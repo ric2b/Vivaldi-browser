@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,12 +13,11 @@
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_task_environment.h"
-#include "services/preferences/public/cpp/dictionary_value_update.h"
-#include "services/preferences/public/cpp/scoped_pref_update.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace web_app {
@@ -60,8 +59,7 @@ TEST_F(WebAppPrefsUtilsTest, TestIphIgnoreRecorded) {
       GetTimeWebAppPref(prefs(), app_id, kIphLastIgnoreTime);
   EXPECT_TRUE(last_ignore_time.has_value());
   {
-    const auto& dict =
-        prefs()->GetValueDict(prefs::kWebAppsAppAgnosticIphState);
+    const auto& dict = prefs()->GetDict(prefs::kWebAppsAppAgnosticIphState);
     EXPECT_EQ(dict.FindInt(kIphIgnoreCount).value_or(0), 1);
     EXPECT_EQ(base::ValueToTime(dict.Find(kIphLastIgnoreTime)),
               last_ignore_time.value());
@@ -79,8 +77,7 @@ TEST_F(WebAppPrefsUtilsTest, TestIphIgnoreRecordUpdated) {
   EXPECT_NE(GetTimeWebAppPref(prefs(), app_id, kIphLastIgnoreTime).value(),
             last_ignore_time.value());
   {
-    const auto& dict =
-        prefs()->GetValueDict(prefs::kWebAppsAppAgnosticIphState);
+    const auto& dict = prefs()->GetDict(prefs::kWebAppsAppAgnosticIphState);
     EXPECT_EQ(dict.FindInt(kIphIgnoreCount).value_or(0), 2);
     EXPECT_NE(base::ValueToTime(dict.Find(kIphLastIgnoreTime)),
               last_ignore_time.value());
@@ -91,15 +88,13 @@ TEST_F(WebAppPrefsUtilsTest, TestIphInstallResetCounters) {
   RecordInstallIphIgnored(prefs(), app_id, base::Time::Now());
   EXPECT_EQ(GetIntWebAppPref(prefs(), app_id, kIphIgnoreCount).value_or(0), 1);
   {
-    const auto& dict =
-        prefs()->GetValueDict(prefs::kWebAppsAppAgnosticIphState);
+    const auto& dict = prefs()->GetDict(prefs::kWebAppsAppAgnosticIphState);
     EXPECT_EQ(dict.FindInt(kIphIgnoreCount).value_or(0), 1);
   }
   RecordInstallIphInstalled(prefs(), app_id);
   EXPECT_EQ(GetIntWebAppPref(prefs(), app_id, kIphIgnoreCount).value_or(0), 0);
   {
-    const auto& dict =
-        prefs()->GetValueDict(prefs::kWebAppsAppAgnosticIphState);
+    const auto& dict = prefs()->GetDict(prefs::kWebAppsAppAgnosticIphState);
     EXPECT_EQ(dict.FindInt(kIphIgnoreCount).value_or(0), 0);
   }
 }
@@ -136,10 +131,8 @@ TEST_F(WebAppPrefsUtilsTest, TestIphConsecutiveAppIgnore) {
 TEST_F(WebAppPrefsUtilsTest, TestGlobalConsecutiveAppIgnore) {
   RecordInstallIphIgnored(prefs(), app_id_2, time_before_global_mute);
   {
-    prefs::ScopedDictionaryPrefUpdate update(
-        prefs(), prefs::kWebAppsAppAgnosticIphState);
-    update->SetInteger(kIphIgnoreCount,
-                       kIphMuteAfterConsecutiveAppAgnosticIgnores);
+    ScopedDictPrefUpdate update(prefs(), prefs::kWebAppsAppAgnosticIphState);
+    update->Set(kIphIgnoreCount, kIphMuteAfterConsecutiveAppAgnosticIgnores);
   }
   EXPECT_FALSE(ShouldShowIph(prefs(), app_id));
 }

@@ -1,11 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/first_party_sets/first_party_sets_site_data_remover.h"
 
 #include "base/check_op.h"
-#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/scoped_observation.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "net/base/schemeful_site.h"
@@ -17,13 +17,13 @@ namespace {
 
 class ClearingTask : public BrowsingDataRemover::Observer {
  public:
-  ClearingTask(BrowsingDataRemover* remover,
+  ClearingTask(BrowsingDataRemover& remover,
                std::vector<net::SchemefulSite> sites,
                base::OnceCallback<void(uint64_t)> callback)
       : remover_(remover),
         sites_(std::move(sites)),
         callback_(std::move(callback)) {
-    scoped_observation_.Observe(remover_.get());
+    scoped_observation_.Observe(&remover_);
   }
   ~ClearingTask() override {
     // This FirstPartySetsSiteDataClearer class is self-owned, and the only way
@@ -80,7 +80,7 @@ class ClearingTask : public BrowsingDataRemover::Observer {
     delete this;
   }
 
-  raw_ptr<BrowsingDataRemover> remover_;
+  raw_ref<BrowsingDataRemover> remover_;
   std::vector<net::SchemefulSite> sites_;
   base::OnceCallback<void(uint64_t)> callback_;
   int task_count_ = 0;
@@ -92,11 +92,10 @@ class ClearingTask : public BrowsingDataRemover::Observer {
 }  // namespace
 
 // static
-void FirstPartySetsSiteDataRemover::HandleRemovingSiteData(
-    BrowsingDataRemover* remover,
+void FirstPartySetsSiteDataRemover::RemoveSiteData(
+    BrowsingDataRemover& remover,
     std::vector<net::SchemefulSite> sites,
     base::OnceCallback<void(uint64_t)> callback) {
-  DCHECK(remover);
   if (sites.empty()) {
     std::move(callback).Run(0);
     return;

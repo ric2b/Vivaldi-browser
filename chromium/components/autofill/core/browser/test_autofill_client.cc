@@ -1,9 +1,12 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/autofill/core/browser/test_autofill_client.h"
 
+#include <utility>
+
+#include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
@@ -23,7 +26,14 @@ TestAutofillClient::TestAutofillClient(
     : test_personal_data_manager_(
           pdm ? std::move(pdm) : std::make_unique<TestPersonalDataManager>()),
       form_origin_(GURL("https://example.test")),
-      last_committed_url_(GURL("https://example.test")) {}
+      last_committed_primary_main_frame_url_(GURL("https://example.test")),
+      log_manager_(LogManager::Create(&log_router_, base::NullCallback())) {
+  mock_iban_manager_ = std::make_unique<testing::NiceMock<MockIBANManager>>(
+      test_personal_data_manager_.get());
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch("show-autofill-internals"))
+    scoped_logging_subscription_.Observe(&log_router_);
+}
 
 TestAutofillClient::~TestAutofillClient() = default;
 
@@ -38,6 +48,10 @@ TestPersonalDataManager* TestAutofillClient::GetPersonalDataManager() {
 AutocompleteHistoryManager*
 TestAutofillClient::GetAutocompleteHistoryManager() {
   return &mock_autocomplete_history_manager_;
+}
+
+IBANManager* TestAutofillClient::GetIBANManager() {
+  return mock_iban_manager_.get();
 }
 
 MerchantPromoCodeManager* TestAutofillClient::GetMerchantPromoCodeManager() {
@@ -57,7 +71,7 @@ CreditCardOtpAuthenticator* TestAutofillClient::GetOtpAuthenticator() {
 }
 
 PrefService* TestAutofillClient::GetPrefs() {
-  return const_cast<PrefService*>(base::as_const(*this).GetPrefs());
+  return const_cast<PrefService*>(std::as_const(*this).GetPrefs());
 }
 
 const PrefService* TestAutofillClient::GetPrefs() const {
@@ -104,8 +118,12 @@ AutofillOfferManager* TestAutofillClient::GetAutofillOfferManager() {
   return autofill_offer_manager_.get();
 }
 
-const GURL& TestAutofillClient::GetLastCommittedURL() const {
-  return last_committed_url_;
+const GURL& TestAutofillClient::GetLastCommittedPrimaryMainFrameURL() const {
+  return last_committed_primary_main_frame_url_;
+}
+
+url::Origin TestAutofillClient::GetLastCommittedPrimaryMainFrameOrigin() const {
+  return url::Origin::Create(last_committed_primary_main_frame_url_);
 }
 
 security_state::SecurityLevel
@@ -266,6 +284,31 @@ bool TestAutofillClient::HasCreditCardScanFeature() {
 
 void TestAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {}
 
+bool TestAutofillClient::IsFastCheckoutSupported() {
+  return false;
+}
+
+bool TestAutofillClient::IsFastCheckoutTriggerForm(const FormData& form,
+                                                   const FormFieldData& field) {
+  return false;
+}
+
+bool TestAutofillClient::FastCheckoutScriptSupportsConsentlessExecution(
+    const url::Origin& origin) {
+  return false;
+}
+
+bool TestAutofillClient::FastCheckoutClientSupportsConsentlessExecution() {
+  return false;
+}
+
+bool TestAutofillClient::ShowFastCheckout(
+    base::WeakPtr<FastCheckoutDelegate> delegate) {
+  return false;
+}
+
+void TestAutofillClient::HideFastCheckout() {}
+
 bool TestAutofillClient::IsTouchToFillCreditCardSupported() {
   return false;
 }
@@ -300,9 +343,10 @@ void TestAutofillClient::UpdatePopup(const std::vector<Suggestion>& suggestions,
 
 void TestAutofillClient::HideAutofillPopup(PopupHidingReason reason) {}
 
-void TestAutofillClient::ShowVirtualCardErrorDialog(bool is_permanent_error) {
+void TestAutofillClient::ShowVirtualCardErrorDialog(
+    const AutofillErrorDialogContext& context) {
   virtual_card_error_dialog_shown_ = true;
-  virtual_card_error_dialog_is_permanent_error_ = is_permanent_error;
+  autofill_error_dialog_context_ = context;
 }
 
 bool TestAutofillClient::IsAutocompleteEnabled() {
@@ -338,6 +382,10 @@ void TestAutofillClient::ExecuteCommand(int id) {}
 
 void TestAutofillClient::OpenPromoCodeOfferDetailsURL(const GURL& url) {}
 
+LogManager* TestAutofillClient::GetLogManager() const {
+  return log_manager_.get();
+}
+
 void TestAutofillClient::LoadRiskData(
     base::OnceCallback<void(const std::string&)> callback) {
   std::move(callback).Run("some risk data");
@@ -360,8 +408,9 @@ void TestAutofillClient::set_form_origin(const GURL& url) {
   test_ukm_recorder_.UpdateSourceURL(source_id_, form_origin_);
 }
 
-void TestAutofillClient::set_last_committed_url(const GURL& url) {
-  last_committed_url_ = url;
+void TestAutofillClient::set_last_committed_primary_main_frame_url(
+    const GURL& url) {
+  last_committed_primary_main_frame_url_ = url;
 }
 
 ukm::TestUkmRecorder* TestAutofillClient::GetTestUkmRecorder() {

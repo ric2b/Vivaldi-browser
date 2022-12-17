@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -290,6 +290,10 @@ class EventRouter : public KeyedService,
   virtual void DispatchEventToExtension(const std::string& extension_id,
                                         std::unique_ptr<Event> event);
 
+  // Dispatches an event to the given url.
+  virtual void DispatchEventToURL(const GURL& owner_url,
+                                  std::unique_ptr<Event> event);
+
   // Dispatches |event| to the given extension as if the extension has a lazy
   // listener for it. NOTE: This should be used rarely, for dispatching events
   // to extensions that haven't had a chance to add their own listeners yet, eg:
@@ -337,6 +341,7 @@ class EventRouter : public KeyedService,
   friend class DownloadExtensionTest;
   friend class SystemInfoAPITest;
   FRIEND_TEST_ALL_PREFIXES(EventRouterTest, MultipleEventRouterObserver);
+  FRIEND_TEST_ALL_PREFIXES(EventRouterDispatchTest, TestDispatch);
   FRIEND_TEST_ALL_PREFIXES(
       DeveloperPrivateApiUnitTest,
       UpdateHostAccess_UnrequestedHostsDispatchUpdateEvents);
@@ -368,6 +373,17 @@ class EventRouter : public KeyedService,
       base::Value::List event_args,
       UserGestureState user_gesture,
       extensions::mojom::EventFilteringInfoPtr info);
+
+  // Gets off-the-record browser context if
+  //     - The extension has incognito mode set to "split"
+  //     - The on-the-record browser context has an off-the-record context
+  //       attached
+  content::BrowserContext* GetIncognitoContextIfAccessible(
+      const std::string& extension_id);
+
+  // Returns the off-the-record context for the BrowserContext associated
+  // with this EventRouter, if any.
+  content::BrowserContext* GetIncognitoContext();
 
   // Adds an extension as an event listener for |event_name|.
   //
@@ -404,10 +420,11 @@ class EventRouter : public KeyedService,
   void RemoveLazyEventListenerImpl(std::unique_ptr<EventListener> listener,
                                    RegisteredEventType type);
 
-  // Shared by all event dispatch methods. If |restrict_to_extension_id| is
-  // empty, the event is broadcast.  An event that just came off the pending
-  // list may not be delayed again.
+  // Shared by all event dispatch methods. If |restrict_to_extension_id|  and
+  // |restrict_to_url| is empty, the event is broadcast.  An event that just
+  // came off the pending list may not be delayed again.
   void DispatchEventImpl(const std::string& restrict_to_extension_id,
+                         const GURL& restrict_to_url,
                          std::unique_ptr<Event> event);
 
   // Dispatches the event to the specified extension or URL running in
@@ -590,20 +607,20 @@ struct Event {
 };
 
 struct EventListenerInfo {
-  // Constructor for a listener from a non-ServiceWorker context (background
-  // page, popup, tab, etc)
+  // Constructor used by tests, for a listener from a non-ServiceWorker
+  // context (background page, popup, tab, etc).
   EventListenerInfo(const std::string& event_name,
                     const std::string& extension_id,
                     const GURL& listener_url,
                     content::BrowserContext* browser_context);
 
-  // Constructor for a listener from a ServiceWorker context.
   EventListenerInfo(const std::string& event_name,
                     const std::string& extension_id,
                     const GURL& listener_url,
                     content::BrowserContext* browser_context,
                     int worker_thread_id,
-                    int64_t service_worker_version_id);
+                    int64_t service_worker_version_id,
+                    bool is_lazy);
 
   // The event name including any sub-event, e.g. "runtime.onStartup" or
   // "webRequest.onCompleted/123".
@@ -613,6 +630,7 @@ struct EventListenerInfo {
   const raw_ptr<content::BrowserContext> browser_context;
   const int worker_thread_id;
   const int64_t service_worker_version_id;
+  const bool is_lazy;
 };
 
 struct ServiceWorkerIdentifier {

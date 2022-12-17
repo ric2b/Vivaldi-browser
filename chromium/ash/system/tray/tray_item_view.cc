@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,7 +65,7 @@ void IconizedLabel::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     return Label::GetAccessibleNodeData(node_data);
 
   node_data->role = ax::mojom::Role::kStaticText;
-  node_data->SetName(custom_accessible_name_);
+  node_data->SetNameChecked(custom_accessible_name_);
 }
 
 TrayItemView::TrayItemView(Shelf* shelf)
@@ -109,24 +109,36 @@ void TrayItemView::DestroyImageView() {
   image_view_ = nullptr;
 }
 
-void TrayItemView::SetVisible(bool set_visible) {
+void TrayItemView::SetVisible(bool visible) {
   if (!GetWidget() ||
       ui::ScopedAnimationDurationScaleMode::duration_multiplier() ==
           ui::ScopedAnimationDurationScaleMode::ZERO_DURATION) {
-    views::View::SetVisible(set_visible);
+    views::View::SetVisible(visible);
     return;
   }
 
   // Do not invoke animation when visibility is not changing.
-  if (set_visible == GetVisible())
+  if (visible == GetVisible())
     return;
 
-  target_visible_ = set_visible;
+  views::View::SetVisible(visible);
+  PerformVisibilityAnimation(visible);
+}
+
+bool TrayItemView::IsHorizontalAlignment() const {
+  return shelf_->IsHorizontalAlignment();
+}
+
+void TrayItemView::PerformVisibilityAnimation(bool visible) {
+  // Set the view visible to show both show/hide animation.
+  views::View::SetVisible(true);
+
+  target_visible_ = visible;
 
   if (!animation_) {
     animation_ = std::make_unique<gfx::SlideAnimation>(this);
     animation_->SetTweenType(gfx::Tween::LINEAR);
-    animation_->Reset(GetVisible() ? 1.0 : 0.0);
+    animation_->Reset(target_visible_ ? 0.0 : 1.0);
   }
 
   if (target_visible_) {
@@ -136,7 +148,6 @@ void TrayItemView::SetVisible(bool set_visible) {
     animation_->SetSlideDuration(base::Milliseconds(400));
     animation_->Show();
     AnimationProgressed(animation_.get());
-    views::View::SetVisible(true);
     layer()->SetOpacity(0.f);
   } else {
     SetupThroughputTrackerForAnimationSmoothness(
@@ -146,10 +157,6 @@ void TrayItemView::SetVisible(bool set_visible) {
     animation_->Hide();
     AnimationProgressed(animation_.get());
   }
-}
-
-bool TrayItemView::IsHorizontalAlignment() const {
-  return shelf_->IsHorizontalAlignment();
 }
 
 gfx::Size TrayItemView::CalculatePreferredSize() const {

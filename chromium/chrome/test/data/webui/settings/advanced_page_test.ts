@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,8 @@ suite('AdvancedPage', function() {
   let basicPage: SettingsBasicPageElement;
 
   suiteSetup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     const settingsUi = document.createElement('settings-ui');
     document.body.appendChild(settingsUi);
     return CrSettingsPrefs.initialized

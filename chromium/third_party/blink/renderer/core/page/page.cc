@@ -28,7 +28,6 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/media_feature_overrides.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
@@ -86,6 +85,7 @@
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme_overlay_mobile.h"
 #include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_chrome_client.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -725,12 +725,12 @@ void Page::SettingsChanged(ChangeType change_type) {
           ->AXObjectCacheOwner()
           .ClearAXObjectCache();
       break;
-    case ChangeType::kViewportRule: {
+    case ChangeType::kViewportStyle: {
       auto* main_local_frame = DynamicTo<LocalFrame>(MainFrame());
       if (!main_local_frame)
         break;
       if (Document* doc = main_local_frame->GetDocument())
-        doc->GetStyleEngine().ViewportRulesChanged();
+        doc->GetStyleEngine().ViewportStyleSettingChanged();
       break;
     }
     case ChangeType::kTextTrackKindUserPreference:
@@ -859,8 +859,8 @@ void Page::InvalidatePaint() {
 }
 
 void Page::NotifyPluginsChanged() const {
-  HeapVector<Member<PluginsChangedObserver>, 32> observers;
-  CopyToVector(plugins_changed_observers_, observers);
+  HeapVector<Member<PluginsChangedObserver>, 32> observers(
+      plugins_changed_observers_);
   for (PluginsChangedObserver* observer : observers)
     observer->PluginsChanged();
 }
@@ -901,6 +901,22 @@ void Page::DidCommitLoad(LocalFrame* frame) {
                                         mojom::blink::ScrollBehavior::kInstant,
                                         ScrollableArea::ScrollCallback());
   }
+  // crbug/1312107: If DevTools has "Highlight ad frames" checked when the
+  // main frame is refreshed or the ad frame is navigated to a different
+  // process, DevTools calls `Settings::SetHighlightAds` so early that the
+  // local frame is still in provisional state (not swapped in). Explicitly
+  // invalidate the settings here as `Page::DidCommitLoad` is only fired after
+  // the navigation is committed, at which point the local frame must already
+  // be swapped-in.
+  //
+  // This explicit update is placed outside the above if-block to accommodate
+  // iframes. The iframes share the same Page (frame tree) as the main frame,
+  // but local frame swap can happen to any of the iframes.
+  //
+  // TODO(crbug/1357763): Properly apply the settings when the local frame
+  // becomes the main frame of the page (i.e. when the navigation is
+  // committed).
+  frame->UpdateAdHighlight();
   GetLinkHighlight().ResetForPageNavigation();
 }
 
@@ -1094,7 +1110,7 @@ bool Page::IsMainFrameFencedFrameRoot() const {
 void Page::SetMediaFeatureOverride(const AtomicString& media_feature,
                                    const String& value) {
   if (!media_feature_overrides_) {
-    if (value.IsEmpty())
+    if (value.empty())
       return;
     media_feature_overrides_ = std::make_unique<MediaFeatureOverrides>();
   }

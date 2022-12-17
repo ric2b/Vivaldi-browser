@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@ class BrowsingDataRemoverBrowserTestBase : public PlatformBrowserTest {
   BrowsingDataRemoverBrowserTestBase();
   ~BrowsingDataRemoverBrowserTestBase() override;
 
-  void InitFeatureList(std::vector<base::Feature> enabled_features);
+  void InitFeatureList(std::vector<base::test::FeatureRef> enabled_features);
 
   void SetUpOnMainThread() override;
   // If `web_contents` is not specified, `GetActiveWebContents` will be used.

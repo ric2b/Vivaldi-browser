@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,7 @@
 #include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/styles/cros_styles.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -56,8 +57,13 @@ DisplayOverlayController::DisplayOverlayController(
     TouchInjector* touch_injector,
     bool first_launch)
     : touch_injector_(touch_injector) {
-  AddOverlay(first_launch ? DisplayMode::kEducation : DisplayMode::kView);
   touch_injector_->set_display_overlay_controller(this);
+
+  // There is no instance for unittest.
+  if (!ash::Shell::HasInstance())
+    return;
+
+  AddOverlay(first_launch ? DisplayMode::kEducation : DisplayMode::kView);
   ash::Shell::Get()->AddPreTargetHandler(this);
   if (auto* dark_light_mode_controller =
           ash::DarkLightModeControllerImpl::Get()) {
@@ -66,12 +72,17 @@ DisplayOverlayController::DisplayOverlayController(
 }
 
 DisplayOverlayController::~DisplayOverlayController() {
+  touch_injector_->set_display_overlay_controller(nullptr);
+
+  // There is no instance for unittest.
+  if (!ash::Shell::HasInstance())
+    return;
+
   if (auto* dark_light_mode_controller =
           ash::DarkLightModeControllerImpl::Get()) {
     dark_light_mode_controller->RemoveObserver(this);
   }
   ash::Shell::Get()->RemovePreTargetHandler(this);
-  touch_injector_->set_display_overlay_controller(nullptr);
   RemoveOverlayIfAny();
 }
 
@@ -94,7 +105,7 @@ gfx::Rect DisplayOverlayController::GetInputMappingViewBoundsForTesting() {
 void DisplayOverlayController::AddOverlay(DisplayMode display_mode) {
   RemoveOverlayIfAny();
   auto* shell_surface_base =
-      exo::GetShellSurfaceBaseForWindow(touch_injector_->target_window());
+      exo::GetShellSurfaceBaseForWindow(touch_injector_->window());
   if (!shell_surface_base)
     return;
 
@@ -110,7 +121,7 @@ void DisplayOverlayController::AddOverlay(DisplayMode display_mode) {
 
 void DisplayOverlayController::RemoveOverlayIfAny() {
   auto* shell_surface_base =
-      exo::GetShellSurfaceBaseForWindow(touch_injector_->target_window());
+      exo::GetShellSurfaceBaseForWindow(touch_injector_->window());
   if (shell_surface_base && shell_surface_base->HasOverlay()) {
     // Call |RemoveInputMenuView| explicitly to make sure UMA stats is updated.
     RemoveInputMenuView();
@@ -126,7 +137,7 @@ void DisplayOverlayController::AddNudgeView(views::Widget* overlay_widget) {
       base::BindRepeating(&DisplayOverlayController::OnNudgeDismissed,
                           base::Unretained(this)),
       l10n_util::GetStringUTF16(IDS_INPUT_OVERLAY_SETTINGS_NUDGE_ALPHA),
-      ash::PillButton::Type::kIcon, &kTipIcon);
+      ash::PillButton::Type::kDefaultWithIconLeading, &kTipIcon);
   nudge_view->SetSize(
       gfx::Size(nudge_view->GetPreferredSize().width(), kNudgeHeight));
   nudge_view->SetButtonTextColor(cros_styles::ResolveColor(
@@ -324,9 +335,70 @@ void DisplayOverlayController::OnEducationalViewDismissed() {
   touch_injector_->set_first_launch(false);
 }
 
+void DisplayOverlayController::AddButtonForAddActionTap() {
+  if (add_action_tap_)
+    return;
+  auto add_action_tap = std::make_unique<ash::PillButton>(
+      base::BindRepeating(
+          &DisplayOverlayController::OnAddActionTapButtonPressed,
+          base::Unretained(this)),
+      u"Add Action Tap", ash::PillButton::Type::kDefaultWithoutIcon,
+      /*icon=*/nullptr);
+  add_action_tap->SetSize(add_action_tap->GetPreferredSize());
+
+  auto* overlay_widget = GetOverlayWidget();
+  DCHECK(overlay_widget);
+  auto* parent_view = overlay_widget->GetContentsView();
+  DCHECK(parent_view);
+  add_action_tap_ = parent_view->AddChildView(std::move(add_action_tap));
+  add_action_tap_->SetPosition(
+      gfx::Point(parent_view->width() - add_action_tap_->width(), 0));
+}
+
+void DisplayOverlayController::RemoveButtonForAddActionTap() {
+  if (!add_action_tap_)
+    return;
+  add_action_tap_->parent()->RemoveChildViewT(add_action_tap_);
+  add_action_tap_ = nullptr;
+}
+
+void DisplayOverlayController::OnAddActionTapButtonPressed() {
+  touch_injector_->AddNewAction(ActionType::TAP);
+}
+
+void DisplayOverlayController::AddButtonForAddActionMove() {
+  auto add_action_move = std::make_unique<ash::PillButton>(
+      base::BindRepeating(
+          &DisplayOverlayController::OnAddActionMoveButtonPressed,
+          base::Unretained(this)),
+      u"Add Action Move", ash::PillButton::Type::kDefaultWithoutIcon,
+      /*icon=*/nullptr);
+  add_action_move->SetSize(add_action_move->GetPreferredSize());
+
+  auto* overlay_widget = GetOverlayWidget();
+  DCHECK(overlay_widget);
+  auto* parent_view = overlay_widget->GetContentsView();
+  DCHECK(parent_view);
+  add_action_move_ = parent_view->AddChildView(std::move(add_action_move));
+  add_action_move_->SetPosition(
+      gfx::Point(parent_view->width() - add_action_move_->width(),
+                 add_action_tap_->height()));
+}
+
+void DisplayOverlayController::RemoveButtonForAddActionMove() {
+  if (!add_action_move_)
+    return;
+  add_action_move_->parent()->RemoveChildViewT(add_action_move_);
+  add_action_move_ = nullptr;
+}
+
+void DisplayOverlayController::OnAddActionMoveButtonPressed() {
+  touch_injector_->AddNewAction(ActionType::MOVE);
+}
+
 views::Widget* DisplayOverlayController::GetOverlayWidget() {
   auto* shell_surface_base =
-      exo::GetShellSurfaceBaseForWindow(touch_injector_->target_window());
+      exo::GetShellSurfaceBaseForWindow(touch_injector_->window());
   DCHECK(shell_surface_base);
 
   return shell_surface_base ? static_cast<views::Widget*>(
@@ -385,6 +457,10 @@ void DisplayOverlayController::SetDisplayMode(DisplayMode mode) {
       RemoveEditFinishView();
       RemoveEducationalView();
       RemoveNudgeView();
+      if (ash::features::IsArcInputOverlayBetaEnabled()) {
+        RemoveButtonForAddActionTap();
+        RemoveButtonForAddActionMove();
+      }
       AddInputMappingView(overlay_widget);
       AddMenuEntryView(overlay_widget);
       ClearFocusOnMenuEntry();
@@ -399,6 +475,10 @@ void DisplayOverlayController::SetDisplayMode(DisplayMode mode) {
       RemoveEducationalView();
       RemoveNudgeView();
       AddEditFinishView(overlay_widget);
+      if (ash::features::IsArcInputOverlayBetaEnabled()) {
+        AddButtonForAddActionTap();
+        AddButtonForAddActionMove();
+      }
       overlay_widget->GetNativeWindow()->SetEventTargetingPolicy(
           aura::EventTargetingPolicy::kTargetAndDescendants);
       break;
@@ -460,6 +540,10 @@ void DisplayOverlayController::RemoveActionEditMenu() {
 
 void DisplayOverlayController::AddEditMessage(const base::StringPiece& message,
                                               MessageType message_type) {
+  // There is no instance for unittest.
+  if (!ash::Shell::HasInstance())
+    return;
+
   RemoveEditMessage();
   auto* overlay_widget = GetOverlayWidget();
   DCHECK(overlay_widget);
@@ -479,10 +563,10 @@ void DisplayOverlayController::RemoveEditMessage() {
   message_ = nullptr;
 }
 
-void DisplayOverlayController::OnBindingChange(
+void DisplayOverlayController::OnInputBindingChange(
     Action* action,
     std::unique_ptr<InputElement> input_element) {
-  touch_injector_->OnBindingChange(action, std::move(input_element));
+  touch_injector_->OnInputBindingChange(action, std::move(input_element));
 }
 
 void DisplayOverlayController::OnCustomizeSave() {
@@ -507,6 +591,14 @@ void DisplayOverlayController::OnApplyMenuState() {
 
   SetInputMappingVisible(GetTouchInjectorEnable() &&
                          GetInputMappingViewVisible());
+}
+
+void DisplayOverlayController::OnActionAdded(Action* action) {
+  input_mapping_view_->OnActionAdded(action);
+}
+
+void DisplayOverlayController::OnActionRemoved(Action* action) {
+  input_mapping_view_->OnActionRemoved(action);
 }
 
 void DisplayOverlayController::OnMouseEvent(ui::MouseEvent* event) {
@@ -581,10 +673,8 @@ void DisplayOverlayController::ProcessPressedEvent(
 
   auto root_location = event.root_location();
   // Convert the LocatedEvent root location to screen location.
-  auto origin = touch_injector_->target_window()
-                    ->GetRootWindow()
-                    ->GetBoundsInScreen()
-                    .origin();
+  auto origin =
+      touch_injector_->window()->GetRootWindow()->GetBoundsInScreen().origin();
   root_location.Offset(origin.x(), origin.y());
 
   if (action_edit_menu_) {

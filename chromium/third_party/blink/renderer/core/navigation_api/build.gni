@@ -1,10 +1,12 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 blink_core_sources_navigation_api = [
   "navigate_event.cc",
   "navigate_event.h",
+  "navigate_event_dispatch_params.cc",
+  "navigate_event_dispatch_params.h",
   "navigation_api_navigation.cc",
   "navigation_api_navigation.h",
   "navigation_api.cc",

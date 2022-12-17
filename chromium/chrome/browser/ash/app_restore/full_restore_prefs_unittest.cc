@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,7 @@
 #include "components/user_manager/scoped_user_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace ash {
-namespace full_restore {
+namespace ash::full_restore {
 
 // Unit tests for full_restore_prefs.
 class FullRestorePrefsTest : public testing::Test {
@@ -124,5 +123,4 @@ TEST_F(FullRestorePrefsTest, NewChromeOSUserFromNotRestore) {
   EXPECT_TRUE(CanPerformRestore(pref_service_.get()));
 }
 
-}  // namespace full_restore
-}  // namespace ash
+}  // namespace ash::full_restore

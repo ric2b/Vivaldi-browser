@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,10 +53,12 @@ struct ASH_PUBLIC_EXPORT ToastData {
   bool visible_on_lock_screen;
   std::u16string dismiss_text;
   bool is_managed = false;
+  bool persist_on_hover = false;
+  bool show_on_all_root_windows = false;
   base::RepeatingClosure dismiss_callback;
   base::RepeatingClosure expired_callback;
   base::TimeTicks time_created;
-  base::TimeTicks time_shown;
+  base::TimeTicks time_start_showing;
 };
 
 }  // namespace ash

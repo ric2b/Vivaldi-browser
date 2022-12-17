@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,12 +7,12 @@
 #include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/fake_video_source_provider.h"
 #include "ash/public/cpp/capture_mode/recording_overlay_view.h"
-#include "ash/services/recording/public/mojom/recording_service.mojom.h"
-#include "ash/services/recording/recording_service_test_api.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/files/file_util.h"
 #include "base/threading/thread_restrictions.h"
+#include "chromeos/ash/services/recording/public/mojom/recording_service.mojom.h"
+#include "chromeos/ash/services/recording/recording_service_test_api.h"
 
 namespace ash {
 
@@ -180,6 +180,10 @@ void TestCaptureModeDelegate::GetDriveFsFreeSpaceBytes(
 
 bool TestCaptureModeDelegate::IsCameraDisabledByPolicy() const {
   return is_camera_disabled_by_policy_;
+}
+
+bool TestCaptureModeDelegate::IsAudioCaptureDisabledByPolicy() const {
+  return is_audio_capture_disabled_by_policy_;
 }
 
 }  // namespace ash

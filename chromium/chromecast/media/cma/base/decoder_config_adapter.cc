@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,6 +59,7 @@ SampleFormat ToSampleFormat(const ::media::SampleFormat sample_format) {
     case ::media::kSampleFormatDts:
     case ::media::kSampleFormatDtsxP2:
     case ::media::kSampleFormatMpegHAudio:
+    case ::media::kSampleFormatIECDts:
       return kUnknownSampleFormat;
     case ::media::kSampleFormatU8:
       return kSampleFormatU8;

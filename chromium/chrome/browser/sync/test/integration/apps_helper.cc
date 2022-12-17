@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -162,16 +162,6 @@ bool IsIncognitoEnabled(Profile* profile, int index) {
 
 void InstallAppsPendingForSync(Profile* profile) {
   SyncExtensionHelper::GetInstance()->InstallExtensionsPendingForSync(profile);
-  WaitForAppService(profile);
-}
-
-void WaitForAppService(Profile* profile) {
-  // The App Service is a Mojo service, and Mojo calls are asynchronous
-  // (because they are potentially IPC calls). When the tests install and
-  // uninstall apps, they may need to pump the run loop so that those async
-  // calls settle.
-  apps::AppServiceProxyFactory::GetForProfile(profile)
-      ->FlushMojoCallsForTesting();
 }
 
 syncer::StringOrdinal GetPageOrdinalForApp(Profile* profile, int app_index) {

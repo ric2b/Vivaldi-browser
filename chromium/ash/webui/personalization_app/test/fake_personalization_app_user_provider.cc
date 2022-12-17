@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,7 @@
 #include "content/public/browser/web_ui.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 
-namespace ash {
-namespace personalization_app {
+namespace ash::personalization_app {
 
 FakePersonalizationAppUserProvider::FakePersonalizationAppUserProvider(
     content::WebUI* web_ui) {}
@@ -50,5 +49,4 @@ void FakePersonalizationAppUserProvider::SelectCameraImage(
 
 void FakePersonalizationAppUserProvider::SelectImageFromDisk() {}
 
-}  // namespace personalization_app
-}  // namespace ash
+}  // namespace ash::personalization_app

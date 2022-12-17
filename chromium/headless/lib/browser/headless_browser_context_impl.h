@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -86,6 +86,8 @@ class HEADLESS_EXPORT HeadlessBrowserContextImpl final
       override;
   content::ReduceAcceptLanguageControllerDelegate*
   GetReduceAcceptLanguageControllerDelegate() override;
+  content::OriginTrialsControllerDelegate* GetOriginTrialsControllerDelegate()
+      override;
 
   HeadlessWebContents* CreateWebContents(HeadlessWebContents::Builder* builder);
   // Register web contents which were created not through Headless API
@@ -146,6 +148,11 @@ class HEADLESS_EXPORT HeadlessBrowserContextImpl final
 
   std::unique_ptr<HeadlessRequestContextManager> request_context_manager_;
   std::unique_ptr<SimpleFactoryKey> simple_factory_key_;
+
+#if defined(HEADLESS_USE_PREFS)
+  std::unique_ptr<content::OriginTrialsControllerDelegate>
+      origin_trials_controller_delegate_;
+#endif  // defined(HEADLESS_USE_PREFS)
 };
 
 }  // namespace headless

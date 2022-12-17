@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -201,8 +201,14 @@ InteractionHandlerAndroid::CreateInteractionCallbackFromProto(
       return absl::optional<InteractionCallback>(base::BindRepeating(
           &android_interactions::ShowInfoPopup,
           proto.show_info_popup().info_popup(), jcontext_, jinfo_page_util_,
+          jdelegate_,
           GetDisplayStringUTF8(ClientSettingsProto::CLOSE,
                                basic_interactions_->GetClientSettings())));
+    }
+    case CallbackProto::kShowAccountScreen: {
+      return absl::optional<InteractionCallback>(base::BindRepeating(
+          &android_interactions::ShowAccountScreen,
+          basic_interactions_->GetWeakPtr(), proto.show_account_screen()));
     }
     case CallbackProto::kShowListPopup:
       if (!proto.show_list_popup().has_item_names()) {
@@ -364,6 +370,11 @@ InteractionHandlerAndroid::CreateInteractionCallbackFromProto(
       return absl::optional<InteractionCallback>(base::BindRepeating(
           &RunForEachLoop, proto.for_each(), GetWeakPtr(),
           user_model_->GetWeakPtr(), view_handler_->GetWeakPtr()));
+    }
+    case CallbackProto::kRequestBackendData: {
+      return absl::optional<InteractionCallback>(base::BindRepeating(
+          &android_interactions::RequestBackendData,
+          basic_interactions_->GetWeakPtr(), proto.request_backend_data()));
     }
     case CallbackProto::KIND_NOT_SET:
       VLOG(1) << "Error creating interaction: kind not set";

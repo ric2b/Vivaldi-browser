@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,7 @@ class __thisIsHereToForceASemicolonAfterThisMacro;
 //
 #define DISALLOW_NEW()                                                        \
  public:                                                                      \
-  using IsDisallowNewMarker = int;                                            \
+  using IsDisallowNewMarker [[maybe_unused]] = int;                           \
   void* operator new(size_t, NotNullTag, void* location) { return location; } \
   void* operator new(size_t, void* location) { return location; }             \
                                                                               \

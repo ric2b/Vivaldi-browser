@@ -42,3 +42,23 @@ imageset("toolbar_forward") {
     "toolbar_forward.imageset/toolbar_forward@3x.png",
   ]
 }
+
+imageset("toolbar_menu") {
+  sources = [
+    "toolbar_menu.imageset/Contents.json",
+    "toolbar_menu.imageset/toolbar_menu.pdf",
+    "toolbar_menu.imageset/toolbar_menu_dark.pdf",
+  ]
+}
+
+colorset("toolbar_button_color") {
+  sources = [ "toolbar_button_color.colorset/Contents.json" ]
+}
+
+colorset("tab_toolbar_button_color_highlighted") {
+  sources = [ "tab_toolbar_button_color_highlighted.colorset/Contents.json" ]
+}
+
+colorset("tab_toolbar_button_color_highlighted_incognito") {
+  sources = [ "tab_toolbar_button_color_highlighted_incognito.colorset/Contents.json" ]
+}

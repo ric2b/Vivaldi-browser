@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,10 @@
 
 #include "base/bind.h"
 #include "base/containers/flat_set.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
@@ -196,6 +198,13 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
   OnAcceleratedWidgetAvailable();
   InitHost();
   window()->Show();
+
+  if (base::FeatureList::IsEnabled(views::features::kWidgetLayering)) {
+    // Stack immedately above its parent so that it does not cover other
+    // root-level windows.
+    if (params.parent)
+      StackAbove(params.parent);
+  }
 }
 
 void DesktopWindowTreeHostWin::OnNativeWidgetCreated(
@@ -231,8 +240,10 @@ std::unique_ptr<corewm::Tooltip> DesktopWindowTreeHostWin::CreateTooltip() {
 
 std::unique_ptr<aura::client::DragDropClient>
 DesktopWindowTreeHostWin::CreateDragDropClient() {
-  drag_drop_client_ = new DesktopDragDropClientWin(window(), GetHWND(), this);
-  return base::WrapUnique(drag_drop_client_.get());
+  auto res =
+      std::make_unique<DesktopDragDropClientWin>(window(), GetHWND(), this);
+  drag_drop_client_ = res->GetWeakPtr();
+  return std::move(res);
 }
 
 void DesktopWindowTreeHostWin::Close() {
@@ -444,6 +455,38 @@ ui::ZOrderLevel DesktopWindowTreeHostWin::GetZOrderLevel() const {
                               : ui::ZOrderLevel::kNormal;
 }
 
+bool DesktopWindowTreeHostWin::IsStackedAbove(aura::Window* window) {
+  HWND above = GetHWND();
+  HWND below = window->GetHost()->GetAcceleratedWidget();
+
+  // Child windows are always above their parent windows.
+  // Check to see if HWNDs have a Parent-Child relationship.
+  if (IsChild(below, above))
+    return true;
+
+  if (IsChild(above, below))
+    return false;
+
+  // Check all HWNDs with lower z order than current HWND
+  // to see if it matches or is a parent to the "below" HWND.
+  bool result = false;
+  HWND parent = above;
+  while (parent && parent != GetDesktopWindow()) {
+    HWND next = parent;
+    while (next) {
+      // GW_HWNDNEXT retrieves the next HWND below z order level.
+      next = GetWindow(next, GW_HWNDNEXT);
+      if (next == below || IsChild(next, below)) {
+        result = true;
+        break;
+      }
+    }
+    parent = GetAncestor(parent, GA_PARENT);
+  }
+
+  return result;
+}
+
 void DesktopWindowTreeHostWin::SetVisibleOnAllWorkspaces(bool always_visible) {
   // Chrome does not yet support Windows 10 desktops.
 }
@@ -506,9 +549,10 @@ void DesktopWindowTreeHostWin::FrameTypeChanged() {
   message_handler_->FrameTypeChanged();
 }
 
-void DesktopWindowTreeHostWin::SetFullscreen(bool fullscreen) {
+void DesktopWindowTreeHostWin::SetFullscreen(bool fullscreen,
+                                             int64_t target_display_id) {
   auto weak_ptr = GetWeakPtr();
-  message_handler_->SetFullscreen(fullscreen);
+  message_handler_->SetFullscreen(fullscreen, target_display_id);
   if (!weak_ptr)
     return;
   // TODO(sky): workaround for ScopedFullscreenVisibility showing window
@@ -1210,8 +1254,7 @@ bool DesktopWindowTreeHostWin::IsModalWindowActive() const {
     return child->GetProperty(aura::client::kModalKey) != ui::MODAL_TYPE_NONE &&
            child->TargetVisibility();
   };
-  return std::any_of(window()->children().cbegin(), window()->children().cend(),
-                     is_active);
+  return base::ranges::any_of(window()->children(), is_active);
 }
 
 void DesktopWindowTreeHostWin::CheckForMonitorChange() {

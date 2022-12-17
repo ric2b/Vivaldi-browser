@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -130,9 +130,10 @@ content::WebContents* WebAppLaunchProcess::Run() {
       launch_url, is_file_handling, web_contents,
       /*started_new_navigation=*/navigate_result.did_navigate);
 
-  RecordMetrics(params_.app_id, params_.container,
-                apps::GetAppLaunchSource(params_.launch_source), launch_url,
-                web_contents);
+  UpdateLaunchStats(web_contents, params_.app_id, launch_url);
+  RecordLaunchMetrics(params_.app_id, params_.container,
+                      apps::GetAppLaunchSource(params_.launch_source),
+                      launch_url, web_contents);
 
   return web_contents;
 }

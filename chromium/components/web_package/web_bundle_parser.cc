@@ -1,16 +1,15 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/web_package/web_bundle_parser.h"
-
-#include <algorithm>
 
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/containers/span.h"
 #include "base/memory/weak_ptr.h"
 #include "base/numerics/checked_math.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -137,7 +136,7 @@ absl::optional<ParsedHeaders> ConvertCBORValueToHeaders(
     // If name contains any upper-case or non-ASCII characters, return an error.
     // This matches the requirement in Section 8.1.2 of [RFC7540].
     if (!base::IsStringASCII(name) ||
-        std::any_of(name.begin(), name.end(), base::IsAsciiUpper<char>))
+        base::ranges::any_of(name, base::IsAsciiUpper<char>))
       return absl::nullopt;
 
     if (!name.empty() && name[0] == ':') {
@@ -951,7 +950,9 @@ class WebBundleParser::MetadataParser
 
   // Implements SharedBundleDataSource::Observer.
   void OnDisconnect() override {
-    RunErrorCallbackAndDestroy("Data source disconnected.");
+    RunErrorCallbackAndDestroy(
+        "Data source disconnected.",
+        mojom::BundleParseErrorType::kParserInternalError);
   }
 
   scoped_refptr<SharedBundleDataSource> data_source_;
@@ -1069,8 +1070,7 @@ class WebBundleParser::ResponseParser
     int status;
     const auto& status_str = pseudo_status->second;
     if (status_str.size() != 3 ||
-        !std::all_of(status_str.begin(), status_str.end(),
-                     base::IsAsciiDigit<char>) ||
+        !base::ranges::all_of(status_str, base::IsAsciiDigit<char>) ||
         !base::StringToInt(status_str, &status)) {
       RunErrorCallbackAndDestroy(":status must be 3 ASCII decimal digits.");
       return;
@@ -1121,7 +1121,9 @@ class WebBundleParser::ResponseParser
 
   // Implements SharedBundleDataSource::Observer.
   void OnDisconnect() override {
-    RunErrorCallbackAndDestroy("Data source disconnected.");
+    RunErrorCallbackAndDestroy(
+        "Data source disconnected.",
+        mojom::BundleParseErrorType::kParserInternalError);
   }
 
   scoped_refptr<SharedBundleDataSource> data_source_;
@@ -1140,22 +1142,22 @@ WebBundleParser::SharedBundleDataSource::SharedBundleDataSource(
 }
 
 void WebBundleParser::SharedBundleDataSource::AddObserver(Observer* observer) {
-  DCHECK(observers_.end() == observers_.find(observer));
-  observers_.insert(observer);
+  observers_.AddObserver(observer);
 }
 
 void WebBundleParser::SharedBundleDataSource::RemoveObserver(
     Observer* observer) {
-  auto it = observers_.find(observer);
-  DCHECK(observers_.end() != it);
-  observers_.erase(it);
+  observers_.RemoveObserver(observer);
 }
 
 WebBundleParser::SharedBundleDataSource::~SharedBundleDataSource() = default;
 
 void WebBundleParser::SharedBundleDataSource::OnDisconnect() {
-  for (auto* observer : observers_)
-    observer->OnDisconnect();
+  // |observer->OnDisconnect()| below may remove the last external reference to
+  // |this|.
+  scoped_refptr<SharedBundleDataSource> keep_alive(this);
+  for (Observer& observer : observers_)
+    observer.OnDisconnect();
 }
 
 void WebBundleParser::SharedBundleDataSource::Read(

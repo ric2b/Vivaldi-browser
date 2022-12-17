@@ -1,14 +1,14 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "services/audio/loopback_stream.h"
 
-#include <algorithm>
 #include <string>
 
 #include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/ranges/algorithm.h"
 #include "base/sync_socket.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
@@ -260,7 +260,7 @@ void LoopbackStream::FlowNetwork::RemoveInput(SnooperNode* node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(control_sequence_);
 
   base::AutoLock scoped_lock(lock_);
-  const auto it = std::find(inputs_.begin(), inputs_.end(), node);
+  const auto it = base::ranges::find(inputs_, node);
   DCHECK(it != inputs_.end());
   inputs_.erase(it);
 }

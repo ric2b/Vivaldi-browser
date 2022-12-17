@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,6 +83,21 @@
   _callbackRunner->PostTask(
       FROM_HERE, base::BindOnce(&updater::UpdateService::GetVersion, _service,
                                 std::move(cb)));
+}
+
+- (void)fetchPoliciesWithReply:(void (^)(int result))reply {
+  auto cb = base::BindOnce(base::RetainBlock(^(int result) {
+    VLOG(0) << "FetchPolicies complete.";
+    if (reply)
+      reply(result);
+
+    _appServer->TaskCompleted();
+  }));
+
+  _appServer->TaskStarted();
+  _callbackRunner->PostTask(
+      FROM_HERE, base::BindOnce(&updater::UpdateService::FetchPolicies,
+                                _service, std::move(cb)));
 }
 
 - (void)runPeriodicTasksWithReply:(void (^)(void))reply {
@@ -213,15 +228,13 @@
   request.existence_checker_path =
       base::mac::NSStringToFilePath(existenceCheckerPath);
 
-  auto cb = base::BindOnce(
-      base::RetainBlock(^(const updater::RegistrationResponse& response) {
-        VLOG(0) << "Registration complete: status code = "
-                << response.status_code;
-        if (reply)
-          reply(response.status_code);
+  auto cb = base::BindOnce(base::RetainBlock(^(int result) {
+    VLOG(0) << "Registration complete: status code = " << result;
+    if (reply)
+      reply(result);
 
-        _appServer->TaskCompleted();
-      }));
+    _appServer->TaskCompleted();
+  }));
 
   _appServer->TaskStarted();
   _callbackRunner->PostTask(
@@ -259,6 +272,7 @@
                      tag:(NSString* _Nullable)ap
                  version:(NSString* _Nullable)version
     existenceCheckerPath:(NSString* _Nullable)existenceCheckerPath
+       clientInstallData:(NSString* _Nullable)clientInstallData
         installDataIndex:(NSString* _Nullable)installDataIndex
                 priority:(CRUPriorityWrapper* _Nonnull)priority
              updateState:(CRUUpdateStateObserver* _Nonnull)updateState
@@ -283,7 +297,7 @@
 
   auto sccb = base::BindRepeating(base::RetainBlock(^(
       const updater::UpdateService::UpdateState& state) {
-    NSString* version = base::SysUTF8ToNSString(
+    NSString* version_string = base::SysUTF8ToNSString(
         state.next_version.IsValid() ? state.next_version.GetString() : "");
 
     base::scoped_nsobject<CRUUpdateStateStateWrapper> updateStateStateWrapper(
@@ -297,7 +311,7 @@
         [[CRUUpdateStateWrapper alloc]
               initWithAppId:base::SysUTF8ToNSString(state.app_id)
                       state:updateStateStateWrapper.get()
-                    version:version
+                    version:version_string
             downloadedBytes:state.downloaded_bytes
                  totalBytes:state.total_bytes
             installProgress:state.install_progress
@@ -311,6 +325,7 @@
   _callbackRunner->PostTask(
       FROM_HERE,
       base::BindOnce(&updater::UpdateService::Install, _service, request,
+                     base::SysNSStringToUTF8(clientInstallData),
                      base::SysNSStringToUTF8(installDataIndex),
                      [priority priority], std::move(sccb), std::move(cb)));
 }
@@ -410,6 +425,13 @@
   [_service getVersionWithReply:reply];
 }
 
+- (void)fetchPoliciesWithReply:(void (^)(int))reply {
+  // This function may only be called by the same user.
+  VLOG(1) << "Rejecting cross-user attempt to call " << __func__;
+  if (reply)
+    reply(updater::kErrorPermissionDenied);
+}
+
 - (void)runPeriodicTasksWithReply:(void (^)(void))reply {
   // This function may only be called by the same user.
   VLOG(1) << "Rejecting cross-user attempt to call " << __func__;
@@ -465,6 +487,7 @@
                      tag:(NSString* _Nullable)ap
                  version:(NSString* _Nullable)version
     existenceCheckerPath:(NSString* _Nullable)existenceCheckerPath
+       clientInstallData:(NSString* _Nullable)clientInstallData
         installDataIndex:(NSString* _Nullable)installDataIndex
                 priority:(CRUPriorityWrapper* _Nonnull)priority
              updateState:(CRUUpdateStateObserver* _Nonnull)updateState

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,6 +77,10 @@ class CONTENT_EXPORT PrefetchURLLoaderInterceptor
   // Called once |this| has decided whether to intercept or not intercept the
   // navigation.
   NavigationLoaderInterceptor::LoaderCallback loader_callback_;
+
+  // The time when probing was started. Used to calculate probe latency which is
+  // reported to the tab helper.
+  absl::optional<base::TimeTicks> probe_start_time_;
 
   // The time when we started waiting for cookies to be copied, delaying the
   // navigation. Used to calculate total cookie wait time.

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/types/optional_util.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/api/developer_private/inspectable_views_finder.h"
@@ -86,10 +87,9 @@ const developer::ExtensionInfo* GetInfoFromList(
 // validation considerably more concise and readable.
 std::string SiteControlsToString(
     const std::vector<developer::SiteControl>& controls) {
-  base::Value list(base::Value::Type::LIST);
+  base::Value::List list;
   for (const auto& control : controls) {
-    std::unique_ptr<base::Value> control_value = control.ToValue();
-    list.Append(std::move(*control_value));
+    list.Append(control.ToValue());
   }
 
   std::string json;
@@ -219,8 +219,7 @@ class ExtensionInfoGeneratorUnitTest : public ExtensionServiceTestWithInstall {
         CreateExtensionInfoFromPath(extension_path,
                                     mojom::ManifestLocation::kUnpacked);
     info->views = std::move(views);
-    std::unique_ptr<base::Value> actual_output_data = info->ToValue();
-    ASSERT_TRUE(actual_output_data);
+    base::Value::Dict actual_output_data = info->ToValue();
 
     // Compare the outputs.
     // Ignore unknown fields in the actual output data.
@@ -231,7 +230,8 @@ class ExtensionInfoGeneratorUnitTest : public ExtensionServiceTestWithInstall {
     std::string actual_string;
     for (auto field : expected_output_data->DictItems()) {
       const base::Value& expected_value = field.second;
-      base::Value* actual_value = actual_output_data->FindPath(field.first);
+      base::Value* actual_value =
+          actual_output_data.FindByDottedPath(field.first);
       EXPECT_TRUE(actual_value) << field.first + " is missing" + paths_details;
       if (!actual_value)
         continue;
@@ -512,7 +512,7 @@ TEST_F(ExtensionInfoGeneratorUnitTest, RuntimeHostPermissions) {
   // The extension should be set to run on all sites.
   ASSERT_TRUE(info->permissions.runtime_host_permissions);
   const developer::RuntimeHostPermissions* runtime_hosts =
-      info->permissions.runtime_host_permissions.get();
+      base::OptionalToPtr(info->permissions.runtime_host_permissions);
   EXPECT_EQ(developer::HOST_ACCESS_ON_ALL_SITES, runtime_hosts->host_access);
   EXPECT_EQ(R"([{"granted":true,"host":"*://*/*"}])",
             SiteControlsToString(runtime_hosts->hosts));
@@ -527,7 +527,8 @@ TEST_F(ExtensionInfoGeneratorUnitTest, RuntimeHostPermissions) {
                                                     all_urls_extension);
   permissions_modifier.SetWithholdHostPermissions(true);
   info = GenerateExtensionInfo(all_urls_extension->id());
-  runtime_hosts = info->permissions.runtime_host_permissions.get();
+  runtime_hosts =
+      base::OptionalToPtr(info->permissions.runtime_host_permissions);
   EXPECT_EQ(developer::HOST_ACCESS_ON_CLICK, runtime_hosts->host_access);
   EXPECT_EQ(R"([{"granted":false,"host":"*://*/*"}])",
             SiteControlsToString(runtime_hosts->hosts));
@@ -538,7 +539,8 @@ TEST_F(ExtensionInfoGeneratorUnitTest, RuntimeHostPermissions) {
   // sites, and those sites should be in the specific_site_controls.hosts set.
   permissions_modifier.GrantHostPermission(GURL("https://example.com"));
   info = GenerateExtensionInfo(all_urls_extension->id());
-  runtime_hosts = info->permissions.runtime_host_permissions.get();
+  runtime_hosts =
+      base::OptionalToPtr(info->permissions.runtime_host_permissions);
   EXPECT_EQ(developer::HOST_ACCESS_ON_SPECIFIC_SITES,
             runtime_hosts->host_access);
   EXPECT_EQ(
@@ -592,7 +594,7 @@ TEST_F(ExtensionInfoGeneratorUnitTest,
   info = GenerateExtensionInfo(extension->id());
   ASSERT_TRUE(info->permissions.runtime_host_permissions);
   const developer::RuntimeHostPermissions* runtime_hosts =
-      info->permissions.runtime_host_permissions.get();
+      base::OptionalToPtr(info->permissions.runtime_host_permissions);
   EXPECT_EQ(developer::HOST_ACCESS_ON_SPECIFIC_SITES,
             runtime_hosts->host_access);
   EXPECT_EQ(
@@ -632,7 +634,7 @@ TEST_F(ExtensionInfoGeneratorUnitTest, RuntimeHostPermissionsSpecificHosts) {
   info = GenerateExtensionInfo(extension->id());
   ASSERT_TRUE(info->permissions.runtime_host_permissions);
   const developer::RuntimeHostPermissions* runtime_hosts =
-      info->permissions.runtime_host_permissions.get();
+      base::OptionalToPtr(info->permissions.runtime_host_permissions);
   EXPECT_EQ(developer::HOST_ACCESS_ON_SPECIFIC_SITES,
             runtime_hosts->host_access);
   EXPECT_EQ(
@@ -657,7 +659,7 @@ TEST_F(ExtensionInfoGeneratorUnitTest, RuntimeHostPermissionsAllURLs) {
   std::unique_ptr<developer::ExtensionInfo> info =
       GenerateExtensionInfo(all_urls_extension->id());
   const developer::RuntimeHostPermissions* runtime_hosts =
-      info->permissions.runtime_host_permissions.get();
+      base::OptionalToPtr(info->permissions.runtime_host_permissions);
   EXPECT_EQ(developer::HOST_ACCESS_ON_CLICK, runtime_hosts->host_access);
   EXPECT_EQ(R"([{"granted":false,"host":"*://*/*"}])",
             SiteControlsToString(runtime_hosts->hosts));
@@ -673,7 +675,8 @@ TEST_F(ExtensionInfoGeneratorUnitTest, RuntimeHostPermissionsAllURLs) {
   // Now the extension should look like it has access to all hosts, while still
   // also counting as having permission withholding enabled.
   info = GenerateExtensionInfo(all_urls_extension->id());
-  runtime_hosts = info->permissions.runtime_host_permissions.get();
+  runtime_hosts =
+      base::OptionalToPtr(info->permissions.runtime_host_permissions);
   EXPECT_EQ(developer::HOST_ACCESS_ON_ALL_SITES, runtime_hosts->host_access);
   EXPECT_EQ(R"([{"granted":true,"host":"*://*/*"}])",
             SiteControlsToString(runtime_hosts->hosts));

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,7 +72,7 @@ std::string GetPath(TooltipType type, const std::string& sub_pref) {
 
 base::Time GetLastShownTime(PrefService* prefs, TooltipType type) {
   const base::Value* last_shown_time =
-      prefs->GetValueDict(prefs::kContextualTooltips)
+      prefs->GetDict(prefs::kContextualTooltips)
           .FindByDottedPath(GetPath(type, kLastTimeShown));
   if (!last_shown_time)
     return base::Time();
@@ -81,7 +81,7 @@ base::Time GetLastShownTime(PrefService* prefs, TooltipType type) {
 
 int GetSuccessCount(PrefService* prefs, TooltipType type) {
   absl::optional<int> success_count =
-      prefs->GetValueDict(prefs::kContextualTooltips)
+      prefs->GetDict(prefs::kContextualTooltips)
           .FindIntByDottedPath(GetPath(type, kSuccessCount));
   return success_count.value_or(0);
 }
@@ -210,22 +210,23 @@ base::TimeDelta GetNudgeTimeout(PrefService* prefs, TooltipType type) {
 
 int GetShownCount(PrefService* prefs, TooltipType type) {
   absl::optional<int> shown_count =
-      prefs->GetValueDict(prefs::kContextualTooltips)
+      prefs->GetDict(prefs::kContextualTooltips)
           .FindIntByDottedPath(GetPath(type, kShownCount));
   return shown_count.value_or(0);
 }
 
 void HandleNudgeShown(PrefService* prefs, TooltipType type) {
   const int shown_count = GetShownCount(prefs, type);
-  DictionaryPrefUpdate update(prefs, prefs::kContextualTooltips);
-  update->SetIntPath(GetPath(type, kShownCount), shown_count + 1);
-  update->SetPath(GetPath(type, kLastTimeShown), base::TimeToValue(GetTime()));
+  ScopedDictPrefUpdate update(prefs, prefs::kContextualTooltips);
+  update->SetByDottedPath(GetPath(type, kShownCount), shown_count + 1);
+  update->SetByDottedPath(GetPath(type, kLastTimeShown),
+                          base::TimeToValue(GetTime()));
 }
 
 void HandleGesturePerformed(PrefService* prefs, TooltipType type) {
   const int success_count = GetSuccessCount(prefs, type);
-  DictionaryPrefUpdate update(prefs, prefs::kContextualTooltips);
-  update->SetIntPath(GetPath(type, kSuccessCount), success_count + 1);
+  ScopedDictPrefUpdate update(prefs, prefs::kContextualTooltips);
+  update->SetByDottedPath(GetPath(type, kSuccessCount), success_count + 1);
 }
 
 void SetDragHandleNudgeDisabledForHiddenShelf(bool nudge_disabled) {
@@ -238,12 +239,12 @@ void SetBackGestureNudgeShowing(bool showing) {
 
 void ClearPrefs() {
   DCHECK(Shell::Get()->session_controller()->GetLastActiveUserPrefService());
-  DictionaryPrefUpdate update(
+  ScopedDictPrefUpdate update(
       Shell::Get()->session_controller()->GetLastActiveUserPrefService(),
       prefs::kContextualTooltips);
-  base::Value* nudges_dict = update.Get();
-  if (nudges_dict && !nudges_dict->DictEmpty())
-    nudges_dict->DictClear();
+  base::Value::Dict& nudges_dict = update.Get();
+  if (!nudges_dict.empty())
+    nudges_dict.clear();
 }
 
 void OverrideClockForTesting(base::Clock* test_clock) {

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,8 +11,7 @@
 #include "third_party/webrtc/media/base/rtp_utils.h"
 #include "third_party/webrtc/rtc_base/time_utils.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 namespace {
 
@@ -122,5 +121,4 @@ void StunTcpPacketProcessor::ApplyPacketOptions(
                               rtc::TimeMicros());
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

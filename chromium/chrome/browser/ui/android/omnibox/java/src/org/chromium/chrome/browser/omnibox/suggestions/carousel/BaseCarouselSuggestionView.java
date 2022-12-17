@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,6 +60,11 @@ public class BaseCarouselSuggestionView extends LinearLayout {
         mRecyclerView.setItemAnimator(null);
         mRecyclerView.setLayoutManager(
                 new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false));
+        mRecyclerView.setClipToPadding(false);
+        mRecyclerView.setPaddingRelative(
+                getResources().getDimensionPixelSize(R.dimen.omnibox_suggestion_side_spacing),
+                mRecyclerView.getPaddingTop(), mRecyclerView.getPaddingEnd(),
+                mRecyclerView.getPaddingBottom());
 
         mSelectionManager =
                 new BaseCarouselSuggestionSelectionManager(mRecyclerView.getLayoutManager());

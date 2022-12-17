@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -792,9 +792,10 @@ TEST_F(OverviewControllerTest, FrameThrottling) {
     arc_windows[i] = created_windows[i + browser_window_count].get();
   }
 
-  EXPECT_CALL(observer, OnThrottlingStarted(
-                            testing::UnorderedElementsAreArray(arc_windows),
-                            frame_throttling_controller->throttled_fps()));
+  EXPECT_CALL(observer,
+              OnThrottlingStarted(
+                  testing::UnorderedElementsAreArray(arc_windows),
+                  frame_throttling_controller->GetCurrentThrottledFrameRate()));
   EnterOverview();
   EXPECT_THAT(frame_throttling_controller->GetFrameSinkIdsToThrottle(),
               ::testing::UnorderedElementsAreArray(ids));

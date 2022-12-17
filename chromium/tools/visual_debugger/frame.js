@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,8 +39,8 @@ class CircularBuffer {
 // Represents a single frame, and contains all associated data.
 //
 class DrawFrame {
-  // Circular buffer supports 2^14 frames.
-  static maxBufferNumFrames = 16384;
+  // Circular buffer supports 1 minute of frames.
+  static maxBufferNumFrames = 60*60;
   static frameBuffer = new CircularBuffer(DrawFrame.maxBufferNumFrames);
   static buffer_map = new Object();
   static count() { return DrawFrame.frameBuffer.instances.length; }
@@ -264,6 +264,11 @@ class DrawFrame {
   appendLogs(logContainer) {
     for (const log of this.logs_) {
       if (log.drawindex > this.submissionFreezeIndex()) break;
+
+      // If thread not enabled, then skip draw call from this thread.
+      if (!this.threadMapping_[log.thread_id].threadEnabled) {
+        continue;
+      }
 
       var color;
       let filter;

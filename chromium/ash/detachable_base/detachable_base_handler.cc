@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,8 +79,8 @@ void DetachableBaseHandler::RemoveUserData(const UserInfo& user) {
   last_used_devices_.erase(user.account_id);
 
   if (local_state_) {
-    DictionaryPrefUpdate update(local_state_, prefs::kDetachableBaseDevices);
-    update->RemoveKey(GetKeyForPrefs(user.account_id));
+    ScopedDictPrefUpdate update(local_state_, prefs::kDetachableBaseDevices);
+    update->Remove(GetKeyForPrefs(user.account_id));
   }
 }
 
@@ -127,9 +127,9 @@ bool DetachableBaseHandler::SetPairedBaseAsLastUsedByUser(
   last_used_devices_[user.account_id] = authenticated_base_id_;
 
   if (!user.is_ephemeral) {
-    DictionaryPrefUpdate update(local_state_, prefs::kDetachableBaseDevices);
-    update->SetPath({GetKeyForPrefs(user.account_id), kLastUsedByUserPrefKey},
-                    base::Value(authenticated_base_id_));
+    ScopedDictPrefUpdate update(local_state_, prefs::kDetachableBaseDevices);
+    update->EnsureDict(GetKeyForPrefs(user.account_id))
+        ->Set(kLastUsedByUserPrefKey, authenticated_base_id_);
   }
 
   return true;
@@ -214,7 +214,7 @@ DetachableBaseHandler::GetLastUsedDeviceForUser(const UserInfo& user) const {
     return "";
 
   const base::Value::Dict& detachable_base_info =
-      local_state_->GetValueDict(prefs::kDetachableBaseDevices);
+      local_state_->GetDict(prefs::kDetachableBaseDevices);
   const base::Value::Dict* account_info =
       detachable_base_info.FindDictByDottedPath(
           GetKeyForPrefs(user.account_id));

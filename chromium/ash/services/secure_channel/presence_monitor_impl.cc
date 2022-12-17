@@ -1,11 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/secure_channel/presence_monitor_impl.h"
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/presence_monitor_delegate.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 

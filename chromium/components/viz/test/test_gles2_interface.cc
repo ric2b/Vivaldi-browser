@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -536,6 +536,10 @@ void TestGLES2Interface::set_supports_gpu_memory_buffer_format(
   } else {
     test_capabilities_.gpu_memory_buffer_formats.Remove(format);
   }
+}
+
+void TestGLES2Interface::set_supports_texture_rg(bool support) {
+  test_capabilities_.texture_rg = support;
 }
 
 size_t TestGLES2Interface::NumTextures() const {

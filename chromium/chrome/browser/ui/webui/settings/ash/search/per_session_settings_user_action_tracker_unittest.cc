@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,7 @@
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
-namespace settings {
+namespace ash::settings {
 
 class PerSessionSettingsUserActionTrackerTest : public testing::Test {
  protected:
@@ -172,5 +171,4 @@ TEST_F(PerSessionSettingsUserActionTrackerTest, TestBlurAndFocus) {
       /*count=*/1);
 }
 
-}  // namespace settings.
-}  // namespace chromeos.
+}  // namespace ash::settings

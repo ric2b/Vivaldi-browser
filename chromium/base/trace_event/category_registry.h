@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,7 +94,7 @@ class BASE_EXPORT CategoryRegistry {
   using CategoryInitializerFn = void (*)(TraceCategory*);
 
   // The max number of trace categories that can be recorded.
-  static constexpr size_t kMaxCategories = 300;
+  static constexpr size_t kMaxCategories = 350;
 
   // Checks that there is enough space for all builtin categories.
   static_assert(BuiltinCategories::Size() <= kMaxCategories,

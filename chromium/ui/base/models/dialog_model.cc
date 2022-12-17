@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "base/ranges/algorithm.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/models/dialog_model_field.h"
+#include "ui/base/ui_base_types.h"
 
 namespace ui {
 
@@ -71,10 +72,30 @@ DialogModel::Builder& DialogModel::Builder::AddExtraButton(
 }
 
 DialogModel::Builder& DialogModel::Builder::AddExtraLink(
-    ui::DialogModelLabel::Link link) {
+    DialogModelLabel::TextReplacement link) {
   DCHECK(!model_->extra_button_);
   DCHECK(!model_->extra_link_);
   model_->extra_link_.emplace(std::move(link));
+  return *this;
+}
+
+DialogModel::Builder& DialogModel::Builder::OverrideDefaultButton(
+    DialogButton button) {
+  // This can only be called once.
+  DCHECK(!model_->override_default_button_);
+  // Confirm the button exists.
+  switch (button) {
+    case DIALOG_BUTTON_NONE:
+      NOTREACHED();
+      break;
+    case DIALOG_BUTTON_OK:
+      DCHECK(model_->ok_button_);
+      break;
+    case DIALOG_BUTTON_CANCEL:
+      DCHECK(model_->cancel_button_);
+      break;
+  }
+  model_->override_default_button_ = button;
   return *this;
 }
 
@@ -97,10 +118,11 @@ DialogModel::DialogModel(base::PassKey<Builder>,
 
 DialogModel::~DialogModel() = default;
 
-void DialogModel::AddBodyText(const DialogModelLabel& label,
-                              ElementIdentifier id) {
-  AddField(
-      std::make_unique<DialogModelBodyText>(GetPassKey(), this, label, id));
+void DialogModel::AddParagraph(const DialogModelLabel& label,
+                               std::u16string header,
+                               ElementIdentifier id) {
+  AddField(std::make_unique<DialogModelParagraph>(GetPassKey(), this, label,
+                                                  header, id));
 }
 
 void DialogModel::AddCheckbox(ElementIdentifier id,

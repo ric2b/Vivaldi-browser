@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,6 +46,15 @@ message ContentMetaData {
 
   // MimeType of the field as detected by Chrome.
   optional string content_type = 6;
+
+  // Source information, e.g., url or path.
+  optional string source = 7;
+
+  // Destination information, e.g., url or path.
+  optional string destination = 8;
+
+  // Name of tab title.
+  optional string tab_title = 9;
 }
 
 message ClientMetadata {
@@ -125,6 +134,13 @@ message ContentAnalysisRequest {
   // The absolute deadline (timestamp in UTC Epoch time) that Chrome will wait
   // until a response from the agent is received.
   optional int64 expires_at = 15;
+
+  // ID for keeping track of analysis requests that belong to the same user
+  // action.
+  optional string user_action_id = 16;
+
+  // Count of analysis requests that belong to the same user action.
+  optional int64 user_action_requests_count = 17;
 
   // Reserved to make sure there is no overlap with DeepScanningClientRequest.
   reserved 3, 4, 6 to 8;

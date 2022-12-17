@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,8 @@ namespace blink {
 
 // Provides access to a subset of paint chunks in a PaintArtifact.
 class PaintChunkSubset {
+  DISALLOW_NEW();
+
  public:
   // An empty subset.
   PaintChunkSubset() = default;
@@ -118,7 +120,7 @@ class PaintChunkSubset {
   }
 
   bool IsEmpty() const {
-    return UsesSubsetIndices() ? subset_indices_.IsEmpty()
+    return UsesSubsetIndices() ? subset_indices_.empty()
                                : begin_index_ == end_index_;
   }
 

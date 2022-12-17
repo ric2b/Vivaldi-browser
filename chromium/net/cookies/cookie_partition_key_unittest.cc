@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -188,8 +188,8 @@ TEST_P(CookiePartitionKeyTest, FromNetworkIsolationKey) {
     SCOPED_TRACE(test_case.desc);
 
     base::test::ScopedFeatureList feature_list;
-    std::vector<base::Feature> enabled_features;
-    std::vector<base::Feature> disabled_features;
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
     if (PartitionedCookiesEnabled()) {
       enabled_features.push_back(features::kPartitionedCookies);
     } else {

@@ -4,7 +4,13 @@
 // Source: Screen Capture (https://w3c.github.io/mediacapture-screen-share/)
 
 partial interface MediaDevices {
-  Promise<MediaStream> getDisplayMedia(optional DisplayMediaStreamConstraints constraints = {});
+  Promise<MediaStream> getDisplayMedia(optional DisplayMediaStreamOptions options = {});
+};
+
+[Exposed=Window, SecureContext]
+interface CaptureController {
+  constructor();
+  // TODO: Add setFocusBehavior() in a separate PR.
 };
 
 enum SelfCapturePreferenceEnum {
@@ -22,9 +28,10 @@ enum SurfaceSwitchingPreferenceEnum {
   "exclude"
 };
 
-dictionary DisplayMediaStreamConstraints {
+dictionary DisplayMediaStreamOptions {
   (boolean or MediaTrackConstraints) video = true;
   (boolean or MediaTrackConstraints) audio = false;
+  CaptureController controller = null;
   SelfCapturePreferenceEnum selfBrowserSurface;
   SystemAudioPreferenceEnum systemAudio;
   SurfaceSwitchingPreferenceEnum surfaceSwitching;

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,8 @@ class AwGLSurface : public gl::GLSurfaceEGL {
   void Destroy() override;
   bool IsOffscreen() override;
   unsigned int GetBackingFramebufferObject() override;
-  gfx::SwapResult SwapBuffers(PresentationCallback callback) override;
+  gfx::SwapResult SwapBuffers(PresentationCallback callback,
+                              gl::FrameData data) override;
   bool OnMakeCurrent(gl::GLContext* context) override;
   gfx::Size GetSize() override;
   void* GetHandle() override;

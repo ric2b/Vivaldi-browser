@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,6 +35,7 @@ enum class RectEdge {
 struct BoundEdges {
   RectEdge start;
   RectEdge end;
+  DISALLOW_NEW();
 };
 
 // Based on the given WritingMode and direction, return the pair of start and

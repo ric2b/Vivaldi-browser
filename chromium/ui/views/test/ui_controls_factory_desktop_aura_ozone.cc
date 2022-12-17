@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/check_op.h"
 #include "base/location.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -194,7 +195,7 @@ class UIControlsDesktopOzone : public UIControlsAura {
     std::vector<aura::Window*> windows =
         DesktopWindowTreeHostPlatform::GetAllOpenWindows();
     const auto i =
-        std::find_if(windows.cbegin(), windows.cend(), [point](auto* window) {
+        base::ranges::find_if(windows, [point](auto* window) {
           return window->GetBoundsInScreen().Contains(point) ||
                  window->HasCapture();
         });

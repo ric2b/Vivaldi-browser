@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,6 +48,12 @@ bool TestPermissionsClient::IsSubresourceFilterActivated(
     content::BrowserContext* browser_context,
     const GURL& url) {
   return false;
+}
+
+OriginKeyedPermissionActionService*
+TestPermissionsClient::GetOriginKeyedPermissionActionService(
+    content::BrowserContext* browser_context) {
+  return &origin_keyed_permission_action_service_;
 }
 
 PermissionActionsHistory* TestPermissionsClient::GetPermissionActionsHistory(

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,8 @@ class CORE_EXPORT NGFrameSetLayoutAlgorithm
                                 const Vector<HTMLDimension>& grid,
                                 const Vector<int>& deltas,
                                 LayoutUnit available_length);
+  void LayoutChildren(const FrameSetLayoutData& layout_data,
+                      const PhysicalSize& frameset_size);
 };
 
 }  // namespace blink

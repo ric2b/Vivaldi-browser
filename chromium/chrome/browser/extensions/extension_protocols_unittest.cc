@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -778,8 +778,8 @@ TEST_F(ExtensionProtocolsTest, MimeTypesForKnownFiles) {
         "web_accessible_resources": ["*"]
       })";
   test_dir.WriteManifest(kManifest);
-  std::unique_ptr<base::DictionaryValue> manifest =
-      base::DictionaryValue::From(base::test::ParseJsonDeprecated(kManifest));
+  std::unique_ptr<base::DictionaryValue> manifest = base::DictionaryValue::From(
+      base::Value::ToUniquePtrValue(base::test::ParseJson(kManifest)));
   ASSERT_TRUE(manifest);
 
   test_dir.WriteFile(FILE_PATH_LITERAL("json_file.json"), "{}");

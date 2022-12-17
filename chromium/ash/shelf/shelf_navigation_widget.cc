@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -410,7 +410,6 @@ ShelfNavigationWidget::Delegate::~Delegate() = default;
 
 void ShelfNavigationWidget::Delegate::Init(ui::Layer* parent_layer) {
   SetParentLayer(parent_layer);
-  UpdateOpaqueBackground();
 }
 
 void ShelfNavigationWidget::Delegate::UpdateOpaqueBackground() {
@@ -444,7 +443,8 @@ void ShelfNavigationWidget::Delegate::UpdateOpaqueBackground() {
 }
 
 void ShelfNavigationWidget::Delegate::UpdateBackgroundColor() {
-  SkColor background_color = ShelfConfig::Get()->GetShelfControlButtonColor();
+  SkColor background_color =
+      ShelfConfig::Get()->GetShelfControlButtonColor(GetWidget());
   if (background_delegate_)
     background_delegate_->SetBackgroundColor(background_color);
   else

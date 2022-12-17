@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,7 +91,7 @@ gfx::RectF BoundsForObject(const blink::WebAXObject& object) {
     computed_bounds.Offset(bounds.x(), bounds.y());
     computed_bounds.Offset(-container.GetScrollOffset().x(),
                            -container.GetScrollOffset().y());
-    transform.TransformRect(&computed_bounds);
+    computed_bounds = transform.MapRect(computed_bounds);
     container.GetRelativeBounds(container, bounds, transform);
   }
   return computed_bounds;
@@ -1233,9 +1233,6 @@ std::string WebAXObjectProxy::AttributesOfChildren() {
 std::string WebAXObjectProxy::BoundsForRange(int start, int end) {
   UpdateLayout();
   if (accessibility_object_.Role() != ax::mojom::Role::kStaticText)
-    return std::string();
-
-  if (!accessibility_object_.MaybeUpdateLayoutAndCheckValidity())
     return std::string();
 
   int len = end - start;

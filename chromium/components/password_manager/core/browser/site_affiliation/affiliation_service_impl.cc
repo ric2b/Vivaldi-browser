@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,7 +45,7 @@ CreateFacetUriToChangePasswordUrlMap(
   for (const auto& grouped_facets : groupings) {
     std::vector<FacetURI> uris_without_urls;
     GURL fallback_url;
-    for (const auto& facet : grouped_facets) {
+    for (const auto& facet : grouped_facets.facets) {
       if (!facet.change_password_url.is_valid()) {
         uris_without_urls.push_back(facet.uri);
         continue;
@@ -282,10 +282,20 @@ void AffiliationServiceImpl::TrimUnusedCache(std::vector<FacetURI> facet_uris) {
                      base::Unretained(backend_), std::move(facet_uris)));
 }
 
+void AffiliationServiceImpl::GetAllGroups(GroupsCallback callback) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(backend_);
+  backend_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&AffiliationBackend::GetAllGroups,
+                     base::Unretained(backend_)),
+      std::move(callback));
+}
+
 void AffiliationServiceImpl::InjectAffiliationAndBrandingInformation(
     std::vector<std::unique_ptr<PasswordForm>> forms,
     AffiliationService::StrategyOnCacheMiss strategy_on_cache_miss,
-    PasswordFormsCallback result_callback) {
+    PasswordFormsOrErrorCallback result_callback) {
   std::vector<PasswordForm*> android_credentials;
   for (const auto& form : forms) {
     if (IsValidAndroidCredential(PasswordFormDigest(*form)))
@@ -338,8 +348,8 @@ void AffiliationServiceImpl::CompleteInjectAffiliationAndBrandingInformation(
   // Inject the affiliated web realm into the form, if available. In case
   // multiple web realms are available, this will always choose the first
   // available web realm for injection.
-  auto affiliated_facet = std::find_if(
-      results.begin(), results.end(), [](const Facet& affiliated_facet) {
+  auto affiliated_facet =
+      base::ranges::find_if(results, [](const Facet& affiliated_facet) {
         return affiliated_facet.uri.IsValidWebFacetURI();
       });
   if (affiliated_facet != results.end())

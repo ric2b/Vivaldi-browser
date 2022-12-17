@@ -1,88 +1,96 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/chrome/browser/prefs/browser_prefs.h"
+#import "ios/chrome/browser/prefs/browser_prefs.h"
 
-#include "base/time/time.h"
-#include "components/autofill/core/common/autofill_prefs.h"
-#include "components/browsing_data/core/pref_names.h"
-#include "components/component_updater/component_updater_service.h"
-#include "components/component_updater/installer_policies/autofill_states_component_installer.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/dom_distiller/core/distilled_page_prefs.h"
-#include "components/enterprise/browser/reporting/common_pref_names.h"
-#include "components/feed/core/v2/public/ios/pref_names.h"
-#include "components/flags_ui/pref_service_flags_storage.h"
+#import "base/stl_util.h"
+#import "base/time/time.h"
+#import "components/autofill/core/common/autofill_prefs.h"
+#import "components/browsing_data/core/pref_names.h"
+#import "components/commerce/core/pref_names.h"
+#import "components/component_updater/component_updater_service.h"
+#import "components/component_updater/installer_policies/autofill_states_component_installer.h"
+#import "components/content_settings/core/browser/host_content_settings_map.h"
+#import "components/dom_distiller/core/distilled_page_prefs.h"
+#import "components/enterprise/browser/reporting/common_pref_names.h"
+#import "components/feed/core/v2/public/ios/pref_names.h"
+#import "components/flags_ui/pref_service_flags_storage.h"
 #import "components/handoff/handoff_manager.h"
-#include "components/history/core/common/pref_names.h"
-#include "components/invalidation/impl/invalidator_registrar_with_memory.h"
-#include "components/invalidation/impl/per_user_topic_subscription_manager.h"
-#include "components/language/core/browser/language_prefs.h"
-#include "components/language/core/browser/pref_names.h"
-#include "components/metrics/demographics/user_demographics.h"
-#include "components/metrics/metrics_pref_names.h"
-#include "components/network_time/network_time_tracker.h"
-#include "components/ntp_snippets/category_rankers/click_based_category_ranker.h"
-#include "components/ntp_snippets/content_suggestions_service.h"
-#include "components/ntp_snippets/remote/remote_suggestions_provider_impl.h"
-#include "components/ntp_snippets/remote/remote_suggestions_scheduler_impl.h"
-#include "components/ntp_snippets/remote/request_throttler.h"
-#include "components/ntp_snippets/user_classifier.h"
-#include "components/ntp_tiles/most_visited_sites.h"
-#include "components/ntp_tiles/popular_sites_impl.h"
-#include "components/omnibox/browser/zero_suggest_provider.h"
+#import "components/history/core/common/pref_names.h"
+#import "components/invalidation/impl/invalidator_registrar_with_memory.h"
+#import "components/invalidation/impl/per_user_topic_subscription_manager.h"
+#import "components/language/core/browser/language_prefs.h"
+#import "components/language/core/browser/pref_names.h"
+#import "components/metrics/demographics/user_demographics.h"
+#import "components/metrics/metrics_pref_names.h"
+#import "components/network_time/network_time_tracker.h"
+#import "components/ntp_snippets/category_rankers/click_based_category_ranker.h"
+#import "components/ntp_snippets/content_suggestions_service.h"
+#import "components/ntp_snippets/remote/remote_suggestions_provider_impl.h"
+#import "components/ntp_snippets/remote/remote_suggestions_scheduler_impl.h"
+#import "components/ntp_snippets/remote/request_throttler.h"
+#import "components/ntp_snippets/user_classifier.h"
+#import "components/ntp_tiles/most_visited_sites.h"
+#import "components/ntp_tiles/popular_sites_impl.h"
+#import "components/omnibox/browser/zero_suggest_provider.h"
 #import "components/optimization_guide/core/optimization_guide_prefs.h"
-#include "components/password_manager/core/browser/password_manager.h"
-#include "components/payments/core/payment_prefs.h"
-#include "components/policy/core/browser/browser_policy_connector.h"
-#include "components/policy/core/browser/url_blocklist_manager.h"
+#import "components/password_manager/core/browser/password_manager.h"
+#import "components/payments/core/payment_prefs.h"
+#import "components/policy/core/browser/browser_policy_connector.h"
+#import "components/policy/core/browser/url_blocklist_manager.h"
 #import "components/policy/core/common/policy_pref_names.h"
-#include "components/policy/core/common/policy_statistics_collector.h"
-#include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_service.h"
-#include "components/proxy_config/pref_proxy_config_tracker_impl.h"
-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "components/search_engines/template_url_prepopulate_data.h"
+#import "components/policy/core/common/policy_statistics_collector.h"
+#import "components/pref_registry/pref_registry_syncable.h"
+#import "components/prefs/pref_service.h"
+#import "components/proxy_config/pref_proxy_config_tracker_impl.h"
+#import "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#import "components/search_engines/template_url_prepopulate_data.h"
 #import "components/segmentation_platform/public/segmentation_platform_service.h"
-#include "components/sessions/core/session_id_generator.h"
-#include "components/signin/public/base/signin_pref_names.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/strings/grit/components_locale_settings.h"
-#include "components/sync/base/sync_prefs.h"
-#include "components/sync/driver/glue/sync_transport_data_prefs.h"
-#include "components/sync_device_info/device_info_prefs.h"
-#include "components/sync_sessions/session_sync_prefs.h"
-#include "components/translate/core/browser/translate_pref_names.h"
-#include "components/translate/core/browser/translate_prefs.h"
-#include "components/unified_consent/unified_consent_service.h"
-#include "components/update_client/update_client.h"
-#include "components/variations/service/variations_service.h"
-#include "components/web_resource/web_resource_pref_names.h"
-#include "ios/chrome/browser/browser_state/browser_state_info_cache.h"
-#include "ios/chrome/browser/first_run/first_run.h"
+#import "components/sessions/core/session_id_generator.h"
+#import "components/signin/public/base/signin_pref_names.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/strings/grit/components_locale_settings.h"
+#import "components/sync/base/sync_prefs.h"
+#import "components/sync/driver/glue/sync_transport_data_prefs.h"
+#import "components/sync_device_info/device_info_prefs.h"
+#import "components/sync_sessions/session_sync_prefs.h"
+#import "components/translate/core/browser/translate_pref_names.h"
+#import "components/translate/core/browser/translate_prefs.h"
+#import "components/unified_consent/unified_consent_service.h"
+#import "components/update_client/update_client.h"
+#import "components/variations/service/variations_service.h"
+#import "components/web_resource/web_resource_pref_names.h"
+#import "ios/chrome/browser/browser_state/browser_state_info_cache.h"
+#import "ios/chrome/browser/first_run/first_run.h"
 #import "ios/chrome/browser/memory/memory_debugger_manager.h"
 #import "ios/chrome/browser/metrics/ios_chrome_metrics_service_client.h"
-#include "ios/chrome/browser/notification_promo.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#include "ios/chrome/browser/pref_names.h"
-#include "ios/chrome/browser/prerender/prerender_pref.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/prerender/prerender_pref.h"
+#import "ios/chrome/browser/push_notification/push_notification_service.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_mediator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_path_cache.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
-#include "ios/chrome/browser/ui/first_run/fre_field_trial.h"
+#import "ios/chrome/browser/ui/first_run/fre_field_trial.h"
 #import "ios/chrome/browser/ui/first_run/trending_queries_field_trial.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
-#include "ios/chrome/browser/voice/voice_search_prefs_registration.h"
+#import "ios/chrome/browser/voice/voice_search_prefs_registration.h"
 #import "ios/chrome/browser/web/font_size/font_size_tab_helper.h"
 #import "ios/web/common/features.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util.h"
 
-#include "prefs/vivaldi_browser_prefs.h"
+// Vivaldi
+#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_prefs.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_prefs.h"
+#import "ios/notes/note_mediator.h"
+#import "ios/notes/note_path_cache.h"
+#import "prefs/vivaldi_browser_prefs.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -112,7 +120,13 @@ const char kOptimizationGuideRemoteFetchingEnabled[] =
 const char kTrialGroupV3PrefName[] = "fre_refactoringV3.trial_group";
 
 // Deprecated 05/2022.
-extern const char kAccountIdMigrationState[] = "account_id_migration_state";
+const char kAccountIdMigrationState[] = "account_id_migration_state";
+
+// Deprecated 09/2022.
+const char kDataSaverEnabled[] = "spdy_proxy.enabled";
+
+// Deprecated 09/2022.
+const char kPrefPromoObject[] = "ios.ntppromo";
 
 }  // namespace
 
@@ -122,7 +136,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   signin::IdentityManager::RegisterLocalStatePrefs(registry);
   IOSChromeMetricsServiceClient::RegisterPrefs(registry);
   network_time::NetworkTimeTracker::RegisterPrefs(registry);
-  ios::NotificationPromo::RegisterPrefs(registry);
   policy::BrowserPolicyConnector::RegisterPrefs(registry);
   policy::PolicyStatisticsCollector::RegisterPrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterPrefs(registry);
@@ -155,8 +168,11 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(metrics::prefs::kMetricsReportingEnabled,
                                 false);
 
+  registry->RegisterDictionaryPref(prefs::kIosPreRestoreAccountInfo);
+
   registry->RegisterListPref(prefs::kIosPromosManagerActivePromos);
   registry->RegisterListPref(prefs::kIosPromosManagerImpressions);
+  registry->RegisterListPref(prefs::kIosPromosManagerSingleDisplayActivePromos);
 
   registry->RegisterBooleanPref(enterprise_reporting::kCloudReportingEnabled,
                                 false);
@@ -182,10 +198,19 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(kFRETrialGroupPrefName, 0);
 
   registry->RegisterIntegerPref(kTrialGroupV3PrefName, 0);
+
+  registry->RegisterDictionaryPref(kPrefPromoObject);
+
+  // Registers prefs to count the remaining number of times autofill branding
+  // animation should perform. Defaults to 2, which is the maximum number of
+  // times a user should see autofill branding animation after installation.
+  registry->RegisterIntegerPref(
+      prefs::kAutofillBrandingIconAnimationRemainingCountPrefName, 2);
 }
 
 void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   autofill::prefs::RegisterProfilePrefs(registry);
+  commerce::RegisterPrefs(registry);
   dom_distiller::DistilledPagePrefs::RegisterProfilePrefs(registry);
   ios_feed::RegisterProfilePrefs(registry);
   FirstRun::RegisterProfilePrefs(registry);
@@ -193,7 +218,6 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   HostContentSettingsMap::RegisterProfilePrefs(registry);
   invalidation::InvalidatorRegistrarWithMemory::RegisterProfilePrefs(registry);
   invalidation::PerUserTopicSubscriptionManager::RegisterProfilePrefs(registry);
-  ios::NotificationPromo::RegisterProfilePrefs(registry);
   language::LanguagePrefs::RegisterProfilePrefs(registry);
   metrics::RegisterDemographicsProfilePrefs(registry);
   ntp_snippets::ClickBasedCategoryRanker::RegisterProfilePrefs(registry);
@@ -209,7 +233,7 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   payments::RegisterProfilePrefs(registry);
   policy::URLBlocklistManager::RegisterProfilePrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
-  prerender_prefs::RegisterNetworkPredictionPrefs(registry);
+  PushNotificationService::RegisterBrowserStatePrefs(registry);
   RegisterVoiceSearchBrowserStatePrefs(registry);
   safe_browsing::RegisterProfilePrefs(registry);
   segmentation_platform::SegmentationPlatformService::RegisterProfilePrefs(
@@ -233,7 +257,14 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   [SigninCoordinator registerBrowserStatePrefs:registry];
   [SigninPromoViewMediator registerBrowserStatePrefs:registry];
 
-  registry->RegisterBooleanPref(prefs::kDataSaverEnabled, false);
+  // Vivaldi
+  [NoteMediator registerBrowserStatePrefs:registry];
+  [NotePathCache registerBrowserStatePrefs:registry];
+  [VivaldiSpeedDialPrefs registerBrowserStatePrefs:registry];
+  [VivaldiBookmarkPrefs registerBrowserStatePrefs:registry];
+  // End Vivaldi
+
+  registry->RegisterBooleanPref(kDataSaverEnabled, false);
   registry->RegisterBooleanPref(
       prefs::kEnableDoNotTrack, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
@@ -266,6 +297,10 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // grouped by publisher.
   registry->RegisterIntegerPref(prefs::kNTPFollowingFeedSortType, 1);
 
+  // Register pref to determine if the user changed the Following sort type.
+  registry->RegisterBooleanPref(prefs::kDefaultFollowingFeedSortTypeChanged,
+                                false);
+
   // Register prefs used by Clear Browsing Data UI.
   browsing_data::prefs::RegisterBrowserUserPrefs(registry);
 
@@ -287,9 +322,7 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   // Register pref storing whether the Incognito interstitial for third-party
   // intents is enabled.
-  if (base::FeatureList::IsEnabled(kIOS3PIntentsInIncognito)) {
-    registry->RegisterBooleanPref(prefs::kIncognitoInterstitialEnabled, false);
-  }
+  registry->RegisterBooleanPref(prefs::kIncognitoInterstitialEnabled, false);
 
   // Register pref used to determine whether the User Policy notification was
   // already shown.
@@ -302,6 +335,16 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
                                 PrefRegistry::LOSSY_PREF);
   registry->RegisterTimePref(prefs::kIosShareChromeLastShare, base::Time(),
                              PrefRegistry::LOSSY_PREF);
+
+
+  registry->RegisterDictionaryPref(kPrefPromoObject);
+
+  // Register prerender network prediction preferences.
+  registry->RegisterIntegerPref(
+      prefs::kNetworkPredictionSetting,
+      base::to_underlying(
+          prerender_prefs::NetworkPredictionSetting::kEnabledWifiOnly),
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -317,15 +360,15 @@ void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
 
   // Added 05/2022
   prefs->ClearPref(kTrialGroupV3PrefName);
+
+  // Added 09/2022
+  prefs->ClearPref(kPrefPromoObject);
 }
 
 // This method should be periodically pruned of year+ old migrations.
 void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
   // Check MigrateDeprecatedAutofillPrefs() to see if this is safe to remove.
   autofill::prefs::MigrateDeprecatedAutofillPrefs(prefs);
-
-  // Added 9/2020.
-  prerender_prefs::MigrateNetworkPredictionPrefs(prefs);
 
   // Added 03/2022
   prefs->ClearPref(kShowReadingListInBookmarkBar);
@@ -341,6 +384,12 @@ void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
   // Added 05/2022
   prefs->ClearPref(kAccountIdMigrationState);
 
+  // Added 09/2022
+  prefs->ClearPref(kPrefPromoObject);
+
   // Added 06/2022.
   syncer::MigrateSyncRequestedPrefPostMice(prefs);
+
+  // Added 09/2022
+  prefs->ClearPref(kDataSaverEnabled);
 }

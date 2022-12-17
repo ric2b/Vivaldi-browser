@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,14 +7,13 @@
 #include <windows.h>
 #include <shellscalingapi.h>
 
-#include <algorithm>
-
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/cxx17_backports.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
@@ -209,14 +208,14 @@ DisplaySettings GetDisplaySettingsForDevice(const wchar_t* device_name) {
           static_cast<int>(mode.dmDisplayFrequency)};
 }
 
-std::vector<DisplayInfo> FindAndRemoveTouchingDisplayInfos(
-    const DisplayInfo& parent_info,
-    std::vector<DisplayInfo>* display_infos) {
+std::vector<internal::DisplayInfo> FindAndRemoveTouchingDisplayInfos(
+    const internal::DisplayInfo& parent_info,
+    std::vector<internal::DisplayInfo>* display_infos) {
   const auto first_touching_it = std::partition(
       display_infos->begin(), display_infos->end(),
       [&](const auto& info) { return !DisplayInfosTouch(parent_info, info); });
-  std::vector<DisplayInfo> touching_display_infos(first_touching_it,
-                                                  display_infos->end());
+  std::vector<internal::DisplayInfo> touching_display_infos(
+      first_touching_it, display_infos->end());
   display_infos->erase(first_touching_it, display_infos->end());
   return touching_display_infos;
 }
@@ -240,9 +239,21 @@ gfx::DisplayColorSpaces CreateDisplayColorSpaces(
 // HDR spaces and given |sdr_white_level|.
 gfx::DisplayColorSpaces GetDisplayColorSpacesForHdr(
     float sdr_white_level,
-    float hdr_max_luminance_relative) {
+    const gfx::mojom::DXGIOutputDesc* dxgi_output_desc) {
   auto color_spaces =
       CreateDisplayColorSpaces(gfx::ColorSpace::CreateSRGB(), sdr_white_level);
+
+  // Set the primaries and the HDR max luminance from the DXGIOutputDesc.
+  float hdr_max_luminance_relative = 0.f;
+  if (dxgi_output_desc) {
+    if (dxgi_output_desc->hdr_enabled) {
+      hdr_max_luminance_relative =
+          dxgi_output_desc->max_luminance / sdr_white_level;
+    }
+    color_spaces.SetPrimaries(dxgi_output_desc->primaries);
+  }
+  hdr_max_luminance_relative =
+      std::max(hdr_max_luminance_relative, kMinHDRCapableMaxLuminanceRelative);
   color_spaces.SetHDRMaxLuminanceRelative(hdr_max_luminance_relative);
 
   // This will map to DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709. In that space,
@@ -294,7 +305,7 @@ gfx::DisplayColorSpaces GetForcedDisplayColorSpaces() {
 }
 
 Display CreateDisplayFromDisplayInfo(
-    const DisplayInfo& display_info,
+    const internal::DisplayInfo& display_info,
     const ColorProfileReader* color_profile_reader,
     const gfx::mojom::DXGIOutputDesc* dxgi_output_desc,
     bool hdr_enabled_on_any_display) {
@@ -316,18 +327,10 @@ Display CreateDisplayFromDisplayInfo(
   if (HasForceDisplayColorProfile()) {
     color_spaces = GetForcedDisplayColorSpaces();
   } else if (hdr_enabled_on_any_display) {
-    float sdr_white_level = display_info.sdr_white_level();
-    float hdr_max_luminance_relative = 0.f;
-    if (dxgi_output_desc && dxgi_output_desc->hdr_enabled) {
-      hdr_max_luminance_relative =
-          dxgi_output_desc->max_luminance / sdr_white_level;
-    }
-    hdr_max_luminance_relative = std::max(hdr_max_luminance_relative,
-                                          kMinHDRCapableMaxLuminanceRelative);
     // TODO(https://crbug.com/1339352): Do not allow non-HDR-enabled displays
     // to use HDR color spaces.
-    color_spaces = GetDisplayColorSpacesForHdr(sdr_white_level,
-                                               hdr_max_luminance_relative);
+    color_spaces = GetDisplayColorSpacesForHdr(display_info.sdr_white_level(),
+                                               dxgi_output_desc);
   } else {
     color_spaces = CreateDisplayColorSpaces(
         color_profile_reader->GetDisplayColorSpace(display.id()),
@@ -360,27 +363,27 @@ Display CreateDisplayFromDisplayInfo(
 // map to multiple screen points due to overlap. The first discovered screen
 // will take precedence.
 std::vector<ScreenWinDisplay> DisplayInfosToScreenWinDisplays(
-    const std::vector<DisplayInfo>& display_infos,
+    const std::vector<internal::DisplayInfo>& display_infos,
     ColorProfileReader* color_profile_reader,
     gfx::mojom::DXGIInfo* dxgi_info) {
   if (display_infos.empty()) {
     return {};
   }
   // Find and extract the primary display.
-  std::vector<DisplayInfo> display_infos_remaining = display_infos;
-  auto primary_display_iter = std::find_if(
-      display_infos_remaining.begin(), display_infos_remaining.end(),
-      [](const DisplayInfo& display_info) {
+  std::vector<internal::DisplayInfo> display_infos_remaining = display_infos;
+  auto primary_display_iter = base::ranges::find_if(
+      display_infos_remaining, [](const internal::DisplayInfo& display_info) {
         return display_info.screen_rect().origin().IsOrigin();
       });
   DCHECK(primary_display_iter != display_infos_remaining.end());
 
   // Build the tree and determine DisplayPlacements along the way.
   DisplayLayoutBuilder builder(primary_display_iter->id());
-  std::vector<DisplayInfo> available_parents = {*primary_display_iter};
+  std::vector<internal::DisplayInfo> available_parents = {
+      *primary_display_iter};
   display_infos_remaining.erase(primary_display_iter);
   while (!available_parents.empty()) {
-    const DisplayInfo parent = available_parents.back();
+    const internal::DisplayInfo parent = available_parents.back();
     available_parents.pop_back();
     for (const auto& child :
          FindAndRemoveTouchingDisplayInfos(parent, &display_infos_remaining)) {
@@ -395,7 +398,7 @@ std::vector<ScreenWinDisplay> DisplayInfosToScreenWinDisplays(
   if (dxgi_info) {
     for (const auto& dxgi_output_desc : dxgi_info->output_descs) {
       hdr_enabled_on_any_display |= dxgi_output_desc->hdr_enabled;
-      dxgi_output_descs[DisplayInfo::DeviceIdFromDeviceName(
+      dxgi_output_descs[internal::DisplayInfo::DeviceIdFromDeviceName(
           dxgi_output_desc->device_name.c_str())] = dxgi_output_desc.get();
     }
   }
@@ -491,7 +494,8 @@ BOOL CALLBACK EnumMonitorForDisplayInfoCallback(HMONITOR monitor,
           GetDefaultMonitorPhysicalPixelsPerInch());
   const auto path_info = GetPathInfo(monitor);
 
-  auto* display_infos = reinterpret_cast<std::vector<DisplayInfo>*>(data);
+  auto* display_infos =
+      reinterpret_cast<std::vector<internal::DisplayInfo>*>(data);
   DCHECK(display_infos);
   display_infos->emplace_back(
       monitor_info, GetMonitorScaleFactor(monitor), GetSDRWhiteLevel(path_info),
@@ -500,8 +504,8 @@ BOOL CALLBACK EnumMonitorForDisplayInfoCallback(HMONITOR monitor,
   return TRUE;
 }
 
-std::vector<DisplayInfo> GetDisplayInfosFromSystem() {
-  std::vector<DisplayInfo> display_infos;
+std::vector<internal::DisplayInfo> GetDisplayInfosFromSystem() {
+  std::vector<internal::DisplayInfo> display_infos;
   EnumDisplayMonitors(nullptr, nullptr, EnumMonitorForDisplayInfoCallback,
                       reinterpret_cast<LPARAM>(&display_infos));
   DCHECK_EQ(::GetSystemMetrics(SM_CMONITORS),
@@ -706,6 +710,27 @@ void ScreenWin::SetDXGIInfo(gfx::mojom::DXGIInfoPtr dxgi_info) {
   }
 }
 
+// static
+ScreenWinDisplay ScreenWin::GetScreenWinDisplayWithDisplayId(int64_t id) {
+  if (!g_instance)
+    return ScreenWinDisplay();
+  const auto it = base::ranges::find(
+      g_instance->screen_win_displays_, id,
+      [](const auto& display) { return display.display().id(); });
+  // There is 1:1 correspondence between MONITORINFOEX and ScreenWinDisplay.
+  // If we found no screens, either there are no screens, or we're in the midst
+  // of updating our screens (see crbug.com/768845); either way, hand out the
+  // default display.
+  return (it == g_instance->screen_win_displays_.cend()) ? ScreenWinDisplay()
+                                                         : *it;
+}
+
+// static
+int64_t ScreenWin::DeviceIdFromDeviceName(const wchar_t* device_name) {
+  return display::win::internal::DisplayInfo::DeviceIdFromDeviceName(
+      device_name);
+}
+
 HWND ScreenWin::GetHWNDFromNativeWindow(gfx::NativeWindow window) const {
   NOTREACHED();
   return nullptr;
@@ -817,7 +842,7 @@ gfx::Rect ScreenWin::DIPToScreenRectInWindow(gfx::NativeWindow window,
 }
 
 void ScreenWin::UpdateFromDisplayInfos(
-    const std::vector<DisplayInfo>& display_infos) {
+    const std::vector<internal::DisplayInfo>& display_infos) {
   screen_win_displays_ = DisplayInfosToScreenWinDisplays(
       display_infos, color_profile_reader_.get(), dxgi_info_.get());
   displays_ = ScreenWinDisplaysToDisplays(screen_win_displays_);
@@ -891,11 +916,10 @@ void ScreenWin::OnColorProfilesChanged() {
   // The color profile reader will often just confirm that our guess that the
   // color profile was sRGB was indeed correct. Avoid doing an update in these
   // cases.
-  if (std::any_of(
-          displays_.cbegin(), displays_.cend(), [this](const auto& display) {
-            return display.color_spaces().GetRasterColorSpace() !=
-                   color_profile_reader_->GetDisplayColorSpace(display.id());
-          }))
+  if (base::ranges::any_of(displays_, [this](const auto& display) {
+        return display.color_spaces().GetRasterColorSpace() !=
+               color_profile_reader_->GetDisplayColorSpace(display.id());
+      }))
     UpdateAllDisplaysAndNotify();
 }
 
@@ -904,7 +928,10 @@ void ScreenWin::UpdateAllDisplaysAndNotify() {
 
   std::vector<Display> old_displays = std::move(displays_);
   UpdateFromDisplayInfos(GetDisplayInfosFromSystem());
-  change_notifier_.NotifyDisplaysChanged(old_displays, displays_);
+  // It's possible notifying of display changes may trigger reentrancy. Copy
+  // `displays_` to ensure there are no problems if reentrancy happens.
+  std::vector<Display> displays_copy = displays_;
+  change_notifier_.NotifyDisplaysChanged(old_displays, displays_copy);
 }
 
 ScreenWinDisplay ScreenWin::GetScreenWinDisplayNearestHWND(HWND hwnd) const {
@@ -959,10 +986,11 @@ ScreenWinDisplay ScreenWin::GetPrimaryScreenWinDisplay() const {
 
 ScreenWinDisplay ScreenWin::GetScreenWinDisplay(
     const MONITORINFOEX& monitor_info) const {
-  const int64_t id = DisplayInfo::DeviceIdFromDeviceName(monitor_info.szDevice);
-  const auto it = std::find_if(
-      screen_win_displays_.cbegin(), screen_win_displays_.cend(),
-      [id](const auto& display) { return display.display().id() == id; });
+  const int64_t id =
+      internal::DisplayInfo::DeviceIdFromDeviceName(monitor_info.szDevice);
+  const auto it = base::ranges::find(
+      screen_win_displays_, id,
+      [](const auto& display) { return display.display().id(); });
   // There is 1:1 correspondence between MONITORINFOEX and ScreenWinDisplay.
   // If we found no screens, either there are no screens, or we're in the midst
   // of updating our screens (see crbug.com/768845); either way, hand out the

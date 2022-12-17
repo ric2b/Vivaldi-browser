@@ -1,9 +1,8 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {ArrayDataModel} from 'chrome://resources/js/cr/ui/array_data_model.m.js';
-
+import {ArrayDataModel} from '../../common/js/array_data_model.js';
 import {VolumeInfo} from '../../externs/volume_info.js';
 import {VolumeInfoList} from '../../externs/volume_info_list.js';
 

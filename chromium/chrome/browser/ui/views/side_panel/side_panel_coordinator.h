@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,11 +14,14 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_registry_observer.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_util.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_view_state_observer.h"
+#include "extensions/common/extension_id.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class BrowserView;
 class SidePanelComboboxModel;
 
 namespace views {
+class ImageButton;
 class Combobox;
 class View;
 }  // namespace views
@@ -45,8 +48,15 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   void Show(absl::optional<SidePanelEntry::Id> entry_id = absl::nullopt,
             absl::optional<SidePanelUtil::SidePanelOpenTrigger> open_trigger =
                 absl::nullopt);
+  void Show(SidePanelEntry::Key entry_key,
+            absl::optional<SidePanelUtil::SidePanelOpenTrigger> open_trigger =
+                absl::nullopt);
   void Close();
   void Toggle();
+
+  // Opens the current side panel contents in a new tab. This is called by the
+  // header button, when it's visible.
+  void OpenInNewTab();
 
   SidePanelRegistry* GetGlobalSidePanelRegistry();
 
@@ -72,6 +82,10 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
 
   bool IsSidePanelShowing();
 
+  // Re-runs open new tab URL check and sets button state to enabled/disabled
+  // accordingly.
+  void UpdateNewTabButtonState();
+
   void AddSidePanelViewStateObserver(SidePanelViewStateObserver* observer);
 
   void RemoveSidePanelViewStateObserver(SidePanelViewStateObserver* observer);
@@ -84,7 +98,7 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
                            PopulateUserNoteSidePanel);
 
   views::View* GetContentView() const;
-  SidePanelEntry* GetEntryForId(SidePanelEntry::Id entry_id);
+  SidePanelEntry* GetEntryForKey(const SidePanelEntry::Key& entry_key);
 
   void SetSidePanelButtonTooltipText(std::u16string tooltip_text);
 
@@ -105,10 +119,10 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
 
   // Returns the last active entry or the reading list entry if no last active
   // entry exists.
-  absl::optional<SidePanelEntry::Id> GetLastActiveEntryId() const;
+  absl::optional<SidePanelEntry::Key> GetLastActiveEntryKey() const;
 
   // Returns the currently selected id in the combobox, if one is shown.
-  absl::optional<SidePanelEntry::Id> GetSelectedId() const;
+  absl::optional<SidePanelEntry::Key> GetSelectedKey() const;
 
   SidePanelRegistry* GetActiveContextualRegistry() const;
 
@@ -124,6 +138,7 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // SidePanelRegistryObserver:
   void OnEntryRegistered(SidePanelEntry* entry) override;
   void OnEntryWillDeregister(SidePanelEntry* entry) override;
+  void OnEntryIconUpdated(SidePanelEntry* entry) override;
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(
@@ -142,7 +157,7 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
 
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<SidePanelRegistry> global_registry_;
-  absl::optional<SidePanelEntry::Id> last_active_global_entry_id_;
+  absl::optional<SidePanelEntry::Key> last_active_global_entry_key_;
 
   // current_entry_ tracks the entry that currently has its view hosted by the
   // side panel. It is necessary as current_entry_ may belong to a contextual
@@ -158,6 +173,9 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // their availability in the observed side panel registries.
   std::unique_ptr<SidePanelComboboxModel> combobox_model_;
   raw_ptr<views::Combobox> header_combobox_ = nullptr;
+
+  // Used to update the visibility of the 'Open in New Tab' header button.
+  raw_ptr<views::ImageButton> header_open_in_new_tab_button_ = nullptr;
 
   base::ObserverList<SidePanelViewStateObserver> view_state_observers_;
 

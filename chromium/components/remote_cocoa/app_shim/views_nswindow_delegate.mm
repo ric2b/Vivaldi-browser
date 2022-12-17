@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -204,6 +204,14 @@
 - (void)windowDidDeminiaturize:(NSNotification*)notification {
   _parent->host()->OnWindowMiniaturizedChanged(false);
   _parent->OnVisibilityChanged();
+}
+
+// The delegate or the window class should implement this method so that
+// -[NSWindow isZoomed] can be then determined by whether or not the current
+// window frame is equal to the zoomed frame.
+- (NSRect)windowWillUseStandardFrame:(NSWindow*)window
+                        defaultFrame:(NSRect)newFrame {
+  return newFrame;
 }
 
 - (void)windowDidChangeBackingProperties:(NSNotification*)notification {

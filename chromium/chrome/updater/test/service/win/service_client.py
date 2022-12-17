@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Calls a function defined in rpc_client.py, which will forward the request
@@ -8,9 +8,9 @@ This command assumes the updater test service is already installed on the
 system.
 
 Example usages:
-    vpython service_proxy.py --function=RunAsSystem \
+    vpython3 service_proxy.py --function=RunAsSystem \
         --args='{"command": "notepad.exe"}'
-    vpython service_proxy.py --function=AnswerUpcomingUACPrompt \
+    vpython3 service_proxy.py --function=AnswerUpcomingUACPrompt \
         --args='{"actions": "A", "wait_child": false, "source": "demo"}'
 """
 

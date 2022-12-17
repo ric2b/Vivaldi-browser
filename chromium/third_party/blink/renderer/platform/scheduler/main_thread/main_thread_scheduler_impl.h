@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,23 +114,12 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     bool low_priority_subframe_throttleable;
     bool low_priority_hidden_frame;
 
-    // Used along with |low_priority_subframe|, |low_priority_throttleable|,
-    // |low_priority_subframe_throttleable|, |low_priority_hidden_frame|
-    // to enable one of these experiments during the loading phase only.
-    bool use_frame_priorities_only_during_loading;
-
     // Ads priority experiment (crbug.com/856150).
     bool low_priority_ad_frame;
     bool best_effort_ad_frame;
-    bool use_adframe_priorities_only_during_loading;
 
     // Origin type priority experiment (crbug.com/856158).
     bool low_priority_cross_origin;
-    bool low_priority_cross_origin_only_during_loading;
-
-    // Use resource fetch priority for resource loading tasks
-    // (crbug.com/860545).
-    bool use_resource_fetch_priority;
 
     // Prioritize compositing and loading tasks until first contentful paint.
     // (crbug.com/971191)
@@ -138,12 +127,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
     // Prioritise one BeginMainFrame after an input task.
     bool prioritize_compositing_after_input;
-
-    // Contains a mapping from net::RequestPriority to TaskQueue::QueuePriority
-    // when use_resource_fetch_priority is enabled.
-    std::array<base::sequence_manager::TaskQueue::QueuePriority,
-               net::RequestPrioritySize::NUM_PRIORITIES>
-        net_to_blink_priority;
 
     // If enabled, base::ThreadTaskRunnerHandle::Get() and
     // base::SequencedTaskRunnerHandle::Get() returns the current active
@@ -173,7 +156,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   ~MainThreadSchedulerImpl() override;
 
   // WebThreadScheduler implementation:
-  std::unique_ptr<Thread> CreateMainThread() override;
+  std::unique_ptr<MainThread> CreateMainThread() override;
   // Note: this is also shared by the ThreadScheduler interface.
   scoped_refptr<base::SingleThreadTaskRunner> NonWakingTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> DeprecatedDefaultTaskRunner()
@@ -198,6 +181,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // MainThreadScheduler implementation:
   [[nodiscard]] std::unique_ptr<MainThreadScheduler::RendererPauseHandle>
   PauseScheduler() override;
+  v8::Isolate* Isolate() override;
 
   // ThreadScheduler implementation:
   void PostIdleTask(const base::Location&, Thread::IdleTask) override;
@@ -876,6 +860,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     std::unique_ptr<power_scheduler::PowerModeVoter> audible_power_mode_voter;
 
     std::unique_ptr<TaskAttributionTracker> task_attribution_tracker;
+    WTF::HashSet<AgentGroupSchedulerImpl*> agent_group_schedulers;
   };
 
   struct AnyThread {
@@ -952,7 +937,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   }
 
   PollableThreadSafeFlag policy_may_need_update_;
-  WTF::HashSet<AgentGroupSchedulerImpl*> agent_group_schedulers_;
   WebAgentGroupScheduler* current_agent_group_scheduler_{nullptr};
 
   base::WeakPtrFactory<MainThreadSchedulerImpl> weak_factory_{this};

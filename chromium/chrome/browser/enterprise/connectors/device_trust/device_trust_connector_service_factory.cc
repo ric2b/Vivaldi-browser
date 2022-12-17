@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,11 @@
 #include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
 #include "components/enterprise/browser/device_trust/device_trust_key_manager.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace enterprise_connectors {
 
@@ -47,8 +52,14 @@ bool DeviceTrustConnectorServiceFactory::ServiceIsCreatedWithBrowserContext()
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 }
 
+bool DeviceTrustConnectorServiceFactory::ServiceIsNULLWhileTesting() const {
+  return true;
+}
+
 DeviceTrustConnectorServiceFactory::DeviceTrustConnectorServiceFactory()
-    : ProfileKeyedServiceFactory("DeviceTrustConnectorService") {}
+    : ProfileKeyedServiceFactory(
+          "DeviceTrustConnectorService",
+          ProfileSelections::BuildForRegularAndIncognitoNonExperimental()) {}
 
 DeviceTrustConnectorServiceFactory::~DeviceTrustConnectorServiceFactory() =
     default;
@@ -56,6 +67,17 @@ DeviceTrustConnectorServiceFactory::~DeviceTrustConnectorServiceFactory() =
 KeyedService* DeviceTrustConnectorServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   auto* profile = Profile::FromBrowserContext(context);
+  // Disallow service for Incognito except for the sign-in profile of ChromeOS
+  // (on the login screen).
+  if (context->IsOffTheRecord()) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    if (!ash::features::IsLoginScreenDeviceTrustConnectorFeatureEnabled() ||
+        !ash::ProfileHelper::IsSigninProfile(profile))
+      return nullptr;
+#else
+    return nullptr;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  }
 
   DeviceTrustConnectorService* service = nullptr;
 

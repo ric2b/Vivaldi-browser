@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,10 +33,6 @@ class CrossOtrTabHelper : public CrossOtrObserver,
  public:
   ~CrossOtrTabHelper() override;
 
-  // Attaches the observer in cases where it should do so; leaves `web_state`
-  // unchanged otherwise.
-  static void CreateForWebState(web::WebState* web_state);
-
   // web::WebStateObserver:
   void DidStartNavigation(web::WebState* web_state,
                           web::NavigationContext* navigation_context) override;
@@ -52,8 +48,9 @@ class CrossOtrTabHelper : public CrossOtrObserver,
   void SetExperimentalStatus(ClassificationExperimentStatus status);
 
  private:
-  CrossOtrTabHelper(web::WebState* web_state);
   friend class WebStateUserData<CrossOtrTabHelper>;
+
+  explicit CrossOtrTabHelper(web::WebState* web_state);
 
   // Flushes metrics and removes the observer from the WebState.
   void Detach(web::WebState* web_state);

@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,6 +61,8 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) CellularMetricsLogger
   static const char kUnmanagedSimPinUnlockSuccessHistogram[];
   static const char kUnrestrictedSimPinUnblockSuccessHistogram[];
   static const char kUnrestrictedSimPinUnlockSuccessHistogram[];
+  static const char kSimPinLockPolicyChangePinSuccessHistogram[];
+  static const char kSimPinLockPolicyRequirePinSuccessHistogram[];
 
   // Histograms associated with user initiated connection success.
   static const char kESimUserInitiatedConnectionResultHistogram[];

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -249,7 +249,7 @@ void PolicyComplianceObserver::OnComplianceReportReceived(
   }
 
   bool is_android_id_reset = true;
-  for (const auto& detail : details->GetListDeprecated()) {
+  for (const auto& detail : details->GetList()) {
     const base::Value* const reason =
         detail.FindKeyOfType("nonComplianceReason", base::Value::Type::INTEGER);
     const std::string* const settingName = detail.FindStringKey("settingName");

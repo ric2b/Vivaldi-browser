@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -10,10 +10,12 @@ component("geometry") {
     "axis_transform2d.h",
     "box_f.cc",
     "box_f.h",
+    "clamp_float_geometry.h",
     "cubic_bezier.cc",
     "cubic_bezier.h",
     "dip_util.cc",
     "dip_util.h",
+    "double4.h",
     "geometry_export.h",
     "insets.cc",
     "insets.h",

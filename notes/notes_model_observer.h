@@ -60,10 +60,6 @@ class NotesModelObserver : public base::CheckedObserver {
   // Invoked when the title or url of a node changes.
   virtual void NotesNodeChanged(NotesModel* model, const NoteNode* node) {}
 
-  // Invoked when a attachment has been loaded or changed.
-  virtual void NotesNodeAttachmentChanged(NotesModel* model,
-                                          const NoteNode* node) {}
-
   // Invoked before the direct children of |node| have been reordered in some
   // way, such as sorted.
   virtual void OnWillReorderNotesNode(NotesModel* model, const NoteNode* node) {

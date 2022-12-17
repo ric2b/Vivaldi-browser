@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 package org.chromium.chrome.browser.signin;
@@ -99,6 +99,30 @@ public final class SyncConsentActivityLauncherImpl implements SyncConsentActivit
             ManagedPreferencesUtils.showManagedByAdministratorToast(context);
         }
         return false;
+    }
+
+    /**
+     * Launches the {@link SyncConsentActivity} with Tangible Sync flow.
+     * @param accessPoint {@link SigninAccessPoint} for starting sign-in flow.
+     * @param accountName The account to select.
+     */
+    @Override
+    public void launchActivityForTangibleSyncFlow(
+            Context context, @SigninAccessPoint int accessPoint, String accountName) {
+        launchInternal(context,
+                SyncConsentFragmentBase.createArgumentsForTangibleSyncFlow(
+                        accessPoint, accountName));
+    }
+
+    /**
+     * Launches the {@link SyncConsentActivity} with "New Account" sign-in flow for Tangible Sync.
+     * @param accessPoint {@link SigninAccessPoint} for starting sign-in flow.
+     */
+    @Override
+    public void launchActivityForTangibleSyncAddAccountFlow(
+            Context context, @SigninAccessPoint int accessPoint) {
+        launchInternal(context,
+                SyncConsentFragmentBase.createArgumentsForTangibleSyncAddAccountFlow(accessPoint));
     }
 
     private void launchInternal(Context context, Bundle fragmentArgs) {

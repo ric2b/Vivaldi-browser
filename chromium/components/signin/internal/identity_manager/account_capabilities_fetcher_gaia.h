@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,7 @@ class AccountCapabilitiesFetcherGaia
 
   // gaia::GaiaOAuthClient::Delegate:
   void OnGetAccountCapabilitiesResponse(
-      std::unique_ptr<base::Value> account_capabilities) override;
+      const base::Value::Dict& account_capabilities) override;
   void OnOAuthError() override;
   void OnNetworkError(int response_code) override;
 

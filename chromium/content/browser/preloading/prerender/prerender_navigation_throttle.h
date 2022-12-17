@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,9 @@ class PrerenderNavigationThrottle : public NavigationThrottle {
   explicit PrerenderNavigationThrottle(NavigationHandle* navigation_handle);
 
   ThrottleCheckResult WillStartOrRedirectRequest(bool is_redirection);
+
+  bool is_same_site_cross_origin_prerender_ = false;
+  bool same_site_cross_origin_prerender_did_redirect_ = false;
 };
 
 }  // namespace content

@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -156,6 +156,11 @@ NET_EXPORT bool GetValidityTimes(CERTCertificate* cert,
 // Calculates the SHA-256 fingerprint of the certificate.  Returns an empty
 // (all zero) fingerprint on failure.
 NET_EXPORT SHA256HashValue CalculateFingerprint256(CERTCertificate* cert);
+
+// Behaves like `CERT_GetCertIsPerm` in NSS. This function's type signature
+// mirrors the NSS function so call sites can be easily replaced when
+// https://crbug.com/1365414 is resolved.
+NET_EXPORT SECStatus GetCertIsPerm(const CERTCertificate* cert, PRBool* isperm);
 
 }  // namespace net::x509_util
 

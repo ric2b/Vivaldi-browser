@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -233,7 +233,7 @@ TrackEventThreadLocalEventSink::AddTypedTraceEvent(
   // |pending_trace_packet_| will be finalized in OnTrackEventCompleted() after
   // the code in //base ran the typed trace point's argument function.
   return base::trace_event::TrackEventHandle(track_event, &incremental_state_,
-                                             this);
+                                             this, privacy_filtering_enabled_);
 }
 
 void TrackEventThreadLocalEventSink::WriteInternedDataIntoTracePacket(
@@ -422,7 +422,8 @@ TrackEvent* TrackEventThreadLocalEventSink::PrepareTrackEvent(
                      force_absolute_timestamp);
 
   TrackEvent* track_event = (*trace_packet)->set_track_event();
-  perfetto::EventContext event_context(track_event, &incremental_state_);
+  perfetto::EventContext event_context(track_event, &incremental_state_,
+                                       privacy_filtering_enabled_);
 
   // TODO(eseckler): Split comma-separated category strings.
   const char* category_name =

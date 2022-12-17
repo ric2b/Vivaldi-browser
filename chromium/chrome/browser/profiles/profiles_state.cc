@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -285,15 +285,6 @@ bool IsPublicSession() {
 #else
   return false;
 #endif
-}
-
-bool ArePublicSessionRestrictionsEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (chromeos::LoginState::IsInitialized()) {
-    return chromeos::LoginState::Get()->ArePublicSessionRestrictionsEnabled();
-  }
-#endif
-  return false;
 }
 
 bool IsKioskSession() {

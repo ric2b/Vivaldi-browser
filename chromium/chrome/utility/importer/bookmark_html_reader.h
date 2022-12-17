@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,7 +87,10 @@ bool ParseBookmarkFromLine(const std::string& line,
                            GURL* favicon,
                            std::u16string* shortcut,
                            base::Time* add_date,
-                           std::u16string* post_data);
+                           std::u16string* post_data,
+                           // Vivaldi
+                           std::u16string* nickname = nullptr,
+                           std::u16string* description = nullptr);
 // Save bookmarks imported from browsers with Firefox 2 compatible bookmark
 // systems such as Epiphany. This bookmark format is the same as that of the
 // basic Firefox 2 bookmark, but it misses additional properties and uses

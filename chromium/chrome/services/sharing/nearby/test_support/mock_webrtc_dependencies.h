@@ -1,14 +1,14 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_SERVICES_SHARING_NEARBY_TEST_SUPPORT_MOCK_WEBRTC_DEPENDENCIES_H_
 #define CHROME_SERVICES_SHARING_NEARBY_TEST_SUPPORT_MOCK_WEBRTC_DEPENDENCIES_H_
 
-#include "ash/services/nearby/public/mojom/nearby_connections.mojom.h"
-#include "ash/services/nearby/public/mojom/sharing.mojom.h"
-#include "ash/services/nearby/public/mojom/webrtc.mojom.h"
-#include "ash/services/nearby/public/mojom/webrtc_signaling_messenger.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/nearby_connections.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/sharing.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/webrtc.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/webrtc_signaling_messenger.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "services/network/public/mojom/mdns_responder.mojom.h"
 #include "services/network/public/mojom/p2p.mojom.h"
@@ -37,6 +37,15 @@ class MockWebRtcDependencies : public network::mojom::P2PSocketManager,
       (const std::string& host_name,
        bool enable_mdns,
        network::mojom::P2PSocketManager::GetHostAddressCallback callback),
+      (override));
+  MOCK_METHOD(
+      void,
+      GetHostAddressWithFamily,
+      (const std::string& host_name,
+       int address_family,
+       bool enable_mdns,
+       network::mojom::P2PSocketManager::GetHostAddressWithFamilyCallback
+           callback),
       (override));
   MOCK_METHOD(void,
               CreateSocket,

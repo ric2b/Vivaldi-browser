@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -716,16 +716,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<PlatformFileForTransit> {
 template <>
 struct COMPONENT_EXPORT(IPC) ParamTraits<base::FilePath> {
   typedef base::FilePath param_type;
-  static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
-
-template <>
-struct COMPONENT_EXPORT(IPC) ParamTraits<base::ListValue> {
-  typedef base::ListValue param_type;
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,

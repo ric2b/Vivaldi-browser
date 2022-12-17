@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,15 +53,18 @@ class GbmSurfacelessWayland : public gl::SurfacelessEGL,
                                 int y,
                                 int width,
                                 int height,
-                                PresentationCallback callback) override;
+                                PresentationCallback callback,
+                                gl::FrameData data) override;
   void SwapBuffersAsync(SwapCompletionCallback completion_callback,
-                        PresentationCallback presentation_callback) override;
+                        PresentationCallback presentation_callback,
+                        gl::FrameData data) override;
   void PostSubBufferAsync(int x,
                           int y,
                           int width,
                           int height,
                           SwapCompletionCallback completion_callback,
-                          PresentationCallback presentation_callback) override;
+                          PresentationCallback presentation_callback,
+                          gl::FrameData data) override;
   EGLConfig GetConfig() override;
   void SetRelyOnImplicitSync() override;
   bool SupportsPlaneGpuFences() const override;
@@ -147,6 +150,7 @@ class GbmSurfacelessWayland : public gl::SurfacelessEGL,
 
     SwapCompletionCallback completion_callback;
     PresentationCallback presentation_callback;
+    gl::FrameData data;
 
     // Says if scheduling succeeded.
     bool schedule_planes_succeeded = true;

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,8 @@ class JSONArray;
 
 // A container for a list of display items of various types.
 class PLATFORM_EXPORT DisplayItemList {
+  DISALLOW_NEW();
+
  public:
   DisplayItemList() = default;
   ~DisplayItemList();
@@ -31,7 +33,7 @@ class PLATFORM_EXPORT DisplayItemList {
   DisplayItemList& operator=(DisplayItemList&&) = delete;
 
   void ReserveCapacity(wtf_size_t initial_capacity) {
-    items_.ReserveCapacity(initial_capacity);
+    items_.reserve(initial_capacity);
   }
 
   // This private section is before the public APIs because some inline public
@@ -88,6 +90,7 @@ class PLATFORM_EXPORT DisplayItemList {
 
   struct ItemSlot {
     alignas(kAlignment) uint8_t data[kMaxItemSize];
+    DISALLOW_NEW();
   };
   using ItemVector = Vector<ItemSlot>;
 

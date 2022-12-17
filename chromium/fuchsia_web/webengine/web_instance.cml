@@ -44,10 +44,19 @@
         "fuchsia.fonts.Provider",
         "fuchsia.hwinfo.Product",
         "fuchsia.intl.PropertyProvider",
+        "fuchsia.kernel.VmexResource",
         "fuchsia.memorypressure.Provider",
         "fuchsia.process.Launcher",
         "fuchsia.sysmem.Allocator",
       ]
+    },
+    {
+      // Optional capabilities, dependent on availability of tracing services.
+      protocol: [
+          "fuchsia.tracing.perfetto.ProducerConnector",
+          "fuchsia.tracing.provider.Registry",
+      ],
+      availability: "optional",
     },
     {
       // Optional capabilities, dependent on ContextFeatureFlags.

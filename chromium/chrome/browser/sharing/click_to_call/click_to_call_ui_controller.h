@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,7 +35,8 @@ class ClickToCallUiController
                          const absl::optional<url::Origin>& initiating_origin,
                          content::WeakDocumentPtr initiator_document,
                          const GURL& url,
-                         bool hide_default_handler);
+                         bool hide_default_handler,
+                         const std::u16string& program_name);
 
   ClickToCallUiController(const ClickToCallUiController&) = delete;
   ClickToCallUiController& operator=(const ClickToCallUiController&) = delete;
@@ -89,6 +90,7 @@ class ClickToCallUiController
 
   UKMRecorderCallback ukm_recorder_;
   GURL phone_url_;
+  std::u16string default_program_name_;
   content::WeakDocumentPtr initiator_document_;
   bool hide_default_handler_ = false;
 

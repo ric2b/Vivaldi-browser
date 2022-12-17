@@ -17,8 +17,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "components/sync/base/time.h"
+#include "components/sync/engine/commit_and_get_updates_types.h"
 #include "components/sync/protocol/entity_data.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/notes_model_metadata.pb.h"
@@ -26,6 +28,7 @@
 #include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
+#include "sync/file_sync/file_store.h"
 #include "sync/notes/synced_note_tracker_entity.h"
 #include "ui/base/models/tree_node_iterator.h"
 
@@ -69,23 +72,34 @@ syncer::ClientTagHash SyncedNoteTracker::GetClientTagHashFromGUID(
 
 // static
 std::unique_ptr<SyncedNoteTracker> SyncedNoteTracker::CreateEmpty(
-    sync_pb::ModelTypeState model_type_state) {
+    sync_pb::ModelTypeState model_type_state,
+    file_sync::SyncedFileStore* synced_file_store) {
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new SyncedNoteTracker(
       std::move(model_type_state), /*notes_reuploaded=*/false,
       /*num_ignored_updates_due_to_missing_parent=*/absl::optional<int64_t>(0),
       /*max_version_among_ignored_updates_due_to_missing_parent=*/
-      absl::nullopt));
+      absl::nullopt, synced_file_store));
 }
 
 // static
 std::unique_ptr<SyncedNoteTracker>
 SyncedNoteTracker::CreateFromNotesModelAndMetadata(
     const vivaldi::NotesModel* model,
-    sync_pb::NotesModelMetadata model_metadata) {
+    sync_pb::NotesModelMetadata model_metadata,
+    file_sync::SyncedFileStore* synced_file_store) {
   DCHECK(model);
 
   if (!model_metadata.model_type_state().initial_sync_done()) {
+    return nullptr;
+  }
+
+  if (!model_metadata.notes_reset_for_attachment_suport()) {
+    // When updating from a version of vivaldi that didn't support attachment,
+    // we need to redownload all notes. This is because those older versions
+    // would just throw away all updates to attachment nodes, since they were
+    // not children of folders. The only way to ensure we receive those again
+    // from the server is to request everything.
     return nullptr;
   }
 
@@ -114,7 +128,8 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
   auto tracker = base::WrapUnique(new SyncedNoteTracker(
       model_metadata.model_type_state(), notes_reuploaded,
       num_ignored_updates_due_to_missing_parent,
-      max_version_among_ignored_updates_due_to_missing_parent));
+      max_version_among_ignored_updates_due_to_missing_parent,
+      synced_file_store));
 
   bool is_not_corrupted = tracker->InitEntitiesFromModelAndMetadata(
       model, std::move(model_metadata));
@@ -205,6 +220,11 @@ const SyncedNoteTrackerEntity* SyncedNoteTracker::Add(
   sync_id_to_entities_map_[sync_id] = std::move(entity);
   DCHECK_EQ(sync_id_to_entities_map_.size(),
             client_tag_hash_to_entities_map_.size());
+  if (server_version != syncer::kUncommittedVersion &&
+      note_node->is_attachment()) {
+    synced_file_store_->AddSyncFileRef(
+        sync_id, syncer::NOTES, base::UTF16ToASCII(note_node->GetContent()));
+  }
   return raw_entity;
 }
 
@@ -272,6 +292,11 @@ void SyncedNoteTracker::Remove(const SyncedNoteTrackerEntity* entity) {
     DCHECK(entity->metadata().is_deleted());
   }
 
+  // We don't need to check if this is an attachment. If it isn't, there will
+  // just be nothing to remove for the provided sync id.
+  synced_file_store_->RemoveSyncRef(entity->metadata().server_id(),
+                                    syncer::NOTES);
+
   client_tag_hash_to_entities_map_.erase(entity->GetClientTagHash());
 
   base::Erase(ordered_local_tombstones_, entity);
@@ -324,6 +349,8 @@ sync_pb::NotesModelMetadata SyncedNoteTracker::BuildNoteModelMetadata() const {
     *note_metadata->mutable_metadata() = tombstone_entity->metadata();
   }
   *model_metadata.mutable_model_type_state() = model_type_state_;
+  // This is always true for all trackers that were allowed to initialize.
+  model_metadata.set_notes_reset_for_attachment_suport(true);
   return model_metadata;
 }
 
@@ -376,8 +403,10 @@ SyncedNoteTracker::SyncedNoteTracker(
     bool notes_reuploaded,
     absl::optional<int64_t> num_ignored_updates_due_to_missing_parent,
     absl::optional<int64_t>
-        max_version_among_ignored_updates_due_to_missing_parent)
-    : model_type_state_(std::move(model_type_state)),
+        max_version_among_ignored_updates_due_to_missing_parent,
+    file_sync::SyncedFileStore* synced_file_store)
+    : synced_file_store_(synced_file_store),
+      model_type_state_(std::move(model_type_state)),
       notes_reuploaded_(notes_reuploaded),
       num_ignored_updates_due_to_missing_parent_(
           num_ignored_updates_due_to_missing_parent),
@@ -673,6 +702,12 @@ void SyncedNoteTracker::UpdateSyncIdIfNeeded(
   owned_entity->MutableMetadata()->set_server_id(sync_id);
   sync_id_to_entities_map_[sync_id] = std::move(owned_entity);
   sync_id_to_entities_map_.erase(old_id);
+
+  if (entity->note_node() && entity->note_node()->is_attachment()) {
+    synced_file_store_->AddSyncFileRef(
+        sync_id, syncer::NOTES,
+        base::UTF16ToASCII(entity->note_node()->GetContent()));
+  }
 }
 
 void SyncedNoteTracker::UndeleteTombstoneForNoteNode(

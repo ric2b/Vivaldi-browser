@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,8 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase {
       blink::mojom::FetchClientSettingsObjectPtr
           outside_fetch_client_settings_object,
       const GlobalRenderFrameHostId& requesting_frame_id,
-      blink::mojom::AncestorFrameType ancestor_frame_type);
+      blink::mojom::AncestorFrameType ancestor_frame_type,
+      PolicyContainerPolicies policy_container_policies);
 
   // For update jobs.
   ServiceWorkerRegisterJob(ServiceWorkerContextCore* context,
@@ -227,6 +228,7 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase {
   scoped_refptr<ServiceWorkerRegistration> promise_resolved_registration_;
   const GlobalRenderFrameHostId requesting_frame_id_;
   const blink::mojom::AncestorFrameType ancestor_frame_type_;
+  PolicyContainerPolicies creator_policy_container_policies_;
 
   base::WeakPtrFactory<ServiceWorkerRegisterJob> weak_factory_{this};
 };

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include <tuple>
 #include <utility>
 
-#include "ash/components/multidevice/remote_device_test_util.h"
 #include "ash/services/secure_channel/authenticated_channel_impl.h"
 #include "ash/services/secure_channel/ble_advertiser_impl.h"
 #include "ash/services/secure_channel/ble_constants.h"
@@ -31,6 +30,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/components/multidevice/remote_device_test_util.h"
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "testing/gmock/include/gmock/gmock.h"

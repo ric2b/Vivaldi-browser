@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,10 +14,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event.h"
+#include "base/trace_event/typed_macros.h"
 #include "cc/metrics/ukm_smoothness_data.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_tab_helper.h"
+#include "chrome/browser/performance_manager/public/user_tuning/user_tuning_utils.h"
 #include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -246,15 +248,18 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnStart(
       navigation_handle->GetWebContents()->GetBrowserContext(),
       navigation_handle->GetURL());
   was_discarded_ = navigation_handle->ExistingDocumentWasDiscarded();
+  refresh_rate_throttled_ =
+      performance_manager::user_tuning::IsRefreshRateThrottled();
 
   return CONTINUE_OBSERVING;
 }
 
-// TODO(https://crbug.com/1317494): Audit and use appropriate policy.
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 UkmPageLoadMetricsObserver::OnFencedFramesStart(
     content::NavigationHandle* navigation_handle,
     const GURL& currently_committed_url) {
+  // Only OnLoadedResource needs observer level forwarding, but the method
+  // handles only the outermost main frame case.
   return STOP_OBSERVING;
 }
 
@@ -393,13 +398,15 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnHidden(
     was_hidden_ = true;
   }
 
-  // Record the CLS metrics when the tab is first hidden after it is first
-  // shown in foreground, in case that OnComplete is not called.
+  // Record the CLS, LCP and INP metrics when the tab is first hidden after it
+  // is first shown in foreground, in case that OnComplete is not called.
   // last_time_shown_ is set when the page starts in the foreground or the page
   // becomes foregrounded.
   if (!was_hidden_after_first_show_in_foreground &&
       !last_time_shown_.is_null()) {
     ReportLayoutInstabilityAfterFirstForeground();
+    ReportLargestContentfulPaintAfterFirstForeground();
+    ReportResponsivenessAfterFirstForeground();
     was_hidden_after_first_show_in_foreground = true;
   }
   return CONTINUE_OBSERVING;
@@ -505,6 +512,8 @@ void UkmPageLoadMetricsObserver::OnLoadedResource(
         extra_request_complete_info) {
   if (was_hidden_)
     return;
+  // This condition check accepts only the outermost main frame as FencedFrame
+  // has RequestDestination::kFencedFrame.
   if (extra_request_complete_info.request_destination ==
       network::mojom::RequestDestination::kDocument) {
     DCHECK(!main_frame_timing_.has_value());
@@ -588,6 +597,7 @@ void UkmPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
     return;
 
   DCHECK(timing.paint_timing->first_contentful_paint.has_value());
+  first_contentful_paint_ = timing.paint_timing->first_contentful_paint.value();
 
   ukm::builders::PageLoad builder(GetDelegate().GetPageUkmSourceId());
   builder.SetPaintTiming_NavigationToFirstContentfulPaint(
@@ -605,6 +615,13 @@ void UkmPageLoadMetricsObserver::RecordSiteEngagement() const {
   }
 
   builder.Record(ukm::UkmRecorder::Get());
+}
+
+const page_load_metrics::ContentfulPaintTimingInfo&
+UkmPageLoadMetricsObserver::GetCoreWebVitalsLcpTimingInfo() {
+  return GetDelegate()
+      .GetLargestContentfulPaintHandler()
+      .MergeMainFrameAndSubframes();
 }
 
 void UkmPageLoadMetricsObserver::RecordTimingMetrics(
@@ -656,27 +673,25 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
     builder.SetPaintTiming_NavigationToLargestContentfulPaint2_MainFrame(
         main_frame_largest_contentful_paint.Time().value().InMilliseconds());
   }
-  const page_load_metrics::ContentfulPaintTimingInfo&
-      all_frames_largest_contentful_paint =
-          GetDelegate()
-              .GetLargestContentfulPaintHandler()
-              .MergeMainFrameAndSubframes();
-  if (all_frames_largest_contentful_paint.ContainsValidTime() &&
+
+  const page_load_metrics::ContentfulPaintTimingInfo& cwv_lcp_timing_info =
+      GetCoreWebVitalsLcpTimingInfo();
+  if (cwv_lcp_timing_info.ContainsValidTime() &&
       WasStartedInForegroundOptionalEventInForeground(
-          all_frames_largest_contentful_paint.Time(), GetDelegate())) {
+          cwv_lcp_timing_info.Time(), GetDelegate())) {
     builder.SetPaintTiming_NavigationToLargestContentfulPaint2(
-        all_frames_largest_contentful_paint.Time().value().InMilliseconds());
+        cwv_lcp_timing_info.Time().value().InMilliseconds());
     builder.SetPaintTiming_LargestContentfulPaintType(
-        LargestContentfulPaintTypeToUKMFlags(
-            all_frames_largest_contentful_paint.Type()));
-    if (all_frames_largest_contentful_paint.TextOrImage() ==
+        LargestContentfulPaintTypeToUKMFlags(cwv_lcp_timing_info.Type()));
+    if (cwv_lcp_timing_info.TextOrImage() ==
         page_load_metrics::ContentfulPaintTimingInfo::
             LargestContentTextOrImage::kImage) {
       builder.SetPaintTiming_LargestContentfulPaintBPP(
-          CalculateLCPEntropyBucket(
-              all_frames_largest_contentful_paint.ImageBPP()));
+          CalculateLCPEntropyBucket(cwv_lcp_timing_info.ImageBPP()));
     }
   }
+  RecordInternalTimingMetrics(cwv_lcp_timing_info);
+
   const page_load_metrics::ContentfulPaintTimingInfo&
       cross_site_sub_frame_largest_contentful_paint =
           GetDelegate()
@@ -692,7 +707,6 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
                 .value()
                 .InMilliseconds());
   }
-  RecordInternalTimingMetrics(all_frames_largest_contentful_paint);
   if (timing.interactive_timing->first_input_delay &&
       WasStartedInForegroundOptionalEventInForeground(
           timing.interactive_timing->first_input_timestamp, GetDelegate())) {
@@ -867,6 +881,9 @@ void UkmPageLoadMetricsObserver::RecordPageLoadMetrics(
   if (GetDelegate().DidCommit() && was_discarded_) {
     builder.SetWasDiscarded(true);
   }
+  if (GetDelegate().DidCommit() && refresh_rate_throttled_) {
+    builder.SetRefreshRateThrottled(true);
+  }
   if (GetDelegate().DidCommit() && navigation_is_cross_process_) {
     builder.SetIsCrossProcessNavigation(navigation_is_cross_process_);
   }
@@ -902,10 +919,11 @@ void UkmPageLoadMetricsObserver::ReportMainResourceTimingMetrics(
   builder.SetMainFrameResource_SocketReused(main_frame_timing_->socket_reused);
 
   int64_t dns_start_ms =
-      main_frame_timing_->connect_timing.dns_start.since_origin()
+      main_frame_timing_->connect_timing.domain_lookup_start.since_origin()
           .InMilliseconds();
-  int64_t dns_end_ms = main_frame_timing_->connect_timing.dns_end.since_origin()
-                           .InMilliseconds();
+  int64_t dns_end_ms =
+      main_frame_timing_->connect_timing.domain_lookup_end.since_origin()
+          .InMilliseconds();
   int64_t connect_start_ms =
       main_frame_timing_->connect_timing.connect_start.since_origin()
           .InMilliseconds();
@@ -982,6 +1000,17 @@ void UkmPageLoadMetricsObserver::ReportMainResourceTimingMetrics(
   }
 }
 
+absl::optional<float> UkmPageLoadMetricsObserver::GetCoreWebVitalsCLS() {
+  const page_load_metrics::NormalizedCLSData& normalized_cls_data =
+      GetDelegate().GetNormalizedCLSData(
+          page_load_metrics::PageLoadMetricsObserverDelegate::BfcacheStrategy::
+              ACCUMULATE);
+  if (!normalized_cls_data.data_tainted) {
+    return normalized_cls_data.session_windows_gap1000ms_max5000ms_max_cls;
+  }
+  return absl::nullopt;
+}
+
 void UkmPageLoadMetricsObserver::ReportLayoutStability() {
   // Don't report CLS if we were never in the foreground.
   if (last_time_shown_.is_null())
@@ -1005,25 +1034,21 @@ void UkmPageLoadMetricsObserver::ReportLayoutStability() {
               GetDelegate()
                   .GetMainFrameRenderData()
                   .layout_shift_score_before_input_or_scroll));
-  // Record CLS normalization UKM.
-  const page_load_metrics::NormalizedCLSData& normalized_cls_data =
-      GetDelegate().GetNormalizedCLSData(
-          page_load_metrics::PageLoadMetricsObserverDelegate::BfcacheStrategy::
-              ACCUMULATE);
-  if (!normalized_cls_data.data_tainted) {
-    const float max_cls =
-        normalized_cls_data.session_windows_gap1000ms_max5000ms_max_cls;
+
+  const absl::optional<float> cwv_cls_value = GetCoreWebVitalsCLS();
+  if (cwv_cls_value.has_value()) {
     builder
         .SetLayoutInstability_MaxCumulativeShiftScore_SessionWindow_Gap1000ms_Max5000ms(
-            page_load_metrics::LayoutShiftUkmValue(max_cls));
+            page_load_metrics::LayoutShiftUkmValue(*cwv_cls_value));
     base::UmaHistogramCounts100(
         "PageLoad.LayoutInstability.MaxCumulativeShiftScore.SessionWindow."
         "Gap1000ms.Max5000ms",
-        page_load_metrics::LayoutShiftUmaValue(max_cls));
+        page_load_metrics::LayoutShiftUmaValue(*cwv_cls_value));
     base::UmaHistogramCustomCounts(
         "PageLoad.LayoutInstability.MaxCumulativeShiftScore.SessionWindow."
         "Gap1000ms.Max5000ms2",
-        page_load_metrics::LayoutShiftUmaValue10000(max_cls), 1, 24000, 50);
+        page_load_metrics::LayoutShiftUmaValue10000(*cwv_cls_value), 1, 24000,
+        50);
     // The pseudo metric of PageLoad.LayoutInstability.MaxCumulativeShiftScore.
     // SessionWindow.Gap1000ms.Max5000ms2.
     // Only used to assess field trial data quality.
@@ -1031,7 +1056,7 @@ void UkmPageLoadMetricsObserver::ReportLayoutStability() {
         "UMA.Pseudo.PageLoad.LayoutInstability.MaxCumulativeShiftScore."
         "SessionWindow.Gap1000ms.Max5000ms2",
         page_load_metrics::LayoutShiftUmaValue10000(
-            metrics::GetPseudoMetricsSample(max_cls)),
+            metrics::GetPseudoMetricsSample(*cwv_cls_value)),
         1, 24000, 50);
   }
   builder.Record(ukm::UkmRecorder::Get());
@@ -1097,6 +1122,62 @@ void UkmPageLoadMetricsObserver::ReportLayoutInstabilityAfterFirstForeground() {
       "CumulativeShiftScoreAtFirstOnHidden",
       page_load_metrics::LayoutShiftUmaValue(
           GetDelegate().GetPageRenderData().layout_shift_score));
+}
+
+void UkmPageLoadMetricsObserver::
+    ReportLargestContentfulPaintAfterFirstForeground() {
+  DCHECK(!last_time_shown_.is_null());
+
+  const page_load_metrics::ContentfulPaintTimingInfo&
+      all_frames_largest_contentful_paint =
+          GetDelegate()
+              .GetLargestContentfulPaintHandler()
+              .MergeMainFrameAndSubframes();
+
+  if (all_frames_largest_contentful_paint.ContainsValidTime() &&
+      WasStartedInForegroundOptionalEventInForeground(
+          all_frames_largest_contentful_paint.Time(), GetDelegate())) {
+    ukm::builders::PageLoad builder(GetDelegate().GetPageUkmSourceId());
+    builder.SetPaintTiming_NavigationToLargestContentfulPaint2AtFirstOnHidden(
+        all_frames_largest_contentful_paint.Time().value().InMilliseconds());
+
+    PAGE_LOAD_HISTOGRAM(
+        "PageLoad.PaintTiming."
+        "NavigationToLargestContentfulPaint2AtFirstOnHidden",
+        all_frames_largest_contentful_paint.Time().value());
+    builder.Record(ukm::UkmRecorder::Get());
+  }
+}
+
+void UkmPageLoadMetricsObserver::ReportResponsivenessAfterFirstForeground() {
+  DCHECK(!last_time_shown_.is_null());
+
+  ukm::builders::PageLoad builder(GetDelegate().GetPageUkmSourceId());
+  const page_load_metrics::NormalizedResponsivenessMetrics&
+      normalized_responsiveness_metrics =
+          GetDelegate().GetNormalizedResponsivenessMetrics();
+  auto& max_event_durations =
+      normalized_responsiveness_metrics.normalized_max_event_durations;
+  if (normalized_responsiveness_metrics.num_user_interactions) {
+    builder
+        .SetInteractiveTiming_UserInteractionLatencyAtFirstOnHidden_HighPercentile2_MaxEventDuration(
+            page_load_metrics::ResponsivenessMetricsNormalization::
+                ApproximateHighPercentile(
+                    normalized_responsiveness_metrics.num_user_interactions,
+                    max_event_durations.worst_ten_latencies)
+                    .InMilliseconds());
+
+    UmaHistogramCustomTimes(
+        "PageLoad.InteractiveTiming.UserInteractionLatencyAtFirstOnHidden."
+        "HighPercentile2."
+        "MaxEventDuration",
+        page_load_metrics::ResponsivenessMetricsNormalization::
+            ApproximateHighPercentile(
+                normalized_responsiveness_metrics.num_user_interactions,
+                max_event_durations.worst_ten_latencies),
+        base::Milliseconds(1), base::Seconds(60), 50);
+  }
+  builder.Record(ukm::UkmRecorder::Get());
 }
 
 void UkmPageLoadMetricsObserver::RecordAbortMetrics(
@@ -1371,6 +1452,39 @@ void UkmPageLoadMetricsObserver::OnTimingUpdate(
   TRACE_EVENT_CATEGORY_GROUP_ENABLED("loading", &loading_enabled);
   if (!loading_enabled)
     return;
+
+  TRACE_EVENT_INSTANT(
+      "loading", "UkmPageLoadTimingUpdate", [&](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_ukm_page_load_timing_update();
+        if (first_contentful_paint_.has_value()) {
+          data->set_first_contentful_paint_ms(
+              first_contentful_paint_.value().InMillisecondsF());
+        }
+        data->set_ukm_source_id(
+            static_cast<int64_t>(GetDelegate().GetPageUkmSourceId()));
+        data->set_latest_url(GetDelegate().GetUrl().spec());
+
+        const absl::optional<float> cwv_cls_value = GetCoreWebVitalsCLS();
+        if (cwv_cls_value.has_value()) {
+          data->set_latest_cumulative_layout_shift(*cwv_cls_value);
+        }
+        const page_load_metrics::ContentfulPaintTimingInfo&
+            cwv_lcp_timing_info = GetCoreWebVitalsLcpTimingInfo();
+        if (cwv_lcp_timing_info.ContainsValidTime() &&
+            WasStartedInForegroundOptionalEventInForeground(
+                cwv_lcp_timing_info.Time(), GetDelegate())) {
+          data->set_latest_largest_contentful_paint_ms(
+              cwv_lcp_timing_info.Time().value().InMillisecondsF());
+        }
+      });
+
+  // The ones below are old trace events which should not be necessary given the
+  // UkmPageLoadTimingUpdate event above, but they may be used in
+  // devtools/lighthouse in addition to the old catapult loadingMetric. They can
+  // be removed once we verify that the consumers of these trace events have
+  // been updated.
+
   const page_load_metrics::ContentfulPaintTimingInfo& paint =
       GetDelegate()
           .GetLargestContentfulPaintHandler()

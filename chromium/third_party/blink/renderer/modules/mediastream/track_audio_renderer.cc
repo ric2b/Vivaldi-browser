@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -385,13 +385,12 @@ void TrackAudioRenderer::MaybeStartSink(bool reconfiguring) {
   // source, but having the buffer duration preferred by the hardware.
   const media::AudioParameters& hardware_params = device_info.output_params();
   media::AudioParameters sink_params(
-      hardware_params.format(), source_params_.channel_layout(),
+      hardware_params.format(), source_params_.channel_layout_config(),
       source_params_.sample_rate(),
       media::AudioLatency::GetRtcBufferSize(
           source_params_.sample_rate(), hardware_params.frames_per_buffer()));
   if (sink_params.channel_layout() == media::CHANNEL_LAYOUT_DISCRETE) {
     DCHECK_LE(source_params_.channels(), 2);
-    sink_params.set_channels_for_discrete(source_params_.channels());
   }
   DVLOG(1) << ("TrackAudioRenderer::MaybeStartSink() -- Starting sink.  "
                "source_params={")

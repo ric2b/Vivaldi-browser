@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -929,7 +929,8 @@ document.getElementById("overlay_in_frame").style.visibility='hidden';
         /* global_payload= */ std::string(),
         /* script_payload= */ std::string(),
         /* listener= */ nullptr, &ordered_interrupts,
-        &mock_script_executor_delegate, &fake_script_executor_ui_delegate);
+        &mock_script_executor_delegate, &fake_script_executor_ui_delegate,
+        /* is_interrupt_executor= */ false);
     base::RunLoop run_loop;
     script_executor.Run(
         &fake_user_data,
@@ -1014,7 +1015,8 @@ document.getElementById("overlay_in_frame").style.visibility='hidden';
         /* global_payload= */ std::string(),
         /* script_payload= */ std::string(),
         /* listener= */ nullptr, &ordered_interrupts,
-        &mock_script_executor_delegate, &fake_script_executor_ui_delegate);
+        &mock_script_executor_delegate, &fake_script_executor_ui_delegate,
+        /* is_interrupt_executor= */ false);
     base::RunLoop run_loop;
     script_executor.Run(
         &fake_user_data,
@@ -2717,7 +2719,9 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, SendDuplexwebEvent) {
   GetFieldsValue({selector}, {"received"});
 }
 
-IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, WaitForElementToBecomeStable) {
+// Extremely flaky: https://crbug.com/1372516
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
+                       DISABLED_WaitForElementToBecomeStable) {
   ClientStatus element_status;
   ElementFinderResult element;
   FindElement(Selector({"#touch_area_one"}), &element_status, &element);
@@ -2743,8 +2747,9 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, WaitForElementToBecomeStable) {
       WaitUntilElementIsStable(element, 10, base::Milliseconds(100)).ok());
 }
 
+// Extremely flaky: https://crbug.com/1372516
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
-                       WaitForElementToBecomeStableForEmptyBoxModel) {
+                       DISABLED_WaitForElementToBecomeStableForEmptyBoxModel) {
   ClientStatus element_status;
 
   // The element has an empty box model.
@@ -2764,8 +2769,9 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
                 .proto_status());
 }
 
+// Extremely flaky: https://crbug.com/1372516
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
-                       WaitForElementToBecomeStableDevtoolsFailure) {
+                       DISABLED_WaitForElementToBecomeStableDevtoolsFailure) {
   // This makes the devtools action fail.
   ElementFinderResult element;
   element.SetNodeFrameId("doesnotexist");

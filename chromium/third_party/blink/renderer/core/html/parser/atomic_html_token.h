@@ -68,7 +68,7 @@ class CORE_EXPORT HTMLTokenName {
   // Returns an HTMLTokenName for the specified string. This function looks up
   // the HTMLTag from the supplied string.
   static HTMLTokenName FromLocalName(const AtomicString& local_name) {
-    if (local_name.IsEmpty())
+    if (local_name.empty())
       return HTMLTokenName(html_names::HTMLTag::kUnknown);
 
     if (local_name.Is8Bit()) {
@@ -101,7 +101,7 @@ class CORE_EXPORT HTMLTokenName {
     if (tag == html_names::HTMLTag::kUnknown) {
       // If the tag is unknown, then `name` must either be empty, or not
       // identify any other HTMLTag.
-      if (!name.IsEmpty()) {
+      if (!name.empty()) {
         if (name.Is8Bit()) {
           DCHECK_EQ(html_names::HTMLTag::kUnknown,
                     lookupHTMLTag(name.Characters8(), name.length()));
@@ -119,6 +119,9 @@ class CORE_EXPORT HTMLTokenName {
   explicit HTMLTokenName(const AtomicString& name)
       : HTMLTokenName(html_names::HTMLTag::kUnknown, name) {}
 
+  // Store both the tag and the name. The tag is enough to lookup the name, but
+  // enough code makes use of the name that's it's worth caching (this performs
+  // a bit better than using a variant for the two and looking up on demand).
   html_names::HTMLTag tag_;
   AtomicString local_name_;
 };
@@ -140,9 +143,9 @@ class CORE_EXPORT AtomicHTMLToken {
     return name_.GetLocalName();
   }
 
-  void SetName(const AtomicString& name) {
+  void SetTokenName(const HTMLTokenName& name) {
     DCHECK(UsesName());
-    name_ = HTMLTokenName::FromLocalName(name);
+    name_ = name;
   }
 
   html_names::HTMLTag GetHTMLTag() const { return name_.GetHTMLTag(); }
@@ -237,11 +240,16 @@ class CORE_EXPORT AtomicHTMLToken {
       : type_(type), name_(html_names::HTMLTag::kUnknown) {}
 
   AtomicHTMLToken(HTMLToken::TokenType type,
-                  const AtomicString& name,
+                  html_names::HTMLTag tag,
                   const Vector<Attribute>& attributes = Vector<Attribute>())
-      : type_(type),
-        name_(HTMLTokenName::FromLocalName(name)),
-        attributes_(attributes) {
+      : type_(type), name_(tag), attributes_(attributes) {
+    DCHECK(UsesName());
+  }
+
+  AtomicHTMLToken(HTMLToken::TokenType type,
+                  const HTMLTokenName& name,
+                  const Vector<Attribute>& attributes = Vector<Attribute>())
+      : type_(type), name_(name), attributes_(attributes) {
     DCHECK(UsesName());
   }
 
@@ -322,7 +330,7 @@ void AtomicHTMLToken::InitializeAttributes(
   }
 
   // This is only called once, so `attributes_` should be empty.
-  DCHECK(attributes_.IsEmpty());
+  DCHECK(attributes_.empty());
   attributes_.ReserveInitialCapacity(size);
   for (const auto& attribute : attributes) {
     if (attribute.NameIsEmpty())

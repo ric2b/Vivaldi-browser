@@ -1,4 +1,4 @@
-// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -111,27 +111,6 @@ TEST(NamedPipePolicyTest, CreatePipeCanonicalization) {
                             L"\\Device\\NamedPipe\\test"};
   EXPECT_EQ(SBOX_TEST_SUCCEEDED,
             NamedPipe_Create(2, const_cast<wchar_t**>(argv)));
-}
-
-std::unique_ptr<TestRunner> StrictInterceptionsRunner() {
-  auto runner = std::make_unique<TestRunner>();
-  runner->GetPolicy()->SetStrictInterceptions();
-  // TODO(nsylvain): This policy is wrong because "*" is a valid char in a
-  // namedpipe name. Here we apply it like a wildcard. http://b/893603
-  runner->AddRule(SubSystem::kNamedPipes, Semantics::kNamedPipesAllowAny,
-                  L"\\\\.\\pipe\\test*");
-  return runner;
-}
-
-// The same test as CreatePipe but this time using strict interceptions.
-TEST(NamedPipePolicyTest, CreatePipeStrictInterceptions) {
-  auto runner = StrictInterceptionsRunner();
-  EXPECT_EQ(SBOX_TEST_SUCCEEDED,
-            runner->RunTest(L"NamedPipe_Create \\\\.\\pipe\\testbleh"));
-
-  runner = StrictInterceptionsRunner();
-  EXPECT_EQ(SBOX_TEST_DENIED,
-            runner->RunTest(L"NamedPipe_Create \\\\.\\pipe\\bleh"));
 }
 
 }  // namespace sandbox

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,7 +46,8 @@ void VirtualKeyboardControllerWin::OnKeyboardVisible(
   // If the software input panel (SIP) is manually raised by the user, the flag
   // should be set so we don't call TryShow API again.
   virtual_keyboard_shown_ = true;
-  if (!host_view_->ShouldVirtualKeyboardOverlayContent()) {
+  if (host_view_->GetVirtualKeyboardMode() !=
+      ui::mojom::VirtualKeyboardMode::kOverlaysContent) {
     host_view_->SetInsets(gfx::Insets::TLBR(
         0, 0, keyboard_rect.IsEmpty() ? 0 : keyboard_rect.height(), 0));
   } else {
@@ -63,7 +64,8 @@ void VirtualKeyboardControllerWin::OnKeyboardHidden() {
   // called or not. Calling TryShow/TryHide multiple times leads to SIP
   // flickering.
   virtual_keyboard_shown_ = false;
-  if (!host_view_->ShouldVirtualKeyboardOverlayContent()) {
+  if (host_view_->GetVirtualKeyboardMode() !=
+      ui::mojom::VirtualKeyboardMode::kOverlaysContent) {
     // Restore the viewport.
     host_view_->SetInsets(gfx::Insets());
   } else {

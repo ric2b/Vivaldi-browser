@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,8 @@
 #include "components/search_engines/template_url.h"
 #include "components/url_formatter/url_formatter.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/omnibox_proto/groups.pb.h"
+#include "third_party/omnibox_proto/types.pb.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/range/range.h"
@@ -41,8 +43,6 @@ class SuggestionAnswer;
 class TemplateURL;
 class TemplateURLService;
 
-enum class SuggestionGroupId;
-
 namespace base {
 class Time;
 }  // namespace base
@@ -57,6 +57,8 @@ const char kACMatchPropertyContentsStartIndex[] = "match contents start index";
 // A match attribute when a default match's score has been boosted with a higher
 // scoring non-default match.
 const char kACMatchPropertyScoreBoostedFrom[] = "score_boosted_from";
+
+// RichAutocompletionParams ---------------------------------------------------
 
 // `RichAutocompletionParams` is a cache for the params used by
 // `TryRichAutocompletion()`. `TryRichAutocompletion()` is called about 80 times
@@ -661,6 +663,9 @@ struct AutocompleteMatch {
   std::string image_dominant_color;
   GURL image_url;
 
+  // Optional entity id for entity suggestions. Empty string means no entity ID.
+  std::string entity_id;
+
   // Optional override to use for types that specify an icon sub-type.
   DocumentType document_type = DocumentType::NONE;
 
@@ -681,12 +686,15 @@ struct AutocompleteMatch {
   std::u16string description_for_shortcuts;
   ACMatchClassifications description_class_for_shortcuts;
 
-  // The optional suggestion group Id. Used to look up the suggestion group info
-  // such as the header text this match must appear under from ACResult.
+  // The optional suggestion group ID used to look up the suggestion group info
+  // for the group this suggestion belongs to from the AutocompleteResult.
   //
-  // This is converted to a primitive int type in Java and JavaScript; with -1
-  // (SuggestionGroupId::kInvalid) used as a sentinel value.
-  absl::optional<SuggestionGroupId> suggestion_group_id;
+  // Use omnibox::GROUP_INVALID in place of a missing value when converting
+  // this to a primitive type.
+  // TODO(manukh): Seems redundant to prefix a suggestion field with
+  //  'suggestion_'. Check if it makes sense to rename to 'group_id', and
+  //  likewise for the associated methods and local variables.
+  absl::optional<omnibox::GroupId> suggestion_group_id;
 
   // If true, UI-level code should swap the contents and description fields
   // before displaying.
@@ -710,16 +718,18 @@ struct AutocompleteMatch {
   absl::optional<bool> has_tab_match;
 
   // Used to identify the specific source / type for suggestions by the
-  // suggest server. See |result_subtypes| in omnibox.proto for more
-  // details.
-  // We use flat_set to help us deduplicate repetitive elements.
-  // The order of elements reported back via AQS is irrelevant, and in the case
-  // we have repetitive subtypes (e.g., as a result of Chrome enriching the set
-  // with its own metadata) we want to merge these subtypes together.
-  // flat_set uses std::vector as a container, allowing us to reduce memory
+  // suggest server. See SuggestSubtype in types.proto for more details.
+  // Uses flat_set to deduplicate subtypes (e.g., as a result of Chrome adding
+  // additional subtypes). The order of elements reported back via AQS is
+  // irrelevant. flat_set uses std::vector as a container, reducing memory
   // overhead of keeping a handful of integers, while offering similar
   // functionality as std::set.
-  base::flat_set<int> subtypes;
+  // Note this set may contain int values not present in omnibox::SuggestSubtype
+  // enum. This is because the list of subtypes in omnibox::SuggestSubtype enum
+  // is not exhaustive. However, casting int values into omnibox::SuggestSubtype
+  // enum without testing membership is expected to be safe as
+  // omnibox::SuggestSubtype enum has a fixed int underlying type.
+  base::flat_set<omnibox::SuggestSubtype> subtypes;
 
   // Set with a keyword provider match if this match can show a keyword hint.
   // For example, if this is a SearchProvider match for "www.amazon.com",
@@ -822,5 +832,16 @@ struct AutocompleteMatch {
 typedef AutocompleteMatch::ACMatchClassification ACMatchClassification;
 typedef std::vector<ACMatchClassification> ACMatchClassifications;
 typedef std::vector<AutocompleteMatch> ACMatches;
+
+// Can be used as the key for grouping AutocompleteMatches in a map based on a
+// std::pair of fields. This can be generalized to a std::tuple if ever needed.
+// The accompanying hash function makes the key usable in an std::unordered_map.
+template <typename S, typename T>
+using ACMatchKey = std::pair<S, T>;
+
+template <typename S, typename T>
+struct ACMatchKeyHash {
+  size_t operator()(const ACMatchKey<S, T>& key) const;
+};
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_MATCH_H_

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -198,8 +198,9 @@ bool IsReportTypeComponent(base::StringPiece string) {
 
 }  // namespace
 
-constexpr base::Feature kWebHidBlocklist{"WebHIDBlocklist",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kWebHidBlocklist,
+             "WebHIDBlocklist",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<std::string> kWebHidBlocklistAdditions{
     &kWebHidBlocklist, "blocklist_additions", /*default_value=*/""};

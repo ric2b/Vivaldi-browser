@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -170,6 +170,7 @@
 #include "chrome/browser/gcm/gcm_product_util.h"
 #include "chrome/browser/hid/hid_policy_allowed_devices.h"
 #include "chrome/browser/intranet_redirect_detector.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/serial/serial_policy_allowed_ports.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -197,7 +198,6 @@
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
-#include "chrome/browser/plugins/plugin_finder.h"
 #include "content/public/browser/plugin_service.h"
 #endif
 
@@ -253,6 +253,7 @@ BrowserProcessImpl::BrowserProcessImpl(StartupData* startup_data)
   // ensure the persistent storage of current max SessionId.
   sessions::SessionIdGenerator::GetInstance()->Init(local_state_.get());
 
+  DCHECK(browser_policy_connector_);
   DCHECK(local_state_);
   DCHECK(startup_data);
   // Most work should be done in Init().
@@ -392,7 +393,7 @@ BrowserProcessImpl::~BrowserProcessImpl() {
   KeepAliveRegistry::GetInstance()->RemoveObserver(this);
 #endif
 
-  g_browser_process = NULL;
+  g_browser_process = nullptr;
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -415,11 +416,10 @@ void BrowserProcessImpl::StartTearDown() {
   // Initial cleanup for ChromeBrowserCloudManagement, shutdown components that
   // depend on profile and notification system. For example, ProfileManager
   // observer and KeyServices observer need to be removed before profiles.
-  if (browser_policy_connector_ &&
-      browser_policy_connector_->chrome_browser_cloud_management_controller()) {
-    browser_policy_connector_->chrome_browser_cloud_management_controller()
-        ->ShutDown();
-  }
+  auto* cloud_management_controller =
+      browser_policy_connector_->chrome_browser_cloud_management_controller();
+  if (cloud_management_controller)
+    cloud_management_controller->ShutDown();
 #endif
 
   system_notification_helper_.reset();
@@ -471,8 +471,7 @@ void BrowserProcessImpl::StartTearDown() {
   // down while the IO and FILE threads are still alive. The monitoring
   // framework owned by |browser_policy_connector_| relies on |gcm_driver_|, so
   // this must be shutdown before |gcm_driver_| below.
-  if (browser_policy_connector_)
-    browser_policy_connector_->Shutdown();
+  browser_policy_connector_->Shutdown();
 
   // The |gcm_driver_| must shut down while the IO thread is still alive.
   if (gcm_driver_)
@@ -987,12 +986,6 @@ void BrowserProcessImpl::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kEulaAccepted, false);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_ANDROID)
 
-  // TODO(brettw,*): this comment about ResourceBundle was here since
-  // initial commit.  This comment seems unrelated, bit-rotten and
-  // a candidate for removal.
-  // Initialize ResourceBundle which handles files loaded from external
-  // sources. This has to be done before uninstall code path and before prefs
-  // are registered.
   registry->RegisterStringPref(language::prefs::kApplicationLocale,
                                std::string());
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1172,11 +1165,8 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
 #endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  auto* plugin_service = content::PluginService::GetInstance();
-  plugin_service->SetFilter(ChromePluginServiceFilter::GetInstance());
-
-  // Triggers initialization of the singleton instance on UI thread.
-  PluginFinder::GetInstance();
+  content::PluginService::GetInstance()->SetFilter(
+      ChromePluginServiceFilter::GetInstance());
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -1210,6 +1200,10 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
   bool result = base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
   DCHECK(result);
   if (breadcrumbs::IsEnabled()) {
+    // Start crash reporter listening for breadcrumb events. Collected
+    // breadcrumbs will be attached to crash reports.
+    breadcrumbs::CrashReporterBreadcrumbObserver::GetInstance();
+
     application_breadcrumbs_logger_ =
         std::make_unique<breadcrumbs::ApplicationBreadcrumbsLogger>(
             user_data_dir, base::BindRepeating([] {

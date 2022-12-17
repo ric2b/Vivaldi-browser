@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,7 @@ import org.chromium.url.Origin;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -69,6 +70,15 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
     private boolean mAppIdExtensionUsed;
     private long mStartTimeMs;
     private WebAuthnBrowserBridge mBrowserBridge;
+
+    private enum ConditionalUiState {
+        NONE,
+        WAITING_FOR_CREDENTIAL_LIST,
+        WAITING_FOR_SELECTION,
+        CANCEL_PENDING
+    }
+
+    private ConditionalUiState mConditionalUiState = ConditionalUiState.NONE;
 
     // Not null when the GMSCore-created ClientDataJson needs to be overridden.
     @Nullable
@@ -215,6 +225,7 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
         if (options.isConditional) {
             // For use in the lambda expression.
             final byte[] finalClientDataHash = clientDataHash;
+            mConditionalUiState = ConditionalUiState.WAITING_FOR_CREDENTIAL_LIST;
             Fido2ApiCallHelper.getInstance().invokeFido2GetCredentials(options.relyingPartyId,
                     mSupportLevel,
                     (credentials)
@@ -224,7 +235,20 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
             return;
         }
 
-        dispatchGetAssertionRequest(options, callerOriginString, clientDataHash, null);
+        maybeDispatchGetAssertionRequest(options, callerOriginString, clientDataHash, null);
+    }
+
+    public void cancelConditionalGetAssertion(RenderFrameHost frameHost) {
+        if (mConditionalUiState == ConditionalUiState.WAITING_FOR_CREDENTIAL_LIST) {
+            mConditionalUiState = ConditionalUiState.CANCEL_PENDING;
+            returnErrorAndResetCallback(AuthenticatorStatus.ABORT_ERROR);
+            return;
+        }
+
+        if (mConditionalUiState == ConditionalUiState.WAITING_FOR_SELECTION) {
+            mConditionalUiState = ConditionalUiState.CANCEL_PENDING;
+            mBrowserBridge.cancelRequest(frameHost);
+        }
     }
 
     public void handleIsUserVerifyingPlatformAuthenticatorAvailableRequest(
@@ -254,6 +278,47 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
         task.addOnFailureListener((e) -> { Log.e(TAG, "FIDO2 API call failed", e); });
     }
 
+    public void handleGetMatchingCredentialIdsRequest(RenderFrameHost frameHost,
+            String relyingPartyId, byte[][] allowCredentialIds, boolean requireThirdPartyPayment,
+            GetMatchingCredentialIdsResponseCallback callback,
+            FidoErrorResponseCallback errorCallback) {
+        assert mErrorCallback == null;
+        mErrorCallback = errorCallback;
+        if (mWebContents == null) {
+            mWebContents = WebContentsStatics.fromRenderFrameHost(frameHost);
+        }
+
+        if (!apiAvailable()) {
+            Log.e(TAG, "Google Play Services' Fido2PrivilegedApi is not available.");
+            returnErrorAndResetCallback(AuthenticatorStatus.UNKNOWN_ERROR);
+            return;
+        }
+
+        Fido2ApiCallHelper.getInstance().invokeFido2GetCredentials(relyingPartyId, mSupportLevel,
+                (credentials)
+                        -> onGetMatchingCredentialIdsListReceived(credentials, allowCredentialIds,
+                                requireThirdPartyPayment, callback),
+                this::onBinderCallException);
+        return;
+    }
+
+    private void onGetMatchingCredentialIdsListReceived(
+            List<WebAuthnCredentialDetails> retrievedCredentials, byte[][] allowCredentialIds,
+            boolean requireThirdPartyPayment, GetMatchingCredentialIdsResponseCallback callback) {
+        List<byte[]> matchingCredentialIds = new ArrayList<>();
+        for (WebAuthnCredentialDetails credential : retrievedCredentials) {
+            if (requireThirdPartyPayment && !credential.mIsPayment) continue;
+
+            for (byte[] allowedId : allowCredentialIds) {
+                if (Arrays.equals(allowedId, credential.mCredentialId)) {
+                    matchingCredentialIds.add(credential.mCredentialId);
+                    break;
+                }
+            }
+        }
+        callback.onResponse(matchingCredentialIds);
+    }
+
     @VisibleForTesting
     public void overrideBrowserBridgeForTesting(WebAuthnBrowserBridge bridge) {
         mBrowserBridge = bridge;
@@ -267,6 +332,14 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
     private void onWebAuthnCredentialDetailsListReceived(RenderFrameHost frameHost,
             PublicKeyCredentialRequestOptions options, String callerOriginString,
             byte[] clientDataHash, List<WebAuthnCredentialDetails> credentials) {
+        assert mConditionalUiState == ConditionalUiState.WAITING_FOR_CREDENTIAL_LIST
+                || mConditionalUiState == ConditionalUiState.CANCEL_PENDING;
+
+        if (mConditionalUiState == ConditionalUiState.CANCEL_PENDING) {
+            // The request was completed synchronously when the cancellation was received.
+            return;
+        }
+
         if (mBrowserBridge == null) {
             mBrowserBridge = new WebAuthnBrowserBridge();
         }
@@ -276,14 +349,24 @@ public class Fido2CredentialRequest implements Callback<Pair<Integer, Intent>> {
                 discoverableCredentials.add(credential);
             }
         }
+
+        mConditionalUiState = ConditionalUiState.WAITING_FOR_SELECTION;
         mBrowserBridge.onCredentialsDetailsListReceived(frameHost, discoverableCredentials,
                 (selectedCredentialId)
-                        -> dispatchGetAssertionRequest(
+                        -> maybeDispatchGetAssertionRequest(
                                 options, callerOriginString, clientDataHash, selectedCredentialId));
     }
 
-    private void dispatchGetAssertionRequest(PublicKeyCredentialRequestOptions options,
+    private void maybeDispatchGetAssertionRequest(PublicKeyCredentialRequestOptions options,
             String callerOriginString, byte[] clientDataHash, byte[] credentialId) {
+        // For Conditional UI requests, this is invoked by a callback, and might have been
+        // cancelled before a credential was selected.
+        if (mConditionalUiState == ConditionalUiState.CANCEL_PENDING) {
+            returnErrorAndResetCallback(AuthenticatorStatus.ABORT_ERROR);
+            return;
+        }
+
+        mConditionalUiState = ConditionalUiState.NONE;
         if (credentialId != null) {
             if (credentialId.length == 0) {
                 // An empty credential ID means an error from native code, which can happen if the

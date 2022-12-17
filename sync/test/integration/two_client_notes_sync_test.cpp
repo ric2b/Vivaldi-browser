@@ -86,8 +86,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(GetClient(1)->AwaitMutualSyncCycleCompletion(GetClient(0)));
   ASSERT_TRUE(AllModelsMatch());
 
-  NoteNode* trash_node_0 = GetNotesModel(0)->trash_node();
-  NoteNode* trash_node_1 = GetNotesModel(1)->trash_node();
+  const NoteNode* trash_node_0 = GetNotesModel(0)->trash_node();
+  const NoteNode* trash_node_1 = GetNotesModel(1)->trash_node();
   ASSERT_TRUE(AddNote(0, trash_node_0, 0,
                       "Venice is a city in northeastern Italy and the capital "
                       "of the Veneto region.",
@@ -251,10 +251,10 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddSeveralNotesAndFolders) {
       const NoteNode* folder = AddFolder(0, i, title);
       ASSERT_TRUE(folder != NULL);
       if (base::RandDouble() > 0.4) {
-        for (int i = 0; i < 20; ++i) {
+        for (int j = 0; j < 20; ++j) {
           std::string content = CreateAutoIndexedContent(i);
-          GURL url = GURL(IndexedURL(i));
-          ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
+          GURL url = GURL(IndexedURL(j));
+          ASSERT_TRUE(AddNote(0, folder, j, content, url) != NULL);
         }
       }
     }
@@ -457,8 +457,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
       GURL url = GURL(IndexedURL(i));
       ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
     } else {
-      std::string title = IndexedSubfolderName(i);
-      ASSERT_TRUE(AddFolder(0, folder, i, title) != NULL);
+      std::string title2 = IndexedSubfolderName(i);
+      ASSERT_TRUE(AddFolder(0, folder, i, title2) != NULL);
     }
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
@@ -491,8 +491,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
       GURL url = GURL(IndexedURL(i));
       ASSERT_TRUE(AddNote(0, subfolder, i, content, url) != NULL);
     } else {
-      std::string title = IndexedSubsubfolderName(i);
-      ASSERT_TRUE(AddFolder(0, subfolder, i, title) != NULL);
+      std::string title2 = IndexedSubsubfolderName(i);
+      ASSERT_TRUE(AddFolder(0, subfolder, i, title2) != NULL);
     }
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
@@ -758,8 +758,8 @@ IN_PROC_BROWSER_TEST_F(
             GURL url = GURL(IndexedURL(j));
             ASSERT_TRUE(AddNote(0, subfolder, j, content, url) != NULL);
           } else {
-            std::string title = IndexedSubsubfolderName(j);
-            ASSERT_TRUE(AddFolder(0, subfolder, j, title) != NULL);
+            std::string title2 = IndexedSubsubfolderName(j);
+            ASSERT_TRUE(AddFolder(0, subfolder, j, title2) != NULL);
           }
         }
       }

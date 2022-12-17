@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "base/files/scoped_file.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
@@ -57,7 +58,7 @@ struct WaylandFrame {
   friend class WaylandFrameManager;
 
   uint32_t frame_id;
-  raw_ptr<WaylandSurface> root_surface;
+  raw_ptr<WaylandSurface, DanglingUntriaged> root_surface;
   wl::WaylandOverlayConfig root_config;
   base::circular_deque<std::pair<WaylandSubsurface*, wl::WaylandOverlayConfig>>
       subsurfaces_to_overlays;
@@ -178,6 +179,12 @@ class WaylandFrameManager {
   // frame must not be used for the further submission.
   bool EnsureWlBuffersExist(WaylandFrame& frame);
 
+  // Immediately clears submitted_buffers in the 1st in-flight submitted_frame.
+  // This unblocks the pipeline.
+  // TODO(crbug.com/1358908): Remove related workaround once CrOS side fix
+  // stablizes.
+  void FreezeTimeout();
+
   const raw_ptr<WaylandWindow> window_;
 
   // When RecordFrame() is called, a Frame is pushed to |pending_frames_|. See
@@ -190,6 +197,12 @@ class WaylandFrameManager {
 
   // Non-owned pointer to the main connection.
   const raw_ptr<WaylandConnection> connection_;
+
+  // Set when invalid frame data is sent and the gpu process must be terminated.
+  std::string fatal_error_message_;
+
+  uint32_t frames_in_flight_ = 0;
+  base::OneShotTimer freeze_timeout_timer_;
 
   base::WeakPtrFactory<WaylandFrameManager> weak_factory_;
 };

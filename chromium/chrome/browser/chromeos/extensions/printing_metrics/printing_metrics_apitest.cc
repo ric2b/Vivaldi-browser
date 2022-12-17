@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -194,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(PrintingMetricsApiTest, OnPrintJobFinished) {
 // that such extensions don't see the chrome.printingMetrics namespace.
 IN_PROC_BROWSER_TEST_F(PrintingMetricsApiTest, IsRestrictedToPolicyExtension) {
   ASSERT_TRUE(RunExtensionTest("printing_metrics",
-                               {.page_url = "api_not_available.html"},
+                               {.extension_url = "api_not_available.html"},
                                {.ignore_manifest_warnings = true}));
 
   base::FilePath extension_path =

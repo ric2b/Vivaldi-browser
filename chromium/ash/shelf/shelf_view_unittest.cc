@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -2334,7 +2334,8 @@ TEST_P(LtrRtlShelfViewTest, TapInFullscreen) {
 }
 
 // Verifies that partying items are hidden from the shelf.
-TEST_P(LtrRtlShelfViewTest, PartyingItemsHiddenFromShelf) {
+// TODO(crbug/1372295): This test consistently times out.
+TEST_P(LtrRtlShelfViewTest, DISABLED_PartyingItemsHiddenFromShelf) {
   AddAppShortcut();
   AddAppShortcut();
   AddApp();
@@ -2428,6 +2429,60 @@ TEST_F(ShelfViewTest, ItemHasCorrectNotificationBadgeIndicator) {
 
   EXPECT_FALSE(GetItemByID(item_id).has_notification);
   EXPECT_FALSE(shelf_app_button->state() & ShelfAppButton::STATE_NOTIFICATION);
+}
+
+TEST_F(ShelfViewTest, TapOnItemDuringFadeOut) {
+  const ShelfID test_item_id = AddApp();
+
+  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+
+  views::View* const test_item_button = GetButtonByID(test_item_id);
+  ASSERT_TRUE(test_item_button);
+  const gfx::Point test_item_location =
+      test_item_button->GetBoundsInScreen().CenterPoint();
+
+  // Enable animations, as the test verifies behavior while a fade out animation
+  // is in progress.
+  ui::ScopedAnimationDurationScaleMode regular_animations(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Simulate test app getting uninstalled.
+  model_->RemoveItemAt(model_->ItemIndexByID(test_item_id));
+
+  // Tap on the removed item bounds (which will remain in place during fadeout
+  // animation).
+  GetEventGenerator()->GestureTapAt(test_item_location);
+
+  test_api_->RunMessageLoopUntilAnimationsDone();
+  VerifyShelfItemBoundsAreValid();
+}
+
+TEST_F(ShelfViewTest, SwipeOnItemDuringFadeOut) {
+  const ShelfID test_item_id = AddApp();
+
+  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+
+  views::View* const test_item_button = GetButtonByID(test_item_id);
+  ASSERT_TRUE(test_item_button);
+  const gfx::Point test_item_location =
+      test_item_button->GetBoundsInScreen().CenterPoint();
+
+  // Enable animations, as the test verifies behavior while a fade out animation
+  // is in progress.
+  ui::ScopedAnimationDurationScaleMode regular_animations(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Simulate test app getting uninstalled.
+  model_->RemoveItemAt(model_->ItemIndexByID(test_item_id));
+
+  // Swipe from the removed item bounds (which will remain in place during
+  // fadeout animation).
+  GetEventGenerator()->GestureScrollSequence(
+      test_item_location, test_item_location + gfx::Vector2d(0, -50),
+      base::Milliseconds(100), 3);
+
+  test_api_->RunMessageLoopUntilAnimationsDone();
+  VerifyShelfItemBoundsAreValid();
 }
 
 class GhostImageShelfViewTest : public ShelfViewTest {
@@ -3568,6 +3623,46 @@ TEST_F(ShelfViewGestureTapTest, MouseClickInterruptionBeforeGestureLongPress) {
 
   EXPECT_FALSE(shelf_view_->IsShowingMenu());
   EXPECT_EQ(views::InkDropState::HIDDEN, GetInkDropStateOfAppIcon1());
+}
+
+class ShelfPartyTest : public ShelfViewTest,
+                       public testing::WithParamInterface<
+                           std::pair<ShelfAlignment, ShelfAutoHideBehavior>> {
+ public:
+  ShelfPartyTest()
+      : ShelfViewTest(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+  ShelfPartyTest(const ShelfPartyTest&) = delete;
+  ShelfPartyTest& operator=(const ShelfPartyTest&) = delete;
+  ~ShelfPartyTest() override = default;
+
+  void SetUp() override {
+    ShelfViewTest::SetUp();
+    shelf_view_->shelf()->SetAlignment(GetParam().first);
+    shelf_view_->shelf()->SetAutoHideBehavior(GetParam().second);
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ShelfPartyTest,
+    testing::Values(
+        std::make_pair(ShelfAlignment::kBottom, ShelfAutoHideBehavior::kAlways),
+        std::make_pair(ShelfAlignment::kBottom, ShelfAutoHideBehavior::kNever),
+        std::make_pair(ShelfAlignment::kLeft, ShelfAutoHideBehavior::kNever),
+        std::make_pair(ShelfAlignment::kRight, ShelfAutoHideBehavior::kNever),
+        std::make_pair(ShelfAlignment::kBottomLocked,
+                       ShelfAutoHideBehavior::kNever),
+        std::make_pair(ShelfAlignment::kBottom,
+                       ShelfAutoHideBehavior::kAlwaysHidden)));
+
+// Exercises the party animation.
+TEST_P(ShelfPartyTest, PartyAnimation) {
+  for (int i = 0; i < 16; ++i)
+    AddAppShortcut();
+  model_->ToggleShelfParty();
+  task_environment()->FastForwardBy(base::Seconds(2));
+  model_->ToggleShelfParty();
+  test_api_->RunMessageLoopUntilAnimationsDone();
 }
 
 }  // namespace ash

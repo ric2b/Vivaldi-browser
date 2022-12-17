@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,8 +60,13 @@ void UserNoteStorageImpl::GetNotesById(
 void UserNoteStorageImpl::UpdateNote(const UserNote* model,
                                      std::u16string note_body_text,
                                      bool is_creation) {
+  // The note model must be cloned to avoid use-after-free issues in the
+  // background sequence. A weak pointer cannot be used because UserNote's weak
+  // pointer factory is already bound to the main thread. Passing the note by
+  // value also isn't possible because AsyncCall needs the move constructor,
+  // which has been deleted in UserNote by the weak pointer factory.
   database_.AsyncCall(&UserNoteDatabase::UpdateNote)
-      .WithArgs(model, note_body_text, is_creation)
+      .WithArgs(UserNote::Clone(model), note_body_text, is_creation)
       .Then(base::BindOnce(&UserNoteStorageImpl::OnNotesChanged,
                            weak_factory_.GetWeakPtr()));
 }

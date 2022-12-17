@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,6 +52,8 @@ class DefaultSearchManager {
   static const char kSuggestionsURLPostParams[];
   static const char kImageURLPostParams[];
   static const char kSideSearchParam[];
+  static const char kSideImageSearchParam[];
+  static const char kImageSearchBrandingLabel[];
 
   static const char kSafeForAutoReplace[];
   static const char kInputEncodings[];

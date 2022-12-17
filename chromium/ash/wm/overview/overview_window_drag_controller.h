@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -118,9 +118,11 @@ class ASH_EXPORT OverviewWindowDragController {
 
   OverviewItem* item() { return item_; }
 
-  DragBehavior current_drag_behavior() { return current_drag_behavior_; }
-
   bool is_touch_dragging() const { return is_touch_dragging_; }
+
+  DragBehavior current_drag_behavior_for_testing() const {
+    return current_drag_behavior_;
+  }
 
  private:
   enum NormalDragAction {
@@ -238,7 +240,8 @@ class ASH_EXPORT OverviewWindowDragController {
   // Records the presentation time of window drag operation in overview mode.
   std::unique_ptr<ui::PresentationTimeRecorder> presentation_time_recorder_;
 
-  SplitViewController::SnapPosition snap_position_ = SplitViewController::NONE;
+  SplitViewController::SnapPosition snap_position_ =
+      SplitViewController::SnapPosition::kNone;
 };
 
 }  // namespace ash

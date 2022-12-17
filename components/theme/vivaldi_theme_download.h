@@ -14,6 +14,8 @@
 
 #include "components/datasource/vivaldi_theme_io.h"
 
+class Profile;
+
 namespace content {
 class BrowserContext;
 }
@@ -35,7 +37,7 @@ class VivaldiThemeDownloadHelper {
       std::string theme_id,
       GURL url,
       ThemeDownloadCallback callback,
-      base::WeakPtr<content::BrowserContext> browser_context);
+      base::WeakPtr<Profile> browser_context);
   ~VivaldiThemeDownloadHelper();
 
   class Delegate {
@@ -63,7 +65,7 @@ class VivaldiThemeDownloadHelper {
   std::string theme_id_;
   std::unique_ptr<network::SimpleURLLoader> url_loader_;
   ThemeDownloadCallback callback_;
-  base::WeakPtr<content::BrowserContext> context_;
+  base::WeakPtr<Profile> profile_;
   Delegate* delegate_ = nullptr;
   // Temporary downloaded file to delete after import
   base::FilePath temporary_file_;

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -193,8 +193,8 @@ std::vector<WebFeature> AllAddressSpaceFeatures() {
 class PrivateNetworkAccessBrowserTestBase : public InProcessBrowserTest {
  public:
   PrivateNetworkAccessBrowserTestBase(
-      std::vector<base::Feature> enabled_features,
-      std::vector<base::Feature> disabled_features) {
+      std::vector<base::test::FeatureRef> enabled_features,
+      std::vector<base::test::FeatureRef> disabled_features) {
     features_.InitWithFeatures(enabled_features, disabled_features);
   }
 
@@ -727,7 +727,7 @@ IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessWithFeatureEnabledBrowserTest,
   EXPECT_TRUE(
       content::NavigateToURL(web_contents(), PublicNonSecureURL(*server)));
 
-  browser()->profile()->GetPrefs()->Set(
+  browser()->profile()->GetPrefs()->SetDict(
       proxy_config::prefs::kProxy,
       ProxyConfigDictionary::CreateFixedServers(
           server->host_port_pair().ToString(), ""));
@@ -1504,8 +1504,8 @@ class PrivateNetworkAccessAutoReloadBrowserTest
 // load due to a transient network error, it is auto-reloaded a short while
 // later and that fetch is not blocked as a private network request.
 //
-// TODO(crbug.com/1326341): Flaky on Linux ChromiumOS MSAN.
-#if BUILDFLAG(IS_CHROMEOS)
+// TODO(crbug.com/1326341): Flaky on Linux MSan.
+#if BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER)
 #define MAYBE_AutoReloadWorks DISABLED_AutoReloadWorks
 #else
 #define MAYBE_AutoReloadWorks AutoReloadWorks

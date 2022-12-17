@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -115,6 +115,7 @@ grit("dev_ui_content_resources") {
   ]
   deps = [
     "//content/browser/aggregation_service:mojo_bindings_webui_js",
+    "//content/browser/attribution_reporting:internals_mojo_bindings_webui_js",
     "//content/browser/attribution_reporting:mojo_bindings_webui_js",
     "//content/browser/preloading/prerender:mojo_bindings_webui_js",
     "//content/browser/resources/aggregation_service:build_ts",

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,8 +18,7 @@
 #include "remoting/protocol/session.h"
 #include "remoting/protocol/transport.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 extern const char kTestJid[];
 
@@ -85,7 +84,6 @@ class FakeSession : public Session {
   base::WeakPtrFactory<FakeSession> weak_factory_{this};
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_FAKE_SESSION_H_

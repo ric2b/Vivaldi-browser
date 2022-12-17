@@ -1,9 +1,10 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/policy/core/common/cloud/dmserver_job_configurations.h"
 
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
@@ -199,10 +200,8 @@ DMServerJobConfiguration::MapNetErrorAndResponseToDMStatus(
       // statuses depending on the contents of the response body.
       em::DeviceManagementResponse response;
       if (response.ParseFromString(response_body) &&
-          std::find(response.error_detail().begin(),
-                    response.error_detail().end(),
-                    em::CBCM_DELETION_POLICY_PREFERENCE_DELETE_TOKEN) !=
-              response.error_detail().end()) {
+          base::Contains(response.error_detail(),
+                         em::CBCM_DELETION_POLICY_PREFERENCE_DELETE_TOKEN)) {
         return DM_STATUS_SERVICE_DEVICE_NEEDS_RESET;
       }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
@@ -228,6 +227,8 @@ DMServerJobConfiguration::MapNetErrorAndResponseToDMStatus(
       return DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED;
     case DeviceManagementService::kIllegalAccountForPackagedEDULicense:
       return DM_STATUS_SERVICE_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE;
+    case DeviceManagementService::kInvalidPackagedDeviceForKiosk:
+      return DM_STATUS_SERVICE_INVALID_PACKAGED_DEVICE_FOR_KIOSK;
     default:
       // Handle all unknown 5xx HTTP error codes as temporary and any other
       // unknown error as one that needs more time to recover.
@@ -269,7 +270,8 @@ void DMServerJobConfiguration::OnURLLoadComplete(
     }
   }
 
-  std::move(callback_).Run(job, code, net_error, response);
+  std::move(callback_).Run(
+      DMServerJobResult{job, net_error, code, std::move(response)});
 }
 
 GURL DMServerJobConfiguration::GetURL(int last_error) const {

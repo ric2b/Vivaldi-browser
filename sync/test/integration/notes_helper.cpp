@@ -174,7 +174,7 @@ const NoteNode* AddNote(int profile,
                         const std::string& title,
                         const GURL& url) {
   NotesModel* model = GetNotesModel(profile);
-  if (GetNotesNodeByID(model, parent->id()) != parent) {
+  if (model->GetNoteNodeByID(parent->id()) != parent) {
     LOG(ERROR) << "Node " << parent->GetTitle() << " does not belong to "
                << "Profile " << profile;
     return NULL;
@@ -215,7 +215,7 @@ const NoteNode* AddFolder(int profile,
   NotesModel* model = GetNotesModel(profile);
   EXPECT_TRUE(model);
   EXPECT_TRUE(parent);
-  if (GetNotesNodeByID(model, parent->id()) != parent) {
+  if (model->GetNoteNodeByID(parent->id()) != parent) {
     LOG(ERROR) << "Node " << parent->GetTitle() << " does not belong to "
                << "Profile " << profile;
     return NULL;
@@ -245,7 +245,7 @@ const NoteNode* AddFolder(int profile,
 
 void SetTitle(int profile, const NoteNode* node, const std::string& new_title) {
   NotesModel* model = GetNotesModel(profile);
-  ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
+  ASSERT_EQ(model->GetNoteNodeByID(node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->UseVerifier()) {
@@ -260,7 +260,7 @@ void SetContent(int profile,
                 const NoteNode* node,
                 const std::string& new_content) {
   NotesModel* model = GetNotesModel(profile);
-  ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
+  ASSERT_EQ(model->GetNoteNodeByID(node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->UseVerifier()) {
@@ -273,7 +273,7 @@ void SetContent(int profile,
 
 const NoteNode* SetURL(int profile, const NoteNode* node, const GURL& new_url) {
   NotesModel* model = GetNotesModel(profile);
-  if (GetNotesNodeByID(model, node->id()) != node) {
+  if (model->GetNoteNodeByID(node->id()) != node) {
     LOG(ERROR) << "Node " << node->GetTitle() << " does not belong to "
                << "Profile " << profile;
     return NULL;
@@ -294,7 +294,7 @@ void Move(int profile,
           const NoteNode* new_parent,
           int index) {
   NotesModel* model = GetNotesModel(profile);
-  ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
+  ASSERT_EQ(model->GetNoteNodeByID(node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->UseVerifier()) {
@@ -309,7 +309,7 @@ void Move(int profile,
 
 void Remove(int profile, const NoteNode* parent, int index) {
   NotesModel* model = GetNotesModel(profile);
-  ASSERT_EQ(GetNotesNodeByID(model, parent->id()), parent)
+  ASSERT_EQ(model->GetNoteNodeByID(parent->id()), parent)
       << "Node " << parent->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->UseVerifier()) {
@@ -336,7 +336,7 @@ void RemoveAll(int profile) {
 
 void SortChildren(int profile, const NoteNode* parent) {
   NotesModel* model = GetNotesModel(profile);
-  ASSERT_EQ(GetNotesNodeByID(model, parent->id()), parent)
+  ASSERT_EQ(model->GetNoteNodeByID(parent->id()), parent)
       << "Node " << parent->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->UseVerifier()) {
@@ -348,7 +348,7 @@ void SortChildren(int profile, const NoteNode* parent) {
 }
 
 void ReverseChildOrder(int profile, const NoteNode* parent) {
-  ASSERT_EQ(GetNotesNodeByID(GetNotesModel(profile), parent->id()), parent)
+  ASSERT_EQ(GetNotesModel(profile)->GetNoteNodeByID(parent->id()), parent)
       << "Node " << parent->GetTitle() << " does not belong to "
       << "Profile " << profile;
   size_t child_count = parent->children().size();

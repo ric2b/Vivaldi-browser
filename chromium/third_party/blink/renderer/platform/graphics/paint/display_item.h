@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -188,6 +188,9 @@ class PLATFORM_EXPORT DisplayItem {
     const wtf_size_t fragment;
 
     struct HashKey {
+      DISALLOW_NEW();
+
+     public:
       HashKey() = default;
       explicit HashKey(const DisplayItem::Id& id)
           : client_id(id.client_id), type(id.type), fragment(id.fragment) {}

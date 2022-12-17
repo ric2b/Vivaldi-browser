@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
@@ -439,18 +440,8 @@ void Window::SetTransform(const gfx::Transform& transform) {
   layer()->SetTransform(transform);
 }
 
-void Window::SetLayoutManager(LayoutManager* layout_manager) {
-  if (layout_manager == layout_manager_.get())
-    return;
-  layout_manager_.reset(layout_manager);
-  if (!layout_manager)
-    return;
-  // If we're changing to a new layout manager, ensure it is aware of all the
-  // existing child windows.
-  for (Windows::const_iterator it = children_.begin();
-       it != children_.end();
-       ++it)
-    layout_manager_->OnWindowAddedToLayout(*it);
+void Window::SetLayoutManager(std::nullptr_t) {
+  SetLayoutManagerImpl(nullptr);
 }
 
 std::unique_ptr<WindowTargeter> Window::SetEventTargeter(
@@ -1734,6 +1725,18 @@ void Window::SetY(int y) {
   if (y == bounds().y())
     return;
   SetBounds({bounds().x(), y, bounds().width(), bounds().height()});
+}
+
+void Window::SetLayoutManagerImpl(
+    std::unique_ptr<LayoutManager> layout_manager) {
+  layout_manager_ = std::move(layout_manager);
+  if (!layout_manager_)
+    return;
+  // If we're changing to a new layout manager, ensure it is aware of all the
+  // existing child windows.
+  for (Windows::const_iterator it = children_.begin(); it != children_.end();
+       ++it)
+    layout_manager_->OnWindowAddedToLayout(*it);
 }
 
 bool Window::GetCapture() const {

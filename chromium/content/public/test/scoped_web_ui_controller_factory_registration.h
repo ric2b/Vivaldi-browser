@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,9 +52,6 @@ class ScopedWebUIConfigRegistration {
   ~ScopedWebUIConfigRegistration();
 
  private:
-  ScopedWebUIConfigRegistration(const GURL& webui_origin,
-                                std::unique_ptr<WebUIConfig> webui_config);
-
   const url::Origin webui_config_origin_;
   std::unique_ptr<WebUIConfig> replaced_webui_config_;
 };

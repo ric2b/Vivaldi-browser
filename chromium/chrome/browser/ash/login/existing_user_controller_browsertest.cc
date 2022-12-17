@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,11 +7,6 @@
 
 #include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
 #include "ash/components/arc/test/arc_util_test_support.h"
-#include "ash/components/login/auth/public/key.h"
-#include "ash/components/login/auth/public/user_context.h"
-#include "ash/components/login/auth/stub_authenticator_builder.h"
-#include "ash/components/settings/cros_settings_names.h"
-#include "ash/components/settings/cros_settings_provider.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
@@ -75,7 +70,12 @@
 #include "chromeos/ash/components/dbus/authpolicy/fake_authpolicy_client.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/fake_userdataauth_client.h"
+#include "chromeos/ash/components/login/auth/public/key.h"
+#include "chromeos/ash/components/login/auth/public/user_context.h"
+#include "chromeos/ash/components/login/auth/stub_authenticator_builder.h"
 #include "chromeos/ash/components/network/network_state_test_helper.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/settings/cros_settings_provider.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/account_id/account_id.h"
@@ -1019,16 +1019,14 @@ class ExistingUserControllerActiveDirectoryTestCreateProfileDir
   ExistingUserControllerActiveDirectoryTestCreateProfileDir() {
     cryptohome_mixin_.MarkUserAsExisting(ad_account_id_);
 
-    // TODO(crbug.com/1311355): This test is run with the feature
-    // kUseAuthsessionAuthentication enabled and disabled because of a
+    // TODO(b/239422391): This test is run with the feature
+    // kUseAuthFactors enabled and disabled because of a
     // transitive dependency of AffiliationTestHelper on that feature. Remove
-    // the parameter when kUseAuthsessionAuthentication is removed.
+    // the parameter when kUseAuthFactors is removed.
     if (GetParam()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          features::kUseAuthsessionAuthentication);
+      scoped_feature_list_.InitAndEnableFeature(features::kUseAuthFactors);
     } else {
-      scoped_feature_list_.InitAndDisableFeature(
-          features::kUseAuthsessionAuthentication);
+      scoped_feature_list_.InitAndDisableFeature(features::kUseAuthFactors);
     }
   }
 
@@ -1176,11 +1174,9 @@ class ExistingUserControllerSavePasswordHashTest
  public:
   ExistingUserControllerSavePasswordHashTest() {
     if (GetParam()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          features::kUseAuthsessionAuthentication);
+      scoped_feature_list_.InitAndEnableFeature(features::kUseAuthFactors);
     } else {
-      scoped_feature_list_.InitAndDisableFeature(
-          features::kUseAuthsessionAuthentication);
+      scoped_feature_list_.InitAndDisableFeature(features::kUseAuthFactors);
     }
   }
   ~ExistingUserControllerSavePasswordHashTest() override = default;
@@ -1317,12 +1313,14 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerAuthFailureTest, TpmError) {
   OobeScreenWaiter(TpmErrorView::kScreenId).Wait();
   EXPECT_TRUE(LoginScreenTestApi::IsOobeDialogVisible());
 
-  EXPECT_EQ(0, FakePowerManagerClient::Get()->num_request_restart_calls());
+  EXPECT_EQ(
+      0, chromeos::FakePowerManagerClient::Get()->num_request_restart_calls());
 
   test::TapOnPathAndWaitForOobeToBeDestroyed(
       {"tpm-error-message", "restartButton"});
 
-  EXPECT_EQ(1, FakePowerManagerClient::Get()->num_request_restart_calls());
+  EXPECT_EQ(
+      1, chromeos::FakePowerManagerClient::Get()->num_request_restart_calls());
 }
 
 IN_PROC_BROWSER_TEST_F(ExistingUserControllerAuthFailureTest, OwnerRequired) {

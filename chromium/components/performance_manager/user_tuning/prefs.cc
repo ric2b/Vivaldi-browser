@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,15 +19,20 @@ const char kBatterySaverModeState[] =
 const char kTabDiscardingExceptions[] =
     "performance_tuning.tab_discarding.exceptions";
 
+const char kManagedTabDiscardingExceptions[] =
+    "performance_tuning.tab_discarding.exceptions.managed";
+
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(kHighEfficiencyModeEnabled, false);
   registry->RegisterIntegerPref(
       kBatterySaverModeState,
-      static_cast<int>(BatterySaverModeState::kDisabled));
+      static_cast<int>(BatterySaverModeState::kEnabledBelowThreshold));
 }
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterListPref(kTabDiscardingExceptions);
+  registry->RegisterListPref(kTabDiscardingExceptions,
+                             user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterListPref(kManagedTabDiscardingExceptions);
 }
 
 BatterySaverModeState GetCurrentBatterySaverModeState(

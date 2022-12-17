@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@
  * @param {Element} peerConnectionElement
  */
 
-import {$} from 'chrome://resources/js/util.m.js';
+import {$} from 'chrome://resources/js/util.js';
 /**
  * A helper function for appending a child element to |parent|.
  * Copied from webrtc_internals.js
@@ -102,9 +102,7 @@ function appendRow(peerConnectionElement, active, candidatePair, stats) {
       '0x' + parseInt(candidatePair.priority, 10).toString(16);
   pairRow.children[6].innerText =
       candidatePair.bytesSent + ' / ' + candidatePair.bytesReceived;
-  pairRow.children[7].innerText =
-    (parseInt(candidatePair.requestsSent, 10) +
-      parseInt(candidatePair.consentRequestsSent, 10)) + ' / ' +
+  pairRow.children[7].innerText = candidatePair.requestsSent + ' / ' +
     candidatePair.responsesReceived;
   pairRow.children[8].innerText = candidatePair.requestsReceived + ' / ' +
     candidatePair.responsesSent;
@@ -136,7 +134,11 @@ function appendRow(peerConnectionElement, active, candidatePair, stats) {
   pairRow.children[2].innerText = localCandidate.networkType;
   // protocol must always be the same for the pair
   // so put it into the pair row above the candidate type.
+  // Add tcpType for local candidates.
   pairRow.children[4].innerText = localCandidate.protocol;
+  if (localCandidate.tcpType) {
+    pairRow.children[4].innerText += ' ' + localCandidate.tcpType;
+  }
 
   // Remote candidate.
   const remoteRow = findOrCreateGridRow(peerConnectionElement.id,

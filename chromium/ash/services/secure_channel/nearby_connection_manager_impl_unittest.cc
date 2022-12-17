@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "ash/components/multidevice/remote_device_test_util.h"
 #include "ash/services/secure_channel/authenticated_channel_impl.h"
 #include "ash/services/secure_channel/fake_authenticated_channel.h"
 #include "ash/services/secure_channel/fake_ble_scanner.h"
@@ -17,6 +16,7 @@
 #include "ash/services/secure_channel/public/cpp/client/fake_nearby_connector.h"
 #include "ash/services/secure_channel/secure_channel.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/components/multidevice/remote_device_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash::secure_channel {

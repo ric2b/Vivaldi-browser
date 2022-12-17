@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -211,7 +211,7 @@ struct SpdySessionDependencies {
   raw_ptr<NetLog> net_log = nullptr;
   bool disable_idle_sockets_close_on_memory_pressure = false;
   bool enable_early_data = false;
-  bool key_auth_cache_server_entries_by_network_isolation_key = false;
+  bool key_auth_cache_server_entries_by_network_anonymization_key = false;
   bool enable_priority_update = false;
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_IOS)
   bool go_away_on_ip_change = true;

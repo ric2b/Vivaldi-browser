@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "components/webapps/browser/android/shortcut_info.h"
 #include "components/webapps/browser/android/webapk/webapk_icon_hasher.h"
@@ -114,7 +113,8 @@ void WebApkInstallScheduler::OnResult(webapps::WebApkInstallResult result) {
   // triggered by the Chrome-service, is invoked on the UI thread.
   webapps::WebappsUtils::ShowWebApkInstallResultToast(result);
 
-  std::move(webapps_client_callback_).Run(shortcut_info_->manifest_url);
+  std::move(webapps_client_callback_)
+      .Run(shortcut_info_->manifest_url, shortcut_info_->manifest_id);
   delete this;
 }
 

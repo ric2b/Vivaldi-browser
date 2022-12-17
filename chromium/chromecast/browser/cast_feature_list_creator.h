@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,11 +36,11 @@ class CastFeatureListCreator {
 
   // Sets the extra features to be enabled.
   void SetExtraEnableFeatures(
-      const std::vector<base::Feature>& extra_enable_features);
+      const std::vector<const base::Feature*>& extra_enable_features);
 
   // Sets the extra features to be disabled.
   void SetExtraDisableFeatures(
-      const std::vector<base::Feature>& extra_disable_features);
+      const std::vector<const base::Feature*>& extra_disable_features);
 
  private:
   // Holds the |PrefService| until TakePrefService() is called and ownership

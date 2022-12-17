@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -174,9 +174,16 @@ SupportedFormats GetSupportedFormatsInternal(
       supported_formats.scalability_modes.push_back(profile.scalability_modes);
       supported_formats.sdp_formats.push_back(std::move(*format));
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 #if BUILDFLAG(IS_WIN)
-      if (media::IsMediaFoundationH264CbpEncodingEnabled() &&
-          profile.profile == media::VideoCodecProfile::H264PROFILE_BASELINE) {
+      const bool kShouldAddH264Cbp =
+          media::IsMediaFoundationH264CbpEncodingEnabled() &&
+          profile.profile == media::VideoCodecProfile::H264PROFILE_BASELINE;
+#elif BUILDFLAG(IS_LINUX)
+      const bool kShouldAddH264Cbp =
+          profile.profile == media::VideoCodecProfile::H264PROFILE_BASELINE;
+#endif
+      if (kShouldAddH264Cbp) {
         supported_formats.profiles.push_back(profile.profile);
         supported_formats.scalability_modes.push_back(
             profile.scalability_modes);

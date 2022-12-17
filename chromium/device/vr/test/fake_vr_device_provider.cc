@@ -1,8 +1,10 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "device/vr/test/fake_vr_device_provider.h"
+
+#include "base/ranges/algorithm.h"
 #include "device/vr/vr_device_base.h"
 
 namespace device {
@@ -22,11 +24,7 @@ void FakeVRDeviceProvider::AddDevice(std::unique_ptr<VRDeviceBase> device) {
 }
 
 void FakeVRDeviceProvider::RemoveDevice(mojom::XRDeviceId device_id) {
-  auto it = std::find_if(
-      devices_.begin(), devices_.end(),
-      [device_id](const std::unique_ptr<VRDeviceBase>& device) {
-        return static_cast<VRDeviceBase*>(device.get())->GetId() == device_id;
-      });
+  auto it = base::ranges::find(devices_, device_id, &VRDeviceBase::GetId);
   if (initialized_)
     client_->RemoveRuntime(device_id);
   devices_.erase(it);

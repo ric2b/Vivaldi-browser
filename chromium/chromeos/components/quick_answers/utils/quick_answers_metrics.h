@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,6 +77,9 @@ void RecordDictionaryIntentSource(DictionaryIntentSource source);
 
 // Record the query language of dictionary intent.
 void RecordDictionaryIntentLanguage(const std::string& language);
+
+// Record the feature enabled status when the first user session starts.
+void RecordFeatureEnabled(bool enabled);
 
 }  // namespace quick_answers
 

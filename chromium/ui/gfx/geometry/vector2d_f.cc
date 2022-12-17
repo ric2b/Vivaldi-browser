@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,6 +40,11 @@ float Vector2dF::Length() const {
 void Vector2dF::Scale(float x_scale, float y_scale) {
   x_ *= x_scale;
   y_ *= y_scale;
+}
+
+void Vector2dF::InvScale(float inv_x_scale, float inv_y_scale) {
+  x_ /= inv_x_scale;
+  y_ /= inv_y_scale;
 }
 
 double CrossProduct(const Vector2dF& lhs, const Vector2dF& rhs) {

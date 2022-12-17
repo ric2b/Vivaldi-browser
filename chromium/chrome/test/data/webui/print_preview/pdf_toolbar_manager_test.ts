@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -126,7 +126,8 @@ suite(pdf_toolbar_manager_test.suiteName, function() {
   let callCount: number = 0;
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     mockWindow = new MockWindow(1920, 1080);
     zoomToolbar = document.createElement('viewer-zoom-toolbar');

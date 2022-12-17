@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -14,8 +14,8 @@ from __future__ import unicode_literals
 import argparse
 import sys
 
-from goma_link import GomaLinkWindows
-from goma_ld import GomaLinkUnix
+from remote_link import RemoteLinkWindows
+from remote_ld import RemoteLinkUnix
 
 
 def main(argv):
@@ -43,9 +43,9 @@ def main(argv):
   linker_prefix = args.linker_prefix
 
   if linker_prefix == '-Wl,':
-    linker = GomaLinkUnix()
+    linker = RemoteLinkUnix()
   else:
-    linker = GomaLinkWindows()
+    linker = RemoteLinkWindows()
 
   rsp_expanded = list(linker.expand_args_rsps(cmdline))
   expanded_args = list(linker.expand_thin_archives(rsp_expanded))

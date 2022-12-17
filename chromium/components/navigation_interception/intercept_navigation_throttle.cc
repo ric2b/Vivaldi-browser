@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,9 @@
 namespace navigation_interception {
 
 // Note: this feature is a no-op on non-Android platforms.
-const base::Feature InterceptNavigationThrottle::kAsyncCheck{
-    "AsyncNavigationIntercept", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kAsyncCheck,
+             "AsyncNavigationIntercept",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 InterceptNavigationThrottle::InterceptNavigationThrottle(
     content::NavigationHandle* navigation_handle,

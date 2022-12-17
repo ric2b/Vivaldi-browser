@@ -1,11 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import static androidx.test.espresso.Espresso.onView;
-import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.RootMatchers.withDecorView;
@@ -87,15 +86,6 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class TabUiTestHelper {
     /**
-     * Apply the necessary theme overlay for activity.
-     * TODO(https://crbug.com/1227875): Move this into a test rule.
-     * @param activity The test activity that will be used to create tab components.
-     */
-    public static void applyThemeOverlays(Activity activity) {
-        activity.setTheme(TabUiThemeProvider.getThemeOverlayStyleResourceId());
-    }
-
-    /**
      * Create {@code tabsCount} tabs for {@code cta} in certain tab model based on {@code
      * isIncognito}.
      * @param cta            A current running activity to create tabs.
@@ -145,7 +135,7 @@ public class TabUiTestHelper {
      */
     public static void leaveTabSwitcher(ChromeTabbedActivity cta) {
         assertTrue(cta.getLayoutManager().isLayoutVisible(LayoutType.TAB_SWITCHER));
-        pressBack();
+        TestThreadUtils.runOnUiThreadBlocking(() -> cta.onBackPressed());
         LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
     }
 

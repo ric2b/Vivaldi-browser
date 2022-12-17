@@ -1,14 +1,15 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'chrome://os-settings/chromeos/lazy_load.js';
 
 import {Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
-import {assertEquals} from '../../chai_assert.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
-import {waitAfterNextRender} from 'chrome://test/test_util.js';
+import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
+
+import {assertEquals} from '../../chai_assert.js';
 
 suite('A11yPageTests', function() {
   /** @type {SettingsA11yPageElement} */

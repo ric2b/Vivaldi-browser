@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,8 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using Dependency = openscreen::cast::EncodedFrame::Dependency;
 
 namespace mirroring {
 
@@ -412,9 +414,9 @@ TEST_F(RemotingSenderTest, CancelsFramesInFlight) {
     const media::cast::EncodedFrame& frame = frames[i];
     EXPECT_EQ(media::cast::FrameId::first() + i, frame.frame_id);
     if (i == 0 || i == 10)
-      EXPECT_EQ(media::cast::EncodedFrame::KEY, frame.dependency);
+      EXPECT_EQ(Dependency::kKeyFrame, frame.dependency);
     else
-      EXPECT_EQ(media::cast::EncodedFrame::DEPENDENT, frame.dependency);
+      EXPECT_EQ(Dependency::kDependent, frame.dependency);
   }
 }
 
@@ -587,10 +589,10 @@ TEST_F(RemotingSenderTest, StopsConsumingWhileTooManyFramesAreInFlight) {
     const media::cast::EncodedFrame& frame = frames[i];
     EXPECT_EQ(media::cast::FrameId::first() + i, frame.frame_id);
     if (i == 0) {
-      EXPECT_EQ(media::cast::EncodedFrame::KEY, frame.dependency);
+      EXPECT_EQ(Dependency::kKeyFrame, frame.dependency);
       EXPECT_EQ(media::cast::FrameId::first() + i, frame.referenced_frame_id);
     } else {
-      EXPECT_EQ(media::cast::EncodedFrame::DEPENDENT, frame.dependency);
+      EXPECT_EQ(Dependency::kDependent, frame.dependency);
       EXPECT_EQ(media::cast::FrameId::first() + i - 1,
                 frame.referenced_frame_id);
     }

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@ import android.os.Message;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup.MarginLayoutParams;
@@ -127,6 +128,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     private static final int ANIM_TAB_SELECTION_DELAY = 150;
     private static final int ANIM_TAB_MOVE_MS = 125;
     private static final int ANIM_TAB_SLIDE_OUT_MS = 250;
+    private static final int ANIM_TAB_DIM_MS = 150;
     private static final long INVALID_TIME = 0L;
     static final long DROP_INTO_GROUP_MS = 300L;
 
@@ -236,7 +238,6 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
     // Experiment flags
     private final boolean mTabStripImpEnabled;
-    private final boolean mTabGroupsEnabled;
 
     /** Vivaldi **/
     private TabModelObserver mModelObserver;
@@ -320,6 +321,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                 mTabMenu.dismiss();
                 if (position == ID_CLOSE_ALL_TABS) {
                     mModel.closeAllTabs(false);
+                    RecordUserAction.record("MobileToolbarCloseAllTabs");
                 }
             }
         });
@@ -331,7 +333,6 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         // Vivaldi
         mTabMenu = new VivaldiTabMenu(context);
 
-        mTabGroupsEnabled = TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext);
         mShouldCascadeTabs =
                 DeviceFormFactor.isNonMultiDisplayContextOnTablet(context) && !mTabStripImpEnabled;
         // Note(david@vivaldi.com): We never cascade tabs in Vivaldi.
@@ -842,11 +843,13 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
         for (int i = 0; i < count; i++) {
             final StripLayoutTab tab = mStripTabs[i];
-            if (TabUiFeatureUtilities.getTabMinWidth() == TAB_WIDTH_MEDIUM) {
-                mStripTabs[i].setCanShowCloseButton(shouldShowCloseButton(tab, i));
-            } else if (TabUiFeatureUtilities.getTabMinWidth() == TAB_WIDTH_SMALL) {
-                mStripTabs[i].setCanShowCloseButton(tab.getWidth() >= TAB_WIDTH_MEDIUM
-                        || (tab.getId() == selectedTab.getId() && shouldShowCloseButton(tab, i)));
+            if (mMinTabWidth == TAB_WIDTH_MEDIUM) {
+                boolean canShowCloseButton = shouldShowCloseButton(tab, i);
+                mStripTabs[i].setCanShowCloseButton(canShowCloseButton, !mIsFirstLayoutPass);
+            } else if (mMinTabWidth == TAB_WIDTH_SMALL) {
+                boolean canShowCloseButton = tab.getWidth() >= TAB_WIDTH_MEDIUM
+                        || (tab.getId() == selectedTab.getId() && shouldShowCloseButton(tab, i));
+                mStripTabs[i].setCanShowCloseButton(canShowCloseButton, !mIsFirstLayoutPass);
             }
         }
     }
@@ -1491,7 +1494,12 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     }
 
     private void pushStackerPropertiesToTab(StripLayoutTab tab) {
-        tab.setCanShowCloseButton(mStripStacker.canShowCloseButton());
+        // The close button is visible by default. If it should be hidden on tab creation, do not
+        // animate the fade-out. See (https://crbug.com/1342654).
+        boolean shouldShowCloseButton =
+                (!mTabStripImpEnabled) || mCachedTabWidth >= TAB_WIDTH_MEDIUM;
+        tab.setCanShowCloseButton(
+                mStripStacker.canShowCloseButton() && shouldShowCloseButton, false);
         // TODO(dtrainor): Push more properties as they are added (title text slide, etc?)
     }
 
@@ -1913,11 +1921,12 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                     calculateOffsetToMakeTabVisible(mInteractingTab, true, true, true, true);
             mScroller.startScroll(Math.round(mScrollOffset), 0, (int) fastExpandDelta, 0, time,
                     getExpandDuration());
-        } else if (mTabGroupsEnabled) {
+        } else if (TabUiFeatureUtilities.isTabletTabGroupsEnabled(mContext)) {
+            Tab tab = getTabById(mInteractingTab.getId());
             if (!ChromeApplicationImpl.isVivaldi())
             computeAndUpdateTabGroupMargins(true, true);
-            setTabGroupDimmed(
-                    mTabGroupModelFilter.getRootId(getTabById(mInteractingTab.getId())), false);
+            setTabGroupDimmed(mTabGroupModelFilter.getRootId(tab), false);
+            performHapticFeedback(tab);
         }
 
         // 7. Request an update.
@@ -1942,7 +1951,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         setBackgroundTabsDimmed(false);
 
         // 4. Clear any tab group margins if they are enabled.
-        if (mTabGroupsEnabled) resetTabGroupMargins();
+        if (TabUiFeatureUtilities.isTabletTabGroupsEnabled(mContext)) resetTabGroupMargins();
 
         // 5. Request an update.
         mUpdateHost.requestUpdate();
@@ -1986,6 +1995,9 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         float delta = (numMarginsToSlide * mTabMarginWidth);
         float startValue = mScrollOffset - startMarginDelta;
         float endValue = startValue - delta;
+
+        if (startValue < mMinScrollOffset) return;
+
         if (animationList != null) {
             CompositorAnimator scrollAnimator =
                     CompositorAnimator.ofFloatProperty(mUpdateHost.getAnimationHandler(), this,
@@ -2091,27 +2103,37 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         startAnimationList(animationList, getTabGroupMarginAnimatorListener());
     }
 
-    private void setBackgroundTabsDimmed(boolean dimmed) {
-        for (int i = 0; i < mStripTabs.length; i++) {
-            final StripLayoutTab tab = mStripTabs[i];
-
-            if (tab != mInteractingTab) {
-                tab.setBrightness(dimmed ? BACKGROUND_TAB_BRIGHTNESS_DIMMED
-                                         : BACKGROUND_TAB_BRIGHTNESS_DEFAULT);
+    private void setTabDimmed(StripLayoutTab tab, boolean dimmed) {
+        if (tab != mInteractingTab) {
+            float brightness =
+                    dimmed ? BACKGROUND_TAB_BRIGHTNESS_DIMMED : BACKGROUND_TAB_BRIGHTNESS_DEFAULT;
+            if (!mAnimationsDisabledForTesting && tab.isVisible()) {
+                CompositorAnimator
+                        .ofFloatProperty(mUpdateHost.getAnimationHandler(), tab,
+                                StripLayoutTab.BRIGHTNESS, tab.getBrightness(), brightness,
+                                ANIM_TAB_DIM_MS)
+                        .start();
+            } else {
+                tab.setBrightness(brightness);
             }
         }
     }
 
+    private void setBackgroundTabsDimmed(boolean dimmed) {
+        for (int i = 0; i < mStripTabs.length; i++) {
+            final StripLayoutTab tab = mStripTabs[i];
+            setTabDimmed(tab, dimmed);
+        }
+    }
+
     private void setTabGroupDimmed(int groupId, boolean dimmed) {
-        assert mTabGroupsEnabled;
+        assert TabUiFeatureUtilities.isTabletTabGroupsEnabled(mContext);
 
         for (int i = 0; i < mStripTabs.length; i++) {
             final StripLayoutTab tab = mStripTabs[i];
 
-            if (mTabGroupModelFilter.getRootId(getTabById(tab.getId())) == groupId
-                    && tab != mInteractingTab) {
-                tab.setBrightness(dimmed ? BACKGROUND_TAB_BRIGHTNESS_DIMMED
-                                         : BACKGROUND_TAB_BRIGHTNESS_DEFAULT);
+            if (mTabGroupModelFilter.getRootId(getTabById(tab.getId())) == groupId) {
+                setTabDimmed(tab, dimmed);
             }
         }
     }
@@ -2256,7 +2278,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         int destIndex = TabModel.INVALID_TAB_INDEX;
         boolean isAnimating = mRunningAnimator != null && mRunningAnimator.isRunning();
         boolean towardEnd = (offset >= 0) ^ LocalizationUtils.isLayoutRtl();
-        boolean isInGroup = mTabGroupsEnabled
+        boolean isInGroup = TabUiFeatureUtilities.isTabletTabGroupsEnabled(mContext)
                 && mTabGroupModelFilter.hasOtherRelatedTabs(getTabById(mInteractingTab.getId()));
         boolean hasTrailingMargin = mInteractingTab.getTrailingMargin() == mTabMarginWidth;
         boolean hasStartingMargin = curIndex == 0
@@ -2350,7 +2372,9 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
             float oldIdealX = mInteractingTab.getIdealX();
             float oldOffset = mScrollOffset;
             if (!ChromeApplicationImpl.isVivaldi())
-            if (mTabGroupsEnabled) computeAndUpdateTabGroupMargins(false, false);
+            if (TabUiFeatureUtilities.isTabletTabGroupsEnabled(mContext)) {
+                computeAndUpdateTabGroupMargins(false, false);
+            }
 
             // 3.d. Since we just moved the tab we're dragging, adjust its offset so it stays in
             // the same apparent position.
@@ -2561,6 +2585,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     @VisibleForTesting
     public void testSetScrollOffset(float offset) {
         mScrollOffset = offset;
+        updateStrip();
     }
 
     /**
@@ -2873,6 +2898,12 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         builder.append(mContext.getResources().getString(resId));
 
         stripTab.setAccessibilityDescription(builder.toString(), title);
+    }
+
+    private void performHapticFeedback(Tab tab) {
+        View tabView = tab.getView();
+        if (tabView == null) return;
+        tabView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
     }
 
     /** Vivaldi **/

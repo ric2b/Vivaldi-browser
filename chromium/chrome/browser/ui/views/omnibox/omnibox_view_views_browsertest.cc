@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -166,11 +166,11 @@ class OmniboxViewViewsTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, PasteAndGoDoesNotLeavePopupOpen) {
-  OmniboxView* view = NULL;
+  OmniboxView* view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &view));
   OmniboxViewViews* omnibox_view_views = static_cast<OmniboxViewViews*>(view);
 
-  // Put an URL on the clipboard.
+  // Put a URL on the clipboard.
   SetClipboardText(ui::ClipboardBuffer::kCopyPaste, u"http://www.example.com/");
 
   // Paste and go.
@@ -181,7 +181,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, PasteAndGoDoesNotLeavePopupOpen) {
 }
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, DoNotNavigateOnDrop) {
-  OmniboxView* view = NULL;
+  OmniboxView* view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &view));
   OmniboxViewViews* omnibox_view_views = static_cast<OmniboxViewViews*>(view);
 
@@ -227,7 +227,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AyncDropCallback) {
 
 // Flaky: https://crbug.com/915591.
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, DISABLED_SelectAllOnClick) {
-  OmniboxView* omnibox_view = NULL;
+  OmniboxView* omnibox_view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
   omnibox_view->SetUserText(u"http://www.google.com/");
 
@@ -292,7 +292,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, DISABLED_SelectAllOnClick) {
 // of lacros-chrome is complete.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectionClipboard) {
-  OmniboxView* omnibox_view = NULL;
+  OmniboxView* omnibox_view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
   omnibox_view->SetUserText(u"http://www.google.com/");
   OmniboxViewViews* omnibox_view_views =
@@ -342,7 +342,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectionClipboard) {
 #if !BUILDFLAG(IS_MAC) || defined(USE_AURA)
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnTap) {
-  OmniboxView* omnibox_view = NULL;
+  OmniboxView* omnibox_view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
   omnibox_view->SetUserText(u"http://www.google.com/");
 
@@ -377,8 +377,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnTap) {
       gfx::Vector2d(omnibox_bounds.width() / 4, omnibox_bounds.height() / 4);
   ASSERT_NO_FATAL_FAILURE(Tap(tap2_location, tap2_location));
   EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
-  // We don't test if the all text is selected because it depends on whether or
-  // not there was text under the tap, which appears to be flaky.
+  // We don't test if the all text is selected because it depends on whether
+  // there was text under the tap, which appears to be flaky.
 
   // Take the focus away and tap in the omnibox again, but drag a bit before
   // releasing. This shouldn't select text.
@@ -392,7 +392,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnTap) {
 // Tests if executing a command hides touch editing handles.
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest,
                        DeactivateTouchEditingOnExecuteCommand) {
-  OmniboxView* view = NULL;
+  OmniboxView* view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &view));
   OmniboxViewViews* omnibox_view_views = static_cast<OmniboxViewViews*>(view);
   views::TextfieldTestApi textfield_test_api(omnibox_view_views);
@@ -406,7 +406,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest,
   Tap(omnibox_center, omnibox_center);
   EXPECT_TRUE(textfield_test_api.touch_selection_controller());
 
-  // Execute a command and check if it deactivate touch editing. Paste & Go is
+  // Execute a command and check if it deactivates touch editing. Paste & Go is
   // chosen since it is specific to Omnibox and its execution wouldn't be
   // delegated to the base Textfield class.
   omnibox_view_views->ExecuteCommand(IDC_PASTE_AND_GO, ui::EF_NONE);
@@ -416,7 +416,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest,
 #endif  // !BUILDFLAG(IS_MAC) || defined(USE_AURA)
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnTabToFocus) {
-  OmniboxView* omnibox_view = NULL;
+  OmniboxView* omnibox_view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), GURL("http://www.google.com/")));
@@ -460,7 +460,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag) {
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()));
 
   // The omnibox popup should open with suggestions displayed.
-  omnibox_view->model()->OnPopupResultChanged();
+  autocomplete_controller->NotifyChanged();
   EXPECT_TRUE(omnibox_view->model()->PopupIsOpen());
 
   // The omnibox text should be selected.
@@ -508,7 +508,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, MaintainCursorAfterFocusCycle) {
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()));
 
   // The omnibox popup should open with suggestions displayed.
-  omnibox_view->model()->OnPopupResultChanged();
+  autocomplete_controller->NotifyChanged();
   EXPECT_TRUE(omnibox_view->model()->PopupIsOpen());
 
   // TODO(krb): For some reason, we need to hit End twice to be registered.
@@ -545,7 +545,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, BackgroundIsOpaque) {
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, FocusedTextInputClient) {
   chrome::FocusLocationBar(browser());
-  OmniboxView* view = NULL;
+  OmniboxView* view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &view));
   OmniboxViewViews* omnibox_view_views = static_cast<OmniboxViewViews*>(view);
   ui::InputMethod* input_method =
@@ -592,6 +592,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, FriendlyAccessibleLabel) {
       ACMatchClassification(0, ACMatchClassification::URL));
   match.destination_url = GURL(match_url);
   match.description = u"Google";
+  match.description_class = {{0, 0}};
   match.allowed_to_be_default_match = true;
 
   // Enter user input mode to prevent spurious unelision.
@@ -611,7 +612,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, FriendlyAccessibleLabel) {
 
   // The omnibox popup should open with suggestions displayed.
   chrome::FocusLocationBar(browser());
-  omnibox_view->model()->OnPopupResultChanged();
+  autocomplete_controller->NotifyChanged();
   EXPECT_TRUE(omnibox_view->model()->PopupIsOpen());
   OmniboxViewViews* omnibox_view_views =
       static_cast<OmniboxViewViews*>(omnibox_view);
@@ -710,7 +711,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AccessiblePopup) {
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()));
 
   // The omnibox popup should open with suggestions displayed.
-  omnibox_view->model()->OnPopupResultChanged();
+  autocomplete_controller->NotifyChanged();
   EXPECT_TRUE(omnibox_view->model()->PopupIsOpen());
   ui::AXNodeData popup_node_data_2;
   popup_view->GetAccessibleNodeData(&popup_node_data_2);
@@ -833,7 +834,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsUIATest, AccessibleOmnibox) {
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()));
 
   // The omnibox popup should open with suggestions displayed.
-  omnibox_view->model()->OnPopupResultChanged();
+  autocomplete_controller->NotifyChanged();
 
   // Wait for ControllerFor property changed event.
   open_waiter.Wait();
@@ -1019,7 +1020,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, MAYBE_HandleExternalProtocolURLs) {
 #endif
 
 // Test that triggers a zero suggest autocomplete request by clicking on the
-// omnibox. These should never attempt an https upgrade or involve the typed
+// omnibox. These should never attempt an HTTPS upgrade or involve the typed
 // navigation upgrade throttle.
 // This is a regression test for https://crbug.com/1251065
 IN_PROC_BROWSER_TEST_F(

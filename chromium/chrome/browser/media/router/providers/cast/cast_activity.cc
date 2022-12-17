@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -106,8 +106,9 @@ void CastActivity::SendMessageToClient(
   it->second->SendMessageToClient(std::move(message));
 }
 
-void CastActivity::SendMediaStatusToClients(const base::Value& media_status,
-                                            absl::optional<int> request_id) {
+void CastActivity::SendMediaStatusToClients(
+    const base::Value::Dict& media_status,
+    absl::optional<int> request_id) {
   for (auto& client : connected_clients_)
     client.second->SendMediaStatusToClient(media_status, request_id);
 }
@@ -159,7 +160,7 @@ void CastActivity::CloseConnectionOnReceiver(const std::string& client_id) {
   if (!session)
     return;
   message_handler_->CloseConnection(cast_channel_id(), client_id,
-                                    session->transport_id());
+                                    session->destination_id());
 }
 
 void CastActivity::HandleLeaveSession(const std::string& client_id) {

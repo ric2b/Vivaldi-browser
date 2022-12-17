@@ -17,28 +17,12 @@ async function createIframeAndWaitForMessage(test, iframeUrl, setPermissionPolic
     var iframe = document.createElement("iframe");
     iframe.src = iframeUrl;
     if (setPermissionPolicy) {
-      iframe.allow = "federated-credentials";
+      iframe.allow = "identity-credentials-get";
     }
     document.body.appendChild(iframe);
     const message = await messageWatcher.wait_for("message");
     return message.data;
 }
-
-promise_test(async t => {
-  const message = await createIframeAndWaitForMessage(
-      t, "support/fedcm-iframe.html",
-      /*setPermissionPolicy=*/false);
-  assert_equals(message.result, "Pass");
-  assert_equals(message.token, "a_token");
-}, "FedCM enabled in same origin iframe");
-
-promise_test(async t => {
-  const message = await createIframeAndWaitForMessage(
-      t, remoteBaseURL + "support/fedcm-iframe.html",
-      /*setPermissionPolicy=*/true);
-  assert_equals(message.result, "Pass");
-  assert_equals(message.token, "a_token");
-}, "FedCM enabled in cross origin iframe with permissions policy");
 
 promise_test(async t => {
   const message = await createIframeAndWaitForMessage(
@@ -52,7 +36,24 @@ promise_test(async t => {
   const message = await createIframeAndWaitForMessage(
       t, remoteBaseURL + "support/fedcm-iframe-level2.html",
       /*setPermissionPolicy=*/true);
+  assert_equals(message.result, "Pass");
+  assert_equals(message.token, "a_token");
+}, "FedCM enabled in 2 level deep nested iframe. FedCM should be enabled regardless of iframe nesting depth");
+
+promise_test(async t => {
+  const message = await createIframeAndWaitForMessage(
+      t, remoteBaseURL + "support/fedcm-iframe-level2.html",
+      /*setPermissionPolicy=*/false);
   assert_equals(message.result, "Fail");
   assert_equals(message.errorType, "NotAllowedError");
-  }, "FedCM disabled in nested cross origin iframes regardless of permissions policy");
+}, "FedCM disabled in 2 level deep nested iframe where middle iframe does not have permission policy");
+
+promise_test(async t => {
+  const message = await createIframeAndWaitForMessage(
+      t, remoteBaseURL + "support/fedcm-iframe-level2-no-permission.html",
+      /*setPermissionPolicy=*/true);
+  assert_equals(message.result, "Fail");
+  assert_equals(message.errorType, "NotAllowedError");
+}, "FedCM disabled in 2 level deep nested iframe where innermost iframe does not have permission policy");
+
 </script>

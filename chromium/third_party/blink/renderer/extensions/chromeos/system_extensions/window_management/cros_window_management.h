@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,6 @@
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_remote.h"
-#include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 
@@ -22,11 +21,10 @@ class CrosWindow;
 class CrosScreen;
 class ScriptPromiseResolver;
 
-class CrosWindowManagement
-    : public EventTargetWithInlineData,
-      public mojom::blink::CrosWindowManagementStartObserver,
-      public Supplement<ExecutionContext>,
-      public ExecutionContextClient {
+class CrosWindowManagement : public EventTargetWithInlineData,
+                             public mojom::blink::CrosWindowManagementObserver,
+                             public Supplement<ExecutionContext>,
+                             public ExecutionContextClient {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -61,13 +59,17 @@ class CrosWindowManagement
   void DispatchStartEvent() override;
   void DispatchAcceleratorEvent(
       mojom::blink::AcceleratorEventPtr event) override;
+  void DispatchWindowOpenedEvent(
+      mojom::blink::CrosWindowInfoPtr window) override;
+  void DispatchWindowClosedEvent(
+      mojom::blink::CrosWindowInfoPtr window) override;
 
  private:
   HeapMojoRemote<mojom::blink::CrosWindowManagementFactory>
       cros_window_management_factory_{GetExecutionContext()};
   HeapMojoAssociatedRemote<mojom::blink::CrosWindowManagement>
       cros_window_management_{GetExecutionContext()};
-  HeapMojoAssociatedReceiver<mojom::blink::CrosWindowManagementStartObserver,
+  HeapMojoAssociatedReceiver<mojom::blink::CrosWindowManagementObserver,
                              CrosWindowManagement>
       observer_receiver_{this, GetExecutionContext()};
 

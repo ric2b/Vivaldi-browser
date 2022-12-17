@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,8 +66,7 @@ bool OverlayStrategyUnderlayCast::Attempt(
       continue;
 
     const auto& transform = quad->shared_quad_state->quad_to_target_transform;
-    gfx::RectF quad_rect = gfx::RectF(quad->rect);
-    transform.TransformRect(&quad_rect);
+    gfx::Rect quad_rect = transform.MapRect(quad->rect);
 
     bool is_underlay = false;
     if (!found_underlay) {
@@ -93,9 +92,9 @@ bool OverlayStrategyUnderlayCast::Attempt(
     }
 
     if (is_underlay) {
-      content_rect.Subtract(gfx::ToEnclosedRect(quad_rect));
+      content_rect.Subtract(quad_rect);
     } else {
-      content_rect.Union(gfx::ToEnclosingRect(quad_rect));
+      content_rect.Union(quad_rect);
     }
   }
 
@@ -197,8 +196,7 @@ bool OverlayStrategyUnderlayCast::AttemptPrioritized(
       continue;
 
     const auto& transform = quad->shared_quad_state->quad_to_target_transform;
-    gfx::RectF quad_rect = gfx::RectF(quad->rect);
-    transform.TransformRect(&quad_rect);
+    gfx::Rect quad_rect = transform.MapRect(quad->rect);
 
     bool is_underlay = false;
     if (!found_underlay) {
@@ -224,9 +222,9 @@ bool OverlayStrategyUnderlayCast::AttemptPrioritized(
     }
 
     if (is_underlay) {
-      content_rect.Subtract(gfx::ToEnclosedRect(quad_rect));
+      content_rect.Subtract(quad_rect);
     } else {
-      content_rect.Union(gfx::ToEnclosingRect(quad_rect));
+      content_rect.Union(quad_rect);
     }
   }
 
@@ -264,7 +262,7 @@ void OverlayStrategyUnderlayCast::CommitCandidate(
   DCHECK(GetVideoGeometrySetter());
   GetVideoGeometrySetter()->SetVideoGeometry(
       proposed_candidate.candidate.display_rect,
-      proposed_candidate.candidate.transform,
+      absl::get<gfx::OverlayTransform>(proposed_candidate.candidate.transform),
       VideoHoleDrawQuad::MaterialCast(*proposed_candidate.quad_iter)
           ->overlay_plane_id);
 

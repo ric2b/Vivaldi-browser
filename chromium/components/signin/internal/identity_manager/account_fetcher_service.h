@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "components/signin/internal/identity_manager/profile_oauth2_token_service_observer.h"
 #include "components/signin/public/base/persistent_repeating_timer.h"
@@ -35,10 +36,6 @@ struct CoreAccountInfo;
 #if BUILDFLAG(IS_ANDROID)
 class ChildAccountInfoFetcherAndroid;
 #endif
-
-namespace base {
-class DictionaryValue;
-}
 
 namespace gfx {
 class Image;
@@ -154,7 +151,7 @@ class AccountFetcherService : public ProfileOAuth2TokenServiceObserver {
 
   // Called by AccountInfoFetcher.
   void OnUserInfoFetchSuccess(const CoreAccountId& account_id,
-                              std::unique_ptr<base::DictionaryValue> user_info);
+                              const base::Value::Dict& user_info);
   void OnUserInfoFetchFailure(const CoreAccountId& account_id);
 
   // Called by AccountCapabilitiesFetcher.

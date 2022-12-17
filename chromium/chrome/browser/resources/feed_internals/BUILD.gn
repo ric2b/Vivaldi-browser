@@ -1,4 +1,4 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -19,6 +19,6 @@ js_type_check("closure_compile") {
 js_library("feed_internals") {
   deps = [
     "//chrome/browser/ui/webui/feed_internals:mojo_bindings_webui_js",
-    "//ui/webui/resources/js:util.m",
+    "//ui/webui/resources/js:util",
   ]
 }

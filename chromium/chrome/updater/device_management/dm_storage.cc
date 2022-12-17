@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,15 +69,6 @@ bool DeleteObsoletePolicies(const base::FilePath& cache_root,
 }
 
 }  // namespace
-
-#if BUILDFLAG(IS_LINUX)
-// TODO(crbug.com/1276162) - implement.
-DMStorage::DMStorage(const base::FilePath& policy_cache_root)
-    : policy_cache_root_(policy_cache_root),
-      policy_info_file_(policy_cache_root_.AppendASCII(kPolicyInfoFileName)) {
-  NOTIMPLEMENTED();
-}
-#endif  // BUILDFLAG(IS_LINUX)
 
 DMStorage::DMStorage(const base::FilePath& policy_cache_root,
                      std::unique_ptr<TokenServiceInterface> token_service)
@@ -214,13 +205,5 @@ DMStorage::GetOmahaPolicySettings() const {
 
   return omaha_settings;
 }
-
-#if BUILDFLAG(IS_LINUX)
-// TODO(crbug.com/1276162) - implement.
-scoped_refptr<DMStorage> GetDefaultDMStorage() {
-  NOTIMPLEMENTED();
-  return nullptr;
-}
-#endif
 
 }  // namespace updater

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -134,7 +134,7 @@ bool VariableExpander::ExpandValue(base::Value* value) const {
     }
 
     case base::Value::Type::LIST: {
-      for (base::Value& child : value->GetListDeprecated())
+      for (base::Value& child : value->GetList())
         no_error &= ExpandValue(&child);
       break;
     }

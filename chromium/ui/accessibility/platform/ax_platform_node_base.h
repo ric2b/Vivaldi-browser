@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,6 +35,8 @@ struct AXNodeData;
 // TODO(nektar): Move this struct over to AXNode so that it can be accessed by
 // AXPosition.
 struct AX_EXPORT AXLegacyHypertext {
+  using OffsetToIndex = std::map<int32_t, int32_t>;
+
   AXLegacyHypertext();
   ~AXLegacyHypertext();
   AXLegacyHypertext(const AXLegacyHypertext& other);
@@ -48,7 +50,7 @@ struct AX_EXPORT AXLegacyHypertext {
 
   // Maps an embedded character offset in |hypertext| to an index in
   // |hyperlinks|.
-  std::map<int32_t, int32_t> hyperlink_offset_to_index;
+  OffsetToIndex hyperlink_offset_to_index;
 
   // The unique id of a AXPlatformNodes for each hyperlink.
   // TODO(nektar): Replace object IDs with child indices if we decide that
@@ -513,8 +515,8 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // First they check for a local selection found on the current control, e.g.
   // when querying the selection on a textarea.
   // If not found they retrieve the global selection found on the current frame.
-  int GetSelectionAnchor(const AXTree::Selection* selection);
-  int GetSelectionFocus(const AXTree::Selection* selection);
+  int GetSelectionAnchor(const AXSelection* selection);
+  int GetSelectionFocus(const AXSelection* selection);
 
   // Retrieves the selection offsets in the way required by the IA2 APIs.
   // selection_start and selection_end are -1 when there is no selection active
@@ -522,10 +524,10 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // The greatest of the two offsets is one past the last character of the
   // selection.)
   void GetSelectionOffsets(int* selection_start, int* selection_end);
-  void GetSelectionOffsets(const AXTree::Selection* selection,
+  void GetSelectionOffsets(const AXSelection* selection,
                            int* selection_start,
                            int* selection_end);
-  void GetSelectionOffsetsFromTree(const AXTree::Selection* selection,
+  void GetSelectionOffsetsFromTree(const AXSelection* selection,
                                    int* selection_start,
                                    int* selection_end);
 

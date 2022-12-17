@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -71,10 +71,9 @@ struct App {
   [MinVersion=2]
   WindowMode window_mode@22;
 
-  // An optional ID used for policy to identify the app.
-  // For web apps, it contains the install URL.
-  [MinVersion=7]
-  string? policy_id@23;
+  [MinVersion=7, RenamedFrom="policy_id"]
+  // DEPRECATED, replaced with |policy_ids| below.
+  string? deprecated_policy_id@23;
 
   // This vector must be treated atomically, if there is a permission
   // change, the publisher must send through the entire list of permissions.
@@ -104,6 +103,11 @@ struct App {
 
   [MinVersion=19]
   OptionalBool is_platform_app@28;
+
+  [MinVersion=20]
+  // IDs used for policy to identify the app.
+  // For web apps, it contains the install URL(s).
+  array<string>? policy_ids@29;
 };
 
 // The types of apps available in the registry.
@@ -148,6 +152,8 @@ enum InstallReason {
   kSync,       // Installed by sync.
   kUser,       // Installed by user action.
   [MinVersion=7] kSubApp,     // Installed by the SubApp API call.
+  [MinVersion=8] kKiosk,      // Installed by Kiosk on Chrome OS.
+  [MinVersion=9] kCommandLine,  // Installed by a command line argument.
 };
 
 // Augments a bool to include an 'unknown' value.
@@ -414,6 +420,7 @@ enum WindowOpenDisposition {
   kNewForegroundTab,
   kNewBackgroundTab,
   kNewWindow,
+  [MinVersion=1] kNewPopup,
 };
 
 [Stable]

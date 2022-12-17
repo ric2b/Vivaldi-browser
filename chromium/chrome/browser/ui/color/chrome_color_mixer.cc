@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,25 +35,6 @@ ui::ColorTransform AdjustHighlightColorForContrast(ui::ColorTransform fg,
   return ui::PickGoogleColor(
       candidate_fg, candidate_bg,
       color_utils::kMinimumReadableContrastRatio * 1.05f);
-}
-
-ui::ColorTransform IncreaseLightness(ui::ColorTransform input_transform,
-                                     double percent) {
-  const auto generator = [](ui::ColorTransform input_transform, double percent,
-                            SkColor input_color, const ui::ColorMixer& mixer) {
-    const SkColor color = input_transform.Run(input_color, mixer);
-    color_utils::HSL result;
-    color_utils::SkColorToHSL(color, &result);
-    result.l += (1 - result.l) * percent;
-    const SkColor result_color =
-        color_utils::HSLToSkColor(result, SkColorGetA(color));
-    DVLOG(2) << "ColorTransform IncreaseLightness:"
-             << " Percent: " << percent
-             << " Transform Color: " << ui::SkColorName(color)
-             << " Result Color: " << ui::SkColorName(result_color);
-    return result_color;
-  };
-  return base::BindRepeating(generator, std::move(input_transform), percent);
 }
 
 // This differs from ui::SelectColorBasedOnInput in that we're checking if the
@@ -189,9 +170,12 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       key.custom_theme &&
       key.custom_theme->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON,
                                  &color);
-  mixer[kColorBookmarkFavicon] =
-      custom_icon_color ? ui::ColorTransform(kColorToolbarButtonIcon)
-                        : ui::ColorTransform(SK_ColorTRANSPARENT);
+  if (custom_icon_color) {
+    mixer[kColorBookmarkFavicon] = ui::ColorTransform(kColorToolbarButtonIcon);
+  } else {
+    mixer[kColorBookmarkFavicon] = ui::PickGoogleColor(
+        gfx::kGoogleGrey500, kColorBookmarkBarBackground, 6.0f);
+  }
   const bool custom_text_color =
       key.custom_theme &&
       key.custom_theme->GetColor(ThemeProperties::COLOR_BOOKMARK_TEXT, &color);
@@ -312,7 +296,6 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorLocationBarBorderOpaque] =
       ui::GetResultingPaintColor(kColorLocationBarBorder, kColorToolbar);
   mixer[kColorMediaRouterIconActive] = {ui::kColorAccent};
-  mixer[kColorMediaRouterIconError] = {ui::kColorAlertHighSeverity};
   mixer[kColorMediaRouterIconWarning] = {ui::kColorAlertMediumSeverity};
   {
     int result = 0;
@@ -338,32 +321,6 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       ui::GetColorWithMaxContrast(kColorNewTabButtonBackgroundFrameActive);
   mixer[kColorNewTabButtonInkDropFrameInactive] =
       ui::GetColorWithMaxContrast(kColorNewTabButtonBackgroundFrameInactive);
-  mixer[kColorNewTabPageBackground] = {kColorToolbar};
-  mixer[kColorNewTabPageHeader] = {SkColorSetRGB(0x96, 0x96, 0x96)};
-  mixer[kColorNewTabPageLink] = {dark_mode ? gfx::kGoogleBlue300
-                                           : SkColorSetRGB(0x06, 0x37, 0x74)};
-  mixer[kColorNewTabPageLogo] = {kColorNewTabPageLogoUnthemedLight};
-  mixer[kColorNewTabPageLogoUnthemedDark] = {gfx::kGoogleGrey700};
-  mixer[kColorNewTabPageLogoUnthemedLight] = {SkColorSetRGB(0xEE, 0xEE, 0xEE)};
-  if (dark_mode) {
-    mixer[kColorNewTabPageMostVisitedTileBackground] = {gfx::kGoogleGrey900};
-  } else {
-    mixer[kColorNewTabPageMostVisitedTileBackground] = {
-        kColorNewTabPageMostVisitedTileBackgroundUnthemed};
-  }
-  mixer[kColorNewTabPageMostVisitedTileBackgroundUnthemed] = {
-      gfx::kGoogleGrey100};
-  mixer[kColorNewTabPageSectionBorder] =
-      ui::SetAlpha(kColorNewTabPageHeader, 0x50);
-  mixer[kColorNewTabPageSearchBoxBackground] = {
-      kColorToolbarBackgroundSubtleEmphasis};
-  mixer[kColorNewTabPageSearchBoxBackgroundHovered] = {
-      kColorToolbarBackgroundSubtleEmphasisHovered};
-  mixer[kColorNewTabPageText] = {dark_mode ? gfx::kGoogleGrey200
-                                           : SK_ColorBLACK};
-  mixer[kColorNewTabPageTextUnthemed] = {gfx::kGoogleGrey050};
-  mixer[kColorNewTabPageTextLight] =
-      IncreaseLightness(kColorNewTabPageText, 0.40);
   mixer[kColorOmniboxAnswerIconBackground] = {
       ui::kColorButtonBackgroundProminent};
   mixer[kColorOmniboxAnswerIconForeground] = {
@@ -722,8 +679,6 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorWindowControlButtonBackgroundActive] = {ui::kColorFrameActive};
   mixer[kColorWindowControlButtonBackgroundInactive] = {
       ui::kColorFrameInactive};
-  mixer[kColorPwaScrollButtonBackground] =
-      ui::SetAlpha(ui::kColorButtonBackground, gfx::kGoogleGreyAlpha700);
 
   // Apply high contrast recipes if necessary.
   if (!ShouldApplyHighContrastColors(key))

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/multidevice/software_feature_state.h"
 #include "ash/services/device_sync/fake_cryptauth_gcm_manager.h"
 #include "ash/services/device_sync/mock_cryptauth_client.h"
 #include "ash/services/device_sync/mock_sync_scheduler.h"
@@ -25,6 +24,7 @@
 #include "base/test/gmock_move_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
+#include "chromeos/ash/components/multidevice/software_feature_state.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -135,10 +135,11 @@ void ExpectSyncedDevicesAreEqual(
     EXPECT_EQ(expected_device.device_type(), device.device_type());
 
     ASSERT_EQ(expected_device.beacon_seeds_size(), device.beacon_seeds_size());
-    for (int i = 0; i < expected_device.beacon_seeds_size(); i++) {
+    for (int beacon_seed = 0; beacon_seed < expected_device.beacon_seeds_size();
+         beacon_seed++) {
       const cryptauth::BeaconSeed expected_seed =
-          expected_device.beacon_seeds(i);
-      const cryptauth::BeaconSeed seed = device.beacon_seeds(i);
+          expected_device.beacon_seeds(beacon_seed);
+      const cryptauth::BeaconSeed seed = device.beacon_seeds(beacon_seed);
       EXPECT_TRUE(expected_seed.has_data());
       EXPECT_TRUE(seed.has_data());
       EXPECT_EQ(expected_seed.data(), seed.data());
@@ -185,7 +186,7 @@ void ExpectSyncedDevicesAndPrefAreEqual(
   ExpectSyncedDevicesAreEqual(expected_devices, devices);
 
   const base::Value::List& synced_devices_pref =
-      pref_service.GetValueList(prefs::kCryptAuthDeviceSyncUnlockKeys);
+      pref_service.GetList(prefs::kCryptAuthDeviceSyncUnlockKeys);
   ASSERT_EQ(expected_devices.size(), synced_devices_pref.size());
   for (size_t i = 0; i < synced_devices_pref.size(); ++i) {
     SCOPED_TRACE(base::StringPrintf("Compare pref dictionary at index=%d",
@@ -297,8 +298,9 @@ void ExpectSyncedDevicesAndPrefAreEqual(
     if (beacon_seeds_from_prefs) {
       ASSERT_EQ(static_cast<size_t>(expected_device.beacon_seeds_size()),
                 beacon_seeds_from_prefs->size());
-      for (size_t i = 0; i < beacon_seeds_from_prefs->size(); i++) {
-        const base::Value& seed = (*beacon_seeds_from_prefs)[i];
+      for (size_t beacon_seed = 0;
+           beacon_seed < beacon_seeds_from_prefs->size(); beacon_seed++) {
+        const base::Value& seed = (*beacon_seeds_from_prefs)[beacon_seed];
         ASSERT_TRUE(seed.is_dict());
 
         const std::string* data_b64 = seed.FindStringKey("beacon_seed_data");
@@ -310,7 +312,7 @@ void ExpectSyncedDevicesAndPrefAreEqual(
         EXPECT_TRUE(end_ms);
 
         const cryptauth::BeaconSeed& expected_seed =
-            expected_device.beacon_seeds((int)i);
+            expected_device.beacon_seeds(static_cast<int>(beacon_seed));
 
         std::string data;
         EXPECT_TRUE(base::Base64UrlDecode(
@@ -508,7 +510,7 @@ class DeviceSyncCryptAuthDeviceManagerImplTest
     devices_in_response_.push_back(unlockable_device);
   }
 
-  ~DeviceSyncCryptAuthDeviceManagerImplTest() {
+  ~DeviceSyncCryptAuthDeviceManagerImplTest() override {
     client_factory_->RemoveObserver(this);
   }
 
@@ -527,7 +529,7 @@ class DeviceSyncCryptAuthDeviceManagerImplTest
         prefs::kCryptAuthDeviceSyncReason,
         std::make_unique<base::Value>(cryptauth::INVOCATION_REASON_UNKNOWN));
 
-    base::Value device_dictionary(base::Value::Type::DICTIONARY);
+    base::Value::Dict device_dictionary;
 
     std::string public_key_b64, device_name_b64, bluetooth_address_b64;
     base::Base64UrlEncode(kStoredPublicKey,
@@ -540,19 +542,17 @@ class DeviceSyncCryptAuthDeviceManagerImplTest
                           base::Base64UrlEncodePolicy::INCLUDE_PADDING,
                           &bluetooth_address_b64);
 
-    device_dictionary.SetStringKey("public_key", public_key_b64);
-    device_dictionary.SetStringKey("device_name", device_name_b64);
-    device_dictionary.SetStringKey("bluetooth_address", bluetooth_address_b64);
-    device_dictionary.SetBoolKey("unlockable", kStoredUnlockable);
-    device_dictionary.SetKey("beacon_seeds",
-                             base::Value(base::Value::Type::LIST));
-    device_dictionary.SetKey("software_features",
-                             base::Value(base::Value::Type::DICTIONARY));
+    device_dictionary.Set("public_key", public_key_b64);
+    device_dictionary.Set("device_name", device_name_b64);
+    device_dictionary.Set("bluetooth_address", bluetooth_address_b64);
+    device_dictionary.Set("unlockable", kStoredUnlockable);
+    device_dictionary.Set("beacon_seeds", base::Value::List());
+    device_dictionary.Set("software_features", base::Value::Dict());
 
     {
-      ListPrefUpdate update(&pref_service_,
-                            prefs::kCryptAuthDeviceSyncUnlockKeys);
-      update.Get()->Append(std::move(device_dictionary));
+      ScopedListPrefUpdate update(&pref_service_,
+                                  prefs::kCryptAuthDeviceSyncUnlockKeys);
+      update->Append(std::move(device_dictionary));
     }
 
     device_manager_ = std::make_unique<TestCryptAuthDeviceManager>(
@@ -722,24 +722,24 @@ TEST_F(DeviceSyncCryptAuthDeviceManagerImplTest, InitWithExistingPrefs) {
 TEST_F(
     DeviceSyncCryptAuthDeviceManagerImplTest,
     InitWithExistingPrefs_MigrateDeprecateBooleansFromPrefsToSoftwareFeature) {
-  ListPrefUpdate update_clear(&pref_service_,
-                              prefs::kCryptAuthDeviceSyncUnlockKeys);
-  update_clear.Get()->ClearList();
+  ScopedListPrefUpdate update_clear(&pref_service_,
+                                    prefs::kCryptAuthDeviceSyncUnlockKeys);
+  update_clear->clear();
 
   // Simulate a deprecated device being persisted to prefs.
-  base::Value device_dictionary(base::Value::Type::DICTIONARY);
+  base::Value::Dict device_dictionary;
   std::string public_key_b64;
   base::Base64UrlEncode(kStoredPublicKey,
                         base::Base64UrlEncodePolicy::INCLUDE_PADDING,
                         &public_key_b64);
-  device_dictionary.SetStringKey("public_key", public_key_b64);
-  device_dictionary.SetBoolKey("unlock_key", true);
-  device_dictionary.SetBoolKey("mobile_hotspot_supported", true);
-  device_dictionary.SetKey("software_features",
-                           base::Value(base::Value::Type::DICTIONARY));
+  device_dictionary.Set("public_key", public_key_b64);
+  device_dictionary.Set("unlock_key", true);
+  device_dictionary.Set("mobile_hotspot_supported", true);
+  device_dictionary.Set("software_features", base::Value::Dict());
 
-  ListPrefUpdate update(&pref_service_, prefs::kCryptAuthDeviceSyncUnlockKeys);
-  update.Get()->Append(std::move(device_dictionary));
+  ScopedListPrefUpdate update(&pref_service_,
+                              prefs::kCryptAuthDeviceSyncUnlockKeys);
+  update->Append(std::move(device_dictionary));
 
   device_manager_ = std::make_unique<TestCryptAuthDeviceManager>(
       &clock_, client_factory_.get(), &gcm_manager_, &pref_service_);
@@ -956,8 +956,7 @@ TEST_F(DeviceSyncCryptAuthDeviceManagerImplTest, SyncThreeDevices) {
   device_manager_->Start();
   EXPECT_EQ(1u, device_manager_->GetSyncedDevices().size());
   EXPECT_EQ(
-      1u,
-      pref_service_.GetValueList(prefs::kCryptAuthDeviceSyncUnlockKeys).size());
+      1u, pref_service_.GetList(prefs::kCryptAuthDeviceSyncUnlockKeys).size());
 
   FireSchedulerForSync(cryptauth::INVOCATION_REASON_PERIODIC);
   ASSERT_FALSE(success_callback_.is_null());

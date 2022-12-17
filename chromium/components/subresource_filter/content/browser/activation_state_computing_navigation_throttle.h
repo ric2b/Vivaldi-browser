@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,7 +114,7 @@ class ActivationStateComputingNavigationThrottle
 
   // Must outlive this class. For root frame navigations, this member will be
   // nullptr until NotifyPageActivationWithRuleset is called.
-  raw_ptr<VerifiedRuleset::Handle> ruleset_handle_;
+  raw_ptr<VerifiedRuleset::Handle, DanglingUntriaged> ruleset_handle_;
 
   // Will be set to true when DEFER is called in WillProcessResponse.
   bool deferred_ = false;

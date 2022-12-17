@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -189,7 +189,8 @@ class AutocompleteSyncBridgeTest : public testing::Test {
     for (const AutofillSpecifics& specifics : remote_data) {
       initial_updates.push_back(SpecificsToUpdateResponse(specifics));
     }
-    real_processor_->OnUpdateReceived(state, std::move(initial_updates));
+    real_processor_->OnUpdateReceived(state, std::move(initial_updates),
+                                      /*gc_directive=*/absl::nullopt);
   }
 
   void SaveSpecificsToTable(

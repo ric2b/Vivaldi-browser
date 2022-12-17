@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,8 +79,8 @@ bool FilterSensitiveExtensionsInstallForcelist(PolicyMap::Entry* map_entry) {
     return false;
 
   // Using index for loop to update the list in place.
-  for (size_t i = 0; i < policy_list_value->GetListDeprecated().size(); i++) {
-    const auto& list_entry = policy_list_value->GetListDeprecated()[i];
+  for (size_t i = 0; i < policy_list_value->GetList().size(); i++) {
+    const auto& list_entry = policy_list_value->GetList()[i];
     if (!list_entry.is_string())
       continue;
 
@@ -92,7 +92,7 @@ bool FilterSensitiveExtensionsInstallForcelist(PolicyMap::Entry* map_entry) {
     // Only allow custom update urls in enterprise environments.
     if (!base::EqualsCaseInsensitiveASCII(entry.substr(pos + 1),
                                           kChromeWebstoreUpdateURL)) {
-      policy_list_value->GetListDeprecated()[i] =
+      policy_list_value->GetList()[i] =
           base::Value(kBlockedExtensionPrefix + entry);
       has_invalid_policies = true;
     }

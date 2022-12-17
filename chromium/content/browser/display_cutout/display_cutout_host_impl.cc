@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -125,8 +125,7 @@ void DisplayCutoutHostImpl::SendSafeAreaToFrame(RenderFrameHost* rfh,
 
   mojo::AssociatedRemote<blink::mojom::DisplayCutoutClient> client;
   provider->GetInterface(client.BindNewEndpointAndPassReceiver());
-  client->SetSafeArea(blink::mojom::DisplayCutoutSafeArea::New(
-      insets.top(), insets.left(), insets.bottom(), insets.right()));
+  client->SetSafeArea(insets);
 }
 
 blink::mojom::ViewportFit DisplayCutoutHostImpl::GetValueOrDefault(

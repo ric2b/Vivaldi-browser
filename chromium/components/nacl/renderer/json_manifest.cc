@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -397,7 +397,7 @@ bool JsonManifest::Init(const std::string& manifest_json_data,
     error_info->string = "manifest: is not a json dictionary.";
     return false;
   }
-  dictionary_ = std::move(json_data.GetDict());
+  dictionary_ = std::move(json_data).TakeDict();
   // Parse has ensured the string was valid JSON.  Check that it matches the
   // manifest schema.
   return MatchesSchema(error_info);

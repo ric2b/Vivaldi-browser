@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,7 +35,7 @@ const int kMaximumSSIDLengthInBytes = 32;
 
 void AddKeyToList(const char* key, base::Value* list) {
   base::Value key_value(key);
-  if (!base::Contains(list->GetListDeprecated(), key_value))
+  if (!base::Contains(list->GetList(), key_value))
     list->Append(std::move(key_value));
 }
 
@@ -48,8 +48,8 @@ bool FieldIsRecommended(const base::Value& object,
                         const std::string& field_name) {
   const base::Value* recommended =
       object.FindKeyOfType(::onc::kRecommended, base::Value::Type::LIST);
-  return recommended && base::Contains(recommended->GetListDeprecated(),
-                                       base::Value(field_name));
+  return recommended &&
+         base::Contains(recommended->GetList(), base::Value(field_name));
 }
 
 bool FieldIsSetToValueOrRecommended(const base::Value& object,
@@ -208,6 +208,10 @@ base::Value Validator::MapArray(const OncValueSignature& array_signature,
   base::Value result = Mapper::MapArray(array_signature, onc_array,
                                         &nested_error_in_current_array);
 
+  if (&array_signature == &kNetworkConfigurationListSignature) {
+    ValidateEthernetConfigs(&result);
+  }
+
   // Drop individual networks and certificates instead of rejecting all of
   // the configuration.
   if (nested_error_in_current_array &&
@@ -280,7 +284,7 @@ bool Validator::ValidateRecommendedField(
   }
 
   base::Value repaired_recommended(base::Value::Type::LIST);
-  for (const auto& entry : recommended_value->GetListDeprecated()) {
+  for (const auto& entry : recommended_value->GetList()) {
     const std::string* field_name = entry.GetIfString();
     if (!field_name) {
       NOTREACHED();  // The types of field values are already verified.
@@ -440,7 +444,7 @@ bool Validator::FieldExistsAndIsEmpty(const base::Value& object,
     if (!(*str).empty())
       return false;
   } else if (value->is_list()) {
-    if (!value->GetListDeprecated().empty())
+    if (!value->GetList().empty())
       return false;
   } else {
     NOTREACHED();
@@ -488,7 +492,7 @@ bool Validator::ListFieldContainsValidValues(
   if (!list)
     return true;
   path_.push_back(field_name);
-  for (const auto& entry : list->GetListDeprecated()) {
+  for (const auto& entry : list->GetList()) {
     const std::string* value = entry.GetIfString();
     if (!value) {
       NOTREACHED();  // The types of field values are already verified.
@@ -985,7 +989,7 @@ bool Validator::ValidateWireGuard(base::Value* result) {
     AddValidationIssue(true /* is_error */, msg.str());
     return false;
   }
-  for (const base::Value& p : peers->GetListDeprecated()) {
+  for (const base::Value& p : peers->GetList()) {
     if (!p.FindKey(::onc::wireguard::kPublicKey)) {
       msg << ::onc::wireguard::kPublicKey
           << " field is required for each peer.";
@@ -1251,6 +1255,80 @@ bool Validator::ValidateTether(base::Value* result) {
   all_required_exist &= RequireField(*result, ::onc::tether::kCarrier);
 
   return !error_on_missing_field_ || all_required_exist;
+}
+
+void Validator::ValidateEthernetConfigs(
+    base::Value* network_configurations_list) {
+  // Ensures that at most one NetworkConfiguration is effective within these
+  // categories:
+  // - "Type": "Ethernet" and "Authentication": "None"
+  // - "Type": "Ethernet" and "Authentication": "8021X"
+  // This is currently necessary because shill only persists one configuration
+  // per such category and the UI only supports one Ethernet configuration.
+  // TODO(b/159725895): Design better Ethernet configuration + policy
+  // management.
+  DCHECK(network_configurations_list->is_list());
+  std::vector<std::string> ethernet_auth_none_guids;
+  std::vector<std::string> ethernet_auth_8021x_guids;
+
+  for (const base::Value& network_configuration :
+       network_configurations_list->GetList()) {
+    const std::string* guid = network_configuration.GetDict().FindString(
+        ::onc::network_config::kGUID);
+    const base::Value::Dict* ethernet =
+        network_configuration.GetDict().FindDict(
+            ::onc::network_config::kEthernet);
+    if (!guid || !ethernet)
+      continue;
+
+    const std::string* auth =
+        ethernet->FindString(::onc::ethernet::kAuthentication);
+    if (!auth)
+      continue;
+    if (*auth == ::onc::ethernet::kAuthenticationNone)
+      ethernet_auth_none_guids.push_back(*guid);
+    if (*auth == ::onc::ethernet::k8021X)
+      ethernet_auth_8021x_guids.push_back(*guid);
+  }
+
+  // If there were multiple NetworkConfigurations in such a bucket, keep the
+  // last one because that's the one which would be effective, as it would be
+  // applies last in shill.
+  OnlyKeepLast(network_configurations_list, ethernet_auth_none_guids,
+               /*type_for_messages=*/"Ethernet");
+  OnlyKeepLast(network_configurations_list, ethernet_auth_8021x_guids,
+               /*type_for_messages=*/"Ethernet 802.1x");
+}
+
+void Validator::OnlyKeepLast(base::Value* network_configurations_list,
+                             const std::vector<std::string>& guids,
+                             const char* type_for_messages) {
+  if (guids.size() < 2)
+    return;
+  for (size_t i = 0; i < guids.size() - 1; ++i) {
+    RemoveNetworkConfigurationWithGuid(network_configurations_list, guids[i]);
+
+    std::ostringstream msg;
+    msg << "NetworkConfiguration '" << guids[i] << "' ignored - only one "
+        << type_for_messages << " configuration can be processed";
+    AddValidationIssue(/*is_error=*/false, msg.str());
+  }
+}
+
+void Validator::RemoveNetworkConfigurationWithGuid(
+    base::Value* network_configurations_list,
+    const std::string& guid_to_remove) {
+  base::Value::List& list = network_configurations_list->GetList();
+  for (auto it = list.begin(); it != list.end(); ++it) {
+    const std::string* guid =
+        it->GetDict().FindString(::onc::network_config::kGUID);
+    if (!guid)
+      continue;
+    if (*guid == guid_to_remove) {
+      list.erase(it);
+      return;
+    }
+  }
 }
 
 void Validator::AddValidationIssue(bool is_error,

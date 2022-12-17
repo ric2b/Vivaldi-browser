@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,6 +98,7 @@ class MockVideoPictureInPictureWindowController
   MOCK_METHOD0(UpdateLayerBounds, void());
   MOCK_METHOD0(IsPlayerActive, bool());
   MOCK_METHOD0(GetWebContents, content::WebContents*());
+  MOCK_METHOD0(GetChildWebContents, content::WebContents*());
   MOCK_METHOD0(TogglePlayPause, bool());
   MOCK_METHOD0(SkipAd, void());
   MOCK_METHOD0(NextTrack, void());
@@ -106,6 +107,7 @@ class MockVideoPictureInPictureWindowController
   MOCK_METHOD0(ToggleCamera, void());
   MOCK_METHOD0(HangUp, void());
   MOCK_CONST_METHOD0(GetSourceBounds, const gfx::Rect&());
+  MOCK_METHOD0(GetWindowBounds, absl::optional<gfx::Rect>());
 };
 
 const base::FilePath::CharType kPictureInPictureWindowSizePage[] =
@@ -1239,6 +1241,12 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
   // Show the non-WebContents based Picture-in-Picture window controller.
   EXPECT_CALL(mock_controller(), Show());
   pip_window_manager->EnterPictureInPictureWithController(&mock_controller());
+
+  EXPECT_CALL(mock_controller(), GetWebContents());
+  pip_window_manager->GetWebContents();
+
+  EXPECT_CALL(mock_controller(), GetChildWebContents());
+  pip_window_manager->GetChildWebContents();
 }
 
 IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,

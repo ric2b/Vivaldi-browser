@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -301,10 +301,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static const absl::optional<std::string>& devtools_stack_id(
       const network::ResourceRequest& request) {
     return request.devtools_stack_id;
-  }
-  static bool is_signed_exchange_prefetch_cache_enabled(
-      const network::ResourceRequest& request) {
-    return request.is_signed_exchange_prefetch_cache_enabled;
   }
   static bool is_fetch_like_api(const network::ResourceRequest& request) {
     return request.is_fetch_like_api;

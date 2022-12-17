@@ -32,6 +32,10 @@
     user-select: none;
   }
 
+  :host([in-side-panel_]) #header {
+    padding-inline-start: 8px;
+  }
+
   a {
     color: inherit;
     text-decoration: none;
@@ -43,6 +47,10 @@
     min-width: 0;
     outline: none;
     padding-inline-end: var(--cluster-padding-horizontal);
+  }
+
+  :host(:hover) #link-container {
+    padding-inline-end: 0;
   }
 
   :host-context(.focus-outline-visible) #link-container:focus {
@@ -82,9 +90,20 @@
     font-size: .875rem;  /* 14px */
   }
 
+  :host([in-side-panel_]) #title {
+    font-size: .8125rem;  /* 13px */
+    line-height: calc(20/13);  /* 20px */
+  }
+
   #url {
     color: var(--url-color);
     line-height: 1.5;  /* 24px */
+  }
+
+  :host([in-side-panel_]) #url {
+    color: var(--side-panel-url-color);
+    font-size: .75rem;  /* 12px */
+    line-height: calc(5/3);  /* 20px */
   }
 
   #debug-info {
@@ -102,10 +121,8 @@
           <span class="annotation">[[item]]</span>
         </template>
       </div>
-      <span id="url" class="truncate">
-        <!-- Print the debug next to the url to keep layout the same. -->
-        <span id="debug-info" hidden="[[!debugInfo_]]">[[debugInfo_]]</span>
-      </span>
+      <span id="url" class="truncate"></span>
+      <span id="debug-info" hidden="[[!debugInfo_]]">[[debugInfo_]]</span>
     </div>
   </a>
   <cr-icon-button id="actionMenuButton" class="icon-more-vert"

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -90,13 +90,8 @@ ui::ColorId GetPrimaryColor() {
   if (features::IsDarkLightModeEnabled())
     return cros_tokens::kColorPrimary;
 
-  if (features::IsProductivityLauncherEnabled()) {
-    // Productivity launcher is default dark.
-    return cros_tokens::kColorPrimaryDark;
-  }
-
-  // The old behavior is default light.
-  return cros_tokens::kColorPrimaryLight;
+  // The dark color is used by default.
+  return cros_tokens::kColorPrimaryDark;
 }
 
 // Returns the secondary color adjusted for enabled features.
@@ -104,13 +99,8 @@ ui::ColorId GetSecondaryColor() {
   if (features::IsDarkLightModeEnabled())
     return cros_tokens::kColorSecondary;
 
-  if (features::IsProductivityLauncherEnabled()) {
-    // Productivity launcher is default dark.
-    return cros_tokens::kColorSecondaryDark;
-  }
-
-  // The old behavior is default light.
-  return cros_tokens::kColorSecondaryLight;
+  // The dark color is used by default.
+  return cros_tokens::kColorSecondaryDark;
 }
 
 }  // namespace

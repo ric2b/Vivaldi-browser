@@ -1,10 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 // #import {PolymerElement, mixinBehaviors} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 // #import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../behaviors/oobe_i18n_behavior.m.js';
-// #import {assert} from '//resources/js/assert.m.js';
+// #import {assert} from '//resources/js/assert.js';
 
 /**
  * @constructor

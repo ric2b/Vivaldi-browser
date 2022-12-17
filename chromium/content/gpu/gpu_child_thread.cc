@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -89,6 +89,7 @@ viz::VizMainImpl::ExternalDependencies CreateVizMainDependencies() {
     deps.sync_point_manager = GetContentClient()->gpu()->GetSyncPointManager();
     deps.shared_image_manager =
         GetContentClient()->gpu()->GetSharedImageManager();
+    deps.scheduler = GetContentClient()->gpu()->GetScheduler();
     deps.viz_compositor_thread_runner =
         GetContentClient()->gpu()->GetVizCompositorThreadRunner();
   }

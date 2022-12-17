@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -170,7 +170,7 @@ std::unique_ptr<BPFBasePolicy> SandboxSeccompBPF::PolicyForSandboxType(
       return GetGpuProcessSandbox(options.use_amd_specific_policies);
     case sandbox::mojom::Sandbox::kRenderer:
       return std::make_unique<RendererProcessPolicy>();
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
     case sandbox::mojom::Sandbox::kPpapi:
       return std::make_unique<PpapiProcessPolicy>();
 #endif
@@ -229,7 +229,7 @@ void SandboxSeccompBPF::RunSandboxSanityChecks(
   switch (sandbox_type) {
     case sandbox::mojom::Sandbox::kRenderer:
     case sandbox::mojom::Sandbox::kGpu:
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
     case sandbox::mojom::Sandbox::kPpapi:
 #endif
     case sandbox::mojom::Sandbox::kPrintCompositor:

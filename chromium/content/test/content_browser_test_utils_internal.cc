@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <map>
 #include <memory>
 #include <set>
@@ -17,6 +16,7 @@
 #include "base/callback_helpers.h"
 #include "base/containers/stack.h"
 #include "base/json/json_reader.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
@@ -162,8 +162,8 @@ RenderFrameHost* CreateSubframe(WebContentsImpl* web_contents,
 std::vector<RenderFrameHostImpl*> CollectAllRenderFrameHosts(
     RenderFrameHostImpl* starting_rfh) {
   std::vector<RenderFrameHostImpl*> visited_frames;
-  starting_rfh->ForEachRenderFrameHost(base::BindLambdaForTesting(
-      [&](RenderFrameHostImpl* rfh) { visited_frames.push_back(rfh); }));
+  starting_rfh->ForEachRenderFrameHost(
+      [&](RenderFrameHostImpl* rfh) { visited_frames.push_back(rfh); });
   return visited_frames;
 }
 
@@ -172,16 +172,15 @@ CollectAllRenderFrameHostsIncludingSpeculative(
     RenderFrameHostImpl* starting_rfh) {
   std::vector<RenderFrameHostImpl*> visited_frames;
   starting_rfh->ForEachRenderFrameHostIncludingSpeculative(
-      base::BindLambdaForTesting(
-          [&](RenderFrameHostImpl* rfh) { visited_frames.push_back(rfh); }));
+      [&](RenderFrameHostImpl* rfh) { visited_frames.push_back(rfh); });
   return visited_frames;
 }
 
 std::vector<RenderFrameHostImpl*> CollectAllRenderFrameHosts(
     WebContentsImpl* web_contents) {
   std::vector<RenderFrameHostImpl*> visited_frames;
-  web_contents->ForEachRenderFrameHost(base::BindLambdaForTesting(
-      [&](RenderFrameHostImpl* rfh) { visited_frames.push_back(rfh); }));
+  web_contents->ForEachRenderFrameHost(
+      [&](RenderFrameHostImpl* rfh) { visited_frames.push_back(rfh); });
   return visited_frames;
 }
 
@@ -189,8 +188,7 @@ std::vector<RenderFrameHostImpl*>
 CollectAllRenderFrameHostsIncludingSpeculative(WebContentsImpl* web_contents) {
   std::vector<RenderFrameHostImpl*> visited_frames;
   web_contents->ForEachRenderFrameHostIncludingSpeculative(
-      base::BindLambdaForTesting(
-          [&](RenderFrameHostImpl* rfh) { visited_frames.push_back(rfh); }));
+      [&](RenderFrameHostImpl* rfh) { visited_frames.push_back(rfh); });
   return visited_frames;
 }
 
@@ -398,8 +396,7 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
 std::string FrameTreeVisualizer::GetName(SiteInstance* site_instance) {
   // Indices into the vector correspond to letters of the alphabet.
   size_t index =
-      std::find(seen_site_instance_ids_.begin(), seen_site_instance_ids_.end(),
-                site_instance->GetId()) -
+      base::ranges::find(seen_site_instance_ids_, site_instance->GetId()) -
       seen_site_instance_ids_.begin();
   if (index == seen_site_instance_ids_.size())
     seen_site_instance_ids_.push_back(site_instance->GetId());
@@ -447,9 +444,18 @@ Shell* OpenPopup(const ToRenderFrameHost& opener,
   return new_shell_observer.GetShell();
 }
 
+FileChooserDelegate::FileChooserDelegate(std::vector<base::FilePath> files,
+                                         const base::FilePath& base_dir,
+                                         base::OnceClosure callback)
+    : files_(std::move(files)),
+      base_dir_(base_dir),
+      callback_(std::move(callback)) {}
+
 FileChooserDelegate::FileChooserDelegate(const base::FilePath& file,
                                          base::OnceClosure callback)
-    : file_(file), callback_(std::move(callback)) {}
+    : FileChooserDelegate(std::vector<base::FilePath>(1, file),
+                          base::FilePath(),
+                          std::move(callback)) {}
 
 FileChooserDelegate::~FileChooserDelegate() = default;
 
@@ -457,16 +463,21 @@ void FileChooserDelegate::RunFileChooser(
     RenderFrameHost* render_frame_host,
     scoped_refptr<content::FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
-  // Send the selected file to the renderer process.
-  auto file_info = blink::mojom::FileChooserFileInfo::NewNativeFile(
-      blink::mojom::NativeFileInfo::New(file_, std::u16string()));
+  // |base_dir_| should be set for and only for |kUploadFolder| mode.
+  DCHECK(base_dir_.empty() ==
+         (params.mode != blink::mojom::FileChooserParams::Mode::kUploadFolder));
+  // Send the selected files to the renderer process.
   std::vector<blink::mojom::FileChooserFileInfoPtr> files;
-  files.push_back(std::move(file_info));
-  listener->FileSelected(std::move(files), base::FilePath(),
-                         blink::mojom::FileChooserParams::Mode::kOpen);
+  for (const auto& file : files_) {
+    auto file_info = blink::mojom::FileChooserFileInfo::NewNativeFile(
+        blink::mojom::NativeFileInfo::New(file, std::u16string()));
+    files.push_back(std::move(file_info));
+  }
+  listener->FileSelected(std::move(files), base_dir_, params.mode);
 
   params_ = params.Clone();
-  std::move(callback_).Run();
+  if (callback_)
+    std::move(callback_).Run();
 }
 
 FrameTestNavigationManager::FrameTestNavigationManager(
@@ -841,8 +852,8 @@ void RenderFrameHostCreatedObserver::RenderFrameCreated(
 BackForwardCache::DisabledReason RenderFrameHostDisabledForTestingReason() {
   static const BackForwardCache::DisabledReason reason =
       BackForwardCache::DisabledReason(
-          {BackForwardCache::DisabledSource::kTesting, 0,
-           "disabled for testing"});
+          BackForwardCache::DisabledSource::kTesting, 0, "disabled for testing",
+          /*context=*/"", "disabled");
   return reason;
 }
 

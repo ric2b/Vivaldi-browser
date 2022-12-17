@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,7 @@
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-shared.h"
 
@@ -379,7 +380,9 @@ class FormForestTest : public content::RenderViewHostTestHarness {
   static blink::ParsedPermissionsPolicy AllowSharedAutofill(
       url::Origin origin) {
     return {blink::ParsedPermissionsPolicyDeclaration(
-        blink::mojom::PermissionsPolicyFeature::kSharedAutofill, {origin},
+        blink::mojom::PermissionsPolicyFeature::kSharedAutofill,
+        {blink::OriginWithPossibleWildcards(origin,
+                                            /*has_subdomain_wildcard=*/false)},
         false, false)};
   }
 
@@ -407,6 +410,7 @@ class FormForestTest : public content::RenderViewHostTestHarness {
   }
 
   base::test::ScopedFeatureList feature_list_;
+  test::AutofillEnvironment autofill_environment_;
   std::map<content::RenderFrameHost*,
            std::unique_ptr<MockContentAutofillDriver>>
       autofill_drivers_;

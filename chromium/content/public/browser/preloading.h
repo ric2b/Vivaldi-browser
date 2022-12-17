@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -110,6 +110,10 @@ enum class PreloadingEligibility {
   // Preloading was ineligible because the Data Saver setting was enabled.
   kDataSaverEnabled = 7,
 
+  // Preloading was ineligible because it was triggered from a page that has an
+  // effective url.
+  kHasEffectiveUrl = 8,
+
   // TODO(crbug.com/1309934): Add more specific ineligibility reasons subject to
   // each preloading operation
   // This constant is used to define the value from which embedders can add more
@@ -180,6 +184,11 @@ enum class PreloadingTriggeringOutcome {
   // kSuccess reason which only tracks when the navigation directly uses the
   // Prefetch. Please note that this doesn't ensure Prerender was successful.
   kTriggeredButUpgradedToPrerender = 8,
+
+  // Preloading was triggered but was pending for starting its initial
+  // navigation. This outcome should not be recorded when
+  // `kPrerender2SequentialPrerendering` is disabled.
+  kTriggeredButPending = 9,
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -196,7 +205,16 @@ enum class PreloadingFailureReason {
   // destroyed" for prerender, but "the user already had cookies for a
   // cross-origin prefetch"
   // for prefetch).
+  //
+  // Values between kPreloadingFailureReasonCommonEnd (included) and
+  // kPreloadingFailureReasonContentEnd (excluded) are reserved for enums
+  // defined in //content.
   kPreloadingFailureReasonCommonEnd = 100,
+
+  // Values beyond this value are for failure reasons defined by the embedder.
+  // The semantics of those values can vary by preloading type (1000 can mean
+  // "limit exceeded" for preconnect but "cancelled" for prerender).
+  kPreloadingFailureReasonContentEnd = 1000,
 };
 
 }  // namespace content

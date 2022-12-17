@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,6 @@
 #include <sys/mman.h>
 
 #include "ash/components/arc/arc_util.h"
-#include "ash/components/settings/cros_settings_names.h"
-#include "ash/components/settings/cros_settings_provider.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -34,6 +32,8 @@
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/settings/cros_settings_provider.h"
 #include "chromeos/components/cdm_factory_daemon/mojom/browser_cdm_factory.mojom.h"
 #include "chromeos/components/remote_apps/mojom/remote_apps.mojom.h"
 #include "chromeos/components/sensors/mojom/cros_sensor_service.mojom.h"
@@ -57,6 +57,7 @@
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/crosapi/mojom/desk_template.mojom.h"
 #include "chromeos/crosapi/mojom/device_attributes.mojom.h"
+#include "chromeos/crosapi/mojom/device_local_account_extension_service.mojom.h"
 #include "chromeos/crosapi/mojom/device_oauth2_token_service.mojom.h"
 #include "chromeos/crosapi/mojom/device_settings_service.mojom.h"
 #include "chromeos/crosapi/mojom/diagnostics_service.mojom.h"
@@ -91,6 +92,7 @@
 #include "chromeos/crosapi/mojom/network_settings_service.mojom.h"
 #include "chromeos/crosapi/mojom/networking_attributes.mojom.h"
 #include "chromeos/crosapi/mojom/networking_private.mojom.h"
+#include "chromeos/crosapi/mojom/parent_access.mojom.h"
 #include "chromeos/crosapi/mojom/policy_service.mojom.h"
 #include "chromeos/crosapi/mojom/power.mojom.h"
 #include "chromeos/crosapi/mojom/prefs.mojom.h"
@@ -244,7 +246,7 @@ constexpr InterfaceVersionEntry MakeInterfaceVersionEntry() {
   return {T::Uuid_, T::Version_};
 }
 
-static_assert(crosapi::mojom::Crosapi::Version_ == 95,
+static_assert(crosapi::mojom::Crosapi::Version_ == 97,
               "If you add a new crosapi, please add it to "
               "kInterfaceVersionEntries below.");
 
@@ -274,6 +276,8 @@ constexpr InterfaceVersionEntry kInterfaceVersionEntries[] = {
     MakeInterfaceVersionEntry<crosapi::mojom::Crosapi>(),
     MakeInterfaceVersionEntry<crosapi::mojom::DeskTemplate>(),
     MakeInterfaceVersionEntry<crosapi::mojom::DeviceAttributes>(),
+    MakeInterfaceVersionEntry<
+        crosapi::mojom::DeviceLocalAccountExtensionService>(),
     MakeInterfaceVersionEntry<crosapi::mojom::DeviceOAuth2TokenService>(),
     MakeInterfaceVersionEntry<crosapi::mojom::DeviceSettingsService>(),
     MakeInterfaceVersionEntry<crosapi::mojom::DiagnosticsService>(),
@@ -327,7 +331,7 @@ constexpr InterfaceVersionEntry kInterfaceVersionEntries[] = {
     MakeInterfaceVersionEntry<crosapi::mojom::StructuredMetricsService>(),
     MakeInterfaceVersionEntry<crosapi::mojom::SnapshotCapturer>(),
     MakeInterfaceVersionEntry<crosapi::mojom::SyncService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::SystemDisplay>(),
+    MakeInterfaceVersionEntry<crosapi::mojom::SystemDisplayDeprecated>(),
     MakeInterfaceVersionEntry<crosapi::mojom::TaskManager>(),
     MakeInterfaceVersionEntry<crosapi::mojom::TestController>(),
     MakeInterfaceVersionEntry<crosapi::mojom::TimeZoneService>(),
@@ -347,6 +351,7 @@ constexpr InterfaceVersionEntry kInterfaceVersionEntries[] = {
     MakeInterfaceVersionEntry<media_session::mojom::MediaControllerManager>(),
     MakeInterfaceVersionEntry<media_session::mojom::AudioFocusManager>(),
     MakeInterfaceVersionEntry<media_session::mojom::AudioFocusManagerDebug>(),
+    MakeInterfaceVersionEntry<crosapi::mojom::ParentAccess>(),
 };
 
 constexpr bool HasDuplicatedUuid() {
@@ -643,13 +648,12 @@ mojom::DeviceSettingsPtr GetDeviceSettings() {
                                 : MojoOptionalBool::kFalse;
       }
 
-      const base::ListValue* usb_detachable_allow_list;
+      const base::Value::List* usb_detachable_allow_list;
       if (cros_settings->GetList(ash::kUsbDetachableAllowlist,
                                  &usb_detachable_allow_list)) {
         mojom::UsbDetachableAllowlistPtr allow_list =
             mojom::UsbDetachableAllowlist::New();
-        for (const auto& entry :
-             usb_detachable_allow_list->GetListDeprecated()) {
+        for (const auto& entry : *usb_detachable_allow_list) {
           mojom::UsbDeviceIdPtr usb_device_id = mojom::UsbDeviceId::New();
           absl::optional<int> vid =
               entry.FindIntKey(ash::kUsbDetachableAllowlistKeyVid);

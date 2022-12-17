@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,7 @@ class AX_EXPORT AXElementWrapper final {
   // BrowserAccessibilityCocoa).
   static std::string DOMIdOf(const id node);
 
-  AXElementWrapper(const id node) : node_(node){};
+  AXElementWrapper(const id node) : node_(node) {}
 
   // Returns true if the object is either an NSAccessibilityElement or
   // AXUIElement.

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -201,6 +201,44 @@ TEST_F(PageDiscardingHelperTest, TestCannotDiscardPageMultipleTimes) {
 
 TEST_F(PageDiscardingHelperTest, TestCannotDiscardPageWithFormInteractions) {
   frame_node()->SetHadFormInteraction();
+  EXPECT_FALSE(
+      PageDiscardingHelper::GetFromGraph(graph())->CanUrgentlyDiscardForTesting(
+          page_node()));
+}
+
+TEST_F(PageDiscardingHelperTest, TestCannotDiscardIsActiveTab) {
+  PageLiveStateDecorator::Data::GetOrCreateForPageNode(page_node())
+      ->SetIsActiveTabForTesting(true);
+  EXPECT_FALSE(
+      PageDiscardingHelper::GetFromGraph(graph())->CanUrgentlyDiscardForTesting(
+          page_node()));
+}
+
+TEST_F(PageDiscardingHelperTest, TestCannotDiscardWithNotificationPermission) {
+  // The page is discardable if notifications are blocked.
+  PageLiveStateDecorator::Data::GetOrCreateForPageNode(page_node())
+      ->SetContentSettingsForTesting({
+          {ContentSettingsType::NOTIFICATIONS, CONTENT_SETTING_BLOCK},
+      });
+  EXPECT_TRUE(
+      PageDiscardingHelper::GetFromGraph(graph())->CanUrgentlyDiscardForTesting(
+          page_node()));
+
+  // The page is discardable if notifications aren't found in its permissions
+  // list.
+  PageLiveStateDecorator::Data::GetOrCreateForPageNode(page_node())
+      ->SetContentSettingsForTesting({
+          {ContentSettingsType::AUTO_SELECT_CERTIFICATE, CONTENT_SETTING_ALLOW},
+      });
+  EXPECT_TRUE(
+      PageDiscardingHelper::GetFromGraph(graph())->CanUrgentlyDiscardForTesting(
+          page_node()));
+
+  // The page is not discardable if it can send notifications.
+  PageLiveStateDecorator::Data::GetOrCreateForPageNode(page_node())
+      ->SetContentSettingsForTesting({
+          {ContentSettingsType::NOTIFICATIONS, CONTENT_SETTING_ALLOW},
+      });
   EXPECT_FALSE(
       PageDiscardingHelper::GetFromGraph(graph())->CanUrgentlyDiscardForTesting(
           page_node()));

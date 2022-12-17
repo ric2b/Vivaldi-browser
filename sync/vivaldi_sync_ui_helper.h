@@ -26,7 +26,6 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
     AUTH_ERROR,
     SERVER_ERROR,
     NETWORK_ERROR,
-    CLIENT_ERROR,
     CONFLICT,
     THROTTLED,
     OTHER_ERROR

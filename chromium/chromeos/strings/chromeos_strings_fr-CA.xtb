@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Modifier le fichier}one{Modifier le fichier}other{Modifier les fichiers}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Direction de la clé</translation>
+<translation id="3294437725009624529">Invité</translation>
 <translation id="3310640316857623290">La latence du DNS dépasse le seuil acceptable de manière considérable</translation>
 <translation id="3328783797891415197">Exécution du test en cours…</translation>
 <translation id="3340011300870565703">Le niveau de la pile de l'écouteur droit est à <ph name="BATTERY_PERCENTAGE" /> %.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Pendant la mise à jour du micrologiciel, ne débranchez pas cet appareil externe et n'éteignez pas votre ordinateur. Vous pouvez réduire cette fenêtre. Cette mise à jour peut prendre quelques minutes, et votre appareil externe peut ne pas fonctionner pendant ce temps.</translation>
 <translation id="3486220673238053218">définition</translation>
 <translation id="3488065109653206955">Partiellement activé</translation>
+<translation id="3510890413042482857">Envoyer des <ph name="BEGIN_LINK1" />données de suivi des performances<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Mise à jour Chrome OS</translation>
 <translation id="3527036260304016759">Échec : erreur inconnue</translation>
 <translation id="3532980081107202182">Il reste environ <ph name="MIN_REMAINING" /> minutes</translation>
@@ -468,6 +470,7 @@ Essayez de toucher le micro pour me demander ce que vous souhaitez.</translation
 <translation id="5502931783115429516">Android n'est pas en cours d'exécution</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Basculer automatiquement au thème sombre au coucher du soleil</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Numériser de nouveau</translation>
 <translation id="5583640892426849032">Effacement arrière</translation>

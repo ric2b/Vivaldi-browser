@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,10 +13,11 @@ class BrowserContext;
 }
 
 namespace screen_ai {
-class ScreenAIServiceRouter;
-}
 
-// Factory to get or create an instance of ScreenAIServiceRouter for a Profile.
+class ScreenAIServiceRouter;
+
+// Factory to get or create an instance of ScreenAIServiceRouter for a
+// BrowserContext.
 class ScreenAIServiceRouterFactory : public BrowserContextKeyedServiceFactory {
  public:
   static screen_ai::ScreenAIServiceRouter* GetForBrowserContext(
@@ -35,5 +36,7 @@ class ScreenAIServiceRouterFactory : public BrowserContextKeyedServiceFactory {
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const override;
 };
+
+}  // namespace screen_ai
 
 #endif  // COMPONENTS_SERVICES_SCREEN_AI_PUBLIC_CPP_SCREEN_AI_SERVICE_ROUTER_FACTORY_H_

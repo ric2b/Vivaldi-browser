@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,6 +26,10 @@ namespace {
 
 VideoDecoderType GetPreferredCrosDecoderImplementation(
     gpu::GpuPreferences gpu_preferences) {
+  // TODO(b/195769334): eventually, we may turn off USE_VAAPI and USE_V4L2_CODEC
+  // on LaCrOS if we delegate all video acceleration to ash-chrome. In those
+  // cases, GetPreferredCrosDecoderImplementation() won't be able to determine
+  // the video API in LaCrOS.
   if (gpu_preferences.disable_accelerated_video_decode)
     return VideoDecoderType::kUnknown;
 
@@ -48,8 +52,8 @@ VideoDecoderType GetPreferredLinuxDecoderImplementation(
   if (!base::FeatureList::IsEnabled(kVaapiVideoDecodeLinux))
     return VideoDecoderType::kUnknown;
 
-  // Regardless of vulkan support, if direct video decoder is disabled, revert
-  // to using the VDA implementation.
+  // If direct video decoder is disabled, revert to using the VDA
+  // implementation.
   if (!base::FeatureList::IsEnabled(kUseChromeOSDirectVideoDecoder))
     return VideoDecoderType::kVda;
   return VideoDecoderType::kVaapi;
@@ -73,8 +77,12 @@ VideoDecoderType GetActualPlatformDecoderImplementation(
                  : VideoDecoderType::kUnknown;
     }
     case VideoDecoderType::kVaapi: {
+      // Allow VaapiVideoDecoder on GL.
+      if (gpu_preferences.gr_context_type == gpu::GrContextType::kGL)
+        return VideoDecoderType::kVaapi;
       if (gpu_preferences.gr_context_type != gpu::GrContextType::kVulkan)
         return VideoDecoderType::kUnknown;
+      // If Vulkan is active, check Vulkan info if VaapiVideoDecoder is allowed.
       if (!gpu_info.vulkan_info.has_value())
         return VideoDecoderType::kUnknown;
       if (gpu_info.vulkan_info->physical_devices.empty())
@@ -107,49 +115,46 @@ VideoDecoderType GetActualPlatformDecoderImplementation(
 
 std::unique_ptr<VideoDecoder> CreatePlatformVideoDecoder(
     VideoDecoderTraits& traits) {
-  // TODO(b/195769334): we'll need to structure this function a bit differently
-  // to account for the following:
-  //
-  // 1) Eventually, we may turn off USE_VAAPI and USE_V4L2_CODEC on LaCrOS if we
-  //    delegate all video acceleration to ash-chrome. In those cases,
-  //    GetPreferredCrosDecoderImplementation() won't be able to determine the
-  //    video API in LaCrOS.
-  //
-  // 2) For out-of-process video decoding, we don't need a |frame_pool| because
-  //    the buffers will be allocated and managed out-of-process.
-  //
-  // 3) It's very possible that not all platforms will be able to migrate to the
-  //    direct VD soon enough. In those cases, the GPU process will still need
-  //    to use a VideoDecoderPipeline backed by an OOPVideoDecoder, and the
-  //    video decoder process will need to run the legacy VDA code and return
-  //    GpuMemoryBuffers.
+  if (traits.oop_video_decoder) {
+    // TODO(b/195769334): for out-of-process video decoding, we don't need a
+    // |frame_pool| because the buffers will be allocated and managed
+    // out-of-process.
+    auto frame_pool = std::make_unique<PlatformVideoFramePool>();
+
+    // With out-of-process video decoding, we don't feed wrapped frames to the
+    // MailboxVideoFrameConverter, so we need to pass base::NullCallback() as
+    // the callback for unwrapping.
+    auto frame_converter = MailboxVideoFrameConverter::Create(
+        /*unwrap_frame_cb=*/base::NullCallback(), traits.gpu_task_runner,
+        traits.get_command_buffer_stub_cb,
+        traits.gpu_preferences.enable_unsafe_webgpu);
+    return VideoDecoderPipeline::Create(
+        *traits.gpu_workarounds, traits.task_runner, std::move(frame_pool),
+        std::move(frame_converter), traits.media_log->Clone(),
+        std::move(traits.oop_video_decoder));
+  }
 
   switch (GetActualPlatformDecoderImplementation(traits.gpu_preferences,
                                                  traits.gpu_info)) {
     case VideoDecoderType::kVaapi:
     case VideoDecoderType::kV4L2: {
       auto frame_pool = std::make_unique<PlatformVideoFramePool>();
-
-      // With out-of-process video decoding, we don't feed wrapped frames to the
-      // MailboxVideoFrameConverter.
-      MailboxVideoFrameConverter::UnwrapFrameCB unwrap_frame_cb =
-          traits.oop_video_decoder
-              ? base::NullCallback()
-              : base::BindRepeating(&PlatformVideoFramePool::UnwrapFrame,
-                                    base::Unretained(frame_pool.get()));
       auto frame_converter = MailboxVideoFrameConverter::Create(
-          std::move(unwrap_frame_cb), traits.gpu_task_runner,
-          traits.get_command_buffer_stub_cb,
+          base::BindRepeating(&PlatformVideoFramePool::UnwrapFrame,
+                              base::Unretained(frame_pool.get())),
+          traits.gpu_task_runner, traits.get_command_buffer_stub_cb,
           traits.gpu_preferences.enable_unsafe_webgpu);
       return VideoDecoderPipeline::Create(
-          traits.task_runner, std::move(frame_pool), std::move(frame_converter),
-          traits.media_log->Clone(), std::move(traits.oop_video_decoder));
+          *traits.gpu_workarounds, traits.task_runner, std::move(frame_pool),
+          std::move(frame_converter), traits.media_log->Clone(),
+          /*oop_video_decoder=*/{});
     }
     case VideoDecoderType::kVda: {
       return VdaVideoDecoder::Create(
           traits.task_runner, traits.gpu_task_runner, traits.media_log->Clone(),
           *traits.target_color_space, traits.gpu_preferences,
-          *traits.gpu_workarounds, traits.get_command_buffer_stub_cb);
+          *traits.gpu_workarounds, traits.get_command_buffer_stub_cb,
+          VideoDecodeAccelerator::Config::OutputMode::ALLOCATE);
     }
     default: {
       return nullptr;

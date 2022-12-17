@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -351,7 +351,11 @@ bool CrasAudioHandler::IsOutputMutedForDevice(uint64_t device_id) {
 }
 
 bool CrasAudioHandler::IsOutputMutedByPolicy() {
-  return output_mute_locked_;
+  return output_mute_forced_by_policy_;
+}
+
+bool CrasAudioHandler::IsOutputMutedBySecurityCurtain() {
+  return output_mute_forced_by_security_curtain_;
 }
 
 bool CrasAudioHandler::IsOutputVolumeBelowDefaultMuteLevel() {
@@ -683,6 +687,65 @@ void CrasAudioHandler::AdjustOutputVolumeByPercent(int adjust_by_percent) {
   SetOutputVolumePercent(output_volume_ + adjust_by_percent);
 }
 
+void CrasAudioHandler::IncreaseOutputVolumeByOneStep(int one_step_percent) {
+  // Set all active devices to the same volume.
+  for (const auto& item : audio_devices_) {
+    const AudioDevice& device = item.second;
+    if (!device.is_input && device.active) {
+      // only USB device should depend on number_of_volume_steps
+      if (device.type == AudioDeviceType::kUsb) {
+        int32_t number_of_volume_steps = device.number_of_volume_steps;
+        if (number_of_volume_steps == 0) {
+          LOG(ERROR)
+              << device.ToString()
+              << ": No valid number_of_volume_steps. Falling back to default.";
+          number_of_volume_steps = NUMBER_OF_VOLUME_STEPS_DEFAULT;
+        }
+        int32_t volume_level = std::round(
+            (double)output_volume_ * (double)number_of_volume_steps * 0.01);
+        if (volume_level == 0 && output_volume_ > 0) {
+          volume_level = 1;
+        }
+        // increase one level and convert to volume
+        output_volume_ = std::min(
+            100, static_cast<int>(std::floor(((double)(volume_level + 1)) /
+                                             number_of_volume_steps * 100)));
+      } else {
+        output_volume_ = std::min(100, output_volume_ + one_step_percent);
+      }
+      SetOutputNodeVolumePercent(device.id, output_volume_);
+    }
+  }
+}
+
+void CrasAudioHandler::DecreaseOutputVolumeByOneStep(int one_step_percent) {
+  // Set all active devices to the same volume.
+  for (const auto& item : audio_devices_) {
+    const AudioDevice& device = item.second;
+    if (!device.is_input && device.active) {
+      if (device.type == AudioDeviceType::kUsb) {
+        int32_t number_of_volume_steps = device.number_of_volume_steps;
+        if (number_of_volume_steps == 0) {
+          LOG(ERROR)
+              << device.ToString()
+              << ": No valid number_of_volume_steps. Falling back to default.";
+          number_of_volume_steps = NUMBER_OF_VOLUME_STEPS_DEFAULT;
+        }
+        int32_t volume_level = std::round(
+            (double)output_volume_ * (double)number_of_volume_steps * 0.01);
+
+        // decrease one level and convert to volume
+        output_volume_ = std::max(
+            0, static_cast<int>(std::floor(((double)(volume_level - 1)) /
+                                           number_of_volume_steps * 100)));
+      } else {
+        output_volume_ = std::max(0, output_volume_ - one_step_percent);
+      }
+      SetOutputNodeVolumePercent(device.id, output_volume_);
+    }
+  }
+}
+
 void CrasAudioHandler::SetOutputMute(bool mute_on) {
   if (!SetOutputMuteInternal(mute_on))
     return;
@@ -697,6 +760,14 @@ void CrasAudioHandler::SetOutputMute(bool mute_on) {
 
   for (auto& observer : observers_)
     observer.OnOutputMuteChanged(output_mute_on_);
+}
+
+void CrasAudioHandler::SetOutputMuteLockedBySecurityCurtain(bool mute_on) {
+  if (output_mute_forced_by_security_curtain_ == mute_on)
+    return;
+
+  output_mute_forced_by_security_curtain_ = mute_on;
+  UpdateAudioMute();
 }
 
 void CrasAudioHandler::AdjustOutputVolumeToAudibleLevel() {
@@ -720,6 +791,15 @@ void CrasAudioHandler::SetInputMute(bool mute_on) {
 void CrasAudioHandler::SetActiveDevice(const AudioDevice& active_device,
                                        bool notify,
                                        DeviceActivateType activate_by) {
+  if (activate_by == ACTIVATE_BY_USER) {
+    if (active_device.is_input) {
+      base::RecordAction(
+          base::UserMetricsAction("StatusArea_Audio_SwitchInputDevice"));
+    } else {
+      base::RecordAction(
+          base::UserMetricsAction("StatusArea_Audio_SwitchOutputDevice"));
+    }
+  }
   if (active_device.is_input)
     CrasAudioClient::Get()->SetActiveInputNode(active_device.id);
   else
@@ -989,6 +1069,12 @@ AudioDevice CrasAudioHandler::ConvertAudioNodeWithModifiedPriority(
   if (deprioritize_bt_wbs_mic_ && device.is_input &&
       (device.type == AudioDeviceType::kBluetooth))
     device.priority = 0;
+
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kRobustAudioDeviceSelectLogic)) {
+    device.user_priority = audio_pref_handler_->GetUserPriority(device);
+  }
+
   return device;
 }
 
@@ -1139,20 +1225,28 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
 }
 
 void CrasAudioHandler::ApplyAudioPolicy() {
-  output_mute_locked_ = false;
-  if (!audio_pref_handler_->GetAudioOutputAllowedValue()) {
+  bool mute_on = !audio_pref_handler_->GetAudioOutputAllowedValue();
+
+  if (output_mute_forced_by_policy_ == mute_on)
+    return;
+
+  output_mute_forced_by_policy_ = mute_on;
+  UpdateAudioMute();
+  // Policy for audio input is handled by kAudioCaptureAllowed in the Chrome
+  // media system.
+}
+
+void CrasAudioHandler::UpdateAudioMute() {
+  if (output_mute_forced_by_policy_ ||
+      output_mute_forced_by_security_curtain_) {
     // Mute the device, but do not update the preference.
     SetOutputMuteInternal(true);
-    output_mute_locked_ = true;
   } else {
     // Restore the mute state.
     const AudioDevice* device = GetDeviceFromId(active_output_node_id_);
     if (device)
       SetOutputMuteInternal(audio_pref_handler_->GetMuteValue(*device));
   }
-
-  // Policy for audio input is handled by kAudioCaptureAllowed in the Chrome
-  // media system.
 }
 
 void CrasAudioHandler::SetOutputNodeVolume(uint64_t node_id, int volume) {
@@ -1178,8 +1272,13 @@ void CrasAudioHandler::SetOutputNodeVolumePercent(uint64_t node_id,
 }
 
 bool CrasAudioHandler::SetOutputMuteInternal(bool mute_on) {
-  if (output_mute_locked_)
+  bool is_output_mute_forced = (output_mute_forced_by_policy_ ||
+                                output_mute_forced_by_security_curtain_);
+
+  if (is_output_mute_forced && !mute_on) {
+    // Do not allow unmuting if the policy forces the device to remain muted.
     return false;
+  }
 
   output_mute_on_ = mute_on;
   CrasAudioClient::Get()->SetOutputUserMute(mute_on);
@@ -1263,6 +1362,17 @@ bool CrasAudioHandler::ChangeActiveDevice(
   if (!found_new_active_device) {
     LOG(ERROR) << "Invalid new active device: " << new_active_device.ToString();
     return false;
+  }
+
+  // Update user priority whenever the audio device is activated.
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kRobustAudioDeviceSelectLogic)) {
+    const AudioDevice* current_active_device =
+        GetDeviceFromId(current_active_node_id);
+    if (current_active_device != nullptr) {
+      audio_pref_handler_->SetUserPriorityHigherThan(new_active_device,
+                                                     *current_active_device);
+    }
   }
 
   // Set the current active input/output device to the new_active_device.
@@ -1476,9 +1586,64 @@ void CrasAudioHandler::HandleNonHotplugNodesChange(
   }
 }
 
+bool CrasAudioHandler::ShouldSwitchToHotPlugDevice(
+    const AudioDevice& hotplug_device) const {
+  // Whenever 35mm headphone or mic is hot plugged, always pick it as the active
+  // device.
+  if (hotplug_device.type == AudioDeviceType::kHeadphone ||
+      hotplug_device.type == AudioDeviceType::kMic) {
+    return true;
+  }
+
+  const uint64_t active_node_id =
+      hotplug_device.is_input ? active_input_node_id_ : active_output_node_id_;
+  const AudioDevice* current_active_device = GetDeviceFromId(active_node_id);
+
+  if (!current_active_device) {
+    return true;
+  }
+
+  // Use built-in priority if hotplug_device or current_active_device has
+  // kUserPriorityNone. Otherwise the newly plugged devices will never be
+  // selected due to having user_priority = 0.
+  // current_active_device can has kUserPriorityNone, if it is a new device
+  // and it is activated when there is no active device (ex: the first active
+  // device after boot).
+  if ((hotplug_device.user_priority == kUserPriorityNone ||
+       current_active_device->user_priority == kUserPriorityNone)) {
+    return LessBuiltInPriority(*current_active_device, hotplug_device);
+  }
+
+  return LessUserPriority(*current_active_device, hotplug_device);
+}
+
+void CrasAudioHandler::HandleHotPlugDeviceByUserPriority(
+    const AudioDevice& hotplug_device) {
+  // This most likely may happen during the transition period of cras
+  // initialization phase, in which a non-simple-usage node may appear like
+  // a hotplug node.
+  if (!hotplug_device.is_for_simple_usage())
+    return;
+
+  if (ShouldSwitchToHotPlugDevice(hotplug_device)) {
+    SwitchToDevice(hotplug_device, true, ACTIVATE_BY_PRIORITY);
+    return;
+  }
+
+  // Do not active the hotplug device. The hotplug device is not the top
+  // priority device.
+  VLOG(1) << "Hotplug device remains inactive as its previous state:"
+          << hotplug_device.ToString();
+}
+
 void CrasAudioHandler::HandleHotPlugDevice(
     const AudioDevice& hotplug_device,
     const AudioDevicePriorityQueue& device_priority_queue) {
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kRobustAudioDeviceSelectLogic)) {
+    return HandleHotPlugDeviceByUserPriority(hotplug_device);
+  }
+
   // This most likely may happen during the transition period of cras
   // initialization phase, in which a non-simple-usage node may appear like
   // a hotplug node.
@@ -1885,6 +2050,15 @@ bool CrasAudioHandler::HasDualInternalMic() const {
   return has_front_mic && has_rear_mic;
 }
 
+bool CrasAudioHandler::HasActiveInputDeviceForSimpleUsage() const {
+  const AudioDevice* active_input_device =
+      GetDeviceFromId(active_input_node_id_);
+  if (active_input_device) {
+    return active_input_device->is_for_simple_usage();
+  }
+  return false;
+}
+
 bool CrasAudioHandler::IsFrontOrRearMic(const AudioDevice& device) const {
   return device.is_input && (device.type == AudioDeviceType::kFrontMic ||
                              device.type == AudioDeviceType::kRearMic);
@@ -1918,7 +2092,8 @@ CrasAudioHandler::ClientType CrasAudioHandler::ConvertClientTypeStringToEnum(
     return ClientType::VM_TERMINA;
   } else if (client_type_str == "CRAS_CLIENT_TYPE_CHROME") {
     return ClientType::CHROME;
-  } else if (client_type_str == "CRAS_CLIENT_TYPE_ARC") {
+  } else if (client_type_str == "CRAS_CLIENT_TYPE_ARC" ||
+             client_type_str == "CRAS_CLIENT_TYPE_ARCVM") {
     return ClientType::ARC;
   } else if (client_type_str == "CRAS_CLIENT_TYPE_BOREALIS") {
     return ClientType::VM_BOREALIS;

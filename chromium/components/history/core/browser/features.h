@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@
 namespace history {
 
 // Organic Repeatable Queries
-extern const base::Feature kOrganicRepeatableQueries;
+BASE_DECLARE_FEATURE(kOrganicRepeatableQueries);
 extern const base::FeatureParam<int> kMaxNumRepeatableQueries;
 extern const base::FeatureParam<bool> kScaleRepeatableQueriesScores;
 extern const base::FeatureParam<bool> kPrivilegeRepeatableQueries;

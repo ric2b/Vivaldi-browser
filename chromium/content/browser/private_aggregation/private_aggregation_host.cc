@@ -1,15 +1,17 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/private_aggregation/private_aggregation_host.h"
 
 #include <iterator>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/check.h"
+#include "base/command_line.h"
 #include "base/guid.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
@@ -17,10 +19,12 @@
 #include "base/values.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/private_aggregation/private_aggregation_budget_key.h"
+#include "content/browser/private_aggregation/private_aggregation_utils.h"
 #include "content/common/aggregatable_report.mojom.h"
 #include "content/common/private_aggregation_host.mojom.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_switches.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -53,7 +57,10 @@ PrivateAggregationHost::PrivateAggregationHost(
                                  PrivateAggregationBudgetKey)>
         on_report_request_received,
     BrowserContext* browser_context)
-    : on_report_request_received_(std::move(on_report_request_received)),
+    : should_not_delay_reports_(
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kPrivateAggregationDeveloperMode)),
+      on_report_request_received_(std::move(on_report_request_received)),
       browser_context_(*browser_context) {
   DCHECK(!on_report_request_received_.is_null());
 }
@@ -83,12 +90,6 @@ void PrivateAggregationHost::SendHistogramReport(
         contribution_ptrs,
     mojom::AggregationServiceMode aggregation_mode,
     mojom::DebugModeDetailsPtr debug_mode_details) {
-  // TODO(alexmt): Consider updating or making a FeatureParam.
-  static constexpr char kFledgeReportingPath[] =
-      "/.well-known/private-aggregation/report-fledge";
-  static constexpr char kSharedStorageReportingPath[] =
-      "/.well-known/private-aggregation/report-shared-storage";
-
   const url::Origin& reporting_origin =
       receiver_set_.current_context().worklet_origin;
   DCHECK(network::IsOriginPotentiallyTrustworthy(reporting_origin));
@@ -127,25 +128,23 @@ void PrivateAggregationHost::SendHistogramReport(
   base::Time now = base::Time::Now();
 
   AggregatableReportSharedInfo shared_info(
-      /*scheduled_report_time=*/GetScheduledReportTime(
-          /*report_issued_time=*/now),
+      /*scheduled_report_time=*/should_not_delay_reports_
+          ? now
+          : GetScheduledReportTime(
+                /*report_issued_time=*/now),
       /*report_id=*/base::GUID::GenerateRandomV4(), reporting_origin,
       debug_mode_details->is_enabled
           ? AggregatableReportSharedInfo::DebugMode::kEnabled
           : AggregatableReportSharedInfo::DebugMode::kDisabled,
       /*additional_fields=*/base::Value::Dict(),
       /*api_version=*/kApiReportVersion,
-      /*api_identifier=*/kApiIdentifier);
+      /*api_identifier=*/
+      private_aggregation::GetApiIdentifier(
+          receiver_set_.current_context().api_for_budgeting));
 
-  std::string reporting_path;
-  switch (receiver_set_.current_context().api_for_budgeting) {
-    case PrivateAggregationBudgetKey::Api::kFledge:
-      reporting_path = kFledgeReportingPath;
-      break;
-    case PrivateAggregationBudgetKey::Api::kSharedStorage:
-      reporting_path = kSharedStorageReportingPath;
-      break;
-  }
+  std::string reporting_path = private_aggregation::GetReportingPath(
+      receiver_set_.current_context().api_for_budgeting,
+      /*is_immediate_debug_report=*/false);
 
   absl::optional<uint64_t> debug_key;
   if (!debug_mode_details->debug_key.is_null()) {

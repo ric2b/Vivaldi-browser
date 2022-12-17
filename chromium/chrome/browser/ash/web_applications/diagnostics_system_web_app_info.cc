@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,7 +25,8 @@ CreateWebAppInfoForDiagnosticsSystemWebApp() {
   // TODO(jimmyxgong): Update the title with finalized i18n copy.
   info->title = u"Diagnostics";
   web_app::CreateIconInfoForSystemWebApp(
-      info->start_url, {{"app_icon_192.png", 192, IDR_DIAGNOSTICS_APP_ICON}},
+      info->start_url,
+      {{"app_icon_192.png", 192, IDR_ASH_DIAGNOSTICS_APP_APP_ICON_192_PNG}},
       *info);
   info->theme_color =
       web_app::GetDefaultBackgroundColor(/*use_dark_mode=*/false);

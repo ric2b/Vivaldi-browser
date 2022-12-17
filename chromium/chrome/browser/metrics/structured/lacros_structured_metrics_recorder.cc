@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include "chromeos/crosapi/mojom/structured_metrics_service.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "components/metrics/structured/event.h"
-#include "components/metrics/structured/event_base.h"
 #include "components/metrics/structured/structured_metrics_client.h"
 #include "mojo/public/cpp/bindings/remote.h"
 

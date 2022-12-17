@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -206,9 +206,9 @@ struct GetSlotStartResult final {
 PA_SCAN_INLINE GetSlotStartResult
 GetSlotStartInSuperPage(uintptr_t maybe_inner_address) {
   PA_SCAN_DCHECK(IsManagedByNormalBuckets(maybe_inner_address));
-  // Don't use SlotSpanMetadata::FromSlotInnerAddr() or
-  // PartitionPage::FromAddr(), because they expect an address within a super
-  // page payload area, which we don't know yet if |maybe_inner_address| is.
+  // Don't use SlotSpanMetadata/PartitionPage::FromAddr() and family, because
+  // they expect an address within a super page payload area, which we don't
+  // know yet if |maybe_inner_address| is.
   const uintptr_t super_page = maybe_inner_address & kSuperPageBaseMask;
 
   const uintptr_t partition_page_index =
@@ -765,10 +765,10 @@ class PCScanScanLoop final : public ScanLoop<PCScanScanLoop> {
 
  private:
 #if defined(PA_HAS_64_BITS_POINTERS)
-  PA_ALWAYS_INLINE static uintptr_t CageBase() {
+  PA_ALWAYS_INLINE static uintptr_t RegularPoolBase() {
     return PartitionAddressSpace::RegularPoolBase();
   }
-  PA_ALWAYS_INLINE static uintptr_t CageMask() {
+  PA_ALWAYS_INLINE static uintptr_t RegularPoolMask() {
     return PartitionAddressSpace::RegularPoolBaseMask();
   }
 #endif  // defined(PA_HAS_64_BITS_POINTERS)
@@ -1274,7 +1274,7 @@ PCScanInternal::~PCScanInternal() = default;
 void PCScanInternal::Initialize(PCScan::InitConfig config) {
   PA_DCHECK(!is_initialized_);
 #if defined(PA_HAS_64_BITS_POINTERS)
-  // Make sure that GigaCage is initialized.
+  // Make sure that pools are initialized.
   PartitionAddressSpace::Init();
 #endif
   CommitCardTable();

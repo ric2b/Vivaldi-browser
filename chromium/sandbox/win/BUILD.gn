@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -13,6 +13,8 @@ static_library("sandbox") {
   sources = [
     "src/acl.cc",
     "src/acl.h",
+    "src/alternate_desktop.cc",
+    "src/alternate_desktop.h",
     "src/app_container.h",
     "src/app_container_base.cc",
     "src/app_container_base.h",
@@ -115,8 +117,6 @@ static_library("sandbox") {
     "src/signed_interception.h",
     "src/signed_policy.cc",
     "src/signed_policy.h",
-    "src/socket_dispatcher.cc",
-    "src/socket_dispatcher.h",
     "src/startup_information_helper.cc",
     "src/startup_information_helper.h",
     "src/target_interceptions.cc",
@@ -182,6 +182,7 @@ test("sbox_integration_tests") {
     "src/lpc_policy_test.cc",
     "src/named_pipe_policy_test.cc",
     "src/policy_target_test.cc",
+    "src/process_mitigations_deathtest.cc",
     "src/process_mitigations_dyncode_unittest.cc",
     "src/process_mitigations_extensionpoints_unittest.cc",
     "src/process_mitigations_unittest.cc",
@@ -210,10 +211,7 @@ test("sbox_integration_tests") {
     ":sbox_integration_test_win_proc",
   ]
 
-  libs = [
-    "ktmw32.lib",
-    "iphlpapi.lib",
-  ]
+  libs = [ "ktmw32.lib" ]
 }
 
 group("maybe_set_appcontainer_acls") {

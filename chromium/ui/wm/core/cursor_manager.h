@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 
 namespace ui {
 class KeyEvent;
+class TouchEvent;
 enum class CursorSize;
 }
 
@@ -66,6 +67,7 @@ class COMPONENT_EXPORT(UI_WM) CursorManager
   void AddObserver(aura::client::CursorClientObserver* observer) override;
   void RemoveObserver(aura::client::CursorClientObserver* observer) override;
   bool ShouldHideCursorOnKeyEvent(const ui::KeyEvent& event) const override;
+  bool ShouldHideCursorOnTouchEvent(const ui::TouchEvent& event) const override;
   gfx::Size GetSystemCursorSize() const override;
 
  private:

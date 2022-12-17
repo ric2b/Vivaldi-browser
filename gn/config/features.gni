@@ -25,4 +25,8 @@ declare_args() {
   vivaldi_yahoo_oauth_client_id = ""
   # Yahoo OAuth client secret
   vivaldi_yahoo_oauth_client_secret = ""
+  # Vivaldi.net OAuth client secret
+  vivaldi_net_oauth_client_secret = ""
+  # Vivaldi.net OAuth client id
+  vivaldi_net_oauth_client_id = ""
 }

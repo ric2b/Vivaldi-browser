@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "ui/base/models/dialog_model.h"
 #include "ui/base/models/dialog_model_field.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/accessibility/accessibility_paint_checks.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
@@ -25,6 +26,7 @@
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -33,10 +35,42 @@
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/layout_provider.h"
+#include "ui/views/style/typography.h"
 #include "ui/views/view_class_properties.h"
 
 namespace views {
 namespace {
+
+// Extra margin to be added to contents view when it's inside a scroll view.
+constexpr int kScrollViewVerticalMargin = 2;
+
+BubbleDialogModelHost::ContentsView* SetAndGetContentsView(
+    BubbleDialogModelHost* parent,
+    ui::ModalType modal_type) {
+  const bool is_modal_dialog = modal_type != ui::MODAL_TYPE_NONE;
+  auto contents_view_unique =
+      std::make_unique<BubbleDialogModelHost::ContentsView>(parent,
+                                                            is_modal_dialog);
+  BubbleDialogModelHost::ContentsView* contents_view =
+      contents_view_unique.get();
+
+  // TODO(crbug.com/1348165): Non modal dialogs size is not dependent on its
+  // content. Thus, the content has to be manually set by the view inside a
+  // scroll view. Modal dialogs handle their own size via constrained windows,
+  // so we can add a scroll view to the DialogModel directly.
+  if (is_modal_dialog) {
+    constexpr int kMaxDialogHeight = 448;
+    auto scroll_view = std::make_unique<views::ScrollView>();
+    scroll_view->ClipHeightTo(0, kMaxDialogHeight);
+    scroll_view->SetHorizontalScrollBarMode(
+        views::ScrollView::ScrollBarMode::kDisabled);
+    scroll_view->SetContents(std::move(contents_view_unique));
+    parent->SetContentsView(std::move(scroll_view));
+  } else {
+    parent->SetContentsView(std::move(contents_view_unique));
+  }
+  return contents_view;
+}
 
 BubbleDialogModelHost::FieldType GetFieldTypeForField(
     ui::DialogModelField* field,
@@ -45,7 +79,7 @@ BubbleDialogModelHost::FieldType GetFieldTypeForField(
   switch (field->type(pass_key)) {
     case ui::DialogModelField::kButton:
       return BubbleDialogModelHost::FieldType::kControl;
-    case ui::DialogModelField::kBodyText:
+    case ui::DialogModelField::kParagraph:
       return BubbleDialogModelHost::FieldType::kText;
     case ui::DialogModelField::kCheckbox:
       return BubbleDialogModelHost::FieldType::kControl;
@@ -103,13 +137,16 @@ int GetDialogTopMargins(LayoutProvider* layout_provider,
 
 int GetDialogBottomMargins(LayoutProvider* layout_provider,
                            ui::DialogModelField* last_field,
+                           bool has_buttons,
                            base::PassKey<ui::DialogModelHost> pass_key) {
   const BubbleDialogModelHost::FieldType field_type =
       last_field ? GetFieldTypeForField(last_field, pass_key)
                  : BubbleDialogModelHost::FieldType::kControl;
   switch (field_type) {
     case BubbleDialogModelHost::FieldType::kMenuItem:
-      return 0;
+      return has_buttons ? layout_provider->GetDistanceMetric(
+                               DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL)
+                         : 0;
     case BubbleDialogModelHost::FieldType::kControl:
       return layout_provider->GetDistanceMetric(
           DISTANCE_DIALOG_CONTENT_MARGIN_BOTTOM_CONTROL);
@@ -183,13 +220,24 @@ std::unique_ptr<View> BubbleDialogModelHost::CustomView::TransferView() {
 
 // TODO(pbos): Migrate most code that calls contents_view_->(some View method)
 // into this class. This was done in steps to limit the size of the diff.
-class BubbleDialogModelHost::ContentsView : public View {
+class BubbleDialogModelHost::ContentsView : public BoxLayoutView {
  public:
-  ContentsView(BubbleDialogModelHost* parent, ui::DialogModel* model)
+  ContentsView(BubbleDialogModelHost* parent, bool is_modal_dialog)
       : parent_(parent) {
     // Note that between-child spacing is manually handled using kMarginsKey.
-    SetLayoutManager(
-        std::make_unique<BoxLayout>(BoxLayout::Orientation::kVertical));
+    SetOrientation(views::BoxLayout::Orientation::kVertical);
+    // Margins are added directly in the dialog. When the dialog is modal, these
+    // contents are wrapped by a scroll view and margins are added outside of it
+    // (instead of outside this contents). This causes some items (e.g
+    // emphasized buttons) to be cut by the scroll view margins (see
+    // crbug.com/1360772). Since we do want the margins outside the scroll view
+    // (so they are always present when scrolling), we add
+    // `kScrollViewVerticalMargin` inside the contents view and later remove it
+    // from the dialog margins.
+    // TODO(crbug.com/1348165): Remove this workaround when contents view
+    // directly supports a scroll view.
+    if (is_modal_dialog)
+      SetInsideBorderInsets(gfx::Insets::VH(kScrollViewVerticalMargin, 0));
   }
 
   void OnThemeChanged() override {
@@ -306,8 +354,7 @@ BubbleDialogModelHost::BubbleDialogModelHost(
     ui::ModalType modal_type)
     : BubbleDialogDelegate(anchor_view, arrow),
       model_(std::move(model)),
-      contents_view_(
-          SetContentsView(std::make_unique<ContentsView>(this, model_.get()))) {
+      contents_view_(SetAndGetContentsView(this, modal_type)) {
   model_->set_host(GetPassKey(), this);
 
   // Note that this needs to be called before IsModalDialog() is called later in
@@ -360,17 +407,22 @@ BubbleDialogModelHost::BubbleDialogModelHost(
         base::BindRepeating(&ui::DialogModelButton::OnPressed,
                             base::Unretained(extra_button), GetPassKey()),
         extra_button->label(GetPassKey())));
-  } else if (ui::DialogModelLabel::Link* extra_link =
+  } else if (ui::DialogModelLabel::TextReplacement* extra_link =
                  model_->extra_link(GetPassKey())) {
-    auto link = std::make_unique<views::Link>(
-        l10n_util::GetStringUTF16(extra_link->message_id));
-    link->SetCallback(extra_link->callback);
+    DCHECK(extra_link->callback().has_value());
+    auto link = std::make_unique<views::Link>(extra_link->text());
+    link->SetCallback(extra_link->callback().value());
     SetExtraView(std::move(link));
   }
 
   SetButtons(button_mask);
 
+  if (model_->override_default_button(GetPassKey()))
+    SetDefaultButton(model_->override_default_button(GetPassKey()).value());
+
   SetTitle(model_->title(GetPassKey()));
+
+  SetSubtitle(model_->subtitle(GetPassKey()));
 
   if (!model_->main_image(GetPassKey()).IsEmpty())
     SetMainImage(model_->main_image(GetPassKey()));
@@ -486,6 +538,10 @@ void BubbleDialogModelHost::OnWidgetInitialized() {
   }
 }
 
+View* BubbleDialogModelHost::GetContentsViewForTesting() {
+  return contents_view_;
+}
+
 void BubbleDialogModelHost::Close() {
   DCHECK(model_);
   DCHECK(GetWidget());
@@ -512,8 +568,8 @@ void BubbleDialogModelHost::OnFieldAdded(ui::DialogModelField* field) {
       // TODO(pbos): Add support for buttons that are part of content area.
       NOTREACHED();
       return;
-    case ui::DialogModelField::kBodyText:
-      AddOrUpdateBodyText(field->AsBodyText(GetPassKey()));
+    case ui::DialogModelField::kParagraph:
+      AddOrUpdateParagraph(field->AsParagraph(GetPassKey()));
       break;
     case ui::DialogModelField::kCheckbox:
       AddOrUpdateCheckbox(field->AsCheckbox(GetPassKey()));
@@ -565,7 +621,14 @@ void BubbleDialogModelHost::UpdateSpacingAndMargins() {
 
   ui::DialogModelField* first_field = nullptr;
   ui::DialogModelField* last_field = nullptr;
-  for (View* const view : contents_view_->children()) {
+
+  auto* scroll_view =
+      views::ScrollView::GetScrollViewForContents(contents_view_);
+  const views::View::Views& children = scroll_view
+                                           ? scroll_view->contents()->children()
+                                           : contents_view_->children();
+
+  for (View* const view : children) {
     ui::DialogModelField* const field =
         FindDialogModelHostField(view).dialog_model_field;
 
@@ -588,11 +651,23 @@ void BubbleDialogModelHost::UpdateSpacingAndMargins() {
     }
     last_field = field;
   }
-  contents_view_->InvalidateLayout();
 
-  set_margins(gfx::Insets::TLBR(
-      GetDialogTopMargins(layout_provider, first_field, GetPassKey()), 0,
-      GetDialogBottomMargins(layout_provider, last_field, GetPassKey()), 0));
+  contents_view_->InvalidateLayout();
+  // Set margins based on the first and last item. Note that we remove margins
+  // that were already added to contents view at construction.
+  // TODO(crbug.com/1348165): Remove the extra margin workaround when contents
+  // view directly supports a scroll view.
+  const int extra_margin = scroll_view ? kScrollViewVerticalMargin : 0;
+  const int top_margin =
+      GetDialogTopMargins(layout_provider, first_field, GetPassKey()) -
+      extra_margin;
+  const int bottom_margin =
+      GetDialogBottomMargins(layout_provider, last_field,
+                             GetDialogButtons() != ui::DIALOG_BUTTON_NONE,
+                             GetPassKey()) -
+      extra_margin;
+  set_margins(gfx::Insets::TLBR(top_margin >= 0 ? top_margin : 0, 0,
+                                bottom_margin >= 0 ? bottom_margin : 0, 0));
 }
 
 void BubbleDialogModelHost::OnWindowClosing() {
@@ -604,11 +679,14 @@ void BubbleDialogModelHost::OnWindowClosing() {
   // TODO(pbos): Do we need to reset `model_` and destroy contents? See Close().
 }
 
-void BubbleDialogModelHost::AddOrUpdateBodyText(
-    ui::DialogModelBodyText* model_field) {
+void BubbleDialogModelHost::AddOrUpdateParagraph(
+    ui::DialogModelParagraph* model_field) {
   // TODO(pbos): Handle updating existing field.
   std::unique_ptr<View> view =
-      CreateViewForLabel(model_field->label(GetPassKey()));
+      model_field->header(GetPassKey()).empty()
+          ? CreateViewForLabel(model_field->label(GetPassKey()))
+          : CreateViewForParagraphWithHeader(model_field->label(GetPassKey()),
+                                             model_field->header(GetPassKey()));
   DialogModelHostField info{model_field, view.get(), nullptr};
   view->SetProperty(kElementIdentifierKey, model_field->id(GetPassKey()));
   AddDialogModelHostField(std::move(view), info);
@@ -697,6 +775,7 @@ void BubbleDialogModelHost::AddOrUpdateMenuItem(
                                   DISTANCE_BUTTON_HORIZONTAL_PADDING))));
 
   item->SetEnabled(model_field->is_enabled(GetPassKey()));
+  item->SetProperty(kElementIdentifierKey, model_field->id(GetPassKey()));
 
   DialogModelHostField info{model_field, item.get(), nullptr};
   AddDialogModelHostField(std::move(item), info);
@@ -808,6 +887,8 @@ void BubbleDialogModelHost::AddDialogModelHostFieldForExistingView(
 #endif  // DCHECK_IS_ON()
   fields_.push_back(field_view_info);
   View* const target = GetTargetView(field_view_info);
+  target->SetProperty(kElementIdentifierKey,
+                      field_view_info.dialog_model_field->id(GetPassKey()));
   for (const auto& accelerator :
        field_view_info.dialog_model_field->accelerators(GetPassKey())) {
     target->AddAccelerator(accelerator);
@@ -842,8 +923,7 @@ View* BubbleDialogModelHost::GetTargetView(
 
 bool BubbleDialogModelHost::DialogModelLabelRequiresStyledLabel(
     const ui::DialogModelLabel& dialog_label) {
-  // Link support only exists in StyledLabel.
-  return !dialog_label.links(GetPassKey()).empty();
+  return !dialog_label.replacements(GetPassKey()).empty();
 }
 
 std::unique_ptr<View> BubbleDialogModelHost::CreateViewForLabel(
@@ -857,27 +937,45 @@ std::unique_ptr<StyledLabel>
 BubbleDialogModelHost::CreateStyledLabelForDialogModelLabel(
     const ui::DialogModelLabel& dialog_label) {
   DCHECK(DialogModelLabelRequiresStyledLabel(dialog_label));
-  // TODO(pbos): Make sure this works for >1 link, it uses .front() now.
-  DCHECK_EQ(dialog_label.links(GetPassKey()).size(), 1u);
+  const std::vector<ui::DialogModelLabel::TextReplacement>& replacements =
+      dialog_label.replacements(GetPassKey());
 
-  size_t offset;
-  const std::u16string link_text = l10n_util::GetStringUTF16(
-      dialog_label.links(GetPassKey()).front().message_id);
+  // Retrieve the replacements strings to create the text.
+  std::vector<std::u16string> string_replacements;
+  for (auto replacement : replacements) {
+    string_replacements.push_back(replacement.text());
+  }
+  std::vector<size_t> offsets;
   const std::u16string text = l10n_util::GetStringFUTF16(
-      dialog_label.message_id(GetPassKey()), link_text, &offset);
+      dialog_label.message_id(GetPassKey()), string_replacements, &offsets);
 
   auto styled_label = std::make_unique<StyledLabel>();
   styled_label->SetText(text);
-  auto style_info = StyledLabel::RangeStyleInfo::CreateForLink(
-      dialog_label.links(GetPassKey()).front().callback);
-  style_info.accessible_name =
-      dialog_label.links(GetPassKey()).front().accessible_name;
-  styled_label->AddStyleRange(gfx::Range(offset, offset + link_text.length()),
-                              style_info);
-
   styled_label->SetDefaultTextStyle(dialog_label.is_secondary(GetPassKey())
                                         ? style::STYLE_SECONDARY
                                         : style::STYLE_PRIMARY);
+
+  // Style the replacements as needed.
+  DCHECK_EQ(string_replacements.size(), offsets.size());
+  for (size_t i = 0; i < replacements.size(); ++i) {
+    auto replacement = replacements[i];
+    // No styling needed if replacement is neither a link nor emphasized text.
+    if (!replacement.callback().has_value() && !replacement.is_emphasized())
+      continue;
+
+    StyledLabel::RangeStyleInfo style_info;
+    if (replacement.callback().has_value()) {
+      style_info = StyledLabel::RangeStyleInfo::CreateForLink(
+          replacement.callback().value());
+      style_info.accessible_name = replacement.accessible_name().value();
+    } else if (replacement.is_emphasized()) {
+      style_info.text_style = views::style::STYLE_EMPHASIZED;
+    }
+
+    auto offset = offsets[i];
+    styled_label->AddStyleRange(
+        gfx::Range(offset, offset + replacement.text().length()), style_info);
+  }
 
   return styled_label;
 }
@@ -893,6 +991,20 @@ std::unique_ptr<Label> BubbleDialogModelHost::CreateLabelForDialogModelLabel(
   text_label->SetMultiLine(true);
   text_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   return text_label;
+}
+
+std::unique_ptr<View> BubbleDialogModelHost::CreateViewForParagraphWithHeader(
+    const ui::DialogModelLabel& dialog_label,
+    const std::u16string header) {
+  auto view = std::make_unique<BoxLayoutView>();
+  view->SetOrientation(BoxLayout::Orientation::kVertical);
+
+  auto* header_label = view->AddChildView(std::make_unique<Label>(
+      header, style::CONTEXT_DIALOG_BODY_TEXT, style::STYLE_PRIMARY));
+  header_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+
+  view->AddChildView(CreateViewForLabel(dialog_label));
+  return view;
 }
 
 bool BubbleDialogModelHost::IsModalDialog() const {

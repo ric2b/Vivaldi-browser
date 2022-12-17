@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
@@ -94,6 +95,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/paint_recorder.h"
@@ -171,6 +173,7 @@ class BookmarkButtonBase : public views::LabelButton {
     views::InstallPillHighlightPathGenerator(this);
 
     SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+    SetHideInkDropWhenShowingContextMenu(false);
 
     show_animation_ = std::make_unique<gfx::SlideAnimation>(this);
     if (!animations_enabled) {
@@ -297,6 +300,7 @@ class BookmarkFolderButton : public BookmarkMenuButtonBase {
     } else {
       show_animation_->Show();
     }
+    SetHideInkDropWhenShowingContextMenu(false);
 
     // ui::EF_MIDDLE_MOUSE_BUTTON opens all bookmarked links in separate tabs.
     SetTriggerableEventFlags(ui::EF_LEFT_MOUSE_BUTTON |
@@ -332,7 +336,7 @@ class BookmarkFolderButton : public BookmarkMenuButtonBase {
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     BookmarkMenuButtonBase::GetAccessibleNodeData(node_data);
-    node_data->SetName(GetAccessibleName());
+    node_data->SetNameChecked(GetAccessibleName());
     node_data->AddStringAttribute(
         ax::mojom::StringAttribute::kRoleDescription,
         l10n_util::GetStringUTF8(
@@ -449,7 +453,7 @@ class BookmarkBarView::ButtonSeparatorView : public views::Separator {
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     node_data->role = ax::mojom::Role::kSplitter;
-    node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_SEPARATOR));
+    node_data->SetNameChecked(l10n_util::GetStringUTF8(IDS_ACCNAME_SEPARATOR));
   }
 };
 using ButtonSeparatorView = BookmarkBarView::ButtonSeparatorView;
@@ -1095,7 +1099,7 @@ void BookmarkBarView::ChildPreferredSizeChanged(views::View* child) {
 
 void BookmarkBarView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kToolbar;
-  node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_BOOKMARKS));
+  node_data->SetNameChecked(l10n_util::GetStringUTF8(IDS_ACCNAME_BOOKMARKS));
 }
 
 void BookmarkBarView::AnimationProgressed(const gfx::Animation* animation) {
@@ -1189,7 +1193,8 @@ void BookmarkBarView::BookmarkNodeMoved(BookmarkModel* model,
 
 void BookmarkBarView::BookmarkNodeAdded(BookmarkModel* model,
                                         const BookmarkNode* parent,
-                                        size_t index) {
+                                        size_t index,
+                                        bool added_by_user) {
   // See comment in BookmarkNodeMoved() for details on this.
   InvalidateDrop();
   if (BookmarkNodeAddedImpl(model, parent, index))
@@ -1480,9 +1485,8 @@ void BookmarkBarView::Init() {
 }
 
 size_t BookmarkBarView::GetFirstHiddenNodeIndex() const {
-  const auto i =
-      std::find_if(bookmark_buttons_.cbegin(), bookmark_buttons_.cend(),
-                   [](const auto* button) { return !button->GetVisible(); });
+  const auto i = base::ranges::find_if_not(bookmark_buttons_,
+                                           &views::LabelButton::GetVisible);
   return i - bookmark_buttons_.cbegin();
 }
 
@@ -1875,8 +1879,7 @@ void BookmarkBarView::InvalidateDrop() {
 }
 
 const BookmarkNode* BookmarkBarView::GetNodeForSender(View* sender) const {
-  const auto i =
-      std::find(bookmark_buttons_.cbegin(), bookmark_buttons_.cend(), sender);
+  const auto i = base::ranges::find(bookmark_buttons_, sender);
   DCHECK(i != bookmark_buttons_.cend());
   size_t child = i - bookmark_buttons_.cbegin();
   return bookmark_model_->bookmark_bar_node()->children()[child].get();
@@ -2007,9 +2010,9 @@ bool BookmarkBarView::UpdateOtherAndManagedButtonsVisibility() {
 }
 
 void BookmarkBarView::UpdateBookmarksSeparatorVisibility() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Ash does not paint the bookmarks separator line because it looks odd on
-  // the flat background.  We keep it present for layout, but don't draw it.
+#if BUILDFLAG(IS_CHROMEOS)
+  // ChromeOS does not paint the bookmarks separator line because it looks odd
+  // on the flat background. We keep it present for layout, but don't draw it.
   bookmarks_separator_view_->SetVisible(false);
 #else
   bookmarks_separator_view_->SetVisible(other_bookmarks_button_->GetVisible());
@@ -2060,8 +2063,7 @@ void BookmarkBarView::InsertBookmarkButtonAtIndex(
 }
 
 size_t BookmarkBarView::GetIndexForButton(views::View* button) {
-  auto it =
-      std::find(bookmark_buttons_.cbegin(), bookmark_buttons_.cend(), button);
+  auto it = base::ranges::find(bookmark_buttons_, button);
   if (it == bookmark_buttons_.cend())
     return static_cast<size_t>(-1);
 

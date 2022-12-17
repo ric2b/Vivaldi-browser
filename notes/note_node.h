@@ -12,7 +12,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
 #include "content/public/browser/notification_observer.h"
-#include "notes/note_attachment.h"
+#include "notes/deprecated_note_attachment.h"
 #include "ui/base/models/tree_node_model.h"
 #include "url/gurl.h"
 
@@ -28,7 +28,7 @@ class NoteLoadDetails;
 
 class NoteNode : public ui::TreeNode<NoteNode> {
  public:
-  enum Type { NOTE, FOLDER, MAIN, OTHER, TRASH, SEPARATOR };
+  enum Type { NOTE, FOLDER, MAIN, OTHER, TRASH, SEPARATOR, ATTACHMENT };
 
   static const char kRootNodeGuid[];
   static const char kMainNodeGuid[];
@@ -52,6 +52,7 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   bool is_other() const { return type_ == OTHER; }
   bool is_trash() const { return type_ == TRASH; }
   bool is_separator() const { return type_ == SEPARATOR; }
+  bool is_attachment() const { return type_ == ATTACHMENT; }
 
   // Returns an unique id for this node.
   // For notes nodes that are managed by the notes model, the IDs are
@@ -72,29 +73,16 @@ class NoteNode : public ui::TreeNode<NoteNode> {
 
   const GURL& GetURL() const { return url_; }
 
-  const NoteAttachment* GetAttachment(const std::string& checksum) const {
-    auto attachment = attachments_.find(checksum);
-    return (attachment != attachments_.end()) ? &(attachment->second) : nullptr;
-  }
-  const NoteAttachments& GetAttachments() const { return attachments_; }
   void SetContent(const std::u16string& content) { content_ = content; }
   void SetURL(const GURL& url) { url_ = url; }
   void SetCreationTime(const base::Time creation_time) {
     creation_time_ = creation_time;
   }
 
-  void AddAttachment(NoteAttachment&& attachment) {
-    attachments_.insert(std::make_pair(
-        attachment.checksum(), std::forward<NoteAttachment>(attachment)));
-  }
-
-  void DeleteAttachment(const std::string& checksum) {
-    attachments_.erase(checksum);
-  }
-
-  void ClearAttachments() { attachments_.clear(); }
-  void SwapAttachments(NoteNode* node) {
-    attachments_.swap(node->attachments_);
+  void AddAttachmentDeprecated(DeprecatedNoteAttachment&& attachment) {
+    deprecated_attachments_.insert(
+        std::make_pair(attachment.checksum(),
+                       std::forward<DeprecatedNoteAttachment>(attachment)));
   }
 
  protected:
@@ -116,8 +104,8 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   std::u16string content_;
   // Attached URL.
   GURL url_;
-  // List of attached data.
-  NoteAttachments attachments_;
+  // List of attached data. Deprecated. Only used for migration.
+  DeprecatedNoteAttachments deprecated_attachments_;
 
   // The GUID for this node. A NoteNode GUID is immutable and differs from
   // the |id_| in that it is consistent across different clients and

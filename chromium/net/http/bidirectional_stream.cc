@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -259,7 +259,7 @@ void BidirectionalStream::OnHeadersReceived(
   load_timing_info_.receive_headers_end = base::TimeTicks::Now();
   read_end_time_ = load_timing_info_.receive_headers_end;
   session_->http_stream_factory()->ProcessAlternativeServices(
-      session_, net::NetworkIsolationKey(), response_info.headers.get(),
+      session_, net::NetworkAnonymizationKey(), response_info.headers.get(),
       url::SchemeHostPort(request_info_->url));
   delegate_->OnHeadersReceived(response_headers);
 }

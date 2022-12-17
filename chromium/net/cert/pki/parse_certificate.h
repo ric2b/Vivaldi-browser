@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -535,8 +535,8 @@ struct AuthorityInfoAccessDescription {
 // ignored.
 [[nodiscard]] NET_EXPORT bool ParseAuthorityInfoAccessURIs(
     const der::Input& authority_info_access_tlv,
-    std::vector<base::StringPiece>* out_ca_issuers_uris,
-    std::vector<base::StringPiece>* out_ocsp_uris);
+    std::vector<std::string_view>* out_ca_issuers_uris,
+    std::vector<std::string_view>* out_ocsp_uris);
 
 // ParsedDistributionPoint represents a parsed DistributionPoint from RFC 5280.
 //

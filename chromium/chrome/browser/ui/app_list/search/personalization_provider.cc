@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "ash/constants/ash_features.h"
 #include "ash/constants/personalization_entry_point.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_metrics.h"
@@ -21,9 +20,8 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
-#include "chrome/browser/ash/web_applications/personalization_app/personalization_app_manager.h"
-#include "chrome/browser/ash/web_applications/personalization_app/personalization_app_manager_factory.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_metrics.h"
+#include "chrome/browser/ash/web_applications/personalization_app/personalization_app_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/search/common/icon_constants.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
@@ -75,28 +73,25 @@ void PersonalizationResult::Open(int event_flags) {
                                launch_params);
 }
 
-PersonalizationProvider::PersonalizationProvider(Profile* profile)
-    : profile_(profile) {
-  DCHECK(ash::features::IsPersonalizationHubEnabled());
-  DCHECK(profile_ && profile_->IsRegularProfile())
-      << "Regular profile required for personalization search";
-
+PersonalizationProvider::PersonalizationProvider(
+    Profile* profile,
+    ash::personalization_app::SearchHandler* search_handler)
+    : profile_(profile), search_handler_(search_handler) {
   app_service_proxy_ = apps::AppServiceProxyFactory::GetForProfile(profile_);
   Observe(&app_service_proxy_->AppRegistryCache());
   StartLoadIcon();
 
-  search_handler_ = ash::personalization_app::PersonalizationAppManagerFactory::
-                        GetForBrowserContext(profile_)
-                            ->search_handler();
-  DCHECK(search_handler_);
-  search_handler_->AddObserver(
-      search_results_observer_.BindNewPipeAndPassRemote());
+  if (search_handler_) {
+    search_handler_->AddObserver(
+        search_results_observer_.BindNewPipeAndPassRemote());
+  }
 }
 
 PersonalizationProvider::~PersonalizationProvider() = default;
 
 void PersonalizationProvider::Start(const std::u16string& query) {
-  DCHECK(search_handler_) << "Search handler required to run query";
+  if (!search_handler_)
+    return;
 
   ClearResultsSilently();
 

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -233,10 +233,10 @@ gfx::Size ExtensionsMenuTestUtil::GetMaxAvailableSizeToFitBubbleOnScreen(
 InstalledExtensionMenuItemView* ExtensionsMenuTestUtil::GetMenuItemViewForId(
     const extensions::ExtensionId& id) {
   auto menu_items = menu_view_->extensions_menu_items_for_testing();
-  auto iter = base::ranges::find_if(
-      menu_items, [id](InstalledExtensionMenuItemView* view) {
-        return view->view_controller()->GetId() == id;
-      });
+  auto iter = base::ranges::find(menu_items, id,
+                                 [](InstalledExtensionMenuItemView* view) {
+                                   return view->view_controller()->GetId();
+                                 });
   if (iter == menu_items.end())
     return nullptr;
   return *iter;

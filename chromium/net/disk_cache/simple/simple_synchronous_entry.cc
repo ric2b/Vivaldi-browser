@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -215,8 +215,9 @@ using simple_util::GetDataSizeFromFileSize;
 using simple_util::GetFileSizeFromDataSize;
 using simple_util::GetFileIndexFromStreamIndex;
 
-const base::Feature kSimpleCachePrefetchExperiment = {
-    "SimpleCachePrefetchExperiment2", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kSimpleCachePrefetchExperiment,
+             "SimpleCachePrefetchExperiment2",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kSimpleCacheFullPrefetchBytesParam[] = "FullPrefetchBytes";
 constexpr base::FeatureParam<int> kSimpleCacheFullPrefetchSize{

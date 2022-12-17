@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,23 +120,23 @@ void ChromeLabsButton::ButtonPressed() {
 
 void ChromeLabsButton::UpdateDotIndicator() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  DictionaryPrefUpdate update(
+  ScopedDictPrefUpdate update(
       browser_view_->browser()->profile()->GetPrefs(),
       chrome_labs_prefs::kChromeLabsNewBadgeDictAshChrome);
 #else
-  DictionaryPrefUpdate update(g_browser_process->local_state(),
+  ScopedDictPrefUpdate update(g_browser_process->local_state(),
                               chrome_labs_prefs::kChromeLabsNewBadgeDict);
 #endif
 
-  base::Value* new_badge_prefs = update.Get();
+  base::Value::Dict& new_badge_prefs = update.Get();
 
   std::vector<std::string> lab_internal_names;
   const std::vector<LabInfo>& all_labs = model_->GetLabInfo();
 
   bool should_show_dot_indicator = base::ranges::any_of(
-      all_labs.begin(), all_labs.end(), [new_badge_prefs](const LabInfo& lab) {
+      all_labs.begin(), all_labs.end(), [&new_badge_prefs](const LabInfo& lab) {
         absl::optional<int> new_badge_pref_value =
-            new_badge_prefs->FindIntKey(lab.internal_name);
+            new_badge_prefs.FindInt(lab.internal_name);
         // Show the dot indicator if new experiments have not been seen yet.
         return new_badge_pref_value == chrome_labs_prefs::kChromeLabsNewExperimentPrefValue;
       });
@@ -157,12 +157,11 @@ bool ChromeLabsButton::ShouldShowButton(const ChromeLabsBubbleViewModel* model,
     return false;
   }
 #endif
-  const std::vector<LabInfo>& all_labs = model->GetLabInfo();
 
-  return std::any_of(all_labs.begin(), all_labs.end(),
-                     [&profile](const LabInfo& lab) {
-                       return IsChromeLabsFeatureValid(lab, profile);
-                     });
+  return base::ranges::any_of(model->GetLabInfo(),
+                              [&profile](const LabInfo& lab) {
+                                return IsChromeLabsFeatureValid(lab, profile);
+                              });
 }
 
 BEGIN_METADATA(ChromeLabsButton, ToolbarButton)

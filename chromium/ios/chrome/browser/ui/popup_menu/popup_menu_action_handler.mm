@@ -1,18 +1,17 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_action_handler.h"
 
-#include "base/bind.h"
-#include "base/check.h"
-#include "base/feature_list.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "base/notreached.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/open_from_clipboard/clipboard_recent_content.h"
-#include "ios/chrome/browser/chrome_url_constants.h"
+#import "base/bind.h"
+#import "base/check.h"
+#import "base/feature_list.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
@@ -28,10 +27,11 @@
 #import "ios/chrome/browser/ui/popup_menu/public/cells/popup_menu_item.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_table_view_controller.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/web/public/web_state.h"
-#include "url/gurl.h"
+#import "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -239,10 +239,19 @@ using base::UserMetricsAction;
           openURLInNewTab:[OpenNewTabCommand commandWithURLFromChrome:
                                                  GURL(kChromeUIManagementURL)]];
       break;
+    case PopupMenuActionPriceNotifications:
+      RecordAction(UserMetricsAction("MobileMenuPriceNotifications"));
+      // TODO(crbug.com/1371166) Once the Price Notifications coordinator has
+      // been merged into the codebase, access that coordinator to display the
+      // Price Notifications UI.
+      break;
+
     // Vivaldi
     case PopupMenuActionNotes:
-     [self.dispatcher showNotesManager];
+     [self.browserCoordinatorCommandsHandler showNotesManager];
+
      break;
+
     default:
       NOTREACHED() << "Unexpected identifier";
       break;

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "base/callback_forward.h"
 #include "base/component_export.h"
 #include "base/observer_list_types.h"
+#include "base/strings/string_piece.h"
 #include "chromeos/dbus/common/dbus_client.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
 
@@ -26,10 +27,9 @@ namespace dbus {
 class Response;
 }
 
-// TODO(tbarzic): We should move these enums inside CrosDisksClient,
-// to be clearer where they come from. Also, most of these are partially or
-// completely duplicated in third_party/dbus/service_constants.h. We should
-// probably use enums from service_contstants directly.
+// TODO(crbug.com/1368408): Most of these are partially or completely duplicated
+// in third_party/dbus/service_constants.h. We should probably use enums from
+// service_contstants directly.
 namespace ash {
 
 // Enum describing types of mount used by cros-disks.
@@ -83,7 +83,8 @@ enum class MountError {
   kNeedPassword = 17,
   kInProgress = 18,
   kCancelled = 19,
-  kCount,
+  kBusy = 20,
+  kMaxValue = 20,
 };
 
 // Output operator for logging.
@@ -105,24 +106,33 @@ enum class RenameError {
   kInvalidCharacter,
 };
 
+// Output operator for logging.
+COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS)
+std::ostream& operator<<(std::ostream& out, RenameError error);
+
 // Format error reported by cros-disks.
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+// See enum CrosDisksClientFormatError in tools/metrics/histograms/enums.xml.
 enum class FormatError {
-  kNone,
-  kUnknown,
-  kInternal,
-  kInvalidDevicePath,
-  kDeviceBeingFormatted,
-  kUnsupportedFilesystem,
-  kFormatProgramNotFound,
-  kFormatProgramFailed,
-  kDeviceNotAllowed,
-  kInvalidOptions,
-  kLongName,
-  kInvalidCharacter,
-  kCount,
+  kNone = 0,
+  kUnknown = 1,
+  kInternal = 2,
+  kInvalidDevicePath = 3,
+  kDeviceBeingFormatted = 4,
+  kUnsupportedFilesystem = 5,
+  kFormatProgramNotFound = 6,
+  kFormatProgramFailed = 7,
+  kDeviceNotAllowed = 8,
+  kInvalidOptions = 9,
+  kLongName = 10,
+  kInvalidCharacter = 11,
+  kMaxValue = 11,
 };
+
+// Output operator for logging.
+COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS)
+std::ostream& operator<<(std::ostream& out, FormatError error);
 
 // Partition error reported by cros-disks.
 enum class PartitionError {
@@ -136,6 +146,10 @@ enum class PartitionError {
   kDeviceNotAllowed = 7,
 };
 
+// Output operator for logging.
+COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS)
+std::ostream& operator<<(std::ostream& out, PartitionError error);
+
 // Event type each corresponding to a signal sent from cros-disks.
 enum class MountEventType {
   kDiskAdded,
@@ -145,6 +159,10 @@ enum class MountEventType {
   kDeviceRemoved,
   kDeviceScanned,
 };
+
+// Output operator for logging.
+COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS)
+std::ostream& operator<<(std::ostream& out, MountEventType event);
 
 // Mount option to control write permission to a device.
 enum class MountAccessMode {
@@ -248,20 +266,11 @@ class COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS) DiskInfo {
   const std::string& file_system_type() const { return file_system_type_; }
 
  private:
-  void InitializeFromResponse(dbus::Response* response);
+  bool InitializeFromResponse(dbus::Response* response);
 
   std::string device_path_;
   std::string mount_path_;
   std::string storage_device_path_;
-  bool is_drive_;
-  bool has_media_;
-  bool on_boot_device_;
-  bool on_removable_device_;
-  bool is_read_only_;
-  bool is_hidden_;
-  bool is_virtual_;
-  bool is_auto_mountable_;
-
   std::string file_path_;
   std::string label_;
   std::string vendor_id_;
@@ -269,32 +278,61 @@ class COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS) DiskInfo {
   std::string product_id_;
   std::string product_name_;
   std::string drive_model_;
-  DeviceType device_type_;
-  int bus_number_;
-  int device_number_;
-  uint64_t total_size_in_bytes_;
   std::string uuid_;
   std::string file_system_type_;
+  uint64_t total_size_in_bytes_ = 0;
+  DeviceType device_type_ = DeviceType::kUnknown;
+  int bus_number_ = 0;
+  int device_number_ = 0;
+  bool is_drive_ = false;
+  bool has_media_ = false;
+  bool on_boot_device_ = false;
+  bool on_removable_device_ = false;
+  bool is_read_only_ = false;
+  bool is_hidden_ = true;
+  bool is_virtual_ = false;
+  bool is_auto_mountable_ = false;
 };
 
 // A struct to represent information about a mount point sent from cros-disks.
-struct MountEntry {
-  MountError error_code = MountError::kUnknown;
+struct COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS) MountPoint {
+  // Device or archive path.
   std::string source_path;
-  MountType mount_type = MountType::kInvalid;
+  // Mounted path.
   std::string mount_path;
+  // Type of mount.
+  MountType mount_type = MountType::kInvalid;
+  // Condition of mount.
+  MountError mount_error = MountError::kNone;
+  // Progress percent between 0 and 100 when mount_error is kInProgress.
   int progress_percent = 0;
+  // Read-only file system?
+  bool read_only = false;
+
+  MountPoint(const MountPoint&);
+  MountPoint& operator=(const MountPoint&);
+
+  MountPoint(MountPoint&&);
+  MountPoint& operator=(MountPoint&&);
+
+  MountPoint();
+  MountPoint(base::StringPiece source_path,
+             base::StringPiece mount_path,
+             MountType mount_type = MountType::kInvalid,
+             MountError mount_error = MountError::kNone,
+             int progress_percent = 0,
+             bool read_only = false);
 };
 
 // Output operator for logging.
 COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS)
-std::ostream& operator<<(std::ostream& out, const MountEntry& entry);
+std::ostream& operator<<(std::ostream& out, const MountPoint& entry);
 
 // A class to make the actual DBus calls for cros-disks service.
 // This class only makes calls, result/error handling should be done
 // by callbacks.
 class COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS) CrosDisksClient
-    : public DBusClient {
+    : public chromeos::DBusClient {
  public:
   // A callback to handle the result of EnumerateDevices.
   // The argument is the enumerated device paths.
@@ -303,7 +341,7 @@ class COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS) CrosDisksClient
 
   // A callback to handle the result of EnumerateMountEntries.
   // The argument is the enumerated mount entries.
-  typedef base::OnceCallback<void(const std::vector<MountEntry>& entries)>
+  typedef base::OnceCallback<void(const std::vector<MountPoint>& entries)>
       EnumerateMountEntriesCallback;
 
   // A callback to handle the result of GetDeviceProperties.
@@ -326,10 +364,10 @@ class COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS) CrosDisksClient
                               const std::string& device_path) = 0;
 
     // Called when a MountCompleted signal is received.
-    virtual void OnMountCompleted(const MountEntry& entry) = 0;
+    virtual void OnMountCompleted(const MountPoint& entry) = 0;
 
     // Called when a MountProgress signal is received.
-    virtual void OnMountProgress(const MountEntry& entry) = 0;
+    virtual void OnMountProgress(const MountPoint& entry) = 0;
 
     // Called when a FormatCompleted signal is received.
     virtual void OnFormatCompleted(FormatError error_code,
@@ -376,7 +414,7 @@ class COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS) CrosDisksClient
                      const std::vector<std::string>& mount_options,
                      MountAccessMode access_mode,
                      RemountOption remount,
-                     VoidDBusMethodCallback callback) = 0;
+                     chromeos::VoidDBusMethodCallback callback) = 0;
 
   // Calls Unmount method.  On method call completion, |callback| is called
   // with the error code.
@@ -398,7 +436,7 @@ class COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS) CrosDisksClient
   virtual void Format(const std::string& device_path,
                       const std::string& filesystem,
                       const std::string& label,
-                      VoidDBusMethodCallback callback) = 0;
+                      chromeos::VoidDBusMethodCallback callback) = 0;
 
   // Calls SinglePartitionFormat async method. |callback| is called when
   // response received.
@@ -409,7 +447,7 @@ class COMPONENT_EXPORT(ASH_DBUS_CROS_DISKS) CrosDisksClient
   // success, or with |false| otherwise.
   virtual void Rename(const std::string& device_path,
                       const std::string& volume_name,
-                      VoidDBusMethodCallback callback) = 0;
+                      chromeos::VoidDBusMethodCallback callback) = 0;
 
   // Calls GetDeviceProperties method.  |callback| is called after the method
   // call succeeds, otherwise, |error_callback| is called.

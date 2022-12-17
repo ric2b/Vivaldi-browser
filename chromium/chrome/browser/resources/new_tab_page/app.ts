@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,13 +6,14 @@ import './iframe.js';
 import './realbox/realbox.js';
 import './logo.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
-import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 
+import {startColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {ClickInfo, Command} from 'chrome://resources/js/browser_command/browser_command.mojom-webui.js';
 import {BrowserCommandProxy} from 'chrome://resources/js/browser_command/browser_command_proxy.js';
 import {hexColorToSkColor, skColorToRgba} from 'chrome://resources/js/color_utils.js';
-import {FocusOutlineManager} from 'chrome://resources/js/cr/ui/focus_outline_manager.m.js';
-import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
+import {EventTracker} from 'chrome://resources/js/event_tracker.js';
+import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
 import {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
 import {DomIf, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -21,6 +22,7 @@ import {BackgroundManager} from './background_manager.js';
 import {CustomizeDialogPage} from './customize_dialog_types.js';
 import {loadTimeData} from './i18n_setup.js';
 import {IframeElement} from './iframe.js';
+import {LensUploadDialogElement} from './lens_upload_dialog.js';
 import {LogoElement} from './logo.js';
 import {recordLoadDuration} from './metrics_utils.js';
 import {PageCallbackRouter, PageHandlerRemote, Theme} from './new_tab_page.mojom-webui.js';
@@ -59,6 +61,7 @@ export enum NtpElement {
 }
 
 const CUSTOMIZE_URL_PARAM: string = 'customize';
+const OGB_IFRAME_ORIGIN = 'chrome-untrusted://new-tab-page';
 
 function recordClick(element: NtpElement) {
   chrome.metricsPrivate.recordEnumerationValue(
@@ -92,6 +95,11 @@ export class AppElement extends PolymerElement {
 
   static get properties() {
     return {
+      oneGoogleBarIframeOrigin_: {
+        type: String,
+        value: OGB_IFRAME_ORIGIN,
+      },
+
       oneGoogleBarIframePath_: {
         type: String,
         value: () => {
@@ -99,20 +107,8 @@ export class AppElement extends PolymerElement {
           params.set(
               'paramsencoded',
               btoa(window.location.search.replace(/^[?]/, '&')));
-          return `chrome-untrusted://new-tab-page/one-google-bar?${params}`;
+          return `${OGB_IFRAME_ORIGIN}/one-google-bar?${params}`;
         },
-      },
-
-      oneGoogleBarLoaded_: {
-        type: Boolean,
-        observer: 'notifyOneGoogleBarDarkThemeEnabledChange_',
-      },
-
-      oneGoogleBarDarkThemeEnabled_: {
-        type: Boolean,
-        computed: `computeOneGoogleBarDarkThemeEnabled_(oneGoogleBarLoaded_,
-            theme_)`,
-        observer: 'notifyOneGoogleBarDarkThemeEnabledChange_',
       },
 
       theme_: {
@@ -180,9 +176,14 @@ export class AppElement extends PolymerElement {
         type: Boolean,
       },
 
+      realboxLensSearchEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('realboxLensSearch'),
+      },
+
       realboxShown_: {
         type: Boolean,
-        computed: 'computeRealboxShown_(theme_)',
+        computed: 'computeRealboxShown_(showLensUploadDialog_)',
       },
 
       logoEnabled_: {
@@ -254,6 +255,14 @@ export class AppElement extends PolymerElement {
         observer: 'onPromoAndModulesLoadedChange_',
       },
 
+      removeScrim_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('removeScrim'),
+        reflectToAttribute: true,
+      },
+
+      showLensUploadDialog_: Boolean,
+
       /**
        * If true, renders additional elements that were not deemed crucial to
        * to show up immediately on load.
@@ -262,9 +271,14 @@ export class AppElement extends PolymerElement {
     };
   }
 
+  static get observers() {
+    return [
+      'udpateOneGoogleBarAppearance_(oneGoogleBarLoaded_, removeScrim_, showBackgroundImage_, theme_)',
+    ];
+  }
+
   private oneGoogleBarIframePath_: string;
   private oneGoogleBarLoaded_: boolean;
-  private oneGoogleBarDarkThemeEnabled_: boolean;
   private theme_: Theme;
   private showCustomizeDialog_: boolean;
   private selectedCustomizeDialogPage_: string|null;
@@ -278,7 +292,9 @@ export class AppElement extends PolymerElement {
   private customizeChromeSidePanelShowing_: boolean;
   private logoColor_: string;
   private singleColoredLogo_: boolean;
+  private realboxLensSearchEnabled_: boolean;
   private realboxShown_: boolean;
+  private showLensUploadDialog_: boolean = false;
   private logoEnabled_: boolean;
   private oneGoogleBarEnabled_: boolean;
   private shortcutsEnabled_: boolean;
@@ -291,6 +307,7 @@ export class AppElement extends PolymerElement {
   private modulesLoaded_: boolean;
   private modulesShownToUser: boolean;
   private promoAndModulesLoaded_: boolean;
+  private removeScrim_: boolean;
   private lazyRender_: boolean;
 
   private callbackRouter_: PageCallbackRouter;
@@ -328,6 +345,8 @@ export class AppElement extends PolymerElement {
           buckets: 200,
         },
         Math.floor(document.documentElement.clientHeight));
+
+    startColorChangeUpdater();
   }
 
   override connectedCallback() {
@@ -396,15 +415,19 @@ export class AppElement extends PolymerElement {
     performance.measure('app-creation', 'app-creation-start');
   }
 
-  private computeOneGoogleBarDarkThemeEnabled_(): boolean {
-    return this.theme_ && this.theme_.isDark;
-  }
-
-  private notifyOneGoogleBarDarkThemeEnabledChange_() {
+  // Called to update the OGB of relevant NTP state changes.
+  private udpateOneGoogleBarAppearance_() {
     if (this.oneGoogleBarLoaded_) {
+      const isNtpDarkTheme =
+          this.theme_ && (!!this.theme_.backgroundImage || this.theme_.isDark);
       $$<IframeElement>(this, '#oneGoogleBar')!.postMessage({
-        type: 'enableDarkTheme',
-        enabled: this.oneGoogleBarDarkThemeEnabled_,
+        type: 'updateAppearance',
+        // We should be using a light OGB for dark themes and vice versa.
+        applyLightTheme: isNtpDarkTheme,
+        // Only apply background protection if using a custom background in
+        // combination with a light OGB theme.
+        applyBackgroundProtection:
+            this.removeScrim_ && this.showBackgroundImage_ && isNtpDarkTheme,
       });
     }
   }
@@ -423,11 +446,9 @@ export class AppElement extends PolymerElement {
         '';
   }
 
-  private computeRealboxShown_(): boolean {
-    // If realbox is to match the Omnibox's theme, keep it hidden until the
-    // theme arrives. Otherwise mismatching colors will cause flicker.
-    return !loadTimeData.getBoolean('realboxMatchOmniboxTheme') ||
-        !!this.theme_;
+  private computeRealboxShown_(showLensUploadDialog: boolean): boolean {
+    // Do not show the realbox if the upload dialog is showing.
+    return !showLensUploadDialog;
   }
 
   private computePromoAndModulesLoaded_(): boolean {
@@ -445,6 +466,19 @@ export class AppElement extends PolymerElement {
   private onOpenVoiceSearch_() {
     this.showVoiceSearchOverlay_ = true;
     recordVoiceAction(VoiceAction.ACTIVATE_SEARCH_BOX);
+  }
+
+  private onOpenLensSearch_() {
+    // TODO(crbug.com/1371943): Use shadow root to select upload dialog until
+    // feature is no-longer wrapped by dom-if.
+    (this.shadowRoot!.querySelector(LensUploadDialogElement.is)! as
+     LensUploadDialogElement)
+        .openDialog();
+    this.showLensUploadDialog_ = true;
+  }
+
+  private onCloseLensSearch_() {
+    this.showLensUploadDialog_ = false;
   }
 
   private onCustomizeClick_() {

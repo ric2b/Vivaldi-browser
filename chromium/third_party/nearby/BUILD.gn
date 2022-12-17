@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import("//build/util/process_version.gni")
@@ -224,8 +224,15 @@ source_set("connections_implementation_analytics") {
     ":nearby_include_config",
     ":nearby_defines",
   ]
-  sources = [ "src/connections/implementation/analytics/analytics_recorder.cc" ]
-  public = [ "src/connections/implementation/analytics/analytics_recorder.h" ]
+  sources = [
+    "src/connections/implementation/analytics/analytics_recorder.cc",
+    "src/connections/implementation/analytics/throughput_recorder.cc",
+  ]
+  public = [
+    "src/connections/implementation/analytics/analytics_recorder.h",
+    "src/connections/implementation/analytics/packet_meta_data.h",
+    "src/connections/implementation/analytics/throughput_recorder.h",
+  ]
   public_deps = [
     ":analytics_event_logger",
     ":connections_enums_proto",
@@ -396,6 +403,7 @@ source_set("platform_api_comm") {
     "src/internal/platform/implementation/wifi_lan.h",
   ]
   public_deps = [
+    ":connections_credential_proto",
     ":offline_wire_formats_proto",
     ":platform_base",
     ":platform_base_cancellation_flag",
@@ -703,6 +711,21 @@ proto_library("connections_log_proto") {
     ":connections_enums_proto",
     ":error_code_enums_proto",
   ]
+}
+
+# src/internal/proto
+proto_library("connections_credential_proto") {
+  proto_in_dir = "src"
+  sources = [ "${proto_in_dir}/internal/proto/credential.proto" ]
+  proto_out_dir = "third_party/nearby"
+  proto_deps = [ ":connections_device_metadata_proto" ]
+  link_deps = [ ":connections_device_metadata_proto" ]
+}
+
+proto_library("connections_device_metadata_proto") {
+  proto_in_dir = "src"
+  sources = [ "${proto_in_dir}/internal/proto/device_metadata.proto" ]
+  proto_out_dir = "third_party/nearby"
 }
 
 # src/connections/implementation/proto

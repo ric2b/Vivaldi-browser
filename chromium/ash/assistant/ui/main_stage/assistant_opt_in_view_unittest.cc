@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,8 +31,8 @@ class AssistantOptInViewUnittest : public AssistantAshTestBase {};
 // case makes sure that styled label is relayouted correctly.
 TEST_F(AssistantOptInViewUnittest, RotateSmallScreen) {
   UpdateDisplay(base::StringPrintf("%dx%d", kLongerEdge, kShorterEdge));
-  // Test in tablet mode because ProductivityLauncher doesn't resize lower than
-  // 640 dips wide in clamshell.
+  // Test in tablet mode because the launcher in clamshell mode doesn't resize
+  // lower than 640 dips wide.
   SetTabletMode(true);
   ShowAssistantUi();
 

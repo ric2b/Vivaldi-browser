@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,8 @@
 #include "ash/quick_pair/common/protocol.h"
 #include "ash/quick_pair/fast_pair_handshake/fast_pair_data_encryptor_impl.h"
 #include "ash/quick_pair/fast_pair_handshake/fast_pair_gatt_service_client_impl.h"
-#include "ash/services/quick_pair/public/cpp/decrypted_response.h"
 #include "base/callback.h"
+#include "chromeos/ash/services/quick_pair/public/cpp/decrypted_response.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/public/cpp/bluetooth_address.h"
 

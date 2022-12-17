@@ -2,12 +2,17 @@
 
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 
+#include <string>
+#include "base/callback.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "components/bookmarks/browser/base_bookmark_model_observer.h"
+#include "components/bookmarks/browser/bookmark_codec.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_storage.h"
@@ -352,4 +357,73 @@ void SetNodeThumbnail(BookmarkModel* model,
   VivaldiBookmarkModelFriend::SetNodeMetaInfoWithIndexChange(
       model, node, GetMetaNames().thumbnail, thumbnail);
 }
+
+bool WriteBookmarkData(const base::Value& value,
+                       BookmarkWriteFunc write_func,
+                       BookmarkWriteFunc write_func_att) {
+  static const char kNickLabel[] = "\" NICKNAME=\"";
+  static const char kDescriptionLabel[] = "\" DESCRIPTION=\"";
+  static const char kSpeedDialLabel[] = "\" SPEEDDIAL=\"";
+
+  const base::Value* meta_info =
+      value.FindDictKey(bookmarks::BookmarkCodec::kMetaInfo);
+  if (!meta_info)
+    return true;
+
+  const std::string* nick_name = meta_info->FindStringKey(GetMetaNames().nickname);
+  const std::string* description=
+      meta_info->FindStringKey(GetMetaNames().description);
+  const std::string* speed_dial =
+      meta_info->FindStringKey(GetMetaNames().speeddial);
+
+  if (nick_name &&
+      (!write_func.Run(kNickLabel) || !write_func_att.Run(*nick_name))) {
+    return false;
+  }
+
+  if (description && (!write_func.Run(kDescriptionLabel) ||
+                      !write_func_att.Run(*description))) {
+    return false;
+  }
+
+  if (speed_dial && *speed_dial == GetMetaNames().true_value &&
+      (!write_func.Run(kSpeedDialLabel) ||
+       !write_func_att.Run(GetMetaNames().true_value))) {
+    return false;
+  }
+
+  return true;
+}
+
+void ReadBookmarkAttributes(BookmarkAttributeReadFunc GetAttribute,
+                            CodePagetoUTF16Func CodePagetoUTF16,
+                            std::u16string* nickname,
+                            std::u16string* description,
+                            bool* is_speeddial_folder) {
+  static const char kNickAttrName[] = "NICKNAME";
+  static const char kDescriptionAttrName[] = "DESCRIPTION";
+  static const char kSpeedDialAttrName[] = "SPEEDDIAL";
+
+  std::string value;
+  if (nickname) {
+    if (GetAttribute.Run(kNickAttrName, &value)) {
+      CodePagetoUTF16(value, nickname);
+      *nickname = base::UnescapeForHTML(*nickname);
+    }
+  }
+  if (description) {
+      if (GetAttribute.Run(kDescriptionAttrName, &value)) {
+        CodePagetoUTF16(value, description);
+        *description = base::UnescapeForHTML(*description);
+      }
+  }
+  if (is_speeddial_folder) {
+    if (GetAttribute.Run(kSpeedDialAttrName, &value) &&
+        base::EqualsCaseInsensitiveASCII(value, "true"))
+      *is_speeddial_folder = true;
+    else
+      *is_speeddial_folder = false;
+  }
+}
+
 }  // namespace vivaldi_bookmark_kit

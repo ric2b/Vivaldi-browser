@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -93,23 +93,23 @@ void AddMediaStreamSourceConstraints(content::WebContents* target_contents,
 
   if (options->audio && *options->audio) {
     if (!options->audio_constraints)
-      options->audio_constraints = std::make_unique<MediaStreamConstraint>();
-    constraints_to_modify[0] = options->audio_constraints.get();
+      options->audio_constraints.emplace();
+    constraints_to_modify[0] = &*options->audio_constraints;
   }
 
   if (options->video && *options->video) {
     if (!options->video_constraints)
-      options->video_constraints = std::make_unique<MediaStreamConstraint>();
-    constraints_to_modify[1] = options->video_constraints.get();
+      options->video_constraints.emplace();
+    constraints_to_modify[1] = &*options->video_constraints;
   }
 
   // Append chrome specific tab constraints.
   for (MediaStreamConstraint* msc : constraints_to_modify) {
     if (!msc)
       continue;
-    base::DictionaryValue* constraint = &msc->mandatory.additional_properties;
-    constraint->SetStringKey(kMediaStreamSource, kMediaStreamSourceTab);
-    constraint->SetStringKey(kMediaStreamSourceId, device_id);
+    base::Value::Dict* constraint = &msc->mandatory.additional_properties;
+    constraint->Set(kMediaStreamSource, kMediaStreamSourceTab);
+    constraint->Set(kMediaStreamSourceId, device_id);
   }
 }
 
@@ -216,7 +216,7 @@ ExtensionFunction::ResponseAction TabCaptureCaptureFunction::Run() {
   // virtual audio/video capture devices and set up all the data flows.  The
   // custom JS bindings can be found here:
   // chrome/renderer/resources/extensions/tab_capture_custom_bindings.js
-  base::Value result = params->options.ToValue()->Clone();
+  base::Value result(params->options.ToValue());
   return RespondNow(OneArgument(std::move(result)));
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2010 The Chromium Authors. All rights reserved.
+// Copyright 2010 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,8 +39,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, EventsAreUnregistered) {
   EventRouter* event_router = EventRouter::Get(profile());
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
 
-  constexpr char test_extension_name[] = "events_are_unregistered";
-  ASSERT_TRUE(RunExtensionTest(test_extension_name, {.page_url = "page1.html"}))
+  static constexpr char test_extension_name[] = "events_are_unregistered";
+  ASSERT_TRUE(
+      RunExtensionTest(test_extension_name, {.extension_url = "page1.html"}))
       << message_;
 
   // Find the extension we just installed by looking for the path.

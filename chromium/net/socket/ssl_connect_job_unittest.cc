@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,8 +70,8 @@ IPAddress ParseIP(const std::string& ip) {
 // Just check that all connect times are set to base::TimeTicks::Now(), for
 // tests that don't update the mocked out time.
 void CheckConnectTimesSet(const LoadTimingInfo::ConnectTiming& connect_timing) {
-  EXPECT_EQ(base::TimeTicks::Now(), connect_timing.dns_start);
-  EXPECT_EQ(base::TimeTicks::Now(), connect_timing.dns_end);
+  EXPECT_EQ(base::TimeTicks::Now(), connect_timing.domain_lookup_start);
+  EXPECT_EQ(base::TimeTicks::Now(), connect_timing.domain_lookup_end);
   EXPECT_EQ(base::TimeTicks::Now(), connect_timing.connect_start);
   EXPECT_EQ(base::TimeTicks::Now(), connect_timing.ssl_start);
   EXPECT_EQ(base::TimeTicks::Now(), connect_timing.ssl_end);
@@ -83,8 +83,8 @@ void CheckConnectTimesSet(const LoadTimingInfo::ConnectTiming& connect_timing) {
 // proxy.
 void CheckConnectTimesExceptDnsSet(
     const LoadTimingInfo::ConnectTiming& connect_timing) {
-  EXPECT_TRUE(connect_timing.dns_start.is_null());
-  EXPECT_TRUE(connect_timing.dns_end.is_null());
+  EXPECT_TRUE(connect_timing.domain_lookup_start.is_null());
+  EXPECT_TRUE(connect_timing.domain_lookup_end.is_null());
   EXPECT_EQ(base::TimeTicks::Now(), connect_timing.connect_start);
   EXPECT_EQ(base::TimeTicks::Now(), connect_timing.ssl_start);
   EXPECT_EQ(base::TimeTicks::Now(), connect_timing.ssl_end);
@@ -103,7 +103,7 @@ class SSLConnectJobTest : public WithTaskEnvironment, public testing::Test {
         direct_transport_socket_params_(
             base::MakeRefCounted<TransportSocketParams>(
                 url::SchemeHostPort(url::kHttpsScheme, "host", 443),
-                NetworkIsolationKey(),
+                NetworkAnonymizationKey(),
                 SecureDnsPolicy::kAllow,
                 OnHostResolutionCallback(),
                 /*supported_alpns=*/
@@ -111,7 +111,7 @@ class SSLConnectJobTest : public WithTaskEnvironment, public testing::Test {
         proxy_transport_socket_params_(
             base::MakeRefCounted<TransportSocketParams>(
                 HostPortPair("proxy", 443),
-                NetworkIsolationKey(),
+                NetworkAnonymizationKey(),
                 SecureDnsPolicy::kAllow,
                 OnHostResolutionCallback(),
                 /*supported_alpns=*/base::flat_set<std::string>({}))),
@@ -119,7 +119,7 @@ class SSLConnectJobTest : public WithTaskEnvironment, public testing::Test {
             proxy_transport_socket_params_,
             true,
             HostPortPair("sockshost", 443),
-            NetworkIsolationKey(),
+            NetworkAnonymizationKey(),
             TRAFFIC_ANNOTATION_FOR_TESTS)),
         http_proxy_socket_params_(base::MakeRefCounted<HttpProxySocketParams>(
             proxy_transport_socket_params_,
@@ -128,7 +128,7 @@ class SSLConnectJobTest : public WithTaskEnvironment, public testing::Test {
             HostPortPair("host", 80),
             /*tunnel=*/true,
             TRAFFIC_ANNOTATION_FOR_TESTS,
-            NetworkIsolationKey())),
+            NetworkAnonymizationKey())),
         common_connect_job_params_(session_->CreateCommonConnectJobParams()) {}
 
   ~SSLConnectJobTest() override = default;
@@ -149,7 +149,7 @@ class SSLConnectJobTest : public WithTaskEnvironment, public testing::Test {
         proxy == ProxyServer::SCHEME_SOCKS5 ? socks_socket_params_ : nullptr,
         proxy == ProxyServer::SCHEME_HTTP ? http_proxy_socket_params_ : nullptr,
         HostPortPair("host", 443), SSLConfig(), PRIVACY_MODE_DISABLED,
-        NetworkIsolationKey());
+        NetworkAnonymizationKey());
   }
 
   void AddAuthToCache() {
@@ -157,7 +157,7 @@ class SSLConnectJobTest : public WithTaskEnvironment, public testing::Test {
     const std::u16string kBar(u"bar");
     session_->http_auth_cache()->Add(
         url::SchemeHostPort(GURL("http://proxy:443/")), HttpAuth::AUTH_PROXY,
-        "MyRealm1", HttpAuth::AUTH_SCHEME_BASIC, NetworkIsolationKey(),
+        "MyRealm1", HttpAuth::AUTH_SCHEME_BASIC, NetworkAnonymizationKey(),
         "Basic realm=MyRealm1", AuthCredentials(kFoo, kBar), "/");
   }
 
@@ -365,8 +365,9 @@ TEST_F(SSLConnectJobTest, BasicDirectAsync) {
   // |dns_start|, which is the only one recorded before the FastForwardBy()
   // call. The test classes don't allow any other phases to be triggered on
   // demand, or delayed by a set interval.
-  EXPECT_EQ(start_time, ssl_connect_job->connect_timing().dns_start);
-  EXPECT_EQ(resolve_complete_time, ssl_connect_job->connect_timing().dns_end);
+  EXPECT_EQ(start_time, ssl_connect_job->connect_timing().domain_lookup_start);
+  EXPECT_EQ(resolve_complete_time,
+            ssl_connect_job->connect_timing().domain_lookup_end);
   EXPECT_EQ(resolve_complete_time,
             ssl_connect_job->connect_timing().connect_start);
   EXPECT_EQ(resolve_complete_time, ssl_connect_job->connect_timing().ssl_start);
@@ -446,7 +447,7 @@ TEST_F(SSLConnectJobTest, SecureDnsPolicy) {
     direct_transport_socket_params_ =
         base::MakeRefCounted<TransportSocketParams>(
             url::SchemeHostPort(url::kHttpsScheme, "host", 443),
-            NetworkIsolationKey(), secure_dns_policy,
+            NetworkAnonymizationKey(), secure_dns_policy,
             OnHostResolutionCallback(),
             /*supported_alpns=*/base::flat_set<std::string>{"h2", "http/1.1"});
     auto common_connect_job_params = session_->CreateCommonConnectJobParams();

@@ -23,7 +23,7 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
                                          TypedUrlResults* results) {
   results->clear();
 
-  std::string sql("SELECT u.url, u.title, ");
+  std::string sql("SELECT u.url, u.title, u.typed_count, ");
   sql.append("k.url_id IS NOT NULL, k.keyword_id, k.normalized_term ");
   sql.append("FROM urls AS u ");
   sql.append("LEFT JOIN keyword_search_terms AS k ON u.id = k.url_id ");
@@ -53,10 +53,11 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
     TypedUrlResult result;
     result.url = GURL(statement.ColumnString(0));
     result.title = statement.ColumnString(1);
-    bool is_keyword = statement.ColumnBool(2);
+    result.typed_count = statement.ColumnInt(2);
+    bool is_keyword = statement.ColumnBool(3);
     if (is_keyword) {
-      result.keyword_id = statement.ColumnInt64(3);
-      result.terms = statement.ColumnString(4);
+      result.keyword_id = statement.ColumnInt64(4);
+      result.terms = statement.ColumnString(5);
     } else {
       result.keyword_id = -1;
     }

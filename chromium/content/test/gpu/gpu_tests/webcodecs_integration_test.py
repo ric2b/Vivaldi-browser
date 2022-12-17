@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -102,11 +102,16 @@ class WebCodecsIntegrationTest(gpu_integration_test.GpuIntegrationTest):
                'use_worker': True
            }])
 
-    for codec in video_codecs:
-      yield ('WebCodecs_EncodeDecode_' + codec, 'encode-decode.html', [{
-          'codec':
-          codec
-      }])
+    for source_type in ['offscreen', 'arraybuffer']:
+      for codec in video_codecs:
+        for acc in accelerations:
+          args = (source_type, codec, acc)
+          yield ('WebCodecs_EncodeDecode_%s_%s_%s' % args, 'encode-decode.html',
+                 [{
+                     'source_type': source_type,
+                     'codec': codec,
+                     'acceleration': acc
+                 }])
 
     for source_type in frame_sources:
       for codec in video_codecs:

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -113,6 +113,9 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     // menus from the context.
     private static boolean sMustUseWebContentsContext;
 
+    // Used in tests to disable magnifier.
+    private static boolean sDisableMagnifier;
+
     private static final class UserDataFactoryLazyHolder {
         private static final UserDataFactory<SelectionPopupControllerImpl> INSTANCE =
                 SelectionPopupControllerImpl::new;
@@ -188,11 +191,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     private boolean mPreserveSelectionOnNextLossOfFocus;
 
-    /**
-     * The {@link SelectionInsertionHandleObserver} that processes handle events, or {@code null} if
-     * none exists.
-     */
-    private SelectionInsertionHandleObserver mHandleObserver;
+    private MagnifierAnimator mMagnifierAnimator;
 
     private AdditionalMenuItemProvider mAdditionalMenuItemProvider;
 
@@ -245,6 +244,11 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         return new SelectionPopupControllerImpl(webContents, null, false);
     }
 
+    @VisibleForTesting
+    public static void setDisableMagnifierForTesting(boolean disable) {
+        sDisableMagnifier = disable;
+    }
+
     /**
      * Create {@link SelectionPopupControllerImpl} instance.
      * @param webContents WebContents instance.
@@ -293,7 +297,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
         mResultCallback = new SmartSelectionCallback();
         mLastSelectedText = "";
-        initHandleObserver();
+        initMagnifier();
         mAdditionalMenuItemProvider = ContentClassFactory.get().createAddtionalMenuItemProvider();
         getPopupController().registerPopup(this);
     }
@@ -332,7 +336,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
         if (view != null) view.setClickable(true);
         mView = view;
-        initHandleObserver();
+        initMagnifier();
     }
 
     // ImeEventObserver
@@ -642,7 +646,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
         mWindowAndroid = newWindowAndroid;
         mContext = mWebContents.getContext();
-        initHandleObserver();
+        initMagnifier();
         destroyPastePopup();
     }
 
@@ -812,6 +816,12 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             menu.removeItem(R.id.select_action_menu_copy);
             menu.removeItem(R.id.select_action_menu_share);
             menu.removeItem(R.id.select_action_menu_web_search);
+            // Vivaldi
+            if (BuildConfig.IS_VIVALDI) {
+                menu.removeItem(R.id.select_action_menu_translate);
+                menu.removeItem(R.id.select_action_menu_copy_to_note);
+                menu.removeItem(R.id.select_action_menu_append_to_note);
+            }
             return;
         }
 
@@ -1315,8 +1325,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
             case SelectionEventType.SELECTION_HANDLE_DRAG_STOPPED:
                 showContextMenuAtTouchHandle(left, bottom);
-                if (mHandleObserver != null) {
-                    mHandleObserver.handleDragStopped();
+                if (mMagnifierAnimator != null) {
+                    mMagnifierAnimator.handleDragStopped();
                 }
                 mIsInHandleDragging = false;
                 break;
@@ -1364,8 +1374,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                     showContextMenuAtTouchHandle(mSelectionRect.left, mSelectionRect.bottom);
                 }
                 mWasPastePopupShowingOnInsertionDragStart = false;
-                if (mHandleObserver != null) {
-                    mHandleObserver.handleDragStopped();
+                if (mMagnifierAnimator != null) {
+                    mMagnifierAnimator.handleDragStopped();
                 }
                 mIsInHandleDragging = false;
                 break;
@@ -1396,13 +1406,13 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             return;
         }
 
-        if (mHandleObserver != null) {
+        if (mMagnifierAnimator != null) {
             final float deviceScale = getDeviceScaleFactor();
             x *= deviceScale;
             // The selection coordinates are relative to the content viewport, but we need
             // coordinates relative to the containing View, so adding getContentOffsetYPix().
             y = y * deviceScale + mWebContents.getRenderCoordinates().getContentOffsetYPix();
-            mHandleObserver.handleDragStartedOrMoved(x, y);
+            mMagnifierAnimator.handleDragStartedOrMoved(x, y);
         }
     }
 
@@ -1473,19 +1483,19 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
      * Sets the handle observer, or null if none exists.
      */
     @VisibleForTesting
-    void setSelectionInsertionHandleObserver(
-            @Nullable SelectionInsertionHandleObserver handleObserver) {
-        mHandleObserver = handleObserver;
+    void setMagnifierAnimator(@Nullable MagnifierAnimator magnifierAnimator) {
+        mMagnifierAnimator = magnifierAnimator;
     }
 
-    private void initHandleObserver() {
-        mHandleObserver = ContentClassFactory.get().createHandleObserver(() -> {
+    private void initMagnifier() {
+        if (sDisableMagnifier || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return;
+        mMagnifierAnimator = new MagnifierAnimator(new MagnifierWrapperImpl(() -> {
             if (sShouldGetReadbackViewFromWindowAndroid) {
                 return mWindowAndroid == null ? null : mWindowAndroid.getReadbackView();
             } else {
                 return mView;
             }
-        });
+        }));
     }
 
     @CalledByNative

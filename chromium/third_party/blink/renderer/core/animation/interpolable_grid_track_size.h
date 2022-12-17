@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,8 @@ class CORE_EXPORT InterpolableGridTrackSize final : public InterpolableValue {
                             std::unique_ptr<InterpolableValue> max_value,
                             const GridTrackSizeType type);
   static std::unique_ptr<InterpolableGridTrackSize> Create(
-      const GridTrackSize& grid_track_size);
+      const GridTrackSize& grid_track_size,
+      float zoom);
 
   GridTrackSize CreateTrackSize(
       const CSSToLengthConversionData& conversion_data) const;

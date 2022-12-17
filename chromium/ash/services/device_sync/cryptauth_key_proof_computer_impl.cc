@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,12 +6,12 @@
 
 #include <vector>
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/device_sync/cryptauth_key.h"
 #include "ash/services/device_sync/proto/cryptauth_common.pb.h"
 #include "base/containers/span.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "crypto/ec_private_key.h"
 #include "crypto/ec_signature_creator.h"
 #include "crypto/hkdf.h"

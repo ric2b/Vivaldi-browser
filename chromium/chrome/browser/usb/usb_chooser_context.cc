@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,16 @@
 #include "services/device/public/cpp/usb/usb_ids.h"
 #include "services/device/public/mojom/usb_device.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/settings/cros_settings.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/crosapi/mojom/device_settings_service.mojom.h"
+#include "chromeos/startup/browser_params_proxy.h"
+#endif
 
 namespace {
 
@@ -103,6 +113,39 @@ base::Value DeviceIdsToValue(int vendor_id, int product_id) {
   return device_value;
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
+bool IsDetachable(int vid, int pid) {
+  // TOOD(huangs): Figure out how to do the following in Lacros, which does not
+  // have access to ash::CrosSettings (https://crbug.com/1219329).
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  const base::Value::List* policy_list;
+  if (ash::CrosSettings::Get()->GetList(ash::kUsbDetachableAllowlist,
+                                        &policy_list)) {
+    for (const auto& entry : *policy_list) {
+      if (entry.FindIntKey(ash::kUsbDetachableAllowlistKeyVid) == vid &&
+          entry.FindIntKey(ash::kUsbDetachableAllowlistKeyPid) == pid) {
+        return true;
+      }
+    }
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  const crosapi::mojom::DeviceSettings* device_settings =
+      chromeos::BrowserParamsProxy::Get()->DeviceSettings().get();
+  if (device_settings && device_settings->usb_detachable_allow_list) {
+    for (const auto& entry :
+         device_settings->usb_detachable_allow_list->usb_device_ids) {
+      if (entry->has_vendor_id && entry->vendor_id == vid &&
+          entry->has_product_id && entry->product_id == pid) {
+        return true;
+      }
+    }
+  }
+#endif
+  return false;
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
 bool IsMassStorageInterface(const device::mojom::UsbInterfaceInfo& interface) {
   for (auto& alternate : interface.alternates) {
     if (alternate->class_code == kUsbClassMassStorage)
@@ -112,10 +155,14 @@ bool IsMassStorageInterface(const device::mojom::UsbInterfaceInfo& interface) {
 }
 
 bool ShouldExposeDevice(const device::mojom::UsbDeviceInfo& device_info) {
+#if BUILDFLAG(IS_CHROMEOS)
+  if (IsDetachable(device_info.vendor_id, device_info.product_id))
+    return true;
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   // blink::USBDevice::claimInterface() disallows claiming mass storage
   // interfaces, but explicitly prevent access in the browser process as
   // ChromeOS would allow these interfaces to be claimed.
-
   for (auto& configuration : device_info.configurations) {
     if (configuration->interfaces.size() == 0) {
         return true;

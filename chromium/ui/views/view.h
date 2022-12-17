@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/as_const.h"
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/gtest_prod_util.h"
@@ -758,6 +757,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // specific to the current Layout Manager)
   virtual void Layout();
 
+  bool needs_layout() const { return needs_layout_; }
+
   // Mark this view and all parents to require a relayout. This ensures the
   // next call to Layout() will propagate to this view, even if the bounds of
   // parent views do not change.
@@ -858,6 +859,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
                                    const View* target,
                                    gfx::Point* point);
 
+  [[nodiscard]] static gfx::Point ConvertPointToTarget(const View* source,
+                                                       const View* target,
+                                                       const gfx::Point& point);
+
   // Convert |rect| from the coordinate system of |source| to the coordinate
   // system of |target|.
   //
@@ -867,6 +872,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   static void ConvertRectToTarget(const View* source,
                                   const View* target,
                                   gfx::RectF* rect);
+  [[nodiscard]] static gfx::RectF ConvertRectToTarget(const View* source,
+                                                      const View* target,
+                                                      const gfx::RectF& rect);
 
   // Convert a point from a View's coordinate system to that of its Widget.
   static void ConvertPointToWidget(const View* src, gfx::Point* point);
@@ -926,7 +934,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Returns the ColorProvider from the ColorProviderManager.
   ui::ColorProvider* GetColorProvider() {
     return const_cast<ui::ColorProvider*>(
-        base::as_const(*this).GetColorProvider());
+        std::as_const(*this).GetColorProvider());
   }
   const ui::ColorProvider* GetColorProvider() const;
 
@@ -936,7 +944,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // set. Warning: the default theme might not be correct; you should probably
   // override OnThemeChanged().
   ui::NativeTheme* GetNativeTheme() {
-    return const_cast<ui::NativeTheme*>(base::as_const(*this).GetNativeTheme());
+    return const_cast<ui::NativeTheme*>(std::as_const(*this).GetNativeTheme());
   }
   const ui::NativeTheme* GetNativeTheme() const;
 
@@ -1126,7 +1134,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Convenience method to retrieve the InputMethod associated with the
   // Widget that contains this view.
   ui::InputMethod* GetInputMethod() {
-    return const_cast<ui::InputMethod*>(base::as_const(*this).GetInputMethod());
+    return const_cast<ui::InputMethod*>(std::as_const(*this).GetInputMethod());
   }
   const ui::InputMethod* GetInputMethod() const;
 
@@ -1441,6 +1449,16 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   void RemoveObserver(ViewObserver* observer);
   bool HasObserver(const ViewObserver* observer) const;
 
+  // http://crbug.com/1162949 : Instrumentation that indicates if this is alive.
+  // Callers should not depend on this as it is meant to be temporary.
+  enum class LifeCycleState : uint32_t {
+    kAlive = 0x600D600D,
+    kDestroying = 0x90141013,
+    kDestroyed = 0xBAADBAAD,
+  };
+
+  LifeCycleState life_cycle_state() const { return life_cycle_state_; }
+
  protected:
   // Used to track a drag. RootView passes this into
   // ProcessMousePressed/Dragged.
@@ -1500,8 +1518,6 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // have changed. The visible bounds are the region of the View not clipped by
   // its ancestors. This is used for clipping NativeViewHost.
   virtual void OnVisibleBoundsChanged();
-
-  bool needs_layout() const { return needs_layout_; }
 
   // Tree operations -----------------------------------------------------------
 
@@ -1701,12 +1717,6 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   FRIEND_TEST_ALL_PREFIXES(ViewTest, PaintWithMovedViewUsesCache);
   FRIEND_TEST_ALL_PREFIXES(ViewTest, PaintWithMovedViewUsesCacheInRTL);
   FRIEND_TEST_ALL_PREFIXES(ViewTest, PaintWithUnknownInvalidation);
-
-  // http://crbug.com/1162949 : Instrumentation that indicates if this is alive.
-  enum class LifeCycleState : uint32_t {
-    kAlive = 0x600D600D,
-    kDestroyed = 0xBAADBAAD,
-  };
 
   // This is the default view layout. It is a very simple version of FillLayout,
   // which merely sets the bounds of the children to the content bounds. The

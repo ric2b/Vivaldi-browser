@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@ import static org.chromium.components.content_settings.PrefNames.NOTIFICATIONS_V
 
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -41,16 +40,18 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.build.annotations.UsedByReflection;
 import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.ExpandablePreferenceGroup;
+import org.chromium.components.browser_ui.settings.FragmentSettingsLauncher;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.ManagedPreferencesUtils;
 import org.chromium.components.browser_ui.settings.SearchUtils;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.AutoDarkMetrics.AutoDarkSettingsChangeSource;
 import org.chromium.components.browser_ui.site_settings.FourStateCookieSettingsPreference.CookieSettingsState;
@@ -87,24 +88,25 @@ import java.util.Set;
 public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         implements Preference.OnPreferenceChangeListener, Preference.OnPreferenceClickListener,
                    AddExceptionPreference.SiteAddedCallback,
-                   PreferenceManager.OnPreferenceTreeClickListener {
+                   PreferenceManager.OnPreferenceTreeClickListener, FragmentSettingsLauncher,
+                   FourStateCookieSettingsPreference.OnCookiesDetailsRequested {
     // The key to use to pass which category this preference should display,
     // e.g. Location/Popups/All sites (if blank).
     public static final String EXTRA_CATEGORY = "category";
     public static final String EXTRA_TITLE = "title";
+
+    private SettingsLauncher mSettingsLauncher;
+
+    @Override
+    public void setSettingsLauncher(SettingsLauncher settingsLauncher) {
+        mSettingsLauncher = settingsLauncher;
+    }
 
     /**
      * If present, the list of websites will be filtered by domain using
      * {@link UrlUtilities#getDomainAndRegistry}.
      */
     public static final String EXTRA_SELECTED_DOMAINS = "selected_domains";
-
-    /**
-     * {@link SharedPreferences} key that indicates whether the desktop site global setting was
-     * enabled by the user.
-     */
-    public static final String USER_ENABLED_DESKTOP_SITE_GLOBAL_SETTING_PREFERENCE_KEY =
-            "Chrome.RequestDesktopSiteGlobalSetting.UserEnabled";
 
     // The list that contains preferences.
     private RecyclerView mListView;
@@ -141,6 +143,15 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
 
     @Nullable
     private Set<String> mSelectedDomains;
+
+    @Override
+    public void onCookiesDetailsRequested(CookieSettingsState requestedPageState) {
+        Bundle fragmentArgs = new Bundle();
+        fragmentArgs.putSerializable(FPSCookieSettings.EXTRA_COOKIE_PAGE_STATE, requestedPageState);
+
+        mSettingsLauncher.launchSettingsActivity(
+                getActivity(), FPSCookieSettings.class, fragmentArgs);
+    }
 
     // Note: these values must match the SiteLayout enum in enums.xml.
     @IntDef({SiteLayout.MOBILE, SiteLayout.DESKTOP})
@@ -382,6 +393,9 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
                 : null;
 
         configureGlobalToggles();
+        if (mCategory.getType() == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE) {
+            RecordUserAction.record("DesktopSiteContentSetting.SettingsPage.Entered");
+        }
 
         setHasOptionsMenu(true);
 
@@ -464,6 +478,10 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
 
             } else {
                 buildPreferenceDialog(website_pref.site()).show();
+                if (mCategory.getType() == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE) {
+                    RecordUserAction.record(
+                            "DesktopSiteContentSetting.SettingsPage.SiteException.Opened");
+                }
             }
         }
 
@@ -569,10 +587,14 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
     }
 
     private boolean cookieSettingsExceptionShouldBlock() {
+        return getCookieSettingsState() == CookieSettingsState.ALLOW;
+    }
+
+    private CookieSettingsState getCookieSettingsState() {
         FourStateCookieSettingsPreference fourStateCookieToggle =
                 (FourStateCookieSettingsPreference) getPreferenceScreen().findPreference(
                         FOUR_STATE_COOKIE_TOGGLE_KEY);
-        return fourStateCookieToggle.getState() == CookieSettingsState.ALLOW;
+        return fourStateCookieToggle.getState();
     }
 
     private String getAddExceptionDialogMessage() {
@@ -613,6 +635,11 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
                                browserContextHandle, ContentSettingsType.FEDERATED_IDENTITY_API)
                     ? R.string.website_settings_add_site_description_federated_identity_block
                     : R.string.website_settings_add_site_description_federated_identity_allow;
+        } else if (mCategory.getType() == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE) {
+            resource = WebsitePreferenceBridge.isCategoryEnabled(
+                               browserContextHandle, ContentSettingsType.REQUEST_DESKTOP_SITE)
+                    ? R.string.website_settings_blocked_group_heading_request_desktop_site
+                    : R.string.website_settings_allowed_group_heading_request_desktop_site;
         }
         assert resource > 0;
         return getString(resource);
@@ -679,6 +706,8 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
                 RecordUserAction.record("SoundContentSetting.UnmuteBy.PatternException");
             }
         }
+        DesktopSiteMetrics.recordDesktopSiteSettingsManuallyAdded(
+                mCategory.getType(), setting, hostname);
     }
 
     /**
@@ -711,6 +740,10 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
             allowSpecifyingExceptions = true;
         } else if (mCategory.getType() == SiteSettingsCategory.Type.FEDERATED_IDENTITY_API) {
             allowSpecifyingExceptions = true;
+        } else if (mCategory.getType() == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE
+                && ContentFeatureList.isEnabled(
+                        ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)) {
+            allowSpecifyingExceptions = true;
         }
         if (allowSpecifyingExceptions) {
             getPreferenceScreen().addPreference(new AddExceptionPreference(getStyledContext(),
@@ -733,7 +766,7 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
 
         mAllowedSiteCount = 0;
 
-        if (websites.size() == 0) {
+        if (websites.size() == 0 || !shouldAddExceptionsForCategory()) {
             updateBlockedHeader(0);
             updateAllowedHeader(0, true);
             updateManagedHeader(0);
@@ -1043,6 +1076,7 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
     private void configureFourStateCookieToggle(
             FourStateCookieSettingsPreference fourStateCookieToggle) {
         fourStateCookieToggle.setOnPreferenceChangeListener(this);
+        fourStateCookieToggle.setCookiesDetailsRequestedListener(this);
         FourStateCookieSettingsPreference.Params params =
                 new FourStateCookieSettingsPreference.Params();
         params.allowCookies = WebsitePreferenceBridge.isCategoryEnabled(
@@ -1053,6 +1087,10 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         params.cookiesContentSettingEnforced = mCategory.isManaged();
         params.cookieControlsModeEnforced = prefService.isManagedPreference(COOKIE_CONTROLS_MODE);
         params.isIncognitoModeEnabled = getSiteSettingsDelegate().isIncognitoModeEnabled();
+        params.isPrivacySandboxFirstPartySetsUIEnabled =
+                getSiteSettingsDelegate().isPrivacySandboxFirstPartySetsUIFeatureEnabled();
+        params.isFirstPartySetsDataAccessEnabled =
+                getSiteSettingsDelegate().isFirstPartySetsDataAccessEnabled();
         fourStateCookieToggle.setState(params);
     }
 
@@ -1167,10 +1205,10 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         Integer value = site.getContentSetting(browserContextHandle, contentSettingsType);
 
         CharSequence[] descriptions = new String[2];
-        descriptions[0] =
-                getString(ContentSettingsResources.getSiteSummary(ContentSettingValues.ALLOW));
-        descriptions[1] =
-                getString(ContentSettingsResources.getSiteSummary(ContentSettingValues.BLOCK));
+        descriptions[0] = getString(ContentSettingsResources.getSiteSummary(
+                ContentSettingValues.ALLOW, contentSettingsType));
+        descriptions[1] = getString(ContentSettingsResources.getSiteSummary(
+                ContentSettingValues.BLOCK, contentSettingsType));
 
         return new AlertDialog.Builder(getContext(), R.style.ThemeOverlay_BrowserUI_AlertDialog)
                 .setPositiveButton(R.string.cancel, null)
@@ -1198,9 +1236,26 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
                             site.setContentSetting(
                                     browserContextHandle, contentSettingsType, permission);
 
+                            DesktopSiteMetrics.recordDesktopSiteSettingsChanged(
+                                    mCategory.getType(), permission, site);
                             getInfoForOrigins();
                             dialog.dismiss();
                         });
+    }
+
+    /**
+     * Always returns true unless a category uses custom logic to show/hide exceptions on the
+     * category settings page.
+     * @return Whether exceptions should be added for the category.
+     */
+    private boolean shouldAddExceptionsForCategory() {
+        if (mCategory.getType() == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE
+                && !ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)
+                && SiteSettingsFeatureList.isEnabled(
+                        SiteSettingsFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS_DOWNGRADE)) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -1218,7 +1273,9 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         // TODO(crbug.com/1069897): Use SharedPreferencesManager if it is componentized.
         ContextUtils.getAppSharedPreferences()
                 .edit()
-                .putBoolean(USER_ENABLED_DESKTOP_SITE_GLOBAL_SETTING_PREFERENCE_KEY, enabled)
+                .putBoolean(SingleCategorySettingsConstants
+                                    .USER_ENABLED_DESKTOP_SITE_GLOBAL_SETTING_PREFERENCE_KEY,
+                        enabled)
                 .apply();
     }
 }

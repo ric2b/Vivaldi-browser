@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -16,6 +15,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/observer_list.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -265,15 +265,24 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
                        std::move(callback)));
   }
 
-  void ApplyDeferredUpdate(base::OnceClosure failure_callback) override {
+  void ApplyDeferredUpdate(bool shutdown_after_update,
+                           base::OnceClosure failure_callback) override {
+    update_engine::ApplyUpdateConfig config;
+    config.set_done_action(shutdown_after_update
+                               ? update_engine::UpdateDoneAction::SHUTDOWN
+                               : update_engine::UpdateDoneAction::REBOOT);
     dbus::MethodCall method_call(update_engine::kUpdateEngineInterface,
-                                 update_engine::kApplyDeferredUpdate);
+                                 update_engine::kApplyDeferredUpdateAdvanced);
     dbus::MessageWriter writer(&method_call);
+    if (!writer.AppendProtoAsArrayOfBytes(config)) {
+      LOG(ERROR) << "Failed to encode ApplyUpdateConfig protobuf.";
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, std::move(failure_callback));
+      return;
+    }
 
     VLOG(1) << "Requesting UpdateEngine to apply deferred update.";
 
-    // TODO(yuanpengni): Add an option to shutdown after applied deferred
-    // update.
     update_engine_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::BindOnce(&UpdateEngineClientImpl::OnApplyDeferredUpdate,
@@ -708,8 +717,10 @@ class UpdateEngineClientDesktopFake : public UpdateEngineClient {
     std::move(callback).Run(absl::nullopt);
   }
 
-  void ApplyDeferredUpdate(base::OnceClosure failure_callback) override {
-    VLOG(1) << "Applying deferred update.";
+  void ApplyDeferredUpdate(bool shutdown_after_update,
+                           base::OnceClosure failure_callback) override {
+    VLOG(1) << "Applying deferred update and "
+            << (shutdown_after_update ? "shutdown." : "reboot.");
   }
 
  private:
@@ -816,12 +827,8 @@ void UpdateEngineClient::Shutdown() {
 bool UpdateEngineClient::IsTargetChannelMoreStable(
     const std::string& current_channel,
     const std::string& target_channel) {
-  const char** cix = std::find(
-      kReleaseChannelsList,
-      kReleaseChannelsList + std::size(kReleaseChannelsList), current_channel);
-  const char** tix = std::find(
-      kReleaseChannelsList,
-      kReleaseChannelsList + std::size(kReleaseChannelsList), target_channel);
+  const char** cix = base::ranges::find(kReleaseChannelsList, current_channel);
+  const char** tix = base::ranges::find(kReleaseChannelsList, target_channel);
   return tix > cix;
 }
 

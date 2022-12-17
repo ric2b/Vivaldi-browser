@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,7 @@ bool IsBinaryDownloadForCurrentOS(
   // should also be updated so that the IsBinaryDownloadForCurrentOS() will
   // return true for that DownloadType as appropriate.
   static_assert(ClientDownloadRequest::DownloadType_MAX ==
-                    ClientDownloadRequest::DOCUMENT,
+                    ClientDownloadRequest::INVALID_SEVEN_ZIP,
                 "Update logic below");
 
 // Platform-specific types are relevant only for their own platforms.
@@ -84,7 +84,10 @@ bool IsBinaryDownloadForCurrentOS(
       download_type == ClientDownloadRequest::RAR_COMPRESSED_ARCHIVE ||
       download_type == ClientDownloadRequest::INVALID_RAR ||
       download_type == ClientDownloadRequest::ARCHIVE ||
-      download_type == ClientDownloadRequest::PPAPI_SAVE_REQUEST) {
+      download_type == ClientDownloadRequest::PPAPI_SAVE_REQUEST ||
+      download_type == ClientDownloadRequest::SEVEN_ZIP_COMPRESSED_EXECUTABLE ||
+      download_type == ClientDownloadRequest::SEVEN_ZIP_COMPRESSED_ARCHIVE ||
+      download_type == ClientDownloadRequest::INVALID_SEVEN_ZIP) {
     return true;
   }
 

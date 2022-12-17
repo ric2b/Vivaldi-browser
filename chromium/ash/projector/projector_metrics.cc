@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,6 +77,9 @@ void RecordCreationFlowError(int message_id) {
       break;
     case IDS_ASH_PROJECTOR_FAILURE_MESSAGE_TRANSCRIPTION:
       error = ProjectorCreationFlowError::kTranscriptionError;
+      break;
+    case IDS_ASH_PROJECTOR_ABORT_BY_AUDIO_POLICY_TEXT:
+      error = ProjectorCreationFlowError::kSessionAbortedByAudioPolicyDisabled;
       break;
     default:
       NOTREACHED();

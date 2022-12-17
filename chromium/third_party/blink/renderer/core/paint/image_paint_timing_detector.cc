@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #include "third_party/blink/renderer/core/paint/image_paint_timing_detector.h"
@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/core/paint/largest_contentful_paint_calculator.h"
 #include "third_party/blink/renderer/core/paint/paint_timing.h"
 #include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
+#include "third_party/blink/renderer/core/style/style_fetched_image.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
@@ -225,9 +226,9 @@ void ImagePaintTimingDetector::StopRecordEntries() {
 }
 
 void ImagePaintTimingDetector::RegisterNotifyPresentationTime() {
-  auto callback = WTF::Bind(&ImagePaintTimingDetector::ReportPresentationTime,
-                            WrapCrossThreadWeakPersistent(this),
-                            last_registered_frame_index_);
+  auto callback = WTF::BindOnce(
+      &ImagePaintTimingDetector::ReportPresentationTime,
+      WrapCrossThreadWeakPersistent(this), last_registered_frame_index_);
   callback_manager_->RegisterCallback(std::move(callback));
 }
 
@@ -244,7 +245,7 @@ void ImagePaintTimingDetector::ReportPresentationTime(
 void ImageRecordsManager::AssignPaintTimeToRegisteredQueuedRecords(
     const base::TimeTicks& timestamp,
     unsigned last_queued_frame_index) {
-  while (!images_queued_for_paint_time_.IsEmpty()) {
+  while (!images_queued_for_paint_time_.empty()) {
     const base::WeakPtr<ImageRecord>& record =
         images_queued_for_paint_time_.front().first;
     if (!record) {
@@ -331,8 +332,10 @@ bool ImagePaintTimingDetector::RecordImage(
         gfx::RectF mapped_visual_rect =
             frame_view_->GetPaintTimingDetector().CalculateVisualRect(
                 image_border, current_paint_chunk_properties);
-        visualizer->DumpImageDebuggingRect(object, mapped_visual_rect,
-                                           media_timing);
+        visualizer->DumpImageDebuggingRect(
+            object, mapped_visual_rect,
+            media_timing.IsSufficientContentLoadedForPaint(),
+            media_timing.Url());
       }
       return true;
     }
@@ -376,8 +379,9 @@ uint64_t ImagePaintTimingDetector::ComputeImageRectSize(
     const MediaTiming& media_timing) {
   if (absl::optional<PaintTimingVisualizer>& visualizer =
           frame_view_->GetPaintTimingDetector().Visualizer()) {
-    visualizer->DumpImageDebuggingRect(object, mapped_visual_rect,
-                                       media_timing);
+    visualizer->DumpImageDebuggingRect(
+        object, mapped_visual_rect,
+        media_timing.IsSufficientContentLoadedForPaint(), media_timing.Url());
   }
   uint64_t rect_size = mapped_visual_rect.size().GetArea();
   // Transform visual rect to window before calling downscale.
@@ -432,7 +436,15 @@ bool ImageRecordsManager::OnFirstAnimatedFramePainted(
     unsigned current_frame_index) {
   base::WeakPtr<ImageRecord> record = GetPendingImage(record_id);
   DCHECK(record);
-  if (record->first_animated_frame_time.is_null()) {
+  if (!record->media_timing->GetFirstVideoFrameTime().is_null()) {
+    // If this is a video record, then we can get the first frame time from the
+    // MediaTiming object, and can use that to set the first frame time in the
+    // ImageRecord object.
+    record->first_animated_frame_time =
+        record->media_timing->GetFirstVideoFrameTime();
+  } else if (record->first_animated_frame_time.is_null()) {
+    // Otherwise, this is an animated images, and so we should wait for the
+    // presentation callback to fire to set the first frame presentation time.
     record->queue_animated_paint = true;
     QueueToMeasurePaintTime(record_id, record, current_frame_index);
     return true;
@@ -456,6 +468,7 @@ void ImageRecordsManager::OnImageLoaded(const RecordId& record_id,
     if (document && document->domWindow()) {
       record->load_time = ImageElementTiming::From(*document->domWindow())
                               .GetBackgroundImageLoadTime(style_image);
+      record->origin_clean = style_image->IsOriginClean();
     }
   }
   OnImageLoadedInternal(record_id, record, current_frame_index);
@@ -559,6 +572,16 @@ std::unique_ptr<ImageRecord> ImageRecordsManager::CreateImageRecord(
 
 void ImageRecordsManager::ClearImagesQueuedForPaintTime() {
   images_queued_for_paint_time_.clear();
+}
+
+void ImageRecordsManager::Clear() {
+  largest_painted_image_.reset();
+  images_queued_for_paint_time_.clear();
+  size_ordered_set_.clear();
+  recorded_images_.clear();
+  pending_images_.clear();
+  image_finished_times_.clear();
+  largest_ignored_image_.reset();
 }
 
 void ImageRecordsManager::Trace(Visitor* visitor) const {

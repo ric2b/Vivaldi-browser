@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,7 @@ bool IsIndexSupported(int index) {
 
 UserImageSyncObserver::UserImageSyncObserver(const user_manager::User* user)
     : user_(user),
-      prefs_(NULL),
+      prefs_(nullptr),
       is_synced_(false),
       local_image_changed_(false) {
   user_manager::UserManager::Get()->AddObserver(this);
@@ -78,9 +78,7 @@ void UserImageSyncObserver::OnProfileGained(Profile* profile) {
       kUserImageInfo,
       base::BindRepeating(&UserImageSyncObserver::OnPreferenceChanged,
                           base::Unretained(this)));
-  is_synced_ = chromeos::features::IsSyncSettingsCategorizationEnabled()
-                   ? prefs_->AreOsPriorityPrefsSyncing()
-                   : prefs_->IsPrioritySyncing();
+  is_synced_ = prefs_->AreOsPriorityPrefsSyncing();
   if (!is_synced_) {
     prefs_->AddObserver(this);
   } else {
@@ -126,9 +124,7 @@ void UserImageSyncObserver::OnUserImageChanged(const user_manager::User& user) {
 }
 
 void UserImageSyncObserver::OnIsSyncingChanged() {
-  is_synced_ = chromeos::features::IsSyncSettingsCategorizationEnabled()
-                   ? prefs_->AreOsPriorityPrefsSyncing()
-                   : prefs_->IsPrioritySyncing();
+  is_synced_ = prefs_->AreOsPriorityPrefsSyncing();
   if (is_synced_) {
     prefs_->RemoveObserver(this);
     OnInitialSync();
@@ -143,9 +139,9 @@ void UserImageSyncObserver::UpdateSyncedImageFromLocal() {
   int synced_index;
   if (GetSyncedImageIndex(&synced_index) && (synced_index == local_index))
     return;
-  DictionaryPrefUpdate update(prefs_, kUserImageInfo);
-  base::Value* dict = update.Get();
-  dict->SetIntKey(kImageIndex, local_index);
+  ScopedDictPrefUpdate update(prefs_, kUserImageInfo);
+  base::Value::Dict& dict = update.Get();
+  dict.Set(kImageIndex, local_index);
   VLOG(1) << "Saved avatar index " << local_index << " to sync.";
 }
 
@@ -167,7 +163,7 @@ void UserImageSyncObserver::UpdateLocalImageFromSynced() {
 
 bool UserImageSyncObserver::GetSyncedImageIndex(int* index) {
   *index = user_manager::User::USER_IMAGE_INVALID;
-  const base::Value::Dict& dict = prefs_->GetValueDict(kUserImageInfo);
+  const base::Value::Dict& dict = prefs_->GetDict(kUserImageInfo);
   absl::optional<int> maybe_index = dict.FindInt(kImageIndex);
   if (!maybe_index.has_value()) {
     *index = user_manager::User::USER_IMAGE_INVALID;

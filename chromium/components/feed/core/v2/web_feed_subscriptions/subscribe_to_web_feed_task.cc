@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -108,6 +108,7 @@ void SubscribeToWebFeedTask::Done(WebFeedSubscriptionRequestStatus status) {
   result.request_status = status;
   result.web_feed_info = subscribed_web_feed_info_;
   result.followed_web_feed_id = subscribed_web_feed_info_.web_feed_id();
+  result.change_reason = request_.change_reason;
   std::move(callback_).Run(std::move(result));
   TaskComplete();
 }

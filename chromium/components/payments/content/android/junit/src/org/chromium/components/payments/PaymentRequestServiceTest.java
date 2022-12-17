@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@ import org.chromium.payments.mojom.PaymentMethodData;
 import org.chromium.payments.mojom.PaymentOptions;
 import org.chromium.payments.mojom.PaymentRequestClient;
 import org.chromium.payments.mojom.PaymentResponse;
+import org.chromium.url.mojom.Url;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -192,6 +193,12 @@ public class PaymentRequestServiceTest implements PaymentRequestClient {
     @Override
     public void warnNoFavicon() {
         mWarnNoFaviconCalled = true;
+    }
+
+    @Override
+    public void allowConnectToSource(Url url, Url urlBeforeRedirects, boolean didFollowRedirect,
+            AllowConnectToSource_Response callback) {
+        callback.call(/*allow=*/true);
     }
 
     @Override
@@ -697,10 +704,11 @@ public class PaymentRequestServiceTest implements PaymentRequestClient {
 
     @Test
     @Feature({"Payments"})
-    public void testSpcCanOnlyBeRequestedAlone_failedForNullPayeeUrl() {
+    public void testSpcCanOnlyBeRequestedAlone_failedForNullPayeeNameAndOrigin() {
         ShadowPaymentFeatureList.setFeatureEnabled(
                 PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION, true);
         Assert.assertNull(defaultBuilder()
+                                  .setPayeeName(null)
                                   .setPayeeOrigin(null)
                                   .setOnlySpcMethodWithoutPaymentOptions()
                                   .build());
@@ -710,7 +718,31 @@ public class PaymentRequestServiceTest implements PaymentRequestClient {
 
     @Test
     @Feature({"Payments"})
-    public void testSpcCanOnlyBeRequestedAlone_failedForHttpPayeeUrl() {
+    public void testSpcCanOnlyBeRequestedAlone_allowsNullPayeeOrigin() {
+        ShadowPaymentFeatureList.setFeatureEnabled(
+                PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION, true);
+        // If a valid payeeName is passed, then payeeOrigin is not needed.
+        Assert.assertNotNull(defaultBuilder()
+                                     .setOnlySpcMethodWithoutPaymentOptions()
+                                     .setPayeeName("Merchant Shop")
+                                     .setPayeeOrigin(null)
+                                     .build());
+    }
+
+    @Test
+    @Feature({"Payments"})
+    public void testSpcCanOnlyBeRequestedAlone_failedForEmptyPayeeName() {
+        ShadowPaymentFeatureList.setFeatureEnabled(
+                PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION, true);
+        Assert.assertNull(
+                defaultBuilder().setPayeeName("").setOnlySpcMethodWithoutPaymentOptions().build());
+        assertErrorAndReason(ErrorStrings.INVALID_PAYMENT_METHODS_OR_DATA,
+                PaymentErrorReason.INVALID_DATA_FROM_RENDERER);
+    }
+
+    @Test
+    @Feature({"Payments"})
+    public void testSpcCanOnlyBeRequestedAlone_failedForHttpPayeeOrigin() {
         ShadowPaymentFeatureList.setFeatureEnabled(
                 PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION, true);
         org.chromium.url.internal.mojom.Origin payeeOrigin =

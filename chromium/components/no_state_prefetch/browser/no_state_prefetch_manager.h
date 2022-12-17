@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -194,9 +194,6 @@ class NoStatePrefetchManager : public content::RenderProcessHostObserver,
       int child_id,
       int route_id) const;
 
-  // Returns a list of all WebContents being prerendered.
-  std::vector<content::WebContents*> GetAllPrerenderingContents() const;
-
   // Returns a list of all WebContents being NoStatePrefetched.
   std::vector<content::WebContents*>
   GetAllNoStatePrefetchingContentsForTesting() const;
@@ -236,14 +233,6 @@ class NoStatePrefetchManager : public content::RenderProcessHostObserver,
   base::Time GetCurrentTime() const;
   base::TimeTicks GetCurrentTimeTicks() const;
   void SetTickClockForTesting(const base::TickClock* tick_clock);
-
-  void DisablePageLoadMetricsObserverForTesting() {
-    page_load_metric_observer_disabled_ = true;
-  }
-
-  bool PageLoadMetricsObserverDisabledForTesting() const {
-    return page_load_metric_observer_disabled_;
-  }
 
   void AddObserver(std::unique_ptr<NoStatePrefetchManagerObserver> observer);
 
@@ -400,8 +389,6 @@ class NoStatePrefetchManager : public content::RenderProcessHostObserver,
   void StartSchedulingPeriodicCleanups();
   void StopSchedulingPeriodicCleanups();
 
-  void EvictOldestPrerendersIfNecessary();
-
   // Deletes stale and cancelled prerendered NoStatePrefetchContents, as well as
   // WebContents that have been replaced by prerendered WebContents.
   // Also identifies and kills NoStatePrefetchContents that use too much
@@ -539,8 +526,6 @@ class NoStatePrefetchManager : public content::RenderProcessHostObserver,
   PrerenderProcessSet prerender_process_hosts_;
 
   raw_ptr<const base::TickClock> tick_clock_;
-
-  bool page_load_metric_observer_disabled_ = false;
 
   std::vector<std::unique_ptr<NoStatePrefetchManagerObserver>> observers_;
 

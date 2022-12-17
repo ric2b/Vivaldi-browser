@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,7 @@
 #include "content/public/common/alternative_error_page_override_info.mojom.h"
 #include "content/public/common/content_client.h"
 #include "media/base/audio_parameters.h"
-#include "media/base/key_system_properties.h"
+#include "media/base/key_system_info.h"
 #include "media/base/supported_types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/platform/url_loader_throttle_provider.h"
@@ -96,8 +96,12 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual void RenderFrameCreated(RenderFrame* render_frame) {}
 
   // Notifies that a new WebView has been created.
+  // `outermost_origin` is only set if it is an extension scheme, otherwise
+  // it will be null. It is null to avoid leaking unnecessary information into
+  // the renderer.
   virtual void WebViewCreated(blink::WebView* web_view,
-                              bool was_created_by_renderer) {}
+                              bool was_created_by_renderer,
+                              const url::Origin* outermost_origin) {}
 
   // Returns the bitmap to show when a plugin crashed, or NULL for none.
   virtual SkBitmap* GetSadPluginBitmap();

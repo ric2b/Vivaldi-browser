@@ -21,6 +21,7 @@
 <translation id="1426410128494586442">Evet</translation>
 <translation id="1446450296470737166">MIDI cihazlarının tam denetimine izin verme</translation>
 <translation id="1620510694547887537">Kamera</translation>
+<translation id="1633720957382884102">İlgili siteler</translation>
 <translation id="1644574205037202324">Geçmiş</translation>
 <translation id="1647582022260550163">İzinleri sıfırlayıp çerezleri ve site verilerini temizlemek istediğinizden emin misiniz?</translation>
 <translation id="1660204651932907780">Sitelerin ses çalmasına izin ver (önerilir)</translation>
@@ -30,8 +31,10 @@
 <translation id="1717218214683051432">Hareket sensörleri</translation>
 <translation id="1743802530341753419">Sitelerin bir cihaza bağlanmasına izin verilmeden önce sor (önerilir)</translation>
 <translation id="1779089405699405702">Görsel kod çözücüsü</translation>
+<translation id="1785415724048343560">En iyi deneyim için önerilir</translation>
 <translation id="1818308510395330587"><ph name="APP_NAME" /> uygulamasının artırılmış gerçekliği (AR) kullanması için <ph name="BEGIN_LINK" />Android Ayarlarında<ph name="END_LINK" /> kamerayı da açın.</translation>
 <translation id="1864927262126810325"><ph name="SOURCE_NAME" /> kaynağından</translation>
+<translation id="187227595286001730">İlgili siteler, gruptaki etkinliğinizi görebilir</translation>
 <translation id="1887786770086287077">Konum erişimi bu cihaz için kapalı. Konum erişimini <ph name="BEGIN_LINK" />Android Ayarları<ph name="END_LINK" />'ndan açın.</translation>
 <translation id="1915307458270490472">Kapat</translation>
 <translation id="1919345977826869612">Reklamlar</translation>
@@ -70,6 +73,7 @@
 <translation id="2490684707762498678"><ph name="APP_NAME" /> tarafından yönetiliyor</translation>
 <translation id="2498359688066513246">Yardım ve geri bildirim</translation>
 <translation id="2501278716633472235">Geri dön</translation>
+<translation id="2546283357679194313">Çerezler ve site verileri</translation>
 <translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 çerez engellendi}other{# çerez engellendi}}</translation>
 <translation id="2570922361219980984">Konum erişimi bu cihaz için de kapalı. Konum erişimini <ph name="BEGIN_LINK" />Android Ayarları<ph name="END_LINK" />'ndan açın.</translation>
 <translation id="257931822824936280">Genişletildi - Daraltmak için tıklayın.</translation>
@@ -83,7 +87,6 @@
 <translation id="2713106313042589954">Kamerayı kapat</translation>
 <translation id="2717722538473713889">E-posta adresleri</translation>
 <translation id="2750481671343847896">Siteler, kimlik hizmetlerinden gelen oturum açma istemlerini gösterebilir.</translation>
-<translation id="2785051990912111074">Bu tercih, <ph name="WEBSITE" /> çerezlerini temizler</translation>
 <translation id="2822354292072154809"><ph name="CHOSEN_OBJECT_NAME" /> için tüm site izinlerini sıfırlamak istediğinizden emin misiniz?</translation>
 <translation id="2870560284913253234">Site</translation>
 <translation id="2874939134665556319">Önceki parça</translation>
@@ -101,18 +104,22 @@
 <translation id="3115898365077584848">Bilgileri Göster</translation>
 <translation id="3123473560110926937">Bazı sitelerde engellendi</translation>
 <translation id="3143754809889689516">Baştan oynat</translation>
+<translation id="3162899666601560689">Siteler size daha iyi bir göz atma deneyimi sunmak, örneğin, oturumunuzu açık tutmak veya alışveriş sepetinizdeki ürünleri hatırlamak için çerez kullanabilir</translation>
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> depolanmış veri</translation>
 <translation id="3203366800380907218">Web'den</translation>
 <translation id="321187648315454507"><ph name="APP_NAME" /> uygulamasının size bildirim gönderebilmesi için <ph name="BEGIN_LINK" />Android Ayarları<ph name="END_LINK" />'nda da bildirimleri açın.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3248611290851046188">Bu site, diğer sitelerin size reklam göstermek için kullanabileceği ilgi alanlarını belirler. Bu site, size daha alakalı reklamlar göstermek için Chrome'dan ilgi alanlarınızı öğrenir</translation>
 <translation id="3277252321222022663">Sitelerin sensörlere erişmesine izin ver (önerilen)</translation>
+<translation id="3285500645985761267">İlgili sitelerin gruptaki etkinliğimi görmesine izin ver</translation>
 <translation id="3295602654194328831">Bilgileri Gizle</translation>
 <translation id="3328801116991980348">Site bilgileri</translation>
 <translation id="3333961966071413176">Tüm kişiler</translation>
 <translation id="3362437373201486687">Bluetooth cihazları taranıyor</translation>
 <translation id="3386292677130313581">Sitelerin, konumunuzu öğrenmesine izin verilmeden önce size sorulsun (önerilir)</translation>
+<translation id="3521663503435878242"><ph name="DOMAIN" /> altındaki siteler</translation>
 <translation id="3538390592868664640">Sitelerin çevremin 3D haritasını oluşturmasını veya kamera konumunu takip etmesini engelle</translation>
+<translation id="3544058026430919413">Bir şirket, bir site grubu tanımlayabilir ve çerezleri kullanarak gruptaki etkinliğinizi paylaşabilir. Bu ayar Gizli modda kapalıdır.</translation>
 <translation id="3551268116566418498">Gizli moddan çıkılsın mı?</translation>
 <translation id="3586500876634962664">Kamera ve mikrofon kullanımı</translation>
 <translation id="358794129225322306">Bir sitenin otomatik olarak birden fazla dosya indirmesine izin verir.</translation>
@@ -149,11 +156,13 @@
 <translation id="429312253194641664">Bir site medya oynatıyor</translation>
 <translation id="42981349822642051">Genişlet</translation>
 <translation id="4336434711095810371">Tüm verileri temizle</translation>
+<translation id="4338831206024587507"><ph name="DOMAIN" /> altındaki tüm siteler</translation>
 <translation id="4402755511846832236">Bu cihazı etkin olarak kullandığınızda sitelerin bunu bilmesi engellenir</translation>
 <translation id="4428065317363009941">Reklam kişiselleştirme</translation>
 <translation id="4434045419905280838">Pop-up'lar ve yönlendirmeler</translation>
 <translation id="445467742685312942">Sitelerin korumalı içeriği oynatmasına izin ver</translation>
 <translation id="4468959413250150279">Belirli bir site için sesi kapatın.</translation>
+<translation id="4475912480633855319">{COOKIES,plural, =1{# çerez}other{# çerez}}</translation>
 <translation id="4479647676395637221">Sitelerin, kameranızı kullanmasına izin verilmeden önce size sorulsun (önerilir)</translation>
 <translation id="4505788138578415521">URL genişletildi</translation>
 <translation id="4534723447064627427"><ph name="APP_NAME" /> uygulamasının mikrofonunuza erişebilmesi için <ph name="BEGIN_LINK" />Android Ayarları<ph name="END_LINK" />'nda da mikrofonu açın.</translation>
@@ -164,18 +173,21 @@
 <translation id="4751476147751820511">Hareket veya ışık sensörleri</translation>
 <translation id="4811450222531576619">Kaynağı ve konusu hakkında bilgi edinin</translation>
 <translation id="4836046166855586901">Bir site bu cihazı etkin olarak kullandığımı bilmek istediğinde sor</translation>
+<translation id="483914009762354899">Bu alandaki tüm siteleri dahil et</translation>
 <translation id="4883854917563148705">Yönetilen ayarlar sıfırlanamaz</translation>
 <translation id="4887024562049524730">Sitelerin sanal gerçeklik cihazıma veya verilerime erişmesine izin vermeden önce sor (önerilir)</translation>
+<translation id="4955223779495905865">Ziyaret ettiğiniz bir site, diğer sitelerdeki resim, reklam ve metin gibi içerikleri yerleştirebilir. Bu sitelerden herhangi biri, deneyiminizi kişiselleştirmek için çerezleri ve diğer verileri kaydedebilir.</translation>
 <translation id="4962975101802056554">Cihaz için tüm izinleri iptal eder</translation>
 <translation id="497421865427891073">İlerle</translation>
 <translation id="4976702386844183910">Son ziyaret tarihi: <ph name="DATE" /></translation>
 <translation id="4994033804516042629">Kişi bulunamadı</translation>
 <translation id="4996978546172906250">Paylaşım yöntemi:</translation>
-<translation id="5014906230196386306">Çerezler silinsin mi?</translation>
 <translation id="5039804452771397117">İzin ver</translation>
 <translation id="5048398596102334565">Sitelerin hareket sensörlerine erişmesine izin ver (önerilen)</translation>
 <translation id="5050380848339752099">Bu site, Gizli mod dışında bir uygulama ile bilgi paylaşımında bulunmak üzere.</translation>
 <translation id="5063480226653192405">Kullanım</translation>
+<translation id="5082281938627763039">Bu işlem, <ph name="FPS_OWNER" /> site grubundaki siteler ve <ph name="FPS_MEMBER" /> için çerezler ile diğer site verilerini siler</translation>
+<translation id="5091013926750941408">Mobil site</translation>
 <translation id="509133520954049755">Masaüstü görünümü iste</translation>
 <translation id="5100237604440890931">Daraltıldı - Genişletmek için tıklayın.</translation>
 <translation id="5123685120097942451">Gizli sekme</translation>
@@ -211,6 +223,7 @@
 <translation id="5677928146339483299">Engelleniyor</translation>
 <translation id="5689516760719285838">Konum</translation>
 <translation id="5690795753582697420">Kamera, Android ayarlarında kapatıldı</translation>
+<translation id="5706552988683188916">Bu işlem, <ph name="WEBSITE" /> için çerezleri ve diğer site verilerini siler</translation>
 <translation id="5719847187258001597">Bu işlem, Ana ekranınızdaki <ph name="ORIGIN" /> sitesi ve sitenin uygulaması tarafından depolanan tüm verileri ve çerezleri temizleyecek.</translation>
 <translation id="5771720122942595109"><ph name="PERMISSION_1" /> engellendi</translation>
 <translation id="5804241973901381774">İzinler</translation>
@@ -219,6 +232,7 @@
 <translation id="5887687176710214216">En son dün ziyaret edildi</translation>
 <translation id="5916664084637901428">Açık</translation>
 <translation id="5922853908706496913">Ekranınız paylaşılıyor</translation>
+<translation id="5922967540311291836">Üçüncü taraf çerezlerini engelle:</translation>
 <translation id="5939518447894949180">Sıfırla</translation>
 <translation id="5975083100439434680">Uzaklaştır</translation>
 <translation id="5976059395673079613"><ph name="PERMISSION" /> - <ph name="WARNING_MESSAGE" /></translation>
@@ -303,13 +317,14 @@
 <translation id="780301667611848630">Hayır, teşekkürler</translation>
 <translation id="7804248752222191302">Bir site kameranızı kullanıyor</translation>
 <translation id="7817023149356982970">Bu sitedeki oturumunuz kapatılacak.</translation>
-<translation id="7828557259026017104">Çerezler, ziyaret ettiğiniz web siteleri tarafından oluşturulan dosyalardır. Siteler tercihlerinizi hatırlamak için çerezleri kullanır. Üçüncü taraf çerezleri diğer siteler tarafından oluşturulur. Bu siteler, ziyaret ettiğiniz web sayfasında gördüğünüz reklam veya resim gibi içeriğin bir kısmına sahiptir.</translation>
 <translation id="7835852323729233924">Medya oynatılıyor/çalınıyor</translation>
 <translation id="783819812427904514">Videonun sesini aç</translation>
 <translation id="7846076177841592234">Seçimi iptal et</translation>
 <translation id="7846621471902887024">Tüm sitelerdeki oturumunuz kapatılacak.</translation>
 <translation id="7882806643839505685">Belirli bir site için sese izin verin.</translation>
+<translation id="789180354981963912">Gizli modda üçüncü taraf çerezleri engelle:</translation>
 <translation id="7940722705963108451">Bana hatırlat</translation>
+<translation id="7974024493641668069">{COUNT,plural, =1{<ph name="FPS_OWNER" /> site grubunda yer alan ve gruptaki etkinliğinizi görebilen <ph name="FPS_MEMBERS_COUNT" /> site var}other{<ph name="FPS_OWNER" /> site grubunda yer alan ve gruptaki etkinliğinizi görebilen <ph name="FPS_MEMBERS_COUNT" /> site var}}</translation>
 <translation id="7986741934819883144">Kişi seçin</translation>
 <translation id="7999064672810608036">Bu web sitesine ilişkin çerezler dahil tüm yerel verileri temizlemek ve bu sitenin tüm izinlerini sıfırlamak istediğinizden emin misiniz?</translation>
 <translation id="8007176423574883786">Bu cihaz için kapatıldı</translation>
@@ -331,13 +346,13 @@
 <translation id="8284326494547611709">Altyazılar</translation>
 <translation id="8300705686683892304">Uygulama tarafından yönetiliyor</translation>
 <translation id="8324158725704657629">Tekrar sorma</translation>
+<translation id="834785183489258869">Gizli moddayken siteler, örneğin reklamları kişiselleştirmek amacıyla farklı sitelerde tarama etkinliğinizi görmek için çerezlerinizi kullanamaz. Bazı sitelerdeki özellikler çalışmayabilir.</translation>
 <translation id="8372893542064058268">Belirli bir site için Arka Plan Senkronizasyonuna izin verin.</translation>
 <translation id="8376384591331888629">Bu sitedeki üçüncü taraf çerezler dahil</translation>
 <translation id="83792324527827022">Bir site kameranızı ve mikrofonunuzu kullanıyor</translation>
 <translation id="8380167699614421159">Bu site, araya giren veya yanıltıcı reklamlar gösteriyor</translation>
 <translation id="8394832520002899662">Siteye dönmek için dokunun</translation>
 <translation id="8409345997656833551">Makaleler basitleştirilmiş görünümde gösterilebiliyorsa bilgilendirilirsiniz</translation>
-<translation id="8425213833346101688">Değiştir</translation>
 <translation id="8428213095426709021">Ayarlar</translation>
 <translation id="8441146129660941386">Geriye doğru git</translation>
 <translation id="8444433999583714703"><ph name="APP_NAME" /> uygulamasının konumunuza erişebilmesi için <ph name="BEGIN_LINK" />Android Ayarları<ph name="END_LINK" />'nda da konumu açın.</translation>
@@ -348,6 +363,7 @@
 <translation id="8499083585497694743">Mikrofonun sesini aç</translation>
 <translation id="851751545965956758">Sitelerin cihazlara bağlanmasını engelle</translation>
 <translation id="8525306231823319788">Tam ekran</translation>
+<translation id="8564613706851221529">{COUNT,plural, =1{<ph name="FPS_MEMBERS_COUNT" /> <ph name="FPS_OWNER" /> sitesi için çerezlere izin veriliyor}other{<ph name="FPS_MEMBERS_COUNT" /> <ph name="FPS_OWNER" /> sitesi için çerezlere izin veriliyor}}</translation>
 <translation id="857943718398505171">İzin verildi (önerilir)</translation>
 <translation id="8609465669617005112">Yukarı taşı</translation>
 <translation id="8676374126336081632">Girişi temizle</translation>
@@ -361,6 +377,7 @@
 <translation id="8751914237388039244">Resim seçin</translation>
 <translation id="8801436777607969138">JavaScript'i belirli bir site için engelleyin.</translation>
 <translation id="8816026460808729765">Sitelerin sensörlere erişimini engelle</translation>
+<translation id="8823559166155093873">Çerezleri engelle</translation>
 <translation id="8847988622838149491">USB</translation>
 <translation id="8903921497873541725">Yakınlaştır</translation>
 <translation id="8921772741368021346"><ph name="POSITION" />/<ph name="DURATION" /></translation>
@@ -372,6 +389,8 @@
 <translation id="8986362086234534611">Unut</translation>
 <translation id="9019902583201351841">Ebeveynleriniz tarafından yönetiliyor</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
+<translation id="9090268041676521955">Bu site, etkinliğinizi görebilen bir grupta bulunuyor. Grup, <ph name="FPS_OWNER" /> tarafından tanımlanmıştır.</translation>
+<translation id="9106233582039520022">Çerezler silinsin mi?</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ve <ph name="NUM_MORE" /> tane daha}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ve <ph name="NUM_MORE" /> tane daha}}</translation>
 <translation id="913657688200966289"><ph name="APP_NAME" /> için izinleri açmak üzere <ph name="BEGIN_LINK" />Android Ayarları<ph name="END_LINK" />'nda izinleri açın.</translation>
 <translation id="9162462602695099906">Bu sayfa tehlikeli</translation>

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,6 +96,9 @@ const char kPaymentManifestCrossSiteRedirectNotAllowed[] =
 
 const char kPaymentManifestDownloadFailed[] =
     "Unable to download payment manifest \"$1\".";
+
+const char kPaymentManifestCSPDenied[] =
+    "Content Security Policy denied the download of payment manifest \"$1\".";
 
 const char kPaymentDetailsNotObject[] =
     "Payment app returned invalid response. \"details\" field is not a "
@@ -227,8 +230,8 @@ const char kInvalidIcon[] =
     "The \"instrument.icon\" either could not be downloaded or decoded.";
 
 const char kRpIdRequired[] =
-    "The \"secure-payment-confirmation\" method requires a non-empty \"rpId\" "
-    "field.";
+    "The \"secure-payment-confirmation\" method requires a valid domain in the "
+    "\"rpId\" field.";
 
 const char kPayeeOriginOrPayeeNameRequired[] =
     "The \"secure-payment-confirmation\" method requires a non-empty "

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <numeric>
 
+#include "base/ranges/algorithm.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_css_numeric_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_cssnumericvalue_double.h"
 #include "third_party/blink/renderer/core/css/css_math_expression_node.h"
@@ -41,7 +42,7 @@ void PrependValueForArithmetic(CSSNumericValueVector& vector,
 template <class BinaryOperation>
 CSSUnitValue* MaybeSimplifyAsUnitValue(const CSSNumericValueVector& values,
                                        const BinaryOperation& op) {
-  DCHECK(!values.IsEmpty());
+  DCHECK(!values.empty());
 
   auto* first_unit_value = DynamicTo<CSSUnitValue>(values[0].Get());
   if (!first_unit_value)
@@ -61,7 +62,7 @@ CSSUnitValue* MaybeSimplifyAsUnitValue(const CSSNumericValueVector& values,
 }
 
 CSSUnitValue* MaybeMultiplyAsUnitValue(const CSSNumericValueVector& values) {
-  DCHECK(!values.IsEmpty());
+  DCHECK(!values.empty());
 
   // We are allowed one unit value with type other than kNumber.
   auto unit_other_than_number = CSSPrimitiveValue::UnitType::kNumber;
@@ -230,7 +231,7 @@ bool CSSNumericValue::IsValidUnit(CSSPrimitiveValue::UnitType unit) {
 }
 
 CSSPrimitiveValue::UnitType CSSNumericValue::UnitFromName(const String& name) {
-  if (name.IsEmpty())
+  if (name.empty())
     return CSSPrimitiveValue::UnitType::kUnknown;
   if (EqualIgnoringASCIICase(name, "number"))
     return CSSPrimitiveValue::UnitType::kNumber;
@@ -407,8 +408,7 @@ CSSMathSum* CSSNumericValue::toSum(const Vector<String>& unit_strings,
     result.push_back(CSSUnitValue::Create(total_value, target_unit));
   }
 
-  if (std::any_of(values.begin(), values.end(),
-                  [](const auto& v) { return v; })) {
+  if (base::ranges::any_of(values, [](const auto& v) { return v; })) {
     exception_state.ThrowTypeError(
         "There were leftover terms that were not converted");
     return nullptr;
@@ -531,8 +531,8 @@ bool CSSNumericValue::equals(
     const HeapVector<Member<V8CSSNumberish>>& numberishes
 ) {
   CSSNumericValueVector values = CSSNumberishesToNumericValues(numberishes);
-  return std::all_of(values.begin(), values.end(),
-                     [this](const auto& v) { return this->Equals(*v); });
+  return base::ranges::all_of(
+      values, [this](const auto& v) { return this->Equals(*v); });
 }
 
 String CSSNumericValue::toString() const {

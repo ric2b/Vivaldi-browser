@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,7 @@
 #include "base/threading/platform_thread.h"
 #include "components/cast/message_port/fuchsia/message_port_fuchsia.h"
 #include "components/cast/message_port/platform_message_port.h"
-#include "components/cast_streaming/browser/test/cast_streaming_test_sender.h"
+#include "components/cast_streaming/test/cast_streaming_test_sender.h"
 #include "content/public/test/browser_test.h"
 #include "fuchsia_web/common/test/fit_adapter.h"
 #include "fuchsia_web/common/test/frame_test_util.h"

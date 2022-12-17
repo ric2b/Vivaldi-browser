@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@ class OmniboxTriggeredFeatureService;
 class PrefService;
 class ShortcutsBackend;
 class TabMatcher;
+class ZeroSuggestCacheService;
 
 namespace bookmarks {
 class BookmarkModel;
@@ -85,6 +86,8 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
       bool create_if_necessary) const = 0;
   virtual DocumentSuggestionsService* GetDocumentSuggestionsService(
       bool create_if_necessary) const = 0;
+  virtual ZeroSuggestCacheService* GetZeroSuggestCacheService() = 0;
+  virtual const ZeroSuggestCacheService* GetZeroSuggestCacheService() const = 0;
   virtual OmniboxPedalProvider* GetPedalProvider() const = 0;
   virtual scoped_refptr<ShortcutsBackend> GetShortcutsBackend() = 0;
   virtual scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() = 0;

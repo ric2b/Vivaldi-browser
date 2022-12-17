@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,6 @@
 #include "content/common/content_export.h"
 #include "device/fido/public_key_credential_descriptor.h"
 #include "third_party/blink/public/mojom/webauthn/authenticator.mojom-forward.h"
-
-class GURL;
 
 namespace url {
 class Origin;
@@ -98,11 +96,6 @@ class CONTENT_EXPORT WebAuthRequestSecurityChecker
       const blink::mojom::RemoteDesktopClientOverridePtr&
           remote_desktop_client_override,
       std::string* out_app_id);
-
-  // Checks whether a given URL is an a-priori authenticated URL.
-  // https://w3c.github.io/webappsec-credential-management/#dom-credentialuserdata-iconurl
-  blink::mojom::AuthenticatorStatus ValidateAPrioriAuthenticatedUrl(
-      const GURL& url);
 
   [[nodiscard]] bool DeduplicateCredentialDescriptorListAndValidateLength(
       std::vector<device::PublicKeyCredentialDescriptor>* list);

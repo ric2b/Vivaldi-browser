@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,7 @@ PrefService* GetPrefs() {
 // Gets the timestamp when the nudge was last shown.
 base::Time GetLastShownTime(PrefService* prefs) {
   const base::Value::Dict& dictionary =
-      prefs->GetValueDict(prefs::kShelfLauncherNudge);
+      prefs->GetDict(prefs::kShelfLauncherNudge);
   absl::optional<base::Time> last_shown_time =
       base::ValueToTime(dictionary.Find(kLastShownTime));
   return last_shown_time.value_or(base::Time());
@@ -61,7 +61,7 @@ base::Time GetLastShownTime(PrefService* prefs) {
 // enabled.
 base::Time GetFirstLoginTime(PrefService* prefs) {
   const base::Value::Dict& dictionary =
-      prefs->GetValueDict(prefs::kShelfLauncherNudge);
+      prefs->GetDict(prefs::kShelfLauncherNudge);
   absl::optional<base::Time> first_login_time =
       base::ValueToTime(dictionary.Find(kFirstLoginTime));
   return first_login_time.value_or(base::Time());
@@ -70,7 +70,7 @@ base::Time GetFirstLoginTime(PrefService* prefs) {
 // Returns true if the launcher has been shown before.
 bool WasLauncherShownPreviously(PrefService* prefs) {
   const base::Value::Dict& dictionary =
-      prefs->GetValueDict(prefs::kShelfLauncherNudge);
+      prefs->GetDict(prefs::kShelfLauncherNudge);
   return dictionary.FindBool(kWasLauncherShown).value_or(false);
 }
 
@@ -111,7 +111,7 @@ HomeButton* LauncherNudgeController::GetHomeButtonForDisplay(
 // static
 int LauncherNudgeController::GetShownCount(PrefService* prefs) {
   const base::Value::Dict& dictionary =
-      prefs->GetValueDict(prefs::kShelfLauncherNudge);
+      prefs->GetDict(prefs::kShelfLauncherNudge);
   return dictionary.FindInt(kShownCount).value_or(0);
 }
 
@@ -200,9 +200,9 @@ void LauncherNudgeController::HandleNudgeShown() {
     return;
 
   const int shown_count = GetShownCount(prefs);
-  DictionaryPrefUpdate update(prefs, prefs::kShelfLauncherNudge);
-  update->SetIntKey(kShownCount, shown_count + 1);
-  update->SetKey(kLastShownTime, base::TimeToValue(GetNow()));
+  ScopedDictPrefUpdate update(prefs, prefs::kShelfLauncherNudge);
+  update->Set(kShownCount, shown_count + 1);
+  update->Set(kLastShownTime, base::TimeToValue(GetNow()));
 }
 
 void LauncherNudgeController::MaybeShowNudge() {
@@ -263,8 +263,8 @@ void LauncherNudgeController::OnActiveUserPrefServiceChanged(
   if (Shell::Get()->session_controller()->IsUserFirstLogin()) {
     // If the current logged in user is a new one, record the first login time
     // to know when to show the nudge.
-    DictionaryPrefUpdate update(prefs, prefs::kShelfLauncherNudge);
-    update->SetKey(kFirstLoginTime, base::TimeToValue(GetNow()));
+    ScopedDictPrefUpdate update(prefs, prefs::kShelfLauncherNudge);
+    update->Set(kFirstLoginTime, base::TimeToValue(GetNow()));
   } else if (GetFirstLoginTime(prefs).is_null()) {
     // For the users that has logged in before the nudge feature is landed, we
     // assume the user has opened the launcher before and thus don't show the
@@ -292,8 +292,8 @@ void LauncherNudgeController::OnAppListVisibilityChanged(bool shown,
     return;
 
   if (!WasLauncherShownPreviously(prefs) && shown) {
-    DictionaryPrefUpdate update(prefs, prefs::kShelfLauncherNudge);
-    update->SetBoolKey(kWasLauncherShown, true);
+    ScopedDictPrefUpdate update(prefs, prefs::kShelfLauncherNudge);
+    update->Set(kWasLauncherShown, true);
   }
 }
 

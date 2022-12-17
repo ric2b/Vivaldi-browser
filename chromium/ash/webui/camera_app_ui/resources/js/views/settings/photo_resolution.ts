@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,7 +77,7 @@ export class PhotoResolutionSettings extends BaseSettings {
     const label = util.toPhotoResolutionOptionLabel(option.resolutionLevel);
     const resolution = option.resolutions[0];
     let megaPixels = resolution.mp;
-    if (this.cameraManager.preferSquarePhoto()) {
+    if (this.cameraManager.useSquareResolution()) {
       const croppedEdge = Math.min(resolution.width, resolution.height);
       megaPixels = (new Resolution(croppedEdge, croppedEdge)).mp;
     }

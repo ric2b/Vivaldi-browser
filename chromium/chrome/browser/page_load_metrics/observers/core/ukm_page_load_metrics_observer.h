@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -139,6 +139,16 @@ class UkmPageLoadMetricsObserver
 
   void ReportLayoutStability();
 
+  // Returns the current Core Web Vital definition of Cumulative Layout Shift.
+  // Returns nullopt if current value should not be reported to UKM.
+  absl::optional<float> GetCoreWebVitalsCLS();
+
+  // Returns the current Core Web Vital definition of Largest Contentful Paint.
+  // The caller needs to check whether the value should be reported to UKM based
+  // on when the page was backgrounded and other validations.
+  const page_load_metrics::ContentfulPaintTimingInfo&
+  GetCoreWebVitalsLcpTimingInfo();
+
   void RecordAbortMetrics(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       base::TimeTicks page_end_time,
@@ -204,6 +214,15 @@ class UkmPageLoadMetricsObserver
   // background.
   void ReportLayoutInstabilityAfterFirstForeground();
 
+  // Record some largest contentful paint metrics that have occurred on the
+  // page until the first time the page starts in the foreground and moves to
+  // the background.
+  void ReportLargestContentfulPaintAfterFirstForeground();
+
+  // Record some Responsiveness metrics that have occurred on the page until
+  // the first time the page moves from the foreground to the background.
+  void ReportResponsivenessAfterFirstForeground();
+
   // Guaranteed to be non-null during the lifetime of |this|.
   raw_ptr<network::NetworkQualityTracker> network_quality_tracker_;
 
@@ -240,6 +259,9 @@ class UkmPageLoadMetricsObserver
   // Load timing metrics of the main frame resource request.
   content::NavigationHandleTiming navigation_handle_timing_;
   absl::optional<net::LoadTimingInfo> main_frame_timing_;
+
+  // First contentful paint as reported in OnFirstContentfulPaintInPage.
+  absl::optional<base::TimeDelta> first_contentful_paint_;
 
   // How the SiteInstance for the committed page was assigned a renderer.
   absl::optional<content::SiteInstanceProcessAssignment>
@@ -317,6 +339,12 @@ class UkmPageLoadMetricsObserver
   // True if the TemplateURLService has a search engine template for the
   // navigation and a scoped search would have been possible.
   bool was_scoped_search_like_navigation_ = false;
+
+  // True if the refresh rate is capped at 30Hz because of power saver mode when
+  // navigation starts. It is possible but very unlikely for this to change mid
+  // navigation, for instance due to a change by the user in settings or the
+  // battery being recharged above 20%.
+  bool refresh_rate_throttled_ = false;
 
   base::WeakPtrFactory<UkmPageLoadMetricsObserver> weak_factory_{this};
 };

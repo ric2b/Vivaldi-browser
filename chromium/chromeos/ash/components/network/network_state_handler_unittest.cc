@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <map>
 #include <memory>
 #include <set>
@@ -16,6 +15,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -87,14 +87,6 @@ std::vector<std::string> GetNetworkPaths(
   for (const auto* network : networks)
     result.push_back(network->path());
   return result;
-}
-
-bool NetworkListContainsPath(const NetworkStateHandler::NetworkStateList& list,
-                             const std::string& path) {
-  return std::find_if(list.begin(), list.end(),
-                      [path](const NetworkState* network) {
-                        return network->path() == path;
-                      }) != list.end();
 }
 
 // Creates a list of cellular SIM slots with a single primary slot whose eid is
@@ -374,6 +366,10 @@ class NetworkStateHandlerTest : public testing::Test {
   }
 
  protected:
+  NetworkState* GetModifiableNetworkState(const std::string& service_path) {
+    return network_state_handler_->GetModifiableNetworkState(service_path);
+  }
+
   void AddService(const std::string& service_path,
                   const std::string& guid,
                   const std::string& name,
@@ -2492,10 +2488,9 @@ TEST_F(NetworkStateHandlerTest, SyncStubCellularNetworks_SimInfoChange) {
 }
 
 TEST_F(NetworkStateHandlerTest, BlockedWifiByPolicyBlocked) {
-  NetworkState* wifi1 = network_state_handler_->GetModifiableNetworkState(
-      kShillManagerClientStubDefaultWifi);
-  NetworkState* wifi2 = network_state_handler_->GetModifiableNetworkState(
-      kShillManagerClientStubWifi2);
+  NetworkState* wifi1 =
+      GetModifiableNetworkState(kShillManagerClientStubDefaultWifi);
+  NetworkState* wifi2 = GetModifiableNetworkState(kShillManagerClientStubWifi2);
 
   EXPECT_FALSE(network_state_handler_->OnlyManagedWifiNetworksAllowed());
   EXPECT_FALSE(wifi1->IsManagedByPolicy());
@@ -2529,10 +2524,9 @@ TEST_F(NetworkStateHandlerTest, BlockedWifiByPolicyBlocked) {
 }
 
 TEST_F(NetworkStateHandlerTest, BlockedWifiByPolicyOnlyManaged) {
-  NetworkState* wifi1 = network_state_handler_->GetModifiableNetworkState(
-      kShillManagerClientStubDefaultWifi);
-  NetworkState* wifi2 = network_state_handler_->GetModifiableNetworkState(
-      kShillManagerClientStubWifi2);
+  NetworkState* wifi1 =
+      GetModifiableNetworkState(kShillManagerClientStubDefaultWifi);
+  NetworkState* wifi2 = GetModifiableNetworkState(kShillManagerClientStubWifi2);
 
   EXPECT_FALSE(network_state_handler_->OnlyManagedWifiNetworksAllowed());
   EXPECT_FALSE(wifi1->IsManagedByPolicy());
@@ -2571,10 +2565,10 @@ TEST_F(NetworkStateHandlerTest, BlockedCellularByPolicyOnlyManaged) {
              shill::kStateIdle);
   base::RunLoop().RunUntilIdle();
 
-  NetworkState* cellular1 = network_state_handler_->GetModifiableNetworkState(
-      kShillManagerClientStubCellular);
-  NetworkState* cellular2 = network_state_handler_->GetModifiableNetworkState(
-      kTestCellularServicePath2);
+  NetworkState* cellular1 =
+      GetModifiableNetworkState(kShillManagerClientStubCellular);
+  NetworkState* cellular2 =
+      GetModifiableNetworkState(kTestCellularServicePath2);
   EXPECT_FALSE(cellular1->IsManagedByPolicy());
   EXPECT_FALSE(cellular1->blocked_by_policy());
   EXPECT_FALSE(cellular2->IsManagedByPolicy());
@@ -2609,10 +2603,10 @@ TEST_F(NetworkStateHandlerTest,
              shill::kStateIdle);
   base::RunLoop().RunUntilIdle();
 
-  NetworkState* cellular1 = network_state_handler_->GetModifiableNetworkState(
-      kShillManagerClientStubCellular);
-  NetworkState* cellular2 = network_state_handler_->GetModifiableNetworkState(
-      kTestCellularServicePath2);
+  NetworkState* cellular1 =
+      GetModifiableNetworkState(kShillManagerClientStubCellular);
+  NetworkState* cellular2 =
+      GetModifiableNetworkState(kTestCellularServicePath2);
   EXPECT_FALSE(cellular1->IsManagedByPolicy());
   EXPECT_FALSE(cellular1->blocked_by_policy());
   EXPECT_FALSE(cellular2->IsManagedByPolicy());
@@ -2641,10 +2635,9 @@ TEST_F(NetworkStateHandlerTest,
 }
 
 TEST_F(NetworkStateHandlerTest, BlockedWifiByPolicyOnlyManagedIfAvailable) {
-  NetworkState* wifi1 = network_state_handler_->GetModifiableNetworkState(
-      kShillManagerClientStubDefaultWifi);
-  NetworkState* wifi2 = network_state_handler_->GetModifiableNetworkState(
-      kShillManagerClientStubWifi2);
+  NetworkState* wifi1 =
+      GetModifiableNetworkState(kShillManagerClientStubDefaultWifi);
+  NetworkState* wifi2 = GetModifiableNetworkState(kShillManagerClientStubWifi2);
 
   EXPECT_FALSE(wifi1->IsManagedByPolicy());
   EXPECT_FALSE(wifi2->IsManagedByPolicy());
@@ -2686,8 +2679,8 @@ TEST_F(NetworkStateHandlerTest, SetNetworkConnectRequested) {
   NetworkStateHandler::NetworkStateList active_networks;
   network_state_handler_->GetActiveNetworkListByType(
       NetworkTypePattern::Default(), &active_networks);
-  EXPECT_FALSE(
-      NetworkListContainsPath(active_networks, kShillManagerClientStubWifi2));
+  EXPECT_FALSE(base::Contains(active_networks, kShillManagerClientStubWifi2,
+                              &NetworkState::path));
 
   // Set |connect_requested_| for wifi2 and verify that it is connecting and
   // in the active list.
@@ -2697,8 +2690,8 @@ TEST_F(NetworkStateHandlerTest, SetNetworkConnectRequested) {
   EXPECT_TRUE(wifi2->IsConnectingState());
   network_state_handler_->GetActiveNetworkListByType(
       NetworkTypePattern::Default(), &active_networks);
-  EXPECT_TRUE(
-      NetworkListContainsPath(active_networks, kShillManagerClientStubWifi2));
+  EXPECT_TRUE(base::Contains(active_networks, kShillManagerClientStubWifi2,
+                             &NetworkState::path));
 
   // Clear |connect_requested_| for wifi2 and verify that it is not connecting
   // or in the active list.
@@ -2708,8 +2701,8 @@ TEST_F(NetworkStateHandlerTest, SetNetworkConnectRequested) {
   EXPECT_FALSE(wifi2->IsConnectingState());
   network_state_handler_->GetActiveNetworkListByType(
       NetworkTypePattern::Default(), &active_networks);
-  EXPECT_FALSE(
-      NetworkListContainsPath(active_networks, kShillManagerClientStubWifi2));
+  EXPECT_FALSE(base::Contains(active_networks, kShillManagerClientStubWifi2,
+                              &NetworkState::path));
 }
 
 TEST_F(NetworkStateHandlerTest, Hostname) {
@@ -2830,6 +2823,23 @@ TEST_F(NetworkStateHandlerTest, RequestTrafficCounters) {
                       },
                       &traffic_counters, run_loop.QuitClosure()));
   run_loop.Run();
+}
+
+TEST_F(NetworkStateHandlerTest, RequestPortalDetection) {
+  RemoveEthernet();
+  NetworkState* wifi1 =
+      GetModifiableNetworkState(kShillManagerClientStubDefaultWifi);
+  EXPECT_EQ(wifi1->connection_state(), shill::kStateOnline);
+
+  test_observer_->reset_change_counts();
+  service_test_->SetRequestPortalState(shill::kStateRedirectFound);
+  network_state_handler_->RequestPortalDetection();
+  base::RunLoop().RunUntilIdle();
+  wifi1 = GetModifiableNetworkState(kShillManagerClientStubDefaultWifi);
+  EXPECT_EQ(wifi1->connection_state(), shill::kStateRedirectFound);
+  EXPECT_EQ(test_observer_->default_network_portal_state(),
+            NetworkState::PortalState::kPortal);
+  EXPECT_EQ(test_observer_->portal_state_change_count(), 1u);
 }
 
 }  // namespace ash

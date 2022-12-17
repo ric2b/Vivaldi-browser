@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,9 +8,9 @@
 #include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/safe_ref.h"
-#include "content/browser/browsing_instance.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/site_instance_group.h"
+#include "content/public/browser/browsing_instance_id.h"
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom-forward.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 

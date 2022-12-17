@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,13 +9,15 @@
 #include <string>
 #include <utility>
 
-#include "base/stl_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/values_test_util.h"
 #include "base/time/time.h"
+#include "base/types/expected.h"
+#include "base/types/optional_util.h"
 #include "base/values.h"
 #include "content/browser/attribution_reporting/attribution_aggregation_keys.h"
 #include "content/browser/attribution_reporting/attribution_filter_data.h"
+#include "content/browser/attribution_reporting/attribution_reporting.mojom.h"
 #include "content/browser/attribution_reporting/attribution_source_type.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
@@ -30,18 +32,27 @@
 namespace content {
 namespace {
 
+using ::attribution_reporting::mojom::SourceRegistrationError;
+
 TEST(AttributionRegistrationParsingTest, ParseAggregationKeys) {
   const struct {
     const char* description;
     absl::optional<base::Value> json;
-    absl::optional<AttributionAggregationKeys> expected;
+    base::expected<AttributionAggregationKeys, SourceRegistrationError>
+        expected;
   } kTestCases[] = {
       {"Null", absl::nullopt, AttributionAggregationKeys()},
-      {"Not a dictionary", base::Value(base::Value::List()), absl::nullopt},
+      {"Not a dictionary", base::Value(base::Value::List()),
+       base::unexpected(SourceRegistrationError::kAggregationKeysWrongType)},
       {"key not a string", base::test::ParseJson(R"({"key":123})"),
-       absl::nullopt},
+       base::unexpected(
+           SourceRegistrationError::kAggregationKeysValueWrongType)},
+      {"key doesn't start with 0x", base::test::ParseJson(R"({"key":"159"})"),
+       base::unexpected(
+           SourceRegistrationError::kAggregationKeysValueWrongFormat)},
       {"Invalid key", base::test::ParseJson(R"({"key":"0xG59"})"),
-       absl::nullopt},
+       base::unexpected(
+           SourceRegistrationError::kAggregationKeysValueWrongFormat)},
       {"One valid key", base::test::ParseJson(R"({"key":"0x159"})"),
        *AttributionAggregationKeys::FromKeys(
            {{"key", absl::MakeUint128(/*high=*/0, /*low=*/345)}})},
@@ -53,12 +64,14 @@ TEST(AttributionRegistrationParsingTest, ParseAggregationKeys) {
            {"key2", absl::MakeUint128(/*high=*/5, /*low=*/345)},
        })},
       {"Second key invalid",
-       base::test::ParseJson(R"({"key1":"0x159","key2":""})"), absl::nullopt},
+       base::test::ParseJson(R"({"key1":"0x159","key2":""})"),
+       base::unexpected(
+           SourceRegistrationError::kAggregationKeysValueWrongFormat)},
   };
 
   for (const auto& test_case : kTestCases) {
     EXPECT_EQ(AttributionAggregationKeys::FromJSON(
-                  base::OptionalOrNullptr(test_case.json)),
+                  base::OptionalToPtr(test_case.json)),
               test_case.expected)
         << test_case.description;
   }
@@ -113,8 +126,8 @@ TEST(AttributionRegistrationParsingTest, ParseAggregationKeys_CheckSize) {
 
   for (const auto& test_case : kTestCases) {
     base::Value value(test_case.GetHeader());
-    EXPECT_EQ(AttributionAggregationKeys::FromJSON(&value),
-              test_case.Expected())
+    EXPECT_EQ(AttributionAggregationKeys::FromJSON(&value).has_value(),
+              test_case.Expected().has_value())
         << test_case.description;
   }
 }
@@ -157,7 +170,7 @@ TEST(AttributionRegistrationParsingTest, ParseFilterData) {
   struct {
     const char* description;
     absl::optional<base::Value> json;
-    absl::optional<AttributionFilterData> expected;
+    base::expected<AttributionFilterData, SourceRegistrationError> expected;
   } kTestCases[] = {
       {
           "Null",
@@ -187,70 +200,71 @@ TEST(AttributionRegistrationParsingTest, ParseFilterData) {
           base::test::ParseJson(R"json({
           "source_type": ["a"]
         })json"),
-          absl::nullopt,
+          base::unexpected(
+              SourceRegistrationError::kFilterDataHasSourceTypeKey),
       },
       {
           "not_dictionary",
           base::Value(base::Value::List()),
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kFilterDataWrongType),
       },
       {
           "value_not_array",
           base::test::ParseJson(R"json({"a": true})json"),
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kFilterDataListWrongType),
       },
       {
           "array_element_not_string",
           base::test::ParseJson(R"json({"a": [true]})json"),
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kFilterDataValueWrongType),
       },
       {
           "too_many_keys",
           make_filter_data_with_keys(51),
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kFilterDataTooManyKeys),
       },
       {
           "key_too_long",
           make_filter_data_with_key_length(26),
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kFilterDataKeyTooLong),
       },
       {
           "too_many_values",
           make_filter_data_with_values(51),
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kFilterDataListTooLong),
       },
       {
           "value_too_long",
           make_filter_data_with_value_length(26),
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kFilterDataValueTooLong),
       },
   };
 
   for (auto& test_case : kTestCases) {
     EXPECT_EQ(AttributionFilterData::FromSourceJSON(
-                  base::OptionalOrNullptr(test_case.json)),
+                  base::OptionalToPtr(test_case.json)),
               test_case.expected)
         << test_case.description;
   }
 
   {
     base::Value json = make_filter_data_with_keys(50);
-    EXPECT_TRUE(AttributionFilterData::FromSourceJSON(&json));
+    EXPECT_TRUE(AttributionFilterData::FromSourceJSON(&json).has_value());
   }
 
   {
     base::Value json = make_filter_data_with_key_length(25);
-    EXPECT_TRUE(AttributionFilterData::FromSourceJSON(&json));
+    EXPECT_TRUE(AttributionFilterData::FromSourceJSON(&json).has_value());
   }
 
   {
     base::Value json = make_filter_data_with_values(50);
-    EXPECT_TRUE(AttributionFilterData::FromSourceJSON(&json));
+    EXPECT_TRUE(AttributionFilterData::FromSourceJSON(&json).has_value());
   }
 
   {
     base::Value json = make_filter_data_with_value_length(25);
-    EXPECT_TRUE(AttributionFilterData::FromSourceJSON(&json));
+    EXPECT_TRUE(AttributionFilterData::FromSourceJSON(&json).has_value());
   }
 }
 
@@ -268,7 +282,7 @@ TEST(AttributionRegistrationParsingTest, ParseSourceRegistration) {
   const struct {
     const char* desc;
     const char* json;
-    absl::optional<StorableSource> expected;
+    base::expected<StorableSource, SourceRegistrationError> expected;
   } kTestCases[] = {
       {
           "required_fields_only",
@@ -309,12 +323,17 @@ TEST(AttributionRegistrationParsingTest, ParseSourceRegistration) {
       {
           "destination_missing",
           R"json({})json",
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kDestinationMissing),
       },
       {
           "destination_wrong_type",
           R"json({"destination":0})json",
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kDestinationWrongType),
+      },
+      {
+          "destination_untrustworthy",
+          R"json({"destination":"http://d.example"})json",
+          base::unexpected(SourceRegistrationError::kDestinationUntrustworthy),
       },
       {
           "priority_valid",
@@ -421,7 +440,7 @@ TEST(AttributionRegistrationParsingTest, ParseSourceRegistration) {
       {
           "filter_data_wrong_type",
           R"json({"filter_data":5,"destination":"https://d.example"})json",
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kFilterDataWrongType),
       },
       {
           "aggregation_keys_valid",
@@ -437,7 +456,7 @@ TEST(AttributionRegistrationParsingTest, ParseSourceRegistration) {
       {
           "aggregation_keys_wrong_type",
           R"json({"aggregation_keys":5,"destination":"https://d.example"})json",
-          absl::nullopt,
+          base::unexpected(SourceRegistrationError::kAggregationKeysWrongType),
       },
   };
 

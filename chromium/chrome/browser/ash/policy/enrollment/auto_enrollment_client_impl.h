@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,10 +20,13 @@ namespace network {
 class SharedURLLoaderFactory;
 }
 
+namespace policy::psm {
+class RlweDmserverClient;
+}
+
 namespace policy {
 
 class DeviceManagementService;
-class PsmRlweDmserverClient;
 
 // Interacts with the device management service and determines whether this
 // machine should automatically enter the Enterprise Enrollment screen during
@@ -59,7 +62,7 @@ class AutoEnrollmentClientImpl final
         const std::string& device_brand_code,
         int power_initial,
         int power_limit,
-        std::unique_ptr<PsmRlweDmserverClient> psm_rlwe_dmserver_client)
+        std::unique_ptr<psm::RlweDmserverClient> psm_rlwe_dmserver_client)
         override;
   };
 

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -451,6 +451,16 @@ public class TabPersistentStore {
                 }
             }
             mTabsToSave.clear();
+            if (isCriticalPersistedTabDataSaveOnlyEnabled()
+                    || isCriticalPersistedTabDataSaveAndRestoreEnabled()) {
+                if (currentStandardTab != null) {
+                    CriticalPersistedTabData.from(currentStandardTab).save();
+                }
+                if (currentIncognitoTab != null) {
+                    CriticalPersistedTabData.from(currentIncognitoTab).save();
+                }
+                PersistedTabData.onShutdown();
+            }
         } finally {
             StrictMode.setThreadPolicy(oldPolicy);
         }
@@ -1970,6 +1980,10 @@ public class TabPersistentStore {
                 && !mTabsToMigrate.isEmpty()) {
             Tab tabToMigrate = mTabsToMigrate.pollFirst();
             if (tabToMigrate != null && !tabToMigrate.isDestroyed()) {
+                // Not all Tab metadata changes result in a Tab save. There is
+                // throttling via setShouldSave. To ensure an un-migrated Tab is
+                // saved, the shouldSave flag should be set.
+                CriticalPersistedTabData.from(tabToMigrate).setShouldSave();
                 tabToMigrate.setIsTabSaveEnabled(true);
             }
             numMigrated++;

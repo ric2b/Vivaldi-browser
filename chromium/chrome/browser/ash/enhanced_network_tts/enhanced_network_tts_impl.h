@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,12 +9,12 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/enhanced_network_tts/mojom/enhanced_network_tts.mojom.h"
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/values.h"
+#include "chromeos/ash/components/enhanced_network_tts/mojom/enhanced_network_tts.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
@@ -24,6 +24,9 @@
 
 namespace ash {
 namespace enhanced_network_tts {
+
+// Whether or not to override enhanced TTS params.
+BASE_DECLARE_FEATURE(kEnhancedNetworkTtsOverride);
 
 // The implementation of the enhanced network text-to-speech mojom receiver.
 // The remote of this mojom pipe will be invoked from the enhanced network tts
@@ -47,10 +50,6 @@ class EnhancedNetworkTtsImpl : public mojom::EnhancedNetworkTts {
   // ash::enhanced_network_tts::mojom::EnhancedNetworkTts:
   void GetAudioData(mojom::TtsRequestPtr request,
                     GetAudioDataCallback callback) override;
-
-  // Whether or not to override enhanced TTS params.
-  static constexpr base::Feature kOverrideParams{
-      "EnhancedNetworkTtsOverride", base::FEATURE_DISABLED_BY_DEFAULT};
 
   // Set the character limit of text piece in each |ServerRequest|. Unit tests
   // can use this method to modify the limit. Otherwise, the limit is set to
@@ -138,8 +137,8 @@ class EnhancedNetworkTtsImpl : public mojom::EnhancedNetworkTts {
 
   // An override Google API key. If empty, the API key with which the browser
   // was built (if any) will be used instead.
-  static constexpr base::FeatureParam<std::string> kApiKey{&kOverrideParams,
-                                                           "api_key", ""};
+  static constexpr base::FeatureParam<std::string> kApiKey{
+      &kEnhancedNetworkTtsOverride, "api_key", ""};
 };
 
 }  // namespace enhanced_network_tts

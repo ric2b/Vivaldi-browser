@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -93,6 +93,8 @@ void WaylandBufferManagerGpu::Initialize(
   supports_surface_background_color_ =
       supported_surface_augmentor_version >=
       AUGMENTED_SURFACE_SET_BACKGROUND_COLOR_SINCE_VERSION;
+  supports_clip_rect_ = supported_surface_augmentor_version >=
+                        AUGMENTED_SUB_SURFACE_SET_CLIP_RECT_SINCE_VERSION;
 
   BindHostInterface(std::move(remote_host));
 

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,6 @@ class PLATFORM_EXPORT StaticBitmapImageToVideoFrameCopier {
   void OnARGBPixelsReadAsync(scoped_refptr<StaticBitmapImage> image,
                              scoped_refptr<media::VideoFrame> temp_argb_frame,
                              FrameReadyCallback callback,
-                             GrSurfaceOrigin result_origin,
                              bool success);
   void OnYUVPixelsReadAsync(scoped_refptr<media::VideoFrame> yuv_frame,
                             FrameReadyCallback callback,

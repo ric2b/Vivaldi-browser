@@ -1,9 +1,11 @@
 <!doctype html>
 <html>
 <head>
-<!-- Copyright 2022 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2022 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 <meta charset="utf-8">
 <meta name="color-scheme" content="light dark">
 <script type="module" src="apc_internals.js"></script>
@@ -50,17 +52,22 @@
   </div>
   <div id="flags" class="info-div">
     <table id="flags-table" class="info-table">
-      <th colspan="2">Overview of APC-related flags</th>
+      <th colspan="2">APC-related flags</th>
+    </table>
+  </div>
+  <div id="prefs" class="info-div">
+    <h2>Autofill Assistant prefs</h2>
+    <table id="prefs-table" class="info-table">
     </table>
   </div>
   <div id="autofill-assistant" class="info-div">
-    <h2>Overview of Autofill Assistant state</h2>
+    <h2>Autofill Assistant state</h2>
     <table id="autofill-assistant-table" class="info-table">
     </table>
   </div>
   <div id="script-fetching" class="info-div">
     <table id="script-fetching-table" class="info-table">
-      <th colspan="2">Overview of script fetching engine</th>
+      <th colspan="2">Script fetching engine</th>
     </table>
     <div id="script-cache">
       <div id="script-cache-header">Script fetching cache (
@@ -69,8 +76,8 @@
         <button id="script-cache-refresh">Refresh</button>)
       </div>
       <div id="script-start-parameters">
+        Bundle Id: <input type="text" id="bundle-id">
         LDAP: <input type="text" id="ldap">
-        Bundle Id: <input type="text" size=3 id="bundle-id">
       </div>
       <div id="script-cache-content">
       </div>

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -219,6 +219,11 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
                                      const blink::StorageKey& key,
                                      const std::string& value,
                                      StatusCallback callback);
+  void UpdateFetchHandlerType(
+      int64_t registration_id,
+      const blink::StorageKey& key,
+      blink::mojom::ServiceWorkerFetchHandlerType fetch_handler_type,
+      StatusCallback callback);
   void StoreUncommittedResourceId(int64_t resource_id,
                                   const blink::StorageKey& key);
   void DoomUncommittedResource(int64_t resource_id);

@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,14 +38,12 @@ struct CONTENT_EXPORT CookieStoreConfig {
   // created using this config.
   CookieStoreConfig(const base::FilePath& path,
                     bool restore_old_session_cookies,
-                    bool persist_session_cookies,
-                    bool first_party_sets_enabled);
+                    bool persist_session_cookies);
   ~CookieStoreConfig();
 
   const base::FilePath path;
   const bool restore_old_session_cookies;
   const bool persist_session_cookies;
-  const bool first_party_sets_enabled;
   // The following are infrequently used cookie store parameters.
   // Rather than clutter the constructor API, these are assigned a default
   // value on CookieStoreConfig construction. Clients should then override

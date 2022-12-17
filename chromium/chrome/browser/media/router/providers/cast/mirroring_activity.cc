@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,11 +23,11 @@
 #include "chrome/browser/media/router/providers/cast/cast_activity_manager.h"
 #include "chrome/browser/media/router/providers/cast/cast_internal_message_util.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/cast_channel/cast_message_util.h"
-#include "components/cast_channel/cast_socket.h"
-#include "components/cast_channel/enum_table.h"
 #include "components/media_router/common/discovery/media_sink_internal.h"
 #include "components/media_router/common/mojom/media_router.mojom.h"
+#include "components/media_router/common/providers/cast/channel/cast_message_util.h"
+#include "components/media_router/common/providers/cast/channel/cast_socket.h"
+#include "components/media_router/common/providers/cast/channel/enum_table.h"
 #include "components/media_router/common/route_request_result.h"
 #include "components/mirroring/mojom/session_parameters.mojom-forward.h"
 #include "components/mirroring/mojom/session_parameters.mojom.h"
@@ -79,14 +79,11 @@ constexpr char kLoggerComponent[] = "MirroringService";
 
 using MirroringType = MirroringActivity::MirroringType;
 
-const std::string GetMirroringNamespace(const base::Value& message) {
-  const base::Value* const type_value =
-      message.FindKeyOfType("type", base::Value::Type::STRING);
-
-  if (type_value &&
-      type_value->GetString() ==
-          cast_util::EnumToString<cast_channel::CastMessageType,
-                                  cast_channel::CastMessageType::kRpc>()) {
+const std::string GetMirroringNamespace(const base::Value::Dict& message) {
+  const std::string* type = message.FindString("type");
+  if (type &&
+      *type == cast_util::EnumToString<cast_channel::CastMessageType,
+                                       cast_channel::CastMessageType::kRpc>()) {
     return mirroring::mojom::kRemotingNamespace;
   } else {
     return mirroring::mojom::kWebRtcNamespace;
@@ -278,7 +275,7 @@ void MirroringActivity::LogErrorMessage(const std::string& message) {
                     route_.media_source().id(), route_.presentation_id());
 }
 
-void MirroringActivity::Send(mirroring::mojom::CastMessagePtr message) {
+void MirroringActivity::OnMessage(mirroring::mojom::CastMessagePtr message) {
   DCHECK(message);
   DVLOG(2) << "Relaying message to receiver: " << message->json_format_data;
 
@@ -298,6 +295,29 @@ void MirroringActivity::OnAppMessage(
     DVLOG(2) << "Ignoring message with namespace " << message.namespace_();
     return;
   }
+  CastSession* session = GetSession();
+  if (!session) {
+    DVLOG(2) << "No valid session.";
+    return;
+  }
+
+  if (message.destination_id() != session->destination_id() &&
+      message.destination_id() != "*") {
+    // Ignore messages sent to someone else.
+    DVLOG(2) << "Ignoring message intended for destination_id:\""
+             << message.destination_id() << "\" (expected \""
+             << session->destination_id() << "\").";
+    return;
+  }
+
+  if (message.source_id() != message_handler_->source_id()) {
+    // Ignore messages sent by a stranger.
+    DVLOG(2) << "Ignoring message unexpectedly sent by source_id: \""
+             << message.source_id() << "\" (expected \""
+             << message_handler_->source_id() << "\")";
+    return;
+  }
+
   DVLOG(2) << "Relaying app message from receiver: " << message.DebugString();
   DCHECK(message.has_payload_utf8());
   DCHECK_EQ(message.protocol_version(),
@@ -314,9 +334,7 @@ void MirroringActivity::OnAppMessage(
   mirroring::mojom::CastMessagePtr ptr = mirroring::mojom::CastMessage::New();
   ptr->message_namespace = message.namespace_();
   ptr->json_format_data = message.payload_utf8();
-  // TODO(crbug.com/1291712): Do something with message.source_id() and
-  // message.destination_id()?
-  channel_to_service_->Send(std::move(ptr));
+  channel_to_service_->OnMessage(std::move(ptr));
 }
 
 void MirroringActivity::OnInternalMessage(
@@ -335,7 +353,7 @@ void MirroringActivity::OnInternalMessage(
         route().media_sink_id(), route().media_source().id(),
         route().presentation_id());
   }
-  channel_to_service_->Send(std::move(ptr));
+  channel_to_service_->OnMessage(std::move(ptr));
 }
 
 void MirroringActivity::CreateMediaController(
@@ -365,7 +383,7 @@ void MirroringActivity::HandleParseJsonResult(
   CastSession* session = GetSession();
   DCHECK(session);
 
-  if (!result.has_value()) {
+  if (!result.has_value() || !result.value().is_dict()) {
     // TODO(crbug.com/905002): Record UMA metric for parse result.
     logger_->LogError(
         media_router::mojom::LogCategory::kMirroring, kLoggerComponent,
@@ -375,19 +393,20 @@ void MirroringActivity::HandleParseJsonResult(
     return;
   }
 
-  const std::string message_namespace = GetMirroringNamespace(*result);
+  const std::string message_namespace =
+      GetMirroringNamespace(result.value().GetDict());
   if (message_namespace == mirroring::mojom::kWebRtcNamespace) {
-    logger_->LogInfo(media_router::mojom::LogCategory::kMirroring,
-                     kLoggerComponent,
-                     base::StrCat({"WebRTC message received: ",
-                                   GetScrubbedLogMessage(*result)}),
-                     route().media_sink_id(), route().media_source().id(),
-                     route().presentation_id());
+    logger_->LogInfo(
+        media_router::mojom::LogCategory::kMirroring, kLoggerComponent,
+        base::StrCat({"WebRTC message received: ",
+                      GetScrubbedLogMessage(result.value().GetDict())}),
+        route().media_sink_id(), route().media_source().id(),
+        route().presentation_id());
   }
 
   cast::channel::CastMessage cast_message = cast_channel::CreateCastMessage(
-      message_namespace, std::move(*result), message_handler_->sender_id(),
-      session->transport_id());
+      message_namespace, std::move(*result), message_handler_->source_id(),
+      session->destination_id());
   if (message_handler_->SendCastMessage(cast_data_.cast_channel_id,
                                         cast_message) == Result::kFailed) {
     logger_->LogError(
@@ -434,11 +453,13 @@ void MirroringActivity::OnSessionSet(const CastSession& session) {
   // called.
   DCHECK(channel_to_service_receiver_);
 
-  host_->Start(SessionParameters::New(
-                   session_type, cast_data_.ip_endpoint.address(),
-                   cast_data_.model_name, cast_source->target_playout_delay()),
-               std::move(observer_remote), std::move(channel_remote),
-               std::move(channel_to_service_receiver_));
+  host_->Start(
+      SessionParameters::New(session_type, cast_data_.ip_endpoint.address(),
+                             cast_data_.model_name, session.destination_id(),
+                             message_handler_->source_id(),
+                             cast_source->target_playout_delay()),
+      std::move(observer_remote), std::move(channel_remote),
+      std::move(channel_to_service_receiver_));
 }
 
 void MirroringActivity::StopMirroring() {
@@ -448,21 +469,25 @@ void MirroringActivity::StopMirroring() {
 }
 
 std::string MirroringActivity::GetScrubbedLogMessage(
-    const base::Value& message) {
+    const base::Value::Dict& message) {
   std::string message_str;
   auto scrubbed_message = message.Clone();
-  auto* streams = scrubbed_message.FindPath("offer.supportedStreams");
-  if (!streams || !streams->is_list()) {
+  base::Value::List* streams =
+      scrubbed_message.FindListByDottedPath("offer.supportedStreams");
+  if (!streams) {
     base::JSONWriter::Write(scrubbed_message, &message_str);
     return message_str;
   }
 
-  for (base::Value& item : streams->GetListDeprecated()) {
-    if (item.FindStringKey("aesKey")) {
-      item.SetStringKey("aesKey", "AES_KEY");
+  for (base::Value& item : *streams) {
+    if (!item.is_dict()) {
+      continue;
     }
-    if (item.FindStringKey("aesIvMask")) {
-      item.SetStringKey("aesIvMask", "AES_IV_MASK");
+    if (item.GetDict().FindString("aesKey")) {
+      item.GetDict().Set("aesKey", "AES_KEY");
+    }
+    if (item.GetDict().FindString("aesIvMask")) {
+      item.GetDict().Set("aesIvMask", "AES_IV_MASK");
     }
   }
   base::JSONWriter::Write(scrubbed_message, &message_str);

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -141,11 +141,11 @@ class BackForwardCacheMetricsBrowserTest
     if (GetParam() == BackForwardCacheStatus::kEnabled) {
       // Enable BackForwardCache.
       feature_list_.InitWithFeaturesAndParameters(
-          {{features::kBackForwardCache, {{"enable_same_site", "true"}}},
+          {{features::kBackForwardCache, {}},
            {kBackForwardCacheNoTimeEviction, {}}},
           // Allow BackForwardCache for all devices regardless of their memory.
           {features::kBackForwardCacheMemoryControls});
-      DCHECK(IsSameSiteBackForwardCacheEnabled());
+      DCHECK(IsBackForwardCacheEnabled());
     } else {
       feature_list_.InitAndDisableFeature(features::kBackForwardCache);
       DCHECK(!IsBackForwardCacheEnabled());

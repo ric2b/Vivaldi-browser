@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -138,19 +138,17 @@ ipcz_source_set("reference_drivers") {
 
   public = [
     "reference_drivers/async_reference_driver.h",
-    "reference_drivers/blob.h",
+    "reference_drivers/single_process_reference_driver_base.h",
     "reference_drivers/sync_reference_driver.h",
   ]
 
   sources = [
     "reference_drivers/async_reference_driver.cc",
-    "reference_drivers/blob.cc",
     "reference_drivers/object.cc",
     "reference_drivers/object.h",
     "reference_drivers/random.cc",
     "reference_drivers/random.h",
     "reference_drivers/single_process_reference_driver_base.cc",
-    "reference_drivers/single_process_reference_driver_base.h",
     "reference_drivers/sync_reference_driver.cc",
   ]
 
@@ -230,6 +228,8 @@ ipcz_source_set("impl") {
     "ipcz/node_link_memory.h",
     "ipcz/node_messages.h",
     "ipcz/node_name.h",
+    "ipcz/node_type.h",
+    "ipcz/operation_context.h",
     "ipcz/parcel.h",
     "ipcz/parcel_queue.h",
     "ipcz/portal.h",
@@ -243,9 +243,12 @@ ipcz_source_set("impl") {
     "ipcz/sequenced_queue.h",
     "ipcz/sublink_id.h",
     "ipcz/test_messages.h",
+    "ipcz/validator.h",
   ]
   sources = [
     "ipcz/api_object.cc",
+    "ipcz/atomic_queue_state.cc",
+    "ipcz/atomic_queue_state.h",
     "ipcz/block_allocator.cc",
     "ipcz/block_allocator_pool.cc",
     "ipcz/block_allocator_pool.h",
@@ -272,6 +275,7 @@ ipcz_source_set("impl") {
     "ipcz/message_macros/message_params_declaration_macros.h",
     "ipcz/message_macros/message_params_declaration_macros.h",
     "ipcz/message_macros/undef_message_macros.h",
+    "ipcz/monitored_atomic.h",
     "ipcz/node.cc",
     "ipcz/node_connector.cc",
     "ipcz/node_link.cc",
@@ -295,6 +299,7 @@ ipcz_source_set("impl") {
     "ipcz/trap_event_dispatcher.h",
     "ipcz/trap_set.cc",
     "ipcz/trap_set.h",
+    "ipcz/validator.cc",
   ]
   public_deps = [
     ":ipcz_header",
@@ -387,6 +392,7 @@ ipcz_source_set("ipcz_tests_sources") {
     "remote_portal_test.cc",
     "trap_test.cc",
     "util/ref_counted_test.cc",
+    "util/safe_math_test.cc",
     "util/stack_trace_test.cc",
   ]
 

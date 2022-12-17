@@ -1,12 +1,12 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import '../cr_icon_button/cr_icon_button.js';
-import '../cr_icons_css.m.js';
-import '../icons.m.js';
-import '../shared_style_css.m.js';
-import '../shared_vars_css.m.js';
+import '../cr_icons.css.js';
+import '../icons.html.js';
+import '../cr_shared_style.css.js';
+import '../cr_shared_vars.css.js';
 import '//resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
 
 import {DomIf, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';

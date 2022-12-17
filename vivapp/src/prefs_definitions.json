@@ -918,6 +918,7 @@
         "syncable": true
       },
       "display_mode": {
+        "description": "[DEPRECATED 2022-10] Use manager_filter from now on",
         "type": "enum",
         "enum_values": {
           "day": 0,
@@ -931,6 +932,7 @@
         "syncable": false
       },
       "panel_display_mode": {
+        "description": "[DEPRECATED 2022-10] Use panel_filter from now on",
         "type": "enum",
         "enum_values": {
           "day": 0,
@@ -939,6 +941,30 @@
         },
         "default": "day",
         "syncable": false
+      },
+      "manager_filter": {
+        "type": "dictionary",
+        "syncable": false,
+        "default": {
+          "showCompletedTasks": false,
+          "displayMode": "month"
+        }
+      },
+      "panel_filter": {
+        "type": "dictionary",
+        "syncable": false,
+        "default": {
+          "showCompletedTasks": false,
+          "displayMode": "day"
+        }
+      },
+      "task_panel_filter": {
+        "type": "dictionary",
+        "syncable": false,
+        "default": {
+          "showCompletedTasks": false,
+          "displayMode": "day"
+        }
       },
       "show_day_sidebar": {
         "type": "boolean",
@@ -980,6 +1006,11 @@
       "notification_sound": {
         "type": "string",
         "default": "",
+        "syncable": false
+      },
+      "notification_volume": {
+        "type": "integer",
+        "default": 100,
         "syncable": false
       },
       "default_notification": {
@@ -1394,6 +1425,12 @@
         "type": "boolean",
         "default": false,
         "syncable": false
+      },
+      "auto_generate_contacts": {
+        "description": "Auto generate contacts based on recipients in sent messages",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
       },
       "panel_activity_indicators_enabled": {
         "description": "Show activity indicators in the Mail Panel",
@@ -2040,8 +2077,80 @@
           "syncable": true
         }
       },
+      "elements": {
+        "description": "Data for panels. An object entry contains an 'id', 'width', 'resizable' and 'floating' if present. The id must be one those in Toolsbars | panel, the rest are optional,",
+        "type": "list",
+        "default": [
+          {
+            "id": "PanelBookmarks",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelReadingList",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelDownloads",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelHistory",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelNotes",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelWindow",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelTranslate",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelMail",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelCalendar",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelTasks",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelFeeds",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelContacts",
+            "width": -1,
+            "resizable": false
+          },
+          {
+            "id": "PanelChat",
+            "width": -1,
+            "resizable": false
+          }
+        ],
+        "syncable": false
+      },
       "list": {
-        "description": "Default panel list",
+        "description": "[DEPRECATED 2022/11] Default panel list",
         "type": "list",
         "default": [
           {
@@ -2167,6 +2276,18 @@
         "syncable": true
       },
       "state": {
+        "description": "[DEPRECATED 2022/11]",
+        "type": "dictionary",
+        "default": {
+          "barVisible": true,
+          "selectedPanel": "",
+          "width": 34,
+          "panelVisible": false
+        },
+        "syncable": false
+      },
+      "window_defaults": {
+        "description": "Same as 'state', but not with same values for 'selectedPanel'.",
         "type": "dictionary",
         "default": {
           "barVisible": true,
@@ -2233,8 +2354,51 @@
         }
       },
       "web": {
+        "elements": {
+          "description": "Default web panel list. The id must be one those in Toolsbars | panel.",
+          "type": "list",
+          "default": [
+            {
+              "id": "WEBPANEL_949d4873-deed-4168-b306-92d1848687a5",
+              "url": "https://social.vivaldi.net/",
+              "faviconUrl": "data:image/png;base64,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",
+              "mobileMode": true,
+              "title": "",
+              "zoom": 1
+            },
+            {
+              "id": "WEBPANEL_ckmam0bsw00002y5xoafpww5i",
+              "url": "https://help.vivaldi.com/",
+              "faviconUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAKQ2lDQ1BJQ0MgcHJvZmlsZQAAeNqdU3dYk/cWPt/3ZQ9WQtjwsZdsgQAiI6wIyBBZohCSAGGEEBJAxYWIClYUFRGcSFXEgtUKSJ2I4qAouGdBiohai1VcOO4f3Ke1fXrv7e371/u855zn/M55zw+AERImkeaiagA5UoU8Otgfj09IxMm9gAIVSOAEIBDmy8JnBcUAAPADeXh+dLA//AGvbwACAHDVLiQSx+H/g7pQJlcAIJEA4CIS5wsBkFIAyC5UyBQAyBgAsFOzZAoAlAAAbHl8QiIAqg0A7PRJPgUA2KmT3BcA2KIcqQgAjQEAmShHJAJAuwBgVYFSLALAwgCgrEAiLgTArgGAWbYyRwKAvQUAdo5YkA9AYACAmUIszAAgOAIAQx4TzQMgTAOgMNK/4KlfcIW4SAEAwMuVzZdL0jMUuJXQGnfy8ODiIeLCbLFCYRcpEGYJ5CKcl5sjE0jnA0zODAAAGvnRwf44P5Dn5uTh5mbnbO/0xaL+a/BvIj4h8d/+vIwCBAAQTs/v2l/l5dYDcMcBsHW/a6lbANpWAGjf+V0z2wmgWgrQevmLeTj8QB6eoVDIPB0cCgsL7SViob0w44s+/zPhb+CLfvb8QB7+23rwAHGaQJmtwKOD/XFhbnauUo7nywRCMW735yP+x4V//Y4p0eI0sVwsFYrxWIm4UCJNx3m5UpFEIcmV4hLpfzLxH5b9CZN3DQCshk/ATrYHtctswH7uAQKLDljSdgBAfvMtjBoLkQAQZzQyefcAAJO/+Y9AKwEAzZek4wAAvOgYXKiUF0zGCAAARKCBKrBBBwzBFKzADpzBHbzAFwJhBkRADCTAPBBCBuSAHAqhGJZBGVTAOtgEtbADGqARmuEQtMExOA3n4BJcgetwFwZgGJ7CGLyGCQRByAgTYSE6iBFijtgizggXmY4EImFINJKApCDpiBRRIsXIcqQCqUJqkV1II/ItchQ5jVxA+pDbyCAyivyKvEcxlIGyUQPUAnVAuagfGorGoHPRdDQPXYCWomvRGrQePYC2oqfRS+h1dAB9io5jgNExDmaM2WFcjIdFYIlYGibHFmPlWDVWjzVjHVg3dhUbwJ5h7wgkAouAE+wIXoQQwmyCkJBHWExYQ6gl7CO0EroIVwmDhDHCJyKTqE+0JXoS+cR4YjqxkFhGrCbuIR4hniVeJw4TX5NIJA7JkuROCiElkDJJC0lrSNtILaRTpD7SEGmcTCbrkG3J3uQIsoCsIJeRt5APkE+S+8nD5LcUOsWI4kwJoiRSpJQSSjVlP+UEpZ8yQpmgqlHNqZ7UCKqIOp9aSW2gdlAvU4epEzR1miXNmxZDy6Qto9XQmmlnafdoL+l0ugndgx5Fl9CX0mvoB+nn6YP0dwwNhg2Dx0hiKBlrGXsZpxi3GS+ZTKYF05eZyFQw1zIbmWeYD5hvVVgq9ip8FZHKEpU6lVaVfpXnqlRVc1U/1XmqC1SrVQ+rXlZ9pkZVs1DjqQnUFqvVqR1Vu6k2rs5Sd1KPUM9RX6O+X/2C+mMNsoaFRqCGSKNUY7fGGY0hFsYyZfFYQtZyVgPrLGuYTWJbsvnsTHYF+xt2L3tMU0NzqmasZpFmneZxzQEOxrHg8DnZnErOIc4NznstAy0/LbHWaq1mrX6tN9p62r7aYu1y7Rbt69rvdXCdQJ0snfU6bTr3dQm6NrpRuoW623XP6j7TY+t56Qn1yvUO6d3RR/Vt9KP1F+rv1u/RHzcwNAg2kBlsMThj8MyQY+hrmGm40fCE4agRy2i6kcRoo9FJoye4Ju6HZ+M1eBc+ZqxvHGKsNN5l3Gs8YWJpMtukxKTF5L4pzZRrmma60bTTdMzMyCzcrNisyeyOOdWca55hvtm82/yNhaVFnMVKizaLx5balnzLBZZNlvesmFY+VnlW9VbXrEnWXOss623WV2xQG1ebDJs6m8u2qK2brcR2m23fFOIUjynSKfVTbtox7PzsCuya7AbtOfZh9iX2bfbPHcwcEh3WO3Q7fHJ0dcx2bHC866ThNMOpxKnD6VdnG2ehc53zNRemS5DLEpd2lxdTbaeKp26fesuV5RruutK10/Wjm7ub3K3ZbdTdzD3Ffav7TS6bG8ldwz3vQfTw91jicczjnaebp8LzkOcvXnZeWV77vR5Ps5wmntYwbcjbxFvgvct7YDo+PWX6zukDPsY+Ap96n4e+pr4i3z2+I37Wfpl+B/ye+zv6y/2P+L/hefIW8U4FYAHBAeUBvYEagbMDawMfBJkEpQc1BY0FuwYvDD4VQgwJDVkfcpNvwBfyG/ljM9xnLJrRFcoInRVaG/owzCZMHtYRjobPCN8Qfm+m+UzpzLYIiOBHbIi4H2kZmRf5fRQpKjKqLupRtFN0cXT3LNas5Fn7Z72O8Y+pjLk722q2cnZnrGpsUmxj7Ju4gLiquIF4h/hF8ZcSdBMkCe2J5MTYxD2J43MC52yaM5zkmlSWdGOu5dyiuRfm6c7Lnnc8WTVZkHw4hZgSl7I/5YMgQlAvGE/lp25NHRPyhJuFT0W+oo2iUbG3uEo8kuadVpX2ON07fUP6aIZPRnXGMwlPUit5kRmSuSPzTVZE1t6sz9lx2S05lJyUnKNSDWmWtCvXMLcot09mKyuTDeR55m3KG5OHyvfkI/lz89sVbIVM0aO0Uq5QDhZML6greFsYW3i4SL1IWtQz32b+6vkjC4IWfL2QsFC4sLPYuHhZ8eAiv0W7FiOLUxd3LjFdUrpkeGnw0n3LaMuylv1Q4lhSVfJqedzyjlKD0qWlQyuCVzSVqZTJy26u9Fq5YxVhlWRV72qX1VtWfyoXlV+scKyorviwRrjm4ldOX9V89Xlt2treSrfK7etI66Trbqz3Wb+vSr1qQdXQhvANrRvxjeUbX21K3nShemr1js20zcrNAzVhNe1bzLas2/KhNqP2ep1/XctW/a2rt77ZJtrWv913e/MOgx0VO97vlOy8tSt4V2u9RX31btLugt2PGmIbur/mft24R3dPxZ6Pe6V7B/ZF7+tqdG9s3K+/v7IJbVI2jR5IOnDlm4Bv2pvtmne1cFoqDsJB5cEn36Z8e+NQ6KHOw9zDzd+Zf7f1COtIeSvSOr91rC2jbaA9ob3v6IyjnR1eHUe+t/9+7zHjY3XHNY9XnqCdKD3x+eSCk+OnZKeenU4/PdSZ3Hn3TPyZa11RXb1nQ8+ePxd07ky3X/fJ897nj13wvHD0Ivdi2yW3S609rj1HfnD94UivW2/rZffL7Vc8rnT0Tes70e/Tf/pqwNVz1/jXLl2feb3vxuwbt24m3Ry4Jbr1+Hb27Rd3Cu5M3F16j3iv/L7a/eoH+g/qf7T+sWXAbeD4YMBgz8NZD+8OCYee/pT/04fh0kfMR9UjRiONj50fHxsNGr3yZM6T4aeypxPPyn5W/3nrc6vn3/3i+0vPWPzY8Av5i8+/rnmp83Lvq6mvOscjxx+8znk98ab8rc7bfe+477rfx70fmSj8QP5Q89H6Y8en0E/3Pud8/vwv94Tz+4A5JREAAAAZdEVYdFNvZnR3YXJlAEFkb2JlIEltYWdlUmVhZHlxyWU8AAAKlklEQVR42txbe2wU5RY/38w+2t1tu8tuaWmhDcYEiHirtMTgH5TgBTEaRSVwJSqI/GEFqsYXRKJGEv/B+EAuN3BvxUSDBY2IGqKJtfURaOWhcpUbQeXRFoV2+97ue+eeb5nZzO7O89tdQE5ymA2d+eY77985M0MgDzQ4Zw6PBwsyh0zEI6dwKhFZiwSRMykhsiAeY56DB+O57p2YFNSBh0bk2cgNyHXI1cg8XB6iCuhF/hH5MPIh5K9QMeN5VQAKToVuQr4LuQiubAoh70P+Fyriq5wUgILPwMObyLfAX5PakNehIv5nWgEo/Co8/PMvYHEjHrEWldCi9EdORfj1eGi5CoQHUYb/iDLpe4Bo+Ra4Oml1picQhZg/epVYXi0cZslzgiXjhDcLJjzHQby2FhJTpgCZPBlISQmQ4mIsZHEQgkFIDA9jQesFcuYMWHp7CxkOVMa/Z3mAWOo68nm3hMsF8cZGsM+dC85Zs4B3Og1dF/X7YfzwYYh2dADf2QkkHM63IuZJJVKugFY8LMsLOpk6Ffjly6Fs4UIgVmtuawUCMLx3LyT27AFLf3++FLAbFfCPlAJEhOfP1f3jPh/wa9aA+9Zb8+67QiwGQ62tIOzcCRyGTB5ygZciRqkMNuYqfPTOO8G9e3dBhE9aymIBz/33Qwl6Qmz27HzkgkY5DmBeUaBxvWkTlK9fDzxNagUmq9cLvjfeAKGpCQSOy2Wp2XIFNDAlObcbbFu2gPuWS4+UPQ88APxLL4Fgs7Eu0SBXQJ3pePd4wLFjBzhnzLhsRb10/nywvfIKJNgSbZ1cAdWm3B7LW/Grr0IR1vPLTc6GBrC+8AJLOCRl5sRhhvF+nhDgnnsOHNOmXTHwrgQ9AR5+2OxlPJWdU0CD2tn+nnugrLHxisO4nhUrIF5fb/Yyi9roSjnuJ00C79q1VybKxxAoRc8U7HZTV1nAxFjMsm4dcCo36P/8c/C3tSWRm+u666AKkaAFq0RekCWu2YcYY+zIEeCw1HoQa3gWLMgukZWVAIgVoKXFeEBjHLjwx6jemTHM9j6VhU8+/zz0ffxxWotpq6iAv+3alazbOQEs7AtOYHyHz55NWYoeJyDwqnnxxezSHArBwN13g4U2VwbSh+EQsFLNKtAANiyS8ETG0fPn4Xes07lS72uvQSRD+CR8/+QTGG5ry/bpoiIgqADjgWMQ45fNm6esgC+/TJt1p45YLYa+/hqGDhzISQHDuH6acnFdypRGOpSb17IlS8Bot2BIAQJFekQ5VQjRqOoG6b/dCFSERIKxn8brcH25UuX3ku6dlasmTIDYjTcqPlxgUkAxrbNqaAxLj9oGk23XqVNwobWVObM76+pSSs30NOcNN6he6sI9j8XjeVAAxpRDA+6W33EH2DH7Km1Q+n1u+3aIGUtKWeRdvDg9tES2TpwIHvFvaggxgAqIC4KuAjTLYHz69GQrqroAKqjmsccUBU+tMToKvdu2saG8m29OS67SPSoRj9B7q5Gtthb40lIY1fYCoqsAoaZG30q33QYl11+ftZA8H/g//BCCv/5qWgE0njmx45OUUIw4w3377brX2qZOhTDmkYi6FxDdEOANNjw1zzyTliizEhZaomfzZqZEmGZ9zAtV9F4GyEaHr7gPrVygqwDOIJpzzpwJPrSKWsKiPHboEAy1t5ubXWESFSKR1LplixZBMd7LkPeUlV0EcegBIZVKpKsA4nAY3uzk5uYkVFXKB6mEiG00FcgwDti/P+VNPMZ8JcJxw0VENoUOoAIE1jJoeFxVXg6THnpI0foSR3p74c8dOwytF+nuhoE9e1LXeleuBAtmfzOtu3RtAr0gqOAFugoQxsdNKaHiwQfBVlWlig4pX3j7bRj46CPtHuCPP+AMepQgToBtWGp9uLap9DE2lmYEqoDMsqivAJP1m2bsaiyLWuiQ4CZ6N22CbmxfQ7/8kl4yR0bA/+678Nt990EUPUBaYyIqg5ic/wlYfjNBWqYX6A5D4ufOmR9OYKvqp+3r0aNpgkOGRwx/9lmSeUxW1MLUYtTyIFpJOs+BiK904ULT+4j09GTdn5bEKLJV/H/qAZpQiWAnxkLVTz8NhOc184FkmQRaPXziBESpsnFzaedh2at48kmmPcROn1ZEkTIvEPQVcPw4UzNTPG0aeLFnV6sGmWGhdp4boXYRw+Q5ioajD1yVUCRNiOGLMgn6ZRCTUOjnn5ksULlmTeqBqGo+UNigxDyWYB/jCC70ww+ayg2LYWaoDIawr2chCmMrVq/W7Ba1rO9dtSq5BgsF2trUlSvuYygWI8bmAV98wYwNvMuXgx37CTV0qLZBCmM9eC3TDHFwEEKIOhWVmxF2hhTAnT8PgW+/ZdoM7SQrn3hC09JKGyx//HHTZU+isX37MAPGstZVqkhUAYYyXARrMyuVzJ0Lrptu0q0G0gYd9fXgUhnB6XorwuyR1lZVweWMLVLCsALIsWMQOHiQWQm0lHFiWVSrBtIUqPypp5jvM4rCJwYGdHNOMlQEIaFbBuUUfv315IsKLGS/5hpw33uvYjWQAyT34sVgv/Zattjv64Pht97S7EjToLIgCIY9IGkchKZD27czW8f3yCPJKQ1RGLAm37B2ucCL57DSwMsvp3oHLcFTZdpmi1MFmDKp8N57EOjqYtogFd736KNZgkvsa2oC3uNhc/1duyB44IBiftECi5z4yrnh1845RFAjGzdC+NQppo26lyyB0kWLstyzFBFf2dKlTGtSwYe2blWMc9WcRl9xQNmll6TO0KmWKXdDS9Xs3GmuP5fROHpREGs1YGJ0NDRAMeN7P5GffoILiDiFUMjUu/8cId3VXV01Ujf4o1kFOP1+OL1yJUxBzdMEZ5YcWBYp50Khzk7of/ZZ/GFOeJGOyYHQYdNZHcsV398PZxHq5lIeWWnsgw/AT8tlKMSGFwThiFwBh5gADrovbWV7mpuhb8sWU7M+VqL382/YAEObN6s+GjPUpxDSJVcAfW00xLAIOERwM/jOO3B62TIIfPNNYSTH7m1s7174E7FEUHxgykq43xB6cEdawmR9VZaiKD9aIiHLwEUzZ8KEFSvASV+lISQ3udGrAvv3wxhC8RjikHwQJsD3MQEuzVQA88vSdOYufwQlLUqf37kWLAAH9gJUKUabm0QgAOHvv4dgezsEOzpAEIeb+SIrIfMru7ras0omKoH2vUxvPQ4iRJYmrnKkR2TDUvv06WCtrQUrfWLjdKbm9nR4mUCO9fRADPFF5OTJ1BOhfBNavx2tPx+UMEMuH0zQQeMwbUE1hqCK/6egLFKgBEpj38px9RWdncdBaR4gfkmxltGtoAhLo5mhh9ZoDApj/Wa58IoDEfGbmg0sN3DIpsBGhh7kElg91YcQsrGqq+vfSk2YckzPmUNfvdxqNhxoQgzK4jfN7TXCAwro9tTySsJrjsRET5gFFz8+NIcQM8fdOiPwAgpPM32DmvCGDWD201n69CWIZfFSJji5xfHwKfK2yd99127gfBOlzsTH08n3cwrv7rSdPYfF97/IRyi8Lea49rx/PG1AMVmfzw/FYvxI/GK7XcrzAv3N0SddRBsa0jGVi+ezplR0gElnePTv6GGJGrs9mo/P5/8vwACXgaC/cliABAAAAABJRU5ErkJggg==",
+              "mobileMode": true,
+              "title": "",
+              "zoom": 1
+            },
+            {
+              "id": "WEBPANEL_ckn7fhhqx0000hc2roo8jshm4",
+              "url": "https://wikipedia.org",
+              "faviconUrl": "data:image/png;base64,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",
+              "mobileMode": true,
+              "title": "",
+              "zoom": 1
+            }
+          ],
+          "syncable": false
+        },
+        "removed_elements": {
+          "description": "List of web panels removed by user.",
+          "type": "list",
+          "default": [],
+          "syncable": false
+        },
+        "modified_elements": {
+          "description": "Id list of bundled web panels that have been removed or modified",
+          "type": "list",
+          "default": [],
+          "syncable": false
+        },
         "items": {
-          "description": "Default web panel list",
+          "description": "[DEPRECATED 2022/11] Default web panel list",
           "type": "list",
           "default": [
             {
@@ -2269,13 +2433,13 @@
           "syncable": false
         },
         "removed_items": {
-          "description": "List of web panels removed by user.",
+          "description": "[DEPRECATED 2022/11] List of web panels removed by user.",
           "type": "list",
           "default": [],
           "syncable": false
         },
         "modified": {
-          "description": "Id list of bundled web panels that have been removed or modified",
+          "description": "[DEPRECATED 2022/11] Id list of bundled web panels that have been removed or modified",
           "type": "list",
           "default": [],
           "syncable": false
@@ -2529,6 +2693,12 @@
         "type": "boolean",
         "default": false,
         "syncable": true
+      },
+      "mono_icons": {
+        "description": "Use monochrome color for icons in Settings",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
       },
       "size": {
         "width": {
@@ -3090,7 +3260,7 @@
       "show_separator": {
         "description": "Show separator below pinned tabs",
         "type": "boolean",
-        "default": false,
+        "default": true,
         "syncable": true
       },
       "stacking": {
@@ -3657,6 +3827,31 @@
           "AccountButton",
           "UpdateButton",
           "Extensions"
+        ],
+        "syncable": false
+      },
+      "panel": {
+        "type": "list",
+        "default": [
+          "PanelBookmarks",
+          "PanelReadingList",
+          "PanelDownloads",
+          "PanelHistory",
+          "PanelNotes",
+          "PanelWindow",
+          "PanelTranslate",
+          "PanelMail",
+          "PanelCalendar",
+          "PanelTasks",
+          "PanelFeeds",
+          "PanelContacts",
+          "PanelChat",
+          "WEBPANEL_949d4873-deed-4168-b306-92d1848687a5",
+          "WEBPANEL_ckmam0bsw00002y5xoafpww5i",
+          "WEBPANEL_ckn7fhhqx0000hc2roo8jshm4",
+          "PanelWeb",
+          "FlexibleSpacer",
+          "Settings"
         ],
         "syncable": false
       },

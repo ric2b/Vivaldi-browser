@@ -1,10 +1,10 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/chrome/browser/sync/ios_trusted_vault_client.h"
+#import "ios/chrome/browser/sync/ios_trusted_vault_client.h"
 
-#include "components/signin/public/identity_manager/account_info.h"
+#import "components/signin/public/identity_manager/account_info.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/trusted_vault_client_backend.h"
 
@@ -78,7 +78,7 @@ void IOSTrustedVaultClient::ClearDataForAccount(
   // on iOS.
 }
 
-ChromeIdentity* IOSTrustedVaultClient::IdentityForAccount(
+id<SystemIdentity> IOSTrustedVaultClient::IdentityForAccount(
     const CoreAccountInfo& account_info) {
   return account_manager_service_->GetIdentityWithGaiaID(account_info.gaia);
 }

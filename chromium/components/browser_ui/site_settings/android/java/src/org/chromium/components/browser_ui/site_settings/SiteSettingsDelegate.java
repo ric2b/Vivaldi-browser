@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,6 +59,11 @@ public interface SiteSettingsDelegate {
      * @return true if the QuietNotificationPrompts Feature is enabled.
      */
     boolean isQuietNotificationPromptsFeatureEnabled();
+
+    /**
+     * @return true if the PrivacySandboxFirstPartySetsUI Feature is enabled.
+     */
+    boolean isPrivacySandboxFirstPartySetsUIFeatureEnabled();
 
     /**
      * @return The id of the notification channel associated with the given origin.
@@ -124,6 +129,34 @@ public interface SiteSettingsDelegate {
      * Dismisses the Privacy Sandbox snackbar, if active.
      */
     void dismissPrivacySandboxSnackbar();
+
+    /***
+     * @return true if First Party Sets data access is enabled.
+     */
+    boolean isFirstPartySetsDataAccessEnabled();
+
+    /***
+     * @return true if First Party Sets data access is managed.
+     */
+    boolean isFirstPartySetsDataAccessManaged();
+
+    /***
+     * @param origin to check.
+     * @return true if the origin is part of the managed FirstPartySet.
+     */
+    boolean isPartOfManagedFirstPartySet(String origin);
+
+    /***
+     * @return Enables/disables First Party Sets data access.
+     */
+    void setFirstPartySetsDataAccessEnabled(boolean enabled);
+
+    /**
+     * Gets the First Party Sets owner hostname given a FPS member origin.
+     * @param memberOrigin FPS member origin.
+     * @return A string containing the owner hostname, null if it doesn't exist.
+     */
+    String getFirstPartySetOwner(String memberOrigin);
 
     /**
      * Returns whether the current implementation of the delegate is able to launch the Clear

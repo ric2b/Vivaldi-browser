@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,8 @@ class BrowserContext;
 class SiteInstance;
 class StoragePartition;
 class StoragePartitionConfig;
-}
+class RenderFrameHost;
+}  // namespace content
 
 namespace extensions {
 class Extension;
@@ -97,6 +98,11 @@ void InitializeFileSchemeAccessForExtension(
 // Gets the ExtensionId associated with the given `site_instance`.  An empty
 // string is returned when `site_instance` is not associated with an extension.
 ExtensionId GetExtensionIdForSiteInstance(content::SiteInstance& site_instance);
+
+// Returns the extension id associated with the given `render_frame_host`, or
+// the empty string if there is none.
+std::string GetExtensionIdFromFrame(
+    content::RenderFrameHost* render_frame_host);
 
 // Returns true if the process corresponding to `render_process_id` can host an
 // extension with `extension_id`.  (It doesn't necessarily mean that the process

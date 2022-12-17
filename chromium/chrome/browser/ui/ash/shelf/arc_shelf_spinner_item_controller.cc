@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -57,7 +57,7 @@ void ArcShelfSpinnerItemController::ItemSelected(
       window_info_->window_id >
           app_restore::kArcSessionIdOffsetForRestoredLaunching) {
     ash::app_restore::AppRestoreArcTaskHandler::GetForProfile(observed_profile_)
-        ->full_restore_arc_app_launch_handler()
+        ->GetFullRestoreArcAppLaunchHandler()
         ->LaunchApp(app_id());
     std::move(callback).Run(ash::SHELF_ACTION_NEW_WINDOW_CREATED, {});
     return;

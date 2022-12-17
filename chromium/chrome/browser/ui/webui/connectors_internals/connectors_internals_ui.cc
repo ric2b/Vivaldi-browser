@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,7 @@ ConnectorsInternalsUI::ConnectorsInternalsUI(content::WebUI* web_ui)
   Profile* profile = Profile::FromWebUI(web_ui);
 
   source->AddBoolean("isOtr", profile->IsOffTheRecord());
-  source->AddBoolean("zeroTrustConnectorEnabled",
+  source->AddBoolean("deviceTrustConnectorEnabled",
                      IsDeviceTrustConnectorFeatureEnabled());
 
   webui::SetupWebUIDataSource(

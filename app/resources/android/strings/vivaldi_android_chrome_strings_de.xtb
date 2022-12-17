@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
 <translation id="1397811292916898096">Mit <ph name="PRODUCT_NAME" /> suchen</translation>
+<translation id="1456207338570705181">Touch to Search ist eine Funktion, die nur verfügbar ist, wenn Google in Vivaldi als Standardsuchmaschine festgelegt ist. Es sendet das ausgewählte Wort und die aktuelle Seite als Kontext an die Google-Suche. Sie können es in den <ph name="BEGIN_LINK" />Einstellungen<ph name="END_LINK" /> ausschalten.</translation>
 <translation id="1598449788754183301">Tabs normal/privat umschalten</translation>
 <translation id="1644574205037202324">Verlauf</translation>
 <translation id="17513872634828108">Geöffnete Tabs</translation>
@@ -42,6 +43,9 @@
 <translation id="5118676864324397542"><ph name="APP_NAME" />-Speicher</translation>
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Neuer Tab</translation>
+<translation id="5375131951310889874">Erfahren Sie mehr über Themen auf Websites, ohne die Seite zu verlassen. Touch to Search ist eine Funktion, die nur verfügbar ist, wenn Google in Vivaldi als Standardsuchmaschine festgelegt ist. Es sendet ein Wort und seinen umgebenden Kontext an Google Search und gibt Definitionen, Bilder, Suchergebnisse und andere Details zurück.
+
+Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern, schieben Sie das Bedienfeld ganz nach oben und tippen Sie auf das Suchfeld.</translation>
 <translation id="572328651809341494">Zuletzt geöffnete Tabs</translation>
 <translation id="6150320133806434356">Lesezeichen gespeichert</translation>
 <translation id="6336451774241870485">Neuer privater Tab</translation>

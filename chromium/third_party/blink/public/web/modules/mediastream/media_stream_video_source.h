@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,14 +71,8 @@ class BLINK_MODULES_EXPORT MediaStreamVideoSource
   MediaStreamVideoSource& operator=(const MediaStreamVideoSource&) = delete;
   ~MediaStreamVideoSource() override;
 
-  // Returns the MediaStreamVideoSource object owned by |source|.
-  //
-  // TODO(https://crbug.com/714136): Replace uses of this method in favor of
-  // the variant below.
-  static MediaStreamVideoSource* GetVideoSource(
-      const WebMediaStreamSource& source);
-
 #if INSIDE_BLINK
+  // Returns the MediaStreamVideoSource object owned by |source|.
   static MediaStreamVideoSource* GetVideoSource(MediaStreamSource* source);
 #endif
 
@@ -166,13 +160,6 @@ class BLINK_MODULES_EXPORT MediaStreamVideoSource
   // must return a value.
   virtual absl::optional<media::VideoCaptureFormat> GetCurrentFormat() const;
 
-  // Implementations must return the capture parameters if available.
-  // Implementations supporting devices of type MEDIA_DEVICE_VIDEO_CAPTURE
-  // must return a value. The format in the returned VideoCaptureParams must
-  // coincide with the value returned by GetCurrentFormat().
-  virtual absl::optional<media::VideoCaptureParams> GetCurrentCaptureParams()
-      const;
-
   // Returns true if encoded output can be enabled in the source.
   virtual bool SupportsEncodedOutput() const;
 
@@ -234,7 +221,9 @@ class BLINK_MODULES_EXPORT MediaStreamVideoSource
     return tracks_.size();
   }
 
-  virtual base::WeakPtr<MediaStreamVideoSource> GetWeakPtr() const = 0;
+  using WebPlatformMediaStreamSource::GetTaskRunner;
+
+  virtual base::WeakPtr<MediaStreamVideoSource> GetWeakPtr() = 0;
 
  protected:
   // MediaStreamSource implementation.

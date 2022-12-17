@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/prefs.h"
 #include "chrome/updater/update_service.h"
@@ -99,6 +100,8 @@ TEST_F(AppServerTestCase, SelfUninstall) {
   EXPECT_TRUE(CreateLocalPrefs(GetUpdaterScope())->GetQualified());
 }
 
+// TODO(crbug.com/1367437): Enable tests once updater is implemented for Linux
+#if !BUILDFLAG(IS_LINUX)
 TEST_F(AppServerTestCase, SelfPromote) {
   {
     scoped_refptr<LocalPrefs> local_prefs = CreateLocalPrefs(GetUpdaterScope());
@@ -140,6 +143,7 @@ TEST_F(AppServerTestCase, InstallAutoPromotes) {
   EXPECT_FALSE(global_prefs->GetSwapping());
   EXPECT_EQ(global_prefs->GetActiveVersion(), kUpdaterVersion);
 }
+#endif  // !BUILDFLAG(IS_LINUX)
 
 TEST_F(AppServerTestCase, SelfPromoteFails) {
   {
@@ -163,6 +167,8 @@ TEST_F(AppServerTestCase, SelfPromoteFails) {
   EXPECT_EQ(global_prefs->GetActiveVersion(), "0");
 }
 
+// TODO(crbug.com/1367437): Enable tests once updater is implemented for Linux
+#if !BUILDFLAG(IS_LINUX)
 TEST_F(AppServerTestCase, ActiveDutyAlready) {
   {
     scoped_refptr<GlobalPrefs> global_prefs =
@@ -216,6 +222,7 @@ TEST_F(AppServerTestCase, StateDirty) {
   EXPECT_FALSE(global_prefs->GetSwapping());
   EXPECT_EQ(global_prefs->GetActiveVersion(), kUpdaterVersion);
 }
+#endif  // !BUILDFLAG(IS_LINUX)
 
 TEST_F(AppServerTestCase, StateDirtySwapFails) {
   {

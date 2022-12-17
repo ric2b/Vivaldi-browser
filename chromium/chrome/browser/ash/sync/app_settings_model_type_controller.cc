@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/model_type.h"
@@ -30,7 +29,6 @@ AppSettingsModelTypeController::AppSettingsModelTypeController(
           /*allow_transport_mode=*/true),
       profile_(profile),
       sync_service_(sync_service) {
-  DCHECK(chromeos::features::IsSyncSettingsCategorizationEnabled());
   DCHECK(profile_);
   DCHECK(sync_service_);
 }

@@ -1,13 +1,13 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/omnibox/browser/history_fuzzy_provider.h"
 
-#include <algorithm>
 #include <vector>
 
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -21,8 +21,7 @@ struct TestCase {
 
 template <typename Container, typename Item>
 void SwapRemoveElement(Container& container, const Item& item) {
-  typename Container::iterator it =
-      std::find(container.begin(), container.end(), item);
+  typename Container::iterator it = base::ranges::find(container, item);
   if (it == container.end()) {
     return;
   }
@@ -33,25 +32,28 @@ void SwapRemoveElement(Container& container, const Item& item) {
   container.pop_back();
 }
 
-// This operator implementation is for debugging.
-std::ostream& operator<<(std::ostream& os,
-                         const fuzzy::Correction& correction) {
+// These operator implementations are for debugging.
+std::ostream& operator<<(std::ostream& os, const fuzzy::Edit& edit) {
   os << '{';
-  switch (correction.kind) {
-    case fuzzy::Correction::Kind::KEEP: {
+  switch (edit.kind) {
+    case fuzzy::Edit::Kind::KEEP: {
       os << 'K';
       break;
     }
-    case fuzzy::Correction::Kind::DELETE: {
+    case fuzzy::Edit::Kind::DELETE: {
       os << 'D';
       break;
     }
-    case fuzzy::Correction::Kind::INSERT: {
+    case fuzzy::Edit::Kind::INSERT: {
       os << 'I';
       break;
     }
-    case fuzzy::Correction::Kind::REPLACE: {
+    case fuzzy::Edit::Kind::REPLACE: {
       os << 'R';
+      break;
+    }
+    case fuzzy::Edit::Kind::TRANSPOSE: {
+      os << 'T';
       break;
     }
     default: {
@@ -59,11 +61,18 @@ std::ostream& operator<<(std::ostream& os,
       break;
     }
   }
-  os << "," << correction.at << "," << static_cast<char>(correction.new_char)
-     << "}";
-  if (correction.next) {
-    os << "~" << *correction.next;
+  os << "," << edit.at << "," << static_cast<char>(edit.new_char) << "}";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const fuzzy::Correction& correction) {
+  os << '[';
+  for (size_t i = 0; i < correction.edit_count; i++) {
+    os << correction.edits[i];
+    os << " <- ";
   }
+  os << ']';
   return os;
 }
 
@@ -237,24 +246,6 @@ TEST_F(HistoryFuzzyProviderTest, ReplacementWorksAnywhere) {
           false,
           {
               u"abcdef",
-          },
-      },
-      {
-          4,
-          u"____xyz",
-          false,
-          {
-              u"abcdxyz",
-              u"tuvwxyz",
-          },
-      },
-      {
-          4,
-          u"abc____",
-          false,
-          {
-              u"abcdefg",
-              u"abcdxyz",
           },
       },
   };
@@ -455,6 +446,39 @@ TEST_F(HistoryFuzzyProviderTest, ToleranceScheduleIsEnforced) {
 
   VerifyCasesWithSchedule(&node, cases,
                           {.start_index = 2, .step_length = 4, .limit = 3});
+}
+
+// This test ensures that transposition swaps two adjacent characters with
+// a single operation at edit distance one. Only directly adjacent characters
+// can be transposed and nonadjacent character swaps still require two edits.
+TEST_F(HistoryFuzzyProviderTest, TransposeIsEditDistanceOne) {
+  fuzzy::Node node;
+  node.Insert(u"transpose", 0);
+
+  std::vector<TestCase> cases = {
+      {
+          // Direct transposition 'op' -> 'po'. Finding the correction
+          // with tolerance 1 implies a single transposition edit was enough.
+          1,
+          u"transopse",
+          false,
+          {
+              u"transpose",
+          },
+      },
+      {
+          // Not a direct transposition, as the 's' is in between,
+          // so this case requires insert + delete pair (tolerance 2).
+          2,
+          u"transpeso",
+          false,
+          {
+              u"transpose",
+          },
+      },
+  };
+
+  VerifyCases(&node, cases);
 }
 
 // This test covers a subtlety in the algorithm. It ensures we don't take

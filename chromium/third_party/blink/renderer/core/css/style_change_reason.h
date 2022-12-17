@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -63,6 +63,7 @@ extern const AtomicString& g_focus_visible;
 extern const AtomicString& g_focus_within;
 extern const AtomicString& g_hover;
 extern const AtomicString& g_past;
+extern const AtomicString& g_toggle;
 extern const AtomicString& g_unresolved;
 
 void Init();

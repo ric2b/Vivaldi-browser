@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,7 +54,7 @@ constexpr ProcessType kProcessTypes[] = {
      ChromeProcessDescriptor::PROCESS_SERVICE_PRINTING},
     {"Service: quarantine.mojom.Quarantine",
      ChromeProcessDescriptor::PROCESS_SERVICE_QUARANTINE},
-    {"Service: chromeos.local_search_service.mojom.LocalSearchService",
+    {"Service: ash.local_search_service.mojom.LocalSearchService",
      ChromeProcessDescriptor::PROCESS_SERVICE_CROS_LOCALSEARCH},
     {"Service: ash.assistant.mojom.AssistantAudioDecoderFactory",
      ChromeProcessDescriptor::PROCESS_SERVICE_CROS_ASSISTANT_AUDIO_DECODER},

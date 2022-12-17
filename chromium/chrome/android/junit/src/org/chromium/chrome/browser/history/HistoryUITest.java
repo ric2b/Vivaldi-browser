@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -713,6 +713,23 @@ public class HistoryUITest {
         // Showing the disclaimer in the Journeys UI should show it in the List UI.
         Assert.assertTrue(mAdapter.hasListHeader());
         Assert.assertEquals(3, headerGroup.size());
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures(ChromeFeatureList.HISTORY_JOURNEYS)
+    public void testJourneysDisabledByPolicy() {
+        doReturn(false).when(mPrefService).getBoolean(HistoryManager.HISTORY_CLUSTERS_VISIBLE_PREF);
+        doReturn(true)
+                .when(mPrefService)
+                .isManagedPreference(HistoryManager.HISTORY_CLUSTERS_VISIBLE_PREF);
+
+        mHistoryManager = new HistoryManager(mActivity, true, mSnackbarManager, false,
+                /* Supplier<Tab>= */ null, false, null, mHistoryProvider);
+
+        Assert.assertNull(mHistoryManager.getView().findViewById(R.id.history_toggle_tab_layout));
+        Assert.assertNull(
+                mHistoryManager.getToolbarForTests().getMenu().findItem(R.id.optout_menu_id));
     }
 
     private void toggleItemSelection(int position) {

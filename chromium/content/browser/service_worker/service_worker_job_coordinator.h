@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,7 +42,8 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
                     outside_fetch_client_settings_object,
                 const GlobalRenderFrameHostId& requesting_frame_id,
                 blink::mojom::AncestorFrameType ancestor_frame_type,
-                ServiceWorkerRegisterJob::RegistrationCallback callback);
+                ServiceWorkerRegisterJob::RegistrationCallback callback,
+                const PolicyContainerPolicies& policy_container_policies);
 
   // If |is_immediate| is true, unregister clears the active worker from the
   // registration without waiting for the controlled clients to unload.

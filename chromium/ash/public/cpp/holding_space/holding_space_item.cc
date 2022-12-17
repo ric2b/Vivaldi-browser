@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "base/json/values_util.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/strcat.h"
+#include "base/ranges/algorithm.h"
 #include "base/unguessable_token.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -116,13 +116,36 @@ bool HoldingSpaceItem::IsDownload(HoldingSpaceItem::Type type) {
     case Type::kLacrosDownload:
       return true;
     case Type::kDiagnosticsLog:
+    case Type::kDriveSuggestion:
+    case Type::kLocalSuggestion:
     case Type::kNearbyShare:
+    case Type::kPhoneHubCameraRoll:
     case Type::kPinnedFile:
     case Type::kPrintedPdf:
     case Type::kScan:
     case Type::kScreenRecording:
     case Type::kScreenshot:
+      return false;
+  }
+}
+
+// static
+bool HoldingSpaceItem::IsSuggestion(HoldingSpaceItem::Type type) {
+  switch (type) {
+    case Type::kDriveSuggestion:
+    case Type::kLocalSuggestion:
+      return true;
+    case Type::kArcDownload:
+    case Type::kDiagnosticsLog:
+    case Type::kDownload:
+    case Type::kLacrosDownload:
+    case Type::kNearbyShare:
     case Type::kPhoneHubCameraRoll:
+    case Type::kPinnedFile:
+    case Type::kPrintedPdf:
+    case Type::kScan:
+    case Type::kScreenRecording:
+    case Type::kScreenshot:
       return false;
   }
 }
@@ -136,7 +159,7 @@ std::unique_ptr<HoldingSpaceItem> HoldingSpaceItem::Deserialize(
   const absl::optional<int> version = dict.FindIntPath(kVersionPath);
   DCHECK(version.has_value() && version.value() == kVersion);
 
-  const Type type = static_cast<Type>(dict.FindIntPath(kTypePath).value());
+  const Type type = DeserializeType(dict);
   const base::FilePath file_path = DeserializeFilePath(dict);
 
   // NOTE: `std::make_unique` does not work with private constructors.
@@ -173,6 +196,17 @@ base::FilePath HoldingSpaceItem::DeserializeFilePath(
   DCHECK(file_path.has_value());
 
   return file_path.value();
+}
+
+// static
+// NOTE: This method must remain in sync with `Serialize()`. If multiple
+// serialization versions are supported, care must be taken to handle each.
+HoldingSpaceItem::Type HoldingSpaceItem::DeserializeType(
+    const base::DictionaryValue& dict) {
+  const absl::optional<int> version = dict.FindIntPath(kVersionPath);
+  DCHECK(version.has_value() && version.value() == kVersion);
+
+  return static_cast<Type>(dict.FindIntPath(kTypePath).value());
 }
 
 // NOTE: This method must remain in sync with `Deserialize()`. The
@@ -282,11 +316,11 @@ bool HoldingSpaceItem::SetProgress(const HoldingSpaceProgress& progress) {
 
 bool HoldingSpaceItem::SetInProgressCommands(
     std::vector<InProgressCommand> in_progress_commands) {
-  DCHECK(std::all_of(in_progress_commands.begin(), in_progress_commands.end(),
-                     [](const InProgressCommand& in_progress_command) {
-                       return holding_space_util::IsInProgressCommand(
-                           in_progress_command.command_id);
-                     }));
+  DCHECK(base::ranges::all_of(in_progress_commands,
+                              [](const InProgressCommand& in_progress_command) {
+                                return holding_space_util::IsInProgressCommand(
+                                    in_progress_command.command_id);
+                              }));
 
   if (progress_.IsComplete() || in_progress_commands_ == in_progress_commands)
     return false;
@@ -308,12 +342,14 @@ bool HoldingSpaceItem::IsScreenCapture() const {
     case Type::kArcDownload:
     case Type::kDiagnosticsLog:
     case Type::kDownload:
+    case Type::kDriveSuggestion:
     case Type::kLacrosDownload:
+    case Type::kLocalSuggestion:
     case Type::kNearbyShare:
+    case Type::kPhoneHubCameraRoll:
     case Type::kPinnedFile:
     case Type::kPrintedPdf:
     case Type::kScan:
-    case Type::kPhoneHubCameraRoll:
       return false;
   }
 }

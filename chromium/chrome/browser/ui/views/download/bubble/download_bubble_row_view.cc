@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/metrics/histogram_functions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/bubble/download_bubble_controller.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/ui/views/download/bubble/download_bubble_row_list_view.h"
 #include "chrome/browser/ui/views/download/download_shelf_context_menu_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/crash/core/common/crash_key.h"
 #include "components/download/public/common/download_item.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -67,10 +69,34 @@ ui::ImageModel GetDefaultIcon() {
 
 constexpr int kDownloadButtonHeight = 24;
 constexpr int kDownloadSubpageIconMargin = 8;
+// Padding between elements in the row (except icon and label).
+constexpr gfx::Insets kRowInterElementPadding = gfx::Insets::TLBR(0, 8, 0, 0);
+constexpr int kProgressBarHeight = 3;
 // Num of columns in the table layout, the width of which progress bar will
-// span. The 6 columns are Download Icon, Padding, Status text, Padding,
+// span. The 5 columns are Download Icon, Padding, Status text,
 // Main Button, Subpage Icon.
-constexpr int kNumColumns = 6;
+constexpr int kNumColumns = 5;
+
+class LabelWithCrashKey : public views::Label {
+ public:
+  METADATA_HEADER(LabelWithCrashKey);
+  LabelWithCrashKey(const std::u16string& text,
+                    int text_context,
+                    int text_style)
+      : Label(text, text_context, text_style) {}
+
+  int GetHeightForWidth(int w) const override {
+    // Not sure how big the filename will be. 256 char should be enough though.
+    static crash_reporter::CrashKeyString<256> download_bubble_crash_key(
+        "DownloadBubble-LabelText");
+    crash_reporter::ScopedCrashKeyString auto_clear(
+        &download_bubble_crash_key, base::UTF16ToUTF8(GetText()));
+    return Label::GetHeightForWidth(w);
+  }
+};
+
+BEGIN_METADATA(LabelWithCrashKey, Label)
+END_METADATA
 
 // A stub subclass of Button that has no visuals.
 class TransparentButton : public views::Button {
@@ -80,17 +106,7 @@ class TransparentButton : public views::Button {
   explicit TransparentButton(PressedCallback callback,
                              DownloadBubbleRowView* row_view)
       : Button(callback), row_view_(row_view) {
-    views::InstallRectHighlightPathGenerator(this);
-    views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
-    views::InkDrop::UseInkDropForFloodFillRipple(views::InkDrop::Get(this),
-                                                 /*highlight_on_hover=*/true,
-                                                 /*highlight_on_focus=*/true);
-    views::InkDrop::Get(this)->SetBaseColorCallback(base::BindRepeating(
-        [](views::View* host) {
-          return views::style::GetColor(*host, views::style::CONTEXT_BUTTON,
-                                        views::style::STYLE_SECONDARY);
-        },
-        this));
+    views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::OFF);
   }
   ~TransparentButton() override = default;
 
@@ -257,7 +273,12 @@ void DownloadBubbleRowView::LoadIcon() {
   }
 }
 
-DownloadBubbleRowView::~DownloadBubbleRowView() = default;
+DownloadBubbleRowView::~DownloadBubbleRowView() {
+  // Explicit removal of InkDrop for classes that override
+  // Add/RemoveLayerBeneathView(). This is done so that the InkDrop doesn't
+  // access the non-override versions in ~View.
+  views::InkDrop::Remove(this);
+}
 
 DownloadBubbleRowView::DownloadBubbleRowView(
     DownloadUIModel::DownloadUIModelPtr model,
@@ -272,9 +293,24 @@ DownloadBubbleRowView::DownloadBubbleRowView(
       row_list_view_(row_list_view),
       bubble_controller_(bubble_controller),
       navigation_handler_(navigation_handler),
-      browser_(browser) {
+      browser_(browser),
+      inkdrop_container_(
+          AddChildView(std::make_unique<views::InkDropContainerView>())) {
   model_->SetDelegate(this);
   SetBorder(views::CreateEmptyBorder(GetLayoutInsets(DOWNLOAD_ROW)));
+
+  views::InkDrop::Install(this, std::make_unique<views::InkDropHost>(this));
+  views::InstallRectHighlightPathGenerator(this);
+  views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
+  views::InkDrop::UseInkDropForFloodFillRipple(views::InkDrop::Get(this),
+                                               /*highlight_on_hover=*/true,
+                                               /*highlight_on_focus=*/true);
+  views::InkDrop::Get(this)->SetBaseColorCallback(base::BindRepeating(
+      [](views::View* host) {
+        return views::style::GetColor(*host, views::style::CONTEXT_BUTTON,
+                                      views::style::STYLE_SECONDARY);
+      },
+      this));
 
   const int icon_label_spacing = ChromeLayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_RELATED_LABEL_HORIZONTAL);
@@ -288,8 +324,7 @@ DownloadBubbleRowView::DownloadBubbleRowView(
   // Download name label (primary_label_)
   layout->AddPaddingColumn(views::TableLayout::kFixedSize, icon_label_spacing)
       .AddColumn(views::LayoutAlignment::kStart, views::LayoutAlignment::kStart,
-                 1.0f, views::TableLayout::ColumnSize::kUsePreferred, 0, 0)
-      .AddPaddingColumn(views::TableLayout::kFixedSize, icon_label_spacing);
+                 1.0f, views::TableLayout::ColumnSize::kUsePreferred, 0, 0);
   // Download Buttons: Cancel, Discard, Scan, Open Now, only one may be active
   layout->AddColumn(views::LayoutAlignment::kCenter,
                     views::LayoutAlignment::kStart,
@@ -303,6 +338,8 @@ DownloadBubbleRowView::DownloadBubbleRowView(
                     views::TableLayout::ColumnSize::kUsePreferred, 0, 0);
   // Three rows, one for name, one for status, and one for the progress bar.
   layout->AddRows(3, 1.0f);
+
+  layout->SetChildViewIgnoredByLayout(inkdrop_container_, true);
 
   transparent_button_ = AddChildView(std::make_unique<TransparentButton>(
       base::BindRepeating(&DownloadBubbleRowView::OnMainButtonPressed,
@@ -319,7 +356,7 @@ DownloadBubbleRowView::DownloadBubbleRowView(
   icon_->SetPaintToLayer();
   icon_->layer()->SetFillsBoundsOpaquely(false);
 
-  primary_label_ = AddChildView(std::make_unique<views::Label>(
+  primary_label_ = AddChildView(std::make_unique<LabelWithCrashKey>(
       model_->GetFileNameToReportUser().LossyDisplayName(),
       views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_PRIMARY));
   primary_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -358,10 +395,10 @@ DownloadBubbleRowView::DownloadBubbleRowView(
       AddChildView(std::make_unique<views::FlexLayoutView>());
   resume_action_ = AddQuickAction(DownloadCommands::RESUME);
   pause_action_ = AddQuickAction(DownloadCommands::PAUSE);
+  show_in_folder_action_ = AddQuickAction(DownloadCommands::SHOW_IN_FOLDER);
+  cancel_action_ = AddQuickAction(DownloadCommands::CANCEL);
   open_when_complete_action_ =
       AddQuickAction(DownloadCommands::OPEN_WHEN_COMPLETE);
-  cancel_action_ = AddQuickAction(DownloadCommands::CANCEL);
-  show_in_folder_action_ = AddQuickAction(DownloadCommands::SHOW_IN_FOLDER);
   quick_action_holder_->SetVisible(false);
   layout->SetChildViewIgnoredByLayout(quick_action_holder_, true);
   quick_action_holder_->SetBackground(
@@ -374,17 +411,21 @@ DownloadBubbleRowView::DownloadBubbleRowView(
       subpage_icon_holder_->AddChildView(std::make_unique<views::ImageView>());
   subpage_icon_->SetImage(ui::ImageModel::FromVectorIcon(
       vector_icons::kSubmenuArrowIcon, ui::kColorIcon));
+  subpage_icon_->SetProperty(
+      views::kMarginsKey,
+      gfx::Insets(kDownloadSubpageIconMargin) + kRowInterElementPadding);
   subpage_icon_->SetVisible(false);
 
   // Empty cell under icon_
   AddChildView(std::make_unique<views::FlexLayoutView>());
 
-  secondary_label_ = AddChildView(std::make_unique<views::Label>(
+  secondary_label_ = AddChildView(std::make_unique<LabelWithCrashKey>(
       model_->GetStatusText(), views::style::CONTEXT_LABEL,
       views::style::STYLE_SECONDARY));
   secondary_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  // The 4 columns are filename text, Padding, Main Button, Subpage Icon.
-  secondary_label_->SetProperty(views::kTableColAndRowSpanKey, gfx::Size(4, 1));
+  // The 2 columns being removed are icon, and padding.
+  secondary_label_->SetProperty(views::kTableColAndRowSpanKey,
+                                gfx::Size(kNumColumns - 2, 1));
   secondary_label_->SetCanProcessEventsWithinSubtree(false);
   secondary_label_->SetMultiLine(true);
   secondary_label_->SetAllowCharacterBreak(true);
@@ -399,8 +440,9 @@ DownloadBubbleRowView::DownloadBubbleRowView(
                                     gfx::Size(kNumColumns, 1));
   progress_bar_holder_->SetProperty(views::kTableHorizAlignKey,
                                     views::LayoutAlignment::kStretch);
-  progress_bar_ = progress_bar_holder_->AddChildView(
-      std::make_unique<views::ProgressBar>());
+  progress_bar_ =
+      progress_bar_holder_->AddChildView(std::make_unique<views::ProgressBar>(
+          /*preferred_height=*/kProgressBarHeight));
   progress_bar_->SetBorder(views::CreateEmptyBorder(
       gfx::Insets::TLBR(ChromeLayoutProvider::Get()->GetDistanceMetric(
                             views::DISTANCE_RELATED_CONTROL_VERTICAL),
@@ -488,6 +530,14 @@ gfx::Size DownloadBubbleRowView::CalculatePreferredSize() const {
   return {fixed_width, GetHeightForWidth(fixed_width)};
 }
 
+void DownloadBubbleRowView::AddLayerBeneathView(ui::Layer* layer) {
+  inkdrop_container_->AddLayerBeneathView(layer);
+}
+
+void DownloadBubbleRowView::RemoveLayerBeneathView(ui::Layer* layer) {
+  inkdrop_container_->RemoveLayerBeneathView(layer);
+}
+
 void DownloadBubbleRowView::OnWillChangeFocus(views::View* before,
                                               views::View* now) {
   if (now) {
@@ -530,6 +580,7 @@ void DownloadBubbleRowView::OnMainButtonPressed() {
   if (ui_info_.has_subpage) {
     navigation_handler_->OpenSecurityDialog(this);
   } else {
+    RecordDownloadOpenButtonPressed(model_->IsDone());
     DownloadCommands(model_->GetWeakPtr())
         .ExecuteCommand(DownloadCommands::OPEN_WHEN_COMPLETE);
   }
@@ -572,8 +623,6 @@ void DownloadBubbleRowView::UpdateButtons() {
                             DownloadCommands::RETRY);
 
   subpage_icon_->SetVisible(ui_info_.has_subpage);
-  subpage_icon_->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets(ui_info_.has_subpage ? kDownloadSubpageIconMargin : 0)));
 }
 
 void DownloadBubbleRowView::UpdateProgressBar() {
@@ -643,7 +692,7 @@ void DownloadBubbleRowView::OnDownloadUpdated() {
 }
 
 void DownloadBubbleRowView::OnDownloadOpened() {
-  bubble_controller_->RemoveContentIdFromPartialView(model_->GetContentId());
+  model_->SetActionedOn(true);
 }
 
 void DownloadBubbleRowView::OnDownloadDestroyed(const ContentId& id) {
@@ -673,6 +722,7 @@ views::MdTextButton* DownloadBubbleRowView::AddMainPageButton(
               base::Unretained(model_.get()), command),
           button_string));
   button->SetMaxSize(gfx::Size(0, kDownloadButtonHeight));
+  button->SetProperty(views::kMarginsKey, kRowInterElementPadding);
   button->SetVisible(false);
   return button;
 }
@@ -687,6 +737,7 @@ views::ImageButton* DownloadBubbleRowView::AddQuickAction(
   InstallCircleHighlightPathGenerator(quick_action);
   quick_action->SetBorder(
       views::CreateEmptyBorder(GetLayoutInsets(DOWNLOAD_ICON)));
+  quick_action->SetProperty(views::kMarginsKey, kRowInterElementPadding);
   quick_action->SetVisible(false);
   return quick_action;
 }

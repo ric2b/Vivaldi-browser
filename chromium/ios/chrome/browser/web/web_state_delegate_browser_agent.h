@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,10 +40,6 @@ class WebStateDelegateBrowserAgent
   WebStateDelegateBrowserAgent(const WebStateDelegateBrowserAgent&) = delete;
   WebStateDelegateBrowserAgent& operator=(const WebStateDelegateBrowserAgent&) =
       delete;
-
-  // Factory.
-  static void CreateForBrowser(Browser* browser,
-                               TabInsertionBrowserAgent* tab_insertion_agent);
 
   // Sets the UI providers to be used for WebStateDelegate tasks that require
   // them.

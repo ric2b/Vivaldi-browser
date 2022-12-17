@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,13 +34,12 @@
 #include "services/network/trust_tokens/trust_token_operation_metrics_recorder.h"
 #include "services/network/url_loader.h"
 #include "services/network/url_loader_factory.h"
+#include "url/scheme_host_port.h"
 #include "url/url_util.h"
 
 #include "app/vivaldi_apptools.h"
 
-namespace network {
-
-namespace cors {
+namespace network::cors {
 
 namespace {
 
@@ -250,7 +249,7 @@ constexpr const char kTimingAllowOrigin[] = "Timing-Allow-Origin";
 class EmptyResolveHostClient : ResolveHostClientBase {
  public:
   EmptyResolveHostClient(const GURL& url,
-                         const net::NetworkIsolationKey& key,
+                         const net::NetworkAnonymizationKey& key,
                          raw_ptr<NetworkContext> context) {
     mojom::ResolveHostParametersPtr params =
         mojom::ResolveHostParameters::New();
@@ -258,17 +257,18 @@ class EmptyResolveHostClient : ResolveHostClientBase {
     params->is_speculative = true;
     params->purpose = mojom::ResolveHostParameters::Purpose::kPreconnect;
     context->ResolveHost(
-        net::HostPortPair::FromURL(url), key, std::move(params),
-        receiver_.BindNewPipeAndPassRemote());
+        mojom::HostResolverHost::NewSchemeHostPort(url::SchemeHostPort(url)),
+        key, std::move(params), receiver_.BindNewPipeAndPassRemote());
   }
   ~EmptyResolveHostClient() override = default;
 
  private:
   // mojom::ResolveHostClient:
-  void OnComplete(
-      int result,
-      const net::ResolveErrorInfo& resolve_error_info,
-      const absl::optional<net::AddressList>& resolved_addresses) override {
+  void OnComplete(int result,
+                  const net::ResolveErrorInfo& resolve_error_info,
+                  const absl::optional<net::AddressList>& resolved_addresses,
+                  const absl::optional<net::HostResolverEndpointResults>&
+                      endpoint_results_with_metadata) override {
     delete this;
   }
 
@@ -348,6 +348,9 @@ void CorsURLLoader::Start() {
       request_.url = request_.url.ReplaceComponents(replacements);
     }
   }
+
+  last_response_url_ = request_.url;
+
   net_log_.BeginEvent(net::NetLogEventType::CORS_REQUEST,
                       [&] { return NetLogCorsURLLoaderStartParams(request_); });
   StartRequest();
@@ -505,8 +508,10 @@ void CorsURLLoader::OnReceiveEarlyHints(mojom::EarlyHintsPtr early_hints) {
     forwarding_client_->OnReceiveEarlyHints(std::move(early_hints));
 }
 
-void CorsURLLoader::OnReceiveResponse(mojom::URLResponseHeadPtr response_head,
-                                      mojo::ScopedDataPipeConsumerHandle body) {
+void CorsURLLoader::OnReceiveResponse(
+    mojom::URLResponseHeadPtr response_head,
+    mojo::ScopedDataPipeConsumerHandle body,
+    absl::optional<mojo_base::BigBuffer> cached_metadata) {
   DCHECK(network_loader_);
   DCHECK(forwarding_client_);
   DCHECK(!deferred_redirect_url_);
@@ -532,7 +537,7 @@ void CorsURLLoader::OnReceiveResponse(mojom::URLResponseHeadPtr response_head,
 
   if (base::FeatureList::IsEnabled(features::kPreconnectInNetworkService) &&
       context_->enable_preconnect() && response_head->parsed_headers) {
-    auto key = isolation_info_.network_isolation_key();
+    auto key = isolation_info_.network_anonymization_key();
     for (auto& header : response_head->parsed_headers->link_headers) {
       if (header->rel == mojom::LinkRelAttribute::kDnsPrefetch) {
         // Deletes itself.
@@ -553,8 +558,20 @@ void CorsURLLoader::OnReceiveResponse(mojom::URLResponseHeadPtr response_head,
   response_head->timing_allow_passed = !timing_allow_failed_flag_;
   response_head->has_authorization_covered_by_wildcard_on_preflight =
       has_authorization_covered_by_wildcard_;
-  forwarding_client_->OnReceiveResponse(std::move(response_head),
-                                        std::move(body));
+  forwarding_client_->OnReceiveResponse(
+      std::move(response_head), std::move(body), std::move(cached_metadata));
+}
+
+void CorsURLLoader::CheckTainted(const net::RedirectInfo& redirect_info) {
+  // If `actualResponse`’s location URL’s origin is not same origin with
+  // `request`’s current url’s origin and `request`’s origin is not same origin
+  // with `request`’s current url’s origin, then set `request`’s tainted origin
+  // flag.
+  if (request_.request_initiator &&
+      (!url::IsSameOriginWith(redirect_info.new_url, request_.url) &&
+       !request_.request_initiator->IsSameOriginWith(request_.url))) {
+    tainted_ = true;
+  }
 }
 
 void CorsURLLoader::OnReceiveRedirect(const net::RedirectInfo& redirect_info,
@@ -590,14 +607,24 @@ void CorsURLLoader::OnReceiveRedirect(const net::RedirectInfo& redirect_info,
     }
   }
 
+  timing_allow_failed_flag_ = !PassesTimingAllowOriginCheck(*response_head);
+  last_response_url_ = redirect_info.new_url;
+
+  if (!url::Origin::Create(redirect_info.new_url)
+           .IsSameOriginWith(url::Origin::Create(request_.url)) &&
+      base::FeatureList::IsEnabled(features::kPreconnectOnRedirect) &&
+      context_->enable_preconnect()) {
+    context_->PreconnectSockets(1, redirect_info.new_url, true,
+                                isolation_info_.network_anonymization_key());
+  }
+
   if (request_.redirect_mode == mojom::RedirectMode::kManual) {
+    CheckTainted(redirect_info);
     deferred_redirect_url_ = std::make_unique<GURL>(redirect_info.new_url);
     forwarding_client_->OnReceiveRedirect(redirect_info,
                                           std::move(response_head));
     return;
   }
-
-  timing_allow_failed_flag_ = !PassesTimingAllowOriginCheck(*response_head);
 
   // Because we initiate a new request on redirect in some cases, we cannot
   // rely on the redirect logic in the network stack. Hence we need to
@@ -627,15 +654,7 @@ void CorsURLLoader::OnReceiveRedirect(const net::RedirectInfo& redirect_info,
     return;
   }
 
-  // If `actualResponse`’s location URL’s origin is not same origin with
-  // `request`’s current url’s origin and `request`’s origin is not same origin
-  // with `request`’s current url’s origin, then set `request`’s tainted origin
-  // flag.
-  if (request_.request_initiator &&
-      (!url::IsSameOriginWith(redirect_info.new_url, request_.url) &&
-       !request_.request_initiator->IsSameOriginWith(request_.url))) {
-    tainted_ = true;
-  }
+  CheckTainted(redirect_info);
 
   // TODO(crbug.com/1073353): Implement the following:
   // If either `actualResponse`’s status is 301 or 302 and `request`’s method is
@@ -673,13 +692,6 @@ void CorsURLLoader::OnUploadProgress(int64_t current_position,
   DCHECK(forwarding_client_);
   forwarding_client_->OnUploadProgress(current_position, total_size,
                                        std::move(ack_callback));
-}
-
-void CorsURLLoader::OnReceiveCachedMetadata(mojo_base::BigBuffer data) {
-  DCHECK(network_loader_);
-  DCHECK(forwarding_client_);
-  DCHECK(!deferred_redirect_url_);
-  forwarding_client_->OnReceiveCachedMetadata(std::move(data));
 }
 
 void CorsURLLoader::OnTransferSizeUpdated(int32_t transfer_size_diff) {
@@ -1053,29 +1065,38 @@ absl::optional<CorsErrorStatus> CorsURLLoader::CheckRedirectLocationForTesting(
   return CheckRedirectLocation(url, request_mode, origin, cors_flag, tainted);
 }
 
+// https://fetch.spec.whatwg.org/#tao-check
 bool CorsURLLoader::PassesTimingAllowOriginCheck(
     const mojom::URLResponseHead& response) const {
+  // If request’s timing allow failed flag is set, then return failure.
   if (timing_allow_failed_flag_)
     return false;
 
-  if (response_tainting_ == mojom::FetchResponseType::kBasic)
-    return true;
-
+  // Let values be the result of getting, decoding, and splitting
+  // `Timing-Allow-Origin` from response’s header list.
   absl::optional<std::string> tao_header_value =
       GetHeaderString(response, kTimingAllowOrigin);
-  if (!tao_header_value)
-    return false;
 
-  mojom::TimingAllowOriginPtr tao = ParseTimingAllowOrigin(*tao_header_value);
+  if (tao_header_value && request_.request_initiator) {
+    mojom::TimingAllowOriginPtr tao = ParseTimingAllowOrigin(*tao_header_value);
+    url::Origin origin = tainted_ ? url::Origin() : *request_.request_initiator;
 
-  if (tao->which() == mojom::TimingAllowOrigin::Tag::kAll)
-    return true;
-
-  url::Origin origin = tainted_ ? url::Origin() : *request_.request_initiator;
-  std::string serialized_origin = origin.Serialize();
-  if (base::Contains(tao->get_serialized_origins(), serialized_origin)) {
-    return true;
+    if (TimingAllowOriginCheck(tao, origin))
+      return true;
   }
+
+  // If request’s mode is "navigate" and request’s current URL’s origin is not
+  // same origin with request’s origin, then return failure.
+  if (request_.mode == mojom::RequestMode::kNavigate &&
+      request_.request_initiator &&
+      (tainted_ ||
+       !request_.request_initiator->IsSameOriginWith(last_response_url_))) {
+    return false;
+  }
+
+  // If request’s response tainting is "basic", then return success.
+  if (response_tainting_ == mojom::FetchResponseType::kBasic)
+    return true;
 
   return false;
 }
@@ -1137,6 +1158,4 @@ absl::optional<std::string> CorsURLLoader::GetHeaderString(
   return header_value;
 }
 
-}  // namespace cors
-
-}  // namespace network
+}  // namespace network::cors

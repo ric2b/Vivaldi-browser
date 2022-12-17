@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -594,8 +594,9 @@ void AXTreeSourceArc::GetChildren(
       continue;
 
     // move the current node to be visited later if necessary.
-    for (int j = i; j + 1 < out_children->size() &&
-                    NeedReorder(out_children->at(j), out_children->at(j + 1));
+    for (size_t j = i;
+         j + 1 < out_children->size() &&
+         NeedReorder(out_children->at(j), out_children->at(j + 1));
          j++) {
       std::swap(out_children->at(j), out_children->at(j + 1));
     }

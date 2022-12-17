@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -589,6 +589,14 @@ TEST_F(ContentSettingsAgentImplBrowserTest, MixedAutoupgradesDisabledByRules) {
   agent->SetRendererContentSettingRulesForTest(content_setting_rules);
 
   EXPECT_FALSE(agent->ShouldAutoupgradeMixedContent());
+}
+
+TEST_F(ContentSettingsAgentImplBrowserTest, MixedAutoupgradesNoSettingsSet) {
+  MockContentSettingsAgentImpl mock_agent(GetMainRenderFrame());
+
+  ContentSettingsAgentImpl* agent =
+      ContentSettingsAgentImpl::Get(GetMainRenderFrame());
+  EXPECT_TRUE(agent->ShouldAutoupgradeMixedContent());
 }
 
 TEST_F(ContentSettingsAgentImplBrowserTest, ContentSettingsAllowedAutoDark) {

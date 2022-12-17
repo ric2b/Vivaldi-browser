@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,8 +78,8 @@ void IpcNetworkManager::StartUpdating() {
   if (network_list_received_) {
     // Post a task to avoid reentrancy.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, WTF::Bind(&IpcNetworkManager::SendNetworksChangedSignal,
-                             weak_factory_.GetWeakPtr()));
+        FROM_HERE, WTF::BindOnce(&IpcNetworkManager::SendNetworksChangedSignal,
+                                 weak_factory_.GetWeakPtr()));
   } else {
     VLOG(1) << "IpcNetworkManager::StartUpdating called; still waiting for "
                "network list from browser process.";
@@ -125,8 +125,16 @@ void IpcNetworkManager::OnNetworkListChanged(
     if (adapter_type == rtc::ADAPTER_TYPE_UNKNOWN) {
       adapter_type = rtc::GetAdapterTypeFromName(it->name.c_str());
     }
+    rtc::AdapterType underlying_adapter_type = rtc::ADAPTER_TYPE_UNKNOWN;
+    if (it->mac_address.has_value() && IsVpnMacAddress(*it->mac_address)) {
+      underlying_adapter_type = adapter_type;
+      adapter_type = rtc::ADAPTER_TYPE_VPN;
+    }
     auto network = std::make_unique<rtc::Network>(
         it->name, it->name, prefix, it->prefix_length, adapter_type);
+    if (adapter_type == rtc::ADAPTER_TYPE_VPN) {
+      network->set_underlying_type_for_vpn(underlying_adapter_type);
+    }
     network->set_default_local_address_provider(this);
     network->set_mdns_responder_provider(this);
 

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,12 @@ constexpr webui::LocalizedString kElementLocalizedStrings[] = {
     {"OncTypeWiFi", IDS_NETWORK_TYPE_WIFI},
     {"ipAddressNotAvailable", IDS_NETWORK_IP_ADDRESS_NA},
     {"networkListItemConnected", IDS_STATUSBAR_NETWORK_DEVICE_CONNECTED},
+    {"networkListItemConnectedLimited",
+     IDS_STATUSBAR_NETWORK_DEVICE_CONNECTED_LIMITED},
+    {"networkListItemConnectedNoConnectivity",
+     IDS_STATUSBAR_NETWORK_DEVICE_CONNECTED_NO_CONNECTIVITY},
     {"networkListItemConnecting", IDS_STATUSBAR_NETWORK_DEVICE_CONNECTING},
+    {"networkListItemSignIn", IDS_STATUSBAR_NETWORK_DEVICE_SIGNIN},
     {"networkListItemConnectingTo", IDS_NETWORK_LIST_CONNECTING_TO},
     {"networkListItemInitializing", IDS_NETWORK_LIST_INITIALIZING},
     {"networkListItemTitle", IDS_NETWORK_LIST_ITEM_TITLE},
@@ -431,11 +436,11 @@ void AddDetailsLocalizedStrings(content::WebUIDataSource* html_source) {
       {"networkProxyWpad", IDS_SETTINGS_INTERNET_NETWORK_PROXY_WPAD},
       {"networkProxyWpadNone", IDS_SETTINGS_INTERNET_NETWORK_PROXY_WPAD_NONE},
       {"remove", IDS_REMOVE},
+      {"controlledSettingPolicy",
+       IDS_SETTINGS_INTERNET_NETWORK_SETTING_MANAGED_BY_ADMIN_TOOLTIP},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
-  html_source->AddBoolean("useAttachApn",
-                          chromeos::features::ShouldUseAttachApn());
   html_source->AddBoolean("isSimLockPolicyEnabled",
                           chromeos::features::IsSimLockPolicyEnabled());
 }

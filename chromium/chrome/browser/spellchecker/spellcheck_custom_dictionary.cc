@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -393,7 +393,6 @@ SpellcheckCustomDictionary::ProcessSyncChanges(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   std::unique_ptr<Change> dictionary_change(new Change);
   for (const syncer::SyncChange& change : change_list) {
-    DCHECK(change.IsValid());
     const std::string& word =
         change.sync_data().GetSpecifics().dictionary().word();
     switch (change.change_type()) {

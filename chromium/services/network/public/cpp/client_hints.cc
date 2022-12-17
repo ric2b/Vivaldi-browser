@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,12 @@
 #include "url/origin.h"
 
 namespace network {
+
+const char kPrefersColorSchemeDark[] = "dark";
+const char kPrefersColorSchemeLight[] = "light";
+
+const char kPrefersReducedMotionNoPreference[] = "no-preference";
+const char kPrefersReducedMotionReduce[] = "reduce";
 
 ClientHintToNameMap MakeClientHintToNameMap() {
   return {
@@ -57,6 +63,8 @@ ClientHintToNameMap MakeClientHintToNameMap() {
       {network::mojom::WebClientHintsType::kFullUserAgent, "sec-ch-ua-full"},
       {network::mojom::WebClientHintsType::kUAWoW64, "sec-ch-ua-wow64"},
       {network::mojom::WebClientHintsType::kSaveData, "save-data"},
+      {network::mojom::WebClientHintsType::kPrefersReducedMotion,
+       "sec-ch-prefers-reduced-motion"},
   };
 }
 

@@ -1,11 +1,11 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
-import {decorate} from 'chrome://resources/js/cr/ui.m.js';
-import {Command} from 'chrome://resources/js/cr/ui/command.js';
-import {Menu} from 'chrome://resources/js/cr/ui/menu.js';
+import {assert} from 'chrome://resources/js/assert.js';
+import {decorate} from 'chrome://resources/js/cr/ui.js';
+import {Command} from './command.js';
+import {Menu} from './menu.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 

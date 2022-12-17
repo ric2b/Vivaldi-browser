@@ -15,8 +15,8 @@
 #include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/protocol/notes_specifics.pb.h"
 #include "notes/note_node.h"
-#include "sync/notes/synced_note_tracker_entity.h"
 #include "sync/notes/synced_note_tracker.h"
+#include "sync/notes/synced_note_tracker_entity.h"
 
 namespace sync_notes {
 
@@ -227,7 +227,7 @@ void PopulateParentGuidInSpecifics(const SyncedNoteTracker* tracker,
   // No tracker provided, so use an empty tracker instead where all lookups will
   // fail.
   std::unique_ptr<SyncedNoteTracker> empty_tracker =
-      SyncedNoteTracker::CreateEmpty(sync_pb::ModelTypeState());
+      SyncedNoteTracker::CreateEmpty(sync_pb::ModelTypeState(), nullptr);
   PopulateParentGuidInSpecificsWithTracker(empty_tracker.get(), updates);
 }
 

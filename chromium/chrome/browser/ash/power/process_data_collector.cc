@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <sys/types.h>
 
-#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -25,12 +24,14 @@
 #include "base/files/file_util.h"
 #include "base/i18n/number_formatting.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -323,8 +324,8 @@ ProcessDataCollector::GetProcessUsages() {
       process_list.begin(), process_list.end(), 0.,
       [](const auto& i, const auto& s) { return i + s.power_usage_fraction; });
   if (total != 0) {
-    std::for_each(process_list.begin(), process_list.end(),
-                  [&total](auto& c) { c.power_usage_fraction /= total; });
+    base::ranges::for_each(
+        process_list, [&total](auto& c) { c.power_usage_fraction /= total; });
   }
 
   return process_list;

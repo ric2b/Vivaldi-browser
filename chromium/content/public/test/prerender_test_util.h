@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -129,6 +129,10 @@ class PrerenderTestHelper {
   // the completion of prerendering.
   int AddPrerender(const GURL& prerendering_url);
   void AddPrerenderAsync(const GURL& prerendering_url);
+
+  // Adds multiple URLs to the speculation rules at the same time. This function
+  // doesn't wait for the completion of prerendering.
+  void AddMultiplePrerenderAsync(const std::vector<GURL>& prerendering_urls);
 
   // Starts prerendering and returns a PrerenderHandle that should be kept alive
   // until prerender activation. Note that it returns before the completion of

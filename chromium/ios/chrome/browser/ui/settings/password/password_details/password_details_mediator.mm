@@ -1,12 +1,13 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_mediator.h"
 
-#include "base/strings/sys_string_conversions.h"
+#import "base/containers/contains.h"
+#import "base/strings/sys_string_conversions.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
-#include "ios/chrome/browser/passwords/password_check_observer_bridge.h"
+#import "ios/chrome/browser/passwords/password_check_observer_bridge.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_consumer.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_table_view_controller_delegate.h"
@@ -47,7 +48,7 @@ using base::SysNSStringToUTF16;
     auto credentials =
         manager->GetSavedPasswordsPresenter()->GetSavedCredentials();
     for (const auto& cred : credentials) {
-      if (cred.signon_realm == credential.signon_realm) {
+      if (cred.GetFirstSignonRealm() == credential.GetFirstSignonRealm()) {
         [usernames addObject:base::SysUTF16ToNSString(cred.username)];
       }
     }
@@ -143,8 +144,7 @@ using base::SysNSStringToUTF16;
     (const std::vector<password_manager::CredentialUIEntry>&)credentials {
   PasswordDetails* password =
       [[PasswordDetails alloc] initWithCredential:_credential];
-  password.compromised = std::find(credentials.begin(), credentials.end(),
-                                   _credential) != credentials.end();
+  password.compromised = base::Contains(credentials, _credential);
   [self.consumer setPassword:password];
 }
 

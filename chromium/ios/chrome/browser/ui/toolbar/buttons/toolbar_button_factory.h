@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,7 +42,7 @@
 // Tab Grid ToolbarButton.
 - (ToolbarTabGridButton*)tabGridButton;
 // Tools Menu ToolbarButton.
-- (ToolbarToolsMenuButton*)toolsMenuButton;
+- (ToolbarButton*)toolsMenuButton;
 // Share ToolbarButton.
 - (ToolbarButton*)shareButton;
 // Reload ToolbarButton.
@@ -54,6 +54,10 @@
 // Button to cancel the edit of the location bar.
 - (UIButton*)cancelButton;
 
+// Vivaldi
+// Panel toolbar button.
+- (ToolbarButton*)panelButton;
+// End Vivaldi
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_BUTTONS_TOOLBAR_BUTTON_FACTORY_H_

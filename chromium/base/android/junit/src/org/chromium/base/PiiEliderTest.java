@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -101,6 +101,13 @@ public class PiiEliderTest {
                 + "ComponentInfo{com.chrome.dev/org.chromium.chrome.browser.ChromeTabbedActivity}: "
                 + "android.view.InflateException: Binary XML file line #20 in "
                 + "com.chrome.dev:layout/0_resource_name_obfuscated:";
+        assertEquals(original, PiiElider.elideUrl(original));
+    }
+
+    @Test
+    public void testElideUrl12() {
+        String original = "System.err: at kH.onAnimationEnd"
+                + "(chromium-TrichromeChromeGoogle6432.aab-canary-530200034:42)";
         assertEquals(original, PiiElider.elideUrl(original));
     }
 

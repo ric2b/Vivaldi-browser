@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/types/optional_util.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
@@ -56,11 +56,10 @@ void ExternalProtocolHandler::RunExternalProtocolDialog(
     bool ignored_has_user_gesture,
     bool ignored_is_in_fenced_frame_tree,
     const absl::optional<url::Origin>& initiating_origin,
-    content::WeakDocumentPtr initiator_document) {
+    content::WeakDocumentPtr initiator_document,
+    const std::u16string& program_name) {
   DCHECK(web_contents);
 
-  std::u16string program_name =
-      shell_integration::GetApplicationNameForProtocol(url);
   if (program_name.empty()) {
     // ShellExecute won't do anything. Don't bother warning the user.
     return;
@@ -122,7 +121,7 @@ ExternalProtocolDialog::ExternalProtocolDialog(
       profile->GetPrefs()->GetBoolean(
           prefs::kExternalProtocolDialogShowAlwaysOpenCheckbox) &&
       ExternalProtocolHandler::MayRememberAllowDecisionsForThisOrigin(
-          base::OptionalOrNullptr(initiating_origin_));
+          base::OptionalToPtr(initiating_origin_));
 
   if (show_remember_selection_checkbox) {
     message_box_view_->SetCheckBoxLabel(l10n_util::GetStringFUTF16(

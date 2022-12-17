@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <initializer_list>
 #include <iterator>
 #include <set>
@@ -18,6 +17,7 @@
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -543,8 +543,7 @@ Directive::Directive(base::StringPiece directive_string,
   // |directive_name| should be lower cased.
   // Note: Using |this->directive_name|, because |directive_name| refers to the
   // already-moved-from input parameter.
-  DCHECK(std::none_of(this->directive_name.begin(), this->directive_name.end(),
-                      base::IsAsciiUpper<char>));
+  DCHECK(base::ranges::none_of(this->directive_name, base::IsAsciiUpper<char>));
 }
 
 CSPParser::Directive::~Directive() = default;
@@ -661,8 +660,8 @@ bool DoesCSPDisallowRemoteCode(const std::string& content_security_policy,
     // Find the first matching directive. As per
     // http://www.w3.org/TR/CSP/#parse-a-csp-policy, duplicate directive names
     // are ignored.
-    auto it = std::find_if(
-        csp_parser.directives().begin(), csp_parser.directives().end(),
+    auto it = base::ranges::find_if(
+        csp_parser.directives(),
         [mapping](const CSPParser::Directive& directive) {
           return mapping->status.Matches(directive.directive_name);
         });
@@ -702,9 +701,8 @@ bool DoesCSPDisallowRemoteCode(const std::string& content_security_policy,
     }
 
     auto directive_values = mapping.directive->directive_values;
-    auto it = std::find_if_not(
-        directive_values.begin(), directive_values.end(),
-        [](base::StringPiece source) {
+    auto it = base::ranges::find_if_not(
+        directive_values, [](base::StringPiece source) {
           std::string source_lower = base::ToLowerASCII(source);
 
           return source_lower == kSelfSource || source_lower == kNoneSource ||

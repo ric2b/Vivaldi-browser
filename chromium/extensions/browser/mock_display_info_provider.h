@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,11 +72,11 @@ class MockDisplayInfoProvider : public DisplayInfoProvider {
 
  private:
   // DisplayInfoProvider override.
-  // Update the content of the |unit| obtained for |display| using
-  // platform specific method.
+  // Update the content of each unit in `units` obtained from the corresponding
+  // display in `displays` using a platform specific method.
   void UpdateDisplayUnitInfoForPlatform(
-      const display::Display& display,
-      extensions::api::system_display::DisplayUnitInfo* unit) override;
+      const std::vector<display::Display>& displays,
+      DisplayUnitInfoList& units) const override;
 
   std::unique_ptr<base::DictionaryValue> set_info_value_;
   std::string set_info_display_id_;

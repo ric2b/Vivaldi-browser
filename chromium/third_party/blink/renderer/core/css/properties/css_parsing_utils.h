@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_mode.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
+#include "third_party/blink/renderer/core/css/parser/css_property_parser.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/frame/web_feature_forward.h"
 #include "third_party/blink/renderer/core/style/grid_area.h"
@@ -163,8 +164,6 @@ StringView ConsumeUrlAsStringView(CSSParserTokenRange&,
                                   const CSSParserContext&);
 cssvalue::CSSURIValue* ConsumeUrl(CSSParserTokenRange&,
                                   const CSSParserContext&);
-CSSValue* ConsumeSelectorFunction(CSSParserTokenRange&);
-CORE_EXPORT CSSValue* ConsumeIdSelector(CSSParserTokenRange&);
 
 CORE_EXPORT CSSValue* ConsumeColor(CSSParserTokenRange&,
                                    const CSSParserContext&,
@@ -257,7 +256,8 @@ bool ConsumeShorthandGreedilyViaLonghands(
     bool important,
     const CSSParserContext&,
     CSSParserTokenRange&,
-    HeapVector<CSSPropertyValue, 64>& properties);
+    HeapVector<CSSPropertyValue, 64>& properties,
+    bool use_initial_value_function = false);
 
 void AddExpandedPropertyForValue(CSSPropertyID prop_id,
                                  const CSSValue&,
@@ -281,6 +281,8 @@ bool IsDefaultKeyword(StringView);
 bool IsHashIdentifier(const CSSParserToken&);
 CORE_EXPORT bool IsDashedIdent(const CSSParserToken&);
 
+CSSValue* ConsumeCSSWideKeyword(CSSParserTokenRange&);
+
 // This function returns false for CSS-wide keywords, 'default', and any
 // template parameters provided.
 //
@@ -291,8 +293,6 @@ bool IsCustomIdent(CSSValueID);
 // https://drafts.csswg.org/scroll-animations-1/#typedef-timeline-name
 bool IsTimelineName(const CSSParserToken&);
 
-CSSValue* ConsumeScrollOffset(CSSParserTokenRange&, const CSSParserContext&);
-CSSValue* ConsumeElementOffset(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumeSelfPositionOverflowPosition(CSSParserTokenRange&,
                                               IsPositionKeyword);
 CSSValue* ConsumeSimplifiedDefaultPosition(CSSParserTokenRange&,
@@ -309,6 +309,8 @@ CSSValue* ConsumeAnimationIterationCount(CSSParserTokenRange&,
 CSSValue* ConsumeAnimationName(CSSParserTokenRange&,
                                const CSSParserContext&,
                                bool allow_quoted_name);
+CSSValue* ConsumeScroller(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeScrollFunction(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumeAnimationTimeline(CSSParserTokenRange&,
                                    const CSSParserContext&);
 CSSValue* ConsumeAnimationTimingFunction(CSSParserTokenRange&,
@@ -320,6 +322,12 @@ bool ConsumeAnimationShorthand(
     CSSParserTokenRange&,
     const CSSParserContext&,
     bool use_legacy_parsing);
+
+CSSValue* ConsumeSingleTimelineAxis(CSSParserTokenRange&);
+CSSValue* ConsumeSingleTimelineName(CSSParserTokenRange&,
+                                    const CSSParserContext&);
+CSSValue* ConsumeSingleTimelineInset(CSSParserTokenRange&,
+                                     const CSSParserContext&);
 
 void AddBackgroundValue(CSSValue*& list, CSSValue*);
 CSSValue* ConsumeBackgroundAttachment(CSSParserTokenRange&);
@@ -419,6 +427,11 @@ CSSValue* ConsumeFontFeatureSettings(CSSParserTokenRange&,
 cssvalue::CSSFontFeatureValue* ConsumeFontFeatureTag(CSSParserTokenRange&,
                                                      const CSSParserContext&);
 CSSIdentifierValue* ConsumeFontVariantCSS21(CSSParserTokenRange&);
+CSSIdentifierValue* ConsumeFontTechIdent(CSSParserTokenRange&);
+CSSIdentifierValue* ConsumeFontFormatIdent(CSSParserTokenRange&);
+CSSValueID FontFormatToId(String);
+bool IsSupportedKeywordTech(CSSValueID keyword);
+bool IsSupportedKeywordFormat(CSSValueID keyword);
 
 CSSValue* ConsumeGridLine(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumeGridTrackList(CSSParserTokenRange&,
@@ -441,6 +454,9 @@ bool ConsumeGridTemplateShorthand(bool important,
                                   const CSSValue*& template_rows,
                                   const CSSValue*& template_columns,
                                   const CSSValue*& template_areas);
+
+CSSValue* ConsumeHyphenateLimitChars(CSSParserTokenRange&,
+                                     const CSSParserContext&);
 
 // The fragmentation spec says that page-break-(after|before|inside) are to be
 // treated as shorthands for their break-(after|before|inside) counterparts.
@@ -465,6 +481,7 @@ CSSValue* ConsumeScrollPadding(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumeOffsetPath(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumePathOrNone(CSSParserTokenRange&);
 CSSValue* ConsumeOffsetRotate(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeInitialLetter(CSSParserTokenRange&, const CSSParserContext&);
 
 CSSValue* ConsumeBasicShape(
     CSSParserTokenRange&,

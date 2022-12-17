@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,9 @@ struct PhysicalOffset;
 struct SVGTextFragment;
 
 struct SVGTextFragmentWithRange {
+  DISALLOW_NEW();
+
+ public:
   SVGTextFragmentWithRange(const SVGTextFragment& fragment,
                            int start_position,
                            int end_position)

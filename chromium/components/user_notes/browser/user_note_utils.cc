@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,8 +97,8 @@ std::vector<std::unique_ptr<FrameUserNoteChanges>> CalculateNoteChanges(
 
     if (!added.empty() || !removed.empty() || !modified.empty()) {
       result.emplace_back(std::make_unique<FrameUserNoteChanges>(
-          note_service.GetSafeRef(), rfh, std::move(added), std::move(modified),
-          std::move(removed)));
+          note_service.GetSafeRef(), rfh->GetWeakDocumentPtr(),
+          std::move(added), std::move(modified), std::move(removed)));
     }
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -134,7 +134,7 @@ void ColorProfileReader::ReadProfilesCompleted(
     const std::string& profile_data = entry.second;
     if (!profile_data.empty()) {
       int64_t display_id =
-          DisplayInfo::DeviceIdFromDeviceName(device_name.c_str());
+          internal::DisplayInfo::DeviceIdFromDeviceName(device_name.c_str());
       display_id_to_profile_map_[display_id] =
           gfx::ICCProfile::FromData(profile_data.data(), profile_data.size());
     }

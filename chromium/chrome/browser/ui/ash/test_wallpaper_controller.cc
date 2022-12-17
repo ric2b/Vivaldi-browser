@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,9 @@
 #include "ash/public/cpp/wallpaper/online_wallpaper_params.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller_observer.h"
 #include "ash/public/cpp/wallpaper/wallpaper_types.h"
+#include "base/containers/adapters.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -56,12 +58,14 @@ void TestWallpaperController::SetCustomWallpaper(
   std::move(callback).Run(true);
 }
 
-void TestWallpaperController::SetCustomWallpaper(const AccountId& account_id,
-                                                 const std::string& file_name,
-                                                 ash::WallpaperLayout layout,
-                                                 const gfx::ImageSkia& image,
-                                                 bool preview_mode,
-                                                 const std::string& file_path) {
+void TestWallpaperController::SetDecodedCustomWallpaper(
+    const AccountId& account_id,
+    const std::string& file_name,
+    ash::WallpaperLayout layout,
+    bool preview_mode,
+    SetWallpaperCallback callback,
+    const std::string& file_path,
+    const gfx::ImageSkia& image) {
   ++set_custom_wallpaper_count_;
 }
 
@@ -98,16 +102,16 @@ bool TestWallpaperController::SetDailyGooglePhotosWallpaperIdCache(
     const AccountId& account_id,
     const DailyGooglePhotosIdCache& ids) {
   id_cache_.ShrinkToSize(0);
-  std::for_each(ids.rbegin(), ids.rend(),
-                [&](uint id) { id_cache_.Put(std::move(id)); });
+  base::ranges::for_each(base::Reversed(ids),
+                         [&](uint id) { id_cache_.Put(std::move(id)); });
   return true;
 }
 
 bool TestWallpaperController::GetDailyGooglePhotosWallpaperIdCache(
     const AccountId& account_id,
     DailyGooglePhotosIdCache& ids_out) const {
-  std::for_each(id_cache_.rbegin(), id_cache_.rend(),
-                [&](uint id) { ids_out.Put(std::move(id)); });
+  base::ranges::for_each(base::Reversed(id_cache_),
+                         [&](uint id) { ids_out.Put(std::move(id)); });
   return true;
 }
 
@@ -161,6 +165,7 @@ bool TestWallpaperController::SetThirdPartyWallpaper(
     ash::WallpaperLayout layout,
     const gfx::ImageSkia& image) {
   ShowWallpaperImage(image);
+  ++third_party_wallpaper_count_;
   return true;
 }
 
@@ -252,12 +257,6 @@ void TestWallpaperController::RemoveObserver(
 
 gfx::ImageSkia TestWallpaperController::GetWallpaperImage() {
   return current_wallpaper;
-}
-
-const std::vector<SkColor>& TestWallpaperController::GetWallpaperColors() {
-  NOTIMPLEMENTED();
-  static std::vector<SkColor> kColors;
-  return kColors;
 }
 
 bool TestWallpaperController::IsWallpaperBlurredForLockState() const {

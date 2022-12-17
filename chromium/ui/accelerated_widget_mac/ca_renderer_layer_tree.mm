@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,12 +18,12 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/trace_event/trace_event.h"
 #include "components/metal_util/hdr_copier_layer.h"
-#include "media/base/mac/color_space_util_mac.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/cocoa/animation_utils.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/hdr_metadata.h"
+#include "ui/gfx/hdr_metadata_mac.h"
 #include "ui/gl/ca_renderer_layer_params.h"
 #include "ui/gl/gl_image_io_surface.h"
 
@@ -37,8 +37,9 @@ constexpr bool g_print_ca_layers = false;
 // Output level for VLOG.
 constexpr int kOutputLevel = 4;
 
-base::Feature kCALayerTreeOptimization{"CALayerTreeOptimization",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kCALayerTreeOptimization,
+             "CALayerTreeOptimization",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 void RecordIOSurfaceHistograms(
     int changed_io_surfaces_during_commit,
@@ -189,14 +190,14 @@ bool AVSampleBufferDisplayLayerEnqueueIOSurface(
               gfx::ColorVolumeMetadata())) {
           CVBufferSetAttachment(
               cv_pixel_buffer, kCVImageBufferMasteringDisplayColorVolumeKey,
-              media::GenerateMasteringDisplayColorVolume(*hdr_metadata),
+              gfx::GenerateMasteringDisplayColorVolume(*hdr_metadata),
               kCVAttachmentMode_ShouldPropagate);
         }
         if (hdr_metadata->max_content_light_level ||
             hdr_metadata->max_frame_average_light_level) {
           CVBufferSetAttachment(
               cv_pixel_buffer, kCVImageBufferContentLightLevelInfoKey,
-              media::GenerateContentLightLevelInfo(*hdr_metadata),
+              gfx::GenerateContentLightLevelInfo(*hdr_metadata),
               kCVAttachmentMode_ShouldPropagate);
         }
       }
@@ -205,6 +206,16 @@ bool AVSampleBufferDisplayLayerEnqueueIOSurface(
 
   return AVSampleBufferDisplayLayerEnqueueCVPixelBuffer(av_layer,
                                                         cv_pixel_buffer);
+}
+
+CATransform3D ToCATransform3D(const gfx::Transform& t) {
+  CATransform3D result;
+  auto* dst = &result.m11;
+  for (int col = 0; col < 4; col++) {
+    for (int row = 0; row < 4; row++)
+      *dst++ = t.rc(row, col);
+  }
+  return result;
 }
 
 }  // namespace
@@ -903,29 +914,11 @@ void CARendererLayerTree::ClipAndSortingLayer::AddContentLayer(
 
 void CARendererLayerTree::TransformLayer::AddContentLayer(
     const CARendererLayerParams& params) {
-  base::ScopedCFTypeRef<IOSurfaceRef> io_surface;
-  base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer;
-  gfx::ColorSpace io_surface_color_space;
-  if (params.image) {
-    gl::GLImageIOSurface* io_surface_image =
-        gl::GLImageIOSurface::FromGLImage(params.image);
-    DCHECK(io_surface_image);
-    io_surface = io_surface_image->io_surface();
-    // Temporary investagtive fix for https://crbug.com/702369. It appears upon
-    // investigation that not using the original CVPixelBufferRef which came
-    // from the VTDecompressionSession prevents or minimizes flashing of
-    // incorrect content. Disable the CVPixelBufferRef path for the moment to
-    // determine if this fixes the bug for users.
-    // TODO(ccameron): If this indeed causes the bug to disappear, then
-    // extirpate the CVPixelBufferRef path.
-    // cv_pixel_buffer = io_surface_image->cv_pixel_buffer();
-    io_surface_color_space = params.image->color_space();
-  }
   content_layers_.emplace_back(
-      this, io_surface, cv_pixel_buffer, params.contents_rect, params.rect,
-      params.background_color, io_surface_color_space, params.edge_aa_mask,
-      params.opacity, params.filter, params.hdr_metadata,
-      params.protected_video_type);
+      this, params.io_surface, base::ScopedCFTypeRef<CVPixelBufferRef>(),
+      params.contents_rect, params.rect, params.background_color,
+      params.io_surface_color_space, params.edge_aa_mask, params.opacity,
+      params.filter, params.hdr_metadata, params.protected_video_type);
 }
 
 void CARendererLayerTree::RootLayer::CommitToCA(CALayer* superlayer,
@@ -1123,8 +1116,7 @@ void CARendererLayerTree::TransformLayer::CommitToCA(
     post_scale.Scale(tree()->scale_factor_, tree()->scale_factor_);
     gfx::Transform conjugated_transform = pre_scale * transform_ * post_scale;
 
-    CATransform3D ca_transform =
-        conjugated_transform.matrix().ToCATransform3D();
+    CATransform3D ca_transform = ToCATransform3D(conjugated_transform);
     [ca_layer_ setTransform:ca_transform];
   }
 
@@ -1217,7 +1209,8 @@ void CARendererLayerTree::ContentLayer::CommitToCA(
     case CALayerType::kHDRCopier:
       if (update_contents) {
         metal::UpdateHDRCopierLayer(ca_layer_.get(), io_surface_.get(),
-                                    io_surface_color_space_);
+                                    tree()->metal_device_,
+                                    io_surface_color_space_, hdr_metadata_);
       }
       break;
     case CALayerType::kVideo:

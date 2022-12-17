@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -705,7 +705,7 @@ void BluetoothAdapterBlueZ::ConnectDevice(
     const std::string& address,
     const absl::optional<device::BluetoothDevice::AddressType>& address_type,
     ConnectDeviceCallback callback,
-    ErrorCallback error_callback) {
+    ConnectDeviceErrorCallback error_callback) {
   DCHECK(bluez::BluezDBusManager::Get());
 
   absl::optional<BluetoothAdapterClient::AddressType> client_address_type;
@@ -1574,7 +1574,7 @@ void BluetoothAdapterBlueZ::RegisterGattService(
     BLUETOOTH_LOG(ERROR)
         << "Re-registering a service that is already registered!";
     std::move(error_callback)
-        .Run(device::BluetoothGattService::GATT_ERROR_FAILED);
+        .Run(device::BluetoothGattService::GattErrorCode::kFailed);
     return;
   }
 
@@ -1600,7 +1600,7 @@ void BluetoothAdapterBlueZ::UnregisterGattService(
         << "Unregistering a service that isn't registered! path: "
         << service->object_path().value();
     std::move(error_callback)
-        .Run(device::BluetoothGattService::GATT_ERROR_FAILED);
+        .Run(device::BluetoothGattService::GattErrorCode::kFailed);
     return;
   }
 
@@ -2155,10 +2155,10 @@ void BluetoothAdapterBlueZ::OnConnectDevice(
 }
 
 void BluetoothAdapterBlueZ::OnConnectDeviceError(
-    ErrorCallback error_callback,
+    ConnectDeviceErrorCallback error_callback,
     const std::string& error_name,
     const std::string& error_message) {
-  std::move(error_callback).Run();
+  std::move(error_callback).Run(error_message);
 }
 
 void BluetoothAdapterBlueZ::UpdateDeviceAdminPolicyFromAdminPolicyClient(

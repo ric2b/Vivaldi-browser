@@ -1,8 +1,10 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/platform/graphics/paint/raster_invalidation_tracking.h"
+
+#include <algorithm>
 
 #include "base/logging.h"
 #include "cc/layers/layer.h"
@@ -80,7 +82,7 @@ static bool CompareRasterInvalidationInfo(const RasterInvalidationInfo& a,
 }
 
 void RasterInvalidationTracking::AsJSON(JSONObject* json, bool detailed) const {
-  if (!invalidations_.IsEmpty()) {
+  if (!invalidations_.empty()) {
     // Sort to make the output more readable and easier to see the differences
     // by a human.
     auto sorted = invalidations_;
@@ -106,7 +108,7 @@ void RasterInvalidationTracking::AsJSON(JSONObject* json, bool detailed) const {
     json->SetArray("invalidations", std::move(invalidations_json));
   }
 
-  if (!under_invalidations_.IsEmpty()) {
+  if (!under_invalidations_.empty()) {
     auto under_invalidations_json = std::make_unique<JSONArray>();
     for (auto& under_invalidation : under_invalidations_) {
       auto under_invalidation_json = std::make_unique<JSONObject>();

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -817,7 +817,7 @@ TEST_F(WebFrameWidgetSimTest, DispatchBufferedTouchEvents) {
   // Expect listener does not get called, due to drag.
   touch.MovePoint(0, 14, 14);
   widget->StartDragging(WebDragData(), kDragOperationCopy, SkBitmap(),
-                        gfx::Point());
+                        gfx::Vector2d(), gfx::Rect());
   widget->ProcessInputEventSynchronouslyForTesting(
       WebCoalescedInputEvent(touch.Clone(), {}, {}, ui::LatencyInfo()),
       base::DoNothing());

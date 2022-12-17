@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,7 +54,7 @@ void OfferNotificationControllerAndroid::ShowIfNecessary(
     message_->SetTitle(
         l10n_util::GetStringUTF16(IDS_AUTOFILL_OFFERS_MESSAGE_TITLE));
     message_->SetDescription(l10n_util::GetStringFUTF16(
-        IDS_AUTOFILL_OFFERS_MESSAGE_DESCRIPTION_TEXT,
+        IDS_AUTOFILL_OFFERS_REMINDER_DESCRIPTION_TEXT,
         card->CardIdentifierStringForAutofillDisplay()));
     message_->SetIconResourceId(
         ResourceMapper::MapToJavaDrawableId(IDR_AUTOFILL_GOOGLE_PAY));

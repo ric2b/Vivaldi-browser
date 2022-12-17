@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -74,7 +74,7 @@ class GPU_GLES2_EXPORT D3DImageBackingFactory
 
   std::unique_ptr<SharedImageBacking> CreateSharedImage(
       const Mailbox& mailbox,
-      viz::ResourceFormat format,
+      viz::SharedImageFormat format,
       SurfaceHandle surface_handle,
       const gfx::Size& size,
       const gfx::ColorSpace& color_space,
@@ -84,7 +84,7 @@ class GPU_GLES2_EXPORT D3DImageBackingFactory
       bool is_thread_safe) override;
   std::unique_ptr<SharedImageBacking> CreateSharedImage(
       const Mailbox& mailbox,
-      viz::ResourceFormat format,
+      viz::SharedImageFormat format,
       const gfx::Size& size,
       const gfx::ColorSpace& color_space,
       GrSurfaceOrigin surface_origin,
@@ -103,25 +103,14 @@ class GPU_GLES2_EXPORT D3DImageBackingFactory
       GrSurfaceOrigin surface_origin,
       SkAlphaType alpha_type,
       uint32_t usage) override;
-  std::vector<std::unique_ptr<SharedImageBacking>> CreateSharedImageVideoPlanes(
-      base::span<const Mailbox> mailboxes,
-      gfx::GpuMemoryBufferHandle handle,
-      gfx::BufferFormat format,
-      const gfx::Size& size,
-      uint32_t usage) override;
 
   bool IsSupported(uint32_t usage,
-                   viz::ResourceFormat format,
+                   viz::SharedImageFormat format,
+                   const gfx::Size& size,
                    bool thread_safe,
                    gfx::GpuMemoryBufferType gmb_type,
                    GrContextType gr_context_type,
-                   bool* allow_legacy_mailbox,
-                   bool is_pixel_used) override;
-
-  // Returns true if the specified GpuMemoryBufferType can be imported using
-  // this factory.
-  bool CanImportGpuMemoryBuffer(gfx::GpuMemoryBufferType memory_buffer_type,
-                                viz::ResourceFormat format);
+                   base::span<const uint8_t> pixel_data) override;
 
   Microsoft::WRL::ComPtr<ID3D11Device> GetDeviceForTesting() const {
     return d3d11_device_;

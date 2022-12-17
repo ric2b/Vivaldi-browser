@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -282,6 +282,11 @@ class LacrosExtensionAppsPublisher::ProfileTracker
     app->readiness = readiness;
     app->name = extension->name();
     app->short_name = extension->short_name();
+
+    // TODO(crbug.com/1367337): Work out how pinning interacts with Lacros
+    // multi-profile support once there is a product decision on what that looks
+    // like.
+    app->policy_ids = {extension->id()};
 
     // We always use an empty icon key since we currently do not support
     // dynamically changing icons or modifying the appearance of icons.

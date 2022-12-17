@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,6 +48,7 @@
 #include "base/feature_list.h"
 #include "base/files/scoped_file.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -777,7 +778,8 @@ bool AwContentBrowserClient::HandleExternalProtocol(
     // Manages its own lifetime.
     new android_webview::AwProxyingURLLoaderFactory(
         frame_tree_node_id, std::move(receiver), mojo::NullRemote(),
-        true /* intercept_only */, absl::nullopt /* security_options */);
+        true /* intercept_only */, absl::nullopt /* security_options */,
+        nullptr /* xrw_allowlist_matcher */);
   } else {
     content::GetIOThreadTaskRunner({})->PostTask(
         FROM_HERE,
@@ -788,7 +790,8 @@ bool AwContentBrowserClient::HandleExternalProtocol(
               new android_webview::AwProxyingURLLoaderFactory(
                   frame_tree_node_id, std::move(receiver), mojo::NullRemote(),
                   true /* intercept_only */,
-                  absl::nullopt /* security_options */);
+                  absl::nullopt /* security_options */,
+                  nullptr /* xrw_allowlist_matcher */);
             },
             std::move(receiver), frame_tree_node_id));
   }
@@ -914,8 +917,8 @@ bool AwContentBrowserClient::WillCreateURLLoaderFactory(
     security_options->disable_web_security =
         base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kDisableWebSecurity);
-    const auto& preferences =
-        WebContents::FromRenderFrameHost(frame)->GetOrCreateWebPreferences();
+    WebContents* web_contents = WebContents::FromRenderFrameHost(frame);
+    const auto& preferences = web_contents->GetOrCreateWebPreferences();
     // See also //android_webview/docs/cors-and-webview-api.md to understand how
     // each settings affect CORS behaviors on file:// and content://.
     if (request_initiator.scheme() == url::kFileScheme) {
@@ -932,21 +935,29 @@ bool AwContentBrowserClient::WillCreateURLLoaderFactory(
           preferences.allow_universal_access_from_file_urls;
     }
 
+    auto xrw_allowlist_matcher =
+        AwSettings::FromWebContents(web_contents)->xrw_allowlist_matcher();
+
     content::GetIOThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(&AwProxyingURLLoaderFactory::CreateProxy,
                        frame->GetFrameTreeNodeId(), std::move(proxied_receiver),
-                       std::move(target_factory_remote), security_options));
+                       std::move(target_factory_remote), security_options,
+                       std::move(xrw_allowlist_matcher)));
   } else {
     // A service worker and worker subresources set nullptr to |frame|, and
     // work without seeing the AllowUniversalAccessFromFileURLs setting. So,
     // we don't pass a valid |security_options| here.
+    AwBrowserContext* aw_browser_context =
+        static_cast<AwBrowserContext*>(browser_context);
     content::GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(&AwProxyingURLLoaderFactory::CreateProxy,
-                                  content::RenderFrameHost::kNoFrameTreeNodeId,
-                                  std::move(proxied_receiver),
-                                  std::move(target_factory_remote),
-                                  absl::nullopt /* security_options */));
+        FROM_HERE,
+        base::BindOnce(
+            &AwProxyingURLLoaderFactory::CreateProxy,
+            content::RenderFrameHost::kNoFrameTreeNodeId,
+            std::move(proxied_receiver), std::move(target_factory_remote),
+            absl::nullopt /* security_options */,
+            aw_browser_context->service_worker_xrw_allowlist_matcher()));
   }
   return true;
 }
@@ -1048,6 +1059,17 @@ bool AwContentBrowserClient::SuppressDifferentOriginSubframeJSDialogs(
     content::BrowserContext* browser_context) {
   return base::FeatureList::IsEnabled(
       features::kWebViewSuppressDifferentOriginSubframeJSDialogs);
+}
+
+void AwContentBrowserClient::OnDisplayInsecureContent(
+    content::WebContents* web_contents) {
+  AwSettings* aw_settings = AwSettings::FromWebContents(web_contents);
+  if (aw_settings) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Android.WebView.OptionallyBlockableMixedContentLoaded.Mode",
+        aw_settings->GetMixedContentMode(),
+        AwSettings::MixedContentMode::COUNT);
+  }
 }
 
 // static

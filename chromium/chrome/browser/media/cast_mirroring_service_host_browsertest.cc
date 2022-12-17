@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -218,8 +218,8 @@ class CastMirroringServiceHostBrowserTest
     constexpr int kTotalSegments = 1;
     constexpr int kAudioTimebase = 48000;
     media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                  media::CHANNEL_LAYOUT_STEREO, kAudioTimebase,
-                                  kAudioTimebase / 100);
+                                  media::ChannelLayoutConfig::Stereo(),
+                                  kAudioTimebase, kAudioTimebase / 100);
     base::RunLoop run_loop;
     EXPECT_CALL(*this, OnAudioStreamCreated())
         .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
@@ -239,8 +239,8 @@ class CastMirroringServiceHostBrowserTest
   MOCK_METHOD1(LogInfoMessage, void(const std::string&));
   MOCK_METHOD1(LogErrorMessage, void(const std::string&));
 
-  // mojom::CastMessageChannel mocks.
-  MOCK_METHOD1(Send, void(mojom::CastMessagePtr));
+  // mojom::CastMessageChannel mock implementation (inbound messages).
+  MOCK_METHOD1(OnMessage, void(mojom::CastMessagePtr));
 
   // mojom::AudioStreamCreatorClient mocks.
   MOCK_METHOD0(OnAudioStreamCreated, void());

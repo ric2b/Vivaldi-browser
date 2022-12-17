@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/check_is_test.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -18,11 +19,11 @@
 #include "base/time/time.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/enrollment/auto_enrollment_client_impl.h"
-#include "chrome/browser/ash/policy/enrollment/private_membership/fake_private_membership_rlwe_client.h"
-#include "chrome/browser/ash/policy/enrollment/private_membership/private_membership_rlwe_client.h"
-#include "chrome/browser/ash/policy/enrollment/private_membership/private_membership_rlwe_client_impl.h"
-#include "chrome/browser/ash/policy/enrollment/private_membership/psm_rlwe_dmserver_client_impl.h"
-#include "chrome/browser/ash/policy/enrollment/private_membership/psm_rlwe_id_provider_impl.h"
+#include "chrome/browser/ash/policy/enrollment/psm/fake_rlwe_client.h"
+#include "chrome/browser/ash/policy/enrollment/psm/rlwe_client.h"
+#include "chrome/browser/ash/policy/enrollment/psm/rlwe_client_impl.h"
+#include "chrome/browser/ash/policy/enrollment/psm/rlwe_dmserver_client_impl.h"
+#include "chrome/browser/ash/policy/enrollment/psm/rlwe_id_provider_impl.h"
 #include "chrome/browser/ash/policy/server_backed_state/server_backed_state_keys_broker.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/browser_process.h"
@@ -179,11 +180,12 @@ AutoEnrollmentController::AutoEnrollmentController() {
   // Create the PSM (private set membership) RLWE client factory depending on
   // whether switches::kEnterpriseUseFakePsmRlweClient is set.
   if (ShouldUseFakePsmRlweClient()) {
-    psm_rlwe_client_factory_ = std::make_unique<
-        policy::FakePrivateMembershipRlweClient::FactoryImpl>();
+    CHECK_IS_TEST();
+    psm_rlwe_client_factory_ =
+        std::make_unique<policy::psm::FakeRlweClient::FactoryImpl>();
   } else {
-    psm_rlwe_client_factory_ = std::make_unique<
-        policy::PrivateMembershipRlweClientImpl::FactoryImpl>();
+    psm_rlwe_client_factory_ =
+        std::make_unique<policy::psm::RlweClientImpl::FactoryImpl>();
   }
 }
 
@@ -285,6 +287,7 @@ AutoEnrollmentController::RegisterProgressCallback(
 
 void AutoEnrollmentController::SetAutoEnrollmentClientFactoryForTesting(
     policy::AutoEnrollmentClient::Factory* auto_enrollment_client_factory) {
+  CHECK_IS_TEST();
   testing_auto_enrollment_client_factory_ = auto_enrollment_client_factory;
 }
 
@@ -436,7 +439,7 @@ void AutoEnrollmentController::StartClientForInitialEnrollment() {
       g_browser_process->system_network_context_manager()
           ->GetSharedURLLoaderFactory(),
       serial_number, rlz_brand_code, power_initial, power_limit,
-      std::make_unique<policy::PsmRlweDmserverClientImpl>(
+      std::make_unique<policy::psm::RlweDmserverClientImpl>(
           service,
           g_browser_process->system_network_context_manager()
               ->GetSharedURLLoaderFactory(),

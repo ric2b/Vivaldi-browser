@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,14 +13,14 @@
 
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '//resources/polymer/v3_0/paper-styles/color.js';
-import '../../cr_elements/icons.m.js';
-import '../../cr_elements/shared_vars_css.m.js';
+import '../../cr_elements/icons.html.js';
+import '../../cr_elements/cr_shared_vars.css.js';
 
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {I18nMixin} from '../../js/i18n_mixin.js';
+import {I18nMixin} from '../../cr_elements/i18n_mixin.js';
 import {loadTimeData} from '../../js/load_time_data.m.js';
-import {WebUIListenerMixin} from '../../js/web_ui_listener_mixin.js';
+import {WebUIListenerMixin} from '../../cr_elements/web_ui_listener_mixin.js';
 
 import {getTemplate} from './managed_footnote.html.js';
 

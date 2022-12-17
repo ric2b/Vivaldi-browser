@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
+#include "chrome/browser/net/fake_nss_service.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
@@ -61,7 +62,7 @@ void DeviceSettingsTestBase::SetUp() {
   ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
   UserDataAuthClient::InitializeFake();
   CryptohomeMiscClient::InitializeFake();
-  PowerManagerClient::InitializeFake();
+  chromeos::PowerManagerClient::InitializeFake();
   chromeos::TpmManagerClient::InitializeFake();
   OwnerSettingsServiceAshFactory::SetDeviceSettingsServiceForTesting(
       device_settings_service_.get());
@@ -77,6 +78,9 @@ void DeviceSettingsTestBase::SetUp() {
                                               owner_key_util_);
 
   profile_ = std::make_unique<TestingProfile>();
+
+  FakeNssService::InitializeForBrowserContext(profile_.get(),
+                                              /*enable_system_slot=*/false);
 }
 
 void DeviceSettingsTestBase::TearDown() {
@@ -86,7 +90,7 @@ void DeviceSettingsTestBase::TearDown() {
   device_settings_service_->UnsetSessionManager();
   device_settings_service_.reset();
   chromeos::TpmManagerClient::Shutdown();
-  PowerManagerClient::Shutdown();
+  chromeos::PowerManagerClient::Shutdown();
   CryptohomeMiscClient::Shutdown();
   UserDataAuthClient::Shutdown();
   ConciergeClient::Shutdown();

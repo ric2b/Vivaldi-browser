@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 
 struct udev {
   // empty
@@ -223,9 +224,7 @@ udev_device* FakeUdevLoader::udev_device_new_from_subsystem_sysname(
 udev_device* FakeUdevLoader::udev_device_new_from_syspath(udev* udev_context,
                                                           const char* syspath) {
   DCHECK(syspath);
-  auto it =
-      std::find_if(devices_.begin(), devices_.end(),
-                   [syspath](const auto& d) { return d->syspath == syspath; });
+  auto it = base::ranges::find(devices_, syspath, &udev_device::syspath);
   return it == devices_.end() ? nullptr : it->get();
 }
 

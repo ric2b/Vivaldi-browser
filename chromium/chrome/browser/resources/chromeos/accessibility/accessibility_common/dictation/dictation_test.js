@@ -1,11 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 GEN_INCLUDE(['dictation_test_base.js']);
 
 /** Dictation feature using accessibility common extension browser tests. */
-DictationE2ETest = class extends DictationE2ETestBase {};
+DictationE2ETest = class extends DictationE2ETestDisallowConsole {};
 
 AX_TEST_F('DictationE2ETest', 'ResetsImeAfterToggleOff', async function() {
   // Set something as the active IME.

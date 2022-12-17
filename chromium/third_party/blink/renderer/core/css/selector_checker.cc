@@ -469,7 +469,7 @@ static bool AttributeValueMatches(const Attribute& attribute_item,
       return true;
     case CSSSelector::kAttributeList: {
       // Ignore empty selectors or selectors containing HTML spaces
-      if (selector_value.IsEmpty() ||
+      if (selector_value.empty() ||
           selector_value.Find(&IsHTMLSpace<UChar>) != kNotFound)
         return false;
 
@@ -491,15 +491,15 @@ static bool AttributeValueMatches(const Attribute& attribute_item,
       return true;
     }
     case CSSSelector::kAttributeContain:
-      if (selector_value.IsEmpty())
+      if (selector_value.empty())
         return false;
       return value.Contains(selector_value, case_sensitivity);
     case CSSSelector::kAttributeBegin:
-      if (selector_value.IsEmpty())
+      if (selector_value.empty())
         return false;
       return value.StartsWith(selector_value, case_sensitivity);
     case CSSSelector::kAttributeEnd:
-      if (selector_value.IsEmpty())
+      if (selector_value.empty())
         return false;
       return value.EndsWith(selector_value, case_sensitivity);
     case CSSSelector::kAttributeHyphen:
@@ -683,9 +683,9 @@ inline bool CacheMatchedElementsAndReturnMatchedResultForIndirectRelation(
           selector_matched = true;
         uint8_t old_result =
             cache_scope_context.SetMatchedAndGetOldResult(has_matched_element);
-        if (old_result == kNotCached)
+        if (old_result == kCheckPseudoHasResultNotCached)
           continue;
-        if (old_result & kMatched)
+        if (old_result & kCheckPseudoHasResultMatched)
           break;
       }
     }
@@ -769,7 +769,7 @@ uint8_t SetHasAnchorElementAsCheckedAndGetOldResult(
             CSSSelector::kPseudoHas);
   Element* has_anchor_element = has_checking_context.element;
   uint8_t previous_result = cache_scope_context.GetResult(has_anchor_element);
-  if (previous_result & kChecked)
+  if (previous_result & kCheckPseudoHasResultChecked)
     return previous_result;
 
   // If the selector checking context is for the subject :has() in the argument
@@ -779,12 +779,12 @@ uint8_t SetHasAnchorElementAsCheckedAndGetOldResult(
       cache_scope_context.AlreadyChecked(has_anchor_element)) {
     // If the element already have cache item, set the element as checked.
     // Otherwise, skip to set to prevent increasing unnecessary cache item.
-    if (previous_result != kNotCached)
+    if (previous_result != kCheckPseudoHasResultNotCached)
       cache_scope_context.SetChecked(has_anchor_element);
 
     // If the :has() anchor element was already checked previously, return the
-    // previous result with the kChecked flag set.
-    return previous_result | kChecked;
+    // previous result with the kCheckPseudoHasResultChecked flag set.
+    return previous_result | kCheckPseudoHasResultChecked;
   }
 
   cache_scope_context.SetChecked(has_anchor_element);
@@ -1008,13 +1008,14 @@ EarlyBreakOnHasArgumentChecking CheckEarlyBreakForHasArgument(
   //  - Otherwise, check :has() argument.
   uint8_t previous_result =
       SetHasAnchorElementAsCheckedAndGetOldResult(context, cache_scope_context);
-  if (previous_result & kChecked) {
+  if (previous_result & kCheckPseudoHasResultChecked) {
     if (update_affected_by_has_flags) {
       SetAffectedByHasFlagsForHasAnchorSiblings(argument_context,
                                                 has_anchor_element);
     }
-    return previous_result & kMatched ? kBreakEarlyAndReturnAsMatched
-                                      : kBreakEarlyAndMoveToNextArgument;
+    return previous_result & kCheckPseudoHasResultMatched
+               ? kBreakEarlyAndReturnAsMatched
+               : kBreakEarlyAndMoveToNextArgument;
   }
 
   // Check fast reject filter to reject :has() argument checking early.
@@ -1182,7 +1183,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
           break;
         }
         if (auto* text_node = DynamicTo<Text>(n)) {
-          if (!text_node->data().IsEmpty()) {
+          if (!text_node->data().empty()) {
             if (text_node->ContainsOnlyWhitespaceOrEmpty()) {
               has_whitespace = true;
             } else {
@@ -1472,7 +1473,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       AtomicString value = vtt_element ? vtt_element->Language()
                                        : element.ComputeInheritedLanguage();
       const AtomicString& argument = selector.Argument();
-      if (value.IsEmpty() ||
+      if (value.empty() ||
           !value.StartsWith(argument, kTextCaseASCIIInsensitive))
         break;
       if (value.length() != argument.length() &&
@@ -1482,7 +1483,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     }
     case CSSSelector::kPseudoDir: {
       const AtomicString& argument = selector.Argument();
-      if (argument.IsEmpty())
+      if (argument.empty())
         break;
 
       TextDirection direction;
@@ -1499,13 +1500,20 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       break;
     }
     case CSSSelector::kPseudoOpen:
-      if (element.HasValidPopupAttribute()) {
+      if (element.HasPopupAttribute()) {
         return element.popupOpen();
       }
       return false;
-    case CSSSelector::kPseudoPopupHidden:
-      if (element.HasValidPopupAttribute()) {
-        return element.GetPopupData()->visibilityState() ==
+    case CSSSelector::kPseudoPopupOpeningOrOpen:
+      if (!RuntimeEnabledFeatures::HTMLPopupAttributeEnabled(
+              element.GetDocument().GetExecutionContext())) {
+        // The html.css UA stylesheet contains a rule for <dialog> elements
+        // that uses this pseudo, with `dialog:not(this_pseudo)`, so it's
+        // important to *not* match when the feature is *disabled*.
+        return false;
+      }
+      if (element.HasPopupAttribute()) {
+        return element.GetPopupData()->visibilityState() !=
                PopupVisibilityState::kHidden;
       }
       return false;
@@ -1648,8 +1656,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       const AtomicString& name = selector.Argument();
       const State* value = selector.ToggleValue();
 
-      auto [toggle, toggle_element] = element.FindToggleInScope(name);
-      DCHECK_EQ(!toggle, !toggle_element);
+      CSSToggle* toggle = CSSToggle::FindToggleInScope(element, name);
       // An element matches :toggle() if the element is in scope for a toggle
       // with the name given by <custom-ident>, and ...
       if (!toggle)
@@ -2042,7 +2049,7 @@ const SelectorChecker::Activations* SelectorChecker::CalculateActivations(
     const Activations& outer_activations) const {
   auto* activations = MakeGarbageCollected<Activations>();
 
-  if (outer_activations.IsEmpty())
+  if (outer_activations.empty())
     return activations;
 
   const Activations* parent_activations = nullptr;

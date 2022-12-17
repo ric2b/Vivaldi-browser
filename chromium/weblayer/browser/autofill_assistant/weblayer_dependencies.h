@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,10 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 
+namespace consent_auditor {
+class ConsentAuditor;
+}  // namespace consent_auditor
+
 namespace weblayer {
 
 // Interface for platform delegates that provide platform-dependent features
@@ -32,31 +36,29 @@ class WebLayerDependencies : public ::autofill_assistant::DependenciesAndroid,
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jstatic_dependencies);
 
-  // Overrides DependenciesAndroid
+  // DependenciesAndroid:
   const ::autofill_assistant::CommonDependencies* GetCommonDependencies()
       const override;
   const ::autofill_assistant::PlatformDependencies* GetPlatformDependencies()
       const override;
 
-  // Overrides CommonDependencies
+  // CommonDependencies:
   std::unique_ptr<::autofill_assistant::AssistantFieldTrialUtil>
   CreateFieldTrialUtil() const override;
-  autofill::PersonalDataManager* GetPersonalDataManager(
-      content::BrowserContext* browser_context) const override;
+  autofill::PersonalDataManager* GetPersonalDataManager() const override;
   password_manager::PasswordManagerClient* GetPasswordManagerClient(
       content::WebContents* web_contents) const override;
   std::string GetLocale() const override;
-  std::string GetCountryCode() const override;
-  std::string GetSignedInEmail(
-      content::BrowserContext* browser_context) const override;
-  bool IsSupervisedUser(
-      content::BrowserContext* browser_context) const override;
+  std::string GetLatestCountryCode() const override;
+  std::string GetStoredPermanentCountryCode() const override;
+  std::string GetSignedInEmail() const override;
+  PrefService* GetPrefs() const override;
+  bool IsSupervisedUser() const override;
   ::autofill_assistant::AnnotateDomModelService*
-  GetOrCreateAnnotateDomModelService(
-      content::BrowserContext* browser_context) const override;
+  GetOrCreateAnnotateDomModelService() const override;
   bool IsWebLayer() const override;
-  signin::IdentityManager* GetIdentityManager(
-      content::BrowserContext* browser_context) const override;
+  signin::IdentityManager* GetIdentityManager() const override;
+  consent_auditor::ConsentAuditor* GetConsentAuditor() const override;
   version_info::Channel GetChannel() const override;
 
   // Overrides PlatformDependencies

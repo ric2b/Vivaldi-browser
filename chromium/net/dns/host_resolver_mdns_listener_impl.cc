@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,9 +73,7 @@ void HostResolverMdnsListenerImpl::OnRecordUpdate(
 
   switch (query_type_) {
     case DnsQueryType::UNSPECIFIED:
-    case DnsQueryType::INTEGRITY:
     case DnsQueryType::HTTPS:
-    case DnsQueryType::HTTPS_EXPERIMENTAL:
       NOTREACHED();
       break;
     case DnsQueryType::A:

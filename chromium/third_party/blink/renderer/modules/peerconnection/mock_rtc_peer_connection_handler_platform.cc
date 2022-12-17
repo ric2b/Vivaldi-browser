@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -215,10 +215,6 @@ class MockRTCPeerConnectionHandlerPlatform::DummyRTCRtpTransceiverPlatform
 
   scoped_refptr<DummyTransceiverInternal> internal() const { return internal_; }
 
-  RTCRtpTransceiverPlatformImplementationType ImplementationType()
-      const override {
-    return RTCRtpTransceiverPlatformImplementationType::kFullTransceiver;
-  }
   uintptr_t Id() const override { return internal_->id(); }
   String Mid() const override { return String(); }
   std::unique_ptr<RTCRtpSenderPlatform> Sender() const override {

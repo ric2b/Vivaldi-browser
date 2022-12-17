@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,9 +10,9 @@
 #include <unordered_map>
 #include <utility>
 
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/secure_channel/bluetooth_helper.h"
 #include "ash/services/secure_channel/data_with_timestamp.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash::secure_channel {

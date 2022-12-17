@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -486,15 +486,9 @@ int OmniboxFieldTrial::MaxNumHQPUrlsIndexedAtStartup() {
 #endif
 
   if (base::SysInfo::IsLowEndDevice()) {
-    return variations::GetVariationParamByFeatureAsInt(
-        omnibox::kHistoryQuickProviderAblateInMemoryURLIndexCacheFile,
-        kMaxNumHQPUrlsIndexedAtStartupOnLowEndDevicesParam,
-        kDefaultOnLowEndDevices);
+    return kDefaultOnLowEndDevices;
   } else {
-    return variations::GetVariationParamByFeatureAsInt(
-        omnibox::kHistoryQuickProviderAblateInMemoryURLIndexCacheFile,
-        kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevicesParam,
-        kDefaultOnNonLowEndDevices);
+    return kDefaultOnNonLowEndDevices;
   }
 }
 
@@ -606,6 +600,11 @@ const base::FeatureParam<bool>
         &omnibox::kOmniboxFuzzyUrlSuggestions,
         "FuzzyUrlSuggestionsLowEndBypass",
         false);
+
+const base::FeatureParam<bool> OmniboxFieldTrial::kFuzzyUrlSuggestionsTranspose(
+    &omnibox::kOmniboxFuzzyUrlSuggestions,
+    "FuzzyUrlSuggestionsTranspose",
+    true);
 
 bool OmniboxFieldTrial::IsExperimentalKeywordModeEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kExperimentalKeywordMode);
@@ -733,20 +732,30 @@ namespace OmniboxFieldTrial {
 // Autocomplete stability.
 
 const base::FeatureParam<bool>
+    kAutocompleteStabilityPreserveDefaultExcludeKeywordInputs(
+        &omnibox::kPreserveDefault,
+        "AutocompleteStabilityPreserveDefaultExcludeKeywordInputs",
+        false);
+const base::FeatureParam<bool>
     kAutocompleteStabilityPreserveDefaultAfterTransfer(
-        &omnibox::kAutocompleteStability,
+        &omnibox::kPreserveDefault,
         "AutocompleteStabilityPreserveDefaultAfterTransfer",
         false);
 const base::FeatureParam<int>
     kAutocompleteStabilityPreserveDefaultForSyncUpdatesMinInputLength(
-        &omnibox::kAutocompleteStability,
+        &omnibox::kPreserveDefault,
         "AutocompleteStabilityPreserveDefaultForSyncUpdatesMinInputLength",
         -1);
 const base::FeatureParam<bool>
     kAutocompleteStabilityPreserveDefaultForAsyncUpdates(
-        &omnibox::kAutocompleteStability,
+        &omnibox::kPreserveDefault,
         "AutocompleteStabilityPreserveDefaultForAsyncUpdates",
         true);
+const base::FeatureParam<bool>
+    kAutocompleteStabilityPreventDefaultPreviousMatches(
+        &omnibox::kPreserveDefault,
+        "AutocompleteStabilityPreventDefaultPreviousMatches",
+        false);
 const base::FeatureParam<bool> kAutocompleteStabilityDontCopyDoneProviders(
     &omnibox::kAutocompleteStability,
     "AutocompleteStabilityDontCopyDoneProviders",
@@ -757,15 +766,22 @@ const base::FeatureParam<bool> kAutocompleteStabilityAsyncProvidersFirst(
     false);
 const base::FeatureParam<bool>
     kAutocompleteStabilityUpdateResultDebounceFromLastRun(
-        &omnibox::kAutocompleteStability,
+        &omnibox::kUpdateResultDebounce,
         "AutocompleteStabilityUpdateResultDebounceFromLastRun",
         false);
 const base::FeatureParam<int> kAutocompleteStabilityUpdateResultDebounceDelay(
-    &omnibox::kAutocompleteStability,
+    &omnibox::kUpdateResultDebounce,
     "AutocompleteStabilityUpdateResultDebounceDelay",
     0);
 
 // Local history zero-prefix (aka zero-suggest) and prefix suggestions:
+
+// The maximum number of entries stored by the in-memory zero-suggest cache at
+// at any given time (LRU eviction policy is used to enforce this limit).
+const base::FeatureParam<int> kZeroSuggestCacheMaxSize(
+    &omnibox::kZeroSuggestInMemoryCaching,
+    "ZeroSuggestCacheMaxSize",
+    5);
 
 // The relevance score for remote zero-suggest ranges from 550-1400. A default
 // value of 500 places local history zero-suggest below the remote zero-suggest.
@@ -774,20 +790,26 @@ const base::FeatureParam<int> kLocalHistoryZeroSuggestRelevanceScore(
     "LocalHistoryZeroSuggestRelevanceScore",
     500);
 
-const base::Feature kUseSharedInstanceForZeroSuggestPrefetching{
-    "UseSharedInstanceForZeroSuggestPrefetching",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
-bool UseSharedInstanceForZeroSuggestPrefetching() {
-  return base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetching) &&
-         base::FeatureList::IsEnabled(
-             kUseSharedInstanceForZeroSuggestPrefetching);
-}
-
 bool IsZeroSuggestPrefetchingEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetching) ||
          base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetchingOnSRP) ||
          base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetchingOnWeb);
+}
+
+bool IsZeroSuggestPrefetchingEnabledInContext(
+    metrics::OmniboxEventProto::PageClassification page_classification) {
+  switch (page_classification) {
+    case metrics::OmniboxEventProto::NTP_ZPS_PREFETCH:
+      return base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetching);
+    case metrics::OmniboxEventProto::SRP_ZPS_PREFETCH:
+      return base::FeatureList::IsEnabled(
+          omnibox::kZeroSuggestPrefetchingOnSRP);
+    case metrics::OmniboxEventProto::OTHER_ZPS_PREFETCH:
+      return base::FeatureList::IsEnabled(
+          omnibox::kZeroSuggestPrefetchingOnWeb);
+    default:
+      return false;
+  }
 }
 
 const base::FeatureParam<bool> kZeroSuggestIgnoreDuplicateVisits(
@@ -852,22 +874,6 @@ const base::FeatureParam<std::string> kBookmarkPathsCounterfactual(
     &omnibox::kBookmarkPaths,
     "OmniboxBookmarkPathsCounterfactual",
     "");
-const base::FeatureParam<bool> kBookmarkPathsUiReplaceTitle(
-    &omnibox::kBookmarkPaths,
-    "OmniboxBookmarkPathsUiReplaceTitle",
-    false);
-const base::FeatureParam<bool> kBookmarkPathsUiReplaceUrl(
-    &omnibox::kBookmarkPaths,
-    "OmniboxBookmarkPathsUiReplaceUrl",
-    false);
-const base::FeatureParam<bool> kBookmarkPathsUiAppendAfterTitle(
-    &omnibox::kBookmarkPaths,
-    "OmniboxBookmarkPathsUiAppendAfterTitle",
-    false);
-const base::FeatureParam<bool> kBookmarkPathsUiDynamicReplaceUrl(
-    &omnibox::kBookmarkPaths,
-    "OmniboxBookmarkPathsUiDynamicReplaceUrl",
-    false);
 
 // Shortcut Expanding
 
@@ -954,6 +960,41 @@ const base::FeatureParam<int> kSiteSearchStarterPackRelevanceScore(
     &omnibox::kSiteSearchStarterPack,
     "SiteSearchStarterPackRelevanceScore",
     1350);
+
+const base::FeatureParam<int> kDomainSuggestionsTypedUrlsThreshold(
+    &omnibox::kDomainSuggestions,
+    "DomainSuggestionsTypedUrlsThreshold",
+    7);
+
+const base::FeatureParam<int> kDomainSuggestionsTypedUrlsOffset(
+    &omnibox::kDomainSuggestions,
+    "DomainSuggestionsTypedUrlsOffset",
+    1);
+
+const base::FeatureParam<int> kDomainSuggestionsTypedVisitThreshold(
+    &omnibox::kDomainSuggestions,
+    "DomainSuggestionsTypedVisitThreshold",
+    4);
+
+const base::FeatureParam<int> kDomainSuggestionsTypedVisitOffset(
+    &omnibox::kDomainSuggestions,
+    "DomainSuggestionsTypedVisitOffset",
+    1);
+
+const base::FeatureParam<int> kDomainSuggestionsTypedVisitCapPerVisit(
+    &omnibox::kDomainSuggestions,
+    "DomainSuggestionsTypedVisitCapPerVisit",
+    2);
+
+const base::FeatureParam<int> kDomainSuggestionsMinInputLength(
+    &omnibox::kDomainSuggestions,
+    "DomainSuggestionsMinInputLength",
+    4);
+
+const base::FeatureParam<int> kDomainSuggestionsMaxMatchesPerDomain(
+    &omnibox::kDomainSuggestions,
+    "DomainSuggestionsMaxMatchesPerDomain",
+    2);
 
 }  // namespace OmniboxFieldTrial
 

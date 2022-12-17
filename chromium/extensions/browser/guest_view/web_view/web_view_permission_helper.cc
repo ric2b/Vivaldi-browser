@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -187,28 +187,26 @@ WebViewPermissionHelper::~WebViewPermissionHelper() {
 }
 
 // static
-WebViewPermissionHelper* WebViewPermissionHelper::FromFrameID(
-    int render_process_id,
-    int render_frame_id) {
-  WebViewGuest* web_view_guest =
-      WebViewGuest::FromFrameID(render_process_id, render_frame_id);
+WebViewPermissionHelper* WebViewPermissionHelper::FromRenderFrameHost(
+    content::RenderFrameHost* rfh) {
+  WebViewGuest* web_view_guest = WebViewGuest::FromRenderFrameHost(rfh);
   return web_view_guest ? web_view_guest->web_view_permission_helper()
                         : nullptr;
 }
 
 // static
-WebViewPermissionHelper* WebViewPermissionHelper::FromWebContents(
-    content::WebContents* web_contents) {
+WebViewPermissionHelper* WebViewPermissionHelper::FromRenderFrameHostId(
+    const content::GlobalRenderFrameHostId& rfh_id) {
   // This can be a MimeHandlerViewGuest, used to show PDFs. In that case use the
   // owner webcontents which will give us a WebViewGuest.
   MimeHandlerViewGuest* mime_view_guest =
-      MimeHandlerViewGuest::FromWebContents(web_contents);
+      MimeHandlerViewGuest::FromRenderFrameHostId(rfh_id);
   if (mime_view_guest) {
     WebViewGuest* web_view_guest =
         WebViewGuest::FromWebContents(mime_view_guest->owner_web_contents());
     return web_view_guest->web_view_permission_helper();
   }
-  WebViewGuest* web_view_guest = WebViewGuest::FromWebContents(web_contents);
+  WebViewGuest* web_view_guest = WebViewGuest::FromRenderFrameHostId(rfh_id);
   return web_view_guest ? web_view_guest->web_view_permission_helper()
                         : nullptr;
 }
@@ -239,7 +237,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
       web_view_guest()->embedder_web_contents()) : nullptr;
   if (helper)
     do {
-      Profile* profile =
+      Profile* source_profile =
           Profile::FromBrowserContext(source->GetBrowserContext());
 
       ContentSetting audio_setting = CONTENT_SETTING_DEFAULT;
@@ -247,7 +245,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
 
       if (request.audio_type != blink::mojom::MediaStreamType::NO_SERVICE) {
         audio_setting =
-            HostContentSettingsMapFactory::GetForProfile(profile)
+            HostContentSettingsMapFactory::GetForProfile(source_profile)
                 ->GetContentSetting(request.security_origin, GURL(),
                                     ContentSettingsType::MEDIASTREAM_MIC);
 
@@ -264,7 +262,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
       }
       if (request.video_type != blink::mojom::MediaStreamType::NO_SERVICE) {
         camera_setting =
-            HostContentSettingsMapFactory::GetForProfile(profile)
+            HostContentSettingsMapFactory::GetForProfile(source_profile)
                 ->GetContentSetting(request.security_origin, GURL(),
                                     ContentSettingsType::MEDIASTREAM_CAMERA);
         if (camera_setting != CONTENT_SETTING_ALLOW &&

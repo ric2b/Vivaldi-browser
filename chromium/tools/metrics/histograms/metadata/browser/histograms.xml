@@ -1,5 +1,5 @@
 <!--
-Copyright 2020 The Chromium Authors. All rights reserved.
+Copyright 2020 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -27,6 +27,7 @@ chromium-metrics-reviews@google.com.
   <variant name="Assistant"/>
   <variant name="Bookmarks"/>
   <variant name="CustomizeChrome"/>
+  <variant name="Extension"/>
   <variant name="Feed"/>
   <variant name="HistoryClusters"/>
   <variant name="Lens"/>
@@ -34,25 +35,26 @@ chromium-metrics-reviews@google.com.
   <variant name="ReadingList"/>
   <variant name="SideSearch"/>
   <variant name="UserNotes"/>
+  <variant name="WebView"/>
 </variants>
 
 <variants name="TabSwitchingType">
-  <variant name=".NoSavedFrames"
-      summary="The time from the input timestamp on a tab switch, until the
-               frame is presented on the screen when there is no saved frame
-               in the cache."/>
   <variant name=".NoSavedFrames_Loaded"
-      summary="Same as NoSavedFrames with the destination tab being loaded
-               (frozen or not frozen)"/>
+      summary="The time from the input timestamp on a tab switch, until the
+               frame is presented on the screen, when there is no saved frame
+               in the cache but the destination tab is already loaded."/>
   <variant name=".NoSavedFrames_NotLoaded"
-      summary="Same as NoSavedFrames with the destination tab being unloaded."/>
+      summary="The time from the input timestamp on a tab switch, until the
+               frame is presented on the screen, when there is no saved frame
+               in the cache and the destination tab is not loaded."/>
   <variant name=".WithSavedFrames"
-      summary="There is a saved frame in the cache when the tab switch
-               starts."/>
+      summary="The time from the input timestamp on a tab switch, until the
+               frame is presented on the screen, when there is a saved frame
+               in the cache."/>
 </variants>
 
 <histogram name="Browser.AnyWindowHasName" enum="Boolean"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>ellyjones@chromium.org</owner>
   <owner>lgrey@chromium.org</owner>
   <summary>
@@ -87,6 +89,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Browser.ChromeOS.HatsSatisfaction{Survey}" units="score"
     expires_after="2023-01-01">
+  <obsolete>
+    M109; Replaced by &quot;ChromeOS.HaTS.*&quot;.
+  </obsolete>
   <owner>aalsum@chromium.org</owner>
   <owner>jackshira@google.org</owner>
   <owner>cros-telemetry@google.com</owner>
@@ -102,6 +107,7 @@ chromium-metrics-reviews@google.com.
     <variant name=".CameraApp"/>
     <variant name=".Ent"/>
     <variant name=".General"/>
+    <variant name=".GeneralCamera"/>
     <variant name=".MediaAppPdf"/>
     <variant name=".OnboardingExperience"/>
     <variant name=".Performance"/>
@@ -129,7 +135,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.DarkModeStatus" enum="DarkModeStatus"
-    expires_after="2023-01-01">
+    expires_after="2023-03-05">
   <owner>lgrey@chromium.org</owner>
   <owner>robliao@chromium.org</owner>
   <summary>
@@ -159,7 +165,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.MainThreadsCongestion{Phase}" units="janks"
-    expires_after="2023-01-15">
+    expires_after="2023-03-15">
 <!-- on probation: expected to graduate as a go/chrome-browser-guiding-metrics -->
 
   <owner>etienneb@chromium.org</owner>
@@ -240,7 +246,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Player.CompositorProcessStartedCorrectly"
-    enum="BooleanSuccess" expires_after="2023-01-15">
+    enum="BooleanSuccess" expires_after="2023-03-19">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -260,7 +266,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.PaintPreview.Player.LinkClicked" enum="BooleanSuccess"
-    expires_after="2022-12-18">
+    expires_after="2023-02-19">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -279,7 +285,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabbedPlayer.CompositorFailureReason"
-    enum="TabbedPaintPreviewCompositorFailureReason" expires_after="2022-12-18">
+    enum="TabbedPaintPreviewCompositorFailureReason" expires_after="2023-02-19">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -302,7 +308,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabbedPlayer.FirstPaintBeforeTabLoad"
-    enum="Boolean" expires_after="2022-12-18">
+    enum="Boolean" expires_after="2023-02-19">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -325,7 +331,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.PaintPreview.TabbedPlayer.SnackbarCount" units="units"
-    expires_after="2022-12-18">
+    expires_after="2023-02-19">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -385,7 +391,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.Responsiveness.IOJanksTotalPerMinute" units="janks"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>gab@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <summary>
@@ -399,7 +405,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.Responsiveness.IOJankyIntervalsPerMinute"
-    units="janks" expires_after="2022-12-18">
+    units="janks" expires_after="2023-02-19">
   <owner>gab@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <summary>
@@ -441,7 +447,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.Responsiveness.JankyIntervalsPerThirtySeconds3{Phase}"
-    units="janks" expires_after="M108">
+    units="janks" expires_after="M111">
 <!-- to graduate as Browser.MainThreadsCongestion as a go/chrome-browser-guiding-metrics) -->
 
   <owner>etienneb@chromium.org</owner>
@@ -471,7 +477,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.Responsiveness.JankyIntervalsPerThirtySeconds{Phase}"
-    units="janks" expires_after="M108">
+    units="janks" expires_after="M111">
 <!-- to be replaced by Browser.MainThreadsCongestion as a go/chrome-browser-guiding-metrics) -->
 
   <owner>gab@chromium.org</owner>
@@ -545,7 +551,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.Tabs.SelectionToVisibilityRequestTime"
-    units="microseconds" expires_after="2023-01-01">
+    units="microseconds" expires_after="2023-03-05">
   <owner>jonross@chromium.org</owner>
   <owner>sky@chromium.org</owner>
   <summary>
@@ -589,6 +595,11 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Browser.Tabs.TabSwitchResult{TabSwitchingType}"
     enum="TabSwitchResult" expires_after="2023-01-26">
+  <obsolete>
+    Replaced by Browser.Tabs.TabSwitchResult2 in M107. Still logged in parallel
+    until M108 to give automated test suites time to update (see
+    http://shortn/_hpallg5Q7H.)
+  </obsolete>
   <owner>fdoray@chromium.org</owner>
   <owner>joenotcharles@google.com</owner>
   <owner>catan-team@chromium.org</owner>
@@ -614,6 +625,11 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Browser.Tabs.TotalIncompleteSwitchDuration{TabSwitchingType}"
     units="ms" expires_after="2023-01-26">
+  <obsolete>
+    Replaced by Browser.Tabs.TotalIncompleteSwitchDuration2 in M107. Still
+    logged in parallel until M108 to give automated test suites time to update
+    (see http://shortn/_hpallg5Q7H.)
+  </obsolete>
   <owner>fdoray@chromium.org</owner>
   <owner>jonross@chromium.org</owner>
   <owner>joenotcharles@google.com</owner>
@@ -641,6 +657,11 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Browser.Tabs.TotalSwitchDuration{TabSwitchingType}" units="ms"
     expires_after="2023-01-26">
+  <obsolete>
+    Replaced by Browser.Tabs.TotalSwitchDuration2 in M107. Still logged in
+    parallel until M108 to give automated test suites time to update (see
+    http://shortn/_hpallg5Q7H.)
+  </obsolete>
   <owner>ejoe@google.com</owner>
   <owner>jonross@chromium.org</owner>
   <owner>joenotcharles@google.com</owner>
@@ -683,7 +704,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.WindowCount.Guest" units="units"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>rhalavati@chromium.org</owner>
   <owner>chrome-privacy-core@google.com</owner>
   <summary>
@@ -695,7 +716,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.WindowCount.Incognito" units="units"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>rhalavati@chromium.org</owner>
   <owner>chrome-privacy-core@google.com</owner>
   <summary>
@@ -794,7 +815,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserRenderProcessHost.LabeledInTaskManager"
-    enum="BooleanLabeledRendererTask" expires_after="2023-01-15">
+    enum="BooleanLabeledRendererTask" expires_after="2023-03-19">
   <owner>creis@chromium.org</owner>
   <owner>avi@chromium.org</owner>
   <summary>
@@ -863,7 +884,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserServices.BrowsableIntentCheck" units="ms"
-    expires_after="M108">
+    expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -874,7 +895,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserServices.ClientAppDataLoad" units="ms"
-    expires_after="M108">
+    expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -885,7 +906,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserServices.ServiceTabResolveInfoQuery" units="ms"
-    expires_after="2022-12-18">
+    expires_after="2023-02-19">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -895,7 +916,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserServices.TwaOpenTime.V2" units="ms"
-    expires_after="M108">
+    expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -905,7 +926,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserServices.VerificationResult"
-    enum="BrowserServicesVerificationResult" expires_after="M108">
+    enum="BrowserServicesVerificationResult" expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -915,7 +936,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserServices.VerificationTime.Offline" units="ms"
-    expires_after="M108">
+    expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -926,7 +947,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserServices.VerificationTime.Online" units="ms"
-    expires_after="M108">
+    expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -1055,7 +1076,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserSwitcher.LaunchSuccess" enum="BooleanSuccess"
-    expires_after="2022-12-05">
+    expires_after="2023-03-19">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1065,7 +1086,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserSwitcher.LaunchTime" units="ms"
-    expires_after="2023-02-05">
+    expires_after="2023-04-09">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1092,6 +1113,16 @@ chromium-metrics-reviews@google.com.
     Whether there is a wildcard (&quot;*&quot;) rule in the
     BrowserSwitcherUrlList policy. Measured when the BrowserSwitcherUrlList
     policy gets updated. Desktop Chrome only.
+  </summary>
+</histogram>
+
+<histogram name="DigitalAssetLinks.NumFingerprints" units="NumFingerprints"
+    expires_after="M116">
+  <owner>swestphal@chromium.org</owner>
+  <owner>rayankans@chromium.org</owner>
+  <summary>
+    Records the number of fingerprints in assetlinks.json for every performed
+    Digital Asset Link validation with a valid `sha256_cert_fingerprints`-entry.
   </summary>
 </histogram>
 

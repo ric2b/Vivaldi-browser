@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -93,15 +93,11 @@ class ExtensionGarbageCollectorChromeOSUnitTest
                                   const std::string& version,
                                   const std::string& users_string,
                                   const base::FilePath& path) {
-    DictionaryPrefUpdate shared_extensions(
+    ScopedDictPrefUpdate shared_extensions(
         testing_local_state_.Get(),
         ExtensionAssetsManagerChromeOS::kSharedExtensions);
 
-    base::Value* extension_info_weak = shared_extensions->FindDictKey(id);
-    if (!extension_info_weak) {
-      extension_info_weak = shared_extensions->SetKey(
-          id, base::Value(base::Value::Type::DICTIONARY));
-    }
+    base::Value::Dict* extension_info_weak = shared_extensions->EnsureDict(id);
 
     base::Value version_info(base::Value::Type::DICTIONARY);
     version_info.SetStringKey(
@@ -115,7 +111,7 @@ class ExtensionGarbageCollectorChromeOSUnitTest
     }
     version_info.SetKey(ExtensionAssetsManagerChromeOS::kSharedExtensionUsers,
                         std::move(users));
-    extension_info_weak->SetKey(version, std::move(version_info));
+    extension_info_weak->Set(version, std::move(version_info));
   }
 
   scoped_refptr<const Extension> CreateExtension(const std::string& id,
@@ -185,7 +181,7 @@ TEST_F(ExtensionGarbageCollectorChromeOSUnitTest, SharedExtensions) {
   EXPECT_TRUE(base::PathExists(path_id2_1));
 
   const base::Value::Dict& shared_extensions =
-      testing_local_state_.Get()->GetValueDict(
+      testing_local_state_.Get()->GetDict(
           ExtensionAssetsManagerChromeOS::kSharedExtensions);
 
   EXPECT_FALSE(shared_extensions.Find(kExtensionId1));

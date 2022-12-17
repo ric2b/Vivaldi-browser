@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -191,7 +191,8 @@ ProxyConfigServiceImpl::GetActiveProxyConfigDictionary(
     const PrefService::Preference* const pref =
         profile_prefs->FindPreference(::proxy_config::prefs::kProxy);
     DCHECK(pref->GetValue() && pref->GetValue()->is_dict());
-    return std::make_unique<ProxyConfigDictionary>(pref->GetValue()->Clone());
+    return std::make_unique<ProxyConfigDictionary>(
+        pref->GetValue()->GetDict().Clone());
   }
 
   const NetworkState* network =

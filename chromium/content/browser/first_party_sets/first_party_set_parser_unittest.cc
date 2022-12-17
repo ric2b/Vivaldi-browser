@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,12 +6,12 @@
 
 #include <sstream>
 
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
+#include "base/test/scoped_feature_list.h"
+#include "content/public/browser/first_party_sets_handler.h"
+#include "content/public/common/content_features.h"
 #include "net/base/schemeful_site.h"
-#include "net/cookies/first_party_set_entry.h"
+#include "net/first_party_sets/first_party_set_entry.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -25,568 +25,453 @@ using ::testing::UnorderedElementsAre;
 
 namespace content {
 
-MATCHER_P(SerializesTo, want, "") {
-  const std::string got = arg.Serialize();
-  return testing::ExplainMatchResult(testing::Eq(want), got, result_listener);
-}
+namespace {
+
+using ParseErrorType = FirstPartySetsHandler::ParseErrorType;
+using ParseError = FirstPartySetsHandler::ParseError;
+using ParseWarningType = FirstPartySetsHandler::ParseWarningType;
+using ParseWarning = FirstPartySetsHandler::ParseWarning;
+
+const char kPrimaryField[] = "primary";
+const char kAssociatedSitesField[] = "associatedSites";
+const char kCctldsField[] = "ccTLDs";
+const char kReplacementsField[] = "replacements";
+const char kAdditionsField[] = "additions";
+
+}  // namespace
 
 FirstPartySetParser::SetsAndAliases ParseSets(const std::string& sets) {
   std::istringstream stream(sets);
-  return FirstPartySetParser::ParseSetsFromStream(stream);
+  return FirstPartySetParser::ParseSetsFromStream(stream, false);
 }
 
 TEST(FirstPartySetParser, RejectsNonemptyMalformed) {
   // If the input isn't valid JSON, we should
   // reject it.
-  const std::string input = "certainly not valid JSON";
-
-  ASSERT_FALSE(base::JSONReader::Read(input));
-  std::istringstream stream(input);
-  EXPECT_THAT(FirstPartySetParser::ParseSetsFromStream(stream),
+  EXPECT_THAT(ParseSets("certainly not valid JSON"),
               Pair(IsEmpty(), IsEmpty()));
 }
 
 TEST(FirstPartySetParser, AcceptsTrivial) {
-  const std::string input = "";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+  EXPECT_THAT(ParseSets(""), Pair(IsEmpty(), IsEmpty()));
 }
 
 TEST(FirstPartySetParser, RejectsSingletonSet) {
-  const std::string input =
-      R"({"owner": "https://example.test", "members": []})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+  EXPECT_THAT(
+      ParseSets(
+          R"({"primary": "https://example.test", "associatedSites": []})"),
+      Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, AcceptsMinimal) {
-  const std::string input =
-      R"({"owner": "https://example.test", "members": ["https://aaaa.test"]})";
+TEST(FirstPartySetParser, AcceptsMinimal_Associated) {
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite aaaa(GURL("https://aaaa.test"));
 
-  std::istringstream stream(input);
+  EXPECT_THAT(ParseSets(R"({"primary": "https://example.test",)"
+                        R"("associatedSites": ["https://aaaa.test"]})"),
+              Pair(UnorderedElementsAre(
+                       Pair(example, net::FirstPartySetEntry(
+                                         example, net::SiteType::kPrimary,
+                                         absl::nullopt)),
+                       Pair(aaaa, net::FirstPartySetEntry(
+                                      example, net::SiteType::kAssociated, 0))),
+                   IsEmpty()));
+}
+
+TEST(FirstPartySetParser, AcceptsMinimal_Service) {
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite aaaa(GURL("https://aaaa.test"));
+
   EXPECT_THAT(
-      FirstPartySetParser::ParseSetsFromStream(stream),
+      ParseSets(R"({"primary": "https://example.test",)"
+                R"("serviceSites": ["https://aaaa.test"]})"),
+      Pair(
+          UnorderedElementsAre(
+              Pair(example,
+                   net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                           absl::nullopt)),
+              Pair(aaaa, net::FirstPartySetEntry(
+                             example, net::SiteType::kService, absl::nullopt))),
+          IsEmpty()));
+}
+
+TEST(FirstPartySetParser, AcceptsMinimal_AllSubsets_WithCcTLDs) {
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite example_cctld(GURL("https://example.cctld"));
+  net::SchemefulSite a(GURL("https://a.test"));
+  net::SchemefulSite a_cctld(GURL("https://a.cctld"));
+  net::SchemefulSite b(GURL("https://b.test"));
+  net::SchemefulSite b_cctld(GURL("https://b.cctld"));
+
+  EXPECT_THAT(
+      ParseSets(R"({"primary": "https://example.test",)"
+                R"("associatedSites": ["https://a.test"],)"
+                R"("serviceSites": ["https://b.test"],)"
+                R"("ccTLDs": {)"
+                R"("https://example.test": ["https://example.cctld"],)"
+                R"("https://a.test": ["https://a.cctld"],)"
+                R"("https://b.test": ["https://b.cctld"])"
+                R"(})"
+                R"(})"),
       Pair(UnorderedElementsAre(
-               Pair(SerializesTo("https://example.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://aaaa.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kAssociated, 0))),
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(a, net::FirstPartySetEntry(example,
+                                               net::SiteType::kAssociated, 0)),
+               Pair(b, net::FirstPartySetEntry(example, net::SiteType::kService,
+                                               absl::nullopt))),
+           UnorderedElementsAre(Pair(example_cctld, example), Pair(a_cctld, a),
+                                Pair(b_cctld, b))));
+}
+
+TEST(FirstPartySetParser, RejectsMissingPrimary) {
+  EXPECT_THAT(ParseSets(R"({"associatedSites": ["https://aaaa.test"]})"),
+              Pair(IsEmpty(), IsEmpty()));
+}
+
+TEST(FirstPartySetParser, RejectsTypeUnsafePrimary) {
+  EXPECT_THAT(
+      ParseSets(R"({ "primary": 3, "associatedSites": ["https://aaaa.test"]})"),
+      Pair(IsEmpty(), IsEmpty()));
+}
+
+TEST(FirstPartySetParser, RejectsNonHTTPSPrimary) {
+  EXPECT_THAT(ParseSets(R"({"primary": "http://example.test",)"
+                        R"("associatedSites": ["https://aaaa.test"]})"),
+              Pair(IsEmpty(), IsEmpty()));
+}
+
+TEST(FirstPartySetParser, RejectsNonOriginPrimary) {
+  EXPECT_THAT(
+      ParseSets(
+          R"({"primary": "example", "associatedSites": ["https://aaaa.test"]})"),
+      Pair(IsEmpty(), IsEmpty()));
+}
+
+TEST(FirstPartySetParser, SkipsSetOnNonOriginPrimary) {
+  net::SchemefulSite example2(GURL("https://example2.test"));
+  net::SchemefulSite associated2(GURL("https://associatedsite2.test"));
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite aaaa(GURL("https://aaaa.test"));
+
+  EXPECT_THAT(
+      ParseSets(
+          R"({"primary": "example", "associatedSites": ["https://aaaa.test"]})"
+          "\n"
+          R"({"primary": "https://example2.test", "associatedSites": )"
+          R"(["https://associatedsite2.test"]})"
+          "\n"
+          R"({"primary": "https://example.test",)"
+          R"("associatedSites": ["https://aaaa.test"]})"),
+      Pair(UnorderedElementsAre(
+               Pair(example2,
+                    net::FirstPartySetEntry(example2, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(associated2, net::FirstPartySetEntry(
+                                     example2, net::SiteType::kAssociated, 0)),
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(aaaa, net::FirstPartySetEntry(
+                              example, net::SiteType::kAssociated, 0))),
            IsEmpty()));
 }
 
-TEST(FirstPartySetParser, RejectsMissingOwner) {
-  const std::string input = R"({"members": ["https://aaaa.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, RejectsPrimaryWithoutRegisteredDomain) {
+  EXPECT_THAT(ParseSets(R"({"primary": "https://example.test..", )"
+                        R"("associatedSites": ["https://aaaa.test"]})"),
+              Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, RejectsTypeUnsafeOwner) {
-  const std::string input =
-      R"({ "owner": 3, "members": ["https://aaaa.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, RejectsMissingAssociatedSites) {
+  EXPECT_THAT(ParseSets(R"({"primary": "https://example.test" })"),
+              Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, RejectsNonHTTPSOwner) {
-  const std::string input =
-      R"({"owner": "http://example.test", "members": ["https://aaaa.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, RejectsTypeUnsafeAssociatedSites) {
+  EXPECT_THAT(ParseSets(R"({"primary": "https://example.test", )"
+                        R"("associatedSites": ["https://aaaa.test", 4]})"),
+              Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, RejectsNonOriginOwner) {
-  const std::string input =
-      R"({"owner": "example", "members": ["https://aaaa.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, RejectsNonHTTPSAssociatedSite) {
+  EXPECT_THAT(ParseSets(R"({"primary": "https://example.test",)"
+                        R"("associatedSites": ["http://aaaa.test"]})"),
+              Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, SkipsSetOnNonOriginOwner) {
-  const std::string input =
-      R"({"owner": "example", "members": ["https://aaaa.test"]})"
-      "\n"
-      R"({"owner": "https://example2.test", "members": )"
-      R"(["https://member2.test"]})"
-      "\n"
-      R"({"owner": "https://example.test", "members": ["https://aaaa.test"]})";
+TEST(FirstPartySetParser, RejectsNonOriginAssociatedSite) {
+  EXPECT_THAT(ParseSets(R"({"primary": "https://example.test",)"
+                        R"("associatedSites": ["aaaa"]})"),
+              Pair(IsEmpty(), IsEmpty()));
+}
+
+TEST(FirstPartySetParser, SkipsSetOnNonOriginAssociatedSite) {
+  net::SchemefulSite example2(GURL("https://example2.test"));
+  net::SchemefulSite associated2(GURL("https://associatedsite2.test"));
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite associated3(GURL("https://associatedsite3.test"));
 
   EXPECT_THAT(
-      ParseSets(input),
+      ParseSets(
+          R"({"primary": "https://example.test", "associatedSites": ["aaaa"]})"
+          "\n"
+          R"({"primary": "https://example2.test", "associatedSites": )"
+          R"(["https://associatedsite2.test"]})"
+          "\n"
+          R"({"primary": "https://example.test", "associatedSites": )"
+          R"(["https://associatedsite3.test"]})"),
       Pair(UnorderedElementsAre(
-               Pair(SerializesTo("https://example2.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example2.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member2.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example2.test")),
-                        net::SiteType::kAssociated, 0)),
-               Pair(SerializesTo("https://example.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://aaaa.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kAssociated, 0))),
+               Pair(example2,
+                    net::FirstPartySetEntry(example2, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(associated2, net::FirstPartySetEntry(
+                                     example2, net::SiteType::kAssociated, 0)),
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(associated3, net::FirstPartySetEntry(
+                                     example, net::SiteType::kAssociated, 0))),
            IsEmpty()));
 }
 
-TEST(FirstPartySetParser, RejectsOwnerWithoutRegisteredDomain) {
-  const std::string input = R"({"owner": "https://example.test..", )"
-                            R"("members": ["https://aaaa.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, RejectsAssociatedSiteWithoutRegisteredDomain) {
+  EXPECT_THAT(ParseSets(R"({"primary": "https://example.test", )"
+                        R"("associatedSites": ["https://aaaa.test.."]})"),
+              Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, RejectsMissingMembers) {
-  const std::string input = R"({"owner": "https://example.test" })";
+TEST(FirstPartySetParser, TruncatesSubdomain_Primary) {
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite aaaa(GURL("https://aaaa.test"));
 
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+  EXPECT_THAT(ParseSets(R"({"primary": "https://subdomain.example.test", )"
+                        R"("associatedSites": ["https://aaaa.test"]})"),
+              Pair(UnorderedElementsAre(
+                       Pair(example, net::FirstPartySetEntry(
+                                         example, net::SiteType::kPrimary,
+                                         absl::nullopt)),
+                       Pair(aaaa, net::FirstPartySetEntry(
+                                      example, net::SiteType::kAssociated, 0))),
+                   IsEmpty()));
 }
 
-TEST(FirstPartySetParser, RejectsTypeUnsafeMembers) {
-  const std::string input = R"({"owner": "https://example.test", )"
-                            R"("members": ["https://aaaa.test", 4]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
-}
-
-TEST(FirstPartySetParser, RejectsNonHTTPSMember) {
-  const std::string input =
-      R"({"owner": "https://example.test", "members": ["http://aaaa.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
-}
-
-TEST(FirstPartySetParser, RejectsNonOriginMember) {
-  const std::string input =
-      R"({"owner": "https://example.test", "members": ["aaaa"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
-}
-
-TEST(FirstPartySetParser, SkipsSetOnNonOriginMember) {
-  const std::string input =
-      R"({"owner": "https://example.test", "members": ["aaaa"]})"
-      "\n"
-      R"({"owner": "https://example2.test", "members": )"
-      R"(["https://member2.test"]})"
-      "\n"
-      R"({"owner": "https://example.test", "members": )"
-      R"(["https://member3.test"]})";
+TEST(FirstPartySetParser, TruncatesSubdomain_AssociatedSite) {
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite aaaa(GURL("https://aaaa.test"));
 
   EXPECT_THAT(
-      ParseSets(input),
+      ParseSets(R"({"primary": "https://example.test", )"
+                R"("associatedSites": ["https://subdomain.aaaa.test"]})"),
       Pair(UnorderedElementsAre(
-               Pair(SerializesTo("https://example2.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example2.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member2.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example2.test")),
-                        net::SiteType::kAssociated, 0)),
-               Pair(SerializesTo("https://example.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member3.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kAssociated, 0))),
-           IsEmpty()));
-}
-
-TEST(FirstPartySetParser, RejectsMemberWithoutRegisteredDomain) {
-  const std::string input = R"({"owner": "https://example.test", )"
-                            R"("members": ["https://aaaa.test.."]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
-}
-
-TEST(FirstPartySetParser, TruncatesSubdomain_Owner) {
-  const std::string input = R"({"owner": "https://subdomain.example.test", )"
-                            R"("members": ["https://aaaa.test"]})";
-
-  EXPECT_THAT(
-      ParseSets(input),
-      Pair(UnorderedElementsAre(
-               Pair(SerializesTo("https://example.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://aaaa.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kAssociated, 0))),
-           IsEmpty()));
-}
-
-TEST(FirstPartySetParser, TruncatesSubdomain_Member) {
-  const std::string input = R"({"owner": "https://example.test", )"
-                            R"("members": ["https://subdomain.aaaa.test"]})";
-
-  EXPECT_THAT(
-      ParseSets(input),
-      Pair(UnorderedElementsAre(
-               Pair(SerializesTo("https://example.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://aaaa.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kAssociated, 0))),
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(aaaa, net::FirstPartySetEntry(
+                              example, net::SiteType::kAssociated, 0))),
            IsEmpty()));
 }
 
 TEST(FirstPartySetParser, AcceptsMultipleSets) {
-  const std::string input =
-      "{\"owner\": \"https://example.test\", \"members\": "
-      "[\"https://member1.test\"]}\n"
-      "{\"owner\": \"https://foo.test\", \"members\": "
-      "[\"https://member2.test\"]}";
+  net::SchemefulSite foo(GURL("https://foo.test"));
+  net::SchemefulSite associated2(GURL("https://associatedsite2.test"));
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite associated1(GURL("https://associatedsite1.test"));
 
-  std::istringstream stream(input);
   EXPECT_THAT(
-      FirstPartySetParser::ParseSetsFromStream(stream),
+      ParseSets("{\"primary\": \"https://example.test\", \"associatedSites\": "
+                "[\"https://associatedsite1.test\"]}\n"
+                "{\"primary\": \"https://foo.test\", \"associatedSites\": "
+                "[\"https://associatedsite2.test\"]}"),
       Pair(UnorderedElementsAre(
-               Pair(SerializesTo("https://example.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member1.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kAssociated, 0)),
-               Pair(SerializesTo("https://foo.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://foo.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member2.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://foo.test")),
-                        net::SiteType::kAssociated, 0))),
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(associated1, net::FirstPartySetEntry(
+                                     example, net::SiteType::kAssociated, 0)),
+               Pair(foo, net::FirstPartySetEntry(foo, net::SiteType::kPrimary,
+                                                 absl::nullopt)),
+               Pair(associated2, net::FirstPartySetEntry(
+                                     foo, net::SiteType::kAssociated, 0))),
            IsEmpty()));
 }
 
 TEST(FirstPartySetParser, AcceptsMultipleSetsWithWhitespace) {
+  net::SchemefulSite foo(GURL("https://foo.test"));
+  net::SchemefulSite associated1(GURL("https://associatedsite1.test"));
+  net::SchemefulSite associated2(GURL("https://associatedsite2.test"));
+  net::SchemefulSite example(GURL("https://example.test"));
   // Note the leading blank line, middle blank line, trailing blank line, and
   // leading whitespace on each line.
-  const std::string input = R"(
-      {"owner": "https://example.test", "members": ["https://member1.test"]}
-
-      {"owner": "https://foo.test", "members": ["https://member2.test"]}
-    )";
-
-  std::istringstream stream(input);
   EXPECT_THAT(
-      FirstPartySetParser::ParseSetsFromStream(stream),
+      ParseSets(R"(
+      {"primary": "https://example.test", "associatedSites": ["https://associatedsite1.test"]}
+
+      {"primary": "https://foo.test", "associatedSites": ["https://associatedsite2.test"]}
+    )"),
       Pair(UnorderedElementsAre(
-               Pair(SerializesTo("https://example.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member1.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kAssociated, 0)),
-               Pair(SerializesTo("https://foo.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://foo.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member2.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://foo.test")),
-                        net::SiteType::kAssociated, 0))),
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(associated1, net::FirstPartySetEntry(
+                                     example, net::SiteType::kAssociated, 0)),
+               Pair(foo, net::FirstPartySetEntry(foo, net::SiteType::kPrimary,
+                                                 absl::nullopt)),
+               Pair(associated2, net::FirstPartySetEntry(
+                                     foo, net::SiteType::kAssociated, 0))),
            IsEmpty()));
 }
 
-TEST(FirstPartySetParser, RejectsInvalidSets_InvalidOwner) {
-  const std::string input = R"({"owner": 3, "members": ["https://member1.test"]}
-    {"owner": "https://foo.test", "members": ["https://member2.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, RejectsInvalidSets_InvalidPrimary) {
+  EXPECT_THAT(
+      ParseSets(
+          R"({"primary": 3, "associatedSites": ["https://associatedsite1.test"]}
+    {"primary": "https://foo.test",)"
+          R"("associatedSites": ["https://associatedsite2.test"]})"),
+      Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, RejectsInvalidSets_InvalidMember) {
-  const std::string input = R"({"owner": "https://example.test", "members": [3]}
-    {"owner": "https://foo.test", "members": ["https://member2.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, RejectsInvalidSets_InvalidAssociatedSite) {
+  EXPECT_THAT(
+      ParseSets(R"({"primary": "https://example.test", "associatedSites": [3]}
+    {"primary": "https://foo.test",)"
+                R"("associatedSites": ["https://associatedsite2.test"]})"),
+      Pair(IsEmpty(), IsEmpty()));
 }
 
 TEST(FirstPartySetParser, AllowsTrailingCommas) {
-  const std::string input = R"({"owner": "https://example.test", )"
-                            R"("members": ["https://member1.test"],})";
-
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite associated1(GURL("https://associatedsite1.test"));
   EXPECT_THAT(
-      ParseSets(input),
+      ParseSets(R"({"primary": "https://example.test", )"
+                R"("associatedSites": ["https://associatedsite1.test"],})"),
       Pair(UnorderedElementsAre(
-               Pair(SerializesTo("https://example.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member1.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kAssociated, 0))),
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(associated1, net::FirstPartySetEntry(
+                                     example, net::SiteType::kAssociated, 0))),
            IsEmpty()));
 }
 
-TEST(FirstPartySetParser, Rejects_SameOwner) {
-  const std::string input =
-      R"({"owner": "https://example.test", "members": ["https://member1.test"]}
-    {"owner": "https://example.test", "members": ["https://member2.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, Rejects_SamePrimary) {
+  EXPECT_THAT(
+      ParseSets(R"({"primary": "https://example.test",)"
+                R"("associatedSites": ["https://associatedsite1.test"]}
+    {"primary": "https://example.test",)"
+                R"("associatedSites": ["https://associatedsite2.test"]})"),
+      Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, Rejects_MemberAsOwner) {
-  const std::string input =
-      R"({"owner": "https://example.test", "members": ["https://member1.test"]}
-    {"owner": "https://member1.test", "members": ["https://member2.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, Rejects_AssociatedSiteAsPrimary) {
+  EXPECT_THAT(
+      ParseSets(R"({"primary": "https://example.test",)"
+                R"("associatedSites": ["https://associatedsite1.test"]}
+    {"primary": "https://associatedsite1.test",)"
+                R"("associatedSites": ["https://associatedsite2.test"]})"),
+      Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, Rejects_SameMember) {
-  const std::string input =
-      R"({"owner": "https://example.test", "members": ["https://member1.test"]}
-    {"owner": "https://foo.test", "members": )"
-      R"(["https://member1.test", "https://member2.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, Rejects_SameAssociatedSite) {
+  EXPECT_THAT(
+      ParseSets(
+          R"({"primary": "https://example.test",)"
+          R"("associatedSites": ["https://associatedsite1.test"]}
+    {"primary": "https://foo.test",)"
+          R"("associatedSites": )"
+          R"(["https://associatedsite1.test", "https://associatedsite2.test"]})"),
+      Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, Rejects_OwnerAsMember) {
-  const std::string input =
-      R"({"owner": "https://example.test", "members": ["https://member1.test"]}
-    {"owner": "https://example2.test", )"
-      R"("members": ["https://example.test", "https://member2.test"]})";
-
-  EXPECT_THAT(ParseSets(input), Pair(IsEmpty(), IsEmpty()));
+TEST(FirstPartySetParser, Rejects_PrimaryAsAssociatedSite) {
+  EXPECT_THAT(
+      ParseSets(R"({"primary": "https://example.test",)"
+                R"("associatedSites": ["https://associatedsite1.test"]}
+    {"primary": "https://example2.test", )"
+                R"("associatedSites":)"
+                R"(["https://example.test", "https://associatedsite2.test"]})"),
+      Pair(IsEmpty(), IsEmpty()));
 }
 
 TEST(FirstPartySetParser, Accepts_ccTLDAliases) {
-  const std::string input =
-      "{"                                         //
-      "\"owner\": \"https://example.test\","      //
-      "\"members\": [\"https://member1.test\"],"  //
-      "\"ccTLDs\": {"                             //
-      "\"https://member1.test\": [\"https://member1.cctld1\", "
-      "\"https://member1.cctld2\"],"                                    //
-      "\"https://not_in_set.test\": [\"https://not_in_set.cctld\"],"    //
-      "\"https://example.test\": \"https://not_a_list.test\""           //
-      "}"                                                               //
-      "}\n"                                                             //
-      "{"                                                               //
-      "\"owner\": \"https://foo.test\","                                //
-      "\"members\": [\"https://member2.test\"],"                        //
-      "\"ccTLDs\": {"                                                   //
-      "\"https://foo.test\": [\"https://foo.cctld\"],"                  //
-      "\"https://member2.test\": [\"https://different_prefix.cctld\"]"  //
-      "}"                                                               //
-      "}";
+  net::SchemefulSite foo(GURL("https://foo.test"));
+  net::SchemefulSite foo_cctld(GURL("https://foo.cctld"));
+  net::SchemefulSite associated1(GURL("https://associatedsite1.test"));
+  net::SchemefulSite associated1_cctld1(GURL("https://associatedsite1.cctld1"));
+  net::SchemefulSite associated1_cctld2(GURL("https://associatedsite1.cctld2"));
+  net::SchemefulSite associated2(GURL("https://associatedsite2.test"));
+  net::SchemefulSite example(GURL("https://example.test"));
 
-  std::istringstream stream(input);
   EXPECT_THAT(
-      FirstPartySetParser::ParseSetsFromStream(stream),
+      ParseSets(
+          "{"                                                         //
+          "\"primary\": \"https://example.test\","                    //
+          "\"associatedSites\": [\"https://associatedsite1.test\"],"  //
+          "\"ccTLDs\": {"                                             //
+          "\"https://associatedsite1.test\": "
+          "[\"https://associatedsite1.cctld1\", "
+          "\"https://associatedsite1.cctld2\"],"                          //
+          "\"https://not_in_set.test\": [\"https://not_in_set.cctld\"],"  //
+          "\"https://example.test\": \"https://not_a_list.test\""         //
+          "}"                                                             //
+          "}\n"                                                           //
+          "{"                                                             //
+          "\"primary\": \"https://foo.test\","                            //
+          "\"associatedSites\": [\"https://associatedsite2.test\"],"      //
+          "\"ccTLDs\": {"                                                 //
+          "\"https://foo.test\": [\"https://foo.cctld\"],"                //
+          "\"https://associatedsite2.test\": "
+          "[\"https://different_prefix.cctld\"]"  //
+          "}"                                     //
+          "}"),
       Pair(UnorderedElementsAre(
-               Pair(SerializesTo("https://example.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member1.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://example.test")),
-                        net::SiteType::kAssociated, 0)),
-               Pair(SerializesTo("https://foo.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://foo.test")),
-                        net::SiteType::kPrimary, absl::nullopt)),
-               Pair(SerializesTo("https://member2.test"),
-                    net::FirstPartySetEntry(
-                        net::SchemefulSite(GURL("https://foo.test")),
-                        net::SiteType::kAssociated, 0))),
-           UnorderedElementsAre(Pair(SerializesTo("https://member1.cctld1"),
-                                     SerializesTo("https://member1.test")),
-                                Pair(SerializesTo("https://member1.cctld2"),
-                                     SerializesTo("https://member1.test")),
-                                Pair(SerializesTo("https://foo.cctld"),
-                                     SerializesTo("https://foo.test")))));
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(associated1, net::FirstPartySetEntry(
+                                     example, net::SiteType::kAssociated, 0)),
+               Pair(foo, net::FirstPartySetEntry(foo, net::SiteType::kPrimary,
+                                                 absl::nullopt)),
+               Pair(associated2, net::FirstPartySetEntry(
+                                     foo, net::SiteType::kAssociated, 0))),
+           UnorderedElementsAre(Pair(associated1_cctld1, associated1),
+                                Pair(associated1_cctld2, associated1),
+                                Pair(foo_cctld, foo))));
 }
 
 TEST(FirstPartySetParser, Rejects_NonSchemefulSiteCcTLDAliases) {
-  const std::string input =
-      "{"                                               //
-      "\"owner\": \"https://example.test\","            //
-      "\"members\": [\"https://member1.test\"],"        //
-      "\"ccTLDs\": {"                                   //
-      "\"https://member1.test\": [\"member1.cctld1\"]"  //
-      "}"                                               //
-      "}";
-
-  std::istringstream stream(input);
-  EXPECT_THAT(FirstPartySetParser::ParseSetsFromStream(stream),
-              Pair(IsEmpty(), IsEmpty()));
+  EXPECT_THAT(
+      ParseSets(
+          "{"                                                               //
+          "\"primary\": \"https://example.test\","                          //
+          "\"associatedSites\": [\"https://associatedsite1.test\"],"        //
+          "\"ccTLDs\": {"                                                   //
+          "\"https://associatedsite1.test\": [\"associatedsite1.cctld1\"]"  //
+          "}"                                                               //
+          "}"),
+      Pair(IsEmpty(), IsEmpty()));
 }
 
-TEST(FirstPartySetParser, SerializeFirstPartySets) {
-  EXPECT_EQ(R"({"https://member1.test":"https://example1.test"})",
-            FirstPartySetParser::SerializeFirstPartySets(
-                {{net::SchemefulSite(GURL("https://member1.test")),
-                  net::FirstPartySetEntry(
-                      net::SchemefulSite(GURL("https://example1.test")),
-                      net::SiteType::kAssociated, 0)},
-                 {net::SchemefulSite(GURL("https://example1.test")),
-                  net::FirstPartySetEntry(
-                      net::SchemefulSite(GURL("https://example1.test")),
-                      net::SiteType::kPrimary, absl::nullopt)}}));
+TEST(FirstPartySetParser, Rejects_NondisjointCcTLDAliases) {
+  // These two sets overlap only via a ccTLD variant.
+  EXPECT_THAT(
+      ParseSets("{"                                         //
+                "\"owner\": \"https://example.test\","      //
+                "\"members\": [\"https://member.test1\"],"  //
+                "\"ccTLDs\": {"                             //
+                "\"https://member.test1\": [\"https://member.cctld\"],"
+                "}"                                                     //
+                "}\n"                                                   //
+                "{"                                                     //
+                "\"owner\": \"https://foo.test\","                      //
+                "\"members\": [\"https://member.test2\"],"              //
+                "\"ccTLDs\": {"                                         //
+                "\"https://member.test2\": [\"https://member.cctld\"]"  //
+                "}"                                                     //
+                "}"),
+      Pair(IsEmpty(), IsEmpty()));
 }
-
-TEST(FirstPartySetParser, SerializeFirstPartySetsWithOpaqueOrigin) {
-  EXPECT_EQ(
-      R"({"https://member1.test":"null"})",
-      FirstPartySetParser::SerializeFirstPartySets(
-          {{net::SchemefulSite(GURL("https://member1.test")),
-            net::FirstPartySetEntry(net::SchemefulSite(GURL("")),
-                                    net::SiteType::kPrimary, absl::nullopt)}}));
-}
-
-TEST(FirstPartySetParser, SerializeFirstPartySetsEmptySet) {
-  EXPECT_EQ("{}", FirstPartySetParser::SerializeFirstPartySets({}));
-}
-
-TEST(FirstPartySetParser, DeserializeFirstPartySets) {
-  const std::string input =
-      R"({"https://member1.test":"https://example1.test",
-          "https://member3.test":"https://example1.test",
-          "https://member2.test":"https://example2.test"})";
-  // Sanity check that the input is actually valid JSON.
-  ASSERT_TRUE(base::JSONReader::Read(input));
-
-  EXPECT_THAT(FirstPartySetParser::DeserializeFirstPartySets(input),
-              UnorderedElementsAre(
-                  Pair(SerializesTo("https://member1.test"),
-                       net::FirstPartySetEntry(
-                           net::SchemefulSite(GURL("https://example1.test")),
-                           net::SiteType::kAssociated, absl::nullopt)),
-                  Pair(SerializesTo("https://member3.test"),
-                       net::FirstPartySetEntry(
-                           net::SchemefulSite(GURL("https://example1.test")),
-                           net::SiteType::kAssociated, absl::nullopt)),
-                  Pair(SerializesTo("https://example1.test"),
-                       net::FirstPartySetEntry(
-                           net::SchemefulSite(GURL("https://example1.test")),
-                           net::SiteType::kPrimary, absl::nullopt)),
-                  Pair(SerializesTo("https://member2.test"),
-                       net::FirstPartySetEntry(
-                           net::SchemefulSite(GURL("https://example2.test")),
-                           net::SiteType::kAssociated, absl::nullopt)),
-                  Pair(SerializesTo("https://example2.test"),
-                       net::FirstPartySetEntry(
-                           net::SchemefulSite(GURL("https://example2.test")),
-                           net::SiteType::kPrimary, absl::nullopt))));
-}
-
-TEST(FirstPartySetParser, DeserializeFirstPartySetsEmptySet) {
-  EXPECT_THAT(FirstPartySetParser::DeserializeFirstPartySets("{}"), IsEmpty());
-}
-
-// Same member appear twice with different owner is not considered invalid
-// content and wouldn't end up returning an empty map, since
-// base::DictionaryValue automatically handles duplicated keys.
-TEST(FirstPartySetParser, DeserializeFirstPartySetsDuplicatedKey) {
-  const std::string input =
-      R"({"https://member1.test":"https://example1.test",
-          "https://member1.test":"https://example2.test"})";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  EXPECT_THAT(FirstPartySetParser::DeserializeFirstPartySets(input),
-              UnorderedElementsAre(
-                  Pair(SerializesTo("https://member1.test"),
-                       net::FirstPartySetEntry(
-                           net::SchemefulSite(GURL("https://example2.test")),
-                           net::SiteType::kAssociated, absl::nullopt)),
-                  Pair(SerializesTo("https://example2.test"),
-                       net::FirstPartySetEntry(
-                           net::SchemefulSite(GURL("https://example2.test")),
-                           net::SiteType::kPrimary, absl::nullopt))));
-}
-
-// Singleton set is ignored.
-TEST(FirstPartySetParser, DeserializeFirstPartySetsSingletonSet) {
-  const std::string input =
-      R"({"https://example1.test":"https://example1.test",
-          "https://member1.test":"https://example2.test",
-          "https://example2.test":"https://example2.test"})";
-  ASSERT_TRUE(base::JSONReader::Read(input));
-  EXPECT_THAT(FirstPartySetParser::DeserializeFirstPartySets(input),
-              UnorderedElementsAre(
-                  Pair(SerializesTo("https://member1.test"),
-                       net::FirstPartySetEntry(
-                           net::SchemefulSite(GURL("https://example2.test")),
-                           net::SiteType::kAssociated, absl::nullopt)),
-                  Pair(SerializesTo("https://example2.test"),
-                       net::FirstPartySetEntry(
-                           net::SchemefulSite(GURL("https://example2.test")),
-                           net::SiteType::kPrimary, absl::nullopt))));
-}
-
-class FirstPartySetParserInvalidContentTest
-    : public testing::Test,
-      public testing::WithParamInterface<std::tuple<bool, std::string>> {
- public:
-  FirstPartySetParserInvalidContentTest() {
-    valid_json_ = std::get<0>(GetParam());
-    input_ = std::get<1>(GetParam());
-  }
-  bool is_valid_json() { return valid_json_; }
-  const std::string& input() { return input_; }
-
- private:
-  bool valid_json_;
-  std::string input_;
-};
-
-TEST_P(FirstPartySetParserInvalidContentTest, DeserializeFirstPartySets) {
-  if (is_valid_json())
-    ASSERT_TRUE(base::JSONReader::Read(input()));
-
-  EXPECT_THAT(FirstPartySetParser::DeserializeFirstPartySets(input()),
-              IsEmpty());
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    InvalidContent,
-    FirstPartySetParserInvalidContentTest,
-    testing::Values(
-        // The input is not valid JSON.
-        std::make_tuple(false, "//"),
-        // The serialized object is type of array.
-        std::make_tuple(true,
-                        R"(["https://member1.test","https://example1.test"])"),
-        // The serialized string is type of map that contains non-URL key.
-        std::make_tuple(true, R"({"member1":"https://example1.test"})"),
-        // The serialized string is type of map that contains non-URL value.
-        std::make_tuple(true, R"({"https://member1.test":"example1"})"),
-        // The serialized string is type of map that contains opaque origin.
-        std::make_tuple(true, R"({"https://member1.test":""})"),
-        std::make_tuple(true, R"({"":"https://example1.test"})"),
-        // The serialized string is type of map that contains non-string value.
-        std::make_tuple(true, R"({"https://member1.test":1})"),
-        // Nondisjoint set. The same site shows up both as member and owner.
-        std::make_tuple(true,
-                        R"({"https://member1.test":"https://example1.test",
-            "https://member2.test":"https://member1.test"})"),
-        std::make_tuple(true,
-                        R"({"https://member1.test":"https://example1.test",
-            "https://example1.test":"https://example2.test"})")));
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
      Accepts_MissingSetLists) {
@@ -597,7 +482,8 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .value(),
+          .value()
+          .first,
       FirstPartySetParser::ParsedPolicySetLists({}, {}));
 }
 
@@ -611,17 +497,18 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest, Accepts_EmptyLists) {
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .value(),
+          .value()
+          .first,
       FirstPartySetParser::ParsedPolicySetLists({}, {}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidTypeError_MissingOwner) {
+     InvalidTypeError_MissingPrimary) {
   base::Value policy_value = base::JSONReader::Read(R"(
               {
                 "replacements": [
                   {
-                    "members": ["https://member1.test"]
+                    "associatedSites": ["https://associatedsite1.test"]
                   }
                 ],
                 "additions": []
@@ -630,19 +517,20 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidType,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidType,
+                 {kReplacementsField, 0, kPrimaryField}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidTypeError_MissingMembers) {
+     InvalidTypeError_WrongPrimaryType) {
   base::Value policy_value = base::JSONReader::Read(R"(
               {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test"
+                    "primary": 123,
+                    "associatedSites": ["https://associatedsite1.test"]
                   }
                 ],
                 "additions": []
@@ -651,20 +539,20 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidType,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidType,
+                 {kReplacementsField, 0, kPrimaryField}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidTypeError_WrongOwnerType) {
+     InvalidTypeError_WrongAssociatedSitesFieldType) {
   base::Value policy_value = base::JSONReader::Read(R"(
               {
                 "replacements": [
                   {
-                    "owner": 123,
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary1.test",
+                    "associatedSites": 123
                   }
                 ],
                 "additions": []
@@ -673,43 +561,21 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidType,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidType,
+                 {kReplacementsField, 0, kAssociatedSitesField}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidTypeError_WrongMembersFieldType) {
-  base::Value policy_value = base::JSONReader::Read(R"(
-              {
-                "replacements": [
-                  {
-                    "owner": "https://owner1.test",
-                    "members": 123
-                  }
-                ],
-                "additions": []
-              }
-            )")
-                                 .value();
-  EXPECT_THAT(
-      FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidType,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
-}
-
-TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidTypeError_WrongMemberType) {
+     InvalidTypeError_WrongAssociatedSiteType) {
   base::Value policy_value = base::JSONReader::Read(R"(
               {
           "replacements": [
             {
-              "owner": "https://owner1.test",
-              "members": ["https://member1.test", 123,
-              "https://member2.test"]
+              "primary": "https://primary1.test",
+              "associatedSites": ["https://associatedsite1.test", 123,
+              "https://associatedsite2.test"]
             }
           ],
           "additions": []
@@ -718,20 +584,20 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidType,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidType,
+                 {kReplacementsField, 0, kAssociatedSitesField, 1}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidOriginError_OwnerOpaque) {
+     InvalidOriginError_PrimaryOpaque) {
   base::Value policy_value = base::JSONReader::Read(R"(
               {
                 "replacements": [
                   {
-                    "owner": "",
-                    "members": ["https://member1.test"]
+                    "primary": "",
+                    "associatedSites": ["https://associatedsite1.test"]
                   }
                 ],
                 "additions": []
@@ -740,20 +606,20 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidOrigin,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidOrigin,
+                 {kReplacementsField, 0, kPrimaryField}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidOriginError_MemberOpaque) {
+     InvalidOriginError_AssociatedSiteOpaque) {
   base::Value policy_value = base::JSONReader::Read(R"(
                {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": [""]
+                    "primary": "https://primary1.test",
+                    "associatedSites": [""]
                   }
                 ],
                 "additions": []
@@ -762,20 +628,20 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidOrigin,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidOrigin,
+                 {kReplacementsField, 0, kAssociatedSitesField, 0}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidOriginError_OwnerNonHttps) {
+     InvalidOriginError_PrimaryNonHttps) {
   base::Value policy_value = base::JSONReader::Read(R"(
                  {
                 "replacements": [
                   {
-                    "owner": "http://owner1.test",
-                    "members": ["https://member1.test"]
+                    "primary": "http://primary1.test",
+                    "associatedSites": ["https://associatedsite1.test"]
                   }
                 ],
                 "additions": []
@@ -784,20 +650,20 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidOrigin,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidOrigin,
+                 {kReplacementsField, 0, kPrimaryField}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidOriginError_MemberNonHttps) {
+     InvalidOriginError_AssociatedSiteNonHttps) {
   base::Value policy_value = base::JSONReader::Read(R"(
                {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": ["http://member1.test"]
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["http://associatedsite1.test"]
                   }
                 ],
                 "additions": []
@@ -806,20 +672,20 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidOrigin,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidOrigin,
+                 {kReplacementsField, 0, kAssociatedSitesField, 0}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidOriginError_OwnerNonRegisteredDomain) {
+     InvalidOriginError_PrimaryNonRegisteredDomain) {
   base::Value policy_value = base::JSONReader::Read(R"(
                 {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test..",
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary1.test..",
+                    "associatedSites": ["https://associatedsite1.test"]
                   }
                 ],
                 "additions": []
@@ -828,20 +694,20 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidOrigin,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidOrigin,
+                 {kReplacementsField, 0, kPrimaryField}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     InvalidOriginError_MemberNonRegisteredDomain) {
+     InvalidOriginError_AssociatedSiteNonRegisteredDomain) {
   base::Value policy_value = base::JSONReader::Read(R"(
               {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": ["https://member1.test.."]
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://associatedsite1.test.."]
                   }
                 ],
                 "additions": []
@@ -850,20 +716,20 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kInvalidOrigin,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidOrigin,
+                 {kReplacementsField, 0, kAssociatedSitesField, 0}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
-     SingletonSetError_EmptyMembers) {
+     SingletonSetError_EmptyAssociatedSites) {
   base::Value policy_value = base::JSONReader::Read(R"(
              {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": []
+                    "primary": "https://primary1.test",
+                    "associatedSites": []
                   }
                 ],
                 "additions": []
@@ -872,10 +738,10 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kSingletonSet,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kSingletonSet,
+                 {kReplacementsField, 0, kAssociatedSitesField}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
@@ -884,8 +750,8 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
               {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": ["https://owner1.test"]
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://primary1.test"]
                   }
                 ],
                 "additions": []
@@ -894,10 +760,10 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kRepeatedDomain,
-           FirstPartySetParser::PolicySetType::kReplacement, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kRepeatedDomain,
+                 {kReplacementsField, 0, kAssociatedSitesField, 0}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
@@ -906,12 +772,12 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                    {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://associatedsite1.test"]
                   },
                   {
-                    "owner": "https://owner2.test",
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary2.test",
+                    "associatedSites": ["https://associatedsite1.test"]
                   }
                 ],
                 "additions": []
@@ -920,10 +786,10 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kNonDisjointSets,
-           FirstPartySetParser::PolicySetType::kReplacement, 1}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kNonDisjointSets,
+                 {kReplacementsField, 1, kAssociatedSitesField, 0}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
@@ -933,12 +799,12 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                 "replacements": [],
                 "additions": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://associatedsite1.test"]
                   },
                   {
-                    "owner": "https://owner2.test",
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary2.test",
+                    "associatedSites": ["https://associatedsite1.test"]
                   }
                 ]
               }
@@ -946,10 +812,10 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kNonDisjointSets,
-           FirstPartySetParser::PolicySetType::kAddition, 1}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kNonDisjointSets,
+                 {kAdditionsField, 1, kAssociatedSitesField, 0}));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
@@ -958,14 +824,14 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://associatedsite1.test"]
                   }
                 ],
                 "additions": [
                   {
-                    "owner": "https://owner2.test",
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary2.test",
+                    "associatedSites": ["https://associatedsite1.test"]
                   }
                 ]
               }
@@ -973,29 +839,75 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .error(),
-      FirstPartySetParser::PolicyParsingError(
-          {FirstPartySetParser::ParseError::kNonDisjointSets,
-           FirstPartySetParser::PolicySetType::kAddition, 0}));
+          .error()
+          .first,
+      ParseError(ParseErrorType::kNonDisjointSets,
+                 {kAdditionsField, 0, kAssociatedSitesField, 0}));
+}
+
+TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest, WarnsUntilError) {
+  base::Value policy_value = base::JSONReader::Read(R"(
+               {
+                "replacements": [
+                  {
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://associatedsite1.test"],
+                    "ccTLDs": {
+                      "https://associatedsite1.cctld": ["https://associatedsite1.test"],
+                      "https://primary1.test": ["https://primary1-diff.cctld"]
+                    }
+                  }
+                ],
+                "additions": [
+                  {
+                    "primary": "https://primary2.",
+                    "associatedSites": ["https://associatedsite2.test"],
+                    "ccTLDs": {
+                      "https://associatedsite2.test": ["https://associatedsite2-diff.cctld"]
+                    }
+                  }
+                ]
+              }
+            )")
+                                 .value();
+  EXPECT_THAT(
+      FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
+          .error()
+          .first,
+      ParseError(ParseErrorType::kInvalidOrigin,
+                 {kAdditionsField, 0, kPrimaryField}));
+
+  // The ParseWarning in the ccTLDs field of "additions[0]" isn't added since
+  // the InvalidOrigin error arises first.
+  EXPECT_THAT(
+      FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
+          .error()
+          .second,
+      ElementsAre(ParseWarning(ParseWarningType::kCctldKeyNotCanonical,
+                               {kReplacementsField, 0, kCctldsField,
+                                "https://associatedsite1.cctld"}),
+                  ParseWarning(ParseWarningType::kAliasNotCctldVariant,
+                               {kReplacementsField, 0, kCctldsField,
+                                "https://primary1.test", 0})));
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
      SuccessfulMapping_SameList) {
-  net::SchemefulSite owner1(GURL("https://owner1.test"));
-  net::SchemefulSite member1(GURL("https://member1.test"));
-  net::SchemefulSite owner2(GURL("https://owner2.test"));
-  net::SchemefulSite member2(GURL("https://member2.test"));
+  net::SchemefulSite primary1(GURL("https://primary1.test"));
+  net::SchemefulSite associated_site1(GURL("https://associatedsite1.test"));
+  net::SchemefulSite primary2(GURL("https://primary2.test"));
+  net::SchemefulSite associated_site2(GURL("https://associatedsite2.test"));
 
   base::Value policy_value = base::JSONReader::Read(R"(
              {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://associatedsite1.test"]
                   },
                   {
-                    "owner": "https://owner2.test",
-                    "members": ["https://member2.test"]
+                    "primary": "https://primary2.test",
+                    "associatedSites": ["https://associatedsite2.test"]
                   }
                 ]
               }
@@ -1003,50 +915,58 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .value(),
+          .value()
+          .first,
       FirstPartySetParser::ParsedPolicySetLists(
           {FirstPartySetParser::SetsMap({
-               {owner1, net::FirstPartySetEntry(owner1, net::SiteType::kPrimary,
-                                                absl::nullopt)},
-               {member1,
-                net::FirstPartySetEntry(owner1, net::SiteType::kAssociated,
+               {primary1,
+                net::FirstPartySetEntry(primary1, net::SiteType::kPrimary,
+                                        absl::nullopt)},
+               {associated_site1,
+                net::FirstPartySetEntry(primary1, net::SiteType::kAssociated,
                                         absl::nullopt)},
            }),
            FirstPartySetParser::SetsMap({
-               {owner2, net::FirstPartySetEntry(owner2, net::SiteType::kPrimary,
-                                                absl::nullopt)},
-               {member2,
-                net::FirstPartySetEntry(owner2, net::SiteType::kAssociated,
+               {primary2,
+                net::FirstPartySetEntry(primary2, net::SiteType::kPrimary,
+                                        absl::nullopt)},
+               {associated_site2,
+                net::FirstPartySetEntry(primary2, net::SiteType::kAssociated,
                                         absl::nullopt)},
            })},
           {}));
+  EXPECT_THAT(
+      FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
+          .value()
+          .second,
+      IsEmpty());
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
      SuccessfulMapping_CrossList) {
-  net::SchemefulSite owner1(GURL("https://owner1.test"));
-  net::SchemefulSite member1(GURL("https://member1.test"));
-  net::SchemefulSite owner2(GURL("https://owner2.test"));
-  net::SchemefulSite member2(GURL("https://member2.test"));
-  net::SchemefulSite owner3(GURL("https://owner3.test"));
-  net::SchemefulSite member3(GURL("https://member3.test"));
+  net::SchemefulSite primary1(GURL("https://primary1.test"));
+  net::SchemefulSite associated_site1(GURL("https://associatedsite1.test"));
+  net::SchemefulSite primary2(GURL("https://primary2.test"));
+  net::SchemefulSite associated_site2(GURL("https://associatedsite2.test"));
+  net::SchemefulSite primary3(GURL("https://primary3.test"));
+  net::SchemefulSite associatedSite3(GURL("https://associatedsite3.test"));
 
   base::Value policy_value = base::JSONReader::Read(R"(
                 {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": ["https://member1.test"]
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://associatedsite1.test"]
                   },
                   {
-                    "owner": "https://owner2.test",
-                    "members": ["https://member2.test"]
+                    "primary": "https://primary2.test",
+                    "associatedSites": ["https://associatedsite2.test"]
                   }
                 ],
                 "additions": [
                   {
-                    "owner": "https://owner3.test",
-                    "members": ["https://member3.test"]
+                    "primary": "https://primary3.test",
+                    "associatedSites": ["https://associatedsite3.test"]
                   }
                 ]
               }
@@ -1054,55 +974,65 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .value(),
+          .value()
+          .first,
       FirstPartySetParser::ParsedPolicySetLists(
           {FirstPartySetParser::SetsMap({
-               {owner1, net::FirstPartySetEntry(owner1, net::SiteType::kPrimary,
-                                                absl::nullopt)},
-               {member1,
-                net::FirstPartySetEntry(owner1, net::SiteType::kAssociated,
+               {primary1,
+                net::FirstPartySetEntry(primary1, net::SiteType::kPrimary,
+                                        absl::nullopt)},
+               {associated_site1,
+                net::FirstPartySetEntry(primary1, net::SiteType::kAssociated,
                                         absl::nullopt)},
            }),
            FirstPartySetParser::SetsMap({
-               {owner2, net::FirstPartySetEntry(owner2, net::SiteType::kPrimary,
-                                                absl::nullopt)},
-               {member2,
-                net::FirstPartySetEntry(owner2, net::SiteType::kAssociated,
+               {primary2,
+                net::FirstPartySetEntry(primary2, net::SiteType::kPrimary,
+                                        absl::nullopt)},
+               {associated_site2,
+                net::FirstPartySetEntry(primary2, net::SiteType::kAssociated,
                                         absl::nullopt)},
            })},
           {FirstPartySetParser::SetsMap({
-              {owner3, net::FirstPartySetEntry(owner3, net::SiteType::kPrimary,
-                                               absl::nullopt)},
-              {member3, net::FirstPartySetEntry(
-                            owner3, net::SiteType::kAssociated, absl::nullopt)},
+              {primary3, net::FirstPartySetEntry(
+                             primary3, net::SiteType::kPrimary, absl::nullopt)},
+              {associatedSite3,
+               net::FirstPartySetEntry(primary3, net::SiteType::kAssociated,
+                                       absl::nullopt)},
           })}));
+  EXPECT_THAT(
+      FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
+          .value()
+          .second,
+      IsEmpty());
 }
 
 TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
      SuccessfulMapping_CCTLDs) {
-  net::SchemefulSite owner1(GURL("https://owner1.test"));
-  net::SchemefulSite member1(GURL("https://member1.test"));
-  net::SchemefulSite member1_cctld(GURL("https://member1.cctld"));
-  net::SchemefulSite owner2(GURL("https://owner2.test"));
-  net::SchemefulSite owner2_cctld(GURL("https://owner2.cctld"));
-  net::SchemefulSite member2(GURL("https://member2.test"));
+  net::SchemefulSite primary1(GURL("https://primary1.test"));
+  net::SchemefulSite associated_site1(GURL("https://associatedsite1.test"));
+  net::SchemefulSite associated_site1_cctld(
+      GURL("https://associatedsite1.cctld"));
+  net::SchemefulSite primary2(GURL("https://primary2.test"));
+  net::SchemefulSite primary2_cctld(GURL("https://primary2.cctld"));
+  net::SchemefulSite associated_site2(GURL("https://associatedsite2.test"));
 
   base::Value policy_value = base::JSONReader::Read(R"(
              {
                 "replacements": [
                   {
-                    "owner": "https://owner1.test",
-                    "members": ["https://member1.test"],
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://associatedsite1.test"],
                     "ccTLDs": {
-                      "https://member1.test": ["https://member1.cctld"],
+                      "https://associatedsite1.test": ["https://associatedsite1.cctld"],
                       "https://not_in_set.test": ["https://not_in_set.cctld"]
                     }
                   },
                   {
-                    "owner": "https://owner2.test",
-                    "members": ["https://member2.test"],
+                    "primary": "https://primary2.test",
+                    "associatedSites": ["https://associatedsite2.test"],
                     "ccTLDs": {
-                      "https://owner2.test": ["https://owner2.cctld"]
+                      "https://primary2.test": ["https://primary2.cctld"]
                     }
                   }
                 ]
@@ -1111,28 +1041,163 @@ TEST(FirstPartySets_ParseSetsFromEnterprisePolicyTest,
                                  .value();
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
-          .value(),
+          .value()
+          .first,
       FirstPartySetParser::ParsedPolicySetLists(
           {FirstPartySetParser::SetsMap({
-               {owner1, net::FirstPartySetEntry(owner1, net::SiteType::kPrimary,
-                                                absl::nullopt)},
-               {member1,
-                net::FirstPartySetEntry(owner1, net::SiteType::kAssociated,
+               {primary1,
+                net::FirstPartySetEntry(primary1, net::SiteType::kPrimary,
                                         absl::nullopt)},
-               {member1_cctld,
-                net::FirstPartySetEntry(owner1, net::SiteType::kAssociated,
+               {associated_site1,
+                net::FirstPartySetEntry(primary1, net::SiteType::kAssociated,
+                                        absl::nullopt)},
+               {associated_site1_cctld,
+                net::FirstPartySetEntry(primary1, net::SiteType::kAssociated,
                                         absl::nullopt)},
            }),
            FirstPartySetParser::SetsMap({
-               {owner2, net::FirstPartySetEntry(owner2, net::SiteType::kPrimary,
-                                                absl::nullopt)},
-               {owner2_cctld,
-                net::FirstPartySetEntry(owner2, net::SiteType::kPrimary,
+               {primary2,
+                net::FirstPartySetEntry(primary2, net::SiteType::kPrimary,
                                         absl::nullopt)},
-               {member2,
-                net::FirstPartySetEntry(owner2, net::SiteType::kAssociated,
+               {primary2_cctld,
+                net::FirstPartySetEntry(primary2, net::SiteType::kPrimary,
+                                        absl::nullopt)},
+               {associated_site2,
+                net::FirstPartySetEntry(primary2, net::SiteType::kAssociated,
                                         absl::nullopt)},
            })},
+          {}));
+
+  EXPECT_THAT(
+      FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
+          .value()
+          .second,
+      std::vector<ParseWarning>{ParseWarning(
+          ParseWarningType::kCctldKeyNotCanonical,
+          {kReplacementsField, 0, kCctldsField, "https://not_in_set.test"})});
+}
+
+class FirstPartySetParserTest : public ::testing::Test {
+ public:
+  FirstPartySetParserTest() {
+    features_.InitWithFeaturesAndParameters(
+        {{features::kFirstPartySets,
+          {{features::kFirstPartySetsMaxAssociatedSites.name, "1"}}}},
+        {});
+  }
+
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+TEST_F(FirstPartySetParserTest, RespectsAssociatedSiteLimit) {
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite a(GURL("https://a.test"));
+
+  EXPECT_THAT(
+      ParseSets(R"({"primary": "https://example.test",)"
+                R"("associatedSites": ["https://a.test", "https://b.test"],)"
+                R"(})"),
+      Pair(UnorderedElementsAre(
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(a, net::FirstPartySetEntry(example,
+                                               net::SiteType::kAssociated, 0))),
+           IsEmpty()));
+}
+
+TEST_F(FirstPartySetParserTest, DetectsErrorsPastAssociatedSiteLimit) {
+  EXPECT_THAT(
+      ParseSets(R"({"primary": "https://example.test",)"
+                R"("associatedSites": ["https://a.test", "not a domain"],)"
+                R"(})"),
+      Pair(IsEmpty(), IsEmpty()));
+}
+
+TEST_F(FirstPartySetParserTest,
+       ServiceSitesAreNotCountedAgainstAssociatedSiteLimit) {
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite a(GURL("https://a.test"));
+  net::SchemefulSite b(GURL("https://b.test"));
+  net::SchemefulSite c(GURL("https://c.test"));
+
+  EXPECT_THAT(
+      ParseSets(R"({)"
+                R"("primary": "https://example.test",)"
+                R"("associatedSites": ["https://a.test"],)"
+                R"("serviceSites": ["https://b.test", "https://c.test"],)"
+                R"(})"),
+      Pair(UnorderedElementsAre(
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(a, net::FirstPartySetEntry(example,
+                                               net::SiteType::kAssociated, 0)),
+               Pair(b, net::FirstPartySetEntry(example, net::SiteType::kService,
+                                               absl::nullopt)),
+               Pair(c, net::FirstPartySetEntry(example, net::SiteType::kService,
+                                               absl::nullopt))),
+           IsEmpty()));
+}
+
+TEST_F(FirstPartySetParserTest,
+       AliasesAreNotCountedAgainstAssociatedSiteLimit) {
+  net::SchemefulSite example(GURL("https://example.test"));
+  net::SchemefulSite a(GURL("https://a.test"));
+  net::SchemefulSite a_cctld1(GURL("https://a.cctld1"));
+  net::SchemefulSite a_cctld2(GURL("https://a.cctld2"));
+
+  EXPECT_THAT(
+      ParseSets(
+          R"({)"
+          R"("primary": "https://example.test",)"
+          R"("associatedSites": ["https://a.test", "https://b.test"],)"
+          R"("ccTLDs": {)"
+          R"(  "https://a.test": ["https://a.cctld1", "https://a.cctld2"])"
+          R"(})"
+          R"(})"),
+      Pair(UnorderedElementsAre(
+               Pair(example,
+                    net::FirstPartySetEntry(example, net::SiteType::kPrimary,
+                                            absl::nullopt)),
+               Pair(a, net::FirstPartySetEntry(example,
+                                               net::SiteType::kAssociated, 0))),
+           UnorderedElementsAre(Pair(a_cctld1, a), Pair(a_cctld2, a))));
+}
+
+TEST_F(FirstPartySetParserTest,
+       EnterprisePolicies_ExemptFromAssociatedSiteLimit) {
+  net::SchemefulSite primary1(GURL("https://primary1.test"));
+  net::SchemefulSite associated1(GURL("https://associated1.test"));
+  net::SchemefulSite associated2(GURL("https://associated2.test"));
+
+  base::Value policy_value = base::JSONReader::Read(R"(
+             {
+                "replacements": [
+                  {
+                    "primary": "https://primary1.test",
+                    "associatedSites": ["https://associated1.test", "https://associated2.test"]
+                  }
+                ]
+              }
+            )")
+                                 .value();
+  EXPECT_THAT(
+      FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
+          .value()
+          .first,
+      FirstPartySetParser::ParsedPolicySetLists(
+          {FirstPartySetParser::SetsMap({
+              {primary1, net::FirstPartySetEntry(
+                             primary1, net::SiteType::kPrimary, absl::nullopt)},
+              {associated1,
+               net::FirstPartySetEntry(primary1, net::SiteType::kAssociated,
+                                       absl::nullopt)},
+              {associated2,
+               net::FirstPartySetEntry(primary1, net::SiteType::kAssociated,
+                                       absl::nullopt)},
+          })},
           {}));
 }
 

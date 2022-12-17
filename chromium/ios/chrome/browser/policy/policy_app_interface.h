@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,12 +9,12 @@
 
 @interface PolicyAppInterface : NSObject
 
-// Returns a JSON-encoded representation of the value for the given |policyKey|.
+// Returns a JSON-encoded representation of the value for the given `policyKey`.
 // Looks for the policy in the platform policy provider under the CHROME policy
 // namespace.
 + (NSString*)valueForPlatformPolicy:(NSString*)policyKey;
 
-// Sets the value of the policy with the |policyKey| key to the given value. The
+// Sets the value of the policy with the `policyKey` key to the given value. The
 // value must be serialized to JSON.
 + (void)setPolicyValue:(NSString*)jsonValue forKey:(NSString*)policyKey;
 
@@ -22,9 +22,9 @@
 + (void)clearPolicies;
 
 // Clear the policies from all providers.
-+ (void)clearAllPoliciesInMemory;
++ (void)clearAllPoliciesInNSUserDefault;
 
-// Returns YES if the given |URL| is blocked by the URLBlocklist and
+// Returns YES if the given `URL` is blocked by the URLBlocklist and
 // URLAllowlist policies.
 + (BOOL)isURLBlocked:(NSString*)URL;
 
@@ -35,14 +35,17 @@
 + (void)setUserCloudPolicyDataWithDomain:(NSString*)domain;
 
 // Removes the whole directory where the device management token file is stored.
-+ (void)clearDMTokenDirectory;
+//  Returns YES if succeeded. It is waiting for the disk operation to be
+//  finished before returning the value.
++ (BOOL)clearDMTokenDirectory [[nodiscard]];
 
 // Returns YES if the cloud policy client is registered.
 + (BOOL)isCloudPolicyClientRegistered;
 
 // Removes the whole directory where the Chrome Browser Cloud Management (CBCM)
-// stores data.
-+ (void)clearCloudPolicyDirectory;
+// stores data. Returns YES if succeeded. It is waiting for the disk operation
+// to be finished before returning the value.
++ (BOOL)clearCloudPolicyDirectory [[nodiscard]];
 
 // Returns YES if there is user policy data in the current BrowserState.
 + (BOOL)hasUserPolicyDataInCurrentBrowserState;

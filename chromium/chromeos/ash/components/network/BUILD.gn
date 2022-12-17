@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -21,11 +21,11 @@ component("network") {
     "//chromeos/ash/components/network/metrics",
     "//chromeos/ash/components/network/onc",
     "//chromeos/ash/components/network/proxy",
+    "//chromeos/ash/services/hotspot_config/public/mojom",
     "//chromeos/components/onc",
     "//chromeos/dbus/common",
     "//chromeos/dbus/permission_broker",
     "//chromeos/login/login_state",
-    "//chromeos/services/hotspot_config/public/mojom",
     "//chromeos/services/network_config/public/mojom",
     "//components/account_id",
     "//components/device_event_log",
@@ -95,8 +95,12 @@ component("network") {
     "hermes_metrics_util.h",
     "hidden_network_handler.cc",
     "hidden_network_handler.h",
+    "hotspot_controller.cc",
+    "hotspot_controller.h",
     "hotspot_state_handler.cc",
     "hotspot_state_handler.h",
+    "hotspot_util.cc",
+    "hotspot_util.h",
     "managed_cellular_pref_handler.cc",
     "managed_cellular_pref_handler.h",
     "managed_network_configuration_handler.cc",
@@ -250,11 +254,11 @@ source_set("unit_tests") {
     "//chromeos/ash/components/network/metrics:unit_tests",
     "//chromeos/ash/components/network/onc:unit_tests",
     "//chromeos/ash/components/network/proxy:unit_tests",
+    "//chromeos/ash/services/hotspot_config/public/mojom",
     "//chromeos/components/onc",
     "//chromeos/components/onc:test_support",
     "//chromeos/dbus/permission_broker",
     "//chromeos/login/login_state",
-    "//chromeos/services/hotspot_config/public/mojom",
     "//chromeos/services/network_config:in_process_instance",
     "//chromeos/services/network_config/public/cpp:test_support",
     "//components/onc",
@@ -290,6 +294,7 @@ source_set("unit_tests") {
     "firewall_hole_unittest.cc",
     "geolocation_handler_unittest.cc",
     "hidden_network_handler_unittest.cc",
+    "hotspot_controller_unittest.cc",
     "hotspot_state_handler_unittest.cc",
     "managed_cellular_pref_handler_unittest.cc",
     "managed_network_configuration_handler_unittest.cc",

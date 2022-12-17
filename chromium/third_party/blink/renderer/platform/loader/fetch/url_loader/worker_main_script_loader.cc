@@ -1,9 +1,10 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/worker_main_script_loader.h"
 
+#include "services/network/public/cpp/header_util.h"
 #include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
@@ -81,7 +82,7 @@ void WorkerMainScriptLoader::Start(
       ResourceLoadObserver::ResponseSource::kNotFromMemoryCache);
 
   if (resource_response_.IsHTTP() &&
-      !cors::IsOkStatus(resource_response_.HttpStatusCode())) {
+      !network::IsSuccessfulStatus(resource_response_.HttpStatusCode())) {
     client_->OnFailedLoadingWorkerMainScript();
     resource_load_observer_->DidFailLoading(
         initial_request_.Url(), initial_request_.InspectorId(),
@@ -94,7 +95,7 @@ void WorkerMainScriptLoader::Start(
   }
 
   script_encoding_ =
-      resource_response_.TextEncodingName().IsEmpty()
+      resource_response_.TextEncodingName().empty()
           ? UTF8Encoding()
           : WTF::TextEncoding(resource_response_.TextEncodingName());
 
@@ -130,7 +131,8 @@ void WorkerMainScriptLoader::OnReceiveEarlyHints(
 
 void WorkerMainScriptLoader::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr response_head,
-    mojo::ScopedDataPipeConsumerHandle handle) {
+    mojo::ScopedDataPipeConsumerHandle handle,
+    absl::optional<mojo_base::BigBuffer> cached_metadata) {
   // This has already happened in the browser process.
   NOTREACHED();
 }
@@ -150,9 +152,6 @@ void WorkerMainScriptLoader::OnUploadProgress(
   NOTREACHED();
 }
 
-void WorkerMainScriptLoader::OnReceiveCachedMetadata(
-    mojo_base::BigBuffer data) {}
-
 void WorkerMainScriptLoader::OnTransferSizeUpdated(int32_t transfer_size_diff) {
 }
 
@@ -162,10 +161,10 @@ void WorkerMainScriptLoader::OnComplete(
     has_seen_end_of_data_ = true;
 
   // Reports resource timing info for the worker main script.
-  scoped_refptr<ResourceTimingInfo> timing_info =
-      ResourceTimingInfo::Create(g_empty_atom, base::TimeTicks::Now(),
-                                 initial_request_.GetRequestContext(),
-                                 initial_request_.GetRequestDestination());
+  scoped_refptr<ResourceTimingInfo> timing_info = ResourceTimingInfo::Create(
+      g_empty_atom, base::TimeTicks::Now(),
+      initial_request_.GetRequestContext(),
+      initial_request_.GetRequestDestination(), initial_request_.GetMode());
   timing_info->SetInitialURL(initial_request_url_);
   timing_info->SetFinalResponse(resource_response_);
   timing_info->SetLoadResponseEnd(status.completion_time);
@@ -176,8 +175,7 @@ void WorkerMainScriptLoader::OnComplete(
   NotifyCompletionIfAppropriate();
 }
 
-SingleCachedMetadataHandler*
-WorkerMainScriptLoader::CreateCachedMetadataHandler() {
+CachedMetadataHandler* WorkerMainScriptLoader::CreateCachedMetadataHandler() {
   // Currently we support the metadata caching only for HTTP family.
   if (!initial_request_url_.ProtocolIsInHTTPFamily() ||
       !resource_response_.CurrentRequestUrl().ProtocolIsInHTTPFamily()) {

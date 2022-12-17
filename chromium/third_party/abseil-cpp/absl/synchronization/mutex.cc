@@ -493,7 +493,8 @@ struct SynchWaitParams {
         cvmu(cvmu_arg),
         thread(thread_arg),
         cv_word(cv_word_arg),
-        contention_start_cycles(base_internal::CycleClock::Now()) {}
+        contention_start_cycles(base_internal::CycleClock::Now()),
+        should_submit_contention_data(false) {}
 
   const Mutex::MuHow how;  // How this thread needs to wait.
   const Condition *cond;  // The condition that this thread is waiting for.
@@ -511,6 +512,7 @@ struct SynchWaitParams {
 
   int64_t contention_start_cycles;  // Time (in cycles) when this thread started
                                     // to contend for the mutex.
+  bool should_submit_contention_data;
 };
 
 struct SynchLocksHeld {
@@ -1799,8 +1801,8 @@ static inline bool EvalConditionAnnotated(const Condition *cond, Mutex *mu,
   // operation tsan considers that we've already released the mutex.
   bool res = false;
 #ifdef ABSL_INTERNAL_HAVE_TSAN_INTERFACE
-  const int flags = read_lock ? __tsan_mutex_read_lock : 0;
-  const int tryflags = flags | (trylock ? __tsan_mutex_try_lock : 0);
+  const uint32_t flags = read_lock ? __tsan_mutex_read_lock : 0;
+  const uint32_t tryflags = flags | (trylock ? __tsan_mutex_try_lock : 0);
 #endif
   if (locking) {
     // For lock we pretend that we have finished the operation,
@@ -2340,21 +2342,26 @@ ABSL_ATTRIBUTE_NOINLINE void Mutex::UnlockSlow(SynchWaitParams *waitp) {
   }                            // end of for(;;)-loop
 
   if (wake_list != kPerThreadSynchNull) {
-    int64_t wait_cycles = 0;
+    int64_t total_wait_cycles = 0;
+    int64_t max_wait_cycles = 0;
     int64_t now = base_internal::CycleClock::Now();
     do {
-      // Sample lock contention events only if the waiter was trying to acquire
+      // Profile lock contention events only if the waiter was trying to acquire
       // the lock, not waiting on a condition variable or Condition.
       if (!wake_list->cond_waiter) {
-        wait_cycles += (now - wake_list->waitp->contention_start_cycles);
+        int64_t cycles_waited =
+            (now - wake_list->waitp->contention_start_cycles);
+        total_wait_cycles += cycles_waited;
+        if (max_wait_cycles == 0) max_wait_cycles = cycles_waited;
         wake_list->waitp->contention_start_cycles = now;
+        wake_list->waitp->should_submit_contention_data = true;
       }
       wake_list = Wakeup(wake_list);              // wake waiters
     } while (wake_list != kPerThreadSynchNull);
-    if (wait_cycles > 0) {
-      mutex_tracer("slow release", this, wait_cycles);
+    if (total_wait_cycles > 0) {
+      mutex_tracer("slow release", this, total_wait_cycles);
       ABSL_TSAN_MUTEX_PRE_DIVERT(this, 0);
-      submit_profile_data(wait_cycles);
+      submit_profile_data(total_wait_cycles);
       ABSL_TSAN_MUTEX_POST_DIVERT(this, 0);
     }
   }

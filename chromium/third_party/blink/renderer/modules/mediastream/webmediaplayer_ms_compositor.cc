@@ -1,15 +1,17 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.h"
 
 #include <stdint.h>
+
 #include <string>
 #include <utility>
 
 #include "base/hash/hash.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
@@ -111,15 +113,15 @@ scoped_refptr<media::VideoFrame> CopyFrame(
                        frame->stride(media::VideoFrame::kYPlane),
                        frame->data(media::VideoFrame::kUVPlane),
                        frame->stride(media::VideoFrame::kUVPlane),
-                       new_frame->data(media::VideoFrame::kYPlane),
+                       new_frame->writable_data(media::VideoFrame::kYPlane),
                        new_frame->stride(media::VideoFrame::kYPlane),
-                       new_frame->data(media::VideoFrame::kUVPlane),
+                       new_frame->writable_data(media::VideoFrame::kUVPlane),
                        new_frame->stride(media::VideoFrame::kUVPlane),
                        coded_size.width(), coded_size.height());
     } else if (frame->format() == media::PIXEL_FORMAT_ARGB) {
       libyuv::ARGBCopy(frame->data(media::VideoFrame::kARGBPlane),
                        frame->stride(media::VideoFrame::kARGBPlane),
-                       new_frame->data(media::VideoFrame::kARGBPlane),
+                       new_frame->writable_data(media::VideoFrame::kARGBPlane),
                        new_frame->stride(media::VideoFrame::kARGBPlane),
                        coded_size.width(), coded_size.height());
     } else {
@@ -129,18 +131,18 @@ scoped_refptr<media::VideoFrame> CopyFrame(
                        frame->stride(media::VideoFrame::kUPlane),
                        frame->data(media::VideoFrame::kVPlane),
                        frame->stride(media::VideoFrame::kVPlane),
-                       new_frame->data(media::VideoFrame::kYPlane),
+                       new_frame->writable_data(media::VideoFrame::kYPlane),
                        new_frame->stride(media::VideoFrame::kYPlane),
-                       new_frame->data(media::VideoFrame::kUPlane),
+                       new_frame->writable_data(media::VideoFrame::kUPlane),
                        new_frame->stride(media::VideoFrame::kUPlane),
-                       new_frame->data(media::VideoFrame::kVPlane),
+                       new_frame->writable_data(media::VideoFrame::kVPlane),
                        new_frame->stride(media::VideoFrame::kVPlane),
                        coded_size.width(), coded_size.height());
     }
     if (frame->format() == media::PIXEL_FORMAT_I420A) {
       libyuv::CopyPlane(frame->data(media::VideoFrame::kAPlane),
                         frame->stride(media::VideoFrame::kAPlane),
-                        new_frame->data(media::VideoFrame::kAPlane),
+                        new_frame->writable_data(media::VideoFrame::kAPlane),
                         new_frame->stride(media::VideoFrame::kAPlane),
                         coded_size.width(), coded_size.height());
     }
@@ -624,7 +626,7 @@ void WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopy() {
   // passed on IO thread.
   io_task_runner_->PostTask(
       FROM_HERE,
-      media::BindToCurrentLoop(WTF::Bind(
+      media::BindToCurrentLoop(WTF::BindOnce(
           &WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopyInternal,
           WrapRefCounted(this))));
 }
@@ -647,11 +649,8 @@ bool WebMediaPlayerMSCompositor::MapTimestampsToRenderTimeTicks(
          io_task_runner_->BelongsToCurrentThread());
 #endif
   for (const base::TimeDelta& timestamp : timestamps) {
-    auto* it =
-        std::find_if(pending_frames_info_.begin(), pending_frames_info_.end(),
-                     [&timestamp](PendingFrameInfo& info) {
-                       return info.timestamp == timestamp;
-                     });
+    auto* it = base::ranges::find(pending_frames_info_, timestamp,
+                                  &PendingFrameInfo::timestamp);
     DCHECK(it != pending_frames_info_.end());
     wall_clock_times->push_back(it->reference_time);
   }

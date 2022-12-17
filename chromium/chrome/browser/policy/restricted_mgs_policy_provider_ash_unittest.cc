@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
@@ -15,6 +14,7 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/webui/certificates_handler.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
@@ -127,7 +127,7 @@ TEST_F(RestrictedMGSPolicyProviderAshTest, CreateRestrictedMGSPolicyProvider) {
   // Gets created for a Managed Guest Session.
   chromeos::LoginState::Get()->SetLoggedInState(
       chromeos::LoginState::LOGGED_IN_ACTIVE,
-      chromeos::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT_MANAGED);
+      chromeos::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT);
   policy_provider = RestrictedMGSPolicyProvider::Create();
   EXPECT_TRUE(policy_provider);
 }
@@ -144,7 +144,7 @@ TEST_F(RestrictedMGSPolicyProviderAshTest,
 
   chromeos::LoginState::Get()->SetLoggedInState(
       chromeos::LoginState::LOGGED_IN_ACTIVE,
-      chromeos::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT_MANAGED);
+      chromeos::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT);
   auto policy_provider = RestrictedMGSPolicyProvider::Create();
   ASSERT_TRUE(policy_provider);
   EXPECT_TRUE(expected_policy_bundle.Equals(policy_provider->policies()));
@@ -158,7 +158,7 @@ TEST_F(RestrictedMGSPolicyProviderAshTest,
 
   chromeos::LoginState::Get()->SetLoggedInState(
       chromeos::LoginState::LOGGED_IN_ACTIVE,
-      chromeos::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT_MANAGED);
+      chromeos::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT);
   auto policy_provider = RestrictedMGSPolicyProvider::Create();
   ASSERT_TRUE(policy_provider);
   EXPECT_TRUE(expected_policy_bundle->Equals(policy_provider->policies()));

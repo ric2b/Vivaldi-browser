@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,11 +14,11 @@
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_group_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/saved_tab_groups/saved_tab_group_model.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
@@ -95,6 +95,9 @@ bool TabGroup::IsCustomized() const {
 }
 
 bool TabGroup::IsSaved() const {
+  // TODO(dljames): Retrieving the service factory each time we want to check
+  // the saved status of a tab group is expensive computationally. Find a way to
+  // simplify this.
   SavedTabGroupKeyedService* backend =
       SavedTabGroupServiceFactory::GetForProfile(controller_->GetProfile());
   return backend && backend->model() && backend->model()->Contains(id());
@@ -138,13 +141,13 @@ gfx::Range TabGroup::ListTabs() const {
 }
 
 void TabGroup::SaveGroup() {
-  std::vector<SavedTabGroupTab> urls;
+  std::vector<SavedTabGroupTab> tabs;
   const gfx::Range tab_range = ListTabs();
   const base::GUID saved_group_guid = base::GUID::GenerateRandomV4();
   for (auto i = tab_range.start(); i < tab_range.end(); ++i) {
     content::WebContents* web_contents = controller_->GetWebContentsAt(i);
     const GURL& url = web_contents->GetVisibleURL();
-    urls.emplace_back(
+    tabs.emplace_back(
         SavedTabGroupTab(url, saved_group_guid)
             .SetTitle(web_contents->GetTitle())
             .SetFavicon(favicon::TabFaviconFromWebContents(web_contents)));
@@ -152,8 +155,10 @@ void TabGroup::SaveGroup() {
 
   SavedTabGroupKeyedService* backend =
       SavedTabGroupServiceFactory::GetForProfile(controller_->GetProfile());
+  if (!backend || !backend->model())
+    return;
   SavedTabGroup saved_tab_group(visual_data_->title(), visual_data_->color(),
-                                urls, saved_group_guid, id_);
+                                tabs, saved_group_guid, id_);
   backend->model()->Add(saved_tab_group);
 }
 
@@ -162,5 +167,7 @@ void TabGroup::UnsaveGroup() {
 
   SavedTabGroupKeyedService* backend =
       SavedTabGroupServiceFactory::GetForProfile(controller_->GetProfile());
+  if (!backend || !backend->model())
+    return;
   backend->model()->Remove(id_);
 }

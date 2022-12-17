@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,9 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
+
+class FrameTreeNode;
+class Portal;
 
 class CONTENT_EXPORT WebContentsDevToolsAgentHost
     : public DevToolsAgentHostImpl,
@@ -28,6 +31,15 @@ class CONTENT_EXPORT WebContentsDevToolsAgentHost
       delete;
 
   static void AddAllAgentHosts(DevToolsAgentHost::List* result);
+
+  // DevToolsAgentHostImpl overrides.
+  protocol::TargetAutoAttacher* auto_attacher() override;
+
+  // Instrumentation methods
+  void PortalActivated(const Portal& portal);
+  void WillInitiatePrerender(FrameTreeNode* ftn);
+  // TODO(caseq): do we need more specific signals here?
+  void UpdateChildFrameTrees(bool update_target_info);
 
  private:
   class AutoAttacher;
@@ -61,8 +73,8 @@ class CONTENT_EXPORT WebContentsDevToolsAgentHost
       const std::string& id) override;
 
   // DevToolsAgentHostImpl overrides.
+  DevToolsSession::Mode GetSessionMode() override;
   bool AttachSession(DevToolsSession* session, bool acquire_wake_lock) override;
-  protocol::TargetAutoAttacher* auto_attacher() override;
 
   // WebContentsObserver overrides.
   void WebContentsDestroyed() override;

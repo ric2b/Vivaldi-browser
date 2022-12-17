@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/functional/overloaded.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -36,17 +37,16 @@ AttributionReport::EventLevelData::EventLevelData(
   DCHECK_LE(randomized_trigger_rate, 1);
 }
 
-AttributionReport::EventLevelData::EventLevelData(const EventLevelData& other) =
+AttributionReport::EventLevelData::EventLevelData(const EventLevelData&) =
     default;
 
 AttributionReport::EventLevelData& AttributionReport::EventLevelData::operator=(
-    const EventLevelData& other) = default;
+    const EventLevelData&) = default;
 
-AttributionReport::EventLevelData::EventLevelData(EventLevelData&& other) =
-    default;
+AttributionReport::EventLevelData::EventLevelData(EventLevelData&&) = default;
 
 AttributionReport::EventLevelData& AttributionReport::EventLevelData::operator=(
-    EventLevelData&& other) = default;
+    EventLevelData&&) = default;
 
 AttributionReport::EventLevelData::~EventLevelData() = default;
 
@@ -88,23 +88,25 @@ AttributionReport::AttributionReport(
     AttributionInfo attribution_info,
     base::Time report_time,
     base::GUID external_report_id,
+    int failed_send_attempts,
     absl::variant<EventLevelData, AggregatableAttributionData> data)
     : attribution_info_(std::move(attribution_info)),
       report_time_(report_time),
       external_report_id_(std::move(external_report_id)),
+      failed_send_attempts_(failed_send_attempts),
       data_(std::move(data)) {
   DCHECK(external_report_id_.is_valid());
+  DCHECK_GE(failed_send_attempts_, 0);
 }
 
-AttributionReport::AttributionReport(const AttributionReport& other) = default;
+AttributionReport::AttributionReport(const AttributionReport&) = default;
 
-AttributionReport& AttributionReport::operator=(
-    const AttributionReport& other) = default;
-
-AttributionReport::AttributionReport(AttributionReport&& other) = default;
-
-AttributionReport& AttributionReport::operator=(AttributionReport&& other) =
+AttributionReport& AttributionReport::operator=(const AttributionReport&) =
     default;
+
+AttributionReport::AttributionReport(AttributionReport&&) = default;
+
+AttributionReport& AttributionReport::operator=(AttributionReport&&) = default;
 
 AttributionReport::~AttributionReport() = default;
 
@@ -114,10 +116,10 @@ GURL AttributionReport::ReportURL(bool debug) const {
 
   const char* endpoint_path;
   switch (GetReportType()) {
-    case ReportType::kEventLevel:
+    case Type::kEventLevel:
       endpoint_path = "report-event-attribution";
       break;
-    case ReportType::kAggregatableAttribution:
+    case Type::kAggregatableAttribution:
       endpoint_path = "report-aggregate-attribution";
       break;
   }
@@ -134,72 +136,74 @@ GURL AttributionReport::ReportURL(bool debug) const {
 }
 
 base::Value::Dict AttributionReport::ReportBody() const {
-  struct Visitor {
-    raw_ptr<const AttributionReport> report;
+  return absl::visit(
+      base::Overloaded{
+          [this](const EventLevelData& data) {
+            base::Value::Dict dict;
 
-    base::Value::Dict operator()(const EventLevelData& data) {
-      base::Value::Dict dict;
+            const CommonSourceInfo& common_source_info =
+                this->attribution_info().source.common_info();
 
-      const CommonSourceInfo& common_source_info =
-          report->attribution_info().source.common_info();
+            dict.Set("attribution_destination",
+                     common_source_info.DestinationSite().Serialize());
 
-      dict.Set("attribution_destination",
-               common_source_info.ConversionDestination().Serialize());
+            // The API denotes these values as strings; a `uint64_t` cannot be
+            // put in a dict as an integer in order to be opaque to various API
+            // configurations.
+            dict.Set(
+                "source_event_id",
+                base::NumberToString(common_source_info.source_event_id()));
 
-      // The API denotes these values as strings; a `uint64_t` cannot be put in
-      // a dict as an integer in order to be opaque to various API
-      // configurations.
-      dict.Set("source_event_id",
-               base::NumberToString(common_source_info.source_event_id()));
+            dict.Set("trigger_data", base::NumberToString(data.trigger_data));
 
-      dict.Set("trigger_data", base::NumberToString(data.trigger_data));
+            dict.Set("source_type", AttributionSourceTypeToString(
+                                        common_source_info.source_type()));
 
-      dict.Set("source_type",
-               AttributionSourceTypeToString(common_source_info.source_type()));
+            dict.Set("report_id",
+                     this->external_report_id().AsLowercaseString());
 
-      dict.Set("report_id", report->external_report_id().AsLowercaseString());
+            dict.Set("randomized_trigger_rate", data.randomized_trigger_rate);
 
-      dict.Set("randomized_trigger_rate", data.randomized_trigger_rate);
+            if (absl::optional<uint64_t> debug_key =
+                    common_source_info.debug_key())
+              dict.Set("source_debug_key", base::NumberToString(*debug_key));
 
-      if (absl::optional<uint64_t> debug_key = common_source_info.debug_key())
-        dict.Set("source_debug_key", base::NumberToString(*debug_key));
+            if (absl::optional<uint64_t> debug_key =
+                    this->attribution_info().debug_key) {
+              dict.Set("trigger_debug_key", base::NumberToString(*debug_key));
+            }
 
-      if (absl::optional<uint64_t> debug_key =
-              report->attribution_info().debug_key) {
-        dict.Set("trigger_debug_key", base::NumberToString(*debug_key));
-      }
+            return dict;
+          },
 
-      return dict;
-    }
+          [this](const AggregatableAttributionData& data) {
+            base::Value::Dict dict;
 
-    base::Value::Dict operator()(const AggregatableAttributionData& data) {
-      base::Value::Dict dict;
+            if (data.assembled_report.has_value()) {
+              dict = data.assembled_report->GetAsJson();
+            } else {
+              // This generally should only be called when displaying the report
+              // for debugging/internals.
+              dict.Set("shared_info", "not generated prior to send");
+              dict.Set("aggregation_service_payloads",
+                       "not generated prior to send");
+            }
 
-      if (data.assembled_report.has_value()) {
-        dict = data.assembled_report->GetAsJson();
-      } else {
-        // This generally should only be called when displaying the report for
-        // debugging/internals.
-        dict.Set("shared_info", "not generated prior to send");
-        dict.Set("aggregation_service_payloads", "not generated prior to send");
-      }
+            const CommonSourceInfo& common_info =
+                this->attribution_info().source.common_info();
 
-      const CommonSourceInfo& common_info =
-          report->attribution_info().source.common_info();
+            if (absl::optional<uint64_t> debug_key = common_info.debug_key())
+              dict.Set("source_debug_key", base::NumberToString(*debug_key));
 
-      if (absl::optional<uint64_t> debug_key = common_info.debug_key())
-        dict.Set("source_debug_key", base::NumberToString(*debug_key));
+            if (absl::optional<uint64_t> debug_key =
+                    this->attribution_info().debug_key) {
+              dict.Set("trigger_debug_key", base::NumberToString(*debug_key));
+            }
 
-      if (absl::optional<uint64_t> debug_key =
-              report->attribution_info().debug_key) {
-        dict.Set("trigger_debug_key", base::NumberToString(*debug_key));
-      }
-
-      return dict;
-    }
-  };
-
-  return absl::visit(Visitor{.report = this}, data_);
+            return dict;
+          },
+      },
+      data_);
 }
 
 AttributionReport::Id AttributionReport::ReportId() const {
@@ -208,11 +212,6 @@ AttributionReport::Id AttributionReport::ReportId() const {
 
 void AttributionReport::set_report_time(base::Time report_time) {
   report_time_ = report_time;
-}
-
-void AttributionReport::set_failed_send_attempts(int failed_send_attempts) {
-  DCHECK_GE(failed_send_attempts, 0);
-  failed_send_attempts_ = failed_send_attempts;
 }
 
 void AttributionReport::SetExternalReportIdForTesting(

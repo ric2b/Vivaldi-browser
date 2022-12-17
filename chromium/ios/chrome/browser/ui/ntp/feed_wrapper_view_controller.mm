@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -81,7 +81,7 @@
   self.contentCollectionView.backgroundColor =
       IsContentSuggestionsUIModuleRefreshEnabled()
           ? [UIColor clearColor]
-          : ntp_home::kNTPBackgroundColor();
+          : ntp_home::NTPBackgroundColor();
   self.contentCollectionView.translatesAutoresizingMaskIntoConstraints = NO;
   AddSameConstraints(self.contentCollectionView, self.view);
 }

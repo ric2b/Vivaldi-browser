@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,7 @@ bool HasModulesToShow(Profile* profile);
 base::DictionaryValue GetModules(Profile* profile);
 
 // Exposed for testing.
-extern const base::Feature kForceEnabled;
+BASE_DECLARE_FEATURE(kForceEnabled);
 
 bool CanShowGoogleAppModuleForTesting(const policy::PolicyMap& policies);
 bool CanShowNTPBackgroundModuleForTesting(const policy::PolicyMap& policies,

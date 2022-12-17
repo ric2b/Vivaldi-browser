@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -124,7 +124,7 @@ RemoteSafeBrowsingDatabaseManager::RemoteSafeBrowsingDatabaseManager()
     // By default, we check all types except a few.
     static_assert(
         network::mojom::RequestDestination::kMaxValue ==
-            network::mojom::RequestDestination::kFencedframe,
+            network::mojom::RequestDestination::kWebIdentity,
         "Decide if new request destination should be skipped on mobile.");
     for (int t_int = 0;
          t_int <=

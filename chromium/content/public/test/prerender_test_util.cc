@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include <tuple>
 
 #include "base/callback_helpers.h"
+#include "base/strings/string_util.h"
 #include "base/trace_event/typed_macros.h"
 #include "content/browser/preloading/prerender/prerender_host_registry.h"
 #include "content/browser/renderer_host/frame_tree.h"
@@ -151,7 +152,7 @@ class PrerenderHostObserverImpl : public PrerenderHost::Observer {
       std::move(waiting_for_activation_).Run();
   }
 
-  void OnHostDestroyed() override {
+  void OnHostDestroyed(PrerenderHost::FinalStatus final_status) override {
     observation_.Reset();
     if (waiting_for_destruction_)
       std::move(waiting_for_destruction_).Run();
@@ -229,7 +230,7 @@ bool PrerenderHostObserver::was_activated() const {
 }
 
 ScopedPrerenderFeatureList::ScopedPrerenderFeatureList() {
-  std::vector<base::Feature> enabled_features;
+  std::vector<base::test::FeatureRef> enabled_features;
 #if !BUILDFLAG(IS_ANDROID)
   // Prerender2 for Speculation Rules should be enabled by default on Android.
   // To test the default behavior on Android, explicitly enable the feature only
@@ -320,6 +321,30 @@ void PrerenderTestHelper::AddPrerenderAsync(const GURL& prerendering_url) {
   // Have to use ExecuteJavaScriptForTests instead of ExecJs/EvalJs here,
   // because some test pages have ContentSecurityPolicy and EvalJs cannot work
   // with it. See the quick migration guide for EvalJs for more information.
+  GetWebContents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
+      base::UTF8ToUTF16(script), base::NullCallback());
+}
+
+void PrerenderTestHelper::AddMultiplePrerenderAsync(
+    const std::vector<GURL>& prerendering_urls) {
+  TRACE_EVENT("test", "PrerenderTestHelper::AddMultiplePrerenderAsync",
+              "prerendering_urls", prerendering_urls);
+  EXPECT_TRUE(content::BrowserThread::CurrentlyOn(BrowserThread::UI));
+
+  // Concatenate the given URLs with a comma separator.
+  std::string urls_str;
+  for (size_t i = 0; i < prerendering_urls.size(); i++) {
+    // Wrap the url with double quotes.
+    urls_str +=
+        base::StringPrintf(R"("%s")", prerendering_urls[i].spec().c_str());
+    if (i + 1 < prerendering_urls.size()) {
+      urls_str += ", ";
+    }
+  }
+
+  std::string script = base::ReplaceStringPlaceholders(
+      kAddSpeculationRuleScript, {urls_str}, nullptr);
+
   GetWebContents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
       base::UTF8ToUTF16(script), base::NullCallback());
 }

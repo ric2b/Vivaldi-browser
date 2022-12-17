@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,9 @@
 namespace base::i18n {
 
 // Enable merging of `icudtl.dat` in Lacros.
-const base::Feature kLacrosMergeIcuDataFile{"LacrosMergeIcuDataFile",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kLacrosMergeIcuDataFile,
+             "LacrosMergeIcuDataFile",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace {
 

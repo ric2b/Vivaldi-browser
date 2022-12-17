@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -192,6 +192,7 @@ class ProfileNetworkContextService
 
   // PrivacySandboxSettings::Observer:
   void OnTrustTokenBlockingChanged(bool block_trust_tokens) override;
+  void OnFirstPartySetsEnabledChanged(bool enabled) override;
 
   const raw_ptr<Profile> profile_;
 

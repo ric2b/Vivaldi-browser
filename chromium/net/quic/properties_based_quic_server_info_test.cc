@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,7 +32,7 @@ class PropertiesBasedQuicServerInfoTest : public ::testing::Test {
   PropertiesBasedQuicServerInfoTest()
       : server_id_("www.google.com", 443, PRIVACY_MODE_DISABLED),
         server_info_(server_id_,
-                     NetworkIsolationKey(),
+                     NetworkAnonymizationKey(),
                      &http_server_properties_) {}
 
   // Initialize |server_info_| object and persist it.
@@ -69,8 +69,8 @@ TEST_F(PropertiesBasedQuicServerInfoTest, Update) {
   InitializeAndPersist();
 
   // Read the persisted data and verify we have read the data correctly.
-  PropertiesBasedQuicServerInfo server_info1(server_id_, NetworkIsolationKey(),
-                                             &http_server_properties_);
+  PropertiesBasedQuicServerInfo server_info1(
+      server_id_, NetworkAnonymizationKey(), &http_server_properties_);
   EXPECT_TRUE(server_info1.Load());
 
   // Verify the data.
@@ -84,8 +84,8 @@ TEST_F(PropertiesBasedQuicServerInfoTest, Update) {
   server_info1.Persist();
 
   // Read the persisted data and verify we have read the data correctly.
-  PropertiesBasedQuicServerInfo server_info2(server_id_, NetworkIsolationKey(),
-                                             &http_server_properties_);
+  PropertiesBasedQuicServerInfo server_info2(
+      server_id_, NetworkAnonymizationKey(), &http_server_properties_);
   EXPECT_TRUE(server_info2.Load());
 
   // Verify updated data.

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -937,7 +937,7 @@ TEST_F(FrameSelectionTest, FocusingButtonHidesRangeInDisabledTextControl) {
   // We use a double click to create the selection [Berlin].
   // FrameSelection::SelectAll (= textarea.select() in JavaScript) would have
   // been shorter, but currently that doesn't work on a *disabled* text control.
-  const gfx::Rect elem_bounds = textarea->BoundsInViewport();
+  const gfx::Rect elem_bounds = textarea->BoundsInWidget();
   WebMouseEvent double_click(WebMouseEvent::Type::kMouseDown, 0,
                              WebInputEvent::GetStaticTimeStampForTests());
   double_click.SetPositionInWidget(elem_bounds.x(), elem_bounds.y());

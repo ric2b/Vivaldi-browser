@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,7 +77,8 @@ class ScriptExecutorTest : public testing::Test,
         /* global_payload= */ "initial global payload",
         /* script_payload= */ "initial payload",
         /* listener= */ this, &ordered_interrupts_,
-        /* delegate= */ &delegate_, /* ui_delegate= */ &ui_delegate_);
+        /* delegate= */ &delegate_, /* ui_delegate= */ &ui_delegate_,
+        /* is_interrupt_executor= */ false);
 
     test_util::MockFindAnyElement(mock_web_controller_);
   }
@@ -2313,6 +2314,48 @@ TEST_F(ScriptExecutorTest, ClearPersistentUiOnError) {
   ASSERT_EQ(nullptr, ui_delegate_.GetPersistentGenericUi());
 }
 
+TEST_F(ScriptExecutorTest, SetGenericUi) {
+  base::MockCallback<
+      base::OnceCallback<void(const autofill_assistant::ClientStatus&)>>
+      end_action_callback;
+  base::MockCallback<
+      base::OnceCallback<void(const autofill_assistant::ClientStatus&)>>
+      view_inflation_finished_callback;
+  base::MockCallback<
+      base::RepeatingCallback<void(const RequestBackendDataProto&)>>
+      request_backend_data_callback;
+  base::MockCallback<
+      base::RepeatingCallback<void(const ShowAccountScreenProto&)>>
+      show_account_screen_callback;
+  ui_delegate_.SetGenericUi(
+      std::make_unique<GenericUserInterfaceProto>(), end_action_callback.Get(),
+      view_inflation_finished_callback.Get(),
+      request_backend_data_callback.Get(), show_account_screen_callback.Get());
+  ASSERT_NE(nullptr, ui_delegate_.GetGenericUi());
+  ASSERT_FALSE(ui_delegate_.GetEndActionCallback().is_null());
+  ASSERT_FALSE(ui_delegate_.GetViewInflationFinishedCallback().is_null());
+  ASSERT_FALSE(ui_delegate_.GetRequestBackendDataCallback().is_null());
+  ASSERT_FALSE(ui_delegate_.GetShowAccountScreenCallback().is_null());
+}
+
+TEST_F(ScriptExecutorTest, SetPersistentGenericUi) {
+  base::MockCallback<
+      base::OnceCallback<void(const autofill_assistant::ClientStatus&)>>
+      view_inflation_finished_callback;
+  ui_delegate_.SetPersistentGenericUi(
+      std::make_unique<GenericUserInterfaceProto>(),
+      view_inflation_finished_callback.Get());
+  ASSERT_NE(nullptr, ui_delegate_.GetPersistentGenericUi());
+  ASSERT_FALSE(ui_delegate_.GetViewInflationFinishedCallback().is_null());
+}
+
+TEST_F(ScriptExecutorTest, SetCollectUserDataUiState) {
+  executor_->SetCollectUserDataUiState(true,
+                                       UserDataEventField::SHIPPING_EVENT);
+  EXPECT_EQ(ui_delegate_.GetCollectUserDataUiLoadingField(),
+            UserDataEventField::SHIPPING_EVENT);
+}
+
 TEST_F(ScriptExecutorTest, RequestUserData) {
   EXPECT_CALL(mock_service_, GetUserData)
       .WillOnce(RunOnceCallback<3>(net::HTTP_OK, std::string(),
@@ -2322,13 +2365,21 @@ TEST_F(ScriptExecutorTest, RequestUserData) {
       base::OnceCallback<void(bool, const GetUserDataResponseProto&)>>
       mock_callback;
   EXPECT_CALL(mock_callback, Run(true, _));
-
-  executor_->RequestUserData(UserDataEventField::SHIPPING_EVENT,
-                             CollectUserDataOptions(), mock_callback.Get());
+  executor_->RequestUserData(CollectUserDataOptions(), mock_callback.Get());
   EXPECT_THAT(delegate_.GetStateHistory(),
-              ElementsAre(AutofillAssistantState::RUNNING));
-  EXPECT_EQ(ui_delegate_.GetCollectUserDataUiLoadingField(),
-            UserDataEventField::SHIPPING_EVENT);
+              ElementsAre(AutofillAssistantState::RUNNING,
+                          AutofillAssistantState::PROMPT));
+}
+
+TEST_F(ScriptExecutorTest, ShowAccountScreen) {
+  ShowAccountScreenProto proto;
+  proto.set_gms_account_intent_screen_id(4);
+  executor_->ShowAccountScreen(proto, "abc@xyz.com");
+
+  EXPECT_EQ(ui_delegate_.GetUserEmail(), "abc@xyz.com");
+  EXPECT_EQ(
+      ui_delegate_.GetShowAccountScreenProto().gms_account_intent_screen_id(),
+      4);
 }
 
 TEST_F(ScriptExecutorTest, CollectUserData) {

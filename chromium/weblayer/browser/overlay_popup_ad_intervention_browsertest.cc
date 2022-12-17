@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,10 +36,10 @@ class OverlayPopupAdViolationBrowserTest : public SubresourceFilterBrowserTest {
   OverlayPopupAdViolationBrowserTest() = default;
 
   void SetUp() override {
-    std::vector<base::Feature> enabled = {
+    std::vector<base::test::FeatureRef> enabled = {
         subresource_filter::kAdTagging,
         subresource_filter::kAdsInterventionsEnforced};
-    std::vector<base::Feature> disabled = {
+    std::vector<base::test::FeatureRef> disabled = {
         blink::features::kFrequencyCappingForOverlayPopupDetection};
 
     feature_list_.InitWithFeatures(enabled, disabled);
@@ -56,8 +56,16 @@ class OverlayPopupAdViolationBrowserTest : public SubresourceFilterBrowserTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
+// TODO(https://crbug.com/1199860): Fails on Linux MSan.
+#if BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER)
+#define MAYBE_NoOverlayPopupAd_AdInterventionNotTriggered \
+  DISABLED_NoOverlayPopupAd_AdInterventionNotTriggered
+#else
+#define MAYBE_NoOverlayPopupAd_AdInterventionNotTriggered \
+  NoOverlayPopupAd_AdInterventionNotTriggered
+#endif
 IN_PROC_BROWSER_TEST_F(OverlayPopupAdViolationBrowserTest,
-                       NoOverlayPopupAd_AdInterventionNotTriggered) {
+                       MAYBE_NoOverlayPopupAd_AdInterventionNotTriggered) {
   base::HistogramTester histogram_tester;
 
   GURL url = embedded_test_server()->GetURL(
@@ -121,8 +129,9 @@ class OverlayPopupAdViolationBrowserTestWithoutEnforcement
   OverlayPopupAdViolationBrowserTestWithoutEnforcement() = default;
 
   void SetUp() override {
-    std::vector<base::Feature> enabled = {subresource_filter::kAdTagging};
-    std::vector<base::Feature> disabled = {
+    std::vector<base::test::FeatureRef> enabled = {
+        subresource_filter::kAdTagging};
+    std::vector<base::test::FeatureRef> disabled = {
         subresource_filter::kAdsInterventionsEnforced,
         blink::features::kFrequencyCappingForOverlayPopupDetection};
 

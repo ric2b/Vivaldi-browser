@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,12 +10,11 @@
 #include "ash/clipboard/clipboard_history_controller_impl.h"
 #include "ash/clipboard/clipboard_history_item.h"
 #include "ash/clipboard/clipboard_history_menu_model_adapter.h"
-#include "ash/clipboard/clipboard_history_metrics.h"
+#include "ash/clipboard/clipboard_history_util.h"
 #include "ash/clipboard/views/clipboard_history_item_view.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/clipboard_history_controller.h"
 #include "ash/shell.h"
-#include "base/bind.h"
 #include "base/scoped_observation.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -37,10 +36,11 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "ui/aura/client/capture_client_observer.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/clipboard_data.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_non_backed.h"
+#include "ui/base/clipboard/clipboard_sequence_number_token.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/base/data_transfer_policy/data_transfer_policy_controller.h"
@@ -58,6 +58,7 @@ using ScopedClipboardHistoryListUpdateWaiter =
     clipboard_history::ScopedClipboardHistoryListUpdateWaiter;
 using ClipboardImageModelRequestWaiter =
     clipboard_history::ClipboardImageModelRequestWaiter;
+using MenuViewID = ash::clipboard_history_util::MenuViewID;
 
 constexpr char kUrlString[] = "https://www.example.com";
 
@@ -202,7 +203,7 @@ class ClipboardHistoryBrowserTest : public ash::LoginManagerTest {
   ClipboardHistoryBrowserTest() {
     login_mixin_.AppendRegularUsers(1);
     account_id1_ = login_mixin_.users()[0].account_id;
-    std::vector<base::Feature> disabled_features = {
+    std::vector<base::test::FeatureRef> disabled_features = {
         ash::features::kClipboardHistoryReorder};
     feature_list_.InitWithFeatures(/*enabled_features=*/{}, disabled_features);
   }
@@ -228,7 +229,7 @@ class ClipboardHistoryBrowserTest : public ash::LoginManagerTest {
   void ClickAtDeleteButton(int index) {
     auto* item_view = GetContextMenu()->GetMenuItemViewAtForTest(index);
     views::View* delete_button =
-        item_view->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID);
+        item_view->GetViewByID(MenuViewID::kDeleteButtonViewID);
 
     if (delete_button->GetVisible()) {
       // Assume that `delete_button` already has meaningful bounds.
@@ -290,7 +291,7 @@ class ClipboardHistoryBrowserTest : public ash::LoginManagerTest {
   void ShowDeleteButtonByMouseHover(int index) {
     auto* item_view = GetContextMenu()->GetMenuItemViewAtForTest(index);
     views::View* delete_button =
-        item_view->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID);
+        item_view->GetViewByID(MenuViewID::kDeleteButtonViewID);
     ASSERT_FALSE(delete_button->GetVisible());
 
     // Hover the mouse on `item_view` to show the delete button.
@@ -353,7 +354,7 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest, VerifySelectionBehavior) {
 
   ShowContextMenuViaAccelerator(/*wait_for_selection=*/true);
   ASSERT_TRUE(GetClipboardHistoryController()->IsMenuShowing());
-  ASSERT_EQ(3, GetContextMenu()->GetMenuItemsCount());
+  ASSERT_EQ(3u, GetContextMenu()->GetMenuItemsCount());
   histogram_tester.ExpectUniqueSample(
       "Ash.ClipboardHistory.ContextMenu.ShowMenu",
       crosapi::mojom::ClipboardHistoryControllerShowSource::kAccelerator, 1);
@@ -364,7 +365,7 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest, VerifySelectionBehavior) {
       GetMenuItemViewForIndex(/*index=*/0);
   EXPECT_TRUE(first_menu_item_view->IsSelected());
   EXPECT_FALSE(GetHistoryItemViewForIndex(/*index=*/0)
-                   ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
+                   ->GetViewByID(MenuViewID::kDeleteButtonViewID)
                    ->GetVisible());
   EXPECT_EQ(gfx::Size(256, 36), first_menu_item_view->size());
 
@@ -381,7 +382,7 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest, VerifySelectionBehavior) {
 
   // Under mouse hovering, the second item's delete button should show.
   EXPECT_TRUE(GetHistoryItemViewForIndex(/*index=*/1)
-                  ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
+                  ->GetViewByID(MenuViewID::kDeleteButtonViewID)
                   ->GetVisible());
 
   const views::MenuItemView* third_menu_item_view =
@@ -394,7 +395,7 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest, VerifySelectionBehavior) {
   EXPECT_FALSE(second_menu_item_view->IsSelected());
   EXPECT_TRUE(third_menu_item_view->IsSelected());
   EXPECT_FALSE(GetHistoryItemViewForIndex(/*index=*/2)
-                   ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
+                   ->GetViewByID(MenuViewID::kDeleteButtonViewID)
                    ->GetVisible());
 }
 
@@ -407,15 +408,15 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest,
 
   // Verify the default state right after the menu shows.
   ASSERT_TRUE(GetClipboardHistoryController()->IsMenuShowing());
-  ASSERT_EQ(2, GetContextMenu()->GetMenuItemsCount());
+  ASSERT_EQ(2u, GetContextMenu()->GetMenuItemsCount());
   const views::MenuItemView* first_menu_item_view =
       GetMenuItemViewForIndex(/*index=*/0);
   ASSERT_TRUE(first_menu_item_view->IsSelected());
   const ash::ClipboardHistoryItemView* first_history_item_view =
       GetHistoryItemViewForIndex(/*index=*/0);
-  ASSERT_FALSE(first_history_item_view
-                   ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                   ->GetVisible());
+  ASSERT_FALSE(
+      first_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
 
   // Press the tab key.
   PressAndRelease(ui::VKEY_TAB);
@@ -423,8 +424,8 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest,
 
   // Verify that the first menu item's delete button shows. In addition, the
   // delete button's inkdrop highlight should fade in or be visible.
-  const views::View* const delete_button = first_history_item_view->GetViewByID(
-      ash::ClipboardHistoryUtil::kDeleteButtonViewID);
+  const views::View* const delete_button =
+      first_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID);
   ASSERT_TRUE(delete_button->GetVisible());
   EXPECT_TRUE(views::InkDrop::Get(const_cast<views::View*>(delete_button))
                   ->GetInkDrop()
@@ -435,50 +436,50 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest,
   EXPECT_FALSE(second_menu_item_view->IsSelected());
   const ash::ClipboardHistoryItemView* second_history_item_view =
       GetHistoryItemViewForIndex(/*index=*/1);
-  EXPECT_FALSE(second_history_item_view
-                   ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                   ->GetVisible());
+  EXPECT_FALSE(
+      second_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
 
   // Press the tab key. Verify that the second menu item is selected while its
   // delete button is hidden.
   PressAndRelease(ui::VKEY_TAB);
   EXPECT_TRUE(second_menu_item_view->IsSelected());
-  EXPECT_FALSE(second_history_item_view
-                   ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                   ->GetVisible());
+  EXPECT_FALSE(
+      second_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
 
   // Press the tab key. Verify that the second item's delete button shows.
   PressAndRelease(ui::VKEY_TAB);
   EXPECT_TRUE(second_menu_item_view->IsSelected());
-  EXPECT_TRUE(second_history_item_view
-                  ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                  ->GetVisible());
+  EXPECT_TRUE(
+      second_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
 
   // Press the tab key with the shift key pressed. Verify that the second item
   // is selected while its delete button is hidden.
   PressAndRelease(ui::VKEY_TAB, ui::EF_SHIFT_DOWN);
   EXPECT_TRUE(second_menu_item_view->IsSelected());
-  EXPECT_FALSE(second_history_item_view
-                   ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                   ->GetVisible());
+  EXPECT_FALSE(
+      second_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
 
   // Press the tab key with the shift key pressed. Verify that the first item
   // is selected while its delete button is visible.
   PressAndRelease(ui::VKEY_TAB, ui::EF_SHIFT_DOWN);
   EXPECT_TRUE(first_menu_item_view->IsSelected());
-  EXPECT_TRUE(first_history_item_view
-                  ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                  ->GetVisible());
+  EXPECT_TRUE(
+      first_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
   EXPECT_FALSE(second_menu_item_view->IsSelected());
 
   // Press the ENTER key. Verifies that the first item is deleted. The second
   // item is selected and its delete button should not show.
   PressAndRelease(ui::VKEY_RETURN);
-  EXPECT_EQ(1, GetContextMenu()->GetMenuItemsCount());
+  EXPECT_EQ(1u, GetContextMenu()->GetMenuItemsCount());
   EXPECT_TRUE(second_menu_item_view->IsSelected());
-  EXPECT_FALSE(second_history_item_view
-                   ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                   ->GetVisible());
+  EXPECT_FALSE(
+      second_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
 }
 
 // Verifies the tab traversal on the history menu with only one item.
@@ -489,28 +490,28 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest,
 
   // Verify the default state right after the menu shows.
   ASSERT_TRUE(GetClipboardHistoryController()->IsMenuShowing());
-  ASSERT_EQ(1, GetContextMenu()->GetMenuItemsCount());
+  ASSERT_EQ(1u, GetContextMenu()->GetMenuItemsCount());
   const ash::ClipboardHistoryItemView* first_history_item_view =
       GetHistoryItemViewForIndex(/*index=*/0);
-  ASSERT_FALSE(first_history_item_view
-                   ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                   ->GetVisible());
+  ASSERT_FALSE(
+      first_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
   const views::MenuItemView* first_menu_item_view =
       GetMenuItemViewForIndex(/*index=*/0);
   ASSERT_TRUE(first_menu_item_view->IsSelected());
 
   // Press the tab key. Verify that the delete button is visible.
   PressAndRelease(ui::VKEY_TAB);
-  ASSERT_TRUE(first_history_item_view
-                  ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                  ->GetVisible());
+  ASSERT_TRUE(
+      first_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
 
   // Press the tab key. Verify that the delete button is hidden. The menu item
   // is still under selection.
   PressAndRelease(ui::VKEY_TAB);
-  ASSERT_FALSE(first_history_item_view
-                   ->GetViewByID(ash::ClipboardHistoryUtil::kDeleteButtonViewID)
-                   ->GetVisible());
+  ASSERT_FALSE(
+      first_history_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID)
+          ->GetVisible());
   EXPECT_TRUE(first_menu_item_view->IsSelected());
 }
 
@@ -552,7 +553,7 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest, HandleClickCancelEvent) {
   // Show the menu.
   ShowContextMenuViaAccelerator(/*wait_for_selection=*/true);
   ASSERT_TRUE(GetClipboardHistoryController()->IsMenuShowing());
-  ASSERT_EQ(2, GetContextMenu()->GetMenuItemsCount());
+  ASSERT_EQ(2u, GetContextMenu()->GetMenuItemsCount());
 
   // Press on the first menu item.
   ash::ClipboardHistoryItemView* first_item_view =
@@ -582,14 +583,14 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest,
 
   ShowContextMenuViaAccelerator(/*wait_for_selection=*/true);
   ASSERT_TRUE(GetClipboardHistoryController()->IsMenuShowing());
-  ASSERT_EQ(2, GetContextMenu()->GetMenuItemsCount());
+  ASSERT_EQ(2u, GetContextMenu()->GetMenuItemsCount());
 
   // Delete the second menu item.
   {
     ScopedClipboardHistoryListUpdateWaiter scoped_waiter;
     ClickAtDeleteButton(/*index=*/1);
   }
-  EXPECT_EQ(1, GetContextMenu()->GetMenuItemsCount());
+  EXPECT_EQ(1u, GetContextMenu()->GetMenuItemsCount());
   EXPECT_TRUE(VerifyClipboardTextData({"B"}));
   EXPECT_TRUE(VerifyClipboardBufferAndHistoryInSync());
 
@@ -618,7 +619,7 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest, DeleteItemViaBackspaceKey) {
   // Show the menu.
   ShowContextMenuViaAccelerator(/*wait_for_selection=*/true);
   ASSERT_TRUE(GetClipboardHistoryController()->IsMenuShowing());
-  ASSERT_EQ(3, GetContextMenu()->GetMenuItemsCount());
+  ASSERT_EQ(3u, GetContextMenu()->GetMenuItemsCount());
 
   // Select the first menu item via key then delete it. Verify the menu and the
   // clipboard history.
@@ -626,7 +627,7 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest, DeleteItemViaBackspaceKey) {
     ScopedClipboardHistoryListUpdateWaiter scoped_waiter;
     PressAndRelease(ui::KeyboardCode::VKEY_BACK);
   }
-  EXPECT_EQ(2, GetContextMenu()->GetMenuItemsCount());
+  EXPECT_EQ(2u, GetContextMenu()->GetMenuItemsCount());
   EXPECT_TRUE(VerifyClipboardTextData({"B", "A"}));
   EXPECT_TRUE(VerifyClipboardBufferAndHistoryInSync());
 
@@ -640,7 +641,7 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryBrowserTest, DeleteItemViaBackspaceKey) {
     PressAndRelease(ui::KeyboardCode::VKEY_DOWN, ui::EF_NONE);
     PressAndRelease(ui::KeyboardCode::VKEY_BACK, ui::EF_NONE);
   }
-  EXPECT_EQ(1, GetContextMenu()->GetMenuItemsCount());
+  EXPECT_EQ(1u, GetContextMenu()->GetMenuItemsCount());
   EXPECT_TRUE(VerifyClipboardTextData({"B"}));
   EXPECT_TRUE(VerifyClipboardBufferAndHistoryInSync());
 
@@ -739,6 +740,8 @@ class ClipboardHistoryPasteTypeBrowserTest
     }
   }
 
+  content::WebContents* web_contents() { return web_contents_; }
+
  private:
   // Returns all valid data formats for the last paste.
   base::Value::List GetLastPaste() {
@@ -747,8 +750,8 @@ class ClipboardHistoryPasteTypeBrowserTest
     EXPECT_TRUE(result.error.empty());
     auto paste_list_value = result.ExtractList();
     EXPECT_TRUE(paste_list_value.is_list());
-    return std::move(paste_list_value.GetList());
-  };
+    return std::move(paste_list_value).TakeList();
+  }
 
   content::WebContents* web_contents_ = nullptr;
   int paste_num_ = 1;
@@ -907,6 +910,14 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryPasteTypeBrowserTest,
   ClipboardDataWaiter().WaitFor(&clipboard_data);
 }
 
+// Regression test for crbug.com/1363828 --- verifies that
+// `WebContents::Paste()` works, since that's necessary for the html preview.
+IN_PROC_BROWSER_TEST_F(ClipboardHistoryPasteTypeBrowserTest, PasteCommand) {
+  SetClipboardTextAndHtml("A", "<span>A</span>");
+  web_contents()->Paste();
+  WaitForWebContentsPaste("A", /*paste_plain_text=*/false);
+}
+
 class ClipboardHistoryReorderBrowserTest
     : public ClipboardHistoryPasteTypeBrowserTest,
       public testing::WithParamInterface<
@@ -914,7 +925,7 @@ class ClipboardHistoryReorderBrowserTest
                      bool /* paste_plain_text */>> {
  public:
   ClipboardHistoryReorderBrowserTest() {
-    std::vector<base::Feature> enabled_features, disabled_features;
+    std::vector<base::test::FeatureRef> enabled_features, disabled_features;
     (ClipboardHistoryReorderEnabled() ? enabled_features : disabled_features)
         .push_back(ash::features::kClipboardHistoryReorder);
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
@@ -955,8 +966,8 @@ IN_PROC_BROWSER_TEST_P(ClipboardHistoryReorderBrowserTest, OnCopy) {
     SetClipboardTextAndHtml("A", "<span>A</span>");
   }
   ui::ClipboardData clipboard_data_a(*clipboard->GetClipboardData(&data_dst));
-  ASSERT_EQ(clipboard_history_items.size(), 1);
-  ASSERT_EQ(clipboard_history_items.front().data(), clipboard_data_a);
+  ASSERT_EQ(clipboard_history_items.size(), 1u);
+  EXPECT_EQ(clipboard_history_items.front().data(), clipboard_data_a);
   histogram_tester.ExpectTotalCount("Ash.ClipboardHistory.ReorderType",
                                     /*count=*/0);
 
@@ -968,8 +979,8 @@ IN_PROC_BROWSER_TEST_P(ClipboardHistoryReorderBrowserTest, OnCopy) {
     SetClipboardTextAndHtml("B", "<span>B</span>");
   }
   ui::ClipboardData clipboard_data_b(*clipboard->GetClipboardData(&data_dst));
-  ASSERT_EQ(clipboard_history_items.size(), 2);
-  ASSERT_EQ(clipboard_history_items.front().data(), clipboard_data_b);
+  ASSERT_EQ(clipboard_history_items.size(), 2u);
+  EXPECT_EQ(clipboard_history_items.front().data(), clipboard_data_b);
   histogram_tester.ExpectTotalCount("Ash.ClipboardHistory.ReorderType",
                                     /*count=*/0);
 
@@ -981,12 +992,20 @@ IN_PROC_BROWSER_TEST_P(ClipboardHistoryReorderBrowserTest, OnCopy) {
     ScopedClipboardHistoryListUpdateWaiter scoped_waiter;
     SetClipboardTextAndHtml("A", "<span>A</span>");
   }
-  ASSERT_EQ(clipboard_history_items.size(), 2);
-  ASSERT_EQ(clipboard_history_items.front().data(), clipboard_data_a);
+  ASSERT_EQ(clipboard_history_items.size(), 2u);
+  EXPECT_EQ(clipboard_history_items.front().data(), clipboard_data_a);
   histogram_tester.ExpectBucketCount(
       "Ash.ClipboardHistory.ReorderType",
-      /*sample=*/ash::ClipboardHistoryReorderType::kOnCopy,
+      /*sample=*/ash::clipboard_history_util::ReorderType::kOnCopy,
       /*expected_count=*/1);
+
+  // Verify that after the original data is written to the clipboard again, the
+  // corresponding clipboard history item's data is updated to have the same
+  // sequence number as the new clipboard.
+  EXPECT_EQ(clipboard_history_items.front().data().sequence_number_token(),
+            clipboard->GetSequenceNumber(ui::ClipboardBuffer::kCopyPaste));
+  EXPECT_NE(clipboard_history_items.front().data().sequence_number_token(),
+            clipboard_data_a.sequence_number_token());
 }
 
 IN_PROC_BROWSER_TEST_P(ClipboardHistoryReorderBrowserTest, OnPaste) {
@@ -1069,12 +1088,12 @@ IN_PROC_BROWSER_TEST_P(ClipboardHistoryReorderBrowserTest, OnPaste) {
   }
   histogram_tester.ExpectBucketCount(
       "Ash.ClipboardHistory.ReorderType",
-      /*sample=*/ash::ClipboardHistoryReorderType::kOnPaste,
+      /*sample=*/ash::clipboard_history_util::ReorderType::kOnPaste,
       /*expected_count=*/ClipboardHistoryReorderEnabled() ? 1 : 0);
 
   const auto& clipboard_history_items = GetClipboardItems();
-  ASSERT_EQ(clipboard_history_items.size(), 2);
-  ASSERT_EQ(clipboard_history_items.front().data(), *expected_clipboard_data);
+  ASSERT_EQ(clipboard_history_items.size(), 2u);
+  EXPECT_EQ(clipboard_history_items.front().data(), *expected_clipboard_data);
 
   SetClipboardTextAndHtml("C", "<span>C</span>");
   histogram_tester.ExpectBucketCount("Ash.ClipboardHistory.ConsecutivePastes",
@@ -1088,7 +1107,7 @@ class ClipboardHistoryMultiProfileBrowserTest
   ClipboardHistoryMultiProfileBrowserTest() {
     login_mixin_.AppendRegularUsers(1);
     // Previous user was added in base class.
-    EXPECT_EQ(2U, login_mixin_.users().size());
+    EXPECT_EQ(2u, login_mixin_.users().size());
     account_id2_ = login_mixin_.users()[1].account_id;
   }
 
@@ -1253,8 +1272,8 @@ IN_PROC_BROWSER_TEST_F(ClipboardHistoryTextfieldBrowserTest,
 
   ash::ClipboardHistoryItemView* second_item_view =
       GetHistoryItemViewForIndex(/*index=*/1);
-  views::View* second_item_delete_button = second_item_view->GetViewByID(
-      ash::ClipboardHistoryUtil::kDeleteButtonViewID);
+  views::View* second_item_delete_button =
+      second_item_view->GetViewByID(MenuViewID::kDeleteButtonViewID);
   EXPECT_FALSE(second_item_delete_button->GetVisible());
 
   // Long press on the second item until its delete button shows.

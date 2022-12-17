@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,6 +36,9 @@ void SetupConnectedScrollListItem(HoverHighlightView* view,
 // Adds connecting sub label to the |view| with appropriate style and updates
 // accessibility label.
 void SetupConnectingScrollListItem(HoverHighlightView* view);
+
+// Add `subtext` with warning color to `view`.
+void SetWarningSubText(HoverHighlightView* view, std::u16string subtext);
 
 // Gets the current tray icon color for the given session state.
 SkColor TrayIconColor(session_manager::SessionState session_state);

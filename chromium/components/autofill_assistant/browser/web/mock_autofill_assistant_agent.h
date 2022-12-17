@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,8 @@ class MockAutofillAssistantAgent : public mojom::AutofillAssistantAgent {
   void BindPendingReceiver(mojo::ScopedInterfaceEndpointHandle handle);
   static void RegisterForAllFrames(content::WebContents* web_contents,
                                    MockAutofillAssistantAgent* agent);
+
+  void ResetReceiversForTesting();
 
   MOCK_METHOD(void,
               GetSemanticNodes,

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -301,7 +301,6 @@ bool UtilityProcessHost::StartProcess() {
       switches::kForceWaveAudio,
       switches::kRaiseTimerFrequency,
       switches::kTrySupportedChannelLayouts,
-      switches::kUseFakeAudioCaptureTimestamps,
       switches::kWaveOutBuffers,
       switches::kWebXrForceRuntime,
       sandbox::policy::switches::kAddXrAppContainerCaps,
@@ -334,8 +333,10 @@ bool UtilityProcessHost::StartProcess() {
 #if BUILDFLAG(IS_WIN)
     if (media::IsMediaFoundationD3D11VideoCaptureEnabled()) {
       // MediaFoundationD3D11VideoCapture requires Gpu memory buffers,
-      // which are unavailable if the GPU process isn't running.
-      if (!GpuDataManagerImpl::GetInstance()->IsGpuCompositingDisabled()) {
+      // which are unavailable if the GPU process isn't running or if
+      // D3D shared images are not supported.
+      if (!GpuDataManagerImpl::GetInstance()->IsGpuCompositingDisabled() &&
+          GpuDataManagerImpl::GetInstance()->GetGPUInfo().shared_image_d3d) {
         cmd_line->AppendSwitch(switches::kVideoCaptureUseGpuMemoryBuffer);
       }
     }

@@ -1,15 +1,15 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef ASH_SERVICES_MULTIDEVICE_SETUP_HOST_BACKEND_DELEGATE_IMPL_H_
 #define ASH_SERVICES_MULTIDEVICE_SETUP_HOST_BACKEND_DELEGATE_IMPL_H_
 
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/device_sync/public/cpp/device_sync_client.h"
 #include "ash/services/multidevice_setup/host_backend_delegate.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PrefRegistrySimple;

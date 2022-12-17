@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
@@ -25,6 +26,7 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -261,10 +263,9 @@ views::Button* OmniboxSuggestionButtonRowView::GetActiveButton() const {
       keyword_button_, tab_switch_button_, pedal_button_};
 
   // Find the button that matches model selection.
-  auto selected_button = std::find_if(
-      buttons.begin(), buttons.end(), [=](OmniboxSuggestionRowButton* button) {
-        return popup_contents_view_->GetSelection() == button->selection();
-      });
+  auto selected_button =
+      base::ranges::find(buttons, popup_contents_view_->GetSelection(),
+                         &OmniboxSuggestionRowButton::selection);
   return selected_button == buttons.end() ? nullptr : *selected_button;
 }
 

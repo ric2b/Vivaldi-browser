@@ -1,10 +1,11 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/cert/pki/crl.h"
 
 #include "base/stl_util.h"
+#include "base/types/optional_util.h"
 #include "net/cert/pki/cert_errors.h"
 #include "net/cert/pki/revocation_util.h"
 #include "net/cert/pki/signature_algorithm.h"
@@ -33,12 +34,11 @@ inline constexpr uint8_t kIssuingDistributionPointOid[] = {0x55, 0x1d, 0x1c};
          !parser.HasMore();
 }
 
-bool ContainsExactMatchingName(std::vector<base::StringPiece> a,
-                               std::vector<base::StringPiece> b) {
+bool ContainsExactMatchingName(std::vector<std::string_view> a,
+                               std::vector<std::string_view> b) {
   std::sort(a.begin(), a.end());
   std::sort(b.begin(), b.end());
-  return !base::STLSetIntersection<std::vector<base::StringPiece>>(a, b)
-              .empty();
+  return !base::STLSetIntersection<std::vector<std::string_view>>(a, b).empty();
 }
 
 }  // namespace
@@ -361,7 +361,7 @@ CRLRevocationStatus GetCRLStatusForCert(
 ParsedCrlTbsCertList::ParsedCrlTbsCertList() = default;
 ParsedCrlTbsCertList::~ParsedCrlTbsCertList() = default;
 
-CRLRevocationStatus CheckCRL(base::StringPiece raw_crl,
+CRLRevocationStatus CheckCRL(std::string_view raw_crl,
                              const ParsedCertificateList& valid_chain,
                              size_t target_cert_index,
                              const ParsedDistributionPoint& cert_dp,
@@ -422,10 +422,9 @@ CRLRevocationStatus CheckCRL(base::StringPiece raw_crl,
 
   // Check CRL dates. Roughly corresponds to 6.3.3 (a) (1) but does not attempt
   // to update the CRL if it is out of date.
-  if (!CheckRevocationDateValid(
-          tbs_cert_list.this_update,
-          base::OptionalOrNullptr(tbs_cert_list.next_update), verify_time,
-          max_age)) {
+  if (!CheckRevocationDateValid(tbs_cert_list.this_update,
+                                base::OptionalToPtr(tbs_cert_list.next_update),
+                                verify_time, max_age)) {
     return CRLRevocationStatus::UNKNOWN;
   }
 

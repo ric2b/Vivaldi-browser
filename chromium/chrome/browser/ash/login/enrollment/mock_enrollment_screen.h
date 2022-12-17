@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,7 @@ class MockEnrollmentScreen : public EnrollmentScreen {
 class MockEnrollmentScreenView : public EnrollmentScreenView {
  public:
   MockEnrollmentScreenView();
-  virtual ~MockEnrollmentScreenView();
+  ~MockEnrollmentScreenView() override;
 
   void Bind(EnrollmentScreen* screen) override;
   void Unbind() override;
@@ -52,9 +52,7 @@ class MockEnrollmentScreenView : public EnrollmentScreenView {
               ShowUserError,
               (UserErrorType error_type, const std::string& email));
   MOCK_METHOD(void, ShowEnrollmentDuringTrialNotAllowedError, ());
-  MOCK_METHOD(void,
-              ShowLicenseTypeSelectionScreen,
-              (const base::DictionaryValue&));
+  MOCK_METHOD(void, ShowSkipConfirmationDialog, ());
   MOCK_METHOD(void,
               ShowActiveDirectoryScreen,
               (const std::string& domain_join_config,

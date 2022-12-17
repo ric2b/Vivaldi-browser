@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;In...</translation>
 <translation id="1181037720776840403">Xóa</translation>
 <translation id="1187722533808055681">Đánh thức khỏi chế độ rảnh</translation>
-<translation id="119944043368869598">Xóa tất cả</translation>
 <translation id="1221825588892235038">Chỉ lựa chọn</translation>
 <translation id="1244303850296295656">Lỗi tiện ích</translation>
 <translation id="125220115284141797">Mặc định</translation>
@@ -49,7 +48,6 @@
 <translation id="1901303067676059328">Chọn &amp;tất cả</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Dùng số để chỉ định số lượng bản cần in (1 đến <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Xóa Tất cả</translation>
 <translation id="1994173015038366702">URL trang web</translation>
 <translation id="2019718679933488176">&amp;Mở Âm thanh trong Tab Mới</translation>
 <translation id="2050339315714019657">Khổ dọc</translation>
@@ -65,7 +63,6 @@
 <translation id="2218515861914035131">Dán dưới dạng văn bản thuần túy</translation>
 <translation id="2249605167705922988">ví dụ: 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Cho phép định danh trên nội dung được bảo vệ (có thể cần phải khởi động lại máy tính)</translation>
-<translation id="2277255602909579701">Tất cả cookie và dữ liệu trang web</translation>
 <translation id="2280486287150724112">Lề phải</translation>
 <translation id="2282146716419988068">Quá trình GPU</translation>
 <translation id="2301382460326681002">Thư mục gốc của tiện ích không hợp lệ.</translation>
@@ -115,7 +112,6 @@
 <translation id="3084548735795614657">Thả để cài đặt</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Tài nguyên NGƯỜI DÙNG</translation>
-<translation id="3127156390846601284">Thao tác này sẽ xóa mọi dữ liệu được lưu trữ trên thiết bị của bạn cho tất cả trang web hiển thị. Bạn có muốn tiếp tục không?</translation>
 <translation id="3129173833825111527">Lề trái</translation>
 <translation id="3144647712221361880">Mở liên kết bằng tài khoản</translation>
 <translation id="3222066309010235055">Trình kết xuất trước: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -133,7 +129,6 @@
 <translation id="3360297538363969800">Không in được. Vui lòng kiểm tra máy in và thử lại.</translation>
 <translation id="3378572629723696641">Tiện ích này có thể đã bị hỏng.</translation>
 <translation id="3387614642886316601">Sử dụng tính năng kiểm tra lỗi chính tả nâng cao</translation>
-<translation id="3432227430032737297">Xóa Tất cả cookie Hiển thị</translation>
 <translation id="345693547134384690">Mở &amp;hình ảnh trong tab mới</translation>
 <translation id="3494769164076977169">Hỏi khi trang web cố gắng tự động tải tệp xuống sau tệp đầu tiên (được đề xuất)</translation>
 <translation id="3505030558724226696">Thu hồi quyền truy cập thiết bị</translation>
@@ -188,7 +183,6 @@
 <translation id="4409697491990005945">Lề</translation>
 <translation id="4423376891418188461">Khôi phục Cài đặt</translation>
 <translation id="4478664379124702289">Lưu Liên &amp;kết Dưới dạng...</translation>
-<translation id="4579581181964204535">Không thể truyền <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">Đ&amp;i đến <ph name="URL" /></translation>
 <translation id="4595560905247879544">Chỉ người quản lý mới có thể sửa đổi ứng dụng và tiện ích (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Tiện ích đã thay đổi trang nào sẽ được hiển thị khi bạn mở một tab mới.</translation>
@@ -254,7 +248,6 @@
 <translation id="5747809636523347288">Dá&amp;n và truy cập <ph name="URL" /></translation>
 <translation id="5759728514498647443">Tài liệu bạn gửi để in qua <ph name="APP_NAME" /> có thể đọc được bằng <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Lư&amp;u âm thanh dưới dạng...</translation>
-<translation id="577624874850706961">Tìm kiếm cookie</translation>
 <translation id="5780973441651030252">Tiến trình ưu tiên</translation>
 <translation id="5804241973901381774">Cấp quyền</translation>
 <translation id="5828633471261496623">Đang in...</translation>
@@ -267,7 +260,6 @@
 <translation id="5965661248935608907">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn nhấp vào nút Trang chủ hoặc tìm kiếm từ Thanh địa chỉ.</translation>
 <translation id="5978277834170881274">&amp;Sử dụng tính năng kiểm tra lỗi chính tả cơ bản</translation>
 <translation id="5979421442488174909">&amp;Dịch sang <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Xóa dữ liệu trang web</translation>
 <translation id="6042308850641462728">Thêm</translation>
 <translation id="6086846494333236931">Được cài đặt bởi quản trị viên của bạn</translation>
 <translation id="6101226222197207147">Đã thêm ứng dụng mới (<ph name="EXTENSION_NAME" />)</translation>
@@ -376,7 +368,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
         =1{Đang tải xuống}other{Đang tải xuống}}</translation>
 <translation id="8230134520748321204">Bạn có muốn lưu mật khẩu cho <ph name="ORIGIN" /> không?</translation>
 <translation id="8261378640211443080">Tiện ích này không được liệt kê trong <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> và có thể đã được thêm mà bạn không biết.</translation>
-<translation id="8339059274628563283"><ph name="SITE" /> đã lưu trữ dữ liệu cục bộ</translation>
 <translation id="8351419472474436977">Tiện ích này đã chiếm quyền kiểm soát cài đặt proxy của bạn, điều đó có nghĩa là tiện ích này có thể thay đổi, làm gián đoạn hoặc nghe trộm bất kỳ điều gì bạn thực hiện trực tuyến. Nếu bạn không chắc chắn về lý do thay đổi này diễn ra, bạn có thể không cần tiện ích này.</translation>
 <translation id="8382913212082956454">Sao chép địa chỉ &amp;email</translation>
 <translation id="8413385045638830869">Hỏi trước (được đề xuất)</translation>

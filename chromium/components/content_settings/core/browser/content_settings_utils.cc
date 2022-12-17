@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/strings/string_split.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 
@@ -182,6 +183,32 @@ bool IsConstraintPersistent(const ContentSettingConstraints& constraints) {
 base::Time GetConstraintExpiration(const base::TimeDelta duration) {
   DCHECK(!duration.is_zero());
   return base::Time::Now() + duration;
+}
+
+bool CanTrackLastVisit(ContentSettingsType type) {
+#if BUILDFLAG(IS_ANDROID)
+  // The notification provider on Android does not support last visit tracking.
+  if (type == ContentSettingsType::NOTIFICATIONS)
+    return false;
+#endif
+  // Protocol handler don't actually use their content setting and don't have
+  // a valid "initial default" value.
+  if (type == ContentSettingsType::PROTOCOL_HANDLERS)
+    return false;
+
+  auto* info =
+      content_settings::ContentSettingsRegistry::GetInstance()->Get(type);
+  return info && info->GetInitialDefaultSetting() == CONTENT_SETTING_ASK;
+}
+
+base::Time GetCoarseTime(base::Time time) {
+  return base::Time::FromDeltaSinceWindowsEpoch(
+      time.ToDeltaSinceWindowsEpoch().FloorToMultiple(
+          GetCoarseTimePrecision()));
+}
+
+base::TimeDelta GetCoarseTimePrecision() {
+  return base::Days(7);
 }
 
 }  // namespace content_settings

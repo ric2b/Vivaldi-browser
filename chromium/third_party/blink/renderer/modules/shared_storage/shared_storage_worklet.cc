@@ -1,9 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/modules/shared_storage/shared_storage_worklet.h"
 
+#include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
 #include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -28,6 +30,7 @@ void SharedStorageWorklet::Trace(Visitor* visitor) const {
 ScriptPromise SharedStorageWorklet::addModule(ScriptState* script_state,
                                               const String& module_url,
                                               ExceptionState& exception_state) {
+  base::TimeTicks start_time = base::TimeTicks::Now();
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   CHECK(execution_context->IsWindow());
 
@@ -74,9 +77,10 @@ ScriptPromise SharedStorageWorklet::addModule(ScriptState* script_state,
   shared_storage_->GetSharedStorageDocumentService(execution_context)
       ->AddModuleOnWorklet(
           script_source_url,
-          WTF::Bind(
+          WTF::BindOnce(
               [](ScriptPromiseResolver* resolver,
-                 SharedStorageWorklet* shared_storage_worklet, bool success,
+                 SharedStorageWorklet* shared_storage_worklet,
+                 base::TimeTicks start_time, bool success,
                  const String& error_message) {
                 DCHECK(resolver);
                 ScriptState* script_state = resolver->GetScriptState();
@@ -91,9 +95,12 @@ ScriptPromise SharedStorageWorklet::addModule(ScriptState* script_state,
                   return;
                 }
 
+                base::UmaHistogramMediumTimes(
+                    "Storage.SharedStorage.Document.Timing.AddModule",
+                    base::TimeTicks::Now() - start_time);
                 resolver->Resolve();
               },
-              WrapPersistent(resolver), WrapPersistent(this)));
+              WrapPersistent(resolver), WrapPersistent(this), start_time));
 
   return promise;
 }

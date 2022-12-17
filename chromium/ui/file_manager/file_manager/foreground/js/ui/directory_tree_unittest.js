@@ -1,11 +1,12 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 import {MockVolumeManager} from '../../../background/js/mock_volume_manager.js';
+import {DialogType} from '../../../common/js/dialog_type.js';
 import {EntryList} from '../../../common/js/files_app_entry_types.js';
 import {metrics} from '../../../common/js/metrics.js';
 import {installMockChrome, MockCommandLinePrivate} from '../../../common/js/mock_chrome.js';
@@ -476,7 +477,7 @@ export function testUpdateSubElementsFromListSections() {
   const androidAppListModel = createFakeAndroidAppListModel(['android:app1']);
   const treeModel = new NavigationListModel(
       volumeManager, shortcutListModel.asFolderShortcutsDataModel(), recentItem,
-      directoryModel, androidAppListModel);
+      directoryModel, androidAppListModel, DialogType.FULL_PAGE);
   const myFilesItem = treeModel.item(0);
   const driveItem = treeModel.item(1);
   const androidAppItem = treeModel.item(2);

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "chrome/browser/autocomplete/in_memory_url_index_factory.h"
 #include "chrome/browser/autocomplete/remote_suggestions_service_factory.h"
 #include "chrome/browser/autocomplete/shortcuts_backend_factory.h"
+#include "chrome/browser/autocomplete/zero_suggest_cache_service_factory.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_service.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -81,9 +82,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
-#include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
+#include "chrome/browser/ui/views/side_panel/history_clusters/history_clusters_side_panel_coordinator.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #endif
 
@@ -180,7 +179,7 @@ history::URLDatabase* ChromeAutocompleteProviderClient::GetInMemoryDatabase() {
 
   // This method is called in unit test contexts where the HistoryService isn't
   // loaded.
-  return history_service ? history_service->InMemoryDatabase() : NULL;
+  return history_service ? history_service->InMemoryDatabase() : nullptr;
 }
 
 InMemoryURLIndex* ChromeAutocompleteProviderClient::GetInMemoryURLIndex() {
@@ -208,6 +207,16 @@ ChromeAutocompleteProviderClient::GetDocumentSuggestionsService(
     bool create_if_necessary) const {
   return DocumentSuggestionsServiceFactory::GetForProfile(profile_,
                                                           create_if_necessary);
+}
+
+ZeroSuggestCacheService*
+ChromeAutocompleteProviderClient::GetZeroSuggestCacheService() {
+  return ZeroSuggestCacheServiceFactory::GetForProfile(profile_);
+}
+
+const ZeroSuggestCacheService*
+ChromeAutocompleteProviderClient::GetZeroSuggestCacheService() const {
+  return ZeroSuggestCacheServiceFactory::GetForProfile(profile_);
 }
 
 OmniboxPedalProvider* ChromeAutocompleteProviderClient::GetPedalProvider()
@@ -464,7 +473,7 @@ void ChromeAutocompleteProviderClient::CloseIncognitoWindows() {
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
 
-bool ChromeAutocompleteProviderClient::OpenJourneys() {
+bool ChromeAutocompleteProviderClient::OpenJourneys(const std::string& query) {
 #if !BUILDFLAG(IS_ANDROID)
   if (!base::FeatureList::IsEnabled(features::kUnifiedSidePanel) ||
       !base::FeatureList::IsEnabled(features::kSidePanelJourneys) ||
@@ -476,16 +485,13 @@ bool ChromeAutocompleteProviderClient::OpenJourneys() {
   if (!browser)
     return false;
 
-  BrowserView* const browser_view =
-      BrowserView::GetBrowserViewForBrowser(browser);
-  if (!browser_view)
-    return false;
-
-  if (browser_view->side_panel_coordinator()) {
-    browser_view->side_panel_coordinator()->Show(
-        SidePanelEntry::Id::kHistoryClusters);
+  if (auto* history_clusters_side_panel_coordinator =
+          HistoryClustersSidePanelCoordinator::BrowserUserData::FromBrowser(
+              browser)) {
+    history_clusters_side_panel_coordinator->Show(query);
     return true;
   }
+
 #endif  // !BUILDFLAG(IS_ANDROID)
 
   return false;

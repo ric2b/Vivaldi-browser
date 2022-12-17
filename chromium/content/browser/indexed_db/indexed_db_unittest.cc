@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/default_clock.h"
-#include "components/services/storage/indexed_db/locks/leveled_lock_manager.h"
+#include "components/services/storage/indexed_db/locks/partitioned_lock_manager.h"
 #include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_database.h"
 #include "components/services/storage/privileged/mojom/indexed_db_control.mojom-test-utils.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
@@ -129,26 +129,27 @@ class IndexedDBTest : public testing::Test,
     InitBucket(kSessionOnlyFirstPartyStorageKey,
                &kSessionOnlyFirstPartyBucketLocator);
 
-    kNormalThirdPartyStorageKey =
-        blink::StorageKey(url::Origin::Create(GURL("http://normal/")),
-                          url::Origin::Create(GURL("http://rando/")));
+    kNormalThirdPartyStorageKey = blink::StorageKey::CreateForTesting(
+        url::Origin::Create(GURL("http://normal/")),
+        url::Origin::Create(GURL("http://rando/")));
     InitBucket(kNormalThirdPartyStorageKey, &kNormalThirdPartyBucketLocator);
 
-    kSessionOnlyThirdPartyStorageKey =
-        blink::StorageKey(url::Origin::Create(GURL("http://session-only/")),
-                          url::Origin::Create(GURL("http://rando/")));
+    kSessionOnlyThirdPartyStorageKey = blink::StorageKey::CreateForTesting(
+        url::Origin::Create(GURL("http://session-only/")),
+        url::Origin::Create(GURL("http://rando/")));
     InitBucket(kSessionOnlyThirdPartyStorageKey,
                &kSessionOnlyThirdPartyBucketLocator);
 
-    kInvertedNormalThirdPartyStorageKey =
-        blink::StorageKey(url::Origin::Create(GURL("http://rando/")),
-                          url::Origin::Create(GURL("http://normal/")));
+    kInvertedNormalThirdPartyStorageKey = blink::StorageKey::CreateForTesting(
+        url::Origin::Create(GURL("http://rando/")),
+        url::Origin::Create(GURL("http://normal/")));
     InitBucket(kInvertedNormalThirdPartyStorageKey,
                &kInvertedNormalThirdPartyBucketLocator);
 
     kInvertedSessionOnlyThirdPartyStorageKey =
-        blink::StorageKey(url::Origin::Create(GURL("http://rando/")),
-                          url::Origin::Create(GURL("http://session-only/")));
+        blink::StorageKey::CreateForTesting(
+            url::Origin::Create(GURL("http://rando/")),
+            url::Origin::Create(GURL("http://session-only/")));
     InitBucket(kInvertedSessionOnlyThirdPartyStorageKey,
                &kInvertedSessionOnlyThirdPartyBucketLocator);
 
@@ -436,9 +437,9 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnDeleteFirstParty) {
 }
 
 TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnDeleteThirdParty) {
-  const blink::StorageKey kTestStorageKey =
-      blink::StorageKey(url::Origin::Create(GURL("http://test/")),
-                        url::Origin::Create(GURL("http://rando/")));
+  const blink::StorageKey kTestStorageKey = blink::StorageKey::CreateForTesting(
+      url::Origin::Create(GURL("http://test/")),
+      url::Origin::Create(GURL("http://rando/")));
   storage::BucketLocator bucket_locator;
   InitBucket(kTestStorageKey, &bucket_locator);
 
@@ -523,9 +524,9 @@ TEST_P(IndexedDBTest, DeleteFailsIfDirectoryLockedFirstParty) {
 }
 
 TEST_P(IndexedDBTest, DeleteFailsIfDirectoryLockedThirdParty) {
-  const blink::StorageKey kTestStorageKey =
-      blink::StorageKey(url::Origin::Create(GURL("http://test/")),
-                        url::Origin::Create(GURL("http://rando/")));
+  const blink::StorageKey kTestStorageKey = blink::StorageKey::CreateForTesting(
+      url::Origin::Create(GURL("http://test/")),
+      url::Origin::Create(GURL("http://rando/")));
   auto bucket_locator = storage::BucketLocator();
   bucket_locator.id = storage::BucketId::FromUnsafeValue(5);
   bucket_locator.storage_key = kTestStorageKey;
@@ -591,9 +592,9 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailureFirstParty) {
 }
 
 TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailureThirdParty) {
-  const blink::StorageKey kTestStorageKey =
-      blink::StorageKey(url::Origin::Create(GURL("http://test/")),
-                        url::Origin::Create(GURL("http://rando/")));
+  const blink::StorageKey kTestStorageKey = blink::StorageKey::CreateForTesting(
+      url::Origin::Create(GURL("http://test/")),
+      url::Origin::Create(GURL("http://rando/")));
   auto bucket_locator = storage::BucketLocator();
   bucket_locator.id = storage::BucketId::FromUnsafeValue(5);
   bucket_locator.storage_key = kTestStorageKey;
@@ -608,8 +609,8 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailureThirdParty) {
   auto create_transaction_callback1 =
       base::BindOnce(&CreateAndBindTransactionPlaceholder);
   auto connection = std::make_unique<IndexedDBPendingConnection>(
-      callbacks, db_callbacks,
-      transaction_id, IndexedDBDatabaseMetadata::DEFAULT_VERSION,
+      callbacks, db_callbacks, transaction_id,
+      IndexedDBDatabaseMetadata::DEFAULT_VERSION,
       std::move(create_transaction_callback1));
   factory->Open(u"db", std::move(connection), bucket_locator,
                 context()->GetDataPath(bucket_locator));
@@ -630,11 +631,11 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailureThirdParty) {
   EXPECT_FALSE(factory->IsBackingStoreOpen(bucket_locator));
 }
 
-TEST(LeveledLockManager, TestRangeDifferences) {
-  LeveledLockRange range_db1;
-  LeveledLockRange range_db2;
-  LeveledLockRange range_db1_os1;
-  LeveledLockRange range_db1_os2;
+TEST(PartitionedLockManager, TestRangeDifferences) {
+  PartitionedLockRange range_db1;
+  PartitionedLockRange range_db2;
+  PartitionedLockRange range_db1_os1;
+  PartitionedLockRange range_db1_os2;
   for (int64_t i = 0; i < 512; ++i) {
     range_db1 = GetDatabaseLockRange(i);
     range_db2 = GetDatabaseLockRange(i + 1);

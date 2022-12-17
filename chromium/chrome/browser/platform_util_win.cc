@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -153,7 +153,7 @@ void PlatformOpenVerifiedItem(const base::FilePath& path, OpenItemType type) {
 
 }  // namespace internal
 
-void OpenExternal(Profile* profile, const GURL& url) {
+void OpenExternal(const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   base::ThreadPool::CreateCOMSTATaskRunner(

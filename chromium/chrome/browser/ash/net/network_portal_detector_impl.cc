@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,11 +14,14 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/branding_buildflags.h"
+#include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chromeos/ash/components/dbus/shill/shill_profile_client.h"
 #include "chromeos/ash/components/network/network_event_log.h"
+#include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/login/login_state/login_state.h"
 #include "content/public/browser/notification_service.h"
@@ -43,8 +46,7 @@ constexpr int kProxyChangeDelaySec = 1;
 // Timeout for attempts.
 constexpr base::TimeDelta kAttemptTimeout = base::Seconds(15);
 
-// Maximum number of reports from captive portal detector about
-// offline state in a row before notification is sent to observers.
+// Number of unknown or offline results before stopping chrome detection.
 constexpr int kMaxOfflineResultsBeforeReport = 3;
 
 const NetworkState* DefaultNetwork() {
@@ -85,7 +87,6 @@ NetworkPortalDetectorImpl::NetworkPortalDetectorImpl(
 
   network_state_handler_observer_.Observe(
       NetworkHandler::Get()->network_state_handler());
-  StartPortalDetection();
 }
 
 NetworkPortalDetectorImpl::~NetworkPortalDetectorImpl() {
@@ -97,30 +98,6 @@ NetworkPortalDetectorImpl::~NetworkPortalDetectorImpl() {
 
   captive_portal_detector_->Cancel();
   captive_portal_detector_.reset();
-  observers_.Clear();
-  for (auto& observer : observers_)
-    observer.OnShutdown();
-}
-
-void NetworkPortalDetectorImpl::AddObserver(Observer* observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (observer && !observers_.HasObserver(observer))
-    observers_.AddObserver(observer);
-}
-
-void NetworkPortalDetectorImpl::AddAndFireObserver(Observer* observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!observer)
-    return;
-  AddObserver(observer);
-  observer->OnPortalDetectionCompleted(DefaultNetwork(),
-                                       GetCaptivePortalStatus());
-}
-
-void NetworkPortalDetectorImpl::RemoveObserver(Observer* observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (observer)
-    observers_.RemoveObserver(observer);
 }
 
 bool NetworkPortalDetectorImpl::IsEnabled() {
@@ -132,32 +109,31 @@ void NetworkPortalDetectorImpl::Enable() {
   if (enabled_)
     return;
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  if (!StartupUtils::IsEulaAccepted()) {
+    NET_LOG(EVENT) << "NetworkPortalDetector: Eula not accepted.";
+    return;
+  }
+#endif
+
   NET_LOG(EVENT) << "NetworkPortalDetector Enabled.";
   DCHECK(is_idle());
   enabled_ = true;
+
+  // Ensure that Shill portal detection is enabled.
+  NetworkHandler::Get()->network_state_handler()->SetCheckPortalList(
+      NetworkStateHandler::kDefaultCheckPortalList);
 
   const NetworkState* network = DefaultNetwork();
   if (!network)
     return;
   SetNetworkPortalState(network, NetworkState::PortalState::kUnknown);
-  StartDetection();
 }
 
 NetworkPortalDetector::CaptivePortalStatus
 NetworkPortalDetectorImpl::GetCaptivePortalStatus() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return default_portal_status_;
-}
-
-void NetworkPortalDetectorImpl::StartPortalDetection() {
-  if (!is_idle())
-    return;
-  const NetworkState* network = DefaultNetwork();
-  if (!network) {
-    NET_LOG(ERROR) << "StartPortalDetection called with no default network.";
-    return;
-  }
-  StartDetection();
 }
 
 void NetworkPortalDetectorImpl::PortalStateChanged(
@@ -227,14 +203,6 @@ void NetworkPortalDetectorImpl::OnShuttingDown() {
 ////////////////////////////////////////////////////////////////////////////////
 // NetworkPortalDetectorImpl, private:
 
-void NetworkPortalDetectorImpl::StartDetection() {
-  NET_LOG(EVENT) << "StartDetection";
-
-  ResetCountersAndSendMetrics();
-  default_portal_status_ = CAPTIVE_PORTAL_STATUS_UNKNOWN;
-  ScheduleAttempt();
-}
-
 void NetworkPortalDetectorImpl::StopDetection() {
   if (is_idle())
     return;
@@ -278,9 +246,19 @@ void NetworkPortalDetectorImpl::StartAttempt() {
 
   state_ = STATE_CHECKING_FOR_PORTAL;
 
-  NET_LOG(EVENT) << "Starting captive portal detection.";
+  const NetworkState* default_network = DefaultNetwork();
+  if (!default_network) {
+    NET_LOG(EVENT) << "Start attempt called with no default network, aborting.";
+    return;
+  }
+
+  GURL url = default_network->probe_url();
+  if (url.is_empty())
+    url = GURL(captive_portal::CaptivePortalDetector::kDefaultURL);
+  NET_LOG(EVENT) << "Starting captive portal detection for: "
+                 << NetworkId(default_network) << " Probe url: " << url;
   captive_portal_detector_->DetectCaptivePortal(
-      GURL(CaptivePortalDetector::kDefaultURL),
+      url,
       base::BindOnce(&NetworkPortalDetectorImpl::OnAttemptCompleted,
                      weak_factory_.GetWeakPtr()),
       NO_TRAFFIC_ANNOTATION_YET);
@@ -449,9 +427,10 @@ void NetworkPortalDetectorImpl::DetectionCompleted(
     // Note: setting an unknown portal state will ignore the Chrome result and
     // fall back to the Shill result.
     SetNetworkPortalState(network, portal_state);
+
+    base::UmaHistogramBoolean("Network.NetworkPortalDetectorHasProxy",
+                              !network->proxy_config().is_none());
   }
-  for (auto& observer : observers_)
-    observer.OnPortalDetectionCompleted(network, status);
 
   ResetCountersAndSendMetrics();
 }
@@ -470,6 +449,11 @@ void NetworkPortalDetectorImpl::ResetCountersAndSendMetrics() {
 
 bool NetworkPortalDetectorImpl::AttemptTimeoutIsCancelledForTesting() const {
   return attempt_timeout_task_.IsCancelled();
+}
+
+void NetworkPortalDetectorImpl::StartDetectionForTesting() {
+  default_portal_status_ = CAPTIVE_PORTAL_STATUS_UNKNOWN;
+  ScheduleAttempt();
 }
 
 }  // namespace ash

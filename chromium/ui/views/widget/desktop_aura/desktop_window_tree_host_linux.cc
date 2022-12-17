@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/null_window_targeter.h"
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/window.h"
@@ -189,10 +190,11 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
     ui::LocatedEvent* located_event = event->AsLocatedEvent();
     if (GetContentWindow() && GetContentWindow()->delegate()) {
       int flags = located_event->flags();
-      gfx::Point location_in_dip = located_event->location();
-      GetRootTransform().TransformPointReverse(&location_in_dip);
+      gfx::PointF location = located_event->location_f();
+      gfx::PointF location_in_dip =
+          GetRootTransform().InverseMapPoint(location).value_or(location);
       hit_test_code = GetContentWindow()->delegate()->GetNonClientComponent(
-          location_in_dip);
+          gfx::ToRoundedPoint(location_in_dip));
       if (hit_test_code != HTCLIENT && hit_test_code != HTNOWHERE)
         flags |= ui::EF_IS_NON_CLIENT;
       located_event->set_flags(flags);
@@ -285,9 +287,6 @@ gfx::Rect DesktopWindowTreeHostLinux::GetGuessedFullScreenSizeInPx() const {
 void DesktopWindowTreeHostLinux::AddAdditionalInitProperties(
     const Widget::InitParams& params,
     ui::PlatformWindowInitProperties* properties) {
-  const ui::LinuxUi* linux_ui = ui::LinuxUi::instance();
-  properties->prefer_dark_theme = linux_ui && linux_ui->PreferDarkTheme();
-
   // Set the background color on startup to make the initial flickering
   // happening between the XWindow is mapped and the first expose event
   // is completely handled less annoying. If possible, we use the content

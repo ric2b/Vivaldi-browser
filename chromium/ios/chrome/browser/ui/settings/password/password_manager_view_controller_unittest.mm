@@ -1,53 +1,53 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/settings/password/password_manager_view_controller.h"
 
-#include "base/bind.h"
-#include "base/compiler_specific.h"
-#include "base/strings/string_piece.h"
-#include "base/strings/sys_string_conversions.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/test/bind.h"
+#import "base/bind.h"
+#import "base/compiler_specific.h"
+#import "base/strings/string_piece.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/strings/utf_string_conversions.h"
+#import "base/test/bind.h"
 #import "base/test/ios/wait_util.h"
-#include "base/test/scoped_feature_list.h"
-#include "components/keyed_service/core/service_access_type.h"
-#include "components/password_manager/core/browser/mock_bulk_leak_check_service.h"
-#include "components/password_manager/core/browser/password_form.h"
-#include "components/password_manager/core/browser/password_manager_test_utils.h"
-#include "components/password_manager/core/browser/test_password_store.h"
-#include "components/password_manager/core/common/password_manager_features.h"
-#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "base/test/scoped_feature_list.h"
+#import "components/keyed_service/core/service_access_type.h"
+#import "components/password_manager/core/browser/mock_bulk_leak_check_service.h"
+#import "components/password_manager/core/browser/password_form.h"
+#import "components/password_manager/core/browser/password_manager_test_utils.h"
+#import "components/password_manager/core/browser/test_password_store.h"
+#import "components/password_manager/core/common/password_manager_features.h"
+#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
-#include "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
-#include "ios/chrome/browser/main/test_browser.h"
-#include "ios/chrome/browser/passwords/ios_chrome_bulk_leak_check_service_factory.h"
-#include "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
-#include "ios/chrome/browser/passwords/ios_chrome_password_check_manager_factory.h"
-#include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
-#include "ios/chrome/browser/passwords/password_check_observer_bridge.h"
-#include "ios/chrome/browser/passwords/save_passwords_consumer.h"
+#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/main/test_browser.h"
+#import "ios/chrome/browser/passwords/ios_chrome_bulk_leak_check_service_factory.h"
+#import "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
+#import "ios/chrome/browser/passwords/ios_chrome_password_check_manager_factory.h"
+#import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/passwords/password_check_observer_bridge.h"
+#import "ios/chrome/browser/passwords/save_passwords_consumer.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_check_item.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_consumer.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_mediator.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_table_view_constants.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_text_item.h"
-#include "ios/chrome/browser/ui/table_view/chrome_table_view_controller_test.h"
+#import "ios/chrome/browser/ui/table_view/chrome_table_view_controller_test.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
-#include "ios/chrome/grit/ios_chromium_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/sync_test_util.h"
-#include "ios/chrome/test/scoped_key_window.h"
-#include "ios/web/public/test/web_task_environment.h"
-#include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gtest/include/gtest/gtest.h"
-#include "testing/gtest_mac.h"
-#include "testing/platform_test.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ios/chrome/test/scoped_key_window.h"
+#import "ios/web/public/test/web_task_environment.h"
+#import "testing/gmock/include/gmock/gmock.h"
+#import "testing/gtest/include/gtest/gtest.h"
+#import "testing/gtest_mac.h"
+#import "testing/platform_test.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -342,10 +342,6 @@ TEST_F(PasswordManagerViewControllerTest, AddSavedAndBlocked) {
 
 // Tests the order in which the saved passwords are displayed.
 TEST_F(PasswordManagerViewControllerTest, TestSavedPasswordsOrder) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      password_manager::features::kEnableFaviconForPasswords);
-
   AddSavedForm2();
 
   CheckURLCellTitleAndDetailText(
@@ -363,10 +359,6 @@ TEST_F(PasswordManagerViewControllerTest, TestSavedPasswordsOrder) {
 
 // Tests the order in which the blocked passwords are displayed.
 TEST_F(PasswordManagerViewControllerTest, TestBlockedPasswordsOrder) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      password_manager::features::kEnableFaviconForPasswords);
-
   AddBlockedForm2();
   CheckURLCellEmptyTitle(@"secret2.com",
                          GetSectionIndex(SectionIdentifierSavedPasswords), 0);
@@ -382,6 +374,10 @@ TEST_F(PasswordManagerViewControllerTest, TestBlockedPasswordsOrder) {
 // TODO(crbug.com/1300569): Remove this when kEnableFaviconForPasswords flag is
 // removed.
 TEST_F(PasswordManagerViewControllerTest, TestSavedPasswordsOrderLegacy) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      password_manager::features::kEnableFaviconForPasswords);
+
   AddSavedForm2();
 
   CheckTextCellTextAndDetailText(
@@ -401,6 +397,10 @@ TEST_F(PasswordManagerViewControllerTest, TestSavedPasswordsOrderLegacy) {
 // TODO(crbug.com/1300569): Remove this when kEnableFaviconForPasswords flag is
 // removed.
 TEST_F(PasswordManagerViewControllerTest, TestBlockedPasswordsOrderLegacy) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      password_manager::features::kEnableFaviconForPasswords);
+
   AddBlockedForm2();
   CheckTextCellText(@"secret2.com",
                     GetSectionIndex(SectionIdentifierSavedPasswords), 0);
@@ -716,7 +716,7 @@ TEST_F(PasswordManagerViewControllerTest, FilterItems) {
                    GetSectionIndex(SectionIdentifierSavedPasswords)));
   EXPECT_EQ(0,
             NumberOfItemsInSection(GetSectionIndex(SectionIdentifierBlocked)));
-  CheckTextCellTextAndDetailText(
+  CheckURLCellTitleAndDetailText(
       @"example.com", @"test@egmail.com",
       GetSectionIndex(SectionIdentifierSavedPasswords), 0);
 
@@ -726,10 +726,10 @@ TEST_F(PasswordManagerViewControllerTest, FilterItems) {
                    GetSectionIndex(SectionIdentifierSavedPasswords)));
   EXPECT_EQ(0,
             NumberOfItemsInSection(GetSectionIndex(SectionIdentifierBlocked)));
-  CheckTextCellTextAndDetailText(
+  CheckURLCellTitleAndDetailText(
       @"example.com", @"test@egmail.com",
       GetSectionIndex(SectionIdentifierSavedPasswords), 0);
-  CheckTextCellTextAndDetailText(
+  CheckURLCellTitleAndDetailText(
       @"example2.com", @"test@egmail.com",
       GetSectionIndex(SectionIdentifierSavedPasswords), 1);
 
@@ -739,10 +739,10 @@ TEST_F(PasswordManagerViewControllerTest, FilterItems) {
                    GetSectionIndex(SectionIdentifierSavedPasswords)));
   EXPECT_EQ(2,
             NumberOfItemsInSection(GetSectionIndex(SectionIdentifierBlocked)));
-  CheckTextCellText(@"secret.com", GetSectionIndex(SectionIdentifierBlocked),
-                    0);
-  CheckTextCellText(@"secret2.com", GetSectionIndex(SectionIdentifierBlocked),
-                    1);
+  CheckURLCellEmptyTitle(@"secret.com",
+                         GetSectionIndex(SectionIdentifierBlocked), 0);
+  CheckURLCellEmptyTitle(@"secret2.com",
+                         GetSectionIndex(SectionIdentifierBlocked), 1);
 
   [passwords_controller searchBar:bar textDidChange:@""];
   // All items should be back.

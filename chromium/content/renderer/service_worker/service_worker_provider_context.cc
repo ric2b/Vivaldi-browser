@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -103,6 +103,15 @@ ServiceWorkerProviderContext::GetSubresourceLoaderFactoryInternal() {
   if (controller_mode_ !=
       blink::mojom::ControllerServiceWorkerMode::kControlled) {
     // The controller does not exist or has no fetch event handler.
+    return nullptr;
+  }
+
+  if (effective_fetch_handler_type_ !=
+      blink::mojom::ServiceWorkerFetchHandlerType::kNotSkippable) {
+    // The fetch handler can be skipped.  The service worker process should
+    // not be ready for this case.
+    CountFeature(
+        blink::mojom::WebFeature::kServiceWorkerSkippedForSubresourceLoad);
     return nullptr;
   }
 
@@ -314,6 +323,7 @@ void ServiceWorkerProviderContext::SetController(
           controller_));
   controller_mode_ = controller_info->mode;
   fetch_handler_type_ = controller_info->fetch_handler_type;
+  effective_fetch_handler_type_ = controller_info->effective_fetch_handler_type;
   remote_controller_ = std::move(controller_info->remote_controller);
 
   // Propagate the controller to workers related to this provider.

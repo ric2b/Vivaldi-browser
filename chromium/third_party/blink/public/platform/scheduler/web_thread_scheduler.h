@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@
 #include "third_party/blink/public/platform/web_common.h"
 
 namespace blink {
-class Thread;
+class MainThread;
 }  // namespace blink
 
 namespace blink {
@@ -59,7 +59,7 @@ class BLINK_PLATFORM_EXPORT WebThreadScheduler {
   DeprecatedDefaultTaskRunner();
 
   // Creates a WebThread implementation for the renderer main thread.
-  virtual std::unique_ptr<Thread> CreateMainThread();
+  virtual std::unique_ptr<MainThread> CreateMainThread();
 
   // Creates a WebAgentGroupScheduler implementation. Must be called from the
   // main thread.

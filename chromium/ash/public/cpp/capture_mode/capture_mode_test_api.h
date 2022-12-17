@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 #define ASH_PUBLIC_CPP_CAPTURE_MODE_CAPTURE_MODE_TEST_API_H_
 
 #include "ash/ash_export.h"
+#include "ash/capture_mode/capture_mode_types.h"
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
@@ -22,6 +23,10 @@ namespace media {
 class VideoFrame;
 }  // namespace media
 
+namespace views {
+class Widget;
+}  // namespace views
+
 namespace ash {
 
 class CaptureModeController;
@@ -37,12 +42,15 @@ class ASH_EXPORT CaptureModeTestApi {
   ~CaptureModeTestApi() = default;
 
   // APIs to start capture mode from the three possible sources (fullscreen,
-  // window, or region). If |for_video| is true, a video will be recorded from
+  // window, or region). If `for_video` is true, a video will be recorded from
   // the chosen source once capture begins, otherwise an image will be
   // captured.
   void StartForFullscreen(bool for_video);
   void StartForWindow(bool for_video);
   void StartForRegion(bool for_video);
+
+  // API to set the capture mode source with given `source`.
+  void SetCaptureModeSource(CaptureModeSource source);
 
   // Returns true if a capture mode session is currently active.
   bool IsSessionActive() const;
@@ -99,6 +107,10 @@ class ASH_EXPORT CaptureModeTestApi {
   // only be called before recording starts, otherwise it has no effect.
   void SetAudioRecordingEnabled(bool enabled);
 
+  // Returns the effective enabled state of audio recording which takes into
+  // account the `AudioCaptureAllowed` policy.
+  bool GetAudioRecordingEnabled() const;
+
   // Flushes the recording service pipe synchronously. Can only be called while
   // recording is in progress.
   void FlushRecordingServiceForTesting();
@@ -137,6 +149,9 @@ class ASH_EXPORT CaptureModeTestApi {
   using CameraVideoFrameCallback =
       base::OnceCallback<void(scoped_refptr<media::VideoFrame>)>;
   void SetOnCameraVideoFrameRendered(CameraVideoFrameCallback callback);
+
+  // Returns the camera preview widget if exists and nullptr otherwise.
+  views::Widget* GetCameraPreviewWidget();
 
  private:
   // Sets the capture mode type to a video capture if |for_video| is true, or

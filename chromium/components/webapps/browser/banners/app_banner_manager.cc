@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -136,6 +136,25 @@ class NullStatusReporter : public AppBannerManager::StatusReporter {
   }
 };
 
+void TrackBeforeInstallEventPrompt(AppBannerManager::State state) {
+  switch (state) {
+    case AppBannerManager::State::SENDING_EVENT_GOT_EARLY_PROMPT:
+      TrackBeforeInstallEvent(BEFORE_INSTALL_EVENT_EARLY_PROMPT);
+      break;
+    case AppBannerManager::State::PENDING_PROMPT_CANCELED:
+      TrackBeforeInstallEvent(
+          BEFORE_INSTALL_EVENT_PROMPT_CALLED_AFTER_PREVENT_DEFAULT);
+      break;
+    case AppBannerManager::State::PENDING_PROMPT_NOT_CANCELED:
+      TrackBeforeInstallEvent(BEFORE_INSTALL_EVENT_PROMPT_CALLED_NOT_CANCELED);
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  TrackBeforeInstallEvent(
+      BEFORE_INSTALL_EVENT_PROMPT_CALLED_AFTER_PREVENT_DEFAULT);
+}
 }  // anonymous namespace
 
 // static
@@ -334,10 +353,12 @@ bool AppBannerManager::DidRetryInstallableManagerRequest(
     case State::INACTIVE:
     case State::ACTIVE:
     case State::FETCHING_NATIVE_DATA:
+    case State::PENDING_WORKER:
     case State::PENDING_ENGAGEMENT:
     case State::SENDING_EVENT:
     case State::SENDING_EVENT_GOT_EARLY_PROMPT:
-    case State::PENDING_PROMPT:
+    case State::PENDING_PROMPT_CANCELED:
+    case State::PENDING_PROMPT_NOT_CANCELED:
     case State::COMPLETE:
       NOTREACHED();
       return false;
@@ -358,6 +379,7 @@ void AppBannerManager::OnDidGetManifest(const InstallableData& data) {
 
   manifest_url_ = data.manifest_url;
   manifest_ = data.manifest.Clone();
+  manifest_id_ = blink::GetIdFromManifest(manifest());
 
   PerformInstallableChecks();
 }
@@ -366,9 +388,15 @@ InstallableParams AppBannerManager::ParamsToPerformInstallableWebAppCheck() {
   InstallableParams params;
   params.valid_primary_icon = true;
   params.valid_manifest = true;
-  params.has_worker = !features::SkipBannerServiceWorkerCheck();
-  params.wait_for_worker = !features::SkipBannerServiceWorkerCheck();
   params.fetch_screenshots = true;
+
+  return params;
+}
+
+InstallableParams AppBannerManager::ParamsToPerformWorkerCheck() {
+  InstallableParams params;
+  params.has_worker = true;
+  params.wait_for_worker = true;
 
   return params;
 }
@@ -395,28 +423,10 @@ void AppBannerManager::OnDidPerformInstallableWebAppCheck(
     return;
 
   UpdateState(State::ACTIVE);
-  if (data.worker_check_passed && data.valid_manifest)
+  if (data.valid_manifest)
     TrackDisplayEvent(DISPLAY_EVENT_WEB_APP_BANNER_REQUESTED);
 
-  bool no_matching_service_worker =
-      base::Contains(data.errors, NO_MATCHING_SERVICE_WORKER);
-  if (no_matching_service_worker) {
-    TrackDisplayEvent(DISPLAY_EVENT_LACKS_SERVICE_WORKER);
-  }
-
   bool is_installable = data.NoBlockingErrors();
-
-  // When |features::SkipInstallServiceWorkerCheck| is true, a service worker is
-  // still required to display the banner prompt. This would mean that while a
-  // banner may not appear, the site is still considered installable if it only
-  // failed service worker checks.
-  bool worker_errors_ignored_for_installs = false;
-  if (features::SkipInstallServiceWorkerCheck() &&
-      data.HasErrorOnlyServiceWorkerErrors()) {
-    DCHECK(!is_installable);
-    worker_errors_ignored_for_installs = true;
-    is_installable = true;
-  }
 
   if (!is_installable) {
     DCHECK(!data.errors.empty());
@@ -440,27 +450,7 @@ void AppBannerManager::OnDidPerformInstallableWebAppCheck(
     return;
   }
 
-  if (no_matching_service_worker &&
-      base::FeatureList::IsEnabled(features::kCreateShortcutIgnoresManifest)) {
-    SetInstallableWebAppCheckResult(
-        InstallableWebAppCheckResult::kYes_ByUserRequest);
-    Stop(NO_MATCHING_SERVICE_WORKER);
-    return;
-  }
-
-  if (worker_errors_ignored_for_installs) {
-    DCHECK(data.HasErrorOnlyServiceWorkerErrors());
-
-    SetInstallableWebAppCheckResult(
-        InstallableWebAppCheckResult::kYes_ByUserRequest);
-    Stop(SERVICE_WORKER_NOT_REQUIRED);
-    return;
-  }
-
-  SetInstallableWebAppCheckResult(
-      InstallableWebAppCheckResult::kYes_Promotable);
-
-  DCHECK(data.worker_check_passed && data.valid_manifest);
+  DCHECK(data.valid_manifest);
   DCHECK(!data.primary_icon_url.is_empty());
   DCHECK(data.primary_icon);
 
@@ -468,10 +458,55 @@ void AppBannerManager::OnDidPerformInstallableWebAppCheck(
   primary_icon_ = *data.primary_icon;
   has_maskable_primary_icon_ = data.has_maskable_primary_icon;
   screenshots_ = data.screenshots;
-  // If we triggered the installability check on page load, then it's possible
-  // we don't have enough engagement yet. If that's the case, return here but
-  // don't call Terminate(). We wait for OnEngagementEvent to tell us that we
-  // should trigger.
+
+  if (features::SkipInstallServiceWorkerCheck() ||
+      base::FeatureList::IsEnabled(features::kCreateShortcutIgnoresManifest)) {
+    SetInstallableWebAppCheckResult(
+        InstallableWebAppCheckResult::kYes_ByUserRequest);
+  }
+
+  if (features::SkipServiceWorkerForInstallPromotion()) {
+    PerformWorkerCheckForAmbientBadge();
+
+    SetInstallableWebAppCheckResult(
+        InstallableWebAppCheckResult::kYes_Promotable);
+    CheckSufficientEngagement();
+    return;
+  }
+
+  PerformServiceWorkerCheck();
+}
+
+void AppBannerManager::PerformServiceWorkerCheck() {
+  UpdateState(State::PENDING_WORKER);
+  manager_->GetData(
+      ParamsToPerformWorkerCheck(),
+      base::BindOnce(&AppBannerManager::OnDidPerformWorkerCheck, GetWeakPtr()));
+}
+
+void AppBannerManager::OnDidPerformWorkerCheck(const InstallableData& data) {
+  if (!data.NoBlockingErrors()) {
+    TrackDisplayEvent(DISPLAY_EVENT_LACKS_SERVICE_WORKER);
+    Stop(data.FirstNoBlockingError());
+    return;
+  }
+
+  passed_worker_check_ = true;
+
+  if (state_ == State::PENDING_WORKER) {
+    UpdateState(State::ACTIVE);
+
+    SetInstallableWebAppCheckResult(
+        InstallableWebAppCheckResult::kYes_Promotable);
+    CheckSufficientEngagement();
+  }
+}
+
+void AppBannerManager::CheckSufficientEngagement() {
+  // If we triggered the installability check on page load, then it's
+  // possible we don't have enough engagement yet. If that's the case,
+  // return here but don't call Terminate(). We wait for OnEngagementEvent
+  // to tell us that we should trigger.
   if (!HasSufficientEngagement()) {
     UpdateState(State::PENDING_ENGAGEMENT);
     return;
@@ -479,6 +514,11 @@ void AppBannerManager::OnDidPerformInstallableWebAppCheck(
 
   SendBannerPromptRequest();
 }
+
+void AppBannerManager::PerformWorkerCheckForAmbientBadge() {}
+
+void AppBannerManager::OnDidPerformWorkerCheckForAmbientBadge(
+    const InstallableData& data) {}
 
 void AppBannerManager::RecordDidShowBanner() {
   content::WebContents* contents = web_contents();
@@ -505,6 +545,7 @@ void AppBannerManager::ResetCurrentPageData() {
   active_media_players_.clear();
   manifest_ = blink::mojom::Manifest::New();
   manifest_url_ = GURL();
+  manifest_id_ = GURL();
   validated_url_ = GURL();
   UpdateState(State::INACTIVE);
   SetInstallableWebAppCheckResult(InstallableWebAppCheckResult::kUnknown);
@@ -513,21 +554,38 @@ void AppBannerManager::ResetCurrentPageData() {
 }
 
 void AppBannerManager::Terminate() {
-  if (state_ == State::PENDING_PROMPT) {
-    TrackBeforeInstallEvent(
-        BEFORE_INSTALL_EVENT_PROMPT_NOT_CALLED_AFTER_PREVENT_DEFAULT);
+  switch (state_) {
+    case State::PENDING_PROMPT_CANCELED:
+      TrackBeforeInstallEvent(
+          BEFORE_INSTALL_EVENT_PROMPT_NOT_CALLED_AFTER_PREVENT_DEFAULT);
+      break;
+    case State::PENDING_PROMPT_NOT_CANCELED:
+      TrackBeforeInstallEvent(
+          BEFORE_INSTALL_EVENT_PROMPT_NOT_CALLED_NOT_CANCELLED);
+      break;
+    case State::PENDING_WORKER:
+      if (!passed_worker_check_)
+        TrackDisplayEvent(DISPLAY_EVENT_LACKS_SERVICE_WORKER);
+      break;
+    case State::PENDING_ENGAGEMENT:
+      if (!has_sufficient_engagement_)
+        TrackDisplayEvent(DISPLAY_EVENT_NOT_VISITED_ENOUGH);
+      break;
+    default:
+      break;
   }
-
-  if (state_ == State::PENDING_ENGAGEMENT && !has_sufficient_engagement_)
-    TrackDisplayEvent(DISPLAY_EVENT_NOT_VISITED_ENOUGH);
 
   Stop(TerminationCode());
 }
 
 InstallableStatusCode AppBannerManager::TerminationCode() const {
   switch (state_) {
-    case State::PENDING_PROMPT:
+    case State::PENDING_PROMPT_CANCELED:
+    case State::PENDING_PROMPT_NOT_CANCELED:
       return RENDERER_CANCELLED;
+    case State::PENDING_WORKER:
+      return passed_worker_check_ ? NO_ERROR_DETECTED
+                                  : NO_MATCHING_SERVICE_WORKER;
     case State::PENDING_ENGAGEMENT:
       return has_sufficient_engagement_ ? NO_ERROR_DETECTED
                                         : INSUFFICIENT_ENGAGEMENT;
@@ -726,10 +784,12 @@ void AppBannerManager::DidUpdateWebManifestURL(
       return;
     case State::ACTIVE:
     case State::FETCHING_NATIVE_DATA:
+    case State::PENDING_WORKER:
     case State::PENDING_ENGAGEMENT:
     case State::SENDING_EVENT:
     case State::SENDING_EVENT_GOT_EARLY_PROMPT:
-    case State::PENDING_PROMPT:
+    case State::PENDING_PROMPT_CANCELED:
+    case State::PENDING_PROMPT_NOT_CANCELED:
       Terminate();
       [[fallthrough]];
     case State::COMPLETE:
@@ -790,7 +850,8 @@ void AppBannerManager::OnEngagementEvent(
 bool AppBannerManager::IsRunning() const {
   switch (state_) {
     case State::INACTIVE:
-    case State::PENDING_PROMPT:
+    case State::PENDING_PROMPT_CANCELED:
+    case State::PENDING_PROMPT_NOT_CANCELED:
     case State::PENDING_ENGAGEMENT:
     case State::COMPLETE:
       return false;
@@ -798,6 +859,7 @@ bool AppBannerManager::IsRunning() const {
     case State::FETCHING_MANIFEST:
     case State::FETCHING_NATIVE_DATA:
     case State::PENDING_INSTALLABLE_CHECK:
+    case State::PENDING_WORKER:
     case State::SENDING_EVENT:
     case State::SENDING_EVENT_GOT_EARLY_PROMPT:
       return true;
@@ -821,7 +883,22 @@ std::u16string AppBannerManager::GetInstallableWebAppName(
       return manager->GetAppName();
   }
 }
-
+// static
+std::string AppBannerManager::GetInstallableWebAppManifestId(
+    content::WebContents* web_contents) {
+  AppBannerManager* manager = FromWebContents(web_contents);
+  if (!manager)
+    return std::string();
+  switch (manager->installable_web_app_check_result_) {
+    case InstallableWebAppCheckResult::kUnknown:
+    case InstallableWebAppCheckResult::kNo:
+    case InstallableWebAppCheckResult::kNo_AlreadyInstalled:
+      return std::string();
+    case InstallableWebAppCheckResult::kYes_ByUserRequest:
+    case InstallableWebAppCheckResult::kYes_Promotable:
+      return manager->manifest_id_.spec();
+  }
+}
 bool AppBannerManager::IsProbablyPromotableWebApp(
     bool ignore_existing_installations) const {
   bool in_promotable_scope =
@@ -919,9 +996,12 @@ void AppBannerManager::OnBannerPromptReply(
   }
 
   if (state_ == State::SENDING_EVENT) {
-    if (!event_canceled)
+    if (!event_canceled) {
       MaybeShowAmbientBadge();
-    UpdateState(State::PENDING_PROMPT);
+      UpdateState(State::PENDING_PROMPT_NOT_CANCELED);
+    } else {
+      UpdateState(State::PENDING_PROMPT_CANCELED);
+    }
     return;
   }
 
@@ -939,8 +1019,8 @@ void AppBannerManager::ShowBanner() {
   content::WebContents* contents = web_contents();
   WebappInstallSource install_source;
 
-  TrackBeforeInstallEvent(
-      BEFORE_INSTALL_EVENT_PROMPT_CALLED_AFTER_PREVENT_DEFAULT);
+  TrackBeforeInstallEventPrompt(state_);
+
   install_source =
       status_reporter_->GetInstallSource(contents, InstallTrigger::API);
 
@@ -969,7 +1049,8 @@ void AppBannerManager::DisplayAppBanner() {
   // Prevent this from being called multiple times on the same connection.
   receiver_.reset();
 
-  if (state_ == State::PENDING_PROMPT) {
+  if (state_ == State::PENDING_PROMPT_CANCELED ||
+      state_ == State::PENDING_PROMPT_NOT_CANCELED) {
     ShowBanner();
   } else if (state_ == State::SENDING_EVENT) {
     // Log that the prompt request was made for when we get the prompt reply.

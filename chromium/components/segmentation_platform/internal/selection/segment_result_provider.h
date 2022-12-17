@@ -1,13 +1,14 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef COMPONENTS_SEGMENTATION_PLATFORM_INTERNAL_SELECTION_SEGMENT_RESULT_PROVIDER_H_
 #define COMPONENTS_SEGMENTATION_PLATFORM_INTERNAL_SELECTION_SEGMENT_RESULT_PROVIDER_H_
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "components/segmentation_platform/internal/database/segment_info_database.h"
+#include "components/segmentation_platform/internal/execution/execution_request.h"
 #include "components/segmentation_platform/public/input_context.h"
 #include "components/segmentation_platform/public/proto/segmentation_platform.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -48,13 +49,19 @@ class SegmentResultProvider {
   };
   struct SegmentResult {
     explicit SegmentResult(ResultState state);
-    SegmentResult(ResultState state, int rank);
+    SegmentResult(ResultState state,
+                  float rank,
+                  std::unique_ptr<ModelExecutionResult> execution_result);
     ~SegmentResult();
     SegmentResult(SegmentResult&) = delete;
     SegmentResult& operator=(SegmentResult&) = delete;
 
     ResultState state = ResultState::kUnknown;
-    absl::optional<int> rank;
+    absl::optional<float> rank;
+
+    // The execution result is only available when the model is executed.
+    // TODO(ssid): Support storing inputs to disk if needed.
+    std::unique_ptr<ModelExecutionResult> execution_result;
   };
   using SegmentResultCallback =
       base::OnceCallback<void(std::unique_ptr<SegmentResult>)>;
@@ -76,8 +83,8 @@ class SegmentResultProvider {
     // The segment ID to fetch result for.
     SegmentId segment_id = SegmentId::OPTIMIZATION_TARGET_UNKNOWN;
 
-    // The key is needed for computing segment from discrete mapping.
-    std::string segmentation_key;
+    // The key is needed for computing segment rank from discrete mapping.
+    std::string discrete_mapping_key;
 
     // Ignores model results stored in database and executes them to fetch
     // results. When set to false, the result could be from following:
@@ -85,8 +92,18 @@ class SegmentResultProvider {
     //  * Execution of default model when score is missing.
     // When set to true, the result could be from following:
     //  * Execution of TFLite model.
-    //  * TODO(ssid): Support fallback to default when model is missing.
+    //  * Fallback to default when model is missing.
     bool ignore_db_scores = false;
+
+    // If `ignore_db_scores` is true and TFLite model is available, then write
+    // the results to database. Used when user wants to rerun the database
+    // model.
+    // TODO(ssid): `callback` is sometimes not called if this field is set to
+    // true. Fix execution scheduler to run callback always even if save to
+    // database is true.
+    // TODO(ssid): Consider moving this option out as a different SaveRequest
+    // method in this class.
+    bool save_results_to_db = false;
 
     // Callback to return the segment result.
     SegmentResultCallback callback;

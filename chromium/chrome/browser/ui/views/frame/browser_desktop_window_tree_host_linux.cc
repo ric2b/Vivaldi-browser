@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,9 +20,11 @@
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/linux/linux_ui.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 #include "ui/platform_window/extensions/x11_extension.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 namespace {
 
@@ -72,6 +74,18 @@ BrowserDesktopWindowTreeHostLinux::~BrowserDesktopWindowTreeHostLinux() =
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserDesktopWindowTreeHostLinux,
 //     BrowserDesktopWindowTreeHost implementation:
+
+void BrowserDesktopWindowTreeHostLinux::AddAdditionalInitProperties(
+    const views::Widget::InitParams& params,
+    ui::PlatformWindowInitProperties* properties) {
+  views::DesktopWindowTreeHostLinux::AddAdditionalInitProperties(params,
+                                                                 properties);
+
+  auto* profile = browser_view_->browser()->profile();
+  const auto* linux_ui_theme = ui::LinuxUiTheme::GetForProfile(profile);
+  properties->prefer_dark_theme =
+      linux_ui_theme && linux_ui_theme->PreferDarkTheme();
+}
 
 views::DesktopWindowTreeHost*
 BrowserDesktopWindowTreeHostLinux::AsDesktopWindowTreeHost() {
@@ -168,17 +182,16 @@ void BrowserDesktopWindowTreeHostLinux::UpdateFrameHints() {
 
   if (SupportsClientFrameShadow()) {
     // Set the frame decoration insets.
-    // For a window in maximised or minimised state, insets should be zero, see
-    // https://crbug.com/1281211.  However, if we also set zero insets when the
-    // window is being initialised and has unknown state, it will be inflated on
-    // later steps.
-    // See https://crbug.com/1287212 for details.
-    const auto window_state = window->GetPlatformWindowState();
-    const gfx::Insets insets =
-        (window_state == ui::PlatformWindowState::kUnknown ||
-         window_state == ui::PlatformWindowState::kNormal)
-            ? layout->MirroredFrameBorderInsets()
-            : gfx::Insets();
+    gfx::Insets insets = layout->MirroredFrameBorderInsets();
+    const auto tiled_edges = browser_frame_->tiled_edges();
+    if (tiled_edges.left)
+      insets.set_left(0);
+    if (tiled_edges.right)
+      insets.set_right(0);
+    if (tiled_edges.top)
+      insets.set_top(0);
+    if (tiled_edges.bottom)
+      insets.set_bottom(0);
     const gfx::Insets insets_px = gfx::ScaleToCeiledInsets(insets, scale);
     window->SetDecorationInsets(showing_frame ? &insets_px : nullptr);
 
@@ -314,6 +327,12 @@ void BrowserDesktopWindowTreeHostLinux::OnWindowStateChanged(
     browser_view_->FullscreenStateChanging();
   }
 
+  UpdateFrameHints();
+}
+
+void BrowserDesktopWindowTreeHostLinux::OnWindowTiledStateChanged(
+    ui::WindowTiledEdges new_tiled_edges) {
+  browser_frame_->set_tiled_edges(new_tiled_edges);
   UpdateFrameHints();
 }
 

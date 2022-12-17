@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -109,7 +109,7 @@ bool SecurityKeyExtensionSession::OnExtensionMessage(
   }
   std::string type = *maybe_type;
 
-  base::Value::Dict client_message = std::move(value->GetDict());
+  base::Value::Dict client_message = std::move(*value).TakeDict();
   if (type == kControlMessage) {
     ProcessControlMessage(client_message);
   } else if (type == kDataMessage) {

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,9 +12,11 @@
 #include <string.h>
 #include <wmcodecdsp.h>
 #include <wrl/client.h>
+
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -78,8 +80,7 @@ EncoderStatus::Codes ValidateInputOptions(const AudioEncoder::Options& options,
   if (options.codec != AudioCodec::kAAC)
     return EncoderStatus::Codes::kEncoderUnsupportedCodec;
 
-  if (std::find(kSupportedSampleRates.begin(), kSupportedSampleRates.end(),
-                options.sample_rate) == kSupportedSampleRates.end()) {
+  if (!base::Contains(kSupportedSampleRates, options.sample_rate)) {
     return EncoderStatus::Codes::kEncoderUnsupportedConfig;
   }
 
@@ -102,8 +103,7 @@ EncoderStatus::Codes ValidateInputOptions(const AudioEncoder::Options& options,
   }
 
   *bitrate = options.bitrate.value_or(kDefaultBitrate);
-  if (std::find(kSupportedBitrates.begin(), kSupportedBitrates.end(),
-                *bitrate) == kSupportedBitrates.end()) {
+  if (!base::Contains(kSupportedBitrates, *bitrate)) {
     return EncoderStatus::Codes::kEncoderUnsupportedConfig;
   }
 
@@ -470,9 +470,9 @@ void MFAudioEncoder::Initialize(const Options& options,
   }
 
   channel_count_ = options_.channels;
-  audio_params_ =
-      AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
-                      options_.sample_rate, kSamplesPerFrame);
+  audio_params_ = AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                                  {channel_layout, channel_count_},
+                                  options_.sample_rate, kSamplesPerFrame);
   input_timestamp_tracker_ =
       std::make_unique<AudioTimestampHelper>(options_.sample_rate);
   output_timestamp_tracker_ =

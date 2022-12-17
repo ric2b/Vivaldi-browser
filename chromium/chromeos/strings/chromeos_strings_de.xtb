@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Datei bearbeiten}other{Dateien bearbeiten}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Schlüsselrichtung</translation>
+<translation id="3294437725009624529">Gast</translation>
 <translation id="3310640316857623290">Die DNS-Latenz liegt deutlich über dem zulässigen Grenzwert</translation>
 <translation id="3328783797891415197">Test wird ausgeführt</translation>
 <translation id="3340011300870565703">Der Akkustand des rechten Kopfhörers liegt bei <ph name="BATTERY_PERCENTAGE" /> %.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Während die Firmware aktualisiert wird, darf dieses externe Gerät nicht getrennt oder der Computer heruntergefahren werden. Du kannst dieses Fenster minimieren. Die Aktualisierung dauert einige Minuten und dein externes Gerät funktioniert während dieser Zeit eventuell nicht.</translation>
 <translation id="3486220673238053218">Definition</translation>
 <translation id="3488065109653206955">Teilweise aktiviert</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />Leistungs-Trace-Daten<ph name="END_LINK1" /> senden</translation>
 <translation id="3517001332549868749">Chrome OS-Update</translation>
 <translation id="3527036260304016759">Fehlgeschlagen – Unbekannter Fehler</translation>
 <translation id="3532980081107202182">Noch etwa <ph name="MIN_REMAINING" /> Minuten</translation>
@@ -468,6 +470,7 @@ Tippe auf das Mikrofon und sag mir, was du wissen möchtest.</translation>
 <translation id="5502931783115429516">Android wird nicht ausgeführt</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Dunkles Design bei Sonnenuntergang automatisch aktivieren</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Neu scannen</translation>
 <translation id="5583640892426849032">Rücktaste</translation>

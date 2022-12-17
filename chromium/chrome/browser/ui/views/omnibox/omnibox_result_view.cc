@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,6 +27,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/omnibox/browser/actions/omnibox_pedal.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
+#include "components/omnibox/browser/omnibox.mojom-shared.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
 #include "components/omnibox/browser/vector_icons.h"
@@ -79,7 +80,7 @@ class OmniboxRemoveSuggestionButton : public views::ImageButton {
     // Although this appears visually as a button, expose as a list box option
     // so that it matches the other options within its list box container.
     node_data->role = ax::mojom::Role::kListBoxOption;
-    node_data->SetName(
+    node_data->SetNameChecked(
         l10n_util::GetStringUTF16(IDS_ACC_REMOVE_SUGGESTION_BUTTON));
   }
 };
@@ -259,8 +260,11 @@ void OmniboxResultView::SetMatch(const AutocompleteMatch& match) {
     suggestion_view_->description()->SetTextWithStyling(
         match_.answer->second_line(), true);
   } else {
+    // Not all 2-line suggestions have deemphasized descriptions; specifically,
+    // calculator answers are 2-line but not deemphasized.
     const bool deemphasize =
-        match_.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY;
+        match_.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY &&
+        OmniboxMatchCellView::IsTwoLineLayout(match_);
     suggestion_view_->description()->SetTextWithStyling(
         match_.description, match_.description_class, deemphasize);
   }
@@ -419,8 +423,12 @@ void OmniboxResultView::ButtonPressed(OmniboxPopupSelection::LineState state,
 // OmniboxResultView, views::View overrides:
 
 bool OmniboxResultView::OnMousePressed(const ui::MouseEvent& event) {
-  if (event.IsOnlyLeftMouseButton())
+  if (event.IsOnlyLeftMouseButton()) {
     popup_contents_view_->SetSelectedIndex(model_index_);
+    // Inform the model that a new result is now selected via mouse press.
+    model_->OnNavigationLikely(model_index_,
+                               omnibox::mojom::NavigationPredictor::kMouseDown);
+  }
   return true;
 }
 

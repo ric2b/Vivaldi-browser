@@ -32,8 +32,8 @@
 
 #include "AppKitPrevention.h"
 
-#define FIRST_UPDATER_MESSAGE_TIMEOUT 7ull
-#define RETRIEVE_PROCESS_IDENTIFIER_TIMEOUT 5ull
+#define FIRST_UPDATER_MESSAGE_TIMEOUT 18ull
+#define RETRIEVE_PROCESS_IDENTIFIER_TIMEOUT 8ull
 
 /**
  * Show display progress UI after a delay from starting the final part of the installation.
@@ -147,7 +147,9 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     
     __weak AppInstaller *weakSelf = self;
     newConnection.interruptionHandler = ^{
-        [weakSelf.activeConnection invalidate];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf.activeConnection invalidate];
+        });
     };
     
     newConnection.invalidationHandler = ^{
@@ -440,7 +442,16 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             if (self.performedStage1Installation) {
                 // Resume the installation if we aren't done with stage 2 yet, and remind the client we are prepared to relaunch
                 dispatch_async(self.installerQueue, ^{
-                    [self performStage2InstallationIfNeeded];
+                    if (!self.performedStage2Installation) {
+                        [self performStage2Installation];
+                    } else if (!self.performedStage3Installation) {
+                        // If we already performed the 2nd stage, re-purpose this request to re-try sending another termination signal
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            // Don't check if the target is already terminated, leave that to the progress agent
+                            // We could be slightly off if there were multiple instances running
+                            [self.agentConnection.agent sendTerminationSignal];
+                        });
+                    }
                 });
             }
         });
@@ -502,14 +513,10 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     });
 }
 
-- (void)performStage2InstallationIfNeeded
+- (void)performStage2Installation
 {
-    if (self.performedStage2Installation) {
-        return;
-    }
-    
-    BOOL performedSecondStage = self.shouldShowUI || [self.installer canInstallSilently];
-    if (performedSecondStage) {
+    BOOL canPerformSecondStage = self.shouldShowUI || [self.installer canInstallSilently];
+    if (canPerformSecondStage) {
         self.performedStage2Installation = YES;
         
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -561,7 +568,9 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
         }
         
         dispatch_async(self.installerQueue, ^{
-            [self performStage2InstallationIfNeeded];
+            if (!self.performedStage2Installation) {
+                [self performStage2Installation];
+            }
             
             if (!self.performedStage2Installation) {
                 // We failed and we're going to exit shortly

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,8 +17,8 @@ import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.DoNotClassMerge;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.DoNotClassMerge;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabStateAttributes;
@@ -543,6 +543,10 @@ public class CriticalPersistedTabData extends PersistedTabData {
 
             @Override
             public void preSerialize() {
+                // preSerialize on a {@link Serializer} is only expected to be called once.
+                // There is no need to acquire a snapshot of {@link Tab} attributes more than
+                // once.
+                if (mPreSerialized) return;
                 try (TraceEvent e = TraceEvent.scoped("CriticalPersistedTabData.PreSerialize")) {
                     WebContentsState webContentsState = mWebContentsState == null
                             ? getWebContentsStateFromTab(mTab)

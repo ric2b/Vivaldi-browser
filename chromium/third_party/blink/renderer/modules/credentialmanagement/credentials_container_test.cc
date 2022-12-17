@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,15 +55,13 @@ class MockCredentialManager : public mojom::blink::CredentialManager {
   void Bind(mojo::PendingReceiver<::blink::mojom::blink::CredentialManager>
                 receiver) {
     receiver_.Bind(std::move(receiver));
+    receiver_.set_disconnect_handler(WTF::BindOnce(
+        &MockCredentialManager::Disconnected, WTF::Unretained(this)));
   }
 
-  void WaitForConnectionError() {
-    if (!receiver_.is_bound())
-      return;
+  void Disconnected() { disconnected_ = true; }
 
-    receiver_.set_disconnect_handler(WTF::Bind(&test::ExitRunLoop));
-    test::EnterRunLoop();
-  }
+  bool IsDisconnected() const { return disconnected_; }
 
   void WaitForCallToGet() {
     if (get_callback_)
@@ -99,6 +97,7 @@ class MockCredentialManager : public mojom::blink::CredentialManager {
   mojo::Receiver<::blink::mojom::blink::CredentialManager> receiver_{this};
 
   GetCallback get_callback_;
+  bool disconnected_ = false;
 };
 
 class CredentialManagerTestingContext {
@@ -143,7 +142,7 @@ class MockPublicKeyCredential : public Credential {
 
 // The completion callbacks for pending mojom::CredentialManager calls each own
 // a persistent handle to a ScriptPromiseResolver instance. Ensure that if the
-// document is destored while a call is pending, it can still be freed up.
+// document is destroyed while a call is pending, it can still be freed up.
 TEST(CredentialsContainerTest, PendingGetRequest_NoGCCycles) {
   MockCredentialManager mock_credential_manager;
   GCObjectLivenessObserver<Document> document_observer;
@@ -156,13 +155,14 @@ TEST(CredentialsContainerTest, PendingGetRequest_NoGCCycles) {
               IGNORE_EXCEPTION_FOR_TESTING);
     mock_credential_manager.WaitForCallToGet();
   }
+  test::RunPendingTasks();
 
   ThreadState::Current()->CollectAllGarbageForTesting();
 
   ASSERT_TRUE(document_observer.WasCollected());
 
   mock_credential_manager.InvokeGetCallback();
-  mock_credential_manager.WaitForConnectionError();
+  ASSERT_TRUE(mock_credential_manager.IsDisconnected());
 }
 
 // If the document is detached before the request is resolved, the promise
@@ -195,98 +195,6 @@ TEST(CredentialsContainerTest, RejectPublicKeyCredentialStoreOperation) {
                   MakeGarbageCollected<MockPublicKeyCredential>());
 
   EXPECT_EQ(v8::Promise::kRejected, promise.V8Promise()->State());
-}
-
-TEST(CredentialsContainerTest,
-     RejectStoringPasswordCredentialWithInvalidIconURL) {
-  MockCredentialManager mock_credential_manager;
-  CredentialManagerTestingContext context(&mock_credential_manager);
-
-  KURL invalid_url("an invalid URL");
-  auto* credential = MakeGarbageCollected<PasswordCredential>(
-      "id", "password", "name", invalid_url);
-
-  auto promise =
-      CredentialsContainer::credentials(*context.DomWindow().navigator())
-          ->store(context.GetScriptState(), credential);
-
-  auto v8promise = promise.V8Promise();
-  EXPECT_EQ(v8::Promise::kRejected, v8promise->State());
-
-  auto* exception = ToScriptWrappable(v8promise->Result().As<v8::Object>())
-                        ->ToImpl<DOMException>();
-  EXPECT_EQ("SecurityError", exception->name());
-  EXPECT_EQ("'iconURL' should be a secure URL", exception->message());
-}
-
-TEST(CredentialsContainerTest,
-     RejectStoringFederatedCredentialWithInvalidIconURL) {
-  MockCredentialManager mock_credential_manager;
-  CredentialManagerTestingContext context(&mock_credential_manager);
-
-  KURL invalid_url("an invalid URL");
-  auto origin = SecurityOrigin::CreateFromString("https://example.test");
-  auto* credential = MakeGarbageCollected<FederatedCredential>(
-      "id", origin, "name", invalid_url);
-
-  auto promise =
-      CredentialsContainer::credentials(*context.DomWindow().navigator())
-          ->store(context.GetScriptState(), credential);
-
-  auto v8promise = promise.V8Promise();
-  EXPECT_EQ(v8::Promise::kRejected, v8promise->State());
-
-  auto* exception = ToScriptWrappable(v8promise->Result().As<v8::Object>())
-                        ->ToImpl<DOMException>();
-  EXPECT_EQ("SecurityError", exception->name());
-  EXPECT_EQ("'iconURL' should be a secure URL", exception->message());
-}
-
-TEST(CredentialsContainerTest,
-     RejectCreatingPublicKeyCredentialWithInvalidIconURL) {
-  MockCredentialManager mock_credential_manager;
-  CredentialManagerTestingContext context(&mock_credential_manager);
-
-  auto* rp_options = PublicKeyCredentialRpEntity::Create();
-  rp_options->setId("example.test");
-  rp_options->setName("Example RP");
-
-  auto* user_options = PublicKeyCredentialUserEntity::Create();
-  int dummy_buffer_source = 1;
-  auto* dummy_buffer =
-      MakeGarbageCollected<V8BufferSource>(DOMArrayBuffer::Create(
-          &dummy_buffer_source, sizeof(dummy_buffer_source)));
-  user_options->setId(dummy_buffer);
-  user_options->setIcon("invalid URL");
-
-  auto* public_key_options = PublicKeyCredentialCreationOptions::Create();
-  public_key_options->setChallenge(dummy_buffer);
-  public_key_options->setUser(user_options);
-  public_key_options->setRp(rp_options);
-  public_key_options->setAttestation("none");
-
-  auto* public_key_param = PublicKeyCredentialParameters::Create();
-  public_key_param->setAlg(1);
-  public_key_param->setType("public-key");
-  auto params = HeapVector<Member<PublicKeyCredentialParameters>>();
-  params.push_back(public_key_param);
-  public_key_options->setPubKeyCredParams(params);
-
-  auto* credential_options = CredentialCreationOptions::Create();
-  credential_options->setPublicKey(public_key_options);
-
-  auto promise =
-      CredentialsContainer::credentials(*context.DomWindow().navigator())
-          ->create(context.GetScriptState(), credential_options,
-                   IGNORE_EXCEPTION_FOR_TESTING);
-
-  auto v8promise = promise.V8Promise();
-  EXPECT_EQ(v8::Promise::kRejected, v8promise->State());
-
-  auto* exception = ToScriptWrappable(v8promise->Result().As<v8::Object>())
-                        ->ToImpl<DOMException>();
-  EXPECT_EQ("SecurityError", exception->name());
-  EXPECT_EQ("'user.icon' should be a secure URL", exception->message());
 }
 
 }  // namespace blink

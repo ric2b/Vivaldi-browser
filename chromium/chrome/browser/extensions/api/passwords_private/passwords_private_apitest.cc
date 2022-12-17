@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,8 +62,9 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
 
  protected:
   bool RunPasswordsSubtest(const std::string& subtest) {
-    const std::string page_url = "main.html?" + subtest;
-    return RunExtensionTest("passwords_private", {.page_url = page_url.c_str()},
+    const std::string extension_url = "main.html?" + subtest;
+    return RunExtensionTest("passwords_private",
+                            {.extension_url = extension_url.c_str()},
                             {.load_as_component = true});
   }
 
@@ -116,6 +117,10 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
 
   const std::vector<int>& last_moved_passwords() const {
     return s_test_delegate_->last_moved_passwords();
+  }
+
+  bool get_authenticator_interaction_status() const {
+    return s_test_delegate_->get_authenticator_interaction_status();
   }
 
  private:
@@ -248,12 +253,8 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, IsOptedInForAccountStorage) {
   EXPECT_TRUE(RunPasswordsSubtest("isOptedInForAccountStorage")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, GetCompromisedCredentials) {
-  EXPECT_TRUE(RunPasswordsSubtest("getCompromisedCredentials")) << message_;
-}
-
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, GetWeakCredentials) {
-  EXPECT_TRUE(RunPasswordsSubtest("getWeakCredentials")) << message_;
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, GetInsecureCredentials) {
+  EXPECT_TRUE(RunPasswordsSubtest("getInsecureCredentials")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, OptInForAccountStorage) {
@@ -348,5 +349,21 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, MovePasswordsToAccount) {
   EXPECT_TRUE(RunPasswordsSubtest("movePasswordsToAccount")) << message_;
   EXPECT_EQ(42, last_moved_passwords()[0]);
 }
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ExtendAuthValidity) {
+  EXPECT_FALSE(get_authenticator_interaction_status());
+  EXPECT_TRUE(RunPasswordsSubtest("extendAuthValidity")) << message_;
+  EXPECT_TRUE(get_authenticator_interaction_status());
+}
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       SwitchBiometricAuthBeforeFillingState) {
+  EXPECT_FALSE(get_authenticator_interaction_status());
+  EXPECT_TRUE(RunPasswordsSubtest("switchBiometricAuthBeforeFillingState"))
+      << message_;
+  EXPECT_TRUE(get_authenticator_interaction_status());
+}
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 
 }  // namespace extensions

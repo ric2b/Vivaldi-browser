@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,11 +31,6 @@ class GaiaAccessTokenFetcher : public OAuth2AccessTokenFetcherImpl {
       OAuth2AccessTokenConsumer* consumer,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const std::string& refresh_token);
-  static std::unique_ptr<GaiaAccessTokenFetcher>
-  CreateExchangeAuthCodeForRefeshTokenInstance(
-      OAuth2AccessTokenConsumer* consumer,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      const std::string& auth_code);
 
   ~GaiaAccessTokenFetcher() override;
 
@@ -43,8 +38,7 @@ class GaiaAccessTokenFetcher : public OAuth2AccessTokenFetcherImpl {
   GaiaAccessTokenFetcher(
       OAuth2AccessTokenConsumer* consumer,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      const std::string& refresh_token,
-      const std::string& auth_code);
+      const std::string& refresh_token);
 
   // OAuth2AccessTokenFetcherImpl:
   void RecordResponseCodeUma(int error_value) const override;

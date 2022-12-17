@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,9 @@ constexpr char kMediaViewVolumeIdPrefix[] = "media_view:";
 
 }  // namespace
 
-const base::Feature kMediaViewFeature{"ArcMediaView",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMediaViewFeature,
+             "ArcMediaView",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kMediaDocumentsProviderAuthority[] =
     "com.android.providers.media.documents";

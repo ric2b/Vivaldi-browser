@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -99,13 +99,15 @@ luci.gitiles_poller(
     ("win64-chrome", "win"),
 )]
 
+# Any builders that should be monitored by the Chrome-Fuchsia Gardener
+# should be in the "gardener" group.
 consoles.console_view(
     name = "sheriff.fuchsia",
     title = "Fuchsia Sheriff Console",
     ordering = {
-        "*type*": consoles.ordering(short_names = ["a64", "x64"]),
-        None: ["ci", "fuchsia ci", "hardware", "fyi"],
-        "chromium.fyi|13": "*type*",
+        None: ["gardener", "fyi"],
+        "gardener": ["ci", "fuchsia ci", "p/chrome", "hardware"],
+        "fyi": ["arm64", "x64", "clang", "hardware"],
     },
 )
 
@@ -116,17 +118,21 @@ consoles.console_view(
     category = category,
     short_name = short_name,
 ) for name, category, short_name in (
-    ("fuchsia-fyi-arm64-size", "fuchsia ci", "a64-size"),
-    ("fuchsia-fyi-astro", "hardware", "ast"),
-    ("fuchsia-fyi-atlas", "hardware", "atl"),
-    ("fuchsia-fyi-sherlock", "hardware", "slk"),
-    ("fuchsia-builder-perf-fyi", "fuchsia ci", "builder-perf"),
-    ("fuchsia-perf-fyi", "hardware", "ast-perf"),
-    ("fuchsia-perf-atlas-fyi", "hardware", "atl-perf"),
-    ("fuchsia-perf-sherlock-fyi", "hardware", "slk-perf"),
-    ("fuchsia-x64", "fuchsia ci", "x64-chrome"),
+    ("fuchsia-builder-perf-arm64", "gardener|p/chrome|arm64", "perf-bld"),
+    ("fuchsia-builder-perf-x64", "gardener|p/chrome|x64", "perf-bld"),
+    ("fuchsia-fyi-arm64-size", "gardener|p/chrome|arm64", "size"),
+    ("fuchsia-fyi-astro", "gardener|hardware", "ast"),
+    ("fuchsia-fyi-atlas", "fyi|hardware", "atl"),
+    ("fuchsia-fyi-sherlock", "fyi|hardware", "sher"),
+    ("fuchsia-perf-ast", "gardener|hardware|perf", "ast"),
+    ("fuchsia-perf-atlas-fyi", "fyi|hardware|perf", "atl"),
+    ("fuchsia-perf-fyi", "fyi|hardware|perf", "ast"),
+    ("fuchsia-perf-sherlock-fyi", "fyi|hardware|perf", "sher"),
+    ("fuchsia-perf-shk", "gardener|hardware|perf", "sher"),
+    ("fuchsia-x64", "gardener|p/chrome|x64", "rel"),
 )]
 
+exec("./ci/checks.star")
 exec("./ci/chromium.star")
 exec("./ci/chromium.accessibility.star")
 exec("./ci/chromium.android.star")

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "ash/constants/ash_constants.h"
 #include "ash/system/message_center/ash_message_popup_collection.h"
 #include "ash/system/message_center/unified_message_center_bubble.h"
 #include "ash/system/message_center/unified_message_center_view.h"
@@ -21,8 +22,6 @@
 namespace ash {
 
 namespace {
-
-const char kPrivacyIndicatorsNotificationIdPrefix[] = "privacy-indicators";
 
 class TestDelegate : public PrivacyIndicatorsNotificationDelegate {
  public:
@@ -94,7 +93,7 @@ TEST_F(PrivacyIndicatorsControllerTest, NotificationMetadata) {
   std::string notification_id = kPrivacyIndicatorsNotificationIdPrefix + app_id;
   scoped_refptr<TestDelegate> delegate = base::MakeRefCounted<TestDelegate>();
   ash::ModifyPrivacyIndicatorsNotification(
-      app_id, app_name, /*camera_is_used=*/true, /*microphone_is_used=*/true,
+      app_id, app_name, /*is_camera_used=*/true, /*is_microphone_used=*/true,
       delegate);
 
   auto* notification =
@@ -110,8 +109,8 @@ TEST_F(PrivacyIndicatorsControllerTest, NotificationClickButton) {
   std::string notification_id = kPrivacyIndicatorsNotificationIdPrefix + app_id;
   scoped_refptr<TestDelegate> delegate = base::MakeRefCounted<TestDelegate>();
   ash::ModifyPrivacyIndicatorsNotification(
-      app_id, u"test_app_name", /*camera_is_used=*/true,
-      /*microphone_is_used=*/true, delegate);
+      app_id, u"test_app_name", /*is_camera_used=*/true,
+      /*is_microphone_used=*/true, delegate);
 
   // Privacy indicators notification should not be a popup. It is silently added
   // to the tray.
@@ -121,14 +120,9 @@ TEST_F(PrivacyIndicatorsControllerTest, NotificationClickButton) {
       GetNotificationViewFromMessageCenter(notification_id));
   EXPECT_TRUE(notification_view);
 
-  // Clicking the first button will trigger launching the app.
-  EXPECT_FALSE(delegate->launch_app_called());
-  ClickView(notification_view, 0);
-  EXPECT_TRUE(delegate->launch_app_called());
-
   // Clicking the first button will trigger launching the app settings.
   EXPECT_FALSE(delegate->launch_settings_called());
-  ClickView(notification_view, 1);
+  ClickView(notification_view, 0);
   EXPECT_TRUE(delegate->launch_settings_called());
 }
 

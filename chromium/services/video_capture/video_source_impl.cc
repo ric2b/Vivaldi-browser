@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@
 namespace video_capture {
 
 VideoSourceImpl::VideoSourceImpl(
-    mojom::DeviceFactory* device_factory,
+    DeviceFactory* device_factory,
     const std::string& device_id,
     base::RepeatingClosure on_last_binding_closed_cb)
     : device_factory_(device_factory),

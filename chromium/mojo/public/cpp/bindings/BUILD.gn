@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -40,6 +40,7 @@ component("bindings_base") {
     "clone_traits.h",
     "connection_group.cc",
     "connection_group.h",
+    "default_construct_traits.h",
     "deprecated_interface_types_forward.h",
     "disconnect_reason.h",
     "enum_traits.h",
@@ -183,6 +184,7 @@ component("bindings") {
     "lib/sync_event_watcher.cc",
     "lib/sync_handle_registry.cc",
     "lib/sync_handle_watcher.cc",
+    "lib/sync_method_traits.h",
     "lib/task_runner_helper.cc",
     "lib/task_runner_helper.h",
     "lib/thread_safe_forwarder_base.cc",

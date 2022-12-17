@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,10 +33,10 @@ IN_PROC_BROWSER_TEST_P(ScanningAppIntegrationTest, ScanningAppInLauncher) {
 // set to be disabled via the SystemFeaturesDisableList policy.
 IN_PROC_BROWSER_TEST_P(ScanningAppIntegrationTest, ScanningAppDisabled) {
   {
-    ListPrefUpdate update(TestingBrowserProcess::GetGlobal()->local_state(),
-                          policy::policy_prefs::kSystemFeaturesDisableList);
-    base::Value* list = update.Get();
-    list->Append(static_cast<int>(policy::SystemFeature::kScanning));
+    ScopedListPrefUpdate update(
+        TestingBrowserProcess::GetGlobal()->local_state(),
+        policy::policy_prefs::kSystemFeaturesDisableList);
+    update->Append(static_cast<int>(policy::SystemFeature::kScanning));
   }
 
   ASSERT_FALSE(GetManager()

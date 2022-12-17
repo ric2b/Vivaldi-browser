@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -82,6 +82,15 @@ class GEOMETRY_EXPORT PointF {
 
   void Scale(float x_scale, float y_scale) {
     SetPoint(x() * x_scale, y() * y_scale);
+  }
+
+  // Scales the point by the inverse of the given scale.
+  void InvScale(float inv_scale) { InvScale(inv_scale, inv_scale); }
+
+  // Scales each component by the inverse of the given scales.
+  void InvScale(float inv_x_scale, float inv_y_scale) {
+    x_ /= inv_x_scale;
+    y_ /= inv_y_scale;
   }
 
   void Transpose() {

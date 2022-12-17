@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,7 +67,8 @@ suite('NavigationBehaviorTest', function() {
     });
 
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     // Creates 3 elements with IDs step-(0~2).
     for (let i = 0; i < 3; i++) {
       elements.push(document.createElement('test-element') as TestElement);

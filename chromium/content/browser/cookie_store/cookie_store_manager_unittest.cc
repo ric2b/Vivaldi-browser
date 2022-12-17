@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -219,7 +219,8 @@ class CookieStoreManagerTest
               << blink::ServiceWorkerStatusToString(status);
           run_loop.Quit();
         }),
-        /*requesting_frame_id=*/GlobalRenderFrameHostId());
+        /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+        PolicyContainerPolicies());
     run_loop.Run();
     if (!success)
       return kInvalidRegistrationId;

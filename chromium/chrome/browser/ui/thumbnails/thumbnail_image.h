@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,7 @@ class TimeTicks;
 
 // Stores compressed thumbnail data for a tab and can vend that data as an
 // uncompressed image to observers.
-class ThumbnailImage : public base::RefCounted<ThumbnailImage> {
+class ThumbnailImage : public base::RefCountedThreadSafe<ThumbnailImage> {
  public:
   // Describes the readiness of the source page for thumbnail capture.
   enum class CaptureReadiness : int {
@@ -170,7 +170,7 @@ class ThumbnailImage : public base::RefCounted<ThumbnailImage> {
  private:
   friend class Delegate;
   friend class ThumbnailImageTest;
-  friend class base::RefCounted<ThumbnailImage>;
+  friend class base::RefCountedThreadSafe<ThumbnailImage>;
 
   virtual ~ThumbnailImage();
 

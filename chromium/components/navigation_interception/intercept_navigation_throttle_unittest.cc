@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,11 +68,9 @@ class InterceptNavigationThrottleTest
   InterceptNavigationThrottleTest()
       : mock_callback_receiver_(new MockInterceptCallbackReceiver()) {
     if (GetParam()) {
-      scoped_feature_.InitAndEnableFeature(
-          InterceptNavigationThrottle::kAsyncCheck);
+      scoped_feature_.InitAndEnableFeature(kAsyncCheck);
     } else {
-      scoped_feature_.InitAndDisableFeature(
-          InterceptNavigationThrottle::kAsyncCheck);
+      scoped_feature_.InitAndDisableFeature(kAsyncCheck);
     }
   }
 

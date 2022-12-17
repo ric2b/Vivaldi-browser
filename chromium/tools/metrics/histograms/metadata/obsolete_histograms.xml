@@ -1,5 +1,5 @@
 <!--
-Copyright 2020 The Chromium Authors. All rights reserved.
+Copyright 2020 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -39041,30 +39041,6 @@ chromium-metrics-reviews@google.com.
     Time elapsed between the last time the priority of a HostResolverImpl::Job
     changed (when a Request was attached or detached) and the time the Job was
     started.
-  </summary>
-</histogram>
-
-<histogram name="Net.DNS.ProcTask.FailureTime" units="ms"
-    expires_after="2018-11-08">
-  <obsolete>
-    Removed 11/2018.
-  </obsolete>
-  <owner>pauljensen@chromium.org</owner>
-  <owner>mef@chromium.org</owner>
-  <summary>
-    Duration of time taken by ProcTask in resolutions that failed.
-  </summary>
-</histogram>
-
-<histogram name="Net.DNS.ProcTask.SuccessTime" units="ms"
-    expires_after="2018-11-08">
-  <obsolete>
-    Removed 11/2018.
-  </obsolete>
-  <owner>pauljensen@chromium.org</owner>
-  <owner>mef@chromium.org</owner>
-  <summary>
-    Duration of time taken by ProcTask in resolutions that succeeded.
   </summary>
 </histogram>
 
@@ -87963,7 +87939,6 @@ chromium-metrics-reviews@google.com.
     Removed 08/2020. Information no longer recorded.
   </obsolete>
   <owner>alancutter@chromium.org</owner>
-  <owner>loyso@chromium.org</owner>
   <summary>
     Records installation result code for sync initiated fallback installs in the
     new USS-based web applications system.
@@ -89458,21 +89433,6 @@ chromium-metrics-reviews@google.com.
     the difference in milliseconds is logged and not the actual stream delay
     value. Sampled every time the stream delay changes more than 50
     milliseconds.
-  </summary>
-</histogram>
-
-<histogram name="WebRTC.Audio.ReceiverDelayEstimateMs" units="ms"
-    expires_after="2020-07-06">
-  <obsolete>
-    Removed 01/2020 due to not being monitored in Chrome.
-  </obsolete>
-  <owner>hlundin@chromium.org</owner>
-  <summary>
-    The sum of the jitter buffer delay and the sound card's buffering delay for
-    the receiving side. That is, the sum of the metrics
-    WebRTC.Audio.ReceiverDeviceDelayMs and
-    WebRTC.Audio.ReceiverJitterBufferDelayMs. Sampled once every 10 ms when
-    WebRTC audio is playing.
   </summary>
 </histogram>
 

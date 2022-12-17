@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -172,46 +172,22 @@ TEST_F(ArcIntentHelperTest, TestObserver) {
   class MockObserver : public ArcIntentHelperObserver {
    public:
     MOCK_METHOD(void,
-                OnArcDownloadAdded,
-                (const base::FilePath& relative_path,
-                 const std::string& owner_package_name),
-                (override));
-    MOCK_METHOD(void,
                 OnIntentFiltersUpdated,
                 (const absl::optional<std::string>& package_name),
                 (override));
-    MOCK_METHOD(
-        void,
-        OnArcSupportedLinksChanged,
-        (const std::vector<arc::mojom::SupportedLinksPtr>& added_packages,
-         const std::vector<arc::mojom::SupportedLinksPtr>& removed_packages,
-         arc::mojom::SupportedLinkChangeSource source),
-        (override));
+    MOCK_METHOD(void,
+                OnArcSupportedLinksChanged,
+                (const std::vector<arc::mojom::SupportedLinksPackagePtr>&
+                     added_packages,
+                 const std::vector<arc::mojom::SupportedLinksPackagePtr>&
+                     removed_packages,
+                 arc::mojom::SupportedLinkChangeSource source),
+                (override));
   };
 
   // Create and add observer.
   testing::StrictMock<MockObserver> observer;
   instance_->AddObserver(&observer);
-
-  {
-    // Observer should be called when a download is added.
-    std::string relative_path("Download/foo/bar.pdf");
-    std::string owner_package_name("owner_package_name");
-    EXPECT_CALL(observer,
-                OnArcDownloadAdded(testing::Eq(base::FilePath(relative_path)),
-                                   testing::Ref(owner_package_name)));
-    instance_->OnDownloadAdded(relative_path, owner_package_name);
-    testing::Mock::VerifyAndClearExpectations(&observer);
-  }
-
-  {
-    // Observer should *not* be called when a download is added outside of the
-    // Download/ folder. This would be an unexpected event coming from ARC but
-    // we protect against it because ARC is treated as an untrusted source.
-    instance_->OnDownloadAdded(/*relative_path=*/"Download/../foo/bar.pdf",
-                               /*owner_package_name=*/"owner_package_name");
-    testing::Mock::VerifyAndClearExpectations(&observer);
-  }
 
   {
     // Observer should be called when an intent filter is updated.
@@ -232,8 +208,6 @@ TEST_F(ArcIntentHelperTest, TestObserver) {
 
   // Observer should not be called after it's removed.
   instance_->RemoveObserver(&observer);
-  instance_->OnDownloadAdded(/*relative_path=*/"Download/foo/bar.pdf",
-                             /*owner_package_name=*/"owner_package_name");
   instance_->OnIntentFiltersUpdated(/*filters=*/{});
   instance_->OnSupportedLinksChanged(
       /*added_packages=*/{},

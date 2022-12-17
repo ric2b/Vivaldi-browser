@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -61,13 +61,12 @@ group("pytype_dependencies") {
   ]
 }
 
-# Could be changed to "testing_pytype" if type hinting is ever added to other
-# code in the directory.
-group("unexpected_passes_common_pytype") {
+group("testing_pytype") {
   data = [
     "//testing/run_pytype.py",
 
     "//testing/unexpected_passes_common/",
+    "//testing/flake_suppressor_common/",
     "//third_party/catapult/third_party/typ/",
   ]
 
@@ -76,18 +75,15 @@ group("unexpected_passes_common_pytype") {
 
 group("fuchsia_pytype") {
   testonly = true
-  data = [ "//build/fuchsia/test/" ]
+  data = [
+    "//build/fuchsia/test/",
+    "//build/util/lib/common/",
+  ]
   data_deps = [ ":pytype_dependencies" ]
 }
 
 python_library("run_isolated_script_test") {
   testonly = true
   pydeps_file = "//testing/scripts/run_isolated_script_test.pydeps"
-  data = [ "//.vpython3" ]
-}
-
-python_library("run_wpt_tests") {
-  testonly = true
-  pydeps_file = "//testing/scripts/run_wpt_tests.pydeps"
   data = [ "//.vpython3" ]
 }

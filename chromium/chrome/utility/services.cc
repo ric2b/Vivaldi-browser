@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,21 +120,21 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/services/ime/ime_service.h"
 #include "ash/services/ime/public/mojom/input_engine.mojom.h"
-#include "ash/services/nearby/public/mojom/sharing.mojom.h"  // nogncheck
-#include "ash/services/quick_pair/quick_pair_service.h"
-#include "ash/services/recording/recording_service.h"
 #include "chrome/services/sharing/sharing_impl.h"
 #include "chromeos/ash/components/assistant/buildflags.h"  // nogncheck
 #include "chromeos/ash/components/local_search_service/local_search_service.h"
 #include "chromeos/ash/components/local_search_service/public/mojom/local_search_service.mojom.h"
 #include "chromeos/ash/components/trash_service/public/mojom/trash_service.mojom.h"
 #include "chromeos/ash/components/trash_service/trash_service_impl.h"
+#include "chromeos/ash/services/nearby/public/mojom/sharing.mojom.h"  // nogncheck
+#include "chromeos/ash/services/quick_pair/quick_pair_service.h"
+#include "chromeos/ash/services/recording/recording_service.h"
 #include "chromeos/services/tts/public/mojom/tts_service.mojom.h"
 #include "chromeos/services/tts/tts_service.h"
 
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 #include "chromeos/ash/services/assistant/audio_decoder/assistant_audio_decoder_factory.h"  // nogncheck
-#include "chromeos/services/libassistant/libassistant_service.h"  // nogncheck
+#include "chromeos/ash/services/libassistant/libassistant_service.h"  // nogncheck
 #endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -388,9 +388,9 @@ auto RunTtsService(
 }
 
 auto RunLocalSearchService(
-    mojo::PendingReceiver<
-        chromeos::local_search_service::mojom::LocalSearchService> receiver) {
-  return std::make_unique<chromeos::local_search_service::LocalSearchService>(
+    mojo::PendingReceiver<ash::local_search_service::mojom::LocalSearchService>
+        receiver) {
+  return std::make_unique<ash::local_search_service::LocalSearchService>(
       std::move(receiver));
 }
 
@@ -409,9 +409,9 @@ auto RunAssistantAudioDecoder(
 }
 
 auto RunLibassistantService(
-    mojo::PendingReceiver<chromeos::libassistant::mojom::LibassistantService>
+    mojo::PendingReceiver<ash::libassistant::mojom::LibassistantService>
         receiver) {
-  return std::make_unique<chromeos::libassistant::LibassistantService>(
+  return std::make_unique<ash::libassistant::LibassistantService>(
       std::move(receiver));
 }
 #endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)

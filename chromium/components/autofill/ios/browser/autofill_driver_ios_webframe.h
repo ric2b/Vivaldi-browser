@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,22 +24,7 @@ class AutofillDriverIOSWebFrame;
 class AutofillDriverIOSWebFrameFactory
     : public web::WebStateUserData<AutofillDriverIOSWebFrameFactory> {
  public:
-  // Creates a AutofillDriverIOSWebFrameFactory that will store all the
-  // needed to create a AutofillDriverIOS.
-  static void CreateForWebStateAndDelegate(
-      web::WebState* web_state,
-      AutofillClient* client,
-      id<AutofillDriverIOSBridge> bridge,
-      const std::string& app_locale,
-      AutofillManager::EnableDownloadManager enable_download_manager);
   ~AutofillDriverIOSWebFrameFactory() override;
-
-  AutofillDriverIOSWebFrameFactory(
-      web::WebState* web_state,
-      AutofillClient* client,
-      id<AutofillDriverIOSBridge> bridge,
-      const std::string& app_locale,
-      AutofillManager::EnableDownloadManager enable_download_manager);
 
   // Returns a AutofillDriverIOSFromWebFrame for |web_frame|, creating it if
   // needed.
@@ -48,6 +33,15 @@ class AutofillDriverIOSWebFrameFactory
 
  private:
   friend class web::WebStateUserData<AutofillDriverIOSWebFrameFactory>;
+
+  // Creates a AutofillDriverIOSWebFrameFactory that will store all the
+  // needed to create a AutofillDriverIOS.
+  AutofillDriverIOSWebFrameFactory(
+      web::WebState* web_state,
+      AutofillClient* client,
+      id<AutofillDriverIOSBridge> bridge,
+      const std::string& app_locale,
+      AutofillManager::EnableDownloadManager enable_download_manager);
 
   web::WebState* web_state_ = nullptr;
   AutofillClient* client_ = nullptr;

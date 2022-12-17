@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,7 @@ TEST(XRViewTest, ViewMatrices) {
       GetMatrixDataForTest(view.refSpaceFromView()->TransformMatrix()),
       GetMatrixDataForTest(TransformationMatrix(ref_space_from_view)));
   AssertMatrixEquals(GetMatrixDataForTest(view_data->ProjectionMatrix()),
-                     GetMatrixDataForTest(TransformationMatrix(
+                     GetMatrixDataForTest(TransformationMatrix::ColMajor(
                          0.78128596636, 0, 0, 0, 0, 0.78128596636, 0, 0, 0, 0,
                          -1.00020002, -1, 0, 0, -0.200020002, 0)));
 }

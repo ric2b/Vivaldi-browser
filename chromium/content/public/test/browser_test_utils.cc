@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/bind.h"
+#include "base/test/test_future.h"
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -98,10 +99,10 @@
 #include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_util.h"
-#include "net/cookies/same_party_context.h"
 #include "net/filter/gzip_header.h"
 #include "net/filter/gzip_source_stream.h"
 #include "net/filter/mock_source_stream.h"
+#include "net/first_party_sets/same_party_context.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -119,6 +120,7 @@
 #include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
+#include "third_party/blink/public/mojom/blob/blob_url_store.mojom-test-utils.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -671,6 +673,13 @@ bool NavigateToURLFromRenderer(const ToRenderFrameHost& adapter,
 bool NavigateToURLFromRendererWithoutUserGesture(
     const ToRenderFrameHost& adapter,
     const GURL& url) {
+  return NavigateToURLFromRendererWithoutUserGesture(adapter, url, url);
+}
+
+bool NavigateToURLFromRendererWithoutUserGesture(
+    const ToRenderFrameHost& adapter,
+    const GURL& url,
+    const GURL& expected_commit_url) {
   RenderFrameHost* rfh = adapter.render_frame_host();
   TestFrameNavigationObserver nav_observer(rfh);
   if (!ExecJs(rfh, JsReplace("location = $1", url),
@@ -678,7 +687,7 @@ bool NavigateToURLFromRendererWithoutUserGesture(
     return false;
   }
   nav_observer.Wait();
-  return nav_observer.last_committed_url() == url;
+  return nav_observer.last_committed_url() == expected_commit_url;
 }
 
 bool BeginNavigateToURLFromRenderer(const ToRenderFrameHost& adapter,
@@ -711,19 +720,30 @@ void NavigateToURLBlockUntilNavigationsComplete(
     const GURL& url,
     int number_of_navigations,
     bool ignore_uncommitted_navigations) {
+  // This mimics behavior of Shell::LoadURL...
+  NavigationController::LoadURLParams params(url);
+  params.transition_type = ui::PageTransitionFromInt(
+      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+
+  NavigateToURLBlockUntilNavigationsComplete(web_contents, params,
+                                             number_of_navigations,
+                                             ignore_uncommitted_navigations);
+}
+
+void NavigateToURLBlockUntilNavigationsComplete(
+    WebContents* web_contents,
+    const NavigationController::LoadURLParams& params,
+    int number_of_navigations,
+    bool ignore_uncommitted_navigations) {
   // Prepare for the navigation.
   WaitForLoadStop(web_contents);
   TestNavigationObserver same_tab_observer(
       web_contents, number_of_navigations,
       MessageLoopRunner::QuitMode::IMMEDIATE,
       /*ignore_uncommitted_navigations=*/ignore_uncommitted_navigations);
-  if (!blink::IsRendererDebugURL(url) && number_of_navigations == 1)
-    same_tab_observer.set_expected_initial_url(url);
+  if (!blink::IsRendererDebugURL(params.url) && number_of_navigations == 1)
+    same_tab_observer.set_expected_initial_url(params.url);
 
-  // This mimics behavior of Shell::LoadURL...
-  NavigationController::LoadURLParams params(url);
-  params.transition_type = ui::PageTransitionFromInt(
-      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
   web_contents->GetController().LoadURLWithParams(params);
   web_contents->GetOutermostWebContents()->Focus();
 
@@ -844,18 +864,16 @@ bool WaitForLoadStop(WebContents* web_contents) {
 void PrepContentsForBeforeUnloadTest(WebContents* web_contents,
                                      bool trigger_user_activation) {
   web_contents->GetPrimaryMainFrame()->ForEachRenderFrameHost(
-      base::BindRepeating(
-          [](bool trigger_user_activation, RenderFrameHost* render_frame_host) {
-            if (trigger_user_activation) {
-              render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
-                  std::u16string(), base::NullCallback());
-            }
+      [trigger_user_activation](RenderFrameHost* render_frame_host) {
+        if (trigger_user_activation) {
+          render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
+              std::u16string(), base::NullCallback());
+        }
 
-            // Disable the hang monitor, otherwise there will be a race between
-            // the beforeunload dialog and the beforeunload hang timer.
-            render_frame_host->DisableBeforeUnloadHangMonitorForTesting();
-          },
-          trigger_user_activation));
+        // Disable the hang monitor, otherwise there will be a race between
+        // the beforeunload dialog and the beforeunload hang timer.
+        render_frame_host->DisableBeforeUnloadHangMonitorForTesting();
+      });
 }
 
 bool IsLastCommittedEntryOfPageType(WebContents* web_contents,
@@ -1089,12 +1107,12 @@ void SimulateTouchscreenPinch(WebContents* web_contents,
 
 #endif  // !BUILDFLAG(IS_MAC)
 
-void SimulateGesturePinchSequence(WebContents* web_contents,
+void SimulateGesturePinchSequence(RenderWidgetHost* render_widget_host,
                                   const gfx::Point& point,
                                   float scale,
                                   blink::WebGestureDevice source_device) {
-  RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
-      web_contents->GetPrimaryMainFrame()->GetRenderViewHost()->GetWidget());
+  RenderWidgetHostImpl* widget_host =
+      RenderWidgetHostImpl::From(render_widget_host);
 
   blink::WebGestureEvent pinch_begin(
       blink::WebInputEvent::Type::kGesturePinchBegin,
@@ -1119,12 +1137,18 @@ void SimulateGesturePinchSequence(WebContents* web_contents,
   widget_host->ForwardGestureEvent(pinch_end);
 }
 
-void SimulateGestureScrollSequence(WebContents* web_contents,
+void SimulateGesturePinchSequence(WebContents* web_contents,
+                                  const gfx::Point& point,
+                                  float scale,
+                                  blink::WebGestureDevice source_device) {
+  RenderWidgetHost* widget_host =
+      web_contents->GetPrimaryMainFrame()->GetRenderWidgetHost();
+  SimulateGesturePinchSequence(widget_host, point, scale, source_device);
+}
+
+void SimulateGestureScrollSequence(RenderWidgetHost* render_widget_host,
                                    const gfx::Point& point,
                                    const gfx::Vector2dF& delta) {
-  RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
-      web_contents->GetPrimaryMainFrame()->GetRenderViewHost()->GetWidget());
-
   blink::WebGestureEvent scroll_begin(
       blink::WebGestureEvent::Type::kGestureScrollBegin,
       blink::WebInputEvent::kNoModifiers, ui::EventTimeForNow(),
@@ -1132,7 +1156,7 @@ void SimulateGestureScrollSequence(WebContents* web_contents,
   scroll_begin.SetPositionInWidget(gfx::PointF(point));
   scroll_begin.data.scroll_begin.delta_x_hint = delta.x();
   scroll_begin.data.scroll_begin.delta_y_hint = delta.y();
-  widget_host->ForwardGestureEvent(scroll_begin);
+  render_widget_host->ForwardGestureEvent(scroll_begin);
 
   blink::WebGestureEvent scroll_update(
       blink::WebGestureEvent::Type::kGestureScrollUpdate,
@@ -1143,14 +1167,31 @@ void SimulateGestureScrollSequence(WebContents* web_contents,
   scroll_update.data.scroll_update.delta_y = delta.y();
   scroll_update.data.scroll_update.velocity_x = 0;
   scroll_update.data.scroll_update.velocity_y = 0;
-  widget_host->ForwardGestureEvent(scroll_update);
+  render_widget_host->ForwardGestureEvent(scroll_update);
 
   blink::WebGestureEvent scroll_end(
       blink::WebGestureEvent::Type::kGestureScrollEnd,
       blink::WebInputEvent::kNoModifiers, ui::EventTimeForNow(),
       blink::WebGestureDevice::kTouchpad);
   scroll_end.SetPositionInWidget(gfx::PointF(point));
-  widget_host->ForwardGestureEvent(scroll_end);
+  render_widget_host->ForwardGestureEvent(scroll_end);
+}
+
+void SimulateGestureScrollSequence(WebContents* web_contents,
+                                   const gfx::Point& point,
+                                   const gfx::Vector2dF& delta) {
+  RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
+      web_contents->GetPrimaryMainFrame()->GetRenderWidgetHost());
+
+  SimulateGestureScrollSequence(widget_host, point, delta);
+}
+
+void SimulateGestureEvent(RenderWidgetHost* render_widget_host,
+                          const blink::WebGestureEvent& gesture_event,
+                          const ui::LatencyInfo& latency) {
+  RenderWidgetHostViewBase* view =
+      static_cast<RenderWidgetHostViewBase*>(render_widget_host->GetView());
+  view->ProcessGestureEvent(gesture_event, latency);
 }
 
 void SimulateGestureEvent(WebContents* web_contents,
@@ -1904,22 +1945,15 @@ EvalJsResult EvalJsAfterLifecycleUpdate(
   return result;
 }
 
-namespace {
-void AddToSetIfFrameMatchesPredicate(
-    std::set<RenderFrameHost*>* frame_set,
-    base::OnceCallback<bool(RenderFrameHost*)> predicate,
-    RenderFrameHost* host) {
-  if (std::move(predicate).Run(host))
-    frame_set->insert(host);
-}
-}
-
 RenderFrameHost* FrameMatchingPredicateOrNullptr(
     Page& page,
     base::RepeatingCallback<bool(RenderFrameHost*)> predicate) {
   std::set<RenderFrameHost*> frame_set;
-  page.GetMainDocument().ForEachRenderFrameHost(base::BindRepeating(
-      &AddToSetIfFrameMatchesPredicate, &frame_set, predicate));
+  page.GetMainDocument().ForEachRenderFrameHost(
+      [&predicate, &frame_set](RenderFrameHost* rfh) {
+        if (predicate.Run(rfh))
+          frame_set.insert(rfh);
+      });
   EXPECT_LE(frame_set.size(), 1u);
   return frame_set.size() == 1 ? *frame_set.begin() : nullptr;
 }
@@ -1963,8 +1997,8 @@ bool HasOriginKeyedProcess(RenderFrameHost* frame) {
 std::vector<RenderFrameHost*> CollectAllRenderFrameHosts(
     RenderFrameHost* starting_rfh) {
   std::vector<RenderFrameHost*> visited_frames;
-  starting_rfh->ForEachRenderFrameHost(base::BindLambdaForTesting(
-      [&](RenderFrameHost* rfh) { visited_frames.push_back(rfh); }));
+  starting_rfh->ForEachRenderFrameHost(
+      [&](RenderFrameHost* rfh) { visited_frames.push_back(rfh); });
   return visited_frames;
 }
 
@@ -1975,8 +2009,8 @@ std::vector<RenderFrameHost*> CollectAllRenderFrameHosts(Page& page) {
 std::vector<RenderFrameHost*> CollectAllRenderFrameHosts(
     WebContents* web_contents) {
   std::vector<RenderFrameHost*> visited_frames;
-  web_contents->ForEachRenderFrameHost(base::BindLambdaForTesting(
-      [&](RenderFrameHost* rfh) { visited_frames.push_back(rfh); }));
+  web_contents->ForEachRenderFrameHost(
+      [&](RenderFrameHost* rfh) { visited_frames.push_back(rfh); });
   return visited_frames;
 }
 
@@ -2024,34 +2058,24 @@ std::string GetCookies(BrowserContext* browser_context,
                        const GURL& url,
                        net::CookieOptions::SameSiteCookieContext context,
                        net::CookiePartitionKeyCollection key_collection) {
-  std::string cookies;
-  base::RunLoop run_loop;
   mojo::Remote<network::mojom::CookieManager> cookie_manager;
   browser_context->GetDefaultStoragePartition()
       ->GetNetworkContext()
       ->GetCookieManager(cookie_manager.BindNewPipeAndPassReceiver());
   net::CookieOptions options;
   options.set_same_site_cookie_context(context);
-  cookie_manager->GetCookieList(
-      url, options, key_collection,
-      base::BindOnce(
-          [](std::string* cookies_out, base::RunLoop* run_loop,
-             const net::CookieAccessResultList& cookies,
-             const net::CookieAccessResultList& excluded_cookies) {
-            *cookies_out = net::CanonicalCookie::BuildCookieLine(cookies);
-            run_loop->Quit();
-          },
-          &cookies, &run_loop));
-  run_loop.Run();
-  return cookies;
+  base::test::TestFuture<const net::CookieAccessResultList&,
+                         const net::CookieAccessResultList&>
+      future;
+  cookie_manager->GetCookieList(url, options, key_collection,
+                                future.GetCallback());
+  return net::CanonicalCookie::BuildCookieLine(std::get<0>(future.Get()));
 }
 
 std::vector<net::CanonicalCookie> GetCanonicalCookies(
     BrowserContext* browser_context,
     const GURL& url,
     net::CookiePartitionKeyCollection key_collection) {
-  std::vector<net::CanonicalCookie> cookies;
-  base::RunLoop run_loop;
   mojo::Remote<network::mojom::CookieManager> cookie_manager;
   browser_context->GetDefaultStoragePartition()
       ->GetNetworkContext()
@@ -2060,19 +2084,12 @@ std::vector<net::CanonicalCookie> GetCanonicalCookies(
   net::CookieOptions options;
   options.set_same_site_cookie_context(
       net::CookieOptions::SameSiteCookieContext::MakeInclusive());
-  cookie_manager->GetCookieList(
-      url, options, key_collection,
-      base::BindOnce(
-          [](base::RunLoop* run_loop,
-             std::vector<net::CanonicalCookie>* cookies_out,
-             const net::CookieAccessResultList& cookies,
-             const net::CookieAccessResultList& excluded_cookies) {
-            *cookies_out = net::cookie_util::StripAccessResults(cookies);
-            run_loop->Quit();
-          },
-          &run_loop, &cookies));
-  run_loop.Run();
-  return cookies;
+  base::test::TestFuture<const net::CookieAccessResultList&,
+                         const net::CookieAccessResultList&>
+      future;
+  cookie_manager->GetCookieList(url, options, key_collection,
+                                future.GetCallback());
+  return net::cookie_util::StripAccessResults(std::get<0>(future.Get()));
 }
 
 bool SetCookie(BrowserContext* browser_context,
@@ -2080,8 +2097,6 @@ bool SetCookie(BrowserContext* browser_context,
                const std::string& value,
                net::CookieOptions::SameSiteCookieContext context,
                net::SamePartyContext::Type party_context) {
-  bool result = false;
-  base::RunLoop run_loop;
   mojo::Remote<network::mojom::CookieManager> cookie_manager;
   browser_context->GetDefaultStoragePartition()
       ->GetNetworkContext()
@@ -2095,40 +2110,48 @@ bool SetCookie(BrowserContext* browser_context,
   options.set_include_httponly();
   options.set_same_site_cookie_context(context);
   options.set_same_party_context(net::SamePartyContext(party_context));
-  cookie_manager->SetCanonicalCookie(
-      *cc.get(), url, options,
-      base::BindOnce(
-          [](bool* result, base::RunLoop* run_loop,
-             net::CookieAccessResult set_cookie_access_result) {
-            *result = set_cookie_access_result.status.IsInclude();
-            run_loop->Quit();
-          },
-          &result, &run_loop));
-  run_loop.Run();
-  return result;
+  base::test::TestFuture<net::CookieAccessResult> future;
+  cookie_manager->SetCanonicalCookie(*cc.get(), url, options,
+                                     future.GetCallback());
+  return future.Get().status.IsInclude();
+}
+
+bool SetPartitionedCookie(BrowserContext* browser_context,
+                          const GURL& url,
+                          const std::string& value,
+                          const net::CookiePartitionKey& cookie_partition_key,
+                          net::CookieOptions::SameSiteCookieContext context,
+                          net::SamePartyContext::Type party_context) {
+  DCHECK(base::Contains(value, ";Partitioned"));
+  mojo::Remote<network::mojom::CookieManager> cookie_manager;
+  browser_context->GetDefaultStoragePartition()
+      ->GetNetworkContext()
+      ->GetCookieManager(cookie_manager.BindNewPipeAndPassReceiver());
+  std::unique_ptr<net::CanonicalCookie> cc(net::CanonicalCookie::Create(
+      url, value, base::Time::Now(), absl::nullopt /* server_time */,
+      cookie_partition_key));
+  DCHECK(cc);
+
+  net::CookieOptions options;
+  options.set_include_httponly();
+  options.set_same_site_cookie_context(context);
+  options.set_same_party_context(net::SamePartyContext(party_context));
+  base::test::TestFuture<net::CookieAccessResult> future;
+  cookie_manager->SetCanonicalCookie(*cc, url, options, future.GetCallback());
+  return future.Get().status.IsInclude();
 }
 
 uint32_t DeleteCookies(BrowserContext* browser_context,
                        network::mojom::CookieDeletionFilter filter) {
-  base::RunLoop run_loop;
   mojo::Remote<network::mojom::CookieManager> cookie_manager;
   browser_context->GetDefaultStoragePartition()
       ->GetNetworkContext()
       ->GetCookieManager(cookie_manager.BindNewPipeAndPassReceiver());
 
-  uint32_t result = 0U;
+  base::test::TestFuture<uint32_t> future;
   cookie_manager->DeleteCookies(
-      network::mojom::CookieDeletionFilter::New(filter),
-      base::BindOnce(
-          [](uint32_t* result, base::RunLoop* run_loop,
-             uint32_t cookies_cleared) {
-            *result = cookies_cleared;
-            run_loop->Quit();
-          },
-          &result, &run_loop));
-
-  run_loop.Run();
-  return result;
+      network::mojom::CookieDeletionFilter::New(filter), future.GetCallback());
+  return future.Get();
 }
 
 void FetchHistogramsFromChildProcesses() {
@@ -2248,8 +2271,9 @@ void WaitForAccessibilityTreeToContainNodeWithName(WebContents* web_contents,
       web_contents_impl->GetPrimaryMainFrame());
   BrowserAccessibilityManager* main_frame_manager =
       main_frame->browser_accessibility_manager();
-  while (!main_frame_manager || !AccessibilityTreeContainsNodeWithName(
-             main_frame_manager->GetRoot(), name)) {
+  while (!main_frame_manager ||
+         !AccessibilityTreeContainsNodeWithName(
+             main_frame_manager->GetBrowserAccessibilityRoot(), name)) {
     WaitForAccessibilityTreeToChange(web_contents);
     main_frame_manager = main_frame->browser_accessibility_manager();
   }
@@ -2278,7 +2302,7 @@ ui::AXPlatformNodeDelegate* GetRootAccessibilityNode(
       static_cast<WebContentsImpl*>(web_contents);
   BrowserAccessibilityManager* manager =
       web_contents_impl->GetRootBrowserAccessibilityManager();
-  return manager ? manager->GetRoot() : nullptr;
+  return manager ? manager->GetBrowserAccessibilityRoot() : nullptr;
 }
 
 FindAccessibilityNodeCriteria::FindAccessibilityNodeCriteria() = default;
@@ -2429,27 +2453,15 @@ WebContents* GetFocusedWebContents(WebContents* web_contents) {
 
 namespace {
 
-RenderFrameMetadataProviderImpl* RenderFrameMetadataProviderFromFrameTreeNode(
-    FrameTreeNode* node) {
-  DCHECK(node);
-  DCHECK(node->current_frame_host());
-  DCHECK(node->current_frame_host()->GetRenderWidgetHost());
-  return node->current_frame_host()
-      ->GetRenderWidgetHost()
-      ->render_frame_metadata_provider();
-}
-
-RenderFrameMetadataProviderImpl* RenderFrameMetadataProviderFromWebContents(
-    WebContents* web_contents) {
-  DCHECK(web_contents);
-  DCHECK(web_contents->GetPrimaryMainFrame()->GetRenderViewHost());
-  DCHECK(
-      RenderWidgetHostImpl::From(
-          web_contents->GetPrimaryMainFrame()->GetRenderViewHost()->GetWidget())
-          ->render_frame_metadata_provider());
-  return RenderWidgetHostImpl::From(web_contents->GetPrimaryMainFrame()
-                                        ->GetRenderViewHost()
-                                        ->GetWidget())
+RenderFrameMetadataProviderImpl* RenderFrameMetadataProviderFromRenderFrameHost(
+    RenderFrameHost* render_frame_host) {
+  DCHECK(render_frame_host);
+  DCHECK(render_frame_host->GetRenderWidgetHost());
+  // This helper should return a valid provider since it's used for
+  // RenderFrameSubmissionObserver ctor.
+  DCHECK(RenderWidgetHostImpl::From(render_frame_host->GetRenderWidgetHost())
+             ->render_frame_metadata_provider());
+  return RenderWidgetHostImpl::From(render_frame_host->GetRenderWidgetHost())
       ->render_frame_metadata_provider();
 }
 
@@ -2790,12 +2802,19 @@ RenderFrameSubmissionObserver::RenderFrameSubmissionObserver(
 RenderFrameSubmissionObserver::RenderFrameSubmissionObserver(
     FrameTreeNode* node)
     : RenderFrameSubmissionObserver(
-          RenderFrameMetadataProviderFromFrameTreeNode(node)) {}
+          RenderFrameMetadataProviderFromRenderFrameHost(
+              node->current_frame_host())) {}
 
 RenderFrameSubmissionObserver::RenderFrameSubmissionObserver(
     WebContents* web_contents)
     : RenderFrameSubmissionObserver(
-          RenderFrameMetadataProviderFromWebContents(web_contents)) {}
+          RenderFrameMetadataProviderFromRenderFrameHost(
+              web_contents->GetPrimaryMainFrame())) {}
+
+RenderFrameSubmissionObserver::RenderFrameSubmissionObserver(
+    RenderFrameHost* rfh)
+    : RenderFrameSubmissionObserver(
+          RenderFrameMetadataProviderFromRenderFrameHost(rfh)) {}
 
 RenderFrameSubmissionObserver::~RenderFrameSubmissionObserver() {
   render_frame_metadata_provider_->RemoveObserver(this);
@@ -3847,10 +3866,35 @@ void UpdateUserActivationStateInterceptor::UpdateUserActivationState(
                                                       notification_type);
 }
 
-WebContents* GetEmbedderForGuest(content::WebContents* guest) {
-  CHECK(guest);
-  return static_cast<WebContentsImpl*>(guest)->GetOuterWebContents();
+// static
+void BlobURLStoreInterceptor::Intercept(
+    GURL target_url,
+    mojo::SelfOwnedAssociatedReceiverRef<blink::mojom::BlobURLStore> receiver) {
+  auto interceptor = base::WrapUnique(new BlobURLStoreInterceptor(target_url));
+  auto* raw_interceptor = interceptor.get();
+  auto impl = receiver->SwapImplForTesting(std::move(interceptor));
+  raw_interceptor->url_store_ = std::move(impl);
 }
+
+blink::mojom::BlobURLStore* BlobURLStoreInterceptor::GetForwardingInterface() {
+  return url_store_.get();
+}
+
+void BlobURLStoreInterceptor::Register(
+    mojo::PendingRemote<blink::mojom::Blob> blob,
+    const GURL& url,
+    // TODO(https://crbug.com/1224926): Remove these once experiment is over.
+    const base::UnguessableToken& unsafe_agent_cluster_id,
+    const absl::optional<net::SchemefulSite>& unsafe_top_level_site,
+    RegisterCallback callback) {
+  GetForwardingInterface()->Register(
+      std::move(blob), target_url_, unsafe_agent_cluster_id,
+      unsafe_top_level_site, std::move(callback));
+}
+
+BlobURLStoreInterceptor::BlobURLStoreInterceptor(GURL target_url)
+    : target_url_(target_url) {}
+BlobURLStoreInterceptor::~BlobURLStoreInterceptor() = default;
 
 namespace {
 
@@ -3922,18 +3966,13 @@ void EnsureCookiesFlushed(BrowserContext* browser_context) {
 }
 
 bool TestGuestAutoresize(WebContents* embedder_web_contents,
-                         WebContents* guest_web_contents) {
-  FrameTreeNode* guest_main_frame_node =
-      static_cast<WebContentsImpl*>(guest_web_contents)
-          ->GetPrimaryFrameTree()
-          .root();
+                         RenderFrameHost* guest_main_frame) {
   RenderFrameProxyHost* subframe_proxy_host =
-      guest_main_frame_node->render_manager()->GetProxyToOuterDelegate();
-
-  RenderWidgetHost* guest_rwh =
-      guest_web_contents->GetRenderWidgetHostView()->GetRenderWidgetHost();
-  RenderWidgetHostImpl* guest_rwh_impl =
-      static_cast<RenderWidgetHostImpl*>(guest_rwh);
+      FrameTreeNode::From(guest_main_frame)
+          ->render_manager()
+          ->GetProxyToOuterDelegate();
+  RenderWidgetHostImpl* guest_rwh_impl = static_cast<RenderWidgetHostImpl*>(
+      guest_main_frame->GetRenderWidgetHost());
 
   auto interceptor = std::make_unique<SynchronizeVisualPropertiesInterceptor>(
       subframe_proxy_host);

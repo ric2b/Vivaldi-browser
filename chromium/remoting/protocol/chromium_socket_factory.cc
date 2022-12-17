@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,8 +31,7 @@
 #include "third_party/webrtc/rtc_base/net_helpers.h"
 #include "third_party/webrtc/rtc_base/socket.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 namespace {
 
@@ -463,5 +462,4 @@ ChromiumPacketSocketFactory::CreateAsyncResolver() {
   return new rtc::AsyncResolver();
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

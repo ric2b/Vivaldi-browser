@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -453,12 +453,6 @@ class POLICY_EXPORT SimpleJsonStringSchemaValidatingPolicyHandler
   bool ValidateJsonString(const std::string& json_string,
                           PolicyErrorMap* errors,
                           int index);
-
-  // Returns a string describing where an error occurred - |index| is the index
-  // of the string where the error occurred if the root value is a list, and
-  // ignored otherwise. |json_error_path| describes where the error occurred
-  // inside a JSON string (this can be empty).
-  std::string ErrorPath(int index, std::string json_error_path);
 
   // Record to UMA that this policy failed validation due to an error in one or
   // more embedded JSON strings - either unparsable, or didn't match the schema.

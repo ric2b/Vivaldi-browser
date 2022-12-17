@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,14 +10,14 @@ import android.text.TextUtils;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.BlockJUnit4ClassRunner;
 
 import org.chromium.base.test.util.Feature;
+import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 /**
  * Unit tests for {@TextInputState}.
  */
-@RunWith(BlockJUnit4ClassRunner.class)
+@RunWith(LocalRobolectricTestRunner.class)
 public class TextInputStateTest {
     @Test
     @Feature({"TextInput"})

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,6 +67,8 @@ TestingPlatformSupportForGpuMemoryBuffer::
   media_thread_.Start();
   ON_CALL(*gpu_factories_, GetTaskRunner())
       .WillByDefault(Return(media_thread_.task_runner()));
+  ON_CALL(*gpu_factories_, ContextCapabilities())
+      .WillByDefault(testing::Invoke([&]() { return capabilities_; }));
 }
 
 TestingPlatformSupportForGpuMemoryBuffer::
@@ -77,6 +79,11 @@ TestingPlatformSupportForGpuMemoryBuffer::
 media::GpuVideoAcceleratorFactories*
 TestingPlatformSupportForGpuMemoryBuffer::GetGpuFactories() {
   return gpu_factories_.get();
+}
+
+void TestingPlatformSupportForGpuMemoryBuffer::SetGpuCapabilities(
+    gpu::Capabilities* capabilities) {
+  capabilities_ = capabilities;
 }
 
 }  // namespace blink

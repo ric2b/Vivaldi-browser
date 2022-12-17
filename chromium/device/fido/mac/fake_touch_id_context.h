@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,9 @@ class FakeTouchIdContext : public TouchIdContext {
 
   ~FakeTouchIdContext() override;
 
+  // Will prevent the next call to PromptTouchId from running the callback.
+  void DoNotResolveNextPrompt();
+
   // TouchIdContext:
   void PromptTouchId(const std::u16string& reason, Callback callback) override;
 
@@ -32,6 +35,7 @@ class FakeTouchIdContext : public TouchIdContext {
   FakeTouchIdContext();
 
   bool callback_result_ = true;
+  bool resolve_next_prompt_ = true;
 };
 
 }  // namespace mac

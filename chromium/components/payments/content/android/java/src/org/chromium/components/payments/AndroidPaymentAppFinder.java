@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -415,7 +415,8 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
             // Initialize the native side of the downloader, once we know that a manifest file needs
             // to be downloaded.
             if (!mDownloader.isInitialized()) {
-                mDownloader.initialize(mFactoryDelegate.getParams().getWebContents());
+                mDownloader.initialize(mFactoryDelegate.getParams().getWebContents(),
+                        mFactoryDelegate.getCSPChecker());
             }
 
             manifestVerifiers.add(new PaymentManifestVerifier(

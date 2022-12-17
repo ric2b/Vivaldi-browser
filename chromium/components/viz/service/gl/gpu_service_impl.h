@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -123,6 +123,7 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
       scoped_refptr<gl::GLSurface> default_offscreen_surface,
       gpu::SyncPointManager* sync_point_manager = nullptr,
       gpu::SharedImageManager* shared_image_manager = nullptr,
+      gpu::Scheduler* scheduler = nullptr,
       base::WaitableEvent* shutdown_event = nullptr);
   void Bind(mojo::PendingReceiver<mojom::GpuService> pending_receiver);
 
@@ -247,9 +248,13 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
                       const GURL& active_url) override;
   void GetDawnInfo(GetDawnInfoCallback callback) override;
 
+  void GetIsolationKey(int client_id,
+                       const blink::WebGPUExecutionContextToken& token,
+                       GetIsolationKeyCallback cb) override;
   void StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
                        const std::string& key,
                        const std::string& shader) override;
+
   // Attempts to atomically shut down the process but only if not running in
   // host process. An error message will be logged.
   void MaybeExitOnContextLost() override;
@@ -319,7 +324,7 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
     return main_runner_;
   }
 
-  scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner() {
+  scoped_refptr<base::SingleThreadTaskRunner> compositor_gpu_task_runner() {
     return compositor_gpu_thread() ? compositor_gpu_thread()->task_runner()
                                    : main_runner_;
   }
@@ -459,13 +464,14 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   // Display compositor gpu thread.
   std::unique_ptr<CompositorGpuThread> compositor_gpu_thread_;
 
-  // On some platforms (e.g. android webview), the SyncPointManager and
-  // SharedImageManager comes from external sources.
+  // On some platforms (e.g. android webview), SyncPointManager,
+  // SharedImageManager and Scheduler come from external sources.
   std::unique_ptr<gpu::SyncPointManager> owned_sync_point_manager_;
 
   std::unique_ptr<gpu::SharedImageManager> owned_shared_image_manager_;
 
-  std::unique_ptr<gpu::Scheduler> scheduler_;
+  std::unique_ptr<gpu::Scheduler> owned_scheduler_;
+  raw_ptr<gpu::Scheduler, DanglingUntriaged> scheduler_;
 
 #if BUILDFLAG(ENABLE_VULKAN)
   raw_ptr<gpu::VulkanImplementation> vulkan_implementation_;

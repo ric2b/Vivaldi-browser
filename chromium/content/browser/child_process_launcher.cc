@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,16 +16,48 @@
 #include "base/time/time.h"
 #include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "build/build_config.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_launcher_utils.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/child_process_binding_types.h"
+#endif
 
 #if BUILDFLAG(IS_MAC)
 #include "content/browser/child_process_task_port_provider_mac.h"
 #endif
 
 namespace content {
+
+namespace {
+
+#if !BUILDFLAG(IS_ANDROID)
+// Returns the cumulative CPU usage for the specified process.
+base::TimeDelta GetCPUUsage(base::ProcessHandle process_handle) {
+#if BUILDFLAG(IS_MAC)
+  std::unique_ptr<base::ProcessMetrics> process_metrics =
+      base::ProcessMetrics::CreateProcessMetrics(
+          process_handle, ChildProcessTaskPortProvider::GetInstance());
+#else
+  std::unique_ptr<base::ProcessMetrics> process_metrics =
+      base::ProcessMetrics::CreateProcessMetrics(process_handle);
+#endif
+
+#if BUILDFLAG(IS_WIN)
+  // Use the precise version which is Windows specific.
+  // TODO(pmonette): Clean up this code when the precise version becomes the
+  //                 default.
+  return process_metrics->GetPreciseCumulativeCPUUsage();
+#else
+  return process_metrics->GetCumulativeCPUUsage();
+#endif
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
+
+}  // namespace
 
 using internal::ChildProcessLauncherHelper;
 
@@ -79,7 +111,11 @@ ChildProcessLauncher::ChildProcessLauncher(
       terminate_child_on_shutdown_(terminate_on_shutdown)
 #endif
 {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+#if BUILDFLAG(IS_WIN)
+  should_launch_elevated_ = delegate->ShouldLaunchElevated();
+#endif
 
   helper_ = base::MakeRefCounted<ChildProcessLauncherHelper>(
       child_process_id, std::move(command_line), std::move(delegate),
@@ -92,7 +128,7 @@ ChildProcessLauncher::ChildProcessLauncher(
 }
 
 ChildProcessLauncher::~ChildProcessLauncher() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (process_.process.IsValid() && terminate_child_on_shutdown_) {
     // Client has gone away, so just kill the process.
     ChildProcessLauncherHelper::ForceNormalProcessTerminationAsync(
@@ -102,7 +138,7 @@ ChildProcessLauncher::~ChildProcessLauncher() {
 
 void ChildProcessLauncher::SetProcessPriority(
     const ChildProcessLauncherPriority& priority) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::Process to_pass = process_.process.Duplicate();
   GetProcessLauncherTaskRunner()->PostTask(
       FROM_HERE,
@@ -116,7 +152,7 @@ void ChildProcessLauncher::Notify(ChildProcessLauncherHelper::Process process,
                                   DWORD last_error,
 #endif
                                   int error_code) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   starting_ = false;
   process_ = std::move(process);
 
@@ -136,19 +172,19 @@ void ChildProcessLauncher::Notify(ChildProcessLauncherHelper::Process process,
 }
 
 bool ChildProcessLauncher::IsStarting() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return starting_;
 }
 
 const base::Process& ChildProcessLauncher::GetProcess() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!starting_);
   return process_.process;
 }
 
 ChildProcessTerminationInfo ChildProcessLauncher::GetChildTerminationInfo(
     bool known_dead) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!process_.process.IsValid()) {
     // Make sure to avoid using the default termination status if the process
@@ -160,7 +196,20 @@ ChildProcessTerminationInfo ChildProcessLauncher::GetChildTerminationInfo(
     return termination_info_;
   }
 
+#if !BUILDFLAG(IS_ANDROID)
+  base::TimeDelta cpu_usage;
+  if (!should_launch_elevated_)
+    cpu_usage = GetCPUUsage(process_.process.Handle());
+#endif
+
   termination_info_ = helper_->GetTerminationInfo(process_, known_dead);
+
+#if !BUILDFLAG(IS_ANDROID)
+  // Get the cumulative CPU usage. This needs to be done before closing the
+  // process handle (on Windows) or reaping the zombie process (on MacOS, Linux,
+  // ChromeOS).
+  termination_info_.cpu_usage = cpu_usage;
+#endif
 
   // POSIX: If the process crashed, then the kernel closed the socket for it and
   // so the child has already died by the time we get here. Since
@@ -189,6 +238,11 @@ bool ChildProcessLauncher::TerminateProcess(const base::Process& process,
 }
 
 #if BUILDFLAG(IS_ANDROID)
+base::android::ChildBindingState
+ChildProcessLauncher::GetEffectiveChildBindingState() {
+  return helper_->GetEffectiveChildBindingState();
+}
+
 void ChildProcessLauncher::DumpProcessStack() {
   base::Process to_pass = process_.process.Duplicate();
   GetProcessLauncherTaskRunner()->PostTask(

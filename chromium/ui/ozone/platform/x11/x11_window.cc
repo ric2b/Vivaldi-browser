@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -960,7 +960,8 @@ void X11Window::SetShape(std::unique_ptr<ShapeRects> native_shape,
       SkPath path_in_dip;
       if (native_region.getBoundaryPath(&path_in_dip)) {
         SkPath path_in_pixels;
-        path_in_dip.transform(transform.matrix().asM33(), &path_in_pixels);
+        path_in_dip.transform(gfx::TransformToFlattenedSkMatrix(transform),
+                              &path_in_pixels);
         xregion = x11::CreateRegionFromSkPath(path_in_pixels);
       } else {
         xregion = std::make_unique<std::vector<x11::Rectangle>>();
@@ -1075,11 +1076,25 @@ void X11Window::SetDecorationInsets(const gfx::Insets* insets_px) {
     x11::DeleteProperty(xwindow_, atom);
     return;
   }
-  std::vector<uint32_t> extents{static_cast<uint32_t>(insets_px->left()),
-                                static_cast<uint32_t>(insets_px->right()),
-                                static_cast<uint32_t>(insets_px->top()),
-                                static_cast<uint32_t>(insets_px->bottom())};
-  x11::SetArrayProperty(xwindow_, atom, x11::Atom::CARDINAL, extents);
+
+  // For a window in maximised or minimised state, insets should be re-set to
+  // zero.
+  // On the other hand, non-zero insets should be set when the window is being
+  // initialised and has unknown state, otherwise the bounds will be
+  // unnecessarily inflated at later steps.
+  // See https://crbug.com/1281211 and https://crbug.com/1287212 for details.
+  if (GetPlatformWindowState() == PlatformWindowState::kNormal ||
+      GetPlatformWindowState() == PlatformWindowState::kUnknown) {
+    x11::SetArrayProperty(
+        xwindow_, atom, x11::Atom::CARDINAL,
+        std::vector<uint32_t>{static_cast<uint32_t>(insets_px->left()),
+                              static_cast<uint32_t>(insets_px->right()),
+                              static_cast<uint32_t>(insets_px->top()),
+                              static_cast<uint32_t>(insets_px->bottom())});
+  } else {
+    x11::SetArrayProperty(xwindow_, atom, x11::Atom::CARDINAL,
+                          std::vector<uint32_t>({0, 0, 0, 0}));
+  }
 }
 
 void X11Window::SetOpaqueRegion(const std::vector<gfx::Rect>* region_px) {

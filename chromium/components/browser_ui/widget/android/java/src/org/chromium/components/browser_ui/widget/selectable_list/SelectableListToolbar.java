@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -448,8 +448,9 @@ public class SelectableListToolbar<E>
         // the toolbar within a recycler view, where the view gets detached from window while
         // swiping (VB-58957). We want to save the selection even in detached state.
         if (!BuildConfig.IS_VIVALDI) {
-        mSelectionDelegate.clearSelection();
+        if (mSelectionDelegate != null) mSelectionDelegate.clearSelection();
         }
+
         if (mIsSearching) hideSearchView();
     }
 

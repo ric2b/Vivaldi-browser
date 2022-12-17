@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,26 +44,12 @@
 namespace autofill_assistant {
 namespace {
 
-bool ShouldSuppressKeyboardForState(AutofillAssistantState state) {
-  switch (state) {
-    case AutofillAssistantState::STARTING:
-    case AutofillAssistantState::RUNNING:
-      return true;
-
-    case AutofillAssistantState::PROMPT:
-    case AutofillAssistantState::BROWSE:
-    case AutofillAssistantState::MODAL_DIALOG:
-    case AutofillAssistantState::STOPPED:
-    case AutofillAssistantState::TRACKING:
-    case AutofillAssistantState::INACTIVE:
-      return false;
-  }
-}
-
 bool ShouldSendModelVersionInContext(const TriggerContext& trigger_context) {
-  return trigger_context.GetScriptParameters()
-             .GetSendAnnotateDomModelVersion()
-             .value_or(false) ||
+  return base::FeatureList::IsEnabled(
+             autofill_assistant::features::
+                 kAutofillAssistantSendModelVersionInClientContext) ||
+         trigger_context.GetScriptParameters()
+             .GetSendAnnotateDomModelVersion() ||
          base::CommandLine::ForCurrentProcess()->HasSwitch(
              switches::kAutofillAssistantAnnotateDom);
 }
@@ -208,9 +194,23 @@ void Controller::RequireUI() {
 }
 
 void Controller::SetUiShown(bool shown) {
+  if (trigger_context_ && trigger_context_->GetIsExternallyTriggered()) {
+    // UIState can only be modified by non-headless runs. For headless runs, the
+    // client is in charge of keeping the UIState value updated.
+    return;
+  }
   ui_shown_ = shown;
   if (runtime_manager_) {
-    runtime_manager_->SetUIState(shown ? UIState::kShown : UIState::kNotShown);
+    // By default, browsing features are suppressed during `UIState::kShown`.
+    // Therefore set a special state if no suppression is desired.
+    if (shown && trigger_context_ &&
+        !trigger_context_->GetSuppressBrowsingFeatures()) {
+      runtime_manager_->SetUIState(
+          UIState::kShownWithoutBrowsingFeatureSuppression);
+    } else {
+      runtime_manager_->SetUIState(shown ? UIState::kShown
+                                         : UIState::kNotShown);
+    }
   }
 
   for (ControllerObserver& observer : observers_) {
@@ -404,7 +404,7 @@ bool Controller::EnterState(AutofillAssistantState state) {
          (state == AutofillAssistantState::TRACKING && tracking_));
   state_ = state;
 
-  bool should_suppress_keyboard = ShouldSuppressKeyboardForState(state_);
+  bool should_suppress_keyboard = ShouldSuppressKeyboard();
   SuppressKeyboard(should_suppress_keyboard);
   for (ControllerObserver& observer : observers_) {
     observer.OnKeyboardSuppressionStateChanged(should_suppress_keyboard);
@@ -853,8 +853,7 @@ void Controller::InitFromParameters() {
   user_model_.SetCurrentURL(GetCurrentURL());
 
   GetService()->SetDisableRpcSigning(
-      trigger_context_->GetScriptParameters().GetDisableRpcSigning().value_or(
-          false));
+      trigger_context_->GetScriptParameters().GetDisableRpcSigning());
 }
 
 void Controller::Track(std::unique_ptr<TriggerContext> trigger_context,
@@ -927,7 +926,23 @@ AutofillAssistantState Controller::GetState() const {
 }
 
 bool Controller::ShouldSuppressKeyboard() const {
-  return ShouldSuppressKeyboardForState(state_);
+  // Return early if keyboard suppression is turned off.
+  if (trigger_context_ && !trigger_context_->GetSuppressBrowsingFeatures()) {
+    return false;
+  }
+
+  switch (state_) {
+    case AutofillAssistantState::STARTING:
+    case AutofillAssistantState::RUNNING:
+      return true;
+    case AutofillAssistantState::PROMPT:
+    case AutofillAssistantState::BROWSE:
+    case AutofillAssistantState::MODAL_DIALOG:
+    case AutofillAssistantState::STOPPED:
+    case AutofillAssistantState::TRACKING:
+    case AutofillAssistantState::INACTIVE:
+      return false;
+  }
 }
 
 base::Value Controller::GetDebugContext() {

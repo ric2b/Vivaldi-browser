@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -169,7 +169,8 @@ void WebAppSyncBridge::CommitUpdate(
     return;
   }
 
-  CheckRegistryUpdateData(update->update_data());
+  if (!disable_checks_for_testing_)
+    CheckRegistryUpdateData(update->update_data());
 
   std::unique_ptr<RegistryUpdateData> update_data = update->TakeUpdateData();
   std::unique_ptr<syncer::MetadataChangeList> metadata_change_list =

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -471,13 +471,38 @@ TEST(IdentifiabilityStudyStateStandaloneTest, ShouldReportEncounteredSurface) {
 
   TestingPrefServiceSimple pref_service;
   prefs::RegisterPrivacyBudgetPrefs(pref_service.registry());
-  test_utils::InspectableIdentifiabilityStudyState settings(&pref_service);
+  test_utils::InspectableIdentifiabilityStudyState state(&pref_service);
+
+  EXPECT_TRUE(state.group_settings().enabled());
+  EXPECT_TRUE(state.group_settings().IsUsingRandomSampling());
 
   // The specific surface doesn't matter.
-  EXPECT_TRUE(settings.ShouldReportEncounteredSurface(ukm::AssignNewSourceId(),
-                                                      kRegularSurface1));
-  EXPECT_FALSE(settings.ShouldReportEncounteredSurface(ukm::NoURLSourceId(),
-                                                       kRegularSurface1));
+  EXPECT_TRUE(state.ShouldReportEncounteredSurface(ukm::AssignNewSourceId(),
+                                                   kRegularSurface1));
+  EXPECT_FALSE(state.ShouldReportEncounteredSurface(ukm::NoURLSourceId(),
+                                                    kRegularSurface1));
+}
+
+// Test the mode in which only the meta experiment (i.e. reporting encountered
+// surfaces) is enabled.
+TEST(IdentifiabilityStudyStateStandaloneTest, OnlyReportEncounteredSurface) {
+  test::ScopedPrivacyBudgetConfig::Parameters params(
+      test::ScopedPrivacyBudgetConfig::Presets::kEnableRandomSampling);
+  params.allowed_random_types = {
+      blink::IdentifiableSurface::Type::kReservedInternal};
+  test::ScopedPrivacyBudgetConfig config(params);
+
+  TestingPrefServiceSimple pref_service;
+  prefs::RegisterPrivacyBudgetPrefs(pref_service.registry());
+  test_utils::InspectableIdentifiabilityStudyState state(&pref_service);
+
+  EXPECT_TRUE(state.group_settings().enabled());
+  EXPECT_TRUE(state.group_settings().IsUsingRandomSampling());
+
+  // The specific surface doesn't matter.
+  EXPECT_TRUE(state.ShouldReportEncounteredSurface(ukm::AssignNewSourceId(),
+                                                   kRegularSurface1));
+  EXPECT_FALSE(state.ShouldRecordSurface(kRegularSurface1));
 }
 
 TEST(IdentifiabilityStudyStateStandaloneTest, ClearsPrefsIfStudyIsDisabled) {
@@ -920,7 +945,7 @@ TEST(IdentifiabilityStudyStateStandaloneTest,
   prefs::RegisterPrivacyBudgetPrefs(pref_service.registry());
   test_utils::InspectableIdentifiabilityStudyState state(&pref_service);
 
-  EXPECT_TRUE(state.IsUsingAssignedBlockSampling());
+  EXPECT_TRUE(state.group_settings().IsUsingAssignedBlockSampling());
 
   // Any single selected group contributes kSurfacesInGroup surfaces.
   EXPECT_EQ(kSurfacesInGroup, state.active_surfaces().Size());

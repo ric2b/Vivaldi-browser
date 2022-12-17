@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -126,7 +126,8 @@ class PersistedData {
   const base::Value* GetAppKey(const std::string& id) const;
 
   // Returns an existing or newly created app key under a root pref.
-  base::Value* GetOrCreateAppKey(const std::string& id, base::Value* root);
+  base::Value::Dict* GetOrCreateAppKey(const std::string& id,
+                                       base::Value::Dict& root);
 
   // Returns fallback if the key does not exist.
   int GetInt(const std::string& id, const std::string& key, int fallback) const;

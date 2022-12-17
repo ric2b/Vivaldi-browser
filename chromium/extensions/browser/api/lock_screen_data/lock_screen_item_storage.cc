@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,6 +38,15 @@ constexpr char kLockScreenDataPrefKey[] = "lockScreenDataItems";
 
 constexpr char kExtensionStorageVersionPrefKey[] = "storage_version";
 constexpr char kExtensionItemCountPrefKey[] = "item_count";
+
+// Returns dictionary at `lock_screen_pref_dict[user_id][extension_id]`,
+// creating it if needed.
+base::Value::Dict& GetOrCreateExtensionInfoDict(
+    const std::string& user_id,
+    const std::string& extension_id,
+    base::Value::Dict& lock_screen_pref_dict) {
+  return *lock_screen_pref_dict.EnsureDict(user_id)->EnsureDict(extension_id);
+}
 
 LockScreenItemStorage* g_data_item_storage = nullptr;
 
@@ -408,10 +417,12 @@ void LockScreenItemStorage::OnItemRegistered(std::unique_ptr<DataItem> item,
                                                     std::move(item));
 
   {
-    DictionaryPrefUpdate update(local_state_, kLockScreenDataPrefKey);
-    update->SetPath({user_id_, extension_id, kExtensionItemCountPrefKey},
-                    base::Value(static_cast<int>(
-                        data_item_cache_[extension_id].data_items.size())));
+    ScopedDictPrefUpdate update(local_state_, kLockScreenDataPrefKey);
+    base::Value::Dict& info =
+        GetOrCreateExtensionInfoDict(user_id_, extension_id, *update);
+    info.Set(
+        kExtensionItemCountPrefKey,
+        static_cast<int>(data_item_cache_[extension_id].data_items.size()));
   }
 
   std::move(callback).Run(OperationResult::kSuccess, item_ptr);
@@ -468,10 +479,12 @@ void LockScreenItemStorage::OnItemDeleted(const std::string& extension_id,
 
   data_item_cache_[extension_id].data_items.erase(item_id);
   {
-    DictionaryPrefUpdate update(local_state_, kLockScreenDataPrefKey);
-    update->SetPath({user_id_, extension_id, kExtensionItemCountPrefKey},
-                    base::Value(static_cast<int>(
-                        data_item_cache_[extension_id].data_items.size())));
+    ScopedDictPrefUpdate update(local_state_, kLockScreenDataPrefKey);
+    base::Value::Dict& info =
+        GetOrCreateExtensionInfoDict(user_id_, extension_id, *update);
+    info.Set(
+        kExtensionItemCountPrefKey,
+        static_cast<int>(data_item_cache_[extension_id].data_items.size()));
   }
 
   std::move(callback).Run(result);
@@ -547,12 +560,11 @@ void LockScreenItemStorage::OnGotExtensionItems(
   }
 
   if (result == OperationResult::kSuccess) {
-    for (base::DictionaryValue::Iterator item_iter(*items);
-         !item_iter.IsAtEnd(); item_iter.Advance()) {
-      std::unique_ptr<DataItem> item = CreateDataItem(
-          item_iter.key(), extension_id, context_, value_store_cache_.get(),
+    for (const auto item : items->GetDict()) {
+      std::unique_ptr<DataItem> data_item = CreateDataItem(
+          item.first, extension_id, context_, value_store_cache_.get(),
           task_runner_.get(), crypto_key_);
-      data->second.data_items.emplace(item_iter.key(), std::move(item));
+      data->second.data_items.emplace(item.first, std::move(data_item));
     }
 
     // Record number of registered items.
@@ -562,12 +574,12 @@ void LockScreenItemStorage::OnGotExtensionItems(
   }
 
   {
-    DictionaryPrefUpdate update(local_state_, kLockScreenDataPrefKey);
-    base::Value info(base::Value::Type::DICTIONARY);
-    info.SetKey(kExtensionItemCountPrefKey,
-                base::Value(static_cast<int>(data->second.data_items.size())));
-    info.SetKey(kExtensionStorageVersionPrefKey, base::Value(2));
-    update->SetPath({user_id_, extension_id}, std::move(info));
+    ScopedDictPrefUpdate update(local_state_, kLockScreenDataPrefKey);
+    base::Value::Dict& info =
+        GetOrCreateExtensionInfoDict(user_id_, extension_id, *update);
+    info.Set(kExtensionItemCountPrefKey,
+             static_cast<int>(data->second.data_items.size()));
+    info.Set(kExtensionStorageVersionPrefKey, 2);
   }
 
   data->second.state = CachedExtensionData::State::kLoaded;
@@ -598,7 +610,7 @@ std::set<std::string> LockScreenItemStorage::GetExtensionsWithDataItems(
   std::set<std::string> result;
 
   const base::Value::Dict& items =
-      local_state_->GetValueDict(kLockScreenDataPrefKey);
+      local_state_->GetDict(kLockScreenDataPrefKey);
   const base::Value::Dict* user_data = items.FindDictByDottedPath(user_id_);
   if (!user_data)
     return result;
@@ -621,7 +633,7 @@ std::set<ExtensionId> LockScreenItemStorage::GetExtensionsToMigrate() {
   std::set<ExtensionId> result;
 
   const base::Value::Dict& items =
-      local_state_->GetValueDict(kLockScreenDataPrefKey);
+      local_state_->GetDict(kLockScreenDataPrefKey);
 
   const base::Value::Dict* user_data = items.FindDictByDottedPath(user_id_);
   if (!user_data)
@@ -666,8 +678,8 @@ void LockScreenItemStorage::ClearExtensionData(const std::string& id) {
 void LockScreenItemStorage::RemoveExtensionFromLocalState(
     const std::string& id) {
   {
-    DictionaryPrefUpdate update(local_state_, kLockScreenDataPrefKey);
-    update->RemovePath(base::StrCat({user_id_, ".", id}));
+    ScopedDictPrefUpdate update(local_state_, kLockScreenDataPrefKey);
+    update->RemoveByDottedPath(base::StrCat({user_id_, ".", id}));
   }
 
   data_item_cache_[id].state = CachedExtensionData::State::kLoaded;

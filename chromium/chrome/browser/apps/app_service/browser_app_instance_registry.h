@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,6 +56,10 @@ class BrowserAppInstanceRegistry
   // Get a single browser window instance by ID (Ash or Lacros).
   const BrowserWindowInstance* GetBrowserWindowInstanceById(
       base::UnguessableToken id) const;
+
+  // Get a single window by instance ID (Ash or Lacros). Returns a nullptr if
+  // instance identified by |id| does not exist.
+  aura::Window* GetWindowByInstanceId(const base::UnguessableToken& id) const;
 
   // Get all instances of lacros browser window instances.
   std::set<const BrowserWindowInstance*> GetLacrosBrowserWindowInstances()

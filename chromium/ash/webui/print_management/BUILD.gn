@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -16,7 +16,7 @@ static_library("print_management") {
 
   deps = [
     "//ash/webui/print_management/mojom",
-    "//ash/webui/resources:print_management_resources",
+    "//ash/webui/print_management/resources:resources",
     "//ash/webui/web_applications",
     "//chromeos/strings/",
     "//content/public/browser",
@@ -24,8 +24,4 @@ static_library("print_management") {
     "//ui/resources",
     "//ui/webui",
   ]
-}
-
-group("closure_compile") {
-  deps = [ "resources:closure_compile_module" ]
 }

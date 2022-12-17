@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -202,7 +202,8 @@ def main():
   else:
     test_target = 'cronet_test_instrumentation_apk'
     unit_target = 'cronet_unittests_android'
-    gn_args = get_android_gn_args(options.release)
+    gn_args = get_android_gn_args(
+        options.release) + " treat_warnings_as_errors=false "
     gn_extra = []
     out_dir_suffix = ''
     if options.x86:

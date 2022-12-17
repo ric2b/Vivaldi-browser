@@ -1,4 +1,5 @@
 adanilo@chromium.org
+alexbn@chromium.org
 austinct@chromium.org
 benreich@chromium.org
 fdegros@chromium.org
@@ -12,3 +13,8 @@ noel@chromium.org
 petermarshall@chromium.org
 simmonsjosh@google.com
 wenbojie@chromium.org
+
+# Temporary ownership for code refactoring: Remove after 2022-12-31.
+# For horizontal changes, usually related to the WebUI toolchain. For any
+# changes that have to do with business logic direct to CrOS OWNERS above.
+file://ui/webui/PLATFORM_OWNERS

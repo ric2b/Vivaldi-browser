@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,9 +27,9 @@ class MetricsStateManager;
 // Used only for testing.
 namespace internal {
 // TODO(crbug.com/1068796): Replace kMetricsReportingFeature with a better name.
-extern const base::Feature kMetricsReportingFeature;
+BASE_DECLARE_FEATURE(kMetricsReportingFeature);
 #if BUILDFLAG(IS_ANDROID)
-extern const base::Feature kPostFREFixMetricsReportingFeature;
+BASE_DECLARE_FEATURE(kPostFREFixMetricsReportingFeature);
 #endif  // BUILDFLAG(IS_ANDROID)
 extern const char kRateParamName[];
 }  // namespace internal

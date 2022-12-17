@@ -5,15 +5,15 @@
 namespace guest_view {
 
 void GuestViewBase::WebContentsDidDetach() {
-  // We can now safely do any pending attaching.
-  if (perform_attach_callback_)
-    std::move(perform_attach_callback_).Run();
-  if (attach_completion_callback_)
-    SignalWhenReady(std::move(attach_completion_callback_));
 }
 
 content::WebContentsDelegate* GuestViewBase::GetDevToolsConnector() {
   return this;
+}
+
+gfx::Size GuestViewBase::GetSizeForNewRenderView(
+    content::WebContents* web_contents) {
+  return normal_size_;
 }
 
 }  // namespace guest_view

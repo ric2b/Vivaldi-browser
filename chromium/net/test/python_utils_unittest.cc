@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,22 +30,6 @@ TEST(PythonUtils, SetPythonPathInEnvironment) {
   EXPECT_NE(env.end(), env.find(FILE_PATH_LITERAL("VPYTHON_CLEAR_PYTHONPATH")));
   EXPECT_EQ(base::NativeEnvironmentString(),
             env[FILE_PATH_LITERAL("VPYTHON_CLEAR_PYTHONPATH")]);
-}
-
-TEST(PythonUtils, PythonRunTime) {
-  base::CommandLine cmd_line(base::CommandLine::NO_PROGRAM);
-  EXPECT_TRUE(GetPythonCommand(&cmd_line));
-
-  // Run a python command to print a string and make sure the output is what
-  // we want.
-  cmd_line.AppendArg("-c");
-  std::string input("PythonUtilsTest");
-  std::string python_cmd = base::StringPrintf("print('%s');", input.c_str());
-  cmd_line.AppendArg(python_cmd);
-  std::string output;
-  EXPECT_TRUE(base::GetAppOutput(cmd_line, &output));
-  base::TrimWhitespaceASCII(output, base::TRIM_TRAILING, &output);
-  EXPECT_EQ(input, output);
 }
 
 TEST(PythonUtils, Python3RunTime) {

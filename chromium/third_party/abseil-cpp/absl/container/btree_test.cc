@@ -18,6 +18,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -26,6 +27,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -38,7 +40,6 @@
 #include "absl/flags/flag.h"
 #include "absl/hash/hash_testing.h"
 #include "absl/memory/memory.h"
-#include "absl/meta/type_traits.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
@@ -3246,6 +3247,77 @@ TEST(Btree, NotAssignableType) {
     map.erase(map.begin());
     EXPECT_THAT(map, ElementsAre(Pair(2, 2), Pair(2, 3), Pair(3, 3)));
   }
+}
+
+struct ArenaLike {
+  void* recycled = nullptr;
+  size_t recycled_size = 0;
+};
+
+// A very simple implementation of arena allocation.
+template <typename T>
+class ArenaLikeAllocator : public std::allocator<T> {
+ public:
+  // Standard library containers require the ability to allocate objects of
+  // different types which they can do so via rebind.other.
+  template <typename U>
+  struct rebind {
+    using other = ArenaLikeAllocator<U>;
+  };
+
+  explicit ArenaLikeAllocator(ArenaLike* arena) noexcept : arena_(arena) {}
+
+  ~ArenaLikeAllocator() {
+    if (arena_->recycled != nullptr) {
+      delete [] static_cast<T*>(arena_->recycled);
+      arena_->recycled = nullptr;
+    }
+  }
+
+  template<typename U>
+  explicit ArenaLikeAllocator(const ArenaLikeAllocator<U>& other) noexcept
+      : arena_(other.arena_) {}
+
+  T* allocate(size_t num_objects, const void* = nullptr) {
+    size_t size = num_objects * sizeof(T);
+    if (arena_->recycled != nullptr && arena_->recycled_size == size) {
+      T* result = static_cast<T*>(arena_->recycled);
+      arena_->recycled = nullptr;
+      return result;
+    }
+    return new T[num_objects];
+  }
+
+  void deallocate(T* p, size_t num_objects) {
+    size_t size = num_objects * sizeof(T);
+
+    // Simulate writing to the freed memory as an actual arena allocator might
+    // do. This triggers an error report if the memory is poisoned.
+    memset(p, 0xde, size);
+
+    if (arena_->recycled == nullptr) {
+      arena_->recycled = p;
+      arena_->recycled_size = size;
+    } else {
+      delete [] p;
+    }
+  }
+
+  ArenaLike* arena_;
+};
+
+// This test verifies that an arena allocator that reuses memory will not be
+// asked to free poisoned BTree memory.
+TEST(Btree, ReusePoisonMemory) {
+  using Alloc = ArenaLikeAllocator<int64_t>;
+  using Set = absl::btree_set<int64_t, std::less<int64_t>, Alloc>;
+  ArenaLike arena;
+  Alloc alloc(&arena);
+  Set set(alloc);
+
+  set.insert(0);
+  set.erase(0);
+  set.insert(0);
 }
 
 }  // namespace

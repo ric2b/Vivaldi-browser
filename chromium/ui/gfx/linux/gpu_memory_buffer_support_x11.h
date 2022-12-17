@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,6 +31,8 @@ class COMPONENT_EXPORT(GBM_SUPPORT_X11) GpuMemoryBufferSupportX11 {
   std::unique_ptr<GbmBuffer> CreateBuffer(gfx::BufferFormat format,
                                           const gfx::Size& size,
                                           gfx::BufferUsage usage);
+
+  bool CanCreateNativePixmapForFormat(gfx::BufferFormat format);
   std::unique_ptr<GbmBuffer> CreateBufferFromHandle(
       const gfx::Size& size,
       gfx::BufferFormat format,

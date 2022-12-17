@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -167,6 +167,7 @@ TEST(AXNodeDataTest, IsClickable) {
       ax::mojom::Role::kCheckBox,
       ax::mojom::Role::kColorWell,
       ax::mojom::Role::kComboBoxMenuButton,
+      ax::mojom::Role::kComboBoxSelect,
       ax::mojom::Role::kDate,
       ax::mojom::Role::kDateTime,
       ax::mojom::Role::kDisclosureTriangle,
@@ -341,9 +342,12 @@ TEST(AXNodeDataTest, SupportsExpandCollapse) {
   AXNodeData data;
 
   std::unordered_set<ax::mojom::Role> roles_expected_supports_expand_collapse =
-      {ax::mojom::Role::kComboBoxGrouping, ax::mojom::Role::kComboBoxMenuButton,
+      {ax::mojom::Role::kComboBoxGrouping,
+       ax::mojom::Role::kComboBoxMenuButton,
+       ax::mojom::Role::kComboBoxSelect,
        ax::mojom::Role::kDisclosureTriangle,
-       ax::mojom::Role::kTextFieldWithComboBox, ax::mojom::Role::kTreeItem};
+       ax::mojom::Role::kTextFieldWithComboBox,
+       ax::mojom::Role::kTreeItem};
 
   for (int role_idx = static_cast<int>(ax::mojom::Role::kMinValue);
        role_idx <= static_cast<int>(ax::mojom::Role::kMaxValue); role_idx++) {
@@ -366,6 +370,11 @@ TEST(AXNodeDataTest, SupportsExpandCollapse) {
 
 TEST(AXNodeDataTest, SetName) {
   AXNodeData data;
+  // SetName should not be called on a role of kUnknown. That role means the
+  // role has not yet been set, and we need a role to identify the NameFrom on
+  // objects where it has not been set. This is enforced by a DCHECK.
+  EXPECT_DCHECK_DEATH(data.SetName("no role yet"));
+
   // SetName should not be called on a role of kNone. That role is used for
   // presentational objects which should not be included in the accessibility
   // tree. This is enforced by a DCHECK.
@@ -392,6 +401,10 @@ TEST(AXNodeDataTest, SetName) {
   EXPECT_EQ("baz", data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   EXPECT_EQ(data.GetNameFrom(), ax::mojom::NameFrom::kContents);
 
+  // Setting the name to the empty string should not be done by
+  // `SetNameChecked`, which enforces that expectation with a DCHECK.
+  EXPECT_DCHECK_DEATH(data.SetNameChecked(""));
+
   data.SetNameExplicitlyEmpty();
   EXPECT_EQ("", data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   EXPECT_EQ(data.GetNameFrom(), ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
@@ -399,6 +412,44 @@ TEST(AXNodeDataTest, SetName) {
   data.SetName("foo");
   EXPECT_EQ("foo", data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   EXPECT_EQ(data.GetNameFrom(), ax::mojom::NameFrom::kContents);
+}
+
+TEST(AXNodeDataTest, SetDescription) {
+  AXNodeData data;
+  data.role = ax::mojom::Role::kButton;
+
+  // Initially there is no description and no DescriptionFrom.
+  EXPECT_EQ("",
+            data.GetStringAttribute(ax::mojom::StringAttribute::kDescription));
+  EXPECT_EQ(data.GetDescriptionFrom(), ax::mojom::DescriptionFrom::kNone);
+
+  // When the DescriptionFrom is not specified it defaults to kAriaDescription.
+  data.SetDescription("foo");
+  EXPECT_EQ("foo",
+            data.GetStringAttribute(ax::mojom::StringAttribute::kDescription));
+  EXPECT_EQ(data.GetDescriptionFrom(),
+            ax::mojom::DescriptionFrom::kAriaDescription);
+
+  // Setting the description explicitly empty should both clear the string
+  // and update the DescriptionFrom.
+  data.SetDescriptionExplicitlyEmpty();
+  EXPECT_EQ("",
+            data.GetStringAttribute(ax::mojom::StringAttribute::kDescription));
+  EXPECT_EQ(data.GetDescriptionFrom(),
+            ax::mojom::DescriptionFrom::kAttributeExplicitlyEmpty);
+
+  // We currently do not enforce that the description gets set prior to the
+  // DescriptionFrom. As a result it is possible to have a DescriptionFrom
+  // value other than kNone and kAttributeExplicitlyEmpty while the description
+  // is an empty string.
+  data.SetDescriptionFrom(ax::mojom::DescriptionFrom::kTitle);
+  EXPECT_EQ("",
+            data.GetStringAttribute(ax::mojom::StringAttribute::kDescription));
+  EXPECT_EQ(data.GetDescriptionFrom(), ax::mojom::DescriptionFrom::kTitle);
+
+  // Setting the description to the empty string should not be done by
+  // SetDescription, which enforces that expectation with a DCHECK.
+  EXPECT_DCHECK_DEATH(data.SetDescription(""));
 }
 
 TEST(AXNodeDataTest, BitFieldsSanityCheck) {

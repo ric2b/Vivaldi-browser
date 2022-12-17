@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -128,9 +128,12 @@ message DeviceReportingProto {
   optional bool report_activity_times = 2 [default = true];
   optional bool report_boot_mode = 3 [default = true];
   optional bool report_location = 4 [default = false];
-  optional bool report_network_interfaces = 5 [default = true];
+  // TODO(b/243958646): The server side should remove the usage of this field.
+  optional bool report_network_interfaces = 5
+      [default = true, deprecated = true];
   optional bool report_users = 6 [default = true];
-  optional bool report_hardware_status = 7 [default = true];
+  // TODO(b/243960946): The server side should remove the usage of this field.
+  optional bool report_hardware_status = 7 [default = true, deprecated = true];
   optional bool report_session_status = 8 [default = true];
   optional bool report_os_update_status = 10 [default = false];
   optional bool report_running_kiosk_app = 11 [default = false];
@@ -162,9 +165,11 @@ message DeviceReportingProto {
   // chrome/browser/ash/policy/core/device_cloud_policy_manager_ash.cc.
   optional int64 device_status_frequency = 9 [default = 10800000];
 
+  // Obsolete: This policy is not supported by the client starting with M-106.
   // This is a internal flag that will be used to control whether enable
   // granular device reporting is enabled
-  optional bool enable_granular_reporting = 32 [default = true];
+  optional bool enable_granular_reporting = 32
+      [default = true, deprecated = true];
 
   // Network telemetry policies.
   optional int64 report_network_telemetry_collection_rate_ms = 33
@@ -175,6 +180,8 @@ message DeviceReportingProto {
   // Audio telemetry policy
   optional int64 report_device_audio_status_checking_rate_ms = 35
       [default = 600000];
+
+  optional StringList report_signal_strength_event_driven_telemetry = 38;
 }
 
 message EphemeralUsersEnabledProto {
@@ -318,17 +325,15 @@ message AutoUpdateSettingsProto {
     // case, the device will still respect |target_version_prefix|, so it will
     // not update Chrome OS.
     ROLLBACK_DISABLED = 1;
-    // If |target_version_prefix| specifies an older version than the currently
-    // installed Chrome OS version, the device should roll back to a Chrome OS
-    // version starting with |target_version_prefix|. The device does a full
-    // powerwash during the rollback, including TPM reset.
+    // Deprecated. This option is not available or supported anymore.
     ROLLBACK_AND_POWERWASH = 2;
     // If |target_version_prefix| specifies an older version than the currently
-    // installed Chrome OS version, the device should roll back to a Chrome OS
+    // installed ChromeOS version, the device should roll back to a ChromeOS
     // version starting with |target_version_prefix|.
-    // If possible, the device tries to carry over device-level configuration
-    // including network credentials during the rollback process.
-    // If that is not possible, rolls back with a full powerwash.
+    // The device is powerwashed but some data is preserved and recovered: OOBE
+    // completion state, stats consent status, and device-wide network
+    // configurations without certificates. When rolling back to M>=106, the
+    // device re-enrolls automatically.
     ROLLBACK_AND_RESTORE_IF_POSSIBLE = 3;
   }
 
@@ -1695,6 +1700,10 @@ message EncryptedReportingPipelineConfigurationProto {
   optional bool enabled = 1 [default = true];
 }
 
+message DeviceReportXDREventsProto {
+  optional bool enabled = 1 [default = false];
+}
+
 message ChromeDeviceSettingsProto {
   reserved 61, 71, 90;
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
@@ -1873,4 +1882,6 @@ message ChromeDeviceSettingsProto {
   optional SAMLUsernameProto saml_username = 135;
   optional StringListPolicyProto
       device_login_screen_context_aware_access_signals_allowlist = 136;
+  optional StringPolicyProto device_printing_client_name_template = 137;
+  optional DeviceReportXDREventsProto device_report_xdr_events = 138;
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -113,8 +113,7 @@ class SingleClientPasswordsSyncTestWithBaseSpecificsInMetadataAndNotes
       : SyncTest(SINGLE_CLIENT) {
     feature_list_.InitWithFeatures(
         /*enabled_features=*/{syncer::kCacheBaseEntitySpecificsInMetadata,
-                              syncer::kReadWritePasswordNotesBackupField,
-                              password_manager::features::kPasswordNotes},
+                              syncer::kPasswordNotesWithBackup},
         /*disabled_features=*/{});
   }
   ~SingleClientPasswordsSyncTestWithBaseSpecificsInMetadataAndNotes() override =

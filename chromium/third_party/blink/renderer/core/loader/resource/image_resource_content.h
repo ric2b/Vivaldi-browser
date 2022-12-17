@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,6 +114,7 @@ class CORE_EXPORT ImageResourceContent final
   // ImageResourceContent::GetContentStatus() can be different from
   // ImageResource::GetStatus(). Use ImageResourceContent::GetContentStatus().
   ResourceStatus GetContentStatus() const;
+  void SetIsSufficientContentLoadedForPaint() override;
   bool IsSufficientContentLoadedForPaint() const override;
   bool IsLoaded() const;
   bool IsLoading() const;
@@ -122,6 +123,15 @@ class CORE_EXPORT ImageResourceContent final
   bool IsAnimatedImage() const override;
   bool IsPaintedFirstFrame() const override;
   bool TimingAllowPassed() const override;
+  base::TimeTicks GetFirstVideoFrameTime() const override {
+    // This returns a null time, which is currently used to signal that this is
+    // an animated image, rather than a video, and we should use the
+    // ImagePaintTimingDetector to set the first frame time in the ImageRecord
+    // instead.
+    // TODO(iclelland): Find a better way to set this from IPTD and use it, to
+    // use this for images as well as videos.
+    return base::TimeTicks();
+  }
 
   // Redirecting methods to Resource.
   const KURL& Url() const override;
@@ -186,7 +196,7 @@ class CORE_EXPORT ImageResourceContent final
   scoped_refptr<const SharedBuffer> ResourceBuffer() const;
   bool ShouldUpdateImageImmediately() const;
   bool HasObservers() const {
-    return !observers_.IsEmpty() || !finished_observers_.IsEmpty();
+    return !observers_.empty() || !finished_observers_.empty();
   }
   bool IsRefetchableDataFromDiskCache() const {
     return is_refetchable_data_from_disk_cache_;

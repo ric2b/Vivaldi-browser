@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,10 @@ void MockXhrSender::Send(const GURL& url,
                          const std::string& method,
                          const std::string& request_body,
                          bool use_credentials,
+                         bool use_api_key,
                          SendRequestCallback callback,
-                         const base::Value::Dict& headers) {
+                         const base::Value::Dict& headers,
+                         const std::string& account_email) {
   std::move(quit_closure_).Run(url, method, request_body);
 }
 }  // namespace ash

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
+#include "base/check_op.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/settings/hardware_data_usage_controller.h"
 #include "chrome/browser/browser_process.h"
@@ -20,9 +21,6 @@ namespace ash {
 namespace {
 
 constexpr const char kUserActionAcceptButtonClicked[] = "accept-button";
-constexpr const char kUserActionShowLearnMore[] = "show-learn-more";
-constexpr const char kUserActionUnselectHWDataUsage[] =
-    "unselect-hw-data-usage";
 constexpr const char kUserActionSelectHWDataUsage[] = "select-hw-data-usage";
 
 }  // namespace
@@ -40,32 +38,18 @@ std::string HWDataCollectionScreen::GetResultString(Result result) {
 }
 
 HWDataCollectionScreen::HWDataCollectionScreen(
-    HWDataCollectionView* view,
+    base::WeakPtr<HWDataCollectionView> view,
     const ScreenExitCallback& exit_callback)
     : BaseScreen(HWDataCollectionView::kScreenId, OobeScreenPriority::DEFAULT),
-      view_(view),
+      view_(std::move(view)),
       exit_callback_(exit_callback) {
-  DCHECK(view);
-  if (view_)
-    view_->Bind(this);
+  DCHECK(view_);
 }
 
-HWDataCollectionScreen::~HWDataCollectionScreen() {
-  if (view_)
-    view_->Unbind();
-}
+HWDataCollectionScreen::~HWDataCollectionScreen() = default;
 
 void HWDataCollectionScreen::SetHWDataUsageEnabled(bool enabled) {
   hw_data_usage_enabled_ = enabled;
-}
-
-bool HWDataCollectionScreen::IsHWDataUsageEnabled() const {
-  return hw_data_usage_enabled_;
-}
-
-void HWDataCollectionScreen::OnViewDestroyed(HWDataCollectionView* view) {
-  if (view_ == view)
-    view_ = nullptr;
 }
 
 bool HWDataCollectionScreen::MaybeSkip(WizardContext& context) {
@@ -106,37 +90,28 @@ bool HWDataCollectionScreen::MaybeSkip(WizardContext& context) {
 }
 
 void HWDataCollectionScreen::ShowImpl() {
-  if (view_)
-    view_->Show();
+  if (view_) {
+    view_->Show(hw_data_usage_enabled_);
+  }
 }
 
-void HWDataCollectionScreen::HideImpl() {
-  if (view_)
-    view_->Hide();
-}
+void HWDataCollectionScreen::HideImpl() {}
 
-void HWDataCollectionScreen::OnUserActionDeprecated(
-    const std::string& action_id) {
+void HWDataCollectionScreen::OnUserAction(const base::Value::List& args) {
+  const std::string& action_id = args[0].GetString();
   if (action_id == kUserActionAcceptButtonClicked) {
     HWDataUsageController::Get()->Set(ProfileManager::GetActiveUserProfile(),
                                       base::Value(hw_data_usage_enabled_));
     exit_callback_.Run(hw_data_usage_enabled_
                            ? Result::ACCEPTED_WITH_HW_DATA_USAGE
                            : Result::ACCEPTED_WITHOUT_HW_DATA_USAGE);
-  } else if (action_id == kUserActionShowLearnMore) {
-    ShowHWDataUsageLearnMore();
-  } else if (action_id == kUserActionUnselectHWDataUsage) {
-    SetHWDataUsageEnabled(false /* enabled */);
   } else if (action_id == kUserActionSelectHWDataUsage) {
-    SetHWDataUsageEnabled(true /* enabled */);
+    CHECK_EQ(args.size(), 2u);
+    const bool enabled = args[1].GetBool();
+    SetHWDataUsageEnabled(enabled);
   } else {
-    BaseScreen::OnUserActionDeprecated(action_id);
+    BaseScreen::OnUserAction(args);
   }
-}
-
-void HWDataCollectionScreen::ShowHWDataUsageLearnMore() {
-  if (view_)
-    view_->ShowHWDataUsageLearnMore();
 }
 
 }  // namespace ash

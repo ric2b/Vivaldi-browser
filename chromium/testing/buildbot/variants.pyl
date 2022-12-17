@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -22,61 +22,64 @@
   },
   'LACROS_VERSION_SKEW_CANARY': {
     'args': [
-      '--ash-chrome-path-override=../../lacros_version_skew_tests_v108.0.5330.0/test_ash_chrome',
+      '--ash-chrome-path-override=../../lacros_version_skew_tests_v110.0.5450.0/test_ash_chrome',
     ],
-    'description': 'Run with ash-chrome version 108.0.5330.0',
+    'description': 'Run with ash-chrome version 110.0.5450.0',
     'identifier': 'Lacros version skew testing ash canary',
     'swarming': {
       'cipd_packages': [
         {
           'cipd_package': 'chromium/testing/linux-ash-chromium/x86_64/ash.zip',
-          'location': 'lacros_version_skew_tests_v108.0.5330.0',
-          'revision': 'version:108.0.5330.0',
+          'location': 'lacros_version_skew_tests_v110.0.5450.0',
+          'revision': 'version:110.0.5450.0',
         },
       ],
     },
   },
   'LACROS_VERSION_SKEW_DEV': {
     'args': [
-      '--ash-chrome-path-override=../../lacros_version_skew_tests_v106.0.5249.12/test_ash_chrome',
+      '--ash-chrome-path-override=../../lacros_version_skew_tests_v109.0.5414.7/test_ash_chrome',
     ],
-    'identifier': 'Lacros version skew testing ash 106.0.5249.12',
+    'description': 'Run with ash-chrome version 109.0.5414.7',
+    'identifier': 'Lacros version skew testing ash dev',
     'swarming': {
       'cipd_packages': [
         {
           'cipd_package': 'chromium/testing/linux-ash-chromium/x86_64/ash.zip',
-          'location': 'lacros_version_skew_tests_v106.0.5249.12',
-          'revision': 'version:106.0.5249.12',
+          'location': 'lacros_version_skew_tests_v109.0.5414.7',
+          'revision': 'version:109.0.5414.7',
         },
       ],
     },
   },
   'LACROS_VERSION_SKEW_BETA': {
     'args': [
-      '--ash-chrome-path-override=../../lacros_version_skew_tests_v105.0.5195.42/test_ash_chrome',
+      '--ash-chrome-path-override=../../lacros_version_skew_tests_v108.0.5359.58/test_ash_chrome',
     ],
-    'identifier': 'Lacros version skew testing ash 105.0.5195.42',
+    'description': 'Run with ash-chrome version 108.0.5359.58',
+    'identifier': 'Lacros version skew testing ash beta',
     'swarming': {
       'cipd_packages': [
         {
           'cipd_package': 'chromium/testing/linux-ash-chromium/x86_64/ash.zip',
-          'location': 'lacros_version_skew_tests_v105.0.5195.42',
-          'revision': 'version:105.0.5195.42',
+          'location': 'lacros_version_skew_tests_v108.0.5359.58',
+          'revision': 'version:108.0.5359.58',
         },
       ],
     },
   },
   'LACROS_VERSION_SKEW_STABLE': {
     'args': [
-      '--ash-chrome-path-override=../../lacros_version_skew_tests_v104.0.5112.110/test_ash_chrome',
+      '--ash-chrome-path-override=../../lacros_version_skew_tests_v107.0.5304.110/test_ash_chrome',
     ],
-    'identifier': 'Lacros version skew testing ash 104.0.5112.110',
+    'description': 'Run with ash-chrome version 107.0.5304.110',
+    'identifier': 'Lacros version skew testing ash stable',
     'swarming': {
       'cipd_packages': [
         {
           'cipd_package': 'chromium/testing/linux-ash-chromium/x86_64/ash.zip',
-          'location': 'lacros_version_skew_tests_v104.0.5112.110',
-          'revision': 'version:104.0.5112.110',
+          'location': 'lacros_version_skew_tests_v107.0.5304.110',
+          'revision': 'version:107.0.5304.110',
         },
       ],
     },
@@ -147,18 +150,6 @@
       'ios_runtime_cache_15_0',
     ],
   },
-  'SIM_IPAD_AIR_2_15_2': {
-    'args': [
-      '--platform',
-      'iPad Air 2',
-      '--version',
-      '15.2'
-    ],
-    'identifier': 'iPad Air 2 15.2',
-    'mixins': [
-      'ios_runtime_cache_15_2',
-    ],
-  },
   'SIM_IPAD_AIR_2_15_5': {
     'args': [
       '--platform',
@@ -195,6 +186,18 @@
       'ios_runtime_cache_16_0',
     ],
   },
+  'SIM_IPAD_AIR_3RD_GEN_16_1': {
+    'args': [
+      '--platform',
+      'iPad Air (3rd generation)',
+      '--version',
+      '16.1'
+    ],
+    'identifier': 'iPad Air (3rd generation) 16.1',
+    'mixins': [
+      'ios_runtime_cache_16_1',
+    ],
+  },
   # In Xcode 12, "iPad Pro (12.9-inch)" requires a generation suffix in
   # "platform" arg.
   'SIM_IPAD_PRO_2ND_GEN_14_5': {
@@ -209,16 +212,54 @@
       'ios_runtime_cache_14_5',
     ],
   },
-  'SIM_IPAD_6_GEN_16_0': {
+  'SIM_IPAD_PRO_3RD_GEN_16_0': {
+    'args': [
+      '--platform',
+      'iPad Pro (12.9-inch) (3rd generation)',
+      '--version',
+      '16.0',
+    ],
+    'identifier': 'iPad Pro (12.9-inch) (3rd generation) 16.0',
+    'mixins': [
+      # TODO(crbug.com/1373622): ci_only due to test pool issues.
+      'ci_only',
+      'ios_runtime_cache_16_0',
+    ],
+  },
+  'SIM_IPAD_PRO_3RD_GEN_16_1': {
+    'args': [
+      '--platform',
+      'iPad Pro (12.9-inch) (3rd generation)',
+      '--version',
+      '16.1',
+    ],
+    'identifier': 'iPad Pro (12.9-inch) (3rd generation) 16.1',
+    'mixins': [
+      'ios_runtime_cache_16_1',
+    ],
+  },
+  'SIM_IPAD_PRO_3RD_GEN_15_5': {
+    'args': [
+      '--platform',
+      'iPad Pro (12.9-inch) (3rd generation)',
+      '--version',
+      '15.5',
+    ],
+    'identifier': 'iPad Pro (12.9-inch) (3rd generation) 15.5',
+    'mixins': [
+      'ios_runtime_cache_15_5',
+    ],
+  },
+  'SIM_IPAD_6_GEN_16_1': {
     'args': [
       '--platform',
       'iPad (6th generation)',
       '--version',
-      '16.0',
+      '16.1',
     ],
-    'identifier': 'iPad (6th generation) 16.0',
+    'identifier': 'iPad (6th generation) 16.1',
     'mixins': [
-      'ios_runtime_cache_16_0',
+      'ios_runtime_cache_16_1',
     ],
   },
   'SIM_IPHONE_6S_14_4': {
@@ -243,18 +284,6 @@
     'identifier': 'iPhone 6s 14.5',
     'mixins': [
       'ios_runtime_cache_14_5',
-    ],
-  },
-  'SIM_IPHONE_6S_15_2': {
-    'args': [
-      '--platform',
-      'iPhone 6s',
-      '--version',
-      '15.2'
-    ],
-    'identifier': 'iPhone 6s 15.2',
-    'mixins': [
-      'ios_runtime_cache_15_2',
     ],
   },
   'SIM_IPHONE_6S_15_5': {
@@ -341,6 +370,18 @@
       'ios_runtime_cache_16_0',
     ],
   },
+  'SIM_IPHONE_8_16_1': {
+    'args': [
+      '--platform',
+      'iPhone 8',
+      '--version',
+      '16.1',
+    ],
+    'identifier': 'iPhone 8 16.1',
+    'mixins': [
+      'ios_runtime_cache_16_1',
+    ],
+  },
   'SIM_IPHONE_8_PLUS_16_0': {
     'args': [
       '--platform',
@@ -351,6 +392,18 @@
     'identifier': 'iPhone 8 Plus 16.0',
     'mixins': [
       'ios_runtime_cache_16_0',
+    ],
+  },
+  'SIM_IPHONE_8_PLUS_16_1': {
+    'args': [
+      '--platform',
+      'iPhone 8 Plus',
+      '--version',
+      '16.1',
+    ],
+    'identifier': 'iPhone 8 Plus 16.1',
+    'mixins': [
+      'ios_runtime_cache_16_1',
     ],
   },
   'SIM_IPHONE_SE_1ST_GEN_14_5': {
@@ -389,6 +442,18 @@
       'ios_runtime_cache_16_0',
     ],
   },
+  'SIM_IPHONE_SE_3RD_GEN_16_1': {
+    'args': [
+      '--platform',
+      'iPhone SE (3rd generation)',
+      '--version',
+      '16.1',
+    ],
+    'identifier': 'iPhone SE (3rd generation) 16.1',
+    'mixins': [
+      'ios_runtime_cache_16_1',
+    ],
+  },
   'SIM_IPHONE_X_14_4': {
     'args': [
       '--platform',
@@ -425,18 +490,6 @@
       'ios_runtime_cache_15_0',
     ],
   },
-  'SIM_IPHONE_X_15_2': {
-    'args': [
-      '--platform',
-      'iPhone X',
-      '--version',
-      '15.2'
-    ],
-    'identifier': 'iPhone X 15.2',
-    'mixins': [
-      'ios_runtime_cache_15_2',
-    ],
-  },
   'SIM_IPHONE_X_15_5': {
     'args': [
       '--platform',
@@ -461,402 +514,37 @@
       'ios_runtime_cache_16_0',
     ],
   },
+  'SIM_IPHONE_X_16_1': {
+    'args': [
+      '--platform',
+      'iPhone X',
+      '--version',
+      '16.1',
+    ],
+    'identifier': 'iPhone X 16.1',
+    'mixins': [
+      'ios_runtime_cache_16_1',
+    ],
+  },
   'WEBVIEW_TRICHROME_FULL_CTS_TESTS': {
     'identifier': 'full_mode',
     'swarming': {
       'shards': 2,
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/android_webview/tools/cts_archive',
-          'location': 'android_webview/tools/cts_archive',
-          'revision': 'qF6dhyFMW7qFOzHo_Lu-bWxpbe-zRfL1KvHPQtQA3d0C',
-        }
-      ]
     },
   },
   'WEBVIEW_TRICHROME_INSTANT_CTS_TESTS': {
     'identifier': 'instant_mode',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/android_webview/tools/cts_archive',
-          'location': 'android_webview/tools/cts_archive',
-          'revision': 'qF6dhyFMW7qFOzHo_Lu-bWxpbe-zRfL1KvHPQtQA3d0C',
-        }
-      ]
-    },
     'args': [
       '--exclude-annotation',
       'AppModeFull',
       '--test-apk-as-instant',
     ],
-    'test': 'webview_trichrome_cts_tests',
-  },
-  'WEBLAYER_10_AND_M_IMPL_SKEW_TESTS_NTH_MILESTONE': {
-    'args': [
-      '--webview-apk-path=apks/AOSP_SystemWebView.apk',
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M104/out/Release',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--impl-version=104',
-    ],
-    'identifier': 'with_impl_from_104',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M104',
-          'revision': 'version:104.0.5112.59',
-        }
-      ],
-    },
-  },
-  'WEBLAYER_10_AND_M_IMPL_SKEW_TESTS_NTH_MINUS_ONE_MILESTONE': {
-    'args': [
-      '--webview-apk-path=apks/AOSP_SystemWebView.apk',
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M103/out/Release',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--impl-version=103',
-    ],
-    'identifier': 'with_impl_from_103',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M103',
-          'revision': 'version:103.0.5060.140',
-        }
-      ],
-    },
-  },
-  'WEBLAYER_10_AND_M_IMPL_SKEW_TESTS_NTH_MINUS_TWO_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--webview-apk-path=apks/AOSP_SystemWebView.apk',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M102/out/Release',
-      '--impl-version=102'
-    ],
-    'identifier': 'with_impl_from_102',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M102',
-          'revision': 'version:102.0.5005.125'
-        }
-      ]
-    }
-  },
-  'WEBLAYER_10_AND_M_IMPL_SKEW_TESTS_NTH_MINUS_THREE_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--webview-apk-path=apks/AOSP_SystemWebView.apk',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M101/out/Release',
-      '--impl-version=101'
-    ],
-    'identifier': 'with_impl_from_101',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M101',
-          'revision': 'version:101.0.4951.74'
-        }
-      ]
-    }
-  },
-  'WEBLAYER_10_AND_M_IMPL_SKEW_TESTS_NTH_MINUS_FOUR_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--webview-apk-path=apks/AOSP_SystemWebView.apk',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M100/out/Release',
-      '--impl-version=100'
-    ],
-    'identifier': 'with_impl_from_100',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M100',
-          'revision': 'version:100.0.4896.134'
-        }
-      ]
-    }
-  },
-  'WEBLAYER_IMPL_SKEW_TESTS_NTH_MILESTONE': {
-    'args': [
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M104/out/Release',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--impl-version=104',
-    ],
-    'identifier': 'with_impl_from_104',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M104',
-          'revision': 'version:104.0.5112.59',
-        }
-      ],
-    },
-  },
-  'WEBLAYER_IMPL_SKEW_TESTS_NTH_MINUS_ONE_MILESTONE': {
-    'args': [
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M103/out/Release',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--impl-version=103',
-    ],
-    'identifier': 'with_impl_from_103',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M103',
-          'revision': 'version:103.0.5060.140',
-        }
-      ],
-    },
-  },
-  'WEBLAYER_IMPL_SKEW_TESTS_NTH_MINUS_TWO_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M102/out/Release',
-      '--impl-version=102'
-    ],
-    'identifier': 'with_impl_from_102',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M102',
-          'revision': 'version:102.0.5005.125'
-        }
-      ]
-    }
-  },
-  'WEBLAYER_IMPL_SKEW_TESTS_NTH_MINUS_THREE_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M101/out/Release',
-      '--impl-version=101'
-    ],
-    'identifier': 'with_impl_from_101',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M101',
-          'revision': 'version:101.0.4951.74'
-        }
-      ]
-    }
-  },
-  'WEBLAYER_IMPL_SKEW_TESTS_NTH_MINUS_FOUR_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M100/out/Release',
-      '--impl-version=100'
-    ],
-    'identifier': 'with_impl_from_100',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M100',
-          'revision': 'version:100.0.4896.134'
-        }
-      ]
-    }
-  },
-  'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MILESTONE': {
-    'args': [
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '../../weblayer_instrumentation_test_M104/out/Release',
-      '--implementation-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--client-version=104',
-    ],
-    'identifier': 'with_client_from_104',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M104',
-          'revision': 'version:104.0.5112.59',
-        }
-      ],
-    },
-  },
-  'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MINUS_ONE_MILESTONE': {
-    'args': [
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '../../weblayer_instrumentation_test_M103/out/Release',
-      '--implementation-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--client-version=103',
-    ],
-    'identifier': 'with_client_from_103',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M103',
-          'revision': 'version:103.0.5060.140',
-        }
-      ],
-    },
-  },
-  'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MINUS_TWO_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--implementation-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--client-outdir',
-      '../../weblayer_instrumentation_test_M102/out/Release',
-      '--client-version=102'
-    ],
-    'identifier': 'with_client_from_102',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M102',
-          'revision': 'version:102.0.5005.125'
-        }
-      ]
-    }
-  },
-  'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MINUS_THREE_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--implementation-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--client-outdir',
-      '../../weblayer_instrumentation_test_M101/out/Release',
-      '--client-version=101'
-    ],
-    'identifier': 'with_client_from_101',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M101',
-          'revision': 'version:101.0.4951.74'
-        }
-      ]
-    }
-  },
-  'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MINUS_FOUR_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--implementation-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--webview-apk-path=apks/SystemWebView.apk',
-      '--client-outdir',
-      '../../weblayer_instrumentation_test_M100/out/Release',
-      '--client-version=100'
-    ],
-    'identifier': 'with_client_from_100',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M100',
-          'revision': 'version:100.0.4896.134'
-        }
-      ]
-    }
   },
   'CROS_ATLAS_RELEASE_LKGM': {
     'skylab': {
       'cros_board': 'atlas',
-      'cros_chrome_version': '106.0.5241.0',
-      'cros_img': 'atlas-release/R106-15050.0.0',
+      'cros_chrome_version': '107.0.5297.0',
+      'cros_img': 'atlas-release/R107-15113.0.0',
     },
     'enabled': False,
     'identifier': 'ATLAS_RELEASE_LKGM',
@@ -864,8 +552,8 @@
   'CROS_ATLAS_RELEASE_DEV': {
     'skylab': {
       'cros_board': 'atlas',
-      'cros_chrome_version': '107.0.5304.10',
-      'cros_img': 'atlas-release/R107-15117.10.0',
+      'cros_chrome_version': '109.0.5414.7',
+      'cros_img': 'atlas-release/R109-15236.9.0',
     },
     'enabled': False,
     'identifier': 'ATLAS_RELEASE_DEV',
@@ -873,8 +561,8 @@
   'CROS_ATLAS_RELEASE_BETA': {
     'skylab': {
       'cros_board': 'atlas',
-      'cros_chrome_version': '106.0.5249.49',
-      'cros_img': 'atlas-release/R106-15054.63.0',
+      'cros_chrome_version': '108.0.5359.58',
+      'cros_img': 'atlas-release/R108-15183.51.0',
     },
     'enabled': True,
     'identifier': 'ATLAS_RELEASE_BETA',
@@ -882,8 +570,8 @@
   'CROS_ATLAS_RELEASE_STABLE': {
     'skylab': {
       'cros_board': 'atlas',
-      'cros_chrome_version': '105.0.5195.134',
-      'cros_img': 'atlas-release/R105-14989.107.0',
+      'cros_chrome_version': '107.0.5304.110',
+      'cros_img': 'atlas-release/R107-15117.112.0',
     },
     'enabled': True,
     'identifier': 'ATLAS_RELEASE_STABLE',
@@ -891,8 +579,8 @@
   'CROS_EVE_RELEASE_LKGM': {
     'skylab': {
       'cros_board': 'eve',
-      'cros_chrome_version': '106.0.5241.0',
-      'cros_img': 'eve-release/R106-15050.0.0',
+      'cros_chrome_version': '107.0.5297.0',
+      'cros_img': 'eve-release/R107-15113.0.0',
     },
     'enabled': False,
     'identifier': 'EVE_RELEASE_LKGM',
@@ -900,8 +588,8 @@
   'CROS_EVE_RELEASE_DEV': {
     'skylab': {
       'cros_board': 'eve',
-      'cros_chrome_version': '107.0.5304.10',
-      'cros_img': 'eve-release/R107-15117.10.0',
+      'cros_chrome_version': '109.0.5412.2',
+      'cros_img': 'eve-release/R109-15236.2.0',
     },
     'enabled': False,
     'identifier': 'EVE_RELEASE_DEV',
@@ -909,8 +597,8 @@
   'CROS_EVE_RELEASE_BETA': {
     'skylab': {
       'cros_board': 'eve',
-      'cros_chrome_version': '106.0.5249.49',
-      'cros_img': 'eve-release/R106-15054.63.0',
+      'cros_chrome_version': '108.0.5359.58',
+      'cros_img': 'eve-release/R108-15183.51.0',
     },
     'enabled': True,
     'identifier': 'EVE_RELEASE_BETA',
@@ -918,8 +606,8 @@
   'CROS_EVE_RELEASE_STABLE': {
     'skylab': {
       'cros_board': 'eve',
-      'cros_chrome_version': '105.0.5195.134',
-      'cros_img': 'eve-release/R105-14989.107.0',
+      'cros_chrome_version': '107.0.5304.110',
+      'cros_img': 'eve-release/R107-15117.112.0',
     },
     'enabled': True,
     'identifier': 'EVE_RELEASE_STABLE',
@@ -928,7 +616,8 @@
     'skylab': {
       'cros_board': 'eve',
       'cros_chrome_version': '105.0.5190.0',
-      'cros_img': 'chromiumos-image-archive/eve-public/R105-14988.0.0',
+      'cros_img': 'eve-public/R105-14988.0.0',
+      'bucket': 'chromiumos-image-archive',
     },
     'enabled': True,
     'identifier': 'EVE_FULL',
@@ -936,8 +625,8 @@
   'CROS_HANA_RELEASE_LKGM': {
     'skylab': {
       'cros_board': 'hana',
-      'cros_chrome_version': '106.0.5241.0',
-      'cros_img': 'hana-release/R106-15050.0.0',
+      'cros_chrome_version': '107.0.5297.0',
+      'cros_img': 'hana-release/R107-15113.0.0',
     },
     'enabled': False,
     'identifier': 'HANA_RELEASE_LKGM',
@@ -945,8 +634,8 @@
   'CROS_HANA_RELEASE_DEV': {
     'skylab': {
       'cros_board': 'hana',
-      'cros_chrome_version': '107.0.5283.0',
-      'cros_img': 'hana-release/R107-15098.0.0',
+      'cros_chrome_version': '109.0.5414.21',
+      'cros_img': 'hana-release/R109-15236.21.0',
     },
     'enabled': False,
     'identifier': 'HANA_RELEASE_DEV',
@@ -954,8 +643,8 @@
   'CROS_HANA_RELEASE_BETA': {
     'skylab': {
       'cros_board': 'hana',
-      'cros_chrome_version': '106.0.5249.36',
-      'cros_img': 'hana-release/R106-15054.50.0',
+      'cros_chrome_version': '108.0.5359.58',
+      'cros_img': 'hana-release/R108-15183.51.0',
     },
     'enabled': True,
     'identifier': 'HANA_RELEASE_BETA',
@@ -963,8 +652,8 @@
   'CROS_HANA_RELEASE_STABLE': {
     'skylab': {
       'cros_board': 'hana',
-      'cros_chrome_version': '105.0.5195.134',
-      'cros_img': 'hana-release/R105-14989.107.0',
+      'cros_chrome_version': '107.0.5304.110',
+      'cros_img': 'hana-release/R107-15117.111.0',
     },
     'enabled': True,
     'identifier': 'HANA_RELEASE_STABLE',
@@ -972,8 +661,8 @@
   'CROS_HEROBRINE_RELEASE_LKGM': {
     'skylab': {
       'cros_board': 'herobrine',
-      'cros_chrome_version': '106.0.5241.0',
-      'cros_img': 'herobrine-release/R106-15050.0.0',
+      'cros_chrome_version': '107.0.5293.0',
+      'cros_img': 'herobrine-release/R107-15110.0.0',
     },
     'enabled': False,
     'identifier': 'HEROBRINE_RELEASE_LKGM',
@@ -981,8 +670,8 @@
   'CROS_JACUZZI_RELEASE_LKGM': {
     'skylab': {
       'cros_board': 'jacuzzi',
-      'cros_chrome_version': '106.0.5241.0',
-      'cros_img': 'jacuzzi-release/R106-15050.0.0',
+      'cros_chrome_version': '107.0.5297.0',
+      'cros_img': 'jacuzzi-release/R107-15113.0.0',
     },
     'enabled': False,
     'identifier': 'JACUZZI_RELEASE_LKGM',
@@ -990,8 +679,8 @@
   'CROS_JACUZZI_RELEASE_DEV': {
     'skylab': {
       'cros_board': 'jacuzzi',
-      'cros_chrome_version': '107.0.5304.10',
-      'cros_img': 'jacuzzi-release/R107-15117.10.0',
+      'cros_chrome_version': '109.0.5414.21',
+      'cros_img': 'jacuzzi-release/R109-15236.21.0',
     },
     'enabled': False,
     'identifier': 'JACUZZI_RELEASE_DEV',
@@ -999,8 +688,8 @@
   'CROS_JACUZZI_RELEASE_BETA': {
     'skylab': {
       'cros_board': 'jacuzzi',
-      'cros_chrome_version': '106.0.5249.49',
-      'cros_img': 'jacuzzi-release/R106-15054.63.0',
+      'cros_chrome_version': '108.0.5359.58',
+      'cros_img': 'jacuzzi-release/R108-15183.51.0',
     },
     'enabled': True,
     'identifier': 'JACUZZI_RELEASE_BETA',
@@ -1008,17 +697,38 @@
   'CROS_JACUZZI_RELEASE_STABLE': {
     'skylab': {
       'cros_board': 'jacuzzi',
-      'cros_chrome_version': '105.0.5195.134',
-      'cros_img': 'jacuzzi-release/R105-14989.107.0',
+      'cros_chrome_version': '107.0.5304.110',
+      'cros_img': 'jacuzzi-release/R107-15117.111.0',
     },
     'enabled': True,
     'identifier': 'JACUZZI_RELEASE_STABLE',
+  },
+  'CROS_JACUZZI_PUBLIC': {
+    'skylab': {
+      'cros_board': 'jacuzzi',
+      'cros_chrome_version': '105.0.5190.0',
+      'cros_img': 'jacuzzi-public/R105-14988.0.0',
+      'bucket': 'chromiumos-image-archive',
+    },
+    'enabled': True,
+    'identifier': 'JACUZZI_PUBLIC',
+  },
+  'CROS_KEVIN_PUBLIC': {
+    'skylab': {
+      'cros_board': 'kevin',
+      'cros_chrome_version': '105.0.5190.0',
+      'cros_img': 'kevin64-public/R105-14988.0.0',
+      'bucket': 'chromiumos-image-archive',
+    },
+    'enabled': True,
+    'identifier': 'KEVIN_PUBLIC',
   },
   'CROS_OCTOPUS_FULL': {
     'skylab': {
       'cros_board': 'octopus',
       'cros_chrome_version': '105.0.5190.0',
-      'cros_img': 'chromiumos-image-archive/octopus-public/R105-14988.0.0',
+      'cros_img': 'octopus-public/R105-14988.0.0',
+      'bucket': 'chromiumos-image-archive',
     },
     'enabled': True,
     'identifier': 'OCTOPUS_FULL',
@@ -1026,8 +736,8 @@
   'CROS_OCTOPUS_RELEASE_LKGM': {
     'skylab': {
       'cros_board': 'octopus',
-      'cros_chrome_version': '106.0.5241.0',
-      'cros_img': 'octopus-release/R106-15050.0.0',
+      'cros_chrome_version': '107.0.5297.0',
+      'cros_img': 'octopus-release/R107-15113.0.0',
     },
     'enabled': False,
     'identifier': 'OCTOPUS_RELEASE_LKGM',
@@ -1035,8 +745,8 @@
   'CROS_OCTOPUS_RELEASE_DEV': {
     'skylab': {
       'cros_board': 'octopus',
-      'cros_chrome_version': '107.0.5304.10',
-      'cros_img': 'octopus-release/R107-15117.10.0',
+      'cros_chrome_version': '109.0.5414.21',
+      'cros_img': 'octopus-release/R109-15236.21.0',
     },
     'enabled': False,
     'identifier': 'OCTOPUS_RELEASE_DEV',
@@ -1044,8 +754,8 @@
   'CROS_OCTOPUS_RELEASE_BETA': {
     'skylab': {
       'cros_board': 'octopus',
-      'cros_chrome_version': '106.0.5249.49',
-      'cros_img': 'octopus-release/R106-15054.63.0',
+      'cros_chrome_version': '108.0.5359.58',
+      'cros_img': 'octopus-release/R108-15183.51.0',
     },
     'enabled': True,
     'identifier': 'OCTOPUS_RELEASE_BETA',
@@ -1053,8 +763,8 @@
   'CROS_OCTOPUS_RELEASE_STABLE': {
     'skylab': {
       'cros_board': 'octopus',
-      'cros_chrome_version': '105.0.5195.134',
-      'cros_img': 'octopus-release/R105-14989.107.0',
+      'cros_chrome_version': '107.0.5304.110',
+      'cros_img': 'octopus-release/R107-15117.111.0',
     },
     'enabled': True,
     'identifier': 'OCTOPUS_RELEASE_STABLE',
@@ -1062,8 +772,8 @@
   'CROS_STRONGBAD_RELEASE_LKGM': {
     'skylab': {
       'cros_board': 'strongbad',
-      'cros_chrome_version': '106.0.5241.0',
-      'cros_img': 'strongbad-release/R106-15050.0.0',
+      'cros_chrome_version': '107.0.5297.0',
+      'cros_img': 'strongbad-release/R107-15113.0.0',
     },
     'enabled': False,
     'identifier': 'STRONGBAD_RELEASE_LKGM',
@@ -1071,8 +781,8 @@
   'CROS_STRONGBAD_RELEASE_DEV': {
     'skylab': {
       'cros_board': 'strongbad',
-      'cros_chrome_version': '107.0.5304.10',
-      'cros_img': 'strongbad-release/R107-15117.10.0',
+      'cros_chrome_version': '109.0.5414.21',
+      'cros_img': 'strongbad-release/R109-15236.21.0',
     },
     'enabled': False,
     'identifier': 'strongbad_RELEASE_DEV',
@@ -1080,8 +790,8 @@
   'CROS_STRONGBAD_RELEASE_BETA': {
     'skylab': {
       'cros_board': 'strongbad',
-      'cros_chrome_version': '106.0.5249.49',
-      'cros_img': 'strongbad-release/R106-15054.63.0',
+      'cros_chrome_version': '108.0.5359.58',
+      'cros_img': 'strongbad-release/R108-15183.51.0',
     },
     'enabled': True,
     'identifier': 'STRONGBAD_RELEASE_BETA',
@@ -1089,11 +799,21 @@
   'CROS_STRONGBAD_RELEASE_STABLE': {
     'skylab': {
       'cros_board': 'strongbad',
-      'cros_chrome_version': '105.0.5195.134',
-      'cros_img': 'strongbad-release/R105-14989.107.0',
+      'cros_chrome_version': '107.0.5304.110',
+      'cros_img': 'strongbad-release/R107-15117.112.0',
     },
     'enabled': True,
     'identifier': 'STRONGBAD_RELEASE_STABLE',
+  },
+  'CROS_TROGDOR64_RELEASE_LKGM': {
+    'skylab': {
+      'cros_board': 'trogdor',
+      'cros_chrome_version': '107.0.5301.0',
+      'cros_img': 'trogdor64-release/R108-15130.0.0',
+      'autotest_name': 'tast.chrome-from-tls',
+    },
+    'enabled': True,
+    'identifier': 'TROGDOR64_RELEASE_LKGM',
   },
   'LACROS_AMD64_GENERIC': {
     'args': [

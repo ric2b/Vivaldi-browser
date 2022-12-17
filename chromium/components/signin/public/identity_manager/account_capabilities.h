@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "components/signin/public/identity_manager/tribool.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -16,10 +17,6 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/scoped_java_ref.h"
 #endif
-
-namespace base {
-class Value;
-}
 
 // Stores the information about account capabilities. Capabilities provide
 // information about state and features of Gaia accounts.
@@ -75,7 +72,7 @@ class AccountCapabilities {
 
  private:
   friend absl::optional<AccountCapabilities> AccountCapabilitiesFromValue(
-      const base::Value& account_capabilities);
+      const base::Value::Dict& account_capabilities);
   friend class AccountCapabilitiesFetcherGaia;
   friend class AccountCapabilitiesTestMutator;
   friend class AccountTrackerService;

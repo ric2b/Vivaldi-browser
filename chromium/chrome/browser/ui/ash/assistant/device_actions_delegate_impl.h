@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,7 @@ class DeviceActionsDelegateImpl : public DeviceActionsDelegate {
 
   ~DeviceActionsDelegateImpl() override;
 
-  chromeos::assistant::AppStatus GetAndroidAppStatus(
+  ash::assistant::AppStatus GetAndroidAppStatus(
       const std::string& package_name) override;
 };
 

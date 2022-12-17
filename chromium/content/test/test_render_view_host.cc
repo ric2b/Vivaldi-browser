@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,6 @@
 #include "content/public/common/page_visibility_state.h"
 #include "content/test/test_page_broadcast.h"
 #include "content/test/test_render_frame_host.h"
-#include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "media/base/video_frame.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -121,6 +120,8 @@ void TestRenderWidgetHostView::ShowWithVisibility(
 }
 
 void TestRenderWidgetHostView::Hide() {
+  if (!host()->is_hidden())
+    host()->WasHidden();
   is_showing_ = false;
 }
 
@@ -136,6 +137,8 @@ void TestRenderWidgetHostView::WasUnOccluded() {
 }
 
 void TestRenderWidgetHostView::WasOccluded() {
+  if (!host()->is_hidden())
+    host()->WasHidden();
   is_occluded_ = true;
 }
 
@@ -271,12 +274,28 @@ void TestRenderWidgetHostView::NotifyHostAndDelegateOnWasShown(
       ADD_FAILURE();
       break;
   }
+  if (host()->is_hidden()) {
+    // Do not pass on `visible_time_request` because there is no compositing to
+    // measure.
+    host()->WasShown({});
+  }
 }
 
 void TestRenderWidgetHostView::RequestPresentationTimeFromHostOrDelegate(
     blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request) {
   // Should only be called if the view was already shown.
+#if !BUILDFLAG(IS_ANDROID)
+  // TODO(jonross): Update the constructor to determine showing state
+  // `is_showing_ = !host()->is_hidden()` this will match production code. Also
+  // update various tests not prepared for this to also match production.
+  //
+  // In tests TestRenderViewHostFactory::CreateRenderViewHost creates all hosts
+  // as visible. Which leads to newly created views being attached to already
+  // visible hosts. On Android we begin tracking content-to-visible-time when
+  // recreating the main render frame. This leads to requests while already
+  // visible in tests.
   EXPECT_TRUE(is_showing_);
+#endif
   EXPECT_FALSE(is_occluded_);
   EXPECT_EQ(page_visibility_, PageVisibilityState::kVisible);
   EXPECT_TRUE(visible_time_request);
@@ -468,7 +487,7 @@ void TestRenderViewHost::TestStartDragging(const DropData& drop_data,
           GetProcess()->GetID(),
           ChromeBlobStorageContext::GetFor(GetProcess()->GetBrowserContext())),
       blink::kDragOperationEvery, std::move(bitmap), gfx::Vector2d(),
-      blink::mojom::DragEventSourceInfo::New());
+      gfx::Rect(), blink::mojom::DragEventSourceInfo::New());
 }
 
 void TestRenderViewHost::TestOnUpdateStateWithFile(

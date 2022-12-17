@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,7 +96,8 @@ void InfoBarContainerView::Layout() {
 
 void InfoBarContainerView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kGroup;
-  node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_INFOBAR_CONTAINER));
+  node_data->SetNameChecked(
+      l10n_util::GetStringUTF8(IDS_ACCNAME_INFOBAR_CONTAINER));
 }
 
 gfx::Size InfoBarContainerView::CalculatePreferredSize() const {

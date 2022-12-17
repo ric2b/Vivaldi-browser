@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -63,7 +63,8 @@ class CONTENT_EXPORT AttributionTrigger {
     kNoMatchingSourceFilterData = 8,
     kNotRegistered = 9,
     kProhibitedByBrowserPolicy = 10,
-    kMaxValue = kProhibitedByBrowserPolicy,
+    kDeduplicated = 11,
+    kMaxValue = kDeduplicated,
   };
 
   struct CONTENT_EXPORT EventTriggerData {
@@ -106,14 +107,15 @@ class CONTENT_EXPORT AttributionTrigger {
       AttributionFilterData filters,
       AttributionFilterData not_filters,
       absl::optional<uint64_t> debug_key,
+      absl::optional<uint64_t> aggregatable_dedup_key,
       std::vector<EventTriggerData> event_triggers,
       std::vector<AttributionAggregatableTriggerData> aggregatable_trigger_data,
       AttributionAggregatableValues aggregatable_values);
 
-  AttributionTrigger(const AttributionTrigger& other);
-  AttributionTrigger& operator=(const AttributionTrigger& other);
-  AttributionTrigger(AttributionTrigger&& other);
-  AttributionTrigger& operator=(AttributionTrigger&& other);
+  AttributionTrigger(const AttributionTrigger&);
+  AttributionTrigger& operator=(const AttributionTrigger&);
+  AttributionTrigger(AttributionTrigger&&);
+  AttributionTrigger& operator=(AttributionTrigger&&);
   ~AttributionTrigger();
 
   const url::Origin& destination_origin() const { return destination_origin_; }
@@ -125,6 +127,10 @@ class CONTENT_EXPORT AttributionTrigger {
   const AttributionFilterData& not_filters() const { return not_filters_; }
 
   absl::optional<uint64_t> debug_key() const { return debug_key_; }
+
+  absl::optional<uint64_t> aggregatable_dedup_key() const {
+    return aggregatable_dedup_key_;
+  }
 
   void ClearDebugKey() { debug_key_ = absl::nullopt; }
 
@@ -154,6 +160,10 @@ class CONTENT_EXPORT AttributionTrigger {
   AttributionFilterData not_filters_;
 
   absl::optional<uint64_t> debug_key_;
+
+  // Key specified for deduplication against existing aggregatable reports with
+  // the same source. If absent, no deduplication is performed.
+  absl::optional<uint64_t> aggregatable_dedup_key_;
 
   std::vector<EventTriggerData> event_triggers_;
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -226,7 +226,8 @@ BrowsingTopicsServiceImpl::BrowsingTopicsServiceImpl(
 std::vector<blink::mojom::EpochTopicPtr>
 BrowsingTopicsServiceImpl::GetBrowsingTopicsForJsApi(
     const url::Origin& context_origin,
-    content::RenderFrameHost* main_frame) {
+    content::RenderFrameHost* main_frame,
+    bool observe) {
   if (!browsing_topics_state_loaded_) {
     RecordBrowsingTopicsApiResultUkmMetrics(
         EmptyApiResultReason::kStateNotReady, main_frame);
@@ -254,9 +255,11 @@ BrowsingTopicsServiceImpl::GetBrowsingTopicsForJsApi(
   HashedDomain hashed_context_domain = HashContextDomainForStorage(
       browsing_topics_state_.hmac_key(), context_domain);
 
-  // Track the API usage context after the permissions check.
-  BrowsingTopicsPageLoadDataTracker::GetOrCreateForPage(main_frame->GetPage())
-      ->OnBrowsingTopicsApiUsed(hashed_context_domain, history_service_);
+  if (observe) {
+    // Track the API usage context after the permissions check.
+    BrowsingTopicsPageLoadDataTracker::GetOrCreateForPage(main_frame->GetPage())
+        ->OnBrowsingTopicsApiUsed(hashed_context_domain, history_service_);
+  }
 
   std::string top_domain =
       net::registry_controlled_domains::GetDomainAndRegistry(

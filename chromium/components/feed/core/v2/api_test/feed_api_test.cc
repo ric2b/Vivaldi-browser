@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -329,9 +329,11 @@ bool TestSurfaceBase::IsInitialLoadSpinnerUpdate(
 }
 
 TestForYouSurface::TestForYouSurface(FeedStream* stream)
-    : TestSurfaceBase(kForYouStream, stream) {}
+    : TestSurfaceBase(StreamType(StreamKind::kForYou), stream) {}
 TestWebFeedSurface::TestWebFeedSurface(FeedStream* stream)
-    : TestSurfaceBase(kWebFeedStream, stream) {}
+    : TestSurfaceBase(StreamType(StreamKind::kFollowing), stream) {}
+TestChannelSurface::TestChannelSurface(FeedStream* stream, std::string channel)
+    : TestSurfaceBase(StreamType(StreamKind::kChannel, channel), stream) {}
 
 TestReliabilityLoggingBridge::TestReliabilityLoggingBridge() = default;
 TestReliabilityLoggingBridge::~TestReliabilityLoggingBridge() = default;

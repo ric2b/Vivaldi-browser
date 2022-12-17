@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -13,10 +13,12 @@ source_set("color_headers") {
     "color_id.h",
     "color_id_macros.inc",
     "color_id_map_macros.inc",
+    "color_metrics.h",
     "color_mixer.h",
     "color_provider.h",
     "color_provider_manager.h",
     "color_provider_utils.h",
+    "system_theme.h",
   ]
 
   public_deps = [
@@ -40,6 +42,7 @@ component("color_switches") {
 
 component("color") {
   sources = [
+    "color_metrics.cc",
     "color_mixer.cc",
     "color_provider.cc",
     "color_provider_source.cc",
@@ -52,7 +55,11 @@ component("color") {
     "color_recipe.h",
     "color_transform.cc",
     "color_transform.h",
+    "temp_palette.cc",
+    "temp_palette.h",
   ]
+
+  configs += [ "//build/config/compiler:prevent_unsafe_narrowing" ]
 
   defines = [ "IS_COLOR_IMPL" ]
 
@@ -135,6 +142,10 @@ component("mixers") {
     "core_default_color_mixer.h",
     "native_color_mixers.cc",
     "native_color_mixers.h",
+    "ref_color_mixer.cc",
+    "ref_color_mixer.h",
+    "sys_color_mixer.cc",
+    "sys_color_mixer.h",
     "ui_color_mixer.cc",
     "ui_color_mixer.h",
   ]

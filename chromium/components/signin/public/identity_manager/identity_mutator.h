@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,13 +35,13 @@ class JniIdentityMutator {
   JniIdentityMutator const& operator=(const IdentityMutator& other) = delete;
 
   // Called by java to mark the account with |account_id| as the primary
-  // account, and return whether the operation succeeded or not. To succeed,
-  // this requires that:
+  // account, and returns PrimaryAccountMutator::PrimaryAccountError. To
+  // succeed, this requires that:
   //   - the account is known by the IdentityManager.
   //   - setting the primary account is allowed,
   //   - the account username is allowed by policy,
   //   - there is not already a primary account set.
-  bool SetPrimaryAccount(
+  jint SetPrimaryAccount(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& primary_account_id,
       jint consent_level);

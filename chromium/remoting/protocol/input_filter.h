@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,7 @@
 #include "base/memory/raw_ptr.h"
 #include "remoting/protocol/input_stub.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 // Forwards input events to |input_stub|, if configured.  Input forwarding may
 // also be disabled independently of the |input_stub| being set.  InputFilters
@@ -49,7 +48,6 @@ class InputFilter : public InputStub {
   bool enabled_;
 };
 
-} // namespace protocol
-} // namespace remoting
+}  // namespace remoting::protocol
 
 #endif // REMOTING_PROTOCOL_INPUT_FILTER_H_

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -173,7 +173,7 @@ class ExtensionAppsBase : public apps::PublisherBase,
                            IntentPtr intent,
                            LaunchSource launch_source,
                            WindowInfoPtr window_info,
-                           base::OnceCallback<void(bool)> callback) override;
+                           LaunchCallback callback) override;
   void LaunchAppWithParams(AppLaunchParams&& params,
                            LaunchCallback callback) override;
   void Uninstall(const std::string& app_id,
@@ -311,9 +311,6 @@ class ExtensionAppsBase : public apps::PublisherBase,
 
   using EnableFlowPtr = std::unique_ptr<ExtensionAppsEnableFlow>;
   std::map<std::string, EnableFlowPtr> enable_flow_map_;
-
-  // app_service_ is owned by the object that owns this object.
-  raw_ptr<apps::mojom::AppService> app_service_;
 
   base::WeakPtrFactory<ExtensionAppsBase> weak_factory_{this};
 };

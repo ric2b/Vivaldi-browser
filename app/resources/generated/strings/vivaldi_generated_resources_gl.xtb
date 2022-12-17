@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="1181037720776840403">Eliminar</translation>
 <translation id="1187722533808055681">Activación inactiva</translation>
-<translation id="119944043368869598">Limpar todo</translation>
 <translation id="1221825588892235038">Só seleccionar</translation>
 <translation id="1234736487471201993">Crear código QR para esta imaxe</translation>
 <translation id="1244303850296295656">Erro de extensión</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Seleccion&amp;ar todo</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> ppp</translation>
 <translation id="1936931585862840749">Usa un número para indicar cantas copias se imprimirán (de 1 a <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Eliminar todo</translation>
 <translation id="1994173015038366702">Sitio URL</translation>
 <translation id="2019718679933488176">&amp;Abrir audio na nova lapela</translation>
 <translation id="2050339315714019657">Vertical</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Pegar como texto sen formatar</translation>
 <translation id="2249605167705922988">p.ex. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permitir identificadores para contido protexido (pode requirir o reinicio do sistema)</translation>
-<translation id="2277255602909579701">Todas as cookies e datos do sitio</translation>
 <translation id="2280486287150724112">Marxe dereita</translation>
 <translation id="2282146716419988068">Proceso da GPU</translation>
 <translation id="2301382460326681002">O directorio raíz da extensión non é correcto.</translation>
@@ -122,7 +119,6 @@
 <translation id="3084548735795614657">Soltar para instalar</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">USUARIO administra</translation>
-<translation id="3127156390846601284">Isto eliminará calquera dato gardado no teu dispositivo para todos os sitios ensinados. Quere continuar?</translation>
 <translation id="3129173833825111527">Marxe esquerda</translation>
 <translation id="3144647712221361880">Abrir ligazón como</translation>
 <translation id="3222066309010235055">Renderizar previamente: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +141,6 @@
 <translation id="3387614642886316601">Usar a revisión ortográfica mellorada</translation>
 <translation id="3390013585654699824">Detalles do aplicativo</translation>
 <translation id="3393582007140394275">Activar a transmisión da pantalla.</translation>
-<translation id="3432227430032737297">Eliminado todo o ensinado</translation>
 <translation id="345693547134384690">Abrir a &amp;imaxe nunha lapela nova</translation>
 <translation id="3494769164076977169">Preguntar cando o sitio intenta descargar ficheiros automaticamente despois do primeiro ficheiro (recomendado)</translation>
 <translation id="3505030558724226696">Revocar acceso do dispositivo</translation>
@@ -204,7 +199,6 @@
 <translation id="4409697491990005945">Marxes</translation>
 <translation id="4423376891418188461">Restaurar configuración</translation>
 <translation id="4478664379124702289">Gardar liga&amp;zón como…</translation>
-<translation id="4579581181964204535">Non se puido transmitir <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Ir a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Só o administrador (<ph name="CUSTODIAN_NAME" />) pode modificar aplicativos e extensións.</translation>
 <translation id="4613271546271159013">Unha extensión cambiou a páxina que se amosa ao abrir unha lapela nova.</translation>
@@ -277,7 +271,6 @@
 <translation id="5747809636523347288">Pe&amp;gar e ir a <ph name="URL" /></translation>
 <translation id="5759728514498647443">Os documentos que envíes para imprimir por <ph name="APP_NAME" /> pódense ler con <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Gar&amp;dar audio como...</translation>
-<translation id="577624874850706961">Buscar cookies</translation>
 <translation id="5780973441651030252">Prioridade do proceso</translation>
 <translation id="5804241973901381774">Permisos</translation>
 <translation id="5828633471261496623">Imprimindo…</translation>
@@ -290,7 +283,6 @@
 <translation id="5965661248935608907">Tamén controla a páxina que se amosa ao premer no botón de inicio ou ao buscar desde Omnibox.</translation>
 <translation id="5978277834170881274">&amp;Usar un corrector ortográfico básico</translation>
 <translation id="5979421442488174909">&amp;Traducir a <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Borrar datos do sitio</translation>
 <translation id="6042308850641462728">Máis</translation>
 <translation id="6086846494333236931">Instalado polo teu administrador</translation>
 <translation id="6101226222197207147">Novo aplicativo engadido (<ph name="EXTENSION_NAME" />)</translation>
@@ -404,7 +396,6 @@ Garda o teu ficheiro de clave nun lugar seguro. Necesitaralo para crear versión
         =1 {Descarga en curso} other {Descargas en curso}}</translation>
 <translation id="8230134520748321204">Gardar o contrasinal para <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Esta extensión non aparece en <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e pódese ter engadido sen o teu coñecemento.</translation>
-<translation id="8339059274628563283"><ph name="SITE" /> almacena datos localmente</translation>
 <translation id="8351419472474436977">Esta extensión tomou o control da túa configuración do proxy, o que significa que pode cambiar, interromper ou espiar o que fagas en liña. Se non estás seguro de por que ocorreu este cambio, probablemente non o queiras manter.</translation>
 <translation id="8382913212082956454">Copiar o enderezo &amp;electrónico</translation>
 <translation id="8413385045638830869">Preguntar primeiro (recomendado)</translation>

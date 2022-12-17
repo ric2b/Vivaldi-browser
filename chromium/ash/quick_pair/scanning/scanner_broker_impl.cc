@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,12 +13,12 @@
 #include "ash/quick_pair/scanning/fast_pair/fast_pair_discoverable_scanner_impl.h"
 #include "ash/quick_pair/scanning/fast_pair/fast_pair_not_discoverable_scanner.h"
 #include "ash/quick_pair/scanning/fast_pair/fast_pair_not_discoverable_scanner_impl.h"
-#include "ash/services/quick_pair/quick_pair_process_manager.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/check.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process_manager.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 
 namespace {

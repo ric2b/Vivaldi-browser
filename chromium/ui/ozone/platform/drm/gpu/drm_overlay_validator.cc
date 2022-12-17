@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,9 +69,11 @@ scoped_refptr<DrmFramebuffer> GetBufferForPageFlipTest(
   if (!buffer)
     return nullptr;
 
+  constexpr bool kIsOriginalBuffer = false;
   scoped_refptr<DrmFramebuffer> drm_framebuffer =
       DrmFramebuffer::AddFramebuffer(drm_device, buffer.get(),
-                                     buffer->GetSize(), modifiers);
+                                     buffer->GetSize(), modifiers,
+                                     kIsOriginalBuffer);
   if (!drm_framebuffer)
     return nullptr;
 

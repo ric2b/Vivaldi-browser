@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@
 #include "base/bind.h"
 #include "base/containers/adapters.h"
 #include "base/memory/weak_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "chromeos/ash/components/audio/sounds.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/compositor/layer.h"
@@ -136,8 +137,8 @@ aura::Window* GetBottomMostSnappedWindowForDeskContainer(
       SplitViewController::Get(desk_container);
   if (desks_util::IsActiveDeskContainer(desk_container) &&
       split_view_controller->InSplitViewMode()) {
-    aura::Window* left_window = split_view_controller->left_window();
-    aura::Window* right_window = split_view_controller->right_window();
+    aura::Window* left_window = split_view_controller->primary_window();
+    aura::Window* right_window = split_view_controller->secondary_window();
     for (auto* child : desk_container->children()) {
       if (child == left_window || child == right_window)
         return child;
@@ -305,9 +306,8 @@ aura::Window* BackdropController::GetTopmostWindowWithBackdrop() {
       continue;
 
     // No need to check the visibility or the activateability of the window if
-    // this is an inactive desk's container.
-    if (!desks_util::IsDeskContainer(container_) ||
-        desks_util::IsActiveDeskContainer(container_)) {
+    // this is not a desk container.
+    if (desks_util::IsDeskContainer(container_)) {
       if (!window->layer()->GetTargetVisibility())
         continue;
 
@@ -557,13 +557,14 @@ void BackdropController::Show() {
 }
 
 void BackdropController::Hide(bool destroy, bool animate) {
-  if (!backdrop_)
+  if (!backdrop_ || is_hiding_backdrop_)
     return;
 
   DCHECK(backdrop_window_);
+  base::AutoReset<bool> lock(&is_hiding_backdrop_, true);
+
   const aura::Window::Windows windows = container_->children();
-  auto window_iter =
-      std::find(windows.begin(), windows.end(), backdrop_window_);
+  auto window_iter = base::ranges::find(windows, backdrop_window_);
   ++window_iter;
   if (window_iter != windows.end()) {
     aura::Window* window_above_backdrop = *window_iter;
@@ -594,10 +595,10 @@ bool BackdropController::BackdropShouldFullscreen() {
   SplitViewController* split_view_controller =
       SplitViewController::Get(root_window_);
   SplitViewController::State state = split_view_controller->state();
-  if ((state == SplitViewController::State::kLeftSnapped &&
-       window_having_backdrop_ == split_view_controller->left_window()) ||
-      (state == SplitViewController::State::kRightSnapped &&
-       window_having_backdrop_ == split_view_controller->right_window())) {
+  if ((state == SplitViewController::State::kPrimarySnapped &&
+       window_having_backdrop_ == split_view_controller->primary_window()) ||
+      (state == SplitViewController::State::kSecondarySnapped &&
+       window_having_backdrop_ == split_view_controller->secondary_window())) {
     return false;
   }
 
@@ -610,12 +611,12 @@ gfx::Rect BackdropController::GetBackdropBounds() {
   SplitViewController* split_view_controller =
       SplitViewController::Get(root_window_);
   SplitViewController::State state = split_view_controller->state();
-  DCHECK(state == SplitViewController::State::kLeftSnapped ||
-         state == SplitViewController::State::kRightSnapped);
+  DCHECK(state == SplitViewController::State::kPrimarySnapped ||
+         state == SplitViewController::State::kSecondarySnapped);
   SplitViewController::SnapPosition snap_position =
-      (state == SplitViewController::State::kLeftSnapped)
-          ? SplitViewController::LEFT
-          : SplitViewController::RIGHT;
+      (state == SplitViewController::State::kPrimarySnapped)
+          ? SplitViewController::SnapPosition::kPrimary
+          : SplitViewController::SnapPosition::kSecondary;
   return split_view_controller->GetSnappedWindowBoundsInScreen(
       snap_position, /*window_for_minimum_size=*/nullptr);
 }

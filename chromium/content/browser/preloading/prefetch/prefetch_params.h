@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,12 @@ bool PrefetchAllowAllDomains();
 bool PrefetchAllowAllDomainsForExtendedPreloading();
 
 // The maximum number of mainframes allowed to be prefetched at the same time.
-int PrefetchServiceMaximumNumberOfConcurrentPrefetches();
+size_t PrefetchServiceMaximumNumberOfConcurrentPrefetches();
+
+// The maximum number of prefetch requests to start from a page. A return value
+// of nullopt means unlimited. Negative values given by the field trial return
+// nullopt.
+absl::optional<int> PrefetchServiceMaximumNumberOfPrefetchesPerPage();
 
 // Returns true if an ineligible prefetch request should be put on the network,
 // but not cached, to disguise the presence of cookies (or other criteria). The

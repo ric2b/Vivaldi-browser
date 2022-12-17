@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,14 +41,22 @@ class FakeSamlIdpMixin final : public InProcessBrowserTestMixin {
   void SetCookieValue(const std::string& cookie_value);
   void SetRequireHttpBasicAuth(bool require_http_basic_auth);
   void SetSamlResponseFile(const std::string& xml_file);
-  bool IsLastChallengeResponseExists() const;
+  bool DeviceTrustHeaderRecieved() const;
+  int GetChallengeResponseCount() const;
   void AssertChallengeResponseMatchesTpmResponse() const;
+
+  // Returns true if a successful challenge response was captured.
+  bool IsLastChallengeResponseExists() const;
+
+  // Returns true if a failed challenge response was captured.
+  bool IsLastChallengeResponseError() const;
 
   std::string GetIdpHost() const;
   std::string GetIdpDomain() const;
   GURL GetSamlPageUrl() const;
   GURL GetHttpSamlPageUrl() const;
   GURL GetSamlWithDeviceAttestationUrl() const;
+  GURL GetSamlWithDeviceTrustUrl() const;
 
  private:
   GURL GetSamlAuthPageUrl() const;
@@ -63,7 +71,8 @@ class FakeSamlIdpMixin final : public InProcessBrowserTestMixin {
     kLogin,
     kLoginAuth,
     kLoginWithDeviceAttestation,
-    kLoginCheckDeviceAnswer
+    kLoginCheckDeviceAnswer,
+    kLoginWithDeviceTrust
   };
 
   // Returns the RequestType that corresponds to `url`, or RequestType::Unknown
@@ -80,6 +89,10 @@ class FakeSamlIdpMixin final : public InProcessBrowserTestMixin {
   BuildResponseForLoginWithDeviceAttestation(
       const net::test_server::HttpRequest& request,
       const GURL& request_url) const;
+  std::unique_ptr<net::test_server::HttpResponse>
+  BuildResponseForLoginWithDeviceTrust(
+      const net::test_server::HttpRequest& request,
+      const GURL& request_url);
   std::unique_ptr<net::test_server::HttpResponse>
   BuildResponseForCheckDeviceAnswer(
       const net::test_server::HttpRequest& request,
@@ -107,7 +120,10 @@ class FakeSamlIdpMixin final : public InProcessBrowserTestMixin {
 
   bool require_http_basic_auth_ = false;
 
+  bool device_trust_header_recieved_ = false;
+  int challenge_response_count_ = 0;
   absl::optional<std::string> challenge_response_;
+  absl::optional<std::string> error_challenge_response_;
 };
 
 }  // namespace ash

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -317,9 +317,9 @@ class NetworkingPrivateApiTest : public ExtensionApiTest {
 
  protected:
   bool RunNetworkingSubtest(const std::string& subtest) {
-    const std::string page_url = "main.html?" + subtest;
+    const std::string extension_url = "main.html?" + subtest;
     return RunExtensionTest("networking_private",
-                            {.page_url = page_url.c_str()},
+                            {.extension_url = extension_url.c_str()},
                             {.load_as_component = true});
   }
 

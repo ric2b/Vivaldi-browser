@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -31,7 +31,6 @@ BROWSER_TEST_SUITES = [
     'android_sync_integration_tests',
     'components_browsertests',
     'content_browsertests',
-    'weblayer_browsertests',
 ]
 
 # The max number of tests to run on a shard during the test run.

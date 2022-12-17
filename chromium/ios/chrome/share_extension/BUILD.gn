@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -57,6 +57,7 @@ ios_appex_bundle("share_extension") {
     "//ios/chrome/common/app_group:command",
     "//ios/chrome/common/crash_report",
     "//ios/chrome/common/ui/colors",
+    "//ios/chrome/common/ui/util",
   ]
   bundle_deps_filter = [ "//third_party/icu:icudata" ]
 

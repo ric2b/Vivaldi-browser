@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "components/page_load_metrics/browser/page_load_metrics_observer_delegate.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/base/net_errors.h"
@@ -138,10 +139,22 @@ class PageLoadMetricsObserverInterface {
   // forwarding. Eventually, we may treat all forwarding at the PageLoadTracker
   // layer to deprecate the FORWARD_OBSERVING for simplicity. FORWARD_OBSERVING
   // is available only for OnFencedFramesStart().
+  //
+  // FORWARD_OBSERVING was introduced to migrate existing observers to support
+  // FencedFrames. Some events need to use this policy to correct metrics that
+  // need observer level forwarding, but most metrics can be gathered by
+  // CONTINUE_OBSERVING. You can check PageLoadMetricsForwardObserver's
+  // implementation. If it does nothing, CONTINUE_OBSERVING just works for the
+  // event. We track FORWARD_OBSERVING users in the following sheet. Please
+  // contact toyoshim@chromium.org or kenoss@chromium.org when you need
+  // FORWARD_OBSERVING. We will replace the observer level forwarding with the
+  // tracker level forwarding so that CONTINUE_OBSERVING just works for all
+  // events.
+  // https://docs.google.com/spreadsheets/d/1ftmGPs5Q9iqSUKLJiS_hAU3m41iDXFq9p7zfGODmKGg/edit#gid=0
   enum ObservePolicy {
     CONTINUE_OBSERVING,
     STOP_OBSERVING,
-    FORWARD_OBSERVING,
+    FORWARD_OBSERVING,  // Deprecated. See the detailed comments above.
   };
 
   using FrameTreeNodeId = int;
@@ -165,6 +178,12 @@ class PageLoadMetricsObserverInterface {
   // TODO(https://crbug.com/1301880): Make all inheritances override this method
   // and make it pure virtual method.
   virtual const char* GetObserverName() const = 0;
+
+  // Gets/Sets the delegate. The delegate must outlive the observer and is
+  // normally set when the observer is first registered for the page load. The
+  // delegate can only be set once.
+  virtual const PageLoadMetricsObserverDelegate& GetDelegate() const = 0;
+  virtual void SetDelegate(PageLoadMetricsObserverDelegate*) = 0;
 
   // The page load started, with the given navigation handle.
   // currently_committed_url contains the URL of the committed page load at the
@@ -548,6 +567,9 @@ class PageLoadMetricsObserverInterface {
   // change in bytes used.
   virtual void OnV8MemoryChanged(
       const std::vector<MemoryUpdate>& memory_updates) = 0;
+
+  // Called when a `SharedStorageWorkletHost` is created.
+  virtual void OnSharedStorageWorkletHostCreated() = 0;
 
  private:
   base::WeakPtrFactory<PageLoadMetricsObserverInterface> weak_factory_{this};

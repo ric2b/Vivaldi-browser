@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,5 +42,6 @@ KeyedService* FastCheckoutCapabilitiesFetcherFactory::BuildServiceInstanceFor(
   return new FastCheckoutCapabilitiesFetcherImpl(
       autofill_assistant::AutofillAssistantFactory::CreateForBrowserContext(
           browser_context,
-          std::make_unique<autofill_assistant::CommonDependenciesChrome>()));
+          std::make_unique<autofill_assistant::CommonDependenciesChrome>(
+              browser_context)));
 }

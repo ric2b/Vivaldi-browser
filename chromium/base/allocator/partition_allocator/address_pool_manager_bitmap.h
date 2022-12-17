@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -103,7 +103,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) AddressPoolManagerBitmap {
         brp_pool_bits_)[address >> kBitShiftOfBRPPoolBitmap];
   }
 
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   static void BanSuperPageFromBRPPool(uintptr_t address) {
     brp_forbidden_super_page_map_[address >> kSuperPageShift].store(
         true, std::memory_order_relaxed);
@@ -111,23 +111,23 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) AddressPoolManagerBitmap {
 
   static bool IsAllowedSuperPageForBRPPool(uintptr_t address) {
     // The only potentially dangerous scenario, in which this check is used, is
-    // when the assignment of the first raw_ptr<T> object for a non-GigaCage
-    // address is racing with the allocation of a new GigCage super-page at the
-    // same address. We assume that if raw_ptr<T> is being initialized with a
-    // raw pointer, the associated allocation is "alive"; otherwise, the issue
-    // should be fixed by rewriting the raw pointer variable as raw_ptr<T>.
-    // In the worst case, when such a fix is impossible, we should just undo the
-    // raw pointer -> raw_ptr<T> rewrite of the problematic field. If the
-    // above assumption holds, the existing allocation will prevent us from
-    // reserving the super-page region and, thus, having the race condition.
-    // Since we rely on that external synchronization, the relaxed memory
-    // ordering should be sufficient.
+    // when the assignment of the first raw_ptr<T> object for an address
+    // allocated outside the BRP pool is racing with the allocation of a new
+    // super page at the same address. We assume that if raw_ptr<T> is being
+    // initialized with a raw pointer, the associated allocation is "alive";
+    // otherwise, the issue should be fixed by rewriting the raw pointer
+    // variable as raw_ptr<T>. In the worst case, when such a fix is
+    // impossible, we should just undo the raw pointer -> raw_ptr<T> rewrite of
+    // the problematic field. If the above assumption holds, the existing
+    // allocation will prevent us from reserving the super-page region and,
+    // thus, having the race condition.  Since we rely on that external
+    // synchronization, the relaxed memory ordering should be sufficient.
     return !brp_forbidden_super_page_map_[address >> kSuperPageShift].load(
         std::memory_order_relaxed);
   }
 
   static void IncrementBlocklistHitCount() { ++blocklist_hit_count_; }
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
  private:
   friend class AddressPoolManager;
@@ -137,25 +137,25 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) AddressPoolManagerBitmap {
   static std::bitset<kRegularPoolBits> regular_pool_bits_
       PA_GUARDED_BY(GetLock());
   static std::bitset<kBRPPoolBits> brp_pool_bits_ PA_GUARDED_BY(GetLock());
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   static std::array<std::atomic_bool, kAddressSpaceSize / kSuperPageSize>
       brp_forbidden_super_page_map_;
   static std::atomic_size_t blocklist_hit_count_;
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 };
 
 }  // namespace internal
 
 // Returns false for nullptr.
 PA_ALWAYS_INLINE bool IsManagedByPartitionAlloc(uintptr_t address) {
-  // When USE_BACKUP_REF_PTR is off, BRP pool isn't used.
+  // When ENABLE_BACKUP_REF_PTR_SUPPORT is off, BRP pool isn't used.
   // No need to add IsManagedByConfigurablePool, because Configurable Pool
   // doesn't exist on 32-bit.
-#if !BUILDFLAG(USE_BACKUP_REF_PTR)
+#if !BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   PA_DCHECK(!internal::AddressPoolManagerBitmap::IsManagedByBRPPool(address));
 #endif
   return internal::AddressPoolManagerBitmap::IsManagedByRegularPool(address)
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
          || internal::AddressPoolManagerBitmap::IsManagedByBRPPool(address)
 #endif
       ;

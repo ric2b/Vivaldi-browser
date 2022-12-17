@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -177,7 +177,9 @@ void SetTitle(int profile,
 enum FaviconSource { FROM_UI, FROM_SYNC };
 
 // Sets the |icon_url| and |image| data for the favicon for |node| in the
-// bookmark model for |profile|.
+// bookmark model for |profile|. Waits until the favicon is loaded, but does so
+// comparing the icon URL and hence is unreliable if the same icon URL has been
+// used before.
 void SetFavicon(int profile,
                 const bookmarks::BookmarkNode* node,
                 const GURL& icon_url,
@@ -321,7 +323,8 @@ class AnyBookmarkChangeObserver : public bookmarks::BookmarkModelObserver {
                          size_t new_index) override;
   void BookmarkNodeAdded(bookmarks::BookmarkModel* model,
                          const bookmarks::BookmarkNode* parent,
-                         size_t index) override;
+                         size_t index,
+                         bool added_by_user) override;
   void OnWillRemoveBookmarks(bookmarks::BookmarkModel* model,
                              const bookmarks::BookmarkNode* parent,
                              size_t old_index,
@@ -435,7 +438,7 @@ class SingleBookmarksModelMatcherChecker
   using Matcher = testing::Matcher<std::vector<const bookmarks::BookmarkNode*>>;
 
   SingleBookmarksModelMatcherChecker(int profile_index, const Matcher& matcher);
-  ~SingleBookmarksModelMatcherChecker();
+  ~SingleBookmarksModelMatcherChecker() override;
 
   // StatusChangeChecker implementation.
   bool IsExitConditionSatisfied(std::ostream* os) final;

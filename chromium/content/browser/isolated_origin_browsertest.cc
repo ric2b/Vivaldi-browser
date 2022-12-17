@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -141,7 +141,8 @@ class IsolatedOriginTestBase : public ContentBrowserTest {
         StoragePartitionConfig::CreateDefault(browser_context),
         WebExposedIsolationInfo::CreateNonIsolated(), false /* is_guest */,
         false /* does_site_request_dedicated_process_for_coop */,
-        false /* is_jit_disabled */, false /* is_pdf */));
+        false /* is_jit_disabled */, false /* is_pdf */,
+        false /* is_fenced */));
   }
 
   WebContentsImpl* web_contents() const {
@@ -164,7 +165,8 @@ class IsolatedOriginTestBase : public ContentBrowserTest {
         StoragePartitionConfig::CreateDefault(browser_context),
         WebExposedIsolationInfo::CreateNonIsolated(), false /* is_guest */,
         false /* does_site_request_dedicated_process_for_coop */,
-        false /* is_jit_disabled */, false /* is_pdf */));
+        false /* is_jit_disabled */, false /* is_pdf */,
+        false /* is_fenced */));
   }
 
  protected:
@@ -1064,7 +1066,7 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest,
       StoragePartitionConfig::CreateDefault(browser_context),
       WebExposedIsolationInfo::CreateNonIsolated(), false /* is_guest */,
       false /* does_site_request_dedicated_process_for_coop */,
-      false /* is_jit_disabled */, false /* is_pdf */));
+      false /* is_jit_disabled */, false /* is_pdf */, false /* is_fenced */));
   EXPECT_TRUE(NavigateToURL(shell(), test_url));
   EXPECT_EQ(2u, CollectAllRenderFrameHosts(shell()->web_contents()).size());
 
@@ -3724,7 +3726,8 @@ IN_PROC_BROWSER_TEST_F(
 
   // Cancel the hung request and commit a real navigation to an isolated
   // origin. This should now end up in the ServiceWorker's process.
-  web_contents()->GetPrimaryFrameTree().root()->ResetNavigationRequest(false);
+  web_contents()->GetPrimaryFrameTree().root()->ResetNavigationRequest(
+      NavigationDiscardReason::kCancelled);
   GURL isolated_url(
       embedded_test_server()->GetURL("isolated.foo.com", "/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), isolated_url));

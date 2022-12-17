@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,10 +72,8 @@ void ServiceWorkerInstalledScriptLoader::OnStarted(
             *response_head));
   }
 
-  client_->OnReceiveResponse(std::move(response_head), std::move(body_handle));
-  if (metadata) {
-    client_->OnReceiveCachedMetadata(std::move(*metadata));
-  }
+  client_->OnReceiveResponse(std::move(response_head), std::move(body_handle),
+                             std::move(metadata));
   // We continue in OnFinished().
 }
 

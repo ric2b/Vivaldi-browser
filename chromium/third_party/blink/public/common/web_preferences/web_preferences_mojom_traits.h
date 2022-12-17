@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -127,10 +127,6 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
   static bool javascript_can_access_clipboard(
       const blink::web_pref::WebPreferences& r) {
     return r.javascript_can_access_clipboard;
-  }
-
-  static bool xslt_enabled(const blink::web_pref::WebPreferences& r) {
-    return r.xslt_enabled;
   }
 
   static bool dns_prefetching_enabled(
@@ -761,6 +757,11 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
   static bool renderer_wide_named_frame_lookup(
       const blink::web_pref::WebPreferences& r) {
     return r.renderer_wide_named_frame_lookup;
+  }
+
+  static bool strict_mime_type_check_for_worker_scripts_enabled(
+      const blink::web_pref::WebPreferences& r) {
+    return r.strict_mime_type_check_for_worker_scripts_enabled;
   }
 
   static bool allow_tab_cycle_from_webpage_into_ui(

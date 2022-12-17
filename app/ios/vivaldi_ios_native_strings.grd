@@ -207,6 +207,105 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_UNAVAILABLE_TITLE" desc="Title shown above a message in the Recently Closed Tabs page of the tab grid when the IncognitoModeAvailability enterprise policy is set to forced.">
         Recently Closed Tabs are Unavailable
       </message>
+      <message name="IDS_IOS_NEW_SPEED_DIAL" desc="The string title describing the new speed dial adding option on the start page.">
+        New Speed Dial
+      </message>
+      <message name="IDS_IOS_EDIT_SPEED_DIAL" desc="The string title describing the context menu option for editing an speed dial.">
+        Edit Speed Dial
+      </message>
+      <message name="IDS_IOS_NEW_SPEED_DIAL_FOLDER" desc="The string title describing the context menu option for adding a new speed dial folder.">
+        New Speed Dial Folder
+      </message>
+      <message name="IDS_IOS_MOVE_ITEM" desc='The string describing moving the dial. [CHAR-LIMIT=30]'>
+        Move out of folder
+      </message>
+      <message name="IDS_IOS_SPEED_DIAL_ITEM_DELETE" desc="Menu item text for deleting a speed dial item [CHAR-LIMIT=24]">
+        Delete
+      </message>
+      <message name="IDS_IOS_SORT_MANUAL" desc="Description of manual sort order">
+        Manual
+      </message>
+      <message name="IDS_IOS_SORT_BY_TITLE" desc="Description of sort order by title">
+        By Title
+      </message>
+      <message name="IDS_IOS_SORT_BY_ADDRESS" desc="Description of sort order by address">
+        By Address
+      </message>
+      <message name="IDS_IOS_SORT_BY_NICKNAME" desc="Description of sort order by nickname">
+        By Nickname
+      </message>
+      <message name="IDS_IOS_SORT_BY_DESCRIPTION" desc="Description of sort order by description">
+        By Description
+      </message>
+      <message name="IDS_IOS_SORT_BY_DATE" desc="Description of sort order by description">
+        By Date
+      </message>
+      <message name="IDS_IOS_SORT_BY_CREATED" desc="Description of sort order by created">
+        By Created
+      </message>
+      <message name="IDS_IOS_SORT_BY_CONTENT" desc="Description of sort order by content">
+        By Content
+      </message>
+      <message name="IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a website. [CHAR_LIMIT=38]">
+        Search or type web address
+      </message>
+      <message name="IDS_IOS_USE_AS_SPEED_DIAL_FOLDER" desc="Description for the bookmark folder editor 'Use as Speed Dial Folder' option">
+        Use as Speed Dial Folder
+      </message>
+      <message name="IDS_IOS_ADD_FOLDER" desc='Title of the "Add Folder" form dialog. [CHAR_LIMIT=30]'>
+        Add folder
+      </message>
+      <message name="IDS_IOS_EDIT_FOLDER" desc='Title of the "Edit Folder" form dialog. [CHAR_LIMIT=30]'>
+        Edit folder
+      </message>
+      <message name="IDS_IOS_DELETE_FOLDER" desc='Title of the "Delete Folder" form dialog. [CHAR_LIMIT=30]'>
+        Delete folder
+      </message>
+      <message name="IDS_IOS_BOOKMARK_PARENT_FOLDER" desc="Header text for title of parent folder of the bookmark [CHAR_LIMIT=32]">
+        Parent folder
+      </message>
+      <message name="IDS_IOS_BOOKMARK_FOLDER_TITLE" desc="Label specifying the title of the bookmark folder. [CHAR_LIMIT=32]" meaning="Name of an inanimate object">
+        Title
+      </message>
+      <message name="IDS_IOS_BOOKMARK_LOCATION" desc="Label specifying the location of the bookmark. [CHAR_LIMIT=32]" meaning="Name of an inanimate object">
+        Location
+      </message>
+      <message name="IDS_IOS_ADD_BOOKMARK" desc="Title of the bookmark editor dialog when a new item is creating.">
+        Add bookmark
+      </message>
+      <message name="IDS_IOS_EDIT_BOOKMARK" desc="Title of the bookmark editor dialog when an exiting item is editing">
+        Edit bookmark
+      </message>
+      <message name="IDS_IOS_DELETE_BOOKMARK" desc="Title of the delete bookmark button in the bookmark editor dialog">
+        Delete bookmark
+      </message>
+      <message name="IDS_IOS_BOOKMARK_NAME" desc="Label specifying the title of the bookmark. [CHAR_LIMIT=32]" meaning="Name of an inanimate object">
+        Name
+      </message>
+      <message name="IDS_IOS_BOOKMARK_URL" desc="Label specifying the url of the bookmark. [CHAR_LIMIT=32]">
+        URL
+      </message>
+      <message name="IDS_IOS_BOOKMARK_NICKNAME" desc="Label specifying the nickname of the bookmark. [CHAR_LIMIT=32]">
+        Nickname
+      </message>
+      <message name="IDS_IOS_BOOKMARK_DESCRIPTION" desc="Label specifying the description of the bookmark. [CHAR_LIMIT=32]">
+        Description
+      </message>
+      <message name="IDS_IOS_BOOKMARK_SHOW_ONLY_SD_FOLDERS" desc="Description for the bookmark folder selection 'Show only Speed Dial folders' option">
+        Show only Speed Dial folders
+      </message>
+      <message name="IDS_IOS_BOOKMARK_FOLDER_SELECTION_SEARCHBAR_PLACEHOLDER" desc="Placeholder text for the search bar used to search folder on folder selection page">
+        Search Folder
+      </message>
+      <message name="IDS_IOS_OPEN_IN_PRIVATE_ACTION_TITLE" desc="Title of the action used to open an URL in a new Private tab. [iOS only]">
+        Open in Private
+      </message>
+      <message name="IDS_IOS_NEW_TAB_PRIVATE_TITLE" desc="Header shown when a user opens an private tab explaining private mode">
+        Private Tab
+      </message>
+      <message name="IDS_IOS_NEW_TAB_PRIVATE_MESSAGE" desc="Message shown when a user opens an private tab explaining incognito mode">
+        Browsing in a Private Tab means that searches, sites visited, cookies and temporary files won't be stored by Vivaldi. It does not encrypt or otherwise modify your connection.
+      </message>
     </messages>
   </release>
 </grit>

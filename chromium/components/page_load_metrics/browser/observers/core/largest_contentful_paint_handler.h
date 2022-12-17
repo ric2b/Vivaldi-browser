@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #ifndef COMPONENTS_PAGE_LOAD_METRICS_BROWSER_OBSERVERS_CORE_LARGEST_CONTENTFUL_PAINT_HANDLER_H_
@@ -144,18 +144,9 @@ class LargestContentfulPaintHandler {
   const ContentfulPaintTimingInfo& MainFrameLargestContentfulPaint() const {
     return main_frame_contentful_paint_.MergeTextAndImageTiming();
   }
-  const ContentfulPaintTimingInfo& SubframesLargestContentfulPaint() const {
-    return subframe_contentful_paint_.MergeTextAndImageTiming();
-  }
   const ContentfulPaintTimingInfo& CrossSiteSubframesLargestContentfulPaint()
       const {
     return cross_site_subframe_contentful_paint_.MergeTextAndImageTiming();
-  }
-  const ContentfulPaintTimingInfo& MainFrameLargestImagePaint() const {
-    return main_frame_contentful_paint_.Image();
-  }
-  const ContentfulPaintTimingInfo& MainFrameLargestTextPaint() const {
-    return main_frame_contentful_paint_.Text();
   }
 
   // We merge the candidates from main frame and subframe to get the largest

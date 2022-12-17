@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,8 @@ void ZwpPrimarySelectionDeviceManager::Instantiate(
     uint32_t name,
     const std::string& interface,
     uint32_t version) {
-  DCHECK_EQ(interface, kInterfaceName);
+  CHECK_EQ(interface, kInterfaceName) << "Expected \"" << kInterfaceName
+                                      << "\" but got \"" << interface << "\"";
 
   if (connection->zwp_primary_selection_device_manager_ ||
       !wl::CanBind(interface, version, kMinVersion, kMinVersion)) {
@@ -65,7 +66,7 @@ ZwpPrimarySelectionDevice* ZwpPrimarySelectionDeviceManager::GetDevice() {
         connection_,
         zwp_primary_selection_device_manager_v1_get_device(
             device_manager_.get(), connection_->seat()->wl_object()));
-    connection_->ScheduleFlush();
+    connection_->Flush();
   }
   DCHECK(device_);
   return device_.get();
@@ -76,7 +77,7 @@ ZwpPrimarySelectionDeviceManager::CreateSource(
     ZwpPrimarySelectionSource::Delegate* delegate) {
   auto* data_source = zwp_primary_selection_device_manager_v1_create_source(
       device_manager_.get());
-  connection_->ScheduleFlush();
+  connection_->Flush();
   return std::make_unique<ZwpPrimarySelectionSource>(data_source, connection_,
                                                      delegate);
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -246,6 +246,12 @@ class VIEWS_EXPORT MenuController
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
 
+  // Called from MenuScrollViewContainer when either end of the menu is reached
+  void OnMenuEdgeReached();
+
+  // Enables/disables scrolling via scroll buttons
+  void SetEnabledScrollButtons(bool enabled);
+
   // Added by Vivaldi.
   void VivaldiOpenMenu(MenuItemView* item);
 
@@ -392,7 +398,7 @@ class VIEWS_EXPORT MenuController
   // Invoked when the user accepts the selected item. This is only used
   // when blocking. This schedules the loop to quit.
   void Accept(MenuItemView* item, int event_flags);
-  void ReallyAccept(MenuItemView* item, int event_flags);
+  void ReallyAccept();
 
   // Added by Vivaldi.
   bool VivaldiHandleKeyPressed(ui::KeyboardCode key_code);
@@ -815,6 +821,10 @@ class VIEWS_EXPORT MenuController
 
   // Currently showing alerted menu items. Updated when submenus open and close.
   base::flat_set<MenuItemView*> alerted_items_;
+
+  // Whether scroll buttons are currently enabled (as they are temporarily
+  // disabled when either end of the menu is reached)
+  bool scroll_buttons_enabled = true;
 };
 
 }  // namespace views

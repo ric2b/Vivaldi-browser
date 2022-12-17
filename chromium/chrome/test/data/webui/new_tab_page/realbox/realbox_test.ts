@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,13 +6,14 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 import 'chrome://new-tab-page/new_tab_page.js';
 
 import {$$, decodeString16, mojoString16, RealboxBrowserProxy, RealboxElement, RealboxIconElement, RealboxMatchElement} from 'chrome://new-tab-page/new_tab_page.js';
+import {NavigationPredictor} from 'chrome://new-tab-page/omnibox.mojom-webui.js';
 import {AutocompleteMatch} from 'chrome://new-tab-page/realbox.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
-import {assertStyle, createTheme} from '../test_support.js';
+import {assertStyle} from '../test_support.js';
 
 import {TestRealboxBrowserProxy} from './test_realbox_browser_proxy.js';
 
@@ -132,7 +133,8 @@ suite('NewTabPageRealboxTest', () => {
   });
 
   setup(async () => {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     testProxy = new TestRealboxBrowserProxy();
     RealboxBrowserProxy.setInstance(testProxy);
@@ -178,51 +180,13 @@ suite('NewTabPageRealboxTest', () => {
     await whenOpenVoiceSearch;
   });
 
-  test('setting theme updates realbox', async () => {
-    const matches = realbox.$.matches;
-    // Assert.
-    assertStyle(realbox, '--search-box-bg', '');
-    assertStyle(realbox, '--search-box-placeholder', '');
-    assertStyle(realbox, '--search-box-results-bg', '');
-    assertStyle(realbox, '--search-box-text', '');
-    assertStyle(realbox, '--search-box-icon', '');
-    assertStyle(matches, '--search-box-icon', '');
-    assertStyle(matches, '--search-box-results-bg-hovered', '');
-    assertStyle(matches, '--search-box-results-bg-selected', '');
-    assertStyle(matches, '--search-box-results-bg', '');
-    assertStyle(matches, '--search-box-results-dim-selected', '');
-    assertStyle(matches, '--search-box-results-dim', '');
-    assertStyle(matches, '--search-box-results-text-selected', '');
-    assertStyle(matches, '--search-box-results-text', '');
-    assertStyle(matches, '--search-box-results-url-selected', '');
-    assertStyle(matches, '--search-box-results-url', '');
-
-    // Act.
-    realbox.theme = createTheme().searchBox;
-
-    // Assert.
-    assertStyle(realbox, '--search-box-bg', 'rgba(0, 0, 0, 1)');
-    assertStyle(realbox, '--search-box-placeholder', 'rgba(0, 0, 3, 1)');
-    assertStyle(realbox, '--search-box-results-bg', 'rgba(0, 0, 4, 1)');
-    assertStyle(realbox, '--search-box-text', 'rgba(0, 0, 13, 1)');
-    assertStyle(matches, '--search-box-icon-selected', 'rgba(0, 0, 2, 1)');
-    assertStyle(matches, '--search-box-results-bg-hovered', 'rgba(0, 0, 5, 1)');
-    assertStyle(matches, '--search-box-results-bg', 'rgba(0, 0, 4, 1)');
-    assertStyle(
-        matches, '--search-box-results-dim-selected', 'rgba(0, 0, 8, 1)');
-    assertStyle(matches, '--search-box-results-dim', 'rgba(0, 0, 7, 1)');
-    assertStyle(matches, '--search-box-results-text', 'rgba(0, 0, 9, 1)');
-    assertStyle(
-        matches, '--search-box-results-url-selected', 'rgba(0, 0, 12, 1)');
-    assertStyle(matches, '--search-box-results-url', 'rgba(0, 0, 11, 1)');
-  });
-
   test('realbox default loupe icon', async () => {
     // Arrange.
     loadTimeData.overrideValues({
       realboxDefaultIcon: 'search.svg',
     });
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     realbox = document.createElement('ntp-realbox');
     document.body.appendChild(realbox);
 
@@ -235,7 +199,8 @@ suite('NewTabPageRealboxTest', () => {
     loadTimeData.overrideValues({
       realboxDefaultIcon: 'realbox/icons/google_g.svg',
     });
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     realbox = document.createElement('ntp-realbox');
     document.body.appendChild(realbox);
 
@@ -2493,8 +2458,7 @@ suite('NewTabPageRealboxTest', () => {
 
     assertEquals(
         pedalEl.querySelector<HTMLImageElement>('#action-icon')!.src,
-        'chrome://theme/current-channel-logo');  // Default Pedal
-                                                 // Icon
+        'chrome://theme/current-channel-logo');  // Default Pedal Icon
 
     const leftClick = new MouseEvent('click', {
       bubbles: true,
@@ -2547,8 +2511,7 @@ suite('NewTabPageRealboxTest', () => {
 
     assertEquals(
         pedalEl.querySelector<HTMLImageElement>('#action-icon')!.src,
-        'chrome://theme/current-channel-logo');  // Default Pedal
-                                                 // Icon
+        'chrome://theme/current-channel-logo');  // Default Pedal Icon
 
     const leftClick = new MouseEvent('click', {
       bubbles: true,
@@ -2566,5 +2529,162 @@ suite('NewTabPageRealboxTest', () => {
       assertTrue(args.matchSelectionTimestamp['internalValue'] > 0);
     });
     assertEquals(1, testProxy.handler.getCallCount('executeAction'));
+  });
+
+  //============================================================================
+  // Test Forwarding Events
+  //============================================================================
+
+  test('arrow events are sent to handler', async () => {
+    realbox.$.input.value = 'he';
+    realbox.$.input.dispatchEvent(new InputEvent('input'));
+
+    const matches = [createSearchMatch()];
+    testProxy.callbackRouterRemote.autocompleteResultChanged({
+      input: mojoString16(realbox.$.input.value.trimLeft()),
+      matches,
+      suggestionGroupsMap: {},
+    });
+    await testProxy.callbackRouterRemote.$.flushForTesting();
+    assertTrue(areMatchesShowing());
+
+    const arrowDownEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,  // So it propagates across shadow DOM boundary.
+      key: 'ArrowDown',
+    });
+    realbox.$.input.dispatchEvent(arrowDownEvent);
+
+    await testProxy.handler.whenCalled('onNavigationLikely').then((args) => {
+      assertEquals(0, args.line);
+      assertEquals(
+          NavigationPredictor.kUpOrDownArrowButton, args.navigationPredictor);
+    });
+  });
+
+  test('mouse down events are sent to handler', async () => {
+    realbox.$.input.value = 'he';
+    realbox.$.input.dispatchEvent(new InputEvent('input'));
+
+    const matches = [createSearchMatch()];
+    testProxy.callbackRouterRemote.autocompleteResultChanged({
+      input: mojoString16(realbox.$.input.value.trimLeft()),
+      matches,
+      suggestionGroupsMap: {},
+    });
+    await testProxy.callbackRouterRemote.$.flushForTesting();
+    assertTrue(areMatchesShowing());
+
+    const matchEls =
+        realbox.$.matches.shadowRoot!.querySelectorAll('ntp-realbox-match');
+
+    const mouseDown = new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      composed: true,  // So it propagates across shadow DOM boundary.
+    });
+    matchEls[0]!.$.contents.dispatchEvent(mouseDown);
+
+    await testProxy.handler.whenCalled('onNavigationLikely').then((args) => {
+      assertEquals(0, args.line);
+      assertEquals(NavigationPredictor.kMouseDown, args.navigationPredictor);
+    });
+  });
+
+  suite('Lens search', () => {
+    test('Lens search button does not show by default', () => {
+      // Assert
+      const lensButton =
+          realbox.shadowRoot!.querySelector('#lensSearchButton') as HTMLElement;
+      assertFalse(!!lensButton);
+    });
+
+    test('Lens search button is visible when feature is flipped', async () => {
+      // Arrange.
+      loadTimeData.overrideValues({
+        realboxLensSearch: true,
+      });
+      document.body.innerHTML =
+          window.trustedTypes!.emptyHTML as unknown as string;
+      realbox = document.createElement('ntp-realbox');
+      document.body.appendChild(realbox);
+      await testProxy.callbackRouterRemote.$.flushForTesting();
+
+      // Assert
+      const lensButton =
+          realbox.shadowRoot!.querySelector('#lensSearchButton') as HTMLElement;
+      assertTrue(!!lensButton);
+    });
+
+    test('clicking Lens search button hides matches', async () => {
+      // Arrange.
+      loadTimeData.overrideValues({
+        realboxLensSearch: true,
+      });
+      document.body.innerHTML =
+          window.trustedTypes!.emptyHTML as unknown as string;
+      realbox = document.createElement('ntp-realbox');
+      document.body.appendChild(realbox);
+
+      // Act.
+      realbox.$.input.value = 'hello';
+      realbox.$.input.dispatchEvent(new InputEvent('input'));
+
+      const matches = [
+        createSearchMatch({
+          allowedToBeDefaultMatch: true,
+        }),
+        createUrlMatch(),
+      ];
+      testProxy.callbackRouterRemote.autocompleteResultChanged({
+        input: mojoString16(realbox.$.input.value.trimLeft()),
+        matches,
+        suggestionGroupsMap: {},
+      });
+      await testProxy.callbackRouterRemote.$.flushForTesting();
+
+      // Assert (consistency check).
+      assertTrue(areMatchesShowing());
+
+      // Act.
+      const lensButton =
+          realbox.shadowRoot!.querySelector('#lensSearchButton') as HTMLElement;
+      lensButton.click();
+
+      // Assert.
+      assertFalse(areMatchesShowing());
+
+      // Restore.
+      loadTimeData.overrideValues({
+        realboxLensSearch: false,
+      });
+    });
+
+    test('clicking Lens search button sends Lens search event', async () => {
+      // Arrange.
+      loadTimeData.overrideValues({
+        realboxLensSearch: true,
+      });
+      document.body.innerHTML = '';
+      realbox = document.createElement('ntp-realbox');
+      document.body.appendChild(realbox);
+      const whenOpenLensSearch = eventToPromise('open-lens-search', realbox);
+      await testProxy.callbackRouterRemote.$.flushForTesting();
+
+      // Act.
+      const lensButton =
+        realbox.shadowRoot!.querySelector('#lensSearchButton') as HTMLElement;
+      lensButton.click();
+
+      // Assert.
+      await whenOpenLensSearch;
+
+      // Restore.
+      loadTimeData.overrideValues({
+        realboxLensSearch: false,
+      });
+    });
   });
 });

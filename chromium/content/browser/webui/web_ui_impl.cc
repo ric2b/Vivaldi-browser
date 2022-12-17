@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -109,7 +109,7 @@ void WebUIImpl::Send(const std::string& message, base::Value::List args) {
 
   if (base::EndsWith(message, "RequiringGesture",
                      base::CompareCase::SENSITIVE) &&
-      !web_contents_->HasRecentInteractiveInputEvent()) {
+      !web_contents_->HasRecentInteraction()) {
     LOG(ERROR) << message << " received without recent user interaction";
     return;
   }

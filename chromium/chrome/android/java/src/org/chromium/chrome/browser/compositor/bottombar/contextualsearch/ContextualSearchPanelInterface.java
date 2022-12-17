@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,6 +73,7 @@ public interface ContextualSearchPanelInterface {
     boolean isPeeking();
     WebContents getWebContents();
     ViewGroup getContainerView();
+    void setCanHideAndroidBrowserControls(boolean canHideAndroidBrowserControls);
 
     /** {@link OverlayPanelBase} methods */
     boolean isPanelOpened();
@@ -84,4 +85,6 @@ public interface ContextualSearchPanelInterface {
     void showPanel(@StateChangeReason int reason);
     @PanelState
     int getPanelState();
+    @VisibleForTesting
+    boolean getCanHideAndroidBrowserControls();
 }

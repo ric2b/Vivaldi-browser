@@ -1,9 +1,9 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {FileType} from 'chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj/common/js/file_type.js';
-import {assert, assertInstanceof} from 'chrome://resources/js/assert.m.js';
+import {FileType} from 'chrome://file-manager/common/js/file_type.js';
+import {assert, assertInstanceof} from 'chrome://resources/js/assert.js';
 
 import {ImageCache} from './cache.js';
 import {ImageLoaderUtil} from './image_loader_util.js';
@@ -131,7 +131,7 @@ ImageRequestTask.MAX_MILLISECONDS_TO_LOAD_VIDEO = 3000;
 /**
  * The default size (width and height) of a square thumbnail. The value is set
  * to match the behavior of drivefs thumbnail generation.
- * See ash/components/drivefs/mojom/drivefs.mojom
+ * See chromeos/ash/components/drivefs/mojom/drivefs.mojom
  * @const
  * @type {number}
  */
@@ -140,7 +140,7 @@ ImageRequestTask.DEFAULT_THUMBNAIL_SQUARE_SIZE = 360;
 /**
  * The default width of a non-square thumbnail. The value is set to match the
  * behavior of drivefs thumbnail generation.
- * See ash/components/drivefs/mojom/drivefs.mojom
+ * See chromeos/ash/components/drivefs/mojom/drivefs.mojom
  * @const
  * @type {number}
  */
@@ -149,7 +149,7 @@ ImageRequestTask.DEFAULT_THUMBNAIL_WIDTH = 500;
 /**
  * The default height of a non-square thumbnail. The value is set to match the
  * behavior of drivefs thumbnail generation.
- * See ash/components/drivefs/mojom/drivefs.mojom
+ * See chromeos/ash/components/drivefs/mojom/drivefs.mojom
  * @const
  * @type {number}
  */

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -352,7 +352,7 @@ BackgroundTracingManagerImpl::GetBackgroundTracingConfig(
   if (!value->is_dict())
     return nullptr;
 
-  return BackgroundTracingConfig::FromDict(std::move(value->GetDict()));
+  return BackgroundTracingConfig::FromDict(std::move(*value).TakeDict());
 }
 
 void BackgroundTracingManagerImpl::OnHistogramTrigger(

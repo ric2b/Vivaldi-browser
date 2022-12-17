@@ -1,4 +1,4 @@
-// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,11 +21,11 @@
 #import "components/security_interstitials/core/unsafe_resource.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/reading_list/offline_url_utils.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #import "ios/chrome/browser/ssl/captive_portal_tab_helper.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/web/error_page_controller_bridge.h"
 #import "ios/chrome/browser/web/error_page_util.h"
 #import "ios/chrome/browser/web/features.h"
@@ -305,7 +305,7 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageWithSSLInfo) {
 // Tests PrepareErrorPage for a safe browsing error, which results in a
 // committed safe browsing interstitial.
 TEST_F(ChromeWebClientTest, PrepareErrorPageForSafeBrowsingError) {
-  // Store an unsafe resource in |web_state|'s container.
+  // Store an unsafe resource in `web_state`'s container.
   web::FakeWebState web_state;
   web_state.SetBrowserState(browser_state());
   SafeBrowsingUrlAllowList::CreateForWebState(&web_state);

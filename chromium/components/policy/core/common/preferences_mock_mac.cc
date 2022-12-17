@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,9 +44,6 @@ Boolean MockPreferences::IsManagedPolicyAvailableForMachineScope(
     CFStringRef key) {
   return CFSetContainsValue(machine_, key);
 }
-
-void MockPreferences::LoadPolicyScopeDetectionPolicy(
-    CFStringRef application_id) {}
 
 void MockPreferences::AddTestItem(CFStringRef key,
                                   CFPropertyListRef value,

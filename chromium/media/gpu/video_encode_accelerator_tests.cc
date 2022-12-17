@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -871,7 +871,7 @@ int main(int argc, char** argv) {
   media::test::FrameOutputConfig frame_output_config;
   base::FilePath output_folder =
       base::FilePath(base::FilePath::kCurrentDirectory);
-  std::vector<base::Feature> disabled_features;
+  std::vector<base::test::FeatureRef> disabled_features;
 
   // Parse command line arguments.
   bool enable_bitstream_validator = true;

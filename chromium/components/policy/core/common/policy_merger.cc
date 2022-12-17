@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -141,7 +141,7 @@ void PolicyListMerger::DoMerge(PolicyMap::Entry* policy) const {
   bool value_changed = false;
 
   for (const base::Value& val :
-       policy->value(base::Value::Type::LIST)->GetListDeprecated()) {
+       policy->value(base::Value::Type::LIST)->GetList()) {
     if (duplicates.find(&val) != duplicates.end())
       continue;
     duplicates.insert(&val);
@@ -157,7 +157,7 @@ void PolicyListMerger::DoMerge(PolicyMap::Entry* policy) const {
     }
 
     for (const base::Value& val :
-         it.entry().value(base::Value::Type::LIST)->GetListDeprecated()) {
+         it.entry().value(base::Value::Type::LIST)->GetList()) {
       if (duplicates.find(&val) != duplicates.end())
         continue;
       duplicates.insert(&val);
@@ -256,7 +256,7 @@ void PolicyDictionaryMerger::DoMerge(PolicyMap::Entry* policy,
         return policy_map.EntryHasHigherPriority(*b, *a);
       });
 
-  base::DictionaryValue merged_dictionary;
+  base::Value::Dict merged_dictionary;
   bool value_changed = false;
 
   // Merges all the keys from the policies from different sources.
@@ -265,15 +265,14 @@ void PolicyDictionaryMerger::DoMerge(PolicyMap::Entry* policy,
                             *it, *policy, AllowUserCloudPolicyMerging()))
       continue;
 
-    const base::DictionaryValue* dict = nullptr;
-
-    it->value(base::Value::Type::DICT)->GetAsDictionary(&dict);
+    const base::Value::Dict* dict =
+        it->value(base::Value::Type::DICT)->GetIfDict();
     DCHECK(dict);
 
-    for (auto pair : dict->DictItems()) {
+    for (auto pair : *dict) {
       const auto& key = pair.first;
       const auto& val = pair.second;
-      merged_dictionary.SetKey(key, val.Clone());
+      merged_dictionary.Set(key, val.Clone());
     }
 
     value_changed |= it != policy;
@@ -281,7 +280,7 @@ void PolicyDictionaryMerger::DoMerge(PolicyMap::Entry* policy,
 
   auto new_conflict = policy->DeepCopy();
   if (value_changed)
-    policy->set_value(std::move(merged_dictionary));
+    policy->set_value(base::Value(std::move(merged_dictionary)));
 
   policy->ClearConflicts();
   policy->AddConflictingPolicy(std::move(new_conflict));

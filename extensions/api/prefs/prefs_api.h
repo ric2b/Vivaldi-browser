@@ -97,16 +97,6 @@ class PrefsSetFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
-class PrefsResetFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("prefs.reset", PREFS_RESET)
-  PrefsResetFunction() = default;
-
- private:
-  ~PrefsResetFunction() override = default;
-  ResponseAction Run() override;
-};
-
 class PrefsGetForCacheFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.getForCache", PREFS_GET_FOR_CACHE)

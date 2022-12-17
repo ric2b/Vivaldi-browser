@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_context_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_timestamp.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_audiocontextlatencycategory_double.h"
-#include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
@@ -111,6 +110,8 @@ bool IsAudible(const AudioBus* rendered_data) {
 
   return energy > 0;
 }
+
+using blink::SetSinkIdResolver;
 
 }  // namespace
 
@@ -260,8 +261,9 @@ AudioContext::AudioContext(Document& document,
           execution_context->GetTaskRunner(TaskType::kPermission)));
   permission_service_->HasPermission(
       CreatePermissionDescriptor(microphone_permission_name),
-      WTF::Bind(&AudioContext::DidInitialPermissionCheck, WrapPersistent(this),
-                CreatePermissionDescriptor(microphone_permission_name)));
+      WTF::BindOnce(&AudioContext::DidInitialPermissionCheck,
+                    WrapPersistent(this),
+                    CreatePermissionDescriptor(microphone_permission_name)));
 }
 
 void AudioContext::Uninitialize() {
@@ -293,6 +295,7 @@ void AudioContext::Trace(Visitor* visitor) const {
   visitor->Trace(audio_context_manager_);
   visitor->Trace(permission_service_);
   visitor->Trace(permission_receiver_);
+  visitor->Trace(set_sink_id_resolvers_);
   BaseAudioContext::Trace(visitor);
 }
 
@@ -450,6 +453,14 @@ void AudioContext::DidClose() {
   if (close_resolver_) {
     close_resolver_->Resolve();
   }
+
+  // Reject all pending resolvers for setSinkId() before closing AudioContext.
+  for (auto& set_sink_id_resolver : set_sink_id_resolvers_) {
+    set_sink_id_resolver->RejectWithDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Cannot resolve pending promise from setSinkId(), AudioContext is "
+        "going away");
+  }
 }
 
 bool AudioContext::IsContextCleared() const {
@@ -508,6 +519,31 @@ double AudioContext::outputLatency() const {
 
   double factor = GetOutputLatencyQuantizingFactor();
   return std::round(output_position_.hardware_output_latency / factor) * factor;
+}
+
+ScriptPromise AudioContext::setSinkId(ScriptState* script_state,
+                                      const String& sink_id,
+                                      ExceptionState& exception_state) {
+  DCHECK(IsMainThread());
+
+  SetSinkIdResolver* resolver =
+      SetSinkIdResolver::Create(script_state, *this, sink_id);
+  ScriptPromise promise = resolver->Promise();
+
+  if (ContextState() == kClosed) {
+    resolver->Reject();
+    return promise;
+  }
+
+  set_sink_id_resolvers_.push_back(resolver);
+
+  // When there's only one resolver in the queue, we start it immediately
+  // because there is no preceding resolver will start it.
+  if (set_sink_id_resolvers_.size() == 1) {
+    resolver->Start();
+  }
+
+  return promise;
 }
 
 MediaElementAudioSourceNode* AudioContext::createMediaElementSource(
@@ -820,8 +856,8 @@ void AudioContext::EnsureAudioContextManagerService() {
               GetDocument()->GetTaskRunner(TaskType::kInternalMedia))));
 
   audio_context_manager_.set_disconnect_handler(
-      WTF::Bind(&AudioContext::OnAudioContextManagerServiceConnectionError,
-                WrapWeakPersistent(this)));
+      WTF::BindOnce(&AudioContext::OnAudioContextManagerServiceConnectionError,
+                    WrapWeakPersistent(this)));
 }
 
 void AudioContext::OnAudioContextManagerServiceConnectionError() {
@@ -881,6 +917,11 @@ double AudioContext::GetOutputLatencyQuantizingFactor() const {
       mojom::blink::PermissionStatus::GRANTED
       ? kOutputLatencyMaxPrecisionFactor
       : kOutputLatencyQuatizingFactor;
+}
+
+void AudioContext::NotifySetSinkIdIsDone(const String& sink_id) {
+  sink_id_ = sink_id;
+  DispatchEvent(*Event::Create(event_type_names::kSinkchange));
 }
 
 }  // namespace blink

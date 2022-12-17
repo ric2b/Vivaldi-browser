@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -228,6 +228,13 @@ scoped_refptr<DecoderBuffer> ReadTestDataFile(const std::string& name
   CHECK_EQ(file_size, base::ReadFile(file_path, data, file_size))
       << "Failed to read '" << name << "'";
 
+  return buffer;
+}
+
+scoped_refptr<DecoderBuffer> ReadTestDataFile(const std::string& name,
+                                              base::TimeDelta pts) {
+  auto buffer = ReadTestDataFile(name);
+  buffer->set_timestamp(pts);
   return buffer;
 }
 

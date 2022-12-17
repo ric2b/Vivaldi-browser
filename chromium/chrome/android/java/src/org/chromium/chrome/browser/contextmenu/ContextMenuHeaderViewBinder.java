@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,6 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver.PerformanceClass;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -63,18 +62,6 @@ class ContextMenuHeaderViewBinder {
             final boolean isVisible = model.get(ContextMenuHeaderProperties.CIRCLE_BG_VISIBLE);
             view.findViewById(R.id.circle_background)
                     .setVisibility(isVisible ? View.VISIBLE : View.INVISIBLE);
-        } else if (propertyKey == ContextMenuHeaderProperties.URL_PERFORMANCE_CLASS) {
-            @PerformanceClass
-            int performanceClass = model.get(ContextMenuHeaderProperties.URL_PERFORMANCE_CLASS);
-            view.findViewById(R.id.menu_header_performance_info)
-                    .setVisibility(performanceClass == PerformanceClass.PERFORMANCE_FAST
-                                    ? View.VISIBLE
-                                    : View.GONE);
-        } else if (propertyKey == ContextMenuHeaderProperties.HIDE_HEADER_IMAGE) {
-            final boolean hideHeaderImage =
-                    model.get(ContextMenuHeaderProperties.HIDE_HEADER_IMAGE);
-            view.findViewById(R.id.menu_header_image_container)
-                    .setVisibility(hideHeaderImage ? View.GONE : View.VISIBLE);
         } else if (propertyKey
                 == ContextMenuHeaderProperties.OVERRIDE_HEADER_IMAGE_MAX_SIZE_PIXEL) {
             int maxSizeOverride =

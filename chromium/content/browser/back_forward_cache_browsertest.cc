@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -162,12 +163,6 @@ void BackForwardCacheBrowserTest::SetUpCommandLine(
   EnableFeatureAndSetParams(features::kBackForwardCache,
                             "message_handling_when_cached", "log");
   EnableFeatureAndSetParams(
-      features::kBackForwardCache, "enable_same_site",
-      same_site_back_forward_cache_enabled_ ? "true" : "false");
-  EnableFeatureAndSetParams(
-      features::kBackForwardCache, "skip_same_site_if_unload_exists",
-      skip_same_site_if_unload_exists_ ? "true" : "false");
-  EnableFeatureAndSetParams(
       blink::features::kLogUnexpectedIPCPostedToBackForwardCachedDocuments,
       "delay_before_tracking_ms", "0");
   EnableFeatureAndSetParams(blink::features::kLoadingTasksUnfreezable,
@@ -207,9 +202,8 @@ void BackForwardCacheBrowserTest::TearDownInProcessBrowserTestFixture() {
 void BackForwardCacheBrowserTest::SetupFeaturesAndParameters() {
   std::vector<base::test::ScopedFeatureList::FeatureAndParams> enabled_features;
 
-  for (auto& features_with_param : features_with_params_) {
-    enabled_features.emplace_back(features_with_param.first,
-                                  features_with_param.second);
+  for (const auto& [feature_ref, params] : features_with_params_) {
+    enabled_features.emplace_back(*feature_ref, params);
   }
 
   feature_list_.InitWithFeaturesAndParameters(enabled_features,
@@ -218,13 +212,13 @@ void BackForwardCacheBrowserTest::SetupFeaturesAndParameters() {
 }
 
 void BackForwardCacheBrowserTest::EnableFeatureAndSetParams(
-    base::Feature feature,
+    const base::Feature& feature,
     std::string param_name,
     std::string param_value) {
   features_with_params_[feature][param_name] = param_value;
 }
 
-void BackForwardCacheBrowserTest::DisableFeature(base::Feature feature) {
+void BackForwardCacheBrowserTest::DisableFeature(const base::Feature& feature) {
   disabled_features_.push_back(feature);
 }
 
@@ -262,11 +256,8 @@ std::string BackForwardCacheBrowserTest::DepictFrameTree(FrameTreeNode* node) {
 bool BackForwardCacheBrowserTest::HistogramContainsIntValue(
     base::HistogramBase::Sample sample,
     std::vector<base::Bucket> histogram_values) {
-  auto it = std::find_if(histogram_values.begin(), histogram_values.end(),
-                         [sample](const base::Bucket& bucket) {
-                           return bucket.min == static_cast<int>(sample);
-                         });
-  return it != histogram_values.end();
+  return base::Contains(histogram_values, static_cast<int>(sample),
+                        &base::Bucket::min);
 }
 
 void BackForwardCacheBrowserTest::EvictByJavaScript(RenderFrameHostImpl* rfh) {
@@ -916,130 +907,6 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
   // D3 takes A2(B(C))'s place in the cache.
   EXPECT_TRUE(rfh_d3->IsInBackForwardCache());
   delete_rfh_a2.WaitUntilDeleted();
-}
-
-class BackForwardCacheBrowserTestSkipSameSiteUnload
-    : public BackForwardCacheBrowserTest {
- public:
-  BackForwardCacheBrowserTestSkipSameSiteUnload() = default;
-  ~BackForwardCacheBrowserTestSkipSameSiteUnload() override = default;
-
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    skip_same_site_if_unload_exists_ = true;
-    BackForwardCacheBrowserTest::SetUpCommandLine(command_line);
-  }
-};
-
-// We won't cache pages with unload handler on same-site navigations when
-// skip_same_site_if_unload_exists is set to true.
-IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTestSkipSameSiteUnload,
-                       SameSiteNavigationFromPageWithUnload) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url_a1(embedded_test_server()->GetURL("a.com", "/title1.html"));
-  GURL url_a2(embedded_test_server()->GetURL("a.com", "/title2.html"));
-
-  // 1) Navigate to A1 and add an unload handler.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a1));
-
-  RenderFrameHostImpl* rfh_a1 = current_frame_host();
-  EXPECT_TRUE(ExecJs(rfh_a1, "window.onunload = () => {} "));
-
-  // 2) Navigate to A2.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a2));
-  RenderFrameHostImpl* rfh_a2 = current_frame_host();
-  // We should not swap RFHs and A1 should not be in the back-forward cache.
-  EXPECT_EQ(rfh_a1, rfh_a2);
-  EXPECT_FALSE(rfh_a1->IsInBackForwardCache());
-}
-
-// We won't cache pages with an unload handler in a same-SiteInstance subframe
-// on same-site navigations when skip_same_site_if_unload_exists is set to true.
-IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTestSkipSameSiteUnload,
-                       SameSiteNavigationFromPageWithUnloadInSameSiteSubframe) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url_a1(embedded_test_server()->GetURL(
-      "a.com", "/cross_site_iframe_factory.html?a(b(a))"));
-  GURL url_a2(embedded_test_server()->GetURL("a.com", "/title2.html"));
-
-  // 1) Navigate to A1 and add an unload handler to a.com subframe.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a1));
-  RenderFrameHostImpl* rfh_a_main = current_frame_host();
-  RenderFrameHostImpl* rfh_b = rfh_a_main->child_at(0)->current_frame_host();
-  RenderFrameHostImpl* rfh_a_subframe =
-      rfh_b->child_at(0)->current_frame_host();
-  EXPECT_TRUE(ExecJs(rfh_a_subframe, "window.onunload = () => {} "));
-
-  // 2) Navigate to A2.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a2));
-  RenderFrameHostImpl* rfh_a2 = current_frame_host();
-  // We should not swap RFHs and A1 should not be in the back-forward cache.
-  EXPECT_EQ(rfh_a_main, rfh_a2);
-  EXPECT_FALSE(rfh_a_main->IsInBackForwardCache());
-}
-
-// We won't cache pages with an unload handler in a cross-site subframe on
-// same-site navigations when skip_same_site_if_unload_exists is set to true
-// iff the cross-site subframe is in the same SiteInstance as the mainframe.
-IN_PROC_BROWSER_TEST_F(
-    BackForwardCacheBrowserTestSkipSameSiteUnload,
-    SameSiteNavigationFromPageWithUnloadInCrossSiteSubframe) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url_a1(embedded_test_server()->GetURL(
-      "a.com", "/cross_site_iframe_factory.html?a(b)"));
-  GURL url_a2(embedded_test_server()->GetURL("a.com", "/title2.html"));
-
-  // 1) Navigate to A1 and add an unload handler to b.com subframe.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a1));
-  RenderFrameHostImpl* rfh_a1 = current_frame_host();
-  RenderFrameHostImpl* rfh_b = rfh_a1->child_at(0)->current_frame_host();
-  EXPECT_TRUE(ExecJs(rfh_b, "window.onunload = () => {} "));
-  EXPECT_EQ(AreStrictSiteInstancesEnabled(),
-            rfh_a1->GetSiteInstance() != rfh_b->GetSiteInstance());
-
-  // 2) Navigate to A2.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a2));
-  RenderFrameHostImpl* rfh_a2 = current_frame_host();
-  if (AreStrictSiteInstancesEnabled()) {
-    // Test this block only for Android, as |rfh_a1| is not eligible for bfcache
-    // because of the unload handler on other platforms.
-    if (IsUnloadAllowedToEnterBackForwardCache()) {
-      // We should swap RFH & BIs and A1 should be in the back-forward cache.
-      EXPECT_NE(rfh_a1, rfh_a2);
-      EXPECT_FALSE(rfh_a1->GetSiteInstance()->IsRelatedSiteInstance(
-          rfh_a2->GetSiteInstance()));
-      EXPECT_TRUE(rfh_a1->IsInBackForwardCache());
-    }
-  } else {
-    // We should not swap RFHs and A1 should not be in the back-forward cache.
-    EXPECT_EQ(rfh_a1, rfh_a2);
-    EXPECT_FALSE(rfh_a1->IsInBackForwardCache());
-  }
-}
-
-// We will cache pages with unload handler on cross-site navigations even when
-// skip_same_site_if_unload_exists is set to true.
-IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTestSkipSameSiteUnload,
-                       CrossSiteNavigationFromPageWithUnload) {
-  // This test is only enabled for Android, as pages with unload handlers are
-  // only eligible for bfcache on Android.
-  if (!IsUnloadAllowedToEnterBackForwardCache())
-    return;
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url_a1(embedded_test_server()->GetURL("a.com", "/title1.html"));
-  GURL url_a2(embedded_test_server()->GetURL("b.com", "/title2.html"));
-
-  // 1) Navigate to A and add an unload handler.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a1));
-  RenderFrameHostImpl* rfh_a = current_frame_host();
-  EXPECT_TRUE(ExecJs(rfh_a, "window.onunload = () => {} "));
-
-  // 2) Navigate to B.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a2));
-  RenderFrameHostImpl* rfh_b = current_frame_host();
-  // We should swap RFHs and A should be in the back-forward cache.
-  EXPECT_NE(rfh_a, rfh_b);
-  EXPECT_TRUE(rfh_a->IsInBackForwardCache());
 }
 
 // Sub-frame doesn't transition from LifecycleStateImpl::kInBackForwardCache to
@@ -1883,9 +1750,13 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest, TextInputStateUpdated) {
   }
 }
 
-// TODO(https://crbug.com/1275493): Flaky on various builders.
+#if (BUILDFLAG(IS_MAC))
+#define MAYBE_SubframeTextInputStateUpdated DISABLED_SubframeTextInputStateUpdated
+#else
+#define MAYBE_SubframeTextInputStateUpdated SubframeTextInputStateUpdated
+#endif
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
-                       DISABLED_SubframeTextInputStateUpdated) {
+                       MAYBE_SubframeTextInputStateUpdated) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_1(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b(a))"));
@@ -1949,7 +1820,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
     EXPECT_TRUE(rfh_a->IsInBackForwardCache());
     EXPECT_TRUE(rfh_b->IsInBackForwardCache());
     EXPECT_TRUE(rfh_subframe_a->IsInBackForwardCache());
-    EXPECT_EQ(current_frame_host(), web_contents()->GetFocusedFrame());
+    EXPECT_NE(rfh_subframe_a, web_contents()->GetFocusedFrame());
   }
 
   {
@@ -2634,19 +2505,17 @@ bool BackForwardCacheBrowserTest::IsUnloadAllowedToEnterBackForwardCache() {
 }
 
 bool BackForwardCacheBrowserTest::AddBlocklistedFeature(RenderFrameHost* rfh) {
-  return ExecJs(rfh, R"(
-    let object = document.createElement("object");
-    object.type = "application/x-blink-test-plugin";
-    document.body.appendChild(object);
-  )");
+  // Add kDummy as blocking feature.
+  RenderFrameHostImplWrapper rfh_a(rfh);
+  rfh_a->UseDummyStickyBackForwardCacheDisablingFeatureForTesting();
+  return true;
 }
 
 void BackForwardCacheBrowserTest::ExpectNotRestoredDueToBlocklistedFeature(
     base::Location location) {
-  ExpectNotRestored(
-      {NotRestoredReason::kBlocklistedFeatures},
-      {blink::scheduler::WebSchedulerTrackedFeature::kContainsPlugins}, {}, {},
-      {}, location);
+  ExpectNotRestored({NotRestoredReason::kBlocklistedFeatures},
+                    {blink::scheduler::WebSchedulerTrackedFeature::kDummy}, {},
+                    {}, {}, location);
 }
 
 const ukm::TestAutoSetUkmRecorder& BackForwardCacheBrowserTest::ukm_recorder() {

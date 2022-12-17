@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,9 @@ enum class LockScreenAppSupport {
   // from the lock screen UI.
   kEnabled = 3,
 };
+
+// For logging and debug purposes.
+std::ostream& operator<<(std::ostream& out, const LockScreenAppSupport& app);
 
 // Tracks available lock screen apps. Only exists for the primary profile.
 class LockScreenApps : public KeyedService {

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,9 +21,9 @@ namespace device {
 
 class GamepadPlatformDataFetcherAndroid : public GamepadDataFetcher {
  public:
-  typedef GamepadDataFetcherFactoryImpl<GamepadPlatformDataFetcherAndroid,
-                                        GAMEPAD_SOURCE_ANDROID>
-      Factory;
+  using Factory =
+      GamepadDataFetcherFactoryImpl<GamepadPlatformDataFetcherAndroid,
+                                    GamepadSource::kAndroid>;
 
   GamepadPlatformDataFetcherAndroid();
   GamepadPlatformDataFetcherAndroid(GamepadPlatformDataFetcherAndroid&&) =

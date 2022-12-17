@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -110,6 +110,7 @@ class DirectWritingTrigger
         if (!mDwServiceEnabled || !mBinder.isServiceConnected()) return false;
         mStylusWritingImeCallback = imeCallback;
         mCallback.setImeCallback(imeCallback);
+        StylusApiOption.recordStylusHandwritingTriggered(Api.DIRECT_WRITING);
         mStylusWritingDetected = true;
         // We know writing can be started but wait for onEditElementFocusedForStylusWriting to be
         // called to get the focused edit bounds and caret position.

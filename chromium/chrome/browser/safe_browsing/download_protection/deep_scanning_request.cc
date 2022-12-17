@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -602,7 +602,7 @@ void DeepScanningRequest::OnScanComplete(
   if (profile && trigger_ == DeepScanTrigger::TRIGGER_POLICY) {
     const auto& file_metadata = file_metadata_.at(current_path);
     report_callbacks_.AddUnsafe(base::BindOnce(
-        &MaybeReportDeepScanningVerdict, profile, item_->GetURL(),
+        &MaybeReportDeepScanningVerdict, profile, item_->GetURL(), "", "",
         file_metadata.filename, file_metadata.sha256, file_metadata.mime_type,
         extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
         DeepScanAccessPoint::DOWNLOAD, file_metadata.size, result,

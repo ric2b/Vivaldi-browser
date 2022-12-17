@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -82,6 +82,11 @@ class SourceDestinationMatcherAsh {
   std::set<ID> Match(content::BrowserContext* context,
                      const storage::FileSystemURL& source_url,
                      const storage::FileSystemURL& destination_url) const;
+
+  // Returns a descriptive string of the volume associated with `path`.
+  static std::string GetVolumeDescriptionFromPath(
+      content::BrowserContext* context,
+      const base::FilePath& path);
 
  private:
   // This enum mostly corresponds to the values in file_manager::VolumeType.

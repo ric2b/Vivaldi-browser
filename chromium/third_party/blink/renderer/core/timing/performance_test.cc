@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,14 +88,6 @@ class PerformanceTest : public PageTestBase {
 
   PerformanceEntryVector PerformanceEntriesInObserver() {
     return observer_->performance_entries_;
-  }
-  static bool AllowsTimingRedirect(
-      const Vector<ResourceResponse>& redirect_chain,
-      const ResourceResponse& final_response,
-      const SecurityOrigin& initiator_security_origin,
-      ExecutionContext* context) {
-    return Performance::AllowsTimingRedirect(
-        redirect_chain, final_response, initiator_security_origin, context);
   }
 
   void CheckBackForwardCacheRestoration(PerformanceEntryVector entries) {
@@ -194,57 +186,6 @@ TEST_F(PerformanceTest, AddLongTaskTiming) {
                            base::TimeTicks() + base::Seconds(5678), "window",
                            "same-origin", "www.foo.com/bar", "", "");
   EXPECT_EQ(1, NumPerformanceEntriesInObserver());  // added an entry
-}
-
-TEST_F(PerformanceTest, AllowsTimingRedirect) {
-  // When there are no cross-origin redirects.
-  AtomicString origin_domain = "http://127.0.0.1:8000";
-  Vector<ResourceResponse> redirect_chain;
-  KURL url(origin_domain + "/foo.html");
-  ResourceResponse redirect_response1(url);
-  ResourceResponse redirect_response2(url);
-  redirect_chain.push_back(redirect_response1);
-  redirect_chain.push_back(redirect_response2);
-  scoped_refptr<const SecurityOrigin> security_origin =
-      SecurityOrigin::Create(url);
-  // When finalResponse is an empty object.
-  ResourceResponse empty_final_response;
-  EXPECT_FALSE(AllowsTimingRedirect(redirect_chain, empty_final_response,
-                                    *security_origin.get(),
-                                    GetExecutionContext()));
-  // Final response is same origin as requestor.
-  ResourceResponse final_response(url);
-  EXPECT_TRUE(AllowsTimingRedirect(redirect_chain, final_response,
-                                   *security_origin.get(),
-                                   GetExecutionContext()));
-  // When there exist cross-origin redirects.
-  AtomicString cross_origin_domain = "http://126.0.0.1:8000";
-  KURL redirect_url(cross_origin_domain + "/bar.html");
-  ResourceResponse redirect_response3(redirect_url);
-  redirect_chain.push_back(redirect_response3);
-  EXPECT_FALSE(AllowsTimingRedirect(redirect_chain, final_response,
-                                    *security_origin.get(),
-                                    GetExecutionContext()));
-
-  // When cross-origin redirect opts in, but the final response doesn't.
-  redirect_chain.back().SetHttpHeaderField(http_names::kTimingAllowOrigin,
-                                           origin_domain);
-  EXPECT_FALSE(AllowsTimingRedirect(redirect_chain, final_response,
-                                    *security_origin.get(),
-                                    GetExecutionContext()));
-  // When cross-origin redirect opts in and the final response has as well, but
-  // the tainted origin flag is set.
-  final_response.SetHttpHeaderField(http_names::kTimingAllowOrigin,
-                                    origin_domain);
-  EXPECT_FALSE(AllowsTimingRedirect(redirect_chain, final_response,
-                                    *security_origin.get(),
-                                    GetExecutionContext()));
-  // Change the opt ins to be '*' and then the check should pass.
-  redirect_chain.back().SetHttpHeaderField(http_names::kTimingAllowOrigin, "*");
-  final_response.SetHttpHeaderField(http_names::kTimingAllowOrigin, "*");
-  EXPECT_TRUE(AllowsTimingRedirect(redirect_chain, final_response,
-                                   *security_origin.get(),
-                                   GetExecutionContext()));
 }
 
 TEST_F(PerformanceTest, BackForwardCacheRestoration) {

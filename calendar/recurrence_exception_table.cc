@@ -120,7 +120,7 @@ bool RecurrrenceExceptionTable ::UpdateRecurrenceExceptionRow(
   sql::Statement statement(
       GetDB().GetCachedStatement(SQL_FROM_HERE,
                                  "UPDATE recurring_exceptions SET \
-        parent_event_id = ?, exception_event_id = ?, exception_date = ?, \
+        parent_event_id = ?, exception_event_id = ?, exception_day = ?, \
         cancelled = ?, last_modified = ? \
         WHERE id = ?"));
 

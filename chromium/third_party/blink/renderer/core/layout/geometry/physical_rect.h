@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -82,6 +82,10 @@ struct CORE_EXPORT PhysicalRect {
     return offset == other.offset && size == other.size;
   }
   bool operator!=(const PhysicalRect& other) const { return !(*this == other); }
+
+  PhysicalRect operator+(const PhysicalOffset& other) const {
+    return {offset + other, size};
+  }
 
   // Returns the distance to |target| in horizontal and vertical directions.
   // Each distance is zero if |this| contains |target| in that direction.

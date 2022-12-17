@@ -1,10 +1,11 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/viz/service/display/display.h"
 
 #include <stddef.h>
+
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -13,6 +14,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
@@ -66,14 +68,6 @@
 namespace viz {
 
 namespace {
-
-enum class TypeOfVideoInFrame {
-  kNoVideo = 0,
-  kVideo = 1,
-
-  // This should be the last entry/largest value above.
-  kMaxValue = kVideo,
-};
 
 const DrawQuad::Material kNonSplittableMaterials[] = {
     // Exclude debug quads from quad splitting
@@ -220,9 +214,9 @@ bool ReduceComplexity(const cc::Region& region,
 
   reduced_region->clear();
   for (gfx::Rect r : region) {
-    auto it =
-        std::find_if(reduced_region->begin(), reduced_region->end(),
-                     [&r](const gfx::Rect& a) { return a.SharesEdgeWith(r); });
+    auto it = base::ranges::find_if(*reduced_region, [&r](const gfx::Rect& a) {
+      return a.SharesEdgeWith(r);
+    });
     if (it != reduced_region->end()) {
       it->Union(r);
       continue;
@@ -604,8 +598,7 @@ void DebugDrawFrame(const AggregatedFrame& frame) {
 
   for (auto* quad : root_render_pass.quad_list) {
     auto& transform = quad->shared_quad_state->quad_to_target_transform;
-    auto display_rect = gfx::RectF(quad->rect);
-    transform.TransformRect(&display_rect);
+    auto display_rect = transform.MapRect(gfx::RectF(quad->rect));
     DBG_DRAW_TEXT_OPT("frame.root.material", DBG_OPT_GREEN,
                       display_rect.origin(),
                       base::NumberToString(static_cast<int>(quad->material)));
@@ -659,10 +652,7 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
   if (params.max_pending_swaps >= 0 && skia_output_surface_ &&
       skia_output_surface_->capabilities()
           .supports_dynamic_frame_buffer_allocation) {
-    if (skia_output_surface_->EnsureMinNumberOfBuffers(
-            params.max_pending_swaps + 1)) {
-      renderer_->ReallocatedFrameBuffers();
-    }
+    renderer_->EnsureMinNumberOfBuffers(params.max_pending_swaps + 1);
   }
 
   gfx::OverlayTransform current_display_transform = gfx::OVERLAY_TRANSFORM_NONE;
@@ -722,14 +712,6 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
     }
   }
   DebugDrawFrame(frame);
-
-  // Records whether the aggregated frame contains video or not.
-  // TODO(vikassoni) : Extend this capability to record whether a video frame is
-  // inline or fullscreen.
-  UMA_HISTOGRAM_ENUMERATION("Compositing.SurfaceAggregator.FrameContainsVideo",
-                            frame.may_contain_video
-                                ? TypeOfVideoInFrame::kVideo
-                                : TypeOfVideoInFrame::kNoVideo);
 
   if (frame.delegated_ink_metadata) {
     TRACE_EVENT_INSTANT1(
@@ -843,10 +825,9 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
     }
 
     draw_timer.emplace();
-    renderer_->DecideRenderPassAllocationsForFrame(frame.render_pass_list);
     overlay_processor_->SetFrameSequenceNumber(frame_sequence_number_);
     overlay_processor_->SetIsVideoCaptureEnabled(frame.video_capture_enabled);
-    overlay_processor_->SetIsVideoFullscreen(frame.page_fullscreen_mode);
+    overlay_processor_->SetIsPageFullscreen(frame.page_fullscreen_mode);
     renderer_->DrawFrame(&frame.render_pass_list, device_scale_factor_,
                          current_surface_size, display_color_spaces_,
                          std::move(frame.surface_damage_rect_list_));

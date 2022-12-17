@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -170,7 +170,7 @@ void Stars::Renderer::CreateBuffers() {
     }
     for (size_t j = 0; j < kVerticesPerStar; j++, cur_vertex++) {
       gfx::Point3F p = local_star_geometry[j];
-      local.TransformPoint(&p);
+      p = local.MapPoint(p);
       g_vertices[cur_vertex * kFloatsPerStarVertex] = p.x();
       g_vertices[cur_vertex * kFloatsPerStarVertex + 1] = p.y();
       g_vertices[cur_vertex * kFloatsPerStarVertex + 2] = p.z();

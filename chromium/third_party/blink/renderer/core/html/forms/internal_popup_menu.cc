@@ -1,4 +1,4 @@
-// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/html/forms/chooser_resource_loader.h"
 #include "third_party/blink/renderer/core/html/forms/html_opt_group_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
@@ -185,11 +186,13 @@ class InternalPopupMenu::ItemIterationContext {
     DCHECK(!is_in_group_);
     PagePopupClient::AddString("baseStyle: {", buffer_);
     if (!BaseStyle().ColorSchemeForced()) {
-      AddProperty("backgroundColor", background_color_.Serialized(), buffer_);
-      AddProperty(
-          "color",
-          BaseStyle().VisitedDependentColor(GetCSSPropertyColor()).Serialized(),
-          buffer_);
+      AddProperty("backgroundColor", background_color_.SerializeAsCSSColor(),
+                  buffer_);
+      AddProperty("color",
+                  BaseStyle()
+                      .VisitedDependentColor(GetCSSPropertyColor())
+                      .SerializeAsCSSColor(),
+                  buffer_);
     }
     AddProperty("textTransform",
                 String(TextTransformToString(BaseStyle().TextTransform())),
@@ -276,8 +279,8 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
   // element's items (see AddElementStyle). This requires a style-clean tree.
   // See Element::EnsureComputedStyle for further explanation.
   DCHECK(!owner_element.GetDocument().NeedsLayoutTreeUpdate());
-  gfx::Rect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
-      owner_element.VisibleBoundsInVisualViewport(),
+  gfx::Rect anchor_rect_in_screen = chrome_client_->LocalRootToScreenDIPs(
+      owner_element.VisibleBoundsInLocalRoot(),
       owner_element.GetDocument().View());
 
   float scale_factor = chrome_client_->WindowToViewportScalar(
@@ -416,14 +419,15 @@ void InternalPopupMenu::AddElementStyle(ItemIterationContext& context,
         style->VisitedDependentColor(GetCSSPropertyColor());
     if (base_style.VisitedDependentColor(GetCSSPropertyColor()) !=
         foreground_color) {
-      AddProperty("color", foreground_color.Serialized(), data);
+      AddProperty("color", foreground_color.SerializeAsCSSColor(), data);
       color_applied = true;
     }
     Color background_color =
         style->VisitedDependentColor(GetCSSPropertyBackgroundColor());
     if (background_color != Color::kTransparent &&
         (context.BackgroundColor() != background_color)) {
-      AddProperty("backgroundColor", background_color.Serialized(), data);
+      AddProperty("backgroundColor", background_color.SerializeAsCSSColor(),
+                  data);
       color_applied = true;
     }
     if (color_applied)
@@ -476,11 +480,11 @@ void InternalPopupMenu::AddOption(ItemIterationContext& context,
   PagePopupClient::AddString("{", data);
   AddProperty("label", element.DisplayLabel(), data);
   AddProperty("value", context.list_index_, data);
-  if (!element.title().IsEmpty())
+  if (!element.title().empty())
     AddProperty("title", element.title(), data);
   const AtomicString& aria_label =
       element.FastGetAttribute(html_names::kAriaLabelAttr);
-  if (!aria_label.IsEmpty())
+  if (!aria_label.empty())
     AddProperty("ariaLabel", aria_label, data);
   if (element.IsDisabledFormControl())
     AddProperty("disabled", true, data);
@@ -548,7 +552,7 @@ void InternalPopupMenu::SetValueAndClosePopup(int num_value,
                                               const String& string_value) {
   DCHECK(popup_);
   DCHECK(owner_element_);
-  if (!string_value.IsEmpty()) {
+  if (!string_value.empty()) {
     bool success;
     int list_index = string_value.ToInt(&success);
     DCHECK(success);
@@ -676,8 +680,8 @@ void InternalPopupMenu::Update(bool force_update) {
   }
   context.FinishGroupIfNecessary();
   PagePopupClient::AddString("],\n", data.get());
-  gfx::Rect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
-      owner_element_->VisibleBoundsInVisualViewport(),
+  gfx::Rect anchor_rect_in_screen = chrome_client_->LocalRootToScreenDIPs(
+      owner_element_->VisibleBoundsInLocalRoot(),
       OwnerElement().GetDocument().View());
   AddProperty("anchorRectInScreen", anchor_rect_in_screen, data.get());
   PagePopupClient::AddString("}\n", data.get());

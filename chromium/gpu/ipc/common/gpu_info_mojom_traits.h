@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -384,6 +384,10 @@ struct GPU_EXPORT StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo> {
 
   static const gpu::OverlayInfo& overlay_info(const gpu::GPUInfo& input) {
     return input.overlay_info;
+  }
+
+  static bool shared_image_d3d(const gpu::GPUInfo& input) {
+    return input.shared_image_d3d;
   }
 #endif
   static const gpu::VideoDecodeAcceleratorSupportedProfiles&

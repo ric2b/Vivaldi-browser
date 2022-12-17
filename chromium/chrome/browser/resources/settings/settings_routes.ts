@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,6 +36,7 @@ export interface SettingsRoutes {
   DEVICE_PASSWORDS: Route;
   PAYMENTS: Route;
   PEOPLE: Route;
+  PERFORMANCE: Route;
   PRIVACY: Route;
   PRIVACY_GUIDE: Route;
   RESET: Route;
@@ -58,7 +59,6 @@ export interface SettingsRoutes {
   SITE_SETTINGS_CAMERA: Route;
   SITE_SETTINGS_CLIPBOARD: Route;
   SITE_SETTINGS_COOKIES: Route;
-  SITE_SETTINGS_DATA_DETAILS: Route;
   SITE_SETTINGS_FEDERATED_IDENTITY_API: Route;
   SITE_SETTINGS_HANDLERS: Route;
   SITE_SETTINGS_HID_DEVICES: Route;
@@ -78,12 +78,11 @@ export interface SettingsRoutes {
   SITE_SETTINGS_PDF_DOCUMENTS: Route;
   SITE_SETTINGS_POPUPS: Route;
   SITE_SETTINGS_PROTECTED_CONTENT: Route;
-  SITE_SETTINGS_SITE_DATA: Route;
   SITE_SETTINGS_SITE_DETAILS: Route;
   SITE_SETTINGS_USB_DEVICES: Route;
   SITE_SETTINGS_SERIAL_PORTS: Route;
   SITE_SETTINGS_VR: Route;
-  SITE_SETTINGS_WINDOW_PLACEMENT: Route;
+  SITE_SETTINGS_WINDOW_MANAGEMENT: Route;
   SITE_SETTINGS_ZOOM_LEVELS: Route;
   SPELL_CHECK: Route;
   SYNC: Route;

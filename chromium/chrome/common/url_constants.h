@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,9 @@ extern const char kAdvancedProtectionDownloadLearnMoreURL[];
 
 // "Chrome Settings" URL for website notifications linked out from OSSettings.
 extern const char kAppNotificationsBrowserSettingsURL[];
+
+// "Learn more" URL for Battery Saver Mode.
+extern const char kBatterySaverModeLearnMoreUrl[];
 
 // The URL for providing help when the Bluetooth adapter is off.
 extern const char kBluetoothAdapterOffHelpURL[];
@@ -180,6 +183,9 @@ extern const char kGooglePasswordManagerURL[];
 
 // URL of the Google Photos.
 extern const char kGooglePhotosURL[];
+
+// The URL for the "Learn more" link for the High Efficiency Mode.
+extern const char kHighEfficiencyModeLearnMoreUrl[];
 
 // The URL for the "Learn more" page for the usage/crash reporting option in the
 // first run dialog.
@@ -447,6 +453,9 @@ extern const char kChromeCleanerLearnMoreURL[];
 
 // The URL for the Windows XP/Vista deprecation help center article.
 extern const char kWindowsXPVistaDeprecationURL[];
+
+// The URL for the Windows 7/8.1 deprecation help center article.
+extern const char kWindows78DeprecationURL[];
 #endif
 
 // "Learn more" URL for the one click signin infobar.

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,12 +16,12 @@
 #include "ash/quick_pair/scanning/fast_pair/fast_pair_scanner.h"
 #include "ash/quick_pair/scanning/fast_pair/fast_pair_scanner_impl.h"
 #include "ash/quick_pair/scanning/scanner_broker.h"
-#include "ash/services/quick_pair/mock_quick_pair_process_manager.h"
-#include "ash/services/quick_pair/quick_pair_process.h"
-#include "ash/services/quick_pair/quick_pair_process_manager.h"
-#include "ash/services/quick_pair/quick_pair_process_manager_impl.h"
 #include "ash/test/ash_test_base.h"
 #include "chromeos/ash/components/network/network_state_test_helper.h"
+#include "chromeos/ash/services/quick_pair/mock_quick_pair_process_manager.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process_manager.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process_manager_impl.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_device.h"

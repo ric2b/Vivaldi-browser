@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,7 +32,6 @@
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_global_scope.h"
-#include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/bindings/no_alloc_direct_call_host.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_dispatcher.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
@@ -385,14 +384,16 @@ CanvasResourceDispatcher* OffscreenCanvas::GetOrCreateResourceDispatcher() {
   // OffscreenCanvas, and it should not have a placeholder.
   if (!frame_dispatcher_) {
     scoped_refptr<base::SingleThreadTaskRunner>
-        agent_group_scheduler_compositor_task_runner =
-            GetTopExecutionContext()
-                ->GetAgentGroupSchedulerCompositorTaskRunner();
+        agent_group_scheduler_compositor_task_runner;
+    if (auto* top_execution_context = GetTopExecutionContext()) {
+      agent_group_scheduler_compositor_task_runner =
+          top_execution_context->GetAgentGroupSchedulerCompositorTaskRunner();
 
-    // AgentGroupSchedulerCompositorTaskRunner will be null for
-    // SharedWorkers, but for windows and other workers it should be non-null.
-    DCHECK(GetTopExecutionContext()->IsSharedWorkerGlobalScope() ||
-           agent_group_scheduler_compositor_task_runner);
+      // AgentGroupSchedulerCompositorTaskRunner will be null for
+      // SharedWorkers, but for windows and other workers it should be non-null.
+      DCHECK(top_execution_context->IsSharedWorkerGlobalScope() ||
+             agent_group_scheduler_compositor_task_runner);
+    }
 
     // The frame dispatcher connects the current thread of OffscreenCanvas
     // (either main or worker) to the browser process and remains unchanged
@@ -425,7 +426,7 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
       (IsRenderingContext2D() &&
        RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled());
 
-  uint32_t shared_image_usage_flags = gpu::SHARED_IMAGE_USAGE_DISPLAY;
+  uint32_t shared_image_usage_flags = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
   if (composited_mode && HasPlaceholderCanvas())
     shared_image_usage_flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
 
@@ -553,8 +554,18 @@ UkmParameters OffscreenCanvas::GetUkmParameters() {
 }
 
 void OffscreenCanvas::NotifyGpuContextLost() {
-  if (context_)
+  if (context_ && !context_->isContextLost()) {
+    // This code path is used only by 2D canvas, because NotifyGpuContextLost
+    // is called by Canvas2DLayerBridge rather than the rendering context
+    DCHECK(context_->IsRenderingContext2D());
     context_->LoseContext(CanvasRenderingContext::kRealLostContext);
+  }
+  if (frame_dispatcher_) {
+    // We'll need to recreate a new frame dispatcher once the context is
+    // restored in order to reestablish the compositor frame sink mojo
+    // channel.
+    frame_dispatcher_ = nullptr;
+  }
 }
 
 FontSelector* OffscreenCanvas::GetFontSelector() {
@@ -588,7 +599,7 @@ void OffscreenCanvas::UpdateMemoryUsage() {
     NoAllocDirectCallHost* nadc_host =
         context_ ? context_->AsNoAllocDirectCallHost() : nullptr;
     if (nadc_host) {
-      nadc_host->PostDeferrableAction(WTF::Bind(
+      nadc_host->PostDeferrableAction(WTF::BindOnce(
           [](intptr_t delta_bytes) {
             v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(
                 delta_bytes);

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -52,21 +52,12 @@ class ZeroSuggestProvider : public BaseSearchProvider {
 
   // Returns the type of results that should be generated for the given context;
   // however, it does not check whether or not a suggest request can be made.
-  // Those checks must be done using BaseSearchProvider::CanSendRequest() and
-  // BaseSearchProvider::CanSendPageURLInRequest() for the kRemoteNoURL and
-  // kRemoteSendURL variants respectively.
+  // Those checks must be done using
+  // BaseSearchProvider::CanSendZeroSuggestRequest() for the kRemoteNoURL
+  // variant and BaseSearchProvider::CanSendSuggestRequestWithURL() for the
+  // kRemoteSendURL variant.
   // This method is static to avoid depending on the provider state.
-  static ResultType ResultTypeToRun(const AutocompleteProviderClient* client,
-                                    const AutocompleteInput& input);
-
-  // Called in Start() or StartPrefetch(), confirms whether zero-prefix
-  // suggestions are allowed in the given context and logs eligibility UMA
-  // metrics. Must be called exactly once. Otherwise the meaning of the the
-  // metrics it logs would change.
-  // This method is static to avoid depending on the provider state.
-  static bool AllowZeroPrefixSuggestions(
-      const AutocompleteProviderClient* client,
-      const AutocompleteInput& input);
+  static ResultType ResultTypeToRun(const AutocompleteInput& input);
 
   // Creates and returns an instance of this provider.
   static ZeroSuggestProvider* Create(AutocompleteProviderClient* client,
@@ -74,6 +65,14 @@ class ZeroSuggestProvider : public BaseSearchProvider {
 
   // Registers a preference used to cache the zero suggest response.
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+
+  // Called in Start() or StartPrefetch(), confirms whether zero-prefix
+  // suggestions are allowed in the given context and logs eligibility UMA
+  // metrics. Must be called exactly once. Otherwise the meaning of the the
+  // metrics it logs would change. This method is virtual to mock for testing.
+  virtual bool AllowZeroPrefixSuggestions(
+      const AutocompleteProviderClient* client,
+      const AutocompleteInput& input);
 
   // AutocompleteProvider:
   void StartPrefetch(const AutocompleteInput& input) override;
@@ -97,15 +96,15 @@ class ZeroSuggestProvider : public BaseSearchProvider {
     return result_type_running_;
   }
 
- private:
   ZeroSuggestProvider(AutocompleteProviderClient* client,
                       AutocompleteProviderListener* listener);
-
-  ~ZeroSuggestProvider() override;
-
   ZeroSuggestProvider(const ZeroSuggestProvider&) = delete;
   ZeroSuggestProvider& operator=(const ZeroSuggestProvider&) = delete;
 
+ protected:
+  ~ZeroSuggestProvider() override;
+
+ private:
   // BaseSearchProvider:
   bool ShouldAppendExtraParams(
       const SearchSuggestionParser::SuggestResult& result) const override;
@@ -116,7 +115,7 @@ class ZeroSuggestProvider : public BaseSearchProvider {
   // input for which the request was made and the latter indicates the result
   // type being received in this callback.
   void OnURLLoadComplete(const AutocompleteInput& input,
-                         ResultType result_type,
+                         const ResultType result_type,
                          const network::SimpleURLLoader* source,
                          std::unique_ptr<std::string> response_body);
   // Called when the prefetch network request has completed.
@@ -124,7 +123,7 @@ class ZeroSuggestProvider : public BaseSearchProvider {
   // input for which the request was made and the latter indicates the result
   // type being received in this callback.
   void OnPrefetchURLLoadComplete(const AutocompleteInput& input,
-                                 ResultType result_type,
+                                 const ResultType result_type,
                                  const network::SimpleURLLoader* source,
                                  std::unique_ptr<std::string> response_body);
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,15 +38,12 @@
 namespace base {
 
 #if BUILDFLAG(IS_CHROMEOS)
-const Feature kOneGroupPerRenderer {
-  "OneGroupPerRenderer",
-
+BASE_FEATURE(kOneGroupPerRenderer,
+             "OneGroupPerRenderer",
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-      FEATURE_ENABLED_BY_DEFAULT
-};
+             FEATURE_ENABLED_BY_DEFAULT);
 #else
-      FEATURE_DISABLED_BY_DEFAULT
-};
+             FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 #endif  // BUILDFLAG(IS_CHROMEOS)
 

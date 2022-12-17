@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -251,7 +251,7 @@ Tutorial::StepBuilder::BuildMaybeShowBubbleCallback(
         std::unique_ptr<HelpBubble> bubble =
             tutorial_service->bubble_factory_registry()->CreateHelpBubble(
                 element, std::move(params));
-        tutorial_service->SetCurrentBubble(std::move(bubble));
+        tutorial_service->SetCurrentBubble(std::move(bubble), is_last_step_);
       },
       base::Unretained(tutorial_service), title_text, body_text, step_.arrow,
       progress, is_last_step, can_be_restarted);

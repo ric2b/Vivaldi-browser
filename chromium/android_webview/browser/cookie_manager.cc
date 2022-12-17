@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -313,12 +313,9 @@ net::CookieStore* CookieManager::GetCookieStore() {
   DCHECK(cookie_store_task_runner_->RunsTasksInCurrentSequence());
 
   if (!cookie_store_) {
-    // TODO(https://crbug.com/1286070): Provide a non-hardcoded value for
-    // the 'first_party_sets_enabled' argument below.
     content::CookieStoreConfig cookie_config(
         cookie_store_path_, /* restore_old_session_cookies= */ true,
-        /* persist_session_cookies= */ true,
-        /* first_party_sets_enabled= */ false);
+        /* persist_session_cookies= */ true);
     cookie_config.client_task_runner = cookie_store_task_runner_;
     cookie_config.background_task_runner =
         cookie_store_backend_thread_.task_runner();

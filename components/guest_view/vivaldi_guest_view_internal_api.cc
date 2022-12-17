@@ -20,7 +20,7 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
     const base::Value& create_params) {
   DCHECK(create_params.is_dict());
 
-  GuestViewManager::WebContentsCreatedCallback callback = base::BindOnce(
+  auto callback = base::BindOnce(
       &GuestViewInternalCreateGuestFunction::CreateGuestCallback, this);
   content::WebContents* contents = nullptr;
 
@@ -61,12 +61,9 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
     // webpage with target set. The guest has been created with
     // GuestViewManager::CreateGuestWithWebContentsParams.
     if (!guest->attached()) {
-      std::move(callback).Run(guest->web_contents());
+      std::move(callback).Run(guest);
       return true;
     }
-    // Otherwise we need to make sure the guest is recreated since the guest is
-    // un-mounted and mounted.
-    guest->Destroy(true);
   }
   return false;
 }

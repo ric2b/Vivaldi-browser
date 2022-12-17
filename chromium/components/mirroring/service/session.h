@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "components/mirroring/service/message_dispatcher.h"
 #include "components/mirroring/service/mirror_settings.h"
 #include "components/mirroring/service/receiver_setup_querier.h"
+#include "components/mirroring/service/rpc_dispatcher_impl.h"
 #include "components/mirroring/service/rtp_stream.h"
 #include "gpu/config/gpu_info.h"
 #include "media/capture/video/video_capture_feedback.h"
@@ -26,6 +27,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace media {
 class AudioInputDevice;
@@ -82,10 +84,12 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) Session final
       std::unique_ptr<std::vector<media::cast::FrameEvent>> frame_events,
       std::unique_ptr<std::vector<media::cast::PacketEvent>> packet_events);
 
-  // Helper method for setting constraints from the ANSWER response.
-  void SetConstraints(const openscreen::cast::Answer& answer,
-                      media::cast::FrameSenderConfig* audio_config,
-                      media::cast::FrameSenderConfig* video_config);
+  // Helper method for applying the constraints from |answer| to the audio and
+  // video configs.
+  void ApplyConstraintsToConfigs(
+      const openscreen::cast::Answer& answer,
+      absl::optional<media::cast::FrameSenderConfig>& audio_config,
+      absl::optional<media::cast::FrameSenderConfig>& video_config);
 
   // Callback for ANSWER response. If the ANSWER is invalid, |observer_| will
   // get notified with error, and session is stopped. Otherwise, capturing and
@@ -175,7 +179,7 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) Session final
   MirrorSettings mirror_settings_;
 
   std::unique_ptr<MessageDispatcher> message_dispatcher_;
-
+  std::unique_ptr<RpcDispatcherImpl> rpc_dispatcher_;
   mojo::Remote<network::mojom::NetworkContext> network_context_;
 
   std::unique_ptr<ReceiverSetupQuerier> setup_querier_;

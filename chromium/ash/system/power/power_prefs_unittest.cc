@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -144,7 +144,7 @@ std::string GetExpectedPeakShiftPolicyForPrefs(PrefService* prefs) {
 
   std::vector<power_manager::PowerManagementPolicy::PeakShiftDayConfig> configs;
   EXPECT_TRUE(chromeos::PowerPolicyController::GetPeakShiftDayConfigs(
-      prefs->GetValueDict(prefs::kPowerPeakShiftDayConfig), &configs));
+      prefs->GetDict(prefs::kPowerPeakShiftDayConfig), &configs));
 
   power_manager::PowerManagementPolicy expected_policy;
   expected_policy.set_peak_shift_battery_percent_threshold(
@@ -165,7 +165,7 @@ std::string GetExpectedAdvancedBatteryChargeModePolicyForPrefs(
       configs;
   EXPECT_TRUE(
       chromeos::PowerPolicyController::GetAdvancedBatteryChargeModeDayConfigs(
-          prefs->GetValueDict(prefs::kAdvancedBatteryChargeModeDayConfig),
+          prefs->GetDict(prefs::kAdvancedBatteryChargeModeDayConfig),
           &configs));
 
   power_manager::PowerManagementPolicy expected_policy;
@@ -480,9 +480,8 @@ TEST_F(PowerPrefsTest, PeakShift) {
 
   managed_pref_store_->SetBoolean(prefs::kPowerPeakShiftEnabled, true);
   managed_pref_store_->SetInteger(prefs::kPowerPeakShiftBatteryThreshold, 50);
-  managed_pref_store_->SetValue(
-      prefs::kPowerPeakShiftDayConfig,
-      std::make_unique<base::Value>(std::move(day_configs)), 0);
+  managed_pref_store_->SetValue(prefs::kPowerPeakShiftDayConfig,
+                                std::move(day_configs), 0);
 
   EXPECT_EQ(chromeos::PowerPolicyController::GetPeakShiftPolicyDebugString(
                 power_manager_client()->policy()),
@@ -522,9 +521,8 @@ TEST_F(PowerPrefsTest, AdvancedBatteryChargeMode) {
 
   managed_pref_store_->SetBoolean(prefs::kAdvancedBatteryChargeModeEnabled,
                                   true);
-  managed_pref_store_->SetValue(
-      prefs::kAdvancedBatteryChargeModeDayConfig,
-      std::make_unique<base::Value>(std::move(day_configs)), 0);
+  managed_pref_store_->SetValue(prefs::kAdvancedBatteryChargeModeDayConfig,
+                                std::move(day_configs), 0);
 
   EXPECT_EQ(chromeos::PowerPolicyController::
                 GetAdvancedBatteryChargeModePolicyDebugString(

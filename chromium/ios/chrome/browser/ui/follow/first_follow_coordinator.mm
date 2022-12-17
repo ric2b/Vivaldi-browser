@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,7 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/new_tab_page_commands.h"
 #import "ios/chrome/browser/ui/follow/first_follow_view_controller.h"
-#import "ios/chrome/browser/ui/ntp/feed_metrics_recorder.h"
+#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
@@ -63,13 +63,21 @@ constexpr CGFloat kHalfSheetCornerRadius = 20;
                                  ->GetFeedMetricsRecorder();
 
   __weak __typeof(self) weakSelf = self;
-  NSURL* webPageURL = _followedWebSite.webPageURL;
+  // Most of time the page url of a followed site is a valid url, but sometimes
+  // it is an invalid url with only a scheme. At this time, use the RSS url
+  // instead. For a followed website, at least one url between the `webPageURL`
+  // and `RSSURL` should be valid with a host.
+  NSURL* followedSiteURL = _followedWebSite.webPageURL.host
+                               ? _followedWebSite.webPageURL
+                               : _followedWebSite.RSSURL;
+  DCHECK(followedSiteURL.host);
+
   FirstFollowViewController* firstFollowViewController =
       [[FirstFollowViewController alloc]
           initWithTitle:_followedWebSite.title
               available:_followedWebSite.available
           faviconSource:^(void (^completion)(UIImage* favicon)) {
-            [weakSelf faviconForURL:webPageURL completion:completion];
+            [weakSelf faviconForURL:followedSiteURL completion:completion];
           }];
 
   firstFollowViewController.actionHandler = self;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -318,6 +318,7 @@ public class SubscriptionsManagerImpl implements SubscriptionsManager {
 
     // Calls the backend for known types and updates the local cache.
     private void initTypes(Callback<Integer> callback) {
+        mStorage.deleteAll();
         String type = CommerceSubscription.CommerceSubscriptionType.PRICE_TRACK;
         getSubscriptions(type, true,
                 remoteSubscriptions

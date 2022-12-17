@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,24 +10,16 @@
 #include <vector>
 
 #include "base/feature_list.h"
-#include "base/trace_event/trace_event.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
+#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
 #include "gpu/command_buffer/service/external_semaphore.h"
-#include "gpu/command_buffer/service/shared_context_state.h"
-#include "gpu/ipc/common/gpu_client_ids.h"
-#include "gpu/vulkan/vulkan_device_queue.h"
-#include "gpu/vulkan/vulkan_function_pointers.h"
-#include "gpu/vulkan/vulkan_implementation.h"
-#include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/overlay_plane_data.h"
 #include "ui/ozone/public/overlay_plane.h"
-#include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/platform_window_surface.h"
-#include "ui/ozone/public/surface_factory_ozone.h"
 
 namespace viz {
 
@@ -35,7 +27,11 @@ namespace {
 
 class PresenterImageFuchsia : public OutputPresenter::Image {
  public:
-  PresenterImageFuchsia() = default;
+  PresenterImageFuchsia(
+      gpu::SharedImageFactory* factory,
+      gpu::SharedImageRepresentationFactory* representation_factory,
+      SkiaOutputSurfaceDependency* deps)
+      : Image(factory, representation_factory, deps) {}
   ~PresenterImageFuchsia() override;
 
   // OutputPresenter::Image implementation.
@@ -43,11 +39,6 @@ class PresenterImageFuchsia : public OutputPresenter::Image {
   void EndPresent(gfx::GpuFenceHandle release_fence) final;
   int GetPresentCount() const final;
   void OnContextLost() final;
-
-  bool Initialize(gpu::SharedImageFactory* factory,
-                  gpu::SharedImageRepresentationFactory* representation_factory,
-                  const gpu::Mailbox& mailbox,
-                  SkiaOutputSurfaceDependency* deps);
 
   // Must only be called in between BeginPresent() and EndPresent().
   scoped_refptr<gfx::NativePixmap> GetNativePixmap() {
@@ -61,14 +52,6 @@ class PresenterImageFuchsia : public OutputPresenter::Image {
       std::vector<gfx::GpuFenceHandle>& read_end_fences);
 
  private:
-  VulkanContextProvider* vulkan_context_provider_ = nullptr;
-
-  std::unique_ptr<gpu::OverlayImageRepresentation> overlay_representation_;
-  std::unique_ptr<gpu::OverlayImageRepresentation::ScopedReadAccess>
-      scoped_overlay_read_access_;
-
-  int present_count_ = 0;
-
   std::vector<gfx::GpuFenceHandle> read_begin_fences_;
   gfx::GpuFenceHandle read_end_fence_;
 };
@@ -76,26 +59,6 @@ class PresenterImageFuchsia : public OutputPresenter::Image {
 PresenterImageFuchsia::~PresenterImageFuchsia() {
   DCHECK(read_begin_fences_.empty());
   DCHECK(read_end_fence_.is_null());
-}
-
-bool PresenterImageFuchsia::Initialize(
-    gpu::SharedImageFactory* factory,
-    gpu::SharedImageRepresentationFactory* representation_factory,
-    const gpu::Mailbox& mailbox,
-    SkiaOutputSurfaceDependency* deps) {
-  vulkan_context_provider_ = deps->GetVulkanContextProvider();
-
-  if (!Image::Initialize(factory, representation_factory, mailbox, deps))
-    return false;
-
-  overlay_representation_ = representation_factory->ProduceOverlay(mailbox);
-
-  if (!overlay_representation_) {
-    DLOG(ERROR) << "ProduceOverlay() failed";
-    return false;
-  }
-
-  return true;
 }
 
 void PresenterImageFuchsia::BeginPresent() {
@@ -122,7 +85,7 @@ void PresenterImageFuchsia::BeginPresent() {
   // A new release fence is generated for each present. The fence for the last
   // present gets waited on before giving up read access to the shared image.
   gpu::ExternalSemaphore semaphore =
-      gpu::ExternalSemaphore::Create(vulkan_context_provider_);
+      gpu::ExternalSemaphore::Create(deps_->GetVulkanContextProvider());
   DCHECK(semaphore.is_valid());
   read_end_fence_ = semaphore.TakeSemaphoreHandle().ToGpuFenceHandle();
 
@@ -229,45 +192,20 @@ OutputPresenterFuchsia::AllocateImages(gfx::ColorSpace color_space,
   CHECK_NE(num_images, 1u);
 
   // Create PresenterImageFuchsia for each buffer in the collection.
-  constexpr uint32_t image_usage = gpu::SHARED_IMAGE_USAGE_DISPLAY |
+  constexpr uint32_t image_usage = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+                                   gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE |
                                    gpu::SHARED_IMAGE_USAGE_RASTER |
                                    gpu::SHARED_IMAGE_USAGE_SCANOUT;
 
   std::vector<std::unique_ptr<OutputPresenter::Image>> images;
   images.reserve(num_images);
 
-  auto* surface_factory =
-      ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
-
-  VkDevice vk_device = dependency_->GetVulkanContextProvider()
-                           ->GetDeviceQueue()
-                           ->GetVulkanDevice();
-
   // Create an image for each buffer in the collection.
   for (size_t i = 0; i < num_images; ++i) {
-    auto pixmap = surface_factory->CreateNativePixmap(
-        dependency_->GetSurfaceHandle(), vk_device, frame_size_, buffer_format_,
-        gfx::BufferUsage::SCANOUT);
-    if (!pixmap)
-      return {};
-
-    gfx::GpuMemoryBufferHandle gmb_handle;
-    gmb_handle.type = gfx::GpuMemoryBufferType::NATIVE_PIXMAP;
-    gmb_handle.native_pixmap_handle = pixmap->ExportHandle();
-
-    auto mailbox = gpu::Mailbox::GenerateForSharedImage();
-    if (!shared_image_factory_->CreateSharedImage(
-            mailbox, gpu::kDisplayCompositorClientId, std::move(gmb_handle),
-            buffer_format_, gfx::BufferPlane::DEFAULT, gpu::kNullSurfaceHandle,
-            frame_size_, color_space, kTopLeft_GrSurfaceOrigin,
-            kPremul_SkAlphaType, image_usage)) {
-      return {};
-    }
-
-    auto image = std::make_unique<PresenterImageFuchsia>();
-    if (!image->Initialize(shared_image_factory_,
-                           shared_image_representation_factory_, mailbox,
-                           dependency_)) {
+    auto image = std::make_unique<PresenterImageFuchsia>(
+        shared_image_factory_, shared_image_representation_factory_,
+        dependency_);
+    if (!image->Initialize(frame_size_, color_space, si_format_, image_usage)) {
       return {};
     }
     images.push_back(std::move(image));
@@ -278,7 +216,8 @@ OutputPresenterFuchsia::AllocateImages(gfx::ColorSpace color_space,
 
 void OutputPresenterFuchsia::SwapBuffers(
     SwapCompletionCallback completion_callback,
-    BufferPresentedCallback presentation_callback) {
+    BufferPresentedCallback presentation_callback,
+    gl::FrameData data) {
   // SwapBuffer() should be called only after SchedulePrimaryPlane().
   DCHECK(next_frame_ && next_frame_->native_pixmap);
 
@@ -291,14 +230,16 @@ void OutputPresenterFuchsia::SwapBuffers(
 void OutputPresenterFuchsia::PostSubBuffer(
     const gfx::Rect& rect,
     SwapCompletionCallback completion_callback,
-    BufferPresentedCallback presentation_callback) {
+    BufferPresentedCallback presentation_callback,
+    gl::FrameData data) {
   // Sub buffer presentation is not supported.
   NOTREACHED();
 }
 
 void OutputPresenterFuchsia::CommitOverlayPlanes(
     SwapCompletionCallback completion_callback,
-    BufferPresentedCallback presentation_callback) {
+    BufferPresentedCallback presentation_callback,
+    gl::FrameData data) {
   // Overlays are not supported yet.
   NOTREACHED();
 }
@@ -337,7 +278,7 @@ void OutputPresenterFuchsia::ScheduleOverlayPlane(
   DCHECK(next_frame_->overlays.empty());
 
   DCHECK(overlay_plane_candidate.mailbox.IsSharedImage());
-  auto pixmap = access->GetNativePixmap();
+  auto pixmap = access ? access->GetNativePixmap() : nullptr;
 
   if (!pixmap) {
     DLOG(ERROR) << "Cannot access SysmemNativePixmap";
@@ -348,7 +289,8 @@ void OutputPresenterFuchsia::ScheduleOverlayPlane(
   auto& overlay = next_frame_->overlays.back();
   overlay.pixmap = std::move(pixmap);
   overlay.overlay_plane_data = gfx::OverlayPlaneData(
-      overlay_plane_candidate.plane_z_order, overlay_plane_candidate.transform,
+      overlay_plane_candidate.plane_z_order,
+      absl::get<gfx::OverlayTransform>(overlay_plane_candidate.transform),
       overlay_plane_candidate.display_rect, overlay_plane_candidate.uv_rect,
       !overlay_plane_candidate.is_opaque,
       gfx::ToRoundedRect(overlay_plane_candidate.damage_rect),

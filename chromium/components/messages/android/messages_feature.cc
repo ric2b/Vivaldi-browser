@@ -1,56 +1,93 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/messages/android/messages_feature.h"
 
+#include "base/android/jni_string.h"
+#include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "components/messages/android/jni_headers/MessageFeatureList_jni.h"
+
+using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
 
 namespace messages {
 
-const base::Feature kMessagesForAndroidAdsBlocked{
-    "MessagesForAndroidAdsBlocked", base::FEATURE_ENABLED_BY_DEFAULT};
+namespace {
 
-const base::Feature kMessagesForAndroidChromeSurvey{
-    "MessagesForAndroidChromeSurvey", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature* kFeaturesExposedToJava[] = {
+    &kMessagesForAndroidStackingAnimation,
+};
 
-const base::Feature kMessagesForAndroidInfrastructure{
-    "MessagesForAndroidInfrastructure", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature* FindFeatureExposedToJava(const std::string& feature_name) {
+  for (const base::Feature* feature : kFeaturesExposedToJava) {
+    if (feature->name == feature_name)
+      return feature;
+  }
+  NOTREACHED() << "Queried feature not found in MessageFeatureList: "
+               << feature_name;
+  return nullptr;
+}
 
-const base::Feature kMessagesForAndroidInstantApps{
-    "MessagesForAndroidInstantApps", base::FEATURE_ENABLED_BY_DEFAULT};
+}  // namespace
 
-const base::Feature kMessagesForAndroidNearOomReduction{
-    "MessagesForAndroidNearOomReduction", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidAdsBlocked,
+             "MessagesForAndroidAdsBlocked",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kMessagesForAndroidNotificationBlocked{
-    "MessagesForAndroidNotificationBlocked", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidChromeSurvey,
+             "MessagesForAndroidChromeSurvey",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kMessagesForAndroidOfferNotification{
-    "MessagesForAndroidOfferNotification", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidInfrastructure,
+             "MessagesForAndroidInfrastructure",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kMessagesForAndroidPasswords{
-    "MessagesForAndroidPasswords", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidInstantApps,
+             "MessagesForAndroidInstantApps",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kMessagesForAndroidNearOomReduction,
+             "MessagesForAndroidNearOomReduction",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kMessagesForAndroidNotificationBlocked,
+             "MessagesForAndroidNotificationBlocked",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kMessagesForAndroidOfferNotification,
+             "MessagesForAndroidOfferNotification",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kMessagesForAndroidPasswords,
+             "MessagesForAndroidPasswords",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<int>
     kMessagesForAndroidPasswords_MessageDismissDurationMs{
         &kMessagesForAndroidPasswords,
         "save_password_message_dismiss_duration_ms", 20000};
 
-const base::Feature kMessagesForAndroidPermissionUpdate{
-    "MessagesForAndroidPermissionUpdate", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidPermissionUpdate,
+             "MessagesForAndroidPermissionUpdate",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kMessagesForAndroidPopupBlocked{
-    "MessagesForAndroidPopupBlocked", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidPopupBlocked,
+             "MessagesForAndroidPopupBlocked",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kMessagesForAndroidReaderMode{
-    "MessagesForAndroidReaderMode", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidReaderMode,
+             "MessagesForAndroidReaderMode",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kMessagesForAndroidSafetyTip{
-    "MessagesForAndroidSafetyTip", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidSafetyTip,
+             "MessagesForAndroidSafetyTip",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kMessagesForAndroidSaveCard{
-    "MessagesForAndroidSaveCard", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidSaveCard,
+             "MessagesForAndroidSaveCard",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<bool>
     kMessagesForAndroidSaveCard_UseFollowupButtonText{
@@ -63,21 +100,21 @@ constexpr base::FeatureParam<bool> kMessagesForAndroidSaveCard_UseGPayIcon{
 constexpr base::FeatureParam<bool> kMessagesForAndroidSaveCard_UseDialogV2{
     &kMessagesForAndroidSaveCard, "save_card_dialog_v2_enabled", false};
 
-const base::Feature kMessagesForAndroidStackingAnimation{
-    "MessagesForAndroidStackingAnimation", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidStackingAnimation,
+             "MessagesForAndroidStackingAnimation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kMessagesForAndroidSyncError{
-    "MessagesForAndroidSyncError", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kMessagesForAndroidUpdatePassword{
-    "MessagesForAndroidUpdatePassword", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidUpdatePassword,
+             "MessagesForAndroidUpdatePassword",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<bool>
     kMessagesForAndroidUpdatePassword_UseFollowupButtonText{
         &kMessagesForAndroidUpdatePassword, "use_followup_button_text", false};
 
-const base::Feature kMessagesForAndroidReduceLayoutChanges{
-    "MessagesForAndroidReduceLayoutChanges", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagesForAndroidReduceLayoutChanges,
+             "MessagesForAndroidReduceLayoutChanges",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsAdsBlockedMessagesUiEnabled() {
   return base::FeatureList::IsEnabled(kMessagesForAndroidInfrastructure) &&
@@ -152,6 +189,14 @@ bool UseGPayIconForSaveCardMessage() {
 
 bool UseDialogV2ForSaveCardMessage() {
   return kMessagesForAndroidSaveCard_UseDialogV2.Get();
+}
+
+static jboolean JNI_MessageFeatureList_IsEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jstring>& jfeature_name) {
+  const base::Feature* feature =
+      FindFeatureExposedToJava(ConvertJavaStringToUTF8(env, jfeature_name));
+  return base::FeatureList::IsEnabled(*feature);
 }
 
 }  // namespace messages

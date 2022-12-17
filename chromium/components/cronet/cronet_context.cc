@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,6 +46,7 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cookies/cookie_monster.h"
+#include "net/first_party_sets/first_party_set_metadata.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/file_net_log_observer.h"
@@ -120,6 +121,7 @@ class BasicNetworkDelegate : public net::NetworkDelegateImpl {
   // net::NetworkDelegate implementation.
   bool OnAnnotateAndMoveUserBlockedCookies(
       const net::URLRequest& request,
+      const net::FirstPartySetMetadata& first_party_set_metadata,
       net::CookieAccessResultList& maybe_included_cookies,
       net::CookieAccessResultList& excluded_cookies) override {
     // Disallow sending cookies by default.
@@ -169,7 +171,7 @@ void SetQuicHint(net::URLRequestContext* context,
   net::AlternativeService alternative_service(
       net::kProtoQUIC, "", static_cast<uint16_t>(quic_hint->alternate_port));
   context->http_server_properties()->SetQuicAlternativeService(
-      quic_server, net::NetworkIsolationKey(), alternative_service,
+      quic_server, net::NetworkAnonymizationKey(), alternative_service,
       base::Time::Max(), quic::ParsedQuicVersionVector());
 }
 
@@ -484,7 +486,7 @@ void CronetContext::NetworkTasks::SetSharedURLRequestContextConfig(
     for (const auto& preloaded_header :
          context_config_->preloaded_report_to_headers) {
       context->reporting_service()->ProcessReportToHeader(
-          preloaded_header.origin, net::NetworkIsolationKey(),
+          preloaded_header.origin, net::NetworkAnonymizationKey(),
           preloaded_header.value);
     }
   }
@@ -493,8 +495,8 @@ void CronetContext::NetworkTasks::SetSharedURLRequestContextConfig(
     for (const auto& preloaded_header :
          context_config_->preloaded_nel_headers) {
       context->network_error_logging_service()->OnHeader(
-          net::NetworkIsolationKey(), preloaded_header.origin, net::IPAddress(),
-          preloaded_header.value);
+          net::NetworkAnonymizationKey(), preloaded_header.origin,
+          net::IPAddress(), preloaded_header.value);
     }
   }
 #endif  // BUILDFLAG(ENABLE_REPORTING)

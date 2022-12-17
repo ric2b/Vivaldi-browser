@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -164,6 +164,10 @@ std::string FormatSampleForDiagnosticOutput(const std::vector<Frame>& sample);
 // ranges, in the specified order.
 void ExpectStackContains(const std::vector<Frame>& stack,
                          const std::vector<FunctionAddressRange>& functions);
+
+// Expects that the stack contains the function names in the specified order.
+void ExpectStackContainsNames(const std::vector<Frame>& stack,
+                              const std::vector<std::string>& function_names);
 
 // Expects that the stack does not contain the functions with the specified
 // address ranges.

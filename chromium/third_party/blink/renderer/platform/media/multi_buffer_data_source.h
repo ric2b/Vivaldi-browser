@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,6 +94,8 @@ class PLATFORM_EXPORT MultiBufferDataSource : public media::DataSource {
   // Returns true if the response includes an Access-Control-Allow-Origin
   // header (that is not "null").
   bool HasAccessControl() const;
+
+  bool PassedTimingAllowOriginCheck();
 
   // Returns the CorsMode of the underlying UrlData.
   UrlData::CorsMode cors_mode() const;

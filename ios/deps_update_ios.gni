@@ -26,6 +26,8 @@ update_target("//ios/chrome/browser/ui/toolbar/buttons:buttons") {
     "resources:toolbar_new_tab_page",
     "resources:toolbar_stop",
     "resources:toolbar_switcher",
+    "resources:tab_toolbar_button_color_highlighted",
+    "resources:tab_toolbar_button_color_highlighted_incognito",
   ]
   deps += [
     "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_back",
@@ -33,6 +35,9 @@ update_target("//ios/chrome/browser/ui/toolbar/buttons:buttons") {
     "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_new_tab_page",
     "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_stop",
     "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_switcher",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_menu",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:tab_toolbar_button_color_highlighted",
+    "//vivaldi/ios/ui/toolbar/buttons/resources:tab_toolbar_button_color_highlighted_incognito",
   ]
 }
 
@@ -107,7 +112,9 @@ update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constan
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_body_text_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_toolbar_text_button_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_background_color",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_icon_not_selected_color"
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_icon_not_selected_color",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_selected_color",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_not_selected_color",
 
   ]
 }
@@ -155,5 +162,55 @@ update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension
     "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_incognito_icon",
     "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_qr_icon",
     "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_voice_search_icon",
+  ]
+}
+
+update_target("//ios/chrome/common/ui/colors/resources:resources") {
+  deps -= [
+    ":toolbar_button_color",
+  ]
+  deps += [
+    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_button_color",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/ntp:coordinator") {
+  deps += [
+    "//vivaldi/ios/chrome/browser/ui/ntp:vivaldi_ntp",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/tabs:tabs") {
+  deps += [
+    "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_strip_background_color",
+    "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_view_selected_color",
+    "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_view_not_selected_color",
+    "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_view_selected_tint_color",
+    "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_tab_view_not_selected_tint_color",
+    "//vivaldi/ios/chrome/browser/ui/tab_strip/resources:vivaldi_primary_toolbar_panel_button",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/bookmarks:bookmarks_ui") {
+    deps += [
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivaldi_bookmarks_folder",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivaldi_speed_dial_folder",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivaldi_bookmark_text_field_underline_color",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivald_bookmark_folder_selection_chevron",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivald_bookmark_folder_selection_checkmark",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/resources:vivaldi_bookmark_add_new_folder",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/badges:badges") {
+  deps -= [
+    "resources:incognito_badge",
+    "resources:incognito_badge_ios14",
+    "resources:incognito_small_badge",
+  ]
+  deps += [
+    "//vivaldi/ios/chrome/browser/ui/badges/resources:incognito_badge",
+    "//vivaldi/ios/chrome/browser/ui/badges/resources:incognito_badge_ios14",
+    "//vivaldi/ios/chrome/browser/ui/badges/resources:incognito_small_badge",
   ]
 }

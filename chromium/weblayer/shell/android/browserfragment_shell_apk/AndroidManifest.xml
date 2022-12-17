@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<!-- Copyright 2022 The Chromium Authors. All rights reserved.
+<!--
+Copyright 2022 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file.
- -->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     package="org.chromium.browserfragment.shell">
 
     <application android:label="BF shell"
+        tools:replace="android:label"
         android:supportsRtl="true">
         <activity android:name="BrowserFragmentShellActivity"
                   android:launchMode="singleTask"
@@ -23,5 +25,10 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
+
+        <meta-data android:name="org.chromium.browserfragment.shell.BrowserProcessMode"
+                   android:value="{{ browser_process_mode }}"/>
     </application>
 </manifest>

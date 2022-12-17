@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,6 +76,14 @@ IpczResult IPCZ_API DeactivateTransport(IpczDriverHandle driver_transport,
   return GetDriver().DeactivateTransport(driver_transport, flags, options);
 }
 
+IpczResult IPCZ_API ReportBadTransportActivity(IpczDriverHandle transport,
+                                               uintptr_t context,
+                                               uint32_t flags,
+                                               const void* options) {
+  return GetDriver().ReportBadTransportActivity(transport, context, flags,
+                                                options);
+}
+
 IpczResult IPCZ_API Transmit(IpczDriverHandle driver_transport,
                              const void* data,
                              size_t num_bytes,
@@ -149,6 +157,7 @@ const IpczDriver kMockDriver = {
     ActivateTransport,
     DeactivateTransport,
     Transmit,
+    ReportBadTransportActivity,
     AllocateSharedMemory,
     GetSharedMemoryInfo,
     DuplicateSharedMemory,

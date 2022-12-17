@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
+#import "base/test/scoped_feature_list.h"
 #import "ios/testing/earl_grey/app_launch_configuration.h"
 
 @class AppLaunchManager;
@@ -55,9 +56,10 @@
 
 // DEPRECATED. Use |ensureAppLaunchedWithConfiguration:| instead.
 - (void)ensureAppLaunchedWithFeaturesEnabled:
-            (std::vector<base::Feature>)featuresEnabled
-                                    disabled:(std::vector<base::Feature>)
-                                                 featuresDisabled
+            (std::vector<base::test::FeatureRef>)featuresEnabled
+                                    disabled:
+                                        (std::vector<base::test::FeatureRef>)
+                                            featuresDisabled
                               relaunchPolicy:(RelaunchPolicy)relaunchPolicy;
 
 // Moves app to background and then moves it back. In EG1, this method is a

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,9 +20,10 @@ class MockIdpNetworkRequestManager : public IdpNetworkRequestManager {
   MockIdpNetworkRequestManager& operator=(const MockIdpNetworkRequestManager&) =
       delete;
 
-  MOCK_METHOD1(FetchManifestList, void(FetchManifestListCallback));
-  MOCK_METHOD3(FetchManifest,
-               void(absl::optional<int>,
+  MOCK_METHOD2(FetchManifestList, void(const GURL&, FetchManifestListCallback));
+  MOCK_METHOD4(FetchManifest,
+               void(const GURL&,
+                    absl::optional<int>,
                     absl::optional<int>,
                     FetchManifestCallback));
   MOCK_METHOD3(FetchClientMetadata,

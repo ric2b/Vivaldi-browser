@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,8 +26,8 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/mock_network_change_notifier.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/network_change_notifier.h"
-#include "net/base/network_isolation_key.h"
 #include "net/cert/cert_verifier.h"
 #include "net/dns/context_host_resolver.h"
 #include "net/dns/dns_config.h"
@@ -36,6 +36,7 @@
 #include "net/dns/host_cache.h"
 #include "net/dns/host_resolver_manager.h"
 #include "net/dns/host_resolver_proc.h"
+#include "net/dns/host_resolver_system_task.h"
 #include "net/dns/public/dns_protocol.h"
 #include "net/dns/public/dns_query_type.h"
 #include "net/dns/public/host_resolver_source.h"
@@ -184,8 +185,8 @@ class StaleHostResolverTest : public testing::Test {
     if (context)
       inner_resolver->SetRequestContext(context);
 
-    net::ProcTaskParams proc_params(mock_proc_, 1u);
-    inner_resolver->SetProcParamsForTesting(proc_params);
+    net::HostResolverSystemTask::Params system_params(mock_proc_, 1u);
+    inner_resolver->SetHostResolverSystemParamsForTest(system_params);
     if (dns_client) {
       inner_resolver->GetManagerForTesting()->SetDnsClientForTesting(
           std::move(dns_client));
@@ -234,7 +235,7 @@ class StaleHostResolverTest : public testing::Test {
     base::TimeDelta ttl(base::Seconds(kCacheEntryTTLSec));
     net::HostCache::Key key(kHostname, net::DnsQueryType::UNSPECIFIED, 0,
                             net::HostResolverSource::ANY,
-                            net::NetworkIsolationKey());
+                            net::NetworkAnonymizationKey());
     net::HostCache::Entry entry(
         error,
         error == net::OK ? MakeEndpoints(kCacheAddress)
@@ -258,7 +259,7 @@ class StaleHostResolverTest : public testing::Test {
 
     net::HostCache::Key key(kHostname, net::DnsQueryType::UNSPECIFIED, 0,
                             net::HostResolverSource::ANY,
-                            net::NetworkIsolationKey());
+                            net::NetworkAnonymizationKey());
     base::TimeTicks now = tick_clock_.NowTicks();
     net::HostCache::EntryStaleness stale;
     EXPECT_TRUE(resolver_->GetHostCache()->LookupStale(key, now, &stale));
@@ -271,7 +272,7 @@ class StaleHostResolverTest : public testing::Test {
     EXPECT_FALSE(resolve_pending_);
 
     request_ = resolver_->CreateRequest(
-        net::HostPortPair(kHostname, kPort), net::NetworkIsolationKey(),
+        net::HostPortPair(kHostname, kPort), net::NetworkAnonymizationKey(),
         net::NetLogWithSource(), optional_parameters);
     resolve_pending_ = true;
     resolve_complete_ = false;

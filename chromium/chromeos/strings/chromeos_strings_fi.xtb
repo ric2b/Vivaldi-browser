@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Muokkaa tiedostoa}other{Muokkaa tiedostoja}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Avaimen suunta</translation>
+<translation id="3294437725009624529">Vierailja</translation>
 <translation id="3310640316857623290">DNS-viive merkittävästi yli sallitun rajan</translation>
 <translation id="3328783797891415197">Testi käynnissä</translation>
 <translation id="3340011300870565703">Laitteen oikean kuulokkeen akun varaus on <ph name="BATTERY_PERCENTAGE" /> %.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Älä irrota ulkoista laitetta äläkä sammuta tietokonetta sillä aikaa kun laiteohjelmisto päivittyy. Voit pienentää ikkunan. Päivityksessä voi mennä muutama minuutti, eikä ulkoinen laite välttämättä toimi sen aikana.</translation>
 <translation id="3486220673238053218">määritelmä</translation>
 <translation id="3488065109653206955">Osittain aktivoitu</translation>
+<translation id="3510890413042482857">Lähetä <ph name="BEGIN_LINK1" />dataa tehokkuuden jäljistä<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">ChromeOS-päivitys</translation>
 <translation id="3527036260304016759">Epäonnistui – Tuntematon virhe</translation>
 <translation id="3532980081107202182">Noin <ph name="MIN_REMAINING" /> minuuttia jäljellä</translation>
@@ -468,6 +470,7 @@ Napauta mikrofonia, niin voit kysyä mitä haluat.</translation>
 <translation id="5502931783115429516">Android ei käynnissä</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Vaihda tummaan teemaan automaattisesti, kun aurinko laskee</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Skannaa uudelleen</translation>
 <translation id="5583640892426849032">Askelpalautin</translation>

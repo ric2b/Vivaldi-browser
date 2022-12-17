@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@
 #include "base/win/windows_version.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/active_use_util.h"
+#include "chrome/chrome_elf/chrome_elf_main.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
@@ -140,7 +141,10 @@ int MainDllLoader::Launch(HINSTANCE instance,
     // For child processes that are running as --no-sandbox, don't initialize
     // the sandbox info, otherwise they'll be treated as brokers (as if they
     // were the browser).
-    content::InitializeSandboxInfo(&sandbox_info);
+    content::InitializeSandboxInfo(
+        &sandbox_info, IsExtensionPointDisableSet()
+                           ? sandbox::MITIGATION_EXTENSION_POINT_DISABLE
+                           : 0);
   }
 
   base::FilePath file;

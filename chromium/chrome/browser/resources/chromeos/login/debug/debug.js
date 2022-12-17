@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,11 @@
 // #import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
 // #import {loadTimeData} from '../i18n_setup.js';
 // #import {Oobe} from '../cr_ui.m.js'
-// #import {$} from 'chrome://resources/js/util.m.js';
+// #import {$} from 'chrome://resources/js/util.js';
 // #import './debug_util.js';
 // #import {AssistantNativeIconType} from '../../assistant_optin/utils.m.js';
 
-// #import {MessageType, ProblemType} from 'chrome://resources/cr_components/chromeos/quick_unlock/setup_pin_keyboard.m.js';
+// #import {MessageType, ProblemType} from 'chrome://resources/ash/common/quick_unlock/setup_pin_keyboard.js';
 
 const createAssistantData = (isMinor) => {
   const data = {};
@@ -418,6 +418,15 @@ cr.define('cr.ui.login.debug', function() {
           id: 'creds',
           trigger: (screen) => {
             screen.setUIStep('creds');
+            screen.isDomainJoin = false;
+          },
+          data: {},
+        },
+        {
+          id: 'creds(isDomainJoin)',
+          trigger: (screen) => {
+            screen.setUIStep('creds');
+            screen.isDomainJoin = true;
           },
           data: {},
         },
@@ -634,6 +643,13 @@ cr.define('cr.ui.login.debug', function() {
             screen.setShouldShowConfirmationDialog(true);
           },
         },
+        {
+          id: 'rollback-error',
+          trigger: (screen) => {
+            screen.reset();
+            screen.setScreenState(3);
+          },
+        },
       ],
     },
     {
@@ -835,33 +851,33 @@ cr.define('cr.ui.login.debug', function() {
           // Password was scraped
           id: 'scraped',
           trigger: (screen) => {
-            screen.show(
-                'someone@example.com',
-                false,  // manualPasswordInput
-                0,      // attempt count
-                () => {});
+            screen.onBeforeShow({
+              email: 'someone@example.com',
+              manualPasswordInput: false,
+            });
+            screen.showPasswordStep(false);
           },
         },
         {
           // Password was scraped
           id: 'scraped-retry',
           trigger: (screen) => {
-            screen.show(
-                'someone@example.com',
-                false,  // manualPasswordInput
-                1,      // attempt count
-                () => {});
+            screen.onBeforeShow({
+              email: 'someone@example.com',
+              manualPasswordInput: false,
+            });
+            screen.showPasswordStep(true);
           },
         },
         {
           // No password was scraped
           id: 'manual',
           trigger: (screen) => {
-            screen.show(
-                'someone@example.com',
-                true,  // manualPasswordInput
-                0,     // attempt count
-                () => {});
+            screen.onBeforeShow({
+              email: 'someone@example.com',
+              manualPasswordInput: true,
+            });
+            screen.showPasswordStep(false);
           },
         },
       ],
@@ -930,6 +946,10 @@ cr.define('cr.ui.login.debug', function() {
       }],
     },
     {
+      id: 'lacros-data-backward-migration',
+      kind: ScreenKind.OTHER,
+    },
+    {
       id: 'terms-of-service',
       kind: ScreenKind.NORMAL,
       handledSteps: 'loading,loaded,error',
@@ -990,61 +1010,86 @@ cr.define('cr.ui.login.debug', function() {
         {
           id: 'regular-owner',
           trigger: (screen) => {
-            screen.setIsDeviceOwner(true);
+            screen.setUsageOptinHidden(false);
           },
           data: {
             isArcEnabled: true,
             isDemo: false,
             isChildAccount: false,
-            isEnterpriseManagedAccount: false,
+            isTosHidden: false,
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
             countryCode: 'us',
+            showRecoveryOption: false,
+            recoveryOptionDefault: false,
           },
         },
         {
           id: 'regular',
           trigger: (screen) => {
-            screen.setIsDeviceOwner(false);
+            screen.setUsageOptinHidden(true);
           },
           data: {
             isArcEnabled: true,
             isDemo: false,
             isChildAccount: false,
-            isEnterpriseManagedAccount: false,
+            isTosHidden: false,
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
             countryCode: 'us',
+            showRecoveryOption: false,
+            recoveryOptionDefault: false,
+          },
+        },
+        {
+          id: 'regular-recovery',
+          trigger: (screen) => {
+            screen.setUsageOptinHidden(true);
+          },
+          data: {
+            isArcEnabled: true,
+            isDemo: false,
+            isChildAccount: false,
+            isTosHidden: false,
+            googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
+            crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
+            countryCode: 'us',
+            showRecoveryOption: true,
+            recoveryOptionDefault: true,
           },
         },
         {
           id: 'child-owner',
           trigger: (screen) => {
-            screen.setIsDeviceOwner(true);
+            screen.setUsageOptinHidden(false);
           },
           data: {
             isArcEnabled: true,
             isDemo: false,
             isChildAccount: true,
-            isEnterpriseManagedAccount: false,
+            isTosHidden: false,
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
             countryCode: 'us',
+            showRecoveryOption: false,
+            recoveryOptionDefault: false,
           },
         },
         {
           id: 'child',
           trigger: (screen) => {
-            screen.setIsDeviceOwner(false);
+            screen.setUsageOptinHidden(true);
           },
           data: {
             isArcEnabled: true,
             isDemo: false,
             isChildAccount: true,
-            isEnterpriseManagedAccount: false,
+            isTosHidden: false,
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
             countryCode: 'us',
+            showRecoveryOption: false,
+            recoveryOptionDefault: false,
           },
         },
         {
@@ -1053,40 +1098,46 @@ cr.define('cr.ui.login.debug', function() {
             isArcEnabled: true,
             isDemo: true,
             isChildAccount: false,
-            isEnterpriseManagedAccount: false,
+            isTosHidden: false,
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
             countryCode: 'us',
+            showRecoveryOption: false,
+            recoveryOptionDefault: false,
           },
         },
         {
           id: 'arc-disabled-owner',
           trigger: (screen) => {
-            screen.setIsDeviceOwner(true);
+            screen.setUsageOptinHidden(false);
           },
           data: {
             isArcEnabled: false,
             isDemo: false,
             isChildAccount: false,
-            isEnterpriseManagedAccount: false,
+            isTosHidden: false,
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
             countryCode: 'us',
+            showRecoveryOption: false,
+            recoveryOptionDefault: false,
           },
         },
         {
           id: 'arc-disabled',
           trigger: (screen) => {
-            screen.setIsDeviceOwner(false);
+            screen.setUsageOptinHidden(true);
           },
           data: {
             isArcEnabled: false,
             isDemo: false,
             isChildAccount: false,
-            isEnterpriseManagedAccount: false,
+            isTosHidden: false,
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
             countryCode: 'us',
+            showRecoveryOption: false,
+            recoveryOptionDefault: false,
           },
         },
         {
@@ -1094,32 +1145,36 @@ cr.define('cr.ui.login.debug', function() {
           trigger: (screen) => {
             screen.setBackupMode(true, true);
             screen.setLocationMode(false, true);
-            screen.setIsDeviceOwner(false);
+            screen.setUsageOptinHidden(true);
           },
           data: {
             isArcEnabled: true,
             isDemo: false,
             isChildAccount: false,
-            isEnterpriseManagedAccount: true,
+            isTosHidden: true,
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
             countryCode: 'us',
+            showRecoveryOption: false,
+            recoveryOptionDefault: false,
           },
         },
         {
           id: 'error',
           trigger: (screen) => {
             screen.setUIStep('error');
-            screen.setIsDeviceOwner(true);
+            screen.setUsageOptinHidden(false);
           },
           data: {
             isArcEnabled: true,
             isDemo: false,
             isChildAccount: false,
-            isEnterpriseManagedAccount: false,
+            isTosHidden: false,
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
             crosEulaUrl: 'https://www.google.com/intl/en/chrome/terms/',
             countryCode: 'us',
+            showRecoveryOption: false,
+            recoveryOptionDefault: false,
           },
         },
 
@@ -1177,6 +1232,10 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'hw-data-collection',
       kind: ScreenKind.OTHER,
+    },
+    {
+      id: 'local-state-error',
+      kind: ScreenKind.ERROR,
     },
     {
       id: 'fingerprint-setup',
@@ -1473,6 +1532,10 @@ cr.define('cr.ui.login.debug', function() {
       kind: ScreenKind.NORMAL,
     },
     {
+      id: 'kiosk-enable',
+      kind: ScreenKind.NORMAL,
+    },
+    {
       id: 'marketing-opt-in',
       kind: ScreenKind.NORMAL,
       handledSteps: 'overview',
@@ -1530,6 +1593,10 @@ cr.define('cr.ui.login.debug', function() {
           },
         },
       ],
+    },
+    {
+      id: 'cryptohome-recovery',
+      kind: ScreenKind.NORMAL,
     },
   ];
 

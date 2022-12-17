@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,13 +112,6 @@ TEST(TemplateUtil, RemoveCvRefT) {
                 "");
   static_assert(
       std::is_same<void (*)(int), remove_cvref_t<void (*)(int)>>::value, "");
-}
-
-TEST(TemplateUtil, IsConstantEvaluated) {
-  // base::is_constant_evaluated() should return whether it is evaluated as part
-  // of a constant expression.
-  static_assert(is_constant_evaluated(), "");
-  EXPECT_FALSE(is_constant_evaluated());
 }
 
 }  // namespace

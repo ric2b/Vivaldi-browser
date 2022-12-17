@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,6 @@
 #include "ash/accelerometer/accelerometer_types.h"
 #include "ash/constants/app_types.h"
 #include "ash/constants/ash_switches.h"
-#include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/shell.h"
 #include "ash/system/screen_layout_observer.h"
@@ -358,10 +357,10 @@ TEST_F(ScreenOrientationControllerTest, SplitViewPreventsLock) {
   Lock(child_window2.get(), chromeos::OrientationType::kPortrait);
   ASSERT_TRUE(RotationLocked());
 
-  split_view_controller()->SnapWindow(focus_window1.get(),
-                                      SplitViewController::LEFT);
-  split_view_controller()->SnapWindow(focus_window1.get(),
-                                      SplitViewController::RIGHT);
+  split_view_controller()->SnapWindow(
+      focus_window1.get(), SplitViewController::SnapPosition::kPrimary);
+  split_view_controller()->SnapWindow(
+      focus_window1.get(), SplitViewController::SnapPosition::kSecondary);
   EXPECT_FALSE(RotationLocked());
 
   split_view_controller()->EndSplitView();
@@ -874,7 +873,7 @@ TEST_F(ScreenOrientationControllerTest, GetCurrentAppRequestedOrientationLock) {
 
   // Once `win0` is snapped in splitview, it can no longer lock the rotation.
   SplitViewController::Get(win0->GetRootWindow())
-      ->SnapWindow(win0.get(), SplitViewController::RIGHT);
+      ->SnapWindow(win0.get(), SplitViewController::SnapPosition::kSecondary);
   EXPECT_EQ(
       chromeos::OrientationType::kAny,
       screen_orientation_controller->GetCurrentAppRequestedOrientationLock());

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -81,8 +81,7 @@ class BASE_EXPORT ThreadController {
   // Notifies that |pending_task| is about to be enqueued. Needed for tracing
   // purposes. The impl may use this opportunity add metadata to |pending_task|
   // before it is moved into the queue.
-  virtual void WillQueueTask(PendingTask* pending_task,
-                             const char* task_queue_name) = 0;
+  virtual void WillQueueTask(PendingTask* pending_task) = 0;
 
   // Notify the controller that its associated sequence has immediate work
   // to run. Shortly after this is called, the thread associated with this
@@ -155,6 +154,13 @@ class BASE_EXPORT ThreadController {
   // NextWorkInfo and yielding to the underlying sequence (e.g. the message
   // pump).
   virtual void PrioritizeYieldingToNative(base::TimeTicks prioritize_until) = 0;
+
+  // Currently only overridden on ThreadControllerWithMessagePumpImpl.
+  // While input is active, don't let sequence manager execute work
+  // for more than |delta|, which is exported from the feature param
+  // |kBrowserPeriodicYieldingToNativeNormalInputAfterMsParam| or
+  // |kBrowserPeriodicYieldingToNativeFlingInputAfterMsParam| for flings.
+  virtual void EnablePeriodicYieldingToNative(base::TimeDelta delta) = 0;
 
   // Sets the SingleThreadTaskRunner that will be returned by
   // ThreadTaskRunnerHandle::Get on the thread controlled by this
@@ -374,7 +380,7 @@ class BASE_EXPORT ThreadController {
       RunLevel(RunLevel&& other);
       RunLevel& operator=(RunLevel&&) = delete;
 
-      void UpdateState(State new_state, LazyNow& lazy_now);
+      void UpdateState(State new_state);
 
       State state() const { return state_; }
 

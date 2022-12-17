@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -255,7 +255,7 @@ TEST_F(PermissionsAPIUnitTest, ContainsAndGetAllWithRuntimeHostPermissions) {
 
     const base::Value* origins_value =
         (*results)[0].FindKeyOfType("origins", base::Value::Type::LIST);
-    for (const auto& value : origins_value->GetListDeprecated())
+    for (const auto& value : origins_value->GetList())
       origins.push_back(value.GetString());
 
     return origins;
@@ -310,6 +310,23 @@ TEST_F(PermissionsAPIUnitTest, ContainsAndGetAllWithRuntimeHostPermissions) {
   // sane behavior.
   EXPECT_FALSE(contains_origin(kExampleCom));
   EXPECT_THAT(get_all(), testing::ElementsAre(kExampleCom));
+}
+
+// Tests requesting permissions that are already granted with the
+// permissions.request() API.
+TEST_F(PermissionsAPIUnitTest, RequestingGrantedPermissions) {
+  // Create an extension with requires all urls, and grant the permission.
+  scoped_refptr<const Extension> extension =
+      ExtensionBuilder("extension").AddPermissions({"<all_urls>"}).Build();
+  AddExtensionAndGrantPermissions(*extension);
+
+  // Request access to any host permissions. No permissions should be prompted,
+  // since permissions that are already granted are not taken into account.
+  std::unique_ptr<const PermissionSet> prompted_permissions;
+  EXPECT_TRUE(RunRequestFunction(*extension, browser(),
+                                 R"([{"origins": ["https://*/*"]}])",
+                                 &prompted_permissions));
+  EXPECT_EQ(prompted_permissions, nullptr);
 }
 
 // Tests requesting withheld permissions with the permissions.request() API.

@@ -20,6 +20,10 @@ namespace vivaldi {
 class NotesModel;
 }
 
+namespace file_sync {
+class SyncedFileStore;
+}
+
 namespace sync_notes {
 
 class NotesModelObserverImpl;
@@ -27,7 +31,7 @@ class NotesModelObserverImpl;
 class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
                                public syncer::ModelTypeControllerDelegate {
  public:
-  NoteModelTypeProcessor();
+  NoteModelTypeProcessor(file_sync::SyncedFileStore* synced_file_store);
 
   NoteModelTypeProcessor(const NoteModelTypeProcessor&) = delete;
   NoteModelTypeProcessor& operator=(const NoteModelTypeProcessor&) = delete;
@@ -44,7 +48,9 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
       const syncer::CommitResponseDataList& committed_response_list,
       const syncer::FailedCommitResponseDataList& error_response_list) override;
   void OnUpdateReceived(const sync_pb::ModelTypeState& type_state,
-                        syncer::UpdateResponseDataList updates) override;
+                        syncer::UpdateResponseDataList updates,
+                        absl::optional<sync_pb::GarbageCollectionDirective>
+                            gc_directive) override;
 
   // ModelTypeControllerDelegate implementation.
   void OnSyncStarting(const syncer::DataTypeActivationRequest& request,
@@ -111,6 +117,8 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   void AppendNodeAndChildrenForDebugging(const vivaldi::NoteNode* node,
                                          int index,
                                          base::Value::List* all_nodes) const;
+
+  file_sync::SyncedFileStore* synced_file_store_;
 
   // Stores the start callback in between OnSyncStarting() and
   // ModelReadyToSync().

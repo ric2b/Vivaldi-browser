@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,13 +9,13 @@
 #include <utility>
 
 #include "ash/components/arc/arc_prefs.h"
-#include "ash/components/policy/weekly_time/time_utils.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/time/default_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/values.h"
+#include "chromeos/ash/components/policy/weekly_time/time_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 
@@ -91,7 +91,7 @@ void SnapshotHoursPolicyService::UpdatePolicy() {
     return;
 
   const base::Value::Dict& dict =
-      local_state_->GetValueDict(prefs::kArcSnapshotHours);
+      local_state_->GetDict(prefs::kArcSnapshotHours);
 
   const auto* timezone = dict.FindString("timezone");
   std::string timezone_str = "";
@@ -118,7 +118,7 @@ void SnapshotHoursPolicyService::UpdatePolicy() {
     if (!entry.is_dict())
       continue;
     auto interval =
-        policy::WeeklyTimeInterval::ExtractFromValue(&entry, -offset);
+        policy::WeeklyTimeInterval::ExtractFromDict(entry.GetDict(), -offset);
     if (interval)
       intervals_.push_back(*interval);
   }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -100,8 +100,9 @@ namespace audio {
 
 #if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS_ASH) && \
     !BUILDFLAG(IS_CHROMEOS_LACROS)
-const base::Feature kDynamicAudioTimeout{"DynamicAudioTimeout",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kDynamicAudioTimeout,
+             "DynamicAudioTimeout",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<double> kBufferDurationPercent{
     &kDynamicAudioTimeout, "buffer_duration_percent", 0.95};

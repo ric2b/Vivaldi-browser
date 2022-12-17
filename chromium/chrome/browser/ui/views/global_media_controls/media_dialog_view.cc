@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -368,7 +368,7 @@ void MediaDialogView::ToggleLiveCaption(bool enabled) {
   if (!speech::SodaInstaller::GetInstance()->IsSodaDownloading(
           speech::GetLanguageCode(
               prefs::GetLiveCaptionLanguageCode(profile_->GetPrefs())))) {
-    live_caption_title_->SetText(GetLiveCaptionTitle(profile_->GetPrefs()));
+    SetLiveCaptionTitle(GetLiveCaptionTitle(profile_->GetPrefs()));
   }
 
   live_caption_button_->SetIsOn(enabled);
@@ -378,7 +378,7 @@ void MediaDialogView::OnSodaInstalled(speech::LanguageCode language_code) {
   if (!prefs::IsLanguageCodeForLiveCaption(language_code, profile_->GetPrefs()))
     return;
   speech::SodaInstaller::GetInstance()->RemoveObserver(this);
-  live_caption_title_->SetText(GetLiveCaptionTitle(profile_->GetPrefs()));
+  SetLiveCaptionTitle(GetLiveCaptionTitle(profile_->GetPrefs()));
 }
 
 void MediaDialogView::OnSodaInstallError(
@@ -392,8 +392,21 @@ void MediaDialogView::OnSodaInstallError(
     return;
   }
 
-  live_caption_title_->SetText(l10n_util::GetStringUTF16(
-      IDS_GLOBAL_MEDIA_CONTROLS_LIVE_CAPTION_DOWNLOAD_ERROR));
+  std::u16string error_message;
+  switch (error_code) {
+    case speech::SodaInstaller::ErrorCode::kUnspecifiedError: {
+      error_message = l10n_util::GetStringUTF16(
+          IDS_GLOBAL_MEDIA_CONTROLS_LIVE_CAPTION_DOWNLOAD_ERROR);
+      break;
+    }
+    case speech::SodaInstaller::ErrorCode::kNeedsReboot: {
+      error_message = l10n_util::GetStringUTF16(
+          IDS_GLOBAL_MEDIA_CONTROLS_LIVE_CAPTION_DOWNLOAD_ERROR_REBOOT_REQUIRED);
+      break;
+    }
+  }
+
+  SetLiveCaptionTitle(error_message);
 }
 
 void MediaDialogView::OnSodaProgress(speech::LanguageCode language_code,
@@ -405,8 +418,13 @@ void MediaDialogView::OnSodaProgress(speech::LanguageCode language_code,
       language_code != speech::LanguageCode::kNone) {
     return;
   }
-  live_caption_title_->SetText(l10n_util::GetStringFUTF16Int(
+  SetLiveCaptionTitle(l10n_util::GetStringFUTF16Int(
       IDS_GLOBAL_MEDIA_CONTROLS_LIVE_CAPTION_DOWNLOAD_PROGRESS, progress));
+}
+
+void MediaDialogView::SetLiveCaptionTitle(const std::u16string& new_text) {
+  live_caption_title_->SetText(new_text);
+  UpdateBubbleSize();
 }
 
 std::unique_ptr<global_media_controls::MediaItemUIView>

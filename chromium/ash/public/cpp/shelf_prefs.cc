@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,10 @@
 
 #include <memory>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/public/cpp/tablet_mode.h"
+#include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "components/prefs/pref_service.h"
@@ -56,7 +59,7 @@ std::string GetPerDisplayPref(PrefService* prefs,
   bool has_per_display_prefs = false;
   if (!pref_key.empty()) {
     const base::Value::Dict& shelf_prefs =
-        prefs->GetValueDict(prefs::kShelfPreferences);
+        prefs->GetDict(prefs::kShelfPreferences);
     const base::Value::Dict* display_pref = shelf_prefs.FindDict(pref_key);
     if (display_pref) {
       const std::string* per_display_value =
@@ -82,37 +85,6 @@ std::string GetPerDisplayPref(PrefService* prefs,
   const std::string* default_string =
       prefs->GetDefaultPrefValue(local_path)->GetIfString();
   return default_string ? *default_string : std::string();
-}
-
-// Sets the preference value for the display with the given |display_id|.
-void SetPerDisplayPref(PrefService* prefs,
-                       int64_t display_id,
-                       const char* pref_key,
-                       const std::string& value) {
-  if (display_id == display::kInvalidDisplayId)
-    return;
-
-  // Avoid DictionaryPrefUpdate's notifications for read but unmodified prefs.
-  const base::Value::Dict& current_shelf_prefs =
-      prefs->GetValueDict(prefs::kShelfPreferences);
-  std::string display_key = base::NumberToString(display_id);
-  const base::Value::Dict* current_display_prefs =
-      current_shelf_prefs.FindDict(display_key);
-  if (current_display_prefs) {
-    const std::string* current_value =
-        current_display_prefs->FindStringByDottedPath(pref_key);
-    if (current_value && *current_value == value)
-      return;
-  }
-
-  DictionaryPrefUpdate update(prefs, prefs::kShelfPreferences);
-  base::Value* shelf_prefs = update.Get();
-  base::Value* display_prefs_weak = shelf_prefs->FindDictKey(display_key);
-  if (!display_prefs_weak) {
-    display_prefs_weak = shelf_prefs->SetKey(
-        display_key, base::Value(base::Value::Type::DICTIONARY));
-  }
-  display_prefs_weak->SetKey(pref_key, base::Value(value));
 }
 
 ShelfAlignment AlignmentFromPref(const std::string& value) {
@@ -169,14 +141,51 @@ const char* AutoHideBehaviorToPref(ShelfAutoHideBehavior behavior) {
 
 }  // namespace
 
+void SetPerDisplayShelfPref(PrefService* prefs,
+                            int64_t display_id,
+                            const char* pref_key,
+                            const std::string& value) {
+  if (display_id == display::kInvalidDisplayId)
+    return;
+
+  // Avoid ScopedDictPrefUpdate's notifications for read but unmodified prefs.
+  const base::Value::Dict& current_shelf_prefs =
+      prefs->GetDict(prefs::kShelfPreferences);
+  std::string display_key = base::NumberToString(display_id);
+  const base::Value::Dict* current_display_prefs =
+      current_shelf_prefs.FindDict(display_key);
+  if (current_display_prefs) {
+    const std::string* current_value =
+        current_display_prefs->FindStringByDottedPath(pref_key);
+    if (current_value && *current_value == value)
+      return;
+  }
+
+  ScopedDictPrefUpdate update(prefs, prefs::kShelfPreferences);
+  base::Value::Dict& shelf_prefs = update.Get();
+  base::Value::Dict* display_prefs_weak = shelf_prefs.EnsureDict(display_key);
+  display_prefs_weak->Set(pref_key, value);
+}
+
 ShelfAutoHideBehavior GetShelfAutoHideBehaviorPref(PrefService* prefs,
                                                    int64_t display_id) {
   DCHECK_NE(display_id, display::kInvalidDisplayId);
 
+  if (!base::FeatureList::IsEnabled(features::kShelfAutoHideSeparation)) {
+    // See comment in |kShelfAlignment| as to why we consider two prefs.
+    return AutoHideBehaviorFromPref(
+        GetPerDisplayPref(prefs, display_id, prefs::kShelfAutoHideBehaviorLocal,
+                          prefs::kShelfAutoHideBehavior));
+  }
+
+  const bool is_in_tablet_mode = TabletMode::Get()->InTabletMode();
   // See comment in |kShelfAlignment| as to why we consider two prefs.
-  return AutoHideBehaviorFromPref(
-      GetPerDisplayPref(prefs, display_id, prefs::kShelfAutoHideBehaviorLocal,
-                        prefs::kShelfAutoHideBehavior));
+  return AutoHideBehaviorFromPref(GetPerDisplayPref(
+      prefs, display_id,
+      is_in_tablet_mode ? prefs::kShelfAutoHideTabletModeBehaviorLocal
+                        : prefs::kShelfAutoHideBehaviorLocal,
+      is_in_tablet_mode ? prefs::kShelfAutoHideTabletModeBehavior
+                        : prefs::kShelfAutoHideBehavior));
 }
 
 void SetShelfAutoHideBehaviorPref(PrefService* prefs,
@@ -188,11 +197,32 @@ void SetShelfAutoHideBehaviorPref(PrefService* prefs,
   if (!value)
     return;
 
-  SetPerDisplayPref(prefs, display_id, prefs::kShelfAutoHideBehavior, value);
+  if (!base::FeatureList::IsEnabled(features::kShelfAutoHideSeparation)) {
+    SetPerDisplayShelfPref(prefs, display_id, prefs::kShelfAutoHideBehavior,
+                           value);
+    if (display_id == display::Screen::GetScreen()->GetPrimaryDisplay().id()) {
+      // See comment in |kShelfAlignment| about why we have two prefs here.
+      prefs->SetString(prefs::kShelfAutoHideBehaviorLocal, value);
+      prefs->SetString(prefs::kShelfAutoHideBehavior, value);
+    }
+    return;
+  }
+
+  const bool is_in_tablet_mode = TabletMode::Get()->InTabletMode();
+  SetPerDisplayShelfPref(prefs, display_id,
+                         is_in_tablet_mode
+                             ? prefs::kShelfAutoHideTabletModeBehavior
+                             : prefs::kShelfAutoHideBehavior,
+                         value);
   if (display_id == display::Screen::GetScreen()->GetPrimaryDisplay().id()) {
     // See comment in |kShelfAlignment| about why we have two prefs here.
-    prefs->SetString(prefs::kShelfAutoHideBehaviorLocal, value);
-    prefs->SetString(prefs::kShelfAutoHideBehavior, value);
+    prefs->SetString(is_in_tablet_mode
+                         ? prefs::kShelfAutoHideTabletModeBehaviorLocal
+                         : prefs::kShelfAutoHideBehaviorLocal,
+                     value);
+    prefs->SetString(is_in_tablet_mode ? prefs::kShelfAutoHideTabletModeBehavior
+                                       : prefs::kShelfAutoHideBehavior,
+                     value);
   }
 }
 
@@ -213,7 +243,7 @@ void SetShelfAlignmentPref(PrefService* prefs,
   if (!value)
     return;
 
-  SetPerDisplayPref(prefs, display_id, prefs::kShelfAlignment, value);
+  SetPerDisplayShelfPref(prefs, display_id, prefs::kShelfAlignment, value);
   if (display_id == display::Screen::GetScreen()->GetPrimaryDisplay().id()) {
     // See comment in |kShelfAlignment| as to why we consider two prefs.
     prefs->SetString(prefs::kShelfAlignmentLocal, value);

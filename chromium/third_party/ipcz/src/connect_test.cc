@@ -1,12 +1,14 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <string>
 
+#include "build/build_config.h"
 #include "ipcz/ipcz.h"
 #include "ipcz/node_messages.h"
-#include "reference_drivers/blob.h"
+#include "reference_drivers/async_reference_driver.h"
+#include "reference_drivers/sync_reference_driver.h"
 #include "test/multinode_test.h"
 #include "test/test_transport_listener.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -16,7 +18,16 @@
 namespace ipcz {
 namespace {
 
-using ConnectTestNode = test::TestNode;
+class ConnectTestNode : public test::TestNode {
+ public:
+  void ActivateAndClose(IpczDriverHandle transport) {
+    // Registering any listener callback activates the transport, and
+    // listener destruction closes it.
+    test::TestTransportListener listener(node(), transport);
+    listener.OnError([] {});
+  }
+};
+
 using ConnectTest = test::MultinodeTest<ConnectTestNode>;
 
 MULTINODE_TEST_NODE(ConnectTestNode, BrokerToNonBrokerClient) {
@@ -25,7 +36,7 @@ MULTINODE_TEST_NODE(ConnectTestNode, BrokerToNonBrokerClient) {
   Close(b);
 }
 
-TEST_P(ConnectTest, BrokerToNonBroker) {
+MULTINODE_TEST(ConnectTest, BrokerToNonBroker) {
   IpczHandle c = SpawnTestNode<BrokerToNonBrokerClient>();
   Close(c);
 }
@@ -47,7 +58,7 @@ MULTINODE_TEST_NODE(ConnectTestNode, SurplusPortalsClient) {
   CloseAll(portals);
 }
 
-TEST_P(ConnectTest, SurplusPortals) {
+MULTINODE_TEST(ConnectTest, SurplusPortals) {
   IpczHandle portals[kNumBrokerPortals];
   SpawnTestNode<SurplusPortalsClient>(portals);
   CloseAll(portals);
@@ -59,12 +70,11 @@ MULTINODE_TEST_NODE(ConnectTestNode, ExpectDisconnectFromBroker) {
   Close(b);
 }
 
-TEST_P(ConnectTest, DisconnectWithoutBrokerHandshake) {
-  TransportPair transports = CreateTransports();
+MULTINODE_TEST(ConnectTest, DisconnectWithoutBrokerHandshake) {
+  IpczDriverHandle our_transport;
   auto controller =
-      SpawnTestNodeWithTransport<ExpectDisconnectFromBroker>(transports.theirs);
-  EXPECT_EQ(IPCZ_RESULT_OK,
-            GetDriver().Close(transports.ours, IPCZ_NO_FLAGS, nullptr));
+      SpawnTestNodeNoConnect<ExpectDisconnectFromBroker>(our_transport);
+  ActivateAndClose(our_transport);
   controller->WaitForShutdown();
 }
 
@@ -74,25 +84,24 @@ MULTINODE_TEST_NODE(ConnectTestNode,
   // we never call ConnectToBroker(). No action required.
 }
 
-TEST_P(ConnectTest, DisconnectWithoutNonBrokerHandshake) {
+MULTINODE_TEST(ConnectTest, DisconnectWithoutNonBrokerHandshake) {
   IpczHandle c = SpawnTestNode<DisconnectWithoutNonBrokerHandshakeClient>();
   EXPECT_EQ(IPCZ_RESULT_OK, WaitForConditionFlags(c, IPCZ_TRAP_PEER_CLOSED));
   Close(c);
 }
 
-TEST_P(ConnectTest, DisconnectOnBadBrokerMessage) {
-  TransportPair transports = CreateTransports();
+MULTINODE_TEST(ConnectTest, DisconnectOnBadBrokerMessage) {
+  IpczDriverHandle our_transport;
   auto controller =
-      SpawnTestNodeWithTransport<ExpectDisconnectFromBroker>(transports.theirs);
+      SpawnTestNodeNoConnect<ExpectDisconnectFromBroker>(our_transport);
 
   // Send some garbage to the other node.
   const char kBadMessage[] = "this will never be a valid handshake message!";
   EXPECT_EQ(
       IPCZ_RESULT_OK,
-      GetDriver().Transmit(transports.ours, kBadMessage, std::size(kBadMessage),
+      GetDriver().Transmit(our_transport, kBadMessage, std::size(kBadMessage),
                            nullptr, 0, IPCZ_NO_FLAGS, nullptr));
-  EXPECT_EQ(IPCZ_RESULT_OK,
-            GetDriver().Close(transports.ours, IPCZ_NO_FLAGS, nullptr));
+  ActivateAndClose(our_transport);
 
   // The other node will only shut down once it's observed peer closure on its
   // portal to us; which it should, because we just sent it some garbage.
@@ -115,7 +124,7 @@ MULTINODE_TEST_NODE(ConnectTestNode, TransmitSomeGarbage) {
   listener.StopListening();
 }
 
-TEST_P(ConnectTest, DisconnectOnBadNonBrokerMessage) {
+MULTINODE_TEST(ConnectTest, DisconnectOnBadNonBrokerMessage) {
   IpczHandle c;
   auto controller = SpawnTestNode<TransmitSomeGarbage>({&c, 1});
 
@@ -160,7 +169,17 @@ MULTINODE_TEST_NODE(ConnectTestNode, NonBrokerToNonBrokerClient) {
   CloseAll({c, b});
 }
 
-TEST_P(ConnectTest, NonBrokerToNonBroker) {
+MULTINODE_TEST(ConnectTest, NonBrokerToNonBroker) {
+#if BUILDFLAG(IS_ANDROID)
+  // Client nodes launching other client nodes doesn't work for Chromium's
+  // custom test driver on Android. Limit this test to the reference test
+  // drivers there.
+  if (&GetDriver() != &reference_drivers::kSyncReferenceDriver &&
+      &GetDriver() != &reference_drivers::kAsyncReferenceDriver) {
+    return;
+  }
+#endif
+
   IpczHandle c1 = SpawnTestNode<NonBrokerToNonBrokerClient>();
   IpczHandle c2 = SpawnTestNode<NonBrokerToNonBrokerClient>();
 
@@ -212,7 +231,7 @@ MULTINODE_TEST_NODE(ConnectTestNode, BadNonBrokerReferralClient) {
             GetDriver().Close(transports.theirs, IPCZ_NO_FLAGS, nullptr));
 }
 
-TEST_P(ConnectTest, BadNonBrokerReferral) {
+MULTINODE_TEST(ConnectTest, BadNonBrokerReferral) {
   IpczHandle c = SpawnTestNode<BadNonBrokerReferralClient>();
   EXPECT_EQ(IPCZ_RESULT_OK, WaitForConditionFlags(c, IPCZ_TRAP_PEER_CLOSED));
   Close(c);
@@ -230,27 +249,109 @@ MULTINODE_TEST_NODE(ConnectTestNode, FailedNonBrokerReferralReferredClient) {
 MULTINODE_TEST_NODE(ConnectTestNode, FailedNonBrokerReferralClient) {
   IpczHandle b = ConnectToBroker();
 
-  TransportPair transports = CreateTransports();
+  IpczDriverHandle our_transport;
   auto controller =
-      SpawnTestNodeWithTransport<FailedNonBrokerReferralReferredClient>(
-          transports.theirs);
+      SpawnTestNodeNoConnect<FailedNonBrokerReferralReferredClient>(
+          our_transport);
 
-  // Disconnect the transport instead of passing to our broker with
-  // ConnectNode(). The referred client should observe disconnection of its
-  // initial portals and terminate itself.
-  EXPECT_EQ(IPCZ_RESULT_OK,
-            GetDriver().Close(transports.ours, IPCZ_NO_FLAGS, nullptr));
+  // Activate and immediately disconnect the transport instead of passing to our
+  // broker with ConnectNode(). The referred client should observe disconnection
+  // of its initial portals and terminate itself.
+  ActivateAndClose(our_transport);
   controller->WaitForShutdown();
   Close(b);
 }
 
-TEST_P(ConnectTest, FailedNonBrokerReferral) {
+MULTINODE_TEST(ConnectTest, FailedNonBrokerReferral) {
   IpczHandle c = SpawnTestNode<FailedNonBrokerReferralClient>();
   EXPECT_EQ(IPCZ_RESULT_OK, WaitForConditionFlags(c, IPCZ_TRAP_PEER_CLOSED));
   Close(c);
 }
 
-INSTANTIATE_MULTINODE_TEST_SUITE_P(ConnectTest);
+MULTINODE_TEST_BROKER_NODE(ConnectTestNode, AnotherBroker) {
+  IpczHandle b = ConnectToBroker();
+  PingPong(b);
+  Close(b);
+}
+
+MULTINODE_TEST(ConnectTest, BrokerToBroker) {
+  IpczHandle b = SpawnTestNode<AnotherBroker>();
+
+  PingPong(b);
+  EXPECT_EQ(IPCZ_RESULT_OK, WaitForConditionFlags(b, IPCZ_TRAP_PEER_CLOSED));
+  Close(b);
+}
+
+MULTINODE_TEST_NODE(ConnectTestNode, BrokerClient) {
+  IpczHandle b = ConnectToBroker();
+  IpczHandle other_client;
+  EXPECT_EQ(IPCZ_RESULT_OK, WaitToGet(b, nullptr, {&other_client, 1}));
+
+  // Ensure that we end up with a direct connection to the other client, which
+  // implies the two non-broker nodes have been properly introduced across the
+  // boundary of their respective node networks.
+  PingPong(other_client);
+  WaitForDirectRemoteLink(other_client);
+
+  // Synchronize against the main test node. See synchronization comment there.
+  PingPong(b);
+  CloseAll({b, other_client});
+}
+
+MULTINODE_TEST_BROKER_NODE(ConnectTestNode, BrokerWithClientNode) {
+  IpczHandle b = ConnectToBroker();
+  IpczHandle client = SpawnTestNode<BrokerClient>();
+
+  IpczHandle other_client;
+  EXPECT_EQ(IPCZ_RESULT_OK, WaitToGet(b, nullptr, {&other_client, 1}));
+  Put(client, "", {&other_client, 1});
+
+  // Synchronize against the launched client to ensure that it's done before we
+  // join it and terminate.
+  PingPong(client);
+  EXPECT_EQ(IPCZ_RESULT_OK,
+            WaitForConditionFlags(client, IPCZ_TRAP_PEER_CLOSED));
+
+  // Synchronize against the main test node. See synchronization comment there.
+  PingPong(b);
+  CloseAll({b, client});
+}
+
+// TODOD(crbug.com/1374114): Fix flakiness and re-enable
+MULTINODE_TEST(ConnectTest, DISABLED_MultiBrokerIntroductions) {
+  // This test covers introductions in a multi-broker network. There are four
+  // test nodes involved here: the main node (this one, call it A), a secondary
+  // broker B launched with the BrokerWithClientNode body defined above; and
+  // two client nodes (running BrokerClient above) we will call C and D, with
+  // C launched by A and D launched by B.
+  //
+  // A portal pair is created on A and its portals are passed to node B (our
+  // secondary broker) and node C (the singular non-broker client node in A's
+  // local network) respectively.
+  //
+  // Node B in turn passes its end to its own launched non-broker client D. This
+  // ultimately elicits a need for node C to be introduced to node D. The test
+  // succeeds only once the portal on node C appears to be directly connected to
+  // the portal on node D -- and vice versa -- implying successful introduction.
+
+  IpczHandle other_broker = SpawnTestNode<BrokerWithClientNode>();
+  IpczHandle client = SpawnTestNode<BrokerClient>();
+
+  auto [q, p] = OpenPortals();
+  Put(other_broker, "", {&q, 1});
+  Put(client, "", {&p, 1});
+
+  // Synchronize against both the launched broker and the launched client node
+  // to ensure that they're done before we join them and terminate.
+  PingPong(other_broker);
+  PingPong(client);
+  EXPECT_EQ(IPCZ_RESULT_OK,
+            WaitForConditionFlags(other_broker, IPCZ_TRAP_PEER_CLOSED));
+  EXPECT_EQ(IPCZ_RESULT_OK,
+            WaitForConditionFlags(client, IPCZ_TRAP_PEER_CLOSED));
+
+  CloseAll({other_broker, client});
+}
 
 }  // namespace
 }  // namespace ipcz

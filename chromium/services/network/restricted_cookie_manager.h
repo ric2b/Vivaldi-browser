@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,7 @@
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_partition_key_collection.h"
 #include "net/cookies/cookie_store.h"
-#include "net/cookies/first_party_set_metadata.h"
+#include "net/first_party_sets/first_party_set_metadata.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom.h"
 #include "url/gurl.h"
@@ -79,7 +79,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) RestrictedCookieManager
       const url::Origin& origin,
       const net::IsolationInfo& isolation_info,
       mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer,
-      bool first_party_sets_enabled,
       net::FirstPartySetMetadata first_party_set_metadata);
 
   RestrictedCookieManager(const RestrictedCookieManager&) = delete;
@@ -263,7 +262,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) RestrictedCookieManager
   // update filtering.
   CookieAccessesByURLAndSite recent_cookie_accesses_;
 
-  const bool first_party_sets_enabled_;
+  bool same_party_attribute_enabled_;
 
   base::WeakPtrFactory<RestrictedCookieManager> weak_ptr_factory_{this};
 };

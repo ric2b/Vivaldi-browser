@@ -1,10 +1,11 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /**
  * @fileoverview Handles automation events on the currently focused node.
  */
+import {AutomationPredicate} from '../../common/automation_predicate.js';
 import {constants} from '../../common/constants.js';
 import {CursorRange} from '../../common/cursors/range.js';
 import {ChromeVoxEvent} from '../common/custom_automation_event.js';
@@ -60,8 +61,7 @@ export class FocusAutomationHandler extends BaseAutomationHandler {
     this.addListener_(
         EventType.ACTIVE_DESCENDANT_CHANGED, this.onActiveDescendantChanged);
     this.addListener_(EventType.DETAILS_CHANGED, this.onDetailsChanged);
-    this.addListener_(
-        EventType.MENU_LIST_ITEM_SELECTED, this.onEventIfSelected);
+    this.addListener_(EventType.MENU_ITEM_SELECTED, this.onEventIfSelected);
     this.addListener_(
         EventType.SELECTED_VALUE_CHANGED, this.onSelectedValueChanged_);
   }
@@ -77,7 +77,7 @@ export class FocusAutomationHandler extends BaseAutomationHandler {
 
     let skipFocusCheck = false;
     chrome.automation.getFocus(focus => {
-      if (focus.role === RoleType.POP_UP_BUTTON) {
+      if (AutomationPredicate.popUpButton(focus)) {
         skipFocusCheck = true;
       }
     });
@@ -140,7 +140,7 @@ export class FocusAutomationHandler extends BaseAutomationHandler {
    * @param {!ChromeVoxEvent} evt
    */
   onSelectedValueChanged_(evt) {
-    if (evt.target.role !== RoleType.POP_UP_BUTTON ||
+    if (!AutomationPredicate.popUpButton(evt.target) ||
         evt.target.state.editable) {
       return;
     }

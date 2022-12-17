@@ -1,9 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
@@ -52,8 +53,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/public/cpp/notification.h"
 
-namespace ash {
-namespace full_restore {
+namespace ash::full_restore {
 
 namespace {
 
@@ -606,6 +606,23 @@ TEST_F(FullRestoreServiceTestHavingFullRestoreFile, AskEveryTimeAndRestore) {
   FullRestoreService::MaybeCloseNotification(profile());
 }
 
+// If the OS restore setting is 'Ask every time' and glanceables are enabled,
+// the notification is not shown.
+TEST_F(FullRestoreServiceTestHavingFullRestoreFile,
+       AskEveryTimeWithGlanceables) {
+  base::test::ScopedFeatureList feature_list(features::kGlanceables);
+
+  profile()->GetPrefs()->SetInteger(
+      kRestoreAppsAndPagesPrefName,
+      static_cast<int>(RestoreOption::kAskEveryTime));
+  CreateFullRestoreServiceForTesting();
+
+  EXPECT_EQ(RestoreOption::kAskEveryTime, GetRestoreOption());
+
+  VerifyNotification(/*has_crash_notification=*/false,
+                     /*has_restore_notification=*/false);
+}
+
 // If the OS restore setting is 'Ask every time', after reboot, show the restore
 // notification, and verify the restore flag when click the Settings button.
 TEST_F(FullRestoreServiceTestHavingFullRestoreFile, AskEveryTimeAndSettings) {
@@ -1012,5 +1029,4 @@ TEST_F(FullRestoreServiceMultipleUsersTest, TwoUsersLoginWithActiveUserLogin) {
   VerifyRestoreInitSettingHistogram(RestoreOption::kAskEveryTime, 2);
 }
 
-}  // namespace full_restore
-}  // namespace ash
+}  // namespace ash::full_restore

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,11 +19,11 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
+#include "base/types/optional_util.h"
 #include "base/value_iterators.h"
 #include "net/base/address_family.h"
 #include "net/base/ip_endpoint.h"
@@ -58,7 +58,7 @@ const char kDnsQueryTypeKey[] = "dns_query_type";
 const char kFlagsKey[] = "flags";
 const char kHostResolverSourceKey[] = "host_resolver_source";
 const char kSecureKey[] = "secure";
-const char kNetworkIsolationKeyKey[] = "network_isolation_key";
+const char kNetworkAnonymizationKey[] = "network_anonymization_key";
 const char kExpirationKey[] = "expiration";
 const char kTtlKey[] = "ttl";
 const char kPinnedKey[] = "pinned";
@@ -202,6 +202,14 @@ const std::string& GetHostname(
   return *hostname;
 }
 
+absl::optional<DnsQueryType> GetDnsQueryType(int dns_query_type) {
+  for (const auto& type : kDnsQueryTypes) {
+    if (base::strict_cast<int>(type.first) == dns_query_type)
+      return type.first;
+  }
+  return absl::nullopt;
+}
+
 }  // namespace
 
 // Used in histograms; do not modify existing values.
@@ -233,12 +241,12 @@ HostCache::Key::Key(absl::variant<url::SchemeHostPort, std::string> host,
                     DnsQueryType dns_query_type,
                     HostResolverFlags host_resolver_flags,
                     HostResolverSource host_resolver_source,
-                    const NetworkIsolationKey& network_isolation_key)
+                    const NetworkAnonymizationKey& network_anonymization_key)
     : host(std::move(host)),
       dns_query_type(dns_query_type),
       host_resolver_flags(host_resolver_flags),
       host_resolver_source(host_resolver_source),
-      network_isolation_key(network_isolation_key) {
+      network_anonymization_key(network_anonymization_key) {
   DCHECK(IsValidHostname(GetHostname(this->host)));
   if (absl::holds_alternative<url::SchemeHostPort>(this->host))
     DCHECK(absl::get<url::SchemeHostPort>(this->host).IsValid());
@@ -798,17 +806,19 @@ void HostCache::GetList(base::Value::List& entry_list,
     const Key& key = pair.first;
     const Entry& entry = pair.second;
 
-    base::Value network_isolation_key_value;
+    base::Value network_anonymization_key_value;
     if (serialization_type == SerializationType::kRestorable) {
-      // Don't save entries associated with ephemeral NetworkIsolationKeys.
-      if (!key.network_isolation_key.ToValue(&network_isolation_key_value))
+      // Don't save entries associated with ephemeral NetworkAnonymizationKeys.
+      if (!key.network_anonymization_key.ToValue(
+              &network_anonymization_key_value)) {
         continue;
+      }
     } else {
       // ToValue() fails for transient NIKs, since they should never be
       // serialized to disk in a restorable format, so use ToDebugString() when
       // serializing for debugging instead of for restoring from disk.
-      network_isolation_key_value =
-          base::Value(key.network_isolation_key.ToDebugString());
+      network_anonymization_key_value =
+          base::Value(key.network_anonymization_key.ToDebugString());
     }
 
     base::Value::Dict entry_dict = entry.GetAsValue(include_staleness);
@@ -827,8 +837,8 @@ void HostCache::GetList(base::Value::List& entry_list,
     entry_dict.Set(kFlagsKey, key.host_resolver_flags);
     entry_dict.Set(kHostResolverSourceKey,
                    base::strict_cast<int>(key.host_resolver_source));
-    entry_dict.Set(kNetworkIsolationKeyKey,
-                   std::move(network_isolation_key_value));
+    entry_dict.Set(kNetworkAnonymizationKey,
+                   std::move(network_anonymization_key_value));
     entry_dict.Set(kSecureKey, key.secure);
 
     entry_list.Append(std::move(entry_dict));
@@ -882,21 +892,22 @@ bool HostCache::RestoreFromListValue(const base::Value::List& old_cache) {
         entry_dict.FindInt(kDnsQueryTypeKey);
     if (!maybe_dns_query_type.has_value())
       return false;
-    DnsQueryType dns_query_type =
-        static_cast<DnsQueryType>(maybe_dns_query_type.value());
-
+    absl::optional<DnsQueryType> dns_query_type =
+        GetDnsQueryType(maybe_dns_query_type.value());
+    if (!dns_query_type.has_value())
+      return false;
     // HostResolverSource is optional.
     int host_resolver_source =
         entry_dict.FindInt(kHostResolverSourceKey)
             .value_or(base::strict_cast<int>(HostResolverSource::ANY));
 
-    const base::Value* network_isolation_key_value =
-        entry_dict.Find(kNetworkIsolationKeyKey);
-    NetworkIsolationKey network_isolation_key;
-    if (!network_isolation_key_value ||
-        network_isolation_key_value->type() == base::Value::Type::STRING ||
-        !NetworkIsolationKey::FromValue(*network_isolation_key_value,
-                                        &network_isolation_key)) {
+    const base::Value* network_anonymization_key_value =
+        entry_dict.Find(kNetworkAnonymizationKey);
+    NetworkAnonymizationKey network_anonymization_key;
+    if (!network_anonymization_key_value ||
+        network_anonymization_key_value->type() == base::Value::Type::STRING ||
+        !NetworkAnonymizationKey::FromValue(*network_anonymization_key_value,
+                                            &network_anonymization_key)) {
       return false;
     }
 
@@ -1035,7 +1046,8 @@ bool HostCache::RestoreFromListValue(const base::Value::List& old_cache) {
 
     // Assume an empty endpoints list and an empty aliases if we have an address
     // type and no results.
-    if (IsAddressType(dns_query_type) && !text_records && !hostname_records) {
+    if (IsAddressType(dns_query_type.value()) && !text_records &&
+        !hostname_records) {
       if (!ip_endpoints) {
         ip_endpoints.emplace();
       }
@@ -1043,9 +1055,9 @@ bool HostCache::RestoreFromListValue(const base::Value::List& old_cache) {
         aliases.emplace();
       }
     }
-    Key key(std::move(host), dns_query_type, flags,
+    Key key(std::move(host), dns_query_type.value(), flags,
             static_cast<HostResolverSource>(host_resolver_source),
-            network_isolation_key);
+            network_anonymization_key);
     key.secure = secure;
 
     // If the key is already in the cache, assume it's more recent and don't

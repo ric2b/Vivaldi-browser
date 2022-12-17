@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,6 @@
 #include "base/observer_list.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -44,8 +43,6 @@
 namespace net {
 
 using CookieDeletionInfo = CookieDeletionInfo;
-
-bool const kFirstPartySetsEnabled = false;
 
 namespace {
 
@@ -419,9 +416,7 @@ CookieStoreIOS::CookieStoreIOS(
     net::CookieMonster::PersistentCookieStore* persistent_store,
     std::unique_ptr<SystemCookieStore> system_store,
     NetLog* net_log)
-    : cookie_monster_(new net::CookieMonster(persistent_store,
-                                             net_log,
-                                             net::kFirstPartySetsEnabled)),
+    : cookie_monster_(new net::CookieMonster(persistent_store, net_log)),
       system_store_(std::move(system_store)),
       metrics_enabled_(false),
       cookie_cache_(new CookieCache()),

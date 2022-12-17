@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@ const char kQuickAnswersDictionaryIntentLanguage[] =
 const char kQuickAnswersNetworkError[] = "QuickAnswers.NetworkError.IntentType";
 const char kQuickAnswersNetworkResponseCode[] =
     "QuickAnswers.NetworkError.ResponseCode";
+const char kQuickAnswerFeatureEnabled[] = "QuickAnswers.FeatureEnabled";
 
 const char kDurationSuffix[] = ".Duration";
 const char kDefinitionSuffix[] = ".Definition";
@@ -160,6 +161,10 @@ void RecordDictionaryIntentLanguage(const std::string& language) {
   base::UmaHistogramSparse(
       kQuickAnswersDictionaryIntentLanguage,
       language::LanguageUsageMetrics::ToLanguageCodeHash(language));
+}
+
+void RecordFeatureEnabled(bool enabled) {
+  base::UmaHistogramBoolean(kQuickAnswerFeatureEnabled, enabled);
 }
 
 }  // namespace quick_answers

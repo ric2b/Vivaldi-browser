@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "chromeos/ash/components/dbus/rgbkbd/rgbkbd_client.h"
 #include "third_party/cros_system_api/dbus/rgbkbd/dbus-constants.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 namespace ash {
 
@@ -41,6 +42,13 @@ class ASH_EXPORT RgbKeyboardManager : public ImeControllerImpl::Observer,
   }
 
  private:
+  // Enum to track the background mode sent to rgbkbd
+  enum class BackgroundType {
+    kNone,
+    kStaticSingleColor,
+    kStaticRainbow,
+  };
+
   // ImeControllerImpl::Observer:
   void OnCapsLockChanged(bool enabled) override;
   void OnKeyboardLayoutNameChanged(const std::string&) override {}
@@ -62,6 +70,11 @@ class ASH_EXPORT RgbKeyboardManager : public ImeControllerImpl::Observer,
       rgbkbd::RgbKeyboardCapabilities::kNone;
 
   raw_ptr<ImeControllerImpl> ime_controller_ptr_;
+
+  // Tracks the currently set background color when `background_type_` is set to
+  // `BackgroundType::kStaticSingleColor`.
+  SkColor background_color_;
+  BackgroundType background_type_ = BackgroundType::kNone;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

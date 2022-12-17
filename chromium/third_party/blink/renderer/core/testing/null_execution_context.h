@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,19 +9,22 @@
 #include "base/task/single_thread_task_runner.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/inspector_audits_issue.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 namespace blink {
 
+class FrameScheduler;
+
 class NullExecutionContext : public GarbageCollected<NullExecutionContext>,
                              public ExecutionContext {
  public:
   NullExecutionContext();
+  explicit NullExecutionContext(std::unique_ptr<FrameScheduler> scheduler);
   ~NullExecutionContext() override;
 
   void SetURL(const KURL& url) { url_ = url; }
@@ -71,7 +74,7 @@ class NullExecutionContext : public GarbageCollected<NullExecutionContext>,
   // A dummy scheduler to ensure that the callers of
   // ExecutionContext::GetScheduler don't have to check for whether it's null or
   // not.
-  std::unique_ptr<FrameOrWorkerScheduler> scheduler_;
+  std::unique_ptr<FrameScheduler> scheduler_;
 
   // A fake token identifying this execution context.
   const LocalFrameToken token_;

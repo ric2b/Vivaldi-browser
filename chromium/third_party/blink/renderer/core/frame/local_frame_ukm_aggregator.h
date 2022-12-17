@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -314,10 +314,6 @@ class CORE_EXPORT LocalFrameUkmAggregator
   // Inform the aggregator that we have reached First Contentful Paint.
   // The UKM event for the pre-FCP period will be recorded and UMA for
   // aggregated contributions to FCP are reported.
-  // TODO(crbug.com/1330675): This is called for the main frame or local frame
-  // roots only, depending on features::kLocalFrameRootPrePostFCPMetrics. When
-  // the experiment finishes, we should let only local frame roots use this
-  // class.
   void DidReachFirstContentfulPaint();
 
   bool InMainFrameUpdate() { return in_main_frame_update_; }

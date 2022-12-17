@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -209,9 +209,9 @@ TEST(FCMInvalidationServiceTest, NotifiesAboutInstanceID) {
 
   // Set up a cached InstanceID aka client ID stored in prefs.
   {
-    DictionaryPrefUpdate update(&delegate->pref_service_,
+    ScopedDictPrefUpdate update(&delegate->pref_service_,
                                 prefs::kInvalidationClientIDCache);
-    update->SetStringKey(kSenderId, "InstanceIDFromPrefs");
+    update->Set(kSenderId, "InstanceIDFromPrefs");
   }
 
   // Create the invalidation service, but do not initialize it yet.

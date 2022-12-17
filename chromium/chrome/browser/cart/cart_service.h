@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #ifndef CHROME_BROWSER_CART_CART_SERVICE_H_
@@ -229,7 +229,8 @@ class CartService : public history::HistoryServiceObserver,
   void SetCouponServiceForTesting(CouponService* coupon_service);
   // Returns whether a URL should be skipped based on server-side bloom filter.
   bool ShouldSkip(const GURL& url);
-  void CacheUsedDiscounts(const cart_db::ChromeCartContentProto& proto);
+  void CacheUsedDiscounts(const cart_db::ChromeCartContentProto& proto,
+                          bool is_code_based_rbd);
   void CleanUpDiscounts(cart_db::ChromeCartContentProto proto);
   // A callback to to keep entries of removed carts when deletion.
   void OnDeleteCart(bool success, std::vector<CartDB::KeyAndValue> proto_pairs);

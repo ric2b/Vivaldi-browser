@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Edit fail}other{Edit fail}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" />GHz</translation>
 <translation id="3291996639387199448">Arahan utama</translation>
+<translation id="3294437725009624529">Tetamu</translation>
 <translation id="3310640316857623290">Kependaman DNS ternyata melebihi ambang yang dibenarkan</translation>
 <translation id="3328783797891415197">Ujian sedang berjalan</translation>
 <translation id="3340011300870565703">Peranti mempunyai <ph name="BATTERY_PERCENTAGE" />% paras bateri kanan.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Semasa perisian tegar sedang dikemas kini, jangan cabut palam peranti luaran ini atau matikan komputer anda. Anda boleh meminimumkan tetingkap ini. Kemaskinian ini mungkin mengambil masa beberapa minit dan peranti luaran anda mungkin tidak berfungsi pada masa ini.</translation>
 <translation id="3486220673238053218">takrif</translation>
 <translation id="3488065109653206955">Diaktifkan sebahagian</translation>
+<translation id="3510890413042482857">Hantar <ph name="BEGIN_LINK1" />data surih prestasi<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Kemaskinian ChromeOS</translation>
 <translation id="3527036260304016759">Gagal - Ralat tidak diketahui</translation>
 <translation id="3532980081107202182">Kira-kira <ph name="MIN_REMAINING" /> minit lagi</translation>
@@ -468,6 +470,7 @@ Cuba ketik mikrofon untuk bertanyakan sebarang perkara kepada saya.</translation
 <translation id="5502931783115429516">Android tidak berjalan</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Tukar kepada tema gelap pada waktu matahari terbenam secara automatik</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Imbas semula</translation>
 <translation id="5583640892426849032">Undur ruang</translation>

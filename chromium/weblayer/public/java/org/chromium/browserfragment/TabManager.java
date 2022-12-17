@@ -1,15 +1,18 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.browserfragment;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.os.RemoteException;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.concurrent.futures.CallbackToFutureAdapter;
 
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import org.chromium.browserfragment.interfaces.IBooleanCallback;
@@ -18,7 +21,7 @@ import org.chromium.browserfragment.interfaces.ITabCallback;
 import org.chromium.browserfragment.interfaces.ITabParams;
 
 /**
- * Class for interaction with Browser Tabs.
+ * Class for interaction with BrowserFragment Tabs.
  * Calls into BrowserFragmentDelegate which runs on the Binder thread, and requires
  * finished initialization from onCreate on UIThread.
  * Access only via ListenableFuture through BrowserFragment.
@@ -49,7 +52,9 @@ public class TabManager {
         @Override
         public void onResult(@Nullable ITabParams tabParams) {
             if (tabParams != null) {
-                mCompleter.set(new Tab(tabParams));
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    mCompleter.set(TabRegistry.getInstance().getOrCreateTab(tabParams));
+                });
                 return;
             }
             mCompleter.set(null);
@@ -68,6 +73,10 @@ public class TabManager {
      */
     @NonNull
     public ListenableFuture<Tab> getActiveTab() {
+        if (mDelegate == null) {
+            return Futures.immediateFailedFuture(
+                    new IllegalStateException("Browser has been destroyed"));
+        }
         return CallbackToFutureAdapter.getFuture(completer -> {
             try {
                 mDelegate.getActiveTab(new TabCallback(completer));
@@ -86,6 +95,10 @@ public class TabManager {
      */
     @NonNull
     public ListenableFuture<Tab> createTab() {
+        if (mDelegate == null) {
+            return Futures.immediateFailedFuture(
+                    new IllegalStateException("Browser has been destroyed"));
+        }
         return CallbackToFutureAdapter.getFuture(completer -> {
             try {
                 mDelegate.createTab(new TabCallback(completer));
@@ -111,10 +124,19 @@ public class TabManager {
      */
     @NonNull
     public ListenableFuture<Boolean> tryNavigateBack() {
+        if (mDelegate == null) {
+            return Futures.immediateFailedFuture(
+                    new IllegalStateException("Browser has been destroyed"));
+        }
         return CallbackToFutureAdapter.getFuture(completer -> {
             mDelegate.tryNavigateBack(new RequestNavigationCallback(completer));
             // Debug string.
             return "Did navigate back Future";
         });
+    }
+
+    void invalidate() {
+        mDelegate = null;
+        TabRegistry.getInstance().invalidate();
     }
 }

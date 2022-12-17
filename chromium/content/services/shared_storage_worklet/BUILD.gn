@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -37,6 +37,7 @@ source_set("shared_storage_worklet") {
   deps = [
     "//base",
     "//content:export",
+    "//content/services/worklet_utils",
     "//gin",
     "//mojo/public/cpp/bindings",
     "//services/network/public/cpp",

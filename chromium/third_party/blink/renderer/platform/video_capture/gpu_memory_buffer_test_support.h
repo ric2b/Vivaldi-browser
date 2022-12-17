@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,10 @@ class MockGpuVideoAcceleratorFactories;
 namespace viz {
 class TestSharedImageInterface;
 }  // namespace viz
+
+namespace gpu {
+struct Capabilities;
+}
 
 namespace blink {
 
@@ -40,10 +44,13 @@ class TestingPlatformSupportForGpuMemoryBuffer
   ~TestingPlatformSupportForGpuMemoryBuffer() override;
   media::GpuVideoAcceleratorFactories* GetGpuFactories() override;
 
+  void SetGpuCapabilities(gpu::Capabilities* capabilities);
+
  private:
   std::unique_ptr<viz::TestSharedImageInterface> sii_;
   std::unique_ptr<media::MockGpuVideoAcceleratorFactories> gpu_factories_;
   base::Thread media_thread_;
+  gpu::Capabilities* capabilities_ = nullptr;
 };
 
 }  // namespace blink

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,9 +67,9 @@ public class TabSwitcherLayout extends Layout {
 
     // Duration of the transition animation
     public static final long ZOOMING_DURATION = 300;
-    private static final int TRANSLATE_DURATION_MS = 450;
+    private static final int TRANSLATE_DURATION_MS = 300;
     private static final int BACKGROUND_FADING_DURATION_MS = 150;
-    private static final int SCRIM_FADE_DURATION_MS = 450;
+    private static final int SCRIM_FADE_DURATION_MS = 350;
 
     private static final String TRACE_SHOW_TAB_SWITCHER = "TabSwitcherLayout.Show.TabSwitcher";
     private static final String TRACE_HIDE_TAB_SWITCHER = "TabSwitcherLayout.Hide.TabSwitcher";

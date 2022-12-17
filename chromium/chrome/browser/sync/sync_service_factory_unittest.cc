@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,7 +84,7 @@ class SyncServiceFactoryTest : public testing::Test {
 
   // Returns the collection of default datatypes.
   syncer::ModelTypeSet DefaultDatatypes() {
-    static_assert(40 + 1 /* notes */ == syncer::GetNumModelTypes(),
+    static_assert(42 + 1 /* notes */ == syncer::GetNumModelTypes(),
                   "When adding a new type, you probably want to add it here as "
                   "well (assuming it is already enabled).");
 
@@ -123,10 +123,8 @@ class SyncServiceFactoryTest : public testing::Test {
     if (arc::IsArcAllowedForProfile(profile())) {
       datatypes.Put(syncer::ARC_PACKAGE);
     }
-    if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
-      datatypes.Put(syncer::OS_PREFERENCES);
-      datatypes.Put(syncer::OS_PRIORITY_PREFERENCES);
-    }
+    datatypes.Put(syncer::OS_PREFERENCES);
+    datatypes.Put(syncer::OS_PRIORITY_PREFERENCES);
     datatypes.Put(syncer::PRINTERS);
     if (chromeos::features::IsOAuthIppEnabled()) {
       datatypes.Put(syncer::PRINTERS_AUTHORIZATION_SERVERS);
@@ -143,6 +141,9 @@ class SyncServiceFactoryTest : public testing::Test {
     datatypes.Put(syncer::AUTOFILL_WALLET_METADATA);
     datatypes.Put(syncer::AUTOFILL_WALLET_OFFER);
     datatypes.Put(syncer::BOOKMARKS);
+    if (base::FeatureList::IsEnabled(syncer::kSyncEnableContactInfoDataType)) {
+      datatypes.Put(syncer::CONTACT_INFO);
+    }
     datatypes.Put(syncer::DEVICE_INFO);
     if (base::FeatureList::IsEnabled(syncer::kSyncEnableHistoryDataType)) {
       datatypes.Put(syncer::HISTORY);

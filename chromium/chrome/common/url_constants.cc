@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,6 +27,9 @@ const char kAdvancedProtectionDownloadLearnMoreURL[] =
 
 const char kAppNotificationsBrowserSettingsURL[] =
     "chrome://settings/content/notifications";
+
+const char kBatterySaverModeLearnMoreUrl[] =
+    "https://support.google.com/chrome/?p=chrome_battery_saver";
 
 const char kBluetoothAdapterOffHelpURL[] =
     "https://support.google.com/chrome?p=bluetooth";
@@ -169,6 +172,9 @@ const char kGoogleAccountDeviceActivityURL[] =
 const char kGooglePasswordManagerURL[] = "https://passwords.google.com";
 
 const char kGooglePhotosURL[] = "https://photos.google.com";
+
+const char kHighEfficiencyModeLearnMoreUrl[] =
+    "https://support.google.com/chrome/?p=chrome_memory_saver";
 
 const char kLearnMoreReportingURL[] =
     "https://support.google.com/chrome/?p=ui_usagestat";
@@ -476,7 +482,10 @@ const char kChromeCleanerLearnMoreURL[] =
 
 const char kWindowsXPVistaDeprecationURL[] =
     "https://chrome.blogspot.com/2015/11/updates-to-chrome-platform-support.html";
-#endif
+
+const char kWindows78DeprecationURL[] =
+    "https://support.google.com/chrome/?p=unsupported_windows";
+#endif  // BUILDFLAG(IS_WIN)
 
 const char kChromeSyncLearnMoreURL[] =
     "https://support.google.com/chrome/answer/165139";

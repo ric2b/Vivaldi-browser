@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -604,15 +604,15 @@ class LockScreenItemStorageTest : public ExtensionsTest {
       ASSERT_TRUE(state.storage_version == 1 || state.storage_version == 2)
           << "Failed to init local state " << state.extension_id;
 
-      DictionaryPrefUpdate update(&local_state_, "lockScreenDataItems");
+      ScopedDictPrefUpdate update(&local_state_, "lockScreenDataItems");
+      base::Value::Dict* user_dict = update->EnsureDict(kTestUserIdHash);
       if (state.storage_version == 1) {
-        update->SetPath({kTestUserIdHash, state.extension_id},
-                        base::Value(state.item_count));
+        user_dict->Set(state.extension_id, state.item_count);
       } else {
-        base::Value info(base::Value::Type::DICTIONARY);
-        info.SetKey("item_count", base::Value(state.item_count));
-        info.SetKey("storage_version", base::Value(2));
-        update->SetPath({kTestUserIdHash, state.extension_id}, std::move(info));
+        base::Value::Dict info;
+        info.Set("item_count", state.item_count);
+        info.Set("storage_version", 2);
+        user_dict->Set(state.extension_id, std::move(info));
       }
     }
   }

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,8 +120,11 @@ class PrerenderWebContentsDelegate : public WebContentsDelegate {
 class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
  public:
   PrerenderHostRegistryTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {blink::features::kPrerender2},
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        // TODO(crbug.com/1273341): remove the limitation and run tests with
+        // multiple prerenders.
+        {{blink::features::kPrerender2,
+          {{"max_num_of_running_speculation_rules", "1"}}}},
         // Disable the memory requirement of Prerender2 so the test can run on
         // any bot.
         {blink::features::kPrerender2MemoryControls});
@@ -966,14 +969,14 @@ TEST_F(PrerenderHostRegistryTest,
 
 TEST_F(PrerenderHostRegistryTest,
        CompareInitialAndActivationCommonParams_ReferrerPolicy) {
-  EXPECT_FALSE(CheckIsActivatedForParams(
+  EXPECT_TRUE(CheckIsActivatedForParams(
       base::BindLambdaForTesting([&](NavigationSimulatorImpl* navigation) {
         navigation->SetReferrer(blink::mojom::Referrer::New(
             web_contents()->GetPrimaryMainFrame()->GetLastCommittedURL(),
             network::mojom::ReferrerPolicy::kAlways));
       })));
   ExpectUniqueSampleOfActivationNavigationParamsMatch(
-      PrerenderHost::ActivationNavigationParamsMatch::kReferrerPolicy);
+      PrerenderHost::ActivationNavigationParamsMatch::kOk);
 }
 
 // End navigation parameter matching tests ---------
@@ -1021,6 +1024,38 @@ TEST_F(PrerenderHostRegistryTest,
                   ->frame_tree_node()
                   ->current_replication_state()
                   .has_potentially_trustworthy_unique_origin);
+}
+
+TEST_F(PrerenderHostRegistryTest, DisallowPageHavingEffectiveUrl) {
+  const GURL kOriginalUrl("https://example.com/");
+  const GURL kModifiedSiteUrl("custom-scheme://custom");
+
+  EffectiveURLContentBrowserClient modified_client(
+      kOriginalUrl, kModifiedSiteUrl,
+      /* requires_dedicated_process */ false);
+  ContentBrowserClient* old_client =
+      SetBrowserClientForTesting(&modified_client);
+
+  std::unique_ptr<TestWebContents> web_contents =
+      CreateWebContents(kOriginalUrl);
+  RenderFrameHostImpl* render_frame_host = web_contents->GetPrimaryMainFrame();
+  ASSERT_TRUE(render_frame_host);
+
+  const GURL kPrerenderingUrl = GURL("https://example.com/empty.html");
+  RenderFrameHostImpl* initiator_rfh = web_contents->GetPrimaryMainFrame();
+  PrerenderHostRegistry* registry = web_contents->GetPrerenderHostRegistry();
+  const int prerender_frame_tree_node_id = registry->CreateAndStartHost(
+      GeneratePrerenderAttributes(kPrerenderingUrl,
+                                  PrerenderTriggerType::kSpeculationRule, "",
+                                  initiator_rfh),
+      *web_contents);
+  EXPECT_EQ(prerender_frame_tree_node_id, RenderFrameHost::kNoFrameTreeNodeId);
+  PrerenderHost* prerender_host =
+      registry->FindNonReservedHostById(prerender_frame_tree_node_id);
+  EXPECT_EQ(prerender_host, nullptr);
+  ExpectUniqueSampleOfFinalStatus(PrerenderHost::FinalStatus::kHasEffectiveUrl);
+
+  SetBrowserClientForTesting(old_client);
 }
 
 // End replication state matching tests ------------

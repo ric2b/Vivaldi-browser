@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,8 @@ class ChromeWebappsClient : public WebappsClient {
       content::WebContents* web_contents) override;
 #if BUILDFLAG(IS_ANDROID)
   bool IsInstallationInProgress(content::WebContents* web_contents,
-                                const GURL& manifest_url) override;
+                                const GURL& manifest_url,
+                                const GURL& manifest_id) override;
   bool CanShowAppBanners(content::WebContents* web_contents) override;
   void OnWebApkInstallInitiatedFromAppMenu(
       content::WebContents* web_contents) override;

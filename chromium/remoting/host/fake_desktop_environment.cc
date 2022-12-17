@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,6 +61,9 @@ void FakeScreenControls::SetScreenResolution(
     const ScreenResolution& resolution,
     absl::optional<webrtc::ScreenId> screen_id) {}
 
+void FakeScreenControls::SetVideoLayout(
+    const protocol::VideoLayout& video_layout) {}
+
 FakeDesktopEnvironment::FakeDesktopEnvironment(
     scoped_refptr<base::SingleThreadTaskRunner> capture_thread,
     const DesktopEnvironmentOptions& options)
@@ -92,8 +95,7 @@ std::unique_ptr<DesktopCapturer> FakeDesktopEnvironment::CreateVideoCapturer() {
   if (!frame_generator_.is_null())
     fake_capturer->set_frame_generator(frame_generator_);
 
-  auto result =
-      std::make_unique<DesktopCapturerProxy>(capture_thread_, capture_thread_);
+  auto result = std::make_unique<DesktopCapturerProxy>(capture_thread_);
   result->set_capturer(std::move(fake_capturer));
   return std::move(result);
 }
@@ -130,11 +132,6 @@ void FakeDesktopEnvironment::SetCapabilities(const std::string& capabilities) {}
 
 uint32_t FakeDesktopEnvironment::GetDesktopSessionId() const {
   return desktop_session_id_;
-}
-
-std::unique_ptr<DesktopAndCursorConditionalComposer>
-FakeDesktopEnvironment::CreateComposingVideoCapturer() {
-  return nullptr;
 }
 
 std::unique_ptr<RemoteWebAuthnStateChangeNotifier>

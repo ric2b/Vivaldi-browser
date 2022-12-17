@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -117,10 +117,14 @@ class WaylandPointer::Delegate {
       WaylandWindow* window,
       const gfx::PointF& location,
       wl::EventDispatchPolicy dispatch_policy) = 0;
-  virtual void OnPointerButtonEvent(EventType evtype,
-                                    int changed_button,
-                                    WaylandWindow* window = nullptr) = 0;
-  virtual void OnPointerMotionEvent(const gfx::PointF& location) = 0;
+  virtual void OnPointerButtonEvent(
+      EventType evtype,
+      int changed_button,
+      WaylandWindow* window,
+      wl::EventDispatchPolicy dispatch_policy) = 0;
+  virtual void OnPointerMotionEvent(
+      const gfx::PointF& location,
+      wl::EventDispatchPolicy dispatch_policy) = 0;
   virtual void OnPointerAxisEvent(const gfx::Vector2dF& offset) = 0;
   virtual void OnPointerFrameEvent() = 0;
   virtual void OnPointerAxisSourceEvent(uint32_t axis_source) = 0;
@@ -129,6 +133,8 @@ class WaylandPointer::Delegate {
   virtual const gfx::PointF& GetPointerLocation() const = 0;
   virtual bool IsPointerButtonPressed(EventFlags button) const = 0;
   virtual void OnPointerStylusToolChanged(EventPointerType pointer_type) = 0;
+  virtual void OnPointerStylusForceChanged(float force) = 0;
+  virtual void OnPointerStylusTiltChanged(const gfx::Vector2dF& tilt) = 0;
   virtual const WaylandWindow* GetPointerTarget() const = 0;
 };
 

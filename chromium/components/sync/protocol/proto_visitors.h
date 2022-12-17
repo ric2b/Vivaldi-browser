@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,6 +39,7 @@
 #include "components/sync/protocol/reading_list_specifics.pb.h"
 #include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 #include "components/sync/protocol/search_engine_specifics.pb.h"
+#include "components/sync/protocol/segmentation_specifics.pb.h"
 #include "components/sync/protocol/send_tab_to_self_specifics.pb.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sharing_message_specifics.pb.h"
@@ -254,8 +255,7 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillSpecifics& proto) {
 
 VISIT_PROTO_FIELDS(const sync_pb::AutofillWalletUsageSpecifics& proto) {
   VISIT(guid);
-  VISIT_ENUM(virtual_card_usage_data);
-  VISIT_REP(retrieval_time_unix_epoch_micros);
+  VISIT(virtual_card_usage_data);
 }
 
 VISIT_PROTO_FIELDS(
@@ -538,7 +538,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntityMetadata& proto) {
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
-  static_assert(40 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(42 + 1 /* notes */ == GetNumModelTypes(),
                 "When adding a new protocol type, you will likely need to add "
                 "it here as well.");
   VISIT(encrypted);
@@ -550,6 +550,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(autofill_offer);
   VISIT(autofill_profile);
   VISIT(autofill_wallet);
+  VISIT(autofill_wallet_usage);
   VISIT(bookmark);
   VISIT(contact_info);
   VISIT(device_info);
@@ -570,6 +571,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(reading_list);
   VISIT(search_engine);
   VISIT(security_event);
+  VISIT(segmentation);
   VISIT(send_tab_to_self);
   VISIT(session);
   VISIT(sharing_message);
@@ -675,6 +677,14 @@ VISIT_PROTO_FIELDS(const sync_pb::ModelTypeState& proto) {
   VISIT(initial_sync_done);
   VISIT(cache_guid);
   VISIT(authenticated_account_id);
+  VISIT_REP(invalidations);
+  VISIT(notes_enabled_before_initial_sync_for_passwords);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::ModelTypeState::Invalidation& proto) {
+  VISIT(hint);
+  VISIT(version);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::NavigationRedirect& proto) {
@@ -785,6 +795,8 @@ VISIT_PROTO_FIELDS(const sync_pb::HistorySpecifics& proto) {
   VISIT(visit_time_windows_epoch_micros);
   VISIT(originator_cache_guid);
   VISIT_REP(redirect_entries);
+  VISIT(redirect_chain_start_incomplete);
+  VISIT(redirect_chain_end_incomplete);
   VISIT(page_transition);
   VISIT(originator_referring_visit_id);
   VISIT(originator_opener_visit_id);
@@ -798,6 +810,8 @@ VISIT_PROTO_FIELDS(const sync_pb::HistorySpecifics& proto) {
   VISIT(http_response_code);
   VISIT(page_language);
   VISIT_ENUM(password_state);
+  VISIT(favicon_url);
+  VISIT(referrer_url);
 }
 
 VISIT_PROTO_FIELDS(
@@ -976,6 +990,43 @@ VISIT_PROTO_FIELDS(const sync_pb::SendTabToSelfSpecifics& proto) {
   VISIT(notification_dismissed);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::SegmentationSpecifics& proto) {
+  VISIT(segmentation_key);
+  VISIT(segment_selection_result);
+  VISIT(device_metadata);
+  VISIT_REP(model_execution_data);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::SegmentationSpecifics::SegmentSelectionResult& proto) {
+  VISIT(selected_segment);
+  VISIT(expiry_time_windows_epoch_seconds);
+  VISIT(last_updated_time_windows_epoch_seconds);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::SegmentationSpecifics::DeviceMetadata& proto) {
+  VISIT(cache_guid);
+  VISIT_ENUM(platform_type);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::SegmentationSpecifics::ModelExecutionData& proto) {
+  VISIT(model_id);
+  VISIT_REP(model_outputs);
+  VISIT(execution_time_windows_epoch_seconds);
+  VISIT(score_expiry_time_windows_epoch_seconds);
+  VISIT(model_version);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::SegmentationSpecifics::ModelExecutionData::ModelOutput&
+        proto) {
+  VISIT(label);
+  VISIT(score);
+  VISIT(rank);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::SessionHeader& proto) {
   VISIT_REP(window);
   VISIT(client_name);
@@ -1131,8 +1182,6 @@ VISIT_PROTO_FIELDS(const sync_pb::TabNavigation& proto) {
   VISIT(navigation_forward_back);
   VISIT(navigation_from_address_bar);
   VISIT(navigation_home_page);
-  VISIT(navigation_chain_start);
-  VISIT(navigation_chain_end);
   VISIT(global_id);
   VISIT(favicon_url);
   VISIT_ENUM(blocked_state);
@@ -1297,6 +1346,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WalletMaskedCreditCard& proto) {
   VISIT_ENUM(virtual_card_enrollment_state);
   VISIT(card_art_url);
   VISIT(product_description);
+  VISIT_ENUM(virtual_card_enrollment_type);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WalletMetadataSpecifics& proto) {
@@ -1475,15 +1525,7 @@ VISIT_PROTO_FIELDS(
 
 // Vivaldi specific
 template <class V>
-void VisitProtoFields(V& visitor,
-                      const sync_pb::NotesAttachmentDeprecated& proto) {
-  VISIT(filename);
-  VISIT(content_type);
-  VISIT(content);
-}
-
-template <class V>
-void VisitProtoFields(V& visitor, const sync_pb::NoteAttachment& proto) {
+void VisitProtoFields(V& visitor, const sync_pb::DeprecatedNoteAttachment& proto) {
   VISIT(checksum);
 }
 
@@ -1493,8 +1535,6 @@ void VisitProtoFields(V& visitor, const sync_pb::NotesSpecifics& proto) {
   VISIT(legacy_canonicalized_title);
   VISIT(content);
   VISIT(creation_time_us);
-  VISIT(icon_deprecated);
-  VISIT_REP(attachments_deprecated);
   VISIT_ENUM(special_node_type);
   VISIT_REP(attachments);
   VISIT(full_title);

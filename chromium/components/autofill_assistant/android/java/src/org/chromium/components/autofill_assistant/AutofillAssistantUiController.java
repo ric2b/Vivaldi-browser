@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@ import org.chromium.base.lifetime.Destroyable;
 import org.chromium.components.autofill_assistant.carousel.AssistantChip;
 import org.chromium.components.autofill_assistant.metrics.DropOutReason;
 import org.chromium.components.autofill_assistant.overlay.AssistantOverlayCoordinator;
+import org.chromium.components.autofill_assistant.user_data.GmsIntegrator;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
@@ -298,6 +299,13 @@ public class AutofillAssistantUiController {
         mSnackbar = mSnackbarFactory.createSnackbar(
                 delayMs, message, undoString, this::safeSnackbarResult);
         mSnackbar.show();
+    }
+
+    @CalledByNative
+    private void showGmsAccountScreenIntent(int screenId, String emailAddress) {
+        WebContents webContents = getModel().get(AssistantModel.WEB_CONTENTS);
+        new GmsIntegrator(emailAddress, mActivity)
+                .launchAccountIntent(screenId, webContents.getTopLevelNativeWindow(), unused -> {});
     }
 
     private void dismissSnackbar() {

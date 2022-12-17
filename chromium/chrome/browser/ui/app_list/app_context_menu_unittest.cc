@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,9 +53,11 @@
 #include "ui/display/test/scoped_screen_override.h"
 #include "ui/display/test/test_screen.h"
 
+namespace app_list {
+
 namespace {
 
-class FakeAppContextMenuDelegate : public app_list::AppContextMenuDelegate {
+class FakeAppContextMenuDelegate : public AppContextMenuDelegate {
  public:
   FakeAppContextMenuDelegate() = default;
   FakeAppContextMenuDelegate(const FakeAppContextMenuDelegate&) = delete;
@@ -63,7 +65,7 @@ class FakeAppContextMenuDelegate : public app_list::AppContextMenuDelegate {
       delete;
   ~FakeAppContextMenuDelegate() override = default;
 
-  // app_list::AppContextMenuDelegate overrides:
+  // AppContextMenuDelegate overrides:
   void ExecuteLaunchCommand(int event_flags) override {}
 };
 
@@ -105,19 +107,49 @@ class FakeAppListControllerDelegate
   std::unordered_set<std::string> open_apps_;
 };
 
+class FakeAppServiceAppItem : public AppServiceAppItem {
+ public:
+  FakeAppServiceAppItem(Profile* profile,
+                        AppListModelUpdater* model_updater,
+                        const AppListSyncableService::SyncItem* sync_item,
+                        const apps::AppUpdate& app_update)
+      : AppServiceAppItem(profile, model_updater, sync_item, app_update) {}
+  FakeAppServiceAppItem(const FakeAppServiceAppItem&) = delete;
+  FakeAppServiceAppItem& operator=(const FakeAppServiceAppItem&) = delete;
+  ~FakeAppServiceAppItem() override = default;
+
+  // AppContextMenuDelegate overrides:
+  void ExecuteLaunchCommand(int event_flags) override {
+    AppServiceAppItem::ExecuteLaunchCommand(event_flags);
+
+    if (!quit_callback_.is_null())
+      std::move(quit_callback_).Run();
+  }
+
+  void WaitForLaunch() {
+    base::RunLoop run_loop;
+    quit_callback_ = run_loop.QuitClosure();
+    run_loop.Run();
+  }
+
+ private:
+  base::OnceClosure quit_callback_;
+};
+
 std::unique_ptr<KeyedService> MenuManagerFactory(
     content::BrowserContext* context) {
   return extensions::MenuManagerFactory::BuildServiceInstanceForTesting(
       context);
 }
 
-std::unique_ptr<AppServiceAppItem> GetAppListItem(Profile* profile,
-                                                  const std::string& app_id) {
-  std::unique_ptr<AppServiceAppItem> item;
+std::unique_ptr<FakeAppServiceAppItem> GetAppListItem(
+    Profile* profile,
+    const std::string& app_id) {
+  std::unique_ptr<FakeAppServiceAppItem> item;
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->AppRegistryCache()
       .ForOneApp(app_id, [profile, &item](const apps::AppUpdate& update) {
-        item = std::make_unique<AppServiceAppItem>(
+        item = std::make_unique<FakeAppServiceAppItem>(
             profile, /*model_updater=*/nullptr, /*sync_item=*/nullptr, update);
 
         // Because model updater is null, set position manually.
@@ -142,7 +174,7 @@ std::unique_ptr<ui::SimpleMenuModel> GetContextMenuModel(
 }
 
 std::unique_ptr<ui::SimpleMenuModel> GetMenuModel(
-    app_list::AppContextMenu* context_menu) {
+    AppContextMenu* context_menu) {
   base::RunLoop run_loop;
   std::unique_ptr<ui::SimpleMenuModel> menu;
   context_menu->GetMenuModel(base::BindLambdaForTesting(
@@ -176,9 +208,9 @@ class AppContextMenuTest : public AppListTestBase {
   }
 
   void TearDown() override {
-    // Let any in-flight tasks finish, otherwise the test might flake
-    // (crbug.com/1115763).
-    app_service_test().WaitForAppService();
+    // Let any in-flight tasks finish, e.g. clear the background thread icon
+    // decode, otherwise the test might flake (crbug.com/1115763).
+    base::RunLoop().RunUntilIdle();
     menu_delegate_.reset();
     controller_.reset();
     menu_manager_.reset();
@@ -264,11 +296,11 @@ class AppContextMenuTest : public AppListTestBase {
                         bool platform_app,
                         AppListControllerDelegate::Pinnable pinnable,
                         extensions::LaunchType launch_type) {
+    app_service_test_.SetUp(profile());
+
     scoped_refptr<extensions::Extension> store = MakeApp(app_id, platform_app);
     service_->AddExtension(store.get());
     service_->EnableExtension(app_id);
-    app_service_test_.SetUp(profile());
-    app_service_test_.FlushMojoCalls();
 
     controller_ = std::make_unique<FakeAppListControllerDelegate>();
     controller_->SetAppPinnable(app_id, pinnable);
@@ -313,10 +345,10 @@ class AppContextMenuTest : public AppListTestBase {
   }
 
   void TestChromeApp() {
+    app_service_test_.SetUp(profile());
+
     scoped_refptr<extensions::Extension> store = MakeChromeApp();
     service_->AddExtension(store.get());
-    app_service_test_.SetUp(profile());
-    app_service_test_.FlushMojoCalls();
 
     controller_ = std::make_unique<FakeAppListControllerDelegate>();
     AppServiceContextMenu menu(menu_delegate(), profile(),
@@ -356,13 +388,13 @@ TEST_F(AppContextMenuTest, ExtensionApp) {
          pinnable <= AppListControllerDelegate::PIN_FIXED;
          pinnable =
              static_cast<AppListControllerDelegate::Pinnable>(pinnable + 1)) {
-      for (size_t combinations = 0; combinations < (1 << 2); ++combinations) {
-        TestExtensionApp(AppListTestBase::kHostedAppId,
-                         (combinations & (1 << 0)) != 0, pinnable, launch_type);
-        TestExtensionApp(AppListTestBase::kPackagedApp1Id,
-                         (combinations & (1 << 0)) != 0, pinnable, launch_type);
-        TestExtensionApp(AppListTestBase::kPackagedApp2Id,
-                         (combinations & (1 << 0)) != 0, pinnable, launch_type);
+      for (bool is_platform_app : {false, true}) {
+        TestExtensionApp(AppListTestBase::kHostedAppId, is_platform_app,
+                         pinnable, launch_type);
+        TestExtensionApp(AppListTestBase::kPackagedApp1Id, is_platform_app,
+                         pinnable, launch_type);
+        TestExtensionApp(AppListTestBase::kPackagedApp2Id, is_platform_app,
+                         pinnable, launch_type);
       }
     }
   }
@@ -376,10 +408,10 @@ TEST_F(AppContextMenuTest, ChromeAppInRecentAppsList) {
   base::test::ScopedFeatureList feature_list(
       ash::features::kProductivityLauncher);
 
+  app_service_test().SetUp(profile());
+
   scoped_refptr<extensions::Extension> app = MakeChromeApp();
   service_->AddExtension(app.get());
-  app_service_test().SetUp(profile());
-  app_service_test().FlushMojoCalls();
 
   // Simulate a context menu in the recent apps row.
   AppServiceContextMenu menu(menu_delegate(), profile(),
@@ -415,9 +447,9 @@ TEST_F(AppContextMenuTest, ArcMenu) {
   controller()->SetAppPinnable(app_id, AppListControllerDelegate::PIN_EDITABLE);
 
   arc_test.app_instance()->SendRefreshAppList(arc_test.fake_apps());
-  app_service_test().FlushMojoCalls();
 
-  std::unique_ptr<AppServiceAppItem> item = GetAppListItem(profile(), app_id);
+  std::unique_ptr<FakeAppServiceAppItem> item =
+      GetAppListItem(profile(), app_id);
 
   std::unique_ptr<ui::MenuModel> menu = GetContextMenuModel(item.get());
   ASSERT_NE(nullptr, menu);
@@ -438,7 +470,9 @@ TEST_F(AppContextMenuTest, ArcMenu) {
   EXPECT_EQ(0u, arc_test.app_instance()->launch_requests().size());
 
   menu->ActivatedAt(0);
-  app_service_test().FlushMojoCalls();
+
+  // Wait for the async menu item to be executed to launch the app.
+  item->WaitForLaunch();
 
   const std::vector<std::unique_ptr<arc::FakeAppInstance::Request>>&
       launch_requests = arc_test.app_instance()->launch_requests();
@@ -475,7 +509,6 @@ TEST_F(AppContextMenuTest, ArcMenu) {
   // Test launching app shortcut item.
   EXPECT_EQ(0, arc_test.app_instance()->launch_app_shortcut_item_count());
   menu->ActivatedAt(menu->GetItemCount() - 1);
-  app_service_test().FlushMojoCalls();
   EXPECT_EQ(1, arc_test.app_instance()->launch_app_shortcut_item_count());
 
   // This makes all apps non-ready.
@@ -510,7 +543,6 @@ TEST_F(AppContextMenuTest, ArcMenu) {
   // Uninstall all apps.
   arc_test.app_instance()->SendRefreshAppList(
       std::vector<arc::mojom::AppInfoPtr>());
-  app_service_test().FlushMojoCalls();
   controller()->SetAppOpen(app_id, false);
 
   // No app available case.
@@ -528,7 +560,6 @@ TEST_F(AppContextMenuTest, ArcMenuShortcut) {
   controller()->SetAppPinnable(app_id, AppListControllerDelegate::PIN_EDITABLE);
 
   arc_test.app_instance()->SendInstallShortcuts(arc_test.fake_shortcuts());
-  app_service_test().FlushMojoCalls();
 
   std::unique_ptr<AppServiceAppItem> item = GetAppListItem(profile(), app_id);
 
@@ -588,7 +619,6 @@ TEST_F(AppContextMenuTest, ArcMenuStickyItem) {
   arc_test.SetUp(profile());
 
   arc_test.app_instance()->SendRefreshAppList(arc_test.fake_apps());
-  app_service_test().FlushMojoCalls();
 
   {
     // Verify menu of store
@@ -632,7 +662,6 @@ TEST_F(AppContextMenuTest, ArcMenuSuspendedItem) {
   std::vector<arc::mojom::AppInfoPtr> apps;
   apps.emplace_back(arc_test.fake_apps()[0]->Clone())->suspended = true;
   arc_test.app_instance()->SendRefreshAppList(apps);
-  app_service_test().FlushMojoCalls();
 
   const std::string app_id = ArcAppTest::GetAppId(*apps[0]);
   controller()->SetAppPinnable(app_id, AppListControllerDelegate::PIN_EDITABLE);
@@ -682,7 +711,7 @@ TEST_F(AppContextMenuTest, CommandIdsMatchEnumsForHistograms) {
 
 // Tests that internal app's context menu is correct.
 TEST_F(AppContextMenuTest, InternalAppMenu) {
-  for (const auto& internal_app : app_list::GetInternalAppList(profile())) {
+  for (const auto& internal_app : GetInternalAppList(profile())) {
     controller()->SetAppPinnable(internal_app.app_id,
                                  AppListControllerDelegate::PIN_EDITABLE);
 
@@ -733,7 +762,6 @@ class AppContextMenuLacrosTest : public AppContextMenuTest {
 
 TEST_F(AppContextMenuLacrosTest, LacrosApp) {
   app_service_test().SetUp(profile());
-  app_service_test().FlushMojoCalls();
 
   // Create the context menu.
   AppServiceContextMenu menu(menu_delegate(), profile(),
@@ -752,3 +780,5 @@ TEST_F(AppContextMenuLacrosTest, LacrosApp) {
   AddToStates(menu, MenuState(ash::SHOW_APP_INFO), &states);
   ValidateMenuState(menu_model.get(), states);
 }
+
+}  // namespace app_list

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,19 +7,26 @@
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
+#include "chrome/browser/ui/webui/settings/ash/fake_hierarchy.h"
+#include "chrome/browser/ui/webui/settings/ash/fake_os_settings_sections.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search.mojom-test-utils.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
-#include "chrome/browser/ui/webui/settings/chromeos/fake_hierarchy.h"
-#include "chrome/browser/ui/webui/settings/chromeos/fake_os_settings_sections.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/local_search_service/public/cpp/local_search_service_proxy.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 
-namespace chromeos {
-namespace settings {
+namespace ash::settings {
+
+namespace mojom {
+using ::chromeos::settings::mojom::kPrintingDetailsSubpagePath;
+using ::chromeos::settings::mojom::Section;
+using ::chromeos::settings::mojom::Setting;
+using ::chromeos::settings::mojom::Subpage;
+}  // namespace mojom
+
 namespace {
 
 class FakeObserver : public mojom::SearchResultsObserver {
@@ -307,5 +314,4 @@ TEST_F(SearchHandlerTest, CompareSearchResults) {
             SearchHandler::CompareSearchResults(a, b));
 }
 
-}  // namespace settings
-}  // namespace chromeos
+}  // namespace ash::settings

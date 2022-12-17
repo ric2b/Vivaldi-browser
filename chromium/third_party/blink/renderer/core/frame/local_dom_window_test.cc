@@ -320,7 +320,7 @@ TEST_F(PageTestBase, CSPForWorld) {
 }
 
 TEST_F(LocalDOMWindowTest, ConsoleMessageCategory) {
-  auto unknown_location = SourceLocation::Capture(String(), 0, 0);
+  auto unknown_location = CaptureSourceLocation(String(), 0, 0);
   auto* console_message = MakeGarbageCollected<ConsoleMessage>(
       mojom::blink::ConsoleMessageSource::kJavaScript,
       mojom::blink::ConsoleMessageLevel::kError, "Kaboom!",
@@ -335,5 +335,11 @@ TEST_F(LocalDOMWindowTest, ConsoleMessageCategory) {
               *message_storage->at(i)->Category());
   }
 }
-
+TEST_F(LocalDOMWindowTest, NavigationId) {
+  EXPECT_EQ(1u, GetFrame().DomWindow()->GetNavigationId());
+  GetFrame().DomWindow()->IncrementNavigationId();
+  EXPECT_EQ(2u, GetFrame().DomWindow()->GetNavigationId());
+  GetFrame().DomWindow()->IncrementNavigationId();
+  EXPECT_EQ(3u, GetFrame().DomWindow()->GetNavigationId());
+}
 }  // namespace blink

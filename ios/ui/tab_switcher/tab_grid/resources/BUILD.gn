@@ -28,6 +28,14 @@ colorset("page_control_icon_not_selected_color") {
   sources = [ "page_control_icon_not_selected_color.colorset/Contents.json" ]
 }
 
+colorset("grid_selected_color") {
+  sources = [ "grid_selected_color.colorset/Contents.json" ]
+}
+
+colorset("grid_not_selected_color") {
+  sources = [ "grid_not_selected_color.colorset/Contents.json" ]
+}
+
 imageset("new_tab_floating_button") {
   sources = [
     "new_tab_floating_button.imageset/Contents.json",
@@ -77,16 +85,16 @@ imageset("page_control_incognito_tabs_selected") {
 imageset("page_control_regular_tabs") {
   sources = [
     "page_control_regular_tabs.imageset/Contents.json",
-    "page_control_regular_tabs.imageset/page_control_regular_tabs@2x.png",
-    "page_control_regular_tabs.imageset/page_control_regular_tabs@3x.png",
+    "page_control_regular_tabs.imageset/page_control_regular_tabs.pdf",
+    "page_control_regular_tabs.imageset/page_control_regular_tabs_dark.pdf"
   ]
 }
 
 imageset("page_control_regular_tabs_selected") {
   sources = [
     "page_control_regular_tabs_selected.imageset/Contents.json",
-    "page_control_regular_tabs_selected.imageset/page_control_regular_tabs_selected@2x.png",
-    "page_control_regular_tabs_selected.imageset/page_control_regular_tabs_selected@3x.png",
+    "page_control_regular_tabs_selected.imageset/page_control_regular_tabs_selected.pdf",
+    "page_control_regular_tabs_selected.imageset/page_control_regular_tabs_selected_dark.pdf"
   ]
 }
 

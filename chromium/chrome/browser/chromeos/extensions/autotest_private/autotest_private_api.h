@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -313,16 +313,6 @@ class AutotestPrivateIsArcProvisionedFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateIsArcProvisionedFunction() override;
-  ResponseAction Run() override;
-};
-
-class AutotestPrivateIsLacrosPrimaryBrowserFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("autotestPrivate.isLacrosPrimaryBrowser",
-                             AUTOTESTPRIVATE_ISLACROSPRIMARYBROWSER)
-
- private:
-  ~AutotestPrivateIsLacrosPrimaryBrowserFunction() override;
   ResponseAction Run() override;
 };
 
@@ -667,7 +657,7 @@ class AutotestPrivateGetPrinterListFunction
   // ash::CupsPrintersManager::Observer
   void OnEnterprisePrintersInitialized() override;
 
-  std::unique_ptr<base::Value> results_;
+  base::Value::List results_;
   std::unique_ptr<ash::CupsPrintersManager> printers_manager_;
   base::OneShotTimer timeout_timer_;
 };
@@ -811,6 +801,9 @@ class AutotestPrivateSendAssistantTextQueryFunction : public ExtensionFunction {
   // Called when Assistant service fails to respond in a certain amount of
   // time. We will respond with an error.
   void Timeout();
+
+  // Convert session_manager::SessionState to string for error logging.
+  std::string ToString(session_manager::SessionState session_state);
 
   std::unique_ptr<AssistantInteractionHelper> interaction_helper_;
   base::OneShotTimer timeout_timer_;
@@ -1333,6 +1326,17 @@ class AutotestPrivateGetDeskCountFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class AutotestPrivateGetDesksInfoFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateGetDesksInfoFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.getDesksInfo",
+                             AUTOTESTPRIVATE_GETDESKSINFO)
+
+ private:
+  ~AutotestPrivateGetDesksInfoFunction() override;
+  ResponseAction Run() override;
+};
+
 class AutotestPrivateMouseClickFunction : public ExtensionFunction {
  public:
   AutotestPrivateMouseClickFunction();
@@ -1575,6 +1579,18 @@ class AutotestPrivateStopThroughputTrackerDataCollectionFunction
   ResponseAction Run() override;
 };
 
+class AutotestPrivateGetThroughputTrackerDataFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateGetThroughputTrackerDataFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.getThroughputTrackerData",
+                             AUTOTESTPRIVATE_GETTHROUGHPUTTRACKERDATA)
+
+ private:
+  ~AutotestPrivateGetThroughputTrackerDataFunction() override;
+  ResponseAction Run() override;
+};
+
 class AutotestPrivateGetDisplaySmoothnessFunction : public ExtensionFunction {
  public:
   AutotestPrivateGetDisplaySmoothnessFunction();
@@ -1673,6 +1689,30 @@ class AutotestPrivateIsInputMethodReadyForTestingFunction
 
  private:
   ~AutotestPrivateIsInputMethodReadyForTestingFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateMakeFuseboxTempDirFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.makeFuseboxTempDir",
+                             AUTOTESTPRIVATE_MAKEFUSEBOXTEMPDIR)
+
+ private:
+  ~AutotestPrivateMakeFuseboxTempDirFunction() override;
+  ResponseAction Run() override;
+
+  void OnMakeTempDir(std::string error_message,
+                     std::string fusebox_file_path,
+                     std::string underlying_file_path);
+};
+
+class AutotestPrivateRemoveFuseboxTempDirFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.removeFuseboxTempDir",
+                             AUTOTESTPRIVATE_REMOVEFUSEBOXTEMPDIR)
+
+ private:
+  ~AutotestPrivateRemoveFuseboxTempDirFunction() override;
   ResponseAction Run() override;
 };
 

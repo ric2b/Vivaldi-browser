@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -143,11 +143,10 @@ class OobeTestApiLoginPinTest : public OobeTestApiTest,
     login_mixin_.AppendRegularUsers(1);
 
     if (GetParam()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          ash::features::kUseAuthsessionAuthentication);
+      scoped_feature_list_.InitAndEnableFeature(ash::features::kUseAuthFactors);
     } else {
       scoped_feature_list_.InitAndDisableFeature(
-          ash::features::kUseAuthsessionAuthentication);
+          ash::features::kUseAuthFactors);
     }
   }
 

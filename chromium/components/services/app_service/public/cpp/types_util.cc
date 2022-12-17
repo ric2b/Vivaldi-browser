@@ -1,8 +1,9 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/services/app_service/public/cpp/types_util.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 
 namespace apps_util {
 
@@ -60,6 +61,7 @@ bool IsHumanLaunch(apps::LaunchSource launch_source) {
     case apps::LaunchSource::kFromSmartTextContextMenu:
     case apps::LaunchSource::kFromDiscoverTabNotification:
     case apps::LaunchSource::kFromCommandLine:
+    case apps::LaunchSource::kFromLockScreen:
       return true;
     case apps::LaunchSource::kUnknown:
     case apps::LaunchSource::kFromChromeInternal:

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@
 #include "chrome/browser/ui/ash/assistant/device_actions_delegate.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/ash/services/assistant/public/cpp/device_actions.h"
-#include "chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
+#include "chromeos/ash/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -39,10 +39,9 @@ class DeviceActions : public ash::AndroidIntentHelper,
   void SetScreenBrightnessLevel(double level, bool gradual) override;
   void SetNightLightEnabled(bool enabled) override;
   void SetSwitchAccessEnabled(bool enabled) override;
-  bool OpenAndroidApp(
-      const chromeos::assistant::AndroidAppInfo& app_info) override;
-  chromeos::assistant::AppStatus GetAndroidAppStatus(
-      const chromeos::assistant::AndroidAppInfo& app_info) override;
+  bool OpenAndroidApp(const ash::assistant::AndroidAppInfo& app_info) override;
+  ash::assistant::AppStatus GetAndroidAppStatus(
+      const ash::assistant::AndroidAppInfo& app_info) override;
   void LaunchAndroidIntent(const std::string& intent) override;
   void AddAndFireAppListEventSubscriber(
       ash::assistant::AppListEventSubscriber* subscriber) override;
@@ -51,7 +50,7 @@ class DeviceActions : public ash::AndroidIntentHelper,
 
   // ash::AndroidIntentHelper overrides:
   absl::optional<std::string> GetAndroidAppLaunchIntent(
-      const chromeos::assistant::AndroidAppInfo& app_info) override;
+      const ash::assistant::AndroidAppInfo& app_info) override;
 
  private:
   // ArcAppListPrefs::Observer overrides.
@@ -67,7 +66,7 @@ class DeviceActions : public ash::AndroidIntentHelper,
   base::ObserverList<ash::assistant::AppListEventSubscriber>
       app_list_subscribers_;
 
-  mojo::Remote<chromeos::bluetooth_config::mojom::CrosBluetoothConfig>
+  mojo::Remote<ash::bluetooth_config::mojom::CrosBluetoothConfig>
       remote_cros_bluetooth_config_;
 };
 

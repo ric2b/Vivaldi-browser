@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,6 +62,8 @@ bool StructTraits<wl::mojom::WaylandOverlayConfigDataView,
   if (!data.ReadRoundedClipBounds(&out->rounded_clip_bounds))
     return false;
   if (!data.ReadBackgroundColor(&out->background_color))
+    return false;
+  if (!data.ReadClipRect(&out->clip_rect))
     return false;
 
   return true;

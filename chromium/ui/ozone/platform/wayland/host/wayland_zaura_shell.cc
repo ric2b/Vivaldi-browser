@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,7 @@ namespace ui {
 
 namespace {
 constexpr uint32_t kMinVersion = 1;
-constexpr uint32_t kMaxVersion = 40;
+constexpr uint32_t kMaxVersion = 42;
 }
 
 // static
@@ -32,7 +32,8 @@ void WaylandZAuraShell::Instantiate(WaylandConnection* connection,
                                     uint32_t name,
                                     const std::string& interface,
                                     uint32_t version) {
-  DCHECK_EQ(interface, kInterfaceName);
+  CHECK_EQ(interface, kInterfaceName) << "Expected \"" << kInterfaceName
+                                      << "\" but got \"" << interface << "\"";
 
   if (connection->zaura_shell_ ||
       !wl::CanBind(interface, version, kMinVersion, kMaxVersion)) {
@@ -102,19 +103,22 @@ void WaylandZAuraShell::OnLayoutMode(void* data,
   auto* self = static_cast<WaylandZAuraShell*>(data);
   auto* connection = self->connection_.get();
   auto* screen = connection->wayland_output_manager()->wayland_screen();
-  // |screen| is null in some unit test suites.
-  if (!screen)
-    return;
 
   switch (layout_mode) {
     case ZAURA_SHELL_LAYOUT_MODE_WINDOWED:
-      screen->OnTabletStateChanged(display::TabletState::kInClamshellMode);
       connection->set_tablet_layout_state(
           display::TabletState::kInClamshellMode);
+      // |screen| is null in some unit test suites or if it's called eariler
+      // than screen initialization.
+      if (screen)
+        screen->OnTabletStateChanged(display::TabletState::kInClamshellMode);
       return;
     case ZAURA_SHELL_LAYOUT_MODE_TABLET:
-      screen->OnTabletStateChanged(display::TabletState::kInTabletMode);
       connection->set_tablet_layout_state(display::TabletState::kInTabletMode);
+      // |screen| is null in some unit test suites or if it's called eariler
+      // than screen initialization.
+      if (screen)
+        screen->OnTabletStateChanged(display::TabletState::kInTabletMode);
       return;
   }
 }

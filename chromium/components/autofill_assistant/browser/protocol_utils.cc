@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,9 +17,7 @@
 #include "components/autofill_assistant/browser/actions/collect_user_data_action.h"
 #include "components/autofill_assistant/browser/actions/configure_bottom_sheet_action.h"
 #include "components/autofill_assistant/browser/actions/configure_ui_state_action.h"
-#include "components/autofill_assistant/browser/actions/delete_password_action.h"
 #include "components/autofill_assistant/browser/actions/dispatch_js_event_action.h"
-#include "components/autofill_assistant/browser/actions/edit_password_action.h"
 #include "components/autofill_assistant/browser/actions/execute_js_action.h"
 #include "components/autofill_assistant/browser/actions/expect_navigation_action.h"
 #include "components/autofill_assistant/browser/actions/external_action.h"
@@ -104,6 +102,26 @@ std::string ProtocolUtils::CreateGetScriptsRequest(
 }
 
 // static
+ClientContextProto ProtocolUtils::CreateNonSensitiveContext(
+    const ClientContextProto& client_context) {
+  ClientContextProto non_sensitive_context;
+  if (client_context.has_locale()) {
+    non_sensitive_context.set_locale(client_context.locale());
+  }
+  if (client_context.has_country()) {
+    non_sensitive_context.set_country(client_context.country());
+  }
+  if (client_context.chrome().has_chrome_version()) {
+    non_sensitive_context.mutable_chrome()->set_chrome_version(
+        client_context.chrome().chrome_version());
+  }
+  if (client_context.has_platform_type()) {
+    non_sensitive_context.set_platform_type(client_context.platform_type());
+  }
+  return non_sensitive_context;
+}
+
+// static
 std::string ProtocolUtils::CreateCapabilitiesByHashRequest(
     uint32_t hash_prefix_length,
     const std::vector<uint64_t>& hash_prefix,
@@ -114,6 +132,46 @@ std::string ProtocolUtils::CreateCapabilitiesByHashRequest(
   for (uint64_t prefix : hash_prefix) {
     request.add_hash_prefix(prefix);
   }
+  *request.mutable_script_parameters() =
+      script_parameters.ToProto(/* only_non_sensitive_allowlisted = */ true);
+  *request.mutable_client_context() = CreateNonSensitiveContext(client_context);
+
+  std::string serialized_request;
+  bool success = request.SerializeToString(&serialized_request);
+  DCHECK(success);
+  return serialized_request;
+}
+
+// static
+std::string ProtocolUtils::CreateTriggerScriptsByHashRequest(
+    uint32_t hash_prefix_length,
+    const std::vector<uint64_t>& hash_prefix,
+    const ClientContextProto& client_context,
+    const ScriptParameters& script_parameters) {
+  GetTriggerScriptsByHashPrefixRequestProto request;
+  request.set_hash_prefix_length(hash_prefix_length);
+  for (uint64_t prefix : hash_prefix) {
+    request.add_hash_prefix(prefix);
+  }
+  *request.mutable_script_parameters() =
+      script_parameters.ToProto(/* only_non_sensitive_allowlisted */ true);
+  *request.mutable_client_context() = CreateNonSensitiveContext(client_context);
+
+  std::string serialized_request;
+  bool success = request.SerializeToString(&serialized_request);
+  DCHECK(success);
+  return serialized_request;
+}
+
+// static
+std::string ProtocolUtils::CreateGetNoRoundTripScriptsByHashRequest(
+    const uint32_t hash_prefix_length,
+    const uint64_t hash_prefix,
+    const ClientContextProto& client_context,
+    const ScriptParameters& script_parameters) {
+  GetNoRoundTripScriptsByHashPrefixRequestProto request;
+  request.set_hash_prefix_length(hash_prefix_length);
+  request.set_hash_prefix(hash_prefix);
   *request.mutable_script_parameters() =
       script_parameters.ToProto(/* only_non_sensitive_allowlisted = */ true);
 
@@ -445,10 +503,6 @@ std::unique_ptr<Action> ProtocolUtils::CreateAction(ActionDelegate* delegate,
                          action.scroll_container().animation()));
     case ActionProto::ActionInfoCase::kSetTouchableArea:
       return std::make_unique<SetTouchableAreaAction>(delegate, action);
-    case ActionProto::ActionInfoCase::kDeletePassword:
-      return std::make_unique<DeletePasswordAction>(delegate, action);
-    case ActionProto::ActionInfoCase::kEditPassword:
-      return std::make_unique<EditPasswordAction>(delegate, action);
     case ActionProto::ActionInfoCase::kBlurField:
       return PerformOnSingleElementAction::WithClientId(
           delegate, action, action.blur_field().client_id(),
@@ -722,14 +776,6 @@ absl::optional<ActionProto> ProtocolUtils::ParseFromString(
       success = ParseActionFromString(action_id, bytes, error_message,
                                       proto.mutable_set_touchable_area());
       break;
-    case ActionProto::ActionInfoCase::kDeletePassword:
-      success = ParseActionFromString(action_id, bytes, error_message,
-                                      proto.mutable_delete_password());
-      break;
-    case ActionProto::ActionInfoCase::kEditPassword:
-      success = ParseActionFromString(action_id, bytes, error_message,
-                                      proto.mutable_edit_password());
-      break;
     case ActionProto::ActionInfoCase::kBlurField:
       success = ParseActionFromString(action_id, bytes, error_message,
                                       proto.mutable_blur_field());
@@ -956,6 +1002,26 @@ bool ProtocolUtils::ParseTriggerScripts(
     *script_parameters = std::make_unique<ScriptParameters>(
         base::flat_map<std::string, std::string>(std::move(parameters)));
   }
+  return true;
+}
+
+// static
+bool ProtocolUtils::ParseTriggerScriptsByHashPrefix(
+    const std::string& response,
+    std::vector<std::pair<std::string, std::string>>* domainScripts) {
+  DCHECK(domainScripts);
+
+  GetTriggerScriptsByHashPrefixResponseProto response_proto;
+  if (!response_proto.ParseFromString(response)) {
+    LOG(ERROR) << "Failed to parse trigger scripts by hash prefix response";
+    return false;
+  }
+
+  for (const auto& match : response_proto.match_info()) {
+    domainScripts->emplace_back(
+        match.domain(), match.trigger_scripts_response().SerializeAsString());
+  }
+
   return true;
 }
 

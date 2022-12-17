@@ -260,12 +260,6 @@ void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
   nudge_for_commit_closure_.Run();
 }
 
-void NotesModelObserverImpl::NotesNodeAttachmentChanged(
-    vivaldi::NotesModel* model,
-    const vivaldi::NoteNode* node) {
-  NotesNodeChanged(model, node);
-}
-
 void NotesModelObserverImpl::NotesNodeChildrenReordered(
     vivaldi::NotesModel* model,
     const vivaldi::NoteNode* node) {

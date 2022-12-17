@@ -1,11 +1,10 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/system/caps_lock_notification_controller.h"
 
 #include "ash/accessibility/accessibility_controller_impl.h"
-#include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -60,13 +59,12 @@ std::unique_ptr<Notification> CreateNotification() {
           ->unified_system_tray()
           ->model()
           ->GetSystemTrayButtonSize();
-  if (ash::features::IsScalableStatusAreaEnabled() &&
-      primary_tray_button_size != SystemTrayButtonSize::kSmall) {
-    // Set the priority to low to prevent the notification showing as a popup in
-    // medium or large size tray button because we already show an icon in tray
-    // for this in the feature.
+
+  // Set the priority to low to prevent the notification showing as a popup in
+  // medium or large size tray button because we already show an icon in tray
+  // for this in the feature.
+  if (primary_tray_button_size != SystemTrayButtonSize::kSmall)
     notification->set_priority(message_center::LOW_PRIORITY);
-  }
 
   return notification;
 }

@@ -1,29 +1,29 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <map>
-#include <string>
+#import <map>
+#import <string>
 
-#include "ios/chrome/browser/https_upgrades/https_upgrade_test_helper.h"
+#import "ios/chrome/browser/https_upgrades/https_upgrade_test_helper.h"
 
-#include "base/bind.h"
-#include "base/strings/escape.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
-#include "base/strings/sys_string_conversions.h"
+#import "base/bind.h"
+#import "base/strings/escape.h"
+#import "base/strings/string_util.h"
+#import "base/strings/stringprintf.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "base/test/metrics/histogram_tester.h"
+#import "base/test/metrics/histogram_tester.h"
 #import "ios/chrome/browser/https_upgrades/https_upgrade_app_interface.h"
-#include "ios/chrome/browser/metrics/metrics_app_interface.h"
+#import "ios/chrome/browser/metrics/metrics_app_interface.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
-#include "ios/testing/embedded_test_server_handlers.h"
-#include "ios/web/common/features.h"
-#include "net/test/embedded_test_server/default_handlers.h"
-#include "net/test/embedded_test_server/http_request.h"
-#include "net/test/embedded_test_server/http_response.h"
-#include "net/test/embedded_test_server/request_handler_util.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/testing/embedded_test_server_handlers.h"
+#import "ios/web/common/features.h"
+#import "net/test/embedded_test_server/default_handlers.h"
+#import "net/test/embedded_test_server/http_request.h"
+#import "net/test/embedded_test_server/http_response.h"
+#import "net/test/embedded_test_server/request_handler_util.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -33,22 +33,21 @@ namespace {
 
 const long kVeryLongTimeout = 100 * 3600 * 1000;
 
-// net::EmbeddedTestServer handler that responds with the request's query as the
-// title and body.
+// net::EmbeddedTestServer handler that responds with simple text.
 std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
     int* counter,
     const net::test_server::HttpRequest& request) {
-  if (request.relative_url == "/") {
-    std::unique_ptr<net::test_server::BasicHttpResponse> response(
-        new net::test_server::BasicHttpResponse);
-    response->set_content_type("text/html");
-    response->set_content("HTTP_RESPONSE");
-    if (counter)
-      (*counter)++;
-    return std::move(response);
+  // Ignore favicon requests.
+  if (request.relative_url == "/favicon.ico") {
+    return nullptr;
   }
-  // Ignore everything else such as favicon URLs.
-  return nullptr;
+  std::unique_ptr<net::test_server::BasicHttpResponse> response(
+      new net::test_server::BasicHttpResponse);
+  response->set_content_type("text/html");
+  response->set_content("HTTP_RESPONSE");
+  if (counter)
+    (*counter)++;
+  return std::move(response);
 }
 
 std::unique_ptr<net::test_server::HttpResponse> FakeHTTPSResponse(
@@ -78,7 +77,7 @@ std::unique_ptr<net::test_server::HttpResponse> FakeHTTPSResponse(
   return std::move(response);
 }
 
-std::unique_ptr<net::test_server::HttpResponse> FakeHungHTTPSResponse(
+std::unique_ptr<net::test_server::HttpResponse> FakeHungResponse(
     const net::test_server::HttpRequest& request) {
   return std::make_unique<net::test_server::HungResponse>();
 }
@@ -107,14 +106,13 @@ std::unique_ptr<net::test_server::HttpResponse> FakeHungHTTPSResponse(
   return _badHTTPSServer.get();
 }
 
-- (net::EmbeddedTestServer*)slowHTTPSServer {
-  if (!_slowHTTPSServer) {
-    _slowHTTPSServer = std::make_unique<net::EmbeddedTestServer>(
+- (net::EmbeddedTestServer*)slowServer {
+  if (!_slowServer) {
+    _slowServer = std::make_unique<net::EmbeddedTestServer>(
         net::test_server::EmbeddedTestServer::TYPE_HTTP);
-    _slowHTTPSServer->RegisterRequestHandler(
-        base::BindRepeating(&FakeHungHTTPSResponse));
+    _slowServer->RegisterRequestHandler(base::BindRepeating(&FakeHungResponse));
   }
-  return _slowHTTPSServer.get();
+  return _slowServer.get();
 }
 
 - (void)setUp {
@@ -129,8 +127,8 @@ std::unique_ptr<net::test_server::HttpResponse> FakeHungHTTPSResponse(
                  @"Test good faux-HTTPS server failed to start.");
   GREYAssertTrue(self.badHTTPSServer->Start(),
                  @"Test bad HTTPS server failed to start.");
-  GREYAssertTrue(self.slowHTTPSServer->Start(),
-                 @"Test slow faux-HTTPS server failed to start.");
+  GREYAssertTrue(self.slowServer->Start(),
+                 @"Test slow server failed to start.");
 
   GREYAssertNil([MetricsAppInterface setupHistogramTester],
                 @"Cannot setup histogram tester.");

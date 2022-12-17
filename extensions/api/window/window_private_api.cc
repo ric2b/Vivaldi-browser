@@ -192,13 +192,13 @@ void VivaldiBrowserObserver::OnBrowserRemoved(Browser* browser) {
                             browser->profile());
 
   if (chrome::GetTotalBrowserCount() == 1) {
-    for (Browser* browser : *BrowserList::GetInstance()) {
+    for (Browser* browser_it : *BrowserList::GetInstance()) {
       // If this is the last normal window, close the settings
       // window so shutdown can progress normally.
-      if (browser->is_vivaldi() &&
-          static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
+      if (browser_it->is_vivaldi() &&
+          static_cast<VivaldiBrowserWindow*>(browser_it->window())->type() ==
               VivaldiBrowserWindow::WindowType::SETTINGS) {
-        browser->window()->Close();
+        browser_it->window()->Close();
         break;
       }
     }
@@ -293,17 +293,17 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   std::string tab_url;
   std::string viv_ext_data;
 
-  if (params->options.incognito.get()) {
-    incognito = *params->options.incognito.get();
+  if (params->options.incognito.has_value()) {
+    incognito = params->options.incognito.value();
   }
-  if (params->options.focused.get()) {
-    focused = *params->options.focused.get();
+  if (params->options.focused.has_value()) {
+    focused = params->options.focused.value();
   }
-  if (params->options.tab_url.get()) {
-    tab_url = *params->options.tab_url.get();
+  if (params->options.tab_url.has_value()) {
+    tab_url = params->options.tab_url.value();
   }
-  if (params->options.viv_ext_data.get()) {
-    viv_ext_data = *params->options.viv_ext_data.get();
+  if (params->options.viv_ext_data.has_value()) {
+    viv_ext_data = params->options.viv_ext_data.value();
   }
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
@@ -333,11 +333,11 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
       window_bounds.set_height(params->options.bounds->height);
     }
 
-    if (params->options.bounds->min_width.get()) {
-      min_width = *params->options.bounds->min_width.get();
+    if (params->options.bounds->min_width.has_value()) {
+      min_width = params->options.bounds->min_width.value();
     }
-    if (params->options.bounds->min_height.get()) {
-      min_height = *params->options.bounds->min_height.get();
+    if (params->options.bounds->min_height.has_value()) {
+      min_height = params->options.bounds->min_height.value();
     }
   }
 
@@ -349,8 +349,8 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
     window_params.settings_window = true;
   }
   window_params.focused = focused;
-  if (params->options.window_decoration.get()) {
-    window_params.native_decorations = *params->options.window_decoration.get();
+  if (params->options.window_decoration.has_value()) {
+    window_params.native_decorations = params->options.window_decoration.value();
   } else {
     window_params.native_decorations = profile->GetPrefs()->GetBoolean(
         vivaldiprefs::kWindowsUseNativeDecoration);

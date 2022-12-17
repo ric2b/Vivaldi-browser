@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,8 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/callback.h"
+#include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/containers/flat_map.h"
 #include "base/feature_list.h"
@@ -17,7 +18,6 @@
 #include "base/notreached.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -29,6 +29,7 @@
 #include "components/sync/model/in_memory_metadata_change_list.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
+#include "components/sync/model/model_error.h"
 #include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/model/sync_metadata_store_change_list.h"
@@ -58,8 +59,15 @@ enum class SyncMetadataReadError {
   // preserve unsupported fields, hence the initial sync flow is forced to
   // resolve this incosistency.
   kNewlySupportedFieldDetectedInUnsupportedFieldsCache = 4,
+  // Reading successful, but the browser has been upgraded to a version that
+  // supports
+  // password notes for the first time. Therefore, initial sync is enforced to
+  // issue a password re-download in order to obtain any potential password
+  // notes on the server that has been ignored by earlier version of the
+  // browser.
+  kPasswordsRequireRedownloadForPotentialNotesOnTheServer = 5,
 
-  kMaxValue = kNewlySupportedFieldDetectedInUnsupportedFieldsCache,
+  kMaxValue = kPasswordsRequireRedownloadForPotentialNotesOnTheServer,
 };
 
 std::string ComputeClientTag(
@@ -151,8 +159,10 @@ bool AreLocalAndRemotePasswordsEqualExcludingIssues(
              remote_password_specifics.avatar_url() &&
          local_password_specifics.federation_url() ==
              remote_password_specifics.federation_url() &&
-         PasswordNotesFromProto(local_password_specifics.notes()) ==
-             PasswordNotesFromProto(remote_password_specifics.notes());
+         (base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)
+              ? PasswordNotesFromProto(local_password_specifics.notes()) ==
+                    PasswordNotesFromProto(remote_password_specifics.notes())
+              : true);
 }
 
 // Returns true iff |remote_password_specifics| and |local_password_specifics|
@@ -287,6 +297,30 @@ PasswordSyncBridge::PasswordSyncBridge(
       batch = std::make_unique<syncer::MetadataBatch>();
       sync_metadata_read_error = SyncMetadataReadError::
           kNewlySupportedFieldDetectedInUnsupportedFieldsCache;
+    } else if (batch->GetModelTypeState().initial_sync_done() &&
+               !batch->GetModelTypeState()
+                    .notes_enabled_before_initial_sync_for_passwords() &&
+               base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)) {
+      // The browser has just been upgraded to a version that supports password
+      // notes. Therefore, the metadata are cleared to enforce the initial sync
+      // flow and download any potential passwords notes on the server. The
+      // processor takes care of setting the flag in the model type state to
+      // avoid running this flow upon every start-up.
+      password_store_sync_->GetMetadataStore()->DeleteAllSyncMetadata();
+      batch = std::make_unique<syncer::MetadataBatch>();
+      sync_metadata_read_error = SyncMetadataReadError::
+          kPasswordsRequireRedownloadForPotentialNotesOnTheServer;
+    } else if (batch->GetModelTypeState().initial_sync_done() &&
+               batch->GetModelTypeState()
+                   .notes_enabled_before_initial_sync_for_passwords() &&
+               !base::FeatureList::IsEnabled(
+                   syncer::kPasswordNotesWithBackup)) {
+      // The feature was enabled before, but not anymore (e.g. due to experiment
+      // ramp-down). Clear the flag to enforce the initial sync flow when the
+      // feature is enabled again.
+      sync_pb::ModelTypeState model_state = batch->GetModelTypeState();
+      model_state.set_notes_enabled_before_initial_sync_for_passwords(false);
+      batch->SetModelTypeState(model_state);
     }
   }
   base::UmaHistogramEnumeration("PasswordManager.SyncMetadataReadError",
@@ -319,8 +353,11 @@ void PasswordSyncBridge::ActOnPasswordStoreChanges(
     return;
   }
 
+  // Note: No `error_callback` is required since any errors are handled
+  // explicitly via TakeError() below.
   syncer::SyncMetadataStoreChangeList metadata_change_list(
-      password_store_sync_->GetMetadataStore(), syncer::PASSWORDS);
+      password_store_sync_->GetMetadataStore(), syncer::PASSWORDS,
+      /*error_callback=*/base::DoNothing());
 
   for (const PasswordStoreChange& change : local_changes) {
     const std::string storage_key =
@@ -342,6 +379,11 @@ void PasswordSyncBridge::ActOnPasswordStoreChanges(
         break;
       }
     }
+  }
+
+  if (absl::optional<syncer::ModelError> error =
+          metadata_change_list.TakeError()) {
+    change_processor()->ReportError(*error);
   }
 }
 
@@ -526,12 +568,12 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
           "PasswordManager.MergeSyncData.AddLoginSyncError",
           add_credential_error);
 
-      // TODO(crbug.com/939302): It's not yet clear if the DCHECK_LE below is
-      // legit. However, recent crashes suggest that 2 changes are returned
-      // when trying to AddCredentialSync (details are in the bug). Once this is
-      // resolved, we should update the call the UpdateStorageKey() if
-      // necessary and remove unnecessary DCHECKs below.
-      // DCHECK_LE(changes.size(), 1U);
+      // In almost all cases, `AddCredentialSync` should have returned exactly 1
+      // change, corresponding to the new addition. There might be 0 in case of
+      // a DB error, or there might be 2 in a specific edge case: A matching
+      // local password (same client tag) already exists in the DB, but wasn't
+      // returned by the `ReadAllCredentials` call above. This can happen if the
+      // password data in un-decryptable.
       DCHECK_LE(changes.size(), 2U);
       if (changes.empty()) {
         DCHECK_NE(add_credential_error, AddCredentialError::kNone);
@@ -569,8 +611,11 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
 
     // Persist the metadata changes.
     // TODO(mamir): add some test coverage for the metadata persistence.
+    // Note: No `error_callback` is required since any errors are handled
+    // explicitly via TakeError() below.
     syncer::SyncMetadataStoreChangeList sync_metadata_store_change_list(
-        password_store_sync_->GetMetadataStore(), syncer::PASSWORDS);
+        password_store_sync_->GetMetadataStore(), syncer::PASSWORDS,
+        /*error_callback=*/base::DoNothing());
     // |metadata_change_list| must have been created via
     // CreateMetadataChangeList() so downcasting is safe.
     static_cast<syncer::InMemoryMetadataChangeList*>(metadata_change_list.get())
@@ -745,8 +790,11 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::ApplySyncChanges(
 
     // Persist the metadata changes.
     // TODO(mamir): add some test coverage for the metadata persistence.
+    // Note: No `error_callback` is required since any errors are handled
+    // explicitly via TakeError() below.
     syncer::SyncMetadataStoreChangeList sync_metadata_store_change_list(
-        password_store_sync_->GetMetadataStore(), syncer::PASSWORDS);
+        password_store_sync_->GetMetadataStore(), syncer::PASSWORDS,
+        /*error_callback=*/base::DoNothing());
     // |metadata_change_list| must have been created via
     // CreateMetadataChangeList() so downcasting is safe.
     static_cast<syncer::InMemoryMetadataChangeList*>(metadata_change_list.get())

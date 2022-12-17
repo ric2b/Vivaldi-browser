@@ -26,11 +26,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "base/task/sequenced_task_runner.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -177,6 +177,26 @@ void ContactBackend::CreateContacts(
   for (size_t i = 0; i < count; i++) {
     ContactRow contact = contacts[i];
     ContactID id = db_->CreateContact(contact);
+
+    for (auto& item : contact.emails()) {
+      item.set_contact_id(id);
+      db_->AddEmailAddress(item);
+    }
+
+    for (auto& phone : contact.phones()) {
+      contact::AddPropertyObject add;
+      add.value = base::UTF8ToUTF16(phone.phonenumber());
+      add.contact_id = id;
+      db_->AddPhoneNumber(add);
+    }
+
+    for (auto& address : contact.postaladdresses()) {
+      contact::AddPropertyObject add;
+      add.value = address.postal_address();
+      add.contact_id = id;
+      db_->AddPostalAddress(add);
+    }
+
     if (id) {
       success_counter++;
     } else {

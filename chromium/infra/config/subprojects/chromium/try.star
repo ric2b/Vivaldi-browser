@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -202,7 +202,7 @@ branches.cq_tryjob_verifier(
     cq_group = "cq",
     experiment_percentage = 100,
     includable_only = False,
-    location_regexp = [".+/[+]/third_party/nearby/README.chromium"],
+    location_filters = [cq.location_filter(path_regexp = "third_party/nearby/README.chromium")],
     owner_whitelist = [
         "googlers",
         "project-chromium-robot-committers",

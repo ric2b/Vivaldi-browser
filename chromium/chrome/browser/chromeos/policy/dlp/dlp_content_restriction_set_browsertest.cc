@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,8 +73,8 @@ class DlpContentRestrictionSetBrowserTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(DlpContentRestrictionSetBrowserTest,
                        GetRestrictionSetForURL) {
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
 
     base::Value src_urls1(base::Value::Type::LIST);
     src_urls1.Append(kUrl1);

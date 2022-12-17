@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,6 @@
 
 #include "chrome/browser/nearby_sharing/nearby_connections_manager.h"
 
-#include "ash/services/nearby/public/cpp/nearby_process_manager.h"
-#include "ash/services/nearby/public/mojom/nearby_connections.mojom.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file.h"
@@ -17,6 +15,8 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/nearby_sharing/nearby_connection_impl.h"
 #include "chrome/browser/nearby_sharing/nearby_file_handler.h"
+#include "chromeos/ash/services/nearby/public/cpp/nearby_process_manager.h"
+#include "chromeos/ash/services/nearby/public/mojom/nearby_connections.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 
@@ -27,8 +27,9 @@ class NearbyConnectionsManagerImpl
       public location::nearby::connections::mojom::ConnectionLifecycleListener,
       public location::nearby::connections::mojom::PayloadListener {
  public:
-  explicit NearbyConnectionsManagerImpl(
-      ash::nearby::NearbyProcessManager* process_manager);
+  NearbyConnectionsManagerImpl(
+      ash::nearby::NearbyProcessManager* process_manager,
+      const std::string& service_id);
   ~NearbyConnectionsManagerImpl() override;
   NearbyConnectionsManagerImpl(const NearbyConnectionsManagerImpl&) = delete;
   NearbyConnectionsManagerImpl& operator=(const NearbyConnectionsManagerImpl&) =
@@ -164,6 +165,8 @@ class NearbyConnectionsManagerImpl
   base::flat_set<std::string> requested_bwu_endpoint_ids_;
   // For metrics. A map of endpoint_id to current upgraded medium.
   base::flat_map<std::string, Medium> current_upgraded_mediums_;
+
+  const std::string service_id_;
 
   mojo::Receiver<EndpointDiscoveryListener> endpoint_discovery_listener_{this};
   mojo::ReceiverSet<ConnectionLifecycleListener>

@@ -1,10 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/passwords/well_known_change_password_navigation_throttle.h"
 
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/password_manager/affiliation_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
@@ -67,7 +68,7 @@ WellKnownChangePasswordNavigationThrottle::MaybeCreateThrottleFor(
     NavigationHandle* handle) {
   // Don't handle navigations in subframes or main frames that are in a nested
   // frame tree (e.g. portals, fenced frames)
-  if (!handle->GetParentFrameOrOuterDocument() &&
+  if (handle->IsInOutermostMainFrame() &&
       IsWellKnownChangePasswordUrl(handle->GetURL()) &&
       IsTriggeredByGoogleOwnedUI(handle)) {
     return std::make_unique<WellKnownChangePasswordNavigationThrottle>(handle);
@@ -214,6 +215,8 @@ void WellKnownChangePasswordNavigationThrottle::Redirect(const GURL& url) {
 
 void WellKnownChangePasswordNavigationThrottle::RecordMetric(
     WellKnownChangePasswordResult result) {
+  base::UmaHistogramEnumeration("PasswordManager.WellKnownChangePasswordResult",
+                                result);
   ukm::builders::PasswordManager_WellKnownChangePasswordResult(source_id_)
       .SetWellKnownChangePasswordResult(static_cast<int64_t>(result))
       .Record(ukm::UkmRecorder::Get());

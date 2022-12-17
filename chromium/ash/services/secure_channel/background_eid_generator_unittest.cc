@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,15 +7,15 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/multidevice/beacon_seed.h"
-#include "ash/components/multidevice/remote_device_ref.h"
-#include "ash/components/multidevice/remote_device_test_util.h"
 #include "ash/services/device_sync/proto/cryptauth_api.pb.h"
 #include "ash/services/secure_channel/data_with_timestamp.h"
 #include "ash/services/secure_channel/raw_eid_generator_impl.h"
 #include "base/strings/string_util.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/multidevice/beacon_seed.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
+#include "chromeos/ash/components/multidevice/remote_device_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 

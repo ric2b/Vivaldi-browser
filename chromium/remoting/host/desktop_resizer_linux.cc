@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,6 +40,10 @@ class DesktopResizerLinux : public DesktopResizer {
 
   void RestoreResolution(const ScreenResolution& original,
                          webrtc::ScreenId screen_id) override {
+    NOTIMPLEMENTED();
+  }
+
+  void SetVideoLayout(const protocol::VideoLayout& layout) override {
     NOTIMPLEMENTED();
   }
 };

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -101,6 +101,13 @@ class DownloadTargetDeterminer : public download::DownloadItem::Observer {
       const base::FilePath& local_path,
       const std::string& mime_type,
       base::OnceCallback<void(bool)> callback);
+
+  // Determine if the file type can be handled safely by the browser if it were
+  // to be opened via a file:// URL. Returns the determined value.
+  static bool DetermineIfHandledSafelyHelperSynchronous(
+      download::DownloadItem* download,
+      const base::FilePath& local_path,
+      const std::string& mime_type);
 
  private:
   // The main workflow is controlled via a set of state transitions. Each state

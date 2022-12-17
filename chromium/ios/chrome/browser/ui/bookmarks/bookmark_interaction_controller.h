@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #ifndef IOS_CHROME_BROWSER_UI_BOOKMARKS_BOOKMARK_INTERACTION_CONTROLLER_H_
@@ -21,6 +21,9 @@ namespace web {
 class WebState;
 }
 
+// Vivaldi
+@class PanelInteractionController;
+
 // The BookmarkInteractionController abstracts the management of the various
 // UIViewControllers used to create, remove and edit a bookmark.
 @interface BookmarkInteractionController : NSObject <BookmarksCommands>
@@ -32,6 +35,16 @@ class WebState;
 @property(nonatomic, weak) UIViewController* parentController;
 
 - (instancetype)initWithBrowser:(Browser*)browser NS_DESIGNATED_INITIALIZER;
+
+// Vivaldi
+@property(nonatomic, weak) PanelInteractionController* panelDelegate;
+
+#ifdef VIVALDI_BUILD
+@property(nonatomic, strong) UINavigationController*
+                    bookmarkNavigationController;
+#endif
+// End Vivaldi
+
 - (instancetype)init NS_UNAVAILABLE;
 
 // Called before the instance is deallocated.

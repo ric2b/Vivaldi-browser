@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/strings/utf_string_conversions.h"
@@ -31,6 +32,7 @@
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/back_forward_cache_can_store_document_result.h"
+#include "content/browser/renderer_host/private_network_access_util.h"
 #include "content/browser/service_worker/payment_handler_support.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
@@ -52,6 +54,7 @@
 #include "net/base/net_errors.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/http/http_response_headers.h"
+#include "services/network/public/mojom/cross_origin_embedder_policy.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
 #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
@@ -382,9 +385,9 @@ void ServiceWorkerVersion::RegisterStatusChangeCallback(
 ServiceWorkerVersionInfo ServiceWorkerVersion::GetInfo() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   ServiceWorkerVersionInfo info(
-      running_status(), status(), fetch_handler_existence(), script_url(),
-      scope(), key(), registration_id(), version_id(),
-      embedded_worker()->process_id(), embedded_worker()->thread_id(),
+      running_status(), status(), fetch_handler_type_, script_url(), scope(),
+      key(), registration_id(), version_id(), embedded_worker()->process_id(),
+      embedded_worker()->thread_id(),
       embedded_worker()->worker_devtools_agent_route_id(), ukm_source_id(),
       ancestor_frame_type_);
   for (const auto& controllee : controllee_map_) {
@@ -428,6 +431,23 @@ void ServiceWorkerVersion::set_fetch_handler_type(
     FetchHandlerType fetch_handler_type) {
   DCHECK(!fetch_handler_type_);
   fetch_handler_type_ = fetch_handler_type;
+}
+
+ServiceWorkerVersion::FetchHandlerType
+ServiceWorkerVersion::EffectiveFetchHandlerType() const {
+  switch (fetch_handler_type()) {
+    case FetchHandlerType::kNoHandler:
+      return FetchHandlerType::kNoHandler;
+    case FetchHandlerType::kNotSkippable:
+      return FetchHandlerType::kNotSkippable;
+    case FetchHandlerType::kEmptyFetchHandler: {
+      if (features::kSkipEmptyFetchHandler.Get()) {
+        return FetchHandlerType::kEmptyFetchHandler;
+      } else {
+        return FetchHandlerType::kNotSkippable;
+      }
+    }
+  }
 }
 
 void ServiceWorkerVersion::StartWorker(ServiceWorkerMetrics::EventType purpose,
@@ -658,6 +678,9 @@ int ServiceWorkerVersion::StartRequestWithCustomTimeout(
       request_id, event_type, expiration_time, timeout_behavior);
   DCHECK(is_inserted);
   request_rawptr->timeout_iter = iter;
+  // TODO(crbug.com/1363504): remove the following DCHECK when the cause
+  // identified.
+  DCHECK_EQ(request_timeouts_.size(), inflight_requests_.size());
   if (expiration_time > max_request_expiration_time_)
     max_request_expiration_time_ = expiration_time;
 
@@ -720,6 +743,9 @@ bool ServiceWorkerVersion::FinishRequestWithFetchCount(int request_id,
       "Handled", was_handled);
   request_timeouts_.erase(request->timeout_iter);
   inflight_requests_.Remove(request_id);
+  // TODO(crbug.com/1363504): remove the following DCHECK when the cause
+  // identified.
+  DCHECK_EQ(request_timeouts_.size(), inflight_requests_.size());
 
   if (!HasWorkInBrowser())
     OnNoWorkInBrowser();
@@ -1216,8 +1242,25 @@ void ServiceWorkerVersion::OnStarted(
   blink::ServiceWorkerStatusCode status =
       mojo::ConvertTo<blink::ServiceWorkerStatusCode>(start_status);
 
-  if (status == blink::ServiceWorkerStatusCode::kOk && !fetch_handler_type_) {
-    set_fetch_handler_type(fetch_handler_type);
+  if (status == blink::ServiceWorkerStatusCode::kOk) {
+    if (fetch_handler_type_ && fetch_handler_type_ != fetch_handler_type) {
+      context_->registry()->UpdateFetchHandlerType(
+          registration_id_, key_, fetch_handler_type,
+          // Ignore errors; bumping the update fetch handler type is
+          // just best-effort.
+          base::DoNothing());
+      base::UmaHistogramEnumeration(
+          "ServiceWorker.OnStarted.UpdatedFetchHandlerType",
+          fetch_handler_type);
+    }
+    if (!fetch_handler_type_) {
+      set_fetch_handler_type(fetch_handler_type);
+    } else if (
+        // Avoid to change live fetch_handler_existence() result.
+        fetch_handler_type != FetchHandlerType::kNoHandler &&
+        fetch_handler_type_ != FetchHandlerType::kNoHandler) {
+      fetch_handler_type_ = fetch_handler_type;
+    }
   }
 
   // Fire all start callbacks.
@@ -1502,6 +1545,9 @@ void ServiceWorkerVersion::PostMessageToClient(
     receiver_.reset();
     return;
   }
+  // As we don't track tasks between workers and renderers, we can nullify the
+  // message's parent task ID.
+  message.parent_task_id = absl::nullopt;
   container_host->PostMessageToClient(this, std::move(message));
 }
 
@@ -1725,12 +1771,17 @@ void ServiceWorkerVersion::OnSimpleEventFinished(
 void ServiceWorkerVersion::CountFeature(blink::mojom::WebFeature feature) {
   if (!used_features_.insert(feature).second)
     return;
+
+  // TODO(crbug.com/1253581 crbug.com/1021718): Speculative bug fix code.
+  // Take snapshot of the `controllee_map_` instead of iterating on it directly.
+  // This is to rule out the possibility of `controllee_map_` being modified
+  // while we call `CountFeature`.
+  std::vector<base::WeakPtr<ServiceWorkerContainerHost>> hosts_snapshot;
+  hosts_snapshot.reserve(controllee_map_.size());
   for (auto container_host_by_uuid : controllee_map_) {
-    const base::WeakPtr<ServiceWorkerContainerHost>& container_host =
-        container_host_by_uuid.second;
-    // TODO(crbug.com/1253581 crbug.com/1021718): controllee_map_ should be only
-    // containing live container hosts. The below "if" check is a workaround for
-    // unmatched AddControllee / RemoveControllee calls.
+    hosts_snapshot.push_back(container_host_by_uuid.second);
+  }
+  for (auto container_host : hosts_snapshot) {
     if (container_host)
       container_host->CountFeature(feature);
   }
@@ -1740,6 +1791,8 @@ void ServiceWorkerVersion::set_cross_origin_embedder_policy(
     network::CrossOriginEmbedderPolicy cross_origin_embedder_policy) {
   // Once it is set, the CrossOriginEmbedderPolicy is immutable.
   DCHECK(!client_security_state_ ||
+         client_security_state_->cross_origin_embedder_policy.value ==
+             network::mojom::CrossOriginEmbedderPolicyValue::kNone ||
          client_security_state_->cross_origin_embedder_policy ==
              cross_origin_embedder_policy);
   if (!client_security_state_) {
@@ -1973,6 +2026,25 @@ void ServiceWorkerVersion::StartWorkerInternal() {
 
   params->ukm_source_id = ukm_source_id_;
 
+  // policy_container_host could be null for registration restored from old DB
+  if (policy_container_host_) {
+    params->policy_container =
+        policy_container_host_->CreatePolicyContainerForBlink();
+
+    if (base::FeatureList::IsEnabled(
+            features::kPrivateNetworkAccessForWorkers)) {
+      if (!client_security_state_) {
+        client_security_state_ = network::mojom::ClientSecurityState::New();
+      }
+      client_security_state_->ip_address_space =
+          policy_container_host_->ip_address_space();
+      client_security_state_->is_web_secure_context =
+          policy_container_host_->policies().is_web_secure_context;
+      client_security_state_->private_network_request_policy =
+          DerivePrivateNetworkRequestPolicy(policy_container_host_->policies());
+    }
+  }
+
   embedded_worker_->Start(std::move(params),
                           base::BindOnce(&ServiceWorkerVersion::OnStartSent,
                                          weak_factory_.GetWeakPtr()));
@@ -2094,6 +2166,9 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
   // Ensure the `request_timeouts_` won't be touched during the loop.
   DCHECK(request_timeouts_.empty());
   request_timeouts_.swap(request_timeouts);
+  // TODO(crbug.com/1363504): remove the following DCHECK when the cause
+  // identified.
+  DCHECK_EQ(request_timeouts_.size(), inflight_requests_.size());
   if (stop_for_timeout && running_status() != EmbeddedWorkerStatus::STOPPING)
     embedded_worker_->Stop();
 
@@ -2206,6 +2281,9 @@ void ServiceWorkerVersion::SetAllRequestExpirations(
     request->timeout_iter = iter;
   }
   request_timeouts_.swap(new_timeouts);
+  // TODO(crbug.com/1363504): remove the following DCHECK when the cause
+  // identified.
+  DCHECK_EQ(request_timeouts_.size(), inflight_requests_.size());
 }
 
 blink::ServiceWorkerStatusCode
@@ -2314,6 +2392,13 @@ void ServiceWorkerVersion::OnStoppedInternal(EmbeddedWorkerStatus old_status) {
     FinishStartWorker(DeduceStartWorkerFailureReason(
         blink::ServiceWorkerStatusCode::kErrorStartWorkerFailed));
   }
+
+  // TODO(crbug.com/1363504): remove the following DCHECK when the cause
+  // identified.
+  // Failing this DCHECK means, the function is called while
+  // the function is modifying contents of request_timeouts_.
+  DCHECK(inflight_requests_.IsEmpty() || !request_timeouts_.empty());
+  DCHECK_EQ(request_timeouts_.size(), inflight_requests_.size());
 
   // Let all message callbacks fail (this will also fire and clear all
   // callbacks for events).
@@ -2441,10 +2526,17 @@ void ServiceWorkerVersion::PrepareForUpdate(
     std::map<GURL, ServiceWorkerUpdateChecker::ComparedScriptInfo>
         compared_script_info_map,
     const GURL& updated_script_url,
+    scoped_refptr<PolicyContainerHost> policy_container_host,
     network::CrossOriginEmbedderPolicy cross_origin_embedder_policy) {
   compared_script_info_map_ = std::move(compared_script_info_map);
   updated_script_url_ = updated_script_url;
   set_cross_origin_embedder_policy(cross_origin_embedder_policy);
+  if (!GetContentClient()
+           ->browser()
+           ->ShouldServiceWorkerInheritPolicyContainerFromCreator(
+               updated_script_url)) {
+    set_policy_container_host(policy_container_host);
+  }
 }
 
 const std::map<GURL, ServiceWorkerUpdateChecker::ComparedScriptInfo>&

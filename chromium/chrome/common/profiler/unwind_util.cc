@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,11 +10,13 @@
 #include "base/android/library_loader/anchor_functions.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/profiler/profiler_buildflags.h"
 #include "base/profiler/stack_sampling_profiler.h"
 #include "base/profiler/unwinder.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/profiler/process_type.h"
@@ -47,6 +49,11 @@ extern char __executable_start;
 }
 #endif  // ANDROID_ARM32_UNWINDING_SUPPORTED
 
+// See `RequestUnwindPrerequisitesInstallation` below.
+BASE_FEATURE(kInstallAndroidUnwindDfm,
+             "InstallAndroidUnwindDfm",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 namespace {
 
 #if ANDROID_ARM32_UNWINDING_SUPPORTED
@@ -55,8 +62,10 @@ class ChromeUnwinderCreator {
  public:
   ChromeUnwinderCreator() {
     constexpr char kCfiFileName[] = "assets/unwind_cfi_32_v2";
+    constexpr char kSplitName[] = "stack_unwinder";
+
     base::MemoryMappedFile::Region cfi_region;
-    int fd = base::android::OpenApkAsset(kCfiFileName, &cfi_region);
+    int fd = base::android::OpenApkAsset(kCfiFileName, kSplitName, &cfi_region);
     DCHECK_GE(fd, 0);
     bool mapped_file_ok =
         chrome_cfi_file_.Initialize(base::File(fd), cfi_region);
@@ -83,9 +92,10 @@ class ChromeUnwinderCreator {
  public:
   ChromeUnwinderCreator() {
     constexpr char kCfiFileName[] = "assets/unwind_cfi_32";
+    constexpr char kSplitName[] = "stack_unwinder";
 
     base::MemoryMappedFile::Region cfi_region;
-    int fd = base::android::OpenApkAsset(kCfiFileName, &cfi_region);
+    int fd = base::android::OpenApkAsset(kCfiFileName, kSplitName, &cfi_region);
     DCHECK_GE(fd, 0);
     bool mapped_file_ok =
         chrome_cfi_file_.Initialize(base::File(fd), cfi_region);
@@ -146,49 +156,113 @@ std::vector<std::unique_ptr<base::Unwinder>> CreateCoreUnwinders(
   return unwinders;
 }
 
-// Checks whether unwinder assets -- such as call frame information needed for
-// unwinders to work -- are available in the current context. Unwinder assets
-// are only embedded into certain builds of Chrome.
-bool AreUnwinderAssetsAvailable() {
-  const version_info::Channel channel = chrome::GetChannel();
-  // CFI is currently only embedded into dev and canary builds of Chrome:
-  // https://crsrc.org/c/chrome/android/chrome_public_apk_tmpl.gni;l=30-36;drc=2b4d4975755c2394a9d45a77a8acf7597ff67dfc
-  return channel == version_info::Channel::CANARY ||
-         channel == version_info::Channel::DEV;
+std::vector<std::unique_ptr<base::Unwinder>> CreateLibunwindstackUnwinders(
+    stack_unwinder::Module* const stack_unwinder_module) {
+  DCHECK_NE(getpid(), gettid());
+  std::vector<std::unique_ptr<base::Unwinder>> unwinders;
+  unwinders.push_back(stack_unwinder_module->CreateLibunwindstackUnwinder());
+  return unwinders;
 }
+
+// Manages installation of the module prerequisite for unwinding. Android, in
+// particular, requires a dynamic feature module to provide the native unwinder.
+class ModuleUnwindPrerequisitesDelegate : public UnwindPrerequisitesDelegate {
+ public:
+  void RequestInstallation(version_info::Channel /* unused */) override {
+    stack_unwinder::Module::RequestInstallation();
+  }
+
+  bool AreAvailable(version_info::Channel channel) override {
+    return stack_unwinder::Module::IsInstalled();
+  }
+};
 #endif  // ANDROID_ARM32_UNWINDING_SUPPORTED
 
 }  // namespace
 
-// static
-void UnwindPrerequisites::RequestInstallation() {
+void RequestUnwindPrerequisitesInstallation(
+    version_info::Channel channel,
+    UnwindPrerequisitesDelegate* prerequites_delegate) {
   CHECK_EQ(metrics::CallStackProfileParams::Process::kBrowser,
            GetProfileParamsProcess(*base::CommandLine::ForCurrentProcess()));
-#if ANDROID_ARM32_UNWINDING_SUPPORTED
+  if (AreUnwindPrerequisitesAvailable(channel, prerequites_delegate)) {
+    return;
+  }
+#if ANDROID_ARM32_UNWINDING_SUPPORTED && defined(OFFICIAL_BUILD) && \
+    BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  ModuleUnwindPrerequisitesDelegate default_delegate;
+  if (prerequites_delegate == nullptr) {
+    prerequites_delegate = &default_delegate;
+  }
+  // We only want to incur the cost of universally downloading the module in
+  // early channels, where profiling will occur over substantially all of
+  // the population. When supporting later channels in the future we will
+  // enable profiling for only a fraction of users and only download for
+  // those users.
+  //
   // The install occurs asynchronously, with the module available at the first
   // run of Chrome following install.
-  stack_unwinder::Module::RequestInstallation();
-#endif  // ANDROID_ARM32_UNWINDING_SUPPORTED
+  if (channel == version_info::Channel::CANARY ||
+      channel == version_info::Channel::DEV ||
+      (channel == version_info::Channel::BETA &&
+       base::FeatureList::IsEnabled(kInstallAndroidUnwindDfm))) {
+    prerequites_delegate->RequestInstallation(channel);
+  }
+#endif
 }
 
-// static
-bool UnwindPrerequisites::Available() {
+bool AreUnwindPrerequisitesAvailable(
+    version_info::Channel channel,
+    UnwindPrerequisitesDelegate* prerequites_delegate) {
 #if ANDROID_ARM32_UNWINDING_SUPPORTED
-  // We need both (1) unwinder assets and (2) unwinder module to be available.
-  return AreUnwinderAssetsAvailable() && stack_unwinder::Module::IsInstalled();
+#if defined(OFFICIAL_BUILD) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // Sometimes, DFMs can be installed even if not requested by Chrome
+  // explicitly (for instance, in some app stores). Therefore, even if the
+  // unwinder module is installed, we only consider it to be available for
+  // specific channels.
+  if (!(channel == version_info::Channel::CANARY ||
+        channel == version_info::Channel::DEV ||
+        channel == version_info::Channel::BETA)) {
+    return false;
+  }
+#endif  // defined(OFFICIAL_BUILD) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  ModuleUnwindPrerequisitesDelegate default_delegate;
+  if (prerequites_delegate == nullptr) {
+    prerequites_delegate = &default_delegate;
+  }
+  return prerequites_delegate->AreAvailable(channel);
 #else   // ANDROID_ARM32_UNWINDING_SUPPORTED
   return true;
 #endif  // ANDROID_ARM32_UNWINDING_SUPPORTED
 }
 
+#if ANDROID_ARM32_UNWINDING_SUPPORTED
+stack_unwinder::Module* GetOrLoadModule() {
+  DCHECK(AreUnwindPrerequisitesAvailable(chrome::GetChannel()));
+  static base::NoDestructor<std::unique_ptr<stack_unwinder::Module>>
+      stack_unwinder_module(stack_unwinder::Module::Load());
+  return stack_unwinder_module.get()->get();
+}
+#endif  // ANDROID_ARM32_UNWINDING_SUPPORTED
+
 base::StackSamplingProfiler::UnwindersFactory CreateCoreUnwindersFactory() {
-  if (!UnwindPrerequisites::Available()) {
+  if (!AreUnwindPrerequisitesAvailable(chrome::GetChannel())) {
     return base::StackSamplingProfiler::UnwindersFactory();
   }
 #if ANDROID_ARM32_UNWINDING_SUPPORTED
-  static base::NoDestructor<std::unique_ptr<stack_unwinder::Module>>
-      stack_unwinder_module(stack_unwinder::Module::Load());
-  return base::BindOnce(CreateCoreUnwinders, stack_unwinder_module->get());
+  return base::BindOnce(CreateCoreUnwinders, GetOrLoadModule());
+#else   // ANDROID_ARM32_UNWINDING_SUPPORTED
+  return base::StackSamplingProfiler::UnwindersFactory();
+#endif  // ANDROID_ARM32_UNWINDING_SUPPORTED
+}
+
+base::StackSamplingProfiler::UnwindersFactory
+CreateLibunwindstackUnwinderFactory() {
+  if (!AreUnwindPrerequisitesAvailable(chrome::GetChannel())) {
+    return base::StackSamplingProfiler::UnwindersFactory();
+  }
+#if ANDROID_ARM32_UNWINDING_SUPPORTED
+  return base::BindOnce(CreateLibunwindstackUnwinders, GetOrLoadModule());
 #else   // ANDROID_ARM32_UNWINDING_SUPPORTED
   return base::StackSamplingProfiler::UnwindersFactory();
 #endif  // ANDROID_ARM32_UNWINDING_SUPPORTED

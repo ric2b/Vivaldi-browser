@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,7 +80,7 @@ constexpr size_t kPartitionCachelineSize = 64;
 // other constant values, we pack _all_ `PartitionRoot::Alloc` sizes perfectly
 // up against the end of a system page.
 
-#if defined(_MIPS_ARCH_LOONGSON)
+#if defined(_MIPS_ARCH_LOONGSON) || defined(ARCH_CPU_LOONG64)
 PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PartitionPageShift() {
   return 16;  // 64 KiB
@@ -179,6 +179,7 @@ constexpr size_t kHighThresholdForAlternateDistribution =
 //     | Metadata page (4 KiB) |
 //     | Guard pages (8 KiB)   |
 //     | TagBitmap             |
+//     | Free Slot Bitmap      |
 //     | *Scan State Bitmap    |
 //     | Slot span             |
 //     | Slot span             |
@@ -188,8 +189,9 @@ constexpr size_t kHighThresholdForAlternateDistribution =
 //     +-----------------------+
 //
 // TagBitmap is only present when
-// defined(PA_USE_MTE_CHECKED_PTR_WITH_64_BITS_POINTERS) is true. State Bitmap
-// is inserted for partitions that may have quarantine enabled.
+// defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS) is true.
+// Free Slot Bitmap is only present when USE_FREESLOT_BITMAP is true. State
+// Bitmap is inserted for partitions that may have quarantine enabled.
 //
 // If refcount_at_end_allocation is enabled, RefcountBitmap(4KiB) is inserted
 // after the Metadata page for BackupRefPtr. The guard pages after the bitmap
@@ -257,18 +259,16 @@ constexpr size_t kSuperPageAlignment = kSuperPageSize;
 constexpr size_t kSuperPageOffsetMask = kSuperPageAlignment - 1;
 constexpr size_t kSuperPageBaseMask = ~kSuperPageOffsetMask;
 
-// GigaCage is generally split into two pools, one which supports BackupRefPtr
-// (BRP) and one that doesn't.
+// PartitionAlloc's address space is split into pools. See `glossary.md`.
 #if defined(PA_HAS_64_BITS_POINTERS)
-// The 3rd, Configurable Pool is only available in 64-bit mode.
 constexpr size_t kNumPools = 3;
-// Maximum GigaCage pool size. With exception of Configurable Pool, it is also
-// the actual size, unless PA_USE_DYNAMICALLY_SIZED_GIGA_CAGE is set, which
+// Maximum pool size. With exception of Configurable Pool, it is also
+// the actual size, unless PA_DYNAMICALLY_SELECT_POOL_SIZE is set, which
 // allows to choose a different size at initialization time for certain
 // configurations.
 //
 // Special-case Android and iOS, which incur test failures with larger
-// GigaCage. Regardless, allocating >8GiB with malloc() on these platforms is
+// pools. Regardless, allocating >8GiB with malloc() on these platforms is
 // unrealistic as of 2022.
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 constexpr size_t kPoolMaxSize = 8 * kGiB;
@@ -316,7 +316,7 @@ constexpr PA_ALWAYS_INLINE size_t MaxSuperPagesInPool() {
 
 #if defined(PA_HAS_64_BITS_POINTERS)
 // In 64-bit mode, the direct map allocation granularity is super page size,
-// because this is the reservation granularity of the GigaCage.
+// because this is the reservation granularity of the pools.
 constexpr PA_ALWAYS_INLINE size_t DirectMapAllocationGranularity() {
   return kSuperPageSize;
 }
@@ -327,7 +327,7 @@ constexpr PA_ALWAYS_INLINE size_t DirectMapAllocationGranularityShift() {
 #else   // defined(PA_HAS_64_BITS_POINTERS)
 // In 32-bit mode, address space is space is a scarce resource. Use the system
 // allocation granularity, which is the lowest possible address space allocation
-// unit. However, don't go below partition page size, so that GigaCage bitmaps
+// unit. However, don't go below partition page size, so that pool bitmaps
 // don't get too large. See kBytesPer1BitOfBRPPoolBitmap.
 PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 DirectMapAllocationGranularity() {
@@ -368,8 +368,10 @@ constexpr size_t kMinBucketedOrder =
 constexpr size_t kMaxBucketedOrder = 20;
 constexpr size_t kNumBucketedOrders =
     (kMaxBucketedOrder - kMinBucketedOrder) + 1;
-// 4 buckets per order (for the higher orders).
-constexpr size_t kNumBucketsPerOrderBits = 2;
+// 8 buckets per order (for the higher orders).
+// Note: this is not what is used by default, but the maximum amount of buckets
+// per order. By default, only 4 are used.
+constexpr size_t kNumBucketsPerOrderBits = 3;
 constexpr size_t kNumBucketsPerOrder = 1 << kNumBucketsPerOrderBits;
 constexpr size_t kNumBuckets = kNumBucketedOrders * kNumBucketsPerOrder;
 constexpr size_t kSmallestBucket = 1 << (kMinBucketedOrder - 1);
@@ -447,6 +449,21 @@ constexpr unsigned char kQuarantinedByte = 0xEF;
 // static_cast<uint32_t>(-1) is too close to a "real" size.
 constexpr size_t kInvalidBucketSize = 1;
 
+#if defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+// Requested size that require the hack.
+constexpr size_t kMac11MallocSizeHackRequestedSize = 32;
+// Usable size for allocations that require the hack.
+constexpr size_t kMac11MallocSizeHackUsableSize =
+#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) ||  \
+    defined(PA_REF_COUNT_STORE_REQUESTED_SIZE) || \
+    defined(PA_REF_COUNT_CHECK_COOKIE)
+    40;
+#else
+    44;
+#endif  // BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) ||
+        // defined(PA_REF_COUNT_STORE_REQUESTED_SIZE) ||
+        // defined(PA_REF_COUNT_CHECK_COOKIE)
+#endif  // defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
 }  // namespace internal
 
 // These constants are used outside PartitionAlloc itself, so we provide

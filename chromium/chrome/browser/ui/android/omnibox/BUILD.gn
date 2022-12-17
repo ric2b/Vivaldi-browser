@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -71,6 +71,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdown.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdownAdapter.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdownEmbedder.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdownScrollListener.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionCommonProperties.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionHost.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionListProperties.java",
@@ -102,6 +103,9 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/carousel/BaseCarouselSuggestionViewBinder.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/carousel/BaseCarouselSuggestionViewProperties.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/clipboard/ClipboardSuggestionProcessor.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/dividerline/DividerLineProcessor.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/dividerline/DividerLineView.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/dividerline/DividerLineViewBinder.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/editurl/EditUrlSuggestionProcessor.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/editurl/EditUrlSuggestionView.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/editurl/EditUrlSuggestionViewBinder.java",
@@ -197,6 +201,7 @@ android_library("java") {
     "//content/public/android:content_java",
     "//third_party/android_deps:guava_android_java",
     "//third_party/android_deps:material_design_java",
+    "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/androidx:androidx_appcompat_appcompat_java",
     "//third_party/androidx:androidx_appcompat_appcompat_resources_java",
@@ -331,8 +336,11 @@ android_resources("java_resources") {
     "java/res/layout/omnibox_results_container.xml",
     "java/res/layout/suggestions_tile_view.xml",
     "java/res/layout/url_action_container.xml",
+    "java/res/values-night/dimens.xml",
+    "java/res/values-night/drawables.xml",
     "java/res/values/colors.xml",
     "java/res/values/dimens.xml",
+    "java/res/values/drawables.xml",
     "java/res/values/ids.xml",
     "java/res/values/styles.xml",
   ]
@@ -404,6 +412,7 @@ robolectric_library("junit") {
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/DropdownItemViewInfoListBuilderUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/DropdownItemViewInfoListManagerUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/FaviconFetcherUnitTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdownUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/answer/AnswerSuggestionProcessorUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/answer/AnswerTextNewLayoutUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/base/BaseSuggestionProcessorUnitTest.java",
@@ -418,11 +427,14 @@ robolectric_library("junit") {
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/carousel/BaseCarouselSuggestionSelectionManagerUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/carousel/BaseCarouselSuggestionViewBinderUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/clipboard/ClipboardSuggestionProcessorUnitTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/dividerline/DividerLineProcessorUnitTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/dividerline/DividerLineViewBinderUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/editurl/EditUrlSuggestionUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/entity/EntitySuggestionProcessorUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/header/HeaderViewBinderUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/mostvisited/MostVisitedTilesProcessorUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/tail/AlignmentManagerUnitTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/tail/TailSuggestionViewBinderUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/voice/AssistantVoiceSearchServiceUnitTest.java",
   ]
   deps = [

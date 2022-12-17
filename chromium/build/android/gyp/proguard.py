@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright 2013 The Chromium Authors. All rights reserved.
+# Copyright 2013 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -11,7 +11,6 @@ import os
 import re
 import shutil
 import sys
-import tempfile
 import zipfile
 
 import dex
@@ -21,6 +20,12 @@ from util import diff_utils
 
 sys.path.insert(1, os.path.dirname(os.path.dirname(__file__)))
 from pylib.dex import dex_parser
+
+_BLOCKLISTED_EXPECTATION_PATHS = [
+    # A separate expectation file is created for these files.
+    'clank/third_party/google3/pg_confs/'
+]
+
 
 def _ParseOptions():
   args = build_utils.ExpandFileArgs(sys.argv[1:])
@@ -79,6 +84,8 @@ def _ParseOptions():
       '--force-enable-assertions',
       action='store_true',
       help='Forcefully enable javac generated assertion code.')
+  parser.add_argument('--assertion-handler',
+                      help='The class name of the assertion handler class.')
   parser.add_argument(
       '--feature-jars',
       action='append',
@@ -136,8 +143,12 @@ def _ParseOptions():
 
   if bool(options.keep_rules_targets_regex) != bool(
       options.keep_rules_output_path):
-    raise Exception('You must path both --keep-rules-targets-regex and '
-                    '--keep-rules-output-path')
+    parser.error('You must path both --keep-rules-targets-regex and '
+                 '--keep-rules-output-path')
+
+  if options.force_enable_assertions and options.assertion_handler:
+    parser.error('Cannot use both --force-enable-assertions and '
+                 '--assertion-handler')
 
   options.classpath = build_utils.ParseGnList(options.classpath)
   options.proguard_configs = build_utils.ParseGnList(options.proguard_configs)
@@ -306,8 +317,10 @@ def _OptimizeWithR8(options,
     if options.disable_checks:
       # Info level priority logs are not printed by default.
       cmd += ['--map-diagnostics:CheckDiscardDiagnostic', 'error', 'info']
-    elif not options.warnings_as_errors:
-      cmd += ['--map-diagnostics:CheckDiscardDiagnostic', 'error', 'warning']
+    else:
+      cmd += ['--map-diagnostics', 'info', 'warning']
+      if not options.warnings_as_errors:
+        cmd += ['--map-diagnostics', 'error', 'warning']
 
     if options.desugar_jdk_libs_json:
       cmd += [
@@ -320,7 +333,9 @@ def _OptimizeWithR8(options,
     if options.min_api:
       cmd += ['--min-api', options.min_api]
 
-    if options.force_enable_assertions:
+    if options.assertion_handler:
+      cmd += ['--force-assertions-handler:' + options.assertion_handler]
+    elif options.force_enable_assertions:
       cmd += ['--force-enable-assertions']
 
     for lib in libraries:
@@ -536,6 +551,10 @@ def _CombineConfigs(configs,
   ret = []
   for config in sorted(configs, key=sort_key):
     if exclude_generated and config.endswith('.resources.proguard.txt'):
+      continue
+
+    # Exclude some confs from expectations.
+    if any(entry in config for entry in _BLOCKLISTED_EXPECTATION_PATHS):
       continue
 
     with open(config) as config_file:

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -433,6 +433,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // Notify observers of caption style changes.
   virtual void NotifyOnCaptionStyleUpdated();
 
+  // Notify observers of preferred contrast changes.
+  virtual void NotifyOnPreferredContrastUpdated();
+
   // Returns whether the user has an explicit contrast preference.
   virtual bool UserHasContrastPreference() const;
 
@@ -483,11 +486,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   void set_preferred_color_scheme(PreferredColorScheme preferred_color_scheme) {
     preferred_color_scheme_ = preferred_color_scheme;
   }
-  void set_preferred_contrast(PreferredContrast preferred_contrast) {
-    preferred_contrast_ = preferred_contrast;
-  }
+  void SetPreferredContrast(PreferredContrast preferred_contrast);
   void set_system_colors(const std::map<SystemThemeColor, SkColor>& colors);
-  bool is_custom_system_theme() const { return is_custom_system_theme_; }
+  ui::SystemTheme system_theme() const { return system_theme_; }
 
   // Set the user_color for ColorProviderManager::Key.
   void set_user_color(absl::optional<SkColor> user_color) {
@@ -515,15 +516,17 @@ class NATIVE_THEME_EXPORT NativeTheme {
                                  float border_width,
                                  float zoom_level) const;
 
- protected:
-  explicit NativeTheme(bool should_only_use_dark_colors,
-                       bool is_custom_system_theme = false);
-  virtual ~NativeTheme();
-
   // Whether high contrast is forced via command-line flag.
-  bool IsForcedHighContrast() const;
+  static bool IsForcedHighContrast();
+
   // Whether dark mode is forced via command-line flag.
-  bool IsForcedDarkMode() const;
+  static bool IsForcedDarkMode();
+
+ protected:
+  explicit NativeTheme(
+      bool should_only_use_dark_colors,
+      ui::SystemTheme system_theme = ui::SystemTheme::kDefault);
+  virtual ~NativeTheme();
 
   // Calculates and returns the current user preferred color scheme. The
   // base behavior is to set preferred color scheme to light or dark depending
@@ -579,7 +582,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
   absl::optional<SkColor> user_color_;
 
   bool should_use_dark_colors_ = false;
-  const bool is_custom_system_theme_;
+  const ui::SystemTheme system_theme_;
   bool forced_colors_ = false;
   PageColors page_colors_ = PageColors::kOff;
   PreferredColorScheme preferred_color_scheme_ = PreferredColorScheme::kLight;

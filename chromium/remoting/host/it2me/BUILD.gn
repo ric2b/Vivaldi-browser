@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -160,6 +160,7 @@ if (is_chromeos) {
         "//remoting/base:base",
         "//remoting/host:common",
         "//remoting/host/chromeos:enterprise_support",
+        "//remoting/host/chromeos:features",
         "//remoting/host/mojom:mojom",
         "//remoting/host/native_messaging",
         "//skia",
@@ -210,6 +211,9 @@ if (!is_chromeos_ash && enable_remoting_host) {
         "//build/config/linux/gtk",
         "//ui/events/platform/x11",
       ]
+    } else if (remoting_use_wayland) {
+      defines = [ "REMOTING_USE_WAYLAND" ]
+      deps += [ "//ui/gtk:gtk_config" ]
     }
 
     if (is_mac) {

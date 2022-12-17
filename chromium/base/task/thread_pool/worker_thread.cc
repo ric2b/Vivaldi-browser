@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,7 @@
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)
+#if (BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)) || BUILDFLAG(IS_FUCHSIA)
 #include "base/files/file_descriptor_watcher_posix.h"
 #endif
 
@@ -102,8 +102,8 @@ void WorkerThread::Delegate::WaitForWork(WaitableEvent* wake_up_event) {
     defined(PA_THREAD_CACHE_SUPPORTED)
   TimeDelta min_sleep_time = std::min(sleep_time, kPurgeThreadCacheIdleDelay);
 
-  static const base::Feature kDelayFirstWorkerWake{
-      "DelayFirstWorkerWake", base::FEATURE_DISABLED_BY_DEFAULT};
+  static BASE_FEATURE(kDelayFirstWorkerWake, "DelayFirstWorkerWake",
+                      base::FEATURE_DISABLED_BY_DEFAULT);
   // ThreadPoolInstance::Start() must always be after FeatureList
   // initialization. This means this function has access to the feature state on
   // first call. Cache the feature check to avoid the overhead of calling
@@ -157,7 +157,7 @@ bool WorkerThread::Start(
   CheckedAutoLock auto_lock(thread_lock_);
   DCHECK(thread_handle_.is_null());
 
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)
+#if (BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)) || BUILDFLAG(IS_FUCHSIA)
   DCHECK(io_thread_task_runner);
   io_thread_task_runner_ = std::move(io_thread_task_runner);
 #endif
@@ -283,7 +283,7 @@ void WorkerThread::UpdateThreadType(ThreadType desired_thread_type) {
 }
 
 void WorkerThread::ThreadMain() {
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)
+#if (BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)) || BUILDFLAG(IS_FUCHSIA)
   DCHECK(io_thread_task_runner_);
   FileDescriptorWatcher file_descriptor_watcher(io_thread_task_runner_);
 #endif

@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Edita el fitxer}other{Edita els fitxers}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Direcció de la clau</translation>
+<translation id="3294437725009624529">Convidat</translation>
 <translation id="3310640316857623290">La latència DNS supera significativament el llindar permès</translation>
 <translation id="3328783797891415197">La prova s'està executant</translation>
 <translation id="3340011300870565703">L'auricular dret del dispositiu té un <ph name="BATTERY_PERCENTAGE" />% de bateria.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Mentre el microprogramari s'actualitza, no desconnectis el dispositiu extern ni apaguis l'ordinador. Pots minimitzar aquesta finestra. Aquesta actualització pot tardar uns quants minuts i és possible que, durant aquest temps, el dispositiu extern no funcioni.</translation>
 <translation id="3486220673238053218">definició</translation>
 <translation id="3488065109653206955">Activat parcialment</translation>
+<translation id="3510890413042482857">Envia <ph name="BEGIN_LINK1" />dades de traça del rendiment<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Actualitz. ChromeOS</translation>
 <translation id="3527036260304016759">Error: error desconegut</translation>
 <translation id="3532980081107202182">Queden aproximadament <ph name="MIN_REMAINING" /> minuts</translation>
@@ -468,6 +470,7 @@ Toca el micròfon per demanar-me qualsevol cosa.</translation>
 <translation id="5502931783115429516">Android no s'està executant</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Canvia automàticament al tema fosc al vespre</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Torna a escanejar</translation>
 <translation id="5583640892426849032">Retrocés</translation>
@@ -592,7 +595,7 @@ Toca el micròfon per demanar-me qualsevol cosa.</translation>
 <translation id="6692996468359469499">Obtén informació relacionada amb la teva selecció</translation>
 <translation id="6704062477274546131">Resolució de DNS</translation>
 <translation id="6723839937902243910">Bateria</translation>
-<translation id="6723847290197874913">Il·luminació a contrallum del teclat</translation>
+<translation id="6723847290197874913">Retroil·luminació del teclat</translation>
 <translation id="672609503628871915">Novetats</translation>
 <translation id="6747215703636344499">S'ha aturat: safata de sortida plena</translation>
 <translation id="6749473226660745022">Fotos</translation>

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -153,7 +153,7 @@ public class OfflineContentAggregatorNotificationBridgeUi
         // TODO(http://crbug.com/855141): Find a cleaner way to hide unimportant UI updates.
         // If it's a suggested page, or the user choose to download later. Do not add it to the
         // notification UI.
-        if (item.isSuggested || item.schedule != null) return;
+        if (item.isSuggested) return;
 
         // If the download is cancelled, no need to DownloadInfo object and it is enough to notify
         // that the download is canceled.

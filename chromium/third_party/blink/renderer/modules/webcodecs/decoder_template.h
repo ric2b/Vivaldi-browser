@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,7 +60,7 @@ class MODULES_EXPORT DecoderTemplate
   ~DecoderTemplate() override;
 
   uint32_t decodeQueueSize();
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(dequeue, kDequeue);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(dequeue, kDequeue)
   void configure(const ConfigType*, ExceptionState&);
   void decode(const InputType*, ExceptionState&);
   ScriptPromise flush(ExceptionState&);
@@ -116,7 +116,12 @@ class MODULES_EXPORT DecoderTemplate
   // DecoderBuffer::is_key_frame() value. I.e., they must process the encoded
   // data to ensure the value is actually what the chunk says it is.
   virtual media::DecoderStatus::Or<scoped_refptr<media::DecoderBuffer>>
-  MakeDecoderBuffer(const InputType& chunk, bool verify_key_frame) = 0;
+  MakeInput(const InputType& chunk, bool verify_key_frame) = 0;
+
+  // Convert an output to the WebCodecs type.
+  virtual media::DecoderStatus::Or<OutputType*> MakeOutput(
+      scoped_refptr<MediaOutputType> output,
+      ExecutionContext* context) = 0;
 
  private:
   struct Request final : public GarbageCollected<Request> {
@@ -207,6 +212,10 @@ class MODULES_EXPORT DecoderTemplate
 
   // Monotonic increasing generation counter for calls to ResetAlgorithm().
   uint32_t reset_generation_ = 0;
+
+  // Set on Shutdown(), used to generate accurate abort messages.
+  bool shutting_down_ = false;
+  bool shutting_down_due_to_error_ = false;
 
   // Which state the codec is in, determining which calls we can receive.
   V8CodecState state_;

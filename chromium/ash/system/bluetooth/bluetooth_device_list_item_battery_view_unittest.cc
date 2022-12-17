@@ -1,16 +1,14 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/system/bluetooth/bluetooth_device_list_item_battery_view.h"
 
-#include "ash/constants/ash_features.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/test/ash_test_base.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/test/scoped_feature_list.h"
-#include "chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
+#include "chromeos/ash/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_unittest_util.h"
@@ -19,17 +17,11 @@
 #include "ui/views/widget/widget.h"
 
 namespace ash {
-namespace {
-using chromeos::bluetooth_config::mojom::BatteryProperties;
-using chromeos::bluetooth_config::mojom::BatteryPropertiesPtr;
-}  // namespace
 
 class BluetoothDeviceListItemBatteryViewTest : public AshTestBase {
  public:
   void SetUp() override {
     AshTestBase::SetUp();
-
-    feature_list_.InitAndEnableFeature(features::kBluetoothRevamp);
 
     widget_ = CreateTestWidget();
     bluetooth_device_list_battery_item_ =
@@ -84,7 +76,6 @@ class BluetoothDeviceListItemBatteryViewTest : public AshTestBase {
         bluetooth_device_list_battery_item()->children().at(1));
   }
 
-  base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<views::Widget> widget_;
   std::unique_ptr<BluetoothDeviceListItemBatteryView>
       bluetooth_device_list_battery_item_;

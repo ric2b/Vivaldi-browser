@@ -1,5 +1,5 @@
 <!--
-Copyright 2017 The Chromium Authors. All rights reserved.
+Copyright 2017 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -453,14 +453,68 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="AdPageLoadCustomSampling" singular="True">
+  <obsolete>
+    Removed 2022/10 in favor of AdPageLoadCustomSampling2
+  </obsolete>
   <owner>yaoxia@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
     Recorded when a page has loaded non-zero ad bytes, and the page is being
-    destroyed/navigated or when the app enters the background on mobile. This is
-    separate from the `AdPageLoad` event to allow a potentially different
-    sampling.
+    destroyed/navigated away or when the app enters the background on mobile.
+    This is separate from the `AdPageLoad` event to allow a potentially
+    different sampling.
+  </summary>
+  <metric name="AverageViewportAdDensity">
+    <summary>
+      The estimated average viewport ad density. Each density value is
+      calculated as the area of ads within the viewport * 100 / viewport area,
+      where each overlapping area is counted once. And this returns the average
+      of the densities accumulated over the page load time rounded to the
+      nearest integer.
+    </summary>
+  </metric>
+  <metric name="KurtosisViewportAdDensity">
+    <summary>
+      The estimated kurtosis of the viewport ad density. Each density value is
+      calculated as the area of ads within the viewport * 100 / viewport area,
+      where each overlapping area is counted once. And this returns the kurtosis
+      of the densities accumulated over the page load time rounded to the
+      nearest exponential bucket integer with bucket spacing 1.3. For negative
+      values, the bucketing will be taken on its magnitude part.
+    </summary>
+  </metric>
+  <metric name="SkewnessViewportAdDensity">
+    <summary>
+      The estimated skewness of the viewport ad density. Each density value is
+      calculated as the area of ads within the viewport * 100 / viewport area,
+      where each overlapping area is counted once. And this returns the skewness
+      of the densities accumulated over the page load time rounded to the
+      nearest exponential bucket integer with bucket spacing 1.3. For negative
+      values, the bucketing will be taken on its magnitude part.
+    </summary>
+  </metric>
+  <metric name="VarianceViewportAdDensity">
+    <summary>
+      The estimated variance of the viewport ad density. Each density value is
+      calculated as the area of ads within the viewport * 100 / viewport area,
+      where each overlapping area is counted once. And this returns the variance
+      of the densities accumulated over the page load time rounded to the
+      nearest exponential bucket integer with bucket spacing 1.3. For negative
+      values, the bucketing will be taken on its magnitude part.
+    </summary>
+  </metric>
+</event>
+
+<event name="AdPageLoadCustomSampling2" singular="True">
+  <owner>yaoxia@chromium.org</owner>
+  <owner>johnidel@chromium.org</owner>
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    Recorded when the page is being destroyed/navigated away or when the app
+    enters the background on mobile. This is separate from the `AdPageLoad`
+    event to allow it to be recorded on all pages (i.e. not only pages that have
+    loaded non-zero ad byte), and to allow a potentially different sampling.
   </summary>
   <metric name="AverageViewportAdDensity">
     <summary>
@@ -539,7 +593,7 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.AverageUserInteractionLatencyOverBudget.MaxEventduration">
+      name="SubFrame.InteractiveTiming.AverageUserInteractionLatencyOverBudget.MaxEventDuration2">
     <summary>
       The average value of user interaction latency above budget of a page load
       in AMP subframes, in ms. For this metric, we measure the latency of user
@@ -550,10 +604,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.AverageUserInteractionLatencyOverBudget.TotalEventduration">
+      name="SubFrame.InteractiveTiming.AverageUserInteractionLatencyOverBudget.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The average value of user interaction latency above budget of a page load
@@ -591,10 +645,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile.MaxEventduration">
+      name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile.MaxEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
@@ -606,10 +660,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile.TotalEventduration">
+      name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
@@ -621,7 +675,7 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile2.MaxEventduration">
+      name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile2.MaxEventDuration2">
     <summary>
       An approximation of high percentile of user interaction latency above
       budget of a page load in AMP subframes, in ms. For this metric, we measure
@@ -632,10 +686,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile2.TotalEventduration">
+      name="SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget.HighPercentile2.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
@@ -647,7 +701,7 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.SumOfUserInteractionLatencyOverBudget.MaxEventduration">
+      name="SubFrame.InteractiveTiming.SumOfUserInteractionLatencyOverBudget.MaxEventDuration2">
     <summary>
       The sum of user interaction latency above budget of a page load in AMP
       subframes, in ms. For this metric, we measure the latency of user
@@ -658,10 +712,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.SumOfUserInteractionLatencyOverBudget.TotalEventduration">
+      name="SubFrame.InteractiveTiming.SumOfUserInteractionLatencyOverBudget.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The sum of user interaction latency above budget of a page load in AMP
@@ -681,7 +735,7 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.WorstUserInteractionLatency.MaxEventduration">
+      name="SubFrame.InteractiveTiming.WorstUserInteractionLatency.MaxEventDuration2">
     <summary>
       The maximum value of high percentile of user interaction latency above
       budget of a page load in AMP subframes, in ms. For this metric, we measure
@@ -690,10 +744,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.WorstUserInteractionLatency.TotalEventduration">
+      name="SubFrame.InteractiveTiming.WorstUserInteractionLatency.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of high percentile of user interaction latency above
@@ -703,10 +757,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.WorstUserInteractionLatencyOverBudget.MaxEventduration">
+      name="SubFrame.InteractiveTiming.WorstUserInteractionLatencyOverBudget.MaxEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency above budget of a page load
@@ -718,10 +772,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SubFrame.InteractiveTiming.WorstUserInteractionLatencyOverBudget.TotalEventduration">
+      name="SubFrame.InteractiveTiming.WorstUserInteractionLatencyOverBudget.TotalEventDuration2">
     <obsolete>
       Removed March 2022 in favor of
-      SlowUserInteractionLatency.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatency.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency above budget of a page load
@@ -1615,6 +1669,46 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Autofill.AddressProfileImport">
+  <owner>vidhanj@google.com</owner>
+  <owner>koerber@google.com</owner>
+  <summary>
+    Recorded after a form submission that either resulted in a save prompt for
+    addresses or in a silent update of an already existing profile.
+  </summary>
+  <metric name="AutocompleteUnrecognizedImport" enum="Boolean">
+    <summary>
+      Logs if data was imported from a field that has autocomplete=UNRECOGNIZED.
+    </summary>
+  </metric>
+  <metric name="ImportType" enum="AutofillProfileImportType">
+    <summary>
+      Logs the import type of the storage prompt. An import type can be either
+      the import of a new profile, an update of an existing profile that results
+      in a confirmation dialog, or a silent update that only changes the
+      structure of an already stored address but does not affect any
+      settings-visible stored data.
+    </summary>
+  </metric>
+  <metric name="NumberOfEditedFields">
+    <summary>
+      Logs the count for the number of fields that have been edited by the user
+      in the storage dialog before the storage was confirmed.
+    </summary>
+  </metric>
+  <metric name="PhoneNumberStatus" enum="AutofillPhoneImportValidity">
+    <summary>
+      Logs the phone number validity status based on whether the phone number
+      was imported in the profile or not or removed beforehand.
+    </summary>
+  </metric>
+  <metric name="UserDecision" enum="AutofillProfileImportDecision">
+    <summary>
+      Logs the user decision based on the storage prompt.
+    </summary>
+  </metric>
+</event>
+
 <event name="Autofill.CardUploadDecision">
   <owner>sebsg@chromium.org</owner>
   <metric name="UploadDecision">
@@ -1948,6 +2042,12 @@ be describing additional metrics about the same event.
   <metric name="AutocompleteFills">
     <summary>
       Number of Autocomplete fills invoked by the user on the current form.
+    </summary>
+  </metric>
+  <metric name="AutofillAssistantIntent" enum="AutofillAssistantIntent">
+    <summary>
+      Describes the trigger source that invoked Autofill. Only recorded if
+      AutofillAssistantIntent was not undefined.
     </summary>
   </metric>
   <metric name="AutofillFills">
@@ -2901,7 +3001,7 @@ be describing additional metrics about the same event.
     RenderFrameHost::IsInactiveAndDisallowActivation. The source IDs match with
     the source IDs of HistoryNavigation events.
   </summary>
-  <metric name="Reason" enum="BackForwardCacheDisallowActivationReason">
+  <metric name="Reason" enum="InactiveFrameDisallowActivationReason">
     <summary>
       For history navigations, records the reason passed to
       RenderFrameHost::IsInactiveAndDisallowActivation.
@@ -5193,6 +5293,50 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="ChargeEventHistory">
+  <owner>thanhdng@chromium.org</owner>
+  <summary>
+    Records history of charge events including start time and duration of
+    charges. Can be used with other ChargeEventHistory to track the last 30 days
+    of charging events. If a &quot;SmartCharging&quot; event and a
+    &quot;ChargeEventHistory&quot; event has them same source ID and
+    &quot;EventId&quot;, it means &quot;ChargeEventHistory&quot; is the charge
+    history when &quot;SmartCharging&quot; event is logged. ChargeEventHistory
+    records an array. Each ChargeEventHistory event records an item in the
+    array, specified by it's index ChargeEventHistoryIndex. Items in the same
+    array will have same source ID and EventId.
+  </summary>
+  <metric name="ChargeEventHistoryDuration">
+    <summary>
+      Duration of a history charge event.
+    </summary>
+  </metric>
+  <metric name="ChargeEventHistoryIndex">
+    <summary>
+      Index of this event in the ChargeEventHistory array. Please see the event
+      summary for more details.
+    </summary>
+  </metric>
+  <metric name="ChargeEventHistorySize">
+    <summary>
+      Number of items in ChargeEventHistory array. Please see the event summary
+      for more details.
+    </summary>
+  </metric>
+  <metric name="ChargeEventHistoryStartTime">
+    <summary>
+      Duration (in minutes) between start time of a charge event and logging
+      time.
+    </summary>
+  </metric>
+  <metric name="EventId">
+    <summary>
+      A unique number that represent order of an event. Used combined with
+      &quot;SmartCharging&quot;'s EventId to reconstruct charge history.
+    </summary>
+  </metric>
+</event>
+
 <event name="ChromeOS.WebsiteUsageTime">
   <owner>nancylingwang@chromium.org</owner>
   <owner>dominickn@chromium.org</owner>
@@ -6205,6 +6349,64 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="DailyChargeSummary">
+  <owner>thanhdng@chromium.org</owner>
+  <summary>
+    Records daily summaries of charging. DailyChargeSummary summarizes charging
+    information (e.g. amount of time on full charge, amount of time on AC
+    adapter, etc) in a day. It can be used in combination with other
+    DailyChargeSummary events to get information about the last 30 days of
+    charging. If a &quot;SmartCharging&quot; event and a
+    &quot;DailyChargeSummary&quot; event has them same source ID and
+    &quot;EventId&quot;, it means &quot;DailyChargeSummary&quot; is the summary
+    when &quot;SmartCharging&quot; event is logged. DailyChargeSummary records
+    an array. Each event records an item in the array, specified by it's index
+    DailySummaryIndex. Items in the same array will have same source ID and
+    EventId.
+  </summary>
+  <metric name="DailySummaryHoldTimeOnAc">
+    <summary>
+      Amount of time (in minutes) the device was on AC charger and the charge
+      was hold due to adaptive charging, at an index specified by
+      DailySummaryIndex.
+    </summary>
+  </metric>
+  <metric name="DailySummaryIndex">
+    <summary>
+      Index of this event in the array. Please see the event summary for more
+      details.
+    </summary>
+  </metric>
+  <metric name="DailySummaryNumDaysDistance">
+    <summary>
+      Distance in days bettwen current day and the day that the daily summary
+      was logged.
+    </summary>
+  </metric>
+  <metric name="DailySummarySize">
+    <summary>
+      Number of items in array. Please see the event summary for more details.
+    </summary>
+  </metric>
+  <metric name="DailySummaryTimeFullOnAc">
+    <summary>
+      Amount of time (in minutes) the device was keep on AC charger with full
+      battery (100%).
+    </summary>
+  </metric>
+  <metric name="DailySummaryTimeOnAc">
+    <summary>
+      Amount of time (in minutes) the device was keep on AC charger.
+    </summary>
+  </metric>
+  <metric name="EventId">
+    <summary>
+      A number that represent order of an event. Used combined with
+      &quot;SmartCharging&quot;'s EventId to reconstruct charge history.
+    </summary>
+  </metric>
+</event>
+
 <event name="DataReductionProxy" singular="True">
   <owner>robertogden@chromium.org</owner>
   <summary>
@@ -6938,6 +7140,72 @@ be describing additional metrics about the same event.
         <index fields="profile.country"/>
         <statistics>
           <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="GamingInputOverlay.Customization">
+  <owner>pjlee@google.com</owner>
+  <owner>cuicuiruan@google.com</owner>
+  <owner>arc-gaming@google.com</owner>
+  <summary>
+    An event for gaming input overlay that is logged when users enter into edit
+    mode.
+  </summary>
+  <metric name="CustomizationUsed" enum="Boolean">
+    <summary>
+      Whether the customization option was used.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="GamingInputOverlay.Feature">
+  <owner>pjlee@google.com</owner>
+  <owner>cuicuiruan@google.com</owner>
+  <owner>arc-gaming@google.com</owner>
+  <summary>
+    An event for gaming input overlay that is logged when the input overlay
+    feature itself changes state.
+  </summary>
+  <metric name="FeatureStateOn" enum="Boolean">
+    <summary>
+      Whether the gaming input overlay feature is in use.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="GamingInputOverlay.MappingHint">
+  <owner>pjlee@google.com</owner>
+  <owner>cuicuiruan@google.com</owner>
+  <owner>arc-gaming@google.com</owner>
+  <summary>
+    An event for gaming input overlay that is logged when the mapping hint state
+    is changed.
+  </summary>
+  <metric name="MappingHintStateOn" enum="Boolean">
+    <summary>
+      Whether the mapping hint for gaming input overlay is on.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
         </statistics>
       </history>
     </aggregation>
@@ -9378,7 +9646,7 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="AverageUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.MaxEventduration">
+      name="AverageUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.MaxEventDuration2">
     <summary>
       The average value of user interaction latency above budget of a page after
       it is restored from the back-forward, in ms. For this metric, we measure
@@ -9389,10 +9657,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="AverageUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.TotalEventduration">
+      name="AverageUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.TotalEventDuration2">
     <obsolete>
       Deprecated March 2022 in favor of
-      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The average value of user interaction latency above budget of a page after
@@ -9618,10 +9886,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.HighPercentile.MaxEventduration">
+      name="SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.HighPercentile.MaxEventDuration2">
     <obsolete>
       Deprecated March 2022 in favor of
-      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
@@ -9633,10 +9901,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.HighPercentile.TotalEventduration">
+      name="SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.HighPercentile.TotalEventDuration2">
     <obsolete>
       Deprecated March 2022 in favor of
-      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
@@ -9648,7 +9916,7 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.HighPercentile2.MaxEventduration">
+      name="SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration2">
     <summary>
       An approximation of high percentile of user interaction latency above
       budget of a page after it is restored from the back-forward, in ms. For
@@ -9659,10 +9927,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.HighPercentile2.TotalEventduration">
+      name="SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.HighPercentile2.TotalEventDuration2">
     <obsolete>
       Deprecated March 2022 in favor of
-      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       An approximation of high percentile of user interaction latency above
@@ -9674,7 +9942,7 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SumOfUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.MaxEventduration">
+      name="SumOfUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.MaxEventDuration2">
     <summary>
       The sum of user interaction latency above budget of a page after it is
       restored from the back-forward, in ms. For this metric, we measure the
@@ -9685,10 +9953,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="SumOfUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.TotalEventduration">
+      name="SumOfUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.TotalEventDuration2">
     <obsolete>
       Deprecated March 2022 in favor of
-      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The sum of user interaction latency above budget of a page after it is
@@ -9725,7 +9993,7 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="WorstUserInteractionLatencyAfterBackForwardCacheRestore.MaxEventduration">
+      name="WorstUserInteractionLatencyAfterBackForwardCacheRestore.MaxEventDuration2">
     <summary>
       The maximum value of user interaction latency of a page after it is
       restored from the back-forward, in ms. For this metric, we measure the
@@ -9734,10 +10002,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="WorstUserInteractionLatencyAfterBackForwardCacheRestore.TotalEventduration">
+      name="WorstUserInteractionLatencyAfterBackForwardCacheRestore.TotalEventDuration2">
     <obsolete>
       Deprecated March 2022 in favor of
-      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency of a page after it is
@@ -9747,10 +10015,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="WorstUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.MaxEventduration">
+      name="WorstUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.MaxEventDuration2">
     <obsolete>
       Deprecated March 2022 in favor of
-      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency above budget of a page after
@@ -9762,10 +10030,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric
-      name="WorstUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.TotalEventduration">
+      name="WorstUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore.TotalEventDuration2">
     <obsolete>
       Deprecated March 2022 in favor of
-      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventduration
+      SlowUserInteractionLatencyAfterBackForwardCacheRestore.HighPercentile2.MaxEventDuration
     </obsolete>
     <summary>
       The maximum value of user interaction latency above budget of a page after
@@ -12669,6 +12937,24 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Navigation.IDNA2008Transition" singular="True">
+  <owner>meacer@google.com</owner>
+  <owner>chrome-trusty-transport@google.com</owner>
+  <summary>
+    Recorded upon main frame navigations to hostnames that contain characters
+    that are treated differently between IDNA 2003 and IDNA 2008, aka deviation
+    characters. Ignores reload navigations.
+  </summary>
+  <metric name="Character" enum="IDNA2008DeviationCharacter">
+    <summary>
+      The deviation character in the URLs eTLD+1. Chrome's URL parsing code
+      normalizes deviation characters so the characters don't appear in the
+      recorded URL. This is recorded to make the deviation character
+      identification simpler.
+    </summary>
+  </metric>
+</event>
+
 <event name="Navigation.ReceivedResponse">
   <owner>miketaylr@chromium.org</owner>
   <owner>potassium-katabolism@google.com</owner>
@@ -12912,7 +13198,7 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
-<event name="NavigationThrottleDeferredTime" singular="False">
+<event name="NavigationThrottleDeferredTime">
   <owner>ryansturm@chromium.org</owner>
   <owner>chrome-brapp-loading@google.com</owner>
   <summary>
@@ -13478,6 +13764,9 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="PageContentAnnotations" singular="True">
+  <obsolete>
+    Removed in 10/2022.
+  </obsolete>
   <owner>chrome-intelligence-core@google.com</owner>
   <owner>mcrouse@chromium.org</owner>
   <summary>
@@ -14361,6 +14650,19 @@ be describing additional metrics about the same event.
       interactions by Responsiveness.UserInteraction.MaxEventDuration.
     </summary>
   </metric>
+  <metric
+      name="InteractiveTiming.UserInteractionLatencyAtFirstOnHidden.HighPercentile2.MaxEventDuration">
+    <summary>
+      An approximation of a high percentile of user interaction latency of a
+      page load, in ms. For this metric, we measure the latency of user
+      interactions by Responsiveness.UserInteraction.MaxEventDuration. We record
+      it when a page is moved from the foreground to the background for the
+      first time. This metric is trying to record the INP values which are not
+      able to be recorded in
+      InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration
+      for some reasons.
+    </summary>
+  </metric>
   <metric name="InteractiveTiming.WorstUserInteractionLatency.MaxEventDuration">
     <summary>
       The maximum value of user interaction latency of a page load, in ms. For
@@ -15213,10 +15515,43 @@ be describing additional metrics about the same event.
       removed from the page. See http://bit.ly/fcp_plus_plus for more details.
     </summary>
   </metric>
+  <metric name="PaintTiming.NavigationToLargestContentfulPaint2AtFirstOnHidden">
+    <summary>
+      Measures the time in milliseconds from navigation timing's navigation
+      start to the time when the page first paints the largest content (text or
+      image) within viewport, across all frames. Recorded at the point when a
+      page which has been opened in the foreground is moved to the background
+      for the first time. See http://bit.ly/fcp_plus_plus for more details. Log
+      of major changes: http://bit.ly/chrome-speed-metrics-changelog. This
+      metric is trying to record the LCP values which are not able to be
+      recorded in PaintTiming.NavigationToLargestContentfulPaint2 for some
+      reasons.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.is_dominant_version"/>
+        <index fields="profile.is_latest_version"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
   <metric name="ParseTiming.NavigationToParseStart">
     <summary>
       Measures the time in milliseconds from navigation timing's navigation
       start to the time the parser started, for main frame documents.
+    </summary>
+  </metric>
+  <metric name="RefreshRateThrottled" enum="Boolean">
+    <summary>
+      Records whether the refresh rate is throttled (capped to 30Hz) by Power
+      Saver Mode for this Page Load, when the navigation starts. It is possible
+      but very unlikely for this to change mid navigation, for instance due to a
+      change by the user in settings or the battery being recharged above 20%.
     </summary>
   </metric>
   <metric name="SiteEngagementScore">
@@ -16231,6 +16566,113 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="PerformanceManager.PageTimelineState">
+  <owner>anthonyvd@chromium.org</owner>
+  <owner>spvw@chromium.org</owner>
+  <summary>
+    Metrics detailing the lifecycle state of tabs over the course of the
+    execution of the browser. One slice is collected on a heartbeat every approx
+    100 minutes on average (but dependent on PRNG). A slice is a collection of
+    PageTimelineState UKM events. One PageTimelineState is recorded for each
+    browser tab when a slice is collected.
+  </summary>
+  <metric name="BatterySaverMode" enum="Boolean">
+    <summary>
+      True if Batter Saver Mode is enabled at the time this event is recorded.
+    </summary>
+  </metric>
+  <metric name="ChangedFaviconOrTitleInBackground" enum="Boolean">
+    <summary>
+      True if this page has been observed to change its favicon or title when in
+      the background.
+    </summary>
+  </metric>
+  <metric name="CurrentState" enum="PageState">
+    <summary>
+      The state the tab was in when the slice was recorded.
+    </summary>
+  </metric>
+  <metric name="HasNotificationPermission" enum="Boolean">
+    <summary>
+      True if this page has been granted the notification permission.
+    </summary>
+  </metric>
+  <metric name="HighEfficiencyMode" enum="Boolean">
+    <summary>
+      True if High Efficiency Mode is enabled at the time this event is
+      recorded.
+    </summary>
+  </metric>
+  <metric name="IsActiveTab" enum="Boolean">
+    <summary>
+      True if this page is the active tab in its tab strip.
+    </summary>
+  </metric>
+  <metric name="IsCapturingMedia" enum="Boolean">
+    <summary>
+      True if this page is capturing media (audio/video/screen).
+    </summary>
+  </metric>
+  <metric name="IsConnectedToDevice" enum="Boolean">
+    <summary>
+      True if this page is connected to a BT or USB device.
+    </summary>
+  </metric>
+  <metric name="IsPlayingAudio" enum="Boolean">
+    <summary>
+      True if this page is playing audio.
+    </summary>
+  </metric>
+  <metric name="ResidentSetSize">
+    <summary>
+      The total resident set size footprint of this page at the moment the
+      sample was recorded, in bytes.
+    </summary>
+  </metric>
+  <metric name="SliceId">
+    <summary>
+      A strictly increasing ID used to order slices in relation to each other.
+      This is not zero for the first slice, but rather is a randomly chosen
+      number to make it more difficult to derive exact browser uptime.
+
+      A &quot;slice&quot; is a collection of PageTimelineStates recorded at the
+      same time.
+    </summary>
+  </metric>
+  <metric name="TabId">
+    <summary>
+      A monotonically increasing generated id assigned to a tab, enabling
+      analysis of a tab's lifecycle across several slices. This is necessary
+      because a URL isn't sufficient to identify a tab: multiple tabs can be
+      open for the same URL, and a tab containing foo.com and be closed, with
+      another re-opened between two slice snapshots.
+    </summary>
+  </metric>
+  <metric name="TimeInCurrentState">
+    <summary>
+      The time in milliseconds spent in the current state. Exponentially
+      bucketed.
+    </summary>
+  </metric>
+  <metric name="TimeSinceCreation">
+    <summary>
+      Time in milliseconds since this tab was created. Exponentially bucketed.
+    </summary>
+  </metric>
+  <metric name="TimeSinceLastSlice">
+    <summary>
+      The time in milliseconds since the last slice was recorded. Exponentially
+      bucketed.
+    </summary>
+  </metric>
+  <metric name="TotalForegroundTime">
+    <summary>
+      Cumulative time in milliseconds spent in foreground by this tab since its
+      creation. Exponentially bucketed.
+    </summary>
+  </metric>
+</event>
+
 <event name="PeriodicBackgroundSyncEventCompleted">
   <owner>nator@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
@@ -17133,10 +17575,30 @@ be describing additional metrics about the same event.
       SRP link.
     </summary>
   </metric>
+  <metric name="PrefetchHeaderLatencyMs">
+    <summary>
+      Time between the prefetch request was sent and the time the response
+      headers were received. Unset if the headers have not been receved by the
+      time the user navigated to the current page.
+    </summary>
+  </metric>
+  <metric name="PrivatePrefetch">
+    <summary>
+      This is 1 if the prefetched resource was prefetched via the private
+      prefetch proxy. This is not logged otherwise.
+    </summary>
+  </metric>
   <metric name="ProbeLatencyMs">
     <summary>
       How long the network probe blocked commit in milliseconds. Recorded only
       when a probe was required.
+    </summary>
+  </metric>
+  <metric name="SameTabAsPrefetchingTab">
+    <summary>
+      This is 1 if the page load matching the prefetch was in the same
+      WebContents as the page that triggerd the prefetch. This is not logged
+      otherwise.
     </summary>
   </metric>
   <metric name="SRPClickPrefetchStatus" enum="PrefetchProxyPrefetchStatus">
@@ -17449,11 +17911,46 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric
+      name="InteractiveTiming.AverageUserInteractionLatencyOverBudget.MaxEventDuration">
+    <summary>
+      The average value of user interaction latency above budget of a
+      prerendered page after it is successfully activated, in ms. For this
+      metric, we measure the latency of user interactions by
+      Responsiveness.UserInteraction.MaxEventDuration and we deduct a budget
+      from the original value. If the latency value is below the budget, it will
+      be treated as 0 ms. Each type of interaction has its own budget.
+    </summary>
+  </metric>
   <metric name="InteractiveTiming.FirstInputDelay4">
     <summary>
       The duration between the hardware timestamp and the start of event
       processing on the main thread for the first meaningful input. Recorded on
       the prerender activation.
+    </summary>
+  </metric>
+  <metric name="InteractiveTiming.NumInteractions">
+    <summary>
+      The number of distinct user interactions on a prerendered page after it is
+      successfully activated. See definition of user interaction:
+      https://web.dev/better-responsiveness-metric/#group-events-into-interactions
+    </summary>
+  </metric>
+  <metric
+      name="InteractiveTiming.UserInteractionLatency.HighPercentile2.MaxEventDuration">
+    <summary>
+      An approximation of a high percentile of user interaction latency of a
+      prerendered page after it is successfully activated, in ms. For this
+      metric, we measure the latency of user interactions by
+      Responsiveness.UserInteraction.MaxEventDuration.
+    </summary>
+  </metric>
+  <metric name="InteractiveTiming.WorstUserInteractionLatency.MaxEventDuration">
+    <summary>
+      The maximum value of user interaction latency of a prerendered page after
+      it is successfully activated, in ms. For this metric, we measure the
+      latency of user interactions by
+      Responsiveness.UserInteraction.MaxEventDuration.
     </summary>
   </metric>
   <metric
@@ -18213,6 +18710,22 @@ be describing additional metrics about the same event.
       the responsiveness of a tab. A lower value means the tab will respond to
       inputs faster. This metric is equal to
       RendererScheduler.ExpectedTaskQueueingDuration of the main frame process.
+    </summary>
+  </metric>
+</event>
+
+<event name="SalientImageAvailability" singular="True">
+  <owner>chrome-intelligence-core@google.com</owner>
+  <owner>tbansal@chromium.org</owner>
+  <summary>
+    Metrics on the salient image of the page, one record per page load commit
+    and has an annotation calculated on it.
+  </summary>
+  <metric name="ImageAvailability"
+      enum="OptimizationGuideSalientImageAvailability">
+    <summary>
+      Records whether salient image was available or not for this page, the
+      source of the salient image and why it was unavailable.
     </summary>
   </metric>
 </event>

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,6 +44,10 @@ class CONTENT_EXPORT PreloadingAttemptImpl : public PreloadingAttempt {
       PreloadingType preloading_type,
       ukm::SourceId triggered_primary_page_source_id,
       PreloadingURLMatchCallback url_match_predicate);
+
+  PreloadingTriggeringOutcome get_triggering_outcome_for_testing() const {
+    return triggering_outcome_;
+  }
 
  private:
   // Reason why the preloading attempt failed, this is similar to specific

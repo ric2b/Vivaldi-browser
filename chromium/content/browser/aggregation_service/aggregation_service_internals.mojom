@@ -1,10 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 module aggregation_service_internals.mojom;
 
-import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
 import "mojo/public/mojom/base/int128.mojom";
 
@@ -28,7 +27,8 @@ enum ReportStatus {
 
 // Struct containing aggregatable report data.
 struct WebUIAggregatableReport {
-  AggregatableReportRequestID id;
+  // Null indicates a report that wasn't stored/scheduled.
+  AggregatableReportRequestID? id;
   // Javascript convention for times, a number of milliseconds since the epoch.
   double report_time;
   string api_identifier;

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,6 +47,8 @@ class TestCertVerifierServiceFactoryImpl
   void GetNewCertVerifier(
       mojo::PendingReceiver<mojom::CertVerifierService> receiver,
       mojom::CertVerifierCreationParamsPtr creation_params) override;
+  void GetServiceParamsForTesting(
+      GetServiceParamsForTestingCallback callback) override;
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
   void UpdateChromeRootStore(mojom::ChromeRootStorePtr new_root_store) override;
@@ -71,6 +73,7 @@ class TestCertVerifierServiceFactoryImpl
         scoped_refptr<base::SequencedTaskRunner> owning_task_runner);
 
     void Init(
+        mojom::CertVerifierServiceParamsPtr params,
         mojo::PendingReceiver<cert_verifier::mojom::CertVerifierServiceFactory>
             receiver);
 

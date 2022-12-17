@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -466,10 +466,10 @@ TEST_F(LocalStorageImplTest, GetStorageUsage_Data) {
 
   std::vector<mojom::StorageUsageInfoPtr> info = GetStorageUsageSync();
   ASSERT_EQ(2u, info.size());
-  if (info[0]->origin == storage_key2.origin())
+  if (info[0]->storage_key == storage_key2)
     std::swap(info[0], info[1]);
-  EXPECT_EQ(storage_key1.origin(), info[0]->origin);
-  EXPECT_EQ(storage_key2.origin(), info[1]->origin);
+  EXPECT_EQ(storage_key1, info[0]->storage_key);
+  EXPECT_EQ(storage_key2, info[1]->storage_key);
   EXPECT_LE(before_write, info[0]->last_modified);
   EXPECT_LE(before_write, info[1]->last_modified);
   EXPECT_GE(after_write, info[0]->last_modified);

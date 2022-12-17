@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -149,8 +149,9 @@ void ArcDiskQuotaBridge::GetCurrentSpaceForProjectId(
 
 void ArcDiskQuotaBridge::GetFreeDiskSpace(GetFreeDiskSpaceCallback callback) {
   ash::SpacedClient::Get()->GetFreeDiskSpace(
-      "/home", base::BindOnce(&ArcDiskQuotaBridge::OnGetFreeDiskSpace,
-                              weak_factory_.GetWeakPtr(), std::move(callback)));
+      "/home/chronos/user",
+      base::BindOnce(&ArcDiskQuotaBridge::OnGetFreeDiskSpace,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void ArcDiskQuotaBridge::OnGetFreeDiskSpace(GetFreeDiskSpaceCallback callback,

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/events/security_policy_violation_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -27,6 +26,7 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worklet_global_scope.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -122,7 +122,7 @@ void ExecutionContextCSPDelegate::AddInsecureRequestPolicy(
     // WorkerGlobalScope::Url() before it's ready. https://crbug.com/861564
     // This should be safe, because the insecure navigations set is not used
     // in non-Document contexts.
-    if (window && !Url().Host().IsEmpty()) {
+    if (window && !Url().Host().empty()) {
       uint32_t hash = Url().Host().Impl()->GetHash();
       security_context.AddInsecureNavigationUpgrade(hash);
       if (auto* frame = window->GetFrame()) {
@@ -136,7 +136,7 @@ void ExecutionContextCSPDelegate::AddInsecureRequestPolicy(
 
 std::unique_ptr<SourceLocation>
 ExecutionContextCSPDelegate::GetSourceLocation() {
-  return SourceLocation::Capture(execution_context_);
+  return CaptureSourceLocation(execution_context_);
 }
 
 absl::optional<uint16_t> ExecutionContextCSPDelegate::GetStatusCode() {
@@ -167,7 +167,7 @@ void ExecutionContextCSPDelegate::DispatchViolationEvent(
   execution_context_->GetTaskRunner(TaskType::kNetworking)
       ->PostTask(
           FROM_HERE,
-          WTF::Bind(
+          WTF::BindOnce(
               &ExecutionContextCSPDelegate::DispatchViolationEventInternal,
               WrapPersistent(this), WrapPersistent(&violation_data),
               WrapPersistent(element)));

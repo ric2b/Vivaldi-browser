@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,6 +98,10 @@ base::span<const MatchPatternRef> GetMatchPatterns(
     PatternSource pattern_source) {
   return GetMatchPatterns(FieldTypeToStringPiece(type), language_code,
                           pattern_source);
+}
+
+bool IsSupportedLanguageCode(LanguageCode language_code) {
+  return kLanguages.contains(*language_code);
 }
 
 // The dereferencing operator implements the distinction between ordinary and

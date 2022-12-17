@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,13 +33,12 @@ import org.robolectric.annotation.LooperMode.Mode;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.crypto.CipherFactory;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
+import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthControllerImpl;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.LifecycleObserver;
@@ -73,7 +72,6 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
     @Captor
     private ArgumentCaptor<TabModelSelectorObserver> mTabModelSelectorObserverArgumentCaptor;
 
-    private OneshotSupplierImpl<Bundle> mSavedInstanceStateSupplier = new OneshotSupplierImpl<>();
     private ObservableSupplierImpl<TabModelSelector> mTabModelSelectorObservableSupplier =
             new ObservableSupplierImpl<>();
     private Supplier<Intent> mIntentSupplier = new Supplier<Intent>() {
@@ -96,6 +94,10 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
     private NativeInitObserver mNativeInitObserver;
     private TabModelSelectorObserver mTabModelSelectorObserver;
 
+    private Bundle getSavedInstanceStateMock() {
+        return mSavedInstanceStateMock;
+    }
+
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
@@ -104,18 +106,10 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         CipherFactory.resetInstanceForTesting(mCipherFactoryMock);
         CommandLine.setInstanceForTesting(mCommandLineMock);
         mTabModelSelectorObservableSupplier.set(mTabModelSelectorMock);
-        // This immediately tries to call the unblock draw runnable since the re-auth feature is
-        // set to false above and therefore the shouldBlockDraw returns false as well.
-        mSavedInstanceStateSupplier.set(mSavedInstanceStateMock);
         mIncognitoRestoreAppLaunchDrawBlocker = new IncognitoRestoreAppLaunchDrawBlocker(
-                mSavedInstanceStateSupplier, mTabModelSelectorObservableSupplier, mIntentSupplier,
-                mShouldIgnoreIntentSupplier, mActivityLifecycleDispatcherMock,
+                this::getSavedInstanceStateMock, mTabModelSelectorObservableSupplier,
+                mIntentSupplier, mShouldIgnoreIntentSupplier, mActivityLifecycleDispatcherMock,
                 mUnblockDrawRunnableMock);
-        // This would get called once we set the |mSavedInstanceStateSupplier| because when the
-        // saved instance state is available we check again the
-        // mIncognitoRestoreAppLaunchDrawBlocker.shouldBlockDraw which returns false because
-        // the incognito re-auth feature is not available and we call the unblock runnable.
-        verify(mUnblockDrawRunnableMock, times(1)).run();
 
         // Check that the we added the native init observer.
         verify(mActivityLifecycleDispatcherMock, times(1))
@@ -186,14 +180,14 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         // Test condition
         doReturn(false)
                 .when(mSavedInstanceStateMock)
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
         assertFalse(
                 "Shouldn't block draw.", mIncognitoRestoreAppLaunchDrawBlocker.shouldBlockDraw());
 
         verify(mCommandLineMock, times(1)).hasSwitch(ChromeSwitches.NO_RESTORE_STATE);
         verify(mCipherFactoryMock, times(1)).restoreFromBundle(mSavedInstanceStateMock);
         verify(mSavedInstanceStateMock, times(1))
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
     }
 
     @Test
@@ -205,7 +199,7 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         doReturn(true).when(mCipherFactoryMock).restoreFromBundle(mSavedInstanceStateMock);
         doReturn(true)
                 .when(mSavedInstanceStateMock)
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
 
         // Test conditions
         doReturn(false)
@@ -220,7 +214,7 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         verify(mCommandLineMock, times(1)).hasSwitch(ChromeSwitches.NO_RESTORE_STATE);
         verify(mCipherFactoryMock, times(1)).restoreFromBundle(mSavedInstanceStateMock);
         verify(mSavedInstanceStateMock, times(1))
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
         verify(mSavedInstanceStateMock, times(1))
                 .getBoolean(IncognitoRestoreAppLaunchDrawBlocker.IS_INCOGNITO_SELECTED, false);
         verify(mIntentMock, times(1))
@@ -237,7 +231,7 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         doReturn(true).when(mCipherFactoryMock).restoreFromBundle(mSavedInstanceStateMock);
         doReturn(true)
                 .when(mSavedInstanceStateMock)
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
         doReturn(true)
                 .when(mSavedInstanceStateMock)
                 .getBoolean(IncognitoRestoreAppLaunchDrawBlocker.IS_INCOGNITO_SELECTED, false);
@@ -255,7 +249,7 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         verify(mCommandLineMock, times(1)).hasSwitch(ChromeSwitches.NO_RESTORE_STATE);
         verify(mCipherFactoryMock, times(1)).restoreFromBundle(mSavedInstanceStateMock);
         verify(mSavedInstanceStateMock, times(1))
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
         verify(mSavedInstanceStateMock, times(1))
                 .getBoolean(IncognitoRestoreAppLaunchDrawBlocker.IS_INCOGNITO_SELECTED, false);
         verify(mIntentMock, times(1))
@@ -263,9 +257,8 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         // This is called again when we call mNativeInitObserver.onFinishNativeInitialization();
         verify(mTabModelSelectorMock, times(2)).isTabStateInitialized();
         // This is called when we call mNativeInitObserver.onFinishNativeInitialization() and since
-        // tab state is initialized as well, we will invoke the unblock runnable. Another time, it
-        // gets called is during our setUp method when the saved instance state becomes available.
-        verify(mUnblockDrawRunnableMock, times(2)).run();
+        // tab state is initialized as well, we will invoke the unblock runnable.
+        verify(mUnblockDrawRunnableMock, times(1)).run();
     }
 
     @Test
@@ -277,7 +270,7 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         doReturn(true).when(mCipherFactoryMock).restoreFromBundle(mSavedInstanceStateMock);
         doReturn(true)
                 .when(mSavedInstanceStateMock)
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
         doReturn(true)
                 .when(mSavedInstanceStateMock)
                 .getBoolean(IncognitoRestoreAppLaunchDrawBlocker.IS_INCOGNITO_SELECTED, false);
@@ -294,7 +287,7 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         verify(mCommandLineMock, times(1)).hasSwitch(ChromeSwitches.NO_RESTORE_STATE);
         verify(mCipherFactoryMock, times(1)).restoreFromBundle(mSavedInstanceStateMock);
         verify(mSavedInstanceStateMock, times(1))
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
         verify(mSavedInstanceStateMock, times(1))
                 .getBoolean(IncognitoRestoreAppLaunchDrawBlocker.IS_INCOGNITO_SELECTED, false);
         verify(mIntentMock, times(1))
@@ -312,7 +305,7 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         doReturn(true).when(mCipherFactoryMock).restoreFromBundle(mSavedInstanceStateMock);
         doReturn(true)
                 .when(mSavedInstanceStateMock)
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
         doReturn(true)
                 .when(mSavedInstanceStateMock)
                 .getBoolean(IncognitoRestoreAppLaunchDrawBlocker.IS_INCOGNITO_SELECTED, false);
@@ -329,7 +322,7 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         verify(mCommandLineMock, times(1)).hasSwitch(ChromeSwitches.NO_RESTORE_STATE);
         verify(mCipherFactoryMock, times(1)).restoreFromBundle(mSavedInstanceStateMock);
         verify(mSavedInstanceStateMock, times(1))
-                .getBoolean(IncognitoReauthController.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
+                .getBoolean(IncognitoReauthControllerImpl.KEY_IS_INCOGNITO_REAUTH_PENDING, false);
         verify(mSavedInstanceStateMock, times(1))
                 .getBoolean(IncognitoRestoreAppLaunchDrawBlocker.IS_INCOGNITO_SELECTED, false);
         verify(mIntentMock, times(1))
@@ -366,8 +359,6 @@ public class IncognitoRestoreAppLaunchDrawBlockerUnitTest {
         mNativeInitObserver.onFinishNativeInitialization();
 
         verify(mTabModelSelectorMock, times(1)).isTabStateInitialized();
-        // The previous one time gets called during the setup part when the saved instance state
-        // becomes available.
-        verify(mUnblockDrawRunnableMock, times(2)).run();
+        verify(mUnblockDrawRunnableMock, times(1)).run();
     }
 }

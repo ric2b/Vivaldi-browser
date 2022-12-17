@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,7 +77,7 @@ PageAllocationGranularityShift() {
   // compiled for 64kB are likely to work on 4kB systems, 64kB is a good choice
   // here.
   return 16;  // 64kB
-#elif defined(_MIPS_ARCH_LOONGSON)
+#elif defined(_MIPS_ARCH_LOONGSON) || defined(ARCH_CPU_LOONG64)
   return 14;  // 16kB
 #elif BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)
   return static_cast<size_t>(vm_page_shift);

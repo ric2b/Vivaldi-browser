@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,11 +55,11 @@ public class AwWebContentsObserver extends WebContentsObserver {
     }
 
     @Override
-    public void didFinishLoad(GlobalRenderFrameHostId rfhId, GURL url, boolean isKnownValid,
-            boolean isInPrimaryMainFrame, @LifecycleState int rfhLifecycleState) {
+    public void didFinishLoadInPrimaryMainFrame(GlobalRenderFrameHostId rfhId, GURL url,
+            boolean isKnownValid, @LifecycleState int rfhLifecycleState) {
         if (rfhLifecycleState != LifecycleState.ACTIVE) return;
         String validatedUrl = isKnownValid ? url.getSpec() : url.getPossiblyInvalidSpec();
-        if (isInPrimaryMainFrame && getClientIfNeedToFireCallback(validatedUrl) != null) {
+        if (getClientIfNeedToFireCallback(validatedUrl) != null) {
             mLastDidFinishLoadUrl = validatedUrl;
         }
     }
@@ -120,18 +120,15 @@ public class AwWebContentsObserver extends WebContentsObserver {
     }
 
     @Override
-    public void didFinishNavigation(NavigationHandle navigation) {
+    public void didFinishNavigationInPrimaryMainFrame(NavigationHandle navigation) {
         String url = navigation.getUrl().getPossiblyInvalidSpec();
         if (navigation.errorCode() != NetError.OK && !navigation.isDownload()) {
-            processFailedLoad(
-                    navigation.isInPrimaryMainFrame(), navigation.errorCode(), navigation.getUrl());
+            processFailedLoad(true, navigation.errorCode(), navigation.getUrl());
         }
 
         if (!navigation.hasCommitted()) return;
 
         mCommittedNavigation = true;
-
-        if (!navigation.isInPrimaryMainFrame()) return;
 
         AwContentsClient client = mAwContentsClient.get();
         if (client != null) {

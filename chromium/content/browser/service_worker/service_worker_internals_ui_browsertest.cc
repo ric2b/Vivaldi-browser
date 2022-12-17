@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
@@ -584,8 +585,15 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerInternalsUIBrowserTest,
   TearDownWindow(sw_internal_ui_window);
 }
 
+// The test is flaky on Mac and Linux. crbug.com/1324856
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#define MAYBE_StopStartSWReflectedOnInternalUI \
+  DISABLED_StopStartSWReflectedOnInternalUI
+#else
+#define MAYBE_StopStartSWReflectedOnInternalUI StopStartSWReflectedOnInternalUI
+#endif
 IN_PROC_BROWSER_TEST_F(ServiceWorkerInternalsUIBrowserTest,
-                       StopStartSWReflectedOnInternalUI) {
+                       MAYBE_StopStartSWReflectedOnInternalUI) {
   Shell* sw_internal_ui_window = CreateNewWindow();
   NavigateToServiceWorkerInternalUI();
 

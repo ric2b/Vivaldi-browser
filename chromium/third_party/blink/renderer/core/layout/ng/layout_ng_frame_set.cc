@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,19 @@ bool LayoutNGFrameSet::IsChildAllowed(LayoutObject* child,
                                       const ComputedStyle&) const {
   NOT_DESTROYED();
   return child->IsFrame() || child->IsLayoutNGFrameSet();
+}
+
+void LayoutNGFrameSet::AddChild(LayoutObject* new_child,
+                                LayoutObject* before_child) {
+  LayoutNGBlock::AddChild(new_child, before_child);
+  To<HTMLFrameSetElement>(GetNode())->DirtyEdgeInfoAndFullPaintInvalidation();
+}
+
+void LayoutNGFrameSet::RemoveChild(LayoutObject* child) {
+  LayoutNGBlock::RemoveChild(child);
+  if (DocumentBeingDestroyed())
+    return;
+  To<HTMLFrameSetElement>(GetNode())->DirtyEdgeInfoAndFullPaintInvalidation();
 }
 
 void LayoutNGFrameSet::UpdateBlockLayout(bool relayout_children) {

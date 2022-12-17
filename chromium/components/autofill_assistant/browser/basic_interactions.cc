@@ -1,11 +1,12 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/autofill_assistant/browser/basic_interactions.h"
-#include <algorithm>
+
 #include "base/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -426,6 +427,20 @@ bool StringEmpty(UserModel* user_model,
   return true;
 }
 
+bool ArrayLength(UserModel* user_model,
+                 const std::string& result_model_identifier,
+                 const ArrayLengthProto& proto) {
+  auto value = user_model->GetValue(proto.value());
+  if (!value.has_value()) {
+    DVLOG(2) << "Failed to find value in user model";
+    return false;
+  }
+  user_model->SetValue(
+      result_model_identifier,
+      SimpleValue(GetValueSize(*value), ContainsClientOnlyValue({*value})));
+  return true;
+}
+
 }  // namespace
 
 base::WeakPtr<BasicInteractions> BasicInteractions::GetWeakPtr() {
@@ -532,6 +547,15 @@ bool BasicInteractions::ComputeValue(const ComputeValueProto& proto) {
       }
       return StringEmpty(execution_delegate_->GetUserModel(),
                          proto.result_model_identifier(), proto.string_empty());
+    case ComputeValueProto::kArrayLength: {
+      if (!proto.array_length().has_value()) {
+        DVLOG(2)
+            << "Error computing ComputeValue::ArrayLength: no value specified";
+        return false;
+      }
+      return ArrayLength(execution_delegate_->GetUserModel(),
+                         proto.result_model_identifier(), proto.array_length());
+    }
     case ComputeValueProto::KIND_NOT_SET:
       DVLOG(2) << "Error computing value: kind not set";
       return false;
@@ -599,12 +623,9 @@ bool BasicInteractions::ToggleUserAction(const ToggleUserActionProto& proto) {
     return false;
   }
 
-  auto user_action_it = std::find_if(
-      user_actions_value->user_actions().values().cbegin(),
-      user_actions_value->user_actions().values().cend(),
-      [&](const UserActionProto& user_action) {
-        return user_action.identifier() == proto.user_action_identifier();
-      });
+  auto user_action_it = base::ranges::find(
+      user_actions_value->user_actions().values(),
+      proto.user_action_identifier(), &UserActionProto::identifier);
   if (user_action_it == user_actions_value->user_actions().values().cend()) {
     DVLOG(2) << "Error evaluating " << __func__ << ": "
              << proto.user_action_identifier() << " not found in "
@@ -635,6 +656,25 @@ bool BasicInteractions::EndAction(const ClientStatus& status) {
   return true;
 }
 
+bool BasicInteractions::RequestBackendData(
+    const RequestBackendDataProto& request) {
+  if (!request_backend_data_callback_) {
+    DVLOG(2) << "Failed to RequestBackendData: no callback set";
+    return false;
+  }
+  request_backend_data_callback_.Run(request);
+  return true;
+}
+
+bool BasicInteractions::ShowAccountScreen(const ShowAccountScreenProto& proto) {
+  if (!show_account_screen_callback_) {
+    DVLOG(2) << "Failed to ShowAccountScreen: no callback set";
+    return false;
+  }
+  show_account_screen_callback_.Run(proto);
+  return true;
+}
+
 bool BasicInteractions::NotifyViewInflationFinished(
     const ClientStatus& status) {
   if (!view_inflation_finished_callback_) {
@@ -656,6 +696,8 @@ bool BasicInteractions::NotifyPersistentViewInflationFinished(
 void BasicInteractions::ClearCallbacks() {
   end_action_callback_.Reset();
   view_inflation_finished_callback_.Reset();
+  request_backend_data_callback_.Reset();
+  show_account_screen_callback_.Reset();
 }
 
 void BasicInteractions::ClearPersistentUiCallbacks() {
@@ -672,6 +714,18 @@ void BasicInteractions::SetViewInflationFinishedCallback(
         view_inflation_finished_callback) {
   view_inflation_finished_callback_ =
       std::move(view_inflation_finished_callback);
+}
+
+void BasicInteractions::SetRequestBackendDataCallback(
+    base::RepeatingCallback<void(const RequestBackendDataProto&)>
+        request_backend_data_callback) {
+  request_backend_data_callback_ = std::move(request_backend_data_callback);
+}
+
+void BasicInteractions::SetShowAccountScreenCallback(
+    base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+        show_account_screen_callback) {
+  show_account_screen_callback_ = std::move(show_account_screen_callback);
 }
 
 void BasicInteractions::SetPersistentViewInflationFinishedCallback(

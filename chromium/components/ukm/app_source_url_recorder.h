@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,13 +22,16 @@ namespace app_list {
 class AppLaunchEventLogger;
 }  // namespace app_list
 
+namespace arc::input_overlay {
+class InputOverlayUkm;
+}  // namespace arc::input_overlay
+
 namespace badging {
 class BadgeManager;
 }  // namespace badging
 namespace ukm {
 
-const base::Feature kUkmAppLogging{"UkmAppLogging",
-                                   base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kUkmAppLogging, "UkmAppLogging", base::FEATURE_ENABLED_BY_DEFAULT);
 
 class AppSourceUrlRecorder {
  private:
@@ -37,6 +40,8 @@ class AppSourceUrlRecorder {
   friend class AppSourceUrlRecorderTest;
 
   friend class app_list::AppLaunchEventLogger;
+
+  friend class arc::input_overlay::InputOverlayUkm;
 
   friend class badging::BadgeManager;
 

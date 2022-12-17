@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -314,12 +314,15 @@ void WebEngineAudioRenderer::SetLatencyHint(
 }
 
 void WebEngineAudioRenderer::SetPreservesPitch(bool preserves_pitch) {
+  // TODO(crbug.com/1368392): Implement this.
   NOTIMPLEMENTED();
 }
 
 void WebEngineAudioRenderer::SetWasPlayedWithUserActivation(
     bool was_played_with_user_activation) {
-  NOTIMPLEMENTED();
+  // WebEngine does not use this signal. This is currently only used by the Live
+  // Caption feature.
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 void WebEngineAudioRenderer::StartTicking() {

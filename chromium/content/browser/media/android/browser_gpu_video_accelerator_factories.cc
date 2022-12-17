@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -217,6 +217,12 @@ void BrowserGpuVideoAcceleratorFactories::NotifyEncoderSupportKnown(
 viz::RasterContextProvider*
 BrowserGpuVideoAcceleratorFactories::GetMediaContextProvider() {
   return context_provider_.get();
+}
+
+const gpu::Capabilities*
+BrowserGpuVideoAcceleratorFactories::ContextCapabilities() {
+  return context_provider_ ? &(context_provider_->ContextCapabilities())
+                           : nullptr;
 }
 
 void BrowserGpuVideoAcceleratorFactories::SetRenderingColorSpace(

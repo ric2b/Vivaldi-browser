@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,7 @@
 @protocol ChromeAccountManagerServiceObserver <NSObject>
 @optional
 - (void)identityListChanged;
-- (void)identityChanged:(ChromeIdentity*)identity;
+- (void)identityChanged:(id<SystemIdentity>)identity;
 @end
 
 // Simple observer bridge that forwards all events to its delegate observer.
@@ -33,7 +33,7 @@ class ChromeAccountManagerServiceObserverBridge
  private:
   // ChromeAccountManagerService::Observer implementation.
   void OnIdentityListChanged(bool need_user_approval) override;
-  void OnIdentityChanged(ChromeIdentity* identity) override;
+  void OnIdentityChanged(id<SystemIdentity> identity) override;
 
   __weak id<ChromeAccountManagerServiceObserver> observer_ = nil;
   base::ScopedObservation<ChromeAccountManagerService,

@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -78,12 +78,15 @@ blink_core_sources_style = [
   "style_generated_image.h",
   "style_highlight_data.cc",
   "style_highlight_data.h",
+  "style_hyphenate_limit_chars.h",
   "style_image.cc",
   "style_image.h",
   "style_inherited_variables.cc",
   "style_inherited_variables.h",
   "style_initial_data.cc",
   "style_initial_data.h",
+  "style_initial_letter.cc",
+  "style_initial_letter.h",
   "style_intrinsic_length.h",
   "style_name.h",
   "style_name_or_keyword.h",
@@ -100,6 +103,7 @@ blink_core_sources_style = [
   "style_self_alignment_data.h",
   "style_svg_resource.cc",
   "style_svg_resource.h",
+  "style_timeline.h",
   "style_variables.cc",
   "style_variables.h",
   "svg_dash_array.cc",
@@ -109,6 +113,7 @@ blink_core_sources_style = [
   "text_decoration_thickness.cc",
   "text_decoration_thickness.h",
   "text_size_adjust.h",
+  "timeline_inset.h",
   "toggle_group.h",
   "toggle_group_list.h",
   "toggle_root.cc",

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,7 +67,7 @@ class AudioStreamHandler::AudioStreamContainer
     if (device_ == nullptr) {
       const media::AudioParameters params(
           media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-          media::GuessChannelLayout(wav_audio_->num_channels()),
+          media::ChannelLayoutConfig::Guess(wav_audio_->num_channels()),
           wav_audio_->sample_rate(), kDefaultFrameCount);
       if (g_observer_for_testing) {
         g_observer_for_testing->Initialize(this, params);
@@ -181,7 +181,7 @@ AudioStreamHandler::AudioStreamHandler(
 
   const media::AudioParameters params(
       media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-      media::GuessChannelLayout(wav_audio->num_channels()),
+      media::ChannelLayoutConfig::Guess(wav_audio->num_channels()),
       wav_audio->sample_rate(), kDefaultFrameCount);
   if (!params.IsValid()) {
     LOG(ERROR) << "Audio params are invalid.";

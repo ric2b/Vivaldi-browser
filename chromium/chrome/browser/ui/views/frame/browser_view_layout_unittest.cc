@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/controls/separator.h"
+#include "ui/views/test/views_test_utils.h"
 
 namespace {
 
@@ -217,13 +218,22 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
         tab_strip_, toolbar_, infobar_container_, contents_container_,
         /*left_aligned_side_panel=*/nullptr,
         /*left_aligned_side_panel_separator=*/nullptr,
-        /*right_aligned_side_panel=*/nullptr,
+        /*unified_side_panel=*/nullptr,
         /*right_aligned_side_panel_separator=*/nullptr,
         /*lens_side_panel=*/nullptr, immersive_mode_controller_.get(),
         separator_);
     layout->set_webui_tab_strip(webui_tab_strip());
     layout_ = layout.get();
     browser_view_->SetLayoutManager(std::move(layout));
+  }
+
+  // For the purposes of this test, boolean values are directly set on a
+  // BrowserViewLayoutDelegate which are checked during layout or child view
+  // visibility is directly changed. These calls do not schedule a layout and we
+  // need to manually invalidate layout.
+  void InvalidateAndRunScheduledLayoutOnBrowserView() {
+    browser_view()->InvalidateLayout();
+    views::test::RunScheduledLayout(browser_view());
   }
 
  private:
@@ -257,7 +267,7 @@ TEST_F(BrowserViewLayoutTest, Layout) {
   delegate()->set_tab_strip_visible(false);
   delegate()->set_toolbar_visible(false);
   delegate()->set_bookmark_bar_visible(false);
-  RunScheduledLayout(browser_view());
+  InvalidateAndRunScheduledLayoutOnBrowserView();
 
   // Top views are zero-height.
   EXPECT_EQ(gfx::Rect(0, 0, 0, 0), tab_strip()->bounds());
@@ -268,7 +278,7 @@ TEST_F(BrowserViewLayoutTest, Layout) {
 
   // Turn on the toolbar, like in a pop-up window.
   delegate()->set_toolbar_visible(true);
-  RunScheduledLayout(browser_view());
+  InvalidateAndRunScheduledLayoutOnBrowserView();
 
   // Now the toolbar has bounds and other views shift down.
   EXPECT_EQ(gfx::Rect(0, 0, 0, 0), tab_strip()->bounds());
@@ -280,7 +290,7 @@ TEST_F(BrowserViewLayoutTest, Layout) {
 
   // Disable the contents separator.
   delegate()->set_content_separator_enabled(false);
-  RunScheduledLayout(browser_view());
+  InvalidateAndRunScheduledLayoutOnBrowserView();
 
   // Now the separator is not visible and the content grows vertically.
   EXPECT_EQ(gfx::Rect(0, 0, 0, 0), tab_strip()->bounds());
@@ -316,7 +326,7 @@ TEST_F(BrowserViewLayoutTest, LayoutContentsWithTopControlsSlideBehavior) {
   delegate()->set_toolbar_visible(true);
   delegate()->set_top_controls_slide_enabled(true);
   delegate()->set_top_controls_shown_ratio(1.f);
-  RunScheduledLayout(browser_view());
+  InvalidateAndRunScheduledLayoutOnBrowserView();
   EXPECT_EQ(gfx::Rect(0, 0, 800, 30), top_container()->bounds());
   EXPECT_EQ(gfx::Rect(0, 0, 800, kToolbarHeight), toolbar()->bounds());
   EXPECT_EQ(gfx::Rect(0, kToolbarHeight, 800, views::Separator::kThickness),
@@ -325,7 +335,7 @@ TEST_F(BrowserViewLayoutTest, LayoutContentsWithTopControlsSlideBehavior) {
 
   // Top controls are half shown, half hidden.
   delegate()->set_top_controls_shown_ratio(0.5f);
-  RunScheduledLayout(browser_view());
+  InvalidateAndRunScheduledLayoutOnBrowserView();
   EXPECT_EQ(gfx::Rect(0, 0, 800, 30), top_container()->bounds());
   EXPECT_EQ(gfx::Rect(0, 0, 800, kToolbarHeight), toolbar()->bounds());
   EXPECT_EQ(gfx::Rect(0, kToolbarHeight, 800, views::Separator::kThickness),
@@ -335,7 +345,7 @@ TEST_F(BrowserViewLayoutTest, LayoutContentsWithTopControlsSlideBehavior) {
   // Top controls are fully hidden. the contents are expanded in height by an
   // amount equal to the top controls height.
   delegate()->set_top_controls_shown_ratio(0.f);
-  RunScheduledLayout(browser_view());
+  InvalidateAndRunScheduledLayoutOnBrowserView();
   EXPECT_EQ(gfx::Rect(0, -30, 800, 30), top_container()->bounds());
   EXPECT_EQ(gfx::Rect(0, 0, 800, kToolbarHeight), toolbar()->bounds());
   EXPECT_EQ(gfx::Rect(0, kToolbarHeight, 800, views::Separator::kThickness),
@@ -347,12 +357,12 @@ TEST_F(BrowserViewLayoutTest, WebUITabStripPushesDownContents) {
   delegate()->set_tab_strip_visible(false);
   delegate()->set_toolbar_visible(true);
   webui_tab_strip()->SetVisible(false);
-  RunScheduledLayout(browser_view());
+  InvalidateAndRunScheduledLayoutOnBrowserView();
   const gfx::Rect original_contents_bounds = contents_container()->bounds();
   EXPECT_EQ(gfx::Size(), webui_tab_strip()->size());
 
   webui_tab_strip()->SetVisible(true);
-  RunScheduledLayout(browser_view());
+  InvalidateAndRunScheduledLayoutOnBrowserView();
   EXPECT_LT(0, webui_tab_strip()->size().height());
   EXPECT_EQ(original_contents_bounds.size(), contents_container()->size());
   EXPECT_EQ(webui_tab_strip()->size().height(),

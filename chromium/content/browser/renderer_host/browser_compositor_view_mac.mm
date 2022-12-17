@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -402,7 +402,7 @@ void BrowserCompositorMac::TransformPointToRootSurface(gfx::PointF* point) {
   gfx::Transform transform_to_root;
   if (parent_ui_layer_)
     parent_ui_layer_->GetTargetTransformRelativeTo(nullptr, &transform_to_root);
-  transform_to_root.TransformPoint(point);
+  *point = transform_to_root.MapPoint(*point);
 }
 
 void BrowserCompositorMac::LayerDestroyed(ui::Layer* layer) {

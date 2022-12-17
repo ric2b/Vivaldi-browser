@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -105,7 +105,9 @@ class CONTENT_EXPORT WebBundleReader final
 
   ~WebBundleReader();
 
-  void ReadMetadataInternal(MetadataCallback callback, base::File file);
+  void OnFileOpened(MetadataCallback callback,
+                    std::unique_ptr<base::File> file);
+  void OnFileDuplicated(MetadataCallback callback, base::File file);
   void ReadResponseInternal(
       web_package::mojom::BundleResponseLocationPtr location,
       ResponseCallback callback);

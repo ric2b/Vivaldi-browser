@@ -1,14 +1,14 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
-import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/polymer/v3_0/paper-progress/paper-progress.js';
 import './strings.m.js';
 
-import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -109,7 +109,7 @@ Polymer({
     /** @private */
     precheckStatus_: {
       type: Number,
-      value: chromeos.crostiniUpgrader.mojom.UpgradePrecheckStatus.OK,
+      value: ash.crostiniUpgrader.mojom.UpgradePrecheckStatus.OK,
     },
 
     /**
@@ -159,8 +159,7 @@ Polymer({
         this.state_ = State.BACKUP_ERROR;
       }),
       callbackRouter.precheckStatus.addListener((status) => {
-        if (status ===
-            chromeos.crostiniUpgrader.mojom.UpgradePrecheckStatus.OK) {
+        if (status === ash.crostiniUpgrader.mojom.UpgradePrecheckStatus.OK) {
           this.precheckSuccessCallback_();
           this.precheckStatus_ = status;
         } else {
@@ -494,11 +493,10 @@ Polymer({
         break;
       case State.PRECHECKS_FAILED:
         switch (precheckStatus) {
-          case chromeos.crostiniUpgrader.mojom.UpgradePrecheckStatus
-              .NETWORK_FAILURE:
+          case ash.crostiniUpgrader.mojom.UpgradePrecheckStatus.NETWORK_FAILURE:
             messageId = 'precheckNoNetwork';
             break;
-          case chromeos.crostiniUpgrader.mojom.UpgradePrecheckStatus.LOW_POWER:
+          case ash.crostiniUpgrader.mojom.UpgradePrecheckStatus.LOW_POWER:
             messageId = 'precheckNoPower';
             break;
           default:

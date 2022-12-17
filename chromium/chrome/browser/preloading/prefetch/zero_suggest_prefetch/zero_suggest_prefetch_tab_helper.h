@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,11 @@ class ZeroSuggestPrefetchTabHelper
 
  private:
   explicit ZeroSuggestPrefetchTabHelper(content::WebContents* web_contents);
+
+  // Starts an autocomplete prefetch request so that zero-prefix providers can
+  // optionally start a prefetch request to warm up the their underlying
+  // service(s) and/or optionally cache their otherwise async response.
+  void StartPrefetch();
 
   friend class content::WebContentsUserData<ZeroSuggestPrefetchTabHelper>;
   WEB_CONTENTS_USER_DATA_KEY_DECL();

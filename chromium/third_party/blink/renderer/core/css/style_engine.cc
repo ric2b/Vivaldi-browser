@@ -30,6 +30,8 @@
 #include "third_party/blink/renderer/core/css/style_engine.h"
 
 #include "base/auto_reset.h"
+#include "base/containers/adapters.h"
+#include "base/ranges/algorithm.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_observable_array_css_style_sheet.h"
@@ -155,6 +157,8 @@ StyleEngine::StyleEngine(Document& document)
 
     DCHECK(document.GetSettings());
     preferred_color_scheme_ = document.GetSettings()->GetPreferredColorScheme();
+    force_dark_mode_enabled_ =
+        document.GetSettings()->GetForceDarkModeEnabled();
     UpdateColorSchemeMetrics();
   }
 
@@ -225,9 +229,9 @@ void StyleEngine::RemoveInjectedSheet(const StyleSheetKey& key,
           origin == WebCssOrigin::kUser ? injected_user_style_sheets_
                                         : injected_author_style_sheets_;
   // Remove the last sheet that matches.
-  const auto& it =
-      std::find_if(injected_style_sheets.rbegin(), injected_style_sheets.rend(),
-                   [&key](const auto& item) { return item.first == key; });
+  const auto& it = base::ranges::find(
+      base::Reversed(injected_style_sheets), key,
+      &std::pair<StyleSheetKey, Member<CSSStyleSheet>>::first);
   if (it != injected_style_sheets.rend()) {
     injected_style_sheets.erase(std::next(it).base());
     if (origin == WebCssOrigin::kUser)
@@ -416,7 +420,7 @@ bool StyleEngine::ShouldUpdateDocumentStyleSheetCollection() const {
 }
 
 bool StyleEngine::ShouldUpdateShadowTreeStyleSheetCollection() const {
-  return !dirty_tree_scopes_.IsEmpty();
+  return !dirty_tree_scopes_.empty();
 }
 
 void StyleEngine::MediaQueryAffectingValueChanged(
@@ -447,7 +451,7 @@ Element* StyleEngine::EnsureVTTOriginatingElement() {
 void StyleEngine::MediaQueryAffectingValueChanged(
     HeapHashSet<Member<TextTrack>>& text_tracks,
     MediaValueChange change) {
-  if (text_tracks.IsEmpty())
+  if (text_tracks.empty())
     return;
 
   for (auto text_track : text_tracks) {
@@ -554,7 +558,7 @@ void StyleEngine::UpdateCounterStyles() {
 
 void StyleEngine::UpdateViewport() {
   if (viewport_resolver_)
-    viewport_resolver_->UpdateViewport(GetDocumentStyleSheetCollection());
+    viewport_resolver_->UpdateViewport();
 }
 
 bool StyleEngine::NeedsActiveStyleUpdate() const {
@@ -570,14 +574,13 @@ void StyleEngine::UpdateActiveStyle() {
   UpdateViewport();
   UpdateActiveStyleSheets();
   UpdateGlobalRuleSet();
-  UpdateTimelines();
 }
 
 const ActiveStyleSheetVector StyleEngine::ActiveStyleSheetsForInspector() {
   if (GetDocument().IsActive())
     UpdateActiveStyle();
 
-  if (active_tree_scopes_.IsEmpty())
+  if (active_tree_scopes_.empty())
     return GetDocumentStyleSheetCollection().ActiveStyleSheets();
 
   ActiveStyleSheetVector active_style_sheets;
@@ -653,6 +656,23 @@ RuleSet* StyleEngine::RuleSetForSheet(CSSStyleSheet& sheet) {
   }
   return &sheet.Contents()->EnsureRuleSet(*media_query_evaluator_,
                                           add_rule_flags);
+}
+
+RuleSet* StyleEngine::RuleSetScope::RuleSetForSheet(StyleEngine& engine,
+                                                    CSSStyleSheet* css_sheet) {
+  RuleSet* rule_set = engine.RuleSetForSheet(*css_sheet);
+  if (rule_set && rule_set->HasCascadeLayers() &&
+      !css_sheet->Contents()->HasSingleOwnerNode() &&
+      !layer_rule_sets_.insert(rule_set).is_new_entry) {
+    // The condition above is met for a stylesheet with cascade layers which
+    // shares StyleSheetContents with another stylesheet in this TreeScope.
+    // WillMutateRules() creates a unique StyleSheetContents for this sheet to
+    // avoid incorrectly identifying two separate anonymous layers as the same
+    // layer.
+    css_sheet->WillMutateRules();
+    rule_set = engine.RuleSetForSheet(*css_sheet);
+  }
+  return rule_set;
 }
 
 void StyleEngine::ClearResolvers() {
@@ -803,7 +823,7 @@ CSSStyleSheet* StyleEngine::CreateSheet(
   DCHECK(style_sheet);
   if (!element.IsInShadowTree()) {
     String title = element.title();
-    if (!title.IsEmpty()) {
+    if (!title.empty()) {
       style_sheet->SetTitle(title);
       SetPreferredStylesheetSetNameIfNotSet(title);
     }
@@ -833,7 +853,7 @@ void StyleEngine::CollectUserStyleFeaturesTo(RuleFeatureSet& features) const {
     features.MutableMediaQueryResultFlags().Add(
         sheet->GetMediaQueryResultFlags());
     DCHECK(sheet->Contents()->HasRuleSet());
-    features.Add(sheet->Contents()->GetRuleSet().Features());
+    features.Merge(sheet->Contents()->GetRuleSet().Features());
   }
 }
 
@@ -1042,9 +1062,10 @@ inline Element* SelfOrPreviousSibling(Node* node) {
 
 }  // namespace
 
-void StyleEngine::InvalidateElementAffectedByHas(Element& element,
-                                                 bool for_pseudo_change) {
-  if (for_pseudo_change && !element.AffectedByPseudoInHas())
+void StyleEngine::InvalidateElementAffectedByHas(
+    Element& element,
+    bool for_element_affected_by_pseudo_in_has) {
+  if (for_element_affected_by_pseudo_in_has && !element.AffectedByPseudoInHas())
     return;
 
   if (element.AffectedBySubjectHas()) {
@@ -1067,80 +1088,156 @@ void StyleEngine::InvalidateElementAffectedByHas(Element& element,
   }
 }
 
-void StyleEngine::InvalidateAncestorsOrSiblingsAffectedByHas(
-    Element* parent,
-    Element* previous_sibling,
-    bool for_pseudo_change) {
-  bool traverse_ancestors = false;
-  bool traverse_siblings = false;
-  Element* element = previous_sibling ? previous_sibling : parent;
+// Context class to provide :has() invalidation traversal information.
+//
+// This class provides this information to the :has() invalidation traversal:
+// - first element of the traversal.
+// - flag to indicate whether the traversal moves to the parent of the first
+//   element.
+// - flag to indicate whether the :has() invalidation invalidates the elements
+//   with AffectedByPseudoInHas flag set.
+class StyleEngine::PseudoHasInvalidationTraversalContext {
+  STACK_ALLOCATED();
 
-  DCHECK(element);
+ public:
+  Element* FirstElement() const { return first_element_; }
+
+  bool TraverseToParentOfFirstElement() const {
+    return traverse_to_parent_of_first_element_;
+  }
+
+  bool ForElementAffectedByPseudoInHas() const {
+    return for_element_affected_by_pseudo_in_has_;
+  }
+
+  PseudoHasInvalidationTraversalContext& SetForElementAffectedByPseudoInHas() {
+    for_element_affected_by_pseudo_in_has_ = true;
+    return *this;
+  }
+
+  // Create :has() invalidation traversal context for attribute change or
+  // pseudo state change without structural DOM changes.
+  static PseudoHasInvalidationTraversalContext ForAttributeOrPseudoStateChange(
+      Element& changed_element) {
+    bool traverse_ancestors =
+        changed_element.AncestorsOrAncestorSiblingsAffectedByHas();
+
+    Element* parent =
+        traverse_ancestors ? changed_element.parentElement() : nullptr;
+    Element* previous_sibling =
+        changed_element.GetSiblingsAffectedByHasFlags()
+            ? ElementTraversal::PreviousSibling(changed_element)
+            : nullptr;
+
+    return PseudoHasInvalidationTraversalContext(
+        previous_sibling ? previous_sibling : parent, traverse_ancestors);
+  }
+
+  // Create :has() invalidation traversal context for element or subtree
+  // insertion.
+  static PseudoHasInvalidationTraversalContext ForInsertion(
+      Element* parent,
+      Element* previous_sibling) {
+    bool traverse_ancestors =
+        parent ? parent->AncestorsOrAncestorSiblingsAffectedByHas() : false;
+
+    return PseudoHasInvalidationTraversalContext(
+        previous_sibling ? previous_sibling : parent, traverse_ancestors);
+  }
+
+  // Create :has() invalidation traversal context for element or subtree
+  // removal. In case of subtree removal, the subtree root element will be
+  // passed through the 'removed_element'.
+  static PseudoHasInvalidationTraversalContext ForRemoval(
+      Element* parent,
+      Element* previous_sibling,
+      Element& removed_element) {
+    bool traverse_ancestors =
+        removed_element.AncestorsOrAncestorSiblingsAffectedByHas();
+
+    if (!traverse_ancestors)
+      parent = nullptr;
+
+    if (!removed_element.GetSiblingsAffectedByHasFlags())
+      previous_sibling = nullptr;
+
+    return PseudoHasInvalidationTraversalContext(
+        previous_sibling ? previous_sibling : parent, traverse_ancestors);
+  }
+
+  // Create :has() invalidation traversal context for removing all children of
+  // a parent.
+  static PseudoHasInvalidationTraversalContext ForAllChildrenRemoved(
+      Element& parent) {
+    return PseudoHasInvalidationTraversalContext(
+        &parent, parent.AncestorsOrAncestorSiblingsAffectedByHas());
+  }
+
+ private:
+  PseudoHasInvalidationTraversalContext(
+      Element* first_element,
+      bool traverse_to_parent_of_first_element)
+      : first_element_(first_element),
+        traverse_to_parent_of_first_element_(
+            traverse_to_parent_of_first_element) {}
+
+  // The first element of the :has() invalidation traversal.
+  Element* first_element_;
+
+  // This flag indicates whether the :has() invalidation traversal moves to the
+  // parent of the first element or not.
+  bool traverse_to_parent_of_first_element_;
+
+  // This flag indicates that the :has() invalidation invalidates a element
+  // only when the element has the AffectedByPseudoInHas flag set. If this flag
+  // is true, the :has() invalidation skips the elements that doesn't have the
+  // AffectedByPseudoInHas flag set even if the elements have the
+  // AffectedBy[Subject|NonSubject]Has flag set.
+  //
+  // FYI. The AffectedByPseudoInHas flag indicates that the element can be
+  // affected by any pseudo state change. (e.g. :hover state change by moving
+  // mouse pointer) If an element doesn't have the flag set, it means the
+  // element is not affected by any pseudo state change.
+  bool for_element_affected_by_pseudo_in_has_{false};
+};
+
+void StyleEngine::InvalidateAncestorsOrSiblingsAffectedByHas(
+    const PseudoHasInvalidationTraversalContext& traversal_context) {
+  bool traverse_to_parent = traversal_context.TraverseToParentOfFirstElement();
+  bool traverse_to_previous_sibling = false;
+  Element* element = traversal_context.FirstElement();
+  bool for_element_affected_by_pseudo_in_has =
+      traversal_context.ForElementAffectedByPseudoInHas();
 
   while (element) {
-    traverse_ancestors |= element->AncestorsOrAncestorSiblingsAffectedByHas();
-    traverse_siblings = element->GetSiblingsAffectedByHasFlags();
+    traverse_to_parent |= element->AncestorsOrAncestorSiblingsAffectedByHas();
+    traverse_to_previous_sibling = element->GetSiblingsAffectedByHasFlags();
 
-    InvalidateElementAffectedByHas(*element, for_pseudo_change);
+    InvalidateElementAffectedByHas(*element,
+                                   for_element_affected_by_pseudo_in_has);
 
-    if (traverse_siblings) {
-      previous_sibling = ElementTraversal::PreviousSibling(*element);
-      if (previous_sibling) {
-        element = previous_sibling;
+    if (traverse_to_previous_sibling) {
+      if (Element* previous = ElementTraversal::PreviousSibling(*element)) {
+        element = previous;
         continue;
       }
     }
 
-    if (!traverse_ancestors)
+    if (!traverse_to_parent)
       return;
 
     element = element->parentElement();
-    traverse_ancestors = false;
+    traverse_to_parent = false;
   }
-}
-
-void StyleEngine::InvalidateAncestorsOrSiblingsAffectedByHasForPseudoChange(
-    Element& changed_element) {
-  InvalidateAncestorsOrSiblingsAffectedByHasForPseudoChange(
-      changed_element.AncestorsOrAncestorSiblingsAffectedByHas()
-          ? changed_element.parentElement()
-          : nullptr,
-      changed_element.GetSiblingsAffectedByHasFlags()
-          ? ElementTraversal::PreviousSibling(changed_element)
-          : nullptr);
-}
-
-void StyleEngine::InvalidateAncestorsOrSiblingsAffectedByHasForPseudoChange(
-    Element* parent,
-    Element* previous_sibling) {
-  InvalidateAncestorsOrSiblingsAffectedByHas(parent, previous_sibling,
-                                             true /* for_pseudo_change */);
-}
-
-void StyleEngine::InvalidateAncestorsOrSiblingsAffectedByHas(
-    Element& changed_element) {
-  InvalidateAncestorsOrSiblingsAffectedByHas(
-      changed_element.AncestorsOrAncestorSiblingsAffectedByHas()
-          ? changed_element.parentElement()
-          : nullptr,
-      changed_element.GetSiblingsAffectedByHasFlags()
-          ? ElementTraversal::PreviousSibling(changed_element)
-          : nullptr);
-}
-
-void StyleEngine::InvalidateAncestorsOrSiblingsAffectedByHas(
-    Element* parent,
-    Element* previous_sibling) {
-  InvalidateAncestorsOrSiblingsAffectedByHas(parent, previous_sibling,
-                                             false /* for_pseudo_change */);
 }
 
 void StyleEngine::InvalidateChangedElementAffectedByLogicalCombinationsInHas(
     Element& changed_element,
-    bool for_pseudo_change) {
+    bool for_element_affected_by_pseudo_in_has) {
   if (!changed_element.AffectedByLogicalCombinationsInHas())
     return;
-  InvalidateElementAffectedByHas(changed_element, for_pseudo_change);
+  InvalidateElementAffectedByHas(changed_element,
+                                 for_element_affected_by_pseudo_in_has);
 }
 
 void StyleEngine::ClassChangedForElement(
@@ -1158,8 +1255,10 @@ void StyleEngine::ClassChangedForElement(
     for (unsigned i = 0; i < changed_size; ++i) {
       if (features.NeedsHasInvalidationForClass(changed_classes[i])) {
         InvalidateChangedElementAffectedByLogicalCombinationsInHas(
-            element, /* for_pseudo_change */ false);
-        InvalidateAncestorsOrSiblingsAffectedByHas(element);
+            element, /* for_element_affected_by_pseudo_in_has */ false);
+        InvalidateAncestorsOrSiblingsAffectedByHas(
+            PseudoHasInvalidationTraversalContext::
+                ForAttributeOrPseudoStateChange(element));
         break;
       }
     }
@@ -1254,8 +1353,10 @@ void StyleEngine::ClassChangedForElement(const SpaceSplitString& old_classes,
 
   if (affecting_has_state) {
     InvalidateChangedElementAffectedByLogicalCombinationsInHas(
-        element, /* for_pseudo_change */ false);
-    InvalidateAncestorsOrSiblingsAffectedByHas(element);
+        element, /* for_element_affected_by_pseudo_in_has */ false);
+    InvalidateAncestorsOrSiblingsAffectedByHas(
+        PseudoHasInvalidationTraversalContext::ForAttributeOrPseudoStateChange(
+            element));
   }
 }
 
@@ -1290,8 +1391,10 @@ void StyleEngine::AttributeChangedForElement(
       PossiblyAffectingHasState(element)) {
     if (features.NeedsHasInvalidationForAttribute(attribute_name)) {
       InvalidateChangedElementAffectedByLogicalCombinationsInHas(
-          element, /* for_pseudo_change */ false);
-      InvalidateAncestorsOrSiblingsAffectedByHas(element);
+          element, /* for_element_affected_by_pseudo_in_has */ false);
+      InvalidateAncestorsOrSiblingsAffectedByHas(
+          PseudoHasInvalidationTraversalContext::
+              ForAttributeOrPseudoStateChange(element));
     }
   }
 
@@ -1323,11 +1426,13 @@ void StyleEngine::IdChangedForElement(const AtomicString& old_id,
   if (RuntimeEnabledFeatures::CSSPseudoHasEnabled() &&
       features.NeedsHasInvalidationForIdChange() &&
       PossiblyAffectingHasState(element)) {
-    if ((!old_id.IsEmpty() && features.NeedsHasInvalidationForId(old_id)) ||
-        (!new_id.IsEmpty() && features.NeedsHasInvalidationForId(new_id))) {
+    if ((!old_id.empty() && features.NeedsHasInvalidationForId(old_id)) ||
+        (!new_id.empty() && features.NeedsHasInvalidationForId(new_id))) {
       InvalidateChangedElementAffectedByLogicalCombinationsInHas(
-          element, /* for_pseudo_change */ false);
-      InvalidateAncestorsOrSiblingsAffectedByHas(element);
+          element, /* for_element_affected_by_pseudo_in_has */ false);
+      InvalidateAncestorsOrSiblingsAffectedByHas(
+          PseudoHasInvalidationTraversalContext::
+              ForAttributeOrPseudoStateChange(element));
     }
   }
 
@@ -1335,9 +1440,9 @@ void StyleEngine::IdChangedForElement(const AtomicString& old_id,
     return;
 
   InvalidationLists invalidation_lists;
-  if (!old_id.IsEmpty())
+  if (!old_id.empty())
     features.CollectInvalidationSetsForId(invalidation_lists, element, old_id);
-  if (!new_id.IsEmpty())
+  if (!new_id.empty())
     features.CollectInvalidationSetsForId(invalidation_lists, element, new_id);
   pending_invalidations_.ScheduleInvalidationSetsForNode(invalidation_lists,
                                                          element);
@@ -1362,8 +1467,11 @@ void StyleEngine::PseudoStateChangedForElement(
       PossiblyAffectingHasState(element)) {
     if (features.NeedsHasInvalidationForPseudoClass(pseudo_type)) {
       InvalidateChangedElementAffectedByLogicalCombinationsInHas(
-          element, /* for_pseudo_change */ true);
-      InvalidateAncestorsOrSiblingsAffectedByHasForPseudoChange(element);
+          element, /* for_element_affected_by_pseudo_in_has */ true);
+      InvalidateAncestorsOrSiblingsAffectedByHas(
+          PseudoHasInvalidationTraversalContext::
+              ForAttributeOrPseudoStateChange(element)
+                  .SetForElementAffectedByPseudoInHas());
     }
   }
 
@@ -1539,7 +1647,7 @@ void StyleEngine::ScheduleTypeRuleSetInvalidations(
     rule_set->Features().CollectTypeRuleInvalidationSet(invalidation_lists,
                                                         node);
   }
-  DCHECK(invalidation_lists.siblings.IsEmpty());
+  DCHECK(invalidation_lists.siblings.empty());
   pending_invalidations_.ScheduleInvalidationSetsForNode(invalidation_lists,
                                                          node);
 
@@ -1639,13 +1747,17 @@ void StyleEngine::ScheduleInvalidationsForHasPseudoAffectedByInsertion(
   }
 
   if (needs_has_invalidation_for_inserted_subtree) {
-    InvalidateAncestorsOrSiblingsAffectedByHas(parent, previous_sibling);
+    InvalidateAncestorsOrSiblingsAffectedByHas(
+        PseudoHasInvalidationTraversalContext::ForInsertion(parent,
+                                                            previous_sibling));
     return;
   }
 
   if (features.NeedsHasInvalidationForPseudoStateChange()) {
-    InvalidateAncestorsOrSiblingsAffectedByHasForPseudoChange(parent,
-                                                              previous_sibling);
+    InvalidateAncestorsOrSiblingsAffectedByHas(
+        PseudoHasInvalidationTraversalContext::ForInsertion(parent,
+                                                            previous_sibling)
+            .SetForElementAffectedByPseudoInHas());
   }
 }
 
@@ -1678,22 +1790,51 @@ void StyleEngine::ScheduleInvalidationsForHasPseudoAffectedByRemoval(
   // sibling order. (e.g. When we have a style rule '.a:has(+ .b) {}', we always
   // need :has() invalidation if the preceding element of '.b' is removed)
   if (parent->ChildrenAffectedByDirectAdjacentRules()) {
-    InvalidateAncestorsOrSiblingsAffectedByHas(parent, previous_sibling);
+    InvalidateAncestorsOrSiblingsAffectedByHas(
+        PseudoHasInvalidationTraversalContext::ForRemoval(
+            parent, previous_sibling, removed_element));
     return;
   }
 
   for (Element& element :
        ElementTraversal::InclusiveDescendantsOf(removed_element)) {
     if (features.NeedsHasInvalidationForInsertedOrRemovedElement(element)) {
-      InvalidateAncestorsOrSiblingsAffectedByHas(parent, previous_sibling);
+      InvalidateAncestorsOrSiblingsAffectedByHas(
+          PseudoHasInvalidationTraversalContext::ForRemoval(
+              parent, previous_sibling, removed_element));
       return;
     }
   }
 
   if (features.NeedsHasInvalidationForPseudoStateChange()) {
-    InvalidateAncestorsOrSiblingsAffectedByHasForPseudoChange(parent,
-                                                              previous_sibling);
+    InvalidateAncestorsOrSiblingsAffectedByHas(
+        PseudoHasInvalidationTraversalContext::ForRemoval(
+            parent, previous_sibling, removed_element)
+            .SetForElementAffectedByPseudoInHas());
   }
+}
+
+void StyleEngine::ScheduleInvalidationsForHasPseudoWhenAllChildrenRemoved(
+    Element& parent) {
+  if (!RuntimeEnabledFeatures::CSSPseudoHasEnabled())
+    return;
+
+  if (ShouldSkipInvalidationFor(parent))
+    return;
+
+  const RuleFeatureSet& features = GetRuleFeatureSet();
+  if (!features.NeedsHasInvalidationForInsertionOrRemoval())
+    return;
+
+  if (!InsertionOrRemovalPossiblyAffectHasStateOfAncestorsOrAncestorSiblings(
+          &parent)) {
+    // Removed children will not affect :has() state
+    return;
+  }
+
+  // Always invalidate elements possibly affected by the removed children.
+  InvalidateAncestorsOrSiblingsAffectedByHas(
+      PseudoHasInvalidationTraversalContext::ForAllChildrenRemoved(parent));
 }
 
 void StyleEngine::InvalidateStyle() {
@@ -1786,15 +1927,15 @@ void StyleEngine::SetStatsEnabled(bool enabled) {
 }
 
 void StyleEngine::SetPreferredStylesheetSetNameIfNotSet(const String& name) {
-  DCHECK(!name.IsEmpty());
-  if (!preferred_stylesheet_set_name_.IsEmpty())
+  DCHECK(!name.empty());
+  if (!preferred_stylesheet_set_name_.empty())
     return;
   preferred_stylesheet_set_name_ = name;
   MarkDocumentDirty();
 }
 
 void StyleEngine::SetHttpDefaultStyle(const String& content) {
-  if (!content.IsEmpty())
+  if (!content.empty())
     SetPreferredStylesheetSetNameIfNotSet(content);
 }
 
@@ -1805,7 +1946,7 @@ void StyleEngine::CollectFeaturesTo(RuleFeatureSet& features) {
     if (!sheet)
       continue;
     if (RuleSet* rule_set = RuleSetForSheet(*sheet))
-      features.Add(rule_set->Features());
+      features.Merge(rule_set->Features());
   }
 }
 
@@ -1858,8 +1999,7 @@ void StyleEngine::EnsureUAStyleForTransitionPseudos() {
   // here. This is done externally by the code which invalidates this style
   // sheet.
   auto* document_transition =
-      DocumentTransitionSupplement::FromIfExists(GetDocument())
-          ->GetTransition();
+      DocumentTransitionSupplement::From(GetDocument())->GetTransition();
   auto* style_sheet_contents =
       CSSDefaultStyleSheets::ParseUASheet(document_transition->UAStyleSheet());
   ua_document_transition_style_ = MakeGarbageCollected<RuleSet>();
@@ -1892,9 +2032,6 @@ bool StyleEngine::HasRulesForId(const AtomicString& id) const {
 }
 
 void StyleEngine::InitialStyleChanged() {
-  if (viewport_resolver_)
-    viewport_resolver_->InitialStyleChanged();
-
   MarkViewportStyleDirty();
   // We need to update the viewport style immediately because media queries
   // evaluated in MediaQueryAffectingValueChanged() below may rely on the
@@ -1905,7 +2042,7 @@ void StyleEngine::InitialStyleChanged() {
       StyleChangeReasonForTracing::Create(style_change_reason::kSettings));
 }
 
-void StyleEngine::ViewportRulesChanged() {
+void StyleEngine::ViewportStyleSettingChanged() {
   if (viewport_resolver_)
     viewport_resolver_->SetNeedsUpdate();
 
@@ -1935,10 +2072,9 @@ enum RuleSetFlags {
   kKeyframesRules = 1 << 1,
   kFullRecalcRules = 1 << 2,
   kPropertyRules = 1 << 3,
-  kScrollTimelineRules = 1 << 4,
-  kCounterStyleRules = 1 << 5,
-  kLayerRules = 1 << 6,
-  kFontPaletteValuesRules = 1 << 7,
+  kCounterStyleRules = 1 << 4,
+  kLayerRules = 1 << 5,
+  kFontPaletteValuesRules = 1 << 6,
 };
 
 const unsigned kRuleSetFlagsAll = ~0u;
@@ -1947,20 +2083,18 @@ unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
   unsigned flags = 0;
   for (auto& rule_set : rule_sets) {
     rule_set->CompactRulesIfNeeded();
-    if (!rule_set->KeyframesRules().IsEmpty())
+    if (!rule_set->KeyframesRules().empty())
       flags |= kKeyframesRules;
-    if (!rule_set->FontFaceRules().IsEmpty())
+    if (!rule_set->FontFaceRules().empty())
       flags |= kFontFaceRules;
-    if (!rule_set->FontPaletteValuesRules().IsEmpty())
+    if (!rule_set->FontPaletteValuesRules().empty())
       flags |= kFontPaletteValuesRules;
     if (rule_set->NeedsFullRecalcForRuleSetInvalidation())
       flags |= kFullRecalcRules;
-    if (!rule_set->PropertyRules().IsEmpty())
+    if (!rule_set->PropertyRules().empty())
       flags |= kPropertyRules;
-    if (!rule_set->CounterStyleRules().IsEmpty())
+    if (!rule_set->CounterStyleRules().empty())
       flags |= kCounterStyleRules;
-    if (!rule_set->ScrollTimelineRules().IsEmpty())
-      flags |= kScrollTimelineRules;
     if (rule_set->HasCascadeLayers())
       flags |= kLayerRules;
   }
@@ -1978,7 +2112,7 @@ void StyleEngine::InvalidateForRuleSetChanges(
     return;
   if (!tree_scope.GetDocument().documentElement())
     return;
-  if (changed_rule_sets.IsEmpty())
+  if (changed_rule_sets.empty())
     return;
 
   Element& invalidation_root =
@@ -2002,8 +2136,8 @@ void StyleEngine::InvalidateInitialData() {
   initial_data_ = nullptr;
 }
 
-// A miniature CascadeMap for cascading @property and @scroll-timeline
-// at-rules according to their origin, cascade layer order and position.
+// A miniature CascadeMap for cascading @property at-rules according to their
+// origin, cascade layer order and position.
 class StyleEngine::AtRuleCascadeMap {
   STACK_ALLOCATED();
 
@@ -2131,26 +2265,19 @@ void StyleEngine::ApplyUserRuleSetChanges(
     for (auto* it = new_style_sheets.begin(); it != new_style_sheets.end();
          it++) {
       DCHECK(it->second);
-      if (!it->second->CounterStyleRules().IsEmpty())
+      if (!it->second->CounterStyleRules().empty())
         EnsureUserCounterStyleMap().AddCounterStyles(*it->second);
     }
 
     MarkCounterStylesNeedUpdate();
   }
 
-  if (changed_rule_flags &
-      (kPropertyRules | kScrollTimelineRules | kFontPaletteValuesRules)) {
+  if (changed_rule_flags & (kPropertyRules | kFontPaletteValuesRules)) {
     if (changed_rule_flags & kPropertyRules) {
       ClearPropertyRules();
       AtRuleCascadeMap cascade_map(GetDocument());
       AddPropertyRulesFromSheets(cascade_map, new_style_sheets,
                                  true /* is_user_style */);
-    }
-    if (changed_rule_flags & kScrollTimelineRules) {
-      ClearScrollTimelineRules();
-      AtRuleCascadeMap cascade_map(GetDocument());
-      AddScrollTimelineRulesFromSheets(cascade_map, new_style_sheets,
-                                       true /* is_user_style */);
     }
 
     if (changed_rule_flags & kFontPaletteValuesRules) {
@@ -2188,13 +2315,11 @@ void StyleEngine::ApplyRuleSetChanges(
                                  (changed_rule_flags & kFontFaceRules) &&
                                  tree_scope.RootNode().IsDocumentNode();
   bool rebuild_at_property_registry = false;
-  bool rebuild_at_scroll_timeline_map = false;
   bool rebuild_at_font_palette_values_map = false;
   ScopedStyleResolver* scoped_resolver = tree_scope.GetScopedStyleResolver();
   if (scoped_resolver && scoped_resolver->NeedsAppendAllSheets()) {
     rebuild_font_face_cache = true;
     rebuild_at_property_registry = true;
-    rebuild_at_scroll_timeline_map = true;
     rebuild_at_font_palette_values_map = true;
     change = kActiveSheetsChanged;
   }
@@ -2219,7 +2344,7 @@ void StyleEngine::ApplyRuleSetChanges(
     //   common prefix, and rebuild CascadeLayerMap only if layers are changed.
     // - For other diffs, reset author style and re-add all sheets for the
     //   TreeScope. If new sheets need a CascadeLayerMap, rebuild it.
-    if (new_style_sheets.IsEmpty()) {
+    if (new_style_sheets.empty()) {
       rebuild_cascade_layer_map = false;
       ResetAuthorStyle(tree_scope);
     } else if (change == kActiveSheetsAppended) {
@@ -2263,20 +2388,6 @@ void StyleEngine::ApplyRuleSetChanges(
     }
   }
 
-  if ((changed_rule_flags & kScrollTimelineRules) ||
-      rebuild_at_scroll_timeline_map) {
-    // @scroll-timeline rules are currently not allowed in shadow trees.
-    // https://drafts.csswg.org/scroll-animations-1/#scroll-timeline-at-rule
-    if (tree_scope.RootNode().IsDocumentNode()) {
-      ClearScrollTimelineRules();
-      AtRuleCascadeMap cascade_map(GetDocument());
-      AddScrollTimelineRulesFromSheets(cascade_map, active_user_style_sheets_,
-                                       true /* is_user_style */);
-      AddScrollTimelineRulesFromSheets(cascade_map, new_style_sheets,
-                                       false /* is_user_style */);
-    }
-  }
-
   if ((changed_rule_flags & kFontPaletteValuesRules) ||
       rebuild_at_font_palette_values_map) {
     // TODO(https://crbug.com1296114): Support @font-palette-values in shadow
@@ -2305,7 +2416,7 @@ void StyleEngine::ApplyRuleSetChanges(
   // TODO(crbug.com/1309178): Invalidate style & layout for @position-fallback
   // rule changes.
 
-  if (!new_style_sheets.IsEmpty()) {
+  if (!new_style_sheets.empty()) {
     tree_scope.EnsureScopedStyleResolver().AppendActiveStyleSheets(
         append_start_index, new_style_sheets);
   }
@@ -2362,6 +2473,15 @@ const MediaQueryEvaluator& StyleEngine::EnsureMediaQueryEvaluator() {
   return *media_query_evaluator_;
 }
 
+bool StyleEngine::StyleMaybeAffectedByLayout(const Node& node) {
+  // Note that the StyleAffectedByLayout flag is set based on which
+  // ComputedStyles we've resolved previously. Since style resolution may never
+  // reach elements in display:none, we defensively treat any null-or-ensured
+  // ComputedStyle as affected by layout.
+  return StyleAffectedByLayout() ||
+         ComputedStyle::IsNullOrEnsured(node.GetComputedStyle());
+}
+
 bool StyleEngine::UpdateRemUnits(const ComputedStyle* old_root_style,
                                  const ComputedStyle* new_root_style) {
   if (!new_root_style || !UsesRemUnits())
@@ -2391,17 +2511,6 @@ void StyleEngine::EnvironmentVariableChanged() {
       style_change_reason::kPropertyRegistration));
   if (resolver_)
     resolver_->InvalidateMatchedPropertiesCache();
-}
-
-void StyleEngine::ScrollTimelinesChanged() {
-  MarkAllElementsForStyleRecalc(StyleChangeReasonForTracing::Create(
-      style_change_reason::kScrollTimeline));
-  // We currently rely on marking at least one element for recalc in order
-  // to clean the timelines_need_update_ flag. (Otherwise the timelines
-  // will just remain dirty). Hence, if we in the future remove the call
-  // to mark elements for recalc, we would need to call
-  // ScheduleLayoutTreeUpdateIfNeeded to ensure that we reach UpdateTimelines.
-  timelines_need_update_ = true;
 }
 
 void StyleEngine::NodeWillBeRemoved(Node& node) {
@@ -2461,11 +2570,6 @@ void StyleEngine::ClearPropertyRules() {
   PropertyRegistration::RemoveDeclaredProperties(GetDocument());
 }
 
-void StyleEngine::ClearScrollTimelineRules() {
-  scroll_timeline_rule_map_.clear();
-  ScrollTimelinesChanged();
-}
-
 void StyleEngine::AddPropertyRulesFromSheets(
     AtRuleCascadeMap& cascade_map,
     const ActiveStyleSheetVector& sheets,
@@ -2473,16 +2577,6 @@ void StyleEngine::AddPropertyRulesFromSheets(
   for (const ActiveStyleSheet& active_sheet : sheets) {
     if (RuleSet* rule_set = active_sheet.second)
       AddPropertyRules(cascade_map, *rule_set, is_user_style);
-  }
-}
-
-void StyleEngine::AddScrollTimelineRulesFromSheets(
-    AtRuleCascadeMap& cascade_map,
-    const ActiveStyleSheetVector& sheets,
-    bool is_user_style) {
-  for (const ActiveStyleSheet& active_sheet : sheets) {
-    if (RuleSet* rule_set = active_sheet.second)
-      AddScrollTimelineRules(cascade_map, *rule_set, is_user_style);
   }
 }
 
@@ -2574,26 +2668,9 @@ void StyleEngine::AddPropertyRules(AtRuleCascadeMap& cascade_map,
   }
 }
 
-void StyleEngine::AddScrollTimelineRules(AtRuleCascadeMap& cascade_map,
-                                         const RuleSet& rule_set,
-                                         bool is_user_style) {
-  const HeapVector<Member<StyleRuleScrollTimeline>> scroll_timeline_rules =
-      rule_set.ScrollTimelineRules();
-  if (scroll_timeline_rules.IsEmpty())
-    return;
-  for (const auto& rule : scroll_timeline_rules) {
-    auto priority =
-        cascade_map.GetPriority(is_user_style, rule->GetCascadeLayer());
-    if (!cascade_map.AddAndCascade(rule->GetName(), priority))
-      continue;
-    scroll_timeline_rule_map_.Set(rule->GetName(), rule);
-  }
-  ScrollTimelinesChanged();
-}
-
 StyleRuleKeyframes* StyleEngine::KeyframeStylesForAnimation(
     const AtomicString& animation_name) {
-  if (keyframes_rule_map_.IsEmpty())
+  if (keyframes_rule_map_.empty())
     return nullptr;
 
   KeyframesRuleMap::iterator it = keyframes_rule_map_.find(animation_name);
@@ -2606,7 +2683,7 @@ StyleRuleKeyframes* StyleEngine::KeyframeStylesForAnimation(
 StyleRuleFontPaletteValues* StyleEngine::FontPaletteValuesForNameAndFamily(
     AtomicString palette_name,
     AtomicString family_name) {
-  if (font_palette_values_rule_map_.IsEmpty() || palette_name.IsEmpty()) {
+  if (font_palette_values_rule_map_.empty() || palette_name.empty()) {
     return nullptr;
   }
 
@@ -2616,51 +2693,6 @@ StyleRuleFontPaletteValues* StyleEngine::FontPaletteValuesForNameAndFamily(
     return nullptr;
 
   return it->value.Get();
-}
-
-void StyleEngine::UpdateTimelines() {
-  if (!timelines_need_update_)
-    return;
-  timelines_need_update_ = false;
-
-  HeapHashMap<AtomicString, Member<CSSScrollTimeline>> timelines;
-
-  for (const auto& it : scroll_timeline_rule_map_) {
-    const AtomicString& name = it.key;
-
-    CSSScrollTimeline::Options options(GetDocument(), *it.value);
-
-    // Check if we can re-use existing timeline.
-    CSSScrollTimeline* existing_timeline = FindScrollTimeline(name);
-    if (existing_timeline && existing_timeline->Matches(options)) {
-      timelines.Set(name, existing_timeline);
-      continue;
-    }
-
-    // Create a new timeline.
-    auto* timeline = MakeGarbageCollected<CSSScrollTimeline>(
-        &GetDocument(), std::move(options));
-    // It is not allowed for a style update to create timelines that
-    // needs timing updates (i.e.
-    // AnimationTimeline::NeedsAnimationTimingUpdate() must return false).
-    // Servicing animations after creation preserves this invariant by ensuring
-    // the last-update time of the timeline is equal to the current time.
-    timeline->ServiceAnimations(kTimingUpdateOnDemand);
-    timelines.Set(name, timeline);
-  }
-
-  std::swap(scroll_timeline_map_, timelines);
-}
-
-CSSScrollTimeline* StyleEngine::FindScrollTimeline(const AtomicString& name) {
-  DCHECK(!timelines_need_update_);
-  auto it = scroll_timeline_map_.find(name);
-  return it != scroll_timeline_map_.end() ? it->value : nullptr;
-}
-
-void StyleEngine::ScrollTimelineInvalidated(CSSScrollTimeline& timeline) {
-  timelines_need_update_ = true;
-  timeline.InvalidateEffectTargetStyle();
 }
 
 DocumentStyleEnvironmentVariables& StyleEngine::EnsureEnvironmentVariables() {
@@ -2688,7 +2720,7 @@ void StyleEngine::RecalcStyleForContainer(Element& container,
 
   // If the container itself depends on an outer container, then its
   // DependsOnSizeContainerQueries flag will be set, and we would recalc its
-  // style (due to ForceRecalcContainer/ForceRecalcDescendantContainers).
+  // style (due to ForceRecalcContainer/ForceRecalcDescendantSizeContainers).
   // This is not necessary, hence we suppress recalc for this element.
   change = change.SuppressRecalc();
 
@@ -2756,8 +2788,10 @@ void StyleEngine::UpdateStyleAndLayoutTreeForContainer(
   auto* evaluator = cq_data->GetContainerQueryEvaluator();
   DCHECK(evaluator);
 
-  ContainerQueryEvaluator::Change query_change = evaluator->ContainerChanged(
-      GetDocument(), container, physical_size, physical_axes);
+  ContainerQueryEvaluator::Change query_change =
+      evaluator->SizeContainerChanged(GetDocument(), container, physical_size,
+                                      physical_axes);
+
   switch (query_change) {
     case ContainerQueryEvaluator::Change::kNone:
       if (!cq_data->SkippedStyleRecalc())
@@ -2765,7 +2799,7 @@ void StyleEngine::UpdateStyleAndLayoutTreeForContainer(
       break;
     case ContainerQueryEvaluator::Change::kNearestContainer:
       if (!IsShadowHost(container)) {
-        change = change.ForceRecalcContainer();
+        change = change.ForceRecalcSizeContainer();
         break;
       }
       // Since the nearest container is found in shadow-including ancestors and
@@ -2778,7 +2812,7 @@ void StyleEngine::UpdateStyleAndLayoutTreeForContainer(
       // a shadow host.
       [[fallthrough]];
     case ContainerQueryEvaluator::Change::kDescendantContainers:
-      change = change.ForceRecalcDescendantContainers();
+      change = change.ForceRecalcDescendantSizeContainers();
       break;
   }
 
@@ -2837,12 +2871,19 @@ void StyleEngine::RecalcStyle(StyleRecalcChange change,
                               const StyleRecalcContext& style_recalc_context) {
   DCHECK(GetDocument().documentElement());
   ScriptForbiddenScope forbid_script;
+  SkipStyleRecalcScope skip_scope(*this);
   CheckPseudoHasCacheScope check_pseudo_has_cache_scope(&GetDocument());
   Element& root_element = style_recalc_root_.RootElement();
   Element* parent = FlatTreeTraversal::ParentElement(root_element);
 
   SelectorFilterRootScope filter_scope(parent);
-  root_element.RecalcStyle(change, style_recalc_context);
+  StyleRecalcChange sibling_change =
+      root_element.RecalcStyle(change, style_recalc_context);
+
+  if (sibling_change.RecalcSiblingDescendants()) {
+    root_element.RecalcSubsequentSiblingStyles(change.Combine(sibling_change),
+                                               style_recalc_context);
+  }
 
   for (ContainerNode* ancestor = root_element.GetStyleRecalcParent(); ancestor;
        ancestor = ancestor->GetStyleRecalcParent()) {
@@ -3093,9 +3134,73 @@ void StyleEngine::UpdateLayoutTreeRebuildRoot(ContainerNode* ancestor,
   layout_tree_rebuild_root_.Update(ancestor, dirty_node);
 }
 
+namespace {
+
+Node* AnalysisParent(const Node& node) {
+  return IsA<ShadowRoot>(node) ? node.ParentOrShadowHostElement()
+                               : LayoutTreeBuilderTraversal::Parent(node);
+}
+
+bool IsRootOrSibling(const Node* root, const Node& node) {
+  if (!root)
+    return false;
+  if (root == &node)
+    return true;
+  if (Node* root_parent = AnalysisParent(*root))
+    return root_parent == AnalysisParent(node);
+  return false;
+}
+
+}  // namespace
+
+StyleEngine::AncestorAnalysis StyleEngine::AnalyzeInclusiveAncestor(
+    const Node& node) {
+  if (IsRootOrSibling(style_recalc_root_.GetRootNode(), node))
+    return AncestorAnalysis::kStyleRoot;
+  if (IsRootOrSibling(style_invalidation_root_.GetRootNode(), node))
+    return AncestorAnalysis::kStyleRoot;
+  if (ComputedStyle::IsInterleavingRoot(node.GetComputedStyle()))
+    return AncestorAnalysis::kInterleavingRoot;
+  return AncestorAnalysis::kNone;
+}
+
+StyleEngine::AncestorAnalysis StyleEngine::AnalyzeExclusiveAncestor(
+    const Node& node) {
+  if (DisplayLockUtilities::IsPotentialStyleRecalcRoot(node))
+    return AncestorAnalysis::kStyleRoot;
+  return AnalyzeInclusiveAncestor(node);
+}
+
+StyleEngine::AncestorAnalysis StyleEngine::AnalyzeAncestors(const Node& node) {
+  AncestorAnalysis analysis = AnalyzeInclusiveAncestor(node);
+
+  for (const Node* ancestor = LayoutTreeBuilderTraversal::Parent(node);
+       ancestor; ancestor = LayoutTreeBuilderTraversal::Parent(*ancestor)) {
+    // Already at maximum severity, no need to proceed.
+    if (analysis == AncestorAnalysis::kStyleRoot)
+      return analysis;
+
+    // LayoutTreeBuilderTraversal::Parent skips ShadowRoots, so we check it
+    // explicitly here.
+    if (ShadowRoot* root = ancestor->GetShadowRoot())
+      analysis = std::max(analysis, AnalyzeExclusiveAncestor(*root));
+
+    analysis = std::max(analysis, AnalyzeExclusiveAncestor(*ancestor));
+  }
+
+  return analysis;
+}
+
 bool StyleEngine::MarkReattachAllowed() const {
   return !InRebuildLayoutTree() ||
          allow_mark_for_reattach_from_rebuild_layout_tree_;
+}
+
+bool StyleEngine::MarkStyleDirtyAllowed() const {
+  if (GetDocument().InStyleRecalc() || InContainerQueryStyleRecalc()) {
+    return allow_mark_style_dirty_from_recalc_;
+  }
+  return !InRebuildLayoutTree();
 }
 
 bool StyleEngine::SupportsDarkColorScheme() {
@@ -3118,6 +3223,8 @@ void StyleEngine::UpdateColorScheme() {
   mojom::blink::PreferredColorScheme old_preferred_color_scheme =
       preferred_color_scheme_;
   preferred_color_scheme_ = settings->GetPreferredColorScheme();
+  bool old_force_dark_mode_enabled = force_dark_mode_enabled_;
+  force_dark_mode_enabled_ = settings->GetForceDarkModeEnabled();
 
   if (const auto* overrides =
           GetDocument().GetPage()->GetMediaFeatureOverrides()) {
@@ -3132,11 +3239,14 @@ void StyleEngine::UpdateColorScheme() {
     }
   }
 
-  if (GetDocument().Printing())
+  if (GetDocument().Printing()) {
     preferred_color_scheme_ = mojom::blink::PreferredColorScheme::kLight;
+    force_dark_mode_enabled_ = false;
+  }
 
   if (forced_colors_ != old_forced_colors ||
-      preferred_color_scheme_ != old_preferred_color_scheme) {
+      preferred_color_scheme_ != old_preferred_color_scheme ||
+      force_dark_mode_enabled_ != old_force_dark_mode_enabled) {
     PlatformColorsChanged();
   }
 
@@ -3367,8 +3477,6 @@ void StyleEngine::Trace(Visitor* visitor) const {
   visitor->Trace(keyframes_rule_map_);
   visitor->Trace(font_palette_values_rule_map_);
   visitor->Trace(user_counter_style_map_);
-  visitor->Trace(scroll_timeline_rule_map_);
-  visitor->Trace(scroll_timeline_map_);
   visitor->Trace(user_cascade_layer_map_);
   visitor->Trace(inspector_style_sheet_);
   visitor->Trace(document_style_sheet_collection_);
@@ -3445,7 +3553,7 @@ void StyleEngine::MarkForLayoutTreeChangesAfterDetach() {
 }
 
 void StyleEngine::ReportUseOfLegacyLayoutWithContainerQueries() {
-  DCHECK(!RuntimeEnabledFeatures::LayoutNGPrintingEnabled());
+  DCHECK(!HasFullNGFragmentationSupport());
 
   // Only report once.
   if (legacy_layout_query_container_)
@@ -3460,6 +3568,19 @@ void StyleEngine::ReportUseOfLegacyLayoutWithContainerQueries() {
           "Using container queries or units with printing, or in combination "
           "with tables inside multicol will not work correctly."));
   GetDocument().AddConsoleMessage(console_message);
+}
+
+bool StyleEngine::AllowSkipStyleRecalcForScope() const {
+  if (InContainerQueryStyleRecalc())
+    return true;
+  if (LocalFrameView* view = GetDocument().View()) {
+    // Existing layout roots before starting style recalc may end up being
+    // inside skipped subtrees if we allowed skipping. If we start out with an
+    // empty list, any added ones will be a result of an element style recalc,
+    // which means the will not be inside a skipped subtree.
+    return !view->IsSubtreeLayout();
+  }
+  return true;
 }
 
 }  // namespace blink

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -418,11 +418,7 @@ base::Value::Dict ConstructAboutInformation(
   transport_state->Set(GetTransportStateString(service->GetTransportState()));
   disable_reasons->Set(GetDisableReasonsString(service->GetDisableReasons()));
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (!chromeos::features::IsSyncSettingsCategorizationEnabled()) {
-    os_feature_state->Set("Flag disabled");
-  } else {
-    os_feature_state->Set("Enforced Enabled");
-  }
+  os_feature_state->Set("Enforced Enabled");
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   feature_enabled->Set(service->IsSyncFeatureEnabled());
   setup_in_progress->Set(service->IsSetupInProgress());
@@ -611,8 +607,7 @@ base::Value::Dict ConstructAboutInformation(
                    base::Value(unrecoverable_error_message));
   }
 
-  about_info.Set("type_status", base::Value::FromUniquePtrValue(
-                                    service->GetTypeStatusMapForDebugging()));
+  about_info.Set("type_status", service->GetTypeStatusMapForDebugging());
 
   return about_info;
 }

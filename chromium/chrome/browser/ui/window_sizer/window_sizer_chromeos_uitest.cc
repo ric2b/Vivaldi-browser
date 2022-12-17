@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,7 @@ gfx::Rect GetChromeIconBoundsInScreen(aura::Window* root) {
   ash::ShelfView* shelf_view =
       ash::Shelf::ForWindow(root)->GetShelfViewForTesting();
   const views::ViewModel* view_model = shelf_view->view_model_for_test();
-  EXPECT_EQ(1, view_model->view_size());
+  EXPECT_EQ(1u, view_model->view_size());
   gfx::Rect bounds = view_model->view_at(0)->GetBoundsInScreen();
   return bounds;
 }

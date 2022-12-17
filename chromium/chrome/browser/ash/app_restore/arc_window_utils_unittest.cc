@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,8 +23,7 @@ const int TEST_DISPLAY_HEIGHT = 1440;
 const double TEST_SCALE_FACTOR = 2.0;
 }  // namespace
 
-namespace ash {
-namespace full_restore {
+namespace ash::full_restore {
 
 class ArcWindowUtilsTest : public testing::Test {
  protected:
@@ -93,5 +92,4 @@ TEST_F(ArcWindowUtilsTest, ArcWindowInfoValidDisplayAndBoundsTest) {
   EXPECT_EQ(arc_window_info->bounds->height(), 800);
 }
 
-}  // namespace full_restore
-}  // namespace ash
+}  // namespace ash::full_restore

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,13 +9,12 @@
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
-#include "content/browser/compute_pressure/pressure_quantizer.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/document_user_data.h"
-#include "mojo/public/cpp/bindings/receiver_set.h"
-#include "mojo/public/cpp/bindings/remote_set.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/device/public/mojom/pressure_manager.mojom.h"
-#include "services/device/public/mojom/pressure_state.mojom.h"
+#include "services/device/public/mojom/pressure_update.mojom.h"
 #include "third_party/blink/public/mojom/compute_pressure/pressure_service.mojom.h"
 
 namespace content {
@@ -47,30 +46,24 @@ class CONTENT_EXPORT PressureServiceImpl
       mojo::PendingReceiver<blink::mojom::PressureService> receiver);
 
   // blink::mojom::PressureService implementation.
-  void AddObserver(mojo::PendingRemote<blink::mojom::PressureObserver> observer,
-                   blink::mojom::PressureQuantizationPtr quantization,
-                   AddObserverCallback callback) override;
+  void BindObserver(
+      mojo::PendingRemote<blink::mojom::PressureObserver> observer,
+      BindObserverCallback callback) override;
 
   // device::mojom::PressureClient implementation.
-  void PressureStateChanged(device::mojom::PressureStatePtr state,
-                            base::Time timestamp) override;
+  void PressureStateChanged(device::mojom::PressureUpdatePtr update) override;
 
  private:
   PressureServiceImpl(RenderFrameHost* render_frame_host,
                       base::TimeDelta visible_observer_rate_limit);
 
-  void OnObserverRemoteDisconnected(mojo::RemoteSetElementId /*id*/);
+  void OnObserverRemoteDisconnected();
 
   void OnManagerRemoteDisconnected();
 
-  void DidAddObserver(
-      mojo::PendingRemote<blink::mojom::PressureObserver> observer,
-      AddObserverCallback callback,
-      bool success);
+  void DidBindObserver(BindObserverCallback callback, bool success);
 
-  // Resets the state used to dispatch updates to observers.
-  //
-  // Called when the quantizing scheme changes.
+  // Resets the state used to dispatch updates to observer.
   void ResetObserverState();
 
   SEQUENCE_CHECKER(sequence_checker_);
@@ -79,31 +72,26 @@ class CONTENT_EXPORT PressureServiceImpl
   // the frame.
   const base::TimeDelta visible_observer_rate_limit_;
 
-  // Implements the quantizing scheme used for all the frame's observers.
-  PressureQuantizer quantizer_ GUARDED_BY_CONTEXT(sequence_checker_);
-
-  // The (quantized) sample that was last reported to this frame's observers.
+  // The update that was last reported to this frame's observers.
   //
   // Stored to avoid sending updates when the underlying compute pressure state
   // changes, but quantization produces the same values that were reported in
   // the last update.
-  device::mojom::PressureState last_reported_state_
-      GUARDED_BY_CONTEXT(sequence_checker_);
+  device::mojom::PressureUpdatePtr last_reported_update_
+      GUARDED_BY_CONTEXT(sequence_checker_) = nullptr;
 
-  // The last time the frame's observers received an update.
-  //
-  // Stored to implement rate-limiting.
-  base::Time last_reported_timestamp_ GUARDED_BY_CONTEXT(sequence_checker_);
-
-  mojo::RemoteSet<blink::mojom::PressureObserver> observers_
-      GUARDED_BY_CONTEXT(sequence_checker_);
-  mojo::ReceiverSet<blink::mojom::PressureService> receivers_
-      GUARDED_BY_CONTEXT(sequence_checker_);
-
+  // Callback from |receiver_| is passed to |remote_| and the Receiver
+  // should be destroyed first so that the callback is invalidated before
+  // being discarded.
   mojo::Remote<device::mojom::PressureManager> remote_
       GUARDED_BY_CONTEXT(sequence_checker_);
   mojo::Receiver<device::mojom::PressureClient> GUARDED_BY_CONTEXT(
       sequence_checker_) client_{this};
+
+  mojo::Remote<blink::mojom::PressureObserver> observer_
+      GUARDED_BY_CONTEXT(sequence_checker_);
+  mojo::Receiver<blink::mojom::PressureService> GUARDED_BY_CONTEXT(
+      sequence_checker_) receiver_{this};
 
   friend DocumentUserData;
   DOCUMENT_USER_DATA_KEY_DECL();

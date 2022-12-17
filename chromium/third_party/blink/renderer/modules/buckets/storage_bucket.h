@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
-#include "third_party/blink/renderer/core/dom/dom_time_stamp.h"
+#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/navigator_base.h"
@@ -19,6 +19,7 @@
 
 namespace blink {
 
+class CacheStorage;
 class IDBFactory;
 class LockManager;
 class ScriptState;
@@ -38,10 +39,11 @@ class StorageBucket final : public ScriptWrappable,
   ScriptPromise persisted(ScriptState*);
   ScriptPromise estimate(ScriptState*);
   ScriptPromise durability(ScriptState*);
-  ScriptPromise setExpires(ScriptState*, const DOMTimeStamp&);
+  ScriptPromise setExpires(ScriptState*, const DOMHighResTimeStamp&);
   ScriptPromise expires(ScriptState*);
   IDBFactory* indexedDB();
   LockManager* locks();
+  CacheStorage* caches(ExceptionState&);
 
   // ActiveScriptWrappable
   bool HasPendingActivity() const final;
@@ -76,6 +78,7 @@ class StorageBucket final : public ScriptWrappable,
 
   Member<IDBFactory> idb_factory_;
   Member<LockManager> lock_manager_;
+  Member<CacheStorage> caches_;
   Member<NavigatorBase> navigator_base_;
 };
 

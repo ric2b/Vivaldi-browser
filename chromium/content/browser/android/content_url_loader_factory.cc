@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -229,7 +229,8 @@ class ContentURLLoader : public network::mojom::URLLoader {
                                head->mime_type);
     }
 
-    client->OnReceiveResponse(std::move(head), std::move(consumer_handle));
+    client->OnReceiveResponse(std::move(head), std::move(consumer_handle),
+                              absl::nullopt);
     client_ = std::move(client);
 
     if (total_bytes_to_send == 0) {

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ import '../controls/settings_radio_group.js';
 import '../privacy_page/collapse_radio_button.js';
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
-import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
@@ -111,7 +111,7 @@ export class SettingsCategoryDefaultRadioGroupElement extends
   blockOptionLabel: string;
   blockOptionSubLabel: string;
   blockOptionIcon: string;
-  private pref_: chrome.settingsPrivate.PrefObject;
+  private pref_: chrome.settingsPrivate.PrefObject<number>;
 
   override ready() {
     super.ready();
@@ -159,7 +159,7 @@ export class SettingsCategoryDefaultRadioGroupElement extends
       case ContentSettingsTypes.SERIAL_PORTS:
       case ContentSettingsTypes.USB_DEVICES:
       case ContentSettingsTypes.VR:
-      case ContentSettingsTypes.WINDOW_PLACEMENT:
+      case ContentSettingsTypes.WINDOW_MANAGEMENT:
         // "Ask" vs "Blocked".
         return ContentSetting.ASK;
       default:
@@ -212,6 +212,9 @@ export class SettingsCategoryDefaultRadioGroupElement extends
           break;
       }
       this.set('pref_.controlledBy', controlledBy);
+    } else {
+      this.set('pref_.enforcement', undefined);
+      this.set('pref_.controlledBy', undefined);
     }
 
     const enabled = this.computeIsSettingEnabled(update.setting);

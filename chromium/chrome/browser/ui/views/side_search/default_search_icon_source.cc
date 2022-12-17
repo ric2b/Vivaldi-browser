@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,7 +76,7 @@ gfx::Image DefaultSearchIconSource::GetRawIconImage() const {
   DCHECK(omnibox_view);
   return omnibox_view->model()->client()->GetFaviconForDefaultSearchProvider(
       base::BindRepeating(&DefaultSearchIconSource::OnIconFetched,
-                          weak_ptr_factory_.GetWeakPtr()));
+                          weak_ptr_factory_.GetMutableWeakPtr()));
 }
 
 void DefaultSearchIconSource::OnIconFetched(const gfx::Image& icon) {

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,10 +92,9 @@ PointerEvent::PointerEvent(const AtomicString& type,
 }
 
 bool PointerEvent::IsMouseEvent() const {
-  if (RuntimeEnabledFeatures::ClickPointerEventEnabled() &&
-      (type() == event_type_names::kClick ||
-       type() == event_type_names::kAuxclick ||
-       type() == event_type_names::kContextmenu)) {
+  if (type() == event_type_names::kClick ||
+      type() == event_type_names::kAuxclick ||
+      type() == event_type_names::kContextmenu) {
     return true;
   }
 
@@ -182,13 +181,10 @@ void PointerEvent::Trace(Visitor* visitor) const {
 }
 
 DispatchEventResult PointerEvent::DispatchEvent(EventDispatcher& dispatcher) {
-  if (type().IsEmpty())
+  if (type().empty())
     return DispatchEventResult::kNotCanceled;  // Shouldn't happen.
 
-  if (RuntimeEnabledFeatures::ClickPointerEventEnabled() &&
-      type() == event_type_names::kClick) {
-    // The MouseEvent::DispatchEvent will take care of sending dblclick event if
-    // needed.
+  if (type() == event_type_names::kClick) {
     return MouseEvent::DispatchEvent(dispatcher);
   }
 

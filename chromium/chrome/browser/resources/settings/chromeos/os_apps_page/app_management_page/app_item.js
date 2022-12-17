@@ -1,13 +1,13 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import './shared_style.js';
 import './shared_vars.js';
-import 'chrome://resources/cr_elements/cr_icons_css.m.js';
+import 'chrome://resources/cr_elements/cr_icons.css.js';
 
 import {AppManagementEntryPoint, AppManagementEntryPointsHistogramName, AppType} from 'chrome://resources/cr_components/app_management/constants.js';
 import {getAppIcon} from 'chrome://resources/cr_components/app_management/util.js';
-import {assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assertNotReached} from 'chrome://resources/js/assert.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {AppManagementStoreClient, AppManagementStoreClientInterface} from './store_client.js';

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -271,7 +271,7 @@ function hasCtrlModifier(e: KeyboardEvent): boolean {
   return hasModifier;
 }
 
-// TODO(crbug.com/1252096): Load from chrome://resources/js/util.m.js instead.
+// TODO(crbug.com/1252096): Load from chrome://resources/js/util.js instead.
 function hasKeyModifiers(e: KeyboardEvent): boolean {
   return !!(e.altKey || e.ctrlKey || e.metaKey || e.shiftKey);
 }

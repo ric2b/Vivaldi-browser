@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -188,11 +188,12 @@ bool FileHandlingIconsSupportedByOs() {
 void RegisterFileHandlersWithOs(const AppId& app_id,
                                 const std::string& app_name,
                                 Profile* profile,
-                                const apps::FileHandlers& file_handlers) {
+                                const apps::FileHandlers& file_handlers,
+                                ResultCallback callback) {
   DCHECK(!file_handlers.empty());
   InstallMimeInfoOnLinux(app_id, profile, file_handlers);
 
-  UpdateFileHandlerRegistrationInOs(app_id, profile, base::DoNothing());
+  UpdateFileHandlerRegistrationInOs(app_id, profile, std::move(callback));
 }
 
 void UnregisterFileHandlersWithOs(const AppId& app_id,

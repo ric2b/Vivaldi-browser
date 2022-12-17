@@ -55,7 +55,7 @@
 <translation id="1442433966118452622">Umthombo wesithombe</translation>
 <translation id="1451536289672181509">Idivayisi iyikhibhodi.</translation>
 <translation id="1459693405370120464">Isimo sezulu</translation>
-<translation id="1468664791493211953">Ukunikezwa</translation>
+<translation id="1468664791493211953">Imititilizo</translation>
 <translation id="1476467821656042872"><ph name="MANAGER" /> iphatha le divayisi futhi ingakwazi ukwengamela umsebenzi wakho.</translation>
 <translation id="1478594628797167447">Iskena</translation>
 <translation id="1483493594462132177">Thumela</translation>
@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Hlela ifayela}one{Hlela amafayela}other{Hlela amafayela}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" />GHz</translation>
 <translation id="3291996639387199448">Isikhombisi-ndlela esiwukhiye</translation>
+<translation id="3294437725009624529">Isivakashi</translation>
 <translation id="3310640316857623290">Ukubambezeleka kwe-DNS kungaphezulu kakhulu komkhawulo ovumelekile</translation>
 <translation id="3328783797891415197">Ukuhlolwa kuyaqhubeka</translation>
 <translation id="3340011300870565703">Idivayisi ine-bud yebhethri engakwesokudla engu-<ph name="BATTERY_PERCENTAGE" />%.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Ngenkathi i-firmware ibuyekeza, ungakhiphi ukuxhuma le divayisi yangaphandle noma ucishe ikhompyutha. Unganciphisa leli windi. Lesi sibuyekezo singase sithathe imizuzu embalwa futhi idivayisi yakho yangaphandle ingase ingasebenzi phakathi nalesi sikhathi.</translation>
 <translation id="3486220673238053218">incazelo</translation>
 <translation id="3488065109653206955">Yenziwe yasebenza ngokungaphelele</translation>
+<translation id="3510890413042482857">Thumela <ph name="BEGIN_LINK1" />idatha yokulandelela ukusebenza<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Isibuyekezo se-ChromeOS</translation>
 <translation id="3527036260304016759">Yehlukile - Iphutha elingaziwa</translation>
 <translation id="3532980081107202182">Kusele cishe amaminithi angu-<ph name="MIN_REMAINING" /></translation>
@@ -468,6 +470,7 @@ Zama ukuthepha imakrofoni ukuze ungibuze noma yini.</translation>
 <translation id="5502931783115429516">I-Android ayiqalisi</translation>
 <translation id="5519195206574732858">I-LTE</translation>
 <translation id="554517032089923082">I-GTC</translation>
+<translation id="5559898619118303662">Shintsha ngokuzenzakalelayo kutimu emnyama ekushoneni kwelanga</translation>
 <translation id="5578477003638479617">I-UMTS</translation>
 <translation id="5578519639599103840">Phinda uskene</translation>
 <translation id="5583640892426849032">I-Backspace</translation>

@@ -185,6 +185,10 @@
     }
   },
   "$build/code_coverage": {
+    "coverage_test_types": [
+      "overall",
+      "unit"
+    ],
     "use_clang_coverage": true
   },
   "$build/flakiness": {
@@ -204,9 +208,5 @@
     ]
   },
   "builder_group": "tryserver.chromium.mac",
-  "orchestrator": {
-    "builder_group": "tryserver.chromium.mac",
-    "builder_name": "mac-rel"
-  },
   "recipe": "chromium/compilator"
 }

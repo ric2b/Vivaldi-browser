@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #include "chromeos/ui/base/window_pin_type.h"
 #include "components/version_info/channel.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/device/public/mojom/bluetooth_system.mojom-forward.h"
 #include "services/device/public/mojom/fingerprint.mojom-forward.h"
 #include "services/media_session/public/cpp/media_session_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -37,6 +36,8 @@ class BackGestureContextualNudgeController;
 class BackGestureContextualNudgeDelegate;
 class CaptureModeDelegate;
 class DesksTemplatesDelegate;
+class GlanceablesController;
+class GlanceablesDelegate;
 class NearbyShareController;
 class NearbyShareDelegate;
 
@@ -53,6 +54,10 @@ class ASH_EXPORT ShellDelegate {
   // Creates and returns the delegate of the Capture Mode feature.
   virtual std::unique_ptr<CaptureModeDelegate> CreateCaptureModeDelegate()
       const = 0;
+
+  // Creates the delegate for the Glanceables feature.
+  virtual std::unique_ptr<GlanceablesDelegate> CreateGlanceablesDelegate(
+      GlanceablesController* controller) const = 0;
 
   // Creates a accessibility delegate. Shell takes ownership of the delegate.
   virtual AccessibilityDelegate* CreateAccessibilityDelegate() = 0;
@@ -95,10 +100,6 @@ class ASH_EXPORT ShellDelegate {
   // Return the height of WebUI tab strip used to determine if a tab has
   // dragged out of it.
   virtual int GetBrowserWebUITabStripHeight() = 0;
-
-  // Binds a BluetoothSystemFactory receiver if possible.
-  virtual void BindBluetoothSystemFactory(
-      mojo::PendingReceiver<device::mojom::BluetoothSystemFactory> receiver) {}
 
   // Binds a fingerprint receiver in the Device Service if possible.
   virtual void BindFingerprint(

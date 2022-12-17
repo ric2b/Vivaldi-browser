@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,14 +91,12 @@ std::u16string GetDescription(CredentialLeakType leak_type) {
   const bool uses_password_manager_google_branding = true;
 #elif BUILDFLAG(IS_ANDROID)
   const bool uses_password_manager_updated_naming =
-      password_manager::features::UsesUnifiedPasswordManagerUi();
+      password_manager::features::UsesUnifiedPasswordManagerBranding();
   const bool uses_password_manager_google_branding =
       password_manager_util::UsesPasswordManagerGoogleBranding(
           IsSyncingPasswordsNormally(leak_type));
 #else
-  const bool uses_password_manager_updated_naming =
-      base::FeatureList::IsEnabled(
-          password_manager::features::kUnifiedPasswordManagerDesktop);
+  const bool uses_password_manager_updated_naming = true;
   const bool uses_password_manager_google_branding =
       password_manager_util::UsesPasswordManagerGoogleBranding(
           IsSyncingPasswordsNormally(leak_type));
@@ -154,11 +152,9 @@ std::u16string GetTitle(CredentialLeakType leak_type) {
           password_manager::features::kIOSEnablePasswordManagerBrandingUpdate);
 #elif BUILDFLAG(IS_ANDROID)
   const bool uses_password_manager_updated_naming =
-      password_manager::features::UsesUnifiedPasswordManagerUi();
+      password_manager::features::UsesUnifiedPasswordManagerBranding();
 #else
-  const bool uses_password_manager_updated_naming =
-      base::FeatureList::IsEnabled(
-          password_manager::features::kUnifiedPasswordManagerDesktop);
+  const bool uses_password_manager_updated_naming = true;
 #endif
   if (uses_password_manager_updated_naming) {
     return l10n_util::GetStringUTF16(ShouldCheckPasswords(leak_type)
@@ -243,13 +239,12 @@ LeakDialogTraits::LeakDialogTraits(CredentialLeakType leak_type)
       uses_password_manager_google_branding_(true)
 #elif BUILDFLAG(IS_ANDROID)
       uses_password_manager_updated_naming_(
-          password_manager::features::UsesUnifiedPasswordManagerUi()),
+          password_manager::features::UsesUnifiedPasswordManagerBranding()),
       uses_password_manager_google_branding_(
           password_manager_util::UsesPasswordManagerGoogleBranding(
               IsSyncingPasswordsNormally(leak_type)))
 #else
-      uses_password_manager_updated_naming_(base::FeatureList::IsEnabled(
-          password_manager::features::kUnifiedPasswordManagerDesktop)),
+      uses_password_manager_updated_naming_(true),
       uses_password_manager_google_branding_(
           password_manager_util::UsesPasswordManagerGoogleBranding(
               IsSyncingPasswordsNormally(leak_type)))

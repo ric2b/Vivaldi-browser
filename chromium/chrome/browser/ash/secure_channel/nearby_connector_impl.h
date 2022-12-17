@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,12 +8,12 @@
 #include <memory>
 #include <vector>
 
-#include "ash/services/nearby/public/cpp/nearby_process_manager.h"
 #include "ash/services/secure_channel/public/cpp/client/nearby_connector.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
 #include "base/memory/weak_ptr.h"
 #include "base/unguessable_token.h"
+#include "chromeos/ash/services/nearby/public/cpp/nearby_process_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"

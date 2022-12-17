@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,11 +55,6 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
-
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
-#include "media/filters/h264_to_annex_b_bitstream_converter.h"
-#include "media/formats/mp4/box_definitions.h"
-#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 using blink::WebMediaSource;
 using blink::WebSourceBuffer;
@@ -198,7 +193,7 @@ SourceBuffer* MediaSource::addSourceBuffer(const String& type,
   // https://www.w3.org/TR/media-source/#dom-mediasource-addsourcebuffer
   // 1. If type is an empty string then throw a TypeError exception
   //    and abort these steps.
-  if (type.IsEmpty()) {
+  if (type.empty()) {
     LogAndThrowTypeError(exception_state, "The type provided is empty");
     return nullptr;
   }
@@ -230,7 +225,7 @@ SourceBuffer* MediaSource::addSourceBuffer(const String& type,
   SourceBuffer* source_buffer = nullptr;
 
   // Note, here we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::Bind(
+  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
           &MediaSource::AddSourceBuffer_Locked, WrapPersistent(this), type,
           nullptr /* audio_config */, nullptr /* video_config */,
           WTF::Unretained(&exception_state),
@@ -281,19 +276,6 @@ SourceBuffer* MediaSource::AddSourceBufferUsingConfig(
   std::unique_ptr<media::VideoDecoderConfig> video_config;
   String console_message;
 
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
-  // TODO(crbug.com/1144908): The SourceBuffer needs these for converting h264
-  // EncodedVideoChunks. Probably best if these details are put into a new
-  // WebCodecs VideoDecoderHelper abstraction (or similar), since this top-level
-  // MediaSource impl shouldn't need to worry about the details of specific
-  // codec bitstream conversions (nor should the underlying implementation be
-  // depended upon to redo work done already in WebCodecs decoder configuration
-  // validation.) In initial prototype, we do not support h264 buffering, so
-  // will fail if these become populated by MakeMediaVideoDecoderConfig, below.
-  std::unique_ptr<media::H264ToAnnexBBitstreamConverter> h264_converter;
-  std::unique_ptr<media::mp4::AVCDecoderConfigurationRecord> h264_avcc;
-#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
-
   if (config->hasAudioConfig()) {
     if (!AudioDecoder::IsValidAudioDecoderConfig(*(config->audioConfig()),
                                                  &console_message /* out */)) {
@@ -322,21 +304,19 @@ SourceBuffer* MediaSource::AddSourceBufferUsingConfig(
       return nullptr;
     }
 
+    bool converter_needed = false;
     absl::optional<media::VideoDecoderConfig> out_video_config =
         VideoDecoder::MakeMediaVideoDecoderConfig(*(config->videoConfig()),
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
-                                                  h264_converter /* out */,
-                                                  h264_avcc /* out */,
-#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
-                                                  &console_message /* out */);
+                                                  &console_message /* out */,
+                                                  &converter_needed /* out */);
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
     // TODO(crbug.com/1144908): Initial prototype does not support h264
     // buffering. See above.
-    if (out_video_config && (h264_converter || h264_avcc)) {
+    if (out_video_config && converter_needed) {
       out_video_config = absl::nullopt;
       console_message =
-          "H.264 EncodedVideoChunk buffering is not yet supported in MSE. See "
-          "https://crbug.com/1144908.";
+          "H.264/H.265 EncodedVideoChunk buffering is not yet supported in "
+          "MSE.See https://crbug.com/1144908.";
     }
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
@@ -367,11 +347,11 @@ SourceBuffer* MediaSource::AddSourceBufferUsingConfig(
   String null_type;
 
   // Note, here we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(
-          WTF::Bind(&MediaSource::AddSourceBuffer_Locked, WrapPersistent(this),
-                    null_type, std::move(audio_config), std::move(video_config),
-                    WTF::Unretained(&exception_state),
-                    WTF::Unretained(&source_buffer)))) {
+  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
+          &MediaSource::AddSourceBuffer_Locked, WrapPersistent(this), null_type,
+          std::move(audio_config), std::move(video_config),
+          WTF::Unretained(&exception_state),
+          WTF::Unretained(&source_buffer)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
     LogAndThrowDOMException(exception_state,
@@ -465,8 +445,8 @@ void MediaSource::removeSourceBuffer(SourceBuffer* buffer,
   // case). Note, we must not be closed (since closing clears our SourceBuffer
   // collections), therefore we must have an attachment.
   if (!RunUnlessElementGoneOrClosingUs(
-          WTF::Bind(&MediaSource::RemoveSourceBuffer_Locked,
-                    WrapPersistent(this), WrapPersistent(buffer)))) {
+          WTF::BindOnce(&MediaSource::RemoveSourceBuffer_Locked,
+                        WrapPersistent(this), WrapPersistent(buffer)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
     LogAndThrowDOMException(exception_state,
@@ -565,7 +545,7 @@ bool MediaSource::IsTypeSupportedInternal(ExecutionContext* context,
   // Section 2.2 isTypeSupported() method steps.
   // https://dvcs.w3.org/hg/html-media/raw-file/tip/media-source/media-source.html#widl-MediaSource-isTypeSupported-boolean-DOMString-type
   // 1. If type is an empty string, then return false.
-  if (type.IsEmpty()) {
+  if (type.empty()) {
     DVLOG(1) << __func__ << "(" << type << ", "
              << (enforce_codec_specificity ? "true" : "false")
              << ") -> false (empty input)";
@@ -575,7 +555,7 @@ bool MediaSource::IsTypeSupportedInternal(ExecutionContext* context,
   // 2. If type does not contain a valid MIME type string, then return false.
   ContentType content_type(type);
   String mime_type = content_type.GetType();
-  if (mime_type.IsEmpty()) {
+  if (mime_type.empty()) {
     DVLOG(1) << __func__ << "(" << type << ", "
              << (enforce_codec_specificity ? "true" : "false")
              << ") -> false (invalid mime type)";
@@ -818,7 +798,7 @@ WebTimeRanges MediaSource::BufferedInternal(
 
   // 1. If activeSourceBuffers.length equals 0 then return an empty TimeRanges
   //    object and abort these steps.
-  if (ranges.IsEmpty())
+  if (ranges.empty())
     return intersection_ranges;
 
   // 2. Let active ranges be the ranges returned by buffered for each
@@ -979,9 +959,9 @@ void MediaSource::setDuration(double duration,
   // Do remainder of steps only if attachment is usable and underlying demuxer
   // is protected from destruction (applicable especially for MSE-in-Worker
   // case). Note, we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(
-          WTF::Bind(&MediaSource::DurationChangeAlgorithm, WrapPersistent(this),
-                    duration, WTF::Unretained(&exception_state)))) {
+  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
+          &MediaSource::DurationChangeAlgorithm, WrapPersistent(this), duration,
+          WTF::Unretained(&exception_state)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
     LogAndThrowDOMException(exception_state,
@@ -996,7 +976,7 @@ double MediaSource::duration() {
     return duration_result;
 
   // Note, here we must be open or ended, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::Bind(
+  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
           [](MediaSource* self, double* result,
              MediaSourceAttachmentSupplement::ExclusiveKey pass_key) {
             *result = self->GetDuration_Locked(pass_key);
@@ -1136,7 +1116,7 @@ void MediaSource::endOfStream(const AtomicString& error,
   // Do remainder of steps only if attachment is usable and underlying demuxer
   // is protected from destruction (applicable especially for MSE-in-Worker
   // case). Note, we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::Bind(
+  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
           &MediaSource::EndOfStreamAlgorithm, WrapPersistent(this), status))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
@@ -1180,8 +1160,8 @@ void MediaSource::setLiveSeekableRange(double start,
 
   // Note, here we must be open, therefore we must have an attachment.
   if (!RunUnlessElementGoneOrClosingUs(
-          WTF::Bind(&MediaSource::SetLiveSeekableRange_Locked,
-                    WrapPersistent(this), start, end))) {
+          WTF::BindOnce(&MediaSource::SetLiveSeekableRange_Locked,
+                        WrapPersistent(this), start, end))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
     LogAndThrowDOMException(exception_state,
@@ -1221,7 +1201,7 @@ void MediaSource::clearLiveSeekableRange(ExceptionState& exception_state) {
     return;
 
   // Note, here we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::Bind(
+  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
           &MediaSource::ClearLiveSeekableRange_Locked, WrapPersistent(this)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
@@ -1247,7 +1227,7 @@ void MediaSource::ClearLiveSeekableRange_Locked(
   SendUpdatedInfoToMainThreadCache();
 }
 
-MediaSourceHandleImpl* MediaSource::handle(ExceptionState& exception_state) {
+MediaSourceHandleImpl* MediaSource::handle() {
   base::AutoLock lock(attachment_link_lock_);
 
   DVLOG(3) << __func__;
@@ -1257,32 +1237,26 @@ MediaSourceHandleImpl* MediaSource::handle(ExceptionState& exception_state) {
          RuntimeEnabledFeatures::MediaSourceInWorkersUsingHandleEnabled(
              GetExecutionContext()));
 
-  // Per https://github.com/w3c/media-source/pull/306:
-  // 1. If the implementation does not support creating a handle for this
-  //    MediaSource, then throw a NotSupportedError exception and abort these
-  //    steps.
   // TODO(crbug.com/506273): Support MediaSource srcObject attachment idiom for
-  // main-thread-owned MediaSource objects.
-  if (IsMainThread() ||
-      !GetExecutionContext()->IsDedicatedWorkerGlobalScope()) {
-    LogAndThrowDOMException(exception_state,
-                            DOMExceptionCode::kNotSupportedError,
-                            "MediaSourceHandle creation is currently supported "
-                            "only in a dedicated worker.");
-    return nullptr;
-  }
+  // main-thread-owned MediaSource objects (would need MSE spec updates, too,
+  // and might not involve a handle regardless).
+  DCHECK(!IsMainThread() &&
+         GetExecutionContext()->IsDedicatedWorkerGlobalScope());
 
-  // Lazily create the handle, since it indirectly holds a
-  // CrossThreadMediaSourceAttachment (until attachment starts or the handle is
-  // transferred) which holds a strong reference to us until attachment is
-  // actually started and later closed.
-  // TODO(crbug.com/878133): Update MSE spec to create this handle either during
-  // construction of worker-owned MediaSource or lazily upon first read of this
-  // attribute at this point, e.g. "Create a new MediaSourceHandle object and
-  // associated resources, and link it internally to this MediaSource."
+  // Per
+  // https://www.w3.org/TR/2022/WD-media-source-2-20220921/#dom-mediasource-handle:
+  // If the handle for this MediaSource object has not yet been created, then
+  // run the following steps:
+  // 1.1. Let created handle be the result of creating a new MediaSourceHandle
+  //      object and associated resources, linked internally to this
+  //      MediaSource.
+  // 1.2. Update the attribute to be created handle.
   if (!worker_media_source_handle_) {
-    // PassKey provider usage here ensures that we are allowed to call the
-    // attachment constructor.
+    // Lazily create the handle, since it indirectly holds a
+    // CrossThreadMediaSourceAttachment (until attachment starts or the handle
+    // is transferred) which holds a strong reference to us until attachment is
+    // actually started and later closed. PassKey provider usage here ensures
+    // that we are allowed to call the attachment constructor.
     scoped_refptr<CrossThreadMediaSourceAttachment> attachment =
         base::MakeRefCounted<CrossThreadMediaSourceAttachment>(
             this, AttachmentCreationPassKeyProvider::GetPassKey());
@@ -1295,11 +1269,14 @@ MediaSourceHandleImpl* MediaSource::handle(ExceptionState& exception_state) {
     // security checks and logging for legacy MSE object URLs.
     SecurityOrigin* origin = GetExecutionContext()->GetMutableSecurityOrigin();
     String internal_blob_url = BlobURL::CreatePublicURL(origin).GetString();
-    DCHECK(!internal_blob_url.IsEmpty());
+    DCHECK(!internal_blob_url.empty());
     worker_media_source_handle_ = MakeGarbageCollected<MediaSourceHandleImpl>(
         std::move(attachment_provider), std::move(internal_blob_url));
   }
 
+  // Per
+  // https://www.w3.org/TR/2022/WD-media-source-2-20220921/#dom-mediasource-handle:
+  // 2. Return the MediaSourceHandle object that is this attribute's value.
   DCHECK(worker_media_source_handle_);
   return worker_media_source_handle_.Get();
 }
@@ -1547,17 +1524,17 @@ void MediaSource::ContextDestroyed() {
   // doing this detachment.
   bool cb_ran = attachment->RunExclusively(
       true /* abort if unsafe to use underlying demuxer */,
-      WTF::Bind(&MediaSource::DetachWorkerOnContextDestruction_Locked,
-                WrapPersistent(this),
-                true /* safe to notify underlying demuxer */));
+      WTF::BindOnce(&MediaSource::DetachWorkerOnContextDestruction_Locked,
+                    WrapPersistent(this),
+                    true /* safe to notify underlying demuxer */));
 
   if (!cb_ran) {
     // Main-thread is already detaching or destructing the underlying demuxer.
     CHECK(attachment->RunExclusively(
         false /* do not abort */,
-        WTF::Bind(&MediaSource::DetachWorkerOnContextDestruction_Locked,
-                  WrapPersistent(this),
-                  false /* do not notify underlying demuxer */)));
+        WTF::BindOnce(&MediaSource::DetachWorkerOnContextDestruction_Locked,
+                      WrapPersistent(this),
+                      false /* do not notify underlying demuxer */)));
   }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,9 +6,9 @@
  * @fileoverview
  * UI element for displaying Bluetooth pairing dialog.
  */
-import 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_pairing_ui.js';
+import 'chrome://resources/ash/common/bluetooth/bluetooth_pairing_ui.js';
 
-import {BluetoothUiSurface, recordBluetoothUiSurfaceMetrics} from 'chrome://resources/cr_components/chromeos/bluetooth/bluetooth_metrics_utils.js';
+import {BluetoothUiSurface, recordBluetoothUiSurfaceMetrics} from 'chrome://resources/ash/common/bluetooth/bluetooth_metrics_utils.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 /** @polymer */

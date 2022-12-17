@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,8 +66,8 @@ struct CORE_EXPORT LogicalRect {
     return other.offset == offset && other.size == size;
   }
 
-  LogicalRect operator+(const LogicalOffset& offset) const {
-    return {this->offset + offset, size};
+  LogicalRect operator+(const LogicalOffset& additional_offset) const {
+    return {offset + additional_offset, size};
   }
 
   void Unite(const LogicalRect&);

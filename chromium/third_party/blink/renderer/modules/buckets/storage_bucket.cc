@@ -1,16 +1,20 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/modules/buckets/storage_bucket.h"
 
+#include "base/time/time.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_estimate.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_usage_details.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
-#include "third_party/blink/renderer/core/dom/dom_time_stamp.h"
+#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
+#include "third_party/blink/renderer/core/fetch/global_fetch.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
+#include "third_party/blink/renderer/modules/cache_storage/cache_storage.h"
+#include "third_party/blink/renderer/modules/cache_storage/global_cache_storage.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_factory.h"
 #include "third_party/blink/renderer/modules/locks/lock_manager.h"
 
@@ -37,8 +41,9 @@ ScriptPromise StorageBucket::persist(ScriptState* script_state) {
     return promise;
   }
 
-  remote_->Persist(WTF::Bind(&StorageBucket::DidRequestPersist,
-                             WrapPersistent(this), WrapPersistent(resolver)));
+  remote_->Persist(WTF::BindOnce(&StorageBucket::DidRequestPersist,
+                                 WrapPersistent(this),
+                                 WrapPersistent(resolver)));
   return promise;
 }
 
@@ -54,8 +59,9 @@ ScriptPromise StorageBucket::persisted(ScriptState* script_state) {
     return promise;
   }
 
-  remote_->Persisted(WTF::Bind(&StorageBucket::DidGetPersisted,
-                               WrapPersistent(this), WrapPersistent(resolver)));
+  remote_->Persisted(WTF::BindOnce(&StorageBucket::DidGetPersisted,
+                                   WrapPersistent(this),
+                                   WrapPersistent(resolver)));
   return promise;
 }
 
@@ -71,8 +77,9 @@ ScriptPromise StorageBucket::estimate(ScriptState* script_state) {
     return promise;
   }
 
-  remote_->Estimate(WTF::Bind(&StorageBucket::DidGetEstimate,
-                              WrapPersistent(this), WrapPersistent(resolver)));
+  remote_->Estimate(WTF::BindOnce(&StorageBucket::DidGetEstimate,
+                                  WrapPersistent(this),
+                                  WrapPersistent(resolver)));
   return promise;
 }
 
@@ -88,14 +95,14 @@ ScriptPromise StorageBucket::durability(ScriptState* script_state) {
     return promise;
   }
 
-  remote_->Durability(WTF::Bind(&StorageBucket::DidGetDurability,
-                                WrapPersistent(this),
-                                WrapPersistent(resolver)));
+  remote_->Durability(WTF::BindOnce(&StorageBucket::DidGetDurability,
+                                    WrapPersistent(this),
+                                    WrapPersistent(resolver)));
   return promise;
 }
 
 ScriptPromise StorageBucket::setExpires(ScriptState* script_state,
-                                        const DOMTimeStamp& expires) {
+                                        const DOMHighResTimeStamp& expires) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
@@ -108,9 +115,9 @@ ScriptPromise StorageBucket::setExpires(ScriptState* script_state,
   }
 
   remote_->SetExpires(
-      base::Time::FromJavaTime(expires),
-      WTF::Bind(&StorageBucket::DidSetExpires, WrapPersistent(this),
-                WrapPersistent(resolver)));
+      base::Time::FromJsTime(expires),
+      WTF::BindOnce(&StorageBucket::DidSetExpires, WrapPersistent(this),
+                    WrapPersistent(resolver)));
   return promise;
 }
 
@@ -126,8 +133,9 @@ ScriptPromise StorageBucket::expires(ScriptState* script_state) {
     return promise;
   }
 
-  remote_->Expires(WTF::Bind(&StorageBucket::DidGetExpires,
-                             WrapPersistent(this), WrapPersistent(resolver)));
+  remote_->Expires(WTF::BindOnce(&StorageBucket::DidGetExpires,
+                                 WrapPersistent(this),
+                                 WrapPersistent(resolver)));
   return promise;
 }
 
@@ -151,6 +159,20 @@ LockManager* StorageBucket::locks() {
   return lock_manager_;
 }
 
+CacheStorage* StorageBucket::caches(ExceptionState& exception_state) {
+  if (!caches_ && GlobalCacheStorage::CanCreateCacheStorage(
+                      GetExecutionContext(), exception_state)) {
+    mojo::PendingRemote<mojom::blink::CacheStorage> cache_storage;
+    remote_->GetCaches(cache_storage.InitWithNewPipeAndPassReceiver());
+    caches_ = MakeGarbageCollected<CacheStorage>(
+        GetExecutionContext(),
+        GlobalFetch::ScopedFetcher::From(*navigator_base_),
+        std::move(cache_storage));
+  }
+
+  return caches_;
+}
+
 bool StorageBucket::HasPendingActivity() const {
   return GetExecutionContext();
 }
@@ -159,6 +181,7 @@ void StorageBucket::Trace(Visitor* visitor) const {
   visitor->Trace(idb_factory_);
   visitor->Trace(lock_manager_);
   visitor->Trace(navigator_base_);
+  visitor->Trace(caches_);
   ScriptWrappable::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
 }
@@ -274,8 +297,8 @@ void StorageBucket::DidGetExpires(ScriptPromiseResolver* resolver,
         DOMExceptionCode::kUnknownError,
         "Unknown error occured while getting expires."));
   } else if (expires.has_value()) {
-    resolver->Resolve(
-        ConvertSecondsToDOMTimeStamp(expires.value().ToDoubleT()));
+    resolver->Resolve(base::Time::kMillisecondsPerSecond *
+                      expires.value().ToDoubleT());
   } else {
     resolver->Resolve(v8::Null(script_state->GetIsolate()));
   }

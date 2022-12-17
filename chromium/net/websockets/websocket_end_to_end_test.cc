@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -638,10 +638,6 @@ TEST_F(WebSocketEndToEndTest, HeaderContinuations) {
 // Test that ws->wss scheme upgrade is supported on receiving a DNS HTTPS
 // record.
 TEST_F(WebSocketEndToEndTest, DnsSchemeUpgradeSupported) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      features::kUseDnsHttpsSvcb, {{"UseDnsHttpsSvcbHttpUpgrade", "true"}});
-
   SpawnedTestServer wss_server(SpawnedTestServer::TYPE_WSS,
                                SpawnedTestServer::SSLOptions(base::FilePath(
                                    FILE_PATH_LITERAL("test_names.pem"))),

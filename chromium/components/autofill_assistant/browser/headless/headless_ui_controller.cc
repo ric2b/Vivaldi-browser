@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@ bool HeadlessUiController::SupportsExternalActions() {
 
 void HeadlessUiController::ExecuteExternalAction(
     const external::Action& external_action,
+    bool is_interrupt,
     base::OnceCallback<void(ExternalActionDelegate::DomUpdateCallback)>
         start_dom_checks_callback,
     base::OnceCallback<void(const external::Result& result)>
@@ -23,7 +24,7 @@ void HeadlessUiController::ExecuteExternalAction(
   DCHECK(action_extension_delegate_);
 
   action_extension_delegate_->OnActionRequested(
-      external_action, std::move(start_dom_checks_callback),
+      external_action, is_interrupt, std::move(start_dom_checks_callback),
       std::move(end_action_callback));
 }
 
@@ -38,7 +39,7 @@ void HeadlessUiController::OnInterruptFinished() {
   }
 }
 
-// TODO(b/201964911): fail execution instead of just logging a warning if a
+// TODO(b/249983799): fail execution instead of just logging a warning if a
 // method is unexpectedly called.
 
 void HeadlessUiController::SetStatusMessage(const std::string& message) {}
@@ -136,9 +137,20 @@ void HeadlessUiController::SetGenericUi(
     std::unique_ptr<GenericUserInterfaceProto> generic_ui,
     base::OnceCallback<void(const ClientStatus&)> end_action_callback,
     base::OnceCallback<void(const ClientStatus&)>
-        view_inflation_finished_callback) {
+        view_inflation_finished_callback,
+    base::RepeatingCallback<void(const RequestBackendDataProto&)>
+        request_backend_data_callback,
+    base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+        show_account_screen_callback) {
   VLOG(2) << "Unexpected UI method called: " << __func__;
 }
+
+void HeadlessUiController::ShowAccountScreen(
+    const ShowAccountScreenProto& proto,
+    const std::string& email_address) {
+  VLOG(2) << "Unexpected UI method called: " << __func__;
+}
+
 void HeadlessUiController::SetPersistentGenericUi(
     std::unique_ptr<GenericUserInterfaceProto> generic_ui,
     base::OnceCallback<void(const ClientStatus&)>

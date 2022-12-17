@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
 
-namespace ash {
-namespace app_restore {
+namespace ash::app_restore {
 
 // static
 AppRestoreArcTaskHandler* AppRestoreArcTaskHandlerFactory::GetForProfile(
@@ -43,5 +42,4 @@ KeyedService* AppRestoreArcTaskHandlerFactory::BuildServiceInstanceFor(
   return new AppRestoreArcTaskHandler(Profile::FromBrowserContext(context));
 }
 
-}  // namespace app_restore
-}  // namespace ash
+}  // namespace ash::app_restore

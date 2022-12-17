@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,7 +40,7 @@ void FakeFileSystemAccessPermissionContext::ConfirmSensitiveEntryAccess(
     PathType path_type,
     const base::FilePath& path,
     HandleType handle_type,
-    ui::SelectFileDialog::Type dialog_type,
+    UserAction user_action,
     GlobalRenderFrameHostId frame_id,
     base::OnceCallback<void(SensitiveEntryResult)> callback) {
   std::move(callback).Run(SensitiveEntryResult::kAllowed);
@@ -89,7 +89,8 @@ void FakeFileSystemAccessPermissionContext::SetWellKnownDirectoryPath(
 }
 
 base::FilePath FakeFileSystemAccessPermissionContext::GetWellKnownDirectoryPath(
-    blink::mojom::WellKnownDirectory directory) {
+    blink::mojom::WellKnownDirectory directory,
+    const url::Origin& origin) {
   return well_known_directory_map_.find(directory) !=
                  well_known_directory_map_.end()
              ? well_known_directory_map_[directory]

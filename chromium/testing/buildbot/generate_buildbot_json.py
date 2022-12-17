@@ -1,5 +1,5 @@
 #!/usr/bin/env vpython3
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -106,6 +106,21 @@ class GPUTelemetryTestGenerator(BaseGenerator):
 
   def sort(self, tests):
     return sorted(tests, key=lambda x: x['name'])
+
+
+class SkylabGPUTelemetryTestGenerator(GPUTelemetryTestGenerator):
+  def generate(self, *args, **kwargs):
+    # This should be identical to a regular GPU Telemetry test, but with any
+    # swarming arguments removed.
+    isolated_scripts = super(SkylabGPUTelemetryTestGenerator,
+                             self).generate(*args, **kwargs)
+    for test in isolated_scripts:
+      if 'swarming' in test:
+        test['swarming'] = {'can_use_on_swarming_builders': False}
+      if 'isolate_name' in test:
+        test['test'] = test['isolate_name']
+        del test['isolate_name']
+    return isolated_scripts
 
 
 class GTestGenerator(BaseGenerator):
@@ -548,7 +563,8 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
           |test_config| is for.
     """
     substituted_array = []
-    for arg in test_config.get('args', []):
+    original_args = test_config.get('args', [])
+    for arg in original_args:
       if arg.startswith(magic_substitutions.MAGIC_SUBSTITUTION_PREFIX):
         function = arg.replace(
             magic_substitutions.MAGIC_SUBSTITUTION_PREFIX, '')
@@ -561,7 +577,7 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
               'Magic substitution function %s does not exist' % function)
       else:
         substituted_array.append(arg)
-    if substituted_array:
+    if substituted_array != original_args:
       test_config['args'] = self.maybe_fixup_args_array(substituted_array)
 
   def dictionary_merge(self, a, b, path=None, update=True):
@@ -754,24 +770,6 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
           'script': '//testing/trigger_scripts/chromeos_device_trigger.py',
         }
 
-  def add_logdog_butler_cipd_package(self, tester_config, result):
-    if not tester_config.get('skip_cipd_packages', False):
-      cipd_packages = result['swarming'].get('cipd_packages', [])
-      already_added = len([
-          package for package in cipd_packages
-          if package.get('cipd_package', "").find('logdog/butler') > 0
-      ]) > 0
-      if not already_added:
-        cipd_packages.append({
-            'cipd_package':
-            'infra/tools/luci/logdog/butler/${platform}',
-            'location':
-            'bin',
-            'revision':
-            'git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c',
-        })
-        result['swarming']['cipd_packages'] = cipd_packages
-
   def add_android_presentation_args(self, tester_config, test_name, result):
     args = result.get('args', [])
     bucket = tester_config.get('results_bucket', 'chromium-result-details')
@@ -824,7 +822,6 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
         # isolated scripts in test_results_presentation.py merge script
         self.add_android_presentation_args(tester_config, test_name, result)
         result['args'] = result.get('args', []) + ['--recover-devices']
-      self.add_logdog_butler_cipd_package(tester_config, result)
 
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
@@ -861,7 +858,6 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
         # TODO(https://crbug.com/1137998) make Android presentation work with
         # isolated scripts in test_results_presentation.py merge script
         self.add_android_presentation_args(tester_config, test_name, result)
-      self.add_logdog_butler_cipd_package(tester_config, result)
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
     self.add_common_test_properties(result, tester_config)
@@ -935,14 +931,15 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
       'gpu_vendor_id': '0',
       'gpu_device_id': '0',
     }
-    dimension_set = swarming_config['dimension_sets'][0]
-    if 'gpu' in dimension_set:
-      # First remove the driver version, then split into vendor and device.
-      gpu = dimension_set['gpu']
-      if gpu != 'none':
-        gpu = gpu.split('-')[0].split(':')
-        substitutions['gpu_vendor_id'] = gpu[0]
-        substitutions['gpu_device_id'] = gpu[1]
+    if swarming_config.get('dimension_sets'):
+      dimension_set = swarming_config['dimension_sets'][0]
+      if 'gpu' in dimension_set:
+        # First remove the driver version, then split into vendor and device.
+        gpu = dimension_set['gpu']
+        if gpu != 'none':
+          gpu = gpu.split('-')[0].split(':')
+          substitutions['gpu_vendor_id'] = gpu[0]
+          substitutions['gpu_device_id'] = gpu[1]
     return [string.Template(arg).safe_substitute(substitutions) for arg in args]
 
   def generate_gpu_telemetry_test(self, waterfall, tester_name, tester_config,
@@ -980,21 +977,6 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
     args = result.get('args', [])
     test_to_run = result.pop('telemetry_test_name', test_name)
 
-    # TODO(skbug.com/12149): Remove this once Gold-based tests no longer clobber
-    # earlier results on retry attempts.
-    is_gold_based_test = False
-    for a in args:
-      if '--git-revision' in a:
-        is_gold_based_test = True
-        break
-    if is_gold_based_test:
-      for a in args:
-        if '--test-filter' in a or '--isolated-script-test-filter' in a:
-          raise RuntimeError(
-              '--test-filter/--isolated-script-test-filter are currently not '
-              'supported for Gold-based GPU tests. See skbug.com/12100 and '
-              'skbug.com/12149 for more details.')
-
     # These tests upload and download results from cloud storage and therefore
     # aren't idempotent yet. https://crbug.com/549140.
     result['swarming']['idempotent'] = False
@@ -1031,6 +1013,7 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
         # being expected to fail, but passing.
         '--passthrough',
         '-v',
+        '--stable-jobs',
         '--extra-browser-args=%s --js-flags=--expose-gc' % logging_arg,
     ] + args
     result['args'] = self.maybe_fixup_args_array(self.substitute_gpu_args(
@@ -1066,6 +1049,8 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
         ScriptGenerator(self),
         'skylab_tests':
         SkylabGenerator(self),
+        'skylab_gpu_telemetry_tests':
+        SkylabGPUTelemetryTestGenerator(self),
     }
 
   def get_test_type_remapper(self):
@@ -1075,6 +1060,9 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
         'android_webview_gpu_telemetry_tests': 'isolated_scripts',
         'cast_streaming_tests': 'isolated_scripts',
         'gpu_telemetry_tests': 'isolated_scripts',
+        # These are the same as existing test types, just configured to run
+        # in Skylab instead of via normal swarming.
+        'skylab_gpu_telemetry_tests': 'skylab_tests',
     }
 
   def check_composition_type_test_suites(self, test_type,
@@ -1214,6 +1202,13 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
         cloned_config['mixins'] = (cloned_config.get('mixins', []) +
                                    cloned_variant.get('mixins', []) + mixins)
 
+        description = []
+        if cloned_config.get('description'):
+          description.append(cloned_config.get('description'))
+        if cloned_variant.get('description'):
+          description.append(cloned_variant.get('description'))
+        if description:
+          cloned_config['description'] = '\n'.join(description)
         basic_swarming_def = cloned_config.get('swarming', {})
         variant_swarming_def = cloned_variant.get('swarming', {})
         if basic_swarming_def and variant_swarming_def:
@@ -1606,20 +1601,6 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
         bot_names.add(l[l.rindex('/') + 1:l.rindex('"')])
     return bot_names
 
-  def get_builders_that_do_not_actually_exist(self):
-    # Some of the bots on the chromium.fyi waterfall in particular
-    # are defined only to be mirrored into trybots, and don't actually
-    # exist on any of the waterfalls or consoles.
-    return [
-        # chromium.fyi
-        'linux-blink-optional-highdpi-rel-dummy',
-        'mac10.13-blink-rel-dummy',
-        'mac10.14-blink-rel-dummy',
-        'mac10.15-blink-rel-dummy',
-        'mac11.0-blink-rel-dummy',
-        'mac11.0.arm64-blink-rel-dummy',
-    ]
-
   def get_internal_waterfalls(self):
     # Similar to get_builders_that_do_not_actually_exist above, but for
     # waterfalls defined in internal configs.
@@ -1640,7 +1621,6 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
 
     # All bots should exist.
     bot_names = self.get_valid_bot_names()
-    builders_that_dont_exist = self.get_builders_that_do_not_actually_exist()
     if bot_names is not None:
       internal_waterfalls = self.get_internal_waterfalls()
       for waterfall in self.waterfalls:
@@ -1648,8 +1628,6 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
         if waterfall['name'] in internal_waterfalls:
           continue  # pragma: no cover
         for bot_name in waterfall['machines']:
-          if bot_name in builders_that_dont_exist:
-            continue  # pragma: no cover
           if bot_name not in bot_names:
             if waterfall['name'] in [
                 'client.v8.chromium', 'client.v8.fyi', 'tryserver.v8'
@@ -1714,7 +1692,6 @@ class BBJSONGenerator(object):  # pylint: disable=useless-object-inheritance
         if removal not in all_bots:
           missing_bots.add(removal)
 
-    missing_bots = missing_bots - set(builders_that_dont_exist)
     if missing_bots:
       raise BBGenErr('The following nonexistent machines were referenced in '
                      'the test suite exceptions: ' + str(missing_bots))

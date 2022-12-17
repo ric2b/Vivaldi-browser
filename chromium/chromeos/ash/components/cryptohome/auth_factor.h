@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,10 +8,21 @@
 #include <string>
 
 #include "base/component_export.h"
+#include "base/containers/enum_set.h"
 #include "chromeos/ash/components/cryptohome/common_types.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace cryptohome {
+
+// All authfactors created/modified after AuthFactor API is launched should
+// have OS/Chrome versions filled in CommonMetadata.
+// However, any factor created before the launch would miss such information.
+// In order to keep rest of the code simple, this "zero" value would be used
+// upon receiving AuthFactor from cryptohome.
+// Note that this value should not be passed back to cryptohome, this
+// is guarded by CHECKs in serialization code.
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_CRYPTOHOME)
+extern const char kFallbackFactorVersion[];
 
 enum class AuthFactorType {
   // Special edge case - on old ChromeOS versions Kiosk keys and passwords for
@@ -19,14 +30,24 @@ enum class AuthFactorType {
   // only Chrome can do that based on UserType.
   // This type can be returned when retrieving data from cryptohome,
   // but should not be used in any data passed from chrome to cryptohome.
+  // This factor type is not included in `AuthFactorsSet`.
   kUnknownLegacy,
+
+  // This is a synthetic factor, there is no actual key associated with this
+  // factor, it is only used as indicator of specific authentication mode.
+  // As such it can never be returned by cryptohome, and is not included in
+  // `AuthFactorsSet`.
+  kLegacyFingerprint,
+
   kPassword,
   kPin,
   kRecovery,
   kSmartCard,
   kKiosk,
-  kLegacyFingerprint
 };
+
+using AuthFactorsSet = base::
+    EnumSet<AuthFactorType, AuthFactorType::kPassword, AuthFactorType::kKiosk>;
 
 // Reference to a particular AuthFactor.
 // While `label` uniquely identifies factor across all factor types,
@@ -42,6 +63,8 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_CRYPTOHOME) AuthFactorRef {
   AuthFactorRef& operator=(const AuthFactorRef&);
 
   ~AuthFactorRef();
+
+  bool operator==(const AuthFactorRef& other) const;
 
   AuthFactorType type() const { return type_; }
 
@@ -67,7 +90,10 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_CRYPTOHOME) AuthFactorRef {
 class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_CRYPTOHOME)
     AuthFactorCommonMetadata {
  public:
+  // This constructor should be used for AuthFactors created on the Chrome side.
+  // It fills in current Chrome version, leaving ChromeOS version empty.
   AuthFactorCommonMetadata();
+  AuthFactorCommonMetadata(ComponentVersion chrome, ComponentVersion chromeos);
   ~AuthFactorCommonMetadata();
 
   AuthFactorCommonMetadata(AuthFactorCommonMetadata&&) noexcept;
@@ -75,6 +101,21 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_CRYPTOHOME)
 
   AuthFactorCommonMetadata(const AuthFactorCommonMetadata&);
   AuthFactorCommonMetadata& operator=(const AuthFactorCommonMetadata&);
+
+  // Should only be used for testing purposes.
+  bool operator==(const AuthFactorCommonMetadata& other) const;
+
+  const ComponentVersion& chrome_version_last_updated() const {
+    return chrome_version_last_updated_;
+  }
+
+  const ComponentVersion& chromeos_version_last_updated() const {
+    return chromeos_version_last_updated_;
+  }
+
+ private:
+  ComponentVersion chrome_version_last_updated_;
+  ComponentVersion chromeos_version_last_updated_;
 };
 
 // Per-factor statuses (read-only properties set by cryptohomed):
@@ -108,6 +149,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_CRYPTOHOME) AuthFactor {
   AuthFactor& operator=(const AuthFactor&);
 
   ~AuthFactor();
+
+  // Should only be used for testing purposes.
+  bool operator==(const AuthFactor& other) const;
 
   const AuthFactorRef& ref() const;
   const AuthFactorCommonMetadata& GetCommonMetadata() const;

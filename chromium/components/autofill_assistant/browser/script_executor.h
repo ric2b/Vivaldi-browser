@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,7 +76,8 @@ class ScriptExecutor : public ActionDelegate,
                  ScriptExecutor::Listener* listener,
                  const std::vector<std::unique_ptr<Script>>* ordered_interrupts,
                  ScriptExecutorDelegate* delegate,
-                 ScriptExecutorUiDelegate* ui_delegate);
+                 ScriptExecutorUiDelegate* ui_delegate,
+                 bool is_interrupt_executor);
 
   ScriptExecutor(const ScriptExecutor&) = delete;
   ScriptExecutor& operator=(const ScriptExecutor&) = delete;
@@ -256,7 +257,11 @@ class ScriptExecutor : public ActionDelegate,
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)> end_action_callback,
       base::OnceCallback<void(const ClientStatus&)>
-          view_inflation_finished_callback) override;
+          view_inflation_finished_callback,
+      base::RepeatingCallback<void(const RequestBackendDataProto&)>
+          request_backend_data_callback,
+      base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+          show_account_screen_callback) override;
   void SetPersistentGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)>
@@ -268,13 +273,16 @@ class ScriptExecutor : public ActionDelegate,
   void MaybeShowSlowWebsiteWarning(
       base::OnceCallback<void(bool)> callback) override;
   void MaybeShowSlowConnectionWarning() override;
-  base::WeakPtr<ActionDelegate> GetWeakPtr() const override;
+  base::WeakPtr<ActionDelegate> GetWeakPtr() override;
   ProcessedActionStatusDetailsProto& GetLogInfo() override;
   void RequestUserData(
-      UserDataEventField event_field,
       const CollectUserDataOptions& options,
       base::OnceCallback<void(bool, const GetUserDataResponseProto&)> callback)
       override;
+  void ShowAccountScreen(const ShowAccountScreenProto& proto,
+                         const std::string& email_address) override;
+  void SetCollectUserDataUiState(bool loading,
+                                 UserDataEventField event_field) override;
   bool SupportsExternalActions() override;
   void RequestExternalAction(
       const ExternalActionProto& external_action,
@@ -448,6 +456,9 @@ class ScriptExecutor : public ActionDelegate,
 
   uint64_t run_id_ = 0;
   std::string report_token_;
+
+  // Whether this instance is executing an interrupt script or not.
+  bool is_interrupt_executor_;
 
   base::WeakPtrFactory<ScriptExecutor> weak_ptr_factory_{this};
 };

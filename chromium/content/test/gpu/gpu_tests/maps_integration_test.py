@@ -1,4 +1,4 @@
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -27,6 +27,11 @@ _MAPS_PERF_TEST_PATH = os.path.join(gpu_path_util.TOOLS_PERF_DIR, 'page_sets',
 _DATA_PATH = os.path.join(gpu_path_util.GPU_DIR, 'gpu_tests')
 
 _TEST_NAME = 'Maps_maps'
+
+_OFF_WHITE_TOP_ROW_DEVICES = {
+    'SM-A135M',
+    'SM-A235M',
+}
 
 
 class MapsIntegrationTest(expected_color_test.ExpectedColorTest):
@@ -121,6 +126,13 @@ class MapsIntegrationTest(expected_color_test.ExpectedColorTest):
       img_height = image_util.Height(screenshot)
       img_width = image_util.Width(screenshot)
       screenshot = image_util.Crop(screenshot, 0, 0, img_width, img_height - 20)
+    # For some reason, the top row of the screenshot is very slightly off-white
+    # instead of pure white, which messes with the crop boundaries. So, chop
+    # off the top row now.
+    if tab.browser.platform.GetDeviceTypeName() in _OFF_WHITE_TOP_ROW_DEVICES:
+      screenshot = image_util.Crop(screenshot, 0, 1,
+                                   image_util.Width(screenshot),
+                                   image_util.Height(screenshot) - 1)
     x1, y1, x2, y2 = _GetCropBoundaries(screenshot)
     screenshot = image_util.Crop(screenshot, x1, y1, x2 - x1, y2 - y1)
 

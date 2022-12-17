@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.password_edit_dialog;
 
 import android.content.res.Resources;
 
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
@@ -46,6 +47,13 @@ class PasswordEditDialogMediator implements ModalDialogProperties.Controller {
     }
 
     /**
+     * Updates model's selected username index when it's changed in UI.
+     */
+    void handleUsernameSelected(int selectedIndex) {
+        mDialogViewModel.set(PasswordEditDialogProperties.USERNAME_INDEX, selectedIndex);
+    }
+
+    /**
      * Updates model's password when it's changed in UI.
      *
      * @param password Password typed by user
@@ -64,9 +72,14 @@ class PasswordEditDialogMediator implements ModalDialogProperties.Controller {
     @Override
     public void onClick(PropertyModel model, @ButtonType int buttonType) {
         if (buttonType == ButtonType.POSITIVE) {
-            mDialogInteractions.onDialogAccepted(
-                    mDialogViewModel.get(PasswordEditDialogProperties.USERNAME),
-                    mDialogViewModel.get(PasswordEditDialogProperties.PASSWORD));
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.PASSWORD_EDIT_DIALOG_WITH_DETAILS)) {
+                mDialogInteractions.onDialogAccepted(
+                        mDialogViewModel.get(PasswordEditDialogProperties.USERNAME),
+                        mDialogViewModel.get(PasswordEditDialogProperties.PASSWORD));
+            } else {
+                mDialogInteractions.onLegacyDialogAccepted(
+                        mDialogViewModel.get(PasswordEditDialogProperties.USERNAME_INDEX));
+            }
         }
         mModalDialogManager.dismissDialog(model,
                 buttonType == ButtonType.POSITIVE ? DialogDismissalCause.POSITIVE_BUTTON_CLICKED

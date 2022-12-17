@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,8 @@ namespace base {
 // Makes a blocking call to fetch the info from the system and caches it
 // before returning. Must be called in each process during the initialization
 // phase.
-BASE_EXPORT void FetchAndCacheSystemInfo();
+// Returns whether the system info was successfully cached.
+[[nodiscard]] BASE_EXPORT bool FetchAndCacheSystemInfo();
 
 // Returns the cached build info.
 BASE_EXPORT const fuchsia::buildinfo::BuildInfo& GetCachedBuildInfo();

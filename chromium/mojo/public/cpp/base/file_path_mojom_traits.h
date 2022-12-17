@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,19 @@ struct COMPONENT_EXPORT(MOJO_BASE_SHARED_TRAITS)
 #endif
 
   static bool Read(mojo_base::mojom::FilePathDataView data,
+                   base::FilePath* out);
+};
+
+template <>
+struct COMPONENT_EXPORT(MOJO_BASE_SHARED_TRAITS)
+    StructTraits<mojo_base::mojom::RelativeFilePathDataView, base::FilePath> {
+#if BUILDFLAG(IS_WIN)
+  static base::span<const uint16_t> path(const base::FilePath& path);
+#else
+  static const base::FilePath::StringType& path(const base::FilePath& path);
+#endif
+
+  static bool Read(mojo_base::mojom::RelativeFilePathDataView data,
                    base::FilePath* out);
 };
 

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <aura-shell-client-protocol.h>
 #include <xdg-decoration-unstable-v1-client-protocol.h>
-#include <xdg-shell-client-protocol.h>
 #include <xdg-shell-unstable-v6-client-protocol.h>
 
 #include "base/logging.h"
@@ -17,6 +16,7 @@
 #include "ui/ozone/common/features.h"
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/shell_surface_wrapper.h"
+#include "ui/ozone/platform/wayland/host/shell_toplevel_wrapper.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_output.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
@@ -99,12 +99,16 @@ bool XDGToplevelWrapperImpl::Initialize() {
   }
 
   static constexpr xdg_toplevel_listener xdg_toplevel_listener = {
-      &ConfigureTopLevel,
-      &CloseTopLevel,
-      // Since v4
-      &ConfigureBounds,
-      // Since v5
-      &WmCapabilities,
+    &ConfigureTopLevel,
+    &CloseTopLevel,
+#if defined(XDG_TOPLEVEL_CONFIGURE_BOUNDS_SINCE_VERSION)
+    // Since v4
+    &ConfigureBounds,
+#endif
+#if defined(XDG_TOPLEVEL_WM_CAPABILITIES_SINCE_VERSION)
+    // Since v5
+    &WmCapabilities,
+#endif
   };
 
   if (!xdg_surface_wrapper_)
@@ -246,15 +250,29 @@ void XDGToplevelWrapperImpl::ConfigureTopLevel(
   auto* surface = static_cast<XDGToplevelWrapperImpl*>(data);
   DCHECK(surface);
 
-  bool is_maximized =
-      CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_MAXIMIZED);
-  bool is_fullscreen =
-      CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_FULLSCREEN);
-  bool is_activated =
-      CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_ACTIVATED);
+  WaylandWindow::WindowStates window_states{
+      .is_maximized =
+          CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_MAXIMIZED),
+      .is_fullscreen =
+          CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_FULLSCREEN),
+      .is_activated =
+          CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_ACTIVATED),
+  };
 
-  surface->wayland_window_->HandleToplevelConfigure(
-      width, height, is_maximized, is_fullscreen, is_activated);
+  if (xdg_toplevel_get_version(xdg_toplevel) >=
+      XDG_TOPLEVEL_STATE_TILED_LEFT_SINCE_VERSION) {
+    // All four tiled states have the same since version, so it is enough to
+    // check only one.
+    window_states.tiled_edges = {
+        .left = CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_TILED_LEFT),
+        .right = CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_TILED_RIGHT),
+        .top = CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_TILED_TOP),
+        .bottom =
+            CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_TILED_BOTTOM)};
+  }
+
+  surface->wayland_window_->HandleToplevelConfigure(width, height,
+                                                    window_states);
 }
 
 // static
@@ -269,15 +287,20 @@ void XDGToplevelWrapperImpl::ConfigureAuraTopLevel(
   auto* surface = static_cast<XDGToplevelWrapperImpl*>(data);
   DCHECK(surface);
 
-  bool is_maximized =
-      CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_MAXIMIZED);
-  bool is_fullscreen =
-      CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_FULLSCREEN);
-  bool is_activated =
-      CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_ACTIVATED);
-
   surface->wayland_window_->HandleAuraToplevelConfigure(
-      x, y, width, height, is_maximized, is_fullscreen, is_activated);
+      x, y, width, height,
+      {.is_maximized =
+           CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_MAXIMIZED),
+       .is_fullscreen =
+           CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_FULLSCREEN),
+       .is_activated =
+           CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_ACTIVATED),
+       .is_snapped_primary =
+           CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_SNAPPED_PRIMARY),
+       .is_snapped_secondary = CheckIfWlArrayHasValue(
+           states, ZAURA_TOPLEVEL_STATE_SNAPPED_SECONDARY),
+       .is_floated =
+           CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_FLOATED)});
 }
 
 // static
@@ -301,6 +324,7 @@ void XDGToplevelWrapperImpl::CloseTopLevel(void* data,
   surface->wayland_window_->OnCloseRequest();
 }
 
+#if defined(XDG_TOPLEVEL_CONFIGURE_BOUNDS_SINCE_VERSION)
 // static
 void XDGToplevelWrapperImpl::ConfigureBounds(void* data,
                                              struct xdg_toplevel* xdg_toplevel,
@@ -308,13 +332,16 @@ void XDGToplevelWrapperImpl::ConfigureBounds(void* data,
                                              int32_t height) {
   NOTIMPLEMENTED_LOG_ONCE();
 }
+#endif
 
+#if defined(XDG_TOPLEVEL_WM_CAPABILITIES_SINCE_VERSION)
 // static
 void XDGToplevelWrapperImpl::WmCapabilities(void* data,
                                             struct xdg_toplevel* xdg_toplevel,
                                             struct wl_array* capabilities) {
   NOTIMPLEMENTED_LOG_ONCE();
 }
+#endif
 
 void XDGToplevelWrapperImpl::SetTopLevelDecorationMode(
     DecorationMode requested_mode) {
@@ -396,22 +423,26 @@ void XDGToplevelWrapperImpl::Unlock() {
 
 void XDGToplevelWrapperImpl::RequestWindowBounds(const gfx::Rect& bounds) {
   DCHECK(SupportsScreenCoordinates());
-  uint32_t id = wayland_window_->GetPreferredEnteredOutputId();
-  auto* output = connection_->wayland_output_manager()->GetOutput(id);
-  if (!output) {
-    // output can be null when the surfae is just created. output should
-    // probably be inferred in that case.
-    LOG(WARNING) << "Output Not found for id=" << id;
-    output = connection_->wayland_output_manager()->GetPrimaryOutput();
-  }
-  // `output` can be null in unit tests where it doesn't wait for output events.
-  if (!output)
+  const auto entered_id = wayland_window_->GetPreferredEnteredOutputId();
+  const WaylandOutputManager* manager = connection_->wayland_output_manager();
+  WaylandOutput* entered_output = entered_id.has_value()
+                                      ? manager->GetOutput(entered_id.value())
+                                      : manager->GetPrimaryOutput();
+
+  // Output can be null when the surface has been just created. It should
+  // probably be inferred in that case.
+  LOG_IF(WARNING, !entered_id.has_value()) << "No output has been entered yet.";
+
+  // `entered_output` can be null in unit tests, where it doesn't wait for
+  // output events.
+  if (!entered_output)
     return;
+
   if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
                             ZAURA_TOPLEVEL_SET_WINDOW_BOUNDS_SINCE_VERSION) {
-    zaura_toplevel_set_window_bounds(aura_toplevel_.get(), bounds.x(),
-                                     bounds.y(), bounds.width(),
-                                     bounds.height(), output->get_output());
+    zaura_toplevel_set_window_bounds(
+        aura_toplevel_.get(), bounds.x(), bounds.y(), bounds.width(),
+        bounds.height(), entered_output->get_output());
   }
 }
 
@@ -456,6 +487,27 @@ void XDGToplevelWrapperImpl::SetZOrder(ZOrderLevel z_order) {
                             ZAURA_TOPLEVEL_SET_Z_ORDER_SINCE_VERSION) {
     zaura_toplevel_set_z_order(aura_toplevel_.get(),
                                ToZauraToplevelZOrderLevel(z_order));
+  }
+}
+
+bool XDGToplevelWrapperImpl::SupportsActivation() {
+  static_assert(
+      ZAURA_TOPLEVEL_ACTIVATE_SINCE_VERSION ==
+          ZAURA_TOPLEVEL_DEACTIVATE_SINCE_VERSION,
+      "Support for activation and deactivation was added in the same version.");
+  return aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
+                               ZAURA_TOPLEVEL_ACTIVATE_SINCE_VERSION;
+}
+
+void XDGToplevelWrapperImpl::Activate() {
+  if (aura_toplevel_ && SupportsActivation()) {
+    zaura_toplevel_activate(aura_toplevel_.get());
+  }
+}
+
+void XDGToplevelWrapperImpl::Deactivate() {
+  if (aura_toplevel_ && SupportsActivation()) {
+    zaura_toplevel_deactivate(aura_toplevel_.get());
   }
 }
 

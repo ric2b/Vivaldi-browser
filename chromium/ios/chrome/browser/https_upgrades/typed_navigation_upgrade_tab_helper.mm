@@ -1,25 +1,23 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/https_upgrades/typed_navigation_upgrade_tab_helper.h"
 
-#include "base/feature_list.h"
-#include "base/metrics/histogram_functions.h"
-#include "base/strings/string_number_conversions.h"
-#include "components/security_interstitials/core/omnibox_https_upgrade_metrics.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/https_upgrades/https_upgrade_service_factory.h"
-#include "ios/chrome/browser/https_upgrades/https_upgrade_service_impl.h"
+#import "base/feature_list.h"
+#import "base/metrics/histogram_functions.h"
+#import "base/strings/string_number_conversions.h"
+#import "components/security_interstitials/core/omnibox_https_upgrade_metrics.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/https_upgrades/https_upgrade_service_impl.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
-#import "ios/chrome/browser/prerender/prerender_service_factory.h"
-#include "ios/components/security_interstitials/https_only_mode/https_upgrade_service.h"
+#import "ios/components/security_interstitials/https_only_mode/https_upgrade_service.h"
 #import "ios/web/public/navigation/https_upgrade_type.h"
 #import "ios/web/public/navigation/navigation_context.h"
-#include "ios/web/public/navigation/navigation_item.h"
-#include "ios/web/public/navigation/navigation_manager.h"
+#import "ios/web/public/navigation/navigation_item.h"
+#import "ios/web/public/navigation/navigation_manager.h"
 #import "net/base/mac/url_conversions.h"
-#include "ui/base/window_open_disposition.h"
+#import "ui/base/window_open_disposition.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -44,23 +42,6 @@ TypedNavigationUpgradeTabHelper::TypedNavigationUpgradeTabHelper(
     HttpsUpgradeService* service)
     : prerender_service_(prerender_service), service_(service) {
   web_state->AddObserver(this);
-}
-
-// static
-void TypedNavigationUpgradeTabHelper::CreateForWebState(
-    web::WebState* web_state) {
-  DCHECK(web_state);
-  if (!FromWebState(web_state)) {
-    PrerenderService* prerender_service =
-        PrerenderServiceFactory::GetForBrowserState(
-            ChromeBrowserState::FromBrowserState(web_state->GetBrowserState()));
-    HttpsUpgradeService* service =
-        HttpsUpgradeServiceFactory::GetForBrowserState(
-            web_state->GetBrowserState());
-    web_state->SetUserData(UserDataKey(),
-                           base::WrapUnique(new TypedNavigationUpgradeTabHelper(
-                               web_state, prerender_service, service)));
-  }
 }
 
 bool TypedNavigationUpgradeTabHelper::IsTimerRunningForTesting() const {
@@ -117,6 +98,8 @@ void TypedNavigationUpgradeTabHelper::DidStartNavigation(
       web_state->GetNavigationManager()->GetPendingItem();
   if (item_pending &&
       item_pending->GetHttpsUpgradeType() == web::HttpsUpgradeType::kOmnibox) {
+    upgraded_https_url_ = navigation_context->GetUrl();
+
     // TODO(crbug.com/1340742): Remove this scheme check once fixed. Without
     // the fix, kHttpsLoadStarted bucket is mildly overcounted.
     GURL url = item_pending->GetURL();
@@ -161,8 +144,13 @@ void TypedNavigationUpgradeTabHelper::DidFinishNavigation(
   if (state_ == State::kStoppedWithTimeout) {
     DCHECK(!timer_.IsRunning());
     RecordUMA(Event::kHttpsLoadTimedOut);
-    FallbackToHttp(web_state, navigation_context->GetUrl());
-    return;
+    // TODO(crbug.com/1379605): Cleanup this logic, we should only use
+    // upgraded_https_url_ here.
+    if (upgraded_https_url_.is_valid()) {
+      FallbackToHttp(web_state, upgraded_https_url_);
+    } else {
+      FallbackToHttp(web_state, navigation_context->GetUrl());
+    }
   }
 
   // Record success.

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,10 @@
 class AppListModelUpdater;
 class ChromeAppListItem;
 class Profile;
+
+namespace apps {
+struct MenuItems;
+}  // namespace apps
 
 namespace gfx {
 class ImageSkia;
@@ -120,6 +124,10 @@ class RemoteAppsManager
   // Deleting a non-existent app will result in an error.
   RemoteAppsError DeleteApp(const std::string& id);
 
+  // Sorts the launcher items with the custom kAlphabeticalEphemeralAppFirst
+  // sort order which moves the remote apps to the front of the launcher.
+  void SortLauncherWithRemoteAppsFirst();
+
   // Adds a folder with |folder_name|. Note that empty folders are not shown in
   // the launcher. Returns the ID for the added folder. If |add_to_front| is
   // true, the folder will be added to the front of the app item list.
@@ -158,7 +166,7 @@ class RemoteAppsManager
   gfx::ImageSkia GetIcon(const std::string& id) override;
   gfx::ImageSkia GetPlaceholderIcon(const std::string& id,
                                     int32_t size_hint_in_dip) override;
-  apps::mojom::MenuItemsPtr GetMenuModel(const std::string& id) override;
+  apps::MenuItems GetMenuModel(const std::string& id) override;
 
   // app_list::AppListSyncableService::Observer:
   void OnSyncModelUpdated() override;

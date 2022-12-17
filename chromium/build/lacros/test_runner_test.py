@@ -1,5 +1,5 @@
 #!/usr/bin/env vpython3
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -102,6 +102,8 @@ class TestRunnerTest(unittest.TestCase):
           '--user-data-dir=/tmp/ash-data',
           '--enable-wayland-server',
           '--no-startup-window',
+          '--disable-lacros-keep-alive',
+          '--disable-login-lacros-opening',
           '--enable-features=LacrosSupport,LacrosPrimary,LacrosOnly',
           '--ash-ready-file-path=/tmp/ash-data/ash_ready.txt',
           '--wayland-server-socket=wayland-exo',

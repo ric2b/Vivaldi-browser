@@ -1,20 +1,21 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "base/ios/block_types.h"
-#include "base/ios/ios_util.h"
-#include "base/strings/sys_string_conversions.h"
+#import "base/ios/ios_util.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "components/policy/policy_constants.h"
+#import "components/policy/policy_constants.h"
 #import "components/signin/internal/identity_manager/account_capabilities_constants.h"
 #import "components/signin/ios/browser/features.h"
-#include "components/signin/public/base/signin_metrics.h"
-#include "components/strings/grit/components_strings.h"
+#import "components/signin/public/base/signin_metrics.h"
+#import "components/signin/public/base/signin_switches.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/metrics/metrics_app_interface.h"
 #import "ios/chrome/browser/policy/policy_earl_grey_utils.h"
-#include "ios/chrome/browser/policy/policy_util.h"
-#include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/policy/policy_util.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_app_interface.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
@@ -23,10 +24,11 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
+#import "ios/chrome/browser/ui/elements/elements_constants.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -35,9 +37,11 @@
 #import "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_interaction_manager_constants.h"
+#import "ios/testing/earl_grey/app_launch_manager.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/testing/earl_grey/matchers.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "net/test/embedded_test_server/embedded_test_server.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -45,8 +49,6 @@
 
 using chrome_test_util::BookmarksNavigationBarDoneButton;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
-using chrome_test_util::ClearBrowsingDataButton;
-using chrome_test_util::ConfirmClearBrowsingDataButton;
 using chrome_test_util::GoogleServicesSettingsButton;
 using chrome_test_util::IdentityCellMatcherForEmail;
 using chrome_test_util::PrimarySignInButton;
@@ -58,7 +60,6 @@ using chrome_test_util::SettingsImportDataContinueButton;
 using chrome_test_util::SettingsImportDataImportButton;
 using chrome_test_util::SettingsImportDataKeepSeparateButton;
 using chrome_test_util::SettingsLink;
-using chrome_test_util::SettingsMenuPrivacyButton;
 using chrome_test_util::StaticTextWithAccessibilityLabelId;
 using l10n_util::GetNSString;
 using testing::ButtonWithAccessibilityLabel;
@@ -223,6 +224,49 @@ void ExpectSyncConsentHistogram(
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
 }
 
+// Tests that signing out from an unsupervised account without clearing data
+// and then signing in to a supervised account performs a local data clearing
+// on sign-in.
+- (void)testSwitchToSupervisedUser {
+  // Add a fake supervised identity to the device.
+  FakeChromeIdentity* fakeSupervisedIdentity =
+      [FakeChromeIdentity fakeIdentity1];
+  SetParentalControlsCapabilityForIdentity(fakeSupervisedIdentity);
+
+  // Add a fake identity to the device.
+  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity2];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  // Sign in with fake identity.
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
+
+  // Add a bookmark after sync is initialized.
+  [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
+  [ChromeEarlGrey waitForBookmarksToFinishLoading];
+  [BookmarkEarlGrey setupStandardBookmarks];
+
+  // Sign out with option to keep local data.
+  [SigninEarlGreyUI
+      signOutWithConfirmationChoice:SignOutConfirmationChoiceKeepData];
+
+  // Sign in with fake supervised identity.
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeSupervisedIdentity];
+
+  // Verify bookmarks are cleared.
+  [BookmarkEarlGreyUI openBookmarks];
+  ConditionBlock condition = ^{
+    NSError* error = nil;
+    [[EarlGrey selectElementWithMatcher:grey_text(GetNSString(
+                                            IDS_IOS_BOOKMARK_EMPTY_TITLE))]
+        assertWithMatcher:grey_notVisible()
+                    error:&error];
+    return error == nil;
+  };
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                 base::test::ios::kWaitForUIElementTimeout, condition),
+             @"Waiting for bookmarks to be cleared");
+}
+
 // Tests that signing out a supervised user account with the keep local data
 // option is honored.
 - (void)testSignOutWithKeepDataForSupervisedUser {
@@ -321,7 +365,10 @@ void ExpectSyncConsentHistogram(
   [ChromeEarlGreyUI waitForAppToIdle];
 
   // Open new tab to cancel sign-in.
-  [ChromeEarlGrey simulateExternalAppURLOpening];
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL expectedURL = self.testServer->GetURL("/echo");
+  [ChromeEarlGrey
+      simulateExternalAppURLOpeningAndWaitUntilOpenedWithGURL:expectedURL];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
@@ -382,7 +429,10 @@ void ExpectSyncConsentHistogram(
       assertWithMatcher:grey_interactable()];
 
   // Open new tab to cancel sign-in.
-  [ChromeEarlGrey simulateExternalAppURLOpening];
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL expectedURL = self.testServer->GetURL("/echo");
+  [ChromeEarlGrey
+      simulateExternalAppURLOpeningAndWaitUntilOpenedWithGURL:expectedURL];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
@@ -433,7 +483,10 @@ void ExpectSyncConsentHistogram(
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Open new tab to cancel sign-in.
-  [ChromeEarlGrey simulateExternalAppURLOpening];
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL expectedURL = self.testServer->GetURL("/echo");
+  [ChromeEarlGrey
+      simulateExternalAppURLOpeningAndWaitUntilOpenedWithGURL:expectedURL];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
@@ -536,17 +589,12 @@ void ExpectSyncConsentHistogram(
       performAction:grey_tap()];
 
   // Open the URL as if it was opened from another app.
-  [ChromeEarlGrey simulateExternalAppURLOpening];
-
-  // Check if the URL was opened.
-  const GURL expectedURL("http://www.example.com/");
-  GREYAssertEqual(expectedURL, [ChromeEarlGrey webStateVisibleURL],
-                  @"Didn't open new tab with example.com.");
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL expectedURL = self.testServer->GetURL("/echo");
+  [ChromeEarlGrey
+      simulateExternalAppURLOpeningAndWaitUntilOpenedWithGURL:expectedURL];
 
   [SigninEarlGrey verifySignedOut];
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      assertWithMatcher:chrome_test_util::OmniboxContainingText(
-                            "www.example.com")];
 }
 
 // Opens the reauth dialog and interrupts it by open an URL from an external
@@ -556,10 +604,10 @@ void ExpectSyncConsentHistogram(
   [SigninEarlGreyAppInterface triggerReauthDialogWithFakeIdentity:fakeIdentity];
   [ChromeEarlGreyUI waitForAppToIdle];
   // Open the URL as if it was opened from another app.
-  [ChromeEarlGrey simulateExternalAppURLOpening];
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      assertWithMatcher:chrome_test_util::OmniboxContainingText(
-                            "www.example.com")];
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL expectedURL = self.testServer->GetURL("/echo");
+  [ChromeEarlGrey
+      simulateExternalAppURLOpeningAndWaitUntilOpenedWithGURL:expectedURL];
 }
 
 // Verifies that the user is signed in when selecting "Yes I'm In", after the
@@ -629,16 +677,10 @@ void ExpectSyncConsentHistogram(
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
   [self openSigninFromView:openSigninMethod tapSettingsLink:tapSettingsLink];
   // Open the URL as if it was opened from another app.
-  [ChromeEarlGrey simulateExternalAppURLOpening];
-
-  // Check if the URL was opened.
-  const GURL expectedURL("http://www.example.com/");
-  GREYAssertEqual(expectedURL, [ChromeEarlGrey webStateVisibleURL],
-                  @"Didn't open new tab with example.com.");
-  // Check that the web page is visible.
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      assertWithMatcher:chrome_test_util::OmniboxContainingText(
-                            "www.example.com")];
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL expectedURL = self.testServer->GetURL("/echo");
+  [ChromeEarlGrey
+      simulateExternalAppURLOpeningAndWaitUntilOpenedWithGURL:expectedURL];
   // Should be not signed in, after being interrupted.
   [SigninEarlGrey verifySignedOut];
 }
@@ -726,7 +768,10 @@ void ExpectSyncConsentHistogram(
   [ChromeEarlGreyUI waitForAppToIdle];
 
   // Open new tab to cancel sign-in.
-  [ChromeEarlGrey simulateExternalAppURLOpening];
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL expectedURL = self.testServer->GetURL("/echo");
+  [ChromeEarlGrey
+      simulateExternalAppURLOpeningAndWaitUntilOpenedWithGURL:expectedURL];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
@@ -800,9 +845,8 @@ void ExpectSyncConsentHistogram(
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Select the identity disc particle.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
-                                   IDS_ACCNAME_PARTICLE_DISC))]
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(GetNSString(
+                                          IDS_ACCNAME_PARTICLE_DISC))]
       performAction:grey_tap()];
 
   // Ensure the Settings menu is displayed.
@@ -825,8 +869,7 @@ void ExpectSyncConsentHistogram(
   [[EarlGrey
       selectElementWithMatcher:grey_allOf(
                                    grey_accessibilityValue(
-                                       l10n_util::GetNSString(
-                                           IDS_IOS_SETTING_ON)),
+                                       GetNSString(IDS_IOS_SETTING_ON)),
                                    grey_accessibilityID(
                                        kSettingsGoogleSyncAndServicesCellId),
                                    nil)]
@@ -851,8 +894,7 @@ void ExpectSyncConsentHistogram(
   [[EarlGrey
       selectElementWithMatcher:grey_allOf(
                                    grey_accessibilityValue(
-                                       l10n_util::GetNSString(
-                                           IDS_IOS_SETTING_OFF)),
+                                       GetNSString(IDS_IOS_SETTING_OFF)),
                                    grey_accessibilityID(
                                        kSettingsGoogleSyncAndServicesCellId),
                                    nil)] performAction:grey_tap()];
@@ -864,8 +906,7 @@ void ExpectSyncConsentHistogram(
   [[EarlGrey
       selectElementWithMatcher:grey_allOf(
                                    grey_accessibilityValue(
-                                       l10n_util::GetNSString(
-                                           IDS_IOS_SETTING_ON)),
+                                       GetNSString(IDS_IOS_SETTING_ON)),
                                    grey_accessibilityID(
                                        kSettingsGoogleSyncAndServicesCellId),
                                    grey_sufficientlyVisible(), nil)]
@@ -888,8 +929,7 @@ void ExpectSyncConsentHistogram(
   [[EarlGrey
       selectElementWithMatcher:grey_allOf(
                                    grey_accessibilityValue(
-                                       l10n_util::GetNSString(
-                                           IDS_IOS_SETTING_OFF)),
+                                       GetNSString(IDS_IOS_SETTING_OFF)),
                                    grey_accessibilityID(
                                        kSettingsGoogleSyncAndServicesCellId),
                                    nil)] performAction:grey_tap()];
@@ -904,8 +944,7 @@ void ExpectSyncConsentHistogram(
   [[EarlGrey
       selectElementWithMatcher:grey_allOf(
                                    grey_accessibilityValue(
-                                       l10n_util::GetNSString(
-                                           IDS_IOS_SETTING_OFF)),
+                                       GetNSString(IDS_IOS_SETTING_OFF)),
                                    grey_accessibilityID(
                                        kSettingsGoogleSyncAndServicesCellId),
                                    grey_sufficientlyVisible(), nil)]
@@ -998,25 +1037,6 @@ void ExpectSyncConsentHistogram(
   [SigninEarlGreyUI verifySigninPromoNotVisible];
 }
 
-// Tests that a user in the `ConsentLevel::kSignin` state will be signed out
-// after clearing their browsing history.
-- (void)testUserSignedOutWhenClearingBrowsingData {
-  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
-  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity enableSync:NO];
-
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsMenuPrivacyButton()];
-  [ChromeEarlGreyUI
-      tapPrivacyMenuButton:ButtonWithAccessibilityLabelId(
-                               IDS_IOS_CLEAR_BROWSING_DATA_TITLE)];
-  [ChromeEarlGreyUI tapClearBrowsingDataMenuButton:ClearBrowsingDataButton()];
-  [[EarlGrey selectElementWithMatcher:ConfirmClearBrowsingDataButton()]
-      performAction:grey_tap()];
-
-  [SigninEarlGrey verifySignedOut];
-}
-
 // Tests that Sync is on when introducing passphrase from settings, after
 // logging in.
 // TODO(crbug.com/1277545): Flaky on iOS simulator.
@@ -1041,11 +1061,12 @@ void ExpectSyncConsentHistogram(
                       GoogleServicesSettingsButton()];
 
   [[EarlGrey
-      selectElementWithMatcher:
-          grey_allOf(grey_accessibilityValue(l10n_util::GetNSString(
-                         IDS_IOS_SYNC_ENCRYPTION_DESCRIPTION)),
-                     grey_accessibilityID(kSettingsGoogleSyncAndServicesCellId),
-                     grey_sufficientlyVisible(), nil)]
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityValue(GetNSString(
+                                       IDS_IOS_SYNC_ENCRYPTION_DESCRIPTION)),
+                                   grey_accessibilityID(
+                                       kSettingsGoogleSyncAndServicesCellId),
+                                   grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
 
   // Scroll to bottom of Manage Sync Settings, if necessary.
@@ -1116,7 +1137,7 @@ void ExpectSyncConsentHistogram(
   [[EarlGrey
       selectElementWithMatcher:
           grey_allOf(
-              grey_accessibilityLabel(l10n_util::GetNSString(
+              grey_accessibilityLabel(GetNSString(
                   IDS_IOS_SIGN_IN_TO_CHROME_SETTING_SUBTITLE_SYNC_MANAGED)),
               grey_sufficientlyVisible(), nil)]
 
@@ -1126,7 +1147,7 @@ void ExpectSyncConsentHistogram(
   [ChromeEarlGreyUI waitForAppToIdle];
 
   NSString* policyText =
-      l10n_util::GetNSString(IDS_IOS_ENTERPRISE_MANAGED_SIGNIN_LEARN_MORE);
+      GetNSString(IDS_IOS_ENTERPRISE_MANAGED_SIGNIN_LEARN_MORE);
   policyText = [policyText stringByReplacingOccurrencesOfString:@"BEGIN_LINK"
                                                      withString:@""];
   policyText = [policyText stringByReplacingOccurrencesOfString:@"END_LINK"
@@ -1156,14 +1177,14 @@ void ExpectSyncConsentHistogram(
 - (void)testTurnOffSyncDisablePolicy {
   // Disable sync by policy.
   policy_test_utils::SetPolicy(true, policy::key::kSyncDisabled);
-  [[EarlGrey selectElementWithMatcher:
-                 grey_allOf(grey_accessibilityLabel(l10n_util::GetNSString(
-                                IDS_IOS_SYNC_SYNC_DISABLED_CONTINUE)),
-                            grey_userInteractionEnabled(), nil)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityLabel(GetNSString(
+                                       IDS_IOS_SYNC_SYNC_DISABLED_CONTINUE)),
+                                   grey_userInteractionEnabled(), nil)]
       performAction:grey_tap()];
   // Open other device tab.
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::ShowTabsButton()]
-      performAction:grey_tap()];
+  [ChromeEarlGreyUI openTabGrid];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::
                                           TabGridOtherDevicesPanelButton()]
       performAction:grey_tap()];

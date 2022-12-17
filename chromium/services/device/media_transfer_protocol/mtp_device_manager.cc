@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,7 @@ MtpDeviceManager* g_mtp_device_manager = nullptr;
 }  // namespace
 
 MtpDeviceManager::MtpDeviceManager()
-    : bus_(chromeos::DBusThreadManager::Get()->GetSystemBus()) {
+    : bus_(ash::DBusThreadManager::Get()->GetSystemBus()) {
   // Listen for future mtpd service owner changes, in case it is not
   // available right now. There is no guarantee that mtpd is running already.
   dbus::Bus::ServiceOwnerChangeCallback mtpd_owner_changed_callback =

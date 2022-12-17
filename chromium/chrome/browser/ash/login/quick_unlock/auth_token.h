@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,6 +47,12 @@ class AuthToken {
 
   // The UserContext returned here can be null if Reset() was called.
   const UserContext* user_context() const { return user_context_.get(); }
+  UserContext* user_context() { return user_context_.get(); }
+
+  // Replace the user context that is stored with this token. If Reset() has
+  // been called earlier, the call is ignored, and the user context passed to
+  // this function is destroyed.
+  void ReplaceUserContext(std::unique_ptr<UserContext>);
 
  private:
   friend class QuickUnlockStorageUnitTest;

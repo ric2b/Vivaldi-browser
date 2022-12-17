@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,9 +6,11 @@
 
 #include <set>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
@@ -269,7 +271,8 @@ void TouchSelectionControllerClientAura::ShowQuickMenu() {
 
   aura::Window* parent = rwhva_->GetNativeView();
   ui::TouchSelectionMenuRunner::GetInstance()->OpenMenu(
-      active_menu_client_, ConvertRectToScreen(parent, anchor_rect),
+      active_menu_client_->GetWeakPtr(),
+      ConvertRectToScreen(parent, anchor_rect),
       gfx::ToRoundedSize(max_handle_size), parent->GetToplevelWindow());
 }
 
@@ -450,6 +453,11 @@ bool TouchSelectionControllerClientAura::IsCommandIdEnabled(
           ui::ClipboardBuffer::kCopyPaste, &data_dst, &result);
       return editable && !result.empty();
     }
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    case ui::TouchEditable::kSelectAll:
+      return readable && base::FeatureList::IsEnabled(
+                             chromeos::features::kTouchTextEditingRedesign);
+#endif
     default:
       return false;
   }
@@ -471,6 +479,9 @@ void TouchSelectionControllerClientAura::ExecuteCommand(int command_id,
       break;
     case ui::TouchEditable::kPaste:
       host_delegate->Paste();
+      break;
+    case ui::TouchEditable::kSelectAll:
+      host_delegate->SelectAll();
       break;
     default:
       NOTREACHED();

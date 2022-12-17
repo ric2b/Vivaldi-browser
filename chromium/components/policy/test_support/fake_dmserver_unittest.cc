@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/policy/proto/chrome_extension_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/policy/test_support/client_storage.h"
 #include "components/policy/test_support/embedded_policy_test_server.h"
@@ -51,6 +52,53 @@ void DownloadedToString(base::OnceClosure callback,
     LOG(INFO) << "response body: " << *response_body;
   std::move(callback).Run();
 }
+
+constexpr base::StringPiece kRawExtensionPolicyPayload =
+    R"({
+      "VisibleStringPolicy": {
+        "Value": "notsecret"
+      },
+      "SensitiveStringPolicy": {
+        "Value": "secret"
+      },
+      "VisibleDictPolicy": {
+        "Value": {
+          "some_bool": true,
+          "some_string": "notsecret"
+        }
+      },
+      "SensitiveDictPolicy": {
+        "Value": {
+          "some_bool": true,
+          "some_string": "secret"
+        }
+      }
+    })";
+constexpr base::StringPiece kPolicyBlobForExternalPolicy =
+    R"(
+    {
+      "managed_users" : [ "*" ],
+      "policy_user" : "tast-user@managedchrome.com",
+      "external_policies": [
+        {
+          "entity_id": "ibdnofdagboejmpijdiknapcihkomkki",
+          "policy_type": "google/chrome/extension",
+          "value": "ewogICAgICAiVmlzaWJsZVN0cmluZ1BvbGljeSI6IHsKICAgICAgICAiVm)"
+    R"(FsdWUiOiAibm90c2VjcmV0IgogICAgICB9LAogICAgICAiU2Vuc2l0aXZlU3RyaW5nUG9sa)"
+    R"(WN5IjogewogICAgICAgICJWYWx1ZSI6ICJzZWNyZXQiCiAgICAgIH0sCiAgICAgICJWaXNp)"
+    R"(YmxlRGljdFBvbGljeSI6IHsKICAgICAgICAiVmFsdWUiOiB7CiAgICAgICAgICAic29tZV9)"
+    R"(ib29sIjogdHJ1ZSwKICAgICAgICAgICJzb21lX3N0cmluZyI6ICJub3RzZWNyZXQiCiAgIC)"
+    R"(AgICAgfQogICAgICB9LAogICAgICAiU2Vuc2l0aXZlRGljdFBvbGljeSI6IHsKICAgICAgI)"
+    R"(CAiVmFsdWUiOiB7CiAgICAgICAgICAic29tZV9ib29sIjogdHJ1ZSwKICAgICAgICAgICJz)"
+    R"(b21lX3N0cmluZyI6ICJzZWNyZXQiCiAgICAgICAgfQogICAgICB9CiAgICB9"
+        }
+      ]
+    }
+  )";
+constexpr base::StringPiece kSHA256HashForExtensionPolicyPayload(
+    "\x1e\x95\xf3\xeb\x42\xcc\x72\x2c\x83\xdb\x2d\x1c\xb1\xca\xfa\x2b\x78\x1e"
+    "\x4b\x91\x2b\x73\x1a\x5c\x85\x72\xa8\xf2\x87\x4a\xbc\x44",
+    32);
 
 }  // namespace
 
@@ -347,7 +395,23 @@ TEST_F(FakeDMServerTest, HandlePolicyRequest_Succeeds) {
       R"(ovL3N0b3JhZ2UuZ29vZ2xlYXBpcy5jb20vY2hyb21pdW1vcy10ZXN0LWFzc2V0cy1wdWJ)"
       R"(saWMvZW50ZXJwcmlzZS9wcmludGVycy5qc29uIn0="
         }
-      ]
+      ],
+      "current_key_index": 1,
+      "robot_api_auth_code": "code",
+      "directory_api_id": "id",
+      "device_affiliation_ids" : [
+        "device_id"
+      ],
+      "user_affiliation_ids" : [
+        "user_id"
+      ],
+      "allow_set_device_attributes" : false,
+      "initial_enrollment_state": {
+        "TEST_serial": {
+          "initial_enrollment_mode": 2,
+          "management_domain": "test-domain.com"
+        }
+      }
     }
   )"));
   ASSERT_TRUE(base::WriteFile(client_state_path_, R"(
@@ -394,6 +458,121 @@ TEST_F(FakeDMServerTest, HandlePolicyRequest_Succeeds) {
             "Q0ZDY1NzQ5Y2FiNWVjZDBmYTdkYjIxMWMxMmEzYjgiLCJ1cmwiOiJodHRwczovL3N0"
             "b3JhZ2UuZ29vZ2xlYXBpcy5jb20vY2hyb21pdW1vcy10ZXN0LWFzc2V0cy1wdWJsaW"
             "MvZW50ZXJwcmlzZS9wcmludGVycy5qc29uIn0=");
+
+  int current_key_index = fake_dmserver.policy_storage()
+                              ->signature_provider()
+                              ->current_key_version();
+  EXPECT_EQ(current_key_index, 1);
+
+  std::string robot_api_auth_code =
+      fake_dmserver.policy_storage()->robot_api_auth_code();
+  EXPECT_EQ(robot_api_auth_code, "code");
+
+  std::string directory_api_id =
+      fake_dmserver.policy_storage()->directory_api_id();
+  EXPECT_EQ(directory_api_id, "id");
+
+  bool allow_set_device_attributes =
+      fake_dmserver.policy_storage()->allow_set_device_attributes();
+  EXPECT_FALSE(allow_set_device_attributes);
+
+  std::vector<std::string> device_affiliation_ids =
+      fake_dmserver.policy_storage()->device_affiliation_ids();
+  EXPECT_EQ(device_affiliation_ids.size(), 1u);
+  EXPECT_EQ(device_affiliation_ids[0], "device_id");
+
+  std::vector<std::string> user_affiliation_ids =
+      fake_dmserver.policy_storage()->user_affiliation_ids();
+  EXPECT_EQ(user_affiliation_ids.size(), 1u);
+  EXPECT_EQ(user_affiliation_ids[0], "user_id");
+
+  const policy::PolicyStorage::InitialEnrollmentState*
+      initial_enrollment_state =
+          fake_dmserver.policy_storage()->GetInitialEnrollmentState(
+              "TEST_serial");
+  EXPECT_TRUE(initial_enrollment_state);
+  EXPECT_EQ(initial_enrollment_state->management_domain, "test-domain.com");
+  EXPECT_EQ(
+      initial_enrollment_state->initial_enrollment_mode,
+      static_cast<enterprise_management::DeviceInitialEnrollmentStateResponse::
+                      InitialEnrollmentMode>(2));
+}
+
+TEST_F(FakeDMServerTest, HandlePolicyRequestWithCustomError_Succeeds) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_,
+                              R"(
+    {
+      "managed_users" : [ "*" ],
+      "policy_user" : "tast-user@managedchrome.com",
+      "request_errors": { "policy": 500 },
+      "policies" : [
+        {
+          "policy_type" : "google/chromeos/user", "value" : "uhMCEAE="
+        }
+      ]
+    }
+  )"));
+  ASSERT_TRUE(base::WriteFile(client_state_path_, R"(
+    {
+      "fake_device_id" : {
+        "device_id" : "fake_device_id",
+        "device_token" : "fake_device_token",
+        "machine_name" : "fake_machine_name",
+        "username" : "tast-user@managedchrome.com",
+        "state_keys" : [ "fake_state_key" ],
+        "allowed_policy_types" : [ "google/chrome/extension",
+        "google/chromeos/user" ]
+      }
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_INTERNAL_SERVER_ERROR);
+}
+
+TEST_F(FakeDMServerTest, HandleExternalPolicyRequest_Succeeds) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_, kPolicyBlobForExternalPolicy));
+  ASSERT_TRUE(base::WriteFile(client_state_path_, R"(
+    {
+      "fake_device_id" : {
+        "device_id" : "fake_device_id",
+        "device_token" : "fake_device_token",
+        "machine_name" : "fake_machine_name",
+        "username" : "tast-user@managedchrome.com",
+        "state_keys" : [ "fake_state_key" ],
+        "allowed_policy_types" : [ "google/chrome/extension",
+        "google/chromeos/user" ]
+      }
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_OK);
+
+  std::string policy_data = fake_dmserver.policy_storage()->GetPolicyPayload(
+      "google/chrome/extension", "ibdnofdagboejmpijdiknapcihkomkki");
+  ASSERT_FALSE(policy_data.empty());
+  enterprise_management::ExternalPolicyData data;
+  ASSERT_TRUE(data.ParseFromString(policy_data));
+  EXPECT_EQ(data.secure_hash(), kSHA256HashForExtensionPolicyPayload);
+  // TODO(b/240445061): Write an integration test that issues a request to the
+  // returned URL and verifies that it returns correct policy.
+  ASSERT_TRUE(data.has_download_url());
+
+  std::string extension_policy_payload =
+      fake_dmserver.policy_storage()->GetExternalPolicyPayload(
+          "google/chrome/extension", "ibdnofdagboejmpijdiknapcihkomkki");
+  EXPECT_EQ(extension_policy_payload, kRawExtensionPolicyPayload);
 }
 
 TEST_F(FakeDMServerTest, ReadPolicyBlobFile_WithWrongJSONData_Fails) {
@@ -437,6 +616,149 @@ TEST_F(FakeDMServerTest, ReadPolicyBlobFile_WithNonDictPolicies_Fails) {
             net::HTTP_INTERNAL_SERVER_ERROR);
 }
 
+TEST_F(FakeDMServerTest, ReadPolicyBlobFile_WithNonDictExternalPolicies_Fails) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_, R"(
+    {
+      "managed_users" : [ "*" ],
+      "external_policies" : [ "1", "2" ]
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_INTERNAL_SERVER_ERROR);
+}
+
+TEST_F(FakeDMServerTest, ReadPolicyBlobFile_WithNonIntRequestError_Fails) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_, R"(
+    {
+      "managed_users" : [ "*" ],
+      "policy_user" : "tast-user@managedchrome.com",
+      "request_errors": { "policy": "non int value" },
+      "policies" : [
+        {
+          "policy_type" : "google/chromeos/user", "value" : "uhMCEAE="
+        }
+      ]
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_INTERNAL_SERVER_ERROR);
+}
+
+TEST_F(FakeDMServerTest,
+       ReadPolicyBlobFile_WithNonBoolAllowSetDeviceAttributes_Fails) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_, R"(
+    {
+      "managed_users" : [ "*" ],
+      "policy_user" : "tast-user@managedchrome.com",
+      "allow_set_device_attributes": { "key": "non int value" },
+      "policies" : [
+        {
+          "policy_type" : "google/chromeos/user", "value" : "uhMCEAE="
+        }
+      ]
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_INTERNAL_SERVER_ERROR);
+}
+
+TEST_F(FakeDMServerTest,
+       ReadPolicyBlobFile_WithNonStringManagementDomain_Fails) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_, R"(
+    {
+      "managed_users" : [ "*" ],
+      "policy_user" : "tast-user@managedchrome.com",
+      "initial_enrollment_state":
+      {
+        "management_domain": 3,
+        "initial_enrollment_mode": 1
+      },
+      "policies" : [
+        {
+          "policy_type" : "google/chromeos/user", "value" : "uhMCEAE="
+        }
+      ]
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_INTERNAL_SERVER_ERROR);
+}
+
+TEST_F(FakeDMServerTest,
+       ReadPolicyBlobFile_WithNonIntInitialEnrollmentMode_Fails) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_, R"(
+    {
+      "managed_users" : [ "*" ],
+      "policy_user" : "tast-user@managedchrome.com",
+      "initial_enrollment_state":
+      {
+        "management_domain": "domain",
+        "initial_enrollment_mode": "non int value"
+      },
+      "policies" : [
+        {
+          "policy_type" : "google/chromeos/user", "value" : "uhMCEAE="
+        }
+      ]
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_INTERNAL_SERVER_ERROR);
+}
+
+TEST_F(FakeDMServerTest, ReadPolicyBlobFile_WithNonIntCurrentKeyIndex_Fails) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_, R"(
+    {
+      "managed_users" : [ "*" ],
+      "policy_user" : "tast-user@managedchrome.com",
+      "current_key_index": "non int value",
+      "policies" : [
+        {
+          "policy_type" : "google/chromeos/user", "value" : "uhMCEAE="
+        }
+      ]
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_INTERNAL_SERVER_ERROR);
+}
+
 TEST_F(FakeDMServerTest, SetPolicyPayload_WithoutValueOrTypeField_Fails) {
   FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
                              client_state_path_.MaybeAsASCII());
@@ -466,6 +788,53 @@ TEST_F(FakeDMServerTest, SetPolicyPayload_WithNonBase64Value_Fails) {
       "managed_users" : [ "*" ],
       "policies" : [
         { "policy_type" : "google/chromeos/user", "value" : "!@#$%^&*" }
+      ]
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_INTERNAL_SERVER_ERROR);
+}
+
+TEST_F(FakeDMServerTest,
+       SetExternalPolicyPayload_WithoutValueOrTypeField_Fails) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_, R"(
+    {
+      "managed_users" : [ "*" ],
+      "external_policies" : [
+        {
+          "wrong type" : "google/chrome/extension",
+          "wrong id" : "random id",
+          "wrong value" : "!@#$%^&*"
+        }
+      ]
+    }
+  )"));
+  EXPECT_EQ(SendRequest(fake_dmserver.GetServiceURL(),
+                        "/?apptype=Chrome&deviceid=fake_device_id&devicetype=2&"
+                        "oauth_token=fake_policy_token&request=policy"),
+            net::HTTP_INTERNAL_SERVER_ERROR);
+}
+
+TEST_F(FakeDMServerTest, SetExternalPolicyPayload_WithNonBase64Value_Fails) {
+  FakeDMServer fake_dmserver(policy_blob_path_.MaybeAsASCII(),
+                             client_state_path_.MaybeAsASCII());
+  EXPECT_TRUE(fake_dmserver.Start());
+
+  ASSERT_TRUE(base::WriteFile(policy_blob_path_, R"(
+    {
+      "managed_users" : [ "*" ],
+      "external_policies" : [
+        {
+          "policy_type" : "google/chrome/extension",
+          "entity_id" : "random_id",
+          "value" : "!@#$%^&*"
+        }
       ]
     }
   )"));

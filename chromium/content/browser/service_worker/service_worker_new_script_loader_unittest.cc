@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,6 +31,7 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/redirect_info.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "services/network/public/mojom/parsed_headers.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "third_party/blink/public/common/features.h"
@@ -107,6 +108,7 @@ class MockNetwork {
     if (response.has_certificate_error) {
       response_head->cert_status = response.cert_status;
     }
+    response_head->parsed_headers = network::mojom::ParsedHeaders::New();
 
     mojo::Remote<network::mojom::URLLoaderClient>& client = params->client;
     if (response_head->headers->response_code() == 307) {
@@ -121,7 +123,8 @@ class MockNetwork {
     MojoResult result = producer->WriteData(
         response.body.data(), &bytes_written, MOJO_WRITE_DATA_FLAG_ALL_OR_NONE);
     CHECK_EQ(MOJO_RESULT_OK, result);
-    client->OnReceiveResponse(std::move(response_head), std::move(consumer));
+    client->OnReceiveResponse(std::move(response_head), std::move(consumer),
+                              absl::nullopt);
 
     network::URLLoaderCompletionStatus status;
     status.error_code = net::OK;

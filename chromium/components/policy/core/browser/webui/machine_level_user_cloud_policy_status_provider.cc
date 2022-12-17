@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,13 +8,34 @@
 
 #include "base/i18n/time_formatting.h"
 #include "base/values.h"
+#include "components/policy/core/browser/webui/policy_status_provider.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/base/l10n/time_format.h"
 
+namespace {
+
+// MachineStatus box labels itself as `machine policies` on desktop. In the
+// domain of mobile devices such as iOS or Android we want to label this box as
+// `device policies`. This is a helper function that retrieves the expected
+// labelKey.
+std::string GetMachineStatusDescriptionKey() {
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  return "statusDevice";
+#else
+  return "statusMachine";
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+}
+
+}  // namespace
+
 namespace policy {
+
+const char kDeviceIdKey[] = "deviceId";
+const char kEnrollmentTokenKey[] = "enrollmentToken";
+const char kMachineKey[] = "machine";
 
 MachineLevelUserCloudPolicyStatusProvider::
     MachineLevelUserCloudPolicyStatusProvider(
@@ -47,10 +68,10 @@ base::Value::Dict MachineLevelUserCloudPolicyStatusProvider::GetStatus() {
       refresh_scheduler ? refresh_scheduler->invalidations_available() : false);
 
   if (!context_->enrollmentToken.empty())
-    dict.Set("enrollmentToken", context_->enrollmentToken);
+    dict.Set(kEnrollmentTokenKey, context_->enrollmentToken);
 
   if (!context_->deviceId.empty())
-    dict.Set("deviceId", context_->deviceId);
+    dict.Set(kDeviceIdKey, context_->deviceId);
 
   CloudPolicyStore* store = core_->store();
   if (store) {
@@ -64,10 +85,10 @@ base::Value::Dict MachineLevelUserCloudPolicyStatusProvider::GetStatus() {
                GetTimeSinceLastActionString(
                    refresh_scheduler ? refresh_scheduler->last_refresh()
                                      : base::Time()));
-      dict.Set("domain", gaia::ExtractDomainName(policy->username()));
+      dict.Set(kDomainKey, gaia::ExtractDomainName(policy->username()));
     }
   }
-  dict.Set("machine", GetMachineName());
+  dict.Set(kMachineKey, GetMachineName());
 
   if (!context_->lastCloudReportSent.is_null()) {
     dict.Set("lastCloudReportSentTimestamp",
@@ -76,6 +97,7 @@ base::Value::Dict MachineLevelUserCloudPolicyStatusProvider::GetStatus() {
     dict.Set("timeSinceLastCloudReportSent",
              GetTimeSinceLastActionString(context_->lastCloudReportSent));
   }
+  dict.Set(policy::kPolicyDescriptionKey, GetMachineStatusDescriptionKey());
   return dict;
 }
 

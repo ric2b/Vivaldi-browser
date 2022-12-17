@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/fenced_frame/fenced_frame.h"
+#include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/navigator.h"
@@ -33,6 +34,7 @@
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/frame/fenced_frame_sandbox_flags.h"
 #include "third_party/blink/public/common/loader/loader_constants.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
@@ -132,21 +134,20 @@ FrameTreeNode* FrameTreeNode::From(RenderFrameHost* rfh) {
   return static_cast<RenderFrameHostImpl*>(rfh)->frame_tree_node();
 }
 
-RenderFrameHostImpl::FencedFrameStatus ComputeFencedFrameStatus(
+FrameTreeNode::FencedFrameStatus ComputeFencedFrameStatus(
     FrameTree* frame_tree,
     RenderFrameHostImpl* parent,
     const blink::FramePolicy& frame_policy) {
+  using FencedFrameStatus = FrameTreeNode::FencedFrameStatus;
   if (blink::features::IsFencedFramesEnabled()) {
     switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
       case blink::features::FencedFramesImplementationType::kMPArch: {
         if (frame_tree->type() == FrameTree::Type::kFencedFrame) {
           if (!parent)
-            return RenderFrameHostImpl::FencedFrameStatus::kFencedFrameRoot;
-          return RenderFrameHostImpl::FencedFrameStatus::
-              kIframeNestedWithinFencedFrame;
+            return FencedFrameStatus::kFencedFrameRoot;
+          return FencedFrameStatus::kIframeNestedWithinFencedFrame;
         } else {
-          return RenderFrameHostImpl::FencedFrameStatus::
-              kNotNestedInFencedFrame;
+          return FencedFrameStatus::kNotNestedInFencedFrame;
         }
       }
       case blink::features::FencedFramesImplementationType::kShadowDOM: {
@@ -154,20 +155,19 @@ RenderFrameHostImpl::FencedFrameStatus ComputeFencedFrameStatus(
         // fenced frame lives in the same FrameTree as its parent, so we need to
         // check its effective frame policy instead.
         if (frame_policy.is_fenced) {
-          return RenderFrameHostImpl::FencedFrameStatus::kFencedFrameRoot;
-        } else if (parent && parent->frame_tree_node()->IsInFencedFrameTree()) {
-          return RenderFrameHostImpl::FencedFrameStatus::
-              kIframeNestedWithinFencedFrame;
+          return FencedFrameStatus::kFencedFrameRoot;
+        } else if (parent && parent->IsNestedWithinFencedFrame()) {
+          return FencedFrameStatus::kIframeNestedWithinFencedFrame;
         }
-        return RenderFrameHostImpl::FencedFrameStatus::kNotNestedInFencedFrame;
+        return FencedFrameStatus::kNotNestedInFencedFrame;
       }
       default: {
-        return RenderFrameHostImpl::FencedFrameStatus::kNotNestedInFencedFrame;
+        return FencedFrameStatus::kNotNestedInFencedFrame;
       }
     }
   }
 
-  return RenderFrameHostImpl::FencedFrameStatus::kNotNestedInFencedFrame;
+  return FencedFrameStatus::kNotNestedInFencedFrame;
 }
 
 FrameTreeNode::FrameTreeNode(
@@ -342,6 +342,10 @@ bool FrameTreeNode::IsMainFrame() const {
   return frame_tree_->root() == this;
 }
 
+Navigator& FrameTreeNode::navigator() {
+  return frame_tree()->navigator();
+}
+
 bool FrameTreeNode::IsOutermostMainFrame() {
   return !GetParentOrOuterDocument();
 }
@@ -453,10 +457,6 @@ void FrameTreeNode::SetOriginalOpener(FrameTreeNode* opener) {
   }
 }
 
-void FrameTreeNode::SetCurrentURL(const GURL& url) {
-  current_frame_host()->SetLastCommittedUrl(url);
-}
-
 void FrameTreeNode::SetCollapsed(bool collapsed) {
   DCHECK(!IsMainFrame() || IsFencedFrameRoot());
   if (is_collapsed_ == collapsed)
@@ -489,6 +489,31 @@ void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
     mojo::ReportBadMessage(
         "FramePolicy properties dealing with fenced frames are considered "
         "immutable, and therefore should never be changed by the renderer.");
+    return;
+  }
+
+  // Inside of a fenced frame, the sandbox flags should not be able to change
+  // from its initial value. If the flags change, we have to assume the change
+  // came from a compromised renderer and terminate it.
+  // We will only do the check if the sandbox flags are already set to
+  // kFencedFrameForcedSandboxFlags. This is to allow the sandbox flags to
+  // be set initially (go from kNone -> kFencedFrameForcedSandboxFlags). Once
+  // it has been set, it cannot change to another value.
+  // Note: The bad message is only expected to hit for ShadowDOM fenced frames.
+  // For MPArch, the RFHI will detect that the change is not coming from the
+  // frame's parent in DidChangeFramePolicy() (an MPArch fenced frame parent
+  // is null since it's the root frame in its tree) and terminate the
+  // renderer before we reach this point.
+  // TODO(crbug.com/1262022) When ShadowDOM is removed, turn this into a DCHECK
+  // and remove the BadMessage call.
+  if (IsFencedFrameRoot() &&
+      pending_frame_policy_.sandbox_flags ==
+          blink::kFencedFrameForcedSandboxFlags &&
+      frame_policy.sandbox_flags != blink::kFencedFrameForcedSandboxFlags) {
+    DCHECK(frame_tree()->IsFencedFramesShadowDOMBased());
+    bad_message::ReceivedBadMessage(
+        current_frame_host()->GetProcess(),
+        bad_message::FF_FROZEN_SANDBOX_FLAGS_CHANGED);
     return;
   }
 
@@ -576,7 +601,7 @@ void FrameTreeNode::CreatedNavigationRequest(
       // Mark the old request as aborted.
       navigation_request_->set_net_error(net::ERR_ABORTED);
     }
-    ResetNavigationRequest(true);
+    ResetNavigationRequestButKeepState();
   }
 
   navigation_request_ = std::move(navigation_request);
@@ -592,20 +617,24 @@ void FrameTreeNode::CreatedNavigationRequest(
   DidStartLoading(to_different_document, was_previously_loading);
 }
 
-void FrameTreeNode::ResetNavigationRequest(bool keep_state) {
+void FrameTreeNode::ResetNavigationRequest(NavigationDiscardReason reason) {
+  if (!navigation_request_)
+    return;
+
+  ResetNavigationRequestButKeepState();
+
+  // The RenderFrameHostManager should clean up any speculative RenderFrameHost
+  // it created for the navigation. Also register that the load stopped.
+  DidStopLoading();
+  render_manager_.CleanUpNavigation(reason);
+}
+
+void FrameTreeNode::ResetNavigationRequestButKeepState() {
   if (!navigation_request_)
     return;
 
   devtools_instrumentation::OnResetNavigationRequest(navigation_request_.get());
   navigation_request_.reset();
-
-  if (keep_state)
-    return;
-
-  // The RenderFrameHostManager should clean up any speculative RenderFrameHost
-  // it created for the navigation. Also register that the load stopped.
-  DidStopLoading();
-  render_manager_.CleanUpNavigation();
 }
 
 void FrameTreeNode::DidStartLoading(bool should_show_loading_ui,
@@ -667,7 +696,7 @@ void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
 bool FrameTreeNode::StopLoading() {
   if (navigation_request_ && navigation_request_->IsNavigationStarted())
     navigation_request_->set_net_error(net::ERR_ABORTED);
-  ResetNavigationRequest(false);
+  ResetNavigationRequest(NavigationDiscardReason::kCancelled);
 
   if (!IsMainFrame())
     return true;
@@ -703,8 +732,9 @@ void FrameTreeNode::BeforeUnloadCanceled() {
   // We also reset navigation request only when this navigation request was
   // responsible for this dialog, as a new navigation request might cancel
   // existing unrelated dialog.
-  if (navigation_request_ && navigation_request_->IsWaitingForBeforeUnload())
-    ResetNavigationRequest(false);
+  if (navigation_request_ && navigation_request_->IsWaitingForBeforeUnload()) {
+    ResetNavigationRequest(NavigationDiscardReason::kCancelled);
+  }
 }
 
 bool FrameTreeNode::NotifyUserActivation(
@@ -737,7 +767,7 @@ bool FrameTreeNode::NotifyUserActivation(
       true);
 
   absl::optional<base::UnguessableToken> originator_nonce =
-      fenced_frame_nonce();
+      GetFencedFrameNonce();
 
   // See the "Same-origin Visibility" section in |UserActivationState| class
   // doc.
@@ -747,7 +777,7 @@ bool FrameTreeNode::NotifyUserActivation(
         this->current_frame_host()->GetLastCommittedOrigin();
     for (FrameTreeNode* node : frame_tree()->Nodes()) {
       if (shadow_dom_fenced_frame_enabled &&
-          node->fenced_frame_nonce() != originator_nonce) {
+          node->GetFencedFrameNonce() != originator_nonce) {
         continue;
       }
 
@@ -775,12 +805,12 @@ bool FrameTreeNode::ConsumeTransientUserActivation() {
   bool shadow_dom_fenced_frame_enabled =
       frame_tree()->IsFencedFramesShadowDOMBased();
   absl::optional<base::UnguessableToken> originator_nonce =
-      fenced_frame_nonce();
+      GetFencedFrameNonce();
 
   bool was_active = user_activation_state_.IsActive();
   for (FrameTreeNode* node : frame_tree()->Nodes()) {
     if (shadow_dom_fenced_frame_enabled &&
-        node->fenced_frame_nonce() != originator_nonce) {
+        node->GetFencedFrameNonce() != originator_nonce) {
       continue;
     }
 
@@ -896,32 +926,95 @@ bool FrameTreeNode::HasNavigation() {
 }
 
 bool FrameTreeNode::IsFencedFrameRoot() const {
-  return fenced_frame_status_ ==
-         RenderFrameHostImpl::FencedFrameStatus::kFencedFrameRoot;
+  return fenced_frame_status_ == FencedFrameStatus::kFencedFrameRoot;
 }
 
 bool FrameTreeNode::IsInFencedFrameTree() const {
-  return fenced_frame_status_ !=
-         RenderFrameHostImpl::FencedFrameStatus::kNotNestedInFencedFrame;
+  return fenced_frame_status_ != FencedFrameStatus::kNotNestedInFencedFrame;
 }
 
-void FrameTreeNode::SetFencedFrameNonceIfNeeded() {
+const absl::optional<FencedFrameURLMapping::FencedFrameProperties>&
+FrameTreeNode::GetFencedFrameProperties() {
   if (!IsInFencedFrameTree()) {
+    // If we might be in a urn iframe, try to find the "urn iframe root"
+    // and if it exists, return the attached `FencedFrameProperties`.
+    if (blink::features::IsAllowURNsInIframeEnabled()) {
+      FrameTreeNode* node = this;
+      while (node->parent()) {
+        CHECK(node->parent()->frame_tree_node());
+        if (node->fenced_frame_properties_.has_value()) {
+          return node->fenced_frame_properties_;
+        }
+        node = node->parent()->frame_tree_node();
+      }
+    }
+    return fenced_frame_properties_;
+  }
+
+  switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
+    case blink::features::FencedFramesImplementationType::kMPArch: {
+      // Because we already confirmed we're in a fenced frame tree, we know
+      // there must be a fenced frame root with properties stored.
+      CHECK(frame_tree());
+      CHECK(frame_tree()->root());
+      CHECK(frame_tree()->root()->fenced_frame_properties_.has_value());
+      return frame_tree()->root()->fenced_frame_properties_;
+    }
+    case blink::features::FencedFramesImplementationType::kShadowDOM: {
+      FrameTreeNode* node = this;
+
+      while (true) {
+        if (node->IsFencedFrameRoot()) {
+          // Because non-opaque url navigations in ShadowDOM fenced frames
+          // do not install fenced frame properties, this may be absl::nullopt
+          // underneath.
+          return node->fenced_frame_properties_;
+        }
+
+        CHECK(node->parent());
+        CHECK(node->parent()->frame_tree_node());
+        node = node->parent()->frame_tree_node();
+      }
+    }
+  }
+}
+
+size_t FrameTreeNode::GetFencedFrameDepth() {
+  size_t depth = 0;
+  FrameTreeNode* node = this;
+
+  while (node->fenced_frame_status() !=
+         FencedFrameStatus::kNotNestedInFencedFrame) {
+    if (node->fenced_frame_status() == FencedFrameStatus::kFencedFrameRoot) {
+      depth += 1;
+    } else {
+      DCHECK_EQ(node->fenced_frame_status(),
+                FencedFrameStatus::kIframeNestedWithinFencedFrame);
+    }
+
+    DCHECK(node->GetParentOrOuterDocument());
+    node = node->GetParentOrOuterDocument()->frame_tree_node();
+  }
+
+  return depth;
+}
+
+absl::optional<base::UnguessableToken> FrameTreeNode::GetFencedFrameNonce() {
+  auto& root_fenced_frame_properties = GetFencedFrameProperties();
+  if (!root_fenced_frame_properties.has_value()) {
+    return absl::nullopt;
+  }
+  return root_fenced_frame_properties->partition_nonce;
+}
+
+void FrameTreeNode::SetFencedFramePropertiesIfNeeded() {
+  if (!IsFencedFrameRoot()) {
     return;
   }
 
-  if (IsFencedFrameRoot()) {
-    fenced_frame_nonce_ = base::UnguessableToken::Create();
-    return;
-  }
-
-  // For nested iframes in a fenced frame tree, propagate the same nonce as was
-  // set in the fenced frame root.
-  DCHECK(parent_);
-  absl::optional<base::UnguessableToken> nonce =
-      parent_->frame_tree_node()->fenced_frame_nonce();
-  DCHECK(nonce.has_value());
-  fenced_frame_nonce_ = nonce;
+  // The fenced frame properties are set only on the fenced frame root.
+  // In the future, they will be set on the FrameTree instead.
+  fenced_frame_properties_ = FencedFrameURLMapping::FencedFrameProperties();
 }
 
 absl::optional<blink::mojom::FencedFrameMode>
@@ -964,14 +1057,16 @@ void FrameTreeNode::SetSrcdocValue(const std::string& srcdoc_value) {
   srcdoc_value_ = srcdoc_value;
 }
 
-FencedFrameURLMapping::SharedStorageBudgetMetadata*
+std::vector<const FencedFrameURLMapping::SharedStorageBudgetMetadata*>
 FrameTreeNode::FindSharedStorageBudgetMetadata() {
+  std::vector<const FencedFrameURLMapping::SharedStorageBudgetMetadata*> result;
   FrameTreeNode* node = this;
 
   while (true) {
-    if (node->shared_storage_budget_metadata()) {
-      DCHECK(node->IsFencedFrameRoot());
-      return node->shared_storage_budget_metadata();
+    if (node->fenced_frame_properties_ &&
+        node->fenced_frame_properties_->shared_storage_budget_metadata) {
+      result.emplace_back(node->fenced_frame_properties_
+                              ->shared_storage_budget_metadata.value());
     }
 
     if (node->GetParentOrOuterDocument()) {
@@ -981,7 +1076,7 @@ FrameTreeNode::FindSharedStorageBudgetMetadata() {
     }
   }
 
-  return nullptr;
+  return result;
 }
 
 const scoped_refptr<BrowsingContextState>&

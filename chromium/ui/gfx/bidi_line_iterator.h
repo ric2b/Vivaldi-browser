@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,14 +12,10 @@
 #include "third_party/icu/source/common/unicode/ubidi.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/gfx/gfx_export.h"
+#include "ui/gfx/ubidi_deleter.h"
 
 namespace ui {
 namespace gfx {
-
-class UBiDiDeleter {
- public:
-  void operator()(UBiDi* ptr) { ubidi_close(ptr); }
-};
 
 // A simple wrapper class for the bidirectional iterator of ICU.
 // This class uses the bidirectional iterator of ICU to split a line of

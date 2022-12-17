@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,12 @@ export class InternetPageBrowserProxy {
    * @param {string} guid
    */
   showCellularSetupUI(guid) {}
+
+  /**
+   * Shows the Portal Signin.
+   * @param {string} guid
+   */
+  showPortalSignin(guid) {}
 
   /**
    * Shows configuration for external VPNs. Includes ThirdParty (extension
@@ -77,6 +83,11 @@ export class InternetPageBrowserProxyImpl {
   /** @override */
   showCellularSetupUI(guid) {
     chrome.send('showCellularSetupUI', [guid]);
+  }
+
+  /** @override */
+  showPortalSignin(guid) {
+    chrome.send('showPortalSignin', [guid]);
   }
 
   /** @override */

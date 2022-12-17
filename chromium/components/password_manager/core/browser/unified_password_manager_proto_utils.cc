@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -108,7 +108,7 @@ void DeserializeOpaqueLocalData(const std::string& opaque_metadata,
     return;
   }
 
-  base::Value::Dict serialized_data(std::move(root->GetDict()));
+  base::Value::Dict serialized_data(std::move(*root).TakeDict());
   auto skip_zero_click = serialized_data.FindBool(kSkipZeroClickKey);
   auto* serialized_form_data = serialized_data.FindDict(kFormDataKey);
   if (!skip_zero_click.has_value() || !serialized_form_data) {

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/threading/thread_checker.h"
-#include "ios/chrome/browser/application_context.h"
+#import "ios/chrome/browser/application_context/application_context.h"
 
 namespace network {
 class TestNetworkConnectionTracker;
@@ -50,6 +50,7 @@ class TestingApplicationContext : public ApplicationContext {
       override;
   network::mojom::NetworkContext* GetSystemNetworkContext() override;
   const std::string& GetApplicationLocale() override;
+  const std::string& GetApplicationCountry() override;
   ios::ChromeBrowserStateManager* GetChromeBrowserStateManager() override;
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
       override;
@@ -77,9 +78,10 @@ class TestingApplicationContext : public ApplicationContext {
  private:
   base::ThreadChecker thread_checker_;
   std::string application_locale_;
+  std::string application_country_;
   PrefService* local_state_;
 
-  // Must be destroyed after |local_state_|. BrowserStatePolicyConnector isn't a
+  // Must be destroyed after `local_state_`. BrowserStatePolicyConnector isn't a
   // keyed service because the pref service, which isn't a keyed service, has a
   // hard dependency on the policy infrastructure. In order to outlive the pref
   // service, the policy connector must live outside the keyed services.

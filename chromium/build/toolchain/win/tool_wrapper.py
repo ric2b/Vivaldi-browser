@@ -1,4 +1,4 @@
-# Copyright (c) 2012 The Chromium Authors. All rights reserved.
+# Copyright 2012 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -141,10 +141,11 @@ class WinTool(object):
     # Read output one line at a time as it shows up to avoid OOM failures when
     # GBs of output is produced.
     for line in link.stdout:
-      if (not line.startswith(b'   Creating library ')
-          and not line.startswith(b'Generating code')
-          and not line.startswith(b'Finished generating code')):
-        print(line)
+      line = line.decode('utf8')
+      if (not line.startswith('   Creating library ')
+          and not line.startswith('Generating code')
+          and not line.startswith('Finished generating code')):
+        print(line.rstrip())
     return link.wait()
 
   def ExecAsmWrapper(self, arch, *args):

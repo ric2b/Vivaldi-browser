@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -215,6 +215,14 @@ class CONTENT_EXPORT RenderWidgetHost {
       base::RepeatingCallback<bool(const blink::WebMouseEvent&)>;
   virtual void AddMouseEventCallback(const MouseEventCallback& callback) = 0;
   virtual void RemoveMouseEventCallback(const MouseEventCallback& callback) = 0;
+
+  // Add/remove a callback that, when it returns true, will suppress IME
+  // display.
+  using SuppressShowingImeCallback = base::RepeatingCallback<bool()>;
+  virtual void AddSuppressShowingImeCallback(
+      const SuppressShowingImeCallback& callback) = 0;
+  virtual void RemoveSuppressShowingImeCallback(
+      const SuppressShowingImeCallback& callback) = 0;
 
   // Observer for WebInputEvents.
   class InputEventObserver {

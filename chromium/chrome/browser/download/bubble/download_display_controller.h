@@ -1,10 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_BROWSER_DOWNLOAD_BUBBLE_DOWNLOAD_DISPLAY_CONTROLLER_H_
 #define CHROME_BROWSER_DOWNLOAD_BUBBLE_DOWNLOAD_DISPLAY_CONTROLLER_H_
 
+#include "base/power_monitor/power_observer.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/download/bubble/download_icon_state.h"
 #include "chrome/browser/download/offline_item_model.h"
@@ -33,7 +34,8 @@ class DownloadDisplay;
 // we can remove AllDownloadItemNotifier::Observer.
 class DownloadDisplayController
     : public download::AllDownloadItemNotifier::Observer,
-      public FullscreenObserver {
+      public FullscreenObserver,
+      public base::PowerSuspendObserver {
  public:
   DownloadDisplayController(DownloadDisplay* display,
                             Browser* browser,
@@ -66,8 +68,14 @@ class DownloadDisplayController
   // Returns an IconInfo that contains current state of the icon.
   IconInfo GetIconInfo();
 
+  // Returns whether the display is showing details.
+  bool IsDisplayShowingDetails();
+
   // Notifies the controller that the button is pressed. Called by `display_`.
   void OnButtonPressed();
+
+  // Handles the button pressed event. Called by the profile level controller.
+  void HandleButtonPressed();
 
   // Common methods for new downloads or new offline items.
   // Called from bubble controller when new item(s) are added, with
@@ -96,6 +104,9 @@ class DownloadDisplayController
 
   // FullScreenObserver
   void OnFullscreenStateChanged() override;
+
+  // PowerSuspendObserver
+  void OnResume() override;
 
   // Returns the DownloadDisplay. Should always return a valid display.
   DownloadDisplay* download_display_for_testing() { return display_; }

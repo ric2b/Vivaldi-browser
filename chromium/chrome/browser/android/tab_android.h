@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -161,6 +161,8 @@ class TabAndroid : public base::SupportsUserData {
       const base::android::JavaParamRef<jstring>& jtitle);
 
   void LoadOriginalImage(JNIEnv* env);
+  void OnShow(JNIEnv* env);
+
   scoped_refptr<content::DevToolsAgentHost> GetDevToolsAgentHost();
 
   void SetDevToolsAgentHost(scoped_refptr<content::DevToolsAgentHost> host);

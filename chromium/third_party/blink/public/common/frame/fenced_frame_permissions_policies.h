@@ -1,6 +1,6 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be found
-// in the LICENSE file.
+// Copyright 2022 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_FRAME_FENCED_FRAME_PERMISSIONS_POLICIES_H_
 #define THIRD_PARTY_BLINK_PUBLIC_COMMON_FRAME_FENCED_FRAME_PERMISSIONS_POLICIES_H_
@@ -16,7 +16,8 @@ namespace blink {
 // its policy was set to "allow: feature(*)".
 constexpr blink::mojom::PermissionsPolicyFeature
     kFencedFrameOpaqueAdsDefaultAllowedFeatures[] = {
-        blink::mojom::PermissionsPolicyFeature::kAttributionReporting};
+        blink::mojom::PermissionsPolicyFeature::kAttributionReporting,
+        blink::mojom::PermissionsPolicyFeature::kSharedStorage};
 
 }  // namespace blink
 

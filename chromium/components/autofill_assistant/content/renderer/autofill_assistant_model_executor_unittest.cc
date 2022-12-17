@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "components/autofill_assistant/content/renderer/autofill_assistant_model_executor.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -102,8 +101,8 @@ TEST_F(AutofillAssistantModelExecutorTest, ExecuteWithLoadedModel) {
 
   auto result = model_executor_.ExecuteModelWithInput(node_signals);
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->first, 47 /* ADDRESS_LINE1 */);
-  EXPECT_EQ(result->second, 7 /* FILL_DELIVERY_ADDRESS */);
+  EXPECT_EQ(result->role, 47 /* ADDRESS_LINE1 */);
+  EXPECT_EQ(result->objective, 7 /* FILL_DELIVERY_ADDRESS */);
 }
 
 TEST_F(AutofillAssistantModelExecutorTest, OverridesMatch) {
@@ -120,8 +119,9 @@ TEST_F(AutofillAssistantModelExecutorTest, OverridesMatch) {
 
   auto result = model_executor.ExecuteModelWithInput(node_signals);
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->first, 9999);
-  EXPECT_EQ(result->second, 1111);
+  EXPECT_EQ(result->role, 9999);
+  EXPECT_EQ(result->objective, 1111);
+  EXPECT_TRUE(result->used_override);
 }
 
 TEST_F(AutofillAssistantModelExecutorTest, OverridesNoMatch) {
@@ -136,8 +136,9 @@ TEST_F(AutofillAssistantModelExecutorTest, OverridesNoMatch) {
 
   auto result = model_executor.ExecuteModelWithInput(node_signals);
   ASSERT_TRUE(result.has_value());
-  EXPECT_NE(result->first, 9999);
-  EXPECT_NE(result->second, 1111);
+  EXPECT_NE(result->role, 9999);
+  EXPECT_NE(result->objective, 1111);
+  EXPECT_FALSE(result->used_override);
 }
 
 TEST_F(AutofillAssistantModelExecutorTest, OverridesResultNotReused) {
@@ -154,8 +155,9 @@ TEST_F(AutofillAssistantModelExecutorTest, OverridesResultNotReused) {
 
     auto result = model_executor.ExecuteModelWithInput(node_signals);
     ASSERT_TRUE(result.has_value());
-    EXPECT_EQ(result->first, 9999);
-    EXPECT_EQ(result->second, 1111);
+    EXPECT_EQ(result->role, 9999);
+    EXPECT_EQ(result->objective, 1111);
+    EXPECT_TRUE(result->used_override);
   }
 
   // We expect the internal overrides result from the previous execution to have
@@ -167,8 +169,9 @@ TEST_F(AutofillAssistantModelExecutorTest, OverridesResultNotReused) {
 
     auto result = model_executor.ExecuteModelWithInput(node_signals);
     ASSERT_TRUE(result.has_value());
-    EXPECT_NE(result->first, 9999);
-    EXPECT_NE(result->second, 1111);
+    EXPECT_NE(result->role, 9999);
+    EXPECT_NE(result->objective, 1111);
+    EXPECT_FALSE(result->used_override);
   }
 }
 

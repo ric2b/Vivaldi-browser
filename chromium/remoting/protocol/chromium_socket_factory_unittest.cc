@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,7 @@
 #include "third_party/webrtc/rtc_base/socket_address.h"
 #include "third_party/webrtc/rtc_base/time_utils.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 namespace {
 
@@ -191,5 +190,4 @@ TEST_F(ChromiumSocketFactoryTest, CheckSendTime) {
   ASSERT_EQ(last_packet_time_, rtc::TimeMicros());
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

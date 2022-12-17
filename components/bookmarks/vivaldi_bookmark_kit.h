@@ -5,9 +5,14 @@
 
 #include <string>
 
+#include "base/callback.h"
 #include "base/guid.h"
 #include "base/time/time.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+
+namespace base {
+class Value;
+}
 
 namespace bookmarks {
 class BookmarkModel;
@@ -94,6 +99,21 @@ void SetNodeSpeeddial(BookmarkModel* model,
 void SetNodeThumbnail(BookmarkModel* model,
                       const BookmarkNode* node,
                       const std::string& path);
+
+typedef base::RepeatingCallback<bool(const std::string&)> BookmarkWriteFunc;
+bool WriteBookmarkData(const base::Value& value,
+                       BookmarkWriteFunc write_func,
+                       BookmarkWriteFunc write_func_att);
+
+typedef base::RepeatingCallback<bool(const std::string&, std::string*)>
+    BookmarkAttributeReadFunc;
+typedef base::FunctionRef<void(const std::string&, std::u16string*)>
+    CodePagetoUTF16Func;
+void ReadBookmarkAttributes(BookmarkAttributeReadFunc GetAttribute,
+                            CodePagetoUTF16Func CodePagetoUTF16,
+                            std::u16string* nickname,
+                            std::u16string* description,
+                            bool* is_speeddial_folder);
 
 }  // namespace vivaldi_bookmark_kit
 

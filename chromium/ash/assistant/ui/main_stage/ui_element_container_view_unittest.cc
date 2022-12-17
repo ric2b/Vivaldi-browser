@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,8 +16,8 @@
 #include "ash/style/dark_light_mode_controller_impl.h"
 #include "base/test/scoped_feature_list.h"
 #include "cc/base/math_util.h"
+#include "chromeos/ash/services/libassistant/public/cpp/assistant_interaction_metadata.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "chromeos/services/libassistant/public/cpp/assistant_interaction_metadata.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/views/background.h"
@@ -64,26 +64,6 @@ TEST_F(UiElementContainerViewTest, DarkAndLightTheme) {
                 ColorProvider::ContentLayerType::kSeparatorColor));
 }
 
-TEST_F(UiElementContainerViewTest, DarkAndLightModeFlagOff) {
-  // ProductivityLauncher uses DarkLightMode colors.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      /*enabled_features=*/{}, /*disabled_features=*/{
-          chromeos::features::kDarkLightMode, features::kNotificationsRefresh,
-          features::kProductivityLauncher});
-
-  ShowAssistantUi();
-
-  views::View* ui_element_container_view =
-      page_view()->GetViewByID(kUiElementContainer);
-  views::View* indicator =
-      ui_element_container_view->GetViewByID(kOverflowIndicator);
-  EXPECT_EQ(indicator->GetBackground()->get_color(), gfx::kGoogleGrey300);
-
-  // Avoid test teardown issues by explicitly closing the launcher.
-  CloseAssistantUi();
-}
-
 TEST_F(UiElementContainerViewTest, CustomOverflowIndicator) {
   ShowAssistantUi();
 
@@ -96,8 +76,7 @@ TEST_F(UiElementContainerViewTest, CustomOverflowIndicator) {
   AssistantInteractionControllerImpl* controller =
       static_cast<AssistantInteractionControllerImpl*>(
           AssistantInteractionController::Get());
-  controller->OnInteractionStarted(
-      chromeos::assistant::AssistantInteractionMetadata());
+  controller->OnInteractionStarted(assistant::AssistantInteractionMetadata());
 
   // Add a single text response and confirm that overflow indicator is not
   // visible.

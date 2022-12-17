@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,9 +48,9 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -198,7 +198,7 @@ public class StartSurfaceTabSwitcherTest {
     @Feature({"StartSurface", "TabGroup"})
     @CommandLineFlags.Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS})
     @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
-    @FlakyTest(message = "https://crbug.com/1232695")
+    @DisabledTest(message = "https://crbug.com/1232695")
     public void testCreateTabWithinTabGroup() throws Exception {
         // Create tab state files for a group with two tabs.
         TabUiTestHelper.finishActivity(mActivityTestRule.getActivity());
@@ -263,7 +263,7 @@ public class StartSurfaceTabSwitcherTest {
     @Test
     @LargeTest
     @Feature({"StartSurface"})
-    @FlakyTest(message = "https://crbug.com/1295839")
+    @DisabledTest(message = "https://crbug.com/1295839")
     @CommandLineFlags.
     Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS + "/show_tabs_in_mru_order/true"})
     public void test_CarouselTabSwitcherShowTabsInMRUOrder() {
@@ -321,7 +321,7 @@ public class StartSurfaceTabSwitcherTest {
     @EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
     // clang-format off
     @CommandLineFlags.Add({START_SURFACE_TEST_BASE_PARAMS
-        + "show_tabs_in_mru_order/true/open_ntp_instead_of_start/false",
+        + "show_tabs_in_mru_order/true/open_ntp_instead_of_start/false/open_start_as_homepage/true",
         DISABLE_ANIMATION_SWITCH})
     public void testShowV2_GridTabSwitcher_AlwaysShowTabsInCreationOrder() {
         // clang-format on

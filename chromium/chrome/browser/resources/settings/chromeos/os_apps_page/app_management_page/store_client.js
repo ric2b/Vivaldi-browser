@@ -1,9 +1,9 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Store} from 'chrome://resources/js/cr/ui/store.js';
-import {StoreClient, StoreClientInterface} from 'chrome://resources/js/cr/ui/store_client.js';
+import {Store} from 'chrome://resources/ash/common/store/store.js';
+import {StoreClient, StoreClientInterface} from 'chrome://resources/ash/common/store/store_client.js';
 
 import {AppManagementStore} from './store.js';
 

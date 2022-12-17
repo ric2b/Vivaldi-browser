@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -695,6 +695,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
  protected:
   // BluetoothGattConnection is a friend to call Add/RemoveGattConnection.
   friend BluetoothGattConnection;
+  FRIEND_TEST_ALL_PREFIXES(BluetoothDeviceTest, GattConnectionErrorReentrancy);
   FRIEND_TEST_ALL_PREFIXES(
       BluetoothTest,
       BluetoothGattConnection_DisconnectGatt_SimulateConnect);

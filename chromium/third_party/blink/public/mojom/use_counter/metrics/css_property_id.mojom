@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -775,6 +775,16 @@ enum CSSSampleId {
     kPopUpShowDelay = 722,
     kPopUpHideDelay = 723,
     kHyphenateCharacter = 724,
+    kScrollTimeline = 725,
+    kScrollTimelineName = 726,
+    kScrollTimelineAxis = 727,
+    kViewTimeline = 728,
+    kViewTimelineAxis = 729,
+    kViewTimelineInset = 730,
+    kViewTimelineName = 731,
+    kToggleVisibility = 732,
+    kInitialLetter = 733,
+    kHyphenateLimitChars = 734,
     // 1. Add new features above this line (don't change the assigned numbers of
     //    the existing items).
     // 2. Run the src/tools/metrics/histograms/update_use_counter_css.py script

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,13 +72,12 @@ GUID AudioCodecToMediaFoundationSubtype(AudioCodec codec) {
       return MFAudioFormat_ALAC;
     case AudioCodec::kAC3:
       return MFAudioFormat_Dolby_AC3;
-#if BUILDFLAG(USE_PROPRIETARY_CODECS) && BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
+#if BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
     case AudioCodec::kDTS:
       return MFAudioFormat_DTS_RAW;
     case AudioCodec::kDTSXP2:
       return MFAudioFormat_DTS_UHD;
-#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS) &&
-        // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
+#endif  // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
     default:
       return GUID_NULL;
   }

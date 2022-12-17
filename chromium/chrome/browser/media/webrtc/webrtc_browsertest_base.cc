@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,7 +87,7 @@ bool JavascriptErrorDetectingLogHandler(int severity,
                                         int line,
                                         size_t message_start,
                                         const std::string& str) {
-  if (file == NULL || std::string("CONSOLE") != file)
+  if (file == nullptr || std::string("CONSOLE") != file)
     return false;
 
   // TODO(crbug.com/918871): Fix AppRTC and stop ignoring this error.
@@ -113,9 +113,9 @@ std::vector<std::string> JsonArrayToVectorOfStrings(
       base::ListValue::From(std::move(value));
   std::vector<std::string> vector;
   vector.reserve(list->GetListDeprecated().size());
-  for (const base::Value& item : list->GetListDeprecated()) {
+  for (base::Value& item : list->GetListDeprecated()) {
     EXPECT_TRUE(item.is_string());
-    vector.push_back(std::move(item.GetString()));
+    vector.push_back(std::move(item).TakeString());
   }
   return vector;
 }
@@ -583,13 +583,11 @@ WebRtcTestBase::GetStatsReportDictionary(content::WebContents* tab) const {
   EXPECT_TRUE(base::StartsWith(result, "ok-", base::CompareCase::SENSITIVE));
   std::unique_ptr<base::Value> parsed_json =
       base::JSONReader::ReadDeprecated(result.substr(3));
-  base::DictionaryValue* dictionary;
   CHECK(parsed_json);
-  CHECK(parsed_json->GetAsDictionary(&dictionary));
-  std::ignore = parsed_json.release();
-  return scoped_refptr<content::TestStatsReportDictionary>(
-      new content::TestStatsReportDictionary(
-          std::unique_ptr<base::DictionaryValue>(dictionary)));
+  base::Value::Dict* dictionary = parsed_json->GetIfDict();
+  CHECK(dictionary);
+  return base::MakeRefCounted<content::TestStatsReportDictionary>(
+      std::move(*dictionary));
 }
 
 double WebRtcTestBase::MeasureGetStatsPerformance(

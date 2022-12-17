@@ -1,11 +1,11 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import '../strings.m.js';
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {$} from 'chrome://resources/js/util.m.js';
+import {$} from 'chrome://resources/js/util.js';
 
 /**
  * A queue of a sequence of closures that will incrementally build the sys info
@@ -122,6 +122,7 @@ function createNameCell(key: string): HTMLElement {
   const nameCell = document.createElement('td');
   nameCell.setAttribute('class', 'name');
   const nameDiv = document.createElement('div');
+  nameDiv.id = key;
   nameDiv.setAttribute('class', 'stat-name');
   nameDiv.appendChild(document.createTextNode(key));
   nameCell.appendChild(nameDiv);
@@ -133,9 +134,11 @@ function createButtonCell(key: string, isMultiLine: boolean): HTMLElement {
   buttonCell.setAttribute('class', 'button-cell');
 
   if (isMultiLine) {
+    const id = `${key}-value-btn`;
     const button = document.createElement('button');
-    button.setAttribute('id', '' + key + '-value-btn');
+    button.setAttribute('id', id);
     button.setAttribute('aria-controls', '' + key + '-value');
+    button.setAttribute('aria-labelledby', `${id} ${key}`);
     button.onclick = changeCollapsedStatus;
     button.textContent = loadTimeData.getString('sysinfoPageExpandBtn');
     buttonCell.appendChild(button);

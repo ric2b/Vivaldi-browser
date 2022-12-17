@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,7 +71,7 @@ std::string GetSandboxProfile(sandbox::mojom::Sandbox sandbox_type) {
     case sandbox::mojom::Sandbox::kNetwork:
       profile += kSeatbeltPolicyString_network;
       break;
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
     case sandbox::mojom::Sandbox::kPpapi:
       profile += kSeatbeltPolicyString_ppapi;
       break;

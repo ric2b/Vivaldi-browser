@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 '''Assembles a Rust toolchain in-tree linked against in-tree LLVM.
@@ -56,11 +56,12 @@ import build
 
 from update_rust import (CHROMIUM_DIR, RUST_REVISION, RUST_SUB_REVISION,
                          RUST_TOOLCHAIN_OUT_DIR, STAGE0_JSON_SHA256,
-                         THIRD_PARTY_DIR, VERSION_STAMP_PATH, GetPackageVersion)
+                         THIRD_PARTY_DIR, VERSION_STAMP_PATH,
+                         GetPackageVersionForBuild)
 
 RUST_GIT_URL = 'https://github.com/rust-lang/rust/'
 
-RUST_SRC_DIR = os.path.join(THIRD_PARTY_DIR, 'rust-src')
+RUST_SRC_DIR = os.path.join(THIRD_PARTY_DIR, 'rust_src', 'src')
 STAGE0_JSON_PATH = os.path.join(RUST_SRC_DIR, 'src', 'stage0.json')
 # Download crates.io dependencies to rust-src subdir (rather than $HOME/.cargo)
 CARGO_HOME_DIR = os.path.join(RUST_SRC_DIR, 'cargo-home')
@@ -109,49 +110,6 @@ def RunCommand(command, env=None, fail_hard=True):
     return False
 
 
-def CheckoutRust(commit, dir):
-    # Submodules we must update early since bootstrap wants them before it
-    # starts managing them.
-    force_update_submodules = [
-        'src/tools/rust-analyzer', 'compiler/rustc_codegen_cranelift'
-    ]
-
-    # Shared between first checkout and subsequent updates.
-    def UpdateSubmodules():
-        return RunCommand(
-            ['git', 'submodule', 'update', '--init', '--recursive'] +
-            force_update_submodules,
-            fail_hard=False)
-
-    # Try updating the current repo if it exists and has no local diff.
-    if os.path.isdir(dir):
-        os.chdir(dir)
-        # git diff-index --quiet returns success when there is no diff.
-        # Also check that the first commit is reachable.
-        if (RunCommand(['git', 'diff-index', '--quiet', 'HEAD'],
-                       fail_hard=False)
-                and RunCommand(['git', 'fetch'], fail_hard=False)
-                and RunCommand(['git', 'checkout', commit], fail_hard=False)
-                and UpdateSubmodules()):
-            return
-
-        # If we can't use the current repo, delete it.
-        os.chdir(CHROMIUM_DIR)  # Can't remove dir if we're in it.
-        print('Removing %s.' % dir)
-        RmTree(dir)
-
-    clone_cmd = ['git', 'clone', RUST_GIT_URL, dir]
-
-    if RunCommand(clone_cmd, fail_hard=False):
-        os.chdir(dir)
-        if (RunCommand(['git', 'checkout', commit], fail_hard=False)
-                and UpdateSubmodules()):
-            return
-
-    print('CheckoutRust failed.')
-    sys.exit(1)
-
-
 def VerifyStage0JsonHash():
     hasher = hashlib.sha256()
     with open(STAGE0_JSON_PATH, 'rb') as input:
@@ -175,7 +133,7 @@ def Configure(llvm_libs_root):
     subs = {}
     subs['INSTALL_DIR'] = RUST_TOOLCHAIN_OUT_DIR
     subs['LLVM_ROOT'] = llvm_libs_root
-    subs['PACKAGE_VERSION'] = GetPackageVersion()
+    subs['PACKAGE_VERSION'] = GetPackageVersionForBuild()
 
     # ...and apply substitutions, writing to config.toml in Rust tree.
     with open(os.path.join(RUST_SRC_DIR, 'config.toml'), 'w') as output:
@@ -242,10 +200,6 @@ def main():
         help=
         'checkout Rust, verify the stage0 hash, then quit without building. '
         'Will print the actual hash if different than expected.')
-    parser.add_argument(
-        '--skip-checkout',
-        action='store_true',
-        help='skip Rust git checkout. Useful for trying local changes')
     parser.add_argument('--skip-clean',
                         action='store_true',
                         help='skip x.py clean step')
@@ -283,9 +237,6 @@ def main():
     else:
         llvm_libs_root = build.LLVM_BOOTSTRAP_DIR
 
-    if not args.skip_checkout:
-        CheckoutRust(RUST_REVISION, RUST_SRC_DIR)
-
     VerifyStage0JsonHash()
     if args.verify_stage0_hash:
         # The above function exits and prints the actual hash if verification
@@ -311,16 +262,6 @@ def main():
         return 0
     else:
         assert not rest
-
-    # Delete vendored sources and .cargo subdir. Otherwise when updating an
-    # existing checkout, vendored sources will not be re-fetched leaving deps
-    # out of date.
-    if not args.skip_checkout:
-        for dir in [
-                os.path.join(RUST_SRC_DIR, d) for d in ['vendor', '.cargo']
-        ]:
-            if os.path.exists(dir):
-                shutil.rmtree(dir)
 
     if not args.skip_clean:
         print('Cleaning build artifacts...')
@@ -358,7 +299,7 @@ def main():
         rust_version = version_file.readline().rstrip()
     with open(VERSION_STAMP_PATH, 'w') as stamp:
         stamp.write('rustc %s-dev (%s chromium)\n' %
-                    (rust_version, GetPackageVersion()))
+                    (rust_version, GetPackageVersionForBuild()))
 
     return 0
 

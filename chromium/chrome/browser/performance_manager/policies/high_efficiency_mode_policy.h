@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,8 @@ class HighEfficiencyModePolicy : public GraphOwned,
   void OnPageNodeAdded(const PageNode* page_node) override;
   void OnBeforePageNodeRemoved(const PageNode* page_node) override;
   void OnIsVisibleChanged(const PageNode* page_node) override;
+  void OnTypeChanged(const PageNode* page_node,
+                     PageType previous_type) override;
 
   // GraphOwned:
   void OnPassedToGraph(Graph* graph) override;
@@ -36,13 +38,15 @@ class HighEfficiencyModePolicy : public GraphOwned,
 
   void OnHighEfficiencyModeChanged(bool enabled);
 
+  // Returns true if High Efficiency mode is enabled, false otherwise. Useful to
+  // get the state of the mode from the Performance Manager sequence.
+  bool IsHighEfficiencyDiscardingEnabled() const;
+
  private:
   void StartDiscardTimerIfEnabled(const PageNode* page_node,
                                   base::TimeDelta time_before_discard);
   void RemoveActiveTimer(const PageNode* page_node);
   void DiscardPageTimerCallback(const PageNode* page_node);
-
-  bool IsHighEfficiencyDiscardingEnabled() const;
 
   bool high_efficiency_mode_enabled_ = false;
 

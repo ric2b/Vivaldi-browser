@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,12 +55,12 @@ class ShillIPConfigClientImpl : public ShillIPConfigClient {
   void SetProperty(const dbus::ObjectPath& ipconfig_path,
                    const std::string& name,
                    const base::Value& value,
-                   VoidDBusMethodCallback callback) override;
+                   chromeos::VoidDBusMethodCallback callback) override;
   void ClearProperty(const dbus::ObjectPath& ipconfig_path,
                      const std::string& name,
-                     VoidDBusMethodCallback callback) override;
+                     chromeos::VoidDBusMethodCallback callback) override;
   void Remove(const dbus::ObjectPath& ipconfig_path,
-              VoidDBusMethodCallback callback) override;
+              chromeos::VoidDBusMethodCallback callback) override;
   ShillIPConfigClient::TestInterface* GetTestInterface() override;
 
  private:
@@ -98,10 +98,11 @@ void ShillIPConfigClientImpl::GetProperties(
                                        ipconfig_path, std::move(callback)));
 }
 
-void ShillIPConfigClientImpl::SetProperty(const dbus::ObjectPath& ipconfig_path,
-                                          const std::string& name,
-                                          const base::Value& value,
-                                          VoidDBusMethodCallback callback) {
+void ShillIPConfigClientImpl::SetProperty(
+    const dbus::ObjectPath& ipconfig_path,
+    const std::string& name,
+    const base::Value& value,
+    chromeos::VoidDBusMethodCallback callback) {
   dbus::MethodCall method_call(shill::kFlimflamIPConfigInterface,
                                shill::kSetPropertyFunction);
   dbus::MessageWriter writer(&method_call);
@@ -113,7 +114,7 @@ void ShillIPConfigClientImpl::SetProperty(const dbus::ObjectPath& ipconfig_path,
       writer.OpenVariant("as", &variant_writer);
       dbus::MessageWriter array_writer(nullptr);
       variant_writer.OpenArray("s", &array_writer);
-      for (const auto& entry : value.GetListDeprecated()) {
+      for (const auto& entry : value.GetList()) {
         DLOG_IF(ERROR, !entry.is_string())
             << "Unexpected type " << entry.type();
         array_writer.AppendString(entry.is_string() ? entry.GetString()
@@ -138,7 +139,7 @@ void ShillIPConfigClientImpl::SetProperty(const dbus::ObjectPath& ipconfig_path,
 void ShillIPConfigClientImpl::ClearProperty(
     const dbus::ObjectPath& ipconfig_path,
     const std::string& name,
-    VoidDBusMethodCallback callback) {
+    chromeos::VoidDBusMethodCallback callback) {
   dbus::MethodCall method_call(shill::kFlimflamIPConfigInterface,
                                shill::kClearPropertyFunction);
   dbus::MessageWriter writer(&method_call);
@@ -146,8 +147,9 @@ void ShillIPConfigClientImpl::ClearProperty(
   GetHelper(ipconfig_path)->CallVoidMethod(&method_call, std::move(callback));
 }
 
-void ShillIPConfigClientImpl::Remove(const dbus::ObjectPath& ipconfig_path,
-                                     VoidDBusMethodCallback callback) {
+void ShillIPConfigClientImpl::Remove(
+    const dbus::ObjectPath& ipconfig_path,
+    chromeos::VoidDBusMethodCallback callback) {
   dbus::MethodCall method_call(shill::kFlimflamIPConfigInterface,
                                shill::kRemoveConfigFunction);
   GetHelper(ipconfig_path)->CallVoidMethod(&method_call, std::move(callback));

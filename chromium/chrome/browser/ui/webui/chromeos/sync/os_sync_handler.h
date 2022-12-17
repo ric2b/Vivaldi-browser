@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,9 +54,6 @@ class OSSyncHandler : public content::WebUIMessageHandler,
   void RemoveSyncServiceObserver();
 
   Profile* const profile_;
-
-  // Prevents messages to JS layer while data type prefs are being set.
-  bool is_setting_prefs_ = false;
 };
 
 #endif  // CHROME_BROWSER_UI_WEBUI_CHROMEOS_SYNC_OS_SYNC_HANDLER_H_

@@ -94,7 +94,7 @@
 <translation id="1506187449813838456">Բարձրացնել ձայնածավալը</translation>
 <translation id="151784044608172266">Հաջորդ նախադասությունը</translation>
 <translation id="1524531499102321782">Հաջորդ տողը</translation>
-<translation id="1542513807034338907">Ոլորեք մինչև նախորդ էջ</translation>
+<translation id="1542513807034338907">Թերթեք մինչև նախորդ էջ</translation>
 <translation id="1546370775711804143">Ոլորագոտի</translation>
 <translation id="1551572888042734032">Ամառ</translation>
 <translation id="1555130319947370107">Կապույտ</translation>
@@ -138,9 +138,9 @@
 <translation id="1812527064848182527">հորիզոնական</translation>
 <translation id="1829244130665387512">Գտնել էջում</translation>
 <translation id="1834891354138622109">Սյունակ</translation>
-<translation id="1845944666972354496">Կրկնակի հպեք՝ ակտիվացնելու համար</translation>
 <translation id="1846771122725914429">Bluetooth-ի միջոցով միացվող բրայլյան էկրան</translation>
 <translation id="1852018405765032699">Չորս մատով հպեք էկրանին՝ ChromeVox-ի ընտրացանկերը բացելու/փակելու համար։ Այս ընտրացանկերը պարունակում են օգտակար տեղեկություններ հրամանների և դյուրանցումների մասին։ Բացված ընտրացանկերում մատը սահեցնելով կարող եք մի տարրից մյուսին անցնել, իսկ տարրին կրկնակի հպելով՝ ակտիվացնել այն։ Շարունակելու համար չորս մատով հպեք էկրանին։</translation>
+<translation id="1864430479908918647">Սեղմեք Որոնում + Բացատ</translation>
 <translation id="1865601187525349519">Տեքստի վերջ</translation>
 <translation id="1876229593313240038">doc</translation>
 <translation id="1902396333223336119">Բջիջ</translation>
@@ -238,6 +238,7 @@
 <translation id="2619344480613750862">Դուք նաև կարող եք էկրանի մի բաժնից մյուսին անցնել։ Օրինակ, կարող եք տեղաշարժվել գործարկիչի, դարակի և Chrome-ի ներդիրների միջև։ Հաջորդ բաժնին անցնելու համար չորս մատը սահեցրեք ձախից աջ։ Փորձեք անել դա հենց հիմա։</translation>
 <translation id="2624431853467395961">Բացել սովորելու ռեժիմը</translation>
 <translation id="2626530649491650971">clickable</translation>
+<translation id="263637551280112393">Սեղմեք «Որոնում» + Shift + բացատ</translation>
 <translation id="2637227747952042642">Մաթեմատիկա</translation>
 <translation id="2638785836053527382">«<ph name="FILE_NAME" />» ֆայլի ներբեռնումը վերսկսվեց</translation>
 <translation id="2639750663247012216">ChromeVox-ի կերպափոխիչ</translation>
@@ -529,6 +530,7 @@
 <translation id="4479068155583208887">Հրակարմիր</translation>
 <translation id="4482330759234983253">Նախորդ աղյուսակը</translation>
 <translation id="4491109536499578614">Պատկեր</translation>
+<translation id="4507332368061453500">Երկար սեղմել ընթացիկ տարրի վրա</translation>
 <translation id="4511186779140817916">Ճերմակ նուշ</translation>
 <translation id="451510441928265982">2-րդ մակարդակի նախորդ վերնագիր չկա</translation>
 <translation id="4515799157838123044">Երանգավորել ֆոնային բովանդակությունը</translation>
@@ -557,7 +559,7 @@
 <translation id="4763480195061959176">video</translation>
 <translation id="4764692524839457597">կանխադրված</translation>
 <translation id="4772771694153161212">Ընդգծումն անջատված է</translation>
-<translation id="4780458943471935919">Ոլորեք մինչև հաջորդ էջ</translation>
+<translation id="4780458943471935919">Թերթեք մինչև հաջորդ էջ</translation>
 <translation id="4784215347943747396">Կառավարեք սարքն ընդամենը 1 կամ 2 փոխանջատիչի օգնությամբ</translation>
 <translation id="4786285211967466855">1-ին մակարդակի նախորդ վերնագիր չկա</translation>
 <translation id="4787577491510559358">Հնչեցնել ընթացիկ տարրի ձևաչափը</translation>
@@ -597,7 +599,6 @@
 <translation id="4993152509206108683">Արագությունը <ph name="PERCENT" /> տոկոս</translation>
 <translation id="4994420463726586413">Հնչեցնել մարտկոցի ընթացիկ կարգավիճակը</translation>
 <translation id="4997282455736854877">Ընտրված է <ph name="NAME" /> կետակոճակը</translation>
-<translation id="5011664330025416377">Ակտիվացնելու համար սեղմեք Search + բացատ ստեղները</translation>
 <translation id="5012724933919010465"><ph name="NAME" />, ընտրացանկի տարրի կետակոճակն ընտրված է</translation>
 <translation id="5020651427400641814">Միացնել խոսքի գրանցումը</translation>
 <translation id="5041394372352067729">Տեղափոխել Բրայլի ցուցադրիչը էջի վերև</translation>
@@ -650,6 +651,7 @@
 <translation id="5355014376930441909">Հաջորդ բաժին չկա</translation>
 <translation id="5368000168321181111">Ձայնային ազդանշաններն անջատված են</translation>
 <translation id="5368505757342402527">«<ph name="FILE_NAME" />» ֆայլը ներբեռնվել է <ph name="PROGRESS" />%-ով: Մնացել է մոտ <ph name="TIME" /> <ph name="UNITS" />:</translation>
+<translation id="5381388086899614489">սեղմեք և պահեք</translation>
 <translation id="5400836586163650660">Մոխրագույն</translation>
 <translation id="5402367795255837559">Բրայլի գրատիպ</translation>
 <translation id="5402791055281059602">Մոդալ ծանուցում</translation>
@@ -762,6 +764,7 @@
 <translation id="6100239002225743044">Մեկ տող վերև գնալ</translation>
 <translation id="6118126368611144850">Android հավելվածներ Chrome-ի համար: Եթե ձեր սարքում տեղադրված է Play Խանութ հավելվածը, ծանոթացեք ChromeVox-ին Android հավելվածների միջոցով: Play Խանութ հավելվածից ներբեռնեք Google Chrome Canary և օգտվեք փորձնական տարբերակից:</translation>
 <translation id="611827076493383239">vtd</translation>
+<translation id="6119846243427417423">ակտիվացնել</translation>
 <translation id="6122013438240733403">btn</translation>
 <translation id="6132506484792346370">Ցուցակով պատուհան կամ ցուցակով դաշտ</translation>
 <translation id="613344593214611552">ջնջել նախորդ նախադասությունը</translation>
@@ -778,6 +781,7 @@
 <translation id="6236061028292614533">Հաջորդ վերնագիրը</translation>
 <translation id="6254901459154107917">Տեքստի հաջորդ խմբագրելի տարածքը</translation>
 <translation id="6259464875943891919">Ելք <ph name="TYPE" /> զետեղարանից:</translation>
+<translation id="6280088282605782512">Կրկնակի հպեք</translation>
 <translation id="6282062888058716985">nav</translation>
 <translation id="6295699829709583154">Հիմնական ստեղներ․ «Որոնում»</translation>
 <translation id="6305702903308659374">Նվագարկել սովորական ձայնով, երբ ChromeVox-ը միացված է</translation>
@@ -981,6 +985,7 @@
 <translation id="7731785449856576010">Հաջորդ մեդիա վիջեթ չկա</translation>
 <translation id="7735498529470878067">«Ուսումնասիրել հպումով» գործառույթի օգնությամբ կարող եք շատ արագ պատկերացում կազմել էկրանին ցուցադրվող բովանդակության մասին։</translation>
 <translation id="773906353055481349">Մեկ վանդակից մյուսին անցնելու համար սեղմեք Search + Ctrl + Alt և սլաքներով ստեղները։</translation>
+<translation id="7746976083433980639"><ph name="ACTION" />՝ <ph name="LABEL" />ու համար</translation>
 <translation id="7763537600611320912">«<ph name="FILE_NAME" />» ֆայլի ներբեռնումը սկսված է</translation>
 <translation id="7768784765476638775">Ընտրեք և լսեք</translation>
 <translation id="7776293189010177726">Բացել ChromeVox-ի ընտրացանկերը</translation>

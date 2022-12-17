@@ -41,12 +41,11 @@ source_set("notes") {
  ]
 
   deps = [
+    "//base",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//components/prefs",
     "//ios/chrome/browser/browser_state",
-    "//vivaldi/ios/sync:sync_notes",
-    "//vivaldi/notes:browser",
     "//ios/third_party/material_components_ios",
     "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/ui:feature_flags",
@@ -62,9 +61,12 @@ source_set("notes") {
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/util",
     "//ui/base",
-    "//base",
     "//vivaldi/ios/notes/cells",
-    "//vivaldi/ios/notes/resources:panel_notes"
+    "//vivaldi/ios/notes/resources:panel_notes",
+    "//vivaldi/ios/panel",
+    "//vivaldi/ios/sync:sync_notes",
+    "//vivaldi/ios/sync:file_sync",
+    "//vivaldi/notes:browser",
   ]
  frameworks = [ "UIKit.framework" ]
 

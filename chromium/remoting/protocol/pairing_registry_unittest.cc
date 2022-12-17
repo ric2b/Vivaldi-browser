@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,8 +56,7 @@ void VerifyPairing(PairingRegistry::Pairing expected,
 
 }  // namespace
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class PairingRegistryTest : public testing::Test {
  public:
@@ -250,5 +249,4 @@ TEST_F(PairingRegistryTest, SerializedRequests) {
   run_loop_.Run();
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -382,7 +382,7 @@ TEST_F(VisualDebuggerTest, SingleBufferAsync) {
     static const int kNumSubmission = 1;
     static std::vector<VizDebuggerInternal::Buffer> previous_textures;
     for (auto&& each : previous_textures) {
-      DBG_COMPLETE_BUFFERS(each.id, each.buffer_info)
+      DBG_COMPLETE_BUFFERS(each.id, each.buffer_info);
     }
 
     int id = 0;

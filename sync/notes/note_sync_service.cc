@@ -9,8 +9,10 @@
 
 namespace sync_notes {
 
-NoteSyncService::NoteSyncService() {
-  note_model_type_processor_ = std::make_unique<NoteModelTypeProcessor>();
+NoteSyncService::NoteSyncService(
+    file_sync::SyncedFileStore* synced_file_store) {
+  note_model_type_processor_ =
+      std::make_unique<NoteModelTypeProcessor>(synced_file_store);
 }
 
 NoteSyncService::~NoteSyncService() = default;

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/metrics/user_metrics.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -1011,12 +1012,26 @@ bool EventRewriterChromeOS::RewriteModifierKeys(const KeyEvent& key_event,
       KeycodeConverter::IsDomKeyForModifier(state->key);
   if (key_event.type() == ET_KEY_PRESSED) {
     state->flags |= characteristic_flag;
-    if (non_modifier_to_modifier)
+    if (non_modifier_to_modifier) {
+      // Edge case: User remaps key while still holding it. Remove the
+      // previously mapped latch.
+      if (previous_non_modifier_latches_.contains(incoming.code)) {
+        pressed_modifier_latches_ &=
+            ~previous_non_modifier_latches_[incoming.code];
+      }
       pressed_modifier_latches_ |= characteristic_flag;
+      previous_non_modifier_latches_[incoming.code] = characteristic_flag;
+    }
   } else {
     state->flags &= ~characteristic_flag;
-    if (non_modifier_to_modifier)
+    if (non_modifier_to_modifier) {
       pressed_modifier_latches_ &= ~characteristic_flag;
+    }
+    if (previous_non_modifier_latches_.contains(incoming.code)) {
+      pressed_modifier_latches_ &=
+          ~previous_non_modifier_latches_[incoming.code];
+      previous_non_modifier_latches_.erase(incoming.code);
+    }
   }
 
   if (key_event.type() == ET_KEY_PRESSED) {
@@ -1734,19 +1749,6 @@ void EventRewriterChromeOS::RewriteFunctionKeys(const KeyEvent& key_event,
             state->flags &= ~EF_COMMAND_DOWN;
             ApplyRemapping(map.result, state);
             RecordSearchPlusDigitFKeyRewrite(key_event.type(), state->key_code);
-          } else {
-            // Only trigger the notification for F1-F10.
-            //
-            // Because of this legacy remapping 2 virtual desk shortcuts
-            // implicitly used F11 and F12 because the shortcut included
-            // Search and either minus or equal. Do not trigger a
-            // notification for this case because it wasn't the users intent.
-            if (static_cast<int>(map.result.code) <=
-                static_cast<int>(DomCode::F10)) {
-              DCHECK_GE(static_cast<int>(map.result.code),
-                        static_cast<int>(DomCode::F1));
-              delegate_->NotifyDeprecatedFKeyRewrite();
-            }
           }
           return;
         }
@@ -1821,8 +1823,8 @@ EventDispatchDetails EventRewriterChromeOS::RewriteKeyEventInContext(
         rewritten_event ? static_cast<const KeyEvent*>(rewritten_event.get())
                         : &key_event);
     MutableKeyState original_key_state(&key_event);
-    auto iter = std::find_if(pressed_key_states_.begin(),
-                             pressed_key_states_.end(), key_state_comparator);
+    auto iter =
+        base::ranges::find_if(pressed_key_states_, key_state_comparator);
 
     // When a key is pressed, store |current_key_state| if it is not stored
     // before.
@@ -1897,8 +1899,7 @@ EventDispatchDetails EventRewriterChromeOS::RewriteKeyEventInContext(
   current_key_state = MutableKeyState(
       rewritten_event ? static_cast<const KeyEvent*>(rewritten_event.get())
                       : &key_event);
-  auto iter = std::find_if(pressed_key_states_.begin(),
-                           pressed_key_states_.end(), key_state_comparator);
+  auto iter = base::ranges::find_if(pressed_key_states_, key_state_comparator);
   if (iter != pressed_key_states_.end()) {
     pressed_key_states_.erase(iter);
 

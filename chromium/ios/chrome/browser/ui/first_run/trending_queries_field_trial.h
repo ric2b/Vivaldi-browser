@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,19 +11,17 @@
 class PrefService;
 class PrefRegistrySimple;
 
-extern const char kTrendingQueriesFieldTrialName[];
-
 namespace {
 
 // Variation IDs for Trending Queries experiment arms.
-const variations::VariationID kTrendingQueriesEnabledAllUsersID = 3350760;
-const variations::VariationID kTrendingQueriesEnabledAllUsersHideShortcutsID =
-    3350761;
-const variations::VariationID kTrendingQueriesEnabledDisabledFeedID = 3350762;
-const variations::VariationID kTrendingQueriesEnabledSignedOutID = 3350763;
-const variations::VariationID kTrendingQueriesEnabledNeverShowModuleID =
-    4833277;
-const variations::VariationID kTrendingQueriesControlID = 3350764;
+const variations::VariationID kTrendingQueriesEnabledModuleEnabledID = 4871319;
+const variations::VariationID
+    kTrendingQueriesEnabledMinimalSpacingModuleEnabledID = 4871320;
+const variations::VariationID
+    kTrendingQueriesEnabledMinimalSpacingRemoveHeaderModuleEnabledID = 4871321;
+const variations::VariationID
+    kTrendingQueriesKeepShortcutsEnabledModuleEnabledID = 4871322;
+const variations::VariationID kTrendingQueriesControlID = 4871323;
 
 }  // namespace
 

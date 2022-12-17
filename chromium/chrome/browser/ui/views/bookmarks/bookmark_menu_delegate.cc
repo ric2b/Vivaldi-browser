@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,6 +38,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/color/color_id.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -266,8 +267,16 @@ bool BookmarkMenuDelegate::ShouldExecuteCommandWithoutClosingMenu(
     const ui::Event& event) {
   if (ui::DispositionFromEventFlags(event.flags()) ==
       WindowOpenDisposition::NEW_BACKGROUND_TAB) {
+    if (!vivaldi::IsVivaldiRunning()) {
     DCHECK(menu_id_to_node_map_.find(id) != menu_id_to_node_map_.end());
+    }
     const BookmarkNode* node = menu_id_to_node_map_[id];
+    if (vivaldi::IsVivaldiRunning() && !node) {
+      // Vivaldi has a menu element that is not mapped in menu_id_to_node_map.
+      // It allows adding bookmarks to the menu. When bookmarks are modifed
+      // the menu is always closed. So return false.
+      return false;
+    }
     // Close the menu before opening a folder since this may pop up a dialog
     // over the menu. See https://crbug.com/1105587 for details.
     return node->type() != BookmarkNode::FOLDER;
@@ -642,7 +651,6 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
                                      size_t start_child_index,
                                      MenuItemView* menu) {
   DCHECK_LE(start_child_index, parent->children().size());
-  ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
   const ui::ImageModel folder_icon =
       vivaldi::IsVivaldiRunning() ?
       vivaldi::GetBookmarkFolderIcon(menu, parent_) :
@@ -683,9 +691,11 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
             MenuItemView::Type::kNormal);
       } else {
       const gfx::Image& image = GetBookmarkModel()->GetFavicon(node);
-      const gfx::ImageSkia* icon = image.IsEmpty() ?
-          vivaldi::IsVivaldiRunning() ? vivaldi::GetBookmarkDefaultIcon() :
-          rb->GetImageSkiaNamed(IDR_DEFAULT_FAVICON) : image.ToImageSkia();
+      const gfx::ImageSkia* icon =
+          (image.IsEmpty() ?
+           vivaldi::IsVivaldiRunning() ? vivaldi::GetBookmarkDefaultIcon() :
+           favicon::GetDefaultFavicon() : image)
+              .ToImageSkia();
       if (vivaldi::IsVivaldiRunning()) {
         child_menu_item = vivaldi::AddMenuItem(menu, &menu_index, id,
             MaybeEscapeLabel(node->GetTitle()), *icon,

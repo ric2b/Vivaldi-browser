@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,16 +62,15 @@ bool AutofillContextMenuManager::IsAutofillCustomCommandId(
 
 AutofillContextMenuManager::AutofillContextMenuManager(
     PersonalDataManager* personal_data_manager,
-    ui::SimpleMenuModel::Delegate* delegate,
+    RenderViewContextMenuBase* delegate,
     ui::SimpleMenuModel* menu_model,
-    Browser* browser,
-    content::RenderFrameHost* render_frame_host)
+    Browser* browser)
     : personal_data_manager_(personal_data_manager),
       menu_model_(menu_model),
       delegate_(delegate),
-      browser_(browser),
-      render_frame_host_(render_frame_host) {
-  DCHECK(render_frame_host_);
+      browser_(browser) {
+  DCHECK(delegate_);
+  params_ = delegate_->params();
 }
 
 AutofillContextMenuManager::~AutofillContextMenuManager() {
@@ -85,12 +84,23 @@ void AutofillContextMenuManager::AppendItems() {
     return;
   }
 
+  content::RenderFrameHost* rfh = delegate_->GetRenderFrameHost();
+  if (!rfh)
+    return;
+
+  ContentAutofillDriver* driver =
+      ContentAutofillDriver::GetForRenderFrameHost(rfh);
+  // Do not show autofill context menu options for input fields that cannot be
+  // filled by the driver. See crbug.com/1367547.
+  if (!driver || !driver->CanShowAutofillUi())
+    return;
+
   DCHECK(personal_data_manager_);
   DCHECK(menu_model_);
 
+  content::WebContents* web_contents = delegate_->GetWebContents();
   AutofillClient* autofill_client =
-      autofill::ChromeAutofillClient::FromWebContents(
-          content::WebContents::FromRenderFrameHost(render_frame_host_));
+      autofill::ChromeAutofillClient::FromWebContents(web_contents);
   // If the autofill popup is shown and the user double clicks from within the
   // bounds of the initiating field, it is assumed that the context menu would
   // overlap with the autofill popup. In that case, hide the autofill popup.
@@ -99,7 +109,7 @@ void AutofillContextMenuManager::AppendItems() {
         PopupHidingReason::kOverlappingWithAutofillContextMenu);
   }
 
-  // Stores all the profile values added to the content menu alongwith the
+  // Stores all the profile values added to the context menu along with the
   // command id of the row.
   std::vector<std::pair<CommandId, ContextMenuItem>>
       detail_items_added_to_context_menu;
@@ -127,23 +137,11 @@ bool AutofillContextMenuManager::IsCommandIdEnabled(
   return true;
 }
 
-void AutofillContextMenuManager::ExecuteCommand(
-    CommandId command_id,
-    const content::ContextMenuParams& params) {
-  ContentAutofillDriver* driver =
-      ContentAutofillDriver::GetForRenderFrameHost(render_frame_host_);
-  if (!driver)
+void AutofillContextMenuManager::ExecuteCommand(CommandId command_id) {
+  content::RenderFrameHost* rfh = delegate_->GetRenderFrameHost();
+  if (!rfh)
     return;
 
-  ExecuteCommand(command_id, driver, params,
-                 render_frame_host_->GetFrameToken());
-}
-
-void AutofillContextMenuManager::ExecuteCommand(
-    CommandId command_id,
-    ContentAutofillDriver* driver,
-    const content::ContextMenuParams& params,
-    const blink::LocalFrameToken local_frame_token) {
   auto it = command_id_to_menu_item_value_mapper_.find(command_id);
   if (it == command_id_to_menu_item_value_mapper_.end())
     return;
@@ -153,7 +151,7 @@ void AutofillContextMenuManager::ExecuteCommand(
   // Field Renderer id should be present because the context menu is triggered
   // on a input field. Otherwise, Autofill context menu models would not have
   // been added to the context menu.
-  if (!params.field_renderer_id)
+  if (!params_.field_renderer_id)
     return;
 
   if (it->second.is_manage_item) {
@@ -176,9 +174,11 @@ void AutofillContextMenuManager::ExecuteCommand(
     return;
   }
 
-  driver->RendererShouldFillFieldWithValue(
-      {LocalFrameToken(local_frame_token.value()),
-       FieldRendererId(params.field_renderer_id.value())},
+  ContentAutofillDriver* driver =
+      ContentAutofillDriver::GetForRenderFrameHost(rfh);
+  driver->browser_events().RendererShouldFillFieldWithValue(
+      {LocalFrameToken(rfh->GetFrameToken().value()),
+       FieldRendererId(params_.field_renderer_id.value())},
       it->second.fill_value);
 
   // TODO(crbug.com/1325811): Use `it->second.sub_menu_type` to record the usage

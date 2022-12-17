@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -122,7 +122,8 @@ class ArcAppLaunchHandler
   ~ArcAppLaunchHandler() override;
 
   // Invoked when the restoration process can start. Reads the restore data, and
-  // add the ARC apps windows to `windows_` and `no_stack_windows_`.
+  // add the ARC apps windows to `windows_` and `no_stack_windows_`. For each
+  // AppLaunchHandler, it is only expected be called once.
   void RestoreArcApps(AppLaunchHandler* app_launch_handler);
 
   void OnAppConnectionReady();
@@ -132,6 +133,7 @@ class ArcAppLaunchHandler
 
   void OnArcPlayStoreEnabledChanged(bool enabled);
 
+  // Launch all windows for the given `app_id`.
   void LaunchApp(const std::string& app_id);
 
   bool IsAppPendingRestore(const std::string& app_id) const;
@@ -201,7 +203,7 @@ class ArcAppLaunchHandler
   // following the window stack priority.
   void MaybeLaunchApp();
 
-  void LaunchApp(const std::string& app_id, int32_t window_id);
+  void LaunchAppWindow(const std::string& app_id, int32_t window_id);
 
   // Removes all windows records related with `app_id` from `windows_`,
   // `no_stack_windows_`, and `pending_windows_`.
@@ -221,8 +223,7 @@ class ArcAppLaunchHandler
   void StartCpuUsageCount();
   void StopCpuUsageCount();
   void UpdateCpuUsage();
-  void OnCpuUsageUpdated(
-      chromeos::cros_healthd::mojom::TelemetryInfoPtr info_ptr);
+  void OnCpuUsageUpdated(cros_healthd::mojom::TelemetryInfoPtr info_ptr);
   void OnProbeServiceDisconnect();
 
   void RecordArcGhostWindowLaunch(bool is_arc_ghost_window);
@@ -300,8 +301,7 @@ class ArcAppLaunchHandler
   bool was_memory_pressured_ = false;
   bool was_cpu_usage_limited_ = false;
 
-  mojo::Remote<chromeos::cros_healthd::mojom::CrosHealthdProbeService>
-      probe_service_;
+  mojo::Remote<cros_healthd::mojom::CrosHealthdProbeService> probe_service_;
 
   // Cpu usage rate count window. It save the cpu usage in a time interval.
   std::list<CpuTick> cpu_tick_window_;

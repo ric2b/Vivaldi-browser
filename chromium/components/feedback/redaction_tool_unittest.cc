@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -183,6 +183,8 @@ const StringWithRedaction kStringsWithRedactions[] = {
      "<URL: 2>", PIIType::kURL},
     {"chrome-extension://nkoccljplnhpfnfiajclkommnmllphnl/foobar.js?bar=x",
      "<URL: 3>", PIIType::kURL},  // Potentially PII in parameter.
+    {"isolated-app://airugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaac/",
+     "<URL: 4>", PIIType::kURL},  // URL
     {"/root/27540283740a0897ab7c8de0f809add2bacde78f/foo",
      "/root/<HASH:2754 1>/foo", PIIType::kStableIdentifier},  // Hash string.
     {"B3mcFTkQAHofv94DDTUuVJGGEI/BbzsyDncplMCR2P4=", "<UID: 1>",
@@ -646,7 +648,10 @@ TEST_F(RedactionToolTest, DetectPII) {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
         {PIIType::kSSID, {"123aaaaaa"}},
         {PIIType::kURL,
-         {"http://tets.comaaaaaaa", "chrome://resources/f?user=bar",
+         {"http://tets.comaaaaaaa",
+          "isolated-app://"
+          "airugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaac/",
+          "chrome://resources/f?user=bar",
           "chrome-extension://nkoccljplnhpfnfiajclkommnmllphnl/"
           "foobar.js?bar=x"}},
         {PIIType::kEmail, {"aaaaaemail@example.comaaa"}},

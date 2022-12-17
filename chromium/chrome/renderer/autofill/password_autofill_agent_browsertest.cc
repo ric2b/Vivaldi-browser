@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -329,7 +329,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
   // We use that so we don't have to make RenderView::OnFillPasswordForm()
   // protected.
   void SimulateOnFillPasswordForm(const PasswordFormFillData& fill_data) {
-    password_autofill_agent_->FillPasswordForm(fill_data);
+    password_autofill_agent_->SetPasswordFillData(fill_data);
   }
 
   void SendVisiblePasswordForms() {
@@ -486,6 +486,17 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     ASSERT_FALSE(element.IsNull());
     password_element_ = element.To<WebInputElement>();
     UpdateRendererIDs();
+  }
+
+  void UpdateOnlyUsernameElement() {
+    WebDocument document = GetMainFrame()->GetDocument();
+    WebElement element =
+        document.GetElementById(WebString::FromUTF16(kUsernameName16));
+    EXPECT_FALSE(element.IsNull());
+    username_element_ = element.To<WebInputElement>();
+    EXPECT_FALSE(username_element_.IsNull());
+    fill_data_.username_field.unique_renderer_id = autofill::FieldRendererId(
+        username_element_.UniqueRendererFormControlId());
   }
 
   void UpdateOnlyPasswordElement() {
@@ -781,7 +792,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
 
   void SaveAndSubmitForm(const WebFormElement& form_element) {
     FormTracker* tracker = autofill_agent_->form_tracker_for_testing();
-    static_cast<content::RenderFrameObserver*>(tracker)->WillSendSubmitEvent(
+    static_cast<blink::WebLocalFrameObserver*>(tracker)->WillSendSubmitEvent(
         form_element);
     static_cast<content::RenderFrameObserver*>(tracker)->WillSubmitForm(
         form_element);
@@ -2328,6 +2339,28 @@ TEST_F(PasswordAutofillAgentTest,
       u"", u"random");
 }
 
+// Similar to RememberLastNonEmptyUsernameAndPasswordOnSubmit_New, but uses
+// no password fields on single username form
+TEST_F(PasswordAutofillAgentTest, RememberLastNonEmptySingleUsername) {
+  const char kSingleUsernameFormHTML[] =
+      "<FORM name='LoginTestForm' action='http://www.bidule.com'>"
+      "  <INPUT type='text' id='username' autocomplete='username'/>"
+      "  <INPUT type='submit' value='Login'/>"
+      "</FORM>";
+  LoadHTML(kSingleUsernameFormHTML);
+  UpdateOnlyUsernameElement();
+
+  SimulateUsernameTyping("temp");
+
+  SubmitForm();
+
+  // Observe that the PasswordAutofillAgent still remembered the last non-empty
+  // password and sent that to the browser.
+  ExpectFormSubmittedWithUsernameAndPasswords(
+      FormRendererId(username_element_.Form().UniqueRendererFormId()), u"temp",
+      u"", u"");
+}
+
 // The user first accepts a suggestion, but then overwrites the password. This
 // test checks that the overwritten password is not reverted back.
 TEST_F(PasswordAutofillAgentTest,
@@ -3832,14 +3865,14 @@ TEST_F(PasswordAutofillAgentTest, GaiaReauthenticationFormIgnored) {
 TEST_F(PasswordAutofillAgentTest,
        UpdateSuggestionsIfNewerCredentialsAreSupplied) {
   // Supply old fill data
-  password_autofill_agent_->FillPasswordForm(fill_data_);
+  password_autofill_agent_->SetPasswordFillData(fill_data_);
   // The username and password should have been autocompleted.
   CheckTextFieldsSuggestedState(kAliceUsername, true, kAlicePassword, true);
 
   // Change fill data
   fill_data_.password_field.value = u"a-changed-password";
   // Supply changed fill data
-  password_autofill_agent_->FillPasswordForm(fill_data_);
+  password_autofill_agent_->SetPasswordFillData(fill_data_);
   CheckTextFieldsSuggestedState(kAliceUsername, true, "a-changed-password",
                                 true);
 }
@@ -3847,7 +3880,7 @@ TEST_F(PasswordAutofillAgentTest,
 TEST_F(PasswordAutofillAgentTest, SuggestLatestCredentials) {
   SimulateClosingTouchToFillIfAndroid(kUsernameName);
 
-  password_autofill_agent_->FillPasswordForm(fill_data_);
+  password_autofill_agent_->SetPasswordFillData(fill_data_);
   SimulateElementClick(kPasswordName);
   EXPECT_CALL(fake_driver_, ShowPasswordSuggestions);
   base::RunLoop().RunUntilIdle();
@@ -3855,7 +3888,7 @@ TEST_F(PasswordAutofillAgentTest, SuggestLatestCredentials) {
   // Change fill data
   fill_data_.username_field.value = u"a-changed-username";
 
-  password_autofill_agent_->FillPasswordForm(fill_data_);
+  password_autofill_agent_->SetPasswordFillData(fill_data_);
   SimulateElementClick(kPasswordName);
   // Empty value because nothing was typed into the field.
   CheckSuggestions(u"", true);

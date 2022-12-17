@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Editar arquivo}one{Editar arquivo}other{Editar arquivos}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Direção da chave</translation>
+<translation id="3294437725009624529">Visitante</translation>
 <translation id="3310640316857623290">Latência do DNS significativamente acima do limite permitido</translation>
 <translation id="3328783797891415197">Teste em execução</translation>
 <translation id="3340011300870565703">O fone direito tem <ph name="BATTERY_PERCENTAGE" />% de bateria.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Não desconecte este dispositivo externo ou desligue o computador enquanto o firmware estiver atualizando. Você pode minimizar esta janela. Esta atualização pode levar alguns minutos e é possível que o dispositivo externo não funcione durante esse período.</translation>
 <translation id="3486220673238053218">definição</translation>
 <translation id="3488065109653206955">Ativado parcialmente</translation>
+<translation id="3510890413042482857">Enviar <ph name="BEGIN_LINK1" />dados de rastreamento de performance<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Atualização do Chrome OS</translation>
 <translation id="3527036260304016759">Falha - Erro desconhecido</translation>
 <translation id="3532980081107202182">Aproximadamente <ph name="MIN_REMAINING" /> minutos restantes</translation>
@@ -468,6 +470,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="5502931783115429516">O Android não está funcionando</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Mudar automaticamente para o tema escuro ao anoitecer</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Digitalizar novamente</translation>
 <translation id="5583640892426849032">Backspace</translation>

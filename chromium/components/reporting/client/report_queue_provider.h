@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,8 @@
 #include "components/reporting/util/statusor.h"
 
 namespace reporting {
+
+BASE_DECLARE_FEATURE(kEncryptedReportingPipeline);
 
 // ReportQueueProvider acts a single point for instantiating
 // |reporting::ReportQueue|s. By performing initialization atomically it ensures
@@ -99,8 +101,6 @@ class ReportQueueProvider {
   // this is when we go ahead and create the report queue.
   using ReportQueueConfiguredCallback = base::OnceCallback<void(
       StatusOr<std::unique_ptr<ReportQueueConfiguration>>)>;
-
-  static const base::Feature kEncryptedReportingPipeline;
 
   explicit ReportQueueProvider(StorageModuleCreateCallback storage_create_cb);
   ReportQueueProvider(const ReportQueueProvider& other) = delete;

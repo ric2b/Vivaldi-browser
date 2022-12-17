@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/analysis/analysis_settings.h"
@@ -123,7 +124,7 @@ void BinaryUploadService::Request::set_digest(const std::string& digest) {
 
 void BinaryUploadService::Request::clear_dlp_scan_request() {
   auto* tags = content_analysis_request_.mutable_tags();
-  auto it = std::find(tags->begin(), tags->end(), "dlp");
+  auto it = base::ranges::find(*tags, "dlp");
   if (it != tags->end())
     tags->erase(it);
 }
@@ -135,6 +136,16 @@ void BinaryUploadService::Request::set_analysis_connector(
 
 void BinaryUploadService::Request::set_url(const std::string& url) {
   content_analysis_request_.mutable_request_data()->set_url(url);
+}
+
+void BinaryUploadService::Request::set_source(const std::string& source) {
+  content_analysis_request_.mutable_request_data()->set_source(source);
+}
+
+void BinaryUploadService::Request::set_destination(
+    const std::string& destination) {
+  content_analysis_request_.mutable_request_data()->set_destination(
+      destination);
 }
 
 void BinaryUploadService::Request::set_csd(ClientDownloadRequest csd) {
@@ -157,6 +168,21 @@ void BinaryUploadService::Request::set_client_metadata(
 
 void BinaryUploadService::Request::set_content_type(const std::string& type) {
   content_analysis_request_.mutable_request_data()->set_content_type(type);
+}
+
+void BinaryUploadService::Request::set_tab_title(const std::string& tab_title) {
+  content_analysis_request_.mutable_request_data()->set_tab_title(tab_title);
+}
+
+void BinaryUploadService::Request::set_user_action_id(
+    const std::string& user_action_id) {
+  content_analysis_request_.set_user_action_id(user_action_id);
+}
+
+void BinaryUploadService::Request::set_user_action_requests_count(
+    uint64_t user_action_requests_count) {
+  content_analysis_request_.set_user_action_requests_count(
+      user_action_requests_count);
 }
 
 std::string BinaryUploadService::Request::SetRandomRequestToken() {
@@ -196,6 +222,14 @@ const std::string& BinaryUploadService::Request::digest() const {
 
 const std::string& BinaryUploadService::Request::content_type() const {
   return content_analysis_request_.request_data().content_type();
+}
+
+const std::string& BinaryUploadService::Request::user_action_id() const {
+  return content_analysis_request_.user_action_id();
+}
+
+uint64_t BinaryUploadService::Request::user_action_requests_count() const {
+  return content_analysis_request_.user_action_requests_count();
 }
 
 void BinaryUploadService::Request::FinishRequest(

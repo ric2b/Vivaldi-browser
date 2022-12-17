@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,19 +13,18 @@ namespace blink {
 
 class WebDocument;
 
-struct WebLanguageDetectionDetails {
+struct BLINK_EXPORT WebLanguageDetectionDetails {
   WebURL url;
   WebString content_language;
   WebString html_language;
   bool has_no_translate_meta = false;
 
-  BLINK_EXPORT static WebLanguageDetectionDetails
-  CollectLanguageDetectionDetails(const WebDocument&);
+  static WebLanguageDetectionDetails CollectLanguageDetectionDetails(
+      const WebDocument&);
 
   // Use to record UMA metrics on the matches between the xml:lang value, html
   // lang value and the Accept-Language request header values.
-  BLINK_EXPORT static void RecordAcceptLanguageAndXmlHtmlLangMetric(
-      const WebDocument&);
+  static void RecordAcceptLanguageAndXmlHtmlLangMetric(const WebDocument&);
 };
 
 }  // namespace blink

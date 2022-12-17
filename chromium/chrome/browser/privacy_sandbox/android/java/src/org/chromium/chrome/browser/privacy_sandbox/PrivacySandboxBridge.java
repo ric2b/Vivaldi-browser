@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,12 +96,42 @@ public class PrivacySandboxBridge {
         PrivacySandboxBridgeJni.get().promptActionOccurred(action);
     }
 
+    public static boolean isFirstPartySetsDataAccessEnabled() {
+        return PrivacySandboxBridgeJni.get().isFirstPartySetsDataAccessEnabled();
+    }
+
+    public static boolean isFirstPartySetsDataAccessManaged() {
+        return PrivacySandboxBridgeJni.get().isFirstPartySetsDataAccessManaged();
+    }
+
+    public static boolean isPartOfManagedFirstPartySet(String origin) {
+        return PrivacySandboxBridgeJni.get().isPartOfManagedFirstPartySet(origin);
+    }
+
+    public static void setFirstPartySetsDataAccessEnabled(boolean enabled) {
+        PrivacySandboxBridgeJni.get().setFirstPartySetsDataAccessEnabled(enabled);
+    }
+
+    /**
+     * Gets the First Party Sets owner hostname given a FPS member origin.
+     * @param memberOrigin FPS member origin.
+     * @return A string containing the owner hostname, null if it doesn't exist.
+     */
+    public static String getFirstPartySetOwner(String memberOrigin) {
+        return PrivacySandboxBridgeJni.get().getFirstPartySetOwner(memberOrigin);
+    }
+
     @NativeMethods
     public interface Natives {
         boolean isPrivacySandboxEnabled();
         boolean isPrivacySandboxManaged();
         boolean isPrivacySandboxRestricted();
+        boolean isFirstPartySetsDataAccessEnabled();
+        boolean isFirstPartySetsDataAccessManaged();
+        boolean isPartOfManagedFirstPartySet(String origin);
         void setPrivacySandboxEnabled(boolean enabled);
+        void setFirstPartySetsDataAccessEnabled(boolean enabled);
+        String getFirstPartySetOwner(String memberOrigin);
         String getFlocStatusString();
         String getFlocGroupString();
         String getFlocUpdateString();

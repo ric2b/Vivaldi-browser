@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -133,6 +133,10 @@ enum class PrefetchStatus {
   // The prefetch was not made because the user requested that the browser use
   // less data.
   kPrefetchNotEligibleDataSaverEnabled = 37,
+
+  // The URL is not eligible to be prefetched, because in the default network
+  // context it is configured to use a proxy server.
+  kPrefetchNotEligibleExistingProxy = 38,
 };
 
 }  // namespace content

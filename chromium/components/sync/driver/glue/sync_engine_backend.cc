@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -492,15 +492,15 @@ SyncEngineBackend::DoOnStandaloneInvalidationReceivedImpl(
   }
 
   bool contains_valid_model_type = false;
+
+  std::vector<int> field_numbers;
+  field_numbers.reserve(payload_message.data_type_invalidations_size());
   for (const auto& data_type_invalidation :
        payload_message.data_type_invalidations()) {
-    const int field_number = data_type_invalidation.data_type_id();
-    ModelType model_type = GetModelTypeFromSpecificsFieldNumber(field_number);
-    if (!IsRealDataType(model_type)) {
-      DLOG(WARNING) << "Unknown field number " << field_number;
-      continue;
-    }
-
+    field_numbers.push_back(data_type_invalidation.data_type_id());
+  }
+  for (auto model_type :
+       GetModelTypeSetFromSpecificsFieldNumberList(field_numbers)) {
     if (!interested_data_types.Has(model_type)) {
       // Filter out invalidations for unsubscribed data types.
       continue;

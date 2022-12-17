@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -121,10 +121,10 @@ class HEADLESS_EXPORT HeadlessDevToolsClientImpl
   // internal::MessageDispatcher implementation:
   void SendMessage(
       const char* method,
-      std::unique_ptr<base::Value> params,
+      base::Value params,
       base::OnceCallback<void(const base::Value&)> callback) override;
   void SendMessage(const char* method,
-                   std::unique_ptr<base::Value> params,
+                   base::Value params,
                    base::OnceClosure callback) override;
   void RegisterEventHandler(
       const char* method,
@@ -156,12 +156,11 @@ class HEADLESS_EXPORT HeadlessDevToolsClientImpl
   };
 
   template <typename CallbackType>
-  void FinalizeAndSendMessage(base::DictionaryValue* message,
-                              CallbackType callback);
+  void FinalizeAndSendMessage(base::Value::Dict message, CallbackType callback);
 
   template <typename CallbackType>
   void SendMessageWithParams(const char* method,
-                             std::unique_ptr<base::Value> params,
+                             base::Value params,
                              CallbackType callback);
 
   bool DispatchMessageReply(std::unique_ptr<base::Value> owning_message,
@@ -181,7 +180,7 @@ class HEADLESS_EXPORT HeadlessDevToolsClientImpl
 
   void ReceiveProtocolMessage(base::span<const uint8_t> json_message,
                               std::unique_ptr<base::DictionaryValue> message);
-  void SendProtocolMessage(const base::DictionaryValue* message);
+  void SendProtocolMessage(const base::Value::Dict& message);
 
   std::unique_ptr<HeadlessDevToolsChannel> channel_;
   raw_ptr<ExternalHost> external_host_ = nullptr;

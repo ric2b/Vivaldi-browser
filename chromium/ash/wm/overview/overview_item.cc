@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/default_color_constants.h"
 #include "ash/style/default_colors.h"
+#include "ash/style/rounded_label_widget.h"
 #include "ash/style/system_shadow.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/desks/templates/saved_desk_animations.h"
@@ -30,8 +31,8 @@
 #include "ash/wm/overview/overview_types.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/overview/overview_window_drag_controller.h"
-#include "ash/wm/overview/rounded_label_widget.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
+#include "ash/wm/overview/scoped_overview_hide_windows.h"
 #include "ash/wm/overview/scoped_overview_transform_window.h"
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_utils.h"
@@ -220,8 +221,20 @@ void OverviewItem::HideForDesksTemplatesGrid(bool animate) {
   // property on the window, we can force it to stay visible.
   GetWindow()->SetProperty(kForceVisibleInMiniViewKey, true);
 
+  // Temporarily hide this window in overview, so that dark/light theme change
+  // does not reset the layer visible. If `animate` is false, the callback will
+  // not run in `PerformFadeOutLayer`. Thus, here we make sure the window is
+  // also hidden in that case.
   DCHECK(item_widget_);
-  PerformFadeOutLayer(item_widget_->GetLayer(), animate, base::DoNothing());
+  hide_window_in_overview_callback_.Reset(base::BindOnce(
+      &OverviewItem::HideWindowInOverview, weak_ptr_factory_.GetWeakPtr()));
+  PerformFadeOutLayer(item_widget_->GetLayer(), animate,
+                      hide_window_in_overview_callback_.callback());
+  if (!animate) {
+    // Cancel the callback if we are going to run it directly.
+    hide_window_in_overview_callback_.Cancel();
+    HideWindowInOverview();
+  }
 
   for (aura::Window* transient_child : GetTransientTreeIterator(GetWindow())) {
     transient_child->SetProperty(kForceVisibleInMiniViewKey, true);
@@ -236,9 +249,24 @@ void OverviewItem::HideForDesksTemplatesGrid(bool animate) {
 }
 
 void OverviewItem::RevertHideForDesksTemplatesGrid(bool animate) {
+  // This might run before `HideForDesksTemplatesGrid()`, thus cancel the
+  // callback to prevent such case.
+  hide_window_in_overview_callback_.Cancel();
+
+  // Restore and show the window back to overview.
+  ShowWindowInOverview();
+
   // `item_widget_` may be null during shutdown if the window is minimized.
-  if (item_widget_)
+  if (item_widget_) {
+    // When a template is being launched, this overview item will be hidden
+    // first so that the library widget fade out animation can take place. Once
+    // the fade out animation is done, the hide will be reverted. Here we need
+    // to make sure header and shadow are sync'ed with the item window.
+    UpdateHeaderLayout(OVERVIEW_ANIMATION_NONE);
+    UpdateRoundedCornersAndShadow();
+
     PerformFadeInLayer(item_widget_->GetLayer(), animate);
+  }
 
   for (aura::Window* transient_child :
        GetTransientTreeIterator(transform_window_.window())) {
@@ -269,31 +297,30 @@ void OverviewItem::RestoreWindow(bool reset_transform,
   }
 
   GetWindow()->ClearProperty(kForceVisibleInMiniViewKey);
-  for (aura::Window* transient_child : GetTransientTreeIterator(GetWindow())) {
+  for (aura::Window* transient_child : GetTransientTreeIterator(GetWindow()))
     transient_child->ClearProperty(kForceVisibleInMiniViewKey);
-  }
 
   overview_item_view_->OnOverviewItemWindowRestoring();
   transform_window_.RestoreWindow(reset_transform,
                                   was_desks_templates_grid_showing);
 
-  if (transform_window_.IsMinimized()) {
-    const auto enter_exit_type = overview_session_->enter_exit_overview_type();
+  if (!transform_window_.IsMinimized())
+    return;
 
-    if (is_moving_to_another_desk_ ||
-        enter_exit_type == OverviewEnterExitType::kImmediateExit) {
-      overview_session_->highlight_controller()->OnViewDestroyingOrDisabling(
-          overview_item_view_);
-      ImmediatelyCloseWidgetOnExit(std::move(item_widget_));
-      overview_item_view_ = nullptr;
-      return;
-    }
-
-    OverviewAnimationType animation_type =
-        GetExitOverviewAnimationTypeForMinimizedWindow(
-            enter_exit_type, should_animate_when_exiting_);
-    FadeOutWidgetFromOverview(std::move(item_widget_), animation_type);
+  const auto enter_exit_type = overview_session_->enter_exit_overview_type();
+  if (is_moving_to_another_desk_ ||
+      enter_exit_type == OverviewEnterExitType::kImmediateExit) {
+    overview_session_->highlight_controller()->OnViewDestroyingOrDisabling(
+        overview_item_view_);
+    ImmediatelyCloseWidgetOnExit(std::move(item_widget_));
+    overview_item_view_ = nullptr;
+    return;
   }
+
+  OverviewAnimationType animation_type =
+      GetExitOverviewAnimationTypeForMinimizedWindow(
+          enter_exit_type, should_animate_when_exiting_);
+  FadeOutWidgetFromOverview(std::move(item_widget_), animation_type);
 }
 
 void OverviewItem::EnsureVisible() {
@@ -435,15 +462,20 @@ void OverviewItem::SetBounds(const gfx::RectF& target_bounds,
   } else {
     gfx::RectF inset_bounds(target_bounds);
     SetItemBounds(inset_bounds, new_animation_type, is_first_update);
-    UpdateHeaderLayout(is_first_update ? OVERVIEW_ANIMATION_NONE
-                                       : new_animation_type);
+
+    // Update header only when the overview item window is visible.
+    if (GetWindow()->IsVisible()) {
+      UpdateHeaderLayout(is_first_update ? OVERVIEW_ANIMATION_NONE
+                                         : new_animation_type);
+    }
   }
 
   // Shadow is normally set after an animation is finished. In the case of no
   // animations, manually set the shadow. Shadow relies on both the window
   // transform and |item_widget_|'s new bounds so set it after SetItemBounds
-  // and UpdateHeaderLayout. Do not apply the shadow for drop target.
-  if (new_animation_type == OVERVIEW_ANIMATION_NONE)
+  // and UpdateHeaderLayout. Do not apply the shadow for drop target. In
+  // addition, only update shadow when the overview item window is visible.
+  if (new_animation_type == OVERVIEW_ANIMATION_NONE && GetWindow()->IsVisible())
     UpdateRoundedCornersAndShadow();
 
   if (cannot_snap_widget_) {
@@ -476,7 +508,7 @@ void OverviewItem::AnimateAndCloseWindow(bool up) {
     ScopedOverviewAnimationSettings settings(
         OVERVIEW_ANIMATION_CLOSE_OVERVIEW_ITEM, window);
     gfx::Transform original_transform = window->transform();
-    original_transform.ConcatTransform(transform);
+    original_transform.PostConcat(transform);
     window->SetTransform(original_transform);
     if (observe) {
       settings.AddObserver(new AnimationObserver{
@@ -523,8 +555,8 @@ void OverviewItem::UpdateCannotSnapWarningVisibility(bool animate) {
   } else {
     const SplitViewController::State state =
         SplitViewController::Get(root_window_)->state();
-    visible = state == SplitViewController::State::kLeftSnapped ||
-              state == SplitViewController::State::kRightSnapped;
+    visible = state == SplitViewController::State::kPrimarySnapped ||
+              state == SplitViewController::State::kSecondarySnapped;
   }
 
   if (!visible && !cannot_snap_widget_)
@@ -741,8 +773,7 @@ void OverviewItem::UpdateRoundedCornersAndShadow() {
   const bool is_shutting_down =
       !overview_controller || !overview_controller->InOverviewSession();
   const bool should_show_rounded_corners =
-      !disable_mask_ && !is_shutting_down &&
-      !overview_controller->IsInStartAnimation();
+      !is_shutting_down && !overview_controller->IsInStartAnimation();
 
   if (transform_window_.IsMinimized()) {
     overview_item_view_->UpdatePreviewRoundedCorners(
@@ -1316,14 +1347,14 @@ void OverviewItem::AnimateOpacity(float opacity,
   transform_window_.BeginScopedAnimation(animation_type, &animation_settings);
   transform_window_.SetOpacity(opacity);
 
-  ScopedOverviewAnimationSettings animation_settings_label(
+  ScopedOverviewAnimationSettings scoped_animation_settings(
       animation_type, item_widget_->GetNativeWindow());
   item_widget_->SetOpacity(opacity);
 
   if (cannot_snap_widget_) {
     aura::Window* cannot_snap_widget_window =
         cannot_snap_widget_->GetNativeWindow();
-    ScopedOverviewAnimationSettings animation_settings_label(
+    ScopedOverviewAnimationSettings scoped_animation_settings_2(
         animation_type, cannot_snap_widget_window);
     cannot_snap_widget_window->layer()->SetOpacity(opacity);
   }
@@ -1419,6 +1450,38 @@ aura::Window::Windows OverviewItem::GetWindowsForHomeGesture() {
   if (cannot_snap_widget_)
     windows.push_back(cannot_snap_widget_->GetNativeWindow());
   return windows;
+}
+
+void OverviewItem::HideWindowInOverview() {
+  ScopedOverviewHideWindows* hide_windows =
+      overview_session_->hide_windows_for_saved_desks_grid();
+  DCHECK(hide_windows);
+
+  // Hide the application window.
+  if (!hide_windows->HasWindow(GetWindow()))
+    hide_windows->AddWindow(GetWindow());
+
+  // Hide the overview item window.
+  if (item_widget_ && !hide_windows->HasWindow(item_widget_->GetNativeWindow()))
+    hide_windows->AddWindow(item_widget_->GetNativeWindow());
+}
+
+void OverviewItem::ShowWindowInOverview() {
+  ScopedOverviewHideWindows* hide_windows =
+      overview_session_->hide_windows_for_saved_desks_grid();
+  DCHECK(hide_windows);
+
+  // Hide the application window. Also make sure to ignore activation for this
+  // application window, so that it remains in overview.
+  if (hide_windows->HasWindow(GetWindow())) {
+    overview_session_->set_ignore_activations(true);
+    hide_windows->RemoveWindow(GetWindow());
+    overview_session_->set_ignore_activations(false);
+  }
+
+  // Show the overview item window.
+  if (item_widget_ && hide_windows->HasWindow(item_widget_->GetNativeWindow()))
+    hide_windows->RemoveWindow(item_widget_->GetNativeWindow());
 }
 
 }  // namespace ash

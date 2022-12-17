@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,9 +73,6 @@ void FakeBrowserManager::NewFullscreenWindow(
 }
 
 void FakeBrowserManager::GetFeedbackData(GetFeedbackDataCallback callback) {
-  const base::DictionaryValue* sysinfo_entries;
-  feedback_response_.GetAsDictionary(&sysinfo_entries);
-
   // Run |callback| with the pre-set |feedback_responses_|, unless testing
   // client requests waiting for crosapi mojo disconnected event being observed.
   if (!wait_for_mojo_disconnect_)

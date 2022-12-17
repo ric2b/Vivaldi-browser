@@ -11,7 +11,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "net/base/mime_util.h"
 #include "url/gurl.h"
 
 #include "app/vivaldi_constants.h"
@@ -23,7 +22,7 @@ const char* const kTypeNames[PathTypeCount] = {
     "local-image",       // kLocalPath
     "thumbnail",         // kImage, for historical reasons the name is not image
     "css-mods",          // kCCSMod
-    "notes-attachment",  // kNotesAttachment
+    "synced-store",      // kSyncedStore
     "desktop-image",     // kDesktopWallpaper
 };
 
@@ -32,11 +31,6 @@ static_assert(sizeof(kTypeNames) / sizeof(kTypeNames[0]) ==
               "the name array must match the number of enum names");
 
 namespace {
-
-const char kMimeTypePNG[] = "image/png";
-
-const char kCSSModsData[] = "css";
-const char kCSSModsExtension[] = ".css";
 
 const char kOldThumbnailFormatPrefix[] = "/http://bookmark_thumbnail/";
 
@@ -120,39 +114,6 @@ absl::optional<PathType> ParseUrl(base::StringPiece url, std::string* data) {
     return absl::nullopt;
 
   return ParsePath(gurl.path_piece(), data);
-}
-
-std::string GetPathMimeType(base::StringPiece path) {
-  std::string data;
-  absl::optional<PathType> type = ParsePath(path, &data);
-  if (type) {
-    switch (*type) {
-      case PathType::kLocalPath:
-      case PathType::kImage: {
-        base::FilePath::StringType extension =
-            base::FilePath::FromUTF8Unsafe(data).Extension();
-        if (extension.empty()) {
-          // Compatibility with old thumbnails and local image paths without the
-          // extension.
-          return kMimeTypePNG;
-        }
-        extension.erase(0, 1);
-        std::string mime_type;
-        if (!net::GetMimeTypeFromExtension(extension, &mime_type))
-          return std::string();
-        return mime_type;
-      }
-      case PathType::kCSSMod:
-        if (data == kCSSModsData || base::EndsWith(data, kCSSModsExtension))
-          return "text/css";
-        break;
-      case PathType::kNotesAttachment:
-        break;
-      case PathType::kDesktopWallpaper:
-        break;
-    }
-  }
-  return kMimeTypePNG;
 }
 
 bool isOldFormatThumbnailId(base::StringPiece id) {

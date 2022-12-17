@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,6 +65,7 @@ class RendererController final : public mojom::RemotingSource,
   void OnRemotePlaybackDisabled(bool disabled) override;
   void OnPlaying() override;
   void OnPaused() override;
+  void OnFrozen() override;
   void OnDataSourceInitialized(const GURL& url_after_redirects) override;
   void OnHlsManifestDetected() override;
   void SetClient(MediaObserverClient* client) override;

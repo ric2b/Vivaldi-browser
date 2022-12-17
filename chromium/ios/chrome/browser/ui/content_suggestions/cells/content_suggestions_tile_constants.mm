@@ -1,15 +1,15 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_constants.h"
 
-#include "base/notreached.h"
-#include "base/strings/sys_string_conversions.h"
-#include "base/strings/utf_string_conversions.h"
+#import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/strings/utf_string_conversions.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -19,9 +19,6 @@ namespace {
 
 // The size of the symbol image used in content suggestions.
 const CGFloat kSymbolContentSuggestionsPointSize = 22;
-
-// Specific symbols used in the content suggestions.
-NSString* const kContentSuggestionsBookmarksSymbol = @"star.fill";
 
 }  // namespace
 
@@ -35,6 +32,8 @@ NSString* TitleForCollectionShortcutType(NTPCollectionShortcutType type) {
       return l10n_util::GetNSString(IDS_IOS_CONTENT_SUGGESTIONS_RECENT_TABS);
     case NTPCollectionShortcutTypeHistory:
       return l10n_util::GetNSString(IDS_IOS_CONTENT_SUGGESTIONS_HISTORY);
+    case NTPCollectionShortcutTypeWhatsNew:
+      return l10n_util::GetNSString(IDS_IOS_CONTENT_SUGGESTIONS_WHATS_NEW);
     case NTPCollectionShortcutTypeCount:
       NOTREACHED();
       return @"";
@@ -56,6 +55,9 @@ UIImage* ImageForCollectionShortcutType(NTPCollectionShortcutType type) {
     case NTPCollectionShortcutTypeHistory:
       imageName = @"ntp_history_icon";
       break;
+    case NTPCollectionShortcutTypeWhatsNew:
+      imageName = @"ntp_whats_new_icon";
+      break;
     case NTPCollectionShortcutTypeCount:
       NOTREACHED();
       break;
@@ -65,27 +67,26 @@ UIImage* ImageForCollectionShortcutType(NTPCollectionShortcutType type) {
 }
 
 UIImage* SymbolForCollectionShortcutType(NTPCollectionShortcutType type) {
-  // TODO(crbug.com/1315544): use right SF symbols.
-  NSString* imageName = nil;
   switch (type) {
     case NTPCollectionShortcutTypeBookmark:
-      imageName = kContentSuggestionsBookmarksSymbol;
-      break;
+      return DefaultSymbolTemplateWithPointSize(
+          kBookmarksSymbol, kSymbolContentSuggestionsPointSize);
     case NTPCollectionShortcutTypeReadingList:
-      imageName = kContentSuggestionsBookmarksSymbol;
-      break;
+      return CustomSymbolTemplateWithPointSize(
+          kReadingListSymbol, kSymbolContentSuggestionsPointSize);
     case NTPCollectionShortcutTypeRecentTabs:
-      imageName = kContentSuggestionsBookmarksSymbol;
-      break;
+      return CustomSymbolTemplateWithPointSize(
+          kRecentTabsSymbol, kSymbolContentSuggestionsPointSize);
     case NTPCollectionShortcutTypeHistory:
-      imageName = kContentSuggestionsBookmarksSymbol;
-      break;
+      return DefaultSymbolTemplateWithPointSize(
+          kHistorySymbol, kSymbolContentSuggestionsPointSize);
+    case NTPCollectionShortcutTypeWhatsNew:
+      return DefaultSymbolTemplateWithPointSize(
+          kCheckmarkSealSymbol, kSymbolContentSuggestionsPointSize);
     case NTPCollectionShortcutTypeCount:
       NOTREACHED();
-      break;
+      return nil;
   }
-  return DefaultSymbolTemplateWithPointSize(imageName,
-                                            kSymbolContentSuggestionsPointSize);
 }
 
 NSString* AccessibilityLabelForReadingListCellWithCount(int count) {

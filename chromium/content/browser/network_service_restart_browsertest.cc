@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/network_service_util.h"
 #include "content/public/test/browser_test.h"
@@ -49,6 +50,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
+#include "net/base/features.h"
 #include "net/cookies/canonical_cookie_test_helpers.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -78,7 +80,7 @@ mojo::PendingRemote<network::mojom::NetworkContext> CreateNetworkContext() {
       network::mojom::NetworkContextParams::New();
   context_params->cert_verifier_params = GetCertVerifierParams(
       cert_verifier::mojom::CertVerifierCreationParams::New());
-  GetNetworkService()->CreateNetworkContext(
+  CreateNetworkContextInNetworkService(
       network_context.InitWithNewPipeAndPassReceiver(),
       std::move(context_params));
   return network_context;
@@ -1095,7 +1097,10 @@ class NetworkServiceRestartWithFirstPartySetBrowserTest
   NetworkServiceRestartWithFirstPartySetBrowserTest()
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
     if (IsFirstPartySetsEnabled()) {
-      scoped_feature_list_.InitAndEnableFeature(features::kFirstPartySets);
+      scoped_feature_list_.InitWithFeatures(
+          {features::kFirstPartySets,
+           net::features::kSamePartyAttributeEnabled},
+          {});
     } else {
       scoped_feature_list_.InitAndDisableFeature(features::kFirstPartySets);
     }
@@ -1106,7 +1111,8 @@ class NetworkServiceRestartWithFirstPartySetBrowserTest
     if (IsFirstPartySetsEnabled()) {
       command_line->AppendSwitchASCII(
           network::switches::kUseFirstPartySet,
-          "https://a.test,https://b.test,https://c.test");
+          R"({"primary": "https://a.test",)"
+          R"("associatedSites": ["https://b.test","https://c.test"]})");
     }
   }
 

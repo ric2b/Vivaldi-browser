@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,16 +22,16 @@
 #include "base/unguessable_token.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
-#include "chromeos/services/libassistant/public/cpp/assistant_suggestion.h"
+#include "chromeos/ash/services/libassistant/public/cpp/assistant_suggestion.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
 
 namespace {
 
+using assistant::AssistantSuggestion;
+using assistant::AssistantSuggestionType;
 using assistant::prefs::AssistantOnboardingMode;
-using chromeos::assistant::AssistantSuggestion;
-using chromeos::assistant::AssistantSuggestionType;
 
 // Conversation starters -------------------------------------------------------
 
@@ -166,7 +166,7 @@ void AssistantSuggestionsControllerImpl::UpdateOnboardingSuggestions() {
 
   std::vector<AssistantSuggestion> onboarding_suggestions;
 
-  using chromeos::assistant::AssistantBetterOnboardingType;
+  using assistant::AssistantBetterOnboardingType;
   auto AddSuggestion = [&CreateIconResourceLink, &onboarding_suggestions](
                            int message_id, AssistantBetterOnboardingType type) {
     onboarding_suggestions.emplace_back();

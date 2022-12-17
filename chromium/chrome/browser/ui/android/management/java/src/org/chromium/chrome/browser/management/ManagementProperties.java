@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@ import org.chromium.ui.modelutil.PropertyModel;
  * Associated properties for ManagementPage's view.
  */
 class ManagementProperties {
-    public static final PropertyModel.WritableObjectPropertyKey<String> ACCOUNT_MANAGER_NAME =
+    public static final PropertyModel.WritableObjectPropertyKey<String> BROWSER_MANAGER_NAME =
             new PropertyModel.WritableObjectPropertyKey<>();
 
     public static final PropertyModel.WritableBooleanPropertyKey BROWSER_IS_MANAGED =
@@ -23,5 +23,5 @@ class ManagementProperties {
             new PropertyModel.WritableObjectPropertyKey<>();
 
     public static final PropertyKey[] ALL_KEYS = {
-            ACCOUNT_MANAGER_NAME, BROWSER_IS_MANAGED, LEARN_MORE_TEXT};
+            BROWSER_MANAGER_NAME, BROWSER_IS_MANAGED, LEARN_MORE_TEXT};
 }

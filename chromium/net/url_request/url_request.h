@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -260,15 +260,28 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   void set_site_for_cookies(const SiteForCookies& site_for_cookies);
 
   // Sets IsolationInfo for the request, which affects whether SameSite cookies
-  // are sent, what NetworkIsolationKey is used for cached resources, and how
-  // that behavior changes when following redirects. This may only be changed
-  // before Start() is called.
+  // are sent, what NetworkAnonymizationKey is used for cached resources, and
+  // how that behavior changes when following redirects. This may only be
+  // changed before Start() is called.
   //
   // TODO(https://crbug.com/1060631): This isn't actually used yet for SameSite
   // cookies. Update consumers and fix that.
   void set_isolation_info(const IsolationInfo& isolation_info) {
     isolation_info_ = isolation_info;
   }
+
+  // This will convert the passed NetworkAnonymizationKey to an IsolationInfo.
+  // This IsolationInfo mmay be assigned an inaccurate frame origin because the
+  // NetworkAnonymizationKey might not contain all the information to populate
+  // it. Additionally the NetworkAnonymizationKey uses sites which will be
+  // converted to origins when set on the IsolationInfo. If using this method it
+  // is required to skip the cache and not use credentials. Before starting the
+  // request, it must have the LoadFlag LOAD_DISABLE_CACHE set, and must be set
+  // to not allow credentials, to ensure that the inaccurate frame origin has no
+  // impact. The request will DCHECK otherwise.
+  void set_isolation_info_from_network_anonymization_key(
+      const NetworkAnonymizationKey& network_anonymization_key);
+
   const IsolationInfo& isolation_info() const { return isolation_info_; }
 
   // Indicate whether SameSite cookies should be attached even though the
@@ -539,6 +552,10 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // Access the LOAD_* flags modifying this request (see load_flags.h).
   int load_flags() const { return load_flags_; }
 
+  bool is_created_from_network_anonymization_key() const {
+    return is_created_from_network_anonymization_key_;
+  }
+
   // Returns the Secure DNS Policy for the request.
   SecureDnsPolicy secure_dns_policy() const { return secure_dns_policy_; }
 
@@ -731,7 +748,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   void SetRequestHeadersCallback(RequestHeadersCallback callback);
 
   // Sets a callback that will be invoked each time the response is received
-  // from the remote party with the actual response headers recieved. Note this
+  // from the remote party with the actual response headers received. Note this
   // is different from response_headers() getter in that in case of revalidation
   // request, the latter will return cached headers, while the callback will be
   // called with a response from the server.
@@ -910,6 +927,11 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // checking.
   void RecordReferrerGranularityMetrics(bool request_is_same_origin) const;
 
+  // Creates a partial IsolationInfo with the information accessible from the
+  // NetworkAnonymiationKey.
+  net::IsolationInfo CreateIsolationInfoFromNetworkAnonymizationKey(
+      const NetworkAnonymizationKey& network_anonymization_key);
+
   // Contextual information used for this request. Cannot be NULL. This contains
   // most of the dependencies which are shared between requests (disk cache,
   // cookie store, socket pool, etc.)
@@ -955,7 +977,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
 
   // Never access methods of the |delegate_| directly. Always use the
   // Notify... methods for this.
-  raw_ptr<Delegate> delegate_;
+  raw_ptr<Delegate, DanglingUntriaged> delegate_;
 
   const bool is_for_websockets_;
 
@@ -971,6 +993,8 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // the appropriate error code and never change again. If multiple failures
   // have been encountered, this will be the first error encountered.
   int status_ = OK;
+
+  bool is_created_from_network_anonymization_key_ = false;
 
   // The HTTP response info, lazily initialized.
   HttpResponseInfo response_info_;

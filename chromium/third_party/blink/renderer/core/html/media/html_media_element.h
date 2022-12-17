@@ -46,6 +46,7 @@
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/media/media_controls.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
+#include "third_party/blink/renderer/core/speech/speech_synthesis_base.h"
 #include "third_party/blink/renderer/platform/audio/audio_source_provider.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
@@ -58,7 +59,6 @@
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/timer.h"
-
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/webrtc_overrides/low_precision_timer.h"
@@ -241,6 +241,10 @@ class CORE_EXPORT HTMLMediaElement
   void SetLoop(bool);
   ScriptPromise playForBindings(ScriptState*);
   absl::optional<DOMExceptionCode> Play();
+
+  // Called when the video should pause to let audio descriptions finish.
+  void PauseToLetDescriptionFinish();
+
   void pause();
   double latencyHint() const;
   void setLatencyHint(double);
@@ -299,6 +303,10 @@ class CORE_EXPORT HTMLMediaElement
   bool TextTracksAreReady() const;
   void ConfigureTextTrackDisplay();
   void UpdateTextTrackDisplay();
+
+  // Get a SpeechSynthesis interface to use for generating speech for audio
+  // descriptions.
+  SpeechSynthesisBase* SpeechSynthesis();
   double LastSeekTime() const { return last_seek_time_; }
   void TextTrackReadyStateChanged(TextTrack*);
 
@@ -450,7 +458,7 @@ class CORE_EXPORT HTMLMediaElement
   // Friend class for testing.
   friend class ContextMenuControllerTest;
   friend class HTMLMediaElementTest;
-  friend class PictureInPictureControllerTest;
+  friend class PictureInPictureControllerTestWithWidget;
   friend class VideoWakeLockTest;
 
   class SourceMetadata {
@@ -503,6 +511,10 @@ class CORE_EXPORT HTMLMediaElement
   virtual void OnLoadStarted() {}
   virtual void OnLoadFinished() {}
 
+  // Handles playing of media element when audio descriptions are finished
+  // speaking.
+  void OnSpeakingCompleted();
+
   void SetShowPosterFlag(bool value);
 
   void SetReadyState(ReadyState);
@@ -515,6 +527,8 @@ class CORE_EXPORT HTMLMediaElement
   void Repaint() final;
   void DurationChanged() final;
   void SizeChanged() final;
+  void OnFirstFrame(base::TimeTicks frame_time,
+                    size_t bytes_to_first_frame) override {}
 
   void SetCcLayer(cc::Layer*) final;
   WebMediaPlayer::TrackId AddAudioTrack(const WebString&,
@@ -555,6 +569,8 @@ class CORE_EXPORT HTMLMediaElement
   void DidMediaMetadataChange(
       bool has_audio,
       bool has_video,
+      media::AudioCodec audio_codec,
+      media::VideoCodec video_codec,
       media::MediaContentType media_content_type) override;
   void DidPlayerMediaPositionStateChange(double playback_rate,
                                          base::TimeDelta duration,
@@ -563,6 +579,7 @@ class CORE_EXPORT HTMLMediaElement
   void DidDisableAudioOutputSinkChanges() override;
   void DidUseAudioServiceChange(bool uses_audio_service) override;
   void DidPlayerSizeChange(const gfx::Size& size) override;
+  void OnRemotePlaybackDisabled(bool disabled) override;
 
   // Returns a reference to the mojo remote for the MediaPlayerHost interface,
   // requesting it first from the BrowserInterfaceBroker if needed. It is an
@@ -638,9 +655,12 @@ class CORE_EXPORT HTMLMediaElement
   void PlayInternal();
 
   // This does not stop autoplay visibility observation.
-  void PauseInternal(PlayPromiseError code);
+  // By default, will pause the video and speech.
+  void PauseInternal(PlayPromiseError code, bool pause_speech = true);
 
-  void UpdatePlayState();
+  // By default, will pause the video and speech.
+  void UpdatePlayState(bool pause_speech = true);
+
   bool PotentiallyPlaying() const;
   bool StoppedDueToErrors() const;
   bool CouldPlayIfEnoughData() const override;
@@ -698,6 +718,7 @@ class CORE_EXPORT HTMLMediaElement
   void ReportCurrentTimeToMediaSource();
 
   void ResetMojoState();
+  void OnRemotePlaybackMetadataChange();
 
   // Adds a new MediaPlayerObserver remote that will be notified about media
   // player events and returns a receiver that an observer implementation can
@@ -830,6 +851,11 @@ class CORE_EXPORT HTMLMediaElement
   // playback raters other than 1.0.
   bool preserves_pitch_ = true;
 
+  // Whether the player disables the Remote Playback feature.
+  bool is_remote_playback_disabled_ = false;
+  media::AudioCodec audio_codec_ = media::AudioCodec::kUnknown;
+  media::VideoCodec video_codec_ = media::VideoCodec::kUnknown;
+
   Member<AudioTrackList> audio_tracks_;
   Member<VideoTrackList> video_tracks_;
   Member<TextTrackList> text_tracks_;
@@ -847,6 +873,10 @@ class CORE_EXPORT HTMLMediaElement
   // HTMLMediaElement and its MediaElementAudioSourceNode in case it is provided
   // die together.
   Member<AudioSourceProviderClient> audio_source_node_;
+
+  // Controls browser vocalization within the media element (e.g. to speak cues,
+  // to pause utterance).
+  Member<SpeechSynthesisBase> speech_synthesis_;
 
   // AudioClientImpl wraps an AudioSourceProviderClient.
   // When the audio format is known, Chromium calls setFormat().

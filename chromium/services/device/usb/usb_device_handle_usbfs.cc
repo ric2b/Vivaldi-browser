@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/numerics/checked_math.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -984,11 +985,8 @@ void UsbDeviceHandleUsbfs::OnTimeout(Transfer* transfer) {
 std::unique_ptr<UsbDeviceHandleUsbfs::Transfer>
 UsbDeviceHandleUsbfs::RemoveFromTransferList(Transfer* transfer_ptr) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  auto it = std::find_if(
-      transfers_.begin(), transfers_.end(),
-      [transfer_ptr](const std::unique_ptr<Transfer>& transfer) -> bool {
-        return transfer.get() == transfer_ptr;
-      });
+  auto it = base::ranges::find(transfers_, transfer_ptr,
+                               &std::unique_ptr<Transfer>::get);
   DCHECK(it != transfers_.end());
   std::unique_ptr<Transfer> transfer = std::move(*it);
   transfers_.erase(it);

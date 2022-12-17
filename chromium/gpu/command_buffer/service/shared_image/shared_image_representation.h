@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,11 +18,16 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/gpu_gles2_export.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "ui/gl/dcomp_surface_proxy.h"
+#endif
 
 #if BUILDFLAG(IS_ANDROID)
 extern "C" typedef struct AHardwareBuffer AHardwareBuffer;
@@ -76,7 +81,7 @@ class GPU_GLES2_EXPORT SharedImageRepresentation {
                             MemoryTypeTracker* tracker);
   virtual ~SharedImageRepresentation();
 
-  viz::ResourceFormat format() const { return backing_->format(); }
+  viz::SharedImageFormat format() const { return backing_->format(); }
   const gfx::Size& size() const { return backing_->size(); }
   const gfx::ColorSpace& color_space() const { return backing_->color_space(); }
   GrSurfaceOrigin surface_origin() const { return backing_->surface_origin(); }
@@ -133,8 +138,8 @@ class GPU_GLES2_EXPORT SharedImageRepresentation {
   };
 
  private:
-  const raw_ptr<SharedImageManager> manager_;
-  const raw_ptr<SharedImageBacking, DanglingUntriaged> backing_;
+  const raw_ptr<SharedImageManager, DanglingUntriaged> manager_;
+  raw_ptr<SharedImageBacking> backing_;
   const raw_ptr<MemoryTypeTracker> tracker_;
   bool has_context_ = true;
   bool has_scoped_access_ = false;
@@ -155,9 +160,6 @@ class SharedImageRepresentationFactoryRef : public SharedImageRepresentation {
     backing()->OnWriteSucceeded();
   }
   bool CopyToGpuMemoryBuffer() { return backing()->CopyToGpuMemoryBuffer(); }
-  bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) {
-    return backing()->ProduceLegacyMailbox(mailbox_manager);
-  }
   bool PresentSwapChain() { return backing()->PresentSwapChain(); }
   void RegisterImageFactory(SharedImageFactory* factory) {
     backing()->RegisterImageFactory(factory);
@@ -190,7 +192,11 @@ class GPU_GLES2_EXPORT GLTextureImageRepresentationBase
       GLenum mode,
       AllowUnclearedAccess allow_uncleared);
 
-  virtual gpu::TextureBase* GetTextureBase() = 0;
+  // Gets the texture associated with the `plane_index` for SharedImageFormat.
+  virtual gpu::TextureBase* GetTextureBase(int plane_index) = 0;
+  // Calls GetTextureBase with `plane_index` = 0 for single planar formats eg.
+  // RGB.
+  gpu::TextureBase* GetTextureBase();
 
  protected:
   friend class SkiaGLImageRepresentation;
@@ -219,9 +225,12 @@ class GPU_GLES2_EXPORT GLTextureImageRepresentation
       : GLTextureImageRepresentationBase(manager, backing, tracker) {}
 
   // TODO(ericrk): Move this to the ScopedAccess object. crbug.com/1003686
-  virtual gles2::Texture* GetTexture() = 0;
+  // Gets the texture associated with the `plane_index` for SharedImageFormat.
+  virtual gles2::Texture* GetTexture(int plane_index) = 0;
+  // Calls GetTexture with `plane_index` = 0 for single planar formats eg. RGB.
+  gles2::Texture* GetTexture();
 
-  gpu::TextureBase* GetTextureBase() override;
+  gpu::TextureBase* GetTextureBase(int plane_index) override;
 
  protected:
   friend class WrappedGLTextureCompoundImageRepresentation;
@@ -239,10 +248,15 @@ class GPU_GLES2_EXPORT GLTexturePassthroughImageRepresentation
       : GLTextureImageRepresentationBase(manager, backing, tracker) {}
 
   // TODO(ericrk): Move this to the ScopedAccess object. crbug.com/1003686
-  virtual const scoped_refptr<gles2::TexturePassthrough>&
-  GetTexturePassthrough() = 0;
+  // Gets the passthrough texture associated with the `plane_index` for
+  // SharedImageFormat.
+  virtual const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough(
+      int plane_index) = 0;
+  // Calls GetTexturePassthrough with `plane_index` = 0 for single planar
+  // formats eg. RGB.
+  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough();
 
-  gpu::TextureBase* GetTextureBase() override;
+  gpu::TextureBase* GetTextureBase(int plane_index) override;
 
  private:
   friend class WrappedGLTexturePassthroughCompoundImageRepresentation;
@@ -288,7 +302,10 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
     SkPromiseImageTexture* promise_image_texture() const {
       return promise_image_texture_.get();
     }
-    sk_sp<SkImage> CreateSkImage(GrDirectContext* context) const;
+    sk_sp<SkImage> CreateSkImage(
+        GrDirectContext* context,
+        SkImage::TextureReleaseProc texture_release_proc = nullptr,
+        SkImage::ReleaseContext release_context = nullptr) const;
     [[nodiscard]] std::unique_ptr<GrBackendSurfaceMutableState> TakeEndState();
 
    private:
@@ -344,11 +361,6 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state);
-  virtual sk_sp<SkSurface> BeginWriteAccess(
-      int final_msaa_count,
-      const SkSurfaceProps& surface_props,
-      std::vector<GrBackendSemaphore>* begin_semaphores,
-      std::vector<GrBackendSemaphore>* end_semaphores);
   virtual sk_sp<SkPromiseImageTexture> BeginWriteAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
@@ -370,9 +382,6 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state);
-  virtual sk_sp<SkPromiseImageTexture> BeginReadAccess(
-      std::vector<GrBackendSemaphore>* begin_semaphores,
-      std::vector<GrBackendSemaphore>* end_semaphores);
   virtual void EndReadAccess() = 0;
 };
 
@@ -446,6 +455,10 @@ class GPU_GLES2_EXPORT OverlayImageRepresentation
     scoped_refptr<gfx::NativePixmap> GetNativePixmap() {
       return representation()->GetNativePixmap();
     }
+#elif BUILDFLAG(IS_WIN)
+    scoped_refptr<gl::DCOMPSurfaceProxy> GetDCOMPSurfaceProxy() {
+      return representation()->GetDCOMPSurfaceProxy();
+    }
 #endif
 
     gfx::GpuFenceHandle TakeAcquireFence() { return std::move(acquire_fence_); }
@@ -485,6 +498,8 @@ class GPU_GLES2_EXPORT OverlayImageRepresentation
   virtual AHardwareBuffer* GetAHardwareBuffer();
 #elif defined(USE_OZONE)
   scoped_refptr<gfx::NativePixmap> GetNativePixmap();
+#elif BUILDFLAG(IS_WIN)
+  virtual scoped_refptr<gl::DCOMPSurfaceProxy> GetDCOMPSurfaceProxy();
 #endif
 
   // TODO(penghuang): Refactor it to not depend on GL.

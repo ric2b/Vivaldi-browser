@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,6 +44,10 @@ enum class ViewportFit;
 namespace gfx {
 class Size;
 }  // namespace gfx
+
+namespace ui::mojom {
+enum class VirtualKeyboardMode;
+}  // namespace ui::mojom
 
 namespace content {
 
@@ -254,14 +258,18 @@ class CONTENT_EXPORT WebContentsObserver {
 
   // Navigation ----------------------------------------------------------------
 
-  // Called when a navigation started in the WebContents. |navigation_handle|
-  // is unique to a specific navigation. The same |navigation_handle| will be
-  // provided on subsequent calls to DidRedirectNavigation, DidFinishNavigation,
-  // and ReadyToCommitNavigation when related to this navigation. Observers
-  // should clear any references to |navigation_handle| in DidFinishNavigation,
-  // just before it is destroyed.
+  // Called when a new navigation starts in the WebContents, WITHOUT
+  // guaranteeing that the navigation will either commit or lead to a new
+  // document. Consider whether listening to PrimaryPageChanged or
+  // DidFinishNavigation is a better fit, and see the IMPORTANT NOTES below.
   //
-  // NOTES:
+  // `navigation_handle` is unique to a specific navigation. The same
+  // `navigation_handle` will be provided on subsequent calls to
+  // DidRedirectNavigation, DidFinishNavigation, and ReadyToCommitNavigation
+  // when related to this navigation. Observers should clear any references to
+  // `navigation_handle` in DidFinishNavigation, just before it is destroyed.
+  //
+  // IMPORTANT NOTES:
   // - Starting a navigation doesn't affect which document is shown, or
   // (in many cases) which URL is displayed in the omnibox. Most effects of the
   // navigation only occur at DidFinishNavigation, if it commits. Feature code
@@ -278,13 +286,18 @@ class CONTENT_EXPORT WebContentsObserver {
   // navigations or pushState/replaceState, which will not result in a document
   // change. To filter these out, use NavigationHandle::IsSameDocument.
   //
-  // - There can be more than one navigation can be ongoing in the same frame at
-  // the same time (including the main frame). Each will get its own
+  // - There can be more than one navigation ongoing in the same frame at the
+  // same time (including the main frame). Each will get its own
   // NavigationHandle.
   //
   // - There is no guarantee that DidFinishNavigation will be called
   // for any particular navigation before DidStartNavigation is called on the
   // next.
+  //
+  // TODO(creis, mcnee): Consider renaming this method to better indicate its
+  // semantics (e.g. DidStartNavigationAttempt).
+  //
+  // WARNING: Please read the above IMPORTANT NOTES for correct usage.
   virtual void DidStartNavigation(NavigationHandle* navigation_handle) {}
 
   // Called when a navigation encountered a server redirect.
@@ -574,6 +587,13 @@ class CONTENT_EXPORT WebContentsObserver {
 
   // This method is called when the viewport fit of a WebContents changes.
   virtual void ViewportFitChanged(blink::mojom::ViewportFit value) {}
+
+  // This method is called when the virtual keyboard mode of a WebContents
+  // changes. This can happen as a result of the
+  // `navigator.virtualKeyboard.overlaysContent` API or the virtual-keyboard key
+  // in the viewport meta tag.
+  virtual void VirtualKeyboardModeChanged(ui::mojom::VirtualKeyboardMode mode) {
+  }
 
   // Notification that a plugin has crashed.
   // |plugin_pid| is the process ID identifying the plugin process. Note that

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -217,7 +217,7 @@ void VRUiHostImpl::WebXRWebContentsChanged(content::WebContents* contents) {
       // There might already be a visible permission bubble from before
       // we registered the observer, show the HMD message now in that case.
       if (permission_request_manager->IsRequestInProgress()) {
-        OnBubbleAdded();
+        OnPromptAdded();
       }
     }
   }
@@ -291,11 +291,11 @@ void VRUiHostImpl::SetLocationInfoOnUi() {
   ui_rendering_thread_->SetLocationInfo(gurl);
 }
 
-void VRUiHostImpl::OnBubbleAdded() {
+void VRUiHostImpl::OnPromptAdded() {
   ShowExternalNotificationPrompt();
 }
 
-void VRUiHostImpl::OnBubbleRemoved() {
+void VRUiHostImpl::OnPromptRemoved() {
   RemoveHeadsetNotificationPrompt();
 }
 

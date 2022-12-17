@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,8 @@ void DCHECKTriggeringOutcomeTransitions(PreloadingTriggeringOutcome old_state,
             PreloadingTriggeringOutcome::kSuccess,
             PreloadingTriggeringOutcome::kFailure,
             PreloadingTriggeringOutcome::kTriggeredButOutcomeUnknown,
-            PreloadingTriggeringOutcome::kTriggeredButUpgradedToPrerender}},
+            PreloadingTriggeringOutcome::kTriggeredButUpgradedToPrerender,
+            PreloadingTriggeringOutcome::kTriggeredButPending}},
 
           {PreloadingTriggeringOutcome::kDuplicate, {}},
 
@@ -51,6 +52,10 @@ void DCHECKTriggeringOutcomeTransitions(PreloadingTriggeringOutcome old_state,
 
           {PreloadingTriggeringOutcome::kTriggeredButUpgradedToPrerender,
            {PreloadingTriggeringOutcome::kFailure}},
+
+          {PreloadingTriggeringOutcome::kTriggeredButPending,
+           {PreloadingTriggeringOutcome::kRunning,
+            PreloadingTriggeringOutcome::kFailure}},
       }));
   DCHECK_STATE_TRANSITION(allowed_transitions,
                           /*old_state=*/old_state,
@@ -101,7 +106,11 @@ void PreloadingAttemptImpl::SetFailureReason(PreloadingFailureReason reason) {
   DCHECK_EQ(holdback_status_, PreloadingHoldbackStatus::kAllowed);
   DCHECK_EQ(failure_reason_, PreloadingFailureReason::kUnspecified);
   DCHECK_NE(reason, PreloadingFailureReason::kUnspecified);
-  SetTriggeringOutcome(PreloadingTriggeringOutcome::kFailure);
+
+  // It could be possible that the TriggeringOutcome is already kFailure, when
+  // we try to set FailureReason after setting TriggeringOutcome to kFailure.
+  if (triggering_outcome_ != PreloadingTriggeringOutcome::kFailure)
+    SetTriggeringOutcome(PreloadingTriggeringOutcome::kFailure);
   failure_reason_ = reason;
 }
 
@@ -194,6 +203,9 @@ std::ostream& operator<<(std::ostream& os,
       break;
     case PreloadingTriggeringOutcome::kTriggeredButUpgradedToPrerender:
       os << "TriggeredButUpgradedToPrerender";
+      break;
+    case PreloadingTriggeringOutcome::kTriggeredButPending:
+      os << "TriggeredButPending";
       break;
   }
   return os;

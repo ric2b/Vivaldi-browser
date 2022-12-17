@@ -1753,6 +1753,38 @@
         }
       },
       {
+        "name": "getVivaldiNetOAuthClientSecret",
+        "type": "function",
+        "description": "Returns Vivaldi.net OAuth client secret.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi.net OAuth client secret."
+            }
+          ]
+        }
+      },
+      {
+        "name": "getVivaldiNetOAuthClientId",
+        "type": "function",
+        "description": "Returns Vivaldi.net OAuth client id.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi.net OAuth client id."
+            }
+          ]
+        }
+      },
+      {
         "name": "getGOAuthClientId",
         "type": "function",
         "description": "Returns G OAuth API client id.",

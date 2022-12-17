@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,8 +77,8 @@ void DoSplitViewTransition(
   for (auto& iter : windows) {
     split_view_controller->SnapWindow(
         iter.first, iter.second == WindowStateType::kPrimarySnapped
-                        ? SplitViewController::LEFT
-                        : SplitViewController::RIGHT);
+                        ? SplitViewController::SnapPosition::kPrimary
+                        : SplitViewController::SnapPosition::kSecondary);
   }
 
   // For clamshell split view mode, end splitview mode if we're in single
@@ -295,8 +295,8 @@ void TabletModeWindowManager::OnOverviewModeEndingAnimationComplete(
       Shell::Get()->mru_window_tracker()->BuildWindowListIgnoreModal(
           kActiveDesk);
   for (auto* window : windows) {
-    if (split_view_controller->left_window() != window &&
-        split_view_controller->right_window() != window) {
+    if (split_view_controller->primary_window() != window &&
+        split_view_controller->secondary_window() != window) {
       MaximizeIfSnapped(window);
     }
   }

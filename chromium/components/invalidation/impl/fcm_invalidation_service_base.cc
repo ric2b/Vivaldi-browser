@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,10 +29,9 @@ void MigratePrefs(PrefService* prefs, const std::string& sender_id) {
   if (!prefs->HasPrefPath(prefs::kFCMInvalidationClientIDCacheDeprecated)) {
     return;
   }
-  DictionaryPrefUpdate update(prefs, prefs::kInvalidationClientIDCache);
-  update->SetStringKey(
-      sender_id,
-      prefs->GetString(prefs::kFCMInvalidationClientIDCacheDeprecated));
+  ScopedDictPrefUpdate update(prefs, prefs::kInvalidationClientIDCache);
+  update->Set(sender_id,
+              prefs->GetString(prefs::kFCMInvalidationClientIDCacheDeprecated));
   prefs->ClearPref(prefs::kFCMInvalidationClientIDCacheDeprecated);
 }
 
@@ -251,7 +250,7 @@ void FCMInvalidationServiceBase::PopulateClientID() {
   // Retrieve any client ID (aka Instance ID) from a previous run, which was
   // cached in prefs.
   const std::string* client_id_pref =
-      pref_service_->GetValueDict(prefs::kInvalidationClientIDCache)
+      pref_service_->GetDict(prefs::kInvalidationClientIDCache)
           .FindString(sender_id_);
   client_id_ = client_id_pref ? *client_id_pref : "";
 
@@ -283,8 +282,8 @@ void FCMInvalidationServiceBase::ResetClientID() {
   // source of truth, and are responsible for ensuring that the deletion
   // actually happens.
   client_id_.clear();
-  DictionaryPrefUpdate update(pref_service_, prefs::kInvalidationClientIDCache);
-  update->RemoveKey(sender_id_);
+  ScopedDictPrefUpdate update(pref_service_, prefs::kInvalidationClientIDCache);
+  update->Remove(sender_id_);
 
   // Also let the registrar (and its observers) know that the instance ID is
   // gone.
@@ -302,9 +301,9 @@ void FCMInvalidationServiceBase::OnInstanceIDReceived(
   diagnostic_info_.instance_id_received = base::Time::Now();
   if (client_id_ != instance_id) {
     client_id_ = instance_id;
-    DictionaryPrefUpdate update(pref_service_,
+    ScopedDictPrefUpdate update(pref_service_,
                                 prefs::kInvalidationClientIDCache);
-    update->SetStringKey(sender_id_, instance_id);
+    update->Set(sender_id_, instance_id);
     invalidator_registrar_.UpdateInvalidatorInstanceId(instance_id);
   }
 }

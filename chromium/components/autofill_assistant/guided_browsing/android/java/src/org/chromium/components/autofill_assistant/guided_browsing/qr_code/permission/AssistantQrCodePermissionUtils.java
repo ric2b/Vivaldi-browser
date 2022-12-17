@@ -1,12 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.components.autofill_assistant.guided_browsing.qr_code.permission;
 
-import android.content.Context;
 import android.content.pm.PackageManager;
-import android.os.Process;
 
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.permissions.PermissionCallback;
@@ -18,10 +16,8 @@ import org.chromium.ui.permissions.PermissionCallback;
 public class AssistantQrCodePermissionUtils {
     /** Returns whether the user has granted permissions. */
     public static boolean hasPermission(
-            Context context, AssistantQrCodePermissionType requiredPermission) {
-        return context.checkPermission(
-                       requiredPermission.getAndroidPermission(), Process.myPid(), Process.myUid())
-                == PackageManager.PERMISSION_GRANTED;
+            WindowAndroid windowAndroid, AssistantQrCodePermissionType requiredPermission) {
+        return windowAndroid.hasPermission(requiredPermission.getAndroidPermission());
     }
 
     /** Returns whether the user can be prompted for permissions. */

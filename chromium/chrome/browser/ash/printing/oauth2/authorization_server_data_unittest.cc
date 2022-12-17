@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,7 @@ void ExpectOneElementListOfStrings(const base::Value::Dict& dict,
                                    const std::string& value) {
   const base::Value::List* list = dict.FindList(name);
   ASSERT_TRUE(list);
-  ASSERT_EQ(list->size(), 1);
+  ASSERT_EQ(list->size(), 1u);
   ASSERT_TRUE(list->front().is_string());
   EXPECT_EQ(list->front().GetString(), value);
 }

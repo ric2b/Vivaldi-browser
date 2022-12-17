@@ -1,11 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/webui/personalization_app/test/fake_personalization_app_theme_provider.h"
 
-namespace ash {
-namespace personalization_app {
+namespace ash::personalization_app {
 
 FakePersonalizationAppThemeProvider::FakePersonalizationAppThemeProvider(
     content::WebUI* web_ui) {}
@@ -44,5 +43,4 @@ void FakePersonalizationAppThemeProvider::IsColorModeAutoScheduleEnabled(
   std::move(callback).Run(/*enabled=*/false);
 }
 
-}  // namespace personalization_app
-}  // namespace ash
+}  // namespace ash::personalization_app

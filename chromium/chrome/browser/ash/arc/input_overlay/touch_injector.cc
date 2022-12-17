@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action_move.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action_tap.h"
+#include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_ukm.h"
 #include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_uma.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_id_manager.h"
 #include "ui/aura/window.h"
@@ -61,15 +62,15 @@ void RemoveActionsWithSameID(std::vector<std::unique_ptr<Action>>& actions) {
 
 // Parse Json to different types of actions.
 std::vector<std::unique_ptr<Action>> ParseJsonToActions(
-    aura::Window* window,
+    TouchInjector* touch_injector,
     const base::Value& root) {
   std::vector<std::unique_ptr<Action>> actions;
 
   // Parse tap actions if they exist.
-  const base::Value* tap_act_list = root.FindListKey(kTapAction);
+  const auto* tap_act_list = root.FindListKey(kTapAction);
   if (tap_act_list && tap_act_list->is_list()) {
-    for (const auto& val : tap_act_list->GetListDeprecated()) {
-      std::unique_ptr<Action> action = std::make_unique<ActionTap>(window);
+    for (const auto& val : tap_act_list->GetList()) {
+      auto action = std::make_unique<ActionTap>(touch_injector);
       bool succeed = action->ParseFromJson(val);
       if (succeed)
         actions.emplace_back(std::move(action));
@@ -79,8 +80,8 @@ std::vector<std::unique_ptr<Action>> ParseJsonToActions(
   // Parse move actions if they exist.
   const base::Value* move_act_list = root.FindListKey(kMoveAction);
   if (move_act_list && move_act_list->is_list()) {
-    for (const base::Value& val : move_act_list->GetListDeprecated()) {
-      std::unique_ptr<Action> action = std::make_unique<ActionMove>(window);
+    for (const base::Value& val : move_act_list->GetList()) {
+      auto action = std::make_unique<ActionMove>(touch_injector);
       bool succeed = action->ParseFromJson(val);
       if (succeed)
         actions.emplace_back(std::move(action));
@@ -141,7 +142,8 @@ class TouchInjector::KeyCommand {
 
 TouchInjector::TouchInjector(aura::Window* top_level_window,
                              OnSaveProtoFileCallback save_file_callback)
-    : target_window_(top_level_window),
+    : window_(top_level_window),
+      content_bounds_(CalculateWindowContentBounds(window_)),
       save_file_callback_(save_file_callback) {}
 
 TouchInjector::~TouchInjector() {
@@ -149,10 +151,11 @@ TouchInjector::~TouchInjector() {
 }
 
 void TouchInjector::ParseActions(const base::Value& root) {
+  DCHECK(actions_.empty());
   if (enable_mouse_lock_)
     ParseMouseLock(root);
 
-  auto parsed_actions = ParseJsonToActions(target_window_, root);
+  auto parsed_actions = ParseJsonToActions(this, root);
   if (!parsed_actions.empty()) {
     std::move(parsed_actions.begin(), parsed_actions.end(),
               std::back_inserter(actions_));
@@ -168,7 +171,7 @@ void TouchInjector::NotifyTextInputState(bool active) {
 void TouchInjector::RegisterEventRewriter() {
   if (observation_.IsObserving())
     return;
-  observation_.Observe(target_window_->GetHost()->GetEventSource());
+  observation_.Observe(window_->GetHost()->GetEventSource());
   Update();
 }
 
@@ -187,7 +190,7 @@ void TouchInjector::Update() {
   UpdateForWindowBoundsChanged();
 }
 
-void TouchInjector::OnBindingChange(
+void TouchInjector::OnInputBindingChange(
     Action* target_action,
     std::unique_ptr<InputElement> input_element) {
   if (display_overlay_controller_)
@@ -205,12 +208,21 @@ void TouchInjector::OnBindingChange(
   // Partially unbind or completely unbind the |overlapped_action| if it
   // conflicts with |input_element|.
   if (overlapped_action)
-    overlapped_action->Unbind(*input_element);
+    overlapped_action->UnbindInput(*input_element);
 
-  target_action->PrepareToBind(std::move(input_element));
+  target_action->PrepareToBindInput(std::move(input_element));
 }
 
 void TouchInjector::OnApplyPendingBinding() {
+  if (beta_) {
+    if (!pending_add_actions_.empty()) {
+      std::move(pending_add_actions_.begin(), pending_add_actions_.end(),
+                std::back_inserter(actions_));
+      pending_add_actions_.clear();
+    }
+    if (!pending_delete_actions_.empty())
+      pending_delete_actions_.clear();
+  }
   for (auto& action : actions_)
     action->BindPending();
 }
@@ -223,47 +235,103 @@ void TouchInjector::OnBindingSave() {
 }
 
 void TouchInjector::OnBindingCancel() {
-  for (auto& action : actions_)
-    action->CancelPendingBind(content_bounds_);
-  display_overlay_controller_->SetDisplayMode(DisplayMode::kView);
+  if (beta_) {
+    // Recover all the actions in |pending_delete_actions_|.
+    if (!pending_delete_actions_.empty()) {
+      auto it = pending_delete_actions_.begin();
+      while (it != pending_delete_actions_.end()) {
+        actions_.emplace_back(std::move(*it));
+        AddActionView(actions_.back().get());
+        pending_delete_actions_.erase(it);
+      }
+    }
+
+    // Remove all the actions in |pending_add_actions_|.
+    if (!pending_add_actions_.empty()) {
+      auto it = pending_add_actions_.begin();
+      while (it != pending_add_actions_.end()) {
+        RemoveActionView(it->get());
+        pending_add_actions_.erase(it);
+      }
+    }
+    next_action_id_ = kMaxDefaultActionID + 1;
+  }
+
+  for (auto& action : actions_) {
+    if (beta_ && next_action_id_ <= action->id())
+      next_action_id_ = action->id() + 1;
+    action->CancelPendingBind();
+  }
+
+  if (display_overlay_controller_)
+    display_overlay_controller_->SetDisplayMode(DisplayMode::kView);
 }
 
 void TouchInjector::OnBindingRestore() {
+  if (beta_) {
+    // Remove all user-added actions to |pending_delete_actions_| in case that
+    // users want to cancel the restore.
+    pending_delete_actions_.clear();
+    RemoveUserActionsAndViews(actions_, pending_delete_actions_);
+
+    // Remove all user-added actions from |pending_add_actions_|.
+    std::vector<std::unique_ptr<Action>> temp_actions;
+    RemoveUserActionsAndViews(pending_add_actions_, temp_actions);
+    temp_actions.clear();
+    DCHECK(pending_add_actions_.empty());
+
+    next_action_id_ = kMaxDefaultActionID + 1;
+  }
+
   for (auto& action : actions_)
-    action->RestoreToDefault(content_bounds_);
+    action->RestoreToDefault();
 }
 
 const std::string* TouchInjector::GetPackageName() const {
-  return target_window_->GetProperty(ash::kArcPackageNameKey);
+  return window_->GetProperty(ash::kArcPackageNameKey);
 }
 
 void TouchInjector::OnProtoDataAvailable(AppDataProto& proto) {
   LoadMenuStateFromProto(proto);
   for (const ActionProto& action_proto : proto.actions()) {
-    auto* action = GetActionById(action_proto.id());
-    DCHECK(action);
-    if (!action)
-      return;
-    auto input_element =
-        InputElement::ConvertFromProto(action_proto.input_element());
-    DCHECK(input_element);
-    OnBindingChange(action, std::move(input_element));
+    if (action_proto.id() <= kMaxDefaultActionID) {
+      auto* action = GetActionById(action_proto.id());
+      DCHECK(action);
+      if (!action)
+        continue;
+
+      action->OverwriteFromProto(action_proto);
+    } else if (beta_) {
+      if (next_action_id_ <= action_proto.id())
+        next_action_id_ = action_proto.id() + 1;
+
+      auto action = CreateRawAction(action_proto.action_type());
+      if (!action)
+        continue;
+
+      action->ParseFromProto(action_proto);
+      actions_.emplace_back(std::move(action));
+    }
   }
-  OnApplyPendingBinding();
 }
 
 void TouchInjector::OnInputMenuViewRemoved() {
   OnSaveProtoFile();
+  const auto* package_name = GetPackageName();
   // Record UMA stats upon |InputMenuView| close because it needs to ignore the
   // unfinalized menu state change.
   if (touch_injector_enable_ != touch_injector_enable_uma_) {
     touch_injector_enable_uma_ = touch_injector_enable_;
     RecordInputOverlayFeatureState(touch_injector_enable_uma_);
+    InputOverlayUkm::RecordInputOverlayFeatureStateUkm(
+        *package_name, touch_injector_enable_uma_);
   }
 
   if (input_mapping_visible_ != input_mapping_visible_uma_) {
     input_mapping_visible_uma_ = input_mapping_visible_;
     RecordInputOverlayMappingHintState(input_mapping_visible_uma_);
+    InputOverlayUkm::RecordInputOverlayMappingHintStateUkm(
+        *package_name, input_mapping_visible_uma_);
   }
 }
 
@@ -276,8 +344,7 @@ void TouchInjector::UpdateForDisplayMetricsChanged() {
   if (rotation_transform_)
     rotation_transform_.reset();
 
-  auto display =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(target_window_);
+  auto display = display::Screen::GetScreen()->GetDisplayNearestWindow(window_);
   // No need to transform if there is no rotation.
   if (display.panel_rotation() == display::Display::ROTATE_0)
     return;
@@ -291,10 +358,9 @@ void TouchInjector::UpdateForDisplayMetricsChanged() {
 }
 
 void TouchInjector::UpdateForWindowBoundsChanged() {
-  content_bounds_ = CalculateWindowContentBounds(target_window_);
+  content_bounds_ = CalculateWindowContentBounds(window_);
   for (auto& action : actions_) {
-    action->UpdateTouchDownPositions(content_bounds_,
-                                     rotation_transform_.get());
+    action->UpdateTouchDownPositions();
   }
 }
 
@@ -432,9 +498,9 @@ bool TouchInjector::LocatedEventOnMenuEntry(const ui::Event& event,
   }
 
   auto event_location = gfx::Point(event.AsLocatedEvent()->root_location());
-  target_window_->GetHost()->ConvertPixelsToDIP(&event_location);
+  window_->GetHost()->ConvertPixelsToDIP(&event_location);
   // Convert |event_location| from root window location to screen location.
-  auto origin = target_window_->GetRootWindow()->GetBoundsInScreen().origin();
+  auto origin = window_->GetRootWindow()->GetBoundsInScreen().origin();
   event_location.Offset(origin.x(), origin.y());
 
   if (!press_required)
@@ -519,7 +585,7 @@ ui::EventDispatchDetails TouchInjector::RewriteEvent(
   if (event.IsTouchEvent()) {
     auto* touch_event = event.AsTouchEvent();
     auto location = touch_event->root_location();
-    target_window_->GetHost()->ConvertPixelsToDIP(&location);
+    window_->GetHost()->ConvertPixelsToDIP(&location);
     auto location_f = gfx::PointF(location);
     // Send touch event as it is if the event is outside of the content bounds.
     if (!content_bounds_.Contains(location_f))
@@ -548,9 +614,9 @@ ui::EventDispatchDetails TouchInjector::RewriteEvent(
   std::list<ui::TouchEvent> touch_events;
   for (auto& action : actions_) {
     bool keep_original_event = false;
-    bool rewritten = action->RewriteEvent(
-        event, content_bounds_, is_mouse_locked_, rotation_transform_.get(),
-        touch_events, keep_original_event);
+    bool rewritten =
+        action->RewriteEvent(event, is_mouse_locked_, rotation_transform_.get(),
+                             touch_events, keep_original_event);
     if (!rewritten)
       continue;
     if (keep_original_event)
@@ -603,7 +669,7 @@ std::unique_ptr<ui::TouchEvent> TouchInjector::RewriteOriginalTouch(
   }
 
   // Confirmed the input is valid.
-  gfx::PointF root_location_f = touch_event->root_location_f();
+  auto root_location_f = touch_event->root_location_f();
 
   if (touch_event->type() == ui::ET_TOUCH_PRESSED) {
     // Generate new touch id that we can manage and add to map.
@@ -653,14 +719,20 @@ Action* TouchInjector::GetActionById(int id) {
   return nullptr;
 }
 
-void TouchInjector::OnSaveProtoFile() {
+std::unique_ptr<AppDataProto> TouchInjector::ConvertToProto() {
   auto app_data_proto = std::make_unique<AppDataProto>();
   for (auto& action : actions_) {
     auto customized_proto = action->ConvertToProtoIfCustomized();
     if (customized_proto)
       *app_data_proto->add_actions() = *customized_proto;
+    customized_proto.reset();
   }
   AddMenuStateToProto(*app_data_proto);
+  return app_data_proto;
+}
+
+void TouchInjector::OnSaveProtoFile() {
+  auto app_data_proto = ConvertToProto();
   std::string package_name(*GetPackageName());
   save_file_callback_.Run(std::move(app_data_proto), package_name);
 }
@@ -680,11 +752,74 @@ void TouchInjector::LoadMenuStateFromProto(AppDataProto& proto) {
     display_overlay_controller_->OnApplyMenuState();
 }
 
+std::unique_ptr<Action> TouchInjector::CreateRawAction(ActionType action_type) {
+  std::unique_ptr<Action> action;
+  switch (action_type) {
+    case ActionType::TAP:
+      action = std::make_unique<ActionTap>(this);
+      break;
+    case ActionType::MOVE:
+      action = std::make_unique<ActionMove>(this);
+      break;
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
+  return action;
+}
+
+void TouchInjector::RemoveUserActionsAndViews(
+    std::vector<std::unique_ptr<Action>>& actions,
+    std::vector<std::unique_ptr<Action>>& removed_actions) {
+  if (actions.empty())
+    return;
+
+  auto it = actions.begin();
+  while (it != actions.end()) {
+    if (it->get()->id() > kMaxDefaultActionID) {
+      removed_actions.emplace_back(std::move(*it));
+      RemoveActionView(removed_actions.back().get());
+      actions.erase(it);
+    } else {
+      it++;
+    }
+  }
+}
+
+int TouchInjector::GetNextActionID() {
+  return next_action_id_++;
+}
+
+void TouchInjector::AddNewAction(ActionType action_type) {
+  auto action = CreateRawAction(action_type);
+  if (!action)
+    return;
+
+  action->InitFromEditor();
+  pending_add_actions_.emplace_back(std::move(action));
+  AddActionView(pending_add_actions_.back().get());
+}
+
+void TouchInjector::AddActionView(Action* action) {
+  if (display_overlay_controller_)
+    display_overlay_controller_->OnActionAdded(action);
+}
+
+void TouchInjector::RemoveActionView(Action* action) {
+  if (display_overlay_controller_)
+    display_overlay_controller_->OnActionRemoved(action);
+}
+
 void TouchInjector::RecordMenuStateOnLaunch() {
   touch_injector_enable_uma_ = touch_injector_enable_;
   input_mapping_visible_uma_ = input_mapping_visible_;
+  const auto* package_name = GetPackageName();
   RecordInputOverlayFeatureState(touch_injector_enable_uma_);
+  InputOverlayUkm::RecordInputOverlayFeatureStateUkm(
+      *package_name, touch_injector_enable_uma_);
   RecordInputOverlayMappingHintState(input_mapping_visible_uma_);
+  InputOverlayUkm::RecordInputOverlayMappingHintStateUkm(
+      *package_name, input_mapping_visible_uma_);
 }
 
 int TouchInjector::GetRewrittenTouchIdForTesting(ui::PointerId original_id) {

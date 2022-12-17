@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,9 +19,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "third_party/blink/public/common/switches.h"
-
-// TODO(crbug.com/1215089): Enable this test suite on Lacros.
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace {
 
@@ -302,8 +299,6 @@ IN_PROC_BROWSER_TEST_F(ConditionalFocusBrowserTest,
           /*on_correct_microtask=*/false,
           /*expected_result=*/
           "InvalidStateError: Failed to execute 'focus' on "
-          "'BrowserCaptureMediaStreamTrack': The microtask on which the "
-          "Promise was settled has terminated.");
+          "'BrowserCaptureMediaStreamTrack': The window of opportunity for "
+          "focus-decision is closed.");
 }
-
-#endif  //  !BUILDFLAG(IS_CHROMEOS_LACROS)

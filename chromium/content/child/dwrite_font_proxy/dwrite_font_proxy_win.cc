@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,8 +36,9 @@ namespace {
 // TODO(https://crbug.com/1089390): Remove this feature when the experiment is
 // complete. If the experiment shows a significant input delay improvement,
 // replace with a more refined mitigation for pages that access many fonts.
-const base::Feature kLimitFontFamilyNamesPerRenderer{
-    "LimitFontFamilyNamesPerRenderer", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kLimitFontFamilyNamesPerRenderer,
+             "LimitFontFamilyNamesPerRenderer",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 constexpr size_t kFamilyNamesLimit = 20;
 
 // Family names that opted-out from the limit enforced by

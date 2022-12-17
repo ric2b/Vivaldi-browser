@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -406,16 +406,13 @@ bool ChromeDesksTemplatesDelegate::IsAppAvailable(
 }
 
 void ChromeDesksTemplatesDelegate::LaunchAppsFromTemplate(
-    std::unique_ptr<ash::DeskTemplate> desk_template,
-    base::Time time_launch_started,
-    base::TimeDelta delay) {
+    std::unique_ptr<ash::DeskTemplate> desk_template) {
   std::vector<std::u16string> unavailable_apps =
       GetUnavailableAppNames(*desk_template);
   // Show app unavailable toast.
   if (!unavailable_apps.empty())
     ShowUnavailableAppToast(unavailable_apps);
-  DesksClient::Get()->LaunchAppsFromTemplate(std::move(desk_template),
-                                             time_launch_started, delay);
+  DesksClient::Get()->LaunchAppsFromTemplate(std::move(desk_template));
 }
 
 // Returns true if `window` is supported in desk templates feature.
@@ -426,18 +423,6 @@ bool ChromeDesksTemplatesDelegate::IsWindowSupportedForDeskTemplate(
 
   // Exclude incognito browser window.
   return !IsIncognitoWindow(window);
-}
-
-void ChromeDesksTemplatesDelegate::OpenFeedbackDialog(
-    const std::string& extra_diagnostics) {
-  // Shows a feedback dialog which prompts users to help us identify which
-  // template(s) and app(s) are problematic.
-  chrome::ShowFeedbackPage(
-      /*browser=*/nullptr, chrome::kFeedbackSourceDesksTemplates,
-      /*description_template=*/
-      "#SavedDesks",
-      /*description_placeholder_text=*/std::string(),
-      /*category_tag=*/std::string(), extra_diagnostics);
 }
 
 std::string ChromeDesksTemplatesDelegate::GetAppShortName(

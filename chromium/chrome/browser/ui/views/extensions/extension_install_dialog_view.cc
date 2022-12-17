@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -107,7 +107,7 @@ class RatingsView : public views::View {
               IDS_EXTENSION_PROMPT_RATING_ACCESSIBLE_TEXT),
           rating_, rating_count_);
     }
-    node_data->SetName(accessible_text);
+    node_data->SetNameChecked(accessible_text);
   }
 
  private:
@@ -657,9 +657,8 @@ void ExtensionInstallDialogView::CreateContents() {
     for (size_t i = 0; i < prompt_->GetRetainedFileCount(); ++i) {
       details.push_back(prompt_->GetRetainedFile(i));
     }
-    sections.push_back(
-        {prompt_->GetRetainedFilesHeading(),
-         std::make_unique<ExpandableContainerView>(details, content_width)});
+    sections.push_back({prompt_->GetRetainedFilesHeading(),
+                        std::make_unique<ExpandableContainerView>(details)});
   }
 
   if (prompt_->GetRetainedDeviceCount()) {
@@ -667,9 +666,8 @@ void ExtensionInstallDialogView::CreateContents() {
     for (size_t i = 0; i < prompt_->GetRetainedDeviceCount(); ++i) {
       details.push_back(prompt_->GetRetainedDeviceMessageString(i));
     }
-    sections.push_back(
-        {prompt_->GetRetainedDevicesHeading(),
-         std::make_unique<ExpandableContainerView>(details, content_width)});
+    sections.push_back({prompt_->GetRetainedDevicesHeading(),
+                        std::make_unique<ExpandableContainerView>(details)});
   }
 
   const bool is_justification_field_enabled =

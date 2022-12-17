@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,9 +7,10 @@ import 'chrome://nearby/strings.m.js';
 import {setContactManagerForTesting} from 'chrome://nearby/shared/nearby_contact_manager.js';
 import {NearbyContactVisibilityElement} from 'chrome://nearby/shared/nearby_contact_visibility.js';
 import {setNearbyShareSettingsForTesting} from 'chrome://nearby/shared/nearby_share_settings.js';
+import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {isChildVisible, waitAfterNextRender} from '../../test_util.js';
+import {isChildVisible} from '../../test_util.js';
 
 import {FakeContactManager} from './fake_nearby_contact_manager.js';
 import {FakeNearbyShareSettings} from './fake_nearby_share_settings.js';

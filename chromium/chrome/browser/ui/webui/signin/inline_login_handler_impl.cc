@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -172,8 +173,7 @@ credential_provider::UiExitCodes ValidateSigninEmail(
       GetEmailDomainsFromParameter(email_domains_parameter);
   std::string email_domain = gaia::ExtractDomainName(signin_email);
 
-  return std::find(all_email_domains.begin(), all_email_domains.end(),
-                   email_domain) != all_email_domains.end()
+  return base::Contains(all_email_domains, email_domain)
              ? credential_provider::kUiecSuccess
              : credential_provider::kUiecInvalidEmailDomain;
 }

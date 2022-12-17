@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -1516,11 +1517,7 @@ class CrossOriginRedirectReduceAcceptLanguageBrowserTest
   std::string GetResponseContentLanguage(
       const std::string& accept_language,
       const std::vector<std::string>& variants_languages) {
-    auto iter =
-        std::find_if(variants_languages.begin(), variants_languages.end(),
-                     [&](const std::string& available_language) {
-                       return accept_language == available_language;
-                     });
+    auto iter = base::ranges::find(variants_languages, accept_language);
     return iter != variants_languages.end() ? *iter : variants_languages[0];
   }
 

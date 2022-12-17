@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,12 +6,12 @@
 
 #include <sstream>
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/device_sync/proto/cryptauth_logging.h"
 #include "ash/services/device_sync/value_string_encoding.h"
 #include "base/i18n/time_formatting.h"
 #include "base/json/values_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 
 namespace ash {
 

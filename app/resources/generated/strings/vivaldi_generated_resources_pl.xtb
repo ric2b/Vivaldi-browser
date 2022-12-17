@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Drukuj...</translation>
 <translation id="1181037720776840403">Usuń</translation>
 <translation id="1187722533808055681">Wznowienia z bezczynności</translation>
-<translation id="119944043368869598">Wyczyść wszystko</translation>
 <translation id="1221825588892235038">Tylko zaznaczenie</translation>
 <translation id="1234736487471201993">Utwórz kod QR dla tego obrazu</translation>
 <translation id="1244303850296295656">Błąd rozszerzenia</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Zaznacz &amp;wszystko</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Wpisz wartość numeryczną, by określić liczbę kopii do wydrukowania (od 1 do <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Usuń wszystkie</translation>
 <translation id="1994173015038366702">URL strony</translation>
 <translation id="2019718679933488176">&amp;Otwórz dźwięk w nowej karcie</translation>
 <translation id="2050339315714019657">Pionowo</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Wklej jako zwykły tekst</translation>
 <translation id="2249605167705922988">np. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Zezwalaj na identyfikatory treści chronionych (może wymagać restartu komputera)</translation>
-<translation id="2277255602909579701">Wszystkie ciasteczka i dane stron</translation>
 <translation id="2280486287150724112">Prawy margines</translation>
 <translation id="2282146716419988068">Proces GPU</translation>
 <translation id="2301382460326681002">Katalog główny rozszerzenia jest nieprawidłowy.</translation>
@@ -93,8 +90,10 @@
 <translation id="2550212893339833758">Pamięć stronicowana</translation>
 <translation id="2553440850688409052">Ukryj wtyczkę</translation>
 <translation id="26224892172169984">Nie zezwalaj żadnej stronie na obsługę protokołów</translation>
+<translation id="2653275834716714682">Zastępowanie tekstu</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Włącz ponownie</translation>
+<translation id="2678100101831051676">Nie udało się przesłać treści.</translation>
 <translation id="2721037002783622288">&amp;Szukaj obrazu w <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Utwórz skrót...</translation>
 <translation id="2785873697295365461">Deskryptory plików</translation>
@@ -122,7 +121,6 @@
 <translation id="3084548735795614657">Upuść, aby zainstalować</translation>
 <translation id="3122464029669770682">Procesor</translation>
 <translation id="3124111068741548686">Uchwyty USER</translation>
-<translation id="3127156390846601284">Spowoduje to usunięcie wszystkich zapisanych na urządzeniu danych dotyczących wyświetlonych stron. Czy chcesz kontynuować?</translation>
 <translation id="3129173833825111527">Lewy margines</translation>
 <translation id="3144647712221361880">Otwórz link jako</translation>
 <translation id="3222066309010235055">Wstępne renderowanie: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +143,6 @@
 <translation id="3387614642886316601">Używaj ulepszonego sprawdzania pisowni</translation>
 <translation id="3390013585654699824">Szczegóły aplikacji</translation>
 <translation id="3393582007140394275">Nie udało się przesłać ekranu.</translation>
-<translation id="3432227430032737297">Usuń wszystkie wyświetlone</translation>
 <translation id="345693547134384690">Otwórz &amp;obraz w nowej karcie</translation>
 <translation id="3494769164076977169">Pytaj gdy strona próbuje automatycznie pobrać pliki po pobraniu pierwszego (zalecane)</translation>
 <translation id="3505030558724226696">Cofnij dostęp do urządzeń</translation>
@@ -204,10 +201,10 @@
 <translation id="4409697491990005945">Marginesy</translation>
 <translation id="4423376891418188461">Przywróć ustawienia</translation>
 <translation id="4478664379124702289">Zapisz link ja&amp;ko...</translation>
-<translation id="4579581181964204535">Nie można przesłać <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Przejdź do <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacje i rozszerzenia może zmieniać tylko menedżer (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Rozszerzenie zmieniło stronę wyświetlaną po otwarciu nowej karty.</translation>
+<translation id="4616405296204756919">Możesz korzystać ze swoich zapisanych haseł na każdym urządzeniu. Są one zapisane w <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Otwórz film w nowej karcie</translation>
 <translation id="4677772697204437347">Pamięć GPU</translation>
 <translation id="4681930562518940301">Otwórz oryginalny &amp;obraz w nowej karcie</translation>
@@ -241,10 +238,12 @@
 <translation id="5233231016133573565">ID procesu</translation>
 <translation id="5233736638227740678">&amp;Wklej</translation>
 <translation id="5256861893479663409">Na wszystkich stronach</translation>
+<translation id="5260334392110301220">Inteligentne cudzysłowy</translation>
 <translation id="5269977353971873915">Drukowanie nie powiodło się</translation>
 <translation id="5284445933715251131">Kontynuuj pobieranie</translation>
 <translation id="52912272896845572">Plik kluczy prywatnych jest nieprawidłowy.</translation>
 <translation id="5301954838959518834">OK, rozumiem</translation>
+<translation id="5302932258331363306">Pokaż zamienniki</translation>
 <translation id="5317780077021120954">Zapisz</translation>
 <translation id="5334142896108694079">Pamięć podręczna skryptów</translation>
 <translation id="5355926466126177564">Rozszerzenie "<ph name="EXTENSION_NAME" />" zmieniło stronę wyświetlaną przy wyszukiwaniu w polu adresu.</translation>
@@ -277,7 +276,6 @@
 <translation id="5747809636523347288">Wklej i &amp;przejdź <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokumenty wysłane do drukowania z <ph name="APP_NAME" /> można odczytać w aplikacji <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">&amp;Zapisz dźwięk jako...</translation>
-<translation id="577624874850706961">Szukaj ciasteczek</translation>
 <translation id="5780973441651030252">Priorytet procesu</translation>
 <translation id="5804241973901381774">Uprawnienia</translation>
 <translation id="5828633471261496623">Drukowanie…</translation>
@@ -290,7 +288,6 @@
 <translation id="5965661248935608907">Kontroluje także to, jaka strona wyświetla się po kliknięciu przycisku strony startowej lub przy wyszukiwaniu w polu adresu.</translation>
 <translation id="5978277834170881274">&amp;Używaj podstawowego sprawdzania pisowni</translation>
 <translation id="5979421442488174909">&amp;Przetłumacz na <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Wyczyść dane witryny</translation>
 <translation id="6042308850641462728">Więcej</translation>
 <translation id="6086846494333236931">Zainstalowane przez twojego administratora</translation>
 <translation id="6101226222197207147">Dodano nową aplikację (<ph name="EXTENSION_NAME" />)</translation>
@@ -346,6 +343,7 @@
 <translation id="7053983685419859001">Blokuj</translation>
 <translation id="7070484045139057854">Może odczytywać i modyfikować dane stron</translation>
 <translation id="708060913198414444">&amp;Kopiuj adres dźwięku</translation>
+<translation id="7121728544325372695">Inteligentne myślniki</translation>
 <translation id="7175353351958621980">Załadowano z:</translation>
 <translation id="7186088072322679094">Trzymaj na pasku narzędzi</translation>
 <translation id="7287143125007575591">Odmowa dostępu.</translation>
@@ -403,7 +401,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Trwa pobieranie pliku}few{Trwa pobieranie plików}many{Trwa pobieranie plików}other{Trwa pobieranie plików}}</translation>
 <translation id="8230134520748321204">Zapisać hasło do: <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">To rozszerzenie nie jest oferowane w <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i mogło zostać dodane bez twojej wiedzy.</translation>
-<translation id="8339059274628563283">Lokalnie zapisane dane z <ph name="SITE" /></translation>
 <translation id="8351419472474436977">To rozszerzenie przejęło kontrolę nad ustawieniami serwera proxy, co oznacza, że może zmieniać, przerywać lub podglądać wszystko, co robisz online. Jeśli nie masz pewności skąd wzięła się ta zmiana, prawdopodobnie jej nie chcesz.</translation>
 <translation id="8382913212082956454">Kopiuj adres &amp;e-mail</translation>
 <translation id="8413385045638830869">Najpierw zapytaj (zalecane)</translation>
@@ -429,6 +426,7 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Kopiuj te&amp;kst linku</translation>
 <translation id="8823704566850948458">Zaproponuj hasło…</translation>
+<translation id="883062543841130884">Zamienniki</translation>
 <translation id="8859174528519900719">Ramka iframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Otwórz link w nowym &amp;oknie</translation>
 <translation id="8915370057835397490">Ładowanie sugestii</translation>

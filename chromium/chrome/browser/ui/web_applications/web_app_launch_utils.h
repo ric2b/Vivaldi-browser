@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,6 +51,9 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
 void SetWebContentsActingAsApp(content::WebContents* contents,
                                const AppId& app_id);
 
+// Marks the web contents as being the pinned home tab of a tabbed web app.
+void SetWebContentsIsPinnedHomeTab(content::WebContents* contents);
+
 // Set preferences that are unique to app windows.
 void SetAppPrefsForWebContents(content::WebContents* web_contents);
 
@@ -80,13 +83,19 @@ content::WebContents* NavigateWebApplicationWindow(
 content::WebContents* NavigateWebAppUsingParams(const std::string& app_id,
                                                 NavigateParams& nav_params);
 
-void RecordAppWindowLaunch(Profile* profile, const std::string& app_id);
+// RecordLaunchMetrics methods report UMA metrics. It shouldn't have other
+// side-effects (e.g. updating app launch time).
+void RecordLaunchMetrics(const AppId& app_id,
+                         apps::LaunchContainer container,
+                         extensions::AppLaunchSource launch_source,
+                         const GURL& launch_url,
+                         content::WebContents* web_contents);
 
-void RecordMetrics(const AppId& app_id,
-                   apps::LaunchContainer container,
-                   extensions::AppLaunchSource launch_source,
-                   const GURL& launch_url,
-                   content::WebContents* web_contents);
+// Updates statistics about web app launch. For example, app's last launch time
+// (populates recently launched app list) and site engagement stats.
+void UpdateLaunchStats(content::WebContents* web_contents,
+                       const AppId& app_id,
+                       const GURL& launch_url);
 
 }  // namespace web_app
 

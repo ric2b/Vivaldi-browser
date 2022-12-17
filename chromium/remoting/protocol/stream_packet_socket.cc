@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "remoting/protocol/stun_tcp_packet_processor.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 namespace {
 
@@ -445,5 +444,4 @@ void StreamPacketSocket::CloseWithNetError(int net_error) {
   SignalClose(this, error_);
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

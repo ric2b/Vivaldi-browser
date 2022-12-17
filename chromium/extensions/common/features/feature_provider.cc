@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -153,10 +153,7 @@ const Feature* FeatureProvider::GetBehaviorFeature(const std::string& name) {
 
 const Feature* FeatureProvider::GetFeature(const std::string& name) const {
   auto iter = features_.find(name);
-  if (iter != features_.end())
-    return iter->second.get();
-  else
-    return nullptr;
+  return iter != features_.end() ? iter->second.get() : nullptr;
 }
 
 const Feature* FeatureProvider::GetParent(const Feature& feature) const {

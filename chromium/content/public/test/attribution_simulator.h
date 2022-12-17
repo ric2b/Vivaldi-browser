@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,8 @@
 
 #include <iosfwd>
 
+#include "content/public/browser/attribution_config.h"
 #include "content/public/browser/attribution_reporting.h"
-#include "content/public/test/attribution_config.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -35,7 +35,7 @@ struct AttributionSimulationOptions {
   // Only used if `noise_mode` is `AttributionNoiseMode::kDefault`.
   absl::optional<absl::uint128> noise_seed;
 
-  AttributionConfig config = AttributionConfig::kDefault;
+  AttributionConfig config;
 
   AttributionDelayMode delay_mode = AttributionDelayMode::kDefault;
 

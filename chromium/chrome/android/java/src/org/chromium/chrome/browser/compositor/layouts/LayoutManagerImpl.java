@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1207,7 +1207,7 @@ public class LayoutManagerImpl
      * Clears all content associated with {@code tabId} from the internal caches.
      * @param tabId The id of the tab to clear.
      */
-    protected void emptyCachesExcept(int tabId) {
+    protected void emptyTabCachesExcept(int tabId) {
         LayoutTab tab = mTabCache.get(tabId);
         mTabCache.clear();
         if (tab != null) mTabCache.put(tabId, tab);

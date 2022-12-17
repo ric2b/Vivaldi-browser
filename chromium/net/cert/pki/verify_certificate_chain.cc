@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <algorithm>
 
-#include "base/check.h"
 #include "base/memory/raw_ptr.h"
 #include "net/cert/pki/cert_error_params.h"
 #include "net/cert/pki/cert_errors.h"
@@ -812,16 +811,18 @@ void PathVerifier::BasicCertificateProcessing(
   }
 
   // Check whether this signature algorithm is allowed.
-  if (!delegate_->IsSignatureAlgorithmAcceptable(cert.signature_algorithm(),
+  if (!cert.signature_algorithm().has_value() ||
+      !delegate_->IsSignatureAlgorithmAcceptable(*cert.signature_algorithm(),
                                                  errors)) {
     *shortcircuit_chain_validation = true;
     errors->AddError(cert_errors::kUnacceptableSignatureAlgorithm);
+    return;
   }
 
   if (working_public_key_) {
     // Verify the digital signature using the previous certificate's key (RFC
     // 5280 section 6.1.3 step a.1).
-    if (!VerifySignedData(cert.signature_algorithm(),
+    if (!VerifySignedData(*cert.signature_algorithm(),
                           cert.tbs_certificate_tlv(), cert.signature_value(),
                           working_public_key_.get())) {
       *shortcircuit_chain_validation = true;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,10 @@
 #include "cc/base/math_util.h"
 #include "content/browser/renderer_host/cross_process_frame_connector.h"
 #include "content/browser/renderer_host/input/synthetic_touchscreen_pinch_gesture.h"
+#include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/common/input/actions_parser.h"
+#include "content/public/browser/render_process_host_priority_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -21,6 +23,7 @@
 #include "content/test/render_document_feature.h"
 #include "content/test/render_widget_host_visibility_observer.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window_tree_host.h"
@@ -64,7 +67,7 @@ void LayoutNonRecursiveForTestingViewportIntersection(
 
 // Check |intersects_viewport| on widget and process.
 bool CheckIntersectsViewport(bool expected, FrameTreeNode* node) {
-  RenderProcessHost::Priority priority =
+  RenderProcessHostPriorityClient::Priority priority =
       node->current_frame_host()->GetRenderWidgetHost()->GetPriority();
   return priority.intersects_viewport == expected &&
          node->current_frame_host()->GetProcess()->GetIntersectsViewport() ==
@@ -754,8 +757,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EvalJsResult iframe_b_result =
       EvalJsAfterLifecycleUpdate(root->current_frame_host(), "", script);
   base::Value iframe_b_offset = iframe_b_result.ExtractList();
-  int iframe_b_offset_left = iframe_b_offset.GetListDeprecated()[0].GetInt();
-  int iframe_b_offset_top = iframe_b_offset.GetListDeprecated()[1].GetInt();
+  int iframe_b_offset_left = iframe_b_offset.GetList()[0].GetInt();
+  int iframe_b_offset_top = iframe_b_offset.GetList()[1].GetInt();
 
   // Make sure a new IPC is sent after dirty-ing layout.
   filter->Clear();
@@ -770,23 +773,25 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EvalJsResult iframe_c_result = EvalJsAfterLifecycleUpdate(
       root->child_at(0)->current_frame_host(), raf_script, script);
   base::Value iframe_c_offset = iframe_c_result.ExtractList();
-  int iframe_c_offset_left = iframe_c_offset.GetListDeprecated()[0].GetInt();
-  int iframe_c_offset_top = iframe_c_offset.GetListDeprecated()[1].GetInt();
+  int iframe_c_offset_left = iframe_c_offset.GetList()[0].GetInt();
+  int iframe_c_offset_top = iframe_c_offset.GetList()[1].GetInt();
 
   // The IPC should already have been sent
   EXPECT_TRUE(filter->MessageReceived());
 
   // +4 for a 2px border on each iframe.
-  gfx::PointF expected(iframe_b_offset_left + iframe_c_offset_left + 4,
-                       iframe_b_offset_top + iframe_c_offset_top + 4);
+  gfx::Vector2dF expected(iframe_b_offset_left + iframe_c_offset_left + 4,
+                          iframe_b_offset_top + iframe_c_offset_top + 4);
   const float device_scale_factor =
       root->render_manager()->GetRenderWidgetHostView()->GetDeviceScaleFactor();
   // Convert from CSS to physical pixels
   expected.Scale(device_scale_factor);
   gfx::Transform actual = filter->GetIntersectionState()->main_frame_transform;
-  gfx::Point viewport_offset;
-  EXPECT_TRUE(actual.TransformPointReverse(&viewport_offset));
-  viewport_offset = gfx::Point(-viewport_offset.x(), -viewport_offset.y());
+  const absl::optional<gfx::PointF> viewport_offset_source_point =
+      actual.InverseMapPoint(gfx::PointF());
+  ASSERT_TRUE(viewport_offset_source_point.has_value());
+  const gfx::Vector2dF viewport_offset =
+      gfx::PointF() - viewport_offset_source_point.value();
   float tolerance = ceilf(device_scale_factor);
   EXPECT_NEAR(expected.x(), viewport_offset.x(), tolerance);
   EXPECT_NEAR(expected.y(), viewport_offset.y(), tolerance);
@@ -999,8 +1004,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
       filter->GetIntersectionState()->main_frame_intersection.IsEmpty());
 }
 
-// Tests that main_frame_scroll_position is not shared by frames in the same
-// process. This is a regression test for https://crbug.com/1063760.
+// Tests that outermost_main_frame_scroll_position is not shared by frames in
+// the same process. This is a regression test for https://crbug.com/1063760.
 //
 // Set up the frame tree to be A(B1(C1),B2(C2)). Send IPC's with different
 // ViewportIntersection information to B1 and B2, and then check that the
@@ -1058,17 +1063,18 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // Now that everything is in a stable, consistent state, we will send viewport
   // intersection IPC's to B1 and B2 that contain a different
-  // main_frame_scroll_position, and then verify that each of them propagates
-  // their own value of main_frame_scroll_position to C1 and C2, respectively.
-  // The IPC code mimics messages that A would send to B1 and B2.
+  // outermost_main_frame_scroll_position, and then verify that each of them
+  // propagates their own value of outermost_main_frame_scroll_position to C1
+  // and C2, respectively. The IPC code mimics messages that A would send to B1
+  // and B2.
   auto b1_intersection_state = b1_node->render_manager()
                                    ->GetProxyToParent()
                                    ->cross_process_frame_connector()
                                    ->intersection_state();
 
-  b1_intersection_state.main_frame_scroll_position.Offset(10, 0);
-  // A change in main_frame_scroll_position by itself will not cause B1 to be
-  // marked dirty, so we also modify viewport_intersection.
+  b1_intersection_state.outermost_main_frame_scroll_position.Offset(10, 0);
+  // A change in outermost_main_frame_scroll_position by itself will not cause
+  // B1 to be marked dirty, so we also modify viewport_intersection.
   b1_intersection_state.viewport_intersection.set_y(
       b1_intersection_state.viewport_intersection.y() + 7);
   b1_intersection_state.viewport_intersection.set_height(
@@ -1081,7 +1087,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                                    ->cross_process_frame_connector()
                                    ->intersection_state();
 
-  b2_intersection_state.main_frame_scroll_position.Offset(20, 0);
+  b2_intersection_state.outermost_main_frame_scroll_position.Offset(20, 0);
   b2_intersection_state.viewport_intersection.set_y(
       b2_intersection_state.viewport_intersection.y() + 7);
   b2_intersection_state.viewport_intersection.set_height(
@@ -1090,16 +1096,16 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   ForceUpdateViewportIntersection(b2_node, b2_intersection_state);
 
   // Once IPC's have been flushed to the C frames, we should see conflicting
-  // values for main_frame_scroll_position.
+  // values for outermost_main_frame_scroll_position.
   flush_ipcs(b1_node);
   flush_ipcs(b2_node);
   ASSERT_TRUE(b1_to_c1_message_filter->MessageReceived());
   ASSERT_TRUE(b2_to_c2_message_filter->MessageReceived());
   EXPECT_EQ(b1_to_c1_message_filter->GetIntersectionState()
-                ->main_frame_scroll_position,
+                ->outermost_main_frame_scroll_position,
             gfx::Point(10, 0));
   EXPECT_EQ(b2_to_c2_message_filter->GetIntersectionState()
-                ->main_frame_scroll_position,
+                ->outermost_main_frame_scroll_position,
             gfx::Point(20, 0));
   b1_to_c1_message_filter->Clear();
   b2_to_c2_message_filter->Clear();
@@ -1120,10 +1126,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                                         ->GetDeviceScaleFactor();
   float expected_y = device_scale_factor * 5.0;
   EXPECT_NEAR(b1_to_c1_message_filter->GetIntersectionState()
-                  ->main_frame_scroll_position.y(),
+                  ->outermost_main_frame_scroll_position.y(),
               expected_y, 1.f);
   EXPECT_NEAR(b2_to_c2_message_filter->GetIntersectionState()
-                  ->main_frame_scroll_position.y(),
+                  ->outermost_main_frame_scroll_position.y(),
               expected_y, 1.f);
 }
 
@@ -1140,7 +1146,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // Child 2 does not intersect, but shares widget with the main frame.
   FrameTreeNode* node = root->child_at(2);
-  RenderProcessHost::Priority priority =
+  RenderProcessHostPriorityClient::Priority priority =
       node->current_frame_host()->GetRenderWidgetHost()->GetPriority();
   EXPECT_TRUE(priority.intersects_viewport);
   EXPECT_TRUE(
@@ -1691,7 +1697,13 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // This test verifies that changing the CSS visibility of a cross-origin
 // <iframe> is forwarded to its corresponding RenderWidgetHost and all other
 // RenderWidgetHosts corresponding to the nested cross-origin frame.
-IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, CSSVisibilityChanged) {
+// TODO(crbug.com/1363740): Flaky on mac, linux-lacros, android.
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_CSSVisibilityChanged DISABLED_CSSVisibilityChanged
+#else
+#define MAYBE_CSSVisibilityChanged CSSVisibilityChanged
+#endif
+IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, MAYBE_CSSVisibilityChanged) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b(b(c(d(d(a))))))"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -1998,8 +2010,16 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, VisibilityChange) {
 
 // This test verifies that the main-frame's page scale factor propagates to
 // the compositor layertrees in each of the child processes.
+// Flaky on Android emulator bots: https://crbug.com/1116774
+#if BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_X86_FAMILY)
+#define MAYBE_PageScaleFactorPropagatesToOOPIFs \
+  DISABLED_PageScaleFactorPropagatesToOOPIFs
+#else
+#define MAYBE_PageScaleFactorPropagatesToOOPIFs \
+  PageScaleFactorPropagatesToOOPIFs
+#endif
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
-                       PageScaleFactorPropagatesToOOPIFs) {
+                       MAYBE_PageScaleFactorPropagatesToOOPIFs) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b(c),d)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));

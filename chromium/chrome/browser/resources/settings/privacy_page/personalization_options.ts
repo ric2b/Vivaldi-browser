@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,7 @@ import '//resources/cr_elements/cr_toast/cr_toast.js';
 
 import {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
 import {assert} from '//resources/js/assert_ts.js';
-import {WebUIListenerMixin} from '//resources/js/web_ui_listener_mixin.js';
+import {WebUIListenerMixin} from '//resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
@@ -119,7 +119,7 @@ export class SettingsPersonalizationOptionsElement extends
   syncStatus: SyncStatus;
 
   // <if expr="_google_chrome and not chromeos_ash">
-  private metricsReportingPref_: chrome.settingsPrivate.PrefObject;
+  private metricsReportingPref_: chrome.settingsPrivate.PrefObject<boolean>;
   private showRestart_: boolean;
   // </if>
 
@@ -154,6 +154,23 @@ export class SettingsPersonalizationOptionsElement extends
     // sync bridge for consent recording.
     return loadTimeData.getBoolean('isAutomatedPasswordChangeEnabled') &&
         !!this.syncStatus && !!this.syncStatus.signedIn;
+  }
+
+  private showPriceEmailNotificationsToggle_(): boolean {
+    // <if expr="chromeos_ash">
+    if (loadTimeData.getBoolean('isOSSettings')) {
+      // Should be hidden in OS settings.
+      return false;
+    }
+    // </if>
+    // Only show the toggle when the user signed in.
+    return loadTimeData.getBoolean('changePriceEmailNotificationsEnabled') &&
+        !!this.syncStatus && !!this.syncStatus.signedIn;
+  }
+
+  private getPriceEmailNotificationsPrefDesc_(): string {
+    const username = this.syncStatus!.signedInUsername || '';
+    return loadTimeData.getStringF('priceEmailNotificationsPrefDesc', username);
   }
 
   override ready() {
@@ -201,7 +218,7 @@ export class SettingsPersonalizationOptionsElement extends
 
   private setMetricsReportingPref_(metricsReporting: MetricsReporting) {
     const hadPreviousPref = this.metricsReportingPref_.value !== undefined;
-    const pref: chrome.settingsPrivate.PrefObject = {
+    const pref: chrome.settingsPrivate.PrefObject<boolean> = {
       key: '',
       type: chrome.settingsPrivate.PrefType.BOOLEAN,
       value: metricsReporting.enabled,
@@ -226,8 +243,7 @@ export class SettingsPersonalizationOptionsElement extends
 
   private showSearchSuggestToggle_(): boolean {
     // <if expr="chromeos_ash">
-    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled') &&
-        loadTimeData.getBoolean('isOSSettings')) {
+    if (loadTimeData.getBoolean('isOSSettings')) {
       // Should be hidden in OS settings.
       return false;
     }
@@ -241,10 +257,7 @@ export class SettingsPersonalizationOptionsElement extends
 
   // <if expr="chromeos_ash">
   private showMetricsReportingAsLink_(): boolean {
-    // If SyncSettingsCategorization is enabled, browser settings should show
-    // a link to the OS settings.
-    return loadTimeData.getBoolean('syncSettingsCategorizationEnabled') &&
-        !loadTimeData.getBoolean('isOSSettings');
+    return !loadTimeData.getBoolean('isOSSettings');
   }
 
   private onMetricsReportingLinkClick_() {
@@ -254,9 +267,9 @@ export class SettingsPersonalizationOptionsElement extends
 
   private showUrlCollectionToggle_(): boolean {
     // <if expr="chromeos_ash">
-    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled')) {
-      // Should be hidden in OS settings.
-      return !loadTimeData.getBoolean('isOSSettings');
+    // Should be hidden in OS settings.
+    if (loadTimeData.getBoolean('isOSSettings')) {
+      return false;
     }
     // </if>
     return true;
@@ -273,8 +286,7 @@ export class SettingsPersonalizationOptionsElement extends
 
   private showSpellCheckControlToggle_(): boolean {
     // <if expr="chromeos_ash">
-    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled') &&
-        !loadTimeData.getBoolean('isOSSettings')) {
+    if (!loadTimeData.getBoolean('isOSSettings')) {
       // The toggle should be hidden in Ash Browser settings page
       // (it shows a link to the OS Settings page instead).
       return false;
@@ -287,9 +299,6 @@ export class SettingsPersonalizationOptionsElement extends
 
   // <if expr="chromeos_ash">
   private showSpellCheckControlLink_(): boolean {
-    if (!loadTimeData.getBoolean('syncSettingsCategorizationEnabled')) {
-      return false;
-    }
     if (loadTimeData.getBoolean('isOSSettings')) {
       return false;  // Should be hidden in OS settings.
     }
@@ -306,8 +315,7 @@ export class SettingsPersonalizationOptionsElement extends
 
   private shouldShowDriveSuggest_(): boolean {
     // <if expr="chromeos_ash">
-    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled') &&
-        loadTimeData.getBoolean('isOSSettings')) {
+    if (loadTimeData.getBoolean('isOSSettings')) {
       // Should be hidden in OS settings.
       return false;
     }

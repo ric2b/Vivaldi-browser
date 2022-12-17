@@ -31,6 +31,8 @@
 #include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 
 #include <math.h>
+
+#include "base/containers/contains.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -118,7 +120,7 @@ MediaConstraintsPrivate::MediaConstraintsPrivate(
 bool MediaConstraintsPrivate::IsUnconstrained() const {
   // TODO(hta): When generating advanced constraints, make sure no empty
   // elements can be added to the m_advanced vector.
-  return basic_.IsUnconstrained() && advanced_.IsEmpty();
+  return basic_.IsUnconstrained() && advanced_.empty();
 }
 
 const MediaTrackConstraintSetPlatform& MediaConstraintsPrivate::Basic() const {
@@ -135,7 +137,7 @@ const String MediaConstraintsPrivate::ToString() const {
   if (!IsUnconstrained()) {
     builder.Append('{');
     builder.Append(Basic().ToString());
-    if (!Advanced().IsEmpty()) {
+    if (!Advanced().empty()) {
       if (builder.length() > 1)
         builder.Append(", ");
       builder.Append("advanced: [");
@@ -250,7 +252,7 @@ StringConstraint::StringConstraint(const char* name)
     : BaseConstraint(name), exact_(), ideal_() {}
 
 bool StringConstraint::Matches(String value) const {
-  if (exact_.IsEmpty()) {
+  if (exact_.empty()) {
     return true;
   }
   for (const auto& choice : exact_) {
@@ -262,7 +264,7 @@ bool StringConstraint::Matches(String value) const {
 }
 
 bool StringConstraint::IsUnconstrained() const {
-  return exact_.IsEmpty() && ideal_.IsEmpty();
+  return exact_.empty() && ideal_.empty();
 }
 
 const Vector<String>& StringConstraint::Exact() const {
@@ -276,7 +278,7 @@ const Vector<String>& StringConstraint::Ideal() const {
 String StringConstraint::ToString() const {
   StringBuilder builder;
   builder.Append('{');
-  if (!ideal_.IsEmpty()) {
+  if (!ideal_.empty()) {
     builder.Append("ideal: [");
     bool first = true;
     for (const auto& iter : ideal_) {
@@ -289,7 +291,7 @@ String StringConstraint::ToString() const {
     }
     builder.Append(']');
   }
-  if (!exact_.IsEmpty()) {
+  if (!exact_.empty()) {
     if (builder.length() > 1)
       builder.Append(", ");
     builder.Append("exact: [");
@@ -354,6 +356,7 @@ MediaTrackConstraintSetPlatform::MediaTrackConstraintSetPlatform()
       tilt("tilt"),
       zoom("zoom"),
       group_id("groupId"),
+      display_surface("displaySurface"),
       media_stream_source("mediaStreamSource"),
       render_to_associated_sink("chromeRenderToAssociatedSink"),
       goog_echo_cancellation("googEchoCancellation"),
@@ -384,6 +387,7 @@ Vector<const BaseConstraint*> MediaTrackConstraintSetPlatform::AllConstraints()
           &channel_count,
           &device_id,
           &group_id,
+          &display_surface,
           &media_stream_source,
           &disable_local_echo,
           &pan,
@@ -415,8 +419,7 @@ bool MediaTrackConstraintSetPlatform::HasMandatoryOutsideSet(
     String& found_name) const {
   for (auto* const constraint : AllConstraints()) {
     if (constraint->HasMandatory()) {
-      if (std::find(good_names.begin(), good_names.end(),
-                    constraint->GetName()) == good_names.end()) {
+      if (!base::Contains(good_names, constraint->GetName())) {
         found_name = constraint->GetName();
         return true;
       }

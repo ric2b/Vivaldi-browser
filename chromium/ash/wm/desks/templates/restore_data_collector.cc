@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,8 +43,6 @@ void RestoreDataCollector::CaptureActiveDeskAsTemplate(
   DCHECK(emplace_result.second);
   Call& call = emplace_result.first->second;
 
-  if (root_window_to_show)
-    window_tracker_.Add(root_window_to_show);
   call.root_window_to_show = root_window_to_show;
   call.template_type = template_type;
   call.template_name = template_name;
@@ -53,6 +51,7 @@ void RestoreDataCollector::CaptureActiveDeskAsTemplate(
   auto mru_windows =
       shell->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
   auto* delegate = shell->desks_templates_delegate();
+  bool has_supported_apps = false;
   for (auto* window : mru_windows) {
     // Skip transient windows without reporting.
     if (wm::GetTransientParent(window))
@@ -60,6 +59,8 @@ void RestoreDataCollector::CaptureActiveDeskAsTemplate(
 
     if (!delegate->IsWindowSupportedForDeskTemplate(window)) {
       call.unsupported_apps.push_back(window);
+      if (delegate->IsIncognitoWindow(window))
+        call.incognito_window_count++;
       continue;
     }
 
@@ -72,6 +73,7 @@ void RestoreDataCollector::CaptureActiveDeskAsTemplate(
       call.unsupported_apps.push_back(window);
       continue;
     }
+    has_supported_apps = true;
 
     const int32_t window_id = window->GetProperty(app_restore::kWindowIdKey);
     std::unique_ptr<app_restore::WindowInfo> window_info =
@@ -88,6 +90,15 @@ void RestoreDataCollector::CaptureActiveDeskAsTemplate(
                                window_id, std::move(window_info)));
   }
 
+  // Do not create a saved desk if the desk is empty or only contains
+  // unsupported apps.
+  if (!has_supported_apps) {
+    calls_.erase(current_serial);
+    return;
+  }
+
+  if (root_window_to_show)
+    window_tracker_.Add(root_window_to_show);
   call.callback = std::move(callback);
 
   // If all requests in the loop above returned data synchronously, then we have
@@ -152,7 +163,7 @@ void RestoreDataCollector::SendDeskTemplate(uint32_t serial) {
     // There were some unsupported apps in the active desk so open up a dialog
     // to let the user know.
     saved_desk_util::GetSavedDeskDialogController()->ShowUnsupportedAppsDialog(
-        root_window_to_show, std::move(call.unsupported_apps),
+        root_window_to_show, call.unsupported_apps, call.incognito_window_count,
         std::move(call.callback), std::move(desk_template));
   } else {
     std::move(call.callback).Run(std::move(desk_template));

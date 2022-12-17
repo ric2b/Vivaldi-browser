@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,8 @@ enum class InvalidStudyReason {
 };
 
 class Study;
+class EntropyProviders;
+class VariationsLayers;
 
 // Wrapper over Study with extra information computed during pre-processing,
 // such as whether the study is expired and its total probability.
@@ -45,7 +47,7 @@ class COMPONENT_EXPORT(VARIATIONS) ProcessedStudy {
   ProcessedStudy(const ProcessedStudy& other);
   ~ProcessedStudy();
 
-  bool Init(const Study* study, bool is_expired);
+  bool Init(const Study* study);
 
   const Study* study() const { return study_; }
 
@@ -57,11 +59,13 @@ class COMPONENT_EXPORT(VARIATIONS) ProcessedStudy {
     return all_assignments_to_one_group_;
   }
 
-  bool is_expired() const { return is_expired_; }
+  bool ShouldStudyUseLowEntropy() const;
 
-  const std::vector<std::string>& associated_features() const {
-    return associated_features_;
-  }
+  // Returns the entropy provider that should be used to select a group for
+  // this study.
+  const base::FieldTrial::EntropyProvider& SelectEntropyProviderForStudy(
+      const EntropyProviders& entropy_providers,
+      const VariationsLayers& layers) const;
 
   // Gets the index of the experiment with the given |name|. Returns -1 if no
   // experiment is found.
@@ -80,15 +84,6 @@ class COMPONENT_EXPORT(VARIATIONS) ProcessedStudy {
 
   // Whether all assignments are to a single group.
   bool all_assignments_to_one_group_ = false;
-
-  // Whether the study is expired.
-  bool is_expired_ = false;
-
-  // A list of feature names associated with this study by default. Studies
-  // might have groups that do not specify any feature associations – this is
-  // often the case for a default group, for example. The features listed here
-  // will be associated with all such groups.
-  std::vector<std::string> associated_features_;
 };
 
 }  // namespace variations

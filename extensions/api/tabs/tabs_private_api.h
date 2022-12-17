@@ -127,7 +127,7 @@ class VivaldiPrivateTabObserver
   // translate::ContentTranslateDriver::Observer implementation
   void OnPageTranslated(const std::string& original_lang,
                         const std::string& translated_lang,
-                        translate::TranslateErrors::Type error_type) override;
+                        translate::TranslateErrors error_type) override;
   void OnIsPageTranslatedChanged(content::WebContents* source) override;
 
   // translate::TranslateDriver::LanguageDetectionObserver
@@ -169,7 +169,6 @@ class VivaldiPrivateTabObserver
 
   void AccessKeyAction(std::string);
 
-  void UpdateSpatnavRects();
   void GetCurrentSpatnavRect(JSSpatnavRectCallback callback);
 
   // Same type of callback as GetCurrentSpatnavRect
@@ -345,20 +344,6 @@ class TabsPrivateMoveSpatnavRectFunction : public ExtensionFunction {
  ResponseAction Run() override;
 };
 
-class TabsPrivateUpdateSpatnavRectsFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.updateSpatnavRects",
-                             TABSPRIVATE_UPDATESPATNAVRECTS)
-
-  TabsPrivateUpdateSpatnavRectsFunction() = default;
-
- protected:
-  ~TabsPrivateUpdateSpatnavRectsFunction() override = default;
-
- private:
-  ResponseAction Run() override;
-};
-
 class TabsPrivateActivateSpatnavElementFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.activateSpatnavElement",
@@ -371,6 +356,22 @@ class TabsPrivateActivateSpatnavElementFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
+};
+
+class TabsPrivateCloseSpatnavOrCurrentOpenMenuFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.closeSpatnavOrCurrentOpenMenu",
+                             TABSPRIVATE_CLOSESPATNAVORCURRENTOPENMENU)
+
+  TabsPrivateCloseSpatnavOrCurrentOpenMenuFunction() = default;
+
+ protected:
+  ~TabsPrivateCloseSpatnavOrCurrentOpenMenuFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+  void CloseSpatnavDone(bool layout_changed, bool current_element_valid);
 };
 
 class TabsPrivateHasBeforeUnloadOrUnloadFunction : public ExtensionFunction {

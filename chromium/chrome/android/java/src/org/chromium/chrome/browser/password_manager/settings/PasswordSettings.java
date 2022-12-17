@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -518,6 +518,8 @@ public class PasswordSettings extends PreferenceFragmentCompat
             getPrefService().setBoolean(Pref.CREDENTIALS_ENABLE_SERVICE, (boolean) newValue);
             RecordHistogram.recordBooleanHistogram(
                     "PasswordManager.Settings.ToggleOfferToSavePasswords", (boolean) newValue);
+            // TODO(http://crbug.com/1371422): Remove method and manage evictions from native code
+            // as this is covered by chrome://password-manager-internals page.
             if ((boolean) newValue) PasswordManagerHelper.resetUpmUnenrollment();
             return true;
         });

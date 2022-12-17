@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include <tuple>
 #include <utility>
 
-#include "ash/components/multidevice/remote_device_test_util.h"
 #include "ash/services/multidevice_setup/multidevice_setup_initializer.h"
 #include "ash/services/multidevice_setup/multidevice_setup_service.h"
 #include "ash/services/multidevice_setup/public/cpp/android_sms_app_helper_delegate.h"
@@ -21,6 +20,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/components/multidevice/remote_device_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 

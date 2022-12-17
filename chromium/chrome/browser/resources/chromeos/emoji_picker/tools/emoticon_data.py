@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -13,6 +13,20 @@ sys.path.append(os.path.join(_CHROME_SOURCE, 'build/android/gyp'))
 import argparse
 import json
 from util import build_utils
+
+
+
+# Set of unicode characters that do not render with fonts available on ChromeOS
+INVALID_CHARACTERS = set([
+    '\u2688\u0325',
+])
+
+
+def isValidEmoticon(string):
+    for symbol in INVALID_CHARACTERS:
+        if symbol in string:
+            return False
+    return True
 
 
 def process_emoticon_data(metadata):
@@ -30,10 +44,9 @@ def process_emoticon_data(metadata):
             "base": {
                 "string": emoticon["value"],
                 "name": emoticon["description"],
-                "keywords": []
             },
-            "alternates": []
-        } for emoticon in group["emoticon"]]
+        } for emoticon in group["emoticon"]
+                  if isValidEmoticon(emoticon["value"])]
     } for group in metadata]
 
 

@@ -1,9 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_INTERNALS_HANDLER_IMPL_H_
 #define CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_INTERNALS_HANDLER_IMPL_H_
+
+#include <string>
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
@@ -14,6 +16,14 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
+
+namespace base {
+class Time;
+}  // namespace base
+
+namespace url {
+class Origin;
+}  // namespace url
 
 namespace content {
 
@@ -31,14 +41,13 @@ class AttributionInternalsHandlerImpl
   AttributionInternalsHandlerImpl(
       WebUI* web_ui,
       mojo::PendingReceiver<attribution_internals::mojom::Handler> receiver);
-  AttributionInternalsHandlerImpl(
-      const AttributionInternalsHandlerImpl& other) = delete;
-  AttributionInternalsHandlerImpl& operator=(
-      const AttributionInternalsHandlerImpl& other) = delete;
-  AttributionInternalsHandlerImpl(AttributionInternalsHandlerImpl&& other) =
+  AttributionInternalsHandlerImpl(const AttributionInternalsHandlerImpl&) =
       delete;
   AttributionInternalsHandlerImpl& operator=(
-      AttributionInternalsHandlerImpl&& other) = delete;
+      const AttributionInternalsHandlerImpl&) = delete;
+  AttributionInternalsHandlerImpl(AttributionInternalsHandlerImpl&&) = delete;
+  AttributionInternalsHandlerImpl& operator=(
+      AttributionInternalsHandlerImpl&&) = delete;
   ~AttributionInternalsHandlerImpl() override;
 
   // mojom::AttributionInternalsHandler:
@@ -48,7 +57,7 @@ class AttributionInternalsHandlerImpl
   void GetActiveSources(
       attribution_internals::mojom::Handler::GetActiveSourcesCallback callback)
       override;
-  void GetReports(AttributionReport::ReportType report_type,
+  void GetReports(AttributionReport::Type report_type,
                   attribution_internals::mojom::Handler::GetReportsCallback
                       callback) override;
   void SendReports(const std::vector<AttributionReport::Id>& ids,
@@ -64,8 +73,7 @@ class AttributionInternalsHandlerImpl
  private:
   // AttributionObserver:
   void OnSourcesChanged() override;
-  void OnReportsChanged(AttributionReport::ReportType report_type) override;
-  void OnSourceDeactivated(const StoredSource& deactivated_source) override;
+  void OnReportsChanged(AttributionReport::Type report_type) override;
   void OnSourceHandled(const StorableSource& source,
                        StorableSource::Result result) override;
   void OnReportSent(const AttributionReport& report,
@@ -73,6 +81,11 @@ class AttributionInternalsHandlerImpl
                     const SendResult& info) override;
   void OnTriggerHandled(const AttributionTrigger& trigger,
                         const CreateReportResult& result) override;
+  void OnFailedSourceRegistration(
+      const std::string& header_value,
+      base::Time source_time,
+      const url::Origin& reporting_origin,
+      attribution_reporting::mojom::SourceRegistrationError) override;
 
   raw_ptr<WebUI> web_ui_;
 

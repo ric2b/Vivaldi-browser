@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
+#include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
@@ -28,9 +29,8 @@
 #include "components/permissions/permission_util.h"
 #include "components/permissions/permissions_client.h"
 #include "components/permissions/request_type.h"
-#include "content/public/browser/back_forward_cache.h"
+#include "components/permissions/unused_site_permissions_service.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/disallow_activation_reason.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -80,14 +80,6 @@ const char kPermissionBlockedRepeatedIgnoresMessage[] =
 const char kPermissionBlockedPermissionsPolicyMessage[] =
     "%s permission has been blocked because of a permissions policy applied to"
     " the current document. See https://goo.gl/EuHzyv for more details.";
-
-const char kPermissionBlockedPortalsMessage[] =
-    "%s permission has been blocked because it was requested inside a portal. "
-    "Portals don't currently support permission requests.";
-
-const char kPermissionBlockedFencedFrameMessage[] =
-    "%s permission has been blocked because it was requested inside a fenced "
-    "frame. Fenced frames don't currently support permission requests.";
 
 void LogPermissionBlockedMessage(content::RenderFrameHost* rfh,
                                  const char* message,
@@ -187,13 +179,7 @@ void PermissionContextBase::RequestPermission(
                                     content_settings_type_);
         break;
       case PermissionStatusSource::PORTAL:
-        LogPermissionBlockedMessage(rfh, kPermissionBlockedPortalsMessage,
-                                    content_settings_type_);
-        break;
       case PermissionStatusSource::FENCED_FRAME:
-        LogPermissionBlockedMessage(rfh, kPermissionBlockedFencedFrameMessage,
-                                    content_settings_type_);
-        break;
       case PermissionStatusSource::INSECURE_ORIGIN:
       case PermissionStatusSource::UNSPECIFIED:
       case PermissionStatusSource::VIRTUAL_URL_DIFFERENT_ORIGIN:
@@ -206,20 +192,6 @@ void PermissionContextBase::RequestPermission(
     NotifyPermissionSet(id, requesting_origin, embedding_origin,
                         std::move(callback), /*persist=*/false,
                         result.content_setting, /*is_one_time=*/false);
-    return;
-  }
-
-  // Don't show request permission UI for an inactive RenderFrameHost as the
-  // page might not distinguish properly between user denying the permission and
-  // automatic rejection, leading to an inconsistent UX once the page becomes
-  // active again.
-  // - If this is called when RenderFrameHost is in BackForwardCache, evict the
-  // document from the cache.
-  // - If this is called when RenderFrameHost is in prerendering, cancel
-  // prerendering.
-  if (rfh->IsInactiveAndDisallowActivation(
-          content::DisallowActivationReasonId::kRequestPermission)) {
-    std::move(callback).Run(result.content_setting);
     return;
   }
 
@@ -255,6 +227,10 @@ void PermissionContextBase::RequestPermission(
   DecidePermission(id, requesting_origin, embedding_origin, user_gesture,
                    std::move(callback));
   }
+}
+
+bool PermissionContextBase::IsRestrictedToSecureOrigins() const {
+  return true;
 }
 
 void PermissionContextBase::UserMadePermissionDecision(
@@ -303,18 +279,6 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
   if (render_frame_host) {
     content::WebContents* web_contents =
         content::WebContents::FromRenderFrameHost(render_frame_host);
-
-    // Permissions are denied for portals.
-    if (web_contents && web_contents->IsPortal()) {
-      return PermissionResult(CONTENT_SETTING_BLOCK,
-                              PermissionStatusSource::PORTAL);
-    }
-
-    // Permissions are denied for fenced frames.
-    if (render_frame_host->IsNestedWithinFencedFrame()) {
-      return PermissionResult(CONTENT_SETTING_BLOCK,
-                              PermissionStatusSource::FENCED_FRAME);
-    }
 
     // Automatically deny all HTTP or HTTPS requests where the virtual URL and
     // the loaded URL are for different origins. The loaded URL is the one
@@ -571,18 +535,13 @@ void PermissionContextBase::UpdateContentSetting(const GURL& requesting_origin,
     // 1. Are ALLOWed.
     // 2. Fall back to ASK.
     // 3. Are not already a one-time grant.
-    if (content_setting == CONTENT_SETTING_ALLOW && !is_one_time) {
+    if (content_setting == CONTENT_SETTING_ALLOW && !is_one_time &&
+        content_settings::CanTrackLastVisit(content_settings_type_)) {
       // For #2, by definition, that should be all of them. If that changes in
       // the future, consider whether revocation for such permission makes
       // sense, and/or change this to an early return so that we don't
       // unnecessarily record timestamps where we don't need them.
-      DCHECK(content_settings::ContentSettingsRegistry::GetInstance()
-                 ->Get(content_settings_type_)
-                 ->GetInitialDefaultSetting() == CONTENT_SETTING_ASK);
-
-      // To avoid inadvertently recording a history entry that a permission was
-      // granted at a certain exact time, the timer is fuzzed.
-      constraints.expiration = base::Time::Now() + base::Days(60 + rand() % 7);
+      constraints.track_last_visit_for_autoexpiration = true;
     }
   }
 #endif  // !BUILDFLAG(IS_ANDROID)

@@ -73,5 +73,12 @@ const char kIosNoteCachedFolderId[] = "ios.note.cached_folder_id";
 const char kIosNoteCachedTopMostRow[] = "ios.note.cached_top_most_row";
 
 const char kIosNoteFolderDefault[] = "ios.note.default_folder";
+
+// Speed dial sorting mode
+const char kVivaldiSpeedDialSortingMode[] = "vivaldi.speed_dial.sorting_mode";
+// Setting for folder visiblity on bookmark folder page
+const char kVivaldiBookmarkFoldersViewMode[] =
+  "vivaldi.bookmark_folders.view_mode";
+
 #endif
 }  // namespace vivaldiprefs

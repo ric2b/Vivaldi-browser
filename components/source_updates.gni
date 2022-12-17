@@ -173,7 +173,11 @@ if (!is_android) {
 if (is_mac) {
   update_target("//components/remote_cocoa/app_shim:app_shim") {
     include_dirs=[ "$root_gen_dir/vivaldi" ] # For sparkle header files
-    public_deps = [ "//vivaldi/thirdparty/:copy_sparkle_headers" ]
+    public_deps = [
+      "//third_party/blink/public/common" ,
+      "//third_party/blink/public/mojom:mojom_core",
+      "//vivaldi/thirdparty/:copy_sparkle_headers",
+    ]
     sources += [
       "//vivaldi/components/remote_cocoa/app_shim/vivaldi_window_size_helper.h",
       "//vivaldi/components/remote_cocoa/app_shim/vivaldi_window_size_helper.mm",
@@ -198,4 +202,19 @@ update_template_instance(
   public_deps += [
     "//vivaldi/components/request_filter/adblock_filter/mojom:mojom_blink"
   ]
+}
+
+if (is_android) {
+  update_template_instance("//components/search_engines:search_engine_type_java") {
+    sources -= [ "search_engine_type.h" ]
+    sources += [ "$root_gen_dir/vivaldi/search_engines_types/search_engine_type.h" ]
+  }
+
+  update_target("//components/search_engines:search_engine_type_java") {
+    if (!defined(deps)) {
+      deps = []
+    }
+
+    deps += [ "//vivaldi/components:prep_search_engines_types" ]
+  }
 }

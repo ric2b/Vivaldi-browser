@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/logging.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/saml/in_session_password_sync_manager.h"
@@ -14,6 +13,7 @@
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "content/public/browser/render_frame_host.h"
 #include "url/gurl.h"

@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -3047,7 +3047,8 @@ IndexedDBBackingStore::Transaction::~Transaction() {
   DCHECK(!committing_);
 }
 
-void IndexedDBBackingStore::Transaction::Begin(std::vector<LeveledLock> locks) {
+void IndexedDBBackingStore::Transaction::Begin(
+    std::vector<PartitionedLock> locks) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_CALLED_ON_VALID_SEQUENCE(backing_store_->sequence_checker_);
   DCHECK(backing_store_);

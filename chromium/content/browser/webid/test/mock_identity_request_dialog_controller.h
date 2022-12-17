@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 
 #include "content/public/browser/identity_request_dialog_controller.h"
 
-#include "base/containers/span.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace content {
@@ -24,16 +23,21 @@ class MockIdentityRequestDialogController
   MockIdentityRequestDialogController& operator=(
       const MockIdentityRequestDialogController&) = delete;
 
-  MOCK_METHOD8(ShowAccountsDialog,
+  MOCK_METHOD7(ShowAccountsDialog,
                void(WebContents*,
-                    const GURL&,
-                    base::span<const content::IdentityRequestAccount> accounts,
-                    const IdentityProviderMetadata&,
-                    const ClientIdData&,
+                    const std::string&,
+                    const absl::optional<std::string>&,
+                    const std::vector<content::IdentityProviderData>&,
                     IdentityRequestAccount::SignInMode,
                     AccountSelectionCallback,
                     DismissCallback));
   MOCK_METHOD0(DestructorCalled, void());
+  MOCK_METHOD5(ShowFailureDialog,
+               void(WebContents*,
+                    const std::string&,
+                    const std::string&,
+                    const absl::optional<std::string>&,
+                    DismissCallback));
 };
 
 }  // namespace content

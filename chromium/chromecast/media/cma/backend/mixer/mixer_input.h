@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -103,6 +103,7 @@ class MixerInput {
   ~MixerInput();
 
   void Initialize();
+  void Destroy();
   void SetFilterGroup(FilterGroup* filter_group);
 
   void SetPostProcessorConfig(const std::string& name,
@@ -182,6 +183,7 @@ class MixerInput {
 
  private:
   bool SetFilterGroupInternal(FilterGroup* filter_group);
+  void CreateChannelMixer(int playout_channel, FilterGroup* filter_group);
   // Reads data from the source. Returns the number of frames actually filled
   // (<= |num_frames|).
   int FillAudioData(int num_frames,
@@ -203,6 +205,7 @@ class MixerInput {
   const std::string device_id_;
   const AudioContentType content_type_;
   int source_read_size_ = 0;
+  int playout_channel_ = 0;
 
   FilterGroup* filter_group_ = nullptr;
   scoped_refptr<FilterGroupTag> filter_group_tag_;

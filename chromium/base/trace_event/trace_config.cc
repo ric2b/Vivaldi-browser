@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,10 @@
 #include "base/trace_event/memory_dump_request_args.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+#if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
+#include "third_party/perfetto/protos/perfetto/config/track_event/track_event_config.gen.h"  // nogncheck
+#endif
 
 namespace base {
 namespace trace_event {
@@ -157,7 +161,7 @@ void TraceConfig::ProcessFilterConfig::InitializeFromConfigDict(
   const Value* value = dict.FindListKey(kIncludedProcessesParam);
   if (!value)
     return;
-  for (auto& pid_value : value->GetListDeprecated()) {
+  for (auto& pid_value : value->GetList()) {
     if (pid_value.is_int()) {
       included_process_ids_.insert(
           static_cast<base::ProcessId>(pid_value.GetInt()));
@@ -235,7 +239,7 @@ bool TraceConfig::EventFilterConfig::GetArgAsSet(
   const Value* list = args_.FindListPath(key);
   if (!list)
     return false;
-  for (const Value& item : list->GetListDeprecated()) {
+  for (const Value& item : list->GetList()) {
     if (item.is_string())
       out_set->insert(item.GetString());
   }
@@ -431,7 +435,7 @@ void TraceConfig::InitializeFromConfigDict(const Value& dict) {
   if (enable_systrace_) {
     const Value* systrace_events = dict.FindListKey(kSystraceEventsParam);
     if (systrace_events) {
-      for (const Value& value : systrace_events->GetListDeprecated())
+      for (const Value& value : systrace_events->GetList())
         systrace_events_.insert(value.GetString());
     }
   }
@@ -508,7 +512,7 @@ void TraceConfig::SetMemoryDumpConfigFromConfigDict(
   const Value* allowed_modes_list =
       memory_dump_config.FindListKey(kAllowedDumpModesParam);
   if (allowed_modes_list) {
-    for (const Value& item : allowed_modes_list->GetListDeprecated()) {
+    for (const Value& item : allowed_modes_list->GetList()) {
       DCHECK(item.is_string());
       memory_dump_config_.allowed_dump_modes.insert(
           StringToMemoryDumpLevelOfDetail(item.GetString()));
@@ -522,7 +526,7 @@ void TraceConfig::SetMemoryDumpConfigFromConfigDict(
   memory_dump_config_.triggers.clear();
   const Value* trigger_list = memory_dump_config.FindListKey(kTriggersParam);
   if (trigger_list) {
-    for (const Value& trigger : trigger_list->GetListDeprecated()) {
+    for (const Value& trigger : trigger_list->GetList()) {
       if (!trigger.is_dict())
         continue;
 
@@ -581,7 +585,7 @@ void TraceConfig::SetProcessFilterConfig(const ProcessFilterConfig& config) {
 void TraceConfig::SetHistogramNamesFromConfigList(
     const Value& histogram_names) {
   histogram_names_.clear();
-  for (const Value& value : histogram_names.GetListDeprecated())
+  for (const Value& value : histogram_names.GetList())
     histogram_names_.insert(value.GetString());
 }
 
@@ -589,7 +593,7 @@ void TraceConfig::SetEventFiltersFromConfigList(
     const Value& category_event_filters) {
   event_filters_.clear();
 
-  for (const Value& event_filter : category_event_filters.GetListDeprecated()) {
+  for (const Value& event_filter : category_event_filters.GetList()) {
     if (!event_filter.is_dict())
       continue;
 
@@ -735,6 +739,35 @@ std::string TraceConfig::ToTraceOptionsString() const {
   }
   return ret;
 }
+
+#if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
+std::string TraceConfig::ToPerfettoTrackEventConfigRaw(
+    bool privacy_filtering_enabled) const {
+  perfetto::protos::gen::TrackEventConfig te_cfg;
+  // If no categories are explicitly enabled, enable the default ones.
+  // Otherwise only matching categories are enabled.
+  if (!category_filter_.included_categories().empty())
+    te_cfg.add_disabled_categories("*");
+  // Metadata is always enabled.
+  te_cfg.add_enabled_categories("__metadata");
+  for (const auto& excluded : category_filter_.excluded_categories()) {
+    te_cfg.add_disabled_categories(excluded);
+  }
+  for (const auto& included : category_filter_.included_categories()) {
+    te_cfg.add_enabled_categories(included);
+  }
+  for (const auto& disabled : category_filter_.disabled_categories()) {
+    te_cfg.add_enabled_categories(disabled);
+  }
+  te_cfg.set_enable_thread_time_sampling(true);
+  te_cfg.set_timestamp_unit_multiplier(1000);
+  if (privacy_filtering_enabled) {
+    te_cfg.set_filter_dynamic_event_names(true);
+    te_cfg.set_filter_debug_annotations(true);
+  }
+  return te_cfg.SerializeAsString();
+}
+#endif
 
 }  // namespace trace_event
 }  // namespace base

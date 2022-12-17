@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,6 +37,14 @@ void SetWindowBounds(struct wl_client* client,
                      int32_t width,
                      int32_t height,
                      struct wl_resource* output) {
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+void SetOrigin(struct wl_client* client,
+               struct wl_resource* resource,
+               int32_t x,
+               int32_t y,
+               struct wl_resource* output) {
   NOTIMPLEMENTED_LOG_ONCE();
 }
 
@@ -103,6 +111,7 @@ const struct zaura_toplevel_interface kTestZAuraToplevelImpl = {
     &SetFloat,
     &UnSetFloat,
     &SetZOrder,
+    &SetOrigin,
 };
 
 }  // namespace wl

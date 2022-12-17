@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/language/url_language_histogram_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -20,6 +21,7 @@
 #include "components/language/core/browser/locale_util.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/language/core/browser/ulp_metrics_logger.h"
+#include "components/language/core/browser/url_language_histogram.h"
 #include "components/language/core/common/language_experiments.h"
 #include "components/language/core/language_model/fluent_language_model.h"
 #include "components/language/core/language_model/ulp_language_model.h"
@@ -39,13 +41,14 @@ namespace {
 
 #if BUILDFLAG(IS_ANDROID)
 // Records per-initialization ULP-related metrics.
-void RecordULPInitMetrics(Profile* profile,
-                          const std::vector<std::string>& ulp_languages) {
+void RecordULPInitMetrics(
+    PrefService* pref_service,
+    const language::UrlLanguageHistogram& page_language_histogram,
+    const std::vector<std::string>& ulp_languages) {
   language::ULPMetricsLogger logger;
 
   logger.RecordInitiationLanguageCount(ulp_languages.size());
 
-  PrefService* pref_service = profile->GetPrefs();
   const std::string app_locale = g_browser_process->GetApplicationLocale();
   logger.RecordInitiationUILanguageInULP(
       ULPMetricsLogger::DetermineLanguageStatus(app_locale, ulp_languages));
@@ -69,8 +72,7 @@ void RecordULPInitMetrics(Profile* profile,
   logger.RecordInitiationTopAcceptLanguageInULP(accept_language_status);
 
   logger.RecordInitiationAcceptLanguagesULPOverlap(
-      ULPMetricsLogger::ULPLanguagesInAcceptLanguagesRatio(accept_languages,
-                                                           ulp_languages));
+      ULPMetricsLogger::LanguagesOverlapRatio(accept_languages, ulp_languages));
 
   std::vector<std::string> never_languages_not_in_ulp =
       ULPMetricsLogger::RemoveULPLanguages(
@@ -80,11 +82,28 @@ void RecordULPInitMetrics(Profile* profile,
       never_languages_not_in_ulp);
   logger.RecordInitiationNeverLanguagesMissingFromULPCount(
       never_languages_not_in_ulp.size());
+
+  std::vector<std::string> page_languages;
+  for (const language::UrlLanguageHistogram::LanguageInfo& language_info :
+       page_language_histogram.GetTopLanguages()) {
+    page_languages.emplace_back(language_info.language_code);
+  }
+  logger.RecordInitiationAcceptLanguagesPageLanguageOverlap(
+      ULPMetricsLogger::LanguagesOverlapRatio(page_languages, ulp_languages));
+  std::vector<std::string> page_languages_not_in_ulp =
+      ULPMetricsLogger::RemoveULPLanguages(page_languages, ulp_languages);
+  logger.RecordInitiationPageLanguagesMissingFromULP(page_languages_not_in_ulp);
+  logger.RecordInitiationPageLanguagesMissingFromULPCount(
+      page_languages_not_in_ulp.size());
 }
 
 void CreateAndAddULPLanguageModel(Profile* profile,
                                   std::vector<std::string> languages) {
-  RecordULPInitMetrics(profile, languages);
+  PrefService* pref_service = profile->GetPrefs();
+  language::UrlLanguageHistogram* page_languages =
+      UrlLanguageHistogramFactory::GetForBrowserContext(profile);
+  RecordULPInitMetrics(pref_service, *page_languages, languages);
+  language::LanguagePrefs(pref_service).SetULPLanguages(languages);
 
   std::unique_ptr<language::ULPLanguageModel> ulp_model =
       std::make_unique<language::ULPLanguageModel>();
@@ -126,7 +145,7 @@ void PrepareLanguageModels(Profile* const profile,
 #if BUILDFLAG(IS_ANDROID)
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock()},
-      base::BindOnce(&language::LanguageBridge::GetULPLanguages,
+      base::BindOnce(&language::LanguageBridge::GetULPLanguagesFromDevice,
                      profile->GetProfileUserName()),
       base::BindOnce(&CreateAndAddULPLanguageModel, profile));
 #endif

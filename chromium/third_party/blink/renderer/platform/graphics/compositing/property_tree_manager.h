@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,8 +112,6 @@ class PropertyTreeManager {
       const TransformPaintPropertyNode& scroll_offset_translation);
 
   int EnsureCompositorPageScaleTransformNode(const TransformPaintPropertyNode&);
-
-  void SetFixedElementsDontOverscroll(const bool value);
 
   // This function is expected to be invoked right before emitting each layer.
   // It keeps track of the nesting of clip and effects, output a composited
@@ -301,7 +299,8 @@ class PropertyTreeManager {
   // creating the associated scroll offset transform node.
   void CreateCompositorScrollNode(
       const ScrollPaintPropertyNode&,
-      const cc::TransformNode& scroll_offset_translation);
+      const cc::TransformNode& scroll_offset_translation,
+      bool is_composited);
 
   void UpdatePixelMovingFilterClipExpanders();
 

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -259,6 +259,10 @@ gfx::Rect ScrollbarLayerImplBase::ComputeThumbQuadRect() const {
       thumb_thickness_scale_factor_);
 }
 
+gfx::Rect ScrollbarLayerImplBase::ComputeHitTestableThumbQuadRect() const {
+  return ComputeThumbQuadRect();
+}
+
 void ScrollbarLayerImplBase::SetOverlayScrollbarLayerOpacityAnimated(
     float opacity) {
   DCHECK(is_overlay_scrollbar());
@@ -300,6 +304,10 @@ bool ScrollbarLayerImplBase::JumpOnTrackClick() const {
   return false;
 }
 
+bool ScrollbarLayerImplBase::IsFluentScrollbarEnabled() const {
+  return layer_tree_impl()->settings().enable_fluent_scrollbar;
+}
+
 gfx::Rect ScrollbarLayerImplBase::BackButtonRect() const {
   return gfx::Rect(0, 0);
 }
@@ -328,7 +336,7 @@ ScrollbarPart ScrollbarLayerImplBase::IdentifyScrollbarPart(
   if (ForwardButtonRect().Contains(pointer_location))
     return ScrollbarPart::FORWARD_BUTTON;
 
-  if (ComputeThumbQuadRect().Contains(pointer_location))
+  if (ComputeHitTestableThumbQuadRect().Contains(pointer_location))
     return ScrollbarPart::THUMB;
 
   if (BackTrackRect().Contains(pointer_location))

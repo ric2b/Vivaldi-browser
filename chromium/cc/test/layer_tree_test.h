@@ -1,4 +1,4 @@
-// Copyright 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -207,6 +207,8 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   base::SingleThreadTaskRunner* image_worker_task_runner() const {
     return image_worker_->task_runner().get();
   }
+
+  size_t NumCallsToWaitForProtectedSequenceCompletion() const;
 
   void UseBeginFrameSource(viz::BeginFrameSource* begin_frame_source) {
     begin_frame_source_ = begin_frame_source;

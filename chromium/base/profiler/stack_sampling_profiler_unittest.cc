@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -483,7 +483,7 @@ class TestAuxUnwinder : public Unwinder {
 
   UnwindResult TryUnwind(RegisterContext* thread_context,
                          uintptr_t stack_top,
-                         std::vector<Frame>* stack) const override {
+                         std::vector<Frame>* stack) override {
     stack->push_back(frame_to_report_);
     return UnwindResult::kAborted;
   }

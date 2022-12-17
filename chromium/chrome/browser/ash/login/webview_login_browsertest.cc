@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,6 @@
 #include <iterator>
 #include <string>
 
-#include "ash/components/login/auth/public/user_context.h"
-#include "ash/components/tpm/tpm_token_loader.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
@@ -75,6 +73,8 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
+#include "chromeos/ash/components/login/auth/public/user_context.h"
+#include "chromeos/ash/components/tpm/tpm_token_loader.h"
 #include "chromeos/dbus/tpm_manager/fake_tpm_manager_client.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "components/account_id/account_id.h"
@@ -353,14 +353,14 @@ class WebviewLoginTest : public OobeBaseTest {
 
     auto* login_main_frame =
         GetLoginUI()->GetWebContents()->GetPrimaryMainFrame();
-    login_main_frame->ForEachRenderFrameHost(
-        base::BindLambdaForTesting([&](content::RenderFrameHost* rfh) {
+    login_main_frame->ForEachRenderFrameHostWithAction(
+        [&](content::RenderFrameHost* rfh) {
           if (rfh->GetStoragePartition() == storage_partition) {
             web_view_found = true;
             return content::RenderFrameHost::FrameIterationAction::kStop;
           }
           return content::RenderFrameHost::FrameIterationAction::kContinue;
-        }));
+        });
 
     return web_view_found;
   }
@@ -818,9 +818,8 @@ class ReauthEndpointWebviewLoginTest : public WebviewLoginTest {
     // TODO(https://crbug.com/1153912) Makes tests work with
     // kParentAccessCodeForOnlineLogin enabled.
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitWithFeatures(
-        {features::kGaiaReauthEndpoint},
-        {::features::kParentAccessCodeForOnlineLogin});
+    scoped_feature_list_.InitAndDisableFeature(
+        ::features::kParentAccessCodeForOnlineLogin);
   }
   ~ReauthEndpointWebviewLoginTest() override = default;
 
@@ -1096,7 +1095,7 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
       base::ScopedAllowBlockingForTesting allow_io;
       ASSERT_TRUE(base::ReadFileToString(authority_file_path, &x509_contents));
     }
-    base::DictionaryValue onc_dict =
+    base::Value::Dict onc_dict =
         BuildDeviceOncDictForUntrustedAuthority(x509_contents);
 
     em::ChromeDeviceSettingsProto& proto(device_policy_builder_.payload());
@@ -1214,24 +1213,23 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
  private:
   // Builds a device ONC dictionary defining a single untrusted authority
   // certificate.
-  static base::DictionaryValue BuildDeviceOncDictForUntrustedAuthority(
+  static base::Value::Dict BuildDeviceOncDictForUntrustedAuthority(
       const std::string& x509_authority_cert) {
-    base::DictionaryValue onc_certificate;
-    onc_certificate.SetKey(onc::certificate::kGUID, base::Value(kTestGuid));
-    onc_certificate.SetKey(onc::certificate::kType,
-                           base::Value(onc::certificate::kAuthority));
-    onc_certificate.SetKey(onc::certificate::kX509,
-                           base::Value(x509_authority_cert));
+    base::Value::Dict onc_certificate;
+    onc_certificate.Set(onc::certificate::kGUID, base::Value(kTestGuid));
+    onc_certificate.Set(onc::certificate::kType,
+                        base::Value(onc::certificate::kAuthority));
+    onc_certificate.Set(onc::certificate::kX509,
+                        base::Value(x509_authority_cert));
 
-    base::ListValue onc_certificates;
+    base::Value::List onc_certificates;
     onc_certificates.Append(std::move(onc_certificate));
 
-    base::DictionaryValue onc_dict;
-    onc_dict.SetKey(onc::toplevel_config::kCertificates,
-                    std::move(onc_certificates));
-    onc_dict.SetKey(
-        onc::toplevel_config::kType,
-        base::Value(onc::toplevel_config::kUnencryptedConfiguration));
+    base::Value::Dict onc_dict;
+    onc_dict.Set(onc::toplevel_config::kCertificates,
+                 std::move(onc_certificates));
+    onc_dict.Set(onc::toplevel_config::kType,
+                 base::Value(onc::toplevel_config::kUnencryptedConfiguration));
     return onc_dict;
   }
 
@@ -1684,8 +1682,8 @@ class WebviewClientCertsTokenLoadingLoginTest
     // At very early stage, the system slot is being initialized becuase fake
     // tpm manager tells the TPM is owned by default. So, it has to be overriden
     // here instead of in the test body or `SetUpOnMainThread()`.
-    TpmManagerClient::InitializeFake();
-    TpmManagerClient::Get()
+    chromeos::TpmManagerClient::InitializeFake();
+    chromeos::TpmManagerClient::Get()
         ->GetTestInterface()
         ->mutable_nonsensitive_status_reply()
         ->set_is_owned(false);
@@ -1841,11 +1839,13 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsTokenLoadingLoginTest,
 
   // Report the TPM as ready, triggering the system token initialization by
   // SystemTokenCertDBInitializer.
-  TpmManagerClient::Get()
+  chromeos::TpmManagerClient::Get()
       ->GetTestInterface()
       ->mutable_nonsensitive_status_reply()
       ->set_is_owned(true);
-  TpmManagerClient::Get()->GetTestInterface()->EmitOwnershipTakenSignal();
+  chromeos::TpmManagerClient::Get()
+      ->GetTestInterface()
+      ->EmitOwnershipTakenSignal();
 
   absl::optional<net::SSLInfo> ssl_info =
       RequestClientCertTestPageInFrame(test::OobeJS(), kSigninWebview);
@@ -1863,11 +1863,13 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsTokenLoadingLoginTest,
 
   // Report the TPM as ready, triggering the system token initialization by
   // SystemTokenCertDBInitializer.
-  TpmManagerClient::Get()
+  chromeos::TpmManagerClient::Get()
       ->GetTestInterface()
       ->mutable_nonsensitive_status_reply()
       ->set_is_owned(false);
-  TpmManagerClient::Get()->GetTestInterface()->EmitOwnershipTakenSignal();
+  chromeos::TpmManagerClient::Get()
+      ->GetTestInterface()
+      ->EmitOwnershipTakenSignal();
 
   EXPECT_FALSE(IsTpmTokenEnabled());
   EXPECT_FALSE(IsSystemSlotAvailable());
@@ -1948,11 +1950,12 @@ class WebviewProxyAuthLoginTest : public WebviewLoginTest {
     // Only care for notifications originating from the frame which is
     // displaying gaia.
     content::WebContents* main_web_contents = GetLoginUI()->GetWebContents();
-    content::WebContents* gaia_frame_web_contents =
-        signin::GetAuthFrameWebContents(main_web_contents, gaia_frame_parent_);
+    content::RenderFrameHost* gaia_rfh =
+        signin::GetAuthFrame(main_web_contents, gaia_frame_parent_);
     LoginHandler* login_handler =
         content::Details<LoginNotificationDetails>(details)->handler();
-    if (login_handler->web_contents() != gaia_frame_web_contents)
+    if (login_handler->web_contents() !=
+        content::WebContents::FromRenderFrameHost(gaia_rfh))
       return false;
 
     gaia_frame_login_handler_ = login_handler;

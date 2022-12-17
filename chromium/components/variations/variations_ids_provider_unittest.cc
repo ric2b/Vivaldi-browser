@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -212,12 +212,7 @@ TEST_P(VariationsIdsProviderTestWithRestrictedVisibility,
 
   // 3320983 is the offset value of kLowEntropySourceVariationIdRangeMin + 5.
   EXPECT_TRUE(base::Contains(variation_ids_first_party, 3320983));
-
-  // The value will be omitted from third-party contexts under
-  // kRestrictGoogleWebVisibility.
-  bool value_omitted =
-      base::FeatureList::IsEnabled(internal::kRestrictGoogleWebVisibility);
-  EXPECT_EQ(value_omitted, !base::Contains(variation_ids_any_context, 3320983));
+  EXPECT_TRUE(base::Contains(variation_ids_any_context, 3320983));
 }
 
 TEST_P(VariationsIdsProviderTestWithRestrictedVisibility,

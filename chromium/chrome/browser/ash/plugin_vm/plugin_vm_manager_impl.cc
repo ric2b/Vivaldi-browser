@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,7 @@
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/dbus/debug_daemon/debug_daemon_client.h"
-#include "chromeos/dbus/dlcservice/dlcservice.pb.h"
+#include "chromeos/ash/components/dbus/dlcservice/dlcservice.pb.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_service.h"
@@ -357,7 +357,6 @@ void PluginVmManagerImpl::OnVmStateChanged(
   // When the VM_STATE_RUNNING signal is received:
   // 1) Call Concierge::GetVmInfo to get seneschal server handle.
   // 2) Ensure default shared path exists.
-  // 3) Share paths with PluginVm
   if (vm_state_ == vm_tools::plugin_dispatcher::VmState::VM_STATE_RUNNING) {
     // If the VM was just created via VMC (instead of the installer), this flag
     // will not yet be set. Setting it here allows us to avoid showing the
@@ -411,7 +410,7 @@ void PluginVmManagerImpl::InstallDlcAndUpdateVmState(
   LOG_FUNCTION_CALL();
   dlcservice::InstallRequest install_request;
   install_request.set_id(kPitaDlc);
-  chromeos::DlcserviceClient::Get()->Install(
+  ash::DlcserviceClient::Get()->Install(
       install_request,
       base::BindOnce(&PluginVmManagerImpl::OnInstallPluginVmDlc,
                      weak_ptr_factory_.GetWeakPtr(),
@@ -422,7 +421,7 @@ void PluginVmManagerImpl::InstallDlcAndUpdateVmState(
 void PluginVmManagerImpl::OnInstallPluginVmDlc(
     base::OnceCallback<void(bool default_vm_exists)> success_callback,
     base::OnceClosure error_callback,
-    const chromeos::DlcserviceClient::InstallResult& install_result) {
+    const ash::DlcserviceClient::InstallResult& install_result) {
   LOG_FUNCTION_CALL();
   if (install_result.error == dlcservice::kErrorNone) {
     StartDispatcher(base::BindOnce(
@@ -611,12 +610,10 @@ void PluginVmManagerImpl::OnGetVmInfoForSharing(
   }
   seneschal_server_handle_ = reply->vm_info().seneschal_server_handle();
 
-  // Create and share default folder, and other persisted shares.
+  // Create and share default folder.
   EnsureDefaultSharedDirExists(
       profile_, base::BindOnce(&PluginVmManagerImpl::OnDefaultSharedDirExists,
                                weak_ptr_factory_.GetWeakPtr()));
-  guest_os::GuestOsSharePath::GetForProfile(profile_)->SharePersistedPaths(
-      kPluginVmName, base::DoNothing());
 }
 
 void PluginVmManagerImpl::OnDefaultSharedDirExists(const base::FilePath& dir,

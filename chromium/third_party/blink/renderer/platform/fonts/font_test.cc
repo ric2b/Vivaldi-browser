@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,6 +56,31 @@ class FontTest : public FontTestBase {
     return Font(font_description);
   }
 };
+
+TEST_F(FontTest, FonteMetricsCapHeight) {
+  const auto cap_height_of = [](const char* font_path, float size) {
+    Font font =
+        CreateTestFont("test", test::PlatformTestDataPath(font_path), size);
+    const SimpleFontData* const font_data = font.PrimaryFont();
+    return font_data->GetFontMetrics().CapHeight();
+  };
+
+  EXPECT_FLOAT_EQ(80.0f, cap_height_of("Ahem.woff", 100));
+  EXPECT_FLOAT_EQ(160.0f, cap_height_of("Ahem.woff", 200));
+
+#if BUILDFLAG(IS_WIN)
+  EXPECT_FLOAT_EQ(
+      70.9961f, cap_height_of("third_party/Roboto/roboto-regular.woff2", 100));
+  EXPECT_FLOAT_EQ(
+      141.99219f,
+      cap_height_of("third_party/Roboto/roboto-regular.woff2", 200));
+#else
+  EXPECT_FLOAT_EQ(
+      71.09375f, cap_height_of("third_party/Roboto/roboto-regular.woff2", 100));
+  EXPECT_FLOAT_EQ(
+      142.1875f, cap_height_of("third_party/Roboto/roboto-regular.woff2", 200));
+#endif
+}
 
 TEST_F(FontTest, IdeographicFullWidthAhem) {
   Font font =

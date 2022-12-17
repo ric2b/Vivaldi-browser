@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -35,6 +34,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/crx_file/crx_verifier.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/test/browser_test.h"
@@ -321,9 +321,9 @@ class KioskAppManagerTest : public InProcessBrowserTest {
                             required_platform_version);
 
     PrefService* local_state = g_browser_process->local_state();
-    DictionaryPrefUpdate dict_update(local_state,
+    ScopedDictPrefUpdate dict_update(local_state,
                                      KioskAppManager::kKioskDictionaryName);
-    dict_update->SetKey(KioskAppDataBase::kKeyApps, std::move(apps_dict));
+    dict_update->Set(KioskAppDataBase::kKeyApps, std::move(apps_dict));
 
     // Make the app appear in device settings.
     base::Value::List device_local_accounts;
@@ -371,7 +371,7 @@ class KioskAppManagerTest : public InProcessBrowserTest {
     // Check data is cached in local state correctly.
     PrefService* local_state = g_browser_process->local_state();
     const base::Value::Dict& dict =
-        local_state->GetValueDict(KioskAppManager::kKioskDictionaryName);
+        local_state->GetDict(KioskAppManager::kKioskDictionaryName);
 
     const std::string name_key = "apps." + app_id + ".name";
     const std::string* name = dict.FindStringByDottedPath(name_key);
@@ -545,7 +545,7 @@ IN_PROC_BROWSER_TEST_F(KioskAppManagerTest, ClearAppData) {
 
   PrefService* local_state = g_browser_process->local_state();
   const base::Value::Dict& dict =
-      local_state->GetValueDict(KioskAppManager::kKioskDictionaryName);
+      local_state->GetDict(KioskAppManager::kKioskDictionaryName);
   const base::Value::Dict* apps_dict =
       dict.FindDict(KioskAppDataBase::kKeyApps);
   EXPECT_TRUE(apps_dict);

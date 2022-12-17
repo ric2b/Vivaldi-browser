@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -22,66 +23,74 @@ namespace password_manager::features {
 // alongside the definition of their values in the .cc file.
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-extern const base::Feature kBiometricAuthenticationForFilling;
+BASE_DECLARE_FEATURE(kBiometricAuthenticationForFilling);
 #endif
 #if BUILDFLAG(IS_MAC)
-extern const base::Feature kBiometricAuthenticationInSettings;
+BASE_DECLARE_FEATURE(kBiometricAuthenticationInSettings);
 #endif
-extern const base::Feature kBiometricTouchToFill;
-extern const base::Feature kDetectFormSubmissionOnFormClear;
-extern const base::Feature kForceEnablePasswordDomainCapabilities;
-extern const base::Feature kEnableFaviconForPasswords;
-extern const base::Feature kEnableOverwritingPlaceholderUsernames;
-extern const base::Feature kEnablePasswordsAccountStorage;
-extern const base::Feature KEnablePasswordGenerationForClearTextFields;
-extern const base::Feature kEnablePasswordManagerWithinFencedFrame;
-extern const base::Feature kFillingAcrossAffiliatedWebsites;
-extern const base::Feature kFillOnAccountSelect;
+BASE_DECLARE_FEATURE(kBiometricTouchToFill);
+BASE_DECLARE_FEATURE(kDetectFormSubmissionOnFormClear);
+BASE_DECLARE_FEATURE(kForceEnablePasswordDomainCapabilities);
+BASE_DECLARE_FEATURE(kEnableFaviconForPasswords);
+BASE_DECLARE_FEATURE(kEnableOverwritingPlaceholderUsernames);
+BASE_DECLARE_FEATURE(kEnablePasswordsAccountStorage);
+BASE_DECLARE_FEATURE(kEnablePasswordGenerationForClearTextFields);
+BASE_DECLARE_FEATURE(kEnablePasswordManagerWithinFencedFrame);
+BASE_DECLARE_FEATURE(kFillingAcrossAffiliatedWebsites);
+BASE_DECLARE_FEATURE(kFillOnAccountSelect);
 #if BUILDFLAG(IS_LINUX)
-extern const base::Feature kForceInitialSyncWhenDecryptionFails;
+BASE_DECLARE_FEATURE(kForceInitialSyncWhenDecryptionFails);
 #endif
-extern const base::Feature kInferConfirmationPasswordField;
-extern const base::Feature kIOSEnablePasswordManagerBrandingUpdate;
+BASE_DECLARE_FEATURE(kInferConfirmationPasswordField);
+BASE_DECLARE_FEATURE(kIOSEnablePasswordManagerBrandingUpdate);
 #if BUILDFLAG(IS_IOS)
-extern const base::Feature kIOSPasswordUISplit;
-extern const base::Feature kIOSPasswordManagerCrossOriginIframeSupport;
+BASE_DECLARE_FEATURE(kIOSPasswordUISplit);
+BASE_DECLARE_FEATURE(kIOSPasswordManagerCrossOriginIframeSupport);
 #endif  // IS_IOS
-extern const base::Feature kMuteCompromisedPasswords;
-extern const base::Feature kPasswordNotes;
-extern const base::Feature kPasswordViewPageInSettings;
-extern const base::Feature kSendPasswords;
-extern const base::Feature kLeakDetectionUnauthenticated;
-extern const base::Feature kPasswordChange;
-extern const base::Feature kPasswordChangeInSettings;
-extern const base::Feature kPasswordChangeWellKnown;
-extern const base::Feature kPasswordDomainCapabilitiesFetching;
-extern const base::Feature kPasswordImport;
+BASE_DECLARE_FEATURE(kMuteCompromisedPasswords);
+
+BASE_DECLARE_FEATURE(kPasswordViewPageInSettings);
+BASE_DECLARE_FEATURE(kSendPasswords);
+BASE_DECLARE_FEATURE(kLeakDetectionUnauthenticated);
+BASE_DECLARE_FEATURE(kPasswordChange);
+BASE_DECLARE_FEATURE(kPasswordChangeInSettings);
+BASE_DECLARE_FEATURE(kPasswordChangeWellKnown);
+BASE_DECLARE_FEATURE(kPasswordDomainCapabilitiesFetching);
+BASE_DECLARE_FEATURE(kPasswordImport);
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)  // Desktop
-extern const base::Feature kPasswordManagerRedesign;
+BASE_DECLARE_FEATURE(kPasswordManagerRedesign);
 #endif
-extern const base::Feature kPasswordReuseDetectionEnabled;
-extern const base::Feature kPasswordScriptsFetching;
-extern const base::Feature kPasswordStrengthIndicator;
-extern const base::Feature kRecoverFromNeverSaveAndroid;
+BASE_DECLARE_FEATURE(kPasswordReuseDetectionEnabled);
+BASE_DECLARE_FEATURE(kPasswordScriptsFetching);
+BASE_DECLARE_FEATURE(kPasswordsGrouping);
+BASE_DECLARE_FEATURE(kPasswordStrengthIndicator);
+BASE_DECLARE_FEATURE(kRecoverFromNeverSaveAndroid);
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-extern const base::Feature kSkipUndecryptablePasswords;
+BASE_DECLARE_FEATURE(kSkipUndecryptablePasswords);
 #endif
 #if BUILDFLAG(IS_LINUX)
-extern const base::Feature kSyncUndecryptablePasswordsLinux;
+BASE_DECLARE_FEATURE(kSyncUndecryptablePasswordsLinux);
 #endif
 #if BUILDFLAG(IS_ANDROID)
-extern const base::Feature kPasswordEditDialogWithDetails;
-extern const base::Feature kShowUPMErrorNotification;
-extern const base::Feature kTouchToFillPasswordSubmission;
-extern const base::Feature kUnifiedCredentialManagerDryRun;
-extern const base::Feature kUnifiedPasswordManagerAndroid;
-extern const base::Feature kUnifiedPasswordManagerErrorMessages;
-extern const base::Feature kUnifiedPasswordManagerSyncUsingAndroidBackendOnly;
+BASE_DECLARE_FEATURE(kPasswordEditDialogWithDetails);
+BASE_DECLARE_FEATURE(kShowUPMErrorNotification);
+BASE_DECLARE_FEATURE(kTouchToFillPasswordSubmission);
+BASE_DECLARE_FEATURE(kUnifiedCredentialManagerDryRun);
+BASE_DECLARE_FEATURE(kUnifiedPasswordManagerAndroid);
+BASE_DECLARE_FEATURE(kUnifiedPasswordManagerErrorMessages);
+BASE_DECLARE_FEATURE(kUnifiedPasswordManagerSyncUsingAndroidBackendOnly);
+BASE_DECLARE_FEATURE(kUnifiedPasswordManagerReenrollment);
+BASE_DECLARE_FEATURE(kUnifiedPasswordManagerAndroidBranding);
 #endif
-extern const base::Feature kUnifiedPasswordManagerDesktop;
-extern const base::Feature kUsernameFirstFlowFallbackCrowdsourcing;
+BASE_DECLARE_FEATURE(kUsernameFirstFlowFallbackCrowdsourcing);
 
 // All features parameters are in alphabetical order.
+
+// If `true`, then password change in settings will also be offered for
+// insecure credentials that are weak (and not phished or leaked).
+constexpr base::FeatureParam<bool>
+    kPasswordChangeInSettingsWeakCredentialsParam = {&kPasswordChangeInSettings,
+                                                     "weak_credentials", false};
 
 // True if the client is part of the live_experiment group for
 // |kPasswordDomainCapabilitiesFetching|, otherwise, the client is assumed to be
@@ -91,6 +100,52 @@ constexpr base::FeatureParam<bool> kPasswordChangeLiveExperimentParam = {
 
 #if BUILDFLAG(IS_ANDROID)
 extern const base::FeatureParam<int> kMigrationVersion;
+
+// Current version of the GMS Core API errors lists. Users save this value on
+// eviction due to error and will only be re-enrolled to the experiment if the
+// configured version is greater than the saved one.
+constexpr base::FeatureParam<int> kGmsApiErrorListVersion = {
+    &kUnifiedPasswordManagerAndroid, "api_error_list_version", 0};
+
+// Current list of the GMS Core API error codes that should be ignored and not
+// result in user eviction.
+// Codes DEVELOPER_ERROR=10, BAD_REQUEST=11008 are ignored to keep the default
+// pre-M107 behaviour.
+constexpr base::FeatureParam<std::string> kIgnoredGmsApiErrors = {
+    &kUnifiedPasswordManagerAndroid, "ignored_api_errors", "10,11008"};
+
+// Current list of the GMS Core API error codes considered retriable.
+// User could still be evicted if retries do not resolve the error.
+constexpr base::FeatureParam<std::string> kRetriableGmsApiErrors = {
+    &kUnifiedPasswordManagerAndroid, "retriable_api_errors", ""};
+
+// Enables fallback to the Chrome built-in backend if the operation executed on
+// the GMS Core backend returns with error. Errors listed in the
+// |kIgnoredGmsApiErrors| will not fallback and will be directly returned to the
+// caller to be addressed in a specific way.
+
+// Fallback on AddLogin and UpdateLogin operations. This is default behaviour
+// since M103.
+constexpr base::FeatureParam<bool> kFallbackOnModifyingOperations = {
+    &kUnifiedPasswordManagerAndroid, "fallback_on_modifying_operations", true};
+
+// Fallback on RemoveLogin* operations.
+constexpr base::FeatureParam<bool> kFallbackOnRemoveOperations = {
+    &kUnifiedPasswordManagerAndroid, "fallback_on_remove_operations", false};
+
+// Fallback on FillMatchingLogins which is needed to perform autofill and could
+// affect user experience.
+constexpr base::FeatureParam<bool> kFallbackOnUserAffectingReadOperations = {
+    &kUnifiedPasswordManagerAndroid,
+    "fallback_on_user_affecting_read_operations", false};
+
+// Fallback on GetAllLogins* and GetAutofillableLogins operations which are
+// needed for certain features (e.g. PhishGuard) but do not affect the core
+// experience.
+constexpr base::FeatureParam<bool> kFallbackOnNonUserAffectingReadOperations = {
+    &kUnifiedPasswordManagerAndroid,
+    "fallback_on_non_user_affecting_read_operations", false};
+
 constexpr base::FeatureParam<UpmExperimentVariation>::Option
     kUpmExperimentVariationOption[] = {
         {UpmExperimentVariation::kEnableForSyncingUsers, "0"},
@@ -104,6 +159,11 @@ constexpr base::FeatureParam<UpmExperimentVariation>
                                  UpmExperimentVariation::kEnableForSyncingUsers,
                                  &kUpmExperimentVariationOption};
 
+extern const base::FeatureParam<int> kMaxUPMReenrollments;
+extern const base::FeatureParam<int> kMaxUPMReenrollmentAttempts;
+
+extern const base::FeatureParam<bool> kIgnoreAuthErrorMessageTimeouts;
+extern const base::FeatureParam<int> kMaxShownUPMErrorsBeforeEviction;
 #endif
 
 // Field trial and corresponding parameters.
@@ -138,18 +198,19 @@ bool IsAutomatedPasswordChangeEnabled();
 
 #if BUILDFLAG(IS_ANDROID)
 // Returns true if the unified password manager feature is active and in a stage
-// that allows to use the new UI.
+// that allows to use the new feature end-to-end.
 bool UsesUnifiedPasswordManagerUi();
-#endif  // IS_ANDROID
 
-#if BUILDFLAG(IS_ANDROID)
+// Returns true when unified password manager strings & icons should be
+// displayed. It provides the option to enable the UPM branding UI earlier then
+// the UPM feature itself.
+bool UsesUnifiedPasswordManagerBranding();
+
 // Returns true if the unified password manager feature is active and in a stage
 // that requires migrating existing credentials. Independent of
 // whether only non-syncable data needs to be migrated or full credentials.
 bool RequiresMigrationForUnifiedPasswordManager();
-#endif  // IS_ANDROID
 
-#if BUILDFLAG(IS_ANDROID)
 // Returns true if the unified password manager feature is active and in a stage
 // that uses the unified storage for passwords that remain local on the device.
 bool ManagesLocalPasswordsInUnifiedPasswordManager();

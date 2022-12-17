@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,8 +33,7 @@ void IncrementAssistantButtonClickCount(AssistantButtonId button_id);
 
 // Record the input source of each query (e.g. voice, typing).
 COMPONENT_EXPORT(ASSISTANT_UTIL)
-void RecordAssistantQuerySource(
-    chromeos::assistant::AssistantQuerySource source);
+void RecordAssistantQuerySource(AssistantQuerySource source);
 
 }  // namespace util
 }  // namespace assistant

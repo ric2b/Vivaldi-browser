@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -291,7 +291,7 @@ void SurfacelessGlRenderer::RenderFrame() {
   gl_surface_->SwapBuffersAsync(
       base::BindOnce(&SurfacelessGlRenderer::PostRenderFrameTask,
                      weak_ptr_factory_.GetWeakPtr()),
-      base::DoNothing());
+      base::DoNothing(), gl::FrameData());
 }
 
 void SurfacelessGlRenderer::PostRenderFrameTask(

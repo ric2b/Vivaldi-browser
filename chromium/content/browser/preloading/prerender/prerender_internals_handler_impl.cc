@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,8 +72,6 @@ const char* FinalStatusToString(PrerenderHost::FinalStatus final_status) {
       return "MixedContent";
     case PrerenderHost::FinalStatus::kTriggerBackgrounded:
       return "TriggerBackgrounded";
-    case PrerenderHost::FinalStatus::kEmbedderTriggeredAndSameOriginRedirected:
-      return "EmbedderTriggeredAndSameOriginRedirected";
     case PrerenderHost::FinalStatus::kEmbedderTriggeredAndCrossOriginRedirected:
       return "EmbedderTriggeredAndCrossOriginRedirected";
     case PrerenderHost::FinalStatus::kMemoryLimitExceeded:
@@ -82,6 +80,16 @@ const char* FinalStatusToString(PrerenderHost::FinalStatus final_status) {
       return "FailToGetMemoryUsage";
     case PrerenderHost::FinalStatus::kDataSaverEnabled:
       return "DataSaverEnabled";
+    case PrerenderHost::FinalStatus::kHasEffectiveUrl:
+      return "HasEffectiveUrl";
+    case PrerenderHost::FinalStatus::kActivatedBeforeStarted:
+      return "ActivatedBeforeStarted";
+    case PrerenderHost::FinalStatus::kInactivePageRestriction:
+      return "InactivePageRestriction";
+    case PrerenderHost::FinalStatus::kStartFailed:
+      return "StartFailed";
+    case PrerenderHost::FinalStatus::kTimeoutBackgrounded:
+      return "TimeoutBackgrounded";
   }
   NOTREACHED();
   return "";

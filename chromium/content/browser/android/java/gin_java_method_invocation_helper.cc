@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,7 +32,7 @@ const int kObjectGetClassInvocationAttemptLogTag = 70151;
 GinJavaMethodInvocationHelper::GinJavaMethodInvocationHelper(
     std::unique_ptr<ObjectDelegate> object,
     const std::string& method_name,
-    const base::ListValue& arguments)
+    const base::Value::List& arguments)
     : object_(std::move(object)),
       method_name_(method_name),
       arguments_(arguments.Clone()),
@@ -51,34 +51,28 @@ void GinJavaMethodInvocationHelper::Init(DispatcherDelegate* dispatcher) {
 // JavaScript values, we don't bother about having a recursion threshold here.
 void GinJavaMethodInvocationHelper::BuildObjectRefsFromListValue(
     DispatcherDelegate* dispatcher,
-    const base::Value& list_value) {
-  DCHECK(list_value.is_list());
-  for (const auto& entry : list_value.GetListDeprecated()) {
+    const base::Value::List& list_value) {
+  for (const auto& entry : list_value) {
     if (AppendObjectRef(dispatcher, entry))
       continue;
     if (entry.is_list()) {
-      BuildObjectRefsFromListValue(dispatcher, entry);
+      BuildObjectRefsFromListValue(dispatcher, entry.GetList());
     } else if (entry.is_dict()) {
-      BuildObjectRefsFromDictionaryValue(dispatcher, entry);
+      BuildObjectRefsFromDictionaryValue(dispatcher, entry.GetDict());
     }
   }
 }
 
 void GinJavaMethodInvocationHelper::BuildObjectRefsFromDictionaryValue(
     DispatcherDelegate* dispatcher,
-    const base::Value& dict_value) {
-  DCHECK(dict_value.is_dict());
-  const base::DictionaryValue* dict;
-  dict_value.GetAsDictionary(&dict);
-  for (base::DictionaryValue::Iterator iter(*dict);
-       !iter.IsAtEnd();
-       iter.Advance()) {
-    if (AppendObjectRef(dispatcher, iter.value()))
+    const base::Value::Dict& dict_value) {
+  for (const auto item : dict_value) {
+    if (AppendObjectRef(dispatcher, item.second))
       continue;
-    if (iter.value().is_list()) {
-      BuildObjectRefsFromListValue(dispatcher, iter.value());
-    } else if (iter.value().is_dict()) {
-      BuildObjectRefsFromDictionaryValue(dispatcher, iter.value());
+    if (item.second.is_list()) {
+      BuildObjectRefsFromListValue(dispatcher, item.second.GetList());
+    } else if (item.second.is_dict()) {
+      BuildObjectRefsFromDictionaryValue(dispatcher, item.second.GetDict());
     }
   }
 }
@@ -109,7 +103,7 @@ bool GinJavaMethodInvocationHelper::AppendObjectRef(
 void GinJavaMethodInvocationHelper::Invoke() {
   JNIEnv* env = AttachCurrentThread();
   const JavaMethod* method =
-      object_->FindMethod(method_name_, arguments_.GetListDeprecated().size());
+      object_->FindMethod(method_name_, arguments_.size());
   if (!method) {
     SetInvocationError(kGinJavaBridgeMethodNotFound);
     return;
@@ -137,9 +131,9 @@ void GinJavaMethodInvocationHelper::Invoke() {
   GinJavaBridgeError coercion_error = kGinJavaBridgeNoError;
   std::vector<jvalue> parameters(method->num_parameters());
   for (size_t i = 0; i < method->num_parameters(); ++i) {
-    const base::Value& argument = arguments_.GetListDeprecated()[i];
+    const base::Value& argument = arguments_[i];
     parameters[i] = CoerceJavaScriptValueToJavaValue(
-        env, &argument, method->parameter_type(i), true, object_refs_,
+        env, argument, method->parameter_type(i), true, object_refs_,
         &coercion_error);
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,10 +59,10 @@ DEFINE_VARIATION_PARAM(kIPHAutoDarkUserEducationMessageFeature,
                        "IPH_AutoDarkUserEducationMessage");
 DEFINE_VARIATION_PARAM(kIPHAutoDarkUserEducationMessageOptInFeature,
                        "IPH_AutoDarkUserEducationMessageOptIn");
-DEFINE_VARIATION_PARAM(kIPHContextualPageActionsPriceTrackingFeature,
-                       "IPH_ContextualPageActions_PriceTracking");
-DEFINE_VARIATION_PARAM(kIPHContextualPageActionsPriceTrackingActionChipFeature,
-                       "IPH_ContextualPageActions_PriceTrackingActionChip");
+DEFINE_VARIATION_PARAM(kIPHContextualPageActionsQuietVariantFeature,
+                       "IPH_ContextualPageActions_QuietVariant");
+DEFINE_VARIATION_PARAM(kIPHContextualPageActionsActionChipFeature,
+                       "IPH_ContextualPageActions_ActionChip");
 DEFINE_VARIATION_PARAM(kIPHCrowFeature, "IPH_Crow");
 DEFINE_VARIATION_PARAM(kIPHDataSaverDetailFeature, "IPH_DataSaverDetail");
 DEFINE_VARIATION_PARAM(kIPHDataSaverMilestonePromoFeature,
@@ -201,6 +201,8 @@ DEFINE_VARIATION_PARAM(kIPHLongPressToolbarTipFeature,
 DEFINE_VARIATION_PARAM(kIPHNewTabTipFeature, "IPH_NewTabTip");
 DEFINE_VARIATION_PARAM(kIPHNewIncognitoTabTipFeature, "IPH_NewIncognitoTabTip");
 DEFINE_VARIATION_PARAM(kIPHBadgedReadingListFeature, "IPH_BadgedReadingList");
+DEFINE_VARIATION_PARAM(kIPHBadgedWhatsNewFeature, "IPH_BadgedWhatsNew");
+DEFINE_VARIATION_PARAM(kIPHWhatsNewFeature, "IPH_WhatsNew");
 DEFINE_VARIATION_PARAM(kIPHReadingListMessagesFeature,
                        "IPH_ReadingListMessages");
 DEFINE_VARIATION_PARAM(kIPHBadgedTranslateManualTriggerFeature,
@@ -217,14 +219,23 @@ DEFINE_VARIATION_PARAM(kIPHOverflowMenuTipFeature, "IPH_OverflowMenuTip");
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
+DEFINE_VARIATION_PARAM(kIPHBatterySaverModeFeature, "IPH_BatterySaverMode");
 DEFINE_VARIATION_PARAM(kIPHDesktopTabGroupsNewGroupFeature,
                        "IPH_DesktopTabGroupsNewGroup");
+DEFINE_VARIATION_PARAM(kIPHExtensionsMenuFeature, "IPH_ExtensionsMenu");
 DEFINE_VARIATION_PARAM(kIPHFocusModeFeature, "IPH_FocusMode");
 DEFINE_VARIATION_PARAM(kIPHGlobalMediaControls, "IPH_GlobalMediaControls");
 DEFINE_VARIATION_PARAM(kIPHGMCCastStartStopFeature, "IPH_GMCCastStartStop");
+DEFINE_VARIATION_PARAM(kIPHHighEfficiencyInfoModeFeature,
+                       "IPH_HighEfficiencyInfoMode");
+DEFINE_VARIATION_PARAM(kIPHHighEfficiencyModeFeature, "IPH_HighEfficiencyMode");
 DEFINE_VARIATION_PARAM(kIPHLiveCaption, "IPH_LiveCaption");
 DEFINE_VARIATION_PARAM(kIPHPasswordsAccountStorageFeature,
                        "IPH_PasswordsAccountStorage");
+DEFINE_VARIATION_PARAM(kIPHPerformanceNewBadgeFeature,
+                       "IPH_PerformanceNewBadge");
+DEFINE_VARIATION_PARAM(kIPHPriceTrackingPageActionIconLabelFeature,
+                       "IPH_PriceTrackingPageActionIconLabelFeature");
 DEFINE_VARIATION_PARAM(kIPHReadingListDiscoveryFeature,
                        "IPH_ReadingListDiscovery");
 DEFINE_VARIATION_PARAM(kIPHReadingListEntryPointFeature,
@@ -235,6 +246,8 @@ DEFINE_VARIATION_PARAM(kIPHReopenTabFeature, "IPH_ReopenTab");
 DEFINE_VARIATION_PARAM(kIPHSideSearchAutoTriggeringFeature,
                        "IPH_SideSearchAutoTriggering");
 DEFINE_VARIATION_PARAM(kIPHSideSearchFeature, "IPH_SideSearch");
+DEFINE_VARIATION_PARAM(kIPHSideSearchPageActionLabelFeature,
+                       "IPH_SideSearchPageActionLabel");
 DEFINE_VARIATION_PARAM(kIPHTabAudioMutingFeature, "IPH_TabAudioMuting");
 DEFINE_VARIATION_PARAM(kIPHTabSearchFeature, "IPH_TabSearch");
 DEFINE_VARIATION_PARAM(kIPHWebUITabStripFeature, "IPH_WebUITabStrip");
@@ -245,6 +258,8 @@ DEFINE_VARIATION_PARAM(kIPHDesktopSharedHighlightingFeature,
 DEFINE_VARIATION_PARAM(kIPHIntentChipFeature, "IPH_IntentChip");
 DEFINE_VARIATION_PARAM(kIPHWebUiHelpBubbleTestFeature,
                        "IPH_WebUiHelpBubbleTest");
+DEFINE_VARIATION_PARAM(kIPHPriceTrackingInSidePanelFeature,
+                       "IPH_PriceTrackingInSidePanel");
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 
@@ -274,7 +289,8 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHAutoDarkOptOutFeature),
         VARIATION_ENTRY(kIPHAutoDarkUserEducationMessageFeature),
         VARIATION_ENTRY(kIPHAutoDarkUserEducationMessageOptInFeature),
-        VARIATION_ENTRY(kIPHContextualPageActionsPriceTrackingFeature),
+        VARIATION_ENTRY(kIPHContextualPageActionsQuietVariantFeature),
+        VARIATION_ENTRY(kIPHContextualPageActionsActionChipFeature),
         VARIATION_ENTRY(kIPHCrowFeature),
         VARIATION_ENTRY(kIPHDataSaverDetailFeature),
         VARIATION_ENTRY(kIPHDataSaverMilestonePromoFeature),
@@ -343,7 +359,9 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHNewTabTipFeature),
         VARIATION_ENTRY(kIPHNewIncognitoTabTipFeature),
         VARIATION_ENTRY(kIPHBadgedReadingListFeature),
+        VARIATION_ENTRY(kIPHBadgedWhatsNewFeature),
         VARIATION_ENTRY(kIPHReadingListMessagesFeature),
+        VARIATION_ENTRY(kIPHWhatsNewFeature),
         VARIATION_ENTRY(kIPHBadgedTranslateManualTriggerFeature),
         VARIATION_ENTRY(kIPHDiscoverFeedHeaderFeature),
         VARIATION_ENTRY(kIPHDefaultSiteViewFeature),
@@ -352,18 +370,25 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHOverflowMenuTipFeature),
 #elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
+        VARIATION_ENTRY(kIPHBatterySaverModeFeature),
         VARIATION_ENTRY(kIPHDesktopTabGroupsNewGroupFeature),
+        VARIATION_ENTRY(kIPHExtensionsMenuFeature),
         VARIATION_ENTRY(kIPHFocusModeFeature),
         VARIATION_ENTRY(kIPHGlobalMediaControls),
         VARIATION_ENTRY(kIPHGMCCastStartStopFeature),
+        VARIATION_ENTRY(kIPHHighEfficiencyInfoModeFeature),
+        VARIATION_ENTRY(kIPHHighEfficiencyModeFeature),
         VARIATION_ENTRY(kIPHLiveCaption),
         VARIATION_ENTRY(kIPHPasswordsAccountStorageFeature),
+        VARIATION_ENTRY(kIPHPerformanceNewBadgeFeature),
+        VARIATION_ENTRY(kIPHPriceTrackingPageActionIconLabelFeature),
         VARIATION_ENTRY(kIPHReadingListDiscoveryFeature),
         VARIATION_ENTRY(kIPHReadingListEntryPointFeature),
         VARIATION_ENTRY(kIPHReadingListInSidePanelFeature),
         VARIATION_ENTRY(kIPHReopenTabFeature),
         VARIATION_ENTRY(kIPHSideSearchAutoTriggeringFeature),
         VARIATION_ENTRY(kIPHSideSearchFeature),
+        VARIATION_ENTRY(kIPHSideSearchPageActionLabelFeature),
         VARIATION_ENTRY(kIPHTabAudioMutingFeature),
         VARIATION_ENTRY(kIPHTabSearchFeature),
         VARIATION_ENTRY(kIPHWebUITabStripFeature),
@@ -372,6 +397,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHDesktopSharedHighlightingFeature),
         VARIATION_ENTRY(kIPHIntentChipFeature),
         VARIATION_ENTRY(kIPHWebUiHelpBubbleTestFeature),
+        VARIATION_ENTRY(kIPHPriceTrackingInSidePanelFeature),
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 

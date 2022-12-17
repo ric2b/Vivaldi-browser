@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,8 +19,7 @@ class CallStackProfileMetricsProviderTest : public testing::Test {
  public:
   CallStackProfileMetricsProviderTest() {
     TestState::ResetStaticStateForTesting();
-    scoped_feature_list_.InitAndEnableFeature(
-        TestState::kSamplingProfilerReporting);
+    scoped_feature_list_.InitAndEnableFeature(kSamplingProfilerReporting);
   }
 
   CallStackProfileMetricsProviderTest(
@@ -32,7 +31,6 @@ class CallStackProfileMetricsProviderTest : public testing::Test {
   // Exposes the feature from the CallStackProfileMetricsProvider.
   class TestState : public CallStackProfileMetricsProvider {
    public:
-    using CallStackProfileMetricsProvider::kSamplingProfilerReporting;
     using CallStackProfileMetricsProvider::ResetStaticStateForTesting;
   };
 
@@ -260,8 +258,7 @@ TEST_F(CallStackProfileMetricsProviderTest, HeapProfileProvidedWhenEnabled) {
 // Finch is disabled.
 TEST_F(CallStackProfileMetricsProviderTest, CpuProfileNotProvidedWithoutFinch) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      TestState::kSamplingProfilerReporting);
+  scoped_feature_list.InitAndDisableFeature(kSamplingProfilerReporting);
   CallStackProfileMetricsProvider provider;
   base::TimeTicks profile_start_time = base::TimeTicks::Now();
 

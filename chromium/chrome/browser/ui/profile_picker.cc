@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -118,33 +118,6 @@ void ProfilePicker::Params::NotifyFirstRunExited(
       .Run(exit_status, std::move(maybe_callback));
 }
 #endif
-
-GURL ProfilePicker::Params::GetInitialURL() const {
-  GURL base_url = GURL(chrome::kChromeUIProfilePickerUrl);
-  switch (entry_point_) {
-    case ProfilePicker::EntryPoint::kOnStartup: {
-      GURL::Replacements replacements;
-      replacements.SetQueryStr(chrome::kChromeUIProfilePickerStartupQuery);
-      return base_url.ReplaceComponents(replacements);
-    }
-    case ProfilePicker::EntryPoint::kProfileMenuManageProfiles:
-    case ProfilePicker::EntryPoint::kOpenNewWindowAfterProfileDeletion:
-    case ProfilePicker::EntryPoint::kNewSessionOnExistingProcess:
-    case ProfilePicker::EntryPoint::kProfileLocked:
-    case ProfilePicker::EntryPoint::kUnableToCreateBrowser:
-    case ProfilePicker::EntryPoint::kBackgroundModeManager:
-    case ProfilePicker::EntryPoint::kProfileIdle:
-      return base_url;
-    case ProfilePicker::EntryPoint::kProfileMenuAddNewProfile:
-      return base_url.Resolve("new-profile");
-    case ProfilePicker::EntryPoint::kLacrosSelectAvailableAccount:
-      return base_url.Resolve("account-selection-lacros");
-    case ProfilePicker::EntryPoint::kLacrosPrimaryProfileFirstRun:
-      // No web UI should be displayed initially.
-      NOTREACHED();
-      return GURL();
-  }
-}
 
 bool ProfilePicker::Params::CanReusePickerWindow(const Params& other) const {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)

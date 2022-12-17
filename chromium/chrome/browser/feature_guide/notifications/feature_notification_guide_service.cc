@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,18 +9,21 @@
 namespace feature_guide {
 namespace features {
 
-const base::Feature kFeatureNotificationGuide{
-    "FeatureNotificationGuide", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kFeatureNotificationGuide,
+             "FeatureNotificationGuide",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kSegmentationModelLowEngagedUsers{
-    "SegmentationModelLowEngagedUsers", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kSegmentationModelLowEngagedUsers,
+             "SegmentationModelLowEngagedUsers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kSkipCheckForLowEngagedUsers{
-    "FeatureNotificationGuideSkipCheckForLowEngagedUsers",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kSkipCheckForLowEngagedUsers,
+             "FeatureNotificationGuideSkipCheckForLowEngagedUsers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kUseFeatureEngagementForUserTargeting{
-    "UseFeatureEngagementForUserTargeting", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kUseFeatureEngagementForUserTargeting,
+             "UseFeatureEngagementForUserTargeting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features
 

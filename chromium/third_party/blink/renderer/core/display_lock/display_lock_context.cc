@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,10 +12,11 @@
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
-#include "third_party/blink/renderer/core/display_lock/content_visibility_auto_state_changed_event.h"
+#include "third_party/blink/renderer/core/display_lock/content_visibility_auto_state_change_event.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
+#include "third_party/blink/renderer/core/dom/css_toggle.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -32,7 +33,7 @@
 #include "third_party/blink/renderer/core/page/page_animator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
-#include "third_party/blink/renderer/platform/bindings/microtask.h"
+#include "third_party/blink/renderer/core/style/toggle_trigger.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -71,28 +72,55 @@ DisplayLockContext::DisplayLockContext(Element* element)
   DetermineIfInSharedElementTransitionChain();
 }
 
-void DisplayLockContext::SetRequestedState(EContentVisibility state) {
-  if (state_ == state)
+void DisplayLockContext::SetRequestedState(EContentVisibility state,
+                                           const AtomicString& toggle_name) {
+  if (state_ == state && toggle_name_ == toggle_name)
     return;
   state_ = state;
+  toggle_name_ = toggle_name;
   base::AutoReset<bool> scope(&set_requested_state_scope_, true);
+  bool should_lock = false;
+  uint16_t lock_activation_mask = 0;
   switch (state_) {
     case EContentVisibility::kVisible:
-      RequestUnlock();
       break;
     case EContentVisibility::kAuto:
       UseCounter::Count(document_, WebFeature::kContentVisibilityAuto);
       had_any_viewport_intersection_notifications_ = false;
-      RequestLock(static_cast<uint16_t>(DisplayLockActivationReason::kAny));
+      should_lock = true;
+      lock_activation_mask =
+          static_cast<uint16_t>(DisplayLockActivationReason::kAuto);
       break;
     case EContentVisibility::kHidden:
       UseCounter::Count(document_, WebFeature::kContentVisibilityHidden);
-      RequestLock(
+      should_lock = true;
+      lock_activation_mask =
           is_hidden_until_found_ || is_details_slot_
               ? static_cast<uint16_t>(DisplayLockActivationReason::kFindInPage)
-              : 0u);
+              : 0u;
       break;
   }
+  if (!toggle_name.IsNull()) {
+    if (should_lock) {
+      // We have both 'content-visibility' and 'toggle-visibility'.  We want
+      // to combine their effects (i.e., content is hidden if *either* would
+      // hide it), which means we want to intersect the activation masks.
+      lock_activation_mask &=
+          static_cast<uint16_t>(DisplayLockActivationReason::kToggleVisibility);
+    } else {
+      // We have 'toggle-visibility', but no 'content-visibility'.
+      should_lock = true;
+      lock_activation_mask =
+          static_cast<uint16_t>(DisplayLockActivationReason::kToggleVisibility);
+    }
+  }
+
+  if (should_lock) {
+    RequestLock(lock_activation_mask);
+  } else {
+    RequestUnlock();
+  }
+
   // In a new state, we might need to either start or stop observing viewport
   // intersections.
   UpdateActivationObservationIfNeeded();
@@ -117,7 +145,7 @@ void DisplayLockContext::SetRequestedState(EContentVisibility state) {
 }
 
 void DisplayLockContext::AdjustElementStyle(ComputedStyle* style) const {
-  if (state_ == EContentVisibility::kVisible)
+  if (IsAlwaysVisible())
     return;
   if (IsLocked())
     style->SetSkipsContents();
@@ -182,8 +210,8 @@ void DisplayLockContext::UpdateActivationObservationIfNeeded() {
 
   // We require observation if we are in 'auto' mode and we're connected to a
   // view.
-  bool should_observe =
-      state_ == EContentVisibility::kAuto && ConnectedToView();
+  bool should_observe = state_ == EContentVisibility::kAuto &&
+                        toggle_name_.IsNull() && ConnectedToView();
   if (is_observed_ == should_observe)
     return;
   is_observed_ = should_observe;
@@ -287,7 +315,9 @@ void DisplayLockContext::Lock() {
   // layout objects, since otherwise they would be hoisted out of our subtree.
   DetachDescendantTopLayerElements();
 
-  // Schedule ContentVisibilityAutoStateChanged event if needed.
+  // Schedule ContentVisibilityAutoStateChange event if needed.
+  // TODO(https://crbug.com/1250716): We shouldn't fire this if it was the
+  // result of toggle state changing.
   ScheduleStateChangeEventIfNeeded();
 
   if (!element_->GetLayoutObject())
@@ -310,9 +340,7 @@ bool DisplayLockContext::ShouldStyleChildren() const {
          forced_info_.is_forced(ForcedPhase::kStyleAndLayoutTree) ||
          (document_->GetDisplayLockDocumentState()
               .ActivatableDisplayLocksForced() &&
-          IsActivatable(DisplayLockActivationReason::kAny)) ||
-         (element_->GetLayoutObject() &&
-          element_->GetLayoutObject()->IsShapingDeferred());
+          IsActivatable(DisplayLockActivationReason::kAny));
 }
 
 void DisplayLockContext::DidStyleSelf() {
@@ -320,7 +348,7 @@ void DisplayLockContext::DidStyleSelf() {
   // to the default state of being visible. This will get updated when we gain
   // new style.
   if (!element_->GetComputedStyle()) {
-    SetRequestedState(EContentVisibility::kVisible);
+    SetRequestedState(EContentVisibility::kVisible, g_null_atom);
     return;
   }
 
@@ -328,7 +356,7 @@ void DisplayLockContext::DidStyleSelf() {
   if (ForceUnlockIfNeeded())
     return;
 
-  if (!IsLocked() && state_ != EContentVisibility::kVisible) {
+  if (!IsLocked() && !IsAlwaysVisible()) {
     UpdateActivationObservationIfNeeded();
     NotifyRenderAffectingStateChanged();
   }
@@ -347,9 +375,7 @@ bool DisplayLockContext::ShouldLayoutChildren() const {
   return !is_locked_ || forced_info_.is_forced(ForcedPhase::kLayout) ||
          (document_->GetDisplayLockDocumentState()
               .ActivatableDisplayLocksForced() &&
-          IsActivatable(DisplayLockActivationReason::kAny)) ||
-         (element_->GetLayoutObject() &&
-          element_->GetLayoutObject()->IsShapingDeferred());
+          IsActivatable(DisplayLockActivationReason::kAny));
 }
 
 void DisplayLockContext::DidLayoutChildren() {
@@ -367,16 +393,13 @@ bool DisplayLockContext::ShouldPrePaintChildren() const {
   return !is_locked_ || forced_info_.is_forced(ForcedPhase::kPrePaint) ||
          (document_->GetDisplayLockDocumentState()
               .ActivatableDisplayLocksForced() &&
-          IsActivatable(DisplayLockActivationReason::kAny)) ||
-         (element_->GetLayoutObject() &&
-          element_->GetLayoutObject()->IsShapingDeferred());
+          IsActivatable(DisplayLockActivationReason::kAny));
 }
 
 bool DisplayLockContext::ShouldPaintChildren() const {
   // Note that forced updates should never require us to paint, so we don't
   // check |forced_info_| here.
-  return !is_locked_ || (element_->GetLayoutObject() &&
-                         element_->GetLayoutObject()->IsShapingDeferred());
+  return !is_locked_;
 }
 // End Should* and Did* functions ==============================================
 
@@ -406,6 +429,14 @@ void DisplayLockContext::CommitForActivation(
     // Note that because the visibility is only determined at the _end_ of the
     // next frame, we need to ensure that we stay unlocked for two frames.
     SetKeepUnlockedUntilLifecycleCount(2);
+  }
+
+  if (!toggle_name_.IsNull()) {
+    CSSToggle* toggle = CSSToggle::FindToggleInScope(*element_, toggle_name_);
+    DCHECK(toggle) << "should no longer be locked with a toggle state";
+    ToggleTrigger trigger(toggle_name_, ToggleTriggerMode::kSet,
+                          ToggleTrigger::State(1u));
+    toggle->FireToggleActivation(*element_, trigger);
   }
 
   if (reason == DisplayLockActivationReason::kFindInPage)
@@ -512,9 +543,11 @@ void DisplayLockContext::UpgradeForcedScope(ForcedPhase old_phase,
       MarkAncestorsForPrePaintIfNeeded();
     }
 
-    if (emit_warnings && v8::Isolate::GetCurrent()->InContext() &&
-        !IsActivatable(DisplayLockActivationReason::kAny) && document_ &&
-        element_) {
+    if (emit_warnings && v8::Isolate::GetCurrent()->InContext() && document_ &&
+        element_ &&
+        (!IsActivatable(DisplayLockActivationReason::kAny) ||
+         RuntimeEnabledFeatures::
+             WarnOnContentVisibilityRenderAccessEnabled())) {
       document_->GetDisplayLockDocumentState().IssueForcedRenderWarning(
           element_);
     }
@@ -523,11 +556,10 @@ void DisplayLockContext::UpgradeForcedScope(ForcedPhase old_phase,
 
 void DisplayLockContext::ScheduleStateChangeEventIfNeeded() {
   if (state_ == EContentVisibility::kAuto &&
-      RuntimeEnabledFeatures::ContentVisibilityAutoStateChangedEventEnabled() &&
-      !IsShapingDeferred()) {
+      RuntimeEnabledFeatures::ContentVisibilityAutoStateChangeEventEnabled()) {
     element_->EnqueueEvent(
-        *ContentVisibilityAutoStateChangedEvent::Create(
-            event_type_names::kContentvisibilityautostatechanged, is_locked_),
+        *ContentVisibilityAutoStateChangeEvent::Create(
+            event_type_names::kContentvisibilityautostatechange, is_locked_),
         TaskType::kMiscPlatformAPI);
   }
 }
@@ -569,8 +601,8 @@ void DisplayLockContext::Unlock() {
     // can mark the dirty bits from the descendant top layer node up to this
     // display lock on the ancestor chain while we're in the middle of style
     // recalc. It seems plausible, but we have to be careful.
-    blocked_child_recalc_change_ =
-        blocked_child_recalc_change_.ForceRecalcDescendants();
+    blocked_child_recalc_change_ = blocked_child_recalc_change_.EnsureAtLeast(
+        StyleRecalcChange::kRecalcDescendants);
   }
 
   // We also need to notify the AX cache (if it exists) to update the childrens
@@ -578,7 +610,9 @@ void DisplayLockContext::Unlock() {
   if (AXObjectCache* cache = element_->GetDocument().ExistingAXObjectCache())
     cache->ChildrenChanged(element_);
 
-  // Schedule ContentVisibilityAutoStateChanged event if needed.
+  // Schedule ContentVisibilityAutoStateChange event if needed.
+  // TODO(https://crbug.com/1250716): We shouldn't fire this if it was the
+  // result of toggle state changing.
   ScheduleStateChangeEventIfNeeded();
 
   auto* layout_object = element_->GetLayoutObject();
@@ -673,13 +707,6 @@ bool DisplayLockContext::MarkForLayoutIfNeeded() {
       // to mark its ancestors as dirty here so that it will be traversed to on
       // the next layout.
       layout_object->MarkContainerChainForLayout();
-      if (layout_object->IsShapingDeferred()) {
-        layout_object->SetIntrinsicLogicalWidthsDirty();
-        layout_object->SetChildNeedsLayout();
-        // Make sure we don't use cached NGFragmentItem objects.
-        To<LayoutBox>(layout_object)->DisassociatePhysicalFragments();
-        To<LayoutBox>(layout_object)->ClearLayoutResults();
-      }
     }
     return true;
   }
@@ -777,7 +804,7 @@ bool DisplayLockContext::IsElementDirtyForStyleRecalc() const {
 bool DisplayLockContext::IsElementDirtyForLayout() const {
   if (auto* layout_object = element_->GetLayoutObject()) {
     return layout_object->NeedsLayout() || child_layout_was_blocked_ ||
-           HasStashedScrollOffset() || layout_object->IsShapingDeferred();
+           HasStashedScrollOffset();
   }
   return false;
 }
@@ -870,6 +897,7 @@ void DisplayLockContext::WillStartLifecycleUpdate(const LocalFrameView& view) {
   if (has_pending_subtree_checks_ || has_pending_top_layer_check_) {
     DetermineIfSubtreeHasTopLayerElement();
     has_pending_top_layer_check_ = false;
+    update_registration = true;
   }
 
   if (has_pending_subtree_checks_) {
@@ -907,7 +935,7 @@ void DisplayLockContext::ElementDisconnected() {
   // We remove the style when disconnecting an element, so we should also unlock
   // the context.
   DCHECK(!element_->GetComputedStyle());
-  SetRequestedState(EContentVisibility::kVisible);
+  SetRequestedState(EContentVisibility::kVisible, g_null_atom);
 
   // blocked_child_recalc_change_ must be cleared because things can be in an
   // inconsistent state when we add the element back (e.g. crbug.com/1262742).
@@ -931,7 +959,7 @@ void DisplayLockContext::DetachLayoutTree() {
   // When |element_| is removed from the flat tree, we need to set this context
   // to visible.
   if (!element_->GetComputedStyle()) {
-    SetRequestedState(EContentVisibility::kVisible);
+    SetRequestedState(EContentVisibility::kVisible, g_null_atom);
     blocked_child_recalc_change_ = StyleRecalcChange();
   }
 }
@@ -940,20 +968,6 @@ void DisplayLockContext::ScheduleTopLayerCheck() {
   has_pending_top_layer_check_ = true;
   UpdateLifecycleNotificationRegistration();
   ScheduleAnimation();
-}
-
-bool DisplayLockContext::IsShapingDeferred() const {
-  if (!element_)
-    return false;
-  if (const auto* layout_object = element_->GetLayoutObject())
-    return layout_object->IsShapingDeferred();
-  return false;
-}
-
-bool DisplayLockContext::IsInclusiveDescendantOf(
-    const LayoutObject& ancestor) const {
-  const LayoutObject* object = element_ ? element_->GetLayoutObject() : nullptr;
-  return object && object->IsDescendantOf(&ancestor);
 }
 
 void DisplayLockContext::ScheduleAnimation() {
@@ -979,11 +993,6 @@ const char* DisplayLockContext::ShouldForceUnlock() const {
     DCHECK(DisplayLockUtilities::LockedAncestorPreventingStyle(*element_));
     return nullptr;
   }
-
-  // Do not force-unlock for deferred elements.
-  if (element_->GetLayoutObject() &&
-      element_->GetLayoutObject()->IsShapingDeferred())
-    return nullptr;
 
   if (element_->HasDisplayContentsStyle())
     return rejection_names::kUnsupportedDisplay;
@@ -1036,7 +1045,7 @@ bool DisplayLockContext::ForceUnlockIfNeeded() {
   // TODO(rakina): If this is after acquire's promise is resolved and update()
   // commit() isn't in progress, the web author won't know that the element
   // got unlocked. Figure out how to notify the author.
-  if (auto* reason = ShouldForceUnlock()) {
+  if (ShouldForceUnlock()) {
     if (IsLocked()) {
       Unlock();
       // If we forced unlocked, then there is a chance that layout containment
@@ -1057,7 +1066,7 @@ bool DisplayLockContext::ForceUnlockIfNeeded() {
       }
       // If we forced unlock, then we need to prevent subsequent calls to
       // Lock() until the next frame.
-      SetRequestedState(EContentVisibility::kVisible);
+      SetRequestedState(EContentVisibility::kVisible, g_null_atom);
     }
     return true;
   }
@@ -1277,21 +1286,19 @@ void DisplayLockContext::NotifyRenderAffectingStateChanged() {
   };
 
   // Check that we're visible if and only if lock has not been requested.
-  DCHECK(state_ == EContentVisibility::kVisible ||
-         state(RenderAffectingState::kLockRequested));
-  DCHECK(state_ != EContentVisibility::kVisible ||
-         !state(RenderAffectingState::kLockRequested));
+  DCHECK_EQ(IsAlwaysVisible(), !state(RenderAffectingState::kLockRequested));
 
   // We should be locked if the lock has been requested (the above DCHECKs
   // verify that this means that we are not 'visible'), and any of the
   // following is true:
   // - We are not in 'auto' mode (meaning 'hidden') or
+  // - We have a non-null toggle_name_ (for 'toggle-visibility') or
   // - We are in 'auto' mode and nothing blocks locking: viewport is
   //   not intersecting, subtree doesn't have focus, and subtree doesn't have
   //   selection, etc. See the condition for the full list.
   bool should_be_locked =
       state(RenderAffectingState::kLockRequested) &&
-      (state_ != EContentVisibility::kAuto ||
+      (state_ != EContentVisibility::kAuto || !toggle_name_.IsNull() ||
        (!state(RenderAffectingState::kIntersectsViewport) &&
         !state(RenderAffectingState::kSubtreeHasFocus) &&
         !state(RenderAffectingState::kSubtreeHasSelection) &&
@@ -1299,17 +1306,6 @@ void DisplayLockContext::NotifyRenderAffectingStateChanged() {
         !state(RenderAffectingState::kAutoUnlockedForPrint) &&
         !state(RenderAffectingState::kSubtreeHasTopLayerElement) &&
         !state(RenderAffectingState::kSharedElementTransitionChain)));
-
-  // For shaping-deferred boxes, we'd like to unlock permanently.
-  if (IsShapingDeferred() && state_ != EContentVisibility::kVisible &&
-      !should_be_locked && IsLocked()) {
-    SetRequestedState(EContentVisibility::kVisible);
-    // We need to change the document lifecycle explicitly because Unlock()
-    // inside the above SetRequestedState() didn't change the lifecycle.
-    // See CanDirtyStyle() check in Unlock().
-    document_->Lifecycle().EnsureStateAtMost(DocumentLifecycle::kStyleClean);
-    return;
-  }
 
   if (should_be_locked && !IsLocked())
     Lock();

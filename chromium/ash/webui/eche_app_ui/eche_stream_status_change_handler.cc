@@ -1,13 +1,13 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/webui/eche_app_ui/eche_stream_status_change_handler.h"
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/constants/ash_features.h"
 #include "ash/webui/eche_app_ui/launch_app_helper.h"
 #include "base/metrics/histogram_functions.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 
 namespace ash {
 namespace eche_app {

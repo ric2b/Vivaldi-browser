@@ -28,6 +28,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/numerics/checked_math.h"
 #include "base/synchronization/lock.h"
@@ -113,6 +114,7 @@
 #include "third_party/blink/renderer/modules/webgl/webgl_video_texture_enum.h"
 #include "third_party/blink/renderer/modules/xr/xr_system.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding_macros.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_2d_layer_bridge.h"
@@ -270,7 +272,7 @@ NoAllocDirectCallHost* WebGLRenderingContextBase::AsNoAllocDirectCallHost() {
 }
 
 WebGLRenderingContextBase* WebGLRenderingContextBase::OldestContext() {
-  if (ActiveContexts().IsEmpty())
+  if (ActiveContexts().empty())
     return nullptr;
 
   WebGLRenderingContextBase* candidate = *(ActiveContexts().begin());
@@ -287,7 +289,7 @@ WebGLRenderingContextBase* WebGLRenderingContextBase::OldestContext() {
 }
 
 WebGLRenderingContextBase* WebGLRenderingContextBase::OldestEvictedContext() {
-  if (ForciblyEvictedContexts().IsEmpty())
+  if (ForciblyEvictedContexts().empty())
     return nullptr;
 
   WebGLRenderingContextBase* candidate = nullptr;
@@ -478,7 +480,7 @@ class ScopedDisableRasterizerDiscard {
 static void FormatWebGLStatusString(const StringView& gl_info,
                                     const StringView& info_string,
                                     StringBuilder& builder) {
-  if (info_string.IsEmpty())
+  if (info_string.empty())
     return;
   builder.Append(", ");
   builder.Append(gl_info);
@@ -677,7 +679,7 @@ scoped_refptr<StaticBitmapImage> WebGLRenderingContextBase::GetImage() {
           image_info, GetDrawingBuffer()->FilterQuality(),
           CanvasResourceProvider::ShouldInitialize::kNo,
           SharedGpuContext::ContextProviderWrapper(), RasterMode::kGPU,
-          is_origin_top_left_, gpu::SHARED_IMAGE_USAGE_DISPLAY);
+          is_origin_top_left_, gpu::SHARED_IMAGE_USAGE_DISPLAY_READ);
   if (!resource_provider || !resource_provider->IsValid()) {
     resource_provider = CanvasResourceProvider::CreateBitmapProvider(
         image_info, GetDrawingBuffer()->FilterQuality(),
@@ -779,8 +781,8 @@ void WebGLRenderingContextBase::MakeXrCompatibleAsync() {
   if (XRSystem* xr = GetXrSystemFromHost(Host())) {
     // The promise will be completed on the callback.
     xr->MakeXrCompatibleAsync(
-        WTF::Bind(&WebGLRenderingContextBase::OnMakeXrCompatibleFinished,
-                  WrapWeakPersistent(this)));
+        WTF::BindOnce(&WebGLRenderingContextBase::OnMakeXrCompatibleFinished,
+                      WrapWeakPersistent(this)));
   } else {
     xr_compatible_ = false;
     CompleteXrCompatiblePromiseIfPending(DOMExceptionCode::kAbortError);
@@ -1117,6 +1119,7 @@ scoped_refptr<DrawingBuffer> WebGLRenderingContextBase::CreateDrawingBuffer(
   bool want_depth_buffer = attrs.depth;
   bool want_stencil_buffer = attrs.stencil;
   bool want_antialiasing = attrs.antialias;
+  bool desynchronized = attrs.desynchronized;
   DrawingBuffer::PreserveDrawingBuffer preserve = attrs.preserve_drawing_buffer
                                                       ? DrawingBuffer::kPreserve
                                                       : DrawingBuffer::kDiscard;
@@ -1142,15 +1145,14 @@ scoped_refptr<DrawingBuffer> WebGLRenderingContextBase::CreateDrawingBuffer(
                                   : DrawingBuffer::kAllowChromiumImage;
 
   bool using_swap_chain =
-      base::FeatureList::IsEnabled(features::kLowLatencyWebGLSwapChain) &&
       context_provider->GetCapabilities().shared_image_swap_chain &&
-      attrs.desynchronized;
+      desynchronized;
 
   return DrawingBuffer::Create(
       std::move(context_provider), graphics_info, using_swap_chain, this,
       ClampedCanvasSize(), premultiplied_alpha, want_alpha_channel,
-      want_depth_buffer, want_stencil_buffer, want_antialiasing, preserve,
-      web_gl_version, chromium_image_usage, Host()->FilterQuality(),
+      want_depth_buffer, want_stencil_buffer, want_antialiasing, desynchronized,
+      preserve, web_gl_version, chromium_image_usage, Host()->FilterQuality(),
       drawing_buffer_color_space_, pixel_format_deprecated_,
       PowerPreferenceToGpuPreference(attrs.power_preference));
 }
@@ -3189,7 +3191,7 @@ WebGLContextAttributes* WebGLRenderingContextBase::getContextAttributes()
 }
 
 GLenum WebGLRenderingContextBase::getError() {
-  if (!lost_context_errors_.IsEmpty()) {
+  if (!lost_context_errors_.empty()) {
     GLenum error = lost_context_errors_.front();
     lost_context_errors_.EraseAt(0);
     return error;
@@ -3198,7 +3200,7 @@ GLenum WebGLRenderingContextBase::getError() {
   if (isContextLost())
     return GL_NO_ERROR;
 
-  if (!synthetic_errors_.IsEmpty()) {
+  if (!synthetic_errors_.empty()) {
     GLenum error = synthetic_errors_.front();
     synthetic_errors_.EraseAt(0);
     return error;
@@ -3409,9 +3411,7 @@ static const GLenum kIdentifiableGLParams[] = {
 bool ShouldMeasureGLParam(GLenum pname) {
   return IdentifiabilityStudySettings::Get()->ShouldSampleType(
              blink::IdentifiableSurface::Type::kWebGLParameter) &&
-         std::find(std::begin(kIdentifiableGLParams),
-                   std::end(kIdentifiableGLParams),
-                   pname) != std::end(kIdentifiableGLParams);
+         base::Contains(kIdentifiableGLParams, pname);
 }
 
 }  // namespace
@@ -7156,17 +7156,24 @@ void WebGLRenderingContextBase::LoseContextImpl(
 
   RemoveAllCompressedTextureFormats();
 
-  // If the DrawingBuffer is destroyed during a real lost context event it
-  // causes the CommandBufferProxy that the DrawingBuffer owns, which is what
-  // issued the lost context event in the first place, to be destroyed before
-  // the event is done being handled. This causes a crash when an outstanding
-  // AutoLock goes out of scope. To avoid this, we create a no-op task to hold
-  // a reference to the DrawingBuffer until this function is done executing.
   if (mode == kRealLostContext) {
+    // If it is a real context loss, the signal needs to be propagated to the
+    // context host so that it knows all resources are dropped.  Otherwise,
+    // OffscreenCanvases on Workers would wait indefinitely for reources to be
+    // returned by the compositor, which would stall requestAnimationFrame.
+    Host()->NotifyGpuContextLost();
+
+    // If the DrawingBuffer is destroyed during a real lost context event it
+    // causes the CommandBufferProxy that the DrawingBuffer owns, which is what
+    // issued the lost context event in the first place, to be destroyed before
+    // the event is done being handled. This causes a crash when an outstanding
+    // AutoLock goes out of scope. To avoid this, we create a no-op task to hold
+    // a reference to the DrawingBuffer until this function is done executing.
     task_runner_->PostTask(
         FROM_HERE,
-        WTF::Bind(&WebGLRenderingContextBase::HoldReferenceToDrawingBuffer,
-                  WrapWeakPersistent(this), WTF::RetainedRef(drawing_buffer_)));
+        WTF::BindOnce(&WebGLRenderingContextBase::HoldReferenceToDrawingBuffer,
+                      WrapWeakPersistent(this),
+                      WTF::RetainedRef(drawing_buffer_)));
   }
 
   // Always destroy the context, regardless of context loss mode. This will
@@ -8142,7 +8149,7 @@ void WebGLRenderingContextBase::PrintGLErrorToConsole(const String& message) {
 
 void WebGLRenderingContextBase::PrintWarningToConsole(const String& message) {
   blink::ExecutionContext* context = Host()->GetTopExecutionContext();
-  PostDeferrableAction(WTF::Bind(
+  PostDeferrableAction(WTF::BindOnce(
       [](blink::ExecutionContext* context, const String& message) {
         if (context && !context->IsContextDestroyed()) {
           context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
@@ -8155,7 +8162,7 @@ void WebGLRenderingContextBase::PrintWarningToConsole(const String& message) {
 
 void WebGLRenderingContextBase::NotifyWebGLErrorOrWarning(
     const String& message) {
-  PostDeferrableAction(WTF::Bind(
+  PostDeferrableAction(WTF::BindOnce(
       [](HTMLCanvasElement* canvas, const String& message) {
         probe::DidFireWebGLErrorOrWarning(canvas, message);
       },
@@ -8163,7 +8170,7 @@ void WebGLRenderingContextBase::NotifyWebGLErrorOrWarning(
 }
 
 void WebGLRenderingContextBase::NotifyWebGLError(const String& error_type) {
-  PostDeferrableAction(WTF::Bind(
+  PostDeferrableAction(WTF::BindOnce(
       [](HTMLCanvasElement* canvas, const String& error_type) {
         probe::DidFireWebGLError(canvas, error_type);
       },
@@ -8171,7 +8178,7 @@ void WebGLRenderingContextBase::NotifyWebGLError(const String& error_type) {
 }
 
 void WebGLRenderingContextBase::NotifyWebGLWarning() {
-  PostDeferrableAction(WTF::Bind(
+  PostDeferrableAction(WTF::BindOnce(
       [](HTMLCanvasElement* canvas) { probe::DidFireWebGLWarning(canvas); },
       WrapPersistent(canvas())));
 }

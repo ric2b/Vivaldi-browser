@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 #import "ios/chrome/browser/ui/ntp/feed_management/follow_management_view_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_management/followed_web_channel_item.h"
 #import "ios/chrome/browser/ui/ntp/feed_management/followed_web_channels_data_source.h"
-#import "ios/chrome/browser/ui/ntp/feed_metrics_recorder.h"
+#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/table_view/table_view_favicon_data_source.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_view.h"
@@ -78,9 +78,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
       base::mac::ObjCCastStrict<FollowedWebChannelItem>(tableViewItem);
   FollowedWebChannelCell* followedWebChannelCell =
       base::mac::ObjCCastStrict<FollowedWebChannelCell>(cellToReturn);
-  CrURL* webPageURL = followedWebChannelItem.followedWebChannel.webPageURL;
 
-  [self.faviconDataSource faviconForURL:webPageURL
+  [self.faviconDataSource faviconForURL:followedWebChannelItem.URL
                              completion:^(FaviconAttributes* attributes) {
                                // Only set favicon if the cell hasn't been
                                // reused.

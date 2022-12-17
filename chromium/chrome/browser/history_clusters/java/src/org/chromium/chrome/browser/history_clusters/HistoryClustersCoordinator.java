@@ -1,14 +1,17 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.history_clusters;
 
 import android.app.Activity;
+import android.os.Handler;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout.LayoutParams;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -22,6 +25,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
+import org.chromium.components.browser_ui.widget.MoreProgressButton;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
@@ -97,7 +101,7 @@ public class HistoryClustersCoordinator extends RecyclerView.OnScrollListener
                 mSelectionDelegate, mMetricsLogger, accessibilityUtil, (message) -> {
                     if (mRecyclerView == null) return;
                     mRecyclerView.announceForAccessibility(message);
-                });
+                }, new Handler());
     }
 
     /**
@@ -165,6 +169,11 @@ public class HistoryClustersCoordinator extends RecyclerView.OnScrollListener
         return mSelectableListLayout.onBackPressed();
     }
 
+    /** Called to notify the Journeys UI that history has been deleted by some other party. */
+    public void onHistoryDeletedExternally() {
+        mMediator.onHistoryDeletedExternally();
+    }
+
     void inflateActivityView() {
         mAdapter = new SimpleRecyclerViewAdapter(mModelList);
         mAdapter.registerType(
@@ -224,8 +233,16 @@ public class HistoryClustersCoordinator extends RecyclerView.OnScrollListener
     }
 
     private View buildMoreProgressView(ViewGroup parent) {
-        return LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.more_progress_button, parent, false);
+        MoreProgressButton moreProgressButton =
+                (MoreProgressButton) LayoutInflater.from(parent.getContext())
+                        .inflate(R.layout.more_progress_button, parent, false);
+        moreProgressButton.setButtonText(moreProgressButton.getResources().getString(
+                R.string.history_clusters_show_more_button_label));
+        View progressSpinner = moreProgressButton.findViewById(R.id.progress_spinner);
+        if (progressSpinner != null) {
+            ((LayoutParams) progressSpinner.getLayoutParams()).gravity = Gravity.CENTER;
+        }
+        return moreProgressButton;
     }
 
     private View buildClusterView(ViewGroup parent) {

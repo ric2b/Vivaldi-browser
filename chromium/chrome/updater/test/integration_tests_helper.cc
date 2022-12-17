@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -230,6 +230,7 @@ void AppTestHelper::FirstTaskRun() {
     // then use the With* helper functions to provide its arguments.
     {"clean", WithSystemScope(Wrap(&Clean))},
     {"enter_test_mode", WithSwitch("url", Wrap(&EnterTestMode))},
+    {"exit_test_mode", WithSystemScope(Wrap(&ExitTestMode))},
     {"set_group_policies", WithSwitch("values", Wrap(&SetGroupPolicies))},
     {"expect_active_updater", WithSystemScope(Wrap(&ExpectActiveUpdater))},
     {"expect_registered",
@@ -246,6 +247,8 @@ void AppTestHelper::FirstTaskRun() {
 #if BUILDFLAG(IS_WIN)
     {"expect_interfaces_registered",
      WithSystemScope(Wrap(&ExpectInterfacesRegistered))},
+    {"expect_marshal_interface_succeeds",
+     WithSystemScope(Wrap(&ExpectMarshalInterfaceSucceeds))},
     {"expect_legacy_update3web_succeeds",
      WithSwitch("expected_error_code",
                 WithSwitch("expected_final_state",
@@ -314,7 +317,10 @@ void AppTestHelper::FirstTaskRun() {
                                                     &RunRecoveryComponent))))},
     {"expect_last_checked", WithSystemScope(Wrap(&ExpectLastChecked))},
     {"expect_last_started", WithSystemScope(Wrap(&ExpectLastStarted))},
-    {"run_offline_install", WithSystemScope(Wrap(&RunOfflineInstall))},
+    {"run_offline_install",
+     WithSwitch("silent",
+                WithSwitch("legacy_install",
+                           WithSystemScope(Wrap(&RunOfflineInstall))))},
   };
 
   const base::CommandLine* command_line =

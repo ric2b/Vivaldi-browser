@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,8 @@
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+
+#include "ui/vivaldi_browser_window.h"
 
 using content::RenderViewHost;
 
@@ -108,6 +110,37 @@ using content::RenderViewHost;
 
 - (NSView*)viewThatWantsHistoryOverlay {
   return _renderWidgetHost->GetView()->GetNativeView().GetNativeNSView();
+}
+
+- (BOOL)canNavigateInDirection:(history_swiper::NavigationDirection)direction
+                      onWindow:(NSWindow*)window {
+  Browser* browser = chrome::FindBrowserWithWindow(window);
+  if (!browser)
+    return NO;
+  
+  if (browser->is_vivaldi() &&
+      static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
+          VivaldiBrowserWindow::WindowType::SETTINGS) {
+    // VB-70626 Crash when using macOS history gesture in settings window
+    return NO;
+  }
+
+  if (direction == history_swiper::kForwards) {
+    return chrome::CanGoForward(browser);
+  } else {
+    return chrome::CanGoBack(browser);
+  }
+}
+
+- (void)navigateInDirection:(history_swiper::NavigationDirection)direction
+                   onWindow:(NSWindow*)window {
+  Browser* browser = chrome::FindBrowserWithWindow(window);
+  if (browser) {
+    if (direction == history_swiper::kForwards)
+      chrome::GoForward(browser, WindowOpenDisposition::CURRENT_TAB);
+    else
+      chrome::GoBack(browser, WindowOpenDisposition::CURRENT_TAB);
+  }
 }
 
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item

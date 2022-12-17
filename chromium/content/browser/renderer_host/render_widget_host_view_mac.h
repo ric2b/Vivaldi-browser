@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -313,6 +313,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   }
 
   // RenderWidgetHostNSViewHostHelper implementation.
+  id GetAccessibilityElement() override;
   id GetRootBrowserAccessibilityElement() override;
   id GetFocusedBrowserAccessibilityElement() override;
   void SetAccessibilityWindow(NSWindow* window) override;
@@ -410,6 +411,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void StopSpeaking() override;
   bool SyncIsSpeaking(bool* is_speaking) override;
   void SyncIsSpeaking(SyncIsSpeakingCallback callback) override;
+  void GetRenderWidgetAccessibilityToken(
+      GetRenderWidgetAccessibilityTokenCallback callback) override;
   void SetRemoteAccessibilityWindowToken(
       const std::vector<uint8_t>& window_token) override;
 

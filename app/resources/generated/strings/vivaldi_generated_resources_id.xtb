@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Cetak...</translation>
 <translation id="1181037720776840403">Hapus</translation>
 <translation id="1187722533808055681">Bangun saat nganggur</translation>
-<translation id="119944043368869598">Bersihkan semua</translation>
 <translation id="1221825588892235038">Khusus yang terpilih</translation>
 <translation id="1234736487471201993">Buat Kode QR untuk gambar ini</translation>
 <translation id="1244303850296295656">Ekstensi galat</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Pilih semu&amp;a</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Gunakan angka untuk menunjukkan jumlah salinan yang akan dicetak (1 sampai <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Hapus Semua</translation>
 <translation id="1994173015038366702">URL situs</translation>
 <translation id="2019718679933488176">&amp;Buka Audio di Tab Baru</translation>
 <translation id="2050339315714019657">Potret</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Tempel sebagai teks biasa</translation>
 <translation id="2249605167705922988">misal: 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Izinkan pengidentifikasi untuk konten yang dilindungi (komputer mungkin perlu dimulai ulang)</translation>
-<translation id="2277255602909579701">Semua kuki dan data situs</translation>
 <translation id="2280486287150724112">Batas kanan</translation>
 <translation id="2282146716419988068">Proses GPU</translation>
 <translation id="2301382460326681002">Direktori akar ekstensi tidak valid.</translation>
@@ -93,8 +90,10 @@
 <translation id="2550212893339833758">Memori yang di-swap</translation>
 <translation id="2553440850688409052">Sembunyikan Plugin Ini</translation>
 <translation id="26224892172169984">Jangan izinkan situs apapun menangani protokol</translation>
+<translation id="2653275834716714682">Penggantian Teks</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Aktifkan ulang</translation>
+<translation id="2678100101831051676">Tidak dapat menyiarkan.</translation>
 <translation id="2721037002783622288">&amp;Telusuri <ph name="SEARCH_ENGINE" /> untuk gambar</translation>
 <translation id="2783321960289401138">Buat pintasan...</translation>
 <translation id="2785873697295365461">Semua deskriptor berkas</translation>
@@ -122,7 +121,6 @@
 <translation id="3084548735795614657">Jatuhkan untuk memasang</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Semua penangan PENGGUNA</translation>
-<translation id="3127156390846601284">Ini akan menghapus semua data yang disimpan di perangkat untuk semua situs yang ditampilkan. Ingin melanjutkan?</translation>
 <translation id="3129173833825111527">Batas kiri</translation>
 <translation id="3144647712221361880">Buka tautan sebagai</translation>
 <translation id="3222066309010235055">Prarender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +143,6 @@
 <translation id="3387614642886316601">Gunakan fitur periksa ejaan yang ditingkatkan</translation>
 <translation id="3390013585654699824">Detail aplikasi</translation>
 <translation id="3393582007140394275">Tidak dapat menyiarkan layar.</translation>
-<translation id="3432227430032737297">Hapus Semua Yang Ditampilkan</translation>
 <translation id="345693547134384690">Buka &amp;gambar di tab baru</translation>
 <translation id="3494769164076977169">Tanyakan saat situs mencoba mengunduh berkas secara otomatis setelah berkas pertama (disarankan)</translation>
 <translation id="3505030558724226696">Mencabut akses perangkat</translation>
@@ -204,10 +201,10 @@
 <translation id="4409697491990005945">Batas</translation>
 <translation id="4423376891418188461">Pulihkan Semua Pengaturan</translation>
 <translation id="4478664379124702289">Simpan Tauta&amp;n Sebagai...</translation>
-<translation id="4579581181964204535">Tidak dapat siaran <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Buka <ph name="URL" /></translation>
 <translation id="4595560905247879544">Semua aplikasi dan ekstensi hanya dapat diubah oleh pengelola (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Ekstensi telah mengubah apa yang ditampilkan halaman saat anda membuka tab baru.</translation>
+<translation id="4616405296204756919">Anda dapat menyimpan sandi yang disimpan di perangkat apapun. Mereka disimpan ke <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Buka Video di Tab Baru</translation>
 <translation id="4677772697204437347">Memori GPU</translation>
 <translation id="4681930562518940301">Buka &amp;gambar asli di tab baru</translation>
@@ -241,10 +238,12 @@
 <translation id="5233231016133573565">ID proses</translation>
 <translation id="5233736638227740678">&amp;Tempel</translation>
 <translation id="5256861893479663409">Di Semua Situs</translation>
+<translation id="5260334392110301220">Tanda Kutip Cerdas</translation>
 <translation id="5269977353971873915">Gagal Mencetak</translation>
 <translation id="5284445933715251131">Lanjutkan Mengunduh</translation>
 <translation id="52912272896845572">Berkas kunci pribadi tidak sah.</translation>
 <translation id="5301954838959518834">Baik, paham</translation>
+<translation id="5302932258331363306">Tampilkan Substitusi</translation>
 <translation id="5317780077021120954">Simpan</translation>
 <translation id="5334142896108694079">Singgahan Skrip</translation>
 <translation id="5355926466126177564">Ekstensi "<ph name="EXTENSION_NAME" />" telah mengubah halaman apa yang ditampilkan saat anda menelusuri dari Omnibox.</translation>
@@ -277,7 +276,6 @@
 <translation id="5747809636523347288">Te&amp;mpel dan buka <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokumen yang anda kirim untuk dicetak melalui <ph name="APP_NAME" /> dapat dibaca oleh <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Sim&amp;pan audio sebagai...</translation>
-<translation id="577624874850706961">Telusuri kuki</translation>
 <translation id="5780973441651030252">Prioritas proses</translation>
 <translation id="5804241973901381774">Semua Izin</translation>
 <translation id="5828633471261496623">Mencetak...</translation>
@@ -290,7 +288,6 @@
 <translation id="5965661248935608907">Juga mengontrol apa yang ditampilkan halaman saat anda mengklik tombol Beranda atau menelusuri dari Omnibox.</translation>
 <translation id="5978277834170881274">&amp;Gunakan fitur periksa ejaan dasar</translation>
 <translation id="5979421442488174909">&amp;Terjemahkan ke <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Bersihkan data situs</translation>
 <translation id="6042308850641462728">Lainnya</translation>
 <translation id="6086846494333236931">Dipasang oleh administrator Anda</translation>
 <translation id="6101226222197207147">Aplikasi baru ditambahkan (<ph name="EXTENSION_NAME" />)</translation>
@@ -346,6 +343,7 @@
 <translation id="7053983685419859001">Blokir</translation>
 <translation id="7070484045139057854">Ini Dapat Membaca dan Mengubah Data Situs</translation>
 <translation id="708060913198414444">S&amp;alin alamat audio</translation>
+<translation id="7121728544325372695">Tanda Pisah Cerdas</translation>
 <translation id="7175353351958621980">Di muat dari:</translation>
 <translation id="7186088072322679094">Simpan di Batang Alat</translation>
 <translation id="7287143125007575591">Akses ditolak.</translation>
@@ -404,7 +402,6 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
         =1 {Unduhan sedang dalam proses} other {Unduhan sedang dalam proses}}</translation>
 <translation id="8230134520748321204">Simpan sandi untuk <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Ekstensi ini tidak tercantum dalam <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah ditambahkan tanpa sepengetahuan anda.</translation>
-<translation id="8339059274628563283">Data <ph name="SITE" /> disimpan secara lokal</translation>
 <translation id="8351419472474436977">Ekstensi ini telah mengambil alih kontrol semua pengaturan proxy anda, yang berarti ekstensi dapat mengubah, merusak, atau menyadap apapun yang anda lakukan secara online. Jika anda tidak yakin mengapa perubahan ini terjadi, mungkin anda tidak menginginkannya.</translation>
 <translation id="8382913212082956454">Salin alamat &amp;email</translation>
 <translation id="8413385045638830869">Tanyakan dahulu (disarankan)</translation>
@@ -430,6 +427,7 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Salin te&amp;ks tautan</translation>
 <translation id="8823704566850948458">Sarankan sandi...</translation>
+<translation id="883062543841130884">Substitusi</translation>
 <translation id="8859174528519900719">Subkerangka: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Buka tautan di &amp;jendela baru</translation>
 <translation id="8915370057835397490">Memuat saran</translation>

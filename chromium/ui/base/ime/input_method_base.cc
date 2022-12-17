@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -158,7 +158,7 @@ void InputMethodBase::SetFocusedTextInputClientInternal(
   NotifyTextInputStateChanged(text_input_client_);
 
   // Move new focused window if necessary.
-  if (text_input_client_)
+  if (text_input_client_ && !keyboard_bounds_.IsEmpty())
     text_input_client_->EnsureCaretNotInRect(keyboard_bounds_);
 }
 

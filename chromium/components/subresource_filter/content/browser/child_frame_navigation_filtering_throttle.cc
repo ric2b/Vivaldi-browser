@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,9 +26,9 @@ namespace features {
 
 // Enables or disables performing SubresourceFilter checks from the Browser
 // against any aliases for the requested URL found from DNS CNAME records.
-const base::Feature kSendCnameAliasesToSubresourceFilterFromBrowser{
-    "SendCnameAliasesToSubresourceFilterFromBrowser",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kSendCnameAliasesToSubresourceFilterFromBrowser,
+             "SendCnameAliasesToSubresourceFilterFromBrowser",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features
 

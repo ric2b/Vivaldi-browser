@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,14 +66,6 @@ class ScopedLacrosAvailabilityCache {
         /*external_data_fetcher=*/nullptr);
     browser_util::CacheLacrosAvailability(policy);
   }
-};
-
-class ScopedSetLacrosEnabled {
- public:
-  ScopedSetLacrosEnabled() { browser_util::SetLacrosEnabledForTest(true); }
-  ~ScopedSetLacrosEnabled() { browser_util::SetLacrosEnabledForTest(false); }
-  ScopedSetLacrosEnabled(const ScopedSetLacrosEnabled&) = delete;
-  ScopedSetLacrosEnabled& operator=(const ScopedSetLacrosEnabled&) = delete;
 };
 
 }  // namespace
@@ -643,7 +635,7 @@ TEST_F(BrowserUtilTest, RecordDataVer) {
   base::Value expected{base::Value::Type::DICTIONARY};
   expected.SetStringKey(user_id_hash, version.GetString());
   const base::Value::Dict& dict =
-      pref_service_.GetValueDict(browser_util::kDataVerPref);
+      pref_service_.GetDict(browser_util::kDataVerPref);
   EXPECT_EQ(dict, expected);
 }
 
@@ -659,7 +651,7 @@ TEST_F(BrowserUtilTest, RecordDataVerOverrides) {
   expected.SetStringKey(user_id_hash, version2.GetString());
 
   const base::Value::Dict& dict =
-      pref_service_.GetValueDict(browser_util::kDataVerPref);
+      pref_service_.GetDict(browser_util::kDataVerPref);
   EXPECT_EQ(dict, expected);
 }
 
@@ -682,7 +674,7 @@ TEST_F(BrowserUtilTest, RecordDataVerWithMultipleUsers) {
   expected.SetStringKey(user_id_hash_2, version2.GetString());
 
   const base::Value::Dict& dict =
-      pref_service_.GetValueDict(browser_util::kDataVerPref);
+      pref_service_.GetDict(browser_util::kDataVerPref);
   EXPECT_EQ(dict, expected);
 }
 
@@ -866,7 +858,7 @@ TEST_F(BrowserUtilTest, IsAshBrowserSyncEnabled) {
   }
 
   {
-    ScopedSetLacrosEnabled scoped_enabled;
+    auto scoped_enabled = browser_util::SetLacrosEnabledForTest(true);
     EXPECT_TRUE(browser_util::IsLacrosEnabled());
     EXPECT_TRUE(browser_util::IsAshWebBrowserEnabled());
     EXPECT_TRUE(browser_util::IsAshBrowserSyncEnabled());
@@ -889,7 +881,7 @@ TEST_F(BrowserUtilTest, IsAshBrowserSyncEnabled) {
         {chromeos::features::kLacrosOnly, chromeos::features::kLacrosPrimary,
          chromeos::features::kLacrosSupport},
         {});
-    ScopedSetLacrosEnabled scoped_enabled;
+    auto scoped_enabled = browser_util::SetLacrosEnabledForTest(true);
     EXPECT_TRUE(browser_util::IsLacrosEnabled());
     EXPECT_FALSE(browser_util::IsAshWebBrowserEnabled());
     EXPECT_FALSE(browser_util::IsAshBrowserSyncEnabled());

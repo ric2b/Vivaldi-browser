@@ -1,8 +1,9 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_scheduler_impl.h"
+
 #include <memory>
 
 #include "base/bind.h"
@@ -11,6 +12,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -337,8 +339,8 @@ bool PageSchedulerImpl::IsMainFrameLocal() const {
 }
 
 bool PageSchedulerImpl::IsLoading() const {
-  return main_thread_scheduler_->current_use_case() == UseCase::kEarlyLoading ||
-         main_thread_scheduler_->current_use_case() == UseCase::kLoading;
+  return IsWaitingForMainFrameContentfulPaint() ||
+         IsWaitingForMainFrameMeaningfulPaint();
 }
 
 bool PageSchedulerImpl::IsOrdinary() const {
@@ -493,34 +495,22 @@ void PageSchedulerImpl::OnTraceLogEnabled() {
   }
 }
 
-void PageSchedulerImpl::OnFirstContentfulPaintInMainFrame() {
-  // Now we get the FCP notification here only for the main frame, notify all
-  // frames within the page to recompute priority for JS timer tasks.
-  if (base::FeatureList::IsEnabled(kDeprioritizeDOMTimersDuringPageLoading) &&
-      kDeprioritizeDOMTimersPhase.Get() ==
-          DeprioritizeDOMTimersPhase::kFirstContentfulPaint) {
-    NotifyFrames();
-  }
-}
-
 bool PageSchedulerImpl::IsWaitingForMainFrameContentfulPaint() const {
-  return std::any_of(frame_schedulers_.begin(), frame_schedulers_.end(),
-                     [](const FrameSchedulerImpl* fs) {
-                       return fs->IsWaitingForContentfulPaint() &&
-                              !fs->IsInEmbeddedFrameTree() &&
-                              fs->GetFrameType() ==
-                                  FrameScheduler::FrameType::kMainFrame;
-                     });
+  return base::ranges::any_of(
+      frame_schedulers_, [](const FrameSchedulerImpl* fs) {
+        return fs->IsWaitingForContentfulPaint() &&
+               !fs->IsInEmbeddedFrameTree() &&
+               fs->GetFrameType() == FrameScheduler::FrameType::kMainFrame;
+      });
 }
 
 bool PageSchedulerImpl::IsWaitingForMainFrameMeaningfulPaint() const {
-  return std::any_of(frame_schedulers_.begin(), frame_schedulers_.end(),
-                     [](const FrameSchedulerImpl* fs) {
-                       return fs->IsWaitingForMeaningfulPaint() &&
-                              !fs->IsInEmbeddedFrameTree() &&
-                              fs->GetFrameType() ==
-                                  FrameScheduler::FrameType::kMainFrame;
-                     });
+  return base::ranges::any_of(
+      frame_schedulers_, [](const FrameSchedulerImpl* fs) {
+        return fs->IsWaitingForMeaningfulPaint() &&
+               !fs->IsInEmbeddedFrameTree() &&
+               fs->GetFrameType() == FrameScheduler::FrameType::kMainFrame;
+      });
 }
 
 void PageSchedulerImpl::WriteIntoTrace(perfetto::TracedValue context,

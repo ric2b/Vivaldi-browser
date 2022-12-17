@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@ namespace ipcz {
 
 namespace {
 
-IpczTrapConditionFlags GetSatisfiedConditions(
+IpczTrapConditionFlags GetSatisfiedConditionsForUpdate(
     const IpczTrapConditions& conditions,
     TrapSet::UpdateReason reason,
     const IpczPortalStatus& status) {
@@ -52,9 +52,12 @@ IpczTrapConditionFlags GetSatisfiedConditions(
   return event_flags;
 }
 
-bool NeedRemoteState(IpczTrapConditionFlags flags) {
-  return (flags & (IPCZ_TRAP_BELOW_MAX_REMOTE_PARCELS |
-                   IPCZ_TRAP_BELOW_MAX_REMOTE_BYTES)) != 0;
+bool NeedRemoteParcels(IpczTrapConditionFlags flags) {
+  return (flags & IPCZ_TRAP_BELOW_MAX_REMOTE_PARCELS) != 0;
+}
+
+bool NeedRemoteBytes(IpczTrapConditionFlags flags) {
+  return (flags & IPCZ_TRAP_BELOW_MAX_REMOTE_BYTES) != 0;
 }
 
 }  // namespace
@@ -65,6 +68,14 @@ TrapSet::~TrapSet() {
   ABSL_ASSERT(empty());
 }
 
+// static
+IpczTrapConditionFlags TrapSet::GetSatisfiedConditions(
+    const IpczTrapConditions& conditions,
+    const IpczPortalStatus& current_status) {
+  return GetSatisfiedConditionsForUpdate(conditions, UpdateReason::kInstallTrap,
+                                         current_status);
+}
+
 IpczResult TrapSet::Add(const IpczTrapConditions& conditions,
                         IpczTrapEventHandler handler,
                         uintptr_t context,
@@ -72,8 +83,8 @@ IpczResult TrapSet::Add(const IpczTrapConditions& conditions,
                         IpczTrapConditionFlags* satisfied_condition_flags,
                         IpczPortalStatus* status) {
   last_known_status_ = current_status;
-  IpczTrapConditionFlags flags = GetSatisfiedConditions(
-      conditions, UpdateReason::kInstallTrap, current_status);
+  IpczTrapConditionFlags flags =
+      GetSatisfiedConditions(conditions, current_status);
   if (flags != 0) {
     if (satisfied_condition_flags) {
       *satisfied_condition_flags = flags;
@@ -91,40 +102,56 @@ IpczResult TrapSet::Add(const IpczTrapConditions& conditions,
   }
 
   traps_.emplace_back(conditions, handler, context);
-  if (NeedRemoteState(conditions.flags)) {
-    ++num_traps_monitoring_remote_state_;
+  if (NeedRemoteParcels(conditions.flags)) {
+    ++num_traps_monitoring_remote_parcels_;
+  }
+  if (NeedRemoteBytes(conditions.flags)) {
+    ++num_traps_monitoring_remote_bytes_;
   }
   return IPCZ_RESULT_OK;
 }
 
-void TrapSet::UpdatePortalStatus(const IpczPortalStatus& status,
+void TrapSet::UpdatePortalStatus(const OperationContext& context,
+                                 const IpczPortalStatus& status,
                                  UpdateReason reason,
                                  TrapEventDispatcher& dispatcher) {
   last_known_status_ = status;
   for (auto* it = traps_.begin(); it != traps_.end();) {
     const Trap& trap = *it;
-    const IpczTrapConditionFlags flags =
-        GetSatisfiedConditions(trap.conditions, reason, status);
+    IpczTrapConditionFlags flags =
+        GetSatisfiedConditionsForUpdate(trap.conditions, reason, status);
     if (!flags) {
       ++it;
       continue;
     }
 
+    if (context.is_api_call()) {
+      flags |= IPCZ_TRAP_WITHIN_API_CALL;
+    }
     dispatcher.DeferEvent(trap.handler, trap.context, flags, status);
     it = traps_.erase(it);
-    if (NeedRemoteState(flags)) {
-      --num_traps_monitoring_remote_state_;
+    if (NeedRemoteParcels(flags)) {
+      --num_traps_monitoring_remote_parcels_;
+    }
+    if (NeedRemoteBytes(flags)) {
+      --num_traps_monitoring_remote_bytes_;
     }
   }
 }
 
-void TrapSet::RemoveAll(TrapEventDispatcher& dispatcher) {
+void TrapSet::RemoveAll(const OperationContext& context,
+                        TrapEventDispatcher& dispatcher) {
+  IpczTrapConditionFlags flags = IPCZ_TRAP_REMOVED;
+  if (context.is_api_call()) {
+    flags |= IPCZ_TRAP_WITHIN_API_CALL;
+  }
   for (const Trap& trap : traps_) {
-    dispatcher.DeferEvent(trap.handler, trap.context, IPCZ_TRAP_REMOVED,
+    dispatcher.DeferEvent(trap.handler, trap.context, flags,
                           last_known_status_);
   }
   traps_.clear();
-  num_traps_monitoring_remote_state_ = 0;
+  num_traps_monitoring_remote_parcels_ = 0;
+  num_traps_monitoring_remote_bytes_ = 0;
 }
 
 TrapSet::Trap::Trap(IpczTrapConditions conditions,

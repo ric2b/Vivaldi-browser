@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 WebrtcEventLogData::WebrtcEventLogData() {
   // See the caveat for base::circular_deque::reserve(). Calling reserve() is
@@ -79,5 +78,4 @@ void WebrtcEventLogData::CreateNewSection() {
   sections_.back().reserve(max_section_size_);
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

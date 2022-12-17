@@ -114,6 +114,17 @@ process is determined by command-line arguments:
         *   If --tag is specified, --install is assumed.
     *   --handoff=...
         *   As --tag.
+    *   --appargs="appguid=...&installerdata=..."
+        * Allows extra data (`installerdata`) to be communicated to the
+          application installer. One per application.
+        * `appguid` must be the first arg followed by the `installerdata`. The
+          same `appguid` must appear in `tag` value or `handoff` value.
+        * This is an alternative to using `installdataindex` in the tag. Where
+          `installdataindex` selects from a pre-defined set of `installerdata`
+          options, this value specifies the exact `installerdata` to use.
+        * The value of `installerdata` needs to be URL encoded.
+        * The data will be decoded and written to a file same as in
+          [installdataindex](#installdataindex).
     *   --offlinedir=...
         *   Performs offline install, which means no update check or file
             download is performed against the server during installation.
@@ -353,6 +364,14 @@ The application installer API varies by platform. [macOS](installer_api_mac.md),
 TODO(crbug.com/1339454): Implement running installers at
 BELOW_NORMAL_PRIORITY_CLASS if the update flow is a background flow.
 
+### Installer Setup
+
+To maintain backwards compatibility with
+[Omaha](https://github.com/google/omaha), the updater setup signals a shutdown
+event that Omaha listens to, so that Omaha processes can shut down gracefully.
+The updater then proceeds to overinstall the Omaha binaries with the updater
+binaries.
+
 ### Enterprise Enrollment
 The updater may be enrolled with a particular enterprise. Enrollment is
 coordinated with a device management server by means of an enrollment token and
@@ -365,8 +384,22 @@ responds with a device-specific device management token, which is used in
 future requests to fetch device-specific policies from the device management
 server.
 
+By default, if enrollment fails, for example if the enrollment token is invalid
+or revoked, the updater will start in an unmanaged state. Instead, if you want
+to prevent the updater from starting if enrollment fails, set
+`EnrollmentMandatory` to `1`.
+
+After the updater sets itself up, the `FetchPolicies` RPC is invoked on the
+updater server to register with device management and fetch policies.
+
+The updater also checks for policy updates when the `RunPeriodicTasks` RPC is
+invoked at periodic intervals.
+
 #### Windows
-The enrollment token is read from
+The `EnrollmentToken` REG_SZ value is read from
+`HKLM\Software\Policies\{COMPANY_SHORTNAME}\CloudManagement`.
+
+The `EnrollmentMandatory` REG_DWORD value is also read from
 `HKLM\Software\Policies\{COMPANY_SHORTNAME}\CloudManagement`.
 
 #### macOS
@@ -376,8 +409,9 @@ The enrollment token is searched in the order:
 * File
  `/Library/{COMPANY_SHORTNAME}/{BROWSER_NAME}/CloudManagementEnrollmentToken`.
 
-TODO(crbug.com/1339451): Document timing of enterprise enrollment and policy
-fetches.
+CBCM enterprise enrollment and policy fetches are done every time an install or
+or update happens, as well as when the updater periodic background task
+`--wake` runs.
 
 ### Enterprise Policies
 Enterprise policies can prevent the installation of applications:
@@ -393,8 +427,8 @@ preferences on macOS), or by communication with the device management server.
 
 For device management, the enterprise policies for Google applications are
 downloaded from the device management server periodically and stored at a fixed
-secure location. The path on Windows is 
-`%ProgramFiles(x86)%\Google\Policies` and on macOS is 
+secure location. The path on Windows is
+`%ProgramFiles(x86)%\Google\Policies` and on macOS is
 `/Library/Google/GoogleSoftwareUpdate/DeviceManagement`.
 
 The policy service searches all active policy providers in pre-determined order

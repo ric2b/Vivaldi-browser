@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,6 +48,7 @@ constexpr auto kKeyboardBlocklist = base::MakeFixedFlatSet<DeviceId>({
     {0x0111, 0x183a},  // SteelSeries Aerox 3 Wireless (Bluetooth)
     {0x0111, 0x1854},  // SteelSeries Aerox 5 Wireless (Bluetooth)
     {0x0111, 0x185a},  // SteelSeries Aerox 9 Wireless (Bluetooth)
+    {0x03f0, 0x0b97},  // HyperX Pulsefire Haste 2 Gaming Mouse
     {0x03f0, 0xa407},  // HP X4000 Wireless Mouse
     {0x045e, 0x0745},  // Microsoft Wireless Mobile Mouse 6000
     {0x045e, 0x0821},  // Microsoft Surface Precision Mouse

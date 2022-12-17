@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,7 @@
 #include "components/favicon_base/favicon_usage_data.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/keyword_id.h"
+#include "components/history/core/browser/url_row.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "sql/init_status.h"
 #include "ui/base/page_transition_types.h"
@@ -223,6 +224,25 @@ class HistoryService : public KeyedService {
                                 int nav_entry_id,
                                 const GURL& url);
 
+  // Updates the history database by setting the detected language of the page
+  // content.
+  // The page can be identified by the combination of the context id, the
+  // navigation entry id and the url. No-op if the page is not found.
+  void SetPageLanguageForVisit(ContextID context_id,
+                               int nav_entry_id,
+                               const GURL& url,
+                               const std::string& page_language);
+
+  // Updates the history database by setting the "password state", i.e. whether
+  // a password form was found on the page.
+  // The page can be identified by the combination of the context id, the
+  // navigation entry id and the url. No-op if the page is not found.
+  void SetPasswordStateForVisit(
+      ContextID context_id,
+      int nav_entry_id,
+      const GURL& url,
+      VisitContentAnnotations::PasswordState password_state);
+
   // Updates the history database with the content model annotations for the
   // visit.
   void AddContentModelAnnotationsForVisit(
@@ -330,6 +350,14 @@ class HistoryService : public KeyedService {
   base::CancelableTaskTracker::TaskId QueryMostVisitedURLs(
       int result_count,
       QueryMostVisitedURLsCallback callback,
+      base::CancelableTaskTracker* tracker);
+
+  // Request `result_count` of the most repeated queries for the given keyword.
+  // Used by TopSites.
+  base::CancelableTaskTracker::TaskId QueryMostRepeatedQueriesForKeyword(
+      KeywordID keyword_id,
+      size_t result_count,
+      base::OnceCallback<void(KeywordSearchTermVisitList)> callback,
       base::CancelableTaskTracker* tracker);
 
   // Statistics ----------------------------------------------------------------
@@ -560,12 +588,15 @@ class HistoryService : public KeyedService {
       base::OnceClosure callback,
       base::CancelableTaskTracker* tracker);
 
-  // Get the most recent `Cluster`s within the constraints.  The most recent
-  // visit of a cluster represents the cluster's time.
+  // Get the most recent `Cluster`s within the constraints. The most recent
+  // visit of a cluster represents the cluster's time. `max_clusters` is a hard
+  // cap. `max_visits_soft_cap` is a soft cap; `GetMostRecentClusters()` will
+  // never return a partial cluster.
   base::CancelableTaskTracker::TaskId GetMostRecentClusters(
       base::Time inclusive_min_time,
       base::Time exclusive_max_time,
-      int max_clusters,
+      size_t max_clusters,
+      size_t max_visits_soft_cap,
       base::OnceCallback<void(std::vector<Cluster>)> callback,
       base::CancelableTaskTracker* tracker);
 

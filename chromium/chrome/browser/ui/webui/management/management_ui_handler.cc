@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/device_api/managed_configuration_api.h"
@@ -31,7 +32,6 @@
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/managed_ui.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/strings/grit/components_strings.h"
@@ -51,7 +51,6 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/settings/cros_settings_names.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_pref_names.h"
@@ -71,6 +70,7 @@
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/proxy/proxy_config_handler.h"
 #include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/enterprise/browser/reporting/common_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
@@ -171,6 +171,8 @@ const char kManagementLogUploadEnabled[] = "managementLogUploadEnabled";
 const char kManagementReportActivityTimes[] = "managementReportActivityTimes";
 const char kManagementReportDeviceAudioStatus[] =
     "managementReportDeviceAudioStatus";
+const char kManagementReportDeviceGraphicsStatus[] =
+    "managementReportDeviceGraphicsStatus";
 const char kManagementReportDevicePeripherals[] =
     "managementReportDevicePeripherals";
 const char kManagementReportNetworkData[] = "managementReportNetworkData";
@@ -350,6 +352,15 @@ void AddDeviceReportingInfo(base::Value::List* report_sources,
   if (report_audio_status) {
     AddDeviceReportingElement(report_sources,
                               kManagementReportDeviceAudioStatus,
+                              DeviceReportingType::kDevice);
+  }
+
+  bool report_graphics_status = false;
+  chromeos::CrosSettings::Get()->GetBoolean(ash::kReportDeviceGraphicsStatus,
+                                            &report_graphics_status);
+  if (report_graphics_status) {
+    AddDeviceReportingElement(report_sources,
+                              kManagementReportDeviceGraphicsStatus,
                               DeviceReportingType::kDevice);
   }
 

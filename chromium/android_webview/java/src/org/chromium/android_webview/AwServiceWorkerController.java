@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.android_webview.safe_browsing.AwSafeBrowsingConfigHelper;
-import org.chromium.base.annotations.DoNotInline;
+import org.chromium.build.annotations.DoNotInline;
 import org.chromium.components.embedder_support.util.WebResourceResponseInfo;
 
 /**
@@ -37,7 +37,7 @@ public class AwServiceWorkerController {
     public AwServiceWorkerController(
             @NonNull Context applicationContext, @NonNull AwBrowserContext browserContext) {
         mBrowserContext = browserContext;
-        mServiceWorkerSettings = new AwServiceWorkerSettings(applicationContext);
+        mServiceWorkerSettings = new AwServiceWorkerSettings(applicationContext, mBrowserContext);
         mServiceWorkerBackgroundThreadClient = new ServiceWorkerBackgroundThreadClientImpl();
         mServiceWorkerIoThreadClient = new ServiceWorkerIoThreadClientImpl();
         AwContentsStatics.setServiceWorkerIoThreadClient(
@@ -100,11 +100,6 @@ public class AwServiceWorkerController {
         @Override
         public boolean getSafeBrowsingEnabled() {
             return AwSafeBrowsingConfigHelper.getSafeBrowsingEnabledByManifest();
-        }
-
-        @Override
-        public int getRequestedWithHeaderMode() {
-            return mServiceWorkerSettings.getRequestedWithHeaderMode();
         }
     }
 

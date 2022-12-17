@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -42,6 +42,9 @@ ci.defaults.set(
     ),
     triggered_by = ["chromium-gitiles-trigger"],
     free_space = builders.free_space.standard,
+
+    # TODO(crbug.com/1362440): remove this.
+    omit_python2 = False,
 )
 
 consoles.console_view(
@@ -150,7 +153,6 @@ fyi_reclient_staging_builder(
             gclient_config = structs.extend(
                 spec.gclient_config,
                 apply_configs = [
-                    "enable_reclient",
                     "reclient_staging",
                 ],
             ),
@@ -161,6 +163,10 @@ fyi_reclient_staging_builder(
     os = os.MAC_DEFAULT,
     builderless = True,
     cores = None,
+    priority = 35,
+    reclient_bootstrap_env = {
+        "GLOG_vmodule": "bridge*=2",
+    },
 )
 
 fyi_reclient_test_builder(
@@ -172,7 +178,6 @@ fyi_reclient_test_builder(
             gclient_config = structs.extend(
                 spec.gclient_config,
                 apply_configs = [
-                    "enable_reclient",
                     "reclient_test",
                 ],
             ),
@@ -183,6 +188,12 @@ fyi_reclient_test_builder(
     os = os.MAC_DEFAULT,
     builderless = True,
     cores = None,
+    priority = 35,
+    reclient_bootstrap_env = {
+        "RBE_ip_timeout": "-1s",
+        "GLOG_vmodule": "bridge*=2",
+    },
+    reclient_profiler_service = "reclient-mac",
 )
 
 fyi_reclient_staging_builder(
@@ -194,7 +205,6 @@ fyi_reclient_staging_builder(
             gclient_config = structs.extend(
                 spec.gclient_config,
                 apply_configs = [
-                    "enable_reclient",
                     "reclient_staging",
                 ],
             ),
@@ -217,7 +227,6 @@ fyi_reclient_test_builder(
             gclient_config = structs.extend(
                 spec.gclient_config,
                 apply_configs = [
-                    "enable_reclient",
                     "reclient_test",
                 ],
             ),
@@ -247,7 +256,7 @@ fyi_reclient_staging_builder(
         ),
         gclient_config = builder_config.gclient_config(
             config = "chromium",
-            apply_configs = ["chromeos", "enable_reclient", "reclient_staging"],
+            apply_configs = ["chromeos", "reclient_staging"],
         ),
     ),
 )
@@ -268,7 +277,7 @@ fyi_reclient_test_builder(
         ),
         gclient_config = builder_config.gclient_config(
             config = "chromium",
-            apply_configs = ["chromeos", "enable_reclient", "reclient_test"],
+            apply_configs = ["chromeos", "reclient_test"],
         ),
     ),
 )
@@ -282,7 +291,6 @@ fyi_reclient_test_builder(
             gclient_config = structs.extend(
                 spec.gclient_config,
                 apply_configs = [
-                    "enable_reclient",
                     "reclient_test",
                 ],
             ),
@@ -294,6 +302,7 @@ fyi_reclient_test_builder(
     builderless = True,
     cores = None,
     xcode = xcode.x13main,
+    priority = 35,
 )
 
 fyi_reclient_staging_builder(
@@ -305,7 +314,6 @@ fyi_reclient_staging_builder(
             gclient_config = structs.extend(
                 spec.gclient_config,
                 apply_configs = [
-                    "enable_reclient",
                     "reclient_staging",
                 ],
             ),
@@ -317,6 +325,7 @@ fyi_reclient_staging_builder(
     builderless = True,
     cores = None,
     xcode = xcode.x13main,
+    priority = 35,
 )
 
 fyi_reclient_staging_builder(
@@ -328,7 +337,6 @@ fyi_reclient_staging_builder(
             gclient_config = structs.extend(
                 spec.gclient_config,
                 apply_configs = [
-                    "enable_reclient",
                     "reclient_staging",
                 ],
             ),
@@ -339,6 +347,7 @@ fyi_reclient_staging_builder(
     os = os.MAC_DEFAULT,
     builderless = True,
     cores = None,
+    priority = 35,
 )
 
 fyi_reclient_test_builder(
@@ -350,7 +359,6 @@ fyi_reclient_test_builder(
             gclient_config = structs.extend(
                 spec.gclient_config,
                 apply_configs = [
-                    "enable_reclient",
                     "reclient_test",
                 ],
             ),
@@ -361,4 +369,5 @@ fyi_reclient_test_builder(
     os = os.MAC_DEFAULT,
     builderless = True,
     cores = None,
+    priority = 35,
 )

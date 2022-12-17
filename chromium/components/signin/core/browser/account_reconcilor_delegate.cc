@@ -1,13 +1,15 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/signin/core/browser/account_reconcilor_delegate.h"
 
+#include <algorithm>
 #include <set>
 
 #include "base/containers/contains.h"
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
@@ -104,13 +106,11 @@ AccountReconcilorDelegate::ReorderChromeAccountsForReconcile(
   // Put first_account in first position if needed, using swap to avoid changing
   // the order of existing cookies.
   if (!first_account.empty()) {
-    auto first_account_it = std::find(ordered_accounts.begin(),
-                                      ordered_accounts.end(), first_account);
+    auto first_account_it = base::ranges::find(ordered_accounts, first_account);
     if (first_account_it == ordered_accounts.end()) {
       // The first account was not already in the cookies, add it in the first
       // empty spot, or at the end if there is no available spot.
-      first_account_it = std::find(ordered_accounts.begin(),
-                                   ordered_accounts.end(), CoreAccountId());
+      first_account_it = base::ranges::find(ordered_accounts, CoreAccountId());
       if (first_account_it == ordered_accounts.end()) {
         first_account_it =
             ordered_accounts.insert(first_account_it, first_account);

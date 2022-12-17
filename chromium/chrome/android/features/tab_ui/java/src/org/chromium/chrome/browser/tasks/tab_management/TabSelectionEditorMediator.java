@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@ import android.view.View;
 import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
 
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -42,26 +43,14 @@ import java.util.Set;
 class TabSelectionEditorMediator
         implements TabSelectionEditorCoordinator.TabSelectionEditorController,
                    TabSelectionEditorAction.ActionDelegate {
-    // TODO(977271): Unify similar interfaces in other components that used the TabListCoordinator.
-    /**
-     * Interface for resetting the selectable tab grid.
-     */
-    interface ResetHandler {
-        /**
-         * Handles the reset event.
-         * @param tabs List of {@link Tab}s to reset.
-         * @param preSelectedCount First {@code preSelectedCount} {@code tabs} are pre-selected.
-         * @param quickMode whether to use quick mode.
-         */
-        void resetWithListOfTabs(@Nullable List<Tab> tabs, int preSelectedCount, boolean quickMode);
-    }
-
     private final Context mContext;
     private final TabModelSelector mTabModelSelector;
-    private final ResetHandler mResetHandler;
+    private final TabListCoordinator mTabListCoordinator;
+    private final TabSelectionEditorCoordinator.ResetHandler mResetHandler;
     private final PropertyModel mModel;
     private final SelectionDelegate<Integer> mSelectionDelegate;
     private final TabSelectionEditorToolbar mTabSelectionEditorToolbar;
+    private final boolean mActionOnRelatedTabs;
     private final TabModelSelectorTabModelObserver mTabModelObserver;
     private final TabModelSelectorObserver mTabModelSelectorObserver;
     private TabSelectionEditorActionProvider mActionProvider;
@@ -97,20 +86,29 @@ class TabSelectionEditorMediator
     };
 
     TabSelectionEditorMediator(Context context, TabModelSelector tabModelSelector,
-            ResetHandler resetHandler, PropertyModel model,
+            TabListCoordinator tabListCoordinator,
+            TabSelectionEditorCoordinator.ResetHandler resetHandler, PropertyModel model,
             SelectionDelegate<Integer> selectionDelegate,
-            TabSelectionEditorToolbar tabSelectionEditorToolbar) {
+            TabSelectionEditorToolbar tabSelectionEditorToolbar, boolean actionOnRelatedTabs) {
         mContext = context;
         mTabModelSelector = tabModelSelector;
+        mTabListCoordinator = tabListCoordinator;
         mResetHandler = resetHandler;
         mModel = model;
         mSelectionDelegate = selectionDelegate;
         mTabSelectionEditorToolbar = tabSelectionEditorToolbar;
+        mActionOnRelatedTabs = actionOnRelatedTabs;
 
         mModel.set(
                 TabSelectionEditorProperties.TOOLBAR_NAVIGATION_LISTENER, mNavigationClickListener);
         mModel.set(TabSelectionEditorProperties.TOOLBAR_ACTION_BUTTON_LISTENER,
                 mActionButtonOnClickListener);
+        if (mActionOnRelatedTabs) {
+            mModel.set(TabSelectionEditorProperties.RELATED_TAB_COUNT_PROVIDER, (tabIdList) -> {
+                return TabSelectionEditorAction.getTabCountIncludingRelatedTabs(
+                        mTabModelSelector, tabIdList);
+            });
+        }
 
         mTabModelObserver = new TabModelSelectorTabModelObserver(mTabModelSelector) {
             @Override
@@ -146,7 +144,8 @@ class TabSelectionEditorMediator
                 this, TabSelectionEditorActionProvider.TabSelectionEditorAction.GROUP);
 
         mNavigationProvider =
-                new TabSelectionEditorCoordinator.TabSelectionEditorNavigationProvider(this);
+                new TabSelectionEditorCoordinator.TabSelectionEditorNavigationProvider(
+                        context, this);
         mBackPressChangedSupplier.set(isEditorVisible());
         mModel.addObserver((source, key) -> {
             if (key == TabSelectionEditorProperties.IS_VISIBLE) {
@@ -194,6 +193,9 @@ class TabSelectionEditorMediator
 
     @Override
     public void show(List<Tab> tabs, int preSelectedTabCount) {
+        // We don't call TabListCoordinator#prepareTabSwitcherView, since not all the logic (e.g.
+        // requiring one tab to be selected) is applicable here.
+        mTabListCoordinator.prepareTabGridView();
         mVisibleTabs.clear();
         mVisibleTabs.addAll(tabs);
         mSelectionDelegate.setSelectionModeEnabledForZeroItems(true);
@@ -221,6 +223,9 @@ class TabSelectionEditorMediator
             @Nullable TabSelectionEditorActionProvider actionProvider,
             int actionButtonEnablingThreshold,
             @Nullable TabSelectionEditorNavigationProvider navigationProvider) {
+        if (mActionListModel != null) {
+            mActionListModel.clear();
+        }
         if (actionButtonText != null) {
             mModel.set(TabSelectionEditorProperties.TOOLBAR_ACTION_BUTTON_TEXT, actionButtonText);
         }
@@ -251,10 +256,8 @@ class TabSelectionEditorMediator
         assert ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_SELECTION_EDITOR_V2);
         if (mActionListModel == null) {
             mActionListModel = new PropertyListModel<>();
-            mTabSelectionEditorMenu =
-                    new TabSelectionEditorMenu(mContext, mTabSelectionEditorToolbar.getMenu());
-            mTabSelectionEditorToolbar.setOnMenuItemClickListener(
-                    mTabSelectionEditorMenu::onMenuItemClick);
+            mTabSelectionEditorMenu = new TabSelectionEditorMenu(
+                    mContext, mTabSelectionEditorToolbar.getActionViewLayout());
             mSelectionDelegate.addObserver(mTabSelectionEditorMenu);
             mActionChangeProcessor = new ListModelChangeProcessor(
                     mActionListModel, mTabSelectionEditorMenu, new TabSelectionEditorMenuAdapter());
@@ -263,7 +266,7 @@ class TabSelectionEditorMediator
 
         mActionListModel.clear();
         for (TabSelectionEditorAction action : actions) {
-            action.configure(mTabModelSelector, mSelectionDelegate, this);
+            action.configure(mTabModelSelector, mSelectionDelegate, this, mActionOnRelatedTabs);
             mActionListModel.add(action.getPropertyModel());
         }
         if (navigationProvider != null) {
@@ -292,9 +295,17 @@ class TabSelectionEditorMediator
 
     @Override
     public void hide() {
+        if (TabUiFeatureUtilities.isTabSelectionEditorV2Enabled(mContext)) {
+            RecordUserAction.record("TabMultiSelectV2.Closed");
+        }
+        mTabListCoordinator.cleanupTabGridView();
         mVisibleTabs.clear();
         mResetHandler.resetWithListOfTabs(null, 0, /*quickMode=*/false);
         mModel.set(TabSelectionEditorProperties.IS_VISIBLE, false);
+        if (ChromeFeatureList.sDiscardOccludedBitmaps.isEnabled()) {
+            mResetHandler.postHiding();
+        }
+
         // Note(david@vivladi.com): Always clear selection.
         mSelectionDelegate.clearSelection();
     }

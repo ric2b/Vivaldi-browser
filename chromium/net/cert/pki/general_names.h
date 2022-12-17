@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/strings/string_piece_forward.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_export.h"
 #include "net/cert/pki/cert_error_id.h"
@@ -76,10 +75,10 @@ struct NET_EXPORT GeneralNames {
   std::vector<der::Input> other_names;
 
   // ASCII rfc822names.
-  std::vector<base::StringPiece> rfc822_names;
+  std::vector<std::string_view> rfc822_names;
 
   // ASCII hostnames.
-  std::vector<base::StringPiece> dns_names;
+  std::vector<std::string_view> dns_names;
 
   // DER-encoded ORAddress values.
   std::vector<der::Input> x400_addresses;
@@ -91,7 +90,7 @@ struct NET_EXPORT GeneralNames {
   std::vector<der::Input> edi_party_names;
 
   // ASCII URIs.
-  std::vector<base::StringPiece> uniform_resource_identifiers;
+  std::vector<std::string_view> uniform_resource_identifiers;
 
   // iPAddresses as sequences of octets in network byte order. This will be
   // populated if the GeneralNames represents a Subject Alternative Name.

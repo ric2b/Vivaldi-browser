@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,28 +39,22 @@ namespace {
 #if BUILDFLAG(IS_CHROMEOS)
 // Features settings for storage and uploader.
 // Use `missived` by all browsers.
-const base::Feature kUseMissiveDaemonFeature{StorageSelector::kUseMissiveDaemon,
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kUseMissiveDaemonFeature,
+             "ConnectMissiveDaemon",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Receive `missived` uploads by ASH/primary browser only.
-const base::Feature kProvideUploaderFeature {
-  StorageSelector::kProvideUploader,
+BASE_FEATURE(kProvideUploaderFeature,
+             "ProvideUploader",
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-      base::FEATURE_ENABLED_BY_DEFAULT
+             base::FEATURE_ENABLED_BY_DEFAULT
 #else   // BUILDFLAG(IS_CHROMEOS_LACROS)
-      base::FEATURE_DISABLED_BY_DEFAULT
+             base::FEATURE_DISABLED_BY_DEFAULT
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-};
+);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace
-
-#if BUILDFLAG(IS_CHROMEOS)
-// static
-const char StorageSelector::kUseMissiveDaemon[] = "ConnectMissiveDaemon";
-// static
-const char StorageSelector::kProvideUploader[] = "ProvideUploader";
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // static
 bool StorageSelector::is_uploader_required() {

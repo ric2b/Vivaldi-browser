@@ -1,10 +1,10 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
 
-#include "components/strings/grit/components_strings.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_actions_handler.h"
@@ -18,9 +18,16 @@
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ios/chrome/grit/ios_theme_resources.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_theme_resources.h"
+#import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -109,9 +116,20 @@ NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
   return tabGridButton;
 }
 
-- (ToolbarToolsMenuButton*)toolsMenuButton {
-  ToolbarToolsMenuButton* toolsMenuButton =
-      [[ToolbarToolsMenuButton alloc] initWithFrame:CGRectZero];
+- (ToolbarButton*)toolsMenuButton {
+  ToolbarButton* toolsMenuButton;
+  if (UseSymbols()) {
+    toolsMenuButton = [ToolbarButton
+        toolbarButtonWithImage:DefaultSymbolWithPointSize(
+                                   kMenuSymbol, kSymbolToolbarPointSize)];
+  } else {
+    toolsMenuButton = [[ToolbarToolsMenuButton alloc] initWithFrame:CGRectZero];
+  }
+
+  if (IsVivaldiRunning()) {
+    UIImage* menuImage = [UIImage imageNamed:@"toolbar_menu"];
+    toolsMenuButton = [ToolbarToolsMenuButton toolbarButtonWithImage:menuImage];
+  } // End Vivaldi
 
   SetA11yLabelAndUiAutomationName(toolsMenuButton, IDS_IOS_TOOLBAR_SETTINGS,
                                   kToolbarToolsMenuButtonIdentifier);
@@ -188,7 +206,7 @@ NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
       [ToolbarNewTabButton toolbarButtonWithImage:newTabImage];
 
   [newTabButton addTarget:self.actionHandler
-                   action:@selector(searchAction:)
+                   action:@selector(newTabAction:)
          forControlEvents:UIControlEventTouchUpInside];
   BOOL isIncognito = self.style == INCOGNITO;
 
@@ -227,6 +245,22 @@ NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
   return cancelButton;
 }
 
+// Vivaldi
+- (ToolbarButton*)panelButton {
+  UIImage* panelImage = [UIImage imageNamed:vPrimaryToolbarPanelButton];
+  ToolbarButton* panelButton = [ToolbarButton
+      toolbarButtonWithImage:[panelImage
+                                 imageFlippedForRightToLeftLayoutDirection]];
+  [self configureButton:panelButton width:kAdaptiveToolbarButtonWidth];
+  // Todo: prio@vivaldi.com - Update accessibility label
+  panelButton.accessibilityLabel = l10n_util::GetNSString(IDS_ACCNAME_BACK);
+  [panelButton addTarget:self.actionHandler
+                 action:@selector(panelAction)
+       forControlEvents:UIControlEventTouchUpInside];
+  panelButton.visibilityMask = self.visibilityConfiguration.backButtonVisibility;
+  return panelButton;
+} // End Vivaldi
+
 #pragma mark - Helpers
 
 // Sets the `button` width to `width` with a priority of
@@ -243,11 +277,11 @@ NSString* const kToolbarArrowForwardSymbol = @"arrow.forward";
   button.exclusiveTouch = YES;
   button.pointerInteractionEnabled = YES;
   button.pointerStyleProvider =
-      ^UIPointerStyle*(UIButton* button, UIPointerEffect* proposedEffect,
+      ^UIPointerStyle*(UIButton* uiButton, UIPointerEffect* proposedEffect,
                        UIPointerShape* proposedShape) {
     // This gets rid of a thin border on a spotlighted bookmarks button.
     // This is applied to all toolbar buttons for consistency.
-    CGRect rect = CGRectInset(button.frame, 1, 1);
+    CGRect rect = CGRectInset(uiButton.frame, 1, 1);
     UIPointerShape* shape = [UIPointerShape shapeWithRoundedRect:rect];
     return [UIPointerStyle styleWithEffect:proposedEffect shape:shape];
   };

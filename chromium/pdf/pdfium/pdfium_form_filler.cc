@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/pdfium/public/fpdf_annot.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/gfx/geometry/rect.h"
 #include "v8/include/v8-isolate.h"
 

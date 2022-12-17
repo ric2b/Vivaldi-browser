@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,10 +41,12 @@ class AndroidPaymentAppFactoryTest : public testing::Test {
     method_data->supported_method = "https://play.google.com/billing";
     method_data->stringified_data = "{}";
     delegate_ = std::make_unique<MockPaymentAppFactoryDelegate>(
-        std::move(method_data), support_->context());
+        web_contents_factory_.CreateWebContents(support_->context()),
+        std::move(method_data));
   }
 
   std::unique_ptr<AndroidAppCommunicationTestSupport> support_;
+  content::TestWebContentsFactory web_contents_factory_;
   std::unique_ptr<MockPaymentAppFactoryDelegate> delegate_;
   AndroidPaymentAppFactory factory_;
 

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -148,7 +148,7 @@ class WebSocketBasicStreamSocketTest : public TestWithTaskEnvironment {
     scoped_refptr<ClientSocketPool::SocketParams> null_params;
     ClientSocketPool::GroupId group_id(
         url::SchemeHostPort(url::kHttpScheme, "a", 80),
-        PrivacyMode::PRIVACY_MODE_DISABLED, NetworkIsolationKey(),
+        PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
         SecureDnsPolicy::kAllow);
     transport_socket->Init(
         group_id, null_params, absl::nullopt /* proxy_annotation_tag */, MEDIUM,

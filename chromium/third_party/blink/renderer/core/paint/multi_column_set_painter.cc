@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,8 +68,7 @@ void MultiColumnSetPainter::PaintColumnRules(
     BoxBorderPainter::DrawBoxSide(
         paint_info.context, pixel_snapped_rule_rect, box_side, rule_color,
         rule_style,
-        PaintAutoDarkMode(block_style,
-                          DarkModeFilter::ElementRole::kBackground));
+        PaintAutoDarkMode(block_style, DarkModeFilter::ElementRole::kBorder));
   }
 }
 

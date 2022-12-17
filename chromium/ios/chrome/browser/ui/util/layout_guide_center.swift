@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,19 +16,24 @@ import UIKit
 ///     center.
 /// -   Referenced views don't have to be laid out by AutoLayout.
 /// -   Referenced views and layout guides don't have to be in the same window.
-class LayoutGuideCenter: NSObject {
+@objc
+public class LayoutGuideCenter: NSObject {
   /// MARK: Public
 
   /// References a view under a specific `name`.
   @objc(referenceView:underName:)
-  func reference(view referenceView: UIView?, under name: String) {
-    let oldReferenceView = referenceViews.object(forKey: name as NSString)
+  public func reference(view referenceView: UIView?, under name: String) {
+    let oldReferenceView = referencedView(under: name)
     // Early return if `referenceView` is already set.
     if referenceView == oldReferenceView {
       return
     }
     oldReferenceView?.cr_onWindowCoordinatesChanged = nil
-    referenceViews.setObject(referenceView, forKey: name as NSString)
+    if let referenceView = referenceView {
+      referenceViews.setObject(referenceView, forKey: name as NSString)
+    } else {
+      referenceViews.removeObject(forKey: name as NSString)
+    }
     updateGuides(named: name)
     // Schedule updates to the matching layout guides when the reference view
     // moves in its window.
@@ -37,13 +42,19 @@ class LayoutGuideCenter: NSObject {
     }
   }
 
+  /// Returns the referenced view under `name`.
+  @objc(referencedViewUnderName:)
+  public func referencedView(under name: String) -> UIView? {
+    return referenceViews.object(forKey: name as NSString)
+  }
+
   /// Creates a new layout guide tracking the view referenced under a specific `name`.
   ///
   /// If the referenced view doesn't exist or isn't yet part of the view hierarchy, it is still
   /// valid to call this method. The layout guide will be updated as soon as the referenced view
   /// is available.
   @objc(makeLayoutGuideNamed:)
-  func makeLayoutGuide(named name: String) -> UILayoutGuide {
+  public func makeLayoutGuide(named name: String) -> UILayoutGuide {
     let layoutGuide = FrameLayoutGuide()
     layoutGuide.onDidMoveToWindow = { [weak self] _ in
       self?.updateGuides(named: name)
@@ -66,7 +77,7 @@ class LayoutGuideCenter: NSObject {
   /// Updates all available guides for the given `name`.
   private func updateGuides(named name: String) {
     // Early return if there is no reference window.
-    guard let referenceView = referenceViews.object(forKey: name as NSString) else { return }
+    guard let referenceView = referencedView(under: name) else { return }
     guard let referenceWindow = referenceView.window else { return }
     // Early return if there are no layout guides.
     guard let layoutGuidesForName = layoutGuides[name] else { return }

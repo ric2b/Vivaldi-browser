@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,11 @@ namespace mojo {
 // static
 bool StructTraits<
     aggregation_service_internals::mojom::AggregatableReportRequestIDDataView,
-    content::AggregationServiceStorage::RequestId>::
+    content::AggregatableReportRequestStorageId>::
     Read(aggregation_service_internals::mojom::
              AggregatableReportRequestIDDataView data,
-         content::AggregationServiceStorage::RequestId* out) {
-  *out = content::AggregationServiceStorage::RequestId(data.value());
+         content::AggregatableReportRequestStorageId* out) {
+  *out = content::AggregatableReportRequestStorageId(data.value());
   return true;
 }
 

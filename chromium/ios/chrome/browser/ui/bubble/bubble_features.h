@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 #include "base/feature_list.h"
 
 // Feature flag to enable rich IPH on bubbles.
-extern const base::Feature kBubbleRichIPH;
+BASE_DECLARE_FEATURE(kBubbleRichIPH);
 
 // Feature parameters for rich IPH on bubbles. If no parameter is set, the
 // default bubble style will be used.

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,6 @@ namespace ash {
 
 struct HatsConfig {
   HatsConfig(const base::Feature& feature,
-             const char* const histogram_name,
              const base::TimeDelta& new_device_threshold,
              const char* const is_selected_pref_name,
              const char* const cycle_end_timestamp_pref_name);
@@ -22,11 +21,6 @@ struct HatsConfig {
   // Chrome OS-level feature (switch) we use to retrieve whether this HaTS
   // survey is enabled or not, and its parameters.
   const base::Feature& feature;
-
-  // Histogram name. New entries should be added to
-  // tools/metrics/histograms/metadata/browser/histograms.xml, as a variant of
-  // Browser.ChromeOS.HatsSatisfaction.
-  const char* const histogram_name;
 
   // Minimum amount of time after initial login or oobe after which we can show
   // the HaTS notification.
@@ -56,6 +50,7 @@ extern const HatsConfig kHatsPersonalizationWallpaperSurvey;
 extern const HatsConfig kHatsMediaAppPdfSurvey;
 extern const HatsConfig kHatsCameraAppSurvey;
 extern const HatsConfig kHatsPhotosExperienceSurvey;
+extern const HatsConfig kHatsGeneralCameraSurvey;
 
 }  // namespace ash
 

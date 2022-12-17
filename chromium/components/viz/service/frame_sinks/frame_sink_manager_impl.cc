@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,10 +13,12 @@
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/queue.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/subtree_capture_id.h"
 #include "components/viz/common/surfaces/video_capture_target.h"
 #include "components/viz/service/display/shared_bitmap_manager.h"
@@ -341,6 +343,11 @@ void FrameSinkManagerImpl::EvictSurfaces(
     if (root_it != root_sink_map_.end())
       root_it->second->DidEvictSurface(surface_id);
   }
+
+  // Trigger garbage collection immediately, otherwise the surface may not be
+  // evicted for a long time (e.g. not before a frame is produced).
+  if (base::FeatureList::IsEnabled(features::kEagerSurfaceGarbageCollection))
+    surface_manager_.GarbageCollectSurfaces();
 }
 
 void FrameSinkManagerImpl::RequestCopyOfOutput(
@@ -744,7 +751,20 @@ void FrameSinkManagerImpl::Throttle(const std::vector<FrameSinkId>& ids,
 
 void FrameSinkManagerImpl::StartThrottlingAllFrameSinks(
     base::TimeDelta interval) {
-  global_throttle_interval_ = interval;
+  // Floor the requested interval to the nearest 10th of a millisecond. This is
+  // because the precision of timing between frames is in microseconds, which
+  // can result in error accumulation over several throttled frames.
+  //
+  // For instance, on a 60Hz display, the first frame is produced at 0.016666
+  // seconds, and the second at (0.016666 + 0.016666 = 0.033332) seconds.
+  // base::Hertz(30) is 0.033333 seconds, so the second frame is considered to
+  // have been produced too fast, and is therefore throttled. This results in a
+  // 20Hz refresh rate instead of the desired 30Hz.
+  //
+  // Flooring at the nearest 10th of a millisecond produces correct throttling
+  // results for frame rates up to 960Hz, after which either flooring to
+  // milliseconds or a more precise between-frames measurement is required.
+  global_throttle_interval_ = interval.FloorToMultiple(base::Microseconds(100));
   UpdateThrottling();
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -791,7 +791,7 @@ int main(int argc, char** argv) {
   media::Bitrate::Mode bitrate_mode = media::Bitrate::Mode::kConstant;
   bool reverse = false;
   absl::optional<uint32_t> encode_bitrate;
-  std::vector<base::Feature> disabled_features;
+  std::vector<base::test::FeatureRef> disabled_features;
 
   // Parse command line arguments.
   base::FilePath::StringType output_folder = media::test::kDefaultOutputFolder;

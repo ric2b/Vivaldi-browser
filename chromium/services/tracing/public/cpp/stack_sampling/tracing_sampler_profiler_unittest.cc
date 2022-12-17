@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -375,10 +375,10 @@ namespace {
 class MockUnwinder : public base::Unwinder {
  public:
   MOCK_CONST_METHOD1(CanUnwindFrom, bool(const base::Frame& current_frame));
-  MOCK_CONST_METHOD3(TryUnwind,
-                     base::UnwindResult(base::RegisterContext* thread_context,
-                                        uintptr_t stack_top,
-                                        std::vector<base::Frame>* stack));
+  MOCK_METHOD3(TryUnwind,
+               base::UnwindResult(base::RegisterContext* thread_context,
+                                  uintptr_t stack_top,
+                                  std::vector<base::Frame>* stack));
 };
 
 std::vector<std::unique_ptr<base::Unwinder>>

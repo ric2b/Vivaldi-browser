@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,6 +68,7 @@ class AudioSinkAndroidAudioTrackImpl : public AudioSinkAndroid {
   MediaPipelineBackendAndroid::RenderingDelay GetRenderingDelay() override;
   MediaPipelineBackendAndroid::AudioTrackTimestamp GetAudioTrackTimestamp()
       override;
+  int GetStartThresholdInFrames() override;
 
   // Getters
   int input_samples_per_second() const override;
@@ -89,6 +90,7 @@ class AudioSinkAndroidAudioTrackImpl : public AudioSinkAndroid {
                                  int input_samples_per_second,
                                  int audio_track_session_id,
                                  bool primary,
+                                 bool is_apk_audio,
                                  bool use_hw_av_sync,
                                  const std::string& device_id,
                                  AudioContentType content_type);

@@ -1,11 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 GEN_INCLUDE(['../dictation_test_base.js']);
 
 /** Dictation tests for speech parsing. */
-DictationParseTest = class extends DictationE2ETestBase {
+DictationParseTest = class extends DictationE2ETestDisallowConsole {
   /** @override */
   async setUpDeferred() {
     await super.setUpDeferred();

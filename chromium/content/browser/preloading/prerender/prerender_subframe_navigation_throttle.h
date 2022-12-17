@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,7 @@ class PrerenderSubframeNavigationThrottle : public NavigationThrottle,
 
   // PrerenderHost::Observer
   void OnActivated() override;
-  void OnHostDestroyed() override;
+  void OnHostDestroyed(PrerenderHost::FinalStatus final_status) override;
 
   // WebContentsObserver:
   void DidFinishNavigation(NavigationHandle* nav_handle) override;

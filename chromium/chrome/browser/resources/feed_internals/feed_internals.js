@@ -1,8 +1,8 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {$} from 'chrome://resources/js/util.m.js';
+import {$} from 'chrome://resources/js/util.js';
 import {TimeDelta} from 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
 import {FeedOrder, LastFetchProperties, PageHandler, PageHandlerRemote, Properties} from './feed_internals.mojom-webui.js';
 
@@ -126,7 +126,8 @@ function setupEventListeners() {
   });
 
   $('discover-api-override-apply').addEventListener('click', function() {
-    pageHandler.overrideFeedHost({url: $('discover-api-override').value});
+    pageHandler.overrideDiscoverApiEndpoint(
+        {url: $('discover-api-override').value});
   });
 
   $('feed-stream-data-override').addEventListener('click', function() {

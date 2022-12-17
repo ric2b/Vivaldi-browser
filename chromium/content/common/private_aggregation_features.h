@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@ namespace content {
 // Enables the Private Aggregation API. Note that this API also requires the
 // `kPrivacySandboxAggregationService` to be enabled to successfully send
 // reports.
-CONTENT_EXPORT extern const base::Feature kPrivateAggregationApi;
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrivateAggregationApi);
 
 }  // namespace content
 

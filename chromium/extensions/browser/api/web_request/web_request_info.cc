@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -136,7 +136,8 @@ std::unique_ptr<base::DictionaryValue> CreateRequestBodyData(
       for (auto& source : data_sources)
         source->FeedToPresenter(presenters[i]);
       if (presenters[i]->Succeeded()) {
-        request_body_data->Set(kKeys[i], presenters[i]->Result());
+        request_body_data->GetDict().Set(kKeys[i],
+                                         presenters[i]->TakeResult().value());
         some_succeeded = true;
         break;
       }

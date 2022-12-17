@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,8 +69,10 @@ int64_t MediaPipelineBackend::AudioDecoder::GetMinimumBufferedTime(
   return AudioSinkAndroid::GetMinimumBufferedTime(config);
 }
 
-AudioDecoderAndroid::AudioDecoderAndroid(MediaPipelineBackendAndroid* backend)
+AudioDecoderAndroid::AudioDecoderAndroid(MediaPipelineBackendAndroid* backend,
+                                         bool is_apk_audio)
     : backend_(backend),
+      is_apk_audio_(is_apk_audio),
       task_runner_(backend->GetTaskRunner()),
       delegate_(nullptr),
       pending_buffer_complete_(false),
@@ -122,7 +124,7 @@ bool AudioDecoderAndroid::Start(int64_t start_pts) {
   DCHECK(IsValidChannelNumber(config_.channel_number));
   sink_.Reset(this, config_.channel_number, config_.samples_per_second,
               config_.audio_track_session_id, backend_->Primary(),
-              config_.use_hw_av_sync, backend_->DeviceId(),
+              is_apk_audio_, config_.use_hw_av_sync, backend_->DeviceId(),
               backend_->ContentType());
   sink_->SetStreamVolumeMultiplier(volume_multiplier_);
   // Create decoder_ if necessary. This can happen if Stop() was called, and
@@ -133,6 +135,7 @@ bool AudioDecoderAndroid::Start(int64_t start_pts) {
   if (!rate_shifter_) {
     CreateRateShifter(config_);
   }
+  sink_->SetPaused(false);
   return true;
 }
 
@@ -285,7 +288,7 @@ bool AudioDecoderAndroid::SetConfig(const AudioConfig& config) {
 
 void AudioDecoderAndroid::ResetSinkForNewConfig(const AudioConfig& config) {
   sink_.Reset(this, config.channel_number, config.samples_per_second,
-              config.audio_track_session_id, backend_->Primary(),
+              config.audio_track_session_id, backend_->Primary(), is_apk_audio_,
               config.use_hw_av_sync, backend_->DeviceId(),
               backend_->ContentType());
   sink_->SetStreamVolumeMultiplier(volume_multiplier_);
@@ -324,11 +327,13 @@ void AudioDecoderAndroid::CreateRateShifter(const AudioConfig& config) {
   rate_shifter_output_.reset();
   rate_shifter_.reset(new ::media::AudioRendererAlgorithm(&media_log_));
   bool is_encrypted = false;
+  ::media::ChannelLayout channel_layout =
+      DecoderConfigAdapter::ToMediaChannelLayout(config.channel_layout);
   rate_shifter_->Initialize(
-      ::media::AudioParameters(
-          ::media::AudioParameters::AUDIO_PCM_LINEAR,
-          DecoderConfigAdapter::ToMediaChannelLayout(config.channel_layout),
-          config.samples_per_second, kDefaultFramesPerBuffer),
+      ::media::AudioParameters(::media::AudioParameters::AUDIO_PCM_LINEAR,
+                               {channel_layout, config.channel_number},
+                               config.samples_per_second,
+                               kDefaultFramesPerBuffer),
       is_encrypted);
 }
 
@@ -376,6 +381,11 @@ AudioDecoderAndroid::GetAudioTrackTimestamp() {
   TRACE_FUNCTION_ENTRY0();
   return (sink_ ? sink_->GetAudioTrackTimestamp()
                 : AudioDecoderAndroid::AudioTrackTimestamp());
+}
+
+int AudioDecoderAndroid::GetStartThresholdInFrames() {
+  TRACE_FUNCTION_ENTRY0();
+  return (sink_ ? sink_->GetStartThresholdInFrames() : 0);
 }
 
 void AudioDecoderAndroid::OnBufferDecoded(

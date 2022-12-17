@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,16 @@ extern const char kHistogramPrerenderCumulativeShiftScoreMainFrame[];
 extern const char
     kHistogramPrerenderMaxCumulativeShiftScoreSessionWindowGap1000msMax5000ms2
         [];
+
+// Responsiveness metrics.
+extern const char
+    kHistogramPrerenderAverageUserInteractionLatencyOverBudgetMaxEventDuration
+        [];
+extern const char kHistogramPrerenderNumInteractions[];
+extern const char
+    kHistogramPrerenderUserInteractionLatencyHighPercentile2MaxEventDuration[];
+extern const char
+    kHistogramPrerenderWorstUserInteractionLatencyMaxEventDuration[];
 
 }  // namespace internal
 
@@ -57,6 +67,11 @@ class PrerenderPageLoadMetricsObserver
  private:
   void RecordSessionEndHistograms(
       const page_load_metrics::mojom::PageLoadTiming& main_frame_timing);
+  // Records Cumulative Layout Shift Score (CLS) to UMA and UKM.
+  void RecordLayoutShiftScoreMetrics(
+      const page_load_metrics::mojom::PageLoadTiming& main_frame_timing);
+  // Records Interaction to Next Paint (INP) to UMA and UKM.
+  void RecordNormalizedResponsivenessMetrics();
 
   // Helper function to concatenate the histogram name, the trigger type and the
   // embedder histogram suffix when the trigger type is kEmbedder.

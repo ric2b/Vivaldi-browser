@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@ import {FilesAppEntry} from '../files_app_entry_interfaces.js';
  * The data for each individual file/entry.
  * @typedef {{
  *   entry: (Entry|FilesAppEntry),
+ *   label: string,
  *   volumeType: (VolumeManagerCommon.VolumeType|null),
  * }}
  */

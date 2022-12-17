@@ -1,9 +1,10 @@
-
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.keyboard_accessory;
+
+import static org.chromium.base.ThreadUtils.assertOnUiThread;
 
 import android.app.Activity;
 import android.util.SparseArray;
@@ -25,6 +26,9 @@ import org.chromium.chrome.browser.keyboard_accessory.data.UserInfoField;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
+
+// Vivaldi
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 class ManualFillingComponentBridge {
     private final SparseArray<PropertyProvider<AccessorySheetData>> mProviders =
@@ -64,6 +68,7 @@ class ManualFillingComponentBridge {
 
     @CalledByNative
     private void onItemsAvailable(Object objAccessorySheetData) {
+        assertOnUiThread();
         AccessorySheetData accessorySheetData = (AccessorySheetData) objAccessorySheetData;
         PropertyProvider<AccessorySheetData> provider =
                 getOrCreateProvider(accessorySheetData.getSheetType());
@@ -105,11 +110,16 @@ class ManualFillingComponentBridge {
 
     @CalledByNative
     void showWhenKeyboardIsVisible() {
-        try { // Vivaldi: Catch potential exceptions here to avoid native crash, ref. VAB-4732.
+        // Note(david@vivaldi.com): We only show the filling ui when setting is on.
+        if (VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.SHOW_KEYBOARD_ACCESSORY_VIEW, true)) {
+            try { // Vivaldi: Catch potential exceptions here to avoid native crash, ref. VAB-4732.
         if (getManualFillingComponent() != null) {
             getManualFillingComponent().showWhenKeyboardIsVisible();
         }
-        } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     @CalledByNative

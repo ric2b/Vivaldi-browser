@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{ഫയൽ എഡിറ്റ് ചെയ്യുക}other{ഫയലുകൾ എഡിറ്റ് ചെയ്യുക}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" />GHz</translation>
 <translation id="3291996639387199448">കീയുടെ ദിശ</translation>
+<translation id="3294437725009624529">അതിഥി</translation>
 <translation id="3310640316857623290">DNS പ്രതികരണ സമയം അനുവദിക്കപ്പെട്ട പരിധിയേക്കാൾ വളരെ മുകളിലാണ്</translation>
 <translation id="3328783797891415197">ടെസ്‌റ്റ് റൺ ചെയ്യുന്നു</translation>
 <translation id="3340011300870565703">ഉപകരണത്തിന്റെ വലത് ബഡിൽ <ph name="BATTERY_PERCENTAGE" />% ബാറ്ററിയുണ്ട്.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">ഫേംവെയർ അപ്ഡേറ്റ് ചെയ്തുകൊണ്ടിരിക്കുമ്പോൾ ഈ എക്സ്റ്റേണൽ ഉപകരണം അൺപ്ലഗ് ചെയ്യാനോ നിങ്ങളുടെ കമ്പ്യൂട്ടർ ഷട്ട് ഡൗൺ ചെയ്യാനോ പാടില്ല. നിങ്ങൾക്ക് ഈ വിൻഡോ ചെറുതാക്കാം. ഈ അപ്ഡേറ്റ് പൂർത്തിയാകാൻ ഏതാനും മിനിറ്റുകൾ എടുത്തേക്കാം, അതുവരെ നിങ്ങളുടെ എക്സ്റ്റേണൽ ഉപകരണം പ്രവർത്തിക്കില്ല.</translation>
 <translation id="3486220673238053218">നിർവചനം</translation>
 <translation id="3488065109653206955">ഭാഗികമായി പ്രവര്‍ത്തനക്ഷമമാക്കി</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />പ്രകടന അടയാള ഡാറ്റ<ph name="END_LINK1" /> അയയ്‌ക്കുക</translation>
 <translation id="3517001332549868749">ChromeOS അപ്ഡേറ്റ്</translation>
 <translation id="3527036260304016759">പ്രിന്റ് ചെയ്യാനായില്ല - അജ്ഞാതമായ പിശക്</translation>
 <translation id="3532980081107202182">ഏകദേശം <ph name="MIN_REMAINING" /> മിനിറ്റ് ശേഷിക്കുന്നു</translation>
@@ -467,6 +469,7 @@
 <translation id="5502931783115429516">Android റൺ ചെയ്യുന്നില്ല</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">സൂര്യാസ്തമയ സമയത്ത് സ്വയമേവ ഡാർക്ക് തീമിലേക്ക് മാറുക</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">വീണ്ടും സ്‌കാൻ ചെയ്യുക</translation>
 <translation id="5583640892426849032">ബാക്ക്‌സ്പെയ്‌സ്</translation>

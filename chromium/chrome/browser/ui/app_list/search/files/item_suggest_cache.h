@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,9 @@ class SimpleURLLoader;
 }  // namespace network
 
 namespace app_list {
+
+// Whether or not to override configuration of the cache with an experiment.
+BASE_DECLARE_FEATURE(kLauncherItemSuggest);
 
 class ItemSuggestCache {
  public:
@@ -58,7 +61,7 @@ class ItemSuggestCache {
   ItemSuggestCache(
       Profile* profile,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
-  ~ItemSuggestCache();
+  virtual ~ItemSuggestCache();
 
   ItemSuggestCache(const ItemSuggestCache&) = delete;
   ItemSuggestCache& operator=(const ItemSuggestCache&) = delete;
@@ -73,14 +76,14 @@ class ItemSuggestCache {
   // the cache has not been successfully updated.
   absl::optional<ItemSuggestCache::Results> GetResults();
 
-  // Updates the cache by calling ItemSuggest.
-  void UpdateCache();
+  // Updates the cache by calling ItemSuggest. Virtual for testing.
+  virtual void MaybeUpdateCache();
+
+  // Updates the cache with a json response.
+  void UpdateCacheWithJsonForTest(const std::string json_response);
 
   static absl::optional<ItemSuggestCache::Results> ConvertJsonForTest(
       const base::Value* value);
-
-  // Whether or not to override configuration of the cache with an experiment.
-  static const base::Feature kExperiment;
 
   // Possible outcomes of a call to the ItemSuggest API. These values persist to
   // logs. Entries should not be renumbered and numeric values should never be
@@ -107,36 +110,37 @@ class ItemSuggestCache {
 
  private:
   // Whether or not the ItemSuggestCache is enabled.
-  static constexpr base::FeatureParam<bool> kEnabled{&kExperiment, "enabled",
-                                                     true};
+  static constexpr base::FeatureParam<bool> kEnabled{&kLauncherItemSuggest,
+                                                     "enabled", true};
   // The url of the service that fetches descriptions given image pixels.
   static constexpr base::FeatureParam<std::string> kServerUrl{
-      &kExperiment, "server_url",
+      &kLauncherItemSuggest, "server_url",
       "https://appsitemsuggest-pa.googleapis.com/v1/items"};
 
   // Specifies the ItemSuggest backend that should be used to serve our
   // requests.
   static constexpr base::FeatureParam<std::string> kModelName{
-      &kExperiment, "model_name", "quick_access"};
+      &kLauncherItemSuggest, "model_name", "quick_access"};
 
   // Whether ItemSuggest should be queried more than once per session. Multiple
   // queries are issued if either this param is true or the suggested files
   // experiment is enabled.
   static constexpr base::FeatureParam<bool> kMultipleQueriesPerSession{
-      &kExperiment, "multiple_queries_per_session", true};
+      &kLauncherItemSuggest, "multiple_queries_per_session", true};
 
   // The minimum time between queries if a short delay is being used.
   static constexpr int kShortDelayMinutes = 10;
   // The minimum time between queries if a long delay is being used. If not set,
   // the short delay value is used as a default instead.
   static constexpr base::FeatureParam<int> kLongDelayMinutes{
-      &kExperiment, "long_delay_minutes", kShortDelayMinutes};
+      &kLauncherItemSuggest, "long_delay_minutes", kShortDelayMinutes};
 
-  // Returns the body for the itemsuggest request. Affected by |kExperiment|.
+  // Returns the body for the itemsuggest request. Affected by
+  // |kLauncherItemSuggest|.
   std::string GetRequestBody();
 
   // Calculates the minimum time required to wait after the previous request.
-  // Affected by |kExperiment|.
+  // Affected by |kLauncherItemSuggest|.
   base::TimeDelta GetDelay();
 
   void OnTokenReceived(GoogleServiceAuthError error,

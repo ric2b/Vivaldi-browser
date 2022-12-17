@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/feature_list.h"
+#include "base/test/scoped_feature_list.h"
 
 class KeyedService;
 class Profile;
@@ -57,9 +57,9 @@ class SpeechRecognitionTestHelper {
   // Sends a fake speech recognition error and waits for tasks to finish.
   void SendErrorAndWait();
   // Returns a list of features that should be enabled.
-  std::vector<base::Feature> GetEnabledFeatures();
+  std::vector<base::test::FeatureRef> GetEnabledFeatures();
   // Returns a list of features that should be disabled.
-  std::vector<base::Feature> GetDisabledFeatures();
+  std::vector<base::test::FeatureRef> GetDisabledFeatures();
 
  private:
   // Methods for setup.

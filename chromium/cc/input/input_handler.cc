@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,7 +70,7 @@ InputHandler::~InputHandler() = default;
 // =========== InputHandler Interface
 //
 
-base::WeakPtr<InputHandler> InputHandler::AsWeakPtr() const {
+base::WeakPtr<InputHandler> InputHandler::AsWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
@@ -1014,7 +1014,9 @@ void InputHandler::NotifyInputEvent() {
 // =========== InputDelegateForCompositor Interface
 //
 
-void InputHandler::ProcessCommitDeltas(CompositorCommitData* commit_data) {
+void InputHandler::ProcessCommitDeltas(
+    CompositorCommitData* commit_data,
+    const MutatorHost* main_thread_mutator_host) {
   DCHECK(commit_data);
   if (ActiveTree().LayerListIsEmpty())
     return;
@@ -1036,7 +1038,7 @@ void InputHandler::ProcessCommitDeltas(CompositorCommitData* commit_data) {
   GetScrollTree().CollectScrollDeltas(
       commit_data, inner_viewport_scroll_element_id,
       compositor_delegate_.GetSettings().commit_fractional_scroll_deltas,
-      snapped_elements);
+      snapped_elements, main_thread_mutator_host);
 
   // Record and reset scroll source flags.
   DCHECK(!commit_data->manipulation_info);
@@ -1194,6 +1196,15 @@ ActivelyScrollingType InputHandler::GetActivelyScrollingType() const {
   return ActivelyScrollingType::kPrecise;
 }
 
+bool InputHandler::IsCurrentScrollMainRepainted() const {
+  const ScrollNode* scroll_node = CurrentlyScrollingNode();
+  if (!scroll_node)
+    return false;
+  uint32_t repaint_reasons =
+      GetScrollTree().GetMainThreadRepaintReasons(*scroll_node);
+  return repaint_reasons != MainThreadScrollingReason::kNotScrollingOnMain;
+}
+
 ScrollNode* InputHandler::CurrentlyScrollingNode() {
   return GetScrollTree().CurrentlyScrollingNode();
 }
@@ -1296,7 +1307,7 @@ gfx::Vector2dF InputHandler::ResolveScrollGranularityToPixels(
 
     // Convert from physical pixels to screen coordinates (if --use-zoom-for-dsf
     // enabled, `DeviceScaleFactor()` returns 1).
-    viewport_size.Scale(1 / compositor_delegate_.DeviceScaleFactor());
+    viewport_size.InvScale(compositor_delegate_.DeviceScaleFactor());
 
     pixel_delta = ScrollUtils::ResolveScrollPercentageToPixels(
         pixel_delta, scroller_size, viewport_size);
@@ -1635,7 +1646,7 @@ gfx::Vector2dF InputHandler::ComputeScrollDelta(const ScrollNode& scroll_node,
   float scale_factor = compositor_delegate_.PageScaleFactor();
 
   gfx::Vector2dF adjusted_scroll(delta);
-  adjusted_scroll.Scale(1.f / scale_factor);
+  adjusted_scroll.InvScale(scale_factor);
   adjusted_scroll = UserScrollableDelta(scroll_node, adjusted_scroll);
 
   gfx::PointF old_offset =
@@ -1754,7 +1765,7 @@ gfx::Vector2dF InputHandler::ScrollNodeWithLocalDelta(
   gfx::PointF previous_offset =
       scroll_tree.current_scroll_offset(scroll_node.element_id);
   gfx::Vector2dF delta = local_delta;
-  delta.Scale(1.f / page_scale_factor);
+  delta.InvScale(page_scale_factor);
   scroll_tree.ScrollBy(scroll_node, delta, &ActiveTree());
   gfx::Vector2dF scrolled =
       scroll_tree.current_scroll_offset(scroll_node.element_id) -
@@ -1786,7 +1797,7 @@ gfx::Vector2dF InputHandler::ScrollSingleNode(const ScrollNode& scroll_node,
     // For touch-scroll we need to scale the delta here, as the transform tree
     // won't know anything about the external page scale factors used by OOPIFs.
     gfx::Vector2dF scaled_delta(adjusted_delta);
-    scaled_delta.Scale(1 / ActiveTree().external_page_scale_factor());
+    scaled_delta.InvScale(ActiveTree().external_page_scale_factor());
     return ScrollNodeWithViewportSpaceDelta(
         scroll_node, gfx::PointF(viewport_point), scaled_delta);
   }
@@ -2244,6 +2255,13 @@ bool InputHandler::ScrollbarScrollIsActive() {
 
 void InputHandler::SetDeferBeginMainFrame(bool defer_begin_main_frame) const {
   compositor_delegate_.SetDeferBeginMainFrame(defer_begin_main_frame);
+}
+
+void InputHandler::UpdateBrowserControlsState(BrowserControlsState constraints,
+                                              BrowserControlsState current,
+                                              bool animate) {
+  compositor_delegate_.UpdateBrowserControlsState(constraints, current,
+                                                  animate);
 }
 
 }  // namespace cc

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #include "components/autofill_assistant/browser/actions/action_delegate_util.h"
@@ -90,7 +90,7 @@ void SkipIfFail(element_action_util::ElementActionCallback action,
 }
 
 // Adds a sequence of actions that execute a click.
-void AddClickOrTapSequence(const ActionDelegate* delegate,
+void AddClickOrTapSequence(ActionDelegate* delegate,
                            ClickType click_type,
                            element_action_util::ElementActionVector* actions) {
   AddStepIgnoreTiming(
@@ -224,7 +224,7 @@ void FindElementAndPerform(const ActionDelegate* delegate,
 }
 
 void PerformClickOrTapElement(
-    const ActionDelegate* delegate,
+    ActionDelegate* delegate,
     ClickType click_type,
     const ElementFinderResult& element,
     base::OnceCallback<void(const ClientStatus&)> done) {
@@ -235,7 +235,7 @@ void PerformClickOrTapElement(
   element_action_util::PerformAll(std::move(actions), element, std::move(done));
 }
 
-void PerformSetFieldValue(const ActionDelegate* delegate,
+void PerformSetFieldValue(ActionDelegate* delegate,
                           const std::string& value,
                           KeyboardValueFillStrategy fill_strategy,
                           int key_press_delay_in_millisecond,

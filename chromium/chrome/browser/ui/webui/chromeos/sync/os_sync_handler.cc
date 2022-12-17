@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,7 @@
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sync_service_factory.h"
-#include "chrome/browser/ui/webui/settings/chromeos/pref_names.h"
+#include "chrome/browser/ui/webui/settings/ash/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/base/user_selectable_type.h"
@@ -63,8 +63,7 @@ void OSSyncHandler::OnJavascriptDisallowed() {
 }
 
 void OSSyncHandler::OnStateChanged(syncer::SyncService* service) {
-  if (!is_setting_prefs_)
-    PushSyncPrefs();
+  PushSyncPrefs();
 }
 
 void OSSyncHandler::HandleDidNavigateToOsSyncPage(
@@ -120,8 +119,6 @@ void OSSyncHandler::HandleSetOsSyncDatatypes(const base::Value::List& args) {
   SyncUserSettings* settings = service->GetUserSettings();
   selected_types.RetainAll(settings->GetRegisteredSelectableOsTypes());
 
-  // Don't send updates back to JS while processing values sent from JS.
-  base::AutoReset<bool> reset(&is_setting_prefs_, true);
   settings->SetSelectedOsTypes(sync_all_os_types, selected_types);
 
   // TODO(jamescook): Add metrics for selected types.

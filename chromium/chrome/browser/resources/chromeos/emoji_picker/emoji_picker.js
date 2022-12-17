@@ -1,22 +1,25 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './icons.js';
+import './icons.html.js';
 import './emoji_group.js';
 import './emoji_group_button.js';
 import './emoji_search.js';
 import './text_group_button.js';
-import 'chrome://resources/cr_elements/cr_icons_css.m.js';
-import {afterNextRender, html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import 'chrome://resources/cr_elements/cr_icons.css.js';
+
+import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import * as constants from './constants.js';
 import {EmojiGroupComponent} from './emoji_group.js';
+import {getTemplate} from './emoji_picker.html.js';
 import {Feature} from './emoji_picker.mojom-webui.js';
 import {EmojiPickerApiProxy, EmojiPickerApiProxyImpl} from './emoji_picker_api_proxy.js';
 import * as events from './events.js';
 import {CATEGORY_METADATA, EMOJI_GROUP_TABS, V2_SUBCATEGORY_TABS, V2_TABS_CATEGORY_START_INDEX} from './metadata_extension.js';
 import {RecentlyUsedStore} from './store.js';
-import {CategoryData, CategoryEnum, EmojiGroup, EmojiGroupData, EmojiVariants, SubcategoryData, EmojiGroupElement} from './types.js';
+import {CategoryData, CategoryEnum, EmojiGroup, EmojiGroupData, EmojiGroupElement, EmojiVariants, SubcategoryData} from './types.js';
 
 export class EmojiPicker extends PolymerElement {
   static get is() {
@@ -24,15 +27,15 @@ export class EmojiPicker extends PolymerElement {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static configs() {
     return {
       'dataUrls': {
         [CategoryEnum.EMOJI]: [
-          '/emoji_14_0_ordering_start.json',
-          '/emoji_14_0_ordering_remaining.json',
+          '/emoji_15_0_ordering_start.json',
+          '/emoji_15_0_ordering_remaining.json',
         ],
         [CategoryEnum.EMOTICON]: ['/emoticon_ordering.json'],
         [CategoryEnum.SYMBOL]: ['/symbol_ordering.json'],
@@ -55,8 +58,6 @@ export class EmojiPicker extends PolymerElement {
       categoriesHistory: {type: Object, value: () => ({})},
       /** @private {number} */
       pagination: {type: Number, value: 1, observer: 'onPaginationChanged'},
-      /** @private {string} */
-      search: {type: String, value: '', observer: 'onSearchChanged'},
       /** @private {boolean} */
       searchLazyIndexing: {type: Boolean, value: true},
       /** @private {boolean} */
@@ -122,6 +123,7 @@ export class EmojiPicker extends PolymerElement {
     this.addEventListener(
       events.CATEGORY_BUTTON_CLICK,
       ev => this.onCategoryButtonClick(ev.detail.categoryName));
+    this.addEventListener('search', ev => this.onSearchChanged(ev.detail));
   }
 
   /**
@@ -178,12 +180,10 @@ export class EmojiPicker extends PolymerElement {
       '--v2-emoji-picker-height': constants.V2_EMOJI_PICKER_HEIGHT_PX,
       '--v2-emoji-picker-side-padding':
           constants.V2_EMOJI_PICKER_SIDE_PADDING_PX,
-      '--v2-emoji-size': constants.V2_EMOJI_ICON_SIZE_PX,
       '--v2-emoji-group-spacing': constants.V2_EMOJI_GROUP_SPACING_PX,
       '--v2-tab-button-margin': constants.V2_TAB_BUTTON_MARGIN_PX,
       '--v2-text-group-button-padding':
           constants.V2_TEXT_GROUP_BUTTON_PADDING_PX,
-      '--v2-emoji-spacing': constants.V2_EMOJI_SPACING_PX,
     });
   }
 
@@ -226,6 +226,13 @@ export class EmojiPicker extends PolymerElement {
             (response) => this.initHistoryUI(response.incognito)),
       ],
     ).then(values => values[0]); // Map to the fetched data only.
+
+    if (this.v2Enabled) {
+      this.updateStyles({
+        '--emoji-size': constants.V2_EMOJI_ICON_SIZE_PX,
+        '--emoji-spacing': constants.V2_EMOJI_SPACING_PX,
+      });
+    }
 
     // Update UI and relevant features based on the initial data.
     this.updateCategoryData(
@@ -332,7 +339,7 @@ export class EmojiPicker extends PolymerElement {
     const baseIndex = this.categoriesGroupElements.length;
     const categoriesGroupElements = [];
 
-    data.forEach((emojiGroup, index) => {
+    data.filter(item => !item.searchOnly).forEach((emojiGroup, index) => {
       const tabIndex = baseIndex + index;
       const tabCategory = V2_SUBCATEGORY_TABS[tabIndex].category;
       categoriesGroupElements.push(
@@ -584,11 +591,11 @@ export class EmojiPicker extends PolymerElement {
     const groupElements =
         Array.from(this.$.groups.querySelectorAll('[data-group]'));
 
-    // activate the first group which is visible for at least 10 pixels,
-    // i.e. whose bottom edge is at least 10px below the top edge of the
+    // activate the first group which is visible for at least 20 pixels,
+    // i.e. whose bottom edge is at least 20px below the top edge of the
     // scrollable region.
     const activeGroup = groupElements.find(
-        el => el.getBoundingClientRect().bottom - thisRect.top >= 10);
+        el => el.getBoundingClientRect().bottom - thisRect.top >= 20);
 
     const activeGroupId = activeGroup ?
         activeGroup.dataset.group : 'emoji-history';
@@ -600,11 +607,6 @@ export class EmojiPicker extends PolymerElement {
    * @param {boolean} updateTabsScroll
    */
   updateActiveGroup(updateTabsScroll) {
-    // no need to update scroll state if search is showing.
-    if (this.search) {
-      return;
-    }
-
     const activeGroupId = this.getActiveGroupIdFromScrollPosition();
     this.set('pagination', this.getPaginationFromGroupId(activeGroupId));
     this.updateChevrons();
@@ -707,6 +709,13 @@ export class EmojiPicker extends PolymerElement {
           V2_SUBCATEGORY_TABS.find((tab) => tab.groupId === activeGroupId)
               .category;
       this.set('category', currentCategory);
+    }
+  }
+
+  preventV2TabScrolling() {
+    if (this.v2Enabled) {
+      this.$.tabs.scrollLeft =
+          this.calculateTabScrollLeftPosition(this.pagination);
     }
   }
 
@@ -988,7 +997,14 @@ export class EmojiPicker extends PolymerElement {
   onCategoryButtonClick(newCategoryName) {
     this.set('category', newCategoryName);
     this.set('pagination', 1);
-    this.scrollToGroup(this.emojiGroupTabs[0].groupId);
+    if (this.$['search-container'].searchNotEmpty()) {
+      this.$['search-container'].setSearchQuery('');
+      afterNextRender(this, () => {
+        this.scrollToGroup(this.emojiGroupTabs[0].groupId);
+      });
+    } else {
+      this.scrollToGroup(this.emojiGroupTabs[0].groupId);
+    }
   }
 
   /**
@@ -1058,6 +1074,15 @@ export class EmojiPicker extends PolymerElement {
     const offsetByLeftChevron = constants.V2_EMOJI_ICON_SIZE + chevronMargin;
     return (page === 1) ? 0 :
         (page - 1) * constants.EMOJI_PICKER_WIDTH - offsetByLeftChevron;
+  }
+
+  /**
+   * @param {number} itemPagination
+   * @param {number} currentPagination
+   * @returns {number}
+   */
+  getTabIndex(itemPagination, currentPagination) {
+    return itemPagination === currentPagination ? 0 : -1;
   }
 
   /**

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -49,6 +49,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) Keychain {
   virtual OSStatus ItemCopyMatching(CFDictionaryRef query, CFTypeRef* result);
   // ItemDelete wraps the |SecItemDelete| function.
   virtual OSStatus ItemDelete(CFDictionaryRef query);
+  // ItemDelete wraps the |SecItemUpdate| function.
+  virtual OSStatus ItemUpdate(
+      CFDictionaryRef query,
+      base::ScopedCFTypeRef<CFMutableDictionaryRef> keychain_data);
 
  protected:
   Keychain();

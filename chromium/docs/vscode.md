@@ -296,9 +296,11 @@ introduction to VS Code customization.
 Open the file [//tools/vscode/settings.json](/tools/vscode/settings.json),
 and check out the default settings there. Feel free to commit added or removed
 settings to enable better team development, or change settings locally to suit
-personal preference. Remember to replace `<full_path_to_your_home>`! To use
-these settings wholesale, enter the following commands into your terminal while
-at the src directory:
+personal preference.
+
+To use these settings wholesale, enter the following commands into your terminal
+while at the src directory:
+
 ```bash
 $ mkdir .vscode/
 $ cp tools/vscode/settings.json .vscode
@@ -320,18 +322,8 @@ terminal:
 $ cp tools/vscode/tasks.json .vscode
 ```
 
-Before running most of the tasks, you'll need to set `chrome.outputDir`. You can
-do this by typing `Ctrl+Shift+P` &gt; "Preferences: Open Folder Settings (JSON)"
-and adding something like:
-
-```json
-{
-  "chrome.outputDir": "C:\\src\\chrome\\src\\out\\release"
-
-  // more settings here...
-}
-
-```
+Before running most of the tasks, you'll need to set the `chromeOutputDir` value
+in your `.vscode/tasks.json` file.
 
 Now you can run tasks by using `Ctrl+P` and typing "task " and then a number
 of your choice. If you select one of the build tasks, the build output will
@@ -535,7 +527,7 @@ To edit this, go to `Settings` -> Select the `Workspace` tab, and choose to open
 Chromium [recently changed](https://docs.google.com/document/d/1OX4jY_bOCeNK7PNjVRuBQE9s6BQKS8XRNWGK8FEyh-E/edit?usp=sharing)
 the file path to be relative to the output dir. Check
 `gn args out/$dir --list` if `strip_absolute_paths_from_debug_symbols` is true (which is the default),
-set `cwd` to the output dir. otherwise, set `cwd` to `${workspaceRoot}`.
+set `cwd` to the output dir. otherwise, set `cwd` to `${workspaceFolder}`.
 
 ### More
 

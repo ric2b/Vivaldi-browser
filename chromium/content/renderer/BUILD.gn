@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -46,8 +46,6 @@ target(link_target_type, "renderer") {
     "accessibility/ax_tree_snapshotter_impl.h",
     "accessibility/blink_ax_action_target.cc",
     "accessibility/blink_ax_action_target.h",
-    "accessibility/blink_ax_tree_source.cc",
-    "accessibility/blink_ax_tree_source.h",
     "accessibility/render_accessibility_impl.cc",
     "accessibility/render_accessibility_impl.h",
     "accessibility/render_accessibility_manager.cc",

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -124,12 +124,6 @@ void InfoBubble::UpdatePosition() {
     SizeToContents();
     widget->SetVisibilityChangedAnimationsEnabled(true);
     widget->ShowInactive();
-#if BUILDFLAG(IS_MAC)
-    // In mac fullscreen for a info bubble on top of another bubble,
-    // explicitly request stacking above the anchored widget, otherwise
-    // the info bubble will be occluded (crbug.com/1348119).
-    widget->StackAboveWidget(anchor_widget());
-#endif
   } else {
     widget->SetVisibilityChangedAnimationsEnabled(false);
     widget->Hide();

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,8 +11,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/strings/string_piece.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 // A data store which records the most recent RTC event log data. This is
 // written to by an RTCEventLogOutput instance, which is owned by the
@@ -71,7 +70,6 @@ class WebrtcEventLogData {
   int max_section_size_ = kMaxSectionSize;
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_WEBRTC_EVENT_LOG_DATA_H_

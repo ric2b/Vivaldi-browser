@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -956,7 +956,7 @@ constexpr TimeDelta TimeBase<TimeClass>::since_origin() const {
 template <class TimeClass>
 constexpr TimeDelta TimeBase<TimeClass>::operator-(
     const TimeBase<TimeClass>& other) const {
-  return Microseconds(us_ - other.us_);
+  return Microseconds(ClampSub(us_, other.us_));
 }
 
 template <class TimeClass>

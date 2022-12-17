@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,13 +33,13 @@ void MediaBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
       switches::kAutoplayPolicy,
       switches::autoplay::kNoUserGestureRequiredPolicy);
 
-  std::vector<base::Feature> enabled_features = {
+  std::vector<base::test::FeatureRef> enabled_features = {
 #if BUILDFLAG(IS_ANDROID)
     features::kLogJsConsoleMessages,
 #endif
   };
 
-  std::vector<base::Feature> disabled_features = {
+  std::vector<base::test::FeatureRef> disabled_features = {
     // Disable fallback after decode error to avoid unexpected test pass on
     // the fallback path.
     media::kFallbackAfterDecodeError,

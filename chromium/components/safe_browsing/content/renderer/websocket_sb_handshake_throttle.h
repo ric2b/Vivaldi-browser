@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,12 +47,17 @@ class WebSocketSBHandshakeThrottle : public blink::WebSocketHandshakeThrottle,
   };
 
   // mojom::UrlCheckNotifier implementation.
-  void OnCompleteCheck(bool proceed, bool showed_interstitial) override;
+  void OnCompleteCheck(bool proceed,
+                       bool showed_interstitial,
+                       bool did_perform_real_time_check,
+                       bool did_check_allowlist) override;
 
   void OnCheckResult(
       mojo::PendingReceiver<mojom::UrlCheckNotifier> slow_check_notifier,
       bool proceed,
-      bool showed_interstitial);
+      bool showed_interstitial,
+      bool did_perform_real_time_check,
+      bool did_check_allowlist);
   void OnMojoDisconnect();
 
   const int render_frame_id_;

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -192,9 +192,9 @@ class TestVariationsService : public VariationsService {
     return VariationsService::DoFetchFromURL(url, is_http_retry);
   }
 
-  bool StoreSeed(const std::string& seed_data,
-                 const std::string& seed_signature,
-                 const std::string& country_code,
+  void StoreSeed(std::string seed_data,
+                 std::string seed_signature,
+                 std::string country_code,
                  base::Time date_fetched,
                  bool is_delta_compressed,
                  bool is_gzip_compressed) override {
@@ -204,12 +204,8 @@ class TestVariationsService : public VariationsService {
     delta_compressed_seed_ = is_delta_compressed;
     gzip_compressed_seed_ = is_gzip_compressed;
     RecordSuccessfulFetch();
-    return seed_stores_succeed_;
-  }
-
-  std::unique_ptr<const base::FieldTrial::EntropyProvider>
-  CreateLowEntropyProvider() override {
-    return std::unique_ptr<const base::FieldTrial::EntropyProvider>(nullptr);
+    OnSeedStoreResult(is_delta_compressed, seed_stores_succeed_,
+                      VariationsSeed());
   }
 
   TestVariationsServiceClient* client() {
@@ -818,7 +814,7 @@ TEST_F(VariationsServiceTest, LoadPermanentConsistencyCountry) {
       expected_list.Append(component);
     }
     const base::Value::List& pref_list =
-        prefs_.GetValueList(prefs::kVariationsPermanentConsistencyCountry);
+        prefs_.GetList(prefs::kVariationsPermanentConsistencyCountry);
     EXPECT_EQ(ListToString(expected_list), ListToString(pref_list))
         << test.permanent_consistency_country_before << ", " << test.version
         << ", " << test.latest_country_code;

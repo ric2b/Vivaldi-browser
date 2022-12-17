@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -256,6 +256,7 @@ class PLATFORM_EXPORT GeometryMapper {
     bool has_animation = false;
     bool has_fixed = false;
     bool has_sticky = false;
+    STACK_ALLOCATED();
   };
 
   static Translation2DOrMatrix SourceToDestinationProjectionInternal(

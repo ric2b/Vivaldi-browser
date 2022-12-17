@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #import <Foundation/Foundation.h>
 
 @class UIApplication;
+@class UNNotificationCategory;
 @class UNNotificationSettings;
 
 // This collection of class functions' purpose is to encapsulate the push
@@ -20,7 +21,12 @@
 // was successfully registered with APNS. If the device's registration was
 // unsuccessful, then AppDelegate's didRegisterForNotificationsWithError
 // function is called.
-+ (void)registerDeviceWithAPNS:(UIApplication*)application;
++ (void)registerDeviceWithAPNS;
+
+// The function registers the set of `UNNotificationCategory` objects with iOS'
+// UNNotificationCenter.
++ (void)registerActionableNotifications:
+    (NSSet<UNNotificationCategory*>*)categories;
 
 // This function displays a permission request system prompt. On display of this
 // prompt, the user must decide whether or not to allow iOS to notify them of

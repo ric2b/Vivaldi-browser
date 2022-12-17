@@ -19,13 +19,7 @@ package sync_pb;
 import "components/sync/protocol/unique_position.proto";
 
 // Corresponds to a single attachment itemt for a notes entry.
-message NotesAttachmentDeprecated {
-  optional string filename = 1;
-  optional string content_type = 2;
-  optional bytes content = 3;
-}
-
-message NoteAttachment {
+message DeprecatedNoteAttachment {
   optional string checksum = 1;
 }
 
@@ -35,6 +29,7 @@ message NotesSpecifics {
     NORMAL = 0;
     SEPARATOR = 2;
     FOLDER = 3;
+    ATTACHMENT = 4;
     reserved "TRASH_NODE";
     reserved 1;
   }
@@ -46,11 +41,10 @@ message NotesSpecifics {
   // Corresponds to Notes_Entry::date_added() and is the internal value from
   // base::Time.
   optional int64 creation_time_us = 4;
-  // DEPRECATED: unused fields, removed
-  optional NotesAttachmentDeprecated icon_deprecated = 5  [deprecated=true];
-  repeated NotesAttachmentDeprecated attachments_deprecated = 6  [deprecated=true];
+  reserved 5;
+  reserved 6;
   optional VivaldiSpecialNotesType special_node_type = 7;
-  repeated NoteAttachment attachments = 8;
+  repeated DeprecatedNoteAttachment attachments = 8  [deprecated = true];
   reserved 9;
   reserved 10;
   optional string guid = 11;

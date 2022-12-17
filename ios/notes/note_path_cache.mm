@@ -4,7 +4,7 @@
 
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "ios/chrome/browser/pref_names.h"
+#include "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/notes/note_utils_ios.h"
 #include "notes/notes_model.h"
 #include "notes/note_node.h"
@@ -40,6 +40,8 @@ const int64_t kFolderNone = -1;
                                                 (vivaldi::NotesModel*)model
                                          folderId:(int64_t*)folderId
                                        topMostRow:(int*)topMostRow {
+  if (!folderId) return NO;
+
   *folderId = prefService->GetInt64(vivaldiprefs::kIosNoteCachedFolderId);
 
   // If the cache was at root node, consider it as nothing was cached.

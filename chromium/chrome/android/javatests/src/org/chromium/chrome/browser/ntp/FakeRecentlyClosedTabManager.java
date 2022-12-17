@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,15 +26,6 @@ public class FakeRecentlyClosedTabManager implements RecentlyClosedTabManager {
     @Override
     public void setEntriesUpdatedRunnable(@Nullable Runnable runnable) {
         mEntriesUpdatedRunnable = runnable;
-    }
-
-    @Override
-    public List<RecentlyClosedTab> getRecentlyClosedTabs(int maxTabCount) {
-        List<RecentlyClosedTab> tabs = new ArrayList<>();
-        for (int i = 0; i < maxTabCount && i < mTabs.size(); i++) {
-            tabs.add((RecentlyClosedTab) mTabs.get(i));
-        }
-        return tabs;
     }
 
     @Override

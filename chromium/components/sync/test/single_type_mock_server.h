@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,6 +92,9 @@ class SingleTypeMockServer {
   // Sets the token that will be returned as part of GetProgress().
   void SetProgressMarkerToken(const std::string& token);
 
+  // Sets whether to return GC directive as part of GetProgress().
+  void SetReturnGcDirective(bool return_gc_directive);
+
  private:
   static std::string GenerateId(const ClientTagHash& tag_hash);
 
@@ -113,6 +116,9 @@ class SingleTypeMockServer {
 
   // The token that is used to generate the current progress marker.
   std::string progress_marker_token_;
+
+  // Whether to return GC directive in GetProgress().
+  bool return_gc_directive_ = false;
 };
 
 }  // namespace syncer

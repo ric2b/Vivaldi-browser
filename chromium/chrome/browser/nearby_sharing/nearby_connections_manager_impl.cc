@@ -1,10 +1,9 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/nearby_sharing/nearby_connections_manager_impl.h"
 
-#include "ash/services/nearby/public/mojom/nearby_connections_types.mojom.h"
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
@@ -15,13 +14,13 @@
 #include "chrome/browser/nearby_sharing/constants.h"
 #include "chrome/browser/nearby_sharing/logging/logging.h"
 #include "chrome/browser/nearby_sharing/nearby_connections_manager.h"
+#include "chromeos/ash/services/nearby/public/mojom/nearby_connections_types.mojom.h"
 #include "crypto/random.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/network_change_notifier.h"
 
 namespace {
 
-const char kServiceId[] = "NearbySharing";
 const char kFastAdvertisementServiceUuid[] =
     "0000fef3-0000-1000-8000-00805f9b34fb";
 const location::nearby::connections::mojom::Strategy kStrategy =
@@ -102,8 +101,9 @@ std::string MediumSelectionToString(
 }  // namespace
 
 NearbyConnectionsManagerImpl::NearbyConnectionsManagerImpl(
-    ash::nearby::NearbyProcessManager* process_manager)
-    : process_manager_(process_manager) {
+    ash::nearby::NearbyProcessManager* process_manager,
+    const std::string& service_id)
+    : process_manager_(process_manager), service_id_(service_id) {
   DCHECK(process_manager_);
 }
 
@@ -162,7 +162,7 @@ void NearbyConnectionsManagerImpl::StartAdvertising(
 
   incoming_connection_listener_ = listener;
   nearby_connections->StartAdvertising(
-      kServiceId, endpoint_info,
+      service_id_, endpoint_info,
       AdvertisingOptions::New(
           kStrategy, std::move(allowed_mediums), auto_upgrade_bandwidth,
           /*enforce_topology_constraints=*/true,
@@ -184,7 +184,7 @@ void NearbyConnectionsManagerImpl::StopAdvertising(
     return;
 
   process_reference_->GetNearbyConnections()->StopAdvertising(
-      kServiceId, std::move(callback));
+      service_id_, std::move(callback));
 }
 
 void NearbyConnectionsManagerImpl::StartDiscovery(
@@ -214,7 +214,7 @@ void NearbyConnectionsManagerImpl::StartDiscovery(
 
   discovery_listener_ = listener;
   nearby_connections->StartDiscovery(
-      kServiceId,
+      service_id_,
       DiscoveryOptions::New(
           kStrategy, std::move(allowed_mediums),
           device::BluetoothUUID(kFastAdvertisementServiceUuid),
@@ -234,7 +234,7 @@ void NearbyConnectionsManagerImpl::StopDiscovery() {
     return;
 
   process_reference_->GetNearbyConnections()->StopDiscovery(
-      kServiceId, base::BindOnce([](ConnectionsStatus status) {
+      service_id_, base::BindOnce([](ConnectionsStatus status) {
         NS_LOG(VERBOSE) << __func__
                         << ": Stop discovery attempted over Nearby "
                            "Connections with result: "
@@ -282,7 +282,7 @@ void NearbyConnectionsManagerImpl::Connect(
   connect_timeout_timers_.emplace(endpoint_id, std::move(timeout_timer));
 
   process_reference_->GetNearbyConnections()->RequestConnection(
-      kServiceId, endpoint_info, endpoint_id,
+      service_id_, endpoint_info, endpoint_id,
       ConnectionOptions::New(std::move(allowed_mediums),
                              std::move(bluetooth_mac_address),
                              /*keep_alive_interval_millis=*/absl::nullopt,
@@ -322,7 +322,7 @@ void NearbyConnectionsManagerImpl::Disconnect(const std::string& endpoint_id) {
     return;
 
   process_reference_->GetNearbyConnections()->DisconnectFromEndpoint(
-      kServiceId, endpoint_id,
+      service_id_, endpoint_id,
       base::BindOnce(
           [](const std::string& endpoint_id, ConnectionsStatus status) {
             NS_LOG(VERBOSE)
@@ -349,7 +349,7 @@ void NearbyConnectionsManagerImpl::Send(
     RegisterPayloadStatusListener(payload->id, listener);
 
   process_reference_->GetNearbyConnections()->SendPayload(
-      kServiceId, {endpoint_id}, std::move(payload),
+      service_id_, {endpoint_id}, std::move(payload),
       base::BindOnce(
           [](const std::string& endpoint_id, ConnectionsStatus status) {
             NS_LOG(VERBOSE)
@@ -391,7 +391,7 @@ void NearbyConnectionsManagerImpl::OnFileCreated(
     return;
 
   process_reference_->GetNearbyConnections()->RegisterPayloadFile(
-      kServiceId, payload_id, std::move(result.input_file),
+      service_id_, payload_id, std::move(result.input_file),
       std::move(result.output_file), std::move(callback));
 }
 
@@ -427,7 +427,7 @@ void NearbyConnectionsManagerImpl::Cancel(int64_t payload_id) {
   }
 
   process_reference_->GetNearbyConnections()->CancelPayload(
-      kServiceId, payload_id,
+      service_id_, payload_id,
       base::BindOnce(
           [](int64_t payload_id, ConnectionsStatus status) {
             NS_LOG(VERBOSE)
@@ -475,7 +475,7 @@ void NearbyConnectionsManagerImpl::UpgradeBandwidth(
 
   requested_bwu_endpoint_ids_.emplace(endpoint_id);
   process_reference_->GetNearbyConnections()->InitiateBandwidthUpgrade(
-      kServiceId, endpoint_id,
+      service_id_, endpoint_id,
       base::BindOnce(
           [](const std::string& endpoint_id, ConnectionsStatus status) {
             NS_LOG(VERBOSE)
@@ -558,7 +558,7 @@ void NearbyConnectionsManagerImpl::OnConnectionInitiated(
                          payload_listener.InitWithNewPipeAndPassReceiver());
 
   process_reference_->GetNearbyConnections()->AcceptConnection(
-      kServiceId, endpoint_id, std::move(payload_listener),
+      service_id_, endpoint_id, std::move(payload_listener),
       base::BindOnce(
           [](const std::string& endpoint_id, ConnectionsStatus status) {
             NS_LOG(VERBOSE)
@@ -588,8 +588,8 @@ void NearbyConnectionsManagerImpl::OnConnectionAccepted(
     incoming_connection_listener_->OnIncomingConnection(
         endpoint_id, it->second->endpoint_info, result.first->second.get());
   } else {
-    auto it = pending_outgoing_connections_.find(endpoint_id);
-    if (it == pending_outgoing_connections_.end()) {
+    auto pending_it = pending_outgoing_connections_.find(endpoint_id);
+    if (pending_it == pending_outgoing_connections_.end()) {
       Disconnect(endpoint_id);
       return;
     }
@@ -597,8 +597,8 @@ void NearbyConnectionsManagerImpl::OnConnectionAccepted(
     auto result = connections_.emplace(
         endpoint_id, std::make_unique<NearbyConnectionImpl>(this, endpoint_id));
     DCHECK(result.second);
-    std::move(it->second).Run(result.first->second.get());
-    pending_outgoing_connections_.erase(it);
+    std::move(pending_it->second).Run(result.first->second.get());
+    pending_outgoing_connections_.erase(pending_it);
     connect_timeout_timers_.erase(endpoint_id);
   }
 }
@@ -701,7 +701,7 @@ void NearbyConnectionsManagerImpl::OnPayloadTransferUpdate(
   if (!payload_it->second->content->is_bytes()) {
     NS_LOG(WARNING) << "Received unknown payload of file type. Cancelling.";
     process_reference_->GetNearbyConnections()->CancelPayload(
-        kServiceId, payload_it->first, base::DoNothing());
+        service_id_, payload_it->first, base::DoNothing());
     return;
   }
 
@@ -745,7 +745,7 @@ NearbyConnectionsManagerImpl::GetNearbyConnections() {
 void NearbyConnectionsManagerImpl::Reset() {
   if (process_reference_) {
     process_reference_->GetNearbyConnections()->StopAllEndpoints(
-        kServiceId, base::BindOnce([](ConnectionsStatus status) {
+        service_id_, base::BindOnce([](ConnectionsStatus status) {
           NS_LOG(VERBOSE) << __func__
                           << ": Stop all endpoints attempted over Nearby "
                              "Connections with result: "

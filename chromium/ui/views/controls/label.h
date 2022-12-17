@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -132,11 +132,13 @@ class VIEWS_EXPORT Label : public View,
   // enabled.
   SkColor GetEnabledColor() const;
   virtual void SetEnabledColor(SkColor color);
+  void SetEnabledColorId(absl::optional<ui::ColorId> enabled_color_id);
 
   // Gets/Sets the background color. This won't be explicitly drawn, but the
   // label will force the text color to be readable over it.
   SkColor GetBackgroundColor() const;
   void SetBackgroundColor(SkColor color);
+  void SetBackgroundColorId(absl::optional<ui::ColorId> background_color_id);
 
   // Gets/Sets the selection text color. This will automatically force the color
   // to be readable over the selection background color, if auto color
@@ -468,6 +470,9 @@ class VIEWS_EXPORT Label : public View,
   SkColor actual_selection_text_color_ = gfx::kPlaceholderColor;
   SkColor selection_background_color_ = gfx::kPlaceholderColor;
 
+  absl::optional<ui::ColorId> enabled_color_id_;
+  absl::optional<ui::ColorId> background_color_id_;
+
   // Set to true once the corresponding setter is invoked.
   bool enabled_color_set_ = false;
   bool background_color_set_ = false;
@@ -512,6 +517,8 @@ VIEW_BUILDER_PROPERTY(SkColor, EnabledColor)
 VIEW_BUILDER_PROPERTY(SkColor, BackgroundColor)
 VIEW_BUILDER_PROPERTY(SkColor, SelectionTextColor)
 VIEW_BUILDER_PROPERTY(SkColor, SelectionBackgroundColor)
+VIEW_BUILDER_PROPERTY(ui::ColorId, EnabledColorId)
+VIEW_BUILDER_PROPERTY(ui::ColorId, BackgroundColorId)
 VIEW_BUILDER_PROPERTY(const gfx::ShadowValues&, Shadows)
 VIEW_BUILDER_PROPERTY(bool, SubpixelRenderingEnabled)
 VIEW_BUILDER_PROPERTY(bool, SkipSubpixelRenderingOpacityCheck)

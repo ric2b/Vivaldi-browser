@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,20 +10,28 @@ import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import android.graphics.Canvas;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.matcher.ViewMatchers.Visibility;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -35,10 +43,19 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.layouts.LayoutTestUtils;
+import org.chromium.chrome.browser.layouts.LayoutType;
+import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
@@ -47,7 +64,12 @@ import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.OmniboxTestUtils;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.ui.test.util.DisableAnimationsTestRule;
 import org.chromium.ui.test.util.UiRestriction;
 
 /**
@@ -57,6 +79,9 @@ import org.chromium.ui.test.util.UiRestriction;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
 public class ToolbarPhoneTest {
+    @ClassRule
+    public static DisableAnimationsTestRule sEnableAnimationsRule =
+            new DisableAnimationsTestRule(true);
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
@@ -69,11 +94,14 @@ public class ToolbarPhoneTest {
     private Runnable mRequestRenderRunnable;
     @Mock
     ThemeColorProvider mThemeColorProvider;
+    @Mock
+    GradientDrawable mLocationbarBackgroundDrawable;
 
     private Canvas mCanvas = new Canvas();
     private ToolbarPhone mToolbar;
     private View mToolbarButtonsContainer;
     private MenuButton mMenuButton;
+    private OmniboxTestUtils mOmnibox;
 
     @Before
     public void setUp() {
@@ -82,6 +110,7 @@ public class ToolbarPhoneTest {
         mActivityTestRule.startMainActivityOnBlankPage();
         mToolbar = mActivityTestRule.getActivity().findViewById(R.id.toolbar);
         mToolbarButtonsContainer = mToolbar.findViewById(R.id.toolbar_buttons);
+        mOmnibox = new OmniboxTestUtils(mActivityTestRule.getActivity());
     }
 
     @Test
@@ -197,6 +226,260 @@ public class ToolbarPhoneTest {
             Assert.assertNotEquals("Offset should be different when menu button is invisible",
                     offsetWhenButtonInvisible, offsetWhenParentVisible);
         });
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE})
+    @CommandLineFlags.
+    Add({"enable-features=" + ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE + "<Study",
+            "force-fieldtrials=Study/Group",
+            "force-fieldtrial-params=Study.Group:modernize_visual_update_active_color_on_omnibox/true"})
+    public void
+    testToolbarColorSameAsSuggestionColorWhenFocus_activeColorOmnibox() {
+        LocationBarCoordinator locationBarCoordinator =
+                (LocationBarCoordinator) mToolbar.getLocationBar();
+        ColorDrawable toolbarBackgroundDrawable = mToolbar.getBackgroundDrawable();
+        mToolbar.setLocationBarBackgroundDrawableForTesting(mLocationbarBackgroundDrawable);
+        int nonFocusedRadius = mActivityTestRule.getActivity().getResources().getDimensionPixelSize(
+                R.dimen.modern_toolbar_background_corner_radius);
+        int focusedRadius = mActivityTestRule.getActivity().getResources().getDimensionPixelSize(
+                R.dimen.omnibox_suggestion_bg_round_corner_radius);
+
+        // Focus on the Omnibox
+        mOmnibox.requestFocus();
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(toolbarBackgroundDrawable.getColor(),
+                    Matchers.is(locationBarCoordinator.getDropdownBackgroundColor(
+                            false /*isIncognito*/)));
+        });
+        verify(mLocationbarBackgroundDrawable)
+                .setTint(
+                        locationBarCoordinator.getSuggestionBackgroundColor(false /*isIncognito*/));
+        verify(mLocationbarBackgroundDrawable, atLeastOnce()).setCornerRadius(focusedRadius);
+
+        // Clear focus on the Omnibox
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            locationBarCoordinator.getPhoneCoordinator().getViewForDrawing().clearFocus();
+        });
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(toolbarBackgroundDrawable.getColor(),
+                    Matchers.not(locationBarCoordinator.getDropdownBackgroundColor(
+                            false /*isIncognito*/)));
+        });
+        verify(mLocationbarBackgroundDrawable, atLeastOnce()).setTint(anyInt());
+        verify(mLocationbarBackgroundDrawable, atLeastOnce()).setCornerRadius(nonFocusedRadius);
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE})
+    @CommandLineFlags.
+    Add({"enable-features=" + ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE + "<Study",
+            "force-fieldtrials=Study/Group",
+            "force-fieldtrial-params=Study.Group:modernize_visual_update_active_color_on_omnibox/false"})
+    public void
+    testToolbarColorSameAsSuggestionColorWhenFocus_noActiveColorOmnibox() {
+        LocationBarCoordinator locationBarCoordinator =
+                (LocationBarCoordinator) mToolbar.getLocationBar();
+        ColorDrawable toolbarBackgroundDrawable = mToolbar.getBackgroundDrawable();
+        mToolbar.setLocationBarBackgroundDrawableForTesting(mLocationbarBackgroundDrawable);
+
+        // Focus on the Omnibox
+        mOmnibox.requestFocus();
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(toolbarBackgroundDrawable.getColor(),
+                    Matchers.is(locationBarCoordinator.getDropdownBackgroundColor(
+                            false /*isIncognito*/)));
+        });
+        verify(mLocationbarBackgroundDrawable)
+                .setTint(locationBarCoordinator.getDropdownBackgroundColor(false /*isIncognito*/));
+        verify(mLocationbarBackgroundDrawable, never()).setCornerRadius(anyInt());
+
+        // Clear focus on the Omnibox
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            locationBarCoordinator.getPhoneCoordinator().getViewForDrawing().clearFocus();
+        });
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(toolbarBackgroundDrawable.getColor(),
+                    Matchers.not(locationBarCoordinator.getDropdownBackgroundColor(
+                            false /*isIncognito*/)));
+        });
+        verify(mLocationbarBackgroundDrawable, atLeastOnce()).setTint(anyInt());
+        verify(mLocationbarBackgroundDrawable, never()).setCornerRadius(anyInt());
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE})
+    @CommandLineFlags.
+    Add({"enable-features=" + ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE + "<Study",
+            "force-fieldtrials=Study/Group",
+            "force-fieldtrial-params=Study.Group:modernize_visual_update_active_color_on_omnibox/false"})
+    public void
+    testToolbarColorChangedAfterScroll_noActiveColorOmnibox() {
+        LocationBarCoordinator locationBarCoordinator =
+                (LocationBarCoordinator) mToolbar.getLocationBar();
+        ColorDrawable toolbarBackgroundDrawable = mToolbar.getBackgroundDrawable();
+        mToolbar.setLocationBarBackgroundDrawableForTesting(mLocationbarBackgroundDrawable);
+
+        // Focus on the Omnibox
+        mOmnibox.requestFocus();
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(toolbarBackgroundDrawable.getColor(),
+                    Matchers.is(locationBarCoordinator.getDropdownBackgroundColor(
+                            false /*isIncognito*/)));
+        });
+        verify(mLocationbarBackgroundDrawable)
+                .setTint(locationBarCoordinator.getDropdownBackgroundColor(false /*isIncognito*/));
+
+        // Scroll the dropdown
+        TestThreadUtils.runOnUiThreadBlocking(() -> { mToolbar.onSuggestionDropdownScroll(); });
+        verify(mLocationbarBackgroundDrawable)
+                .setTint(ChromeColors.getSurfaceColor(
+                        mActivityTestRule.getActivity(), R.dimen.toolbar_text_box_elevation));
+
+        // Scroll the dropdown back to the top
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { mToolbar.onSuggestionDropdownOverscrolledToTop(); });
+        verify(mLocationbarBackgroundDrawable, atLeastOnce())
+                .setTint(locationBarCoordinator.getDropdownBackgroundColor(false /*isIncognito*/));
+
+        // Clear focus on the Omnibox
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            locationBarCoordinator.getPhoneCoordinator().getViewForDrawing().clearFocus();
+        });
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(toolbarBackgroundDrawable.getColor(),
+                    Matchers.not(locationBarCoordinator.getDropdownBackgroundColor(
+                            false /*isIncognito*/)));
+        });
+        verify(mLocationbarBackgroundDrawable, atLeastOnce()).setTint(anyInt());
+        verify(mLocationbarBackgroundDrawable, never()).setCornerRadius(anyInt());
+    }
+
+    @Test
+    @MediumTest
+    @DisableFeatures({ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE})
+    public void testLocationBarCornerShouldNeverUpdatedWithoutExperiment() {
+        LocationBarCoordinator locationBarCoordinator =
+                (LocationBarCoordinator) mToolbar.getLocationBar();
+        mToolbar.setLocationBarBackgroundDrawableForTesting(mLocationbarBackgroundDrawable);
+
+        // Focus on the Omnibox
+        mOmnibox.requestFocus();
+        verify(mLocationbarBackgroundDrawable, never()).setCornerRadius(anyInt());
+
+        // Clear focus on the Omnibox
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            locationBarCoordinator.getPhoneCoordinator().getViewForDrawing().clearFocus();
+        });
+        verify(mLocationbarBackgroundDrawable, never()).setCornerRadius(anyInt());
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID,
+            ChromeFeatureList.TAB_TO_GTS_ANIMATION, ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID})
+    public void
+    testEnterTabSwitcher_toolbarVisibleUntilTransitionEnds_startSurfaceEnabled() {
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        TabModelSelector tabModelSelector = cta.getTabModelSelectorSupplier().get();
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(tabModelSelector.isTabStateInitialized(), Matchers.is(true));
+            Criteria.checkThat(tabModelSelector.getTotalTabCount(), Matchers.is(1));
+        });
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            cta.findViewById(org.chromium.chrome.tab_ui.R.id.tab_switcher_button).performClick();
+        });
+
+        CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() != View.VISIBLE);
+        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
+        CriteriaHelper.pollUiThread(() -> {
+            RecyclerView tabList = cta.findViewById(R.id.tab_list_view);
+            RecyclerView.ViewHolder viewHolder =
+                    tabList == null ? null : tabList.findViewHolderForAdapterPosition(0);
+            if (viewHolder != null) {
+                viewHolder.itemView.performClick();
+                return true;
+            }
+            return false;
+        });
+        CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() == View.VISIBLE);
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID,
+            ChromeFeatureList.TAB_TO_GTS_ANIMATION, ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID})
+    @DisableAnimationsTestRule.EnsureAnimationsOn
+    public void
+    testEnterTabSwitcher_toolbarVisibleUntilTransitionEnds_startSurfaceEnabled_animationsEnabled() {
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        TabModelSelector tabModelSelector = cta.getTabModelSelectorSupplier().get();
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(tabModelSelector.isTabStateInitialized(), Matchers.is(true));
+            Criteria.checkThat(tabModelSelector.getTotalTabCount(), Matchers.is(1));
+        });
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            cta.findViewById(org.chromium.chrome.tab_ui.R.id.tab_switcher_button).performClick();
+        });
+
+        if (TabUiFeatureUtilities.isTabToGtsAnimationEnabled()) {
+            Assert.assertTrue(mToolbar.getVisibility() == View.VISIBLE);
+        }
+
+        CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() != View.VISIBLE);
+        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
+        CriteriaHelper.pollUiThread(() -> {
+            RecyclerView tabList = cta.findViewById(R.id.tab_list_view);
+            RecyclerView.ViewHolder viewHolder =
+                    tabList == null ? null : tabList.findViewHolderForAdapterPosition(0);
+            if (viewHolder != null) {
+                viewHolder.itemView.performClick();
+                return true;
+            }
+            return false;
+        });
+        CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() == View.VISIBLE);
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID})
+    @DisableFeatures({ChromeFeatureList.START_SURFACE_ANDROID})
+    @DisableAnimationsTestRule.EnsureAnimationsOn
+    public void testEnterTabSwitcher_toolbarVisibleUntilTransitionEnds_startSurfaceDisabled() {
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        TabModelSelector tabModelSelector = cta.getTabModelSelectorSupplier().get();
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(tabModelSelector.isTabStateInitialized(), Matchers.is(true));
+            Criteria.checkThat(tabModelSelector.getTotalTabCount(), Matchers.is(1));
+        });
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            cta.findViewById(org.chromium.chrome.tab_ui.R.id.tab_switcher_button).performClick();
+        });
+
+        if (TabUiFeatureUtilities.isTabToGtsAnimationEnabled()) {
+            Assert.assertTrue(mToolbar.getVisibility() == View.VISIBLE);
+        }
+
+        CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() != View.VISIBLE);
+        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.TAB_SWITCHER);
+        CriteriaHelper.pollUiThread(() -> {
+            RecyclerView tabList = cta.findViewById(R.id.tab_list_view);
+            RecyclerView.ViewHolder viewHolder =
+                    tabList == null ? null : tabList.findViewHolderForAdapterPosition(0);
+            if (viewHolder != null) {
+                viewHolder.itemView.performClick();
+                return true;
+            }
+            return false;
+        });
+        CriteriaHelper.pollUiThread(() -> mToolbar.getVisibility() == View.VISIBLE);
     }
 
     private static class TestControlsVisibilityDelegate

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/components/login/auth/public/user_context.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -48,6 +47,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
 #include "chrome/common/channel_info.h"
+#include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
@@ -85,10 +85,10 @@ bool AllAllowlistedUsersPresent() {
   if (allow_family_link)
     return false;
 
-  const base::ListValue* allowlist = nullptr;
+  const base::Value::List* allowlist = nullptr;
   if (!cros_settings->GetList(kAccountsPrefUsers, &allowlist) || !allowlist)
     return false;
-  for (const base::Value& i : allowlist->GetListDeprecated()) {
+  for (const base::Value& i : *allowlist) {
     const std::string* allowlisted_user = i.GetIfString();
     // NB: Wildcards in the allowlist are also detected as not present here.
     if (!allowlisted_user || !user_manager::UserManager::Get()->IsKnownUser(
@@ -168,7 +168,6 @@ LoginDisplayHostMojo::~LoginDisplayHostMojo() {
   GetLoginScreenCertProviderService()
       ->pin_dialog_manager()
       ->RemovePinDialogHost(&security_token_pin_dialog_host_login_impl_);
-  dialog_->GetOobeUI()->signin_screen_handler()->SetDelegate(nullptr);
   StopObservingOobeUI();
   dialog_->Close();
 }
@@ -205,6 +204,13 @@ void LoginDisplayHostMojo::ShowPasswordChangedDialog(
   DCHECK(GetOobeUI());
   wizard_controller_->ShowGaiaPasswordChangedScreen(account_id,
                                                     show_password_error);
+  ShowDialog();
+}
+
+void LoginDisplayHostMojo::StartCryptohomeRecovery(
+    const AccountId& account_id) {
+  DCHECK(GetOobeUI());
+  wizard_controller_->ShowCryptohomeRecoveryScreen(account_id);
   ShowDialog();
 }
 
@@ -408,8 +414,9 @@ void LoginDisplayHostMojo::HideOobeDialog(bool saml_page_closed) {
   // on camera timeout during SAML login.
   // TODO(crbug.com/1283052): simplify the logic here.
 
-  const bool no_users =
-      !login_display_->IsSigninInProgress() && !has_user_pods_;
+  const bool no_users = GetExistingUserController() &&
+                        !GetExistingUserController()->IsSigninInProgress() &&
+                        !has_user_pods_;
   if (no_users && !saml_page_closed) {
     return;
   }
@@ -686,8 +693,6 @@ void LoginDisplayHostMojo::EnsureOobeDialogLoaded() {
     return;
 
   dialog_ = new OobeUIDialogDelegate(weak_factory_.GetWeakPtr());
-  dialog_->GetOobeUI()->signin_screen_handler()->SetDelegate(
-      login_display_.get());
 
   views::View* web_dialog_view = dialog_->GetWebDialogView();
   scoped_observation_.Observe(web_dialog_view);
@@ -747,6 +752,9 @@ void LoginDisplayHostMojo::HideDialog() {
   // with hidden error screens).
   StopObservingOobeUI();
   dialog_->Hide();
+  // Hide the current screen of the `WizardController` to force `Show()` to be
+  // called on the first screen when the dialog reopens.
+  GetWizardController()->HideCurrentScreen();
   gaia_reauth_account_id_.reset();
 }
 

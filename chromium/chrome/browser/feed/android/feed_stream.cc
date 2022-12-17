@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/strings/string_piece.h"
+#include "base/time/time.h"
 #include "chrome/browser/feed/android/feed_reliability_logging_bridge.h"
 #include "chrome/browser/feed/android/jni_headers/FeedStream_jni.h"
 #include "chrome/browser/feed/android/jni_translation.h"
@@ -39,16 +40,30 @@ static jlong JNI_FeedStream_Init(JNIEnv* env,
                                  jint stream_kind,
                                  jlong native_feed_reliability_logging_bridge) {
   return reinterpret_cast<intptr_t>(
-      new FeedStream(j_this, stream_kind,
+      new FeedStream(j_this, stream_kind, std::string(),
                      reinterpret_cast<FeedReliabilityLoggingBridge*>(
                          native_feed_reliability_logging_bridge)));
 }
 
+static jlong JNI_FeedStream_InitWebFeed(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& j_this,
+    const JavaParamRef<jbyteArray>& j_web_feed_id,
+    jlong native_feed_reliability_logging_bridge) {
+  std::string web_feed_id;
+  base::android::JavaByteArrayToString(env, j_web_feed_id, &web_feed_id);
+  return reinterpret_cast<intptr_t>(new FeedStream(
+      j_this, static_cast<jint>(StreamKind::kChannel), web_feed_id,
+      reinterpret_cast<FeedReliabilityLoggingBridge*>(
+          native_feed_reliability_logging_bridge)));
+}
+
 FeedStream::FeedStream(const JavaRef<jobject>& j_this,
                        jint stream_kind,
+                       std::string web_feed_id,
                        FeedReliabilityLoggingBridge* reliability_logging_bridge)
-    : ::feed::FeedStreamSurface(
-          StreamType(static_cast<StreamKind>(stream_kind))),
+    : ::feed::FeedStreamSurface(StreamType(static_cast<StreamKind>(stream_kind),
+                                           std::move(web_feed_id))),
       feed_stream_api_(nullptr),
       reliability_logging_bridge_(reliability_logging_bridge) {
   java_ref_.Reset(j_this);
@@ -314,6 +329,16 @@ void FeedStream::InvalidateContentCacheFor(JNIEnv* env,
     return;
   feed_stream_api_->InvalidateContentCacheFor(
       (static_cast<StreamKind>(stream_kind)));
+}
+
+void FeedStream::ReportContentSliceVisibleTimeForGoodVisits(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jlong elapsed_ms) {
+  if (!feed_stream_api_)
+    return;
+  feed_stream_api_->ReportContentSliceVisibleTimeForGoodVisits(
+      base::Milliseconds(elapsed_ms));
 }
 
 }  // namespace android

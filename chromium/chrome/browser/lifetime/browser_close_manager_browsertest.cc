@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,7 +25,7 @@
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_prefs.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
@@ -1094,7 +1094,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
     if (!base::PathExists(path))
       ASSERT_TRUE(base::CreateDirectory(path));
     other_profile =
-        Profile::CreateProfile(path, NULL, Profile::CREATE_MODE_SYNCHRONOUS);
+        Profile::CreateProfile(path, nullptr, Profile::CREATE_MODE_SYNCHRONOUS);
   }
   Profile* other_profile_ptr = other_profile.get();
   profile_manager->RegisterTestingProfile(std::move(other_profile), true);

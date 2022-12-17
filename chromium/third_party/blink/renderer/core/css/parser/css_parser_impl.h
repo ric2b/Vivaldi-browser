@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,7 +42,6 @@ class StyleRulePositionFallback;
 class StyleRuleProperty;
 class StyleRuleSupports;
 class StyleRuleTry;
-class StyleRuleViewport;
 class StyleSheetContents;
 class Element;
 
@@ -55,7 +54,8 @@ class CORE_EXPORT CSSParserImpl {
   STACK_ALLOCATED();
 
  public:
-  CSSParserImpl(const CSSParserContext*, StyleSheetContents* = nullptr);
+  explicit CSSParserImpl(const CSSParserContext*,
+                         StyleSheetContents* = nullptr);
   CSSParserImpl(const CSSParserImpl&) = delete;
   CSSParserImpl& operator=(const CSSParserImpl&) = delete;
 
@@ -174,7 +174,6 @@ class CORE_EXPORT CSSParserImpl {
   StyleRuleNamespace* ConsumeNamespaceRule(CSSParserTokenStream&);
   StyleRuleMedia* ConsumeMediaRule(CSSParserTokenStream&);
   StyleRuleSupports* ConsumeSupportsRule(CSSParserTokenStream&);
-  StyleRuleViewport* ConsumeViewportRule(CSSParserTokenStream&);
   StyleRuleFontFace* ConsumeFontFaceRule(CSSParserTokenStream&);
   StyleRuleFontPaletteValues* ConsumeFontPaletteValuesRule(
       CSSParserTokenStream&);
@@ -183,7 +182,6 @@ class CORE_EXPORT CSSParserImpl {
   StyleRulePage* ConsumePageRule(CSSParserTokenStream&);
   StyleRuleProperty* ConsumePropertyRule(CSSParserTokenStream&);
   StyleRuleCounterStyle* ConsumeCounterStyleRule(CSSParserTokenStream&);
-  StyleRuleScrollTimeline* ConsumeScrollTimelineRule(CSSParserTokenStream&);
   StyleRuleBase* ConsumeScopeRule(CSSParserTokenStream&);
   StyleRuleContainer* ConsumeContainerRule(CSSParserTokenStream&);
   StyleRuleBase* ConsumeLayerRule(CSSParserTokenStream&);
@@ -225,6 +223,10 @@ class CORE_EXPORT CSSParserImpl {
   CSSParserObserver* observer_;
 
   CSSLazyParsingState* lazy_state_;
+
+  // Used for temporary allocations of CSSParserSelector (we send it down
+  // to CSSSelectorParser, which temporarily holds on to a reference to it).
+  Arena arena_;
 
   HeapHashMap<String, Member<const MediaQuerySet>> media_query_cache_;
 };

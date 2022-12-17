@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,9 +42,6 @@ public abstract class BaseCarouselSuggestionProcessor implements SuggestionProce
      * @return Minimum height of an element hosted by the carousel.
      */
     public abstract int getMinimumCarouselItemViewHeight();
-
-    @Override
-    public void onUrlFocusChange(boolean hasFocus) {}
 
     @CallSuper
     @Override

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -137,7 +137,7 @@ std::string FormattedMacAddress(const std::string& shill_mac_address) {
   return result;
 }
 
-bool ParseCellularScanResults(const base::Value::ConstListView list,
+bool ParseCellularScanResults(const base::Value::List& list,
                               std::vector<CellularScanResult>* scan_results) {
   scan_results->clear();
   scan_results->reserve(list.size());
@@ -173,7 +173,7 @@ bool ParseCellularScanResults(const base::Value::ConstListView list,
 }
 
 bool ParseCellularSIMSlotInfo(
-    const base::Value::ConstListView list,
+    const base::Value::List& list,
     std::vector<CellularSIMSlotInfo>* sim_slot_infos) {
   sim_slot_infos->clear();
   sim_slot_infos->reserve(list.size());
@@ -237,7 +237,8 @@ base::Value TranslateNetworkStateToONC(const NetworkState* network) {
       ->FindPolicyByGUID(user_id_hash, network->guid(), &onc_source);
 
   base::Value onc_dictionary = onc::TranslateShillServiceToONCPart(
-      shill_dictionary, onc_source, &onc::kNetworkWithStateSignature, network);
+      shill_dictionary, onc_source, &chromeos::onc::kNetworkWithStateSignature,
+      network);
 
   // Remove IPAddressConfigType/NameServersConfigType as these were
   // historically not provided by TranslateNetworkStateToONC.

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,7 +88,7 @@ class MockDelegate : public blink::URLLoaderThrottle::Delegate {
     is_resumed_ = true;
     // Resume from OnReceiveResponse() with a customized response header.
     destination_loader_client()->OnReceiveResponse(
-        std::move(updated_response_head_), std::move(body_));
+        std::move(updated_response_head_), std::move(body_), absl::nullopt);
   }
 
   void SetPriority(net::RequestPriority priority) override { NOTIMPLEMENTED(); }

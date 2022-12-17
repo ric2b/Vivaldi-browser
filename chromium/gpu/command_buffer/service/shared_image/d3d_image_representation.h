@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,8 +34,8 @@ class GLTexturePassthroughD3DImageRepresentation
       scoped_refptr<gles2::TexturePassthrough> texture);
   ~GLTexturePassthroughD3DImageRepresentation() override;
 
-  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough()
-      override;
+  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough(
+      int plane_index) override;
 
  private:
   bool BeginAccess(GLenum mode) override;

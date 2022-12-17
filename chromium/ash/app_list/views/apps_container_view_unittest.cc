@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,15 +11,13 @@
 #include "ash/app_list/views/continue_section_view.h"
 #include "ash/app_list/views/recent_apps_view.h"
 #include "ash/app_list/views/search_box_view.h"
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/layer_animation_stopped_waiter.h"
-#include "base/test/scoped_feature_list.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/compositor/test/layer_animation_stopped_waiter.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -56,12 +54,7 @@ class TransitionWaiter : public PaginationModelObserver {
 
 class AppsContainerViewTest : public AshTestBase {
  public:
-  AppsContainerViewTest() {
-    // These tests primarily exercise the "hide continue section" behavior.
-    features_.InitWithFeatures({features::kProductivityLauncher,
-                                features::kLauncherHideContinueSection},
-                               {});
-  }
+  AppsContainerViewTest() = default;
   ~AppsContainerViewTest() override = default;
 
   // testing::Test:
@@ -111,7 +104,6 @@ class AppsContainerViewTest : public AshTestBase {
   }
 
  private:
-  base::test::ScopedFeatureList features_;
   std::unique_ptr<test::AppListTestModel> app_list_test_model_;
   std::unique_ptr<SearchModel> search_model_;
 };
@@ -184,7 +176,7 @@ TEST_F(AppsContainerViewTest, HideContinueSectionPlaysAnimation) {
 
   // Wait for the last item's animation to complete.
   AppListItemView* last_item = apps_grid_view->GetItemViewAt(item_count - 1);
-  LayerAnimationStoppedWaiter().Wait(last_item->layer());
+  ui::LayerAnimationStoppedWaiter().Wait(last_item->layer());
 
   // Animation status is updated.
   EXPECT_EQ(apps_grid_view->grid_animation_status_for_test(),

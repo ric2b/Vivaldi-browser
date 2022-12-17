@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -253,7 +253,7 @@ void TestPlugin::UpdateGeometry(const gfx::Rect& window_rect,
     mailbox_ = sii->CreateSharedImage(
         viz::ResourceFormat::RGBA_8888, rect_.size(), gfx::ColorSpace(),
         kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
-        gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_DISPLAY,
+        gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_DISPLAY_READ,
         gpu::kNullSurfaceHandle);
     gl_->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
 
@@ -321,8 +321,8 @@ bool TestPlugin::PrepareTransferableResource(
     return false;
   gfx::Size size(rect_.size());
   if (!mailbox_.IsZero()) {
-    *resource = viz::TransferableResource::MakeGL(
-        mailbox_, GL_LINEAR, GL_TEXTURE_2D, sync_token_, size,
+    *resource = viz::TransferableResource::MakeGpu(
+        mailbox_, GL_LINEAR, GL_TEXTURE_2D, sync_token_, size, viz::RGBA_8888,
         false /* is_overlay_candidate */);
     // We pass ownership of the shared image to the callback.
     *release_callback =

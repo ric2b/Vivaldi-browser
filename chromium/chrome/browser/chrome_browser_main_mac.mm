@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,11 +22,13 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/buildflags.h"
 #import "chrome/browser/chrome_browser_application_mac.h"
+#include "chrome/browser/chrome_for_testing/buildflags.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/mac/install_from_dmg.h"
 #import "chrome/browser/mac/keystone_glue.h"
 #include "chrome/browser/mac/mac_startup_profiler.h"
 #include "chrome/browser/ui/cocoa/main_menu_builder.h"
+#include "chrome/browser/updater/scheduler.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -82,6 +84,7 @@ void ChromeBrowserMainPartsMac::PreCreateMainMessageLoop() {
   // point (needed to load the nib).
   CHECK(ui::ResourceBundle::HasSharedInstance());
 
+#if !BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
 #if BUILDFLAG(ENABLE_CHROMIUM_UPDATER)
   InstallUpdaterAndRegisterBrowser();
 #else
@@ -89,6 +92,7 @@ void ChromeBrowserMainPartsMac::PreCreateMainMessageLoop() {
   // The framework is only distributed with branded Google Chrome builds.
   [[KeystoneGlue defaultKeystoneGlue] registerWithKeystone];
 #endif  // BUILDFLAG(ENABLE_CHROMIUM_UPDATER)
+  updater::SchedulePeriodicTasks();
 
   // Disk image installation is sort of a first-run task, so it shares the
   // no first run switches.
@@ -110,6 +114,7 @@ void ChromeBrowserMainPartsMac::PreCreateMainMessageLoop() {
       exit(0);
     }
   }
+#endif  // !BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
 
   // Create the app delegate. This object is intentionally leaked as a global
   // singleton. It is accessed through -[NSApp delegate].

@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -103,12 +103,14 @@ declare_args() {
   enable_hevc_parser_and_hw_decoder =
       proprietary_codecs &&
       (use_fuzzing_engine || use_chromeos_protected_media || is_win || is_mac ||
-       is_android)
+       is_android || is_linux)
 }
 
 # Use another declare_args() to allow dependence on
 # |enable_hevc_parser_and_hw_decoder|.
 declare_args() {
+  # If overriding this to false, possibly via its component values,
+  # `enable_libaom` should likely also be overriddent to false.
   enable_av1_decoder = enable_dav1d_decoder || enable_libgav1_decoder
 
   # Enable HEVC/H265 demuxing. Actual decoding must be provided by the

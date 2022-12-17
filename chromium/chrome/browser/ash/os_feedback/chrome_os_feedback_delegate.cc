@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -133,6 +133,8 @@ std::string ChromeOsFeedbackDelegate::GetApplicationLocale() {
 }
 
 absl::optional<GURL> ChromeOsFeedbackDelegate::GetLastActivePageUrl() {
+  // GetLastActivePageUrl will be called when the UI is about to be displayed.
+  PreloadSystemLogs();
   return page_url_;
 }
 
@@ -144,6 +146,14 @@ absl::optional<std::string> ChromeOsFeedbackDelegate::GetSignedInUserEmail()
   // Browser sync consent is not required to use feedback.
   return identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
       .email;
+}
+
+int ChromeOsFeedbackDelegate::GetPerformanceTraceId() {
+  if (ContentTracingManager* manager = ContentTracingManager::Get()) {
+    return manager->RequestTrace();
+  } else {
+    return 0;
+  }
 }
 
 void ChromeOsFeedbackDelegate::GetScreenshotPng(
@@ -168,6 +178,8 @@ void ChromeOsFeedbackDelegate::SendReport(
   feedback_params.load_system_info = report->include_system_logs_and_histograms;
   feedback_params.send_histograms = report->include_system_logs_and_histograms;
   feedback_params.send_bluetooth_logs = report->send_bluetooth_logs;
+  feedback_params.is_internal_email =
+      report->feedback_context->is_internal_account;
 
   base::WeakPtr<feedback::FeedbackUploader> uploader =
       base::AsWeakPtr(GetFeedbackUploaderForContext(profile_));
@@ -189,6 +201,11 @@ void ChromeOsFeedbackDelegate::SendReport(
     feedback_data->AddLog(kExtraDiagnosticsKey,
                           feedback_context->extra_diagnostics.value());
   }
+  feedback_data->set_trace_id(report->feedback_context->trace_id);
+  feedback_data->set_from_assistant(feedback_context->from_assistant);
+  feedback_data->set_assistant_debug_info_allowed(
+      feedback_context->assistant_debug_info_allowed);
+
   if (feedback_context->category_tag.has_value()) {
     feedback_data->set_category_tag(feedback_context->category_tag.value());
   }
@@ -257,6 +274,18 @@ void ChromeOsFeedbackDelegate::SendReport(
   ash::os_feedback_ui::metrics::EmitFeedbackAppDescriptionLength(
       report->description.length());
 
+  // If system logs are included, get them from preloaded response.
+  if (feedback_params.load_system_info && system_logs_response_ &&
+      system_logs_response_->size() > 0) {
+    for (auto& itr : *system_logs_response_) {
+      if (FeedbackCommon::IncludeInSystemLogs(
+              itr.first, feedback_params.is_internal_email))
+        feedback_data->AddLog(std::move(itr.first), std::move(itr.second));
+    }
+    // Set to false so they won't be loaded again in feedback service.
+    feedback_params.load_system_info = false;
+  }
+
   feedback_service_->SendFeedback(
       feedback_params, feedback_data,
       base::BindOnce(&ChromeOsFeedbackDelegate::OnSendFeedbackDone,
@@ -291,14 +320,6 @@ void ChromeOsFeedbackDelegate::OpenSystemInfoDialog() {
   OpenWebDialog(systemInfoUrl);
 }
 
-void ChromeOsFeedbackDelegate::OpenBluetoothLogsInfoDialog() {
-  // TODO(http://b/233079042): Make the bluetooth_logs_info.html page a separate
-  // WebUI. For now, use the old Feedback tool's bluetooth_logs_info.html.
-  GURL system_info_url = GURL(base::StrCat(
-      {chrome::kChromeUIFeedbackURL, "html/bluetooth_logs_info.html"}));
-  OpenWebDialog(system_info_url);
-}
-
 void ChromeOsFeedbackDelegate::OpenWebDialog(GURL url) {
   Browser* feedback_browser = ash::FindSystemWebAppBrowser(
       profile_, ash::SystemWebAppType::OS_FEEDBACK);
@@ -315,6 +336,22 @@ void ChromeOsFeedbackDelegate::OpenWebDialog(GURL url) {
       /*can_minimize=*/true);
 
   child_dialog->Show();
+}
+
+void ChromeOsFeedbackDelegate::PreloadSystemLogs() {
+  base::TimeTicks fetch_start_time = base::TimeTicks::Now();
+  feedback_service_->GetFeedbackPrivateDelegate()->FetchSystemInformation(
+      profile_,
+      base::BindOnce(&ChromeOsFeedbackDelegate::PreloadSystemLogsDone,
+                     weak_ptr_factory_.GetWeakPtr(), fetch_start_time));
+}
+
+void ChromeOsFeedbackDelegate::PreloadSystemLogsDone(
+    base::TimeTicks fetch_start_time,
+    std::unique_ptr<system_logs::SystemLogsResponse> response) {
+  base::UmaHistogramMediumTimes("Feedback.Duration.FetchSystemInformation",
+                                base::TimeTicks::Now() - fetch_start_time);
+  system_logs_response_ = std::move(response);
 }
 
 }  // namespace ash

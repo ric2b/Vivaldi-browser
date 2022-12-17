@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,7 +53,7 @@ class COMPONENT_EXPORT(UI_BASE_IME_FUCHSIA) KeyboardClient
 
   // Dispatches events into Chromium once they have been converted to
   // ui::KeyEvents.
-  InputEventSink* event_sink_;
+  InputEventSink* const event_sink_;
 
   // Tracks the activation state of the named modifier keys.
   bool left_shift_ = false;

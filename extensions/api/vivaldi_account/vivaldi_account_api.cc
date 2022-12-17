@@ -239,7 +239,7 @@ VivaldiAccountSetPendingRegistrationFunction::Run() {
 }
 
 void VivaldiAccountSetPendingRegistrationFunction::OnEncryptDone(
-    std::unique_ptr<vivaldi::vivaldi_account::PendingRegistration>
+    absl::optional<vivaldi::vivaldi_account::PendingRegistration>
         pending_registration,
     std::unique_ptr<std::string> encrypted_password,
     bool result) {
@@ -251,8 +251,8 @@ void VivaldiAccountSetPendingRegistrationFunction::OnEncryptDone(
   base::Base64Encode(*encrypted_password, &pending_registration->password);
   PrefService* prefs =
       Profile::FromBrowserContext(browser_context())->GetPrefs();
-  prefs->Set(vivaldiprefs::kVivaldiAccountPendingRegistration,
-             *pending_registration->ToValue());
+  prefs->SetDict(vivaldiprefs::kVivaldiAccountPendingRegistration,
+                 pending_registration->ToValue());
 
   Respond(NoArguments());
 }
@@ -264,7 +264,7 @@ VivaldiAccountGetPendingRegistrationFunction::Run() {
 
   auto pending_registration =
       vivaldi::vivaldi_account::PendingRegistration::FromValue(
-          *prefs->Get(vivaldiprefs::kVivaldiAccountPendingRegistration));
+          prefs->GetValue(vivaldiprefs::kVivaldiAccountPendingRegistration));
 
   if (!pending_registration) {
     return RespondNow(ArgumentList({}));

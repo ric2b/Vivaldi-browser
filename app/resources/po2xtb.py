@@ -79,6 +79,7 @@ def main():
     is_macosx=False,
     is_android=False,
     is_win=True,
+    vivaldi_debug=False,
   )
 
   resources = grd_reader.Parse(options.grd_file, defines=defines)

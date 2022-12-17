@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 import 'chrome://settings/lazy_load.js';
 
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {ImportDialogState, PasswordsImportDialogElement} from 'chrome://settings/lazy_load.js';
+import {IMPORT_HELP_LANDING_PAGE, ImportDialogState, PasswordsImportDialogElement} from 'chrome://settings/lazy_load.js';
 import {PasswordManagerImpl, SettingsPluralStringProxyImpl, CrButtonElement} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestPluralStringProxy} from 'chrome://webui-test/test_plural_string_proxy.js';
@@ -47,25 +47,21 @@ function assertIntialStatePartsAndClose(
   assertTrue(!!spinner);
   assertFalse(spinner.active);
 
-  const cancel =
-      importDialog.shadowRoot!.querySelector<CrButtonElement>('#cancel');
-  assertTrue(!!cancel);
-  const chooseFile =
-      importDialog.shadowRoot!.querySelector<CrButtonElement>('#chooseFile');
-  assertTrue(!!chooseFile);
+  assertTrue(isVisible(importDialog.$.chooseFile));
+  assertFalse(importDialog.$.close.disabled);
+  assertFalse(importDialog.$.chooseFile.disabled);
 
-  assertTrue(isVisible(cancel));
-  assertTrue(isVisible(chooseFile));
-  assertFalse(cancel.disabled);
-  assertFalse(chooseFile.disabled);
+  assertFalse(isVisible(
+      importDialog.shadowRoot!.querySelector<HTMLElement>('#tipBox')));
 
-  assertEquals(importDialog.i18n('cancel'), cancel.textContent!.trim());
+  assertEquals(
+      importDialog.i18n('cancel'), importDialog.$.close.textContent!.trim());
   assertEquals(
       importDialog.i18n('importPasswordsChooseFile'),
-      chooseFile.textContent!.trim());
+      importDialog.$.chooseFile.textContent!.trim());
   assertEquals(
       expectedDescription, importDialog.$.descriptionText.textContent!.trim());
-  cancel.click();
+  importDialog.$.close.click();
 }
 
 async function assertErrorStateAndClose(
@@ -77,15 +73,15 @@ async function assertErrorStateAndClose(
   assertEquals(ImportDialogState.ERROR, importDialog.dialogState);
 
   assertEquals(
-      expectedDescription, importDialog.$.descriptionText.textContent!.trim());
+      expectedDescription, importDialog.$.descriptionText.innerHTML!.trim());
 
-  const close =
-      importDialog.shadowRoot!.querySelector<CrButtonElement>('#close');
-  assertTrue(!!close);
-  assertEquals(importDialog.i18n('close'), close.textContent!.trim());
-  assertTrue(isVisible(close));
-  assertFalse(close.disabled);
-  close.click();
+  assertFalse(isVisible(
+      importDialog.shadowRoot!.querySelector<HTMLElement>('#tipBox')));
+
+  assertEquals(
+      importDialog.i18n('close'), importDialog.$.close.textContent!.trim());
+  assertFalse(importDialog.$.close.disabled);
+  importDialog.$.close.click();
   await eventToPromise('close', importDialog);
 }
 
@@ -95,7 +91,8 @@ suite('PasswordsImportDialog', function() {
   let elementFactory: PasswordSectionElementFactory;
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     // Override the PasswordManagerImpl for testing.
     passwordManager = new TestPasswordManagerProxy();
     PasswordManagerImpl.setInstance(passwordManager);
@@ -154,22 +151,21 @@ suite('PasswordsImportDialog', function() {
     // After the import, the dialog should switch to SUCCESS state.
     assertEquals(ImportDialogState.SUCCESS, importDialog.dialogState);
 
-    const successTip =
-        importDialog.shadowRoot!.querySelector<HTMLElement>('#successTip');
-    assertTrue(!!successTip);
+    assertTrue(isVisible(
+        importDialog.shadowRoot!.querySelector<HTMLElement>('#tipBox')));
     assertEquals(
-        importDialog.i18n('importPasswordsSuccessTip', 'test.csv'),
-        successTip.textContent!.trim());
+        importDialog.i18nAdvanced('importPasswordsSuccessTip')
+            .replace('<b></b>', 'test.csv'),
+        importDialog.$.successTip.textContent!.trim());
 
     // Failed imports summary should not be visible.
-    assertFalse(!!importDialog.shadowRoot!.querySelector<HTMLElement>(
-        '#failuresSummary'));
+    assertFalse(isVisible(importDialog.$.failuresSummary));
 
-    const done = importDialog.shadowRoot!.querySelector<HTMLElement>('#done');
-    assertTrue(!!done);
-    assertEquals(importDialog.i18n('done'), done.textContent!.trim());
-    assertTrue(isVisible(done));
-    done.click();
+    assertEquals(
+        importDialog.i18n('done'), importDialog.$.close.textContent!.trim());
+    assertFalse(importDialog.$.close.disabled);
+    // check console for exceptions!
+    importDialog.$.close.click();
     await eventToPromise('close', importDialog);
   });
 
@@ -185,7 +181,12 @@ suite('PasswordsImportDialog', function() {
 
     await assertErrorStateAndClose(
         importDialog, passwordManager,
-        importDialog.i18n('importPasswordsBadFormatError', 'test.csv'));
+        importDialog
+            .i18nAdvanced(
+                'importPasswordsBadFormatError',
+                {substitutions: [IMPORT_HELP_LANDING_PAGE]},
+                )
+            .replace('<b></b>', '<b>test.csv</b>'));
   });
 
   test('hasCorrectUnknownErrorState', async function() {
@@ -219,6 +220,21 @@ suite('PasswordsImportDialog', function() {
         importDialog.i18n('importPasswordsLimitExceeded', 3000));
   });
 
+  test('hasCorrectFileSizeExceededState', async function() {
+    const importDialog = elementFactory.createPasswordsImportDialog();
+    assertEquals(ImportDialogState.START, importDialog.dialogState);
+    passwordManager.setImportResults({
+      status: chrome.passwordsPrivate.ImportResultsStatus.MAX_FILE_SIZE,
+      numberImported: 0,
+      failedImports: [],
+      fileName: 'test.csv',
+    });
+
+    await assertErrorStateAndClose(
+        importDialog, passwordManager,
+        importDialog.i18n('importPasswordsFileSizeExceeded'));
+  });
+
   test('hasCorrectSuccessStateWithFailures', async function() {
     const importDialog = elementFactory.createPasswordsImportDialog();
     assertEquals(ImportDialogState.START, importDialog.dialogState);
@@ -227,9 +243,54 @@ suite('PasswordsImportDialog', function() {
       numberImported: 42,
       failedImports: [
         {
+          status: chrome.passwordsPrivate.ImportEntryStatus.MISSING_PASSWORD,
+          username: 'username',
+          url: 'https://google.com',
+        },
+        {
+          status: chrome.passwordsPrivate.ImportEntryStatus.MISSING_URL,
+          username: 'username',
+          url: '',
+        },
+        {
+          status: chrome.passwordsPrivate.ImportEntryStatus.INVALID_URL,
+          username: 'username',
+          url: 'http/google.com',
+        },
+        {
+          status: chrome.passwordsPrivate.ImportEntryStatus.LONG_URL,
+          username: 'username',
+          url: 'https://morethan2048chars.com',
+        },
+        {
+          status: chrome.passwordsPrivate.ImportEntryStatus.NON_ASCII_URL,
+          username: 'username',
+          url: 'https://أهلا.com',
+        },
+        {
           status: chrome.passwordsPrivate.ImportEntryStatus.LONG_PASSWORD,
           username: 'username',
           url: 'https://google.com',
+        },
+        {
+          status: chrome.passwordsPrivate.ImportEntryStatus.LONG_USERNAME,
+          username: 'morethan1000chars',
+          url: 'https://google.com',
+        },
+        {
+          status: chrome.passwordsPrivate.ImportEntryStatus.CONFLICT_PROFILE,
+          username: 'username',
+          url: 'https://google.com',
+        },
+        {
+          status: chrome.passwordsPrivate.ImportEntryStatus.CONFLICT_ACCOUNT,
+          username: 'username',
+          url: 'https://google.com',
+        },
+        {
+          status: chrome.passwordsPrivate.ImportEntryStatus.UNKNOWN_ERROR,
+          username: '',
+          url: '',
         },
       ],
       fileName: 'test.csv',
@@ -242,22 +303,18 @@ suite('PasswordsImportDialog', function() {
     assertEquals(ImportDialogState.SUCCESS, importDialog.dialogState);
 
     // Success tip should not be visible.
-    assertFalse(
-        !!importDialog.shadowRoot!.querySelector<HTMLElement>('#successTip'));
+    assertFalse(isVisible(
+        importDialog.shadowRoot!.querySelector<HTMLElement>('#tipBox')));
 
-    const failuresSummary =
-        importDialog.shadowRoot!.querySelector<HTMLElement>('#failuresSummary');
-    assertTrue(!!failuresSummary);
+    assertTrue(isVisible(importDialog.$.failuresSummary));
+    assertEquals(
+        importDialog.i18n('importPasswordsFailuresSummary', 10),
+        importDialog.$.failuresSummary.textContent!.trim());
 
     assertEquals(
-        importDialog.i18n('importPasswordsFailuresSummary', 1),
-        failuresSummary.textContent!.trim());
-
-    const done = importDialog.shadowRoot!.querySelector<HTMLElement>('#done');
-    assertTrue(!!done);
-    assertEquals(importDialog.i18n('done'), done.textContent!.trim());
-    assertTrue(isVisible(done));
-    done.click();
+        importDialog.i18n('done'), importDialog.$.close.textContent!.trim());
+    assertFalse(importDialog.$.close.disabled);
+    importDialog.$.close.click();
     await eventToPromise('close', importDialog);
   });
 
@@ -285,13 +342,14 @@ suite('PasswordsImportDialog', function() {
         importDialog.i18n('importPasswordsAlreadyActive'),
         importDialog.$.descriptionText.textContent!.trim());
 
-    const close =
-        importDialog.shadowRoot!.querySelector<CrButtonElement>('#close');
-    assertTrue(!!close);
-    assertEquals(importDialog.i18n('close'), close.textContent!.trim());
-    assertTrue(isVisible(close));
-    assertFalse(close.disabled);
-    close.click();
+    assertFalse(isVisible(
+        importDialog.shadowRoot!.querySelector<HTMLElement>('#tipBox')));
+
+
+    assertEquals(
+        importDialog.i18n('close'), importDialog.$.close.textContent!.trim());
+    assertFalse(importDialog.$.close.disabled);
+    importDialog.$.close.click();
     await eventToPromise('close', importDialog);
   });
 });

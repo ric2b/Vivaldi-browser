@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,9 +46,6 @@ class MediaStreamDevicePermissionContext
                        const GURL& embedding_origin) override;
 
  private:
-  // PermissionContextBase:
-  bool IsRestrictedToSecureOrigins() const override;
-
 #if BUILDFLAG(IS_ANDROID)
   // PermissionContextBase:
   void UpdateTabContext(const permissions::PermissionRequestID& id,

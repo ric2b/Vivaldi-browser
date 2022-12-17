@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -602,9 +602,8 @@ bool SSLClientSocketImpl::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->peer_signature_algorithm =
       SSL_get_peer_signature_algorithm(ssl_.get());
 
-  SSLConnectionStatusSetCipherSuite(
-      static_cast<uint16_t>(SSL_CIPHER_get_id(cipher)),
-      &ssl_info->connection_status);
+  SSLConnectionStatusSetCipherSuite(SSL_CIPHER_get_protocol_id(cipher),
+                                    &ssl_info->connection_status);
   SSLConnectionStatusSetVersion(GetNetSSLVersion(ssl_.get()),
                                 &ssl_info->connection_status);
 
@@ -1254,9 +1253,8 @@ ssl_verify_result_t SSLClientSocketImpl::HandleVerifyResult() {
   // Enforce keyUsage extension for RSA leaf certificates chaining up to known
   // roots.
   // TODO(crbug.com/795089): Enforce this unconditionally.
-  if (server_cert_verify_result_.is_issued_by_known_root) {
-    SSL_set_enforce_rsa_key_usage(ssl_.get(), 1);
-  }
+  SSL_set_enforce_rsa_key_usage(
+      ssl_.get(), server_cert_verify_result_.is_issued_by_known_root);
 
   // If the connection was good, check HPKP and CT status simultaneously,
   // but prefer to treat the HPKP error as more serious, if there was one.
@@ -1268,7 +1266,7 @@ ssl_verify_result_t SSLClientSocketImpl::HandleVerifyResult() {
             server_cert_verify_result_.public_key_hashes, server_cert_.get(),
             server_cert_verify_result_.verified_cert.get(),
             TransportSecurityState::ENABLE_PIN_REPORTS,
-            ssl_config_.network_isolation_key, &pinning_failure_log_);
+             ssl_config_.network_anonymization_key, &pinning_failure_log_);
     switch (pin_validity) {
       case TransportSecurityState::PKPStatus::VIOLATED:
         server_cert_verify_result_.cert_status |=
@@ -1341,7 +1339,7 @@ int SSLClientSocketImpl::CheckCTCompliance() {
           server_cert_verify_result_.scts,
           TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
           server_cert_verify_result_.policy_compliance,
-          ssl_config_.network_isolation_key);
+          ssl_config_.network_anonymization_key);
 
   if (context_->sct_auditing_delegate()) {
     context_->sct_auditing_delegate()->MaybeEnqueueReport(
@@ -1742,7 +1740,7 @@ SSLClientSessionCache::Key SSLClientSocketImpl::GetSessionCacheKey(
   key.dest_ip_addr = dest_ip_addr;
   if (base::FeatureList::IsEnabled(
           features::kPartitionSSLSessionsByNetworkIsolationKey)) {
-    key.network_isolation_key = ssl_config_.network_isolation_key;
+    key.network_anonymization_key = ssl_config_.network_anonymization_key;
   }
   key.privacy_mode = ssl_config_.privacy_mode;
   key.disable_legacy_crypto = ssl_config_.disable_legacy_crypto;

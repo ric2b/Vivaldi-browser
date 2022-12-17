@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,6 @@
 #include "base/test/scoped_mock_clock_override.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
-#include "components/metrics/structured/event_base.h"
 #include "components/metrics/structured/histogram_util.h"
 #include "components/metrics/structured/recorder.h"
 #include "components/metrics/structured/storage.pb.h"

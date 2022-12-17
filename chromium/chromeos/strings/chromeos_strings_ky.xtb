@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Файлды түзөтүү}other{Файлдарды түзөтүү}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> ГГц</translation>
 <translation id="3291996639387199448">Ачкычтын багыты</translation>
+<translation id="3294437725009624529">Конок</translation>
 <translation id="3310640316857623290">DNS күтүү убакыты уруксат берилген босогодон бир кыйла жогору</translation>
 <translation id="3328783797891415197">Сыноо аткарылууда</translation>
 <translation id="3340011300870565703">Түзмөктүн оң кулакчынынын батареясынын деңгээли: <ph name="BATTERY_PERCENTAGE" />%.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Орнотулган программа жаңыртылып жатканда, тышкы түзмөктү ажыратпаңыз же компьютерди өчүрбөңүз. Бул терезени кичирейтип койсоңуз болот. Жаңыртуу бир нече мүнөткө созулуп, ал эми тышкы түзмөгүңүз бул убакытта иштебеши мүмкүн.</translation>
 <translation id="3486220673238053218">аныктама</translation>
 <translation id="3488065109653206955">Жарым-жартылай жандырылган</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />Жаздырылган майнаптуулук маалыматын<ph name="END_LINK1" /> жөнөтүү</translation>
 <translation id="3517001332549868749">ChromeOS жаңыртуусу</translation>
 <translation id="3527036260304016759">Басылып чыгарылган жок - Белгисиз ката</translation>
 <translation id="3532980081107202182">Болжол менен <ph name="MIN_REMAINING" /> мүнөт калды</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">Android иштеген жок</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Күн батканда автоматтык түрдө караңгы темага которулуу</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Кайра скандоо</translation>
 <translation id="5583640892426849032">Backspace</translation>

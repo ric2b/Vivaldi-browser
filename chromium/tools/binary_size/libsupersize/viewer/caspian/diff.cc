@@ -1,9 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "tools/binary_size/libsupersize/viewer/caspian/diff.h"
 
+#include <cmath>
 #include <deque>
 #include <functional>
 #include <iostream>
@@ -245,15 +246,20 @@ DeltaSizeInfo Diff(const SizeInfo* before, const SizeInfo* after) {
     SectionId section_id = pair.first;
     float padding = pair.second;
     if (padding != 0.0f) {
+      float abs_padding = std::abs(padding);
       ret.owned_symbols.emplace_back();
-      Symbol& after_sym = ret.owned_symbols.back();
-      after_sym.section_id_ = section_id;
-      after_sym.size_ = padding;
-      after_sym.padding_ = padding;
-      after_sym.full_name_ = "Overhead: aggregate padding of diff'ed symbols";
-      after_sym.template_name_ = after_sym.full_name_;
-      after_sym.name_ = after_sym.full_name_;
-      ret.delta_symbols.push_back(DeltaSymbol(nullptr, &after_sym));
+      Symbol& abs_sym = ret.owned_symbols.back();
+      abs_sym.section_id_ = section_id;
+      abs_sym.size_ = abs_padding;
+      abs_sym.padding_ = abs_padding;
+      abs_sym.full_name_ = "Overhead: aggregate padding of diff'ed symbols";
+      abs_sym.template_name_ = abs_sym.full_name_;
+      abs_sym.name_ = abs_sym.full_name_;
+      if (padding < 0.0f) {
+        ret.delta_symbols.emplace_back(&abs_sym, nullptr);
+      } else {
+        ret.delta_symbols.emplace_back(nullptr, &abs_sym);
+      }
     }
   }
   return ret;

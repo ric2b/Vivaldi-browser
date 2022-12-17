@@ -116,6 +116,9 @@
       <message name="IDS_IMPORTER_LOCK_TITLE" desc="Dialog title for importer lock dialog">
         Close Browser Before Importing
       </message>
+      <message name="IDS_PASSWORD_BUBBLES_FOOTER_SYNCED_TO_ACCOUNT" desc="The footer text of the bubbles that offers users to save, update or manage stored passwords in Vivaldi and synced to their Vivaldi account.">
+        You can use saved passwords on any device. They're saved to the <ph name="VIVALDI_PASSWORD_MANAGER">$1<ex>Vivaldi Password Manager</ex></ph>.
+      </message>
       <if expr="use_titlecase">
         <message name="IDS_NEW_INCOGNITO_WINDOW" desc="In Title Case: The text label of a menu item for opening a New Private window. Overridden from Chromium">
           New &amp;Private Window

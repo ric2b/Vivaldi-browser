@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,8 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #include <iterator>
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -140,6 +142,8 @@ void InProcessImporterBridge::SetHistoryItems(
 void InProcessImporterBridge::SetKeywords(
     const std::vector<importer::SearchEngineInfo>& search_engines,
     bool unique_on_host_and_path) {
+  if (vivaldi::IsVivaldiRunning())
+    return;
   TemplateURLService::OwnedTemplateURLVector owned_template_urls;
   for (const auto& search_engine : search_engines) {
     std::unique_ptr<TemplateURL> owned_template_url = CreateTemplateURL(

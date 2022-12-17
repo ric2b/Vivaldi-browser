@@ -1,10 +1,9 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/component_updater/component_updater_service.h"
 
-#include <algorithm>
 #include <map>
 #include <string>
 #include <utility>
@@ -17,6 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -214,8 +214,7 @@ bool CrxUpdateService::DoUnregisterComponent(const std::string& id) {
 
   const bool result = components_.find(id)->second.installer->Uninstall();
 
-  const auto pos =
-      std::find(components_order_.begin(), components_order_.end(), id);
+  const auto pos = base::ranges::find(components_order_, id);
   if (pos != components_order_.end())
     components_order_.erase(pos);
 

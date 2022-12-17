@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,7 +60,7 @@ public class CrashKeys {
      * @see #flushToNative
      */
     public AtomicReferenceArray<String> getValues() {
-        assert !mFlushed;
+        assert !mFlushed : "Getting Java CrashKeys after the keys were flushed to native";
         return mValues;
     }
 
@@ -89,7 +89,7 @@ public class CrashKeys {
     public void flushToNative() {
         ThreadUtils.assertOnUiThread();
 
-        assert !mFlushed;
+        assert !mFlushed : "Tried to flush to native twice";
         for (@CrashKeyIndex int i = 0; i < mValues.length(); i++) {
             CrashKeysJni.get().set(CrashKeys.this, i, mValues.getAndSet(i, null));
         }

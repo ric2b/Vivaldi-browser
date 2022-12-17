@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -6,6 +6,7 @@ import("//build/config/chrome_build.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//ppapi/buildflags/buildflags.gni")
+import("//third_party/tflite/features.gni")
 
 extra_configs = [
   "//build/config/compiler:wexit_time_destructors",
@@ -22,6 +23,7 @@ content_app_deps = [
   "//content/public/common:common_sources",
   "//crypto",
   "//mojo/core/embedder",
+  "//mojo/public/cpp/platform",
   "//ppapi/buildflags",
   "//services/tracing/public/cpp",
   "//ui/base",
@@ -72,6 +74,7 @@ source_set("content_main_runner_app") {
 
   configs += extra_configs
   deps = content_app_deps + [
+           "//components/optimization_guide:machine_learning_tflite_buildflags",
            "//components/power_scheduler",
            "//content/browser",
            "//content/gpu:gpu_sources",
@@ -89,6 +92,9 @@ source_set("content_main_runner_app") {
       "//chromeos/startup:constants",
     ]
   }
+  if (build_tflite_with_xnnpack) {
+    deps += [ "//third_party/cpuinfo" ]
+  }
 }
 
 source_set("app") {
@@ -98,6 +104,7 @@ source_set("app") {
 
   sources = [
     "content_main.cc",
+    "initialize_mojo_core.cc",
     "mojo/mojo_init.cc",
     "mojo/mojo_init.h",
     "mojo_ipc_support.cc",

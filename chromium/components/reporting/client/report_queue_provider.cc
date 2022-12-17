@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -93,8 +93,9 @@ bool ReportQueueProvider::IsEncryptedReportingPipelineEnabled() {
 }
 
 // static
-const base::Feature ReportQueueProvider::kEncryptedReportingPipeline{
-    "EncryptedReportingPipeline", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kEncryptedReportingPipeline,
+             "EncryptedReportingPipeline",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 ReportQueueProvider::ReportQueueProvider(
     StorageModuleCreateCallback storage_create_cb)

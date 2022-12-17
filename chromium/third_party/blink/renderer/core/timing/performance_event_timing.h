@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,6 +53,10 @@ class CORE_EXPORT PerformanceEventTiming final : public PerformanceEntry {
 
   void SetInteractionId(uint32_t interaction_id);
 
+  base::TimeTicks unsafePresentationTimestamp() const;
+
+  void SetUnsafePresentationTimestamp(base::TimeTicks presentation_timestamp);
+
   void SetDuration(double duration);
 
   void BuildJSONValue(V8ObjectBuilder&) const override;
@@ -68,6 +72,12 @@ class CORE_EXPORT PerformanceEventTiming final : public PerformanceEntry {
   bool cancelable_;
   WeakMember<Node> target_;
   uint32_t interaction_id_ = 0;
+
+  // This is the exact (non-rounded) monotonic timestamp for presentation, which
+  // is currently only used by eventTiming trace events to report accurate
+  // ending time. It should not be exposed to performance observer API entries
+  // for security and privacy reasons.
+  base::TimeTicks unsafe_presentation_timestamp_ = base::TimeTicks::Min();
 };
 }  // namespace blink
 

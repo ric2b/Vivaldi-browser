@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@ namespace features {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // Enables Floss client if supported by platform
-const base::Feature kFlossEnabled{"Floss", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kFlossEnabled, "Floss", base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 bool IsFlossEnabled() {

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -115,8 +115,7 @@ bool HitTestQuery::TransformLocationForTarget(
     if (!GetTransformToTarget(target_ancestors.front(), &transform))
       return false;
 
-    *transformed_location = location_in_root;
-    transform.TransformPoint(transformed_location);
+    *transformed_location = transform.MapPoint(location_in_root);
     return true;
   }
 
@@ -196,8 +195,8 @@ bool HitTestQuery::FindTargetInRegionForLocation(
       return true;
     }
 
-    hit_test_data_[region_index].transform.TransformPoint(
-        &location_transformed);
+    location_transformed =
+        hit_test_data_[region_index].transform.MapPoint(location_transformed);
     if (!gfx::RectF(hit_test_data_[region_index].rect)
              .Contains(location_transformed)) {
       return false;
@@ -285,7 +284,8 @@ bool HitTestQuery::TransformLocationForTargetRecursively(
     size_t target_ancestor,
     size_t region_index,
     gfx::PointF* location_in_target) const {
-  hit_test_data_[region_index].transform.TransformPoint(location_in_target);
+  *location_in_target =
+      hit_test_data_[region_index].transform.MapPoint(*location_in_target);
   if (!target_ancestor)
     return true;
 

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,10 +10,10 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "base/types/optional_util.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/process_lock.h"
 #include "content/browser/renderer_host/debug_urls.h"
@@ -67,6 +67,13 @@ using CrossOriginOpenerPolicyValue =
     network::mojom::CrossOriginOpenerPolicyValue;
 using CrossOriginEmbedderPolicyValue =
     network::mojom::CrossOriginEmbedderPolicyValue;
+
+void LogNavigationStartToBeginWithAvoidUnnecessaryBeforeUnloadSync(
+    base::TimeDelta delta) {
+  base::UmaHistogramTimes(
+      "Navigation.NavigationStartToBeginWithAvoidUnnecessaryBeforeUnloadSync",
+      delta);
+}
 
 // Map Cross-Origin-Opener-Policy header value to its corresponding WebFeature.
 absl::optional<WebFeature> FeatureCoop(CrossOriginOpenerPolicyValue value) {
@@ -178,6 +185,20 @@ void RecordWebPlatformSecurityMetrics(RenderFrameHostImpl* rfh,
         main_frame->GetPageUkmSourceId())
         .SetSubframeEmbedded(1)
         .Record(ukm::UkmRecorder::Get());
+  }
+
+  // Record whether <iframe> with the anonymous attribute contains sandboxed
+  // document or not. Please note:
+  // - This is recorded once for every new document in the iframe.
+  // - It excludes nested document that are anonymous only by inheritance.
+  // - It would have been better to take a snapshot of the frame.anonymous
+  //   attribute at the beginning of the navigation, as opposed to when the
+  //   new document has been created, because it might have changed. Still, it
+  //   is good enough, a priori.
+  if (rfh->frame_tree_node()->anonymous()) {
+    base::UmaHistogramBoolean(
+        "Navigation.AnonymousIframeIsSandboxed",
+        rfh->active_sandbox_flags() != network::mojom::WebSandboxFlags::kNone);
   }
 
   // Webview tag guests do not follow regular process model decisions. They
@@ -691,12 +712,14 @@ void Navigator::Navigate(std::unique_ptr<NavigationRequest> request,
   // We don't want to dispatch a beforeunload handler if
   // is_history_navigation_in_new_child is true. This indicates a newly created
   // child frame which does not have a beforeunload handler.
+  bool no_dispatch_because_avoid_unnecessary_sync = false;
   bool should_dispatch_beforeunload =
       !NavigationTypeUtils::IsSameDocument(
           request->common_params().navigation_type) &&
       !request->common_params().is_history_navigation_in_new_child_frame &&
       frame_tree_node->current_frame_host()->ShouldDispatchBeforeUnload(
-          false /* check_subframes_only */);
+          false /* check_subframes_only */,
+          &no_dispatch_because_avoid_unnecessary_sync);
 
   int nav_entry_id = request->nav_entry_id();
   bool is_pending_entry =
@@ -714,6 +737,12 @@ void Navigator::Navigate(std::unique_ptr<NavigationRequest> request,
         RenderFrameHostImpl::BeforeUnloadType::BROWSER_INITIATED_NAVIGATION,
         reload_type != ReloadType::NONE);
   } else {
+    if (no_dispatch_because_avoid_unnecessary_sync) {
+      LogNavigationStartToBeginWithAvoidUnnecessaryBeforeUnloadSync(
+          base::TimeTicks::Now() - frame_tree_node->navigation_request()
+                                       ->common_params()
+                                       .navigation_start);
+    }
     frame_tree_node->navigation_request()->BeginNavigation();
     // WARNING: The NavigationRequest might have been destroyed in
     // BeginNavigation(). Do not use |frame_tree_node->navigation_request()|
@@ -838,7 +867,8 @@ void Navigator::NavigateFromFrameProxy(
     const absl::optional<blink::Impression>& impression,
     base::TimeTicks navigation_start_time,
     bool is_embedder_initiated_fenced_frame_navigation,
-    bool is_unfenced_top_navigation) {
+    bool is_unfenced_top_navigation,
+    bool force_new_browsing_instance) {
   // |method != "POST"| should imply absence of |post_body|.
   if (method != "POST" && post_body) {
     NOTREACHED();
@@ -881,8 +911,8 @@ void Navigator::NavigateFromFrameProxy(
       download_policy, method, post_body, extra_headers,
       std::move(source_location), std::move(blob_url_loader_factory),
       is_form_submission, impression, navigation_start_time,
-      is_embedder_initiated_fenced_frame_navigation,
-      is_unfenced_top_navigation);
+      is_embedder_initiated_fenced_frame_navigation, is_unfenced_top_navigation,
+      force_new_browsing_instance);
 }
 
 void Navigator::BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,
@@ -904,7 +934,7 @@ void Navigator::BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,
   // after the navigation started. The last user input should be respected, and
   // the navigation cancelled anyway.
   if (!proceed) {
-    CancelNavigation(frame_tree_node);
+    CancelNavigation(frame_tree_node, NavigationDiscardReason::kCancelled);
     return;
   }
 
@@ -970,7 +1000,8 @@ void Navigator::OnBeginNavigation(
           .is_history_navigation_in_new_child_frame) {
     // Preemptively clear this local pointer before deleting the request.
     ongoing_navigation_request = nullptr;
-    frame_tree_node->ResetNavigationRequest(false);
+    frame_tree_node->ResetNavigationRequest(
+        NavigationDiscardReason::kNewNavigation);
   }
 
   // Verify this navigation has precedence.
@@ -1014,9 +1045,11 @@ void Navigator::OnBeginNavigation(
   // those frames.
   DCHECK(!NavigationTypeUtils::IsSameDocument(
       navigation_request->common_params().navigation_type));
+  bool no_dispatch_because_avoid_unnecessary_sync = false;
   bool should_dispatch_beforeunload =
       frame_tree_node->current_frame_host()->ShouldDispatchBeforeUnload(
-          true /* check_subframes_only */);
+          true /* check_subframes_only */,
+          &no_dispatch_because_avoid_unnecessary_sync);
   if (should_dispatch_beforeunload) {
     frame_tree_node->navigation_request()->SetWaitingForRendererResponse();
     frame_tree_node->current_frame_host()->DispatchBeforeUnload(
@@ -1024,6 +1057,12 @@ void Navigator::OnBeginNavigation(
         NavigationTypeUtils::IsReload(
             navigation_request->common_params().navigation_type));
     return;
+  }
+
+  if (no_dispatch_because_avoid_unnecessary_sync) {
+    LogNavigationStartToBeginWithAvoidUnnecessaryBeforeUnloadSync(
+        base::TimeTicks::Now() -
+        navigation_request->common_params().navigation_start);
   }
 
   // For main frames, NavigationHandle will be created after the call to
@@ -1051,10 +1090,11 @@ void Navigator::RestartNavigationAsCrossDocument(
   // See https://crbug.com/770157.
 }
 
-void Navigator::CancelNavigation(FrameTreeNode* frame_tree_node) {
+void Navigator::CancelNavigation(FrameTreeNode* frame_tree_node,
+                                 NavigationDiscardReason reason) {
   if (frame_tree_node->navigation_request())
     frame_tree_node->navigation_request()->set_net_error(net::ERR_ABORTED);
-  frame_tree_node->ResetNavigationRequest(false);
+  frame_tree_node->ResetNavigationRequest(reason);
   if (frame_tree_node->IsMainFrame())
     navigation_data_.reset();
 }

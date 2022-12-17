@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,9 +6,9 @@
  * @fileoverview
  * 'settings-basic-page' is the settings page containing the actual settings.
  */
-import 'chrome://resources/cr_elements/hidden_style_css.m.js';
-import 'chrome://resources/cr_elements/shared_style_css.m.js';
-import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
+import 'chrome://resources/cr_elements/cr_shared_style.css.js';
+import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '../appearance_page/appearance_page.js';
 import '../privacy_page/privacy_guide_promo.js';
@@ -18,27 +18,30 @@ import '../autofill_page/autofill_page.js';
 import '../controls/settings_idle_load.js';
 import '../on_startup_page/on_startup_page.js';
 import '../people_page/people_page.js';
+import '../performance_page/battery_page.js';
+import '../performance_page/performance_page.js';
 import '../reset_page/reset_profile_banner.js';
 import '../search_page/search_page.js';
 import '../settings_page/settings_section.js';
 import '../settings_page_styles.css.js';
-
 // <if expr="not is_chromeos">
 import '../default_browser_page/default_browser_page.js';
 // </if>
 
 // <if expr="not chromeos_ash">
 import '../languages_page/languages.js';
+
 // </if>
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {beforeNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsIdleLoadElement} from '../controls/settings_idle_load.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {PageVisibility} from '../page_visibility.js';
 import {SyncStatus} from '../people_page/sync_browser_proxy.js';
+import {PerformanceBrowserProxy, PerformanceBrowserProxyImpl} from '../performance_page/performance_browser_proxy.js';
 import {PrefsMixin, PrefsMixinInterface} from '../prefs/prefs_mixin.js';
 import {MAX_PRIVACY_GUIDE_PROMO_IMPRESSION, PrivacyGuideBrowserProxy, PrivacyGuideBrowserProxyImpl} from '../privacy_page/privacy_guide/privacy_guide_browser_proxy.js';
 import {routes} from '../route.js';
@@ -181,6 +184,14 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
         value: false,
         reflectToAttribute: true,
       },
+
+      /**
+       * Used to hide battery settings section if the device has no battery
+       */
+      showBatterySettings_: {
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
@@ -203,6 +214,7 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
 
   private currentRoute_: Route;
   private advancedTogglingInProgress_: boolean;
+  private showBatterySettings_: boolean;
 
   private showPrivacyGuidePromo_: boolean;
   private privacyGuidePromoWasShown_: boolean;
@@ -210,6 +222,8 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
   private isChildUser_: boolean;
   private privacyGuideBrowserProxy_: PrivacyGuideBrowserProxy =
       PrivacyGuideBrowserProxyImpl.getInstance();
+  private performanceBrowserProxy_: PerformanceBrowserProxy =
+      PerformanceBrowserProxyImpl.getInstance();
 
   override ready() {
     super.ready();
@@ -225,6 +239,14 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
         'is-managed-changed', this.onIsManagedChanged_.bind(this));
     this.addWebUIListener(
         'sync-status-changed', this.onSyncStatusChanged_.bind(this));
+
+    if (loadTimeData.getBoolean('batterySaverModeAvailable')) {
+      this.addWebUIListener(
+          'device-has-battery-changed',
+          this.onDeviceHasBatteryChanged_.bind(this));
+      this.performanceBrowserProxy_.getDeviceHasBattery().then(
+          this.onDeviceHasBatteryChanged_.bind(this));
+    }
 
     this.currentRoute_ = Router.getInstance().getCurrentRoute();
   }
@@ -269,7 +291,8 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
   }
 
   private updatePrivacyGuidePromoVisibility_() {
-    if (this.pageVisibility.privacy === false || this.isManaged_ ||
+    if (!loadTimeData.getBoolean('showPrivacyGuide') ||
+        this.pageVisibility.privacy === false || this.isManaged_ ||
         this.isChildUser_ || this.prefs === undefined ||
         this.getPref('privacy_guide.viewed').value ||
         this.privacyGuideBrowserProxy_.getPromoImpressionCount() >=
@@ -301,6 +324,10 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
     // state as true, because the Settings route for privacy guide would still
     // be unavailable until the page is reloaded.
     this.isChildUser_ = this.isChildUser_ || !!syncStatus.childUser;
+  }
+
+  private onDeviceHasBatteryChanged_(deviceHasBattery: boolean) {
+    this.showBatterySettings_ = deviceHasBattery;
   }
 
   /**
@@ -401,6 +428,16 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
 
   private showAdvancedSettings_(visibility?: boolean): boolean {
     return visibility !== false;
+  }
+
+  private showPerformancePage_(visibility?: boolean): boolean {
+    return visibility !== false &&
+        loadTimeData.getBoolean('highEfficiencyModeAvailable');
+  }
+
+  private showBatteryPage_(visibility?: boolean): boolean {
+    return visibility !== false &&
+        loadTimeData.getBoolean('batterySaverModeAvailable');
   }
 }
 

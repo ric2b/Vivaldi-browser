@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,9 +30,6 @@ class WebFaviconDriver : public web::WebStateObserver,
   WebFaviconDriver& operator=(const WebFaviconDriver&) = delete;
 
   ~WebFaviconDriver() override;
-
-  static void CreateForWebState(web::WebState* web_state,
-                                CoreFaviconService* favicon_service);
 
   // FaviconDriver implementation.
   gfx::Image GetFavicon() const override;

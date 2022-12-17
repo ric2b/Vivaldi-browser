@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,9 +18,9 @@ namespace content {
 namespace {
 
 #if BUILDFLAG(IS_ANDROID)
-const base::Feature kNetworkServiceOutOfProcessMemoryThreshold{
-    "NetworkServiceOutOfProcessMemoryThreshold",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kNetworkServiceOutOfProcessMemoryThreshold,
+             "NetworkServiceOutOfProcessMemoryThreshold",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Using 1077 rather than 1024 because 1) it helps ensure that devices with
 // exactly 1GB of RAM won't get included because of inaccuracies or off-by-one

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,13 +6,16 @@
  * @fileoverview 'settings-input-method-options-page' is the settings sub-page
  * to allow users to change options for each input method.
  */
-import 'chrome://resources/cr_elements/md_select_css.m.js';
+import 'chrome://resources/cr_elements/md_select.css.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import '../../settings_shared.css.js';
+import './os_japanese_clear_ime_data_dialog.js';
+import './os_japanese_manage_user_dictionary_page.js';
 
-import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
-import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
-import {afterNextRender, html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
+import {afterNextRender, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
 import {Route, Router} from '../../router.js';
@@ -20,7 +23,8 @@ import {routes} from '../os_route.js';
 import {PrefsBehavior, PrefsBehaviorInterface} from '../prefs_behavior.js';
 import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../route_observer_behavior.js';
 
-import {generateOptions, getFirstPartyInputMethodEngineId, getOptionLabelName, getOptionMenuItems, getOptionUiType, getOptionUrl, getUntranslatedOptionLabelName, hasOptionsPageInSettings, isNumberValue, isOptionLabelTranslated, OPTION_DEFAULT, OptionType, UiType} from './input_method_util.js';
+import {getTemplate} from './input_method_options_page.html.js';
+import {generateOptions, getFirstPartyInputMethodEngineId, getOptionLabelName, getOptionMenuItems, getOptionSubtitleName, getOptionUiType, getOptionUrl, getSubmenuButtonType, getUntranslatedOptionLabelName, hasOptionsPageInSettings, isOptionLabelTranslated, OPTION_DEFAULT, OptionType, shouldStoreNumberAsString, SubmenuButton, UiType} from './input_method_util.js';
 import {LanguageHelper} from './languages_types.js';
 
 /**
@@ -41,7 +45,7 @@ class SettingsInputMethodOptionsPageElement extends
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -70,11 +74,17 @@ class SettingsInputMethodOptionsPageElement extends
       /**
        * The content to be displayed in the page, auto generated every time when
        * the user enters the page.
-       * @private {!Array<!{title: string, options:!Array<!Object<string, *>>}>}
+       * @private {!Array<{title: string, options:!Array<!Object<string, *>>}>}
        */
       optionSections_: {
         type: Array,
         value: [],
+      },
+
+      /** @private */
+      showClearPersonalizedData_: {
+        type: Boolean,
+        value: false,
       },
     };
   }
@@ -115,6 +125,20 @@ class SettingsInputMethodOptionsPageElement extends
     this.populateOptionSections_();
   }
 
+  onSubmenuButtonClick_(e) {
+    if (e.target.getAttribute('submenu-button-type') ===
+        SubmenuButton.JAPANESE_CLEAR_PERSONALIZATION_DATA) {
+      this.showClearPersonalizedData_ = true;
+      return;
+    }
+    console.error(`SubmenuButton with invalid type clicked : ${
+        e.target.getAttribute('submenu-button-type')}`);
+  }
+
+  onClearPersonalizedDataClose_() {
+    this.showClearPersonalizedData_ = false;
+  }
+
   /**
    * Get menu items for an option, and enrich the items with selected status and
    * i18n label.
@@ -137,10 +161,11 @@ class SettingsInputMethodOptionsPageElement extends
   populateOptionSections_() {
     const options = generateOptions(
         this.engineId_, loadTimeData.getBoolean('allowPredictiveWriting'),
-        loadTimeData.getBoolean('allowDiacriticsOnPhysicalKeyboardLongpress'));
+        loadTimeData.getBoolean('allowDiacriticsOnPhysicalKeyboardLongpress'),
+        loadTimeData.getBoolean('languageSettingsUpdateJapanese'));
     const prefValue = this.getPref(this.PREFS_PATH).value;
-    const prefix = this.getPrefsPrefix_();
-    const currentSettings = prefix in prefValue ? prefValue[prefix] : {};
+    const currentSettings =
+        this.engineId_ in prefValue ? prefValue[this.engineId_] : {};
 
     const makeOption = (option) => {
       const name = option.name;
@@ -155,16 +180,24 @@ class SettingsInputMethodOptionsPageElement extends
       const label = isOptionLabelTranslated(name) ?
           this.i18n(getOptionLabelName(name)) :
           getUntranslatedOptionLabelName(name);
+
+      const subtitleStringName = getOptionSubtitleName(name);
+      const subtitle = subtitleStringName && this.i18n(subtitleStringName);
+
       return {
         name: name,
         uiType: uiType,
         value: value,
         label: label,
+        subtitle: subtitle,
         menuItems: this.getMenuItems(name, value),
         url: getOptionUrl(name),
         dependentOptions: option.dependentOptions ?
             option.dependentOptions.map(t => makeOption({name: t})) :
             [],
+        submenuButtonType: this.isSubmenuButton_(uiType) ?
+            getSubmenuButtonType(name) :
+            undefined,
       };
     };
 
@@ -178,21 +211,6 @@ class SettingsInputMethodOptionsPageElement extends
                 options: section.optionNames.map(makeOption, false),
               };
             });
-  }
-
-  /**
-   * @return {string} Prefs prefix for the current engine ID, which is usually
-   *     just the engine ID itself, but pinyin and zhuyin are special for legacy
-   *     compatibility reason.
-   * @private
-   */
-  getPrefsPrefix_() {
-    if (this.engineId_ === 'zh-t-i0-pinyin') {
-      return 'pinyin';
-    } else if (this.engineId_ === 'zh-hant-t-i0-und') {
-      return 'zhuyin';
-    }
-    return this.engineId_;
   }
 
   /**
@@ -210,7 +228,7 @@ class SettingsInputMethodOptionsPageElement extends
   /**
    * Handler for toggle button and dropdown change. Update the value of the
    * changing option in Cros prefs.
-   * @param {!{model: !{option: Object}}} e
+   * @param {{model: {option: Object}}} e
    * @private
    */
   onToggleButtonOrDropdownChange_(e) {
@@ -247,27 +265,20 @@ class SettingsInputMethodOptionsPageElement extends
     // new variable.
     const updatedSettings = {};
     Object.assign(updatedSettings, this.getPref(this.PREFS_PATH)['value']);
-    const prefix = this.getPrefsPrefix_();
-    if (!(prefix in updatedSettings)) {
-      updatedSettings[prefix] = {};
+    if (!(this.engineId_ in updatedSettings)) {
+      updatedSettings[this.engineId_] = {};
     }
-    // The value of dropdown in html is always string, but some of the prefs
-    // values are used as integer or enum by IME, so we need to store numbers
-    // for them to function correctly.
-    if (isNumberValue(optionName)) {
+    if (shouldStoreNumberAsString(optionName)) {
       newValue = parseInt(newValue, 10);
     }
-    updatedSettings[prefix][optionName] = newValue;
+    updatedSettings[this.engineId_][optionName] = newValue;
 
-    if (prefix !== this.engineId_) {
-      updatedSettings[this.engineId_] = updatedSettings[prefix];
-    }
     this.setPrefValue(this.PREFS_PATH, updatedSettings);
   }
 
   /**
    * Opens external link in Chrome.
-   * @param {!{model: !{option: !{url: !Route}}}} e
+   * @param {{model: {option: {url: !Route}}}} e
    * @private
    */
   navigateToOtherPageInSettings_(e) {
@@ -291,6 +302,16 @@ class SettingsInputMethodOptionsPageElement extends
         return this.i18n('inputMethodOptionsVirtualKeyboardSectionTitle');
       case 'suggestions':
         return this.i18n('inputMethodOptionsSuggestionsSectionTitle');
+      // Japanese section
+      case 'inputAssistance':
+        return this.i18n('inputMethodOptionsInputAssistanceSectionTitle');
+      // Japanese section
+      case 'userDictionaries':
+        return this.i18n('inputMethodOptionsUserDictionariesSectionTitle');
+      // Japanese section
+      case 'privacy':
+        return this.i18n('inputMethodOptionsPrivacySectionTitle');
+
       default:
         assertNotReached();
     }
@@ -303,6 +324,16 @@ class SettingsInputMethodOptionsPageElement extends
    */
   isToggleButton_(item) {
     return item === UiType.TOGGLE_BUTTON;
+  }
+
+
+  /**
+   * @param {!UiType} item
+   * @return {boolean} true if |item| is a toggle button.
+   * @private
+   */
+  isSubmenuButton_(item) {
+    return item === UiType.SUBMENU_BUTTON;
   }
 
   /**

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/process/process_metrics.h"
+#include "base/task/task_runner_util.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
@@ -64,7 +65,7 @@ TaskGroupSampler::TaskGroupSampler(
   // will be used to assert we're running the expensive operations on one of the
   // blocking pool threads.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  worker_pool_sequenced_checker_.DetachFromSequence();
+  DETACH_FROM_SEQUENCE(worker_pool_sequenced_checker_);
 }
 
 void TaskGroupSampler::Refresh(int64_t refresh_flags) {
@@ -119,7 +120,7 @@ TaskGroupSampler::~TaskGroupSampler() {
 }
 
 double TaskGroupSampler::RefreshCpuUsage() {
-  DCHECK(worker_pool_sequenced_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(worker_pool_sequenced_checker_);
   double cpu_usage = process_metrics_->GetPlatformIndependentCPUUsage();
   if (!cpu_usage_calculated_) {
     // First call to GetPlatformIndependentCPUUsage returns 0. Ignore it,
@@ -131,7 +132,7 @@ double TaskGroupSampler::RefreshCpuUsage() {
 }
 
 int64_t TaskGroupSampler::RefreshSwappedMem() {
-  DCHECK(worker_pool_sequenced_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(worker_pool_sequenced_checker_);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return process_metrics_->GetVmSwapBytes();
@@ -141,21 +142,21 @@ int64_t TaskGroupSampler::RefreshSwappedMem() {
 }
 
 int TaskGroupSampler::RefreshIdleWakeupsPerSecond() {
-  DCHECK(worker_pool_sequenced_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(worker_pool_sequenced_checker_);
 
   return process_metrics_->GetIdleWakeupsPerSecond();
 }
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 int TaskGroupSampler::RefreshOpenFdCount() {
-  DCHECK(worker_pool_sequenced_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(worker_pool_sequenced_checker_);
 
   return process_metrics_->GetOpenFdCount();
 }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 
 bool TaskGroupSampler::RefreshProcessPriority() {
-  DCHECK(worker_pool_sequenced_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(worker_pool_sequenced_checker_);
 #if BUILDFLAG(IS_MAC)
   return process_.IsProcessBackgrounded(
       content::BrowserChildProcessHost::GetPortProvider());

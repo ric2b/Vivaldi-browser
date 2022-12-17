@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -203,7 +203,8 @@ void RecentTabsBuilderTestHelper::ExportToSessionSync(
 
   sync_pb::ModelTypeState model_type_state;
   model_type_state.set_initial_sync_done(true);
-  processor->OnUpdateReceived(model_type_state, std::move(updates));
+  processor->OnUpdateReceived(model_type_state, std::move(updates),
+                              /*gc_directive=*/absl::nullopt);
   // ClientTagBasedModelTypeProcessor uses ModelTypeProcessorProxy during
   // activation, which involves task posting for receiving updates.
   base::RunLoop().RunUntilIdle();

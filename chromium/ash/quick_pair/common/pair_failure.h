@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,7 +64,9 @@ enum class PairFailure {
   kPairingConnect = 21,
   // Failed to bond to device via public address.
   kAddressConnect = 22,
-  kMaxValue = kAddressConnect,
+  // BLE device instance lost mid pair with classic instance
+  kBleDeviceLostMidPair = 23,
+  kMaxValue = kBleDeviceLostMidPair,
 };
 
 COMPONENT_EXPORT(QUICK_PAIR_COMMON)

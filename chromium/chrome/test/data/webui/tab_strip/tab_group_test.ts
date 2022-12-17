@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,8 @@ suite('TabGroup', () => {
     testTabsApiProxy = new TestTabsApiProxy();
     TabsApiProxyImpl.setInstance(testTabsApiProxy);
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     tabGroupElement = document.createElement('tabstrip-tab-group');
     tabGroupElement.dataset['groupId'] = groupId;
     tabGroupElement.appendChild(document.createElement('tabstrip-tab'));

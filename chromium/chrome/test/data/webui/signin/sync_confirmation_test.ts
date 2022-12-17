@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,6 @@ const STANDARD_CONSENT_CONFIRMATION = 'Yes, I\'m in';
 const SIGNIN_INTERCEPT_CONSENT_CONFIRMATION = 'Turn on sync';
 
 const SETTINGS_CONSENT_CONFIRMATION = 'Settings';
-const MANAGE_SYNC_CONSENT_CONFIRMATION = 'Manage sync';
 const SYNC_SETTINGS_CONSENT_CONFIRMATION = 'Sync settings';
 
 const CONSENT_DESCRIPTION_TEXTS = [
@@ -30,8 +29,7 @@ const CONSENT_DESCRIPTION_TEXTS = [
 ];
 const CONSENT_DESCRIPTION_SIGNIN_INTERCEPT_TEXTS = [
   'Welcome, Person 1',
-  'Turn on sync to get your bookmarks, passwords, history, and more on this device and anywhere else you\'re syncing.',
-  'Google may use your history to personalize Search and other Google services',
+  'Turn on sync to get your bookmarks, passwords, history, and more on this device and anywhere else you\'re syncing. Google may use your history to personalize Search and other Google services.',
 ];
 
 // <if expr="chromeos_lacros">
@@ -62,7 +60,8 @@ suite(`SigninSyncConfirmationTest`, function() {
   setup(async function() {
     browserProxy = new TestSyncConfirmationBrowserProxy();
     SyncConfirmationBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     app = document.createElement('sync-confirmation-app');
     document.body.append(app);
     // Check that the account image is requested when the app element is
@@ -117,7 +116,8 @@ suite(`SigninSyncConfirmationConsentRecordingTest`, function() {
     browserProxy = new TestSyncConfirmationBrowserProxy();
     SyncConfirmationBrowserProxyImpl.setInstance(browserProxy);
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     app = document.createElement('sync-confirmation-app');
     document.body.append(app);
     // Wait for the app element to get attached to the document (which is
@@ -131,10 +131,14 @@ suite(`SigninSyncConfirmationConsentRecordingTest`, function() {
     app.shadowRoot!.querySelector<HTMLElement>('#confirmButton')!.click();
     const [description, confirmation] =
         await browserProxy.whenCalled('confirm');
-    assertEquals(
-        isSigninInterceptFreEnabled ? SIGNIN_INTERCEPT_CONSENT_CONFIRMATION :
-                                      STANDARD_CONSENT_CONFIRMATION,
-        confirmation);
+    if (isSigninInterceptFreEnabled) {
+      // Confirmation button is capitalized on MacOS.
+      assertEquals(
+          SIGNIN_INTERCEPT_CONSENT_CONFIRMATION.toLowerCase(),
+          confirmation.toLowerCase());
+    } else {
+      assertEquals(STANDARD_CONSENT_CONFIRMATION, confirmation);
+    }
     assertArrayEquals(
         isSigninInterceptFreEnabled ?
             CONSENT_DESCRIPTION_SIGNIN_INTERCEPT_TEXTS :
@@ -148,9 +152,7 @@ suite(`SigninSyncConfirmationConsentRecordingTest`, function() {
     app.shadowRoot!.querySelector<HTMLElement>('#settingsButton')!.click();
     const [description, confirmation] =
         await browserProxy.whenCalled('goToSettings');
-    if (isSigninInterceptFreEnabled) {
-      assertEquals(MANAGE_SYNC_CONSENT_CONFIRMATION, confirmation);
-    } else if (isModalDialogDesignEnabled) {
+    if (isModalDialogDesignEnabled) {
       assertEquals(SETTINGS_CONSENT_CONFIRMATION, confirmation);
     } else {
       assertEquals(SYNC_SETTINGS_CONSENT_CONFIRMATION, confirmation);

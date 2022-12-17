@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@
 
 import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
 import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.js';
-import 'chrome://resources/cr_elements/md_select_css.m.js';
+import 'chrome://resources/cr_elements/md_select.css.js';
 import '../controls/settings_toggle_button.js';
 import '../prefs/prefs.js';
 import '../settings_shared.css.js';
@@ -24,7 +24,7 @@ import './secure_dns_input.js';
 
 import {CrRadioGroupElement} from 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.js';
 import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
-import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
@@ -134,7 +134,7 @@ export class SettingsSecureDnsElement extends SettingsSecureDnsElementBase {
   }
 
   private secureDnsDescription_: string;
-  private secureDnsToggle_: chrome.settingsPrivate.PrefObject;
+  private secureDnsToggle_: chrome.settingsPrivate.PrefObject<boolean>;
   private showRadioGroup_: boolean;
   private secureDnsRadio_: SecureDnsMode;
   private resolverOptions_: ResolverOption[];
@@ -301,7 +301,7 @@ export class SettingsSecureDnsElement extends SettingsSecureDnsElementBase {
     }
     // If the underlying secure DNS mode pref has an enforced value, communicate
     // that via the toggle pref.
-    const pref: chrome.settingsPrivate.PrefObject = {
+    const pref: chrome.settingsPrivate.PrefObject<boolean> = {
       key: '',
       type: chrome.settingsPrivate.PrefType.BOOLEAN,
       value: this.secureDnsToggle_.value,

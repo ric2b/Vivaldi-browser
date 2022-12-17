@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -161,8 +161,7 @@ TEST_F(EncryptionModuleTest, EncryptionDisabled) {
 
   // Disable encryption for this test.
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitFromCommandLine(
-      {}, {EncryptionModuleInterface::kEncryptedReporting});
+  scoped_feature_list.InitAndDisableFeature(kEncryptedReportingFeature);
 
   // Encrypt the test string.
   const auto encrypted_result = EncryptSync(kTestString);

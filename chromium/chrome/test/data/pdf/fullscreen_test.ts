@@ -1,10 +1,10 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {FittingType, PDFScriptingAPI} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import {FittingType, PdfScriptingApi} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 import {isMac} from 'chrome://resources/js/cr.m.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
@@ -21,6 +21,35 @@ async function ensureFullscreen(): Promise<void> {
   const toolbar = viewer.shadowRoot!.querySelector('viewer-toolbar')!;
   toolbar.dispatchEvent(new CustomEvent('present-click'));
   await eventToPromise('fullscreenchange', scroller);
+}
+
+async function enterAndExitFullscreen(): Promise<void> {
+  // Subsequent calls to requestFullScreen() fail with an "API can only be
+  // initiated by a user gesture" error, so we need to run with user
+  // gesture.
+  function enterFullscreenWithUserGesture(): Promise<void> {
+    return new Promise(res => {
+      chrome.test.runWithUserGesture(() => {
+        ensureFullscreen().then(res);
+      });
+    });
+  }
+
+  await enterFullscreenWithUserGesture();
+  document.exitFullscreen();
+  await eventToPromise('fullscreenchange', scroller);
+}
+
+async function assertEnterAndExitFullscreenWithType(fittingType: FittingType):
+    Promise<void> {
+  // Fullscreen must be exited at the start of this test in order for it to
+  // function properly.
+  chrome.test.assertTrue(document.fullscreenElement === null);
+
+  viewer.viewport.setFittingType(fittingType);
+  await enterAndExitFullscreen();
+  chrome.test.assertTrue(document.fullscreenElement === null);
+  chrome.test.assertEq(fittingType, viewer.viewport.fittingType);
 }
 
 const tests = [
@@ -130,7 +159,7 @@ const tests = [
   async function testTextSelectionDisabled() {
     await ensureFullscreen();
 
-    const client = new PDFScriptingAPI(window, window);
+    const client = new PdfScriptingApi(window, window);
     client.selectAll();
     client.getSelectedText(selectedText => {
       // No text should be selected.
@@ -138,14 +167,37 @@ const tests = [
       chrome.test.succeed();
     });
   },
-  // Note: The following test needs to be the last one, because subsequent calls
-  // to requestFullScreen() fail with an "API can only be initiated by a user
-  // gesture" error.
   async function testFocusAfterExiting() {
     await ensureFullscreen();
     document.exitFullscreen();
     await eventToPromise('fullscreenchange', scroller);
     chrome.test.assertEq('EMBED', getDeepActiveElement()!.nodeName);
+    chrome.test.succeed();
+  },
+  async function testZoomAfterExiting() {
+    // Fullscreen must be exited at the start of this test in order for it to
+    // function properly.
+    chrome.test.assertTrue(document.fullscreenElement === null);
+
+    // Zoom before fullscreen should be restored after entering and exiting
+    // fullscreen.
+    viewer.viewport.setZoom(0.5);
+    await enterAndExitFullscreen();
+    chrome.test.assertEq(0.5, viewer.viewport.getZoom());
+    chrome.test.assertEq(FittingType.NONE, viewer.viewport.fittingType);
+
+    chrome.test.succeed();
+  },
+  async function testEnterAndExitFullscreenWithType_FitToPage() {
+    await assertEnterAndExitFullscreenWithType(FittingType.FIT_TO_PAGE);
+    chrome.test.succeed();
+  },
+  async function testEnterAndExitFullscreenWithType_FitToWidth() {
+    await assertEnterAndExitFullscreenWithType(FittingType.FIT_TO_WIDTH);
+    chrome.test.succeed();
+  },
+  async function testEnterAndExitFullscreenWithType_FitToHeight() {
+    await assertEnterAndExitFullscreenWithType(FittingType.FIT_TO_HEIGHT);
     chrome.test.succeed();
   },
 ];

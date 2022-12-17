@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,7 @@ std::pair<base::File, base::FileErrorOr<int64_t>> GetFileLengthOnBlockingThread(
     base::File file) {
   int64_t file_length = file.GetLength();
   if (file_length < 0)
-    return {std::move(file), base::File::GetLastFileError()};
+    return {std::move(file), base::unexpected(base::File::GetLastFileError())};
   return {std::move(file), std::move(file_length)};
 }
 
@@ -332,7 +332,7 @@ void FileSystemAccessFileHandleImpl::DidOpenFileAndGetLength(
   base::FileErrorOr<int64_t> length_or_error =
       std::move(file_and_length.second);
 
-  if (length_or_error.is_error()) {
+  if (!length_or_error.has_value()) {
     std::move(callback).Run(
         file_system_access_error::FromFileError(length_or_error.error()),
         blink::mojom::FileSystemAccessAccessHandleFilePtr(),
@@ -373,6 +373,7 @@ void FileSystemAccessFileHandleImpl::IsSameEntry(
 void FileSystemAccessFileHandleImpl::IsSameEntryImpl(
     IsSameEntryCallback callback,
     FileSystemAccessTransferTokenImpl* other) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!other) {
     std::move(callback).Run(
         file_system_access_error::FromStatus(
@@ -381,24 +382,13 @@ void FileSystemAccessFileHandleImpl::IsSameEntryImpl(
     return;
   }
 
-  if (other->type() != FileSystemAccessPermissionContext::HandleType::kFile) {
-    std::move(callback).Run(file_system_access_error::Ok(), false);
-    return;
-  }
-
-  const storage::FileSystemURL& url1 = url();
-  const storage::FileSystemURL& url2 = other->url();
-
-  // If two URLs are of a different type they are definitely not related.
-  if (url1.type() != url2.type()) {
-    std::move(callback).Run(file_system_access_error::Ok(), false);
-    return;
-  }
-
-  // Otherwise compare path.
-  const base::FilePath& path1 = url1.path();
-  const base::FilePath& path2 = url2.path();
-  std::move(callback).Run(file_system_access_error::Ok(), path1 == path2);
+  // The two handles are the same if they serialize to the same value.
+  auto serialization = manager()->SerializeURL(
+      url(), FileSystemAccessPermissionContext::HandleType::kFile);
+  auto other_serialization =
+      manager()->SerializeURL(other->url(), other->type());
+  std::move(callback).Run(file_system_access_error::Ok(),
+                          serialization == other_serialization);
 }
 
 void FileSystemAccessFileHandleImpl::Transfer(
@@ -653,6 +643,14 @@ void FileSystemAccessFileHandleImpl::DidCopySwapFile(
           FileSystemAccessManagerImpl::SharedHandleState(
               handle_state().read_grant, handle_state().write_grant),
           auto_close));
+}
+
+void FileSystemAccessFileHandleImpl::GetUniqueId(GetUniqueIdCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  auto id = manager()->GetUniqueId(*this);
+  DCHECK(id.is_valid());
+  std::move(callback).Run(id.AsLowercaseString());
 }
 
 base::WeakPtr<FileSystemAccessHandleBase>

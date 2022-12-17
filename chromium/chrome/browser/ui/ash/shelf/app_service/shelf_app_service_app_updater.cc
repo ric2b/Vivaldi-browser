@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,7 @@ ShelfAppServiceAppUpdater::~ShelfAppServiceAppUpdater() = default;
 void ShelfAppServiceAppUpdater::OnAppUpdate(const apps::AppUpdate& update) {
   if (!update.ReadinessChanged() && !update.PausedChanged() &&
       !update.ShowInShelfChanged() && !update.ShortNameChanged() &&
-      !update.PolicyIdChanged()) {
+      !update.PolicyIdsChanged()) {
     return;
   }
 
@@ -71,7 +71,7 @@ void ShelfAppServiceAppUpdater::OnAppUpdate(const apps::AppUpdate& update) {
     }
   }
 
-  if (update.PolicyIdChanged())
+  if (update.PolicyIdsChanged())
     delegate()->OnAppInstalled(browser_context(), app_id);
 
   if (update.ShowInShelfChanged()) {

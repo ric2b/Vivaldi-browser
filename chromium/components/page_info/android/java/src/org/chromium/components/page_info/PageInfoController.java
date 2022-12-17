@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -198,7 +198,7 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
         PageInfoContainer.Params containerParams = new PageInfoContainer.Params();
         boolean useDarkText = !ColorUtils.inNightMode(mContext);
         OmniboxUrlEmphasizer.emphasizeUrl(displayUrlBuilder, mContext, autocompleteSchemeClassifier,
-                mSecurityLevel, mIsInternalPage, useDarkText,
+                mSecurityLevel, useDarkText,
                 /*emphasizeScheme=*/true);
         containerParams.url = displayUrlBuilder;
         containerParams.urlOriginLength = OmniboxUrlEmphasizer.getOriginEndIndex(

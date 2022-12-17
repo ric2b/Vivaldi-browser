@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,31 +15,25 @@
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
-#include "base/feature_list.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/crostini/crostini_test_helper.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_test_util.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/browser/ui/app_list/arc/arc_default_app_list.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
-#include "chrome/browser/ui/app_list/search/search_result_ranker/app_search_result_ranker.h"
-#include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
 #include "chrome/browser/ui/app_list/search/test/test_search_controller.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
-#include "chrome/common/chrome_constants.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/dbus/chunneld/chunneld_client.h"
 #include "chromeos/ash/components/dbus/cicerone/cicerone_client.h"
@@ -49,21 +43,11 @@
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
 #include "components/services/app_service/public/cpp/stub_icon_loader.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
-#include "components/sessions/content/content_test_helper.h"
-#include "components/sessions/core/serialized_navigation_entry_test_helper.h"
-#include "components/sessions/core/session_id.h"
 #include "components/sync/model/string_ordinal.h"
 #include "components/sync/protocol/sync_enums.pb.h"
-#include "components/sync_sessions/mock_sync_sessions_client.h"
-#include "components/sync_sessions/open_tabs_ui_delegate_impl.h"
-#include "components/sync_sessions/session_sync_service.h"
-#include "components/sync_sessions/synced_session.h"
-#include "components/sync_sessions/synced_session_tracker.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/extension_set.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -110,10 +94,6 @@ base::Time MicrosecondsSinceEpoch(int microseconds) {
       base::Microseconds(microseconds));
 }
 
-}  // namespace
-
-const base::Time kTestCurrentTime = MicrosecondsSinceEpoch(100000);
-
 bool MoreRelevant(const ChromeSearchResult* result1,
                   const ChromeSearchResult* result2) {
   return result1->relevance() > result2->relevance();
@@ -138,15 +118,11 @@ void UpdateIconKey(apps::AppServiceProxy& proxy, const std::string& app_id) {
                                   false /* should_notify_initialized */);
 }
 
+}  // namespace
+
 class AppSearchProviderTest : public AppListTestBase {
  public:
-  AppSearchProviderTest() {
-    // TODO(crbug.com/990684): disable FuzzyAppSearch because we flipped the
-    // flag to be enabled by default, need to enable it after it is fully
-    // launched.
-    scoped_feature_list_.InitWithFeatures(
-        {}, {app_list_features::kEnableFuzzyAppSearch});
-  }
+  AppSearchProviderTest() = default;
 
   AppSearchProviderTest(const AppSearchProviderTest&) = delete;
   AppSearchProviderTest& operator=(const AppSearchProviderTest&) = delete;
@@ -164,25 +140,11 @@ class AppSearchProviderTest : public AppListTestBase {
   }
 
   void CreateSearch() {
-    clock_.SetNow(kTestCurrentTime);
     search_controller_ = std::make_unique<TestSearchController>();
     auto app_search = std::make_unique<AppSearchProvider>(
         profile_.get(), nullptr, &clock_, model_updater_.get());
     app_search_ = app_search.get();
     search_controller_->AddProvider(0, std::move(app_search));
-  }
-
-  void CreateSearchWithContinueReading() {
-    CreateSearch();
-
-    session_tracker_ = std::make_unique<sync_sessions::SyncedSessionTracker>(
-        &mock_sync_sessions_client_);
-    open_tabs_ui_delegate_ =
-        std::make_unique<sync_sessions::OpenTabsUIDelegateImpl>(
-            &mock_sync_sessions_client_, session_tracker_.get(),
-            base::DoNothing());
-    app_search_->set_open_tabs_ui_delegate_for_testing(
-        open_tabs_ui_delegate_.get());
   }
 
   std::string RunQuery(const std::string& query) {
@@ -198,54 +160,10 @@ class AppSearchProviderTest : public AppListTestBase {
       sorted_results.emplace_back(result.get());
     std::sort(sorted_results.begin(), sorted_results.end(), &MoreRelevant);
 
-    // If the query is empty and we're in the non-productivity launcher, every
-    // other result is a chip result identical to the tile result. Skip these.
-    const int increment =
-        (!app_list_features::IsCategoricalSearchEnabled() && query.empty()) ? 2
-                                                                            : 1;
     std::string result_str;
-    for (size_t i = 0; i < sorted_results.size(); i += increment) {
+    for (auto* result : sorted_results) {
       if (!result_str.empty())
         result_str += ',';
-
-      result_str += base::UTF16ToUTF8(sorted_results[i]->title());
-    }
-    return result_str;
-  }
-
-  // Used for testing Continue Reading. Because the result is placed in the
-  // container based on index flags instead of relevance, use this methodology
-  // to generate list of test results.
-  std::string RunQueryNotSortingByRelevance(const std::string& query) {
-    search_controller_->StartSearch(base::UTF8ToUTF16(query));
-
-    std::vector<ChromeSearchResult*> non_relevance_results;
-    std::vector<ChromeSearchResult*> priority_results;
-    for (const auto& result : results()) {
-      if (result->display_index() == ash::kFirstIndex &&
-          (result->display_type() == ash::kChip ||
-           result->display_type() == ash::kTile)) {
-        priority_results.emplace_back(result.get());
-      } else {
-        non_relevance_results.emplace_back(result.get());
-      }
-    }
-
-    if (priority_results.size() != 0) {
-      non_relevance_results.insert(non_relevance_results.begin(),
-                                   priority_results.begin(),
-                                   priority_results.end());
-    }
-
-    // If the query is empty, every other result is a chip result identical to
-    // the tile result. Skip these.
-    const int increment = query.empty() ? 2 : 1;
-    std::string result_str;
-    for (size_t i = 0; i < non_relevance_results.size(); i += increment) {
-      auto* result = non_relevance_results[i];
-      if (!result_str.empty())
-        result_str += ',';
-
       result_str += base::UTF16ToUTF8(result->title());
     }
     return result_str;
@@ -304,36 +222,21 @@ class AppSearchProviderTest : public AppListTestBase {
   }
 
   const SearchProvider::Results& results() {
-    if (app_list_features::IsCategoricalSearchEnabled()) {
-      return search_controller_->last_results();
-    } else {
-      return app_search_->results();
-    }
+    return search_controller_->last_results();
   }
 
   ArcAppTest& arc_test() { return arc_test_; }
 
   void CallViewClosing() { app_search_->ViewClosing(); }
 
-  sync_sessions::SyncedSessionTracker* session_tracker() {
-    return session_tracker_.get();
-  }
-
  private:
   base::SimpleTestClock clock_;
   base::ScopedTempDir temp_dir_;
-  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<FakeAppListModelUpdater> model_updater_;
   std::unique_ptr<TestSearchController> search_controller_;
   AppSearchProvider* app_search_ = nullptr;
   std::unique_ptr<::test::TestAppListControllerDelegate> controller_;
   ArcAppTest arc_test_;
-
-  // For continue reading.
-  testing::NiceMock<sync_sessions::MockSyncSessionsClient>
-      mock_sync_sessions_client_;
-  std::unique_ptr<sync_sessions::SyncedSessionTracker> session_tracker_;
-  std::unique_ptr<sync_sessions::OpenTabsUIDelegateImpl> open_tabs_ui_delegate_;
 };
 
 TEST_F(AppSearchProviderTest, Basic) {
@@ -358,9 +261,10 @@ TEST_F(AppSearchProviderTest, Basic) {
   EXPECT_TRUE(result == "Packaged App 1,Packaged App 2" ||
               result == "Packaged App 2,Packaged App 1");
 
-  EXPECT_EQ("Packaged App 1", RunQuery("pa1"));
-  EXPECT_EQ("Packaged App 2", RunQuery("pa2"));
-  EXPECT_EQ("Packaged App 1", RunQuery("papp1"));
+  // The app with the queried number has a higher relevance score.
+  EXPECT_EQ("Packaged App 1,Packaged App 2", RunQuery("packaged 1"));
+  EXPECT_EQ("Packaged App 2,Packaged App 1", RunQuery("packaged 2"));
+
   EXPECT_EQ("Hosted App", RunQuery("host"));
 
   result = RunQuery("fake");
@@ -388,10 +292,10 @@ TEST_F(AppSearchProviderTest, DisableAndEnable) {
 TEST_F(AppSearchProviderTest, UninstallExtension) {
   CreateSearch();
 
-  EXPECT_EQ("Packaged App 1", RunQuery("pa1"));
+  EXPECT_EQ("Packaged App 1", RunQuery("app 1 p"));
   EXPECT_FALSE(results().empty());
-  service_->UninstallExtension(kPackagedApp1Id,
-                               extensions::UNINSTALL_REASON_FOR_TESTING, NULL);
+  service_->UninstallExtension(
+      kPackagedApp1Id, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
 
   // Allow async callbacks to run.
   base::RunLoop().RunUntilIdle();
@@ -418,7 +322,7 @@ TEST_F(AppSearchProviderTest, InstallUninstallArc) {
   CreateSearch();
 
   EXPECT_TRUE(results().empty());
-  EXPECT_EQ("", RunQuery("fapp0"));
+  EXPECT_EQ("", RunQuery("fake0"));
 
   arc_apps.emplace_back(arc_test().fake_apps()[0]->Clone());
   arc_test().app_instance()->SendRefreshAppList(arc_apps);
@@ -426,7 +330,7 @@ TEST_F(AppSearchProviderTest, InstallUninstallArc) {
   // Allow async callbacks to run.
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ("Fake App 0", RunQuery("fapp0"));
+  EXPECT_EQ("Fake App 0", RunQuery("fake0"));
   EXPECT_FALSE(results().empty());
 
   arc_apps.clear();
@@ -436,7 +340,7 @@ TEST_F(AppSearchProviderTest, InstallUninstallArc) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(results().empty());
-  EXPECT_EQ("", RunQuery("fapp0"));
+  EXPECT_EQ("", RunQuery("fake0"));
 
   // Let uninstall code to clean up.
   base::RunLoop().RunUntilIdle();
@@ -465,7 +369,7 @@ TEST_F(AppSearchProviderTest, FetchRecommendations) {
   EXPECT_EQ("Packaged App 2,Packaged App 1,Hosted App", RunQuery(""));
 
   // Times in the future should just be handled as highest priority.
-  prefs->SetLastLaunchTime(kHostedAppId, kTestCurrentTime + base::Seconds(5));
+  prefs->SetLastLaunchTime(kHostedAppId, base::Time::Now() + base::Seconds(5));
   prefs->SetLastLaunchTime(kPackagedApp1Id, MicrosecondsSinceEpoch(10));
   prefs->SetLastLaunchTime(kPackagedApp2Id, MicrosecondsSinceEpoch(5));
   // Allow async callbacks to run.
@@ -616,9 +520,6 @@ TEST_F(AppSearchProviderTest, FetchInternalApp) {
 }
 
 TEST_F(AppSearchProviderTest, WebApp) {
-  apps::AppServiceProxyFactory::GetForProfile(testing_profile())
-      ->FlushMojoCallsForTesting();
-
   const web_app::AppId app_id = web_app::test::InstallDummyWebApp(
       testing_profile(), kWebAppName, GURL(kWebAppUrl));
 
@@ -677,7 +578,7 @@ TEST_F(AppSearchProviderCrostiniTest, CrostiniApp) {
   EXPECT_EQ("goodApp", RunQuery("excellent app"));
   EXPECT_EQ("goodApp", RunQuery("good"));
   EXPECT_EQ("goodApp", RunQuery("executable"));
-  EXPECT_EQ("", RunQuery("wow amazing"));
+  EXPECT_EQ("goodApp", RunQuery("wow amazing"));
   EXPECT_EQ("", RunQuery("terrible"));
 }
 
@@ -715,11 +616,6 @@ TEST_F(AppSearchProviderTest, AppServiceIconCache) {
   EXPECT_FALSE(results().empty());
   // Allow async callbacks to run.
   base::RunLoop().RunUntilIdle();
-  if (!app_list_features::IsCategoricalSearchEnabled()) {
-    // Verify the search results are cleared async.
-    EXPECT_TRUE(results().empty());
-  }
-
   EXPECT_EQ(2, stub_icon_loader.NumLoadIconFromIconKeyCalls());
 
   // The icon has been added to the map, so issuing the same "pa" query should
@@ -739,8 +635,6 @@ TEST_F(AppSearchProviderTest, AppServiceIconCache) {
 }
 
 TEST_F(AppSearchProviderTest, FuzzyAppSearchTest) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(app_list_features::kEnableFuzzyAppSearch);
   CreateSearch();
   EXPECT_EQ("Packaged App 1,Packaged App 2", RunQuery("pa"));
   std::string result = RunQuery("ackaged");
@@ -769,72 +663,6 @@ class AppSearchProviderWithExtensionInstallType
 
   ~AppSearchProviderWithExtensionInstallType() override = default;
 };
-
-TEST_P(AppSearchProviderWithExtensionInstallType, InstallInternallyRanking) {
-  extensions::ExtensionPrefs* const prefs =
-      extensions::ExtensionPrefs::Get(profile());
-  ASSERT_TRUE(prefs);
-
-  // Install normal app.
-  const std::string normal_app_id =
-      crx_file::id_util::GenerateId(kRankingNormalAppName);
-  AddExtension(normal_app_id, kRankingNormalAppName,
-               ManifestLocation::kExternalPrefDownload,
-               extensions::Extension::NO_FLAGS);
-
-  // Wait a bit to make sure time is updated.
-  WaitTimeUpdated();
-
-  // Install app internally.
-  const std::string internal_app_id =
-      crx_file::id_util::GenerateId(kRankingInternalAppName);
-  switch (GetParam()) {
-    case TestExtensionInstallType::CONTROLLED_BY_POLICY:
-      AddExtension(internal_app_id, kRankingInternalAppName,
-                   ManifestLocation::kExternalPolicyDownload,
-                   extensions::Extension::NO_FLAGS);
-      break;
-    case TestExtensionInstallType::CHROME_COMPONENT:
-      AddExtension(internal_app_id, kRankingInternalAppName,
-                   ManifestLocation::kComponent,
-                   extensions::Extension::NO_FLAGS);
-      break;
-    case TestExtensionInstallType::INSTALLED_BY_DEFAULT:
-      AddExtension(internal_app_id, kRankingInternalAppName,
-                   ManifestLocation::kExternalPrefDownload,
-                   extensions::Extension::WAS_INSTALLED_BY_DEFAULT);
-      break;
-    case TestExtensionInstallType::INSTALLED_BY_OEM:
-      AddExtension(internal_app_id, kRankingInternalAppName,
-                   ManifestLocation::kExternalPrefDownload,
-                   extensions::Extension::WAS_INSTALLED_BY_OEM);
-      break;
-  }
-
-  // Allow async callbacks to run.
-  base::RunLoop().RunUntilIdle();
-  EXPECT_LT(prefs->GetInstallTime(normal_app_id),
-            prefs->GetInstallTime(internal_app_id));
-
-  // Installed internally app has runking below other apps, even if it's install
-  // time is later.
-  CreateSearch();
-  // Allow async callbacks to run.
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(std::string(kRankingNormalAppName) + "," +
-                std::string(kRankingInternalAppName),
-            RunQuery(kRankingAppQuery));
-
-  // Using installed internally app moves it in ranking up.
-  WaitTimeUpdated();
-  prefs->SetLastLaunchTime(internal_app_id, base::Time::Now());
-  CreateSearch();
-  // Allow async callbacks to run.
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(std::string(kRankingInternalAppName) + "," +
-                std::string(kRankingNormalAppName),
-            RunQuery(kRankingAppQuery));
-}
 
 TEST_P(AppSearchProviderWithExtensionInstallType, OemResultsOnFirstBoot) {
   // Disable the pre-installed high-priority extensions. This test simulates

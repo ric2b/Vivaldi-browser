@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -371,19 +371,21 @@ AX_TEST_F(
       await mockFeedback.replay();
     });
 
-AX_TEST_F('ChromeVoxBackgroundTest', 'SelectSingleBasic', async function() {
-  const mockFeedback = this.createMockFeedback();
-  await this.runWithLoadedTree(this.formsDoc);
-  mockFeedback.expectSpeech('apple', 'has pop up', 'Collapsed')
-      .expectBraille('apple btn +popup +3 +')
-      .call(press(KeyCode.DOWN))
-      .expectSpeech('grape', /2 of 3/)
-      .expectBraille('grape 2/3')
-      .call(press(KeyCode.DOWN))
-      .expectSpeech('banana', /3 of 3/)
-      .expectBraille('banana 3/3');
-  await mockFeedback.replay();
-});
+// crbug.com/1356181 Disable due to flaky.
+AX_TEST_F(
+    'ChromeVoxBackgroundTest', 'DISABLED_SelectSingleBasic', async function() {
+      const mockFeedback = this.createMockFeedback();
+      await this.runWithLoadedTree(this.formsDoc);
+      mockFeedback.expectSpeech('apple', 'has pop up', 'Collapsed')
+          .expectBraille('apple btn +popup +3 +')
+          .call(press(KeyCode.DOWN))
+          .expectSpeech('grape', /2 of 3/)
+          .expectBraille('grape 2/3')
+          .call(press(KeyCode.DOWN))
+          .expectSpeech('banana', /3 of 3/)
+          .expectBraille('banana 3/3');
+      await mockFeedback.replay();
+    });
 
 AX_TEST_F('ChromeVoxBackgroundTest', 'ContinuousRead', async function() {
   const mockFeedback = this.createMockFeedback();
@@ -789,7 +791,7 @@ AX_TEST_F('ChromeVoxBackgroundTest', 'SelectOptionSelected', async function() {
     </select>
   `;
   const root = await this.runWithLoadedTree(site);
-  const select = root.find({role: RoleType.POP_UP_BUTTON});
+  const select = root.find({role: RoleType.COMBO_BOX_SELECT});
   const selectLastOption = () => {
     const options = select.findAll({role: RoleType.LIST_BOX_OPTION});
     options[options.length - 1].doDefault();
@@ -1303,8 +1305,10 @@ AX_TEST_F('ChromeVoxBackgroundTest', 'ForceClickInPageLinks', async function() {
 // Note: this test needs the test server running because the browser
 // does not follow same-page links on data urls (because it modifies the
 // url fragment, and any change to the url is disallowed for a data url).
+// crbug.com/1356181 Disable due to flaky.
 AX_TEST_F(
-    'ChromeVoxBackgroundTestWithTestServer', 'InPageLinks', async function() {
+    'ChromeVoxBackgroundTestWithTestServer',
+    'DISABLED_InPageLinks', async function() {
       const mockFeedback = this.createMockFeedback();
       const root = await this.runWithLoadedTree(undefined, {
         url: `${
@@ -1651,7 +1655,7 @@ AX_TEST_F(
     </select>
   `;
       const root = await this.runWithLoadedTree(site);
-      const select = root.find({role: RoleType.POP_UP_BUTTON});
+      const select = root.find({role: RoleType.COMBO_BOX_SELECT});
       mockFeedback.expectSpeech('Button', 'has pop up', 'Collapsed')
           .call(doDefault(select))
           .expectSpeech('Expanded')
@@ -1788,7 +1792,9 @@ AX_TEST_F(
       await mockFeedback.replay();
     });
 
-AX_TEST_F('ChromeVoxBackgroundTest', 'GestureGranularity', async function() {
+// crbug.com/1356181 Disable due to flaky.
+AX_TEST_F('ChromeVoxBackgroundTest',
+          'DISABLED_aGestureGranularity', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <p>This is a test</p>
@@ -2893,7 +2899,7 @@ AX_TEST_F(
       await mockFeedback.replay();
     });
 
-AX_TEST_F('ChromeVoxBackgroundTest', 'PopupButtonCollapsed', async function() {
+AX_TEST_F('ChromeVoxBackgroundTest', 'SelectCollapsed', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <select id="button">
@@ -3086,8 +3092,9 @@ AX_TEST_F('ChromeVoxBackgroundTest', 'SwipeLeftRight2', async function() {
 });
 
 // TODO(crbug.com/1228418) - Improve the generation of summaries across ChromeOS
+// crbug.com/1356181 Disable due to flaky.
 AX_TEST_F(
-    'ChromeVoxBackgroundTest', 'AlertDialogAutoSummaryTextContent',
+    'ChromeVoxBackgroundTest', 'DISABLED_AlertDialogAutoSummaryTextContent',
     async function() {
       this.resetContextualOutput();
       const mockFeedback = this.createMockFeedback();
@@ -3256,7 +3263,7 @@ AX_TEST_F(
   `;
       const root = await this.runWithLoadedTree(site);
       const application = root.find({role: RoleType.APPLICATION});
-      const popUpButton = root.find({role: RoleType.POP_UP_BUTTON});
+      const popUpButton = root.find({role: RoleType.COMBO_BOX_SELECT});
       const p = root.find({role: RoleType.PARAGRAPH});
 
       // Move focus to the select, which honors value changes through
@@ -3268,7 +3275,7 @@ AX_TEST_F(
       p.doDefault();
       await TestUtils.waitForSpeech('grape');
       assertEquals(
-          RoleType.POP_UP_BUTTON,
+          RoleType.COMBO_BOX_SELECT,
           ChromeVoxState.instance.currentRange.start.node.role);
 
       // Now, move focus to the application which is a parent of the select.
@@ -3740,7 +3747,8 @@ AX_TEST_F('ChromeVoxBackgroundTest', 'Abbreviation', async function() {
   await mockFeedback.replay();
 });
 
-AX_TEST_F('ChromeVoxBackgroundTest', 'EndOfText', async function() {
+// TODO(crbug.com/1361544): Test is flaky.
+AX_TEST_F('ChromeVoxBackgroundTest', 'DISABLED_EndOfText', async function() {
   const mockFeedback = this.createMockFeedback();
   const site = `
     <p>start</p>
@@ -3997,8 +4005,10 @@ AX_TEST_F(
     });
 
 // Make sure navigation with touch to ListBox lands on options.
+// crbug.com/1356181 Disable due to flaky.
 AX_TEST_F(
-    'ChromeVoxBackgroundTest', 'TouchListBoxItemsNavigation', async function() {
+    'ChromeVoxBackgroundTest',
+    'DISABLED_TouchListBoxItemsNavigation', async function() {
       const mockFeedback = this.createMockFeedback();
       await this.runWithLoadedTree(this.listBoxDoc);
       mockFeedback

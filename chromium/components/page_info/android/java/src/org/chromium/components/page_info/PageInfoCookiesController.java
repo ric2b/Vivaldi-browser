@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@ package org.chromium.components.page_info;
 import android.view.View;
 import android.view.ViewGroup;
 
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
 import org.chromium.components.browser_ui.site_settings.SiteDataCleaner;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
@@ -45,7 +46,7 @@ public class PageInfoCookiesController
         mMainController = mainController;
         mRowView = rowView;
         mFullUrl = mainController.getURL().getSpec();
-        mTitle = mRowView.getContext().getResources().getString(R.string.cookies_title);
+        mTitle = mRowView.getContext().getResources().getString(R.string.page_info_cookies_title);
         mBridge = delegate.createCookieControlsBridge(this);
 
         PageInfoRowView.ViewParams rowParams = new PageInfoRowView.ViewParams();
@@ -89,7 +90,9 @@ public class PageInfoCookiesController
         SiteSettingsCategory storageCategory = SiteSettingsCategory.createFromType(
                 mMainController.getBrowserContext(), SiteSettingsCategory.Type.USE_STORAGE);
         new WebsitePermissionsFetcher(mMainController.getBrowserContext())
-                .fetchPreferencesForCategory(storageCategory, this::onStorageFetched);
+                .fetchPreferencesForCategoryAndPopulateFpsInfo(
+                        getDelegate().getSiteSettingsDelegate(), storageCategory,
+                        this::onStorageFetched);
 
         return view;
     }
@@ -102,6 +105,11 @@ public class PageInfoCookiesController
                 address, result);
         if (mSubPage != null) {
             mSubPage.setStorageUsage(mWebsite.getTotalUsage());
+
+            boolean isFPSInfoShown = mSubPage.maybeShowFPSInfo(
+                    mWebsite.getFPSCookieInfo(), mWebsite.getAddress().getOrigin());
+            RecordHistogram.recordBooleanHistogram(
+                    "Security.PageInfo.Cookies.HasFPSInfo", isFPSInfoShown);
         }
     }
 

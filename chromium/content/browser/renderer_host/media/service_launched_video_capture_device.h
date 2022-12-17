@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,7 +62,7 @@ class ServiceLaunchedVideoCaptureDevice : public LaunchedVideoCaptureDevice {
   mojo::Remote<video_capture::mojom::VideoSource> source_;
   mojo::Remote<video_capture::mojom::PushVideoStreamSubscription> subscription_;
   base::OnceClosure connection_lost_cb_;
-  base::SequenceChecker sequence_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   media::VideoCaptureFeedback last_feedback_;
 };

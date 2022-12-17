@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,7 @@
 #include "chrome/browser/ui/views/media_router/cast_toolbar_button.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_container.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_controller.h"
+#include "chrome/browser/ui/views/performance_controls/battery_saver_button.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_toolbar_icon_view.h"
 #include "chrome/browser/ui/views/side_search/side_search_browser_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
@@ -80,6 +81,7 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/performance_manager/public/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/send_tab_to_self/features.h"
@@ -93,6 +95,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
@@ -280,7 +283,7 @@ void ToolbarView::Init() {
   }
 
   std::unique_ptr<SidePanelToolbarButton> side_panel_button;
-  if (browser_view_->right_aligned_side_panel()) {
+  if (browser_view_->unified_side_panel()) {
     side_panel_button = std::make_unique<SidePanelToolbarButton>(browser_);
   }
 
@@ -323,6 +326,12 @@ void ToolbarView::Init() {
     }
   }
 
+  if (base::FeatureList::IsEnabled(
+          performance_manager::features::kBatterySaverModeAvailable)) {
+    battery_saver_button_ =
+        AddChildView(std::make_unique<BatterySaverButton>(browser_view_));
+  }
+
   if (cast)
     cast_ = AddChildView(std::move(cast));
 
@@ -342,7 +351,7 @@ void ToolbarView::Init() {
   bool show_avatar_toolbar_button = true;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // ChromeOS only badges Incognito and Guest icons in the browser window.
-  show_avatar_toolbar_button = browser_->profile()->IsOffTheRecord() ||
+  show_avatar_toolbar_button = browser_->profile()->IsIncognitoProfile() ||
                                browser_->profile()->IsGuestSession();
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   show_avatar_toolbar_button = !profiles::IsPublicSession();
@@ -506,9 +515,9 @@ void ToolbarView::ShowBookmarkBubble(
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   delegate = std::make_unique<BookmarkBubbleSignInDelegate>(profile);
 #endif
-  BookmarkBubbleView::ShowBubble(anchor_view, bookmark_star_icon, observer,
-                                 std::move(delegate), profile, url,
-                                 already_bookmarked);
+  BookmarkBubbleView::ShowBubble(
+      anchor_view, GetWebContents(), bookmark_star_icon, observer,
+      std::move(delegate), profile, url, already_bookmarked);
 }
 
 ExtensionsToolbarButton* ToolbarView::GetExtensionsButton() const {
@@ -868,6 +877,10 @@ ReloadButton* ToolbarView::GetReloadButton() {
 
 IntentChipButton* ToolbarView::GetIntentChipButton() {
   return location_bar()->intent_chip();
+}
+
+DownloadToolbarButtonView* ToolbarView::GetDownloadButton() {
+  return download_button();
 }
 
 BrowserRootView::DropIndex ToolbarView::GetDropIndex(

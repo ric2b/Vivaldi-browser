@@ -37,6 +37,7 @@
 #include <string>
 
 #include "base/callback_helpers.h"
+#include "base/functional/function_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/test/fake_layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_host.h"
@@ -51,7 +52,6 @@
 #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
 #include "third_party/blink/public/mojom/widget/platform_widget.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/scheduler/test/web_fake_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -127,9 +127,10 @@ WebMouseEvent CreateMouseEvent(WebInputEvent::Type,
 // Helper for creating a local child frame of a local parent frame.
 WebLocalFrameImpl* CreateLocalChild(
     WebLocalFrame& parent,
-    blink::mojom::blink::TreeScopeType,
+    mojom::blink::TreeScopeType,
     TestWebFrameClient*,
-    WebPolicyContainerBindParams policy_container_bind_params);
+    WebPolicyContainerBindParams policy_container_bind_params,
+    WebLocalFrameClient::FinishChildFrameCreationFn finish_creation);
 
 // Similar, but unlike the overload which takes the client as a raw pointer,
 // ownership of the TestWebFrameClient is transferred to the test framework.
@@ -138,7 +139,8 @@ WebLocalFrameImpl* CreateLocalChild(
     WebLocalFrame& parent,
     blink::mojom::blink::TreeScopeType,
     std::unique_ptr<TestWebFrameClient>,
-    WebPolicyContainerBindParams policy_container_bind_params);
+    WebPolicyContainerBindParams policy_container_bind_params,
+    WebLocalFrameClient::FinishChildFrameCreationFn finish_creation);
 
 // Helper for creating a remote frame. Generally used when creating a remote
 // frame to swap into the frame tree.
@@ -209,7 +211,8 @@ class TestWebFrameWidgetHost : public mojom::blink::WidgetHost,
   void StartDragging(const blink::WebDragData& drag_data,
                      blink::DragOperationsMask operations_allowed,
                      const SkBitmap& bitmap,
-                     const gfx::Vector2d& bitmap_offset_in_dip,
+                     const gfx::Vector2d& cursor_offset_in_dip,
+                     const gfx::Rect& drag_obj_rect_in_dip,
                      mojom::blink::DragEventSourceInfoPtr event_info) override;
 
   void BindWidgetHost(
@@ -227,9 +230,7 @@ class TestWebFrameWidget : public WebFrameWidgetImpl {
  public:
   template <typename... Args>
   explicit TestWebFrameWidget(Args&&... args)
-      : WebFrameWidgetImpl(std::forward<Args>(args)...) {
-    agent_group_scheduler_ = fake_thread_scheduler_.CreateAgentGroupScheduler();
-  }
+      : WebFrameWidgetImpl(std::forward<Args>(args)...) {}
   ~TestWebFrameWidget() override = default;
 
   TestWebFrameWidgetHost& WidgetHost() { return *widget_host_; }
@@ -238,14 +239,6 @@ class TestWebFrameWidget : public WebFrameWidgetImpl {
   const Vector<std::unique_ptr<blink::WebCoalescedInputEvent>>&
   GetInjectedScrollEvents() const {
     return injected_scroll_events_;
-  }
-
-  scheduler::WebThreadScheduler* main_thread_scheduler() {
-    return &fake_thread_scheduler_;
-  }
-
-  blink::scheduler::WebAgentGroupScheduler& GetAgentGroupScheduler() {
-    return *agent_group_scheduler_;
   }
 
   // The returned pointer is valid after AllocateNewLayerTreeFrameSink() occurs,
@@ -297,9 +290,6 @@ class TestWebFrameWidget : public WebFrameWidgetImpl {
 
  private:
   cc::FakeLayerTreeFrameSink* last_created_frame_sink_ = nullptr;
-  blink::scheduler::WebFakeThreadScheduler fake_thread_scheduler_;
-  std::unique_ptr<blink::scheduler::WebAgentGroupScheduler>
-      agent_group_scheduler_;
   Vector<std::unique_ptr<blink::WebCoalescedInputEvent>>
       injected_scroll_events_;
   std::unique_ptr<TestWidgetInputHandlerHost> widget_input_handler_host_;
@@ -503,8 +493,8 @@ class TestWebFrameClient : public WebLocalFrameClient {
       const FramePolicy&,
       const WebFrameOwnerProperties&,
       FrameOwnerElementType,
-      WebPolicyContainerBindParams policy_container_bind_params) override;
-  void InitializeAsChildFrame(WebLocalFrame* parent) override;
+      WebPolicyContainerBindParams policy_container_bind_params,
+      FinishChildFrameCreationFn finish_creation) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
   bool SwapIn(WebFrame* previous_frame) override;

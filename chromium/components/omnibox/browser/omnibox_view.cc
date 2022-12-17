@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -259,11 +259,6 @@ void OmniboxView::RevertAll() {
 void OmniboxView::CloseOmniboxPopup() {
   if (model_)
     model_->StopAutocomplete();
-}
-
-void OmniboxView::StartPrefetch(const AutocompleteInput& input) {
-  if (model_)
-    model_->autocomplete_controller()->StartPrefetch(input);
 }
 
 bool OmniboxView::IsImeShowingPopup() const {

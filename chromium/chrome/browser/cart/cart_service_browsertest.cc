@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -301,5 +301,7 @@ IN_PROC_BROWSER_TEST_F(CartServiceBrowserDiscountTest,
   service_->PrepareForNavigation(foo_url, false);
   TabStripModel* model = browser()->tab_strip_model();
   NavigateToURL(foo_url);
-  ASSERT_EQ(bar_url, model->GetActiveWebContents()->GetVisibleURL());
+  ASSERT_EQ(GURL(bar_url.spec() +
+                 "?utm_source=chrome&utm_medium=app&utm_campaign=chrome-cart"),
+            model->GetActiveWebContents()->GetVisibleURL());
 }

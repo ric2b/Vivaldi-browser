@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,6 +56,9 @@ class FilesRequestHandler : public RequestHandlerBase {
       Profile* profile,
       const enterprise_connectors::AnalysisSettings& analysis_settings,
       GURL url,
+      const std::string& source,
+      const std::string& destination,
+      const std::string& user_action_id,
       safe_browsing::DeepScanAccessPoint access_point,
       const std::vector<base::FilePath>& paths,
       CompletionCallback callback)>;
@@ -70,6 +73,9 @@ class FilesRequestHandler : public RequestHandlerBase {
       Profile* profile,
       const enterprise_connectors::AnalysisSettings& analysis_settings,
       GURL url,
+      const std::string& source,
+      const std::string& destination,
+      const std::string& user_action_id,
       safe_browsing::DeepScanAccessPoint access_point,
       const std::vector<base::FilePath>& paths,
       CompletionCallback callback);
@@ -83,22 +89,25 @@ class FilesRequestHandler : public RequestHandlerBase {
   void ReportWarningBypass(
       absl::optional<std::u16string> user_justification) override;
 
-  void FileRequestCallbackForTesting(
-      base::FilePath path,
-      safe_browsing::BinaryUploadService::Result result,
-      enterprise_connectors::ContentAnalysisResponse response);
-
  protected:
   FilesRequestHandler(
       safe_browsing::BinaryUploadService* upload_service,
       Profile* profile,
       const enterprise_connectors::AnalysisSettings& analysis_settings,
       GURL url,
+      const std::string& source,
+      const std::string& destination,
+      const std::string& user_action_id,
       safe_browsing::DeepScanAccessPoint access_point,
       const std::vector<base::FilePath>& paths,
       CompletionCallback callback);
 
   bool UploadDataImpl() override;
+
+  void FileRequestCallbackForTesting(
+      base::FilePath path,
+      safe_browsing::BinaryUploadService::Result result,
+      enterprise_connectors::ContentAnalysisResponse response);
 
  private:
   // Prepares an upload request for the file at `path`.  If the file

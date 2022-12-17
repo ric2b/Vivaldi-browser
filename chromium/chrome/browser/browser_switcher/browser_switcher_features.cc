@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 // Feature for session-only data deletion on startup.
@@ -11,5 +11,6 @@
 //
 // TODO(crbug.com/1282233): Remove this flag once we're confident this
 // doesn't break customers.
-extern const base::Feature kBrowserSwitcherNoneIsGreylist{
-    "BrowserSwitcherNoneIsGreylist", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kBrowserSwitcherNoneIsGreylist,
+             "BrowserSwitcherNoneIsGreylist",
+             base::FEATURE_ENABLED_BY_DEFAULT);

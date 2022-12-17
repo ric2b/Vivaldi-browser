@@ -1,11 +1,11 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /** @fileoverview Suite of tests for extensions-detail-view. */
 
 import {CrCheckboxElement, ExtensionsDetailViewElement, ExtensionsToggleRowElement, navigation, Page} from 'chrome://extensions/extensions.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -26,6 +26,7 @@ const extension_detail_view_tests = {
     NoSiteAccessWithEnhancedSiteControls:
         'no site access with enhanced site controls',
     InspectableViewSortOrder: 'inspectable view sort order',
+    ShowAccessRequestsInToolbar: 'show access requests in toolbar',
   },
 };
 
@@ -43,7 +44,8 @@ suite(extension_detail_view_tests.suiteName, function() {
 
   // Initialize an extension item before each test.
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     extensionData = createExtensionInfo({
       incognitoAccess: {isEnabled: true, isActive: false},
       fileAccess: {isEnabled: true, isActive: false},
@@ -560,5 +562,39 @@ suite(extension_detail_view_tests.suiteName, function() {
         assertDeepEquals(
             ['service worker', 'background page', 'popup.html'],
             orderedListItems);
+      });
+
+  test(
+      assert(extension_detail_view_tests.TestNames.ShowAccessRequestsInToolbar),
+      function() {
+        const testIsVisible = isChildVisible.bind(null, item);
+
+        const allSitesPermissions = {
+          simplePermissions: [],
+          runtimeHostPermissions: {
+            hosts: [{granted: false, host: '<all_urls>'}],
+            hasAllHosts: true,
+            hostAccess: chrome.developerPrivate.HostAccess.ON_CLICK,
+          },
+        };
+        item.set('data.permissions', allSitesPermissions);
+        item.set('data.showAccessRequestsInToolbar', true);
+        flush();
+
+        assertFalse(testIsVisible('#show-access-requests-toggle'));
+
+        item.enableEnhancedSiteControls = true;
+        flush();
+
+        assertTrue(testIsVisible('#show-access-requests-toggle'));
+        assertTrue(item.shadowRoot!
+                       .querySelector<ExtensionsToggleRowElement>(
+                           '#show-access-requests-toggle')!.checked);
+
+        mockDelegate.testClickingCalls(
+            item.shadowRoot!
+                .querySelector<ExtensionsToggleRowElement>(
+                    '#show-access-requests-toggle')!.getLabel(),
+            'setShowAccessRequestsInToolbar', [extensionData.id, false]);
       });
 });

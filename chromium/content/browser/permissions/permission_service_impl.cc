@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,11 +14,14 @@
 #include "base/memory/ptr_util.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/permissions/permission_controller_impl.h"
+#include "content/browser/permissions/permission_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_result.h"
 #include "content/public/browser/render_frame_host.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-shared.h"
+#include "url/origin.h"
 
 using blink::mojom::PermissionDescriptorPtr;
 using blink::mojom::PermissionName;
@@ -125,11 +128,29 @@ void PermissionServiceImpl::RequestPermissions(
       std::make_unique<PendingRequest>(types, std::move(callback));
 
   int pending_request_id = pending_requests_.Add(std::move(pending_request));
-  PermissionControllerImpl::FromBrowserContext(browser_context)
-      ->RequestPermissionsFromCurrentDocument(
-          types, context_->render_frame_host(), user_gesture,
-          base::BindOnce(&PermissionServiceImpl::OnRequestPermissionsResponse,
-                         weak_factory_.GetWeakPtr(), pending_request_id));
+
+  if (!permissions.empty() &&
+      PermissionUtil::IsDomainOverride(permissions[0])) {
+    if (!PermissionUtil::ValidateDomainOverride(
+            types, context_->render_frame_host())) {
+      ReceivedBadMessage();
+      return;
+    }
+    url::Origin requested_origin =
+        PermissionUtil::ExtractDomainOverride(permissions[0]);
+    PermissionControllerImpl::FromBrowserContext(browser_context)
+        ->RequestPermissions(
+            types, context_->render_frame_host(), requested_origin,
+            user_gesture,
+            base::BindOnce(&PermissionServiceImpl::OnRequestPermissionsResponse,
+                           weak_factory_.GetWeakPtr(), pending_request_id));
+  } else {
+    PermissionControllerImpl::FromBrowserContext(browser_context)
+        ->RequestPermissionsFromCurrentDocument(
+            types, context_->render_frame_host(), user_gesture,
+            base::BindOnce(&PermissionServiceImpl::OnRequestPermissionsResponse,
+                           weak_factory_.GetWeakPtr(), pending_request_id));
+  }
 }
 
 void PermissionServiceImpl::OnRequestPermissionsResponse(

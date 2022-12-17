@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -49,7 +49,7 @@ class TextFragmentHandlerTest : public SimTest {
     // When the beforematch event is not scheduled, a DCHECK will fail on
     // BeginFrame() because no event was scheduled, so we schedule an empty task
     // here.
-    GetDocument().EnqueueAnimationFrameTask(WTF::Bind([]() {}));
+    GetDocument().EnqueueAnimationFrameTask(WTF::BindOnce([]() {}));
     Compositor().BeginFrame();
   }
 
@@ -93,7 +93,7 @@ class TextFragmentHandlerTest : public SimTest {
           callback_called = true;
         };
     auto callback =
-        WTF::Bind(lambda, std::ref(callback_called), std::ref(selector));
+        WTF::BindOnce(lambda, std::ref(callback_called), std::ref(selector));
     GetTextFragmentHandler().RequestSelector(std::move(callback));
     base::RunLoop().RunUntilIdle();
 
@@ -109,8 +109,8 @@ class TextFragmentHandlerTest : public SimTest {
       target_texts = fetched_target_texts;
       callback_called = true;
     };
-    auto callback =
-        WTF::Bind(lambda, std::ref(callback_called), std::ref(target_texts));
+    auto callback = WTF::BindOnce(lambda, std::ref(callback_called),
+                                  std::ref(target_texts));
 
     GetTextFragmentHandler().ExtractTextFragmentsMatches(std::move(callback));
 
@@ -126,8 +126,8 @@ class TextFragmentHandlerTest : public SimTest {
       text_fragment_rect = fetched_text_fragment_rect;
       callback_called = true;
     };
-    auto callback = WTF::Bind(lambda, std::ref(callback_called),
-                              std::ref(text_fragment_rect));
+    auto callback = WTF::BindOnce(lambda, std::ref(callback_called),
+                                  std::ref(text_fragment_rect));
 
     GetTextFragmentHandler().ExtractFirstFragmentRect(std::move(callback));
 
@@ -433,11 +433,11 @@ TEST_F(TextFragmentHandlerTest, ExtractFirstTextFragmentRectScroll) {
       GetDocument().GetFrame()->View()->FrameToViewport(rect);
   // ExtractFirstTextFragmentsRect should return the first matched scaled
   // viewport relative location since the page is loaded zoomed in 4X
-  ASSERT_EQ(expected_rect.ToString(), "432,296 360x44");
+  ASSERT_EQ(gfx::Rect(432, 300, 360, 40), expected_rect);
 
   gfx::Rect text_fragment_rect = ExtractFirstTextFragmentsRect();
 
-  EXPECT_EQ(expected_rect.ToString(), text_fragment_rect.ToString());
+  EXPECT_EQ(expected_rect, text_fragment_rect);
 }
 
 TEST_F(TextFragmentHandlerTest, ExtractFirstTextFragmentRectMultipleHighlight) {
@@ -666,8 +666,8 @@ TEST_F(TextFragmentHandlerTest, SecondGenerationCrash) {
   SetSelection(start, end);
 
   auto callback =
-      WTF::Bind([](const TextFragmentSelector& selector,
-                   shared_highlighting::LinkGenerationError error) {});
+      WTF::BindOnce([](const TextFragmentSelector& selector,
+                       shared_highlighting::LinkGenerationError error) {});
   MakeGarbageCollected<TextFragmentSelectorGenerator>(GetDocument().GetFrame())
       ->SetCallbackForTesting(std::move(callback));
 
@@ -918,7 +918,7 @@ TEST_F(TextFragmentHandlerTest,
         callback_called = true;
       };
   auto callback =
-      WTF::Bind(lambda, std::ref(callback_called), std::ref(selector));
+      WTF::BindOnce(lambda, std::ref(callback_called), std::ref(selector));
   remote->RequestSelector(std::move(callback));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(callback_called);

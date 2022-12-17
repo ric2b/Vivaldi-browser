@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -183,7 +183,8 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
             new TabListMediator.ThumbnailFetcher(new TabListMediator.ThumbnailProvider() {
                 @Override
                 public void getTabThumbnailWithCallback(int tabId, Size thumbnailSize,
-                        Callback<Bitmap> callback, boolean forceUpdate, boolean writeToCache) {
+                        Callback<Bitmap> callback, boolean forceUpdate, boolean writeToCache,
+                        boolean isSelected) {
                     Bitmap bitmap = mShouldReturnBitmap
                             ? Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
                             : null;
@@ -231,7 +232,6 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
     public void setUpTest() throws Exception {
         super.setUpTest();
         MockitoAnnotations.initMocks(this);
-        TabUiTestHelper.applyThemeOverlays(getActivity());
         ViewGroup view = new LinearLayout(getActivity());
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);

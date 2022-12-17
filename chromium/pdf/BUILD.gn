@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -226,11 +226,7 @@ if (enable_pdf) {
   }
 
   static_library("pdf_view_web_plugin") {
-    # The PDF viewer relies on plugin infrastructure, which is currently tied to
-    # PPAPI support. Fuchsia does not have plugins enabled and is in a state
-    # where this code builds but does not work in Chrome.
-    # TODO(crbug.com/1306610): Remove this assert when this is no longer true.
-    assert(enable_plugins || is_fuchsia)
+    assert(enable_plugins, "The PDF viewer relies on plugin infrastructure")
 
     visibility = [
       ":*",
@@ -340,6 +336,7 @@ if (enable_pdf) {
       "pdfium/pdfium_page_unittest.cc",
       "pdfium/pdfium_permissions_unittest.cc",
       "pdfium/pdfium_print_unittest.cc",
+      "pdfium/pdfium_range_unittest.cc",
       "pdfium/pdfium_test_base.cc",
       "pdfium/pdfium_test_base.h",
       "test/run_all_unittests.cc",

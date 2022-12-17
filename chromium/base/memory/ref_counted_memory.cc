@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,9 +13,8 @@ namespace base {
 
 bool RefCountedMemory::Equals(
     const scoped_refptr<RefCountedMemory>& other) const {
-  return other.get() &&
-         size() == other->size() &&
-         (memcmp(front(), other->front(), size()) == 0);
+  return other.get() && size() == other->size() &&
+         (size() == 0 || (memcmp(front(), other->front(), size()) == 0));
 }
 
 RefCountedMemory::RefCountedMemory() = default;

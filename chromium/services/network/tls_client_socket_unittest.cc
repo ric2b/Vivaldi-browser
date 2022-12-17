@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_errors.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/test_completion_callback.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/socket/server_socket.h"
@@ -180,7 +180,7 @@ class TLSClientSocketTestBase {
     base::RunLoop run_loop;
     int net_error = net::ERR_FAILED;
     proxy_resolving_factory_->CreateProxyResolvingSocket(
-        url, net::NetworkIsolationKey(), nullptr /* options */,
+        url, net::NetworkAnonymizationKey(), nullptr /* options */,
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
         std::move(receiver), mojo::NullRemote() /* observer */,
         base::BindLambdaForTesting(
@@ -971,15 +971,13 @@ TEST_P(TLSClientSocketIoModeTest, MultipleWriteToTLSSocket) {
   net::IoMode mode = GetParam();
   for (int j = 0; j < kNumIterations; ++j) {
     for (size_t i = 0; i < kSecretMsgSize; ++i) {
-      writes.push_back(
-          net::MockWrite(mode, &kSecretMsg[i], 1, sequence_number++));
+      writes.emplace_back(mode, &kSecretMsg[i], 1, sequence_number++);
     }
     for (size_t i = 0; i < kSecretMsgSize; ++i) {
-      reads.push_back(
-          net::MockRead(net::ASYNC, &kSecretMsg[i], 1, sequence_number++));
+      reads.emplace_back(net::ASYNC, &kSecretMsg[i], 1, sequence_number++);
     }
     if (j == kNumIterations - 1) {
-      reads.push_back(net::MockRead(mode, net::OK, sequence_number++));
+      reads.emplace_back(mode, net::OK, sequence_number++);
     }
   }
   net::SequencedSocketData data_provider(reads, writes);

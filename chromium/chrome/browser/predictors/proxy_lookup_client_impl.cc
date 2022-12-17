@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ namespace predictors {
 
 ProxyLookupClientImpl::ProxyLookupClientImpl(
     const GURL& url,
-    const net::NetworkIsolationKey& network_isolation_key,
+    const net::NetworkAnonymizationKey& network_isolation_key,
     ProxyLookupCallback callback,
     network::mojom::NetworkContext* network_context)
     : callback_(std::move(callback)) {

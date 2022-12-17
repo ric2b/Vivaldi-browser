@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,7 @@ void OpenItem(Profile* profile,
   NOTIMPLEMENTED();
 }
 
-void OpenExternal(Profile* profile, const GURL& url) {
+void OpenExternal(const GURL& url) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_url =
       base::android::ConvertUTF8ToJavaString(env, url.spec());

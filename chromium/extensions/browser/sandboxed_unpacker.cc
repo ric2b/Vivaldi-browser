@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -578,7 +579,7 @@ void SandboxedUnpacker::UnpackExtensionSucceeded(base::Value manifest) {
   // with std::u16string
   std::string utf8_error;
   if (!extension_l10n_util::LocalizeExtension(
-          extension_root_, final_manifest_dict.get(),
+          extension_root_, &final_manifest_dict->GetDict(),
           extension_l10n_util::GzippedMessagesPermission::kDisallow,
           &utf8_error)) {
     ReportFailure(

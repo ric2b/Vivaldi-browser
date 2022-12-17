@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/no_destructor.h"
-#include "base/stl_util.h"
+#include "base/types/optional_util.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_handle.h"
@@ -56,10 +56,10 @@ class MockNavigationHandle : public NavigationHandle {
     return render_frame_host_ ? !render_frame_host_->GetParent() : true;
   }
   MOCK_METHOD0(IsInPrerenderedMainFrame, bool());
-  bool IsPrerenderedPageActivation() override {
+  bool IsPrerenderedPageActivation() const override {
     return is_prerendered_page_activation_;
   }
-  bool IsInFencedFrameTree() override { return is_in_fenced_frame_tree_; }
+  bool IsInFencedFrameTree() const override { return is_in_fenced_frame_tree_; }
   FrameType GetNavigatingFrameType() const override {
     NOTIMPLEMENTED();
     return FrameType::kPrimaryMainFrame;
@@ -72,6 +72,9 @@ class MockNavigationHandle : public NavigationHandle {
   }
   bool IsInPrimaryMainFrame() const override {
     return is_in_primary_main_frame_;
+  }
+  bool IsInOutermostMainFrame() override {
+    return !GetParentFrameOrOuterDocument();
   }
   MOCK_METHOD0(GetFrameTreeNodeId, int());
   MOCK_METHOD0(GetPreviousRenderFrameHostId, GlobalRenderFrameHostId());
@@ -116,7 +119,7 @@ class MockNavigationHandle : public NavigationHandle {
   RenderFrameHost* GetRenderFrameHost() const override {
     return render_frame_host_;
   }
-  bool IsSameDocument() override { return is_same_document_; }
+  bool IsSameDocument() const override { return is_same_document_; }
   MOCK_METHOD0(WasServerRedirect, bool());
   const std::vector<GURL>& GetRedirectChain() override {
     return redirect_chain_;

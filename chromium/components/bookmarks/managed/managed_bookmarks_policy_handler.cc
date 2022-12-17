@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,7 +41,7 @@ void ManagedBookmarksPolicyHandler::ApplyPolicySettings(
 
   prefs->SetString(prefs::kManagedBookmarksFolderName,
                    GetFolderName(value->GetList()));
-  base::Value::List filtered(FilterBookmarks(std::move(value->GetList())));
+  base::Value::List filtered(FilterBookmarks(std::move(*value).TakeList()));
   prefs->SetValue(prefs::kManagedBookmarks, base::Value(std::move(filtered)));
 }
 

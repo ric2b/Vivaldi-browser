@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -63,12 +63,6 @@ class WidgetBaseClient {
   virtual void RecordEndOfFrameMetrics(
       base::TimeTicks frame_begin_time,
       cc::ActiveFrameSequenceTrackers trackers) {}
-
-  // Called when the commit is deferred or restarted
-  virtual void OnDeferCommitsChanged(
-      bool defer_status,
-      cc::PaintHoldingReason reason,
-      absl::optional<cc::PaintHoldingCommitTrigger> trigger) {}
 
   // Return metrics information for the stages of BeginMainFrame. This is
   // ultimately implemented by Blink's LocalFrameUKMAggregator. It must be a

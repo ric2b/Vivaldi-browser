@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -997,8 +997,6 @@ TEST_F(CertProvisioningSchedulerTest, PlatformKeysServiceShutDown) {
   pref_service_.Set(prefs::kRequiredClientCertificateForDevice, config);
 
   // Same as in the policy.
-  const char kCertProfileId[] = "cert_profile_id_1";
-  const char kCertProfileVersion[] = "cert_profile_version_1";
   CertProfile cert_profile{kCertProfileId, kCertProfileName,
                            kCertProfileVersion,
                            /*is_va_enabled=*/true, kCertProfileRenewalPeriod};

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,8 @@ import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min
 import {PasswordDialogMode, PasswordEditDialogElement, SettingsTextareaElement} from 'chrome://settings/lazy_load.js';
 import {PasswordManagerImpl} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {eventToPromise, flushTasks, isVisible} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {createPasswordEntry, PasswordSectionElementFactory} from './passwords_and_autofill_fake_data.js';
 import {TestPasswordManagerProxy} from './test_password_manager_proxy.js';
@@ -212,7 +213,8 @@ suite('PasswordEditDialog', function() {
   let elementFactory: PasswordSectionElementFactory;
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     // Override the PasswordManagerImpl for testing.
     passwordManager = new TestPasswordManagerProxy();
     PasswordManagerImpl.setInstance(passwordManager);
@@ -630,6 +632,7 @@ suite('PasswordEditDialog', function() {
   test(
       'requestsPlaintextPasswordAndSwitchesToEditModeOnViewPasswordClick',
       async function() {
+        loadTimeData.overrideValues({enablePasswordViewPage: false});
         const existingEntry = createPasswordEntry(
             {url: 'website.com', username: 'username', id: 0});
         const addDialog =
@@ -655,6 +658,27 @@ suite('PasswordEditDialog', function() {
         assertEquals(existingEntry.username, addDialog.$.usernameInput.value);
         assertEquals(existingEntry.password, addDialog.$.passwordInput.value);
       });
+
+  test('dispatchesViewPageRequestedEventOnViewPasswordClick', async function() {
+    loadTimeData.overrideValues({enablePasswordViewPage: true});
+    const existingEntry =
+        createPasswordEntry({url: 'website.com', username: 'username', id: 0});
+    const addDialog =
+        elementFactory.createPasswordEditDialog(null, [existingEntry]);
+    assertFalse(isElementVisible(addDialog.$.viewExistingPasswordLink));
+
+    await updateWebsiteInput(
+        addDialog, passwordManager, existingEntry.urls.shown);
+    addDialog.$.usernameInput.value = existingEntry.username;
+    assertTrue(isElementVisible(addDialog.$.viewExistingPasswordLink));
+
+    const passwordViewPageRequestedEvent =
+        eventToPromise('password-view-page-requested', addDialog);
+    addDialog.$.viewExistingPasswordLink.click();
+    await passwordViewPageRequestedEvent.then((event) => {
+      assertEquals(existingEntry, event.detail.entry);
+    });
+  });
 
   test('hasCorrectInitialStateWhenEditModeWhenNotesEnabled', async function() {
     loadTimeData.overrideValues({enablePasswordNotes: true});
@@ -798,22 +822,42 @@ suite('PasswordEditDialog', function() {
     assertFalse(passwordDialog.$.actionButton.disabled);
   });
 
-  test('changingUsernameResetsNote', async function() {
-    loadTimeData.overrideValues({enablePasswordNotes: true});
+  test('editingInputsDoesntCallExtendAuthValidity', async function() {
+    loadTimeData.overrideValues({enablePasswordViewPage: false});
     const commonEntry = createPasswordEntry({
       url: 'goo.gl',
-      username: 'bart',
+      username: 'derine',
       id: 42,
-      note: 'personal account',
     });
-    const passwordDialog =
-        elementFactory.createPasswordEditDialog(commonEntry, [], false);
-    const noteElement =
-        passwordDialog.shadowRoot!.querySelector<SettingsTextareaElement>(
-            '#note');
+    const passwordDialog = elementFactory.createPasswordEditDialog(commonEntry);
 
-    passwordDialog.$.usernameInput.value = 'maggie';
-    assertEquals('', noteElement!.value);
+    passwordDialog.$.usernameInput.value += 'l';
+
+    assertEquals(0, passwordManager.getCallCount('extendAuthValidity'));
+
+    passwordDialog.$.passwordInput.value = 'super5tr0ngpa55';
+
+    assertEquals(0, passwordManager.getCallCount('extendAuthValidity'));
+  });
+
+  test('editingInputsCallsExtendAuthValidityOnViewPage', async function() {
+    loadTimeData.overrideValues({enablePasswordViewPage: true});
+    const commonEntry = createPasswordEntry({
+      url: 'goo.gl',
+      username: 'derine',
+      id: 42,
+    });
+    const passwordDialog = elementFactory.createPasswordEditDialog(commonEntry);
+    passwordManager.resetResolver('extendAuthValidity');
+
+    passwordDialog.$.usernameInput.value += 'l';
+
+    assertEquals(1, passwordManager.getCallCount('extendAuthValidity'));
+
+    passwordDialog.shadowRoot!.querySelector<SettingsTextareaElement>(
+                                  '#note')!.value = 'personal account';
+
+    assertEquals(2, passwordManager.getCallCount('extendAuthValidity'));
   });
 
   // <if expr="not is_chromeos">
@@ -822,6 +866,7 @@ suite('PasswordEditDialog', function() {
   test(
       'notSwitchToEditModeOnViewPasswordClickWhenRequestPlaintextPasswordFailed',
       async function() {
+        loadTimeData.overrideValues({enablePasswordViewPage: false});
         const existingEntry = createPasswordEntry(
             {url: 'website.com', username: 'username', id: 0});
         const addDialog =
@@ -849,6 +894,7 @@ suite('PasswordEditDialog', function() {
   test(
       'requestsPlaintextPasswordAndSwitchesToEditModeOnViewPasswordClickInCros',
       async function() {
+        loadTimeData.overrideValues({enablePasswordViewPage: false});
         const existingEntry = createPasswordEntry(
             {url: 'website.com', username: 'username', id: 0});
         const addDialog =
@@ -870,7 +916,6 @@ suite('PasswordEditDialog', function() {
         // if the user clicks cancel, add dialog is still visible.
         passwordDialog.dispatchEvent(new CustomEvent('close'));
         await flushTasks();
-        debugger;
 
         assertAddDialogParts(addDialog);
         assertFalse(!!addDialog.shadowRoot!.querySelector(

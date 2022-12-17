@@ -60,6 +60,13 @@ class NoteLoadDetails {
   void set_guids_reassigned(bool value) { guids_reassigned_ = value; }
   bool guids_reassigned() const { return guids_reassigned_; }
 
+  void set_has_deprecated_attachments(bool value) {
+    has_deprecated_attachments_ = value;
+  }
+  bool has_deprecated_attachments() const {
+    return has_deprecated_attachments_;
+  }
+
   // Returns the string blob representing the sync metadata in the json file.
   // The string blob is set during decode time upon the call to
   // NotesModel::Load.
@@ -78,6 +85,7 @@ class NoteLoadDetails {
   int64_t max_id_ = 1;
   bool ids_reassigned_ = false;
   bool guids_reassigned_ = false;
+  bool has_deprecated_attachments_ = false;
   // A string blob represetning the sync metadata stored in the json file.
   std::string sync_metadata_str_;
 };

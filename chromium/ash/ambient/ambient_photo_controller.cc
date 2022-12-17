@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,7 +34,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -283,10 +282,10 @@ void AmbientPhotoController::ReadPhotoFromTopicQueue() {
                      /*is_related_image=*/false, on_done));
 
   if (!topic.related_image_url.empty()) {
-    ::ambient::Photo* photo = cache_entry_.mutable_related_photo();
-    photo->set_details(topic.related_details);
-    photo->set_is_portrait(topic.is_portrait);
-    photo->set_type(topic.topic_type);
+    ::ambient::Photo* related_photo = cache_entry_.mutable_related_photo();
+    related_photo->set_details(topic.related_details);
+    related_photo->set_is_portrait(topic.is_portrait);
+    related_photo->set_type(topic.topic_type);
 
     photo_cache_->DownloadPhoto(
         topic.related_image_url,

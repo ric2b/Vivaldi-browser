@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,9 +10,14 @@ import {BookmarksApiProxyImpl} from 'chrome://read-later.top-chrome/bookmarks/bo
 import {BookmarksListElement, LOCAL_STORAGE_OPEN_FOLDERS_KEY} from 'chrome://read-later.top-chrome/bookmarks/bookmarks_list.js';
 import {BookmarkProductInfo} from 'chrome://read-later.top-chrome/bookmarks/commerce/shopping_list.mojom-webui.js';
 import {ShoppingListApiProxyImpl} from 'chrome://read-later.top-chrome/bookmarks/commerce/shopping_list_api_proxy.js';
+import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {flushTasks, isVisible} from 'chrome://webui-test/test_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
+import {TestPluralStringProxy} from 'chrome://webui-test/test_plural_string_proxy.js';
+import {isVisible} from 'chrome://webui-test/test_util.js';
+
+import {fakeMetricsPrivate, MetricsTracker} from '../metrics_test_support.js';
 
 import {TestShoppingListApiProxy} from './commerce/test_shopping_list_api_proxy.js';
 import {TestBookmarksApiProxy} from './test_bookmarks_api_proxy.js';
@@ -21,6 +26,7 @@ suite('SidePanelBookmarksListTest', () => {
   let bookmarksList: BookmarksListElement;
   let bookmarksApi: TestBookmarksApiProxy;
   let shoppingListApi: TestShoppingListApiProxy;
+  let metrics: MetricsTracker;
 
   const folders: chrome.bookmarks.BookmarkTreeNode[] = [
     {
@@ -94,7 +100,10 @@ suite('SidePanelBookmarksListTest', () => {
 
   setup(async () => {
     window.localStorage[LOCAL_STORAGE_OPEN_FOLDERS_KEY] = undefined;
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
+
+    metrics = fakeMetricsPrivate();
 
     bookmarksApi = new TestBookmarksApiProxy();
     bookmarksApi.setFolders(JSON.parse(JSON.stringify(folders)));
@@ -103,6 +112,9 @@ suite('SidePanelBookmarksListTest', () => {
     shoppingListApi = new TestShoppingListApiProxy();
     shoppingListApi.setProducts(products);
     ShoppingListApiProxyImpl.setInstance(shoppingListApi);
+
+    const pluralString = new TestPluralStringProxy();
+    PluralStringProxyImpl.setInstance(pluralString);
 
     bookmarksList = document.createElement('bookmarks-list');
     document.body.appendChild(bookmarksList);
@@ -267,13 +279,39 @@ suite('SidePanelBookmarksListTest', () => {
         window.localStorage[LOCAL_STORAGE_OPEN_FOLDERS_KEY]);
   });
 
-  test('ShoppingListVisibility', () => {
+  test('ShoppingListVisibility', async () => {
     checkShoppingListVisibility(bookmarksList, true);
+    assertEquals(
+        1,
+        metrics.count('Commerce.PriceTracking.SidePanel.TrackedProductsShown'));
 
     shoppingListApi.setProducts([]);
-    const bookmarksListNoShopping = document.createElement('bookmarks-list');
-    document.body.appendChild(bookmarksListNoShopping);
+    const newbookmarksList = document.createElement('bookmarks-list');
+    document.body.appendChild(newbookmarksList);
 
-    checkShoppingListVisibility(bookmarksListNoShopping, false);
+    checkShoppingListVisibility(newbookmarksList, false);
+    assertEquals(
+        1,
+        metrics.count('Commerce.PriceTracking.SidePanel.TrackedProductsShown'));
+
+    shoppingListApi.getCallbackRouterRemote().priceTrackedForBookmark(
+        products[0]!);
+    await flushTasks();
+    checkShoppingListVisibility(newbookmarksList, true);
+    assertEquals(
+        2,
+        metrics.count('Commerce.PriceTracking.SidePanel.TrackedProductsShown'));
+  });
+
+  test('RemovesBookmarksInShoppingList', async () => {
+    checkShoppingListVisibility(bookmarksList, true);
+
+    bookmarksApi.callbackRouter.onRemoved.callListeners('4');
+    flush();
+    checkShoppingListVisibility(bookmarksList, true);
+
+    bookmarksApi.callbackRouter.onRemoved.callListeners('3');
+    flush();
+    checkShoppingListVisibility(bookmarksList, false);
   });
 });

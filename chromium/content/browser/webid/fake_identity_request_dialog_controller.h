@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,14 +22,14 @@ class CONTENT_EXPORT FakeIdentityRequestDialogController
       absl::optional<std::string> selected_account);
   ~FakeIdentityRequestDialogController() override;
 
-  void ShowAccountsDialog(content::WebContents* rp_web_contents,
-                          const GURL& idp_signin_url,
-                          base::span<const IdentityRequestAccount> accounts,
-                          const IdentityProviderMetadata& idp_metadata,
-                          const ClientIdData& client_id_data,
-                          IdentityRequestAccount::SignInMode sign_in_mode,
-                          AccountSelectionCallback on_selected,
-                          DismissCallback dismmiss_callback) override;
+  void ShowAccountsDialog(
+      content::WebContents* rp_web_contents,
+      const std::string& rp_for_display,
+      const absl::optional<std::string>& iframe_url_for_display,
+      const std::vector<content::IdentityProviderData>& identity_provider_data,
+      IdentityRequestAccount::SignInMode sign_in_mode,
+      AccountSelectionCallback on_selected,
+      DismissCallback dismmiss_callback) override;
 
  private:
   absl::optional<std::string> selected_account_;

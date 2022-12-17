@@ -40,6 +40,7 @@ class Point;
 
 namespace ui {
 class AXMode;
+struct AXTreeUpdate;
 }
 
 namespace blink {
@@ -73,8 +74,6 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void SetAXMode(const ui::AXMode&) = 0;
 
   // A Freeze() occurs during a serialization run.
-  // Used here as a hint for DCHECKS to enforce the following behavior:
-  // objects in the ax hierarchy should not be destroyed during serialization.
   virtual void Freeze() = 0;
   virtual void Thaw() = 0;
 
@@ -95,6 +94,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   // Returns true if the AXObject is removed.
   virtual bool Remove(LayoutObject*) = 0;
   virtual void Remove(Node*) = 0;
+  virtual void Remove(Document*) = 0;
   virtual void Remove(AbstractInlineTextBox*) = 0;
 
   virtual const Element* RootAXEditableElement(const Node*) = 0;
@@ -186,6 +186,8 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   virtual AXObject* ObjectFromAXID(AXID) const = 0;
 
+  virtual AXID GenerateAXID() const = 0;
+
   typedef AXObjectCache* (*AXObjectCacheCreateFunction)(Document&,
                                                         const ui::AXMode&);
   static void Init(AXObjectCacheCreateFunction);
@@ -195,6 +197,55 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   // Returns true if there are any pending updates that need processing.
   virtual bool IsDirty() const = 0;
+
+  virtual void ResetSerializer() = 0;
+
+  virtual void SerializeLocationChanges() = 0;
+
+  virtual AXObject* GetPluginRoot() = 0;
+
+  virtual bool SerializeEntireTree(bool exclude_offscreen,
+                                   size_t max_node_count,
+                                   base::TimeDelta timeout,
+                                   ui::AXTreeUpdate*) = 0;
+
+  virtual void MarkAllImageAXObjectsDirty() = 0;
+
+  // Notifies that an AXObject is dirty and its state needs
+  // to be serialized again. If |subtree| is true, the entire subtree is
+  // dirty.
+  // |event_from| and |event_from_action| annotate this node change with info
+  // about the event which caused the change. For example, an event from a user
+  // or an event from a focus action.
+  virtual void MarkAXObjectDirty(
+      AXObject* obj,
+      bool subtree,
+      ax::mojom::blink::EventFrom event_from,
+      ax::mojom::blink::Action event_from_action,
+      const std::vector<ui::AXEventIntent>& event_intents) = 0;
+
+  virtual void SerializeDirtyObjectsAndEvents(
+      bool has_plugin_tree_source,
+      std::vector<ui::AXTreeUpdate>& updates,
+      std::vector<ui::AXEvent>& events,
+      bool& had_end_of_test_event,
+      bool& had_load_complete_messages,
+      bool& need_to_send_location_changes) = 0;
+
+  virtual void ClearDirtyObjectsAndPendingEvents() = 0;
+
+  // Note that any pending event also causes its corresponding object to
+  // become dirty.
+  virtual bool HasDirtyObjects() = 0;
+
+  // Adds the event to a list of pending events that is cleared out by
+  // a subsequent call to  duplicates are not represented.. Returns false if
+  // the event is already pending; duplicates are not represented.
+  virtual bool AddPendingEvent(const ui::AXEvent& event,
+                               bool insert_at_beginning) = 0;
+
+  // Ensure that a call to ProcessDeferredAccessibilityEvents() will occur soon.
+  virtual void ScheduleVisualUpdate(Document& document) = 0;
 
  protected:
   friend class ScopedBlinkAXEventIntent;

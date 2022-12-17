@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,10 +13,13 @@
 
 class PrefService;
 
+namespace policy::psm {
+class RlweDmserverClient;
+}
+
 namespace policy {
 
 class DeviceManagementService;
-class PsmRlweDmserverClient;
 
 // A fake AutoEnrollmentClient. The test code can control its state.
 class FakeAutoEnrollmentClient : public AutoEnrollmentClient {
@@ -53,7 +56,7 @@ class FakeAutoEnrollmentClient : public AutoEnrollmentClient {
         const std::string& device_brand_code,
         int power_initial,
         int power_limit,
-        std::unique_ptr<PsmRlweDmserverClient> psm_rlwe_dmserver_client)
+        std::unique_ptr<psm::RlweDmserverClient> psm_rlwe_dmserver_client)
         override;
 
    private:

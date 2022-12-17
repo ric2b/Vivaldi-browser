@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">列印(&amp;P)...</translation>
 <translation id="1181037720776840403">移除</translation>
 <translation id="1187722533808055681">閒置喚醒</translation>
-<translation id="119944043368869598">全部清除</translation>
 <translation id="1221825588892235038">僅限選取的內容</translation>
 <translation id="1234736487471201993">為這張圖片建立 QR Code</translation>
 <translation id="1244303850296295656">擴充功能錯誤</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">選取全部(&amp;A)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">使用數字指定列印份數 (1 至 <ph name="MAX_COPIES" />)。</translation>
-<translation id="1963227389609234879">全部移除</translation>
 <translation id="1994173015038366702">網站 URL</translation>
 <translation id="2019718679933488176">在新分頁中開啟音訊(&amp;O)</translation>
 <translation id="2050339315714019657">縱向</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">以純文字貼上</translation>
 <translation id="2249605167705922988">例如：1-5、8、11-13</translation>
 <translation id="225240747099314620">允許受保護內容的標識符（可能需要重新啟動）</translation>
-<translation id="2277255602909579701">全部 Cookie 和網站資料</translation>
 <translation id="2280486287150724112">右邊界</translation>
 <translation id="2282146716419988068">GPU 處理程式</translation>
 <translation id="2301382460326681002">擴充功能根目錄無效。</translation>
@@ -93,8 +90,10 @@
 <translation id="2550212893339833758">Swap 記憶體</translation>
 <translation id="2553440850688409052">隱藏這個外掛程式</translation>
 <translation id="26224892172169984">不允許任何網站處理通訊協定</translation>
+<translation id="2653275834716714682">替代文字</translation>
 <translation id="2662876636500006917">Chrome 線上應用程式商店</translation>
 <translation id="2678063897982469759">重新啟用</translation>
+<translation id="2678100101831051676">無法投放。</translation>
 <translation id="2721037002783622288">透過 <ph name="SEARCH_ENGINE" /> 搜尋圖片(&amp;S)</translation>
 <translation id="2783321960289401138">建立捷徑...</translation>
 <translation id="2785873697295365461">檔案描述符</translation>
@@ -122,7 +121,6 @@
 <translation id="3084548735795614657">拖放至此處進行安裝</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">USER 處理</translation>
-<translation id="3127156390846601284">這會將顯示的所有網站儲存在你裝置上的資料全部刪除。你要繼續操作嗎？</translation>
 <translation id="3129173833825111527">左邊界</translation>
 <translation id="3144647712221361880">以其他身分開啟連結</translation>
 <translation id="3222066309010235055">預先轉譯：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +143,6 @@
 <translation id="3387614642886316601">使用進階拼字檢查</translation>
 <translation id="3390013585654699824">應用程式詳細資料</translation>
 <translation id="3393582007140394275">無法投放螢幕畫面。</translation>
-<translation id="3432227430032737297">將顯示的項目全部移除</translation>
 <translation id="345693547134384690">在新分頁開啟圖片(&amp;I)</translation>
 <translation id="3494769164076977169">在網站已下載第一個檔案，並且嘗試自動下載更多檔案時先詢問我 (建議使用)</translation>
 <translation id="3505030558724226696">撤銷裝置存取權限</translation>
@@ -204,10 +201,10 @@
 <translation id="4409697491990005945">邊界</translation>
 <translation id="4423376891418188461">復原設定</translation>
 <translation id="4478664379124702289">另存連結(&amp;K)...</translation>
-<translation id="4579581181964204535">無法投放 <ph name="HOST_NAME" />。</translation>
 <translation id="4593021220803146968">前往 <ph name="URL" /> (&amp;G)</translation>
 <translation id="4595560905247879544">只有管理員 (<ph name="CUSTODIAN_NAME" />) 可以修改應用程式和擴充功能。</translation>
 <translation id="4613271546271159013">擴充功能已變更開啟新分頁時所顯示的頁面。</translation>
+<translation id="4616405296204756919">你可以使用在任何裝置上儲存的密碼。這些密碼都儲存在<ph name="VIVALDI_PASSWORD_MANAGER" />。</translation>
 <translation id="4643612240819915418">在新分頁中開啟影片(&amp;O)</translation>
 <translation id="4677772697204437347">GPU 記憶體</translation>
 <translation id="4681930562518940301">在新分頁開啟原始圖片(&amp;I)</translation>
@@ -241,10 +238,12 @@
 <translation id="5233231016133573565">程式 ID</translation>
 <translation id="5233736638227740678">貼上(&amp;P)</translation>
 <translation id="5256861893479663409">在全部站點上</translation>
+<translation id="5260334392110301220">智慧型引號</translation>
 <translation id="5269977353971873915">列印失敗</translation>
 <translation id="5284445933715251131">繼續下載</translation>
 <translation id="52912272896845572">私鑰檔案無效。</translation>
 <translation id="5301954838959518834">朕知道了</translation>
+<translation id="5302932258331363306">顯示替代文字</translation>
 <translation id="5317780077021120954">儲存</translation>
 <translation id="5334142896108694079">腳本快取</translation>
 <translation id="5355926466126177564">「<ph name="EXTENSION_NAME" />」擴充功能已變更您使用網址列搜尋時所顯示的網頁。</translation>
@@ -277,7 +276,6 @@
 <translation id="5747809636523347288">貼上 <ph name="URL" /> 並前往該網址 (&amp;S)</translation>
 <translation id="5759728514498647443">「<ph name="APP_NAME" />」可以讀取您透過「<ph name="APP_NAME" />」傳送的待列印文件。</translation>
 <translation id="5764483294734785780">另存音訊(&amp;V)...</translation>
-<translation id="577624874850706961">搜尋 Cookie</translation>
 <translation id="5780973441651030252">處理優先順序</translation>
 <translation id="5804241973901381774">權限</translation>
 <translation id="5828633471261496623">正在列印...</translation>
@@ -290,7 +288,6 @@
 <translation id="5965661248935608907">這個延伸套件也會控管您點選首頁按鈕或使用網址列搜尋時所顯示的網頁。</translation>
 <translation id="5978277834170881274">使用基本拼字檢查功能(&amp;U)</translation>
 <translation id="5979421442488174909">翻譯為<ph name="LANGUAGE" />(&amp;T)</translation>
-<translation id="6011449291337289699">清除網站資料</translation>
 <translation id="6042308850641462728">更多</translation>
 <translation id="6086846494333236931">由您的管理員安裝</translation>
 <translation id="6101226222197207147">已新增應用程式：<ph name="EXTENSION_NAME" /></translation>
@@ -346,6 +343,7 @@
 <translation id="7053983685419859001">封鎖</translation>
 <translation id="7070484045139057854">可讀取及更改網站資料</translation>
 <translation id="708060913198414444">複製音訊網址(&amp;O)</translation>
+<translation id="7121728544325372695">智慧型破折號</translation>
 <translation id="7175353351958621980">載入自：</translation>
 <translation id="7186088072322679094">放置於工具列</translation>
 <translation id="7287143125007575591">存取遭拒。</translation>
@@ -404,7 +402,6 @@
 	=1{正在執行一項下載作業}other{正在執行多項下載作業}}</translation>
 <translation id="8230134520748321204">要儲存 <ph name="ORIGIN" /> 的密碼嗎？</translation>
 <translation id="8261378640211443080">這個擴充功能未列在 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> 中，可能在您不知情的情況下加入瀏覽器。</translation>
-<translation id="8339059274628563283"><ph name="SITE" /> 儲存在本機的資料</translation>
 <translation id="8351419472474436977">您的代理設定已受到這個擴充功能控制，該延伸套件可變更、中斷、或監視您在網路上的行為。如果您不確定這項變更的發生原因，建議您停用該擴充功能。</translation>
 <translation id="8382913212082956454">複製電子郵件地址(&amp;E)</translation>
 <translation id="8413385045638830869">先詢問我 (建議)</translation>
@@ -430,6 +427,7 @@
 <translation id="8808478386290700967">線上應用程式商店</translation>
 <translation id="8823514049557262177">複製連結文字(&amp;X)</translation>
 <translation id="8823704566850948458">建議密碼...</translation>
+<translation id="883062543841130884">替代文字</translation>
 <translation id="8859174528519900719">子頁框：<ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">在新視窗開啟連結(&amp;W)</translation>
 <translation id="8915370057835397490">正在載入建議</translation>

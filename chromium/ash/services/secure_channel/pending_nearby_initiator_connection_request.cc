@@ -1,12 +1,12 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/secure_channel/pending_nearby_initiator_connection_request.h"
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/public/mojom/secure_channel.mojom.h"
 #include "base/memory/ptr_util.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 
 namespace ash::secure_channel {

@@ -1,9 +1,10 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/system/unified/feature_pods_container_view.h"
 
+#include "ash/constants/quick_settings_catalogs.h"
 #include "ash/public/cpp/pagination/pagination_controller.h"
 #include "ash/public/cpp/pagination/pagination_model.h"
 #include "ash/system/tray/tray_constants.h"
@@ -15,6 +16,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/view_observer.h"
 
 namespace ash {
@@ -51,9 +53,11 @@ class FeaturePodsContainerViewTest : public NoSessionAshTestBase,
 
   // FeaturePodControllerBase:
   FeaturePodButton* CreateButton() override { return nullptr; }
+
   void OnIconPressed() override {}
-  SystemTrayItemUmaType GetUmaType() const override {
-    return SystemTrayItemUmaType::UMA_TEST;
+
+  QsFeatureCatalogName GetCatalogName() override {
+    return QsFeatureCatalogName::kUnknown;
   }
 
   // views::ViewObserver:
@@ -71,7 +75,7 @@ class FeaturePodsContainerViewTest : public NoSessionAshTestBase,
     for (int i = 0; i < count; ++i)
       AddButton(new FeaturePodButton(this));
     container()->SetBoundsRect(gfx::Rect(container_->GetPreferredSize()));
-    container()->Layout();
+    views::test::RunScheduledLayout(container());
   }
 
   FeaturePodsContainerView* container() { return container_.get(); }
@@ -241,7 +245,7 @@ TEST_F(FeaturePodsContainerViewTest, PaginationTransition) {
       gfx::Rect(initial_bounds.x() - page_offset, initial_bounds.y(),
                 initial_bounds.width(), initial_bounds.height());
   pagination_model()->SelectPage(1, false);
-  container()->Layout();
+  views::test::RunScheduledLayout(container());
   EXPECT_EQ(final_bounds, buttons_[0]->bounds());
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 
 #include "content/browser/renderer_host/render_process_host_impl.h"
 
-#include <algorithm>
 #include <limits>
 #include <map>
 #include <memory>
@@ -15,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -50,6 +50,7 @@
 #include "base/observer_list.h"
 #include "base/process/process_handle.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/system/sys_info.h"
@@ -115,7 +116,6 @@
 #include "content/browser/renderer_host/render_frame_host_delegate.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_message_filter.h"
-#include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_helper.h"
 #include "content/browser/renderer_host/renderer_sandboxed_process_launcher_delegate.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -146,6 +146,7 @@
 #include "content/public/browser/render_process_host_creation_observer.h"
 #include "content/public/browser/render_process_host_factory.h"
 #include "content/public/browser/render_process_host_observer.h"
+#include "content/public/browser/render_process_host_priority_client.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/resource_coordinator_service.h"
@@ -204,6 +205,7 @@
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "base/android/child_process_binding_types.h"
 #include "content/browser/android/java_interfaces_impl.h"
 #include "content/browser/font_unique_name_lookup/font_unique_name_lookup_service.h"
 #include "content/public/browser/android/java_interfaces.h"
@@ -1534,22 +1536,6 @@ RenderProcessHostImpl::RenderProcessHostImpl(
   gpu_client_.reset(
       new viz::GpuClient(std::make_unique<BrowserGpuClientDelegate>(), id,
                          tracing_id, GetUIThreadTaskRunner({})));
-
-  // Set cache information after the GpuClient has been initialized. Note that
-  // we also check if the factory is initialized because in tests the factory
-  // may never have been initialized properly.
-  if (!GetBrowserContext()->IsOffTheRecord() &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableGpuShaderDiskCache)) {
-    if (auto* cache_factory = GetGpuDiskCacheFactorySingleton()) {
-      for (const gpu::GpuDiskCacheType type : gpu::kGpuDiskCacheTypes) {
-        auto handle = cache_factory->GetCacheHandle(
-            type, storage_partition_impl_->GetPath().Append(
-                      gpu::GetGpuDiskCacheSubdir(type)));
-        gpu_client_->SetDiskCacheHandle(handle);
-      }
-    }
-  }
 }
 
 // static
@@ -1677,6 +1663,22 @@ bool RenderProcessHostImpl::Init() {
   sent_render_process_ready_ = false;
 
   gpu_client_->PreEstablishGpuChannel();
+
+  // Set cache information after establishing a channel since the handles are
+  // stored on the channels. Note that we also check if the factory is
+  // initialized because in tests the factory may never have been initialized.
+  if (!GetBrowserContext()->IsOffTheRecord() &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableGpuShaderDiskCache)) {
+    if (auto* cache_factory = GetGpuDiskCacheFactorySingleton()) {
+      for (const gpu::GpuDiskCacheType type : gpu::kGpuDiskCacheTypes) {
+        auto handle = cache_factory->GetCacheHandle(
+            type, storage_partition_impl_->GetPath().Append(
+                      gpu::GetGpuDiskCacheSubdir(type)));
+        gpu_client_->SetDiskCacheHandle(handle);
+      }
+    }
+  }
 
   // We may reach Init() during process death notification (e.g.
   // RenderProcessExited on some observer). In this case the Channel may be
@@ -1900,13 +1902,13 @@ void RenderProcessHostImpl::BindCacheStorage(
     const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
         coep_reporter_remote,
-    const blink::StorageKey& storage_key,
+    const storage::BucketLocator& bucket_locator,
     mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   storage_partition_impl_->GetCacheStorageControl()->AddReceiver(
       cross_origin_embedder_policy, std::move(coep_reporter_remote),
-      storage_key, storage::mojom::CacheStorageOwner::kCacheAPI,
+      bucket_locator, storage::mojom::CacheStorageOwner::kCacheAPI,
       std::move(receiver));
 }
 
@@ -1925,22 +1927,13 @@ void RenderProcessHostImpl::BindIndexedDB(
       storage_key, std::move(receiver));
 }
 
-void RenderProcessHostImpl::BindBucketManagerHostForRenderFrame(
-    const GlobalRenderFrameHostId& render_frame_host_id,
+void RenderProcessHostImpl::BindBucketManagerHost(
+    base::WeakPtr<BucketContext> bucket_context,
     mojo::PendingReceiver<blink::mojom::BucketManagerHost> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  RenderFrameHostImpl* rfh = RenderFrameHostImpl::FromID(render_frame_host_id);
-  storage_partition_impl_->GetBucketManager()->BindReceiverForRenderFrame(
-      render_frame_host_id, rfh->storage_key(), std::move(receiver),
+  storage_partition_impl_->GetBucketManager()->BindReceiver(
+      std::move(bucket_context), std::move(receiver),
       mojo::GetBadMessageCallback());
-}
-
-void RenderProcessHostImpl::BindBucketManagerHostForWorker(
-    const blink::StorageKey& storage_key,
-    mojo::PendingReceiver<blink::mojom::BucketManagerHost> receiver) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  storage_partition_impl_->GetBucketManager()->BindReceiverForWorker(
-      GetID(), storage_key, std::move(receiver), mojo::GetBadMessageCallback());
 }
 
 void RenderProcessHostImpl::ForceCrash() {
@@ -2117,6 +2110,18 @@ void RenderProcessHostImpl::CreateWebSocketConnector(
                                               : nullptr)),
       std::move(receiver));
 }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+void RenderProcessHostImpl::ReinitializeLogging(
+    uint32_t logging_dest,
+    base::ScopedFD log_file_descriptor) {
+  auto logging_settings = mojom::LoggingSettings::New();
+  logging_settings->logging_dest = logging_dest;
+  logging_settings->log_file_descriptor =
+      mojo::PlatformHandle(std::move(log_file_descriptor));
+  child_process_->ReinitializeLogging(std::move(logging_settings));
+}
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 void RenderProcessHostImpl::CreateStableVideoDecoder(
@@ -2504,11 +2509,11 @@ void RenderProcessHostImpl::BindPushMessaging(
 }
 
 void RenderProcessHostImpl::BindP2PSocketManager(
-    net::NetworkIsolationKey isolation_key,
+    net::NetworkAnonymizationKey anonymization_key,
     mojo::PendingReceiver<network::mojom::P2PSocketManager> receiver,
     GlobalRenderFrameHostId render_frame_host_id) {
   p2p_socket_dispatcher_host_->BindReceiver(
-      *this, std::move(receiver), isolation_key, render_frame_host_id);
+      *this, std::move(receiver), anonymization_key, render_frame_host_id);
 }
 
 void RenderProcessHostImpl::CreateMediaLogRecordHost(
@@ -2796,9 +2801,10 @@ void RenderProcessHostImpl::RemoveRoute(int32_t routing_id) {
 bool RenderProcessHostImpl::TakeFrameTokensForFrameRoutingID(
     int32_t new_routing_id,
     blink::LocalFrameToken& frame_token,
-    base::UnguessableToken& devtools_frame_token) {
+    base::UnguessableToken& devtools_frame_token,
+    blink::DocumentToken& document_token) {
   return widget_helper_->TakeFrameTokensForFrameRoutingID(
-      new_routing_id, frame_token, devtools_frame_token);
+      new_routing_id, frame_token, devtools_frame_token, document_token);
 }
 
 void RenderProcessHostImpl::AddObserver(RenderProcessHostObserver* observer) {
@@ -2867,7 +2873,8 @@ void RenderProcessHostImpl::ShutdownForBadMessage(
       PROCESS_TYPE_RENDERER);
 }
 
-void RenderProcessHostImpl::UpdateClientPriority(PriorityClient* client) {
+void RenderProcessHostImpl::UpdateClientPriority(
+    RenderProcessHostPriorityClient* client) {
   DCHECK(client);
   DCHECK_EQ(1u, priority_clients_.count(client));
   UpdateProcessPriorityInputs();
@@ -2888,6 +2895,16 @@ bool RenderProcessHostImpl::GetIntersectsViewport() {
 #if BUILDFLAG(IS_ANDROID)
 ChildProcessImportance RenderProcessHostImpl::GetEffectiveImportance() {
   return effective_importance_;
+}
+
+base::android::ChildBindingState
+RenderProcessHostImpl::GetEffectiveChildBindingState() {
+  if (child_process_launcher_) {
+    return child_process_launcher_->GetEffectiveChildBindingState();
+  }
+
+  // If there is no ChildProcessLauncher this is the best default.
+  return base::android::ChildBindingState::UNBOUND;
 }
 
 void RenderProcessHostImpl::DumpProcessStack() {
@@ -3175,6 +3192,15 @@ void RenderProcessHostImpl::AppendRendererCommandLine(
   if (IsJitDisabled())
     command_line->AppendSwitchASCII(blink::switches::kJavaScriptFlags,
                                     "--jitless");
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kTouchTextEditingRedesign)) {
+    command_line->AppendSwitchASCII(
+        blink::switches::kTouchTextSelectionStrategy,
+        blink::switches::kTouchTextSelectionStrategy_Direction);
+  }
+#endif
 
 #if BUILDFLAG(IS_WIN)
   command_line->AppendSwitchASCII(
@@ -3961,14 +3987,15 @@ void RenderProcessHostImpl::RemovePendingView() {
     UpdateProcessPriority();
 }
 
-void RenderProcessHostImpl::AddPriorityClient(PriorityClient* priority_client) {
+void RenderProcessHostImpl::AddPriorityClient(
+    RenderProcessHostPriorityClient* priority_client) {
   DCHECK(!base::Contains(priority_clients_, priority_client));
   priority_clients_.insert(priority_client);
   UpdateProcessPriorityInputs();
 }
 
 void RenderProcessHostImpl::RemovePriorityClient(
-    PriorityClient* priority_client) {
+    RenderProcessHostPriorityClient* priority_client) {
   DCHECK(base::Contains(priority_clients_, priority_client));
   priority_clients_.erase(priority_client);
   UpdateProcessPriorityInputs();
@@ -4092,8 +4119,7 @@ void RenderProcessHostImpl::RegisterCreationObserver(
 void RenderProcessHostImpl::UnregisterCreationObserver(
     RenderProcessHostCreationObserver* observer) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  auto iter = std::find(GetAllCreationObservers().begin(),
-                        GetAllCreationObservers().end(), observer);
+  auto iter = base::ranges::find(GetAllCreationObservers(), observer);
   DCHECK(iter != GetAllCreationObservers().end());
   GetAllCreationObservers().erase(iter);
 }
@@ -4793,7 +4819,7 @@ void RenderProcessHostImpl::UpdateProcessPriorityInputs() {
       ChildProcessImportance::NORMAL;
 #endif
   for (auto* client : priority_clients_) {
-    Priority priority = client->GetPriority();
+    RenderProcessHostPriorityClient::Priority priority = client->GetPriority();
 
     // Compute the lowest depth of widgets with highest visibility priority.
     // See comment on |frame_depth_| for more details.

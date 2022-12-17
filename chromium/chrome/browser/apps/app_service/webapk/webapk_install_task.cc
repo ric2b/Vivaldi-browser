@@ -1,10 +1,9 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/apps/app_service/webapk/webapk_install_task.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "ash/components/arc/mojom/webapk.mojom.h"
@@ -15,6 +14,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/task_traits.h"
@@ -368,9 +368,8 @@ void WebApkInstallTask::OnArcFeaturesLoaded(
   // and just send any URL of the correct purpose.
   auto& registrar = web_app_provider_->registrar();
   const auto& manifest_icons = registrar.GetAppIconInfos(app_id_);
-  auto it = std::find_if(
-      manifest_icons.begin(), manifest_icons.end(),
-      [&icon_size_and_purpose](const apps::IconInfo& info) {
+  auto it = base::ranges::find_if(
+      manifest_icons, [&icon_size_and_purpose](const apps::IconInfo& info) {
         return info.purpose ==
                ManifestPurposeToIconInfoPurpose(icon_size_and_purpose->purpose);
       });
@@ -497,7 +496,6 @@ void WebApkInstallTask::OnInstallComplete(
 
   const bool success = result == arc::mojom::WebApkInstallResult::kSuccess;
   const bool is_update = package_name_to_update_.has_value();
-  RecordWebApkArcResult(is_update, result);
   if (success) {
     if (is_update) {
       webapk_prefs::SetUpdateNeededForApp(profile_, app_id_,

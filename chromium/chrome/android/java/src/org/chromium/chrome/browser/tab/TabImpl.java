@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,6 @@ import org.chromium.chrome.browser.tab.TabUtils.LoadIfNeededCaller;
 import org.chromium.chrome.browser.tab.TabUtils.UseDesktopUserAgentCaller;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tab.state.SerializedCriticalPersistedTabData;
-import org.chromium.chrome.browser.ui.TabObscuringHandler;
 import org.chromium.chrome.browser.ui.native_page.FrozenNativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
@@ -589,6 +588,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             return true;
         }
 
+        RequestDesktopUtils.maybeRestoreUserAgentOnSiteSettingsDowngrade(this);
         switchUserAgentIfNeeded(UseDesktopUserAgentCaller.LOAD_IF_NEEDED + caller);
         restoreIfNeeded();
         return true;
@@ -699,6 +699,22 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             updateInteractableState();
 
             loadIfNeeded(caller);
+
+            // TODO(crbug.com/1253938): We should provide a timestamp that apporoximates the input
+            // event timestamp. When presenting a Tablet UI, StripLayoutTab.handleClick does
+            // receive a timestamp. When presenting a Phone UI
+            // TabGridViewBinder.bindClosableTabProperties is called by Android.View.performClick,
+            // and does not receive the event timestamp. This currently triggers an animation in
+            // TabSwitcherAndStartSurfaceLayout.startHidingImpl which lasts around 300ms.
+            // TabSwitcherAndStartSurfaceLayout.doneHiding runs after the animation, actually
+            // triggering this tab change.
+            //
+            // Due to this TabSwitchMetrics.startTabSwitchLatencyTiming is not using an accurate
+            // start time and needs updating.
+            //
+            // We should also consider merging the TabImpl and WebContents onShow into a single Jni
+            // call.
+            TabImplJni.get().onShow(mNativeTabAndroid);
 
             if (getWebContents() != null) getWebContents().onShow();
 
@@ -840,13 +856,13 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     // TabObscuringHandler.Observer
 
     @Override
-    public void updateObscured(boolean isObscured) {
+    public void updateObscured(boolean obscureTabContent, boolean obscureToolbar) {
         // Update whether or not the current native tab and/or web contents are
         // currently visible (from an accessibility perspective), or whether
         // they're obscured by another view.
         View view = getView();
         if (view != null) {
-            int importantForAccessibility = isObscured
+            int importantForAccessibility = obscureTabContent
                     ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                     : View.IMPORTANT_FOR_ACCESSIBILITY_YES;
             if (view.getImportantForAccessibility() != importantForAccessibility) {
@@ -857,7 +873,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
         WebContentsAccessibility wcax = getWebContentsAccessibility(getWebContents());
         if (wcax != null) {
-            boolean isWebContentObscured = isObscured || isShowingCustomView();
+            boolean isWebContentObscured = obscureTabContent || isShowingCustomView();
             wcax.setObscuredByAnotherView(isWebContentObscured);
         }
     }
@@ -1690,16 +1706,20 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         // INHERIT means use the same UA that was used last time.
         @UserAgentOverrideOption
         int userAgentOverrideOption = UserAgentOverrideOption.INHERIT;
-        // Do not override UA if there is a tab level setting.
-        if (tabUserAgent != TabUserAgent.DEFAULT) {
-            recordHistogramUseDesktopUserAgent(currentRequestDesktopSite);
-            return userAgentOverrideOption;
-        }
 
         Profile profile = IncognitoUtils.getProfileFromWindowAndroid(mWindowAndroid, isIncognito());
         if (url == null && webContents != null) {
             url = webContents.getVisibleUrl();
         }
+
+        // Do not override UA if there is a tab level setting.
+        if (tabUserAgent != TabUserAgent.DEFAULT) {
+            recordHistogramUseDesktopUserAgent(currentRequestDesktopSite);
+            RequestDesktopUtils.maybeUpgradeTabLevelDesktopSiteSetting(
+                    this, profile, tabUserAgent, url);
+            return userAgentOverrideOption;
+        }
+
         boolean shouldRequestDesktopSite =
                 TabUtils.readRequestDesktopSiteContentSettings(profile, url);
         if (!shouldRequestDesktopSite
@@ -1765,7 +1785,8 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     }
 
     @NativeMethods
-    interface Natives {
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    public interface Natives {
         TabImpl fromWebContents(WebContents webContents);
         void init(TabImpl caller);
         void destroy(long nativeTabAndroid);
@@ -1781,6 +1802,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         void setActiveNavigationEntryTitleForUrl(long nativeTabAndroid, String url, String title);
         void loadOriginalImage(long nativeTabAndroid);
         boolean handleNonNavigationAboutURL(GURL url);
+        void onShow(long nativeTabAndroid);
 
         // Vivaldi: Native exchange of webcontents.
         void changeWebContents(long nativeTabAndroid, WebContents newWebContents,

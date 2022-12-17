@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/flex_layout.h"
@@ -33,7 +34,6 @@ constexpr int kCloseButtonExtraMargin = 4;
 constexpr int kCloseButtonSize = 17;
 constexpr int kCornerRadius = 18;
 constexpr int kLabelExtraLeftMargin = 2;
-constexpr int kSelectionIconSize = 16;
 
 int GetLensInstructionChipString() {
   if (features::UseAltChipString()) {
@@ -124,7 +124,8 @@ void LensRegionSearchInstructionsView::Init() {
     auto selection_icon_view =
         std::make_unique<views::ImageView>(ui::ImageModel::FromVectorIcon(
             selection_icon, kColorFeatureLensPromoBubbleForeground,
-            kSelectionIconSize));
+            layout_provider->GetDistanceMetric(
+                DISTANCE_BUBBLE_HEADER_VECTOR_ICON_SIZE)));
     AddChildView(std::move(selection_icon_view));
   }
 
@@ -159,6 +160,9 @@ void LensRegionSearchInstructionsView::Init() {
   close_button_->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
   close_button_->SetProperty(
       views::kMarginsKey, gfx::Insets::TLBR(0, kCloseButtonExtraMargin, 0, 0));
+  // Make sure the hover background behind the button is a circle, rather than a
+  // rounded square.
+  views::InstallCircleHighlightPathGenerator(close_button_.get());
   constructed_close_button_ = AddChildView(std::move(close_button_));
 }
 

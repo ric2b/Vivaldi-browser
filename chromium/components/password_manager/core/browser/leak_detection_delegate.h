@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -93,7 +93,7 @@ class LeakDetectionDelegate : public LeakDetectionDelegateInterface {
 // Determines whether the leak check can be started depending on |prefs|. Will
 // use |client| for logging if non-null.
 bool CanStartLeakCheck(const PrefService& prefs,
-                       const PasswordManagerClient* client = nullptr);
+                       PasswordManagerClient* client = nullptr);
 
 }  // namespace password_manager
 

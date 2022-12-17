@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,9 +12,9 @@ import {bar} from 'chrome://some-other-source/legacy_file.js';
 import {num} from 'chrome://some-other-source/foo.js';
 
 function doNothing(): void {
-  console.log(foo());
-  console.log(bar());
-  console.log(baz());
+  console.info(foo());
+  console.info(bar());
+  console.info(baz());
 }
 
 doNothing();

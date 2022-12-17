@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Redaguoti failą}one{Redaguoti failus}few{Redaguoti failus}many{Redaguoti failus}other{Redaguoti failus}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Rakto kryptis</translation>
+<translation id="3294437725009624529">Svečias</translation>
 <translation id="3310640316857623290">DNS delsa gerokai viršija leistiną slenksčio vertę</translation>
 <translation id="3328783797891415197">Vykdomas bandymas</translation>
 <translation id="3340011300870565703">Įrenginio dešiniosios ausinės akumuliatoriaus energijos lygis: <ph name="BATTERY_PERCENTAGE" /> proc.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Kol programinė aparatinė įranga atnaujinama, neatjunkite išorinio įrenginio ir neišjunkite kompiuterio. Galite sumažinti šį langą. Šis atnaujinimo procesas gali užtrukti kelias minutes ir tuo metu jūsų išorinis įrenginys gali neveikti.</translation>
 <translation id="3486220673238053218">apibrėžimas</translation>
 <translation id="3488065109653206955">Iš dalies suaktyvinta</translation>
+<translation id="3510890413042482857">Siųsti <ph name="BEGIN_LINK1" />našumo stebėjimo duomenis<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">„Chrome“ OS naujinys</translation>
 <translation id="3527036260304016759">Nepavyko – nežinoma klaida</translation>
 <translation id="3532980081107202182">Liko apie <ph name="MIN_REMAINING" /> min.</translation>
@@ -468,6 +470,7 @@ Palieskite mikrofoną, kad užduotumėte reikiamus klausimus.</translation>
 <translation id="5502931783115429516">„Android“ neveikia</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Automatiškai perjungti į tamsiąją temą saulei leidžiantis</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Nuskaityti iš naujo</translation>
 <translation id="5583640892426849032">Grįžties klavišas</translation>

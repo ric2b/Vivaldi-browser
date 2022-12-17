@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,6 @@
 #include "ash/public/cpp/test/mock_projector_client.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/root_window_controller.h"
-#include "ash/services/recording/recording_service_test_api.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
@@ -66,6 +65,7 @@
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/weak_ptr.h"
@@ -75,6 +75,7 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "chromeos/ash/services/recording/recording_service_test_api.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
 #include "components/account_id/account_id.h"
@@ -83,13 +84,16 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_video_capture.mojom.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/capture_client_observer.h"
+#include "ui/aura/client/cursor_shape_client.h"
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/cursor_factory.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/compositor/compositor.h"
@@ -122,6 +126,8 @@
 namespace ash {
 
 namespace {
+
+using ::ui::mojom::CursorType;
 
 constexpr char kEndRecordingReasonInClamshellHistogramName[] =
     "Ash.CaptureModeController.EndRecordingReason.ClamshellMode";
@@ -472,7 +478,7 @@ TEST_F(CaptureModeTest, StartStop) {
 TEST_F(CaptureModeTest, CheckCursorVisibility) {
   // Hide cursor before entering capture mode.
   auto* cursor_manager = Shell::Get()->cursor_manager();
-  cursor_manager->SetCursor(ui::mojom::CursorType::kPointer);
+  cursor_manager->SetCursor(CursorType::kPointer);
   cursor_manager->HideCursor();
   cursor_manager->DisableMouseEvents();
   EXPECT_FALSE(cursor_manager->IsCursorVisible());
@@ -588,7 +594,7 @@ TEST_F(CaptureModeTest, VideoRecordingUiBehavior) {
   // Hit Enter to begin recording.
   auto* event_generator = GetEventGenerator();
   SendKey(ui::VKEY_RETURN, event_generator);
-  EXPECT_EQ(ui::mojom::CursorType::kPointer,
+  EXPECT_EQ(CursorType::kPointer,
             Shell::Get()->cursor_manager()->GetCursor().type());
   WaitForRecordingToStart();
   EXPECT_FALSE(controller->IsActive());
@@ -1282,7 +1288,6 @@ TEST_F(CaptureModeTest, MultiDisplayTouch) {
 
 TEST_F(CaptureModeTest, RegionCursorStates) {
   UpdateDisplay("800x700,801+0-800x700");
-  using ui::mojom::CursorType;
 
   auto* cursor_manager = Shell::Get()->cursor_manager();
   auto* event_generator = GetEventGenerator();
@@ -1417,7 +1422,6 @@ TEST_F(CaptureModeTest, RegionCursorStates) {
 // Regression testing for https://crbug.com/1334824.
 TEST_F(CaptureModeTest, CursorShouldNotChangeWhileAdjustingRegion) {
   UpdateDisplay("800x600");
-  using ui::mojom::CursorType;
 
   auto* cursor_manager = Shell::Get()->cursor_manager();
   auto* event_generator = GetEventGenerator();
@@ -1439,8 +1443,6 @@ TEST_F(CaptureModeTest, CursorShouldNotChangeWhileAdjustingRegion) {
 }
 
 TEST_F(CaptureModeTest, FullscreenCursorStates) {
-  using ui::mojom::CursorType;
-
   auto* cursor_manager = Shell::Get()->cursor_manager();
   CursorType original_cursor_type = cursor_manager->GetCursor().type();
   EXPECT_FALSE(cursor_manager->IsCursorLocked());
@@ -1513,8 +1515,6 @@ TEST_F(CaptureModeTest, FullscreenCursorStates) {
 }
 
 TEST_F(CaptureModeTest, WindowCursorStates) {
-  using ui::mojom::CursorType;
-
   std::unique_ptr<aura::Window> window(CreateTestWindow(gfx::Rect(200, 200)));
 
   auto* cursor_manager = Shell::Get()->cursor_manager();
@@ -1593,8 +1593,6 @@ TEST_F(CaptureModeTest, WindowCursorStates) {
 
 // Tests that nothing crashes when windows are destroyed while being observed.
 TEST_F(CaptureModeTest, WindowDestruction) {
-  using ui::mojom::CursorType;
-
   // Create 2 windows that overlap with each other.
   const gfx::Rect bounds1(0, 0, 200, 200);
   const gfx::Rect bounds2(150, 150, 200, 200);
@@ -1670,8 +1668,6 @@ TEST_F(CaptureModeTest, WindowDestruction) {
 }
 
 TEST_F(CaptureModeTest, CursorUpdatedOnDisplayRotation) {
-  using ui::mojom::CursorType;
-
   UpdateDisplay("600x400");
   const int64_t display_id =
       display::Screen::GetScreen()->GetPrimaryDisplay().id();
@@ -4488,7 +4484,6 @@ TEST_F(CaptureModeTest, CaptureBarAndSettingsMenuVisibilityDrawingRegion) {
   // region.
   event_generator->MoveMouseTo(target_region.origin());
   auto* cursor_manager = Shell::Get()->cursor_manager();
-  using ui::mojom::CursorType;
   EXPECT_EQ(CursorType::kPointer, cursor_manager->GetCursor().type());
 
   // Pressing outside the bounds of the settings should dismiss it immediately,
@@ -4960,6 +4955,76 @@ TEST_F(CaptureModeCursorOverlayTest, OverlayHidesWhenOutOfBounds) {
   EXPECT_TRUE(fake_overlay()->IsHidden());
 }
 
+namespace {
+
+// A CursorShapeClient that always fails to return cursor data.
+class FakeCursorShapeClient : public aura::client::CursorShapeClient {
+ public:
+  FakeCursorShapeClient() = default;
+  FakeCursorShapeClient(const FakeCursorShapeClient&) = delete;
+  FakeCursorShapeClient& operator=(const FakeCursorShapeClient&) = delete;
+  ~FakeCursorShapeClient() override = default;
+
+  // aura::client::CursorShapeClient:
+  absl::optional<ui::CursorData> GetCursorData(
+      const ui::Cursor& cursor) const override {
+    return absl::nullopt;
+  }
+};
+
+}  // namespace
+
+TEST_F(CaptureModeCursorOverlayTest, OverlayWhenCursorIsHiddenOrFails) {
+  StartRecordingAndSetupFakeOverlay(CaptureModeSource::kWindow);
+  EXPECT_FALSE(fake_overlay()->IsHidden());
+
+  // Move cursor, the overlay should update.
+  gfx::RectF last_bounds = fake_overlay()->last_bounds();
+  auto* generator = GetEventGenerator();
+  // Generate a click event to overcome throttling.
+  generator->MoveMouseBy(10, 10);
+  generator->ClickLeftButton();
+  FlushOverlay();
+  EXPECT_FALSE(fake_overlay()->IsHidden());
+  EXPECT_NE(fake_overlay()->last_bounds(), last_bounds);
+
+  // Hide cursor, the overlay should be empty and hidden.
+  auto* cursor_manager = Shell::Get()->cursor_manager();
+  cursor_manager->SetCursor(CursorType::kNone);
+  // Lock the cursor to prevent mouse events from changing it back.
+  cursor_manager->LockCursor();
+  generator->MoveMouseBy(10, 10);
+  generator->ClickLeftButton();
+  FlushOverlay();
+  EXPECT_TRUE(fake_overlay()->IsHidden());
+  EXPECT_EQ(fake_overlay()->last_bounds(), gfx::RectF());
+
+  // While the cursor is hidden, the overlay shouldn't change.
+  generator->MoveMouseBy(10, 10);
+  generator->ClickLeftButton();
+  FlushOverlay();
+  EXPECT_TRUE(fake_overlay()->IsHidden());
+  EXPECT_EQ(fake_overlay()->last_bounds(), gfx::RectF());
+
+  // Unhide cursor, the overlay should update.
+  cursor_manager->UnlockCursor();
+  generator->ClickLeftButton();
+  FlushOverlay();
+  EXPECT_FALSE(fake_overlay()->IsHidden());
+  EXPECT_NE(fake_overlay()->last_bounds(), gfx::RectF());
+
+  // Set a fake cursor shape client so that retrieving the cursor data fails.
+  // The overlay shouldn't change.
+  FakeCursorShapeClient cursor_shape_client;
+  aura::client::SetCursorShapeClient(&cursor_shape_client);
+  last_bounds = fake_overlay()->last_bounds();
+  generator->MoveMouseBy(10, 10);
+  generator->ClickLeftButton();
+  FlushOverlay();
+  EXPECT_FALSE(fake_overlay()->IsHidden());
+  EXPECT_EQ(fake_overlay()->last_bounds(), last_bounds);
+}
+
 // Verifies that the cursor overlay bounds calculation takes into account the
 // cursor image scale factor. https://crbug.com/1222494.
 TEST_F(CaptureModeCursorOverlayTest, OverlayBoundsAccountForCursorScaleFactor) {
@@ -4970,7 +5035,7 @@ TEST_F(CaptureModeCursorOverlayTest, OverlayBoundsAccountForCursorScaleFactor) {
   auto* cursor_manager = Shell::Get()->cursor_manager();
   auto set_cursor = [cursor_manager](const gfx::Size& cursor_image_size,
                                      float cursor_image_scale_factor) {
-    const auto cursor_type = ui::mojom::CursorType::kCustom;
+    const auto cursor_type = CursorType::kCustom;
     gfx::NativeCursor cursor{cursor_type};
     SkBitmap cursor_image;
     cursor_image.allocN32Pixels(cursor_image_size.width(),
@@ -5163,13 +5228,13 @@ TEST_F(ProjectorCaptureModeIntegrationTests, EntryPoint) {
   controller->SetType(CaptureModeType::kImage);
   // Also, audio recording is initially disabled. However, the projector flow
   // forces it enabled.
-  EXPECT_FALSE(controller->enable_audio_recording());
+  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
 
   StartProjectorModeSession();
   EXPECT_TRUE(controller->IsActive());
   auto* session = controller->capture_mode_session();
   EXPECT_TRUE(session->is_in_projector_mode());
-  EXPECT_TRUE(controller->enable_audio_recording());
+  EXPECT_TRUE(controller->GetAudioRecordingEnabled());
 
   constexpr char kEntryPointHistogram[] =
       "Ash.CaptureModeController.EntryPoint.ClamshellMode";
@@ -5197,7 +5262,42 @@ TEST_F(ProjectorCaptureModeIntegrationTests, CaptureModeSettings) {
   CaptureModeMenuGroup* audio_input_menu_group =
       test_api.GetAudioInputMenuGroup();
   EXPECT_TRUE(audio_input_menu_group->IsOptionChecked(kAudioMicrophone));
-  EXPECT_TRUE(controller->enable_audio_recording());
+  EXPECT_TRUE(controller->GetAudioRecordingEnabled());
+}
+
+TEST_F(ProjectorCaptureModeIntegrationTests, AudioCaptureDisabledByPolicy) {
+  auto* controller = CaptureModeController::Get();
+  auto* delegate =
+      static_cast<TestCaptureModeDelegate*>(controller->delegate_for_testing());
+  delegate->set_is_audio_capture_disabled_by_policy(true);
+  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+
+  // A projector session is not allowed to start when audio recording is
+  // disabled by policy.
+  EXPECT_FALSE(projector_helper_.CanStartProjectorSession());
+}
+
+TEST_F(ProjectorCaptureModeIntegrationTests,
+       AudioCaptureDisabledByPolicyAfterSessionStarts) {
+  auto* controller = CaptureModeController::Get();
+  auto* delegate =
+      static_cast<TestCaptureModeDelegate*>(controller->delegate_for_testing());
+  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+
+  // At this point, a Projector session is allowed to begin.
+  EXPECT_TRUE(projector_helper_.CanStartProjectorSession());
+  StartProjectorModeSession();
+
+  // Flip the audio policy now before recording begins. Attempt to start
+  // recording, but expect that the capture mode session will end *without*
+  // starting a new recording.
+  delegate->set_is_audio_capture_disabled_by_policy(true);
+  PressAndReleaseKey(ui::VKEY_RETURN);
+  WaitForSessionToEnd();
+  EXPECT_FALSE(controller->is_recording_in_progress());
+
+  // The Projector session preconditions should now be up-to-date.
+  EXPECT_FALSE(projector_helper_.CanStartProjectorSession());
 }
 
 // Tests the keyboard navigation for projector mode. The `image_toggle_button_`
@@ -5651,13 +5751,13 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
   struct {
     const std::string scope_trace;
     const ShelfAlignment shelf_alignment;
-  } kTestCases[] = {
+  } kAlignmentTestCases[] = {
       {"Shelf has botton alignment", ShelfAlignment::kBottom},
       {"Shelf has left alignment", ShelfAlignment::kLeft},
       {"Shelf has right alignment", ShelfAlignment::kRight},
   };
 
-  for (const auto& test_case : kTestCases) {
+  for (const auto& test_case : kAlignmentTestCases) {
     SCOPED_TRACE(test_case.scope_trace);
     // Enable annotation.
     projector_controller->EnableAnnotatorTool();
@@ -5763,7 +5863,7 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
     }
 
     StartRecordingForProjectorFromSource(capture_source);
-    WaitForSeconds(5);
+    WaitForSeconds(1);
     test_api.StopVideoRecording();
     EXPECT_FALSE(CaptureModeController::Get()->is_recording_in_progress());
 
@@ -5771,7 +5871,7 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
 
     histogram_tester_.ExpectUniqueSample(
         GetCaptureModeHistogramName(kProjectorRecordTimeHistogramBase),
-        /*seconds=*/5, /*count=*/1);
+        /*seconds=*/1, /*count=*/1);
   }
 }
 
@@ -6036,7 +6136,7 @@ TEST_F(CaptureModeSettingsTest, NudgeDoesNotShowForAllUserTypes) {
     std::string trace;
     user_manager::UserType user_type;
     bool can_see_nudge;
-  } kTestCases[] = {
+  } kUserTypeTestCases[] = {
       {"regular user", user_manager::USER_TYPE_REGULAR, true},
       {"child", user_manager::USER_TYPE_CHILD, true},
       {"guest", user_manager::USER_TYPE_GUEST, false},
@@ -6047,7 +6147,7 @@ TEST_F(CaptureModeSettingsTest, NudgeDoesNotShowForAllUserTypes) {
       {"active dir", user_manager::USER_TYPE_ACTIVE_DIRECTORY, false},
   };
 
-  for (const auto& test_case : kTestCases) {
+  for (const auto& test_case : kUserTypeTestCases) {
     SCOPED_TRACE(test_case.trace);
     ClearLogin();
     SimulateUserLogin("example@gmail.com", test_case.user_type);
@@ -6078,7 +6178,7 @@ TEST_F(CaptureModeSettingsTest, AudioInputSettingsMenu) {
 
   // Test that the audio recording preference is defaulted to off.
   ClickOnView(GetSettingsButton(), event_generator);
-  EXPECT_FALSE(controller->enable_audio_recording());
+  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
 
   CaptureModeSettingsTestApi test_api;
   CaptureModeMenuGroup* audio_input_menu_group =
@@ -6092,13 +6192,39 @@ TEST_F(CaptureModeSettingsTest, AudioInputSettingsMenu) {
   ClickOnView(microphone_option, event_generator);
   EXPECT_TRUE(audio_input_menu_group->IsOptionChecked(kAudioMicrophone));
   EXPECT_FALSE(audio_input_menu_group->IsOptionChecked(kAudioOff));
-  EXPECT_TRUE(controller->enable_audio_recording());
+  EXPECT_TRUE(controller->GetAudioRecordingEnabled());
 
   // Test that the user selected audio preference for audio recording is
   // remembered between sessions.
   SendKey(ui::VKEY_ESCAPE, event_generator);
   StartImageRegionCapture();
-  EXPECT_TRUE(controller->enable_audio_recording());
+  EXPECT_TRUE(controller->GetAudioRecordingEnabled());
+}
+
+TEST_F(CaptureModeSettingsTest, AudioCaptureDisabledByPolicy) {
+  auto* controller = CaptureModeController::Get();
+
+  // Even if audio recording is set to enabled, the policy setting will
+  // overwrite it.
+  controller->EnableAudioRecording(true);
+  auto* delegate =
+      static_cast<TestCaptureModeDelegate*>(controller->delegate_for_testing());
+  delegate->set_is_audio_capture_disabled_by_policy(true);
+  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+
+  StartImageRegionCapture();
+
+  // Open the settings menu, and check that "Audio Off" setting is dimmed out,
+  // and the "Microphone" setting was not added. This menu group should be
+  // marked as "managed by policy".
+  ClickOnView(GetSettingsButton(), GetEventGenerator());
+  CaptureModeSettingsTestApi test_api;
+  CaptureModeMenuGroup* audio_input_menu_group =
+      test_api.GetAudioInputMenuGroup();
+  EXPECT_TRUE(audio_input_menu_group->IsManagedByPolicy());
+  EXPECT_TRUE(audio_input_menu_group->IsOptionChecked(kAudioOff));
+  EXPECT_FALSE(audio_input_menu_group->IsOptionEnabled(kAudioOff));
+  EXPECT_FALSE(test_api.GetMicrophoneOption());
 }
 
 TEST_F(CaptureModeSettingsTest, SelectFolderFromDialog) {
@@ -6562,12 +6688,9 @@ TEST_F(CaptureModeSettingsTest,
 
   std::vector<CaptureModeSessionFocusCycler::HighlightableView*>
       highlightable_items = settings_menu->GetHighlightableItems();
-  EXPECT_TRUE(
-      std::find_if(highlightable_items.begin(), highlightable_items.end(),
-                   [custom_folder_view](
-                       CaptureModeSessionFocusCycler::HighlightableView* item) {
-                     return item->GetView() == custom_folder_view;
-                   }) == highlightable_items.end());
+  EXPECT_FALSE(base::Contains(
+      highlightable_items, custom_folder_view,
+      &CaptureModeSessionFocusCycler::HighlightableView::GetView));
 
   // Tab five times to focus the default `Downloads` option.
   SendKey(ui::VKEY_TAB, event_generator, /*shift_down=*/false, /*count=*/5);

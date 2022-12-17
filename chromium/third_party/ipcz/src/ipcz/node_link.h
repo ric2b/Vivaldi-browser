@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -103,6 +103,7 @@ class NodeLink : public msg::NodeMessageListener {
   // shared RouterLinkState structure for the new link. Only central links
   // require a RouterLinkState.
   Ref<RemoteRouterLink> AddRemoteRouterLink(
+      const OperationContext& context,
       SublinkId sublink,
       FragmentRef<RouterLinkState> link_state,
       LinkType type,
@@ -137,6 +138,7 @@ class NodeLink : public msg::NodeMessageListener {
   // construct a new NodeLink to that node.
   void AcceptIntroduction(const NodeName& name,
                           LinkSide side,
+                          Node::Type remote_node_type,
                           uint32_t remote_protocol_version,
                           Ref<DriverTransport> transport,
                           DriverMemory memory);
@@ -199,7 +201,7 @@ class NodeLink : public msg::NodeMessageListener {
   // Must only be called on an activated NodeLink, either one which was created
   // with CreateActive(), or one which was activated later by calling
   // Activate().
-  void Deactivate();
+  void Deactivate(const OperationContext& context);
 
   // Finalizes serialization of DriverObjects within `message` and transmits it
   // to the NodeLink's peer, either over the DriverTransport or through shared
@@ -235,13 +237,15 @@ class NodeLink : public msg::NodeMessageListener {
   bool OnRequestIntroduction(msg::RequestIntroduction& request) override;
   bool OnAcceptIntroduction(msg::AcceptIntroduction& accept) override;
   bool OnRejectIntroduction(msg::RejectIntroduction& reject) override;
+  bool OnRequestIndirectIntroduction(
+      msg::RequestIndirectIntroduction& request) override;
   bool OnAddBlockBuffer(msg::AddBlockBuffer& add) override;
   bool OnAcceptParcel(msg::AcceptParcel& accept) override;
   bool OnAcceptParcelDriverObjects(
       msg::AcceptParcelDriverObjects& accept) override;
   bool OnRouteClosed(msg::RouteClosed& route_closed) override;
   bool OnRouteDisconnected(msg::RouteDisconnected& route_disconnected) override;
-  bool OnNotifyDataConsumed(msg::NotifyDataConsumed& notify) override;
+  bool OnSnapshotPeerQueueState(msg::SnapshotPeerQueueState& snapshot) override;
   bool OnBypassPeer(msg::BypassPeer& bypass) override;
   bool OnAcceptBypassLink(msg::AcceptBypassLink& accept) override;
   bool OnStopProxying(msg::StopProxying& stop) override;
@@ -254,6 +258,8 @@ class NodeLink : public msg::NodeMessageListener {
   bool OnRelayMessage(msg::RelayMessage& relay) override;
   bool OnAcceptRelayedMessage(msg::AcceptRelayedMessage& accept) override;
   void OnTransportError() override;
+
+  void HandleTransportError(const OperationContext& context);
 
   // Invoked when we receive a Parcel whose data fragment resides in a buffer
   // not yet known to the local node. This schedules the parcel for acceptance

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1530,6 +1530,14 @@ void InputHandlerProxy::ScrollEndForSnapFling(bool did_finish) {
 
 void InputHandlerProxy::RequestAnimationForSnapFling() {
   RequestAnimation();
+}
+
+void InputHandlerProxy::UpdateBrowserControlsState(
+    cc::BrowserControlsState constraints,
+    cc::BrowserControlsState current,
+    bool animate) {
+  DCHECK(input_handler_);
+  input_handler_->UpdateBrowserControlsState(constraints, current, animate);
 }
 
 void InputHandlerProxy::HandleOverscroll(

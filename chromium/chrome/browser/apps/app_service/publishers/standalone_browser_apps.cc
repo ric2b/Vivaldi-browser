@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -163,16 +163,27 @@ void StandaloneBrowserApps::Launch(const std::string& app_id,
                                    LaunchSource launch_source,
                                    WindowInfoPtr window_info) {
   DCHECK_EQ(app_constants::kLacrosAppId, app_id);
-  crosapi::BrowserManager::Get()->NewTab(
-      /*should_trigger_session_restore=*/true);
+  crosapi::BrowserManager::Get()->Launch();
 }
 
 void StandaloneBrowserApps::LaunchAppWithParams(AppLaunchParams&& params,
                                                 LaunchCallback callback) {
-  Launch(params.app_id, ui::EF_NONE, apps::mojom::LaunchSource::kUnknown,
-         nullptr);
+  if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
+    Launch(params.app_id, ui::EF_NONE, LaunchSource::kUnknown, nullptr);
+  } else {
+    Launch(params.app_id, ui::EF_NONE, apps::mojom::LaunchSource::kUnknown,
+           nullptr);
+  }
   // TODO(crbug.com/1244506): Add launch return value.
   std::move(callback).Run(LaunchResult());
+}
+
+void StandaloneBrowserApps::GetMenuModel(
+    const std::string& app_id,
+    MenuType menu_type,
+    int64_t display_id,
+    base::OnceCallback<void(MenuItems)> callback) {
+  std::move(callback).Run(CreateBrowserMenuItems(profile_));
 }
 
 void StandaloneBrowserApps::Connect(
@@ -193,15 +204,15 @@ void StandaloneBrowserApps::Launch(const std::string& app_id,
                                    apps::mojom::LaunchSource launch_source,
                                    apps::mojom::WindowInfoPtr window_info) {
   DCHECK_EQ(app_constants::kLacrosAppId, app_id);
-  crosapi::BrowserManager::Get()->NewTab(
-      /*should_trigger_session_restore=*/true);
+  crosapi::BrowserManager::Get()->Launch();
 }
 
 void StandaloneBrowserApps::GetMenuModel(const std::string& app_id,
                                          apps::mojom::MenuType menu_type,
                                          int64_t display_id,
                                          GetMenuModelCallback callback) {
-  std::move(callback).Run(CreateBrowserMenuItems(profile_));
+  std::move(callback).Run(
+      ConvertMenuItemsToMojomMenuItems(CreateBrowserMenuItems(profile_)));
 }
 
 void StandaloneBrowserApps::OpenNativeSettings(const std::string& app_id) {

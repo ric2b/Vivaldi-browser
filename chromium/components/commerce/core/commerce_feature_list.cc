@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,11 +7,13 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/no_destructor.h"
+#include "base/values.h"
 #include "build/buildflag.h"
 #if !BUILDFLAG(IS_ANDROID)
 #include "components/commerce/core/commerce_heuristics_data.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 #include "components/commerce/core/commerce_heuristics_data_metrics_helper.h"
+#include "components/commerce/core/pref_names.h"
 #include "third_party/re2/src/re2/re2.h"
 
 namespace commerce {
@@ -75,54 +77,70 @@ namespace switches {
 const char kEnableChromeCart[] = "enable-chrome-cart";
 }  // namespace switches
 
-const base::Feature kCommerceAllowLocalImages{
-    "CommerceAllowLocalImages", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kCommerceAllowLocalImages,
+             "CommerceAllowLocalImages",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kCommerceAllowServerImages{
-    "CommerceAllowServerImages", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kCommerceAllowOnDemandBookmarkUpdates,
+             "CommerceAllowOnDemandBookmarkUpdates",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kCommerceCoupons{"CommerceCoupons",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kCommerceAllowServerImages,
+             "CommerceAllowServerImages",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kCommerceMerchantViewer{"CommerceMerchantViewer",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kCommerceCoupons,
+             "CommerceCoupons",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kCommercePriceTracking{"CommercePriceTracking",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kCommerceMerchantViewer,
+             "CommerceMerchantViewer",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kCommercePriceTracking,
+             "CommercePriceTracking",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 const base::FeatureParam<bool> kDeleteAllMerchantsOnClearBrowsingHistory{
     &kCommerceMerchantViewer, "delete_all_merchants_on_clear_history", false};
 
-const base::Feature kShoppingList{"ShoppingList",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kShoppingList, "ShoppingList", base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kShoppingPDPMetrics{"ShoppingPDPMetrics",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kShoppingListEnableDesyncResolution,
+             "ShoppingListEnableDesyncResolution",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kRetailCoupons{"RetailCoupons",
-                                   base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kShoppingPDPMetrics,
+             "ShoppingPDPMetrics",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kCommerceDeveloper{"CommerceDeveloper",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kRetailCoupons, "RetailCoupons", base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kCommerceDeveloper,
+             "CommerceDeveloper",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kRetailCouponsWithCodeParam[] = "RetailCouponsWithCodeParam";
 
 // Params use for Discount Consent v2.
-const base::Feature kDiscountConsentV2{"DiscountConsentV2",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kDiscountConsentV2,
+             "DiscountConsentV2",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kCommerceHintAndroid{"CommerceHintAndroid",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kCommerceHintAndroid,
+             "CommerceHintAndroid",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kMerchantWidePromotion{"MerchantWidePromotion",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMerchantWidePromotion,
+             "MerchantWidePromotion",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Params for Discount Consent V2 in the NTP Cart module.
 const char kNtpChromeCartModuleDiscountConsentNtpVariationParam[] =
     "discount-consent-ntp-variation";
 const base::FeatureParam<int> kNtpChromeCartModuleDiscountConsentNtpVariation{
     &commerce::kDiscountConsentV2,
-    kNtpChromeCartModuleDiscountConsentNtpVariationParam, 0};
+    kNtpChromeCartModuleDiscountConsentNtpVariationParam, 4};
 const char kNtpChromeCartModuleDiscountConsentReshowTimeParam[] =
     "discount-consent-ntp-reshow-time";
 const base::FeatureParam<base::TimeDelta>
@@ -159,7 +177,7 @@ const base::FeatureParam<bool>
     kNtpChromeCartModuleDiscountConsentNtpStepOneUseStaticContent{
         &commerce::kDiscountConsentV2,
         kNtpChromeCartModuleDiscountConsentNtpStepOneUseStaticContentParam,
-        false};
+        true};
 const char kNtpChromeCartModuleDiscountConsentNtpStepOneStaticContentParam[] =
     "step-one-static-content";
 const base::FeatureParam<std::string>
@@ -226,6 +244,15 @@ const base::FeatureParam<bool> kReadyToFetchMerchantWidePromotion{
     &commerce::kMerchantWidePromotion, kReadyToFetchMerchantWidePromotionParam,
     false};
 
+const char kCodeBasedRuleDiscountParam[] = "code-based-rbd";
+const base::FeatureParam<bool> kCodeBasedRuleDiscount{
+    &ntp_features::kNtpChromeCartModule, kCodeBasedRuleDiscountParam, false};
+
+const char kRevertIconOnFailureParam[] =
+    "shopping-list-revert-page-action-icon-on-failure";
+const base::FeatureParam<bool> kRevertIconOnFailure{
+    &kShoppingList, kRevertIconOnFailureParam, false};
+
 bool IsPartnerMerchant(const GURL& url) {
   return commerce::IsCouponDiscountPartnerMerchant(url) ||
          IsRuleDiscountPartnerMerchant(url);
@@ -265,6 +292,14 @@ bool IsFakeDataEnabled() {
 bool isContextualConsentEnabled() {
   return kContextualConsentShowOnCartAndCheckoutPage.Get() ||
          kContextualConsentShowOnSRP.Get();
+}
+
+bool IsShoppingListAllowedForEnterprise(PrefService* prefs) {
+  const base::Value* pref =
+      prefs->GetUserPrefValue(kShoppingListEnabledPrefName);
+
+  // Default to true if there is no value set.
+  return !pref || pref->GetBool();
 }
 
 #if !BUILDFLAG(IS_ANDROID)

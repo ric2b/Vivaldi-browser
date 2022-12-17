@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -405,6 +405,13 @@ bool SandboxLinux::InitializeSandbox(sandbox::mojom::Sandbox sandbox_type,
 
   InitLibcLocaltimeFunctions();
 
+  if (!IsUnsandboxedSandboxType(sandbox_type)) {
+    // No sandboxed process should make use of getaddrinfo() as it is impossible
+    // to sandbox (e.g. glibc loads arbitrary third party DNS resolution
+    // libraries).
+    DiscourageGetaddrinfo();
+  }
+
   // Attempt to limit the future size of the address space of the process.
   // Fine to call with multiple threads as we don't use RLIMIT_STACK.
   int error = 0;
@@ -554,7 +561,7 @@ void SandboxLinux::SealSandbox() {
 void SandboxLinux::CheckForBrokenPromises(
     sandbox::mojom::Sandbox sandbox_type) {
   if (sandbox_type != sandbox::mojom::Sandbox::kRenderer
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
       && sandbox_type != sandbox::mojom::Sandbox::kPpapi
 #endif
   ) {

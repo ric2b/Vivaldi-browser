@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -215,8 +215,11 @@ void RenderWidgetTargeter::FindTargetAndCallback(
 }
 
 void RenderWidgetTargeter::ResolveTargetingRequest(TargetingRequest request) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   bool vivaldi_optimizaton = false;
+#endif // !IS_ANDROID && !IS_IOS
   if (request_in_flight_) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
     if (vivaldi::IsVivaldiRunning()) {
       // VB-47391: avoid blocking Vivaldi UI when the page is loading slowly.
       // UI does not depend on page's state and it is OK to send events to it
@@ -226,10 +229,13 @@ void RenderWidgetTargeter::ResolveTargetingRequest(TargetingRequest request) {
     } else {
     vivaldi_delay_request:
       // clang-format off
+#endif // !IS_ANDROID && !IS_IOS
     requests_.push(std::move(request));
     return;
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
       // clang-format on
     }
+#endif // !IS_ANDROID && !IS_IOS
   }
 
   RenderWidgetTargetResult result;
@@ -257,13 +263,14 @@ void RenderWidgetTargeter::ResolveTargetingRequest(TargetingRequest request) {
     result = delegate_->FindTargetSynchronouslyAtPoint(request_target,
                                                        request_target_location);
   }
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   if (vivaldi_optimizaton) {
     if (result.view != request.GetRootView())
       goto vivaldi_delay_request;
     if (result.should_query_view)
       goto vivaldi_delay_request;
   }
-
+#endif // !IS_ANDROID && !IS_IOS
   RenderWidgetHostViewBase* target = result.view;
   if (!is_autoscroll_in_progress_ && result.should_query_view) {
     TRACE_EVENT_WITH_FLOW2(
@@ -292,10 +299,11 @@ void RenderWidgetTargeter::ViewWillBeDestroyed(RenderWidgetHostViewBase* view) {
   if (is_autoscroll_in_progress_ && middle_click_result_.view == view) {
     SetIsAutoScrollInProgress(false);
   }
-
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   if (vivaldi::IsVivaldiRunning() && vivaldi_active_down_target_ == view) {
     vivaldi_active_down_target_ = nullptr;
   }
+#endif // !IS_ANDROID && !IS_IOS
 }
 
 bool RenderWidgetTargeter::HasEventsPendingDispatch() const {
@@ -452,6 +460,7 @@ void RenderWidgetTargeter::FoundTarget(
     request->RunCallback(target, target_location);
   }
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   if (vivaldi::IsVivaldiRunning() && request->IsWebInputEventRequest()) {
     // NOTE(espen@vivaldi.com): Work around a problem with multi document setups
     // like Vivaldi is. When seleting text with a mouse in edit fields we must
@@ -480,7 +489,7 @@ void RenderWidgetTargeter::FoundTarget(
       vivaldi_active_down_target_ = nullptr;
     }
   }
-
+#endif // !IS_ANDROID && !IS_IOS
   FlushEventQueue();
 }
 

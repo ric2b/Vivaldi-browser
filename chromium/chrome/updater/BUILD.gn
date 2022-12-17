@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -94,8 +94,6 @@ if (is_win || is_mac || is_linux) {
       "device_management/dm_response_validator.h",
       "device_management/dm_storage.cc",
       "device_management/dm_storage.h",
-      "device_management_task.cc",
-      "device_management_task.h",
       "enum_traits.h",
       "external_constants.cc",
       "external_constants.h",
@@ -109,6 +107,8 @@ if (is_win || is_mac || is_linux) {
       "policy/dm_policy_manager.h",
       "policy/manager.cc",
       "policy/manager.h",
+      "policy/policy_fetcher.cc",
+      "policy/policy_fetcher.h",
       "policy/policy_manager.cc",
       "policy/policy_manager.h",
       "policy/service.cc",
@@ -269,6 +269,7 @@ if (is_win || is_mac || is_linux) {
         "win/app_install_controller.cc",
         "win/install_progress_observer.cc",
         "win/install_progress_observer.h",
+        "win/installer/exit_code.h",
         "win/installer_api.cc",
         "win/installer_api.h",
         "win/manifest_util.cc",
@@ -278,6 +279,7 @@ if (is_win || is_mac || is_linux) {
         "win/net/network_fetcher.h",
         "win/protocol_parser_xml.cc",
         "win/protocol_parser_xml.h",
+        "win/proxy_impl_base.h",
         "win/scoped_handle.h",
         "win/scoped_impersonation.cc",
         "win/scoped_impersonation.h",
@@ -357,11 +359,15 @@ if (is_win || is_mac || is_linux) {
         "activity_impl_linux.cc",
         "app/server/linux/server.cc",
         "app/server/linux/server.h",
+        "device_management/dm_storage_linux.cc",
+        "linux/linux_util.cc",
+        "linux/linux_util.h",
         "linux/net/network.cc",
         "linux/net/network.h",
         "linux/setup/setup.h",
         "linux/update_service_internal_proxy.cc",
         "linux/update_service_proxy.cc",
+        "linux/update_service_proxy.h",
         "prefs_linux.cc",
         "setup_linux.cc",
         "update_usage_stats_task_linux.cc",
@@ -420,6 +426,8 @@ if (is_win || is_mac || is_linux) {
       "-e",
       "BROWSER_NAME=\"$browser_name\"",
       "-e",
+      "BROWSER_PRODUCT_NAME=\"$browser_product_name\"",
+      "-e",
       "COMPANY_FULLNAME=\"$updater_company_full_name\"",
       "-e",
       "COMPANY_SHORTNAME=\"$updater_company_short_name\"",
@@ -443,6 +451,8 @@ if (is_win || is_mac || is_linux) {
       "MAC_BROWSER_BUNDLE_IDENTIFIER=\"$mac_browser_bundle_identifier\"",
       "-e",
       "MAC_BUNDLE_IDENTIFIER=\"$mac_updater_bundle_identifier\"",
+      "-e",
+      "MAC_TEAM_IDENTIFIER=\"$mac_team_identifier\"",
       "-e",
       "UPDATE_CHECK_URL=\"$update_check_url\"",
     ]
@@ -486,6 +496,13 @@ if (is_win || is_mac || is_linux) {
         "//chrome/updater/win/win_constants.h",
         "//chrome/updater/win/win_util.cc",
         "//chrome/updater/win/win_util.h",
+      ]
+    }
+
+    if (is_linux) {
+      sources += [
+        "//chrome/updater/linux/linux_util.cc",
+        "//chrome/updater/linux/linux_util.h",
       ]
     }
 
@@ -543,7 +560,10 @@ if (is_win || is_mac || is_linux) {
 
         # Mac ASAN builds have an extra dylib that must be packaged in the CRX.
         if (is_asan) {
-          inputs += [ "$root_build_dir/${updater_product_full_name}_test.app/Contents/MacOS/libclang_rt.asan_osx_dynamic.dylib" ]
+          inputs += [
+            "$root_build_dir/${updater_product_full_name}_test.app/Contents/Helpers/$keystone_app_name.bundle/Contents/MacOS/libclang_rt.asan_osx_dynamic.dylib",
+            "$root_build_dir/${updater_product_full_name}_test.app/Contents/MacOS/libclang_rt.asan_osx_dynamic.dylib",
+          ]
         }
       }
 
@@ -706,6 +726,7 @@ if (is_win || is_mac || is_linux) {
       sources += [
         "mac/keystone/ksadmin_unittest.cc",
         "mac/net/network_unittest.cc",
+        "mac/privileged_helper/privileged_helper_unittests.mm",
         "mac/scoped_xpc_service_mock.h",
         "mac/scoped_xpc_service_mock.mm",
         "mac/setup/ks_tickets_unittest.mm",
@@ -720,6 +741,7 @@ if (is_win || is_mac || is_linux) {
       deps += [
         "//chrome/common/mac:launchd",
         "//chrome/updater/mac:ksadmin_lib",
+        "//chrome/updater/mac:privileged_helper_sources",
         "//third_party/ocmock",
       ]
 
@@ -750,6 +772,18 @@ if (is_win || is_mac || is_linux) {
         "//third_party/updater/chrome_mac_universal/GoogleUpdater_test.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/Helpers/ksinstall",
         "//third_party/updater/chrome_mac_universal/GoogleUpdater_test.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/Helpers/ksadmin",
         "//third_party/updater/chrome_mac_universal/GoogleUpdater_test.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/Info.plist",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/CodeResources",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/Helpers/ksadmin",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/Helpers/ksinstall",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/Info.plist",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/MacOS/GoogleSoftwareUpdate",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/Resources/GoogleSoftwareUpdateAgent.app/Contents/Info.plist",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/Resources/GoogleSoftwareUpdateAgent.app/Contents/MacOS/GoogleSoftwareUpdateAgent",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/Resources/GoogleSoftwareUpdateAgent.app/Contents/_CodeSignature",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/Helpers/GoogleSoftwareUpdate.bundle/Contents/_CodeSignature",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/Info.plist",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/MacOS/GoogleUpdater",
+        "//third_party/updater/chrome_mac_universal_prod/GoogleUpdater.app/Contents/_CodeSignature",
       ]
 
       data_deps = [
@@ -838,6 +872,7 @@ if (is_win || is_mac || is_linux) {
       deps += [ "//chrome/installer/util:with_no_strings" ]
       data_deps = [
         ":test_service_files",
+        "//chrome/updater/win:updater_test",
         "//third_party/updater:old_updater",
       ]
     }
@@ -871,6 +906,7 @@ if (is_win || is_mac || is_linux) {
       deps += [ "//chrome/installer/util:with_no_strings" ]
       data_deps += [
         ":test_service_files",
+        "//chrome/updater/win:updater_test",
         "//third_party/updater:old_updater",
       ]
     }

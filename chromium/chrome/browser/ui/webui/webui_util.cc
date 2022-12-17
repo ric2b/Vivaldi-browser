@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,8 +38,12 @@ namespace webui {
 void SetJSModuleDefaults(content::WebUIDataSource* source) {
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
-      "script-src chrome://resources chrome://test "
-      "chrome://webui-test 'self';");
+      "script-src chrome://resources chrome://webui-test "
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      "chrome://test "
+#endif
+      "'self';");
+
   // TODO(crbug.com/1098690): Trusted Type Polymer
   source->DisableTrustedTypesCSP();
   source->UseStringsJs();

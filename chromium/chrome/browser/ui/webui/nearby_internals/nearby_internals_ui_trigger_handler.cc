@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,13 +8,13 @@
 #include <utility>
 #include <vector>
 
-#include "ash/services/nearby/public/mojom/nearby_share_target_types.mojom.h"
 #include "base/bind.h"
 #include "base/time/time.h"
 #include "chrome/browser/nearby_sharing/attachment.h"
 #include "chrome/browser/nearby_sharing/logging/logging.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
 #include "chrome/browser/nearby_sharing/text_attachment.h"
+#include "chromeos/ash/services/nearby/public/mojom/nearby_share_target_types.mojom.h"
 
 namespace {
 

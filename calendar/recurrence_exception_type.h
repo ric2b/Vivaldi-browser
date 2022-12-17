@@ -17,11 +17,18 @@
 
 namespace calendar {
 
+enum UpdateRecurrenceExceptionFields {
+  PARENT_EVENT_ID = 1 << 0,
+  EXCEPTION_EVENT_ID = 1 << 1,
+  CANCELLED = 1 << 2,
+  EXCEPTION_DAY = 1 << 3,
+};
+
 // RecurrenceExceptionRow
 // Holds all information associated with a recurrence exception row.
 class RecurrenceExceptionRow {
  public:
-  RecurrenceExceptionRow() = default;
+  RecurrenceExceptionRow();
   ~RecurrenceExceptionRow() = default;
 
   RecurrenceExceptionID id;
@@ -29,6 +36,7 @@ class RecurrenceExceptionRow {
   EventID exception_event_id;
   bool cancelled;
   base::Time exception_day;
+  int updateFields;
 };
 
 typedef std::vector<RecurrenceExceptionRow> RecurrenceExceptionRows;

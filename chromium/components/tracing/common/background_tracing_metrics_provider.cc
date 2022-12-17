@@ -1,11 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/tracing/common/background_tracing_metrics_provider.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
-
 #include "components/metrics/content/gpu_metrics_provider.h"
 #include "components/metrics/cpu_metrics_provider.h"
 #include "content/public/browser/background_tracing_manager.h"
@@ -38,6 +38,9 @@ void BackgroundTracingMetricsProvider::ProvideIndependentMetrics(
     std::move(done_callback).Run(false);
     return;
   }
+
+  base::UmaHistogramCounts100000("Tracing.Background.UploadingTraceSizeInKB",
+                                 serialized_trace.size() / 1024);
   metrics::TraceLog* log = uma_proto->add_trace_log();
   log->set_raw_data(std::move(serialized_trace));
 

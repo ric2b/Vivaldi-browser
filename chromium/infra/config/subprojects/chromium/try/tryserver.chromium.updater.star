@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Definitions of builders in the tryserver.chromium.updater builder group."""
@@ -15,6 +15,9 @@ try_.defaults.set(
     goma_backend = goma.backend.RBE_PROD,
     pool = try_.DEFAULT_POOL,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
+
+    # TODO(crbug.com/1362440): remove this.
+    omit_python2 = False,
 )
 
 consoles.list_view(
@@ -38,8 +41,8 @@ updater_mac_builder(
     ],
     main_list_view = "try",
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/chrome/updater/.+",
+        location_filters = [
+            "chrome/updater/.+",
         ],
     ),
 )
@@ -52,8 +55,8 @@ updater_mac_builder(
     ],
     main_list_view = "try",
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/chrome/updater/.+",
+        location_filters = [
+            "chrome/updater/.+",
         ],
     ),
 )
@@ -66,8 +69,8 @@ updater_windows_builder(
     ],
     main_list_view = "try",
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/chrome/updater/.+",
+        location_filters = [
+            "chrome/updater/.+",
         ],
     ),
 )
@@ -80,8 +83,8 @@ updater_windows_builder(
     ],
     main_list_view = "try",
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/chrome/updater/.+",
+        location_filters = [
+            "chrome/updater/.+",
         ],
     ),
 )

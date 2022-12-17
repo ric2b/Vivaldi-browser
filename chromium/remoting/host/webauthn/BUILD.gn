@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -52,7 +52,9 @@ source_set("main") {
     "//base",
     "//mojo/core/embedder:embedder",
     "//remoting/base",
+    "//remoting/base:breakpad",
     "//remoting/host:chromoting_host_services_client",
+    "//remoting/host:common_headers",
     "//remoting/host/base",
     "//remoting/host/native_messaging",
   ]

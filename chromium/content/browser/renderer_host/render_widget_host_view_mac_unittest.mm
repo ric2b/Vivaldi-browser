@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -530,11 +530,6 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
     pool_.Recycle();
   }
 
-  void DestroyHostViewRetainCocoaView() {
-    test_rvh()->GetWidget()->SetView(nullptr);
-    rwhv_mac_->Destroy();
-  }
-
   void ActivateViewWithTextInputManager(RenderWidgetHostViewBase* view,
                                         ui::TextInputType type) {
     ui::mojom::TextInputState state;
@@ -904,7 +899,7 @@ TEST_F(RenderWidgetHostViewMacTest, CompositionEventAfterDestroy) {
   EXPECT_EQ(40, rect.size.height);
   EXPECT_EQ(range, gfx::Range(actual_range));
 
-  DestroyHostViewRetainCocoaView();
+  rwhv_mac_->Destroy();
   actual_range = NSMakeRange(0, 0);
   rect = [rwhv_cocoa_ firstRectForCharacterRange:range.ToNSRange()
                                      actualRange:&actual_range];

@@ -22,9 +22,6 @@
                 "target_bits": 64
               },
               "legacy_gclient_config": {
-                "apply_configs": [
-                  "enable_reclient"
-                ],
                 "config": "chromium"
               }
             }
@@ -40,7 +37,7 @@
       ],
       "mirroring_builder_group_and_names": [
         {
-          "builder": "cast_shell_linux_dbg",
+          "builder": "linux-x64-castos-dbg",
           "group": "tryserver.chromium.linux"
         }
       ]

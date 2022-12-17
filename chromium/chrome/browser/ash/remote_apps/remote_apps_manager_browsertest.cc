@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/views/app_list_item_view.h"
-#include "ash/components/login/auth/public/user_context.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
@@ -17,6 +16,7 @@
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/test/app_list_test_api.h"
 #include "ash/shell.h"
+#include "ash/test/ash_test_base.h"
 #include "base/barrier_closure.h"
 #include "base/callback.h"
 #include "base/callback_forward.h"
@@ -36,11 +36,13 @@
 #include "chrome/browser/ash/remote_apps/id_generator.h"
 #include "chrome/browser/ash/remote_apps/remote_apps_manager_factory.h"
 #include "chrome/browser/ash/remote_apps/remote_apps_model.h"
+#include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "chromeos/components/remote_apps/mojom/remote_apps.mojom.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
@@ -191,6 +193,9 @@ class RemoteAppsManagerBrowsertest
     user_manager::User* user =
         user_manager::UserManager::Get()->GetActiveUser();
     profile_ = ProfileHelper::Get()->GetProfileByUser(user);
+    app_list_syncable_service_ =
+        app_list::AppListSyncableServiceFactory::GetForProfile(profile_);
+    app_list_model_updater_ = app_list_syncable_service_->GetModelUpdater();
     manager_ = RemoteAppsManagerFactory::GetForProfile(profile_);
     std::unique_ptr<FakeIdGenerator> id_generator =
         std::make_unique<FakeIdGenerator>(
@@ -288,13 +293,47 @@ class RemoteAppsManagerBrowsertest
     AppListClientImpl* client = AppListClientImpl::GetInstance();
     EXPECT_FALSE(client->GetAppListWindow());
     ash::AcceleratorController::Get()->PerformActionIfEnabled(
-        ash::TOGGLE_APP_LIST_FULLSCREEN, {});
-    if (ash::features::IsProductivityLauncherEnabled())
-      ash::AppListTestApi().WaitForBubbleWindow(wait_for_opening_animation);
+        ash::TOGGLE_APP_LIST, {});
+    ash::AppListTestApi().WaitForBubbleWindow(wait_for_opening_animation);
     EXPECT_TRUE(client->GetAppListWindow());
   }
 
+  std::string LoadExtension(const base::FilePath& extension_path) {
+    extensions::ChromeTestExtensionLoader loader(profile_);
+    loader.set_location(extensions::mojom::ManifestLocation::kExternalPolicy);
+    loader.set_pack_extension(true);
+    // When |set_pack_extension_| is true, the |loader| first packs and then
+    // loads the extension. The packing step creates a _metadata folder which
+    // causes an install warning when loading.
+    loader.set_ignore_manifest_warnings(true);
+    return loader.LoadExtension(extension_path)->id();
+  }
+
+  // Returns a list of app ids following the ordinal increasing order.
+  std::vector<std::string> GetAppIdsInOrdinalOrder(
+      const std::vector<std::string>& ids) {
+    std::vector<std::string> copy_ids(ids);
+    std::sort(
+        copy_ids.begin(), copy_ids.end(),
+        [&](const std::string& id1, const std::string& id2) {
+          return app_list_model_updater_->FindItem(id1)->position().LessThan(
+              app_list_model_updater_->FindItem(id2)->position());
+        });
+    return copy_ids;
+  }
+
+  void OnReorderAnimationDone(base::OnceClosure closure,
+                              bool aborted,
+                              AppListGridAnimationStatus status) {
+    EXPECT_FALSE(aborted);
+    EXPECT_EQ(AppListGridAnimationStatus::kReorderFadeIn, status);
+    std::move(closure).Run();
+  }
+
  protected:
+  app_list::AppListSyncableService* app_list_syncable_service_;
+  AppListModelUpdater* app_list_model_updater_;
+  ash::AppListTestApi app_list_test_api_;
   RemoteAppsManager* manager_ = nullptr;
   MockImageDownloader* image_downloader_ = nullptr;
   Profile* profile_ = nullptr;
@@ -357,17 +396,16 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, AddAppPlaceholderIcon) {
 
   // App's icon is placeholder.
   // TODO(https://crbug.com/1345682): add a pixel diff test for this scenario.
-  ash::AppListTestApi app_list_test_api;
-  CheckIconsEqual(
-      future.Get()->uncompressed,
-      app_list_test_api.GetTopLevelItemViewFromId(kId1)->icon_image_for_test());
+  CheckIconsEqual(future.Get()->uncompressed,
+                  app_list_test_api_.GetTopLevelItemViewFromId(kId1)
+                      ->icon_image_for_test());
   CheckIconsEqual(future.Get()->uncompressed, item->GetDefaultIcon());
 
   // App list color sorting should still work for placeholder icons.
   ui::test::EventGenerator event_generator(ash::Shell::GetPrimaryRootWindow());
   ash::AppListTestApi::ReorderAnimationEndState actual_state;
 
-  app_list_test_api.ReorderByMouseClickAtToplevelAppsGridMenu(
+  app_list_test_api_.ReorderByMouseClickAtToplevelAppsGridMenu(
       ash::AppListSortOrder::kColor,
       ash::AppListTestApi::MenuType::kAppListNonFolderItemMenu,
       &event_generator,
@@ -658,11 +696,9 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, OnAppLaunched) {
 // the added remote app items are marked as ephemeral and are not synced to
 // local storage or uploaded to sync data.
 IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, RemoteAppsNotSynced) {
-  app_list::AppListSyncableService* app_list_syncable_service =
-      app_list::AppListSyncableServiceFactory::GetForProfile(profile_);
   std::unique_ptr<syncer::FakeSyncChangeProcessor> sync_processor =
       std::make_unique<syncer::FakeSyncChangeProcessor>();
-  app_list_syncable_service->MergeDataAndStartSyncing(
+  app_list_syncable_service_->MergeDataAndStartSyncing(
       syncer::APP_LIST, {},
       std::unique_ptr<syncer::SyncChangeProcessor>(
           new syncer::SyncChangeProcessorWrapperForTest(sync_processor.get())),
@@ -680,7 +716,7 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, RemoteAppsNotSynced) {
 
   // Remote app sync item not added to local storage.
   const base::Value::Dict& local_items =
-      profile_->GetPrefs()->GetValueDict(prefs::kAppListLocalState);
+      profile_->GetPrefs()->GetDict(prefs::kAppListLocalState);
   const base::Value::Dict* dict_item = local_items.FindDict(kId1);
   EXPECT_FALSE(dict_item);
 
@@ -696,14 +732,10 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, RemoteAppsNotSynced) {
 // that the added remote folder items are marked as ephemeral and are not synced
 // to local storage or uploaded to sync data.
 IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, RemoteFoldersNotSynced) {
-  app_list::AppListSyncableService* app_list_syncable_service =
-      app_list::AppListSyncableServiceFactory::GetForProfile(profile_);
   std::unique_ptr<syncer::FakeSyncChangeProcessor> sync_processor =
       std::make_unique<syncer::FakeSyncChangeProcessor>();
-  AppListModelUpdater* app_list_model_updater =
-      app_list_syncable_service->GetModelUpdater();
-  app_list_model_updater->SetActive(true);
-  app_list_syncable_service->MergeDataAndStartSyncing(
+  app_list_model_updater_->SetActive(true);
+  app_list_syncable_service_->MergeDataAndStartSyncing(
       syncer::APP_LIST, {},
       std::unique_ptr<syncer::SyncChangeProcessor>(
           new syncer::SyncChangeProcessorWrapperForTest(sync_processor.get())),
@@ -724,7 +756,7 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, RemoteFoldersNotSynced) {
 
   // Remote folder sync item not added to local storage.
   const base::Value::Dict& local_items =
-      profile_->GetPrefs()->GetValueDict(prefs::kAppListLocalState);
+      profile_->GetPrefs()->GetDict(prefs::kAppListLocalState);
   const base::Value::Dict* dict_item = local_items.FindDict(kId1);
   EXPECT_FALSE(dict_item);
 
@@ -734,5 +766,75 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, RemoteFoldersNotSynced) {
         sync_change.sync_data().GetSpecifics().app_list().item_id();
     EXPECT_NE(item_id, kId1);
   }
+}
+
+// Tests that the kAlphabeticalEphemeralAppFirst sort order moves the remote
+// apps and folders to the front of the launcher, before all native items.
+IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest,
+                       SortLauncherWithRemoteAppsFirst) {
+  // Show launcher UI so that app icons are loaded.
+  ShowLauncherAppsGrid(/*wait_for_opening_animation=*/true);
+
+  base::FilePath test_dir_path;
+  base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir_path);
+  test_dir_path = test_dir_path.AppendASCII("extensions");
+
+  // Adds 2 remote apps.
+  // Make one app name lower case to test case insensitive.
+  std::string remote_app1_id =
+      AddApp(kExtensionId1, "test app 5", std::string(), GURL(),
+             /*add_to_front=*/true);
+  std::string remote_app2_id =
+      AddApp(kExtensionId1, "Test App 7", std::string(), GURL(),
+             /*add_to_front=*/true);
+
+  // Adds remote folder with one remote app inside.
+  std::string remote_folder_id =
+      manager_->AddFolder("Test App 6 Folder", /*add_to_front=*/true);
+  AddApp(kExtensionId1, "Test App 8", remote_folder_id, GURL(),
+         /*add_to_front=*/true);
+
+  // Adds 3 native apps.
+  std::string app1_id =
+      LoadExtension(test_dir_path.AppendASCII("app1"));  // Test App 1
+  ASSERT_FALSE(app1_id.empty());
+  std::string app2_id =
+      LoadExtension(test_dir_path.AppendASCII("app2"));  // Test App 2
+  ASSERT_FALSE(app2_id.empty());
+  std::string app3_id =
+      LoadExtension(test_dir_path.AppendASCII("app4"));  // Test App 4
+  ASSERT_FALSE(app3_id.empty());
+
+  // Moves 2 native apps to a native folder.
+  const std::string native_folder_id =
+      app_list_test_api_.CreateFolderWithApps({app2_id, app3_id});
+  ash::AppListItem* folder_item = GetAppListItem(native_folder_id);
+  auto folder_metadata = folder_item->CloneMetadata();
+  folder_metadata->name = "Test App 2 Folder";
+  folder_item->SetMetadata(std::move(folder_metadata));
+
+  // Current order: `Test App 2 Folder` (native), `Test App 1` (native),
+  // `Test App 6 Folder` (remote), `Test App 7` (remote), `test app 5` (remote).
+  const std::vector<std::string> ids({app1_id, native_folder_id, remote_app1_id,
+                                      remote_app2_id, remote_folder_id});
+  EXPECT_EQ(
+      GetAppIdsInOrdinalOrder(ids),
+      std::vector<std::string>({native_folder_id, app1_id, remote_folder_id,
+                                remote_app2_id, remote_app1_id}));
+
+  base::RunLoop run_loop;
+  app_list_test_api_.AddReorderAnimationCallback(
+      base::BindRepeating(&RemoteAppsManagerBrowsertest::OnReorderAnimationDone,
+                          base::Unretained(this), run_loop.QuitClosure()));
+
+  manager_->SortLauncherWithRemoteAppsFirst();
+  run_loop.Run();
+
+  // Sorted order: `test app 5` (remote), `Test App 6 Folder` (remote),
+  // `Test App 7` (remote), `Test App 1` (native), `Test App 2 Folder` (native).
+  EXPECT_EQ(
+      GetAppIdsInOrdinalOrder(ids),
+      std::vector<std::string>({remote_app1_id, remote_folder_id,
+                                remote_app2_id, app1_id, native_folder_id}));
 }
 }  // namespace ash

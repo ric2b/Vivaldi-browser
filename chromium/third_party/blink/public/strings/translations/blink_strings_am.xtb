@@ -7,7 +7,6 @@
 <translation id="1178581264944972037">ለአፍታ አቁም</translation>
 <translation id="1306460908038601864">ጠፍቷል</translation>
 <translation id="1311894908970423688">እሴት <ph name="VALUE_DATE_OR_TIME" /> መሆን አለበት።</translation>
-<translation id="145015347812617860"><ph name="COUNT" /> ንጥሎች</translation>
 <translation id="1480676835519562650">በብዛት ሊመረጥ የሚችል፣ <ph name="SELECTED" /> ከ<ph name="COUNT" /> ተመርጠዋል።</translation>
 <translation id="1588438908519853928">መደበኛ</translation>
 <translation id="1591562245178063882">በዚህ ወር</translation>
@@ -31,7 +30,6 @@
 <translation id="2246498165605549352">አካባቢያዊ ፋይል</translation>
 <translation id="2247351761944213033">ሳምንት <ph name="WEEKNUMBER" />፣ <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">ትራክ <ph name="NUMBER" /></translation>
-<translation id="2307576640803031502">በዝርዝር ውስጥ፣ ንጥል <ph name="INDEX" /> ከ<ph name="COUNT" /></translation>
 <translation id="2393030564806080191">ባለአስራስድስትዮሽ የቀለም እሴት</translation>
 <translation id="2398813069815436052">መገናኛ ተከፍቷል።</translation>
 <translation id="245932805758469625">የቪዲዮ ቀሪ ሰከንዶች ብዛት</translation>
@@ -43,7 +41,7 @@
 <translation id="2613802280814924224">እባክዎ የሚሰራ ዋጋ ያስገቡ። የሚቀርበው ዋጋ <ph name="VALID_VALUE" /> ነው።</translation>
 <translation id="2634240155926812724">አረንጓዴ ሰርጥ</translation>
 <translation id="2653659639078652383">አስገባ</translation>
-<translation id="2723001399770238859">ድምጽ</translation>
+<translation id="2723001399770238859">ድምፅ</translation>
 <translation id="2746543609216772311">ዋጋ <ph name="MINIMUM_DATE_OR_TIME" /> ወይም ከዚያ በኋላ መሆን አለበት።</translation>
 <translation id="2761667185364618470">ለመቀጠል ከፈለጉ እባክዎ ይህ ሳጥን ላይ ምልክት ያድርጉ።</translation>
 <translation id="2908441821576996758">እባክዎ በኮማ የተለዩ የኢሜይል አድራሻዎች ዝርዝር ያስገቡ።</translation>
@@ -97,7 +95,7 @@
 <translation id="5546461542133609677">ድምፅ-ከልን አንሳ</translation>
 <translation id="5630795885300617244">10 ሴ ለመዝለል ወደ ግራ ወይም ቀኝ ሁለቴ መታ ያድርጉ</translation>
 <translation id="5677946354068040947">ተጨማሪ አማራጮች</translation>
-<translation id="57838592816432529">ድምጽ ይዝጉ</translation>
+<translation id="57838592816432529">ድምፅ ይዝጉ</translation>
 <translation id="5786442179789148008">የመልሶ ማጫወት ፍጥነት ምናሌን አሳይ</translation>
 <translation id="5787939484346677755">ተዘርግቷል፣ የራስ-ማጠናቀቅ አማራጮች አሉ።</translation>
 <translation id="5860033963881614850">አጥፋ</translation>

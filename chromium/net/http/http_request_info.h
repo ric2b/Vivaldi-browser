@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "base/memory/raw_ptr.h"
 #include "net/base/idempotency.h"
 #include "net/base/net_export.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/network_isolation_key.h"
 #include "net/base/privacy_mode.h"
 #include "net/dns/public/secure_dns_policy.h"
@@ -29,6 +30,8 @@ struct NET_EXPORT HttpRequestInfo {
   HttpRequestInfo(const HttpRequestInfo& other);
   ~HttpRequestInfo();
 
+  bool IsConsistent() const;
+
   // The requested URL.
   GURL url;
 
@@ -36,8 +39,16 @@ struct NET_EXPORT HttpRequestInfo {
   std::string method;
 
   // This key is used to isolate requests from different contexts in accessing
-  // shared network resources like the cache.
+  // shared cache.
   NetworkIsolationKey network_isolation_key;
+
+  // This key is used to isolate requests from different contexts in accessing
+  // shared network resources.
+
+  // TODO @brgoldstein: populate this field from the
+  // NetworkContext::PreconnectSockets path. And the HTTPCacheLookupManager
+  // path.
+  NetworkAnonymizationKey network_anonymization_key;
 
   // True if it is a subframe's document resource.
   bool is_subframe_document_resource = false;
@@ -96,6 +107,15 @@ struct NET_EXPORT HttpRequestInfo {
   // Checksum of the request body and selected headers, in upper-case
   // hexadecimal. Only non-empty if the USE_SINGLE_KEYED_CACHE load flag is set.
   std::string checksum;
+
+  // If not null, the value is used to evaluate whether the cache entry should
+  // be bypassed; if is null, that means the request site does not match the
+  // filter.
+  absl::optional<int64_t> fps_cache_filter;
+
+  // Use as ID to mark the cache entry when persisting. Should be a positive
+  // number once set.
+  absl::optional<int64_t> browser_run_id;
 };
 
 }  // namespace net

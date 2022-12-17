@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,6 +77,8 @@ class TestStartSuggestService : public StartSuggestService {
       : StartSuggestService(template_url_service,
                             url_loader_factory,
                             std::move(scheme_classifier),
+                            "us",
+                            "en",
                             request_initiator_url) {}
   ~TestStartSuggestService() override = default;
 

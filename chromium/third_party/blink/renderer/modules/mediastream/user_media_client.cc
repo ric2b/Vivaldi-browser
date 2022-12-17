@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -99,12 +99,12 @@ UserMediaClient::UserMediaClient(
                   WrapWeakPersistent(this)),
               std::move(task_runner))),
       media_devices_dispatcher_(frame->DomWindow()) {
-  if (frame_) {
-    // WrapWeakPersistent is safe because the |frame_| owns UserMediaClient.
-    frame_->SetIsCapturingMediaCallback(WTF::BindRepeating(
-        [](UserMediaClient* client) { return client && client->IsCapturing(); },
-        WrapWeakPersistent(this)));
-  }
+  DCHECK(frame_);
+  DCHECK(user_media_processor_);
+  // WrapWeakPersistent is safe because the |frame_| owns UserMediaClient.
+  frame_->SetIsCapturingMediaCallback(WTF::BindRepeating(
+      [](UserMediaClient* client) { return client && client->IsCapturing(); },
+      WrapWeakPersistent(this)));
 }
 
 UserMediaClient::UserMediaClient(
@@ -202,7 +202,6 @@ bool UserMediaClient::IsCapturing() {
 
 #if !BUILDFLAG(IS_ANDROID)
 void UserMediaClient::FocusCapturedSurface(const String& label, bool focus) {
-  DCHECK(user_media_processor_);
   user_media_processor_->FocusCapturedSurface(label, focus);
 }
 #endif
@@ -219,20 +218,20 @@ void UserMediaClient::MaybeProcessNextRequestInfo() {
   if (current_request->IsUserMedia()) {
     user_media_processor_->ProcessRequest(
         current_request->MoveUserMediaRequest(),
-        WTF::Bind(&UserMediaClient::CurrentRequestCompleted,
-                  WrapWeakPersistent(this)));
+        WTF::BindOnce(&UserMediaClient::CurrentRequestCompleted,
+                      WrapWeakPersistent(this)));
   } else if (current_request->IsApplyConstraints()) {
     apply_constraints_processor_->ProcessRequest(
         current_request->apply_constraints_request(),
-        WTF::Bind(&UserMediaClient::CurrentRequestCompleted,
-                  WrapWeakPersistent(this)));
+        WTF::BindOnce(&UserMediaClient::CurrentRequestCompleted,
+                      WrapWeakPersistent(this)));
   } else {
     DCHECK(current_request->IsStopTrack());
     MediaStreamTrackPlatform* track = MediaStreamTrackPlatform::GetTrack(
         WebMediaStreamTrack(current_request->track_to_stop()));
     if (track) {
-      track->StopAndNotify(WTF::Bind(&UserMediaClient::CurrentRequestCompleted,
-                                     WrapWeakPersistent(this)));
+      track->StopAndNotify(WTF::BindOnce(
+          &UserMediaClient::CurrentRequestCompleted, WrapWeakPersistent(this)));
     } else {
       CurrentRequestCompleted();
     }
@@ -245,8 +244,8 @@ void UserMediaClient::CurrentRequestCompleted() {
   if (!pending_request_infos_.empty()) {
     frame_->GetTaskRunner(blink::TaskType::kInternalMedia)
         ->PostTask(FROM_HERE,
-                   WTF::Bind(&UserMediaClient::MaybeProcessNextRequestInfo,
-                             WrapWeakPersistent(this)));
+                   WTF::BindOnce(&UserMediaClient::MaybeProcessNextRequestInfo,
+                                 WrapWeakPersistent(this)));
   }
 }
 
@@ -347,6 +346,16 @@ UserMediaClient* UserMediaClient::From(LocalDOMWindow* window) {
     Supplement<LocalDOMWindow>::ProvideTo(*window, client);
   }
   return client;
+}
+
+void UserMediaClient::KeepDeviceAliveForTransfer(
+    base::UnguessableToken session_id,
+    base::UnguessableToken transfer_id,
+    UserMediaProcessor::KeepDeviceAliveForTransferCallback keep_alive_cb) {
+  // KeepDeviceAliveForTransfer is safe to call even during an ongoing request,
+  // so doesn't need to be queued.
+  user_media_processor_->KeepDeviceAliveForTransfer(session_id, transfer_id,
+                                                    std::move(keep_alive_cb));
 }
 
 }  // namespace blink

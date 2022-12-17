@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,10 +6,10 @@
  * @fileoverview
  * 'settings-menu' shows a menu with a hardcoded set of pages and subpages.
  */
-import 'chrome://resources/cr_elements/cr_icons_css.m.js';
+import 'chrome://resources/cr_elements/cr_icons.css.js';
 import 'chrome://resources/cr_elements/cr_menu_selector/cr_menu_selector.js';
 import 'chrome://resources/cr_elements/cr_nav_menu_item_style.css.js';
-import 'chrome://resources/cr_elements/icons.m.js';
+import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 import 'chrome://resources/polymer/v3_0/paper-ripple/paper-ripple.js';
@@ -17,10 +17,12 @@ import '../icons.html.js';
 import '../settings_shared.css.js';
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {DomIf, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {PageVisibility} from '../page_visibility.js';
+import {routes} from '../route.js';
 import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
 
 import {getTemplate} from './settings_menu.html.js';
@@ -51,12 +53,36 @@ export class SettingsMenuElement extends SettingsMenuElementBase {
        * Dictionary defining page visibility.
        */
       pageVisibility: Object,
+
+      performanceFeaturesAvailable_: {
+        type: Boolean,
+        value: function() {
+          return loadTimeData.getBoolean('highEfficiencyModeAvailable') ||
+              loadTimeData.getBoolean('batterySaverModeAvailable');
+        },
+      },
     };
   }
 
   pageVisibility: PageVisibility;
+  private performanceFeaturesAvailable_: boolean;
 
   override currentRouteChanged(newRoute: Route) {
+    if (this.performanceFeaturesAvailable_ && newRoute === routes.PERFORMANCE) {
+      // Add special handling for the Performance section, since the
+      // corresponding menu entry resides in a dom-if and is normally not
+      // present in the DOM during initial load. Force-render the dom-if
+      // instead.
+      const anchor = this.shadowRoot!.querySelector('#performance');
+      if (anchor === null) {
+        const domIf =
+            this.shadowRoot!.querySelector<DomIf>('#performanceDomIf');
+        assert(domIf);
+        assert(domIf.if);
+        domIf.render();
+      }
+    }
+
     // Focus the initially selected path.
     const anchors = this.shadowRoot!.querySelectorAll('a');
     for (let i = 0; i < anchors.length; ++i) {

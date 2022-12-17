@@ -1,12 +1,16 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
 
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format_utils.h"
+#include "gpu/command_buffer/common/shared_image_trace_utils.h"
+#include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
@@ -46,14 +50,16 @@ const char* BackingTypeToString(SharedImageBackingType type) {
       return "WrappedSkImage";
     case SharedImageBackingType::kCompound:
       return "CompoundImageBacking";
+    case SharedImageBackingType::kDCOMPSurfaceProxy:
+      return "DCOMPSurfaceProxy";
   }
   NOTREACHED();
-};
+}
 
 }  // namespace
 
 SharedImageBacking::SharedImageBacking(const Mailbox& mailbox,
-                                       viz::ResourceFormat format,
+                                       viz::SharedImageFormat format,
                                        const gfx::Size& size,
                                        const gfx::ColorSpace& color_space,
                                        GrSurfaceOrigin surface_origin,
@@ -86,7 +92,7 @@ void SharedImageBacking::OnContextLost() {
 SkImageInfo SharedImageBacking::AsSkImageInfo() const {
   return SkImageInfo::Make(size_.width(), size_.height(),
                            viz::ResourceFormatToClosestSkColorType(
-                               /*gpu_compositing=*/true, format_),
+                               /*gpu_compositing=*/true, format()),
                            alpha_type_, color_space_.ToSkColorSpace());
 }
 
@@ -94,7 +100,14 @@ bool SharedImageBacking::CopyToGpuMemoryBuffer() {
   return false;
 }
 
+void SharedImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {}
+
 bool SharedImageBacking::UploadFromMemory(const SkPixmap& pixmap) {
+  NOTREACHED();
+  return false;
+}
+
+bool SharedImageBacking::ReadbackToMemory(SkPixmap& pixmap) {
   NOTREACHED();
   return false;
 }
@@ -105,21 +118,29 @@ bool SharedImageBacking::PresentSwapChain() {
 
 void SharedImageBacking::OnMemoryDump(
     const std::string& dump_name,
-    base::trace_event::MemoryAllocatorDump* dump,
+    base::trace_event::MemoryAllocatorDumpGuid client_guid,
     base::trace_event::ProcessMemoryDump* pmd,
     uint64_t client_tracing_id) {
-  NOTIMPLEMENTED();
+  base::trace_event::MemoryAllocatorDump* dump =
+      pmd->CreateAllocatorDump(dump_name);
+  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                  EstimatedSizeForMemTracking());
+
+  dump->AddString("type", "", GetName());
+  dump->AddString("dimensions", "", size().ToString());
+  dump->AddString("format", "", format().ToString());
+  dump->AddString("usage", "", CreateLabelForSharedImageUsage(usage()));
+
+  // Add ownership edge to `client_guid` which expresses shared ownership with
+  // the client process.
+  pmd->CreateSharedGlobalAllocatorDump(client_guid);
+  pmd->AddOwnershipEdge(dump->guid(), client_guid, kNonOwningEdgeImportance);
 }
 
 std::unique_ptr<GLTextureImageRepresentation>
 SharedImageBacking::ProduceGLTexture(SharedImageManager* manager,
                                      MemoryTypeTracker* tracker) {
-  return nullptr;
-}
-
-std::unique_ptr<GLTextureImageRepresentation>
-SharedImageBacking::ProduceRGBEmulationGLTexture(SharedImageManager* manager,
-                                                 MemoryTypeTracker* tracker) {
   return nullptr;
 }
 
@@ -177,8 +198,14 @@ SharedImageBacking::ProduceLegacyOverlay(SharedImageManager* manager,
 }
 #endif
 
+void SharedImageBacking::SetNotRefCounted() {
+  DCHECK(!HasAnyRefs());
+  is_ref_counted_ = false;
+}
+
 void SharedImageBacking::AddRef(SharedImageRepresentation* representation) {
   AutoLock auto_lock(this);
+  DCHECK(is_ref_counted_);
 
   bool first_ref = refs_.empty();
   refs_.push_back(representation);
@@ -190,8 +217,9 @@ void SharedImageBacking::AddRef(SharedImageRepresentation* representation) {
 
 void SharedImageBacking::ReleaseRef(SharedImageRepresentation* representation) {
   AutoLock auto_lock(this);
+  DCHECK(is_ref_counted_);
 
-  auto found = std::find(refs_.begin(), refs_.end(), representation);
+  auto found = base::ranges::find(refs_, representation);
   DCHECK(found != refs_.end());
 
   // If the found representation is the first (owning) ref, free the attributed
@@ -209,6 +237,14 @@ void SharedImageBacking::ReleaseRef(SharedImageRepresentation* representation) {
     refs_[0]->tracker()->TrackMemAlloc(estimated_size_);
     return;
   }
+}
+
+const MemoryTracker* SharedImageBacking::GetMemoryTracker() const {
+  AutoLock auto_lock(this);
+  if (refs_.empty())
+    return nullptr;
+
+  return refs_[0]->tracker()->memory_tracker();
 }
 
 void SharedImageBacking::RegisterImageFactory(SharedImageFactory* factory) {
@@ -271,7 +307,7 @@ base::Lock* SharedImageBacking::AutoLock::InitializeLock(
 
 ClearTrackingSharedImageBacking::ClearTrackingSharedImageBacking(
     const Mailbox& mailbox,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,

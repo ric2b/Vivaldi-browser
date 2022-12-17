@@ -1,10 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/login/screens/enable_debugging_screen.h"
 
 #include "base/check.h"
+#include "base/check_op.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/login_web_dialog.h"
@@ -70,7 +71,7 @@ void EnableDebuggingScreen::OnUserAction(const base::Value::List& args) {
     return;
   }
   if (action_id == kUserActionSetup) {
-    CHECK_EQ(args.size(), 2);
+    CHECK_EQ(args.size(), 2u);
     const std::string& password = args[1].GetString();
     HandleSetup(password);
     return;

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -126,7 +126,7 @@ const NGLayoutResult* NGFieldsetLayoutAlgorithm::Layout() {
   if (UNLIKELY(InvolvedInBlockFragmentation(container_builder_))) {
     NGBreakStatus status = FinishFragmentation(
         Node(), ConstraintSpace(), Borders().block_end,
-        FragmentainerSpaceAtBfcStart(ConstraintSpace()), &container_builder_);
+        FragmentainerSpaceLeft(ConstraintSpace()), &container_builder_);
     if (status == NGBreakStatus::kNeedsEarlierBreak) {
       // If we found a good break somewhere inside this block, re-layout and
       // break at that location.
@@ -401,7 +401,7 @@ NGBreakStatus NGFieldsetLayoutAlgorithm::LayoutFieldsetContent(
   if (ConstraintSpace().HasBlockFragmentation() && !early_break_) {
     break_status = BreakBeforeChildIfNeeded(
         ConstraintSpace(), fieldset_content, *result,
-        ConstraintSpace().FragmentainerOffsetAtBfc() + intrinsic_block_size_,
+        ConstraintSpace().FragmentainerOffset() + intrinsic_block_size_,
         /* has_container_separation */ false, &container_builder_);
   }
 
@@ -412,10 +412,14 @@ NGBreakStatus NGFieldsetLayoutAlgorithm::LayoutFieldsetContent(
 
     const auto& fragment =
         To<NGPhysicalBoxFragment>(result->PhysicalFragment());
-    if (auto baseline = fragment.Baseline())
-      container_builder_.SetBaseline(offset.block_offset + *baseline);
+    if (auto first_baseline = fragment.FirstBaseline()) {
+      container_builder_.SetFirstBaseline(offset.block_offset +
+                                          *first_baseline);
+    }
     if (auto last_baseline = fragment.LastBaseline())
       container_builder_.SetLastBaseline(offset.block_offset + *last_baseline);
+    if (fragment.UseLastBaselineForInlineBaseline())
+      container_builder_.SetUseLastBaselineForInlineBaseline();
 
     intrinsic_block_size_ +=
         NGFragment(writing_direction_, fragment).BlockSize();
@@ -430,9 +434,8 @@ NGBreakStatus NGFieldsetLayoutAlgorithm::LayoutFieldsetContent(
 LayoutUnit NGFieldsetLayoutAlgorithm::FragmentainerSpaceAvailable() const {
   // The legend may have extended past the end of the fragmentainer. Clamp to
   // zero if this is the case.
-  return std::max(
-      LayoutUnit(),
-      FragmentainerSpaceAtBfcStart(ConstraintSpace()) - intrinsic_block_size_);
+  return std::max(LayoutUnit(), FragmentainerSpaceLeft(ConstraintSpace()) -
+                                    intrinsic_block_size_);
 }
 
 void NGFieldsetLayoutAlgorithm::ConsumeRemainingFragmentainerSpace() {

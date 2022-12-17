@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -159,6 +159,7 @@ export function createCreditCardEntry():
     expirationMonth: Math.ceil(Math.random() * 11).toString(),
     expirationYear: (2016 + Math.floor(Math.random() * 5)).toString(),
     network: `${card}_network`,
+    imageSrc: 'chrome://theme/IDR_AUTOFILL_CC_GENERIC',
     metadata: {
       isLocal: true,
       summaryLabel: card + ' ' +
@@ -173,7 +174,17 @@ export function createCreditCardEntry():
  */
 export function makeInsecureCredential(
     url: string, username: string,
-    id?: number): chrome.passwordsPrivate.PasswordUiEntry {
+    types?: chrome.passwordsPrivate.CompromiseType[], id?: number,
+    elapsedMinSinceCompromise?: number,
+    isMuted?: boolean): chrome.passwordsPrivate.PasswordUiEntry {
+  elapsedMinSinceCompromise = elapsedMinSinceCompromise || 0;
+  types = types || [];
+  const compromisedInfo = {
+    compromiseTime: Date.now() - (elapsedMinSinceCompromise * 60000),
+    elapsedTimeSinceCompromise: `${elapsedMinSinceCompromise} minutes ago`,
+    compromiseTypes: types,
+    isMuted: isMuted ?? false,
+  };
   return {
     id: id || 0,
     storedIn: chrome.passwordsPrivate.PasswordStoreSet.DEVICE,
@@ -187,25 +198,8 @@ export function makeInsecureCredential(
     username: username,
     note: '',
     isAndroidCredential: false,
+    compromisedInfo: types.length ? compromisedInfo : undefined,
   };
-}
-
-/**
- * Creates a new compromised credential.
- */
-export function makeCompromisedCredential(
-    url: string, username: string, type: chrome.passwordsPrivate.CompromiseType,
-    id?: number, elapsedMinSinceCompromise?: number,
-    isMuted?: boolean): chrome.passwordsPrivate.PasswordUiEntry {
-  const credential = makeInsecureCredential(url, username, id);
-  elapsedMinSinceCompromise = elapsedMinSinceCompromise || 0;
-  credential.compromisedInfo = {
-    compromiseTime: Date.now() - (elapsedMinSinceCompromise * 60000),
-    elapsedTimeSinceCompromise: `${elapsedMinSinceCompromise} minutes ago`,
-    compromiseType: type,
-    isMuted: isMuted ?? false,
-  };
-  return credential;
 }
 
 /**
@@ -276,6 +270,7 @@ export class PasswordSectionElementFactory {
           value: true,
         },
       },
+      password_manager: {biometric_authentication_filling: {value: true}},
     };
     this.document.body.appendChild(passwordsSection);
     flush();

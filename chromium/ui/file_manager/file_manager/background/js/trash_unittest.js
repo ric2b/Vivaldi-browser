@@ -1,8 +1,8 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
@@ -229,59 +229,6 @@ export async function testDownloadsHasOwnTrash(done) {
   assertTrue(fs.entries['/Downloads/.Trash/files/file3'].isFile);
   assertTrue(fs.entries['/Downloads/.Trash/info/file3.trashinfo'].isFile);
   assertEquals(12, Object.keys(fs.entries).length);
-  done();
-}
-
-/**
- * Test crostini trash in .local/share/Trash.
- */
-export async function testCrostiniTrash(done) {
-  const trash = new Trash();
-  const deletePermanently = false;
-  const crostini = volumeManager.createVolumeInfo(
-      VolumeManagerCommon.VolumeType.CROSTINI, 'crostini', 'Linux files', '',
-      '/home/testuser');
-  const fs = crostini.fileSystem;
-  const file1 = MockFileEntry.create(fs, '/file1', null, new Blob(['f1']));
-  const file2 = MockFileEntry.create(fs, '/file2', null, new Blob(['f1']));
-  assertEquals(3, Object.keys(fs.entries).length);
-
-  // Move /file1 to trash.
-  const file1TrashEntry = await trash.removeFileOrDirectory(
-      volumeManager, file1, deletePermanently);
-  assertFalse(!!fs.entries['/file1']);
-  assertTrue(fs.entries['/.local/share/Trash'].isDirectory);
-  assertTrue(fs.entries['/.local/share/Trash/files'].isDirectory);
-  assertTrue(fs.entries['/.local/share/Trash/info'].isDirectory);
-  assertTrue(fs.entries['/.local/share/Trash/files/file1'].isFile);
-  assertTrue(fs.entries['/.local/share/Trash/info/file1.trashinfo'].isFile);
-  const text = await fs.entries['/.local/share/Trash/info/file1.trashinfo']
-                   .content.text();
-  assertTrue(
-      text.startsWith('[Trash Info]\nPath=/home/testuser/file1\nDeletionDate='),
-      `${text} must have Path=/home/test/user/file1`);
-  assertEquals(9, Object.keys(fs.entries).length);
-
-  // Restore /file1
-  await trash.restore(volumeManager, assert(file1TrashEntry));
-  assertEquals(8, Object.keys(fs.entries).length);
-  assertTrue(!!fs.entries['/file1']);
-
-  // Move /file2 to trash, then delete /.local/share/Trash/files/file2.
-  await trash.removeFileOrDirectory(volumeManager, file2, deletePermanently);
-  const file2Trashed = fs.entries['/.local/share/Trash/files/file2'];
-  assertFalse(!!trash.shouldMoveToTrash(volumeManager, file2Trashed));
-  await trash.removeFileOrDirectory(
-      volumeManager, file2Trashed, deletePermanently);
-  assertEquals(8, Object.keys(fs.entries).length);
-
-  // Delete /.local/share/Trash.
-  const crostiniTrash = fs.entries['/.local/share/Trash'];
-  assertFalse(!!trash.shouldMoveToTrash(volumeManager, crostiniTrash));
-  await trash.removeFileOrDirectory(
-      volumeManager, crostiniTrash, deletePermanently);
-  assertEquals(4, Object.keys(fs.entries).length);
-
   done();
 }
 

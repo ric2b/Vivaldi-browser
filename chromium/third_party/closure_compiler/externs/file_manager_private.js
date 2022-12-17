@@ -1,8 +1,11 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/** @fileoverview Externs generated from namespace: fileManagerPrivate */
+/**
+ * @fileoverview Externs generated from namespace: fileManagerPrivate
+ * @externs
+ */
 
 /** @const */
 chrome.fileManagerPrivate = {};
@@ -56,6 +59,7 @@ chrome.fileManagerPrivate.DriveOfflineReason = {
 chrome.fileManagerPrivate.MountCondition = {
   UNKNOWN: 'unknown',
   UNSUPPORTED: 'unsupported',
+  IN_PROGRESS: 'in_progress',
 };
 
 /** @enum {string} */
@@ -92,6 +96,7 @@ chrome.fileManagerPrivate.MountCompletedStatus = {
   ERROR_NEED_PASSWORD: 'error_need_password',
   ERROR_IN_PROGRESS: 'error_in_progress',
   ERROR_CANCELLED: 'error_cancelled',
+  ERROR_BUSY: 'error_busy',
 };
 
 /** @enum {string} */
@@ -243,6 +248,7 @@ chrome.fileManagerPrivate.EntryPropertyName = {
   IS_MACHINE_ROOT: 'isMachineRoot',
   IS_EXTERNAL_MEDIA: 'isExternalMedia',
   IS_ARBITRARY_SYNC_FOLDER: 'isArbitrarySyncFolder',
+  SYNC_STATUS: 'syncStatus',
 };
 
 /** @enum {string} */
@@ -309,6 +315,7 @@ chrome.fileManagerPrivate.SharesheetLaunchSource = {
 /** @enum {string} */
 chrome.fileManagerPrivate.IOTaskState = {
   QUEUED: 'queued',
+  SCANNING: 'scanning',
   IN_PROGRESS: 'in_progress',
   SUCCESS: 'success',
   ERROR: 'error',
@@ -324,6 +331,7 @@ chrome.fileManagerPrivate.IOTaskType = {
   EXTRACT: 'extract',
   MOVE: 'move',
   RESTORE: 'restore',
+  RESTORE_TO_DESTINATION: 'restore_to_destination',
   TRASH: 'trash',
   ZIP: 'zip',
 };
@@ -353,6 +361,12 @@ chrome.fileManagerPrivate.UserType = {
   ORGANIZATION: 'kOrganization'
 };
 
+/** @enum {string} */
+chrome.fileManagerPrivate.PolicyDefaultHandlerStatus = {
+  DEFAULT_HANDLER_ASSIGNED_BY_POLICY: 'default_handler_assigned_by_policy',
+  INCORRECT_ASSIGNMENT: 'incorrect_assignment',
+};
+
 /**
  * @typedef {{
  *   appId: string,
@@ -373,6 +387,15 @@ chrome.fileManagerPrivate.FileTaskDescriptor;
  * }}
  */
 chrome.fileManagerPrivate.FileTask;
+
+/**
+ * @typedef {{
+ *   tasks: !Array<!chrome.fileManagerPrivate.FileTask>,
+ *   policyDefaultHandlerStatus:
+ * (!chrome.fileManagerPrivate.PolicyDefaultHandlerStatus|undefined)
+ * }}
+ */
+chrome.fileManagerPrivate.ResultingTasks;
 
 /**
  * @typedef {{
@@ -492,6 +515,7 @@ chrome.fileManagerPrivate.MountCompletedEvent;
  *   processed: number,
  *   total: number,
  *   numTotalJobs: number,
+ *   showNotification: boolean,
  *   hideWhenZeroJobs: boolean
  * }}
  */
@@ -500,7 +524,8 @@ chrome.fileManagerPrivate.FileTransferStatus;
 /**
  * @typedef {{
  *   type: !chrome.fileManagerPrivate.DriveSyncErrorType,
- *   fileUrl: string
+ *   fileUrl: string,
+ *   showNotification: boolean
  * }}
  */
 chrome.fileManagerPrivate.DriveSyncErrorEvent;
@@ -550,7 +575,8 @@ chrome.fileManagerPrivate.FileWatchEvent;
  *   timezone: string,
  *   arcEnabled: boolean,
  *   arcRemovableMediaAccessEnabled: boolean,
- *   folderShortcuts: !Array<string>
+ *   folderShortcuts: !Array<string>,
+ *   trashEnabled: boolean
  * }}
  */
 chrome.fileManagerPrivate.Preferences;
@@ -726,6 +752,7 @@ chrome.fileManagerPrivate.GetVolumeRootOptions;
  * @typedef {{
  *   destinationFolder: (DirectoryEntry|undefined),
  *   password: (string|undefined),
+ *   showNotification: (boolean|undefined),
  * }}
  */
 chrome.fileManagerPrivate.IOTaskParams;
@@ -742,6 +769,7 @@ chrome.fileManagerPrivate.IOTaskParams;
  *   totalBytes: number,
  *   taskId: number,
  *   remainingSeconds: number,
+ *   showNotification: boolean,
  *   errorName: string,
  *   outputs: (Array<Entry>|undefined),
  * }}
@@ -758,8 +786,17 @@ chrome.fileManagerPrivate.DlpMetadata;
 
 /** @enum {string} */
 chrome.fileManagerPrivate.DlpLevel = {
+  REPORT: 'report',
+  WARN: 'warn',
   BLOCK: 'block',
   ALLOW: 'allow',
+};
+
+/** @enum {string} */
+chrome.fileManagerPrivate.SyncStatus = {
+  NOT_FOUND: 'not_found',
+  IN_PROGRESS: 'in_progress',
+  ERROR: 'error'
 };
 
 /**
@@ -770,6 +807,14 @@ chrome.fileManagerPrivate.DlpLevel = {
  * }}
  */
 chrome.fileManagerPrivate.DlpRestrictionDetails;
+
+/**
+ * @typedef {{
+ *   url:  (string|undefined),
+ *   component: (!chrome.fileManagerPrivate.VolumeType|undefined),
+ * }}
+ */
+chrome.fileManagerPrivate.DialogCallerInformation;
 
 /**
  * @typedef {{
@@ -1015,6 +1060,25 @@ chrome.fileManagerPrivate.getDlpMetadata = function(entries, callback) {};
  */
 chrome.fileManagerPrivate.getDlpRestrictionDetails = function(
     sourceUrl, callback) {};
+
+/**
+ * Retrieves the list of components to which the transfer of an Entry is blocked
+ * by Data Leak Prevention (DLP) policy.
+ * @param {string} sourceUrl Source URL of the Entry that should be checked.
+ * @param {function(!Array<chrome.fileManagerPrivate.VolumeType>)}
+ * callback Callback with the list of components (subset of VolumeType) to which
+ * transferring an Entry is blocked by DLP.
+ */
+chrome.fileManagerPrivate.getDlpBlockedComponents = function(
+    sourceUrl, callback) {};
+
+/**
+ * Retrieves the caller that created the dialog (Save As/File Picker).
+ * @param {function(!chrome.fileManagerPrivate.DialogCallerInformation)}
+ * callback Callback with either a URL or component (subset of VolumeType) of
+ * the caller.
+ */
+chrome.fileManagerPrivate.getDialogCaller = function(callback) {};
 
 /**
  * Starts to copy an entry. If the source is a directory, the copy is done
@@ -1532,13 +1596,6 @@ chrome.fileManagerPrivate.pollDriveHostedFilePinStates = function() {};
  * Opens the page to manage currently syncing folders.
  */
 chrome.fileManagerPrivate.openManageSyncSettings = function() {};
-
-/**
- * Returns color via `callback` for Files app foreground window frame.
- * @param {function(string): void} callback |color| String containing the color
- *     of the title bar.
- */
-chrome.fileManagerPrivate.getFrameColor = function(callback) {};
 
 /**
  * Parses the supplied .trashinfo files and returns the successfully parsed

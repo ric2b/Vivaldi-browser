@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,11 +17,15 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser_command_controller.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/lens/lens_entrypoints.h"
 #include "components/lens/lens_features.h"
+#include "components/lens/lens_rendering_environment.h"
+#include "components/lens/lens_url_utils.h"
+#include "components/search/search.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -61,10 +65,10 @@ using content::WebContents;
 
 namespace {
 
-const int kImageSearchThumbnailMinSize = 300 * 300;
-const int kImageSearchThumbnailMaxWidth = 600;
-const int kImageSearchThumbnailMaxHeight = 600;
-
+constexpr int kImageSearchThumbnailMinSize = 300 * 300;
+constexpr int kImageSearchThumbnailMaxWidth = 600;
+constexpr int kImageSearchThumbnailMaxHeight = 600;
+constexpr char kUnifiedSidePanelVersion[] = "1";
 }  // namespace
 
 CoreTabHelper::CoreTabHelper(WebContents* web_contents)
@@ -94,57 +98,92 @@ void CoreTabHelper::UpdateContentRestrictions(int content_restrictions) {
 #endif
 }
 
-void CoreTabHelper::SearchWithLensInNewTab(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& src_url,
-    lens::EntryPoint entry_point,
-    bool use_side_panel) {
-  SearchByImageInNewTabImpl(
-      render_frame_host, src_url, kImageSearchThumbnailMinSize,
-      lens::features::GetMaxPixelsForImageSearch(),
-      lens::features::GetMaxPixelsForImageSearch(),
-      lens::GetQueryParametersForLensRequest(entry_point, use_side_panel),
-      use_side_panel);
+void CoreTabHelper::SearchWithLens(content::RenderFrameHost* render_frame_host,
+                                   const GURL& src_url,
+                                   lens::EntryPoint entry_point,
+                                   bool is_side_panel_enabled_for_feature) {
+  bool use_side_panel =
+      is_side_panel_enabled_for_feature && IsSidePanelEnabled();
+
+  SearchByImageImpl(render_frame_host, src_url, kImageSearchThumbnailMinSize,
+                    lens::features::GetMaxPixelsForImageSearch(),
+                    lens::features::GetMaxPixelsForImageSearch(),
+                    lens::GetQueryParametersForLensRequest(
+                        entry_point, use_side_panel,
+                        /** is_full_screen_region_search_request **/ false),
+                    use_side_panel);
 }
 
-void CoreTabHelper::SearchWithLensInNewTab(gfx::Image image,
-                                           const gfx::Size& image_original_size,
-                                           lens::EntryPoint entry_point,
-                                           bool use_side_panel) {
-  SearchByImageInNewTabImpl(
-      image, image_original_size,
-      lens::GetQueryParametersForLensRequest(entry_point, use_side_panel),
-      use_side_panel);
+TemplateURLService* CoreTabHelper::GetTemplateURLService() {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  DCHECK(profile);
+  TemplateURLService* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(profile);
+  DCHECK(template_url_service);
+  return template_url_service;
 }
 
-void CoreTabHelper::SearchByImageInNewTab(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& src_url) {
-  SearchByImageInNewTabImpl(
-      render_frame_host, src_url, kImageSearchThumbnailMinSize,
-      kImageSearchThumbnailMaxWidth, kImageSearchThumbnailMaxHeight,
-      std::string(), /*use_side_panel=*/false);
+bool CoreTabHelper::IsInProgressiveWebApp() {
+#if !BUILDFLAG(IS_ANDROID)
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  return browser && (browser->is_type_app() || browser->is_type_app_popup());
+#else
+  return false;
+#endif  // !BUILDFLAG(IS_ANDROID)
 }
 
-void CoreTabHelper::SearchByImageInNewTab(
-    const gfx::Image& image,
-    const gfx::Size& image_original_size) {
-  SearchByImageInNewTabImpl(image, image_original_size,
-                            /*additional_query_params=*/std::string(),
-                            /*use_side_panel=*/false);
+bool CoreTabHelper::IsSidePanelEnabled() {
+  return GetTemplateURLService()
+             ->IsSideImageSearchSupportedForDefaultSearchProvider() &&
+         !IsInProgressiveWebApp();
 }
 
-void CoreTabHelper::SearchByImageInNewTabImpl(
+bool CoreTabHelper::IsSidePanelEnabledFor3PDse() {
+  return IsSidePanelEnabled() &&
+         base::FeatureList::IsEnabled(features::kUnifiedSidePanel) &&
+         lens::features::GetEnableImageSearchUnifiedSidePanelFor3PDse();
+}
+
+void CoreTabHelper::SearchWithLens(gfx::Image image,
+                                   const gfx::Size& image_original_size,
+                                   lens::EntryPoint entry_point,
+                                   bool is_region_search_request,
+                                   bool is_side_panel_enabled_for_feature) {
+  bool use_side_panel =
+      is_side_panel_enabled_for_feature && IsSidePanelEnabled();
+  bool is_full_screen_region_search_request =
+      is_region_search_request &&
+      lens::features::IsLensFullscreenSearchEnabled();
+  auto lens_query_params = lens::GetQueryParametersForLensRequest(
+      entry_point, use_side_panel,
+      /* is_full_screen_region_search_request= */
+      is_full_screen_region_search_request);
+  SearchByImageImpl(image, image_original_size, lens_query_params,
+                    use_side_panel);
+}
+
+void CoreTabHelper::SearchByImage(content::RenderFrameHost* render_frame_host,
+                                  const GURL& src_url) {
+  SearchByImageImpl(render_frame_host, src_url, kImageSearchThumbnailMinSize,
+                    kImageSearchThumbnailMaxWidth,
+                    kImageSearchThumbnailMaxHeight, std::string(),
+                    IsSidePanelEnabledFor3PDse());
+}
+
+void CoreTabHelper::SearchByImage(const gfx::Image& image,
+                                  const gfx::Size& image_original_size) {
+  SearchByImageImpl(image, image_original_size,
+                    /*additional_query_params=*/std::string(),
+                    IsSidePanelEnabledFor3PDse());
+}
+
+void CoreTabHelper::SearchByImageImpl(
     const gfx::Image& image,
     const gfx::Size& image_original_size,
     const std::string& additional_query_params,
     bool use_side_panel) {
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-
-  TemplateURLService* template_url_service =
-      TemplateURLServiceFactory::GetForProfile(profile);
-  DCHECK(template_url_service);
+  TemplateURLService* template_url_service = GetTemplateURLService();
   const TemplateURL* const default_provider =
       template_url_service->GetDefaultSearchProvider();
   DCHECK(default_provider);
@@ -166,10 +205,15 @@ void CoreTabHelper::SearchByImageInNewTabImpl(
   TemplateURLRef::PostContent post_content;
   GURL search_url(default_provider->image_url_ref().ReplaceSearchTerms(
       search_args, template_url_service->search_terms_data(), &post_content));
+  if (use_side_panel) {
+    search_url = template_url_service
+                     ->GenerateSideImageSearchURLForDefaultSearchProvider(
+                         search_url, kUnifiedSidePanelVersion);
+  }
   PostContentToURL(post_content, search_url, use_side_panel);
 }
 
-void CoreTabHelper::SearchByImageInNewTabImpl(
+void CoreTabHelper::SearchByImageImpl(
     content::RenderFrameHost* render_frame_host,
     const GURL& src_url,
     int thumbnail_min_size,
@@ -187,7 +231,7 @@ void CoreTabHelper::SearchByImageInNewTabImpl(
       thumbnail_min_size, gfx::Size(thumbnail_max_width, thumbnail_max_height),
       lens::features::GetSendImagesAsPng() ? chrome::mojom::ImageFormat::PNG
                                            : chrome::mojom::ImageFormat::JPEG,
-      base::BindOnce(&CoreTabHelper::DoSearchByImageInNewTab,
+      base::BindOnce(&CoreTabHelper::DoSearchByImage,
                      weak_factory_.GetWeakPtr(), std::move(chrome_render_frame),
                      src_url, additional_query_params, use_side_panel));
 }
@@ -354,7 +398,7 @@ void CoreTabHelper::OnWebContentsLostFocus(
 
 // Handles the image thumbnail for the context node, composes a image search
 // request based on the received thumbnail and opens the request in a new tab.
-void CoreTabHelper::DoSearchByImageInNewTab(
+void CoreTabHelper::DoSearchByImage(
     mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame>
         chrome_render_frame,
     const GURL& src_url,
@@ -362,16 +406,12 @@ void CoreTabHelper::DoSearchByImageInNewTab(
     bool use_side_panel,
     const std::vector<uint8_t>& thumbnail_data,
     const gfx::Size& original_size,
-    const std::string& image_extension) {
+    const std::string& image_extension,
+    const std::vector<lens::mojom::LatencyLogPtr> log_data) {
   if (thumbnail_data.empty())
     return;
 
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-
-  TemplateURLService* template_url_service =
-      TemplateURLServiceFactory::GetForProfile(profile);
-  DCHECK(template_url_service);
+  TemplateURLService* template_url_service = GetTemplateURLService();
   const TemplateURL* const default_provider =
 #if BUILDFLAG(IS_ANDROID)
       template_url_service->GetDefaultSearchProvider();
@@ -380,16 +420,28 @@ void CoreTabHelper::DoSearchByImageInNewTab(
 #endif
   DCHECK(default_provider);
 
+  std::string additional_query_params_modified = additional_query_params;
+  if (lens::features::GetEnableLatencyLogging() &&
+      search::DefaultSearchProviderIsGoogle(template_url_service)) {
+    lens::AppendLogsQueryParam(&additional_query_params_modified,
+                               std::move(log_data));
+  }
+
   TemplateURLRef::SearchTermsArgs search_args =
       TemplateURLRef::SearchTermsArgs(std::u16string());
   search_args.image_thumbnail_content.assign(thumbnail_data.begin(),
                                              thumbnail_data.end());
   search_args.image_url = src_url;
   search_args.image_original_size = original_size;
-  search_args.additional_query_params = additional_query_params;
+  search_args.additional_query_params = additional_query_params_modified;
   TemplateURLRef::PostContent post_content;
   GURL search_url(default_provider->image_url_ref().ReplaceSearchTerms(
       search_args, template_url_service->search_terms_data(), &post_content));
+  if (use_side_panel) {
+    search_url = template_url_service
+                     ->GenerateSideImageSearchURLForDefaultSearchProvider(
+                         search_url, kUnifiedSidePanelVersion);
+  }
   PostContentToURL(post_content, search_url, use_side_panel);
 }
 

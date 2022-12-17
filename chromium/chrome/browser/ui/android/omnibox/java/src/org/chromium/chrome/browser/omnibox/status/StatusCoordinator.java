@@ -1,9 +1,10 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.omnibox.status;
 
+import android.animation.Animator;
 import android.content.res.Resources;
 import android.view.View;
 
@@ -28,10 +29,13 @@ import org.chromium.components.permissions.PermissionDialogController;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.modelutil.PropertyModelAnimatorFactory;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
-import org.chromium.build.BuildConfig;
+import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 
 /**
@@ -128,12 +132,11 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
         mMediator.setStatusClickListener(this);
         mMediator.updateStatusVisibility();
         mMediator.setStoreIconController();
-        mMediator.readFeatureListParams();
 
         if (BuildConfig.IS_VIVALDI) {
             SearchEngineIconHandler.get().initialize();
             mMediator.getTemplateUrlServiceObserverHelper().onNativeInitialized();
-            setShowIconsWhenUrlFocused(true);
+            mMediator.setShowIconsWhenUrlFocused(true);
         }
     }
 
@@ -214,6 +217,11 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
         return mStatusView.isSearchEngineStatusIconVisible();
     }
 
+    /** Returns {@code true} if the search engine icon is  currently being displayed. */
+    public boolean shouldDisplaySearchEngineIcon() {
+        return mMediator.shouldDisplaySearchEngineIcon();
+    }
+
     /** Returns the ID of the drawable currently shown in the security icon. */
     @DrawableRes
     public int getSecurityIconResourceIdForTesting() {
@@ -271,11 +279,6 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
         mMediator.setAnimationsEnabled(shouldAnimate);
     }
 
-    /** Specify whether URL should present icons when focused. */
-    public void setShowIconsWhenUrlFocused(boolean showIconsWithUrlFocused) {
-        mMediator.setShowIconsWhenUrlFocused(showIconsWithUrlFocused);
-    }
-
     /** Returns width of the status icon including start/end margins. */
     public int getStatusIconWidth() {
         // TODO(crbug.com/1109369): try to hide this method
@@ -288,11 +291,6 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
         return mStatusView.getMeasuredWidth();
     }
 
-    /** Returns the increase in StatusView end padding, when the Url bar is focused. */
-    public int getEndPaddingPixelSizeOnFocusDelta() {
-        return mMediator.getEndPaddingPixelSizeOnFocusDelta();
-    }
-
     /**
      * Notifies StatusCoordinator that the default match for the currently entered autocomplete text
      * has been classified, indicating whether the default match is a search.
@@ -301,13 +299,6 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
      */
     public void onDefaultMatchClassified(boolean defaultMatchIsSearch) {
         mMediator.updateLocationBarIconForDefaultMatchCategory(defaultMatchIsSearch);
-    }
-
-    /** Returns the additional end margin for the url container. */
-    public int getAdditionalUrlContainerMarginEnd() {
-        return mMediator.shouldDisplaySearchEngineIcon() && isSearchEngineStatusIconVisible()
-                ? getEndPaddingPixelSizeOnFocusDelta()
-                : 0;
     }
 
     public void destroy() {
@@ -319,5 +310,22 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
     /** Returns whether the status view is currently in the process of animating a change. */
     public boolean isStatusIconAnimating() {
         return mStatusView.isStatusIconAnimating();
+    }
+
+    /**
+     * Populates an animation that fades =/unfades the entire StatusView container with the given
+     * start delay and duration, adding it to the given list of animators.
+     */
+    public void populateFadeAnimation(
+            List<Animator> animators, long startDelayMs, long durationMs, float targetAlpha) {
+        // Vivaldi: This animation is bogus, don't use it.
+        if (BuildConfig.IS_VIVALDI) return;
+        if (mLocationBarDataProvider.isIncognito()) {
+            Animator animator = PropertyModelAnimatorFactory
+                                        .ofFloat(mModel, StatusProperties.ALPHA, targetAlpha)
+                                        .setDuration(durationMs);
+            animator.setStartDelay(startDelayMs);
+            animators.add(animator);
+        }
     }
 }

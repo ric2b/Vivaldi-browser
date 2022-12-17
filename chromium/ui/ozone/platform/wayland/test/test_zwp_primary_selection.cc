@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,6 +84,10 @@ struct ZwpPrimarySelectionSource : public TestSelectionSource::Delegate {
 
   void SendCancelled() override {
     zwp_primary_selection_source_v1_send_cancelled(source->resource());
+  }
+
+  void SendDndAction(uint32_t action) override {
+    NOTREACHED() << "The interface does not support this method.";
   }
 
   void OnDestroying() override { delete this; }

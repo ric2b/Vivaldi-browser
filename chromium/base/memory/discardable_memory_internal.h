@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,7 @@ enum DiscardableMemoryTrialGroup : int {
 
 namespace features {
 // Feature flag enabling the discardable memory backing trial.
-BASE_EXPORT extern const base::Feature kDiscardableMemoryBackingTrial;
+BASE_EXPORT BASE_DECLARE_FEATURE(kDiscardableMemoryBackingTrial);
 
 BASE_EXPORT extern const base::FeatureParam<DiscardableMemoryTrialGroup>::Option
     kDiscardableMemoryBackingParamOptions[];

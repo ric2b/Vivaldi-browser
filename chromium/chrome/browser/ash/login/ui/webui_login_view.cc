@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -380,12 +380,7 @@ void WebUILoginView::OnFocusLeavingSystemTray(bool reverse) {
   AboutToRequestFocusFromTabTraversal(reverse);
 }
 
-void WebUILoginView::OnSystemTrayBubbleShown() {
-  if (!GetOobeUI())
-    return;
-
-  GetOobeUI()->OnSystemTrayBubbleShown();
-}
+void WebUILoginView::OnSystemTrayBubbleShown() {}
 
 void WebUILoginView::OnLoginPromptVisible() {
   if (!observing_system_tray_focus_ && LoginScreenClientImpl::HasInstance()) {

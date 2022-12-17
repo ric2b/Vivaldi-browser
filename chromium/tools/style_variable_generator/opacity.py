@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -32,6 +32,10 @@ class Opacity:
         self.a = float(value)
         if not (0 <= self.a <= 1):
             raise ValueError('Alpha expected to be between 0 and 1')
+
+    def GetReadableStr(self):
+        return 'var(--%s)' % self.var if self.var else '%g%%' % (
+            float(self.a) * 100)
 
     def __repr__(self):
         return 'var(--%s)' % self.var if self.var else '%g' % self.a

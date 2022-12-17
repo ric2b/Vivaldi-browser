@@ -42,6 +42,15 @@ config("features") {
   if (is_vivaldi_renault) {
     defines += [ "OEM_RENAULT_BUILD" ]
   }
+  if (is_vivaldi_lynkco) {
+    defines += [ "OEM_LYNKCO_BUILD" ]
+  }
+  if (is_vivaldi_mercedes) {
+    defines += [ "OEM_MERCEDES_BUILD" ]
+  }
+  if (is_vivaldi_preloaded) {
+    defines += [ "OEM_PRELOADED_BUILD" ]
+  }
 }
 
 config("linux_386_linking") {

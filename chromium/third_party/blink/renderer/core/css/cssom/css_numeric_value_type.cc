@@ -1,10 +1,12 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/css/cssom/css_numeric_value_type.h"
 
-#include <algorithm>
+#include <functional>
+
+#include "base/ranges/algorithm.h"
 
 namespace blink {
 
@@ -60,6 +62,7 @@ CSSNumericValueType::BaseType UnitTypeToBaseType(
     case UnitType::kRems:
     case UnitType::kChs:
     case UnitType::kIcs:
+    case UnitType::kLhs:
       return BaseType::kLength;
     case UnitType::kMilliseconds:
     case UnitType::kSeconds:
@@ -127,8 +130,8 @@ CSSNumericValueType::CSSNumericValueType(int exponent,
 
 CSSNumericValueType CSSNumericValueType::NegateExponents(
     CSSNumericValueType type) {
-  std::for_each(type.exponents_.begin(), type.exponents_.end(),
-                [](int& v) { v *= -1; });
+  base::ranges::transform(type.exponents_, type.exponents_.begin(),
+                          std::negate());
   return type;
 }
 

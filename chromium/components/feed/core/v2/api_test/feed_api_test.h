@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -178,6 +178,10 @@ class TestForYouSurface : public TestSurfaceBase {
 class TestWebFeedSurface : public TestSurfaceBase {
  public:
   explicit TestWebFeedSurface(FeedStream* stream = nullptr);
+};
+class TestChannelSurface : public TestSurfaceBase {
+ public:
+  explicit TestChannelSurface(FeedStream* stream = nullptr, std::string = "");
 };
 
 class TestImageFetcher : public ImageFetcher {

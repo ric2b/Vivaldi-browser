@@ -1,10 +1,10 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/paint/svg_shape_painter.h"
 
-#include "base/stl_util.h"
+#include "base/types/optional_util.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_marker.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_shape.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
@@ -109,7 +109,7 @@ void SVGShapePainter::Paint(const PaintInfo& paint_info) {
                            paint_info.context,
                            paint_info.IsRenderingClipPathAsMaskImage(), style,
                            kApplyToStrokeMode, stroke_flags,
-                           base::OptionalOrNullptr(non_scaling_transform))) {
+                           base::OptionalToPtr(non_scaling_transform))) {
                 break;
               }
               stroke_flags.setAntiAlias(should_anti_alias);
@@ -138,6 +138,8 @@ void SVGShapePainter::Paint(const PaintInfo& paint_info) {
 }
 
 class PathWithTemporaryWindingRule {
+  STACK_ALLOCATED();
+
  public:
   PathWithTemporaryWindingRule(Path& path, SkPathFillType fill_type)
       : path_(const_cast<SkPath&>(path.GetSkPath())) {
@@ -211,7 +213,7 @@ void SVGShapePainter::StrokeShape(GraphicsContext& context,
 void SVGShapePainter::PaintMarkers(const PaintInfo& paint_info) {
   const Vector<MarkerPosition>* marker_positions =
       layout_svg_shape_.MarkerPositions();
-  if (!marker_positions || marker_positions->IsEmpty())
+  if (!marker_positions || marker_positions->empty())
     return;
   SVGResourceClient* client = SVGResources::GetClient(layout_svg_shape_);
   const ComputedStyle& style = layout_svg_shape_.StyleRef();

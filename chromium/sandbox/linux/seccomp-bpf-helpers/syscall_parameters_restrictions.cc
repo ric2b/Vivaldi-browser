@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -464,6 +464,13 @@ ResultExpr RestrictPtrace() {
 ResultExpr RestrictPkeyAllocFlags() {
   const Arg<int> flags(0);
   return If(flags == 0, Allow()).Else(CrashSIGSYS());
+}
+
+ResultExpr RestrictGoogle3Threading(int sysno) {
+  DCHECK(sysno == __NR_getitimer || sysno == __NR_setitimer);
+
+  const Arg<int> which(0);
+  return If(which == ITIMER_PROF, Allow()).Else(Error(EPERM));
 }
 
 }  // namespace sandbox.

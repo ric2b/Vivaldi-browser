@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,12 +10,14 @@
 #include "base/run_loop.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
+#include "chrome/common/chrome_features.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
 namespace crosapi {
 
 AshRequiresLacrosBrowserTestBase::AshRequiresLacrosBrowserTestBase() {
-  scoped_feature_list_.InitAndEnableFeature(chromeos::features::kLacrosSupport);
+  scoped_feature_list_.InitWithFeatures(
+      {chromeos::features::kLacrosSupport, features::kWebAppsCrosapi}, {});
 }
 
 AshRequiresLacrosBrowserTestBase::~AshRequiresLacrosBrowserTestBase() = default;

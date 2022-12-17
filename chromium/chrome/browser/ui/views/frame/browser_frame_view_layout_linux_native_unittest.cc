@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,12 +7,16 @@
 
 #include <memory>
 
+#include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/test/views/chrome_views_test_base.h"
+#include "ui/base/models/image_model.h"
 #include "ui/linux/nav_button_provider.h"
 #include "ui/linux/window_frame_provider.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/test/views_test_utils.h"
 
 namespace {
 
@@ -76,6 +80,9 @@ class TestLayoutDelegate : public OpaqueBrowserFrameViewLayoutDelegate {
       const gfx::Rect& bounding_rect) const override {}
   bool IsTranslucentWindowOpacitySupported() const override { return true; }
   bool ShouldDrawRestoredFrameShadow() const override { return true; }
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+  ui::WindowTiledEdges GetTiledEdges() const override { return {}; }
+#endif
 };
 
 class TestNavButtonProvider : public ui::NavButtonProvider {
@@ -138,7 +145,8 @@ class TestFrameProvider : public ui::WindowFrameProvider {
   void PaintWindowFrame(gfx::Canvas* canvas,
                         const gfx::Rect& rect,
                         int top_area_height,
-                        bool focused) override {}
+                        bool focused,
+                        ui::WindowTiledEdges tiled_edges) override {}
 };
 
 }  // namespace
@@ -213,10 +221,10 @@ class BrowserFrameViewLayoutLinuxNativeTest : public ChromeViewsTestBase {
 
     for (const auto& button : kButtons) {
       for (const auto& state : kStates) {
-        button.button->SetImage(
+        button.button->SetImageModel(
             state.button_state,
-            nav_button_provider_->GetImage(button.type,
-                                           state.nav_button_provider_state));
+            ui::ImageModel::FromImageSkia(nav_button_provider_->GetImage(
+                button.type, state.nav_button_provider_state)));
       }
     }
   }
@@ -250,7 +258,7 @@ TEST_F(BrowserFrameViewLayoutLinuxNativeTest, NativeNavButtons) {
   layout_manager_->SetButtonOrdering(leading_buttons, trailing_buttons);
   ResetNativeNavButtonImagesFromButtonProvider();
 
-  RunScheduledLayout(root_view_);
+  views::test::RunScheduledLayout(root_view_);
 
   const int frame_top_thickness = FrameInsets().top();
 

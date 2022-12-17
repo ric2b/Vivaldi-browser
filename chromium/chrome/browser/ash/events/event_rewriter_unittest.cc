@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1294,6 +1294,57 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapBackspaceToEscape) {
   });
 }
 
+TEST_F(EventRewriterTest,
+       TestRewriteNonModifierToModifierWithRemapBetweenKeyEvents) {
+  // Remap Escape to Alt.
+  Preferences::RegisterProfilePrefs(prefs()->registry());
+  IntegerPrefMember escape;
+  InitModifierKeyPref(&escape, ::prefs::kLanguageRemapEscapeKeyTo,
+                      ui::chromeos::ModifierKey::kAltKey);
+
+  SetupKeyboard("Internal Keyboard");
+
+  // Press Escape.
+  EXPECT_EQ(
+      GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_MENU,
+                                ui::DomCode::ALT_LEFT, ui::EF_ALT_DOWN,
+                                ui::DomKey::ALT, kNoScanCode),
+      GetRewrittenEventAsString(rewriter(), ui::ET_KEY_PRESSED, ui::VKEY_ESCAPE,
+                                ui::DomCode::ESCAPE, ui::EF_NONE,
+                                ui::DomKey::ESCAPE, kNoScanCode));
+
+  // Remap Escape to Control before releasing Escape.
+  InitModifierKeyPref(&escape, ::prefs::kLanguageRemapEscapeKeyTo,
+                      ui::chromeos::ModifierKey::kControlKey);
+
+  // Release Escape.
+  EXPECT_EQ(
+      GetExpectedResultAsString(ui::ET_KEY_RELEASED, ui::VKEY_ESCAPE,
+                                ui::DomCode::ESCAPE, ui::EF_NONE,
+                                ui::DomKey::ESCAPE, kNoScanCode),
+      GetRewrittenEventAsString(rewriter(), ui::ET_KEY_RELEASED,
+                                ui::VKEY_ESCAPE, ui::DomCode::ESCAPE,
+                                ui::EF_NONE, ui::DomKey::ESCAPE, kNoScanCode));
+
+  // Press A, expect that Alt is not stickied.
+  EXPECT_EQ(
+      GetExpectedResultAsString(
+          ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::US_A, ui::EF_NONE,
+          ui::DomKey::Constant<'a'>::Character, kNoScanCode),
+      GetRewrittenEventAsString(
+          rewriter(), ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::US_A,
+          ui::EF_NONE, ui::DomKey::Constant<'a'>::Character, kNoScanCode));
+
+  // Release A.
+  EXPECT_EQ(
+      GetExpectedResultAsString(
+          ui::ET_KEY_RELEASED, ui::VKEY_A, ui::DomCode::US_A, ui::EF_NONE,
+          ui::DomKey::Constant<'a'>::Character, kNoScanCode),
+      GetRewrittenEventAsString(
+          rewriter(), ui::ET_KEY_RELEASED, ui::VKEY_A, ui::DomCode::US_A,
+          ui::EF_NONE, ui::DomKey::Constant<'a'>::Character, kNoScanCode));
+}
+
 TEST_F(EventRewriterTest, TestRewriteModifiersRemapToCapsLock) {
   // Remap Search to Caps Lock.
   Preferences::RegisterProfilePrefs(prefs()->registry());
@@ -2110,72 +2161,52 @@ TEST_F(EventRewriterTest, TestRewriteSearchNumberToFunctionKeyNoAction) {
        {ui::VKEY_1, ui::DomCode::DIGIT1, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'1'>::Character},
        {ui::VKEY_1, ui::DomCode::DIGIT1, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'1'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'1'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_2, ui::DomCode::DIGIT2, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'2'>::Character},
        {ui::VKEY_2, ui::DomCode::DIGIT2, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'2'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'2'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_3, ui::DomCode::DIGIT3, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'3'>::Character},
        {ui::VKEY_3, ui::DomCode::DIGIT3, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'3'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'3'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_4, ui::DomCode::DIGIT4, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'4'>::Character},
        {ui::VKEY_4, ui::DomCode::DIGIT4, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'4'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'4'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_5, ui::DomCode::DIGIT5, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'5'>::Character},
        {ui::VKEY_5, ui::DomCode::DIGIT5, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'5'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'5'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_6, ui::DomCode::DIGIT6, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'6'>::Character},
        {ui::VKEY_6, ui::DomCode::DIGIT6, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'6'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'6'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_7, ui::DomCode::DIGIT7, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'7'>::Character},
        {ui::VKEY_7, ui::DomCode::DIGIT7, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'7'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'7'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_8, ui::DomCode::DIGIT8, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'8'>::Character},
        {ui::VKEY_8, ui::DomCode::DIGIT8, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'8'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'8'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_9, ui::DomCode::DIGIT9, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'9'>::Character},
        {ui::VKEY_9, ui::DomCode::DIGIT9, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'9'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'9'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_0, ui::DomCode::DIGIT0, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'0'>::Character},
        {ui::VKEY_0, ui::DomCode::DIGIT0, ui::EF_COMMAND_DOWN,
-        ui::DomKey::Constant<'0'>::Character},
-       kKeyboardDeviceId,
-       /*triggers_notification=*/true},
+        ui::DomKey::Constant<'0'>::Character}},
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_OEM_MINUS, ui::DomCode::MINUS, ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'-'>::Character},
@@ -4503,7 +4534,7 @@ TEST_F(EventRewriterAshTest, ScrollEventDispatchImpl) {
 
 class StickyKeysOverlayTest : public EventRewriterAshTest {
  public:
-  StickyKeysOverlayTest() : overlay_(NULL) {}
+  StickyKeysOverlayTest() : overlay_(nullptr) {}
 
   ~StickyKeysOverlayTest() override {}
 
@@ -4782,7 +4813,6 @@ class ExtensionRewriterInputTest : public EventRewriterAshTest,
 
   bool IsSearchKeyAcceleratorReserved() const override { return false; }
   bool NotifyDeprecatedRightClickRewrite() override { return false; }
-  bool NotifyDeprecatedFKeyRewrite() override { return false; }
   bool NotifyDeprecatedSixPackKeyRewrite(ui::KeyboardCode key_code) override {
     return false;
   }

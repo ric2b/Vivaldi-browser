@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,11 +75,8 @@ TEST(NetLogUtil, GetNetInfoIncludesFieldTrials) {
       std::make_unique<base::FeatureList>());
 
   // Add and activate a new Field Trial.
-  base::FieldTrial* field_trial = base::FieldTrialList::FactoryGetFieldTrial(
-      "NewFieldTrial", 100, "Default", base::FieldTrial::ONE_TIME_RANDOMIZED,
-      nullptr);
-  field_trial->AppendGroup("Active", 100);
-  EXPECT_EQ(field_trial->group_name(), "Active");
+  base::FieldTrialList::CreateFieldTrial("NewFieldTrial", "Active");
+  EXPECT_EQ(base::FieldTrialList::FindFullName("NewFieldTrial"), "Active");
 
   auto context = CreateTestURLRequestContextBuilder()->Build();
   base::Value net_info(GetNetInfo(context.get()));

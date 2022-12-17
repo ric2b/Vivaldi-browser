@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,8 +34,7 @@ namespace {
 // This is for finch. See also crbug.com/633704 for details.
 // TODO(hidehiko): More comments of the intention how this works, when
 // we unify the commandline flags.
-const base::Feature kEnableArcFeature{"EnableARC",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kEnableArcFeature, "EnableARC", base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Possible values for --arc-availability flag.
 constexpr char kAvailabilityNone[] = "none";

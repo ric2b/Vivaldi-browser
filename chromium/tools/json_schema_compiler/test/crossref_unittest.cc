@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,10 +46,8 @@ TEST(JsonSchemaCompilerCrossrefTest, CrossrefTypePopulateAndToValue) {
   EXPECT_EQ(simple_api::TEST_ENUM_NONE, crossref_type.test_enum_optional_extra);
 
   // Test ToValue of the compiled type --> value.
-  std::unique_ptr<base::DictionaryValue> crossref_value =
-      crossref_type.ToValue();
-  ASSERT_TRUE(crossref_value);
-  EXPECT_EQ(crossref_orig, *crossref_value);
+  base::Value::Dict crossref_value = crossref_type.ToValue();
+  EXPECT_EQ(crossref_orig, crossref_value);
 }
 
 TEST(JsonSchemaCompilerCrossrefTest, TestTypeOptionalParamCreate) {
@@ -58,8 +56,8 @@ TEST(JsonSchemaCompilerCrossrefTest, TestTypeOptionalParamCreate) {
   std::unique_ptr<crossref::TestTypeOptionalParam::Params> params(
       crossref::TestTypeOptionalParam::Params::Create(params_value));
   EXPECT_TRUE(params.get());
-  EXPECT_TRUE(params->test_type.get());
-  EXPECT_EQ(CreateTestTypeValue(), *params->test_type->ToValue());
+  EXPECT_TRUE(params->test_type);
+  EXPECT_EQ(CreateTestTypeValue(), params->test_type->ToValue());
 }
 
 TEST(JsonSchemaCompilerCrossrefTest, TestTypeOptionalParamFail) {
@@ -93,10 +91,9 @@ TEST(JsonSchemaCompilerCrossrefTest, TestTypeInObjectParamsCreate) {
     std::unique_ptr<crossref::TestTypeInObject::Params> params(
         crossref::TestTypeInObject::Params::Create(params_value));
     EXPECT_TRUE(params.get());
-    EXPECT_TRUE(params->param_object.test_type.get());
+    EXPECT_TRUE(params->param_object.test_type);
     EXPECT_TRUE(params->param_object.boolean);
-    EXPECT_EQ(CreateTestTypeValue(),
-              *params->param_object.test_type->ToValue());
+    EXPECT_EQ(CreateTestTypeValue(), params->param_object.test_type->ToValue());
   }
   {
     base::Value::List params_value;
@@ -106,7 +103,7 @@ TEST(JsonSchemaCompilerCrossrefTest, TestTypeInObjectParamsCreate) {
     std::unique_ptr<crossref::TestTypeInObject::Params> params(
         crossref::TestTypeInObject::Params::Create(params_value));
     EXPECT_TRUE(params.get());
-    EXPECT_FALSE(params->param_object.test_type.get());
+    EXPECT_FALSE(params->param_object.test_type);
     EXPECT_TRUE(params->param_object.boolean);
   }
   {

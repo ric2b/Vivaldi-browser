@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,8 @@
 
 #include <memory>
 
-#include "ash/services/nearby/public/mojom/firewall_hole.mojom.h"
 #include "base/memory/weak_ptr.h"
+#include "chromeos/ash/services/nearby/public/mojom/firewall_hole.mojom.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 
 namespace ash {

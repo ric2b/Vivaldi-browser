@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,9 +46,9 @@ class SandboxFeatureTest
   virtual AppContainerType GetExpectedAppContainerType();
   virtual std::vector<base::win::Sid> GetExpectedCapabilities();
 
-  void ValidateSecurityLevels(TargetPolicy* policy);
-  void ValidatePolicyFlagSettings(TargetPolicy* policy);
-  void ValidateAppContainerSettings(TargetPolicy* policy);
+  void ValidateSecurityLevels(TargetConfig* config);
+  void ValidatePolicyFlagSettings(TargetConfig* config);
+  void ValidateAppContainerSettings(TargetConfig* config);
 
   base::test::ScopedFeatureList feature_list_;
 };

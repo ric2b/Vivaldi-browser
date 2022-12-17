@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 #include <Security/Security.h>
 
 #include "base/mac/foundation_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "device/fido/mac/authenticator_config.h"
 #include "device/fido/mac/credential_store.h"
 #include "device/fido/mac/fake_keychain.h"
@@ -21,8 +22,7 @@ using testing::UnorderedElementsAreArray;
 
 static const PublicKeyCredentialUserEntity kUser({1, 2, 3},
                                                  "doe@example.com",
-                                                 "John Doe",
-                                                 absl::nullopt);
+                                                 "John Doe");
 constexpr char kRpId[] = "example.com";
 constexpr char kOtherRpId[] = "foobar.com";
 
@@ -155,6 +155,23 @@ TEST_F(CredentialStoreTest, FindResidentCredentials) {
   found = store_.FindResidentCredentials(kRpId);
   ASSERT_TRUE(found);
   EXPECT_THAT(*found, UnorderedElementsAreArray(credentials));
+}
+
+TEST_F(CredentialStoreTest, UpdateCredentialRecorded) {
+  base::HistogramTester histogram_tester;
+  auto credential = store_.CreateCredential(
+      kRpId, kUser, TouchIdCredentialStore::kNonDiscoverable);
+  ASSERT_TRUE(credential);
+  absl::optional<std::list<Credential>> found =
+      store_.FindResidentCredentials(kRpId);
+  ASSERT_TRUE(found);
+  EXPECT_EQ(found->size(), 0u);
+  ASSERT_TRUE(
+      store_.UpdateCredential(credential->first.credential_id, "new-username"));
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.TouchIdCredentialStore.UpdateCredential",
+      TouchIdCredentialStoreUpdateCredentialStatus::kUpdateCredentialSuccess,
+      1);
 }
 
 }  // namespace

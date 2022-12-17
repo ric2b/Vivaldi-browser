@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@
 #include "base/timer/timer.h"
 #include "components/services/storage/public/mojom/service_worker_storage_control.mojom.h"
 #include "content/browser/renderer_host/back_forward_cache_metrics.h"
+#include "content/browser/renderer_host/policy_container_host.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_client_utils.h"
@@ -233,6 +234,24 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Returns the fetch handler type if set.  Otherwise, kNoHandler.
   FetchHandlerType fetch_handler_type() const;
   void set_fetch_handler_type(FetchHandlerType fetch_handler_type);
+
+  // If the feature flag for `fetch_handler_type_` is enabled,
+  // the function returns `fetch_handler_type_`.
+  // Otherwise, kNotSkippable would be returned if `fetch_handler_type_`
+  // is not kNoHandler.  Note that kNoHandler will be returned if
+  // `fetch_handler_type_` is kNoHandler.
+  //
+  // You may wonder why we need to introduce the effective fetch handler
+  // type in addition to the existing fetch_handler_type.  That is because
+  // we cannot change the fetch_handler_type behavior for the service
+  // worker registration and the metrics.  Since the service worker
+  // registration is persistent data, I do not think it is good idea to
+  // change its contents by the flag.  For metrics, we want to compare the
+  // same fetch handler case with the different flags.  The
+  // fetch_handler_type should also need to be persistent here.
+  // Note that FCP/LCP with skippable fetch handler type is taken in this
+  // way.
+  FetchHandlerType EffectiveFetchHandlerType() const;
 
   base::TimeDelta TimeSinceNoControllees() const {
     return GetTickDuration(no_controllees_time_);
@@ -561,6 +580,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Returns nullptr if `client_security_state()` is nullptr.
   const network::CrossOriginEmbedderPolicy* cross_origin_embedder_policy()
       const;
+  const scoped_refptr<PolicyContainerHost> policy_container_host() const {
+    return policy_container_host_;
+  }
 
   // Returns the client security state used by this service worker, if any.
   // Never returns a nullptr value after returning a non-nullptr value.
@@ -600,6 +622,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
       std::map<GURL, ServiceWorkerUpdateChecker::ComparedScriptInfo>
           compared_script_info_map,
       const GURL& updated_script_url,
+      scoped_refptr<PolicyContainerHost> policy_container_host,
       network::CrossOriginEmbedderPolicy cross_origin_embedder_policy);
   const std::map<GURL, ServiceWorkerUpdateChecker::ComparedScriptInfo>&
   compared_script_info_map() const;
@@ -641,6 +664,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
     reporting_observer_receiver_ = std::move(reporting_observer_receiver);
   }
 
+  void set_policy_container_host(
+      scoped_refptr<PolicyContainerHost> policy_container_host) {
+    policy_container_host_ = std::move(policy_container_host);
+  }
+
   // Initializes the global scope of the ServiceWorker on the renderer side.
   void InitializeGlobalScope();
 
@@ -653,9 +681,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void ExecuteScriptForTest(const std::string& script,
                             ServiceWorkerScriptExecutionCallback callback);
 
+  blink::mojom::AncestorFrameType ancestor_frame_type() const {
+    return ancestor_frame_type_;
+  }
+
  private:
   friend class base::RefCounted<ServiceWorkerVersion>;
-  friend class EmbeddedWorkerInstanceTest;
+  friend class EmbeddedWorkerTestHelper;
   friend class ServiceWorkerPingController;
   friend class ServiceWorkerContainerHostTest;
   friend class ServiceWorkerReadFromCacheJobTest;
@@ -1185,6 +1217,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Identifier for UKM recording in the service worker thread. Stored here so
   // it can be associated with clients' source IDs.
   const ukm::SourceId ukm_source_id_;
+
+  scoped_refptr<PolicyContainerHost> policy_container_host_;
 
   base::UnguessableToken reporting_source_;
 

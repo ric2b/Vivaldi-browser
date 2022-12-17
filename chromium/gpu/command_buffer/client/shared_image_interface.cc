@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,14 +14,6 @@ uint32_t SharedImageInterface::UsageForMailbox(const Mailbox& mailbox) {
 
 void SharedImageInterface::NotifyMailboxAdded(const Mailbox& /*mailbox*/,
                                               uint32_t /*usage*/) {}
-
-std::vector<Mailbox> SharedImageInterface::CreateSharedImageVideoPlanes(
-    gfx::GpuMemoryBuffer* gpu_memory_buffer,
-    GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    uint32_t usage) {
-  NOTREACHED();
-  return {};
-}
 
 Mailbox SharedImageInterface::CreateSharedImage(
     gfx::GpuMemoryBuffer* gpu_memory_buffer,

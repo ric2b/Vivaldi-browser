@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "ash/ambient/ambient_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/assistant/assistant_controller_impl.h"
+#include "ash/calendar/calendar_controller.h"
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/clipboard/clipboard_nudge_controller.h"
 #include "ash/constants/ash_features.h"
@@ -17,6 +18,7 @@
 #include "ash/detachable_base/detachable_base_handler.h"
 #include "ash/display/display_prefs.h"
 #include "ash/display/privacy_screen_controller.h"
+#include "ash/glanceables/glanceables_util.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/login/login_screen_controller.h"
 #include "ash/login/ui/login_expanded_public_account_view.h"
@@ -28,7 +30,6 @@
 #include "ash/session/fullscreen_controller.h"
 #include "ash/shelf/shelf_controller.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
-#include "ash/system/bluetooth/bluetooth_power_controller.h"
 #include "ash/system/camera/autozoom_controller_impl.h"
 #include "ash/system/camera/autozoom_nudge_controller.h"
 #include "ash/system/caps_lock_notification_controller.h"
@@ -47,13 +48,14 @@
 #include "ash/system/privacy_hub/privacy_hub_controller.h"
 #include "ash/system/session/logout_button_tray.h"
 #include "ash/system/session/logout_confirmation_controller.h"
+#include "ash/system/unified/quick_settings_footer.h"
 #include "ash/system/unified/top_shortcuts_view.h"
 #include "ash/system/unified/unified_system_tray_controller.h"
 #include "ash/system/usb_peripheral/usb_peripheral_notification_controller.h"
 #include "ash/touch/touch_devices_controller.h"
 #include "ash/wallpaper/wallpaper_pref_manager.h"
 #include "ash/wm/desks/desks_restore_util.h"
-#include "ash/wm/desks/persistent_desks_bar_controller.h"
+#include "ash/wm/desks/persistent_desks_bar/persistent_desks_bar_controller.h"
 #include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/multitask_menu_nudge_controller.h"
@@ -77,8 +79,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   AutozoomControllerImpl::RegisterProfilePrefs(registry);
   AutozoomNudgeController::RegisterProfilePrefs(registry);
   AmbientController::RegisterProfilePrefs(registry);
-  if (!ash::features::IsBluetoothRevampEnabled())
-    BluetoothPowerController::RegisterProfilePrefs(registry);
+  CalendarController::RegisterProfilePrefs(registry);
   CapsLockNotificationController::RegisterProfilePrefs(registry, for_test);
   CaptureModeController::RegisterProfilePrefs(registry);
   CellularSetupNotifier::RegisterProfilePrefs(registry);
@@ -145,15 +146,17 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry, bool for_test) {
   PaletteTray::RegisterLocalStatePrefs(registry);
   WallpaperPrefManager::RegisterLocalStatePrefs(registry);
-  if (!ash::features::IsBluetoothRevampEnabled())
-    BluetoothPowerController::RegisterLocalStatePrefs(registry);
   DetachableBaseHandler::RegisterPrefs(registry);
   PowerPrefs::RegisterLocalStatePrefs(registry);
   DisplayPrefs::RegisterLocalStatePrefs(registry);
   LoginExpandedPublicAccountView::RegisterLocalStatePrefs(registry);
   LockStateController::RegisterPrefs(registry);
   quick_pair::Mediator::RegisterLocalStatePrefs(registry);
-  TopShortcutsView::RegisterLocalStatePrefs(registry);
+  if (ash::features::IsQsRevampEnabled())
+    QuickSettingsFooter::RegisterLocalStatePrefs(registry);
+  else
+    TopShortcutsView::RegisterLocalStatePrefs(registry);
+  glanceables_util::RegisterLocalStatePrefs(registry);
 }
 
 void RegisterSigninProfilePrefs(PrefRegistrySimple* registry, bool for_test) {

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,6 @@
 #include "base/values.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/shutdown_reason.h"
-#include "components/sync/model/data_type_error_handler.h"
 
 namespace syncer {
 
@@ -108,7 +107,7 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
   // transport-only mode (see syncer::SyncMode enum).
   virtual bool ShouldRunInTransportOnlyMode() const = 0;
 
-  // Returns a ListValue representing all nodes for this data type through
+  // Returns a Value::List representing all nodes for this data type through
   // |callback| on this thread. Can only be called if state() != NOT_RUNNING.
   // Used for populating nodes in Sync Node Browser of chrome://sync-internals.
   virtual void GetAllNodes(AllNodesCallback callback) = 0;

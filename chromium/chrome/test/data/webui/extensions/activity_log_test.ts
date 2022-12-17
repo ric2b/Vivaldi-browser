@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +43,8 @@ suite('ExtensionsActivityLogTest', function() {
 
   // Initialize an extension activity log before each test.
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     // Give this a large enough height that the tabs will be visible.
     document.body.style.height = '300px';
 

@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -85,6 +85,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/feed/webfeed/WebFeedFollowIntroController.java",
     "java/src/org/chromium/chrome/browser/feed/webfeed/WebFeedFollowIntroView.java",
     "java/src/org/chromium/chrome/browser/feed/webfeed/WebFeedMainMenuItem.java",
+    "java/src/org/chromium/chrome/browser/feed/webfeed/WebFeedRecommendationFollowAcceleratorController.java",
     "java/src/org/chromium/chrome/browser/feed/webfeed/WebFeedSnackbarController.java",
   ]
   deps = [
@@ -174,7 +175,6 @@ android_resources("feed_java_resources") {
     "java/res/drawable-v24/header_title_tab_selected_background.xml",
     "java/res/drawable-xhdpi/follow_accelerator_shadow.9.png",
     "java/res/drawable-xxhdpi/follow_accelerator_shadow.9.png",
-    "java/res/drawable/back_arrow.xml",
     "java/res/drawable/back_to_top_arrow.xml",
     "java/res/drawable/crow_icon.xml",
     "java/res/drawable/header_title_section_tab_background.xml",
@@ -293,6 +293,7 @@ robolectric_library("junit") {
     "java/src/org/chromium/chrome/browser/feed/feedmanagement/FeedManagementMediatorTest.java",
     "java/src/org/chromium/chrome/browser/feed/followmanagement/FollowManagementCoordinatorTest.java",
     "java/src/org/chromium/chrome/browser/feed/followmanagement/FollowManagementMediatorTest.java",
+    "java/src/org/chromium/chrome/browser/feed/sections/SectionHeaderBadgeDrawableTest.java",
     "java/src/org/chromium/chrome/browser/feed/sections/SectionHeaderViewTest.java",
     "java/src/org/chromium/chrome/browser/feed/sort_ui/FeedOptionsCoordinatorTest.java",
     "java/src/org/chromium/chrome/browser/feed/webfeed/TestWebFeedFaviconFetcher.java",

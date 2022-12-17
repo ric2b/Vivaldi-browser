@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,24 +11,24 @@
 namespace shared_highlighting {
 
 // Enables link to text to be generated in advance.
-extern const base::Feature kPreemptiveLinkToTextGeneration;
+BASE_DECLARE_FEATURE(kPreemptiveLinkToTextGeneration);
 // Sets the timeout length for pre-emptive link generation.
 extern const base::FeatureParam<int> kPreemptiveLinkGenTimeoutLengthMs;
 
 // Enables shared highlighting for AMP viewers pages.
-extern const base::Feature kSharedHighlightingAmp;
+BASE_DECLARE_FEATURE(kSharedHighlightingAmp);
 
 // Enables the new SharedHighlightingManager refactoring.
-extern const base::Feature kSharedHighlightingManager;
+BASE_DECLARE_FEATURE(kSharedHighlightingManager);
 
 // Feature flag that enable Shared Highlighting V2 in iOS.
-extern const base::Feature kIOSSharedHighlightingV2;
+BASE_DECLARE_FEATURE(kIOSSharedHighlightingV2);
 
 // Feature flag that enables a narrower blocklist.
-extern const base::Feature kSharedHighlightingRefinedBlocklist;
+BASE_DECLARE_FEATURE(kSharedHighlightingRefinedBlocklist);
 
 // Feature flag that allows to experiment with different Max Context Words.
-extern const base::Feature kSharedHighlightingRefinedMaxContextWords;
+BASE_DECLARE_FEATURE(kSharedHighlightingRefinedMaxContextWords);
 // Feature name and parameter to capture the different maxContextWords values.
 extern const char kSharedHighlightingRefinedMaxContextWordsName[];
 extern const base::FeatureParam<int> kSharedHighlightingMaxContextWords;

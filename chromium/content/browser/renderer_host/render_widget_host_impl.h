@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/callback_list.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
@@ -29,6 +30,7 @@
 #include "cc/mojom/render_frame_metadata.mojom.h"
 #include "components/power_scheduler/power_mode_voter.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
+#include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/input/input_disposition_handler.h"
@@ -38,13 +40,13 @@
 #include "content/browser/renderer_host/input/synthetic_gesture_controller.h"
 #include "content/browser/renderer_host/input/touch_emulator_client.h"
 #include "content/browser/renderer_host/render_frame_metadata_provider_impl.h"
-#include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/scheduler/browser_ui_thread_scheduler.h"
 #include "content/common/content_export.h"
 #include "content/common/frame.mojom-forward.h"
 #include "content/public/browser/render_process_host_observer.h"
+#include "content/public/browser/render_process_host_priority_client.h"
 #include "content/public/browser/render_widget_host.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -141,8 +143,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       public FrameTokenMessageQueue::Client,
       public InputRouterImplClient,
       public InputDispositionHandler,
-      public RenderProcessHostImpl::PriorityClient,
       public RenderProcessHostObserver,
+      public RenderProcessHostPriorityClient,
       public SyntheticGestureController::Delegate,
       public RenderFrameMetadataProvider::Observer,
       public blink::mojom::FrameWidgetHost,
@@ -246,6 +248,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       const KeyPressEventCallback& callback) override;
   void AddMouseEventCallback(const MouseEventCallback& callback) override;
   void RemoveMouseEventCallback(const MouseEventCallback& callback) override;
+  void AddSuppressShowingImeCallback(
+      const SuppressShowingImeCallback& callback) override;
+  void RemoveSuppressShowingImeCallback(
+      const SuppressShowingImeCallback& callback) override;
   void AddInputEventObserver(
       RenderWidgetHost::InputEventObserver* observer) override;
   void RemoveInputEventObserver(
@@ -300,8 +306,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
                               const ui::MenuSourceType source_type) override;
   void InsertVisualStateCallback(VisualStateCallback callback) override;
 
-  // RenderProcessHostImpl::PriorityClient implementation.
-  RenderProcessHost::Priority GetPriority() override;
+  // RenderProcessHostPriorityClient implementation.
+  RenderProcessHostPriorityClient::Priority GetPriority() override;
 
   // RenderProcessHostObserver implementation.
   void RenderProcessExited(RenderProcessHost* host,
@@ -883,6 +889,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   SiteInstanceGroup* GetSiteInstanceGroup();
 
+  // Updates the browser controls by directly IPCing onto the compositor thread.
+  void UpdateBrowserControlsState(cc::BrowserControlsState constraints,
+                                  cc::BrowserControlsState current,
+                                  bool animate);
+
   // NOTE(david@vivaldi.com): Returns the status of the device
   // emulation.
   bool IsDeviceEmulationActive() { return device_emulation_active_; }
@@ -1023,7 +1034,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void StartDragging(blink::mojom::DragDataPtr drag_data,
                      blink::DragOperationsMask drag_operations_mask,
                      const SkBitmap& unsafe_bitmap,
-                     const gfx::Vector2d& bitmap_offset_in_dip,
+                     const gfx::Vector2d& cursor_offset_in_dip,
+                     const gfx::Rect& drag_obj_rect_in_dip,
                      blink::mojom::DragEventSourceInfoPtr event_info) override;
 
   // When the RenderWidget is destroyed and recreated, this resets states in the
@@ -1062,6 +1074,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       const blink::WebInputEvent& event,
       const ui::LatencyInfo& latency_info) override;
   void IncrementInFlightEventCount() override;
+  void NotifyUISchedulerOfScrollStateUpdate(
+      BrowserUIThreadScheduler::ScrollState scroll_state) override;
   void DecrementInFlightEventCount(
       blink::mojom::InputEventResultSource ack_source) override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
@@ -1189,8 +1203,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // The delegate of the owner of this object.
   // This member is non-null if and only if this RenderWidgetHost is associated
   // with a main frame RenderWidget.
-  raw_ptr<RenderWidgetHostOwnerDelegate, DanglingUntriaged> owner_delegate_ =
-      nullptr;
+  raw_ptr<RenderWidgetHostOwnerDelegate> owner_delegate_ = nullptr;
 
   // AgentSchedulingGroupHost to be used for IPC with the corresponding
   // (renderer-side) AgentSchedulingGroup. Its channel may be nullptr if the
@@ -1284,6 +1297,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Mouse event callbacks.
   std::vector<MouseEventCallback> mouse_event_callbacks_;
 
+  // Suppress showing keyboard callbacks.
+  std::vector<SuppressShowingImeCallback> suppress_showing_ime_callbacks_;
+
   // Input event callbacks.
   base::ObserverList<RenderWidgetHost::InputEventObserver>::Unchecked
       input_event_observers_;
@@ -1300,6 +1316,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // This is true if the renderer is currently unresponsive.
   bool is_unresponsive_ = false;
+
+  // We access this value quite a lot, so we cache switches::kDisableHangMonitor
+  // here.
+  const bool should_disable_hang_monitor_;
 
   // This value denotes the number of input events yet to be acknowledged
   // by the renderer.

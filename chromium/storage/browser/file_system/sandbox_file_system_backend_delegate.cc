@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,6 @@
 #include "base/files/file_error_or.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task/task_runner_util.h"
 #include "base/time/time.h"
 #include "storage/browser/file_system/async_file_util_adapter.h"
 #include "storage/browser/file_system/file_system_context.h"
@@ -122,12 +121,12 @@ base::File::Error OpenSandboxFileSystemOnFileTaskRunner(
     base::FileErrorOr<base::FilePath> path =
         file_util->GetDirectoryForBucketAndType(bucket_locator.value(), type,
                                                 create);
-    error = (path.is_error()) ? path.error() : base::File::FILE_OK;
+    error = path.has_value() ? base::File::FILE_OK : path.error();
   } else {
     base::FileErrorOr<base::FilePath> path =
         file_util->GetDirectoryForStorageKeyAndType(
             blink::StorageKey(url::Origin::Create(origin_url)), type, create);
-    error = (path.is_error()) ? path.error() : base::File::FILE_OK;
+    error = path.has_value() ? base::File::FILE_OK : path.error();
   }
   if (error != base::File::FILE_OK) {
     UMA_HISTOGRAM_ENUMERATION(kOpenFileSystemLabel, kCreateDirectoryError,
@@ -241,9 +240,7 @@ SandboxFileSystemBackendDelegate::GetBaseDirectoryForStorageKeyAndType(
   base::FileErrorOr<base::FilePath> path =
       obfuscated_file_util()->GetDirectoryForStorageKeyAndType(storage_key,
                                                                type, create);
-  if (path.is_error())
-    return base::FilePath();
-  return path.value();
+  return path.value_or(base::FilePath());
 }
 
 base::FilePath
@@ -254,9 +251,7 @@ SandboxFileSystemBackendDelegate::GetBaseDirectoryForBucketAndType(
   base::FileErrorOr<base::FilePath> path =
       obfuscated_file_util()->GetDirectoryForBucketAndType(bucket_locator, type,
                                                            create);
-  if (path.is_error())
-    return base::FilePath();
-  return path.value();
+  return path.value_or(base::FilePath());
 }
 
 void SandboxFileSystemBackendDelegate::OpenFileSystem(
@@ -492,7 +487,7 @@ int64_t SandboxFileSystemBackendDelegate::GetUsageOnFileTaskRunner(
   if (bucket_locator.has_value()) {
     base::FileErrorOr<base::FilePath> result =
         GetBaseDirectoryForBucketAndType(bucket_locator.value(), type, false);
-    if (result.is_error() ||
+    if (!result.has_value() ||
         !obfuscated_file_util()->delegate()->DirectoryExists(result.value()))
       return 0;
     path = result.value();
@@ -606,7 +601,7 @@ void SandboxFileSystemBackendDelegate::InvalidateUsageCache(
   base::FileErrorOr<base::FilePath> usage_file_path =
       GetUsageCachePathForStorageKeyAndType(obfuscated_file_util(), storage_key,
                                             type);
-  if (usage_file_path.is_error())
+  if (!usage_file_path.has_value())
     return;
   usage_cache()->IncrementDirty(usage_file_path.value());
 }
@@ -689,7 +684,7 @@ SandboxFileSystemBackendDelegate::GetUsageCachePathForStorageKeyAndType(
   base::FileErrorOr<base::FilePath> base_path =
       sandbox_file_util->GetDirectoryForStorageKeyAndType(storage_key, type,
                                                           false /* create */);
-  if (base_path.is_error()) {
+  if (!base_path.has_value()) {
     return base_path;
   }
   return base_path->Append(FileSystemUsageCache::kUsageFileName);
@@ -712,7 +707,7 @@ SandboxFileSystemBackendDelegate::GetUsageCachePathForBucketAndType(
   base::FileErrorOr<base::FilePath> base_path =
       sandbox_file_util->GetDirectoryForBucketAndType(bucket_locator, type,
                                                       /*create=*/false);
-  if (base_path.is_error()) {
+  if (!base_path.has_value()) {
     return base_path;
   }
   return base_path->Append(FileSystemUsageCache::kUsageFileName);

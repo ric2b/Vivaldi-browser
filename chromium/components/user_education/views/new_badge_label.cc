@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,7 +80,7 @@ void NewBadgeLabel::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     accessible_name.push_back(' ');
     accessible_name.append(views::NewBadge::GetNewBadgeAccessibleDescription());
   }
-  node_data->SetName(accessible_name);
+  node_data->SetNameChecked(accessible_name);
 }
 
 gfx::Size NewBadgeLabel::CalculatePreferredSize() const {

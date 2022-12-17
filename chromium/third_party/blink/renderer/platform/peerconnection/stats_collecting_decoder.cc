@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -156,9 +156,9 @@ void StatsCollectingDecoder::Decoded(webrtc::VideoFrame& decodedImage,
     int pixel_size = static_cast<int>(decodedImage.size());
     bool is_hardware_accelerated =
         decoder_->GetDecoderInfo().is_hardware_accelerated;
-    float decode_time_ms = decodedImage.processing_time()->Elapsed().ms();
+    float processing_time_ms = decodedImage.processing_time()->Elapsed().ms();
 
-    AddProcessingTime(pixel_size, is_hardware_accelerated, decode_time_ms,
+    AddProcessingTime(pixel_size, is_hardware_accelerated, processing_time_ms,
                       number_of_new_keyframes, now);
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,8 +52,8 @@ void SaveSubmittedPasswordAction::InternalProcessAction(
     delegate_->GetPasswordChangeSuccessTracker()->OnChangePasswordFlowCompleted(
         delegate_->GetUserData()->selected_login_->origin,
         delegate_->GetUserData()->selected_login_->username,
-        PasswordChangeSuccessTracker::EndEvent::
-            kAutomatedFlowOwnPasswordChosen);
+        PasswordChangeSuccessTracker::EndEvent::kAutomatedFlowOwnPasswordChosen,
+        /* phished= */ false);
   }
 
   // If a timeout is specified, perform a leak check.

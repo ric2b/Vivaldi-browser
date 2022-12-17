@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,13 +10,13 @@
 #include <set>
 #include <utility>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_names.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -238,14 +238,13 @@ std::vector<DeviceLocalAccount> GetDeviceLocalAccounts(
   // TODO(https://crbug.com/984021): handle TYPE_SAML_PUBLIC_SESSION
   std::vector<DeviceLocalAccount> accounts;
 
-  const base::ListValue* list = NULL;
-  cros_settings->GetList(ash::kAccountsPrefDeviceLocalAccounts, &list);
-  if (!list)
+  const base::Value::List* list = nullptr;
+  if (!cros_settings->GetList(ash::kAccountsPrefDeviceLocalAccounts, &list))
     return accounts;
 
   std::set<std::string> account_ids;
-  for (size_t i = 0; i < list->GetListDeprecated().size(); ++i) {
-    const base::Value& entry = list->GetListDeprecated()[i];
+  for (size_t i = 0; i < list->size(); ++i) {
+    const base::Value& entry = (*list)[i];
     if (!entry.is_dict()) {
       LOG(ERROR) << "Corrupt entry in device-local account list at index " << i
                  << ".";

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -82,7 +82,7 @@ SharedStorageClearSiteDataTester::GetSharedStorageOrigins() {
 
   std::vector<url::Origin> origins;
   for (const auto& info : infos)
-    origins.push_back(info->origin);
+    origins.push_back(info->storage_key.origin());
 
   return origins;
 }
@@ -101,7 +101,7 @@ int SharedStorageClearSiteDataTester::GetSharedStorageNumEntriesForOrigin(
   auto infos = future.Take();
 
   for (const auto& info : infos) {
-    if (info->origin == origin)
+    if (info->storage_key.origin() == origin)
       return PaddedBytesToNumEntries(info->total_size_bytes);
   }
 

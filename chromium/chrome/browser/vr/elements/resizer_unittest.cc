@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,9 +41,10 @@ class ResizerTest : public testing::Test {
   }
 
   float ComputeScale() {
-    gfx::Vector3dF v = {1.0f, 0.0f, 0.0f};
-    static_cast<UiElement*>(resizer_)->LocalTransform().TransformVector(&v);
-    return v.x();
+    return static_cast<UiElement*>(resizer_)
+        ->LocalTransform()
+        .MapVector(gfx::Vector3dF(1.0f, 0.0f, 0.0f))
+        .x();
   }
 
   void CheckScale(float scale) { EXPECT_FLOAT_EQ(scale, ComputeScale()); }

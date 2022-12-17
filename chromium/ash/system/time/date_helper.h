@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,11 +8,11 @@
 #include <string>
 
 #include "ash/ash_export.h"
-#include "ash/components/settings/timezone_settings.h"
 #include "ash/public/cpp/locale_update_controller.h"
 #include "base/memory/singleton.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/settings/timezone_settings.h"
 #include "third_party/icu/source/i18n/unicode/dtitvfmt.h"
 #include "third_party/icu/source/i18n/unicode/dtptngen.h"
 #include "third_party/icu/source/i18n/unicode/gregocal.h"
@@ -34,6 +34,17 @@ class DateHelper : public LocaleChangeObserver,
 
   // Creates a formatter object used to format dates from the given `pattern`.
   icu::SimpleDateFormat CreateSimpleDateFormatter(const char* pattern);
+
+  // Creates a formatter object used to format dates without calling the
+  // `getBestPattern` function, which resolves the input pattern to the best
+  // fit, which is not always what we want. e.g. 'mm' returns 'm' even though we
+  // want it zero-padded (03 vs. 3 when given 12:03)
+  icu::SimpleDateFormat CreateSimpleDateFormatterWithoutBestPattern(
+      const char* pattern);
+
+  // Creates a formatter object that extracts the hours field from a given date.
+  // Uses `pattern` to differentiate between 12 and 24 hour clock formats.
+  icu::SimpleDateFormat CreateHoursFormatter(const char* pattern);
 
   // Creates a date interval formatter object that formats a `DateInterval` into
   // text as compactly as possible.
@@ -107,6 +118,16 @@ class DateHelper : public LocaleChangeObserver,
   }
 
   icu::SimpleDateFormat& year_formatter() { return year_formatter_; }
+
+  icu::SimpleDateFormat& twelve_hour_clock_hours_formatter() {
+    return twelve_hour_clock_hours_formatter_;
+  }
+
+  icu::SimpleDateFormat& twenty_four_hour_clock_hours_formatter() {
+    return twenty_four_hour_clock_hours_formatter_;
+  }
+
+  icu::SimpleDateFormat& minutes_formatter() { return minutes_formatter_; }
 
   const icu::DateIntervalFormat* twelve_hour_clock_interval_formatter() {
     return twelve_hour_clock_interval_formatter_.get();
@@ -183,6 +204,15 @@ class DateHelper : public LocaleChangeObserver,
 
   // Formatter for getting the year.
   icu::SimpleDateFormat year_formatter_;
+
+  // Formatter for getting the hours in a 12 hour clock format.
+  icu::SimpleDateFormat twelve_hour_clock_hours_formatter_;
+
+  // Formatter for getting the hours in a 24 hour clock format.
+  icu::SimpleDateFormat twenty_four_hour_clock_hours_formatter_;
+
+  // Formatter for getting the minutes.
+  icu::SimpleDateFormat minutes_formatter_;
 
   // Interval formatter for two dates. Formats time in twelve
   // hour clock format (e.g. 8:30 – 9:30 PM or 11:30 AM – 2:30 PM).

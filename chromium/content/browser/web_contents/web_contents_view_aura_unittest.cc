@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -752,7 +752,7 @@ TEST_F(WebContentsViewAuraTest, StartDragging) {
   DropData drop_data;
   drop_data.text.emplace(u"Hello World!");
   view->StartDragging(drop_data, blink::DragOperationsMask::kDragOperationNone,
-                      gfx::ImageSkia(), gfx::Vector2d(),
+                      gfx::ImageSkia(), gfx::Vector2d(), gfx::Rect(),
                       blink::mojom::DragEventSourceInfo(),
                       RenderWidgetHostImpl::From(rvh()->GetWidget()));
 
@@ -823,7 +823,7 @@ TEST_F(WebContentsViewAuraTest, StartDragFromPrivilegedWebContents) {
 
   DropData drop_data;
   view->StartDragging(drop_data, blink::DragOperationsMask::kDragOperationNone,
-                      gfx::ImageSkia(), gfx::Vector2d(),
+                      gfx::ImageSkia(), gfx::Vector2d(), gfx::Rect(),
                       blink::mojom::DragEventSourceInfo(),
                       RenderWidgetHostImpl::From(rvh()->GetWidget()));
 

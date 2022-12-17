@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,6 +80,7 @@ class UserImageManagerImpl : public UserImageManager,
   static const char kImagePathNodeName[];
   static const char kImageIndexNodeName[];
   static const char kImageURLNodeName[];
+  static const char kImageCacheUpdated[];
 
  private:
   friend class UserImageManagerTestBase;

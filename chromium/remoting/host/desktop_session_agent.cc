@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,7 @@
 #include "remoting/proto/control.pb.h"
 #include "remoting/proto/event.pb.h"
 #include "remoting/protocol/clipboard_stub.h"
+#include "remoting/protocol/desktop_capturer.h"
 #include "remoting/protocol/errors.h"
 #include "remoting/protocol/input_event_tracker.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
@@ -406,12 +407,7 @@ void DesktopSessionAgent::Start(
   }
 
   // Start the video capturer and mouse cursor monitor.
-  // TODO(lambroslambrou): When supporting multiple streams, this class should
-  // call desktop_environment_->GetDisplayInfoMonitor()->Start(), so the
-  // display-info is queried on a timer instead of after each captured frame
-  // from multiple capturers.
-  video_capturer_ = std::make_unique<DesktopAndCursorConditionalComposer>(
-      desktop_environment_->CreateVideoCapturer());
+  video_capturer_ = desktop_environment_->CreateVideoCapturer();
   video_capturer_->Start(this);
   video_capturer_->SetSharedMemoryFactory(
       std::make_unique<SharedMemoryFactoryImpl>(
@@ -432,6 +428,12 @@ void DesktopSessionAgent::Start(
       base::BindRepeating(&DesktopSessionAgent::OnKeyboardLayoutChange,
                           base::Unretained(this)));
   keyboard_layout_monitor_->Start();
+
+  // Begin observing the desktop display(s) for changes. Note that some
+  // desktop environments may not provide a display info monitor.
+  auto* display_info_monitor = desktop_environment_->GetDisplayInfoMonitor();
+  if (display_info_monitor)
+    display_info_monitor->Start();
 
   // Set up the message handler for file transfers.
   session_file_operations_handler_.emplace(
@@ -653,9 +655,10 @@ void DesktopSessionAgent::InjectMouseEvent(const protocol::MouseEvent& event) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
   CHECK(started_);
 
-  if (video_capturer_)
+  if (video_capturer_) {
     video_capturer_->SetComposeEnabled(event.has_delta_x() ||
                                        event.has_delta_y());
+  }
 
   // InputStub implementations must verify events themselves, so we don't need
   // verification here. This matches HostEventDispatcher.

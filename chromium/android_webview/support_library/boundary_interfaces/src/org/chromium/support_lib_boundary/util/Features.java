@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -106,6 +106,9 @@ public class Features {
             "SAFE_BROWSING_RESPONSE_SHOW_INTERSTITIAL";
 
     // WebMessage.getMessagePayload
+    // WebMessagePayload.getType
+    // WebMessagePayload.getAsString
+    // WebMessagePayload.getAsArrayBuffer
     public static final String WEB_MESSAGE_GET_MESSAGE_PAYLOAD = "WEB_MESSAGE_GET_MESSAGE_PAYLOAD";
 
     // WebMessagePortCompat.postMessage
@@ -201,7 +204,18 @@ public class Features {
     // WebSettingsCompat.getRequestedWithHeaderMode
     // ServiceWorkerWebSettingsCompat.setRequestedWithHeaderMode
     // ServiceWorkerWebSettingsCompat.getRequestedWithHeaderMode
+    /**
+     * @deprecated Feature was never launched. Do not reuse feature name.
+     */
+    @Deprecated()
     public static final String REQUESTED_WITH_HEADER_CONTROL = "REQUESTED_WITH_HEADER_CONTROL";
+
+    // WebSettingsCompat.setRequestedWithHeaderAllowList
+    // WebSettingsCompat.getRequestedWithHeaderAllowList
+    // ServiceWorkerWebSettingsCompat.setRequestedWithHeaderAllowList
+    // ServiceWorkerWebSettingsCompat.getRequestedWithHeaderAllowList
+    public static final String REQUESTED_WITH_HEADER_ALLOW_LIST =
+            "REQUESTED_WITH_HEADER_ALLOW_LIST";
 
     // WebViewCompat.getVariationsHeader
     public static final String GET_VARIATIONS_HEADER = "GET_VARIATIONS_HEADER";

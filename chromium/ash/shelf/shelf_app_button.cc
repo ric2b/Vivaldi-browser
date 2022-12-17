@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,13 +34,11 @@
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/color_analysis.h"
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/skbitmap_operations.h"
-#include "ui/views/accessibility/accessibility_paint_checks.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
@@ -338,11 +336,6 @@ ShelfAppButton::ShelfAppButton(ShelfView* shelf_view,
   };
   icon_shadows_.assign(kShadows, kShadows + std::size(kShadows));
 
-  // TODO(crbug.com/1218186): Remove this, this is in place temporarily to be
-  // able to submit accessibility checks. This crashes if fetching a11y node
-  // data during paint because message_view_ is null.
-  SetProperty(views::kSkipAccessibilityPaintChecks, true);
-
   views::InkDrop::Get(this)->SetCreateRippleCallback(base::BindRepeating(
       [](ShelfAppButton* host) -> std::unique_ptr<views::InkDropRipple> {
         const gfx::Rect small_ripple_area = host->CalculateSmallRippleArea();
@@ -624,8 +617,11 @@ gfx::Rect ShelfAppButton::CalculateSmallRippleArea() const {
   // the shelf when there is a non-zero padding between the app icon and the
   // end of scrollable shelf.
   if (TabletModeController::Get()->InTabletMode() && padding > 0) {
-    const size_t current_index =
-        shelf_view_->view_model()->GetIndexOfView(this).value();
+    // Note that `current_index` may be nullopt while the button is fading out
+    // after it's been removed from the model - for example, see
+    // https://crbug.com/1355561.
+    const absl::optional<size_t> current_index =
+        shelf_view_->view_model()->GetIndexOfView(this);
     int left_padding =
         (shelf_view_->visible_views_indices().front() == current_index)
             ? padding

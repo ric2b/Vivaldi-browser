@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,7 @@ namespace ui {
 
 class DialogModel;
 class DialogModelButton;
-class DialogModelBodyText;
+class DialogModelParagraph;
 class DialogModelCheckbox;
 class DialogModelCombobox;
 class DialogModelCustomField;
@@ -34,44 +34,72 @@ class Event;
 // TODO(pbos): Move this to separate header.
 // DialogModelLabel is an exception to below classes. This is not a
 // DialogModelField but rather represents a text label and styling. This is used
-// with DialogModelBodyText and DialogModelCheckbox for instance and has support
-// for showing a link.
+// with DialogModelParagraph and DialogModelCheckbox for instance and has
+// support for styling text replacements and showing a link.
 class COMPONENT_EXPORT(UI_BASE) DialogModelLabel {
  public:
-  struct COMPONENT_EXPORT(UI_BASE) Link {
-    // TODO(pbos): Move this definition (maybe as a ui::LinkCallback) so it can
-    // be reused with views::Link.
-    using Callback = base::RepeatingCallback<void(const Event& event)>;
+  // TODO(pbos): Move this definition (maybe as a ui::LinkCallback) so it can
+  // be reused with views::Link.
+  using Callback = base::RepeatingCallback<void(const Event& event)>;
 
-    Link(int message_id,
-         Callback callback,
-         std::u16string accessible_name = std::u16string());
-    Link(int message_id,
-         base::RepeatingClosure closure,
-         std::u16string accessible_name = std::u16string());
-    Link(const Link&);
-    ~Link();
+  class COMPONENT_EXPORT(UI_BASE) TextReplacement {
+   public:
+    TextReplacement(const TextReplacement&);
+    ~TextReplacement();
 
-    const int message_id;
-    const Callback callback;
-    const std::u16string accessible_name;
+    const std::u16string& text() const { return text_; }
+    bool is_emphasized() const { return is_emphasized_; }
+    const absl::optional<Callback>& callback() const { return callback_; }
+    const absl::optional<std::u16string>& accessible_name() const {
+      return accessible_name_;
+    }
+
+   private:
+    friend class DialogModelLabel;
+
+    // Used for regular and emphasized text.
+    explicit TextReplacement(std::u16string text, bool is_emphasized = false);
+    // Used for links.
+    TextReplacement(int message_id,
+                    Callback closure,
+                    std::u16string accessible_name = std::u16string());
+
+    const std::u16string text_;
+    const bool is_emphasized_;
+    const absl::optional<Callback> callback_;
+    const absl::optional<std::u16string> accessible_name_;
   };
 
   explicit DialogModelLabel(int message_id);
   explicit DialogModelLabel(std::u16string fixed_string);
+
   DialogModelLabel(const DialogModelLabel&);
   DialogModelLabel& operator=(const DialogModelLabel&) = delete;
   ~DialogModelLabel();
 
-  static DialogModelLabel CreateWithLink(int message_id, Link link);
+  static DialogModelLabel CreateWithReplacement(int message_id,
+                                                TextReplacement replacement);
+  static DialogModelLabel CreateWithReplacements(
+      int message_id,
+      std::vector<TextReplacement> replacements);
 
-  static DialogModelLabel CreateWithLinks(int message_id,
-                                          std::vector<Link> links);
+  // Builder methods for TextReplacements.
+  static TextReplacement CreateLink(
+      int message_id,
+      base::RepeatingClosure closure,
+      std::u16string accessible_name = std::u16string());
+  static TextReplacement CreateLink(
+      int message_id,
+      Callback callback,
+      std::u16string accessible_name = std::u16string());
+  static TextReplacement CreatePlainText(std::u16string text);
+  static TextReplacement CreateEmphasizedText(std::u16string text);
 
-  // Gets the string. Not for use with links, in which case the caller must use
-  // links() and message_id() to construct the final label. This is required to
-  // style the final label appropriately and support link callbacks. The caller
-  // is responsible for checking links().empty() before calling this.
+  // Gets the string. Not for use with replacements, in which case the caller
+  // must use replacements() and message_id() to construct the final label. This
+  // is required to style the final label appropriately and support replacement
+  // callbacks. The caller is responsible for checking replacements().empty()
+  // before calling this.
   const std::u16string& GetString(base::PassKey<DialogModelHost>) const;
 
   DialogModelLabel& set_is_secondary() {
@@ -85,9 +113,11 @@ class COMPONENT_EXPORT(UI_BASE) DialogModelLabel {
   }
 
   int message_id(base::PassKey<DialogModelHost>) const { return message_id_; }
-  const std::vector<Link> links(base::PassKey<DialogModelHost>) const {
-    return links_;
+  const std::vector<TextReplacement>& replacements(
+      base::PassKey<DialogModelHost>) const {
+    return replacements_;
   }
+
   bool is_secondary(base::PassKey<DialogModelHost>) const {
     return is_secondary_;
   }
@@ -96,11 +126,15 @@ class COMPONENT_EXPORT(UI_BASE) DialogModelLabel {
   }
 
  private:
-  explicit DialogModelLabel(int message_id, std::vector<Link> links);
+  explicit DialogModelLabel(int message_id,
+                            std::vector<TextReplacement> replacements);
 
   const int message_id_;
   const std::u16string string_;
-  const std::vector<Link> links_;
+
+  // Set of replacements that will be added to `message_id_`.
+  const std::vector<TextReplacement> replacements_;
+
   bool is_secondary_ = false;
   bool allow_character_break_ = false;
 };
@@ -117,7 +151,7 @@ class COMPONENT_EXPORT(UI_BASE) DialogModelField {
  public:
   enum Type {
     kButton,
-    kBodyText,
+    kParagraph,
     kCheckbox,
     kCombobox,
     kCustom,
@@ -139,7 +173,7 @@ class COMPONENT_EXPORT(UI_BASE) DialogModelField {
   }
   ElementIdentifier id(base::PassKey<DialogModelHost>) const { return id_; }
   DialogModelButton* AsButton(base::PassKey<DialogModelHost>);
-  DialogModelBodyText* AsBodyText(base::PassKey<DialogModelHost>);
+  DialogModelParagraph* AsParagraph(base::PassKey<DialogModelHost>);
   DialogModelCheckbox* AsCheckbox(base::PassKey<DialogModelHost>);
   DialogModelCombobox* AsCombobox(base::PassKey<DialogModelHost>);
   DialogModelMenuItem* AsMenuItem(base::PassKey<DialogModelHost>);
@@ -157,7 +191,7 @@ class COMPONENT_EXPORT(UI_BASE) DialogModelField {
                    base::flat_set<Accelerator> accelerators);
 
   DialogModelButton* AsButton();
-  DialogModelBodyText* AsBodyText();
+  DialogModelParagraph* AsParagraph();
   DialogModelCheckbox* AsCheckbox();
   DialogModelCombobox* AsCombobox();
   const DialogModelMenuItem* AsMenuItem() const;
@@ -224,25 +258,31 @@ class COMPONENT_EXPORT(UI_BASE) DialogModelButton : public DialogModelField {
   base::RepeatingCallback<void(const Event&)> callback_;
 };
 
-// Field class representing body text.
-class COMPONENT_EXPORT(UI_BASE) DialogModelBodyText : public DialogModelField {
+// Field class representing a paragraph.
+class COMPONENT_EXPORT(UI_BASE) DialogModelParagraph : public DialogModelField {
  public:
   // Note that this is constructed through a DialogModel which adds it to model
   // fields.
-  DialogModelBodyText(base::PassKey<DialogModel> pass_key,
-                      DialogModel* model,
-                      const DialogModelLabel& label,
-                      ElementIdentifier id);
-  DialogModelBodyText(const DialogModelBodyText&) = delete;
-  DialogModelBodyText& operator=(const DialogModelBodyText&) = delete;
-  ~DialogModelBodyText() override;
+  DialogModelParagraph(base::PassKey<DialogModel> pass_key,
+                       DialogModel* model,
+                       const DialogModelLabel& label,
+                       std::u16string header,
+                       ElementIdentifier id);
+  DialogModelParagraph(const DialogModelParagraph&) = delete;
+  DialogModelParagraph& operator=(const DialogModelParagraph&) = delete;
+  ~DialogModelParagraph() override;
 
   const DialogModelLabel& label(base::PassKey<DialogModelHost>) const {
     return label_;
   }
 
+  const std::u16string header(base::PassKey<DialogModelHost>) const {
+    return header_;
+  }
+
  private:
   const DialogModelLabel label_;
+  const std::u16string header_;
 };
 
 // Field class representing a checkbox with descriptive text.
@@ -376,15 +416,14 @@ class COMPONENT_EXPORT(UI_BASE) DialogModelMenuItem : public DialogModelField {
     Params& operator=(const Params&) = delete;
     ~Params();
 
-    Params& set_is_enabled(bool is_enabled) {
-      is_enabled_ = is_enabled;
-      return *this;
-    }
+    Params& SetIsEnabled(bool is_enabled);
+    Params& SetId(ElementIdentifier id);
 
    private:
     friend class DialogModelMenuItem;
 
     bool is_enabled_ = true;
+    ElementIdentifier id_;
   };
 
   // Note that this is constructed through a DialogModel which adds it to model

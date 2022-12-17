@@ -1,8 +1,9 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/feed/feed_feature_list.h"
+#include "base/time/time.h"
 #include "components/feed/buildflags.h"
 
 #include "base/feature_list.h"
@@ -15,22 +16,27 @@
 
 namespace feed {
 
-const base::Feature kInterestFeedContentSuggestions{
-    "InterestFeedContentSuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kInterestFeedContentSuggestions,
+             "InterestFeedContentSuggestions",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 // InterestFeedV2 takes precedence over InterestFeedContentSuggestions.
 // InterestFeedV2 is cached in ChromeCachedFlags. If the default value here is
 // changed, please update the cached one's default value in CachedFeatureFlags.
-const base::Feature kInterestFeedV2{"InterestFeedV2",
-                                    base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kInterestFeedV2,
+             "InterestFeedV2",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kInterestFeedV2Autoplay{"InterestFeedV2Autoplay",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kInterestFeedV2Autoplay,
+             "InterestFeedV2Autoplay",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kInterestFeedV2Hearts{"InterestFeedV2Hearts",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kInterestFeedV2Hearts,
+             "InterestFeedV2Hearts",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kInterestFeedV2Scrolling{"InterestFeedV2Scrolling",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kInterestFeedV2Scrolling,
+             "InterestFeedV2Scrolling",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<std::string> kDisableTriggerTypes{
     &kInterestFeedContentSuggestions, "disable_trigger_types", ""};
@@ -44,56 +50,66 @@ const base::FeatureParam<bool> kOnlySetLastRefreshAttemptOnSuccess{
     &kInterestFeedContentSuggestions,
     "only_set_last_refresh_attempt_on_success", true};
 
-const base::Feature kInterestFeedV1ClicksAndViewsConditionalUpload{
-    "InterestFeedV1ClickAndViewActionsConditionalUpload",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kInterestFeedV2ClicksAndViewsConditionalUpload{
-    "InterestFeedV2ClickAndViewActionsConditionalUpload",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kInterestFeedV1ClicksAndViewsConditionalUpload,
+             "InterestFeedV1ClickAndViewActionsConditionalUpload",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kInterestFeedV2ClicksAndViewsConditionalUpload,
+             "InterestFeedV2ClickAndViewActionsConditionalUpload",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_IOS)
-const base::Feature kInterestFeedNoticeCardAutoDismiss{
-    "InterestFeedNoticeCardAutoDismiss", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kInterestFeedNoticeCardAutoDismiss,
+             "InterestFeedNoticeCardAutoDismiss",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
-const base::Feature kWebFeed{"WebFeed", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kDiscoFeedEndpoint{"DiscoFeedEndpoint",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kXsurfaceMetricsReporting{
-    "XsurfaceMetricsReporting", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kReliabilityLogging{"FeedReliabilityLogging",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kFeedInteractiveRefresh{"FeedInteractiveRefresh",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kFeedLoadingPlaceholder{"FeedLoadingPlaceholder",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kWebFeed, "WebFeed", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kDiscoFeedEndpoint,
+             "DiscoFeedEndpoint",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kXsurfaceMetricsReporting,
+             "XsurfaceMetricsReporting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kReliabilityLogging,
+             "FeedReliabilityLogging",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kFeedInteractiveRefresh,
+             "FeedInteractiveRefresh",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kFeedLoadingPlaceholder,
+             "FeedLoadingPlaceholder",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<bool>
     kEnableFeedLoadingPlaceholderAnimationOnInstantStart{
         &kFeedLoadingPlaceholder, "enable_animation_on_instant_start", false};
-const base::Feature kFeedImageMemoryCacheSizePercentage{
-    "FeedImageMemoryCacheSizePercentage", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kFeedClearImageMemoryCache{
-    "FeedClearImageMemoryCache", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kFeedBackToTop{"FeedBackToTop",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kFeedStamp{"FeedStamp", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kFeedImageMemoryCacheSizePercentage,
+             "FeedImageMemoryCacheSizePercentage",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kFeedClearImageMemoryCache,
+             "FeedClearImageMemoryCache",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kFeedBackToTop,
+             "FeedBackToTop",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kFeedStamp, "FeedStamp", base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kDefaultReferrerUrl[] = "https://www.google.com/";
 
-const base::Feature kWebFeedAwareness{"WebFeedAwareness",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kWebFeedAwareness,
+             "WebFeedAwareness",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kWebFeedOnboarding{"WebFeedOnboarding",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kWebFeedOnboarding,
+             "WebFeedOnboarding",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kWebFeedSort{"WebFeedSort",
-                                 base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kWebFeedSort, "WebFeedSort", base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kEnableOpenInNewTabFromStartSurfaceFeed{
-    "EnableOpenInNewTabFromStartSurfaceFeed",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kEnableOpenInNewTabFromStartSurfaceFeed,
+             "EnableOpenInNewTabFromStartSurfaceFeed",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kWebUiFeed{"FeedWebUi", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kWebUiFeed, "FeedWebUi", base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<std::string> kWebUiFeedUrl{
     &kWebUiFeed, "feedurl", "https://www.google.com/feed-api/following"};
 const base::FeatureParam<bool> kWebUiDisableContentSecurityPolicy{
@@ -108,51 +124,76 @@ std::string GetFeedReferrerUrl() {
   return referrer.empty() ? kDefaultReferrerUrl : referrer;
 }
 
-const base::Feature kPersonalizeFeedUnsignedUsers{
-    "PersonalizeFeedUnsignedUsers", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kPersonalizeFeedUnsignedUsers,
+             "PersonalizeFeedUnsignedUsers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kPersonalizeFeedNonSyncUsers{
-    "PersonalizeFeedNonSyncUsers", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kPersonalizeFeedNonSyncUsers,
+             "PersonalizeFeedNonSyncUsers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 signin::ConsentLevel GetConsentLevelNeededForPersonalizedFeed() {
   if (!base::FeatureList::IsEnabled(kPersonalizeFeedNonSyncUsers))
     return signin::ConsentLevel::kSync;
-
-#if BUILDFLAG(IS_ANDROID)
-  // When this flag is enabled, the wording of the sync promo card
-  // shows that enabling sync may get the user more relevant content but does
-  // not imply that a signed-in user must enable sync to get personalized
-  // content. Therefore we can request a signed-in feed for users who are
-  // signed in but not syncing.
-  // TODO(crbug/1205923): When this wording is fully launched, use kSignin
-  // only.
-  if (!base::FeatureList::IsEnabled(syncer::kSyncAndroidPromosWithTitle))
-    return signin::ConsentLevel::kSync;
-#endif  // BUILDFLAG(IS_ANDROID)
   return signin::ConsentLevel::kSignin;
 }
 
-const base::Feature kInfoCardAcknowledgementTracking{
-    "InfoCardAcknowledgementTracking", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kInfoCardAcknowledgementTracking,
+             "InfoCardAcknowledgementTracking",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kShareCrowButton{"ShareCrowButton",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kShareCrowButton,
+             "ShareCrowButton",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kIsAblated{"FeedAblation",
-                               base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kIsAblated, "FeedAblation", base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kFeedCloseRefresh{"FeedCloseRefresh",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kFeedCloseRefresh,
+             "FeedCloseRefresh",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<int> kFeedCloseRefreshDelayMinutes{
     &kFeedCloseRefresh, "delay_minutes", 30};
 const base::FeatureParam<bool> kFeedCloseRefreshRequireInteraction{
     &kFeedCloseRefresh, "require_interaction", false};
 
-const base::Feature kFeedNoViewCache{"FeedNoViewCache",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kFeedReplaceAll{"FeedReplaceAll",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kFeedVideoInlinePlayback{"FeedVideoInlinePlayback",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kFeedNoViewCache,
+             "FeedNoViewCache",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kFeedReplaceAll,
+             "FeedReplaceAll",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kFeedVideoInlinePlayback,
+             "FeedVideoInlinePlayback",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kClientGoodVisits,
+             "FeedClientGoodVisits",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+const base::FeatureParam<base::TimeDelta> kVisitTimeout{
+    &kClientGoodVisits, "visit_timeout", base::Minutes(5)};
+
+const base::FeatureParam<base::TimeDelta> kGoodTimeInFeed{
+    &kClientGoodVisits, "good_time_in_feed", base::Minutes(1)};
+
+const base::FeatureParam<base::TimeDelta> kLongOpenTime{
+    &kClientGoodVisits, "long_open_time", base::Seconds(10)};
+
+const base::FeatureParam<base::TimeDelta> kMinStableContentSliceVisibilityTime{
+    &kClientGoodVisits, "min_stable_content_slice_visibility_time",
+    base::Milliseconds(500)};
+
+const base::FeatureParam<base::TimeDelta> kMaxStableContentSliceVisibilityTime{
+    &kClientGoodVisits, "max_stable_content_slice_visibility_time",
+    base::Seconds(30)};
+
+const base::FeatureParam<double> kSliceVisibleExposureThreshold{
+    &kClientGoodVisits, "slice_exposure_threshold", 0.5f};
+
+const base::FeatureParam<double> kSliceVisibleCoverageThreshold{
+    &kClientGoodVisits, "slice_coverage_threshold", 0.25f};
+BASE_FEATURE(kFeedExperimentIDTagging,
+             "FeedExperimentIDTagging",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace feed

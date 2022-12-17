@@ -70,7 +70,7 @@ CSSSelectorWatch* CSSSelectorWatch::FromIfExists(Document& document) {
 
 void CSSSelectorWatch::CallbackSelectorChangeTimerFired(TimerBase*) {
   // Should be ensured by updateSelectorMatches():
-  DCHECK(!added_selectors_.IsEmpty() || !removed_selectors_.IsEmpty());
+  DCHECK(!added_selectors_.empty() || !removed_selectors_.empty());
 
   if (timer_expirations_ < 1) {
     timer_expirations_++;
@@ -78,10 +78,8 @@ void CSSSelectorWatch::CallbackSelectorChangeTimerFired(TimerBase*) {
     return;
   }
   if (GetSupplementable()->GetFrame()) {
-    Vector<String> added_selectors;
-    Vector<String> removed_selectors;
-    CopyToVector(added_selectors_, added_selectors);
-    CopyToVector(removed_selectors_, removed_selectors);
+    Vector<String> added_selectors(added_selectors_);
+    Vector<String> removed_selectors(removed_selectors_);
     GetSupplementable()->GetFrame()->Client()->SelectorMatchChanged(
         added_selectors, removed_selectors);
   }
@@ -125,7 +123,7 @@ void CSSSelectorWatch::UpdateSelectorMatches(
   if (!should_update_timer)
     return;
 
-  if (removed_selectors_.IsEmpty() && added_selectors_.IsEmpty()) {
+  if (removed_selectors_.empty() && added_selectors_.empty()) {
     if (callback_selector_change_timer_.IsActive()) {
       timer_expirations_ = 0;
       callback_selector_change_timer_.Stop();
@@ -157,10 +155,11 @@ void CSSSelectorWatch::WatchCSSSelectors(const Vector<String>& selectors) {
   // UA stylesheets always parse in the insecure context mode.
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kUASheetMode, SecureContextMode::kInsecureContext);
+  Arena arena;
   for (const auto& selector : selectors) {
     CSSSelectorVector selector_vector =
-        CSSParser::ParseSelector(context, nullptr, selector);
-    if (selector_vector.IsEmpty())
+        CSSParser::ParseSelector(context, nullptr, selector, arena);
+    if (selector_vector.empty())
       continue;
 
     StyleRule* style_rule =

@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -121,7 +121,6 @@ test("chromeos_unittests") {
       "//chromeos/crosapi/cpp:unit_tests",
       "//chromeos/crosapi/mojom:unit_tests",
       "//chromeos/dbus:unit_tests",
-      "//chromeos/language/language_packs:unit_tests",
       "//chromeos/login/login_state:unit_tests",
       "//chromeos/printing:unit_tests",
       "//chromeos/process_proxy:unit_tests",
@@ -187,6 +186,14 @@ if (is_chromeos_ash && is_chromeos_device) {
     # tast_disabled_tests_from_chrome_all list in "tast_control.gni" and cite
     # a bug.
     tast_disabled_tests = tast_disabled_tests_from_chrome_all
+  }
+
+  tast_test("chrome_all_tast_tests_with_lacros") {
+    # To disable a specific test, add it to the
+    # tast_disabled_tests_from_chrome_all list in "tast_control.gni" and cite
+    # a bug.
+    tast_disabled_tests = tast_disabled_tests_from_chrome_all
+    deploy_lacros_chrome = true
   }
 
   tast_test("chrome_all_tast_tests_informational") {

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -209,12 +209,6 @@ export class ExtensionBridge {
    * @private
    */
   contentOnMessageHandler_(request, sender, sendResponse) {
-    if (request && request['srcFile']) {
-      // TODO (clchen, deboer): Investigate this further and come up with a
-      // cleaner solution. The root issue is that this should never be run on
-      // the background page, but it is in the Chrome OS case.
-      return;
-    }
     if (request[ExtensionBridge.PONG_MSG]) {
       this.gotPongFromBackgroundPage_(request[ExtensionBridge.PONG_MSG]);
     } else {

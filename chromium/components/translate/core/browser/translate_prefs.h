@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,11 +39,11 @@ namespace translate {
 
 // Enables or disables using the most recent target language as the default
 // target language option.
-extern const base::Feature kTranslateRecentTarget;
+BASE_DECLARE_FEATURE(kTranslateRecentTarget);
 
 // This allows the user to disable translate by using the
 // `--disable-features=Translate` command-line flag.
-extern const base::Feature kTranslate;
+BASE_DECLARE_FEATURE(kTranslate);
 
 // Whether to migrate the obsolete always-translate languages pref to the new
 // pref during object construction as a fix for crbug/1291356, which had
@@ -55,7 +55,7 @@ extern const base::Feature kTranslate;
 // TODO(crbug/1291356): This base::Feature only exists to allow a less risky
 // merge into iOS M98. This base::Feature should be removed once it's no longer
 // relevant and the enabled behavior should become the only behavior.
-extern const base::Feature kMigrateAlwaysTranslateLanguagesFix;
+BASE_DECLARE_FEATURE(kMigrateAlwaysTranslateLanguagesFix);
 
 // Minimum number of times the user must accept a translation before we show
 // a shortcut to the "Always Translate" functionality.
@@ -111,7 +111,6 @@ class TranslatePrefs {
   // TODO(crbug.com/524927): Remove kPrefNeverPromptSites after
   // 3 milestones (M74).
   static const char kPrefNeverPromptSitesDeprecated[];
-  static const char kPrefNeverPromptSitesWithTime[];
   static const char kPrefTranslateDeniedCount[];
   static const char kPrefTranslateIgnoredCount[];
   static const char kPrefTranslateAcceptedCount[];

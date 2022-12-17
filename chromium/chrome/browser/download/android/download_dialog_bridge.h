@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,9 +35,6 @@ class DownloadDialogBridge {
  public:
   using DialogCallback = base::OnceCallback<void(DownloadDialogResult)>;
 
-  static long GetDownloadLaterMinFileSize();
-  static bool ShouldShowDateTimePicker();
-
   DownloadDialogBridge();
   DownloadDialogBridge(const DownloadDialogBridge&) = delete;
   DownloadDialogBridge& operator=(const DownloadDialogBridge&) = delete;
@@ -56,9 +53,7 @@ class DownloadDialogBridge {
 
   void OnComplete(JNIEnv* env,
                   const base::android::JavaParamRef<jobject>& obj,
-                  const base::android::JavaParamRef<jstring>& returned_path,
-                  jboolean on_wifi,
-                  jlong start_time);
+                  const base::android::JavaParamRef<jstring>& returned_path);
 
   void OnCanceled(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 

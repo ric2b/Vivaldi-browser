@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,10 +31,10 @@ class CONTENT_EXPORT AttributionHost
       public blink::mojom::ConversionHost {
  public:
   explicit AttributionHost(WebContents* web_contents);
-  AttributionHost(const AttributionHost& other) = delete;
-  AttributionHost& operator=(const AttributionHost& other) = delete;
-  AttributionHost(AttributionHost&& other) = delete;
-  AttributionHost& operator=(AttributionHost&& other) = delete;
+  AttributionHost(const AttributionHost&) = delete;
+  AttributionHost& operator=(const AttributionHost&) = delete;
+  AttributionHost(AttributionHost&&) = delete;
+  AttributionHost& operator=(AttributionHost&&) = delete;
   ~AttributionHost() override;
 
   static void BindReceiver(
@@ -79,8 +79,8 @@ class CONTENT_EXPORT AttributionHost
   //
   // A flat_map is used as the number of ongoing impression navigations is
   // expected to be very small in a given WebContents.
-  using NavigationImpressionOriginMap = base::flat_map<int64_t, url::Origin>;
-  NavigationImpressionOriginMap navigation_impression_origins_;
+  using NavigationSourceOriginMap = base::flat_map<int64_t, url::Origin>;
+  NavigationSourceOriginMap navigation_source_origins_;
 
   RenderFrameHostReceiverSet<blink::mojom::ConversionHost> receivers_;
 

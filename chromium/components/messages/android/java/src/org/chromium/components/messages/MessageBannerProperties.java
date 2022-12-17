@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -117,9 +117,12 @@ public class MessageBannerProperties {
     // Following properties should only be accessed by the message banner component.
     static final WritableFloatPropertyKey TRANSLATION_X = new WritableFloatPropertyKey();
     static final WritableFloatPropertyKey TRANSLATION_Y = new WritableFloatPropertyKey();
+
+    static final WritableIntPropertyKey MARGIN_TOP = new WritableIntPropertyKey();
     static final WritableFloatPropertyKey ALPHA = new WritableFloatPropertyKey();
     static final WritableObjectPropertyKey<Runnable> ON_TOUCH_RUNNABLE =
             new WritableObjectPropertyKey<>();
+    static final WritableFloatPropertyKey ELEVATION = new WritableFloatPropertyKey();
     // PRIMARY_BUTTON_CLICK_LISTENER is SingleActionMessage's handler attached to primary button
     // view. SingleActionMessage calls ON_PRIMARY_ACTION from the handler.
     static final WritableObjectPropertyKey<OnClickListener> PRIMARY_BUTTON_CLICK_LISTENER =
@@ -136,5 +139,5 @@ public class MessageBannerProperties {
             ON_SECONDARY_BUTTON_CLICK, SECONDARY_ICON_CONTENT_DESCRIPTION, DISMISSAL_DURATION,
             TRANSLATION_X, TRANSLATION_Y, ALPHA, ON_TOUCH_RUNNABLE, ON_PRIMARY_ACTION,
             ON_SECONDARY_ACTION, ON_DISMISSED, ON_STARTED_SHOWING, SECONDARY_MENU_BUTTON_DELEGATE,
-            SECONDARY_MENU_MAX_SIZE, PRIMARY_WIDGET_APPEARANCE};
+            SECONDARY_MENU_MAX_SIZE, PRIMARY_WIDGET_APPEARANCE, ELEVATION, MARGIN_TOP};
 }

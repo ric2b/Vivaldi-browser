@@ -1,5 +1,5 @@
 <!--
-Copyright 2020 The Chromium Authors. All rights reserved.
+Copyright 2020 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -110,7 +110,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.ClientAppId" enum="ClientAppId"
-    expires_after="2023-01-29">
+    expires_after="2023-04-02">
   <owner>yusufo@chromium.org</owner>
   <summary>
     Android: AppId declared by the launching application in EXTRA_APPLICATION_ID
@@ -142,7 +142,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.CloseButton.ChildTab.ScopeAlgorithm.ClosesOneTab"
-    enum="BooleanCloseJustCurrentTab" expires_after="M108">
+    enum="BooleanCloseJustCurrentTab" expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>
     src/chrome/android/java/src/org/chromium/chrome/browser/browserservices/OWNERS
@@ -171,7 +171,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.ConnectionStatusOnReturn.GSA"
-    enum="CustomTabsConnection" expires_after="2023-01-15">
+    enum="CustomTabsConnection" expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -184,7 +184,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.ConnectionStatusOnReturn.NonGSA"
-    enum="CustomTabsConnection" expires_after="M108">
+    enum="CustomTabsConnection" expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -208,7 +208,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.DetachedResourceRequest.FinalStatus"
-    enum="NetErrorCodes" expires_after="2022-12-25">
+    enum="NetErrorCodes" expires_after="2023-02-26">
   <owner>lizeb@chromium.org</owner>
   <owner>cct-team@google.com</owner>
   <summary>
@@ -241,8 +241,31 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CustomTabs.ImmersiveModeConfirmationsSettingConfirmed"
+    enum="Boolean" expires_after="2023-03-15">
+  <owner>kgrosu@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Android only. Recorded during Partial Custom Tab creation, if it has not
+    already been logged during the existing Chrome session. Returns true if the
+    value for &quot;immersive_mode_confirmations&quot; from Settings.Secure is
+    set to &quot;confirmed&quot;, false otherwise.
+
+    This is trying to approximate what percentage of Chrome sessions that run
+    PCCTs have already confirmed the dialog that shows up when an app enters
+    immersive mode (e.g. when hiding the navigation bar buttons or status bar).
+    Once the user has tapped on the dialog, it should never be displayed again.
+    This metric will be used to measure the impact that hiding the navigation
+    bar buttons would have. In the scenario where we hide the nav bar buttons
+    only when a PCCT is being resized, this confirmation dialog shows only while
+    the user is dragging the PCCT window, but disappears as soon as the finger
+    is lifted from the screen, giving no time for the user to confirm that they
+    are aware that they entered immersive mode.
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.IncognitoCCTCallerId" enum="IncognitoCCTCallerId"
-    expires_after="M110">
+    expires_after="2023-03-12">
   <owner>roagarwal@chromium.org</owner>
   <owner>chrome-incognito@google.com</owner>
   <owner>cct-team@google.com</owner>
@@ -308,7 +331,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.PostMessage.OnMessage" enum="Boolean"
-    expires_after="M108">
+    expires_after="2023-02-26">
   <owner>sinansahin@google.com</owner>
   <owner>jinsukkim@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
@@ -319,7 +342,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.PostMessage.PostMessageFromClientApp"
-    enum="Boolean" expires_after="M108">
+    enum="Boolean" expires_after="2023-02-26">
   <owner>sinansahin@google.com</owner>
   <owner>jinsukkim@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
@@ -330,7 +353,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.PostMessage.RequestPostMessageChannel"
-    enum="Boolean" expires_after="M108">
+    enum="Boolean" expires_after="2023-02-26">
   <owner>sinansahin@google.com</owner>
   <owner>jinsukkim@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
@@ -361,9 +384,19 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CustomTabs.ResizeType" enum="CustomTabsResizeType"
+    expires_after="2023-03-12">
+  <owner>kgrosu@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    When a Partial Custom Tab has been resized by the user log if it is an
+    expansion or a minimization of the tab.
+  </summary>
+</histogram>
+
 <histogram
     name="CustomTabs.RetainableSessions.TimeBetweenLaunch{IdentifierType}"
-    units="seconds" expires_after="2022-11-03">
+    units="seconds" expires_after="2023-02-12">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -401,8 +434,42 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="CustomTabs.SessionDisconnectStatus"
+    enum="CustomTabsSessionDisconnectStatus" expires_after="2023-03-15">
+  <owner>kgrosu@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Recorded only for Android. Record information about the state of the client
+    app, custom tab and system in the moment the connection between the client
+    and the custom tab is terminated. With this, we are trying to understand how
+    often a connection is terminated (the client app dies/is killed/is closed)
+    while a custom tab is in foreground. Also, if the EXTRA_KEEP_ALIVE is set,
+    we want to understand if it reduces the number of connections being
+    terminated. The aim is that CT_FOREGROUND and CT_FOREGROUND_KEEPALIVE are
+    logged as little as possible, while the rest of the states are expected ways
+    in which a connection may be terminated.
+
+    *CT_FOREGROUND*/*CT_BACKGROUND* - an enum value that contains this text
+    reflects if the custom tab was in the foreground/background when the
+    connection was terminated.
+
+    *KEEP_ALIVE* - an enum value that contains this text reflects that the
+    EXTRA_KEEP_ALIVE intent extra was specified and that the custom tab binds to
+    the service provided by it in order to increase the priority of the client
+    app to foreground.
+
+    *LOW_MEMORY* - an enum value that contains this text reflects that the
+    system was low on memory when the connection was terminated. This does not
+    mean that this was indeed the reason for the connection being terminated,
+    but it might be a good indicator of it.
+
+    UNKNOWN - if this is logged then there is probably a bug in the code as we
+    have a state we can be in that we don't currently account for.
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.ShareOptionLocation" enum="ShareOptionLocation"
-    expires_after="M109">
+    expires_after="M115">
   <owner>sophey@chromium.org</owner>
   <owner>src/components/send_tab_to_self/OWNERS</owner>
   <summary>
@@ -481,7 +548,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.WarmupStateOnLaunch" enum="WarmupStateOnLaunch"
-    expires_after="2023-01-22">
+    expires_after="2023-03-26">
   <owner>lizeb@chromium.org</owner>
   <summary>
     Recorded only on Android. Reports whether warmup() has been called when a
@@ -501,7 +568,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ClearDataDialogOnClearAppDataAccepted"
-    enum="Boolean" expires_after="M108">
+    enum="Boolean" expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -511,7 +578,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ClearDataDialogOnUninstallAccepted"
-    enum="Boolean" expires_after="M108">
+    enum="Boolean" expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -522,7 +589,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="TrustedWebActivity.DelegatedNotificationSmallIconFallback"
     enum="TrustedWebActivityDelegatedNotificationSmallIconFallback"
-    expires_after="M108">
+    expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -581,6 +648,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="TrustedWebActivity.LocationUpdateErrorCode"
     enum="TrustedWebActivityLocationErrorCode" expires_after="2022-10-23">
+  <obsolete>
+    Deprecated 2022-09. no longer needed.
+  </obsolete>
   <owner>eirage@chromium.org</owner>
   <owner>peconn@chromium.org</owner>
   <summary>
@@ -608,7 +678,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="TrustedWebActivity.QualityEnforcementViolation"
     enum="TrustedWebActivityQualityEnforcementViolationType"
-    expires_after="M104">
+    expires_after="2023-06-30">
   <owner>eirage@chromium.org</owner>
   <owner>peconn@chromium.org</owner>
   <summary>
@@ -632,14 +702,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ShareTargetRequest"
-    enum="WebShareTargetMethod" expires_after="M108">
+    enum="WebShareTargetMethod" expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>Recorded when data is shared via a Trusted Web Activity.</summary>
 </histogram>
 
 <histogram name="TrustedWebActivity.SplashScreenShown" enum="Boolean"
-    expires_after="M108">
+    expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -649,7 +719,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.TimeInVerifiedOrigin.V2" units="ms"
-    expires_after="M108">
+    expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -659,7 +729,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.TimeOutOfVerifiedOrigin.V2" units="ms"
-    expires_after="M108">
+    expires_after="M114">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>

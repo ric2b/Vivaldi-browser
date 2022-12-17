@@ -1,4 +1,4 @@
-// Copyright 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,6 +31,7 @@
 #include "base/metrics/histogram.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/trace_event/traced_value.h"
@@ -342,6 +343,14 @@ void LayerTreeHostImpl::SetDeferBeginMainFrame(
   client_->SetDeferBeginMainFrameFromImpl(defer_begin_main_frame);
 }
 
+void LayerTreeHostImpl::UpdateBrowserControlsState(
+    BrowserControlsState constraints,
+    BrowserControlsState current,
+    bool animate) {
+  browser_controls_offset_manager_->UpdateBrowserControlsState(
+      constraints, current, animate);
+}
+
 bool LayerTreeHostImpl::IsInHighLatencyMode() const {
   return impl_thread_phase_ == ImplThreadPhase::IDLE;
 }
@@ -442,7 +451,9 @@ LayerTreeHostImpl::LayerTreeHostImpl(
                       compositor_frame_reporting_controller_.get()),
       lcd_text_metrics_reporter_(LCDTextMetricsReporter::CreateIfNeeded(this)),
       frame_rate_estimator_(GetTaskRunner()),
-      contains_srgb_cache_(kContainsSrgbCacheSize) {
+      contains_srgb_cache_(kContainsSrgbCacheSize),
+      use_dmsaa_for_tiles_(
+          base::FeatureList::IsEnabled(features::kUseDMSAAForTiles)) {
   DCHECK(mutator_host_);
   mutator_host_->SetMutatorHostClient(this);
   mutator_events_ = mutator_host_->CreateEvents();
@@ -563,6 +574,7 @@ void LayerTreeHostImpl::BeginMainFrameAborted(
     CommitEarlyOutReason reason,
     std::vector<std::unique_ptr<SwapPromise>> swap_promises,
     const viz::BeginFrameArgs& args,
+    bool next_bmf,
     bool scroll_and_viewport_changes_synced) {
   if (reason == CommitEarlyOutReason::ABORTED_NOT_VISIBLE ||
       reason == CommitEarlyOutReason::FINISHED_NO_UPDATES) {
@@ -576,7 +588,7 @@ void LayerTreeHostImpl::BeginMainFrameAborted(
   // values were applied and committed.
   bool main_frame_applied_deltas = MainFrameAppliedDeltas(reason);
   active_tree_->ApplySentScrollAndScaleDeltasFromAbortedCommit(
-      main_frame_applied_deltas);
+      next_bmf, main_frame_applied_deltas);
   if (main_frame_applied_deltas) {
     if (pending_tree_) {
       pending_tree_->AppendSwapPromises(std::move(swap_promises));
@@ -598,6 +610,7 @@ void LayerTreeHostImpl::BeginMainFrameAborted(
 
 void LayerTreeHostImpl::ReadyToCommit(
     const viz::BeginFrameArgs& commit_args,
+    bool scroll_and_viewport_changes_synced,
     const BeginMainFrameMetrics* begin_main_frame_metrics,
     bool commit_timeout) {
   frame_trackers_.NotifyMainFrameProcessed(commit_args);
@@ -609,10 +622,18 @@ void LayerTreeHostImpl::ReadyToCommit(
     total_frame_counter_.Reset();
     dropped_frame_counter_.OnFcpReceived();
   }
+
   // Notify the browser controls manager that we have processed any
   // controls constraint update.
-  if (browser_controls_manager()) {
+  if (scroll_and_viewport_changes_synced && browser_controls_manager()) {
     browser_controls_manager()->NotifyConstraintSyncedToMainThread();
+  }
+
+  // If the scoll offsets were not synchronized, undo the sending of offsets
+  // similar to what's done when the commit is aborted.
+  if (!scroll_and_viewport_changes_synced) {
+    active_tree_->ApplySentScrollAndScaleDeltasFromAbortedCommit(
+        /*next_bmf=*/false, /*main_frame_applied_deltas=*/false);
   }
 }
 
@@ -1174,11 +1195,7 @@ static void AppendQuadsToFillScreen(
 static viz::CompositorRenderPass* FindRenderPassById(
     const viz::CompositorRenderPassList& list,
     viz::CompositorRenderPassId id) {
-  auto it =
-      std::find_if(list.begin(), list.end(),
-                   [id](const std::unique_ptr<viz::CompositorRenderPass>& p) {
-                     return p->id == id;
-                   });
+  auto it = base::ranges::find(list, id, &viz::CompositorRenderPass::id);
   return it == list.end() ? nullptr : it->get();
 }
 
@@ -1965,8 +1982,11 @@ int LayerTreeHostImpl::GetMSAASampleCountForRaster(
   if (!can_use_msaa_)
     return 0;
 
-  if (display_list->HasNonAAPaint() && !supports_disable_msaa_)
-    return 0;
+  if (display_list->HasNonAAPaint()) {
+    UMA_HISTOGRAM_BOOLEAN("GPU.SupportsDisableMsaa", supports_disable_msaa_);
+    if (!supports_disable_msaa_ || use_dmsaa_for_tiles_)
+      return 0;
+  }
 
   return RequestedMSAASampleCount();
 }
@@ -2232,8 +2252,7 @@ void LayerTreeHostImpl::OnDraw(const gfx::Transform& transform,
 
 void LayerTreeHostImpl::OnCompositorFrameTransitionDirectiveProcessed(
     uint32_t sequence_id) {
-  finished_transition_request_sequence_ids_.push_back(sequence_id);
-  SetNeedsCommit();
+  client_->NotifyTransitionRequestFinished(sequence_id);
 }
 
 void LayerTreeHostImpl::ReportEventLatency(
@@ -2319,8 +2338,11 @@ viz::CompositorFrameMetadata LayerTreeHostImpl::MakeCompositorFrameMetadata() {
 
   metadata.display_transform_hint = active_tree_->display_transform_hint();
 
-  if (std::unique_ptr<gfx::DelegatedInkMetadata> delegated_ink_metadata =
-          active_tree_->take_delegated_ink_metadata()) {
+  if (const gfx::DelegatedInkMetadata* delegated_ink_metadata_ptr =
+          active_tree_->delegated_ink_metadata()) {
+    std::unique_ptr<gfx::DelegatedInkMetadata> delegated_ink_metadata =
+        std::make_unique<gfx::DelegatedInkMetadata>(
+            *delegated_ink_metadata_ptr);
     delegated_ink_metadata->set_frame_time(CurrentBeginFrameArgs().frame_time);
     TRACE_EVENT_WITH_FLOW1(
         "delegated_ink_trails",
@@ -2628,9 +2650,7 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
 
   viz::CompositorFrameMetadata metadata = MakeCompositorFrameMetadata();
 
-  std::map<DocumentTransitionSharedElementId,
-           DocumentTransitionRequest::SharedElementInfo>
-      shared_element_render_pass_id_map;
+  DocumentTransitionRequest::SharedElementMap shared_element_render_pass_id_map;
   for (RenderSurfaceImpl* render_surface : *frame->render_surface_list) {
     const auto& shared_element_id =
         render_surface->GetDocumentTransitionSharedElementId();
@@ -3240,6 +3260,10 @@ ActivelyScrollingType LayerTreeHostImpl::GetActivelyScrollingType() const {
   return input_delegate_->GetActivelyScrollingType();
 }
 
+bool LayerTreeHostImpl::IsCurrentScrollMainRepainted() const {
+  return input_delegate_ && input_delegate_->IsCurrentScrollMainRepainted();
+}
+
 bool LayerTreeHostImpl::ScrollAffectsScrollHandler() const {
   if (!input_delegate_)
     return false;
@@ -3703,13 +3727,6 @@ std::unique_ptr<MutatorEvents> LayerTreeHostImpl::TakeMutatorEvents() {
   return events;
 }
 
-std::vector<uint32_t>
-LayerTreeHostImpl::TakeFinishedTransitionRequestSequenceIds() {
-  std::vector<uint32_t> result;
-  result.swap(finished_transition_request_sequence_ids_);
-  return result;
-}
-
 void LayerTreeHostImpl::ClearHistory() {
   client_->ClearHistory();
 }
@@ -3779,7 +3796,14 @@ void LayerTreeHostImpl::ReleaseLayerTreeFrameSink() {
   resource_pool_ = nullptr;
   ClearUIResources();
 
-  if (layer_tree_frame_sink_->context_provider()) {
+  bool should_finish = true;
+#if BUILDFLAG(IS_WIN)
+  // Windows does not have stability issues that require calling Finish.
+  // To minimize risk, only avoid waiting for the UI layer tree.
+  should_finish = !settings_.is_layer_tree_for_ui;
+#endif
+
+  if (should_finish && layer_tree_frame_sink_->context_provider()) {
     // TODO(ericrk): Remove this once all uses of ContextGL from LTFS are
     // removed.
     auto* gl = layer_tree_frame_sink_->context_provider()->ContextGL();
@@ -4130,15 +4154,19 @@ void LayerTreeHostImpl::CollectScrollbarUpdatesForCommit(
 }
 
 std::unique_ptr<CompositorCommitData>
-LayerTreeHostImpl::ProcessCompositorDeltas() {
+LayerTreeHostImpl::ProcessCompositorDeltas(
+    const MutatorHost* main_thread_mutator_host) {
   auto commit_data = std::make_unique<CompositorCommitData>();
 
-  if (input_delegate_)
-    input_delegate_->ProcessCommitDeltas(commit_data.get());
+  if (input_delegate_) {
+    input_delegate_->ProcessCommitDeltas(commit_data.get(),
+                                         main_thread_mutator_host);
+  }
   CollectScrollbarUpdatesForCommit(commit_data.get());
 
   commit_data->page_scale_delta =
-      active_tree_->page_scale_factor()->PullDeltaForMainThread();
+      active_tree_->page_scale_factor()->PullDeltaForMainThread(
+          main_thread_mutator_host);
   commit_data->is_pinch_gesture_active = active_tree_->PinchGestureActive();
   commit_data->is_scroll_active =
       input_delegate_ && GetInputHandler().IsCurrentlyScrolling();
@@ -4148,11 +4176,14 @@ LayerTreeHostImpl::ProcessCompositorDeltas() {
   DCHECK(settings().is_for_scalable_page ||
          commit_data->page_scale_delta == 1.f);
   commit_data->top_controls_delta =
-      active_tree()->top_controls_shown_ratio()->PullDeltaForMainThread();
+      active_tree()->top_controls_shown_ratio()->PullDeltaForMainThread(
+          main_thread_mutator_host);
   commit_data->bottom_controls_delta =
-      active_tree()->bottom_controls_shown_ratio()->PullDeltaForMainThread();
+      active_tree()->bottom_controls_shown_ratio()->PullDeltaForMainThread(
+          main_thread_mutator_host);
   commit_data->elastic_overscroll_delta =
-      active_tree_->elastic_overscroll()->PullDeltaForMainThread();
+      active_tree_->elastic_overscroll()->PullDeltaForMainThread(
+          main_thread_mutator_host);
   commit_data->swap_promises.swap(swap_promises_for_main_thread_scroll_update_);
 
   commit_data->ongoing_scroll_animation =
@@ -4562,7 +4593,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
   // For gpu compositing, a SharedImage mailbox will be allocated and the
   // UIResource will be uploaded into it.
   gpu::Mailbox mailbox;
-  uint32_t shared_image_usage = gpu::SHARED_IMAGE_USAGE_DISPLAY;
+  uint32_t shared_image_usage = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
   // For gpu compositing, we also calculate the GL texture target.
   // TODO(ericrk): Remove references to GL from this code.
   GLenum texture_target = GL_TEXTURE_2D;
@@ -4684,10 +4715,9 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
                                     ->SharedImageInterface()
                                     ->GenUnverifiedSyncToken();
 
-    transferable = viz::TransferableResource::MakeGL(
-        mailbox, GL_LINEAR, texture_target, sync_token, upload_size,
+    transferable = viz::TransferableResource::MakeGpu(
+        mailbox, GL_LINEAR, texture_target, sync_token, upload_size, format,
         overlay_candidate);
-    transferable.format = format;
   } else {
     layer_tree_frame_sink_->DidAllocateSharedBitmap(std::move(shm.region),
                                                     shared_bitmap_id);

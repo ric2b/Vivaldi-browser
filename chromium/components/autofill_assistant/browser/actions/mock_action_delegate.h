@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,8 @@ class MockActionDelegate : public ActionDelegate {
   }
   void ShortWaitForElementWithSlowWarning(
       const Selector& selector,
-      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback) {
+      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback)
+      override {
     OnShortWaitForElement(selector, callback);
   }
   MOCK_METHOD2(
@@ -200,12 +201,21 @@ class MockActionDelegate : public ActionDelegate {
            base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>));
   MOCK_METHOD0(RequireUI, void());
   MOCK_METHOD0(SetExpandSheetForPromptAction, bool());
-  MOCK_METHOD3(
+  MOCK_METHOD5(
       SetGenericUi,
       void(std::unique_ptr<GenericUserInterfaceProto> generic_ui,
            base::OnceCallback<void(const ClientStatus&)> end_action_callback,
            base::OnceCallback<void(const ClientStatus&)>
-               view_inflation_finished_callback));
+               view_inflation_finished_callback,
+           base::RepeatingCallback<void(const RequestBackendDataProto&)>
+               request_backend_data_callback,
+           base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+               show_account_screen_callback));
+  MOCK_METHOD(void,
+              ShowAccountScreen,
+              (const ShowAccountScreenProto& proto,
+               const std::string& email_address),
+              (override));
 
   MOCK_METHOD2(SetPersistentGenericUi,
                void(std::unique_ptr<GenericUserInterfaceProto> generic_ui,
@@ -221,12 +231,13 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD0(MaybeShowSlowConnectionWarning, void());
   MOCK_METHOD0(GetLogInfo, ProcessedActionStatusDetailsProto&());
   MOCK_CONST_METHOD0(GetElementStore, ElementStore*());
-  MOCK_METHOD3(
+  MOCK_METHOD2(
       RequestUserData,
-      void(UserDataEventField event_field,
-           const CollectUserDataOptions& options,
+      void(const CollectUserDataOptions& options,
            base::OnceCallback<void(bool, const GetUserDataResponseProto&)>
                callback));
+  MOCK_METHOD2(SetCollectUserDataUiState,
+               void(bool loading, UserDataEventField event_field));
   MOCK_METHOD0(SupportsExternalActions, bool());
   MOCK_METHOD3(
       RequestExternalAction,
@@ -249,7 +260,7 @@ class MockActionDelegate : public ActionDelegate {
                void(const std::string& payload,
                     base::OnceCallback<void(bool)> callback));
 
-  base::WeakPtr<ActionDelegate> GetWeakPtr() const override {
+  base::WeakPtr<ActionDelegate> GetWeakPtr() override {
     return weak_ptr_factory_.GetWeakPtr();
   }
 

@@ -1,11 +1,11 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_components/history_clusters/clusters.js';
 import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
-import 'chrome://resources/cr_elements/shared_style_css.m.js';
-import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/cr_elements/cr_shared_style.css.js';
+import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/cr_elements/cr_tabs/cr_tabs.js';
 import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
@@ -20,10 +20,10 @@ import {CrDrawerElement} from 'chrome://resources/cr_elements/cr_drawer/cr_drawe
 import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import {FindShortcutMixin, FindShortcutMixinInterface} from 'chrome://resources/cr_elements/find_shortcut_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
+import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {hasKeyModifiers} from 'chrome://resources/js/util.m.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {hasKeyModifiers} from 'chrome://resources/js/util.js';
+import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
 import {IronPagesElement} from 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
 import {IronScrollTargetBehavior} from 'chrome://resources/polymer/v3_0/iron-scroll-target-behavior/iron-scroll-target-behavior.js';
@@ -211,7 +211,8 @@ export class HistoryAppElement extends HistoryAppElementBase {
 
       tabsIcons_: {
         type: Array,
-        value: () => ['images/list.svg', 'images/journeys.svg'],
+        value: () =>
+            ['images/list.svg', 'chrome://resources/images/icon_journeys.svg'],
       },
 
       tabsNames_: {
@@ -260,7 +261,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
     super.connectedCallback();
 
     this.eventTracker_.add(
-        document, 'keydown', e => this.onKeyDown_(e as KeyboardEvent));
+        document, 'keydown', (e: Event) => this.onKeyDown_(e as KeyboardEvent));
     this.eventTracker_.add(
         document, 'visibilitychange', this.onVisibilityChange_.bind(this));
     this.addWebUIListener(

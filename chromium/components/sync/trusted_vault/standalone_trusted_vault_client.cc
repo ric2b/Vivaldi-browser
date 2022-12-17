@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,7 @@
 #include "components/sync/trusted_vault/standalone_trusted_vault_backend.h"
 #include "components/sync/trusted_vault/trusted_vault_access_token_fetcher_impl.h"
 #include "components/sync/trusted_vault/trusted_vault_connection_impl.h"
+#include "google_apis/gaia/google_service_auth_error.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace syncer {
@@ -66,6 +67,9 @@ class IdentityManagerObserver : public signin::IdentityManager::Observer {
   void OnAccountsCookieDeletedByUserAction() override;
   void OnAccountsInCookieUpdated(
       const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
+      const GoogleServiceAuthError& error) override;
+  void OnErrorStateOfRefreshTokenUpdatedForAccount(
+      const CoreAccountInfo& account_info,
       const GoogleServiceAuthError& error) override;
   void OnRefreshTokensLoaded() override;
 
@@ -124,6 +128,22 @@ void IdentityManagerObserver::OnAccountsInCookieUpdated(
     const GoogleServiceAuthError& error) {
   UpdateAccountsInCookieJarInfoIfNeeded(accounts_in_cookie_jar_info);
   notify_keys_changed_callback_.Run();
+}
+
+void IdentityManagerObserver::OnErrorStateOfRefreshTokenUpdatedForAccount(
+    const CoreAccountInfo& account_info,
+    const GoogleServiceAuthError& error) {
+  if (primary_account_.IsEmpty() ||
+      account_info.account_id != primary_account_.account_id) {
+    return;
+  }
+
+  const bool has_persistent_auth_error = error.IsPersistentError();
+
+  backend_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&StandaloneTrustedVaultBackend::SetPrimaryAccount,
+                     backend_, primary_account_, has_persistent_auth_error));
 }
 
 void IdentityManagerObserver::OnRefreshTokensLoaded() {
@@ -203,6 +223,7 @@ class BackendDelegate : public StandaloneTrustedVaultBackend::Delegate {
 
 StandaloneTrustedVaultClient::StandaloneTrustedVaultClient(
     const base::FilePath& file_path,
+    const base::FilePath& deprecated_file_path,
     signin::IdentityManager* identity_manager,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
     : backend_task_runner_(
@@ -220,7 +241,7 @@ StandaloneTrustedVaultClient::StandaloneTrustedVaultClient(
   }
 
   backend_ = base::MakeRefCounted<StandaloneTrustedVaultBackend>(
-      file_path,
+      file_path, deprecated_file_path,
       std::make_unique<
           BackendDelegate>(BindToCurrentSequence(base::BindRepeating(
           &StandaloneTrustedVaultClient::NotifyRecoverabilityDegradedChanged,

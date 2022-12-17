@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,7 +68,8 @@ class WebTestWebFrameWidgetImpl : public WebFrameWidgetImpl,
   void StartDragging(const WebDragData& drag_data,
                      DragOperationsMask operations_allowed,
                      const SkBitmap& drag_image,
-                     const gfx::Point& drag_image_offset) override;
+                     const gfx::Vector2d& cursor_offset,
+                     const gfx::Rect& drag_obj_rect) override;
   void DidAutoResize(const gfx::Size& size) override;
 
   // WidgetBaseClient overrides:

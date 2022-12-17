@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -159,9 +159,10 @@ GURL CreateFencedFrameURLMapping(RenderFrameHost* rfh, const GURL& url) {
       static_cast<RenderFrameHostImpl*>(rfh)->frame_tree_node();
   FencedFrameURLMapping& url_mapping =
       target_node->current_frame_host()->GetPage().fenced_frame_urls_map();
-  GURL urn_uuid = url_mapping.AddFencedFrameURL(url);
-  EXPECT_TRUE(urn_uuid.is_valid());
-  return urn_uuid;
+  absl::optional<GURL> urn_uuid = url_mapping.AddFencedFrameURL(url);
+  EXPECT_TRUE(urn_uuid.has_value());
+  EXPECT_TRUE(urn_uuid->is_valid());
+  return urn_uuid.value();
 }
 }  // namespace test
 

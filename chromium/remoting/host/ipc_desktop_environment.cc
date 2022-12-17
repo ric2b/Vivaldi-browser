@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -107,12 +107,6 @@ void IpcDesktopEnvironment::SetCapabilities(const std::string& capabilities) {
 
 uint32_t IpcDesktopEnvironment::GetDesktopSessionId() const {
   return desktop_session_proxy_->desktop_session_id();
-}
-
-std::unique_ptr<DesktopAndCursorConditionalComposer>
-IpcDesktopEnvironment::CreateComposingVideoCapturer() {
-  // Cursor compositing is done by the desktop process if necessary.
-  return nullptr;
 }
 
 std::unique_ptr<RemoteWebAuthnStateChangeNotifier>

@@ -191,10 +191,10 @@ base::FilePath ConstructCaptureFilename(
     base::Time::Exploded now;
     base::Time::Now().LocalExplode(&now);
 
-    for (CaptureFilePattern& pattern : file_patterns) {
+    for (CaptureFilePattern& pattern_item : file_patterns) {
       base::ReplaceSubstringsAfterOffset(
-          &new_string, 0, pattern.pattern,
-          ConstructCaptureArgument(pattern.pattern_id, url, now, title));
+          &new_string, 0, pattern_item.pattern,
+          ConstructCaptureArgument(pattern_item.pattern_id, url, now, title));
     }
     // Strip invalid characters from the generated filename.
     // Windows is the strictest OS so we use the list from
@@ -349,27 +349,27 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
   if (params->params.save_file_pattern) {
     data->save_file_pattern = *params->params.save_file_pattern;
   }
-  if (params->params.encode_format.get()) {
-    data->image_format = *params->params.encode_format == "jpg"
+  if (params->params.encode_format.has_value()) {
+    data->image_format = params->params.encode_format.value() == "jpg"
                              ? ::vivaldi::skia_utils::ImageFormat::kJPEG
                              : ::vivaldi::skia_utils::ImageFormat::kPNG;
   }
-  if (params->params.encode_quality.get()) {
-    data->encode_quality = *params->params.encode_quality.get();
+  if (params->params.encode_quality.has_value()) {
+    data->encode_quality = params->params.encode_quality.value();
   }
-  if (params->params.save_to_disk.get()) {
-    data->save_to_disk = *params->params.save_to_disk;
+  if (params->params.save_to_disk.has_value()) {
+    data->save_to_disk = params->params.save_to_disk.value();
   }
   if (data->save_to_disk) {
-    if (params->params.show_file_in_path) {
-      data->show_file_in_path = *params->params.show_file_in_path;
+    if (params->params.show_file_in_path.has_value()) {
+      data->show_file_in_path = params->params.show_file_in_path.value();
     }
     Profile* profile = Profile::FromBrowserContext(browser_context());
     data->save_folder =
         profile->GetPrefs()->GetString(vivaldiprefs::kWebpagesCaptureDirectory);
   }
-  if (params->params.copy_to_clipboard.get()) {
-    data->copy_to_clipboard = *params->params.copy_to_clipboard;
+  if (params->params.copy_to_clipboard.has_value()) {
+    data->copy_to_clipboard = params->params.copy_to_clipboard.value();
   }
 
   content::WebContents* tab =
@@ -411,8 +411,8 @@ void ThumbnailsCaptureUIFunction::OnCaptureDone(
 void ThumbnailsCaptureUIFunction::SendResult(
     std::unique_ptr<CaptureData> data) {
   namespace Results = vivaldi::thumbnails::CaptureUI::Results;
-
-  Respond(ArgumentList(Results::Create(*data->success, data->base64)));
+  bool result = data->success ? *data->success : false;
+  Respond(ArgumentList(Results::Create(result, data->base64)));
   ShowFolderIfNecessary(browser_context(), *data);
 }
 
@@ -506,7 +506,8 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
     scale = display.device_scale_factor();
   }
   capture_params.rect =
-      gfx::ToNearestRect(gfx::ConvertRectToPixels(rect, scale));
+      gfx::ToEnclosingRect(gfx::ConvertRectToDips(rect, scale));
+
   capture_params.target_size = out_dimension;
 
   ::vivaldi::CapturePage::Capture(

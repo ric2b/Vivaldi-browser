@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,7 +53,7 @@ class WaylandWindowDragControllerTest : public WaylandDragDropTest {
 
   void SetUp() override {
     WaylandDragDropTest::SetUp();
-    drag_controller()->SetExtendedDragAvailableForTesting();
+    drag_controller()->set_extended_drag_available_for_testing(true);
 
     EXPECT_FALSE(window_->HasPointerFocus());
     EXPECT_EQ(State::kIdle, drag_controller()->state());
@@ -106,6 +106,7 @@ class WaylandWindowDragControllerTest : public WaylandDragDropTest {
     wl_fixed_t x = wl_fixed_from_int(location.x());
     wl_fixed_t y = wl_fixed_from_int(location.y());
     wl_pointer_send_motion(pointer_->resource(), NextTime(), x, y);
+    wl_pointer_send_frame(pointer_->resource());
 
     if (!sync_and_ensure_dispatched)
       return;
@@ -174,7 +175,7 @@ TEST_P(WaylandWindowDragControllerTest, DragInsideWindowAndDrop) {
   EXPECT_EQ(State::kAttached, drag_controller()->state());
 
   auto* move_loop_handler = GetWmMoveLoopHandler(*window_);
-  DCHECK(move_loop_handler);
+  ASSERT_TRUE(move_loop_handler);
 
   enum { kStarted, kDragging, kDropping, kDone } test_step = kStarted;
 
@@ -229,7 +230,7 @@ TEST_P(WaylandWindowDragControllerTest, DragInsideWindowAndDrop) {
   // RunMoveLoop() blocks until the dragging session ends, so resume test
   // server's run loop until it returns.
   server_.Resume();
-  move_loop_handler->RunMoveLoop({});
+  EXPECT_TRUE(move_loop_handler->RunMoveLoop({}));
   server_.Pause();
 
   SendPointerEnter(window_.get(), &delegate_);
@@ -311,7 +312,7 @@ TEST_P(WaylandWindowDragControllerTest, DragInsideWindowAndDrop_TOUCH) {
   // RunMoveLoop() blocks until the dragging session ends, so resume test
   // server's run loop until it returns.
   server_.Resume();
-  GetWmMoveLoopHandler(*window_)->RunMoveLoop({});
+  EXPECT_TRUE(GetWmMoveLoopHandler(*window_)->RunMoveLoop({}));
   server_.Pause();
 
   EXPECT_EQ(test_step, TestStep::kDone);
@@ -411,7 +412,7 @@ TEST_P(WaylandWindowDragControllerTest, DragExitWindowAndDrop) {
   EXPECT_EQ(State::kAttached, drag_controller()->state());
 
   auto* move_loop_handler = GetWmMoveLoopHandler(*window_);
-  DCHECK(move_loop_handler);
+  ASSERT_TRUE(move_loop_handler);
 
   enum { kStarted, kDragging, kExitedDropping, kDone } test_step = kStarted;
 
@@ -465,7 +466,7 @@ TEST_P(WaylandWindowDragControllerTest, DragExitWindowAndDrop) {
   // RunMoveLoop() blocks until the dragging sessions ends, so resume test
   // server's run loop until it returns.
   server_.Resume();
-  move_loop_handler->RunMoveLoop({});
+  EXPECT_TRUE(move_loop_handler->RunMoveLoop({}));
   server_.Pause();
 
   SendPointerEnter(window_.get(), &delegate_);
@@ -520,7 +521,7 @@ TEST_P(WaylandWindowDragControllerTest, DragToOtherWindowSnapDragDrop) {
   EXPECT_EQ(State::kAttached, drag_controller()->state());
 
   auto* move_loop_handler = GetWmMoveLoopHandler(*window_);
-  DCHECK(move_loop_handler);
+  ASSERT_TRUE(move_loop_handler);
 
   enum {
     kStarted,
@@ -576,7 +577,8 @@ TEST_P(WaylandWindowDragControllerTest, DragToOtherWindowSnapDragDrop) {
   // RunMoveLoop() blocks until the dragging sessions ends, so resume test
   // server's run loop until it returns.
   server_.Resume();
-  move_loop_handler->RunMoveLoop({});
+  // TODO(nickdiego): Should succeed for this test case.
+  EXPECT_FALSE(move_loop_handler->RunMoveLoop({}));
   server_.Pause();
 
   // Continue the dragging session after "snapping" the window. At this point,
@@ -713,7 +715,8 @@ TEST_P(WaylandWindowDragControllerTest, DragToOtherWindowSnapDragDrop_TOUCH) {
   // RunMoveLoop() blocks until the window moving ends, so resume test server's
   // message loop until it move loo returns.
   server_.Resume();
-  move_loop_handler->RunMoveLoop({});
+  // TODO(nickdiego): Should succeed for this test case.
+  EXPECT_FALSE(move_loop_handler->RunMoveLoop({}));
   server_.Pause();
 
   // Checks |target_window| is now "focused" and the states keep consistent.
@@ -933,7 +936,7 @@ TEST_P(WaylandWindowDragControllerTest, IgnorePointerEventsUntilDrop) {
   EXPECT_EQ(State::kAttached, drag_controller()->state());
 
   auto* move_loop_handler = GetWmMoveLoopHandler(*window_);
-  DCHECK(move_loop_handler);
+  ASSERT_TRUE(move_loop_handler);
 
   enum { kStarted, kDragging, kDropping, kDone } test_step = kStarted;
 
@@ -1002,7 +1005,7 @@ TEST_P(WaylandWindowDragControllerTest, IgnorePointerEventsUntilDrop) {
   // RunMoveLoop() blocks until the dragging session ends, so resume test
   // server's run loop until it returns.
   server_.Resume();
-  move_loop_handler->RunMoveLoop({});
+  EXPECT_TRUE(move_loop_handler->RunMoveLoop({}));
   server_.Pause();
 
   SendPointerEnter(window_.get(), &delegate_);
@@ -1068,7 +1071,8 @@ TEST_P(WaylandWindowDragControllerTest, MotionEventsSkippedWhileReattaching) {
                                   base::Unretained(move_loop_handler)));
 
   // Spins move loop for |window_1|.
-  move_loop_handler->RunMoveLoop({});
+  // TODO(nickdiego): Should succeed for this test case.
+  EXPECT_FALSE(move_loop_handler->RunMoveLoop({}));
 
   // When the transition to |kAttached| state is finally done (ie. nested loop
   // quits), motion events are then expected to be propagated by window drag
@@ -1141,7 +1145,7 @@ TEST_P(WaylandWindowDragControllerTest, CursorPositionIsUpdatedOnMotion) {
 
       // Send the window to |output|.
       wl::MockSurface* surface = server->GetObject<wl::MockSurface>(
-          window->root_surface()->GetSurfaceId());
+          window->root_surface()->get_surface_id());
       ASSERT_TRUE(surface);
       wl_surface_send_enter(surface->resource(), output->resource());
       self->Sync();
@@ -1198,7 +1202,7 @@ TEST_P(WaylandWindowDragControllerTest,
       base::BindLambdaForTesting([&]() { move_loop_handler->EndMoveLoop(); }));
 
   // 3. Run the move loop.
-  move_loop_handler->RunMoveLoop({});
+  EXPECT_FALSE(move_loop_handler->RunMoveLoop({}));
   Sync();
 
   // 4. Destroy the dragged window just after quitting move loop.
@@ -1292,7 +1296,7 @@ TEST_P(WaylandWindowDragControllerTest,
   }));
 
   ASSERT_TRUE(GetWmMoveLoopHandler(*window_2));
-  GetWmMoveLoopHandler(*window_2)->RunMoveLoop({});
+  EXPECT_FALSE(GetWmMoveLoopHandler(*window_2)->RunMoveLoop({}));
   Sync();
 
   EXPECT_EQ(State::kAttached, drag_controller()->state());
@@ -1310,6 +1314,69 @@ TEST_P(WaylandWindowDragControllerTest,
   EXPECT_FALSE(window_manager()->GetCurrentPointerOrTouchFocusedWindow());
   EXPECT_EQ(gfx::kNullAcceleratedWidget,
             screen_->GetLocalProcessWidgetAtPoint({20, 20}, {}));
+}
+
+// Ensures correct behavior when ext-drag protocol is not available, such as:
+//
+// 1. Returns 'success' even when wl_data_source.cancelled is sent by the
+//    Wayland Compositor.
+//
+//  Regression test for https://crbug.com/1366504.
+TEST_P(WaylandWindowDragControllerTest, ExtendedDragUnavailable) {
+  ASSERT_TRUE(GetWmMoveLoopHandler(*window_));
+  ASSERT_TRUE(GetWaylandExtension(*window_));
+  drag_controller()->set_extended_drag_available_for_testing(false);
+
+  SendPointerEnter(window_.get(), &delegate_);
+  SendPointerPress(window_.get(), &delegate_, BTN_LEFT);
+  SendPointerMotion(window_.get(), &delegate_, {10, 10});
+
+  GetWaylandExtension(*window_)->StartWindowDraggingSessionIfNeeded(
+      /*allow_system_drag=*/false);
+  EXPECT_EQ(State::kAttached, drag_controller()->state());
+
+  auto* move_loop_handler = GetWmMoveLoopHandler(*window_);
+  ASSERT_TRUE(move_loop_handler);
+
+  enum { kStarted, kDropping, kDone } test_step = kStarted;
+  EXPECT_CALL(delegate_, DispatchEvent(_)).WillRepeatedly([&](Event* event) {
+    EXPECT_TRUE(event->IsMouseEvent());
+    switch (test_step) {
+      case kStarted:
+        EXPECT_EQ(ET_MOUSE_ENTERED, event->type());
+        EXPECT_EQ(State::kDetached, drag_controller()->state());
+
+        SendDndCancelled();
+        test_step = kDropping;
+        break;
+      case kDropping: {
+        EXPECT_EQ(ET_MOUSE_RELEASED, event->type());
+        EXPECT_EQ(State::kDropped, drag_controller()->state());
+
+        test_step = kDone;
+        break;
+      }
+      case kDone:
+        EXPECT_EQ(ET_MOUSE_EXITED, event->type());
+        EXPECT_EQ(window_->GetWidget(),
+                  screen_->GetLocalProcessWidgetAtPoint({20, 20}, {}));
+        break;
+    }
+  });
+
+  // RunMoveLoop() blocks until the dragging session ends, so resume test
+  // server's run loop until it returns.
+  server_.Resume();
+  bool succeeded = move_loop_handler->RunMoveLoop({});
+  EXPECT_TRUE(succeeded);
+  server_.Pause();
+
+  SendPointerEnter(window_.get(), &delegate_);
+  Sync();
+
+  EXPECT_EQ(State::kIdle, drag_controller()->state());
+  EXPECT_EQ(window_.get(),
+            window_manager()->GetCurrentPointerOrTouchFocusedWindow());
 }
 
 INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,9 +42,7 @@ export async function combinedSearch(
   const [settingsResponse, personalizationResponse] = await Promise.all([
     getSettingsSearchHandler().search(
         query, maxNumResults, parentResultBehavior),
-    loadTimeData.getBoolean('isPersonalizationHubEnabled') ?
-        getPersonalizationSearchHandler().search(query, maxNumResults) :
-        {results: []},
+    getPersonalizationSearchHandler().search(query, maxNumResults),
   ]);
   return {
     results: mergeResults(

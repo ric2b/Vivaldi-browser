@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -133,6 +133,45 @@ const testCases = [
             });
           });
     });
+  },
+  // Adds the following Remote apps and folders: `test app 5`, `Test App 7`,
+  // `Test App 6 Folder`, `Test App 8` (contained by the folder) and sorts the
+  // items after prompted by the calling site.
+  async function AddRemoteItemsForSort() {
+    chrome.enterprise.remoteApps.addApp(
+        {name: 'test app 5', iconUrl, addToFront: true}, (appId) => {
+          chrome.test.assertNoLastError();
+          chrome.test.assertEq('Id 1', appId);
+
+          chrome.enterprise.remoteApps.addApp(
+              {name: 'Test App 7', iconUrl, addToFront: true}, (appId) => {
+                chrome.test.assertNoLastError();
+                chrome.test.assertEq('Id 2', appId);
+
+                chrome.enterprise.remoteApps.addFolder(
+                    {name: 'Test App 6 Folder', addToFront: true},
+                    (folderId) => {
+                      chrome.test.assertNoLastError();
+                      chrome.test.assertEq('Id 3', folderId);
+
+                      chrome.enterprise.remoteApps.addApp(
+                          {name: 'Test App 8', folderId, iconUrl}, (appId) => {
+                            chrome.test.assertNoLastError();
+                            chrome.test.assertEq('Id 4', appId);
+
+                            chrome.test.sendMessage('Ready to sort', () => {
+                              // Sorts all launcher items with REMOTE_APPS_FIRST
+                              // order.
+                              chrome.enterprise.remoteApps.sortLauncher(
+                                  {position: 'REMOTE_APPS_FIRST'}, () => {
+                                    chrome.test.assertNoLastError();
+                                    chrome.test.succeed();
+                                  });
+                            });
+                          });
+                    });
+              });
+        });
   },
 ];
 

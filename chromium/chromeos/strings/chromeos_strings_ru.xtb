@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Редактировать файл}one{Редактировать файлы}few{Редактировать файлы}many{Редактировать файлы}other{Редактировать файлы}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> ГГц</translation>
 <translation id="3291996639387199448">Направление ключа</translation>
+<translation id="3294437725009624529">Гость</translation>
 <translation id="3310640316857623290">Задержка на сервере доменных имен существенно превышает допустимое значение.</translation>
 <translation id="3328783797891415197">Идет проверка</translation>
 <translation id="3340011300870565703">Правый наушник заряжен на <ph name="BATTERY_PERCENTAGE" /> %.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Пока выполняется обновление встроенного ПО, не отключайте внешнее устройство и не выключайте компьютер. Это окно можно свернуть. Обновление займет несколько минут, в течение которых внешнее устройство может не работать.</translation>
 <translation id="3486220673238053218">узнать определение</translation>
 <translation id="3488065109653206955">Частично активировано</translation>
+<translation id="3510890413042482857">Отправлять <ph name="BEGIN_LINK1" />данные отслеживания производительности<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Обновление Chrome OS</translation>
 <translation id="3527036260304016759">Сбой: неизвестная ошибка</translation>
 <translation id="3532980081107202182">Осталось примерно <ph name="MIN_REMAINING" /> мин.</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">ОС Android не запущена</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Автоматически включать тёмную тему на закате</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Сканировать повторно</translation>
 <translation id="5583640892426849032">Клавиша возврата (Backspace)</translation>

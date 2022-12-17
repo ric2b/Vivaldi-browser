@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,13 +6,6 @@
 
 #include <memory>
 
-#include "ash/components/multidevice/remote_device_test_util.h"
-#include "ash/components/multidevice/software_feature.h"
-#include "ash/components/tether/fake_notification_presenter.h"
-#include "ash/components/tether/fake_tether_component.h"
-#include "ash/components/tether/fake_tether_host_fetcher.h"
-#include "ash/components/tether/tether_component_impl.h"
-#include "ash/components/tether/tether_host_fetcher_impl.h"
 #include "ash/constants/ash_features.h"
 #include "ash/services/device_sync/cryptauth_device_manager.h"
 #include "ash/services/device_sync/cryptauth_enroller.h"
@@ -44,11 +37,18 @@
 #include "chromeos/ash/components/dbus/shill/shill_device_client.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
 #include "chromeos/ash/components/dbus/shill/shill_service_client.h"
+#include "chromeos/ash/components/multidevice/remote_device_test_util.h"
+#include "chromeos/ash/components/multidevice/software_feature.h"
 #include "chromeos/ash/components/network/network_connect.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_handler_test_helper.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_type_pattern.h"
+#include "chromeos/ash/components/tether/fake_notification_presenter.h"
+#include "chromeos/ash/components/tether/fake_tether_component.h"
+#include "chromeos/ash/components/tether/fake_tether_host_fetcher.h"
+#include "chromeos/ash/components/tether/tether_component_impl.h"
+#include "chromeos/ash/components/tether/tether_host_fetcher_impl.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"

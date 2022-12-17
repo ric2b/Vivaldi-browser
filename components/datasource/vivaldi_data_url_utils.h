@@ -21,7 +21,7 @@ enum class PathType {
   kLocalPath,
   kImage,
   kCSSMod,
-  kNotesAttachment,
+  kSyncedStore,
 
   // Windows-specific
   kDesktopWallpaper,
@@ -31,6 +31,8 @@ enum class PathType {
 
 constexpr size_t PathTypeCount = static_cast<size_t>(PathType::kLastType) + 1;
 
+constexpr char kMimeTypePNG[] = "image/png";
+
 // Parse the path component of chrome://vivaldi-data/ URLs. Typically it is
 // /type/data, but there are few older formats that deviates from it.
 absl::optional<PathType> ParsePath(base::StringPiece path,
@@ -39,8 +41,6 @@ absl::optional<PathType> ParsePath(base::StringPiece path,
 // Parse the full url.
 absl::optional<PathType> ParseUrl(base::StringPiece url,
                                   std::string* data = nullptr);
-
-std::string GetPathMimeType(base::StringPiece path);
 
 // Check if path mapping id is really old-format thumbanil, not a path
 // mapping.

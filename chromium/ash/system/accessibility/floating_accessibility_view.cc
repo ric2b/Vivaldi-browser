@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "ash/public/cpp/keyboard/keyboard_controller.h"
 #include "ash/public/cpp/system_tray.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
@@ -97,7 +98,8 @@ std::string GetDescriptionForMovedToPosition(FloatingMenuPosition position) {
 
 bool IsKioskImeButtonEnabled() {
   return Shell::Get()->session_controller()->IsRunningInAppMode() &&
-         base::FeatureList::IsEnabled(features::kKioskEnableImeButton);
+         base::FeatureList::IsEnabled(features::kKioskEnableImeButton) &&
+         Shell::Get()->ime_controller()->GetVisibleImes().size() > 1;
 }
 
 }  // namespace
@@ -127,16 +129,20 @@ END_METADATA
 
 FloatingAccessibilityView::FloatingAccessibilityView(Delegate* delegate)
     : delegate_(delegate) {
-
   Shelf* shelf = RootWindowController::ForTargetRootWindow()->shelf();
   std::unique_ptr<views::View> feature_buttons_container =
       CreateButtonRowContainer(kPanelPositionButtonPadding);
   dictation_button_ = feature_buttons_container->AddChildView(
-      std::make_unique<DictationButtonTray>(shelf));
+      std::make_unique<DictationButtonTray>(
+          shelf, TrayBackgroundViewCatalogName::kDictationAccesibilityWindow));
   select_to_speak_button_ = feature_buttons_container->AddChildView(
-      std::make_unique<SelectToSpeakTray>(shelf));
+      std::make_unique<SelectToSpeakTray>(
+          shelf,
+          TrayBackgroundViewCatalogName::kSelectToSpeakAccessibilityWindow));
   virtual_keyboard_button_ = feature_buttons_container->AddChildView(
-      std::make_unique<VirtualKeyboardTray>(shelf));
+      std::make_unique<VirtualKeyboardTray>(
+          shelf,
+          TrayBackgroundViewCatalogName::kVirtualKeyboardAccessibilityWindow));
 
   // It will be visible again as soon as any of the children becomes visible.
   feature_buttons_container->SetVisible(false);
@@ -176,6 +182,7 @@ FloatingAccessibilityView::FloatingAccessibilityView(Delegate* delegate)
     AddChildView(std::move(ime_button_container));
     AddChildView(CreateSeparator());
   }
+
   AddChildView(std::move(feature_buttons_container));
   AddChildView(std::move(tray_button_container));
   AddChildView(CreateSeparator());
@@ -192,9 +199,12 @@ FloatingAccessibilityView::FloatingAccessibilityView(Delegate* delegate)
   }
 }
 
-FloatingAccessibilityView::~FloatingAccessibilityView() {}
+FloatingAccessibilityView::~FloatingAccessibilityView() {
+  KeyboardController::Get()->RemoveObserver(this);
+}
 
 void FloatingAccessibilityView::Initialize() {
+  KeyboardController::Get()->AddObserver(this);
   for (auto* feature_view :
        {dictation_button_, select_to_speak_button_, virtual_keyboard_button_}) {
     feature_view->Initialize();
@@ -280,6 +290,13 @@ void FloatingAccessibilityView::OnViewVisibilityChanged(
   if (observed_view != starting_view)
     return;
   delegate_->OnLayoutChanged();
+}
+
+void FloatingAccessibilityView::OnKeyboardVisibilityChanged(bool visible) {
+  // To avoid the collision with the virtual keyboard
+  // Accessibility tray is closed after opening the virtual keyboard tray
+  if (visible)
+    delegate_->OnDetailedMenuEnabled(false);
 }
 
 BEGIN_METADATA(FloatingAccessibilityView, views::BoxLayoutView)

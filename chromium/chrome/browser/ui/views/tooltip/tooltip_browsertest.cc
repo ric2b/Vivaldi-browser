@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -329,8 +329,8 @@ IN_PROC_BROWSER_TEST_F(TooltipBrowserTest, MAYBE_HideTooltipOnKeyPress) {
   EXPECT_FALSE(helper()->IsTooltipVisible());
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
-// https://crbug.com/1212403. Flaky on linux-chromeos-rel.
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
+// https://crbug.com/1212403. Flaky on linux-chromeos-rel, windows.
 #define MAYBE_ScriptFocusHidesKeyboardTriggeredTooltip \
   DISABLED_ScriptFocusHidesKeyboardTriggeredTooltip
 #else

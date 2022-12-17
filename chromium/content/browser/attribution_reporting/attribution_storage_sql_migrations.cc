@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "base/check.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
+#include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
 #include "content/browser/attribution_reporting/rate_limit_table.h"
 #include "sql/database.h"
@@ -35,7 +36,7 @@ bool MigrateToVersion34(sql::Database* db, sql::MetaTable* meta_table) {
   // using "ALTER ... ADD COLUMN" require setting a DEFAULT value for the column
   // which is undesirable.
   static constexpr char kNewAggregatableReportMetadataTableSql[] =
-      "CREATE TABLE IF NOT EXISTS new_aggregatable_report_metadata("
+      "CREATE TABLE new_aggregatable_report_metadata("
       "aggregation_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
       "source_id INTEGER NOT NULL,"
       "trigger_time INTEGER NOT NULL,"
@@ -72,19 +73,19 @@ bool MigrateToVersion34(sql::Database* db, sql::MetaTable* meta_table) {
   // new table.
 
   static constexpr char kAggregateSourceIdIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS aggregate_source_id_idx "
+      "CREATE INDEX aggregate_source_id_idx "
       "ON aggregatable_report_metadata(source_id)";
   if (!db->Execute(kAggregateSourceIdIndexSql))
     return false;
 
   static constexpr char kAggregateTriggerTimeIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS aggregate_trigger_time_idx "
+      "CREATE INDEX aggregate_trigger_time_idx "
       "ON aggregatable_report_metadata(trigger_time)";
   if (!db->Execute(kAggregateTriggerTimeIndexSql))
     return false;
 
   static constexpr char kAggregateReportTimeIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS aggregate_report_time_idx "
+      "CREATE INDEX aggregate_report_time_idx "
       "ON aggregatable_report_metadata(report_time)";
   if (!db->Execute(kAggregateReportTimeIndexSql))
     return false;
@@ -101,8 +102,8 @@ bool MigrateToVersion35(sql::Database* db, sql::MetaTable* meta_table) {
     return false;
 
   static constexpr char kNewRateLimitsTableSql[] =
-      "CREATE TABLE IF NOT EXISTS new_rate_limits"
-      "(id INTEGER PRIMARY KEY NOT NULL,"
+      "CREATE TABLE new_rate_limits("
+      "id INTEGER PRIMARY KEY NOT NULL,"
       "scope INTEGER NOT NULL,"
       "source_id INTEGER NOT NULL,"
       "source_site TEXT NOT NULL,"
@@ -175,30 +176,94 @@ bool MigrateToVersion35(sql::Database* db, sql::MetaTable* meta_table) {
 
   // Create the rate_limits table indices on the new table.
   static constexpr char kRateLimitSourceSiteReportingOriginIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS rate_limit_source_site_reporting_origin_idx "
+      "CREATE INDEX rate_limit_source_site_reporting_origin_idx "
       "ON rate_limits"
       "(scope,source_site,reporting_origin)";
   if (!db->Execute(kRateLimitSourceSiteReportingOriginIndexSql))
     return false;
 
   static constexpr char kRateLimitReportingOriginIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS rate_limit_reporting_origin_idx "
+      "CREATE INDEX rate_limit_reporting_origin_idx "
       "ON rate_limits(scope,destination_site,source_site)";
   if (!db->Execute(kRateLimitReportingOriginIndexSql))
     return false;
 
   static constexpr char kRateLimitTimeIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS rate_limit_time_idx ON rate_limits(time)";
+      "CREATE INDEX rate_limit_time_idx ON rate_limits(time)";
   if (!db->Execute(kRateLimitTimeIndexSql))
     return false;
 
   static constexpr char kRateLimitImpressionIdIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS rate_limit_source_id_idx "
+      "CREATE INDEX rate_limit_source_id_idx "
       "ON rate_limits(source_id)";
   if (!db->Execute(kRateLimitImpressionIdIndexSql))
     return false;
 
   meta_table->SetVersionNumber(35);
+  return transaction.Commit();
+}
+
+bool MigrateToVersion36(sql::Database* db, sql::MetaTable* meta_table) {
+  // Wrap each migration in its own transaction. See comment in
+  // `MigrateToVersion34`.
+  sql::Transaction transaction(db);
+  if (!transaction.Begin())
+    return false;
+
+  static constexpr char kDropOldIndexSql[] = "DROP INDEX sources_by_origin";
+  if (!db->Execute(kDropOldIndexSql))
+    return false;
+
+  static constexpr char kCreateNewIndexSql[] =
+      "CREATE INDEX active_sources_by_source_origin "
+      "ON sources(source_origin)"
+      "WHERE event_level_active=1 OR aggregatable_active=1";
+  if (!db->Execute(kCreateNewIndexSql))
+    return false;
+
+  meta_table->SetVersionNumber(36);
+  return transaction.Commit();
+}
+
+bool MigrateToVersion37(sql::Database* db, sql::MetaTable* meta_table) {
+  // Wrap each migration in its own transaction. See comment in
+  // `MigrateToVersion34`.
+  sql::Transaction transaction(db);
+  if (!transaction.Begin())
+    return false;
+
+  static constexpr char kNewDedupKeyTableSql[] =
+      "CREATE TABLE IF NOT EXISTS new_dedup_keys"
+      "(source_id INTEGER NOT NULL,"
+      "report_type INTEGER NOT NULL,"
+      "dedup_key INTEGER NOT NULL,"
+      "PRIMARY KEY(source_id,report_type,dedup_key))WITHOUT ROWID";
+  if (!db->Execute(kNewDedupKeyTableSql))
+    return false;
+
+  static_assert(static_cast<int>(AttributionReport::Type::kEventLevel) == 0,
+                "update the report type value `0` below");
+
+  // Transfer the existing rows to the new table, inserting
+  // `Attribution::Type::kEventLevel` as default values for the
+  // report_type column.
+  static constexpr char kPopulateNewDedupKeyTableSql[] =
+      "INSERT INTO new_dedup_keys SELECT "
+      "source_id,0,dedup_key "
+      "FROM dedup_keys";
+  if (!db->Execute(kPopulateNewDedupKeyTableSql))
+    return false;
+
+  static constexpr char kDropOldDedupKeyTableSql[] = "DROP TABLE dedup_keys";
+  if (!db->Execute(kDropOldDedupKeyTableSql))
+    return false;
+
+  static constexpr char kRenameDedupKeyTableSql[] =
+      "ALTER TABLE new_dedup_keys RENAME TO dedup_keys";
+  if (!db->Execute(kRenameDedupKeyTableSql))
+    return false;
+
+  meta_table->SetVersionNumber(37);
   return transaction.Commit();
 }
 
@@ -209,7 +274,9 @@ bool UpgradeAttributionStorageSqlSchema(sql::Database* db,
   DCHECK(db);
   DCHECK(meta_table);
 
-  base::ThreadTicks start_timestamp = base::ThreadTicks::Now();
+  base::ThreadTicks start_timestamp;
+  if (base::ThreadTicks::IsSupported())
+    start_timestamp = base::ThreadTicks::Now();
 
   if (meta_table->GetVersionNumber() == 33) {
     if (!MigrateToVersion34(db, meta_table))
@@ -219,10 +286,21 @@ bool UpgradeAttributionStorageSqlSchema(sql::Database* db,
     if (!MigrateToVersion35(db, meta_table))
       return false;
   }
+  if (meta_table->GetVersionNumber() == 35) {
+    if (!MigrateToVersion36(db, meta_table))
+      return false;
+  }
+  if (meta_table->GetVersionNumber() == 36) {
+    if (!MigrateToVersion37(db, meta_table))
+      return false;
+  }
   // Add similar if () blocks for new versions here.
 
-  base::UmaHistogramMediumTimes("Conversions.Storage.MigrationTime",
-                                base::ThreadTicks::Now() - start_timestamp);
+  if (base::ThreadTicks::IsSupported()) {
+    base::UmaHistogramMediumTimes("Conversions.Storage.MigrationTime",
+                                  base::ThreadTicks::Now() - start_timestamp);
+  }
+
   return true;
 }
 

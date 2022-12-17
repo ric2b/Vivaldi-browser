@@ -1,10 +1,23 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/user_notes/model/user_note.h"
 
 namespace user_notes {
+
+// static
+std::unique_ptr<UserNote> UserNote::Clone(const UserNote* note) {
+  return std::make_unique<UserNote>(
+      note->id(),
+      std::make_unique<UserNoteMetadata>(note->metadata().creation_date(),
+                                         note->metadata().modification_date(),
+                                         note->metadata().min_note_version()),
+      std::make_unique<UserNoteBody>(note->body().plain_text_value()),
+      std::make_unique<UserNoteTarget>(
+          note->target().type(), note->target().original_text(),
+          note->target().target_page(), note->target().selector()));
+}
 
 UserNote::UserNote(const base::UnguessableToken& id,
                    std::unique_ptr<UserNoteMetadata> metadata,

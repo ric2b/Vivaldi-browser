@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Definitions of builders in the tryserver.chromium.win builder group."""
@@ -22,6 +22,9 @@ try_.defaults.set(
     os = os.WINDOWS_DEFAULT,
     pool = try_.DEFAULT_POOL,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
+
+    # TODO(crbug.com/1362440): remove this.
+    omit_python2 = False,
 )
 
 consoles.list_view(
@@ -61,9 +64,6 @@ try_.builder(
     main_list_view = "try",
     os = os.WINDOWS_ANY,
     tryjob = try_.job(),
-    experiments = {
-        "enable_weetbix_queries": 100,
-    },
 )
 
 try_.builder(
@@ -141,6 +141,14 @@ try_.builder(
 )
 
 try_.builder(
+    name = "win10-wpt-content-shell-fyi-rel",
+    mirrors = [
+        "ci/win10-wpt-content-shell-fyi-rel",
+    ],
+    os = os.WINDOWS_10,
+)
+
+try_.builder(
     name = "win11-x64-fyi-rel",
     mirrors = [
         "ci/Win x64 Builder",
@@ -185,9 +193,10 @@ try_.orchestrator_builder(
     tryjob = try_.job(),
     experiments = {
         "remove_src_checkout_experiment": 100,
-        "enable_weetbix_queries": 100,
     },
-    use_orchestrator_pool = True,
+    # TODO (crbug.com/1372179): Use orchestrator pool once overloaded test pools
+    # are addressed
+    #use_orchestrator_pool = True,
 )
 
 try_.compilator_builder(
@@ -218,9 +227,9 @@ try_.builder(
     main_list_view = "try",
     ssd = True,
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/sandbox/win/.+",
-            ".+/[+]/sandbox/policy/win/.+",
+        location_filters = [
+            "sandbox/win/.+",
+            "sandbox/policy/win/.+",
         ],
     ),
 )
@@ -229,6 +238,13 @@ try_.builder(
     name = "win-fieldtrial-rel",
     os = os.WINDOWS_DEFAULT,
     mirrors = ["ci/win-fieldtrial-rel"],
+)
+
+try_.builder(
+    name = "win-perfetto-rel",
+    mirrors = [
+        "ci/win-perfetto-rel",
+    ],
 )
 
 try_.gpu.optional_tests_builder(
@@ -258,31 +274,31 @@ try_.gpu.optional_tests_builder(
     main_list_view = "try",
     os = os.WINDOWS_DEFAULT,
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/chrome/browser/vr/.+",
-            ".+/[+]/content/browser/xr/.+",
-            ".+/[+]/content/test/gpu/.+",
-            ".+/[+]/device/vr/.+",
-            ".+/[+]/gpu/.+",
-            ".+/[+]/media/audio/.+",
-            ".+/[+]/media/base/.+",
-            ".+/[+]/media/capture/.+",
-            ".+/[+]/media/filters/.+",
-            ".+/[+]/media/gpu/.+",
-            ".+/[+]/media/mojo/.+",
-            ".+/[+]/media/renderers/.+",
-            ".+/[+]/media/video/.+",
-            ".+/[+]/testing/buildbot/tryserver.chromium.win.json",
-            ".+/[+]/testing/trigger_scripts/.+",
-            ".+/[+]/third_party/blink/renderer/modules/vr/.+",
-            ".+/[+]/third_party/blink/renderer/modules/mediastream/.+",
-            ".+/[+]/third_party/blink/renderer/modules/webcodecs/.+",
-            ".+/[+]/third_party/blink/renderer/modules/webgl/.+",
-            ".+/[+]/third_party/blink/renderer/modules/xr/.+",
-            ".+/[+]/third_party/blink/renderer/platform/graphics/gpu/.+",
-            ".+/[+]/tools/clang/scripts/update.py",
-            ".+/[+]/tools/mb/mb_config_expectations/tryserver.chromium.win.json",
-            ".+/[+]/ui/gl/.+",
+        location_filters = [
+            "chrome/browser/vr/.+",
+            "content/browser/xr/.+",
+            "content/test/gpu/.+",
+            "device/vr/.+",
+            "gpu/.+",
+            "media/audio/.+",
+            "media/base/.+",
+            "media/capture/.+",
+            "media/filters/.+",
+            "media/gpu/.+",
+            "media/mojo/.+",
+            "media/renderers/.+",
+            "media/video/.+",
+            "testing/buildbot/tryserver.chromium.win.json",
+            "testing/trigger_scripts/.+",
+            "third_party/blink/renderer/modules/vr/.+",
+            "third_party/blink/renderer/modules/mediastream/.+",
+            "third_party/blink/renderer/modules/webcodecs/.+",
+            "third_party/blink/renderer/modules/webgl/.+",
+            "third_party/blink/renderer/modules/xr/.+",
+            "third_party/blink/renderer/platform/graphics/gpu/.+",
+            "tools/clang/scripts/update.py",
+            "tools/mb/mb_config_expectations/tryserver.chromium.win.json",
+            "ui/gl/.+",
         ],
     ),
 )

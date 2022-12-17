@@ -48,6 +48,10 @@ _log = logging.getLogger(__name__)
 # the leading dot.
 # TODO(robertma): Investigate changing the CLI.
 BASELINE_SUFFIX_LIST = tuple(ext[1:] for ext in base.Port.BASELINE_EXTENSIONS)
+# When large number of tests need to be optimized, limit the length of the commandline to 128 tests
+# to not run into issues with any commandline size limitations with popen. In windows CreateProcess()
+# arg length limit is 32768. With 250 chars in test path length, choosing a chunk size of 128.
+MAX_TESTS_IN_OPTIMIZE_CMDLINE = 128
 
 
 class AbstractRebaseliningCommand(Command):
@@ -154,14 +158,7 @@ class AbstractRebaseliningCommand(Command):
         return self._host_port.output_filename(
             test_name, test_failures.FILENAME_SUFFIX_ACTUAL, '.' + suffix)
 
-    def _file_name_for_expected_result(self, test_name, suffix, is_wpt=False):
-        if is_wpt:
-            # *-actual.txt produced by wptrunner are actually manifest files
-            # that can make the test pass if renamed to *.ini.
-            file_name = self._host_port.get_file_path_for_wpt_test(test_name)
-            assert file_name, ('Cannot find %s in WPT' % test_name)
-            return file_name + '.ini'
-
+    def _file_name_for_expected_result(self, test_name, suffix):
         # output_filename takes extensions starting with '.'.
         return self._host_port.output_filename(
             test_name, test_failures.FILENAME_SUFFIX_EXPECTED, '.' + suffix)
@@ -350,7 +347,6 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                 debug_build_steps.add((builder, step))
 
         build_steps_to_fallback_paths = defaultdict(dict)
-        wpt_build_steps = set()
         #TODO: we should make the selection of (builder, step) deterministic
         for builder, step in list(release_build_steps) + list(
                 debug_build_steps):
@@ -366,17 +362,17 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                         build_steps_to_fallback_paths[is_legacy_step].values()):
                     build_steps_to_fallback_paths[
                         is_legacy_step][builder, step] = fallback_path
-            else:
-                wpt_build_steps.add((builder, step))
-        return (set(build_steps_to_fallback_paths[True]) |
-                set(build_steps_to_fallback_paths[False]) |
-                wpt_build_steps)
+        return (set(build_steps_to_fallback_paths[True])
+                | set(build_steps_to_fallback_paths[False]))
 
     def baseline_fetch_url_resultdb(self, test_name, build):
-        # TODO(preethim): Consider doing QueryArtifacts do a walk of that list for
-        # test of interest than sending out the RPC for every test.
+        # TODO(crbug.com/1213998): Optimize the loop through all artifact_list.
+        # Currently the runtime is O(# tests * # artifacts), but the rpc to get
+        # query all artifacts per build is cached instead rpc sent per test.
         webtest_results_resultdb = self._tool.results_fetcher.fetch_results_from_resultdb_layout_tests(
-            self._tool, build, True)
+            build, True)
+        artifact_list = (self._tool.results_fetcher.
+                         query_artifact_for_build_test_results(build))
         artifact_fetch_urls = []
         if webtest_results_resultdb:
             results_list = webtest_results_resultdb.test_results_resultdb()
@@ -385,25 +381,12 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                 if done:
                     break
                 if test_name in result['testId']:
-                    artifact_list = self._tool.results_fetcher.get_artifact_list_for_test(
-                        self._tool, result['name'])
                     for artifact in artifact_list:
-                        if 'actual' in artifact['artifactId']:
+                        if 'actual' in artifact['artifactId'] and result[
+                                'name'] in artifact['name']:
                             artifact_fetch_urls.append(artifact['fetchUrl'])
-                        done = True
+                            done = True
         return artifact_fetch_urls
-
-    def _can_optimize(self, builder_name):
-        # TODO(crbug.com/1154085): Undo this special case when we have WPT
-        # bots on more ports.
-        # We may be rebaselining only a subset of all platforms, in which
-        # case we need to copy any existing baselines first to avoid clobbering
-        # results from platforms that were not run. See
-        # https://chromium.googlesource.com/chromium/src/+/main/docs/testing/web_test_baseline_fallback.md#rebaseline
-        #
-        # However when running in modes that don't interact with the optimizer,
-        # we don't want to do this copying.
-        return not self._tool.builders.is_wpt_builder(builder_name)
 
     def _rebaseline_args(self,
                          test,
@@ -429,10 +412,10 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
         return args
 
     def _rebaseline_commands(self, test_baseline_set, options):
-        test_port_pairs_to_suffixes = collections.defaultdict(set)
         path_to_blink_tool = self._tool.path()
         cwd = self._tool.git().checkout_root
         rebaseline_commands = []
+        copy_baseline_commands = []
         lines_to_remove = {}
         fetch_urls = []
 
@@ -462,11 +445,9 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                     lines_to_remove[test].append(port_name)
                 continue
 
-            if suffixes and self._can_optimize(build.builder_name):
-                test_port_pairs_to_suffixes[test, port_name].update(suffixes)
-
             flag_spec_option = self._tool.builders.flag_specific_option(
                 build.builder_name, step_name)
+
             args = self._rebaseline_args(test, suffixes, port_name,
                                          flag_spec_option, options.verbose)
             args.extend(['--builder', build.builder_name])
@@ -487,19 +468,14 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             ] + args
             rebaseline_commands.append((rebaseline_command, cwd))
 
-        copy_baseline_commands = []
-        for (test, port_name), suffixes in sorted(
-                test_port_pairs_to_suffixes.items()):
             copy_command = [
                 self._tool.executable,
                 path_to_blink_tool,
                 'copy-existing-baselines-internal',
             ]
             copy_command.extend(
-                self._rebaseline_args(test,
-                                      suffixes,
-                                      port_name,
-                                      verbose=options.verbose))
+                self._rebaseline_args(test, suffixes, port_name,
+                                      flag_spec_option, options.verbose))
             copy_baseline_commands.append((copy_command, cwd))
 
         return copy_baseline_commands, rebaseline_commands, lines_to_remove
@@ -529,40 +505,35 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                            verbose=False,
                            resultDB=False):
         """Returns a list of commands to run in parallel to de-duplicate baselines."""
-        # Group suffixes together to invoke fewer commands.
-        test_flag_pairs_to_suffixes = collections.defaultdict(set)
+        test_set = set()
         baseline_subset = self._filter_baseline_set_builders(test_baseline_set)
         for test, build, step_name, _ in baseline_subset:
-            if not self._can_optimize(build.builder_name):
-                continue
-
-            flag_spec = self._tool.builders.flag_specific_option(
-                build.builder_name, step_name)
+            # Use the suffixes information to determine whether to proceed with the optimize
+            # step. Suffixes are not passed to the optimizer.
             if resultDB:
-                test_flag_pairs_to_suffixes[test, flag_spec].update(
-                    self._suffixes_for_actual_failures_resultdb(test, build))
+                suffixes = self._suffixes_for_actual_failures_resultdb(
+                    test, build)
             else:
-                test_flag_pairs_to_suffixes[test, flag_spec].update(
-                    self._suffixes_for_actual_failures(test, build, step_name))
-
-        suffixes_flag_spec = collections.defaultdict(set)
-        test_list = collections.defaultdict(list)
-        for (test, flag_spec), suffixes in test_flag_pairs_to_suffixes.items():
-            if not suffixes:
+                suffixes = self._suffixes_for_actual_failures(
+                    test, build, step_name)
+            if suffixes == set():
                 continue
-            if flag_spec is None:
-                flag_spec = 'default'
+            test_set.add(test)
 
-            suffixes_flag_spec[flag_spec].update(suffixes)
-            test_list[flag_spec].append(test)
+        # Process the test_list so that each list caps at MAX_TESTS_IN_OPTIMIZE_CMDLINE tests
+        capped_test_list = []
+        test_list = list(test_set)
+        for i in range(0, len(test_set), MAX_TESTS_IN_OPTIMIZE_CMDLINE):
+            capped_test_list.append(test_list[i:i +
+                                              MAX_TESTS_IN_OPTIMIZE_CMDLINE])
 
-        optimize_commands = collections.defaultdict(lambda: ([], ''))
+        optimize_commands = []
         cwd = self._tool.git().checkout_root
         path_to_blink_tool = self._tool.path()
 
         # Build one optimize-baselines invocation command for each flag_spec.
         # All the tests in the test list will be optimized iteratively.
-        for flag_spec, test_list_flag in test_list.items():
+        for test_list in capped_test_list:
             command = [
                 self._tool.executable,
                 path_to_blink_tool,
@@ -574,15 +545,9 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             ]
             if verbose:
                 command.append('--verbose')
-            if flag_spec != 'default':
-                command.extend(['--flag-specific', flag_spec])
-            command.extend([
-                '--suffixes', ','.join(sorted(suffixes_flag_spec[flag_spec]))
-            ])
-            for test in test_list_flag:
-                command.append(test)
 
-            optimize_commands[flag_spec] = (command, cwd)
+            command.extend(test_list)
+            optimize_commands.append((command, cwd))
 
         return optimize_commands
 
@@ -696,7 +661,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             else:
                 optimize_commands = self._optimize_commands(
                     test_baseline_set, options.verbose, options.resultDB)
-                for _, (cmd, cwd) in optimize_commands.items():
+                for (cmd, cwd) in optimize_commands:
                     output = self._tool.executive.run_command(cmd, cwd)
                     print(output)
 
@@ -726,7 +691,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                 for suffix in BASELINE_SUFFIX_LIST
             ]
             baseline_paths += [
-                filesystem.join(self._web_tests_dir(), 'platform/generic', filename)
+                filesystem.join(self._web_tests_dir(), filename)
                 for filename in filenames
             ]
         baseline_paths.sort()
@@ -745,8 +710,6 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                 suffixes.add('txt')
             if 'actual_audio' in artifact_fetch_url:
                 suffixes.add('wav')
-            if self._tool.builders.is_wpt_builder(build.builder_name):
-                suffixes.add('txt')
         return suffixes
 
     def _suffixes_for_actual_failures(self, test, build, step_name=None):
@@ -763,11 +726,6 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
         test_result = self._result_for_test(test, build, step_name)
         if not test_result:
             return set()
-        # Regardless of the test type, we only need the text output (i.e. the
-        # INI manifest) on a WPT bot (a reftest produces both text and image
-        # output, but the image is only informative).
-        if self._tool.builders.is_wpt_builder(build.builder_name):
-            return {'txt'}
         return test_result.suffixes_for_test_result()
 
     def _test_passed_unexpectedly(self, test, build, port_name,

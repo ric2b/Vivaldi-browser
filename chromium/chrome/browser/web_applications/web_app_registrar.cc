@@ -1,10 +1,11 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/web_applications/web_app_registrar.h"
 
 #include <algorithm>
+#include <bitset>
 #include <utility>
 #include <vector>
 
@@ -24,14 +25,20 @@
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_prefs_utils.h"
+#include "chrome/browser/web_applications/web_app_sources.h"
 #include "chrome/browser/web_applications/web_app_translation_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/common/content_features.h"
 #include "third_party/blink/public/common/features.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
+#endif
 
 namespace web_app {
 
@@ -80,7 +87,8 @@ bool WebAppRegistrar::IsPlaceholderApp(
         .IsPlaceholderApp(app_id);
   }
 
-  DCHECK(source_type == WebAppManagement::kPolicy);
+  DCHECK(source_type == WebAppManagement::kPolicy ||
+         source_type == WebAppManagement::kKiosk);
   const WebApp* web_app = GetAppById(app_id);
   if (!web_app)
     return false;
@@ -104,7 +112,8 @@ absl::optional<AppId> WebAppRegistrar::LookupPlaceholderAppId(
         .LookupPlaceholderAppId(install_url);
   }
 
-  DCHECK(source_type == WebAppManagement::kPolicy);
+  DCHECK(source_type == WebAppManagement::kPolicy ||
+         source_type == WebAppManagement::kKiosk);
   absl::optional<AppId> app_id = LookUpAppIdByInstallUrl(install_url);
   if (app_id.has_value() && IsPlaceholderApp(app_id.value(), source_type))
     return app_id;
@@ -311,14 +320,32 @@ bool WebAppRegistrar::IsUrlInAppScope(const GURL& url,
 size_t WebAppRegistrar::GetUrlInAppScopeScore(const std::string& url_spec,
                                               const AppId& app_id) const {
   std::string app_scope = GetAppScope(app_id).spec();
-  DCHECK(!app_scope.empty());
-  return base::StartsWith(url_spec, app_scope, base::CompareCase::SENSITIVE)
-             ? app_scope.size()
-             : 0;
+
+  // The app may have been uninstalled.
+  if (app_scope.empty())
+    return 0;
+
+  size_t score =
+      base::StartsWith(url_spec, app_scope, base::CompareCase::SENSITIVE)
+          ? app_scope.size()
+          : 0;
+
+#if BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(
+          features::kMicrosoftOfficeWebAppExperiment)) {
+    score = std::max(score, ChromeOsWebAppExperiments::GetExtendedScopeScore(
+                                app_id, url_spec));
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+  return score;
 }
 
 absl::optional<AppId> WebAppRegistrar::FindAppWithUrlInScope(
     const GURL& url) const {
+  if (!url.is_valid())
+    return absl::nullopt;
+
   const std::string url_spec = url.spec();
 
   absl::optional<AppId> best_app_id;
@@ -607,6 +634,10 @@ void WebAppRegistrar::SetSubsystems(
   translation_manager_ = translation_manager;
 }
 
+base::WeakPtr<WebAppRegistrar> WebAppRegistrar::AsWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 absl::optional<AppId> WebAppRegistrar::LookUpAppIdByInstallUrl(
     const GURL& install_url) const {
   for (const WebApp& web_app : GetApps()) {
@@ -621,8 +652,16 @@ absl::optional<AppId> WebAppRegistrar::LookUpAppIdByInstallUrl(
 
 bool WebAppRegistrar::IsInstalled(const AppId& app_id) const {
   const WebApp* web_app = GetAppById(app_id);
-  return web_app && !web_app->is_from_sync_and_pending_installation() &&
-         !web_app->is_uninstalling();
+  if (!web_app || web_app->is_uninstalling())
+    return false;
+
+  // `is_from_sync_and_pending_installation()` should be treated as 'not
+  // installed' only if there are no other sources that have installed the web
+  // app.
+  WebAppSources sources_except_sync = web_app->GetSources();
+  sources_except_sync.set(WebAppManagement::kSync, false);
+  return !(web_app->is_from_sync_and_pending_installation() &&
+           sources_except_sync.none());
 }
 
 bool WebAppRegistrar::IsUninstalling(const AppId& app_id) const {

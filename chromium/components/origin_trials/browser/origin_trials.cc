@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,23 +26,25 @@ OriginTrials::~OriginTrials() = default;
 
 base::flat_set<std::string> OriginTrials::GetPersistedTrialsForOrigin(
     const url::Origin& origin,
-    const base::Time current_time) const {
+    const base::Time current_time) {
   return GetPersistedTrialsForOriginWithMatch(origin, current_time,
                                               absl::nullopt);
 }
 
-bool OriginTrials::IsTrialPersistedForOrigin(
-    const url::Origin& origin,
-    const base::StringPiece trial_name,
-    const base::Time current_time) const {
+bool OriginTrials::IsTrialPersistedForOrigin(const url::Origin& origin,
+                                             const base::StringPiece trial_name,
+                                             const base::Time current_time) {
   return !GetPersistedTrialsForOriginWithMatch(origin, current_time, trial_name)
               .empty();
 }
 
 void OriginTrials::PersistTrialsFromTokens(
     const url::Origin& origin,
-    const base::span<const base::StringPiece> header_tokens,
+    const base::span<const std::string> header_tokens,
     const base::Time current_time) {
+  if (origin.opaque())
+    return;
+
   base::flat_set<PersistedTrialToken> enabled_persistent_trial_tokens;
 
   for (const base::StringPiece token : header_tokens) {
@@ -66,6 +68,9 @@ base::flat_set<std::string> OriginTrials::GetPersistedTrialsForOriginWithMatch(
     const url::Origin& origin,
     const base::Time current_time,
     const absl::optional<const base::StringPiece> trial_name_match) const {
+  if (origin.opaque())
+    return {};
+
   base::flat_set<PersistedTrialToken> saved_tokens =
       persistence_provider_->GetPersistentTrialTokens(origin);
 

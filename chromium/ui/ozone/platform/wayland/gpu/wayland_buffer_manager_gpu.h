@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -151,6 +151,7 @@ class WaylandBufferManagerGpu : public ozone::mojom::WaylandBufferManagerGpu {
   bool supports_surface_background_color() const {
     return supports_surface_background_color_;
   }
+  bool supports_clip_rect() const { return supports_clip_rect_; }
 
   // Adds a WaylandBufferManagerGpu binding.
   void AddBindingWaylandBufferManagerGpu(
@@ -258,6 +259,8 @@ class WaylandBufferManagerGpu : public ozone::mojom::WaylandBufferManagerGpu {
   // Determines whether Wayland server supports Wayland protocols that allow to
   // export wl_buffers backed by dmabuf.
   bool supports_dmabuf_ = true;
+
+  bool supports_clip_rect_ = false;
 
   mojo::ReceiverSet<ozone::mojom::WaylandBufferManagerGpu> receiver_set_;
 

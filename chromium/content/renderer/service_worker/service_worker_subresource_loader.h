@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -137,9 +137,10 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
 
   void CommitResponseHeaders();
 
-  // Calls url_loader_client_->OnReceiveResponse() with |response_head_| and
-  // |response_body|.
-  void CommitResponseBody(mojo::ScopedDataPipeConsumerHandle response_body);
+  // Calls url_loader_client_->OnReceiveResponse() with |response_head_|,
+  // |response_body|, and |cached_metadata|.
+  void CommitResponseBody(mojo::ScopedDataPipeConsumerHandle response_body,
+                          absl::optional<mojo_base::BigBuffer> cached_metadata);
 
   // Creates and sends an empty response's body with the net::OK status.
   // Sends net::ERR_INSUFFICIENT_RESOURCES when it can't be created.

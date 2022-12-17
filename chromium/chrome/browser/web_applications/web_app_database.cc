@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,9 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/containers/contains.h"
+#include "base/files/file_path.h"
+#include "base/functional/overloaded.h"
+#include "base/pickle.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
@@ -36,6 +39,7 @@
 #include "components/sync/model/model_error.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/mojom/manifest/capture_links.mojom.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
@@ -236,6 +240,8 @@ WebAppManagement::Type ProtoToWebAppManagement(WebAppManagementProto type) {
       [[fallthrough]];
     case WebAppManagementProto::SYSTEM:
       return WebAppManagement::Type::kSystem;
+    case WebAppManagementProto::KIOSK:
+      return WebAppManagement::Type::kKiosk;
     case WebAppManagementProto::POLICY:
       return WebAppManagement::Type::kPolicy;
     case WebAppManagementProto::SUBAPP:
@@ -246,6 +252,8 @@ WebAppManagement::Type ProtoToWebAppManagement(WebAppManagementProto type) {
       return WebAppManagement::Type::kSync;
     case WebAppManagementProto::DEFAULT:
       return WebAppManagement::Type::kDefault;
+    case WebAppManagementProto::COMMAND_LINE:
+      return WebAppManagement::Type::kCommandLine;
   }
 }
 
@@ -253,6 +261,8 @@ WebAppManagementProto WebAppManagementToProto(WebAppManagement::Type type) {
   switch (type) {
     case WebAppManagement::Type::kSystem:
       return WebAppManagementProto::SYSTEM;
+    case WebAppManagement::Type::kKiosk:
+      return WebAppManagementProto::KIOSK;
     case WebAppManagement::Type::kPolicy:
       return WebAppManagementProto::POLICY;
     case WebAppManagement::Type::kSubApp:
@@ -263,6 +273,8 @@ WebAppManagementProto WebAppManagementToProto(WebAppManagement::Type type) {
       return WebAppManagementProto::SYNC;
     case WebAppManagement::Type::kDefault:
       return WebAppManagementProto::DEFAULT;
+    case WebAppManagement::Type::kCommandLine:
+      return WebAppManagementProto::COMMAND_LINE;
   }
 }
 
@@ -284,6 +296,23 @@ TabStrip::Visibility ProtoToTabStripVisibility(
     case proto::TabStrip_Visibility_ABSENT:
       return TabStrip::Visibility::kAbsent;
   }
+}
+
+std::string FilePathToProto(const base::FilePath& path) {
+  base::Pickle pickle;
+  path.WriteToPickle(&pickle);
+  return std::string(static_cast<const char*>(pickle.data()), pickle.size());
+}
+
+absl::optional<base::FilePath> ProtoToFilePath(const std::string& bytes) {
+  const base::Pickle pickle(bytes.data(), bytes.size());
+  base::PickleIterator pickle_iterator(pickle);
+
+  base::FilePath path;
+  if (!path.ReadFromPickle(&pickle_iterator)) {
+    return absl::nullopt;
+  }
+  return path;
 }
 
 }  // anonymous namespace
@@ -374,6 +403,10 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
       web_app.sources_[WebAppManagement::kDefault]);
   local_data->mutable_sources()->set_sub_app(
       web_app.sources_[WebAppManagement::kSubApp]);
+  local_data->mutable_sources()->set_kiosk(
+      web_app.sources_[WebAppManagement::kKiosk]);
+  local_data->mutable_sources()->set_command_line(
+      web_app.sources_[WebAppManagement::kCommandLine]);
 
   local_data->set_is_locally_installed(web_app.is_locally_installed());
 
@@ -660,8 +693,9 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
         continue;
       const std::string feature_string(feature_name->second);
       proto_policy.set_feature(feature_string);
-      for (const auto& origin : decl.allowed_origins) {
-        proto_policy.add_allowed_origins(origin.Serialize());
+      for (const auto& origin_with_possible_wildcards : decl.allowed_origins) {
+        proto_policy.add_allowed_origins(
+            origin_with_possible_wildcards.Serialize());
       }
       proto_policy.set_matches_all_origins(decl.matches_all_origins);
       proto_policy.set_matches_opaque_src(decl.matches_opaque_src);
@@ -722,26 +756,23 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
       web_app.always_show_toolbar_in_fullscreen());
 
   if (web_app.isolation_data().has_value()) {
-    struct ContentVisitor {
-      void operator()(const WebApp::IsolationData::InstalledBundle& bundle) {
-        mutable_isolation_data->mutable_installed_bundle()->set_path(
-            bundle.path);
-      }
-
-      void operator()(const WebApp::IsolationData::DevModeBundle& bundle) {
-        mutable_isolation_data->mutable_dev_mode_bundle()->set_path(
-            bundle.path);
-      }
-
-      void operator()(const WebApp::IsolationData::DevModeProxy& proxy) {
-        mutable_isolation_data->mutable_dev_mode_proxy()->set_proxy_url(
-            proxy.proxy_url);
-      }
-
-      IsolationData* mutable_isolation_data;
-    };
-    absl::visit(ContentVisitor{local_data->mutable_isolation_data()},
-                web_app.isolation_data().value().content);
+    auto* mutable_data = local_data->mutable_isolation_data();
+    absl::visit(
+        base::Overloaded{
+            [&mutable_data](const IsolationData::InstalledBundle& bundle) {
+              mutable_data->mutable_installed_bundle()->set_path(
+                  FilePathToProto(bundle.path));
+            },
+            [&mutable_data](const IsolationData::DevModeBundle& bundle) {
+              mutable_data->mutable_dev_mode_bundle()->set_path(
+                  FilePathToProto(bundle.path));
+            },
+            [&mutable_data](const IsolationData::DevModeProxy& proxy) {
+              mutable_data->mutable_dev_mode_proxy()->set_proxy_url(
+                  proxy.proxy_url);
+            },
+        },
+        web_app.isolation_data().value().content);
   }
 
   return local_data;
@@ -791,6 +822,13 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   sources[WebAppManagement::kDefault] = local_data.sources().default_();
   if (local_data.sources().has_sub_app()) {
     sources[WebAppManagement::kSubApp] = local_data.sources().sub_app();
+  }
+  if (local_data.sources().has_kiosk()) {
+    sources[WebAppManagement::kKiosk] = local_data.sources().kiosk();
+  }
+  if (local_data.sources().has_command_line()) {
+    sources[WebAppManagement::kCommandLine] =
+        local_data.sources().command_line();
   }
   if (!sources.any() && !local_data.is_uninstalling()) {
     DLOG(ERROR) << "WebApp proto parse error: no any source in sources field, "
@@ -1279,7 +1317,9 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
       decl.feature = feature_enum->second;
 
       for (const std::string& origin : decl_proto.allowed_origins()) {
-        decl.allowed_origins.push_back(url::Origin::Create(GURL(origin)));
+        decl.allowed_origins.emplace_back(
+            blink::OriginWithPossibleWildcards::Parse(
+                origin, blink::OriginWithPossibleWildcards::NodeType::kHeader));
       }
       decl.matches_all_origins = decl_proto.matches_all_origins();
       decl.matches_opaque_src = decl_proto.matches_opaque_src();
@@ -1353,27 +1393,39 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
 
   if (local_data.has_isolation_data()) {
     switch (local_data.isolation_data().content_case()) {
-      case IsolationData::ContentCase::kInstalledBundle:
+      case IsolationDataProto::ContentCase::kInstalledBundle: {
+        absl::optional<base::FilePath> path = ProtoToFilePath(
+            local_data.isolation_data().installed_bundle().path());
+        if (!path.has_value()) {
+          DLOG(ERROR) << "WebApp proto isolation_data.installed_bundle.path "
+                         "parse error: cannot deserialize file path";
+          return nullptr;
+        }
         web_app->SetIsolationData(
-            WebApp::IsolationData(WebApp::IsolationData::InstalledBundle{
-                .path =
-                    local_data.isolation_data().installed_bundle().path()}));
+            IsolationData(IsolationData::InstalledBundle{.path = *path}));
+        break;
+      }
+
+      case IsolationDataProto::ContentCase::kDevModeBundle: {
+        absl::optional<base::FilePath> path = ProtoToFilePath(
+            local_data.isolation_data().dev_mode_bundle().path());
+        if (!path.has_value()) {
+          DLOG(ERROR) << "WebApp proto isolation_data.dev_mode_bundle.path "
+                         "parse error: cannot deserialize file path";
+          return nullptr;
+        }
+        web_app->SetIsolationData(
+            IsolationData(IsolationData::DevModeBundle{.path = *path}));
+        break;
+      }
+
+      case IsolationDataProto::ContentCase::kDevModeProxy:
+        web_app->SetIsolationData(IsolationData(IsolationData::DevModeProxy{
+            .proxy_url =
+                local_data.isolation_data().dev_mode_proxy().proxy_url()}));
         break;
 
-      case IsolationData::ContentCase::kDevModeBundle:
-        web_app->SetIsolationData(
-            WebApp::IsolationData(WebApp::IsolationData::DevModeBundle{
-                .path = local_data.isolation_data().dev_mode_bundle().path()}));
-        break;
-
-      case IsolationData::ContentCase::kDevModeProxy:
-        web_app->SetIsolationData(
-            WebApp::IsolationData(WebApp::IsolationData::DevModeProxy{
-                .proxy_url =
-                    local_data.isolation_data().dev_mode_proxy().proxy_url()}));
-        break;
-
-      case IsolationData::ContentCase::CONTENT_NOT_SET:
+      case IsolationDataProto::ContentCase::CONTENT_NOT_SET:
         DLOG(ERROR) << "WebApp proto isolation_data parse error: "
                     << "content not set";
         return nullptr;

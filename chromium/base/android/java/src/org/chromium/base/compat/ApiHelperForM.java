@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import androidx.annotation.RequiresApi;
+import androidx.annotation.RequiresPermission;
 
 /**
  * Utility class to use new APIs that were added in M (API level 23). These need to exist in a
@@ -142,6 +143,7 @@ public final class ApiHelperForM {
     }
 
     /** See {@link AlarmManager#setExactAndAllowWhileIdle(int, long, PendingIntent) }.  */
+    @RequiresPermission(android.Manifest.permission.SCHEDULE_EXACT_ALARM)
     public static void setAlarmManagerExactAndAllowWhileIdle(AlarmManager alarmManager, int type,
             long triggerAtMillis, PendingIntent pendingIntent) {
         alarmManager.setExactAndAllowWhileIdle(type, triggerAtMillis, pendingIntent);

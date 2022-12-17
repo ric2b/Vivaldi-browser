@@ -11,7 +11,7 @@
 #import "SUFileManager.h"
 #import "SUTestWebServer.h"
 #import "TestAppHelperProtocol.h"
-#import "ed25519.h" // Run `git submodule update --init` if you get an error here
+#import "ed25519.h"
 #import <Sparkle/Sparkle.h>
 #import "SUPopUpTitlebarUserDriver.h"
 #import "SUBinaryDeltaCreate.h"
@@ -60,7 +60,7 @@
     
 #if SPARKLE_BUILD_UI_BITS
     // Detect as early as possible if the shift key is held down
-    BOOL shiftKeyHeldDown = ([NSEvent modifierFlags] & NSShiftKeyMask) != 0;
+    BOOL shiftKeyHeldDown = ([NSEvent modifierFlags] & NSEventModifierFlagShift) != 0;
 #endif
     
     // Apple's file manager may not work well over the network (on macOS 10.11.4 as of writing this), but at the same time

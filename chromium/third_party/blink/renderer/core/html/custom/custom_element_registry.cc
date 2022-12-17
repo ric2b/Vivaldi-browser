@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,6 +73,14 @@ bool ThrowIfValidName(const AtomicString& name,
 }
 
 }  // namespace
+
+// static
+CustomElementRegistry* CustomElementRegistry::Create(
+    ScriptState* script_state) {
+  DCHECK(RuntimeEnabledFeatures::ScopedCustomElementRegistryEnabled());
+  return MakeGarbageCollected<CustomElementRegistry>(
+      LocalDOMWindow::From(script_state));
+}
 
 CustomElementRegistry::CustomElementRegistry(const LocalDOMWindow* owner)
     : element_definition_is_running_(false),

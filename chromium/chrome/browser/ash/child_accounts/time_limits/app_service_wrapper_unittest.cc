@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,7 +114,6 @@ class AppServiceWrapperTest : public ::testing::Test {
 
     app_service_test_.SetUp(&profile_);
     arc_test_.SetUp(&profile_);
-    app_service_test_.FlushMojoCalls();
     task_environment_.RunUntilIdle();
 
     tested_wrapper_.AddObserver(&test_listener_);
@@ -159,7 +158,8 @@ class AppServiceWrapperTest : public ::testing::Test {
     if (app_id.app_type() == apps::AppType::kWeb) {
       DCHECK(url.has_value());
       const web_app::AppId installed_app_id = web_app::test::InstallDummyWebApp(
-          &profile_, app_name, GURL(url.value()));
+          &profile_, app_name, GURL(url.value()),
+          webapps::WebappInstallSource::EXTERNAL_DEFAULT);
       EXPECT_EQ(installed_app_id, app_id.app_id());
       task_environment_.RunUntilIdle();
       return;

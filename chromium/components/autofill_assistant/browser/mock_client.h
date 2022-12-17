@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,7 @@ namespace autofill_assistant {
 class MockClient : public Client {
  public:
   MockClient();
-  ~MockClient();
+  ~MockClient() override;
 
   MOCK_CONST_METHOD0(GetChannel, version_info::Channel());
   MOCK_CONST_METHOD0(GetLocale, std::string());
@@ -35,7 +35,8 @@ class MockClient : public Client {
       ExtractValuesFromSingleTagXml,
       const std::vector<std::string>(const std::string& xml_string,
                                      const std::vector<std::string>& keys));
-  MOCK_CONST_METHOD0(GetCountryCode, std::string());
+  MOCK_CONST_METHOD0(GetLatestCountryCode, std::string());
+  MOCK_CONST_METHOD0(GetStoredPermanentCountryCode, std::string());
   MOCK_CONST_METHOD0(GetDeviceContext, DeviceContext());
   MOCK_CONST_METHOD0(GetWindowSize, absl::optional<std::pair<int, int>>());
   MOCK_CONST_METHOD0(GetScreenOrientation,

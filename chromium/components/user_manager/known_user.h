@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -187,7 +187,7 @@ class USER_MANAGER_EXPORT KnownUser final {
   // Setter and getter for the information about challenge-response keys that
   // can be used by this user to authenticate. The getter returns a null value
   // when the property isn't present. For the format of the value, refer to
-  // ash/components/login/auth/challenge_response/known_user_pref_utils.h.
+  // chromeos/ash/components/login/auth/challenge_response/known_user_pref_utils.h.
   void SetChallengeResponseKeys(const AccountId& account_id, base::Value value);
 
   base::Value GetChallengeResponseKeys(const AccountId& account_id);
@@ -298,14 +298,8 @@ namespace known_user {
 // KnownUser::GetKnownAccountIds instead.
 std::vector<AccountId> USER_MANAGER_EXPORT GetKnownAccountIds();
 
-// This call forms full account id of a known user by email and (optionally)
-// gaia_id.
-// This is a temporary call while migrating to AccountId.
-// TODO(https://crbug.com/1150434): Deprecated, use KnownUser::GetAccountId
-// instead.
-AccountId USER_MANAGER_EXPORT GetAccountId(const std::string& user_email,
-                                           const std::string& id,
-                                           const AccountType& account_type);
+AccountId USER_MANAGER_EXPORT
+GetPlatformKnownAccountId(const std::string& user_email);
 
 }  // namespace known_user
 }  // namespace user_manager

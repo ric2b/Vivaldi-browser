@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -801,6 +801,7 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermissionID::kTabCapture);
   skip.insert(APIPermissionID::kWebRequest);
   skip.insert(APIPermissionID::kWebRequestBlocking);
+  skip.insert(APIPermissionID::kWebRequestAuthProvider);
   skip.insert(APIPermissionID::kDeclarativeNetRequestWithHostAccess);
 
   // This permission requires explicit user action (context menu handler)
@@ -882,7 +883,7 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermissionID::kLockScreen);
 
   // We already have a generic message for declaring externally_connectable.
-  skip.insert(APIPermissionID::kExternallyConnectableAllUrls);
+  skip.insert(APIPermissionID::kDeprecated_ExternallyConnectableAllUrls);
 
   const PermissionMessageProvider* provider = PermissionMessageProvider::Get();
   PermissionsInfo* info = PermissionsInfo::GetInstance();

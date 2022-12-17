@@ -1,27 +1,25 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/multidevice_setup/host_backend_delegate_impl.h"
 
-#include <algorithm>
 #include <sstream>
 
-#include "ash/components/multidevice/logging/logging.h"
-#include "ash/components/multidevice/software_feature.h"
-#include "ash/components/multidevice/software_feature_state.h"
 #include "ash/constants/ash_features.h"
 #include "ash/services/device_sync/feature_status_change.h"
 #include "ash/services/multidevice_setup/eligible_host_devices_provider.h"
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
+#include "base/ranges/algorithm.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
+#include "chromeos/ash/components/multidevice/software_feature.h"
+#include "chromeos/ash/components/multidevice/software_feature_state.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
-namespace ash {
-
-namespace multidevice_setup {
+namespace ash::multidevice_setup {
 
 namespace {
 
@@ -320,13 +318,11 @@ absl::optional<multidevice::RemoteDeviceRef>
 HostBackendDelegateImpl::GetHostFromDeviceSync() {
   multidevice::RemoteDeviceRefList synced_devices =
       device_sync_client_->GetSyncedDevices();
-  auto it = std::find_if(
-      synced_devices.begin(), synced_devices.end(),
+  auto it = base::ranges::find(
+      synced_devices, multidevice::SoftwareFeatureState::kEnabled,
       [](const auto& remote_device) {
-        multidevice::SoftwareFeatureState host_state =
-            remote_device.GetSoftwareFeatureState(
-                multidevice::SoftwareFeature::kBetterTogetherHost);
-        return host_state == multidevice::SoftwareFeatureState::kEnabled;
+        return remote_device.GetSoftwareFeatureState(
+            multidevice::SoftwareFeature::kBetterTogetherHost);
       });
 
   if (it == synced_devices.end())
@@ -383,6 +379,4 @@ void HostBackendDelegateImpl::OnSetHostNetworkRequestFinished(
   }
 }
 
-}  // namespace multidevice_setup
-
-}  // namespace ash
+}  // namespace ash::multidevice_setup

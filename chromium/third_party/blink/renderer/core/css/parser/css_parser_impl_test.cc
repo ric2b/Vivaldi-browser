@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,23 +95,6 @@ TEST(CSSParserImplTest, AtSupportsOffsets) {
   EXPECT_EQ(test_css_parser_observer.rule_body_end_, 27u);
 }
 
-TEST(CSSParserImplTest, AtViewportOffsets) {
-  String sheet_text = "@viewport { }";
-  auto* context = MakeGarbageCollected<CSSParserContext>(
-      kUASheetMode, SecureContextMode::kInsecureContext);
-  auto* style_sheet = MakeGarbageCollected<StyleSheetContents>(context);
-  TestCSSParserObserver test_css_parser_observer;
-  CSSParserImpl::ParseStyleSheetForInspector(sheet_text, context, style_sheet,
-                                             test_css_parser_observer);
-  EXPECT_EQ(style_sheet->ChildRules().size(), 1u);
-  EXPECT_EQ(test_css_parser_observer.rule_type_,
-            StyleRule::RuleType::kViewport);
-  EXPECT_EQ(test_css_parser_observer.rule_header_start_, 10u);
-  EXPECT_EQ(test_css_parser_observer.rule_header_end_, 10u);
-  EXPECT_EQ(test_css_parser_observer.rule_body_start_, 10u);
-  EXPECT_EQ(test_css_parser_observer.rule_body_end_, 10u);
-}
-
 TEST(CSSParserImplTest, AtFontFaceOffsets) {
   String sheet_text = "@font-face { }";
   auto* context = MakeGarbageCollected<CSSParserContext>(
@@ -177,25 +160,6 @@ TEST(CSSParserImplTest, AtPropertyOffsets) {
   EXPECT_EQ(test_css_parser_observer.rule_header_end_, 17u);
   EXPECT_EQ(test_css_parser_observer.rule_body_start_, 18u);
   EXPECT_EQ(test_css_parser_observer.rule_body_end_, 19u);
-}
-
-TEST(CSSParserImplTest, AtScrollTimelineOffsets) {
-  ScopedCSSScrollTimelineForTest scoped_feature(true);
-
-  String sheet_text = "@scroll-timeline test { }";
-  auto* context = MakeGarbageCollected<CSSParserContext>(
-      kHTMLStandardMode, SecureContextMode::kInsecureContext);
-  auto* style_sheet = MakeGarbageCollected<StyleSheetContents>(context);
-  TestCSSParserObserver test_css_parser_observer;
-  CSSParserImpl::ParseStyleSheetForInspector(sheet_text, context, style_sheet,
-                                             test_css_parser_observer);
-  EXPECT_EQ(style_sheet->ChildRules().size(), 1u);
-  EXPECT_EQ(test_css_parser_observer.rule_type_,
-            StyleRule::RuleType::kScrollTimeline);
-  EXPECT_EQ(test_css_parser_observer.rule_header_start_, 17u);
-  EXPECT_EQ(test_css_parser_observer.rule_header_end_, 22u);
-  EXPECT_EQ(test_css_parser_observer.rule_body_start_, 23u);
-  EXPECT_EQ(test_css_parser_observer.rule_body_end_, 24u);
 }
 
 TEST(CSSParserImplTest, AtCounterStyleOffsets) {
@@ -519,7 +483,7 @@ TEST(CSSParserImplTest, LayeredImportRulesMultipleLayers) {
     ASSERT_TRUE(parsed->IsLayered());
     ASSERT_EQ(1u, parsed->GetLayerName().size());
     EXPECT_EQ(g_empty_atom, parsed->GetLayerName()[0]);
-    EXPECT_EQ("layer", parsed->MediaQueries()->MediaText());
+    EXPECT_EQ("not all", parsed->MediaQueries()->MediaText());
   }
 
   {
@@ -539,7 +503,7 @@ TEST(CSSParserImplTest, LayeredImportRulesMultipleLayers) {
     ASSERT_TRUE(parsed->IsLayered());
     ASSERT_EQ(1u, parsed->GetLayerName().size());
     EXPECT_EQ("bar", parsed->GetLayerName()[0]);
-    EXPECT_EQ("layer", parsed->MediaQueries()->MediaText());
+    EXPECT_EQ("not all", parsed->MediaQueries()->MediaText());
   }
 }
 

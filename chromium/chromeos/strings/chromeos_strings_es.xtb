@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Editar archivo}other{Editar archivos}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Dirección de la clave</translation>
+<translation id="3294437725009624529">Invitado</translation>
 <translation id="3310640316857623290">La latencia DNS supera considerablemente el umbral permitido</translation>
 <translation id="3328783797891415197">Prueba en curso</translation>
 <translation id="3340011300870565703">Nivel de batería del auricular derecho del dispositivo: <ph name="BATTERY_PERCENTAGE" /> %.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Mientras se actualiza el firmware, no desconectes este dispositivo externo ni apagues el ordenador. Puedes minimizar esta ventana. Es posible que esta actualización tarde unos minutos en instalarse y que tu dispositivo externo no funcione durante ese tiempo.</translation>
 <translation id="3486220673238053218">definición</translation>
 <translation id="3488065109653206955">Activación parcial</translation>
+<translation id="3510890413042482857">Enviar <ph name="BEGIN_LINK1" />datos de seguimiento de rendimiento<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Actualiza Chrome OS</translation>
 <translation id="3527036260304016759">No se ha podido imprimir - Error desconocido</translation>
 <translation id="3532980081107202182">Quedan unos <ph name="MIN_REMAINING" /> minutos</translation>
@@ -467,6 +469,7 @@
 <translation id="5502931783115429516">Android no se está ejecutando</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Cambiar automáticamente al tema oscuro al anochecer</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Escanear de nuevo</translation>
 <translation id="5583640892426849032">Tecla de retroceso</translation>

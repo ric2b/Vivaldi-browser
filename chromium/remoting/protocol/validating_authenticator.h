@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,8 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "remoting/protocol/authenticator.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 // This authenticator class provides a way to check the validity of a connection
 // as it is being established through an asynchronous callback.  The validation
@@ -85,7 +84,6 @@ class ValidatingAuthenticator : public Authenticator {
   base::WeakPtrFactory<ValidatingAuthenticator> weak_factory_{this};
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_VALIDATING_AUTHENTICATOR_H_

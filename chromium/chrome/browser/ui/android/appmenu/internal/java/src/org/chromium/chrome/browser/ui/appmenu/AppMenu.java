@@ -1,4 +1,4 @@
-// Copyright 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,7 @@ import java.util.List;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * Shows a popup of menuitems anchored to a host view. When a item is selected we call
@@ -224,6 +225,12 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         // Make sure that the popup window will be closed when touch outside of it.
         mPopup.setOutsideTouchable(true);
 
+        // Vivaldi: Animate from bottom when main toolbar is at the bottom.
+        boolean isToolbarAtBottom = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.ADDRESS_BAR_TO_BOTTOM, false);
+        if (isToolbarAtBottom)
+            mPopup.setAnimationStyle(R.style.EndIconMenuAnimBottom);
+        else
         if (!isByPermanentButton) {
             mPopup.setAnimationStyle(
                     isMenuIconAtStart ? R.style.StartIconMenuAnim : R.style.EndIconMenuAnim);
@@ -338,6 +345,8 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
             mListView.setFadingEdgeLength(mVerticalFadeDistance);
         }
 
+        // Vivaldi: Disable this good-for-nothing animation to make the app menu feel more snappy.
+        if (!BuildConfig.IS_VIVALDI)
         // Don't animate the menu items for low end devices.
         if (!SysUtils.isLowEndDevice()) {
             mListView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {

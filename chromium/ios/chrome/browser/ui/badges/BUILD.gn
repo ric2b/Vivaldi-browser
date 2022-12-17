@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -32,6 +32,8 @@ source_set("util") {
     "//ios/chrome/browser/infobars:public",
     "//ios/chrome/browser/ui/icons:action_icons",
     "//ios/chrome/browser/ui/icons:infobar_icons",
+    "//ios/chrome/browser/ui/icons:infobar_icons",
+    "//ios/chrome/browser/ui/icons:symbols",
     "//ios/chrome/browser/ui/icons:symbols",
     "//ui/base",
   ]
@@ -59,6 +61,7 @@ source_set("badges") {
     ":public",
     ":util",
     "resources:incognito_badge",
+    "resources:incognito_badge_ios14",
     "resources:incognito_small_badge",
     "resources:wrench_badge",
     "//base",
@@ -113,8 +116,8 @@ source_set("badges_popup_menu") {
     ":public",
     "//base",
     "//components/password_manager/core/common",
-    "//components/strings:components_strings_grit",
-    "//ios/chrome/app/strings:ios_strings_grit",
+    "//components/strings",
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/infobars:public",
     "//ios/chrome/browser/infobars/overlays",

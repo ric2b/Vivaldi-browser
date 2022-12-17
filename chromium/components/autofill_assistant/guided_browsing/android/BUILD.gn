@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -65,6 +65,7 @@ android_resources("java_resources") {
     "java/res/layout/autofill_assistant_qr_code_dialog.xml",
     "java/res/layout/autofill_assistant_qr_code_permission_layout.xml",
     "java/res/values-v17/dimens.xml",
+    "java/res/values-v17/ids.xml",
   ]
   deps = [
     "//components/browser_ui/strings/android:browser_ui_strings_grd",

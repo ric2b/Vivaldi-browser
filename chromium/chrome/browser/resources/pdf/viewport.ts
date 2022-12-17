@@ -1,10 +1,10 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
-import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
-import {hasKeyModifiers, isRTL} from 'chrome://resources/js/util.m.js';
+import {EventTracker} from 'chrome://resources/js/event_tracker.js';
+import {hasKeyModifiers, isRTL} from 'chrome://resources/js/util.js';
 
 import {ExtendedKeyEvent, FittingType, Point} from './constants.js';
 import {Gesture, GestureDetector, PinchEventDetail} from './gesture_detector.js';
@@ -57,7 +57,7 @@ function vectorDelta(p1: Point, p2: Point): Point {
   return {x: p2.x - p1.x, y: p2.y - p1.y};
 }
 
-type HTMLElementWithExtras = HTMLElement&{
+type HtmlElementWithExtras = HTMLElement&{
   scrollCallback(): void,
   resizeCallback(): void,
 };
@@ -75,6 +75,13 @@ export class Viewport implements ViewportInterface {
 
   private allowedToChangeZoom_: boolean = false;
   private internalZoom_: number = 1;
+
+  /**
+   * Zoom state used to change zoom and fitting type to what it was
+   * originally when saved.
+   */
+  private savedZoom_: number|null = null;
+  private savedFittingType_: FittingType|null = null;
 
   /**
    * Predefined zoom factors to be used when zooming in/out. These are in
@@ -152,12 +159,12 @@ export class Viewport implements ViewportInterface {
       this.scrollContent_.setEventTarget(window);
       // The following line is only used in tests, since they expect
       // |scrollCallback| to be called on the mock |window_| object (legacy).
-      (this.window_ as HTMLElementWithExtras).scrollCallback =
+      (this.window_ as HtmlElementWithExtras).scrollCallback =
           this.updateViewport_.bind(this);
       window.addEventListener('resize', this.resizeWrapper_.bind(this));
       // The following line is only used in tests, since they expect
       // |resizeCallback| to be called on the mock |window_| object (legacy).
-      (this.window_ as HTMLElementWithExtras).resizeCallback =
+      (this.window_ as HtmlElementWithExtras).resizeCallback =
           this.resizeWrapper_.bind(this);
     } else {
       // Standard PDF viewer
@@ -591,6 +598,30 @@ export class Viewport implements ViewportInterface {
     });
   }
 
+  /**
+   * Save the current zoom and fitting type.
+   */
+  saveZoomState() {
+    this.savedZoom_ = this.internalZoom_;
+    this.savedFittingType_ = this.fittingType_;
+  }
+
+  /**
+   * Set zoom and fitting type to what it was when saved. See saveZoomState().
+   */
+  restoreZoomState() {
+    assert(
+        this.savedZoom_ !== null && this.savedFittingType_ !== null,
+        'No saved zoom state exists');
+    if (this.savedFittingType_ === FittingType.NONE) {
+      this.setZoom(this.savedZoom_);
+    } else {
+      this.setFittingType(this.savedFittingType_);
+    }
+    this.savedZoom_ = null;
+    this.savedFittingType_ = null;
+  }
+
   /** @param e Event containing the old browser zoom. */
   private updateZoomFromBrowserChange_(e: CustomEvent<number>) {
     const oldBrowserZoom = e.detail;
@@ -866,6 +897,25 @@ export class Viewport implements ViewportInterface {
     }
 
     return Math.max(zoom, 0);
+  }
+
+  setFittingType(fittingType: FittingType) {
+    switch (fittingType) {
+      case FittingType.FIT_TO_PAGE:
+        this.fitToPage();
+        return;
+      case FittingType.FIT_TO_WIDTH:
+        this.fitToWidth();
+        return;
+      case FittingType.FIT_TO_HEIGHT:
+        this.fitToHeight();
+        return;
+      case FittingType.NONE:
+        this.fittingType_ = fittingType;
+        return;
+      default:
+        assertNotReached('Invalid fittingType');
+    }
   }
 
   /** Zoom the viewport so that the page width consumes the entire viewport. */

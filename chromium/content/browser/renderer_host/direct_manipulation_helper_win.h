@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,7 +98,7 @@ class CONTENT_EXPORT DirectManipulationHelper
   Microsoft::WRL::ComPtr<IDirectManipulationViewport> viewport_;
   Microsoft::WRL::ComPtr<DirectManipulationEventHandler> event_handler_;
   HWND window_;
-  raw_ptr<ui::Compositor> compositor_ = nullptr;
+  raw_ptr<ui::Compositor, DanglingUntriaged> compositor_ = nullptr;
   DWORD view_port_handler_cookie_;
   bool has_animation_observer_ = false;
 };

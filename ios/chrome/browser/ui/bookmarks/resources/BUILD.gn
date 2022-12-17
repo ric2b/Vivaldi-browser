@@ -1,0 +1,42 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+colorset("vivaldi_bookmark_text_field_underline_color") {
+  sources = [ "vivaldi_bookmark_text_field_underline_color.colorset/Contents.json" ]
+}
+
+imageset("vivaldi_bookmarks_folder") {
+  sources = [
+    "vivaldi_bookmarks_folder.imageset/Contents.json",
+    "vivaldi_bookmarks_folder.imageset/vivaldi_bookmarks_folder.pdf",
+  ]
+}
+
+imageset("vivaldi_speed_dial_folder") {
+  sources = [
+    "vivaldi_speed_dial_folder.imageset/Contents.json",
+    "vivaldi_speed_dial_folder.imageset/vivaldi_speed_dial_folder.pdf",
+  ]
+}
+
+imageset("vivald_bookmark_folder_selection_chevron") {
+  sources = [
+    "vivald_bookmark_folder_selection_chevron.imageset/Contents.json",
+    "vivald_bookmark_folder_selection_chevron.imageset/vivald_bookmark_folder_selection_chevron.pdf",
+  ]
+}
+
+imageset("vivald_bookmark_folder_selection_checkmark") {
+  sources = [
+    "vivald_bookmark_folder_selection_checkmark.imageset/Contents.json",
+    "vivald_bookmark_folder_selection_checkmark.imageset/vivald_bookmark_folder_selection_checkmark.pdf",
+  ]
+}
+
+imageset("vivaldi_bookmark_add_new_folder") {
+  sources = [
+    "vivaldi_bookmark_add_new_folder.imageset/Contents.json",
+    "vivaldi_bookmark_add_new_folder.imageset/vivaldi_bookmark_add_new_folder.pdf",
+  ]
+}

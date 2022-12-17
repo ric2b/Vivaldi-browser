@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -216,6 +216,14 @@ class GEOMETRY_EXPORT RectF {
   void Scale(float x_scale, float y_scale) {
     set_origin(ScalePoint(origin(), x_scale, y_scale));
     set_size(ScaleSize(size(), x_scale, y_scale));
+  }
+
+  // Divides the rectangle by |inv_scale|.
+  void InvScale(float inv_scale) { InvScale(inv_scale, inv_scale); }
+
+  void InvScale(float x_scale, float y_scale) {
+    origin_.InvScale(x_scale, y_scale);
+    size_.InvScale(x_scale, y_scale);
   }
 
   // This method reports if the RectF can be safely converted to an integer

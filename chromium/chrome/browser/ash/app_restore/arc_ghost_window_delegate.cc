@@ -1,10 +1,12 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/app_restore/arc_ghost_window_delegate.h"
 
+#include "chrome/browser/ash/app_restore/arc_ghost_window_shell_surface.h"
 #include "chrome/browser/ash/app_restore/arc_window_utils.h"
+#include "chrome/browser/ash/arc/window_predictor/window_predictor_utils.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
@@ -12,16 +14,17 @@ namespace {
 const int kNullWindowState = -1;
 }  // namespace
 
-namespace ash {
-namespace full_restore {
+namespace ash::full_restore {
 
 ArcGhostWindowDelegate::ArcGhostWindowDelegate(
     exo::ClientControlledShellSurface* shell_surface,
     int window_id,
+    const std::string& app_id,
     int64_t display_id,
     const gfx::Rect& bounds,
     chromeos::WindowStateType window_state)
     : window_id_(window_id),
+      app_id_(app_id),
       bounds_(gfx::Rect(bounds)),
       pending_close_(false),
       window_state_(window_state),
@@ -146,6 +149,20 @@ void ArcGhostWindowDelegate::OnWindowCloseRequested(int window_id) {
   UpdateWindowInfoToArc();
 }
 
+void ArcGhostWindowDelegate::OnAppStatesUpdate(const std::string& app_id,
+                                               bool ready,
+                                               bool need_fixup) {
+  if (app_id != app_id_)
+    return;
+
+  // Currently the type update is oneway. If an App need fixup, is not able to
+  // become another state before it's ready.
+  if (need_fixup) {
+    static_cast<ArcGhostWindowShellSurface*>(shell_surface_)
+        ->SetWindowType(arc::GhostWindowType::kFixup);
+  }
+}
+
 bool ArcGhostWindowDelegate::SetDisplayId(int64_t display_id) {
   absl::optional<double> scale_factor = GetDisplayScaleFactor(display_id);
   if (!scale_factor.has_value()) {
@@ -164,5 +181,4 @@ void ArcGhostWindowDelegate::UpdateWindowInfoToArc() {
       display_id_, gfx::ScaleToRoundedRect(bounds_, scale_factor_));
 }
 
-}  // namespace full_restore
-}  // namespace ash
+}  // namespace ash::full_restore

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Rebuilds baseline files by deleting the xml and re-building lint targets."""
@@ -16,7 +16,7 @@ _OUTPUT_DIR_ROOT = _SRC_PATH / 'out'
 _AUTONINJA_PATH = _SRC_PATH / 'third_party' / 'depot_tools' / 'autoninja'
 _NINJA_PATH = _SRC_PATH / 'third_party' / 'depot_tools' / 'ninja'
 _GN_PATH = _SRC_PATH / 'third_party' / 'depot_tools' / 'gn'
-_CHROMECAST_EXTRA_ARGS = ['is_chromecast=true']
+_CHROMECAST_EXTRA_ARGS = ['is_cast_android=true', 'enable_cast_receiver=true']
 
 
 def gen_args_gn_content(use_goma: bool = False,

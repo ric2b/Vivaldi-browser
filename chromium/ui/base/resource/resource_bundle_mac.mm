@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/notreached.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "ui/base/resource/resource_handle.h"
@@ -101,7 +102,8 @@ gfx::Image& ResourceBundle::GetNativeImageNamed(int resource_id) {
     base::scoped_nsobject<NSImage> ns_image;
     for (const auto& resource_handle : resource_handles_) {
       scoped_refptr<base::RefCountedStaticMemory> data(
-          resource_handle->GetStaticMemory(resource_id));
+          resource_handle->GetStaticMemory(
+              base::checked_cast<uint16_t>(resource_id)));
       if (!data.get())
         continue;
 

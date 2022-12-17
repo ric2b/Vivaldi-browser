@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_BACK_FORWARD_CACHE_RESTORATION_H_
@@ -25,8 +25,8 @@ class CORE_EXPORT BackForwardCacheRestoration : public PerformanceEntry {
 
   DOMHighResTimeStamp pageshowEventStart() const {
     return pageshow_event_start_;
-  };
-  DOMHighResTimeStamp pageshowEventEnd() const { return pageshow_event_end_; };
+  }
+  DOMHighResTimeStamp pageshowEventEnd() const { return pageshow_event_end_; }
 
   void Trace(Visitor*) const override;
 

@@ -1,14 +1,14 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
 
-#include "base/check.h"
-#include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
-#include "components/password_manager/core/browser/manage_passwords_referrer.h"
-#include "components/password_manager/core/browser/password_manager_constants.h"
+#import "base/check.h"
+#import "base/memory/ptr_util.h"
+#import "base/metrics/histogram_macros.h"
+#import "components/password_manager/core/browser/manage_passwords_referrer.h"
+#import "components/password_manager/core/browser/password_manager_constants.h"
 #import "ios/chrome/browser/passwords/password_controller.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
@@ -19,15 +19,6 @@
 #endif
 
 PasswordTabHelper::~PasswordTabHelper() = default;
-
-// static
-void PasswordTabHelper::CreateForWebState(web::WebState* web_state) {
-  DCHECK(web_state);
-  if (!FromWebState(web_state)) {
-    web_state->SetUserData(UserDataKey(),
-                           base::WrapUnique(new PasswordTabHelper(web_state)));
-  }
-}
 
 void PasswordTabHelper::SetBaseViewController(
     UIViewController* baseViewController) {
@@ -59,11 +50,6 @@ password_manager::PasswordManager* PasswordTabHelper::GetPasswordManager() {
 password_manager::PasswordManagerClient*
 PasswordTabHelper::GetPasswordManagerClient() {
   return controller_.passwordManagerClient;
-}
-
-password_manager::PasswordManagerDriver*
-PasswordTabHelper::GetPasswordManagerDriver() {
-  return controller_.passwordManagerDriver;
 }
 
 id<PasswordGenerationProvider>

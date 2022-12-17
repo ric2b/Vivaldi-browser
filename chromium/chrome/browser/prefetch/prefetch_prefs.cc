@@ -1,16 +1,18 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/prefetch/prefetch_prefs.h"
+#include "chrome/browser/battery/battery_saver.h"
 #include "chrome/browser/prefetch/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 
 namespace prefetch {
 
-const base::Feature kPreloadingHoldback{"PreloadingHoldback",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kPreloadingHoldback,
+             "PreloadingHoldback",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 void RegisterPredictionOptionsProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
@@ -66,6 +68,9 @@ bool IsSomePreloadingEnabled(const PrefService& prefs) {
 }
 
 bool IsSomePreloadingEnabledIgnoringFinch(const PrefService& prefs) {
+  if (battery::IsBatterySaverEnabled()) {
+    return false;
+  }
   return GetPreloadPagesState(prefs) != PreloadPagesState::kNoPreloading;
 }
 

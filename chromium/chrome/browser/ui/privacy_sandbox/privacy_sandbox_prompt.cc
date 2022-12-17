@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,8 +8,7 @@
 
 void ShowPrivacySandboxPrompt(Browser* browser,
                               PrivacySandboxService::PromptType prompt_type) {
-  if (privacy_sandbox::kPrivacySandboxSettings3NewNotice.Get() &&
-      prompt_type == PrivacySandboxService::PromptType::kNotice) {
+  if (prompt_type == PrivacySandboxService::PromptType::kNotice) {
     ShowPrivacySandboxNoticeBubble(browser);
   } else {
     ShowPrivacySandboxDialog(browser, prompt_type);

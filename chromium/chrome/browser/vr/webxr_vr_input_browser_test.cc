@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,8 +148,7 @@ class WebXrControllerInputMock : public MockXRDeviceHookBase {
                          bool is_valid) {
     auto controller_data = GetCurrentControllerData(index);
     controller_data.pose_data.is_valid = is_valid;
-    device_to_origin.matrix().getColMajor(
-        controller_data.pose_data.device_to_origin);
+    device_to_origin.GetColMajorF(controller_data.pose_data.device_to_origin);
     UpdateControllerAndWait(index, controller_data);
   }
 
@@ -755,7 +754,7 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestControllerInputRegistered) {
 
 std::string TransformToColMajorString(const gfx::Transform& t) {
   float array[16];
-  t.matrix().getColMajor(array);
+  t.GetColMajorF(array);
   std::string array_string = "[";
   for (int i = 0; i < 16; i++) {
     array_string += base::NumberToString(array[i]) + ",";

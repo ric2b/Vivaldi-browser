@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,17 +9,15 @@
 
 namespace features {
 
-extern const base::Feature kNearbySharing;
-extern const base::Feature kNearbySharingBackgroundScanning;
-extern const base::Feature kNearbySharingChildAccounts;
-extern const base::Feature kNearbySharingDeviceContacts;
-extern const base::Feature kNearbySharingOnePageOnboarding;
-extern const base::Feature kNearbySharingReceiveWifiCredentials;
-extern const base::Feature kNearbySharingSelfShareAutoAccept;
-extern const base::Feature kNearbySharingSelfShareUI;
-extern const base::Feature kNearbySharingVisibilityReminder;
-extern const base::Feature kNearbySharingWebRtc;
-extern const base::Feature kNearbySharingWifiLan;
+BASE_DECLARE_FEATURE(kNearbySharing);
+BASE_DECLARE_FEATURE(kNearbySharingChildAccounts);
+BASE_DECLARE_FEATURE(kNearbySharingDeviceContacts);
+BASE_DECLARE_FEATURE(kNearbySharingOnePageOnboarding);
+BASE_DECLARE_FEATURE(kNearbySharingSelfShareAutoAccept);
+BASE_DECLARE_FEATURE(kNearbySharingSelfShareUI);
+BASE_DECLARE_FEATURE(kNearbySharingVisibilityReminder);
+BASE_DECLARE_FEATURE(kNearbySharingWebRtc);
+BASE_DECLARE_FEATURE(kNearbySharingWifiLan);
 
 }  // namespace features
 

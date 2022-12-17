@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,8 @@ import org.chromium.android_webview.AwSettings;
 import org.chromium.base.Log;
 import org.chromium.support_lib_boundary.WebSettingsBoundaryInterface;
 import org.chromium.support_lib_glue.SupportLibWebViewChromiumFactory.ApiCall;
+
+import java.util.Set;
 
 /**
  * Adapter between WebSettingsBoundaryInterface and AwSettings.
@@ -164,30 +166,15 @@ class SupportLibWebSettingsAdapter implements WebSettingsBoundaryInterface {
     }
 
     @Override
-    public void setRequestedWithHeaderMode(int mode) {
-        recordApiCall(ApiCall.WEB_SETTINGS_SET_REQUESTED_WITH_HEADER_MODE);
-        switch (mode) {
-            case RequestedWithHeaderMode.NO_HEADER:
-                mAwSettings.setRequestedWithHeaderMode(AwSettings.REQUESTED_WITH_NO_HEADER);
-                break;
-            case RequestedWithHeaderMode.APP_PACKAGE_NAME:
-                mAwSettings.setRequestedWithHeaderMode(AwSettings.REQUESTED_WITH_APP_PACKAGE_NAME);
-                break;
-        }
+    public void setRequestedWithHeaderOriginAllowList(Set<String> allowedOriginRules) {
+        recordApiCall(ApiCall.WEB_SETTINGS_SET_REQUESTED_WITH_HEADER_ORIGIN_ALLOWLIST);
+        mAwSettings.setRequestedWithHeaderOriginAllowList(allowedOriginRules);
     }
 
     @Override
-    public int getRequestedWithHeaderMode() {
-        recordApiCall(ApiCall.WEB_SETTINGS_GET_REQUESTED_WITH_HEADER_MODE);
-        // The AwSettings.REQUESTED_WITH_CONSTANT_WEBVIEW setting is intended to be internal
-        // and for testing only, so it will not be mapped in the public API.
-        switch (mAwSettings.getRequestedWithHeaderMode()) {
-            case AwSettings.REQUESTED_WITH_NO_HEADER:
-                return RequestedWithHeaderMode.NO_HEADER;
-            case AwSettings.REQUESTED_WITH_APP_PACKAGE_NAME:
-                return RequestedWithHeaderMode.APP_PACKAGE_NAME;
-        }
-        return RequestedWithHeaderMode.APP_PACKAGE_NAME;
+    public Set<String> getRequestedWithHeaderOriginAllowList() {
+        recordApiCall(ApiCall.WEB_SETTINGS_GET_REQUESTED_WITH_HEADER_ORIGIN_ALLOWLIST);
+        return mAwSettings.getRequestedWithHeaderOriginAllowList();
     }
 
     @Override

@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Редактиране на файла}other{Редактиране на файловете}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> ГХц</translation>
 <translation id="3291996639387199448">Посока на ключа</translation>
+<translation id="3294437725009624529">Гост</translation>
 <translation id="3310640316857623290">Забавянето на DNS е значително над допустимия праг</translation>
 <translation id="3328783797891415197">Тестът се изпълнява</translation>
 <translation id="3340011300870565703">Нивото на батерията на дясната слушалка е <ph name="BATTERY_PERCENTAGE" />%.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Докато фърмуерът се актуализира, не изключвайте това външно устройство, нито компютъра си. Можете да намалите прозореца. Възможно е актуализацията да отнеме няколко минути и през това време външното ви устройство може да не работи.</translation>
 <translation id="3486220673238053218">дефиниция</translation>
 <translation id="3488065109653206955">Частично активиран</translation>
+<translation id="3510890413042482857">Изпращане на <ph name="BEGIN_LINK1" />данните от проследяването на ефективността<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Chrome OS: Актуал.</translation>
 <translation id="3527036260304016759">Неуспешно – неизвестна грешка</translation>
 <translation id="3532980081107202182">Остават около <ph name="MIN_REMAINING" /> минути</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">Android не работи</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Автоматично превключване към тъмната тема при залез</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Повторно сканиране</translation>
 <translation id="5583640892426849032">Backspace</translation>

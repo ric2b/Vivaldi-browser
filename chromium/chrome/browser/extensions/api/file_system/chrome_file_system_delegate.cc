@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,8 +47,6 @@ namespace extensions {
 namespace file_system = api::file_system;
 
 #if BUILDFLAG(IS_CHROMEOS)
-using file_system_api::ConsentProvider;
-using file_system_api::ConsentProviderDelegate;
 
 namespace file_system_api {
 
@@ -129,18 +127,15 @@ bool ChromeFileSystemDelegate::ShowSelectFileDialog(
   // TODO(michaelpg): As a workaround for https://crbug.com/736930, allow this
   // to work from a background page for non-platform apps (which, in practice,
   // is restricted to allowlisted extensions).
+  // NOTE(andre@vivaldi.com) : Allow this if the extension calling is Vivaldi.
   if (extension->is_platform_app() &&
+      !::vivaldi::IsVivaldiApp(extension->id()) &&
       !vivaldi::IsVivaldiRunning() &&
       !AppWindowRegistry::Get(extension_function->browser_context())
            ->GetAppWindowForWebContents(web_contents)) {
     return false;
   }
 
-  if (extension->is_platform_app() &&
-      vivaldi::IsVivaldiRunning() &&
-      !vivaldi::FindBrowserForEmbedderWebContents(web_contents)) {
-    return false;
-  }
 
   // The file picker will hold a reference to the ExtensionFunction
   // instance, preventing its destruction (and subsequent sending of the
@@ -176,19 +171,10 @@ int ChromeFileSystemDelegate::GetDescriptionIdForAcceptType(
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
-bool ChromeFileSystemDelegate::IsGrantable(
-    content::BrowserContext* browser_context,
-    const Extension& extension) {
-  // Only kiosk apps in kiosk sessions can use this API.
-  // Additionally it is enabled for allowlisted component extensions and apps.
-  ConsentProviderDelegate consent_provider_delegate(
-      Profile::FromBrowserContext(browser_context));
-  return ConsentProvider(&consent_provider_delegate).IsGrantable(extension);
-}
-
 void ChromeFileSystemDelegate::RequestFileSystem(
     content::BrowserContext* browser_context,
     scoped_refptr<ExtensionFunction> requester,
+    ConsentProvider* consent_provider,
     const Extension& extension,
     std::string volume_id,
     bool writable,

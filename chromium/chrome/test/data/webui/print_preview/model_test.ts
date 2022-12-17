@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@ import {Destination, DestinationOrigin, DuplexMode, makeRecentDestination, Margi
 // <if expr="is_chromeos">
 import {GooglePromotedDestinationId} from 'chrome://print/print_preview.js';
 // </if>
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 // <if expr="is_chromeos">
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 // </if>
@@ -37,7 +37,8 @@ suite(model_test.suiteName, function() {
   let model: PrintPreviewModelElement;
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     model = document.createElement('print-preview-model');
     document.body.appendChild(model);
   });

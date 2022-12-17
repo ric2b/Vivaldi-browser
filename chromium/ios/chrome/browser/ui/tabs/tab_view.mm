@@ -1,5 +1,4 @@
-
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,25 +6,33 @@
 
 #import <MaterialComponents/MaterialActivityIndicator.h>
 
-#include "base/i18n/rtl.h"
-#include "base/ios/ios_util.h"
-#include "base/strings/sys_string_conversions.h"
-#include "ios/chrome/browser/system_flags.h"
+#import "base/i18n/rtl.h"
+#import "base/ios/ios_util.h"
+#import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/ui/elements/fade_truncating_label.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/image_util/image_util.h"
-#include "ios/chrome/browser/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/elements/highlight_button.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/l10n_util_mac.h"
-#include "ui/base/resource/resource_bundle.h"
-#include "ui/gfx/image/image.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "ui/base/resource/resource_bundle.h"
+#import "ui/gfx/image/image.h"
 #import "ui/gfx/ios/uikit_util.h"
-#include "url/gurl.h"
+#import "url/gurl.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -88,6 +95,11 @@ UIImage* DefaultFaviconImage() {
 
   // Adds hover interaction to background tabs.
   API_AVAILABLE(ios(13.4)) UIPointerInteraction* _pointerInteraction;
+
+  // Vivaldi
+  // Background view for tab view
+  UIView *tabViewBackground;
+  // End Vivaldi
 }
 @end
 
@@ -113,6 +125,11 @@ UIImage* DefaultFaviconImage() {
   if ((self = [super initWithFrame:CGRectZero])) {
     [self setOpaque:NO];
     [self createCommonViews];
+
+    if (IsVivaldiRunning() && !emptyView) {
+      [self createTabViewBackrgound:selected];
+    } // End Vivaldi
+
     if (!emptyView)
       [self createButtonsAndLabel];
 
@@ -350,9 +367,19 @@ UIImage* DefaultFaviconImage() {
 // incognito style.
 - (void)updateStyleForSelected:(BOOL)selected {
   // Style the background image first.
+
+  if (IsVivaldiRunning()) {
+    _backgroundImageView.hidden = YES;
+    tabViewBackground.backgroundColor = selected ?
+      [UIColor colorNamed: vTabViewSelectedBackgroundColor] :
+      [UIColor colorNamed: vTabViewNotSelectedBackgroundColor];
+    tabViewBackground.layer.borderColor =
+      [UIColor colorNamed:vTabStripDefaultBackgroundColor].CGColor;
+  } else {
   NSString* state = (selected ? @"foreground" : @"background");
   NSString* imageName = [NSString stringWithFormat:@"tabstrip_%@_tab", state];
   _backgroundImageView.image = [UIImage imageNamed:imageName];
+  } // End Vivaldi
 
   if (selected) {
     if (_pointerInteraction)
@@ -383,6 +410,19 @@ UIImage* DefaultFaviconImage() {
   // several complicated layers to UIA.  Instead, simply set active/inactive
   // here to be used by UIA.
   [_titleLabel setAccessibilityValue:(selected ? @"active" : @"inactive")];
+
+  if (IsVivaldiRunning()) {
+    _closeButton.tintColor =
+      selected ? [UIColor colorNamed: vTabViewSelectedTintColor] :
+                 [UIColor colorNamed: vTabViewNotSelectedTintColor];
+    _faviconView.tintColor =
+      selected ? [UIColor colorNamed: vTabViewSelectedTintColor] :
+                 [UIColor colorNamed: vTabViewNotSelectedTintColor];
+    _titleLabel.textColor =
+      selected ? [UIColor colorNamed: vTabViewSelectedTintColor] :
+                 [UIColor colorNamed: vTabViewNotSelectedTintColor];
+  } // End Vivaldi
+
 }
 
 // Bezier path for the border shape of the tab. While the shape of the tab is an
@@ -484,5 +524,34 @@ UIImage* DefaultFaviconImage() {
 - (UILabel*)titleLabel {
   return _titleLabel;
 }
+
+#pragma mark - VIVALDI
+- (void)createTabViewBackrgound:(BOOL)selected {
+  tabViewBackground = [UIView new];
+
+  tabViewBackground.backgroundColor = selected ?
+    [UIColor colorNamed: vTabViewSelectedBackgroundColor] :
+    [UIColor colorNamed: vTabViewNotSelectedBackgroundColor];
+
+  tabViewBackground.layer.cornerRadius = vTabViewBackgroundCornerRadius;
+  tabViewBackground.layer.maskedCorners = kCALayerMinXMinYCorner |
+                                          kCALayerMaxXMinYCorner;
+  tabViewBackground.layer.borderColor =
+    [UIColor colorNamed:vTabStripDefaultBackgroundColor].CGColor;
+  tabViewBackground.layer.borderWidth = 1.0;
+  [self insertSubview:tabViewBackground atIndex:0];
+
+  [tabViewBackground anchorTop:self.topAnchor
+                       leading:self.leadingAnchor
+                        bottom:self.bottomAnchor
+                      trailing:self.trailingAnchor
+                       padding:vTabViewBackgroundPadding];
+
+  // Setup tap gesture
+  UITapGestureRecognizer *tap =
+    [[UITapGestureRecognizer alloc] initWithTarget:self
+                                            action:@selector(tabWasTapped)];
+  [tabViewBackground addGestureRecognizer:tap];
+} // End Vivaldi
 
 @end

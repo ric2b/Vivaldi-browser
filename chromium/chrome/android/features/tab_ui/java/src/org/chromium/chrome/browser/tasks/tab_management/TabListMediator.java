@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -135,7 +135,7 @@ class TabListMediator {
          * @see TabContentManager#getTabThumbnailWithCallback
          */
         void getTabThumbnailWithCallback(int tabId, Size thumbnailSize, Callback<Bitmap> callback,
-                boolean forceUpdate, boolean writeToCache);
+                boolean forceUpdate, boolean writeToCache, boolean isSelected);
     }
 
     /**
@@ -299,14 +299,14 @@ class TabListMediator {
             mWriteToCache = writeToCache;
         }
 
-        void fetch(Callback<Bitmap> callback, Size thumbnailSize) {
+        void fetch(Callback<Bitmap> callback, Size thumbnailSize, boolean isSelected) {
             Callback<Bitmap> forking = (bitmap) -> {
                 if (sBitmapCallbackForTesting != null) sBitmapCallbackForTesting.onResult(bitmap);
                 callback.onResult(bitmap);
             };
             sFetchCountForTesting++;
             mThumbnailProvider.getTabThumbnailWithCallback(
-                    mId, thumbnailSize, forking, mForceUpdate, mWriteToCache);
+                    mId, thumbnailSize, forking, mForceUpdate, mWriteToCache, isSelected);
         }
     }
 
@@ -483,6 +483,15 @@ class TabListMediator {
                 RecordUserAction.record("TabMultiSelect.TabSelected");
             }
             mModel.get(index).model.set(TabProperties.IS_SELECTED, !selected);
+            // Reset thumbnail to ensure the color of the blank tab slots is correct.
+            TabGroupModelFilter filter =
+                    (TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
+                            .getCurrentTabModelFilter();
+            Tab tab = mTabModelSelector.getTabById(tabId);
+            if (tab != null && filter.hasOtherRelatedTabs(tab)) {
+                mModel.get(index).model.set(TabProperties.THUMBNAIL_FETCHER,
+                        new ThumbnailFetcher(mThumbnailProvider, tabId, false, false));
+            }
         }
     };
 
@@ -490,7 +499,11 @@ class TabListMediator {
         @Override
         public void onDidStartNavigationInPrimaryMainFrame(
                 Tab tab, NavigationHandle navigationHandle) {
-            if (navigationHandle.isSameDocument() || UrlUtilities.isNTPUrl(tab.getUrl())) {
+            // The URL of the tab and the navigation handle can match without it being a same
+            // document navigation if the tab had no renderer and needed to start a new one.
+            // See https://crbug.com/1359002.
+            if (navigationHandle.isSameDocument() || UrlUtilities.isNTPUrl(tab.getUrl())
+                    || tab.getUrl().equals(navigationHandle.getUrl())) {
                 return;
             }
             if (mModel.indexFromId(tab.getId()) == TabModel.INVALID_TAB_INDEX) return;
@@ -880,6 +893,15 @@ class TabListMediator {
                     boolean isUngroupingLastTabInGroup = groupTab.getId() == movedTab.getId();
                     if (mActionsOnAllRelatedTabs) {
                         if (isUngroupingLastTabInGroup) {
+                            // TODO(crbug/1374935): Find out why this is required and remove if
+                            // possible.
+                            if (TabUiFeatureUtilities.isTabSelectionEditorV2Enabled(mContext)) {
+                                boolean isSelected = mTabModelSelector.getCurrentTabId()
+                                        == filter.getTabAt(prevFilterIndex).getId();
+                                updateTab(mModel.indexOfNthTabCard(prevFilterIndex),
+                                        PseudoTab.fromTab(filter.getTabAt(prevFilterIndex)),
+                                        isSelected, false, false);
+                            }
                             return;
                         }
                         Tab currentSelectedTab = mTabModelSelector.getCurrentTab();
@@ -914,13 +936,15 @@ class TabListMediator {
                             addTabInfoToModel(PseudoTab.fromTab(movedTab), modelIndex,
                                     currentSelectedTab.getId() == movedTab.getId());
                         } else {
-                            int filterIndex = TabModelUtils.getTabIndexById(
-                                    mTabModelSelector.getTabModelFilterProvider()
-                                            .getCurrentTabModelFilter(),
-                                    movedTab.getId());
-                            addTabInfoToModel(PseudoTab.fromTab(movedTab),
-                                    mModel.indexOfNthTabCard(filterIndex),
-                                    currentSelectedTab.getId() == movedTab.getId());
+                            // Only add a tab to the model if it represents a new card (new group or
+                            // new singular tab). However, always update the previous group to clean
+                            // up old state.
+                            if (!filter.hasOtherRelatedTabs(movedTab)) {
+                                int filterIndex = filter.indexOf(movedTab);
+                                addTabInfoToModel(PseudoTab.fromTab(movedTab),
+                                        mModel.indexOfNthTabCard(filterIndex),
+                                        currentSelectedTab.getId() == movedTab.getId());
+                            }
                             boolean isSelected = mTabModelSelector.getCurrentTabId()
                                     == filter.getTabAt(prevFilterIndex).getId();
                             updateTab(mModel.indexOfNthTabCard(prevFilterIndex),
@@ -947,13 +971,31 @@ class TabListMediator {
                     // group 1, we can always find the current indexes of 1) Tab 1 and 2) Tab 2 or
                     // group 1 in the model. The method getIndexesForMergeToGroup() returns these
                     // two ids by using Tab 1's related Tabs, which have been updated in TabModel.
-                    Pair<Integer, Integer> positions =
-                            mModel.getIndexesForMergeToGroup(mTabModelSelector.getCurrentModel(),
-                                    getRelatedTabsForId(movedTab.getId()));
+                    List<Tab> relatedTabs = getRelatedTabsForId(movedTab.getId());
+                    Pair<Integer, Integer> positions = mModel.getIndexesForMergeToGroup(
+                            mTabModelSelector.getCurrentModel(), relatedTabs);
                     int srcIndex = positions.second;
                     int desIndex = positions.first;
 
+                    // If only the desIndex is valid then the movedTab was already part of another
+                    // group and is not present in the model. This happens only during an undo.
+                    // Refresh just the desIndex tab card in the model. The removal of the movedTab
+                    // from its previous group was already handled by didMoveTabOutOfGroup.
+                    if (desIndex != TabModel.INVALID_TAB_INDEX
+                            && srcIndex == TabModel.INVALID_TAB_INDEX) {
+                        boolean isSelected = false;
+                        for (Tab tab : relatedTabs) {
+                            isSelected |= tab == mTabModelSelector.getCurrentTab();
+                        }
+                        updateTab(desIndex,
+                                PseudoTab.fromTab(mTabModelSelector.getTabById(
+                                        mModel.get(desIndex).model.get(TabProperties.TAB_ID))),
+                                isSelected, false, false);
+                        return;
+                    }
+
                     if (!isValidMovePosition(srcIndex) || !isValidMovePosition(desIndex)) return;
+
                     Tab newSelectedTabInMergedGroup = null;
                     boolean isMRU = isShowingTabsInMRUOrder();
                     if (isMRU) {
@@ -1040,8 +1082,8 @@ class TabListMediator {
                 }
 
                 @Override
-                public void didCreateGroup(
-                        List<Tab> tabs, List<Integer> tabOriginalIndex, boolean isSameGroup) {}
+                public void didCreateGroup(List<Tab> tabs, List<Integer> tabOriginalIndex,
+                        List<Integer> tabOriginalRootId) {}
             };
 
             ((TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
@@ -1367,6 +1409,8 @@ class TabListMediator {
                 tabSelectedListener = mTabSelectedListener;
             }
         }
+        boolean selectionStateChanged =
+                mModel.get(index).model.get(TabProperties.IS_SELECTED) != isSelected;
         mModel.get(index).model.set(TabProperties.TAB_SELECTED_LISTENER, tabSelectedListener);
         mModel.get(index).model.set(TabProperties.IS_SELECTED, isSelected);
         mModel.get(index).model.set(TabProperties.SHOULD_SHOW_PRICE_DROP_TOOLTIP, false);
@@ -1398,10 +1442,13 @@ class TabListMediator {
         boolean forceUpdate = isSelected && !quickMode;
         boolean forceUpdateLastSelected =
                 mActionsOnAllRelatedTabs && index == mLastSelectedTabListModelIndex && !quickMode;
-
+        boolean forceUpdateColorForSelectableGroup = mUiType == UiType.SELECTABLE
+                && selectionStateChanged
+                && PseudoTab.getRelatedTabs(mContext, pseudoTab, mTabModelSelector).size() > 1;
         if (mThumbnailProvider != null && mVisible
                 && (mModel.get(index).model.get(TabProperties.THUMBNAIL_FETCHER) == null
-                        || forceUpdate || isUpdatingId || forceUpdateLastSelected)) {
+                        || forceUpdate || isUpdatingId || forceUpdateLastSelected
+                        || forceUpdateColorForSelectableGroup)) {
             ThumbnailFetcher callback = new ThumbnailFetcher(mThumbnailProvider, pseudoTab.getId(),
                     forceUpdate || forceUpdateLastSelected,
                     forceUpdate && !TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
@@ -1465,7 +1512,8 @@ class TabListMediator {
                 int itemType = mModel.get(position).type;
 
                 if (itemType == TabProperties.UiType.MESSAGE
-                        || itemType == TabProperties.UiType.LARGE_MESSAGE) {
+                        || itemType == TabProperties.UiType.LARGE_MESSAGE
+                        || itemType == UiType.DIVIDER) {
                     return manager.getSpanCount();
                 }
                 return 1;

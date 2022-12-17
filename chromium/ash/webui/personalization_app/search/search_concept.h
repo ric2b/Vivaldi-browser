@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,7 @@
 
 #include "ash/webui/personalization_app/search/search.mojom.h"
 
-namespace ash {
-namespace personalization_app {
+namespace ash::personalization_app {
 
 struct SearchConcept {
   // The id of this search concept. Used for metrics.
@@ -28,7 +27,6 @@ struct SearchConcept {
   std::string relative_url;
 };
 
-}  // namespace personalization_app
-}  // namespace ash
+}  // namespace ash::personalization_app
 
 #endif  // ASH_WEBUI_PERSONALIZATION_APP_SEARCH_SEARCH_CONCEPT_H_

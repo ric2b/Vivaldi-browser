@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,6 +56,10 @@ class WaylandBufferHandle {
   // when linux_explicit_synchronization extension is enabled to replace
   // wl_buffer.release events.
   void OnExplicitRelease(WaylandSurface* requestor);
+
+  WaylandBufferBacking::BufferBackingType backing_type() const {
+    return backing_->GetBackingType();
+  }
 
  private:
   // Called when wl_buffer object is created.

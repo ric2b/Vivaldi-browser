@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "remoting/host/desktop_display_info_monitor.h"
 #include "remoting/proto/control.pb.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capture_options.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
@@ -26,10 +25,15 @@
 #include "third_party/webrtc/modules/desktop_capture/desktop_region.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "base/feature_list.h"
 #include "remoting/host/chromeos/aura_desktop_capturer.h"
+#include "remoting/host/chromeos/features.h"
+#include "remoting/host/chromeos/frame_sink_desktop_capturer.h"
 #endif
 
 #if defined(REMOTING_USE_WAYLAND)
+#include "base/environment.h"
+#include "base/nix/xdg_util.h"
 #include "remoting/host/linux/wayland_desktop_capturer.h"
 #endif
 
@@ -50,7 +54,7 @@ class DesktopCapturerProxy::Core : public webrtc::DesktopCapturer::Callback {
   }
   void CreateCapturer(const webrtc::DesktopCaptureOptions& options);
 
-  void Start();
+  void Start(scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner);
   void SetSharedMemoryFactory(
       std::unique_ptr<webrtc::SharedMemoryFactory> shared_memory_factory);
   void SelectSource(SourceId id);
@@ -64,33 +68,52 @@ class DesktopCapturerProxy::Core : public webrtc::DesktopCapturer::Callback {
   void OnCaptureResult(webrtc::DesktopCapturer::Result result,
                        std::unique_ptr<webrtc::DesktopFrame> frame) override;
 
-  base::ThreadChecker thread_checker_;
-
   base::WeakPtr<DesktopCapturerProxy> proxy_;
   scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner_;
   std::unique_ptr<webrtc::DesktopCapturer> capturer_;
+
+  THREAD_CHECKER(thread_checker_);
 };
 
 DesktopCapturerProxy::Core::Core(base::WeakPtr<DesktopCapturerProxy> proxy)
-    : proxy_(proxy), caller_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
-  thread_checker_.DetachFromThread();
+    : proxy_(proxy) {
+  DETACH_FROM_THREAD(thread_checker_);
 }
 
 DesktopCapturerProxy::Core::~Core() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 }
 
 void DesktopCapturerProxy::Core::CreateCapturer(
     const webrtc::DesktopCaptureOptions& options) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!capturer_);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  capturer_ = std::make_unique<webrtc::DesktopCapturerDifferWrapper>(
-      std::make_unique<AuraDesktopCapturer>());
+  if (base::FeatureList::IsEnabled(
+          remoting::features::kEnableFrameSinkDesktopCapturerInCrd)) {
+    capturer_ = std::make_unique<FrameSinkDesktopCapturer>();
+  } else {
+    capturer_ = std::make_unique<webrtc::DesktopCapturerDifferWrapper>(
+        std::make_unique<AuraDesktopCapturer>());
+  }
 #elif defined(REMOTING_USE_WAYLAND)
-  if (options.allow_pipewire() && DesktopCapturer::IsRunningUnderWayland()) {
-    capturer_ = std::make_unique<WaylandDesktopCapturer>(options);
+  static base::nix::SessionType session_type = base::nix::SessionType::kUnset;
+  if (session_type == base::nix::SessionType::kUnset) {
+    std::unique_ptr<base::Environment> env = base::Environment::Create();
+    session_type = base::nix::GetSessionType(*env);
+  }
+
+  if (options.allow_pipewire() &&
+      session_type == base::nix::SessionType::kWayland) {
+    // Even though wayland itself has mechanism to detect surface damage in a
+    // fine grained fashion, the framebuffer handed over by the compositor over
+    // to the pipewire stream contains the entire scene (and not just the delta)
+    // from one frame to another. DesktopCapturerDiffWrapper is the closest
+    // thing that can help mimic XDamage behavior for wayland and avoid
+    // unnecessary frame encoding overhead.
+    capturer_ = std::make_unique<webrtc::DesktopCapturerDifferWrapper>(
+        std::make_unique<WaylandDesktopCapturer>(options));
   } else {
     capturer_ = webrtc::DesktopCapturer::CreateScreenCapturer(options);
   }
@@ -101,29 +124,36 @@ void DesktopCapturerProxy::Core::CreateCapturer(
     LOG(ERROR) << "Failed to initialize screen capturer.";
 }
 
-void DesktopCapturerProxy::Core::Start() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void DesktopCapturerProxy::Core::Start(
+    scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(!caller_task_runner_);
+
+  caller_task_runner_ = caller_task_runner;
   if (capturer_)
     capturer_->Start(this);
 }
 
 void DesktopCapturerProxy::Core::SetSharedMemoryFactory(
     std::unique_ptr<webrtc::SharedMemoryFactory> shared_memory_factory) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
   if (capturer_) {
     capturer_->SetSharedMemoryFactory(std::move(shared_memory_factory));
   }
 }
 
 void DesktopCapturerProxy::Core::SelectSource(SourceId id) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
   if (capturer_) {
     capturer_->SelectSource(id);
   }
 }
 
 void DesktopCapturerProxy::Core::CaptureFrame() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
   if (capturer_) {
     capturer_->CaptureFrame();
   } else {
@@ -133,7 +163,8 @@ void DesktopCapturerProxy::Core::CaptureFrame() {
 
 #if defined(WEBRTC_USE_GIO)
 void DesktopCapturerProxy::Core::GetAndSetMetadata() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
   if (capturer_) {
     webrtc::DesktopCaptureMetadata metadata = capturer_->GetMetadata();
     caller_task_runner_->PostTask(
@@ -146,7 +177,7 @@ void DesktopCapturerProxy::Core::GetAndSetMetadata() {
 void DesktopCapturerProxy::Core::OnCaptureResult(
     webrtc::DesktopCapturer::Result result,
     std::unique_ptr<webrtc::DesktopFrame> frame) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   caller_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&DesktopCapturerProxy::OnFrameCaptured, proxy_,
@@ -154,9 +185,9 @@ void DesktopCapturerProxy::Core::OnCaptureResult(
 }
 
 DesktopCapturerProxy::DesktopCapturerProxy(
-    scoped_refptr<base::SingleThreadTaskRunner> capture_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner)
+    scoped_refptr<base::SingleThreadTaskRunner> capture_task_runner)
     : capture_task_runner_(capture_task_runner) {
+  DETACH_FROM_THREAD(thread_checker_);
   core_ = std::make_unique<Core>(weak_factory_.GetWeakPtr());
 }
 
@@ -164,15 +195,11 @@ DesktopCapturerProxy::~DesktopCapturerProxy() {
   capture_task_runner_->DeleteSoon(FROM_HERE, core_.release());
 }
 
-void DesktopCapturerProxy::set_desktop_display_info_monitor(
-    DesktopDisplayInfoMonitor* monitor) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  desktop_display_info_monitor_ = monitor;
-}
-
 void DesktopCapturerProxy::CreateCapturer(
     const webrtc::DesktopCaptureOptions& options) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  // CreateCapturer() must be called before Start().
+  DCHECK(!callback_);
+
   capture_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&Core::CreateCapturer,
                                 base::Unretained(core_.get()), options));
@@ -180,21 +207,25 @@ void DesktopCapturerProxy::CreateCapturer(
 
 void DesktopCapturerProxy::set_capturer(
     std::unique_ptr<webrtc::DesktopCapturer> capturer) {
+  // set_capturer() must be called before Start().
+  DCHECK(!callback_);
+
   core_->set_capturer(std::move(capturer));
 }
 
 void DesktopCapturerProxy::Start(Callback* callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   callback_ = callback;
 
   capture_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&Core::Start, base::Unretained(core_.get())));
+      FROM_HERE, base::BindOnce(&Core::Start, base::Unretained(core_.get()),
+                                base::ThreadTaskRunnerHandle::Get()));
 }
 
 void DesktopCapturerProxy::SetSharedMemoryFactory(
     std::unique_ptr<webrtc::SharedMemoryFactory> shared_memory_factory) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   capture_task_runner_->PostTask(
       FROM_HERE,
@@ -204,9 +235,8 @@ void DesktopCapturerProxy::SetSharedMemoryFactory(
 }
 
 void DesktopCapturerProxy::CaptureFrame() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  // Start() must be called before Capture().
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // Start() must be called before CaptureFrame().
   DCHECK(callback_);
 
   capture_task_runner_->PostTask(
@@ -220,7 +250,7 @@ bool DesktopCapturerProxy::GetSourceList(SourceList* sources) {
 }
 
 bool DesktopCapturerProxy::SelectSource(SourceId id) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   capture_task_runner_->PostTask(
       FROM_HERE,
@@ -231,19 +261,16 @@ bool DesktopCapturerProxy::SelectSource(SourceId id) {
 void DesktopCapturerProxy::OnFrameCaptured(
     webrtc::DesktopCapturer::Result result,
     std::unique_ptr<webrtc::DesktopFrame> frame) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   callback_->OnCaptureResult(result, std::move(frame));
-
-  if (desktop_display_info_monitor_) {
-    desktop_display_info_monitor_->QueryDisplayInfo();
-  }
 }
 
 #if defined(WEBRTC_USE_GIO)
 void DesktopCapturerProxy::GetMetadataAsync(
     base::OnceCallback<void(webrtc::DesktopCaptureMetadata)> callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
   metadata_callback_ = std::move(callback);
   capture_task_runner_->PostTask(
       FROM_HERE,
@@ -251,7 +278,7 @@ void DesktopCapturerProxy::GetMetadataAsync(
 }
 
 void DesktopCapturerProxy::OnMetadata(webrtc::DesktopCaptureMetadata metadata) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   std::move(metadata_callback_).Run(std::move(metadata));
 }

@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Bestand bewerken}other{Bestanden bewerken}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Sleutelrichting</translation>
+<translation id="3294437725009624529">Gast</translation>
 <translation id="3310640316857623290">DNS-latentie aanzienlijk langer dan toelaatbare drempel</translation>
 <translation id="3328783797891415197">Test actief</translation>
 <translation id="3340011300870565703">Apparaat heeft nog <ph name="BATTERY_PERCENTAGE" />% batterijlading in het rechteroordopje.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Koppel dit externe apparaat niet los en zet je computer niet uit terwijl de firmware wordt geüpdatet. Je kunt dit venster minimaliseren. Deze update kan een paar minuten duren en je externe apparaat werkt misschien niet tijdens het updaten.</translation>
 <translation id="3486220673238053218">definitie</translation>
 <translation id="3488065109653206955">Gedeeltelijk geactiveerd</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />Gegevens over prestatietracering<ph name="END_LINK1" /> sturen</translation>
 <translation id="3517001332549868749">Chrome OS-update</translation>
 <translation id="3527036260304016759">Mislukt - Onbekende fout</translation>
 <translation id="3532980081107202182">Nog ongeveer <ph name="MIN_REMAINING" /> minuten</translation>
@@ -468,6 +470,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="5502931783115429516">Android wordt niet uitgevoerd</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Automatisch overschakelen naar donker thema bij zonsondergang</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Opnieuw scannen</translation>
 <translation id="5583640892426849032">Backspace</translation>

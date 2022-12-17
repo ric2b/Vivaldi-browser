@@ -1,10 +1,9 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h"
 
-#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -12,6 +11,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
+#include "base/ranges/algorithm.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_canvasfilter_string.h"
@@ -319,7 +319,8 @@ void BaseRenderingContext2D::RestoreMatrixClipStack(cc::PaintCanvas* c) const {
     c->setMatrix(SkM44());
     if (curr_state->Get()) {
       curr_state->Get()->PlaybackClips(c);
-      c->setMatrix(curr_state->Get()->GetTransform().ToSkM44());
+      c->setMatrix(
+          AffineTransformToSkMatrix(curr_state->Get()->GetTransform()));
     }
     c->save();
   }
@@ -655,7 +656,7 @@ void BaseRenderingContext2D::setShadowBlur(double blur) {
 String BaseRenderingContext2D::shadowColor() const {
   // TODO(https://1351544): CanvasRenderingContext2DState's shadow color should
   // be a Color, not an SkColor or SkColor4f.
-  return Color::FromSkColor(GetState().ShadowColor()).Serialized();
+  return Color::FromSkColor(GetState().ShadowColor()).SerializeAsCanvasColor();
 }
 
 void BaseRenderingContext2D::setShadowColor(const String& color_string) {
@@ -676,8 +677,8 @@ const Vector<double>& BaseRenderingContext2D::getLineDash() const {
 }
 
 static bool LineDashSequenceIsValid(const Vector<double>& dash) {
-  return std::all_of(dash.begin(), dash.end(),
-                     [](double d) { return std::isfinite(d) && d >= 0; });
+  return base::ranges::all_of(
+      dash, [](double d) { return std::isfinite(d) && d >= 0; });
 }
 
 void BaseRenderingContext2D::setLineDash(const Vector<double>& dash) {
@@ -805,7 +806,7 @@ void BaseRenderingContext2D::scale(double sx, double sy) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kScale, sx, sy);
   }
 
-  TransformationMatrix new_transform = GetState().GetTransform();
+  AffineTransform new_transform = GetState().GetTransform();
   float fsx = ClampTo<float>(sx);
   float fsy = ClampTo<float>(sy);
   new_transform.ScaleNonUniform(fsx, fsy);
@@ -832,8 +833,8 @@ void BaseRenderingContext2D::rotate(double angle_in_radians) {
                                                 angle_in_radians);
   }
 
-  TransformationMatrix new_transform = GetState().GetTransform();
-  new_transform.Rotate(Rad2deg(angle_in_radians));
+  AffineTransform new_transform = GetState().GetTransform();
+  new_transform.RotateRadians(angle_in_radians);
   if (GetState().GetTransform() == new_transform)
     return;
 
@@ -860,7 +861,7 @@ void BaseRenderingContext2D::translate(double tx, double ty) {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kTranslate, tx, ty);
   }
 
-  TransformationMatrix new_transform = GetState().GetTransform();
+  AffineTransform new_transform = GetState().GetTransform();
   // clamp to float to avoid float cast overflow when used as SkScalar
   float ftx = ClampTo<float>(tx);
   float fty = ClampTo<float>(ty);
@@ -882,9 +883,6 @@ void BaseRenderingContext2D::transform(double m11,
                                        double m22,
                                        double dx,
                                        double dy) {
-  // TODO(crbug.com/1140535) Investigate the performance implications of simply
-  // calling the 3d version above with:
-  // transform(m11, m12, 0, 0, m21, m22, 0, 0, 0, 0, 1, 0, dx, dy, 0, 1);
   cc::PaintCanvas* c = GetOrCreatePaintCanvas();
   if (!c)
     return;
@@ -905,8 +903,8 @@ void BaseRenderingContext2D::transform(double m11,
                                                 fm12, fm21, fm22, fdx, fdy);
   }
 
-  TransformationMatrix transform(fm11, fm12, fm21, fm22, fdx, fdy);
-  TransformationMatrix new_transform = GetState().GetTransform() * transform;
+  AffineTransform transform(fm11, fm12, fm21, fm22, fdx, fdy);
+  AffineTransform new_transform = GetState().GetTransform() * transform;
   if (GetState().GetTransform() == new_transform)
     return;
 
@@ -914,7 +912,7 @@ void BaseRenderingContext2D::transform(double m11,
   if (!IsTransformInvertible())
     return;
 
-  c->concat(transform.ToSkM44());
+  c->concat(AffineTransformToSkMatrix(transform));
   path_.Transform(transform.Inverse());
 }
 
@@ -926,7 +924,7 @@ void BaseRenderingContext2D::resetTransform() {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kResetTransform);
   }
 
-  TransformationMatrix ctm = GetState().GetTransform();
+  AffineTransform ctm = GetState().GetTransform();
   bool invertible_ctm = IsTransformInvertible();
   // It is possible that CTM is identity while CTM is not invertible.
   // When CTM becomes non-invertible, realizeSaves() can make CTM identity.
@@ -973,7 +971,7 @@ void BaseRenderingContext2D::setTransform(DOMMatrixInit* transform,
 }
 
 DOMMatrix* BaseRenderingContext2D::getTransform() {
-  const TransformationMatrix& t = GetState().GetTransform();
+  const AffineTransform& t = GetState().GetTransform();
   DOMMatrix* m = DOMMatrix::Create();
   m->setA(t.A());
   m->setB(t.B());
@@ -984,7 +982,7 @@ DOMMatrix* BaseRenderingContext2D::getTransform() {
   return m;
 }
 
-TransformationMatrix BaseRenderingContext2D::GetTransform() const {
+AffineTransform BaseRenderingContext2D::GetTransform() const {
   return GetState().GetTransform();
 }
 
@@ -1252,7 +1250,7 @@ bool BaseRenderingContext2D::IsPointInPathInternal(
   if (!std::isfinite(x) || !std::isfinite(y))
     return false;
   gfx::PointF point(ClampTo<float>(x), ClampTo<float>(y));
-  TransformationMatrix ctm = GetState().GetTransform();
+  AffineTransform ctm = GetState().GetTransform();
   gfx::PointF transformed_point = ctm.Inverse().MapPoint(point);
 
   return path.Contains(transformed_point,
@@ -1281,7 +1279,7 @@ bool BaseRenderingContext2D::IsPointInStrokeInternal(const Path& path,
   if (!std::isfinite(x) || !std::isfinite(y))
     return false;
   gfx::PointF point(ClampTo<float>(x), ClampTo<float>(y));
-  AffineTransform ctm = GetState().GetAffineTransform();
+  const AffineTransform& ctm = GetState().GetTransform();
   gfx::PointF transformed_point = ctm.Inverse().MapPoint(point);
 
   StrokeData stroke_data;

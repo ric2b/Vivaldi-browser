@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -144,6 +144,7 @@ async function transferBetweenVolumes(transferInfo) {
       BASIC_DRIVE_ENTRY_SET.concat([
         ENTRIES.sharedDirectory,
         ENTRIES.sharedDirectoryFile,
+        ENTRIES.docxFile,
       ]);
 
   // Open files app.
@@ -245,6 +246,7 @@ const TRANSFER_LOCATIONS = {
     volumeName: 'drive',
     initialEntries: BASIC_DRIVE_ENTRY_SET.concat([
       ENTRIES.sharedDirectory,
+      ENTRIES.docxFile,
     ]),
   }),
 
@@ -342,6 +344,17 @@ Object.freeze(TRANSFER_LOCATIONS);
 testcase.transferFromDriveToDownloads = () => {
   return transferBetweenVolumes(new TransferInfo({
     fileToTransfer: ENTRIES.hello,
+    source: TRANSFER_LOCATIONS.drive,
+    destination: TRANSFER_LOCATIONS.downloads,
+  }));
+};
+
+/**
+ * Tests copying an office file from Drive to Downloads.
+ */
+testcase.transferOfficeFileFromDriveToDownloads = () => {
+  return transferBetweenVolumes(new TransferInfo({
+    fileToTransfer: ENTRIES.docxFile,
     source: TRANSFER_LOCATIONS.drive,
     destination: TRANSFER_LOCATIONS.downloads,
   }));
@@ -1104,9 +1117,6 @@ testcase.transferInfoIsRemembered = async () => {
   const primaryText = panel.attributes['primary-text'];
   const secondaryText = panel.attributes['secondary-text'];
 
-  // Close the Files app window.
-  await remoteCall.closeWindowAndWait(appId);
-
   // Open a Files app window again.
   appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
 
@@ -1212,9 +1222,6 @@ testcase.transferDismissedErrorIsRemembered = async () => {
       'fakeMouseClick', appId,
       [['#progress-panel', 'xf-panel-item', 'xf-button#secondary-action']]));
 
-  // Close the Files app window.
-  await remoteCall.closeWindowAndWait(appId);
-
   // Open a Files app window again.
   appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS, [entry], []);
 
@@ -1310,9 +1317,9 @@ testcase.transferUpdateSamePanelItem = async () => {
 };
 
 /**
- * Tests pending message shown when the remaining time is zero.
+ * Tests prepraring message shown when the remaining time is zero.
  */
-testcase.transferShowPendingMessageForZeroRemainingTime = async () => {
+testcase.transferShowPreparingMessageForZeroRemainingTime = async () => {
   const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
 
   // Show a |copy| progress in feedback panel.
@@ -1328,6 +1335,6 @@ testcase.transferShowPendingMessageForZeroRemainingTime = async () => {
   const panel = await remoteCall.waitForElement(
       appId, ['#progress-panel', 'xf-panel-item']);
 
-  // Check secondary text is pending message.
-  chrome.test.assertEq('Pending', panel.attributes['secondary-text']);
+  // Check secondary text is preparing message.
+  chrome.test.assertEq('Preparing', panel.attributes['secondary-text']);
 };

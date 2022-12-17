@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include "base/notreached.h"
 #include "third_party/skia/include/core/SkPath.h"
+#include "ui/base/owned_window_anchor.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -14,6 +15,11 @@ namespace ui {
 PlatformWindowDelegate::PlatformWindowDelegate() = default;
 
 PlatformWindowDelegate::~PlatformWindowDelegate() = default;
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+void PlatformWindowDelegate::OnWindowTiledStateChanged(
+    WindowTiledEdges new_tiled_edges) {}
+#endif
 
 absl::optional<gfx::Size> PlatformWindowDelegate::GetMinimumSizeForWindow() {
   return absl::nullopt;

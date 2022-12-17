@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,7 +54,8 @@ bool IsUrlPotentiallySecure(const GURL& url) {
 // This method should return the same results as
 // SchemeRegistry::shouldTreatURLSchemeAsRestrictingMixedContent.
 bool DoesOriginSchemeRestrictMixedContent(const url::Origin& origin) {
-  return origin.scheme() == url::kHttpsScheme;
+  return origin.GetTupleOrPrecursorTupleIfOpaque().scheme() ==
+         url::kHttpsScheme;
 }
 
 void UpdateRendererOnMixedContentFound(NavigationRequest* navigation_request,
@@ -65,7 +66,7 @@ void UpdateRendererOnMixedContentFound(NavigationRequest* navigation_request,
   // mixed content for now. Once/if the browser should also check form submits
   // for mixed content than this will be allowed to happen and this DCHECK
   // should be updated.
-  DCHECK(navigation_request->GetParentFrameOrOuterDocument());
+  DCHECK(!navigation_request->IsInOutermostMainFrame());
 
   RenderFrameHostImpl* rfh =
       navigation_request->frame_tree_node()->current_frame_host();
@@ -368,7 +369,7 @@ void MixedContentNavigationThrottle::ReportBasicMixedContentFeatures(
 void MixedContentNavigationThrottle::MaybeHandleCertificateError() {
   // The outermost main frame certificate errors are handled separately in
   // SSLManager.
-  if (!navigation_handle()->GetParentFrameOrOuterDocument()) {
+  if (navigation_handle()->IsInOutermostMainFrame()) {
     return;
   }
 

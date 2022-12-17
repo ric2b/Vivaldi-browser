@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,7 +84,7 @@ class WaylandWindowDragController::ExtendedDragSource {
     auto* surface = window ? window->root_surface()->surface() : nullptr;
     zcr_extended_drag_source_v1_drag(source_.get(), surface, offset.x(),
                                      offset.y());
-    connection_.ScheduleFlush();
+    connection_.Flush();
   }
 
  private:
@@ -268,7 +268,8 @@ void WaylandWindowDragController::OnDragMotion(const gfx::PointF& location) {
   pointer_location_ = location;
 
   if (*drag_source_ == DragSource::kMouse) {
-    pointer_delegate_->OnPointerMotionEvent(location);
+    pointer_delegate_->OnPointerMotionEvent(
+        location, wl::EventDispatchPolicy::kImmediate);
   } else {
     base::TimeTicks timestamp = base::TimeTicks::Now();
     auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
@@ -319,7 +320,8 @@ void WaylandWindowDragController::OnDragLeave() {
     return;
 
   if (*drag_source_ == DragSource::kMouse) {
-    pointer_delegate_->OnPointerMotionEvent({pointer_location_.x(), -1});
+    pointer_delegate_->OnPointerMotionEvent(
+        {pointer_location_.x(), -1}, wl::EventDispatchPolicy::kImmediate);
   } else {
     base::TimeTicks timestamp = base::TimeTicks::Now();
     auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
@@ -390,8 +392,9 @@ void WaylandWindowDragController::OnDataSourceFinish(bool completed) {
   // Transition to |kDropped| state and determine the next action to take. If
   // drop happened while the move loop was running (i.e: kDetached), ask to quit
   // the loop, otherwise notify session end and reset state right away.
-  State state_when_dropped =
-      std::exchange(state_, completed ? State::kDropped : State::kCancelled);
+  State state_when_dropped = std::exchange(
+      state_, completed || !IsExtendedDragAvailable() ? State::kDropped
+                                                      : State::kCancelled);
   if (state_when_dropped == State::kDetached)
     QuitLoop();
   else
@@ -493,7 +496,8 @@ void WaylandWindowDragController::HandleDropAndResetState() {
   if (*drag_source_ == DragSource::kMouse) {
     if (pointer_grab_owner_) {
       pointer_delegate_->OnPointerButtonEvent(
-          ET_MOUSE_RELEASED, EF_LEFT_MOUSE_BUTTON, pointer_grab_owner_);
+          ET_MOUSE_RELEASED, EF_LEFT_MOUSE_BUTTON, pointer_grab_owner_,
+          wl::EventDispatchPolicy::kImmediate);
     }
   } else {
     auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
@@ -555,9 +559,8 @@ void WaylandWindowDragController::SetDraggedWindow(
 }
 
 bool WaylandWindowDragController::IsExtendedDragAvailable() const {
-  return set_extended_drag_available_for_testing_
-             ? true
-             : IsExtendedDragAvailableInternal();
+  return extended_drag_available_for_testing_ ||
+         IsExtendedDragAvailableInternal();
 }
 
 bool WaylandWindowDragController::IsExtendedDragAvailableInternal() const {

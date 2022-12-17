@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/observer_list.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -201,7 +202,7 @@ void OpenUrl(content::WebContents* current_web_contents,
 int64_t GetNavigationIDFromPrefsByOrigin(PrefService* prefs,
                                          const Origin& origin) {
   const base::Value::Dict& unhandled_sync_password_reuses =
-      prefs->GetValueDict(prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
+      prefs->GetDict(prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
 
   const base::Value* navigation_id_value =
       unhandled_sync_password_reuses.Find(origin.Serialize());
@@ -373,9 +374,8 @@ bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
          password_type == PasswordType::OTHER_GAIA_PASSWORD);
   // Otherwise, checks if there's any unhandled sync password reuses matches
   // this origin.
-  const auto& unhandled_sync_password_reuses =
-      profile->GetPrefs()->GetValueDict(
-          prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
+  const auto& unhandled_sync_password_reuses = profile->GetPrefs()->GetDict(
+      prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
   return unhandled_sync_password_reuses.Find(web_contents->GetPrimaryMainFrame()
                                                  ->GetLastCommittedOrigin()
                                                  .Serialize());
@@ -471,11 +471,11 @@ void ChromePasswordProtectionService::OnModalWarningShownForGaiaPassword(
     ReusedPasswordAccountType password_type,
     const std::string& verdict_token) {
   if (!IsIncognito()) {
-    DictionaryPrefUpdate update(
+    ScopedDictPrefUpdate update(
         profile_->GetPrefs(), prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
     // Since base::Value doesn't support int64_t type, we convert the navigation
     // ID to string format and store it in the preference dictionary.
-    update->SetStringKey(
+    update->Set(
         web_contents->GetPrimaryMainFrame()
             ->GetLastCommittedOrigin()
             .Serialize(),
@@ -876,9 +876,8 @@ void ChromePasswordProtectionService::
 void ChromePasswordProtectionService::OnGaiaPasswordChanged(
     const std::string& username,
     bool is_other_gaia_password) {
-  DictionaryPrefUpdate unhandled_gaia_password_reuses(
-      profile_->GetPrefs(), prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
-  unhandled_gaia_password_reuses->DictClear();
+  profile_->GetPrefs()->SetDict(prefs::kSafeBrowsingUnhandledGaiaPasswordReuses,
+                                base::Value::Dict());
   if (!is_other_gaia_password)
     MaybeLogPasswordCapture(/*did_log_in=*/true);
   for (auto& observer : observer_list_)
@@ -1013,15 +1012,26 @@ void ChromePasswordProtectionService::OpenChangePasswordUrl(
       ReusedPasswordAccountType::NON_GAIA_ENTERPRISE) {
     // Directly open enterprise change password page for enterprise password
     // reuses.
+    RecordAction(UserMetricsAction(
+        "PasswordProtection.NonGaiaEnterprise.ChangePasswordButtonClicked"));
     OpenUrl(web_contents, GetEnterpriseChangePasswordURL(), content::Referrer(),
             /*in_new_tab=*/true);
     web_contents_with_unhandled_enterprise_reuses_.erase(web_contents);
   } else if (password_type.account_type() !=
              ReusedPasswordAccountType::SAVED_PASSWORD) {
     // Opens accounts.google.com in a new tab.
+    if (password_type.account_type() == ReusedPasswordAccountType::GMAIL) {
+      RecordAction(UserMetricsAction(
+          "PasswordProtection.Gmail.ChangePasswordButtonClicked"));
+    } else {
+      RecordAction(UserMetricsAction(
+          "PasswordProtection.GSuite.ChangePasswordButtonClicked"));
+    }
     OpenUrl(web_contents, GetDefaultChangePasswordURL(), content::Referrer(),
             /*in_new_tab=*/true);
   } else {
+    RecordAction(UserMetricsAction(
+        "PasswordProtection.SavedPassword.ChangePasswordButtonClicked"));
 #if BUILDFLAG(IS_ANDROID)
     JNIEnv* env = base::android::AttachCurrentThread();
     PasswordCheckupLauncherHelper::LaunchLocalCheckup(
@@ -1061,10 +1071,10 @@ void ChromePasswordProtectionService::HandleUserActionOnPageInfo(
         ReusedPasswordAccountType::NON_GAIA_ENTERPRISE) {
       web_contents_with_unhandled_enterprise_reuses_.erase(web_contents);
     } else {
-      DictionaryPrefUpdate update(
+      ScopedDictPrefUpdate update(
           profile_->GetPrefs(),
           prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
-      update->RemoveKey(origin.Serialize());
+      update->Remove(origin.Serialize());
     }
 
     // If the site is marked as legitimate and the phished password is
@@ -1529,14 +1539,13 @@ AccountInfo ChromePasswordProtectionService::GetAccountInfoForUsername(
 
   std::vector<CoreAccountInfo> signed_in_accounts =
       identity_manager->GetAccountsWithRefreshTokens();
-  auto account_iterator =
-      std::find_if(signed_in_accounts.begin(), signed_in_accounts.end(),
-                   [username](const auto& account) {
-                     return password_manager::AreUsernamesSame(
-                         account.email,
-                         /*is_username1_gaia_account=*/true, username,
-                         /*is_username2_gaia_account=*/true);
-                   });
+  auto account_iterator = base::ranges::find_if(
+      signed_in_accounts, [username](const auto& account) {
+        return password_manager::AreUsernamesSame(
+            account.email,
+            /*is_username1_gaia_account=*/true, username,
+            /*is_username2_gaia_account=*/true);
+      });
   if (account_iterator == signed_in_accounts.end())
     return AccountInfo();
 
@@ -1572,17 +1581,17 @@ void ChromePasswordProtectionService::
         const history::URLRows& deleted_rows) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  DictionaryPrefUpdate unhandled_sync_password_reuses(
+  ScopedDictPrefUpdate unhandled_sync_password_reuses(
       profile_->GetPrefs(), prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
   if (all_history) {
-    unhandled_sync_password_reuses->DictClear();
+    unhandled_sync_password_reuses->clear();
     return;
   }
 
   for (const history::URLRow& row : deleted_rows) {
     if (!row.url().SchemeIsHTTPOrHTTPS())
       continue;
-    unhandled_sync_password_reuses->RemoveKey(
+    unhandled_sync_password_reuses->Remove(
         Origin::Create(row.url()).Serialize());
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,8 @@
 #include "base/android/scoped_java_ref.h"
 #include "chrome/browser/android/autofill_assistant/platform_dependencies_android.h"
 #include "chrome/browser/autofill_assistant/common_dependencies_chrome.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "components/autofill_assistant/browser/android/dependencies_android.h"
 
 namespace autofill_assistant {
@@ -24,7 +26,8 @@ class DependenciesAndroidChrome : public DependenciesAndroid {
 
  private:
   // Default initialized.
-  CommonDependenciesChrome common_dependencies_;
+  CommonDependenciesChrome common_dependencies_{
+      ProfileManager::GetLastUsedProfile()};
   PlatformDependenciesAndroid platform_dependencies_;
 };
 

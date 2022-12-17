@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1034,6 +1034,39 @@ TEST_F(DownloadTargetDeterminerTest, DefaultVirtual) {
   }
 }
 
+#if BUILDFLAG(ENABLE_PLUGINS)
+TEST_F(DownloadTargetDeterminerTest,
+       DetermineIfHandledSafelyHelperSynchronous) {
+  const char16_t kPluginName[] = u"PDF";
+  const char kPdfMimeType[] = "application/pdf";
+  const char kPdfFileType[] = "pdf";
+  content::WebPluginInfo plugin_info;
+  plugin_info.type = content::WebPluginInfo::PLUGIN_TYPE_PEPPER_OUT_OF_PROCESS;
+  plugin_info.name = kPluginName;
+  plugin_info.mime_types.emplace_back(kPdfMimeType, kPdfFileType,
+                                      std::string());
+  content::PluginService::GetInstance()->RegisterInternalPlugin(plugin_info,
+                                                                false);
+
+  const DownloadTestCase download_test_case = {
+      AUTOMATIC,
+      download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+      DownloadFileType::NOT_DANGEROUS,
+      "http://example.com/foo.txt",
+      kPdfMimeType,
+      FILE_PATH_LITERAL(""),
+      FILE_PATH_LITERAL("foo.txt"),
+      DownloadItem::TARGET_DISPOSITION_OVERWRITE,
+      EXPECT_CRDOWNLOAD};
+  std::unique_ptr<download::MockDownloadItem> item =
+      CreateActiveDownloadItem(1, download_test_case);
+
+  EXPECT_TRUE(
+      DownloadTargetDeterminer::DetermineIfHandledSafelyHelperSynchronous(
+          item.get(), base::FilePath(), kPdfMimeType));
+}
+#endif
+
 // Test that an inactive download will still get a virtual or local download
 // path.
 TEST_F(DownloadTargetDeterminerTest, InactiveDownload) {
@@ -1779,6 +1812,32 @@ TEST_F(DownloadTargetDeterminerTest, NotifyExtensionsDefaultPath) {
       .WillOnce(WithArg<2>(ScheduleCallback2(
           overridden_path, DownloadPathReservationTracker::UNIQUIFY)));
   RunTestCase(test_case, base::FilePath(), item.get());
+}
+
+// Test that relative paths returned by extensions are always relative to the
+// default downloads path.
+TEST_F(DownloadTargetDeterminerTest, NotifyExtensionsLocalFile) {
+  const DownloadTestCase kNotifyExtensionsTestCases[] = {
+      {AUTOMATIC, download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+       DownloadFileType::NOT_DANGEROUS,
+#if BUILDFLAG(IS_WIN)
+       "file:///usr/local/xyz",
+#else
+       "file:///c:/usr/local/xyz",
+#endif  // BUILDFLAG(IS_WIN)
+       "text/plain", FILE_PATH_LITERAL(""),
+
+       FILE_PATH_LITERAL("overridden/xyz"),
+       DownloadItem::TARGET_DISPOSITION_OVERWRITE,
+
+       EXPECT_CRDOWNLOAD}};
+
+  base::FilePath overridden_path(FILE_PATH_LITERAL("overridden/foo.txt"));
+  EXPECT_CALL(*delegate(), NotifyExtensions_(_, _, _))
+      .WillRepeatedly(WithArg<2>(ScheduleCallback2(
+          overridden_path, DownloadPathReservationTracker::UNIQUIFY)));
+  RunTestCasesWithActiveItem(kNotifyExtensionsTestCases,
+                             std::size(kNotifyExtensionsTestCases));
 }
 
 TEST_F(DownloadTargetDeterminerTest, InitialVirtualPathUnsafe) {

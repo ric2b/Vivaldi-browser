@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,13 +12,13 @@
 #include "base/strings/string_piece.h"
 #include "base/time/tick_clock.h"
 #include "net/base/net_errors.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/dns/dns_config.h"
 #include "net/dns/host_cache.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_manager.h"
 #include "net/dns/host_resolver_proc.h"
-#include "net/dns/host_resolver_results.h"
+#include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/resolve_error_info.h"
 #include "net/dns/resolve_context.h"
 #include "net/log/net_log_with_source.h"
@@ -69,7 +69,7 @@ void ContextHostResolver::OnShutdown() {
 std::unique_ptr<HostResolver::ResolveHostRequest>
 ContextHostResolver::CreateRequest(
     url::SchemeHostPort host,
-    NetworkIsolationKey network_isolation_key,
+    NetworkAnonymizationKey network_anonymization_key,
     NetLogWithSource source_net_log,
     absl::optional<ResolveHostParameters> optional_parameters) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -78,7 +78,7 @@ ContextHostResolver::CreateRequest(
     return HostResolver::CreateFailingRequest(ERR_CONTEXT_SHUT_DOWN);
 
   return manager_->CreateRequest(
-      std::move(host), std::move(network_isolation_key),
+      Host(std::move(host)), std::move(network_anonymization_key),
       std::move(source_net_log), std::move(optional_parameters),
       resolve_context_.get(), resolve_context_->host_cache());
 }
@@ -86,7 +86,7 @@ ContextHostResolver::CreateRequest(
 std::unique_ptr<HostResolver::ResolveHostRequest>
 ContextHostResolver::CreateRequest(
     const HostPortPair& host,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     const NetLogWithSource& source_net_log,
     const absl::optional<ResolveHostParameters>& optional_parameters) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -94,9 +94,9 @@ ContextHostResolver::CreateRequest(
   if (shutting_down_)
     return HostResolver::CreateFailingRequest(ERR_CONTEXT_SHUT_DOWN);
 
-  return manager_->CreateRequest(host, network_isolation_key, source_net_log,
-                                 optional_parameters, resolve_context_.get(),
-                                 resolve_context_->host_cache());
+  return manager_->CreateRequest(
+      host, network_anonymization_key, source_net_log, optional_parameters,
+      resolve_context_.get(), resolve_context_->host_cache());
 }
 
 std::unique_ptr<HostResolver::ProbeRequest>
@@ -156,9 +156,10 @@ size_t ContextHostResolver::CacheSize() const {
                                         : 0;
 }
 
-void ContextHostResolver::SetProcParamsForTesting(
-    const ProcTaskParams& proc_params) {
-  manager_->set_proc_params_for_test(proc_params);
+void ContextHostResolver::SetHostResolverSystemParamsForTest(
+    const HostResolverSystemTask::Params& host_resolver_system_params) {
+  manager_->set_host_resolver_system_params_for_test(  // IN-TEST
+      host_resolver_system_params);
 }
 
 void ContextHostResolver::SetTickClockForTesting(

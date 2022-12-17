@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -187,7 +187,9 @@ class VideoImageReaderImageBacking::GLTextureVideoImageRepresentation
   GLTextureVideoImageRepresentation& operator=(
       const GLTextureVideoImageRepresentation&) = delete;
 
-  gles2::Texture* GetTexture() override {
+  gles2::Texture* GetTexture(int plane_index) override {
+    DCHECK_EQ(plane_index, 0);
+
     auto* texture = gles2::Texture::CheckedCast(texture_->GetTextureBase());
     DCHECK(texture);
 
@@ -254,8 +256,9 @@ class VideoImageReaderImageBacking::GLTexturePassthroughVideoImageRepresentation
   GLTexturePassthroughVideoImageRepresentation& operator=(
       const GLTexturePassthroughVideoImageRepresentation&) = delete;
 
-  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough()
-      override {
+  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough(
+      int plane_index) override {
+    DCHECK_EQ(plane_index, 0);
     return passthrough_texture_;
   }
 

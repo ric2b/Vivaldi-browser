@@ -154,51 +154,6 @@ int WebAXObject::AxID() const {
   return private_->AXObjectID();
 }
 
-int WebAXObject::GenerateAXID() const {
-  if (IsDetached())
-    return -1;
-
-  return private_->AXObjectCache().GenerateAXID();
-}
-
-// This method must be called before serializing any accessibility nodes, in
-// order to ensure that layout calls are not made at an unsafe time in the
-// document lifecycle.
-bool WebAXObject::MaybeUpdateLayoutAndCheckValidity() {
-  DCHECK(!IsDetached());
-
-  if (!MaybeUpdateLayoutAndCheckValidity(GetDocument()))
-    return false;
-
-  // Doing a layout can cause this object to be invalid, so check again.
-  if (!CheckValidity())
-    return false;
-
-  private_->PreSerializationConsistencyCheck();
-  return true;
-}
-
-// Returns true if the object is valid and can be accessed.
-bool WebAXObject::CheckValidity() {
-  if (IsDetached())
-    return false;
-
-#if DCHECK_IS_ON()
-  Node* node = private_->GetNode();
-  if (!node)
-    return true;
-
-  // Has up-to-date layout info or is display-locked (content-visibility), which
-  // is handled as a special case inside of accessibility code.
-  Document* document = private_->GetDocument();
-  DCHECK(!document->NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked(*node) ||
-         DisplayLockUtilities::LockedAncestorPreventingPaint(*node))
-      << "Node needs layout update and is not display locked";
-#endif  // DCHECK_IS_ON()
-
-  return true;
-}
-
 ax::mojom::DefaultActionVerb WebAXObject::Action() const {
   if (IsDetached())
     return ax::mojom::DefaultActionVerb::kNone;
@@ -239,11 +194,87 @@ void WebAXObject::Serialize(ui::AXNodeData* node_data,
   if (IsDetached())
     return;
 
+#if DCHECK_IS_ON()
+  if (Node* node = private_->GetNode()) {
+    Document* document = private_->GetDocument();
+    DCHECK(
+        !document->NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked(*node) ||
+        DisplayLockUtilities::LockedAncestorPreventingPaint(*node))
+        << "Node needs layout update and is not display locked";
+  }
+#endif
+
   private_->Serialize(node_data, accessibility_mode);
 }
 
-BLINK_EXPORT void WebAXObject::SerializerClearedNode(int node_id) const {
+void WebAXObject::SerializerClearedNode(int node_id) const {
   private_->AXObjectCache().SerializerClearedNode(node_id);
+}
+
+void WebAXObject::InvalidateSerializerSubtree() const {
+  if (IsDetached())
+    return;
+  private_->AXObjectCache().InvalidateSerializerSubtree(*private_);
+}
+
+bool WebAXObject::SerializeChanges(ui::AXTreeUpdate* update) {
+  if (IsDetached())
+    return true;
+  return private_->AXObjectCache().SerializeChanges(*private_, update);
+}
+
+void WebAXObject::MarkDirty(
+    bool subtree,
+    ax::mojom::blink::EventFrom event_from,
+    ax::mojom::blink::Action event_from_action,
+    std::vector<ui::AXEventIntent> event_intents) const {
+  if (IsDetached())
+    return;
+  private_->AXObjectCache().MarkAXObjectDirty(
+      private_.Get(), subtree, event_from, event_from_action, event_intents);
+}
+
+bool WebAXObject::IsInClientTree() {
+  if (IsDetached())
+    return false;
+  return private_->AXObjectCache().IsInClientTree(*private_);
+}
+
+void WebAXObject::OnLoadInlineTextBoxes() const {
+  if (IsDetached())
+    return;
+  private_->AXObjectCache().OnLoadInlineTextBoxes(*private_);
+}
+
+bool WebAXObject::ShouldLoadInlineTextBoxes() const {
+  if (IsDetached())
+    return false;
+  return private_->AXObjectCache().ShouldLoadInlineTextBoxes(*private_);
+}
+
+BLINK_EXPORT void WebAXObject::GetChildren(
+    std::vector<WebAXObject>* out_children) {
+  if (IsDetached())
+    return;
+  std::vector<AXObject*> children;
+  private_->AXObjectCache().GetChildren(*private_, &children);
+  for (auto* child : children) {
+    out_children->push_back(WebAXObject(child));
+  }
+}
+
+BLINK_EXPORT void WebAXObject::SetImageAsDataNodeId(
+    const gfx::Size& max_size) const {
+  if (IsDetached())
+    return;
+  private_->AXObjectCache().SetImageAsDataNodeId(private_->AXObjectID(),
+                                                 max_size);
+}
+
+BLINK_EXPORT int WebAXObject::ImageDataNodeId() const {
+  if (IsDetached())
+    return -1;
+  return private_->AXObjectCache().image_data_node_id();
 }
 
 WebString WebAXObject::AutoComplete() const {
@@ -1151,13 +1182,6 @@ void WebAXObject::GetRelativeBounds(WebAXObject& offset_container,
   bounds_in_container = bounds;
 }
 
-void WebAXObject::SerializeLocationChanges() const {
-  if (IsDetached())
-    return;
-
-  private_->AXObjectCache().SerializeLocationChanges();
-}
-
 bool WebAXObject::ScrollToMakeVisible() const {
   if (IsDetached())
     return false;
@@ -1336,8 +1360,13 @@ void WebAXObject::UpdateLayout(const WebDocument& web_document) {
 bool WebAXObject::MaybeUpdateLayoutAndCheckValidity(
     const WebDocument& web_document) {
   const Document* document = web_document.ConstUnwrap<Document>();
-  if (!document || !document->View())
+  if (!document)
     return false;
+
+  DCHECK(document->defaultView());
+  DCHECK(document->GetFrame());
+  DCHECK(document->View());
+  DCHECK(document->ExistingAXObjectCache());
 
   if (document->NeedsLayoutTreeUpdate() || document->View()->NeedsLayout() ||
       document->Lifecycle().GetState() < DocumentLifecycle::kPrePaintClean) {
@@ -1365,24 +1394,6 @@ bool WebAXObject::IsDirty(const WebDocument& web_document) {
     return false;
 
   return document->ExistingAXObjectCache()->IsDirty();
-}
-
-// static
-void WebAXObject::Freeze(const WebDocument& web_document) {
-  const Document* doc = web_document.ConstUnwrap<Document>();
-  auto* cache = To<AXObjectCacheImpl>(doc->ExistingAXObjectCache());
-  if (cache)
-    cache->Freeze();
-}
-
-// static
-void WebAXObject::Thaw(const WebDocument& web_document) {
-  const Document* doc = web_document.ConstUnwrap<Document>();
-  if (!doc)
-    return;
-  auto* cache = To<AXObjectCacheImpl>(doc->ExistingAXObjectCache());
-  if (cache)
-    cache->Thaw();
 }
 
 }  // namespace blink

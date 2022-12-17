@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,8 @@
 #include "components/segmentation_platform/internal/execution/default_model_manager.h"
 #include "components/segmentation_platform/public/proto/segmentation_platform.pb.h"
 #include "components/segmentation_platform/public/proto/types.pb.h"
+
+class PrefService;
 
 namespace base {
 class Clock;
@@ -45,7 +47,8 @@ class DatabaseMaintenanceImpl : public DatabaseMaintenance {
                                    SegmentInfoDatabase* segment_info_database,
                                    SignalDatabase* signal_database,
                                    SignalStorageConfig* signal_storage_config,
-                                   DefaultModelManager* default_model_manager);
+                                   DefaultModelManager* default_model_manager,
+                                   PrefService* profile_prefs);
   ~DatabaseMaintenanceImpl() override;
 
   // DatabaseMaintenance overrides.
@@ -84,7 +87,8 @@ class DatabaseMaintenanceImpl : public DatabaseMaintenance {
   void RecordCompactionResult(proto::SignalType signal_type,
                               uint64_t name_hash,
                               bool success);
-  void CompactSamplesDone(base::OnceClosure next_action);
+  void CompactSamplesDone(base::OnceClosure next_action,
+                          base::Time last_compation_time);
 
   // Input.
   base::flat_set<SegmentId> segment_ids_;
@@ -97,6 +101,9 @@ class DatabaseMaintenanceImpl : public DatabaseMaintenance {
 
   // Default model provider.
   raw_ptr<DefaultModelManager> default_model_manager_;
+
+  // PrefService from profile.
+  raw_ptr<PrefService> profile_prefs_;
 
   base::WeakPtrFactory<DatabaseMaintenanceImpl> weak_ptr_factory_{this};
 };

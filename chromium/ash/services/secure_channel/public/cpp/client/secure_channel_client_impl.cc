@@ -1,16 +1,16 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/secure_channel/public/cpp/client/secure_channel_client_impl.h"
 
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/secure_channel/public/cpp/client/connection_attempt_impl.h"
 #include "ash/services/secure_channel/public/cpp/client/nearby_connector.h"
 #include "ash/services/secure_channel/public/mojom/secure_channel.mojom.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/task_runner.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 
 namespace ash::secure_channel {
 

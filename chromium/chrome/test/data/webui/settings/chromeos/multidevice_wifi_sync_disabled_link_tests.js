@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,11 +47,6 @@ suite('Multidevice', function() {
     chromeSyncLink.click();
     flush();
 
-    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled')) {
-      assertEquals(Router.getInstance().getCurrentRoute(), routes.OS_SYNC);
-    } else {
-      assertEquals(
-          Router.getInstance().getCurrentRoute(), routes.SYNC_ADVANCED);
-    }
+    assertEquals(Router.getInstance().getCurrentRoute(), routes.OS_SYNC);
   });
 });

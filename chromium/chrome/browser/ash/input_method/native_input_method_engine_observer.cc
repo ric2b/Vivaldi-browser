@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,26 +10,18 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/services/ime/public/mojom/input_method.mojom.h"
 #include "base/feature_list.h"
-#include "base/i18n/i18n_constants.h"
-#include "base/i18n/icu_string_conversions.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/strings/utf_string_conversion_utils.h"
-#include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/ash/input_method/assistive_suggester_client_filter.h"
 #include "chrome/browser/ash/input_method/assistive_suggester_prefs.h"
 #include "chrome/browser/ash/input_method/assistive_suggester_switch.h"
 #include "chrome/browser/ash/input_method/autocorrect_manager.h"
 #include "chrome/browser/ash/input_method/diacritics_checker.h"
-#include "chrome/browser/ash/input_method/get_current_window_properties.h"
-#include "chrome/browser/ash/input_method/grammar_service_client.h"
 #include "chrome/browser/ash/input_method/input_method_quick_settings_helpers.h"
 #include "chrome/browser/ash/input_method/input_method_settings.h"
-#include "chrome/browser/ash/input_method/suggestions_service_client.h"
 #include "chrome/browser/ash/input_method/ui/input_method_menu_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
@@ -116,7 +108,7 @@ bool IsPhysicalKeyboardAutocorrectEnabled(PrefService* prefs,
   }
 
   const base::Value::Dict& input_method_settings =
-      prefs->GetValueDict(::prefs::kLanguageInputMethodSpecificSettings);
+      prefs->GetDict(::prefs::kLanguageInputMethodSpecificSettings);
   const base::Value* autocorrect_setting =
       input_method_settings.FindByDottedPath(
           engine_id + ".physicalKeyboardAutoCorrectionLevel");
@@ -478,7 +470,7 @@ std::string MojomLayoutToXkbLayout(mojom::PinyinLayout layout) {
 
 mojom::InputFieldInfoPtr CreateInputFieldInfo(
     const std::string& engine_id,
-    const ui::IMEEngineHandlerInterface::InputContext& context,
+    const ui::TextInputMethod::InputContext& context,
     const InputFieldContext& input_field_context,
     const PrefService& prefs,
     bool is_normal_screen) {
@@ -509,31 +501,39 @@ void OverrideXkbLayoutIfNeeded(ImeKeyboard* keyboard,
   }
 }
 
-void MigratePinyinAndZhuyinSettings(PrefService* prefs,
-                                    const std::string& engine_id) {
-  // We are using legacy pref keys for pinyin and zhuyin. To get rid of them, we
-  // need to write existing settings under the correct pref keys as the first
-  // step.
-  // TODO(b/175085612): Remove this function once we have migrated from the
-  // legacy pref keys.
-  if (engine_id != "zh-t-i0-pinyin" && engine_id != "zh-hant-t-i0-und")
+void UpdateCandidatesWindowSync(ime::mojom::CandidatesWindowPtr window) {
+  IMECandidateWindowHandlerInterface* candidate_window_handler =
+      ui::IMEBridge::Get()->GetCandidateWindowHandler();
+  if (!candidate_window_handler) {
     return;
-
-  const base::Value::Dict& all_input_method_pref =
-      prefs->GetValueDict(::prefs::kLanguageInputMethodSpecificSettings);
-
-  // Check if the settings are already migrated.
-  if (all_input_method_pref.FindDict(engine_id))
-    return;
-
-  const base::Value::Dict* existing_pref_or_null =
-      all_input_method_pref.FindDict(engine_id == "zh-t-i0-pinyin" ? "pinyin"
-                                                                   : "zhuyin");
-  if (existing_pref_or_null) {
-    DictionaryPrefUpdate update(prefs,
-                                ::prefs::kLanguageInputMethodSpecificSettings);
-    update->SetPath(engine_id, base::Value(existing_pref_or_null->Clone()));
   }
+
+  if (!window) {
+    candidate_window_handler->HideLookupTable();
+    return;
+  }
+
+  ui::CandidateWindow candidate_window;
+  for (const auto& candidate : window->candidates) {
+    ui::CandidateWindow::Entry entry;
+    entry.value = base::UTF8ToUTF16(candidate->text);
+    entry.label = base::UTF8ToUTF16(candidate->label.value_or(""));
+    entry.annotation = base::UTF8ToUTF16(candidate->annotation.value_or(""));
+    candidate_window.mutable_candidates()->push_back(entry);
+  }
+
+  ui::CandidateWindow::CandidateWindowProperty property;
+  property.is_cursor_visible = !window->highlighted_candidate.is_null();
+  property.cursor_position =
+      window->highlighted_candidate ? window->highlighted_candidate->index : 0;
+  property.page_size = window->candidates.size();
+  property.is_vertical = true;
+  property.is_auxiliary_text_visible =
+      window->auxiliary_text.value_or("") != "";
+  property.auxiliary_text = window->auxiliary_text.value_or("");
+  candidate_window.SetProperty(property);
+
+  candidate_window_handler->UpdateLookupTable(candidate_window);
 }
 
 }  // namespace
@@ -623,8 +623,6 @@ void NativeInputMethodEngineObserver::ConnectToImeService(
   ime::mojom::InputMethodSettingsPtr settings =
       CreateSettingsFromPrefs(*prefs_, engine_id);
 
-  MigratePinyinAndZhuyinSettings(prefs_, engine_id);
-
   connection_factory_->ConnectToInputMethod(
       engine_id, input_method_.BindNewEndpointAndPassReceiver(),
       std::move(input_method_host), std::move(settings),
@@ -641,7 +639,7 @@ void NativeInputMethodEngineObserver::ActivateTextClient(
 void NativeInputMethodEngineObserver::OnActivate(const std::string& engine_id) {
   // Always hide the candidates window and clear the quick settings menu when
   // switching input methods.
-  UpdateCandidatesWindow(nullptr);
+  UpdateCandidatesWindowSync(nullptr);
   ui::ime::InputMethodMenuManager::GetInstance()
       ->SetCurrentInputMethodMenuItemList({});
   assistive_suggester_->OnActivate(engine_id);
@@ -686,7 +684,7 @@ void NativeInputMethodEngineObserver::OnActivate(const std::string& engine_id) {
 void NativeInputMethodEngineObserver::OnFocus(
     const std::string& engine_id,
     int context_id,
-    const IMEEngineHandlerInterface::InputContext& context) {
+    const TextInputMethod::InputContext& context) {
   text_client_ =
       TextClient{.context_id = context_id, .state = TextClientState::kPending};
 
@@ -724,7 +722,7 @@ void NativeInputMethodEngineObserver::OnFocus(
 void NativeInputMethodEngineObserver::HandleOnFocusAsyncForNativeMojoEngine(
     const std::string& engine_id,
     int context_id,
-    const IMEEngineHandlerInterface::InputContext& context,
+    const TextInputMethod::InputContext& context,
     const AssistiveSuggesterSwitch::EnabledSuggestions& enabled_suggestions) {
   // It is possible the text client got unfocused/or changed before this async
   // function is run, if the new focus/blur event occurred fast enough. In that
@@ -771,12 +769,13 @@ void NativeInputMethodEngineObserver::OnTouch(
 void NativeInputMethodEngineObserver::OnBlur(const std::string& engine_id,
                                              int context_id) {
   // Always hide the candidates window when there's no focus.
-  UpdateCandidatesWindow(nullptr);
+  UpdateCandidatesWindowSync(nullptr);
 
   text_client_ = absl::nullopt;
 
   if (assistive_suggester_->IsAssistiveFeatureEnabled())
     assistive_suggester_->OnBlur();
+  autocorrect_manager_->OnBlur();
 
   if (ShouldRouteToNativeMojoEngine(engine_id)) {
     if (IsInputMethodBound()) {
@@ -790,20 +789,21 @@ void NativeInputMethodEngineObserver::OnBlur(const std::string& engine_id,
 void NativeInputMethodEngineObserver::OnKeyEvent(
     const std::string& engine_id,
     const ui::KeyEvent& event,
-    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback) {
+    ui::TextInputMethod::KeyEventDoneCallback callback) {
   if (assistive_suggester_->IsAssistiveFeatureEnabled()) {
     if (assistive_suggester_->OnKeyEvent(event)) {
-      std::move(callback).Run(true);
+      std::move(callback).Run(
+          ui::ime::KeyEventHandledState::kHandledByAssistiveSuggester);
       return;
     }
   }
   if (autocorrect_manager_->OnKeyEvent(event)) {
-    std::move(callback).Run(true);
+    std::move(callback).Run(ui::ime::KeyEventHandledState::kHandledByIME);
     return;
   }
   if (grammar_manager_->IsOnDeviceGrammarEnabled() &&
       grammar_manager_->OnKeyEvent(event)) {
-    std::move(callback).Run(true);
+    std::move(callback).Run(ui::ime::KeyEventHandledState::kHandledByIME);
     return;
   }
 
@@ -817,20 +817,20 @@ void NativeInputMethodEngineObserver::OnKeyEvent(
       // Don't send dead keys to the system IME. Dead keys should be handled at
       // the OS level and not exposed to IMEs.
       if (event.GetDomKey().IsDeadKey()) {
-        std::move(callback).Run(true);
+        std::move(callback).Run(ui::ime::KeyEventHandledState::kHandledByIME);
         return;
       }
 
       mojom::PhysicalKeyEventPtr key_event =
           CreatePhysicalKeyEventFromKeyEvent(event);
       if (!key_event) {
-        std::move(callback).Run(false);
+        std::move(callback).Run(ui::ime::KeyEventHandledState::kNotHandled);
         return;
       }
 
       // Hot switches to turn on/off certain IME features.
       if (IsFstEngine(engine_id) && autocorrect_manager_->DisabledByRule()) {
-        std::move(callback).Run(false);
+        std::move(callback).Run(ui::ime::KeyEventHandledState::kNotHandled);
         return;
       }
 
@@ -842,18 +842,19 @@ void NativeInputMethodEngineObserver::OnKeyEvent(
       }
 
       auto process_key_event_callback = base::BindOnce(
-          [](ui::IMEEngineHandlerInterface::KeyEventDoneCallback
-                 original_callback,
+          [](ui::TextInputMethod::KeyEventDoneCallback original_callback,
              mojom::KeyEventResult result) {
             std::move(original_callback)
-                .Run(result == mojom::KeyEventResult::kConsumedByIme);
+                .Run((result == mojom::KeyEventResult::kConsumedByIme)
+                         ? ui::ime::KeyEventHandledState::kHandledByIME
+                         : ui::ime::KeyEventHandledState::kNotHandled);
           },
           std::move(callback));
 
       input_method_->ProcessKeyEvent(std::move(key_event),
                                      std::move(process_key_event_callback));
     } else {
-      std::move(callback).Run(false);
+      std::move(callback).Run(ui::ime::KeyEventHandledState::kNotHandled);
     }
   } else {
     ime_base_observer_->OnKeyEvent(engine_id, event, std::move(callback));
@@ -1087,7 +1088,7 @@ void NativeInputMethodEngineObserver::FinishComposition() {
   if (!IsTextClientActive())
     return;
 
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
 
   input_context->ConfirmCompositionText(/*reset_engine=*/false,
@@ -1147,41 +1148,9 @@ void NativeInputMethodEngineObserver::DisplaySuggestions(
 
 void NativeInputMethodEngineObserver::UpdateCandidatesWindow(
     mojom::CandidatesWindowPtr window) {
-  if (!IsTextClientActive())
-    return;
-
-  IMECandidateWindowHandlerInterface* candidate_window_handler =
-      ui::IMEBridge::Get()->GetCandidateWindowHandler();
-  if (!candidate_window_handler) {
-    return;
-  }
-
-  if (!window) {
-    candidate_window_handler->HideLookupTable();
-    return;
-  }
-
-  ui::CandidateWindow candidate_window;
-  for (const auto& candidate : window->candidates) {
-    ui::CandidateWindow::Entry entry;
-    entry.value = base::UTF8ToUTF16(candidate->text);
-    entry.label = base::UTF8ToUTF16(candidate->label.value_or(""));
-    entry.annotation = base::UTF8ToUTF16(candidate->annotation.value_or(""));
-    candidate_window.mutable_candidates()->push_back(entry);
-  }
-
-  ui::CandidateWindow::CandidateWindowProperty property;
-  property.is_cursor_visible = !window->highlighted_candidate.is_null();
-  property.cursor_position =
-      window->highlighted_candidate ? window->highlighted_candidate->index : 0;
-  property.page_size = window->candidates.size();
-  property.is_vertical = true;
-  property.is_auxiliary_text_visible =
-      window->auxiliary_text.value_or("") != "";
-  property.auxiliary_text = window->auxiliary_text.value_or("");
-  candidate_window.SetProperty(property);
-
-  candidate_window_handler->UpdateLookupTable(candidate_window);
+  update_candidates_timer_.Start(
+      FROM_HERE, base::Seconds(0),
+      base::BindOnce(UpdateCandidatesWindowSync, std::move(window)));
 }
 
 void NativeInputMethodEngineObserver::RecordUkm(mojom::UkmEntryPtr entry) {

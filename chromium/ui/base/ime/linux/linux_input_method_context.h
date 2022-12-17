@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 
 #include "base/component_export.h"
 #include "ui/base/ime/grammar_fragment.h"
+#include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 
@@ -67,6 +68,10 @@ class COMPONENT_EXPORT(UI_BASE_IME_LINUX) LinuxInputMethodContext {
   // Resets the context.  A client needs to call OnTextInputTypeChanged() again
   // before calling DispatchKeyEvent().
   virtual void Reset() = 0;
+
+  // Called when the text input focus is about to change.
+  virtual void WillUpdateFocus(TextInputClient* old_client,
+                               TextInputClient* new_client) {}
 
   // Called when text input focus is changed.
   virtual void UpdateFocus(bool has_client,

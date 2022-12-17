@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -29,7 +29,6 @@ class OptimizeBaselines(AbstractRebaseliningCommand):
         super(OptimizeBaselines, self).__init__(options=[
             self.suffixes_option,
             self.port_name_option,
-            self.flag_specific_option,
             self.all_option,
         ] + self.platform_options + self.wpt_options)
 

@@ -1,6 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+// IMPORTANT NOTE: All QtUi members that use `shim_` must be decorated
+// with DISABLE_CFI_VCALL.
 
 #include "ui/qt/qt_ui.h"
 
@@ -8,6 +11,7 @@
 
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/cxx17_backports.h"
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
@@ -28,6 +32,7 @@
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/image/image_skia_source.h"
 #include "ui/linux/linux_ui.h"
+#include "ui/linux/nav_button_provider.h"
 #include "ui/native_theme/native_theme_aura.h"
 #include "ui/native_theme/native_theme_base.h"
 #include "ui/qt/qt_interface.h"
@@ -85,13 +90,14 @@ class QtNativeTheme : public ui::NativeThemeAura {
   explicit QtNativeTheme(QtInterface* shim)
       : ui::NativeThemeAura(/*use_overlay_scrollbars=*/false,
                             /*should_only_use_dark_colors=*/false,
-                            /*is_custom_system_theme=*/true),
+                            ui::SystemTheme::kQt),
         shim_(shim) {}
   QtNativeTheme(const QtNativeTheme&) = delete;
   QtNativeTheme& operator=(const QtNativeTheme&) = delete;
   ~QtNativeTheme() override = default;
 
   // ui::NativeTheme:
+  DISABLE_CFI_VCALL
   void PaintFrameTopArea(cc::PaintCanvas* canvas,
                          State state,
                          const gfx::Rect& rect,
@@ -116,8 +122,8 @@ class QtNativeTheme : public ui::NativeThemeAura {
   raw_ptr<QtInterface> const shim_;
 };
 
-QtUi::QtUi(std::unique_ptr<ui::LinuxUi> fallback_linux_ui)
-    : fallback_linux_ui_(std::move(fallback_linux_ui)) {}
+QtUi::QtUi(ui::LinuxUi* fallback_linux_ui)
+    : fallback_linux_ui_(fallback_linux_ui) {}
 
 QtUi::~QtUi() {
   shell_dialog_linux::Finalize();
@@ -159,6 +165,8 @@ ui::SelectFileDialog* QtUi::CreateSelectFileDialog(
                             : nullptr;
 }
 
+DISABLE_CFI_DLSYM
+DISABLE_CFI_VCALL
 bool QtUi::Initialize() {
   base::FilePath path;
   if (!base::PathService::Get(base::DIR_MODULE, &path))
@@ -182,6 +190,10 @@ bool QtUi::Initialize() {
   return true;
 }
 
+ui::NativeTheme* QtUi::GetNativeTheme() const {
+  return native_theme_.get();
+}
+
 bool QtUi::GetColor(int id, SkColor* color, bool use_custom_frame) const {
   auto value = GetColor(id, use_custom_frame);
   if (value)
@@ -199,30 +211,37 @@ bool QtUi::GetDisplayProperty(int id, int* result) const {
   }
 }
 
+DISABLE_CFI_VCALL
 SkColor QtUi::GetFocusRingColor() const {
   return shim_->GetColor(ColorType::kHighlightBg, ColorState::kNormal);
 }
 
+DISABLE_CFI_VCALL
 SkColor QtUi::GetActiveSelectionBgColor() const {
   return shim_->GetColor(ColorType::kHighlightBg, ColorState::kNormal);
 }
 
+DISABLE_CFI_VCALL
 SkColor QtUi::GetActiveSelectionFgColor() const {
   return shim_->GetColor(ColorType::kHighlightFg, ColorState::kNormal);
 }
 
+DISABLE_CFI_VCALL
 SkColor QtUi::GetInactiveSelectionBgColor() const {
   return shim_->GetColor(ColorType::kHighlightBg, ColorState::kInactive);
 }
 
+DISABLE_CFI_VCALL
 SkColor QtUi::GetInactiveSelectionFgColor() const {
   return shim_->GetColor(ColorType::kHighlightFg, ColorState::kInactive);
 }
 
+DISABLE_CFI_VCALL
 base::TimeDelta QtUi::GetCursorBlinkInterval() const {
   return base::Milliseconds(shim_->GetCursorBlinkIntervalMs());
 }
 
+DISABLE_CFI_VCALL
 gfx::Image QtUi::GetIconForContentType(const std::string& content_type,
                                        int size,
                                        float scale) const {
@@ -258,15 +277,18 @@ QtUi::WindowFrameAction QtUi::GetWindowFrameAction(
   }
 }
 
+DISABLE_CFI_VCALL
 float QtUi::GetDeviceScaleFactor() const {
   return shim_->GetScaleFactor();
 }
 
+DISABLE_CFI_VCALL
 bool QtUi::PreferDarkTheme() const {
   return color_utils::IsDark(
       shim_->GetColor(ColorType::kWindowBg, ColorState::kNormal));
 }
 
+DISABLE_CFI_VCALL
 bool QtUi::AnimationsEnabled() const {
   return shim_->GetAnimationDurationMs() > 0;
 }
@@ -298,10 +320,6 @@ int QtUi::GetCursorThemeSize() {
   return 0;
 }
 
-ui::NativeTheme* QtUi::GetNativeThemeImpl() const {
-  return native_theme_.get();
-}
-
 bool QtUi::GetTextEditCommandsForEvent(
     const ui::Event& event,
     std::vector<ui::TextEditCommandAuraLinux>* commands) {
@@ -322,6 +340,7 @@ gfx::Size QtUi::GetPdfPaperSize(printing::PrintingContextLinux* context) {
 }
 #endif
 
+DISABLE_CFI_VCALL
 void QtUi::FontChanged() {
   auto params = shim_->GetFontRenderParams();
   auto desc = shim_->GetFontDescription();
@@ -360,9 +379,10 @@ void QtUi::ThemeChanged() {
   native_theme_->NotifyOnNativeThemeUpdated();
 }
 
+DISABLE_CFI_VCALL
 void QtUi::AddNativeColorMixer(ui::ColorProvider* provider,
                                const ui::ColorProviderManager::Key& key) {
-  if (key.system_theme == ui::ColorProviderManager::SystemTheme::kDefault)
+  if (key.system_theme != ui::SystemTheme::kQt)
     return;
 
   ui::ColorMixer& mixer = provider->AddMixer();
@@ -400,20 +420,18 @@ void QtUi::AddNativeColorMixer(ui::ColorProvider* provider,
       {ui::kColorMenuItemForegroundSelected, ColorType::kHighlightFg},
 
       // Platform-specific UI elements
-      {ui::kColorNativeButtonBorder,
-       // For flat-styled buttons, QT uses the text color as the button border.
-       ColorType::kWindowFg},
-      {ui::kColorNativeHeaderButtonBorderActive, ColorType::kWindowFg},
-      {ui::kColorNativeHeaderButtonBorderInactive, ColorType::kWindowFg,
+      {ui::kColorNativeButtonBorder, ColorType::kMidground},
+      {ui::kColorNativeHeaderButtonBorderActive, ColorType::kMidground},
+      {ui::kColorNativeHeaderButtonBorderInactive, ColorType::kMidground,
        ColorState::kInactive},
-      {ui::kColorNativeHeaderSeparatorBorderActive, ColorType::kWindowFg},
-      {ui::kColorNativeHeaderSeparatorBorderInactive, ColorType::kWindowFg,
+      {ui::kColorNativeHeaderSeparatorBorderActive, ColorType::kMidground},
+      {ui::kColorNativeHeaderSeparatorBorderInactive, ColorType::kMidground,
        ColorState::kInactive},
       {ui::kColorNativeLabelForeground, ColorType::kWindowFg},
       {ui::kColorNativeTabForegroundInactiveFrameActive, ColorType::kButtonFg},
       {ui::kColorNativeTabForegroundInactiveFrameInactive, ColorType::kButtonFg,
        ColorState::kInactive},
-      {ui::kColorNativeTextfieldBorderUnfocused, ColorType::kWindowFg,
+      {ui::kColorNativeTextfieldBorderUnfocused, ColorType::kMidground,
        ColorState::kInactive},
       {ui::kColorNativeToolbarBackground, ColorType::kButtonBg},
   };
@@ -426,6 +444,7 @@ void QtUi::AddNativeColorMixer(ui::ColorProvider* provider,
       shim_->GetFrameColor(ColorState::kInactive, true)};
 }
 
+DISABLE_CFI_VCALL
 absl::optional<SkColor> QtUi::GetColor(int id, bool use_custom_frame) const {
   switch (id) {
     case ThemeProperties::COLOR_LOCATION_BAR_BORDER:
@@ -491,9 +510,9 @@ absl::optional<SkColor> QtUi::GetColor(int id, bool use_custom_frame) const {
   }
 }
 
-std::unique_ptr<ui::LinuxUi> CreateQtUi(
-    std::unique_ptr<ui::LinuxUi> fallback_linux_ui) {
-  return std::make_unique<QtUi>(std::move(fallback_linux_ui));
+std::unique_ptr<ui::LinuxUiAndTheme> CreateQtUi(
+    ui::LinuxUi* fallback_linux_ui) {
+  return std::make_unique<QtUi>(fallback_linux_ui);
 }
 
 }  // namespace qt

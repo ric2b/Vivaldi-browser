@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,6 +68,11 @@ class ExtensionTelemetryService : public KeyedService {
       delete;
 
   ~ExtensionTelemetryService() override;
+
+  // Records the signal type when a signal is:
+  // - created externally and passed to extension service using AddSignal OR
+  // - created internally by a signal processor from other signals received.
+  static void RecordSignalType(ExtensionSignalType signal_type);
 
   // Enables/disables the service.
   void SetEnabled(bool enable);
@@ -169,6 +174,11 @@ class ExtensionTelemetryService : public KeyedService {
       base::flat_map<ExtensionSignalType,
                      std::unique_ptr<ExtensionSignalProcessor>>;
   SignalProcessors signal_processors_;
+
+  using SignalSubscribers =
+      base::flat_map<ExtensionSignalType,
+                     std::vector<ExtensionSignalProcessor*>>;
+  SignalSubscribers signal_subscribers_;
 
   friend class ExtensionTelemetryServiceTest;
   friend class ExtensionTelemetryServiceBrowserTest;

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,12 +21,11 @@
 #include "remoting/protocol/fake_audio_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 namespace {
 
-// Creates a dummy packet with 1k data
+// Creates a dummy packet with 1k data.
 std::unique_ptr<AudioPacket> MakeAudioPacket(int channel_count = 2) {
   std::unique_ptr<AudioPacket> packet(new AudioPacket);
   packet->add_data()->resize(1024);
@@ -186,5 +185,4 @@ TEST_F(AudioPumpTest, DownmixAudioPacket) {
   ASSERT_EQ(sent_packets_.size(), std::size(kChannels));
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

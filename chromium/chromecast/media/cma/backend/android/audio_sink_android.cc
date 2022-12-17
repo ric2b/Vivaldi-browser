@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,13 +32,14 @@ void ManagedAudioSink::Reset(Delegate* delegate,
                              int samples_per_second,
                              int audio_track_session_id,
                              bool primary,
+                             bool is_apk_audio,
                              bool use_hw_av_sync,
                              const std::string& device_id,
                              AudioContentType content_type) {
   Remove();
   sink_ = new AudioSinkAndroidAudioTrackImpl(
       delegate, num_channels, samples_per_second, audio_track_session_id,
-      primary, use_hw_av_sync, device_id, content_type);
+      primary, is_apk_audio, use_hw_av_sync, device_id, content_type);
   AudioSinkManager::Get()->Add(sink_);
 }
 

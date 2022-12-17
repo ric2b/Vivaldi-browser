@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -139,10 +139,6 @@ bool UsingBuiltinCertVerifier() {
 #if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   return true;
 #else
-#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
-  if (base::FeatureList::IsEnabled(net::features::kCertVerifierBuiltinFeature))
-    return true;
-#endif
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
   if (base::FeatureList::IsEnabled(net::features::kChromeRootStoreUsed))
     return true;

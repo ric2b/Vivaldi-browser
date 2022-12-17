@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -99,7 +99,7 @@ def main_run(args):
       json.dump(sheet_config, config_file, indent=4)
       config_filename = config_file.name
       config_file.close()
-      vpython_path = 'vpython.bat' if is_windows() else 'vpython'
+      vpython_path = 'vpython3.bat' if is_windows() else 'vpython3'
 
       command_line = [
         vpython_path,

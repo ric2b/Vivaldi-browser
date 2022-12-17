@@ -42,9 +42,14 @@
   }
 </style>
 <div id="container">
-  <div id="themeLabel">
-    <h2>$i18n{themeLabel}</h2>
-  </div>
+  <template is="dom-if" if="[[!isJellyEnabled_]]">
+    <div id="themeLabel">
+      <h2>$i18n{themeLabel}</h2>
+    </div>
+  </template>
+  <template is="dom-if" if="[[isJellyEnabled_]]">
+    <theme-header></theme-header>
+  </template>
   <iron-a11y-keys id="keys" keys="left right" on-keys-pressed="onKeysPress_">
   </iron-a11y-keys>
   <iron-selector id="selector" selected="0"
@@ -68,7 +73,8 @@
         on-click="onClickAutoModeButton_"
         on-keypress="onClickAutoModeButton_" tabindex="-1"
         aria-pressed$="[[getAutoAriaPressed_(colorModeAutoScheduleEnabled_)]]"
-        aria-description="$i18n{ariaLabelEnableAutoColorMode}">
+        aria-description="$i18n{ariaLabelEnableAutoColorMode}"
+        title="$i18n{tooltipAutoColorMode}">
       <iron-icon icon="personalization:auto" aria-hidden="true"></iron-icon>
       <div class="text">$i18n{autoColorMode}</div>
     </cr-button>

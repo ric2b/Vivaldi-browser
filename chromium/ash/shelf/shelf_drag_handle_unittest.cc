@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -827,7 +827,8 @@ TEST_F(DragHandleContextualNudgeTest,
   EnterOverview();
   SplitViewController* split_view_controller =
       SplitViewController::Get(shelf_widget->GetNativeWindow());
-  split_view_controller->SnapWindow(window.get(), SplitViewController::LEFT);
+  split_view_controller->SnapWindow(
+      window.get(), SplitViewController::SnapPosition::kPrimary);
   EXPECT_TRUE(split_view_controller->InSplitViewMode());
 
   // Tapping the drag handle will not show the drag handle.
@@ -857,7 +858,8 @@ TEST_F(DragHandleContextualNudgeTest, DragHandleNudgeHiddenOnSplitScreen) {
   EnterOverview();
   SplitViewController* split_view_controller =
       SplitViewController::Get(shelf_widget->GetNativeWindow());
-  split_view_controller->SnapWindow(window.get(), SplitViewController::LEFT);
+  split_view_controller->SnapWindow(
+      window.get(), SplitViewController::SnapPosition::kPrimary);
   EXPECT_TRUE(split_view_controller->InSplitViewMode());
 
   // The drag handle nudge should no longer be visible.

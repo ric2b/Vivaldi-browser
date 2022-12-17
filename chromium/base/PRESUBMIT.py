@@ -1,4 +1,4 @@
-# Copyright (c) 2012 The Chromium Authors. All rights reserved.
+# Copyright 2012 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -20,7 +20,7 @@ def CheckChangeLintsClean(input_api, output_api):
   # The only valid extensions for cpplint are .cc, .h, .cpp, .cu, and .ch.
   # Only process those extensions which are used in Chromium, in directories
   # that currently lint clean.
-  CLEAN_CPP_FILES_ONLY = (r'base[\\/]win[\\/].*\.(cc|h)$', )
+  CLEAN_CPP_FILES_ONLY = (r'base/win/.*\.(cc|h)$', )
   source_file_filter = lambda x: input_api.FilterSourceFile(
       x,
       files_to_check=CLEAN_CPP_FILES_ONLY,
@@ -90,9 +90,9 @@ def _CheckNoTraceEventInclude(input_api, output_api):
     r".*\.(h|cc|mm)$",
   ]
   files_to_skip = [
-    r".*[\\/]test[\\/].*",
-    r".*[\\/]trace_event[\\/].*",
-    r".*[\\/]tracing[\\/].*",
+    r".*/test/.*",
+    r".*/trace_event/.*",
+    r".*/tracing/.*",
   ]
 
   locations = _FindLocations(input_api, discouraged_includes, files_to_check,
@@ -123,9 +123,9 @@ def _WarnPbzeroIncludes(input_api, output_api):
     r".*\.(h|cc|mm)$",
   ]
   files_to_skip = [
-    r".*[\\/]test[\\/].*",
-    r".*[\\/]trace_event[\\/].*",
-    r".*[\\/]tracing[\\/].*",
+    r".*/test/.*",
+    r".*/trace_event/.*",
+    r".*/tracing/.*",
   ]
 
   locations = _FindLocations(input_api, warn_includes, files_to_check,

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,9 +70,7 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   bool IsOptedInForAccountStorage() override;
   void SetAccountStorageOptIn(bool opt_in,
                               content::WebContents* web_contents) override;
-  std::vector<api::passwords_private::PasswordUiEntry>
-  GetCompromisedCredentials() override;
-  std::vector<api::passwords_private::PasswordUiEntry> GetWeakCredentials()
+  std::vector<api::passwords_private::PasswordUiEntry> GetInsecureCredentials()
       override;
   // Fake implementation of `MuteInsecureCredential`. This succeeds if the
   // delegate knows of a insecure credential with the same id.
@@ -99,6 +97,9 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
       StartAutomatedPasswordChangeCallback callback) override;
   password_manager::InsecureCredentialsManager* GetInsecureCredentialsManager()
       override;
+  void ExtendAuthValidity() override;
+  void SwitchBiometricAuthBeforeFillingState(
+      content::WebContents* web_contents) override;
 
   void SetProfile(Profile* profile);
   void SetOptedInForAccountStorage(bool opted_in);
@@ -127,6 +128,10 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
 
   const std::vector<int>& last_moved_passwords() const {
     return last_moved_passwords_;
+  }
+
+  bool get_authenticator_interaction_status() const {
+    return authenticator_interacted_;
   }
 
  private:
@@ -175,6 +180,9 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
 
   // Records the ids of the passwords that were last moved.
   std::vector<int> last_moved_passwords_;
+
+  // Used to track whether user interacted with the ExtendAuthValidity API.
+  bool authenticator_interacted_ = false;
 };
 }  // namespace extensions
 

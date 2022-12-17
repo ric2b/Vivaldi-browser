@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,8 +97,9 @@ class MEDIA_EXPORT MediaLog {
     DCHECK(!status.is_ok());
     std::unique_ptr<MediaLogRecord> record =
         CreateRecord(MediaLogRecord::Type::kMediaStatus);
-    auto serialized = MediaSerialize(status);
-    record->params.MergeDictionary(&serialized);
+    base::Value serialized = MediaSerialize(status);
+    DCHECK(serialized.is_dict());
+    record->params.Merge(std::move(serialized.GetDict()));
     AddLogRecord(std::move(record));
   }
 
@@ -114,11 +115,6 @@ class MEDIA_EXPORT MediaLog {
   // Inheritors should override GetErrorMessageLocked().
   // TODO(tmathmeyer) Use a media::Status when that is ready.
   std::string GetErrorMessage();
-
-  // Getter for |id_|. Used by MojoMediaLogService to construct MediaLogRecords
-  // to log into this MediaLog. Also used in trace events to associate each
-  // event with a specific media playback.
-  int32_t id() const { return parent_log_record_->id; }
 
   // Add a record to this log.  Inheritors should override AddLogRecordLocked to
   // do something. This needs to be public for MojoMediaLogService to use it.
@@ -152,16 +148,16 @@ class MEDIA_EXPORT MediaLog {
   template <MediaLogProperty P, typename T>
   std::unique_ptr<MediaLogRecord> CreatePropertyRecord(const T& value) {
     auto record = CreateRecord(MediaLogRecord::Type::kMediaPropertyChange);
-    record->params.SetKey(MediaLogPropertyKeyToString(P),
-                          MediaLogPropertyTypeSupport<P, T>::Convert(value));
+    record->params.Set(MediaLogPropertyKeyToString(P),
+                       MediaLogPropertyTypeSupport<P, T>::Convert(value));
     return record;
   }
   template <MediaLogEvent E, typename... Opt>
   std::unique_ptr<MediaLogRecord> CreateEventRecord() {
     std::unique_ptr<MediaLogRecord> record(
         CreateRecord(MediaLogRecord::Type::kMediaEventTriggered));
-    record->params.SetString(MediaLog::kEventKey,
-                             MediaLogEventTypeSupport<E, Opt...>::TypeName());
+    record->params.Set(MediaLog::kEventKey,
+                       MediaLogEventTypeSupport<E, Opt...>::TypeName());
     return record;
   }
 
@@ -177,9 +173,6 @@ class MEDIA_EXPORT MediaLog {
 
     ParentLogRecord(const ParentLogRecord&) = delete;
     ParentLogRecord& operator=(const ParentLogRecord&) = delete;
-
-    // A unique (to this process) id for this MediaLog.
-    int32_t id;
 
     // |lock_| protects the rest of this structure.
     base::Lock lock;

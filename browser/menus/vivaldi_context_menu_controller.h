@@ -107,7 +107,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   void Delete();
 
   typedef std::map<int, bool> IdToBoolMap;
-  typedef std::map<int, std::string*> IdToStringMap;
+  typedef std::map<int, std::string> IdToStringMap;
   typedef std::map<int, ui::Accelerator> IdToAcceleratorMap;
 
   content::WebContents* window_web_contents_;

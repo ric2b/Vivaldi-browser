@@ -54,9 +54,9 @@ using blink::mojom::FetchCacheMode;
 
 namespace blink {
 
-// This is complementary to ConvertNetPriorityToWebKitPriority, defined in
-// service_worker_context_client.cc.
-net::RequestPriority ConvertWebKitPriorityToNetPriority(
+// This is complementary to ConvertRequestPriorityToResourceLoadPriority,
+// defined in third_party/blink/renderer/core/fetch/fetch_request_data.cc.
+net::RequestPriority WebURLRequest::ConvertToNetPriority(
     WebURLRequest::Priority priority) {
   switch (priority) {
     case WebURLRequest::Priority::kVeryHigh:
@@ -513,10 +513,6 @@ absl::optional<WebString> WebURLRequest::GetDevToolsId() const {
 
 bool WebURLRequest::IsFromOriginDirtyStyleSheet() const {
   return resource_request_->IsFromOriginDirtyStyleSheet();
-}
-
-bool WebURLRequest::IsSignedExchangePrefetchCacheEnabled() const {
-  return resource_request_->IsSignedExchangePrefetchCacheEnabled();
 }
 
 absl::optional<base::UnguessableToken> WebURLRequest::RecursivePrefetchToken()

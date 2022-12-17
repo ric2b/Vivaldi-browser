@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,13 +14,13 @@
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "chrome/browser/ui/views/permissions/permission_chip.h"
-#include "chrome/browser/ui/views/permissions/permission_request_chip.h"
+#include "chrome/browser/ui/views/permissions/chip_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/permissions/permission_request_manager_test_api.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/omnibox/browser/open_tab_provider.h"
 #include "components/permissions/features.h"
 #include "components/permissions/test/permission_request_observer.h"
 #include "content/public/browser/web_contents.h"
@@ -50,7 +50,8 @@ LocationBarView* GetLocationBarView(Browser* browser) {
 
 }  // namespace
 
-class PermissionRequestChipBrowserTest : public InProcessBrowserTest {
+class PermissionRequestChipGestureSensitiveBrowserTest
+    : public InProcessBrowserTest {
  public:
   void SetUp() override {
     feature_list_.InitWithFeatures(
@@ -65,12 +66,11 @@ class PermissionRequestChipBrowserTest : public InProcessBrowserTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserTest,
+IN_PROC_BROWSER_TEST_F(PermissionRequestChipGestureSensitiveBrowserTest,
                        ChipFinalizedWhenInteractingWithOmnibox) {
   RequestPermission(browser());
   LocationBarView* lbv = GetLocationBarView(browser());
-  auto* button = static_cast<OmniboxChipButton*>(lbv->chip()->button());
-  auto* animation = button->animation_for_testing();
+  auto* animation = lbv->chip_controller()->chip()->animation_for_testing();
 
   // Animate the chip expand.
   gfx::AnimationTestApi animation_api(animation);
@@ -78,10 +78,14 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserTest,
   animation_api.SetStartTime(now);
   animation_api.Step(now + animation->GetSlideDuration());
 
-  // After animation ended, the chip is expanded and the bubble is shown.
-  EXPECT_TRUE(lbv->chip()->GetVisible());
-  EXPECT_TRUE(lbv->chip()->IsBubbleShowing());
-  EXPECT_TRUE(lbv->chip()->IsInitialized());
+  // After animation ended, the chip is expanded and the bubble is shown because
+  // the gesture sensitive request feature is enabled.
+  EXPECT_TRUE(lbv->chip_controller()->IsPermissionPromptChipVisible());
+  EXPECT_TRUE(lbv->chip_controller()->IsBubbleShowing());
+
+  // Because the bubble is shown, callback timers should be abandoned
+  EXPECT_FALSE(lbv->chip_controller()->is_collapse_timer_running_for_testing());
+  EXPECT_FALSE(lbv->chip_controller()->is_dismiss_timer_running_for_testing());
 
   // Type something in the omnibox.
   auto* omnibox_view = lbv->GetOmniboxView();
@@ -92,19 +96,22 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserTest,
 
   // While the user is interacting with the omnibox, the chip is hidden, the
   // location icon isn't offset by the chip and the bubble is hidden.
-  EXPECT_FALSE(lbv->chip()->GetVisible());
-  EXPECT_FALSE(lbv->chip()->IsBubbleShowing());
-  EXPECT_FALSE(lbv->chip()->IsInitialized());
+  EXPECT_FALSE(lbv->chip_controller()->IsPermissionPromptChipVisible());
+  EXPECT_FALSE(lbv->chip_controller()->IsBubbleShowing());
   EXPECT_EQ(lbv->location_icon_view()->bounds().x(),
             GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING));
+
+  // Ensure no callbacks are pending.
+  EXPECT_FALSE(lbv->chip_controller()->is_collapse_timer_running_for_testing());
+  EXPECT_FALSE(lbv->chip_controller()->is_dismiss_timer_running_for_testing());
 }
 
-IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserTest,
+IN_PROC_BROWSER_TEST_F(PermissionRequestChipGestureSensitiveBrowserTest,
                        ChipIsNotShownWhenInteractingWithOmnibox) {
   LocationBarView* lbv = GetLocationBarView(browser());
 
   // The chip is not shown because there is no active permission request.
-  EXPECT_FALSE(lbv->chip()->GetVisible());
+  EXPECT_FALSE(lbv->chip_controller()->IsPermissionPromptChipVisible());
 
   // Type something in the omnibox.
   auto* omnibox_view = lbv->GetOmniboxView();
@@ -115,7 +122,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserTest,
 
   // While the user is interacting with the omnibox, an incoming permission
   // request will be automatically ignored. The chip is not shown.
-  EXPECT_FALSE(lbv->chip()->GetVisible());
+  EXPECT_FALSE(lbv->chip_controller()->IsPermissionPromptChipVisible());
 }
 
 // This is an end-to-end test that verifies that a permission prompt bubble will
@@ -123,7 +130,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserTest,
 // such a test should be placed in PermissionsSecurityModelInteractiveUITest but
 // due to dependency issues (see crbug.com/1112591) `//chrome/browser` is not
 // allowed to have dependencies on `//chrome/browser/ui/views/*`.
-IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserTest,
+IN_PROC_BROWSER_TEST_F(PermissionRequestChipGestureSensitiveBrowserTest,
                        PermissionRequestIsAutoIgnored) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -195,6 +202,146 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserTest,
                    .value.GetBool());
 }
 
+IN_PROC_BROWSER_TEST_F(PermissionRequestChipGestureSensitiveBrowserTest,
+                       ShouldUpdateActiverPRMAndObservations) {
+  constexpr char kRequestNotifications[] = R"(
+    new Promise(resolve => {
+      Notification.requestPermission().then(function (permission) {
+        resolve(permission)
+      });
+    })
+    )";
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL url(embedded_test_server()->GetURL("/empty.html"));
+
+  // Setup: open 2 tabs at the same origin
+  TabStripModel* tab_strip = browser()->tab_strip_model();
+  content::WebContents* embedder_contents_tab_0 =
+      tab_strip->GetActiveWebContents();
+  ASSERT_TRUE(embedder_contents_tab_0);
+  content::RenderFrameHost* rfh_tab_0 =
+      ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(browser(), url,
+                                                                1);
+  content::WebContents::FromRenderFrameHost(rfh_tab_0)->Focus();
+  embedder_contents_tab_0 = tab_strip->GetActiveWebContents();
+  auto* manager_tab_0 = permissions::PermissionRequestManager::FromWebContents(
+      embedder_contents_tab_0);
+  permissions::PermissionRequestObserver observer_tab_0(
+      embedder_contents_tab_0);
+
+  chrome::NewTabToRight(browser());
+  EXPECT_EQ(2, tab_strip->count());
+
+  tab_strip->ActivateTabAt(1);
+  content::RenderFrameHost* rfh_tab_1 =
+      ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(browser(), url,
+                                                                1);
+  content::WebContents* embedder_contents_tab_1 =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  auto* manager_tab_1 = permissions::PermissionRequestManager::FromWebContents(
+      embedder_contents_tab_1);
+  permissions::PermissionRequestObserver observer_tab_1(
+      embedder_contents_tab_1);
+
+  tab_strip->ActivateTabAt(0);
+
+  // Obtain the chip controller instance. The chip controller instance is tied
+  // to the location bar view instance. Since the location bar view instance is
+  // reused across multiple tabs, this in turn also means that the chip
+  // controller instance is the same across multiple tabs.
+  LocationBarView* location_bar =
+      BrowserView::GetBrowserViewForBrowser(browser())->GetLocationBarView();
+  ASSERT_TRUE(location_bar);
+  ChipController* chip_controller = location_bar->chip_controller();
+
+  // Trigger permission request on first tab
+  EXPECT_FALSE(manager_tab_0->IsRequestInProgress());
+  EXPECT_TRUE(content::ExecJs(
+      rfh_tab_0, kRequestNotifications,
+      content::EvalJsOptions::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
+  observer_tab_0.Wait();
+  EXPECT_TRUE(manager_tab_0->IsRequestInProgress());
+
+  // Close first tab
+  tab_strip->CloseWebContentsAt(0, TabCloseTypes::CLOSE_USER_GESTURE);
+  EXPECT_FALSE(manager_tab_1->IsRequestInProgress());
+
+  // After closing the first tab, the chip controller should no longer be
+  // observing any permission request manager. It should also no longer hold a
+  // reference to a Permission Request Manager instance.
+  ASSERT_FALSE(chip_controller->IsInObserverList());
+  ASSERT_FALSE(chip_controller->active_permission_request_manager_for_testing()
+                   .has_value());
+
+  // Trigger a request on the second (the now only remaining) tab.
+  EXPECT_TRUE(content::ExecJs(
+      rfh_tab_1, kRequestNotifications,
+      content::EvalJsOptions::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
+
+  observer_tab_1.Wait();
+
+  // During the request, the chip controller should be observing the correct
+  // permission request manager instance, and have a reference to the same.
+  EXPECT_TRUE(manager_tab_1->IsRequestInProgress());
+  ASSERT_TRUE(chip_controller->active_permission_request_manager_for_testing()
+                  .has_value());
+  ASSERT_EQ(
+      chip_controller->active_permission_request_manager_for_testing().value(),
+      manager_tab_1);
+  ASSERT_TRUE(manager_tab_1->get_observer_list_for_testing()->HasObserver(
+      chip_controller));
+}
+
+class PermissionRequestChipGestureInsensitiveBrowserTest
+    : public InProcessBrowserTest {
+ public:
+  void SetUp() override {
+    feature_list_.InitWithFeatures(
+        {permissions::features::kPermissionChip,
+         permissions::features::kPermissionChipRequestTypeSensitive},
+        {});
+    InProcessBrowserTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(PermissionRequestChipGestureInsensitiveBrowserTest,
+                       CallbacksResetWhenInteractingWithOmnibox) {
+  RequestPermission(browser());
+  LocationBarView* lbv = GetLocationBarView(browser());
+  auto* animation = lbv->chip_controller()->chip()->animation_for_testing();
+
+  // Animate the chip expand.
+  gfx::AnimationTestApi animation_api(animation);
+  base::TimeTicks now = base::TimeTicks::Now();
+  animation_api.SetStartTime(now);
+  animation_api.Step(now + animation->GetSlideDuration());
+
+  // After animation ended, the chip is expanded and a bubble is shown.
+  EXPECT_TRUE(lbv->chip_controller()->IsPermissionPromptChipVisible());
+  EXPECT_TRUE(lbv->chip_controller()->IsBubbleShowing());
+
+  // Because a bubble is shown, the collapse callback timer should not be
+  // running.
+  EXPECT_FALSE(lbv->chip_controller()->is_collapse_timer_running_for_testing());
+  EXPECT_FALSE(lbv->chip_controller()->is_dismiss_timer_running_for_testing());
+
+  // Type something in the omnibox.
+  auto* omnibox_view = lbv->GetOmniboxView();
+  omnibox_view->SetUserText(u"search query");
+  omnibox_view->model()->SetInputInProgress(true);
+
+  base::RunLoop().RunUntilIdle();
+
+  // Ensure chip is no longer visible and callbacks are no longer running.
+  EXPECT_FALSE(lbv->chip_controller()->IsPermissionPromptChipVisible());
+  EXPECT_FALSE(lbv->chip_controller()->is_collapse_timer_running_for_testing());
+  EXPECT_FALSE(lbv->chip_controller()->is_dismiss_timer_running_for_testing());
+}
+
 class PermissionRequestChipDialogBrowserTest : public UiBrowserTest {
  public:
   PermissionRequestChipDialogBrowserTest() {
@@ -212,13 +359,12 @@ class PermissionRequestChipDialogBrowserTest : public UiBrowserTest {
 
     LocationBarView* lbv = GetLocationBarView(browser());
     lbv->GetFocusManager()->ClearFocus();
-    auto* button = static_cast<OmniboxChipButton*>(lbv->chip()->button());
-    button->SetForceExpandedForTesting(true);
+    lbv->chip_controller()->chip()->SetForceExpandedForTesting(true);
   }
 
   bool VerifyUi() override {
     LocationBarView* lbv = GetLocationBarView(browser());
-    PermissionChip* chip = lbv->chip();
+    OmniboxChipButton* chip = lbv->chip_controller()->chip();
     if (!chip)
       return false;
 

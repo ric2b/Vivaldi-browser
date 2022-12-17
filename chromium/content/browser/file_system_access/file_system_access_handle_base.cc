@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,20 +12,17 @@
 #include "base/files/file_path.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "content/browser/file_system_access/file_system_access_directory_handle_impl.h"
 #include "content/browser/file_system_access/file_system_access_error.h"
 #include "content/browser/file_system_access/file_system_access_manager_impl.h"
+#include "content/browser/file_system_access/file_system_access_safe_move_helper.h"
 #include "content/browser/file_system_access/file_system_access_transfer_token_impl.h"
-#include "content/browser/file_system_access/safe_move_helper.h"
 #include "content/browser/renderer_host/back_forward_cache_disable.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/back_forward_cache.h"
-#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
-#include "net/base/filename_util.h"
 #include "storage/browser/file_system/file_system_operation.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "storage/common/file_system/file_system_types.h"
@@ -372,20 +369,22 @@ void FileSystemAccessHandleBase::DidCreateDestinationDirectoryHandle(
     locks.emplace_back(std::move(dest_write_lock));
   }
 
-  auto safe_move_helper = std::make_unique<SafeMoveHelper>(
-      manager()->AsWeakPtr(), context(), url(), dest_url,
-      storage::FileSystemOperation::CopyOrMoveOptionSet(),
-      GetContentClient()->browser()->GetQuarantineConnectionCallback(),
-      has_transient_user_activation);
+  auto file_system_access_safe_move_helper =
+      std::make_unique<FileSystemAccessSafeMoveHelper>(
+          manager()->AsWeakPtr(), context(), url(), dest_url,
+          storage::FileSystemOperation::CopyOrMoveOptionSet(),
+          GetContentClient()->browser()->GetQuarantineConnectionCallback(),
+          has_transient_user_activation);
   // Allows the unique pointer to be bound to the callback so the helper stays
   // alive until the operation completes.
-  SafeMoveHelper* raw_helper = safe_move_helper.get();
+  FileSystemAccessSafeMoveHelper* raw_helper =
+      file_system_access_safe_move_helper.get();
   raw_helper->Start(base::BindOnce(
       [](base::WeakPtr<FileSystemAccessHandleBase> handle,
          storage::FileSystemURL new_url,
          std::vector<scoped_refptr<FileSystemAccessWriteLockManager::WriteLock>>
              write_locks,
-         std::unique_ptr<content::SafeMoveHelper> /*safe_move_helper*/,
+         std::unique_ptr<FileSystemAccessSafeMoveHelper> /*move_helper*/,
          base::OnceCallback<void(blink::mojom::FileSystemAccessErrorPtr)>
              callback,
          blink::mojom::FileSystemAccessErrorPtr result) {
@@ -398,8 +397,8 @@ void FileSystemAccessHandleBase::DidCreateDestinationDirectoryHandle(
         write_locks.clear();
         std::move(callback).Run(std::move(result));
       },
-      AsWeakPtr(), dest_url, std::move(locks), std::move(safe_move_helper),
-      std::move(callback)));
+      AsWeakPtr(), dest_url, std::move(locks),
+      std::move(file_system_access_safe_move_helper), std::move(callback)));
 }
 
 void FileSystemAccessHandleBase::DoRemove(

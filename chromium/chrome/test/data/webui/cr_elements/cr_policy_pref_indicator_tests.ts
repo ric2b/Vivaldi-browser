@@ -1,11 +1,11 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 // clang-format off
-import 'chrome://resources/cr_elements/policy/cr_policy_pref_indicator.m.js';
+import 'chrome://resources/cr_elements/policy/cr_policy_pref_indicator.js';
 
-import {CrPolicyPrefIndicatorElement} from 'chrome://resources/cr_elements/policy/cr_policy_pref_indicator.m.js';
+import {CrPolicyPrefIndicatorElement} from 'chrome://resources/cr_elements/policy/cr_policy_pref_indicator.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
@@ -17,7 +17,8 @@ suite('CrPolicyPrefIndicator', function() {
   let indicator: CrPolicyPrefIndicatorElement;
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     indicator = document.createElement('cr-policy-pref-indicator');
     document.body.appendChild(indicator);
@@ -39,6 +40,7 @@ suite('CrPolicyPrefIndicator', function() {
     const icon = indicator.shadowRoot!.querySelector('cr-tooltip-icon')!;
     assertTrue(icon.hidden);
 
+    // <if expr="chromeos_ash">
     // Check indicator behavior for a preference controlled by the device owner.
     indicator.set(
         'pref.controlledBy', chrome.settingsPrivate.ControlledBy.OWNER);
@@ -49,6 +51,7 @@ suite('CrPolicyPrefIndicator', function() {
     assertFalse(icon.hidden);
     assertEquals('cr:person', icon.iconClass);
     assertEquals('owner: owner_name', icon.tooltipText);
+    // </if>
 
     // Check indicator behavior for a preference with a recommended value that
     // is different from the current value of the preference.
@@ -67,6 +70,7 @@ suite('CrPolicyPrefIndicator', function() {
     flush();
     assertEquals('matches', icon.tooltipText);
 
+    // <if expr="chromeos_ash">
     // Check indicator behavior for a preference that is enforced for a
     // supervised user.
     indicator.set(
@@ -76,6 +80,7 @@ suite('CrPolicyPrefIndicator', function() {
     assertFalse(icon.hidden);
     assertEquals('cr20:kite', icon.iconClass);
     assertEquals(CrPolicyStrings.controlledSettingParent, icon.tooltipText);
+    // </if>
 
     // Check indicator behavior for a preference that is enforced by device
     // policy.

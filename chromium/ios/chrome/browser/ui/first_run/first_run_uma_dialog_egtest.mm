@@ -1,12 +1,12 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "components/signin/ios/browser/features.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
+#import "ios/chrome/browser/ui/first_run/field_trial_constants.h"
 #import "ios/chrome/browser/ui/first_run/first_run_app_interface.h"
 #import "ios/chrome/browser/ui/first_run/first_run_constants.h"
-#import "ios/chrome/browser/ui/first_run/fre_field_trial.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/ui/promo_style/constants.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
@@ -95,19 +95,6 @@ GREYElementInteraction* ElementInteractionWithGreyMatcher(
   AppLaunchConfiguration config;
   config.additional_args.push_back(std::string("-") +
                                    test_switches::kSignInAtStartup);
-  // Enable UMA dialog MICe FRe.
-  config.additional_args.push_back(
-      "--enable-features=" +
-      std::string(signin::kNewMobileIdentityConsistencyFRE.name) + "<" +
-      std::string(signin::kNewMobileIdentityConsistencyFRE.name));
-  config.additional_args.push_back(
-      "--force-fieldtrials=" +
-      std::string(signin::kNewMobileIdentityConsistencyFRE.name) + "/Test");
-  config.additional_args.push_back(
-      "--force-fieldtrial-params=" +
-      std::string(signin::kNewMobileIdentityConsistencyFRE.name) +
-      ".Test:" + std::string(kNewMobileIdentityConsistencyFREParam) + "/" +
-      kNewMobileIdentityConsistencyFREParamUMADialog);
   // Disable default browser promo.
   config.features_disabled.push_back(kEnableFREDefaultBrowserPromoScreen);
   // Show the First Run UI at startup.

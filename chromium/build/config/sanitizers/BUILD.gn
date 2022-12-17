@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -400,6 +400,9 @@ config("msan_flags") {
 
       # TODO(https://crbug.com/1317909): evaluate and possibly enable
       "-fno-sanitize-memory-use-after-dtor",
+
+      # TODO(https://crbug.com/1369167): evaluate and possibly enable
+      "-fno-sanitize-memory-param-retval",
     ]
   }
 }
@@ -432,6 +435,7 @@ config("ubsan_flags") {
       "-fsanitize=float-divide-by-zero",
       "-fsanitize=integer-divide-by-zero",
       "-fsanitize=null",
+      "-fsanitize=nonnull-attribute",
       "-fsanitize=object-size",
       "-fsanitize=return",
       "-fsanitize=returns-nonnull-attribute",

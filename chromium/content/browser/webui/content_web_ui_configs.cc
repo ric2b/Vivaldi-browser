@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@
 #include "content/browser/indexed_db/indexed_db_internals_ui.h"
 #include "content/browser/media/media_internals_ui.h"
 #include "content/browser/metrics/histograms_internals_ui.h"
-#include "content/browser/net/network_errors_listing_ui.h"
+#include "content/browser/network/network_errors_listing_ui.h"
 #include "content/browser/preloading/prerender/prerender_internals_ui.h"
 #include "content/browser/process_internals/process_internals_ui.h"
 #include "content/browser/quota/quota_internals_ui.h"

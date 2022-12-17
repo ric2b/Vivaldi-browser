@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,7 @@
 #include "components/policy/proto/cloud_policy.pb.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -268,8 +269,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_EmptyPolicy) {
 
 IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, BlockDestination) {
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
 
     base::Value src_urls1(base::Value::Type::LIST);
     src_urls1.Append(kMailUrl);
@@ -348,28 +349,28 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, BlockDestination) {
 IN_PROC_BROWSER_TEST_F(DataTransferDlpBrowserTest, MAYBE_WarnDestination) {
   base::WeakPtr<views::Widget> widget;
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
-    base::Value rule(base::Value::Type::DICTIONARY);
-    base::Value src_urls(base::Value::Type::DICTIONARY);
-    base::Value src_urls_list(base::Value::Type::LIST);
-    src_urls_list.Append(base::Value(kMailUrl));
-    src_urls.SetKey("urls", std::move(src_urls_list));
-    rule.SetKey("sources", std::move(src_urls));
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
+    base::Value::Dict rule;
+    base::Value::Dict src_urls;
+    base::Value::List src_urls_list;
+    src_urls_list.Append(kMailUrl);
+    src_urls.Set("urls", std::move(src_urls_list));
+    rule.Set("sources", std::move(src_urls));
 
-    base::Value dst_urls(base::Value::Type::DICTIONARY);
-    base::Value dst_urls_list(base::Value::Type::LIST);
-    dst_urls_list.Append(base::Value("*"));
-    dst_urls.SetKey("urls", std::move(dst_urls_list));
-    rule.SetKey("destinations", std::move(dst_urls));
+    base::Value::Dict dst_urls;
+    base::Value::List dst_urls_list;
+    dst_urls_list.Append("*");
+    dst_urls.Set("urls", std::move(dst_urls_list));
+    rule.Set("destinations", std::move(dst_urls));
 
-    base::Value restrictions(base::Value::Type::DICTIONARY);
-    base::Value restrictions_list(base::Value::Type::LIST);
-    base::Value class_level_dict(base::Value::Type::DICTIONARY);
-    class_level_dict.SetKey("class", base::Value("CLIPBOARD"));
-    class_level_dict.SetKey("level", base::Value("WARN"));
+    base::Value::Dict restrictions;
+    base::Value::List restrictions_list;
+    base::Value::Dict class_level_dict;
+    class_level_dict.Set("class", "CLIPBOARD");
+    class_level_dict.Set("level", "WARN");
     restrictions_list.Append(std::move(class_level_dict));
-    rule.SetKey("restrictions", std::move(restrictions_list));
+    rule.Set("restrictions", std::move(restrictions_list));
 
     update->Append(std::move(rule));
   }
@@ -504,28 +505,28 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_ProceedOnWarn) {
 
   // TODO(1276069): Refactor duplicated code below.
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
-    base::Value rule(base::Value::Type::DICTIONARY);
-    base::Value src_urls(base::Value::Type::DICTIONARY);
-    base::Value src_urls_list(base::Value::Type::LIST);
-    src_urls_list.Append(base::Value(kMailUrl));
-    src_urls.SetKey("urls", std::move(src_urls_list));
-    rule.SetKey("sources", std::move(src_urls));
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
+    base::Value::Dict rule;
+    base::Value::Dict src_urls;
+    base::Value::List src_urls_list;
+    src_urls_list.Append(kMailUrl);
+    src_urls.Set("urls", std::move(src_urls_list));
+    rule.Set("sources", std::move(src_urls));
 
-    base::Value dst_urls(base::Value::Type::DICTIONARY);
-    base::Value dst_urls_list(base::Value::Type::LIST);
-    dst_urls_list.Append(base::Value("*"));
-    dst_urls.SetKey("urls", std::move(dst_urls_list));
-    rule.SetKey("destinations", std::move(dst_urls));
+    base::Value::Dict dst_urls;
+    base::Value::List dst_urls_list;
+    dst_urls_list.Append("*");
+    dst_urls.Set("urls", std::move(dst_urls_list));
+    rule.Set("destinations", std::move(dst_urls));
 
-    base::Value restrictions(base::Value::Type::DICTIONARY);
-    base::Value restrictions_list(base::Value::Type::LIST);
-    base::Value class_level_dict(base::Value::Type::DICTIONARY);
-    class_level_dict.SetKey("class", base::Value("CLIPBOARD"));
-    class_level_dict.SetKey("level", base::Value("WARN"));
+    base::Value::Dict restrictions;
+    base::Value::List restrictions_list;
+    base::Value::Dict class_level_dict;
+    class_level_dict.Set("class", "CLIPBOARD");
+    class_level_dict.Set("level", "WARN");
     restrictions_list.Append(std::move(class_level_dict));
-    rule.SetKey("restrictions", std::move(restrictions_list));
+    rule.Set("restrictions", std::move(restrictions_list));
 
     update->Append(std::move(rule));
   }
@@ -553,11 +554,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_ProceedOnWarn) {
              "  };"
              "});"));
 
-  content::UpdateUserActivationStateInterceptor user_activation_interceptor(
-      GetActiveWebContents()->GetPrimaryMainFrame());
-  user_activation_interceptor.UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation,
-      blink::mojom::UserActivationNotificationType::kTest);
+  content::SimulateMouseClick(GetActiveWebContents(), 0,
+                              blink::WebPointerProperties::Button::kLeft);
 
   // Send paste event and wait till the notification is displayed.
   base::RunLoop run_loop;
@@ -599,28 +597,28 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_CancelWarn) {
 
   // TODO(1276069): Refactor duplicated code below.
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
-    base::Value rule(base::Value::Type::DICTIONARY);
-    base::Value src_urls(base::Value::Type::DICTIONARY);
-    base::Value src_urls_list(base::Value::Type::LIST);
-    src_urls_list.Append(base::Value(kMailUrl));
-    src_urls.SetKey("urls", std::move(src_urls_list));
-    rule.SetKey("sources", std::move(src_urls));
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
+    base::Value::Dict rule;
+    base::Value::Dict src_urls;
+    base::Value::List src_urls_list;
+    src_urls_list.Append(kMailUrl);
+    src_urls.Set("urls", std::move(src_urls_list));
+    rule.Set("sources", std::move(src_urls));
 
-    base::Value dst_urls(base::Value::Type::DICTIONARY);
-    base::Value dst_urls_list(base::Value::Type::LIST);
-    dst_urls_list.Append(base::Value("*"));
-    dst_urls.SetKey("urls", std::move(dst_urls_list));
-    rule.SetKey("destinations", std::move(dst_urls));
+    base::Value::Dict dst_urls;
+    base::Value::List dst_urls_list;
+    dst_urls_list.Append("*");
+    dst_urls.Set("urls", std::move(dst_urls_list));
+    rule.Set("destinations", std::move(dst_urls));
 
-    base::Value restrictions(base::Value::Type::DICTIONARY);
-    base::Value restrictions_list(base::Value::Type::LIST);
-    base::Value class_level_dict(base::Value::Type::DICTIONARY);
-    class_level_dict.SetKey("class", base::Value("CLIPBOARD"));
-    class_level_dict.SetKey("level", base::Value("WARN"));
+    base::Value::Dict restrictions;
+    base::Value::List restrictions_list;
+    base::Value::Dict class_level_dict;
+    class_level_dict.Set("class", "CLIPBOARD");
+    class_level_dict.Set("level", "WARN");
     restrictions_list.Append(std::move(class_level_dict));
-    rule.SetKey("restrictions", std::move(restrictions_list));
+    rule.Set("restrictions", std::move(restrictions_list));
 
     update->Append(std::move(rule));
   }
@@ -647,12 +645,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_CancelWarn) {
              "      resolve(clipboardDataText);});"
              "  };"
              "});"));
-
-  content::UpdateUserActivationStateInterceptor user_activation_interceptor(
-      GetActiveWebContents()->GetPrimaryMainFrame());
-  user_activation_interceptor.UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation,
-      blink::mojom::UserActivationNotificationType::kTest);
+  content::SimulateMouseClick(GetActiveWebContents(), 0,
+                              blink::WebPointerProperties::Button::kLeft);
 
   // Send paste event and wait till the notification is displayed.
   base::RunLoop run_loop;
@@ -691,28 +685,28 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest,
 
   // TODO(1276069): Refactor duplicated code below.
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
-    base::Value rule(base::Value::Type::DICTIONARY);
-    base::Value src_urls(base::Value::Type::DICTIONARY);
-    base::Value src_urls_list(base::Value::Type::LIST);
-    src_urls_list.Append(base::Value(kMailUrl));
-    src_urls.SetKey("urls", std::move(src_urls_list));
-    rule.SetKey("sources", std::move(src_urls));
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
+    base::Value::Dict rule;
+    base::Value::Dict src_urls;
+    base::Value::List src_urls_list;
+    src_urls_list.Append(kMailUrl);
+    src_urls.Set("urls", std::move(src_urls_list));
+    rule.Set("sources", std::move(src_urls));
 
-    base::Value dst_urls(base::Value::Type::DICTIONARY);
-    base::Value dst_urls_list(base::Value::Type::LIST);
-    dst_urls_list.Append(base::Value("*"));
-    dst_urls.SetKey("urls", std::move(dst_urls_list));
-    rule.SetKey("destinations", std::move(dst_urls));
+    base::Value::Dict dst_urls;
+    base::Value::List dst_urls_list;
+    dst_urls_list.Append("*");
+    dst_urls.Set("urls", std::move(dst_urls_list));
+    rule.Set("destinations", std::move(dst_urls));
 
-    base::Value restrictions(base::Value::Type::DICTIONARY);
-    base::Value restrictions_list(base::Value::Type::LIST);
-    base::Value class_level_dict(base::Value::Type::DICTIONARY);
-    class_level_dict.SetKey("class", base::Value("CLIPBOARD"));
-    class_level_dict.SetKey("level", base::Value("WARN"));
+    base::Value::Dict restrictions;
+    base::Value::List restrictions_list;
+    base::Value::Dict class_level_dict;
+    class_level_dict.Set("class", "CLIPBOARD");
+    class_level_dict.Set("level", "WARN");
     restrictions_list.Append(std::move(class_level_dict));
-    rule.SetKey("restrictions", std::move(restrictions_list));
+    rule.Set("restrictions", std::move(restrictions_list));
 
     update->Append(std::move(rule));
   }
@@ -740,11 +734,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest,
              "  };"
              "});"));
 
-  content::UpdateUserActivationStateInterceptor user_activation_interceptor(
-      GetActiveWebContents()->GetPrimaryMainFrame());
-  user_activation_interceptor.UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation,
-      blink::mojom::UserActivationNotificationType::kTest);
+  content::SimulateMouseClick(GetActiveWebContents(), 0,
+                              blink::WebPointerProperties::Button::kLeft);
 
   dlp_controller_->force_paste_on_warn_ = true;
   GetActiveWebContents()->Paste();
@@ -774,28 +765,28 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_Reporting) {
 
   // TODO(1276069): Refactor duplicated code below.
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
-    base::Value rule(base::Value::Type::DICTIONARY);
-    base::Value src_urls(base::Value::Type::DICTIONARY);
-    base::Value src_urls_list(base::Value::Type::LIST);
-    src_urls_list.Append(base::Value(kMailUrl));
-    src_urls.SetKey("urls", std::move(src_urls_list));
-    rule.SetKey("sources", std::move(src_urls));
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
+    base::Value::Dict rule;
+    base::Value::Dict src_urls;
+    base::Value::List src_urls_list;
+    src_urls_list.Append(kMailUrl);
+    src_urls.Set("urls", std::move(src_urls_list));
+    rule.Set("sources", std::move(src_urls));
 
-    base::Value dst_urls(base::Value::Type::DICTIONARY);
-    base::Value dst_urls_list(base::Value::Type::LIST);
-    dst_urls_list.Append(base::Value("*"));
-    dst_urls.SetKey("urls", std::move(dst_urls_list));
-    rule.SetKey("destinations", std::move(dst_urls));
+    base::Value::Dict dst_urls;
+    base::Value::List dst_urls_list;
+    dst_urls_list.Append("*");
+    dst_urls.Set("urls", std::move(dst_urls_list));
+    rule.Set("destinations", std::move(dst_urls));
 
-    base::Value restrictions(base::Value::Type::DICTIONARY);
-    base::Value restrictions_list(base::Value::Type::LIST);
-    base::Value class_level_dict(base::Value::Type::DICTIONARY);
-    class_level_dict.SetKey("class", base::Value("CLIPBOARD"));
-    class_level_dict.SetKey("level", base::Value("REPORT"));
+    base::Value::Dict restrictions;
+    base::Value::List restrictions_list;
+    base::Value::Dict class_level_dict;
+    class_level_dict.Set("class", "CLIPBOARD");
+    class_level_dict.Set("level", "REPORT");
     restrictions_list.Append(std::move(class_level_dict));
-    rule.SetKey("restrictions", std::move(restrictions_list));
+    rule.Set("restrictions", std::move(restrictions_list));
 
     update->Append(std::move(rule));
   }
@@ -823,11 +814,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_Reporting) {
              "  };"
              "});"));
 
-  content::UpdateUserActivationStateInterceptor user_activation_interceptor(
-      GetActiveWebContents()->GetPrimaryMainFrame());
-  user_activation_interceptor.UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation,
-      blink::mojom::UserActivationNotificationType::kTest);
+  content::SimulateMouseClick(GetActiveWebContents(), 0,
+                              blink::WebPointerProperties::Button::kLeft);
 
   GetActiveWebContents()->Paste();
   EXPECT_FALSE(dlp_controller_->ObserveWidget());

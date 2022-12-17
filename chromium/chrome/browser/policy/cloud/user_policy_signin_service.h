@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -102,10 +102,6 @@ class UserPolicySigninService : public UserPolicySigninServiceBase,
   // |policy_manager| is not-nul. Expects that there is a refresh token for
   // the primary account.
   void TryInitializeForSignedInUser();
-
-  // Invoked when a policy registration request is complete.
-  void CallPolicyRegistrationCallback(std::unique_ptr<CloudPolicyClient> client,
-                                      PolicyRegistrationCallback callback);
 
   // Initializes the UserPolicySigninService once its owning Profile becomes
   // ready. If the Profile has a signed-in account associated with it at startup

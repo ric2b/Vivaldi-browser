@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1183,7 +1183,7 @@ void HttpHandler::HandleCommand(
     return;
   }
   // Pass host instead for potential WebSocketUrl if it's a new session
-  iter->command.Run(params,
+  iter->command.Run(params.GetDict(),
                     internal::IsNewSession(*iter)
                         ? request.GetHeaderValue("host")
                         : session_id,
@@ -1543,8 +1543,8 @@ void HttpHandler::OnWebSocketMessage(HttpServer* http_server,
 
   std::string session_id = it->second;
 
-  base::DictionaryValue params;
-  params.Set("bidiCommand", std::make_unique<base::Value>(data));
+  base::Value::Dict params;
+  params.Set("bidiCommand", data);
 
   auto callback = base::BindRepeating(
       [](base::RepeatingCallback<void(const Status&)> send_error,

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,8 +19,8 @@
 #include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using chromeos::assistant::AndroidAppInfo;
-using chromeos::assistant::AppStatus;
+using ::ash::assistant::AndroidAppInfo;
+using ::ash::assistant::AppStatus;
 
 namespace {
 

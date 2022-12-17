@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@ namespace autofill_assistant {
 const char* kSitePerProcess = "site-per-process";
 
 BaseBrowserTest::BaseBrowserTest() = default;
-BaseBrowserTest::~BaseBrowserTest() {}
+BaseBrowserTest::~BaseBrowserTest() = default;
 
 void BaseBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
   command_line->AppendSwitch(kSitePerProcess);
@@ -32,15 +32,23 @@ void BaseBrowserTest::SetUpOnMainThread() {
       net::EmbeddedTestServer::TYPE_HTTP);
   http_server_iframe_->ServeFilesFromSourceDirectory(
       "components/test/data/autofill_assistant/html_iframe");
-  ASSERT_TRUE(http_server_iframe_->Start(8081));
+  // We must assign a known port since we reference http_server_iframe_ from the
+  // html hosted in http_server_.
+  ASSERT_TRUE(http_server_iframe_->Start(51217));
 
   // Start the main server hosting the test page.
   http_server_ = std::make_unique<net::EmbeddedTestServer>(
       net::EmbeddedTestServer::TYPE_HTTP);
   http_server_->ServeFilesFromSourceDirectory(
       "components/test/data/autofill_assistant/html");
-  ASSERT_TRUE(http_server_->Start(8080));
+  ASSERT_TRUE(http_server_->Start());
   ASSERT_TRUE(NavigateToURL(shell(), http_server_->GetURL(kTargetWebsitePath)));
+}
+
+void BaseBrowserTest::TearDown() {
+  ASSERT_TRUE(http_server_->ShutdownAndWaitUntilComplete());
+  ASSERT_TRUE(http_server_iframe_->ShutdownAndWaitUntilComplete());
+  ContentBrowserTest::TearDown();
 }
 
 }  // namespace autofill_assistant

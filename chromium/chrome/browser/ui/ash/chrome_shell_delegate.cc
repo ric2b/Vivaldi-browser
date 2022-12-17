@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 
 #include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/services/multidevice_setup/multidevice_setup_service.h"
@@ -37,6 +38,7 @@
 #include "chrome/browser/ui/ash/capture_mode/chrome_capture_mode_delegate.h"
 #include "chrome/browser/ui/ash/chrome_accessibility_delegate.h"
 #include "chrome/browser/ui/ash/desks/chrome_desks_templates_delegate.h"
+#include "chrome/browser/ui/ash/glanceables/chrome_glanceables_delegate.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/ash/window_pin_util.h"
@@ -113,6 +115,12 @@ bool ChromeShellDelegate::CanShowWindowForUser(
 std::unique_ptr<ash::CaptureModeDelegate>
 ChromeShellDelegate::CreateCaptureModeDelegate() const {
   return std::make_unique<ChromeCaptureModeDelegate>();
+}
+
+std::unique_ptr<ash::GlanceablesDelegate>
+ChromeShellDelegate::CreateGlanceablesDelegate(
+    ash::GlanceablesController* controller) const {
+  return std::make_unique<ChromeGlanceablesDelegate>(controller);
 }
 
 ash::AccessibilityDelegate* ChromeShellDelegate::CreateAccessibilityDelegate() {
@@ -198,11 +206,6 @@ bool ChromeShellDelegate::IsTabDrag(const ui::OSExchangeData& drop_data) {
 int ChromeShellDelegate::GetBrowserWebUITabStripHeight() {
   DCHECK(ash::features::IsWebUITabStripTabDragIntegrationEnabled());
   return TabStripUILayout::GetContainerHeight();
-}
-
-void ChromeShellDelegate::BindBluetoothSystemFactory(
-    mojo::PendingReceiver<device::mojom::BluetoothSystemFactory> receiver) {
-  content::GetDeviceService().BindBluetoothSystemFactory(std::move(receiver));
 }
 
 void ChromeShellDelegate::BindFingerprint(
@@ -352,6 +355,11 @@ const GURL& ChromeShellDelegate::GetLastCommittedURLForWindowIfAny(
 }
 
 version_info::Channel ChromeShellDelegate::GetChannel() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ash::switches::kForceShowReleaseTrack)) {
+    // Simulate a non-stable channel so the release track UI is visible.
+    return version_info::Channel::BETA;
+  }
   return chrome::GetChannel();
 }
 

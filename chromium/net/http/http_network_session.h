@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -165,7 +165,7 @@ struct NET_EXPORT HttpNetworkSessionParams {
   // If true, idle sockets won't be closed when memory pressure happens.
   bool disable_idle_sockets_close_on_memory_pressure = false;
 
-  bool key_auth_cache_server_entries_by_network_isolation_key = false;
+  bool key_auth_cache_server_entries_by_network_anonymization_key = false;
 
   // If true, enable sending PRIORITY_UPDATE frames until SETTINGS frame
   // arrives.  After SETTINGS frame arrives, do not send PRIORITY_UPDATE
@@ -211,9 +211,8 @@ struct NET_EXPORT HttpNetworkSessionContext {
   raw_ptr<NetworkQualityEstimator> network_quality_estimator;
   raw_ptr<QuicContext> quic_context;
 #if BUILDFLAG(ENABLE_REPORTING)
-  raw_ptr<ReportingService, DanglingUntriaged> reporting_service;
-  raw_ptr<NetworkErrorLoggingService, DanglingUntriaged>
-      network_error_logging_service;
+  raw_ptr<ReportingService> reporting_service;
+  raw_ptr<NetworkErrorLoggingService> network_error_logging_service;
 #endif
 
     // Optional factory to use for creating QuicCryptoClientStreams.
@@ -338,9 +337,8 @@ class NET_EXPORT HttpNetworkSession {
   const raw_ptr<HostResolver> host_resolver_;
 
 #if BUILDFLAG(ENABLE_REPORTING)
-  const raw_ptr<ReportingService, DanglingUntriaged> reporting_service_;
-  const raw_ptr<NetworkErrorLoggingService, DanglingUntriaged>
-      network_error_logging_service_;
+  const raw_ptr<ReportingService> reporting_service_;
+  const raw_ptr<NetworkErrorLoggingService> network_error_logging_service_;
 #endif
   const raw_ptr<ProxyResolutionService> proxy_resolution_service_;
   const raw_ptr<SSLConfigService> ssl_config_service_;

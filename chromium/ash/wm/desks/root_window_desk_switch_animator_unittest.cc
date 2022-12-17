@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,9 +53,7 @@ gfx::Rect GetVisibleBounds(ui::Layer* child_layer,
       use_target_transform ? animating_layer->GetTargetTransform()
                            : animating_layer->transform();
   DCHECK(animating_layer_transform.IsIdentityOr2DTranslation());
-  gfx::RectF bounds(child_layer->bounds());
-  animating_layer_transform.TransformRect(&bounds);
-  return gfx::ToRoundedRect(bounds);
+  return animating_layer_transform.MapRect(child_layer->bounds());
 }
 
 gfx::Rect GetTargetVisibleBounds(ui::Layer* child_layer,

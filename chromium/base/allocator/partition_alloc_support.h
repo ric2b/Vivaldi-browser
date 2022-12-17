@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,6 +35,7 @@ BASE_EXPORT std::map<std::string, std::string> ProposeSyntheticFinchTrials();
 // This is currently effective, only when compiled with
 // `enable_dangling_raw_ptr_checks` build flag.
 BASE_EXPORT void InstallDanglingRawPtrChecks();
+BASE_EXPORT void InstallUnretainedDanglingRawPtrChecks();
 
 }  // namespace allocator
 }  // namespace base

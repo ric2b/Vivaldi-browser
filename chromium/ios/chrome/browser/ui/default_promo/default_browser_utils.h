@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,11 +20,11 @@ namespace {
 
 // Enum actions for the IOS.DefaultBrowserFullscreenPromo* UMA metrics. Entries
 // should not be renumbered and numeric values should never be reused.
-enum IOSDefaultBrowserFullscreenPromoAction {
-  ACTION_BUTTON = 0,
-  CANCEL = 1,
-  REMIND_ME_LATER = 2,
-  kMaxValue = REMIND_ME_LATER,
+enum class IOSDefaultBrowserFullscreenPromoAction {
+  kActionButton = 0,
+  kCancel = 1,
+  kRemindMeLater = 2,
+  kMaxValue = kRemindMeLater,
 };
 
 }  // namespace

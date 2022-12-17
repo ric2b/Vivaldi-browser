@@ -1,11 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 module network.mojom;
 
 import "mojo/public/mojom/base/file_path.mojom";
-import "mojo/public/mojom/base/values.mojom";
 
 // Represents a directory that, on platforms like Fuchsia, can be sent
 // over Mojo as a handle. On other platforms, the path will be used

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -213,20 +213,8 @@ class CouponServiceTest : public testing::Test {
   TestingProfile profile_;
   raw_ptr<CouponService> service_;
   raw_ptr<CouponDB> coupon_db_;
-  // TODO(crbug/1313126): These are only initialized here because
-  // AutofillOfferData does not have a default ctor, and are overwritten in
-  // tests. Change these to local-only or to pointers so that this throwaway
-  // initialization isn't necessary.
-  autofill::AutofillOfferData coupon_data_a_ =
-      BuildCouponOfferData(kMockCouponIdA,
-                           kMockMerchantA,
-                           kMockCouponDescriptionA,
-                           kMockCouponCodeA);
-  autofill::AutofillOfferData coupon_data_b_ =
-      BuildCouponOfferData(kMockCouponIdB,
-                           kMockMerchantB,
-                           kMockCouponDescriptionB,
-                           kMockCouponCodeB);
+  autofill::AutofillOfferData coupon_data_a_;
+  autofill::AutofillOfferData coupon_data_b_;
 };
 
 TEST_F(CouponServiceTest, TestGetCouponForUrl) {

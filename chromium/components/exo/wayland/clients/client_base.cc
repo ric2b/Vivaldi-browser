@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -31,6 +31,7 @@
 #include "base/memory/shared_memory_mapper.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -192,6 +193,14 @@ void RegistryHandler(void* data,
   } else if (strcmp(interface, "zcr_stylus_v2") == 0) {
     globals->stylus.reset(static_cast<zcr_stylus_v2*>(
         wl_registry_bind(registry, id, &zcr_stylus_v2_interface, version)));
+  } else if (strcmp(interface, zcr_remote_shell_v1_interface.name) == 0) {
+    globals->cr_remote_shell_v1.reset(
+        static_cast<zcr_remote_shell_v1*>(wl_registry_bind(
+            registry, id, &zcr_remote_shell_v1_interface, version)));
+  } else if (strcmp(interface, zcr_remote_shell_v2_interface.name) == 0) {
+    globals->cr_remote_shell_v2.reset(
+        static_cast<zcr_remote_shell_v2*>(wl_registry_bind(
+            registry, id, &zcr_remote_shell_v2_interface, version)));
   }
 }
 
@@ -1241,10 +1250,7 @@ std::unique_ptr<ClientBase::Buffer> ClientBase::CreateDrmBuffer(
 
 ClientBase::Buffer* ClientBase::DequeueBuffer() {
   auto buffer_it =
-      std::find_if(buffers_.begin(), buffers_.end(),
-                   [](const std::unique_ptr<ClientBase::Buffer>& buffer) {
-                     return !buffer->busy;
-                   });
+      base::ranges::find_if_not(buffers_, &ClientBase::Buffer::busy);
   if (buffer_it == buffers_.end())
     return nullptr;
 

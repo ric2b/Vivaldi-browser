@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -133,8 +133,10 @@ public class ContextMenuDragTest {
     @Test
     @SmallTest
     @CommandLineFlags.
-    Add({"force-fieldtrial-params=Study.Group:DragAndDropMovementThresholdDipParam/"
-            + TEST_MIN_DIST})
+    Add({"enable-features=" + ContentFeatures.TOUCH_DRAG_AND_CONTEXT_MENU + "<Study",
+            "force-fieldtrials=Study/Group",
+            "force-fieldtrial-params=Study.Group:DragAndDropMovementThresholdDipParam/"
+                    + TEST_MIN_DIST})
     public void
     testTriggerContextMenuWithDrag() throws TimeoutException {
         longPressOpenContextMenu(TEST_IMAGE_ID);

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,11 +8,11 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/multidevice/remote_device_ref.h"
-#include "ash/components/proximity_auth/screenlock_bridge.h"
 #include "ash/services/device_sync/proto/cryptauth_api.pb.h"
 #include "ash/services/device_sync/public/cpp/device_sync_client.h"
 #include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
+#include "chromeos/ash/components/proximity_auth/screenlock_bridge.h"
 // TODO(https://crbug.com/1164001): move to forward declaration
 #include "ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
 #include "base/callback.h"
@@ -81,7 +81,7 @@ class EasyUnlockServiceRegular
       override;
   EasyUnlockService::Type GetType() const override;
   AccountId GetAccountId() const override;
-  const base::ListValue* GetRemoteDevices() const override;
+  const base::Value::List* GetRemoteDevices() const override;
   std::string GetChallenge() const override;
   std::string GetWrappedSecret() const override;
   void RecordEasySignInOutcome(const AccountId& account_id,

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "ash/constants/ash_pref_names.h"
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/ranges/algorithm.h"
 #include "base/values.h"
 #include "chromeos/ash/components/dbus/hermes/hermes_euicc_client.h"
 #include "chromeos/ash/components/network/cellular_utils.h"
@@ -29,15 +30,6 @@ base::flat_set<std::string> GetEuiccPathsFromHermes() {
     paths.insert(euicc_path.value());
   }
   return paths;
-}
-
-bool ContainsProfileWithoutIccid(
-    const std::vector<CellularESimProfile>& profiles) {
-  auto iter = std::find_if(profiles.begin(), profiles.end(),
-                           [](const CellularESimProfile& profile) {
-                             return profile.iccid().empty();
-                           });
-  return iter != profiles.end();
 }
 
 }  // namespace
@@ -71,7 +63,7 @@ CellularESimProfileHandlerImpl::GetESimProfiles() {
     return std::vector<CellularESimProfile>();
 
   const base::Value::List& profiles_list =
-      device_prefs_->GetValueList(prefs::kESimProfiles);
+      device_prefs_->GetList(prefs::kESimProfiles);
 
   std::vector<CellularESimProfile> profiles;
   for (const base::Value& value : profiles_list) {
@@ -201,7 +193,7 @@ CellularESimProfileHandlerImpl::GetAutoRefreshedEuiccPathsFromPrefs() const {
   DCHECK(device_prefs_);
 
   const base::Value::List& euicc_paths_from_prefs =
-      device_prefs_->GetValueList(prefs::kESimRefreshedEuiccs);
+      device_prefs_->GetList(prefs::kESimRefreshedEuiccs);
 
   base::flat_set<std::string> euicc_paths;
   for (const auto& euicc : euicc_paths_from_prefs) {
@@ -257,7 +249,8 @@ void CellularESimProfileHandlerImpl::UpdateProfilesFromHermes() {
   // yet. This is required because property updates to eSIM profile objects
   // occur after the profile list has been updated. This state is temporary.
   // This method will be triggered again when ICCID properties are updated.
-  if (ContainsProfileWithoutIccid(profiles_from_hermes)) {
+  if (base::ranges::any_of(profiles_from_hermes, &std::string::empty,
+                           &CellularESimProfile::iccid)) {
     return;
   }
 
@@ -314,10 +307,9 @@ void CellularESimProfileHandlerImpl::ResetESimProfileCache() {
 
 void CellularESimProfileHandlerImpl::DisableActiveESimProfile() {
   std::vector<CellularESimProfile> esim_profiles = GetESimProfiles();
-  const auto iter = base::ranges::find_if(
-      esim_profiles, [&](const auto& esim_profile) -> bool {
-        return esim_profile.state() == CellularESimProfile::State::kActive;
-      });
+  const auto iter =
+      base::ranges::find(esim_profiles, CellularESimProfile::State::kActive,
+                         &CellularESimProfile::state);
   if (iter == esim_profiles.end()) {
     NET_LOG(EVENT) << "No active eSIM profile is found.";
     return;

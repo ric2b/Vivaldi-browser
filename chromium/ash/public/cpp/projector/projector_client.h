@@ -1,9 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef ASH_PUBLIC_CPP_PROJECTOR_PROJECTOR_CLIENT_H_
 #define ASH_PUBLIC_CPP_PROJECTOR_PROJECTOR_CLIENT_H_
+
+#include <vector>
 
 #include "ash/public/cpp/ash_public_export.h"
 
@@ -45,6 +47,10 @@ class ASH_PUBLIC_EXPORT ProjectorClient {
   // Notifies the Projector SWA if it can trigger a new Projector session.
   virtual void OnNewScreencastPreconditionChanged(
       const NewScreencastPrecondition& precondition) const = 0;
+  // Toggles to suppress/resume the system notification for `screencast_paths`.
+  virtual void ToggleFileSyncingNotificationForPaths(
+      const std::vector<base::FilePath>& screencast_paths,
+      bool suppress) = 0;
 };
 
 }  // namespace ash

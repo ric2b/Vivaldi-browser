@@ -1,24 +1,27 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import './realbox_icon.js';
 import './realbox_action.js';
+import './realbox_dropdown_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import 'chrome://resources/cr_elements/cr_icons_css.m.js';
-import 'chrome://resources/cr_elements/hidden_style_css.m.js';
+import 'chrome://resources/cr_elements/cr_icons.css.js';
+import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
+import {NavigationPredictor} from '../omnibox.mojom-webui.js';
 import {ACMatchClassification, AutocompleteMatch, PageHandlerInterface} from '../realbox.mojom-webui.js';
 import {decodeString16, mojoTimeTicks} from '../utils.js';
 
 import {RealboxBrowserProxy} from './realbox_browser_proxy.js';
 import {RealboxIconElement} from './realbox_icon.js';
 import {getTemplate} from './realbox_match.html.js';
-// clang-format off
 
+
+// clang-format off
 /**
  * Bitmap used to decode the value of ACMatchClassification style
  * field.
@@ -31,6 +34,8 @@ enum ACMatchClassificationStyle {
   DIM =   1 << 2,  // A "helper text".
 }
 // clang-format on
+
+const ENTITY_MATCH_TYPE: string = 'search-suggest-entity';
 
 export interface RealboxMatchElement {
   $: {
@@ -72,6 +77,25 @@ export class RealboxMatchElement extends PolymerElement {
       hasImage: {
         type: Boolean,
         computed: `computeHasImage_(match)`,
+        reflectToAttribute: true,
+      },
+
+      /**
+       * Whether the match is an entity suggestion (with or without an image).
+       */
+      isEntitySuggestion: {
+        type: Boolean,
+        computed: `computeIsEntitySuggestion_(match)`,
+        reflectToAttribute: true,
+      },
+
+      /**
+       * Whether the match should be rendered in a two-row layout. Currently
+       * limited to matches that feature an image, calculator, and answers.
+       */
+      isRichSuggestion: {
+        type: Boolean,
+        computed: `computeIsRichSuggestion_(match)`,
         reflectToAttribute: true,
       },
 
@@ -158,6 +182,7 @@ export class RealboxMatchElement extends PolymerElement {
 
     this.addEventListener('click', (event) => this.onMatchClick_(event));
     this.addEventListener('focusin', () => this.onMatchFocusin_());
+    this.addEventListener('mousedown', () => this.onMatchMouseDown_());
   }
 
   //============================================================================
@@ -210,6 +235,11 @@ export class RealboxMatchElement extends PolymerElement {
       composed: true,
       detail: this.matchIndex,
     }));
+  }
+
+  private onMatchMouseDown_() {
+    this.pageHandler_.onNavigationLikely(
+        this.matchIndex, NavigationPredictor.kMouseDown);
   }
 
   private onRemoveButtonClick_(e: MouseEvent) {
@@ -297,6 +327,14 @@ export class RealboxMatchElement extends PolymerElement {
 
   private computeHasImage_(): boolean {
     return this.match && !!this.match.imageUrl;
+  }
+
+  private computeIsEntitySuggestion_(): boolean {
+    return this.match && this.match.type === ENTITY_MATCH_TYPE;
+  }
+
+  private computeIsRichSuggestion_(): boolean {
+    return this.match && this.match.isRichSuggestion;
   }
 
   private computeActionIsVisible_(): boolean {

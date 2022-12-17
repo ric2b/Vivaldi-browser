@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -135,11 +135,6 @@ class EventRewriterChromeOS : public EventRewriter {
     // The notification is only sent once per user session, and this function
     // returns true if the notification was shown.
     virtual bool NotifyDeprecatedRightClickRewrite() = 0;
-
-    // Used to send a notification about Search+Digit Fkey rewrites being
-    // deprecated. The notification is only sent once per user session,
-    // and this function returns true if the notification was shown.
-    virtual bool NotifyDeprecatedFKeyRewrite() = 0;
 
     // Used to send a notification about a Six Pack (PageUp, PageDown, Home,
     // End, Insert, Delete) key rewrite being deprecated. The notification
@@ -388,6 +383,14 @@ class EventRewriterChromeOS : public EventRewriter {
   int pressed_modifier_latches_;
   int latched_modifier_latches_;
   int used_modifier_latches_;
+
+  // If a non-modifier key has been remapped to a modifier key,
+  // e.g. ESCAPE -> ALT, this stores the DomCode on the KeyPress event
+  // along with its associated previous modifier remap.
+  // Handles the case in which the original key's remap is no longer mapped to a
+  // modifier but there needs to be a way to reset the stickied modifier
+  // latches. See b/216049965 for more details.
+  base::flat_map<DomCode, ui::EventFlags> previous_non_modifier_latches_;
 
   ash::input_method::ImeKeyboard* const ime_keyboard_;
 

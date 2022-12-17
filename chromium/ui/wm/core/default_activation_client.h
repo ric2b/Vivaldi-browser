@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,7 +65,7 @@ class COMPONENT_EXPORT(UI_WM) DefaultActivationClient
   // The window which was active before the currently active one.
   raw_ptr<aura::Window> last_active_;
 
-  base::ObserverList<ActivationChangeObserver>::Unchecked observers_;
+  base::ObserverList<ActivationChangeObserver> observers_;
 };
 
 }  // namespace wm

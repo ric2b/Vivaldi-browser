@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <limits>
 #include <memory>
 
+#include "base/fuchsia/fuchsia_logging.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
@@ -178,10 +179,11 @@ TouchEvent CreateTouchEventDraft(const fup::TouchEvent& event,
                                 view_parameters.viewport_to_view_transform);
   // TODO(fxbug.dev/88580): Consider setting hover via
   // ui::TouchEvent::set_hovering().
-  return TouchEvent(event_type, gfx::PointF(logical[0], logical[1]),
-                    gfx::PointF(sample.position_in_viewport()[0],
-                                sample.position_in_viewport()[1]),
-                    timestamp, pointer_details);
+  gfx::PointF location(logical[0], logical[1]);
+  gfx::PointF root_location(sample.position_in_viewport()[0],
+                            sample.position_in_viewport()[1]);
+  return TouchEvent(event_type, location, root_location, timestamp,
+                    pointer_details);
 }
 
 // It returns a "draft" because the coordinates are logical. Later,
@@ -271,16 +273,25 @@ std::unique_ptr<MouseEvent> CreateMouseEventDraft(
         location, root_location, timestamp, pressed_buttons_flags,
         changed_buttons_flags, gfx::Vector2d(tick_x_120ths, tick_y_120ths));
   }
-  return std::make_unique<MouseEvent>(event_type, location, root_location,
-                                      timestamp, pressed_buttons_flags,
-                                      changed_buttons_flags, pointer_details);
+  auto mouse_event = std::make_unique<MouseEvent>(
+      event_type, location, root_location, timestamp, pressed_buttons_flags,
+      changed_buttons_flags, pointer_details);
+  mouse_event->InitializeNative();
+  return mouse_event;
 }
 
 }  // namespace
 
 PointerEventsHandler::PointerEventsHandler(fup::TouchSourceHandle touch_source,
                                            fup::MouseSourceHandle mouse_source)
-    : touch_source_(touch_source.Bind()), mouse_source_(mouse_source.Bind()) {}
+    : touch_source_(touch_source.Bind()), mouse_source_(mouse_source.Bind()) {
+  touch_source_.set_error_handler([](zx_status_t status) {
+    ZX_LOG(ERROR, status) << "fuchsia.ui.pointer.TouchSource disconnected.";
+  });
+  mouse_source_.set_error_handler([](zx_status_t status) {
+    ZX_LOG(ERROR, status) << "fuchsia.ui.pointer.MouseSource disconnected.";
+  });
+}
 
 PointerEventsHandler::~PointerEventsHandler() = default;
 

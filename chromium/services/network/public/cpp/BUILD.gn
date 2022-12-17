@@ -1,4 +1,4 @@
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -30,8 +30,6 @@ component("cpp") {
   output_name = "network_cpp"
 
   sources = [
-    "bfcache_opt_in_parser.cc",
-    "bfcache_opt_in_parser.h",
     "client_hints.cc",
     "client_hints.h",
     "constants.cc",
@@ -189,6 +187,12 @@ component("ip_address_mojom_support") {
   sources = [
     "address_list_mojom_traits.cc",
     "address_list_mojom_traits.h",
+    "alternate_protocol_usage_mojom_traits.cc",
+    "alternate_protocol_usage_mojom_traits.h",
+    "connection_endpoint_metadata_mojom_traits.cc",
+    "connection_endpoint_metadata_mojom_traits.h",
+    "host_resolver_endpoint_result_mojom_traits.cc",
+    "host_resolver_endpoint_result_mojom_traits.h",
     "ip_address_mojom_traits.cc",
     "ip_address_mojom_traits.h",
     "ip_endpoint_mojom_traits.cc",
@@ -322,6 +326,8 @@ component("cpp_base") {
     "isolation_info_mojom_traits.h",
     "load_timing_info_mojom_traits.cc",
     "load_timing_info_mojom_traits.h",
+    "network_anonymization_key_mojom_traits.cc",
+    "network_anonymization_key_mojom_traits.h",
     "network_interface_mojom_traits.cc",
     "network_interface_mojom_traits.h",
     "network_ipc_param_traits.cc",
@@ -336,6 +342,8 @@ component("cpp_base") {
     "resource_request_body.h",
     "transferable_directory.cc",
     "transferable_directory.h",
+    "transferable_socket.cc",
+    "transferable_socket.h",
     "trust_token_parameterization.h",
     "url_loader_completion_status.cc",
     "url_loader_completion_status.h",
@@ -425,7 +433,6 @@ source_set("tests") {
   testonly = true
 
   sources = [
-    "bfcache_opt_in_parser_unittest.cc",
     "client_hints_unittest.cc",
     "content_language_parser_unittest.cc",
     "content_security_policy/content_security_policy_unittest.cc",
@@ -461,6 +468,7 @@ source_set("tests") {
     "mutable_network_traffic_annotation_tag_mojom_traits_unittest.cc",
     "mutable_partial_network_traffic_annotation_tag_mojom_traits_unittest.cc",
     "net_log_mojom_traits_unittest.cc",
+    "network_anonymization_key_mojom_traits_unittest.cc",
     "network_connection_tracker_unittest.cc",
     "network_isolation_key_mojom_traits_unittest.cc",
     "network_mojom_traits_unittest.cc",
@@ -474,6 +482,7 @@ source_set("tests") {
     "supports_loading_mode/supports_loading_mode_parser_unittest.cc",
     "timing_allow_origin_parser_unittest.cc",
     "transferable_directory_unittest.cc",
+    "transferable_socket_unittest.cc",
     "url_loader_completion_status_mojom_traits_unittest.cc",
     "url_request_mojom_traits_unittest.cc",
     "variants_header_parser_unittest.cc",

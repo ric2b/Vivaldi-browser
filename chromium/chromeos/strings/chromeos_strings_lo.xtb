@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{ແກ້ໄຂໄຟລ໌}other{ແກ້ໄຂໄຟລ໌}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" />GHz</translation>
 <translation id="3291996639387199448">ທິດທາງກະແຈ</translation>
+<translation id="3294437725009624529">ແຂກ</translation>
 <translation id="3310640316857623290">ເວລາໃນການຕອບສະໜອງ DNS ສູງກວ່າເກນທີ່ຍອມຮັບໄດ້ຫຼາຍ</translation>
 <translation id="3328783797891415197">ກຳລັງດຳເນີນການທົດສອບຢູ່</translation>
 <translation id="3340011300870565703">ອຸປະກອນມີແບັດເຕີຣີຫູຟັງຂ້າງຂວາເຫຼືອ <ph name="BATTERY_PERCENTAGE" />%.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">ໃນຂະນະທີ່ກຳລັງອັບເດດເຟີມແວຢູ່, ກະລຸນາຢ່າຖອດອຸປະກອນພາຍນອກນີ້ອອກ ຫຼື ຢ່າປິດເຄື່ອງຄອມພິວເຕີຂອງທ່ານ. ທ່ານສາມາດຫຍໍ້ໜ້າຈໍນີ້ລົງໄດ້. ອັບເດດນີ້ອາດໃຊ້ເວລາສອງສາມນາທີ ແລະ ອຸປະກອນພາຍນອກຂອງທ່ານອາດບໍ່ເຮັດວຽກໃນລະຫວ່າງນີ້.</translation>
 <translation id="3486220673238053218">ຄໍາ​ນິ​ຍາມ</translation>
 <translation id="3488065109653206955">ເປີດ​​ໃຊ້ງານ​ບາງ​ສ່ວນເທົ່ານັ້ນ</translation>
+<translation id="3510890413042482857">ສົ່ງ <ph name="BEGIN_LINK1" />ຂໍ້ມູນການຕິດຕາມປະສິດທິພາບ<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">ອັບເດດ ChromeOS</translation>
 <translation id="3527036260304016759">ບໍ່ສຳເລັດ, ບໍ່ຮູ້ຈັກຂໍ້ຜິດພາດ</translation>
 <translation id="3532980081107202182">ຍັງເຫຼືອອີກປະມານ <ph name="MIN_REMAINING" /> ນາທີ</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">Android ບໍ່ໄດ້ຖືກເອີ້ນໃຊ້ຢູ່</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">ສະຫຼັບໄປໃຊ້ຮູບແບບສີສັນມືດໂດຍອັດຕະໂນມັດຕອນຕາເວັນຕົກ</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">ສະແກນຄືນໃໝ່</translation>
 <translation id="5583640892426849032">ລຶບຄືນຫຼັງ</translation>

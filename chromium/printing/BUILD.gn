@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -362,6 +362,7 @@ test("printing_unittests") {
 
   if (is_win) {
     sources += [
+      "backend/xps_utils_win_unittest.cc",
       "emf_win_unittest.cc",
       "printed_page_win_unittest.cc",
       "printing_context_win_unittest.cc",

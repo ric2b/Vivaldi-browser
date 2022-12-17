@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,8 @@
 #include "components/password_manager/core/browser/import/csv_password.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/site_affiliation/affiliation_service.h"
+#include "components/password_manager/core/browser/ui/affiliated_group.h"
 #include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 
 namespace password_manager {
@@ -79,19 +81,30 @@ class SavedPasswordsPresenter : public PasswordStoreInterface::Observer,
     kSuccess,
     // Credential is invalid.
     kInvalid,
-    // Credential already exists in the profile store.
-    kExistsInProfileStore,
-    // Credential already exists in the account store.
-    kExistsInAccountStore,
-    // Credential already exists in the profile and account store.
-    kExistsInProfileAndAccountStore,
-    kMaxValue = kExistsInProfileAndAccountStore,
+    // Credential (with the same username, realm, and password) already exists
+    // in the profile or/and account store.
+    kExactMatch,
+    // Credential with the same username and realm already exists in the profile
+    // store.
+    kConflictInProfileStore,
+    // Credential with the same username and realm already exists in the account
+    // store.
+    kConflictInAccountStore,
+    // Credential with the same username and realm already exists in both
+    // profile and account stores.
+    kConflictInProfileAndAccountStore,
+    kMaxValue = kConflictInProfileAndAccountStore,
   };
 
   using AddCredentialsCallback =
       base::OnceCallback<void(const std::vector<AddResult>&)>;
+  using SignonRealm = base::StrongAlias<class SignonRealmTag, std::string>;
+  using GroupId = base::StrongAlias<class GroupIdTag, int>;
+  using UsernamePasswordKey =
+      base::StrongAlias<class UsernamePasswordKeyTag, std::string>;
 
-  explicit SavedPasswordsPresenter(
+  SavedPasswordsPresenter(
+      AffiliationService* affiliation_service,
       scoped_refptr<PasswordStoreInterface> profile_store,
       scoped_refptr<PasswordStoreInterface> account_store = nullptr);
   ~SavedPasswordsPresenter() override;
@@ -99,6 +112,9 @@ class SavedPasswordsPresenter : public PasswordStoreInterface::Observer,
   // Initializes the presenter and makes it issue the first request for all
   // saved passwords.
   void Init();
+
+  // Returns whether there are ongoing fetch requests to credential stores.
+  bool IsWaitingForPasswordStore() const;
 
   // Removes the credential and all its duplicates from the store.
   bool RemoveCredential(const CredentialUIEntry& credential);
@@ -145,6 +161,9 @@ class SavedPasswordsPresenter : public PasswordStoreInterface::Observer,
   // credentials federation origin.
   std::vector<CredentialUIEntry> GetSavedCredentials() const;
 
+  // Returns a list of affiliated groups for the Password Manager.
+  std::vector<AffiliatedGroup> GetAffiliatedGroups() const;
+
   // Returns PasswordForms corresponding to |credential|.
   std::vector<PasswordForm> GetCorrespondingPasswordForms(
       const CredentialUIEntry& credential) const;
@@ -177,6 +196,9 @@ class SavedPasswordsPresenter : public PasswordStoreInterface::Observer,
       PasswordStoreInterface* store,
       std::vector<std::unique_ptr<PasswordForm>> results) override;
 
+  // Handle groups results and perform grouping algorithm.
+  void OnGetAllGroupsResultsFrom(const std::vector<GroupedFacets>& results);
+
   // Notify observers about changes in the compromised credentials.
   void NotifyEdited(const PasswordForm& password);
   void NotifySavedPasswordsChanged();
@@ -202,6 +224,11 @@ class SavedPasswordsPresenter : public PasswordStoreInterface::Observer,
   scoped_refptr<PasswordStoreInterface> profile_store_;
   scoped_refptr<PasswordStoreInterface> account_store_;
 
+  raw_ptr<AffiliationService> affiliation_service_;
+
+  // The number of stores from which no updates have been received yet.
+  int pending_store_updates = 0;
+
   std::unique_ptr<PasswordUndoHelper> undo_helper_;
 
   // Cache of the most recently obtained saved passwords.
@@ -209,6 +236,19 @@ class SavedPasswordsPresenter : public PasswordStoreInterface::Observer,
 
   // Structure used to deduplicate list of passwords.
   DuplicatePasswordsMap sort_key_to_password_forms_;
+
+  // Structure used to keep track of the mapping between the credential's
+  // sign-on realm and the group id.
+  std::map<SignonRealm, GroupId> map_signon_realm_to_group_id_;
+
+  // Structure used to keep track of the mapping between the group id and the
+  // grouped facet's branding information.
+  std::map<GroupId, FacetBrandingInfo> map_group_id_to_branding_info_;
+
+  // Structure used to keep track of the mapping between a group id and the
+  // grouped by username-password key password forms.
+  std::map<GroupId, std::map<UsernamePasswordKey, std::vector<PasswordForm>>>
+      map_group_id_to_forms_;
 
   base::ObserverList<Observer, /*check_empty=*/true> observers_;
 

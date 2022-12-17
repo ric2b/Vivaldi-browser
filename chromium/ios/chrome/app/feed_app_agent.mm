@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,12 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+// NSUserDefaults key for the last time background refresh was called.
+NSString* const kFeedLastBackgroundRefreshTimestamp =
+    @"FeedLastBackgroundRefreshTimestamp";
+}  // namespace
 
 @implementation FeedAppAgent
 
@@ -44,7 +50,7 @@
     // execute saving a new value.
     SaveFeedBackgroundRefreshEnabledForNextColdStart();
   } else if (appState.initStage == InitStageNormalUI &&
-             IsWebChannelsEnabled()) {
+             IsWebChannelsEnabled() && IsDiscoverFeedServiceCreatedEarly()) {
     // Starting the DiscoverFeedService is required before users are able to
     // interact with any tab because following a web channel (part of the
     // Following Feed feature which depends on the DiscoverFeedService) is
@@ -226,6 +232,7 @@
     title = @"Feed Bg Refresh Failure";
   }
   [self maybeRequestNotification:title];
+  SetFeedRefreshTimestamp([NSDate now], kFeedLastBackgroundRefreshTimestamp);
 }
 
 @end

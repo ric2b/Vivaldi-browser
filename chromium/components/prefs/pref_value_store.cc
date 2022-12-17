@@ -1,12 +1,14 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/prefs/pref_value_store.h"
 
 #include <stddef.h>
+#include <string>
 
 #include "base/logging.h"
+#include "base/strings/string_piece.h"
 #include "components/prefs/pref_notifier.h"
 #include "components/prefs/pref_observer.h"
 
@@ -54,11 +56,8 @@ PrefValueStore::PrefValueStore(PrefStore* managed_prefs,
                                PrefStore* user_prefs,
                                PrefStore* recommended_prefs,
                                PrefStore* default_prefs,
-                               PrefNotifier* pref_notifier,
-                               std::unique_ptr<Delegate> delegate)
-    : pref_notifier_(pref_notifier),
-      initialization_failed_(false),
-      delegate_(std::move(delegate)) {
+                               PrefNotifier* pref_notifier)
+    : pref_notifier_(pref_notifier), initialization_failed_(false) {
   InitPrefStore(MANAGED_STORE, managed_prefs);
   InitPrefStore(SUPERVISED_USER_STORE, supervised_user_prefs);
   InitPrefStore(EXTENSION_STORE, extension_prefs);
@@ -69,11 +68,6 @@ PrefValueStore::PrefValueStore(PrefStore* managed_prefs,
   InitPrefStore(DEFAULT_STORE, default_prefs);
 
   CheckInitializationCompleted();
-  if (delegate_) {
-    delegate_->Init(managed_prefs, supervised_user_prefs, extension_prefs,
-                    standalone_browser_prefs, command_line_prefs, user_prefs,
-                    recommended_prefs, default_prefs, pref_notifier);
-  }
 }
 
 PrefValueStore::~PrefValueStore() {}
@@ -87,8 +81,7 @@ std::unique_ptr<PrefValueStore> PrefValueStore::CloneAndSpecialize(
     PrefStore* user_prefs,
     PrefStore* recommended_prefs,
     PrefStore* default_prefs,
-    PrefNotifier* pref_notifier,
-    std::unique_ptr<Delegate> delegate) {
+    PrefNotifier* pref_notifier) {
   DCHECK(pref_notifier);
   if (!managed_prefs)
     managed_prefs = GetPrefStore(MANAGED_STORE);
@@ -110,10 +103,10 @@ std::unique_ptr<PrefValueStore> PrefValueStore::CloneAndSpecialize(
   return std::make_unique<PrefValueStore>(
       managed_prefs, supervised_user_prefs, extension_prefs,
       standalone_browser_prefs, command_line_prefs, user_prefs,
-      recommended_prefs, default_prefs, pref_notifier, std::move(delegate));
+      recommended_prefs, default_prefs, pref_notifier);
 }
 
-bool PrefValueStore::GetValue(const std::string& name,
+bool PrefValueStore::GetValue(base::StringPiece name,
                               base::Value::Type type,
                               const base::Value** out_value) const {
   // Check the |PrefStore|s in order of their priority from highest to lowest,
@@ -205,8 +198,6 @@ bool PrefValueStore::PrefValueStandaloneBrowserModifiable(
 
 void PrefValueStore::UpdateCommandLinePrefStore(PrefStore* command_line_prefs) {
   InitPrefStore(COMMAND_LINE_STORE, command_line_prefs);
-  if (delegate_)
-    delegate_->UpdateCommandLinePrefStore(command_line_prefs);
 }
 
 bool PrefValueStore::IsInitializationComplete() const {
@@ -216,10 +207,6 @@ bool PrefValueStore::IsInitializationComplete() const {
       return false;
   }
   return true;
-}
-
-bool PrefValueStore::HasPrefStore(PrefStoreType type) const {
-  return GetPrefStore(type);
 }
 
 bool PrefValueStore::PrefValueInStore(
@@ -257,7 +244,7 @@ PrefValueStore::PrefStoreType PrefValueStore::ControllingPrefStoreForPref(
   return INVALID_STORE;
 }
 
-bool PrefValueStore::GetValueFromStore(const std::string& name,
+bool PrefValueStore::GetValueFromStore(base::StringPiece name,
                                        PrefValueStore::PrefStoreType store_type,
                                        const base::Value** out_value) const {
   // Only return true if we find a value and it is the correct type, so stale
@@ -273,7 +260,7 @@ bool PrefValueStore::GetValueFromStore(const std::string& name,
 }
 
 bool PrefValueStore::GetValueFromStoreWithType(
-    const std::string& name,
+    base::StringPiece name,
     base::Value::Type type,
     PrefStoreType store,
     const base::Value** out_value) const {

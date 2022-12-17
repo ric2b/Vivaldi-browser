@@ -1,9 +1,9 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from '../../js/assert.m.js';
-import {FocusOutlineManager} from '../../js/cr/ui/focus_outline_manager.m.js';
+import {assert} from '../../js/assert.js';
+import {FocusOutlineManager} from '../../js/focus_outline_manager.js';
 
 export class CrMenuSelector extends HTMLElement {
   static get is() {

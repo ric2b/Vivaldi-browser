@@ -16,7 +16,8 @@ namespace {
 const char kSearchTermsParameterFull[] = "{searchTerms}";
 const char kGoogleUnescapedSearchTermsParameterFull[] =
     "{google:unescapedSearchTerms}";
-
+const char kTemplateServiceNotAvailable[] =
+    "TemplateURLService not available for profile.";
 // Display value for kSearchTermsParameter.
 const char kDisplaySearchTerms[] = "%s";
 
@@ -116,7 +117,9 @@ SearchEnginesAPI::SearchEnginesAPI(content::BrowserContext* context)
     : browser_context_(context),
       service_(TemplateURLServiceFactory::GetForProfile(
           Profile::FromBrowserContext(browser_context_))) {
-  service_->AddObserver(this);
+  if (service_) {
+    service_->AddObserver(this);
+  }
 }
 
 // static
@@ -131,8 +134,9 @@ SearchEnginesAPI::~SearchEnginesAPI() {}
 
 // KeyedService implementation.
 void SearchEnginesAPI::Shutdown() {
-  if (service_)
+  if (service_) {
     service_->RemoveObserver(this);
+  }
 }
 
 void SearchEnginesAPI::OnTemplateURLServiceChanged() {
@@ -143,7 +147,9 @@ void SearchEnginesAPI::OnTemplateURLServiceChanged() {
 }
 
 void SearchEnginesAPI::OnTemplateURLServiceShuttingDown() {
-  service_->RemoveObserver(this);
+  if (service_) {
+    service_->RemoveObserver(this);
+  }
   service_ = nullptr;
 }
 
@@ -161,6 +167,9 @@ ExtensionFunction::ResponseAction SearchEnginesGetKeywordForUrlFunction::Run() {
 ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
   vivaldi::search_engines::AllTemplateURLs result;
   if (service->loaded()) {
     TemplateURLService::TemplateURLVector template_urls =
@@ -258,6 +267,9 @@ ExtensionFunction::ResponseAction SearchEnginesAddTemplateUrlFunction::Run() {
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
 
   if (params->template_url.keyword.empty() || params->template_url.url.empty())
     return RespondNow(ArgumentList(
@@ -293,6 +305,9 @@ SearchEnginesRemoveTemplateUrlFunction::Run() {
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
 
   TemplateURLID id;
   if (!base::StringToInt64(params->id, &id))
@@ -357,6 +372,9 @@ SearchEnginesUpdateTemplateUrlFunction::Run() {
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
 
   TemplateURLID id;
   if (!base::StringToInt64(params->template_url.id, &id))
@@ -391,6 +409,9 @@ ExtensionFunction::ResponseAction SearchEnginesMoveTemplateUrlFunction::Run() {
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
 
   TemplateURLID id;
   if (!base::StringToInt64(params->id, &id))
@@ -427,6 +448,9 @@ ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
 
   TemplateURLID id;
   if (!base::StringToInt64(params->id, &id))
@@ -475,6 +499,9 @@ ExtensionFunction::ResponseAction SearchEnginesGetSearchRequestFunction::Run() {
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
 
   TemplateURLID id;
   if (!base::StringToInt64(params->id, &id))
@@ -501,6 +528,9 @@ SearchEnginesGetSuggestRequestFunction::Run() {
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
 
   TemplateURLID id;
   if (!base::StringToInt64(params->id, &id))
@@ -529,6 +559,9 @@ SearchEnginesRepairPrepopulatedTemplateUrlsFunction::Run() {
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
   service->RepairPrepopulatedSearchEngines();
 
   if (!params->only_keep_prepopulated)

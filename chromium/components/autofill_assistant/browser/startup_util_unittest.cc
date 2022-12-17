@@ -1,13 +1,14 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/autofill_assistant/browser/startup_util.h"
 
-#include <array>
+#include <iterator>
 #include <memory>
 #include <ostream>
 
+#include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill_assistant/browser/features.h"
@@ -46,6 +47,7 @@ namespace {
 
 using features::kAutofillAssistant;
 using features::kAutofillAssistantChromeEntry;
+using features::kAutofillAssistantGetTriggerScriptsByHashPrefix;
 using features::kAutofillAssistantLoadDFMForTriggerScripts;
 using features::kAutofillAssistantProactiveHelp;
 using ::testing::Eq;
@@ -53,13 +55,14 @@ using ::testing::ValuesIn;
 
 // Feature configurations to instantiate tests with.
 struct TestFeatureConfig {
-  std::vector<base::Feature> enabled_features;
+  std::vector<base::test::FeatureRef> enabled_features;
 };
 
 // Shorthand for the full set of relevant features.
-const std::array<base::Feature, 4> kFullFeatureSet = {
+const base::test::FeatureRef kFullFeatureSet[] = {
     kAutofillAssistant, kAutofillAssistantProactiveHelp,
-    kAutofillAssistantChromeEntry, kAutofillAssistantLoadDFMForTriggerScripts};
+    kAutofillAssistantChromeEntry, kAutofillAssistantLoadDFMForTriggerScripts,
+    kAutofillAssistantGetTriggerScriptsByHashPrefix};
 
 // Common script parameters to reuse.
 const base::flat_map<std::string, std::string> kRegularScript = {
@@ -76,13 +79,15 @@ const TriggerContext::Options kDefaultCCTOptions = {
     std::string(), /* is_cct = */ true,
     false,         false,
     std::string(), false,
-    false,         false};
+    false,         false,
+    true};
 
 const TriggerContext::Options kDefaultNonCCTOptions = {
     std::string(), /* is_cct = */ false,
     false,         false,
     std::string(), false,
-    false,         false};
+    false,         false,
+    true};
 
 // The set of feature combinations to test.
 const TestFeatureConfig kTestFeatureConfigs[] = {
@@ -96,11 +101,12 @@ const TestFeatureConfig kTestFeatureConfigs[] = {
     {{kAutofillAssistant, kAutofillAssistantChromeEntry,
       kAutofillAssistantProactiveHelp}},
     // All features are enabled.
-    {{kFullFeatureSet.begin(), kFullFeatureSet.end()}}};
+    {{std::begin(kFullFeatureSet), std::end(kFullFeatureSet)}}};
 
 // Custom output operator overloads to provide human-readable test outputs.
-std::ostream& operator<<(std::ostream& out, const base::Feature& feature) {
-  out << feature.name;
+std::ostream& operator<<(std::ostream& out,
+                         const base::test::FeatureRef& feature) {
+  out << feature->name;
   return out;
 }
 
@@ -145,9 +151,9 @@ class StartupUtilParametrizedTest
  public:
   void SetUp() override {
     StartupUtilTest::SetUp();
-    std::vector<base::Feature> disabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
     for (const auto& feature : kFullFeatureSet) {
-      if (!IsFeatureEnabled(feature)) {
+      if (!IsFeatureEnabled(*feature)) {
         disabled_features.emplace_back(feature);
       }
     }
@@ -160,9 +166,20 @@ class StartupUtilParametrizedTest
 
   void TearDown() override { scoped_feature_list_.reset(); }
 
-  bool AreFeaturesEnabled(const std::vector<base::Feature>& features) const {
+  bool IsAnyFeatureSetEnabled(
+      const std::vector<std::vector<base::test::FeatureRef>>& feature_sets) {
+    for (const auto& features : feature_sets) {
+      if (AreFeaturesEnabled(features)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool AreFeaturesEnabled(
+      const std::vector<base::test::FeatureRef>& features) const {
     for (const auto& feature : features) {
-      if (!IsFeatureEnabled(feature)) {
+      if (!IsFeatureEnabled(*feature)) {
         return false;
       }
     }
@@ -171,11 +188,8 @@ class StartupUtilParametrizedTest
 
   // Returns whether |feature| is enabled for the current run.
   bool IsFeatureEnabled(const base::Feature& feature) const {
-    return std::find_if(GetParam().enabled_features.begin(),
-                        GetParam().enabled_features.end(),
-                        [&](const base::Feature& candidate) {
-                          return candidate.name == feature.name;
-                        }) != GetParam().enabled_features.end();
+    return base::Contains(GetParam().enabled_features, feature.name,
+                          &base::Feature::name);
   }
 
  private:
@@ -246,7 +260,12 @@ TEST_P(StartupUtilParametrizedTest, StartRpcTriggerScript) {
               ? StartupMode::START_RPC_TRIGGER_SCRIPT
               : StartupMode::FEATURE_DISABLED));
 
-  // CCT, MSBB is off.
+  // CCT, MSBB is off, but kAutofillAssistantGetTriggerScriptsByHashPrefix might
+  // be enabled.
+  StartupMode expectedStartupMode =
+      IsFeatureEnabled(kAutofillAssistantGetTriggerScriptsByHashPrefix)
+          ? StartupMode::START_RPC_TRIGGER_SCRIPT
+          : StartupMode::SETTING_DISABLED;
   EXPECT_THAT(
       StartupUtil().ChooseStartupModeForIntent(
           TriggerContext{
@@ -257,7 +276,7 @@ TEST_P(StartupUtilParametrizedTest, StartRpcTriggerScript) {
            .feature_module_installed = true}),
       MatchingStartupMode(AreFeaturesEnabled({kAutofillAssistant,
                                               kAutofillAssistantProactiveHelp})
-                              ? StartupMode::SETTING_DISABLED
+                              ? expectedStartupMode
                               : StartupMode::FEATURE_DISABLED));
 
   // CCT, Proactive help is off.
@@ -335,7 +354,7 @@ TEST_P(StartupUtilParametrizedTest, InvalidParameterCombinationsShouldFail) {
                       {"ENABLED", "true"}, {"START_IMMEDIATELY", "true"}}),
               {std::string(), /* is_cct = */ true, false, false,
                /* initial_url = */ "https://www.example.com", false, false,
-               false}},
+               false, true}},
           {.msbb_setting_enabled = true,
            .proactive_help_setting_enabled = true,
            .feature_module_installed = true}),

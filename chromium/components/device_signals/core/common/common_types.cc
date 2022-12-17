@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@ ExecutableMetadata::~ExecutableMetadata() = default;
 
 bool ExecutableMetadata::operator==(const ExecutableMetadata& other) const {
   return is_running == other.is_running &&
-         public_key_sha256 == other.public_key_sha256 &&
+         public_keys_hashes == other.public_keys_hashes &&
          product_name == other.product_name && version == other.version;
 }
 

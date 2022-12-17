@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2021 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2021 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Main menu item dimens. -->
@@ -46,8 +48,6 @@
     <dimen name="ntp_header_lateral_paddings_v2">16dp</dimen>
     <dimen name="feed_options_vertical_margins">6dp</dimen>
     <dimen name="feed_options_chip_margin">8dp</dimen>
-    <dimen name="feed_divider_height">4dp</dimen>
-    <dimen name="feed_divider_margin_bottom">12dp</dimen>
     <dimen name="feed_header_dropdown_size">15dp</dimen>
     <dimen name="feed_header_tab_extra_margin_right">7dp</dimen>
     <dimen name="feed_header_background_corner_radius">60dp</dimen>
@@ -55,7 +55,7 @@
     <!-- Feed unread dot dimens -->
     <dimen name="feed_badge_radius">2.5dp</dimen>
     <dimen name="feed_badge_hoffset">-1dp</dimen>
-    <dimen name="feed_badge_voffset">2dp</dimen>
+    <dimen name="feed_badge_voffset">-0.5dp</dimen>
 
     <!-- Dynamic color dimensions. -->
     <dimen name="feed_header_section_tab_bg_elevation_enabled">@dimen/default_elevation_2</dimen>
@@ -63,4 +63,5 @@
 
     <!-- Menu footer chip dimensions. -->
     <item name="menu_footer_chip_background_alpha" format="float" type="dimen">0.1</item>
+    <dimen name="menu_footer_second_row_margin_start">16dp</dimen>
 </resources>

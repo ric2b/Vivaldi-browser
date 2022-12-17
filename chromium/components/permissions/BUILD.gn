@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -55,12 +55,16 @@ source_set("permissions") {
     "contexts/wake_lock_permission_context.h",
     "contexts/webxr_permission_context.cc",
     "contexts/webxr_permission_context.h",
-    "contexts/window_placement_permission_context.cc",
-    "contexts/window_placement_permission_context.h",
+    "contexts/window_management_permission_context.cc",
+    "contexts/window_management_permission_context.h",
+    "notification_permission_review_service.cc",
+    "notification_permission_review_service.h",
     "notifications_engagement_service.cc",
     "notifications_engagement_service.h",
     "object_permission_context_base.cc",
     "object_permission_context_base.h",
+    "origin_keyed_permission_action_service.cc",
+    "origin_keyed_permission_action_service.h",
     "permission_actions_history.cc",
     "permission_actions_history.h",
     "permission_auditing_database.cc",
@@ -102,6 +106,8 @@ source_set("permissions") {
     "request_type.h",
     "switches.cc",
     "switches.h",
+    "unused_site_permissions_service.cc",
+    "unused_site_permissions_service.h",
   ]
   deps = [
     "//base",
@@ -153,13 +159,13 @@ source_set("permissions") {
       "android/permission_prompt/permission_dialog.h",
       "android/permission_prompt/permission_dialog_delegate.cc",
       "android/permission_prompt/permission_dialog_delegate.h",
-      "android/permission_prompt/permission_infobar.cc",
-      "android/permission_prompt/permission_infobar.h",
       "android/permission_prompt/permission_message.cc",
       "android/permission_prompt/permission_message.h",
       "android/permission_prompt/permission_prompt_android.cc",
       "android/permission_prompt/permission_prompt_android.h",
       "android/permission_prompt/permission_prompt_android_factory.cc",
+      "android/permission_prompt/permission_prompt_infobar.cc",
+      "android/permission_prompt/permission_prompt_infobar.h",
       "android/permissions_android_feature_list.cc",
       "android/permissions_android_feature_list.h",
       "contexts/geolocation_permission_context_android.cc",
@@ -264,6 +270,7 @@ source_set("unit_tests") {
     "permission_request_manager_unittest.cc",
     "permission_request_queue_unittest.cc",
     "permission_uma_util_unittest.cc",
+    "unused_site_permissions_service_unittest.cc",
   ]
   if (!is_android) {
     sources += [
@@ -287,6 +294,7 @@ source_set("unit_tests") {
     "//components/keyed_service/content",
     "//components/prefs:test_support",
     "//components/strings:components_strings_grit",
+    "//components/sync_preferences:test_support",
     "//components/ukm:test_support",
     "//components/ukm/content",
     "//components/variations",

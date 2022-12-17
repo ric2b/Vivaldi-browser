@@ -10,10 +10,13 @@
 <translation id="1131805035311359397">若要检查您的密码是否未曾遭遇数据泄露和其他安全问题，请<ph name="BEGIN_LINK" />登录 Chromium<ph name="END_LINK" />。</translation>
 <translation id="1185134272377778587">关于 Chromium</translation>
 <translation id="1203500561924088507">感谢您完成安装。您必须重启浏览器才能使用 <ph name="BUNDLE_NAME" />。</translation>
+<translation id="1231839967188101156">开启此设置后，Chromium 会释放闲置标签页占用的内存。这可让使用中的标签页和其他应用获得更多计算机资源，并让 Chromium 保持快速运行。当您返回到闲置标签页时，它们会自动重新变为活动状态。<ph name="BEGIN_LINK" />了解详情<ph name="END_LINK" /></translation>
+<translation id="1261119230216066228">省内存模式提高了 Chromium 的运行速度</translation>
 <translation id="1315551408014407711">设置您的新 Chromium 个人资料</translation>
 <translation id="1385859895174722837">Chromium 中的 Google 助理</translation>
 <translation id="1396446129537741364">Chromium 正尝试显示密码。</translation>
 <translation id="1414495520565016063">您已登录 Chromium！</translation>
+<translation id="1493803763272692301">您可以充分利用 Chromium</translation>
 <translation id="1524282610922162960">共享 Chromium 标签页</translation>
 <translation id="1553461853655228091">Chromium 需要获得相应权限，才能使用您的摄像头为您的周边环境创建 3D 地图</translation>
 <translation id="1607715478322902680">{COUNT,plural, =0{您的管理员要求您重新启动 Chromium 以应用一项更新}=1{您的管理员要求您重新启动 Chromium 以应用一项更新。您的无痕式窗口不会重新打开。}other{您的管理员要求您重新启动 Chromium 以应用一项更新。您的 # 个无痕式窗口不会重新打开。}}</translation>
@@ -61,6 +64,7 @@
 <translation id="2583187216237139145">在使用此工作资料（例如创建书签、历史记录、密码和其他设置）时生成的任何 Chromium 数据都可由工作资料管理员移除。<ph name="LEARN_MORE" /></translation>
 <translation id="2648074677641340862">安装过程中出现操作系统错误。请重新下载 Chromium。</translation>
 <translation id="2661879430930417727">如果您是与亲朋好友共用一部设备，他们将能够使用单独的帐号进行浏览，并可随心所欲地设置 Chromium</translation>
+<translation id="2669853942967761236">Chromium 屏蔽了此归档文件，因为它可能藏有恶意软件</translation>
 <translation id="268602741124540128">欢迎使用 Chromium，<ph name="ACCOUNT_FIRST_NAME" /></translation>
 <translation id="2711502716910134313">Chromium 标签页</translation>
 <translation id="2718390899429598676">为了提高安全性，Chromium 将对您的数据进行加密。</translation>
@@ -179,6 +183,7 @@
 <translation id="5386450000063123300">正在更新 Chromium (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="538767207339317086">允许登录 Chromium</translation>
 <translation id="5398878173008909840">Chromium 现已推出新版本。</translation>
+<translation id="5405650547142096840">从Chromium中移除</translation>
 <translation id="5427571867875391349">将Chromium设为默认浏览器</translation>
 <translation id="5438241569118040789"><ph name="PAGE_TITLE" /> - Chromium 测试版</translation>
 <translation id="5473971139929175403">Chromium 可能无法正常运行，因为它不再支持此 Linux 发行版</translation>
@@ -206,8 +211,10 @@
 <translation id="6055895534982063517">Chromium 现已推出速度更快的新版本。</translation>
 <translation id="6063093106622310249">在 Chromium 中打开(&amp;O)</translation>
 <translation id="6072279588547424923">“<ph name="EXTENSION_NAME" />”已添加到 Chromium</translation>
+<translation id="6072463441809498330">提高 Chromium 的运行速度</translation>
 <translation id="608006075545470555">向此浏览器添加工作资料</translation>
 <translation id="6096348254544841612">有可用的更新。欢迎自定义和控制 Chromium。</translation>
+<translation id="6119438414301547735">允许扩展程序在 Chromium 工具栏中显示访问请求</translation>
 <translation id="6120345080069858279">Chromium 会将此密码保存在您的 Google 帐号中，因此您不必记住它。</translation>
 <translation id="6129621093834146363"><ph name="FILE_NAME" /> 存在危险，因此 Chromium 已将其拦截。</translation>
 <translation id="6134968993075716475">“安全浏览”功能已关闭。Chromium 建议开启此功能。</translation>
@@ -248,6 +255,7 @@
 <translation id="6717134281241384636">您的个人资料来自更高版本的 Chromium，因此无法使用。
 
 某些功能可能会无法使用。请指定其他个人资料目录或使用更高版本的 Chromium。</translation>
+<translation id="6730677189742196061">省内存模式提高了 Chromium 的运行速度</translation>
 <translation id="6734291798041940871">已为您计算机上的所有用户都安装 Chromium。</translation>
 <translation id="673636774878526923">如需在您的所有设备上访问自己的 Chromium 信息，请登录您的帐号，然后开启同步功能。</translation>
 <translation id="6774082503108938489">您的家长已为 Chromium 停用“网站、应用和扩展程序的权限”。因此，您无法启用该<ph name="EXTENSION_TYPE_PARAMETER" />。</translation>
@@ -286,6 +294,7 @@ Chromium 无法恢复您的设置。</translation>
 <translation id="7398989605938454041">通过使用多份 Chromium 个人资料，您可将自己的所有 Chromium 信息分门别类，从而更轻松地将工作和娱乐分开。</translation>
 <translation id="7449453770951226939"><ph name="PAGE_TITLE" /> - Chromium 开发者版</translation>
 <translation id="7451052299415159299">Chromium 需要获得相应权限，才能允许此网站使用您的摄像头</translation>
+<translation id="7461356015007898716">若要接收后续 Chromium 更新，您需使用 Windows 10 或更高版本。该计算机目前使用的是 Windows 7。</translation>
 <translation id="7467949745582939695">重新启动 Chromium？</translation>
 <translation id="7483335560992089831">无法安装与当前运行的版本相同的 Chromium。请关闭 Chromium 并重试。</translation>
 <translation id="753534427205733210">{0,plural, =1{Chromium 将在 1 分钟后重新启动}other{Chromium 将在 # 分钟后重新启动}}</translation>
@@ -302,6 +311,7 @@ Chromium 无法恢复您的设置。</translation>
 <translation id="7689606757190482937">在您的所有设备上同步并个性化设置 Chromium</translation>
 <translation id="7745317241717453663">这会从这台设备上删除您的浏览数据。如果日后想要检索您的数据，届时请以 <ph name="USER_EMAIL" /> 的身份登录 Chromium。</translation>
 <translation id="7747138024166251722">安装程序无法创建临时目录。请检查您是否有足够的磁盘空间和权限来安装该软件。</translation>
+<translation id="7786760609782648049">提高 Chromium 的运行速度</translation>
 <translation id="7790626492778995050"><ph name="PAGE_TITLE" /> - Chromium Canary</translation>
 <translation id="7828947555739565424">此设备上已有一份使用该帐号创建的 Chromium 个人资料</translation>
 <translation id="7845233973568007926">感谢您完成安装。您必须重启计算机才能使用 <ph name="BUNDLE_NAME" />。</translation>
@@ -325,6 +335,7 @@ Chromium 无法恢复您的设置。</translation>
 <translation id="8330519371938183845">登录即可在您的所有设备上同步并个性化设置 Chromium</translation>
 <translation id="8340674089072921962"><ph name="USER_EMAIL_ADDRESS" /> 之前使用的是 Chromium</translation>
 <translation id="8357820681460164151">如需在您的所有设备上访问自己的 Chromium 浏览器信息，请登录您的帐号，然后开启同步功能</translation>
+<translation id="8360718212975266891">若要接收后续 Chromium 更新，您需使用 Windows 10 或更高版本。该计算机目前使用的是 Windows 8。</translation>
 <translation id="8417404458978023919">{0,plural, =1{请于 1 天内重新启动 Chromium}other{请于 # 天内重新启动 Chromium}}</translation>
 <translation id="8453117565092476964">安装程序归档损坏或无效。请重新下载 Chromium。</translation>
 <translation id="8463672209299734063">可选：自动向 Google 发送诊断数据和使用情况数据，协助改进 Chromium 操作系统的功能和性能。</translation>
@@ -333,6 +344,7 @@ Chromium 无法恢复您的设置。</translation>
 <translation id="8558383651099478961">您的家长已为 Chromium 停用“网站、应用和扩展程序的权限”。因此，您无法添加该<ph name="EXTENSION_TYPE_PARAMETER" />。</translation>
 <translation id="8561285221328166383">若要接收后续 Chromium 更新，您需使用 macOS 10.13 或更高版本。该计算机目前使用的是 macOS 10.12。</translation>
 <translation id="8568283329061645092">您需要先登录 Google 帐号才能使用 Chromium 的密码检查功能。</translation>
+<translation id="8574036838419011058">开启此设置后，Chromium 会通过限制后台活动和视觉效果（例如流畅滚动和视频帧速率）来节省电池电量。<ph name="BEGIN_LINK" />了解详情<ph name="END_LINK" /></translation>
 <translation id="8586442755830160949">版权所有<ph name="YEAR" /> The Chromium Authors。保留所有权利。</translation>
 <translation id="8608079656141766906"><ph name="BEGIN_BOLD" />我们会如何使用这些数据<ph name="END_BOLD" />：网站可以将您的兴趣信息存储在 Chromium 中。例如，如果您访问某个网站购买马拉松跑鞋，系统可能会根据该网站推测您对跑马拉松感兴趣。之后，如果您访问其他网站报名参加比赛，相应网站就可以根据您的兴趣向您展示跑鞋广告。</translation>
 <translation id="8619360774459241877">正在启动 Chromium…</translation>
@@ -356,6 +368,7 @@ Chromium 无法恢复您的设置。</translation>
 <translation id="9022552996538154597">登录 Chromium</translation>
 <translation id="9089354809943900324">Chromium版本太旧</translation>
 <translation id="9093206154853821181">{0,plural, =1{Chromium 将在 1 小时后重新启动}other{Chromium 将在 # 小时后重新启动}}</translation>
+<translation id="9106612006984859720">若要接收后续 Chromium 更新，您需使用 Windows 10 或更高版本。该计算机目前使用的是 Windows 8.1。</translation>
 <translation id="91086099826398415">在 Chromium 新标签页中打开链接(&amp;T)</translation>
 <translation id="911206726377975832">同时删除您的浏览数据吗？</translation>
 <translation id="9144490074902256427">在试用期间，您可看到并移除被网站用来向您展示广告的兴趣主题。Chromium 会根据您近期的浏览记录推测出您的兴趣。</translation>

@@ -32,6 +32,7 @@
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/window_features/window_features.mojom-blink.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/public/web/web_window_features.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
@@ -76,7 +77,7 @@ WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string,
 
   // This code follows the HTML spec, specifically
   // https://html.spec.whatwg.org/C/#concept-window-open-features-tokenize
-  if (feature_string.IsEmpty())
+  if (feature_string.empty())
     return window_features;
 
   bool ui_features_were_disabled = false;
@@ -146,16 +147,16 @@ WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string,
 
     // Listing a key with no value is shorthand for key=yes
     int value;
-    if (value_string.IsEmpty() || value_string == "yes" ||
+    constexpr auto kLoose = WTF::NumberParsingOptions::Loose();
+    if (value_string.empty() || value_string == "yes" ||
         value_string == "true") {
       value = 1;
     } else if (value_string.Is8Bit()) {
       value = CharactersToInt(value_string.Characters8(), value_string.length(),
-                              WTF::NumberParsingOptions::kLoose, nullptr);
+                              kLoose, nullptr);
     } else {
-      value =
-          CharactersToInt(value_string.Characters16(), value_string.length(),
-                          WTF::NumberParsingOptions::kLoose, nullptr);
+      value = CharactersToInt(value_string.Characters16(),
+                              value_string.length(), kLoose, nullptr);
     }
 
     if (!ui_features_were_disabled && key_string != "noopener" &&
@@ -217,7 +218,7 @@ WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string,
       const String decoded = DecodeURLEscapeSequences(
           original_case_value_string.ToString(), DecodeURLMode::kUTF8);
 
-      if (!decoded.IsEmpty()) {
+      if (!decoded.empty()) {
         window_features.impression =
             dom_window->GetFrame()
                 ->GetAttributionSrcLoader()
@@ -294,15 +295,11 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
   request.SetFrameType(mojom::RequestContextFrameType::kAuxiliary);
 
   const KURL& url = request.GetResourceRequest().Url();
-  auto* csp_for_world = opener_window.GetContentSecurityPolicyForCurrentWorld();
-  if (url.ProtocolIsJavaScript() && csp_for_world) {
-    String script_source = DecodeURLEscapeSequences(
-        url.GetString(), DecodeURLMode::kUTF8OrIsomorphic);
-
-    if (!csp_for_world->AllowInline(
-            ContentSecurityPolicy::InlineType::kNavigation,
-            nullptr /* element */, script_source, String() /* nonce */,
-            opener_window.Url(), OrdinalNumber::First())) {
+  if (url.ProtocolIsJavaScript()) {
+    if (opener_window
+            .CheckAndGetJavascriptUrl(request.JavascriptWorld().get(), url,
+                                      nullptr /* element */)
+            .empty()) {
       return nullptr;
     }
   }
@@ -378,7 +375,10 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
 
   frame.View()->SetCanHaveScrollbars(features.scrollbars_visible);
 
-  gfx::Rect window_rect = page->GetChromeClient().RootWindowRect(frame);
+  mojom::blink::WindowFeaturesPtr window_features =
+      mojom::blink::WindowFeatures::New();
+  window_features->bounds = page->GetChromeClient().RootWindowRect(frame);
+  gfx::Rect& window_rect = window_features->bounds;
   if (features.x_set)
     window_rect.set_x(features.x);
   if (features.y_set)
@@ -389,7 +389,7 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
     window_rect.set_height(features.height);
 
   page->GetChromeClient().Show(frame, opener_frame,
-                               request.GetNavigationPolicy(), window_rect,
+                               request.GetNavigationPolicy(), *window_features,
                                consumed_user_gesture);
   MaybeLogWindowOpen(opener_frame);
   return &frame;

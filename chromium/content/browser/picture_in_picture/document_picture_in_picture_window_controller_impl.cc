@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -128,6 +128,13 @@ void DocumentPictureInPictureWindowControllerImpl::WebContentsDestroyed() {
   Observe(/*web_contents=*/nullptr);
   opener_web_contents_ = nullptr;
   Close(/*should_pause_video=*/true);
+}
+
+absl::optional<gfx::Rect>
+DocumentPictureInPictureWindowControllerImpl::GetWindowBounds() {
+  if (!child_contents_)
+    return absl::nullopt;
+  return child_contents_->GetContainerBounds();
 }
 
 void DocumentPictureInPictureWindowControllerImpl::PrimaryPageChanged(Page&) {

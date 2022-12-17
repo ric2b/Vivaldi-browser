@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,12 +19,6 @@ class LocalTrustedVaultDegradedRecoverabilityState;
 }  // namespace sync_pb
 
 namespace syncer {
-// Exposed only for testing.
-constexpr base::TimeDelta kLongDegradedRecoverabilityRefreshPeriod =
-    base::Days(7);
-constexpr base::TimeDelta kShortDegradedRecoverabilityRefreshPeriod =
-    base::Hours(1);
-
 // Refreshs the degraded recoverability state by scheduling the requests based
 // on the current state, heuristics and last refresh time.
 class TrustedVaultDegradedRecoverabilityHandler {
@@ -39,20 +33,23 @@ class TrustedVaultDegradedRecoverabilityHandler {
     virtual void WriteDegradedRecoverabilityState(
         const sync_pb::LocalTrustedVaultDegradedRecoverabilityState&
             degraded_recoverability_state) = 0;
-    virtual void OnDegradedRecoverabilityChanged(bool value) = 0;
+    virtual void OnDegradedRecoverabilityChanged() = 0;
   };
 
   // `connection` and `delegate` must not be null and must outlive this object.
   TrustedVaultDegradedRecoverabilityHandler(
       TrustedVaultConnection* connection,
       Delegate* delegate,
-      const CoreAccountInfo& account_info);
+      const CoreAccountInfo& account_info,
+      const sync_pb::LocalTrustedVaultDegradedRecoverabilityState&
+          degraded_recoverability_state);
   TrustedVaultDegradedRecoverabilityHandler(
       const TrustedVaultDegradedRecoverabilityHandler&) = delete;
   TrustedVaultDegradedRecoverabilityHandler& operator=(
       const TrustedVaultDegradedRecoverabilityHandler&) = delete;
   ~TrustedVaultDegradedRecoverabilityHandler();
 
+  void HintDegradedRecoverabilityChanged();
   void StartLongIntervalRefreshing();
   void StartShortIntervalRefreshing();
   void RefreshImmediately();
@@ -63,6 +60,8 @@ class TrustedVaultDegradedRecoverabilityHandler {
   void OnRecoverabilityIsDegradedDownloaded(
       TrustedVaultRecoverabilityStatus status);
 
+  base::TimeDelta long_degraded_recoverability_refresh_period_;
+  base::TimeDelta short_degraded_recoverability_refresh_period_;
   const raw_ptr<TrustedVaultConnection> connection_;
   const raw_ptr<Delegate> delegate_;
   CoreAccountInfo account_info_;

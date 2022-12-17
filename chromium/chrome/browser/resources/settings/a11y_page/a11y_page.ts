@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import '../controls/settings_toggle_button.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_shared.css.js';
-// <if expr="not is_macosx and not chromeos_ash">
+// <if expr="not is_macosx and not is_chromeos">
 import './captions_subpage.js';
 import '../settings_page/settings_subpage.js';
 // </if>
@@ -22,7 +22,7 @@ import './live_caption_section.js';
 
 // </if>
 
-import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
@@ -37,10 +37,10 @@ import {CaptionsBrowserProxyImpl} from './captions_browser_proxy.js';
 
 // </if>
 
-const SettingsA11YPageElementBase =
+const SettingsA11yPageElementBase =
     WebUIListenerMixin(BaseMixin(PolymerElement));
 
-class SettingsA11YPageElement extends SettingsA11YPageElementBase {
+class SettingsA11yPageElement extends SettingsA11yPageElementBase {
   static get is() {
     return 'settings-a11y-page';
   }
@@ -67,7 +67,7 @@ class SettingsA11YPageElement extends SettingsA11YPageElementBase {
         notify: true,
       },
 
-      // <if expr="not chromeos_ash">
+      // <if expr="not is_chromeos">
       enableLiveCaption_: {
         type: Boolean,
         value: function() {
@@ -127,7 +127,7 @@ class SettingsA11YPageElement extends SettingsA11YPageElementBase {
     };
   }
 
-  // <if expr="not chromeos_ash">
+  // <if expr="not is_chromeos">
   private enableLiveCaption_: boolean;
   private showFocusHighlightOption_: boolean;
   // </if>
@@ -172,7 +172,7 @@ class SettingsA11YPageElement extends SettingsA11YPageElementBase {
     }
   }
 
-  // <if expr="not chromeos_ash">
+  // <if expr="not is_chromeos">
   private onFocusHighlightChange_(event: Event) {
     chrome.metricsPrivate.recordBoolean(
         'Accessibility.FocusHighlight.ToggleEnabled',
@@ -180,9 +180,15 @@ class SettingsA11YPageElement extends SettingsA11YPageElementBase {
   }
   // </if>
 
-  // <if expr="chromeos_ash">
+  // <if expr="is_chromeos">
   private onManageSystemAccessibilityFeaturesTap_() {
-    window.location.href = 'chrome://os-settings/manageAccessibility';
+    if (loadTimeData.valueExists(
+            'isAccessibilityOSSettingsVisibilityEnabled') &&
+        loadTimeData.getBoolean('isAccessibilityOSSettingsVisibilityEnabled')) {
+      window.location.href = 'chrome://os-settings/osAccessibility';
+    } else {
+      window.location.href = 'chrome://os-settings/manageAccessibility';
+    }
   }
   // </if>
 
@@ -203,4 +209,4 @@ class SettingsA11YPageElement extends SettingsA11YPageElementBase {
   }
 }
 
-customElements.define(SettingsA11YPageElement.is, SettingsA11YPageElement);
+customElements.define(SettingsA11yPageElement.is, SettingsA11yPageElement);

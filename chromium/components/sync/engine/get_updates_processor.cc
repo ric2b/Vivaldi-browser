@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -207,7 +207,7 @@ void GetUpdatesProcessor::PrepareGetUpdates(
     sync_pb::DataTypeProgressMarker* progress_marker =
         get_updates->add_from_progress_marker();
     *progress_marker = handler_it->second->GetDownloadProgress();
-    progress_marker->clear_gc_directive();
+    DCHECK(!progress_marker->has_gc_directive());
 
     sync_pb::DataTypeContext context = handler_it->second->GetDataTypeContext();
     if (!context.context().empty())

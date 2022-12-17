@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,6 +72,7 @@ class TestableTtsController : public content::TtsController {
   void StripSSML(
       const std::string& utterance,
       base::OnceCallback<void(const std::string&)> callback) override {}
+  void OnTtsUtteranceBecameInvalid(int utterance_id) override {}
 
   int last_utterance_id_;
   content::TtsEventType last_event_type_;

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,6 +50,10 @@
 #include "v8/include/v8-wasm-trap-handler-posix.h"
 #endif
 
+#if BUILDFLAG(IS_MAC)
+#include "base/system/sys_info.h"
+#endif
+
 namespace {
 
 void SetV8FlagIfFeature(const base::Feature& feature, const char* v8_flag) {
@@ -93,7 +97,11 @@ namespace content {
 
 RenderProcessImpl::RenderProcessImpl()
     : RenderProcess(GetThreadPoolInitParams()) {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+#if BUILDFLAG(IS_MAC)
+  // Specified when launching the process in
+  // RendererSandboxedProcessLauncherDelegate::EnableCpuSecurityMitigations
+  base::SysInfo::SetIsCpuSecurityMitigationsEnabled(true);
+#endif
 
 #if BUILDFLAG(DCHECK_IS_CONFIGURABLE)
   // Some official builds ship with DCHECKs compiled in. Failing DCHECKs then
@@ -127,6 +135,14 @@ RenderProcessImpl::RenderProcessImpl()
   SetV8FlagIfHasSwitch(switches::kEnableExperimentalWebAssemblyFeatures,
                        "--wasm-staging");
 
+  SetV8FlagIfFeature(features::kJavaScriptExperimentalSharedMemory,
+                     "--shared-string-table --harmony-struct");
+
+  SetV8FlagIfFeature(features::kJavaScriptArrayGrouping,
+                     "--harmony-array-grouping");
+  SetV8FlagIfNotFeature(features::kJavaScriptArrayGrouping,
+                        "--no-harmony-array-grouping");
+
   SetV8FlagIfFeature(features::kV8VmFuture, "--future");
   SetV8FlagIfNotFeature(features::kV8VmFuture, "--no-future");
 
@@ -146,12 +162,12 @@ RenderProcessImpl::RenderProcessImpl()
 #endif  // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) &&
         // defined(ARCH_CPU_X86_64)
 
-#if defined(ARCH_CPU_X86_64)
+#if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
   SetV8FlagIfFeature(features::kEnableExperimentalWebAssemblyStackSwitching,
                      "--experimental-wasm-type-reflection");
   SetV8FlagIfFeature(features::kEnableExperimentalWebAssemblyStackSwitching,
                      "--experimental-wasm-stack-switching");
-#endif  // defined(ARCH_CPU_X86_64)
+#endif  // defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
 
   SetV8FlagIfFeature(features::kWebAssemblyLazyCompilation,
                      "--wasm-lazy-compilation");
@@ -162,8 +178,9 @@ RenderProcessImpl::RenderProcessImpl()
   SetV8FlagIfNotFeature(features::kWebAssemblySimd,
                         "--no-experimental-wasm-simd");
 
-  SetV8FlagIfFeature(blink::features::kJSONModules,
-                     "--harmony-import-assertions");
+  constexpr char kImportAssertionsFlag[] = "--harmony-import-assertions";
+  v8::V8::SetFlagsFromString(kImportAssertionsFlag,
+                             sizeof(kImportAssertionsFlag));
 
   constexpr char kAtomicsFlag[] = "--harmony-atomics";
   v8::V8::SetFlagsFromString(kAtomicsFlag, sizeof(kAtomicsFlag));
@@ -179,7 +196,7 @@ RenderProcessImpl::RenderProcessImpl()
 
   // Bypass the SAB restriction when enabled by Enterprise Policy.
   if (!enable_shared_array_buffer_unconditionally &&
-      command_line->HasSwitch(
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSharedArrayBufferUnrestrictedAccessAllowed)) {
     enable_shared_array_buffer_unconditionally = true;
     blink::WebRuntimeFeatures::EnableSharedArrayBufferUnrestrictedAccessAllowed(
@@ -203,17 +220,6 @@ RenderProcessImpl::RenderProcessImpl()
     v8::V8::SetFlagsFromString(kSABPerContextFlag, sizeof(kSABPerContextFlag));
   }
 
-  // The display-capture-permissions-policy-allowed flag is used to pass
-  // the kDisplayCapturePermissionsPolicyEnabled Enterprise policy from the
-  // browser process to the renderer process. This switch should be enabled by
-  // default for now, but after a few milestones that allow enterprises to fix
-  // broken applications, this flag will be removed.
-  // This switch will only be enabled by the Enterprise policy.
-  if (command_line->HasSwitch(
-          switches::kDisplayCapturePermissionsPolicyAllowed)) {
-    blink::WebRuntimeFeatures::EnableDisplayCapturePermissionsPolicy(true);
-  }
-
   SetV8FlagIfFeature(features::kWebAssemblyTiering, "--wasm-tier-up");
   SetV8FlagIfNotFeature(features::kWebAssemblyTiering, "--no-wasm-tier-up");
 
@@ -222,10 +228,11 @@ RenderProcessImpl::RenderProcessImpl()
   SetV8FlagIfNotFeature(features::kWebAssemblyDynamicTiering,
                         "--no-wasm-dynamic-tiering");
 
-  v8::V8::SetFlagsFromString("--freeze-flags-after-init");
-
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && defined(ARCH_CPU_X86_64)
   if (base::FeatureList::IsEnabled(features::kWebAssemblyTrapHandler)) {
+    base::CommandLine* const command_line =
+        base::CommandLine::ForCurrentProcess();
+
     if (command_line->HasSwitch(switches::kEnableCrashpad) ||
         command_line->HasSwitch(switches::kEnableCrashReporter) ||
         command_line->HasSwitch(switches::kEnableCrashReporterForTesting)) {

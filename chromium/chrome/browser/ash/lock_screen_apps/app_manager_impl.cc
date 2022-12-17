@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -290,14 +290,13 @@ bool AppManagerImpl::LaunchLockScreenApp() {
     return false;
   }
 
-  auto action_data =
-      std::make_unique<extensions::api::app_runtime::ActionData>();
-  action_data->action_type =
+  extensions::api::app_runtime::ActionData action_data;
+  action_data.action_type =
       extensions::api::app_runtime::ActionType::ACTION_TYPE_NEW_NOTE;
-  action_data->is_lock_screen_action = std::make_unique<bool>(true);
-  action_data->restore_last_action_state =
-      std::make_unique<bool>(primary_profile_->GetPrefs()->GetBoolean(
-          prefs::kRestoreLastLockScreenNote));
+  action_data.is_lock_screen_action = true;
+  action_data.restore_last_action_state =
+      primary_profile_->GetPrefs()->GetBoolean(
+          prefs::kRestoreLastLockScreenNote);
   apps::LaunchPlatformAppWithAction(lock_screen_profile_, app,
                                     std::move(action_data));
   return true;
@@ -424,9 +423,10 @@ AppManagerImpl::State AppManagerImpl::AddAppToLockScreenProfile(
 
   std::string error;
   scoped_refptr<extensions::Extension> lock_profile_app =
-      extensions::Extension::Create(lock_profile_app_path, app->location(),
-                                    *app->manifest()->value()->CreateDeepCopy(),
-                                    app->creation_flags(), app->id(), &error);
+      extensions::Extension::Create(
+          lock_profile_app_path, app->location(),
+          base::Value::AsDictionaryValue(app->manifest()->value()->Clone()),
+          app->creation_flags(), app->id(), &error);
 
   // While extension creation can fail in general, in this case the lock screen
   // profile extension creation arguments come from an app already installed in
@@ -567,9 +567,10 @@ AppManagerImpl::GetChromeAppForLockScreenAppLaunch() {
 
   std::string error;
   scoped_refptr<extensions::Extension> lock_profile_app =
-      extensions::Extension::Create(app->path(), app->location(),
-                                    *app->manifest()->value()->CreateDeepCopy(),
-                                    app->creation_flags(), app->id(), &error);
+      extensions::Extension::Create(
+          app->path(), app->location(),
+          base::Value::AsDictionaryValue(app->manifest()->value()->Clone()),
+          app->creation_flags(), app->id(), &error);
 
   extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(lock_screen_profile_)

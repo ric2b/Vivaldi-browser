@@ -37,3 +37,13 @@ update_target("//components/sync_sessions:sync_sessions") {
     "//vivaldi/sync/vivaldi_session_sync_prefs.cc",
   ]
 }
+
+
+if (!is_ios) {
+  update_target("//chrome/browser:browser") {
+    sources += [
+      "//vivaldi/sync/file_sync/file_store_factory.cc",
+      "//vivaldi/sync/file_sync/file_store_factory.h",
+    ]
+  }
+}

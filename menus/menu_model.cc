@@ -120,7 +120,7 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
             loaded_menu ? loaded_menu->GetByAction(target->action()) : nullptr;
         if (loaded && loaded->parent()) {
           // Remove old content
-          Menu_Node* target_parent = target->parent();
+          target_parent = target->parent();
           int target_index = target_parent->GetIndexOf(target).value();
           target_parent->Remove(target_index);
           // Add new content

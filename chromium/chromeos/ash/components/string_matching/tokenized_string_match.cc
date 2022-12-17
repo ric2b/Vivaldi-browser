@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,7 +41,7 @@ double TokenizedStringMatch::Calculate(const TokenizedString& query,
   const auto text_size = text_text.size();
   if (query_size > 0 && query_size == text_size &&
       base::EqualsCaseInsensitiveASCII(query_text, text_text)) {
-    hits_.push_back(gfx::Range(0, query_size));
+    hits_.emplace_back(0, query_size);
     relevance_ = 1.0;
     return true;
   }
@@ -60,8 +60,8 @@ double TokenizedStringMatch::Calculate(const TokenizedString& query,
             query.text(), text.text(), &substr_match_start,
             &substr_match_length)) {
       relevance_ = kIsSubstringMultiplier * substr_match_length;
-      hits_.push_back(gfx::Range(substr_match_start,
-                                 substr_match_start + substr_match_length));
+      hits_.emplace_back(substr_match_start,
+                         substr_match_start + substr_match_length);
     }
   }
 
@@ -69,9 +69,6 @@ double TokenizedStringMatch::Calculate(const TokenizedString& query,
   // relevance (roughly, each keystroke) is worth less than the last. This means
   // that typing a few characters of a word is enough to promote matches very
   // high, with any subsequent characters being worth comparatively less.
-  // TODO(mgiuca): This doesn't really play well with Omnibox results, since as
-  // you type more characters, the app/omnibox results tend to jump over each
-  // other.
   relevance_ = 1.0 - std::pow(0.5, relevance_);
 
   return relevance_;

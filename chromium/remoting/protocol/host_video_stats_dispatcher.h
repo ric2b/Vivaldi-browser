@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,7 @@
 #include "remoting/protocol/channel_dispatcher_base.h"
 #include "remoting/protocol/video_stats_stub.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class HostVideoStatsDispatcher : public ChannelDispatcherBase,
                                  public VideoStatsStub {
@@ -34,7 +33,6 @@ class HostVideoStatsDispatcher : public ChannelDispatcherBase,
   base::WeakPtrFactory<HostVideoStatsDispatcher> weak_factory_{this};
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_HOST_VIDEO_STATS_DISPATCHER_H_

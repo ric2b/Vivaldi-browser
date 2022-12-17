@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/variations/client_filterable_state.h"
+#include "components/variations/entropy_provider.h"
 #include "components/variations/processed_study.h"
 #include "components/variations/study_filtering.h"
 #include "components/variations/variations_associated_data.h"
@@ -23,6 +24,10 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace variations {
+
+namespace internal {
+const char kFeatureConflictGroupName[] = "ClientSideFeatureConflict";
+}  // namespace internal
 
 namespace {
 
@@ -119,9 +124,35 @@ void ForceExperimentState(
     // This call must happen after all params have been registered for the
     // trial. Otherwise, since we look up params by trial and group name, the
     // params won't be registered under the correct key.
-    trial->group();
+    trial->Activate();
     // UI Strings can only be overridden from ACTIVATE_ON_STARTUP experiments.
     ApplyUIStringOverrides(experiment, override_callback);
+  }
+}
+
+// Associates features for groups that do not specify them manually.
+void AssociateDefaultFeatures(const Study& study,
+                              base::FieldTrial* trial,
+                              base::FeatureList* feature_list) {
+  // Note: We only compute feature associations for ACTIVATE_ON_QUERY studies,
+  // since these associations are only used to determine that the trial has
+  // been queried when the feature is queried.
+  if (study.activation_type() != Study_ActivationType_ACTIVATE_ON_QUERY)
+    return;
+
+  std::set<std::string> features_to_associate;
+  for (const auto& experiment : study.experiment()) {
+    const auto& features = experiment.feature_association();
+    for (const auto& feature : features.enable_feature()) {
+      features_to_associate.insert(feature);
+    }
+    for (const auto& feature : features.disable_feature()) {
+      features_to_associate.insert(feature);
+    }
+  }
+  for (const auto& feature_name : features_to_associate) {
+    feature_list->RegisterFieldTrialOverride(
+        feature_name, base::FeatureList::OVERRIDE_USE_DEFAULT, trial);
   }
 }
 
@@ -132,8 +163,8 @@ void RegisterFeatureOverrides(const ProcessedStudy& processed_study,
   const std::string& group_name = trial->GetGroupNameWithoutActivation();
   int experiment_index = processed_study.GetExperimentIndexByName(group_name);
   // If the chosen experiment was not found in the study, simply return.
-  // Although not normally expected, but could happen in exception cases, see
-  // tests: ExpiredStudy_NoDefaultGroup, ExistingFieldTrial_ExpiredByConfig
+  // Although not normally expected, but could happen if the trial was forced
+  // on the command line.
   if (experiment_index == -1)
     return;
 
@@ -159,10 +190,7 @@ void RegisterFeatureOverrides(const ProcessedStudy& processed_study,
   // Associate features for groups that do not specify them manually (e.g.
   // "Default" group), so that such groups are reported.
   if (!experiment.has_feature_association()) {
-    for (const auto& feature_name : processed_study.associated_features()) {
-      feature_list->RegisterFieldTrialOverride(
-          feature_name, base::FeatureList::OVERRIDE_USE_DEFAULT, trial);
-    }
+    AssociateDefaultFeatures(study, trial, feature_list);
   }
 }
 
@@ -187,6 +215,23 @@ bool ShouldForceExperiment(const Study::Experiment& experiment,
   return false;
 }
 
+// Creates a placeholder trial that indicates the feature conflict.
+//
+// This forcibly associates |trial_name| with the |kFeatureConflictGroupName|
+// group, which indicates the trial was not applied due to a feature conflict.
+// This group has no features, params, or variation IDs associated with it.
+//
+// Trials may be associated with this group due to toggling flags in
+// chrome://flags that are associated with the trial's features, or if there
+// are different trials associated with the same feature.
+void CreateTrialWithFeatureConflictGroup(const std::string& trial_name) {
+  base::FieldTrial* trial = base::FieldTrialList::CreateFieldTrial(
+      trial_name, internal::kFeatureConflictGroupName);
+  DCHECK(trial);
+  // Activate immediately to make the conflict obvious in metrics logs.
+  trial->Activate();
+}
+
 }  // namespace
 
 VariationsSeedProcessor::VariationsSeedProcessor() = default;
@@ -197,41 +242,32 @@ void VariationsSeedProcessor::CreateTrialsFromSeed(
     const VariationsSeed& seed,
     const ClientFilterableState& client_state,
     const UIStringOverrideCallback& override_callback,
-    const base::FieldTrial::EntropyProvider* low_entropy_provider,
+    const EntropyProviders& entropy_providers,
     base::FeatureList* feature_list) {
   base::UmaHistogramCounts1000("Variations.AppliedSeed.StudyCount",
                                seed.study().size());
-  std::vector<ProcessedStudy> filtered_studies;
-  VariationsLayers layers(seed, low_entropy_provider);
-  FilterAndValidateStudies(seed, client_state, layers, &filtered_studies);
+  VariationsLayers layers(seed, entropy_providers);
+  std::vector<ProcessedStudy> filtered_studies =
+      FilterAndValidateStudies(seed, client_state, layers);
   SetSeedVersion(seed.version());
 
   for (const ProcessedStudy& study : filtered_studies) {
-    CreateTrialFromStudy(study, override_callback, low_entropy_provider,
+    CreateTrialFromStudy(study, override_callback, entropy_providers, layers,
                          feature_list);
   }
-}
-
-// static
-bool VariationsSeedProcessor::ShouldStudyUseLowEntropy(const Study& study) {
-  // This should be kept in sync with the server-side layer validation
-  // code: https://go/chrome-variations-layer-validation
-  for (int i = 0; i < study.experiment_size(); ++i) {
-    const Study::Experiment& experiment = study.experiment(i);
-    if (experiment.has_google_web_experiment_id() ||
-        experiment.has_google_web_trigger_experiment_id() ||
-        experiment.has_chrome_sync_experiment_id()) {
-      return true;
-    }
-  }
-  return false;
 }
 
 void VariationsSeedProcessor::CreateTrialFromStudy(
     const ProcessedStudy& processed_study,
     const UIStringOverrideCallback& override_callback,
-    const base::FieldTrial::EntropyProvider* low_entropy_provider,
+    const EntropyProviders& entropy_providers,
+    const VariationsLayers& layers,
     base::FeatureList* feature_list) {
+  // Since trials and features can come from many different sources (variations
+  // seed, about://flags, and command line), there are special cases for when
+  // they conflict with each other. See the following doc:
+  // https://docs.google.com/document/d/1PAlx0KyjRwLJsmkIWlZMgZ-R422Oetgxa3ZPq0Q98aQ
+
   const Study& study = *processed_study.study();
 
   // If the trial already exists, check if the selected group exists in the
@@ -242,13 +278,45 @@ void VariationsSeedProcessor::CreateTrialFromStudy(
         existing_trial->GetGroupNameWithoutActivation());
     if (experiment_index == -1)
       return;
+    // If the selected group exists in |processed_study|, then there may be some
+    // variation ids, params, and features to pick up, so do not return early.
+    // For example, if a user specifies the command line flag
+    // "--force-fieldtrials=Study/Enabled" and the variations seed includes
+    // a "Study" trial with an "Enabled" group that specifies features or other
+    // details, then use those details, even though they were not directly
+    // specified on the command line.
+  } else {
+    // If an experiment group in the study specifies a feature that is already
+    // associated with another trial, forcibly select the
+    // |kFeatureConflictGroupName| group to indicate a conflict. Usually, the
+    // server-side enforces that no two studies enable/disable the same feature,
+    // but this might happen from the client-side, such as through flags or
+    // through the command line.
+    //
+    // Only check for this if the trial does not already exist. If it already
+    // exists, then we cannot create the |kFeatureConflictGroupName| group for
+    // it.
+    for (const Study::Experiment& experiment : study.experiment()) {
+      const auto& features = experiment.feature_association();
+      for (const std::string& feature_name : features.enable_feature()) {
+        if (feature_list->HasAssociatedFieldTrialByFeatureName(feature_name)) {
+          CreateTrialWithFeatureConflictGroup(study.name());
+          return;
+        }
+      }
+      for (const std::string& feature_name : features.disable_feature()) {
+        if (feature_list->HasAssociatedFieldTrialByFeatureName(feature_name)) {
+          CreateTrialWithFeatureConflictGroup(study.name());
+          return;
+        }
+      }
+    }
   }
 
   // Check if any experiments need to be forced due to a command line
   // flag. Force the first experiment with an existing flag.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  for (int i = 0; i < study.experiment_size(); ++i) {
-    const Study::Experiment& experiment = study.experiment(i);
+  for (const auto& experiment : study.experiment()) {
     if (ShouldForceExperiment(experiment, *command_line, *feature_list)) {
       base::FieldTrial* trial = base::FieldTrialList::CreateFieldTrial(
           study.name(), experiment.name());
@@ -278,34 +346,18 @@ void VariationsSeedProcessor::CreateTrialFromStudy(
   if (processed_study.total_probability() <= 0)
     return;
 
-  uint32_t randomization_seed = 0;
-  base::FieldTrial::RandomizationType randomization_type =
-      base::FieldTrial::SESSION_RANDOMIZED;
-  if (study.has_consistency() &&
-      study.consistency() == Study_Consistency_PERMANENT &&
-      // If all assignments are to a single group, no need to enable one time
-      // randomization (which is more expensive to compute), since the result
-      // will be the same.
-      !processed_study.all_assignments_to_one_group()) {
-    randomization_type = base::FieldTrial::ONE_TIME_RANDOMIZED;
-    if (study.has_randomization_seed())
-      randomization_seed = study.randomization_seed();
-  }
+  const auto& entropy_provider =
+      processed_study.SelectEntropyProviderForStudy(entropy_providers, layers);
 
-  // The trial is created without specifying an expiration date because the
-  // expiration check in field_trial.cc is based on the build date. Instead,
-  // the expiration check using |reference_date| is done explicitly below.
   scoped_refptr<base::FieldTrial> trial(
-      base::FieldTrialList::FactoryGetFieldTrialWithRandomizationSeed(
+      base::FieldTrialList::FactoryGetFieldTrial(
           study.name(), processed_study.total_probability(),
-          processed_study.GetDefaultExperimentName(), randomization_type,
-          randomization_seed, nullptr,
-          ShouldStudyUseLowEntropy(study) ? low_entropy_provider : nullptr));
+          processed_study.GetDefaultExperimentName(), entropy_provider,
+          study.randomization_seed()));
 
   bool has_overrides = false;
   bool enables_or_disables_features = false;
-  for (int i = 0; i < study.experiment_size(); ++i) {
-    const Study::Experiment& experiment = study.experiment(i);
+  for (const auto& experiment : study.experiment()) {
     RegisterExperimentParams(study, experiment);
 
     // Groups with forcing flags have probability 0 and will never be selected.
@@ -329,8 +381,6 @@ void VariationsSeedProcessor::CreateTrialFromStudy(
   }
 
   trial->SetForced();
-  if (processed_study.is_expired())
-    trial->Disable();
 
   if (enables_or_disables_features)
     RegisterFeatureOverrides(processed_study, trial.get(), feature_list);
@@ -349,8 +399,8 @@ void VariationsSeedProcessor::CreateTrialFromStudy(
     // UI Strings can only be overridden from ACTIVATE_ON_STARTUP experiments.
     int experiment_index = processed_study.GetExperimentIndexByName(group_name);
     // If the chosen experiment was not found in the study, simply return.
-    // Although not normally expected, but could happen in exception cases, see
-    // tests: ExpiredStudy_NoDefaultGroup, ExistingFieldTrial_ExpiredByConfig
+    // Although not normally expected, but could happen if the trial was forced
+    // on the command line.
     if (experiment_index != -1) {
       ApplyUIStringOverrides(study.experiment(experiment_index),
                              override_callback);

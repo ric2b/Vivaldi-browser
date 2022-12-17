@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Modifiko skedarin}other{Modifiko skedarët}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Drejtimi i çelësit</translation>
+<translation id="3294437725009624529">Vizitor</translation>
 <translation id="3310640316857623290">Vonesa e DNS-së është shumë më lart se pragu i lejueshëm</translation>
 <translation id="3328783797891415197">Testi është në ekzekutim</translation>
 <translation id="3340011300870565703">Pajisja ka <ph name="BATTERY_PERCENTAGE" />% bateri në kufjen e djathtë.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Mos e shkëput këtë pajisje të jashtme dhe mos e fik kompjuterin gjatë përditësimit të firmuerit. Mund ta minimizosh këtë dritare. Ky përditësim mund të zgjasë disa minuta dhe pajisja jote e jashtme mund të mos funksionojë gjatë kësaj kohe.</translation>
 <translation id="3486220673238053218">përkufizimi</translation>
 <translation id="3488065109653206955">I aktivizuar pjesërisht</translation>
+<translation id="3510890413042482857">Dërgo <ph name="BEGIN_LINK1" />të dhënat e gjurmimit të performancës<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Përditësim: ChromeOS</translation>
 <translation id="3527036260304016759">Dështoi - Gabim i panjohur</translation>
 <translation id="3532980081107202182">Rreth <ph name="MIN_REMAINING" /> minuta të mbetura</translation>
@@ -467,6 +469,7 @@
 <translation id="5502931783115429516">Android nuk po punon</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Kalo automatikisht te tema e errët në perëndim të diellit</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Skano përsëri</translation>
 <translation id="5583640892426849032">Hapësirë prapa</translation>

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,7 +97,7 @@ struct EntityData {
   bool is_deleted() const { return specifics.ByteSize() == 0; }
 
   // Dumps all info into a DictionaryValue and returns it.
-  base::Value::Dict ToDictionaryValue();
+  base::Value::Dict ToDictionaryValue() const;
 
   // Returns the estimate of dynamically allocated memory in bytes.
   size_t EstimateMemoryUsage() const;

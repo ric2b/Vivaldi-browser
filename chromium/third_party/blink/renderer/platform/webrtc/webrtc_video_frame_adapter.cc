@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "base/dcheck_is_on.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_restrictions.h"
+#include "cc/trees/raster_context_provider_wrapper.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
@@ -19,8 +20,8 @@
 #include "media/renderers/video_frame_rgba_to_yuva_converter.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/graphics/web_graphics_context_3d_video_frame_pool.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/webrtc/convert_to_webrtc_video_frame_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/webrtc/rtc_base/ref_counted_object.h"
@@ -43,7 +44,11 @@ bool IsApproxEquals(const gfx::Rect& a, const gfx::Rect& b) {
 static void CreateContextProviderOnMainThread(
     scoped_refptr<viz::RasterContextProvider>* result,
     base::WaitableEvent* waitable_event) {
-  *result = blink::Platform::Current()->SharedCompositorWorkerContextProvider();
+  scoped_refptr<cc::RasterContextProviderWrapper> worker_context_provider =
+      blink::Platform::Current()->SharedCompositorWorkerContextProvider(
+          nullptr);
+  if (worker_context_provider)
+    *result = worker_context_provider->GetContext();
   waitable_event->Signal();
 }
 
@@ -180,7 +185,8 @@ WebRtcVideoFrameAdapter::SharedResources::GetRasterContextProvider() {
   // Recreate the context provider.
   base::WaitableEvent waitable_event;
   PostCrossThreadTask(
-      *Thread::MainThread()->GetDeprecatedTaskRunner(), FROM_HERE,
+      *Thread::MainThread()->GetTaskRunner(MainThreadTaskRunnerRestricted()),
+      FROM_HERE,
       CrossThreadBindOnce(&CreateContextProviderOnMainThread,
                           CrossThreadUnretained(&raster_context_provider_),
                           CrossThreadUnretained(&waitable_event)));
@@ -264,9 +270,9 @@ WebRtcVideoFrameAdapter::SharedResources::ConstructVideoFrameFromTexture(
         // copying only the necessary part.
         if (dst_frame->visible_rect() != source_frame->visible_rect() ||
             dst_frame->natural_size() != source_frame->natural_size()) {
-          const auto format = dst_frame->format();
+          const auto dst_format = dst_frame->format();
           dst_frame = media::VideoFrame::WrapVideoFrame(
-              std::move(dst_frame), format, source_frame->visible_rect(),
+              std::move(dst_frame), dst_format, source_frame->visible_rect(),
               source_frame->natural_size());
           DCHECK(dst_frame);
         }

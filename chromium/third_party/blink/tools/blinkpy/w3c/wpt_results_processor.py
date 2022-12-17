@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Process WPT results for upload to ResultDB."""
@@ -66,6 +66,7 @@ class WPTResultsProcessor(object):
         self.results_dir = results_dir
         self.sink = sink or ResultSinkReporter()
         self.wpt_manifest = self.port.wpt_manifest('external/wpt')
+        self.internal_manifest = self.port.wpt_manifest('wpt_internal')
         self.path_finder = path_finder.PathFinder(self.fs)
         # Provide placeholder properties until the wptreport is processed.
         self.run_info = dict(mozinfo.info)
@@ -180,21 +181,12 @@ class WPTResultsProcessor(object):
                 raw_results_path) as results_file:
             results = json.load(results_file)
 
-        # wptrunner test names exclude the "external/wpt" prefix. Here, we
-        # reintroduce the prefix to create valid paths relative to the web test
-        # root directory in the Chromium source tree.
-        tests = results['tests']
-        prefix_components = self.path_finder.wpt_prefix().split(self.fs.sep)
-        for component in reversed(prefix_components):
-            if component:
-                tests = {component: tests}
-        results['tests'] = tests
         metadata = results.get('metadata') or {}
         test_names = self._extract_artifacts(
             results['tests'],
             delim=results['path_delimiter'],
-            # Unlike the "external/wpt" prefix, this prefix does not actually
-            # exist on disk and only affects how the results are reported.
+            # This prefix does not actually exist on disk and only affects
+            # how the results are reported.
             test_name_prefix=metadata.get('test_name_prefix', ''))
         _log.info('Extracted artifacts for %d tests', len(test_names))
 
@@ -291,21 +283,25 @@ class WPTResultsProcessor(object):
         Raises:
             ValueError: If the expected metadata was unreadable or unparsable.
         """
-        # When looking into the WPT manifest, we omit "external/wpt" from the
-        # web test name, since that part of the path is only relevant in
-        # Chromium.
-        wpt_name = self.path_finder.strip_wpt_path(test_name)
-        # TODO(crbug.com/1299650): Support virtual tests and metadata fallback.
-        test_file_subpath = self.wpt_manifest.file_path_for_test_url(wpt_name)
+        if self.path_finder.is_wpt_internal_path(test_name):
+            test_file_subpath = self.internal_manifest.file_path_for_test_url(
+                test_name[len('wpt_internal/'):])
+            metadata_root = self.path_finder.path_from_web_tests(
+                'wpt_internal')
+        else:
+            # TODO(crbug.com/1299650): Support virtual tests and metadata fallback.
+            test_file_subpath = self.wpt_manifest.file_path_for_test_url(
+                test_name)
+            metadata_root = self.path_finder.path_from_web_tests(
+                'external', 'wpt')
         if not test_file_subpath:
             raise ValueError('test ID did not resolve to a file')
-        metadata_root = self.path_finder.wpt_tests_dir()
         manifest = manifestexpected.get_manifest(metadata_root,
                                                  test_file_subpath, '/',
                                                  self.run_info)
         if not manifest:
             raise ValueError('unable to read ".ini" file from disk')
-        test_manifest = manifest.get_test('/' + wpt_name)
+        test_manifest = manifest.get_test('/' + test_name)
         if not test_manifest:
             raise ValueError('test ID does not exist')
         return wptmanifest.serialize(test_manifest.node)
@@ -398,13 +394,9 @@ class WPTResultsProcessor(object):
                 url = url[1:]
             image_bytes = base64.b64decode(printable_image.strip())
 
-            # When comparing the test name to the image URL, we omit
-            # "external/wpt" from the test name, since that part of the path is
-            # only relevant in Chromium.
-            wpt_name = self.path_finder.strip_wpt_path(test_name)
             screenshot_key = 'expected_image'
             file_suffix = test_failures.FILENAME_SUFFIX_EXPECTED
-            if wpt_name == url:
+            if test_name == url:
                 screenshot_key = 'actual_image'
                 file_suffix = test_failures.FILENAME_SUFFIX_ACTUAL
                 actual_image_bytes = image_bytes
@@ -498,7 +490,6 @@ class WPTResultsProcessor(object):
             text=False,
         )
 
-
     def _add_result_to_sink(self, node, test_name, test_name_prefix=''):
         """Add test results to the result sink."""
         actual_statuses = node['actual'].split()
@@ -515,25 +506,26 @@ class WPTResultsProcessor(object):
         for name, paths in (node.get('artifacts') or {}).items():
             for path in paths:
                 artifacts.AddArtifact(name, path)
-        test_path = self.fs.join(self.web_tests_dir,
-                                 _remove_query_params(test_name))
+        if self.path_finder.is_wpt_internal_path(test_name):
+            test_path = self.fs.join(self.web_tests_dir,
+                                     _remove_query_params(test_name))
+        else:
+            test_path = self.fs.join(self.web_tests_dir, 'external', 'wpt',
+                                     _remove_query_params(test_name))
 
         for iteration, (actual,
                         duration) in enumerate(zip(actual_statuses,
                                                    durations)):
-            # Test timeouts are a special case of aborts. We must report "ABORT"
-            # to result sink for tests that timed out.
-            if actual == 'TIMEOUT':
-                actual = 'ABORT'
-
             result = Result(
                 name=test_name,
                 actual=actual,
-                started=self.host.time() - duration,
+                started=(self.host.time() - duration),
                 took=duration,
                 worker=0,
+                # The expected statuses here are actually the web test/wptrunner
+                # ones, unlike `actual`, which is a ResultDB status.
                 expected=expected,
-                unexpected=actual not in expected,
+                unexpected=(actual not in expected),
                 flaky=flaky,
                 # TODO(crbug/1314847): wptrunner merges output from all runs
                 # together. Until it outputs per-test-run artifacts instead, we
@@ -568,36 +560,58 @@ class WPTResultsProcessor(object):
         # Delete the current node if empty.
         return len(current_node) == 0
 
-    def _get_wpt_revision(self):
-        version_path = self.fs.join(self.web_tests_dir, 'external', 'Version')
-        target = 'Version:'
-        with self.fs.open_text_file_for_reading(version_path) as version_file:
-            for line in version_file:
-                if line.startswith(target):
-                    rev = line[len(target):].strip()
-                    return rev
-        return None
-
     def process_wpt_report(self, report_path):
         """Process and upload a wpt report to result sink."""
         with self.fs.open_text_file_for_reading(report_path) as report_file:
-            report = json.load(report_file)
-        rev = self._get_wpt_revision()
-        # Update with upstream revision
-        if rev:
-            report['run_info']['revision'] = rev
+            report = json.loads(next(report_file))
+            for retry_report in map(json.loads, report_file):
+                report['results'].extend(retry_report['results'])
         report_filename = self.fs.basename(report_path)
         artifact_path = self.fs.join(self.artifacts_dir, report_filename)
+        if not report['run_info'].get('used_upstream'):
+            report['results'] = self._compact_wpt_results(report['results'])
         with self.fs.open_text_file_for_writing(artifact_path) as report_file:
-            json.dump(report, report_file)
-
+            json.dump(report, report_file, separators=(',', ':'))
         self.run_info.update(report['run_info'])
         _log.info('Processed wpt report (%s -> %s)', report_path,
                   artifact_path)
-        artifact = {
+        self.sink.report_invocation_level_artifacts({
             report_filename: {
                 'filePath': artifact_path,
             },
-        }
-        self.sink.report_invocation_level_artifacts(artifact)
-        return artifact_path
+        })
+
+    def _compact_wpt_results(self, results):
+        """Remove nonessential fields from wptreport (sub)tests.
+
+        Fields unnecessary for updating metadata include:
+           * 'message': Informational messages like stack traces.
+           * 'expected': When omitted, implies the test ran as expected.
+             Expected results are still included because the updater removes
+             stale expectations by default.
+           * 'known_intermittent': When omitted, no intermittent statuses are
+              expected.
+           * 'duration': Time taken to run the test.
+
+        See Also:
+            https://github.com/web-platform-tests/wpt/blob/131b8a541ba98afcef35ae757e4fb2f805714230/tools/wptrunner/wptrunner/metadata.py#L439-L450
+            https://github.com/web-platform-tests/wpt.fyi/blob/8bf23a6f68d18acab002aa6a613fc5660afb0a85/webapp/components/test-file-results-table.js#L240-L283
+        """
+        compact_results = []
+        for result in results:
+            compact_result = {'status': result['status']}
+            expected = result.get('expected')
+            if expected and expected != result['status']:
+                compact_result['expected'] = expected
+            intermittent = result.get('known_intermittent')
+            if intermittent:
+                compact_result['known_intermittent'] = intermittent
+            test_id = result.get('test')
+            if test_id:
+                compact_result['test'] = test_id
+                compact_result['subtests'] = self._compact_wpt_results(
+                    result['subtests'])
+            else:
+                compact_result['name'] = result['name']  # Subtest detected
+            compact_results.append(compact_result)
+        return compact_results

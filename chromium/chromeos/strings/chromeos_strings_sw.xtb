@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Badilisha faili}other{Badilisha faili}}</translation>
 <translation id="3286515922899063534">GHz <ph name="CURRENT" /></translation>
 <translation id="3291996639387199448">Uelekeo wa ufunguo</translation>
+<translation id="3294437725009624529">Mgeni</translation>
 <translation id="3310640316857623290">Muda wa kusubiri wa DNS umezidi zaidi kiwango cha juu kinachoruhusiwa</translation>
 <translation id="3328783797891415197">Jaribio linatekelezwa</translation>
 <translation id="3340011300870565703">Kiwango cha chaji cha spika ya masikioni ya kulia ni asilimia <ph name="BATTERY_PERCENTAGE" />.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Usichomoe kifaa hiki cha nje wala usizime kompyuta yako programu dhibiti ikisasishwa. Unaweza kupunguza kidirisha hiki. Sasisho hili linaweza kuchukua dakika chache na kifaa chako cha nje huenda kisifanye kazi kwa wakati huu.</translation>
 <translation id="3486220673238053218">ufafanuzi</translation>
 <translation id="3488065109653206955">Imaeamilisha kidogo</translation>
+<translation id="3510890413042482857">Tuma <ph name="BEGIN_LINK1" />data ya ufuatiliaji wa utendaji<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Sasisho la ChromeOS</translation>
 <translation id="3527036260304016759">Haijakamilika - Hitilafu isiyojulikana</translation>
 <translation id="3532980081107202182">Zimesalia takriban dakika <ph name="MIN_REMAINING" /></translation>
@@ -467,6 +469,7 @@
 <translation id="5502931783115429516">Android haifanyi kazi</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Badilisha kiotomatiki kuwa mandhari meusi wakati wa machweo</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Changanua upya</translation>
 <translation id="5583640892426849032">Backspace</translation>

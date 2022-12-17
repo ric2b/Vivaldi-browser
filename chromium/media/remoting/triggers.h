@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -85,8 +85,11 @@ enum StopTrigger {
   // User changing setting forcing shutdown.
   USER_DISABLED = 23,  // Media Remoting was disabled by user.
 
+  // Media element was frozen (e.g. page was navigated away).
+  MEDIA_ELEMENT_FROZEN = 25,
+
   // Change this to the highest value.
-  STOP_TRIGGER_MAX = 24,
+  STOP_TRIGGER_MAX = MEDIA_ELEMENT_FROZEN,
 };
 
 }  // namespace remoting

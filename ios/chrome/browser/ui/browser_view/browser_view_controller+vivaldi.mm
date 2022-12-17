@@ -34,13 +34,13 @@ NoteInteractionController* _noteInteractionController;
 - (void)showNotesManager:(Browser*)browser
         parentController:(BrowserViewController*)bvc{
     if (_noteInteractionController) {
-        [_noteInteractionController presentNotes];
+        [_noteInteractionController showNotes];
         return;
    }
    _noteInteractionController =
       [[NoteInteractionController alloc] initWithBrowser:browser
                                             parentController:bvc];
-   [_noteInteractionController presentNotes];
+   [_noteInteractionController showNotes];
 }
 
 - (void)onCopy:(UIMenuController*)sender {
@@ -68,7 +68,6 @@ NoteInteractionController* _noteInteractionController;
     MDCSnackbarMessage* message = [MDCSnackbarMessage messageWithText:text];
     message.accessibilityLabel = text;
     message.duration = 2.0;
-    // TODO [[self getCommandDispatcher] showSnackbarMessage:[self getSnackbarCategory]];
 }
 
 - (void)dismissNoteController{

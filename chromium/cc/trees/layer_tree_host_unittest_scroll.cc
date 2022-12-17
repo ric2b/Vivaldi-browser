@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -2567,6 +2567,14 @@ class LayerTreeHostScrollTestImplSideInvalidation
     }
   }
 
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    // If the third main frame was sent before the second main frame finished
+    // commit, then the impl side invalidation flag set in
+    // DidSendBeginMainFrameOnThread got clobbered, so set it again here.
+    if (++num_of_commits_ == 2 && num_of_main_frames_ == 3)
+      host_impl->RequestImplSideInvalidationForCheckerImagedTiles();
+  }
+
   void BeginMainFrameAbortedOnThread(
       LayerTreeHostImpl* host_impl,
       CommitEarlyOutReason reason,
@@ -2635,6 +2643,7 @@ class LayerTreeHostScrollTestImplSideInvalidation
   // Impl thread.
   int num_of_activations_ = 0;
   int num_of_main_frames_ = 0;
+  int num_of_commits_ = 0;
   bool invalidated_on_impl_thread_ = false;
   raw_ptr<CompletionEvent> impl_side_invalidation_event_ = nullptr;
 
@@ -2643,6 +2652,69 @@ class LayerTreeHostScrollTestImplSideInvalidation
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostScrollTestImplSideInvalidation);
+
+class LayerTreeHostScrollTestMainRepaint : public LayerTreeHostScrollTest {
+ public:
+  void SetupTree() override {
+    LayerTreeHostScrollTest::SetupTree();
+    GetViewportScrollNode()->main_thread_scrolling_reasons =
+        MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects;
+  }
+
+  void UpdateLayerTreeHost() override {
+    if (layer_tree_host()->SourceFrameNumber() == 1)
+      GetViewportScrollNode()->main_thread_scrolling_reasons =
+          MainThreadScrollingReason::kNotScrollingOnMain;
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
+    int frame_number = host_impl->active_tree()->source_frame_number();
+    InputHandler& input_handler = host_impl->GetInputHandler();
+
+    if (frame_number == 0) {
+      EXPECT_EQ(SAME_PRIORITY_FOR_BOTH_TREES, host_impl->GetTreePriority());
+      DoScrollBeginAndUpdate(input_handler);
+
+      // In frame 0, scroll node has main_thread_scrolling_reasons. Do not
+      // prioritize smoothness, since we need to repaint on the main thread for
+      // the user to see the scroll.
+      EXPECT_EQ(SAME_PRIORITY_FOR_BOTH_TREES, host_impl->GetTreePriority());
+      input_handler.ScrollEnd();
+      PostSetNeedsCommitToMainThread();
+    }
+
+    if (frame_number == 1) {
+      EXPECT_EQ(SAME_PRIORITY_FOR_BOTH_TREES, host_impl->GetTreePriority());
+      DoScrollBeginAndUpdate(input_handler);
+
+      // In frame 1, we have cleared the main_thread_scrolling_reasons.
+      // Prioritize smoothness.
+      EXPECT_EQ(SMOOTHNESS_TAKES_PRIORITY, host_impl->GetTreePriority());
+      input_handler.ScrollEnd();
+      EndTest();
+    }
+  }
+
+ private:
+  ScrollNode* GetViewportScrollNode() {
+    LayerTreeHost* host = layer_tree_host();
+    ElementId viewport_element_id = host->OuterViewportScrollElementId();
+    ScrollTree& scroll_tree = host->property_trees()->scroll_tree_mutable();
+    return scroll_tree.FindNodeFromElementId(viewport_element_id);
+  }
+
+  void DoScrollBeginAndUpdate(InputHandler& input_handler) {
+    input_handler.ScrollBegin(
+        BeginState(gfx::Point(), gfx::Vector2dF(0, 10)).get(),
+        ui::ScrollInputType::kTouchscreen);
+    input_handler.ScrollUpdate(
+        UpdateState(gfx::Point(), gfx::Vector2dF(0, 10)).get());
+  }
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostScrollTestMainRepaint);
 
 class NonScrollingNonFastScrollableRegion : public LayerTreeHostScrollTest {
  public:
@@ -3042,5 +3114,70 @@ class PreventRecreatingTilingDuringScroll : public LayerTreeHostScrollTest {
 };
 
 MULTI_THREAD_TEST_F(PreventRecreatingTilingDuringScroll);
+
+class CommitWithoutSynchronizingScrollOffsets : public LayerTreeHostScrollTest {
+ public:
+  CommitWithoutSynchronizingScrollOffsets() {}
+
+  void BeginTest() override {}
+
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    LayerTreeHostScrollTest::InitializeSettings(settings);
+    settings->skip_commits_if_not_synchronizing_compositor_state = false;
+  }
+
+  void WillBeginMainFrame() override {
+    Layer* scroll_layer =
+        layer_tree_host()->OuterViewportScrollLayerForTesting();
+
+    switch (layer_tree_host()->SourceFrameNumber()) {
+      case 0:
+        break;
+      case 1:
+        ASSERT_TRUE(layer_tree_host()->IsDeferringCommits());
+        EXPECT_POINTF_EQ(gfx::PointF(0, 0), CurrentScrollOffset(scroll_layer));
+        layer_tree_host()->SetNeedsCommit();
+        layer_tree_host()->StopDeferringCommits(
+            PaintHoldingCommitTrigger::kTimeoutFCP);
+        break;
+      case 2:
+        EXPECT_POINTF_EQ(gfx::PointF(10, 10),
+                         CurrentScrollOffset(scroll_layer));
+        EndTest();
+        break;
+      default:
+        break;
+    }
+  }
+
+  void WillActivateTreeOnThread(LayerTreeHostImpl* impl) override {
+    LayerImpl* scroll_layer =
+        impl->pending_tree()->OuterViewportScrollLayerForTesting();
+    if (impl->sync_tree()->source_frame_number() == 0) {
+      ASSERT_EQ(gfx::PointF(0, 0), CurrentScrollOffset(scroll_layer));
+    } else {
+      ASSERT_EQ(gfx::PointF(10, 10), CurrentScrollOffset(scroll_layer));
+    }
+  }
+
+  void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
+    if (impl->active_tree()->source_frame_number() != 0)
+      return;
+
+    // Ask the main thread to defer commits so the state is deferred before the
+    // next BeginMainFrame.
+    PostDeferringCommitsStatusToMainThread(true);
+
+    // Initiate a scroll on the compositor thread.
+    LayerImpl* scroll_layer =
+        impl->active_tree()->OuterViewportScrollLayerForTesting();
+    scroll_layer->ScrollBy(gfx::Vector2dF(10, 10));
+    ASSERT_EQ(gfx::PointF(10, 10), CurrentScrollOffset(scroll_layer));
+    PostSetNeedsCommitToMainThread();
+  }
+};
+
+MULTI_THREAD_TEST_F(CommitWithoutSynchronizingScrollOffsets);
+
 }  // namespace
 }  // namespace cc

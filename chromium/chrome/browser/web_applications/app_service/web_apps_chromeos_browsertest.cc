@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,10 +66,6 @@ IN_PROC_BROWSER_TEST_F(WebAppsChromeOsBrowserTest, ShortcutIcons) {
   const web_app::AppId app_id =
       web_app::InstallWebAppFromPage(browser(), app_url);
   LaunchWebAppBrowser(app_id);
-
-  // Wait for app service to see the newly installed app.
-  apps::AppServiceProxyFactory::GetForProfile(profile())
-      ->FlushMojoCallsForTesting();
 
   std::unique_ptr<ui::SimpleMenuModel> menu_model;
   {

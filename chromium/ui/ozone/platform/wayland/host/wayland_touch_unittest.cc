@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,11 +43,6 @@ ACTION_P(CloneEvent, ptr) {
   *ptr = arg0->Clone();
 }
 
-bool CompareFloat(float a, float b) {
-  constexpr float kEpsilon = std::numeric_limits<float>::epsilon();
-  return std::isnan(a) ? std::isnan(b) : fabs(a - b) < kEpsilon;
-}
-
 }  // namespace
 
 class WaylandTouchTest : public WaylandTest {
@@ -86,10 +81,19 @@ class WaylandTouchTest : public WaylandTest {
 
     auto* touch_event = event->AsTouchEvent();
     EXPECT_EQ(event_type, touch_event->type());
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    // These checks rely on the Exo-only protocol zcr_touch_stylus_v2 [1]
+    // at //t_p/wayland-protocols/unstable/stylus/stylus-unstable-v2.xml
+    auto compare_float = [](float a, float b) -> bool {
+      constexpr float kEpsilon = std::numeric_limits<float>::epsilon();
+      return std::isnan(a) ? std::isnan(b) : fabs(a - b) < kEpsilon;
+    };
+
     EXPECT_EQ(pointer_type, touch_event->pointer_details().pointer_type);
-    EXPECT_TRUE(CompareFloat(force, touch_event->pointer_details().force));
-    EXPECT_TRUE(CompareFloat(tilt_x, touch_event->pointer_details().tilt_x));
-    EXPECT_TRUE(CompareFloat(tilt_y, touch_event->pointer_details().tilt_y));
+    EXPECT_TRUE(compare_float(force, touch_event->pointer_details().force));
+    EXPECT_TRUE(compare_float(tilt_x, touch_event->pointer_details().tilt_x));
+    EXPECT_TRUE(compare_float(tilt_y, touch_event->pointer_details().tilt_y));
+#endif
   }
 
   raw_ptr<wl::TestTouch> touch_;
@@ -299,7 +303,7 @@ TEST_P(WaylandTouchTest, KeyboardFlagsSet) {
 
   std::unique_ptr<char, base::FreeDeleter> keymap_string(
       xkb_keymap_get_as_string(xkb_keymap.get(), XKB_KEYMAP_FORMAT_TEXT_V1));
-  DCHECK(keymap_string.get());
+  ASSERT_TRUE(keymap_string.get());
   size_t keymap_size = strlen(keymap_string.get()) + 1;
 
   base::UnsafeSharedMemoryRegion shared_keymap_region =
@@ -308,7 +312,7 @@ TEST_P(WaylandTouchTest, KeyboardFlagsSet) {
   base::subtle::PlatformSharedMemoryRegion platform_shared_keymap =
       base::UnsafeSharedMemoryRegion::TakeHandleForSerialization(
           std::move(shared_keymap_region));
-  DCHECK(shared_keymap.IsValid());
+  ASSERT_TRUE(shared_keymap.IsValid());
 
   memcpy(shared_keymap.memory(), keymap_string.get(), keymap_size);
   wl_keyboard_send_keymap(

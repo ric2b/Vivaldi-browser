@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,7 @@ class ASH_EXPORT SavedDeskDialogController : public views::WidgetObserver {
   void ShowUnsupportedAppsDialog(
       aura::Window* root_window,
       const std::vector<aura::Window*>& unsupported_apps,
+      size_t incognito_window_count,
       DesksController::GetDeskTemplateCallback callback,
       std::unique_ptr<DeskTemplate> desk_template);
   void ShowReplaceDialog(aura::Window* root_window,

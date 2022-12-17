@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -127,19 +127,22 @@ public class EphemeralTabMediator {
             }
 
             @Override
-            public void didFinishNavigation(NavigationHandle navigation) {
-                if (navigation.isInPrimaryMainFrame()) {
-                    if (navigation.hasCommitted()) {
-                        mIsOnErrorPage = navigation.isErrorPage();
-                        mSheetContent.updateURL(mWebContents.get().getVisibleUrl());
-                    } else {
-                        // Not viewable contents such as download. Show a toast and close the tab.
-                        Toast.makeText(ContextUtils.getApplicationContext(),
-                                     R.string.ephemeral_tab_sheet_not_viewable, Toast.LENGTH_SHORT)
-                                .show();
-                        mBottomSheetController.hideContent(mSheetContent, /* animate= */ true);
-                    }
+            public void didFinishNavigationInPrimaryMainFrame(NavigationHandle navigation) {
+                if (navigation.hasCommitted()) {
+                    mIsOnErrorPage = navigation.isErrorPage();
+                    mSheetContent.updateURL(mWebContents.get().getVisibleUrl());
+                } else {
+                    // Not viewable contents such as download. Show a toast and close the tab.
+                    Toast.makeText(ContextUtils.getApplicationContext(),
+                                 R.string.ephemeral_tab_sheet_not_viewable, Toast.LENGTH_SHORT)
+                            .show();
+                    mBottomSheetController.hideContent(mSheetContent, /* animate= */ true);
                 }
+            }
+
+            @Override
+            public void didFinishNavigationNoop(NavigationHandle navigation) {
+                if (navigation.isInPrimaryMainFrame()) return;
             }
         };
     }

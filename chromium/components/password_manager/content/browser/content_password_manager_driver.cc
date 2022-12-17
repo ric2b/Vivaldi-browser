@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -124,11 +124,11 @@ int ContentPasswordManagerDriver::GetId() const {
   return id_;
 }
 
-void ContentPasswordManagerDriver::FillPasswordForm(
+void ContentPasswordManagerDriver::SetPasswordFillData(
     const autofill::PasswordFormFillData& form_data) {
   password_autofill_manager_.OnAddPasswordFillData(form_data);
   if (const auto& agent = GetPasswordAutofillAgent()) {
-    agent->FillPasswordForm(autofill::MaybeClearPasswordValues(form_data));
+    agent->SetPasswordFillData(autofill::MaybeClearPasswordValues(form_data));
   }
 }
 
@@ -373,7 +373,7 @@ void ContentPasswordManagerDriver::RecordSavePasswordProgress(
   // chrome://password-manager-internals based debugging.
   if (GetLastCommittedURL().SchemeIs(content::kChromeUIScheme))
     return;
-  client_->GetLogManager()->LogTextMessage(log);
+  LOG_AF(client_->GetLogManager()) << log;
 }
 
 void ContentPasswordManagerDriver::UserModifiedPasswordField() {

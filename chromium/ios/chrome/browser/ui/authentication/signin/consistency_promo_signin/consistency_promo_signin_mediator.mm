@@ -1,18 +1,21 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/authentication/signin/consistency_promo_signin/consistency_promo_signin_mediator.h"
 
 #import "base/cancelable_callback.h"
+#import "base/mac/foundation_util.h"
 #import "base/threading/thread_task_runner_handle.h"
 #import "components/prefs/pref_service.h"
+#import "components/signin/ios/browser/features.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
-#import "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
+#import "ios/chrome/browser/ui/authentication/authentication_flow.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_completion_info.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 
@@ -35,6 +38,7 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
   // Closure to trigger the sign-in time out error. This closure has to be
   // canceled if the sign-in is done in time (or fails).
   base::CancelableOnceClosure _signinTimeoutClosure;
+  AuthenticationFlow* _authenticationFlow;
 }
 
 // List of gaia IDs added by the user with the consistency view.
@@ -47,7 +51,7 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
 @property(nonatomic, assign) PrefService* userPrefService;
 @property(nonatomic, assign, readonly) signin_metrics::AccessPoint accessPoint;
 // Identity for the sign-in in progress.
-@property(nonatomic, assign) ChromeIdentity* signingIdentity;
+@property(nonatomic, assign) id<SystemIdentity> signingIdentity;
 // Duration before sign-in timeout. The property is overwritten in unittests.
 @property(nonatomic, assign, readonly) NSInteger signinTimeoutDurationSeconds;
 
@@ -90,15 +94,16 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
   switch (signinResult) {
     case SigninCoordinatorResultSuccess: {
       DCHECK(self.signingIdentity);
-      ChromeIdentity* defaultIdentity =
+      id<SystemIdentity> signingIdentity = self.signingIdentity;
+      id<SystemIdentity> defaultIdentity =
           self.accountManagerService->GetDefaultIdentity();
       DCHECK(defaultIdentity);
-      if ([self.addedGaiaIDs containsObject:self.signingIdentity.gaiaID]) {
+      if ([self.addedGaiaIDs containsObject:signingIdentity.gaiaID]) {
         // Added identity.
         RecordConsistencyPromoUserAction(
             signin_metrics::AccountConsistencyPromoAction::
                 SIGNED_IN_WITH_ADDED_ACCOUNT);
-      } else if ([defaultIdentity isEqual:self.signingIdentity]) {
+      } else if ([defaultIdentity isEqual:signingIdentity]) {
         // Default identity.
         RecordConsistencyPromoUserAction(
             signin_metrics::AccountConsistencyPromoAction::
@@ -130,22 +135,23 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
   _identityManagerObserverBridge.reset();
 }
 
-- (void)chromeIdentityAdded:(ChromeIdentity*)identity {
+- (void)systemIdentityAdded:(id<SystemIdentity>)identity {
   [self.addedGaiaIDs addObject:identity.gaiaID];
 }
 
-- (void)signinWithIdentity:(ChromeIdentity*)identity {
-  self.signingIdentity = identity;
+- (void)signinWithAuthenticationFlow:(AuthenticationFlow*)authenticationFlow {
+  _authenticationFlow = authenticationFlow;
+  self.signingIdentity = authenticationFlow.identity;
   // Reset dismissal count if the user wants to sign-in.
   if (self.accessPoint ==
       signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN) {
     self.userPrefService->SetInteger(prefs::kSigninWebSignDismissalCount, 0);
   }
-  self.authenticationService->SignIn(identity, nil);
-  [self.delegate consistencyPromoSigninMediatorSigninStarted:self];
-  DCHECK(self.authenticationService->HasPrimaryIdentity(
-      signin::ConsentLevel::kSignin));
   __weak __typeof(self) weakSelf = self;
+  [_authenticationFlow startSignInWithCompletion:^(BOOL success) {
+    [weakSelf authenticationFlowCompletedWithSuccess:success];
+  }];
+  [self.delegate consistencyPromoSigninMediatorSigninStarted:self];
   _signinTimeoutClosure.Reset(base::BindOnce(^{
     [weakSelf cancelSigninWithError:ConsistencyPromoSigninMediatorErrorTimeout];
   }));
@@ -162,11 +168,26 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
 
 #pragma mark - Private
 
+- (void)authenticationFlowCompletedWithSuccess:(BOOL)success {
+  DCHECK(_authenticationFlow);
+  _authenticationFlow = nil;
+  if (success) {
+    // `-[ConsistencyPromoSigninMediator onAccountsInCookieUpdated:error:]` will
+    // be called when the cookies will be ready, and then the sign-in can be
+    // finished. Or `_signinTimeoutClosure` will be called if it takes too long.
+    return;
+  }
+  _signinTimeoutClosure.Cancel();
+  [self
+      cancelSigninWithError:ConsistencyPromoSigninMediatorErrorFailedToSignin];
+}
+
 // Cancels sign-in and calls the delegate to display the error.
 - (void)cancelSigninWithError:(ConsistencyPromoSigninMediatorError)error {
   if (!self.authenticationService)
     return;
   self.signingIdentity = nil;
+  _authenticationFlow = nil;
   switch (error) {
     case ConsistencyPromoSigninMediatorErrorTimeout:
       RecordConsistencyPromoUserAction(
@@ -175,6 +196,10 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
     case ConsistencyPromoSigninMediatorErrorGeneric:
       RecordConsistencyPromoUserAction(
           signin_metrics::AccountConsistencyPromoAction::GENERIC_ERROR_SHOWN);
+      break;
+    case ConsistencyPromoSigninMediatorErrorFailedToSignin:
+      RecordConsistencyPromoUserAction(
+          signin_metrics::AccountConsistencyPromoAction::SIGN_IN_FAILED);
       break;
   }
   __weak __typeof(self) weakSelf = self;
@@ -194,7 +219,7 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
       // an account change event must come from the consistency sheet.
       // TODO(crbug.com/1081764): Update if sign-in UI becomes non-blocking.
       DCHECK(self.signingIdentity);
-      ChromeIdentity* signedInIdentity =
+      id<SystemIdentity> signedInIdentity =
           self.authenticationService->GetPrimaryIdentity(
               signin::ConsentLevel::kSignin);
       DCHECK([signedInIdentity isEqual:self.signingIdentity]);
@@ -212,13 +237,22 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
 - (void)onAccountsInCookieUpdated:
             (const signin::AccountsInCookieJarInfo&)accountsInCookieJarInfo
                             error:(const GoogleServiceAuthError&)error {
-  if (!self.signingIdentity) {
+  if (base::FeatureList::IsEnabled(signin::kEnableUnicornAccountSupport) &&
+      _authenticationFlow) {
+    // Ignore if `_authenticationFlow` is in progress since
+    // `onAccountsInCookieUpdated` may be called when data is cleared on
+    // sign-in.
+    return;
+  }
+  id<SystemIdentity> signingIdentity = self.signingIdentity;
+  if (!signingIdentity) {
     // TODO(crbug.com/1204528): This case should not happen, but
     // `onAccountsInCookieUpdated:error:` can be called twice when there is an
     // error. Once this bug is fixed, this `if` should be replaced with
     // `DCHECK(!self.alertCoordinator)`.
     return;
   }
+  DCHECK(!_authenticationFlow);
   _signinTimeoutClosure.Cancel();
   if (error.state() == GoogleServiceAuthError::State::NONE &&
       self.authenticationService->GetPrimaryIdentity(
@@ -229,10 +263,10 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
         signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN) {
       self.userPrefService->SetInteger(prefs::kSigninWebSignDismissalCount, 0);
     }
-    DCHECK(self.signingIdentity);
-    [self.delegate
-        consistencyPromoSigninMediatorSignInDone:self
-                                    withIdentity:self.signingIdentity];
+    ChromeIdentity* chromeIdentity =
+        base::mac::ObjCCastStrict<ChromeIdentity>(signingIdentity);
+    [self.delegate consistencyPromoSigninMediatorSignInDone:self
+                                               withIdentity:chromeIdentity];
     return;
   }
   [self cancelSigninWithError:ConsistencyPromoSigninMediatorErrorGeneric];

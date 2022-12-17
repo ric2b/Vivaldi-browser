@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,19 +8,24 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/memory/ptr_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "remoting/host/client_session_control.h"
 #include "remoting/host/host_window.h"
 #include "remoting/host/host_window_proxy.h"
 #include "remoting/host/input_monitor/local_input_monitor.h"
-#include "remoting/protocol/capability_names.h"
+#include "remoting/host/session_terminator.h"
 
 #if BUILDFLAG(IS_POSIX)
 #include <sys/types.h>
 #include <unistd.h>
 #endif  // BUILDFLAG(IS_POSIX)
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "base/feature_list.h"
+#include "remoting/host/chromeos/features.h"
+#include "remoting/host/curtain_mode_chromeos.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace remoting {
 
@@ -85,6 +90,28 @@ It2MeDesktopEnvironment::It2MeDesktopEnvironment(
   }
 }
 
+bool It2MeDesktopEnvironment::InitializeCurtainMode() {
+#if BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(features::kEnableCrdAdminRemoteAccess)) {
+    if (desktop_environment_options().enable_curtaining()) {
+      curtain_mode_ = std::make_unique<CurtainModeChromeOs>(ui_task_runner());
+      if (!curtain_mode_->Activate()) {
+        LOG(ERROR) << "Failed to activate the curtain mode.";
+        curtain_mode_ = nullptr;
+        return false;
+      }
+
+      // Log out the current user when a curtained off session is disconnected,
+      // to prevent a local passerby from gaining control of the logged-in
+      // session when they unplug the ethernet cable.
+      session_terminator_ = SessionTerminator::Create(ui_task_runner());
+      return true;
+    }
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+  return true;
+}
+
 It2MeDesktopEnvironmentFactory::It2MeDesktopEnvironmentFactory(
     scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner,
@@ -103,9 +130,14 @@ std::unique_ptr<DesktopEnvironment> It2MeDesktopEnvironmentFactory::Create(
     const DesktopEnvironmentOptions& options) {
   DCHECK(caller_task_runner()->BelongsToCurrentThread());
 
-  return base::WrapUnique(new It2MeDesktopEnvironment(
+  std::unique_ptr<It2MeDesktopEnvironment> result(new It2MeDesktopEnvironment(
       caller_task_runner(), video_capture_task_runner(), input_task_runner(),
       ui_task_runner(), client_session_control, options));
+
+  if (!result->InitializeCurtainMode())
+    return nullptr;
+
+  return result;
 }
 
 }  // namespace remoting

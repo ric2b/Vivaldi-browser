@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,17 +59,12 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) InstallAttributesClient {
 
   // Runs the callback as soon as the service becomes available.
   virtual void WaitForServiceToBeAvailable(
-      WaitForServiceToBeAvailableCallback callback) = 0;
+      chromeos::WaitForServiceToBeAvailableCallback callback) = 0;
 
   // Retrieves an install attribute.
   virtual void InstallAttributesGet(
       const ::user_data_auth::InstallAttributesGetRequest& request,
       InstallAttributesGetCallback callback) = 0;
-
-  // Set an install attribute.
-  virtual void InstallAttributesSet(
-      const ::user_data_auth::InstallAttributesSetRequest& request,
-      InstallAttributesSetCallback callback) = 0;
 
   // Finalizes the install attribute.
   virtual void InstallAttributesFinalize(

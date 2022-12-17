@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -121,6 +121,13 @@ public class UrlUtilities {
      */
     public static boolean isInternalScheme(@NonNull GURL gurl) {
         return INTERNAL_SCHEMES.contains(gurl.getScheme());
+    }
+
+    /**
+     * Returns whether the scheme represented by the given string is for a internal chrome page.
+     */
+    public static boolean isInternalScheme(String scheme) {
+        return INTERNAL_SCHEMES.contains(scheme);
     }
 
     /**

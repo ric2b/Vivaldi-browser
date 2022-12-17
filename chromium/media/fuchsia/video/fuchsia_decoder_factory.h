@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,39 +7,35 @@
 
 #include "media/base/decoder_factory.h"
 #include "media/fuchsia/mojom/fuchsia_media_resource_provider.mojom.h"
-#include "mojo/public/cpp/bindings/remote.h"
-
-namespace blink {
-class BrowserInterfaceBrokerProxy;
-}  // namespace blink
+#include "mojo/public/cpp/bindings/shared_remote.h"
 
 namespace media {
 
 class FuchsiaDecoderFactory final : public DecoderFactory {
  public:
-  explicit FuchsiaDecoderFactory(
-      blink::BrowserInterfaceBrokerProxy* interface_broker);
+  FuchsiaDecoderFactory(
+      mojo::PendingRemote<media::mojom::FuchsiaMediaResourceProvider>
+          resource_provider,
+      bool allow_overlays);
   ~FuchsiaDecoderFactory() final;
 
   // DecoderFactory implementation.
   void CreateAudioDecoders(
       scoped_refptr<base::SequencedTaskRunner> task_runner,
       MediaLog* media_log,
-      std::vector<std::unique_ptr<AudioDecoder>>* audio_decoders) final;
-  SupportedVideoDecoderConfigs GetSupportedVideoDecoderConfigsForWebRTC() final;
+      std::vector<std::unique_ptr<AudioDecoder>>* audio_decoders) override;
   void CreateVideoDecoders(
       scoped_refptr<base::SequencedTaskRunner> task_runner,
       GpuVideoAcceleratorFactories* gpu_factories,
       MediaLog* media_log,
       RequestOverlayInfoCB request_overlay_info_cb,
       const gfx::ColorSpace& target_color_space,
-      std::vector<std::unique_ptr<VideoDecoder>>* video_decoders) final;
+      std::vector<std::unique_ptr<VideoDecoder>>* video_decoders) override;
 
  private:
-  mojo::PendingRemote<media::mojom::FuchsiaMediaResourceProvider>
-      media_resource_provider_handle_;
-  mojo::Remote<media::mojom::FuchsiaMediaResourceProvider>
-      media_resource_provider_;
+  const mojo::SharedRemote<media::mojom::FuchsiaMediaResourceProvider>
+      resource_provider_;
+  const bool allow_overlays_;
 };
 
 }  // namespace media

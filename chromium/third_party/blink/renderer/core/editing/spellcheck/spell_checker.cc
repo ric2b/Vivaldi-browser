@@ -231,7 +231,7 @@ void SpellChecker::AdvanceToNextMisspelling(bool start_before_selection) {
         FindFirstMisspelling(spelling_search_start, spelling_search_end);
   }
 
-  if (misspelled_word.IsEmpty()) {
+  if (misspelled_word.empty()) {
     SpellCheckPanelHostClient().UpdateSpellingUIWithMisspelledWord({});
   } else {
     // We found a misspelling. Select the misspelling, update the spelling
@@ -496,17 +496,17 @@ void SpellChecker::ReplaceMisspelledRange(const String& text) {
 }
 
 void SpellChecker::RespondToChangedSelection() {
-  idle_spell_check_controller_->SetNeedsInvocation();
+  idle_spell_check_controller_->RespondToChangedSelection();
 }
 
 void SpellChecker::RespondToChangedContents() {
-  idle_spell_check_controller_->SetNeedsInvocation();
+  idle_spell_check_controller_->RespondToChangedContents();
 }
 
 void SpellChecker::RespondToChangedEnablement(const HTMLElement& element,
                                               bool enabled) {
   if (enabled) {
-    idle_spell_check_controller_->SetNeedsInvocation();
+    idle_spell_check_controller_->RespondToChangedEnablement();
   } else {
     RemoveSpellingAndGrammarMarkers(element);
     idle_spell_check_controller_->SetSpellCheckingDisabled(element);
@@ -694,7 +694,7 @@ std::pair<String, int> SpellChecker::FindFirstMisspelling(const Position& start,
           }
         }
 
-        if (!misspelled_word.IsEmpty()) {
+        if (!misspelled_word.empty()) {
           int spelling_offset = spelling_location - current_start_offset;
           if (!first_iteration)
             spelling_offset +=
@@ -730,10 +730,6 @@ bool SpellChecker::IsSpellCheckingEnabledAt(const Position& position) {
     return false;
   if (TextControlElement* text_control = EnclosingTextControl(position)) {
     if (auto* input = DynamicTo<HTMLInputElement>(text_control)) {
-      // TODO(tkent): The following password type check should be done in
-      // HTMLElement::spellcheck(). crbug.com/371567
-      if (input->type() == input_type_names::kPassword)
-        return false;
       if (!input->IsFocusedElementInDocument())
         return false;
     }

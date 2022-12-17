@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,10 +18,13 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
-#include "ipc/message_filter.h"
 
 namespace gpu {
 class GpuMemoryBufferManager;
+}
+
+namespace viz {
+class HostGpuMemoryBufferManager;
 }
 
 namespace content {
@@ -80,7 +83,7 @@ class BrowserGpuChannelHostFactory : public gpu::GpuChannelEstablishFactory {
   const int gpu_client_id_;
   const uint64_t gpu_client_tracing_id_;
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
-  std::unique_ptr<gpu::GpuMemoryBufferManager> gpu_memory_buffer_manager_;
+  std::unique_ptr<viz::HostGpuMemoryBufferManager> gpu_memory_buffer_manager_;
   scoped_refptr<EstablishRequest> pending_request_;
   bool is_visible_ = true;
 

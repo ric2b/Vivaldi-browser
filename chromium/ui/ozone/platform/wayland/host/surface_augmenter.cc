@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@ namespace ui {
 
 namespace {
 constexpr uint32_t kMinVersion = 1;
-constexpr uint32_t kMaxVersion = 3;
+constexpr uint32_t kMaxVersion = 4;
 }
 
 // static
@@ -27,7 +27,8 @@ void SurfaceAugmenter::Instantiate(WaylandConnection* connection,
                                    uint32_t name,
                                    const std::string& interface,
                                    uint32_t version) {
-  DCHECK_EQ(interface, kInterfaceName);
+  CHECK_EQ(interface, kInterfaceName) << "Expected \"" << kInterfaceName
+                                      << "\" but got \"" << interface << "\"";
 
   if (connection->surface_augmenter_ ||
       !wl::CanBind(interface, version, kMinVersion, kMaxVersion)) {
@@ -53,6 +54,11 @@ SurfaceAugmenter::~SurfaceAugmenter() = default;
 bool SurfaceAugmenter::SupportsSubpixelAccuratePosition() const {
   return GetSurfaceAugmentorVersion() >=
          SURFACE_AUGMENTER_GET_AUGMENTED_SUBSURFACE_SINCE_VERSION;
+}
+
+bool SurfaceAugmenter::SupportsClipRect() const {
+  return GetSurfaceAugmentorVersion() >=
+         AUGMENTED_SUB_SURFACE_SET_CLIP_RECT_SINCE_VERSION;
 }
 
 uint32_t SurfaceAugmenter::GetSurfaceAugmentorVersion() const {

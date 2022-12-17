@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -504,7 +504,7 @@ struct SSLSocketDataProvider {
   absl::optional<bool> expected_send_client_cert;
   scoped_refptr<X509Certificate> expected_client_cert;
   absl::optional<HostPortPair> expected_host_and_port;
-  absl::optional<NetworkIsolationKey> expected_network_isolation_key;
+  absl::optional<NetworkAnonymizationKey> expected_network_anonymization_key;
   absl::optional<bool> expected_disable_legacy_crypto;
   absl::optional<std::vector<uint8_t>> expected_ech_config_list;
 
@@ -987,6 +987,13 @@ class MockUDPClientSocket : public DatagramClientSocket, public AsyncSocket {
   int ConnectUsingNetwork(handles::NetworkHandle network,
                           const IPEndPoint& address) override;
   int ConnectUsingDefaultNetwork(const IPEndPoint& address) override;
+  int ConnectAsync(const IPEndPoint& address,
+                   CompletionOnceCallback callback) override;
+  int ConnectUsingNetworkAsync(handles::NetworkHandle network,
+                               const IPEndPoint& address,
+                               CompletionOnceCallback callback) override;
+  int ConnectUsingDefaultNetworkAsync(const IPEndPoint& address,
+                                      CompletionOnceCallback callback) override;
   handles::NetworkHandle GetBoundNetwork() const override;
   void ApplySocketTag(const SocketTag& tag) override;
   void SetMsgConfirm(bool confirm) override {}
@@ -1389,7 +1396,7 @@ int64_t CountWriteBytes(base::span<const MockWrite> writes);
 bool CanGetTaggedBytes();
 
 // Query the system to find out how many bytes were received with tag
-// |expected_tag| for our UID.  Return the count of recieved bytes.
+// |expected_tag| for our UID.  Return the count of received bytes.
 uint64_t GetTaggedBytes(int32_t expected_tag);
 #endif
 

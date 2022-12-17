@@ -92,8 +92,8 @@ void ColorChooserPopupUIController::WriteDocument(SharedBuffer* data) {
 
 void ColorChooserPopupUIController::WriteColorPickerDocument(
     SharedBuffer* data) {
-  gfx::Rect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
-      client_->ElementRectRelativeToViewport(), frame_->View());
+  gfx::Rect anchor_rect_in_screen = chrome_client_->LocalRootToScreenDIPs(
+      client_->ElementRectRelativeToLocalRoot(), frame_->View());
 
   PagePopupClient::AddString(
       "<!DOCTYPE html><head><meta charset='UTF-8'><meta name='color-scheme' "
@@ -106,8 +106,8 @@ void ColorChooserPopupUIController::WriteColorPickerDocument(
       "<div id='main'>Loading...</div><script>\n"
       "window.dialogArguments = {\n",
       data);
-  PagePopupClient::AddProperty("selectedColor",
-                               client_->CurrentColor().Serialized(), data);
+  PagePopupClient::AddProperty(
+      "selectedColor", client_->CurrentColor().SerializeAsCSSColor(), data);
   AddProperty("anchorRectInScreen", anchor_rect_in_screen, data);
   AddProperty("zoomFactor", ScaledZoomFactor(), data);
   AddProperty("shouldShowColorSuggestionPicker", false, data);
@@ -158,12 +158,12 @@ void ColorChooserPopupUIController::WriteColorSuggestionPickerDocument(
   Vector<String> suggestion_values;
   for (auto& suggestion : client_->Suggestions()) {
     // TODO(https://crbug.com/1351544): ColorSuggestions be sent as Color or
-    // SkColor4f.
+    // SkColor4f and should be serialized as CSS colors.
     suggestion_values.push_back(
-        Color::FromRGBA32(suggestion->color).Serialized());
+        Color::FromRGBA32(suggestion->color).SerializeAsCanvasColor());
   }
-  gfx::Rect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
-      client_->ElementRectRelativeToViewport(), frame_->View());
+  gfx::Rect anchor_rect_in_screen = chrome_client_->LocalRootToScreenDIPs(
+      client_->ElementRectRelativeToLocalRoot(), frame_->View());
 
   PagePopupClient::AddString(
       "<!DOCTYPE html><head><meta charset='UTF-8'><meta name='color-scheme' "
@@ -180,8 +180,8 @@ void ColorChooserPopupUIController::WriteColorSuggestionPickerDocument(
   PagePopupClient::AddProperty("values", suggestion_values, data);
   PagePopupClient::AddLocalizedProperty("otherColorLabel",
                                         IDS_FORM_OTHER_COLOR_LABEL, data);
-  PagePopupClient::AddProperty("selectedColor",
-                               client_->CurrentColor().Serialized(), data);
+  PagePopupClient::AddProperty(
+      "selectedColor", client_->CurrentColor().SerializeAsCSSColor(), data);
   AddProperty("anchorRectInScreen", anchor_rect_in_screen, data);
   AddProperty("zoomFactor", ScaledZoomFactor(), data);
   AddProperty("shouldShowColorSuggestionPicker", true, data);
@@ -264,7 +264,8 @@ void ColorChooserPopupUIController::EyeDropperResponseHandler(bool success,
   AddProperty("success", success, data.get());
   // TODO(https://crbug.com/1351544): The EyeDropper should use Color or
   // SkColor4f.
-  AddProperty("color", Color::FromRGBA32(color).Serialized(), data.get());
+  AddProperty("color", Color::FromRGBA32(color).SerializeAsCSSColor(),
+              data.get());
   PagePopupClient::AddString("}\n", data.get());
   popup_->PostMessageToPopup(String::FromUTF8(data->Data(), data->size()));
 }
@@ -279,11 +280,11 @@ void ColorChooserPopupUIController::OpenEyeDropper() {
   frame_->GetBrowserInterfaceBroker().GetInterface(
       eye_dropper_chooser_.BindNewPipeAndPassReceiver(
           frame_->GetTaskRunner(TaskType::kUserInteraction)));
-  eye_dropper_chooser_.set_disconnect_handler(WTF::Bind(
+  eye_dropper_chooser_.set_disconnect_handler(WTF::BindOnce(
       &ColorChooserPopupUIController::EndChooser, WrapWeakPersistent(this)));
   eye_dropper_chooser_->Choose(
-      WTF::Bind(&ColorChooserPopupUIController::EyeDropperResponseHandler,
-                WrapWeakPersistent(this)));
+      WTF::BindOnce(&ColorChooserPopupUIController::EyeDropperResponseHandler,
+                    WrapWeakPersistent(this)));
 }
 
 void ColorChooserPopupUIController::OpenSystemColorChooser() {

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -145,6 +145,10 @@ class TaskScheduler {
   // Returns true if the scheduled task specified by |task_name| can be started
   // successfully or is currently running.
   virtual bool StartTask(const wchar_t* task_name) = 0;
+
+  // Name of the sub-folder that the scheduled tasks are created in, prefixed
+  // with the company folder `GetTaskCompanyFolder`.
+  virtual std::wstring GetTaskSubfolderName(UpdaterScope scope) = 0;
 
  protected:
   TaskScheduler();

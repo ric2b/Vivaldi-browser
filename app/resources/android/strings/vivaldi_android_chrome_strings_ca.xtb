@@ -2,13 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ca">
 <translation id="1397811292916898096">Cerca amb <ph name="PRODUCT_NAME" /></translation>
-<translation id="1456207338570705181">La funcionalitat de prémer per cercar només és disponible quan Google és el motor de cerca predeterminat a Vivaldi. Envia una paraula i el seu context al cercador de Google. El pot deshabilitar als <ph name="BEGIN_LINK" />Ajustos<ph name="END_LINK" />.</translation>
+<translation id="1456207338570705181">La funcionalitat de prémer per cercar només és disponible quan Google és el motor de cerca predeterminat a Vivaldi. Envia una paraula i el seu context al cercador de Google. El pots deshabilitar als <ph name="BEGIN_LINK" />Ajustos<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Commuta pestanyes normals/privades</translation>
 <translation id="1644574205037202324">Historial</translation>
 <translation id="17513872634828108">Pestanyes obertes</translation>
 <translation id="1829244130665387512">Cerca a la pàgina</translation>
 <translation id="1910514478706885609">Obre a una nova pila de pestanyes</translation>
-<translation id="2038563949887743358">Activa la petició de vista d'escriptori</translation>
+<translation id="2038563949887743358">Activa la petició de vista del lloc d'escriptori</translation>
 <translation id="2139186145475833000">Afegeix a la pantalla d'inici</translation>
 <translation id="2306442503286132111">Marcador desat a la carpeta <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aparença</translation>
@@ -18,48 +18,48 @@
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> marcador}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> marcadors}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Tots els drets reservats.</translation>
-<translation id="3234355010754616171">Nova pestanya discreta</translation>
+<translation id="3234355010754616171">Nova pestanya privada</translation>
 <translation id="3377025655491224618">Pestanya privada</translation>
 <translation id="3504699618187058974">Apila les pestanyes</translation>
 <translation id="3518985090088779359">Accepta i continua</translation>
 <translation id="3571177741182643350">Articles no llegits - Disponibles fora de línia:</translation>
 <translation id="3700829948786686853">Benvingut a Vivaldi</translation>
-<translation id="3719826155360621982">Pàgina d'inici</translation>
+<translation id="3719826155360621982">Pàgina principal</translation>
 <translation id="385051799172605136">Enrere</translation>
 <translation id="399014816462153200">Articles llegits:</translation>
-<translation id="4121750346708795461">Al fer servir aquesta aplicació, accepteu les <ph name="BEGIN_LINK1" />COndicions de servei<ph name="END_LINK1" /> i la <ph name="BEGIN_LINK2" />Política de seguretat<ph name="END_LINK2" />.</translation>
-<translation id="4137746084635924146">Llengua actual del dispositiu</translation>
+<translation id="4121750346708795461">En fer servir aquesta aplicació, acceptes les <ph name="BEGIN_LINK1" />condicions de servei<ph name="END_LINK1" /> i la <ph name="BEGIN_LINK2" />política de privacitat<ph name="END_LINK2" /> de Vivaldi.</translation>
+<translation id="4137746084635924146">Idioma actual del dispositiu</translation>
 <translation id="4167670741834902166">Nova pestanya privada</translation>
-<translation id="4243710787042215766">Obre un una pestanya discreta</translation>
+<translation id="4243710787042215766">Obre en una pestanya privada</translation>
 <translation id="4526803704855831732">Pestanyes privades</translation>
-<translation id="4719086422742491124">Aprengui sobre coses a les pàgines webs sense sortir-ne. Seleccioni una o més paraules a la pàgina per cercar-les.
+<translation id="4719086422742491124">Aprèn sobre coses a les pàgines webs sense sortir-ne. Selecciona una o més paraules a la pàgina per cercar-les.
 
 La funcionalitat de prèmer per cercar només és disponible quan Google és el motor de cerca predeterminat a Vivaldi.</translation>
 <translation id="4759238208242260848">Baixades</translation>
 <translation id="4883379392681899581">Surt del mode privat</translation>
 <translation id="4943872375798546930">Sense resultats</translation>
 <translation id="49576331685473090">Bloquejador de continguts</translation>
-<translation id="5079259810715830221">Quan un lloc de Google pregunta per precarregar privadament enllaços a la seva pàgina, Vivaldi encripta i precarrega les pàgines a través dels servidors de Google sense galetes. Això amaga la vostra identitat al lloc precarregat.</translation>
-<translation id="5118676864324397542">Emmagatzematge de Vivaldi <ph name="APP_NAME" /></translation>
+<translation id="5079259810715830221">Quan un lloc de Google pregunta per precarregar privadament enllaços a la seva pàgina, Vivaldi encripta i precarrega les pàgines a través dels servidors de Google sense galetes. Això amaga la teva identitat al lloc precarregat.</translation>
+<translation id="5118676864324397542">Emmagatzematge de <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privada</translation>
-<translation id="5233638681132016545">Pestanya nova</translation>
-<translation id="5375131951310889874">Aprengui sobre coses a les pàgines web sense sortir-ne. La funcionalitat de prémer per cercar només és disponible quan Google és el motor de cerca predeterminat a Vivaldi. Envia una paraula i el seu context al cercador de Google, retornant definicions, imatges, resultats de cerca i altres detalls.
+<translation id="5233638681132016545">Nova pestanya</translation>
+<translation id="5375131951310889874">Aprèn sobre coses a les pàgines web sense sortir-ne. La funcionalitat de prémer per cercar només és disponible quan Google és el motor de cerca predeterminat a Vivaldi. Envia una paraula i el seu context al cercador de Google, retornant definicions, imatges, resultats de cerca i altres detalls.
 
-Per ajustar el seu terme de cerca, premi llarg per seleccionar. Per refinar la seva cerca, llisqui el tauler cap amunt i premi el camp de cerca.</translation>
+Per ajustar el teu terme de cerca, prem llarg per seleccionar. Per refinar la teva cerca, llisca el tauler cap amunt i prem al camp de cerca.</translation>
 <translation id="572328651809341494">Pestanyes recents</translation>
 <translation id="6150320133806434356">Marcador desat</translation>
-<translation id="6336451774241870485">Nova pestanya discreta</translation>
+<translation id="6336451774241870485">Nova pestanya privada</translation>
 <translation id="6585139692466700358">Ofereix traduir pàgines a altres idiomes amb el servei de traducció de Vivaldi</translation>
-<translation id="6593061639179217415">Versió per a escriptori</translation>
-<translation id="6610147964972079463">Tanqueu les pestanyes discretes</translation>
-<translation id="7029995644714925509">Quan un lloc pregunta per precarregar privadament enllaços a la seva pàgina, Vivaldi encripta i precarrega les pàgines a través dels servidors de Google sense galetes. Això amaga la vostra identitat al lloc precarregat.</translation>
+<translation id="6593061639179217415">Lloc per a l'escriptori</translation>
+<translation id="6610147964972079463">Tanca les pestanyes privades</translation>
+<translation id="7029995644714925509">Quan un lloc pregunta per precarregar privadament enllaços a la seva pàgina, Vivaldi encripta i precarrega les pàgines a través dels servidors de Google sense galetes. Això amaga la teva identitat al lloc precarregat.</translation>
 <translation id="706339621163631076">Política de privadesa de Vivaldi</translation>
 <translation id="732145680195464316">Marcador desat a <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Sobre Vivaldi</translation>
-<translation id="7465104139234185284">Tanqueu totes les pestanyes discretes</translation>
+<translation id="7465104139234185284">Tanca totes les pestanyes privades</translation>
 <translation id="804786196054284061">Condicions de servei de Vivaldi</translation>
-<translation id="85991616550051997">Vés a la pàgina inicial</translation>
+<translation id="85991616550051997">Ves a la pàgina principal</translation>
 <translation id="8820817407110198400">Marcadors</translation>
-<translation id="9063523880881406963">Desactiva la petició de vista d'escriptori</translation>
+<translation id="9063523880881406963">Desactiva la petició de vista del lloc d'escriptori</translation>
 <translation id="9080642952018487277">Entra al mode privat</translation>
 </translationbundle>

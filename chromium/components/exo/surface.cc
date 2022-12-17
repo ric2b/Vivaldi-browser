@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
@@ -60,6 +61,7 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size_conversions.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/gpu_fence.h"
@@ -89,10 +91,7 @@ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kStylusOnlyKey, false)
 // with |key|.
 template <typename T, typename U>
 typename T::iterator FindListEntry(T& list, U key) {
-  return std::find_if(list.begin(), list.end(),
-                      [key](const typename T::value_type& entry) {
-                        return entry.first == key;
-                      });
+  return base::ranges::find(list, key, &T::value_type::first);
 }
 
 // Helper function that returns true if |list| contains an entry with |key|.
@@ -544,6 +543,16 @@ void Surface::SetOverlayPriorityHint(OverlayPriority hint) {
   pending_state_.overlay_priority_hint = hint;
 }
 
+void Surface::SetClipRect(const absl::optional<gfx::RectF>& clip_rect) {
+  TRACE_EVENT1("exo", "Surface::SetClipRect", "clip_rect",
+               (clip_rect ? clip_rect->ToString() : "nullopt"));
+
+  if (pending_state_.clip_rect == clip_rect) {
+    return;
+  }
+  pending_state_.clip_rect = clip_rect;
+}
+
 void Surface::SetBackgroundColor(absl::optional<SkColor4f> background_color) {
   TRACE_EVENT0("exo", "Surface::SetBackgroundColor");
   pending_state_.basic_state.background_color = background_color;
@@ -700,6 +709,23 @@ std::string Surface::GetClientSurfaceId() const {
   return value ? *value : std::string();
 }
 
+void Surface::SetContainsVideo(bool contains_video) {
+  TRACE_EVENT1("exo", "Surface::SetContainsVideo", "contains_video",
+               contains_video ? "true" : "false");
+  pending_state_.basic_state.contains_video = contains_video;
+}
+
+bool Surface::ContainsVideo() {
+  if (state_.basic_state.contains_video)
+    return true;
+
+  for (auto& subsurface : sub_surfaces_) {
+    if (subsurface.first->ContainsVideo())
+      return true;
+  }
+  return false;
+}
+
 void Surface::SetWindowSessionId(int32_t window_session_id) {
   if (window_session_id > 0)
     window_->SetProperty(kWindowSessionId, window_session_id);
@@ -784,6 +810,7 @@ void Surface::Commit() {
   }
   cached_state_.rounded_corners_bounds = pending_state_.rounded_corners_bounds;
   cached_state_.overlay_priority_hint = pending_state_.overlay_priority_hint;
+  cached_state_.clip_rect = pending_state_.clip_rect;
   cached_state_.acquire_fence = std::move(pending_state_.acquire_fence);
   cached_state_.per_commit_explicit_release_callback_ =
       std::move(pending_state_.per_commit_explicit_release_callback_);
@@ -924,6 +951,7 @@ void Surface::CommitSurfaceHierarchy(bool synchronized) {
       }
       state_.rounded_corners_bounds = cached_state_.rounded_corners_bounds;
       state_.overlay_priority_hint = cached_state_.overlay_priority_hint;
+      state_.clip_rect = cached_state_.clip_rect;
       state_.acquire_fence = std::move(cached_state_.acquire_fence);
       state_.per_commit_explicit_release_callback_ =
           std::move(cached_state_.per_commit_explicit_release_callback_);
@@ -1282,7 +1310,60 @@ void Surface::UpdateBufferTransform(bool y_invert) {
   if (state_.basic_state.buffer_scale != 0)
     buffer_matrix.postScale(1.0f / state_.basic_state.buffer_scale,
                             1.0f / state_.basic_state.buffer_scale);
-  buffer_transform_ = gfx::Transform(buffer_matrix);
+  buffer_transform_ = gfx::SkMatrixToTransform(buffer_matrix);
+}
+
+// Try to share the |SharedQuadState| (sqs) when a single layer can be
+// reconstructed. This is important for performance reasons in the occlusion
+// code and correctness in the per edge anti-alias code.
+static viz::SharedQuadState* AppendOrCreateSharedQuadState(
+    float opacity,
+    const std::unique_ptr<viz::CompositorRenderPass>& render_pass,
+    const gfx::Transform quad_to_target_transform,
+    const gfx::Rect& quad_rect,
+    const gfx::MaskFilterInfo& msk,
+    const absl::optional<gfx::Rect>& quad_clip_rect,
+    const bool are_contents_opaque) {
+  viz::SharedQuadState* quad_state =
+      !render_pass->shared_quad_state_list.empty()
+          ? render_pass->shared_quad_state_list.back()
+          : nullptr;
+  auto test_union = quad_rect;
+  bool is_sealed_union = false;
+  if (quad_state) {
+    // A sealed union is when the combined rect has no gaps and can form a
+    // single layer rect.
+    test_union.Union(quad_state->quad_layer_rect);
+    if ((test_union.width() == quad_rect.width() &&
+         test_union.width() == quad_state->quad_layer_rect.width())) {
+      if (quad_rect.height() + quad_state->quad_layer_rect.height() >=
+          test_union.height())
+        is_sealed_union = true;
+    }
+
+    if ((test_union.height() == quad_rect.height() &&
+         test_union.height() == quad_state->quad_layer_rect.height())) {
+      if (quad_rect.width() + quad_state->quad_layer_rect.width() >=
+          test_union.width())
+        is_sealed_union = true;
+    }
+  }
+
+  if (quad_state && is_sealed_union &&
+      quad_to_target_transform == quad_state->quad_to_target_transform &&
+      opacity == quad_state->opacity &&
+      quad_clip_rect == quad_state->clip_rect &&
+      are_contents_opaque == quad_state->are_contents_opaque && msk == msk) {
+    // Expland the layer portion of the sqs.
+    quad_state->quad_layer_rect = test_union;
+    quad_state->visible_quad_layer_rect = test_union;
+  } else {
+    quad_state = render_pass->CreateAndAppendSharedQuadState();
+    quad_state->SetAll(quad_to_target_transform, quad_rect, quad_rect, msk,
+                       quad_clip_rect, are_contents_opaque, opacity,
+                       SkBlendMode::kSrcOver, 0);
+  }
+  return quad_state;
 }
 
 void Surface::AppendContentsToFrame(const gfx::PointF& origin,
@@ -1313,6 +1394,15 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
       // which makes the enclosing rect equal to |damage_rect|.
       damage_rect.Scale(device_scale_factor);
     }
+  }
+
+  absl::optional<gfx::Rect> quad_clip_rect;
+  if (state_.clip_rect) {
+    // The clip rect will later be rescaled by 1/device_scale_factor, and the
+    // enclosing rect used. Take the enclosed rect here to mitigate error.
+    gfx::RectF clip_rect_px(*state_.clip_rect);
+    clip_rect_px.Scale(device_scale_factor);
+    quad_clip_rect = gfx::ToEnclosedRect(clip_rect_px);
   }
 
   state_.damage.Clear();
@@ -1354,8 +1444,8 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
   viewport_to_target_matrix.postScale(device_scale_factor, device_scale_factor);
 
   gfx::Transform quad_to_target_transform(buffer_transform_);
-  quad_to_target_transform.ConcatTransform(
-      gfx::Transform(viewport_to_target_matrix));
+  quad_to_target_transform.PostConcat(
+      gfx::SkMatrixToTransform(viewport_to_target_matrix));
 
   bool are_contents_opaque =
       !current_resource_has_alpha_ ||
@@ -1369,9 +1459,7 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
     auto rounded_corners_rect = state_.rounded_corners_bounds;
 
     // Convert from dip to px.
-    gfx::Transform scale_transform;
-    scale_transform.Scale(device_scale_factor, device_scale_factor);
-    scale_transform.TransformRRectF(&rounded_corners_rect);
+    rounded_corners_rect.Scale(device_scale_factor);
 
     // Set the mask.
     msk = gfx::MaskFilterInfo(rounded_corners_rect);
@@ -1382,8 +1470,8 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
   // work with 0,0 1x1 quads. This also means that quads that do not fall on
   // pixel boundaries (rotated or subpixel rects) cannot be removed by the
   // algorithm.
-  gfx::RectF target_space_rect(quad_rect);
-  quad_to_target_transform.TransformRect(&target_space_rect);
+  gfx::RectF target_space_rect =
+      quad_to_target_transform.MapRect(gfx::RectF(quad_rect));
   CHECK(quad_to_target_transform.Preserves2dAxisAlignment());
   // This simple rect representation cannot mathematically express a rotation
   // (and currently does not express flip/mirror) hence the
@@ -1395,16 +1483,6 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
     quad_to_target_transform = gfx::Transform();
   }
 
-  viz::SharedQuadState* quad_state =
-      render_pass->CreateAndAppendSharedQuadState();
-  quad_state->SetAll(/*quad_layer_rect=*/quad_to_target_transform, quad_rect,
-                     /*visible_quad_layer_rect=*/quad_rect,
-                     /*mask_filter_info=*/msk, /*clip_rect=*/absl::nullopt,
-                     /*contents_opaque=*/are_contents_opaque,
-                     /*opacity=*/state_.basic_state.alpha,
-                     /*blend_mode=*/SkBlendMode::kSrcOver,
-                     /*sorting_context_id=*/0);
-
   if (current_resource_.id) {
     gfx::RectF uv_crop(gfx::SizeF(1, 1));
     if (!state_.basic_state.crop.IsEmpty()) {
@@ -1414,11 +1492,11 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
       uv_crop = gfx::RectF(state_.basic_state.crop);
       gfx::Size transformed_buffer_size(ToTransformedSize(
           current_resource_.size, state_.basic_state.buffer_transform));
-      if (!transformed_buffer_size.IsEmpty())
-        uv_crop.Scale(1.f / transformed_buffer_size.width(),
-                      1.f / transformed_buffer_size.height());
-
-      buffer_transform_.TransformRectReverse(&uv_crop);
+      if (!transformed_buffer_size.IsEmpty()) {
+        uv_crop.InvScale(transformed_buffer_size.width(),
+                         transformed_buffer_size.height());
+      }
+      uv_crop = buffer_transform_.InverseMapRect(uv_crop).value_or(uv_crop);
     }
 
     SkColor4f background_color = SkColors::kTransparent;
@@ -1441,6 +1519,11 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
       }
       if (latest_embedded_surface_id_.is_valid() &&
           !embedded_surface_size_.IsEmpty()) {
+        viz::SharedQuadState* quad_state =
+            render_pass->CreateAndAppendSharedQuadState();
+        quad_state->SetAll(quad_to_target_transform, quad_rect, quad_rect, msk,
+                           quad_clip_rect, are_contents_opaque,
+                           state_.basic_state.alpha, SkBlendMode::kSrcOver, 0);
         if (!state_.basic_state.crop.IsEmpty()) {
           quad_state->clip_rect = gfx::ToEnclosedRect(output_rect);
         }
@@ -1456,8 +1539,11 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
       // later.
       frame->resource_list.push_back(current_resource_);
     } else if (state_.basic_state.alpha != 0.0f) {
-      // Draw quad is only needed if buffer is not fully transparent.
+      const viz::SharedQuadState* quad_state = AppendOrCreateSharedQuadState(
+          state_.basic_state.alpha, render_pass, quad_to_target_transform,
+          quad_rect, msk, quad_clip_rect, are_contents_opaque);
 
+      // Draw quad is only needed if buffer is not fully transparent.
       const bool requires_texture_draw_quad =
           state_.basic_state.only_visible_on_secure_output ||
           state_.overlay_priority_hint != OverlayPriority::LOW;
@@ -1523,6 +1609,9 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
       frame->resource_list.push_back(current_resource_);
     }
   } else {
+    const viz::SharedQuadState* quad_state = AppendOrCreateSharedQuadState(
+        state_.basic_state.alpha, render_pass, quad_to_target_transform,
+        quad_rect, msk, quad_clip_rect, are_contents_opaque);
     SkColor4f color = state_.buffer.has_value() && state_.buffer->buffer()
                           ? state_.buffer->buffer()->GetColor()
                           : SkColors::kBlack;

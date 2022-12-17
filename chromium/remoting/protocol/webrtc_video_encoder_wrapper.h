@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -162,9 +162,8 @@ class WebrtcVideoEncoderWrapper : public webrtc::VideoEncoder {
   // TaskRunner used for scheduling encoding tasks.
   scoped_refptr<base::SingleThreadTaskRunner> encode_task_runner_;
 
-  // Stores the taret frame rate used for capture and encode scheduling. May be
-  // overridden by the client via SessionOptions. This value is applied to all
-  // codecs and cannot be changed during a session.
+  // Stores the target frame rate used for capture and encode scheduling. May be
+  // changed by the client using SDP format parameters for the selected codec.
   int target_frame_rate_ = kTargetFrameRate;
   base::TimeDelta target_frame_interval_;
 

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,7 @@ class GLTextureAndroidImageRepresentation
   GLTextureAndroidImageRepresentation& operator=(
       const GLTextureAndroidImageRepresentation&) = delete;
 
-  gles2::Texture* GetTexture() override;
+  gles2::Texture* GetTexture(int plane_index) override;
 
   bool BeginAccess(GLenum mode) override;
   void EndAccess() override;

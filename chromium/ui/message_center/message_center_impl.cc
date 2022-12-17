@@ -1,10 +1,9 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ui/message_center/message_center_impl.h"
 
-#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <utility>
@@ -15,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/observer_list.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -29,6 +29,7 @@
 #include "ui/message_center/public/cpp/notifier_id.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_constants.h"
 #include "ash/constants/ash_features.h"
 #endif
 
@@ -73,7 +74,7 @@ void MessageCenterImpl::AddNotificationBlocker(NotificationBlocker* blocker) {
 void MessageCenterImpl::RemoveNotificationBlocker(
     NotificationBlocker* blocker) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  auto iter = std::find(blockers_.begin(), blockers_.end(), blocker);
+  auto iter = base::ranges::find(blockers_, blocker);
   if (iter == blockers_.end())
     return;
   blocker->RemoveObserver(this);
@@ -162,9 +163,17 @@ Notification* MessageCenterImpl::FindParentNotification(
   // For a notification to have a parent notification, they must have identical
   // notifier_ids. To make sure that the notifications come from
   // the same website for the same user. Also make sure to only group
-  // notifications from web pages with valid origin urls.
-  if (notification->origin_url().is_empty() ||
-      notification->notifier_id().type != NotifierType::WEB_PAGE) {
+  // notifications from web pages with valid origin urls. For system
+  // notifications, currently we only group privacy indicators notification.
+  bool is_privacy_indicators_notification = false;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  is_privacy_indicators_notification =
+      notification->notifier_id().id == ash::kPrivacyIndicatorsNotifierId;
+#endif
+
+  if (!is_privacy_indicators_notification &&
+      (notification->origin_url().is_empty() ||
+       notification->notifier_id().type != NotifierType::WEB_PAGE)) {
     return nullptr;
   }
 
@@ -180,12 +189,8 @@ Notification* MessageCenterImpl::FindParentNotification(
 
 Notification* MessageCenterImpl::FindPopupNotificationById(
     const std::string& id) {
-  auto id_match = [&id](Notification* notification) {
-    return id == notification->id();
-  };
   auto notifications = GetPopupNotifications();
-  auto notification =
-      std::find_if(notifications.begin(), notifications.end(), id_match);
+  auto notification = base::ranges::find(notifications, id, &Notification::id);
 
   return notification == notifications.end() ? nullptr : *notification;
 }

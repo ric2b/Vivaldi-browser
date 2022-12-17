@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -252,8 +252,9 @@ class RenderWidgetTargeter {
 
   uint64_t trace_id_;
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   RenderWidgetHostViewBase* vivaldi_active_down_target_ = nullptr;
-
+#endif // !IS_ANDROID && !IS_IOS
   const raw_ptr<Delegate> delegate_;
   base::WeakPtrFactory<RenderWidgetTargeter> weak_ptr_factory_{this};
 };

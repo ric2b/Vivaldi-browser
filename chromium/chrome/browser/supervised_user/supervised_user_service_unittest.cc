@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -146,7 +146,8 @@ class SupervisedUserServiceTest : public ::testing::Test {
   std::unique_ptr<TestingProfile> profile_;
 };
 
-TEST_F(SupervisedUserServiceTest, DeprecatedFilterPolicy) {
+// TODO(crbug.com/1364589): Failing consistently
+TEST_F(SupervisedUserServiceTest, DISABLED_DeprecatedFilterPolicy) {
   PrefService* prefs = profile_->GetPrefs();
   EXPECT_EQ(prefs->GetInteger(prefs::kDefaultSupervisedUserFilteringBehavior),
             SupervisedUserURLFilter::ALLOW);

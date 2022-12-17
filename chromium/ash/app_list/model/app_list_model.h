@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,6 +65,8 @@ class APP_LIST_MODEL_EXPORT AppListModel : public AppListItemListObserver {
                                const std::string& folder_id);
 
   // Add a "page break" item right after the specified item in item list.
+  // TODO(crbug.com/1366414): Delete this method. The launcher no longer
+  // supports page breaks.
   void AddPageBreakItemAfter(const AppListItem* previous_item);
 
   // Updates an item's metadata (e.g. name, position, etc).

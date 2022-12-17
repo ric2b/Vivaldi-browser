@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -101,7 +101,8 @@ size_t CalculateRequiredCountsBytes(size_t bucket_count) {
 
 }  // namespace
 
-const Feature kPersistentHistogramsFeature{
+BASE_FEATURE(
+    kPersistentHistogramsFeature,
     "PersistentHistograms",
 #if BUILDFLAG(IS_FUCHSIA)
     // TODO(crbug.com/1295119): Enable once writable mmap() is supported.
@@ -109,7 +110,7 @@ const Feature kPersistentHistogramsFeature{
 #else
     FEATURE_ENABLED_BY_DEFAULT
 #endif  // BUILDFLAG(IS_FUCHSIA)
-};
+);
 
 PersistentSparseHistogramDataManager::PersistentSparseHistogramDataManager(
     PersistentMemoryAllocator* allocator)

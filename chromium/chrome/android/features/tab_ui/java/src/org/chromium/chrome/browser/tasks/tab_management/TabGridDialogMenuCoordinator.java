@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -133,13 +133,18 @@ public class TabGridDialogMenuCoordinator {
 
     private ModelList buildMenuItems(Context context) {
         ModelList itemList = new ModelList();
-        itemList.add(new ListItem(ListItemType.MENU_ITEM,
-                buildPropertyModel(context, R.string.tab_grid_dialog_toolbar_remove_from_group,
-                        R.id.ungroup_tab)));
-        if (TabUiFeatureUtilities.ENABLE_TAB_GROUP_SHARING.getValue()) {
+        if (TabUiFeatureUtilities.isTabSelectionEditorV2Enabled(mContext)) {
             itemList.add(new ListItem(ListItemType.MENU_ITEM,
-                    buildPropertyModel(context, R.string.tab_grid_dialog_toolbar_share_group,
-                            R.id.share_tab_group)));
+                    buildPropertyModel(context, R.string.menu_select_tabs, R.id.select_tabs)));
+        } else {
+            itemList.add(new ListItem(ListItemType.MENU_ITEM,
+                    buildPropertyModel(context, R.string.tab_grid_dialog_toolbar_remove_from_group,
+                            R.id.ungroup_tab)));
+            if (TabUiFeatureUtilities.ENABLE_TAB_GROUP_SHARING.getValue()) {
+                itemList.add(new ListItem(ListItemType.MENU_ITEM,
+                        buildPropertyModel(context, R.string.tab_grid_dialog_toolbar_share_group,
+                                R.id.share_tab_group)));
+            }
         }
         if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
             itemList.add(new ListItem(ListItemType.MENU_ITEM,

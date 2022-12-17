@@ -6,7 +6,6 @@
 <translation id="1165039591588034296">Faddina</translation>
 <translation id="1175364870820465910">&amp;Imprenta...</translation>
 <translation id="1181037720776840403">Lea</translation>
-<translation id="119944043368869598">Burra totu</translation>
 <translation id="1221825588892235038">Sa seberada ebbia</translation>
 <translation id="1244303850296295656">B'at una faddina de s'estensione</translation>
 <translation id="125220115284141797">Predefinidu</translation>
@@ -23,7 +22,6 @@
 <translation id="1779468444204342338">Su minimu</translation>
 <translation id="1886996562706621347">Permiti a zassos web de preguntare si podent diventare sos handlers predefinidos pro sos protocollos (cunsigiadu)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
-<translation id="1963227389609234879">Lea-nde totu</translation>
 <translation id="1994173015038366702">URL de su zassu web</translation>
 <translation id="2050339315714019657">Ritratu</translation>
 <translation id="2087822576218954668">Imprenta: <ph name="PRINT_NAME" /></translation>
@@ -32,7 +30,6 @@
 <translation id="219008588003277019">Native Client module: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">e.g. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permiti sos identificadores de contenutos protetos (podet dare chi as a depere istudiare e aviare s'elaboradore)</translation>
-<translation id="2277255602909579701">Totus sos cookies e is datos</translation>
 <translation id="2280486287150724112">Oru de dereta</translation>
 <translation id="2282146716419988068">Protzessu GPU</translation>
 <translation id="2301382460326681002">Su tretu de sa cartella de estratzione no balet.</translation>
@@ -64,7 +61,6 @@
 <translation id="3080207940057008665">B'at aterun'aplicu in su'elaboradore chi at agiuntu unu tema chi podet mudare su comportamentu de Vivaldi.</translation>
 <translation id="3084548735795614657">Tratze-lu pro l'assetare</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3127156390846601284">Custu at a burrare cale si siet datu ammentadu in su dispositivu tou pro totus sos zassos web ammustrados. Cheres sighere?</translation>
 <translation id="3129173833825111527">Oru de manca</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Sèbera sa cartella in-ue istringhere s'estensione. Pro annoare un'estensione sèbera fintzas su file de sa crae privada chi depes torrare a impreare.</translation>
@@ -76,7 +72,6 @@
 <translation id="3341703758641437857">Permiti de leghere file URLs</translation>
 <translation id="3360297538363969800">B'at istadu una faddina imprentande. Pro piaghere cuntrolla s'imprentadora tua e prova-bi ateruna borta.</translation>
 <translation id="3378572629723696641">Cust'estensione podet èssere currumpida.</translation>
-<translation id="3432227430032737297">Lea-nde totu su chi est ammustradu</translation>
 <translation id="3494769164076977169">Pregunta-mi cando unu giassu web provat a iscarrigare files a sa sola pustis de su primu file (cunsigiadu)</translation>
 <translation id="3505030558724226696">No permites a s'aplicu de impreare sos dispositivos</translation>
 <translation id="3560034655160545939">Cuntrollu de sa sillabatzione</translation>
@@ -146,7 +141,6 @@
 <translation id="5715711091495208045">Plugin Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Ammenta-lu che a PDF</translation>
 <translation id="5759728514498647443">Sos documentos chi nc'as mandadu a imprentare dae <ph name="APP_NAME" /> podent èssere ligidos ebbia dae <ph name="APP_NAME" />.</translation>
-<translation id="577624874850706961">Chirca cookies</translation>
 <translation id="5804241973901381774">Ordines</translation>
 <translation id="5828633471261496623">Imprentande...</translation>
 <translation id="583281660410589416">No si connoschet</translation>
@@ -154,7 +148,6 @@
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
 <translation id="5978277834170881274">Imprea su cuntrollu de sa sillabatzione basilare</translation>
 <translation id="5979421442488174909">&amp;Borta in <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Burra sos datos de su zassu web</translation>
 <translation id="6042308850641462728">Ateru</translation>
 <translation id="6101226222197207147">Aplicu nou agiuntu (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">S'atacadura a internet tua est cuntrollada</translation>
@@ -219,7 +212,6 @@ Mantene su file cun sa crae in d-unu zassu siguru. Podet dare puru chi as a depe
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {iscarrigamentu est andande adenanti} àteros {iscarrrigamentos sunt andande adenanti}}</translation>
 <translation id="8261378640211443080">Cust'estensione no est elencada in <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e podet dare chi siet bisada agiunta chentza s'òrdine tou.</translation>
-<translation id="8339059274628563283"><ph name="SITE" /> datos ammentados in s'elaboradore</translation>
 <translation id="8413385045638830869">Pregunta-mi a primu (cunsigiadu)</translation>
 <translation id="8569682776816196752">No apo aciapadu sas destinatziones</translation>
 <translation id="857943718398505171">Dona s'òrdine (cunsigiadu)</translation>

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,6 @@ import org.chromium.base.MathUtils;
 import org.chromium.base.Promise;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.merchant_viewer.MerchantTrustSignalsCoordinator;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.R;
@@ -168,15 +167,18 @@ public class StatusMediator implements PermissionDialogController.Observer,
         mWindowAndroid = windowAndroid;
         mMerchantTrustSignalsCoordinatorSupplier = merchantTrustSignalsCoordinatorSupplier;
 
+        // TODO(crbug.com/1369345): Figure out how to remove the usage of
+        // mEndPaddingPixelSizeOnFocusDelta.
         mEndPaddingPixelSizeOnFocusDelta =
                 mResources.getDimensionPixelSize(R.dimen.location_bar_icon_end_padding_focused)
                 - mResources.getDimensionPixelSize(R.dimen.location_bar_icon_end_padding);
         int iconWidth = resources.getDimensionPixelSize(R.dimen.location_bar_status_icon_width);
-        mTextOffsetThreshold =
-                (float) iconWidth / (iconWidth + getEndPaddingPixelSizeOnFocusDelta());
+        mTextOffsetThreshold = (float) iconWidth / (iconWidth + mEndPaddingPixelSizeOnFocusDelta);
         mTextOffsetAdjustedScale = mTextOffsetThreshold == 1 ? 1 : (1 - mTextOffsetThreshold);
 
         mIsTablet = isTablet;
+        mShowStatusIconWhenUrlFocused = mIsTablet;
+
         mPermissionDialogController = permissionDialogController;
         mPermissionDialogController.addObserver(this);
 
@@ -268,16 +270,12 @@ public class StatusMediator implements PermissionDialogController.Observer,
     }
 
     /**
-     * Returns the increase in StatusView end padding, when the Url bar is focused.
-     */
-    int getEndPaddingPixelSizeOnFocusDelta() {
-        return mEndPaddingPixelSizeOnFocusDelta;
-    }
-
-    /**
      * Specify whether status icon should be shown when URL is focused.
      */
+    @VisibleForTesting
+    public // Vivaldi
     void setShowIconsWhenUrlFocused(boolean showIconWhenFocused) {
+        if (mShowStatusIconWhenUrlFocused == showIconWhenFocused) return;
         mShowStatusIconWhenUrlFocused = showIconWhenFocused;
         updateLocationBarIcon(IconTransitionType.CROSSFADE);
     }
@@ -359,10 +357,12 @@ public class StatusMediator implements PermissionDialogController.Observer,
      * @param percent The current focus percent.
      */
     void setUrlFocusChangePercent(float percent) {
-        mUrlFocusPercent = percent;
         // On tablets, the status icon should always be shown so the following logic doesn't apply.
         assert !mIsTablet : "This logic shouldn't be called on tablets";
 
+        boolean couldAffectIcon = (mUrlFocusPercent == 0.0f && percent > 0.0f)
+                || (percent == 0.0f && mUrlFocusPercent > 0.0f);
+        mUrlFocusPercent = percent;
         updateStatusVisibility();
 
         // Vivaldi: Always set the alpha to 1 since the animation is disabled and we don't get
@@ -382,7 +382,9 @@ public class StatusMediator implements PermissionDialogController.Observer,
             setStatusIconAlpha(1f);
         }
 
-        updateLocationBarIcon(IconTransitionType.CROSSFADE);
+        if (couldAffectIcon) {
+            updateLocationBarIcon(IconTransitionType.CROSSFADE);
+        }
     }
 
     /**
@@ -769,12 +771,6 @@ public class StatusMediator implements PermissionDialogController.Observer,
     @Override
     public void onTemplateURLServiceChanged() {
         updateLocationBarIcon(IconTransitionType.CROSSFADE);
-    }
-
-    public void readFeatureListParams() {
-        mPermissionIconDisplayTimeoutMs = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
-                ChromeFeatureList.PAGE_INFO_DISCOVERABILITY, PERMISSION_ICON_TIMEOUT_MS_PARAM,
-                PERMISSION_ICON_DEFAULT_DISPLAY_TIMEOUT_MS);
     }
 
     // Vivaldi

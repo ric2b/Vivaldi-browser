@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <cstdint>
 
 #include "base/allocator/partition_allocator/address_pool_manager.h"
+#include "base/allocator/partition_allocator/freeslot_bitmap.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/page_allocator_constants.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
@@ -72,7 +73,7 @@ PA_ALWAYS_INLINE void PartitionDirectUnmap(
   // This can create a fake "address space exhaustion" OOM, in the case where
   // e.g. a large allocation is freed on a thread, and another large one is made
   // from another *before* UnmapNow() has finished running. In this case the
-  // second one may not find enough space in the GigaCage, and fail. This is
+  // second one may not find enough space in the pool, and fail. This is
   // expected to be very rare though, and likely preferable to holding the lock
   // while releasing the address space.
   ScopedUnlockGuard unlock{root->lock_};
@@ -134,12 +135,23 @@ PA_ALWAYS_INLINE void SlotSpanMetadata<thread_safe>::RegisterEmpty() {
         root->empty_slot_spans_dirty_bytes / 2, max_empty_dirty_bytes));
   }
 }
+// static
+template <bool thread_safe>
+const SlotSpanMetadata<thread_safe>
+    SlotSpanMetadata<thread_safe>::sentinel_slot_span_;
+
+// static
+template <bool thread_safe>
+const SlotSpanMetadata<thread_safe>*
+SlotSpanMetadata<thread_safe>::get_sentinel_slot_span() {
+  return &sentinel_slot_span_;
+}
 
 // static
 template <bool thread_safe>
 SlotSpanMetadata<thread_safe>*
-SlotSpanMetadata<thread_safe>::get_sentinel_slot_span() {
-  return &sentinel_slot_span_;
+SlotSpanMetadata<thread_safe>::get_sentinel_slot_span_non_const() {
+  return const_cast<SlotSpanMetadata<thread_safe>*>(&sentinel_slot_span_);
 }
 
 template <bool thread_safe>
@@ -224,6 +236,11 @@ void SlotSpanMetadata<thread_safe>::Decommit(PartitionRoot<thread_safe>* root) {
       slot_span_start, size_to_decommit,
       PageAccessibilityDisposition::kAllowKeepForPerf);
 
+#if BUILDFLAG(USE_FREESLOT_BITMAP)
+  FreeSlotBitmapReset(slot_span_start, slot_span_start + size_to_decommit,
+                      bucket->slot_size);
+#endif
+
   // We actually leave the decommitted slot span in the active list. We'll sweep
   // it on to the decommitted list when we next walk the active list.
   // Pulling this trick enables us to use a singly-linked list for all
@@ -300,9 +317,9 @@ void UnmapNow(uintptr_t reservation_start,
               pool_handle pool) {
   PA_DCHECK(reservation_start && reservation_size > 0);
 #if BUILDFLAG(PA_DCHECK_IS_ON)
-  // When USE_BACKUP_REF_PTR is off, BRP pool isn't used.
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
-  if (pool == GetBRPPool()) {
+  // When ENABLE_BACKUP_REF_PTR_SUPPORT is off, BRP pool isn't used.
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
+  if (pool == kBRPPoolHandle) {
     // In 32-bit mode, the beginning of a reservation may be excluded from the
     // BRP pool, so shift the pointer. Other pools don't have this logic.
     PA_DCHECK(IsManagedByPartitionAllocBRPPool(
@@ -315,10 +332,10 @@ void UnmapNow(uintptr_t reservation_start,
 #endif
         ));
   } else
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   {
-    PA_DCHECK(pool == GetRegularPool() ||
-              (IsConfigurablePoolAvailable() && pool == GetConfigurablePool()));
+    PA_DCHECK(pool == kRegularPoolHandle || (IsConfigurablePoolAvailable() &&
+                                             pool == kConfigurablePoolHandle));
     // Non-BRP pools don't need adjustment that BRP needs in 32-bit mode.
     PA_DCHECK(IsManagedByPartitionAllocRegularPool(reservation_start) ||
               IsManagedByPartitionAllocConfigurablePool(reservation_start));

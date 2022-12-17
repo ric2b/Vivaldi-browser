@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -368,20 +368,5 @@ IN_PROC_BROWSER_TEST_F(MigrationTwoClientTest, MigrationHellWithNigori) {
   ASSERT_EQ(MakeSet(syncer::NIGORI), migration_list.back());
   RunTwoClientMigrationTest(migration_list, MODIFY_BOOKMARK);
 }
-
-class MigrationReconfigureTest : public MigrationTwoClientTest {
- public:
-  MigrationReconfigureTest() = default;
-
-  void SetUpCommandLine(base::CommandLine* cl) override {
-    AddTestSwitches(cl);
-    // Do not add optional datatypes.
-  }
-
-  MigrationReconfigureTest(const MigrationReconfigureTest&) = delete;
-  MigrationReconfigureTest& operator=(const MigrationReconfigureTest&) = delete;
-
-  ~MigrationReconfigureTest() override = default;
-};
 
 }  // namespace

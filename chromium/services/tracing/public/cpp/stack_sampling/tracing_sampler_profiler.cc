@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -408,6 +408,24 @@ bool IsStackSamplingSupported() {
 }
 #endif
 
+perfetto::StaticString UnwinderTypeToString(
+    const TracingSamplerProfiler::UnwinderType unwinder_type) {
+  switch (unwinder_type) {
+    case TracingSamplerProfiler::UnwinderType::kUnknown:
+      return "TracingSamplerProfiler (unknown unwinder)";
+    case TracingSamplerProfiler::UnwinderType::kArm64Android:
+      return "TracingSamplerProfiler (default arm64 android unwinder)";
+    case TracingSamplerProfiler::UnwinderType::kCfiAndroid:
+      return "TracingSamplerProfiler (default cfi android unwinder)";
+    case TracingSamplerProfiler::UnwinderType::kCustomAndroid:
+      return "TracingSamplerProfiler (custom android unwinder)";
+    case TracingSamplerProfiler::UnwinderType::kDefault:
+      return "TracingSamplerProfiler (default unwinder)";
+    case TracingSamplerProfiler::UnwinderType::kLibunwindstackUnwinderAndroid:
+      return "TracingSamplerProfiler (libunwindstack unwinder android)";
+  }
+}
+
 }  // namespace
 
 TracingSamplerProfiler::TracingProfileBuilder::BufferedSample::BufferedSample(
@@ -485,22 +503,22 @@ void TracingSamplerProfiler::TracingProfileBuilder::OnSampleCompleted(
     return;
   }
   if (!buffered_samples_.empty()) {
-    for (const auto& sample : buffered_samples_) {
-      WriteSampleToTrace(sample);
+    for (auto& sample : buffered_samples_) {
+      WriteSampleToTrace(std::move(sample));
     }
     buffered_samples_.clear();
   }
 
-  WriteSampleToTrace(BufferedSample(sample_timestamp, std::move(frames)));
+  BufferedSample sample(sample_timestamp, std::move(frames));
+  WriteSampleToTrace(std::move(sample));
   if (sample_callback_for_testing_) {
     sample_callback_for_testing_.Run();
   }
 }
 
 void TracingSamplerProfiler::TracingProfileBuilder::WriteSampleToTrace(
-    const TracingSamplerProfiler::TracingProfileBuilder::BufferedSample&
-        sample) {
-  const auto& frames = sample.sample;
+    TracingSamplerProfiler::TracingProfileBuilder::BufferedSample sample) {
+  auto& frames = sample.sample;
   auto reset_id =
       TracingSamplerProfilerDataSource::GetIncrementalStateResetID();
   if (reset_id != last_incremental_state_reset_id_) {
@@ -533,6 +551,8 @@ void TracingSamplerProfiler::TracingProfileBuilder::WriteSampleToTrace(
 #else
     update_packet(trace_writer_->NewTracePacket());
 #endif
+    TRACE_EVENT_INSTANT(TRACE_DISABLED_BY_DEFAULT("cpu_profiler"),
+                        UnwinderTypeToString(unwinder_type_));
     reset_incremental_state_ = false;
   }
 
@@ -573,6 +593,11 @@ void TracingSamplerProfiler::TracingProfileBuilder::SetTraceWriter(
 }
 #endif
 
+void TracingSamplerProfiler::TracingProfileBuilder::SetUnwinderType(
+    const TracingSamplerProfiler::UnwinderType unwinder_type) {
+  unwinder_type_ = unwinder_type;
+}
+
 TracingSamplerProfiler::StackProfileWriter::StackProfileWriter(
     bool enable_filtering)
     : should_enable_filtering_(enable_filtering) {}
@@ -580,7 +605,7 @@ TracingSamplerProfiler::StackProfileWriter::~StackProfileWriter() = default;
 
 InterningID
 TracingSamplerProfiler::StackProfileWriter::GetCallstackIDAndMaybeEmit(
-    const std::vector<base::Frame>& frames,
+    std::vector<base::Frame>& frames,
     perfetto::TraceWriter::TracePacketHandle* trace_packet) {
   size_t ip_hash = 0;
   for (const auto& frame : frames) {
@@ -596,7 +621,8 @@ TracingSamplerProfiler::StackProfileWriter::GetCallstackIDAndMaybeEmit(
   auto* interned_data = (*trace_packet)->set_interned_data();
 
   std::vector<InterningID> frame_ids;
-  for (const auto& frame : frames) {
+  for (auto& frame : frames) {
+    bool is_unwinder_provided_function_name = false;
     FrameDetails frame_details;
     if (frame.module) {
       frame_details.SetModule(*frame.module);
@@ -611,12 +637,23 @@ TracingSamplerProfiler::StackProfileWriter::GetCallstackIDAndMaybeEmit(
       if (!frame_details.has_valid_module()) {
         frame_details.SetChromeModuleInfo();
       }
-    } else if (frame.instruction_pointer == 0) {
-      // TODO(ssid): This frame is currently skipped from inserting. Find a way
-      // to specify that this frame is scanned in the trace.
-      frame_details.frame_name = "Scanned";
-    } else if (!frame_details.has_valid_module()) {
-      frame_details.SetSystemModuleInfo(frame.instruction_pointer);
+    } else {
+      if (!frame.function_name.empty()) {
+        // Set function names for modules other than native chrome.
+        // This includes Java frames and native Android system frames.
+        // Chrome native frames can already be symbolized server side.
+        // Currently only libunwindstack_unwinder fills function_names in
+        // frames.
+        is_unwinder_provided_function_name = true;
+        frame_details.frame_name = std::move(frame.function_name);
+      }
+      if (frame.instruction_pointer == 0) {
+        // TODO(ssid): This frame is currently skipped from inserting. Find a
+        // way to specify that this frame is scanned in the trace.
+        frame_details.frame_name = "Scanned";
+      } else if (!frame_details.has_valid_module()) {
+        frame_details.SetSystemModuleInfo(frame.instruction_pointer);
+      }
     }
 #endif  // !(ANDROID_ARM64_UNWINDING_SUPPORTED ||
         // ANDROID_CFI_UNWINDING_SUPPORTED)
@@ -631,9 +668,11 @@ TracingSamplerProfiler::StackProfileWriter::GetCallstackIDAndMaybeEmit(
     frame_details.module_id =
         base::TransformModuleIDToBreakpadFormat(frame_details.module_id);
 
-    // We never emit frame names in privacy filtered mode.
+    // Allow uploading function names passed from unwinder, which would be
+    // coming from static compile time strings.
     bool should_emit_frame_names =
-        !frame_details.frame_name.empty() && !should_enable_filtering_;
+        !frame_details.frame_name.empty() &&
+        (is_unwinder_provided_function_name || !should_enable_filtering_);
 
     InterningIndexEntry interned_frame;
     if (should_emit_frame_names) {
@@ -706,8 +745,12 @@ TracingSamplerProfiler::StackProfileWriter::GetCallstackIDAndMaybeEmit(
 
   auto* callstack_entry = interned_data->add_callstacks();
   callstack_entry->set_iid(interned_callstack.id);
-  for (auto& frame_id : frame_ids)
-    callstack_entry->add_frame_ids(frame_id);
+  // base::Unwinder starts from stack top and works to the bottom, but our
+  // Callstack proto wants bottom first to stack top, so we iterate in reverse.
+  // See b/241357440 for context.
+  for (auto it = frame_ids.rbegin(); it != frame_ids.rend(); ++it) {
+    callstack_entry->add_frame_ids(*it);
+  }
 
   return interned_callstack.id;
 }
@@ -724,10 +767,11 @@ void TracingSamplerProfiler::StackProfileWriter::ResetEmittedState() {
 // static
 std::unique_ptr<TracingSamplerProfiler>
 TracingSamplerProfiler::CreateOnMainThread(
-    CoreUnwindersCallback core_unwinders_factory_function) {
+    CoreUnwindersCallback core_unwinders_factory_function,
+    UnwinderType unwinder_type) {
   auto profiler = std::make_unique<TracingSamplerProfiler>(
       base::GetSamplingProfilerCurrentThreadToken(),
-      std::move(core_unwinders_factory_function));
+      std::move(core_unwinders_factory_function), unwinder_type);
   // If running in single process mode, there may be multiple "main thread"
   // profilers created. In this case, we assume the first created one is the
   // browser one.
@@ -818,10 +862,12 @@ void TracingSamplerProfiler::StopTracingForTesting() {
 
 TracingSamplerProfiler::TracingSamplerProfiler(
     base::SamplingProfilerThreadToken sampled_thread_token,
-    CoreUnwindersCallback core_unwinders_factory_function)
+    CoreUnwindersCallback core_unwinders_factory_function,
+    UnwinderType unwinder_type)
     : sampled_thread_token_(sampled_thread_token),
       core_unwinders_factory_function_(
-          std::move(core_unwinders_factory_function)) {
+          std::move(core_unwinders_factory_function)),
+      unwinder_type_(unwinder_type) {
   DCHECK_NE(sampled_thread_token_.id, base::kInvalidThreadId);
   TracingSamplerProfilerDataSource::Get()->RegisterProfiler(this);
 }
@@ -903,6 +949,10 @@ void TracingSamplerProfiler::StartTracing(
     core_unwinders_factory = core_unwinders_factory_function_.Run();
   }
   if (core_unwinders_factory) {
+    if (unwinder_type_ == UnwinderType::kUnknown) {
+      unwinder_type_ = UnwinderType::kCustomAndroid;
+    }
+    profile_builder->SetUnwinderType(unwinder_type_);
     profiler_ = std::make_unique<base::StackSamplingProfiler>(
         sampled_thread_token_, params, std::move(profile_builder),
         std::move(core_unwinders_factory));
@@ -914,11 +964,13 @@ void TracingSamplerProfiler::StartTracing(
       unwinders.push_back(std::make_unique<UnwinderArm64>());
       return unwinders;
     };
+    profile_builder->SetUnwinderType(UnwinderType::kArm64Android);
     profiler_ = std::make_unique<base::StackSamplingProfiler>(
         sampled_thread_token_, params, std::move(profile_builder),
         base::BindOnce(create_unwinders));
 #elif ANDROID_CFI_UNWINDING_SUPPORTED
     auto* module_cache = profile_builder->GetModuleCache();
+    profile_builder->SetUnwinderType(UnwinderType::kCfiAndroid);
     profiler_ = std::make_unique<base::StackSamplingProfiler>(
         sampled_thread_token_, params, std::move(profile_builder),
         std::make_unique<StackSamplerAndroid>(sampled_thread_token_,
@@ -926,6 +978,10 @@ void TracingSamplerProfiler::StartTracing(
 #endif
   }
 #else   // BUILDFLAG(IS_ANDROID)
+  if (unwinder_type_ == UnwinderType::kUnknown) {
+    unwinder_type_ = UnwinderType::kDefault;
+  }
+  profile_builder->SetUnwinderType(unwinder_type_);
   profiler_ = std::make_unique<base::StackSamplingProfiler>(
       sampled_thread_token_, params, std::move(profile_builder));
 #endif  // BUILDFLAG(IS_ANDROID)

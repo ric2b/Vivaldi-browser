@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,22 +42,26 @@ bool GetCalibratedTransform(
   // If the calibration was performed at a resolution that is 0.5 times the
   // current resolution, then the display points (x, y) for a given touch point
   // now represents a display point at (2 * x, 2 * y). This and other kinds of
-  // similar tranforms can be applied using |pre_calibration_tm|.
-  for (int row = 0; row < 4; row++)
-    pre_calibration_tm.TransformPoint(&touch_point_pairs[row].first);
+  // similar transforms can be applied using |pre_calibration_tm|.
+  for (int row = 0; row < 4; row++) {
+    touch_point_pairs[row].first =
+        pre_calibration_tm.MapPoint(touch_point_pairs[row].first);
+  }
 
   // Vector of the X-coordinate of display points corresponding to each of the
   // touch points.
-  SkV4 display_points_x = {static_cast<float>(touch_point_pairs[0].first.x()),
-                           static_cast<float>(touch_point_pairs[1].first.x()),
-                           static_cast<float>(touch_point_pairs[2].first.x()),
-                           static_cast<float>(touch_point_pairs[3].first.x())};
+  float display_points_x[4] = {
+      static_cast<float>(touch_point_pairs[0].first.x()),
+      static_cast<float>(touch_point_pairs[1].first.x()),
+      static_cast<float>(touch_point_pairs[2].first.x()),
+      static_cast<float>(touch_point_pairs[3].first.x())};
   // Vector of the Y-coordinate of display points corresponding to each of the
   // touch points.
-  SkV4 display_points_y = {static_cast<float>(touch_point_pairs[0].first.y()),
-                           static_cast<float>(touch_point_pairs[1].first.y()),
-                           static_cast<float>(touch_point_pairs[2].first.y()),
-                           static_cast<float>(touch_point_pairs[3].first.y())};
+  float display_points_y[4] = {
+      static_cast<float>(touch_point_pairs[0].first.y()),
+      static_cast<float>(touch_point_pairs[1].first.y()),
+      static_cast<float>(touch_point_pairs[2].first.y()),
+      static_cast<float>(touch_point_pairs[3].first.y())};
 
   // Initialize |touch_point_matrix|
   // If {(xt_1, yt_1), (xt_2, yt_2), (xt_3, yt_3)....} are a set of touch points
@@ -69,12 +73,10 @@ bool GetCalibratedTransform(
   // |xt_4  yt_4  1  0|
   gfx::Transform touch_point_matrix;
   for (int row = 0; row < 4; row++) {
-    touch_point_matrix.matrix().setRC(row, 0,
-                                      touch_point_pairs[row].second.x());
-    touch_point_matrix.matrix().setRC(row, 1,
-                                      touch_point_pairs[row].second.y());
-    touch_point_matrix.matrix().setRC(row, 2, 1);
-    touch_point_matrix.matrix().setRC(row, 3, 0);
+    touch_point_matrix.set_rc(row, 0, touch_point_pairs[row].second.x());
+    touch_point_matrix.set_rc(row, 1, touch_point_pairs[row].second.y());
+    touch_point_matrix.set_rc(row, 2, 1);
+    touch_point_matrix.set_rc(row, 3, 0);
   }
   gfx::Transform touch_point_matrix_transpose = touch_point_matrix;
   touch_point_matrix_transpose.Transpose();
@@ -84,7 +86,7 @@ bool GetCalibratedTransform(
 
   // Set (3, 3) = 1 so that |determinent| of the matrix is != 0 and the inverse
   // can be calculated.
-  product_matrix.matrix().setRC(3, 3, 1);
+  product_matrix.set_rc(3, 3, 1);
 
   gfx::Transform product_matrix_inverse;
 
@@ -95,24 +97,24 @@ bool GetCalibratedTransform(
     return false;
   }
 
-  product_matrix_inverse.matrix().setRC(3, 3, 0);
+  product_matrix_inverse.set_rc(3, 3, 0);
 
   product_matrix = product_matrix_inverse * touch_point_matrix_transpose;
 
   // The result [A, B, C, 0] will be used to calibrate the x-coordinate of
   // touch input:
   //   x_new = x_old * A + y_old * B + C;
-  product_matrix.TransformVector4(&display_points_x);
+  product_matrix.TransformVector4(display_points_x);
   // The result [D, E, F, 0] will be used to calibrate the y-coordinate of
   // touch input:
   //   y_new = x_old * D + y_old * E + F;
-  product_matrix.TransformVector4(&display_points_y);
+  product_matrix.TransformVector4(display_points_y);
 
   // Create a transform matrix using the touch calibration data.
   // clang-format off
-  ctm->ConcatTransform(gfx::Transform(
-      display_points_x.x, display_points_x.y, 0, display_points_x.z,
-      display_points_y.x, display_points_y.y, 0, display_points_y.z,
+  ctm->PostConcat(gfx::Transform::RowMajor(
+      display_points_x[0], display_points_x[1], 0, display_points_x[2],
+      display_points_y[0], display_points_y[1], 0, display_points_y[2],
       0, 0, 1, 0,
       0, 0, 0, 1));
   // clang-format on
@@ -274,7 +276,7 @@ gfx::Transform TouchTransformController::GetTouchTransform(
                                     touch_native_size);
   }
 
-  stored_ctm.ConcatTransform(ctm);
+  stored_ctm.PostConcat(ctm);
   return stored_ctm;
 }
 

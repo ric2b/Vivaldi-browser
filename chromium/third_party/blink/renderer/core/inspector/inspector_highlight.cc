@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -305,7 +305,7 @@ void AppendStyleInfo(Node* node,
   }
   element_info->setValue("style", std::move(computed_style));
 
-  if (!node_contrast.font_size.IsEmpty()) {
+  if (!node_contrast.font_size.empty()) {
     std::unique_ptr<protocol::DictionaryValue> contrast =
         protocol::DictionaryValue::create();
     contrast->setString("fontSize", node_contrast.font_size);
@@ -353,7 +353,7 @@ std::unique_ptr<protocol::DictionaryValue> BuildElementInfo(Element* element) {
     else if (pseudo_element->GetPseudoId() == kPseudoIdMarker)
       class_names.Append("::marker");
   }
-  if (!class_names.IsEmpty())
+  if (!class_names.empty())
     element_info->setString("className", class_names.ToString());
 
   LayoutObject* layout_object = element->GetLayoutObject();
@@ -405,7 +405,7 @@ void AppendLineStyleConfig(
 
   std::unique_ptr<protocol::DictionaryValue> config =
       protocol::DictionaryValue::create();
-  config->setString("color", line_style->color.Serialized());
+  config->setString("color", line_style->color.SerializeAsCSSColor());
   config->setString("pattern", line_style->pattern);
 
   parent_config->setValue(line_name, std::move(config));
@@ -421,8 +421,8 @@ void AppendBoxStyleConfig(
 
   std::unique_ptr<protocol::DictionaryValue> config =
       protocol::DictionaryValue::create();
-  config->setString("fillColor", box_style->fill_color.Serialized());
-  config->setString("hatchColor", box_style->hatch_color.Serialized());
+  config->setString("fillColor", box_style->fill_color.SerializeAsCSSColor());
+  config->setString("hatchColor", box_style->hatch_color.SerializeAsCSSColor());
 
   parent_config->setValue(box_name, std::move(config));
 }
@@ -487,39 +487,41 @@ std::unique_ptr<protocol::DictionaryValue> BuildGridHighlightConfigInfo(
 
   if (grid_config.grid_color != Color::kTransparent) {
     grid_config_info->setString("gridBorderColor",
-                                grid_config.grid_color.Serialized());
+                                grid_config.grid_color.SerializeAsCSSColor());
   }
   if (grid_config.row_line_color != Color::kTransparent) {
-    grid_config_info->setString("rowLineColor",
-                                grid_config.row_line_color.Serialized());
+    grid_config_info->setString(
+        "rowLineColor", grid_config.row_line_color.SerializeAsCSSColor());
   }
   if (grid_config.column_line_color != Color::kTransparent) {
-    grid_config_info->setString("columnLineColor",
-                                grid_config.column_line_color.Serialized());
+    grid_config_info->setString(
+        "columnLineColor", grid_config.column_line_color.SerializeAsCSSColor());
   }
   if (grid_config.row_gap_color != Color::kTransparent) {
-    grid_config_info->setString("rowGapColor",
-                                grid_config.row_gap_color.Serialized());
+    grid_config_info->setString(
+        "rowGapColor", grid_config.row_gap_color.SerializeAsCSSColor());
   }
   if (grid_config.column_gap_color != Color::kTransparent) {
-    grid_config_info->setString("columnGapColor",
-                                grid_config.column_gap_color.Serialized());
+    grid_config_info->setString(
+        "columnGapColor", grid_config.column_gap_color.SerializeAsCSSColor());
   }
   if (grid_config.row_hatch_color != Color::kTransparent) {
-    grid_config_info->setString("rowHatchColor",
-                                grid_config.row_hatch_color.Serialized());
+    grid_config_info->setString(
+        "rowHatchColor", grid_config.row_hatch_color.SerializeAsCSSColor());
   }
   if (grid_config.column_hatch_color != Color::kTransparent) {
-    grid_config_info->setString("columnHatchColor",
-                                grid_config.column_hatch_color.Serialized());
+    grid_config_info->setString(
+        "columnHatchColor",
+        grid_config.column_hatch_color.SerializeAsCSSColor());
   }
   if (grid_config.area_border_color != Color::kTransparent) {
-    grid_config_info->setString("areaBorderColor",
-                                grid_config.area_border_color.Serialized());
+    grid_config_info->setString(
+        "areaBorderColor", grid_config.area_border_color.SerializeAsCSSColor());
   }
   if (grid_config.grid_background_color != Color::kTransparent) {
-    grid_config_info->setString("gridBackgroundColor",
-                                grid_config.grid_background_color.Serialized());
+    grid_config_info->setString(
+        "gridBackgroundColor",
+        grid_config.grid_background_color.SerializeAsCSSColor());
   }
   return grid_config_info;
 }
@@ -544,10 +546,11 @@ BuildIsolationModeHighlightConfigInfo(
   std::unique_ptr<protocol::DictionaryValue> config_info =
       protocol::DictionaryValue::create();
 
-  config_info->setString("resizerColor", config.resizer_color.Serialized());
+  config_info->setString("resizerColor",
+                         config.resizer_color.SerializeAsCSSColor());
   config_info->setString("resizerHandleColor",
-                         config.resizer_handle_color.Serialized());
-  config_info->setString("maskColor", config.mask_color.Serialized());
+                         config.resizer_handle_color.SerializeAsCSSColor());
+  config_info->setString("maskColor", config.mask_color.SerializeAsCSSColor());
 
   return config_info;
 }
@@ -1083,7 +1086,8 @@ DevtoolsFlexInfo GetFlexLinesAndItems(LayoutBox* layout_box,
       LayoutUnit baseline =
           NGBoxFragment(layout_box->StyleRef().GetWritingDirection(),
                         *To<NGPhysicalBoxFragment>(child_fragment))
-              .BaselineOrSynthesize(layout_box->StyleRef().GetFontBaseline());
+              .FirstBaselineOrSynthesize(
+                  layout_box->StyleRef().GetFontBaseline());
       float adjusted_baseline = AdjustForAbsoluteZoom::AdjustFloat(
           baseline + box->MarginTop(), box->StyleRef());
 
@@ -1097,7 +1101,7 @@ DevtoolsFlexInfo GetFlexLinesAndItems(LayoutBox* layout_box,
       LayoutUnit item_end = is_horizontal ? item_rect.X() + item_rect.Width()
                                           : item_rect.Y() + item_rect.Height();
 
-      if (flex_lines.IsEmpty() ||
+      if (flex_lines.empty() ||
           (is_reverse ? item_end > progression : item_start < progression)) {
         flex_lines.emplace_back();
       }
@@ -1671,10 +1675,10 @@ void InspectorHighlightBase::AppendPath(
   std::unique_ptr<protocol::DictionaryValue> object =
       protocol::DictionaryValue::create();
   object->setValue("path", std::move(path));
-  object->setString("fillColor", fill_color.Serialized());
+  object->setString("fillColor", fill_color.SerializeAsCSSColor());
   if (outline_color != Color::kTransparent)
-    object->setString("outlineColor", outline_color.Serialized());
-  if (!name.IsEmpty())
+    object->setString("outlineColor", outline_color.SerializeAsCSSColor());
+  if (!name.empty())
     object->setString("name", name);
   highlight_paths_->pushValue(std::move(object));
 }
@@ -2269,9 +2273,9 @@ std::unique_ptr<protocol::DictionaryValue> InspectorScrollSnapHighlight(
   AppendLineStyleConfig(config.snap_area_border, scroll_snap_info,
                         "snapAreaBorder");
   scroll_snap_info->setString("scrollMarginColor",
-                              config.scroll_margin_color.Serialized());
-  scroll_snap_info->setString("scrollPaddingColor",
-                              config.scroll_padding_color.Serialized());
+                              config.scroll_margin_color.SerializeAsCSSColor());
+  scroll_snap_info->setString(
+      "scrollPaddingColor", config.scroll_padding_color.SerializeAsCSSColor());
 
   return scroll_snap_info;
 }

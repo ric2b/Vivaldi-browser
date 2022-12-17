@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors.All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,12 +10,15 @@
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
+#include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_space_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/table/ng_table_node.h"
+#include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
@@ -68,6 +71,9 @@ bool InlineLengthUnresolvable(const NGConstraintSpace& constraint_space,
     return constraint_space.PercentageResolutionInlineSize() == kIndefiniteSize;
 
   if (length.IsFillAvailable())
+    return constraint_space.AvailableSize().inline_size == kIndefiniteSize;
+
+  if (length.IsFitContent())
     return constraint_space.AvailableSize().inline_size == kIndefiniteSize;
 
   return false;
@@ -138,25 +144,19 @@ LayoutUnit ResolveInlineLengthInternal(
     case Length::kMinIntrinsic:
     case Length::kFitContent: {
       DCHECK(min_max_sizes.has_value());
+      if (length.IsMinContent() || length.IsMinIntrinsic())
+        return min_max_sizes->min_size;
+      if (length.IsMaxContent())
+        return min_max_sizes->max_size;
+
       LayoutUnit available_size = constraint_space.AvailableSize().inline_size;
-      LayoutUnit value;
-      // TODO(ikilpatrick): The |IsFitContent()| might not be correct for a
-      // max-size, e.g. "max-width: fit-content".
-      if (length.IsMinContent() || length.IsMinIntrinsic() ||
-          (length.IsFitContent() && available_size == kIndefiniteSize)) {
-        value = min_max_sizes->min_size;
-      } else if (length.IsMaxContent()) {
-        value = min_max_sizes->max_size;
-      } else {
-        DCHECK_GE(available_size, LayoutUnit());
-        if (override_available_size != kIndefiniteSize)
-          available_size = override_available_size;
-        NGBoxStrut margins = ComputeMarginsForSelf(constraint_space, style);
-        LayoutUnit fill_available =
-            (available_size - margins.InlineSum()).ClampNegativeToZero();
-        value = min_max_sizes->ShrinkToFit(fill_available);
-      }
-      return value;
+      DCHECK_GE(available_size, LayoutUnit());
+      if (override_available_size != kIndefiniteSize)
+        available_size = override_available_size;
+      NGBoxStrut margins = ComputeMarginsForSelf(constraint_space, style);
+      LayoutUnit fill_available =
+          (available_size - margins.InlineSum()).ClampNegativeToZero();
+      return min_max_sizes->ShrinkToFit(fill_available);
     }
     case Length::kDeviceWidth:
     case Length::kDeviceHeight:
@@ -549,10 +549,12 @@ LayoutUnit ComputeInlineSizeForFragmentInternal(
 
   if (LIKELY(extent == kIndefiniteSize)) {
     if (logical_width.IsAuto()) {
-      logical_width = (space.IsInlineAutoBehaviorStretch() &&
-                       space.AvailableSize().inline_size != kIndefiniteSize)
-                          ? Length::FillAvailable()
-                          : Length::FitContent();
+      if (space.AvailableSize().inline_size == kIndefiniteSize)
+        logical_width = Length::MinContent();
+      else if (space.IsInlineAutoBehaviorStretch())
+        logical_width = Length::FillAvailable();
+      else
+        logical_width = Length::FitContent();
     }
     extent = ResolveMainInlineLength(space, style, border_padding,
                                      MinMaxSizesFunc, logical_width);
@@ -862,10 +864,9 @@ absl::optional<LogicalSize> ComputeNormalizedNaturalSize(
   return absl::nullopt;
 }
 
-}  // namespace
-
-// Computes size for a replaced element.
-LogicalSize ComputeReplacedSize(
+// The main part of ComputeReplacedSize(). This function doesn't handle a
+// case of <svg> as the documentElement.
+LogicalSize ComputeReplacedSizeInternal(
     const NGBlockNode& node,
     const NGConstraintSpace& space,
     const NGBoxStrut& border_padding,
@@ -1143,6 +1144,60 @@ LogicalSize ComputeReplacedSize(
   // the constrained block-size, and recalculate the inline-size.
   return {inline_min_max_sizes.ClampSizeToMinAndMax(hypothetical_inline),
           constrained_block};
+}
+
+}  // namespace
+
+// Computes size for a replaced element.
+LogicalSize ComputeReplacedSize(
+    const NGBlockNode& node,
+    const NGConstraintSpace& space,
+    const NGBoxStrut& border_padding,
+    absl::optional<LogicalSize> override_available_size,
+    ReplacedSizeMode mode,
+    const Length::AnchorEvaluator* anchor_evaluator) {
+  DCHECK(node.IsReplaced());
+
+  if (!node.GetLayoutBox()->IsSVGRoot()) {
+    return ComputeReplacedSizeInternal(node, space, border_padding,
+                                       override_available_size, mode,
+                                       anchor_evaluator);
+  }
+
+  const LayoutSVGRoot* svg_root = To<LayoutSVGRoot>(node.GetLayoutBox());
+  PhysicalSize container_size(svg_root->GetContainerSize());
+  if (!container_size.IsEmpty()) {
+    LogicalSize size =
+        container_size.ConvertToLogical(node.Style().GetWritingMode());
+    size.inline_size += border_padding.InlineSum();
+    size.block_size += border_padding.BlockSum();
+    return size;
+  }
+
+  if (svg_root->IsEmbeddedThroughFrameContainingSVGDocument()) {
+    LogicalSize size = space.AvailableSize();
+    size.block_size = node.Style().IsHorizontalWritingMode()
+                          ? node.InitialContainingBlockSize().height
+                          : node.InitialContainingBlockSize().width;
+    return size;
+  }
+
+  LogicalSize size = ComputeReplacedSizeInternal(node, space, border_padding,
+                                                 override_available_size, mode,
+                                                 anchor_evaluator);
+
+  if (node.Style().LogicalWidth().IsPercentOrCalc())
+    size.inline_size *= svg_root->LogicalSizeScaleFactorForPercentageLengths();
+
+  const Length& logical_height = node.Style().LogicalHeight();
+  if (svg_root->IsDocumentElement() && logical_height.IsPercentOrCalc()) {
+    LayoutUnit height = ValueForLength(
+        logical_height,
+        node.GetDocument().GetLayoutView()->ViewLogicalHeightForPercentages());
+    height *= svg_root->LogicalSizeScaleFactorForPercentageLengths();
+    size.block_size = height;
+  }
+  return size;
 }
 
 int ResolveUsedColumnCount(int computed_count,

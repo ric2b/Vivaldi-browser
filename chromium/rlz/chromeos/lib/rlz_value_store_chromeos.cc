@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -126,10 +126,8 @@ void OnSetRlzPingSent(int retry_count, bool success);
 void SetRlzPingSent(int retry_count) {
   // GetSystemBus() could return null in tests.
   base::SequencedTaskRunner* const origin_task_runner =
-      chromeos::DBusThreadManager::Get()->GetSystemBus()
-          ? chromeos::DBusThreadManager::Get()
-                ->GetSystemBus()
-                ->GetOriginTaskRunner()
+      ash::DBusThreadManager::Get()->GetSystemBus()
+          ? ash::DBusThreadManager::Get()->GetSystemBus()->GetOriginTaskRunner()
           : nullptr;
   if (origin_task_runner && !origin_task_runner->RunsTasksInCurrentSequence()) {
     origin_task_runner->PostTask(FROM_HERE,

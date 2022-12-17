@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,6 @@ class DurableStoragePermissionContext
                             const GURL& embedding_origin,
                             ContentSetting content_setting,
                             bool is_one_time) override;
-  bool IsRestrictedToSecureOrigins() const override;
 };
 
 #endif  // CHROME_BROWSER_STORAGE_DURABLE_STORAGE_PERMISSION_CONTEXT_H_

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,8 +18,11 @@ import org.chromium.browserfragment.interfaces.IBrowserFragmentDelegate;
 import org.chromium.browserfragment.interfaces.IBrowserFragmentDelegateClient;
 import org.chromium.browserfragment.interfaces.IFragmentParams;
 import org.chromium.browserfragment.interfaces.ITabCallback;
-import org.chromium.browserfragment.interfaces.ITabObserverDelegate;
+import org.chromium.browserfragment.interfaces.ITabListObserverDelegate;
 import org.chromium.browserfragment.interfaces.ITabParams;
+import org.chromium.weblayer_private.interfaces.BrowserFragmentArgs;
+import org.chromium.weblayer_private.interfaces.IObjectWrapper;
+import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 
 /**
  * This class acts as a proxy between the embedding app's BrowserFragment and
@@ -30,11 +33,9 @@ class BrowserFragmentDelegate extends IBrowserFragmentDelegate.Stub {
 
     private Context mContext;
     private WebLayer mWebLayer;
+    private BrowserFragmentEventHandler mEventHandler;
 
-    // TODO(rayankans): Create an event handler instead of using the weblayer fragment directly.
-    private BrowserFragment mFragment;
-
-    private BrowserFragmentTabDelegate mTabDelegate;
+    private BrowserFragmentTabListDelegate mBrowserDelegate;
 
     private IBrowserFragmentDelegateClient mClient;
     private SurfaceControlViewHost mSurfaceControlViewHost;
@@ -42,17 +43,32 @@ class BrowserFragmentDelegate extends IBrowserFragmentDelegate.Stub {
     BrowserFragmentDelegate(Context context, WebLayer webLayer, IFragmentParams params) {
         mContext = context;
         mWebLayer = webLayer;
-        mTabDelegate = new BrowserFragmentTabDelegate();
+        mBrowserDelegate = new BrowserFragmentTabListDelegate();
 
         BrowserFragmentCreateParams createParams = (new BrowserFragmentCreateParams.Builder())
                                                            .setProfileName(params.profileName)
                                                            .setPersistenceId(params.persistenceId)
                                                            .setIsIncognito(params.isIncognito)
                                                            .build();
-        mHandler.post(() -> {
-            mFragment = (BrowserFragment) WebLayer.createBrowserFragmentWithParams(createParams);
-            mFragment.ignoreViewModel();
-        });
+        mHandler.post(() -> { mEventHandler = createBrowserFragmentEventHandler(createParams); });
+    }
+
+    private BrowserFragmentEventHandler createBrowserFragmentEventHandler(
+            BrowserFragmentCreateParams params) {
+        ThreadCheck.ensureOnUiThread();
+        String profileName = Profile.sanitizeProfileName(params.getProfileName());
+        boolean isIncognito = params.isIncognito() || "".equals(profileName);
+        // Support for named incognito profiles was added in 87. Checking is done in
+        // BrowserFragment, as this code should not trigger loading WebLayer.
+        Bundle args = new Bundle();
+        args.putString(BrowserFragmentArgs.PROFILE_NAME, profileName);
+        if (params.getPersistenceId() != null) {
+            args.putString(BrowserFragmentArgs.PERSISTENCE_ID, params.getPersistenceId());
+        }
+        args.putBoolean(BrowserFragmentArgs.IS_INCOGNITO, isIncognito);
+        args.putBoolean(BrowserFragmentArgs.USE_VIEW_MODEL, params.getUseViewModel());
+
+        return new BrowserFragmentEventHandler(args);
     }
 
     @Override
@@ -72,11 +88,22 @@ class BrowserFragmentDelegate extends IBrowserFragmentDelegate.Stub {
         mSurfaceControlViewHost =
                 new SurfaceControlViewHost(mContext, window.getDefaultDisplay(), hostToken);
 
-        mFragment.getBrowser().setSurfaceControlViewHost(mSurfaceControlViewHost);
+        mEventHandler.getBrowser().setSurfaceControlViewHost(mSurfaceControlViewHost);
         try {
             mClient.onSurfacePackageReady(mSurfaceControlViewHost.getSurfacePackage());
         } catch (RemoteException e) {
         }
+    }
+
+    @Override
+    public void retrieveContentViewRenderView() {
+        mHandler.post(() -> {
+            try {
+                mClient.onContentViewRenderViewReady(
+                        ObjectWrapper.wrap(mEventHandler.getBrowser().getContentViewRenderView()));
+            } catch (RemoteException e) {
+            }
+        });
     }
 
     @Override
@@ -91,7 +118,7 @@ class BrowserFragmentDelegate extends IBrowserFragmentDelegate.Stub {
     @Override
     public void getActiveTab(ITabCallback tabCallback) {
         mHandler.post(() -> {
-            Tab activeTab = mFragment.getBrowser().getActiveTab();
+            Tab activeTab = mEventHandler.getBrowser().getActiveTab();
             try {
                 if (activeTab != null) {
                     ITabParams tabParams = TabParams.buildParcelable(activeTab);
@@ -106,36 +133,51 @@ class BrowserFragmentDelegate extends IBrowserFragmentDelegate.Stub {
 
     @Override
     public void onAttach() {
-        mHandler.post(() -> mFragment.onAttach(mContext));
+        mHandler.post(() -> mEventHandler.onAttach(mContext));
+    }
+
+    @Override
+    public void onAttachWithContext(IObjectWrapper context) {
+        mHandler.post(() -> mEventHandler.onAttach(ObjectWrapper.unwrap(context, Context.class)));
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        mHandler.post(() -> mFragment.onCreate(savedInstanceState, mTabDelegate));
+        mHandler.post(() -> {
+            mEventHandler.onCreate(savedInstanceState, mBrowserDelegate);
+
+            Profile profile = mEventHandler.getBrowser().getProfile();
+            try {
+                mClient.onCookieManagerReady(new CookieManagerDelegate(profile.getCookieManager()));
+            } catch (RemoteException e) {
+            }
+        });
     }
 
     @Override
     public void onDestroy() {
-        mHandler.post(() -> mFragment.onDestroy(/* force= */ true));
+        mHandler.post(() -> mEventHandler.onDestroy());
     }
 
     @Override
     public void onDetach() {
         mHandler.post(() -> {
-            mFragment.onDetach();
-            mSurfaceControlViewHost.release();
-            mSurfaceControlViewHost = null;
+            mEventHandler.onDetach();
+            if (mSurfaceControlViewHost != null) {
+                mSurfaceControlViewHost.release();
+                mSurfaceControlViewHost = null;
+            }
         });
     }
 
     @Override
     public void onStart() {
         mHandler.post(() -> {
-            mFragment.onStart();
+            mEventHandler.onStart();
 
             // Retrieve the instance state.
             Bundle instanceState = new Bundle();
-            mFragment.onSaveInstanceState(instanceState);
+            mEventHandler.onSaveInstanceState(instanceState);
 
             try {
                 mClient.onStarted(instanceState);
@@ -146,28 +188,28 @@ class BrowserFragmentDelegate extends IBrowserFragmentDelegate.Stub {
 
     @Override
     public void onStop() {
-        mHandler.post(() -> mFragment.onStop());
+        mHandler.post(() -> mEventHandler.onStop());
     }
 
     @Override
     public void onResume() {
-        mHandler.post(() -> mFragment.onResume());
+        mHandler.post(() -> mEventHandler.onResume());
     }
 
     @Override
     public void onPause() {
-        mHandler.post(() -> mFragment.onPause());
+        mHandler.post(() -> mEventHandler.onPause());
     }
 
     @Override
-    public void setTabObserverDelegate(ITabObserverDelegate tabObserverDelegate) {
-        mTabDelegate.setObserver(tabObserverDelegate);
+    public void setTabListObserverDelegate(ITabListObserverDelegate browserObserverDelegate) {
+        mBrowserDelegate.setObserver(browserObserverDelegate);
     }
 
     @Override
     public void tryNavigateBack(IBooleanCallback callback) {
         mHandler.post(() -> {
-            mFragment.getBrowser().tryNavigateBack(didNavigate -> {
+            mEventHandler.getBrowser().tryNavigateBack(didNavigate -> {
                 try {
                     callback.onResult(didNavigate);
                 } catch (RemoteException e) {
@@ -179,7 +221,7 @@ class BrowserFragmentDelegate extends IBrowserFragmentDelegate.Stub {
     @Override
     public void createTab(ITabCallback callback) {
         mHandler.post(() -> {
-            Tab newTab = mFragment.getBrowser().createTab();
+            Tab newTab = mEventHandler.getBrowser().createTab();
             try {
                 callback.onResult(TabParams.buildParcelable(newTab));
             } catch (RemoteException e) {

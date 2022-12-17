@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,9 +66,23 @@ bool PrefetchAllowAllDomainsForExtendedPreloading() {
       "allow_all_domains_for_extended_preloading", true);
 }
 
-int PrefetchServiceMaximumNumberOfConcurrentPrefetches() {
+size_t PrefetchServiceMaximumNumberOfConcurrentPrefetches() {
   return base::GetFieldTrialParamByFeatureAsInt(
       features::kPrefetchUseContentRefactor, "max_concurrent_prefetches", 1);
+}
+
+absl::optional<int> PrefetchServiceMaximumNumberOfPrefetchesPerPage() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          "isolated-prerender-unlimited-prefetches")) {
+    return absl::nullopt;
+  }
+
+  int max = base::GetFieldTrialParamByFeatureAsInt(
+      features::kPrefetchUseContentRefactor, "max_srp_prefetches", 5);
+  if (max < 0) {
+    return absl::nullopt;
+  }
+  return max;
 }
 
 bool PrefetchServiceSendDecoyRequestForIneligblePrefetch(

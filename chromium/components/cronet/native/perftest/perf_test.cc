@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -421,7 +421,7 @@ void PerfTest(const char* json_args) {
       << "Benchmark options string is not a dictionary: " << benchmark_options
       << " See DEFAULT_BENCHMARK_CONFIG in perf_test_util.py.";
   g_options =
-      std::make_unique<base::Value::Dict>(std::move(options_value->GetDict()));
+      std::make_unique<base::Value::Dict>(std::move(*options_value).TakeDict());
 
   // Run benchmarks putting timing results into |results|.
   base::Value::Dict results;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,7 +84,7 @@ class COMPONENT_EXPORT(ASH_PERIPHERAL_NOTIFICATION)
 
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
-  enum PeripheralConnectivityResults {
+  enum class PeripheralConnectivityResults {
     kTBTSupportedAndAllowed = 0,
     kTBTOnlyAndBlockedByPciguard = 1,
     kTBTOnlyAndBlockedInGuestSession = 2,

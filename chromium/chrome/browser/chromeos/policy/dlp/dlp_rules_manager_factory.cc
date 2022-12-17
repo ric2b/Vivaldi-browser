@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,8 +51,8 @@ Profile* GetMainProfile() {
   if (!profile_manager)
     return nullptr;
   auto profiles = profile_manager->GetLoadedProfiles();
-  const auto profile_it = base::ranges::find_if(
-      profiles, [](Profile* profile) { return profile->IsMainProfile(); });
+  const auto profile_it =
+      base::ranges::find_if(profiles, &Profile::IsMainProfile);
   if (profile_it == profiles.end())
     return nullptr;
   return *profile_it;

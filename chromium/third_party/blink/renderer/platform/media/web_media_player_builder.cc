@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,6 +38,7 @@ WebMediaPlayer* WebMediaPlayerBuilder::Build(
     UrlIndex* url_index,
     std::unique_ptr<VideoFrameCompositor> compositor,
     std::unique_ptr<media::MediaLog> media_log,
+    media::MediaPlayerLoggingID player_id,
     DeferLoadCB defer_load_cb,
     scoped_refptr<media::SwitchableAudioRendererSink> audio_renderer_sink,
     scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
@@ -62,7 +63,7 @@ WebMediaPlayer* WebMediaPlayerBuilder::Build(
     scoped_refptr<ThreadSafeBrowserInterfaceBrokerProxy> remote_interfaces) {
   return new WebMediaPlayerImpl(
       frame, client, encrypted_client, delegate, std::move(factory_selector),
-      url_index, std::move(compositor), std::move(media_log),
+      url_index, std::move(compositor), std::move(media_log), player_id,
       std::move(defer_load_cb), std::move(audio_renderer_sink),
       std::move(media_task_runner), std::move(worker_task_runner),
       std::move(compositor_task_runner),

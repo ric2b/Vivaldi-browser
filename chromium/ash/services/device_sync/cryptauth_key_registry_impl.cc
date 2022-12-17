@@ -1,12 +1,12 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/device_sync/cryptauth_key_registry_impl.h"
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/device_sync/pref_names.h"
 #include "base/memory/ptr_util.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
@@ -43,7 +43,7 @@ void CryptAuthKeyRegistryImpl::RegisterPrefs(PrefRegistrySimple* registry) {
 CryptAuthKeyRegistryImpl::CryptAuthKeyRegistryImpl(PrefService* pref_service)
     : pref_service_(pref_service) {
   const base::Value::Dict& dict =
-      pref_service_->GetValueDict(prefs::kCryptAuthKeyRegistry);
+      pref_service_->GetDict(prefs::kCryptAuthKeyRegistry);
 
   for (const CryptAuthKeyBundle::Name& name : CryptAuthKeyBundle::AllNames()) {
     std::string name_string =

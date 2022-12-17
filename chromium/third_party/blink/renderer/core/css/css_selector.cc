@@ -329,7 +329,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoPlaceholder:
     case kPseudoPlaceholderShown:
     case kPseudoPlaying:
-    case kPseudoPopupHidden:
+    case kPseudoPopupOpeningOrOpen:
     case kPseudoReadOnly:
     case kPseudoReadWrite:
     case kPseudoRelativeAnchor:
@@ -383,7 +383,7 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"-internal-media-controls-overlay-cast-button",
      CSSSelector::kPseudoWebKitCustomElement},
     {"-internal-multi-select-focus", CSSSelector::kPseudoMultiSelectFocus},
-    {"-internal-popup-hidden", CSSSelector::kPseudoPopupHidden},
+    {"-internal-popup-opening-or-open", CSSSelector::kPseudoPopupOpeningOrOpen},
     {"-internal-relative-anchor", CSSSelector::kPseudoRelativeAnchor},
     {"-internal-selector-fragment-anchor",
      CSSSelector::kPseudoSelectorFragmentAnchor},
@@ -576,7 +576,7 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
   if (match->type == CSSSelector::kPseudoOpen && !popup_attribute_enabled)
     return CSSSelector::kPseudoUnknown;
 
-  if (match->type == CSSSelector::kPseudoPopupHidden &&
+  if (match->type == CSSSelector::kPseudoPopupOpeningOrOpen &&
       !popup_attribute_enabled)
     return CSSSelector::kPseudoUnknown;
 
@@ -779,7 +779,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoPictureInPicture:
     case kPseudoPlaceholderShown:
     case kPseudoPlaying:
-    case kPseudoPopupHidden:
+    case kPseudoPopupOpeningOrOpen:
     case kPseudoReadOnly:
     case kPseudoReadWrite:
     case kPseudoRelativeAnchor:
@@ -825,7 +825,7 @@ static void SerializeNamespacePrefixIfNeeded(const AtomicString& prefix,
                                              const AtomicString& any,
                                              StringBuilder& builder,
                                              bool is_attribute_selector) {
-  if (prefix.IsNull() || (prefix.IsEmpty() && is_attribute_selector))
+  if (prefix.IsNull() || (prefix.empty() && is_attribute_selector))
     return;
   SerializeIdentifierOrAny(prefix, any, builder);
   builder.Append('|');

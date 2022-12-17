@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -233,7 +233,7 @@ class CookieSettingsBaseStorageAccessAPITest
  public:
   CookieSettingsBaseStorageAccessAPITest() {
     std::vector<base::test::ScopedFeatureList::FeatureAndParams> enabled;
-    std::vector<base::Feature> disabled;
+    std::vector<base::test::FeatureRef> disabled;
     if (IsStorageAccessAPIEnabled()) {
       enabled.push_back({net::features::kStorageAccessAPI,
                          {{"storage-access-api-grants-unpartitioned-storage",

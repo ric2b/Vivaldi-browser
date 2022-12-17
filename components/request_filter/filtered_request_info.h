@@ -29,7 +29,7 @@ struct FilteredRequestInfo {
   ~FilteredRequestInfo();
 
   // Fill in response data for this request.
-  void AddResponse(const network::mojom::URLResponseHead& response);
+  void AddResponse(const network::mojom::URLResponseHead& added_response);
 
   // A unique identifier for this request.
   const uint64_t id;

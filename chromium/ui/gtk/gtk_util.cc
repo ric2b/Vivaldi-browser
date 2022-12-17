@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -227,8 +227,12 @@ CairoSurface::CairoSurface(const gfx::Size& size)
 }
 
 CairoSurface::~CairoSurface() {
-  cairo_destroy(cairo_);
-  cairo_surface_destroy(surface_);
+  // `cairo_destroy` and `cairo_surface_destroy` decrease the reference count on
+  // `cairo_` and `surface_` objects respectively. The underlying memory is
+  // freed if the reference count goes to zero. We use ExtractAsDangling() here
+  // to avoid holding a briefly dangling ptr in case the memory is freed.
+  cairo_destroy(cairo_.ExtractAsDangling());
+  cairo_surface_destroy(surface_.ExtractAsDangling());
 }
 
 SkColor CairoSurface::GetAveragePixelValue(bool frame) {

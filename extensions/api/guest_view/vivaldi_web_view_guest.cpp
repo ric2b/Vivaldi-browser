@@ -70,6 +70,7 @@
 #include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 #include "extensions/helper/vivaldi_init_helpers.h"
 #include "prefs/vivaldi_gen_prefs.h"
+#include "ui/content/vivaldi_tab_check.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -215,8 +216,6 @@ static std::string ContentSettingsTypeToString(
       return "mixed-script";
     case ContentSettingsType::PROTOCOL_HANDLERS:
       return "register-protocol-handler";
-    case ContentSettingsType::PPAPI_BROKER:
-      return "ppapi-broker";
     case ContentSettingsType::AUTOMATIC_DOWNLOADS:
       return "multiple-automatic-downloads";
     case ContentSettingsType::MIDI_SYSEX:
@@ -494,7 +493,7 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
         guest->web_contents()->GetBrowserContext();
 
     // We are done with the guest, get rid of it so the teardown will be clean.
-    guest->Destroy(false);
+    guest->WebContentsDestroyed();
 
     Profile* profile = Profile::FromBrowserContext(context);
 
@@ -601,16 +600,16 @@ void WebViewGuest::OnWindowBlocked(
   base::Value::Dict args;
   args.Set(webview::kTargetURL, window_target_url.spec());
   if (features.has_height) {
-    args.Set(webview::kInitialHeight, features.height);
+    args.Set(webview::kInitialHeight, features.bounds.height());
   }
   if (features.has_width) {
-    args.Set(webview::kInitialWidth, features.width);
+    args.Set(webview::kInitialWidth, features.bounds.width());
   }
   if (features.has_x) {
-    args.Set(webview::kInitialLeft, features.x);
+    args.Set(webview::kInitialLeft, features.bounds.x());
   }
   if (features.has_y) {
-    args.Set(webview::kInitialTop, features.y);
+    args.Set(webview::kInitialTop, features.bounds.y());
   }
   args.Set(webview::kName, frame_name);
   args.Set(webview::kWindowOpenDisposition,
@@ -628,8 +627,7 @@ void WebViewGuest::AllowRunningInsecureContent() {
         *web_contents()->GetOpener());
   }
 
-  web_contents()->ForEachRenderFrameHost(
-      base::BindRepeating(&SetAllowRunningInsecureContent));
+  web_contents()->ForEachRenderFrameHost(&SetAllowRunningInsecureContent);
 }
 
 bool WebViewGuest::ShouldAllowRunningInsecureContent(WebContents* web_contents,
@@ -725,7 +723,7 @@ void WebViewGuest::LoadTabContentsIfNecessary() {
 
 content::WebContentsDelegate* WebViewGuest::GetDevToolsConnector() {
   if (::vivaldi::IsVivaldiRunning() && connector_item_)
-    return connector_item_.get();
+    return connector_item_;
   return this;
 }
 
@@ -770,8 +768,9 @@ void WebViewGuest::SetIsNavigatingAwayFromVivaldiUI(bool away) {
 }
 
 void WebViewGuest::VivaldiCreateWebContents(
+    std::unique_ptr<GuestViewBase> owned_this,
     const base::Value::Dict& create_params,
-    WebContentsCreatedCallback callback) {
+    WebContentsCreatedCallback webcontentents_created_callback) {
   RenderProcessHost* owner_render_process_host =
       owner_web_contents()->GetPrimaryMainFrame()->GetProcess();
   // browser_context_ is always owner_web_contents->GetBrowserContext().
@@ -787,7 +786,7 @@ void WebViewGuest::VivaldiCreateWebContents(
   if (!base::IsStringUTF8(storage_partition_id)) {
     bad_message::ReceivedBadMessage(owner_render_process_host,
                                     bad_message::WVG_PARTITION_ID_NOT_UTF8);
-    std::move(callback).Run(nullptr);
+    std::move(webcontentents_created_callback).Run(std::move(owned_this), nullptr);
     return;
   }
   std::string partition_domain = GetOwnerSiteURL().host();
@@ -845,7 +844,7 @@ void WebViewGuest::VivaldiCreateWebContents(
         browser_context(), partition_config);
   }
 
-  WebContents* new_contents = nullptr;
+  std::unique_ptr<WebContents> new_contents;
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   content::BrowserContext* context = browser_context();
@@ -854,33 +853,36 @@ void WebViewGuest::VivaldiCreateWebContents(
     // guest with InitWithWebContents we cannot delete the tabstrip contents,
     // and we don't need to recreate the webcontents either. Just use the
     // WebContents owned by the tab-strip.
-    content::WebContents* tabstrip_contents = NULL;
+    content::WebContents* tabstrip_contents = nullptr;
     bool include_incognito = true;
     Browser* browser;
     int tab_index;
 
     if (extensions::ExtensionTabUtil::GetTabById(
-            *tab_id, profile, include_incognito, &browser, NULL,
+            *tab_id, profile, include_incognito, &browser, nullptr,
             &tabstrip_contents, &tab_index)) {
-      new_contents = tabstrip_contents;
 
-      CreatePluginGuest(new_contents);
+      new_contents.reset(
+          tabstrip_contents);  // Tabstrip must not lose ownership. Will
+                               // override and release in
+                               // ClearOwnedGuestContents
+
+      // Make sure we clean up WebViewguests with the same webcontents.
+      extensions::WebViewGuest* web_view_guest =
+        extensions::WebViewGuest::FromWebContents(tabstrip_contents);
+      if (web_view_guest) {
+        zoom::ZoomController::FromWebContents(tabstrip_contents)
+            ->RemoveObserver(web_view_guest);
+        web_view_guest->WebContentsDestroyed();
+      }
+
+      CreatePluginGuest(new_contents.get());
 
       // Fire a WebContentsCreated event informing the client that script-
       // injection can be done.
       SendEventToView(*this, webview::kEventWebContentsCreated,
                       base::Value::Dict());
     } else {
-      // NOTE(jarle): Get the |new_contents| using the original Chromium way.
-      // This makes Chrome apps work again, ref. VB-22908.
-
-      // If we already have a webview tag in the same app using the same storage
-      // partition, we should use the same SiteInstance so the existing tag and
-      // the new tag can script each other.
-      auto* guest_view_manager =
-          GuestViewManager::FromBrowserContext(browser_context());
-      scoped_refptr<content::SiteInstance> guest_site_instance =
-          guest_view_manager->GetGuestSiteInstance(partition_config);
       if (!guest_site_instance) {
         // Create the SiteInstance in a new BrowsingInstance, which will ensure
         // that webview tags are also not allowed to send messages across
@@ -891,9 +893,9 @@ void WebViewGuest::VivaldiCreateWebContents(
       WebContents::CreateParams params(browser_context(),
                                        std::move(guest_site_instance));
       params.guest_delegate = this;
-      new_contents = WebContents::Create(params).release();
+      new_contents = WebContents::Create(params);
     }
-  } else if (auto tab_id = create_params.FindInt("inspect_tab_id")) {
+  } else if ((tab_id = create_params.FindInt("inspect_tab_id"))) {
     // We want to attach this guest view to the already existing WebContents
     // currently used for DevTools.
     if (inspecting_tab_id_ == 0 || inspecting_tab_id_ != *tab_id) {
@@ -906,25 +908,12 @@ void WebViewGuest::VivaldiCreateWebContents(
         content::WebContents* devtools_contents =
             DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
                 inspected_contents);
-        if (devtools_contents == nullptr) {
-          // This can happen when going between docked and undocked.
-          DevToolsWindow::InspectElement(
-              inspected_contents->GetPrimaryMainFrame(), 0,
-                                         0);
-          devtools_contents =
-              DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
-                  inspected_contents);
-        }
         // NOTE(david@vivaldi.com): Each docking state has it's own dedicated
         // webview now (VB-42802). We need to make sure that we attach this
         // guest view either to the already existing |toolbox_web_contents_|
-        // wich is required for undocked dev tools or to the
+        // which is required for undocked dev tools or to the
         // |main_web_contents_| when docked. Each guest view will be reattached
         // after docking state was changed.
-        std::string paramstr;
-        DevToolsWindow* devWindow =
-            DevToolsWindow::GetInstanceForInspectedWebContents(
-                inspected_contents);
         if (auto* paramstr = create_params.FindString("name")) {
           if (!paramstr->find("vivaldi-devtools")) {
             DevToolsContentsResizingStrategy strategy;
@@ -935,6 +924,8 @@ void WebViewGuest::VivaldiCreateWebContents(
         DCHECK(devtools_contents);
         if (!devtools_contents) {
           // TODO(tomas@vivaldi.com): Band-aid for VB-48293
+          std::move(webcontentents_created_callback)
+              .Run(std::move(owned_this), nullptr);
           return;
         }
         content::WebContentsImpl* contents =
@@ -945,15 +936,27 @@ void WebViewGuest::VivaldiCreateWebContents(
                 Profile::FromBrowserContext(browser_context()));
         DCHECK(api);
 
-        connector_item_ =
-            base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
-                api->GetOrCreateDevtoolsConnectorItem(*tab_id));
-        DCHECK(connector_item_.get());
-        connector_item_->set_guest_delegate(this);
+        DevToolsWindow* devWindow =
+            DevToolsWindow::GetInstanceForInspectedWebContents(
+                inspected_contents);
+        devWindow->set_guest_delegate(this);
+        connector_item_ = api->GetOrCreateDevtoolsConnectorItem(*tab_id);
+        DCHECK(connector_item_);
         connector_item_->set_devtools_delegate(devWindow);
 
-        new_contents = contents;
-        CreatePluginGuest(new_contents);
+        VivaldiTabCheck::MarkAsDevToolContents(devtools_contents);
+
+        // Make sure we clean up WebViewguests with the same webcontents.
+        extensions::WebViewGuest* web_view_guest =
+          extensions::WebViewGuest::FromWebContents(devtools_contents);
+        if (web_view_guest) {
+          zoom::ZoomController::FromWebContents(devtools_contents)
+              ->RemoveObserver(web_view_guest);
+          web_view_guest->WebContentsDestroyed();
+        }
+
+        new_contents.reset(contents);
+        CreatePluginGuest(new_contents.get());
         inspecting_tab_id_ = *tab_id;
         SetAttachParams(create_params);
       }
@@ -998,18 +1001,18 @@ void WebViewGuest::VivaldiCreateWebContents(
               ProcessManager::Get(context)->GetSiteInstanceForURL(popup_url);
           WebContents::CreateParams params(context, std::move(site_instance));
           params.guest_delegate = this;
-          new_contents = WebContents::Create(params).release();
+          new_contents = WebContents::Create(params);
           extension_host_ = std::make_unique<::vivaldi::VivaldiExtensionHost>(
               context, popup_url, mojom::ViewType::kExtensionPopup,
-              new_contents);
-          task_manager::WebContentsTags::CreateForTabContents(new_contents);
+              new_contents.get());
+          task_manager::WebContentsTags::CreateForTabContents(new_contents.get());
         }
       } else if (*view_name == "vivaldi_embedded_view") {
         // Create WebContents where we can open
         // chrome-extension://mpognobbkildjkofajifpdfhcoklimli resources.
         WebContents::CreateParams params(context);
         params.guest_delegate = this;
-        new_contents = WebContents::Create(params).release();
+        new_contents = WebContents::Create(params);
       }
     }
 
@@ -1024,12 +1027,12 @@ void WebViewGuest::VivaldiCreateWebContents(
       if (IsVivaldiApp(owner_host())) {
         WebContents::CreateParams params(context);
         params.guest_delegate = this;
-        new_contents = WebContents::Create(params).release();
+        new_contents = WebContents::Create(params);
       } else {
         WebContents::CreateParams params(context,
                                          std::move(guest_site_instance));
         params.guest_delegate = this;
-        new_contents = WebContents::Create(params).release();
+        new_contents = WebContents::Create(params);
       }
     }
   }
@@ -1039,7 +1042,7 @@ void WebViewGuest::VivaldiCreateWebContents(
     // of the AppWindow has been muted due to thumbnail capturing, so we also
     // mute the webview webcontents.
     chrome::SetTabAudioMuted(
-        new_contents, true, TabMutedReason::EXTENSION,
+        new_contents.get(), true, TabMutedReason::EXTENSION,
         LastMuteMetadata::FromWebContents(owner_web_contents())->extension_id);
   }
 
@@ -1053,7 +1056,8 @@ void WebViewGuest::VivaldiCreateWebContents(
       new_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
       url::Origin::Create(GetOwnerSiteURL()));
 
-  std::move(callback).Run(new_contents);
+  std::move(webcontentents_created_callback)
+      .Run(std::move(owned_this), std::move(new_contents));
 }
 
 }  // namespace extensions

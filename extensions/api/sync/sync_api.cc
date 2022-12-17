@@ -59,8 +59,6 @@ vivaldi::sync::CycleStatus ToVivaldiCycleStatus(
       return vivaldi::sync::CycleStatus::CYCLE_STATUS_SERVER_ERROR;
     case ::vivaldi::VivaldiSyncUIHelper::NETWORK_ERROR:
       return vivaldi::sync::CycleStatus::CYCLE_STATUS_NETWORK_ERROR;
-    case ::vivaldi::VivaldiSyncUIHelper::CLIENT_ERROR:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_CLIENT_ERROR;
     case ::vivaldi::VivaldiSyncUIHelper::CONFLICT:
       return vivaldi::sync::CycleStatus::CYCLE_STATUS_CONFLICT;
     case ::vivaldi::VivaldiSyncUIHelper::THROTTLED:
@@ -540,12 +538,11 @@ SyncGetDefaultSessionNameFunction::~SyncGetDefaultSessionNameFunction() =
     default;
 
 ExtensionFunction::ResponseAction SyncGetDefaultSessionNameFunction::Run() {
-  base::PostTaskAndReplyWithResult(
-      base::ThreadPool::CreateSequencedTaskRunner(
-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
-          .get(),
-      FROM_HERE, base::BindOnce(&syncer::GetPersonalizableDeviceNameBlocking),
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&syncer::GetPersonalizableDeviceNameBlocking),
       base::BindOnce(
           &SyncGetDefaultSessionNameFunction::OnGetDefaultSessionName, this));
   return RespondLater();

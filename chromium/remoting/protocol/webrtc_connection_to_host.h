@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,8 +18,7 @@
 #include "remoting/protocol/session.h"
 #include "remoting/protocol/webrtc_transport.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class ClientControlDispatcher;
 class ClientEventDispatcher;
@@ -116,7 +115,6 @@ class WebrtcConnectionToHost : public ConnectionToHost,
   ErrorCode error_ = OK;
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_WEBRTC_CONNECTION_TO_HOST_H_

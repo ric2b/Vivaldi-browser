@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -219,6 +219,9 @@ void SettingsOverridesAPI::OnExtensionUnloaded(
     if (settings->search_engine) {
       if (settings->search_engine->is_default) {
         // Current extension can be overriding DSE.
+        UnsetPref(
+            extension->id(),
+            DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName);
         UnsetPref(extension->id(),
                   DefaultSearchManager::kDefaultSearchProviderDataPrefName);
       }
@@ -255,11 +258,17 @@ void SettingsOverridesAPI::RegisterSearchProvider(
         extension->id(),
         DefaultSearchManager::kDefaultSearchProviderDataPrefName,
         base::Value::FromUniquePtrValue(TemplateURLDataToDictionary(*data)));
+      SetPref(
+          extension->id(),
+          DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName,
+          base::Value::FromUniquePtrValue(TemplateURLDataToDictionary(*data)));
     } else {
       // If the override is disabled by Vivaldi, make sure to clear any existing
       // override when the extension is reloaded on startup.
       UnsetPref(extension->id(),
                 DefaultSearchManager::kDefaultSearchProviderDataPrefName);
+      UnsetPref(extension->id(),
+                DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName);
     }
   }
 }

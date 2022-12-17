@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -111,14 +111,14 @@ std::string FormattedMacAddress(const std::string& shill_mac_address);
 // CellularScanResult in |scan_results|. Returns false if parsing fails,
 // in which case the contents of |scan_results| will be undefined.
 COMPONENT_EXPORT(CHROMEOS_NETWORK)
-bool ParseCellularScanResults(const base::Value::ConstListView list,
+bool ParseCellularScanResults(const base::Value::List& list,
                               std::vector<CellularScanResult>* scan_results);
 
 // Parses |list|, which contains dictionary Values and returns a vector of
 // CellularSIMSlotInfo in |sim_slot_infos|. Returns false if parsing fails,
 // in which case the contents of |sim_slot_infos| will be undefined.
 COMPONENT_EXPORT(CHROMEOS_NETWORK)
-bool ParseCellularSIMSlotInfo(const base::Value::ConstListView list,
+bool ParseCellularSIMSlotInfo(const base::Value::List& list,
                               std::vector<CellularSIMSlotInfo>* sim_slot_infos);
 
 // Retrieves the ONC state dictionary for |network| using GetStateProperties.

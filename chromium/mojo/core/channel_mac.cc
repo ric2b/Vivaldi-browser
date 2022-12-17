@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,7 @@
 #include "base/mac/scoped_mach_vm.h"
 #include "base/message_loop/message_pump_for_io.h"
 #include "base/task/current_thread.h"
+#include "base/thread_annotations.h"
 #include "base/trace_event/typed_macros.h"
 
 extern "C" {
@@ -182,7 +183,10 @@ class ChannelMac : public Channel,
         vm_allocate(mach_task_self(), &address, size,
                     VM_MAKE_TAG(VM_MEMORY_MACH_MSG) | VM_FLAGS_ANYWHERE);
     MACH_CHECK(kr == KERN_SUCCESS, kr) << "vm_allocate";
-    send_buffer_.reset(address, size);
+    {
+      base::AutoLock lock(write_lock_);
+      send_buffer_.reset(address, size);
+    }
 
     kr = vm_allocate(mach_task_self(), &address, size,
                      VM_MAKE_TAG(VM_MEMORY_MACH_MSG) | VM_FLAGS_ANYWHERE);
@@ -222,7 +226,11 @@ class ChannelMac : public Channel,
 
     watch_controller_.StopWatchingMachPort();
 
-    send_buffer_.reset();
+    {
+      base::AutoLock lock(write_lock_);
+      send_buffer_.reset();
+      reject_writes_ = true;
+    }
     receive_buffer_.reset();
     incoming_handles_.clear();
 
@@ -330,7 +338,7 @@ class ChannelMac : public Channel,
     SendPendingMessagesLocked();
   }
 
-  void SendPendingMessagesLocked() {
+  void SendPendingMessagesLocked() EXCLUSIVE_LOCKS_REQUIRED(write_lock_) {
     // If a previous send failed due to the receiver's kernel message queue
     // being full, attempt to send that failed message first.
     if (send_buffer_contains_message_ && !reject_writes_) {
@@ -357,7 +365,8 @@ class ChannelMac : public Channel,
     }
   }
 
-  bool SendMessageLocked(MessagePtr message) {
+  bool SendMessageLocked(MessagePtr message)
+      EXCLUSIVE_LOCKS_REQUIRED(write_lock_) {
     DCHECK(!send_buffer_contains_message_);
     base::BufferIterator<char> buffer(
         reinterpret_cast<char*>(send_buffer_.address()), send_buffer_.size());
@@ -452,7 +461,8 @@ class ChannelMac : public Channel,
     return MachMessageSendLocked(header);
   }
 
-  bool MachMessageSendLocked(mach_msg_header_t* header) {
+  bool MachMessageSendLocked(mach_msg_header_t* header)
+      EXCLUSIVE_LOCKS_REQUIRED(write_lock_) {
     kern_return_t kr = mach_msg(header, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
                                 header->msgh_size, 0, MACH_PORT_NULL,
                                 /*timeout=*/0, MACH_PORT_NULL);
@@ -674,7 +684,7 @@ class ChannelMac : public Channel,
   }
 
   // Marks the channel as unaccepting of new messages and shuts it down.
-  void OnWriteErrorLocked(Error error) {
+  void OnWriteErrorLocked(Error error) EXCLUSIVE_LOCKS_REQUIRED(write_lock_) {
     reject_writes_ = true;
     io_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&ChannelMac::OnError, this, error));
@@ -715,18 +725,19 @@ class ChannelMac : public Channel,
 
   // Lock that protects the following members.
   base::Lock write_lock_;
-  // Whether writes should be rejected due to an internal error.
-  bool reject_writes_ = false;
+  // Whether writes should be rejected due to an internal error or channel
+  // shutdown.
+  bool reject_writes_ GUARDED_BY(write_lock_) = false;
   // IO buffer for sending Mach messages.
-  base::mac::ScopedMachVM send_buffer_;
+  base::mac::ScopedMachVM send_buffer_ GUARDED_BY(write_lock_);
   // If a message timed out during send in MachMessageSendLocked(), this will
   // be true to indicate that |send_buffer_| contains a message that must
   // be sent. If this is true, then other calls to Write() queue messages onto
   // |pending_messages_|.
-  bool send_buffer_contains_message_ = false;
+  bool send_buffer_contains_message_ GUARDED_BY(write_lock_) = false;
   // When |handshake_done_| is false or |send_buffer_contains_message_| is true,
   // calls to Write() will enqueue messages here.
-  base::circular_deque<MessagePtr> pending_messages_;
+  base::circular_deque<MessagePtr> pending_messages_ GUARDED_BY(write_lock_);
 };
 
 }  // namespace

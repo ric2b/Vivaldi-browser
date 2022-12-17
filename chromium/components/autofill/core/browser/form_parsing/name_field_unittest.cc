@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,13 +56,6 @@ TEST_P(NameFieldTest, FirstMiddleLast2) {
 
 // Test that a field for a honorific title is parsed correctly.
 TEST_P(NameFieldTest, HonorificPrefixFirstLast) {
-  // With support for two last names, the parsing should find the first name
-  // field and the two last name fields.
-  // TODO(crbug.com/1098943): Remove once launched.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillEnableSupportForMoreStructureInNames);
-
   AddTextFormFieldData("salutation", "", NAME_HONORIFIC_PREFIX);
   AddTextFormFieldData("first_name", "", NAME_FIRST);
   AddTextFormFieldData("last_name", "", NAME_LAST);
@@ -78,33 +71,21 @@ TEST_P(NameFieldTest, FirstLast) {
 }
 
 TEST_P(NameFieldTest, NameSurname) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillEnableNameSurenameParsing);
-
   AddTextFormFieldData("name", "name", NAME_FIRST);
-  AddTextFormFieldData("surename", "surname", NAME_LAST);
+  AddTextFormFieldData("surname", "surname", NAME_LAST);
 
   ClassifyAndVerify(ParseResult::PARSED);
 }
 
 TEST_P(NameFieldTest, NameSurnameWithMiddleName) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillEnableNameSurenameParsing);
-
   AddTextFormFieldData("name", "name", NAME_FIRST);
   AddTextFormFieldData("middlename", "middlename", NAME_MIDDLE);
-  AddTextFormFieldData("surename", "surname", NAME_LAST);
+  AddTextFormFieldData("surname", "surname", NAME_LAST);
 
   ClassifyAndVerify(ParseResult::PARSED);
 }
 
 TEST_P(NameFieldTest, NameSurname_DE) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillEnableNameSurenameParsing);
-
   AddTextFormFieldData("name", "name", NAME_FIRST);
   AddTextFormFieldData("nachname", "nachname", NAME_LAST);
 
@@ -143,7 +124,7 @@ TEST_P(NameFieldTest, FirstMiddleLastEmpty) {
 
 TEST_P(NameFieldTest, MiddleInitial) {
   AddTextFormFieldData("first_name", "Name", NAME_FIRST);
-  AddTextFormFieldData("middle_name", "MI", NAME_MIDDLE_INITIAL);
+  AddTextFormFieldData("middle_initial", "MI", NAME_MIDDLE_INITIAL);
   AddTextFormFieldData("last_name", "", NAME_LAST);
 
   ClassifyAndVerify(ParseResult::PARSED);
@@ -151,7 +132,7 @@ TEST_P(NameFieldTest, MiddleInitial) {
 
 TEST_P(NameFieldTest, MiddleInitialNoLastName) {
   AddTextFormFieldData("first_name", "First Name", UNKNOWN_TYPE);
-  AddTextFormFieldData("middle_name", "MI", UNKNOWN_TYPE);
+  AddTextFormFieldData("middle_initial", "MI", UNKNOWN_TYPE);
 
   ClassifyAndVerify(ParseResult::NOT_PARSED);
 }
@@ -159,13 +140,6 @@ TEST_P(NameFieldTest, MiddleInitialNoLastName) {
 // Tests that a website with a first and second surname field is parsed
 // correctly.
 TEST_P(NameFieldTest, HonorificPrefixAndFirstNameAndHispanicLastNames) {
-  // With support for two last names, the parsing should find the first name
-  // field and the two last name fields.
-  // TODO(crbug.com/1098943): Remove once launched.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillEnableSupportForMoreStructureInNames);
-
   AddTextFormFieldData("tratamiento", "tratamiento", NAME_HONORIFIC_PREFIX);
   AddTextFormFieldData("nombre", "nombre", NAME_FIRST);
   AddTextFormFieldData("apellido paterno", "apellido_paterno", NAME_LAST_FIRST);
@@ -178,12 +152,6 @@ TEST_P(NameFieldTest, HonorificPrefixAndFirstNameAndHispanicLastNames) {
 // Tests that a website with a first and second surname field is parsed
 // correctly.
 TEST_P(NameFieldTest, FirstNameAndOptionalMiddleNameAndHispanicLastNames) {
-  // With support for two last names, the parsing should find the first name
-  // field and the two last name fields.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillEnableSupportForMoreStructureInNames);
-
   AddTextFormFieldData("nombre", "nombre", NAME_FIRST);
   AddTextFormFieldData("middle_name", "middle name", NAME_MIDDLE);
   AddTextFormFieldData("apellido_paterno", "apellido paterno", NAME_LAST_FIRST);

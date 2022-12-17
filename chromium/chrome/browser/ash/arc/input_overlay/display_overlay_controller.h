@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,8 +60,8 @@ class DisplayOverlayController : public ui::EventHandler,
                       MessageType message_type);
   void RemoveEditMessage();
 
-  void OnBindingChange(Action* action,
-                       std::unique_ptr<InputElement> input_element);
+  void OnInputBindingChange(Action* action,
+                            std::unique_ptr<InputElement> input_element);
 
   // Save the changes when users press the save button after editing.
   void OnCustomizeSave();
@@ -76,12 +76,20 @@ class DisplayOverlayController : public ui::EventHandler,
   // hidden or input overlay is disabled.
   void OnApplyMenuState();
 
+  // For editor.
+  // Show the action view when adding |action|.
+  void OnActionAdded(Action* action);
+  // Remove the action view when removing |action|.
+  void OnActionRemoved(Action* action);
+
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;
   void OnTouchEvent(ui::TouchEvent* event) override;
 
   // ash::ColorModeObserver:
   void OnColorModeChanged(bool dark_mode_enabled) override;
+
+  const TouchInjector* touch_injector() const { return touch_injector_; }
 
  private:
   friend class ::arc::ArcInputOverlayManagerTest;
@@ -119,6 +127,15 @@ class DisplayOverlayController : public ui::EventHandler,
   void RemoveEducationalView();
   void OnEducationalViewDismissed();
 
+  // TODO(b/250900717): Below are used temporarily. It will be updated/removed
+  // when the final UX/UI is ready.
+  void AddButtonForAddActionTap();
+  void RemoveButtonForAddActionTap();
+  void OnAddActionTapButtonPressed();
+  void AddButtonForAddActionMove();
+  void RemoveButtonForAddActionMove();
+  void OnAddActionMoveButtonPressed();
+
   views::Widget* GetOverlayWidget();
   gfx::Point CalculateMenuEntryPosition();
   views::View* GetParentView();
@@ -137,8 +154,6 @@ class DisplayOverlayController : public ui::EventHandler,
   gfx::Rect GetInputMappingViewBoundsForTesting();
   void DismissEducationalViewForTesting();
 
-  TouchInjector* touch_injector() { return touch_injector_; }
-
   const raw_ptr<TouchInjector> touch_injector_;
 
   // References to UI elements owned by the overlay widget.
@@ -150,6 +165,9 @@ class DisplayOverlayController : public ui::EventHandler,
   raw_ptr<MessageView> message_ = nullptr;
   raw_ptr<EducationalView> educational_view_ = nullptr;
   raw_ptr<ash::PillButton> nudge_view_ = nullptr;
+  // TODO(b/250900717): Below are temporary UIs for editor feature.
+  raw_ptr<ash::PillButton> add_action_tap_ = nullptr;
+  raw_ptr<ash::PillButton> add_action_move_ = nullptr;
 
   DisplayMode display_mode_ = DisplayMode::kNone;
 };

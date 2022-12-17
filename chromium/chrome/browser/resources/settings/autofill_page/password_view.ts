@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
-import '../controls/settings_textarea.js';
 import '../i18n_setup.js';
 // <if expr="is_chromeos">
 import '../controls/password_prompt_dialog.js';
@@ -21,8 +20,9 @@ import './password_remove_dialog.js';
 import './passwords_shared.css.js';
 
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
+import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
+import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
@@ -31,6 +31,7 @@ import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '..
 
 import {SavedPasswordEditedEvent} from './password_edit_dialog.js';
 import {PasswordListItemElement} from './password_list_item.js';
+import {PasswordManagerImpl} from './password_manager_proxy.js';
 import {PasswordRemovalMixin, PasswordRemovalMixinInterface} from './password_removal_mixin.js';
 import {PasswordRemoveDialogPasswordsRemovedEvent} from './password_remove_dialog.js';
 import {PasswordRequestorMixin, PasswordRequestorMixinInterface} from './password_requestor_mixin.js';
@@ -70,6 +71,8 @@ export enum PasswordViewPageUrlParams {
   ID = 'id',
 }
 
+export const PASSWORD_MANAGER_AUTH_TIMEOUT_PARAM = 'authTimeout';
+
 export function recordPasswordViewInteraction(
     interaction: PasswordViewPageInteractions) {
   chrome.metricsPrivate.recordEnumerationValue(
@@ -93,8 +96,11 @@ export enum PasswordViewPageInteractions {
   PASSWORD_EDIT_BUTTON_CLICKED = 6,
   PASSWORD_DELETE_BUTTON_CLICKED = 7,
   CREDENTIAL_EDITED = 8,
+  TIMED_OUT_IN_EDIT_DIALOG = 9,
+  TIMED_OUT_IN_VIEW_PAGE = 10,
+  CREDENTIAL_REQUESTED_BY_URL = 11,
   // Must be last.
-  COUNT = 9,
+  COUNT = 12,
 }
 
 export class PasswordViewElement extends PasswordViewElementBase {
@@ -147,6 +153,36 @@ export class PasswordViewElement extends PasswordViewElementBase {
   private isPasswordVisible_: boolean;
   private showEditDialog_: boolean;
   private visibilityChangedListener_: () => void;
+  private passwordManagerAuthTimeoutListener_: () => void;
+
+  override connectedCallback() {
+    super.connectedCallback();
+
+    this.passwordManagerAuthTimeoutListener_ = () => {
+      if (Router.getInstance().getCurrentRoute() !== routes.PASSWORD_VIEW) {
+        return;
+      }
+      recordPasswordViewInteraction(
+          this.showEditDialog_ ?
+              PasswordViewPageInteractions.TIMED_OUT_IN_EDIT_DIALOG :
+              PasswordViewPageInteractions.TIMED_OUT_IN_VIEW_PAGE);
+
+      const params = new URLSearchParams();
+      params.set(PASSWORD_MANAGER_AUTH_TIMEOUT_PARAM, 'true');
+      Router.getInstance().navigateTo(routes.PASSWORDS, params);
+    };
+
+    PasswordManagerImpl.getInstance().addPasswordManagerAuthTimeoutListener(
+        this.passwordManagerAuthTimeoutListener_);
+
+    FocusOutlineManager.forDocument(document);
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    PasswordManagerImpl.getInstance().removePasswordManagerAuthTimeoutListener(
+        this.passwordManagerAuthTimeoutListener_);
+  }
 
   override currentRouteChanged(route: Route): void {
     if (route !== routes.PASSWORD_VIEW) {
@@ -218,6 +254,9 @@ export class PasswordViewElement extends PasswordViewElementBase {
           composed: true,
           detail: eventDetail,
         }));
+
+    recordPasswordViewInteraction(
+        PasswordViewPageInteractions.CREDENTIAL_REQUESTED_BY_URL);
   }
 
   /** Gets the title text for the show/hide icon. */

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
+class AuthenticationExtensionsDevicePublicKeyInputs;
 class AuthenticatorSelectionCriteria;
 class CableAuthenticationData;
 class CableRegistrationData;
@@ -196,6 +197,13 @@ struct TypeConverter<blink::mojom::blink::IdentityProviderPtr,
                      blink::IdentityProvider> {
   static blink::mojom::blink::IdentityProviderPtr Convert(
       const blink::IdentityProvider&);
+};
+
+template <>
+struct TypeConverter<blink::mojom::blink::DevicePublicKeyRequestPtr,
+                     blink::AuthenticationExtensionsDevicePublicKeyInputs> {
+  static blink::mojom::blink::DevicePublicKeyRequestPtr Convert(
+      const blink::AuthenticationExtensionsDevicePublicKeyInputs&);
 };
 
 }  // namespace mojo

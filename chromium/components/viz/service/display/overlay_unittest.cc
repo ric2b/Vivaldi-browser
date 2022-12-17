@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,7 +32,6 @@
 #include "components/viz/common/quads/video_hole_draw_quad.h"
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/resources/transferable_resource.h"
-#include "components/viz/service/display/ca_layer_overlay.h"
 #include "components/viz/service/display/display_resource_provider_skia.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/output_surface_client.h"
@@ -67,6 +66,10 @@
 #include "components/viz/service/display/overlay_strategy_underlay_cast.h"
 #endif
 
+#if BUILDFLAG(IS_APPLE)
+#include "components/viz/service/display/ca_layer_overlay.h"
+#endif
+
 using testing::_;
 using testing::Mock;
 
@@ -80,16 +83,6 @@ const gfx::Rect kOverlayBottomRightRect(128, 128, 128, 128);
 const gfx::Rect kOverlayClipRect(0, 0, 128, 128);
 const gfx::PointF kUVTopLeft(0.1f, 0.2f);
 const gfx::PointF kUVBottomRight(1.0f, 1.0f);
-const gfx::Transform kNormalTransform =
-    gfx::Transform(0.9f, 0, 0, 0.8f, 0.1f, 0.2f);  // x,y -> x,y.
-const gfx::Transform kXMirrorTransform =
-    gfx::Transform(-0.9f, 0, 0, 0.8f, 1.0f, 0.2f);  // x,y -> 1-x,y.
-const gfx::Transform kYMirrorTransform =
-    gfx::Transform(0.9f, 0, 0, -0.8f, 0.1f, 1.0f);  // x,y -> x,1-y.
-const gfx::Transform kBothMirrorTransform =
-    gfx::Transform(-0.9f, 0, 0, -0.8f, 1.0f, 1.0f);  // x,y -> 1-x,1-y.
-const gfx::Transform kSwapTransform =
-    gfx::Transform(0, 1, 1, 0, 0, 0);  // x,y -> y,x.
 const gfx::BufferFormat kDefaultBufferFormat = gfx::BufferFormat::RGBA_8888;
 
 class TimeTicksOverride {
@@ -417,10 +410,9 @@ static ResourceId CreateResourceInLayerTree(
     const gfx::Size& size,
     bool is_overlay_candidate,
     ResourceFormat resource_format) {
-  auto resource = TransferableResource::MakeGL(
-      gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
-      size, is_overlay_candidate);
-  resource.format = resource_format;
+  auto resource = TransferableResource::MakeGpu(
+      gpu::Mailbox::GenerateForSharedImage(), GL_LINEAR, GL_TEXTURE_2D,
+      gpu::SyncToken(), size, resource_format, is_overlay_candidate);
 
   ResourceId resource_id =
       child_resource_provider->ImportResource(resource, base::DoNothing());
@@ -1911,7 +1903,7 @@ TEST_F(UnderlayTest, AllowVerticalFlip) {
       &damage_rect_, &content_bounds_);
   ASSERT_EQ(1U, candidate_list.size());
   EXPECT_EQ(gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL,
-            candidate_list.back().transform);
+            absl::get<gfx::OverlayTransform>(candidate_list.back().transform));
 }
 
 TEST_F(UnderlayTest, AllowHorizontalFlip) {
@@ -1939,7 +1931,7 @@ TEST_F(UnderlayTest, AllowHorizontalFlip) {
       &damage_rect_, &content_bounds_);
   ASSERT_EQ(1U, candidate_list.size());
   EXPECT_EQ(gfx::OVERLAY_TRANSFORM_FLIP_HORIZONTAL,
-            candidate_list.back().transform);
+            absl::get<gfx::OverlayTransform>(candidate_list.back().transform));
 }
 
 TEST_F(SingleOverlayOnTopTest, AllowPositiveScaleTransform) {
@@ -2063,7 +2055,8 @@ TEST_F(UnderlayTest, Allow90DegreeRotation) {
       std::move(surface_damage_rect_list), nullptr, &candidate_list,
       &damage_rect_, &content_bounds_);
   ASSERT_EQ(1U, candidate_list.size());
-  EXPECT_EQ(gfx::OVERLAY_TRANSFORM_ROTATE_90, candidate_list.back().transform);
+  EXPECT_EQ(gfx::OVERLAY_TRANSFORM_ROTATE_90,
+            absl::get<gfx::OverlayTransform>(candidate_list.back().transform));
 }
 
 TEST_F(UnderlayTest, Allow180DegreeRotation) {
@@ -2089,7 +2082,8 @@ TEST_F(UnderlayTest, Allow180DegreeRotation) {
       std::move(surface_damage_rect_list), nullptr, &candidate_list,
       &damage_rect_, &content_bounds_);
   ASSERT_EQ(1U, candidate_list.size());
-  EXPECT_EQ(gfx::OVERLAY_TRANSFORM_ROTATE_180, candidate_list.back().transform);
+  EXPECT_EQ(gfx::OVERLAY_TRANSFORM_ROTATE_180,
+            absl::get<gfx::OverlayTransform>(candidate_list.back().transform));
 }
 
 TEST_F(UnderlayTest, Allow270DegreeRotation) {
@@ -2115,7 +2109,8 @@ TEST_F(UnderlayTest, Allow270DegreeRotation) {
       std::move(surface_damage_rect_list), nullptr, &candidate_list,
       &damage_rect_, &content_bounds_);
   ASSERT_EQ(1U, candidate_list.size());
-  EXPECT_EQ(gfx::OVERLAY_TRANSFORM_ROTATE_270, candidate_list.back().transform);
+  EXPECT_EQ(gfx::OVERLAY_TRANSFORM_ROTATE_270,
+            absl::get<gfx::OverlayTransform>(candidate_list.back().transform));
 }
 
 TEST_F(UnderlayTest, AllowsOpaqueCandidates) {

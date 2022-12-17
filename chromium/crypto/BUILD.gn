@@ -1,9 +1,10 @@
-# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Copyright 2013 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
 import("//build/config/chromeos/ui_mode.gni")
+import("//components/nacl/toolchain.gni")
 import("//crypto/features.gni")
 import("//testing/test.gni")
 
@@ -54,6 +55,8 @@ component("crypto") {
     "symmetric_key.h",
     "unexportable_key.cc",
     "unexportable_key.h",
+    "unexportable_key_metrics.cc",
+    "unexportable_key_metrics.h",
   ]
 
   deps = [
@@ -126,15 +129,18 @@ component("crypto") {
       "nss_util.h",
       "nss_util_internal.h",
     ]
-    deps += [ "//build:chromeos_buildflags" ]
+    deps += [
+      "//build:chromeos_buildflags",
+      "//components/nacl/common:buildflags",
+    ]
     configs += [ "//build/config/linux/nss" ]
   }
 
-  if (is_chromeos_ash) {
+  if (is_chromeos_ash && !is_minimal_toolchain) {
     sources += [ "nss_util_chromeos.cc" ]
   }
 
-  if (is_chromeos || is_chromeos_lacros) {
+  if (is_chromeos && !is_minimal_toolchain) {
     sources += [
       "chaps_support.cc",
       "chaps_support.h",
@@ -161,6 +167,10 @@ test("crypto_unittests") {
     "symmetric_key_unittest.cc",
     "unexportable_key_unittest.cc",
   ]
+
+  if (is_win) {
+    sources += [ "unexportable_key_metrics_unittest.cc" ]
+  }
 
   # Some files are built when NSS is used for the platform certificate library.
   if (use_nss_certs) {

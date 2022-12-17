@@ -1,12 +1,12 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/policy/off_hours/off_hours_proto_parser.h"
 
-#include "ash/components/policy/weekly_time/time_utils.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/policy/weekly_time/time_utils.h"
 
 namespace em = enterprise_management;
 

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,10 @@
 #include "chrome/browser/enterprise/connectors/device_trust/attestation/desktop/google_keys.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+namespace policy {
+class BrowserDMTokenStorage;
+}  // namespace policy
+
 namespace enterprise_connectors {
 
 class DeviceTrustKeyManager;
@@ -26,12 +30,14 @@ class DeviceTrustKeyManager;
 // Verified Access.
 class DesktopAttestationService : public AttestationService {
  public:
-  explicit DesktopAttestationService(DeviceTrustKeyManager* key_manager);
+  explicit DesktopAttestationService(
+      policy::BrowserDMTokenStorage* dm_token_storage,
+      DeviceTrustKeyManager* key_manager);
   ~DesktopAttestationService() override;
 
   // AttestationService:
   void BuildChallengeResponseForVAChallenge(
-      const std::string& serialized_signed_challenge,
+      const std::string& challenge,
       base::Value::Dict signals,
       AttestationCallback callback) override;
 
@@ -60,6 +66,9 @@ class DesktopAttestationService : public AttestationService {
       absl::optional<std::vector<uint8_t>> encrypted_response);
 
   GoogleKeys google_keys_;
+
+  // Helper for handling DMToken and DeviceID.
+  const raw_ptr<policy::BrowserDMTokenStorage> dm_token_storage_;
 
   // Owned by the CBCMController, which is eventually owned by the browser
   // process. Since the current service is owned at the profile level, this

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,16 +24,6 @@
 #endif
 
 namespace favicon {
-
-// static
-void WebFaviconDriver::CreateForWebState(web::WebState* web_state,
-                                         CoreFaviconService* favicon_service) {
-  if (FromWebState(web_state))
-    return;
-
-  web_state->SetUserData(UserDataKey(), base::WrapUnique(new WebFaviconDriver(
-                                            web_state, favicon_service)));
-}
 
 gfx::Image WebFaviconDriver::GetFavicon() const {
   return web_state_->GetFaviconStatus().image;

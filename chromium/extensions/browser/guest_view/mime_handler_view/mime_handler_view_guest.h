@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,10 +83,11 @@ class StreamContainer {
 class MimeHandlerViewGuest
     : public guest_view::GuestView<MimeHandlerViewGuest> {
  public:
+  ~MimeHandlerViewGuest() override;
   MimeHandlerViewGuest(const MimeHandlerViewGuest&) = delete;
   MimeHandlerViewGuest& operator=(const MimeHandlerViewGuest&) = delete;
 
-  static guest_view::GuestViewBase* Create(
+  static std::unique_ptr<GuestViewBase> Create(
       content::WebContents* owner_web_contents);
 
   static const char Type[];
@@ -128,7 +129,6 @@ class MimeHandlerViewGuest
 
  protected:
   explicit MimeHandlerViewGuest(content::WebContents* owner_web_contents);
-  ~MimeHandlerViewGuest() override;
 
  private:
   friend class TestMimeHandlerViewGuest;
@@ -136,7 +136,8 @@ class MimeHandlerViewGuest
   // GuestViewBase implementation.
   const char* GetAPINamespace() const final;
   int GetTaskPrefix() const final;
-  void CreateWebContents(const base::Value::Dict& create_params,
+  void CreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
+                         const base::Value::Dict& create_params,
                          WebContentsCreatedCallback callback) override;
   void DidAttachToEmbedder() override;
   void DidInitialize(const base::Value::Dict& create_params) final;
@@ -159,7 +160,6 @@ class MimeHandlerViewGuest
   bool SaveFrame(const GURL& url,
                  const content::Referrer& referrer,
                  content::RenderFrameHost* rfh) final;
-  void OnRenderFrameHostDeleted(int process_id, int routing_id) final;
   void EnterFullscreenModeForTab(
       content::RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) override;

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "net/base/net_errors.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_auth_challenge_tokenizer.h"
 #include "net/http/http_auth_handler_mock.h"
@@ -45,7 +45,7 @@ TEST(HttpAuthHandlerTest, NetLog) {
       // AUTHORIZATION_RESULT_REJECT.
       mock_handler.set_connection_based(true);
       mock_handler.InitFromChallenge(
-          &tokenizer, target, SSLInfo(), NetworkIsolationKey(),
+          &tokenizer, target, SSLInfo(), NetworkAnonymizationKey(),
           scheme_host_port, NetLogWithSource::Make(NetLogSourceType::NONE));
       mock_handler.SetGenerateExpectation(async, OK);
       mock_handler.GenerateAuthToken(&credentials, &request,

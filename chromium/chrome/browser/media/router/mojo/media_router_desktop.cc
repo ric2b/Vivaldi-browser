@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,10 +17,10 @@
 #include "chrome/browser/media/router/providers/wired_display/wired_display_media_route_provider.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/cast_channel/cast_socket_service.h"
 #include "components/media_router/browser/media_router.h"
 #include "components/media_router/browser/media_router_factory.h"
 #include "components/media_router/common/media_source.h"
+#include "components/media_router/common/providers/cast/channel/cast_socket_service.h"
 #include "components/openscreen_platform/network_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -37,7 +37,7 @@ constexpr char kLoggerComponent[] = "MediaRouterDesktop";
 
 MediaRouterDesktop::~MediaRouterDesktop() {
   if (media_sink_service_)
-    media_sink_service_->RemoveLogger();
+    media_sink_service_->RemoveLogger(GetLogger());
 }
 
 void MediaRouterDesktop::OnUserGesture() {
@@ -68,7 +68,7 @@ void MediaRouterDesktop::OnUserGesture() {
 #endif
 }
 
-base::Value MediaRouterDesktop::GetState() const {
+base::Value::Dict MediaRouterDesktop::GetState() const {
   return media_sink_service_status_.GetStatusAsValue();
 }
 
@@ -137,7 +137,7 @@ void MediaRouterDesktop::GetMediaSinkServiceStatus(
 void MediaRouterDesktop::Initialize() {
   MediaRouterMojoImpl::Initialize();
   if (media_sink_service_) {
-    media_sink_service_->BindLogger(GetLogger());
+    media_sink_service_->AddLogger(GetLogger());
     InitializeMediaRouteProviders();
 #if BUILDFLAG(IS_WIN)
     CanFirewallUseLocalPorts(

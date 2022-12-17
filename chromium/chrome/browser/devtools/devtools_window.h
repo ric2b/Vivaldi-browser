@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,6 +94,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   static content::WebContents* GetInTabWebContents(
       content::WebContents* inspected_tab,
       DevToolsContentsResizingStrategy* out_strategy);
+
 
   static bool IsDevToolsWindow(content::WebContents* web_contents);
   static DevToolsWindow* AsDevToolsWindow(content::WebContents* web_contents);
@@ -265,7 +266,14 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   // Vivaldi
   static DevToolsWindow* FindWindowByDevtoolsWebContents(
-    content::WebContents* devtools_web_contents);
+      content::WebContents* devtools_web_contents);
+  void set_guest_delegate(content::WebContentsDelegate* d) {
+    guest_delegate_ = d;
+  }
+  content::WebContents* ui_webcontents() {
+    return is_docked_ ? toolbox_web_contents_
+                      : toolbox_web_contents_ /*main_web_contents_*/;
+  }
 
  private:
   friend class DevToolsWindowTesting;
@@ -274,6 +282,9 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   // Vivaldi:
   friend class DevtoolsConnectorItem;
+  // Daisy-chain webcontentsdelegates in AddNewContents().
+  content::WebContentsDelegate* guest_delegate_ = nullptr;
+
 
   using CreationCallback = base::RepeatingCallback<void(DevToolsWindow*)>;
   static void AddCreationCallbackForTest(const CreationCallback& callback);
@@ -366,7 +377,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
                       std::unique_ptr<content::WebContents> new_contents,
                       const GURL& target_url,
                       WindowOpenDisposition disposition,
-                      const gfx::Rect& initial_rect,
+                      const blink::mojom::WindowFeatures& window_features,
                       bool user_gesture,
                       bool* was_blocked) override;
   void WebContentsCreated(content::WebContents* source_contents,
@@ -396,6 +407,9 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
                       const blink::mojom::FileChooserParams& params) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
+  bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
+                         const content::ContextMenuParams& params) override;
+
 
   // content::DevToolsUIBindings::Delegate overrides
   void ActivateWindow() override;
@@ -498,7 +512,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   base::ScopedClosureRunner capture_handle_;
 
   // Vivaldi:
-  scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;
+  extensions::DevtoolsConnectorItem* connector_item_ = nullptr;
 
   friend class DevToolsEventForwarder;
 };

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,10 +19,11 @@ suite('SitePermissionsList', function() {
   setup(function() {
     delegate = new TestService();
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     element = document.createElement('site-permissions-list');
     element.delegate = delegate;
-    element.siteSet = chrome.developerPrivate.UserSiteSet.RESTRICTED;
+    element.siteSet = chrome.developerPrivate.SiteSet.USER_RESTRICTED;
     element.sites = [];
 
     document.body.appendChild(element);
@@ -62,7 +63,7 @@ suite('SitePermissionsList', function() {
     remove.click();
     const [siteSet, hosts] =
         await delegate.whenCalled('removeUserSpecifiedSites');
-    assertEquals(chrome.developerPrivate.UserSiteSet.RESTRICTED, siteSet);
+    assertEquals(chrome.developerPrivate.SiteSet.USER_RESTRICTED, siteSet);
     assertDeepEquals(['http://www.example.com'], hosts);
     assertFalse(actionMenu.open);
   });

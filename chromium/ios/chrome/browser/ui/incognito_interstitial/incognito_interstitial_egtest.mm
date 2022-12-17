@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@
 #import "ios/chrome/browser/policy/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/policy/scoped_policy_list.h"
-#import "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -255,12 +255,12 @@ using chrome_test_util::NTPIncognitoView;
   GURL destinationURL = self.testServer->GetURL("/destination.html");
   [ChromeEarlGrey sceneOpenURL:destinationURL];
   // Wait for the expected page content to be displayed.
-  double timeout = 10.0;
+  base::TimeDelta timeout = base::Seconds(10);
   if (@available(iOS 16.0, *)) {
-    timeout = 20.0;
+    timeout = base::Seconds(20);
   }
   [ChromeEarlGrey waitForWebStateContainingText:"You've arrived"
-                                        timeout:timeout];
+                                        timeout:timeout.InSecondsF()];
   // Wait for the Incognito tab count to be one, as expected.
   [ChromeEarlGrey waitForMainTabCount:1];
 }
@@ -281,12 +281,12 @@ using chrome_test_util::NTPIncognitoView;
   GURL destinationURL = self.testServer->GetURL("/destination.html");
   [ChromeEarlGrey sceneOpenURL:destinationURL];
   // Wait for the expected page content to be displayed.
-  double timeout = 10.0;
+  base::TimeDelta timeout = base::Seconds(10);
   if (@available(iOS 16.0, *)) {
-    timeout = 20.0;
+    timeout = base::Seconds(20);
   }
   [ChromeEarlGrey waitForWebStateContainingText:"You've arrived"
-                                        timeout:timeout];
+                                        timeout:timeout.InSecondsF()];
   // Wait for the Incognito tab count to be one, as expected.
   [ChromeEarlGrey waitForIncognitoTabCount:1];
 }

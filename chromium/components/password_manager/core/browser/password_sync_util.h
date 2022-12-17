@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,6 +51,9 @@ bool ShouldSaveEnterprisePasswordHash(const PasswordForm& form,
 
 // If syncing passwords is enabled in settings.
 bool IsPasswordSyncEnabled(const syncer::SyncService* sync_service);
+
+// If passwords are actively syncing.
+bool IsPasswordSyncActive(const syncer::SyncService* sync_service);
 
 // Active syncing account if one exists. If password sync is disabled
 // absl::nullopt will be returned.

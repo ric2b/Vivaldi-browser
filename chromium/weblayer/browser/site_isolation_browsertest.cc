@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,8 +47,8 @@ class SiteIsolationBrowserTest : public WebLayerBrowserTest {
   std::vector<std::string> GetSavedIsolatedSites() {
     PrefService* prefs =
         user_prefs::UserPrefs::Get(GetProfile()->GetBrowserContext());
-    const auto& list = prefs->GetValueList(
-        site_isolation::prefs::kUserTriggeredIsolatedOrigins);
+    const auto& list =
+        prefs->GetList(site_isolation::prefs::kUserTriggeredIsolatedOrigins);
     std::vector<std::string> sites;
     for (const base::Value& value : list)
       sites.push_back(value.GetString());

@@ -25,11 +25,14 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_DOCUMENT_PARSER_H_
 
 #include <memory>
+#include "base/callback.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/dom/document_encoding_data.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
@@ -59,8 +62,14 @@ class CORE_EXPORT DocumentParser : public GarbageCollected<DocumentParser>,
   virtual void AppendBytes(const char* bytes, size_t length) = 0;
   virtual bool NeedsDecoder() const { return false; }
   virtual void SetDecoder(std::unique_ptr<TextResourceDecoder>);
-  virtual TextResourceDecoder* Decoder();
   virtual void SetHasAppendedData() {}
+  virtual void AppendDecodedData(const String& data,
+                                 const DocumentEncodingData& encoding_data) {}
+  using BackgroundScanCallback =
+      WTF::CrossThreadRepeatingFunction<void(const String&)>;
+  virtual BackgroundScanCallback TakeBackgroundScanCallback() {
+    return BackgroundScanCallback();
+  }
 
   // FIXME: append() should be private, but DocumentLoader and DOMPatchSupport
   // uses it for now.

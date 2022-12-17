@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,6 +67,10 @@ class LensRegionSearchController : public content::WebContentsObserver {
   // The function handling the metrics recording and resizing that happens when
   // the capture has been completed.
   void OnCaptureCompleted(const image_editor::ScreenshotCaptureResult& result);
+
+  // Returns whether the overlay and instruction bubble are both visible. If
+  // either of the UI elements is not visible, returns false.
+  bool IsOverlayUIVisibleForTesting();
 
  private:
   void RecordCaptureResult(lens::LensRegionSearchCaptureResult result);

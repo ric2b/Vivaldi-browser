@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,7 +48,7 @@
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/task_queue_throttler.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/agent_group_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
-#include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/pending_user_input.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/task_type_names.h"
@@ -77,11 +77,6 @@ const double kShortIdlePeriodDurationPercentile = 50;
 // which main thread compositing can be considered fast.
 const double kFastCompositingIdleTimeThreshold = .2;
 const int64_t kSecondsPerMinute = 60;
-
-// Name of the finch study that enables using resource fetch priorities to
-// schedule tasks on Blink.
-constexpr const char kResourceFetchPriorityExperiment[] =
-    "ResourceFetchPriorityExperiment";
 
 constexpr base::TimeDelta kPrioritizeCompositingAfterDelay =
     base::Milliseconds(100);
@@ -166,7 +161,8 @@ const char* OptionalTaskDescriptionToString(
     return TaskTypeNames::TaskTypeToString(desc->task_type);
   if (!desc->queue_type)
     return "detached_tq";
-  return MainThreadTaskQueue::NameForQueueType(desc->queue_type.value());
+  return perfetto::protos::pbzero::SequenceManagerTask::QueueName_Name(
+      MainThreadTaskQueue::NameForQueueType(desc->queue_type.value()));
 }
 
 const char* OptionalTaskPriorityToString(
@@ -174,26 +170,6 @@ const char* OptionalTaskPriorityToString(
   if (!priority)
     return nullptr;
   return TaskQueue::PriorityToString(priority.value());
-}
-
-TaskQueue::QueuePriority StringToTaskQueuePriority(
-    const std::string& priority) {
-  if (priority == "CONTROL") {
-    return TaskQueue::QueuePriority::kControlPriority;
-  } else if (priority == "HIGHEST") {
-    return TaskQueue::QueuePriority::kHighestPriority;
-  } else if (priority == "HIGH") {
-    return TaskQueue::QueuePriority::kHighPriority;
-  } else if (priority == "NORMAL") {
-    return TaskQueue::QueuePriority::kNormalPriority;
-  } else if (priority == "LOW") {
-    return TaskQueue::QueuePriority::kLowPriority;
-  } else if (priority == "BEST_EFFORT") {
-    return TaskQueue::QueuePriority::kBestEffortPriority;
-  } else {
-    NOTREACHED();
-    return TaskQueue::QueuePriority::kQueuePriorityCount;
-  }
 }
 
 bool IsBlockingEvent(const blink::WebInputEvent& web_input_event) {
@@ -562,22 +538,13 @@ MainThreadSchedulerImpl::SchedulingSettings::SchedulingSettings() {
       base::FeatureList::IsEnabled(kLowPriorityForThrottleableTask);
   low_priority_subframe_throttleable =
       base::FeatureList::IsEnabled(kLowPriorityForSubFrameThrottleableTask);
-  use_frame_priorities_only_during_loading =
-      base::FeatureList::IsEnabled(kFrameExperimentOnlyWhenLoading);
 
   low_priority_ad_frame = base::FeatureList::IsEnabled(kLowPriorityForAdFrame);
   best_effort_ad_frame =
       base::FeatureList::IsEnabled(kBestEffortPriorityForAdFrame);
-  use_adframe_priorities_only_during_loading =
-      base::FeatureList::IsEnabled(kAdFrameExperimentOnlyWhenLoading);
 
   low_priority_cross_origin =
       base::FeatureList::IsEnabled(kLowPriorityForCrossOrigin);
-  low_priority_cross_origin_only_during_loading =
-      base::FeatureList::IsEnabled(kLowPriorityForCrossOriginOnlyWhenLoading);
-
-  use_resource_fetch_priority =
-      base::FeatureList::IsEnabled(kUseResourceFetchPriority);
 
   prioritize_compositing_and_loading_during_early_loading =
       base::FeatureList::IsEnabled(
@@ -585,23 +552,6 @@ MainThreadSchedulerImpl::SchedulingSettings::SchedulingSettings() {
 
   prioritize_compositing_after_input =
       base::FeatureList::IsEnabled(kPrioritizeCompositingAfterInput);
-
-  if (use_resource_fetch_priority) {
-    base::FieldTrialParams params;
-    base::GetFieldTrialParams(kResourceFetchPriorityExperiment, &params);
-    for (size_t net_priority = 0;
-         net_priority < net::RequestPrioritySize::NUM_PRIORITIES;
-         net_priority++) {
-      net_to_blink_priority[net_priority] =
-          TaskQueue::QueuePriority::kNormalPriority;
-      auto iter = params.find(net::RequestPriorityToString(
-          static_cast<net::RequestPriority>(net_priority)));
-      if (iter != params.end()) {
-        net_to_blink_priority[net_priority] =
-            StringToTaskQueuePriority(iter->second);
-      }
-    }
-  }
 
   mbi_override_task_runner_handle =
       base::FeatureList::IsEnabled(kMbiOverrideTaskRunnerHandle);
@@ -681,8 +631,8 @@ void MainThreadSchedulerImpl::Shutdown() {
   was_shutdown_ = true;
 }
 
-std::unique_ptr<Thread> MainThreadSchedulerImpl::CreateMainThread() {
-  return std::make_unique<MainThread>(this);
+std::unique_ptr<MainThread> MainThreadSchedulerImpl::CreateMainThread() {
+  return std::make_unique<MainThreadImpl>(this);
 }
 
 scoped_refptr<WidgetScheduler>
@@ -880,7 +830,8 @@ MainThreadSchedulerImpl::NewThrottleableTaskQueueForTest(
 scoped_refptr<base::sequence_manager::TaskQueue>
 MainThreadSchedulerImpl::NewTaskQueueForTest() {
   return sequence_manager_->CreateTaskQueue(
-      base::sequence_manager::TaskQueue::Spec("test"));
+      base::sequence_manager::TaskQueue::Spec(
+          base::sequence_manager::QueueName::TEST_TQ));
 }
 
 void MainThreadSchedulerImpl::OnShutdownTaskQueue(
@@ -1157,8 +1108,19 @@ void MainThreadSchedulerImpl::SetHaveSeenABlockingGestureForTesting(
 }
 
 void MainThreadSchedulerImpl::PerformMicrotaskCheckpoint() {
+  // This will fallback to execute the microtask checkpoint for the
+  // default EventLoop for the isolate.
   if (isolate())
     EventLoop::PerformIsolateGlobalMicrotasksCheckpoint(isolate());
+  // Perform a microtask checkpoint for each AgentSchedulingGroup. This
+  // really should only be the ones that are not frozen but AgentSchedulingGroup
+  // does not have that concept yet.
+  // TODO(dtapuska): Move this to EndAgentGroupSchedulerScope so that we only
+  // run the microtask checkpoint for a given AgentGroupScheduler.
+  for (AgentGroupSchedulerImpl* agent_group_scheduler :
+       main_thread_only().agent_group_schedulers) {
+    agent_group_scheduler->PerformMicrotaskCheckpoint();
+  }
 }
 
 // static
@@ -2144,8 +2106,9 @@ MainThreadSchedulerImpl::CreateAgentGroupScheduler() {
 
 void MainThreadSchedulerImpl::RemoveAgentGroupScheduler(
     AgentGroupSchedulerImpl* agent_group_scheduler) {
-  DCHECK(agent_group_schedulers_.Contains(agent_group_scheduler));
-  agent_group_schedulers_.erase(agent_group_scheduler);
+  DCHECK(main_thread_only().agent_group_schedulers.Contains(
+      agent_group_scheduler));
+  main_thread_only().agent_group_schedulers.erase(agent_group_scheduler);
 }
 
 WebAgentGroupScheduler*
@@ -2156,6 +2119,10 @@ MainThreadSchedulerImpl::GetCurrentAgentGroupScheduler() {
 
 void MainThreadSchedulerImpl::SetV8Isolate(v8::Isolate* isolate) {
   ThreadSchedulerBase::SetV8Isolate(isolate);
+}
+
+v8::Isolate* MainThreadSchedulerImpl::Isolate() {
+  return isolate();
 }
 
 base::TimeTicks MainThreadSchedulerImpl::MonotonicallyIncreasingVirtualTime() {
@@ -2264,8 +2231,9 @@ base::TimeTicks MainThreadSchedulerImpl::NowTicks() const {
 
 void MainThreadSchedulerImpl::AddAgentGroupScheduler(
     AgentGroupSchedulerImpl* agent_group_scheduler) {
-  bool is_new_entry =
-      agent_group_schedulers_.insert(agent_group_scheduler).is_new_entry;
+  bool is_new_entry = main_thread_only()
+                          .agent_group_schedulers.insert(agent_group_scheduler)
+                          .is_new_entry;
   DCHECK(is_new_entry);
 }
 
@@ -2717,7 +2685,7 @@ MainThreadSchedulerImpl::ComputeCompositorPriorityFromUseCase() const {
 }
 
 bool MainThreadSchedulerImpl::AllPagesFrozen() const {
-  if (main_thread_only().page_schedulers.IsEmpty())
+  if (main_thread_only().page_schedulers.empty())
     return false;
   for (const auto* scheduler : main_thread_only().page_schedulers) {
     if (!scheduler->IsFrozen())

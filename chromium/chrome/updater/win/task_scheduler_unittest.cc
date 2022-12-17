@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -155,8 +155,8 @@ TEST_F(TaskSchedulerTests, DISABLED_RunAProgramNow) {
   const std::wstring event_name =
       base::StrCat({kTestProcessExecutableName, L"-",
                     base::NumberToWString(::GetCurrentProcessId())});
-  NamedObjectAttributes attr;
-  GetNamedObjectAttributes(event_name.c_str(), GetTestScope(), &attr);
+  NamedObjectAttributes attr =
+      GetNamedObjectAttributes(event_name.c_str(), GetTestScope());
 
   base::WaitableEvent event(base::win::ScopedHandle(
       ::CreateEvent(&attr.sa, FALSE, FALSE, attr.name.c_str())));
@@ -352,12 +352,13 @@ TEST_F(TaskSchedulerTests, GetTaskInfoNameAndDescription) {
   EXPECT_EQ(kTaskDescription1, info.description);
   EXPECT_EQ(kTaskName1, info.name);
 
-  EXPECT_TRUE(task_scheduler_->HasTaskFolder(
-      base::StrCat(
-          {L"\\" COMPANY_SHORTNAME_STRING,
-           GetTestScope() == UpdaterScope::kSystem ? L"System " : L"User ",
-           L"\\" PRODUCT_FULLNAME_STRING})
-          .c_str()));
+  const std::wstring expected_task_folder = base::StrCat(
+      {L"\\" COMPANY_SHORTNAME_STRING,
+       GetTestScope() == UpdaterScope::kSystem ? L"System " : L"User ",
+       L"\\" PRODUCT_FULLNAME_STRING});
+  EXPECT_EQ(task_scheduler_->GetTaskSubfolderName(GetTestScope()),
+            expected_task_folder);
+  EXPECT_TRUE(task_scheduler_->HasTaskFolder(expected_task_folder.c_str()));
 
   EXPECT_TRUE(task_scheduler_->DeleteTask(kTaskName1));
 }

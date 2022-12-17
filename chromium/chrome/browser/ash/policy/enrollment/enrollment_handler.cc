@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -145,18 +144,6 @@ em::DeviceRegisterRequest::Flavor EnrollmentModeToRegistrationFlavor(
 
   NOTREACHED() << "Bad enrollment mode: " << mode;
   return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_MANUAL;
-}
-
-// A utility function of base::ReadFileToString which returns an optional
-// string.
-// TODO(mukai): move this to base/files.
-absl::optional<std::string> ReadFileToOptionalString(
-    const base::FilePath& file_path) {
-  std::string content;
-  absl::optional<std::string> result;
-  if (base::ReadFileToString(file_path, &content))
-    result = std::move(content);
-  return result;
 }
 
 // Returns the PSM protocol execution result if prefs::kEnrollmentPsmResult is
@@ -518,16 +505,17 @@ void EnrollmentHandler::StartAttestationBasedEnrollmentFlow(
       base::BindOnce(&EnrollmentHandler::HandleRegistrationCertificateResult,
                      weak_ptr_factory_.GetWeakPtr(), is_initial_attempt);
   attestation_flow_->GetCertificate(
-      chromeos::attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE,
+      ash::attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE,
       EmptyAccountId(), /*request_origin=*/std::string(), force_new_key,
-      /*=key_name=*/std::string(), std::move(callback));
+      ::attestation::KEY_TYPE_RSA, /*=key_name=*/std::string(),
+      std::move(callback));
 }
 
 void EnrollmentHandler::HandleRegistrationCertificateResult(
     bool is_initial_attempt,
-    chromeos::attestation::AttestationStatus status,
+    ash::attestation::AttestationStatus status,
     const std::string& pem_certificate_chain) {
-  if (status != chromeos::attestation::ATTESTATION_SUCCESS) {
+  if (status != ash::attestation::ATTESTATION_SUCCESS) {
     ReportResult(EnrollmentStatus::ForStatus(
         EnrollmentStatus::REGISTRATION_CERT_FETCH_FAILED));
     return;

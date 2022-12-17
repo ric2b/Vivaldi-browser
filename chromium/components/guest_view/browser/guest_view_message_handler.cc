@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,15 +95,17 @@ void GuestViewMessageHandler::AttachToEmbedderFrame(
     return;
   }
 
-  content::WebContents* guest_web_contents =
-      manager->GetGuestByInstanceIDSafely(guest_instance_id,
-                                          render_process_id());
-  if (!guest_web_contents) {
+  GuestViewBase* guest = manager->GetGuestByInstanceIDSafely(
+      guest_instance_id, render_process_id());
+  if (!guest) {
     std::move(callback).Run();
     return;
   }
 
-  auto* guest = GuestViewBase::FromWebContents(guest_web_contents);
+  std::unique_ptr<GuestViewBase> owned_guest =
+      manager->TransferOwnership(guest);
+  DCHECK_EQ(owned_guest.get(), guest);
+
   content::WebContents* owner_web_contents = guest->owner_web_contents();
   DCHECK(owner_web_contents);
   auto* embedder_frame = RenderFrameHost::FromID(
@@ -122,9 +124,9 @@ void GuestViewMessageHandler::AttachToEmbedderFrame(
       "Extensions.GuestView.ChangeOwnerWebContentsOnAttach",
       changed_owner_web_contents);
 
-  guest->AttachToOuterWebContentsFrame(embedder_frame, element_instance_id,
-                                       false /* is_full_page_plugin */,
-                                       std::move(callback));
+  guest->AttachToOuterWebContentsFrame(
+      std::move(owned_guest), embedder_frame, element_instance_id,
+      false /* is_full_page_plugin */, std::move(callback));
 }
 
 }  // namespace guest_view

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -313,6 +313,13 @@ class CORE_EXPORT ObjectPaintProperties {
            "effect trees.";
   }
 #endif
+
+  PaintPropertyChangeType DirectlyUpdateTransformAndOrigin(
+      TransformPaintPropertyNode::TransformAndOrigin&& transform_and_origin,
+      const TransformPaintPropertyNode::AnimationState& animation_state) {
+    return transform_->DirectlyUpdateTransformAndOrigin(
+        std::move(transform_and_origin), animation_state);
+  }
 
  private:
   // Return true if the property tree structure changes (an existing node was

@@ -1,12 +1,12 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /** @fileoverview Element which shows toasts with optional undo button. */
 
 import '../../js/cr.m.js';
-import '../../js/event_tracker.m.js';
-import '../hidden_style_css.m.js';
+import '../../js/event_tracker.js';
+import '../cr_hidden_style.css.js';
 import './cr_toast.js';
 
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';

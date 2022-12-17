@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,7 +27,7 @@ namespace password_manager {
 
 class PasswordAutofillManager;
 class PasswordGenerationFrameHelper;
-class PasswordManager;
+class PasswordManagerInterface;
 
 // Interface that allows PasswordManager core code to interact with its driver
 // (i.e., obtain information from it and give information to it).
@@ -50,7 +50,7 @@ class PasswordManagerDriver
   virtual int GetId() const = 0;
 
   // Fills forms matching |form_data|.
-  virtual void FillPasswordForm(
+  virtual void SetPasswordFillData(
       const autofill::PasswordFormFillData& form_data) = 0;
 
   // Informs the driver that there are no saved credentials in the password
@@ -111,7 +111,7 @@ class PasswordManagerDriver
   virtual PasswordGenerationFrameHelper* GetPasswordGenerationHelper() = 0;
 
   // Returns the PasswordManager associated with this instance.
-  virtual PasswordManager* GetPasswordManager() = 0;
+  virtual PasswordManagerInterface* GetPasswordManager() = 0;
 
   // Returns the PasswordAutofillManager associated with this instance.
   virtual PasswordAutofillManager* GetPasswordAutofillManager() = 0;

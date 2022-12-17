@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,7 +114,7 @@ void WebTestWebFrameWidgetImpl::ScheduleAnimationForWebTests() {
 
 void WebTestWebFrameWidgetImpl::UpdateAllLifecyclePhasesAndComposite(
     base::OnceClosure callback) {
-  LayerTreeHost()->RequestPresentationTimeForNextFrame(WTF::Bind(
+  LayerTreeHost()->RequestPresentationTimeForNextFrame(WTF::BindOnce(
       [](base::OnceClosure callback, const gfx::PresentationFeedback&) {
         std::move(callback).Run();
       },
@@ -148,16 +148,18 @@ void WebTestWebFrameWidgetImpl::ScheduleAnimationInternal(bool do_raster) {
 
     frame->GetTaskRunner(TaskType::kInternalTest)
         ->PostDelayedTask(FROM_HERE,
-                          WTF::Bind(&WebTestWebFrameWidgetImpl::AnimateNow,
-                                    WrapWeakPersistent(this)),
+                          WTF::BindOnce(&WebTestWebFrameWidgetImpl::AnimateNow,
+                                        WrapWeakPersistent(this)),
                           base::Milliseconds(1));
   }
 }
 
-void WebTestWebFrameWidgetImpl::StartDragging(const WebDragData& data,
-                                              DragOperationsMask mask,
-                                              const SkBitmap& drag_image,
-                                              const gfx::Point& image_offset) {
+void WebTestWebFrameWidgetImpl::StartDragging(
+    const WebDragData& data,
+    DragOperationsMask mask,
+    const SkBitmap& drag_image,
+    const gfx::Vector2d& cursor_offset,
+    const gfx::Rect& drag_obj_rect) {
   doing_drag_and_drop_ = true;
   GetTestRunner()->SetDragImage(drag_image);
 

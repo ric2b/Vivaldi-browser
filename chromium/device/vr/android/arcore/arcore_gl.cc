@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,19 +31,14 @@
 #include "device/vr/public/mojom/pose.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/util/transform_utils.h"
-#include "gpu/ipc/common/gpu_memory_buffer_impl_android_hardware_buffer.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/angle_conversions.h"
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/gpu_fence.h"
-#include "ui/gl/android/scoped_java_surface.h"
-#include "ui/gl/android/surface_texture.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_fence_android_native_fence_sync.h"
-#include "ui/gl/gl_fence_egl.h"
-#include "ui/gl/gl_image_ahardwarebuffer.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
@@ -83,10 +78,10 @@ gfx::Transform GetContentTransform(const gfx::RectF& bounds) {
   // old WebVR convention with origin at top left, so the Y range needs to be
   // mirrored.
   gfx::Transform transform;
-  transform.matrix().setRC(0, 0, bounds.width());
-  transform.matrix().setRC(1, 1, bounds.height());
-  transform.matrix().setRC(0, 3, bounds.x());
-  transform.matrix().setRC(1, 3, 1.f - bounds.y() - bounds.height());
+  transform.set_rc(0, 0, bounds.width());
+  transform.set_rc(1, 1, bounds.height());
+  transform.set_rc(0, 3, bounds.x());
+  transform.set_rc(1, 3, 1.f - bounds.y() - bounds.height());
   return transform;
 }
 
@@ -97,10 +92,8 @@ gfx::Size GetCameraImageSize(const gfx::Size& in, const gfx::Transform& xform) {
   // leaving just the scaling factors.
   double x = in.width();
   double y = in.height();
-  int width = std::round(
-      std::abs(x * xform.matrix().rc(0, 0) + y * xform.matrix().rc(1, 0)));
-  int height = std::round(
-      std::abs(x * xform.matrix().rc(0, 1) + y * xform.matrix().rc(1, 1)));
+  int width = std::round(std::abs(x * xform.rc(0, 0) + y * xform.rc(1, 0)));
+  int height = std::round(std::abs(x * xform.rc(0, 1) + y * xform.rc(1, 1)));
 
   DVLOG(3) << __func__ << ": uncropped size=" << in.ToString()
            << " cropped/rotated size=" << gfx::Size(width, height).ToString()
@@ -575,11 +568,12 @@ void ArCoreGl::RecalculateUvsAndProjection() {
   constexpr float depth_near = 0.1f;
   constexpr float depth_far = 1000.f;
   projection_ = arcore_->GetProjectionMatrix(depth_near, depth_far);
-  auto m = projection_.matrix();
-  float left = depth_near * (m.rc(2, 0) - 1.f) / m.rc(0, 0);
-  float right = depth_near * (m.rc(2, 0) + 1.f) / m.rc(0, 0);
-  float bottom = depth_near * (m.rc(2, 1) - 1.f) / m.rc(1, 1);
-  float top = depth_near * (m.rc(2, 1) + 1.f) / m.rc(1, 1);
+  float left = depth_near * (projection_.rc(2, 0) - 1.f) / projection_.rc(0, 0);
+  float right =
+      depth_near * (projection_.rc(2, 0) + 1.f) / projection_.rc(0, 0);
+  float bottom =
+      depth_near * (projection_.rc(2, 1) - 1.f) / projection_.rc(1, 1);
+  float top = depth_near * (projection_.rc(2, 1) + 1.f) / projection_.rc(1, 1);
 
   // Also calculate the inverse projection which is needed for converting
   // screen touches to world rays.
@@ -696,10 +690,10 @@ void ArCoreGl::GetFrameData(
   // Warn the compositor that we're expecting to have data to submit this frame.
   if (ar_compositor_) {
     base::TimeDelta frametime = EstimatedArCoreFrameTime();
-    base::TimeTicks now = base::TimeTicks::Now();
     base::TimeDelta render_margin =
         kScheduleFrametimeMarginForRender * frametime;
-    base::TimeTicks deadline = now + (frametime - render_margin);
+    base::TimeTicks deadline =
+        base::TimeTicks::Now() + (frametime - render_margin);
     ar_compositor_->RequestBeginFrame(frametime, deadline);
   }
 
@@ -1055,7 +1049,7 @@ void ArCoreGl::FinishFrame(int16_t frame_index) {
 
   TRACE_EVENT1("gpu", __func__, "frame", frame_index);
   DVLOG(3) << __func__;
-  surface_->SwapBuffers(base::DoNothing());
+  surface_->SwapBuffers(base::DoNothing(), gl::FrameData());
 
   // If we have a rendering frame (we don't if the app didn't submit one),
   // update statistics.
@@ -1710,7 +1704,7 @@ std::vector<mojom::XRInputSourceStatePtr> ArCoreGl::GetInputSourceStates() {
         (1.f - screen_last_touch.y() / screen_size_.height()) * 2.f - 1.f;
     gfx::Point3F touch_point(x_normalized, y_normalized, -1.f);
     DVLOG(3) << __func__ << ": touch_point=" << touch_point.ToString();
-    inverse_projection_.TransformPoint(&touch_point);
+    touch_point = inverse_projection_.MapPoint(touch_point);
     DVLOG(3) << __func__ << ": unprojected=" << touch_point.ToString();
 
     // Ray points along -Z in ray space, so we need to flip it to get
@@ -1733,7 +1727,7 @@ std::vector<mojom::XRInputSourceStatePtr> ArCoreGl::GetInputSourceStates() {
 
     // Fill in the transform matrix in row-major order. The first three columns
     // contain the basis vectors, the fourth column the position offset.
-    gfx::Transform viewer_from_pointer(
+    auto viewer_from_pointer = gfx::Transform::RowMajor(
         new_x.x(), new_y.x(), new_z.x(), touch_point.x(),  // row 1
         new_x.y(), new_y.y(), new_z.y(), touch_point.y(),  // row 2
         new_x.z(), new_y.z(), new_z.z(), touch_point.z(),  // row 3
@@ -1807,6 +1801,12 @@ void ArCoreGl::Resume() {
 
   arcore_->Resume();
   is_paused_ = false;
+
+  // This call appears to fix a spurious ARCoreError "texture names are not
+  // set" aka AR_ERROR_TEXTURE_NOT_SET. The documentation mentions that
+  // the texture contents aren't valid across pause/resume, but it's unclear
+  // why that also makes the registered texture name invalid.
+  arcore_->SetCameraTexture(ar_image_transport_->GetCameraTextureId());
 }
 
 void ArCoreGl::OnBindingDisconnect() {

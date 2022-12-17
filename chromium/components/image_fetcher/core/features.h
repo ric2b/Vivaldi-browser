@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ namespace image_fetcher {
 namespace features {
 
 #if BUILDFLAG(IS_ANDROID)
-extern const base::Feature kBatchImageDecoding;
+BASE_DECLARE_FEATURE(kBatchImageDecoding);
 #endif
 
 }  // namespace features

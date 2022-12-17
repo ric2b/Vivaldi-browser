@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -102,7 +102,7 @@ class MockCapturerSource : public media::AudioCapturerSource {
   MockCapturerSource& operator=(const MockCapturerSource&) = delete;
 
   void Initialize(const media::AudioParameters& params,
-                  CaptureCallback* callback) {
+                  CaptureCallback* callback) override {
     audio_parameters_ = params;
     capture_callback_ = callback;
   }

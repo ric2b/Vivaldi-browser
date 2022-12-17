@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -104,7 +104,7 @@ class AnnouncementNotificationServiceTest : public testing::Test {
             bool guest_profile = false) {
     std::vector<base::test::ScopedFeatureList::FeatureAndParams>
         enabled_features;
-    std::vector<base::Feature> disabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
     if (enable_feature)
       enabled_features.emplace_back(kAnnouncementNotification, parameters);
     else

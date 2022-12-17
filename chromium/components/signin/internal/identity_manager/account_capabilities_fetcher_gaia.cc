@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,15 +79,15 @@ void AccountCapabilitiesFetcherGaia::OnGetTokenFailure(
 }
 
 void AccountCapabilitiesFetcherGaia::OnGetAccountCapabilitiesResponse(
-    std::unique_ptr<base::Value> account_capabilities) {
+    const base::Value::Dict& account_capabilities) {
   TRACE_EVENT_NESTABLE_ASYNC_END0("AccountFetcherService",
                                   "GetAccountCapabilities", this);
   absl::optional<AccountCapabilities> parsed_capabilities =
-      AccountCapabilitiesFromValue(*account_capabilities);
+      AccountCapabilitiesFromValue(account_capabilities);
   FetchResult result = FetchResult::kSuccess;
   if (!parsed_capabilities) {
     VLOG(1) << "Failed to parse account capabilities for " << account_id()
-            << ". Response body: " << account_capabilities->DebugString();
+            << ". Response body: " << account_capabilities.DebugString();
     result = FetchResult::kParseResponseFailure;
   }
 

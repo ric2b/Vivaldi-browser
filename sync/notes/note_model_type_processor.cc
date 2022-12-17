@@ -29,6 +29,7 @@
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
+#include "sync/file_sync/file_store.h"
 #include "sync/notes/note_local_changes_builder.h"
 #include "sync/notes/note_model_merger.h"
 #include "sync/notes/note_remote_updates_handler.h"
@@ -90,7 +91,9 @@ std::string ComputeServerDefinedUniqueTagForDebugging(
 
 }  // namespace
 
-NoteModelTypeProcessor::NoteModelTypeProcessor() {}
+NoteModelTypeProcessor::NoteModelTypeProcessor(
+    file_sync::SyncedFileStore* synced_file_store)
+    : synced_file_store_(synced_file_store) {}
 
 NoteModelTypeProcessor::~NoteModelTypeProcessor() {
   if (notes_model_ && notes_model_observer_) {
@@ -158,11 +161,15 @@ void NoteModelTypeProcessor::OnCommitCompleted(
 
 void NoteModelTypeProcessor::OnUpdateReceived(
     const sync_pb::ModelTypeState& model_type_state,
-    syncer::UpdateResponseDataList updates) {
+    syncer::UpdateResponseDataList updates,
+    absl::optional<sync_pb::GarbageCollectionDirective> gc_directive) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!model_type_state.cache_guid().empty());
   DCHECK_EQ(model_type_state.cache_guid(), cache_guid_);
   DCHECK(model_type_state.initial_sync_done());
+
+  // TODO(crbug.com/1356900): validate incoming updates, e.g. |gc_directive|
+  // must be empty for Notes.
 
   // Clients before M94 did not populate the parent GUID in specifics.
   PopulateParentGuidInSpecifics(note_tracker_.get(), &updates);
@@ -231,7 +238,7 @@ void NoteModelTypeProcessor::ModelReadyToSync(
   model_metadata.ParseFromString(metadata_str);
 
   note_tracker_ = SyncedNoteTracker::CreateFromNotesModelAndMetadata(
-      model, std::move(model_metadata));
+      model, std::move(model_metadata), synced_file_store_);
 
   if (note_tracker_) {
     StartTrackingMetadata();
@@ -346,6 +353,7 @@ void NoteModelTypeProcessor::OnSyncStopping(
         note_tracker_.reset();
       }
       schedule_save_closure_.Run();
+      synced_file_store_->RemoveAllSyncRefsForType(syncer::NOTES);
       break;
     }
   }
@@ -381,7 +389,8 @@ void NoteModelTypeProcessor::OnInitialUpdateReceived(
 
   TRACE_EVENT0("sync", "NoteModelTypeProcessor::OnInitialUpdateReceived");
 
-  note_tracker_ = SyncedNoteTracker::CreateEmpty(model_type_state);
+  note_tracker_ =
+      SyncedNoteTracker::CreateEmpty(model_type_state, synced_file_store_);
   StartTrackingMetadata();
 
   {
@@ -513,7 +522,7 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
   data_dictionary.Set("metadata", base::Value::FromUniquePtrValue(
                                       syncer::EntityMetadataToValue(metadata)));
   data_dictionary.Set("modelType", "Notes");
-  data_dictionary.Set("IS_DIR", node->is_folder());
+  data_dictionary.Set("IS_DIR", node->is_folder() || node->is_note());
   all_nodes->Append(std::move(data_dictionary));
 
   int i = 0;

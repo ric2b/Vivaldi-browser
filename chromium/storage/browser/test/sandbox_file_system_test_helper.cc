@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -139,7 +139,7 @@ int64_t SandboxFileSystemTestHelper::ComputeCurrentStorageKeyUsage() {
 
   int64_t size = file_util_delegate()->ComputeDirectorySize(GetRootPath());
   base::FileErrorOr<base::FilePath> path = GetUsageCachePath();
-  if (!path.is_error() && file_util_delegate()->PathExists(path.value()))
+  if (path.has_value() && file_util_delegate()->PathExists(path.value()))
     size -= FileSystemUsageCache::kUsageFileSize;
 
   return size;
@@ -203,7 +203,7 @@ void SandboxFileSystemTestHelper::SetUpFileSystem() {
                                                /*create=*/true);
   }
   base::FileErrorOr<base::FilePath> usage_cache_path = GetUsageCachePath();
-  if (!usage_cache_path.is_error() && !usage_cache_path->empty())
+  if (usage_cache_path.has_value() && !usage_cache_path->empty())
     usage_cache()->UpdateUsage(usage_cache_path.value(), 0);
 }
 

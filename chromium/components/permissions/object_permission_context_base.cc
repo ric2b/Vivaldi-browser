@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -320,7 +320,7 @@ ObjectPermissionContextBase::GetWebsiteSettingObjects() {
     if (!objects)
       continue;
 
-    for (auto& object : objects->GetListDeprecated()) {
+    for (auto& object : objects->GetList()) {
       if (!IsValidObject(object)) {
         continue;
       }

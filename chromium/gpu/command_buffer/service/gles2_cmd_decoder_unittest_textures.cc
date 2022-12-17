@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -3075,17 +3075,18 @@ TEST_P(GLES2DecoderTest, CreateAndConsumeTextureCHROMIUMInvalidTexture) {
 TEST_P(GLES2DecoderTest, CreateAndTexStorage2DSharedImageCHROMIUM) {
   MemoryTypeTracker memory_tracker(memory_tracker_.get());
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
+  auto format = viz::SharedImageFormat::kRGBA_8888;
   std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image =
       GetSharedImageManager()->Register(
           std::make_unique<TestImageBacking>(
-              mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
-              gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
-              0, 0, kNewServiceId),
+              mailbox, format, gfx::Size(10, 10), gfx::ColorSpace(),
+              kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, 0, 0,
+              kNewServiceId),
           &memory_tracker);
 
   auto& cmd = *GetImmediateAs<
       cmds::CreateAndTexStorage2DSharedImageINTERNALImmediate>();
-  cmd.Init(kNewClientId, GL_NONE, mailbox.name);
+  cmd.Init(kNewClientId, mailbox.name);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(mailbox.name)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 
@@ -3115,7 +3116,7 @@ TEST_P(GLES2DecoderTest,
 
   auto& cmd = *GetImmediateAs<
       cmds::CreateAndTexStorage2DSharedImageINTERNALImmediate>();
-  cmd.Init(kNewClientId, GL_NONE, mailbox.name);
+  cmd.Init(kNewClientId, mailbox.name);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(mailbox.name)));
 
   // CreateAndTexStorage2DSharedImage should fail if the mailbox is invalid.
@@ -3137,17 +3138,18 @@ TEST_P(GLES2DecoderTest,
   // Try to create a mailbox with kNewClientId.
   MemoryTypeTracker memory_tracker(memory_tracker_.get());
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
+  auto format = viz::SharedImageFormat::kRGBA_8888;
   std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image =
       GetSharedImageManager()->Register(
           std::make_unique<TestImageBacking>(
-              mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
-              gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
-              0, 0, kNewServiceId),
+              mailbox, format, gfx::Size(10, 10), gfx::ColorSpace(),
+              kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, 0, 0,
+              kNewServiceId),
           &memory_tracker);
 
   auto& cmd = *GetImmediateAs<
       cmds::CreateAndTexStorage2DSharedImageINTERNALImmediate>();
-  cmd.Init(client_texture_id_, GL_NONE, mailbox.name);
+  cmd.Init(client_texture_id_, mailbox.name);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(mailbox.name)));
 
   // CreateAndTexStorage2DSharedImage should fail.
@@ -3161,17 +3163,18 @@ TEST_P(GLES2DecoderTest,
 TEST_P(GLES2DecoderTest, BeginEndSharedImageAccessCRHOMIUM) {
   MemoryTypeTracker memory_tracker(memory_tracker_.get());
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
+  auto format = viz::SharedImageFormat::kRGBA_8888;
   std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image =
       GetSharedImageManager()->Register(
           std::make_unique<TestImageBacking>(
-              mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
-              gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
-              0, 0, kNewServiceId),
+              mailbox, format, gfx::Size(10, 10), gfx::ColorSpace(),
+              kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, 0, 0,
+              kNewServiceId),
           &memory_tracker);
 
   auto& cmd = *GetImmediateAs<
       cmds::CreateAndTexStorage2DSharedImageINTERNALImmediate>();
-  cmd.Init(kNewClientId, GL_NONE, mailbox.name);
+  cmd.Init(kNewClientId, mailbox.name);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(mailbox.name)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 
@@ -3222,10 +3225,10 @@ TEST_P(GLES2DecoderTest, BeginSharedImageAccessDirectCHROMIUMCantBeginAccess) {
   // Create a shared image.
   MemoryTypeTracker memory_tracker(memory_tracker_.get());
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
+  auto format = viz::SharedImageFormat::kRGBA_8888;
   auto shared_image_backing = std::make_unique<TestImageBacking>(
-      mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
-      gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, 0, 0,
-      kNewServiceId);
+      mailbox, format, gfx::Size(10, 10), gfx::ColorSpace(),
+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, 0, 0, kNewServiceId);
   // Set the shared image to fail BeginAccess.
   shared_image_backing->set_can_access(false);
   std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image =
@@ -3234,7 +3237,7 @@ TEST_P(GLES2DecoderTest, BeginSharedImageAccessDirectCHROMIUMCantBeginAccess) {
 
   auto& cmd = *GetImmediateAs<
       cmds::CreateAndTexStorage2DSharedImageINTERNALImmediate>();
-  cmd.Init(kNewClientId, GL_NONE, mailbox.name);
+  cmd.Init(kNewClientId, mailbox.name);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(mailbox.name)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 

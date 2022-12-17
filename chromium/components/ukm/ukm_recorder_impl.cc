@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,12 +37,13 @@
 
 namespace ukm {
 
-const base::Feature kUkmSamplingRateFeature{"UkmSamplingRate",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kUkmSamplingRateFeature,
+             "UkmSamplingRate",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
 
-bool IsWhitelistedSourceId(SourceId source_id) {
+bool IsAllowlistedSourceId(SourceId source_id) {
   SourceIdType type = GetSourceIdType(source_id);
   switch (type) {
     case ukm::SourceIdObj::Type::NAVIGATION_ID:
@@ -75,21 +76,11 @@ bool HasSupportedScheme(const GURL& url) {
          url.SchemeIs(kAppScheme);
 }
 
-void LogEventHashAsUmaHistogram(const std::string& histogram_name,
-                                uint64_t event_hash) {
-  // The enum for this histogram gets populated by the PopulateEnumWithUkmEvents
-  // function in populate_enums.py when producing the merged XML.
-  base::UmaHistogramSparse(histogram_name,
-                           // Truncate the unsigned 64-bit hash to 31 bits, to
-                           // make it a suitable histogram sample.
-                           event_hash & 0x7fffffff);
-}
-
 enum class DroppedDataReason {
   NOT_DROPPED = 0,
   RECORDING_DISABLED = 1,
   MAX_HIT = 2,
-  NOT_WHITELISTED = 3,
+  DEPRECATED_NOT_WHITELISTED = 3,
   UNSUPPORTED_URL_SCHEME = 4,
   SAMPLED_OUT = 5,
   EXTENSION_URLS_DISABLED = 6,
@@ -114,7 +105,14 @@ void RecordDroppedSource(bool already_recorded_another_reason,
 }
 
 void RecordDroppedEntry(uint64_t event_hash, DroppedDataReason reason) {
-  LogEventHashAsUmaHistogram("UKM.Entries.Dropped.ByEntryHash", event_hash);
+  // Truncate the unsigned 64-bit hash to 31 bits, to
+  // make it a suitable histogram sample.
+  uint32_t value = event_hash & 0x7fffffff;
+  // The enum for these histograms gets populated by the
+  // PopulateEnumWithUkmEvents
+  // function in populate_enums.py when producing the merged XML.
+
+  UMA_HISTOGRAM_SPARSE("UKM.Entries.Dropped.ByEntryHash", value);
 
   // Because the "UKM.Entries.Dropped.ByEntryHash" histogram will be emitted to
   // every single time an entry is dropped, it will be dominated by the
@@ -123,12 +121,10 @@ void RecordDroppedEntry(uint64_t event_hash, DroppedDataReason reason) {
   // split by those reasons.
   switch (reason) {
     case DroppedDataReason::MAX_HIT:
-      LogEventHashAsUmaHistogram("UKM.Entries.Dropped.MaxHit.ByEntryHash",
-                                 event_hash);
+      UMA_HISTOGRAM_SPARSE("UKM.Entries.Dropped.MaxHit.ByEntryHash", value);
       break;
     case DroppedDataReason::SAMPLED_OUT:
-      LogEventHashAsUmaHistogram("UKM.Entries.Dropped.SampledOut.ByEntryHash",
-                                 event_hash);
+      UMA_HISTOGRAM_SPARSE("UKM.Entries.Dropped.SampledOut.ByEntryHash", value);
       break;
     default:
       break;
@@ -169,11 +165,11 @@ GURL SanitizeURL(const GURL& url) {
   return url.ReplaceComponents(remove_params);
 }
 
-void AppendWhitelistedUrls(
+void AppendAllowlistedUrls(
     const std::map<SourceId, std::unique_ptr<UkmSource>>& sources,
     std::unordered_set<std::string>* urls) {
   for (const auto& kv : sources) {
-    if (IsWhitelistedSourceId(kv.first)) {
+    if (IsAllowlistedSourceId(kv.first)) {
       urls->insert(kv.second->url().spec());
       // Some non-navigation sources only record origin as a URL.
       // Add the origin from the navigation source to match those too.
@@ -376,11 +372,11 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
   const int num_sources_unsent =
       recordings_.sources.size() - source_ids_seen.size();
 
-  // Construct set of whitelisted URLs by merging those carried over from the
+  // Construct set of allowlisted URLs by merging those carried over from the
   // previous report cycle and those from sources recorded in this cycle.
-  std::unordered_set<std::string> url_whitelist;
-  recordings_.carryover_urls_whitelist.swap(url_whitelist);
-  AppendWhitelistedUrls(recordings_.sources, &url_whitelist);
+  std::unordered_set<std::string> url_allowlist;
+  recordings_.carryover_urls_allowlist.swap(url_allowlist);
+  AppendAllowlistedUrls(recordings_.sources, &url_allowlist);
 
   // Number of sources discarded due to not matching a navigation URL.
   int num_sources_unmatched = 0;
@@ -389,15 +385,12 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
 
   for (const auto& kv : recordings_.sources) {
     MaybeMarkForDeletion(kv.first);
-    // If the source id is not whitelisted, don't send it unless it has
-    // associated entries and the URL matches that of a whitelisted source.
-    // Note: If ShouldRestrictToWhitelistedSourceIds() is true, this logic will
-    // not be hit as the source would have already been filtered in
-    // UpdateSourceURL().
-    if (!IsWhitelistedSourceId(kv.first)) {
+    // If the source id is not allowlisted, don't send it unless it has
+    // associated entries and the URL matches that of a allowlisted source.
+    if (!IsAllowlistedSourceId(kv.first)) {
       // UkmSource should not keep initial_url for non-navigation source IDs.
       DCHECK_EQ(1u, kv.second->urls().size());
-      if (!url_whitelist.count(kv.second->url().spec())) {
+      if (!url_allowlist.count(kv.second->url().spec())) {
         RecordDroppedSource(DroppedDataReason::NOT_MATCHED);
         MarkSourceForDeletion(kv.first);
         num_sources_unmatched++;
@@ -408,7 +401,7 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
         continue;
       }
 
-      // Non-whitelisted Source types will not be kept after entries are logged.
+      // Non-allowlisted Source types will not be kept after entries are logged.
       MarkSourceForDeletion(kv.first);
     }
     // Minimal validations before serializing into a proto message.
@@ -505,10 +498,10 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
   // in the next reporting cycle.
   recordings_.source_counts.carryover_sources = recordings_.sources.size();
 
-  // We already matched these deferred sources against the URL whitelist.
-  // Re-whitelist them for the next report.
+  // We already matched these deferred sources against the URL allowlist.
+  // Re-allowlist them for the next report.
   for (const auto& kv : recordings_.sources) {
-    recordings_.carryover_urls_whitelist.insert(kv.second->url().spec());
+    recordings_.carryover_urls_allowlist.insert(kv.second->url().spec());
   }
 
   UMA_HISTOGRAM_COUNTS_1000("UKM.Sources.KeptSourcesCount",
@@ -669,11 +662,6 @@ int UkmRecorderImpl::PruneData(std::set<SourceId>& source_ids_seen) {
     }
   }
   return pruned_sources_age_sec;
-}
-
-bool UkmRecorderImpl::ShouldRestrictToWhitelistedSourceIds() const {
-  return base::GetFieldTrialParamByFeatureAsBool(
-      kUkmFeature, "RestrictToWhitelistedSourceIds", false);
 }
 
 bool UkmRecorderImpl::ApplyEntryFilter(mojom::UkmEntry* entry) {
@@ -889,13 +877,6 @@ UkmRecorderImpl::ShouldRecordUrlResult UkmRecorderImpl::ShouldRecordUrl(
     return ShouldRecordUrlResult::kDropped;
   }
 
-  if (ShouldRestrictToWhitelistedSourceIds() &&
-      !IsWhitelistedSourceId(source_id)) {
-    RecordDroppedSource(has_recorded_reason,
-                        DroppedDataReason::NOT_WHITELISTED);
-    return ShouldRecordUrlResult::kDropped;
-  }
-
   if (sanitized_url.is_empty()) {
     RecordDroppedSource(has_recorded_reason, DroppedDataReason::EMPTY_URL);
     return ShouldRecordUrlResult::kDropped;
@@ -1005,8 +986,10 @@ void UkmRecorderImpl::AddEntry(mojom::UkmEntryPtr entry) {
 
   // Log a corresponding entry to UMA so we get a per-metric breakdown of UKM
   // entry counts.
-  LogEventHashAsUmaHistogram("UKM.Entries.Recorded.ByEntryHash",
-                             entry->event_hash);
+  // Truncate the unsigned 64-bit hash to 31 bits, to
+  // make it a suitable histogram sample.
+  UMA_HISTOGRAM_SPARSE("UKM.Entries.Recorded.ByEntryHash",
+                       entry->event_hash & 0x7fffffff);
 
   recordings_.entries.push_back(std::move(entry));
 }

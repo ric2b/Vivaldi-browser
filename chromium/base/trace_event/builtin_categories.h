@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,6 +60,7 @@
   X("cast.mdns")                                                         \
   X("cast.mdns.socket")                                                  \
   X("cast.stream")                                                       \
+  X("catan_investigation")                                               \
   X("cc")                                                                \
   X("cc.debug")                                                          \
   X("cdp.perf")                                                          \
@@ -193,6 +194,7 @@
   X(TRACE_DISABLED_BY_DEFAULT("blink.feature_usage"))                    \
   X(TRACE_DISABLED_BY_DEFAULT("blink.image_decoding"))                   \
   X(TRACE_DISABLED_BY_DEFAULT("blink.invalidation"))                     \
+  X(TRACE_DISABLED_BY_DEFAULT("identifiability"))                        \
   X(TRACE_DISABLED_BY_DEFAULT("cc"))                                     \
   X(TRACE_DISABLED_BY_DEFAULT("cc.debug"))                               \
   X(TRACE_DISABLED_BY_DEFAULT("cc.debug.cdp-perf"))                      \

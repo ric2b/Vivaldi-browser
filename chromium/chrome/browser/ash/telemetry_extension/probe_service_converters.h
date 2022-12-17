@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,14 +14,7 @@
 #include "chromeos/crosapi/mojom/nullable_primitives.mojom-forward.h"
 #include "chromeos/crosapi/mojom/probe_service.mojom-forward.h"
 
-namespace ash {
-
-// TODO(https://crbug.com/1164001): Remove if cros_healthd::mojom moved to ash.
-namespace cros_healthd {
-namespace mojom = ::chromeos::cros_healthd::mojom;
-}  // namespace cros_healthd
-
-namespace converters {
+namespace ash::converters {
 
 // This file contains helper functions used by ProbeService to convert its
 // types to/from cros_healthd ProbeService types.
@@ -114,6 +107,9 @@ crosapi::mojom::ProbeSystemInfoPtr UncheckedConvertPtr(
 crosapi::mojom::ProbeOsVersionPtr UncheckedConvertPtr(
     cros_healthd::mojom::OsVersionPtr);
 
+crosapi::mojom::ProbeNetworkResultPtr UncheckedConvertPtr(
+    cros_healthd::mojom::NetworkResultPtr input);
+
 std::pair<crosapi::mojom::ProbeCachedVpdInfoPtr,
           crosapi::mojom::ProbeSystemInfoPtr>
 UncheckedConvertPairPtr(cros_healthd::mojom::SystemInfoPtr input);
@@ -121,6 +117,21 @@ UncheckedConvertPairPtr(cros_healthd::mojom::SystemInfoPtr input);
 std::pair<crosapi::mojom::ProbeCachedVpdResultPtr,
           crosapi::mojom::ProbeSystemResultPtr>
 UncheckedConvertPairPtr(cros_healthd::mojom::SystemResultPtr input);
+
+crosapi::mojom::ProbeTpmVersionPtr UncheckedConvertPtr(
+    cros_healthd::mojom::TpmVersionPtr input);
+
+crosapi::mojom::ProbeTpmStatusPtr UncheckedConvertPtr(
+    cros_healthd::mojom::TpmStatusPtr input);
+
+crosapi::mojom::ProbeTpmDictionaryAttackPtr UncheckedConvertPtr(
+    cros_healthd::mojom::TpmDictionaryAttackPtr input);
+
+crosapi::mojom::ProbeTpmInfoPtr UncheckedConvertPtr(
+    cros_healthd::mojom::TpmInfoPtr input);
+
+crosapi::mojom::ProbeTpmResultPtr UncheckedConvertPtr(
+    cros_healthd::mojom::TpmResultPtr input);
 
 crosapi::mojom::ProbeTelemetryInfoPtr UncheckedConvertPtr(
     cros_healthd::mojom::TelemetryInfoPtr input);
@@ -131,6 +142,9 @@ crosapi::mojom::ProbeErrorType Convert(cros_healthd::mojom::ErrorType type);
 
 crosapi::mojom::ProbeCpuArchitectureEnum Convert(
     cros_healthd::mojom::CpuArchitectureEnum input);
+
+crosapi::mojom::ProbeTpmGSCVersion Convert(
+    cros_healthd::mojom::TpmGSCVersion input);
 
 crosapi::mojom::BoolValuePtr Convert(bool input);
 
@@ -168,7 +182,6 @@ auto ConvertProbePairPtr(InputT input) {
 std::vector<cros_healthd::mojom::ProbeCategoryEnum> ConvertCategoryVector(
     const std::vector<crosapi::mojom::ProbeCategoryEnum>& input);
 
-}  // namespace converters
-}  // namespace ash
+}  // namespace ash::converters
 
 #endif  // CHROME_BROWSER_ASH_TELEMETRY_EXTENSION_PROBE_SERVICE_CONVERTERS_H_

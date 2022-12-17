@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,7 +51,6 @@
 #include "net/third_party/quiche/src/quiche/quic/core/quic_versions.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
-#include "net/url_request/url_request_context_storage.h"
 #include "url/scheme_host_port.h"
 #include "url/url_util.h"
 
@@ -404,7 +403,7 @@ void CronetEnvironment::InitializeOnNetworkThread() {
     url::SchemeHostPort quic_hint_server("https", quic_hint.host(),
                                          quic_hint.port());
     main_context_->http_server_properties()->SetQuicAlternativeService(
-        quic_hint_server, net::NetworkIsolationKey(), alternative_service,
+        quic_hint_server, net::NetworkAnonymizationKey(), alternative_service,
         base::Time::Max(), quic::ParsedQuicVersionVector());
   }
 

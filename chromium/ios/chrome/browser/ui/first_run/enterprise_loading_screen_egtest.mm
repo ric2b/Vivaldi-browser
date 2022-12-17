@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,19 +47,24 @@ constexpr char kEnrollmentToken[] = "enrollment_token";
   GREYAssertTrue(_policyTestServer->Start(),
                  @"Policy test server did not start.");
 
-  [PolicyAppInterface clearAllPoliciesInMemory];
-  [PolicyAppInterface clearDMTokenDirectory];
-  [PolicyAppInterface clearCloudPolicyDirectory];
+  [self clearPolicies];
 }
 
 - (void)tearDown {
-  [PolicyAppInterface clearAllPoliciesInMemory];
-  [PolicyAppInterface clearDMTokenDirectory];
-  [PolicyAppInterface clearCloudPolicyDirectory];
+  [self clearPolicies];
   [super tearDown];
 }
 
 #pragma mark - Helpers
+
+// Removes all policies stored in memory.
+- (void)clearPolicies {
+  [PolicyAppInterface clearAllPoliciesInNSUserDefault];
+  GREYAssertTrue([PolicyAppInterface clearDMTokenDirectory],
+                 @"DM token directory not cleared.");
+  GREYAssertTrue([PolicyAppInterface clearCloudPolicyDirectory],
+                 @"Cloud policy directory not cleared.");
+}
 
 // Waits and verify that the enterprise loading screen is not displayed.
 - (void)verifyLoadingScreenIsDismissed {
@@ -79,7 +84,8 @@ constexpr char kEnrollmentToken[] = "enrollment_token";
   // Waits for enterprise loading screen to be dismissed or timeout after
   // kWaitForUIElementTimeout.
   GREYAssertTrue([loadingScreenDismissed
-                     waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+                     waitWithTimeout:base::test::ios::kWaitForUIElementTimeout
+                                         .InSecondsF()],
                  @"Enterprise loading screen still visible.");
 }
 
@@ -132,8 +138,7 @@ constexpr char kEnrollmentToken[] = "enrollment_token";
 
 // Ensures that the loading screen is dismissed when registration succeeds and
 // policy fetch fails.
-// TODO(crbug.com/1352111): Re-enable
-- (void)DISABLED_testLoadingScreenDismissedByPolicyFetchError {
+- (void)testLoadingScreenDismissedByPolicyFetchError {
   _policyTestServer->ConfigureRequestError(
       policy::dm_protocol::kValueRequestPolicy, net::HTTP_METHOD_NOT_ALLOWED);
 

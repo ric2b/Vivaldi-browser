@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -105,8 +105,6 @@ const nodeNameContainedInStaticTextChildren = function(node) {
 };
 
 export class AutomationPredicate {
-  constructor() {}
-
   /**
    * Constructs a predicate given a list of roles.
    * @param {!Array<Role>} roles
@@ -941,6 +939,21 @@ AutomationPredicate.clickable = AutomationPredicate.match({
   anyAttribute: {clickable: true},
 });
 
+/**
+ * Returns if the node is long clickable.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.longClickable = AutomationPredicate.match({
+  anyPredicate: [
+    node => {
+      return node.standardActions.includes(
+          chrome.automation.ActionType.LONG_CLICK);
+    },
+  ],
+  anyAttribute: {longClickable: true},
+});
+
 // Table related predicates.
 /**
  * Returns if the node has a cell like role.
@@ -986,4 +999,16 @@ AutomationPredicate.selectableText = AutomationPredicate.roles([
   Role.INLINE_TEXT_BOX,
   Role.LINE_BREAK,
   Role.LIST_MARKER,
+]);
+
+/**
+ * Matches against pop-up button like nodes.
+ * Historically, single value <select> controls were represented as a
+ * popup button, but they are distinct from <button aria-haspopup='menu'>.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.popUpButton = AutomationPredicate.roles([
+  Role.COMBO_BOX_SELECT,
+  Role.POP_UP_BUTTON,
 ]);

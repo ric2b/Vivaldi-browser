@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -113,8 +113,8 @@ blink_core_sources_inspector = [
   "request_debug_header_scope.h",
   "resolve_node.cc",
   "resolve_node.h",
-  "thread_debugger.cc",
-  "thread_debugger.h",
+  "thread_debugger_common_impl.cc",
+  "thread_debugger_common_impl.h",
   "v8_inspector_string.cc",
   "v8_inspector_string.h",
   "worker_devtools_params.h",

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,8 +80,7 @@ class FlatlandSysmemBufferCollection
                      VkImage* vk_image,
                      VkImageCreateInfo* vk_image_info,
                      VkDeviceMemory* vk_device_memory,
-                     VkDeviceSize* mem_allocation_size,
-                     absl::optional<gpu::VulkanYCbCrInfo>* ycbcr_info);
+                     VkDeviceSize* mem_allocation_size);
 
   gfx::SysmemBufferCollectionId id() const { return id_; }
   size_t num_buffers() const { return buffers_info_.buffer_count; }

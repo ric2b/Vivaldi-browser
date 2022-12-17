@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/time/time_to_iso8601.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_metrics_logger.h"
@@ -47,6 +48,7 @@
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/mojom/window_open_disposition.mojom.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/webui/mojo_bubble_web_ui_controller.h"
 #include "ui/webui/resources/cr_components/history_clusters/history_clusters.mojom.h"
 #include "url/gurl.h"
@@ -127,9 +129,8 @@ mojom::URLVisitPtr VisitToMojom(Profile* profile,
   visit_mojom->raw_visit_data = mojom::RawVisitData::New(
       annotated_visit.url_row.url(), annotated_visit.visit_row.visit_time);
   for (const auto& duplicate : visit.duplicate_visits) {
-    visit_mojom->duplicates.push_back(mojom::RawVisitData::New(
-        duplicate.annotated_visit.url_row.url(),
-        duplicate.annotated_visit.visit_row.visit_time));
+    visit_mojom->duplicates.push_back(
+        mojom::RawVisitData::New(duplicate.url, duplicate.visit_time));
   }
 
   visit_mojom->page_title = base::UTF16ToUTF8(annotated_visit.url_row.title());
@@ -177,8 +178,13 @@ mojom::URLVisitPtr VisitToMojom(Profile* profile,
     visit_mojom->debug_info["visit_id"] =
         base::NumberToString(annotated_visit.visit_row.visit_id);
     visit_mojom->debug_info["score"] = base::NumberToString(visit.score);
-    visit_mojom->debug_info["visit_duration"] = base::NumberToString(
-        annotated_visit.visit_row.visit_duration.InSecondsF());
+    visit_mojom->debug_info["visit_time"] =
+        base::TimeToISO8601(visit.annotated_visit.visit_row.visit_time);
+    visit_mojom->debug_info["foreground_duration"] =
+        base::NumberToString(annotated_visit.context_annotations
+                                 .total_foreground_duration.InSecondsF());
+    visit_mojom->debug_info["visit_source"] =
+        base::NumberToString(annotated_visit.source);
   }
 
   return visit_mojom;
@@ -210,6 +216,24 @@ absl::optional<mojom::SearchQueryPtr> SearchQueryToMojom(
   return search_query_mojom;
 }
 
+void ShowSurveyAndLogMetrics(HatsService* service,
+                             content::WebContents* contents,
+                             const std::string& trigger,
+                             base::TimeDelta delay) {
+  DCHECK(service);
+  DCHECK(contents);
+
+  base::UmaHistogramBoolean("History.Clusters.Survey.CanShowAnySurvey",
+                            service->CanShowAnySurvey(/*user_prompted=*/false));
+  base::UmaHistogramBoolean("History.Clusters.Survey.CanShowSurvey",
+                            service->CanShowSurvey(trigger));
+
+  bool success = service->LaunchDelayedSurveyForWebContents(
+      kHatsSurveyTriggerJourneysHistoryEntrypoint, contents,
+      delay.InMilliseconds());
+  base::UmaHistogramBoolean("History.Clusters.Survey.Success", success);
+}
+
 }  // namespace
 
 // Creates a `mojom::QueryResultPtr` using the original `query`, if the query
@@ -235,7 +259,8 @@ mojom::QueryResultPtr QueryClustersResultToMojom(
     }
 
     if (GetConfig().user_visible_debug && cluster.from_persistence) {
-      cluster_mojom->debug_info = "persisted";
+      cluster_mojom->debug_info =
+          "persisted, id = " + base::NumberToString(cluster.cluster_id);
     }
 
     for (const auto& visit : cluster.visits) {
@@ -292,6 +317,12 @@ void HistoryClustersHandler::SetSidePanelUIEmbedder(
   history_clusters_side_panel_embedder_ = side_panel_embedder;
 }
 
+void HistoryClustersHandler::SetQuery(const std::string& query) {
+  if (page_) {
+    page_->OnQueryChangedByUser(query);
+  }
+}
+
 void HistoryClustersHandler::OpenHistoryCluster(
     const GURL& url,
     ui::mojom::ClickModifiersPtr click_modifiers) {
@@ -333,6 +364,8 @@ void HistoryClustersHandler::ToggleVisibility(
 
 void HistoryClustersHandler::StartQueryClusters(const std::string& query,
                                                 bool recluster) {
+  last_query_issued_ = query;
+
   if (!query.empty()) {
     // If the query string is not empty, we assume that this clusters query
     // is user generated.
@@ -379,11 +412,13 @@ void HistoryClustersHandler::RemoveVisits(
 
   std::vector<history::BrowsingHistoryService::HistoryEntry> items_to_remove;
   for (const auto& visit : visits) {
-    history::BrowsingHistoryService::HistoryEntry entry;
-    entry.url = visit->raw_visit_data->url;
-    entry.all_timestamps.insert(
-        visit->raw_visit_data->visit_time.ToInternalValue());
-    items_to_remove.push_back(std::move(entry));
+    {
+      history::BrowsingHistoryService::HistoryEntry entry;
+      entry.url = visit->raw_visit_data->url;
+      entry.all_timestamps.insert(
+          visit->raw_visit_data->visit_time.ToInternalValue());
+      items_to_remove.push_back(std::move(entry));
+    }
     for (const auto& duplicate : visit->duplicates) {
       history::BrowsingHistoryService::HistoryEntry entry;
       entry.url = duplicate->url;
@@ -402,12 +437,7 @@ void HistoryClustersHandler::RemoveVisits(
 
 void HistoryClustersHandler::OpenVisitUrlsInTabGroup(
     std::vector<mojom::URLVisitPtr> visits) {
-  // Sometimes WebUI passes an empty vector, and TabStripModel::AddToNewGroup
-  // requires a non-empty vector (Fixes https://crbug.com/1339140)
-  if (visits.empty()) {
-    return;
-  }
-  const auto* browser = chrome::FindTabbedBrowser(profile_, false);
+  auto* browser = chrome::FindTabbedBrowser(profile_, false);
   if (!browser) {
     return;
   }
@@ -423,24 +453,22 @@ void HistoryClustersHandler::OpenVisitUrlsInTabGroup(
   auto* model = browser->tab_strip_model();
   std::vector<int> tab_indices;
   tab_indices.reserve(visits.size());
-  auto* opener = web_contents_.get();
   for (const auto& visit_ptr : visits) {
-    auto* opened_web_contents = opener->OpenURL(
+    auto* opened_web_contents = browser->OpenURL(
         content::OpenURLParams(visit_ptr->normalized_url, content::Referrer(),
                                WindowOpenDisposition::NEW_BACKGROUND_TAB,
                                ui::PAGE_TRANSITION_AUTO_BOOKMARK, false));
-
-    // The url may have opened a new window or clobbered the current one.
-    // Replace `opener` to be sure. `opened_web_contents` may be null in tests.
-    if (opened_web_contents) {
-      opener = opened_web_contents;
-    }
 
     // Only add those tabs to a new group that actually opened in this browser.
     const int tab_index = model->GetIndexOfWebContents(opened_web_contents);
     if (tab_index != TabStripModel::kNoTab) {
       tab_indices.push_back(tab_index);
     }
+  }
+  // Sometimes tab_indices is empty, and TabStripModel::AddToNewGroup
+  // requires a non-empty vector (Fixes https://crbug.com/1339140)
+  if (tab_indices.empty()) {
+    return;
   }
   model->AddToNewGroup(tab_indices);
 }
@@ -505,21 +533,33 @@ void HistoryClustersHandler::LaunchJourneysSurvey() {
     return;
   }
 
+  constexpr char kHistoryClustersSurveyRequestedUmaName[] =
+      "History.Clusters.Survey.Requested";
+  // These values must match enums.xml, and should not be modified.
+  enum HistoryClustersSurvey {
+    kHistoryEntrypoint = 0,
+    kOmniboxEntrypoint = 1,
+    kMaxValue = kOmniboxEntrypoint,
+  };
   if (*initial_state ==
           history_clusters::HistoryClustersInitialState::kSameDocument &&
       base::FeatureList::IsEnabled(kJourneysSurveyForHistoryEntrypoint)) {
     // Same document navigation basically means clicking over from History.
-    hats_service->LaunchDelayedSurveyForWebContents(
-        kHatsSurveyTriggerJourneysHistoryEntrypoint, web_contents_,
-        kJourneysSurveyForHistoryEntrypointDelay.Get().InMilliseconds());
+    ShowSurveyAndLogMetrics(hats_service, web_contents_,
+                            kHatsSurveyTriggerJourneysHistoryEntrypoint,
+                            kJourneysSurveyForHistoryEntrypointDelay.Get());
+    base::UmaHistogramEnumeration(kHistoryClustersSurveyRequestedUmaName,
+                                  kHistoryEntrypoint);
   } else if (*initial_state == history_clusters::HistoryClustersInitialState::
                                    kIndirectNavigation &&
              base::FeatureList::IsEnabled(
                  kJourneysSurveyForOmniboxEntrypoint)) {
     // Indirect navigation basically means from the omnibox.
-    hats_service->LaunchDelayedSurveyForWebContents(
-        kHatsSurveyTriggerJourneysOmniboxEntrypoint, web_contents_,
-        kJourneysSurveyForOmniboxEntrypointDelay.Get().InMilliseconds());
+    ShowSurveyAndLogMetrics(hats_service, web_contents_,
+                            kHatsSurveyTriggerJourneysOmniboxEntrypoint,
+                            kJourneysSurveyForOmniboxEntrypointDelay.Get());
+    base::UmaHistogramEnumeration(kHistoryClustersSurveyRequestedUmaName,
+                                  kOmniboxEntrypoint);
   }
 }
 

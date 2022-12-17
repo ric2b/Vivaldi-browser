@@ -1,23 +1,23 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/web/js_messaging/web_frame_impl.h"
+#import "ios/web/js_messaging/web_frame_impl.h"
 
 #import <WebKit/WebKit.h>
 
-#include "base/bind.h"
+#import "base/bind.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/web/js_messaging/java_script_content_world.h"
-#include "ios/web/js_messaging/page_script_util.h"
+#import "ios/web/js_messaging/page_script_util.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/test/web_state_test_util.h"
 #import "ios/web/public/test/web_test_with_web_state.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/test/js_test_util_internal.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -29,7 +29,7 @@ using base::test::ios::WaitUntilConditionOrTimeout;
 
 namespace {
 // Returns the first WebFrame found which is not the main frame in the given
-// |web_state|. Does not wait and returns null if such a frame is not found.
+// `web_state`. Does not wait and returns null if such a frame is not found.
 web::WebFrame* GetChildWebFrameForWebState(web::WebState* web_state) {
   __block web::WebFramesManager* manager = web_state->GetWebFramesManager();
   web::WebFrame* iframe = nullptr;
@@ -49,14 +49,12 @@ namespace web {
 typedef WebTestWithWebState WebFrameImplIntTest;
 
 // Tests that the expected result is received from executing a JavaScript
-// function via |CallJavaScriptFunction| on the main frame.
+// function via `CallJavaScriptFunction` on the main frame.
 TEST_F(WebFrameImplIntTest, CallJavaScriptFunctionOnMainFrame) {
   ASSERT_TRUE(LoadHtml("<p>"));
 
   WebFrame* main_frame = web_state()->GetWebFramesManager()->GetMainWebFrame();
   ASSERT_TRUE(main_frame);
-
-  NSTimeInterval js_timeout = kWaitForJSCompletionTimeout;
 
   __block bool called = false;
   std::vector<base::Value> params;
@@ -67,9 +65,9 @@ TEST_F(WebFrameImplIntTest, CallJavaScriptFunctionOnMainFrame) {
         called = true;
       }),
       // Increase feature timeout in order to fail on test specific timeout.
-      base::Seconds(2 * js_timeout));
+      2 * kWaitForJSCompletionTimeout);
 
-  EXPECT_TRUE(WaitUntilConditionOrTimeout(js_timeout, ^bool {
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
     return called;
   }));
 }
@@ -83,7 +81,6 @@ TEST_F(WebFrameImplIntTest, CallJavaScriptFunctionOnIframe) {
         return manager->GetAllWebFrames().size() == 2;
       }));
 
-  NSTimeInterval js_timeout = kWaitForJSCompletionTimeout;
   WebFrame* iframe = GetChildWebFrameForWebState(web_state());
   ASSERT_TRUE(iframe);
 
@@ -96,9 +93,9 @@ TEST_F(WebFrameImplIntTest, CallJavaScriptFunctionOnIframe) {
         called = true;
       }),
       // Increase feature timeout in order to fail on test specific timeout.
-      base::Seconds(2 * js_timeout));
+      2 * kWaitForJSCompletionTimeout);
 
-  EXPECT_TRUE(WaitUntilConditionOrTimeout(js_timeout, ^bool {
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
     return called;
   }));
 }
@@ -197,7 +194,7 @@ TEST_F(WebFrameImplIntTest, JavaScriptMessageFromFrame) {
 }
 
 // Tests that the expected result is received from executing a JavaScript
-// function via |CallJavaScriptFunction| on the main frame in the page content
+// function via `CallJavaScriptFunction` on the main frame in the page content
 // world.
 TEST_F(WebFrameImplIntTest, CallJavaScriptFunctionMainFramePageContentWorld) {
   ASSERT_TRUE(LoadHtml("<p>"));
@@ -210,28 +207,27 @@ TEST_F(WebFrameImplIntTest, CallJavaScriptFunctionMainFramePageContentWorld) {
       web_state()->GetWebFramesManager()->GetMainWebFrame());
   ASSERT_TRUE(main_frame_impl);
 
-  NSTimeInterval js_timeout = kWaitForJSCompletionTimeout;
   JavaScriptContentWorld world(GetBrowserState(), WKContentWorld.pageWorld);
   __block bool called = false;
 
   std::vector<base::Value> function_params;
+  auto block = ^(const base::Value* value) {
+    ASSERT_TRUE(value->is_string());
+    EXPECT_EQ(value->GetString(), "10");
+    called = true;
+  };
   EXPECT_TRUE(main_frame_impl->CallJavaScriptFunctionInContentWorld(
-      "fakeFunction", function_params, &world,
-      base::BindOnce(^(const base::Value* value) {
-        ASSERT_TRUE(value->is_string());
-        EXPECT_EQ(value->GetString(), "10");
-        called = true;
-      }),
+      "fakeFunction", function_params, &world, base::BindOnce(block),
       // Increase feature timeout in order to fail on test specific timeout.
-      base::Seconds(2 * js_timeout)));
+      2 * kWaitForJSCompletionTimeout));
 
-  EXPECT_TRUE(WaitUntilConditionOrTimeout(js_timeout, ^bool {
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
     return called;
   }));
 }
 
 // Tests that the expected result is received from executing a JavaScript
-// function via |CallJavaScriptFunction| on the main frame in an isolated
+// function via `CallJavaScriptFunction` on the main frame in an isolated
 // world.
 TEST_F(WebFrameImplIntTest, CallJavaScriptFunctionMainFrameIsolatedWorld) {
   ASSERT_TRUE(LoadHtml("<p>"));
@@ -247,22 +243,21 @@ TEST_F(WebFrameImplIntTest, CallJavaScriptFunctionMainFrameIsolatedWorld) {
       web_state()->GetWebFramesManager()->GetMainWebFrame());
   ASSERT_TRUE(main_frame_impl);
 
-  NSTimeInterval js_timeout = kWaitForJSCompletionTimeout;
   JavaScriptContentWorld world(GetBrowserState(),
                                WKContentWorld.defaultClientWorld);
   __block bool called = false;
   std::vector<base::Value> function_params;
+  auto block = ^(const base::Value* value) {
+    ASSERT_TRUE(value->is_string());
+    EXPECT_EQ(value->GetString(), "10");
+    called = true;
+  };
   EXPECT_TRUE(main_frame_impl->CallJavaScriptFunctionInContentWorld(
-      "fakeFunction", function_params, &world,
-      base::BindOnce(^(const base::Value* value) {
-        ASSERT_TRUE(value->is_string());
-        EXPECT_EQ(value->GetString(), "10");
-        called = true;
-      }),
+      "fakeFunction", function_params, &world, base::BindOnce(block),
       // Increase feature timeout in order to fail on test specific timeout.
-      base::Seconds(2 * js_timeout)));
+      2 * kWaitForJSCompletionTimeout));
 
-  EXPECT_TRUE(WaitUntilConditionOrTimeout(js_timeout, ^bool {
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
     return called;
   }));
 }

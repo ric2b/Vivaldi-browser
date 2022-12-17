@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,10 +26,15 @@ public class TabSelectionEditorActionProperties {
     public static final ReadableIntPropertyKey ICON_POSITION = new ReadableIntPropertyKey();
 
     public static final WritableIntPropertyKey TITLE_RESOURCE_ID = new WritableIntPropertyKey();
+    public static final WritableBooleanPropertyKey TITLE_IS_PLURAL =
+            new WritableBooleanPropertyKey();
     public static final WritableObjectPropertyKey<Integer> CONTENT_DESCRIPTION_RESOURCE_ID =
             new WritableObjectPropertyKey();
-    public static final WritableObjectPropertyKey<Drawable> ICON =
+    public static final WritableObjectPropertyKey<String> TITLE = new WritableObjectPropertyKey();
+    public static final WritableObjectPropertyKey<String> CONTENT_DESCRIPTION =
             new WritableObjectPropertyKey<>();
+    public static final WritableObjectPropertyKey<Drawable> ICON =
+            new WritableObjectPropertyKey<>(true);
     public static final WritableBooleanPropertyKey ENABLED = new WritableBooleanPropertyKey();
     public static final WritableIntPropertyKey ITEM_COUNT = new WritableIntPropertyKey();
     public static final WritableObjectPropertyKey<ColorStateList> TEXT_TINT =
@@ -50,11 +55,24 @@ public class TabSelectionEditorActionProperties {
 
     public static final WritableObjectPropertyKey<Runnable> ON_CLICK_LISTENER =
             new WritableObjectPropertyKey<>();
+    public static final WritableBooleanPropertyKey SHOULD_DISMISS_MENU =
+            new WritableBooleanPropertyKey();
     public static final WritableObjectPropertyKey<Callback<List<Integer>>>
             ON_SELECTION_STATE_CHANGE = new WritableObjectPropertyKey<>();
+    public static final WritableObjectPropertyKey<Runnable> ON_SHOWN_IN_MENU =
+            new WritableObjectPropertyKey<>();
 
-    public static final PropertyKey[] ALL_KEYS = {MENU_ITEM_ID, SHOW_MODE, BUTTON_TYPE,
-            ICON_POSITION, TITLE_RESOURCE_ID, CONTENT_DESCRIPTION_RESOURCE_ID, ICON, ENABLED,
-            ITEM_COUNT, TEXT_TINT, ICON_TINT, SKIP_ICON_TINT, ON_CLICK_LISTENER,
-            ON_SELECTION_STATE_CHANGE};
+    /**
+     * Keys for the {@link TabSelectionEditorAction}.
+     */
+    public static final PropertyKey[] ACTION_KEYS = {MENU_ITEM_ID, SHOW_MODE, BUTTON_TYPE,
+            ICON_POSITION, TITLE_RESOURCE_ID, TITLE_IS_PLURAL, CONTENT_DESCRIPTION_RESOURCE_ID,
+            ICON, ENABLED, ITEM_COUNT, TEXT_TINT, ICON_TINT, SKIP_ICON_TINT, ON_CLICK_LISTENER,
+            SHOULD_DISMISS_MENU, ON_SELECTION_STATE_CHANGE, ON_SHOWN_IN_MENU};
+
+    /**
+     * Keys for the {@link TabSelectionEditorMenuItem}.
+     */
+    public static final PropertyKey[] MENU_ITEM_KEYS = {MENU_ITEM_ID, TITLE, CONTENT_DESCRIPTION,
+            ICON, ICON_TINT, ENABLED, ITEM_COUNT, ON_SHOWN_IN_MENU};
 }

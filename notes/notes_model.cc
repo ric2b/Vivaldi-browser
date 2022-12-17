@@ -11,16 +11,18 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/guid.h"
 #include "base/i18n/string_compare.h"
 #include "base/i18n/string_search.h"
 #include "base/memory/ptr_util.h"
-#include "base/task/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "importer/imported_notes_entry.h"
 #include "notes/note_load_details.h"
 #include "notes/note_node.h"
 #include "notes/notes_storage.h"
+#include "sync/file_sync/file_store.h"
 #include "sync/notes/note_sync_service.h"
 #include "ui/base/models/tree_node_iterator.h"
 
@@ -51,6 +53,18 @@ class SortComparator {
  private:
   icu::Collator* collator_;
 };
+
+const NoteNode* GetNodeByID(const NoteNode* node, int64_t id) {
+  if (node->id() == id)
+    return node;
+
+  for (auto& it : node->children()) {
+    const NoteNode* result = GetNodeByID(it.get(), id);
+    if (result)
+      return result;
+  }
+  return nullptr;
+}
 }  // namespace
 
 // Helper to get a mutable notes node.
@@ -58,12 +72,14 @@ NoteNode* AsMutable(const NoteNode* node) {
   return const_cast<NoteNode*>(node);
 }
 
-NotesModel::NotesModel(sync_notes::NoteSyncService* sync_service)
+NotesModel::NotesModel(sync_notes::NoteSyncService* sync_service,
+                       file_sync::SyncedFileStore* synced_file_store)
     : root_(std::make_unique<NoteNode>(
           0,
           base::GUID::ParseLowercase(NoteNode::kRootNodeGuid),
           NoteNode::FOLDER)),
-      sync_service_(sync_service) {}
+      sync_service_(sync_service),
+      synced_file_store_(synced_file_store) {}
 
 NotesModel::~NotesModel() {
   for (auto& observer : observers_)
@@ -109,6 +125,18 @@ void NotesModel::DoneLoading(std::unique_ptr<NoteLoadDetails> details) {
   other_node_ = details->other_notes_node();
   trash_node_ = details->trash_notes_node();
 
+  if (synced_file_store_) {
+    if (synced_file_store_->IsLoaded())
+      OnSyncedFilesStoreLoaded(std::move(details));
+    else
+      synced_file_store_->AddOnLoadedCallback(
+          base::BindOnce(&NotesModel::OnSyncedFilesStoreLoaded,
+                         weak_factory_.GetWeakPtr(), std::move(details)));
+  }
+}
+
+void NotesModel::OnSyncedFilesStoreLoaded(
+    std::unique_ptr<NoteLoadDetails> details) {
   loaded_ = true;
 
   if (sync_service_) {
@@ -123,6 +151,30 @@ void NotesModel::DoneLoading(std::unique_ptr<NoteLoadDetails> details) {
   // Notify our direct observers.
   for (auto& observer : observers_)
     observer.NotesModelLoaded(this, details->ids_reassigned());
+
+  if (details->has_deprecated_attachments()) {
+    BeginExtensiveChanges();
+    MigrateAttachmentsRecursive(AsMutable(root_node()));
+    EndExtensiveChanges();
+  }
+}
+
+void NotesModel::MigrateAttachmentsRecursive(NoteNode* node) {
+  for (auto& deprecated_attachment : node->deprecated_attachments_) {
+    if (deprecated_attachment.second.content().empty())
+      continue;
+
+    base::StringPiece content(deprecated_attachment.second.content());
+    size_t separator_pos = content.find_first_of(',');
+    if (separator_pos == std::string::npos)
+      continue;
+    content.remove_prefix(separator_pos + 1);
+    absl::optional<std::vector<uint8_t>> decoded = base::Base64Decode(content);
+    AddAttachment(node, node->children().size(), u"migrated", GURL(), *decoded);
+  }
+
+  for (size_t i = node->children().size(); i > 0; --i)
+    MigrateAttachmentsRecursive(node->children()[i - 1].get());
 }
 
 void NotesModel::GetNotes(std::vector<NotesModel::URLAndTitle>* notes) {
@@ -140,18 +192,6 @@ void NotesModel::GetNotes(std::vector<NotesModel::URLAndTitle>* notes) {
     }
     last_url = url;
   }
-}
-
-bool NotesModel::LoadNotes() {
-  return false;
-}
-
-bool NotesModel::SaveNotes() {
-  if (store_.get()) {
-    store_->ScheduleSave();
-    return true;
-  }
-  return false;
 }
 
 void NotesModel::AddObserver(NotesModelObserver* observer) {
@@ -196,13 +236,13 @@ NoteNode* NotesModel::AddNode(NoteNode* parent,
   return node_ptr;
 }
 
-NoteNode* NotesModel::AddNote(const NoteNode* parent,
-                              size_t index,
-                              const std::u16string& title,
-                              const GURL& url,
-                              const std::u16string& content,
-                              absl::optional<base::Time> creation_time,
-                              absl::optional<base::GUID> guid) {
+const NoteNode* NotesModel::AddNote(const NoteNode* parent,
+                                    size_t index,
+                                    const std::u16string& title,
+                                    const GURL& url,
+                                    const std::u16string& content,
+                                    absl::optional<base::Time> creation_time,
+                                    absl::optional<base::GUID> guid) {
   DCHECK(loaded_);
   DCHECK(!guid || guid->is_valid());
 
@@ -226,9 +266,9 @@ NoteNode* NotesModel::AddNote(const NoteNode* parent,
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-NoteNode* NotesModel::ImportNote(const NoteNode* parent,
-                                 size_t index,
-                                 const ImportedNotesEntry& note) {
+const NoteNode* NotesModel::ImportNote(const NoteNode* parent,
+                                       size_t index,
+                                       const ImportedNotesEntry& note) {
   if (!loaded_)
     return NULL;
 
@@ -247,11 +287,11 @@ NoteNode* NotesModel::ImportNote(const NoteNode* parent,
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-NoteNode* NotesModel::AddFolder(const NoteNode* parent,
-                                size_t index,
-                                const std::u16string& name,
-                                absl::optional<base::Time> creation_time,
-                                absl::optional<base::GUID> guid) {
+const NoteNode* NotesModel::AddFolder(const NoteNode* parent,
+                                      size_t index,
+                                      const std::u16string& name,
+                                      absl::optional<base::Time> creation_time,
+                                      absl::optional<base::GUID> guid) {
   DCHECK(loaded_);
   DCHECK(!guid || guid->is_valid());
 
@@ -270,11 +310,12 @@ NoteNode* NotesModel::AddFolder(const NoteNode* parent,
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-NoteNode* NotesModel::AddSeparator(const NoteNode* parent,
-                                   size_t index,
-                                   absl::optional<std::u16string> name,
-                                   absl::optional<base::Time> creation_time,
-                                   absl::optional<base::GUID> guid) {
+const NoteNode* NotesModel::AddSeparator(
+    const NoteNode* parent,
+    size_t index,
+    absl::optional<std::u16string> name,
+    absl::optional<base::Time> creation_time,
+    absl::optional<base::GUID> guid) {
   DCHECK(loaded_);
   DCHECK(!guid || guid->is_valid());
 
@@ -284,18 +325,92 @@ NoteNode* NotesModel::AddSeparator(const NoteNode* parent,
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
       generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
       NoteNode::SEPARATOR);
-  if (name)
-    new_node->SetTitle(*name);
   new_node->SetCreationTime(*creation_time);
+  if (name) {
+    new_node->SetTitle(*name);
+    DCHECK(new_node->GetTitle() == name);
+  }
+
+  DCHECK(new_node->is_separator());
 
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-void NotesModel::SetTitle(const NoteNode* node, const std::u16string& title) {
-  if (!node) {
-    NOTREACHED();
-    return;
+const NoteNode* NotesModel::AddAttachmentFromChecksum(
+    const NoteNode* parent,
+    size_t index,
+    const std::u16string& title,
+    const GURL& url,
+    const std::string& checksum,
+    absl::optional<base::Time> creation_time,
+    absl::optional<base::GUID> guid) {
+  DCHECK(loaded_);
+  DCHECK(parent);
+  DCHECK(parent->is_note());
+  DCHECK(!guid || guid->is_valid());
+  DCHECK(synced_file_store_);
+
+  if (!creation_time)
+    creation_time = Time::Now();
+
+  std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
+      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      NoteNode::ATTACHMENT);
+  new_node->SetTitle(title);
+  new_node->SetCreationTime(*creation_time);
+  new_node->SetContent(base::ASCIIToUTF16(checksum));
+  new_node->SetURL(url);
+
+  {
+    // Only hold the lock for the duration of the insert.
+    base::AutoLock url_lock(url_lock_);
+    nodes_ordered_by_url_set_.insert(new_node.get());
   }
+
+  synced_file_store_->AddLocalFileRef(new_node->guid(), syncer::NOTES,
+                                      checksum);
+  return AddNode(AsMutable(parent), index, std::move(new_node));
+}
+
+const NoteNode* NotesModel::AddAttachment(
+    const NoteNode* parent,
+    size_t index,
+    const std::u16string& title,
+    const GURL& url,
+    std::vector<uint8_t> content,
+    absl::optional<base::Time> creation_time,
+    absl::optional<base::GUID> guid) {
+  DCHECK(loaded_);
+  DCHECK(parent);
+  DCHECK(parent->is_note());
+  DCHECK(!guid || guid->is_valid());
+  DCHECK(synced_file_store_);
+
+  if (!creation_time)
+    creation_time = Time::Now();
+
+  std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
+      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      NoteNode::ATTACHMENT);
+  new_node->SetTitle(title);
+  new_node->SetCreationTime(*creation_time);
+  new_node->SetURL(url);
+
+  {
+    // Only hold the lock for the duration of the insert.
+    base::AutoLock url_lock(url_lock_);
+    nodes_ordered_by_url_set_.insert(new_node.get());
+  }
+
+  std::string checksum = synced_file_store_->AddLocalFile(
+      new_node->guid(), syncer::NOTES, std::move(content));
+  new_node->SetContent(base::ASCIIToUTF16(checksum));
+  return AddNode(AsMutable(parent), index, std::move(new_node));
+}
+
+void NotesModel::SetTitle(const NoteNode* node, const std::u16string& title) {
+  DCHECK(node);
+
   if (node->GetTitle() == title)
     return;
 
@@ -318,17 +433,12 @@ void NotesModel::SetTitle(const NoteNode* node, const std::u16string& title) {
 
 void NotesModel::SetContent(const NoteNode* node,
                             const std::u16string& content) {
-  if (!node) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(node);
+  DCHECK(!node->is_folder());
   if (node->GetContent() == content)
     return;
 
-  if (is_permanent_node(node)) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(!node->is_attachment());
 
   for (auto& observer : observers_)
     observer.OnWillChangeNotesNode(this, node);
@@ -343,16 +453,9 @@ void NotesModel::SetContent(const NoteNode* node,
 }
 
 void NotesModel::SetURL(const NoteNode* node, const GURL& url) {
-  if (!node) {
-    NOTREACHED();
-    return;
-  }
-
-  // We cannot change the URL of a folder.
-  if (node->is_folder()) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(node);
+  DCHECK(!node->is_folder());
+  DCHECK(!node->is_separator());
 
   if (node->GetURL() == url)
     return;
@@ -376,67 +479,6 @@ void NotesModel::SetURL(const NoteNode* node, const GURL& url) {
     observer.NotesNodeChanged(this, node);
 }
 
-void NotesModel::ClearAttachments(const NoteNode* node) {
-  if (!node) {
-    NOTREACHED();
-    return;
-  }
-
-  for (auto& observer : observers_)
-    observer.OnWillChangeNotesNode(this, node);
-
-  AsMutable(node)->ClearAttachments();
-
-  if (store_.get())
-    store_->ScheduleSave();
-
-  for (auto& observer : observers_)
-    observer.NotesNodeChanged(this, node);
-}
-
-void NotesModel::AddAttachment(const NoteNode* node,
-                               NoteAttachment&& attachment) {
-  if (!node) {
-    NOTREACHED();
-    return;
-  }
-
-  for (auto& observer : observers_)
-    observer.OnWillChangeNotesNode(this, node);
-
-  AsMutable(node)->AddAttachment(std::forward<NoteAttachment>(attachment));
-
-  if (store_.get())
-    store_->ScheduleSave();
-
-  for (auto& observer : observers_)
-    observer.NotesNodeChanged(this, node);
-}
-
-void NotesModel::SwapAttachments(const NoteNode* node1, const NoteNode* node2) {
-  if (!node1 || !node2) {
-    NOTREACHED();
-    return;
-  }
-
-  for (auto& observer : observers_)
-    observer.OnWillChangeNotesNode(this, node1);
-
-  for (auto& observer : observers_)
-    observer.OnWillChangeNotesNode(this, node2);
-
-  AsMutable(node1)->SwapAttachments(AsMutable(node2));
-
-  if (store_.get())
-    store_->ScheduleSave();
-
-  for (auto& observer : observers_)
-    observer.NotesNodeChanged(this, node1);
-
-  for (auto& observer : observers_)
-    observer.NotesNodeChanged(this, node2);
-}
-
 void NotesModel::SetDateFolderModified(const NoteNode* parent,
                                        const Time time) {
   DCHECK(parent);
@@ -447,18 +489,11 @@ void NotesModel::SetDateFolderModified(const NoteNode* parent,
 }
 
 void NotesModel::SetDateAdded(const NoteNode* node, base::Time date_added) {
-  if (!node) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(node);
+  DCHECK(!is_permanent_node(node));
 
   if (node->GetCreationTime() == date_added)
     return;
-
-  if (is_permanent_node(node)) {
-    NOTREACHED();
-    return;
-  }
 
   AsMutable(node)->SetCreationTime(date_added);
 
@@ -474,7 +509,7 @@ void NotesModel::SetDateAdded(const NoteNode* node, base::Time date_added) {
 bool NotesModel::IsValidIndex(const NoteNode* parent,
                               size_t index,
                               bool allow_end) {
-  return (parent && parent->is_folder() &&
+  return (parent && (parent->is_folder() || parent->is_note()) &&
           (index >= 0 && (index < parent->children().size() ||
                           (allow_end && index == parent->children().size()))));
 }
@@ -498,9 +533,25 @@ void NotesModel::Remove(const NoteNode* node) {
 
   const NoteNode* parent = node->parent();
   DCHECK(parent);
-  int index = parent->GetIndexOf(node).value();
+  size_t index = static_cast<size_t>(*parent->GetIndexOf(node));
+  DCHECK_NE(static_cast<size_t>(-1), index);
 
-  RemoveAndDeleteNode(AsMutable(parent), index, AsMutable(node));
+  for (auto& observer : observers_)
+    observer.OnWillRemoveNotes(this, parent, index, node);
+
+  std::unique_ptr<NoteNode> owned_node;
+  {
+    base::AutoLock url_lock(url_lock_);
+    RemoveNodeTreeFromURLSet(AsMutable(node));
+    RemoveAttachmentsRecursive(AsMutable(node));
+    owned_node = AsMutable(parent)->Remove(index);
+  }
+
+  if (store_.get())
+    store_->ScheduleSave();
+
+  for (auto& observer : observers_)
+    observer.NotesNodeRemoved(this, parent, index, node);
 }
 
 void NotesModel::RemoveAllUserNotes() {
@@ -515,7 +566,11 @@ void NotesModel::RemoveAllUserNotes() {
   {
     base::AutoLock url_lock(url_lock_);
     nodes_ordered_by_url_set_.clear();
-    main_node_->DeleteAll();
+
+    for (const auto& permanent_node : root_->children()) {
+      RemoveAttachmentsRecursive(permanent_node.get());
+      permanent_node->DeleteAll();
+    }
   }
 
   EndExtensiveChanges();
@@ -534,13 +589,12 @@ bool NotesModel::IsNotesNoLock(const GURL& url) {
 }
 
 void NotesModel::RemoveNodeTreeFromURLSet(NoteNode* node) {
-  if (!loaded_ || !node || is_permanent_node(node)) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(loaded_);
+  DCHECK(node);
+  DCHECK(!is_permanent_node(node));
 
   url_lock_.AssertAcquired();
-  if (node->is_note()) {
+  if (node->is_note() || node->is_attachment()) {
     RemoveNodeFromURLSet(node);
   }
 
@@ -563,33 +617,15 @@ void NotesModel::RemoveNodeFromURLSet(NoteNode* node) {
     nodes_ordered_by_url_set_.erase(i);
 }
 
-bool NotesModel::Remove(NoteNode* parent, size_t index) {
-  if (!parent)
-    return false;
-  NoteNode* node = parent->children()[index].get();
-  RemoveAndDeleteNode(parent, index, node);
-  return true;
-}
+void NotesModel::RemoveAttachmentsRecursive(NoteNode* node) {
+  if (!synced_file_store_)
+    return;
 
-void NotesModel::RemoveAndDeleteNode(NoteNode* parent,
-                                     size_t index,
-                                     NoteNode* node_ptr) {
-  std::unique_ptr<NoteNode> node;
+  if (node->is_attachment())
+    synced_file_store_->RemoveLocalRef(node->guid(), syncer::NOTES);
 
-  for (auto& observer : observers_)
-    observer.OnWillRemoveNotes(this, parent, index, node_ptr);
-
-  {
-    base::AutoLock url_lock(url_lock_);
-    RemoveNodeTreeFromURLSet(node_ptr);
-    node = parent->Remove(index);
-  }
-
-  if (store_.get())
-    store_->ScheduleSave();
-
-  for (auto& observer : observers_)
-    observer.NotesNodeRemoved(this, parent, index, node.get());
+  for (size_t i = node->children().size(); i > 0; --i)
+    RemoveAttachmentsRecursive(node->children()[i - 1].get());
 }
 
 void NotesModel::BeginGroupedChanges() {
@@ -602,38 +638,22 @@ void NotesModel::EndGroupedChanges() {
     observer.GroupedNotesChangesEnded(this);
 }
 
-const NoteNode* GetNotesNodeByID(const NotesModel* model, int64_t id) {
-  // TODO(sky): TreeNode needs a method that visits all nodes using a predicate.
-  return GetNodeByID(model->root_node(), id);
+const NoteNode* NotesModel::GetNoteNodeByID(int64_t id) const {
+  DCHECK(loaded_);
+  return GetNodeByID(root_node(), id);
 }
 
-const NoteNode* GetNodeByID(const NoteNode* node, int64_t id) {
-  if (node->id() == id)
-    return node;
-
-  for (auto& it : node->children()) {
-    const NoteNode* result = GetNodeByID(it.get(), id);
-    if (result)
-      return result;
-  }
-  return NULL;
-}
-
-bool NotesModel::Move(const NoteNode* node,
+void NotesModel::Move(const NoteNode* node,
                       const NoteNode* new_parent,
                       size_t index) {
-  if (!loaded_ || !node || !IsValidIndex(new_parent, index, true) ||
-      is_root_node(new_parent) || is_permanent_node(node)) {
-    NOTREACHED();
-    return false;
-  }
-
+  DCHECK(loaded_);
+  DCHECK(node);
+  DCHECK(IsValidIndex(new_parent, index, true));
+  DCHECK(!is_root_node(new_parent));
+  DCHECK(!is_permanent_node(node));
   DCHECK(!new_parent->HasAncestor(node));
-  if (new_parent->HasAncestor(node)) {
-    // Can't make an ancestor of the node be a child of the node.
-    NOTREACHED();
-    return false;
-  }
+  DCHECK(node->is_attachment() && new_parent->is_note() ||
+         !node->is_attachment() && new_parent->is_folder());
 
   const NoteNode* old_parent = node->parent();
   size_t old_index = old_parent->GetIndexOf(node).value();
@@ -641,7 +661,7 @@ bool NotesModel::Move(const NoteNode* node,
   if (old_parent == new_parent &&
       (index == old_index || index == old_index + 1)) {
     // Node is already in this position, nothing to do.
-    return false;
+    return;
   }
 
   SetDateFolderModified(new_parent, Time::Now());
@@ -659,8 +679,6 @@ bool NotesModel::Move(const NoteNode* node,
 
   for (auto& observer : observers_)
     observer.NotesNodeMoved(this, old_parent, old_index, new_parent, index);
-
-  return true;
 }
 
 void NotesModel::SortChildren(const NoteNode* parent) {
@@ -676,9 +694,7 @@ void NotesModel::SortChildren(const NoteNode* parent) {
   std::unique_ptr<icu::Collator> collator(icu::Collator::createInstance(error));
   if (U_FAILURE(error))
     collator.reset(NULL);
-  NoteNode* mutable_parent = AsMutable(parent);
-  std::sort(mutable_parent->children_.begin(), mutable_parent->children_.end(),
-            SortComparator(collator.get()));
+  AsMutable(parent)->SortChildren(SortComparator(collator.get()));
 
   if (store_.get())
     store_->ScheduleSave();
@@ -703,17 +719,19 @@ void NotesModel::ReorderChildren(
     for (size_t i = 0; i < ordered_nodes.size(); ++i)
       order[ordered_nodes[i]] = i;
 
-    std::vector<std::unique_ptr<NoteNode>> new_children(ordered_nodes.size());
-    NoteNode* mutable_parent = AsMutable(parent);
-    for (auto& child : mutable_parent->children_) {
-      size_t new_location = order[child.get()];
-      new_children[new_location] = std::move(child);
+    std::vector<size_t> new_order(ordered_nodes.size());
+    for (size_t old_index = 0; old_index < parent->children().size();
+         ++old_index) {
+      const NoteNode* node = parent->children()[old_index].get();
+      size_t new_index = order[node];
+      new_order[old_index] = new_index;
     }
-    mutable_parent->children_.swap(new_children);
-  }
 
-  if (store_.get())
-    store_->ScheduleSave();
+    AsMutable(parent)->ReorderChildren(new_order);
+
+    if (store_.get())
+      store_->ScheduleSave();
+  }
 
   for (auto& observer : observers_)
     observer.NotesNodeChildrenReordered(this, parent);

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -723,7 +723,8 @@ bool NativeViewGLSurfaceGLX::IsOffscreen() {
 }
 
 gfx::SwapResult NativeViewGLSurfaceGLX::SwapBuffers(
-    PresentationCallback callback) {
+    PresentationCallback callback,
+    FrameData data) {
   TRACE_EVENT2("gpu", "NativeViewGLSurfaceGLX:RealSwapBuffers", "width",
                GetSize().width(), "height", GetSize().height());
   GLSurfacePresentationHelper::ScopedSwapBuffers scoped_swap_buffers(
@@ -775,7 +776,8 @@ gfx::SwapResult NativeViewGLSurfaceGLX::PostSubBuffer(
     int y,
     int width,
     int height,
-    PresentationCallback callback) {
+    PresentationCallback callback,
+    FrameData data) {
   DCHECK(g_driver_glx.ext.b_GLX_MESA_copy_sub_buffer);
 
   GLSurfacePresentationHelper::ScopedSwapBuffers scoped_swap_buffers(
@@ -892,7 +894,8 @@ bool UnmappedNativeViewGLSurfaceGLX::IsOffscreen() {
 }
 
 gfx::SwapResult UnmappedNativeViewGLSurfaceGLX::SwapBuffers(
-    PresentationCallback callback) {
+    PresentationCallback callback,
+    FrameData data) {
   NOTREACHED() << "Attempted to call SwapBuffers on an unmapped window.";
   return gfx::SwapResult::SWAP_FAILED;
 }

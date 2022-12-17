@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,28 +95,6 @@ enum class BufferPlane {
   V,
 
   LAST = V
-};
-
-// This enum is used for histogram states and should only have new values added
-// to the end before kMaxValue. tools/metrics/histograms/enums.xml should be
-// updated together.
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class OddSize {
-  kEvenWidthAndHeight = 0,
-  kOddWidthOnly = 1,
-  kOddHeightOnly = 2,
-  kOddWidthAndHeight = 3,
-  kMaxValue = kOddWidthAndHeight,
-};
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class OddOffset {
-  kEvenXAndY = 0,
-  kOddXOnly = 1,
-  kOddYOnly = 2,
-  kOddXAndY = 3,
-  kMaxValue = kOddXAndY,
 };
 
 }  // namespace gfx

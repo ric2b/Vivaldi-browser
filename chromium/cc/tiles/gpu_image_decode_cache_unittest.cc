@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -385,7 +385,7 @@ class GpuImageDecodeCacheTest
                      bool /* no_discardable_memory */>> {
  public:
   void SetUp() override {
-    std::vector<base::Feature> enabled_features;
+    std::vector<base::test::FeatureRef> enabled_features;
     allow_accelerated_jpeg_decoding_ = std::get<3>(GetParam());
     if (allow_accelerated_jpeg_decoding_)
       enabled_features.push_back(features::kVaapiJpegImageDecodeAcceleration);

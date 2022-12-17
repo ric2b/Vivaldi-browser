@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Presubmit script for Fuchsia.
@@ -25,6 +25,9 @@ def CommonChecks(input_api, output_api):
       J('binary_size_differ_test.py'),
       J('device_target_test.py'),
       J('ermine_ctl_test.py'),
+      J('gcs_download_test.py'),
+      J('update_images_test.py'),
+      J('update_sdk_test.py'),
   ]
 
   # TODO(1309977): enable on Windows when fixed.

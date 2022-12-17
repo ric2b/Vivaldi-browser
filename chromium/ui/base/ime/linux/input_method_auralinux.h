@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,6 +98,8 @@ class COMPONENT_EXPORT(UI_BASE_IME_LINUX) InputMethodAuraLinux
   absl::optional<CommitResult> last_commit_result_;
 
   absl::optional<std::u16string> result_text_;
+  absl::optional<std::u16string> surrounding_text_;
+  gfx::Range selection_range_;
 
   ui::CompositionText composition_;
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,10 +21,6 @@ class CommonDependencies;
 // Factory class for creating |AutofillAssistant|.
 class AutofillAssistantFactory {
  public:
-  // TODO(b/201964911) The |AutofillAssistant::CreateHeadlessScriptController|
-  // method ignores the  |channel|, |country_code| and |locale| passed here and
-  // instead fetches them directly. Make the treatment between
-  // |HeadlessScriptController| and |GetCapabilitiesByHashPrefix| consistent.
   static std::unique_ptr<AutofillAssistant> CreateForBrowserContext(
       content::BrowserContext* browser_context,
       std::unique_ptr<CommonDependencies> dependencies);

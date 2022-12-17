@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@
 #import "ios/chrome/browser/ui/util/dynamic_type_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/common/ui/util/dynamic_type_util.h"
+#import "ios/chrome/common/ui/util/dynamic_type_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -20,8 +20,15 @@ namespace {
 const NSInteger kLabelNumLines = 2;
 const CGFloat kSpaceIconTitle = 10;
 const CGFloat kIconSize = 56;
-const CGFloat kPreferredMaxWidth = 73;
+
+// Standard width of tiles.
+const CGFloat kPreferredMaxWidth = 74;
 const CGFloat kPreferredMaxWidthWide = 83;
+
+// Non-standard width of tiles. (Used only when the Content Suggestions UI
+// Module Refresh feature is enabled.)
+const CGFloat kModulePreferredMaxWidth = 74;
+const CGFloat kModulePreferredMaxWidthWide = 83;
 
 }  // namespace
 
@@ -41,15 +48,22 @@ const CGFloat kPreferredMaxWidthWide = 83;
     _titleLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
     _titleLabel.font = [self titleLabelFont];
     _titleLabel.textAlignment = NSTextAlignmentCenter;
+
     // Since modules are given more horizontal space on iPad, allow for more
     // estimated width for the label to calculate content size.
-    _titleLabel.preferredMaxLayoutWidth =
-        self.traitCollection.horizontalSizeClass ==
-                UIUserInterfaceSizeClassRegular
-            ? kPreferredMaxWidthWide
-            : kPreferredMaxWidth;
-    _titleLabel.numberOfLines = kLabelNumLines;
+    CGFloat preferredWidth = self.traitCollection.horizontalSizeClass ==
+                                     UIUserInterfaceSizeClassRegular
+                                 ? kPreferredMaxWidthWide
+                                 : kPreferredMaxWidth;
+    CGFloat modulePreferredWidth = self.traitCollection.horizontalSizeClass ==
+                                           UIUserInterfaceSizeClassRegular
+                                       ? kModulePreferredMaxWidthWide
+                                       : kModulePreferredMaxWidth;
 
+    _titleLabel.preferredMaxLayoutWidth =
+        IsContentSuggestionsUIModuleRefreshEnabled() ? modulePreferredWidth
+                                                     : preferredWidth;
+    _titleLabel.numberOfLines = kLabelNumLines;
     _imageContainerView = [[UIView alloc] init];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _imageContainerView.translatesAutoresizingMaskIntoConstraints = NO;

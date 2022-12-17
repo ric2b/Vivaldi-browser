@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,8 +53,7 @@ class AssistantMediaSessionTest : public testing::Test {
   ScopedAssistantBrowserDelegate delegate_;
   testing::StrictMock<LibassistantMediaControllerMock>
       libassistant_media_controller_;
-  mojo::Remote<chromeos::libassistant::mojom::MediaDelegate>
-      libassistant_media_delegate_;
+  mojo::Remote<libassistant::mojom::MediaDelegate> libassistant_media_delegate_;
   MediaHost media_host_{AssistantBrowserDelegate::Get(),
                         /*interaction_subscribers=*/nullptr};
   AssistantMediaSession assistant_media_session_{&media_host_};

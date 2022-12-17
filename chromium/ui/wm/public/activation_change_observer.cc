@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,10 @@ namespace wm {
 DEFINE_UI_CLASS_PROPERTY_KEY(ActivationChangeObserver*,
                              kActivationChangeObserverKey,
                              nullptr)
+
+ActivationChangeObserver::~ActivationChangeObserver() {
+  CHECK(!IsInObserverList());
+}
 
 void SetActivationChangeObserver(aura::Window* window,
                                  ActivationChangeObserver* observer) {

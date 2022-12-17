@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,8 +94,8 @@ class PageSchedulerImplTest : public testing::Test {
     feature_list_.InitAndEnableFeature(blink::features::kStopInBackground);
   }
 
-  PageSchedulerImplTest(std::vector<base::Feature> enabled_features,
-                        std::vector<base::Feature> disabled_features) {
+  PageSchedulerImplTest(std::vector<base::test::FeatureRef> enabled_features,
+                        std::vector<base::test::FeatureRef> disabled_features) {
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
@@ -402,6 +402,30 @@ TEST_F(PageSchedulerImplTest, RepeatingTimers_OneBackgroundOneForeground) {
   EXPECT_EQ(1, run_count2);
 }
 
+TEST_F(PageSchedulerImplTest, IsLoadingTest) {
+  // 1st Page is loaded.
+  EXPECT_FALSE(page_scheduler_->IsLoading());
+
+  std::unique_ptr<PageSchedulerImpl> page_scheduler2 =
+      CreatePageScheduler(nullptr, scheduler_.get(), *agent_group_scheduler_);
+  std::unique_ptr<FrameSchedulerImpl> frame_scheduler2 =
+      CreateFrameScheduler(page_scheduler2.get(), nullptr,
+                           /*is_in_embedded_frame_tree=*/false,
+                           FrameScheduler::FrameType::kMainFrame);
+
+  // 1st Page is loaded. 2nd page is loading.
+  EXPECT_FALSE(page_scheduler_->IsLoading());
+  EXPECT_TRUE(page_scheduler2->IsLoading());
+
+  // 2nd page finishes loading.
+  frame_scheduler2->OnFirstContentfulPaintInMainFrame();
+  frame_scheduler2->OnFirstMeaningfulPaint();
+
+  // Both pages are loaded.
+  EXPECT_FALSE(page_scheduler_->IsLoading());
+  EXPECT_FALSE(page_scheduler2->IsLoading());
+}
+
 namespace {
 
 void RunVirtualTimeRecorderTask(const base::TickClock* clock,
@@ -674,7 +698,7 @@ TEST_F(PageSchedulerImplTest, VirtualTimeSettings_NewFrameScheduler) {
           base::Milliseconds(1));
 
   test_task_runner_->FastForwardUntilNoTasksRemain();
-  EXPECT_TRUE(run_order.IsEmpty());
+  EXPECT_TRUE(run_order.empty());
 
   vtc->SetVirtualTimePolicy(VirtualTimePolicy::kAdvance);
   test_task_runner_->FastForwardUntilNoTasksRemain();
@@ -935,7 +959,7 @@ TEST_F(PageSchedulerImplTest, PauseTimersWhileVirtualTimeIsPaused) {
                                            base::Unretained(&run_order)));
 
   test_task_runner_->FastForwardUntilNoTasksRemain();
-  EXPECT_TRUE(run_order.IsEmpty());
+  EXPECT_TRUE(run_order.empty());
 
   vtc->SetVirtualTimePolicy(VirtualTimePolicy::kAdvance);
   test_task_runner_->FastForwardUntilNoTasksRemain();

@@ -44,6 +44,11 @@ const char16_t kFolder1Title[] = u"folder1";
 const char16_t kFolder2Title[] = u"folder2";
 const char16_t kTrashFolder1Title[] = u"trashfolder1";
 
+// Helper to get a mutable note node.
+NoteNode* AsMutable(const NoteNode* node) {
+  return const_cast<NoteNode*>(node);
+}
+
 // Helper to verify the two given notes nodes.
 void AssertNodesEqual(const NoteNode* expected, const NoteNode* actual) {
   ASSERT_TRUE(expected);
@@ -75,7 +80,8 @@ void AssertModelsEqual(NotesModel* expected, NotesModel* actual) {
 }  // namespace
 
 std::unique_ptr<NotesModel> CreateTestNotesModel() {
-  std::unique_ptr<NotesModel> model = std::make_unique<NotesModel>(nullptr);
+  std::unique_ptr<NotesModel> model =
+      std::make_unique<NotesModel>(nullptr, nullptr);
   std::unique_ptr<NoteLoadDetails> details =
       std::make_unique<NoteLoadDetails>();
   model->DoneLoading(std::move(details));

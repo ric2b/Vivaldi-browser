@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #include "media/audio/cras/audio_manager_chromeos.h"
@@ -274,8 +274,8 @@ class AllowedDspParameters
 
   AudioManagerChromeOS::SystemAudioProcessingInfo system_apm_info_;
   size_t user_buffer_size_ = kDefaultInputBufferSize;
-  std::vector<base::Feature> enabled_features_;
-  std::vector<base::Feature> disabled_features_;
+  std::vector<base::test::FeatureRef> enabled_features_;
+  std::vector<base::test::FeatureRef> disabled_features_;
   bool aec_on_dsp_allowed_;
   bool ns_on_dsp_allowed_;
   bool agc_on_dsp_allowed_;

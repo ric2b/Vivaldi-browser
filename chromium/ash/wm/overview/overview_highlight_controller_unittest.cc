@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,6 @@
 #include "ash/wm/desks/desks_bar_view.h"
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/desks/expanded_desks_bar_button.h"
-#include "ash/wm/desks/templates/save_desk_template_button.h"
 #include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/desks/zero_state_button.h"
 #include "ash/wm/overview/overview_constants.h"
@@ -84,7 +83,7 @@ class OverviewHighlightControllerTest
 
   // OverviewTestBase:
   void SetUp() override {
-    std::vector<base::Feature> enabled_features, disabled_features;
+    std::vector<base::test::FeatureRef> enabled_features, disabled_features;
     if (IsDesksTemplatesEnabled())
       enabled_features.push_back(features::kDesksTemplates);
     else
@@ -399,6 +398,11 @@ class DesksOverviewHighlightControllerTest
     auto* desk_controller = DesksController::Get();
     desk_controller->NewDesk(DesksCreationRemovalSource::kButton);
     ASSERT_EQ(2u, desk_controller->desks().size());
+
+    // Give the second desk a name. The desk name gets exposed as the accessible
+    // name. And the focusable views that are painted in these tests will fail
+    // the accessibility paint checker checks if they lack an accessible name.
+    desk_controller->desks()[1]->SetName(u"Desk 2", false);
   }
 
   OverviewHighlightableView* GetHighlightedView() {
@@ -880,7 +884,8 @@ TEST_P(DesksOverviewHighlightControllerTest,
     SendKey(ui::VKEY_TAB);
   }
   EXPECT_FALSE(new_desk_button->GetEnabled());
-  EXPECT_EQ(desks_util::kMaxNumberOfDesks, desks_controller->desks().size());
+  EXPECT_EQ(desks_util::GetMaxNumberOfDesks(),
+            desks_controller->desks().size());
 }
 
 TEST_P(DesksOverviewHighlightControllerTest, ZeroStateOfDesksBar) {
@@ -893,9 +898,10 @@ TEST_P(DesksOverviewHighlightControllerTest, ZeroStateOfDesksBar) {
   auto* event_generator = GetEventGenerator();
   auto* mini_view = desks_bar_view->mini_views()[1];
   event_generator->MoveMouseTo(mini_view->GetBoundsInScreen().CenterPoint());
-  EXPECT_TRUE(mini_view->close_desk_button()->GetVisible());
-  event_generator->MoveMouseTo(
-      mini_view->close_desk_button()->GetBoundsInScreen().CenterPoint());
+  EXPECT_TRUE(GetDeskActionVisibilityForMiniView(mini_view));
+  event_generator->MoveMouseTo(GetCloseDeskButtonForMiniView(mini_view)
+                                   ->GetBoundsInScreen()
+                                   .CenterPoint());
   event_generator->ClickLeftButton();
   EXPECT_TRUE(desks_bar_view->IsZeroState());
 
@@ -977,9 +983,10 @@ TEST_P(DesksOverviewHighlightControllerTest, SwitchingToZeroStateWhileTabbing) {
   auto* event_generator = GetEventGenerator();
   auto* mini_view = desks_bar_view->mini_views()[1];
   event_generator->MoveMouseTo(mini_view->GetBoundsInScreen().CenterPoint());
-  ASSERT_TRUE(mini_view->close_desk_button()->GetVisible());
-  event_generator->MoveMouseTo(
-      mini_view->close_desk_button()->GetBoundsInScreen().CenterPoint());
+  ASSERT_TRUE(GetDeskActionVisibilityForMiniView(mini_view));
+  event_generator->MoveMouseTo(GetCloseDeskButtonForMiniView(mini_view)
+                                   ->GetBoundsInScreen()
+                                   .CenterPoint());
   event_generator->ClickLeftButton();
   ASSERT_TRUE(desks_bar_view->IsZeroState());
 

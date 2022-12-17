@@ -38,6 +38,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_timeline.h"
@@ -73,7 +74,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element_creation_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element_registration_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_observable_array_css_style_sheet.h"
@@ -117,6 +117,7 @@
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
 #include "third_party/blink/renderer/core/dom/attr.h"
 #include "third_party/blink/renderer/core/dom/beforeunload_event_listener.h"
 #include "third_party/blink/renderer/core/dom/cdata_section.h"
@@ -245,6 +246,7 @@
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_controller.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
+#include "third_party/blink/renderer/core/layout/deferred_shaping_controller.h"
 #include "third_party/blink/renderer/core/layout/hit_test_canvas_result.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
@@ -289,6 +291,7 @@
 #include "third_party/blink/renderer/core/paint/first_meaningful_paint_detector.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/paint/paint_timing.h"
 #include "third_party/blink/renderer/core/permissions_policy/dom_feature_policy.h"
 #include "third_party/blink/renderer/core/permissions_policy/permissions_policy_parser.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
@@ -305,6 +308,7 @@
 #include "third_party/blink/renderer/core/svg/svg_use_element.h"
 #include "third_party/blink/renderer/core/svg_element_factory.h"
 #include "third_party/blink/renderer/core/svg_names.h"
+#include "third_party/blink/renderer/core/timing/render_blocking_metrics_reporter.h"
 #include "third_party/blink/renderer/core/timing/soft_navigation_heuristics.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_html.h"
 #include "third_party/blink/renderer/core/xml/parser/xml_document_parser.h"
@@ -314,8 +318,8 @@
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/bindings/v8_dom_wrapper.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/fonts/font_matching_metrics.h"
@@ -373,11 +377,17 @@ enum class RequestStorageResult {
   REJECTED_EXISTING_DENIAL = 5,
   REJECTED_SANDBOXED = 6,
   REJECTED_GRANT_DENIED = 7,
-  kMaxValue = REJECTED_GRANT_DENIED,
+  REJECTED_INCORRECT_FRAME = 8,
+  kMaxValue = REJECTED_INCORRECT_FRAME,
 };
 void FireRequestStorageAccessHistogram(RequestStorageResult result) {
   base::UmaHistogramEnumeration("API.StorageAccess.RequestStorageAccess",
                                 result);
+}
+
+void FireRequestStorageAccessForOriginHistogram(RequestStorageResult result) {
+  base::UmaHistogramEnumeration(
+      "API.StorageAccess.RequestStorageAccessForOrigin", result);
 }
 
 class IntrinsicSizeResizeObserverDelegate : public ResizeObserver::Delegate {
@@ -613,7 +623,7 @@ const ListedElement::List& Document::UnassociatedListedElementsList::Get(
     const Document& owner) {
   if (dirty_) {
     const Node& root = owner.GetTreeScope().RootNode();
-    DCHECK(list_.IsEmpty());
+    DCHECK(list_.empty());
 
     // TODO(crbug.com/1243730): We do not consider shadow trees for now.
     for (HTMLElement& element : Traversal<HTMLElement>::StartsAfter(root)) {
@@ -673,8 +683,9 @@ Document* Document::Create(Document& document) {
   return new_document;
 }
 
-Document* Document::CreateForTest() {
-  return MakeGarbageCollected<Document>(DocumentInit::Create().ForTest());
+Document* Document::CreateForTest(ExecutionContext* execution_context) {
+  return MakeGarbageCollected<Document>(
+      DocumentInit::Create().ForTest(execution_context));
 }
 
 Document::Document(const DocumentInit& initializer,
@@ -686,15 +697,18 @@ Document::Document(const DocumentInit& initializer,
               &Document::OnAdoptedStyleSheetSet),
           static_cast<V8ObservableArrayCSSStyleSheet::DeleteAlgorithmCallback>(
               &Document::OnAdoptedStyleSheetDelete)),
+      token_(initializer.GetToken()),
       is_initial_empty_document_(initializer.IsInitialEmptyDocument()),
       is_prerendering_(initializer.IsPrerendering()),
       evaluate_media_queries_on_style_recalc_(false),
       pending_sheet_layout_(kNoLayoutWithPendingSheets),
       dom_window_(initializer.GetWindow()),
       execution_context_(initializer.GetExecutionContext()),
+      agent_(execution_context_ ? execution_context_->GetAgent() : nullptr),
       context_features_(ContextFeatures::DefaultSwitch()),
       http_refresh_scheduler_(MakeGarbageCollected<HttpRefreshScheduler>(this)),
       well_formed_(false),
+      fallback_base_url_for_srcdoc_(initializer.FallbackSrcdocBaseURL()),
       cookie_url_(dom_window_ ? initializer.GetCookieUrl()
                               : KURL(g_empty_string)),
       printing_(kNotPrinting),
@@ -952,7 +966,7 @@ void Document::SetDoctype(DocumentType* doc_type) {
     if (doc_type_->publicId().StartsWithIgnoringASCIICase(
             "-//wapforum//dtd xhtml mobile 1.")) {
       is_mobile_document_ = true;
-      style_engine_->ViewportRulesChanged();
+      style_engine_->ViewportStyleSettingChanged();
     }
   }
 }
@@ -1384,7 +1398,7 @@ bool Document::HasValidNamespaceForElements(const QualifiedName& q_name) {
   // These checks are from DOM Core Level 2, createElementNS
   // http://www.w3.org/TR/DOM-Level-2-Core/core.html#ID-DocCrElNS
   // createElementNS(null, "html:div")
-  if (!q_name.Prefix().IsEmpty() && q_name.NamespaceURI().IsNull())
+  if (!q_name.Prefix().empty() && q_name.NamespaceURI().IsNull())
     return false;
   // createElementNS("http://www.example.com", "xml:lang")
   if (q_name.Prefix() == g_xml_atom &&
@@ -1396,7 +1410,7 @@ bool Document::HasValidNamespaceForElements(const QualifiedName& q_name) {
   // createElementNS("http://www.w3.org/2000/xmlns/", "foo:bar"),
   // createElementNS(null, "xmlns:bar"), createElementNS(null, "xmlns")
   if (q_name.Prefix() == g_xmlns_atom ||
-      (q_name.Prefix().IsEmpty() && q_name.LocalName() == g_xmlns_atom))
+      (q_name.Prefix().empty() && q_name.LocalName() == g_xmlns_atom))
     return q_name.NamespaceURI() == xmlns_names::kNamespaceURI;
   return q_name.NamespaceURI() != xmlns_names::kNamespaceURI;
 }
@@ -1524,14 +1538,14 @@ void Document::SetMimeType(const AtomicString& mime_type) {
 }
 
 AtomicString Document::contentType() const {
-  if (!mime_type_.IsEmpty())
+  if (!mime_type_.empty())
     return mime_type_;
 
   if (DocumentLoader* document_loader = Loader())
     return document_loader->MimeType();
 
   String mime_type = SuggestedMIMEType();
-  if (!mime_type.IsEmpty())
+  if (!mime_type.empty())
     return AtomicString(mime_type);
 
   return AtomicString("application/xml");
@@ -1618,7 +1632,7 @@ void Document::UpdateTitle(const String& title) {
   raw_title_ = title;
 
   String old_title = title_;
-  if (raw_title_.IsEmpty())
+  if (raw_title_.empty())
     title_ = String();
   else if (raw_title_.Is8Bit())
     title_ = CanonicalizedTitle<LChar>(this, raw_title_);
@@ -1822,10 +1836,6 @@ String Document::nodeName() const {
   return "#document";
 }
 
-Node::NodeType Document::getNodeType() const {
-  return kDocumentNode;
-}
-
 FormController& Document::GetFormController() {
   if (!form_controller_) {
     form_controller_ = MakeGarbageCollected<FormController>(*this);
@@ -1902,7 +1912,7 @@ Document::CalculateStyleAndLayoutTreeUpdateForThisDocument() const {
 
   if (style_engine_->NeedsFullStyleUpdate())
     return StyleAndLayoutTreeUpdate::kFull;
-  if (!use_elements_needing_update_.IsEmpty())
+  if (!use_elements_needing_update_.empty())
     return StyleAndLayoutTreeUpdate::kFull;
   // We have scheduled an invalidation set on the document node which means any
   // element may need a style recalc.
@@ -2275,21 +2285,18 @@ void Document::UpdateStyle() {
   }
 }
 
-bool Document::NeedsLayoutTreeUpdateForNode(const Node& node,
-                                            bool ignore_adjacent_style) const {
+bool Document::NeedsLayoutTreeUpdateForNode(const Node& node) const {
   // TODO(rakina): Switch some callers that may need to call
   // NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked instead of this.
   if (DisplayLockUtilities::LockedAncestorPreventingStyle(node)) {
     // |node| is in a locked-subtree, so we don't need to update it.
     return false;
   }
-  return NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked(
-      node, ignore_adjacent_style);
+  return NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked(node);
 }
 
 bool Document::NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked(
-    const Node& node,
-    bool ignore_adjacent_style) const {
+    const Node& node) const {
   if (!node.isConnected())
     return false;
   if (node.IsShadowRoot())
@@ -2305,84 +2312,30 @@ bool Document::NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked(
   if (!analyze)
     analyze = !DisplayLockUtilities::IsUnlockedQuickCheck(node);
 
-  // If style may depend on layout (which is the case for container queries),
-  // then we need to analyze the (inclusive) ancestor chain in order to figure
-  // out if the call to UpdateStyleAndLayoutTree needs an upgrade [1].
-  //
-  // Note that NeedsLayout may be marked without any style-dirtiness, and
-  // also note that style-dirtiness on elements unrelated to this ancestor
-  // chain may *cause* NeedsLayout.
-  //
-  // [1] See blink::LayoutUpgrade
+  bool maybe_affected_by_layout =
+      GetStyleEngine().StyleMaybeAffectedByLayout(node);
+  // Even if we don't need layout *now*, any dirty style may invalidate layout.
   bool maybe_needs_layout =
       (update != StyleAndLayoutTreeUpdate::kNone) || View()->NeedsLayout();
+  bool needs_update_inside_interleaving_root =
+      maybe_affected_by_layout && maybe_needs_layout;
+
   if (!analyze)
-    analyze = GetStyleEngine().StyleAffectedByLayout() && maybe_needs_layout;
+    analyze = needs_update_inside_interleaving_root;
 
   if (!analyze) {
     DCHECK_EQ(StyleAndLayoutTreeUpdate::kNone, update);
     return false;
   }
 
-  bool is_dirty = false;
-  if (node.NeedsStyleRecalc() || node.NeedsStyleInvalidation()) {
-    if (auto* style = node.GetComputedStyle())
-      return !style->IsEnsuredOutsideFlatTree();
-    is_dirty = true;
+  switch (GetStyleEngine().AnalyzeAncestors(node)) {
+    case StyleEngine::AncestorAnalysis::kNone:
+      return false;
+    case StyleEngine::AncestorAnalysis::kInterleavingRoot:
+      return needs_update_inside_interleaving_root;
+    case StyleEngine::AncestorAnalysis::kStyleRoot:
+      return true;
   }
-
-  // NodeLayoutUpgrade::GetReasons returns a set of possible upgrade
-  // reasons [1] for the provided node, but not all of those possible reasons
-  // should actually be treated as dirtying in all situations. (Keep reading).
-  //
-  // [1] See blink::NodeLayoutUpgrade::Reasons
-  NodeLayoutUpgrade::Reasons upgrade_mask =
-      maybe_needs_layout ? NodeLayoutUpgrade::kDependsOnSizeContainerQueries
-                         : 0;
-
-  if (NodeLayoutUpgrade::GetReasons(node) & upgrade_mask)
-    is_dirty = true;
-
-  // If `node` does not have a style, we're typically in display:none. In this
-  // case, we can not be sure that we *don't* require a layout upgrade, since
-  // this information would be stored on `ComputedStyle`. Hence we treat any
-  // style-less node as requiring an upgrade if the node could possibly be
-  // affected by layout (which is only the case inside an interleaving root).
-  if (ComputedStyle::IsNullOrEnsured(node.GetComputedStyle()) &&
-      maybe_needs_layout) {
-    upgrade_mask |= NodeLayoutUpgrade::kInterleavingRoot;
-  }
-
-  for (const ContainerNode* ancestor = LayoutTreeBuilderTraversal::Parent(node);
-       ancestor; ancestor = LayoutTreeBuilderTraversal::Parent(*ancestor)) {
-    if (ShadowRoot* root = ancestor->GetShadowRoot()) {
-      if (root->NeedsStyleRecalc() || root->NeedsStyleInvalidation() ||
-          root->NeedsAdjacentStyleRecalc()) {
-        is_dirty = true;
-      }
-    }
-    if (ancestor->NeedsStyleRecalc() || ancestor->NeedsStyleInvalidation() ||
-        (ancestor->NeedsAdjacentStyleRecalc() && !ignore_adjacent_style)) {
-      is_dirty = true;
-    }
-    if (NodeLayoutUpgrade::GetReasons(*ancestor) & upgrade_mask)
-      is_dirty = true;
-    if (is_dirty) {
-      if (auto* style = ancestor->GetComputedStyle())
-        return !style->IsEnsuredOutsideFlatTree();
-    }
-
-    auto* element = DynamicTo<Element>(ancestor);
-    if (!element)
-      continue;
-    if (auto* context = element->GetDisplayLockContext()) {
-      // Even if the ancestor is style-clean, we might've previously
-      // blocked a style traversal going to the ancestor or its descendants.
-      if (context->StyleTraversalWasBlocked())
-        return true;
-    }
-  }
-  return is_dirty;
 }
 
 void Document::UpdateStyleAndLayoutTreeForNode(const Node* node) {
@@ -2437,6 +2390,35 @@ void Document::UpdateStyleAndLayoutForNode(const Node* node,
   DisplayLockUtilities::ScopedForcedUpdate scoped_update_forced(
       node, DisplayLockContext::ForcedPhase::kLayout);
   UpdateStyleAndLayout(reason);
+}
+
+void Document::AddToRecalcStyleForToggle(Element* element) {
+  elements_needing_style_recalc_for_toggle_.insert(element);
+}
+
+bool Document::SetNeedsStyleRecalcForToggles() {
+  // TODO(crbug.com/1250716): We currently call this from
+  // LocalFrameView::RunCSSToggleSteps().  This is not ideal, but it produces
+  // behavior that's basically what we want, except for making
+  // getComputedStyle() produce correct results, which is hopefully fixable
+  // with future changes to PostStyleUpdateScope).  The behavior is also not
+  // yet well-defined; see https://github.com/tabatkins/css-toggle/issues/27
+  // for making this better.
+
+  if (elements_needing_style_recalc_for_toggle_.size() == 0)
+    return false;
+
+  HeapHashSet<Member<Element>> elements;
+  std::swap(elements_needing_style_recalc_for_toggle_, elements);
+
+  const auto& reason = StyleChangeReasonForTracing::CreateWithExtraData(
+      style_change_reason::kPseudoClass, style_change_extra_data::g_toggle);
+
+  for (auto element : elements) {
+    element->SetNeedsStyleRecalc(StyleChangeType::kSubtreeStyleChange, reason);
+  }
+
+  return true;
 }
 
 void Document::ApplyScrollRestorationLogic() {
@@ -2656,10 +2638,8 @@ void Document::ClearFocusedElementTimerFired(TimerBase*) {
 
 scoped_refptr<const ComputedStyle> Document::StyleForPage(uint32_t page_index) {
   AtomicString page_name;
-  if (const LayoutView* layout_view = GetLayoutView()) {
-    if (const NamedPagesMapper* mapper = layout_view->GetNamedPagesMapper())
-      page_name = mapper->NamedPageAtIndex(page_index);
-  }
+  if (const LayoutView* layout_view = GetLayoutView())
+    page_name = layout_view->NamedPageAtIndex(page_index);
   GetStyleEngine().UpdateActiveStyle();
   return GetStyleEngine().GetStyleResolver().StyleForPage(page_index,
                                                           page_name);
@@ -2672,7 +2652,10 @@ void Document::EnsurePaintLocationDataValidForNode(
   if (!node->InActiveDocument())
     return;
 
-  GetDisplayLockDocumentState().UnlockShapingDeferredElements(*node);
+  if (reason == DocumentUpdateReason::kJavaScript) {
+    DeferredShapingController::From(*this)->ReshapeDeferred(
+        ReshapeReason::kGeometryApi, *node);
+  }
 
   DisplayLockUtilities::ScopedForcedUpdate scoped_update_forced(
       node, DisplayLockContext::ForcedPhase::kLayout);
@@ -2690,16 +2673,11 @@ void Document::EnsurePaintLocationDataValidForNode(const Node* node,
     return;
 
   if (RuntimeEnabledFeatures::DeferredShapingEnabled()) {
-    auto& state = GetDisplayLockDocumentState();
-    if (state.HasActivatableLocks()) {
-      UpdateStyleAndLayoutTree();
-      if (node->GetLayoutObject()) {
-        if (property_id == CSSPropertyID::kWidth)
-          state.UnlockToDetermineWidth(*node->GetLayoutObject());
-        else
-          state.UnlockToDetermineHeight(*node->GetLayoutObject());
-      }
-    }
+    auto* ds_controller = DeferredShapingController::From(*this);
+    if (property_id == CSSPropertyID::kWidth)
+      ds_controller->ReshapeDeferredForWidth(*node->GetLayoutObject());
+    else
+      ds_controller->ReshapeDeferredForHeight(*node->GetLayoutObject());
   }
 
   DisplayLockUtilities::ScopedForcedUpdate scoped_update_forced(
@@ -2798,7 +2776,7 @@ void Document::UpdateUseShadowTreesIfNeeded() {
   ScriptForbiddenScope forbid_script;
 
   // Breadth-first search since nested use elements add to the queue.
-  while (!use_elements_needing_update_.IsEmpty()) {
+  while (!use_elements_needing_update_.empty()) {
     HeapHashSet<Member<SVGUseElement>> elements;
     use_elements_needing_update_.swap(elements);
     for (SVGUseElement* element : elements)
@@ -2947,24 +2925,22 @@ void Document::Shutdown() {
   if (this == &AXObjectCacheOwner()) {
     ax_contexts_.clear();
     ClearAXObjectCache();
+  } else {
+    DCHECK(!ax_object_cache_ || ExistingAXObjectCache())
+        << "Had AXObjectCache for parent, but not for popup document.";
+    if (AXObjectCache* cache = ExistingAXObjectCache()) {
+      // This is a popup document. Clear all accessibility state related to it
+      // by removing the AXObject for its root. The AXObjectCache is
+      // retrieved from the main document, but it maintains both documents.
+      cache->Remove(this);
+    }
   }
+
   computed_node_mapping_.clear();
 
   DetachLayoutTree();
   layout_view_ = nullptr;
   DCHECK(!View()->IsAttached());
-
-  if (this != &AXObjectCacheOwner()) {
-    if (AXObjectCache* cache = ExistingAXObjectCache()) {
-      // Documents that are not a root document use the AXObjectCache in
-      // their root document. Node::removedFrom is called after the
-      // document has been detached so it can't find the root document.
-      // We do the removals here instead.
-      for (Node& node : NodeTraversal::DescendantsOf(*this)) {
-        cache->Remove(&node);
-      }
-    }
-  }
 
   GetStyleEngine().DidDetach();
 
@@ -3006,11 +2982,36 @@ void Document::Shutdown() {
   execution_context_ = nullptr;
 }
 
+void Document::RemovedEventListener(
+    const AtomicString& event_type,
+    const RegisteredEventListener& registered_listener) {
+  ContainerNode::RemovedEventListener(event_type, registered_listener);
+
+  // We need to track the existence of the visibilitychange event listeners to
+  // enable/disable sudden terminations.
+  if (event_type == event_type_names::kVisibilitychange) {
+    if (auto* frame = GetFrame())
+      frame->RemovedSuddenTerminationDisablerListener(*this, event_type);
+  }
+}
+
 void Document::RemoveAllEventListeners() {
+  int previous_visibility_change_handlers_count =
+      NumberOfEventListeners(event_type_names::kVisibilitychange);
+
   ContainerNode::RemoveAllEventListeners();
 
   if (LocalDOMWindow* dom_window = domWindow())
     dom_window->RemoveAllEventListeners();
+
+  // Update sudden termination disabler state if we previously have listeners
+  // for visibilitychange.
+  if (previous_visibility_change_handlers_count) {
+    if (auto* frame = GetFrame()) {
+      frame->RemovedSuddenTerminationDisablerListener(
+          *this, event_type_names::kVisibilitychange);
+    }
+  }
 }
 
 Document& Document::AXObjectCacheOwner() const {
@@ -3029,6 +3030,13 @@ static ui::AXMode ComputeAXModeFromAXContexts(Vector<AXContext*> ax_contexts) {
   ui::AXMode ax_mode = 0;
   for (AXContext* context : ax_contexts)
     ax_mode |= context->GetAXMode();
+
+  if (!ax_contexts.empty()) {
+    DCHECK(!ax_mode.is_mode_off())
+        << "The computed AX mode was empty but there were > 0 AXContext "
+           "objects. A caller should have called RemoveAXContext().";
+  }
+
   return ax_mode;
 }
 
@@ -3057,10 +3065,14 @@ void Document::AddAXContext(AXContext* context) {
   }
 }
 
+void Document::AXContextModeChanged() {
+  DCHECK_GT(ax_contexts_.size(), 0u);
+  DCHECK(ax_object_cache_);
+  ax_object_cache_->SetAXMode(ComputeAXModeFromAXContexts(ax_contexts_));
+}
+
 void Document::RemoveAXContext(AXContext* context) {
-  auto** iter =
-      std::find_if(ax_contexts_.begin(), ax_contexts_.end(),
-                   [&context](const auto& item) { return item == context; });
+  auto** iter = base::ranges::find(ax_contexts_, context);
   if (iter != ax_contexts_.end())
     ax_contexts_.erase(iter);
   if (ax_contexts_.size() == 0) {
@@ -3169,6 +3181,8 @@ void Document::SetPrinting(PrintingState state) {
 
   if (was_printing != is_printing) {
     GetDisplayLockDocumentState().NotifyPrintingOrPreviewChanged();
+    if (auto* ds_controller = DeferredShapingController::From(*this))
+      ds_controller->ReshapeAllDeferred(ReshapeReason::kPrinting);
 
     // We force the color-scheme to light for printing.
     ColorSchemeChanged();
@@ -3331,10 +3345,6 @@ void Document::open() {
   // Window object as well.
   RemoveAllEventListenersRecursively();
 
-  ResetTreeScope();
-  if (GetFrame())
-    GetFrame()->Selection().Clear();
-
   // Create a new HTML parser and associate it with |document|.
   //
   // Set the current document readiness of |document| to "loading".
@@ -3381,8 +3391,10 @@ DocumentParser* Document::OpenForNavigation(
     const AtomicString& mime_type,
     const AtomicString& encoding) {
   DocumentParser* parser = ImplicitOpen(parser_sync_policy);
-  if (parser->NeedsDecoder())
-    parser->SetDecoder(BuildTextResourceDecoderFor(this, mime_type, encoding));
+  if (parser->NeedsDecoder()) {
+    parser->SetDecoder(
+        BuildTextResourceDecoder(GetFrame(), Url(), mime_type, encoding));
+  }
   if (AnchorElementInteractionTracker::IsFeatureEnabled() &&
       !GetFrame()->IsProvisional()) {
     anchor_element_interaction_tracker_ =
@@ -4054,6 +4066,11 @@ void Document::SetParsingState(ParsingState parsing_state) {
       parsing_state_ == kFinishedParsing) {
     if (form_controller_ && form_controller_->HasControlStates())
       form_controller_->ScheduleRestore();
+    if (auto* ds_controller = DeferredShapingController::From(*this)) {
+      PaintTiming& timing = PaintTiming::From(*this);
+      if (!timing.FirstContentfulPaintIgnoringSoftNavigations().is_null())
+        ds_controller->ReshapeAllDeferred(ReshapeReason::kDomContentLoaded);
+    }
   }
 }
 
@@ -4133,6 +4150,10 @@ void Document::write(const String& text,
     if (ignore_opens_during_unload_count_)
       return;
 
+    if (ignore_destructive_write_module_script_count_) {
+      UseCounter::Count(*this,
+                        WebFeature::kDestructiveDocumentWriteAfterModuleScript);
+    }
     open(entered_window, ASSERT_NO_EXCEPTION);
   }
 
@@ -4260,6 +4281,23 @@ void Document::UpdateBaseURL() {
   if (!base_url_.IsValid())
     base_url_ = KURL();
 
+  // The RenderFrameHost won't know anything about the state of
+  // `base_element_url_` or `base_url_override_`, so if either of these affect
+  // `base_url_` we should share it with the frame host.
+  bool has_overridden_base_url =
+      !base_element_url_.IsEmpty() || !base_url_override_.IsEmpty();
+  // Avoid sending a spurious IPC if this is the first UpdateBaseURL() call
+  // and there is no overridden base URL. There may not be a frame since
+  // UpdateBaseURL() is called for documents that do not have a frame;
+  // there is nothing to notify in that case however.
+  // If we sent `base_url_` to the frame host, and then later its dependence
+  // on `base_element_url_`/`base_url_override_` ends, we should notify the
+  // frame host so it can reset its copy.
+  if ((!old_base_url.IsNull() || has_overridden_base_url) && GetFrame()) {
+    GetFrame()->GetLocalFrameHostRemote().DidChangeBaseURL(
+        has_overridden_base_url ? base_url_ : KURL());
+  }
+
   if (elem_sheet_) {
     // Element sheet is silly. It never contains anything.
     DCHECK(!elem_sheet_->Contents()->RuleCount());
@@ -4290,14 +4328,21 @@ KURL Document::FallbackBaseURL() const {
   //           document base URL of document's browsing context's container
   //           document.
   if (IsSrcdocDocument()) {
+    // Return the base_url value that was sent from the parent along with the
+    // srcdoc attribute's value.
+    if (fallback_base_url_for_srcdoc_.IsValid())
+      return fallback_base_url_for_srcdoc_;
+    // Until https://crbug.com/1356658 is resolved,
+    // `fallback_base_url_for_srcdoc_` will only be sent from the frame host if
+    // we are process isolating sandboxed srcdoc iframes (although when the
+    // IsolateSandboxedIframes feature is enabled we will send it for all srcdoc
+    // iframes, not just sandboxed ones). If `fallback_base_url_for_srcdoc_`
+    // isn't sent, then we must still check that `ParentDocument()` is non-null,
+    // in case this function is called while the document is detached.
     // TODO(https://crbug.com/751329, https://crbug.com/1336904): Referring to
     // ParentDocument() is not correct.
-    if (Document* parent = ParentDocument()) {
-      return parent->BaseURL();
-    }
-    // TODO(https://crbug.com/1339824) Sandboxed about:srcdoc document can be
-    // hosted in a different process. As a result, their `parent` may be null,
-    // and we might return something wrong, in a different way here.
+    if (ParentDocument())
+      return ParentDocument()->BaseURL();
   }
 
   // [spec] 2. If document's URL is about:blank, and document's browsing
@@ -4361,7 +4406,7 @@ void Document::ProcessBaseElement() {
   KURL base_element_url;
   if (href) {
     String stripped_href = StripLeadingAndTrailingHTMLSpaces(*href);
-    if (!stripped_href.IsEmpty())
+    if (!stripped_href.empty())
       base_element_url = KURL(FallbackBaseURL(), stripped_href);
   }
 
@@ -4421,8 +4466,8 @@ void Document::DidLoadAllScriptBlockingResources() {
   // just for executing scripts.
   execute_scripts_waiting_for_resources_task_handle_ = PostCancellableTask(
       *GetTaskRunner(TaskType::kNetworking), FROM_HERE,
-      WTF::Bind(&Document::ExecuteScriptsWaitingForResources,
-                WrapWeakPersistent(this)));
+      WTF::BindOnce(&Document::ExecuteScriptsWaitingForResources,
+                    WrapWeakPersistent(this)));
 
   if (IsA<HTMLDocument>(this) && body()) {
     // For HTML if we have no more stylesheets to load and we're past the body
@@ -4447,6 +4492,10 @@ CSSStyleSheet& Document::ElementSheet() {
   return *elem_sheet_;
 }
 
+bool Document::InPostLifecycleSteps() const {
+  return View() && View()->InPostLifecycleSteps();
+}
+
 void Document::MaybeHandleHttpRefresh(const String& content,
                                       HttpRefreshType http_refresh_type) {
   if (is_view_source_ || !dom_window_)
@@ -4461,7 +4510,7 @@ void Document::MaybeHandleHttpRefresh(const String& content,
                         delay, refresh_url_string))
     return;
   KURL refresh_url =
-      refresh_url_string.IsEmpty() ? Url() : CompleteURL(refresh_url_string);
+      refresh_url_string.empty() ? Url() : CompleteURL(refresh_url_string);
 
   if (refresh_url.ProtocolIsJavaScript()) {
     String message =
@@ -4793,7 +4842,7 @@ void Document::LayoutViewportWasResized() {
     if (GetFrame()->IsMainFrame() && !Printing())
       probe::DidResizeMainFrame(GetFrame());
   }
-  if (!HasStaticViewportUnits())
+  if (!HasViewportUnits())
     return;
   GetStyleResolver().SetResizedForViewportUnits();
   GetStyleEngine().MarkViewportUnitDirty(ViewportUnitFlag::kStatic);
@@ -4813,7 +4862,6 @@ void Document::DynamicViewportUnitsChanged() {
 }
 
 void Document::SetHoverElement(Element* new_hover_element) {
-  Element::HoveredElementChanged(hover_element_, new_hover_element);
   hover_element_ = new_hover_element;
 }
 
@@ -5102,10 +5150,10 @@ void Document::SendFocusNotification(Element* new_focused_element,
 
     if (new_focused_element->IsSVGElement()) {
       // Convert to window coordinate system (this will be in DIPs).
-      bounds_in_viewport = new_focused_element->BoundsInViewport();
+      bounds_in_viewport = new_focused_element->BoundsInWidget();
     } else {
       Vector<gfx::Rect> outline_rects =
-          new_focused_element->OutlineRectsInVisualViewport(
+          new_focused_element->OutlineRectsInWidget(
               DocumentUpdateReason::kFocus);
       for (auto& outline_rect : outline_rects)
         bounds_in_viewport.Union(outline_rect);
@@ -5316,7 +5364,7 @@ void Document::MoveNodeIteratorsToNewDocument(Node& node,
 
 void Document::DidMoveTreeToNewDocument(const Node& root) {
   DCHECK_NE(root.GetDocument(), this);
-  if (!ranges_.IsEmpty()) {
+  if (!ranges_.empty()) {
     AttachedRangeSet ranges = ranges_;
     for (Range* range : ranges)
       range->UpdateOwnerDocumentIfNeeded();
@@ -5422,7 +5470,7 @@ void Document::DidMergeTextNodes(const Text& merged_node,
                                  unsigned old_length) {
   NodeWithIndex node_to_be_removed_with_index(
       const_cast<Text&>(node_to_be_removed));
-  if (!ranges_.IsEmpty()) {
+  if (!ranges_.empty()) {
     for (Range* range : ranges_)
       range->DidMergeTextNodes(node_to_be_removed_with_index, old_length);
   }
@@ -5821,7 +5869,7 @@ void Document::setDomain(const String& raw_domain,
     return;
   }
 
-  if (new_domain.IsEmpty()) {
+  if (new_domain.empty()) {
     exception_state.ThrowSecurityError("'" + new_domain +
                                        "' is an empty domain.");
     return;
@@ -5949,13 +5997,13 @@ void Document::setDomain(const String& raw_domain,
 
 absl::optional<base::Time> Document::lastModifiedTime() const {
   AtomicString http_last_modified = override_last_modified_;
-  if (http_last_modified.IsEmpty()) {
+  if (http_last_modified.empty()) {
     if (DocumentLoader* document_loader = Loader()) {
       http_last_modified = document_loader->GetResponse().HttpHeaderField(
           http_names::kLastModified);
     }
   }
-  if (!http_last_modified.IsEmpty()) {
+  if (!http_last_modified.empty()) {
     return ParseDate(http_last_modified);
   }
   return absl::nullopt;
@@ -6022,7 +6070,7 @@ mojom::blink::PermissionService* Document::GetPermissionService(
     execution_context->GetBrowserInterfaceBroker().GetInterface(
         data_->permission_service_.BindNewPipeAndPassReceiver(
             execution_context->GetTaskRunner(TaskType::kPermission)));
-    data_->permission_service_.set_disconnect_handler(WTF::Bind(
+    data_->permission_service_.set_disconnect_handler(WTF::BindOnce(
         &Document::PermissionServiceConnectionError, WrapWeakPersistent(this)));
   }
   return data_->permission_service_.get();
@@ -6045,8 +6093,143 @@ ScriptPromise Document::hasStorageAccess(ScriptState* script_state) {
   return promise;
 }
 
+ScriptPromise Document::requestStorageAccessForOrigin(
+    ScriptState* script_state,
+    const AtomicString& origin) {
+  if (!GetFrame()) {
+    FireRequestStorageAccessForOriginHistogram(
+        RequestStorageResult::REJECTED_NO_ORIGIN);
+    // Note that in detached frames, resolvers are not able to return a promise.
+    return ScriptPromise::RejectWithDOMException(
+        script_state,
+        MakeGarbageCollected<DOMException>(
+            DOMExceptionCode::kInvalidStateError,
+            "requestStorageAccessForOrigin: Cannot be used unless "
+            "the document is fully active."));
+  }
+
+  ScriptPromiseResolver* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+
+  // Access the promise first to ensure it is created so that the proper state
+  // can be changed when it is resolved or rejected.
+  ScriptPromise promise = resolver->Promise();
+
+  const bool has_user_gesture =
+      LocalFrame::HasTransientUserActivation(GetFrame());
+  if (!has_user_gesture) {
+    AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kSecurity,
+        mojom::blink::ConsoleMessageLevel::kError,
+        "requestStorageAccessForOrigin: Must be handling a user gesture to "
+        "use."));
+
+    FireRequestStorageAccessForOriginHistogram(
+        RequestStorageResult::REJECTED_NO_USER_GESTURE);
+    resolver->Reject();
+    return promise;
+  }
+
+  if (!IsInOutermostMainFrame()) {
+    AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kSecurity,
+        mojom::blink::ConsoleMessageLevel::kError,
+        "requestStorageAccessForOrigin: Only supported in primary top-level "
+        "browsing contexts."));
+    FireRequestStorageAccessForOriginHistogram(
+        RequestStorageResult::REJECTED_INCORRECT_FRAME);
+    resolver->Reject();
+    return promise;
+  }
+
+  if (dom_window_->GetSecurityOrigin()->IsOpaque()) {
+    AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kSecurity,
+        mojom::blink::ConsoleMessageLevel::kError,
+        "requestStorageAccessForOrigin: Cannot be used by opaque origins."));
+
+    FireRequestStorageAccessForOriginHistogram(
+        RequestStorageResult::REJECTED_OPAQUE_ORIGIN);
+    resolver->Reject();
+    return promise;
+  }
+
+  KURL origin_as_kurl{origin};
+  scoped_refptr<SecurityOrigin> supplied_origin =
+      SecurityOrigin::Create(origin_as_kurl);
+  if (supplied_origin->IsOpaque()) {
+    AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kSecurity,
+        mojom::blink::ConsoleMessageLevel::kError,
+        "requestStorageAccessForOrigin: Invalid origin parameter."));
+    FireRequestStorageAccessForOriginHistogram(
+        RequestStorageResult::REJECTED_OPAQUE_ORIGIN);
+    resolver->Reject();
+    return promise;
+  }
+
+  if (dom_window_->GetSecurityOrigin()->IsSameSiteWith(supplied_origin.get())) {
+    // Access is not actually disabled, so accept the request.
+    resolver->Resolve();
+    FireRequestStorageAccessForOriginHistogram(
+        RequestStorageResult::APPROVED_EXISTING_ACCESS);
+    return promise;
+  }
+
+  auto descriptor = mojom::blink::PermissionDescriptor::New();
+  descriptor->name = mojom::blink::PermissionName::STORAGE_ACCESS;
+  auto storage_access_extension =
+      mojom::blink::StorageAccessPermissionDescriptor::New();
+  storage_access_extension->siteOverride = supplied_origin;
+  descriptor->extension =
+      mojom::blink::PermissionDescriptorExtension::NewStorageAccess(
+          std::move(storage_access_extension));
+
+  GetPermissionService(ExecutionContext::From(script_state))
+      ->RequestPermission(
+          std::move(descriptor), has_user_gesture,
+          WTF::BindOnce(
+              [](ScriptPromiseResolver* resolver, Document* document,
+                 mojom::blink::PermissionStatus status) {
+                DCHECK(resolver);
+                DCHECK(document);
+
+                switch (status) {
+                  case mojom::blink::PermissionStatus::GRANTED:
+                    document->expressly_denied_storage_access_ = false;
+                    FireRequestStorageAccessForOriginHistogram(
+                        RequestStorageResult::APPROVED_NEW_GRANT);
+                    resolver->Resolve();
+                    break;
+                  case mojom::blink::PermissionStatus::DENIED:
+                    LocalFrame::ConsumeTransientUserActivation(
+                        document->GetFrame());
+                    document->expressly_denied_storage_access_ = true;
+                    [[fallthrough]];
+                  case mojom::blink::PermissionStatus::ASK:
+                  default:
+                    FireRequestStorageAccessForOriginHistogram(
+                        RequestStorageResult::REJECTED_GRANT_DENIED);
+                    resolver->Reject();
+                }
+              },
+              WrapPersistent(resolver), WrapPersistent(this)));
+
+  return promise;
+}
+
 ScriptPromise Document::requestStorageAccess(ScriptState* script_state) {
-  DCHECK(GetFrame());
+  if (!GetFrame()) {
+    FireRequestStorageAccessHistogram(RequestStorageResult::REJECTED_NO_ORIGIN);
+
+    // Note that in detached frames, resolvers are not able to return a promise.
+    return ScriptPromise::RejectWithDOMException(
+        script_state, MakeGarbageCollected<DOMException>(
+                          DOMExceptionCode::kInvalidStateError,
+                          "requestStorageAccess: Cannot be used unless the "
+                          "document is fully active."));
+  }
+
   ScriptPromiseResolver* resolver =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
 
@@ -6063,18 +6246,6 @@ ScriptPromise Document::requestStorageAccess(ScriptState* script_state) {
         "requestStorageAccess: Must be handling a user gesture to use."));
     FireRequestStorageAccessHistogram(
         RequestStorageResult::REJECTED_NO_USER_GESTURE);
-
-    resolver->Reject();
-    return promise;
-  }
-
-  if (!TopFrameOrigin()) {
-    AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::blink::ConsoleMessageSource::kSecurity,
-        mojom::blink::ConsoleMessageLevel::kError,
-        "requestStorageAccess: Cannot execute in documents lacking top-frame "
-        "origins."));
-    FireRequestStorageAccessHistogram(RequestStorageResult::REJECTED_NO_ORIGIN);
 
     resolver->Reject();
     return promise;
@@ -6137,7 +6308,7 @@ ScriptPromise Document::requestStorageAccess(ScriptState* script_state) {
   GetPermissionService(ExecutionContext::From(script_state))
       ->RequestPermission(
           std::move(descriptor), has_user_gesture,
-          WTF::Bind(
+          WTF::BindOnce(
               [](ScriptPromiseResolver* resolver, Document* document,
                  mojom::blink::PermissionStatus status) {
                 DCHECK(resolver);
@@ -6151,6 +6322,8 @@ ScriptPromise Document::requestStorageAccess(ScriptState* script_state) {
                     resolver->Resolve();
                     break;
                   case mojom::blink::PermissionStatus::DENIED:
+                    LocalFrame::ConsumeTransientUserActivation(
+                        document->GetFrame());
                     document->expressly_denied_storage_access_ = true;
                     [[fallthrough]];
                   case mojom::blink::PermissionStatus::ASK:
@@ -6206,9 +6379,9 @@ ScriptPromise Document::hasTrustToken(ScriptState* script_state,
     return promise;
   }
 
-  if (!top_frame_origin->IsPotentiallyTrustworthy() ||
-      (top_frame_origin->Protocol() != url::kHttpsScheme &&
-       top_frame_origin->Protocol() != url::kHttpScheme)) {
+  DCHECK(top_frame_origin->IsPotentiallyTrustworthy());
+  if (top_frame_origin->Protocol() != url::kHttpsScheme &&
+      top_frame_origin->Protocol() != url::kHttpScheme) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "hasTrustToken: Cannot execute in "
@@ -6222,15 +6395,15 @@ ScriptPromise Document::hasTrustToken(ScriptState* script_state,
         data_->trust_token_query_answerer_.BindNewPipeAndPassReceiver(
             GetExecutionContext()->GetTaskRunner(TaskType::kInternalDefault)));
     data_->trust_token_query_answerer_.set_disconnect_handler(
-        WTF::Bind(&Document::TrustTokenQueryAnswererConnectionError,
-                  WrapWeakPersistent(this)));
+        WTF::BindOnce(&Document::TrustTokenQueryAnswererConnectionError,
+                      WrapWeakPersistent(this)));
   }
 
   data_->pending_trust_token_query_resolvers_.insert(resolver);
 
   data_->trust_token_query_answerer_->HasTrustTokens(
       issuer_origin,
-      WTF::Bind(
+      WTF::BindOnce(
           [](WeakPersistent<ScriptPromiseResolver> resolver,
              WeakPersistent<Document> document,
              network::mojom::blink::HasTrustTokensResultPtr result) {
@@ -6251,6 +6424,101 @@ ScriptPromise Document::hasTrustToken(ScriptState* script_state,
               resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
                   state->GetIsolate(), DOMExceptionCode::kOperationError,
                   "Failed to retrieve hasTrustToken response. (Would "
+                  "associating the given issuer with this top-level origin "
+                  "have exceeded its number-of-issuers limit?)"));
+            }
+
+            document->data_->pending_trust_token_query_resolvers_.erase(
+                resolver);
+          },
+          WrapWeakPersistent(resolver), WrapWeakPersistent(this)));
+
+  return promise;
+}
+
+ScriptPromise Document::hasRedemptionRecord(ScriptState* script_state,
+                                            const String& issuer,
+                                            ExceptionState& exception_state) {
+  ScriptPromiseResolver* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+
+  ScriptPromise promise = resolver->Promise();
+
+  // Trust Tokens state is keyed by issuer and top-frame origins that
+  // are both (1) HTTP or HTTPS and (2) potentially trustworthy. Consequently,
+  // we can return early if either the issuer or the top-frame origin fails to
+  // satisfy either of these requirements.
+  KURL issuer_url = KURL(issuer);
+  auto issuer_origin = SecurityOrigin::Create(issuer_url);
+  if (!issuer_url.ProtocolIsInHTTPFamily() ||
+      !issuer_origin->IsPotentiallyTrustworthy()) {
+    exception_state.ThrowTypeError(
+        "hasRedemptionRecord: Trust token issuer origins must be both HTTP(S) "
+        "and "
+        "secure (\"potentially trustworthy\").");
+    resolver->Reject(exception_state);
+    return promise;
+  }
+
+  scoped_refptr<const SecurityOrigin> top_frame_origin = TopFrameOrigin();
+  if (!top_frame_origin) {
+    // Note: One case where there might be no top frame origin is if this
+    // document is destroyed. In this case, this function will return
+    // `undefined`. Still bother adding the exception and rejecting, just in
+    // case there are other situations in which the top frame origin might be
+    // absent.
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "hasRedemptionRecord: Cannot execute in "
+                                      "documents lacking top-frame origins.");
+    resolver->Reject(exception_state);
+    return promise;
+  }
+
+  DCHECK(top_frame_origin->IsPotentiallyTrustworthy());
+  if (top_frame_origin->Protocol() != url::kHttpsScheme &&
+      top_frame_origin->Protocol() != url::kHttpScheme) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotAllowedError,
+        "hasRedemptionRecord: Cannot execute in "
+        "documents without secure, HTTP(S), top-frame origins.");
+    resolver->Reject(exception_state);
+    return promise;
+  }
+
+  if (!data_->trust_token_query_answerer_.is_bound()) {
+    GetFrame()->GetBrowserInterfaceBroker().GetInterface(
+        data_->trust_token_query_answerer_.BindNewPipeAndPassReceiver(
+            GetExecutionContext()->GetTaskRunner(TaskType::kInternalDefault)));
+    data_->trust_token_query_answerer_.set_disconnect_handler(
+        WTF::BindOnce(&Document::TrustTokenQueryAnswererConnectionError,
+                      WrapWeakPersistent(this)));
+  }
+
+  data_->pending_trust_token_query_resolvers_.insert(resolver);
+
+  data_->trust_token_query_answerer_->HasRedemptionRecord(
+      issuer_origin,
+      WTF::BindOnce(
+          [](WeakPersistent<ScriptPromiseResolver> resolver,
+             WeakPersistent<Document> document,
+             network::mojom::blink::HasRedemptionRecordResultPtr result) {
+            // If there was a Mojo connection error, the promise was already
+            // resolved and deleted.
+            if (!base::Contains(
+                    document->data_->pending_trust_token_query_resolvers_,
+                    resolver)) {
+              return;
+            }
+
+            if (result->status ==
+                network::mojom::blink::TrustTokenOperationStatus::kOk) {
+              resolver->Resolve(result->has_redemption_record);
+            } else {
+              ScriptState* state = resolver->GetScriptState();
+              ScriptState::Scope scope(state);
+              resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
+                  state->GetIsolate(), DOMExceptionCode::kOperationError,
+                  "Failed to retrieve hasRedemptionRecord response. (Would "
                   "associating the given issuer with this top-level origin "
                   "have exceeded its number-of-issuers limit?)"));
             }
@@ -6392,13 +6660,13 @@ static ParseQualifiedNameResult ParseQualifiedNameInternal(
     local_name = qualified_name;
   } else {
     prefix = AtomicString(characters, colon_pos);
-    if (prefix.IsEmpty())
+    if (prefix.empty())
       return ParseQualifiedNameResult(kQNEmptyPrefix);
     int prefix_start = colon_pos + 1;
     local_name = AtomicString(characters + prefix_start, length - prefix_start);
   }
 
-  if (local_name.IsEmpty())
+  if (local_name.empty())
     return ParseQualifiedNameResult(kQNEmptyLocalName);
 
   return ParseQualifiedNameResult(kQNValid);
@@ -6574,7 +6842,7 @@ KURL Document::OpenSearchDescriptionURL() {
 }
 
 V8HTMLOrSVGScriptElement* Document::currentScriptForBinding() const {
-  if (current_script_stack_.IsEmpty())
+  if (current_script_stack_.empty())
     return nullptr;
   ScriptElementBase* script_element_base = current_script_stack_.back();
   if (!script_element_base)
@@ -6587,7 +6855,7 @@ void Document::PushCurrentScript(ScriptElementBase* new_current_script) {
 }
 
 void Document::PopCurrentScript(ScriptElementBase* script) {
-  DCHECK(!current_script_stack_.IsEmpty());
+  DCHECK(!current_script_stack_.empty());
   DCHECK_EQ(current_script_stack_.back(), script);
   current_script_stack_.pop_back();
 }
@@ -6639,6 +6907,10 @@ Document& Document::TopDocument() const {
 
 ExecutionContext* Document::GetExecutionContext() const {
   return execution_context_.Get();
+}
+
+Agent* Document::GetAgent() const {
+  return agent_.Get();
 }
 
 Attr* Document::createAttribute(const AtomicString& name,
@@ -6767,21 +7039,54 @@ void Document::setAllowDeclarativeShadowRoots(bool val) {
 
 void Document::MaybeExecuteDelayedAsyncScripts(
     MilestoneForDelayedAsyncScript milestone) {
-  if (!base::FeatureList::IsEnabled(features::kDelayAsyncScriptExecution))
+  // This is called on each paint when DelayAsyncScriptDelayType is kEachPaint,
+  // which causes regression. Cache the feature status to avoid frequent
+  // calculation.
+  static const bool delay_async_script_execution_is_enabled =
+      base::FeatureList::IsEnabled(features::kDelayAsyncScriptExecution);
+  if (!delay_async_script_execution_is_enabled)
     return;
 
-  switch (features::kDelayAsyncScriptExecutionDelayParam.Get()) {
+  // Cache for performance reason.
+  static const features::DelayAsyncScriptDelayType
+      delay_async_script_delay_type =
+          features::kDelayAsyncScriptExecutionDelayParam.Get();
+  switch (delay_async_script_delay_type) {
     case features::DelayAsyncScriptDelayType::kFirstPaintOrFinishedParsing:
       // Notify the ScriptRunner if the first paint has been recorded and
       // we're delaying async scripts until first paint or finished parsing
       // (whichever comes first).
-      script_runner_delayer_->Deactivate();
+      if (milestone == MilestoneForDelayedAsyncScript::kFirstPaint ||
+          milestone == MilestoneForDelayedAsyncScript::kFinishedParsing) {
+        script_runner_delayer_->Deactivate();
+      }
       break;
     case features::DelayAsyncScriptDelayType::kFinishedParsing:
       // Notify the ScriptRunner if we're finished parsing and we're delaying
       // async scripts until finished parsing occurs.
       if (milestone == MilestoneForDelayedAsyncScript::kFinishedParsing)
         script_runner_delayer_->Deactivate();
+      break;
+    case features::DelayAsyncScriptDelayType::kEachLcpCandidate:
+      // Notify the ScriptRunner if a LCP candidate is reported.
+      if (milestone == MilestoneForDelayedAsyncScript::kLcpCandidate) {
+        // Flush all async scripts that are already prepared but forced to be
+        // delayed.
+        script_runner_delayer_->Deactivate();
+        // Delay async scripts until next LCP candidate occurs or reaches the
+        // time limit.
+        script_runner_delayer_->Activate();
+      }
+      break;
+    case features::DelayAsyncScriptDelayType::kEachPaint:
+      // Notify the ScriptRunner if paint happened.
+      if (milestone == MilestoneForDelayedAsyncScript::kPaint) {
+        // Flush all async scripts that are already prepared but forced to be
+        // delayed.
+        script_runner_delayer_->Deactivate();
+        // Delay async scripts until next paint or reaches the time limit.
+        script_runner_delayer_->Activate();
+      }
       break;
   }
 }
@@ -6790,14 +7095,25 @@ void Document::MarkFirstPaint() {
   MaybeExecuteDelayedAsyncScripts(MilestoneForDelayedAsyncScript::kFirstPaint);
 }
 
+void Document::OnPaintFinished() {
+  MaybeExecuteDelayedAsyncScripts(MilestoneForDelayedAsyncScript::kPaint);
+}
+
+void Document::OnLargestContentfulPaintUpdated() {
+  MaybeExecuteDelayedAsyncScripts(
+      MilestoneForDelayedAsyncScript::kLcpCandidate);
+}
+
+void Document::OnPrepareToStopParsing() {
+  MaybeExecuteDelayedAsyncScripts(
+      MilestoneForDelayedAsyncScript::kFinishedParsing);
+}
+
 void Document::FinishedParsing() {
   DCHECK(!GetScriptableDocumentParser() || !parser_->IsParsing());
   DCHECK(!GetScriptableDocumentParser() || ready_state_ != kLoading);
   SetParsingState(kInDOMContentLoaded);
   DocumentParserTiming::From(*this).MarkParserStop();
-
-  MaybeExecuteDelayedAsyncScripts(
-      MilestoneForDelayedAsyncScript::kFinishedParsing);
 
   // FIXME: DOMContentLoaded is dispatched synchronously, but this should be
   // dispatched in a queued task, see https://crbug.com/961428
@@ -6812,8 +7128,7 @@ void Document::FinishedParsing() {
   // Ensure Custom Element callbacks are drained before DOMContentLoaded.
   // FIXME: Remove this ad-hoc checkpoint when DOMContentLoaded is dispatched in
   // a queued task, which will do a checkpoint anyway. https://crbug.com/425790
-  if (!ScriptForbiddenScope::IsScriptForbidden())
-    Microtask::PerformCheckpoint(V8PerIsolateData::MainThreadIsolate());
+  agent_->event_loop()->PerformMicrotaskCheckpoint();
 
   ScriptableDocumentParser* parser = GetScriptableDocumentParser();
   well_formed_ = parser && parser->WellFormed();
@@ -6821,7 +7136,7 @@ void Document::FinishedParsing() {
   if (LocalFrame* frame = GetFrame()) {
     // Guarantee at least one call to the client specifying a title. (If
     // |title_| is not empty, then the title has already been dispatched.)
-    if (title_.IsEmpty())
+    if (title_.empty())
       DispatchDidReceiveTitle();
 
     // Don't update the layout tree if we haven't requested the main resource
@@ -6844,16 +7159,6 @@ void Document::FinishedParsing() {
     BeginLifecycleUpdatesIfRenderingReady();
 
     frame->Loader().FinishedParsing();
-
-    if (parser) {
-      if (SourceKeyedCachedMetadataHandler* metadata_handler =
-              parser->GetInlineScriptCacheHandler()) {
-        metadata_handler->LogUsageMetrics();
-      }
-    }
-
-    if (frame->GetFrameScheduler())
-      frame->GetFrameScheduler()->OnDomContentLoaded();
 
     if (ShouldMarkFontPerformance())
       FontPerformance::MarkDomContentLoaded();
@@ -6887,7 +7192,10 @@ void Document::BeginLifecycleUpdatesIfRenderingReady() {
     return;
   if (!HaveRenderBlockingResourcesLoaded())
     return;
-  rendering_has_begun_ = true;
+  if (!rendering_has_begun_) {
+    RenderBlockingMetricsReporter::From(*this).RenderBlockingResourcesLoaded();
+    rendering_has_begun_ = true;
+  }
   // TODO(japhet): If IsActive() is true, View() should always be non-null.
   // Speculative fix for https://crbug.com/1171891
   if (auto* view = View()) {
@@ -6927,7 +7235,7 @@ Vector<IconURL> Document::IconURLs(int icon_types_mask) {
     if (link_element->Href().IsEmpty())
       continue;
 
-    if (!link_element->Media().IsEmpty()) {
+    if (!link_element->Media().empty()) {
       auto* media_query =
           GetMediaQueryMatcher().MatchMedia(link_element->Media());
       if (!media_query->matches())
@@ -6997,7 +7305,7 @@ absl::optional<Color> Document::ThemeColor() {
   // tree order that matches and is valid.
   // https://html.spec.whatwg.org/multipage/semantics.html#meta-theme-color
   for (auto& element : meta_theme_color_elements_) {
-    if (!element->Media().IsEmpty()) {
+    if (!element->Media().empty()) {
       auto* media_query = GetMediaQueryMatcher().MatchMedia(
           element->Media().GetString().StripWhiteSpace());
       if (!media_query->matches())
@@ -7314,7 +7622,7 @@ HTMLDialogElement* Document::ActiveModalDialog() const {
 Element* Document::TopmostPopupAutoOrHint() const {
   if (PopupHintShowing())
     return PopupHintShowing();
-  if (PopupStack().IsEmpty())
+  if (PopupStack().empty())
     return nullptr;
   return PopupStack().back();
 }
@@ -7322,7 +7630,7 @@ Element* Document::TopmostPopupAutoOrHint() const {
 void Document::SetPopUpMousedownTarget(const Element* pop_up) {
   DCHECK(
       RuntimeEnabledFeatures::HTMLPopupAttributeEnabled(GetExecutionContext()));
-  DCHECK(!pop_up || pop_up->HasValidPopupAttribute());
+  DCHECK(!pop_up || pop_up->HasPopupAttribute());
   pop_up_mousedown_target_ = pop_up;
 }
 
@@ -7641,7 +7949,7 @@ bool Document::HaveRenderBlockingResourcesLoaded() const {
 
 Locale& Document::GetCachedLocale(const AtomicString& locale) {
   AtomicString locale_key = locale;
-  if (locale.IsEmpty() ||
+  if (locale.empty() ||
       !RuntimeEnabledFeatures::LangAttributeAwareFormControlUIEnabled())
     return Locale::DefaultLocale();
   LocaleIdentifierToLocaleMap::AddResult result =
@@ -7762,7 +8070,7 @@ void Document::FlushAutofocusCandidates() {
     return;
 
   // 3. If candidates is empty, then return.
-  if (autofocus_candidates_.IsEmpty())
+  if (autofocus_candidates_.empty())
     return;
 
   // 4. If topDocument's focused area is not topDocument itself, or
@@ -7793,7 +8101,7 @@ void Document::FlushAutofocusCandidates() {
   }
 
   // 5. While candidates is not empty:
-  while (!autofocus_candidates_.IsEmpty()) {
+  while (!autofocus_candidates_.empty()) {
     // 5.1. Let element be candidates[0].
     Element& element = *autofocus_candidates_[0];
 
@@ -8081,7 +8389,7 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(popup_stack_);
   visitor->Trace(pop_up_mousedown_target_);
   visitor->Trace(popups_waiting_to_hide_);
-  visitor->Trace(all_open_pop_ups_);
+  visitor->Trace(elements_needing_style_recalc_for_toggle_);
   visitor->Trace(load_event_delay_timer_);
   visitor->Trace(plugin_loading_timer_);
   visitor->Trace(elem_sheet_);
@@ -8118,6 +8426,7 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(pending_animations_);
   visitor->Trace(worklet_animation_controller_);
   visitor->Trace(execution_context_);
+  visitor->Trace(agent_);
   visitor->Trace(canvas_font_cache_);
   visitor->Trace(intersection_observer_controller_);
   visitor->Trace(snap_coordinator_);
@@ -8142,6 +8451,8 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(anchor_element_interaction_tracker_);
   visitor->Trace(focused_element_change_observers_);
   visitor->Trace(pending_link_header_preloads_);
+  visitor->Trace(event_node_path_cache_);
+  visitor->Trace(event_node_path_cache_key_list_);
   Supplementable<Document>::Trace(visitor);
   TreeScope::Trace(visitor);
   ContainerNode::Trace(visitor);
@@ -8221,9 +8532,10 @@ void Document::ProcessJavaScriptUrl(
   GetFrame()->Loader().Progress().ProgressStarted();
   pending_javascript_urls_.push_back(PendingJavascriptUrl(url, world));
   if (!javascript_url_task_handle_.IsActive()) {
-    javascript_url_task_handle_ = PostCancellableTask(
-        *GetTaskRunner(TaskType::kNetworking), FROM_HERE,
-        WTF::Bind(&Document::ExecuteJavaScriptUrls, WrapWeakPersistent(this)));
+    javascript_url_task_handle_ =
+        PostCancellableTask(*GetTaskRunner(TaskType::kNetworking), FROM_HERE,
+                            WTF::BindOnce(&Document::ExecuteJavaScriptUrls,
+                                          WrapWeakPersistent(this)));
   }
 }
 
@@ -8242,7 +8554,7 @@ bool Document::IsInWebAppScope() const {
     return false;
 
   const String& web_app_scope = GetSettings()->GetWebAppScope();
-  if (web_app_scope.IsNull() || web_app_scope.IsEmpty())
+  if (web_app_scope.IsNull() || web_app_scope.empty())
     return false;
 
   DCHECK_EQ(KURL(web_app_scope).GetString(), web_app_scope);
@@ -8490,11 +8802,24 @@ void Document::WriteIntoTrace(perfetto::TracedValue ctx) const {
   dict.Add("url", Url());
 }
 
+bool Document::DeferredCompositorCommitIsAllowed() const {
+  // Don't defer commits if a transition is in progress. It requires commits to
+  // send directives to the compositor and uses a separate mechanism to pause
+  // all rendering when needed.
+  auto* supplement = DocumentTransitionSupplement::FromIfExists(*this);
+  if (supplement && !supplement->GetTransition()->IsIdle())
+    return false;
+
+  return deferred_compositor_commit_is_allowed_;
+}
+
 Document::PaintPreviewScope::PaintPreviewScope(Document& document,
                                                PaintPreviewState state)
     : document_(document) {
   document_.paint_preview_ = state;
   document_.GetDisplayLockDocumentState().NotifyPrintingOrPreviewChanged();
+  if (auto* ds_controller = DeferredShapingController::From(document_))
+    ds_controller->ReshapeAllDeferred(ReshapeReason::kPrinting);
 }
 
 Document::PaintPreviewScope::~PaintPreviewScope() {
@@ -8512,6 +8837,62 @@ Document::PendingJavascriptUrl::~PendingJavascriptUrl() = default;
 void Document::CheckPartitionedCookiesOriginTrial(
     const ResourceResponse& response) {
   cookie_jar_->CheckPartitionedCookiesOriginTrial(response);
+}
+
+static wtf_size_t MaxEventNodePathCachedEntriesValue() {
+  // The cache stores N entries/nodes that are receiving events simultaneously
+  // in a document. The size of this cache will be O(kN) where k is the average
+  // tree depth of the stored nodes.
+  static const wtf_size_t kMaxEventNodePathCachedEntriesValue =
+      features::kDocumentMaxEventNodePathCachedEntries.Get();
+  return kMaxEventNodePathCachedEntriesValue;
+}
+
+static bool EventNodePathCachingEnabled() {
+  // Cache the feature value since checking for each event path regresses
+  // performance.
+  static const bool kEnabled =
+      base::FeatureList::IsEnabled(features::kDocumentEventNodePathCaching);
+  return kEnabled;
+}
+
+const EventPath::NodePath& Document::GetOrCalculateEventNodePath(Node& node) {
+  DCHECK(EventNodePathCachingEnabled());
+  if (event_node_path_dom_tree_version_ != dom_tree_version_) {
+    if (!event_node_path_cache_.empty()) {
+      event_node_path_cache_.clear();
+      event_node_path_cache_key_list_.clear();
+    } else {
+      DCHECK(event_node_path_cache_key_list_.empty());
+    }
+    event_node_path_dom_tree_version_ = dom_tree_version_;
+  }
+
+  EventPath::NodePath* event_node_path = nullptr;
+  {
+    // Keep `result` within own scope to avoid dangling references into cache,
+    // because it might get modified during pruning.
+    auto result = event_node_path_cache_.insert(&node, nullptr);
+    if (result.is_new_entry) {
+      EventPath::NodePath node_path = EventPath::CalculateNodePath(node);
+      result.stored_value->value =
+          MakeGarbageCollected<EventPath::NodePath>(std::move(node_path));
+    }
+    event_node_path = result.stored_value->value;
+  }
+  event_node_path_cache_key_list_.PrependOrMoveToFirst(&node);
+
+  // Prune oldest cached node if size is bigger than max.
+  wtf_size_t max_entries = MaxEventNodePathCachedEntriesValue();
+  if (event_node_path_cache_key_list_.size() > max_entries) {
+    DCHECK_EQ(event_node_path_cache_key_list_.size(), max_entries + 1);
+    event_node_path_cache_.erase(event_node_path_cache_key_list_.back());
+    event_node_path_cache_key_list_.pop_back();
+  }
+
+  DCHECK_EQ(event_node_path_cache_.size(),
+            event_node_path_cache_key_list_.size());
+  return *event_node_path;
 }
 
 template class CORE_TEMPLATE_EXPORT Supplement<Document>;

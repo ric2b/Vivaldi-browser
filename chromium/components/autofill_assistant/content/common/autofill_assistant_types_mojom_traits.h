@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,10 @@ struct StructTraits<autofill_assistant::mojom::NodeDataDataView,
                     autofill_assistant::NodeData> {
   static int32_t backend_node_id(const autofill_assistant::NodeData& r) {
     return r.backend_node_id;
+  }
+
+  static bool used_override(const autofill_assistant::NodeData& r) {
+    return r.used_override;
   }
 
   static bool Read(autofill_assistant::mojom::NodeDataDataView data,

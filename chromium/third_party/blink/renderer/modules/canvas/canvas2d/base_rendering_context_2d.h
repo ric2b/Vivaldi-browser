@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -504,9 +504,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   bool ShouldDrawImageAntialiased(const gfx::RectF& dest_rect) const;
 
-  void SetTransform(const TransformationMatrix&);
+  void SetTransform(const AffineTransform&);
 
-  TransformationMatrix GetTransform() const override;
+  AffineTransform GetTransform() const override;
 
   bool StateHasFilter();
 
@@ -752,7 +752,7 @@ void BaseRenderingContext2D::Draw(
 
   if (UNLIKELY(GetState().IsFilterUnresolved())) {
     // Resolving a filter requires allocating garbage-collected objects.
-    PostDeferrableAction(WTF::Bind(
+    PostDeferrableAction(WTF::BindOnce(
         &BaseRenderingContext2D::DrawInternal<CurrentOverdrawOp, DrawFunc,
                                               DrawCoversClipBoundsFunc>,
         WrapPersistent(this), draw_func, draw_covers_clip_bounds, bounds,
@@ -863,7 +863,7 @@ void BaseRenderingContext2D::AdjustRectForCanvas(T& x,
 }
 
 ALWAYS_INLINE void BaseRenderingContext2D::SetTransform(
-    const TransformationMatrix& matrix) {
+    const AffineTransform& matrix) {
   GetState().SetTransform(matrix);
   SetIsTransformInvertible(matrix.IsInvertible());
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Merge results from code-coverage/pgo swarming runs.
@@ -182,7 +182,8 @@ def main():
         'This script was told to merge test results, but no additional merge '
         'script was given.')
 
-  return 1 if (failed or bool(invalid_profiles)) else 0
+  # TODO(crbug.com/1369158): Return non-zero if invalid_profiles is not None
+  return 1 if failed else 0
 
 
 if __name__ == '__main__':

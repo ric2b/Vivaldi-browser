@@ -1,4 +1,4 @@
-/// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -125,6 +125,91 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHBatterySaverModeFeature.name == feature->name) {
+    // Show promo once a year when the battery saver toolbar icon is visible.
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->trigger = EventConfig("battery_saver_info_triggered",
+                                  Comparator(EQUAL, 0), 360, 360);
+    config->used =
+        EventConfig("battery_saver_info_shown", Comparator(EQUAL, 0), 7, 360);
+    return config;
+  }
+
+  if (kIPHHighEfficiencyInfoModeFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    // Show the promo once a year if the page action chip was not opened
+    // within the last week
+    config->trigger = EventConfig("high_efficiency_info_trigger",
+                                  Comparator(EQUAL, 0), 360, 360);
+    config->used =
+        EventConfig("high_efficiency_info_shown", Comparator(EQUAL, 0), 7, 360);
+    return config;
+  }
+
+  if (kIPHHighEfficiencyModeFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    // Show the promo max 3 times, once per day.
+    config->trigger = EventConfig("high_efficiency_prompt_in_trigger",
+                                  Comparator(LESS_THAN, 1), 1, 360);
+    // This event is never logged but is included for consistency.
+    config->used = EventConfig("high_efficiency_prompt_in_used",
+                               Comparator(EQUAL, 0), 360, 360);
+    config->event_configs.insert(
+        EventConfig("high_efficiency_prompt_in_trigger",
+                    Comparator(LESS_THAN, 3), 360, 360));
+    return config;
+  }
+
+  if (kIPHPerformanceNewBadgeFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->session_rate_impact.type = SessionRateImpact::Type::NONE;
+    // Show the new badge max 20 times within a year
+    config->trigger = EventConfig("performance_new_badge_shown",
+                                  Comparator(LESS_THAN, 20), 360, 360);
+
+    // Badge stops showing after the user uses it 3 times
+    config->used = EventConfig("performance_activated",
+                               Comparator(LESS_THAN, 3), 360, 360);
+    return config;
+  }
+
+  if (kIPHPriceTrackingInSidePanelFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    // Show the promo once a year if the price tracking IPH was not triggered.
+    config->trigger = EventConfig("iph_price_tracking_side_panel_trigger",
+                                  Comparator(EQUAL, 0), 360, 360);
+    config->used = EventConfig("price_tracking_side_panel_shown",
+                               Comparator(EQUAL, 0), 360, 360);
+    return config;
+  }
+
+  if (kIPHPriceTrackingPageActionIconLabelFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    // Show the promo once per day.
+    config->trigger =
+        EventConfig("price_tracking_page_action_icon_label_in_trigger",
+                    Comparator(LESS_THAN, 1), 1, 360);
+    return config;
+  }
+
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS)
 
@@ -214,26 +299,25 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
                                              Comparator(LESS_THAN, 1), 1, 360));
     return config;
   }
-  if (kIPHContextualPageActionsPriceTrackingFeature.name == feature->name) {
-    // A config that allows the Price Tracking IPH to be shown:
+  if (kIPHContextualPageActionsQuietVariantFeature.name == feature->name) {
+    // A config that allows the contextual page action IPH to be shown:
     // * Once per day. 3 times max in 90 days
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
     config->availability = Comparator(ANY, 0);
     config->session_rate = Comparator(EQUAL, 0);
     config->trigger =
-        EventConfig("contextual_page_actions_price_tracking_iph_trigger",
+        EventConfig("contextual_page_actions_quiet_variant_iph_trigger",
                     Comparator(LESS_THAN, 1), 1, 360);
-    config->used = EventConfig("contextual_page_actions_price_tracking_used",
+    config->used = EventConfig("contextual_page_actions_quiet_variant_used",
                                Comparator(EQUAL, 0), 90, 360);
     config->event_configs.insert(
-        EventConfig("contextual_page_actions_price_tracking_iph_trigger",
+        EventConfig("contextual_page_actions_quiet_variant_iph_trigger",
                     Comparator(LESS_THAN, 3), 90, 360));
     return config;
   }
-  if (kIPHContextualPageActionsPriceTrackingActionChipFeature.name ==
-      feature->name) {
-    // A config that allows the Price Tracking Action Chip to be shown:
+  if (kIPHContextualPageActionsActionChipFeature.name == feature->name) {
+    // A config that allows the Contextual Page Action Chip to be shown:
     // * 3 times per session.
     // * 5 times per day.
     // * 10 times per week.
@@ -241,12 +325,12 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     config->valid = true;
     config->availability = Comparator(ANY, 0);
     config->session_rate = Comparator(LESS_THAN, 3);
-    config->trigger = EventConfig(
-        "contextual_page_actions_price_tracking_action_chip_iph_trigger",
-        Comparator(LESS_THAN, 5), 1, 360);
-    config->event_configs.insert(EventConfig(
-        "contextual_page_actions_price_tracking_action_chip_iph_trigger",
-        Comparator(LESS_THAN, 10), 7, 360));
+    config->trigger =
+        EventConfig("contextual_page_actions_action_chip_iph_trigger",
+                    Comparator(LESS_THAN, 5), 1, 360);
+    config->event_configs.insert(
+        EventConfig("contextual_page_actions_action_chip_iph_trigger",
+                    Comparator(LESS_THAN, 10), 7, 360));
     return config;
   }
   if (kIPHAddToHomescreenMessageFeature.name == feature->name) {
@@ -935,6 +1019,44 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) ||
         // BUILDFLAG(IS_FUCHSIA)
+
+#if BUILDFLAG(IS_IOS)
+  if (kIPHDefaultSiteViewFeature.name == feature->name) {
+    // A config that shows an IPH on the overflow menu button advertising the
+    // Default Page Mode feature when the user has requested the Desktop version
+    // of a website 3 times in 60 days. It will be shown every other year unless
+    // the user interacted with the setting in the past 2 years.
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->used =
+        EventConfig("default_site_view_used", Comparator(EQUAL, 0), 720, 720);
+    config->trigger =
+        EventConfig("default_site_view_shown", Comparator(EQUAL, 0), 720, 720);
+    config->event_configs.insert(
+        EventConfig("desktop_version_requested",
+                    Comparator(GREATER_THAN_OR_EQUAL, 3), 60, 60));
+    return config;
+  }
+
+  if (kIPHWhatsNewFeature.name == feature->name) {
+    // A config that allows a user education bubble to be shown for the bottom
+    // toolbar. After the promo manager dismisses What's New promo, the user
+    // education bubble will be shown once. This can only occur once every a
+    // year.
+
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(EQUAL, 0);
+    config->trigger =
+        EventConfig("whats_new_trigger", Comparator(EQUAL, 0), 360, 360);
+    config->used =
+        EventConfig("whats_new_used", Comparator(EQUAL, 0), 360, 360);
+    return config;
+  }
+#endif  // BUILDFLAG(IS_IOS)
 
   if (kIPHDummyFeature.name == feature->name) {
     // Only used for tests. Various magic tricks are used below to ensure this

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -230,7 +230,7 @@ bool XDGPopupWrapperImpl::SetBounds(const gfx::Rect& new_bounds) {
   xdg_popup_reposition(xdg_popup_.get(), positioner.get(),
                        ++next_reposition_token_);
 
-  connection_->ScheduleFlush();
+  connection_->Flush();
   return true;
 }
 

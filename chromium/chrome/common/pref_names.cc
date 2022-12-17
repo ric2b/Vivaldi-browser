@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -478,6 +478,15 @@ const char kHideWebStoreIcon[] = "hide_web_store_icon";
 // attestation.
 const char kAttestationExtensionAllowlist[] = "attestation.extension_allowlist";
 
+// A boolean specifying whether the Desk API is enabled for third party web
+// applications. If set to true, the Desk API bridge component extension will be
+// installed.
+const char kDeskAPIThirdPartyAccessEnabled[] =
+    "desk_api.third_party_access_enabled";
+
+// A list of third party web application domains allowed to use the Desk API.
+const char kDeskAPIThirdPartyAllowlist[] = "desk_api.third_party_allowlist";
+
 // The list of extensions allowed to skip print job confirmation dialog when
 // they use the chrome.printing.submitJob() function. Note that this used to be
 // `kPrintingAPIExtensionsWhitelist`, hence the difference between the variable
@@ -898,6 +907,15 @@ const char kHatsPhotosExperienceCycleEndTs[] =
 const char kHatsPhotosExperienceIsSelected[] =
     "hats_photos_experience_is_selected";
 
+// An int64 pref. This is the timestamp, microseconds after epoch, that
+// indicated the end of the most recent general camera survey cycle.
+const char kHatsGeneralCameraSurveyCycleEndTs[] =
+    "hats_general_camera_cycle_end_timestamp";
+
+// A boolean pref. Indicated if the device is selected for the general camera
+// survey.
+const char kHatsGeneralCameraIsSelected[] = "hats_general_camera_is_selected";
+
 // A boolean pref. Indicates if we've already shown a notification to inform the
 // current user about the quick unlock feature.
 const char kPinUnlockFeatureNotificationShown[] =
@@ -1251,7 +1269,8 @@ const char kUseAshProxy[] = "lacros.proxy.use_ash_proxy";
 // of lacros-chrome is complete.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // Linux specific preference on whether we should match the system theme.
-const char kUsesSystemTheme[] = "extensions.theme.use_system";
+const char kUsesSystemThemeDeprecated[] = "extensions.theme.use_system";
+const char kSystemTheme[] = "extensions.theme.system_theme";
 #endif
 const char kCurrentThemePackFilename[] = "extensions.theme.pack";
 const char kCurrentThemeID[] = "extensions.theme.id";
@@ -1338,6 +1357,20 @@ const char kAccessibilityFocusHighlightEnabled[] =
 // accessibility feature that simulates forced colors mode at the browser level.
 const char kPageColors[] = "settings.a11y.page_colors";
 
+// Boolean Pref that indicates whether the user wants to enable page colors only
+// when the OS is in an Increased Contrast mode such as High Contrast on Windows
+// or Increased Contrast on Mac.
+const char kApplyPageColorsOnlyOnIncreasedContrast[] =
+    "settings.a11y.apply_page_colors_only_on_increased_contrast";
+
+#if BUILDFLAG(IS_WIN)
+// Boolean that indicates what the default page colors state should be. When
+// true, page colors will be 'High Contrast' when OS High Contrast is turned on,
+// otherwise page colors will remain 'Off'.
+const char kIsDefaultPageColorsOnHighContrast[] =
+    "settings.a11y.is_default_page_colors_on_high_contrast";
+#endif  // BUILDFLAG(IS_WIN)
+
 #if BUILDFLAG(IS_MAC)
 // Boolean that indicates whether the application should show the info bar
 // asking the user to set up automatic updates when Keystone promotion is
@@ -1355,8 +1388,10 @@ const char kUseCustomChromeFrame[] = "browser.custom_chrome_frame";
 #endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-// Which plugins have been whitelisted manually by the user.
-const char kContentSettingsPluginWhitelist[] =
+// Which plugins have been allowed manually by the user.
+// Note that this used to be `kContentSettingsPluginWhitelist`, hence the
+// difference between the variable name and the string value.
+const char kContentSettingsPluginAllowlist[] =
     "profile.content_settings.plugin_whitelist";
 #endif
 
@@ -1583,6 +1618,10 @@ const char kPrintJobHistoryExpirationPeriod[] =
 // deleted.
 const char kDeletePrintJobHistoryAllowed[] =
     "printing.delete_print_job_history_allowed";
+
+// String representing a template for the 'client-name' IPP attribute
+// configured by the administrator
+const char kPrintingClientNameTemplate[] = "printing.client_name_template";
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // An integer pref specifying the fallback behavior for sites outside of content
@@ -1765,13 +1804,6 @@ const char kManagedWebHidAllowDevicesWithHidUsagesForUrls[] =
     "managed.web_hid_allow_devices_with_hid_usages_for_urls";
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if !BUILDFLAG(IS_ANDROID)
-// Boolean indicating whether the user has given consent to use Autofill
-// Assistant. Prefs are not synced across devices or platforms and pref
-// keys differ.
-const char kAutofillAssistantOnDesktopEnabled[] = "autofill_assistant.enabled";
-#endif  // !BUILDFLAG(IS_ANDROID)
-
 // Directory of the last profile used.
 const char kProfileLastUsed[] = "profile.last_used";
 
@@ -1894,6 +1926,13 @@ const char kDefaultTasksByMimeType[] = "filebrowser.tasks.default_by_mime_type";
 
 // Map of default tasks, associated by file suffix.
 const char kDefaultTasksBySuffix[] = "filebrowser.tasks.default_by_suffix";
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// Maps file extensions to handlers according to the
+// DefaultHandlersForFileExtensions policy.
+const char kDefaultHandlersForFileExtensions[] =
+    "filebrowser.default_handlers_for_file_extensions";
+#endif
 
 // A flag to enable/disable the Shared Clipboard feature which enables users to
 // send text across devices.
@@ -2235,7 +2274,7 @@ const char kAuthAndroidNegotiateAccountType[] =
 const char kAllowCrossOriginAuthPrompt[] = "auth.allow_cross_origin_prompt";
 
 // Boolean that specifies whether cached (server) auth credentials are separated
-// by NetworkIsolationKey.
+// by NetworkAnonymizationKey.
 const char kGloballyScopeHTTPAuthCacheEnabled[] =
     "auth.globally_scoped_http_auth_cache_enabled";
 
@@ -2266,6 +2305,12 @@ const char kNtlmV2Enabled[] = "auth.ntlm_v2_enabled";
 #if BUILDFLAG(IS_CHROMEOS)
 // Boolean whether Kerberos functionality is enabled.
 const char kKerberosEnabled[] = "kerberos.enabled";
+
+// A list of dictionaries for force-installed Isolated Web Apps. Each dictionary
+// contains two strings: the update manifest URL and Web Bundle ID of the
+// Isolated Web App,
+const char kIsolatedWebAppInstallForceList[] =
+    "profile.isolated_web_app.install.forcelist";
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Boolean that specifies whether to enable revocation checking (best effort)
@@ -2481,11 +2526,6 @@ const char kDeviceEnrollmentCanExit[] = "enrollment.can_exit";
 // DM token fetched from the DM server during enrollment. Stored for Active
 // Directory devices only.
 const char kDeviceDMToken[] = "device_dm_token";
-
-// Dictionary of per-user last input method (used at login screen). Note that
-// the pref name is UsersLRUInputMethods for compatibility with previous
-// versions.
-const char kUsersLastInputMethod[] = "UsersLRUInputMethod";
 
 // Key name of a dictionary in local state to store cached multiprofle user
 // behavior policy value.
@@ -2938,6 +2978,10 @@ const char kEchoCheckedOffers[] = "EchoCheckedOffers";
 // for managed users is false.
 const char kLacrosSecondaryProfilesAllowed[] =
     "lacros_secondary_profiles_allowed";
+// String pref indicating what to do when Lacros is disabled and we go back
+// to using Ash.
+const char kLacrosDataBackwardMigrationMode[] =
+    "lacros_data_backward_migration_mode";
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Device identifier used by CryptAuth stored in local state. This ID is
@@ -3242,18 +3286,6 @@ const char kIsolateOrigins[] = "site_isolation.isolate_origins";
 // Boolean that specifies opting into --site-per-process (full Site Isolation).
 const char kSitePerProcess[] = "site_isolation.site_per_process";
 
-// Boolean that is true when the display-capture permissions-policy is enabled.
-// This permissions-policy gates access to getDisplayMedia(), as per this spec:
-// https://www.w3.org/TR/screen-capture/#feature-policy-integration
-// However, if kDisplayCapturePermissionsPolicyEnabled is set to |false|,
-// this requirement is not enforced, and getDisplayMedia() is allowed from
-// contexts that would otherwise be forbidden.
-// This Enterprise policy is temporary. It is intended to unblock Enterprise
-// users whose application is non-spec compliant, but needs time to be fixed.
-// TODO(crbug.com/1233969): Remove this around m100.
-extern const char kDisplayCapturePermissionsPolicyEnabled[] =
-    "display_capture_permissions_policy_enabled";
-
 #if !BUILDFLAG(IS_ANDROID)
 // Boolean to allow SharedArrayBuffer in non-crossOriginIsolated contexts.
 // TODO(crbug.com/1144104) Remove when migration to COOP+COEP is complete.
@@ -3320,19 +3352,10 @@ const char kCACertificateManagementAllowed[] =
     "ca_certificate_management_allowed";
 #endif
 
-#if BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
-// Boolean that specifies whether the built-in certificate verifier should be
-// used. If false, Chrome will use the platform certificate verifier. If not
-// set, Chrome will choose the certificate verifier based on experiments.
-const char kBuiltinCertificateVerifierEnabled[] =
-    "builtin_certificate_verifier_enabled";
-#endif
-
 #if BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
 // Boolean that specifies whether the Chrome Root Store and built-in
 // certificate verifier should be used. If false, Chrome will not use the
-// Chrome Root Store. (The built-in certificate verifier may or may not be used
-// depending on the state of kBuiltinCertificateVerifierEnabled, if supported.)
+// Chrome Root Store.
 // If not set, Chrome will choose the root store based on experiments.
 const char kChromeRootStoreEnabled[] = "chrome_root_store_enabled";
 #endif
@@ -3574,5 +3597,35 @@ const char kSCTAuditingHashdanceReportCount[] =
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kConsumerAutoUpdateToggle[] = "settings.consumer_auto_update_toggle";
 #endif
+
+#if !BUILDFLAG(IS_ANDROID)
+// An integer count of how many times the user has seen the high efficiency mode
+// page action chip in the expanded size.
+const char kHighEfficiencyChipExpandedCount[] =
+    "high_efficiency.chip_expanded_count";
+
+// A boolean indicating whether the price track first user experience bubble
+// should show. This is set to false if the user has clicked the "Price track"
+// button in the FUE bubble once.
+const char kShouldShowPriceTrackFUEBubble[] =
+    "should_show_price_track_fue_bubble_fue";
+
+// A boolean indicating whether we should show the bookmark tab for the next
+// side panel opening. Right now this is only used by Price Tracking feature
+// to show the bookmark tab (which contains the price tracking list) after
+// IPH.
+const char kShouldShowSidePanelBookmarkTab[] =
+    "should_show_side_panel_bookmark_tab";
+#endif
+
+const char kStrictMimetypeCheckForWorkerScriptsEnabled[] =
+    "strict_mime_type_check_for_worker_scripts_enabled";
+
+#if BUILDFLAG(IS_ANDROID)
+// If true, the virtual keyboard will resize the layout viewport by default.
+// Has no effect otherwise.
+const char kVirtualKeyboardResizesLayoutByDefault[] =
+    "virtual_keyboard_resizes_layout_by_default";
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace prefs

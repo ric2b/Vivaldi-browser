@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,7 +37,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityClientWrappers.Connection;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityClientWrappers.ConnectionPool;
-import org.chromium.chrome.browser.browserservices.constants.LocationUpdateError;
 import org.chromium.chrome.browser.browserservices.metrics.TrustedWebActivityUmaRecorder;
 import org.chromium.chrome.browser.browserservices.metrics.TrustedWebActivityUmaRecorder.DelegatedNotificationSmallIconFallback;
 import org.chromium.chrome.browser.browserservices.permissiondelegation.InstalledWebappPermissionManager;
@@ -498,6 +497,5 @@ public class TrustedWebActivityClient {
         Bundle error = new Bundle();
         error.putString("message", message);
         callback.onExtraCallback(EXTRA_NEW_LOCATION_ERROR_CALLBACK, error);
-        mRecorder.recordLocationUpdateError(LocationUpdateError.NO_TWA);
     }
 }

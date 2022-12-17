@@ -1,11 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/web/web_state_delegate_browser_agent.h"
 
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
@@ -61,7 +61,7 @@ class WebStateDelegateBrowserAgentTest : public PlatformTest {
     std::unique_ptr<web::WebState> web_state =
         web::WebState::Create(create_params);
     BlockedPopupTabHelper::CreateForWebState(web_state.get());
-    SnapshotTabHelper::CreateForWebState(web_state.get(), @"tab1");
+    SnapshotTabHelper::CreateForWebState(web_state.get());
     web_state->GetNavigationManager()->LoadURLWithParams(load_params);
 
     WebStateOpener opener;

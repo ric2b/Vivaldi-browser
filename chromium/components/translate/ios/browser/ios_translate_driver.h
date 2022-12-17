@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,9 +46,6 @@ class IOSTranslateDriver
     return language_detection_controller_.get();
   }
 
-  TranslateController* translate_controller() {
-    return translate_controller_.get();
-  }
   void OnLanguageModelFileAvailabilityChanged(bool available);
 
   // web::WebStateObserver methods.
@@ -91,10 +88,10 @@ class IOSTranslateDriver
   bool IsPageValid(int page_seq_no) const;
 
   // TranslateController::Observer methods.
-  void OnTranslateScriptReady(TranslateErrors::Type error_type,
+  void OnTranslateScriptReady(TranslateErrors error_type,
                               double load_time,
                               double ready_time) override;
-  void OnTranslateComplete(TranslateErrors::Type error_type,
+  void OnTranslateComplete(TranslateErrors error_type,
                            const std::string& source_language,
                            double translation_time) override;
 
@@ -109,7 +106,6 @@ class IOSTranslateDriver
   web::WebState* web_state_ = nullptr;
 
   base::WeakPtr<TranslateManager> translate_manager_;
-  std::unique_ptr<TranslateController> translate_controller_;
   std::unique_ptr<LanguageDetectionController> language_detection_controller_;
 
   LanguageDetectionModelService* language_detection_model_service_ = nullptr;

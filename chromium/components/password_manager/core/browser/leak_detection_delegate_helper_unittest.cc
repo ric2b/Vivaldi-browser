@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -109,13 +109,15 @@ class LeakDetectionDelegateHelperTest
       std::vector<PasswordForm> password_forms) {
     EXPECT_CALL(*store_, GetAutofillableLogins)
         .WillOnce(testing::WithArg<0>(
-            [password_forms](base::WeakPtr<PasswordStoreConsumer> consumer) {
+            [password_forms, store = store_.get()](
+                base::WeakPtr<PasswordStoreConsumer> consumer) {
               std::vector<std::unique_ptr<PasswordForm>> results;
               for (auto& form : password_forms) {
                 results.push_back(
                     std::make_unique<PasswordForm>(std::move(form)));
               }
-              consumer->OnGetPasswordStoreResults(std::move(results));
+              consumer->OnGetPasswordStoreResultsOrErrorFrom(
+                  store, std::move(results));
             }));
   }
 

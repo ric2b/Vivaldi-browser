@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -201,6 +201,18 @@ class Color:
 
         if not parsed:
             raise ValueError('Malformed color value')
+
+    def GetFormula(self):
+        if self.blended_colors:
+            return 'blend(%s, %s)' % (self.blended_colors[0].GetFormula(),
+                                      self.blended_colors[1].GetFormula())
+        if self.var:
+            return self.var
+        if self.rgb_var:
+            a = self.opacity.GetReadableStr()
+            return '%s @ %s' % (self.rgb_var, a)
+        a = repr(self.opacity)
+        return 'rgba(%d, %d, %d, %s)' % (self.r, self.g, self.b, a)
 
     def __repr__(self):
         a = repr(self.opacity)

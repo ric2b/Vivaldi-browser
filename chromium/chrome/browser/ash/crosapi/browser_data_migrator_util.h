@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -134,6 +134,7 @@ constexpr const char* const kRemainInAshDataPaths[] = {
     "structured_metrics",
     "Sync Data",
     "Trusted Vault",
+    "trusted_vault.pb",
     "WebRTC Logs",
     "webrtc_event_logs",
     "zero_state_group_ranker.pb",
@@ -173,6 +174,7 @@ constexpr const char* const kLacrosDataPaths[]{
     "Service Worker",
     "Session Storage",
     "Sessions",
+    "SharedStorage",
     "Shortcuts",
     "Storage",
     "Sync App Settings",
@@ -180,17 +182,18 @@ constexpr const char* const kLacrosDataPaths[]{
     "Top Sites",
     "Visited Links",
     "Web Applications",
-    "Web Data"};
+    "Web Data",
+    "WebStorage"};
 
 // The base names of files/dirs that are required by both ash and lacros and
 // thus should be copied to lacros while keeping the original files/dirs in ash
 // data dir.
 constexpr const char* const kNeedCopyForMoveDataPaths[]{
-    "DNR Extension Rules", "Extension Cookies", "Policy", "shared_proto_db"};
+    "DNR Extension Rules", "Extension Cookies", "shared_proto_db"};
 
 // The same as `kNeedCopyDataPathsForMove` + "Preferences".
 constexpr const char* const kNeedCopyForCopyDataPaths[]{
-    "DNR Extension Rules", "Extension Cookies", "Policy", "Preferences",
+    "DNR Extension Rules", "Extension Cookies", "Preferences",
     "shared_proto_db"};
 
 // List of extension ids to be kept in Ash.
@@ -245,6 +248,10 @@ constexpr const char* const kStateStorePaths[] = {
 constexpr char kStorageFilePath[] = "Storage";
 constexpr char kStorageExtFilePath[] = "ext";
 
+// Values used for the kBrowserDataMigrationMode flag.
+constexpr char kCopySwitchValue[] = "copy";  // Corresponds to kCopy.
+constexpr char kMoveSwitchValue[] = "move";  // Corresponds to KMove.
+
 // The type of LevelDB schema.
 enum class LevelDBType {
   kLocalStorage = 0,
@@ -296,7 +303,7 @@ constexpr const char* kLacrosOnlyPreferencesKeys[] = {
 };
 
 // List of data types in Sync Data that have to stay in Ash and Ash only.
-static_assert(40 == syncer::GetNumModelTypes(),
+static_assert(42 == syncer::GetNumModelTypes(),
               "If adding a new sync data type, update the lists below if"
               " you want to keep the new data type in Ash only.");
 constexpr syncer::ModelType kAshOnlySyncDataTypes[] = {

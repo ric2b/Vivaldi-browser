@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,6 @@
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/action_after_pagehide.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_window.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_window_post_message_options.h"
@@ -38,6 +37,7 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -195,7 +195,7 @@ void DOMWindow::postMessage(v8::Isolate* isolate,
       WebFeature::kWindowProxyCrossOriginAccessFromOtherPagePostMessage);
   WindowPostMessageOptions* options = WindowPostMessageOptions::Create();
   options->setTargetOrigin(target_origin);
-  if (!transfer.IsEmpty())
+  if (!transfer.empty())
     options->setTransfer(transfer);
   postMessage(isolate, message, options, exception_state);
 }
@@ -440,7 +440,7 @@ void DOMWindow::focus(v8::Isolate* isolate) {
   if (!page)
     return;
 
-  if (!frame->ShouldAllowScriptFocus()) {
+  if (!frame->AllowFocusWithoutUserActivation()) {
     // Disallow script focus that crosses a fenced frame boundary on a
     // frame that doesn't have transient user activation. Note: all calls to
     // DOMWindow::focus come from JavaScript calls in the web platform
@@ -538,8 +538,8 @@ void DOMWindow::InstallCoopAccessMonitor(
   // TODO(arthursonzogni): Consider observing |accessing_main_frame| deletion
   // instead.
   monitor.reporter.set_disconnect_handler(
-      WTF::Bind(&DOMWindow::DisconnectCoopAccessMonitor,
-                WrapWeakPersistent(this), monitor.accessing_main_frame));
+      WTF::BindOnce(&DOMWindow::DisconnectCoopAccessMonitor,
+                    WrapWeakPersistent(this), monitor.accessing_main_frame));
 
   // As long as RenderDocument isn't shipped, it can exist a CoopAccessMonitor
   // for the same |accessing_main_frame|, because it might now host a different
@@ -567,7 +567,7 @@ void DOMWindow::InstallCoopAccessMonitor(
 // Check if the accessing context would be able to access this window if COOP
 // was enforced. If this isn't a report is sent.
 void DOMWindow::ReportCoopAccess(const char* property_name) {
-  if (coop_access_monitor_.IsEmpty())  // Fast early return. Very likely true.
+  if (coop_access_monitor_.empty())  // Fast early return. Very likely true.
     return;
 
   v8::Isolate* isolate = window_proxy_manager_->GetIsolate();
@@ -611,7 +611,7 @@ void DOMWindow::ReportCoopAccess(const char* property_name) {
 
     // TODO(arthursonzogni): Send the blocked-window-url.
 
-    auto location = SourceLocation::Capture(
+    auto location = CaptureSourceLocation(
         ExecutionContext::From(isolate->GetCurrentContext()));
     // TODO(arthursonzogni): Once implemented, use the SourceLocation typemap
     // https://chromium-review.googlesource.com/c/chromium/src/+/2041657
@@ -856,21 +856,18 @@ BlinkTransferableMessage
 DOMWindow::PostedMessage::ToBlinkTransferableMessage() && {
   BlinkTransferableMessage result;
 
-  // Message data and cluster ID (optional).
   result.message = std::move(data);
-  if (result.message->IsLockedToAgentCluster())
-    result.locked_agent_cluster_id = source->GetAgentClusterID();
+  result.sender_agent_cluster_id = source->GetAgentClusterID();
+  result.locked_to_sender_agent_cluster =
+      result.message->IsLockedToAgentCluster();
 
-  // Ports
   result.ports = std::move(channels);
 
-  // User activation
   if (user_activation) {
     result.user_activation = mojom::blink::UserActivationSnapshot::New(
         user_activation->hasBeenActive(), user_activation->isActive());
   }
 
-  // Capability delegation
   result.delegated_capability = delegated_capability;
 
   return result;

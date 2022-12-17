@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@ class IntegrationTestCommands
     : public base::RefCountedThreadSafe<IntegrationTestCommands> {
  public:
   virtual void EnterTestMode(const GURL& url) const = 0;
+  virtual void ExitTestMode() const = 0;
   virtual void SetGroupPolicies(const base::Value::Dict& values) const = 0;
   virtual void Clean() const = 0;
   virtual void ExpectClean() const = 0;
@@ -68,9 +69,10 @@ class IntegrationTestCommands
   virtual void DeleteUpdaterDirectory() const = 0;
   virtual void PrintLog() const = 0;
   virtual base::FilePath GetDifferentUserPath() const = 0;
-  virtual void WaitForUpdaterExit() const = 0;
+  [[nodiscard]] virtual bool WaitForUpdaterExit() const = 0;
 #if BUILDFLAG(IS_WIN)
   virtual void ExpectInterfacesRegistered() const = 0;
+  virtual void ExpectMarshalInterfaceSucceeds() const = 0;
   virtual void ExpectLegacyUpdate3WebSucceeds(
       const std::string& app_id,
       int expected_final_state,
@@ -100,7 +102,8 @@ class IntegrationTestCommands
   virtual void ExpectLastStarted() const = 0;
   virtual void UninstallApp(const std::string& app_id) const = 0;
 
-  virtual void RunOfflineInstall() = 0;
+  virtual void RunOfflineInstall(bool is_legacy_install,
+                                 bool is_silent_install) = 0;
 
  protected:
   friend class base::RefCountedThreadSafe<IntegrationTestCommands>;

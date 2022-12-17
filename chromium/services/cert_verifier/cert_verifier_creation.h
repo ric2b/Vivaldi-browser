@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,7 @@ bool IsUsingCertNetFetcher();
 // Creates a concrete net::CertVerifier based on the platform and the particular
 // build configuration. |creation_params| and |root_store_data| are optional.
 std::unique_ptr<net::CertVerifierWithUpdatableProc> CreateCertVerifier(
+    mojom::CertVerifierServiceParams* impl_params,
     mojom::CertVerifierCreationParams* creation_params,
     scoped_refptr<net::CertNetFetcher> cert_net_fetcher,
     const net::ChromeRootStoreData* root_store_data);

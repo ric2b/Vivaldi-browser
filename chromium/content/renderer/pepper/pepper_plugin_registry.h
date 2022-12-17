@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 #include <map>
 
 #include "base/memory/ref_counted.h"
-#include "content/public/common/pepper_plugin_info.h"
+#include "content/public/common/content_plugin_info.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
 
@@ -33,7 +33,7 @@ class PepperPluginRegistry {
   // return value will be NULL if there is no such plugin.
   //
   // The returned pointer is owned by the PluginRegistry.
-  const PepperPluginInfo* GetInfoForPlugin(const WebPluginInfo& info);
+  const ContentPluginInfo* GetInfoForPlugin(const WebPluginInfo& info);
 
   // Returns an existing loaded module for the given path. It will search for
   // both preloaded in-process or currently active (non crashed) out-of-process
@@ -59,7 +59,7 @@ class PepperPluginRegistry {
   void Initialize();
 
   // All known pepper plugins.
-  std::vector<PepperPluginInfo> plugin_list_;
+  std::vector<ContentPluginInfo> plugin_list_;
 
   // Plugins that have been preloaded so they can be executed in-process in
   // the renderer (the sandbox prevents on-demand loading).

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -93,6 +93,12 @@ public class CastContentWindowAndroid implements CastWebContentsComponent.OnComp
     private void enableTouchInput(boolean enabled) {
         if (DEBUG) Log.d(TAG, "enableTouchInput");
         mComponent.enableTouchInput(enabled);
+    }
+
+    @SuppressWarnings("unused")
+    @CalledByNative
+    private void setAllowPictureInPicture(boolean allowPictureInPicture) {
+        mComponent.setAllowPictureInPicture(allowPictureInPicture);
     }
 
     @SuppressWarnings("unused")

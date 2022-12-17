@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,14 +12,12 @@
 #include "base/gtest_prod_util.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
-#include "chrome/browser/ui/webui/settings/chromeos/os_settings_section.h"
+#include "chrome/browser/ui/webui/settings/ash/os_settings_section.h"
 #include "chromeos/ash/components/local_search_service/public/cpp/local_search_service_proxy.h"
 #include "chromeos/ash/components/local_search_service/public/mojom/index.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
-namespace chromeos {
-
-namespace settings {
+namespace ash::settings {
 
 struct SearchConcept;
 
@@ -60,8 +58,8 @@ class SearchTagRegistry {
     std::unordered_map<std::string, ConceptWithShouldAddBool> pending_updates_;
   };
 
-  SearchTagRegistry(local_search_service::LocalSearchServiceProxy*
-                        local_search_service_proxy);
+  explicit SearchTagRegistry(local_search_service::LocalSearchServiceProxy*
+                                 local_search_service_proxy);
   SearchTagRegistry(const SearchTagRegistry& other) = delete;
   SearchTagRegistry& operator=(const SearchTagRegistry& other) = delete;
   virtual ~SearchTagRegistry();
@@ -105,7 +103,11 @@ class SearchTagRegistry {
   base::WeakPtrFactory<SearchTagRegistry> weak_ptr_factory_{this};
 };
 
-}  // namespace settings
-}  // namespace chromeos
+}  // namespace ash::settings
+
+// TODO(https://crbug.com/1164001): remove when the migration is finished.
+namespace chromeos::settings {
+using ::ash::settings::SearchTagRegistry;
+}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_SEARCH_SEARCH_TAG_REGISTRY_H_

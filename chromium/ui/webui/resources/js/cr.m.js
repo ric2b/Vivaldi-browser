@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,8 @@
  * logic in js_modulizer.py only to address the cr.js case, which is not worth
  * it.
  */
-import {assert, assertNotReached} from './assert.m.js';
-import {PromiseResolver} from './promise_resolver.m.js';
+import {assert, assertNotReached} from './assert.js';
+import {PromiseResolver} from './promise_resolver.js';
 
 /** @typedef {{eventName: string, uid: number}} */
 export let WebUIListener;

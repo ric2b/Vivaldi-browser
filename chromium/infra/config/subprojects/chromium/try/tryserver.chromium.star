@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Definitions of builders in the tryserver.chromium builder group."""
@@ -18,6 +18,9 @@ try_.defaults.set(
     os = os.LINUX_DEFAULT,
     pool = try_.DEFAULT_POOL,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
+
+    # TODO(crbug.com/1362440): remove this.
+    omit_python2 = False,
 )
 
 consoles.list_view(
@@ -31,16 +34,25 @@ consoles.list_view(
 try_.builder(
     name = "android-official",
     branch_selector = branches.STANDARD_MILESTONE,
+    mirrors = [
+        "ci/android-official",
+    ],
 )
 
 try_.builder(
     name = "fuchsia-official",
     branch_selector = branches.FUCHSIA_LTS_MILESTONE,
+    mirrors = [
+        "ci/fuchsia-official",
+    ],
 )
 
 try_.builder(
     name = "linux-official",
     branch_selector = branches.STANDARD_MILESTONE,
+    mirrors = [
+        "ci/linux-official",
+    ],
 )
 
 try_.builder(

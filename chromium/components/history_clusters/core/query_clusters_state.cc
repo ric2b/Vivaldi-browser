@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/thread_pool.h"
 #include "components/history_clusters/core/history_clusters_service.h"
 #include "components/history_clusters/core/history_clusters_util.h"
@@ -82,7 +83,8 @@ void QueryClustersState::LoadNextBatchOfClusters(ResultCallback callback) {
       /*begin_time=*/base::Time(), continuation_params_, recluster_,
       base::BindOnce(&QueryClustersState::OnGotRawClusters,
                      weak_factory_.GetWeakPtr(), query_start_time,
-                     std::move(callback)));
+                     std::move(callback)),
+      HistoryClustersServiceTaskGetMostRecentClusters::Source::kWebUi);
 }
 
 void QueryClustersState::OnGotRawClusters(
@@ -100,7 +102,7 @@ void QueryClustersState::OnGotRawClusters(
       base::BindOnce(&PostProcessor::PostProcess, post_processing_state_,
                      std::move(clusters)),
       base::BindOnce(
-          &QueryClustersState::OnGotClusters, weak_factory_.GetWeakPtr(),
+          &QueryClustersState::OnGotClusters, weak_factory_.GetMutableWeakPtr(),
           std::move(post_processing_timer), clusters_from_backend_count,
           query_start_time, std::move(callback), continuation_params));
 }
@@ -171,11 +173,8 @@ void QueryClustersState::UpdateUniqueRawLabels(
     // Warning: N^2 algorithm below. If this ends up scaling poorly, it can be
     // optimized by adding a map that tracks which labels have been seen
     // already.
-    auto it = std::find_if(raw_label_counts_so_far_.begin(),
-                           raw_label_counts_so_far_.end(),
-                           [&raw_label_value](const LabelCount& label_count) {
-                             return label_count.first == raw_label_value;
-                           });
+    auto it = base::ranges::find(raw_label_counts_so_far_, raw_label_value,
+                                 &LabelCount::first);
     if (it == raw_label_counts_so_far_.end()) {
       it = raw_label_counts_so_far_.insert(it,
                                            std::make_pair(raw_label_value, 0));

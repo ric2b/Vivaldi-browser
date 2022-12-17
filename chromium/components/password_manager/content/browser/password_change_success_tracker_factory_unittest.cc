@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,6 +27,7 @@ namespace {
 
 constexpr char kUrl[] = "https://www.example.com";
 constexpr char kUsername[] = "Paul";
+constexpr bool kNotPhished = false;
 
 }  // namespace
 
@@ -72,7 +73,8 @@ TEST_F(PasswordChangeSuccessTrackerFactoryTest,
 
   tracker->OnChangePasswordFlowCompleted(
       GURL(kUrl), kUsername,
-      PasswordChangeSuccessTracker::EndEvent::kAutomatedFlowOwnPasswordChosen);
+      PasswordChangeSuccessTracker::EndEvent::kAutomatedFlowOwnPasswordChosen,
+      kNotPhished);
 
   histogram_tester.ExpectTotalCount(
       "PasswordManager.PasswordChangeFlowDuration.LeakWarningDialog."
@@ -101,7 +103,8 @@ TEST_F(PasswordChangeSuccessTrackerFactoryTest,
   tracker->OnChangePasswordFlowCompleted(
       GURL(kUrl), kUsername,
       PasswordChangeSuccessTracker::EndEvent::
-          kManualFlowGeneratedPasswordChosen);
+          kManualFlowGeneratedPasswordChosen,
+      kNotPhished);
 
   // Check that UKM logging is correct.
   const auto& entries = ukm_tester.GetEntriesByName(UkmEntry::kEntryName);

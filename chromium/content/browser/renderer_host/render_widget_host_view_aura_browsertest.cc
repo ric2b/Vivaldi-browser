@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -433,10 +432,10 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewAuraDSFBrowserTest,
   // done in `WebFrameWidgetImpl`.
   const base::Value eval_result =
       EvalJs(wc, "getSelectionBounds();").ExtractList();
-  const int x = floor(eval_result.GetListDeprecated()[0].GetDouble());
-  const int right = ceil(eval_result.GetListDeprecated()[1].GetDouble());
-  const int y = floor(eval_result.GetListDeprecated()[2].GetDouble());
-  const int bottom = ceil(eval_result.GetListDeprecated()[3].GetDouble());
+  const int x = floor(eval_result.GetList()[0].GetDouble());
+  const int right = ceil(eval_result.GetList()[1].GetDouble());
+  const int y = floor(eval_result.GetList()[2].GetDouble());
+  const int bottom = ceil(eval_result.GetList()[3].GetDouble());
   const int expected_dip_width = floor(right / scale()) - ceil(x / scale());
   const int expected_dip_height = floor(bottom / scale()) - ceil(y / scale());
 

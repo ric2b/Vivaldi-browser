@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,7 @@ class FakeAreaSource : public GarbageCollected<FakeAreaSource>,
                        public CachedStorageArea::Source {
  public:
   explicit FakeAreaSource(const KURL& page_url,
-                          const LocalDOMWindow* local_dom_window)
+                          LocalDOMWindow* local_dom_window)
       : page_url_(page_url), local_dom_window_(local_dom_window) {}
 
   void Trace(Visitor* visitor) const override {
@@ -40,7 +40,7 @@ class FakeAreaSource : public GarbageCollected<FakeAreaSource>,
     return blink::WebScopedVirtualTimePauser();
   }
 
-  const LocalDOMWindow* GetDOMWindow() override { return local_dom_window_; }
+  LocalDOMWindow* GetDOMWindow() override { return local_dom_window_; }
 
   struct Event {
     String key, old_value, new_value, url;
@@ -55,7 +55,7 @@ class FakeAreaSource : public GarbageCollected<FakeAreaSource>,
 
  private:
   KURL page_url_;
-  Member<const LocalDOMWindow> local_dom_window_;
+  Member<LocalDOMWindow> local_dom_window_;
 };
 
 }  // namespace blink

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/location.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -20,8 +21,8 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_video_device.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -82,10 +83,12 @@ class MediaStreamVideoTrack::FrameDeliverer
  public:
   using VideoSinkId = WebMediaStreamSink*;
 
-  FrameDeliverer(scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-                 base::WeakPtr<MediaStreamVideoTrack> media_stream_video_track,
-                 bool enabled,
-                 uint32_t crop_version);
+  FrameDeliverer(
+      scoped_refptr<base::SingleThreadTaskRunner> main_render_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+      base::WeakPtr<MediaStreamVideoTrack> media_stream_video_track,
+      bool enabled,
+      uint32_t crop_version);
 
   FrameDeliverer(const FrameDeliverer&) = delete;
   FrameDeliverer& operator=(const FrameDeliverer&) = delete;
@@ -220,23 +223,24 @@ class MediaStreamVideoTrack::FrameDeliverer
 };
 
 MediaStreamVideoTrack::FrameDeliverer::FrameDeliverer(
+    scoped_refptr<base::SingleThreadTaskRunner> main_render_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     base::WeakPtr<MediaStreamVideoTrack> media_stream_video_track,
     bool enabled,
     uint32_t crop_version)
     : io_task_runner_(std::move(io_task_runner)),
-      // TODO(crbug.com/1223353, crbug.com/624696): Move to WebFrameScheduler.
-      main_render_task_runner_(Thread::MainThread()->GetDeprecatedTaskRunner()),
+      main_render_task_runner_(main_render_task_runner),
       media_stream_video_track_(media_stream_video_track),
       enabled_(enabled),
       emit_frame_drop_events_(true),
       await_next_key_frame_(false),
       crop_version_(crop_version) {
   DCHECK(io_task_runner_.get());
+  DCHECK(main_render_task_runner_);
 }
 
 MediaStreamVideoTrack::FrameDeliverer::~FrameDeliverer() {
-  DCHECK(callbacks_.IsEmpty());
+  DCHECK(callbacks_.empty());
 }
 
 void MediaStreamVideoTrack::FrameDeliverer::AddCallback(
@@ -267,7 +271,7 @@ void MediaStreamVideoTrack::FrameDeliverer::SetNotifyFrameDroppedCallback(
       CrossThreadBindOnce(&FrameDeliverer::SetNotifyFrameDroppedCallbackOnIO,
                           WrapRefCounted(this), WTF::CrossThreadUnretained(id),
                           CrossThreadBindRepeating(std::move(callback)),
-                          Thread::Current()->GetDeprecatedTaskRunner()));
+                          main_render_task_runner_));
 }
 
 void MediaStreamVideoTrack::FrameDeliverer::SetNotifyFrameDroppedCallbackOnIO(
@@ -314,7 +318,7 @@ void MediaStreamVideoTrack::FrameDeliverer::RemoveCallback(VideoSinkId id) {
       *io_task_runner_, FROM_HERE,
       CrossThreadBindOnce(&FrameDeliverer::RemoveCallbackOnIO,
                           WrapRefCounted(this), WTF::CrossThreadUnretained(id),
-                          Thread::Current()->GetDeprecatedTaskRunner()));
+                          main_render_task_runner_));
 }
 
 void MediaStreamVideoTrack::FrameDeliverer::RemoveCallbackOnIO(
@@ -345,7 +349,7 @@ void MediaStreamVideoTrack::FrameDeliverer::RemoveEncodedCallback(
       *io_task_runner_, FROM_HERE,
       CrossThreadBindOnce(&FrameDeliverer::RemoveEncodedCallbackOnIO,
                           WrapRefCounted(this), WTF::CrossThreadUnretained(id),
-                          Thread::Current()->GetDeprecatedTaskRunner()));
+                          main_render_task_runner_));
 }
 
 void MediaStreamVideoTrack::FrameDeliverer::RemoveEncodedCallbackOnIO(
@@ -448,9 +452,21 @@ void MediaStreamVideoTrack::FrameDeliverer::DeliverFrameOnIO(
     std::vector<scoped_refptr<media::VideoFrame>> scaled_video_frames,
     base::TimeTicks estimated_capture_time) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
-  DCHECK_EQ(frame->metadata().crop_version, crop_version_);
 
-  if (!enabled_ && main_render_task_runner_ && emit_frame_drop_events_) {
+  // TODO(crbug.com/1369085): Understand why we sometimes see old crop versions.
+  if (frame->metadata().crop_version != crop_version_) {
+    // TODO(crbug.com/964947): A weak ptr instance of MediaStreamVideoTrack is
+    // passed to FrameDeliverer in order to avoid the re-binding the instance of
+    // a WTF::CrossThreadFunction.
+    PostCrossThreadTask(
+        *main_render_task_runner_, FROM_HERE,
+        CrossThreadBindOnce(
+            &MediaStreamVideoTrack::OnFrameDropped, media_stream_video_track_,
+            media::VideoCaptureFrameDropReason::kCropVersionNotCurrent));
+    return;
+  }
+
+  if (!enabled_ && emit_frame_drop_events_) {
     emit_frame_drop_events_ = false;
 
     // TODO(crbug.com/964947): A weak ptr instance of MediaStreamVideoTrack is
@@ -610,8 +626,8 @@ MediaStreamVideoTrack::MediaStreamVideoTrack(
       source_(source->GetWeakPtr()) {
   frame_deliverer_ =
       base::MakeRefCounted<MediaStreamVideoTrack::FrameDeliverer>(
-          source->io_task_runner(), weak_factory_.GetWeakPtr(), enabled,
-          source->GetCropVersion());
+          source->GetTaskRunner(), source->io_task_runner(),
+          weak_factory_.GetWeakPtr(), enabled, source->GetCropVersion());
   source->AddTrack(
       this, VideoTrackAdapterSettings(),
       ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
@@ -659,8 +675,8 @@ MediaStreamVideoTrack::MediaStreamVideoTrack(
       source_(source->GetWeakPtr()) {
   frame_deliverer_ =
       base::MakeRefCounted<MediaStreamVideoTrack::FrameDeliverer>(
-          source->io_task_runner(), weak_factory_.GetWeakPtr(), enabled,
-          source->GetCropVersion());
+          source->GetTaskRunner(), source->io_task_runner(),
+          weak_factory_.GetWeakPtr(), enabled, source->GetCropVersion());
   source->AddTrack(
       this, adapter_settings,
       ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
@@ -686,8 +702,8 @@ MediaStreamVideoTrack::MediaStreamVideoTrack(
 
 MediaStreamVideoTrack::~MediaStreamVideoTrack() {
   DCHECK_CALLED_ON_VALID_THREAD(main_render_thread_checker_);
-  DCHECK(sinks_.IsEmpty());
-  DCHECK(encoded_sinks_.IsEmpty());
+  DCHECK(sinks_.empty());
+  DCHECK(encoded_sinks_.empty());
   Stop();
   DVLOG(3) << "~MediaStreamVideoTrack()";
 }
@@ -700,7 +716,7 @@ static void AddSinkInternal(Vector<WebMediaStreamSink*>* sinks,
 
 static void RemoveSinkInternal(Vector<WebMediaStreamSink*>* sinks,
                                WebMediaStreamSink* sink) {
-  auto** it = std::find(sinks->begin(), sinks->end(), sink);
+  auto** it = base::ranges::find(*sinks, sink);
   DCHECK(it != sinks->end());
   sinks->erase(it);
 }
@@ -716,8 +732,6 @@ void MediaStreamVideoTrack::AddSink(
   secure_tracker_.Add(sink, is_secure == MediaStreamVideoSink::IsSecure::kYes);
   if (uses_alpha == MediaStreamVideoSink::UsesAlpha::kDefault) {
     alpha_using_sinks_.insert(sink);
-  } else if (uses_alpha == MediaStreamVideoSink::UsesAlpha::kNo) {
-    alpha_discarding_sinks_.insert(sink);
   }
 
   // Ensure sink gets told about any constraints set.
@@ -731,10 +745,8 @@ void MediaStreamVideoTrack::AddSink(
   RequestRefreshFrame();
   source_->UpdateCapturingLinkSecure(this,
                                      secure_tracker_.is_capturing_secure());
-  // Alpha can't be discarded if any sink uses alpha, or if the only sinks
-  // connected are kDependsOnOtherSinks.
-  const bool can_discard_alpha =
-      alpha_using_sinks_.IsEmpty() && !alpha_discarding_sinks_.IsEmpty();
+  // Alpha can be discarded only if no sink need to use alpha.
+  const bool can_discard_alpha = alpha_using_sinks_.empty();
   source_->SetCanDiscardAlpha(can_discard_alpha);
   if (is_screencast_)
     StartTimerForRequestingFrames();
@@ -762,7 +774,6 @@ void MediaStreamVideoTrack::RemoveSink(WebMediaStreamSink* sink) {
   DCHECK_CALLED_ON_VALID_THREAD(main_render_thread_checker_);
   RemoveSinkInternal(&sinks_, sink);
   alpha_using_sinks_.erase(sink);
-  alpha_discarding_sinks_.erase(sink);
   frame_deliverer_->RemoveCallback(sink);
   secure_tracker_.Remove(sink);
   if (!source_)
@@ -770,9 +781,8 @@ void MediaStreamVideoTrack::RemoveSink(WebMediaStreamSink* sink) {
   UpdateSourceHasConsumers();
   source_->UpdateCapturingLinkSecure(this,
                                      secure_tracker_.is_capturing_secure());
-  const bool can_discard_alpha =
-      sinks_.IsEmpty() ||
-      (alpha_using_sinks_.IsEmpty() && !alpha_discarding_sinks_.IsEmpty());
+  // Alpha can be discarded only if no sink uses alpha or no sink exists.
+  const bool can_discard_alpha = sinks_.empty() || alpha_using_sinks_.empty();
   source_->SetCanDiscardAlpha(can_discard_alpha);
   // Restart the timer with existing sinks.
   if (is_screencast_)
@@ -792,7 +802,7 @@ void MediaStreamVideoTrack::UpdateSourceHasConsumers() {
   DCHECK_CALLED_ON_VALID_THREAD(main_render_thread_checker_);
   if (!source_)
     return;
-  bool has_consumers = !sinks_.IsEmpty() || !encoded_sinks_.IsEmpty();
+  bool has_consumers = !sinks_.empty() || !encoded_sinks_.empty();
   source_->UpdateHasConsumers(this, has_consumers);
 }
 
@@ -803,7 +813,7 @@ void MediaStreamVideoTrack::SetEnabled(bool enabled) {
   // stream undecodable.
   bool maybe_await_key_frame = false;
   if (enabled && source_ && source_->SupportsEncodedOutput() &&
-      !encoded_sinks_.IsEmpty()) {
+      !encoded_sinks_.empty()) {
     RequestRefreshFrame();
     maybe_await_key_frame = true;
   }

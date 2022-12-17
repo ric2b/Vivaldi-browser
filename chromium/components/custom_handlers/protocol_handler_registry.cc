@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
+#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/custom_handlers/pref_names.h"
@@ -505,7 +506,7 @@ void ProtocolHandlerRegistry::PromoteHandler(const ProtocolHandler& handler) {
   DCHECK(IsRegistered(handler));
   auto p = protocol_handlers_.find(handler.protocol());
   ProtocolHandlerList& list = p->second;
-  list.erase(std::find(list.begin(), list.end(), handler));
+  list.erase(base::ranges::find(list, handler));
   list.insert(list.begin(), handler);
 }
 
@@ -628,7 +629,7 @@ ProtocolHandlerRegistry::GetHandlersFromPref(const char* pref_name) const {
     return result;
   }
 
-  const base::Value::List& handlers = prefs_->GetValueList(pref_name);
+  const base::Value::List& handlers = prefs_->GetList(pref_name);
 
   for (const auto& list_item : handlers) {
     if (const base::Value::Dict* encoded_handler = list_item.GetIfDict()) {
@@ -698,7 +699,7 @@ void ProtocolHandlerRegistry::EraseHandler(const ProtocolHandler& handler,
 
 void ProtocolHandlerRegistry::EraseHandler(const ProtocolHandler& handler,
                                            ProtocolHandlerList* list) {
-  list->erase(std::find(list->begin(), list->end(), handler));
+  list->erase(base::ranges::find(*list, handler));
 }
 
 void ProtocolHandlerRegistry::OnSetAsDefaultProtocolClientFinished(

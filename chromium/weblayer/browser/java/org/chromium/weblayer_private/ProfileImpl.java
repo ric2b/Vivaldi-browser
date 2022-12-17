@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,8 +84,8 @@ public final class ProfileImpl
         mIsIncognito = isIncognito;
         mName = name;
         mNativeProfile = ProfileImplJni.get().createProfile(name, ProfileImpl.this, mIsIncognito);
-        mCookieManager =
-                new CookieManagerImpl(ProfileImplJni.get().getCookieManager(mNativeProfile));
+        mCookieManager = new CookieManagerImpl(
+                ProfileImplJni.get().getCookieManager(mNativeProfile), ProfileImpl.this);
         mPrerenderController = new PrerenderControllerImpl(
                 ProfileImplJni.get().getPrerenderController(mNativeProfile));
         mOnDestroyCallback = onDestroyCallback;

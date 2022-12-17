@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,7 @@
 #include "base/memory/raw_ptr.h"
 #include "remoting/protocol/stream_channel_factory.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class DatagramChannelFactory;
 class P2PDatagramSocket;
@@ -49,7 +48,6 @@ class PseudoTcpChannelFactory : public StreamChannelFactory {
   PendingSocketsMap pending_sockets_;
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_PSEUDOTCP_CHANNEL_FACTORY_H_

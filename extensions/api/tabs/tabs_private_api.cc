@@ -665,7 +665,7 @@ void VivaldiPrivateTabObserver::DidFinishLoad(
     const GURL& validated_url) {
   SetContentsMimeType(web_contents()->GetContentsMimeType());
   tabs_private::UpdateTabInfo info;
-  info.mime_type.reset(new std::string(contents_mime_type()));
+  info.mime_type = contents_mime_type();
   BroadcastTabInfo(info);
 }
 
@@ -684,12 +684,6 @@ void VivaldiPrivateTabObserver::AccessKeysReceived(
     JSAccessKeysCallback callback,
     std::vector<::vivaldi::mojom::AccessKeyPtr> access_keys) {
   std::move(callback).Run(std::move(access_keys));
-}
-
-void VivaldiPrivateTabObserver::UpdateSpatnavRects() {
-  auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-      web_contents()->GetPrimaryMainFrame());
-  rfhi->GetVivaldiFrameService()->UpdateSpatnavRects();
 }
 
 void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
@@ -883,7 +877,7 @@ void VivaldiPrivateTabObserver::ActivateTab(content::WebContents* contents) {
 void VivaldiPrivateTabObserver::OnPageTranslated(
     const std::string& original_lang,
     const std::string& translated_lang,
-    translate::TranslateErrors::Type error_type) {
+    translate::TranslateErrors error_type) {
   int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
   if (tab_id) {
     ::vivaldi::BroadcastEvent(
@@ -968,14 +962,14 @@ ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
   if (!tab_api)
     return RespondNow(Error(error));
 
-  if (info->show_images) {
-    tab_api->SetShowImages(*info->show_images.get());
+  if (info->show_images.has_value()) {
+    tab_api->SetShowImages(info->show_images.value());
   }
-  if (info->load_from_cache_only) {
-    tab_api->SetLoadFromCacheOnly(*info->load_from_cache_only.get());
+  if (info->load_from_cache_only.has_value()) {
+    tab_api->SetLoadFromCacheOnly(info->load_from_cache_only.value());
   }
-  if (info->mute_tab) {
-    tab_api->SetMuted(*info->mute_tab.get());
+  if (info->mute_tab.has_value()) {
+    tab_api->SetMuted(info->mute_tab.value());
   }
   tab_api->CommitSettings();
   tab_api->BroadcastTabInfo(*info);
@@ -997,8 +991,8 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
     return RespondNow(Error(error));
 
   tabs_private::UpdateTabInfo info;
-  info.show_images.reset(new bool(tab_api->show_images()));
-  info.load_from_cache_only.reset(new bool(tab_api->load_from_cache_only()));
+  info.show_images = tab_api->show_images();
+  info.load_from_cache_only = tab_api->load_from_cache_only();
   return RespondNow(ArgumentList(Results::Create(info)));
 }
 
@@ -1078,23 +1072,23 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
         std::swap(p[0], p[2]);
       }
     }
-    SkBitmap bitmap;
+    SkBitmap* bitmap = new SkBitmap;
     SkImageInfo image_info = SkImageInfo::MakeN32Premul(w, h);
 
     // SkBitmap::installPixels takes ownership of data and calls the release
     // callback to delete them in all cases including on errors.
     using ImageVector = std::vector<uint8_t>;
-    ImageVector* raw_image = params->drag_data.image_data.release();
+    ImageVector raw_image = params->drag_data.image_data.value();
     auto release_pixels = [](void* addr, void* context) {
       // Let unique_ptr to call delete.
       std::unique_ptr<ImageVector> image_data(
           static_cast<ImageVector*>(context));
       CHECK(addr == image_data->data());
     };
-    bool success = bitmap.installPixels(image_info, raw_image->data(),
+    bool success = bitmap->installPixels(image_info, raw_image.data(),
                                         image_info.minRowBytes(),
-                                        release_pixels, raw_image);
-    OnCaptureDone(window_id, success, 1.0, bitmap);
+                                        release_pixels, &raw_image);
+    OnCaptureDone(window_id, success, 1.0, *bitmap);
     return AlreadyResponded();
   }
 
@@ -1112,7 +1106,8 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
 void TabsPrivateStartDragFunction::OnCaptureDone(SessionID::id_type window_id,
                                                  bool success,
                                                  float device_scale_factor,
-                                                 const SkBitmap& bitmap) {
+                                                 const SkBitmap& bitmapref) {
+  SkBitmap bitmap = bitmapref;
   do {
     if (!success)
       break;
@@ -1141,7 +1136,7 @@ void TabsPrivateStartDragFunction::OnCaptureDone(SessionID::id_type window_id,
     // On Linux and Windows StartDragging is synchronous, so enable tab dragging
     // mode before calling it.
     ::vivaldi::SetTabDragInProgress(true);
-    view->StartDragging(drop_data_, allowed_ops, image, image_offset_,
+    view->StartDragging(drop_data_, allowed_ops, image, image_offset_, {},
                         event_info_, rvh->GetWidget());
   } while (false);
 
@@ -1273,22 +1268,6 @@ TabsPrivateMoveSpatnavRectFunction::Run() {
   return RespondLater();
 }
 
-ExtensionFunction::ResponseAction TabsPrivateUpdateSpatnavRectsFunction::Run() {
-  using tabs_private::UpdateSpatnavRects::Params;
-
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  std::string error;
-  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
-      browser_context(), params->tab_id, &error);
-  if (!tab_api)
-    return RespondNow(Error(error));
-  tab_api->UpdateSpatnavRects();
-
-  return RespondNow(NoArguments());
-}
-
 ExtensionFunction::ResponseAction
 TabsPrivateActivateSpatnavElementFunction::Run() {
   using tabs_private::ActivateSpatnavElement::Params;
@@ -1306,6 +1285,36 @@ TabsPrivateActivateSpatnavElementFunction::Run() {
 
   frame_service->ActivateSpatnavElement(modifiers);
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateCloseSpatnavOrCurrentOpenMenuFunction::Run() {
+  using tabs_private::CloseSpatnavOrCurrentOpenMenu::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string error;
+  ::vivaldi::mojom::VivaldiFrameService* frame_service =
+      GetPrimaryFrameService(this, params->tab_id, &error);
+  if (!frame_service)
+    return RespondNow(Error(error));
+
+  frame_service->CloseSpatnavOrCurrentOpenMenu(base::BindOnce(
+      &TabsPrivateCloseSpatnavOrCurrentOpenMenuFunction::CloseSpatnavDone,
+      this));
+  return RespondLater();
+}
+
+void TabsPrivateCloseSpatnavOrCurrentOpenMenuFunction::CloseSpatnavDone(
+    bool layout_changed,
+    bool current_element_valid) {
+  namespace Results = tabs_private::CloseSpatnavOrCurrentOpenMenu::Results;
+  vivaldi::tabs_private::CloseSpatnavParams params;
+  params.layout_changed = layout_changed;
+  params.current_element_valid = current_element_valid;
+
+  return Respond(ArgumentList(Results::Create(params)));
 }
 
 ExtensionFunction::ResponseAction

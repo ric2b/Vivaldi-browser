@@ -1,14 +1,14 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 
 #import <Foundation/Foundation.h>
 
-#include "base/check.h"
-#include "base/notreached.h"
-#include "components/bookmarks/browser/bookmark_model.h"
+#import "base/check.h"
+#import "base/notreached.h"
+#import "components/bookmarks/browser/bookmark_model.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -53,7 +53,8 @@ void BookmarkModelBridge::BookmarkNodeMoved(BookmarkModel* model,
 
 void BookmarkModelBridge::BookmarkNodeAdded(BookmarkModel* model,
                                             const BookmarkNode* parent,
-                                            size_t index) {
+                                            size_t index,
+                                            bool added_by_user) {
   [observer_ bookmarkNodeChildrenChanged:parent];
 }
 
@@ -95,5 +96,15 @@ void BookmarkModelBridge::BookmarkAllUserNodesRemoved(
     const std::set<GURL>& removed_urls) {
   [observer_ bookmarkModelRemovedAllNodes];
 }
+
+// Vivaldi
+void BookmarkModelBridge::BookmarkMetaInfoChanged(BookmarkModel* model,
+                                                  const BookmarkNode* node) {
+  SEL selector = @selector(bookmarkMetaInfoChanged:);
+  if ([observer_ respondsToSelector:selector]) {
+    [observer_ bookmarkMetaInfoChanged:node];
+  }
+}
+// End Vivaldi
 
 }  // namespace bookmarks

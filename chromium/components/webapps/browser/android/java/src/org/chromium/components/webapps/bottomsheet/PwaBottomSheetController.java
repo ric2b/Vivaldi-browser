@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -185,10 +185,15 @@ public class PwaBottomSheetController
         assert mWebContentsObserver == null;
         mWebContentsObserver = new WebContentsObserver(webContents) {
             @Override
-            public void didFinishNavigation(NavigationHandle navigation) {
-                if (navigation.isInPrimaryMainFrame() && navigation.hasCommitted()) {
+            public void didFinishNavigationInPrimaryMainFrame(NavigationHandle navigation) {
+                if (navigation.hasCommitted()) {
                     mBottomSheetController.hideContent(mPwaBottomSheetContent, /* animate= */ true);
                 }
+            }
+
+            @Override
+            public void didFinishNavigationNoop(NavigationHandle navigation) {
+                if (!navigation.isInPrimaryMainFrame()) return;
             }
         };
     }

@@ -175,7 +175,7 @@ FontPlatformData FontCustomPlatformData::GetFontPlatformData(
 
     bool explicit_opsz_configured = false;
     if (variation_settings && variation_settings->size() < UINT16_MAX) {
-      variation.ReserveCapacity(variation_settings->size() + variation.size());
+      variation.reserve(variation_settings->size() + variation.size());
       for (const auto& setting : *variation_settings) {
         if (setting.Tag() == kOpszTag)
           explicit_opsz_configured = true;
@@ -326,19 +326,6 @@ scoped_refptr<FontCustomPlatformData> FontCustomPlatformData::Create(
   }
   return base::AdoptRef(
       new FontCustomPlatformData(std::move(typeface), decoder.DecodedSize()));
-}
-
-bool FontCustomPlatformData::SupportsFormat(const String& format) {
-  // Support relevant format specifiers from
-  // https://drafts.csswg.org/css-fonts-4/#src-desc
-  return EqualIgnoringASCIICase(format, "woff") ||
-         EqualIgnoringASCIICase(format, "truetype") ||
-         EqualIgnoringASCIICase(format, "opentype") ||
-         EqualIgnoringASCIICase(format, "woff2") ||
-         EqualIgnoringASCIICase(format, "woff-variations") ||
-         EqualIgnoringASCIICase(format, "truetype-variations") ||
-         EqualIgnoringASCIICase(format, "opentype-variations") ||
-         EqualIgnoringASCIICase(format, "woff2-variations");
 }
 
 bool FontCustomPlatformData::MayBeIconFont() const {

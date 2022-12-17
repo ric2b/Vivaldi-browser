@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -106,6 +106,7 @@ bool WaylandDataDragController::StartSession(const OSExchangeData& data,
                                              DragEventSource source) {
   DCHECK_EQ(state_, State::kIdle);
   DCHECK(!origin_window_);
+  DCHECK(!icon_surface_);
 
   WaylandWindow* origin_window =
       source == DragEventSource::kTouch
@@ -139,10 +140,10 @@ bool WaylandDataDragController::StartSession(const OSExchangeData& data,
     icon_surface_ = std::make_unique<WaylandSurface>(connection_, nullptr);
     if (icon_surface_->Initialize()) {
       // Corresponds to actual scale factor of the origin surface.
-      icon_surface_->SetSurfaceBufferScale(origin_window->window_scale());
+      icon_surface_->set_surface_buffer_scale(origin_window->window_scale());
       // Icon surface do not need input.
       const gfx::Rect empty_region_px;
-      icon_surface_->SetInputRegion(&empty_region_px);
+      icon_surface_->set_input_region(&empty_region_px);
       icon_surface_->ApplyPendingState();
 
       auto icon_offset = -data.provider().GetDragImageOffset();
@@ -200,7 +201,13 @@ void WaylandDataDragController::DrawIcon() {
   wl_surface* const surface = icon_surface_->surface();
   icon_frame_callback_.reset(wl_surface_frame(surface));
   wl_callback_add_listener(icon_frame_callback_.get(), &kFrameListener, this);
-  wl_surface_commit(surface);
+
+  // Some Wayland compositors seem to assume that the icon surface will already
+  // have a non-null buffer attached when wl_data_device.start_drag is issued,
+  // otherwise it does not get drawn when, for example, attached in an upcoming
+  // wl_surface.frame callback. This was observed, at least in Sway/Wlroots and
+  // Weston, see https://crbug.com/1359364 for details.
+  DrawIconInternal();
 }
 
 void WaylandDataDragController::OnDragSurfaceFrame(void* data,
@@ -210,7 +217,7 @@ void WaylandDataDragController::OnDragSurfaceFrame(void* data,
   DCHECK(self);
   self->DrawIconInternal();
   self->icon_frame_callback_.reset();
-  self->connection_->ScheduleFlush();
+  self->connection_->Flush();
 }
 
 void WaylandDataDragController::DrawIconInternal() {
@@ -339,7 +346,8 @@ void WaylandDataDragController::OnDataSourceFinish(bool completed) {
 
   if (origin_window_) {
     origin_window_->OnDragSessionClose(
-        DndActionToDragOperation(data_source_->dnd_action()));
+        completed ? DndActionToDragOperation(data_source_->dnd_action())
+                  : DragOperation::kNone);
     // DnD handlers expect DragLeave to be sent for drag sessions that end up
     // with no data transfer (wl_data_source::cancelled event).
     if (!completed)
@@ -361,6 +369,8 @@ void WaylandDataDragController::OnDataSourceFinish(bool completed) {
   data_source_.reset();
   data_offer_.reset();
   icon_buffer_.reset();
+  icon_surface_.reset();
+  icon_bitmap_ = nullptr;
   icon_frame_callback_.reset();
   offered_exchange_data_provider_.reset();
   data_device_->ResetDragDelegate();
@@ -534,9 +544,9 @@ void WaylandDataDragController::SetUpWindowDraggingSessionIfNeeded(
 
 void WaylandDataDragController::DispatchPointerRelease() {
   DCHECK(pointer_grabber_for_window_drag_);
-  pointer_delegate_->OnPointerButtonEvent(ET_MOUSE_RELEASED,
-                                          EF_LEFT_MOUSE_BUTTON,
-                                          pointer_grabber_for_window_drag_);
+  pointer_delegate_->OnPointerButtonEvent(
+      ET_MOUSE_RELEASED, EF_LEFT_MOUSE_BUTTON, pointer_grabber_for_window_drag_,
+      wl::EventDispatchPolicy::kImmediate);
   pointer_grabber_for_window_drag_ = nullptr;
 }
 

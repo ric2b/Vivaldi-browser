@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -161,7 +161,8 @@ class DnsOverHttpsIntegrationTest : public TestWithTaskEnvironment {
     // HostResolverManager::HaveTestProcOverride disables the built-in DNS
     // client.
     auto* resolver_raw = resolver.get();
-    resolver->SetProcParamsForTesting(ProcTaskParams(host_resolver_proc_, 1));
+    resolver->SetHostResolverSystemParamsForTest(
+        HostResolverSystemTask::Params(host_resolver_proc_, 1));
 
     auto context_builder = CreateTestURLRequestContextBuilder();
     context_builder->set_host_resolver(std::move(resolver));
@@ -300,7 +301,7 @@ TEST_F(HttpsWithDnsOverHttpsTest, EndToEnd) {
 
   ClientSocketPool::GroupId group_id(
       url::SchemeHostPort(request_info.url), PrivacyMode::PRIVACY_MODE_DISABLED,
-      NetworkIsolationKey(), SecureDnsPolicy::kAllow);
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow);
   EXPECT_EQ(network_session
                 ->GetSocketPool(HttpNetworkSession::NORMAL_SOCKET_POOL,
                                 ProxyServer::Direct())
@@ -325,9 +326,8 @@ TEST_F(HttpsWithDnsOverHttpsTest, EndToEnd) {
   EXPECT_TRUE(http_server.ShutdownAndWaitUntilComplete());
   EXPECT_TRUE(doh_server_.ShutdownAndWaitUntilComplete());
 
-  // There should be two DoH lookups for kHostname (both A and AAAA records are
-  // queried).
-  EXPECT_EQ(doh_server_.QueriesServed(), 2);
+  // There should be three DoH lookups for kHostname (A, AAAA, and HTTPS).
+  EXPECT_EQ(doh_server_.QueriesServed(), 3);
   // The requests to the DoH server are pooled, so there should only be one
   // insecure lookup for the DoH server hostname.
   EXPECT_EQ(host_resolver_proc_->insecure_queries_served(), 1u);
@@ -369,7 +369,11 @@ TEST_F(HttpsWithDnsOverHttpsTest, EndToEndFail) {
 TEST_F(HttpsWithDnsOverHttpsTest, HttpsUpgrade) {
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeatureWithParameters(
-      features::kUseDnsHttpsSvcb, {{"UseDnsHttpsSvcbHttpUpgrade", "true"}});
+      features::kUseDnsHttpsSvcb,
+      {// Disable timeouts.
+       {"UseDnsHttpsSvcbSecureExtraTimeMax", "0"},
+       {"UseDnsHttpsSvcbSecureExtraTimePercent", "0"},
+       {"UseDnsHttpsSvcbSecureExtraTimeMin", "0"}});
   ResetContext();
 
   GURL https_url = https_server_.GetURL(kHostname, "/test");
@@ -413,7 +417,11 @@ TEST_F(HttpsWithDnsOverHttpsTest, HttpsUpgrade) {
 TEST_F(HttpsWithDnsOverHttpsTest, HttpsMetadata) {
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeatureWithParameters(
-      features::kUseDnsHttpsSvcb, {{"UseDnsHttpsSvcbHttpUpgrade", "true"}});
+      features::kUseDnsHttpsSvcb,
+      {// Disable timeouts.
+       {"UseDnsHttpsSvcbSecureExtraTimeMax", "0"},
+       {"UseDnsHttpsSvcbSecureExtraTimePercent", "0"},
+       {"UseDnsHttpsSvcbSecureExtraTimeMin", "0"}});
   ResetContext();
 
   GURL main_url = https_server_.GetURL(kHostname, "/test");
@@ -468,13 +476,23 @@ TEST_F(DnsOverHttpsIntegrationTest, EncryptedClientHello) {
     SCOPED_TRACE(feature_enabled);
     base::test::ScopedFeatureList features;
     if (feature_enabled) {
-      features.InitWithFeatures(
-          /*enabled_features=*/{features::kUseDnsHttpsSvcb,
-                                features::kEncryptedClientHello},
+      features.InitWithFeaturesAndParameters(
+          /*enabled_features=*/{{features::kUseDnsHttpsSvcb,
+                                 {// Disable timeouts.
+                                  {"UseDnsHttpsSvcbSecureExtraTimeMax", "0"},
+                                  {"UseDnsHttpsSvcbSecureExtraTimePercent",
+                                   "0"},
+                                  {"UseDnsHttpsSvcbSecureExtraTimeMin", "0"}}},
+                                {features::kEncryptedClientHello, {}}},
           /*disabled_features=*/{});
     } else {
-      features.InitWithFeatures(
-          /*enabled_features=*/{features::kUseDnsHttpsSvcb},
+      features.InitWithFeaturesAndParameters(
+          /*enabled_features=*/{{features::kUseDnsHttpsSvcb,
+                                 {// Disable timeouts.
+                                  {"UseDnsHttpsSvcbSecureExtraTimeMax", "0"},
+                                  {"UseDnsHttpsSvcbSecureExtraTimePercent",
+                                   "0"},
+                                  {"UseDnsHttpsSvcbSecureExtraTimeMin", "0"}}}},
           /*disabled_features=*/{features::kEncryptedClientHello});
     }
 
@@ -512,9 +530,13 @@ TEST_F(DnsOverHttpsIntegrationTest, EncryptedClientHello) {
 // handshake as the public name.
 TEST_F(DnsOverHttpsIntegrationTest, EncryptedClientHelloStaleKey) {
   base::test::ScopedFeatureList features;
-  features.InitWithFeatures(
-      /*enabled_features=*/{features::kEncryptedClientHello,
-                            features::kUseDnsHttpsSvcb},
+  features.InitWithFeaturesAndParameters(
+      /*enabled_features=*/{{features::kEncryptedClientHello, {}},
+                            {features::kUseDnsHttpsSvcb,
+                             {// Disable timeouts.
+                              {"UseDnsHttpsSvcbSecureExtraTimeMax", "0"},
+                              {"UseDnsHttpsSvcbSecureExtraTimePercent", "0"},
+                              {"UseDnsHttpsSvcbSecureExtraTimeMin", "0"}}}},
       /*disabled_features=*/{});
   ResetContext();
 
@@ -593,9 +615,13 @@ TEST_F(DnsOverHttpsIntegrationTest, EncryptedClientHelloStaleKey) {
 
 TEST_F(DnsOverHttpsIntegrationTest, EncryptedClientHelloFallback) {
   base::test::ScopedFeatureList features;
-  features.InitWithFeatures(
-      /*enabled_features=*/{features::kEncryptedClientHello,
-                            features::kUseDnsHttpsSvcb},
+  features.InitWithFeaturesAndParameters(
+      /*enabled_features=*/{{features::kEncryptedClientHello, {}},
+                            {features::kUseDnsHttpsSvcb,
+                             {// Disable timeouts.
+                              {"UseDnsHttpsSvcbSecureExtraTimeMax", "0"},
+                              {"UseDnsHttpsSvcbSecureExtraTimePercent", "0"},
+                              {"UseDnsHttpsSvcbSecureExtraTimeMin", "0"}}}},
       /*disabled_features=*/{});
   ResetContext();
 
@@ -664,9 +690,13 @@ TEST_F(DnsOverHttpsIntegrationTest, EncryptedClientHelloFallback) {
 
 TEST_F(DnsOverHttpsIntegrationTest, EncryptedClientHelloFallbackTLS12) {
   base::test::ScopedFeatureList features;
-  features.InitWithFeatures(
-      /*enabled_features=*/{features::kEncryptedClientHello,
-                            features::kUseDnsHttpsSvcb},
+  features.InitWithFeaturesAndParameters(
+      /*enabled_features=*/{{features::kEncryptedClientHello, {}},
+                            {features::kUseDnsHttpsSvcb,
+                             {// Disable timeouts.
+                              {"UseDnsHttpsSvcbSecureExtraTimeMax", "0"},
+                              {"UseDnsHttpsSvcbSecureExtraTimePercent", "0"},
+                              {"UseDnsHttpsSvcbSecureExtraTimeMin", "0"}}}},
       /*disabled_features=*/{});
   ResetContext();
 

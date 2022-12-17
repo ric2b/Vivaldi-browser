@@ -165,31 +165,30 @@ void FillBitmapForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
           rep, ExtensionAction::ActionIconSize(), device_scale));
     }
     if (rep.is_null()) {
-      info->badge_icon = std::make_unique<std::string>();
+      info->badge_icon = std::string();
     } else {
-      info->badge_icon =
-          std::make_unique<std::string>(EncodeBitmapToPng(&rep.GetBitmap()));
+      info->badge_icon = EncodeBitmapToPng(&rep.GetBitmap());
     }
   } else {
-    info->badge_icon.reset(new std::string(""));
+    info->badge_icon = std::string();
   }
 }
 
 void FillInfoFromManifest(vivaldi::extension_action_utils::ExtensionInfo* info,
                           const Extension* extension) {
-  info->name = std::make_unique<std::string>(extension->name());
+  info->name = extension->name();
 
   const std::string* manifest_string =
       extension->manifest()->FindStringPath(manifest_keys::kHomepageURL);
   if (manifest_string) {
-    info->homepage = std::make_unique<std::string>(*manifest_string);
+    info->homepage = *manifest_string;
   }
   if (OptionsPageInfo::HasOptionsPage(extension)) {
     GURL url = OptionsPageInfo::GetOptionsPage(extension);
-    info->optionspage = std::make_unique<std::string>(url.spec());
+    info->optionspage = url.spec();
 
     bool new_tab = OptionsPageInfo::ShouldOpenInTab(extension);
-    info->options_in_new_tab = std::make_unique<bool>(new_tab);
+    info->options_in_new_tab = new_tab;
   }
 }
 
@@ -282,14 +281,10 @@ ExtensionActionUtil::ExtensionActionUtil(Profile* profile) : profile_(profile) {
   PrefsChange();
 }
 void ExtensionActionUtil::PrefsChange() {
-  const base::Value* hidden_extensions = profile_->GetPrefs()->GetList(
+  auto& hidden_extensions = profile_->GetPrefs()->GetList(
       vivaldiprefs::kAddressBarExtensionsHiddenExtensions);
-  // Can happen if we start in an old profile.
-  if (!hidden_extensions || !hidden_extensions->is_list()) {
-    return;
-  }
 
-  user_hidden_extensions_ = hidden_extensions->Clone();
+  user_hidden_extensions_ = base::Value(hidden_extensions.Clone());
 }
 
 ExtensionActionUtil::~ExtensionActionUtil() {}
@@ -298,37 +293,34 @@ void ExtensionActionUtil::FillInfoForTabId(
     vivaldi::extension_action_utils::ExtensionInfo* info,
     ExtensionAction* action,
     int tab_id) {
-  info->keyboard_shortcut.reset(
-      new std::string(GetShortcutTextForExtensionAction(action, profile_)));
+  info->keyboard_shortcut = GetShortcutTextForExtensionAction(action, profile_);
 
   info->id = action->extension_id();
 
   // Note, all getters return default values if no explicit value has been set.
-  info->badge_tooltip.reset(new std::string(action->GetTitle(tab_id)));
+  info->badge_tooltip = action->GetTitle(tab_id);
 
-  info->badge_text.reset(
-      new std::string(action->GetExplicitlySetBadgeText(tab_id)));
+  info->badge_text = action->GetExplicitlySetBadgeText(tab_id);
 
-  info->badge_background_color.reset(
-      new std::string(color_utils::SkColorToRgbaString(
-          action->GetBadgeBackgroundColor(tab_id))));
+  info->badge_background_color = color_utils::SkColorToRgbaString(
+          action->GetBadgeBackgroundColor(tab_id));
 
-  info->badge_text_color.reset(new std::string(
-      color_utils::SkColorToRgbaString(action->GetBadgeTextColor(tab_id))));
+  info->badge_text_color =
+      color_utils::SkColorToRgbaString(action->GetBadgeTextColor(tab_id));
 
   info->action_type = action->action_type() == ActionInfo::TYPE_BROWSER
                           ? vivaldi::extension_action_utils::ACTION_TYPE_BROWSER
                           : vivaldi::extension_action_utils::ACTION_TYPE_PAGE;
 
-  info->visible.reset(new bool(action->GetIsVisible(tab_id)));
+  info->visible = action->GetIsVisible(tab_id);
 
-  info->allow_in_incognito.reset(
-      new bool(util::IsIncognitoEnabled(action->extension_id(), profile_)));
+  info->allow_in_incognito =
+      util::IsIncognitoEnabled(action->extension_id(), profile_);
 
   bool is_user_hidden = Contains(user_hidden_extensions_.GetList(),
                                  base::Value(action->extension_id()));
 
-  info->action_is_hidden.reset(new bool(is_user_hidden));
+  info->action_is_hidden = is_user_hidden;
 
   FillBitmapForTabId(info, action, tab_id);
 }
@@ -364,8 +356,8 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
 
   vivaldi::extension_action_utils::ExtensionInfo info;
 
-  info.keyboard_shortcut.reset(new std::string(
-      GetShortcutTextForExtensionAction(extension_action, browser_context)));
+  info.keyboard_shortcut =
+      GetShortcutTextForExtensionAction(extension_action, browser_context);
 
   // TODO(igor@vivaldi.com): Shall we use the passed browser_context here,
   // not stored profile_? See VB-52519.
@@ -600,16 +592,16 @@ ExtensionActionUtilsGetToolbarExtensionsFunction::Run() {
           ExtensionActionUtilFactory::GetForBrowserContext(browser_context());
 
       utils->FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId);
-      info.name.reset(new std::string(extension->name()));
+      info.name = extension->name();
 
       const std::string* manifest_string =
           extension->manifest()->FindStringPath(manifest_keys::kHomepageURL);
       if (manifest_string) {
-        info.homepage.reset(new std::string(*manifest_string));
+        info.homepage = *manifest_string;
       }
       manifest_string = extension->manifest()->FindStringPath(manifest_keys::kOptionsPage);
       if (manifest_string) {
-        info.optionspage.reset(new std::string(*manifest_string));
+        info.optionspage = *manifest_string;
       }
       toolbar_extensionactions.push_back(std::move(info));
     }
@@ -683,19 +675,19 @@ ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
   }
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  const base::Value* hidden_extensions = profile->GetPrefs()->GetList(
+  auto& hidden_extensions = profile->GetPrefs()->GetList(
       vivaldiprefs::kAddressBarExtensionsHiddenExtensions);
 
-  base::Value updated_hidden_extensions(hidden_extensions->GetList().Clone());
+  auto updated_hidden_extensions(hidden_extensions.Clone());
 
-  if (Contains(updated_hidden_extensions.GetList(),
+  if (Contains(updated_hidden_extensions,
                base::Value(params->extension_id))) {
-    updated_hidden_extensions.EraseListValue(base::Value(params->extension_id));
+    updated_hidden_extensions.EraseValue(base::Value(params->extension_id));
   } else {
     updated_hidden_extensions.Append(params->extension_id);
   }
-  profile->GetPrefs()->Set(vivaldiprefs::kAddressBarExtensionsHiddenExtensions,
-                           updated_hidden_extensions);
+  profile->GetPrefs()->SetList(vivaldiprefs::kAddressBarExtensionsHiddenExtensions,
+                           std::move(updated_hidden_extensions));
 
   ExtensionActionAPI::Get(browser_context())
       ->NotifyChange(action, nullptr, browser_context());
@@ -819,7 +811,7 @@ void RecursivelyFillMenu(
     bool top_level,
     const MenuItem::OwnedList* all_items,
     bool can_cross_incognito,
-    std::vector<vivaldi::extension_action_utils::MenuItem>* menu_items,
+    std::vector<vivaldi::extension_action_utils::MenuItem>& menu_items,
     content::BrowserContext* browser_context) {
   if (!all_items || all_items->empty())
     return;
@@ -845,13 +837,12 @@ void RecursivelyFillMenu(
 
       // Only go down one level from the top as a limit for now.
       if (top_level && item->children().size()) {
-        menuitem.submenu = std::make_unique<
-            std::vector<vivaldi::extension_action_utils::MenuItem>>();
+        menuitem.submenu = std::vector<vivaldi::extension_action_utils::MenuItem>();
         top_level = false;
         RecursivelyFillMenu(top_level, &item->children(), can_cross_incognito,
-                            menuitem.submenu.get(), browser_context);
+                            menuitem.submenu.value(), browser_context);
       }
-      menu_items->push_back(std::move(menuitem));
+      menu_items.push_back(std::move(menuitem));
     }
   }
 }
@@ -867,7 +858,7 @@ std::vector<vivaldi::extension_action_utils::MenuItem> FillMenuFromManifest(
   const MenuItem::OwnedList* all_items =
       manager->MenuItems(MenuItem::ExtensionKey(extension->id()));
 
-  RecursivelyFillMenu(true, all_items, can_cross_incognito, &menu_items,
+  RecursivelyFillMenu(true, all_items, can_cross_incognito, menu_items,
                       browser_context);
 
   return std::vector<vivaldi::extension_action_utils::MenuItem>(
@@ -935,7 +926,7 @@ ExtensionActionUtilsExecuteMenuActionFunction::Run() {
     action_id.string_uid = "";
     base::StringToInt(params->menu_id, &action_id.uid);
 
-    MenuItem* item = manager->GetItemById(action_id);
+    item = manager->GetItemById(action_id);
     if (!item) {
       return RespondNow(Error(NoSuchMenuItem(params->menu_id)));
     }

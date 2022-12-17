@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,15 +6,14 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <set>
 #include <string>
 #include <utility>
 
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -51,7 +50,9 @@ enum class ElementRole {
   USERNAME,
   CURRENT_PASSWORD,
   NEW_PASSWORD,
-  CONFIRMATION_PASSWORD
+  CONFIRMATION_PASSWORD,
+  // Used for fields tagged only for webauthn autocomplete.
+  WEBAUTHN,
 };
 
 // Expected FormFieldData are constructed based on these descriptions.
@@ -125,10 +126,12 @@ struct ParseResultIds {
   autofill::FieldRendererId password_id;
   autofill::FieldRendererId new_password_id;
   autofill::FieldRendererId confirmation_password_id;
+  std::vector<autofill::FieldRendererId> webauthn_ids;
 
   bool IsEmpty() const {
     return username_id.is_null() && password_id.is_null() &&
-           new_password_id.is_null() && confirmation_password_id.is_null();
+           new_password_id.is_null() && confirmation_password_id.is_null() &&
+           webauthn_ids.empty();
   }
 };
 
@@ -144,6 +147,9 @@ void UpdateResultWithIdByRole(ParseResultIds* result,
     case ElementRole::USERNAME:
       DCHECK(result->username_id.is_null());
       result->username_id = id;
+      break;
+    case ElementRole::WEBAUTHN:
+      result->webauthn_ids.push_back(id);
       break;
     case ElementRole::CURRENT_PASSWORD:
       DCHECK(result->password_id.is_null());
@@ -252,10 +258,8 @@ void CheckField(const std::vector<FormFieldData>& fields,
     return;
   }
 
-  auto field_it = std::find_if(fields.begin(), fields.end(),
-                               [renderer_id](const FormFieldData& field) {
-                                 return field.unique_renderer_id == renderer_id;
-                               });
+  auto field_it = base::ranges::find(fields, renderer_id,
+                                     &FormFieldData::unique_renderer_id);
   ASSERT_TRUE(field_it != fields.end())
       << "Could not find a field with renderer ID " << renderer_id;
 
@@ -946,6 +950,13 @@ TEST(FormParserTest, TestAutocomplete) {
                    .form_control_type = "password"},
               },
       },
+      {
+          .description_for_logging = "Autocomplete single username",
+          .fields = {{.role = ElementRole::USERNAME,
+                      .is_focusable = false,
+                      .autocomplete_attribute = "username",
+                      .form_control_type = "text"}},
+      },
   });
 }
 
@@ -1140,7 +1151,7 @@ TEST(FormParserTest, ReadonlyFields) {
 TEST(FormParserTest, ServerPredictionsForClearTextPasswordFields) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
-      password_manager::features::KEnablePasswordGenerationForClearTextFields);
+      password_manager::features::kEnablePasswordGenerationForClearTextFields);
   CheckTestData({
       {
           .description_for_logging = "Server prediction for account change "
@@ -1556,6 +1567,7 @@ TEST(FormParserTest, AllPossiblePasswords) {
                   {.value = u"", .form_control_type = "password"},
                   {.role_filling = ElementRole::USERNAME,
                    .autocomplete_attribute = "username",
+                   .value = u"",
                    .form_control_type = "text"},
                   {.role_filling = ElementRole::CURRENT_PASSWORD,
                    .autocomplete_attribute = "current-password",
@@ -2911,6 +2923,51 @@ TEST(FormParserTest, AcceptsWebAuthnCredentials) {
               {
                   {.role = ElementRole::USERNAME,
                    .autocomplete_attribute = "webauthn",
+                   .value = u"rosalina",
+                   .name = u"username",
+                   .form_control_type = "text"},
+                  {.role = ElementRole::CURRENT_PASSWORD,
+                   .value = u"luma",
+                   .name = u"password",
+                   .form_control_type = "password"},
+              },
+          .accepts_webauthn_credentials = true,
+      },
+  });
+}
+
+// Tests that if there is a single field marked as autofill="webauthn" then the
+// form is parsed and the `accepts_webauthn_credentials` flag is set.
+// Regression test for crbug.com/1366006.
+TEST(FormParserTest, SingleFieldAcceptsWebAuthnCredentials) {
+  CheckTestData({
+      {
+          .description_for_logging =
+              "Single field tagged with autofill=\"webauthn\"",
+          .fields =
+              {
+                  {.role_filling = ElementRole::WEBAUTHN,
+                   .autocomplete_attribute = "webauthn",
+                   .value = u"rosalina",
+                   .name = u"username",
+                   .form_control_type = "text"},
+              },
+          .accepts_webauthn_credentials = true,
+      },
+  });
+}
+
+// Tests that if a field is marked as autofill="username webauthn" then the
+// `accepts_webauthn_credentials` flag is set.
+TEST(FormParserTest, AcceptsUsernameWebAuthnCredentials) {
+  CheckTestData({
+      {
+          .description_for_logging =
+              "Field tagged with autofill=\"username webauthn\"",
+          .fields =
+              {
+                  {.role = ElementRole::USERNAME,
+                   .autocomplete_attribute = "username webauthn",
                    .value = u"rosalina",
                    .name = u"username",
                    .form_control_type = "text"},

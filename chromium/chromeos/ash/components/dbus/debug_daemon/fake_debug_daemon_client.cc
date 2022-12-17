@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,14 +40,16 @@ FakeDebugDaemonClient::~FakeDebugDaemonClient() = default;
 
 void FakeDebugDaemonClient::Init(dbus::Bus* bus) {}
 
-void FakeDebugDaemonClient::DumpDebugLogs(bool is_compressed,
-                                          int file_descriptor,
-                                          VoidDBusMethodCallback callback) {
+void FakeDebugDaemonClient::DumpDebugLogs(
+    bool is_compressed,
+    int file_descriptor,
+    chromeos::VoidDBusMethodCallback callback) {
   std::move(callback).Run(true);
 }
 
-void FakeDebugDaemonClient::SetDebugMode(const std::string& subsystem,
-                                         VoidDBusMethodCallback callback) {
+void FakeDebugDaemonClient::SetDebugMode(
+    const std::string& subsystem,
+    chromeos::VoidDBusMethodCallback callback) {
   std::move(callback).Run(false);
 }
 
@@ -147,21 +149,24 @@ void FakeDebugDaemonClient::GetPerfOutput(
     int file_descriptor,
     chromeos::DBusMethodCallback<uint64_t> error_callback) {}
 
-void FakeDebugDaemonClient::StopPerf(uint64_t session_id,
-                                     VoidDBusMethodCallback callback) {}
+void FakeDebugDaemonClient::StopPerf(
+    uint64_t session_id,
+    chromeos::VoidDBusMethodCallback callback) {}
 
-void FakeDebugDaemonClient::GetScrubbedBigLogs(
+void FakeDebugDaemonClient::GetFeedbackLogsV2(
     const cryptohome::AccountIdentifier& id,
+    const std::vector<debugd::FeedbackLogType>& requested_logs,
     GetLogsCallback callback) {
   std::map<std::string, std::string> sample;
-  sample["Sample Scrubbed Big Log"] = "Your email address is xxxxxxxx";
+  sample["Sample Log"] = "Your email address is abc@abc.com";
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), false, sample));
+      FROM_HERE,
+      base::BindOnce(std::move(callback), /*succeeded=*/true, sample));
 }
 
 void FakeDebugDaemonClient::BackupArcBugReport(
     const cryptohome::AccountIdentifier& id,
-    VoidDBusMethodCallback callback) {
+    chromeos::VoidDBusMethodCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), true));
 }
@@ -227,7 +232,7 @@ void FakeDebugDaemonClient::RemoveRootfsVerification(
 }
 
 void FakeDebugDaemonClient::WaitForServiceToBeAvailable(
-    WaitForServiceToBeAvailableCallback callback) {
+    chromeos::WaitForServiceToBeAvailableCallback callback) {
   if (service_is_available_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), true));
@@ -253,7 +258,7 @@ void FakeDebugDaemonClient::SetServiceIsAvailable(bool is_available) {
   if (!is_available)
     return;
 
-  std::vector<WaitForServiceToBeAvailableCallback> callbacks;
+  std::vector<chromeos::WaitForServiceToBeAvailableCallback> callbacks;
   callbacks.swap(pending_wait_for_service_to_be_available_callbacks_);
   for (auto& callback : callbacks)
     std::move(callback).Run(true);
@@ -319,8 +324,9 @@ void FakeDebugDaemonClient::SetSchedulerConfigurationV2(
       base::BindOnce(std::move(callback), true, /*num_cores_disabled=*/0));
 }
 
-void FakeDebugDaemonClient::SetU2fFlags(const std::set<std::string>& flags,
-                                        VoidDBusMethodCallback callback) {
+void FakeDebugDaemonClient::SetU2fFlags(
+    const std::set<std::string>& flags,
+    chromeos::VoidDBusMethodCallback callback) {
   u2f_flags_ = flags;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), true));

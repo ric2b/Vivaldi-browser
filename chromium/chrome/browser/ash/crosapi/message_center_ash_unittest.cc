@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -448,7 +448,7 @@ TEST_F(MessageCenterAshTest, NotificationsGroupByNotifierId) {
   // There should only be a single popup since the new notification should be
   // added to the existing notification as a grouped child.
   EXPECT_EQ(
-      1, message_center::MessageCenter::Get()->GetPopupNotifications().size());
+      1u, message_center::MessageCenter::Get()->GetPopupNotifications().size());
 }
 
 }  // namespace

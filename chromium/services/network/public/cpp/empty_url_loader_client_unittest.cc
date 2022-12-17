@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,7 @@ void CheckBodyIsDrained(const std::string& body) {
 
   // Upcasting to mojom::URLLoaderClient to access mojom methods.
   mojom::URLLoaderClient* client = empty_client.get();
-  client->OnReceiveResponse(nullptr, std::move(consumer_handle));
+  client->OnReceiveResponse(nullptr, std::move(consumer_handle), absl::nullopt);
   client->OnComplete(URLLoaderCompletionStatus(net::OK));
 
   EXPECT_TRUE(mojo::BlockingCopyFromString(body, producer_handle));

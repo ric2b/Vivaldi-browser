@@ -1,0 +1,28 @@
+# Copyright 2022 Vivaldi Technologies AS. All rights reserved.
+
+source_set("top_menu") {
+  sources = [
+    "vivaldi_ntp_top_menu_cell.h",
+    "vivaldi_ntp_top_menu_cell.mm",
+    "vivaldi_ntp_top_menu.h",
+    "vivaldi_ntp_top_menu.mm",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/common/ui/util",
+    "//ios/public/provider/chrome/browser",
+    "//ios/third_party/material_components_ios",
+    "//ui/base",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

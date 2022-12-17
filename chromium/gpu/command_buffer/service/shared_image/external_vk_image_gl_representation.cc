@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -166,7 +166,8 @@ ExternalVkImageGLRepresentation::ExternalVkImageGLRepresentation(
 
 ExternalVkImageGLRepresentation::~ExternalVkImageGLRepresentation() {}
 
-gles2::Texture* ExternalVkImageGLRepresentation::GetTexture() {
+gles2::Texture* ExternalVkImageGLRepresentation::GetTexture(int plane_index) {
+  DCHECK_EQ(plane_index, 0);
   return texture_;
 }
 
@@ -191,7 +192,9 @@ ExternalVkImageGLPassthroughRepresentation::
     ~ExternalVkImageGLPassthroughRepresentation() {}
 
 const scoped_refptr<gles2::TexturePassthrough>&
-ExternalVkImageGLPassthroughRepresentation::GetTexturePassthrough() {
+ExternalVkImageGLPassthroughRepresentation::GetTexturePassthrough(
+    int plane_index) {
+  DCHECK_EQ(plane_index, 0);
   return representation_shared_.backing_impl()->GetTexturePassthrough();
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -140,7 +140,7 @@ void PaintRenderingContext2D::WillOverwriteCanvas() {
 }
 
 DOMMatrix* PaintRenderingContext2D::getTransform() {
-  const TransformationMatrix& t = GetState().GetTransform();
+  const AffineTransform& t = GetState().GetTransform();
   DOMMatrix* m = DOMMatrix::Create();
   m->setA(t.A() / effective_zoom_);
   m->setB(t.B() / effective_zoom_);

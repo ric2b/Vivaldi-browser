@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,13 +13,15 @@ import android.view.View;
 import android.widget.FrameLayout;
 import org.chromium.base.TraceEvent;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * A location bar implementation specific for smaller/phone screens.
  */
 /*Vivaldi*/ public class LocationBarPhone extends LocationBarLayout {
     private static final int ACTION_BUTTON_TOUCH_OVERFLOW_LEFT = 15;
 
-    private View mFirstVisibleFocusedView;
     private View mUrlBar;
     private View mStatusView;
 
@@ -70,21 +72,6 @@ import org.chromium.base.TraceEvent;
     }
 
     @Override
-    public void setShowIconsWhenUrlFocused(boolean showIcon) {
-        super.setShowIconsWhenUrlFocused(showIcon);
-        mFirstVisibleFocusedView = showIcon ? mStatusView : mUrlBar;
-    }
-
-    /* package */ void setFirstVisibleFocusedView(boolean toStatusView) {
-        mFirstVisibleFocusedView = toStatusView ? mStatusView : mUrlBar;
-        // It's possible that the fade animators hid the new first visible focused view if it was
-        // to the start of the previous first visible focused view. This happens while
-        // transitioning between incognito in some start surface scenarios.
-        mFirstVisibleFocusedView.setAlpha(1f);
-        mFirstVisibleFocusedView.setVisibility(View.VISIBLE);
-    }
-
-    @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         try (TraceEvent e = TraceEvent.scoped("LocationBarPhone.onMeasure")) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -99,15 +86,6 @@ import org.chromium.base.TraceEvent;
     }
 
     /**
-     * Returns the first child view that would be visible when location bar is focused. The first
-     * visible, focused view should be either url bar or status icon.
-     */
-    // TODO(crbug.com/1194642): Remove the idea of firstVisibleFocusedView.
-    /* package */ View getFirstVisibleFocusedView() {
-        return mFirstVisibleFocusedView;
-    }
-
-    /**
      * Returns {@link FrameLayout.LayoutParams} of the LocationBar view.
      *
      * <p>TODO(1133482): Hide this View interaction if possible.
@@ -116,5 +94,15 @@ import org.chromium.base.TraceEvent;
      */
     public FrameLayout.LayoutParams getFrameLayoutParams() {
         return (FrameLayout.LayoutParams) getLayoutParams();
+    }
+
+    int getOffsetOfFirstVisibleFocusedView() {
+        // Vivaldi: We should always make space for the status view, to show the dse icon.
+        if (!BuildConfig.IS_VIVALDI)
+        if (mLocationBarDataProvider.isIncognito() && mStatusView.getVisibility() != View.GONE) {
+            return mStatusView.getMeasuredWidth();
+        }
+
+        return 0;
     }
 }

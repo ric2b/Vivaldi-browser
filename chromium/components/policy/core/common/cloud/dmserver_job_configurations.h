@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,16 +26,31 @@ namespace policy {
 
 class CloudPolicyClient;
 
+// Struct containing the result data for a given job.
+struct DMServerJobResult {
+  // Unowned pointer the return value of `DeviceManagementService::CreateJob`.
+  const DeviceManagementService::Job* job = nullptr;
+
+  // net::Error value cast to int.
+  int net_error = 0;
+
+  // Status code combining
+  //   - `net_error`
+  //   - HTTP response code received from DMServer
+  //   - potential error from parsing `response`
+  DeviceManagementStatus dm_status =
+      DeviceManagementStatus::DM_STATUS_REQUEST_INVALID;
+
+  // The parsed response proto received from DMServer. This could be empty
+  // in case of errors.
+  enterprise_management::DeviceManagementResponse response;
+};
+
 // A configuration for sending enterprise_management::DeviceManagementRequest to
 // the DM server.
 class POLICY_EXPORT DMServerJobConfiguration : public JobConfigurationBase {
  public:
-  typedef base::OnceCallback<void(
-      DeviceManagementService::Job* job,
-      DeviceManagementStatus code,
-      int net_error,
-      const enterprise_management::DeviceManagementResponse&)>
-      Callback;
+  typedef base::OnceCallback<void(DMServerJobResult)> Callback;
 
   DMServerJobConfiguration(
       DeviceManagementService* service,

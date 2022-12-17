@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -192,8 +192,8 @@ TEST_F(LegacyAppCommandWebImplTest, CommandRunningStatus) {
   const std::wstring event_name =
       base::StrCat({kTestProcessExecutableName, L"-",
                     base::NumberToWString(::GetCurrentProcessId())});
-  NamedObjectAttributes attr;
-  GetNamedObjectAttributes(event_name.c_str(), GetTestScope(), &attr);
+  NamedObjectAttributes attr =
+      GetNamedObjectAttributes(event_name.c_str(), GetTestScope());
 
   base::WaitableEvent event(base::win::ScopedHandle(
       ::CreateEvent(&attr.sa, FALSE, FALSE, attr.name.c_str())));

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -325,7 +325,7 @@ ${REGISTER_NON_MAIN_DEX_NATIVES}
 
 def CreateProxyJavaFromDict(registration_dict, proxy_opts, forwarding=False):
   template = string.Template("""\
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -378,7 +378,7 @@ def CreateFromDict(registration_dict,
   """Returns the content of the header file."""
 
   template = string.Template("""\
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -846,7 +846,9 @@ def _MakeProxySignature(proxy_native,
     signature_template = string.Template("""
       // Hashed name: ${ALT_NAME}""" + native_method_line)
 
-    alt_name = proxy_native.hashed_proxy_name
+    # We add the prefix that is sometimes used so that codesearch can find it if
+    # someone searches a full method name from the stacktrace.
+    alt_name = f'Java_J_N_{proxy_native.hashed_proxy_name}'
     proxy_name = proxy_native.proxy_name
 
   return signature_template.substitute({

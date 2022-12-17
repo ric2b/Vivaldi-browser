@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,7 +69,7 @@ class OriginAgentClusterBrowserTest : public ContentBrowserTest {
 
     // InitWithFeatures needs to be called in the constructor in multi-threaded
     // tests.
-    std::vector<base::Feature> enabled, disabled;
+    std::vector<base::test::FeatureRef> enabled, disabled;
     (origin_cluster_default_enabled_ ? enabled : disabled)
         .push_back(blink::features::kOriginAgentClusterDefaultEnabled);
     (origin_cluster_absent_warning_ ? enabled : disabled)

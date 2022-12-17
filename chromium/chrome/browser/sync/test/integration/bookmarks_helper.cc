@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/types/optional_util.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
@@ -40,6 +41,7 @@
 #include "components/bookmarks/browser/bookmark_client.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon_base/favicon_util.h"
@@ -52,6 +54,7 @@
 #include "components/sync/test/entity_builder_factory.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/models/tree_node_iterator.h"
 #include "ui/gfx/favicon_size.h"
@@ -128,8 +131,10 @@ void ApplyBookmarkFavicon(
 // particular bookmark node in a particular bookmark model.
 class FaviconChangeObserver : public bookmarks::BookmarkModelObserver {
  public:
-  FaviconChangeObserver(BookmarkModel* model, const BookmarkNode* node)
-      : model_(model), node_(node) {
+  FaviconChangeObserver(BookmarkModel* model,
+                        const BookmarkNode* node,
+                        const absl::optional<GURL>& expected_icon_url)
+      : model_(model), node_(node), expected_icon_url_(expected_icon_url) {
     model->AddObserver(this);
   }
 
@@ -137,7 +142,8 @@ class FaviconChangeObserver : public bookmarks::BookmarkModelObserver {
   FaviconChangeObserver& operator=(const FaviconChangeObserver&) = delete;
 
   ~FaviconChangeObserver() override { model_->RemoveObserver(this); }
-  void WaitForSetFavicon() {
+
+  void WaitUntilFaviconChangedToIconURL() {
     DCHECK(!run_loop_.running());
     content::RunThisRunLoop(&run_loop_);
   }
@@ -152,7 +158,8 @@ class FaviconChangeObserver : public bookmarks::BookmarkModelObserver {
                          size_t new_index) override {}
   void BookmarkNodeAdded(BookmarkModel* model,
                          const BookmarkNode* parent,
-                         size_t index) override {}
+                         size_t index,
+                         bool added_by_user) override {}
   void BookmarkNodeRemoved(BookmarkModel* model,
                            const BookmarkNode* parent,
                            size_t old_index,
@@ -168,18 +175,34 @@ class FaviconChangeObserver : public bookmarks::BookmarkModelObserver {
       model->GetFavicon(node);
     }
   }
+
   void BookmarkNodeChildrenReordered(BookmarkModel* model,
                                      const BookmarkNode* node) override {}
+
   void BookmarkNodeFaviconChanged(BookmarkModel* model,
                                   const BookmarkNode* node) override {
-    if (model == model_ && node == node_) {
+    if (model != model_ || node != node_) {
+      return;
+    }
+    if (!node_->is_favicon_loaded()) {
+      // Favicons are loaded lazily, trigger loading. Note, that this logic is
+      // particularly important for favicon deletion, since simple check of
+      // icon_url() is not sufficient (it can be null if favicon was actually
+      // deleted or if it's not yet loaded).
+      model_->GetFavicon(node_);
+      return;
+    }
+
+    if (base::OptionalFromPtr(node_->icon_url()) == expected_icon_url_) {
       run_loop_.Quit();
     }
   }
 
  private:
-  raw_ptr<BookmarkModel> model_;
-  raw_ptr<const BookmarkNode> node_;
+  const raw_ptr<BookmarkModel> model_;
+  const raw_ptr<const BookmarkNode> node_;
+  const absl::optional<GURL> expected_icon_url_;
+
   base::RunLoop run_loop_;
 };
 
@@ -283,7 +306,7 @@ void SetFaviconImpl(Profile* profile,
                     FaviconSource favicon_source) {
   BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
 
-  FaviconChangeObserver observer(model, node);
+  FaviconChangeObserver observer(model, node, icon_url);
   favicon::FaviconService* favicon_service =
       FaviconServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::EXPLICIT_ACCESS);
@@ -294,9 +317,8 @@ void SetFaviconImpl(Profile* profile,
     ApplyBookmarkFavicon(node, favicon_service, icon_url, image.As1xPNGBytes());
   }
 
-  // Wait for the favicon for |node| to be invalidated.
-  observer.WaitForSetFavicon();
-  model->GetFavicon(node);
+  // Wait for the favicon for |node| to be updated.
+  observer.WaitUntilFaviconChangedToIconURL();
 }
 
 // Expires the favicon for |profile| and |node|. |profile| may be
@@ -325,7 +347,8 @@ void DeleteFaviconMappingsImpl(Profile* profile,
                                FaviconSource favicon_source) {
   BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
 
-  FaviconChangeObserver observer(model, node);
+  FaviconChangeObserver observer(model, node,
+                                 /*expected_icon_url=*/absl::nullopt);
   favicon::FaviconService* favicon_service =
       FaviconServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::EXPLICIT_ACCESS);
@@ -339,9 +362,8 @@ void DeleteFaviconMappingsImpl(Profile* profile,
         scoped_refptr<base::RefCountedString>(new base::RefCountedString()));
   }
 
-  // Wait for the favicon for |node| to be invalidated.
-  observer.WaitForSetFavicon();
-  model->GetFavicon(node);
+  // Wait for the favicon for |node| to be deleted.
+  observer.WaitUntilFaviconChangedToIconURL();
 }
 
 // Checks if the favicon in |node_a| from |model_a| matches that of |node_b|
@@ -606,7 +628,8 @@ void SetTitle(int profile,
   ASSERT_EQ(bookmarks::GetBookmarkNodeByID(model, node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
-  model->SetTitle(node, base::UTF8ToUTF16(new_title));
+  model->SetTitle(node, base::UTF8ToUTF16(new_title),
+                  bookmarks::metrics::BookmarkEditSource::kOther);
 }
 
 void SetFavicon(int profile,
@@ -697,7 +720,8 @@ const BookmarkNode* SetURL(int profile,
     return nullptr;
   }
   if (node->is_url()) {
-    model->SetURL(node, new_url);
+    model->SetURL(node, new_url,
+                  bookmarks::metrics::BookmarkEditSource::kOther);
   }
   return node;
 }
@@ -923,7 +947,8 @@ void AnyBookmarkChangeObserver::BookmarkNodeMoved(
 
 void AnyBookmarkChangeObserver::BookmarkNodeAdded(BookmarkModel* model,
                                                   const BookmarkNode* parent,
-                                                  size_t index) {
+                                                  size_t index,
+                                                  bool added_by_user) {
   cb_.Run();
 }
 

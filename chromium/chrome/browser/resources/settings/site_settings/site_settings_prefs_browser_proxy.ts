@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,9 @@ export interface SiteGroup {
   etldPlus1: string;
   numCookies: number;
   origins: OriginInfo[];
+  fpsOwner?: string;
+  fpsNumMembers?: number;
+  fpsEnterpriseManaged?: boolean;
   hasInstalledPWA: boolean;
 }
 
@@ -163,6 +166,15 @@ export interface ZoomLevelEntry {
   setting: string;
   source: string;
   zoom: string;
+}
+
+/**
+ * The notification permission information passed from
+ * site_settings_handler.cc.
+ */
+export interface NotificationPermission {
+  origin: string;
+  notificationInfoString: string;
 }
 
 export interface SiteSettingsPrefsBrowserProxy {
@@ -437,6 +449,41 @@ export interface SiteSettingsPrefsBrowserProxy {
    * @param action number.
    */
   recordAction(action: number): void;
+
+  /** Gets the site list that send a lot of notifications. */
+  getNotificationPermissionReview(): Promise<NotificationPermission[]>;
+
+  /** Blocks the notification permission for all origins in the list. */
+  blockNotificationPermissionForOrigins(origins: string[]): void;
+
+  /** Allows the notification permission for all origins in the list */
+  allowNotificationPermissionForOrigins(origins: string[]): void;
+
+  /** Adds the origins to blocklist for the notification permissions feature. */
+  ignoreNotificationPermissionForOrigins(origins: string[]): void;
+
+  /**
+   * Removes the origins from the blocklist for the notification permissions
+   * feature.
+   */
+  undoIgnoreNotificationPermissionForOrigins(origins: string[]): void;
+
+  /** Resets the notification permission for the origins. */
+  resetNotificationPermissionForOrigins(origin: string[]): void;
+
+  /**
+   * Gets display string for FPS information of owner and member count.
+   * @param fpsNumMembers The number of members in the first party set.
+   * @param fpsOwner The eTLD+1 for the first party set owner.
+   */
+  getFpsMembershipLabel(fpsNumMembers: number, fpsOwner: string):
+      Promise<string>;
+
+  /**
+   * Gets the plural string for a given number of cookies.
+   * @param numCookies The number of cookies.
+   */
+  getNumCookiesString(numCookies: number): Promise<string>;
 }
 
 export class SiteSettingsPrefsBrowserProxyImpl implements
@@ -589,6 +636,48 @@ export class SiteSettingsPrefsBrowserProxyImpl implements
 
   recordAction(action: number) {
     chrome.send('recordAction', [action]);
+  }
+
+  getNotificationPermissionReview() {
+    return sendWithPromise('getNotificationPermissionReview');
+  }
+
+  blockNotificationPermissionForOrigins(origins: string[]) {
+    chrome.send('blockNotificationPermissionForOrigins', [
+      origins,
+    ]);
+  }
+
+  allowNotificationPermissionForOrigins(origins: string[]) {
+    chrome.send('allowNotificationPermissionForOrigins', [
+      origins,
+    ]);
+  }
+
+  ignoreNotificationPermissionForOrigins(origins: string[]) {
+    chrome.send('ignoreNotificationPermissionReviewForOrigins', [
+      origins,
+    ]);
+  }
+
+  undoIgnoreNotificationPermissionForOrigins(origins: string[]) {
+    chrome.send('undoIgnoreNotificationPermissionReviewForOrigins', [
+      origins,
+    ]);
+  }
+
+  resetNotificationPermissionForOrigins(origins: string[]) {
+    chrome.send('resetNotificationPermissionForOrigins', [
+      origins,
+    ]);
+  }
+
+  getFpsMembershipLabel(fpsNumMembers: number, fpsOwner: string) {
+    return sendWithPromise('getFpsMembershipLabel', fpsNumMembers, fpsOwner);
+  }
+
+  getNumCookiesString(numCookies: number) {
+    return sendWithPromise('getNumCookiesString', numCookies);
   }
 
   static getInstance(): SiteSettingsPrefsBrowserProxy {

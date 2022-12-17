@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -137,17 +137,9 @@ void MojoWebUIBrowserTest::BrowsePreload(const GURL& browse_to) {
   if (use_mojo_modules_)
     return;
 
-  if (use_mojo_lite_bindings_) {
-    std::string test_mojo_lite_js =
-        ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
-            IDR_WEB_UI_TEST_MOJO_LITE_JS);
-    web_contents->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
-        base::UTF8ToUTF16(test_mojo_lite_js), base::NullCallback());
-  } else {
-    std::string test_mojo_js =
-        ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
-            IDR_WEB_UI_TEST_MOJO_JS);
-    web_contents->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
-        base::UTF8ToUTF16(test_mojo_js), base::NullCallback());
-  }
+  std::string test_mojo_lite_js =
+      ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
+          IDR_WEB_UI_TEST_MOJO_LITE_JS);
+  web_contents->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
+      base::UTF8ToUTF16(test_mojo_lite_js), base::NullCallback());
 }

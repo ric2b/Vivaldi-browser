@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,7 +35,6 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.subscriptions.CommerceSubscription;
 import org.chromium.chrome.browser.subscriptions.SubscriptionsManager;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
@@ -48,7 +47,6 @@ import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetTestSupport;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
-import org.chromium.components.power_bookmarks.PowerBookmarkType;
 import org.chromium.components.power_bookmarks.ShoppingSpecifics;
 import org.chromium.content_public.browser.test.util.ClickUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -81,7 +79,6 @@ public class BookmarkSaveFlowTest {
     private BottomSheetController mBottomSheetController;
     private BottomSheetTestSupport mBottomSheetTestSupport;
     private BookmarkModel mBookmarkModel;
-    private BookmarkBridge mBookmarkBridge;
 
     @Before
     public void setUp() throws ExecutionException {
@@ -96,9 +93,7 @@ public class BookmarkSaveFlowTest {
             mBottomSheetTestSupport = new BottomSheetTestSupport(mBottomSheetController);
             mBookmarkSaveFlowCoordinator = new BookmarkSaveFlowCoordinator(
                     cta, mBottomSheetController, mSubscriptionsManager, mUserEducationHelper);
-            mBookmarkModel = new BookmarkModel(Profile.fromWebContents(
-                    mActivityTestRule.getActivity().getActivityTab().getWebContents()));
-            mBookmarkBridge = mActivityTestRule.getActivity().getBookmarkBridgeForTesting();
+            mBookmarkModel = mActivityTestRule.getActivity().getBookmarkModelForTesting();
         });
 
         loadBookmarkModel();
@@ -166,13 +161,9 @@ public class BookmarkSaveFlowTest {
     public void testBookmarkSaveFlow_WithShoppingListItem() throws IOException {
         TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
             BookmarkId id = addBookmark("Test bookmark", new GURL("http://a.com"));
-            PowerBookmarkMeta.Builder meta =
-                    PowerBookmarkMeta.newBuilder()
-                            .setType(PowerBookmarkType.SHOPPING)
-                            .setShoppingSpecifics(ShoppingSpecifics.newBuilder()
-                                                          .setProductClusterId(1234L)
-                                                          .build());
-            mBookmarkBridge.setPowerBookmarkMeta(id, meta.build());
+            PowerBookmarkMeta.Builder meta = PowerBookmarkMeta.newBuilder().setShoppingSpecifics(
+                    ShoppingSpecifics.newBuilder().setProductClusterId(1234L).build());
+            mBookmarkModel.setPowerBookmarkMeta(id, meta.build());
             mBookmarkSaveFlowCoordinator.show(id, /*fromHeuristicEntryPoint=*/false,
                     /*wasBookmarkMoved=*/false, meta.build());
             return null;
@@ -188,13 +179,9 @@ public class BookmarkSaveFlowTest {
             throws IOException {
         TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
             BookmarkId id = addBookmark("Test bookmark", new GURL("http://a.com"));
-            PowerBookmarkMeta.Builder meta =
-                    PowerBookmarkMeta.newBuilder()
-                            .setType(PowerBookmarkType.SHOPPING)
-                            .setShoppingSpecifics(ShoppingSpecifics.newBuilder()
-                                                          .setProductClusterId(1234L)
-                                                          .build());
-            mBookmarkBridge.setPowerBookmarkMeta(id, meta.build());
+            PowerBookmarkMeta.Builder meta = PowerBookmarkMeta.newBuilder().setShoppingSpecifics(
+                    ShoppingSpecifics.newBuilder().setProductClusterId(1234L).build());
+            mBookmarkModel.setPowerBookmarkMeta(id, meta.build());
             mBookmarkSaveFlowCoordinator.show(
                     id, /*fromHeuristicEntryPoint=*/true, /*wasBookmarkMoved=*/false, meta.build());
             return null;
@@ -210,12 +197,9 @@ public class BookmarkSaveFlowTest {
             throws IOException {
         TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
             BookmarkId id = addBookmark("Test bookmark", new GURL("http://a.com"));
-            PowerBookmarkMeta.Builder meta =
-                    PowerBookmarkMeta.newBuilder()
-                            .setType(PowerBookmarkType.SHOPPING)
-                            .setShoppingSpecifics(
-                                    ShoppingSpecifics.newBuilder().setProductClusterId(1234L));
-            mBookmarkBridge.setPowerBookmarkMeta(id, meta.build());
+            PowerBookmarkMeta.Builder meta = PowerBookmarkMeta.newBuilder().setShoppingSpecifics(
+                    ShoppingSpecifics.newBuilder().setProductClusterId(1234L));
+            mBookmarkModel.setPowerBookmarkMeta(id, meta.build());
             mBookmarkSaveFlowCoordinator.show(id, /*fromHeuristicEntryPoint=*/false,
                     /*wasBookmarkMoved=*/false, meta.build());
             return null;

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -339,12 +339,13 @@ class NET_EXPORT SpdySession
 
   // Returns true if |new_hostname| can be pooled into an existing connection to
   // |old_hostname| associated with |ssl_info|.
-  static bool CanPool(TransportSecurityState* transport_security_state,
-                      const SSLInfo& ssl_info,
-                      const SSLConfigService& ssl_config_service,
-                      const std::string& old_hostname,
-                      const std::string& new_hostname,
-                      const net::NetworkIsolationKey& network_isolation_key);
+  static bool CanPool(
+      TransportSecurityState* transport_security_state,
+      const SSLInfo& ssl_info,
+      const SSLConfigService& ssl_config_service,
+      const std::string& old_hostname,
+      const std::string& new_hostname,
+      const net::NetworkAnonymizationKey& network_anonymization_key);
 
   // Create a new SpdySession.
   // |spdy_session_key| is the host/port that this session connects to, privacy

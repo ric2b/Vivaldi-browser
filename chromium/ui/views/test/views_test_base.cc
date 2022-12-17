@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,7 @@
 #include "ui/gl/test/gl_surface_test_support.h"
 #include "ui/views/buildflags.h"
 #include "ui/views/test/test_platform_native_widget.h"
+#include "ui/views/view_test_api.h"
 
 #if defined(USE_AURA)
 #include "ui/views/widget/native_widget_aura.h"
@@ -112,19 +113,6 @@ void ViewsTestBase::SetUpForInteractiveTests() {
 void ViewsTestBase::RunPendingMessages() {
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
-}
-
-void ViewsTestBase::RunScheduledLayout(View* view) {
-  DCHECK(view);
-  Widget* widget = view->GetWidget();
-  if (widget) {
-    widget->LayoutRootViewIfNecessary();
-    return;
-  }
-  View* parent_view = view;
-  while (parent_view->parent())
-    parent_view = parent_view->parent();
-  parent_view->Layout();
 }
 
 Widget::InitParams ViewsTestBase::CreateParams(Widget::InitParams::Type type) {

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,9 +12,9 @@ namespace user_notes {
 // Model class for a note.
 class UserNoteMetadata {
  public:
-  explicit UserNoteMetadata(base::Time creation_date,
-                            base::Time modification_date,
-                            int min_note_version);
+  UserNoteMetadata(base::Time creation_date,
+                   base::Time modification_date,
+                   int min_note_version);
   ~UserNoteMetadata();
   UserNoteMetadata(const UserNoteMetadata&) = delete;
   UserNoteMetadata& operator=(const UserNoteMetadata&) = delete;

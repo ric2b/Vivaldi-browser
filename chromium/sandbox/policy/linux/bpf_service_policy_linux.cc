@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,10 +24,6 @@ ResultExpr ServiceProcessPolicy::EvaluateSyscall(int sysno) const {
   switch (sysno) {
     case __NR_ioctl:
       return RestrictIoctl();
-    // Some third party libraries seem to call sched_getaffinity(). There's not
-    // much reason to block the syscall.
-    case __NR_sched_getaffinity:
-      return RestrictSchedTarget(GetPolicyPid(), sysno);
       // Allow the system calls below.
 #if defined(__i386__) || defined(__x86_64__) || defined(__mips__) || \
     defined(__aarch64__)

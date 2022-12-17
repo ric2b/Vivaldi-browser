@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -74,6 +74,8 @@ class GPU_EXPORT MemoryTypeTracker {
   MemoryTypeTracker& operator=(const MemoryTypeTracker&) = delete;
 
   ~MemoryTypeTracker();
+
+  const MemoryTracker* memory_tracker() const { return memory_tracker_; }
 
   void TrackMemAlloc(size_t bytes);
   void TrackMemFree(size_t bytes);

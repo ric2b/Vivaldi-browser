@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -125,6 +125,7 @@ void ManualFillingControllerImpl::OnAutomaticGenerationStatusChanged(
 
 void ManualFillingControllerImpl::RefreshSuggestions(
     const AccessorySheetData& accessory_sheet_data) {
+  TRACE_EVENT0("passwords", "ManualFillingControllerImpl::RefreshSuggestions");
   view_->OnItemsAvailable(accessory_sheet_data);
   available_sheets_.insert_or_assign(GetSourceForTabType(accessory_sheet_data),
                                      accessory_sheet_data);
@@ -230,7 +231,7 @@ void ManualFillingControllerImpl::OnToggleChanged(
 
 void ManualFillingControllerImpl::RequestAccessorySheet(
     autofill::AccessoryTabType tab_type,
-    base::OnceCallback<void(const autofill::AccessorySheetData&)> callback) {
+    base::OnceCallback<void(autofill::AccessorySheetData)> callback) {
   // TODO(crbug.com/1169167): Consider to execute this async to reduce jank.
   absl::optional<AccessorySheetData> sheet =
       GetControllerForTabType(tab_type)->GetSheetData();
@@ -331,15 +332,11 @@ bool ManualFillingControllerImpl::ShouldShowAccessory() const {
            last_focused_field_type_ == FocusedFieldType::kFillableUsernameField;
   }
   switch (last_focused_field_type_) {
-    // Always show on password fields to provide management and generation.
-    case FocusedFieldType::kFillablePasswordField:
-      return true;
-
     // If there are suggestions, show on usual form fields.
+    case FocusedFieldType::kFillablePasswordField:
     case FocusedFieldType::kFillableUsernameField:
     case FocusedFieldType::kFillableNonSearchField:
-      // TODO(crbug/1242839): Hide the accessory if no fallback is available.
-      return true;
+      return !available_sources_.empty();
 
     // Fallbacks aren't really useful on search fields but autocomplete entries
     // justify showing the accessory.
@@ -400,6 +397,8 @@ void ManualFillingControllerImpl::OnSourceAvailabilityChanged(
     FillingSource source,
     AccessoryController* source_controller,
     AccessoryController::IsFillingSourceAvailable is_source_available) {
+  TRACE_EVENT0("passwords",
+               "ManualFillingControllerImpl::OnSourceAvailabilityChanged");
   absl::optional<AccessorySheetData> sheet = source_controller->GetSheetData();
   bool show_filling_source = sheet.has_value() && is_source_available;
   // TODO(crbug.com/1169167): Remove once all sheets pull this information

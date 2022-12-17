@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -190,7 +190,6 @@ class OzonePlatformX11 : public OzonePlatform,
       properties->message_pump_type_for_viz_compositor =
           base::MessagePumpType::UI;
       properties->supports_vulkan_swap_chain = true;
-      properties->uses_external_vulkan_image_factory = true;
       properties->skia_can_fall_back_to_x11 = true;
       properties->platform_shows_drag_image = false;
       properties->supports_global_application_menus = true;

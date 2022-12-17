@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,8 @@
 namespace blink {
 
 class CSSPrimitiveValue;
-class ComputedStyle;
 class Document;
+class Element;
 class LocalFrame;
 enum class CSSValueID;
 enum class ColorSpaceGamut;
@@ -87,9 +87,9 @@ class CORE_EXPORT MediaValues : public GarbageCollected<MediaValues>,
   virtual int GetHorizontalViewportSegments() const = 0;
   virtual int GetVerticalViewportSegments() const = 0;
   virtual device::mojom::blink::DevicePostureType GetDevicePosture() const = 0;
-  // Returns the ComputedStyle used for style() query evaluation for container
-  // queries.
-  virtual const ComputedStyle* GetComputedStyle() const { return nullptr; }
+  // Returns the container element used to retrieve base style and parent style
+  // when computing the computed value of a style() container query.
+  virtual Element* ContainerElement() const { return nullptr; }
 
  protected:
   static double CalculateViewportWidth(LocalFrame*);
@@ -104,6 +104,7 @@ class CORE_EXPORT MediaValues : public GarbageCollected<MediaValues>,
   static float CalculateExSize(LocalFrame*);
   static float CalculateChSize(LocalFrame*);
   static float CalculateIcSize(LocalFrame*);
+  static float CalculateLineHeight(LocalFrame*);
   static int CalculateDeviceWidth(LocalFrame*);
   static int CalculateDeviceHeight(LocalFrame*);
   static bool CalculateStrictMode(LocalFrame*);

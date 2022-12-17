@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "components/segmentation_platform/internal/proto/signal.pb.h"
 #include "components/segmentation_platform/internal/proto/signal_storage_config.pb.h"
 #include "components/segmentation_platform/internal/ukm_data_manager.h"
+#include "components/segmentation_platform/public/features.h"
 
 namespace segmentation_platform {
 namespace {
@@ -32,7 +33,8 @@ StorageService::StorageService(
     base::Clock* clock,
     UkmDataManager* ukm_data_manager,
     const base::flat_set<proto::SegmentId>& all_segment_ids,
-    ModelProviderFactory* model_provider_factory)
+    ModelProviderFactory* model_provider_factory,
+    PrefService* profile_prefs)
     : StorageService(
           db_provider->GetDB<proto::SegmentInfo>(
               leveldb_proto::ProtoDbType::SEGMENT_INFO_DATABASE,
@@ -49,7 +51,8 @@ StorageService::StorageService(
           clock,
           ukm_data_manager,
           all_segment_ids,
-          model_provider_factory) {}
+          model_provider_factory,
+          profile_prefs) {}
 
 StorageService::StorageService(
     std::unique_ptr<leveldb_proto::ProtoDatabase<proto::SegmentInfo>>
@@ -60,12 +63,15 @@ StorageService::StorageService(
     base::Clock* clock,
     UkmDataManager* ukm_data_manager,
     const base::flat_set<proto::SegmentId>& all_segment_ids,
-    ModelProviderFactory* model_provider_factory)
+    ModelProviderFactory* model_provider_factory,
+    PrefService* profile_prefs)
     : default_model_manager_(
           std::make_unique<DefaultModelManager>(model_provider_factory,
                                                 all_segment_ids)),
-      segment_info_database_(
-          std::make_unique<SegmentInfoDatabase>(std::move(segment_db))),
+      segment_info_database_(std::make_unique<SegmentInfoDatabase>(
+          std::move(segment_db),
+          std::make_unique<SegmentInfoCache>(base::FeatureList::IsEnabled(
+              features::kSegmentationPlatformSegmentInfoCache)))),
       signal_database_(
           std::make_unique<SignalDatabaseImpl>(std::move(signal_db), clock)),
       signal_storage_config_(std::make_unique<SignalStorageConfig>(
@@ -78,7 +84,8 @@ StorageService::StorageService(
           segment_info_database_.get(),
           signal_database_.get(),
           signal_storage_config_.get(),
-          default_model_manager_.get())) {
+          default_model_manager_.get(),
+          profile_prefs)) {
   ukm_data_manager_->AddRef();
 }
 

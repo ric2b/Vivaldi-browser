@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -96,6 +96,10 @@ target(link_target_type, "gpu_sources") {
       "gpu_sandbox_hook_linux.cc",
       "gpu_sandbox_hook_linux.h",
     ]
+
+    if (use_v4l2_codec) {
+      deps += [ "//media/gpu/v4l2" ]
+    }
   }
 
   if (is_chromeos_ash) {

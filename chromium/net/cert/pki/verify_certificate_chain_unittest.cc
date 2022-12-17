@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,8 +17,7 @@ class VerifyCertificateChainTestDelegate {
  public:
   static void Verify(const VerifyCertChainTest& test,
                      const std::string& test_file_path) {
-    SimplePathBuilderDelegate delegate(
-        1024, SimplePathBuilderDelegate::DigestPolicy::kWeakAllowSha1);
+    SimplePathBuilderDelegate delegate(1024, test.digest_policy);
 
     CertPathErrors errors;
     // TODO(eroman): Check user_constrained_policy_set.

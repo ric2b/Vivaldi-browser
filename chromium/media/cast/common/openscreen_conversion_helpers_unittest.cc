@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,8 @@ TEST(OpenscreenConversionHelpersTest, EncodedFrameConversions) {
   original.lossiness = 0.5f;
   original.encode_completion_time =
       base::TimeTicks() + base::Milliseconds(1337);
-  original.dependency = EncodedFrame::Dependency::INDEPENDENT;
+  original.dependency =
+      openscreen::cast::EncodedFrame::Dependency::kIndependent;
   original.frame_id = FrameId::first();
   original.rtp_timestamp = ToRtpTimeTicks(base::Seconds(3), 9000);
   original.reference_time = base::TimeTicks() + base::Milliseconds(1338);
@@ -31,7 +32,7 @@ TEST(OpenscreenConversionHelpersTest, EncodedFrameConversions) {
 
   const openscreen::cast::EncodedFrame converted =
       ToOpenscreenEncodedFrame(original);
-  EXPECT_EQ(openscreen::cast::EncodedFrame::Dependency::INDEPENDENTLY_DECODABLE,
+  EXPECT_EQ(openscreen::cast::EncodedFrame::Dependency::kIndependent,
             converted.dependency);
   EXPECT_EQ(openscreen::cast::FrameId(0), converted.frame_id);
   EXPECT_EQ(openscreen::cast::RtpTimeTicks(27000), converted.rtp_timestamp);

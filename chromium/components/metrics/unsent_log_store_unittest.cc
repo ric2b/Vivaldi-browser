@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,22 +92,24 @@ class TestUnsentLogStore : public UnsentLogStore {
       : UnsentLogStore(std::make_unique<UnsentLogStoreMetricsImpl>(),
                        service,
                        kTestPrefName,
-                       nullptr,
+                       /*metadata_pref_name=*/nullptr,
                        kLogCountLimit,
                        min_log_bytes,
-                       /* max_log_size= */ 0,
-                       std::string()) {}
+                       /*max_log_size=*/0,
+                       /*signing_key=*/std::string(),
+                       /*logs_event_manager=*/nullptr) {}
   TestUnsentLogStore(PrefService* service,
                      size_t min_log_bytes,
                      const std::string& signing_key)
       : UnsentLogStore(std::make_unique<UnsentLogStoreMetricsImpl>(),
                        service,
                        kTestPrefName,
-                       nullptr,
+                       /*metadata_pref_name=*/nullptr,
                        kLogCountLimit,
                        min_log_bytes,
-                       /* max_log_size = */ 0,
-                       signing_key) {}
+                       /*max_log_size=*/0,
+                       signing_key,
+                       /*logs_event_manager=*/nullptr) {}
   TestUnsentLogStore(std::unique_ptr<UnsentLogStoreMetrics> metrics,
                      PrefService* service,
                      size_t max_log_size)
@@ -116,9 +118,10 @@ class TestUnsentLogStore : public UnsentLogStore {
                        kTestPrefName,
                        kTestMetaDataPrefName,
                        kLogCountLimit,
-                       /* min_log_bytes= */ 1,
+                       /*min_log_bytes=*/1,
                        max_log_size,
-                       std::string()) {}
+                       /*signing_key=*/std::string(),
+                       /*logs_event_manager=*/nullptr) {}
 
   TestUnsentLogStore(const TestUnsentLogStore&) = delete;
   TestUnsentLogStore& operator=(const TestUnsentLogStore&) = delete;
@@ -138,7 +141,7 @@ TEST_F(UnsentLogStoreTest, EmptyLogList) {
   TestUnsentLogStore unsent_log_store(&prefs_, kLogByteLimit);
 
   unsent_log_store.TrimAndPersistUnsentLogs(/*overwrite_in_memory_store=*/true);
-  EXPECT_EQ(0U, prefs_.GetValueList(kTestPrefName).size());
+  EXPECT_EQ(0U, prefs_.GetList(kTestPrefName).size());
 
   TestUnsentLogStore result_unsent_log_store(&prefs_, kLogByteLimit);
   result_unsent_log_store.LoadPersistedUnsentLogs();

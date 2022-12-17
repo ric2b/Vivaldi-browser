@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,12 +30,6 @@ export function setPersonalizationSearchHandlerForTesting(testSearchHandler) {
  *     handler.
  */
 export function getPersonalizationSearchHandler() {
-  assert(
-      loadTimeData.getBoolean('isPersonalizationHubEnabled'),
-      'personalization hub feature is required');
-  assert(
-      !loadTimeData.getBoolean('isGuest'),
-      'guest must not request personalization search handler');
   if (!personalizationSearchHandler) {
     personalizationSearchHandler = SearchHandler.getRemote();
   }

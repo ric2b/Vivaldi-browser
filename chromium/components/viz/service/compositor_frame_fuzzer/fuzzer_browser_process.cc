@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -131,7 +131,7 @@ CompositorFrame FuzzerBrowserProcess::BuildBrowserUICompositorFrame(
                gfx::Rect(kBrowserSize), gfx::Transform());
 
   auto* renderer_sqs = pass->CreateAndAppendSharedQuadState();
-  renderer_sqs->SetAll(gfx::Transform(1.0, 0.0, 0.0, 1.0, 0, 80),
+  renderer_sqs->SetAll(gfx::Transform::MakeTranslation(0, 80),
                        gfx::Rect(kRendererFrameSize),
                        gfx::Rect(kRendererFrameSize),
                        /*mask_filter_info=*/gfx::MaskFilterInfo(),

@@ -20,12 +20,21 @@ namespace web {
 class WebState;
 }
 
+@class PanelInteractionController;
+
 // The NoteInteractionController abstracts the management of the various
 // UIViewControllers used to create, remove and edit a note.
 @interface NoteInteractionController : NSObject
 
 // This object's delegate.
 @property(nonatomic, weak) id<NoteInteractionControllerDelegate> delegate;
+
+@property(nonatomic, weak) PanelInteractionController* panelDelegate;
+
+// The navigation controller that is being presented, if any.
+// |self.noteBrowser|, |self.noteEditor|, and |self.folderEditor| are
+// children of this navigation controller.
+@property(nonatomic, strong) UINavigationController* noteNavigationController;
 
 - (instancetype)initWithBrowser:(Browser*)browser
                parentController:(UIViewController*)parentController
@@ -35,8 +44,8 @@ class WebState;
 // Called before the instance is deallocated.
 - (void)shutdown;
 
-// Presents the notes browser modally.
-- (void)presentNotes;
+// Opens the notes browser in the modal panel.
+- (void)showNotes;
 
 // Presents the note or folder editor for the given |node|.
 - (void)presentEditorForNode:(const vivaldi::NoteNode*)node;

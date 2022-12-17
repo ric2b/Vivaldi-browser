@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -147,7 +147,7 @@ IN_PROC_BROWSER_TEST_F(ProtocolHandlerApiTest, BrowserProcessSecurityLevel) {
   // Run the extension subtest and wait for the initialization.
   ASSERT_TRUE(RunExtensionTest(
       "protocol_handler",
-      {.page_url = "test_browser_process_security_level.html"}))
+      {.extension_url = "test_browser_process_security_level.html"}))
       << message_;
 
   content::WebContentsDelegate* web_contents_delegate =

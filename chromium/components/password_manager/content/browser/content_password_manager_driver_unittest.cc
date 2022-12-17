@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -57,7 +57,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
       delete;
   ~MockPasswordManagerClient() override = default;
 
-  MOCK_METHOD(const autofill::LogManager*, GetLogManager, (), (const override));
+  MOCK_METHOD(autofill::LogManager*, GetLogManager, (), (override));
   MOCK_METHOD(PasswordManager*, GetPasswordManager, (), (const override));
 #if BUILDFLAG(SAFE_BROWSING_DB_LOCAL)
   MOCK_METHOD(void,
@@ -87,7 +87,7 @@ class FakePasswordAutofillAgent
 
   // autofill::mojom::PasswordAutofillAgent:
   MOCK_METHOD(void,
-              FillPasswordForm,
+              SetPasswordFillData,
               (const PasswordFormFillData&),
               (override));
   MOCK_METHOD(void, InformNoSavedCredentials, (bool), (override));
@@ -168,8 +168,10 @@ PasswordFormFillData GetTestPasswordFormFillData() {
   non_preferred_match.password_value = u"test1";
   matches.push_back(&non_preferred_match);
 
+  url::Origin page_origin = url::Origin::Create(GURL("https://foo.com/"));
+
   return CreatePasswordFormFillData(form_on_page, matches, preferred_match,
-                                    true);
+                                    page_origin, true);
 }
 
 MATCHER(WerePasswordsCleared, "Passwords not cleared") {
@@ -272,8 +274,8 @@ TEST_F(ContentPasswordManagerDriverTest, ClearPasswordsOnAutofill) {
 
   PasswordFormFillData fill_data = GetTestPasswordFormFillData();
   fill_data.wait_for_username = true;
-  EXPECT_CALL(fake_agent_, FillPasswordForm(WerePasswordsCleared()));
-  driver->FillPasswordForm(fill_data);
+  EXPECT_CALL(fake_agent_, SetPasswordFillData(WerePasswordsCleared()));
+  driver->SetPasswordFillData(fill_data);
   base::RunLoop().RunUntilIdle();
 }
 
@@ -454,7 +456,7 @@ TEST_F(ContentPasswordManagerDriverTest,
   // Install a the PasswordAutofillAgent mock. Verify it do not receive commands
   // from the browser side.
   FakePasswordAutofillAgent anonymous_fake_agent_;
-  EXPECT_CALL(anonymous_fake_agent_, FillPasswordForm(_)).Times(0);
+  EXPECT_CALL(anonymous_fake_agent_, SetPasswordFillData(_)).Times(0);
   anonymous_iframe_1->GetRemoteAssociatedInterfaces()->OverrideBinderForTesting(
       autofill::mojom::PasswordAutofillAgent::Name_,
       base::BindRepeating(&FakePasswordAutofillAgent::BindPendingReceiver,
@@ -468,7 +470,7 @@ TEST_F(ContentPasswordManagerDriverTest,
   std::unique_ptr<ContentPasswordManagerDriver> driver(
       std::make_unique<ContentPasswordManagerDriver>(
           anonymous_iframe_1, &password_manager_client_, &autofill_client_));
-  driver->FillPasswordForm(GetTestPasswordFormFillData());
+  driver->SetPasswordFillData(GetTestPasswordFormFillData());
   base::RunLoop().RunUntilIdle();
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,9 +17,10 @@
 #include "components/safe_browsing/core/browser/referrer_chain_provider.h"
 #include "components/safe_browsing/core/browser/sync/sync_utils.h"
 #include "components/safe_browsing/core/browser/verdict_cache_manager.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "components/sync/driver/test_sync_service.h"
+#include "components/sync/test/test_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -247,6 +248,46 @@ TEST_F(ChromeEnterpriseRealTimeUrlLookupServiceTest,
 
   // Check the response is cached.
   EXPECT_NE(nullptr, GetCachedRealTimeUrlVerdict(url));
+}
+
+TEST_F(ChromeEnterpriseRealTimeUrlLookupServiceTest,
+       TestCanCheckSafeBrowsingHighConfidenceAllowlist_BypassAllowlistFeature) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {safe_browsing::kRealTimeUrlLookupForEnterpriseAllowlistBypass}, {});
+  test_profile_->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+  SetDMTokenForTesting(policy::DMToken::CreateValidTokenForTesting("dm_token"));
+
+  // Can check allowlist if SafeBrowsingEnterpriseRealTimeUrlCheckMode is
+  // disabled.
+  test_profile_->GetPrefs()->SetInteger(
+      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode,
+      REAL_TIME_CHECK_DISABLED);
+  EXPECT_TRUE(
+      enterprise_rt_service()->CanCheckSafeBrowsingHighConfidenceAllowlist());
+
+  // Bypass allowlist if the SafeBrowsingEnterpriseRealTimeUrlCheckMode pref is
+  // set.
+  test_profile_->GetPrefs()->SetInteger(
+      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode,
+      REAL_TIME_CHECK_FOR_MAINFRAME_ENABLED);
+  EXPECT_FALSE(
+      enterprise_rt_service()->CanCheckSafeBrowsingHighConfidenceAllowlist());
+}
+
+TEST_F(ChromeEnterpriseRealTimeUrlLookupServiceTest,
+       TestCanCheckSafeBrowsingHighConfidenceAllowlist_CheckAllowlist) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {}, {safe_browsing::kRealTimeUrlLookupForEnterpriseAllowlistBypass});
+  test_profile_->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+  SetDMTokenForTesting(policy::DMToken::CreateValidTokenForTesting("dm_token"));
+
+  test_profile_->GetPrefs()->SetInteger(
+      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode,
+      REAL_TIME_CHECK_FOR_MAINFRAME_ENABLED);
+  EXPECT_TRUE(
+      enterprise_rt_service()->CanCheckSafeBrowsingHighConfidenceAllowlist());
 }
 
 }  // namespace safe_browsing

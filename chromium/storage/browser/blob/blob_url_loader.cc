@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,6 @@
 #include "net/http/http_response_info.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
-#include "net/url_request/url_request.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -232,11 +231,9 @@ void BlobURLLoader::HeadersCompleted(
   // services/network/url_loader.h
 
   client_->OnReceiveResponse(std::move(response),
-                             std::move(response_body_consumer_handle_));
+                             std::move(response_body_consumer_handle_),
+                             std::move(metadata));
   sent_headers_ = true;
-
-  if (metadata.has_value())
-    client_->OnReceiveCachedMetadata(std::move(metadata.value()));
 }
 
 }  // namespace storage

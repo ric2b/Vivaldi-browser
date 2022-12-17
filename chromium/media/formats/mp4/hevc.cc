@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/media_util.h"
+#include "media/base/video_decoder_config.h"
 #include "media/formats/mp4/avc.h"
 #include "media/formats/mp4/box_definitions.h"
 #include "media/formats/mp4/box_reader.h"
@@ -45,7 +46,8 @@ HEVCDecoderConfigurationRecord::HEVCDecoderConfigurationRecord()
       numTemporalLayers(0),
       temporalIdNested(0),
       lengthSizeMinusOne(0),
-      numOfArrays(0) {}
+      numOfArrays(0),
+      alpha_mode(VideoDecoderConfig::AlphaMode::kIsOpaque) {}
 
 HEVCDecoderConfigurationRecord::~HEVCDecoderConfigurationRecord() {}
 FourCC HEVCDecoderConfigurationRecord::BoxType() const { return FOURCC_HVCC; }
@@ -75,20 +77,18 @@ bool HEVCDecoderConfigurationRecord::ParseInternal(BufferReader* reader,
   uint32_t general_constraint_indicator_flags_hi = 0;
   uint16_t general_constraint_indicator_flags_lo = 0;
   uint8_t misc = 0;
-  RCHECK(reader->Read1(&configurationVersion) && configurationVersion == 1 &&
+  RCHECK(reader->Read1(&configurationVersion) &&
+         (configurationVersion == 0 || configurationVersion == 1) &&
          reader->Read1(&profile_indication) &&
          reader->Read4(&general_profile_compatibility_flags) &&
          reader->Read4(&general_constraint_indicator_flags_hi) &&
          reader->Read2(&general_constraint_indicator_flags_lo) &&
          reader->Read1(&general_level_idc) &&
          reader->Read2(&min_spatial_segmentation_idc) &&
-         reader->Read1(&parallelismType) &&
-         reader->Read1(&chromaFormat) &&
+         reader->Read1(&parallelismType) && reader->Read1(&chromaFormat) &&
          reader->Read1(&bitDepthLumaMinus8) &&
-         reader->Read1(&bitDepthChromaMinus8) &&
-         reader->Read2(&avgFrameRate) &&
-         reader->Read1(&misc) &&
-         reader->Read1(&numOfArrays));
+         reader->Read1(&bitDepthChromaMinus8) && reader->Read2(&avgFrameRate) &&
+         reader->Read1(&misc) && reader->Read1(&numOfArrays));
 
   general_profile_space = profile_indication >> 6;
   general_tier_flag = (profile_indication >> 5) & 1;
@@ -125,6 +125,97 @@ bool HEVCDecoderConfigurationRecord::ParseInternal(BufferReader* reader,
     }
   }
 
+#if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+  if (!arrays.size()) {
+    DVLOG(1) << "Could not found HVCCNALArray";
+    return true;
+  }
+  // Parse the color space and hdr metadata.
+  std::vector<uint8_t> param_sets;
+  HEVC::ConvertConfigToAnnexB(*this, &param_sets);
+  H265Parser parser;
+  H265NALU nalu;
+  parser.SetStream(param_sets.data(), param_sets.size());
+  while (true) {
+    H265Parser::Result result = parser.AdvanceToNextNALU(&nalu);
+    if (result != H265Parser::kOk)
+      break;
+
+    switch (nalu.nal_unit_type) {
+      case H265NALU::SPS_NUT: {
+        int sps_id = -1;
+        result = parser.ParseSPS(&sps_id);
+        if (result != H265Parser::kOk) {
+          DVLOG(1) << "Could not parse SPS for fetching colorspace";
+          break;
+        }
+
+        const H265SPS* sps = parser.GetSPS(sps_id);
+        DCHECK(sps);
+        color_space = sps->GetColorSpace();
+        break;
+      }
+      case H265NALU::PREFIX_SEI_NUT: {
+        H265SEIMessage sei_msg;
+        result = parser.ParseSEI(&sei_msg);
+        if (result != H265Parser::kOk) {
+          DVLOG(1) << "Could not parse SEI for fetching HDR metadata";
+          break;
+        }
+        switch (sei_msg.type) {
+          case H265SEIMessage::kSEIContentLightLevelInfo:
+            hdr_metadata.max_content_light_level =
+                sei_msg.content_light_level_info.max_content_light_level;
+            hdr_metadata.max_frame_average_light_level =
+                sei_msg.content_light_level_info
+                    .max_picture_average_light_level;
+            break;
+          case H265SEIMessage::kSEIMasteringDisplayInfo: {
+            constexpr auto kChromaDenominator = 50000.0f;
+            constexpr auto kLumaDenoninator = 10000.0f;
+            // display primaries are in G/B/R order in MDCV SEI.
+            hdr_metadata.color_volume_metadata.primary_r = gfx::PointF(
+                sei_msg.mastering_display_info.display_primaries[2][0] /
+                    kChromaDenominator,
+                sei_msg.mastering_display_info.display_primaries[2][1] /
+                    kChromaDenominator);
+            hdr_metadata.color_volume_metadata.primary_g = gfx::PointF(
+                sei_msg.mastering_display_info.display_primaries[0][0] /
+                    kChromaDenominator,
+                sei_msg.mastering_display_info.display_primaries[0][1] /
+                    kChromaDenominator);
+            hdr_metadata.color_volume_metadata.primary_b = gfx::PointF(
+                sei_msg.mastering_display_info.display_primaries[1][0] /
+                    kChromaDenominator,
+                sei_msg.mastering_display_info.display_primaries[1][1] /
+                    kChromaDenominator);
+            hdr_metadata.color_volume_metadata.white_point =
+                gfx::PointF(sei_msg.mastering_display_info.white_points[0] /
+                                kChromaDenominator,
+                            sei_msg.mastering_display_info.white_points[1] /
+                                kChromaDenominator);
+            hdr_metadata.color_volume_metadata.luminance_max =
+                sei_msg.mastering_display_info.max_luminance / kLumaDenoninator;
+            hdr_metadata.color_volume_metadata.luminance_min =
+                sei_msg.mastering_display_info.min_luminance / kLumaDenoninator;
+            break;
+          }
+          case H265SEIMessage::kSEIAlphaChannelInfo:
+            if (sei_msg.alpha_channel_info.alpha_channel_cancel_flag == 0) {
+              alpha_mode = VideoDecoderConfig::AlphaMode::kHasAlpha;
+            }
+            break;
+          default:
+            break;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+#endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+
   return true;
 }
 
@@ -160,42 +251,15 @@ VideoCodecProfile HEVCDecoderConfigurationRecord::GetVideoProfile() const {
 
 #if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
 VideoColorSpace HEVCDecoderConfigurationRecord::GetColorSpace() {
-  if (!arrays.size()) {
-    DVLOG(1) << "HVCCNALArray not found, fallback to default colorspace";
-    return VideoColorSpace();
-  }
+  return color_space;
+}
 
-  std::vector<uint8_t> param_sets;
-  if (!HEVC::ConvertConfigToAnnexB(*this, &param_sets))
-    return VideoColorSpace();
+gfx::HDRMetadata HEVCDecoderConfigurationRecord::GetHDRMetadata() {
+  return hdr_metadata;
+}
 
-  H265Parser parser;
-  H265NALU nalu;
-  parser.SetStream(param_sets.data(), param_sets.size());
-  while (true) {
-    H265Parser::Result result = parser.AdvanceToNextNALU(&nalu);
-
-    if (result != H265Parser::kOk)
-      return VideoColorSpace();
-
-    switch (nalu.nal_unit_type) {
-      case H265NALU::SPS_NUT: {
-        int sps_id = -1;
-        result = parser.ParseSPS(&sps_id);
-        if (result != H265Parser::kOk) {
-          DVLOG(1) << "Could not parse SPS, fallback to default colorspace";
-          return VideoColorSpace();
-        }
-
-        const H265SPS* sps = parser.GetSPS(sps_id);
-        DCHECK(sps);
-        return sps->GetColorSpace();
-      }
-      default:
-        break;
-    }
-  }
-  NOTREACHED();
+VideoDecoderConfig::AlphaMode HEVCDecoderConfigurationRecord::GetAlphaMode() {
+  return alpha_mode;
 }
 #endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
 
@@ -228,7 +292,7 @@ bool HEVC::InsertParamSetsAnnexB(
   start = NULL;
 
   std::vector<uint8_t> param_sets;
-  RCHECK(HEVC::ConvertConfigToAnnexB(hevc_config, &param_sets));
+  HEVC::ConvertConfigToAnnexB(hevc_config, &param_sets);
   DVLOG(4) << __func__ << " converted hvcC to AnnexB "
            << " size=" << param_sets.size() << " inserted at "
            << (int)(config_insert_point - buffer->begin());
@@ -236,7 +300,7 @@ bool HEVC::InsertParamSetsAnnexB(
   if (subsamples && !subsamples->empty()) {
     int subsample_index = AVC::FindSubsampleIndex(*buffer, subsamples,
                                                   &(*config_insert_point));
-    // Update the size of the subsample where SPS/PPS is to be inserted.
+    // Update the size of the subsample where VPS/SPS/PPS is to be inserted.
     (*subsamples)[subsample_index].clear_bytes += param_sets.size();
   }
 
@@ -249,7 +313,7 @@ bool HEVC::InsertParamSetsAnnexB(
 }
 
 // static
-bool HEVC::ConvertConfigToAnnexB(
+void HEVC::ConvertConfigToAnnexB(
     const HEVCDecoderConfigurationRecord& hevc_config,
     std::vector<uint8_t>* buffer) {
   DCHECK(buffer->empty());
@@ -266,8 +330,6 @@ bool HEVC::ConvertConfigToAnnexB(
                      hevc_config.arrays[j].units[i].end());
     }
   }
-
-  return true;
 }
 
 // static
@@ -303,6 +365,8 @@ BitstreamConverter::AnalysisResult HEVC::AnalyzeAnnexB(
   // Rec. ITU-T H.265 v5 (02/2018)
   // 7.4.2.4.4 Order of NAL units and coded pictures and their association to
   // access units
+  // F.7.4.2.4.4 Order of NAL units and coded pictures and association to access
+  // units
   while (true) {
     H265NaluParser::Result h265_result = parser.AdvanceToNextNALU(&nalu);
     if (h265_result == H265NaluParser::kEOStream) {
@@ -317,14 +381,6 @@ BitstreamConverter::AnalysisResult HEVC::AnalyzeAnnexB(
 
     DVLOG(3) << "nal_unit_type " << nalu.nal_unit_type;
 
-    // Definition of "access unit" and "base layer" is only applied to NALs with
-    // nuh_layer_id equals 0.
-    if (nalu.nuh_layer_id != 0) {
-      LOG(WARNING) << "Unrecognized layer ID " << nalu.nuh_layer_id
-                   << ", skip.";
-      continue;
-    }
-
     if (order_state == kNoMoreDataAllowed) {
       DVLOG(1) << "No more data is allowed after EOB_NUT.";
       return result;
@@ -337,10 +393,9 @@ BitstreamConverter::AnalysisResult HEVC::AnalyzeAnnexB(
     }
 
     switch (nalu.nal_unit_type) {
-      // When an access unit delimiter NAL unit with nuh_layer_id equal to 0 is
-      // present, it shall be the first NAL unit. There shall be at most one
-      // access unit delimiter NAL unit with nuh_layer_id equal to 0 in any
-      // access unit.
+      // When an access unit delimiter NAL unit is present, it shall be the
+      // first NAL unit. There shall be at most one access unit delimiter NAL
+      // unit in any access unit.
       case H265NALU::AUD_NUT:
         if (order_state > kAUDAllowed) {
           DVLOG(1) << "Unexpected AUD in order_state " << order_state;
@@ -401,9 +456,8 @@ BitstreamConverter::AnalysisResult HEVC::AnalyzeAnnexB(
         }
         break;
 
-      // When an end of sequence NAL unit with nuh_layer_id equal to 0 is
-      // present, it shall be the last NAL unit among all NAL units with
-      // nuh_layer_id equal to 0 in the access unit other than an end of
+      // When an end of sequence NAL unit is present, it shall be the last NAL
+      // unit among all NAL units in the access unit other than an end of
       // bitstream NAL unit (when present).
       case H265NALU::EOS_NUT:
         if (order_state != kAfterFirstVCL) {

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
@@ -19,8 +18,7 @@
 #include "base/containers/flat_map.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
-#include "chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
+#include "chromeos/ash/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -35,18 +33,18 @@
 #include "ui/views/widget/widget.h"
 
 namespace ash {
+
 namespace {
 
-using chromeos::bluetooth_config::mojom::BatteryProperties;
-using chromeos::bluetooth_config::mojom::BatteryPropertiesPtr;
-using chromeos::bluetooth_config::mojom::BluetoothDeviceProperties;
-using chromeos::bluetooth_config::mojom::BluetoothDevicePropertiesPtr;
-using chromeos::bluetooth_config::mojom::DeviceBatteryInfo;
-using chromeos::bluetooth_config::mojom::DeviceBatteryInfoPtr;
-using chromeos::bluetooth_config::mojom::DeviceConnectionState;
-using chromeos::bluetooth_config::mojom::DeviceType;
-using chromeos::bluetooth_config::mojom::PairedBluetoothDeviceProperties;
-using chromeos::bluetooth_config::mojom::PairedBluetoothDevicePropertiesPtr;
+using bluetooth_config::mojom::BatteryProperties;
+using bluetooth_config::mojom::BatteryPropertiesPtr;
+using bluetooth_config::mojom::BluetoothDeviceProperties;
+using bluetooth_config::mojom::DeviceBatteryInfo;
+using bluetooth_config::mojom::DeviceBatteryInfoPtr;
+using bluetooth_config::mojom::DeviceConnectionState;
+using bluetooth_config::mojom::DeviceType;
+using bluetooth_config::mojom::PairedBluetoothDeviceProperties;
+using bluetooth_config::mojom::PairedBluetoothDevicePropertiesPtr;
 
 const char kDeviceId[] = "/device/id";
 const std::string kDeviceNickname = "clicky keys";
@@ -107,8 +105,6 @@ class BluetoothDeviceListItemViewTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
 
-    feature_list_.InitAndEnableFeature(features::kBluetoothRevamp);
-
     fake_bluetooth_detailed_view_ =
         std::make_unique<FakeBluetoothDetailedView>(/*delegate=*/nullptr);
     std::unique_ptr<BluetoothDeviceListItemView> bluetooth_device_list_item =
@@ -141,7 +137,6 @@ class BluetoothDeviceListItemViewTest : public AshTestBase {
   }
 
  private:
-  base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<views::Widget> widget_;
   std::unique_ptr<FakeBluetoothDetailedView> fake_bluetooth_detailed_view_;
   BluetoothDeviceListItemView* bluetooth_device_list_item_;

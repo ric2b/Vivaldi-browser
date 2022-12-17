@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,6 +73,8 @@ class SoftBindAttestationFlow {
     const AccountId account_id_;
     std::string user_key_;
     int max_retries_ = 3;
+    base::WeakPtrFactory<SoftBindAttestationFlow::Session> weak_ptr_factory_{
+        this};
   };
 
   void GetCertificateInternal(bool force_new_key,

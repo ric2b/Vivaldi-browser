@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,7 +52,7 @@ class VersionUpdaterCrosTest : public ::testing::Test {
       : version_updater_(VersionUpdater::Create(nullptr)),
         version_updater_cros_ptr_(
             reinterpret_cast<VersionUpdaterCros*>(version_updater_.get())),
-        fake_update_engine_client_(NULL),
+        fake_update_engine_client_(nullptr),
         mock_user_manager_(new MockUserManager()),
         user_manager_enabler_(base::WrapUnique(mock_user_manager_)) {}
 
@@ -215,6 +215,53 @@ TEST_F(VersionUpdaterCrosTest, GetUpdateStatus_CallbackDuringUpdates) {
   // Expect the callbac kto be called as it's an update status change.
   StrictMock<base::MockCallback<VersionUpdater::StatusCallback>> mock_callback;
   EXPECT_CALL(mock_callback, Run(_, _, _, _, _, _, _)).Times(1);
+  version_updater_cros_ptr_->GetUpdateStatus(mock_callback.Get());
+}
+
+TEST_F(VersionUpdaterCrosTest,
+       GetUpdateStatus_SetToUpdatedForNonInteractiveDeferredUpdate) {
+  SetEthernetService();
+  update_engine::StatusResult status;
+  // The update is non-interactive and will be deferred.
+  status.set_is_interactive(false);
+  status.set_will_defer_update(true);
+  fake_update_engine_client_->set_default_status(status);
+
+  // Expect to set status to `UPDATED`.
+  StrictMock<base::MockCallback<VersionUpdater::StatusCallback>> mock_callback;
+  EXPECT_CALL(mock_callback, Run(VersionUpdater::UPDATED, 0, _, _, _, _, _))
+      .Times(1);
+  version_updater_cros_ptr_->GetUpdateStatus(mock_callback.Get());
+}
+
+TEST_F(VersionUpdaterCrosTest, GetUpdateStatus_UpdatedButDeferred) {
+  SetEthernetService();
+  update_engine::StatusResult status;
+  // The update is deferred.
+  status.set_is_interactive(false);
+  status.set_will_defer_update(true);
+  status.set_current_operation(update_engine::Operation::UPDATED_BUT_DEFERRED);
+  fake_update_engine_client_->set_default_status(status);
+
+  // Expect the status to be `DEFERRED`.
+  StrictMock<base::MockCallback<VersionUpdater::StatusCallback>> mock_callback;
+  EXPECT_CALL(mock_callback, Run(VersionUpdater::DEFERRED, _, _, _, _, _, _))
+      .Times(1);
+  version_updater_cros_ptr_->GetUpdateStatus(mock_callback.Get());
+}
+
+TEST_F(VersionUpdaterCrosTest, GetUpdateStatus_UpdatedNeedReboot) {
+  SetEthernetService();
+  update_engine::StatusResult status;
+  status.set_is_interactive(false);
+  status.set_current_operation(update_engine::Operation::UPDATED_NEED_REBOOT);
+  fake_update_engine_client_->set_default_status(status);
+
+  // Expect the status to be `NEARLY_UPDATED`.
+  StrictMock<base::MockCallback<VersionUpdater::StatusCallback>> mock_callback;
+  EXPECT_CALL(mock_callback,
+              Run(VersionUpdater::NEARLY_UPDATED, _, _, _, _, _, _))
+      .Times(1);
   version_updater_cros_ptr_->GetUpdateStatus(mock_callback.Get());
 }
 

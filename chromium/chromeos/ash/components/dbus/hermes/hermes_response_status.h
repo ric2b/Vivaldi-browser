@@ -1,10 +1,11 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROMEOS_ASH_COMPONENTS_DBUS_HERMES_HERMES_RESPONSE_STATUS_H_
 #define CHROMEOS_ASH_COMPONENTS_DBUS_HERMES_HERMES_RESPONSE_STATUS_H_
 
+#include <array>
 #include <ostream>
 #include <string>
 #include "base/callback.h"
@@ -39,6 +40,10 @@ enum class HermesResponseStatus {
   kErrorSendHttpsFailure = 20,
   kMaxValue = kErrorSendHttpsFailure
 };
+
+// Hermes codes returned that are possibly a result of user error.
+extern const std::array<HermesResponseStatus, 4> COMPONENT_EXPORT(HERMES_CLIENT)
+    kHermesUserErrorCodes;
 
 // Callback that receives only a HermesResponseStatus.
 using HermesResponseCallback =

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,8 @@ void WaylandDataDeviceManager::Instantiate(WaylandConnection* connection,
                                            uint32_t name,
                                            const std::string& interface,
                                            uint32_t version) {
-  DCHECK_EQ(interface, kInterfaceName);
+  CHECK_EQ(interface, kInterfaceName) << "Expected \"" << kInterfaceName
+                                      << "\" but got \"" << interface << "\"";
 
   if (connection->data_device_manager_ ||
       !wl::CanBind(interface, version, kMinVersion, kMaxVersion)) {

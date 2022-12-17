@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,6 +46,7 @@ bool IsComponentExtensionAllowlisted(const std::string& extension_id) {
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
     extension_misc::kContactCenterInsightsExtensionId,
+    extension_misc::kDeskApiExtensionId,
 #endif
   };
 
@@ -81,7 +82,6 @@ bool IsComponentExtensionAllowlisted(int manifest_resource_id) {
     // Separate ChromeOS list, as it is quite large.
     case IDR_ARC_SUPPORT_MANIFEST:
     case IDR_CHROME_APP_MANIFEST:
-    case IDR_FILEMANAGER_MANIFEST:
     case IDR_IMAGE_LOADER_MANIFEST:
     case IDR_KEYBOARD_MANIFEST:
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -91,6 +91,7 @@ bool IsComponentExtensionAllowlisted(int manifest_resource_id) {
 
 #if BUILDFLAG(IS_CHROMEOS)
     case IDR_CONTACT_CENTER_INSIGHTS_MANIFEST:
+    case IDR_DESK_API_MANIFEST:
     case IDR_ECHO_MANIFEST:
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     case IDR_QUICKOFFICE_MANIFEST:

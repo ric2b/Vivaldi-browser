@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,8 +37,6 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
 
   // VideoEncodeAccelerator implementation.
   VideoEncodeAccelerator::SupportedProfiles GetSupportedProfiles() override;
-  VideoEncodeAccelerator::SupportedProfiles GetSupportedProfilesLight()
-      override;
 
   bool Initialize(const Config& config,
                   Client* client,
@@ -72,7 +70,7 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
   void DestroyTask();
 
   // Helper functions to set bitrate.
-  void SetAdjustedConstantBitrate(int32_t bitrate);
+  void SetAdjustedConstantBitrate(uint32_t bitrate);
   void SetVariableBitrate(const Bitrate& bitrate);
 
   // Helper function to notify the client of an error on |client_task_runner_|.
@@ -127,8 +125,8 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
   // bitrate mode no adjustments are needed.
   // Bitrate adjuster used to fix VideoToolbox's inconsistent bitrate issues.
   webrtc::BitrateAdjuster bitrate_adjuster_;
-  int32_t target_bitrate_ = 0;       // User for CBR only
-  int32_t encoder_set_bitrate_ = 0;  // User for CBR only
+  uint32_t target_bitrate_ = 0;       // User for CBR only
+  uint32_t encoder_set_bitrate_ = 0;  // User for CBR only
 
   // If True, the encoder fails initialization if setting of session's property
   // kVTCompressionPropertyKey_MaxFrameDelayCount returns an error.

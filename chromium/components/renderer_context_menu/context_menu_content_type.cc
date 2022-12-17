@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,12 +22,9 @@ bool IsDevToolsURL(const GURL& url) {
 }  // namespace
 
 ContextMenuContentType::ContextMenuContentType(
-    content::WebContents* web_contents,
     const content::ContextMenuParams& params,
     bool supports_custom_items)
-    : params_(params),
-      source_web_contents_(web_contents),
-      supports_custom_items_(supports_custom_items) {}
+    : params_(params), supports_custom_items_(supports_custom_items) {}
 
 ContextMenuContentType::~ContextMenuContentType() {
 }

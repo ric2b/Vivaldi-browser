@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -303,9 +303,10 @@ class CONTENT_EXPORT NavigationRequest
   SiteInstanceImpl* GetSourceSiteInstance() override;
   bool IsInMainFrame() const override;
   bool IsInPrimaryMainFrame() const override;
+  bool IsInOutermostMainFrame() override;
   bool IsInPrerenderedMainFrame() override;
-  bool IsPrerenderedPageActivation() override;
-  bool IsInFencedFrameTree() override;
+  bool IsPrerenderedPageActivation() const override;
+  bool IsInFencedFrameTree() const override;
   FrameType GetNavigatingFrameType() const override;
   bool IsRendererInitiated() override;
   bool IsSameOrigin() override;
@@ -326,7 +327,7 @@ class CONTENT_EXPORT NavigationRequest
   bool IsExternalProtocol() override;
   net::Error GetNetErrorCode() override;
   RenderFrameHostImpl* GetRenderFrameHost() const override;
-  bool IsSameDocument() override;
+  bool IsSameDocument() const override;
   bool HasCommitted() const override;
   bool IsErrorPage() const override;
   bool HasSubframeNavigationEntryCommitted() override;
@@ -727,6 +728,12 @@ class CONTENT_EXPORT NavigationRequest
   // Returns nullptr if this navigation had no initiator.
   const PolicyContainerPolicies* GetInitiatorPolicyContainerPolicies() const;
 
+  // The DocumentToken that should be used for the document created as a result
+  // of committing this navigation.
+  // - must only be called for cross-document navigations
+  // - must not be called before the navigation is ready to commit
+  const blink::DocumentToken& GetDocumentToken() const;
+
   // Returns the policies of the new document being navigated to.
   //
   // Must only be called after ReadyToCommitNavigation().
@@ -809,6 +816,27 @@ class CONTENT_EXPORT NavigationRequest
   // Returns the current url from GetURL() packaged with other state required to
   // properly determine SiteInstances and process allocation.
   UrlInfo GetUrlInfo();
+
+  // Return the parent's base url, snapshotted when this NavigationRequest was
+  // created. Used for sending to srcdoc renderers. See
+  // https://crbug.com/1356658 for further details. Note: The returned value
+  // will be empty unless (i) the navigation is to about:srcdoc, and (ii)
+  // IsolateSandboxedIframes is enabled.
+  // TODO(wjmaclean):  https://crbug.com/1356658 Make this also apply for
+  // about:blank navigations as well.
+
+  // Return the parent's base url, snapshotted when this NavigationRequest was
+  // created. Used for sending to srcdoc renderers. See
+  // https://crbug.com/1356658 for further details.
+  // Note: The returned value will be empty unless:
+  // 1. The navigation is to about:srcdoc, and
+  // 2. IsolateSandboxedIframes is enabled.
+  //
+  // TODO(https://crbug.com/1356658) Make this also apply for
+  // about:blank navigations as well.
+  const GURL& inherited_base_url() const {
+    return commit_params_->fallback_srcdoc_baseurl;
+  }
 
   bool is_overriding_user_agent() const {
     return commit_params_->is_overriding_user_agent;
@@ -928,14 +956,16 @@ class CONTENT_EXPORT NavigationRequest
     return prerender_frame_tree_node_id_.value();
   }
 
-  const absl::optional<FencedFrameURLMapping::PendingAdComponentsMap>&
-  pending_ad_components_map() const {
-    return pending_ad_components_map_;
+  // TODO(crbug.com/1347953): Replace this function with
+  // NavigationRequest::ComputeFencedFrameProperties(), which falls back to
+  // frame_tree_node_->GetFencedFrameProperties() when the NavigationRequest
+  // itself doesn't have any properties.
+  const absl::optional<FencedFrameURLMapping::FencedFrameProperties>&
+  fenced_frame_properties() const {
+    return fenced_frame_properties_;
   }
 
-  const absl::optional<AdAuctionData>& ad_auction_data() const {
-    return ad_auction_data_;
-  }
+  const absl::optional<base::UnguessableToken> ComputeFencedFrameNonce() const;
 
   void RenderFallbackContentForObjectTag();
 
@@ -987,6 +1017,11 @@ class CONTENT_EXPORT NavigationRequest
   const scoped_refptr<NavigationOrDocumentHandle>&
   navigation_or_document_handle() {
     return navigation_or_document_handle_;
+  }
+
+  const std::pair<url::Origin, std::string>&
+  browser_side_origin_to_commit_with_debug_info() {
+    return browser_side_origin_to_commit_with_debug_info_;
   }
 
  private:
@@ -1086,10 +1121,12 @@ class CONTENT_EXPORT NavigationRequest
   void DetermineOriginAgentClusterEndResult();
   void ProcessOriginAgentClusterEndResult();
 
+  void PopulateDocumentTokenForCrossDocumentNavigation();
+
   // NavigationURLLoaderDelegate implementation.
   void OnRequestRedirected(
       const net::RedirectInfo& redirect_info,
-      const net::NetworkIsolationKey& network_isolation_key,
+      const net::NetworkAnonymizationKey& network_anonymization_key,
       network::mojom::URLResponseHeadPtr response_head) override;
   void OnResponseStarted(
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
@@ -1098,7 +1135,7 @@ class CONTENT_EXPORT NavigationRequest
       GlobalRequestID request_id,
       bool is_download,
       blink::NavigationDownloadPolicy download_policy,
-      net::NetworkIsolationKey network_isolation_key,
+      net::NetworkAnonymizationKey network_anonymization_key,
       absl::optional<SubresourceLoaderParams> subresource_loader_params,
       EarlyHints early_hints) override;
   void OnRequestFailed(
@@ -1617,6 +1654,11 @@ class CONTENT_EXPORT NavigationRequest
   blink::mojom::BeginNavigationParamsPtr begin_params_;
   blink::mojom::CommitNavigationParamsPtr commit_params_;
   bool same_origin_ = false;
+  // This member is calculated at ReadyToCommit time. It is used to compare
+  // against renderer calculated origin and browser calculated one at commit
+  // time.
+  std::pair<url::Origin, std::string>
+      browser_side_origin_to_commit_with_debug_info_;
 
   // Stores the NavigationUIData for this navigation until the NavigationHandle
   // is created. This can be null if the embedded did not provide a
@@ -1631,6 +1673,7 @@ class CONTENT_EXPORT NavigationRequest
 
   std::unique_ptr<NavigationURLLoader> loader_;
 
+  bool navigation_visible_to_embedder_ = false;
 #if BUILDFLAG(IS_ANDROID)
   // For each C++ NavigationHandle, there is a Java counterpart. It is the JNI
   // bridge in between the two.
@@ -1717,6 +1760,13 @@ class CONTENT_EXPORT NavigationRequest
   // SignedExchangeSubresourcePrefetch.
   absl::optional<SubresourceLoaderParams> subresource_loader_params_;
 
+  // DocumentToken to use for the newly-committed document in a cross-document
+  // navigation. Currently set immediately before sending CommitNavigation to
+  // the renderer. In the future, this may be populated earlier to allow lookup
+  // of a navigation request by the document that it may create, similar to how
+  // `NavigationOrDocumentHandle` behaves.
+  absl::optional<blink::DocumentToken> document_token_;
+
   // See comment on accessor.
   const base::UnguessableToken devtools_navigation_token_ =
       base::UnguessableToken::Create();
@@ -1793,12 +1843,12 @@ class CONTENT_EXPORT NavigationRequest
   // prior (most likely <a download>) download attempt.
   bool from_download_cross_origin_redirect_ = false;
 
-  // Used when SignedExchangeSubresourcePrefetch is enabled to hold the
-  // prefetched signed exchanges. This is shared with the navigation initiator's
-  // RenderFrameHostImpl. This also means that only the navigations that were
-  // directly initiated by the frame that made the prefetches could use the
-  // prefetched resources, which is a different behavior from regular prefetches
-  // (where all prefetched resources are stored and shared in http cache).
+  // Used to hold prefetched signed exchanges. This is shared with the
+  // navigation initiator's RenderFrameHostImpl. This also means that only the
+  // navigations that were directly initiated by the frame that made the
+  // prefetches could use the prefetched resources, which is a different
+  // behavior from regular prefetches (where all prefetched resources are
+  // stored and shared in http cache).
   scoped_refptr<PrefetchedSignedExchangeCache>
       prefetched_signed_exchange_cache_;
 
@@ -1949,7 +1999,7 @@ class CONTENT_EXPORT NavigationRequest
 
   // Whether the document loaded by this navigation will be committed inside an
   // anonymous iframe. Documents loaded inside anonymous iframes get partitioned
-  // storage and use a transient NetworkIsolationKey.
+  // storage and use a transient NetworkAnonymizationKey.
   const bool is_anonymous_;
 
   // Non-nullopt from construction until |TakePolicyContainerHost()| is called.
@@ -2082,59 +2132,48 @@ class CONTENT_EXPORT NavigationRequest
   // Indicates that this navigation is for PDF content in a renderer.
   bool is_pdf_ = false;
 
-  // Only for fenced frames based on MPArch:
   // Indicates that this navigation is an embedder-initiated navigation of a
   // fenced frame root. That is to say, the navigation is caused by a `src`
   // attribute mutation on the <fencedframe> element, which cannot be performed
   // from inside the fenced frame tree.
-  const bool is_embedder_initiated_fenced_frame_navigation_ = false;
+  // TODO(crbug.com/1262022): Make this `const` again once ShadowDOM is gone.
+  bool is_embedder_initiated_fenced_frame_navigation_ = false;
 
-  // Only for fenced frames based on MPArch:
   // Indicates that this navigation is to an opaque url (urn:uuid). This value
   // may only be true when `is_embedder_initiated_fenced_frame_navigation` is
   // true.
   const bool is_embedder_initiated_fenced_frame_opaque_url_navigation_ = false;
 
-  // Only for fenced frames based on MPArch:
   // Indicates that the target of this navigation is the root of a fenced frame
   // tree whose most recent embedder-initiated navigation was to an opaque URL
   // (urn:uuid). The most recent navigation may be the current
   // NavigationRequest.
   const bool is_target_fenced_frame_root_originating_from_opaque_url_ = false;
 
-  // On every embedder-initiated navigation of a fenced frame, we reinitialize
-  // the fenced frame properties.
+  // On every embedder-initiated navigation of a fenced frame, i.e.
+  // `is_embedder_initiated_fenced_frame_navigation_`, we reinitialize
+  // the fenced frame properties with the default `FencedFrameProperties()`
+  // constructor, which gives the fenced frame a fresh partition nonce.
+  //
   // If the embedder-initiated navigation is to an opaque url (urn:uuid), i.e.
-  // `is_embedder_initiated_fenced_frame_opaque_url_navigation_`, then
-  // this will be non-empty (containing the properties bound to the opaque url),
-  // and we will store this new set of fenced frame properties in the fenced
-  // frame root FrameTreeNode.
-  // If the embedder-initiated navigation is not to an opaque url, then
-  // this will be nullopt, and we will install it in order to clear the old
-  // fenced frame properties.
+  // `is_embedder_initiated_fenced_frame_opaque_url_navigation_`, we overwrite
+  // the default properties stored in this `NavigationRequest` with the
+  // `FencedFrameProperties` bound to that urn:uuid, in
+  // `NavigationRequest::OnFencedFrameURLMappingComplete`.
+  //
+  // For certain actions related to the pending `NavigationRequest` (rather
+  // than the existing fenced frame document), e.g. partitioned network
+  // requests for the pending navigation, we use the pending
+  // `FencedFrameProperties`.
+  //
+  // If the navigation commits, this new set of fenced frame properties will be
+  // stored in the fenced frame root FrameTreeNode in
+  // `NavigationRequest::DidCommitNavigation`.
+  //
+  // If the navigation doesn't commit (e.g. an HTTP 204 response), the fenced
+  // frame properties will not be stored in the fenced frame root.
   absl::optional<FencedFrameURLMapping::FencedFrameProperties>
       fenced_frame_properties_;
-
-  // If this navigation is a load in a fenced frame of a URN URL that resulted
-  // from an interest group auction, this contains some information about the
-  // auction that should be attached to the renderer as AdAuctionDocumentData.
-  absl::optional<AdAuctionData> ad_auction_data_;
-
-  // If this navigation is a load in a fenced frame of a URN URL that resulted
-  // from an interest group auction, this contains the ad component URLs
-  // associated with that auction's winning bid, and the corresponding URNs that
-  // will be mapped to them.
-  absl::optional<FencedFrameURLMapping::PendingAdComponentsMap>
-      pending_ad_components_map_;
-
-  // If this navigation is a load in a fenced frame of a URN URL that resulted
-  // from a shared storage url selection operation, this contains the metadata
-  // for shared storage budget charging. A non-null pointer will stay valid
-  // during the `FencedFrameURLMapping`'s (thus the page's) lifetime, and a page
-  // will outlive any NavigationRequest occurring in fenced frames in the page,
-  // thus it's safe for this NavigationRequest to store this pointer.
-  raw_ptr<FencedFrameURLMapping::SharedStorageBudgetMetadata>
-      shared_storage_budget_metadata_ = nullptr;
 
   // Prerender2:
   // The type to trigger prerendering. The value is valid only when Prerender2

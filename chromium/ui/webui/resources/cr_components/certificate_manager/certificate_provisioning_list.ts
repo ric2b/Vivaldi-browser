@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,16 +6,16 @@
  * @fileoverview 'certificate-provisioning-list' is an element that displays a
  * list of certificate provisioning processes.
  */
-import '../../cr_elements/shared_style_css.m.js';
+import '../../cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import './certificate_provisioning_details_dialog.js';
 import './certificate_provisioning_entry.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {focusWithoutInk} from '../../js/cr/ui/focus_without_ink.m.js';
-import {I18nMixin} from '../../js/i18n_mixin.js';
-import {WebUIListenerMixin} from '../../js/web_ui_listener_mixin.js';
+import {focusWithoutInk} from '../../js/focus_without_ink.js';
+import {I18nMixin} from '../../cr_elements/i18n_mixin.js';
+import {WebUIListenerMixin} from '../../cr_elements/web_ui_listener_mixin.js';
 
 import {CertificateProvisioningViewDetailsActionEvent} from './certificate_manager_types.js';
 import {CertificateProvisioningBrowserProxyImpl, CertificateProvisioningProcess} from './certificate_provisioning_browser_proxy.js';

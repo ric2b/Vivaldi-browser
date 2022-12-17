@@ -6,6 +6,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/base/load_flags.h"
@@ -21,11 +22,11 @@ VivaldiThemeDownloadHelper::VivaldiThemeDownloadHelper(
     std::string theme_id,
     GURL url,
     ThemeDownloadCallback callback,
-    base::WeakPtr<content::BrowserContext> browser_context)
+    base::WeakPtr<Profile> profile)
     : url_(std::move(url)),
       theme_id_(std::move(theme_id)),
       callback_(std::move(callback)),
-      context_(std::move(browser_context)) {}
+      profile_(std::move(profile)) {}
 
 VivaldiThemeDownloadHelper::~VivaldiThemeDownloadHelper() {}
 
@@ -55,9 +56,9 @@ void VivaldiThemeDownloadHelper::DownloadAndInstall() {
       })");
 
   // At this point the context must be alive.
-  DCHECK(context_);
+  DCHECK(profile_);
 
-  auto url_loader_factory = context_->GetDefaultStoragePartition()
+  auto url_loader_factory = profile_->GetDefaultStoragePartition()
                                 ->GetURLLoaderFactoryForBrowserProcess();
 
   url_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
@@ -85,7 +86,7 @@ void VivaldiThemeDownloadHelper::OnDownloadCompleted(base::FilePath path) {
   temporary_file_ = std::move(path);
 
   vivaldi_theme_io::Import(
-      context_, temporary_file_, std::vector<uint8_t>(),
+      profile_, temporary_file_, std::vector<uint8_t>(),
       base::BindOnce(&VivaldiThemeDownloadHelper::SendResult,
                      weak_factory_.GetWeakPtr()));
 }

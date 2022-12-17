@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -111,8 +111,7 @@ void SharingSyncPreference::RegisterProfilePrefs(
 
 absl::optional<std::vector<uint8_t>> SharingSyncPreference::GetVapidKey()
     const {
-  const base::Value::Dict& vapid_key =
-      prefs_->GetValueDict(prefs::kSharingVapidKey);
+  const base::Value::Dict& vapid_key = prefs_->GetDict(prefs::kSharingVapidKey);
   const std::string* base64_private_key =
       vapid_key.FindString(kVapidECPrivateKey);
 
@@ -135,10 +134,9 @@ void SharingSyncPreference::SetVapidKey(
   base::Base64Encode(std::string(vapid_key.begin(), vapid_key.end()),
                      &base64_vapid_key);
 
-  DictionaryPrefUpdate update(prefs_, prefs::kSharingVapidKey);
-  update->SetStringKey(kVapidECPrivateKey, base64_vapid_key);
-  update->SetKey(kVapidCreationTimestamp,
-                 base::TimeToValue(creation_timestamp));
+  ScopedDictPrefUpdate update(prefs_, prefs::kSharingVapidKey);
+  update->Set(kVapidECPrivateKey, base64_vapid_key);
+  update->Set(kVapidCreationTimestamp, base::TimeToValue(creation_timestamp));
 }
 
 void SharingSyncPreference::SetVapidKeyChangeObserver(
@@ -155,7 +153,7 @@ void SharingSyncPreference::ClearVapidKeyChangeObserver() {
 absl::optional<SharingSyncPreference::FCMRegistration>
 SharingSyncPreference::GetFCMRegistration() const {
   const base::Value::Dict& registration =
-      prefs_->GetValueDict(prefs::kSharingFCMRegistration);
+      prefs_->GetDict(prefs::kSharingFCMRegistration);
   const std::string* authorized_entity_ptr =
       registration.FindString(kRegistrationAuthorizedEntity);
   const base::Value* timestamp_value =
@@ -175,15 +173,15 @@ SharingSyncPreference::GetFCMRegistration() const {
 }
 
 void SharingSyncPreference::SetFCMRegistration(FCMRegistration registration) {
-  DictionaryPrefUpdate update(prefs_, prefs::kSharingFCMRegistration);
+  ScopedDictPrefUpdate update(prefs_, prefs::kSharingFCMRegistration);
   if (registration.authorized_entity) {
-    update->SetStringKey(kRegistrationAuthorizedEntity,
-                         std::move(*registration.authorized_entity));
+    update->Set(kRegistrationAuthorizedEntity,
+                std::move(*registration.authorized_entity));
   } else {
-    update->RemoveKey(kRegistrationAuthorizedEntity);
+    update->Remove(kRegistrationAuthorizedEntity);
   }
-  update->SetKey(kRegistrationTimestamp,
-                 base::TimeToValue(registration.timestamp));
+  update->Set(kRegistrationTimestamp,
+              base::TimeToValue(registration.timestamp));
 }
 
 void SharingSyncPreference::ClearFCMRegistration() {
@@ -211,14 +209,14 @@ void SharingSyncPreference::SetLocalSharingInfo(
     list_value.Append(feature);
   }
 
-  DictionaryPrefUpdate local_sharing_info_update(
+  ScopedDictPrefUpdate local_sharing_info_update(
       prefs_, prefs::kSharingLocalSharingInfo);
-  local_sharing_info_update->SetKey(kSharingInfoVapidTargetInfo,
-                                    std::move(vapid_target_info));
-  local_sharing_info_update->SetKey(kSharingInfoSenderIdTargetInfo,
-                                    std::move(sender_id_target_info));
-  local_sharing_info_update->SetKey(kSharingInfoEnabledFeatures,
-                                    std::move(list_value));
+  local_sharing_info_update->Set(kSharingInfoVapidTargetInfo,
+                                 std::move(vapid_target_info));
+  local_sharing_info_update->Set(kSharingInfoSenderIdTargetInfo,
+                                 std::move(sender_id_target_info));
+  local_sharing_info_update->Set(kSharingInfoEnabledFeatures,
+                                 std::move(list_value));
 
   device_info_sync_service_->RefreshLocalDeviceInfo();
 }
@@ -240,7 +238,7 @@ void SharingSyncPreference::ClearLocalSharingInfo() {
 absl::optional<syncer::DeviceInfo::SharingInfo>
 SharingSyncPreference::GetLocalSharingInfoForSync(PrefService* prefs) {
   const base::Value::Dict& registration =
-      prefs->GetValueDict(prefs::kSharingLocalSharingInfo);
+      prefs->GetDict(prefs::kSharingLocalSharingInfo);
 
   const base::Value::Dict* vapid_target_info_value =
       registration.FindDict(kSharingInfoVapidTargetInfo);

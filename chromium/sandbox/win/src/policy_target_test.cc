@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -260,7 +260,7 @@ TEST(PolicyTargetTest, InheritedDesktopPolicy) {
   BrokerServices* broker = GetBroker();
 
   // Precreate the desktop.
-  broker->CreatePolicy()->CreateAlternateDesktop(false);
+  broker->CreateAlternateDesktop(Desktop::kAlternateDesktop);
 
   ASSERT_TRUE(broker);
 
@@ -279,8 +279,9 @@ TEST(PolicyTargetTest, InheritedDesktopPolicy) {
   base::win::ScopedProcessInformation target;
 
   auto policy = broker->CreatePolicy();
-  policy->SetAlternateDesktop(false);
-  policy->SetTokenLevel(USER_INTERACTIVE, USER_LOCKDOWN);
+  policy->GetConfig()->SetDesktop(Desktop::kAlternateDesktop);
+  EXPECT_EQ(SBOX_ALL_OK, policy->GetConfig()->SetTokenLevel(USER_INTERACTIVE,
+                                                            USER_LOCKDOWN));
   PROCESS_INFORMATION temp_process_info = {};
   result =
       broker->SpawnTarget(prog_name, arguments.c_str(), std::move(policy),
@@ -299,7 +300,7 @@ TEST(PolicyTargetTest, InheritedDesktopPolicy) {
   ::WaitForSingleObject(target.process_handle(), INFINITE);
 
   // Close the desktop handle.
-  broker->CreatePolicy()->DestroyAlternateDesktop();
+  broker->DestroyDesktops();
 
   // Close the null dacl desktop.
   EXPECT_TRUE(::SetThreadDesktop(old_desktop));
@@ -314,7 +315,7 @@ TEST(PolicyTargetTest, DesktopPolicy) {
   BrokerServices* broker = GetBroker();
 
   // Precreate the desktop.
-  broker->CreatePolicy()->CreateAlternateDesktop(false);
+  broker->CreateAlternateDesktop(Desktop::kAlternateDesktop);
 
   ASSERT_TRUE(broker);
 
@@ -333,11 +334,13 @@ TEST(PolicyTargetTest, DesktopPolicy) {
   base::win::ScopedProcessInformation target;
 
   auto policy = broker->CreatePolicy();
-  policy->SetAlternateDesktop(false);
-  policy->SetTokenLevel(USER_INTERACTIVE, USER_LOCKDOWN);
+  policy->GetConfig()->SetDesktop(Desktop::kAlternateDesktop);
+  EXPECT_EQ(SBOX_ALL_OK, policy->GetConfig()->SetTokenLevel(USER_INTERACTIVE,
+                                                            USER_LOCKDOWN));
   PROCESS_INFORMATION temp_process_info = {};
-  // Keep the desktop name to test against later.
-  std::wstring desktop_name = policy->GetAlternateDesktop();
+  // Keep the desktop name to test against later (note - it was precreated).
+  std::wstring desktop_name =
+      broker->GetDesktopName(Desktop::kAlternateDesktop);
   result =
       broker->SpawnTarget(prog_name, arguments.c_str(), std::move(policy),
                           &warning_result, &last_error, &temp_process_info);
@@ -362,7 +365,7 @@ TEST(PolicyTargetTest, DesktopPolicy) {
   ::WaitForSingleObject(target.process_handle(), INFINITE);
 
   // Close the desktop handle.
-  broker->CreatePolicy()->DestroyAlternateDesktop();
+  broker->DestroyDesktops();
 
   // Make sure the desktop does not exist anymore.
   desk = ::OpenDesktop(desktop_name.c_str(), 0, false, DESKTOP_ENUMERATE);
@@ -377,7 +380,7 @@ TEST(PolicyTargetTest, WinstaPolicy) {
   BrokerServices* broker = GetBroker();
 
   // Precreate the desktop.
-  broker->CreatePolicy()->CreateAlternateDesktop(true);
+  broker->CreateAlternateDesktop(Desktop::kAlternateWinstation);
 
   ASSERT_TRUE(broker);
 
@@ -395,12 +398,14 @@ TEST(PolicyTargetTest, WinstaPolicy) {
   base::win::ScopedProcessInformation target;
 
   auto policy = broker->CreatePolicy();
-  policy->SetAlternateDesktop(true);
-  policy->SetTokenLevel(USER_INTERACTIVE, USER_LOCKDOWN);
+  policy->GetConfig()->SetDesktop(Desktop::kAlternateWinstation);
+  EXPECT_EQ(SBOX_ALL_OK, policy->GetConfig()->SetTokenLevel(USER_INTERACTIVE,
+                                                            USER_LOCKDOWN));
   PROCESS_INFORMATION temp_process_info = {};
   DWORD last_error = ERROR_SUCCESS;
-  // Keep the desktop name for later.
-  std::wstring desktop_name = policy->GetAlternateDesktop();
+  // Keep the desktop name for later (note - it was precreated).
+  std::wstring desktop_name =
+      broker->GetDesktopName(Desktop::kAlternateWinstation);
   result =
       broker->SpawnTarget(prog_name, arguments.c_str(), std::move(policy),
                           &warning_result, &last_error, &temp_process_info);
@@ -433,7 +438,7 @@ TEST(PolicyTargetTest, WinstaPolicy) {
   ::WaitForSingleObject(target.process_handle(), INFINITE);
 
   // Close the desktop handle.
-  broker->CreatePolicy()->DestroyAlternateDesktop();
+  broker->DestroyDesktops();
 }
 
 // Creates multiple policies, with alternate desktops on both local and
@@ -446,15 +451,19 @@ TEST(PolicyTargetTest, BothLocalAndAlternateWinstationDesktop) {
   auto policy3 = broker->CreatePolicy();
 
   ResultCode result;
-  result = policy1->SetAlternateDesktop(false);
+  result = broker->CreateAlternateDesktop(Desktop::kAlternateDesktop);
   EXPECT_EQ(SBOX_ALL_OK, result);
-  result = policy2->SetAlternateDesktop(true);
-  EXPECT_EQ(SBOX_ALL_OK, result);
-  result = policy3->SetAlternateDesktop(false);
+  result = broker->CreateAlternateDesktop(Desktop::kAlternateWinstation);
   EXPECT_EQ(SBOX_ALL_OK, result);
 
-  std::wstring policy1_desktop_name = policy1->GetAlternateDesktop();
-  std::wstring policy2_desktop_name = policy2->GetAlternateDesktop();
+  policy1->GetConfig()->SetDesktop(Desktop::kAlternateDesktop);
+  policy2->GetConfig()->SetDesktop(Desktop::kAlternateWinstation);
+  policy3->GetConfig()->SetDesktop(Desktop::kAlternateDesktop);
+
+  std::wstring policy1_desktop_name =
+      broker->GetDesktopName(Desktop::kAlternateDesktop);
+  std::wstring policy2_desktop_name =
+      broker->GetDesktopName(Desktop::kAlternateWinstation);
 
   // Extract only the "desktop name" portion of
   // "{winstation name}\\{desktop name}"
@@ -463,9 +472,7 @@ TEST(PolicyTargetTest, BothLocalAndAlternateWinstationDesktop) {
             policy2_desktop_name.substr(
                 policy2_desktop_name.find_first_of(L'\\') + 1));
 
-  policy1->DestroyAlternateDesktop();
-  policy2->DestroyAlternateDesktop();
-  policy3->DestroyAlternateDesktop();
+  broker->DestroyDesktops();
 }
 
 // Launches the app in the sandbox and share a handle with it. The app should
@@ -505,7 +512,8 @@ TEST(PolicyTargetTest, ShareHandleTest) {
   ResultCode warning_result = SBOX_ALL_OK;
   base::win::ScopedProcessInformation target;
 
-  policy->SetTokenLevel(USER_INTERACTIVE, USER_LOCKDOWN);
+  EXPECT_EQ(SBOX_ALL_OK, policy->GetConfig()->SetTokenLevel(USER_INTERACTIVE,
+                                                            USER_LOCKDOWN));
   PROCESS_INFORMATION temp_process_info = {};
   DWORD last_error = ERROR_SUCCESS;
   result =

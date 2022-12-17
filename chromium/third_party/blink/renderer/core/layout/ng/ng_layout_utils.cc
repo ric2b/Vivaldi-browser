@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -208,7 +208,12 @@ NGLayoutCacheStatus CalculateSizeBasedLayoutCacheStatusWithGeometry(
   LayoutUnit block_size = fragment_geometry.border_box_size.block_size;
   bool is_initial_block_size_indefinite = block_size == kIndefiniteSize;
   if (is_initial_block_size_indefinite) {
-    LayoutUnit intrinsic_block_size = layout_result.IntrinsicBlockSize();
+    LayoutUnit intrinsic_block_size;
+    // Intrinsic block-size is only defined if the node is unfragmented.
+    if (!physical_fragment.IsFirstForNode() || physical_fragment.BreakToken())
+      intrinsic_block_size = kIndefiniteSize;
+    else
+      intrinsic_block_size = layout_result.IntrinsicBlockSize();
 
     // Grid/flex/fieldset can have their children calculate their size based on
     // their parent's final block-size. E.g.
@@ -382,7 +387,7 @@ NGLayoutCacheStatus CalculateSizeBasedLayoutCacheStatusWithGeometry(
         // We've been provided a new alignment baseline, just check that it
         // matches the previously generated baseline.
         if (!old_alignment_baseline) {
-          if (*new_alignment_baseline != physical_fragment.Baseline())
+          if (*new_alignment_baseline != physical_fragment.FirstBaseline())
             return NGLayoutCacheStatus::kNeedsLayout;
           break;
         }

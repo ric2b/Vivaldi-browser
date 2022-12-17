@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@ typedef NS_ENUM(NSInteger, ScreenType) {
   kSignIn,
   kLegacySignIn,
   kSync,
+  kTangibleSync,
   kDefaultBrowserPromo,
   // It isn't a screen, but a signal that no more screen should be
   // presented.

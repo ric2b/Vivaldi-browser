@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,13 @@ UploadState GetUploadToGoogleState(const SyncService* sync_service,
 
   // Persistent auth errors always map to NOT_ACTIVE. For transient errors, we
   // give the benefit of the doubt and may still say we're INITIALIZING.
+  // TODO(crbug.com/1156584): Remove this entire block once the feature toggle
+  // is cleaned up.
   if (sync_service->GetAuthError().IsPersistentError()) {
+    if (base::FeatureList::IsEnabled(kSyncPauseUponAnyPersistentAuthError)) {
+      DCHECK_EQ(sync_service->GetTransportState(),
+                SyncService::TransportState::PAUSED);
+    }
     return UploadState::NOT_ACTIVE;
   }
 

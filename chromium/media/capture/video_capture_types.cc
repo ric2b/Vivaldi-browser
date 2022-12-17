@@ -1,10 +1,11 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "media/capture/video_capture_types.h"
 
 #include "base/check.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "media/base/limits.h"
 
@@ -51,14 +52,8 @@ std::string VideoCaptureFormat::ToString(const VideoCaptureFormat& format) {
 bool VideoCaptureFormat::ComparePixelFormatPreference(
     const VideoPixelFormat& lhs,
     const VideoPixelFormat& rhs) {
-  auto* format_lhs = std::find(
-      kSupportedCapturePixelFormats,
-      kSupportedCapturePixelFormats + std::size(kSupportedCapturePixelFormats),
-      lhs);
-  auto* format_rhs = std::find(
-      kSupportedCapturePixelFormats,
-      kSupportedCapturePixelFormats + std::size(kSupportedCapturePixelFormats),
-      rhs);
+  auto* format_lhs = base::ranges::find(kSupportedCapturePixelFormats, lhs);
+  auto* format_rhs = base::ranges::find(kSupportedCapturePixelFormats, rhs);
   return format_lhs < format_rhs;
 }
 

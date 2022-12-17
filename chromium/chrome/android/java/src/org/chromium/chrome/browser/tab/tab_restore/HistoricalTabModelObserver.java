@@ -1,10 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.tab.tab_restore;
 
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -39,11 +38,6 @@ public class HistoricalTabModelObserver implements TabModelObserver {
 
     @Override
     public void onFinishingMultipleTabClosure(List<Tab> tabs) {
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.BULK_TAB_RESTORE)) {
-            legacyCreateHistoricalTabs(tabs);
-            return;
-        }
-
         if (tabs.isEmpty()) return;
 
         if (tabs.size() == 1) {
@@ -52,16 +46,6 @@ public class HistoricalTabModelObserver implements TabModelObserver {
         }
 
         buildGroupsAndCreateClosure(tabs);
-    }
-
-    /**
-     * Creates one historical tab entry per {@link Tab} in {@code tabs}. This is approximately
-     * identical to what occurred prior to {@link ChromeFeatureList.BULK_TAB_RESTORE}.
-     */
-    private void legacyCreateHistoricalTabs(List<Tab> tabs) {
-        for (Tab tab : tabs) {
-            mHistoricalTabSaver.createHistoricalTab(tab);
-        }
     }
 
     private void buildGroupsAndCreateClosure(List<Tab> tabs) {

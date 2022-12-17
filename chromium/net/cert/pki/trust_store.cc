@@ -1,10 +1,8 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/cert/pki/trust_store.h"
-
-#include "base/notreached.h"
 
 namespace net {
 
@@ -49,7 +47,7 @@ bool CertificateTrust::IsTrustAnchor() const {
       return true;
   }
 
-  NOTREACHED();
+  assert(0);  // NOTREACHED
   return false;
 }
 
@@ -64,7 +62,7 @@ bool CertificateTrust::IsDistrusted() const {
       return false;
   }
 
-  NOTREACHED();
+  assert(0);  // NOTREACHED
   return false;
 }
 
@@ -79,7 +77,7 @@ bool CertificateTrust::HasUnspecifiedTrust() const {
       return false;
   }
 
-  NOTREACHED();
+  assert(0);  // NOTREACHED
   return true;
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,22 +28,24 @@ fuchsia::buildinfo::BuildInfo& CachedBuildInfo() {
 
 // Synchronously fetches BuildInfo from the system and caches it for use in this
 // process.
-void FetchAndCacheBuildInfo() {
+// Returns whether the system info was successfully cached.
+bool FetchAndCacheBuildInfo() {
   DCHECK(CachedBuildInfo().IsEmpty()) << "Only call once per process";
 
   fuchsia::buildinfo::ProviderSyncPtr provider_sync;
   ComponentContextForProcess()->svc()->Connect(provider_sync.NewRequest());
 
   zx_status_t status = provider_sync->GetBuildInfo(&CachedBuildInfo());
-  ZX_CHECK(status == ZX_OK, status);
-  CHECK(!CachedBuildInfo().IsEmpty());
+  ZX_DLOG_IF(ERROR, status != ZX_OK, status);
+  DLOG_IF(ERROR, CachedBuildInfo().IsEmpty()) << "Received empty BuildInfo";
+  return status == ZX_OK && !CachedBuildInfo().IsEmpty();
 }
 
 }  // namespace
 
-void FetchAndCacheSystemInfo() {
+bool FetchAndCacheSystemInfo() {
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::WILL_BLOCK);
-  FetchAndCacheBuildInfo();
+  return FetchAndCacheBuildInfo();
 }
 
 const fuchsia::buildinfo::BuildInfo& GetCachedBuildInfo() {

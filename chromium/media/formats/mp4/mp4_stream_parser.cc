@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,8 +33,7 @@
 #include "media/formats/mp4/rcheck.h"
 #include "media/formats/mpeg/adts_constants.h"
 
-namespace media {
-namespace mp4 {
+namespace media::mp4 {
 
 namespace {
 
@@ -60,25 +59,6 @@ EncryptionScheme GetEncryptionScheme(const ProtectionSchemeInfo& sinf) {
   return EncryptionScheme::kUnencrypted;
 }
 
-gfx::ColorVolumeMetadata ConvertMdcvToColorVolumeMetadata(
-    const MasteringDisplayColorVolume& mdcv) {
-  gfx::ColorVolumeMetadata color_volume_metadata;
-
-  color_volume_metadata.primary_r = gfx::ColorVolumeMetadata::Chromaticity(
-      mdcv.display_primaries_rx, mdcv.display_primaries_ry);
-  color_volume_metadata.primary_g = gfx::ColorVolumeMetadata::Chromaticity(
-      mdcv.display_primaries_gx, mdcv.display_primaries_gy);
-  color_volume_metadata.primary_b = gfx::ColorVolumeMetadata::Chromaticity(
-      mdcv.display_primaries_bx, mdcv.display_primaries_by);
-  color_volume_metadata.white_point = gfx::ColorVolumeMetadata::Chromaticity(
-      mdcv.white_point_x, mdcv.white_point_y);
-
-  color_volume_metadata.luminance_max = mdcv.max_display_mastering_luminance;
-  color_volume_metadata.luminance_min = mdcv.min_display_mastering_luminance;
-
-  return color_volume_metadata;
-}
-
 }  // namespace
 
 MP4StreamParser::MP4StreamParser(const std::set<int>& audio_object_types,
@@ -101,12 +81,12 @@ MP4StreamParser::~MP4StreamParser() = default;
 
 void MP4StreamParser::Init(
     InitCB init_cb,
-    const NewConfigCB& config_cb,
-    const NewBuffersCB& new_buffers_cb,
+    NewConfigCB config_cb,
+    NewBuffersCB new_buffers_cb,
     bool /* ignore_text_tracks */,
-    const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
-    const NewMediaSegmentCB& new_segment_cb,
-    const EndMediaSegmentCB& end_of_segment_cb,
+    EncryptedMediaInitDataCB encrypted_media_init_data_cb,
+    NewMediaSegmentCB new_segment_cb,
+    EndMediaSegmentCB end_of_segment_cb,
     MediaLog* media_log) {
   DCHECK_EQ(state_, kWaitingForInit);
   DCHECK(!init_cb_);
@@ -119,11 +99,11 @@ void MP4StreamParser::Init(
 
   ChangeState(kParsingBoxes);
   init_cb_ = std::move(init_cb);
-  config_cb_ = config_cb;
-  new_buffers_cb_ = new_buffers_cb;
-  encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;
-  new_segment_cb_ = new_segment_cb;
-  end_of_segment_cb_ = end_of_segment_cb;
+  config_cb_ = std::move(config_cb);
+  new_buffers_cb_ = std::move(new_buffers_cb);
+  encrypted_media_init_data_cb_ = std::move(encrypted_media_init_data_cb);
+  new_segment_cb_ = std::move(new_segment_cb);
+  end_of_segment_cb_ = std::move(end_of_segment_cb);
   media_log_ = media_log;
 }
 
@@ -304,8 +284,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
     // send a codec reconfiguration for fragments using a sample description
     // index different from the previous one. See https://crbug.com/748250.
     size_t desc_idx = 0;
-    for (size_t t = 0; t < moov_->extends.tracks.size(); t++) {
-      const TrackExtends& trex = moov_->extends.tracks[t];
+    for (const auto& trex : moov_->extends.tracks) {
       if (trex.track_id == track->header.track_id) {
         desc_idx = trex.default_sample_description_index;
         break;
@@ -335,10 +314,9 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
 #if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
           audio_format != FOURCC_AC3 && audio_format != FOURCC_EAC3 &&
 #endif
-#if BUILDFLAG(USE_PROPRIETARY_CODECS) && BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
+#if BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
           audio_format != FOURCC_DTSC && audio_format != FOURCC_DTSX &&
-#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS) &&
-        // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
+#endif  // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
 #if BUILDFLAG(ENABLE_PLATFORM_MPEG_H_AUDIO)
           audio_format != FOURCC_MHM1 && audio_format != FOURCC_MHA1 &&
 #endif
@@ -407,7 +385,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           if (audio_format == FOURCC_DTSX)
             audio_type = kDTSX;
         }
-#endif
+#endif  // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
         DVLOG(1) << "audio_type 0x" << std::hex << static_cast<int>(audio_type);
         if (audio_object_types_.find(audio_type) == audio_object_types_.end()) {
           MEDIA_LOG(ERROR, media_log_)
@@ -571,8 +549,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           return false;
       }
       video_config.Initialize(entry.video_codec, entry.video_codec_profile,
-                              VideoDecoderConfig::AlphaMode::kIsOpaque,
-                              VideoColorSpace::REC709(),
+                              entry.alpha_mode, VideoColorSpace::REC709(),
                               CalculateRotation(track->header, moov_->header),
                               coded_size, visible_rect, natural_size,
                               // No decoder-specific buffer needed for AVC;
@@ -584,22 +561,8 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
       if (entry.video_color_space.IsSpecified())
         video_config.set_color_space_info(entry.video_color_space);
 
-      if (entry.mastering_display_color_volume ||
-          entry.content_light_level_information) {
-        gfx::HDRMetadata hdr_metadata;
-        if (entry.mastering_display_color_volume) {
-          hdr_metadata.color_volume_metadata = ConvertMdcvToColorVolumeMetadata(
-              *entry.mastering_display_color_volume);
-        }
-
-        if (entry.content_light_level_information) {
-          hdr_metadata.max_content_light_level =
-              entry.content_light_level_information->max_content_light_level;
-          hdr_metadata.max_frame_average_light_level =
-              entry.content_light_level_information
-                  ->max_pic_average_light_level;
-        }
-        video_config.set_hdr_metadata(hdr_metadata);
+      if (entry.hdr_metadata.has_value() && entry.hdr_metadata->IsValid()) {
+        video_config.set_hdr_metadata(entry.hdr_metadata.value());
       }
 
       DVLOG(1) << "video_track_id=" << video_track_id
@@ -712,15 +675,15 @@ void MP4StreamParser::OnEncryptedMediaInitData(
   // concatenated in arbitrary order) matches the EME spec.
   // See https://www.w3.org/Bugs/Public/show_bug.cgi?id=17673.
   size_t total_size = 0;
-  for (size_t i = 0; i < headers.size(); i++)
-    total_size += headers[i].raw_box.size();
+  for (const auto& header : headers) {
+    total_size += header.raw_box.size();
+  }
 
   std::vector<uint8_t> init_data(total_size);
   size_t pos = 0;
-  for (size_t i = 0; i < headers.size(); i++) {
-    memcpy(&init_data[pos], &headers[i].raw_box[0],
-           headers[i].raw_box.size());
-    pos += headers[i].raw_box.size();
+  for (const auto& header : headers) {
+    memcpy(&init_data[pos], &header.raw_box[0], header.raw_box.size());
+    pos += header.raw_box.size();
   }
   encrypted_media_init_data_cb_.Run(EmeInitDataType::CENC, init_data);
 }
@@ -979,7 +942,7 @@ bool MP4StreamParser::ReadAndDiscardMDATsUntil(int64_t max_clear_offset) {
   ParseResult result = ParseResult::kOk;
   int64_t upper_bound = std::min(max_clear_offset, queue_.tail());
   while (mdat_tail_ < upper_bound) {
-    const uint8_t* buf = NULL;
+    const uint8_t* buf = nullptr;
     int size = 0;
     queue_.PeekAt(mdat_tail_, &buf, &size);
 
@@ -1046,5 +1009,4 @@ bool MP4StreamParser::ComputeHighestEndOffset(const MovieFragment& moof) {
   return true;
 }
 
-}  // namespace mp4
-}  // namespace media
+}  // namespace media::mp4

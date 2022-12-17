@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -251,3 +251,6 @@ IN_PROC_BROWSER_TEST_F(SearchEngineTabHelperPrerenderingBrowserTest,
   // A new template url is added on the primary page.
   EXPECT_NE(template_urls, url_service->GetTemplateURLs());
 }
+
+// TODO(http://crbug.com/1270519): Add a test for prerendering scenarios there
+// the OpenSearchDescriptionDocumentHandler mojo calls are deferred.

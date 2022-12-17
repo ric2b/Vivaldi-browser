@@ -1,5 +1,5 @@
-# Copyright 2022 The Chromium Authors.All rights reserved.
-# Use of this source code is governed by a BSD - style license that can be
+# Copyright 2022 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 source_set("subscriptions") {
@@ -16,12 +16,14 @@ source_set("subscriptions") {
 
   deps = [
     "//base",
+    "//components/commerce/core:account_checker",
     "//components/commerce/core:commerce_subscription_db_content_proto",
     "//components/commerce/core:feature_list",
     "//components/endpoint_fetcher:endpoint_fetcher",
     "//components/leveldb_proto",
     "//components/session_proto_db:core",
     "//components/signin/public/identity_manager:identity_manager",
+    "//net:net",
     "//net/traffic_annotation:traffic_annotation",
     "//services/data_decoder/public/cpp",
     "//services/network/public/cpp:cpp",
@@ -40,6 +42,7 @@ source_set("subscriptions_unit_tests") {
   deps = [
     ":subscriptions",
     "//base/test:test_support",
+    "//components/commerce/core:account_checker_test_support",
     "//components/commerce/core:commerce_subscription_db_content_proto",
     "//components/commerce/core:feature_list",
     "//components/endpoint_fetcher:endpoint_fetcher",

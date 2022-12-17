@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,9 @@
 #include "ui/accessibility/ax_export.h"
 
 // Private WebKit accessibility attributes.
+AX_EXPORT constexpr NSString* const
+    NSAccessibilityAttributedStringForTextMarkerRangeParameterizedAttribute =
+        @"AXAttributedStringForTextMarkerRange";
 AX_EXPORT constexpr NSString* const NSAccessibilityAccessKeyAttribute =
     @"AXAccessKey";
 AX_EXPORT constexpr NSString* const NSAccessibilityARIAAtomicAttribute =
@@ -36,6 +39,11 @@ AX_EXPORT constexpr NSString* const NSAccessibilityARIASetSizeAttribute =
     @"AXARIASetSize";
 AX_EXPORT constexpr NSString* const NSAccessibilityAutocompleteValueAttribute =
     @"AXAutocompleteValue";
+AX_EXPORT constexpr NSString* const NSAccessibilityBrailleLabelAttribute =
+    @"AXBrailleLabel";
+AX_EXPORT constexpr NSString* const NSAccessibilityBrailleRoleDescription =
+    @"AXBrailleRoleDescription";
+
 AX_EXPORT constexpr NSString* const NSAccessibilityBlockQuoteLevelAttribute =
     @"AXBlockQuoteLevel";
 AX_EXPORT constexpr NSString* const NSAccessibilityChromeAXNodeIdAttribute =

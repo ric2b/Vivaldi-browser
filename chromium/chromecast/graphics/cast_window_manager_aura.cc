@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -203,7 +203,8 @@ void CastWindowManagerAura::Setup() {
       enable_input_, std::move(properties));
   window_tree_host_->InitHost();
   aura::Window* root_window = window_tree_host_->window();
-  root_window->SetLayoutManager(new CastLayoutManager(this, root_window));
+  root_window->SetLayoutManager(
+      std::make_unique<CastLayoutManager>(this, root_window));
   window_tree_host_->SetRootTransform(GetPrimaryDisplayRotationTransform());
 
   // Allow seeing through to the hardware video plane:

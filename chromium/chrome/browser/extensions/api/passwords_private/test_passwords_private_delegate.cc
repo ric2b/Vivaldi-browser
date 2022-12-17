@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -157,8 +158,7 @@ void TestPasswordsPrivateDelegate::RequestCredentialDetails(
     content::WebContents* web_contents) {
   api::passwords_private::PasswordUiEntry entry = CreateEntry(42);
   if (plaintext_password_.has_value()) {
-    entry.password = std::make_unique<std::string>(
-        base::UTF16ToUTF8(plaintext_password_.value()));
+    entry.password = base::UTF16ToUTF8(plaintext_password_.value());
     std::move(callback).Run(std::move(entry));
   } else {
     std::move(callback).Run(std::move(absl::nullopt));
@@ -216,42 +216,39 @@ void TestPasswordsPrivateDelegate::SetAccountStorageOptIn(
 }
 
 std::vector<api::passwords_private::PasswordUiEntry>
-TestPasswordsPrivateDelegate::GetCompromisedCredentials() {
-  api::passwords_private::PasswordUiEntry credential;
-  credential.username = "alice";
-  credential.urls.shown = "example.com";
-  credential.urls.link = "https://example.com";
-  credential.urls.signon_realm = "https://example.com";
-  credential.is_android_credential = false;
-  credential.change_password_url =
-      std::make_unique<std::string>("https://example.com/change-password");
-  credential.compromised_info =
-      std::make_unique<api::passwords_private::CompromisedInfo>();
+TestPasswordsPrivateDelegate::GetInsecureCredentials() {
+  api::passwords_private::PasswordUiEntry leaked_credential;
+  leaked_credential.username = "alice";
+  leaked_credential.urls.shown = "example.com";
+  leaked_credential.urls.link = "https://example.com";
+  leaked_credential.urls.signon_realm = "https://example.com";
+  leaked_credential.is_android_credential = false;
+  leaked_credential.change_password_url = "https://example.com/change-password";
+  leaked_credential.compromised_info.emplace();
   // Mar 03 2020 12:00:00 UTC
-  credential.compromised_info->compromise_time = 1583236800000;
-  credential.compromised_info->elapsed_time_since_compromise =
+  leaked_credential.compromised_info->compromise_time = 1583236800000;
+  leaked_credential.compromised_info->elapsed_time_since_compromise =
       base::UTF16ToUTF8(TimeFormat::Simple(
           TimeFormat::FORMAT_ELAPSED, TimeFormat::LENGTH_LONG, base::Days(3)));
-  credential.compromised_info->compromise_type =
-      api::passwords_private::COMPROMISE_TYPE_LEAKED;
-  credential.stored_in = api::passwords_private::PASSWORD_STORE_SET_DEVICE;
-  std::vector<api::passwords_private::PasswordUiEntry> credentials;
-  credentials.push_back(std::move(credential));
-  return credentials;
-}
+  leaked_credential.compromised_info->compromise_types = {
+      api::passwords_private::COMPROMISE_TYPE_LEAKED};
+  leaked_credential.stored_in =
+      api::passwords_private::PASSWORD_STORE_SET_DEVICE;
 
-std::vector<api::passwords_private::PasswordUiEntry>
-TestPasswordsPrivateDelegate::GetWeakCredentials() {
-  api::passwords_private::PasswordUiEntry credential;
-  credential.username = "bob";
-  credential.urls.shown = "example.com";
-  credential.urls.link = "https://example.com";
-  credential.is_android_credential = false;
-  credential.change_password_url =
-      std::make_unique<std::string>("https://example.com/change-password");
-  credential.stored_in = api::passwords_private::PASSWORD_STORE_SET_DEVICE;
+  api::passwords_private::PasswordUiEntry weak_credential;
+  weak_credential.username = "bob";
+  weak_credential.urls.shown = "example.com";
+  weak_credential.urls.link = "https://example.com";
+  weak_credential.is_android_credential = false;
+  weak_credential.change_password_url = "https://example.com/change-password";
+  weak_credential.stored_in = api::passwords_private::PASSWORD_STORE_SET_DEVICE;
+  weak_credential.compromised_info.emplace();
+  weak_credential.compromised_info->compromise_types = {
+      api::passwords_private::COMPROMISE_TYPE_WEAK};
+
   std::vector<api::passwords_private::PasswordUiEntry> credentials;
-  credentials.push_back(std::move(credential));
+  credentials.push_back(std::move(leaked_credential));
+  credentials.push_back(std::move(weak_credential));
   return credentials;
 }
 
@@ -302,18 +299,20 @@ api::passwords_private::PasswordCheckStatus
 TestPasswordsPrivateDelegate::GetPasswordCheckStatus() {
   api::passwords_private::PasswordCheckStatus status;
   status.state = api::passwords_private::PASSWORD_CHECK_STATE_RUNNING;
-  status.already_processed = std::make_unique<int>(5);
-  status.remaining_in_queue = std::make_unique<int>(10);
-  status.elapsed_time_since_last_check =
-      std::make_unique<std::string>(base::UTF16ToUTF8(
-          TimeFormat::Simple(TimeFormat::FORMAT_ELAPSED,
-                             TimeFormat::LENGTH_SHORT, base::Minutes(5))));
+  status.already_processed = 5;
+  status.remaining_in_queue = 10;
+  status.elapsed_time_since_last_check = base::UTF16ToUTF8(TimeFormat::Simple(
+      TimeFormat::FORMAT_ELAPSED, TimeFormat::LENGTH_SHORT, base::Minutes(5)));
   return status;
 }
 
 password_manager::InsecureCredentialsManager*
 TestPasswordsPrivateDelegate::GetInsecureCredentialsManager() {
   return nullptr;
+}
+
+void TestPasswordsPrivateDelegate::ExtendAuthValidity() {
+  authenticator_interacted_ = true;
 }
 
 void TestPasswordsPrivateDelegate::SetProfile(Profile* profile) {
@@ -350,10 +349,13 @@ void TestPasswordsPrivateDelegate::SendPasswordExceptionsList() {
 
 bool TestPasswordsPrivateDelegate::IsCredentialPresentInInsecureCredentialsList(
     const api::passwords_private::PasswordUiEntry& credential) {
-  return std::any_of(insecure_credentials_.begin(), insecure_credentials_.end(),
-                     [&credential](const auto& insecure_credential) {
-                       return insecure_credential.id == credential.id;
-                     });
+  return base::Contains(insecure_credentials_, credential.id,
+                        &api::passwords_private::PasswordUiEntry::id);
+}
+
+void TestPasswordsPrivateDelegate::SwitchBiometricAuthBeforeFillingState(
+    content::WebContents* web_contents) {
+  authenticator_interacted_ = true;
 }
 
 }  // namespace extensions

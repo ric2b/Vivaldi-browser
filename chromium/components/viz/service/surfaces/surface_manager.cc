@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <algorithm>
 #include <utility>
 
 #include "base/containers/adapters.h"
@@ -15,9 +14,11 @@
 #include "base/containers/queue.h"
 #include "base/logging.h"
 #include "base/observer_list.h"
+#include "base/ranges/algorithm.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/service/surfaces/surface.h"
@@ -353,11 +354,10 @@ void SurfaceManager::RemoveTemporaryReferenceImpl(const SurfaceId& surface_id,
   // Find the iterator to the range tracking entry for |surface_id|. Use that
   // iterator to find the right end iterator for the temporary references we
   // want to remove.
-  auto end_iter =
-      std::find_if(frame_sink_temp_refs.begin(), frame_sink_temp_refs.end(),
-                   [&surface_id](const LocalSurfaceId& id) {
-                     return id.IsNewerThan(surface_id.local_surface_id());
-                   });
+  auto end_iter = base::ranges::find_if(
+      frame_sink_temp_refs, [&surface_id](const LocalSurfaceId& id) {
+        return id.IsNewerThan(surface_id.local_surface_id());
+      });
   auto begin_iter = frame_sink_temp_refs.begin();
 
   // Remove temporary references and range tracking information.
@@ -427,6 +427,11 @@ void SurfaceManager::ExpireOldTemporaryReferences() {
 
   for (auto& surface_id : temporary_references_to_delete)
     RemoveTemporaryReferenceImpl(surface_id, RemovedReason::EXPIRED);
+
+  // Some surfaces may have become eligible to garbage collection, since we
+  // just removed temporary references.
+  if (base::FeatureList::IsEnabled(features::kEagerSurfaceGarbageCollection))
+    GarbageCollectSurfaces();
 }
 
 Surface* SurfaceManager::GetSurfaceForId(const SurfaceId& surface_id) const {

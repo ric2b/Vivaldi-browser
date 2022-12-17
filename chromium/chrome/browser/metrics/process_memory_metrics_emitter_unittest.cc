@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,14 +40,9 @@ using UkmEntry = ukm::builders::Memory_Experimental;
 using MetricMap = base::flat_map<const char*, int64_t>;
 
 int GetResidentValue(const MetricMap& metric_map) {
-#if BUILDFLAG(IS_MAC)
-  // Resident set is not populated on Mac.
-  return 0;
-#else
   auto it = metric_map.find("Resident");
   EXPECT_NE(it, metric_map.end());
   return it->second;
-#endif
 }
 
 // Provide fake to surface ReceivedMemoryDump and ReceivedProcessInfos to public
@@ -180,10 +175,7 @@ void PopulateBrowserMetrics(GlobalMemoryDumpPtr& global_dump,
 MetricMap GetExpectedBrowserMetrics() {
   return MetricMap({
     {"ProcessType", static_cast<int64_t>(ProcessType::BROWSER)},
-#if !BUILDFLAG(IS_MAC)
-        {"Resident", 10},
-#endif
-        {"Malloc", 20}, {"PrivateMemoryFootprint", 30},
+        {"Resident", 10}, {"Malloc", 20}, {"PrivateMemoryFootprint", 30},
         {"SharedMemoryFootprint", 35}, {"Uptime", 42},
         {"GpuMemory", kGpuTotalMemory * 1024 * 1024},
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
@@ -334,7 +326,7 @@ void PopulateRendererMetrics(GlobalMemoryDumpPtr& global_dump,
                        metrics_mb_or_count["SharedMemoryFootprint"] * 1024,
                        metrics_mb_or_count["PrivateSwapFootprint"] * 1024
 #else
-      metrics_mb_or_count["SharedMemoryFootprint"] * 1024
+                       metrics_mb_or_count["SharedMemoryFootprint"] * 1024
 #endif
       );
   pmd->os_dump = std::move(os_dump);
@@ -348,11 +340,7 @@ constexpr int kTestRendererSharedMemoryFootprint = 135;
 constexpr int kNativeLibraryResidentMemoryFootprint = 27560;
 constexpr int kNativeLibraryResidentNotOrderedCodeFootprint = 12345;
 constexpr int kNativeLibraryNotResidentOrderedCodeFootprint = 23456;
-
-#if !BUILDFLAG(IS_MAC)
 constexpr int kTestRendererResidentSet = 110;
-#endif
-
 constexpr base::ProcessId kTestRendererPid201 = 201;
 constexpr base::ProcessId kTestRendererPid202 = 202;
 constexpr base::ProcessId kTestRendererPid203 = 203;
@@ -360,10 +348,7 @@ constexpr base::ProcessId kTestRendererPid203 = 203;
 MetricMap GetExpectedRendererMetrics() {
   return MetricMap({
     {"ProcessType", static_cast<int64_t>(ProcessType::RENDERER)},
-#if !BUILDFLAG(IS_MAC)
-        {"Resident", kTestRendererResidentSet},
-#endif
-        {"Malloc", kTestRendererMalloc},
+        {"Resident", kTestRendererResidentSet}, {"Malloc", kTestRendererMalloc},
         {"PrivateMemoryFootprint", kTestRendererPrivateMemoryFootprint},
         {"SharedMemoryFootprint", kTestRendererSharedMemoryFootprint},
         {"PartitionAlloc", 140}, {"BlinkGC", 150}, {"V8", 160},
@@ -438,10 +423,7 @@ void PopulateGpuMetrics(GlobalMemoryDumpPtr& global_dump,
 
 MetricMap GetExpectedGpuMetrics() {
   return MetricMap({
-    {"ProcessType", static_cast<int64_t>(ProcessType::GPU)},
-#if !BUILDFLAG(IS_MAC)
-        {"Resident", 210},
-#endif
+    {"ProcessType", static_cast<int64_t>(ProcessType::GPU)}, {"Resident", 210},
         {"Malloc", 220}, {"PrivateMemoryFootprint", 230},
         {"SharedMemoryFootprint", 235}, {"CommandBuffer", kGpuCommandBufferMB},
         {"Uptime", 42}, {"GpuMemory", kGpuTotalMemory * 1024 * 1024},
@@ -478,10 +460,7 @@ void PopulateAudioServiceMetrics(GlobalMemoryDumpPtr& global_dump,
 MetricMap GetExpectedAudioServiceMetrics() {
   return MetricMap({
     {"ProcessType", static_cast<int64_t>(ProcessType::UTILITY)},
-#if !BUILDFLAG(IS_MAC)
-        {"Resident", 10},
-#endif
-        {"Malloc", 20}, {"PrivateMemoryFootprint", 30},
+        {"Resident", 10}, {"Malloc", 20}, {"PrivateMemoryFootprint", 30},
         {"SharedMemoryFootprint", 35}, {"Uptime", 42},
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
         {"PrivateSwapFootprint", 50},
@@ -516,10 +495,8 @@ void PopulatePaintPreviewCompositorMetrics(GlobalMemoryDumpPtr& global_dump,
 MetricMap GetExpectedPaintPreviewCompositorMetrics() {
   return MetricMap({
     {"ProcessType", static_cast<int64_t>(ProcessType::UTILITY)},
-#if !BUILDFLAG(IS_MAC)
-        {"Resident", 10},
-#endif
-        {"PrivateMemoryFootprint", 30}, {"SharedMemoryFootprint", 35},
+        {"Resident", 10}, {"PrivateMemoryFootprint", 30},
+        {"SharedMemoryFootprint", 35},
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
         {"PrivateSwapFootprint", 50},
 #endif
@@ -920,6 +897,13 @@ TEST_F(ProcessMemoryMetricsEmitterTest, RendererAndTotalHistogramsAreRecorded) {
   MetricMap expected_metrics = GetExpectedRendererMetrics();
   PopulateRendererMetrics(global_dump, expected_metrics, kTestRendererPid201);
   PopulateRendererMetrics(global_dump, expected_metrics, kTestRendererPid202);
+
+  constexpr uint64_t kMiB = 1024 * 1024;
+  SetAllocatorDumpMetric(global_dump->process_dumps[0], "cc/tile_memory",
+                         "size", 12 * kMiB);
+  SetAllocatorDumpMetric(global_dump->process_dumps[1], "cc/tile_memory",
+                         "size", 22 * kMiB);
+
   global_dump->aggregated_metrics->native_library_resident_kb =
       kNativeLibraryResidentMemoryFootprint;
   global_dump->aggregated_metrics->native_library_not_resident_ordered_kb =
@@ -943,6 +927,16 @@ TEST_F(ProcessMemoryMetricsEmitterTest, RendererAndTotalHistogramsAreRecorded) {
       "Memory.NativeLibrary.NotResidentOrderedCodeMemoryFootprint", 0);
   histograms.ExpectTotalCount(
       "Memory.NativeLibrary.ResidentNotOrderedCodeMemoryFootprint", 0);
+#if BUILDFLAG(IS_ANDROID)
+  histograms.ExpectTotalCount(
+      "Memory.Total.PrivateMemoryFootprintExcludingWaivedRenderers", 0);
+  histograms.ExpectTotalCount(
+      "Memory.Total.RendererPrivateMemoryFootprintExcludingWaived", 0);
+  histograms.ExpectTotalCount(
+      "Memory.Total.PrivateMemoryFootprintVisibleOrHigherPriorityRenderers", 0);
+  histograms.ExpectTotalCount(
+      "Memory.Total.RendererPrivateMemoryFootprintVisibleOrHigherPriority", 0);
+#endif
 
   // Simulate some metrics emission.
   scoped_refptr<ProcessMemoryMetricsEmitterFake> emitter =
@@ -956,12 +950,8 @@ TEST_F(ProcessMemoryMetricsEmitterTest, RendererAndTotalHistogramsAreRecorded) {
                                 kTestRendererPrivateMemoryFootprint, 2);
   histograms.ExpectUniqueSample("Memory.Renderer.SharedMemoryFootprint",
                                 kTestRendererSharedMemoryFootprint, 2);
-#if BUILDFLAG(IS_MAC)
-  histograms.ExpectTotalCount("Memory.Renderer.ResidentSet", 0);
-#else
   histograms.ExpectUniqueSample("Memory.Renderer.ResidentSet",
                                 kTestRendererResidentSet, 2);
-#endif
 
   histograms.ExpectUniqueSample("Memory.Total.PrivateMemoryFootprint",
                                 2 * kTestRendererPrivateMemoryFootprint, 1);
@@ -971,12 +961,11 @@ TEST_F(ProcessMemoryMetricsEmitterTest, RendererAndTotalHistogramsAreRecorded) {
                                 2 * kTestRendererMalloc, 1);
   histograms.ExpectUniqueSample("Memory.Total.SharedMemoryFootprint",
                                 2 * kTestRendererSharedMemoryFootprint, 1);
-#if BUILDFLAG(IS_MAC)
-  histograms.ExpectTotalCount("Memory.Total.ResidentSet", 0);
-#else
   histograms.ExpectUniqueSample("Memory.Total.ResidentSet",
                                 2 * kTestRendererResidentSet, 1);
-#endif
+
+  histograms.ExpectUniqueSample("Memory.Total.TileMemory", 12 + 22, 1);
+
   histograms.ExpectUniqueSample(
       "Memory.NativeLibrary.MappedAndResidentMemoryFootprint3",
       kNativeLibraryResidentMemoryFootprint, 1);
@@ -986,6 +975,20 @@ TEST_F(ProcessMemoryMetricsEmitterTest, RendererAndTotalHistogramsAreRecorded) {
   histograms.ExpectUniqueSample(
       "Memory.NativeLibrary.ResidentNotOrderedCodeMemoryFootprint",
       kNativeLibraryResidentNotOrderedCodeFootprint, 1);
+#if BUILDFLAG(IS_ANDROID)
+  // Expect values of 0 as the Renderer is not in the list of active processes
+  // and is therefore considered UNBOUND and will not emit these values.
+  histograms.ExpectUniqueSample(
+      "Memory.Total.PrivateMemoryFootprintExcludingWaivedRenderers", 0, 1);
+  histograms.ExpectUniqueSample(
+      "Memory.Total.RendererPrivateMemoryFootprintExcludingWaived", 0, 1);
+  histograms.ExpectUniqueSample(
+      "Memory.Total.PrivateMemoryFootprintVisibleOrHigherPriorityRenderers", 0,
+      1);
+  histograms.ExpectUniqueSample(
+      "Memory.Total.RendererPrivateMemoryFootprintVisibleOrHigherPriority", 0,
+      1);
+#endif
 }
 
 TEST_F(ProcessMemoryMetricsEmitterTest, MainFramePMFEmitted) {

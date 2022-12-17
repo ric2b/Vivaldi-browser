@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,6 +44,7 @@ class NaClForkDelegate : public content::ZygoteForkDelegate {
                int* uma_sample,
                int* uma_boundary_value) override;
   pid_t Fork(const std::string& process_type,
+             const std::vector<std::string>& args,
              const std::vector<int>& fds,
              const std::string& channel_id) override;
   bool GetTerminationStatus(pid_t pid,

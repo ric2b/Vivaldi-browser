@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include <set>
 #include <string>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "base/files/file_path.h"
@@ -61,9 +60,8 @@
 #include "chromeos/ash/components/dbus/cicerone/cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_client.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/prefs/pref_service.h"
-#include "components/services/app_service/public/mojom/types.mojom-shared.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/disable_reason.h"
@@ -91,6 +89,8 @@ using extensions::ExtensionSystem;
 using plugin_vm::PluginVmTestHelper;
 using ::testing::_;
 using ::testing::Matcher;
+
+namespace app_list {
 
 namespace {
 
@@ -149,7 +149,6 @@ void RemoveApps(apps::AppType app_type,
                 FakeAppListModelUpdater* model_updater) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  proxy->FlushMojoCallsForTesting();
   proxy->AppRegistryCache().ForEachApp(
       [&model_updater, &app_type](const apps::AppUpdate& update) {
         if (update.AppType() != app_type) {
@@ -225,6 +224,8 @@ class AppServiceAppModelBuilderTest : public AppListTestBase {
     app_service_test_.UninstallAllApps(profile());
     testing_profile()->SetGuestSession(guest_mode);
     app_service_test_.SetUp(profile());
+    // Wait for some default apps added to AppService.
+    base::RunLoop().RunUntilIdle();
     model_updater_ = std::make_unique<FakeAppListModelUpdater>(
         /*profile=*/nullptr, /*reorder_delegate=*/nullptr);
     controller_ = std::make_unique<test::TestAppListControllerDelegate>();
@@ -412,8 +413,8 @@ TEST_F(BuiltInAppTest, Build) {
   // internal_app_metadata.cc. Only count the apps can display in launcher.
   std::string built_in_apps_name;
   CreateBuilder(false);
-  EXPECT_EQ(app_list::GetNumberOfInternalAppsShowInLauncherForTest(
-                &built_in_apps_name, profile()),
+  EXPECT_EQ(GetNumberOfInternalAppsShowInLauncherForTest(&built_in_apps_name,
+                                                         profile()),
             model_updater_->ItemCount());
   EXPECT_EQ(built_in_apps_name,
             base::JoinString(GetModelContent(model_updater_.get()), ","));
@@ -424,8 +425,8 @@ TEST_F(BuiltInAppTest, BuildGuestMode) {
   // internal_app_metadata.cc. Only count the apps can display in launcher.
   std::string built_in_apps_name;
   CreateBuilder(true);
-  EXPECT_EQ(app_list::GetNumberOfInternalAppsShowInLauncherForTest(
-                &built_in_apps_name, profile()),
+  EXPECT_EQ(GetNumberOfInternalAppsShowInLauncherForTest(&built_in_apps_name,
+                                                         profile()),
             model_updater_->ItemCount());
   EXPECT_EQ(built_in_apps_name,
             base::JoinString(GetModelContent(model_updater_.get()), ","));
@@ -438,13 +439,13 @@ TEST_F(ExtensionAppTest, Build) {
 }
 
 TEST_F(ExtensionAppTest, HideWebStore) {
+  app_service_test_.SetUp(profile());
+
   // Install a "web store" app.
   scoped_refptr<extensions::Extension> store =
       MakeApp("webstore", "0.0", "http://google.com",
               std::string(extensions::kWebStoreAppId));
   service_->AddExtension(store.get());
-
-  app_service_test_.SetUp(profile());
 
   // Web store should be present in the model.
   FakeAppListModelUpdater model_updater1(/*profile=*/nullptr,
@@ -458,7 +459,6 @@ TEST_F(ExtensionAppTest, HideWebStore) {
 
   // Activate the HideWebStoreIcon policy.
   profile_->GetPrefs()->SetBoolean(prefs::kHideWebStoreIcon, true);
-  app_service_test_.FlushMojoCalls();
   // Now the web store should not be present anymore.
   EXPECT_FALSE(model_updater1.FindItem(store->id()));
 
@@ -470,12 +470,10 @@ TEST_F(ExtensionAppTest, HideWebStore) {
       AppServiceAppModelBuilder::ScopedAppPositionInitCallbackForTest>(
       &builder2, base::BindRepeating(&InitAppPosition));
   builder2.Initialize(nullptr, profile_.get(), &model_updater2);
-  app_service_test_.FlushMojoCalls();
   EXPECT_FALSE(model_updater2.FindItem(store->id()));
 
   // Deactivate the HideWebStoreIcon policy again.
   profile_->GetPrefs()->SetBoolean(prefs::kHideWebStoreIcon, false);
-  app_service_test_.FlushMojoCalls();
   // Now the web store should have appeared.
   EXPECT_TRUE(model_updater2.FindItem(store->id()));
 
@@ -487,18 +485,15 @@ TEST_F(ExtensionAppTest, HideWebStore) {
 TEST_F(ExtensionAppTest, DisableAndEnable) {
   service_->DisableExtension(kHostedAppId,
                              extensions::disable_reason::DISABLE_USER_ACTION);
-  app_service_test_.FlushMojoCalls();
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
 
   service_->EnableExtension(kHostedAppId);
-  app_service_test_.FlushMojoCalls();
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
 }
 
 TEST_F(ExtensionAppTest, Uninstall) {
   service_->UninstallExtension(
       kPackagedApp2Id, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
-  app_service_test_.FlushMojoCalls();
   EXPECT_EQ((std::vector<std::string>{"Hosted App", "Packaged App 1"}),
             GetModelContent(model_updater_.get()));
 
@@ -513,7 +508,6 @@ TEST_F(ExtensionAppTest, UninstallTerminatedApp) {
 
   service_->UninstallExtension(
       kPackagedApp2Id, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
-  app_service_test_.FlushMojoCalls();
   EXPECT_EQ((std::vector<std::string>{"Hosted App", "Packaged App 1"}),
             GetModelContent(model_updater_.get()));
 
@@ -529,7 +523,6 @@ TEST_F(ExtensionAppTest, Reinstall) {
   extensions::InstallObserver::ExtensionInstallParams params(
       kPackagedApp1Id, "", gfx::ImageSkia(), true, true);
   tracker->OnBeginExtensionInstall(params);
-  app_service_test_.FlushMojoCalls();
 
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
 }
@@ -540,7 +533,6 @@ TEST_F(ExtensionAppTest, OrdinalPrefsChange) {
   syncer::StringOrdinal package_app_page =
       sorting->GetPageOrdinal(kPackagedApp1Id);
   sorting->SetPageOrdinal(kHostedAppId, package_app_page.CreateBefore());
-  app_service_test_.FlushMojoCalls();
   // Old behavior: This would be "Hosted App,Packaged App 1,Packaged App 2"
   // New behavior: Sorting order doesn't change.
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
@@ -552,7 +544,6 @@ TEST_F(ExtensionAppTest, OrdinalPrefsChange) {
   sorting->SetPageOrdinal(kHostedAppId, package_app_page);
   sorting->SetAppLaunchOrdinal(kHostedAppId,
                                app1_ordinal.CreateBetween(app2_ordinal));
-  app_service_test_.FlushMojoCalls();
   // Old behavior: This would be "Packaged App 1,Hosted App,Packaged App 2"
   // New behavior: Sorting order doesn't change.
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
@@ -564,19 +555,16 @@ TEST_F(ExtensionAppTest, OnExtensionMoved) {
                           sorting->GetPageOrdinal(kPackagedApp1Id));
 
   sorting->OnExtensionMoved(kHostedAppId, kPackagedApp1Id, kPackagedApp2Id);
-  app_service_test_.FlushMojoCalls();
   // Old behavior: This would be "Packaged App 1,Hosted App,Packaged App 2"
   // New behavior: Sorting order doesn't change.
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
 
   sorting->OnExtensionMoved(kHostedAppId, kPackagedApp2Id, std::string());
-  app_service_test_.FlushMojoCalls();
   // Old behavior: This would be restored to the default order.
   // New behavior: Sorting order still doesn't change.
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
 
   sorting->OnExtensionMoved(kHostedAppId, std::string(), kPackagedApp1Id);
-  app_service_test_.FlushMojoCalls();
   // Old behavior: This would be "Hosted App,Packaged App 1,Packaged App 2"
   // New behavior: Sorting order doesn't change.
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
@@ -653,8 +641,6 @@ TEST_F(WebAppBuilderTest, LoadGeneratedIcon) {
   const std::string kAppName = "Web App";
   const std::string app_id = CreateWebApp(kAppName);
 
-  app_service_test_.FlushMojoCalls();
-
   // Generate the source icon for comparing.
   gfx::ImageSkia src_image_skia;
   GenerateWebAppIcon(app_id, src_image_skia);
@@ -679,6 +665,8 @@ class WebAppBuilderDemoModeTest : public WebAppBuilderTest {
     demo_mode_test_helper_->InitializeSession();
 
     app_service_test_.SetUp(profile_.get());
+    // Wait for some default apps added to AppService.
+    base::RunLoop().RunUntilIdle();
     RemoveApps(apps::AppType::kWeb, profile(), model_updater_.get());
   }
 
@@ -782,18 +770,17 @@ class CrostiniAppTest : public AppServiceAppModelBuilderTest {
 
   void CreateBuilder() {
     model_updater_factory_scope_ = std::make_unique<
-        app_list::AppListSyncableService::ScopedModelUpdaterFactoryForTest>(
+        AppListSyncableService::ScopedModelUpdaterFactoryForTest>(
         base::BindRepeating(
             [](Profile* profile,
-               app_list::reorder::AppListReorderDelegate* reorder_delegate)
+               reorder::AppListReorderDelegate* reorder_delegate)
                 -> std::unique_ptr<AppListModelUpdater> {
               return std::make_unique<FakeAppListModelUpdater>(
                   profile, reorder_delegate);
             },
             profile()));
     // The AppListSyncableService creates the CrostiniAppModelBuilder.
-    sync_service_ =
-        std::make_unique<app_list::AppListSyncableService>(profile_.get());
+    sync_service_ = std::make_unique<AppListSyncableService>(profile_.get());
     RemoveNonCrostiniApps();
   }
 
@@ -810,12 +797,11 @@ class CrostiniAppTest : public AppServiceAppModelBuilderTest {
     return l10n_util::GetStringUTF8(IDS_CROSTINI_TERMINAL_APP_NAME);
   }
 
-  std::unique_ptr<app_list::AppListSyncableService> sync_service_;
+  std::unique_ptr<AppListSyncableService> sync_service_;
   std::unique_ptr<CrostiniTestHelper> test_helper_;
 
  private:
-  std::unique_ptr<
-      app_list::AppListSyncableService::ScopedModelUpdaterFactoryForTest>
+  std::unique_ptr<AppListSyncableService::ScopedModelUpdaterFactoryForTest>
       model_updater_factory_scope_;
 };
 
@@ -1025,12 +1011,10 @@ TEST_F(PluginVmAppTest, PluginVmDisabled) {
 }
 
 TEST_F(PluginVmAppTest, EnableAndDisablePluginVm) {
-  app_service_test_.FlushMojoCalls();
   EXPECT_THAT(GetModelContent(model_updater_.get()), testing::IsEmpty());
 
   AllowPluginVm();
 
-  app_service_test_.FlushMojoCalls();
   EXPECT_EQ(std::vector<std::string>{l10n_util::GetStringUTF8(
                 IDS_PLUGIN_VM_APP_NAME)},
             GetModelContent(model_updater_.get()));
@@ -1038,7 +1022,6 @@ TEST_F(PluginVmAppTest, EnableAndDisablePluginVm) {
   testing_profile_->ScopedCrosSettingsTestHelper()->SetBoolean(
       ash::kPluginVmAllowed, false);
 
-  app_service_test_.FlushMojoCalls();
   EXPECT_THAT(GetModelContent(model_updater_.get()), testing::IsEmpty());
 }
 
@@ -1053,3 +1036,5 @@ TEST_F(PluginVmAppTest, PluginVmEnabled) {
                 IDS_PLUGIN_VM_APP_NAME)},
             GetModelContent(model_updater_.get()));
 }
+
+}  // namespace app_list

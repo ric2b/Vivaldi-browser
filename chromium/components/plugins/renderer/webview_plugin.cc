@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -287,7 +287,8 @@ WebViewPlugin::WebViewHelper::WebViewHelper(
   web_view_->SetRendererPreferences(renderer_preferences);
 
   WebLocalFrame* web_frame = WebLocalFrame::CreateMainFrame(
-      web_view_, this, nullptr, blink::LocalFrameToken(), nullptr);
+      web_view_, this, nullptr, blink::LocalFrameToken(),
+      blink::DocumentToken(), nullptr);
   blink::WebFrameWidget* frame_widget = web_frame->InitializeFrameWidget(
       blink::CrossVariantMojoAssociatedRemote<
           blink::mojom::FrameWidgetHostInterfaceBase>(),

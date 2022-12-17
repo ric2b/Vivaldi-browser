@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,14 +13,17 @@
 #include "content/common/content_export.h"
 
 namespace content {
+
 class BrowserAccessibilityAuraLinux;
+class WebAXPlatformTreeManagerDelegate;
 
 // Manages a tree of BrowserAccessibilityAuraLinux objects.
 class CONTENT_EXPORT BrowserAccessibilityManagerAuraLinux
     : public BrowserAccessibilityManager {
  public:
-  BrowserAccessibilityManagerAuraLinux(const ui::AXTreeUpdate& initial_tree,
-                                       BrowserAccessibilityDelegate* delegate);
+  BrowserAccessibilityManagerAuraLinux(
+      const ui::AXTreeUpdate& initial_tree,
+      WebAXPlatformTreeManagerDelegate* delegate);
 
   BrowserAccessibilityManagerAuraLinux(
       const BrowserAccessibilityManagerAuraLinux&) = delete;
@@ -34,13 +37,15 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAuraLinux
       BrowserAccessibility* object1,
       BrowserAccessibility* object2);
 
-  // Implementation of BrowserAccessibilityManager methods.
-  void FireFocusEvent(BrowserAccessibility* node) override;
+  // AXTreeManager overrides.
+  void FireFocusEvent(ui::AXNode* node) override;
+
+  // BrowserAccessibilityManager overrides.
   void FireBlinkEvent(ax::mojom::Event event_type,
                       BrowserAccessibility* node,
                       int action_request_id) override;
   void FireGeneratedEvent(ui::AXEventGenerator::Event event_type,
-                          BrowserAccessibility* node) override;
+                          const ui::AXNode* node) override;
 
   void FireSelectedEvent(BrowserAccessibility* node);
   void FireEnabledChangedEvent(BrowserAccessibility* node);

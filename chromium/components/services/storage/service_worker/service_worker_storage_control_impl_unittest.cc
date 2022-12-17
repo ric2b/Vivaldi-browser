@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -111,11 +111,10 @@ ReadResponseHeadResult ReadResponseHead(
 
 ReadDataResult ReadResponseData(mojom::ServiceWorkerResourceReader* reader,
                                 int data_size) {
-  FakeServiceWorkerDataPipeStateNotifier notifier;
   mojo::ScopedDataPipeConsumerHandle data_consumer;
   base::RunLoop loop;
-  reader->ReadData(
-      data_size, notifier.BindNewPipeAndPassRemote(),
+  reader->PrepareReadData(
+      data_size,
       base::BindLambdaForTesting([&](mojo::ScopedDataPipeConsumerHandle pipe) {
         data_consumer = std::move(pipe);
         loop.Quit();
@@ -123,8 +122,14 @@ ReadDataResult ReadResponseData(mojom::ServiceWorkerResourceReader* reader,
   loop.Run();
 
   ReadDataResult result;
+
+  base::RunLoop loop2;
+  reader->ReadData(base::BindLambdaForTesting([&](int32_t status) {
+    result.status = status;
+    loop2.Quit();
+  }));
   result.data = test::ReadDataPipeViaRunLoop(std::move(data_consumer));
-  result.status = notifier.WaitUntilComplete();
+  loop2.Run();
 
   return result;
 }
@@ -332,6 +337,22 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     base::RunLoop loop;
     storage()->UpdateLastUpdateCheckTime(
         registration_id, key, last_update_check_time,
+        base::BindLambdaForTesting([&](DatabaseStatus status) {
+          out_status = status;
+          loop.Quit();
+        }));
+    loop.Run();
+    return out_status;
+  }
+
+  DatabaseStatus UpdateFetchHandlerType(
+      int64_t registration_id,
+      const blink::StorageKey& key,
+      blink::mojom::ServiceWorkerFetchHandlerType fetch_handler_type) {
+    DatabaseStatus out_status;
+    base::RunLoop loop;
+    storage()->UpdateFetchHandlerType(
+        registration_id, key, fetch_handler_type,
         base::BindLambdaForTesting([&](DatabaseStatus status) {
           out_status = status;
           loop.Quit();
@@ -890,12 +911,55 @@ TEST_F(ServiceWorkerStorageControlImplTest, UpdateLastUpdateCheckTime) {
   status = UpdateLastUpdateCheckTime(registration_id, kKey, now);
   ASSERT_EQ(status, DatabaseStatus::kOk);
 
-  // Now the stored registration should be active.
+  // Now the stored registration should have the last update check time.
   {
     FindRegistrationResult result =
         FindRegistrationForId(registration_id, kKey);
     ASSERT_EQ(result.status, DatabaseStatus::kOk);
     EXPECT_EQ(result.entry->registration->last_update_check, now);
+  }
+}
+
+TEST_F(ServiceWorkerStorageControlImplTest, UpdateFetchHandlerType) {
+  const GURL kScope("https://www.example.com/");
+  const blink::StorageKey kKey(url::Origin::Create(kScope));
+  const GURL kScriptUrl("https://www.example.com/sw.js");
+  const int64_t kScriptSize = 10;
+
+  LazyInitializeForTest();
+
+  // Preparation: Store a registration.
+  const int64_t registration_id = GetNewRegistrationId();
+  const int64_t version_id = GetNewVersionId().version_id;
+  const int64_t resource_id = GetNewResourceId();
+  DatabaseStatus status =
+      CreateAndStoreRegistration(registration_id, version_id, resource_id,
+                                 kScope, kKey, kScriptUrl, kScriptSize);
+  ASSERT_EQ(status, DatabaseStatus::kOk);
+
+  // The stored registration shouldn't have the fetch handler type yet.
+  // i.e. we expect the default value.
+  {
+    FindRegistrationResult result =
+        FindRegistrationForId(registration_id, kKey);
+    ASSERT_EQ(result.status, DatabaseStatus::kOk);
+    EXPECT_EQ(result.entry->registration->fetch_handler_type,
+              blink::mojom::ServiceWorkerFetchHandlerType::kNoHandler);
+  }
+
+  // Set the fetch handler type.
+  status = UpdateFetchHandlerType(
+      registration_id, kKey,
+      blink::mojom::ServiceWorkerFetchHandlerType::kNotSkippable);
+  ASSERT_EQ(status, DatabaseStatus::kOk);
+
+  // Now the stored registration should have the fetch handler type.
+  {
+    FindRegistrationResult result =
+        FindRegistrationForId(registration_id, kKey);
+    ASSERT_EQ(result.status, DatabaseStatus::kOk);
+    EXPECT_EQ(result.entry->registration->fetch_handler_type,
+              blink::mojom::ServiceWorkerFetchHandlerType::kNotSkippable);
   }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,8 +54,8 @@ std::vector<std::string> UlpLanguageCodeLocator::GetLanguageCodes(
   S2CellId cell(S2LatLng::FromDegrees(latitude, longitude));
   std::vector<std::string> languages;
 
-  ListPrefUpdate update(prefs_, kCachedGeoLanguagesPref);
-  base::Value::List& celllangs_cached = update->GetList();
+  ScopedListPrefUpdate update(prefs_, kCachedGeoLanguagesPref);
+  base::Value::List& celllangs_cached = update.Get();
   for (size_t index = 0; index < serialized_langtrees_.size(); index++) {
     std::string language;
 

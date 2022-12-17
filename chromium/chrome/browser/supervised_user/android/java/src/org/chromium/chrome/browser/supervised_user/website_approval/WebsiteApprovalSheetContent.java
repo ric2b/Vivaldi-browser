@@ -1,27 +1,37 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.supervised_user.website_approval;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.widget.DialogTitle;
 
 import org.chromium.chrome.browser.supervised_user.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
+import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.ui.widget.ButtonCompat;
+import org.chromium.url.GURL;
 
 /**
  * Bottom sheet content for the screen which allows a parent to approve or deny a website.
  */
 class WebsiteApprovalSheetContent implements BottomSheetContent {
     private static final String TAG = "WebsiteApprovalSheetContent";
+    private static final String ELLIPSIS = "...";
+    static final int MAX_HOST_SIZE = 256;
+    static final int SUBSTRING_LIMIT = 256;
+    static final int MAX_FULL_URL_SIZE = MAX_HOST_SIZE + SUBSTRING_LIMIT;
+
     private final Context mContext;
     private final View mContentView;
 
@@ -112,14 +122,50 @@ class WebsiteApprovalSheetContent implements BottomSheetContent {
         titleView.setText(mContext.getString(R.string.parent_website_approval_title, childName));
     }
 
-    public void setDomainText(String domain) {
+    public void setDomainText(GURL url) {
         TextView domainTextView = mContentView.findViewById(R.id.all_pages_of);
-        domainTextView.setText(
-                mContext.getString(R.string.parent_website_approval_all_of_domain, domain));
+        // Omit scheme, credentials, path and trivial subdomains
+        String formattedDomain =
+                UrlFormatter.formatUrlForDisplayOmitSchemePathAndTrivialSubdomains(url);
+        domainTextView.setText(mContext.getString(
+                R.string.parent_website_approval_all_of_domain, formattedDomain));
     }
 
-    public void setFullUrlText(String url) {
+    @VisibleForTesting
+    static String truncateLongUrl(GURL url) {
+        // Omit user-specific and trivial url parts.
+        String formattedUrl =
+                UrlFormatter.formatUrlForDisplayOmitSchemeOmitTrivialSubdomains(url.getSpec());
+
+        if (formattedUrl.length() <= MAX_FULL_URL_SIZE) {
+            return formattedUrl;
+        } else {
+            // Omit scheme, credentials, path and trivial subdomains
+            String formattedHost =
+                    UrlFormatter.formatUrlForDisplayOmitSchemePathAndTrivialSubdomains(url);
+            // Keep the full host but only portions of the path up to a limit.
+            // The urls the we process never contain query or fragments.
+            StringBuilder truncatedUrlBuilder = new StringBuilder();
+            truncatedUrlBuilder.append(formattedHost);
+            int truncatedPathLength = Math.min(url.getPath().length(), SUBSTRING_LIMIT);
+            if (truncatedPathLength + ELLIPSIS.length() < url.getPath().length()) {
+                truncatedUrlBuilder.append(url.getPath().substring(0, truncatedPathLength));
+                truncatedUrlBuilder.append(ELLIPSIS);
+
+            } else {
+                truncatedUrlBuilder.append(url.getPath());
+            }
+            return truncatedUrlBuilder.toString();
+        }
+    }
+
+    public void setFullUrlText(GURL url) {
         TextView urlTextView = mContentView.findViewById(R.id.full_url);
-        urlTextView.setText(url);
+        urlTextView.setText(truncateLongUrl(url));
+    }
+
+    public void setFaviconBitmap(Bitmap bitmap) {
+        ImageView faviconImageView = mContentView.findViewById(R.id.favicon);
+        faviconImageView.setImageBitmap(bitmap);
     }
 }

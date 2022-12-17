@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -278,11 +278,10 @@ void AppListBubbleView::InitContentsView(
           view_delegate_, drag_and_drop_host, GetAppListConfig(),
           a11y_announcer_.get(), /*folder_controller=*/this,
           /*search_box=*/search_box_view_));
-  if (features::IsLauncherHideContinueSectionEnabled()) {
-    // Skip the "hide continue section" button on arrow up/down in app list.
-    button_focus_skipper_->AddButton(
-        apps_page_->toggle_continue_section_button());
-  }
+
+  // Skip the "hide continue section" button on arrow up/down in app list.
+  button_focus_skipper_->AddButton(
+      apps_page_->toggle_continue_section_button());
 
   search_page_ =
       pages_container->AddChildView(std::make_unique<AppListBubbleSearchPage>(
@@ -294,8 +293,8 @@ void AppListBubbleView::InitContentsView(
 void AppListBubbleView::InitFolderView(
     ApplicationDragAndDropHost* drag_and_drop_host) {
   auto folder_view = std::make_unique<AppListFolderView>(
-      this, apps_page_->scrollable_apps_grid_view(),
-      /*contents_view=*/nullptr, a11y_announcer_.get(), view_delegate_);
+      this, apps_page_->scrollable_apps_grid_view(), a11y_announcer_.get(),
+      view_delegate_);
   folder_view->items_grid_view()->SetDragAndDropHostOfCurrentAppList(
       drag_and_drop_host);
   folder_view->UpdateAppListConfig(GetAppListConfig());
@@ -607,6 +606,7 @@ void AppListBubbleView::Layout() {
     // NOTE: Folder view bounds are also modified during reparent drag when the
     // view is "visible" but hidden offscreen. See app_list_folder_view.cc.
     folder_view_->SetBoundsRect(folder_view_->preferred_bounds());
+    folder_view_->UpdateShadowBounds();
   }
 }
 

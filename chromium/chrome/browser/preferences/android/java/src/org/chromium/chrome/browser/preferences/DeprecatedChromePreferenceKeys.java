@@ -1,10 +1,10 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.preferences;
 
-import org.chromium.base.annotations.CheckDiscard;
+import org.chromium.build.annotations.CheckDiscard;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -19,14 +19,11 @@ public class DeprecatedChromePreferenceKeys {
     static List<String> getKeysForTesting() {
         // clang-format off
         return Arrays.asList(
-                "AUTOFILL_ASSISTANT_ONBOARDING_ACCEPTED",
                 "AUTOFILL_ASSISTANT_SKIP_INIT_SCREEN",
                 "BANDWIDTH_REDUCTION_PROXY_ENABLED",
                 "BANDWIDTH_REDUCTION_FIRST_ENABLED_TIME",
                 "Chrome.AccountPickerBottomSheet.ShownCount",
-                "Chrome.AutofillAssistant.LiteScriptFirstTimeUser",
                 "Chrome.AutofillAssistant.NumberOfLiteScriptsCanceled",
-                "Chrome.AutofillAssistant.ProactiveHelp",
                 "Chrome.Flags.PaintPreviewTestEnabled",
                 "Chrome.Flags.SafeBool.*",
                 "Chrome.Flags.SafeDouble.*",
@@ -61,7 +58,6 @@ public class DeprecatedChromePreferenceKeys {
                 "allow_low_end_device_ui",
                 "allow_prefetch",
                 "allow_starting_service_manager_only",
-                "autofill_assistant_switch",
                 "bookmark_search_history",
                 "bottom_toolbar_enabled",
                 "bottom_toolbar_variation",

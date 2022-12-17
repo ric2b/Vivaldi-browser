@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,7 +32,7 @@ class BrowserContext;
 
 namespace features {
 // Enables persistent permissions for the File System Access API.
-extern const base::Feature kFileSystemAccessPersistentPermissions;
+BASE_DECLARE_FEATURE(kFileSystemAccessPersistentPermissions);
 }  // namespace features
 
 // Chrome implementation of FileSystemAccessPermissionContext. This class
@@ -85,7 +85,7 @@ class ChromeFileSystemAccessPermissionContext
       PathType path_type,
       const base::FilePath& path,
       HandleType handle_type,
-      ui::SelectFileDialog::Type dialog_type,
+      UserAction user_action,
       content::GlobalRenderFrameHostId frame_id,
       base::OnceCallback<void(SensitiveEntryResult)> callback) override;
   void PerformAfterWriteChecks(
@@ -102,7 +102,8 @@ class ChromeFileSystemAccessPermissionContext
   PathInfo GetLastPickedDirectory(const url::Origin& origin,
                                   const std::string& id) override;
   base::FilePath GetWellKnownDirectoryPath(
-      blink::mojom::WellKnownDirectory directory) override;
+      blink::mojom::WellKnownDirectory directory,
+      const url::Origin& origin) override;
 
   std::u16string GetPickerTitle(
       const blink::mojom::FilePickerOptionsPtr& options) override;
@@ -121,7 +122,8 @@ class ChromeFileSystemAccessPermissionContext
     kUpdatePersistedPermission,
   };
 
-  // Returns a snapshot of the currently granted active permissions.
+  // Returns a snapshot of both the currently granted active and persisted
+  // permissions.
   struct Grants {
     Grants();
     ~Grants();
@@ -195,7 +197,7 @@ class ChromeFileSystemAccessPermissionContext
       const url::Origin& origin,
       const base::FilePath& path,
       HandleType handle_type,
-      ui::SelectFileDialog::Type dialog_type,
+      UserAction user_action,
       content::GlobalRenderFrameHostId frame_id,
       base::OnceCallback<void(SensitiveEntryResult)> callback,
       bool should_block);

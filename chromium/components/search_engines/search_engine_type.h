@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,16 +79,8 @@ enum SearchEngineType {
   SEARCH_ENGINE_STARTER_PACK_HISTORY = 62,
   SEARCH_ENGINE_STARTER_PACK_TABS = 63,
 
-  // Vivaldi search engines:
-  VIVALDI_SEARCH_ENGINE_STARTPAGE_COM,
-  VIVALDI_SEARCH_ENGINE_WIKIPEDIA,
-  VIVALDI_SEARCH_ENGINE_NEEVA,
-  VIVALDI_SEARCH_ENGINE_WOLFRAM_ALPHA,
-  VIVALDI_SEARCH_ENGINE_OZON,
-  VIVALDI_SEARCH_ENGINE_AMAZON,
-  VIVALDI_SEARCH_ENGINE_EBAY,
-  VIVALDI_SEARCH_ENGINE_QWANT,
-  VIVALDI_SEARCH_ENGINE_YELP,
+#include "components/search_engines/vivaldi_search_engine_type.inc"
+
   SEARCH_ENGINE_MAX  // Bounding value needed for UMA histogram macro.
 };
 

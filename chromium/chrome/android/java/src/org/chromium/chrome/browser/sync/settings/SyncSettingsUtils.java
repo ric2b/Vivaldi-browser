@@ -1,7 +1,9 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 package org.chromium.chrome.browser.sync.settings;
+
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ERROR_MESSAGES;
 
 import android.app.Activity;
 import android.app.PendingIntent;
@@ -29,6 +31,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.CustomTabsUiType;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.SyncService;
@@ -131,7 +134,9 @@ public class SyncSettingsUtils {
     public static String getSyncErrorHint(Context context, @SyncError int error) {
         switch (error) {
             case SyncError.AUTH_ERROR:
-                return context.getString(R.string.hint_sync_auth_error);
+                return ChromeFeatureList.isEnabled(UNIFIED_PASSWORD_MANAGER_ERROR_MESSAGES)
+                        ? context.getString(R.string.hint_sync_auth_error_modern)
+                        : context.getString(R.string.hint_sync_auth_error);
             case SyncError.CLIENT_OUT_OF_DATE:
                 return context.getString(
                         R.string.hint_client_out_of_date, BuildInfo.getInstance().hostPackageLabel);
@@ -242,7 +247,7 @@ public class SyncSettingsUtils {
             return context.getString(R.string.sync_error_generic);
         }
 
-        if (!syncService.isSyncRequested() || syncService.getChosenDataTypes().isEmpty()) {
+        if (!syncService.isSyncRequested() || syncService.getSelectedTypes().isEmpty()) {
             return context.getString(R.string.sync_data_types_off);
         }
 
@@ -306,7 +311,7 @@ public class SyncSettingsUtils {
 
         SyncService syncService = SyncService.get();
         if (syncService == null || !syncService.isSyncRequested()
-                || syncService.getChosenDataTypes().isEmpty()) {
+                || syncService.getSelectedTypes().isEmpty()) {
             return AppCompatResources.getDrawable(context, R.drawable.ic_sync_off_48dp);
         }
         if (syncService.isSyncDisabledByEnterprisePolicy()) {
@@ -398,6 +403,12 @@ public class SyncSettingsUtils {
                 (pendingIntent)
                         -> {
                     try {
+                        // startIntentSenderForResult() will fail if the fragment is
+                        // already gone, see crbug.com/1362141.
+                        if (!fragment.isAdded()) {
+                            return;
+                        }
+
                         fragment.startIntentSenderForResult(pendingIntent.getIntentSender(),
                                 requestCode,
                                 /* fillInIntent */ null, /* flagsMask */ 0,

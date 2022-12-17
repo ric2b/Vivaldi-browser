@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,13 +32,16 @@ class UpdateServiceImplInactive : public UpdateService {
         FROM_HERE, base::BindOnce(std::move(callback), base::Version()));
   }
 
-  void RegisterApp(
-      const RegistrationRequest& request,
-      base::OnceCallback<void(const RegistrationResponse&)> callback) override {
+  void FetchPolicies(base::OnceCallback<void(int)> callback) override {
+    VLOG(1) << __func__ << " (Inactive)";
+    std::move(callback).Run(-1);
+  }
+
+  void RegisterApp(const RegistrationRequest& request,
+                   base::OnceCallback<void(int)> callback) override {
     VLOG(1) << __func__ << " (Inactive)";
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), RegistrationResponse(-1)));
+        FROM_HERE, base::BindOnce(std::move(callback), -1));
   }
 
   void GetAppStates(base::OnceCallback<void(const std::vector<AppState>&)>
@@ -74,6 +77,7 @@ class UpdateServiceImplInactive : public UpdateService {
   }
 
   void Install(const RegistrationRequest& /*registration*/,
+               const std::string& /*client_install_data*/,
                const std::string& /*install_data_index*/,
                Priority /*priority*/,
                StateChangeCallback /*state_update*/,

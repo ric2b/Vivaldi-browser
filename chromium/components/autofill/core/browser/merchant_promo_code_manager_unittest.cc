@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "components/autofill/core/browser/metrics/payments/offers_metrics.h"
 #include "components/autofill/core/browser/suggestions_context.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/strings/grit/components_strings.h"
@@ -23,9 +24,6 @@ using testing::Truly;
 using testing::UnorderedElementsAre;
 
 namespace autofill {
-
-using FieldPrediction =
-    AutofillQueryResponse::FormSuggestion::FieldSuggestion::FieldPrediction;
 
 namespace {
 
@@ -56,6 +54,8 @@ class MockSuggestionsHandler
 class MerchantPromoCodeManagerTest : public testing::Test {
  protected:
   MerchantPromoCodeManagerTest() {
+    scoped_feature_list_async_parse_form_.InitWithFeatureState(
+        features::kAutofillParseAsync, true);
     personal_data_manager_ = std::make_unique<TestPersonalDataManager>();
     merchant_promo_code_manager_ = std::make_unique<MerchantPromoCodeManager>();
     merchant_promo_code_manager_->Init(personal_data_manager_.get(),
@@ -82,13 +82,13 @@ class MerchantPromoCodeManagerTest : public testing::Test {
 
   // Adds a promo code focused field to the suggestions context.
   void AddPromoCodeFocusedFieldToSuggestionsContext(SuggestionsContext* out) {
-    FieldPrediction merchant_promo_code_field_prediction;
-    merchant_promo_code_field_prediction.set_type(MERCHANT_PROMO_CODE);
     autofill_field_.set_server_predictions(
-        {merchant_promo_code_field_prediction});
+        {::autofill::test::CreateFieldPrediction(MERCHANT_PROMO_CODE)});
     out->focused_field = &autofill_field_;
   }
 
+  base::test::ScopedFeatureList scoped_feature_list_async_parse_form_;
+  test::AutofillEnvironment autofill_environment_;
   std::unique_ptr<MerchantPromoCodeManager> merchant_promo_code_manager_;
   std::unique_ptr<TestPersonalDataManager> personal_data_manager_;
   FormFieldData test_field_;
@@ -154,20 +154,20 @@ TEST_F(MerchantPromoCodeManagerTest, ShowsPromoCodeSuggestions) {
       /*context=*/context));
 
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShownOnce,
       2);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShown,
       3);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce, 2);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 3);
 }
 
@@ -189,20 +189,20 @@ TEST_F(MerchantPromoCodeManagerTest,
 
   // Ensure that no metrics were logged.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShownOnce,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShown,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce, 0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 0);
 }
 
@@ -235,20 +235,20 @@ TEST_F(MerchantPromoCodeManagerTest,
 
   // Ensure that no metrics were logged.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShownOnce,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShown,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce, 0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 0);
 }
 
@@ -279,20 +279,20 @@ TEST_F(MerchantPromoCodeManagerTest,
 
   // Ensure that no metrics were logged.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShownOnce,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShown,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce, 0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 0);
 }
 
@@ -323,20 +323,20 @@ TEST_F(MerchantPromoCodeManagerTest, NoPromoCodeOffers) {
 
   // Ensure that no metrics were logged.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShownOnce,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShown,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce, 0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 0);
 }
 
@@ -371,20 +371,20 @@ TEST_F(MerchantPromoCodeManagerTest, AutofillWalletImportDisabled) {
 
   // Ensure that no metrics were logged.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShownOnce,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShown,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce, 0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 0);
 }
 
@@ -419,20 +419,61 @@ TEST_F(MerchantPromoCodeManagerTest, AutofillCreditCardDisabled) {
 
   // Ensure that no metrics were logged.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShownOnce,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.SuggestionsPopupShown",
+      "Autofill.Offer.SuggestionsPopupShown2",
       autofill_metrics::OffersSuggestionsPopupEvent::
           kOffersSuggestionsPopupShown,
       0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce, 0);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
+      autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 0);
+}
+
+// This test case exists to ensure that we do not offer promo code offer
+// suggestions if the handler is invalid or destroyed.
+TEST_F(MerchantPromoCodeManagerTest, NoQueryHandler) {
+  base::HistogramTester histogram_tester;
+  std::string last_committed_origin_url = "https://www.example.com";
+  FormData form_data;
+  form_data.main_frame_origin =
+      url::Origin::Create(GURL(last_committed_origin_url));
+  FormStructure form_structure{form_data};
+  SuggestionsContext context;
+  context.form_structure = &form_structure;
+  AddPromoCodeFocusedFieldToSuggestionsContext(&context);
+  SetUpPromoCodeOffer(last_committed_origin_url,
+                      GURL("https://offer-details-url.com/"));
+
+  // Simulate request for suggestions, but with an empty handler.
+  EXPECT_TRUE(merchant_promo_code_manager_->OnGetSingleFieldSuggestions(
+      /*query_id=*/2, /*is_autocomplete_enabled=*/true,
+      /*autoselect_first_suggestion=*/false, test_field_,
+      /*handler=*/nullptr,
+      /*context=*/context));
+
+  // No metrics should be logged because no suggestions were shown.
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.SuggestionsPopupShown2",
+      autofill_metrics::OffersSuggestionsPopupEvent::
+          kOffersSuggestionsPopupShownOnce,
+      0);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.SuggestionsPopupShown2",
+      autofill_metrics::OffersSuggestionsPopupEvent::
+          kOffersSuggestionsPopupShown,
+      0);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
+      autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce, 0);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 0);
 }
 
@@ -469,26 +510,23 @@ TEST_F(MerchantPromoCodeManagerTest, PrefixMatched) {
       suggestions_handler->GetWeakPtr(),
       /*context=*/context));
 
-  // Log that suggestions were attempted to be shown.
-  // TODO(crbug.com/1190334): Fix the metrics logging to not log if we will not
-  // show promo code autofill suggestions.
-  // histogram_tester.ExpectBucketCount(
-  //     "Autofill.Offer.SuggestionsPopupShown",
-  //     autofill_metrics::OffersSuggestionsPopupEvent::
-  //         kOffersSuggestionsPopupShownOnce,
-  //     0);
-  // histogram_tester.ExpectBucketCount(
-  //     "Autofill.Offer.SuggestionsPopupShown",
-  //     autofill_metrics::OffersSuggestionsPopupEvent::
-  //         kOffersSuggestionsPopupShown,
-  //     0);
-  // histogram_tester.ExpectBucketCount(
-  //     "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
-  //     autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce,
-  //     0);
-  // histogram_tester.ExpectBucketCount(
-  //     "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
-  //     autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 0);
+  // No metrics should be logged because no suggestions were shown.
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.SuggestionsPopupShown2",
+      autofill_metrics::OffersSuggestionsPopupEvent::
+          kOffersSuggestionsPopupShownOnce,
+      0);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.SuggestionsPopupShown2",
+      autofill_metrics::OffersSuggestionsPopupEvent::
+          kOffersSuggestionsPopupShown,
+      0);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
+      autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShownOnce, 0);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
+      autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionShown, 0);
 }
 
 TEST_F(MerchantPromoCodeManagerTest,
@@ -516,7 +554,7 @@ TEST_F(MerchantPromoCodeManagerTest,
   merchant_promo_code_manager_->OnSingleFieldSuggestionSelected(
       test_promo_code, POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionSelected, 0);
 
   // Simulate showing the promo code offers suggestions popup.
@@ -531,10 +569,10 @@ TEST_F(MerchantPromoCodeManagerTest,
 
   // Check that the histograms logged correctly.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionSelected, 1);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionSelectedOnce,
       1);
 
@@ -550,10 +588,10 @@ TEST_F(MerchantPromoCodeManagerTest,
 
   // Check that the histograms logged correctly.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionSelected, 2);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::kOfferSuggestionSelectedOnce,
       1);
 }
@@ -583,7 +621,7 @@ TEST_F(MerchantPromoCodeManagerTest,
   merchant_promo_code_manager_->OnSingleFieldSuggestionSelected(
       test_promo_code, POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::
           kOfferSuggestionSeeOfferDetailsSelected,
       0);
@@ -600,12 +638,12 @@ TEST_F(MerchantPromoCodeManagerTest,
 
   // Check that the histograms logged correctly.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::
           kOfferSuggestionSeeOfferDetailsSelected,
       1);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::
           kOfferSuggestionSeeOfferDetailsSelectedOnce,
       1);
@@ -622,12 +660,12 @@ TEST_F(MerchantPromoCodeManagerTest,
 
   // Check that the histograms logged correctly.
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::
           kOfferSuggestionSeeOfferDetailsSelected,
       2);
   histogram_tester.ExpectBucketCount(
-      "Autofill.Offer.Suggestion.GPayPromoCodeOffer",
+      "Autofill.Offer.Suggestion2.GPayPromoCodeOffer",
       autofill_metrics::OffersSuggestionsEvent::
           kOfferSuggestionSeeOfferDetailsSelectedOnce,
       1);

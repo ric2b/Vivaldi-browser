@@ -141,6 +141,12 @@
         "description": "Toggle developer tools.",
         "parameters": [
           {
+            "type": "integer",
+            "name": "windowId",
+            "minimum": 1,
+            "description": "The window id for the browserwindow we want to toggle devtools for."
+          },
+          {
             "name": "panelType",
             "$ref": "PanelType"
           }

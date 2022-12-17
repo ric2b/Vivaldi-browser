@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,7 +54,8 @@ TEST_F(RecentlyDestroyedHostsTest,
        RecordMetricIfReusableHostRecentlyDestroyed) {
   const IsolationContext isolation_context(BrowsingInstanceId(1),
                                            &browser_context_,
-                                           /*is_guest=*/false);
+                                           /*is_guest=*/false,
+                                           /*is_fenced=*/false);
   const ProcessLock process_lock = ProcessLock::Create(
       isolation_context,
       UrlInfo::CreateForTesting(GURL("https://www.google.com"),

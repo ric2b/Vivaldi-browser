@@ -1,5 +1,5 @@
 <!--
-Copyright 2014 The Chromium Authors. All rights reserved.
+Copyright 2014 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -3536,6 +3536,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="AppList_FullToPeeking">
+  <obsolete>This feature was deprecated in M104</obsolete>
   <owner>vadimt@chromium.org</owner>
   <description>CrOS Launcher went from full to peeking state.</description>
 </action>
@@ -3590,6 +3591,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="AppList_PeekingToFull">
+  <obsolete>This feature was deprecated in M104</obsolete>
   <owner>vadimt@chromium.org</owner>
   <description>
     CrOS Launcher went from peeking to full state or, in a search mode, from
@@ -3808,6 +3810,143 @@ should be able to be added at any place in this file.
 <action name="AutoDetectChange">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Autofill.FastCheckout.Accepted">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user accepted their selections of profile and credit card.
+  </description>
+</action>
+
+<action name="Autofill.FastCheckout.Destroyed" not_user_triggered="true">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>The bottomsheet was destroyed.</description>
+</action>
+
+<action name="Autofill.FastCheckout.Dismissed">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>The bottomsheet was dismissed by the user.</description>
+</action>
+
+<action name="Autofill.FastCheckout.Initialized">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>The FastCheckout bottomsheet was initialized.</description>
+</action>
+
+<action name="Autofill.FastCheckout.NavigatedBackHome">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>The user tapped the back button on a detail sheet.</description>
+</action>
+
+<action name="Autofill.FastCheckout.NavigatedToAddresses">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>The user navigated to the addresses details sheet.</description>
+</action>
+
+<action name="Autofill.FastCheckout.NavigatedToAddressesSettingsViaFooter">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user tapped the &quot;Add new address&quot; footer.
+  </description>
+</action>
+
+<action name="Autofill.FastCheckout.NavigatedToAddressesSettingsViaIcon">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user tapped the settings icon on the addresses details sheet.
+  </description>
+</action>
+
+<action name="Autofill.FastCheckout.NavigatedToCreditCards">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user navigated to the credit cards details sheet.
+  </description>
+</action>
+
+<action name="Autofill.FastCheckout.NavigatedToCreditCardsSettingsViaFooter">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user tapped the &quot;Add new credit card&quot; footer.
+  </description>
+</action>
+
+<action name="Autofill.FastCheckout.NavigatedToCreditCardsSettingsViaIcon">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user tapped the settings icon on the credit cards details sheet.
+  </description>
+</action>
+
+<action name="Autofill.FastCheckout.SelectedDifferentAddress">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user selected a different address from the already selected one
+    (navigates back to home screen).
+  </description>
+</action>
+
+<action name="Autofill.FastCheckout.SelectedDifferentCreditCard">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user selected a different credit card from the already selected one
+    (navigates back to home screen).
+  </description>
+</action>
+
+<action name="Autofill.FastCheckout.SelectedSameAddress">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user selected the same address that was already selected (navigates back
+    to home screen).
+  </description>
+</action>
+
+<action name="Autofill.FastCheckout.SelectedSameCreditCard">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <description>
+    The user selected the same credit card that was already selected (navigates
+    back to home screen).
+  </description>
+</action>
+
+<action name="Autofill_BrandingTapped">
+  <owner>ginnyhuang@chromium.org</owner>
+  <description>
+    The user has tapped on the Chrome logo inside the input accessory bar for
+    autofill. (iOS only)
+  </description>
 </action>
 
 <action name="Autofill_ClearedForm">
@@ -5954,6 +6093,184 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Commerce.PriceTracking.BookmarkDialogPriceTrackViewShown">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users click the bookmark star icon and the price track view is
+    shown inside the bookmark bubble.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.BookmarkDialogPriceTrackViewTrackedPrice">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users clicks the toggle button in the bookmark bubble to track
+    the product.
+  </description>
+</action>
+
+<action
+    name="Commerce.PriceTracking.BookmarkDialogPriceTrackViewUntrackedPrice">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users clicks the toggle button in the bookmark bubble to
+    untrack the product.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.Confirmation.Untrack">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users click the &quot;Untrack&quot; button to untrack the
+    product in the confirmation bubble.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.ConfirmationShown">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users click the price tracking icon view and shows the
+    confirmation bubble.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.EditedBookmarkFolderFromOmniboxBubble">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users click the bookmark folder name shown in the confirmation
+    bubble to launch the bookmark editor.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.FirstRunBubbleDismissed">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users click the &quot;Cancel&quot; button to dismiss the
+    confirmation bubble.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.FirstRunBubbleShown">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users click the price tracking icon view and shows the first
+    run experience bubble.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.FirstRunBubbleTrackedPrice">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users click the &quot;Track price&quot; button to track the
+    product in the first run experience bubble.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.OmniboxChip.Tracked">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users click the price tracking icon view to track the product.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.OmniboxChipClicked">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when users click the price tracking icon view regarless of the icon
+    view state.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.OmniboxChipShown">
+  <owner>meiliang@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when price tracking icon view shown regarless of the icon view
+    state.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.SidePanel.ClickedTrackedProduct">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Triggered when the product item is clicked in the price tracking list in
+    side panel. This can be triggered by both regular click and auxclick.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.SidePanel.Track.BellButton">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Triggered when users start tracking price for a product from side panel via
+    bell button.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.SidePanel.Track.ContextMenu">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Triggered when users start tracking price for a product from side panel via
+    context menu.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.SidePanel.TrackedProductsCollapsed">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Triggered when the price tracking list in side panel has collapsed.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.SidePanel.TrackedProductsExpanded">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Triggered when the price tracking list in side panel has expanded.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.SidePanel.TrackedProductsShown">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Triggered when the price tracking list in side panel shows (regardless of
+    being expanded or collapsed).
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.SidePanel.Untrack.BellButton">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Triggered when users stop tracking price for a product from side panel via
+    bell button.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.SidePanel.Untrack.ContextMenu">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Triggered when users stop tracking price for a product from side panel via
+    context menu.
+  </description>
+</action>
+
 <action name="Commerce.PriceWelcomeMessageCard.Dismissed">
   <owner>zhiyuancai@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -7282,6 +7599,49 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="DemoMode_AttractLoop_Break">
+  <owner>lbowen@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
+  <description>
+    Recorded when exiting current Attract Loop by moving cursor, clicking mouse
+    or pressing key.
+  </description>
+</action>
+
+<action name="DemoMode_Highlights_HomeButtonClick">
+  <owner>lbowen@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
+  <description>
+    Recorded when Home button is clicked in the Highlights app.
+  </description>
+</action>
+
+<action name="DemoMode_Highlights_HomePage_Click">
+  <owner>lbowen@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
+  <description>
+    Recorded when buttons are clicked in the Home page of the Highlights app.
+  </description>
+</action>
+
+<action name="DemoMode_Highlights_Navbar_Click">
+  <owner>lbowen@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
+  <description>
+    Recorded when pillar buttons are clicked on the nav bar of the Highlights
+    app.
+  </description>
+</action>
+
+<action name="DemoMode_Highlights_PillarPage_Click">
+  <owner>lbowen@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
+  <description>
+    Recorded when the buttons are clicked in the pillar page of the Highlights
+    app.
+  </description>
+</action>
+
 <action name="Desktop_SwitchTask">
   <owner>tbuckley@chromium.org</owner>
   <description>
@@ -7433,6 +7793,25 @@ should be able to be added at any place in this file.
   <description>
     Recorded when the infobar explaining that a desktop search has been
     redirected to the default search engine is shown.
+  </description>
+</action>
+
+<action name="DesktopSiteContentSetting.SettingsPage.Entered">
+  <owner>shuyng@google.com</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User entered the SingleCategoryPreferences page for Desktop site. It is
+    emitted whenever this page is shown regardless how it is triggered. Android
+    only.
+  </description>
+</action>
+
+<action name="DesktopSiteContentSetting.SettingsPage.SiteException.Opened">
+  <owner>shuyng@google.com</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User opened the site exception edit dialog by clicking on a site in the
+    SingleCategoryPreferences page for Desktop site. Android only.
   </description>
 </action>
 
@@ -10899,12 +11278,29 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="IOS.ExperienceKit.Calendar.Copy">
+  <owner>erahmaoui@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    Recorded when user taps Copy in context menu after a long press on an date.
+  </description>
+</action>
+
 <action name="IOS.ExperienceKit.Calendar.Display">
   <owner>erahmaoui@google.com</owner>
   <owner>djean@chromium.org</owner>
   <description>
     The number of times the user triggered the &quot;add-to-calendar&quot;
     context after a long press on a date.
+  </description>
+</action>
+
+<action name="IOS.ExperienceKit.Maps.Copy">
+  <owner>erahmaoui@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    Recorded when user taps Copy in context menu after a long press on an
+    address.
   </description>
 </action>
 
@@ -15712,6 +16108,17 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="LensUnifiedSidePanel.RemoveLensEntry_SearchEngineChanged">
+  <owner>stanfield@google.com</owner>
+  <owner>benwgold@google.com</owner>
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>apalanki@google.com</owner>
+  <description>
+    Search engine selection changed, so removing lens entry from the side panel.
+  </description>
+</action>
+
 <action name="LensUnifiedSidePanel.ResultLinkClick">
   <owner>stanfield@google.com</owner>
   <owner>benwgold@google.com</owner>
@@ -16824,6 +17231,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Mobile.LensIOS.NewTabPageEntryPointTapped">
+  <owner>hujasonx@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <description>
+    Recorded when the user taps the entrypoint to Lens in the New Tab Page. (iOS
+    only).
+  </description>
+</action>
+
 <action name="Mobile.OmniboxContextMenu.SearchCopiedImage">
   <owner>rkgibson@google.com</owner>
   <owner>stkhapugin@google.com</owner>
@@ -17871,7 +18287,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileFreUMALinkTapped">
-  <owner>arthurmilchior@google.com</owner>
+  <owner>arthurmilchior@chromium.org</owner>
   <owner>jlebel@google.com</owner>
   <owner>chrome-signin-team@google.com</owner>
   <description>
@@ -18203,6 +18619,12 @@ should be able to be added at any place in this file.
   <description>User pressed 'Paste and Go' in the app menu.</description>
 </action>
 
+<action name="MobileMenuPriceNotifications">
+  <owner>danieltwhite@google.com</owner>
+  <owner>ajuma@chromium.org</owner>
+  <description>User pressed 'Track Price' in the app menu.</description>
+</action>
+
 <action name="MobileMenuPrint">
   <owner>aurimas@chromium.org</owner>
   <description>User pressed 'Print' in the app menu.</description>
@@ -18273,6 +18695,13 @@ should be able to be added at any place in this file.
   <description>User pressed 'Search Copied Image' in the app menu.</description>
 </action>
 
+<action name="MobileMenuSelectTabs">
+  <owner>ckitagawa@chromium.org</owner>
+  <description>
+    User pressed 'Select tabs' in the mobile tab switcher.
+  </description>
+</action>
+
 <action name="MobileMenuSettings">
   <owner>aurimas@chromium.org</owner>
   <description>User pressed 'Settings' in the app menu.</description>
@@ -18333,6 +18762,12 @@ should be able to be added at any place in this file.
 <action name="MobileMenuVoiceSearch">
   <owner>gambard@chromium.org</owner>
   <description>User pressed 'Voice Search' in the app menu.</description>
+</action>
+
+<action name="MobileMenuWhatsNew">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@google.com</owner>
+  <description>User pressed 'What's New' in the app menu.</description>
 </action>
 
 <action name="MobileMenuWindowManager">
@@ -18618,6 +19053,12 @@ should be able to be added at any place in this file.
 <action name="MobileNTPShowRecentTabs">
   <owner>justincohen@chromium.org</owner>
   <description>The user tapped the recent list icon on the NTP.</description>
+</action>
+
+<action name="MobileNTPShowWhatsNew">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>The user tapped the what's new icon on the NTP.</description>
 </action>
 
 <action name="MobileNTPSwitchToBookmarks">
@@ -18909,6 +19350,23 @@ should be able to be added at any place in this file.
   <obsolete>Deprecated as of 7/2015</obsolete>
   <owner>ksimbili@chromium.org</owner>
   <description>User closes the tab while preview page is loaded.</description>
+</action>
+
+<action name="MobilePriceNotificationsSettingsBack">
+  <owner>danieltwhite@chromium.org</owner>
+  <owner>ajuma@chromium.org</owner>
+  <description>
+    Reported when user goes back from Price Notifications Settings UI to root
+    Settings screen. iOS only.
+  </description>
+</action>
+
+<action name="MobilePriceNotificationsSettingsClose">
+  <owner>danieltwhite@chromium.org</owner>
+  <owner>ajuma@chromium.org</owner>
+  <description>
+    Reported when Price Notifications Settings UI was dismissed. iOS only.
+  </description>
 </action>
 
 <action name="MobilePrivacySettingsBack">
@@ -19319,6 +19777,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileShareMenuMarkupPDF">
+  <owner>alionadangla@chromium.org</owner>
+  <owner>gambard@chromium.org</owner>
+  <description>
+    User pressed &quot;Markup&quot; from the share action menu.
+  </description>
+</action>
+
 <action name="MobileShareMenuPrint">
   <owner>gambard@chromium.org</owner>
   <owner>seblalancette@chromium.org</owner>
@@ -19338,6 +19804,12 @@ should be able to be added at any place in this file.
     User requested the desktop or mobile version of a site web from the share
     menu.
   </description>
+</action>
+
+<action name="MobileShareMenuSaveFile">
+  <owner>alionadangla@chromium.org</owner>
+  <owner>gambard@chromium.org</owner>
+  <description>User saved a file from share action menu.</description>
 </action>
 
 <action name="MobileShareMenuSaveImage">
@@ -20010,6 +20482,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileToolbarCloseAllTabs">
+  <owner>clank-app-team@google.com</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User clicked close all tabs button by long pressing close button on any tab
+    in the tablet tab strip. Android Only.
+  </description>
+</action>
+
 <action name="MobileToolbarCloseTab">
   <owner>clank-app-team@google.com</owner>
   <owner>twellington@chromium.org</owner>
@@ -20250,6 +20731,23 @@ should be able to be added at any place in this file.
   <owner>chrome-language@google.com</owner>
   <description>
     The user tapped on the top toolbar's voice search button.
+  </description>
+</action>
+
+<action name="MobileTrackingPriceSettingsBack">
+  <owner>danieltwhite@chromium.org</owner>
+  <owner>ajuma@chromium.org</owner>
+  <description>
+    Reported when user goes back from Tracking Price Settings UI to root
+    Settings screen. iOS only.
+  </description>
+</action>
+
+<action name="MobileTrackingPriceSettingsClose">
+  <owner>danieltwhite@chromium.org</owner>
+  <owner>ajuma@chromium.org</owner>
+  <description>
+    Reported when Tracking Price Settings UI was dismissed. iOS only.
   </description>
 </action>
 
@@ -20779,6 +21277,14 @@ should be able to be added at any place in this file.
     Emitted when a navigation happens to a page whose URL looks like it's a URL
     from the user's default search engine. I.e., emitted when it looks like--via
     a simple pattern match--the user navigated to a search results page.
+
+    Prior to M-108, this was possible to be emitted for all navigations, even
+    within profiles such as &quot;system&quot; profiles that don't allow the
+    user to search. (We expect it was rarely if even logged in those settings.)
+    In those settings, it looked for the search engine used by default in this
+    install of Chrome. This is typically Google. In M-108 and later, this user
+    action is eligible to be emitted only for profiles that allow the user to
+    search: regular profiles, Incognito profiles, and Guest profiles.
 
     NavEntryCommitted will also always be emitted at the same time (in the same
     code, just a few lines before).
@@ -23854,61 +24360,73 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="OutdatedPluginInfobar.AllowThisTime">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Closed">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Dismissed">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.LearnMore">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Shown">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Shown.Java">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Shown.QuickTime">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Shown.Reader">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Shown.RealPlayer">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Shown.Shockwave">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Shown.Silverlight">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="OutdatedPluginInfobar.Update">
+  <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -24109,6 +24627,31 @@ should be able to be added at any place in this file.
   <owner>olesiamarukhno@google.com</owner>
   <owner>dullweber@chromium.org</owner>
   <description>Page Info Cookies subpage opened.</description>
+</action>
+
+<action name="PageInfo.CookiesSubpage.AllSitesFilteredOpened">
+  <owner>zsalata@google.com</owner>
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>dullweber@chromium.org</owner>
+  <description>
+    Opened All sites with a filter for FPS from PageInfo.
+  </description>
+</action>
+
+<action name="PageInfo.CookiesSubpage.Opened">
+  <owner>zsalata@google.com</owner>
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>dullweber@chromium.org</owner>
+  <description>Cookies subpage opened from PageInfo.</description>
+</action>
+
+<action name="PageInfo.CookiesSubpage.SettingsLinkClicked">
+  <owner>zsalata@google.com</owner>
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>dullweber@chromium.org</owner>
+  <description>
+    Cookies settings link clicked in Cookies subpage from PageInfo.
+  </description>
 </action>
 
 <action name="PageInfo.ForgetSite.Cleared">
@@ -24479,6 +25022,32 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="PasswordProtection.Gaia.HashedPasswordSaved">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>
+    Reported when a user's hashed gaia password is saved.
+  </description>
+</action>
+
+<action name="PasswordProtection.Gmail.ChangePasswordButtonClicked">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>
+    Reported when a user clicks on the change password button for a Gmail
+    account.
+  </description>
+</action>
+
+<action name="PasswordProtection.GSuite.ChangePasswordButtonClicked">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>
+    Reported when a user clicks on the change password button for a Gsuite
+    account.
+  </description>
+</action>
+
 <action name="PasswordProtection.Interstitial.ResetPassword">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
@@ -24514,6 +25083,23 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="PasswordProtection.NonGaiaEnterprise.ChangePasswordButtonClicked">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>
+    Reported when a user clicks on the change password button for a
+    Non-Gaia-Enterprise account.
+  </description>
+</action>
+
+<action name="PasswordProtection.NonGaiaEnterprise.HashedPasswordSaved">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>
+    Reported when a user's hashed non-gaia-enterprise password is saved.
+  </description>
+</action>
+
 <action name="PasswordProtection.PageInfo.ChangePasswordButtonClicked">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
@@ -24529,6 +25115,46 @@ should be able to be added at any place in this file.
   <description>
     Reported when the user clicks on the mark site as legitimate button on the
     page info bubble.
+  </description>
+</action>
+
+<action name="PasswordProtection.PasswordUpdated.AutomatedFlowPasswordChosen">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>
+    Reported when the automated change password flow completes with a generated
+    password.
+  </description>
+</action>
+
+<action
+    name="PasswordProtection.PasswordUpdated.AutomatedFlowResetLinkRequested">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>Reported when a password-reset link is requested.</description>
+</action>
+
+<action name="PasswordProtection.PasswordUpdated.ManualFlowPasswordChosen">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>
+    Reported when password change/reset flow completes with a user chosen
+    password.
+  </description>
+</action>
+
+<action name="PasswordProtection.PasswordUpdated.Timeout">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>Reported when the password change flow times out.</description>
+</action>
+
+<action name="PasswordProtection.SavedPassword.ChangePasswordButtonClicked">
+  <owner>nwokedi@chromium.org</owner>
+  <owner>chrome-counter-abuse-alerts@google.com</owner>
+  <description>
+    Reported when a user clicks on the change password button for a saved
+    password.
   </description>
 </action>
 
@@ -25628,6 +26254,24 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action
+    name="SafeBrowsing.AccountIntegration.DisabledDialog.SettingsButtonClicked">
+  <owner>awado@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <description>
+    User clicks the settings button on the ESB disabled dialog.
+  </description>
+</action>
+
+<action
+    name="SafeBrowsing.AccountIntegration.EnabledDialog.SettingsButtonClicked">
+  <owner>awado@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <description>
+    User clicks the settings button on the ESB enabled dialog.
+  </description>
+</action>
+
 <action name="SafeBrowsing.Download.WarningBypassed">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
@@ -26305,6 +26949,35 @@ should be able to be added at any place in this file.
   <owner>zentaro@chromium.org</owner>
   <owner>jimmyxgong@chromium.org</owner>
   <description>User pressed Search+9 to produce the F9 key.</description>
+</action>
+
+<action name="SearchResumptionModule.NTP.Click">
+  <owner>hanxi@chromium.org</owner>
+  <owner>spdonghao@chromium.org</owner>
+  <owner>xinyiji@chromium.org</owner>
+  <description>
+    The search suggestion on the search resumption module is clicked.
+  </description>
+</action>
+
+<action name="SearchResumptionModule.NTP.Collapse">
+  <owner>hanxi@chromium.org</owner>
+  <owner>spdonghao@chromium.org</owner>
+  <owner>xinyiji@chromium.org</owner>
+  <description>
+    Users click the header of the search resumption module to collapse the
+    suggestions.
+  </description>
+</action>
+
+<action name="SearchResumptionModule.NTP.Expand">
+  <owner>hanxi@chromium.org</owner>
+  <owner>spdonghao@chromium.org</owner>
+  <owner>xinyiji@chromium.org</owner>
+  <description>
+    Users click the header of the search resumption module to expand and show
+    the suggestions.
+  </description>
 </action>
 
 <action name="SearchWidget.SearchMade">
@@ -28340,6 +29013,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_Impression_FromPostDeviceRestoreSigninPromo">
+  <owner>scottyoder@google.com</owner>
+  <owner>bling-get-set-up@google.com</owner>
+  <description>
+    Recorded when showing sign in after the post restore signin promo.
+  </description>
+</action>
+
 <action name="Signin_Impression_FromRecentTabs" not_user_triggered="true">
   <owner>gogerald@chromium.org</owner>
   <description>
@@ -28958,6 +29639,15 @@ should be able to be added at any place in this file.
   <description>
     Recorded on sign in start from access point
     signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromPostDeviceRestoreSigninPromo">
+  <owner>scottyoder@google.com</owner>
+  <owner>bling-get-set-up@google.com</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_POST_DEVICE_RESTORE_SIGNIN_PROMO.
   </description>
 </action>
 
@@ -29935,9 +30625,20 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="Signin_Signout_FromAccountListSettings">
+<action name="Signin_Signout">
   <owner>jlebel@chromium.org</owner>
-  <owner>fernandex@chromium.org</owner>
+  <owner>arthurmilchior@chromium.org</owner>
+  <description>
+    Recorded when the user signs out. Recorded for iOS only.
+  </description>
+</action>
+
+<action name="Signin_Signout_FromAccountListSettings">
+  <obsolete>
+    Removed since M107. Renamed without _FromAccountListSettings since the
+    action is called from anywhere.
+  </obsolete>
+  <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the user signs out from the Account list view. Recorded for
@@ -29957,9 +30658,21 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="Signin_SignoutClearData_FromAccountListSettings">
+<action name="Signin_SignoutClearData">
   <owner>jlebel@chromium.org</owner>
-  <owner>fernandex@chromium.org</owner>
+  <owner>arthurmilchior@chromium.org</owner>
+  <description>
+    Recorded when the user signs out and delete user data. Recorded for iOS
+    only.
+  </description>
+</action>
+
+<action name="Signin_SignoutClearData_FromAccountListSettings">
+  <obsolete>
+    Removed since M107. Renamed without _FromAccountListSettings since the
+    action is called from anywhere.
+  </obsolete>
+  <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the user signs out and delete user data, from the Account list
@@ -30517,21 +31230,37 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="StatusArea_Audio_Muted">
+  <obsolete>
+    Replaced with &quot;Ash.QuickSettings.Slider.{SliderBehavior}&quot; in ash,
+    09/2022.
+  </obsolete>
   <owner>tetsui@chromium.org</owner>
   <description>User muted audio from the button in SystemTray.</description>
 </action>
 
 <action name="StatusArea_Audio_SwitchInputDevice">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>judyhsiao@google.com</owner>
+  <owner>aaronyu@google.com</owner>
+  <owner>chromeos-audio-sw@google.com</owner>
+  <description>
+    User selected an audio input device from the SystemTray.
+  </description>
 </action>
 
 <action name="StatusArea_Audio_SwitchOutputDevice">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>judyhsiao@google.com</owner>
+  <owner>aaronyu@google.com</owner>
+  <owner>chromeos-audio-sw@google.com</owner>
+  <description>
+    User selected an audio output device from the SystemTray.
+  </description>
 </action>
 
 <action name="StatusArea_Audio_Unmuted">
+  <obsolete>
+    Replaced with &quot;Ash.QuickSettings.Slider.{SliderBehavior}&quot; in ash,
+    09/2022.
+  </obsolete>
   <owner>tetsui@chromium.org</owner>
   <description>User unmuted audio from the button in SystemTray.</description>
 </action>
@@ -30823,6 +31552,10 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="StatusArea_Mic_Gain_Changed">
+  <obsolete>
+    Replaced with &quot;Ash.QuickSettings.Slider.{SliderBehavior}&quot; in ash,
+    09/2022.
+  </obsolete>
   <owner>amehfooz@chromium.org tengs@chromium.org</owner>
   <description>
     The user changed the slider for mic gain in the audio detailed view.
@@ -30830,6 +31563,10 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="StatusArea_Mic_Muted">
+  <obsolete>
+    Replaced with &quot;Ash.QuickSettings.Slider.{SliderBehavior}&quot; in ash,
+    09/2022.
+  </obsolete>
   <owner>amehfooz@chromium.org tengs@chromium.org</owner>
   <description>
     The user muted the mic by pressing the mic mute button.
@@ -30837,6 +31574,10 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="StatusArea_Mic_Unmuted">
+  <obsolete>
+    Replaced with &quot;Ash.QuickSettings.Slider.{SliderBehavior}&quot; in ash,
+    09/2022.
+  </obsolete>
   <owner>amehfooz@chromium.org tengs@chromium.org</owner>
   <description>
     The user unmuted the mic by pressing the mic mute button
@@ -31112,6 +31853,10 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="StatusArea_Volume_ChangedMenu">
+  <obsolete>
+    Replaced with &quot;Ash.QuickSettings.Slider.{SliderBehavior}&quot; in ash,
+    09/2022.
+  </obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -31813,6 +32558,12 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="TabContextMenu_CopyURL">
+  <owner>loubrett@google.com</owner>
+  <owner>desktop-pwas-team@google.com</owner>
+  <description>User selected Copy URL from tab context menu.</description>
+</action>
+
 <action name="TabContextMenu_Duplicate">
   <owner>tbergquist@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
@@ -32236,6 +32987,12 @@ should be able to be added at any place in this file.
   <owner>yusufo@chromium.org</owner>
   <owner>wychen@chromium.org</owner>
   <description>User took an action on the TabSelectionEditor.</description>
+</action>
+
+<action name="TabMultiSelectV2">
+  <owner>ckitagawa@chromium.org</owner>
+  <owner>bjfong@google.com</owner>
+  <description>User took an action on the TabSelectionEditorV2.</description>
 </action>
 
 <action name="TabOverview_DetachCell">
@@ -33650,6 +34407,142 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="WhatsNew.AddPasswordManually">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user opened Add Password Manually in What's New.
+  </description>
+</action>
+
+<action name="WhatsNew.AddPasswordManually.LearnMoreTapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user tapped on learn more to know more about Add Password Manually in
+    What's New.
+  </description>
+</action>
+
+<action name="WhatsNew.AddPasswordManually.PrimaryActionTapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user tapped on the primary action of Add Password Manually in What's
+    New.
+  </description>
+</action>
+
+<action name="WhatsNew.Autofill">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>The user opened Autofill in What's New.</description>
+</action>
+
+<action name="WhatsNew.Autofill.LearnMoreTapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user tapped on learn more to know more about Autofill in What's New.
+  </description>
+</action>
+
+<action name="WhatsNew.Dismissed">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>The user dismissed What's New.</description>
+</action>
+
+<action name="WhatsNew.NewOverflowMenu">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>The user opened New Overflow Menu in What's New.</description>
+</action>
+
+<action name="WhatsNew.PasswordsInOtherApps">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user opened Passwords In Other Apps in What's New.
+  </description>
+</action>
+
+<action name="WhatsNew.PasswordsInOtherApps.LearnMoreTapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user tapped on learn more to know more about Passwords In Other Apps in
+    What's New.
+  </description>
+</action>
+
+<action name="WhatsNew.PasswordsInOtherApps.PrimaryActionTapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user tapped on the primary action of Passwords In Other Apps in What's
+    New.
+  </description>
+</action>
+
+<action name="WhatsNew.Promo.Displayed">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>The What's New promo was displayed to the user.</description>
+</action>
+
+<action name="WhatsNew.SearchTabs">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>The user opened Search Tabs in What's New.</description>
+</action>
+
+<action name="WhatsNew.SearchTabs.LearnMoreTapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user tapped on learn more to know more about Search Tabs in What's New.
+  </description>
+</action>
+
+<action name="WhatsNew.SharedHighlighting">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>The user opened Shared Highlighting in What's New.</description>
+</action>
+
+<action name="WhatsNew.SharedHighlighting.LearnMoreTapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user tapped on learn more to know more about Shared Highlighting in
+    What's New.
+  </description>
+</action>
+
+<action name="WhatsNew.UseChromeByDefault">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>The user opened Chrome By Default in What's New.</description>
+</action>
+
+<action name="WhatsNew.UseChromeByDefault.LearnMoreTapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user tapped on learn more to know more about Chrome By Default in What's
+    New.
+  </description>
+</action>
+
+<action name="WhatsNew.UseChromeByDefault.PrimaryActionTappedTapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user tapped on the primary action of Chrome By Default in What's New.
+  </description>
+</action>
+
 <action name="Win10WelcomePage_SetAsDefaultBrowser">
   <owner>pmonette@chromium.org</owner>
   <description>
@@ -33981,7 +34874,12 @@ should be able to be added at any place in this file.
       label="For AutoDarkUserEducationMessage feature."/>
   <suffix name="AutoDarkUserEducationMessageOptIn"
       label="For AutoDarkUserEducationMessageOptIn feature."/>
+  <suffix name="AutofillVirtualCardSuggestion"
+      label="For AutofillVirtualCardSuggestion feature."/>
   <suffix name="BadgedReadingList" label="For BadgedReadingList feature."/>
+  <suffix name="BadgedTranslateManualTrigger"
+      label="For BadgedTranslateManualTrigger feature."/>
+  <suffix name="BatterySaverMode" label="For BatterySaverMode feature."/>
   <suffix name="Bookmark" label="For Bookmark feature."/>
   <suffix name="BottomToolbarTip" label="For BottomToolbarTip feature."/>
   <suffix name="ChromeDuet" label="For ChromeDuet feature."/>
@@ -33994,6 +34892,12 @@ should be able to be added at any place in this file.
       label="For ChromeHomeMenuHeader feature."/>
   <suffix name="ChromeHomePullToRefresh"
       label="For ChromeHomePullToRefresh feature."/>
+  <suffix name="ChromeReengagementNotification1"
+      label="For ChromeReengagementNotification1 feature."/>
+  <suffix name="ChromeReengagementNotification2"
+      label="For ChromeReengagementNotification2 feature."/>
+  <suffix name="ChromeReengagementNotification3"
+      label="For ChromeReengagementNotification3 feature."/>
   <suffix name="ContextualPageActions_PriceTracking"
       label="For Contextual page actions price tracking feature."/>
   <suffix name="ContextualPageActions_PriceTrackingActionChip"
@@ -34008,17 +34912,11 @@ should be able to be added at any place in this file.
       label="For ContextualSearchPanel feature."/>
   <suffix name="ContextualSearchPromotePanelOpen"
       label="For ContextualSearchPromotePanelOpen feature."/>
-  <suffix name="ContextualSearchPromotePanelOpen"
-      label="For ContextualSearchPromotePanelOpen feature."/>
-  <suffix name="ContextualSearchPromoteTap"
-      label="For ContextualSearchPromoteTap feature."/>
   <suffix name="ContextualSearchPromoteTap"
       label="For ContextualSearchPromoteTap feature."/>
   <suffix name="ContextualSearchTap" label="For ContextualSearchTap feature."/>
   <suffix name="ContextualSearchTappedButShouldLongpress"
       label="For ContextualSearchTappedButShouldLongpress feature."/>
-  <suffix name="ContextualSearchWebSearch"
-      label="For ContextualSearchWebSearch feature."/>
   <suffix name="ContextualSearchWebSearch"
       label="For ContextualSearchWebSearch feature."/>
   <suffix name="ContextualSuggestions"
@@ -34028,14 +34926,28 @@ should be able to be added at any place in this file.
   <suffix name="DataSaverMilestonePromo"
       label="For DataSaverMilestonePromo feature."/>
   <suffix name="DataSaverPreview" label="For DataSaverPreview feature."/>
+  <suffix name="DefaultSiteView" label="For DefaultSiteView feature."/>
   <suffix name="DesktopPwaInstall" label="For desktop PWA install icon."/>
+  <suffix name="DesktopSharedHighlighting"
+      label="For DesktopSharedHighlighting feature."/>
+  <suffix name="DesktopSnoozeFeature"
+      label="For DesktopSnoozeFeature feature."/>
   <suffix name="DesktopTabGroupsNewGroup" label="For desktop Tab Groups."/>
+  <suffix name="DiscoverFeedHeaderMenu"
+      label="For DiscoverFeedHeaderMenu feature."/>
   <suffix name="DownloadHome" label="For DownloadHome feature."/>
+  <suffix name="DownloadIndicator" label="For DownloadIndicator feature."/>
+  <suffix name="DownloadInfoBarDownloadContinuing"
+      label="For DownloadInfoBarDownloadContinuing feature."/>
+  <suffix name="DownloadInfoBarDownloadsAreFaster"
+      label="For DownloadInfoBarDownloadsAreFaster feature."/>
   <suffix name="DownloadPage" label="For DownloadPage feature."/>
   <suffix name="DownloadPageScreenshot"
       label="For DownloadPageScreenshot feature."/>
+  <suffix name="DownloadSettings" label="For DownloadSettings feature."/>
   <suffix name="EphemeralTab" label="For Ephemeral Tab."/>
   <suffix name="ExploreSitesTile" label="For Explore Sites feature."/>
+  <suffix name="ExtensionsMenu" label="For Extensions menu opening."/>
   <suffix name="FeatureNotificationGuideDefaultBrowserNotificationShown"
       label="For feature notification guide default browser notification
              feature."/>
@@ -34046,6 +34958,8 @@ should be able to be added at any place in this file.
   <suffix name="FeatureNotificationGuideIncognitoTabNotificationShown"
       label="For feature notification guide incognito tab notification
              feature."/>
+  <suffix name="FeatureNotificationGuideIncognitoTabUsed"
+      label="For FeatureNotificationGuideIncognitoTabUsed feature."/>
   <suffix name="FeatureNotificationGuideNTPSuggestionCardHelpBubble"
       label="For feature notification guide NTP suggestion card help bubble."/>
   <suffix name="FeatureNotificationGuideNTPSuggestionCardNotificationShown"
@@ -34060,15 +34974,25 @@ should be able to be added at any place in this file.
   <suffix name="FeatureNotificationGuideVoiceSearchNotificationShown"
       label="For feature notification guide voice search notification
              feature."/>
+  <suffix name="FeatureNotificationGuideVoiceSearchUsed"
+      label="For FeatureNotificationGuideVoiceSearchUsed feature."/>
   <suffix name="FeedCardMenu" label="For FeedCardMenu feature."/>
   <suffix name="FeedHeaderMenu" label="For FeedHeaderMenu feature."/>
+  <suffix name="FeedSwipeRefresh" label="For FeedSwipeRefresh feature."/>
+  <suffix name="FocusHelpBubbleScreenReaderPromo"
+      label="For FocusHelpBubbleScreenReaderPromo feature."/>
   <suffix name="FollowWhileBrowsing"
       label="For Follow While-Browsing IPH feature."/>
   <suffix name="GenericAlwaysTriggerHelpUiFeature"
       label="For generic always show help UI feature."/>
   <suffix name="GlobalMediaControls" label="For GlobalMediaControls feature."/>
+  <suffix name="GMCCastStartStop" label="For GMCCastStartStop feature."/>
   <suffix name="GMCCastStartStopFeature"
       label="For Global Media Controls Cast start and stop feature."/>
+  <suffix name="HighEfficiencyInfoMode"
+      label="For HighEfficiencyInfoMode feature."/>
+  <suffix name="HighEfficiencyModeFeature"
+      label="For suggesting High Efficiency Mode feature"/>
   <suffix name="HomePageButton" label="For HomePageButton feature."/>
   <suffix name="HomepageTile" label="For HomepageTile feature."/>
   <suffix name="IdentityDisc" label="For IdentityDisc feature."/>
@@ -34077,7 +35001,20 @@ should be able to be added at any place in this file.
   <suffix name="IntentChip"
       label="In product help for opening a webpage in an app using the intent
              chip."/>
+  <suffix name="KeyboardAccessoryAddressFilling"
+      label="For KeyboardAccessoryAddressFilling feature."/>
+  <suffix name="KeyboardAccessoryBarSwiping"
+      label="For KeyboardAccessoryBarSwiping feature."/>
+  <suffix name="KeyboardAccessoryPasswordFilling"
+      label="For KeyboardAccessoryPasswordFilling feature."/>
+  <suffix name="KeyboardAccessoryPaymentFilling"
+      label="For KeyboardAccessoryPaymentFilling feature."/>
+  <suffix name="KeyboardAccessoryPaymentOffer"
+      label="For KeyboardAccessoryPaymentOffer feature."/>
+  <suffix name="LiveCaption" label="For LiveCaption feature."/>
   <suffix name="LongPressToolbarTip" label="For LongPressToolbar feature."/>
+  <suffix name="LowUserEngagementDetector"
+      label="For LowUserEngagementDetector feature."/>
   <suffix name="MediaDownload" label="For MediaDownload feature."/>
   <suffix name="MicToolbar" label="In product help for toolbar mic."/>
   <suffix name="NewIncognitoTabTip" label="For NewIncognitoTabTip feature."/>
@@ -34093,9 +35030,15 @@ should be able to be added at any place in this file.
   <suffix name="PasswordsAccountStorage"
       label="For PasswordsAccountStorage feature."/>
   <suffix name="PasswordSuggestions" label="For PasswordSuggestions feature."/>
+  <suffix name="PerformanceNewBadge"
+      label="For new badge next to Performance feature."/>
   <suffix name="PreviewsOmniboxUI"
       label="For the Previews UI in the Android Omnibox feature."/>
   <suffix name="PriceDropNTP" label="For PriceDropNTP feature."/>
+  <suffix name="PriceTrackingInSidePanel"
+      label="For PriceTrackingInSidePanelFeature feature."/>
+  <suffix name="PriceTrackingPageActionIconLabel"
+      label="For price tracking page action icon label triggering."/>
   <suffix name="ProfileSwitch"
       label="In product help for switching profiles using the profile menu."/>
   <suffix name="PwaInstallAvailableFeature"
@@ -34106,7 +35049,17 @@ should be able to be added at any place in this file.
       label="For ReadingListDiscoveryFeature feature."/>
   <suffix name="ReadingListEntryPoint"
       label="For ReadingListEntryPoint feature."/>
+  <suffix name="ReadingListInSidePanel"
+      label="For ReadingListInSidePanel feature."/>
   <suffix name="ReadingListMessages" label="For ReadingListMessages feature."/>
+  <suffix name="ReadLaterAppMenuBookmarks"
+      label="For ReadLaterAppMenuBookmarks feature."/>
+  <suffix name="ReadLaterAppMenuBookmarkThisPage"
+      label="For ReadLaterAppMenuBookmarkThisPage feature."/>
+  <suffix name="ReadLaterBottomSheet"
+      label="For ReadLaterBottomSheet feature."/>
+  <suffix name="ReadLaterContextMenu"
+      label="For ReadLaterContextMenu feature."/>
   <suffix name="ReopenTab" label="For ReopenTab feature."/>
   <suffix name="RequestDesktopSiteAppMenu"
       label="For the RequestDesktopSiteAppMenu feature."/>
@@ -34114,13 +35067,21 @@ should be able to be added at any place in this file.
       label="For SharedHighlightingBuilder feature."/>
   <suffix name="SharedHighlightingReceiver"
       label="For SharedHighlightingReceiver feature."/>
+  <suffix name="ShareScreenshot" label="For ShareScreenshot feature."/>
   <suffix name="SharingHubLinkToggle"
       label="For Sharing Hub link toggle feature."/>
+  <suffix name="SharingHubWebnotesStylize"
+      label="For SharingHubWebnotesStylize feature."/>
   <suffix name="ShoppingListMenuItem"
       label="For ShoppingListMenuItem feature."/>
+  <suffix name="ShoppingListSaveFlow"
+      label="For ShoppingListSaveFlow feature."/>
   <suffix name="SideSearch" label="For the side search feature."/>
   <suffix name="SideSearchAutoTriggering"
       label="For side search feature automatic triggering."/>
+  <suffix name="SideSearchPageActionLabel"
+      label="For side search feature page action label triggering."/>
+  <suffix name="TabAudioMuting" label="For TabAudioMuting feature."/>
   <suffix name="TabGroupsDragAndDrop" label="For drop-to-merge in tab group."/>
   <suffix name="TabGroupsQuicklyComparePages"
       label="For long press links to create tab groups."/>
@@ -34143,9 +35104,11 @@ should be able to be added at any place in this file.
       label="For voice search video tutorial."/>
   <suffix name="VideoTutorial_TryNow"
       label="For video tutorial Try Now feature."/>
+  <suffix name="WebFeedAwareness" label="For WebFeedAwareness feature."/>
   <suffix name="WebFeedFollow" label="For Web Feed follow recommendations."/>
   <suffix name="WebFeedPostFollowDialog"
       label="For Web Feed successful follow operations."/>
+  <suffix name="WebUiHelpBubbleTest" label="For WebUiHelpBubbleTest feature."/>
   <suffix name="WebUITabStrip" label="For the WebUI tab strip."/>
   <affected-action name="InProductHelp.NotifyEvent.IPH"/>
   <affected-action name="InProductHelp.NotifyUsedEvent.IPH"/>
@@ -34395,11 +35358,43 @@ should be able to be added at any place in this file.
              back arrow or through the system back."/>
   <suffix name="Done"
       label="Users tapped the action button on the top right corner."/>
+  <suffix name="OpenFromDialog"
+      label="Users tapped the ungroup button in the tab grid dialog."/>
   <suffix name="TabSelected"
       label="Users selected a tab in TabSelectionEditor."/>
   <suffix name="TabUnselected"
       label="Users un-selected a tab in TabSelectionEditor."/>
   <affected-action name="TabMultiSelect"/>
+</action-suffix>
+
+<action-suffix separator="." ordering="suffix">
+  <suffix name="Closed"
+      label="Catch all for closures of the TabSelectionEditorV2."/>
+  <suffix name="ClosedAutomatically"
+      label="Users closed the TabSelectionEditorV2 via an action."/>
+  <suffix name="ClosedByUser"
+      label="Users closed the TabSelectionEditorV2 explictly."/>
+  <suffix name="CloseTabs"
+      label="Users tapped on the close tabs button in TabSelectionEditorV2."/>
+  <suffix name="DeselectAll"
+      label="Users tapped on the deselect all button in TabSelectionEditorV2."/>
+  <suffix name="GroupTabs"
+      label="Users tapped on the group tabs button in TabSelectionEditorV2."/>
+  <suffix name="OpenFromDialog"
+      label="Users opened TabSelectionEditorV2 from the Tab Dialog."/>
+  <suffix name="OpenFromGrid"
+      label="Users opened TabSelectionEditorV2 from the Tab Switcher."/>
+  <suffix name="SelectAll"
+      label="Users tapped on the select all button in TabSelectionEditorV2."/>
+  <suffix name="SharedTabAsTextList"
+      label="Users tapped on the share button for a single tab in
+             TabSelectionEditorV2."/>
+  <suffix name="SharedTabsListAsTextList"
+      label="Users tapped on the share button for multiple tabs in
+             TabSelectionEditorV2."/>
+  <suffix name="UngroupTabs"
+      label="Users tapped on the ungroup tabs button in TabSelectionEditorV2."/>
+  <affected-action name="TabMultiSelectV2"/>
 </action-suffix>
 
 <action-suffix separator="." ordering="suffix">
@@ -34474,6 +35469,26 @@ should be able to be added at any place in this file.
   <suffix name="Feed" label="via Feed entry point"/>
   <affected-action name="Crow.EntryPointShown"/>
   <affected-action name="Crow.LaunchCustomTab"/>
+</action-suffix>
+
+<action-suffix separator="_" ordering="suffix">
+  <suffix name="DisplayButton" label="Display pillar page button"/>
+  <suffix name="EasyButton" label="Easy pillar page button"/>
+  <suffix name="FastButton" label="Fast pillar page button"/>
+  <suffix name="GameButton" label="Game pillar page button"/>
+  <suffix name="GraphicsButton" label="Graphics pillar page button"/>
+  <suffix name="KeyboardButton" label="Keyboard pillar page button"/>
+  <suffix name="PeripheralsButton" label="Peripherals pillar page button"/>
+  <suffix name="PowerfulButton" label="Powerful pillar page button"/>
+  <suffix name="SecureButton" label="Secure pillar page button"/>
+  <affected-action name="DemoMode_Highlights_HomePage_Click"/>
+  <affected-action name="DemoMode_Highlights_Navbar_Click"/>
+</action-suffix>
+
+<action-suffix separator="_" ordering="suffix">
+  <suffix name="NextButton" label="next button in pillar pages"/>
+  <suffix name="PreviousButton" label="previous button in pillar pages"/>
+  <affected-action name="DemoMode_Highlights_PillarPage_Click"/>
 </action-suffix>
 
 </actions>

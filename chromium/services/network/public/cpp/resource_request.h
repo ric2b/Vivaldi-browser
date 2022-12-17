@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -168,7 +168,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   absl::optional<base::UnguessableToken> fetch_window_id;
   absl::optional<std::string> devtools_request_id;
   absl::optional<std::string> devtools_stack_id;
-  bool is_signed_exchange_prefetch_cache_enabled = false;
   bool is_fetch_like_api = false;
   bool is_favicon = false;
   absl::optional<base::UnguessableToken> recursive_prefetch_token;

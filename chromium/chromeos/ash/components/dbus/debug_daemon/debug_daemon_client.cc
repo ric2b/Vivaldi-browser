@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -149,7 +149,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   // DebugDaemonClient override.
   void DumpDebugLogs(bool is_compressed,
                      int file_descriptor,
-                     VoidDBusMethodCallback callback) override {
+                     chromeos::VoidDBusMethodCallback callback) override {
     // Issue the dbus request to get debug logs.
     dbus::MethodCall method_call(debugd::kDebugdInterface,
                                  debugd::kDumpDebugLogs);
@@ -163,7 +163,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   }
 
   void SetDebugMode(const std::string& subsystem,
-                    VoidDBusMethodCallback callback) override {
+                    chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(debugd::kDebugdInterface,
                                  debugd::kSetDebugMode);
     dbus::MessageWriter writer(&method_call);
@@ -241,7 +241,8 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  void StopPerf(uint64_t session_id, VoidDBusMethodCallback callback) override {
+  void StopPerf(uint64_t session_id,
+                chromeos::VoidDBusMethodCallback callback) override {
     DCHECK(session_id);
     dbus::MethodCall method_call(debugd::kDebugdInterface, debugd::kStopPerf);
     dbus::MessageWriter writer(&method_call);
@@ -253,8 +254,10 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  void GetScrubbedBigLogs(const cryptohome::AccountIdentifier& id,
-                          GetLogsCallback callback) override {
+  void GetFeedbackLogsV2(
+      const cryptohome::AccountIdentifier& id,
+      const std::vector<debugd::FeedbackLogType>& requested_logs,
+      GetLogsCallback callback) override {
     // The PipeReaderWrapper is a self-deleting object; we don't have to worry
     // about ownership or lifetime. We need to create a new one for each Big
     // Logs requests in order to queue these requests. One request can take a
@@ -264,21 +267,28 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
     base::ScopedFD pipe_write_end = pipe_reader->Initialize();
 
     dbus::MethodCall method_call(debugd::kDebugdInterface,
-                                 debugd::kGetBigFeedbackLogs);
+                                 debugd::kGetFeedbackLogsV2);
     dbus::MessageWriter writer(&method_call);
     writer.AppendFileDescriptor(pipe_write_end.get());
     writer.AppendString(id.account_id());
+    // Write |requested_logs|.
+    dbus::MessageWriter sub_writer(NULL);
+    writer.OpenArray("i", &sub_writer);
+    for (auto log_type : requested_logs) {
+      sub_writer.AppendInt32(log_type);
+    }
+    writer.CloseContainer(&sub_writer);
 
-    DVLOG(1) << "Requesting big feedback logs";
+    DVLOG(1) << "Requesting feedback logs";
     debugdaemon_proxy_->CallMethod(
         &method_call, kBigLogsDBusTimeoutMS,
-        base::BindOnce(&DebugDaemonClientImpl::OnBigFeedbackLogsResponse,
+        base::BindOnce(&DebugDaemonClientImpl::OnFeedbackLogsResponse,
                        weak_ptr_factory_.GetWeakPtr(),
                        pipe_reader->AsWeakPtr()));
   }
 
   void BackupArcBugReport(const cryptohome::AccountIdentifier& id,
-                          VoidDBusMethodCallback callback) override {
+                          chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(debugd::kDebugdInterface,
                                  debugd::kBackupArcBugReport);
     dbus::MessageWriter writer(&method_call);
@@ -466,7 +476,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   }
 
   void WaitForServiceToBeAvailable(
-      WaitForServiceToBeAvailableCallback callback) override {
+      chromeos::WaitForServiceToBeAvailableCallback callback) override {
     debugdaemon_proxy_->WaitForServiceToBeAvailable(std::move(callback));
   }
 
@@ -606,7 +616,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   }
 
   void SetU2fFlags(const std::set<std::string>& flags,
-                   VoidDBusMethodCallback callback) override {
+                   chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(debugd::kDebugdInterface,
                                  debugd::kSetU2fFlags);
     dbus::MessageWriter writer(&method_call);
@@ -799,8 +809,8 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
     std::move(callback).Run(!sub_reader.HasMoreData() && !broken, logs);
   }
 
-  void OnBigFeedbackLogsResponse(base::WeakPtr<PipeReaderWrapper> pipe_reader,
-                                 dbus::Response* response) {
+  void OnFeedbackLogsResponse(base::WeakPtr<PipeReaderWrapper> pipe_reader,
+                              dbus::Response* response) {
     if (!response && pipe_reader.get()) {
       // We need to terminate the data stream if an error occurred while the
       // pipe reader is still waiting on read.
@@ -826,7 +836,8 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
 
   // Called when D-Bus method call which does not return the result is
   // completed or on its error.
-  void OnVoidMethod(VoidDBusMethodCallback callback, dbus::Response* response) {
+  void OnVoidMethod(chromeos::VoidDBusMethodCallback callback,
+                    dbus::Response* response) {
     std::move(callback).Run(response);
   }
 

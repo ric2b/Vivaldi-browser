@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,11 +48,13 @@ ExtensionOptionsGuest::ExtensionOptionsGuest(WebContents* owner_web_contents)
 ExtensionOptionsGuest::~ExtensionOptionsGuest() = default;
 
 // static
-GuestViewBase* ExtensionOptionsGuest::Create(WebContents* owner_web_contents) {
-  return new ExtensionOptionsGuest(owner_web_contents);
+std::unique_ptr<GuestViewBase> ExtensionOptionsGuest::Create(
+    WebContents* owner_web_contents) {
+  return base::WrapUnique(new ExtensionOptionsGuest(owner_web_contents));
 }
 
 void ExtensionOptionsGuest::CreateWebContents(
+    std::unique_ptr<GuestViewBase> owned_this,
     const base::Value::Dict& create_params,
     WebContentsCreatedCallback callback) {
   // Get the extension's base URL.
@@ -60,14 +62,14 @@ void ExtensionOptionsGuest::CreateWebContents(
       create_params.FindString(extensionoptions::kExtensionId);
 
   if (!extension_id || !crx_file::id_util::IdIsValid(*extension_id)) {
-    std::move(callback).Run(nullptr);
+    std::move(callback).Run(std::move(owned_this), nullptr);
     return;
   }
 
   GURL extension_url =
       extensions::Extension::GetBaseURLFromExtensionId(*extension_id);
   if (!extension_url.is_valid()) {
-    std::move(callback).Run(nullptr);
+    std::move(callback).Run(std::move(owned_this), nullptr);
     return;
   }
 
@@ -79,13 +81,13 @@ void ExtensionOptionsGuest::CreateWebContents(
   if (!extension) {
     // The ID was valid but the extension didn't exist. Typically this will
     // happen when an extension is disabled.
-    std::move(callback).Run(nullptr);
+    std::move(callback).Run(std::move(owned_this), nullptr);
     return;
   }
 
   options_page_ = extensions::OptionsPageInfo::GetOptionsPage(extension);
   if (!options_page_.is_valid()) {
-    std::move(callback).Run(nullptr);
+    std::move(callback).Run(std::move(owned_this), nullptr);
     return;
   }
 
@@ -96,18 +98,14 @@ void ExtensionOptionsGuest::CreateWebContents(
       browser_context(),
       content::SiteInstance::CreateForURL(browser_context(), extension_url));
   params.guest_delegate = this;
-  // TODO(erikchen): Fix ownership semantics for guest views.
-  // https://crbug.com/832879.
-  std::move(callback).Run(WebContents::Create(params).release());
+  std::move(callback).Run(std::move(owned_this), WebContents::Create(params));
 }
 
 void ExtensionOptionsGuest::DidInitialize(
     const base::Value::Dict& create_params) {
   ExtensionsAPIClient::Get()->AttachWebContentsHelpers(web_contents());
-  web_contents()->GetController().LoadURL(options_page_,
-                                          content::Referrer(),
-                                          ui::PAGE_TRANSITION_LINK,
-                                          std::string());
+  GetController().LoadURL(options_page_, content::Referrer(),
+                          ui::PAGE_TRANSITION_LINK, std::string());
 }
 
 void ExtensionOptionsGuest::GuestViewDidStopLoading() {
@@ -135,7 +133,8 @@ void ExtensionOptionsGuest::OnPreferredSizeChanged(const gfx::Size& pref_size) {
   options.height = PhysicalPixelsToLogicalPixels(pref_size.height());
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       api::extension_options_internal::OnPreferredSizeChanged::kEventName,
-      options.ToValue()));
+      base::DictionaryValue::From(
+          base::Value::ToUniquePtrValue(base::Value(options.ToValue())))));
 }
 
 void ExtensionOptionsGuest::AddNewContents(
@@ -143,7 +142,7 @@ void ExtensionOptionsGuest::AddNewContents(
     std::unique_ptr<WebContents> new_contents,
     const GURL& target_url,
     WindowOpenDisposition disposition,
-    const gfx::Rect& initial_rect,
+    const blink::mojom::WindowFeatures& window_features,
     bool user_gesture,
     bool* was_blocked) {
   // |new_contents| is potentially used as a non-embedded WebContents, so we
@@ -155,7 +154,7 @@ void ExtensionOptionsGuest::AddNewContents(
     return;
 
   embedder_web_contents()->GetDelegate()->AddNewContents(
-      source, std::move(new_contents), target_url, disposition, initial_rect,
+      source, std::move(new_contents), target_url, disposition, window_features,
       user_gesture, was_blocked);
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <set>
@@ -601,7 +600,7 @@ class InMemoryHistoryBackendTest : public HistoryBackendTestBase {
 
   size_t GetNumberOfMatchingSearchTerms(const int keyword_id,
                                         const std::u16string& prefix) {
-    std::vector<std::unique_ptr<KeywordSearchTermVisit>> matching_terms;
+    KeywordSearchTermVisitList matching_terms;
     mem_backend_->db()->GetMostRecentKeywordSearchTerms(
         keyword_id, prefix, 1, &matching_terms);
     return matching_terms.size();
@@ -1205,18 +1204,18 @@ TEST_F(HistoryBackendTest, AddPagesWithDetails) {
   const URLRows& changed_urls = urls_modified_notifications()[0];
   EXPECT_EQ(3u, changed_urls.size());
 
-  auto it_row1 = std::find_if(changed_urls.begin(), changed_urls.end(),
-                              URLRow::URLRowHasURL(row1.url()));
+  auto it_row1 =
+      base::ranges::find_if(changed_urls, URLRow::URLRowHasURL(row1.url()));
   ASSERT_NE(changed_urls.end(), it_row1);
   EXPECT_EQ(stored_row1.id(), it_row1->id());
 
-  auto it_row2 = std::find_if(changed_urls.begin(), changed_urls.end(),
-                              URLRow::URLRowHasURL(row2.url()));
+  auto it_row2 =
+      base::ranges::find_if(changed_urls, URLRow::URLRowHasURL(row2.url()));
   ASSERT_NE(changed_urls.end(), it_row2);
   EXPECT_EQ(stored_row2.id(), it_row2->id());
 
-  auto it_row3 = std::find_if(changed_urls.begin(), changed_urls.end(),
-                              URLRow::URLRowHasURL(row3.url()));
+  auto it_row3 =
+      base::ranges::find_if(changed_urls, URLRow::URLRowHasURL(row3.url()));
   ASSERT_NE(changed_urls.end(), it_row3);
   EXPECT_EQ(stored_row3.id(), it_row3->id());
 }
@@ -1273,14 +1272,14 @@ TEST_F(HistoryBackendTest, UpdateURLs) {
   const URLRows& changed_urls = urls_modified_notifications()[0];
   EXPECT_EQ(2u, changed_urls.size());
 
-  auto it_row1 = std::find_if(changed_urls.begin(), changed_urls.end(),
-                              URLRow::URLRowHasURL(row1.url()));
+  auto it_row1 =
+      base::ranges::find_if(changed_urls, URLRow::URLRowHasURL(row1.url()));
   ASSERT_NE(changed_urls.end(), it_row1);
   EXPECT_EQ(altered_row1.id(), it_row1->id());
   EXPECT_EQ(altered_row1.visit_count(), it_row1->visit_count());
 
-  auto it_row3 = std::find_if(changed_urls.begin(), changed_urls.end(),
-                              URLRow::URLRowHasURL(row3.url()));
+  auto it_row3 =
+      base::ranges::find_if(changed_urls, URLRow::URLRowHasURL(row3.url()));
   ASSERT_NE(changed_urls.end(), it_row3);
   EXPECT_EQ(altered_row3.id(), it_row3->id());
   EXPECT_EQ(altered_row3.visit_count(), it_row3->visit_count());
@@ -3613,6 +3612,54 @@ TEST_F(HistoryBackendTest, QueryMostVisitedURLs) {
                   MostVisitedURL(GURL("http://example5.com"), kSomeTitle)));
 }
 
+TEST_F(HistoryBackendTest, QueryMostRepeatedQueriesForKeyword) {
+  ASSERT_TRUE(backend_.get());
+
+  // Choose the local midnight of today last week as the baseline for the time.
+  base::Time base_time = base::Time::Now().LocalMidnight() - base::Days(7);
+  const size_t result_count = 3;
+
+  const KeywordID first_keyword_id = 1;
+  for (size_t i = 0; i < result_count * 2; ++i) {
+    HistoryAddPageArgs args;
+    const std::u16string term = u"First" + base::NumberToString16(i + 1);
+    args.url = GURL(u"https://www.google.com/search?q=" + term);
+    args.time = base_time + base::Days(i + 1);
+    args.transition = ui::PAGE_TRANSITION_TYPED;
+    backend_->AddPage(args);
+    backend_->SetKeywordSearchTermsForURL(args.url, first_keyword_id, term);
+  }
+
+  const KeywordID second_keyword_id = 2;
+  for (size_t i = 0; i < result_count * 2; ++i) {
+    HistoryAddPageArgs args;
+    const std::u16string term = u"Second" + base::NumberToString16(i + 1);
+    args.url = GURL(u"https://www.example.com/search?q=" + term);
+    args.time = base_time + base::Days(i + 1);
+    args.transition = ui::PAGE_TRANSITION_TYPED;
+    backend_->AddPage(args);
+    backend_->SetKeywordSearchTermsForURL(args.url, second_keyword_id, term);
+  }
+
+  {
+    base::HistogramTester histogram_tester;
+    KeywordSearchTermVisitList queries =
+        backend_->QueryMostRepeatedQueriesForKeyword(first_keyword_id,
+                                                     result_count);
+    ASSERT_EQ(result_count, queries.size());
+    EXPECT_EQ(u"first6", queries[0]->normalized_term);
+    EXPECT_EQ(u"first5", queries[1]->normalized_term);
+    EXPECT_EQ(u"first4", queries[2]->normalized_term);
+
+    histogram_tester.ExpectTotalCount("History.QueryMostRepeatedQueriesTime",
+                                      1);
+    histogram_tester.ExpectTotalCount("History.QueryMostRepeatedQueriesCount",
+                                      1);
+    histogram_tester.ExpectUniqueSample("History.QueryMostRepeatedQueriesCount",
+                                        result_count * 2, 1);
+  }
+}
+
 TEST(FormatUrlForRedirectComparisonTest, TestUrlFormatting) {
   // Tests that the formatter removes HTTPS scheme, port, username/password,
   // and trivial "www." subdomain. Domain and path are left unchanged.
@@ -3867,13 +3914,21 @@ TEST_F(HistoryBackendTest, FindMostRecentClusteredTime) {
   backend_->ReplaceClusters({}, CreateClusters({{1, 2, 3}}));
 
   // Should return the max time across all visits in the cluster.
-  EXPECT_EQ(backend_->FindMostRecentClusteredTime(), GetRelativeTime(20));
+  EXPECT_EQ(backend_->FindMostRecentClusteredTime(), GetRelativeTime(60));
 
   // Add another cluster.
-  backend_->ReplaceClusters({}, CreateClusters({{1}}));
+  AddAnnotatedVisit(10);
+  backend_->ReplaceClusters({}, CreateClusters({{4}}));
 
   // Should return the max time across all clusters.
-  EXPECT_EQ(backend_->FindMostRecentClusteredTime(), GetRelativeTime(20));
+  EXPECT_EQ(backend_->FindMostRecentClusteredTime(), GetRelativeTime(60));
+
+  // Add another cluster.
+  AddAnnotatedVisit(100);
+  backend_->ReplaceClusters({}, CreateClusters({{5}}));
+
+  // Should return the max time across all clusters.
+  EXPECT_EQ(backend_->FindMostRecentClusteredTime(), GetRelativeTime(100));
 }
 
 TEST_F(HistoryBackendTest, ReplaceClusters) {
@@ -3884,7 +3939,7 @@ TEST_F(HistoryBackendTest, ReplaceClusters) {
 
     backend_->ReplaceClusters({}, CreateClusters({{1, 2}, {1, 2}, {}, {1}}));
     VerifyClusters(backend_->GetMostRecentClusters(base::Time::Min(),
-                                                   base::Time::Max(), 10),
+                                                   base::Time::Max(), 10, 1000),
                    {
                        {1, {2, 1}},
                        // Shouldn't check duplicates clusters.
@@ -3902,7 +3957,7 @@ TEST_F(HistoryBackendTest, ReplaceClusters) {
 
     backend_->ReplaceClusters({2, 4}, CreateClusters({{1, 3}, {4}}));
     VerifyClusters(backend_->GetMostRecentClusters(base::Time::Min(),
-                                                   base::Time::Max(), 10),
+                                                   base::Time::Max(), 10, 1000),
                    {
                        {5, {4}},
                        {4, {3, 1}},
@@ -3931,33 +3986,67 @@ TEST_F(HistoryBackendTest, GetMostRecentClusters) {
   {
     // Verify returns clusters with a visit >= min_time. Verify returns complete
     // clusters, including visits < min_time.
-    SCOPED_TRACE("time: [9, 20), max_clusters: 10");
-    VerifyClusters(backend_->GetMostRecentClusters(GetRelativeTime(9),
-                                                   GetRelativeTime(20), 10),
+    SCOPED_TRACE("time: [9, 20), max_clusters: 10, max_visits: 100");
+    VerifyClusters(backend_->GetMostRecentClusters(
+                       GetRelativeTime(9), GetRelativeTime(20), 10, 100),
                    {{3, {10}}, {2, {9, 6, 5}}});
   }
   {
     // Verify doesn't return clusters with a visit > max_time.
-    SCOPED_TRACE("time: [9, 20), max_clusters: 10");
+    SCOPED_TRACE("time: [9, 20), max_clusters: 10, max_visits: 100");
     VerifyClusters(backend_->GetMostRecentClusters(GetRelativeTime(4),
-                                                   GetRelativeTime(8), 10),
+                                                   GetRelativeTime(8), 10, 100),
                    {{1, {4, 3}}});
   }
   {
-    // Verify `max_clusters`.`
-    SCOPED_TRACE("time: [0, 20), max_clusters: 1");
+    // Verify `max_clusters`.
+    SCOPED_TRACE("time: [0, 20), max_clusters: 1, max_visits: 100");
     VerifyClusters(backend_->GetMostRecentClusters(GetRelativeTime(0),
-                                                   GetRelativeTime(20), 1),
+                                                   GetRelativeTime(20), 1, 100),
                    {{3, {10}}});
+  }
+  {
+    // Verify `max_visits`.
+    SCOPED_TRACE("time: [0, 20), max_clusters: 10, max_visits: 1");
+    VerifyClusters(backend_->GetMostRecentClusters(GetRelativeTime(0),
+                                                   GetRelativeTime(20), 10, 1),
+                   {{3, {10}}});
+  }
+  {
+    // Verify doesn't return clusters with invalid visits.
+    SCOPED_TRACE(
+        "time: [0, 20), max_clusters: 1, max_visits: 100, after url 10 "
+        "deleted.");
+    backend_->db()->DeleteURLRow(10);
+    VerifyClusters(backend_->GetMostRecentClusters(GetRelativeTime(0),
+                                                   GetRelativeTime(20), 1, 100),
+                   {});
+  }
+  {
+    // Verify doesn't deleted visits don't interfere.
+    SCOPED_TRACE(
+        "time: [0, 20), max_clusters: 1, max_visits: 100, after visit 10 "
+        "deleted.");
+    backend_->db()->DeleteAnnotationsForVisit(10);
+    VerifyClusters(backend_->GetMostRecentClusters(GetRelativeTime(0),
+                                                   GetRelativeTime(20), 1, 100),
+                   {{2, {9, 6, 5}}});
   }
 }
 
-TEST_F(HistoryBackendTest, GetCluster) {
+TEST_F(HistoryBackendTest, AddClusters_GetCluster) {
   AddAnnotatedVisit(0);
   AddAnnotatedVisit(1);
 
   ClusterVisit visit_1;
   visit_1.annotated_visit.visit_row.visit_id = 1;
+  // URLs and times should be ignored, they'll be retrieved from the 'urls' and
+  // 'visits' DBs respectively.
+  visit_1.duplicate_visits.push_back(
+      {2, GURL{"https://duplicate_visit.com"}, GetRelativeTime(5)});
+  // A non-existent duplicate visit shouldn't be returned;
+  visit_1.duplicate_visits.push_back(
+      {20, GURL{"https://duplicate_visit.com"}, GetRelativeTime(5)});
   // Verify the cluster visits are being flushed out.
   visit_1.url_for_display = u"url_for_display";
   ClusterVisit visit_2;
@@ -3986,6 +4075,7 @@ TEST_F(HistoryBackendTest, GetCluster) {
   EXPECT_EQ(cluster.cluster_id, 1);
   EXPECT_EQ(cluster.label, u"label");
   EXPECT_EQ(cluster.visits[1].url_for_display, u"url_for_display");
+  // Verify keywords
   EXPECT_EQ(cluster.keyword_to_data_map.size(), 2u);
   EXPECT_EQ(cluster.keyword_to_data_map[u"keyword1"].type,
             ClusterKeywordData::ClusterKeywordType::kEntityAlias);
@@ -3998,17 +4088,33 @@ TEST_F(HistoryBackendTest, GetCluster) {
   EXPECT_EQ(cluster.keyword_to_data_map[u"keyword2"].score, .6f);
   EXPECT_TRUE(
       cluster.keyword_to_data_map[u"keyword2"].entity_collections.empty());
+  // Verify duplicate visits.
+  EXPECT_TRUE(cluster.visits[0].duplicate_visits.empty());
+  ASSERT_EQ(cluster.visits[1].duplicate_visits.size(), 1u);
+  EXPECT_EQ(cluster.visits[1].duplicate_visits[0].visit_id, 2);
+  EXPECT_EQ(
+      cluster.visits[1].duplicate_visits[0].url.spec(),
+      "https://google.com/1");  // The URL generated by `AddAnnotatedVisit()`.
+  EXPECT_EQ(cluster.visits[1].duplicate_visits[0].visit_time,
+            GetRelativeTime(1));
 
-  // Verify keywords are not returned, but other info is, when the
-  // `include_keywords` param is false.
+  // Verify keywords and duplicates are not returned, but other info is, when
+  // the `include_keywords_and_duplicates` param is false.
   cluster = backend_->GetCluster(1, false);
   VerifyCluster(cluster, {1, {2, 1}});
   EXPECT_EQ(cluster.cluster_id, 1);
   EXPECT_EQ(cluster.label, u"label");
   EXPECT_EQ(cluster.visits[1].url_for_display, u"url_for_display");
   EXPECT_TRUE(cluster.keyword_to_data_map.empty());
+  EXPECT_TRUE(cluster.visits[0].duplicate_visits.empty());
+  EXPECT_TRUE(cluster.visits[1].duplicate_visits.empty());
 
   // Verify non-existent clusters aren't returned.
+  VerifyCluster(backend_->GetCluster(2, true), {0});
+
+  // Verify clusters without valid visits aren't returned. `visit_3` does not
+  // exist.
+  backend_->db_->AddClusters({{0, {visit_3}, {}, false, u"label"}});
   VerifyCluster(backend_->GetCluster(2, true), {0});
 }
 

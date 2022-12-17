@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,7 @@ class MdTextButton;
 class ImageButton;
 class ProgressBar;
 class FlexLayoutView;
+class InkDropContainerView;
 }  // namespace views
 
 class DownloadShelfContextMenuView;
@@ -58,6 +59,8 @@ class DownloadBubbleRowView : public views::View,
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
   gfx::Size CalculatePreferredSize() const override;
+  void AddLayerBeneathView(ui::Layer* layer) override;
+  void RemoveLayerBeneathView(ui::Layer* layer) override;
 
   // Overrides views::FocusChangeListener
   void OnWillChangeFocus(views::View* before, views::View* now) override;
@@ -80,6 +83,9 @@ class DownloadBubbleRowView : public views::View,
   DownloadUIModel* model() { return model_.get(); }
 
   DownloadUIModel::BubbleUIInfo& ui_info() { return ui_info_; }
+  void SetUIInfoForTesting(DownloadUIModel::BubbleUIInfo ui_info) {
+    ui_info_ = ui_info;
+  }
 
  protected:
   // Overrides ui::LayerDelegate:
@@ -144,9 +150,9 @@ class DownloadBubbleRowView : public views::View,
   // Quick Actions on the main page.
   raw_ptr<views::ImageButton> resume_action_ = nullptr;
   raw_ptr<views::ImageButton> pause_action_ = nullptr;
-  raw_ptr<views::ImageButton> open_when_complete_action_ = nullptr;
-  raw_ptr<views::ImageButton> cancel_action_ = nullptr;
   raw_ptr<views::ImageButton> show_in_folder_action_ = nullptr;
+  raw_ptr<views::ImageButton> cancel_action_ = nullptr;
+  raw_ptr<views::ImageButton> open_when_complete_action_ = nullptr;
 
   // Holder for the main button.
   raw_ptr<views::FlexLayoutView> main_button_holder_ = nullptr;
@@ -190,6 +196,8 @@ class DownloadBubbleRowView : public views::View,
   // Button for transparent button click, inkdrop animations and drag and drop
   // events.
   raw_ptr<views::Button> transparent_button_ = nullptr;
+
+  raw_ptr<views::InkDropContainerView> inkdrop_container_;
 
   // Drag and drop:
   // Whether we are dragging the download bubble row.

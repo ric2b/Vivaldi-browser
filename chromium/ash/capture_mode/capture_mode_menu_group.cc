@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,13 +12,15 @@
 #include "ash/capture_mode/capture_mode_constants.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/style/ash_color_provider.h"
+#include "ash/style/ash_color_id.h"
+#include "ash/style/color_util.h"
 #include "ash/style/style_util.h"
 #include "base/containers/cxx20_erase_vector.h"
 #include "base/ranges/algorithm.h"
 #include "ui/accessibility/ax_enums.mojom-shared.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/button.h"
@@ -44,8 +46,7 @@ constexpr int kSpaceBetweenMenuItem = 0;
 constexpr gfx::Size kIconSize{20, 20};
 
 void ConfigLabelView(views::Label* label_view) {
-  label_view->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary));
+  label_view->SetEnabledColorId(kColorAshTextColorPrimary);
   label_view->SetBackgroundColor(SK_ColorTRANSPARENT);
   label_view->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label_view->SetVerticalAlignment(gfx::VerticalAlignment::ALIGN_MIDDLE);
@@ -92,15 +93,14 @@ class CaptureModeMenuHeader
                 : nullptr) {
     icon_view_->SetImageSize(kIconSize);
     icon_view_->SetPreferredSize(kIconSize);
-    const auto icon_color = AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kButtonIconColor);
-    icon_view_->SetImage(gfx::CreateVectorIcon(icon, icon_color));
+    icon_view_->SetImage(
+        ui::ImageModel::FromVectorIcon(icon, kColorAshButtonIconColor));
 
     if (managed_icon_view_) {
       managed_icon_view_->SetImageSize(kIconSize);
       managed_icon_view_->SetPreferredSize(kIconSize);
-      managed_icon_view_->SetImage(
-          gfx::CreateVectorIcon(kCaptureModeManagedIcon, icon_color));
+      managed_icon_view_->SetImage(ui::ImageModel::FromVectorIcon(
+          kCaptureModeManagedIcon, kColorAshIconColorSecondary));
       managed_icon_view_->SetTooltipText(
           l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_MANAGED_BY_POLICY));
     }
@@ -114,6 +114,8 @@ class CaptureModeMenuHeader
   CaptureModeMenuHeader(const CaptureModeMenuHeader&) = delete;
   CaptureModeMenuHeader& operator=(const CaptureModeMenuHeader&) = delete;
   ~CaptureModeMenuHeader() override = default;
+
+  bool is_managed_by_policy() const { return !!managed_icon_view_; }
 
   const std::u16string& GetHeaderLabel() const {
     return label_view_->GetText();
@@ -213,14 +215,7 @@ class CaptureModeOption
     SetAccessibleName(GetOptionLabel());
 
     checked_icon_view_->SetVisible(checked);
-
-    // Calling `SetEnabled()` will result in calling `UpdateState()` only when
-    // the state changes, but by default the view's state is enabled, so we only
-    // need to call `UpdateState()` explicitly if `enabled` is true.
-    if (enabled)
-      UpdateState();
-    else
-      SetEnabled(false);
+    SetEnabled(enabled);
   }
 
   CaptureModeOption(const CaptureModeOption&) = delete;
@@ -245,7 +240,19 @@ class CaptureModeOption
   bool IsOptionChecked() { return checked_icon_view_->GetVisible(); }
 
   // views::Button:
-  void StateChanged(ButtonState old_state) override { UpdateState(); }
+  void StateChanged(ButtonState old_state) override {
+    // Don't trigger `UpdateState` when the option is not added to the views
+    // hierarchy yet, since we need to get the color from the widget's color
+    // provider. When the option is added to the view hierarchy,
+    // `OnThemeChanged` will be triggered and then `UpdateState` will be called.
+    if (GetWidget())
+      UpdateState();
+  }
+
+  void OnThemeChanged() override {
+    views::Button::OnThemeChanged();
+    UpdateState();
+  }
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     Button::GetAccessibleNodeData(node_data);
@@ -262,18 +269,18 @@ class CaptureModeOption
  private:
   // Dims out the label and the checked icon if this view is disabled.
   void UpdateState() {
-    auto* provider = AshColorProvider::Get();
-    const auto label_enabled_color = provider->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kTextColorPrimary);
-    const auto icon_enabled_color = provider->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kButtonLabelColorBlue);
+    const auto* color_provider = GetColorProvider();
+    const auto label_enabled_color =
+        color_provider->GetColor(kColorAshTextColorPrimary);
+    const auto icon_enabled_color =
+        color_provider->GetColor(kColorAshButtonLabelColorBlue);
     const bool is_disabled = GetState() == STATE_DISABLED;
     label_view_->SetEnabledColor(
-        is_disabled ? provider->GetDisabledColor(label_enabled_color)
+        is_disabled ? ColorUtil::GetDisabledColor(label_enabled_color)
                     : label_enabled_color);
     checked_icon_view_->SetImage(gfx::CreateVectorIcon(
         kHollowCheckCircleIcon,
-        is_disabled ? provider->GetDisabledColor(icon_enabled_color)
+        is_disabled ? ColorUtil::GetDisabledColor(icon_enabled_color)
                     : icon_enabled_color));
   }
 
@@ -306,6 +313,10 @@ CaptureModeMenuGroup::CaptureModeMenuGroup(Delegate* delegate,
 }
 
 CaptureModeMenuGroup::~CaptureModeMenuGroup() = default;
+
+bool CaptureModeMenuGroup::IsManagedByPolicy() const {
+  return menu_header_->is_managed_by_policy();
+}
 
 void CaptureModeMenuGroup::AddOption(std::u16string option_label,
                                      int option_id) {
@@ -403,10 +414,7 @@ std::u16string CaptureModeMenuGroup::GetOptionLabelForTesting(
 }
 
 CaptureModeOption* CaptureModeMenuGroup::GetOptionById(int option_id) const {
-  auto iter =
-      base::ranges::find_if(options_, [option_id](CaptureModeOption* option) {
-        return option->id() == option_id;
-      });
+  auto iter = base::ranges::find(options_, option_id, &CaptureModeOption::id);
   return iter == options_.end() ? nullptr : *iter;
 }
 

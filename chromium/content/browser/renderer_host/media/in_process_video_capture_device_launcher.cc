@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,11 +91,13 @@ const int kMaxNumberOfBuffers = media::kVideoCaptureDefaultMaxBufferPoolSize;
 #if BUILDFLAG(ENABLE_SCREEN_CAPTURE)
 
 #if BUILDFLAG(IS_MAC)
-const base::Feature kDesktopCaptureMacV2{"DesktopCaptureMacV2",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kDesktopCaptureMacV2,
+             "DesktopCaptureMacV2",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kScreenCaptureKitMac{"ScreenCaptureKitMac",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kScreenCaptureKitMac,
+             "ScreenCaptureKitMac",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 void IncrementDesktopCaptureCounters(const DesktopMediaID& device_id) {

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@ void FakeModelTypeProcessor::OnCommitCompleted(
 
 void FakeModelTypeProcessor::OnUpdateReceived(
     const sync_pb::ModelTypeState& type_state,
-    UpdateResponseDataList updates) {}
+    UpdateResponseDataList updates,
+    absl::optional<sync_pb::GarbageCollectionDirective> gc_directive) {}
 
 }  // namespace syncer

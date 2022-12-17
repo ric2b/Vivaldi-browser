@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -160,6 +160,9 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosService {
   // available. This method can only be called from the affine sequence (main
   // thread). The returned remote can only be used on the affine sequence (main
   // thread).
+  // Note that the remote will not be owned by the caller, so callers should
+  // avoid calling methods that would mutate the state of the remote such as
+  // set_disconnect_handler, since only one can be set on a Remote.
   template <typename CrosapiInterface>
   mojo::Remote<CrosapiInterface>& GetRemote() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
@@ -223,6 +226,10 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosService {
           chromeos::remote_apps::mojom::RemoteAppsLacrosBridge> receiver);
 
   // This may be called on any thread.
+  void BindScreenManagerReceiver(
+      mojo::PendingReceiver<crosapi::mojom::ScreenManager> pending_receiver);
+
+  // This may be called on any thread.
   void BindSensorHalClient(
       mojo::PendingRemote<chromeos::sensors::mojom::SensorHalClient> remote);
 
@@ -274,6 +281,17 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosService {
             weak_sequenced_state_, std::move(pending_receiver_or_remote)));
   }
 
+  // Injects remote for a registered crosapi interface.
+  template <typename CrosapiInterface>
+  void InjectRemoteForTesting(
+      mojo::PendingRemote<CrosapiInterface> pending_remote) {
+    DCHECK(IsRegistered<CrosapiInterface>());
+    did_bind_receiver_ = true;
+
+    interfaces_.find(CrosapiInterface::Uuid_)
+        ->second->InjectRemoteForTesting(std::move(pending_remote));
+  }
+
  private:
   // This class is a wrapper around a crosapi remote, e.g.
   // mojo::Remote<crosapi::mojom::Automation>. This base class uses type erasure
@@ -294,6 +312,13 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosService {
 
     // Initialization for the remote and |available_|.
     virtual void MaybeBind(uint32_t crosapi_version, LacrosService* impl) = 0;
+
+    template <typename CrosapiInterface>
+    void InjectRemoteForTesting(
+        mojo::PendingRemote<CrosapiInterface> pending_remote) {
+      available_ = pending_remote.is_valid();
+      Get<CrosapiInterface>() = mojo::Remote(std::move(pending_remote));
+    }
 
    protected:
     InterfaceEntryBase();

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,11 +17,13 @@
 #include "chrome/grit/side_panel_resources.h"
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 
 HistoryClustersSidePanelUI::HistoryClustersSidePanelUI(content::WebUI* web_ui)
-    : ui::MojoBubbleWebUIController(web_ui) {
+    : ui::MojoBubbleWebUIController(web_ui),
+      content::WebContentsObserver(web_ui->GetWebContents()) {
   content::WebUIDataSource* source = content::WebUIDataSource::Create(
       chrome::kChromeUIHistoryClustersSidePanelHost);
 
@@ -60,4 +62,48 @@ void HistoryClustersSidePanelUI::BindInterface(
           std::move(pending_page_handler), Profile::FromWebUI(web_ui()),
           web_ui()->GetWebContents());
   history_clusters_handler_->SetSidePanelUIEmbedder(this->embedder());
+}
+
+base::WeakPtr<HistoryClustersSidePanelUI>
+HistoryClustersSidePanelUI::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
+void HistoryClustersSidePanelUI::SetQuery(const std::string& query) {
+  // If the handler has already been created, pass to the existing WebUI.
+  // Otherwise, we don't need to do anything, because
+  // HistoryClustersSidePanelCoordinator will pass it to the newly created WebUI
+  // via a URL parameter.
+  if (history_clusters_handler_) {
+    history_clusters_handler_->SetQuery(query);
+  }
+}
+
+std::string HistoryClustersSidePanelUI::GetLastQueryIssued() const {
+  return history_clusters_handler_
+             ? history_clusters_handler_->last_query_issued()
+             : std::string();
+}
+
+void HistoryClustersSidePanelUI::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInPrimaryMainFrame()) {
+    return;
+  }
+
+  if (navigation_handle->GetURL().host_piece() !=
+      chrome::kChromeUIHistoryClustersSidePanelHost) {
+    return;
+  }
+
+  // Early exit in case we've already set the initial state once.
+  auto* logger =
+      history_clusters::HistoryClustersMetricsLogger::GetOrCreateForPage(
+          navigation_handle->GetWebContents()->GetPrimaryPage());
+  if (logger->initial_state()) {
+    return;
+  }
+
+  logger->set_navigation_id(navigation_handle->GetNavigationId());
+  logger->set_initial_state(metrics_initial_state_);
 }

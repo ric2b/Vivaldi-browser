@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/mac/foundation_util.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/platform_accelerator_cocoa.h"
@@ -103,7 +104,7 @@ bool MenuHasVisibleItems(const ui::MenuModel* model) {
 // Adds a separator item at the given index. As the separator doesn't need
 // anything from the model, this method doesn't need the model index as the
 // other method below does.
-- (void)addSeparatorToMenu:(NSMenu*)menu atIndex:(int)index;
+- (void)addSeparatorToMenu:(NSMenu*)menu atIndex:(size_t)index;
 
 // Called when the user chooses a particular menu item. AppKit sends this only
 // after the menu has fully faded out. |sender| is the menu item chosen.
@@ -199,17 +200,19 @@ bool MenuHasVisibleItems(const ui::MenuModel* model) {
   return menu;
 }
 
-- (void)addSeparatorToMenu:(NSMenu*)menu
-                   atIndex:(int)index {
+- (void)addSeparatorToMenu:(NSMenu*)menu atIndex:(size_t)index {
   NSMenuItem* separator = [NSMenuItem separatorItem];
-  [menu insertItem:separator atIndex:index];
+  [menu insertItem:separator atIndex:base::checked_cast<NSInteger>(index)];
 }
 
 - (void)addItemToMenu:(NSMenu*)menu
               atIndex:(size_t)index
             fromModel:(ui::MenuModel*)model
     withColorProvider:(const ui::ColorProvider*)colorProvider {
-  NSString* label = l10n_util::FixUpWindowsStyleLabel(model->GetLabelAt(index));
+  auto rawLabel = model->GetLabelAt(index);
+  NSString* label = model->MayHaveMnemonicsAt(index)
+                        ? l10n_util::FixUpWindowsStyleLabel(rawLabel)
+                        : base::SysUTF16ToNSString(rawLabel);
   base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
       initWithTitle:label
              action:@selector(itemSelected:)
@@ -221,6 +224,7 @@ bool MenuHasVisibleItems(const ui::MenuModel* model) {
     [item setImage:icon.GetImage().ToNSImage()];
 
   ui::MenuModel::ItemType type = model->GetTypeAt(index);
+  const NSInteger modelIndex = base::checked_cast<NSInteger>(index);
   if (type == ui::MenuModel::TYPE_SUBMENU && model->IsVisibleAt(index)) {
     ui::MenuModel* submenuModel = model->GetSubmenuModelAt(index);
 
@@ -246,7 +250,7 @@ bool MenuHasVisibleItems(const ui::MenuModel* model) {
     // the model so hierarchical menus check the correct index in the correct
     // model. Setting the target to |self| allows this class to participate
     // in validation of the menu items.
-    [item setTag:index];
+    [item setTag:modelIndex];
     [item setTarget:self];
     [item setRepresentedObject:[WeakPtrToMenuModelAsNSObject
                                    weakPtrForModel:model]];
@@ -272,7 +276,7 @@ bool MenuHasVisibleItems(const ui::MenuModel* model) {
                    withColorProvider:colorProvider];
   }
 
-  [menu insertItem:item atIndex:index];
+  [menu insertItem:item atIndex:modelIndex];
 }
 
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
@@ -280,13 +284,12 @@ bool MenuHasVisibleItems(const ui::MenuModel* model) {
   if (action != @selector(itemSelected:))
     return NO;
 
-  NSInteger modelIndex = [item tag];
   ui::MenuModel* model =
       [WeakPtrToMenuModelAsNSObject getFrom:[(id)item representedObject]];
-
   if (!model)
     return NO;
 
+  const size_t modelIndex = base::checked_cast<size_t>([item tag]);
   BOOL checked = model->IsItemCheckedAt(modelIndex);
   DCHECK([(id)item isKindOfClass:[NSMenuItem class]]);
   [(id)item setState:(checked ? NSOnState : NSOffState)];
@@ -313,20 +316,18 @@ bool MenuHasVisibleItems(const ui::MenuModel* model) {
 }
 
 - (void)itemSelected:(id)sender {
-  NSInteger modelIndex = [sender tag];
   ui::MenuModel* model =
       [WeakPtrToMenuModelAsNSObject getFrom:[sender representedObject]];
   DCHECK(model);
-  if (model) {
-    const ui::ElementIdentifier identifier =
-        model->GetElementIdentifierAt(modelIndex);
-    if (identifier) {
-      ui::ElementTrackerMac::GetInstance()->NotifyMenuItemActivated(
-          [sender menu], identifier);
-    }
-    model->ActivatedAt(modelIndex,
-                       ui::EventFlagsFromNative([NSApp currentEvent]));
+  const size_t modelIndex = base::checked_cast<size_t>([sender tag]);
+  const ui::ElementIdentifier identifier =
+      model->GetElementIdentifierAt(modelIndex);
+  if (identifier) {
+    ui::ElementTrackerMac::GetInstance()->NotifyMenuItemActivated([sender menu],
+                                                                  identifier);
   }
+  model->ActivatedAt(modelIndex,
+                     ui::EventFlagsFromNative([NSApp currentEvent]));
   // Note: |self| may be destroyed by the call to ActivatedAt().
 }
 

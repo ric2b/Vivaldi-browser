@@ -6,6 +6,7 @@
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/sync/file_store_factory.h"
 #include "ios/sync/note_sync_service_factory.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
@@ -18,6 +19,7 @@ NotesModelFactory::NotesModelFactory()
           "Notes_Model",
           BrowserStateDependencyManager::GetInstance()) {
   DependsOn(NoteSyncServiceFactory::GetInstance());
+  DependsOn(SyncedFileStoreFactory::GetInstance());
 }
 
 NotesModelFactory::~NotesModelFactory() {}
@@ -46,8 +48,9 @@ std::unique_ptr<KeyedService> NotesModelFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
   ChromeBrowserState* browser_state =
       ChromeBrowserState::FromBrowserState(context);
-  std::unique_ptr<NotesModel> notes_model(new NotesModel(
-      NoteSyncServiceFactory::GetForBrowserState(browser_state)));
+  auto notes_model = std::make_unique<NotesModel>(
+      NoteSyncServiceFactory::GetForBrowserState(browser_state),
+      SyncedFileStoreFactory::GetForBrowserState(browser_state));
   notes_model->Load(browser_state->GetStatePath());
   return notes_model;
 }

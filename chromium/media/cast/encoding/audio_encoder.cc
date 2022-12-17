@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,7 @@
 #include "media/cast/common/rtp_time.h"
 #include "media/cast/common/sender_encoded_frame.h"
 #include "media/cast/constants.h"
+#include "third_party/openscreen/src/cast/streaming/encoded_frame.h"
 
 #if !BUILDFLAG(IS_IOS)
 #include "third_party/opus/src/include/opus.h"
@@ -89,6 +90,10 @@ class AudioEncoder::ImplBase
 
   base::TimeDelta frame_duration() const { return frame_duration_; }
 
+  // Returns the current bitrate that the audio encoder is configured to use. If
+  // the encoder doesn't support getting the bitrate, returns 0.
+  virtual int GetBitrate() const { return 0; }
+
   void EncodeAudio(std::unique_ptr<AudioBus> audio_bus,
                    const base::TimeTicks recorded_time) {
     DCHECK_EQ(operational_status_, STATUS_INITIALIZED);
@@ -143,7 +148,8 @@ class AudioEncoder::ImplBase
         break;
 
       std::unique_ptr<SenderEncodedFrame> audio_frame(new SenderEncodedFrame());
-      audio_frame->dependency = EncodedFrame::KEY;
+      audio_frame->dependency =
+          openscreen::cast::EncodedFrame::Dependency::kKeyFrame;
       audio_frame->frame_id = frame_id_;
       audio_frame->referenced_frame_id = frame_id_;
       audio_frame->rtp_timestamp = frame_rtp_timestamp_;
@@ -274,6 +280,13 @@ class AudioEncoder::OpusImpl final : public AudioEncoder::ImplBase {
 
   OpusImpl(const OpusImpl&) = delete;
   OpusImpl& operator=(const OpusImpl&) = delete;
+
+  int GetBitrate() const override {
+    int bitrate = 0;
+    CHECK_EQ(opus_encoder_ctl(opus_encoder_.get(), OPUS_GET_BITRATE(&bitrate)),
+             OPUS_OK);
+    return bitrate;
+  }
 
  private:
   ~OpusImpl() final = default;
@@ -796,6 +809,14 @@ base::TimeDelta AudioEncoder::GetFrameDuration() const {
     return base::TimeDelta();
   }
   return impl_->frame_duration();
+}
+
+int AudioEncoder::GetBitrate() const {
+  DCHECK_CALLED_ON_VALID_THREAD(insert_thread_checker_);
+  if (InitializationResult() != STATUS_INITIALIZED) {
+    return 0;
+  }
+  return impl_->GetBitrate();
 }
 
 void AudioEncoder::InsertAudio(std::unique_ptr<AudioBus> audio_bus,

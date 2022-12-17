@@ -1,10 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "weblayer/browser/url_bar/page_info_delegate_impl.h"
 
 #include "build/build_config.h"
+#include "components/permissions/permission_util.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"

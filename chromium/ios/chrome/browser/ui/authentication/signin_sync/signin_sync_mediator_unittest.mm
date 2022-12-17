@@ -1,18 +1,20 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/authentication/signin_sync/signin_sync_mediator.h"
 
-#include "base/run_loop.h"
+#import "base/run_loop.h"
 #import "base/test/ios/wait_util.h"
-#include "components/consent_auditor/consent_auditor.h"
-#include "components/consent_auditor/fake_consent_auditor.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/sync/driver/mock_sync_service.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/unified_consent/pref_names.h"
+#import "components/consent_auditor/consent_auditor.h"
+#import "components/consent_auditor/fake_consent_auditor.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/sync/driver/sync_service.h"
+#import "components/sync/test/mock_sync_service.h"
+#import "components/unified_consent/pref_names.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
+#import "ios/chrome/browser/consent_auditor/consent_auditor_test_utils.h"
 #import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service_fake.h"
@@ -21,7 +23,7 @@
 #import "ios/chrome/browser/signin/constants.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/signin_util.h"
-#import "ios/chrome/browser/sync/consent_auditor_factory.h"
+#import "ios/chrome/browser/sync/mock_sync_service_utils.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
@@ -32,17 +34,16 @@
 #import "ios/chrome/browser/ui/authentication/signin_sync/signin_sync_mediator_delegate.h"
 #import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
-#include "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
-#include "ios/public/provider/chrome/browser/test_chrome_browser_provider.h"
+#import "ios/public/provider/chrome/browser/test_chrome_browser_provider.h"
 #import "ios/web/public/test/web_task_environment.h"
-#include "testing/gtest/include/gtest/gtest.h"
-#include "testing/gtest_mac.h"
-#include "testing/platform_test.h"
-#include "third_party/ocmock/OCMock/OCMock.h"
-#include "third_party/ocmock/gtest_support.h"
+#import "testing/gtest/include/gtest/gtest.h"
+#import "testing/gtest_mac.h"
+#import "testing/platform_test.h"
+#import "third_party/ocmock/OCMock/OCMock.h"
+#import "third_party/ocmock/gtest_support.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -50,20 +51,6 @@
 
 using base::test::ios::kWaitForActionTimeout;
 using base::test::ios::WaitUntilConditionOrTimeout;
-
-namespace {
-
-std::unique_ptr<KeyedService> CreateMockSyncService(
-    web::BrowserState* context) {
-  return std::make_unique<syncer::MockSyncService>();
-}
-
-std::unique_ptr<KeyedService> CreateFakeConsentAuditor(
-    web::BrowserState* context) {
-  return std::make_unique<consent_auditor::FakeConsentAuditor>();
-}
-
-}  // namespace
 
 // Fake implementing the consumer protocol.
 @interface FakeSigninSyncConsumer : NSObject <SigninSyncConsumer>
@@ -118,7 +105,7 @@ class SigninSyncMediatorTest : public PlatformTest {
         base::BindRepeating(
             &AuthenticationServiceFake::CreateAuthenticationService));
     builder.AddTestingFactory(ConsentAuditorFactory::GetInstance(),
-                              base::BindRepeating(&CreateFakeConsentAuditor));
+                              base::BindRepeating(&BuildFakeConsentAuditor));
     builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
                               base::BindRepeating(&CreateMockSyncService));
     builder.AddTestingFactory(
@@ -201,7 +188,7 @@ TEST_F(SigninSyncMediatorTest, TestSettingConsumerWithExistingIdentity) {
   UIImage* avatar = consumer_.avatar;
   EXPECT_NE(nil, avatar);
   CGSize expected_size =
-      GetSizeForIdentityAvatarSize(IdentityAvatarSize::DefaultLarge);
+      GetSizeForIdentityAvatarSize(IdentityAvatarSize::Regular);
   EXPECT_TRUE(CGSizeEqualToSize(expected_size, avatar.size));
 }
 
@@ -225,7 +212,7 @@ TEST_F(SigninSyncMediatorTest, TestUpdatingSelectedIdentity) {
   UIImage* avatar = consumer_.avatar;
   EXPECT_NE(nil, avatar);
   CGSize expected_size =
-      GetSizeForIdentityAvatarSize(IdentityAvatarSize::DefaultLarge);
+      GetSizeForIdentityAvatarSize(IdentityAvatarSize::Regular);
   EXPECT_TRUE(CGSizeEqualToSize(expected_size, avatar.size));
 }
 
@@ -250,7 +237,7 @@ TEST_F(SigninSyncMediatorTest, TestIdentityListChanged) {
   UIImage* avatar = consumer_.avatar;
   EXPECT_NE(nil, avatar);
   CGSize expected_size =
-      GetSizeForIdentityAvatarSize(IdentityAvatarSize::DefaultLarge);
+      GetSizeForIdentityAvatarSize(IdentityAvatarSize::Regular);
   EXPECT_TRUE(CGSizeEqualToSize(expected_size, avatar.size));
 
   // Removing all the identity is resetting the selected identity.
@@ -336,7 +323,7 @@ TEST_F(SigninSyncMediatorTest, TestStartSyncService) {
   EXPECT_CALL(
       *sync_setup_service_mock_,
       SetFirstSetupComplete(syncer::SyncFirstSetupCompleteSource::BASIC_FLOW));
-  [mediator_ startSyncWithConfirmationID:0
+  [mediator_ startSyncWithConfirmationID:1
                               consentIDs:consentStringIDs
                       authenticationFlow:mock_flow];
 }
@@ -366,7 +353,7 @@ TEST_F(SigninSyncMediatorTest, TestAuthenticationFlow) {
   EXPECT_TRUE(consumer_.UIWasEnabled);
 
   [mediator_ startSyncWithConfirmationID:1
-                              consentIDs:nil
+                              consentIDs:@[ @(1) ]
                       authenticationFlow:mock_flow];
 
   EXPECT_FALSE(consumer_.UIWasEnabled);

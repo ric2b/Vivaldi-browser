@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -200,6 +200,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
                        MAYBE_CreateTwice) {
   LoadTabAndEnterPictureInPicture(browser());
 
+  ASSERT_TRUE(window_controller()->GetWebContents());
   ASSERT_TRUE(window_controller()->GetChildWebContents());
   DestructionObserver w(window_controller()->GetChildWebContents());
 
@@ -208,7 +209,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_EQ(true, EvalJs(active_web_contents,
-                         "window.requestPictureInPictureWindow()"
+                         "navigator.documentPictureInPicture.requestWindow()"
                          ".then(w => true)"));
   base::RunLoop().RunUntilIdle();
 
@@ -320,6 +321,25 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
   base::RunLoop().RunUntilIdle();
 }
 
+// Window controller bounds should be same as the web content bounds.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+// Document PiP is not supported in Lacros yet.
+#define MAYBE_CheckWindowBoundsSameAsWebContents \
+  DISABLED_CheckWindowBoundsSameAsWebContents
+#else
+#define MAYBE_CheckWindowBoundsSameAsWebContents \
+  CheckWindowBoundsSameAsWebContents
+#endif
+IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
+                       MAYBE_CheckWindowBoundsSameAsWebContents) {
+  LoadTabAndEnterPictureInPicture(browser());
+  auto* web_contents = window_controller()->GetChildWebContents();
+  ASSERT_TRUE(web_contents);
+
+  EXPECT_EQ(web_contents->GetContainerBounds(),
+            window_controller()->GetWindowBounds());
+}
+
 // Make sure that document PiP fails without a secure context.
 // Unlike other tests, this one does work on Lacros.
 // TODO(crbug.com/1328840): Consider replacing this with a web platform test.
@@ -335,5 +355,5 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
 
   // In an insecure context, there should not be a method.
   EXPECT_EQ(false, EvalJs(active_web_contents,
-                          "'requestPictureInPictureWindow' in window"));
+                          "'documentPictureInPicture' in navigator"));
 }

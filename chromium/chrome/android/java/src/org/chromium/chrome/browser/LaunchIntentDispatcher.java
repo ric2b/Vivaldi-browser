@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@ import android.app.Activity;
 import android.app.ActivityManager.RecentTaskInfo;
 import android.app.Notification;
 import android.app.SearchManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -312,11 +313,13 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
         // achieved by simply adding the FLAG_GRANT_READ_URI_PERMISSION to the Intent, since the
         // data URI on the Intent isn't |uri|, it just has |uri| as a query parameter.
         if (uri != null && UrlConstants.CONTENT_SCHEME.equals(uri.getScheme())) {
+            String packageName = context.getPackageName();
             try {
-                context.grantUriPermission(
-                        context.getPackageName(), uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            } catch (SecurityException e) {
-                Log.w(TAG, "Unable to grant Uri permission. ", e);
+                context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (Exception e) {
+                // SecurityException or UndeclaredThrowableException.
+                // https://crbug.com/1373209
+                Log.w(TAG, "Unable to grant Uri permission", e);
             }
         }
 
@@ -371,11 +374,20 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
         }
         maybePrefetchDnsInBackground();
 
+        // Strip EXTRA_CALLING_ACTIVITY_PACKAGE if present on the original intent so that it
+        // cannot be spoofed by CCT client apps.
+        IntentUtils.safeRemoveExtra(mIntent, IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE);
+
         // Create and fire a launch intent.
         Intent launchIntent = createCustomTabActivityIntent(mActivity, mIntent);
         Uri extraReferrer = mActivity.getReferrer();
         if (extraReferrer != null) {
             launchIntent.putExtra(IntentHandler.EXTRA_ACTIVITY_REFERRER, extraReferrer.toString());
+        }
+        ComponentName callingActivity = mActivity.getCallingActivity();
+        if (callingActivity != null) {
+            launchIntent.putExtra(
+                    IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, callingActivity.getPackageName());
         }
 
         // Allow disk writes during startActivity() to avoid strict mode violations on some

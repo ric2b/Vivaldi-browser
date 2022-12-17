@@ -104,8 +104,8 @@ void WebURLResponse::SetLoadTiming(
   timing->SetRequestTime(mojo_timing.request_start);
   timing->SetProxyStart(mojo_timing.proxy_resolve_start);
   timing->SetProxyEnd(mojo_timing.proxy_resolve_end);
-  timing->SetDnsStart(mojo_timing.connect_timing.dns_start);
-  timing->SetDnsEnd(mojo_timing.connect_timing.dns_end);
+  timing->SetDomainLookupStart(mojo_timing.connect_timing.domain_lookup_start);
+  timing->SetDomainLookupEnd(mojo_timing.connect_timing.domain_lookup_end);
   timing->SetConnectStart(mojo_timing.connect_timing.connect_start);
   timing->SetConnectEnd(mojo_timing.connect_timing.connect_end);
   timing->SetWorkerStart(mojo_timing.service_worker_start_time);
@@ -227,6 +227,10 @@ void WebURLResponse::SetIsLegacyTLSVersion(bool value) {
 
 void WebURLResponse::SetHasRangeRequested(bool value) {
   resource_response_->SetHasRangeRequested(value);
+}
+
+bool WebURLResponse::TimingAllowPassed() const {
+  return resource_response_->TimingAllowPassed();
 }
 
 void WebURLResponse::SetTimingAllowPassed(bool value) {
@@ -413,6 +417,11 @@ WebString WebURLResponse::AlpnNegotiatedProtocol() const {
 void WebURLResponse::SetAlpnNegotiatedProtocol(
     const WebString& alpn_negotiated_protocol) {
   resource_response_->SetAlpnNegotiatedProtocol(alpn_negotiated_protocol);
+}
+
+void WebURLResponse::SetAlternateProtocolUsage(
+    const net::AlternateProtocolUsage alternate_protocol_usage) {
+  resource_response_->SetAlternateProtocolUsage(alternate_protocol_usage);
 }
 
 bool WebURLResponse::HasAuthorizationCoveredByWildcardOnPreflight() const {

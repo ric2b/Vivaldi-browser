@@ -1,19 +1,26 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_OBSERVER_H_
 #define CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_OBSERVER_H_
 
+#include <string>
+
 #include "base/observer_list_types.h"
+#include "base/time/time.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
+#include "content/browser/attribution_reporting/attribution_reporting.mojom.h"
 #include "content/browser/attribution_reporting/storable_source.h"
+
+namespace url {
+class Origin;
+}  // namespace url
 
 namespace content {
 
 class AttributionTrigger;
 class CreateReportResult;
-class StoredSource;
 
 struct SendResult;
 
@@ -27,15 +34,11 @@ class AttributionObserver : public base::CheckedObserver {
   virtual void OnSourcesChanged() {}
 
   // Called when reports in storage change.
-  virtual void OnReportsChanged(AttributionReport::ReportType report_type) {}
+  virtual void OnReportsChanged(AttributionReport::Type report_type) {}
 
   // Called when a source is registered, regardless of success.
   virtual void OnSourceHandled(const StorableSource& source,
                                StorableSource::Result result) {}
-
-  // Called when a source is deactivated. Note that this isn't called when a
-  // source reaches the attribution limit.
-  virtual void OnSourceDeactivated(const StoredSource& source) {}
 
   // Called when a report is sent, regardless of success, but not for attempts
   // that will be retried.
@@ -46,6 +49,13 @@ class AttributionObserver : public base::CheckedObserver {
   // Called when a trigger is registered, regardless of success.
   virtual void OnTriggerHandled(const AttributionTrigger& trigger,
                                 const CreateReportResult& result) {}
+
+  // Called when the source header registration json parser fails.
+  virtual void OnFailedSourceRegistration(
+      const std::string& header_value,
+      base::Time source_time,
+      const url::Origin& reporting_origin,
+      attribution_reporting::mojom::SourceRegistrationError) {}
 };
 
 }  // namespace content

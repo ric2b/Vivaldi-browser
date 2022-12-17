@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,7 +27,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/url_utils.h"
 #include "extensions/browser/extension_util.h"
-#include "extensions/common/extension.h"
 #include "google_apis/common/task_util.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/isolated_context.h"
@@ -476,7 +475,7 @@ void GenerateUnusedFilenameOnGotMetadata(
     return;
   } else if (error != base::File::FILE_OK &&
              error != base::File::FILE_ERROR_NOT_A_DIRECTORY) {
-    std::move(callback).Run(error);
+    std::move(callback).Run(base::unexpected(error));
     return;
   }
 
@@ -506,10 +505,7 @@ EntryDefinition::EntryDefinition(const EntryDefinition& other) = default;
 EntryDefinition::~EntryDefinition() = default;
 
 const GURL GetFileManagerURL() {
-  if (ash::features::IsFileManagerSwaEnabled()) {
-    return GURL(ash::file_manager::kChromeUIFileManagerURL);
-  }
-  return extensions::Extension::GetBaseURLFromExtensionId(kFileManagerAppId);
+  return GURL(ash::file_manager::kChromeUIFileManagerURL);
 }
 
 bool IsFileManagerURL(const GURL& source_url) {
@@ -691,7 +687,8 @@ void GenerateUnusedFilename(
     base::OnceCallback<void(base::FileErrorOr<storage::FileSystemURL>)>
         callback) {
   if (filename.empty() || filename != filename.BaseName()) {
-    std::move(callback).Run(base::File::FILE_ERROR_INVALID_OPERATION);
+    std::move(callback).Run(
+        base::unexpected(base::File::FILE_ERROR_INVALID_OPERATION));
     return;
   }
 

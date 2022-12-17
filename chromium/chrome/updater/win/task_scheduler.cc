@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -139,13 +139,6 @@ Microsoft::WRL::ComPtr<ITaskService> GetTaskService() {
 std::wstring GetTaskCompanyFolder(UpdaterScope scope) {
   return base::StrCat({L"\\" COMPANY_SHORTNAME_STRING,
                        scope == UpdaterScope::kSystem ? L"System " : L"User "});
-}
-
-// Name of the sub-folder that the scheduled tasks are created in, prefixed with
-// the company folder `GetTaskCompanyFolder`.
-std::wstring GetTaskSubfolderName(UpdaterScope scope) {
-  return base::StrCat(
-      {GetTaskCompanyFolder(scope), L"\\" PRODUCT_FULLNAME_STRING});
 }
 
 // A task scheduler class uses the V2 API of the task scheduler.
@@ -339,6 +332,10 @@ class TaskSchedulerV2 final : public TaskScheduler {
     Microsoft::WRL::ComPtr<ITaskFolder> task_folder;
     const HRESULT hr = task_service_->GetFolder(
         base::win::ScopedBstr(folder_name).Get(), &task_folder);
+    LOG_IF(ERROR, FAILED(hr))
+        << "task_service_->GetFolder failed: " << folder_name << ": "
+        << std::hex << hr;
+
     return SUCCEEDED(hr);
   }
 
@@ -702,6 +699,11 @@ class TaskSchedulerV2 final : public TaskScheduler {
     }
 
     return true;
+  }
+
+  std::wstring GetTaskSubfolderName(UpdaterScope scope) override {
+    return base::StrCat(
+        {GetTaskCompanyFolder(scope), L"\\" PRODUCT_FULLNAME_STRING});
   }
 
  private:

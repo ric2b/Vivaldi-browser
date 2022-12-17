@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,7 +80,8 @@ class ONCCertificateImporterImplTest : public testing::Test {
 
     CertificateImporterImpl importer(task_runner_, test_nssdb_.get());
     auto onc_parsed_certificates =
-        std::make_unique<OncParsedCertificates>(onc_certificates_);
+        std::make_unique<chromeos::onc::OncParsedCertificates>(
+            onc_certificates_);
     EXPECT_EQ(expected_parse_success, !onc_parsed_certificates->has_error());
     switch (import_type) {
       case ImportType::kClientCertificatesOnly:
@@ -129,7 +130,7 @@ class ONCCertificateImporterImplTest : public testing::Test {
                 certificate::GetCertType(private_list_[0].get()));
     }
 
-    const base::Value& certificate = onc_certificates_.GetListDeprecated()[0];
+    const base::Value& certificate = onc_certificates_.GetList()[0];
     const std::string* guid_value =
         certificate.FindStringKey(::onc::certificate::kGUID);
     *guid = *guid_value;
@@ -184,7 +185,7 @@ TEST_F(ONCCertificateImporterImplTest, MultipleCertificates) {
   AddCertificatesFromFile("managed_toplevel2.onc", ImportType::kAllCertificates,
                           true /* expected_parse_success */,
                           true /* expected_import_success */);
-  EXPECT_EQ(onc_certificates_.GetListDeprecated().size(), public_list_.size());
+  EXPECT_EQ(onc_certificates_.GetList().size(), public_list_.size());
   EXPECT_TRUE(private_list_.empty());
   EXPECT_EQ(2ul, public_list_.size());
 }
@@ -204,7 +205,7 @@ TEST_F(ONCCertificateImporterImplTest, MultipleCertificatesWithFailures) {
   AddCertificatesFromFile(
       "toplevel_partially_invalid.onc", ImportType::kAllCertificates,
       false /* expected_parse_success */, true /* expected_import_success */);
-  EXPECT_EQ(3ul, onc_certificates_.GetListDeprecated().size());
+  EXPECT_EQ(3ul, onc_certificates_.GetList().size());
   EXPECT_EQ(1ul, private_list_.size());
   EXPECT_TRUE(public_list_.empty());
 }

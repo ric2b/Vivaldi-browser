@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,6 +37,17 @@ class LocalBrowserManagementStatusProvider final
  public:
   LocalBrowserManagementStatusProvider();
   ~LocalBrowserManagementStatusProvider() final;
+
+ protected:
+  // ManagementStatusProvider impl
+  EnterpriseManagementAuthority FetchAuthority() final;
+};
+
+class LocalDomainBrowserManagementStatusProvider final
+    : public policy::ManagementStatusProvider {
+ public:
+  LocalDomainBrowserManagementStatusProvider();
+  ~LocalDomainBrowserManagementStatusProvider() final;
 
  protected:
   // ManagementStatusProvider impl

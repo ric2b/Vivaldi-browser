@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -182,8 +182,6 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
         final int msgContinuePendingReload = 1;
         final int msgCancelPendingReload = 2;
 
-        // TODO(sgurun) Remember the URL to cancel the reload behavior
-        // if it is different than the most recent NavigationController entry.
         final Handler handler = new Handler(ThreadUtils.getUiThreadLooper()) {
             @Override
             public void handleMessage(Message msg) {

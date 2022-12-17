@@ -173,7 +173,7 @@
 <translation id="7221855153210829124">Mostrar notificaciones</translation>
 <translation id="7260504762447901703">Revocar acceso</translation>
 <translation id="7353601530677266744">Línea de comandos</translation>
-<translation id="7364115444476960850">La página fue bloqueada por <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
+<translation id="7364115444476960850">La página fue bloqueada por el <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
 <translation id="7419106976560586862">Ruta del perfil</translation>
 <translation id="7445762425076701745">La identidad del servidor al que estás conectado no se puede validar por completo. Estás conectado a un servidor con un nombre que solo es válido dentro tu red y cuya propiedad no puede ser validada por una entidad externa emisora de certificados. A pesar de que algunas entidades emisoras emiten certificados para esos nombres, no es posible garantizar que estés conectado al sitio web que quieres, y no al de un atacante.</translation>
 <translation id="7455133967321480974">Usar valor por defecto global (bloquear)</translation>
@@ -215,7 +215,7 @@
 <translation id="8740359287975076522">No se pudo encontrar la &lt;abbr id="dnsDefinition"&gt;dirección DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Se está diagnosticando el problema.</translation>
 <translation id="8774017153185436870">Los sitios pueden autoreproducir videos</translation>
 <translation id="8820817407110198400">Marcadores</translation>
-<translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
+<translation id="8940028675168378100">Bloqueada por el <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir a los ajustes del sitio</translation>
 <translation id="9001074447101275817">El proxy <ph name="DOMAIN" /> requiere un nombre de usuario y contraseña.</translation>
 <translation id="9008201768610948239">Ignorar</translation>

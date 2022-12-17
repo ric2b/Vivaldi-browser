@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -110,14 +110,6 @@ class GPU_EXPORT SharedImageInterface {
                             GrSurfaceOrigin surface_origin,
                             SkAlphaType alpha_type,
                             uint32_t usage);
-
-  // Similar to above, but creates backings for all planes in one shot. Needed
-  // on platforms where the planes need to share some state on initialization.
-  // Only implemented on Windows.
-  virtual std::vector<Mailbox> CreateSharedImageVideoPlanes(
-      gfx::GpuMemoryBuffer* gpu_memory_buffer,
-      GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      uint32_t usage);
 
   // Updates a shared image after its GpuMemoryBuffer (if any) was modified on
   // the CPU or through external devices, after |sync_token| has been released.

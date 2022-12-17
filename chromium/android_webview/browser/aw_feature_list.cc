@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,8 +33,10 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewMeasureScreenCoverage,
     &features::kWebViewJavaJsBridgeMojo,
     &features::kWebViewUseMetricsUploadService,
-    &features::kWebViewXRequestedWithHeader,
+    &features::kWebViewXRequestedWithHeaderControl,
+    &features::kWebViewXRequestedWithHeaderManifestAllowList,
     &features::kWebViewSynthesizePageLoadOnlyOnInitialMainDocumentAccess,
+    &features::kWebViewClientHintsControllerDelegate,
 };
 
 const base::Feature* FindFeatureExposedToJava(const std::string& feature_name) {

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include <algorithm>  // std::find
 #include <memory>
 #include <set>
 #include <sstream>
@@ -21,6 +20,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -549,7 +549,7 @@ void InputMethodManagerImpl::StateImpl::ToggleInputMethodForJpIme() {
 void InputMethodManagerImpl::StateImpl::AddInputMethodExtension(
     const std::string& extension_id,
     const InputMethodDescriptors& descriptors,
-    ui::IMEEngineHandlerInterface* engine) {
+    ui::TextInputMethod* engine) {
   if (IsShuttingDown())
     return;
 
@@ -652,8 +652,7 @@ void InputMethodManagerImpl::StateImpl::SetEnabledExtensionImes(
       switch_to_pending = true;
 
     const auto currently_enabled_iter =
-        std::find(enabled_input_method_ids_.begin(),
-                  enabled_input_method_ids_.end(), entry.first);
+        base::ranges::find(enabled_input_method_ids_, entry.first);
 
     bool currently_enabled =
         currently_enabled_iter != enabled_input_method_ids_.end();
@@ -764,12 +763,9 @@ void InputMethodManagerImpl::StateImpl::SwitchToNextInputMethod() {
   std::unique_ptr<InputMethodDescriptors> sorted_enabled_input_methods =
       GetEnabledInputMethodsSortedByLocalizedDisplayNames();
 
-  auto iter = std::find_if(
-      sorted_enabled_input_methods->begin(),
-      sorted_enabled_input_methods->end(),
-      [&current_input_method_id](const InputMethodDescriptor& input_method) {
-        return current_input_method_id == input_method.id();
-      });
+  auto iter =
+      base::ranges::find(*sorted_enabled_input_methods, current_input_method_id,
+                         &InputMethodDescriptor::id);
 
   if (iter != sorted_enabled_input_methods->end())
     ++iter;
@@ -792,8 +788,7 @@ void InputMethodManagerImpl::StateImpl::SwitchToLastUsedInputMethod() {
   }
 
   const auto iter =
-      std::find(enabled_input_method_ids_.begin(),
-                enabled_input_method_ids_.end(), last_used_input_method_id_);
+      base::ranges::find(enabled_input_method_ids_, last_used_input_method_id_);
   if (iter == enabled_input_method_ids_.end()) {
     // last_used_input_method_id_ is not supported.
     SwitchToNextInputMethod();
@@ -1079,7 +1074,7 @@ void InputMethodManagerImpl::ChangeInputMethodInternalFromActiveState(
 
   if (notify_menu) {
     // Clear property list.  Property list would be updated by
-    // extension IMEs via IMEEngineHandlerInterface::(Set|Update)MenuItems.
+    // extension IMEs via TextInputMethod::(Set|Update)MenuItems.
     // If the current input method is a keyboard layout, empty
     // properties are sufficient.
     const ui::ime::InputMethodMenuItemList empty_menu_item_list;
@@ -1090,8 +1085,7 @@ void InputMethodManagerImpl::ChangeInputMethodInternalFromActiveState(
   }
 
   // Disable the current engine handler.
-  ui::IMEEngineHandlerInterface* engine =
-      ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  ui::TextInputMethod* engine = ui::IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
     engine->Disable();
 
@@ -1142,7 +1136,7 @@ void InputMethodManagerImpl::ActivateInputMethodMenuItem(
 
   if (ui::ime::InputMethodMenuManager::GetInstance()->
       HasInputMethodMenuItemForKey(key)) {
-    ui::IMEEngineHandlerInterface* engine =
+    ui::TextInputMethod* engine =
         ui::IMEBridge::Get()->GetCurrentEngineHandler();
     if (engine)
       engine->PropertyActivate(key);
@@ -1244,8 +1238,7 @@ void InputMethodManagerImpl::OnAppTerminating() {
 }
 
 void InputMethodManagerImpl::CandidateClicked(int index) {
-  ui::IMEEngineHandlerInterface* engine =
-      ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  ui::TextInputMethod* engine = ui::IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
     engine->CandidateClicked(index);
 }
@@ -1262,8 +1255,7 @@ void InputMethodManagerImpl::CandidateWindowClosed() {
 
 void InputMethodManagerImpl::AssistiveWindowButtonClicked(
     const ui::ime::AssistiveWindowButton& button) const {
-  ui::IMEEngineHandlerInterface* engine =
-      ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  ui::TextInputMethod* engine = ui::IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
     engine->AssistiveWindowButtonClicked(button);
 }
@@ -1359,8 +1351,8 @@ void InputMethodManagerImpl::OverrideKeyboardKeyset(ImeKeyset keyset) {
   auto id_end = overridden_ref.find("&", id_start + 1);
   std::string id_string = overridden_ref.substr(id_start, id_end - id_start);
   // Remove existing keyset string.
-  for (const ImeKeyset keyset : kKeysets) {
-    std::string keyset_string = KeysetToString(keyset);
+  for (const ImeKeyset keyset_to_find : kKeysets) {
+    std::string keyset_string = KeysetToString(keyset_to_find);
     auto keyset_start = id_string.find("." + keyset_string);
     if (keyset_start != std::string::npos) {
       id_string.replace(keyset_start, keyset_string.length() + 1, "");
@@ -1425,8 +1417,7 @@ void InputMethodManagerImpl::NotifyObserversImeExtraInputStateChange() {
 
 ui::VirtualKeyboardController*
 InputMethodManagerImpl::GetVirtualKeyboardController() {
-  ui::IMEEngineHandlerInterface* engine =
-      ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  ui::TextInputMethod* engine = ui::IMEBridge::Get()->GetCurrentEngineHandler();
   if (!engine)
     return nullptr;
   return engine->GetVirtualKeyboardController();

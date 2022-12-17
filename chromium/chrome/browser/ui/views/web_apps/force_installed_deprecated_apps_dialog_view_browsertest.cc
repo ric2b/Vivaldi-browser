@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,7 +56,9 @@ class ForceInstalledDeprecatedAppsDialogViewBrowserTest
   ForceInstalledDeprecatedAppsDialogViewBrowserTest() {
     bool disable_preinstalled_apps = GetParam();
     if (disable_preinstalled_apps) {
-      feature_list_.InitWithFeatures({features::kChromeAppsDeprecation}, {});
+      feature_list_.InitWithFeatures(
+          {features::kChromeAppsDeprecation},
+          {features::kKeepForceInstalledPreinstalledApps});
     } else {
       feature_list_.InitWithFeatures(
           {features::kKeepForceInstalledPreinstalledApps,

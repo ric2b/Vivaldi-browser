@@ -1,24 +1,31 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_cell.h"
 
 #import <MaterialComponents/MaterialActivityIndicator.h>
-#include <ostream>
+#import <ostream>
 
-#include "base/check.h"
-#include "base/notreached.h"
-#import "ios/chrome/browser/commerce/price_alert_util.h"
+#import "base/check.h"
+#import "base/feature_list.h"
+#import "base/notreached.h"
 #import "ios/chrome/browser/ui/elements/top_aligned_image_view.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 #import "ui/gfx/ios/uikit_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -57,6 +64,11 @@ void PositionView(UIView* view, CGPoint point) {
   view.frame = frame;
 }
 
+// Kill switch guarding a workaround for crash, see crbug.com/1350976
+BASE_FEATURE(kPreviousTabViewWidthCrash,
+             "PreviousTabViewWidthCrash",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 }  // namespace
 
 @interface GridCell ()
@@ -87,6 +99,13 @@ void PositionView(UIView* view, CGPoint point) {
 @property(nonatomic, weak) UIView* border;
 // Whether or not the cell is currently displaying an editing state.
 @property(nonatomic, readonly) BOOL isInSelectionMode;
+
+// Vivaldi
+// Whether or not the cell is currently displaying is the selected or
+// highlighted.
+@property(nonatomic, assign) BOOL isItemSelected;
+// End Vivaldi
+
 @end
 
 @implementation GridCell
@@ -103,12 +122,31 @@ void PositionView(UIView* view, CGPoint point) {
     // `UIColor.clearColor` here will not remain transparent, so a solid color
     // must be chosen. Using the grid color prevents the corners from showing
     // while it transitions to the presented context menu/dragging state.
-    self.backgroundColor = [UIColor colorNamed:kGridBackgroundColor];
 
+    // Vivaldi Note: Doesn't seem like we need this workaround anymore.
+    if (IsVivaldiRunning()) {
+      self.backgroundColor = UIColor.clearColor;
+    } else {
+    self.backgroundColor = [UIColor colorNamed:kGridBackgroundColor];
+    } // End Vivaldi
+
+    // Vivaldi: Instead of creating a border for Vivaldi we will use the
+    // contentView border for selection state.
+    if (!IsVivaldiRunning()) {
     [self setupSelectedBackgroundView];
+    } // End Vivaldi
+
     UIView* contentView = self.contentView;
     contentView.layer.cornerRadius = kGridCellCornerRadius;
     contentView.layer.masksToBounds = YES;
+
+    // Vivaldi
+    contentView.layer.borderWidth = vTabGridNotSelectedBorderWidth;
+    contentView.layer.borderColor =
+      [UIColor colorNamed:vTabGridNotSelectedColor].CGColor;
+    contentView.clipsToBounds = YES;
+    // End Vivaldi
+
     UIView* topBar = [self setupTopBar];
     TopAlignedImageView* snapshotView = [[TopAlignedImageView alloc] init];
     snapshotView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -123,11 +161,8 @@ void PositionView(UIView* view, CGPoint point) {
         kGridCellCloseButtonIdentifier;
     [contentView addSubview:topBar];
     [contentView addSubview:snapshotView];
-    PriceCardView* priceCardView;
-    if (IsPriceAlertsEnabled()) {
-      priceCardView = [[PriceCardView alloc] init];
-      [snapshotView addSubview:priceCardView];
-    }
+    PriceCardView* priceCardView = [[PriceCardView alloc] init];
+    [snapshotView addSubview:priceCardView];
     [contentView addSubview:closeTapTargetButton];
     _topBar = topBar;
     _snapshotView = snapshotView;
@@ -141,14 +176,17 @@ void PositionView(UIView* view, CGPoint point) {
     self.titleLabel.textColor = [UIColor colorNamed:kTextPrimaryColor];
     self.closeIconView.tintColor = [UIColor colorNamed:kCloseButtonColor];
 
+    // Vivaldi: We will not use drop shadow for tab grid items on Vivaldi.
+    if (!IsVivaldiRunning()) {
     self.layer.cornerRadius = kGridCellCornerRadius;
     self.layer.shadowColor = [UIColor blackColor].CGColor;
     self.layer.shadowOffset = CGSizeMake(0, 0);
     self.layer.shadowRadius = 4.0f;
     self.layer.shadowOpacity = 0.5f;
     self.layer.masksToBounds = NO;
-    NSMutableArray* constraints = [[NSMutableArray alloc] init];
-    [constraints addObjectsFromArray:@[
+    } // End Vivaldi
+
+    NSArray* constraints = @[
       [topBar.topAnchor constraintEqualToAnchor:contentView.topAnchor],
       [topBar.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor],
       [topBar.trailingAnchor
@@ -168,21 +206,16 @@ void PositionView(UIView* view, CGPoint point) {
           constraintEqualToConstant:kGridCellCloseTapTargetWidthHeight],
       [closeTapTargetButton.heightAnchor
           constraintEqualToConstant:kGridCellCloseTapTargetWidthHeight],
-    ]];
-    if (IsPriceAlertsEnabled()) {
-      [constraints addObjectsFromArray:@[
-        [priceCardView.topAnchor
-            constraintEqualToAnchor:snapshotView.topAnchor
-                           constant:kGridCellPriceDropTopSpacing],
-        [priceCardView.leadingAnchor
-            constraintEqualToAnchor:snapshotView.leadingAnchor
-                           constant:kGridCellPriceDropLeadingSpacing],
-        [priceCardView.trailingAnchor
-            constraintLessThanOrEqualToAnchor:snapshotView.trailingAnchor
-                                     constant:-
-                                              kGridCellPriceDropTrailingSpacing]
-      ]];
-    }
+      [priceCardView.topAnchor
+          constraintEqualToAnchor:snapshotView.topAnchor
+                         constant:kGridCellPriceDropTopSpacing],
+      [priceCardView.leadingAnchor
+          constraintEqualToAnchor:snapshotView.leadingAnchor
+                         constant:kGridCellPriceDropLeadingSpacing],
+      [priceCardView.trailingAnchor
+          constraintLessThanOrEqualToAnchor:snapshotView.trailingAnchor
+                                   constant:-kGridCellPriceDropTrailingSpacing],
+    ];
     [NSLayoutConstraint activateConstraints:constraints];
   }
   return self;
@@ -201,6 +234,15 @@ void PositionView(UIView* view, CGPoint point) {
   if (isPreviousAccessibilityCategory ^ isCurrentAccessibilityCategory) {
     [self updateTopBarSize];
   }
+
+  // Vivaldi
+  // Reset the border color when theme is changed.
+  if ([self.traitCollection
+       hasDifferentColorAppearanceComparedToTraitCollection:
+         previousTraitCollection]) {
+    [self setSelected:self.isItemSelected];
+  } // End Vivaldi
+
 }
 
 #pragma mark - UICollectionViewCell
@@ -221,6 +263,11 @@ void PositionView(UIView* view, CGPoint point) {
   self.priceCardView.hidden = YES;
   self.opacity = 1.0;
   [self hideActivityIndicator];
+
+  // Vivaldi
+  self.isItemSelected = NO;
+  // End Vivaldi
+
 }
 
 #pragma mark - UIAccessibility
@@ -283,8 +330,8 @@ void PositionView(UIView* view, CGPoint point) {
 }
 
 - (void)showActivityIndicator {
-  [self.activityIndicator setHidden:NO];
   [self.activityIndicator startAnimating];
+  [self.activityIndicator setHidden:NO];
   [self.iconView setHidden:YES];
 }
 
@@ -625,6 +672,17 @@ void PositionView(UIView* view, CGPoint point) {
              : kGridCellHeaderHeight;
 }
 
+#pragma mark - VIVALID
+- (void)setSelected:(BOOL)selected {
+  self.isItemSelected = selected;
+  self.contentView.layer.borderColor = selected ?
+    [UIColor colorNamed:vTabGridSelectedColor].CGColor :
+    [UIColor colorNamed:vTabGridNotSelectedColor].CGColor;
+  self.contentView.layer.borderWidth = selected ?
+    vTabGridSelectedBorderWidth : vTabGridNotSelectedBorderWidth;
+}
+// End Vivaldi
+
 @end
 
 @implementation GridTransitionSelectionCell
@@ -694,6 +752,12 @@ void PositionView(UIView* view, CGPoint point) {
   if (!mainTabView.superview)
     [self.contentView addSubview:mainTabView];
   _previousTabViewWidth = mainTabView.frame.size.width;
+  static bool previous_tab_view_width_crash_workaround =
+      base::FeatureList::IsEnabled(kPreviousTabViewWidthCrash);
+  if (previous_tab_view_width_crash_workaround && !_previousTabViewWidth) {
+    UIWindow* window = UIApplication.sharedApplication.windows.firstObject;
+    _previousTabViewWidth = window.bounds.size.width;
+  }
   _mainTabView = mainTabView;
 }
 
@@ -736,8 +800,9 @@ void PositionView(UIView* view, CGPoint point) {
   self.topBarHeightConstraint.constant = [self topBarHeight];
   [self setNeedsUpdateConstraints];
   [self layoutIfNeeded];
-  CGFloat yOffset = kGridCellHeaderHeight - self.topTabView.frame.size.height;
-  PositionView(self.topTabView, CGPointMake(0, yOffset));
+  CGFloat topYOffset =
+      kGridCellHeaderHeight - self.topTabView.frame.size.height;
+  PositionView(self.topTabView, CGPointMake(0, topYOffset));
   // Position the main view so it's top-aligned with the main cell view.
   PositionView(self.mainTabView, self.mainCellView.frame.origin);
   if (!self.bottomTabView)
@@ -750,8 +815,8 @@ void PositionView(UIView* view, CGPoint point) {
                  CGPointMake(0, self.bottomTabView.frame.origin.y * scale));
   } else {
     // Position the bottom tab view below the main content view.
-    CGFloat yOffset = CGRectGetMaxY(self.mainCellView.frame);
-    PositionView(self.bottomTabView, CGPointMake(0, yOffset));
+    CGFloat bottomYOffset = CGRectGetMaxY(self.mainCellView.frame);
+    PositionView(self.bottomTabView, CGPointMake(0, bottomYOffset));
   }
 }
 
@@ -764,6 +829,12 @@ void PositionView(UIView* view, CGPoint point) {
   ScaleView(self.mainTabView, scale);
   ScaleView(self.bottomTabView, scale);
   _previousTabViewWidth = self.mainTabView.frame.size.width;
+  static bool previous_tab_view_width_crash_workaround =
+      base::FeatureList::IsEnabled(kPreviousTabViewWidthCrash);
+  if (previous_tab_view_width_crash_workaround && !_previousTabViewWidth) {
+    UIWindow* window = UIApplication.sharedApplication.windows.firstObject;
+    _previousTabViewWidth = window.bounds.size.width;
+  }
 }
 
 @end

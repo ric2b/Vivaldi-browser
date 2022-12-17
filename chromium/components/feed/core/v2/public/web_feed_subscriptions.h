@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,8 @@ class WebFeedSubscriptions {
     WebFeedMetadata web_feed_metadata;
     // Number of subscriptions the user has after the Follow operation.
     int subscription_count = 0;
+    // The change reason from the request.
+    feedwire::webfeed::WebFeedChangeReason change_reason;
   };
   // Follow a web feed given information about a web page. Calls `callback` when
   // complete. The callback parameter reports whether the url is now considered

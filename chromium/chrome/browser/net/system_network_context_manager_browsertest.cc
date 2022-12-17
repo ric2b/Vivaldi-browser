@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,6 +36,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/frame_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "net/base/features.h"
 #include "net/cookies/canonical_cookie_test_helpers.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/net_buildflags.h"
@@ -229,7 +230,9 @@ class SystemNetworkContextManagerWithFirstPartySetComponentBrowserTest
 
   void SetUpInProcessBrowserTestFixture() override {
     SystemNetworkContextManagerBrowsertest::SetUpInProcessBrowserTestFixture();
-    feature_list_.InitAndEnableFeature(features::kFirstPartySets);
+    feature_list_.InitWithFeatures(
+        {features::kFirstPartySets, net::features::kSamePartyAttributeEnabled},
+        {});
     CHECK(component_dir_.CreateUniqueTempDir());
     base::ScopedAllowBlockingForTesting allow_blocking;
 
@@ -261,10 +264,10 @@ class SystemNetworkContextManagerWithFirstPartySetComponentBrowserTest
 
  private:
   std::string GetComponentContents() const {
-    return "{\"owner\": \"https://a.test\", \"members\": [ "
-           "\"https://b.test\", \"https://member1.test\"]}\n"
-           "{\"owner\": \"https://c.test\", \"members\": [ "
-           "\"https://d.test\", \"https://member2.test\"]}";
+    return "{\"primary\": \"https://a.test\", \"associatedSites\": [ "
+           "\"https://b.test\", \"https://associatedsite1.test\"]}\n"
+           "{\"primary\": \"https://c.test\", \"associatedSites\": [ "
+           "\"https://d.test\", \"https://associatedsite2.test\"]}";
   }
 
   base::test::ScopedFeatureList feature_list_;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,8 @@
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "chromeos/ash/services/assistant/platform/audio_devices.h"
+#include "chromeos/ash/services/libassistant/public/mojom/audio_input_controller.mojom.h"
 #include "chromeos/dbus/power/power_manager_client.h"
-#include "chromeos/services/libassistant/public/mojom/audio_input_controller.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -29,7 +29,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AudioInputHostImpl
       private AudioDevices::Observer {
  public:
   AudioInputHostImpl(
-      mojo::PendingRemote<chromeos::libassistant::mojom::AudioInputController>
+      mojo::PendingRemote<libassistant::mojom::AudioInputController>
           pending_remote,
       CrasAudioHandler* cras_audio_handler,
       chromeos::PowerManagerClient* power_manager_client,
@@ -56,7 +56,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AudioInputHostImpl
   void OnInitialLidStateReceived(
       absl::optional<chromeos::PowerManagerClient::SwitchStates> switch_states);
 
-  mojo::Remote<chromeos::libassistant::mojom::AudioInputController> remote_;
+  mojo::Remote<libassistant::mojom::AudioInputController> remote_;
   chromeos::PowerManagerClient* const power_manager_client_;
   base::ScopedObservation<chromeos::PowerManagerClient,
                           chromeos::PowerManagerClient::Observer>

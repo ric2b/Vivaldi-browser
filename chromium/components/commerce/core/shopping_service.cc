@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,20 +8,26 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/commerce/core/bookmark_update_manager.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/metrics/metrics_utils.h"
+#include "components/commerce/core/metrics/scheduled_metrics_manager.h"
 #include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #include "components/commerce/core/proto/merchant_trust.pb.h"
 #include "components/commerce/core/proto/price_tracking.pb.h"
 #include "components/commerce/core/shopping_bookmark_model_observer.h"
+#include "components/commerce/core/shopping_power_bookmark_data_provider.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "components/commerce/core/subscriptions/subscriptions_manager.h"
 #include "components/commerce/core/web_wrapper.h"
@@ -29,8 +35,10 @@
 #include "components/optimization_guide/core/new_optimization_guide_decider.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/proto/hints.pb.h"
+#include "components/power_bookmarks/core/power_bookmark_service.h"
 #include "components/power_bookmarks/core/power_bookmark_utils.h"
 #include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
+#include "components/power_bookmarks/core/proto/shopping_specifics.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/session_proto_db/session_proto_storage.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -63,10 +71,12 @@ ShoppingService::ShoppingService(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     SessionProtoStorage<
         commerce_subscription_db::CommerceSubscriptionContentProto>*
-        subscription_proto_db)
+        subscription_proto_db,
+    power_bookmarks::PowerBookmarkService* power_bookmark_service)
     : opt_guide_(opt_guide),
       pref_service_(pref_service),
       bookmark_model_(bookmark_model),
+      power_bookmark_service_(power_bookmark_service),
       weak_ptr_factory_(this) {
   // Register for the types of information we're allowed to receive from
   // optimization guide.
@@ -86,22 +96,39 @@ ShoppingService::ShoppingService(
     opt_guide_->RegisterOptimizationTypes(types);
   }
 
-  if (identity_manager && subscription_proto_db) {
+  if (identity_manager) {
+    account_checker_ = base::WrapUnique(
+        new AccountChecker(pref_service, identity_manager, url_loader_factory));
+  }
+
+  if (IsProductInfoApiEnabled() && identity_manager && account_checker_ &&
+      subscription_proto_db) {
     subscriptions_manager_ = std::make_unique<SubscriptionsManager>(
-        identity_manager, std::move(url_loader_factory), subscription_proto_db);
+        identity_manager, url_loader_factory, subscription_proto_db,
+        account_checker_.get());
   }
 
   if (bookmark_model) {
     shopping_bookmark_observer_ =
-        std::make_unique<ShoppingBookmarkModelObserver>(bookmark_model, this);
+        std::make_unique<ShoppingBookmarkModelObserver>(
+            bookmark_model, this, subscriptions_manager_.get());
   }
-}
 
-void ShoppingService::RegisterPrefs(PrefRegistrySimple* registry) {
-  // This pref value is queried from server. Set initial value as true so our
-  // features can be correctly set up while waiting for the server response.
-  registry->RegisterBooleanPref(commerce::kWebAndAppActivityEnabledForShopping,
-                                true);
+  if (power_bookmark_service_ && IsProductInfoApiEnabled()) {
+    shopping_power_bookmark_data_provider_ =
+        std::make_unique<ShoppingPowerBookmarkDataProvider>(
+            power_bookmark_service_, this);
+  }
+
+  bookmark_update_manager_ = std::make_unique<BookmarkUpdateManager>(
+      this, bookmark_model_, pref_service_);
+
+  // In testing, the objects required for metrics may be null.
+  if (pref_service_ && bookmark_model_) {
+    scheduled_metrics_manager_ =
+        std::make_unique<metrics::ScheduledMetricsManager>(pref_service_,
+                                                           bookmark_model_);
+  }
 }
 
 void ShoppingService::WebWrapperCreated(WebWrapper* web) {}
@@ -283,7 +310,8 @@ void ShoppingService::GetProductInfoForUrl(const GURL& url,
     absl::optional<ProductInfo> info;
     // Make a copy based on the cached value.
     info.emplace(*cached_info);
-    std::move(callback).Run(url, info);
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), url, info));
     return;
   }
 
@@ -380,7 +408,8 @@ void ShoppingService::HandleOptGuideProductInfoResponse(
   std::unique_ptr<ProductInfo> info = OptGuideResultToProductInfo(metadata);
 
   absl::optional<ProductInfo> optional_info;
-  if (info) {
+  // The product info is considered valid only if it has a country code.
+  if (info && !info->country_code.empty()) {
     optional_info.emplace(*info);
     UpdateProductInfoCache(url, true, std::move(info));
   }
@@ -612,17 +641,62 @@ void ShoppingService::HandleOptGuideMerchantInfoResponse(
 void ShoppingService::Subscribe(
     std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
     base::OnceCallback<void(bool)> callback) {
-  CHECK(subscriptions_manager_);
-  subscriptions_manager_->Subscribe(std::move(subscriptions),
-                                    std::move(callback));
+  // TODO(crbug.com/1377515): When calling this api, we should always have a
+  // valid subscriptions_manager_ and there is no need to do the null check. We
+  // can build an internal system for error logging.
+  if (subscriptions_manager_) {
+    subscriptions_manager_->Subscribe(std::move(subscriptions),
+                                      std::move(callback));
+  } else {
+    std::move(callback).Run(false);
+  }
 }
 
 void ShoppingService::Unsubscribe(
     std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
     base::OnceCallback<void(bool)> callback) {
-  CHECK(subscriptions_manager_);
-  subscriptions_manager_->Unsubscribe(std::move(subscriptions),
-                                      std::move(callback));
+  // TODO(crbug.com/1377515): When calling this api, we should always have a
+  // valid subscriptions_manager_ and there is no need to do the null check. We
+  // can build an internal system for error logging.
+  if (subscriptions_manager_) {
+    subscriptions_manager_->Unsubscribe(std::move(subscriptions),
+                                        std::move(callback));
+  } else {
+    std::move(callback).Run(false);
+  }
+}
+
+void ShoppingService::FetchPriceEmailPref() {
+  if (account_checker_) {
+    account_checker_->FetchPriceEmailPref();
+  }
+}
+
+void ShoppingService::ScheduleSavedProductUpdate() {
+  bookmark_update_manager_->ScheduleUpdate();
+}
+
+bool ShoppingService::IsShoppingListEligible() {
+  return IsShoppingListEligible(account_checker_.get(), pref_service_);
+}
+
+bool ShoppingService::IsShoppingListEligible(AccountChecker* account_checker,
+                                             PrefService* prefs) {
+  if (!base::FeatureList::IsEnabled(kShoppingList))
+    return false;
+
+  if (!prefs || !IsShoppingListAllowedForEnterprise(prefs))
+    return false;
+
+  // Make sure the user allows subscriptions to be made and that we can fetch
+  // store data.
+  if (!account_checker || !account_checker->IsSignedIn() ||
+      !account_checker->IsAnonymizedUrlDataCollectionEnabled() ||
+      !account_checker->IsWebAndAppActivityEnabled()) {
+    return false;
+  }
+
+  return true;
 }
 
 base::WeakPtr<ShoppingService> ShoppingService::AsWeakPtr() {

@@ -1,10 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/modules/direct_sockets/tcp_writable_stream_wrapper.h"
 
 #include "base/callback_helpers.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/mock_callback.h"
 #include "net/base/net_errors.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_tester.h"
@@ -140,7 +141,7 @@ TEST(TCPWritableStreamWrapperTest, WriteArrayBufferView) {
 }
 
 bool IsAllNulls(base::span<const uint8_t> data) {
-  return std::all_of(data.begin(), data.end(), [](uint8_t c) { return !c; });
+  return base::ranges::all_of(data, [](uint8_t c) { return !c; });
 }
 
 TEST(TCPWritableStreamWrapperTest, AsyncWrite) {
@@ -168,7 +169,7 @@ TEST(TCPWritableStreamWrapperTest, AsyncWrite) {
   test::RunPendingTasks();
 
   // Let microtasks run just in case write() returns prematurely.
-  v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
+  scope.PerformMicrotaskCheckpoint();
   ASSERT_FALSE(tester.IsFulfilled());
 
   // Read the first part of the data.
@@ -221,7 +222,7 @@ TEST(TCPWritableStreamWrapperTest, WriteThenClose) {
 
   // Make sure that write() and close() both run before the event loop is
   // serviced.
-  v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
+  scope.PerformMicrotaskCheckpoint();
 
   write_tester.WaitUntilSettled();
   ASSERT_TRUE(write_tester.IsFulfilled());

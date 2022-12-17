@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -63,9 +63,13 @@ class FakeVideoCaptureHost : public media::mojom::VideoCaptureHost {
   // Create one video frame and send it to |observer_|.
   void SendOneFrame(const gfx::Size& size, base::TimeTicks capture_time);
 
+  // Get the most recent capture parameters passed to Start().
+  media::VideoCaptureParams GetVideoCaptureParams() const;
+
  private:
   mojo::Receiver<media::mojom::VideoCaptureHost> receiver_;
   mojo::Remote<media::mojom::VideoCaptureObserver> observer_;
+  media::VideoCaptureParams last_params_;
 };
 
 }  // namespace mirroring

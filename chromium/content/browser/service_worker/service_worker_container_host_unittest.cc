@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -217,7 +217,7 @@ class ServiceWorkerContainerHostTest : public testing::Test {
     container_host->OnBeginNavigationCommit(
         GlobalRenderFrameHostId(helper_->mock_render_process_id(),
                                 1 /* route_id */),
-        network::CrossOriginEmbedderPolicy(), std::move(reporter),
+        PolicyContainerPolicies(), std::move(reporter),
         ukm::UkmRecorder::GetNewSourceID());
   }
 
@@ -1095,8 +1095,7 @@ void ServiceWorkerContainerHostTest::TestReservedClientsAreNotExposed(
                                blink::StorageKey(url::Origin::Create(url)));
     EXPECT_FALSE(CanFindClientContainerHost(container_host.get()));
     container_host->CompleteWebWorkerPreparation(
-        network::CrossOriginEmbedderPolicy(),
-        ukm::UkmRecorder::GetNewSourceID());
+        PolicyContainerPolicies(), ukm::UkmRecorder::GetNewSourceID());
     EXPECT_TRUE(CanFindClientContainerHost(container_host.get()));
   }
 
@@ -1185,7 +1184,7 @@ void ServiceWorkerContainerHostTest::TestClientPhaseTransition(
   container_host->UpdateUrls(url, url::Origin::Create(url),
                              blink::StorageKey(url::Origin::Create(url)));
   container_host->CompleteWebWorkerPreparation(
-      network::CrossOriginEmbedderPolicy(), ukm::UkmRecorder::GetNewSourceID());
+      PolicyContainerPolicies(), ukm::UkmRecorder::GetNewSourceID());
 
   EXPECT_TRUE(container_host->is_response_committed());
   EXPECT_TRUE(container_host->is_execution_ready());

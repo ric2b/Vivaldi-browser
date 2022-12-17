@@ -1,12 +1,12 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import '../cr_icon_button/cr_icon_button.js';
-import '../cr_icons_css.m.js';
-import '../hidden_style_css.m.js';
-import '../icons.m.js';
-import '../shared_vars_css.m.js';
+import '../cr_icons.css.js';
+import '../cr_hidden_style.css.js';
+import '../cr_shared_vars.css.js';
+import '../icons.html.js';
 import '//resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import './cr_toolbar_search_field.js';
 

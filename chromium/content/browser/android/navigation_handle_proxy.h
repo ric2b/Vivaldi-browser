@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,16 +22,14 @@ class NavigationHandleProxy final {
   explicit NavigationHandleProxy(NavigationHandle* cpp_navigation_handle);
   ~NavigationHandleProxy();
 
-  NavigationHandle* cpp_navigation_handle() const {
-    return cpp_navigation_handle_;
-  }
   const base::android::ScopedJavaGlobalRef<jobject>& java_navigation_handle()
       const {
     return java_navigation_handle_;
   }
 
-  // |DidRedirect| and |DidFinish| updates the NavigationHandle on the java side
-  // with the state from the C++ side.
+  // |DidStart|, |DidRedirect| and |DidFinish| update the NavigationHandle on
+  // the java side with the state from the C++ side.
+  void DidStart();
   void DidRedirect();
   void DidFinish();
 

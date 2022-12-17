@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,8 @@ class CORE_EXPORT InterpolableGridTrackRepeater final
                                 const NGGridTrackRepeater& repeater);
   static std::unique_ptr<InterpolableGridTrackRepeater> Create(
       const NGGridTrackRepeater& repeater,
-      const Vector<GridTrackSize, 1>& repeater_track_sizes);
+      const Vector<GridTrackSize, 1>& repeater_track_sizes,
+      float zoom);
 
   Vector<GridTrackSize, 1> CreateTrackSizes(
       const CSSToLengthConversionData& conversion_data) const;

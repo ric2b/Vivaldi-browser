@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,6 +27,7 @@
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
@@ -99,6 +100,8 @@
 #include "chrome/browser/apps/app_service/metrics/app_service_metrics.h"
 #include "chrome/browser/badging/badge_manager_factory.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
+#include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
+#include "chrome/common/chrome_features.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -200,6 +203,8 @@ apps::mojom::InstallReason GetHighestPriorityInstallReason(
   switch (web_app->GetHighestPrioritySource()) {
     case WebAppManagement::kSystem:
       return apps::mojom::InstallReason::kSystem;
+    case WebAppManagement::kKiosk:
+      return apps::mojom::InstallReason::kKiosk;
     case WebAppManagement::kPolicy:
       return apps::mojom::InstallReason::kPolicy;
     case WebAppManagement::kSubApp:
@@ -210,6 +215,8 @@ apps::mojom::InstallReason GetHighestPriorityInstallReason(
       return apps::mojom::InstallReason::kSync;
     case WebAppManagement::kDefault:
       return apps::mojom::InstallReason::kDefault;
+    case WebAppManagement::kCommandLine:
+      return apps::mojom::InstallReason::kCommandLine;
   }
 }
 
@@ -227,6 +234,7 @@ apps::mojom::InstallSource ConvertInstallSourceToMojom(
     case webapps::WebappInstallSource::API_CUSTOM_TAB:
     case webapps::WebappInstallSource::DEVTOOLS:
     case webapps::WebappInstallSource::MANAGEMENT_API:
+    case webapps::WebappInstallSource::ISOLATED_APP_DEV_INSTALL:
     case webapps::WebappInstallSource::AMBIENT_BADGE_BROWSER_TAB:
     case webapps::WebappInstallSource::AMBIENT_BADGE_CUSTOM_TAB:
     case webapps::WebappInstallSource::RICH_INSTALL_UI_WEBLAYER:
@@ -235,11 +243,13 @@ apps::mojom::InstallSource ConvertInstallSourceToMojom(
     case webapps::WebappInstallSource::MENU_CREATE_SHORTCUT:
     case webapps::WebappInstallSource::SUB_APP:
     case webapps::WebappInstallSource::CHROME_SERVICE:
+    case webapps::WebappInstallSource::KIOSK:
       return apps::mojom::InstallSource::kBrowser;
     case webapps::WebappInstallSource::ARC:
       return apps::mojom::InstallSource::kPlayStore;
     case webapps::WebappInstallSource::INTERNAL_DEFAULT:
     case webapps::WebappInstallSource::EXTERNAL_DEFAULT:
+    case webapps::WebappInstallSource::EXTERNAL_LOCK_SCREEN:
     case webapps::WebappInstallSource::SYSTEM_DEFAULT:
       return apps::mojom::InstallSource::kSystem;
     case webapps::WebappInstallSource::SYNC:
@@ -362,6 +372,23 @@ void UninstallImpl(WebAppProvider* provider,
   }
 }
 
+RunOnOsLoginMode ConvertOsLoginModeToWebAppConstants(
+    apps::mojom::RunOnOsLoginMode login_mode) {
+  RunOnOsLoginMode web_app_constant_login_mode = RunOnOsLoginMode::kMinValue;
+  switch (login_mode) {
+    case apps::mojom::RunOnOsLoginMode::kWindowed:
+      web_app_constant_login_mode = RunOnOsLoginMode::kWindowed;
+      break;
+    case apps::mojom::RunOnOsLoginMode::kNotRun:
+      web_app_constant_login_mode = RunOnOsLoginMode::kNotRun;
+      break;
+    case apps::mojom::RunOnOsLoginMode::kUnknown:
+      web_app_constant_login_mode = RunOnOsLoginMode::kNotRun;
+      break;
+  }
+  return web_app_constant_login_mode;
+}
+
 WebAppPublisherHelper::Delegate::Delegate() = default;
 
 WebAppPublisherHelper::Delegate::~Delegate() = default;
@@ -394,13 +421,12 @@ WebAppPublisherHelper::WebAppPublisherHelper(
     Profile* profile,
     WebAppProvider* provider,
     ash::SystemWebAppManager* swa_manager,
-    apps::AppType app_type,
     Delegate* delegate,
     bool observe_media_requests)
     : profile_(profile),
       provider_(provider),
       swa_manager_(swa_manager),
-      app_type_(app_type),
+      app_type_(GetWebAppType()),
       delegate_(delegate) {
   DCHECK(profile_);
   DCHECK(delegate_);
@@ -408,6 +434,21 @@ WebAppPublisherHelper::WebAppPublisherHelper(
 }
 
 WebAppPublisherHelper::~WebAppPublisherHelper() = default;
+
+// static
+apps::AppType WebAppPublisherHelper::GetWebAppType() {
+// After moving the ordinary Web Apps to Lacros chrome, the remaining web
+// apps in ash Chrome will be only System Web Apps. Change the app type
+// to kSystemWeb for this case and the kWeb app type will be published from
+// the publisher for Lacros web apps.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (crosapi::browser_util::IsLacrosEnabled() && IsWebAppsCrosapiEnabled()) {
+    return apps::AppType::kSystemWeb;
+  }
+#endif
+
+  return apps::AppType::kWeb;
+}
 
 // static
 bool WebAppPublisherHelper::IsSupportedWebAppPermissionType(
@@ -621,6 +662,17 @@ apps::IntentFilters WebAppPublisherHelper::CreateIntentFiltersForWebApp(
         apps_util::CreateIntentFilterForUrlScope(app_scope)));
   }
 
+#if BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(
+          features::kMicrosoftOfficeWebAppExperiment)) {
+    for (const char* scope_extension :
+         ChromeOsWebAppExperiments::GetScopeExtensions(app_id)) {
+      filters.push_back(apps::ConvertMojomIntentFilterToIntentFilter(
+          apps_util::CreateIntentFilterForUrlScope(GURL(scope_extension))));
+    }
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   if (app_share_target) {
     base::Extend(filters,
                  CreateShareIntentFiltersFromShareTarget(*app_share_target));
@@ -684,7 +736,7 @@ apps::AppPtr WebAppPublisherHelper::CreateWebApp(const WebApp* web_app) {
   DCHECK_EQ(web_app->IsSystemApp(),
             app->install_reason == apps::InstallReason::kSystem);
 
-  app->policy_id = GetPolicyId(*web_app);
+  app->policy_ids = GetPolicyIds(*web_app);
 
   app->permissions = CreatePermissions(web_app);
 
@@ -819,8 +871,9 @@ void WebAppPublisherHelper::UninstallWebApp(
                              },
                              base::Unretained(profile())),
                          origin, kClearCookies, kClearStorage, kClearCache,
-                         kAvoidClosingConnections, absl::nullopt,
-                         base::DoNothing());
+                         kAvoidClosingConnections,
+                         /*cookie_partition_key=*/absl::nullopt,
+                         /*storage_key=*/absl::nullopt, base::DoNothing());
 }
 
 apps::mojom::IconKeyPtr WebAppPublisherHelper::MakeIconKey(
@@ -944,6 +997,7 @@ content::WebContents* WebAppPublisherHelper::Launch(
     case apps::LaunchSource::kFromOsLogin:
     case apps::LaunchSource::kFromProtocolHandler:
     case apps::LaunchSource::kFromUrlHandler:
+    case apps::LaunchSource::kFromLockScreen:
       break;
   }
 
@@ -984,11 +1038,11 @@ void WebAppPublisherHelper::LaunchAppWithIntent(
     apps::IntentPtr intent,
     apps::LaunchSource launch_source,
     apps::WindowInfoPtr window_info,
-    base::OnceCallback<void(bool)> callback) {
+    apps::LaunchCallback callback) {
   CHECK(intent);
 
   if (IsShuttingDown()) {
-    std::move(callback).Run(false);
+    std::move(callback).Run(apps::LaunchResult(apps::State::FAILED));
     return;
   }
 
@@ -999,12 +1053,12 @@ void WebAppPublisherHelper::LaunchAppWithIntent(
     guest_os::LaunchTerminalWithIntent(
         profile_, display_id, std::move(intent),
         base::BindOnce(
-            [](base::OnceCallback<void(bool)> callback, bool success,
+            [](apps::LaunchCallback callback, bool success,
                const std::string& failure_reason) {
               if (!success) {
                 LOG(WARNING) << "Launch terminal failed: " << failure_reason;
               }
-              std::move(callback).Run(success);
+              std::move(callback).Run(apps::ConvertBoolToLaunchResult(success));
             },
             std::move(callback)));
     return;
@@ -1015,8 +1069,7 @@ void WebAppPublisherHelper::LaunchAppWithIntent(
       app_id, event_flags, std::move(intent), launch_source,
       window_info ? window_info->display_id : display::kInvalidDisplayId,
       base::BindOnce(
-          [](base::OnceCallback<void(bool)> success_callback,
-             apps::LaunchSource launch_source,
+          [](apps::LaunchCallback callback, apps::LaunchSource launch_source,
              const std::vector<content::WebContents*>& web_contentses) {
 // TODO(crbug.com/1214763): Set ArcWebContentsData for Lacros.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1030,8 +1083,8 @@ void WebAppPublisherHelper::LaunchAppWithIntent(
               }
             }
 #endif
-            std::move(success_callback)
-                .Run(/*success=*/!web_contentses.empty());
+            std::move(callback).Run(
+                apps::ConvertBoolToLaunchResult(!web_contentses.empty()));
           },
           std::move(callback), launch_source));
 }
@@ -1050,8 +1103,9 @@ content::WebContents* WebAppPublisherHelper::LaunchAppWithParams(
   }
 
   apps::AppLaunchParams params_for_restore(
-      params.app_id, params.container, params.disposition, params.launch_source,
-      params.display_id, params.launch_files, params.intent);
+      params.app_id, params.container, params.disposition, params.override_url,
+      params.launch_source, params.display_id, params.launch_files,
+      params.intent);
 
   // Create the FullRestoreSaveHandler instance before launching the app to
   // observe the browser window.
@@ -1076,6 +1130,19 @@ content::WebContents* WebAppPublisherHelper::LaunchAppWithParams(
               params_for_restore.display_id,
               std::move(params_for_restore.launch_files),
               std::move(params_for_restore.intent));
+
+      // TODO(crbug.com/1368285): Determine whether override URL can be restored
+      // for all SWAs.
+      DCHECK(swa_manager_);
+      auto system_app_type =
+          swa_manager_->GetSystemAppTypeForAppId(params_for_restore.app_id);
+      if (system_app_type.has_value()) {
+        auto* system_app = swa_manager_->GetSystemApp(*system_app_type);
+        DCHECK(system_app);
+        if (system_app->ShouldRestoreOverrideUrl())
+          launch_info->override_url = params_for_restore.override_url;
+      }
+
       full_restore::SaveAppLaunchInfo(profile()->GetPath(),
                                       std::move(launch_info));
     }
@@ -1181,17 +1248,17 @@ apps::WindowMode WebAppPublisherHelper::GetWindowMode(
 }
 
 void WebAppPublisherHelper::SetWindowMode(const std::string& app_id,
-                                          apps::mojom::WindowMode window_mode) {
+                                          apps::WindowMode window_mode) {
   auto user_display_mode = UserDisplayMode::kStandalone;
   switch (window_mode) {
-    case apps::mojom::WindowMode::kBrowser:
+    case apps::WindowMode::kBrowser:
       user_display_mode = UserDisplayMode::kBrowser;
       break;
-    case apps::mojom::WindowMode::kUnknown:
-    case apps::mojom::WindowMode::kWindow:
+    case apps::WindowMode::kUnknown:
+    case apps::WindowMode::kWindow:
       user_display_mode = UserDisplayMode::kStandalone;
       break;
-    case apps::mojom::WindowMode::kTabbedWindow:
+    case apps::WindowMode::kTabbedWindow:
       user_display_mode = UserDisplayMode::kTabbed;
       break;
   }
@@ -1208,23 +1275,6 @@ void WebAppPublisherHelper::SetRunOnOsLoginMode(
           &provider_->sync_bridge(), app_id,
           ConvertOsLoginModeToWebAppConstants(run_on_os_login_mode),
           base::DoNothing()));
-}
-
-RunOnOsLoginMode WebAppPublisherHelper::ConvertOsLoginModeToWebAppConstants(
-    apps::mojom::RunOnOsLoginMode login_mode) {
-  RunOnOsLoginMode web_app_constant_login_mode = RunOnOsLoginMode::kMinValue;
-  switch (login_mode) {
-    case apps::mojom::RunOnOsLoginMode::kWindowed:
-      web_app_constant_login_mode = RunOnOsLoginMode::kWindowed;
-      break;
-    case apps::mojom::RunOnOsLoginMode::kNotRun:
-      web_app_constant_login_mode = RunOnOsLoginMode::kNotRun;
-      break;
-    case apps::mojom::RunOnOsLoginMode::kUnknown:
-      web_app_constant_login_mode = RunOnOsLoginMode::kNotRun;
-      break;
-  }
-  return web_app_constant_login_mode;
 }
 
 apps::WindowMode WebAppPublisherHelper::ConvertDisplayModeToWindowMode(
@@ -1593,8 +1643,10 @@ void WebAppPublisherHelper::Init(bool observe_media_requests) {
   }
 
   DCHECK(provider_);
-  install_manager_observation_.Observe(&install_manager());
-  registrar_observation_.Observe(&registrar());
+  provider_->on_registry_ready().Post(
+      FROM_HERE, base::BindOnce(&WebAppPublisherHelper::ObserveWebAppSubsystems,
+                                weak_ptr_factory_.GetWeakPtr()));
+
   content_settings_observation_.Observe(
       HostContentSettingsMapFactory::GetForProfile(profile_));
 
@@ -1618,6 +1670,11 @@ void WebAppPublisherHelper::Init(bool observe_media_requests) {
     media_dispatcher_.Observe(MediaCaptureDevicesDispatcher::GetInstance());
   }
 #endif
+}
+
+void WebAppPublisherHelper::ObserveWebAppSubsystems() {
+  install_manager_observation_.Observe(&install_manager());
+  registrar_observation_.Observe(&registrar());
 }
 
 IconEffects WebAppPublisherHelper::GetIconEffects(const WebApp* web_app) {
@@ -1674,27 +1731,36 @@ void WebAppPublisherHelper::LaunchAppWithIntentImpl(
   std::move(callback).Run({LaunchAppWithParams(std::move(params))});
 }
 
-std::string WebAppPublisherHelper::GetPolicyId(const WebApp& web_app) {
+std::vector<std::string> WebAppPublisherHelper::GetPolicyIds(
+    const WebApp& web_app) const {
+  const auto& app_id = web_app.app_id();
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // File Manager SWA uses File Manager Extension's ID for policy.
-  if (chromeos::features::IsFileManagerSwaEnabled() &&
-      web_app.app_id() == file_manager::kFileManagerSwaAppId) {
-    return file_manager::kFileManagerAppId;
+  if (app_id == file_manager::kFileManagerSwaAppId) {
+    return {file_manager::kFileManagerAppId};
   }
 #endif
 
-  GURL install_url;
-  if (registrar().HasExternalAppWithInstallSource(
-          web_app.app_id(), ExternalInstallSource::kExternalPolicy)) {
-    base::flat_map<AppId, base::flat_set<GURL>> installed_apps =
-        registrar().GetExternallyInstalledApps(
-            ExternalInstallSource::kExternalPolicy);
-    if (base::Contains(installed_apps, web_app.app_id())) {
-      DCHECK(installed_apps[web_app.app_id()].size() > 0);
-      install_url = *installed_apps[web_app.app_id()].begin();
-    }
+  if (!registrar().HasExternalAppWithInstallSource(
+          app_id, ExternalInstallSource::kExternalPolicy)) {
+    return {};
   }
-  return install_url.spec();
+
+  base::flat_map<AppId, base::flat_set<GURL>> installed_apps =
+      registrar().GetExternallyInstalledApps(
+          ExternalInstallSource::kExternalPolicy);
+  if (auto it = installed_apps.find(app_id); it != installed_apps.end()) {
+    const auto& install_urls = it->second;
+    DCHECK(!install_urls.empty());
+
+    std::vector<std::string> policy_ids;
+    base::ranges::transform(install_urls, std::back_inserter(policy_ids),
+                            &GURL::spec);
+    return policy_ids;
+  }
+
+  return {};
 }
 
 #if BUILDFLAG(IS_CHROMEOS)

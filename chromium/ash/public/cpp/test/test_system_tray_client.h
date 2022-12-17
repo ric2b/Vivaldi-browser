@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,7 +59,6 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
   void ShowNetworkSettings(const std::string& network_id) override;
   void ShowMultiDeviceSetup() override;
   void ShowFirmwareUpdate() override;
-  void RequestRestartForUpdate() override;
   void SetLocaleAndExit(const std::string& locale_iso_code) override;
   void ShowAccessCodeCastingDialog(
       AccessCodeCastDialogOpenLocation open_location) override;
@@ -109,6 +108,8 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
 
   int show_network_create_count() const { return show_network_create_count_; }
 
+  int show_calendar_event_count() const { return show_calendar_event_count_; }
+
   const std::string& last_network_type() const { return last_network_type_; }
 
   int show_firmware_update_count() const { return show_firmware_update_count_; }
@@ -119,6 +120,14 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
 
   const std::string& last_network_settings_network_id() const {
     return last_network_settings_network_id_;
+  }
+
+  int show_channel_info_additional_details_count() const {
+    return show_channel_info_additional_details_count_;
+  }
+
+  int show_channel_info_give_feedback_count() const {
+    return show_channel_info_give_feedback_count_;
   }
 
   void set_user_feedback_enabled(bool user_feedback_enabled) {
@@ -137,9 +146,12 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
   int show_sim_unlock_settings_count_ = 0;
   int show_firmware_update_count_ = 0;
   int show_network_create_count_ = 0;
+  int show_calendar_event_count_ = 0;
   std::string last_bluetooth_settings_device_id_;
   std::string last_network_settings_network_id_;
   std::string last_network_type_;
+  int show_channel_info_additional_details_count_ = 0;
+  int show_channel_info_give_feedback_count_ = 0;
   bool user_feedback_enabled_ = false;
 };
 

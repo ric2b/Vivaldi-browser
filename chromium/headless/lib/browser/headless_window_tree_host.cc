@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -101,5 +101,12 @@ void HeadlessWindowTreeHost::MoveCursorToScreenLocationInPixels(
     const gfx::Point& location) {}
 
 void HeadlessWindowTreeHost::OnCursorVisibilityChangedNative(bool show) {}
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+std::string HeadlessWindowTreeHost::GetUniqueId() const {
+  NOTIMPLEMENTED_LOG_ONCE() << "Headless does not have a unique ID";
+  return std::string();
+}
+#endif
 
 }  // namespace headless

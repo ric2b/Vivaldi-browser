@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,8 +8,8 @@
  * which allows finer-grained control over introducing dependencies.
  */
 
-import {assert, assertInstanceof} from 'chrome://resources/js/assert.m.js';
-import {decorate} from 'chrome://resources/js/cr/ui.m.js';
+import {assert, assertInstanceof} from 'chrome://resources/js/assert.js';
+import {decorate} from 'chrome://resources/js/cr/ui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 import {EntryLocation} from '../../externs/entry_location.js';
@@ -116,23 +116,6 @@ util.htmlEscape = str => {
 };
 
 /**
- * @param {string} str String to unescape.
- * @return {string} Unescaped string.
- */
-util.htmlUnescape = str => {
-  return str.replace(/&(lt|gt|amp);/g, entity => {
-    switch (entity) {
-      case '&lt;':
-        return '<';
-      case '&gt;':
-        return '>';
-      case '&amp;':
-        return '&';
-    }
-  });
-};
-
-/**
  * Remove a file or a directory.
  * @param {Entry} entry The entry to remove.
  * @param {function()} onSuccess The success callback.
@@ -226,29 +209,6 @@ util.bytesToString = (bytes, addedPrecision = 0) => {
 util.getKeyModifiers = event => {
   return (event.ctrlKey ? 'Ctrl-' : '') + (event.altKey ? 'Alt-' : '') +
       (event.shiftKey ? 'Shift-' : '') + (event.metaKey ? 'Meta-' : '');
-};
-
-/**
- * @typedef {?{
- *   scaleX: number,
- *   scaleY: number,
- *   rotate90: number
- * }}
- */
-util.Transform;
-
-/**
- * @param {Element} element Element to transform.
- * @param {util.Transform} transform Transform object,
- *                           contains scaleX, scaleY and rotate90 properties.
- */
-util.applyTransform = (element, transform) => {
-  // The order of rotate and scale matters.
-  element.style.transform = transform ?
-      'rotate(' + transform.rotate90 * 90 + 'deg)' +
-          'scaleX(' + transform.scaleX + ') ' +
-          'scaleY(' + transform.scaleY + ') ' :
-      '';
 };
 
 /**
@@ -389,6 +349,7 @@ util.FileOperationType = {
   DELETE: 'DELETE',
   MOVE: 'MOVE',
   RESTORE: 'RESTORE',
+  RESTORE_TO_DESTINATION: 'RESTORE_TO_DESTINATION',
   ZIP: 'ZIP',
 };
 Object.freeze(util.FileOperationType);
@@ -498,10 +459,7 @@ util.getTeamDriveName = entry => {
  * @return {boolean}
  */
 util.isRecentRootType = rootType => {
-  return rootType == VolumeManagerCommon.RootType.RECENT ||
-      rootType == VolumeManagerCommon.RootType.RECENT_AUDIO ||
-      rootType == VolumeManagerCommon.RootType.RECENT_IMAGES ||
-      rootType == VolumeManagerCommon.RootType.RECENT_VIDEOS;
+  return rootType == VolumeManagerCommon.RootType.RECENT;
 };
 
 /**
@@ -906,8 +864,8 @@ util.getCurrentLocaleOrDefault = () => {
  */
 util.entriesToURLs = entries => {
   return entries.map(entry => {
-    // When building background.js, cachedUrl is not refered other than here.
-    // Thus closure compiler raises an error if we refer the property like
+    // When building file_manager_base.js, cachedUrl is not referred other than
+    // here. Thus closure compiler raises an error if we refer the property like
     // entry.cachedUrl.
     return entry['cachedUrl'] || entry.toURL();
   });
@@ -1068,12 +1026,6 @@ util.getRootTypeLabel = locationInfo => {
       return str('DRIVE_DIRECTORY_LABEL');
     case VolumeManagerCommon.RootType.RECENT:
       return str('RECENT_ROOT_LABEL');
-    case VolumeManagerCommon.RootType.RECENT_AUDIO:
-      return str('MEDIA_VIEW_AUDIO_ROOT_LABEL');
-    case VolumeManagerCommon.RootType.RECENT_IMAGES:
-      return str('MEDIA_VIEW_IMAGES_ROOT_LABEL');
-    case VolumeManagerCommon.RootType.RECENT_VIDEOS:
-      return str('MEDIA_VIEW_VIDEOS_ROOT_LABEL');
     case VolumeManagerCommon.RootType.CROSTINI:
       return str('LINUX_FILES_ROOT_LABEL');
     case VolumeManagerCommon.RootType.MY_FILES:
@@ -1309,45 +1261,12 @@ util.isCopyImageEnabled = () => {
 };
 
 /**
- * Returns true if filters in Recents view is enabled.
- * @return {boolean}
- */
-util.isRecentsFilterEnabled = () => {
-  return loadTimeData.getBoolean('FILTERS_IN_RECENTS_ENABLED');
-};
-
-/**
- * Returns true if filters in Recents view V2 is enabled.
- * @return {boolean}
- */
-util.isRecentsFilterV2Enabled = () => {
-  return loadTimeData.valueExists('FILTERS_IN_RECENTS_V2_ENABLED') &&
-      loadTimeData.getBoolean('FILTERS_IN_RECENTS_V2_ENABLED');
-};
-
-/**
- * Returns true if FilesTrash feature flag is enabled.
+ * Whether the Files app integration with DLP (Data Loss Prevention) is enabled.
  * @returns {boolean}
  */
-util.isTrashEnabled = () => {
-  return loadTimeData.valueExists('FILES_TRASH_ENABLED') &&
-      loadTimeData.getBoolean('FILES_TRASH_ENABLED');
-};
-
-/**
- * Returns true if Files SWA feature flag is enabled.
- * @return {boolean}
- */
-util.isSwaEnabled = () => {
-  return loadTimeData.getBoolean('FILES_SWA');
-};
-
-/**
- * Returns true if FilesSinglePartitionFormat flag is enabled.
- * @return {boolean}
- */
-util.isSinglePartitionFormatEnabled = () => {
-  return loadTimeData.getBoolean('FILES_SINGLE_PARTITION_FORMAT_ENABLED');
+util.isDlpEnabled = () => {
+  return loadTimeData.valueExists('DLP_ENABLED') &&
+      loadTimeData.getBoolean('DLP_ENABLED');
 };
 
 /**
@@ -1368,12 +1287,13 @@ util.isFilesAppExperimental = () => {
 };
 
 /**
- * Whether the Files app integration with DLP (Data Loss Prevention) is enabled.
- * @returns {boolean}
+ * Returns true if FuseBoxDebug flag is enabled.
+ * @return {boolean}
  */
-util.isDlpEnabled = () => {
-  return loadTimeData.valueExists('DLP_ENABLED') &&
-      loadTimeData.getBoolean('DLP_ENABLED');
+util.isFuseBoxDebugEnabled = () => {
+  return loadTimeData.isInitialized() &&
+      loadTimeData.valueExists('FUSEBOX_DEBUG') &&
+      loadTimeData.getBoolean('FUSEBOX_DEBUG');
 };
 
 /**
@@ -1382,16 +1302,6 @@ util.isDlpEnabled = () => {
  */
 util.isFuseBoxEnabled = () => {
   return loadTimeData.getBoolean('FUSEBOX');
-};
-
-/**
- * Returns true if FuseBoxDebug flag is enabled.
- * @return {boolean}
- */
-util.isFuseBoxDebugEnabled = () => {
-  return loadTimeData.isInitialized() &&
-      loadTimeData.valueExists('FUSEBOX_DEBUG') &&
-      loadTimeData.getBoolean('FUSEBOX_DEBUG');
 };
 
 /**
@@ -1410,6 +1320,49 @@ util.isMirrorSyncEnabled = () => {
   return loadTimeData.isInitialized() &&
       loadTimeData.valueExists('DRIVEFS_MIRRORING') &&
       loadTimeData.getBoolean('DRIVEFS_MIRRORING');
+};
+
+/**
+ * Returns true if filters in Recents view V2 is enabled.
+ * @return {boolean}
+ */
+util.isRecentsFilterV2Enabled = () => {
+  return loadTimeData.valueExists('FILTERS_IN_RECENTS_V2_ENABLED') &&
+      loadTimeData.getBoolean('FILTERS_IN_RECENTS_V2_ENABLED');
+};
+
+/**
+ * Returns true if search v2 feature flag is enabled.
+ * @return {boolean}
+ */
+util.isSearchV2Enabled = () => {
+  return loadTimeData.getBoolean('FILES_SEARCH_V2');
+};
+
+/**
+ * Returns true if FilesSinglePartitionFormat flag is enabled.
+ * @return {boolean}
+ */
+util.isSinglePartitionFormatEnabled = () => {
+  return loadTimeData.getBoolean('FILES_SINGLE_PARTITION_FORMAT_ENABLED');
+};
+
+/**
+ * Returns true if FilesTrash feature flag is enabled.
+ * @returns {boolean}
+ */
+util.isTrashEnabled = () => {
+  return loadTimeData.valueExists('FILES_TRASH_ENABLED') &&
+      loadTimeData.getBoolean('FILES_TRASH_ENABLED');
+};
+
+/**
+ * Returns true if InlineSyncStatus feature flag is enabled.
+ * @returns {boolean}
+ */
+util.isInlineSyncStatusEnabled = () => {
+  return loadTimeData.valueExists('INLINE_SYNC_STATUS') &&
+      loadTimeData.getBoolean('INLINE_SYNC_STATUS');
 };
 
 /**
@@ -1514,12 +1467,6 @@ util.doIfPrimaryContext = async (callback) => {
   if (guestMode) {
     callback();
     return true;
-  }
-  if (!window.isSWA) {
-    if (!chrome.extension.inIncognitoContext) {
-      callback();
-      return true;
-    }
   }
   return false;
 };

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,11 +80,13 @@ TEST_F(OsIntegrationManagerTest, InstallOsHooksOnlyShortcuts) {
 
   testing::StrictMock<MockOsIntegrationManager> manager;
   EXPECT_CALL(manager, MacAppShimOnAppInstalledForProfile(app_id)).Times(1);
-  EXPECT_CALL(manager, CreateShortcuts(app_id, false, testing::_))
-      .WillOnce(base::test::RunOnceCallback<2>(true));
+  EXPECT_CALL(manager, CreateShortcuts(app_id, false,
+                                       SHORTCUT_CREATION_AUTOMATED, testing::_))
+      .WillOnce(base::test::RunOnceCallback<3>(true));
 
   InstallOsHooksOptions options;
   options.os_hooks[OsHookType::kShortcuts] = true;
+  options.reason = SHORTCUT_CREATION_AUTOMATED;
   manager.InstallOsHooks(app_id, std::move(callback), nullptr, options);
   run_loop.Run();
   EXPECT_FALSE(install_errors[OsHookType::kShortcuts]);
@@ -106,8 +108,9 @@ TEST_F(OsIntegrationManagerTest, InstallOsHooksEverything) {
   // added here.
   testing::StrictMock<MockOsIntegrationManager> manager;
   EXPECT_CALL(manager, MacAppShimOnAppInstalledForProfile(app_id)).Times(1);
-  EXPECT_CALL(manager, CreateShortcuts(app_id, true, testing::_))
-      .WillOnce(base::test::RunOnceCallback<2>(true));
+  EXPECT_CALL(manager, CreateShortcuts(app_id, true, SHORTCUT_CREATION_BY_USER,
+                                       testing::_))
+      .WillOnce(base::test::RunOnceCallback<3>(true));
   EXPECT_CALL(manager, RegisterFileHandlers(app_id, testing::_)).Times(1);
   EXPECT_CALL(manager, RegisterProtocolHandlers(app_id, testing::_)).Times(1);
   EXPECT_CALL(manager, RegisterUrlHandlers(app_id, testing::_)).Times(1);
@@ -122,6 +125,7 @@ TEST_F(OsIntegrationManagerTest, InstallOsHooksEverything) {
   InstallOsHooksOptions options;
   options.add_to_desktop = true;
   options.add_to_quick_launch_bar = true;
+  options.reason = SHORTCUT_CREATION_BY_USER;
   // Set all hooks to true.
   options.os_hooks.set();
   manager.InstallOsHooks(app_id, std::move(callback), nullptr, options);
@@ -166,7 +170,7 @@ TEST_F(OsIntegrationManagerTest, UninstallOsHooksEverything) {
   EXPECT_CALL(manager, UnregisterProtocolHandlers(app_id, testing::_)).Times(1);
   EXPECT_CALL(manager, UnregisterUrlHandlers(app_id)).Times(1);
   EXPECT_CALL(manager, UnregisterWebAppOsUninstallation(app_id)).Times(1);
-  EXPECT_CALL(manager, UnregisterShortcutsMenu(app_id))
+  EXPECT_CALL(manager, UnregisterShortcutsMenu(app_id, testing::_))
       .WillOnce(testing::Return(true));
   EXPECT_CALL(manager,
               UnregisterRunOnOsLogin(app_id, base::FilePath(kFakeProfilePath),

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,14 +95,16 @@ bool GLSurfaceEglReadbackWayland::SupportsAsyncSwap() {
 }
 
 gfx::SwapResult GLSurfaceEglReadbackWayland::SwapBuffers(
-    PresentationCallback callback) {
+    PresentationCallback callback,
+    gl::FrameData data) {
   NOTREACHED();
   return gfx::SwapResult::SWAP_FAILED;
 }
 
 void GLSurfaceEglReadbackWayland::SwapBuffersAsync(
     SwapCompletionCallback completion_callback,
-    PresentationCallback presentation_callback) {
+    PresentationCallback presentation_callback,
+    gl::FrameData data) {
   DCHECK(pending_frames_ < kMaxBuffers);
 
   // Increase pending frames number.

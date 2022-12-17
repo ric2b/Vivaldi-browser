@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@
 
 namespace {
 // The set of user-selectable datatypes. This must be in the same order as
-// |SyncSetupService::SyncableDatatype|.
+// `SyncSetupService::SyncableDatatype`.
 syncer::ModelType kDataTypes[] = {
     syncer::BOOKMARKS,    syncer::TYPED_URLS, syncer::PASSWORDS,
     syncer::PROXY_TABS,   syncer::AUTOFILL,   syncer::PREFERENCES,
@@ -178,21 +178,22 @@ bool SyncSetupService::IsEncryptEverythingEnabled() const {
   return sync_service_->GetUserSettings()->IsEncryptEverythingEnabled();
 }
 
-bool SyncSetupService::HasFinishedInitialSetup() {
+bool SyncSetupService::IsInitialSetupOngoing() {
   // Sync initial setup is considered to finished iff:
   //   1. User is signed in with sync enabled and the sync setup was completed.
   //   OR
   //   2. User is not signed in or has disabled sync.
+  // Otherwise we consider that the initial setup is still pending.
   // Note that if the user visits the Advanced Settings during the opt-in flow,
   // the Sync consent is not granted yet. In this case, IsSyncRequested() is
   // set to true, indicating that the sync was requested but the initial setup
   // has not been finished yet.
-  return !IsSyncRequested() ||
-         sync_service_->GetUserSettings()->IsFirstSetupComplete();
+  return IsSyncRequested() &&
+         !sync_service_->GetUserSettings()->IsFirstSetupComplete();
 }
 
 void SyncSetupService::PrepareForFirstSyncSetup() {
-  // |PrepareForFirstSyncSetup| should always be called while the user is signed
+  // `PrepareForFirstSyncSetup` should always be called while the user is signed
   // out. At that time, sync setup is not completed.
   DCHECK(!sync_service_->GetUserSettings()->IsFirstSetupComplete());
   if (!sync_blocker_)

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,8 +52,9 @@ void ArcDiskSpaceMonitor::ScheduleCheckDiskSpace(base::TimeDelta delay) {
 
 void ArcDiskSpaceMonitor::CheckDiskSpace() {
   ash::SpacedClient::Get()->GetFreeDiskSpace(
-      "/home", base::BindOnce(&ArcDiskSpaceMonitor::OnGetFreeDiskSpace,
-                              weak_ptr_factory_.GetWeakPtr()));
+      "/home/chronos/user",
+      base::BindOnce(&ArcDiskSpaceMonitor::OnGetFreeDiskSpace,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ArcDiskSpaceMonitor::OnGetFreeDiskSpace(absl::optional<int64_t> reply) {

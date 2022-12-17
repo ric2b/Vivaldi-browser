@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,9 +15,7 @@
 #include "net/log/net_log_with_source.h"
 #include "url/gurl.h"
 
-namespace network {
-
-namespace cors {
+namespace network::cors {
 
 namespace {
 
@@ -162,6 +160,4 @@ void PreflightCache::MayPurge(size_t max_entries, size_t purge_unit) {
   cache_.erase(purge_begin_entry, purge_end_entry);
 }
 
-}  // namespace cors
-
-}  // namespace network
+}  // namespace network::cors

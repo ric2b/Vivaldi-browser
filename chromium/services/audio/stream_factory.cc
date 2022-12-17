@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "base/unguessable_token.h"
 #include "build/chromecast_buildflags.h"
@@ -45,8 +46,9 @@ std::unique_ptr<OutputDeviceMixerManager> MaybeCreateOutputDeviceMixerManager(
 constexpr base::TimeDelta kReatimeThreadPeriod = base::Milliseconds(10);
 }  // namespace
 
-StreamFactory::StreamFactory(media::AudioManager* audio_manager,
-                             AecdumpRecordingManager* aecdump_recording_manager)
+StreamFactory::StreamFactory(
+    media::AudioManager* audio_manager,
+    media::AecdumpRecordingManager* aecdump_recording_manager)
     : audio_manager_(audio_manager),
       aecdump_recording_manager_(aecdump_recording_manager),
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
@@ -92,7 +94,6 @@ void StreamFactory::CreateInputStream(
       std::move(stream_receiver), std::move(client), std::move(observer),
       std::move(pending_log), audio_manager_, aecdump_recording_manager_,
       UserInputMonitor::Create(std::move(key_press_count_buffer)),
-      &stream_count_metric_reporter_,
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
       output_device_mixer_manager_.get(), std::move(processing_config),
 #else
@@ -164,8 +165,7 @@ void StreamFactory::CreateOutputStream(
       std::move(created_callback), std::move(deleter_callback),
       std::move(managed_device_output_stream_create_callback),
       std::move(stream_receiver), std::move(observer), std::move(log),
-      audio_manager_, &stream_count_metric_reporter_, device_id_or_group_id,
-      params, &coordinator_, group_id));
+      audio_manager_, device_id_or_group_id, params, &coordinator_, group_id));
 }
 
 void StreamFactory::BindMuter(
@@ -176,16 +176,14 @@ void StreamFactory::BindMuter(
                                       group_id);
 
   // Find the existing LocalMuter for this group, or create one on-demand.
-  auto it = std::find_if(muters_.begin(), muters_.end(),
-                         [&group_id](const std::unique_ptr<LocalMuter>& muter) {
-                           return muter->group_id() == group_id;
-                         });
+  auto it = base::ranges::find(muters_, group_id, &LocalMuter::group_id);
   LocalMuter* muter;
   if (it == muters_.end()) {
     auto muter_ptr = std::make_unique<LocalMuter>(&coordinator_, group_id);
     muter = muter_ptr.get();
-    muter->SetAllBindingsLostCallback(base::BindRepeating(
-        &StreamFactory::DestroyMuter, base::Unretained(this), muter));
+    muter->SetAllBindingsLostCallback(
+        base::BindRepeating(&StreamFactory::DestroyMuter,
+                            base::Unretained(this), muter_ptr->GetWeakPtr()));
     muters_.emplace_back(std::move(muter_ptr));
   } else {
     muter = it->get();
@@ -257,9 +255,10 @@ void StreamFactory::DestroyOutputStream(OutputStream* stream) {
   DCHECK_EQ(1u, erased);
 }
 
-void StreamFactory::DestroyMuter(LocalMuter* muter) {
+void StreamFactory::DestroyMuter(base::WeakPtr<LocalMuter> muter) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
-  DCHECK(muter);
+  if (!muter)
+    return;
 
   // Output streams have a task posting before destruction (see the OnError
   // function in output_stream.cc). To ensure that stream destruction and
@@ -268,13 +267,10 @@ void StreamFactory::DestroyMuter(LocalMuter* muter) {
   // Otherwise, a "destroy all streams, then destroy the muter" sequence may
   // result in a brief blip of audio.
   auto do_destroy = [](base::WeakPtr<StreamFactory> weak_this,
-                       LocalMuter* muter) {
-    if (weak_this) {
-
-      const auto it =
-          std::find_if(weak_this->muters_.begin(), weak_this->muters_.end(),
-                       base::MatchesUniquePtr(muter));
-      DCHECK(it != weak_this->muters_.end());
+                       base::WeakPtr<LocalMuter> muter) {
+    if (weak_this && muter) {
+      const auto it = base::ranges::find_if(
+          weak_this->muters_, base::MatchesUniquePtr(muter.get()));
 
       // The LocalMuter can still have receivers if a receiver was bound after
       // DestroyMuter is called but before the do_destroy task is run.
@@ -294,8 +290,7 @@ void StreamFactory::DestroyLoopbackStream(LoopbackStream* stream) {
   DCHECK(stream);
 
   const auto it =
-      std::find_if(loopback_streams_.begin(), loopback_streams_.end(),
-                   base::MatchesUniquePtr(stream));
+      base::ranges::find_if(loopback_streams_, base::MatchesUniquePtr(stream));
   DCHECK(it != loopback_streams_.end());
   loopback_streams_.erase(it);
 

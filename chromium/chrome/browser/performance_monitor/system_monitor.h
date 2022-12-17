@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -159,7 +159,7 @@ class SystemMonitor {
     using ObserverArgType =
         typename std::conditional<std::is_scalar<T>::value, T, const T&>::type;
 
-    MetricEvaluatorImpl<T>(
+    MetricEvaluatorImpl(
         Type type,
         base::OnceCallback<absl::optional<T>()> evaluate_function,
         void (SystemObserver::*notify_function)(ObserverArgType));

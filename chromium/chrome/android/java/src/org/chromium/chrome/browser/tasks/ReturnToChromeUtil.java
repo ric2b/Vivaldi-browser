@@ -1,13 +1,16 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.tasks;
 
+import static org.chromium.chrome.features.start_surface.StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_SECONDS;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
@@ -19,22 +22,20 @@ import org.chromium.base.Log;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
+import org.chromium.base.lifetime.Destroyable;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.base.supplier.OneshotSupplier;
-import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeInactivityTracker;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.feed.FeedFeatures;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.homepage.HomepageManager;
-import org.chromium.chrome.browser.layouts.LayoutStateProvider;
-import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
-import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -42,10 +43,8 @@ import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.segmentation_platform.SegmentationPlatformServiceFactory;
-import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
@@ -54,9 +53,9 @@ import org.chromium.chrome.features.start_surface.StartSurfaceUserData;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.segmentation_platform.SegmentSelectionResult;
 import org.chromium.components.segmentation_platform.SegmentationPlatformService;
 import org.chromium.components.segmentation_platform.proto.SegmentationProto.SegmentId;
-import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ResourceRequestBody;
@@ -83,6 +82,7 @@ public final class ReturnToChromeUtil {
             "StartSurface.ShownFromBackNavigation.";
 
     private static final String START_SEGMENTATION_PLATFORM_KEY = "chrome_start_android";
+    private static final String START_V2_SEGMENTATION_PLATFORM_KEY = "chrome_start_android_v2";
 
     @VisibleForTesting
     public static final String TAB_SWITCHER_ON_RETURN_MS_PARAM = "tab_switcher_on_return_time_ms";
@@ -106,59 +106,36 @@ public final class ReturnToChromeUtil {
      * from start surface and this tab is unable to be navigated back further, then we trigger
      * the callback to show overview mode.
      */
-    public static class ReturnToChromeBackPressHandler implements BackPressHandler {
+    public static class ReturnToChromeBackPressHandler implements BackPressHandler, Destroyable {
         private final ObservableSupplierImpl<Boolean> mBackPressChangedSupplier =
                 new ObservableSupplierImpl<>();
-        private final Supplier<LayoutStateProvider> mLayoutStateProvider;
-        private final Supplier<TabModelSelector> mTabModelSelectorSupplier;
         private final Runnable mOnBackPressedCallback;
+        private final ActivityTabProvider.ActivityTabTabObserver mActivityTabObserver;
+        private final ActivityTabProvider mActivityTabProvider;
 
         public ReturnToChromeBackPressHandler(
-                OneshotSupplier<LayoutStateProvider> layoutStateProviderOneshotSupplier,
-                ObservableSupplier<TabModelSelector> tabModelSelectorSupplier,
-                Runnable onBackPressedCallback) {
-            mLayoutStateProvider = layoutStateProviderOneshotSupplier;
-            mTabModelSelectorSupplier = tabModelSelectorSupplier;
-            mOnBackPressedCallback = onBackPressedCallback;
-            onBackPressStateChanged();
-            tabModelSelectorSupplier.addObserver(this::onTabModelSelectorAvailable);
-            layoutStateProviderOneshotSupplier.onAvailable(this::onLayoutManagerAvailable);
-        }
-
-        private void onTabModelSelectorAvailable(TabModelSelector tabModelSelector) {
-            onBackPressStateChanged();
-            tabModelSelector.getTabModelFilterProvider().addTabModelFilterObserver(
-                    new TabModelObserver() {
+                ActivityTabProvider activityTabProvider, Runnable onBackPressedCallback) {
+            mActivityTabProvider = activityTabProvider;
+            mActivityTabObserver =
+                    new ActivityTabProvider.ActivityTabTabObserver(activityTabProvider, true) {
                         @Override
-                        public void didSelectTab(Tab tab, int type, int lastId) {
+                        protected void onObservingDifferentTab(Tab tab, boolean hint) {
                             onBackPressStateChanged();
                         }
-                    });
-        }
-
-        private void onLayoutManagerAvailable(LayoutStateProvider layoutStateProvider) {
+                    };
+            mOnBackPressedCallback = onBackPressedCallback;
             onBackPressStateChanged();
-            layoutStateProvider.addObserver(new LayoutStateObserver() {
-                @Override
-                public void onStartedShowing(int layoutType, boolean showToolbar) {
-                    onBackPressStateChanged();
-                }
-            });
         }
 
         private void onBackPressStateChanged() {
-            if (mTabModelSelectorSupplier.get() == null || mLayoutStateProvider.get() == null
-                    || mTabModelSelectorSupplier.get().getCurrentTab() == null) {
-                mBackPressChangedSupplier.set(false);
-                return;
-            }
-            mBackPressChangedSupplier.set(
-                    isTabFromStartSurface(mTabModelSelectorSupplier.get().getCurrentTab())
-                    && !mLayoutStateProvider.get().isLayoutVisible(LayoutType.TAB_SWITCHER));
+            Tab tab = mActivityTabProvider.get();
+            mBackPressChangedSupplier.set(tab != null && isTabFromStartSurface(tab));
         }
 
         @Override
         public void handleBackPress() {
+            Tab tab = mActivityTabProvider.get();
+            assert tab != null && !tab.canGoBack();
             mOnBackPressedCallback.run();
         }
 
@@ -166,23 +143,45 @@ public final class ReturnToChromeUtil {
         public ObservableSupplier<Boolean> getHandleBackPressChangedSupplier() {
             return mBackPressChangedSupplier;
         }
+
+        @Override
+        public void destroy() {
+            mActivityTabObserver.destroy();
+        }
     }
 
     /**
      * Determine if we should show the tab switcher on returning to Chrome.
      *   Returns true if enough time has elapsed since the app was last backgrounded.
-     *   The threshold time in milliseconds is set by experiment "enable-tab-switcher-on-return"
+     *   The threshold time in milliseconds is set by experiment "enable-tab-switcher-on-return" or
+     *   from segmentation platform result if {@link ChromeFeatureList.START_SURFACE_RETURN_TIME} is
+     *   enabled.
      *
      * @param lastBackgroundedTimeMillis The last time the application was backgrounded. Set in
      *                                   ChromeTabbedActivity::onStopWithNative
      * @return true if past threshold, false if not past threshold or experiment cannot be loaded.
      */
     public static boolean shouldShowTabSwitcher(final long lastBackgroundedTimeMillis) {
-        int tabSwitcherAfterMillis = TAB_SWITCHER_ON_RETURN_MS.getValue();
+        long tabSwitcherAfterMillis = TAB_SWITCHER_ON_RETURN_MS.getValue();
+        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.START_SURFACE_RETURN_TIME)
+                && TAB_SWITCHER_ON_RETURN_MS.getValue() != 0) {
+            if (!StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_USE_MODEL.getValue()) {
+                tabSwitcherAfterMillis =
+                        START_SURFACE_RETURN_TIME_SECONDS.getValue() * DateUtils.SECOND_IN_MILLIS;
+            } else {
+                tabSwitcherAfterMillis = getReturnTimeFromSegmentation();
+            }
+        }
+
+        // Note(david@vivaldi.com): We never show the tab switcher on startup. We reset the field
+        // trial parameter here.
+        tabSwitcherAfterMillis = -1;
 
         if (lastBackgroundedTimeMillis == -1) {
             // No last background timestamp set, use control behavior unless "immediate" was set.
-            return tabSwitcherAfterMillis == 0;
+            // Even when {@link ChromeFeatureList.START_SURFACE_RETURN_TIME} is enabled, we still
+            // check the value of "enable-tab-switcher-on-return".
+            return TAB_SWITCHER_ON_RETURN_MS.getValue() == 0 || tabSwitcherAfterMillis == 0;
         }
 
         if (tabSwitcherAfterMillis < 0) {
@@ -190,7 +189,22 @@ public final class ReturnToChromeUtil {
             return false;
         }
 
-        return System.currentTimeMillis() - lastBackgroundedTimeMillis > tabSwitcherAfterMillis;
+        return System.currentTimeMillis() - lastBackgroundedTimeMillis >= tabSwitcherAfterMillis;
+    }
+
+    /**
+     * Gets the cached return time obtained from the segmentation platform service.
+     * Note: this function should NOT been called on tablets! The default value for tablets is -1
+     * which means not showing.
+     * @return How long to show the Start surface again on startup. A negative value means not show,
+     *         0 means showing immediately. The return time is in the unit of milliseconds.
+     */
+    @VisibleForTesting
+    public static long getReturnTimeFromSegmentation() {
+        // Sets the default value as 8 hours; 0 means showing immediately.
+        return SharedPreferencesManager.getInstance().readLong(
+                ChromePreferenceKeys.START_RETURN_TIME_SEGMENTATION_RESULT_MS,
+                START_SURFACE_RETURN_TIME_SECONDS.getDefaultValue());
     }
 
     /**
@@ -384,7 +398,20 @@ public final class ReturnToChromeUtil {
      */
     public static boolean shouldShowStartSurfaceAsTheHomePage(Context context) {
         return isStartSurfaceEnabled(context)
-                && !StartSurfaceConfiguration.START_SURFACE_OPEN_NTP_INSTEAD_OF_START.getValue();
+                && StartSurfaceConfiguration.START_SURFACE_OPEN_START_AS_HOMEPAGE.getValue()
+                && useChromeHomepage();
+    }
+
+    /**
+     * Returns whether to use Chrome's homepage. This function doesn't distinguish whether to show
+     * NTP or Start though. If checking whether to show Start as homepage, use
+     * {@link ReturnToChromeUtil#shouldShowStartSurfaceAsTheHomePage(Context)} instead.
+     */
+    private static boolean useChromeHomepage() {
+        String homePageUrl = HomepageManager.getHomepageUri();
+        return HomepageManager.isHomepageEnabled()
+                && (TextUtils.isEmpty(homePageUrl)
+                        || UrlUtilities.isCanonicalizedNTPUrl(homePageUrl));
     }
 
     /**
@@ -397,11 +424,12 @@ public final class ReturnToChromeUtil {
     }
 
     /**
-     * @return Whether Start Surface should be shown as NTP.
+     * @return Whether Start Surface should be shown as a new Tab.
      */
-    public static boolean shouldShowStartSurfaceHomeAsNTP(
+    public static boolean shouldShowStartSurfaceHomeAsNewTab(
             Context context, boolean incognito, boolean isTablet) {
-        return !incognito && shouldShowStartSurfaceAsTheHomePageOnPhone(context, isTablet);
+        return !incognito && !isTablet && isStartSurfaceEnabled(context)
+                && !StartSurfaceConfiguration.START_SURFACE_OPEN_NTP_INSTEAD_OF_START.getValue();
     }
 
     /**
@@ -412,7 +440,8 @@ public final class ReturnToChromeUtil {
     }
 
     /**
-     * Check whether Start Surface is enabled. It includes checks of:
+     * Returns whether Start Surface is enabled in the given context.
+     * This includes checks of:
      * 1) whether home page is enabled and whether it is Chrome' home page url;
      * 2) whether Start surface is enabled with current accessibility settings;
      * 3) whether it is on phone.
@@ -422,11 +451,7 @@ public final class ReturnToChromeUtil {
         // When creating initial tab, i.e. cold start without restored tabs, we should only show
         // StartSurface as the HomePage if Single Pane is enabled, HomePage is not customized, not
         // on tablet, accessibility is not enabled or the tab group continuation feature is enabled.
-        String homePageUrl = HomepageManager.getHomepageUri();
         return StartSurfaceConfiguration.isStartSurfaceFlagEnabled()
-                && HomepageManager.isHomepageEnabled()
-                && (TextUtils.isEmpty(homePageUrl)
-                        || UrlUtilities.isCanonicalizedNTPUrl(homePageUrl))
                 && !shouldHideStartSurfaceWithAccessibilityOn(context)
                 && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
     }
@@ -462,7 +487,11 @@ public final class ReturnToChromeUtil {
      * Returns whether grid Tab switcher or the Start surface should be shown at startup.
      */
     public static boolean shouldShowOverviewPageOnStart(Context context, Intent intent,
-            TabModelSelector tabModelSelector, ChromeInactivityTracker inactivityTracker) {
+            TabModelSelector tabModelSelector, ChromeInactivityTracker inactivityTracker,
+            boolean isTablet) {
+        // Neither Start surface or GTS should be shown on Tablet at startup.
+        if (isTablet) return false;
+
         String intentUrl = IntentHandler.getUrlFromIntent(intent);
 
         // If user launches Chrome by tapping the app icon, the intentUrl is NULL;
@@ -471,69 +500,39 @@ public final class ReturnToChromeUtil {
         // If user taps the "New Incognito Tab" item from the app icon, skip here and continue the
         // following checks.
         if (UrlUtilities.isCanonicalizedNTPUrl(intentUrl)
-                && ReturnToChromeUtil.shouldShowStartSurfaceAsTheHomePage(context)
+                && ReturnToChromeUtil.shouldShowStartSurfaceHomeAsNewTab(
+                        context, tabModelSelector.isIncognitoSelected(), isTablet)
                 && !intent.getBooleanExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false)) {
             return true;
         }
 
-        boolean isStartSurfaceEnabled = ReturnToChromeUtil.isStartSurfaceEnabled(context);
+        // If Start surface isn't enabled, return false.
+        if (!ReturnToChromeUtil.isStartSurfaceEnabled(context)) return false;
 
-        // If Start surface is enabled and there's no tab existing, handle the initial tab creation.
-        if (isStartSurfaceEnabled && IntentUtils.isMainIntentFromLauncher(intent)
-                && ReturnToChromeUtil.getTotalTabCount(tabModelSelector) <= 0) {
+        // All of the following checks are based on Start surface is enabled.
+        // If there's no tab existing, handle the initial tab creation.
+        // Note: if user has a customized homepage, we don't show Start even there isn't any tab.
+        // However, if NTP is used as homepage, we show Start when there isn't any tab. See
+        // https://crbug.com/1368224.
+        if (IntentUtils.isMainIntentFromLauncher(intent)
+                && ReturnToChromeUtil.getTotalTabCount(tabModelSelector) <= 0
+                && useChromeHomepage()) {
             return true;
         }
 
-        // Checks whether to hide Start surface when last visited tab is a search result page.
-        if (isStartSurfaceEnabled && shouldHideStartSurfaceWhenLastVisitedTabIsSRP()) return false;
-
-        // Checks whether to show the Start surface / grid Tab switcher due to feature flag
-        // TAB_SWITCHER_ON_RETURN_MS.
+        // Checks whether to show the Start surface due to feature flag TAB_SWITCHER_ON_RETURN_MS.
         long lastBackgroundedTimeMillis = inactivityTracker.getLastBackgroundedTimeMs();
-        boolean tabSwitcherOnReturn = !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                && IntentUtils.isMainIntentFromLauncher(intent)
+        boolean tabSwitcherOnReturn = IntentUtils.isMainIntentFromLauncher(intent)
                 && ReturnToChromeUtil.shouldShowTabSwitcher(lastBackgroundedTimeMillis);
 
         // If the overview page won't be shown on startup, stops here.
         if (!tabSwitcherOnReturn) return false;
 
-        if (isStartSurfaceEnabled) {
-            if (StartSurfaceConfiguration.CHECK_SYNC_BEFORE_SHOW_START_AT_STARTUP.getValue()) {
-                // We only check the sync status when flag CHECK_SYNC_BEFORE_SHOW_START_AT_STARTUP
-                // and the Start surface are both enabled.
-                return ReturnToChromeUtil.isPrimaryAccountSync();
-            } else if (!TextUtils.isEmpty(
-                               StartSurfaceConfiguration.BEHAVIOURAL_TARGETING.getValue())) {
-                return ReturnToChromeUtil.userBehaviourSupported();
-            }
+        if (!TextUtils.isEmpty(StartSurfaceConfiguration.BEHAVIOURAL_TARGETING.getValue())) {
+            return ReturnToChromeUtil.userBehaviourSupported();
         }
 
-        // If Start surface is disable and should show the Grid tab switcher at startup, or flag
-        // CHECK_SYNC_BEFORE_SHOW_START_AT_STARTUP and behavioural targeting flag aren't enabled,
-        // return true here.
         return true;
-    }
-
-    /**
-     * Returns whether user has a primary account with syncing on.
-     */
-    @VisibleForTesting
-    public static boolean isPrimaryAccountSync() {
-        return SharedPreferencesManager.getInstance().readBoolean(
-                ChromePreferenceKeys.PRIMARY_ACCOUNT_SYNC, false);
-    }
-
-    /**
-     * Caches the status of whether the primary account is synced.
-     */
-    public static void cachePrimaryAccountSyncStatus() {
-        boolean isPrimaryAccountSync =
-                IdentityServicesProvider.get()
-                        .getSigninManager(Profile.getLastUsedRegularProfile())
-                        .getIdentityManager()
-                        .hasPrimaryAccount(ConsentLevel.SYNC);
-        SharedPreferencesManager.getInstance().writeBoolean(
-                ChromePreferenceKeys.PRIMARY_ACCOUNT_SYNC, isPrimaryAccountSync);
     }
 
     /**
@@ -738,6 +737,37 @@ public final class ReturnToChromeUtil {
         });
     }
 
+    /*
+     * Computes a return time from the result of the segmentation platform and stores to prefs.
+     */
+    public static void cacheReturnTimeFromSegmentation() {
+        SegmentationPlatformService segmentationPlatformService =
+                SegmentationPlatformServiceFactory.getForProfile(
+                        Profile.getLastUsedRegularProfile());
+
+        segmentationPlatformService.getSelectedSegment(START_V2_SEGMENTATION_PLATFORM_KEY,
+                result -> { cacheReturnTimeFromSegmentationImpl(result); });
+    }
+
+    @VisibleForTesting
+    public static void cacheReturnTimeFromSegmentationImpl(SegmentSelectionResult result) {
+        long returnTimeMs = TAB_SWITCHER_ON_RETURN_MS.getDefaultValue();
+        if (result.isReady) {
+            if (result.selectedSegment
+                    != SegmentId.OPTIMIZATION_TARGET_SEGMENTATION_CHROME_START_ANDROID_V2) {
+                // If selected segment is not Start, then don't show.
+                returnTimeMs = -1;
+            } else {
+                // The value of result.rank is in the unit of seconds.
+                assert result.rank >= 0;
+                // Converts to milliseconds.
+                returnTimeMs = result.rank.longValue() * DateUtils.SECOND_IN_MILLIS;
+            }
+        }
+        SharedPreferencesManager.getInstance().writeLong(
+                ChromePreferenceKeys.START_RETURN_TIME_SEGMENTATION_RESULT_MS, returnTimeMs);
+    }
+
     /**
      * Returns whether to show Start surface based on segmentation result. When unavailable, returns
      * default value given.
@@ -908,6 +938,14 @@ public final class ReturnToChromeUtil {
     }
 
     /**
+     * Returns whether to improve Start surface when Feed is not visible.
+     */
+    public static boolean shouldImproveStartWhenFeedIsDisabled(Context context) {
+        return ChromeFeatureList.sStartSurfaceDisabledFeedImprovement.isEnabled()
+                && !getFeedArticlesVisibility() && isStartSurfaceEnabled(context);
+    }
+
+    /**
      * Returns true if START_SURFACE_REFACTOR is enabled but Start surface is disabled.
      * Currently we only support the refactor code when Start surface is disabled. We may remove
      * #isStartSurfaceEnabled check in this method after we support the refactor when Start surface
@@ -923,26 +961,11 @@ public final class ReturnToChromeUtil {
         return getBehaviourType(key);
     }
 
-    @VisibleForTesting
-    public static void setSyncForTesting(boolean isSyncing) {
-        SharedPreferencesManager manager = SharedPreferencesManager.getInstance();
-        manager.writeBoolean(ChromePreferenceKeys.PRIMARY_ACCOUNT_SYNC, isSyncing);
-    }
-
     /**
      * Records a user action that Start surface is showing due to tapping the back button.
      * @param from: Where the back navigation is initiated, either "FromTab" or "FromTabSwitcher".
      */
     public static void recordBackNavigationToStart(String from) {
         RecordUserAction.record(SHOWN_FROM_BACK_NAVIGATION_UMA + from);
-    }
-
-    /**
-     * Returns whether Start surface should be hidden when last visited tab is a search result page.
-     */
-    private static boolean shouldHideStartSurfaceWhenLastVisitedTabIsSRP() {
-        return StartSurfaceConfiguration.HIDE_START_WHEN_LAST_VISITED_TAB_IS_SRP.getValue()
-                && SharedPreferencesManager.getInstance().readBoolean(
-                        ChromePreferenceKeys.IS_LAST_VISITED_TAB_SRP, false);
     }
 }

@@ -64,6 +64,9 @@
 @end
 
 @implementation SPUInstallerDriver
+{
+    void (^_updateWillInstallHandler)(void);
+}
 
 @synthesize host = _host;
 @synthesize applicationBundle = _applicationBundle;
@@ -95,25 +98,50 @@
     return self;
 }
 
+- (void)setUpdateWillInstallHandler:(void (^)(void))updateWillInstallHandler
+{
+    _updateWillInstallHandler = [updateWillInstallHandler copy];
+}
+
 - (void)_reportInstallerError:(nullable NSError *)currentInstallerError genericErrorCode:(NSInteger)genericErrorCode genericUserInfo:(NSDictionary *)genericUserInfo
 {
     // First see if there is a good custom error we can show
-    // We only check for signing validation errors currently
-    NSError *customError;
+    // We only check for signing validation errors and installation errors due to not having write permission currently
+    NSError *customError = nil;
     if (currentInstallerError != nil) {
         NSError *underlyingError = currentInstallerError.userInfo[NSUnderlyingErrorKey];
-        if (underlyingError != nil && underlyingError.code == SUValidationError) {
-            NSDictionary *userInfo = @{
-                NSLocalizedDescriptionKey: SULocalizedString(@"The update is improperly signed and could not be validated. Please try again later or contact the app developer.", nil),
-                NSUnderlyingErrorKey: (NSError * _Nonnull)currentInstallerError
-            };
-            
-            customError = [NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationError userInfo:userInfo];
-        } else {
-            customError = nil;
+        if (underlyingError != nil) {
+            if (underlyingError.code == SUValidationError) {
+                NSDictionary *userInfo = @{
+                    NSLocalizedDescriptionKey: SULocalizedString(@"The update is improperly signed and could not be validated. Please try again later or contact the app developer.", nil),
+                    NSUnderlyingErrorKey: (NSError * _Nonnull)currentInstallerError
+                };
+                
+                customError = [NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationError userInfo:userInfo];
+            } else if (underlyingError.code == SUInstallationError) {
+                NSError *secondUnderlyingError = underlyingError.userInfo[NSUnderlyingErrorKey];
+                if (secondUnderlyingError != nil && [secondUnderlyingError.domain isEqualToString:NSCocoaErrorDomain] && secondUnderlyingError.code == NSFileWriteNoPermissionError) {
+                    // Note: these error strings will only surface for external app updaters like sparkle-cli (i.e, updaters that update other app bundles)
+                    
+                    NSMutableDictionary *userInfo = [NSMutableDictionary dictionaryWithDictionary:@{
+                        NSLocalizedDescriptionKey: SULocalizedString(@"The installation failed due to not having permission to write the new update.", nil),
+                        NSUnderlyingErrorKey: (NSError * _Nonnull)currentInstallerError
+                    }];
+                    
+                    // macOS 13 and later introduce a policy where Gatekeeper can block app modifications if the apps have different Team IDs
+                    if (@available(macOS 13, *)) {
+                        NSBundle *mainBundle = [NSBundle mainBundle];
+                        if (![mainBundle isEqual:self.host.bundle]) {
+                            SUHost *mainBundleHost = [[SUHost alloc] initWithBundle:mainBundle];
+                            
+                            userInfo[NSLocalizedRecoverySuggestionErrorKey] = [NSString stringWithFormat:SULocalizedString(@"You may need to allow modifications from %1$@ in System Settings under Privacy & Security and App Management to install future updates.", nil), mainBundleHost.name];
+                        }
+                    }
+                    
+                    customError = [NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationWriteNoPermissionError userInfo:userInfo];
+                }
+            }
         }
-    } else {
-        customError = nil;
     }
     
     // Otherwise if there's no custom error, then use a generic installer error to show
@@ -142,7 +170,7 @@
     assert(hostBundleIdentifier != nil);
     
     if (!SPUXPCServiceIsEnabled(SUEnableInstallerConnectionServiceKey)) {
-        self.installerConnection = [[SUInstallerConnection alloc] initWithDelegate:self];
+        self.installerConnection = [[SUInstallerConnection alloc] initWithDelegate:self remote:NO];
     } else {
         self.installerConnection = [[SUXPCInstallerConnection alloc] initWithDelegate:self];
     }
@@ -474,6 +502,10 @@
                 return;
             }
         }
+    }
+    
+    if (_updateWillInstallHandler != NULL) {
+        _updateWillInstallHandler();
     }
     
     // Set up connection to the installer if one is not set up already

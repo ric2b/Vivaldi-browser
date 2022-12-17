@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -232,3 +232,29 @@ class GitTestWithMock(unittest.TestCase):
                 'd/untracked.txt': '?',
                 'a': '?',
             })
+
+    def test_uncommitted_changes(self):
+        git = self.make_git()
+        status_lines = [
+            ' M d/modified.txt',
+            ' D d/deleted.txt',
+            '?? d/untracked.txt',
+            '?? a',
+            'D  d/deleted.txt',
+            'M  d/modified-staged.txt',
+            'A  d/added-staged.txt',
+            'AM d/added-then-modified.txt',
+            'MM d/modified-then-modified.txt',
+        ]
+        git.run = lambda args: '\x00'.join(status_lines) + '\x00'
+        self.assertEqual(git.uncommitted_changes(), [
+            'd/modified.txt',
+            'd/deleted.txt',
+            'd/untracked.txt',
+            'a',
+            'd/deleted.txt',
+            'd/modified-staged.txt',
+            'd/added-staged.txt',
+            'd/added-then-modified.txt',
+            'd/modified-then-modified.txt',
+        ])

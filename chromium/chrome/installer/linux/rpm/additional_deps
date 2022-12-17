@@ -1,4 +1,4 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 #
@@ -44,6 +44,3 @@ libcurl.so.4()(64bit)
 
 # For OS integration.
 xdg-utils
-
-# For ANGLE with Wayland support - Fedora and openSUSE use different package names
-libwayland-client.so.0()(64bit)

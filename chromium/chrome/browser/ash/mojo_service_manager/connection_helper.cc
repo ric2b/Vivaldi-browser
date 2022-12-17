@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,12 +6,12 @@
 
 #include <memory>
 
-#include "chromeos/components/mojo_service_manager/connection.h"
+#include "chromeos/ash/components/mojo_service_manager/connection.h"
 #include "chromeos/features.h"
 
 #if !BUILDFLAG(USE_REAL_CHROMEOS_SERVICES)
 #include "base/system/sys_info.h"
-#include "chromeos/components/mojo_service_manager/fake_mojo_service_manager.h"
+#include "chromeos/ash/components/mojo_service_manager/fake_mojo_service_manager.h"
 #endif
 
 namespace {

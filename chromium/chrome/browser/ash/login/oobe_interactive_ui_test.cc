@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -479,11 +479,11 @@ class FakeRecommendAppsFetcher : public RecommendAppsFetcher {
       delegate_->OnLoadSuccess(base::Value(std::move(response_dict)));
       return;
     }
-    base::Value app(base::Value::Type::DICTIONARY);
-    app.SetKey("package_name", base::Value("test.package"));
-    base::Value app_list(base::Value::Type::LIST);
+    base::Value::Dict app;
+    app.Set("package_name", "test.package");
+    base::Value::List app_list;
     app_list.Append(std::move(app));
-    delegate_->OnLoadSuccess(std::move(app_list));
+    delegate_->OnLoadSuccess(base::Value(std::move(app_list)));
   }
 
   void Retry() override { NOTREACHED(); }
@@ -594,8 +594,8 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
              params_.hide_shelf_controls_in_tablet_mode,
              params_.is_oobe_remove_shutdown_button_enabled,
              params_.arc_state) = parameters;
-    std::vector<base::Feature> enabled_features;
-    std::vector<base::Feature> disabled_features;
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
     if (params_.hide_shelf_controls_in_tablet_mode) {
       enabled_features.push_back(features::kHideShelfControlsInTabletMode);
     } else {
@@ -919,10 +919,9 @@ class OobeZeroTouchInteractiveUITest : public OobeInteractiveUITest {
     AttestationClient::Get()
         ->GetTestInterface()
         ->AllowlistSignSimpleChallengeKey(
-            /*username=*/"", attestation::GetKeyNameForProfile(
-                                 chromeos::attestation::
-                                     PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE,
-                                 ""));
+            /*username=*/"",
+            attestation::GetKeyNameForProfile(
+                attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, ""));
     OobeInteractiveUITest::SetUpOnMainThread();
     policy_test_server_mixin_.ConfigureFakeStatisticsForZeroTouch(
         &fake_statistics_provider_);

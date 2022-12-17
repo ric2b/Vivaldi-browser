@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,7 @@
 #include "chrome/browser/enterprise/connectors/reporting/reporting_service_settings.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/profiles/reporting_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
@@ -67,8 +68,9 @@ bool IsClientValid(const std::string& dm_token,
 
 namespace enterprise_connectors {
 
-const base::Feature RealtimeReportingClient::kRealtimeReportingFeature{
-    "SafeBrowsingRealtimeReporting", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kSafeBrowsingRealtimeReporting,
+             "SafeBrowsingRealtimeReporting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 RealtimeReportingClient::RealtimeReportingClient(
     content::BrowserContext* context)
@@ -98,10 +100,18 @@ std::string RealtimeReportingClient::GetBaseName(const std::string& filename) {
 
 // static
 bool RealtimeReportingClient::ShouldInitRealtimeReportingClient() {
-  if (!base::FeatureList::IsEnabled(kRealtimeReportingFeature) &&
+  if (!base::FeatureList::IsEnabled(kSafeBrowsingRealtimeReporting) &&
       !base::FeatureList::IsEnabled(
           enterprise_connectors::kEnterpriseConnectorsEnabled)) {
     DVLOG(2) << "Safe browsing real-time reporting is not enabled.";
+    return false;
+  }
+
+  if (profiles::IsPublicSession() &&
+      !base::FeatureList::IsEnabled(
+          enterprise_connectors::kEnterpriseConnectorsEnabledOnMGS)) {
+    DVLOG(2) << "Safe browsing real-time reporting is not enabled in Managed "
+                "Guest Sessions.";
     return false;
   }
 
@@ -210,7 +220,12 @@ RealtimeReportingClient::InitBrowserReportingClient(
     profile = Profile::FromBrowserContext(context_);
   }
   DCHECK(profile);
-  client_id = reporting::GetUserClientId(profile).value_or("");
+
+  if (profiles::IsPublicSession()) {
+    client_id = reporting::GetMGSUserClientId().value_or("");
+  } else {
+    client_id = reporting::GetUserClientId(profile).value_or("");
+  }
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   Profile* main_profile = enterprise_connectors::GetMainProfileLacros();
   if (main_profile) {
@@ -220,6 +235,8 @@ RealtimeReportingClient::InitBrowserReportingClient(
 #else
   client_id = policy::BrowserDMTokenStorage::Get()->RetrieveClientId();
 #endif
+
+  DCHECK(!client_id.empty());
 
   // Make sure DeviceManagementService has been initialized.
   device_management_service->ScheduleInitialization(0);

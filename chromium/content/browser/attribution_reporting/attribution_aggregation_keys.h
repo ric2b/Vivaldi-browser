@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,8 @@
 #include <string>
 
 #include "base/containers/flat_map.h"
+#include "base/types/expected.h"
+#include "content/browser/attribution_reporting/attribution_reporting.mojom-forward.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -25,8 +27,9 @@ class CONTENT_EXPORT AttributionAggregationKeys {
   // Returns `absl::nullopt` if `keys` is invalid.
   static absl::optional<AttributionAggregationKeys> FromKeys(Keys keys);
 
-  static absl::optional<AttributionAggregationKeys> FromJSON(
-      const base::Value*);
+  static base::expected<AttributionAggregationKeys,
+                        attribution_reporting::mojom::SourceRegistrationError>
+  FromJSON(const base::Value*);
 
   // Deserializes `str`, if valid. Returns `absl::nullopt` if not.
   static absl::optional<AttributionAggregationKeys> Deserialize(

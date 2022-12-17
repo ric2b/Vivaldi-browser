@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1269,15 +1269,14 @@ TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
   // factor when swapping display. Test crbug.com/253690.
   UpdateDisplay("400x300*2,600x400/o");
   root_windows = Shell::GetAllRootWindows();
-  gfx::Point point;
-  Shell::GetAllRootWindows()[1]->GetHost()->GetRootTransform().TransformPoint(
-      &point);
+  gfx::Point point =
+      Shell::GetAllRootWindows()[1]->GetHost()->GetRootTransform().MapPoint(
+          gfx::Point());
   EXPECT_EQ(gfx::Point(15, 10), point);
 
   SwapPrimaryDisplay();
-  point.SetPoint(0, 0);
-  Shell::GetAllRootWindows()[1]->GetHost()->GetRootTransform().TransformPoint(
-      &point);
+  point = Shell::GetAllRootWindows()[1]->GetHost()->GetRootTransform().MapPoint(
+      gfx::Point());
   EXPECT_EQ(gfx::Point(15, 10), point);
 
   Shell::Get()->RemovePreTargetHandler(&event_handler);

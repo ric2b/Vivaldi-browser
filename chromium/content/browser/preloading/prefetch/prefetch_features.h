@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@ namespace content::features {
 // If enabled, then prefetch requests from speculation rules should use the code
 // in content/browser/preloading/prefetch/ instead of
 // chrome/browser/preloadingprefetch/prefetch_proxy/.
-extern CONTENT_EXPORT const base::Feature kPrefetchUseContentRefactor;
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrefetchUseContentRefactor);
 
 }  // namespace content::features
 

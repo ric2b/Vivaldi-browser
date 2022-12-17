@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,4 +44,25 @@ interface SimplePinger {
 interface Ponger {
   [Sync] Pong() => ();
   PongAsync();
+};
+
+interface SyncService {
+  [Sync] SyncCall() => ();
+};
+
+interface NoSync {
+  Method() => ();
+
+  BindNoSync(pending_associated_receiver<NoSync> no_sync);
+  BindOneSync(pending_associated_receiver<OneSync> one_sync);
+};
+
+interface OneSync {
+  Method() => ();
+
+  [Sync]
+  SyncMethod() => ();
+
+  BindNoSync(pending_associated_receiver<NoSync> no_sync);
+  BindOneSync(pending_associated_receiver<OneSync> one_sync);
 };

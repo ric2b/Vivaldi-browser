@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,7 +44,7 @@ const std::u16string kDeniedTitle = u"Denied";
 
 const base::FilePath kEmptyDataPath = kTestDataPath.AppendASCII("empty.pb");
 
-const std::vector<base::Feature> kFeatures = {
+const std::vector<base::test::FeatureRef> kFeatures = {
     media::kMediaEngagementBypassAutoplayPolicies,
     media::kPreloadMediaEngagementData};
 
@@ -172,7 +172,7 @@ class MediaEngagementAutoplayBrowserTest
     cmd.AppendArgPath(input_path);
     cmd.AppendArgPath(output_path);
     base::Process process = base::LaunchProcess(cmd, base::LaunchOptions());
-    EXPECT_TRUE(process.WaitForExit(0));
+    EXPECT_TRUE(process.WaitForExit(nullptr));
 
     // Load the preloaded list.
     EXPECT_TRUE(

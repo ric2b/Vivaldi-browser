@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -35,8 +36,10 @@ ExtractIOTask::ExtractIOTask(
     std::string password,
     storage::FileSystemURL parent_folder,
     Profile* profile,
-    scoped_refptr<storage::FileSystemContext> file_system_context)
-    : source_urls_(std::move(source_urls)),
+    scoped_refptr<storage::FileSystemContext> file_system_context,
+    bool show_notification)
+    : IOTask(show_notification),
+      source_urls_(std::move(source_urls)),
       password_(std::move(password)),
       parent_folder_(std::move(parent_folder)),
       profile_(profile),
@@ -90,7 +93,7 @@ void ExtractIOTask::FinishedExtraction(base::FilePath directory, bool success) {
       base::PlatformThread::Sleep(base::Microseconds(1));
     }
   }
-  DCHECK_GT(extractCount_, 0);
+  DCHECK_GT(extractCount_, 0u);
   if (--extractCount_ == 0) {
     progress_.state = success ? State::kSuccess : State::kError;
     RecordUmaExtractStatus(progress_.state == State::kSuccess
@@ -169,7 +172,7 @@ void ExtractIOTask::ExtractArchive(
     base::FileErrorOr<storage::FileSystemURL> destination_result) {
   DCHECK(index < progress_.sources.size());
   const base::FilePath source_file = progress_.sources[index].url.path();
-  if (destination_result.is_error()) {
+  if (!destination_result.has_value()) {
     ZipExtractCallback(base::FilePath(), false);
   } else {
     const base::FilePath destination_directory =
@@ -229,7 +232,7 @@ void ExtractIOTask::GotFreeDiskSpace(int64_t free_space) {
 }
 
 void ExtractIOTask::ZipInfoCallback(unzip::mojom::InfoPtr info) {
-  DCHECK_GT(extractCount_, 0);
+  DCHECK_GT(extractCount_, 0u);
   if (info->size_is_valid) {
     progress_.total_bytes += info->size;
   }

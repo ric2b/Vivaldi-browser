@@ -1,38 +1,39 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
 
-#include <memory>
+#import <memory>
 
-#include "base/bind.h"
-#include "base/memory/ptr_util.h"
+#import "base/bind.h"
+#import "base/memory/ptr_util.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_command_line.h"
-#include "components/pref_registry/pref_registry_syncable.h"
+#import "base/test/scoped_feature_list.h"
+#import "components/pref_registry/pref_registry_syncable.h"
 #import "components/signin/public/base/signin_metrics.h"
-#include "components/sync_preferences/pref_service_mock_factory.h"
-#include "components/sync_preferences/pref_service_syncable.h"
-#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#include "ios/chrome/browser/main/test_browser.h"
+#import "components/sync_preferences/pref_service_mock_factory.h"
+#import "components/sync_preferences/pref_service_syncable.h"
+#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/main/test_browser.h"
+#import "ios/chrome/browser/policy/cloud/user_policy_constants.h"
 #import "ios/chrome/browser/policy/cloud/user_policy_switch.h"
-#include "ios/chrome/browser/prefs/browser_prefs.h"
-#include "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/prefs/browser_prefs.h"
+#import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service_fake.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow_performer.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
-#include "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
-#include "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
-#include "ios/web/public/test/web_task_environment.h"
+#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
+#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
+#import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/gtest_support.h"
 #import "third_party/ocmock/ocmock_extensions.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -64,7 +65,7 @@ class AuthenticationFlowTest : public PlatformTest {
     ChromeAccountManagerService* account_manager_service =
         ChromeAccountManagerServiceFactory::GetForBrowserState(
             browser_state_.get());
-    NSArray<ChromeIdentity*>* identities =
+    NSArray<id<SystemIdentity>>* identities =
         account_manager_service->GetAllIdentities();
     identity1_ = identities[0];
     identity2_ = identities[1];
@@ -98,7 +99,7 @@ class AuthenticationFlowTest : public PlatformTest {
   // Creates a new AuthenticationFlow with default values for fields that are
   // not directly useful.
   void CreateAuthenticationFlow(PostSignInAction postSignInAction,
-                                ChromeIdentity* identity) {
+                                id<SystemIdentity> identity) {
     view_controller_ = [OCMockObject niceMockForClass:[UIViewController class]];
     authentication_flow_ =
         [[AuthenticationFlow alloc] initWithBrowser:browser_.get()
@@ -122,16 +123,11 @@ class AuthenticationFlowTest : public PlatformTest {
     [performer_ verify];
   }
 
-  void SetSigninSuccessExpectations(ChromeIdentity* identity,
+  void SetSigninSuccessExpectations(id<SystemIdentity> identity,
                                     NSString* hosted_domain) {
-    [[[performer_ expect] andDo:^(NSInvocation* invocation) {
-      signin_ui::CompletionCallback callback;
-      [invocation getArgument:&callback atIndex:5];
-      callback(YES);
-    }] signInIdentity:identity
-        withHostedDomain:hosted_domain
-          toBrowserState:browser_state_.get()
-              completion:[OCMArg isNotNil]];
+    [[performer_ expect] signInIdentity:identity
+                       withHostedDomain:hosted_domain
+                         toBrowserState:browser_state_.get()];
   }
 
   web::WebTaskEnvironment task_environment_;
@@ -139,9 +135,9 @@ class AuthenticationFlowTest : public PlatformTest {
   AuthenticationFlow* authentication_flow_ = nullptr;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   std::unique_ptr<Browser> browser_;
-  ChromeIdentity* identity1_ = nullptr;
-  ChromeIdentity* identity2_ = nullptr;
-  ChromeIdentity* managed_identity_ = nullptr;
+  id<SystemIdentity> identity1_ = nil;
+  id<SystemIdentity> identity2_ = nil;
+  id<SystemIdentity> managed_identity_ = nil;
   OCMockObject* performer_ = nil;
   signin_ui::CompletionCallback sign_in_completion_;
   UIViewController* view_controller_;
@@ -199,7 +195,7 @@ TEST_F(AuthenticationFlowTest, TestAlreadySignedIn) {
   [[performer_ expect] commitSyncForBrowserState:browser_state_.get()];
 
   AuthenticationServiceFactory::GetForBrowserState(browser_state_.get())
-      ->SignIn(identity1_, nil);
+      ->SignIn(identity1_);
   [authentication_flow_ startSignInWithCompletion:sign_in_completion_];
 
   CheckSignInCompletion(/*expected_signed_in=*/true);
@@ -245,7 +241,7 @@ TEST_F(AuthenticationFlowTest, TestSignOutUserChoice) {
   [[performer_ expect] commitSyncForBrowserState:browser_state_.get()];
 
   AuthenticationServiceFactory::GetForBrowserState(browser_state_.get())
-      ->SignIn(identity2_, nil);
+      ->SignIn(identity2_);
   [authentication_flow_ startSignInWithCompletion:sign_in_completion_];
 
   CheckSignInCompletion(/*expected_signed_in=*/true);
@@ -403,9 +399,8 @@ TEST_F(AuthenticationFlowTest, TestSyncAfterSigninAndSync) {
 // enabled and the user policy feature is enabled for the browser.
 TEST_F(AuthenticationFlowTest,
        TestRegisterAndFetchUserPolicyWithManagedAccountWhenEligible) {
-  base::test::ScopedCommandLine command_line;
-
-  policy::EnableUserPolicy();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({policy::kUserPolicy}, {});
 
   CreateAuthenticationFlow(POST_SIGNIN_ACTION_COMMIT_SYNC, managed_identity_);
 
@@ -454,7 +449,8 @@ TEST_F(AuthenticationFlowTest,
 // sync.
 TEST_F(AuthenticationFlowTest,
        TestSkipFetchUserPolicyWithManagedAccountWhenRegistrationFailed) {
-  policy::EnableUserPolicy();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({policy::kUserPolicy}, {});
 
   CreateAuthenticationFlow(POST_SIGNIN_ACTION_COMMIT_SYNC, managed_identity_);
 
@@ -500,9 +496,8 @@ TEST_F(AuthenticationFlowTest,
 // authentication flow. The user should sill be able to sign-in and
 // sync.
 TEST_F(AuthenticationFlowTest, TestCanSyncWithUserPolicyFetchFailure) {
-  base::test::ScopedCommandLine command_line;
-
-  policy::EnableUserPolicy();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({policy::kUserPolicy}, {});
 
   CreateAuthenticationFlow(POST_SIGNIN_ACTION_COMMIT_SYNC, managed_identity_);
 

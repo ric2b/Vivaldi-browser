@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,8 @@
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 #include "chromeos/ash/services/assistant/public/cpp/assistant_browser_delegate.h"
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
-#include "chromeos/services/libassistant/libassistant_service.h"
-#include "chromeos/services/libassistant/public/mojom/service.mojom-forward.h"
+#include "chromeos/ash/services/libassistant/libassistant_service.h"
+#include "chromeos/ash/services/libassistant/public/mojom/service.mojom-forward.h"
 #endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 
 namespace ash::assistant {
@@ -27,17 +27,15 @@ LibassistantServiceHostImpl::LibassistantServiceHostImpl() {
 LibassistantServiceHostImpl::~LibassistantServiceHostImpl() = default;
 
 void LibassistantServiceHostImpl::Launch(
-    mojo::PendingReceiver<chromeos::libassistant::mojom::LibassistantService>
-        receiver) {
+    mojo::PendingReceiver<libassistant::mojom::LibassistantService> receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (assistant::features::IsLibAssistantSandboxEnabled()) {
     AssistantBrowserDelegate::Get()->RequestLibassistantService(
         std::move(receiver));
   } else {
     DCHECK(!libassistant_service_);
-    libassistant_service_ =
-        std::make_unique<chromeos::libassistant::LibassistantService>(
-            std::move(receiver));
+    libassistant_service_ = std::make_unique<libassistant::LibassistantService>(
+        std::move(receiver));
   }
 }
 
@@ -52,8 +50,7 @@ LibassistantServiceHostImpl::LibassistantServiceHostImpl() = default;
 LibassistantServiceHostImpl::~LibassistantServiceHostImpl() = default;
 
 void LibassistantServiceHostImpl::Launch(
-    mojo::PendingReceiver<chromeos::libassistant::mojom::LibassistantService>
-        receiver) {}
+    mojo::PendingReceiver<libassistant::mojom::LibassistantService> receiver) {}
 
 void LibassistantServiceHostImpl::Stop() {}
 

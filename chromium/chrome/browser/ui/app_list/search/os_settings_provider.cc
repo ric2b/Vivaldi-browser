@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,37 +11,31 @@
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/search/common/icon_constants.h"
 #include "chrome/browser/ui/app_list/search/search_tags_util.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/browser/ui/webui/settings/ash/hierarchy.h"
+#include "chrome/browser/ui/webui/settings/ash/os_settings_manager.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search_handler.h"
-#include "chrome/browser/ui/webui/settings/chromeos/hierarchy.h"
-#include "chrome/browser/ui/webui/settings/chromeos/os_settings_manager.h"
-#include "chrome/browser/ui/webui/settings/chromeos/os_settings_manager_factory.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "ui/gfx/image/image_skia.h"
-#include "url/gurl.h"
 
 namespace app_list {
 namespace {
 
-using SettingsResultPtr = chromeos::settings::mojom::SearchResultPtr;
-using SettingsResultType = chromeos::settings::mojom::SearchResultType;
+using SettingsResultPtr = ::ash::settings::mojom::SearchResultPtr;
+using SettingsResultType = ::ash::settings::mojom::SearchResultType;
 using Setting = chromeos::settings::mojom::Setting;
 using Subpage = chromeos::settings::mojom::Subpage;
 using Section = chromeos::settings::mojom::Section;
 
 constexpr char kOsSettingsResultPrefix[] = "os-settings://";
-constexpr double kScoreEps = 1.0e-5;
 
 constexpr size_t kNumRequestedResults = 5u;
 constexpr size_t kMaxShownResults = 2u;
@@ -67,7 +61,7 @@ void LogError(Error error) {
 
 bool ContainsBetterAncestor(Subpage subpage,
                             const double score,
-                            const chromeos::settings::Hierarchy* hierarchy,
+                            const ash::settings::Hierarchy* hierarchy,
                             const base::flat_map<Subpage, double>& subpages,
                             const base::flat_map<Section, double>& sections) {
   // Returns whether or not a higher-scoring ancestor subpage or section of
@@ -90,7 +84,7 @@ bool ContainsBetterAncestor(Subpage subpage,
 
 bool ContainsBetterAncestor(Setting setting,
                             const double score,
-                            const chromeos::settings::Hierarchy* hierarchy,
+                            const ash::settings::Hierarchy* hierarchy,
                             const base::flat_map<Subpage, double>& subpages,
                             const base::flat_map<Section, double>& sections) {
   // Returns whether or not a higher-scoring ancestor subpage or section of
@@ -115,12 +109,11 @@ bool ContainsBetterAncestor(Setting setting,
 
 }  // namespace
 
-OsSettingsResult::OsSettingsResult(
-    Profile* profile,
-    const chromeos::settings::mojom::SearchResultPtr& result,
-    const double relevance_score,
-    const gfx::ImageSkia& icon,
-    const std::u16string& query)
+OsSettingsResult::OsSettingsResult(Profile* profile,
+                                   const SettingsResultPtr& result,
+                                   const double relevance_score,
+                                   const gfx::ImageSkia& icon,
+                                   const std::u16string& query)
     : profile_(profile), url_path_(result->url_path_with_parameters) {
   set_id(kOsSettingsResultPrefix + url_path_);
   SetCategory(Category::kSettings);
@@ -167,11 +160,10 @@ void OsSettingsResult::Open(int event_flags) {
                                                                url_path_);
 }
 
-OsSettingsProvider::OsSettingsProvider(Profile* profile)
-    : profile_(profile),
-      settings_manager_(
-          chromeos::settings::OsSettingsManagerFactory::GetForProfile(
-              profile)) {
+OsSettingsProvider::OsSettingsProvider(
+    Profile* profile,
+    ash::settings::OsSettingsManager* settings_manager)
+    : profile_(profile), settings_manager_(settings_manager) {
   DCHECK(profile_);
 
   if (settings_manager_) {
@@ -207,22 +199,6 @@ OsSettingsProvider::OsSettingsProvider(Profile* profile)
       /*allow_placeholder_icon=*/false,
       base::BindOnce(&OsSettingsProvider::OnLoadIcon,
                      weak_factory_.GetWeakPtr()));
-
-  // Set parameters from Finch. Reasonable defaults are set in the header.
-  accept_alternate_matches_ = base::GetFieldTrialParamByFeatureAsBool(
-      app_list_features::kLauncherSettingsSearch, "accept_alternate_matches",
-      accept_alternate_matches_);
-  min_query_length_ = base::GetFieldTrialParamByFeatureAsInt(
-      app_list_features::kLauncherSettingsSearch, "min_query_length",
-      min_query_length_);
-  min_query_length_for_alternates_ = base::GetFieldTrialParamByFeatureAsInt(
-      app_list_features::kLauncherSettingsSearch,
-      "min_query_length_for_alternates", min_query_length_for_alternates_);
-  min_score_ = base::GetFieldTrialParamByFeatureAsDouble(
-      app_list_features::kLauncherSettingsSearch, "min_score", min_score_);
-  min_score_for_alternates_ = base::GetFieldTrialParamByFeatureAsDouble(
-      app_list_features::kLauncherSettingsSearch, "min_score_for_alternates",
-      min_score_for_alternates_);
 }
 
 OsSettingsProvider::~OsSettingsProvider() = default;
@@ -257,8 +233,7 @@ void OsSettingsProvider::Start(const std::u16string& query) {
   weak_factory_.InvalidateWeakPtrs();
   search_handler_->Search(
       query, kNumRequestedResults,
-      chromeos::settings::mojom::ParentResultBehavior::
-          kDoNotIncludeParentResults,
+      ash::settings::mojom::ParentResultBehavior::kDoNotIncludeParentResults,
       base::BindOnce(&OsSettingsProvider::OnSearchReturned,
                      weak_factory_.GetWeakPtr(), query, start_time));
 }
@@ -270,31 +245,14 @@ void OsSettingsProvider::ViewClosing() {
 void OsSettingsProvider::OnSearchReturned(
     const std::u16string& query,
     const base::TimeTicks& start_time,
-    std::vector<chromeos::settings::mojom::SearchResultPtr> sorted_results) {
+    std::vector<SettingsResultPtr> sorted_results) {
   DCHECK_LE(sorted_results.size(), kNumRequestedResults);
 
   SearchProvider::Results search_results;
 
-  // Categorical search doesn't pin settings to the top of the results, but old
-  // search does. Handle both cases.
-  //
-  // TODO(crbug.com/1199206): This can be cleaned up once categorical search is
-  // launched.
-  if (app_list_features::IsCategoricalSearchEnabled()) {
-    for (const auto& result :
-         FilterResults(query, sorted_results, hierarchy_)) {
-      search_results.emplace_back(std::make_unique<OsSettingsResult>(
-          profile_, result, result->relevance_score, icon_, last_query_));
-    }
-  } else {
-    int i = 0;
-    for (const auto& result :
-         FilterResults(query, sorted_results, hierarchy_)) {
-      const double score = 1.0 - i * kScoreEps;
-      search_results.emplace_back(std::make_unique<OsSettingsResult>(
-          profile_, result, score, icon_, last_query_));
-      ++i;
-    }
+  for (const auto& result : FilterResults(query, sorted_results, hierarchy_)) {
+    search_results.emplace_back(std::make_unique<OsSettingsResult>(
+        profile_, result, result->relevance_score, icon_, last_query_));
   }
 
   UMA_HISTOGRAM_TIMES("Apps.AppList.OsSettingsProvider.QueryTime",
@@ -335,11 +293,10 @@ void OsSettingsProvider::OnSearchResultsChanged() {
   Start(last_query_);
 }
 
-std::vector<chromeos::settings::mojom::SearchResultPtr>
-OsSettingsProvider::FilterResults(
+std::vector<SettingsResultPtr> OsSettingsProvider::FilterResults(
     const std::u16string& query,
-    const std::vector<chromeos::settings::mojom::SearchResultPtr>& results,
-    const chromeos::settings::Hierarchy* hierarchy) {
+    const std::vector<SettingsResultPtr>& results,
+    const ash::settings::Hierarchy* hierarchy) {
   base::flat_set<std::string> seen_urls;
   base::flat_map<Subpage, double> seen_subpages;
   base::flat_map<Section, double> seen_sections;

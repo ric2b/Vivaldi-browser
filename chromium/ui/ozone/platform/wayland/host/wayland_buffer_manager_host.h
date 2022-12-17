@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,6 +59,9 @@ class WaylandBufferManagerHost : public ozone::mojom::WaylandBufferManagerHost {
   // only when the GPU channel, which uses the mojo pipe to this interface, is
   // destroyed.
   void OnChannelDestroyed();
+
+  // Called by WaylandFrameManager if overlay data is invalid.
+  void OnCommitOverlayError(const std::string& message);
 
   // Returns supported buffer formats either from zwp_linux_dmabuf or wl_drm.
   wl::BufferFormatsWithModifiersMap GetSupportedBufferFormats() const;
@@ -154,7 +157,6 @@ class WaylandBufferManagerHost : public ozone::mojom::WaylandBufferManagerHost {
                            uint32_t buffer_id);
   bool ValidateDataFromGpu(const gfx::Size& size, uint32_t buffer_id);
   bool ValidateBufferExistence(uint32_t buffer_id);
-  bool ValidateOverlayData(const wl::WaylandOverlayConfig& overlay_data);
 
   // Terminates the GPU process on invalid data received
   void TerminateGpuProcess();

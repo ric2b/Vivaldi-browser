@@ -1,10 +1,12 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "device/vr/openxr/openxr_extension_helper.h"
 
 #include <tuple>
+
+#include "base/ranges/algorithm.h"
 
 namespace device {
 
@@ -27,11 +29,11 @@ OpenXrExtensionEnumeration::~OpenXrExtensionEnumeration() = default;
 
 bool OpenXrExtensionEnumeration::ExtensionSupported(
     const char* extension_name) const {
-  return std::find_if(
-             extension_properties_.begin(), extension_properties_.end(),
-             [&extension_name](const XrExtensionProperties& properties) {
-               return strcmp(properties.extensionName, extension_name) == 0;
-             }) != extension_properties_.end();
+  return base::ranges::any_of(
+      extension_properties_,
+      [&extension_name](const XrExtensionProperties& properties) {
+        return strcmp(properties.extensionName, extension_name) == 0;
+      });
 }
 
 OpenXrExtensionHelper::~OpenXrExtensionHelper() = default;

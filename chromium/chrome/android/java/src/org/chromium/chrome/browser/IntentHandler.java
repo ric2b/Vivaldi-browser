@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -155,6 +155,12 @@ public class IntentHandler {
             "org.chromium.chrome.browser.activity_referrer";
 
     /**
+     * Intent extra used to deliver the package name of original #getCallingActivity if present.
+     */
+    public static final String EXTRA_CALLING_ACTIVITY_PACKAGE =
+            "org.chromium.chrome.browser.calling_activity_package";
+
+    /**
      * A referrer id used for Chrome to Chrome referrer passing.
      */
     public static final String EXTRA_REFERRER_ID = "org.chromium.chrome.browser.referrer_id";
@@ -180,6 +186,10 @@ public class IntentHandler {
      */
     public static final String EXTRA_OPEN_ADDITIONAL_URLS_IN_TAB_GROUP =
             "org.chromium.chrome.browser.open_additional_urls_in_tab_group";
+
+    /** Extra specifying to show regular overview mode. */
+    public static final String EXTRA_OPEN_REGULAR_OVERVIEW_MODE =
+            "org.chromium.chrome.browser.open_regular_overview_mode";
 
     /**
      * Key to associate a timestamp with an intent.
@@ -872,6 +882,7 @@ public class IntentHandler {
 
             if (!HttpUtil.isAllowedHeader(key, value)) {
                 Log.w(TAG, "Ignoring forbidden header " + key + " in EXTRA_HEADERS.");
+                continue;
             }
 
             // Strip the custom header that can only be added by ourselves.

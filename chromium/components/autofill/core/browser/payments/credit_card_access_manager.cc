@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,7 @@
 #include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
+#include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/autofill/core/browser/payments/webauthn_callback_types.h"
@@ -249,9 +250,14 @@ void CreditCardAccessManager::FetchCreditCard(
     return;
   }
 
-  if (card->record_type() == CreditCard::VIRTUAL_CARD) {
+  // Log the server card unmasking attempt, and differentiate based on server
+  // card or virtual card.
+  CreditCard::RecordType record_type = card->record_type();
+  if (ShouldLogServerCardUnmaskAttemptMetrics(record_type)) {
     AutofillMetrics::LogServerCardUnmaskAttempt(
-        AutofillClient::PaymentsRpcCardType::kVirtualCard);
+        record_type == CreditCard::VIRTUAL_CARD
+            ? AutofillClient::PaymentsRpcCardType::kVirtualCard
+            : AutofillClient::PaymentsRpcCardType::kServerCard);
   }
 
   // If card has been previously unmasked, use cached data.
@@ -373,7 +379,9 @@ void CreditCardAccessManager::GetAuthenticationTypeForVirtualCard(
   if (virtual_card_unmask_response_details_.card_unmask_challenge_options
           .empty()) {
     accessor_->OnCreditCardFetched(CreditCardFetchResult::kTransientError);
-    client_->ShowVirtualCardErrorDialog(/*is_permanent_error=*/true);
+    client_->ShowVirtualCardErrorDialog(
+        AutofillErrorDialogContext::WithPermanentOrTemporaryError(
+            /*is_permanent_error=*/true));
     Reset();
     AutofillMetrics::LogServerCardUnmaskResult(
         AutofillMetrics::ServerCardUnmaskResult::
@@ -502,14 +510,14 @@ void CreditCardAccessManager::Authenticate() {
       std::vector<CardUnmaskChallengeOption> options =
           virtual_card_unmask_response_details_.card_unmask_challenge_options;
       auto card_unmask_challenge_options_it =
-          std::find_if(options.begin(), options.end(),
-                       [&](const CardUnmaskChallengeOption& option) {
-                         return option.id == selected_challenge_option_id_;
-                       });
+          base::ranges::find(options, selected_challenge_option_id_,
+                             &CardUnmaskChallengeOption::id);
       if (card_unmask_challenge_options_it == options.end()) {
         NOTREACHED();
         accessor_->OnCreditCardFetched(CreditCardFetchResult::kTransientError);
-        client_->ShowVirtualCardErrorDialog(/*is_permanent_error=*/false);
+        client_->ShowVirtualCardErrorDialog(
+            AutofillErrorDialogContext::WithPermanentOrTemporaryError(
+                /*is_permanent_error=*/false));
         if (card_->record_type() == CreditCard::VIRTUAL_CARD) {
           AutofillMetrics::LogServerCardUnmaskResult(
               AutofillMetrics::ServerCardUnmaskResult::kUnexpectedError,
@@ -666,8 +674,10 @@ void CreditCardAccessManager::OnFIDOAuthenticationComplete(
     // authentication afterwards. Instead reset all states, notify accessor and
     // invoke the error dialog.
     client_->ShowVirtualCardErrorDialog(
-        response.failure_type ==
-        payments::FullCardRequest::VIRTUAL_CARD_RETRIEVAL_PERMANENT_FAILURE);
+        AutofillErrorDialogContext::WithPermanentOrTemporaryError(
+            /*is_permanent_error=*/response.failure_type ==
+            payments::FullCardRequest::
+                VIRTUAL_CARD_RETRIEVAL_PERMANENT_FAILURE));
     accessor_->OnCreditCardFetched(result);
 
     if (card_->record_type() == CreditCard::VIRTUAL_CARD) {
@@ -969,9 +979,9 @@ void CreditCardAccessManager::FetchVirtualCard() {
                      weak_ptr_factory_.GetWeakPtr()));
 
   // Send a risk-based unmasking request to server to attempt to fetch the card.
-  absl::optional<GURL> last_committed_url_origin =
-      client_->GetLastCommittedURL().DeprecatedGetOriginAsURL();
-  if (!last_committed_url_origin.has_value()) {
+  absl::optional<GURL> last_committed_primary_main_frame_origin =
+      client_->GetLastCommittedPrimaryMainFrameURL().DeprecatedGetOriginAsURL();
+  if (!last_committed_primary_main_frame_origin.has_value()) {
     accessor_->OnCreditCardFetched(CreditCardFetchResult::kTransientError);
     AutofillMetrics::LogServerCardUnmaskResult(
         AutofillMetrics::ServerCardUnmaskResult::kUnexpectedError,
@@ -981,8 +991,9 @@ void CreditCardAccessManager::FetchVirtualCard() {
     return;
   }
 
-  virtual_card_unmask_request_details_.last_committed_url_origin =
-      last_committed_url_origin;
+  virtual_card_unmask_request_details_
+      .last_committed_primary_main_frame_origin =
+      last_committed_primary_main_frame_origin;
   virtual_card_unmask_request_details_.card = *card_;
   virtual_card_unmask_request_details_.billing_customer_number =
       payments::GetBillingCustomerId(personal_data_manager_);
@@ -1069,9 +1080,23 @@ void CreditCardAccessManager::OnVirtualCardUnmaskResponseReceived(
       unmask_result, AutofillClient::PaymentsRpcCardType::kVirtualCard,
       AutofillMetrics::VirtualCardUnmaskFlowType::kUnspecified);
 
-  client_->ShowVirtualCardErrorDialog(
-      result ==
-      AutofillClient::PaymentsRpcResult::kVcnRetrievalPermanentFailure);
+  if (response_details.autofill_error_dialog_context) {
+    DCHECK(
+        response_details.autofill_error_dialog_context->server_returned_title &&
+        response_details.autofill_error_dialog_context
+            ->server_returned_description);
+
+    // Error fields returned in the server response are more detailed than the
+    // virtual card temporary/permanent error messages stored on the client, so
+    // prefer the server-returned fields if they exist.
+    client_->ShowVirtualCardErrorDialog(
+        *response_details.autofill_error_dialog_context);
+  } else {
+    client_->ShowVirtualCardErrorDialog(
+        AutofillErrorDialogContext::WithPermanentOrTemporaryError(
+            /*is_permanent_error=*/result ==
+            AutofillClient::PaymentsRpcResult::kVcnRetrievalPermanentFailure));
+  }
   Reset();
 }
 
@@ -1184,6 +1209,27 @@ void CreditCardAccessManager::ShowUnmaskAuthenticatorSelectionDialog() {
           weak_ptr_factory_.GetWeakPtr()),
       base::BindOnce(&CreditCardAccessManager::OnVirtualCardUnmaskCancelled,
                      weak_ptr_factory_.GetWeakPtr()));
+}
+
+bool CreditCardAccessManager::ShouldLogServerCardUnmaskAttemptMetrics(
+    CreditCard::RecordType record_type) {
+  // We always want to log virtual card unmask attempts.
+  if (record_type == CreditCard::VIRTUAL_CARD)
+    return true;
+
+  // We only want to log masked server card or full server card unmask
+  // attempts if the `kAutofillEnableRemadeDownstreamMetrics` feature flag is
+  // enabled, due to this being a histogram refactoring that we want to roll out
+  // slowly to ensure that it works properly.
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableRemadeDownstreamMetrics)) {
+    return record_type == CreditCard::MASKED_SERVER_CARD ||
+           record_type == CreditCard::FULL_SERVER_CARD;
+  }
+
+  // No conditions were met to log a server card unmasking attempt, so return
+  // false.
+  return false;
 }
 
 }  // namespace autofill

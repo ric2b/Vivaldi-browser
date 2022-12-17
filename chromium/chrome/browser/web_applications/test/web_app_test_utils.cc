@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -63,6 +63,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
@@ -193,7 +194,9 @@ blink::ParsedPermissionsPolicy CreateRandomPermissionsPolicy(
 
       const auto origin =
           url::Origin::Create(GURL("https://app-" + suffix_str + ".com/"));
-      permissions_policy[i].allowed_origins.push_back(origin);
+      permissions_policy[i].allowed_origins.emplace_back(
+          origin,
+          /*has_subdomain_wildcard=*/false);
     }
   }
   return permissions_policy;
@@ -349,6 +352,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
     app->AddSource(WebAppManagement::kSystem);
     management_types.push_back(WebAppManagement::kSystem);
   }
+
   if (random.next_bool()) {
     app->AddSource(WebAppManagement::kPolicy);
     management_types.push_back(WebAppManagement::kPolicy);
@@ -368,6 +372,14 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   if (random.next_bool()) {
     app->AddSource(WebAppManagement::kSubApp);
     management_types.push_back(WebAppManagement::kSubApp);
+  }
+  if (random.next_bool()) {
+    app->AddSource(WebAppManagement::kKiosk);
+    management_types.push_back(WebAppManagement::kKiosk);
+  }
+  if (random.next_bool()) {
+    app->AddSource(WebAppManagement::kCommandLine);
+    management_types.push_back(WebAppManagement::kCommandLine);
   }
 
   // Must always be at least one source.
@@ -603,17 +615,18 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   }
 
   if (random.next_bool()) {
-    using IsolationDataContent = decltype(WebApp::IsolationData::content);
+    using IsolationDataContent = decltype(IsolationData::content);
     constexpr size_t kNumContentTypes =
         absl::variant_size<IsolationDataContent>::value;
+    auto path = base::FilePath::FromUTF8Unsafe(seed_str);
     IsolationDataContent content_types[] = {
-        WebApp::IsolationData::InstalledBundle{.path = seed_str},
-        WebApp::IsolationData::DevModeBundle{.path = seed_str},
-        WebApp::IsolationData::DevModeProxy{.proxy_url = seed_str},
+        IsolationData::InstalledBundle{.path = path},
+        IsolationData::DevModeBundle{.path = path},
+        IsolationData::DevModeProxy{.proxy_url = seed_str},
     };
     static_assert(std::size(content_types) == kNumContentTypes);
 
-    WebApp::IsolationData isolation_data(
+    IsolationData isolation_data(
         content_types[random.next_uint(kNumContentTypes)]);
     app->SetIsolationData(isolation_data);
   }

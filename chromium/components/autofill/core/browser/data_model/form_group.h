@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,6 +34,10 @@ class FormGroup {
   // data. This method is additive on |non_empty_types|.
   virtual void GetNonEmptyTypes(const std::string& app_locale,
                                 ServerFieldTypeSet* non_empty_types) const;
+
+  // Returns a set of server field types for which this FormGroup has non-empty
+  // raw data. This method is additive on `non_empty_types`.
+  virtual void GetNonEmptyRawTypes(ServerFieldTypeSet* non_empty_types) const;
 
   // Returns the string associated with |type|, without canonicalizing the
   // returned value. For user-visible strings, use GetInfo() instead.

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,7 +62,7 @@ enum DriveOfflineReason {NOT_READY, NO_NETWORK, NO_SERVICE};
 
 // Additional data about mount, for example, that the filesystem is not
 // supported.
-enum MountCondition { unknown, unsupported };
+enum MountCondition { unknown, unsupported, in_progress };
 
 // Additional information of the context the volume was mounted.
 enum MountContext { user, auto };
@@ -92,7 +92,8 @@ enum MountCompletedStatus {
   error_invalid_archive,
   error_need_password,
   error_in_progress,
-  error_cancelled
+  error_cancelled,
+  error_busy
 };
 
 // Filesystem to format to.
@@ -291,7 +292,8 @@ enum EntryPropertyName {
   canPin,
   isMachineRoot,
   isExternalMedia,
-  isArbitrarySyncFolder
+  isArbitrarySyncFolder,
+  syncStatus
 };
 
 // Source of the volume data.
@@ -351,6 +353,7 @@ enum SharesheetLaunchSource {
 
 enum IOTaskState {
   queued,
+  scanning,
   in_progress,
   success,
   error,
@@ -365,6 +368,7 @@ enum IOTaskType {
   extract,
   move,
   restore,
+  restore_to_destination,
   trash,
   zip
 };
@@ -388,10 +392,30 @@ enum UserType {
 };
 
 enum DlpLevel {
-  // User cannot perform an action.
+  // Report every action to the admin, doesn't affect the user.
+  report,
+  // Warn the user on every action.
+  warn,
+  // Block the user on every action.
   block,
   // No restriction.
   allow
+};
+
+enum SyncStatus {
+  // No sync status available for file.
+  not_found,
+  // File is currently being synced.
+  in_progress,
+  // There was an error syncing the file.
+  error
+};
+
+// Describes how admin policy affects the default task in a ResultingTasks.
+// See chrome/browser/ash/file_manager/file_tasks.h for details.
+enum PolicyDefaultHandlerStatus {
+  default_handler_assigned_by_policy,
+  incorrect_assignment
 };
 
 // These three fields together uniquely identify a task.
@@ -426,6 +450,15 @@ dictionary FileTask {
   // types: ["*/*"]). Partial wild card (e.g. types: ["image/*"]) is not
   // generic file handler.
   boolean isGenericFileHandler;
+};
+
+// Represents a set of tasks capable of handling file entries.
+// See chrome/browser/ash/file_manager/file_tasks.h for details.
+dictionary ResultingTasks {
+  FileTask[] tasks;
+
+  // Note that this field is non-null if and only if at least one entry has been affected by policy.
+  PolicyDefaultHandlerStatus? policyDefaultHandlerStatus;
 };
 
 // Additional entry properties.
@@ -529,6 +562,9 @@ dictionary EntryProperties {
 
   // True if the entry is an arbitrary sync folder.
   boolean? isArbitrarySyncFolder;
+
+  // Sync status for files tracked by different cloud filesystem providers.
+  SyncStatus? syncStatus;
 };
 
 // Information about total and remaining size on the mount point.
@@ -692,6 +728,9 @@ dictionary FileTransferStatus {
   // Total number of jobs.
   long numTotalJobs;
 
+  // Indicates whether a notification should be shown for the transfer update.
+  boolean showNotification;
+
   // If true, hide when a job is completed when there are zero jobs in
   // progress. Otherwise, hide when one job is in progress.
   boolean hideWhenZeroJobs;
@@ -787,6 +826,7 @@ dictionary Preferences {
   boolean arcEnabled;
   boolean arcRemovableMediaAccessEnabled;
   DOMString[] folderShortcuts;
+  boolean trashEnabled;
 };
 
 dictionary PreferencesChange {
@@ -996,6 +1036,11 @@ dictionary IOTaskParams {
 
   // Password used for unpacking encrypted archives.
   DOMString? password;
+
+  // Whether to display a notification in the UI. This does not stop the
+  // IOProgressStatus event propagating instead it provides a true boolean on
+  // the event that the UI can choose to show / hide the notification.
+  boolean? showNotification;
 };
 
 // IO Task Progress status, see file_manager::io_task::ProgressStatus.
@@ -1032,6 +1077,9 @@ dictionary ProgressStatus {
   // The estimate time to finish the operation.
   double remainingSeconds;
 
+  // Whether notifications should be shown on progress status.
+  boolean showNotification;
+
   // The name of the last error that happened.
   DOMString errorName;
 
@@ -1056,6 +1104,14 @@ dictionary DlpRestrictionDetails {
 
   // List of components for which the restriction is enforced.
   VolumeType[] components;
+};
+
+dictionary DialogCallerInformation {
+  // The URL of the caller.
+  DOMString? url;
+
+  // The component type of the caller.
+  VolumeType? component;
 };
 
 // A Guest OS that supports guest->host file sharing. This definition should
@@ -1093,8 +1149,8 @@ callback BooleanCallback = void(boolean result);
 // |result| Result of the task execution.
 callback ExecuteTaskCallback = void(TaskResult result);
 
-// |tasks| The list of matched file entries for this task.
-callback GetFileTasksCallback = void(FileTask[] tasks);
+// |resultingTasks| The list of matched file entries for this task.
+callback GetFileTasksCallback = void(ResultingTasks resultingTasks);
 
 // |result| Mime type of the file.
 callback GetMimeTypeCallback = void(DOMString result);
@@ -1107,9 +1163,6 @@ callback GetContentMetadataCallback = void(MediaMetadata result);
 
 // |result| Hash containing the string assets.
 callback GetStringsCallback = void(object result);
-
-// |color| String containing the color of the title bar.
-callback GetFrameColorCallback = void(DOMString color);
 
 // |success| True when file watch is successfully added.
 callback AddFileWatchCallback = void(optional boolean success);
@@ -1142,6 +1195,14 @@ callback GetDlpMetadataCallback =
 // summarized restriction information about an entry.
 callback GetDlpRestrictionDetailsCallback =
     void(DlpRestrictionDetails[] restrictionDetails);
+
+// |blockedComponents| A list of components (subset of VolumeType) to which
+// transferring an Entry is blocked by Data Leak Prevention (DLP) policy.
+callback GetDlpBlockedComponentsCallback = void(VolumeType[] blockedComponents);
+
+// |caller| Either the URL or a component (subset of VolumeType) of
+// the caller that created the dialog (Save As/File Picker).
+callback GetDialogCallerCallback = void(DialogCallerInformation caller);
 
 // |copyId| ID of the copy task. Can be used to identify the progress, and to
 // cancel the task.
@@ -1445,6 +1506,18 @@ interface Functions {
   static void getDlpRestrictionDetails(
       DOMString sourceUrl,
       GetDlpRestrictionDetailsCallback callback);
+
+  // Retrieves the list of components to which the transfer of an Entry
+  // is blocked by Data Leak Prevention (DLP) policy.
+  // |sourceUrl| Source URL of the Entry that should be checked.
+  // |callback| Result callback.
+  static void getDlpBlockedComponents(
+      DOMString sourceUrl,
+      GetDlpBlockedComponentsCallback callback);
+
+  // Retrieves the caller that created the dialog (Save As/File Picker).
+  // |callback| Result callback.
+  static void getDialogCaller(GetDialogCallerCallback callback);
 
   // Starts to copy an entry. If the source is a directory, the copy is done
   // recursively.
@@ -1759,9 +1832,6 @@ interface Functions {
   // the holding space currently contains.
   // |callback| The result callback.
   static void getHoldingSpaceState(HoldingSpaceStateCallback callback);
-
-  // Returns color via `callback` for Files app foreground window frame.
-  static void getFrameColor(GetFrameColorCallback callback);
 
   // Returns true via `callback` if tablet mode is enabled, false otherwise.
   static void isTabletModeEnabled(BooleanCallback callback);

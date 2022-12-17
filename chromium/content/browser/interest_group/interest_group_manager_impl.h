@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,18 +11,21 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "base/threading/sequence_bound.h"
 #include "base/time/time.h"
 #include "content/browser/interest_group/auction_process_manager.h"
+#include "content/browser/interest_group/interest_group_k_anonymity_manager.h"
 #include "content/browser/interest_group/interest_group_permissions_checker.h"
 #include "content/browser/interest_group/interest_group_update.h"
 #include "content/browser/interest_group/interest_group_update_manager.h"
 #include "content/browser/interest_group/storage_interest_group.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/interest_group_manager.h"
+#include "content/public/browser/k_anonymity_service_delegate.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom-forward.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -63,7 +66,8 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       const base::FilePath& path,
       bool in_memory,
       ProcessMode process_mode,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      KAnonymityServiceDelegate* k_anonymity_service);
   ~InterestGroupManagerImpl() override;
   InterestGroupManagerImpl(const InterestGroupManagerImpl& other) = delete;
   InterestGroupManagerImpl& operator=(const InterestGroupManagerImpl& other) =
@@ -157,6 +161,11 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // piece of opaque data to identify the winning ad.
   void RecordInterestGroupWin(const blink::InterestGroupKey& group_key,
                               const std::string& ad_json);
+
+  // Reports the AD URL to the k-anonymity service. Should be called when FLEDGE
+  // selects and ad.
+  void RegisterAdAsWon(const GURL& render_url);
+
   // Gets a single interest group.
   void GetInterestGroup(
       const blink::InterestGroupKey& group_key,
@@ -175,10 +184,14 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   void GetInterestGroupsForOwner(
       const url::Origin& owner,
       base::OnceCallback<void(std::vector<StorageInterestGroup>)> callback);
-  // Clear out storage for the matching owning storage key. If the callback is
+  // Clear out storage for the matching owning storage key. If the matcher is
   // empty then apply to all storage keys.
   void DeleteInterestGroupData(
-      StoragePartition::StorageKeyMatcherFunction storage_key_matcher);
+      StoragePartition::StorageKeyMatcherFunction storage_key_matcher,
+      base::OnceClosure completion_callback);
+  // Completely delete all interest group data, including k-anonymity data that
+  // is not cleared by DeleteInterestGroupData.
+  void DeleteAllInterestGroupData(base::OnceClosure completion_callback);
   // Get the last maintenance time from the underlying InterestGroupStorage.
   void GetLastMaintenanceTimeForTesting(
       base::RepeatingCallback<void(base::Time)> callback) const;
@@ -194,6 +207,14 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // Update the interest group priority.
   void SetInterestGroupPriority(const blink::InterestGroupKey& group,
                                 double priority);
+
+  // Merges `update_priority_signals_overrides` with the previous priority
+  // signals of `group`.
+  void UpdateInterestGroupPriorityOverrides(
+      const blink::InterestGroupKey& group_key,
+      base::flat_map<std::string,
+                     auction_worklet::mojom::PrioritySignalsDoublePtr>
+          update_priority_signals_overrides);
 
   // Clears the InterestGroupPermissionsChecker's cache of the results of
   // .well-known fetches.
@@ -240,8 +261,27 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
     return report_requests_.size();
   }
 
+  // Handles daily k-anonymity updates for the interest group. Triggers an
+  // update request for the k-anonymity of all parts of the interest group
+  // (including ads). Also reports membership in the interest group to the
+  // k-anonymity of interest-group service.
+  void QueueKAnonymityUpdateForInterestGroup(const StorageInterestGroup& group);
+  // Records K-anonymity to the database.
+  void UpdateKAnonymity(const StorageInterestGroup::KAnonymityData& data);
+  // Gets the last time that the key was reported to the k-anonymity server.
+  void GetLastKAnonymityReported(
+      const std::string& key,
+      base::OnceCallback<void(absl::optional<base::Time>)> callback);
+  // Updates the last time that the key was reported to the k-anonymity server.
+  void UpdateLastKAnonymityReported(const std::string& key);
+
   InterestGroupPermissionsChecker& permissions_checker_for_testing() {
     return permissions_checker_;
+  }
+
+  void set_k_anonymity_manager_for_testing(
+      std::unique_ptr<InterestGroupKAnonymityManager> k_anonymity_manager) {
+    k_anonymity_manager_ = std::move(k_anonymity_manager);
   }
 
  private:
@@ -336,6 +376,12 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       std::unique_ptr<network::SimpleURLLoader> simple_url_loader,
       scoped_refptr<net::HttpResponseHeaders> response_headers);
 
+  // A version of QueueKAnonymityUpdateForInterestGroup() called from
+  // JoinInterestGroup which passes the group in an optional (the group must
+  // always exist). Called from JoinInterestGroup.
+  void QueueKAnonymityUpdateForInterestGroupFromJoinInterestGroup(
+      absl::optional<StorageInterestGroup> maybe_group);
+
   // Owns and manages access to the InterestGroupStorage living on a different
   // thread.
   base::SequenceBound<InterestGroupStorage> impl_;
@@ -354,6 +400,17 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // Therefore, `update_manager_` *must* be declared after fields used by those
   // methods so that updates are cancelled before those fields are destroyed.
   InterestGroupUpdateManager update_manager_;
+
+  // Manages the logic required to support k-anonymity updates.
+  //
+  // InterestGroupKAnonymityManager keeps a pointer to this
+  // InterestGroupManagerImpl to make database reads and writes....
+  //
+  // Therefore, `k_anonymity_manager_` *must* be declared after fields used by
+  // those methods so that k-anonymity operations are cancelled before those
+  // fields are destroyed.
+  // Stored as pointer so that tests can override it.
+  std::unique_ptr<InterestGroupKAnonymityManager> k_anonymity_manager_;
 
   // Checks if a frame can join or leave an interest group. Global so that
   // pending operations can continue after a page has been navigate away from.

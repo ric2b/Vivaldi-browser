@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -130,6 +130,9 @@ void ChromeSpeechRecognitionClient::Initialize() {
       media::mojom::SpeechRecognitionOptions::New();
   options->recognition_mode = media::mojom::SpeechRecognitionMode::kCaption;
   options->enable_formatting = true;
+  options->recognizer_client_type =
+      media::mojom::RecognizerClientType::kLiveCaption;
+
   speech_recognition_context_->BindRecognizer(
       speech_recognition_recognizer_.BindNewPipeAndPassReceiver(),
       std::move(speech_recognition_client_remote), std::move(options),

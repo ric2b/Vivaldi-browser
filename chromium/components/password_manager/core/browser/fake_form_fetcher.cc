@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -117,4 +117,15 @@ void FakeFormFetcher::NotifyFetchCompleted() {
   for (Consumer& consumer : consumers_)
     consumer.OnFetchCompleted();
 }
+
+absl::optional<PasswordStoreBackendError>
+FakeFormFetcher::GetProfileStoreBackendError() const {
+  return profile_store_backend_error_;
+}
+
+void FakeFormFetcher::SetProfileStoreBackendError(
+    absl::optional<PasswordStoreBackendError> error) {
+  profile_store_backend_error_ = error;
+}
+
 }  // namespace password_manager

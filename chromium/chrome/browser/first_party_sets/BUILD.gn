@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -13,6 +13,8 @@ source_set("first_party_sets") {
     "//chrome/test:*",
   ]
   sources = [
+    "first_party_sets_navigation_throttle.cc",
+    "first_party_sets_navigation_throttle.h",
     "first_party_sets_overrides_policy_handler.cc",
     "first_party_sets_overrides_policy_handler.h",
     "first_party_sets_policy_service.cc",
@@ -21,6 +23,8 @@ source_set("first_party_sets") {
     "first_party_sets_policy_service_factory.h",
     "first_party_sets_pref_names.cc",
     "first_party_sets_pref_names.h",
+    "mock_first_party_sets_handler.cc",
+    "mock_first_party_sets_handler.h",
   ]
   deps = [
     "//base",
@@ -35,6 +39,9 @@ source_set("first_party_sets") {
     "//components/policy/proto",
     "//components/pref_registry",
     "//components/prefs:prefs",
+    "//components/privacy_sandbox:privacy_sandbox",
+    "//components/privacy_sandbox:privacy_sandbox_prefs",
+    "//components/strings:components_strings_grit",
   ]
   public_deps = [ "//content/public/browser" ]
 }
@@ -51,4 +58,8 @@ fuzzer_test("first_party_sets_overrides_policy_handler_fuzzer") {
     "//testing/libfuzzer/proto:json_proto_converter",
     "//third_party/libprotobuf-mutator",
   ]
+
+  if (is_chromeos) {
+    deps += [ "//chromeos/ash/components/dbus/cros_disks" ]
+  }
 }

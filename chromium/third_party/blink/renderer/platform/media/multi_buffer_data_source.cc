@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -292,6 +292,10 @@ void MultiBufferDataSource::OnRedirect(RedirectCB callback) {
 
 bool MultiBufferDataSource::HasAccessControl() const {
   return url_data_->has_access_control();
+}
+
+bool MultiBufferDataSource::PassedTimingAllowOriginCheck() {
+  return url_data_->passed_timing_allow_origin_check();
 }
 
 UrlData::CorsMode MultiBufferDataSource::cors_mode() const {

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,8 +96,6 @@ class FakeRTCRtpTransceiverImpl : public RTCRtpTransceiverPlatform {
       absl::optional<webrtc::RtpTransceiverDirection> current_direction);
   ~FakeRTCRtpTransceiverImpl() override;
 
-  RTCRtpTransceiverPlatformImplementationType ImplementationType()
-      const override;
   uintptr_t Id() const override;
   String Mid() const override;
   std::unique_ptr<blink::RTCRtpSenderPlatform> Sender() const override;

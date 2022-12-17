@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -185,6 +185,12 @@ void WindowTreeHostPlatform::LockMouse(Window* window) {
   window->SetCapture();
   WindowTreeHost::LockMouse(window);
 }
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+std::string WindowTreeHostPlatform::GetUniqueId() const {
+  return platform_window()->GetWindowUniqueId();
+}
+#endif
 
 void WindowTreeHostPlatform::OnBoundsChanged(const BoundsChange& change) {
   // It's possible this function may be called recursively. Only notify

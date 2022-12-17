@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{ಫೈಲ್ ಎಡಿಟ್ ಮಾಡಿ}one{ಫೈಲ್‌ಗಳನ್ನು ಎಡಿಟ್ ಮಾಡಿ}other{ಫೈಲ್‌ಗಳನ್ನು ಎಡಿಟ್ ಮಾಡಿ}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" />GHz</translation>
 <translation id="3291996639387199448">ಕೀ ನಿರ್ದೇಶನ</translation>
+<translation id="3294437725009624529">ಅತಿಥಿ</translation>
 <translation id="3310640316857623290">ಅನುಮತಿಸಬಹುದಾದ ಥ್ರೆಶ್‌ಹೋಲ್ಡ್‌ಗಿಂತ DNS ವಿಳಂಬವು ಗಮನಾರ್ಹವಾಗಿ ಮೇಲಿದೆ</translation>
 <translation id="3328783797891415197">ಪರೀಕ್ಷೆ ರನ್ ಆಗುತ್ತಿದೆ</translation>
 <translation id="3340011300870565703">ಸಾಧನದ ಬಲ ಇಯರ್‌ಬಡ್ <ph name="BATTERY_PERCENTAGE" />% ರಷ್ಟು ಬ್ಯಾಟರಿಯನ್ನು ಹೊಂದಿದೆ.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">ಫರ್ಮ್‌ವೇರ್ ಅಪ್‌ಡೇಟ್ ಆಗುತ್ತಿರುವ ಸಮಯದಲ್ಲಿ, ಈ ಬಾಹ್ಯ ಸಾಧನವನ್ನು ಅನ್‌ಪ್ಲಗ್ ಮಾಡಬೇಡಿ ಅಥವಾ ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್ ಅನ್ನು ಸ್ಥಶಟ್ ಡೌನ್ ಮಾಡಬೇಡಿ. ನೀವು ಈ ವಿಂಡೋವನ್ನು ಕುಗ್ಗಿಸಬಹುದು. ಈ ಅಪ್‌ಡೇಟ್, ಕೆಲವು ನಿಮಿಷಗಳನ್ನು ತೆಗೆದುಕೊಳ್ಳಬಹುದು ಮತ್ತು ಈ ಸಮಯದಲ್ಲಿ ನಿಮ್ಮ ಬಾಹ್ಯ ಸಾಧನವು ಕಾರ್ಯನಿರ್ವಹಿಸದೇ ಇರಬಹುದು.</translation>
 <translation id="3486220673238053218">ವಿವರಣೆ</translation>
 <translation id="3488065109653206955">ಭಾಗಶಃ ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />ಕಾರ್ಯಕ್ಷಮತೆ ಟ್ರೇಸ್ ಡೇಟಾ<ph name="END_LINK1" /> ಕಳುಹಿಸಿ</translation>
 <translation id="3517001332549868749">ChromeOS ಅಪ್‌ಡೇಟ್</translation>
 <translation id="3527036260304016759">ವಿಫಲವಾಗಿದೆ - ಅಪರಿಚಿತ ದೋಷ</translation>
 <translation id="3532980081107202182">ಸುಮಾರು <ph name="MIN_REMAINING" /> ಬಾಕಿ ಉಳಿದಿದೆ</translation>
@@ -467,6 +469,7 @@
 <translation id="5502931783115429516">Android ರನ್ ಆಗುತ್ತಿಲ್ಲ</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">ಸೂರ್ಯಾಸ್ತದ ಸಮಯದಲ್ಲಿ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಡಾರ್ಕ್ ಥೀಮ್‌ಗೆ ಬದಲಿಸಿ</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">ಪುನಃ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ</translation>
 <translation id="5583640892426849032">Backspace</translation>

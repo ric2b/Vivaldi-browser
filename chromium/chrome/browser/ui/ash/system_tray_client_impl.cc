@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/constants/personalization_entry_point.h"
 #include "ash/public/cpp/locale_update_controller.h"
 #include "ash/public/cpp/login_types.h"
@@ -40,7 +41,6 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/extensions/vpn_provider/vpn_service_factory.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -426,7 +426,6 @@ void SystemTrayClientImpl::ShowDisplaySettings() {
 }
 
 void SystemTrayClientImpl::ShowDarkModeSettings() {
-  DCHECK(ash::features::IsPersonalizationHubEnabled());
   // Record entry point metric to Personalization through Dark Mode Quick
   // Settings/System Tray.
   ash::personalization_app::LogPersonalizationEntryPoint(
@@ -504,7 +503,12 @@ void SystemTrayClientImpl::ShowAccessibilityHelp() {
 
 void SystemTrayClientImpl::ShowAccessibilitySettings() {
   base::RecordAction(base::UserMetricsAction("ShowAccessibilitySettings"));
-  if (::features::IsAccessibilityOSSettingsVisibilityEnabled()) {
+  // TODO(crbug.com/1358729): We show the old Manage Accessibility page in kiosk
+  // mode, so users can't get to other OS Settings (such as Wi-Fi, Date / Time).
+  // We plan to remove this after we add a standalone OS Accessibility page for
+  // kiosk mode, which blocks access to other OS settings.
+  bool is_kiosk = user_manager::UserManager::Get()->IsLoggedInAsAnyKioskApp();
+  if (!is_kiosk && ::features::IsAccessibilityOSSettingsVisibilityEnabled()) {
     ShowSettingsSubPageForActiveUser(
         chromeos::settings::mojom::kAccessibilitySectionPath);
   } else {
@@ -696,10 +700,6 @@ void SystemTrayClientImpl::ShowFirmwareUpdate() {
   chrome::ShowFirmwareUpdatesApp(ProfileManager::GetActiveUserProfile());
 }
 
-void SystemTrayClientImpl::RequestRestartForUpdate() {
-  browser_shutdown::NotifyAndTerminate(/*fast_path=*/true);
-}
-
 void SystemTrayClientImpl::SetLocaleAndExit(
     const std::string& locale_iso_code) {
   ProfileManager::GetActiveUserProfile()->ChangeAppLocale(
@@ -791,6 +791,11 @@ void SystemTrayClientImpl::ShowChannelInfoGiveFeedback() {
 }
 
 bool SystemTrayClientImpl::IsUserFeedbackEnabled() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ash::switches::kForceShowReleaseTrack)) {
+    // Force the release track UI to show the feedback button.
+    return true;
+  }
   PrefService* signin_prefs =
       ProfileManager::GetActiveUserProfile()->GetPrefs();
   DCHECK(signin_prefs);

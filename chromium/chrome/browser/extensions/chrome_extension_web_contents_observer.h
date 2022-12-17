@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,18 +51,6 @@ class ChromeExtensionWebContentsObserver
 
   // content::WebContentsObserver overrides.
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
-
-  // Silence a warning about hiding a virtual function.
-  bool OnMessageReceived(const IPC::Message& message,
-                         content::RenderFrameHost* render_frame_host) override;
-
-  // Adds a message to the extensions ErrorConsole.
-  void OnDetailedConsoleMessageAdded(
-      content::RenderFrameHost* render_frame_host,
-      const std::u16string& message,
-      const std::u16string& source,
-      const StackTrace& stack_trace,
-      int32_t severity_level);
 
   // Reloads an extension if it is on the terminated list.
   void ReloadIfTerminated(content::RenderFrameHost* render_frame_host);

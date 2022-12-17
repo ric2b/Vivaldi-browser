@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@ import 'chrome://settings/settings.js';
 
 import {SettingsDropdownMenuElement} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertNotReached, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {waitAfterNextRender} from 'chrome://webui-test/test_util.js';
+import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 /** @fileoverview Suite of tests for settings-dropdown-menu. */
 suite('SettingsDropdownMenu', function() {
@@ -33,7 +33,8 @@ suite('SettingsDropdownMenu', function() {
   }
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     dropdown = document.createElement('settings-dropdown-menu');
     document.body.appendChild(dropdown);
     selectElement = dropdown.shadowRoot!.querySelector('select')!;

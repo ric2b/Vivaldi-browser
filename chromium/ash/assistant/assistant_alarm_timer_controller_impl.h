@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,7 +54,7 @@ class AssistantAlarmTimerControllerImpl
   // AssistantAlarmTimerController:
   const AssistantAlarmTimerModel* GetModel() const override;
   void OnTimerStateChanged(
-      const std::vector<chromeos::assistant::AssistantTimer>& timers) override;
+      const std::vector<assistant::AssistantTimer>& timers) override;
 
   // AssistantControllerObserver:
   void OnAssistantControllerConstructed() override;
@@ -67,18 +67,16 @@ class AssistantAlarmTimerControllerImpl
   void OnAssistantStatusChanged(assistant::AssistantStatus status) override;
 
   // AssistantAlarmTimerModelObserver:
-  void OnTimerAdded(const chromeos::assistant::AssistantTimer& timer) override;
-  void OnTimerUpdated(
-      const chromeos::assistant::AssistantTimer& timer) override;
-  void OnTimerRemoved(
-      const chromeos::assistant::AssistantTimer& timer) override;
+  void OnTimerAdded(const assistant::AssistantTimer& timer) override;
+  void OnTimerUpdated(const assistant::AssistantTimer& timer) override;
+  void OnTimerRemoved(const assistant::AssistantTimer& timer) override;
 
  private:
   void PerformAlarmTimerAction(const assistant::util::AlarmTimerAction& action,
                                const std::string& alarm_timer_id,
                                const absl::optional<base::TimeDelta>& duration);
 
-  void ScheduleNextTick(const chromeos::assistant::AssistantTimer& timer);
+  void ScheduleNextTick(const assistant::AssistantTimer& timer);
   void Tick(const std::string& timer_id);
 
   AssistantControllerImpl* const assistant_controller_;  // Owned by Shell.

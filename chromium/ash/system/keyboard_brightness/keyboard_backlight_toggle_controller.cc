@@ -1,9 +1,10 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/system/keyboard_brightness/keyboard_backlight_toggle_controller.h"
 
+#include "ash/constants/quick_settings_catalogs.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
@@ -83,6 +84,10 @@ views::View* KeyboardBacklightToggleController::CreateView() {
   DCHECK(!slider_);
   slider_ = new UnifiedKeyboardBacklightToggleView(this, model_);
   return slider_;
+}
+
+QsSliderCatalogName KeyboardBacklightToggleController::GetCatalogName() {
+  return QsSliderCatalogName::kKeyboardBrightness;
 }
 
 void KeyboardBacklightToggleController::SliderValueChanged(

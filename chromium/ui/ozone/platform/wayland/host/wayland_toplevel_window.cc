@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@
 #include "ui/ozone/platform/wayland/host/xdg_activation.h"
 #include "ui/platform_window/common/platform_window_defaults.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
+#include "ui/platform_window/platform_window_delegate.h"
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
@@ -41,6 +42,13 @@ namespace ui {
 
 namespace {
 bool decorations_allowed_for_test_ = true;
+
+bool ShouldSetBounds(PlatformWindowState state) {
+  return state == PlatformWindowState::kNormal ||
+         state == PlatformWindowState::kSnappedPrimary ||
+         state == PlatformWindowState::kSnappedSecondary ||
+         state == PlatformWindowState::kFloated;
+}
 }
 
 constexpr int kVisibleOnAllWorkspaces = -1;
@@ -123,7 +131,7 @@ void WaylandToplevelWindow::DispatchHostWindowDragMovement(
   else
     shell_toplevel_->SurfaceResize(connection(), hittest);
 
-  connection()->ScheduleFlush();
+  connection()->Flush();
 }
 
 void WaylandToplevelWindow::Show(bool inactive) {
@@ -158,7 +166,7 @@ void WaylandToplevelWindow::Hide() {
     aura_surface_.reset();
   }
   shell_toplevel_.reset();
-  connection()->ScheduleFlush();
+  connection()->Flush();
 }
 
 bool WaylandToplevelWindow::IsVisible() const {
@@ -175,7 +183,7 @@ void WaylandToplevelWindow::SetTitle(const std::u16string& title) {
 
   if (shell_toplevel_) {
     shell_toplevel_->SetTitle(title);
-    connection()->ScheduleFlush();
+    connection()->Flush();
   }
 }
 
@@ -235,13 +243,17 @@ void WaylandToplevelWindow::Activate() {
   // user.
   //
   // Exo provides activation through aura-shell, Mutter--through gtk-shell.
-  //
-  // TODO(crbug.com/1175327): add support for xdg-activation.
-  if (aura_surface_ && zaura_surface_get_version(aura_surface_.get()) >=
-                           ZAURA_SURFACE_ACTIVATE_SINCE_VERSION) {
+  if (shell_toplevel_ && shell_toplevel_->SupportsActivation()) {
+    shell_toplevel_->Activate();
+  } else if (aura_surface_ && zaura_surface_get_version(aura_surface_.get()) >=
+                                  ZAURA_SURFACE_ACTIVATE_SINCE_VERSION) {
     zaura_surface_activate(aura_surface_.get());
   } else if (connection()->xdg_activation()) {
-    connection()->xdg_activation()->Activate(root_surface()->surface());
+    // xdg-activation implementation in some compositors is still buggy and
+    // Mutter crashes were observed when windows are activated during window
+    // dragging sessions. See https://crbug.com/1366504.
+    if (!connection()->IsDragInProgress())
+      connection()->xdg_activation()->Activate(root_surface()->surface());
   } else if (gtk_surface1_) {
     gtk_surface1_->RequestFocus();
   }
@@ -250,7 +262,14 @@ void WaylandToplevelWindow::Activate() {
   // but nothing more happens (until the user moves the mouse over a Lacros
   // window in which case events will start and the activation will come
   // through).
-  connection()->ScheduleFlush();
+  connection()->Flush();
+}
+
+void WaylandToplevelWindow::Deactivate() {
+  if (shell_toplevel_ && shell_toplevel_->SupportsActivation()) {
+    shell_toplevel_->Deactivate();
+    connection()->Flush();
+  }
 }
 
 void WaylandToplevelWindow::SizeConstraintsChanged() {
@@ -259,6 +278,17 @@ void WaylandToplevelWindow::SizeConstraintsChanged() {
     return;
 
   SetSizeConstraints();
+}
+
+void WaylandToplevelWindow::SetZOrderLevel(ZOrderLevel order) {
+  if (shell_toplevel_)
+    shell_toplevel_->SetZOrder(z_order_);
+
+  z_order_ = order;
+}
+
+ZOrderLevel WaylandToplevelWindow::GetZOrderLevel() const {
+  return z_order_;
 }
 
 std::string WaylandToplevelWindow::GetWindowUniqueId() const {
@@ -305,7 +335,7 @@ void WaylandToplevelWindow::SetOpaqueRegion(
     opaque_region_px_ = *region_px;
   else
     opaque_region_px_ = absl::nullopt;
-  root_surface()->SetOpaqueRegion(region_px);
+  root_surface()->set_opaque_region(region_px);
 }
 
 void WaylandToplevelWindow::SetInputRegion(const gfx::Rect* region_px) {
@@ -313,7 +343,7 @@ void WaylandToplevelWindow::SetInputRegion(const gfx::Rect* region_px) {
     input_region_px_ = *region_px;
   else
     input_region_px_ = absl::nullopt;
-  root_surface()->SetInputRegion(region_px);
+  root_surface()->set_input_region(region_px);
 }
 
 void WaylandToplevelWindow::NotifyStartupComplete(
@@ -349,46 +379,55 @@ void WaylandToplevelWindow::UpdateWindowScale(bool update_bounds) {
   SizeConstraintsChanged();
 }
 
-void WaylandToplevelWindow::HandleToplevelConfigure(int32_t width_dip,
-                                                    int32_t height_dip,
-                                                    bool is_maximized,
-                                                    bool is_fullscreen,
-                                                    bool is_activated) {
-  HandleAuraToplevelConfigure(0, 0, width_dip, height_dip, is_maximized,
-                              is_fullscreen, is_activated);
+void WaylandToplevelWindow::HandleToplevelConfigure(
+    int32_t width_dip,
+    int32_t height_dip,
+    const WindowStates& window_states) {
+  HandleAuraToplevelConfigure(0, 0, width_dip, height_dip, window_states);
 }
 
-void WaylandToplevelWindow::HandleAuraToplevelConfigure(int32_t x,
-                                                        int32_t y,
-                                                        int32_t width_dip,
-                                                        int32_t height_dip,
-                                                        bool is_maximized,
-                                                        bool is_fullscreen,
-                                                        bool is_activated) {
+void WaylandToplevelWindow::HandleAuraToplevelConfigure(
+    int32_t x,
+    int32_t y,
+    int32_t width_dip,
+    int32_t height_dip,
+    const WindowStates& window_states) {
   // Store the old state to propagte state changes if Wayland decides to change
   // the state to something else.
   PlatformWindowState old_state = state_;
-  if (state_ == PlatformWindowState::kMinimized && !is_activated) {
+  if (state_ == PlatformWindowState::kMinimized &&
+      !window_states.is_activated) {
     state_ = PlatformWindowState::kMinimized;
-  } else if (is_fullscreen) {
+  } else if (window_states.is_fullscreen) {
     state_ = PlatformWindowState::kFullScreen;
-  } else if (is_maximized) {
+  } else if (window_states.is_maximized) {
     state_ = PlatformWindowState::kMaximized;
+  } else if (window_states.is_snapped_primary) {
+    state_ = PlatformWindowState::kSnappedPrimary;
+  } else if (window_states.is_snapped_secondary) {
+    state_ = PlatformWindowState::kSnappedSecondary;
+  } else if (window_states.is_floated) {
+    state_ = PlatformWindowState::kFloated;
   } else {
     state_ = PlatformWindowState::kNormal;
   }
 
-  const bool is_normal = state_ == PlatformWindowState::kNormal;
-
-  bool did_send_delegate_notification = !!requested_window_show_state_count_;
+  const bool did_send_delegate_notification =
+      !!requested_window_show_state_count_;
   if (requested_window_show_state_count_)
     requested_window_show_state_count_--;
 
-  const bool did_window_show_state_change = old_state != state_;
-
   // Update state before notifying delegate.
-  const bool did_active_change = is_active_ != is_activated;
-  is_active_ = is_activated;
+  const bool did_active_change = is_active_ != window_states.is_activated;
+  is_active_ = window_states.is_activated;
+
+  // The tiled state affects the window geometry, so apply it here.
+  if (window_states.tiled_edges != tiled_state_) {
+    // This configure changes the decoration insets.  We should adjust the
+    // bounds appropriately.
+    tiled_state_ = window_states.tiled_edges;
+    delegate()->OnWindowTiledStateChanged(window_states.tiled_edges);
+  }
 
   // Rather than call SetBounds here for every configure event, just save the
   // most recent bounds, and have WaylandConnection call ApplyPendingBounds
@@ -407,13 +446,12 @@ void WaylandToplevelWindow::HandleAuraToplevelConfigure(int32_t x,
   gfx::Rect bounds_dip(pending_bounds_dip());
   if (width_dip > 1 && height_dip > 1) {
     bounds_dip.SetRect(x, y, width_dip, height_dip);
-    // TODO(crbug.com/3651999): Change SetDecorationInsets to take DIP.
-    if (is_normal && frame_insets_px()) {
-      bounds_dip.Inset(
-          -gfx::ScaleToRoundedInsets(*frame_insets_px(), 1.f / window_scale()));
+    const auto insets = GetDecorationInsetsInDIP();
+    if (ShouldSetBounds(state_) && !insets.IsEmpty()) {
+      bounds_dip.Inset(-insets);
       bounds_dip.set_origin({x, y});
     }
-  } else if (is_normal) {
+  } else if (ShouldSetBounds(state_)) {
     bounds_dip = !restored_size_dip().IsEmpty() ? gfx::Rect(restored_size_dip())
                                                 : GetBoundsInDIP();
   }
@@ -427,7 +465,7 @@ void WaylandToplevelWindow::HandleAuraToplevelConfigure(int32_t x,
   // Thus, we must store previous bounds to restore later.
   SetOrResetRestoredBounds();
 
-  if (did_window_show_state_change && !did_send_delegate_notification) {
+  if (old_state != state_ && !did_send_delegate_notification) {
     previous_state_ = old_state;
     delegate()->OnWindowStateChanged(previous_state_, state_);
   }
@@ -503,7 +541,10 @@ bool WaylandToplevelWindow::OnInitialize(
   SetWorkspaceExtensionDelegate(properties.workspace_extension_delegate);
   SetDeskExtension(this, static_cast<DeskExtension*>(this));
 
-  z_order_ = properties.z_order;
+  // When we are initializing and we do not already have a `shell_toplevel_`,
+  // this will simply set `z_order_` and then set it as the window's initial z
+  // order in `SetUpShellIntegration()`.
+  SetZOrderLevel(properties.z_order);
 
   if (!properties.workspace.empty()) {
     int workspace;
@@ -537,10 +578,9 @@ void WaylandToplevelWindow::SetWindowGeometry(gfx::Rect bounds_dip) {
 
   gfx::Rect geometry_dip(bounds_dip.size());
 
-  if (state_ == PlatformWindowState::kNormal && frame_insets_px()) {
-    geometry_dip.Inset(
-        gfx::ScaleToRoundedInsets(*frame_insets_px(), 1.f / window_scale()));
-  }
+  const auto insets = GetDecorationInsetsInDIP();
+  if (state_ == PlatformWindowState::kNormal && !insets.IsEmpty())
+    geometry_dip.Inset(insets);
   shell_toplevel_->SetWindowGeometry(geometry_dip);
 }
 
@@ -837,7 +877,7 @@ void WaylandToplevelWindow::TriggerStateChanges() {
 
   delegate()->OnWindowStateChanged(previous_state_, state_);
 
-  connection()->ScheduleFlush();
+  connection()->Flush();
 }
 
 void WaylandToplevelWindow::SetWindowState(PlatformWindowState state) {
@@ -868,7 +908,7 @@ void WaylandToplevelWindow::SetSizeConstraints() {
   if (max_size_dip.has_value())
     shell_toplevel_->SetMaxSize(max_size_dip->width(), max_size_dip->height());
 
-  connection()->ScheduleFlush();
+  connection()->Flush();
 }
 
 void WaylandToplevelWindow::SetOrResetRestoredBounds() {
@@ -877,7 +917,7 @@ void WaylandToplevelWindow::SetOrResetRestoredBounds() {
   // window has just become normal and store the current bounds if it is
   // either going out of normal state or simply changes the state and we don't
   // have any meaningful value stored.
-  if (GetPlatformWindowState() == PlatformWindowState::kNormal) {
+  if (ShouldSetBounds(GetPlatformWindowState())) {
     SetRestoredBoundsInDIP({});
   } else if (GetRestoredBoundsInDIP().IsEmpty()) {
     SetRestoredBoundsInDIP(GetBoundsInDIP());
@@ -901,7 +941,10 @@ void WaylandToplevelWindow::SetUpShellIntegration() {
     }
     zaura_surface_set_occlusion_tracking(aura_surface_.get());
     SetImmersiveFullscreenStatus(false);
-    SetInitialZOrder();
+
+    // We pass the value of `z_order_` to the `shell_toplevel_` here in order to
+    // set the initial z order of the window.
+    SetZOrderLevel(z_order_);
     SetInitialWorkspace();
     if (restore_window_id_) {
       DCHECK(!restore_window_id_source_);
@@ -967,17 +1010,13 @@ void WaylandToplevelWindow::SetInitialWorkspace() {
   }
 }
 
-void WaylandToplevelWindow::SetInitialZOrder() {
-  shell_toplevel_->SetZOrder(z_order_);
-}
-
 void WaylandToplevelWindow::UpdateWindowMask() {
   std::vector<gfx::Rect> region{gfx::Rect({}, visual_size_px())};
-  root_surface()->SetOpaqueRegion(opaque_region_px_.has_value()
-                                      ? &*opaque_region_px_
-                                      : (IsOpaqueWindow() ? &region : nullptr));
-  root_surface()->SetInputRegion(input_region_px_ ? &*input_region_px_
-                                                  : &*region.begin());
+  root_surface()->set_opaque_region(
+      opaque_region_px_.has_value() ? &*opaque_region_px_
+                                    : (IsOpaqueWindow() ? &region : nullptr));
+  root_surface()->set_input_region(input_region_px_ ? &*input_region_px_
+                                                    : &*region.begin());
 }
 
 bool WaylandToplevelWindow::GetTabletMode() {

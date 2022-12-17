@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,8 +73,7 @@ class NET_EXPORT TrustStoreInMemory : public TrustStore {
   };
 
   // Multimap from normalized subject -> Entry.
-  std::unordered_multimap<base::StringPiece, Entry, base::StringPieceHash>
-      entries_;
+  std::unordered_multimap<std::string_view, Entry> entries_;
 
   // Adds a certificate with the specified trust settings. Both trusted and
   // distrusted certificates require a full DER match.

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,8 +15,8 @@
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "content/browser/attribution_reporting/attribution_interop_parser.h"
+#include "content/public/browser/attribution_config.h"
 #include "content/public/browser/attribution_reporting.h"
-#include "content/public/test/attribution_config.h"
 #include "content/public/test/attribution_simulator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"

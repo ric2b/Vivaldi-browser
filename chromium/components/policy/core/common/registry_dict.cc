@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,7 +56,7 @@ absl::optional<base::Value> ConvertRegistryValue(const base::Value& value,
       return result;
     } else if (value.is_list()) {
       base::Value result(base::Value::Type::LIST);
-      for (const auto& entry : value.GetListDeprecated()) {
+      for (const auto& entry : value.GetList()) {
         absl::optional<base::Value> converted =
             ConvertRegistryValue(entry, schema.GetItems());
         if (converted.has_value())
@@ -321,7 +321,7 @@ std::unique_ptr<base::Value> RegistryDict::ConvertToJSON(
           std::unique_ptr<base::Value> converted =
               entry->second->ConvertToJSON(subschema);
           if (converted) {
-            result->SetWithoutPathExpansion(entry->first, std::move(converted));
+            result->GetDict().Set(entry->first, std::move(*converted));
             break;
           }
         }

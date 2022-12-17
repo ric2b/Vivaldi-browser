@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 
 import {DefaultUserImage, Paths, UserImage, UserPreview} from 'chrome://personalization/js/personalization_app.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {waitAfterNextRender} from 'chrome://webui-test/test_util.js';
+import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {baseSetup, initElement, teardownElement, toString16} from './personalization_app_test_utils.js';
 import {TestPersonalizationStore} from './test_personalization_store.js';
@@ -112,6 +112,29 @@ suite('UserPreviewTest', function() {
     assertTrue(
         avatarImage.src.startsWith('blob:'),
         'blob url is shown for external image');
+  });
+
+  test('displays placeholder image if user image is unavailable', async () => {
+    userPreviewElement = initElement(UserPreview, {path: Paths.ROOT});
+    await waitAfterNextRender(userPreviewElement!);
+
+    const avatarImage = userPreviewElement!.shadowRoot!.getElementById(
+                            'avatar') as HTMLImageElement;
+    assertEquals(
+        'chrome://theme/IDR_PROFILE_AVATAR_PLACEHOLDER_LARGE', avatarImage.src,
+        'placeholder image is shown if user image is unavailable');
+  });
+
+  test('displays placeholder image if user image is invalid', async () => {
+    personalizationStore.data.user.image = {invalidImage: {}};
+    userPreviewElement = initElement(UserPreview, {path: Paths.ROOT});
+    await waitAfterNextRender(userPreviewElement!);
+
+    const avatarImage = userPreviewElement!.shadowRoot!.getElementById(
+                            'avatar') as HTMLImageElement;
+    assertEquals(
+        'chrome://theme/IDR_PROFILE_AVATAR_PLACEHOLDER_LARGE', avatarImage.src,
+        'placeholder image is shown for invalid user image');
   });
 
   test('displays non-clickable user image on user subpage', async () => {

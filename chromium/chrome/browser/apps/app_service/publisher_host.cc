@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,29 +48,6 @@ void PublisherHost::SetArcIsRegistered() {
   chrome_apps_->ObserveArc();
 }
 
-void PublisherHost::FlushMojoCallsForTesting() {
-  if (built_in_chrome_os_apps_) {
-    built_in_chrome_os_apps_->FlushMojoCallsForTesting();
-  }
-  crostini_apps_->FlushMojoCallsForTesting();
-  chrome_apps_->FlushMojoCallsForTesting();
-  if (extension_apps_) {
-    chrome_apps_->FlushMojoCallsForTesting();
-  }
-  if (plugin_vm_apps_) {
-    plugin_vm_apps_->FlushMojoCallsForTesting();
-  }
-  if (standalone_browser_apps_) {
-    standalone_browser_apps_->FlushMojoCallsForTesting();
-  }
-  if (web_apps_) {
-    web_apps_->FlushMojoCallsForTesting();
-  }
-  if (borealis_apps_) {
-    borealis_apps_->FlushMojoCallsForTesting();
-  }
-}
-
 void PublisherHost::ReInitializeCrostiniForTesting(AppServiceProxy* proxy) {
   DCHECK(proxy);
   crostini_apps_->Initialize();
@@ -107,14 +84,12 @@ void PublisherHost::RegisterPublishersForTesting() {
 }
 
 void PublisherHost::Shutdown() {
-  if (proxy_->AppService().is_connected()) {
-    chrome_apps_->Shutdown();
-    if (extension_apps_) {
-      extension_apps_->Shutdown();
-    }
-    if (web_apps_) {
-      web_apps_->Shutdown();
-    }
+  chrome_apps_->Shutdown();
+  if (extension_apps_) {
+    extension_apps_->Shutdown();
+  }
+  if (web_apps_) {
+    web_apps_->Shutdown();
   }
   borealis_apps_.reset();
 }

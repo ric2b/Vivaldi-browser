@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -253,9 +253,13 @@ void BlinkGCPluginConsumer::CheckClass(RecordInfo* info) {
     if (!info->IsGCMixin()) {
       CheckLeftMostDerived(info);
       CheckDispatch(info);
-      if (CXXMethodDecl* newop = info->DeclaresNewOperator())
-        if (!Config::IsIgnoreAnnotated(newop))
+      if (CXXMethodDecl* newop = info->DeclaresNewOperator()) {
+        if (!info->IsStackAllocated() &&
+            !Config::IsGCBase(newop->getParent()->getName()) &&
+            !Config::IsIgnoreAnnotated(newop)) {
           reporter_.ClassOverridesNew(info, newop);
+        }
+      }
     }
 
     {

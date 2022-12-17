@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -795,7 +795,7 @@ TEST_F(NetExportFileWriterTest, StartWithNetworkContextActive) {
   ASSERT_TRUE(root->GetList("events", &events));
 
   // Check there is at least one event as a result of the ongoing request.
-  ASSERT_GE(events->GetListDeprecated().size(), 1u);
+  ASSERT_GE(events->GetList().size(), 1u);
 
   // Check the URL in the params of the first event.
   base::Value::Dict* event = events->GetList()[0].GetIfDict();

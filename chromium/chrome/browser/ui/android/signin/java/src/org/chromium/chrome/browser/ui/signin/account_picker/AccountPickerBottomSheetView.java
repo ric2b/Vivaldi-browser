@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -160,7 +160,7 @@ class AccountPickerBottomSheetView implements BottomSheetContent {
         ExistingAccountRowViewBinder.bindAccountView(accountProfileData, mSelectedAccountView);
 
         ButtonCompat continueButton = view.findViewById(R.id.account_picker_continue_as_button);
-        String continueAsButtonText = mActivity.getString(R.string.signin_promo_continue_as,
+        String continueAsButtonText = mActivity.getString(R.string.sync_promo_continue_as,
                 accountProfileData.getGivenNameOrFullNameOrEmail());
         continueButton.setText(continueAsButtonText);
     }

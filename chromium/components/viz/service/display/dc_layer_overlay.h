@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,7 +71,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlay {
 
   gfx::HDRMetadata hdr_metadata;
 
-  bool is_video_fullscreen_mode;
+  bool is_video_fullscreen_letterboxing = false;
 };
 
 typedef std::vector<DCLayerOverlay> DCLayerOverlayList;
@@ -103,7 +103,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor final
                        SurfaceDamageRectList surface_damage_rect_list,
                        DCLayerOverlayList* dc_layer_overlays,
                        bool is_video_capture_enabled,
-                       bool is_video_fullscreen_mode);
+                       bool is_page_fullscreen_mode);
   void ClearOverlayState();
   // This is the damage contribution due to previous frame's overlays which can
   // be empty.
@@ -112,6 +112,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor final
   // DirectCompositionOverlayCapsObserver implementation.
   void OnOverlayCapsChanged() override;
   void UpdateHasHwOverlaySupport();
+  void UpdateSystemHDRStatus();
 
   void set_frames_since_last_qualified_multi_overlays_for_testing(int value) {
     frames_since_last_qualified_multi_overlays_ = value;
@@ -134,7 +135,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor final
                              size_t* new_index,
                              gfx::Rect* damage_rect,
                              DCLayerOverlayList* dc_layer_overlays,
-                             bool is_video_fullscreen_mode);
+                             bool is_page_fullscreen_mode);
 
   // Returns an iterator to the element after |it|.
   QuadList::Iterator ProcessForOverlay(const gfx::RectF& display_rect,
@@ -191,6 +192,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor final
       std::vector<size_t>* candidate_index_list);
 
   bool has_overlay_support_;
+  bool system_hdr_enabled_ = false;
   const int allowed_yuv_overlay_count_;
   int processed_yuv_overlay_count_ = 0;
   uint64_t frames_since_last_qualified_multi_overlays_ = 0;

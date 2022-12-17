@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 #include "ash/system/network/network_icon.h"
 #include "ash/system/network/network_info.h"
 #include "ash/test/ash_test_base.h"
+#include "base/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_test_helper.h"
@@ -42,6 +43,7 @@ using chromeos::network_config::mojom::ConnectionStateType;
 using chromeos::network_config::mojom::NetworkStatePropertiesPtr;
 using chromeos::network_config::mojom::NetworkType;
 using chromeos::network_config::mojom::OncSource;
+using chromeos::network_config::mojom::PortalState;
 using chromeos::network_config::mojom::SecurityType;
 
 const std::string kWiFiName = "WiFi";
@@ -66,7 +68,9 @@ class NetworkListNetworkItemViewTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
 
-    feature_list_.InitAndEnableFeature(features::kQuickSettingsNetworkRevamp);
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kQuickSettingsNetworkRevamp},
+        /*disabled_features=*/{features::kCaptivePortalUI2022});
 
     SetUpDefaultNetworkDevices();
 
@@ -105,6 +109,10 @@ class NetworkListNetworkItemViewTest : public AshTestBase {
     return {OncSource::kDevicePolicy, OncSource::kNone};
   }
 
+  std::vector<PortalState> GetPortalStates() {
+    return {PortalState::kPortal, PortalState::kNoInternet};
+  }
+
   const NetworkListItemView* LastClickedNetworkListItem() {
     return fake_network_detailed_network_view_
         ->last_clicked_network_list_item();
@@ -123,7 +131,7 @@ class NetworkListNetworkItemViewTest : public AshTestBase {
   }
 
   void AssertA11yDescription(NetworkStatePropertiesPtr& network_properties,
-                             const std::u16string& description) {
+                             const std::u16string& expected_description) {
     ui::AXNodeData node_data;
     UpdateViewForNetwork(network_properties);
     network_list_network_item_view()
@@ -131,14 +139,18 @@ class NetworkListNetworkItemViewTest : public AshTestBase {
         .GetAccessibleNodeData(&node_data);
     std::string a11ydescription =
         node_data.GetStringAttribute(ax::mojom::StringAttribute::kDescription);
-    EXPECT_EQ(base::UTF8ToUTF16(a11ydescription), description);
+    EXPECT_EQ(base::UTF8ToUTF16(a11ydescription), expected_description);
+  }
+
+  void NetworkIconChanged() {
+    network_list_network_item_view()->NetworkIconChanged();
   }
 
   NetworkListNetworkItemView* network_list_network_item_view() {
     return network_list_network_item_view_;
   }
 
- private:
+ protected:
   void SetUpDefaultNetworkDevices() {
     network_state_helper()->ClearDevices();
     network_state_helper()->AddDevice(kCellularDevicePath, shill::kTypeCellular,
@@ -263,6 +275,98 @@ TEST_F(NetworkListNetworkItemViewTest, HasCorrectCellularSublabel) {
   UpdateViewForNetwork(cellular_network);
   EXPECT_EQ(l10n_util::GetStringUTF16(
                 IDS_ASH_STATUS_TRAY_NETWORK_STATUS_SIGN_IN_TO_UNLOCK),
+            network_list_network_item_view()->sub_text_label()->GetText());
+}
+
+TEST_F(NetworkListNetworkItemViewTest, HasCorrectPortalSublabel) {
+  EXPECT_FALSE(network_list_network_item_view()->sub_text_label());
+
+  NetworkStatePropertiesPtr wifi_network = CreateStandaloneNetworkProperties(
+      kWiFiName, NetworkType::kWiFi, ConnectionStateType::kPortal);
+  wifi_network->portal_state = PortalState::kPortal;
+
+  UpdateViewForNetwork(wifi_network);
+  EXPECT_TRUE(network_list_network_item_view()->sub_text_label());
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED),
+      network_list_network_item_view()->sub_text_label()->GetText());
+}
+
+TEST_F(NetworkListNetworkItemViewTest, HasCorrectPortalSublabelWithFlag) {
+  feature_list_.Reset();
+  feature_list_.InitWithFeatures(
+      /*enabled_features=*/{features::kCaptivePortalUI2022,
+                            features::kQuickSettingsNetworkRevamp},
+      /*disabled_features=*/{});
+  EXPECT_FALSE(network_list_network_item_view()->sub_text_label());
+
+  NetworkStatePropertiesPtr wifi_network = CreateStandaloneNetworkProperties(
+      kWiFiName, NetworkType::kWiFi, ConnectionStateType::kPortal);
+  wifi_network->portal_state = PortalState::kPortal;
+
+  UpdateViewForNetwork(wifi_network);
+  EXPECT_TRUE(network_list_network_item_view()->sub_text_label());
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_STATUS_SIGNIN),
+      network_list_network_item_view()->sub_text_label()->GetText());
+}
+
+TEST_F(NetworkListNetworkItemViewTest, HasCorrectProxyAuthSublabelWithFlag) {
+  feature_list_.Reset();
+  feature_list_.InitWithFeatures(
+      /*enabled_features=*/{features::kCaptivePortalUI2022,
+                            features::kQuickSettingsNetworkRevamp},
+      /*disabled_features=*/{});
+  EXPECT_FALSE(network_list_network_item_view()->sub_text_label());
+
+  NetworkStatePropertiesPtr wifi_network = CreateStandaloneNetworkProperties(
+      kWiFiName, NetworkType::kWiFi, ConnectionStateType::kPortal);
+  wifi_network->portal_state = PortalState::kProxyAuthRequired;
+
+  UpdateViewForNetwork(wifi_network);
+  EXPECT_TRUE(network_list_network_item_view()->sub_text_label());
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_STATUS_SIGNIN),
+      network_list_network_item_view()->sub_text_label()->GetText());
+}
+
+TEST_F(NetworkListNetworkItemViewTest,
+       HasCorrectPortalSuspectedSublabelWithFlag) {
+  feature_list_.Reset();
+  feature_list_.InitWithFeatures(
+      /*enabled_features=*/{features::kCaptivePortalUI2022,
+                            features::kQuickSettingsNetworkRevamp},
+      /*disabled_features=*/{});
+  EXPECT_FALSE(network_list_network_item_view()->sub_text_label());
+
+  NetworkStatePropertiesPtr wifi_network = CreateStandaloneNetworkProperties(
+      kWiFiName, NetworkType::kWiFi, ConnectionStateType::kPortal);
+  wifi_network->portal_state = PortalState::kPortalSuspected;
+
+  UpdateViewForNetwork(wifi_network);
+  EXPECT_TRUE(network_list_network_item_view()->sub_text_label());
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED_NO_INTERNET),
+            network_list_network_item_view()->sub_text_label()->GetText());
+}
+
+TEST_F(NetworkListNetworkItemViewTest,
+       HasCorrectNoConnectivitySublabelWithFlag) {
+  feature_list_.Reset();
+  feature_list_.InitWithFeatures(
+      /*enabled_features=*/{features::kCaptivePortalUI2022,
+                            features::kQuickSettingsNetworkRevamp},
+      /*disabled_features=*/{});
+  EXPECT_FALSE(network_list_network_item_view()->sub_text_label());
+
+  NetworkStatePropertiesPtr wifi_network = CreateStandaloneNetworkProperties(
+      kWiFiName, NetworkType::kWiFi, ConnectionStateType::kPortal);
+  wifi_network->portal_state = PortalState::kNoInternet;
+
+  UpdateViewForNetwork(wifi_network);
+  EXPECT_TRUE(network_list_network_item_view()->sub_text_label());
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED_NO_INTERNET),
             network_list_network_item_view()->sub_text_label()->GetText());
 }
 
@@ -657,6 +761,141 @@ TEST_F(NetworkListNetworkItemViewTest, HasExpectedDescriptionForWiFi) {
       }
     }
   }
+}
+
+TEST_F(NetworkListNetworkItemViewTest, HasExpectedDescriptionForWiFiWithFlag) {
+  feature_list_.Reset();
+  feature_list_.InitWithFeatures(
+      /*enabled_features=*/{features::kCaptivePortalUI2022,
+                            features::kQuickSettingsNetworkRevamp},
+      /*disabled_features=*/{});
+
+  SecurityType security_types[2] = {SecurityType::kNone, SecurityType::kWepPsk};
+
+  NetworkStatePropertiesPtr wifi_network = CreateStandaloneNetworkProperties(
+      kWiFiName, NetworkType::kWiFi, ConnectionStateType::kConnected);
+
+  for (const auto& security : security_types) {
+    wifi_network->type_state->get_wifi()->security = security;
+    const std::u16string security_label = l10n_util::GetStringUTF16(
+        security == SecurityType::kWepPsk
+            ? IDS_ASH_STATUS_TRAY_NETWORK_STATUS_SECURED
+            : IDS_ASH_STATUS_TRAY_NETWORK_STATUS_UNSECURED);
+
+    for (const auto& connection : GetConnectionStateTypes()) {
+      wifi_network->connection_state = connection;
+      wifi_network->portal_state = PortalState::kUnknown;  // default
+      std::u16string connection_status;
+      int desc_id;
+      for (const auto& policy : GetPolicies()) {
+        wifi_network->source = policy;
+        // Set desc_id for portal, online, connecting
+        switch (policy) {
+          case OncSource::kDevicePolicy:
+            desc_id =
+                IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC_MANAGED_WITH_CONNECTION_STATUS;
+            break;
+          case OncSource::kNone:
+            desc_id =
+                IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC_WITH_CONNECTION_STATUS;
+            break;
+          default:
+            NOTREACHED();
+        }
+        switch (connection) {
+          case ConnectionStateType::kPortal: {
+            for (const auto& portal_state : GetPortalStates()) {
+              wifi_network->portal_state = portal_state;
+              switch (portal_state) {
+                case PortalState::kPortal:
+                  connection_status = l10n_util::GetStringUTF16(
+                      IDS_ASH_STATUS_TRAY_NETWORK_STATUS_SIGNIN);
+                  break;
+                case PortalState::kNoInternet:
+                  connection_status = l10n_util::GetStringUTF16(
+                      IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED_NO_INTERNET);
+                  break;
+                default:
+                  NOTREACHED();
+              }
+              AssertA11yDescription(
+                  wifi_network, l10n_util::GetStringFUTF16(
+                                    desc_id, security_label, connection_status,
+                                    base::FormatPercent(kSignalStrength)));
+            }
+            break;
+          }
+          case ConnectionStateType::kConnected:
+            [[fallthrough]];
+          case ConnectionStateType::kOnline: {
+            connection_status = l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED);
+            AssertA11yDescription(
+                wifi_network, l10n_util::GetStringFUTF16(
+                                  desc_id, security_label, connection_status,
+                                  base::FormatPercent(kSignalStrength)));
+            break;
+          }
+          case ConnectionStateType::kConnecting: {
+            connection_status = l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTING);
+            AssertA11yDescription(
+                wifi_network, l10n_util::GetStringFUTF16(
+                                  desc_id, security_label, connection_status,
+                                  base::FormatPercent(kSignalStrength)));
+            break;
+          }
+          case ConnectionStateType::kNotConnected: {
+            switch (policy) {
+              case OncSource::kDevicePolicy:
+                desc_id = IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC_MANAGED;
+                break;
+              case OncSource::kNone:
+                desc_id = IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC;
+                break;
+              default:
+                NOTREACHED();
+            }
+            AssertA11yDescription(wifi_network,
+                                  l10n_util::GetStringFUTF16(
+                                      desc_id, security_label,
+                                      base::FormatPercent(kSignalStrength)));
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+TEST_F(NetworkListNetworkItemViewTest, NetworkIconAnimating) {
+  NetworkStatePropertiesPtr wifi_network = CreateStandaloneNetworkProperties(
+      kWiFiName, NetworkType::kWiFi, ConnectionStateType::kConnecting);
+
+  UpdateViewForNetwork(wifi_network);
+
+  EXPECT_FALSE(static_cast<views::ImageView*>(
+                   network_list_network_item_view()->left_view())
+                   ->GetImage()
+                   .isNull());
+
+  // Override current icon with an empty icon, check it is updated when
+  // animation starts.
+  static_cast<views::ImageView*>(network_list_network_item_view()->left_view())
+      ->SetImage(gfx::ImageSkia());
+
+  EXPECT_TRUE(static_cast<views::ImageView*>(
+                  network_list_network_item_view()->left_view())
+                  ->GetImage()
+                  .isNull());
+
+  // Simulate icon animation observer being called.
+  NetworkIconChanged();
+
+  EXPECT_FALSE(static_cast<views::ImageView*>(
+                   network_list_network_item_view()->left_view())
+                   ->GetImage()
+                   .isNull());
 }
 
 }  // namespace ash

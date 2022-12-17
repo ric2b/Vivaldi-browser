@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,10 +22,10 @@ class DeskBarHoverObserver;
 class DeskDragProxy;
 class DeskMiniView;
 class ExpandedDesksBarButton;
-class GradientLayerDelegate;
 class NewDeskButton;
 class OverviewGrid;
 class PersistentDesksBarVerticalDotsButton;
+class PillButton;
 class ScrollArrowButton;
 class ZeroStateDefaultDeskButton;
 class ZeroStateIconButton;
@@ -58,6 +58,8 @@ class ASH_EXPORT DesksBarView : public views::View,
   void set_is_bounds_animation_on_going(bool value) {
     is_bounds_animation_on_going_ = value;
   }
+
+  PillButton* up_next_button() const { return up_next_button_; }
 
   ZeroStateDefaultDeskButton* zero_state_default_desk_button() const {
     return zero_state_default_desk_button_;
@@ -160,7 +162,6 @@ class ASH_EXPORT DesksBarView : public views::View,
   void Layout() override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
-  void OnThemeChanged() override;
 
   // DesksController::Observer:
   void OnDeskAdded(const Desk* desk) override;
@@ -194,6 +195,10 @@ class ASH_EXPORT DesksBarView : public views::View,
   // updates the background color of the `zero_state_desks_templates_button_`
   // and the `zero_state_default_desk_button_`.
   void UpdateButtonsForDesksTemplatesGrid();
+
+  // Updates the visibility of the two buttons inside the zero state desks bar
+  // and the ExpandedDesksBarButton on the desk bar's state.
+  void UpdateDeskButtonsVisibility();
 
   // Updates the visibility of the desks templates button based on whether the
   // desks templates feature is enabled, the user has any desks templates and
@@ -230,10 +235,6 @@ class ASH_EXPORT DesksBarView : public views::View,
   // be moved when performing the mini_view creation or deletion animations.
   int GetFirstMiniViewXOffset() const;
 
-  // Updates the visibility of the two buttons inside the zero state desks bar
-  // and the ExpandedDesksBarButton on the desk bar's state.
-  void UpdateDeskButtonsVisibility();
-
   // Updates the visibility of |left_scroll_button_| and |right_scroll_button_|.
   // Show |left_scroll_button_| if there are contents outside of the left edge
   // of the |scroll_view_|, the same for |right_scroll_button_| based on the
@@ -243,7 +244,7 @@ class ASH_EXPORT DesksBarView : public views::View,
   // We will show a fade in gradient besides |left_scroll_button_| and a fade
   // out gradient besides |right_scroll_button_|. Show the gradient only when
   // the corresponding scroll button is visible.
-  void UpdateGradientZone();
+  void UpdateGradientMask();
 
   // Scrolls the desks bar to the previous or next page. The page size is the
   // width of the scroll view, the contents that are outside of the scroll view
@@ -299,6 +300,9 @@ class ASH_EXPORT DesksBarView : public views::View,
   // done to eliminate the unnecessary `Layout` calls during the animation.
   bool is_bounds_animation_on_going_ = false;
 
+  // Button to return to the glanceables screen.
+  PillButton* up_next_button_ = nullptr;
+
   ZeroStateDefaultDeskButton* zero_state_default_desk_button_ = nullptr;
   ZeroStateIconButton* zero_state_new_desk_button_ = nullptr;
   ExpandedDesksBarButton* expanded_state_new_desk_button_ = nullptr;
@@ -313,10 +317,6 @@ class ASH_EXPORT DesksBarView : public views::View,
   DeskMiniView* drag_view_ = nullptr;
   // Drag proxy for the dragged desk.
   std::unique_ptr<DeskDragProxy> drag_proxy_;
-
-  // The layer delegate used for |scroll_view_|'s mask layer, with left and
-  // right gradient asides the scroll buttons.
-  std::unique_ptr<GradientLayerDelegate> gradient_layer_delegate_;
 
   // A circular button which when clicked will open the context menu of the
   // persistent desks bar. Note that this button will only be created when

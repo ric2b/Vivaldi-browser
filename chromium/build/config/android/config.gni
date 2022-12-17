@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -72,6 +72,10 @@ if (is_android || is_chromeos) {
   # Avoid typos when setting android_static_analysis in args.gn.
   assert(android_static_analysis == "on" || android_static_analysis == "off" ||
          android_static_analysis == "build_server")
+
+  # This configuration has not bot coverage and has broken multiple times.
+  # Warn against it.
+  assert(!(enable_chrome_android_internal && skip_secondary_abi_for_cq))
 
   declare_args() {
     # Android API level for 32 bits platforms

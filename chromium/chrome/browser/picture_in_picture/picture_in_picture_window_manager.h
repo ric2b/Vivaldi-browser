@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,8 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace content {
 enum class PictureInPictureResult;
@@ -54,7 +56,16 @@ class PictureInPictureWindowManager {
 
   void ExitPictureInPicture();
 
-  content::WebContents* GetWebContents();
+  // Gets the web contents in the opener browser window.
+  content::WebContents* GetWebContents() const;
+
+  // Gets the web contents in the PiP window. This only applies to document PiP
+  // and will be null for video PiP.
+  content::WebContents* GetChildWebContents() const;
+
+  // Returns the window bounds of the video picture-in-picture or the document
+  // picture-in-picture if either of them is present.
+  absl::optional<gfx::Rect> GetPictureInPictureWindowBounds() const;
 
  private:
   friend struct base::DefaultSingletonTraits<PictureInPictureWindowManager>;

@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Definitions of builders in the chromium.memory builder group."""
@@ -6,7 +6,7 @@
 load("//lib/args.star", "args")
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
-load("//lib/builders.star", "goma", "os", "reclient", "sheriff_rotations", "xcode")
+load("//lib/builders.star", "os", "reclient", "sheriff_rotations", "xcode")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 
@@ -23,6 +23,9 @@ ci.defaults.set(
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     sheriff_rotations = sheriff_rotations.CHROMIUM,
     tree_closing = True,
+
+    # TODO(crbug.com/1362440): remove this.
+    omit_python2 = False,
 )
 
 consoles.console_view(
@@ -133,7 +136,6 @@ linux_memory_builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
-                "enable_reclient",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -302,7 +304,6 @@ linux_memory_builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
-                "enable_reclient",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -329,7 +330,6 @@ linux_memory_builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
-                "enable_reclient",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -357,7 +357,6 @@ linux_memory_builder(
             config = "chromium_no_telemetry_dependencies",
             apply_configs = [
                 "chromeos",
-                "enable_reclient",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -375,6 +374,8 @@ linux_memory_builder(
         category = "lacros|asan",
         short_name = "asan",
     ),
+    cores = 16,
+    ssd = True,
     # TODO(crbug.com/1324240) Enable when it's stable.
     sheriff_rotations = args.ignore_default(None),
     tree_closing = False,
@@ -401,15 +402,11 @@ ci.builder(
         category = "mac",
         short_name = "bld",
     ),
-    goma_debug = True,  # TODO(hinoka): Remove this after debugging.
-    goma_jobs = None,
     cores = None,  # Swapping between 8 and 24
     os = os.MAC_DEFAULT,
     triggering_policy = scheduler.greedy_batching(
         max_concurrent_invocations = 2,
     ),
-    reclient_instance = None,
-    goma_backend = goma.backend.RBE_PROD,
 )
 
 linux_memory_builder(
@@ -419,7 +416,6 @@ linux_memory_builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
-                "enable_reclient",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -476,7 +472,6 @@ ci.builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
-                "enable_reclient",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -502,7 +497,6 @@ ci.builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
-                "enable_reclient",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -527,7 +521,6 @@ ci.builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
-                "enable_reclient",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -564,7 +557,6 @@ ci.builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
-                "enable_reclient",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -643,7 +635,6 @@ ci.builder(
         category = "iOS",
         short_name = "asn",
     ),
-    goma_backend = goma.backend.RBE_PROD,
     sheriff_rotations = args.ignore_default(sheriff_rotations.IOS),
     cores = None,
     os = os.MAC_12,

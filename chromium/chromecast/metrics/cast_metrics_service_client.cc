@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -316,6 +316,7 @@ void CastMetricsServiceClient::InitializeMetricsService() {
       // framework.
       /*user_data_dir=*/base::FilePath(),
       ::metrics::StartupVisibility::kUnknown,
+      ::metrics::EntropyProviderType::kDefault,
       base::BindRepeating(&CastMetricsServiceClient::StoreClientInfo,
                           base::Unretained(this)),
       base::BindRepeating(&CastMetricsServiceClient::LoadClientInfo,

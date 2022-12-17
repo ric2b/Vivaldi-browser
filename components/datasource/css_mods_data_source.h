@@ -14,6 +14,8 @@ class CSSModsDataClassHandler : public VivaldiDataClassHandler {
   void GetData(Profile* profile,
                const std::string& data_id,
                content::URLDataSource::GotDataCallback callback) override;
+  std::string GetMimetype(Profile* profile,
+                          const std::string& data_id) override;
 
  private:
   static scoped_refptr<base::RefCountedMemory> GetDataForIdOnBlockingThread(

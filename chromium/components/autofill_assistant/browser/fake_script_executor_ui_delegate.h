@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,7 +79,13 @@ class FakeScriptExecutorUiDelegate : public ScriptExecutorUiDelegate {
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)> end_action_callback,
       base::OnceCallback<void(const ClientStatus&)>
-          view_inflation_finished_callback) override;
+          view_inflation_finished_callback,
+      base::RepeatingCallback<void(const RequestBackendDataProto&)>
+          request_backend_data_callback,
+      base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+          show_account_screen_callback) override;
+  void ShowAccountScreen(const ShowAccountScreenProto& proto,
+                         const std::string& email_address) override;
   void SetPersistentGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)>
@@ -90,6 +96,7 @@ class FakeScriptExecutorUiDelegate : public ScriptExecutorUiDelegate {
   bool SupportsExternalActions() override;
   void ExecuteExternalAction(
       const external::Action& external_action,
+      bool is_interrupt,
       base::OnceCallback<void(ExternalActionDelegate::DomUpdateCallback)>
           start_dom_checks_callback,
       base::OnceCallback<void(const external::Result& result)>
@@ -99,8 +106,35 @@ class FakeScriptExecutorUiDelegate : public ScriptExecutorUiDelegate {
 
   const std::vector<Details>& GetDetails() { return details_; }
 
+  const GenericUserInterfaceProto* GetGenericUi() { return generic_ui_.get(); }
+
+  const base::OnceCallback<void(const ClientStatus&)>& GetEndActionCallback() {
+    return end_action_callback_;
+  }
+
+  const base::OnceCallback<void(const ClientStatus&)>&
+  GetViewInflationFinishedCallback() {
+    return view_inflation_finished_callback_;
+  }
+
+  const base::RepeatingCallback<void(const RequestBackendDataProto&)>&
+  GetRequestBackendDataCallback() {
+    return request_backend_data_callback_;
+  }
+
+  const base::RepeatingCallback<void(const ShowAccountScreenProto&)>&
+  GetShowAccountScreenCallback() {
+    return show_account_screen_callback_;
+  }
+
   const GenericUserInterfaceProto* GetPersistentGenericUi() {
     return persistent_generic_ui_.get();
+  }
+
+  const std::string& GetUserEmail() { return user_email_; }
+
+  const ShowAccountScreenProto& GetShowAccountScreenProto() {
+    return show_account_screen_proto_;
   }
 
   InfoBox* GetInfoBox() { return info_box_.get(); }
@@ -137,8 +171,18 @@ class FakeScriptExecutorUiDelegate : public ScriptExecutorUiDelegate {
   bool expand_or_collapse_value_ = false;
   bool expand_sheet_for_prompt_ = true;
   bool show_qr_code_scan_ui_ = false;
+  std::unique_ptr<GenericUserInterfaceProto> generic_ui_;
+  base::OnceCallback<void(const ClientStatus&)> end_action_callback_;
+  base::OnceCallback<void(const ClientStatus&)>
+      view_inflation_finished_callback_;
+  base::RepeatingCallback<void(const RequestBackendDataProto&)>
+      request_backend_data_callback_;
+  base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+      show_account_screen_callback_;
   std::unique_ptr<GenericUserInterfaceProto> persistent_generic_ui_;
   std::vector<InterruptNotification> interrupt_notification_history_;
+  ShowAccountScreenProto show_account_screen_proto_;
+  std::string user_email_;
 };
 
 }  // namespace autofill_assistant

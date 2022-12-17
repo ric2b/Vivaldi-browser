@@ -204,6 +204,20 @@ bool HTMLTokenizer::FlushEmitAndResumeIn(SegmentedString& source,
   return true;
 }
 
+void HTMLTokenizer::GetSnapshot(HTMLTokenizerSnapshot& snapshot) const {
+  snapshot.state = state_;
+  snapshot.appropriate_end_tag_name = appropriate_end_tag_name_.AsString();
+  snapshot.buffered_end_tag_name = buffered_end_tag_name_.AsString();
+}
+
+void HTMLTokenizer::RestoreSnapshot(const HTMLTokenizerSnapshot& snapshot) {
+  state_ = snapshot.state;
+  appropriate_end_tag_name_.clear();
+  appropriate_end_tag_name_.Append(snapshot.appropriate_end_tag_name);
+  buffered_end_tag_name_.clear();
+  buffered_end_tag_name_.Append(snapshot.buffered_end_tag_name.Span8());
+}
+
 bool HTMLTokenizer::NextToken(SegmentedString& source, HTMLToken& token) {
   // If we have a token in progress, then we're supposed to be called back
   // with the same token so we can finish it.
@@ -311,13 +325,13 @@ bool HTMLTokenizer::NextToken(SegmentedString& source, HTMLToken& token) {
     END_STATE()
 
     HTML_BEGIN_STATE(kTagOpenState) {
-      if (cc == '!') {
+      if (IsASCIIAlpha(cc)) {
+        token_->BeginStartTag(ToLowerCase(cc));
+        HTML_ADVANCE_PAST_NON_NEWLINE_TO(kTagNameState);
+      } else if (cc == '!') {
         HTML_ADVANCE_PAST_NON_NEWLINE_TO(kMarkupDeclarationOpenState);
       } else if (cc == '/') {
         HTML_ADVANCE_PAST_NON_NEWLINE_TO(kEndTagOpenState);
-      } else if (IsASCIIAlpha(cc)) {
-        token_->BeginStartTag(ToLowerCase(cc));
-        HTML_ADVANCE_PAST_NON_NEWLINE_TO(kTagNameState);
       } else if (cc == '?') {
         ParseError();
         // The spec consumes the current character before switching

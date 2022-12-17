@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,6 +78,14 @@ enum ShellWindowId {
   kShellWindowId_DeskContainerF,
   kShellWindowId_DeskContainerG,
   kShellWindowId_DeskContainerH,
+  kShellWindowId_DeskContainerI,
+  kShellWindowId_DeskContainerJ,
+  kShellWindowId_DeskContainerK,
+  kShellWindowId_DeskContainerL,
+  kShellWindowId_DeskContainerM,
+  kShellWindowId_DeskContainerN,
+  kShellWindowId_DeskContainerO,
+  kShellWindowId_DeskContainerP,
 
   // The container for top-level windows with the 'always-on-top' flag set.
   kShellWindowId_AlwaysOnTopContainer,

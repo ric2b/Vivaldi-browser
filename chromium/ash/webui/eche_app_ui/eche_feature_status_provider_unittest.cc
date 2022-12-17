@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,13 +7,13 @@
 #include <memory>
 #include <vector>
 
-#include "ash/components/multidevice/remote_device_test_util.h"
 #include "ash/components/phonehub/fake_phone_hub_manager.h"
 #include "ash/components/phonehub/phone_hub_manager.h"
 #include "ash/services/device_sync/public/cpp/fake_device_sync_client.h"
 #include "ash/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
 #include "ash/services/secure_channel/public/cpp/client/fake_connection_manager.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/components/multidevice/remote_device_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 

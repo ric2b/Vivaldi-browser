@@ -1,9 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/location_bar/omnibox_chip_button.h"
+#include <cstddef>
 
+#include "base/time/time.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -51,16 +53,37 @@ OmniboxChipButton::OmniboxChipButton(PressedCallback callback)
 
 OmniboxChipButton::~OmniboxChipButton() = default;
 
-void OmniboxChipButton::AnimateCollapse() {
-  constexpr auto kAnimationDuration = base::Milliseconds(250);
-  animation_->SetSlideDuration(kAnimationDuration);
-  animation_->Hide();
+void OmniboxChipButton::VisibilityChanged(views::View* starting_from,
+                                          bool is_visible) {
+  if (visibility_changed_callback_) {
+    visibility_changed_callback_.Run();
+  }
 }
 
-void OmniboxChipButton::AnimateExpand() {
-  constexpr auto kAnimationDuration = base::Milliseconds(350);
+void OmniboxChipButton::AnimateCollapse(base::TimeDelta kAnimationDuration) {
+  base_width_ = 0;
   animation_->SetSlideDuration(kAnimationDuration);
-  animation_->Show();
+  ForceAnimateCollapse();
+}
+
+void OmniboxChipButton::AnimateExpand(base::TimeDelta kAnimationDuration) {
+  base_width_ = 0;
+  animation_->SetSlideDuration(kAnimationDuration);
+  ForceAnimateExpand();
+}
+
+void OmniboxChipButton::AnimateToFit(base::TimeDelta kAnimationDuration) {
+  animation_->SetSlideDuration(kAnimationDuration);
+  base_width_ = label()->width();
+
+  if (label()->GetPreferredSize().width() < width()) {
+    // As we're collapsing, we need to make sure that the padding is not
+    // animated away.
+    base_width_ += kChipImagePadding + kExtraRightPadding;
+    ForceAnimateCollapse();
+  } else {
+    ForceAnimateExpand();
+  }
 }
 
 void OmniboxChipButton::ResetAnimation(double value) {
@@ -73,14 +96,21 @@ void OmniboxChipButton::SetExpandAnimationEndedCallback(
   expand_animation_ended_callback_ = callback;
 }
 
+void OmniboxChipButton::SetCollapseEndedCallback(
+    base::RepeatingCallback<void()> callback) {
+  collapse_animation_ended_callback_ = callback;
+}
+
 gfx::Size OmniboxChipButton::CalculatePreferredSize() const {
   const int fixed_width = GetIconSize() + GetInsets().width();
   const int collapsable_width = label()->GetPreferredSize().width() +
                                 kChipImagePadding + kExtraRightPadding;
+
   const double animation_value =
       force_expanded_for_testing_ ? 1.0 : animation_->GetCurrentValue();
-  const int width =
-      std::round(collapsable_width * animation_value) + fixed_width;
+  const int width = base_width_ +
+                    std::round(collapsable_width * animation_value) +
+                    fixed_width;
   return gfx::Size(width, GetHeightForWidth(width));
 }
 
@@ -104,8 +134,15 @@ void OmniboxChipButton::AnimationEnded(const gfx::Animation* animation) {
     return;
 
   fully_collapsed_ = animation->GetCurrentValue() != 1.0;
-  if (animation->GetCurrentValue() == 1.0 && expand_animation_ended_callback_)
+
+  if (animation->GetCurrentValue() == 1.0 && expand_animation_ended_callback_) {
     expand_animation_ended_callback_.Run();
+  }
+
+  if (animation->GetCurrentValue() == 0.0 &&
+      collapse_animation_ended_callback_) {
+    collapse_animation_ended_callback_.Run();
+  }
 }
 
 void OmniboxChipButton::AnimationProgressed(const gfx::Animation* animation) {
@@ -129,12 +166,21 @@ ui::ImageModel OmniboxChipButton::GetIconImageModel() const {
 }
 
 const gfx::VectorIcon& OmniboxChipButton::GetIcon() const {
-  if (permission_chip_delegate_.has_value()) {
-    return show_blocked_icon_ ? permission_chip_delegate_.value()->GetIconOff()
-                              : permission_chip_delegate_.value()->GetIconOn();
+  if (icon_) {
+    return const_cast<decltype(*icon_)>(*icon_);
   }
 
   return gfx::kNoneIcon;
+}
+
+void OmniboxChipButton::ForceAnimateExpand() {
+  ResetAnimation(0.0);
+  animation_->Show();
+}
+
+void OmniboxChipButton::ForceAnimateCollapse() {
+  ResetAnimation(1.0);
+  animation_->Hide();
 }
 
 int OmniboxChipButton::GetIconSize() const {
@@ -171,29 +217,10 @@ void OmniboxChipButton::SetForceExpandedForTesting(
   force_expanded_for_testing_ = force_expanded_for_testing;
 }
 
-void OmniboxChipButton::SetShowBlockedIcon(bool show_blocked_icon) {
-  if (show_blocked_icon_ != show_blocked_icon) {
-    show_blocked_icon_ = show_blocked_icon;
-    theme_ = show_blocked_icon ? OmniboxChipTheme::kLowVisibility
-                               : OmniboxChipTheme::kNormalVisibility;
-    UpdateIconAndColors();
-  }
-}
-
-void OmniboxChipButton::SetPermissionChipDelegate(
-    PermissionChipDelegate* permission_chip_delegate) {
-  DCHECK(permission_chip_delegate);
-  permission_chip_delegate_ = permission_chip_delegate;
+void OmniboxChipButton::SetChipIcon(const gfx::VectorIcon& icon) {
+  icon_ = &icon;
 
   UpdateIconAndColors();
-}
-
-void OmniboxChipButton::Finalize() {
-  permission_chip_delegate_.reset();
-  show_blocked_icon_ = false;
-  // It is possible that a chip gets finalized while the animation was in
-  // progress.
-  animation_->Stop();
 }
 
 BEGIN_METADATA(OmniboxChipButton, views::MdTextButton)

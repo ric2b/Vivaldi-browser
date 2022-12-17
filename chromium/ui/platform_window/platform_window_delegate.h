@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 
 #include "base/component_export.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/rect.h"
@@ -27,6 +28,7 @@ class SkPath;
 namespace ui {
 
 class Event;
+struct OwnedWindowAnchor;
 
 enum class PlatformWindowState {
   kUnknown,
@@ -34,6 +36,11 @@ enum class PlatformWindowState {
   kMinimized,
   kNormal,
   kFullScreen,
+
+  // Currently, only used by ChromeOS.
+  kSnappedPrimary,
+  kSnappedSecondary,
+  kFloated,
 };
 
 enum class PlatformWindowOcclusionState {
@@ -88,6 +95,11 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowDelegate {
 
   virtual void OnWindowStateChanged(PlatformWindowState old_state,
                                     PlatformWindowState new_state) = 0;
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Notifies the delegate that the tiled state of the window edges has changed.
+  virtual void OnWindowTiledStateChanged(WindowTiledEdges new_tiled_edges);
+#endif
 
   virtual void OnLostCapture() = 0;
 

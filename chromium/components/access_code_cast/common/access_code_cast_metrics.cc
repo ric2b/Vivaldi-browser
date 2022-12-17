@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,8 @@ AccessCodeCastMetrics::AccessCodeCastMetrics() = default;
 AccessCodeCastMetrics::~AccessCodeCastMetrics() = default;
 
 // static
+const char AccessCodeCastMetrics::kHistogramAccessCodeNotFoundCount[] =
+    "AccessCodeCast.Ui.AccessCodeNotFoundCount";
 const char AccessCodeCastMetrics::kHistogramAddSinkResultNew[] =
     "AccessCodeCast.Discovery.AddSinkResult.New";
 const char AccessCodeCastMetrics::kHistogramAddSinkResultRemembered[] =
@@ -31,6 +33,15 @@ void AccessCodeCastMetrics::OnCastSessionResult(int route_request_result_code,
   if (route_request_result_code == 1 /* ResultCode::OK */) {
     base::UmaHistogramEnumeration(kHistogramCastModeOnSuccess, mode);
   }
+}
+
+// static
+void AccessCodeCastMetrics::RecordAccessCodeNotFoundCount(int count) {
+  // Do not record if there were no incorrect codes.
+  if (count <= 0)
+    return;
+
+  base::UmaHistogramCounts100(kHistogramAccessCodeNotFoundCount, count);
 }
 
 // static

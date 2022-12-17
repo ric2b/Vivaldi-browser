@@ -1,10 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_BROWSER_UI_VIEWS_PERMISSIONS_PERMISSION_PROMPT_BUBBLE_H_
 #define CHROME_BROWSER_UI_VIEWS_PERMISSIONS_PERMISSION_PROMPT_BUBBLE_H_
 
+#include "chip_controller.h"
 #include "chrome/browser/ui/views/permissions/permission_prompt_bubble_view.h"
 #include "chrome/browser/ui/views/permissions/permission_prompt_desktop.h"
 
@@ -31,7 +32,7 @@ class PermissionPromptBubble : public PermissionPromptDesktop,
   void OnWidgetDestroying(views::Widget* widget) override;
 
   // permissions::PermissionPrompt:
-  void UpdateAnchor() override;
+  bool UpdateAnchor() override;
   permissions::PermissionPromptDisposition GetPromptDisposition()
       const override;
 
@@ -43,6 +44,8 @@ class PermissionPromptBubble : public PermissionPromptDesktop,
   raw_ptr<PermissionPromptBubbleView> prompt_bubble_ = nullptr;
 
   base::TimeTicks permission_requested_time_;
+
+  base::WeakPtrFactory<PermissionPromptBubble> weak_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PERMISSIONS_PERMISSION_PROMPT_BUBBLE_H_

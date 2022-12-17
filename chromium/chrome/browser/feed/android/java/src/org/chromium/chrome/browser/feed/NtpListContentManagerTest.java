@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -207,6 +207,12 @@ public class NtpListContentManagerTest implements ListContentManagerObserver {
         assertTrue(mManager.isNativeView(2));
         assertFalse(mManager.isNativeView(3));
         assertTrue(mManager.isNativeView(4));
+
+        assertFalse(mManager.isFullSpan(0));
+        assertTrue(mManager.isFullSpan(1));
+        assertTrue(mManager.isFullSpan(2));
+        assertFalse(mManager.isFullSpan(3));
+        assertTrue(mManager.isFullSpan(4));
 
         assertArrayEquals("foo".getBytes(), mManager.getExternalViewBytes(0));
         assertEquals(v2, getNativeView(mManager.getViewType(1)));

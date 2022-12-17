@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #if BUILDFLAG(IS_WIN)
 #include "base/win/windows_version.h"
 #endif
+#include "base/task/task_runner_util.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/media/router/discovery/access_code/access_code_cast_constants.h"
 #include "chrome/browser/media/router/discovery/access_code/access_code_media_sink_util.h"
@@ -44,8 +45,8 @@ const char kEndpointResponseSuccess[] =
 class AccessCodeCastSinkServiceBrowserTest
     : public AccessCodeCastIntegrationBrowserTest {};
 
-// TODO(b/242928209): Saved device tests are flaky on linux-rel.
-#if BUILDFLAG(IS_LINUX)
+// TODO(b/242928209): Saved device tests are flaky on linux-rel/Mac.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
 #define MAYBE_PRE_InstantExpiration DISABLED_PRE_InstantExpiration
 #define MAYBE_InstantExpiration DISABLED_InstantExpiration
 #else
@@ -130,8 +131,8 @@ IN_PROC_BROWSER_TEST_F(AccessCodeCastSinkServiceBrowserTest,
           weak_ptr_factory_.GetWeakPtr()));
 }
 
-// TODO(b/242928209): Saved device tests are flaky on linux-rel.
-#if BUILDFLAG(IS_LINUX)
+// TODO(b/242928209): Saved device tests are flaky on linux-rel/Mac/ChromeOS.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_PRE_SavedDevice DISABLED_PRE_SavedDevice
 #define MAYBE_SavedDevice DISABLED_SavedDevice
 #else

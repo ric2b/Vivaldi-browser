@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -487,10 +487,18 @@ CORE_EXPORT NGBoxStrut ComputeMarginsFor(const NGConstraintSpace&,
                                          const NGConstraintSpace& compute_for);
 
 inline NGBoxStrut ComputeMarginsFor(
-    const ComputedStyle& child_style,
+    const ComputedStyle& style,
     LayoutUnit percentage_resolution_size,
     WritingDirectionMode container_writing_direction) {
-  return ComputePhysicalMargins(child_style, percentage_resolution_size)
+  return ComputePhysicalMargins(style, percentage_resolution_size)
+      .ConvertToLogical(container_writing_direction);
+}
+
+inline NGBoxStrut ComputeMarginsFor(
+    const NGConstraintSpace& space,
+    const ComputedStyle& style,
+    WritingDirectionMode container_writing_direction) {
+  return ComputePhysicalMargins(space, style)
       .ConvertToLogical(container_writing_direction);
 }
 

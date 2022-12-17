@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,7 +53,7 @@ base::Value::Dict GetSiteEngagementScoreDictForSettings(
   if (!value.is_dict())
     return base::Value::Dict();
 
-  return std::move(value.GetDict());
+  return std::move(value).TakeDict();
 }
 
 }  // namespace

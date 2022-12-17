@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -164,6 +164,11 @@ HttpStreamFactory::JobController::JobController(
                                           url::kWsScheme) ||
          base::EqualsCaseInsensitiveASCII(request_info_.url.scheme_piece(),
                                           url::kWssScheme));
+  // Preconnects do not require a NetworkIsolationKey so we don't require it to
+  // be set consistently with the NetworkAnonymizationKey here.
+  if (!is_preconnect) {
+    DCHECK(request_info.IsConsistent());
+  }
 
   net_log_.BeginEvent(NetLogEventType::HTTP_STREAM_JOB_CONTROLLER, [&] {
     return NetLogJobControllerParams(request_info, is_preconnect);
@@ -299,8 +304,7 @@ void HttpStreamFactory::JobController::OnStreamReady(
   std::unique_ptr<HttpStream> stream = job->ReleaseStream();
   DCHECK(stream);
 
-  MarkRequestComplete(job->was_alpn_negotiated(), job->negotiated_protocol(),
-                      job->using_spdy());
+  MarkRequestComplete(job);
 
   if (!request_)
     return;
@@ -331,8 +335,7 @@ void HttpStreamFactory::JobController::OnBidirectionalStreamImplReady(
     return;
   }
 
-  MarkRequestComplete(job->was_alpn_negotiated(), job->negotiated_protocol(),
-                      job->using_spdy());
+  MarkRequestComplete(job);
 
   if (!request_)
     return;
@@ -354,8 +357,7 @@ void HttpStreamFactory::JobController::OnWebSocketHandshakeStreamReady(
     const ProxyInfo& used_proxy_info,
     std::unique_ptr<WebSocketHandshakeStreamBase> stream) {
   DCHECK(job);
-  MarkRequestComplete(job->was_alpn_negotiated(), job->negotiated_protocol(),
-                      job->using_spdy());
+  MarkRequestComplete(job);
 
   if (!request_)
     return;
@@ -754,7 +756,7 @@ int HttpStreamFactory::JobController::DoResolveProxy() {
   CompletionOnceCallback io_callback =
       base::BindOnce(&JobController::OnIOComplete, base::Unretained(this));
   return session_->proxy_resolution_service()->ResolveProxy(
-      origin_url, request_info_.method, request_info_.network_isolation_key,
+      origin_url, request_info_.method, request_info_.network_anonymization_key,
       &proxy_info_, std::move(io_callback), &proxy_resolve_request_, net_log_);
 }
 
@@ -823,7 +825,7 @@ int HttpStreamFactory::JobController::DoCreateJobs() {
       session_->IsQuicEnabled() && proxy_info_.is_direct() &&
       !session_->http_server_properties()->IsAlternativeServiceBroken(
           GetAlternativeServiceForDnsJob(origin_url),
-          request_info_.network_isolation_key);
+          request_info_.network_anonymization_key);
 
   if (is_preconnect_) {
     // Due to how the socket pools handle priorities and idle sockets, only IDLE
@@ -874,7 +876,11 @@ int HttpStreamFactory::JobController::DoCreateJobs() {
 
   // Alternative Service can only be set for HTTPS requests while Alternative
   // Proxy is set for HTTP requests.
-  if (alternative_service_info_.protocol() != kProtoUnknown) {
+  // The main job may use HTTP/3 if the origin is specified in
+  // `--origin-to-force-quic-on` switch. In that case, do not create
+  // `alternative_job_` and `dns_alpn_h3_job_`.
+  if ((alternative_service_info_.protocol() != kProtoUnknown) &&
+      !main_job_->using_quic()) {
     DCHECK(request_info_.url.SchemeIs(url::kHttpsScheme));
     DCHECK(!is_websocket_);
     DVLOG(1) << "Selected alternative service (host: "
@@ -898,7 +904,7 @@ int HttpStreamFactory::JobController::DoCreateJobs() {
         alternative_service_info_.protocol(), quic_version);
   }
 
-  if (dns_alpn_h3_job_enabled) {
+  if (dns_alpn_h3_job_enabled && !main_job_->using_quic()) {
     DCHECK(!is_websocket_);
     url::SchemeHostPort dns_alpn_h3_destination =
         url::SchemeHostPort(origin_url);
@@ -1037,19 +1043,20 @@ void HttpStreamFactory::JobController::OrphanUnboundJob() {
 void HttpStreamFactory::JobController::OnJobSucceeded(Job* job) {
   DCHECK(job);
   if (!bound_job_) {
-    if ((main_job_ && alternative_job_) || dns_alpn_h3_job_)
-      ReportAlternateProtocolUsage(job);
     BindJob(job);
     return;
   }
 }
 
-void HttpStreamFactory::JobController::MarkRequestComplete(
-    bool was_alpn_negotiated,
-    NextProto negotiated_protocol,
-    bool using_spdy) {
-  if (request_)
-    request_->Complete(was_alpn_negotiated, negotiated_protocol, using_spdy);
+void HttpStreamFactory::JobController::MarkRequestComplete(Job* job) {
+  if (request_) {
+    AlternateProtocolUsage alternate_protocol_usage =
+        CalculateAlternateProtocolUsage(job);
+    request_->Complete(job->was_alpn_negotiated(), job->negotiated_protocol(),
+                       alternate_protocol_usage, job->using_spdy());
+    ReportAlternateProtocolUsage(alternate_protocol_usage,
+                                 HasGoogleHost(job->origin_url()));
+  }
 }
 
 void HttpStreamFactory::JobController::MaybeReportBrokenAlternativeService(
@@ -1076,7 +1083,7 @@ void HttpStreamFactory::JobController::MaybeReportBrokenAlternativeService(
     // network changes.
     session_->http_server_properties()
         ->MarkAlternativeServiceBrokenUntilDefaultNetworkChanges(
-            alt_service, request_info_.network_isolation_key);
+            alt_service, request_info_.network_anonymization_key);
     return;
   }
 
@@ -1094,7 +1101,7 @@ void HttpStreamFactory::JobController::MaybeReportBrokenAlternativeService(
   HistogramBrokenAlternateProtocolLocation(
       BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_JOB_ALT);
   session_->http_server_properties()->MarkAlternativeServiceBroken(
-      alt_service, request_info_.network_isolation_key);
+      alt_service, request_info_.network_anonymization_key);
 }
 
 void HttpStreamFactory::JobController::MaybeNotifyFactoryOfCompletion() {
@@ -1183,7 +1190,7 @@ HttpStreamFactory::JobController::GetAlternativeServiceInfoInternal(
   const AlternativeServiceInfoVector alternative_service_info_vector =
       http_server_properties.GetAlternativeServiceInfos(
           url::SchemeHostPort(original_url),
-          request_info.network_isolation_key);
+          request_info.network_anonymization_key);
   if (alternative_service_info_vector.empty())
     return AlternativeServiceInfo();
 
@@ -1201,7 +1208,7 @@ HttpStreamFactory::JobController::GetAlternativeServiceInfoInternal(
       quic_advertised = true;
     const bool is_broken = http_server_properties.IsAlternativeServiceBroken(
         alternative_service_info.alternative_service(),
-        request_info.network_isolation_key);
+        request_info.network_anonymization_key);
     net_log_.AddEvent(
         NetLogEventType::HTTP_STREAM_JOB_CONTROLLER_ALT_SVC_FOUND, [&] {
           return NetLogAltSvcParams(&alternative_service_info, is_broken);
@@ -1265,7 +1272,7 @@ HttpStreamFactory::JobController::GetAlternativeServiceInfoInternal(
     RewriteUrlWithHostMappingRules(mapped_origin);
     QuicSessionKey session_key(
         HostPortPair::FromURL(mapped_origin), request_info.privacy_mode,
-        request_info.socket_tag, request_info.network_isolation_key,
+        request_info.socket_tag, request_info.network_anonymization_key,
         request_info.secure_dns_policy, /*require_dns_https_alpn=*/false);
 
     GURL destination = CreateAltSvcUrl(
@@ -1315,40 +1322,38 @@ quic::ParsedQuicVersion HttpStreamFactory::JobController::SelectQuicVersion(
 }
 
 void HttpStreamFactory::JobController::ReportAlternateProtocolUsage(
-    Job* job) const {
-  DCHECK((main_job_ && alternative_job_) || dns_alpn_h3_job_);
-
-  bool is_google_host = HasGoogleHost(job->origin_url());
-
-  if (job == main_job_.get()) {
-    HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_MAIN_JOB_WON_RACE,
-                                    is_google_host);
-    return;
-  }
-  if (job == alternative_job_.get()) {
-    if (job->using_existing_quic_session()) {
-      HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_NO_RACE,
-                                      is_google_host);
-      return;
-    }
-
-    HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_WON_RACE,
-                                    is_google_host);
-  }
-  if (job == dns_alpn_h3_job_.get()) {
-    if (job->using_existing_quic_session()) {
-      HistogramAlternateProtocolUsage(
-          ALTERNATE_PROTOCOL_USAGE_DNS_ALPN_H3_JOB_WON_WITOUT_RACE,
-          is_google_host);
-      return;
-    }
-    HistogramAlternateProtocolUsage(
-        ALTERNATE_PROTOCOL_USAGE_DNS_ALPN_H3_JOB_WON_RACE, is_google_host);
-  }
+    AlternateProtocolUsage alternate_protocol_usage,
+    bool is_google_host) const {
+  DCHECK_LT(alternate_protocol_usage, ALTERNATE_PROTOCOL_USAGE_MAX);
+  HistogramAlternateProtocolUsage(alternate_protocol_usage, is_google_host);
 }
 
 bool HttpStreamFactory::JobController::IsJobOrphaned(Job* job) const {
   return !request_ || (job_bound_ && bound_job_ != job);
+}
+
+AlternateProtocolUsage
+HttpStreamFactory::JobController::CalculateAlternateProtocolUsage(
+    Job* job) const {
+  if ((main_job_ && alternative_job_) || dns_alpn_h3_job_) {
+    if (job == main_job_.get()) {
+      return ALTERNATE_PROTOCOL_USAGE_MAIN_JOB_WON_RACE;
+    }
+    if (job == alternative_job_.get()) {
+      if (job->using_existing_quic_session()) {
+        return ALTERNATE_PROTOCOL_USAGE_NO_RACE;
+      }
+      return ALTERNATE_PROTOCOL_USAGE_WON_RACE;
+    }
+    if (job == dns_alpn_h3_job_.get()) {
+      if (job->using_existing_quic_session()) {
+        return ALTERNATE_PROTOCOL_USAGE_DNS_ALPN_H3_JOB_WON_WITHOUT_RACE;
+      }
+      return ALTERNATE_PROTOCOL_USAGE_DNS_ALPN_H3_JOB_WON_RACE;
+    }
+  }
+  // TODO(crbug.com/1345536): Implement better logic to support uncovered cases.
+  return ALTERNATE_PROTOCOL_USAGE_UNSPECIFIED_REASON;
 }
 
 int HttpStreamFactory::JobController::ReconsiderProxyAfterError(Job* job,

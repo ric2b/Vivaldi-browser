@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "base/auto_reset.h"
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
@@ -30,6 +32,12 @@ namespace {
 NSString* const kWindowDidChangePositionInWindowList =
     @"ChromeWindowDidChangePositionInWindowList";
 NSString* const kWindowIsOccludedKey = @"ChromeWindowIsOccludedKey";
+
+bool IsBrowserProcess() {
+  return base::CommandLine::ForCurrentProcess()
+      ->GetSwitchValueASCII("type")
+      .empty();
+}
 
 }  // namespace
 
@@ -65,6 +73,11 @@ NSString* const kWindowIsOccludedKey = @"ChromeWindowIsOccludedKey";
       [self sharedOcclusionChecker];
   if (sharedInstance->get() == nil) {
     sharedInstance->reset([[self alloc] init]);
+
+    // Checking if occlusion tracking is the cause of crashes in utility
+    // processes (and how that's possible). See https://crbug.com/1276322 .
+    if (!IsBrowserProcess())
+      base::debug::DumpWithoutCrashing();
   }
   return sharedInstance->get();
 }
@@ -77,6 +90,13 @@ NSString* const kWindowIsOccludedKey = @"ChromeWindowIsOccludedKey";
   self = [super init];
 
   DCHECK(base::FeatureList::IsEnabled(kMacWebContentsOcclusion));
+  DCHECK(IsBrowserProcess());
+  if (!IsBrowserProcess()) {
+    static auto* const crash_key = base::debug::AllocateCrashKeyString(
+        "MacWebContentsOcclusionChecker", base::debug::CrashKeySize::Size32);
+    base::debug::SetCrashKeyString(crash_key, "initialized");
+  }
+
   [self setUpNotifications];
 
   // There's no notification for NSWindows changing their order in the window
@@ -221,7 +241,15 @@ NSString* const kWindowIsOccludedKey = @"ChromeWindowIsOccludedKey";
 - (void)windowWillClose:(NSNotification*)notification {
   NSWindow* theWindow = [notification object];
 
-  if ([self windowCanTriggerOcclusionUpdates:theWindow])
+  // -windowCanTriggerOcclusionUpdates: returns NO if the window doesn't
+  // contain a webcontents. In some cases, however, a closing browser window
+  // will be stripped of its webcontents by the time we reach this method.
+  // As a result, if we use windowCanTriggerOcclusionUpdates:, the browser
+  // window's closure won't trigger an occlusion state update, leaving the
+  // webcontentses in windows it covered in the occluded state. To avoid this,
+  // we'll perform an occlusion update if the window isn't a child window.
+  // See http://crbug.com/1356622 .
+  if ([theWindow parentWindow] == nil)
     [self scheduleOcclusionStateUpdates];
 }
 

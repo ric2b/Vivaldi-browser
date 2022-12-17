@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,7 +46,7 @@ class PartitionAllocPCScanTestBase : public testing::Test {
  public:
   PartitionAllocPCScanTestBase() {
     PartitionAllocGlobalInit([](size_t) { PA_LOG(FATAL) << "Out of memory"; });
-    // Previous test runs within the same process decommit GigaCage, therefore
+    // Previous test runs within the same process decommit pools, therefore
     // we need to make sure that the card table is recommitted for each run.
     PCScan::ReinitForTesting(
         {PCScan::InitConfig::WantedWriteProtectionMode::kDisabled,
@@ -130,8 +130,8 @@ FullSlotSpanAllocation GetFullSlotSpan(ThreadSafePartitionRoot& root,
   PA_CHECK(0u == root.get_total_size_of_committed_pages());
 
   const size_t raw_size = root.AdjustSizeForExtrasAdd(object_size);
-  const size_t bucket_index = root.SizeToBucketIndex(
-      raw_size, root.flags.with_denser_bucket_distribution);
+  const size_t bucket_index =
+      root.SizeToBucketIndex(raw_size, root.GetBucketDistribution());
   ThreadSafePartitionRoot::Bucket& bucket = root.buckets[bucket_index];
   const size_t num_slots = (bucket.get_bytes_per_span()) / bucket.slot_size;
 
@@ -664,23 +664,25 @@ TEST_F(PartitionAllocPCScanTest, StackScanning) {
     [this]() PA_NOINLINE {
       // This writes the pointer to the stack.
       [[maybe_unused]] auto* volatile stack_ref = dangling_reference;
+      // Call the non-inline function that would scan the stack. Don't execute
+      // the rest of the actions inside the function, since otherwise it would
+      // be tail-call optimized and the parent frame's stack with the dangling
+      // pointer would be missed.
       [this]() PA_NOINLINE {
         // Schedule PCScan but don't scan.
         SchedulePCScan();
         // Enter safepoint and scan from mutator. This will scan the stack.
         JoinPCScanAsMutator();
-        // Check that the object is still quarantined since it's referenced by
-        // |dangling_reference|.
-        EXPECT_TRUE(IsInQuarantine(dangling_reference));
-        // Check that value is not in the freelist.
-        EXPECT_FALSE(
-            IsInFreeList(root().ObjectToSlotStart(dangling_reference)));
-        // Run sweeper.
-        FinishPCScanAsScanner();
-        // Check that |dangling_reference| still exists.
-        EXPECT_FALSE(
-            IsInFreeList(root().ObjectToSlotStart(dangling_reference)));
       }();
+      // Check that the object is still quarantined since it's referenced by
+      // |dangling_reference|.
+      EXPECT_TRUE(IsInQuarantine(dangling_reference));
+      // Check that value is not in the freelist.
+      EXPECT_FALSE(IsInFreeList(root().ObjectToSlotStart(dangling_reference)));
+      // Run sweeper.
+      FinishPCScanAsScanner();
+      // Check that |dangling_reference| still exists.
+      EXPECT_FALSE(IsInFreeList(root().ObjectToSlotStart(dangling_reference)));
     }();
   }();
 }

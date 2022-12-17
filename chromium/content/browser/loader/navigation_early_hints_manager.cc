@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -300,7 +300,7 @@ NavigationEarlyHintsManager::PreloadedResource::operator=(
 NavigationEarlyHintsManager::InflightPreload::InflightPreload(
     std::unique_ptr<blink::ThrottlingURLLoader> loader,
     std::unique_ptr<PreloadURLLoaderClient> client)
-    : loader(std::move(loader)), client(std::move(client)) {}
+    : client(std::move(client)), loader(std::move(loader)) {}
 
 NavigationEarlyHintsManager::InflightPreload::~InflightPreload() = default;
 
@@ -328,8 +328,10 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
   // mojom::URLLoaderClient overrides:
   void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) override {
   }
-  void OnReceiveResponse(network::mojom::URLResponseHeadPtr head,
-                         mojo::ScopedDataPipeConsumerHandle body) override {
+  void OnReceiveResponse(
+      network::mojom::URLResponseHeadPtr head,
+      mojo::ScopedDataPipeConsumerHandle body,
+      absl::optional<mojo_base::BigBuffer> cached_metadata) override {
     if (!head->network_accessed && head->was_fetched_via_cache) {
       // Cancel the client since the response is already stored in the cache.
       result_.was_canceled = true;
@@ -354,7 +356,6 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
                         OnUploadProgressCallback callback) override {
     NOTREACHED();
   }
-  void OnReceiveCachedMetadata(mojo_base::BigBuffer data) override {}
   void OnTransferSizeUpdated(int32_t transfer_size_diff) override {}
   void OnComplete(const network::URLLoaderCompletionStatus& status) override {
     if (result_.was_canceled || result_.error_code.has_value()) {
@@ -506,9 +507,9 @@ void NavigationEarlyHintsManager::MaybePreconnect(
 
   bool allow_credentials =
       link->cross_origin != network::mojom::CrossOriginAttribute::kAnonymous;
-  network_context->PreconnectSockets(/*num_streams=*/1, link->href,
-                                     allow_credentials,
-                                     isolation_info_.network_isolation_key());
+  network_context->PreconnectSockets(
+      /*num_streams=*/1, link->href, allow_credentials,
+      isolation_info_.network_anonymization_key());
   preconnect_entries_.insert(std::move(entry));
 }
 

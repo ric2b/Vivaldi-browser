@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -78,9 +79,7 @@ ElementFragmentAnchor* ElementFragmentAnchor::TryCreate(const KURL& url,
   if (!should_scroll)
     return nullptr;
 
-  if (RuntimeEnabledFeatures::AutoExpandDetailsElementEnabled()) {
-    HTMLDetailsElement::ExpandDetailsAncestors(*anchor_node);
-  }
+  HTMLDetailsElement::ExpandDetailsAncestors(*anchor_node);
 
   if (RuntimeEnabledFeatures::BeforeMatchEventEnabled(
           frame.GetDocument()->GetExecutionContext())) {
@@ -203,7 +202,7 @@ void ElementFragmentAnchor::ApplyFocusIfNeeded() {
   // clear focus, which matches the behavior of other browsers.
   auto* element = DynamicTo<Element>(anchor_node_.Get());
   if (element && element->IsFocusable()) {
-    element->Focus();
+    element->Focus(FocusParams(/*gate_on_user_activation=*/true));
   } else {
     frame_->GetDocument()->SetSequentialFocusNavigationStartingPoint(
         anchor_node_);

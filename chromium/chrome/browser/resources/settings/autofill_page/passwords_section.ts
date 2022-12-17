@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,10 +10,11 @@
 
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import 'chrome://resources/cr_elements/icons.m.js';
-import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/icons.html.js';
+import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import '../controls/extension_controlled_indicator.js';
@@ -33,14 +34,16 @@ import './avatar_icon.js';
 
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
+import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
+import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
-import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {DomRepeat, DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import {FocusConfig} from '../focus_config.js';
 import {GlobalScrollTargetMixin, GlobalScrollTargetMixinInterface} from '../global_scroll_target_mixin.js';
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_proxy.js';
@@ -52,12 +55,14 @@ import {routes} from '../route.js';
 import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
 
 import {MergePasswordsStoreCopiesMixin, MergePasswordsStoreCopiesMixinInterface} from './merge_passwords_store_copies_mixin.js';
-// <if expr="is_win">
+// <if expr="is_win or is_macosx">
 import {PasskeysBrowserProxy, PasskeysBrowserProxyImpl} from './passkeys_browser_proxy.js';
 // </if>
 import {PasswordCheckMixin, PasswordCheckMixinInterface} from './password_check_mixin.js';
 import {AddCredentialFromSettingsUserInteractions, PasswordEditDialogElement} from './password_edit_dialog.js';
 import {PasswordCheckReferrer, PasswordExceptionListChangedListener, PasswordManagerImpl, PasswordManagerProxy} from './password_manager_proxy.js';
+import {PASSWORD_MANAGER_AUTH_TIMEOUT_PARAM} from './password_view.js';
+import {PasswordsImportDesktopInteractions, recordPasswordsImportInteraction} from './passwords_import_dialog.js';
 import {PasswordsListHandlerElement} from './passwords_list_handler.js';
 import {getTemplate} from './passwords_section.html.js';
 import {UserUtilMixin, UserUtilMixinInterface} from './user_util_mixin.js';
@@ -82,6 +87,7 @@ export interface PasswordsSectionElement {
     accountStorageOptInBody: HTMLElement,
     accountStorageOptOutBody: HTMLElement,
     addPasswordDialog: PasswordEditDialogElement,
+    authTimeoutDialog: CrDialogElement,
     checkPasswordLeakCount: HTMLElement,
     checkPasswordLeakDescription: HTMLElement,
     checkPasswordWarningIcon: HTMLElement,
@@ -92,7 +98,7 @@ export interface PasswordsSectionElement {
     exportImportMenu: CrActionMenuElement,
     manageLink: HTMLElement,
     menuEditPassword: HTMLElement,
-    menuExportPassword: HTMLElement,
+    menuExportPassword: HTMLButtonElement,
     noExceptionsLabel: HTMLElement,
     noPasswordsLabel: HTMLElement,
     optInToAccountStorageButton: HTMLElement,
@@ -221,12 +227,6 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
         value: false,
       },
 
-      hidePasswordsLink_: {
-        type: Boolean,
-        computed: 'computeHidePasswordsLink_(syncPrefs, syncStatus, ' +
-            'eligibleForAccountStorage, isUnifiedPasswordManagerEnabled_)',
-      },
-
       isAutomaticPasswordChangeEnabled_: {
         type: Boolean,
         value() {
@@ -243,12 +243,14 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
         reflectToAttribute: true,
       },
 
-      isUnifiedPasswordManagerEnabled_: {
+      // <if expr="is_win or is_macosx">
+      isBiometricAuthenticationForFillingEnabled_: {
         type: Boolean,
         value() {
-          return loadTimeData.getBoolean('unifiedPasswordManagerEnabled');
+          return loadTimeData.getBoolean('biometricAuthenticationForFilling');
         },
       },
+      // </if>
 
       showImportPasswords_: {
         type: Boolean,
@@ -292,12 +294,10 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
   private shouldShowBanner_: boolean;
   private isAutomaticPasswordChangeEnabled_: boolean;
   private isPasswordViewPageEnabled_: boolean;
-  private isUnifiedPasswordManagerEnabled_: boolean;
   private shouldShowDevicePasswordsLink_: boolean;
   private trustedVaultBannerState_: TrustedVaultBannerState;
   private hasLeakedCredentials_: boolean;
   private hasPasskeys_: boolean;
-  private hidePasswordsLink_: boolean;
   private showImportPasswords_: boolean;
 
   private showPasswordsExportDialog_: boolean;
@@ -307,7 +307,7 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
 
   private passwordManager_: PasswordManagerProxy =
       PasswordManagerImpl.getInstance();
-  // <if expr="is_win">
+  // <if expr="is_win or is_macosx">
   private passkeysBrowserProxy_: PasskeysBrowserProxy =
       PasskeysBrowserProxyImpl.getInstance();
   // </if>
@@ -330,11 +330,25 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
       // </if>
     });
 
-    // <if expr="is_win">
+    // <if expr="is_win or is_macosx">
     this.passkeysBrowserProxy_.hasPasskeys().then(hasPasskeys => {
       this.hasPasskeys_ = hasPasskeys;
     });
     // </if>
+
+    if (this.showImportPasswords_) {
+      const importLink = this.$.noPasswordsLabel.querySelector('a');
+      // Add an event listener to the import link, points to the import flow.
+      assert(importLink);
+      importLink!.addEventListener('click', (event: Event) => {
+        // The action is triggered from a dummy anchor element poining to "#".
+        // For that case preventing the default behaviour is required here.
+        event.preventDefault();
+        recordPasswordsImportInteraction(
+            PasswordsImportDesktopInteractions.DIALOG_OPENED_FROM_EMPTY_STATE);
+        this.showPasswordsImportDialog_ = true;
+      });
+    }
   }
 
   override connectedCallback() {
@@ -376,11 +390,28 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
   override currentRouteChanged(route: Route): void {
     super.currentRouteChanged(route);
 
+    if (route !== routes.PASSWORDS) {
+      return;
+    }
+
     // If password change scripts are enabled, the scripts cache should be
     // refreshed to minimize any UI modifications on the password check page.
-    if (route === routes.PASSWORDS && this.isAutomaticPasswordChangeEnabled_) {
+    if (this.isAutomaticPasswordChangeEnabled_) {
       this.passwordManager_.refreshScriptsIfNecessary();
     }
+
+    // Show the auth timeout dialog if the URL has the URL param.
+    const params = Router.getInstance().getQueryParameters();
+    if (!params.get(PASSWORD_MANAGER_AUTH_TIMEOUT_PARAM)) {
+      return;
+    }
+    this.$.authTimeoutDialog.showModal();
+    params.delete(PASSWORD_MANAGER_AUTH_TIMEOUT_PARAM);
+    Router.getInstance().updateRouteParams(params);
+  }
+
+  private onCloseAuthTimeoutDialogButton_() {
+    this.$.authTimeoutDialog.close();
   }
 
   private computeShowAddPasswordButton_(): boolean {
@@ -417,19 +448,6 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
         (this.numberOfDevicePasswords_ > 0);
   }
 
-  /**
-   * hide the link to the user's Google Account if:
-   *  a) the link is embedded in the account storage message OR
-   *  b) the user is signed out (or signed-in but has encrypted passwords) OR
-   *  c) unified password manager for desktop is enabled.
-   */
-  private computeHidePasswordsLink_(): boolean {
-    return !!this.eligibleForAccountStorage ||
-        (!!this.syncStatus && !!this.syncStatus.signedIn && !!this.syncPrefs &&
-         !!this.syncPrefs.encryptAllData) ||
-        this.isUnifiedPasswordManagerEnabled_;
-  }
-
   private computeHasLeakedCredentials_(): boolean {
     return this.leakedPasswords.length > 0;
   }
@@ -438,8 +456,16 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
     return !this.status.elapsedTimeSinceLastCheck;
   }
 
-  private getPasswordToggleClass_(): string {
-    return this.isUnifiedPasswordManagerEnabled_ ? 'hr' : '';
+  private switchBiometricAuthBeforeFillingState_(e: Event) {
+    const biometricAuthenticationForFillingToggle =
+        e!.target as SettingsToggleButtonElement;
+    assert(biometricAuthenticationForFillingToggle);
+    // User action is removed since toggle value shouldn't change until user
+    // authenticates successfully, after that toggle value will be put in the
+    // correct state.
+    biometricAuthenticationForFillingToggle.checked =
+        !biometricAuthenticationForFillingToggle.checked;
+    this.passwordManager_.switchBiometricAuthBeforeFillingState();
   }
 
   /**
@@ -533,9 +559,11 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
   }
 
   /**
-   * Fires an event that should trigger the password import process.
+   * Opens the passwords import dialog.
    */
   private onImportTap_() {
+    recordPasswordsImportInteraction(
+        PasswordsImportDesktopInteractions.DIALOG_OPENED_FROM_THREE_DOT_MENU);
     this.showPasswordsImportDialog_ = true;
     this.$.exportImportMenu.close();
   }
@@ -589,7 +617,7 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
       assert(toFocus);
       focusWithoutInk(toFocus);
     });
-    // <if expr="is_win">
+    // <if expr="is_win or is_macosx">
     this.focusConfig.set(routes.PASSKEYS.path, () => {
       const toFocus =
           this.shadowRoot!.querySelector<HTMLElement>('#managePasskeysIcon');

@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -12,6 +12,7 @@ static_library("storage_configuration") {
 
   deps = [
     "//base",
+    "//components/reporting/proto:record_constants",
     "//components/reporting/resources:resource_interface",
   ]
 }
@@ -75,6 +76,7 @@ static_library("storage") {
     "//components/reporting/encryption:primitives",
     "//components/reporting/encryption:verification",
     "//components/reporting/health:health_module",
+    "//components/reporting/proto:pipeline_id_proto",
     "//components/reporting/proto:record_constants",
     "//components/reporting/proto:record_proto",
     "//components/reporting/resources:resource_interface",

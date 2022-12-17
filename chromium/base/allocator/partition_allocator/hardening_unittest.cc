@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,6 +112,11 @@ TEST(HardeningTest, MetadataPointerCrashing) {
 #endif  // !BUILDFLAG(IS_ANDROID) && defined(GTEST_HAS_DEATH_TEST) &&
         // defined(PA_HAS_FREELIST_SHADOW_ENTRY)
 
+// Below test also misbehaves on Android; as above, death tests don't
+// quite work (crbug.com/1240184), and having free slot bitmaps enabled
+// force the expectations below to crash.
+#if !BUILDFLAG(IS_ANDROID)
+
 TEST(HardeningTest, SuccessfulCorruption) {
   PartitionRoot<ThreadSafe> root({
       PartitionOptions::AlignedAlloc::kAllowed,
@@ -139,6 +144,11 @@ TEST(HardeningTest, SuccessfulCorruption) {
   PartitionFreelistEntry::EmplaceAndInitForTest(root.ObjectToSlotStart(data),
                                                 to_corrupt, true);
 
+#if BUILDFLAG(USE_FREESLOT_BITMAP)
+  // This part crashes with freeslot bitmap because it detects freelist
+  // corruptions, which is rather desirable behavior.
+  EXPECT_DEATH_IF_SUPPORTED(root.Alloc(kAllocSize, ""), "");
+#else
   // Next allocation is what was in
   // root->bucket->active_slot_span_head->freelist_head, so not the corrupted
   // pointer.
@@ -149,7 +159,9 @@ TEST(HardeningTest, SuccessfulCorruption) {
   void* new_data2 = root.Alloc(kAllocSize, "");
   // Now we have a pointer to the middle of an existing allocation.
   EXPECT_EQ(new_data2, to_corrupt);
+#endif  // BUILDFLAG(USE_FREESLOT_BITMAP)
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 }  // namespace partition_alloc::internal

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,11 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/gurl.h"
 
 using base::android::ConvertUTF16ToJavaString;
+using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
 namespace {
@@ -177,4 +180,44 @@ static void JNI_PrivacySandboxBridge_PromptActionOccurred(JNIEnv* env,
       ProfileManager::GetActiveUserProfile())
       ->PromptActionOccurred(
           static_cast<PrivacySandboxService::PromptAction>(action));
+}
+
+static jboolean JNI_PrivacySandboxBridge_IsFirstPartySetsDataAccessEnabled(
+    JNIEnv* env) {
+  return GetPrivacySandboxService()->IsFirstPartySetsDataAccessEnabled();
+}
+
+static jboolean JNI_PrivacySandboxBridge_IsFirstPartySetsDataAccessManaged(
+    JNIEnv* env) {
+  return GetPrivacySandboxService()->IsFirstPartySetsDataAccessManaged();
+}
+
+static void JNI_PrivacySandboxBridge_SetFirstPartySetsDataAccessEnabled(
+    JNIEnv* env,
+    jboolean enabled) {
+  GetPrivacySandboxService()->SetFirstPartySetsDataAccessEnabled(enabled);
+}
+
+static ScopedJavaLocalRef<jstring>
+JNI_PrivacySandboxBridge_GetFirstPartySetOwner(
+    JNIEnv* env,
+    const JavaParamRef<jstring>& memberOrigin) {
+  auto fpsOwner = GetPrivacySandboxService()->GetFirstPartySetOwner(
+      GURL(ConvertJavaStringToUTF8(env, memberOrigin)));
+
+  if (!fpsOwner.has_value()) {
+    return nullptr;
+  }
+
+  return ConvertUTF8ToJavaString(env, fpsOwner->GetURL().host());
+}
+
+static jboolean JNI_PrivacySandboxBridge_IsPartOfManagedFirstPartySet(
+    JNIEnv* env,
+    const JavaParamRef<jstring>& origin) {
+  auto schemefulSite =
+      net::SchemefulSite(GURL(ConvertJavaStringToUTF8(env, origin)));
+
+  return GetPrivacySandboxService()->IsPartOfManagedFirstPartySet(
+      schemefulSite);
 }

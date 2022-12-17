@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -152,7 +152,7 @@ class DisplayLockContextTest : public testing::Test {
   }
 
   void UnlockImmediate(DisplayLockContext* context) {
-    context->SetRequestedState(EContentVisibility::kVisible);
+    context->SetRequestedState(EContentVisibility::kVisible, g_null_atom);
   }
 
   mojom::blink::FindOptionsPtr FindOptions(bool new_session = true) {
@@ -2005,7 +2005,7 @@ class DisplayLockContextRenderingTest : public RenderingTest {
     return context->needs_compositing_dependent_flag_update_;
   }
   void LockImmediate(DisplayLockContext* context) {
-    context->SetRequestedState(EContentVisibility::kHidden);
+    context->SetRequestedState(EContentVisibility::kHidden, g_null_atom);
   }
   void RunStartOfLifecycleTasks() {
     auto start_of_lifecycle_tasks =

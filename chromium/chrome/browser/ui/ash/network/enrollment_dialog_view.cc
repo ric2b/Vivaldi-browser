@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
 
-namespace chromeos {
+namespace ash::enrollment {
 
 namespace {
 
@@ -96,7 +96,7 @@ EnrollmentDialogView::EnrollmentDialogView(const std::string& network_name,
   label->SetAllowCharacterBreak(true);
 }
 
-EnrollmentDialogView::~EnrollmentDialogView() {}
+EnrollmentDialogView::~EnrollmentDialogView() = default;
 
 // static
 void EnrollmentDialogView::ShowDialog(const std::string& network_name,
@@ -169,7 +169,7 @@ DialogEnrollmentDelegate::DialogEnrollmentDelegate(
       network_name_(network_name),
       profile_(profile) {}
 
-DialogEnrollmentDelegate::~DialogEnrollmentDelegate() {}
+DialogEnrollmentDelegate::~DialogEnrollmentDelegate() = default;
 
 bool DialogEnrollmentDelegate::Enroll(
     const std::vector<std::string>& uri_list) {
@@ -219,23 +219,18 @@ bool EnrollmentDialogAllowed(Profile* profile) {
     case LoginState::LOGGED_IN_USER_GUEST:
       return true;
     case LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT:
-    case LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT_MANAGED:
       return false;
     case LoginState::LOGGED_IN_USER_KIOSK:
       return false;
     case LoginState::LOGGED_IN_USER_CHILD:
       return true;
   }
-  NOTREACHED();
-  return false;
 }
 
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // Factory function.
-
-namespace enrollment {
 
 bool CreateEnrollmentDialog(const std::string& network_id) {
   const NetworkState* network =
@@ -260,7 +255,7 @@ bool CreateEnrollmentDialog(const std::string& network_id) {
   if (!policy)
     return false;
 
-  ash::client_cert::ClientCertConfig cert_config;
+  client_cert::ClientCertConfig cert_config;
   OncToClientCertConfig(onc_source, policy->GetDict(), &cert_config);
 
   if (cert_config.client_cert_type != onc::client_cert::kPattern)
@@ -282,6 +277,4 @@ bool CreateEnrollmentDialog(const std::string& network_id) {
   return enrollment->Enroll(cert_config.pattern.enrollment_uri_list());
 }
 
-}  // namespace enrollment
-
-}  // namespace chromeos
+}  // namespace ash::enrollment

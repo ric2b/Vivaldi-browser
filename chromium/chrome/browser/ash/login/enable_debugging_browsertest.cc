@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -391,8 +391,8 @@ class EnableDebuggingRequestedTest : public EnableDebuggingDevTest {
 
   // EnableDebuggingDevTest overrides:
   bool SetUpUserDataDirectory() override {
-    base::DictionaryValue local_state_dict;
-    local_state_dict.SetBoolKey(prefs::kDebuggingFeaturesRequested, true);
+    base::Value::Dict local_state_dict;
+    local_state_dict.Set(prefs::kDebuggingFeaturesRequested, true);
 
     base::FilePath user_data_dir;
     CHECK(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));

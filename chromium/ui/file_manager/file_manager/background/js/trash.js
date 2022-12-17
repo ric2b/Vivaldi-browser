@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,9 +7,9 @@
  * https://specifications.freedesktop.org/trash-spec/trashspec-1.0.html
  */
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 
-import {TrashConfig, TrashDirs, TrashEntry} from '../../common/js/trash.js';
+import {AUTO_DELETE_INTERVAL_MS, TrashConfig, TrashDirs, TrashEntry} from '../../common/js/trash.js';
 import {util} from '../../common/js/util.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
 
@@ -381,7 +381,7 @@ export class Trash {
           }
 
           // Delete entries older than 30d.
-          const ago30d = now - Trash.AUTO_DELETE_INTERVAL_MS;
+          const ago30d = now - AUTO_DELETE_INTERVAL_MS;
           const ago30dStr = new Date(ago30d).toISOString();
           if (d < ago30d) {
             const msg = `Older than ${ago30dStr}, DeletionDate=${found[1]}`;
@@ -401,10 +401,3 @@ export class Trash {
     }
   }
 }
-
-/**
- * Interval (ms) until items in trash are permanently deleted. 30 days.
- * @const
- */
-Trash.AUTO_DELETE_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
-

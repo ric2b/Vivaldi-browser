@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,6 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_result.h"
-#include "components/permissions/permission_util.h"
 #include "components/permissions/prediction_service/prediction_service_messages.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -26,6 +25,7 @@ class GURL;
 
 namespace permissions {
 enum class PermissionRequestGestureType;
+enum class PermissionAction;
 class PermissionRequest;
 
 // Used for UMA to record the types of permission prompts shown.
@@ -65,7 +65,7 @@ enum class RequestTypeForUma {
   PERMISSION_AR = 22,
   PERMISSION_STORAGE_ACCESS = 23,
   PERMISSION_CAMERA_PAN_TILT_ZOOM = 24,
-  PERMISSION_WINDOW_PLACEMENT = 25,
+  PERMISSION_WINDOW_MANAGEMENT = 25,
   PERMISSION_LOCAL_FONTS = 26,
   PERMISSION_IDLE_DETECTION = 27,
   PERMISSION_FILE_HANDLING = 28,
@@ -256,6 +256,59 @@ enum class PermissionPredictionSource {
   kMaxValue = SERVER_SIDE,
 };
 
+// This enum backs up the 'PageInfoDialogAccessType' histogram enum.
+// It is used for collecting page info access type metrics in the context of
+// the confirmation chip.
+enum class PageInfoDialogAccessType {
+  // The user opened page info by clicking on the lock in a situation that is
+  // considered independent of the display of a confirmation chip.
+  LOCK_CLICK = 0,
+  // The user opened page info by clicking on the lock while a confirmation chip
+  // was being displayed.
+  LOCK_CLICK_DURING_CONFIRMATION_CHIP = 1,
+  // The user opened page info by clicking on the confirmation chip while it was
+  // being displayed.
+  CONFIRMATION_CHIP_CLICK = 2,
+
+  // The user opened page info by clicking on the lock within
+  // 'kConfirmationConsiderationDurationForUma' after confirmation chip has
+  // collapsed. This click may be considered influenced by the displaying of the
+  // confirmation chip.
+  LOCK_CLICK_SHORTLY_AFTER_CONFIRMATION_CHIP = 3,
+
+  // Always keep at the end.
+  kMaxValue = LOCK_CLICK_SHORTLY_AFTER_CONFIRMATION_CHIP
+};
+
+constexpr auto kConfirmationConsiderationDurationForUma = base::Seconds(20);
+
+// This enum backs up the
+// 'Permissions.PageInfo.ChangedWithin1m.{PermissionType}' histograms enum. It
+// is used for collecting page info permission change metrics following in the
+// first minute after a PermissionAction has been taken. Note that
+// PermissionActions  DISMISSED and IGNORED are not taken into account, as they
+// don't have an effect on the content settings.
+enum class PermissionChangeAction {
+  // PermissionAction was one of {GRANTED, GRANTED_ONCE} and the content
+  // setting is changed to CONTENT_SETTING_BLOCK.
+  REVOKED = 0,
+
+  // PermissionAction was DENIED and the content setting is changed to
+  // CONTENT_SETTING_ALLOW.
+  REALLOWED = 1,
+
+  // PermissionAction was one of {GRANTED, GRANTED_ONCE} and the content setting
+  // is changed to CONTENT_SETTING_DEFAULT.
+  RESET_FROM_ALLOWED = 2,
+
+  // PermissionAction was DENIED and the content setting is changed to
+  // CONTENT_SETTING_DEFAULT.
+  RESET_FROM_DENIED = 3,
+
+  // Always keep at the end.
+  kMaxValue = RESET_FROM_DENIED
+};
+
 // Provides a convenient way of logging UMA for permission related operations.
 class PermissionUmaUtil {
  public:
@@ -365,6 +418,14 @@ class PermissionUmaUtil {
       RequestType request_type,
       bool is_on_device,
       bool is_heldback);
+
+  static void RecordPageInfoDialogAccessType(
+      PageInfoDialogAccessType access_type);
+
+  static void RecordPageInfoPermissionChangeWithin1m(
+      ContentSettingsType type,
+      PermissionAction previous_action,
+      ContentSetting setting_after);
 
   static std::string GetPermissionActionString(
       PermissionAction permission_action);

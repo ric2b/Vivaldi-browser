@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1186,6 +1186,16 @@ content::BluetoothDelegate* ContentBrowserClientImpl::GetBluetoothDelegate() {
 content::SpeechRecognitionManagerDelegate*
 ContentBrowserClientImpl::CreateSpeechRecognitionManagerDelegate() {
   return new WebLayerSpeechRecognitionManagerDelegate();
+}
+
+bool ContentBrowserClientImpl::ShouldSandboxNetworkService() {
+#if BUILDFLAG(IS_WIN)
+  // Weblayer ConfigureNetworkContextParams does not support data migration
+  // required for network sandbox to be enabled on Windows.
+  return false;
+#else
+  return ContentBrowserClient::ShouldSandboxNetworkService();
+#endif  // BUILDFLAG(IS_WIN)
 }
 
 #if BUILDFLAG(ENABLE_ARCORE)

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,6 @@
 #include "chrome/browser/web_applications/os_integration/web_app_shortcuts_menu.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
-#include "chrome/browser/web_applications/user_uninstalled_preinstalled_web_app_prefs.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
@@ -50,10 +49,50 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/webapps/browser/uninstall_result_code.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace web_app {
+namespace {
+
+// Overwrite the user display mode if the install source indicates a
+// user-initiated installation
+bool ShouldInstallOverwriteUserDisplayMode(
+    webapps::WebappInstallSource source) {
+  using InstallSource = webapps::WebappInstallSource;
+  switch (source) {
+    case InstallSource::MENU_BROWSER_TAB:
+    case InstallSource::MENU_CUSTOM_TAB:
+    case InstallSource::AUTOMATIC_PROMPT_BROWSER_TAB:
+    case InstallSource::AUTOMATIC_PROMPT_CUSTOM_TAB:
+    case InstallSource::API_BROWSER_TAB:
+    case InstallSource::API_CUSTOM_TAB:
+    case InstallSource::AMBIENT_BADGE_BROWSER_TAB:
+    case InstallSource::AMBIENT_BADGE_CUSTOM_TAB:
+    case InstallSource::RICH_INSTALL_UI_WEBLAYER:
+    case InstallSource::ARC:
+    case InstallSource::CHROME_SERVICE:
+    case InstallSource::OMNIBOX_INSTALL_ICON:
+    case InstallSource::MENU_CREATE_SHORTCUT:
+      return true;
+    case InstallSource::DEVTOOLS:
+    case InstallSource::MANAGEMENT_API:
+    case InstallSource::INTERNAL_DEFAULT:
+    case InstallSource::ISOLATED_APP_DEV_INSTALL:
+    case InstallSource::EXTERNAL_DEFAULT:
+    case InstallSource::EXTERNAL_POLICY:
+    case InstallSource::EXTERNAL_LOCK_SCREEN:
+    case InstallSource::SYSTEM_DEFAULT:
+    case InstallSource::SYNC:
+    case InstallSource::SUB_APP:
+    case InstallSource::KIOSK:
+      return false;
+    case InstallSource::COUNT:
+      NOTREACHED();
+      return false;
+  }
+}
+
+}  // namespace
 
 WebAppInstallFinalizer::FinalizeOptions::FinalizeOptions(
     webapps::WebappInstallSource install_surface)
@@ -91,23 +130,11 @@ void WebAppInstallFinalizer::FinalizeInstall(
   AppId app_id =
       GenerateAppId(web_app_info.manifest_id, web_app_info.start_url);
   const WebApp* existing_web_app = GetWebAppRegistrar().GetAppById(app_id);
-  // A web app might be sync installed with id received from WebAppSpecifics
-  // that's different from start_url hash, in this case we look up the app by
-  // start_url and respect the app_id from the existing WebApp.
-  if (!base::FeatureList::IsEnabled(blink::features::kWebAppEnableManifestId) &&
-      !existing_web_app) {
-    existing_web_app =
-        GetWebAppRegistrar().GetAppByStartUrl(web_app_info.start_url);
-  }
   std::unique_ptr<WebApp> web_app;
   if (existing_web_app) {
     app_id = existing_web_app->app_id();
     // Prepare copy-on-write:
     // Allows changing manifest_id and start_url when manifest_id is enabled.
-    if (!base::FeatureList::IsEnabled(
-            blink::features::kWebAppEnableManifestId)) {
-      DCHECK_EQ(web_app_info.start_url, existing_web_app->start_url());
-    }
     web_app = std::make_unique<WebApp>(*existing_web_app);
 
     // The UI may initiate a full install to overwrite the existing
@@ -138,8 +165,7 @@ void WebAppInstallFinalizer::FinalizeInstall(
 
   // Set |user_display_mode| and any user-controllable fields here if this
   // install is user initiated or it's a new app.
-  if (webapps::InstallableMetrics::IsUserInitiatedInstallSource(
-          options.install_surface) ||
+  if (ShouldInstallOverwriteUserDisplayMode(options.install_surface) ||
       !existing_web_app) {
     DCHECK(web_app_info.user_display_mode.has_value());
     web_app->SetUserDisplayMode(*web_app_info.user_display_mode);
@@ -163,6 +189,10 @@ void WebAppInstallFinalizer::FinalizeInstall(
   if (options.system_web_app_data.has_value()) {
     web_app->client_data()->system_web_app_data =
         options.system_web_app_data.value();
+  }
+
+  if (options.isolation_data.has_value()) {
+    web_app->SetIsolationData(*options.isolation_data);
   }
 
   web_app->SetAdditionalSearchTerms(web_app_info.additional_search_terms);
@@ -202,13 +232,14 @@ void WebAppInstallFinalizer::UninstallExternalWebApp(
   DCHECK(started_);
 
   DCHECK(external_install_source == WebAppManagement::Type::kSystem ||
+         external_install_source == WebAppManagement::Type::kKiosk ||
          external_install_source == WebAppManagement::Type::kPolicy ||
          external_install_source == WebAppManagement::Type::kSubApp ||
          external_install_source == WebAppManagement::Type::kWebAppStore ||
          external_install_source == WebAppManagement::Type::kDefault);
 
-  UninstallExternalWebAppOrRemoveSource(app_id, external_install_source,
-                                        uninstall_source, std::move(callback));
+  ScheduleUninstallCommand(app_id, external_install_source, uninstall_source,
+                           std::move(callback));
 }
 
 void WebAppInstallFinalizer::UninstallExternalWebAppByUrl(
@@ -246,60 +277,18 @@ void WebAppInstallFinalizer::UninstallWebApp(
     webapps::WebappUninstallSource webapp_uninstall_source,
     UninstallWebAppCallback callback) {
   DCHECK(started_);
-
-  // Check that the source was from a known 'user' or allowed ones such
-  // as kMigration.
-  // WebappUninstallSource::kSync should not be included in this list.
-  DCHECK(
-      webapp_uninstall_source == webapps::WebappUninstallSource::kUnknown ||
-      webapp_uninstall_source == webapps::WebappUninstallSource::kAppMenu ||
-      webapp_uninstall_source == webapps::WebappUninstallSource::kAppsPage ||
-      webapp_uninstall_source == webapps::WebappUninstallSource::kOsSettings ||
-      webapp_uninstall_source ==
-          webapps::WebappUninstallSource::kAppManagement ||
-      webapp_uninstall_source == webapps::WebappUninstallSource::kMigration ||
-      webapp_uninstall_source == webapps::WebappUninstallSource::kAppList ||
-      webapp_uninstall_source == webapps::WebappUninstallSource::kShelf ||
-      webapp_uninstall_source == webapps::WebappUninstallSource::kSubApp);
-
-  const WebApp* app = GetWebAppRegistrar().GetAppById(app_id);
-  DCHECK(app);
-  DCHECK(app->CanUserUninstallWebApp());
-
-  if (app->IsPreinstalledApp()) {
-    // Update the default uninstalled web_app prefs if it is a preinstalled app
-    // but being removed by user.
-    const WebApp::ExternalConfigMap& config_map =
-        app->management_to_external_config_map();
-    auto it = config_map.find(WebAppManagement::kDefault);
-    if (it != config_map.end()) {
-      UserUninstalledPreinstalledWebAppPrefs(profile_->GetPrefs())
-          .Add(app_id, it->second.install_urls);
-    } else {
-      base::UmaHistogramBoolean(
-          "WebApp.Preinstalled.ExternalConfigMapAbsentDuringUninstall", true);
-    }
-  }
-
-  // UninstallWebApp can wipe out an app with multiple sources. This
-  // is the behavior from the old bookmark-app based system, which does not
-  // support incremental AddSource/RemoveSource. Here we are preserving that
-  // behavior for now.
-  // TODO(loyso): Implement different uninstall flows in UI. For example, we
-  // should separate UninstallWebAppFromSyncByUser from
-  // UninstallWebApp.
-  UninstallWebAppInternal(app_id, webapp_uninstall_source, std::move(callback));
+  // An external install source (or management type) is only required
+  // for apps that have been externally installed.
+  ScheduleUninstallCommand(app_id, /*external_install_source=*/absl::nullopt,
+                           webapp_uninstall_source, std::move(callback));
 }
 
 void WebAppInstallFinalizer::RetryIncompleteUninstalls(
     const base::flat_set<AppId>& apps_to_uninstall) {
   for (const AppId& app_id : apps_to_uninstall) {
-    command_manager_->ScheduleCommand(std::make_unique<WebAppUninstallCommand>(
-        app_id,
-        url::Origin::Create(registrar_->GetAppById(app_id)->start_url()),
-        profile_, os_integration_manager_, sync_bridge_, icon_manager_,
-        registrar_, install_manager_, this, translation_manager_,
-        webapps::WebappUninstallSource::kStartupCleanup, base::DoNothing()));
+    ScheduleUninstallCommand(app_id, /*external_install_source=*/absl::nullopt,
+                             webapps::WebappUninstallSource::kStartupCleanup,
+                             base::DoNothing());
   }
 }
 
@@ -362,9 +351,9 @@ void WebAppInstallFinalizer::Shutdown() {
   started_ = false;
 }
 
-void WebAppInstallFinalizer::SetRemoveSourceCallbackForTesting(
+void WebAppInstallFinalizer::SetRemoveManagementTypeCallbackForTesting(
     base::RepeatingCallback<void(const AppId&)> callback) {
-  install_source_removed_callback_for_testing_ = std::move(callback);
+  management_type_removed_callback_for_testing_ = std::move(callback);
 }
 
 void WebAppInstallFinalizer::SetSubsystems(
@@ -386,64 +375,6 @@ void WebAppInstallFinalizer::SetSubsystems(
   policy_manager_ = policy_manager;
   translation_manager_ = translation_manager;
   command_manager_ = command_manager;
-}
-
-void WebAppInstallFinalizer::UninstallWebAppInternal(
-    const AppId& app_id,
-    webapps::WebappUninstallSource uninstall_source,
-    UninstallWebAppCallback callback) {
-  command_manager_->ScheduleCommand(std::make_unique<WebAppUninstallCommand>(
-      app_id, url::Origin::Create(registrar_->GetAppById(app_id)->start_url()),
-      profile_, os_integration_manager_, sync_bridge_, icon_manager_,
-      registrar_, install_manager_, this, translation_manager_,
-      uninstall_source, std::move(callback)));
-}
-
-void WebAppInstallFinalizer::UninstallExternalWebAppOrRemoveSource(
-    const AppId& app_id,
-    WebAppManagement::Type install_source,
-    webapps::WebappUninstallSource uninstall_source,
-    UninstallWebAppCallback callback) {
-  const WebApp* app = GetWebAppRegistrar().GetAppById(app_id);
-  if (!app) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback),
-                       webapps::UninstallResultCode::kNoAppToUninstall));
-    return;
-  }
-
-  if (app->HasOnlySource(install_source)) {
-    UninstallWebAppInternal(app_id, uninstall_source, std::move(callback));
-  } else {
-    // There is a chance that removed source type is NOT user uninstallable
-    // but the remaining source (after removal) types are user uninstallable.
-    // In this case, the following call will register os uninstallation.
-    MaybeRegisterOsUninstall(
-        app, install_source, *os_integration_manager_,
-        base::BindOnce(&WebAppInstallFinalizer::OnMaybeRegisterOsUninstall,
-                       weak_ptr_factory_.GetWeakPtr(), app_id, install_source,
-                       std::move(callback)));
-  }
-}
-
-void WebAppInstallFinalizer::OnMaybeRegisterOsUninstall(
-    const AppId& app_id,
-    WebAppManagement::Type source,
-    UninstallWebAppCallback callback,
-    OsHooksErrors os_hooks_errors) {
-  ScopedRegistryUpdate update(sync_bridge_);
-  WebApp* app_to_update = update->UpdateApp(app_id);
-  app_to_update->RemoveSource(source);
-  if (source == WebAppManagement::kSubApp) {
-    app_to_update->SetParentAppId(absl::nullopt);
-  }
-  if (install_source_removed_callback_for_testing_)
-    install_source_removed_callback_for_testing_.Run(app_id);
-
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback),
-                                webapps::UninstallResultCode::kSuccess));
 }
 
 void WebAppInstallFinalizer::SetWebAppManifestFieldsAndWriteData(
@@ -588,6 +519,21 @@ void WebAppInstallFinalizer::OnDatabaseCommitCompletedForInstall(
   hooks_options.os_hooks[OsHookType::kFileHandlers] = true;
   hooks_options.os_hooks[OsHookType::kProtocolHandlers] = true;
 
+  switch (finalize_options.source) {
+    case WebAppManagement::kSystem:
+    case WebAppManagement::kPolicy:
+    case WebAppManagement::kDefault:
+      hooks_options.reason = SHORTCUT_CREATION_AUTOMATED;
+      break;
+    case WebAppManagement::kKiosk:
+    case WebAppManagement::kSubApp:
+    case WebAppManagement::kWebAppStore:
+    case WebAppManagement::kSync:
+    case WebAppManagement::kCommandLine:
+      hooks_options.reason = SHORTCUT_CREATION_BY_USER;
+      break;
+  }
+
   os_integration_manager_->InstallOsHooks(
       app_id,
       base::BindOnce(&WebAppInstallFinalizer::OnInstallHooksFinished,
@@ -682,6 +628,24 @@ void WebAppInstallFinalizer::WriteExternalConfigMapInfo(
       web_app.AddInstallURLToManagementExternalConfigMap(source, install_url);
     }
   }
+}
+
+void WebAppInstallFinalizer::ScheduleUninstallCommand(
+    const AppId& app_id,
+    absl::optional<WebAppManagement::Type> external_install_source,
+    webapps::WebappUninstallSource uninstall_source,
+    UninstallWebAppCallback callback) {
+  auto uninstall_command = std::make_unique<WebAppUninstallCommand>(
+      app_id, external_install_source, uninstall_source, std::move(callback),
+      profile_, os_integration_manager_, sync_bridge_, icon_manager_,
+      registrar_, install_manager_, translation_manager_);
+
+  if (management_type_removed_callback_for_testing_) {
+    uninstall_command->SetRemoveManagementTypeCallbackForTesting(  // IN-TEST
+        management_type_removed_callback_for_testing_);
+  }
+
+  command_manager_->ScheduleCommand(std::move(uninstall_command));
 }
 
 FileHandlerUpdateAction WebAppInstallFinalizer::GetFileHandlerUpdateAction(

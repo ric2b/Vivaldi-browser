@@ -1,23 +1,23 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/ios/ios_util.h"
+#import "base/ios/ios_util.h"
 #import "base/test/ios/wait_util.h"
-#include "components/strings/grit/components_strings.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
-#include "net/test/embedded_test_server/default_handlers.h"
-#include "net/test/embedded_test_server/embedded_test_server.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "net/test/embedded_test_server/default_handlers.h"
+#import "net/test/embedded_test_server/embedded_test_server.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -326,11 +326,13 @@ void WaitForOmniboxSuggestion(NSString* suggestion, int section, int row) {
 - (void)testTypeJavaScriptIntoOmnibox {
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/echo")];
 
-  [ChromeEarlGreyUI focusOmniboxAndType:@"javascript:alert('Hello');\n"];
+  [ChromeEarlGreyUI
+      focusOmniboxAndType:@"javascript:alert('JS Alert Text');\n"];
 
   ConditionBlock condition = ^{
     NSError* error = nil;
-    [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(@"Hello")]
+    [[EarlGrey
+        selectElementWithMatcher:grey_accessibilityLabel(@"JS Alert Text")]
         assertWithMatcher:grey_sufficientlyVisible()
                     error:&error];
     return error == nil;

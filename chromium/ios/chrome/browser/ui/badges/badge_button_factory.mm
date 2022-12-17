@@ -1,13 +1,13 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/badges/badge_button_factory.h"
 
-#include <ostream>
+#import <ostream>
 
 #import "base/notreached.h"
-#include "components/password_manager/core/common/password_manager_features.h"
+#import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/ui/badges/badge_button.h"
 #import "ios/chrome/browser/ui/badges/badge_constants.h"
 #import "ios/chrome/browser/ui/badges/badge_delegate.h"
@@ -16,8 +16,8 @@
 #import "ios/chrome/browser/ui/icons/infobar_icon.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -79,11 +79,14 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 }
 
 - (BadgeButton*)passwordsSaveBadgeButton {
-  BadgeButton* button = [self
-      createButtonForType:kBadgeTypePasswordSave
-                    image:[[UIImage imageNamed:[self passwordKeyAssetName]]
-                              imageWithRenderingMode:
-                                  UIImageRenderingModeAlwaysTemplate]];
+  UIImage* image =
+      UseSymbols()
+          ? CustomSymbolWithPointSize(kPasswordSymbol, kSymbolImagePointSize)
+          : [UIImage imageNamed:[self passwordKeyAssetName]];
+  BadgeButton* button =
+      [self createButtonForType:kBadgeTypePasswordSave
+                          image:[image imageWithRenderingMode:
+                                           UIImageRenderingModeAlwaysTemplate]];
   [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -95,11 +98,14 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 }
 
 - (BadgeButton*)passwordsUpdateBadgeButton {
-  BadgeButton* button = [self
-      createButtonForType:kBadgeTypePasswordUpdate
-                    image:[[UIImage imageNamed:[self passwordKeyAssetName]]
-                              imageWithRenderingMode:
-                                  UIImageRenderingModeAlwaysTemplate]];
+  UIImage* image =
+      UseSymbols()
+          ? CustomSymbolWithPointSize(kPasswordSymbol, kSymbolImagePointSize)
+          : [UIImage imageNamed:[self passwordKeyAssetName]];
+  BadgeButton* button =
+      [self createButtonForType:kBadgeTypePasswordUpdate
+                          image:[image imageWithRenderingMode:
+                                           UIImageRenderingModeAlwaysTemplate]];
   [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -149,8 +155,18 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)incognitoBadgeButton {
   BadgeButton* button;
   if (UseSymbols()) {
-    UIImage* image = CustomSymbolTemplateWithPointSize(
-        kIncognitoCircleFillSymbol, kSymbolIncognitoPointSize);
+    UIImage* image;
+    if (@available(iOS 15, *)) {
+      image = CustomPaletteSymbol(
+          kIncognitoCircleFillSymbol, kSymbolIncognitoPointSize,
+          UIImageSymbolWeightMedium, UIImageSymbolScaleMedium, @[
+            [UIColor colorNamed:kGrey400Color],
+            [UIColor colorNamed:kGrey100Color]
+          ]);
+    } else {
+      image = [[UIImage imageNamed:@"incognito_badge_ios14"]
+          imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    }
     button = [self createButtonForType:kBadgeTypeIncognito image:image];
     button.fullScreenImage = CustomSymbolTemplateWithPointSize(
         kIncognitoSymbol, kSymbolIncognitoFullScreenPointSize);

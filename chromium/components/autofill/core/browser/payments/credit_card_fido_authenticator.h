@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -239,6 +239,11 @@ class CreditCardFIDOAuthenticator
 
   // Updates the user preference to the value of |user_is_opted_in_|.
   void UpdateUserPref();
+
+  // Helper functions to handle the GetAssertion result.
+  void HandleGetAssertionSuccess(
+      blink::mojom::GetAssertionAuthenticatorResponsePtr assertion_response);
+  void HandleGetAssertionFailure();
 
   // Gets or creates Authenticator pointer to facilitate WebAuthn.
   webauthn::InternalAuthenticator* authenticator();

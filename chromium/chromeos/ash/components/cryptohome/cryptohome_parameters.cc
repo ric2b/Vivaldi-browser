@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,6 +41,9 @@ const std::string GetCryptohomeId(const AccountId& account_id) {
 }
 
 AccountId LookupUserByCryptohomeId(const std::string& cryptohome_id) {
+  if (cryptohome_id.empty())
+    return EmptyAccountId();
+
   const std::vector<AccountId> known_account_ids =
       user_manager::known_user::GetKnownAccountIds();
 
@@ -59,8 +62,7 @@ AccountId LookupUserByCryptohomeId(const std::string& cryptohome_id) {
     }
   }
 
-  return user_manager::known_user::GetAccountId(
-      cryptohome_id, std::string() /* id */, AccountType::UNKNOWN);
+  return user_manager::known_user::GetPlatformKnownAccountId(cryptohome_id);
 }
 
 }  //  anonymous namespace

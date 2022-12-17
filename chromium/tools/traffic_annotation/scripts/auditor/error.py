@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -183,7 +183,7 @@ class AuditorError:
           "It is recommended to run traffic_annotation_auditor locally to do "
           "the updates automatically (please refer to tools/traffic_annotation/"
           "auditor/README.md), but you can also apply the following edit(s) to "
-          "do it manually:\n{}\n\n".format(self._details[0]))
+          "do it manually:\n{}".format(self._details[0]))
 
     if self.type == ErrorType.GROUPING_XML_UPDATE:
       assert self._details
@@ -192,7 +192,7 @@ class AuditorError:
           "It is recommended to run traffic_annotation_auditor locally to do "
           "the updates automatically (please refer to tools/traffic_annotation/"
           "auditor/README.md), but you can also apply the following edit(s) to "
-          "do it manually:\n{}\n\n".format(self._details[0]))
+          "do it manually:\n{}".format(self._details[0]))
 
     raise NotImplementedError("Unimplemented ErrorType: {}".format(
         self.type.name))

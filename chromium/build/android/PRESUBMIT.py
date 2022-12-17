@@ -1,4 +1,4 @@
-# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Copyright 2013 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -116,6 +116,7 @@ def CommonChecks(input_api, output_api):
               J('pylib', 'utils', 'dexdump_test.py'),
               J('pylib', 'utils', 'gold_utils_test.py'),
               J('pylib', 'utils', 'test_filter_test.py'),
+              J('gyp', 'dex_test.py'),
               J('gyp', 'util', 'build_utils_test.py'),
               J('gyp', 'util', 'manifest_utils_test.py'),
               J('gyp', 'util', 'md5_check_test.py'),

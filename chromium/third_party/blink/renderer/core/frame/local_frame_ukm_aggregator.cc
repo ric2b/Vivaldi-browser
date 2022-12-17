@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -277,10 +277,6 @@ void LocalFrameUkmAggregator::RecordTimerSample(size_t metric_index,
 
 void LocalFrameUkmAggregator::RecordCountSample(size_t metric_index,
                                                 int64_t count) {
-  static base::CpuReductionExperimentFilter filter;
-  if (!filter.ShouldLogHistograms())
-    return;
-
   // Always use RecordForcedLayoutSample for the kForcedStyleAndLayout
   // metric id.
   DCHECK_NE(metric_index, static_cast<size_t>(kForcedStyleAndLayout));
@@ -295,6 +291,10 @@ void LocalFrameUkmAggregator::RecordCountSample(size_t metric_index,
     record.main_frame_count += count;
   if (is_pre_fcp)
     record.pre_fcp_aggregate += count;
+
+  if (!base::ShouldLogHistogramForCpuReductionExperiment())
+    return;
+
   // Record the UMA
   // ForcedStyleAndLayout happen so frequently on some pages that we overflow
   // the signed 32 counter for number of events in a 30 minute period. So

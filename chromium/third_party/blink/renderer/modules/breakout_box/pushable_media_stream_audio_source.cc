@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -135,9 +135,10 @@ void PushableMediaStreamAudioSource::DeliverData(
       params.format() != media::AudioParameters::AUDIO_PCM_LOW_LATENCY ||
       last_channels_ != channel_count || last_sample_rate_ != sample_rate ||
       last_frames_ != frame_count) {
-    SetFormat(media::AudioParameters(
-        media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-        media::GuessChannelLayout(channel_count), sample_rate, frame_count));
+    SetFormat(
+        media::AudioParameters(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                               media::ChannelLayoutConfig::Guess(channel_count),
+                               sample_rate, frame_count));
     last_channels_ = channel_count;
     last_sample_rate_ = sample_rate;
     last_frames_ = frame_count;

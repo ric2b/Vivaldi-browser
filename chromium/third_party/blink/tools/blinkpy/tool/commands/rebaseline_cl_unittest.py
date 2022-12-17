@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -155,8 +155,10 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
                 },
             },
         }
+        # TODO(crbug.com/1213998): Fix the example web test result format.
         self.web_test_resultsdb = WebTestResults([{
-            "name": "tests/two/image-fail.html/results/2",
+            "name":
+            "invocations/task-chromium-swarm.appspot.com-2/tests/ninja:%2F%2F:blink_web_tests%2Ftwo%2Fimage-fail.html",
             "testId": "ninja://:blink_web_tests/two/image-fail.html",
             "resultId": "2",
             "variant": {
@@ -168,7 +170,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             },
             "status": "FAIL"
         }, {
-            "name": "tests/one/missing.html/results/1",
+            "name":
+            "invocations/task-chromium-swarm.appspot.com-1/tests/ninja:%2F%2F:blink_web_tests%2Fone%2Fmissing.html",
             "testId": "ninja://:blink_web_tests/one/missing.html",
             "resultId": "1",
             "variant": {
@@ -180,7 +183,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             },
             "status": "FAIL"
         }, {
-            "name": "tests/one/crash.html/results/3",
+            "name":
+            "invocations/task-chromium-swarm.appspot.com-2/tests/ninja:%2F%2F:blink_web_tests%2Fone%2Fcrash.html",
             "testId": "ninja://:blink_web_tests/one/crash.html",
             "resultId": "3",
             "variant": {
@@ -211,7 +215,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             }],
             "tests/one/crash.html/results/3": [{
                 "name":
-                "invocations/task-chromium-swarm.appspot.com-2/tests/ninja:%2F%2F:blink_web_tests%2Ftwo%2Fcrash.html/results/3",
+                "invocations/task-chromium-swarm.appspot.com-2/tests/ninja:%2F%2F:blink_web_tests%2Fone%2Fcrash.html/results/3",
                 "artifactId": "actual_text",
                 "fetchUrl":
                 "https://results.usercontent.cr.dev/invocations/task-chromium-swarm.appspot.com-2/tests/ninja:%2F%2F:blink_web_tests%2Fone%2Fcrash.html/results/artifacts/actual_text?token=3",
@@ -326,7 +330,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         for build in self.builds:
             self.tool.results_fetcher.set_results_to_resultdb(
                 build, self.web_test_resultsdb)
-            self.tool.results_fetcher.set_artifact_list_for_test(
+            self.tool.results_fetcher.set_artifact_query_for_build(
                 build, self.test_artifacts_list)
         exit_code = self.command.execute(self.command_options(resultDB=True),
                                          [], self.tool)
@@ -380,7 +384,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         for build in self.builds:
             self.tool.results_fetcher.set_results_to_resultdb(
                 build, self.web_test_resultsdb)
-            self.tool.results_fetcher.set_artifact_list_for_test(
+            self.tool.results_fetcher.set_artifact_query_for_build(
                 build, self.test_artifacts_list)
         exit_code = self.command.execute(
             self.command_options(test_name_file=test_name_file, resultDB=True),
@@ -510,9 +514,9 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'INFO:   BUILDER              NUMBER  STATUS    BUCKET\n',
             'INFO:   MOCK Try Linux       6000    SCHEDULED try   \n',
             'INFO:   MOCK Try Mac         4000    STARTED   try   \n',
-            'INFO: There are some builders with no results:\n',
-            'INFO:   MOCK Try Linux\n',
-            'INFO:   MOCK Try Mac\n',
+            'WARNING: There are some builders with no results:\n',
+            'WARNING:   MOCK Try Linux\n',
+            'WARNING:   MOCK Try Mac\n',
             'INFO: Would you like to continue?\n',
             'INFO: Aborting.\n',
         ])
@@ -531,8 +535,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         self.assertEqual(exit_code, 1)
         self.assertLog([
             'INFO: All builds finished.\n',
-            'INFO: There are some builders with no results:\n',
-            'INFO:   MOCK Try Linux\n',
+            'WARNING: There are some builders with no results:\n',
+            'WARNING:   MOCK Try Linux\n',
             'INFO: Would you like to continue?\n',
             'INFO: Aborting.\n',
         ])
@@ -574,8 +578,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'INFO:   BUILDER              NUMBER  STATUS    BUCKET\n',
             'INFO:   MOCK Try Mac         4000    FAILURE   try   \n',
             'INFO:   MOCK Try Win         5000    FAILURE   try   \n',
-            'INFO: There are some builders with no results:\n',
-            'INFO:   MOCK Try Linux\n',
+            'WARNING: There are some builders with no results:\n',
+            'WARNING:   MOCK Try Linux\n',
             'INFO: Would you like to continue?\n',
             'INFO: Aborting.\n',
         ])
@@ -674,8 +678,6 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
                               'echo',
                               'optimize-baselines',
                               '--no-manifest-update',
-                              '--suffixes',
-                              'wav',
                               'one/flaky-fail.html',
                           ]])
 
@@ -720,11 +722,24 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             self.command_options(builders=['MOCK Try Linux Multiple Steps']),
             ['one/text-fail.html', 'one/does-not-exist.html'], self.tool)
         self.assertEqual(exit_code, 0)
-        self.assertEqual(self.tool.executive.calls[0], [[
-            'python', 'echo', 'copy-existing-baselines-internal', '--test',
-            'one/text-fail.html', '--suffixes', 'txt', '--port-name',
-            'test-linux-trusty'
-        ]])
+        self.assertEqual(sorted(self.tool.executive.calls[0]), [
+            [
+                'python', 'echo', 'copy-existing-baselines-internal', '--test',
+                'one/text-fail.html', '--suffixes', 'txt', '--port-name',
+                'test-linux-trusty'
+            ],
+            [
+                'python', 'echo', 'copy-existing-baselines-internal', '--test',
+                'one/text-fail.html', '--suffixes', 'txt', '--port-name',
+                'test-linux-trusty', '--flag-specific', 'disable-layout-ng'
+            ],
+            [
+                'python', 'echo', 'copy-existing-baselines-internal', '--test',
+                'one/text-fail.html', '--suffixes', 'txt', '--port-name',
+                'test-linux-trusty', '--flag-specific',
+                'disable-site-isolation-trials'
+            ],
+        ])
         self.assertEqual(sorted(self.tool.executive.calls[1]), [
             [
                 'python', 'echo', 'rebaseline-test-internal', '--test',
@@ -753,17 +768,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         ])
         self.assertEqual(self.tool.executive.calls[2], [
             'python', 'echo', 'optimize-baselines', '--no-manifest-update',
-            '--suffixes', 'txt', 'one/text-fail.html'
-        ])
-        self.assertEqual(self.tool.executive.calls[3], [
-            'python', 'echo', 'optimize-baselines', '--no-manifest-update',
-            '--flag-specific', 'disable-layout-ng', '--suffixes', 'txt',
             'one/text-fail.html'
-        ])
-        self.assertEqual(self.tool.executive.calls[4], [
-            'python', 'echo', 'optimize-baselines', '--no-manifest-update',
-            '--flag-specific', 'disable-site-isolation-trials', '--suffixes',
-            'txt', 'one/text-fail.html'
         ])
 
     def test_execute_missing_results_with_no_fill_missing_prompts(self):
@@ -778,10 +783,36 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             ('WARNING: Results URL: https://test-results.appspot.com/data/layout_results/'
              'MOCK_Try_Win/5000/blink_web_tests%20%28with%20patch%29/layout-test-results/results.html\n'
              ),
-            'INFO: There are some builders with no results:\n',
-            'INFO:   MOCK Try Win\n',
+            'WARNING: There are some builders with no results:\n',
+            'WARNING:   MOCK Try Win\n',
             'INFO: Would you like to continue?\n',
             'INFO: Aborting.\n',
+        ])
+
+    def test_execute_interrupted_results_with_fill_missing(self):
+        self.tool.results_fetcher.set_results(
+            Build('MOCK Try Win', 5000, 'Build-1'),
+            WebTestResults(self.raw_web_test_results,
+                           interrupted=True,
+                           step_name='blink_web_tests (with patch)'))
+        self.tool.user.set_canned_responses(['y', 'n'])
+        exit_code = self.command.execute(self.command_options(),
+                                         ['one/flaky-fail.html'], self.tool)
+        self.assertEqual(exit_code, 0)
+        self.assertLog([
+            'INFO: All builds finished.\n',
+            'WARNING: There are some builders that were interrupted.\n',
+            'WARNING: Some shards may have timed out or exited early due to '
+            'excessive unexpected failures:\n',
+            'WARNING:   MOCK Try Win\n',
+            'INFO: Would you like to continue?\n',
+            'INFO: Would you like to try to fill in missing results '
+            'with available results?\n'
+            'Note: This is generally not suggested unless the results '
+            'are platform agnostic.\n',
+            'INFO: Please rebaseline again for builders '
+            'with incomplete results later.\n',
+            'INFO: Rebaselining one/flaky-fail.html\n',
         ])
 
     def test_execute_missing_results_with_fill_missing_continues(self):
@@ -797,8 +828,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'WARNING: Failed to fetch some results for "MOCK Try Win".\n',
             ('WARNING: Results URL: https://test-results.appspot.com/data/layout_results/'
              'MOCK_Try_Win/5000/blink_web_tests%20%28with%20patch%29/layout-test-results/results.html\n'
-             ), 'INFO: There are some builders with no results:\n',
-            'INFO:   MOCK Try Win\n', 'INFO: For one/flaky-fail.html:\n',
+             ), 'WARNING: There are some builders with no results:\n',
+            'WARNING:   MOCK Try Win\n', 'INFO: For one/flaky-fail.html:\n',
             'INFO: Using "MOCK Try Linux" build 6000 for test-win-win7.\n',
             'INFO: Rebaselining one/flaky-fail.html\n'
         ])

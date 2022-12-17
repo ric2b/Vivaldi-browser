@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -326,8 +326,8 @@ std::unique_ptr<base::Value> PrefModelAssociator::MergeListValues(
   DCHECK(to_value.type() == base::Value::Type::LIST);
 
   base::Value result = to_value.Clone();
-  for (const auto& value : from_value.GetListDeprecated()) {
-    if (!base::Contains(result.GetListDeprecated(), value)) {
+  for (const auto& value : from_value.GetList()) {
+    if (!base::Contains(result.GetList(), value)) {
       result.Append(value.Clone());
     }
   }

@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@ static constexpr size_t kCookieSize = 16;
 // Cookie is enabled for debug builds.
 #if BUILDFLAG(PA_DCHECK_IS_ON)
 
-static constexpr unsigned char kCookieValue[kCookieSize] = {
+inline constexpr unsigned char kCookieValue[kCookieSize] = {
     0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xD0, 0x0D,
     0x13, 0x37, 0xF0, 0x05, 0xBA, 0x11, 0xAB, 0x1E};
 

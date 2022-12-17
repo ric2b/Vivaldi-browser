@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,21 +20,6 @@
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 
 namespace blink {
-
-namespace {
-class AutoSignal {
- public:
-  explicit AutoSignal(base::WaitableEvent* event) : event_(event) {
-    DCHECK(event);
-  }
-  AutoSignal(const AutoSignal&) = delete;
-  AutoSignal& operator=(const AutoSignal&) = delete;
-  ~AutoSignal() { event_->Signal(); }
-
- private:
-  base::WaitableEvent* event_;
-};
-}  // namespace
 
 // static
 std::unique_ptr<PlatformPaintWorkletLayerPainter>

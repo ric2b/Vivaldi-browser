@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,7 +120,7 @@ TEST_F(URLSchemeListPolicyHandlerTest, ApplyPolicySettings_Empty) {
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(kTestPrefName, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_TRUE(out->GetListDeprecated().empty());
+  EXPECT_TRUE(out->GetList().empty());
 }
 
 TEST_F(URLSchemeListPolicyHandlerTest, ApplyPolicySettings_WrongElementType) {
@@ -135,9 +135,9 @@ TEST_F(URLSchemeListPolicyHandlerTest, ApplyPolicySettings_WrongElementType) {
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(kTestPrefName, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_EQ(1U, out->GetListDeprecated().size());
+  EXPECT_EQ(1U, out->GetList().size());
 
-  const std::string* out_string = out->GetListDeprecated()[0].GetIfString();
+  const std::string* out_string = out->GetList()[0].GetIfString();
   ASSERT_TRUE(out_string);
   EXPECT_EQ(kTestUrl, *out_string);
 }
@@ -154,9 +154,9 @@ TEST_F(URLSchemeListPolicyHandlerTest, ApplyPolicySettings_BadUrl) {
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(kTestPrefName, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_EQ(1U, out->GetListDeprecated().size());
+  EXPECT_EQ(1U, out->GetList().size());
 
-  const std::string* out_string = out->GetListDeprecated()[0].GetIfString();
+  const std::string* out_string = out->GetList()[0].GetIfString();
   ASSERT_TRUE(out_string);
   EXPECT_EQ(kTestUrl, *out_string);
 }
@@ -170,9 +170,9 @@ TEST_F(URLSchemeListPolicyHandlerTest, ApplyPolicySettings_Successful) {
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(kTestPrefName, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_EQ(1U, out->GetListDeprecated().size());
+  EXPECT_EQ(1U, out->GetList().size());
 
-  const std::string* out_string = out->GetListDeprecated()[0].GetIfString();
+  const std::string* out_string = out->GetList()[0].GetIfString();
   ASSERT_TRUE(out_string);
   EXPECT_EQ(kTestUrl, *out_string);
 }
@@ -189,7 +189,7 @@ TEST_F(URLSchemeListPolicyHandlerTest,
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(kTestPrefName, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_EQ(policy::kMaxUrlFiltersPerPolicy, out->GetListDeprecated().size());
+  EXPECT_EQ(policy::kMaxUrlFiltersPerPolicy, out->GetList().size());
 }
 
 // Test that the warning message, mapped to
@@ -205,7 +205,7 @@ TEST_F(URLSchemeListPolicyHandlerTest,
 
   ApplyPolicies();
 
-  auto error_str = errors_.GetErrors(kTestPolicyName);
+  auto error_str = errors_.GetErrorMessages(kTestPolicyName);
   auto expected_str = l10n_util::GetStringFUTF16(
       IDS_POLICY_URL_ALLOW_BLOCK_LIST_MAX_FILTERS_LIMIT_WARNING,
       base::NumberToString16(policy::kMaxUrlFiltersPerPolicy));
@@ -214,7 +214,7 @@ TEST_F(URLSchemeListPolicyHandlerTest,
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(kTestPrefName, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_EQ(policy::kMaxUrlFiltersPerPolicy, out->GetListDeprecated().size());
+  EXPECT_EQ(policy::kMaxUrlFiltersPerPolicy, out->GetList().size());
 }
 
 TEST_F(URLSchemeListPolicyHandlerTest, ValidatePolicyEntry) {

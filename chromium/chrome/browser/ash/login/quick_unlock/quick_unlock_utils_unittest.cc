@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,14 +44,12 @@ class QuickUnlockUtilsUnitTest : public testing::Test {
 
   void SetValues(base::Value::List quick_unlock_modes,
                  base::Value::List webauthn_factors) {
-    pref_store_->SetValue(
-        prefs::kQuickUnlockModeAllowlist,
-        std::make_unique<base::Value>(std::move(quick_unlock_modes)),
-        /*flags=*/0);
-    pref_store_->SetValue(
-        prefs::kWebAuthnFactors,
-        std::make_unique<base::Value>(std::move(webauthn_factors)),
-        /*flags=*/0);
+    pref_store_->SetValue(prefs::kQuickUnlockModeAllowlist,
+                          base::Value(std::move(quick_unlock_modes)),
+                          /*flags=*/0);
+    pref_store_->SetValue(prefs::kWebAuthnFactors,
+                          base::Value(std::move(webauthn_factors)),
+                          /*flags=*/0);
   }
 
   std::unique_ptr<PrefService> GetPrefService() {

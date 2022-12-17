@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 
 #include <ostream>
 
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/secure_channel/connection_attempt_details.h"
 #include "ash/services/secure_channel/connection_role.h"
 #include "ash/services/secure_channel/device_id_pair.h"
@@ -16,6 +15,7 @@
 #include "base/containers/flat_set.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace device {

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,9 +6,10 @@ import 'chrome://os-settings/chromeos/lazy_load.js';
 
 import {DevicePageBrowserProxy, DevicePageBrowserProxyImpl, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {eventToPromise, isVisible, waitAfterNextRender, waitBeforeNextRender} from 'chrome://test/test_util.js';
+import {waitAfterNextRender, waitBeforeNextRender} from 'chrome://webui-test/polymer_test_util.js';
+import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
 
@@ -291,7 +292,7 @@ suite('ManageAccessibilityPageTests', function() {
     const dictationSetting = page.shadowRoot.querySelector('#enableDictation');
     assertTrue(!!dictationSetting);
     assertTrue(dictationSetting.checked);
-    assertEquals('Enable dictation (speak to type)', dictationSetting.label);
+    assertEquals('Dictation', dictationSetting.label);
     assertEquals(
         'Type with your voice. Use Search + D, then start speaking.',
         dictationSetting.subLabel);
@@ -313,7 +314,7 @@ suite('ManageAccessibilityPageTests', function() {
     flush();
 
     // Only the dictation locale subtitle should have changed.
-    assertEquals('Enable dictation (speak to type)', dictationSetting.label);
+    assertEquals('Dictation', dictationSetting.label);
     assertEquals(
         'Type with your voice. Use Search + D, then start speaking.',
         dictationSetting.subLabel);

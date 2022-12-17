@@ -1,4 +1,4 @@
-// Copyright 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,7 @@
 namespace base {
 
 #if BUILDFLAG(IS_APPLE)
-extern const Feature kMacAllowBackgroundingProcesses;
+BASE_DECLARE_FEATURE(kMacAllowBackgroundingProcesses);
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -39,7 +39,7 @@ extern const Feature kMacAllowBackgroundingProcesses;
 // its own cgroup. This will cause the scheduler to use the aggregate runtime
 // of all threads in the process when deciding on the next thread to schedule.
 // It will help guarantee fairness between renderers.
-BASE_EXPORT extern const Feature kOneGroupPerRenderer;
+BASE_EXPORT BASE_DECLARE_FEATURE(kOneGroupPerRenderer);
 #endif
 
 // Provides a move-only encapsulation of a process.

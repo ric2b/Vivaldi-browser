@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/password_edit_dialog/android/password_edit_dialog_bridge.h"
 #include "chrome/browser/ui/passwords/manage_passwords_state.h"
@@ -29,10 +30,31 @@ class WebContents;
 // metrics.
 class SaveUpdatePasswordMessageDelegate {
  public:
+  // When Chrome detects an unknown password being entered into a web page, it
+  // shows the message asking if user wants to save or update (if there is
+  // already some other password saved for the site) the password.
+  // This enum is used to record the user decision regarding the save/update UI.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class SaveUpdatePasswordMessageDismissReason {
+    kAccept = 0,          // Click save/update/continue in the message
+    kAcceptInDialog = 1,  // Save (or update) in dialog (if the dialog is
+                          // an optional part of the workflow)
+    // Clicked Accept in Username confirmation dialog.
+    // This bucket is different from kAcceptInDialog in order to differentiate
+    // between acceptance in the confirmation dialog, which is a required
+    // part of the flow, and the save/update dialogs which are optional.
+    kAcceptInUsernameConfirmDialog = 2,
+    kCancel = 3,          // Dismiss the message
+    kCancelInDialog = 4,  // Cancel clicked in dialog (or dialog dismissed)
+    kNeverSave = 5,       // Click 'Never save for this site'
+    kMaxValue = kNeverSave,
+  };
   using PasswordEditDialogFactory =
       base::RepeatingCallback<std::unique_ptr<PasswordEditDialog>(
           content::WebContents*,
           PasswordEditDialog::DialogAcceptedCallback,
+          PasswordEditDialog::LegacyDialogAcceptedCallback,
           PasswordEditDialog::DialogDismissedCallback)>;
 
   SaveUpdatePasswordMessageDelegate();
@@ -52,6 +74,7 @@ class SaveUpdatePasswordMessageDelegate {
 
  private:
   friend class SaveUpdatePasswordMessageDelegateTest;
+  enum class SavePasswordDialogMenuItem { kNeverSave = 0, kEditPassword = 1 };
 
   SaveUpdatePasswordMessageDelegate(
       PasswordEditDialogFactory password_edit_dialog_factory);
@@ -64,7 +87,12 @@ class SaveUpdatePasswordMessageDelegate {
       absl::optional<AccountInfo> account_info,
       bool update_password);
   void CreateMessage(bool update_password);
-  void SetupCogMenu(std::unique_ptr<messages::MessageWrapper>& message);
+  void SetupCogMenu(std::unique_ptr<messages::MessageWrapper>& message,
+                    bool update_password);
+  void SetupCogMenuForDialogWithDetails(
+      std::unique_ptr<messages::MessageWrapper>& message,
+      bool update_password);
+  void HandleSaveMessageMenuItemClick(int item_id);
 
   // Returns the message description depending on whether the password is being
   // saved or updated and if unified password manager is enabled.
@@ -88,22 +116,30 @@ class SaveUpdatePasswordMessageDelegate {
   void HandleSaveButtonClicked();
   void HandleNeverSaveClicked();
   void HandleUpdateButtonClicked();
-  void DisplayEditDialog();
-  void DisplaySavePasswordDialog(std::u16string current_username,
-                                 std::u16string current_password);
-  void DisplayUpdatePasswordDialog(std::vector<std::u16string> usernames,
-                                   int selected_username_index);
+  void DisplayEditDialog(bool update_password);
   void HandleMessageDismissed(messages::DismissReason dismiss_reason);
-  void HandleSavePasswordFromDialog(const std::u16string& username,
-                                    const std::u16string& password);
+  bool HasMultipleCredentialsStored();
   void CreatePasswordEditDialog();
   void HandleDialogDismissed(bool dialogAccepted);
+  void HandleSavePasswordFromDialog(const std::u16string& username,
+                                    const std::u16string& password);
+  void HandleSavePasswordFromLegacyDialog(int username_index);
 
   void ClearState();
 
   void RecordMessageShownMetrics();
   void RecordDismissalReasonMetrics(
       password_manager::metrics_util::UIDismissalReason ui_dismissal_reason);
+
+  void RecordSaveUpdateUIDismissalReason(
+      SaveUpdatePasswordMessageDismissReason dismiss_reason);
+
+  SaveUpdatePasswordMessageDismissReason GetPasswordEditDialogDismissReason(
+      bool accepted);
+
+  SaveUpdatePasswordMessageDismissReason
+  GetSaveUpdatePasswordMessageDismissReason(
+      messages::DismissReason dismiss_reason);
 
   static password_manager::metrics_util::UIDismissalReason
   MessageDismissReasonToPasswordManagerUIDismissalReason(

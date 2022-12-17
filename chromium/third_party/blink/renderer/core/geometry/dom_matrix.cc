@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -107,13 +107,13 @@ DOMMatrix* DOMMatrix::fromMatrix(DOMMatrixInit* other,
   }
   if (other->is2D()) {
     return MakeGarbageCollected<DOMMatrix>(
-        TransformationMatrix(other->m11(), other->m12(), other->m21(),
-                             other->m22(), other->m41(), other->m42()),
+        TransformationMatrix::Affine(other->m11(), other->m12(), other->m21(),
+                                     other->m22(), other->m41(), other->m42()),
         other->is2D());
   }
 
   return MakeGarbageCollected<DOMMatrix>(
-      TransformationMatrix(
+      TransformationMatrix::ColMajor(
           other->m11(), other->m12(), other->m13(), other->m14(), other->m21(),
           other->m22(), other->m23(), other->m24(), other->m31(), other->m32(),
           other->m33(), other->m34(), other->m41(), other->m42(), other->m43(),
@@ -127,22 +127,9 @@ void DOMMatrix::SetIs2D(bool value) {
 }
 
 void DOMMatrix::SetNAN() {
-  matrix_.SetM11(NAN);
-  matrix_.SetM12(NAN);
-  matrix_.SetM13(NAN);
-  matrix_.SetM14(NAN);
-  matrix_.SetM21(NAN);
-  matrix_.SetM22(NAN);
-  matrix_.SetM23(NAN);
-  matrix_.SetM24(NAN);
-  matrix_.SetM31(NAN);
-  matrix_.SetM32(NAN);
-  matrix_.SetM33(NAN);
-  matrix_.SetM34(NAN);
-  matrix_.SetM41(NAN);
-  matrix_.SetM42(NAN);
-  matrix_.SetM43(NAN);
-  matrix_.SetM44(NAN);
+  matrix_ =
+      TransformationMatrix::ColMajor(NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN,
+                                     NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN);
 }
 
 DOMMatrix* DOMMatrix::multiplySelf(DOMMatrixInit* other,
@@ -217,7 +204,7 @@ DOMMatrix* DOMMatrix::scaleSelf(double sx,
     translateSelf(ox, oy, oz);
 
   if (is2d_)
-    matrix_.ScaleNonUniform(sx, sy);
+    matrix_.Scale(sx, sy);
   else
     matrix_.Scale3d(sx, sy, sz);
 
@@ -244,15 +231,15 @@ DOMMatrix* DOMMatrix::rotateSelf(double rot_x, double rot_y) {
 
 DOMMatrix* DOMMatrix::rotateSelf(double rot_x, double rot_y, double rot_z) {
   if (rot_z)
-    matrix_.Rotate3d(0, 0, 1, rot_z);
+    matrix_.RotateAboutZAxis(rot_z);
 
   if (rot_y) {
-    matrix_.Rotate3d(0, 1, 0, rot_y);
+    matrix_.RotateAboutYAxis(rot_y);
     is2d_ = false;
   }
 
   if (rot_x) {
-    matrix_.Rotate3d(1, 0, 0, rot_x);
+    matrix_.RotateAboutXAxis(rot_x);
     is2d_ = false;
   }
 
@@ -268,7 +255,7 @@ DOMMatrix* DOMMatrix::rotateAxisAngleSelf(double x,
                                           double y,
                                           double z,
                                           double angle) {
-  matrix_.Rotate3d(x, y, z, angle);
+  matrix_.RotateAbout(x, y, z, angle);
 
   if (x != 0 || y != 0)
     is2d_ = false;
@@ -287,23 +274,23 @@ DOMMatrix* DOMMatrix::skewYSelf(double sy) {
 }
 
 DOMMatrix* DOMMatrix::perspectiveSelf(double p) {
-  matrix_.ApplyPerspective(p);
+  matrix_.ApplyPerspectiveDepth(p);
   return this;
 }
 
 DOMMatrix* DOMMatrix::invertSelf() {
+  // TODO(crbug.com/1359528): Let gfx::Transform::GetInverse() preserve
+  // 2d status and avoid the following block.
   if (is2d_) {
     AffineTransform affine_transform = matrix_.ToAffineTransform();
     if (affine_transform.IsInvertible()) {
       matrix_ = TransformationMatrix(affine_transform.Inverse());
       return this;
     }
-  } else {
-    if (matrix_.IsInvertible()) {
-      matrix_ = matrix_.Inverse();
-      return this;
-    }
+  } else if (matrix_.GetInverse(&matrix_)) {
+    return this;
   }
+
   SetNAN();
   SetIs2D(false);
   return this;

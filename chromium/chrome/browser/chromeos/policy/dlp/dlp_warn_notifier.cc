@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,6 +50,19 @@ void DlpWarnNotifier::ShowDlpVideoCaptureWarningDialog(
       std::move(callback),
       DlpWarnDialog::DlpWarnDialogOptions(
           DlpWarnDialog::Restriction::kVideoCapture, confidential_contents));
+}
+
+base::WeakPtr<views::Widget> DlpWarnNotifier::ShowDlpFilesWarningDialog(
+    OnDlpRestrictionCheckedCallback callback,
+    const std::vector<DlpConfidentialFile>& confidential_files,
+    absl::optional<DlpRulesManager::Component> dst_component,
+    const absl::optional<std::string>& destination_pattern,
+    DlpFilesController::FileAction files_action) {
+  return ShowDlpWarningDialog(
+      std::move(callback),
+      DlpWarnDialog::DlpWarnDialogOptions(DlpWarnDialog::Restriction::kFiles,
+                                          confidential_files, dst_component,
+                                          destination_pattern, files_action));
 }
 
 base::WeakPtr<views::Widget> DlpWarnNotifier::ShowDlpScreenShareWarningDialog(

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #include "components/safe_browsing/content/browser/password_protection/password_protection_service.h"
@@ -516,8 +516,9 @@ class PasswordProtectionServiceBaseTest
     return contents;
   }
 
-  void SetFeatures(const std::vector<base::Feature>& enabled_features,
-                   const std::vector<base::Feature>& disabled_features) {
+  void SetFeatures(
+      const std::vector<base::test::FeatureRef>& enabled_features,
+      const std::vector<base::test::FeatureRef>& disabled_features) {
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 

@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/html/html_all_collection.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
@@ -96,6 +97,40 @@ bool IsTooSmallOrBig(blink::Document* document, gfx::Rect& rect) {
   return false;
 }
 
+void DispatchMouseMoveAt(blink::Element* element, gfx::PointF event_position) {
+  blink::WebNode web_node = element;
+  const blink::Node* node = web_node.ConstUnwrap<blink::Node>();
+  if (!node) {
+    return;
+  }
+  const blink::Page* page = node->GetDocument().GetPage();
+  if (!page) {
+    return;
+  }
+  const blink::LocalFrame* local_main_frame =
+      blink::DynamicTo<blink::LocalFrame>(page->MainFrame());
+  if (!local_main_frame) {
+    return;
+  }
+
+  gfx::PointF event_position_screen = event_position;
+  int click_count = 0;
+  blink::WebMouseEvent fake_mouse_move_event(
+      blink::WebInputEvent::Type::kMouseMove, event_position,
+      event_position_screen, blink::WebPointerProperties::Button::kNoButton,
+      click_count, blink::WebInputEvent::kRelativeMotionEvent,
+      base::TimeTicks::Now());
+  Vector<blink::WebMouseEvent> coalesced_events, predicted_events;
+
+  DCHECK(local_main_frame);
+  local_main_frame->GetEventHandler().HandleMouseMoveEvent(
+      blink::TransformWebMouseEvent(local_main_frame->View(),
+      fake_mouse_move_event),
+      coalesced_events, predicted_events);
+}
+
+}  // namespace
+
 bool IsVisible(blink::WebElement element) {
   blink::WebNode web_node = element;
   const blink::Node* node = web_node.ConstUnwrap<blink::Node>();
@@ -113,41 +148,18 @@ bool IsVisible(blink::WebElement element) {
   return true;
 }
 
-}  // namespace
-
-
-void DispatchMouseMoveAt(blink::Element* element) {
-  blink::WebNode web_node = element;
-  const blink::Node* node = web_node.ConstUnwrap<blink::Node>();
-  if (!node) {
-    return;
-  }
-  const blink::LocalFrame* local_main_frame =
-      blink::DynamicTo<blink::LocalFrame>(
-      node->GetDocument().GetPage()->MainFrame());
-  if (!local_main_frame)
-    return;
-
+void HoverElement(blink::Element* element) {
   gfx::PointF event_position(-1, -1);
   if (element) {
     event_position = blink::RectInViewport(*element).origin();
     event_position.Offset(1, 1);
   }
+  DispatchMouseMoveAt(element, event_position);
+}
 
-  gfx::PointF event_position_screen = event_position;
-  int click_count = 0;
-  blink::WebMouseEvent fake_mouse_move_event(
-      blink::WebInputEvent::Type::kMouseMove, event_position,
-      event_position_screen, blink::WebPointerProperties::Button::kNoButton,
-      click_count, blink::WebInputEvent::kRelativeMotionEvent,
-      base::TimeTicks::Now());
-  Vector<blink::WebMouseEvent> coalesced_events, predicted_events;
-
-  DCHECK(local_main_frame);
-  local_main_frame->GetEventHandler().HandleMouseMoveEvent(
-      blink::TransformWebMouseEvent(local_main_frame->View(),
-      fake_mouse_move_event),
-      coalesced_events, predicted_events);
+void ClearHover(blink::Element* element) {
+  gfx::PointF event_position(-1, -1);
+  DispatchMouseMoveAt(element, event_position);
 }
 
 // Used For HiDPI displays. We need the unscaled version of the coordinates.
@@ -207,22 +219,36 @@ std::string ElementPath(blink::WebElement& element) {
 }
 
 std::vector<blink::WebElement> GetSpatialNavigationElements(
-    blink::WebLocalFrame* frame,
-    float scale) {
-  std::vector<blink::WebElement> spatnav_elements;
-  blink::Document* document = frame->GetDocument();
+    blink::Document *document,
+    float scale,
+    std::vector<blink::WebElement>& spatnav_elements) {
 
-  blink::WebElementCollection all_elements = frame->GetDocument().All();
+  blink::WebElementCollection all_elements = document->all();
+
   for (blink::WebElement element = all_elements.FirstItem(); !element.IsNull();
        element = all_elements.NextItem()) {
-
-    gfx::Rect rect = RevertDeviceScaling(element.BoundsInViewport(), scale);
+    gfx::Rect rect = RevertDeviceScaling(element.BoundsInWidget(), scale);
     blink::Element* elm = element.Unwrap<blink::Element>();
     if (elm && elm->IsFocusable() && IsUnobscured(element) &&
-      IsVisible(element) && !IsTooSmallOrBig(document, rect)) {
-      spatnav_elements.push_back(element);
+        IsVisible(element) && !IsTooSmallOrBig(document, rect)) {
+      if (elm->IsFrameOwnerElement()) {
+        auto* owner = blink::To<blink::HTMLFrameOwnerElement>(elm);
+        blink::LocalFrame* subframe =
+            blink::DynamicTo<blink::LocalFrame>(owner->ContentFrame());
+        if (subframe) {
+          blink::Document* subdocument = subframe->GetDocument();
+          GetSpatialNavigationElements(subdocument, scale, spatnav_elements);
+        } else {
+          spatnav_elements.push_back(element);
+        }
+      } else {
+        spatnav_elements.push_back(element);
+      }
     }
   }
+
+  // We need this sorted for easier checking whether element lists are equal.
+  std::sort(spatnav_elements.begin(), spatnav_elements.end());
 
   return spatnav_elements;
 }

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -143,7 +143,7 @@ class UsbDeviceHandleImpl::InterfaceClaimer
   int alternate_setting_;
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
   ResultCallback release_callback_;
-  base::SequenceChecker sequence_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 };
 
 UsbDeviceHandleImpl::InterfaceClaimer::InterfaceClaimer(
@@ -156,7 +156,7 @@ UsbDeviceHandleImpl::InterfaceClaimer::InterfaceClaimer(
       task_runner_(task_runner) {}
 
 UsbDeviceHandleImpl::InterfaceClaimer::~InterfaceClaimer() {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
   int rc = libusb_release_interface(handle_->handle(), interface_number_);

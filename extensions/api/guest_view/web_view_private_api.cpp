@@ -59,8 +59,8 @@ bool VivaldiWebViewWithGuestFunction::PreRunValidation(std::string* error) {
 
   absl::optional<int> instance_id = args()[0].GetIfInt();
   EXTENSION_FUNCTION_PRERUN_VALIDATE(instance_id.has_value());
-  guest_ = WebViewGuest::From(render_frame_host()->GetProcess()->GetID(),
-                              instance_id.value());
+  guest_ = WebViewGuest::FromInstanceID(
+      render_frame_host()->GetProcess()->GetID(), instance_id.value());
 
   if (!guest_) {
     *error = "Could not find guest";

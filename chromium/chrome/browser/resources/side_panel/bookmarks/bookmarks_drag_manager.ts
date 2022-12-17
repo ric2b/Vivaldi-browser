@@ -1,10 +1,10 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import '../strings.m.js';
 
-import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
+import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 import {getBookmarkFromElement, isBookmarkFolderElement, isValidDropTarget} from './bookmark_folder.js';
@@ -181,14 +181,16 @@ export class BookmarksDragManager {
 
   startObserving() {
     this.eventTracker_.add(
-        this.delegate_, 'dragstart', e => this.onDragStart_(e as DragEvent));
+        this.delegate_, 'dragstart',
+        (e: Event) => this.onDragStart_(e as DragEvent));
     this.eventTracker_.add(
-        this.delegate_, 'dragover', e => this.onDragOver_(e as DragEvent));
+        this.delegate_, 'dragover',
+        (e: Event) => this.onDragOver_(e as DragEvent));
     this.eventTracker_.add(
         this.delegate_, 'dragleave', () => this.onDragLeave_());
     this.eventTracker_.add(this.delegate_, 'dragend', () => this.cancelDrag_());
     this.eventTracker_.add(
-        this.delegate_, 'drop', e => this.onDrop_(e as DragEvent));
+        this.delegate_, 'drop', (e: Event) => this.onDrop_(e as DragEvent));
 
     if (loadTimeData.getBoolean('bookmarksDragAndDropEnabled')) {
       chrome.bookmarkManagerPrivate.onDragEnter.addListener(

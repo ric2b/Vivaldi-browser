@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,12 @@ export interface PasskeysBrowserProxy {
    * operation.
    */
   delete(credentialId: string): Promise<Passkey[]|null>;
+
+  /**
+   * Edits a passkey's credential metadata username then performs an `enumerate`
+   * operation.
+   */
+  edit(credentialId: string, newUsername: string): Promise<Passkey[]|null>;
 }
 
 export class PasskeysBrowserProxyImpl implements PasskeysBrowserProxy {
@@ -45,6 +51,10 @@ export class PasskeysBrowserProxyImpl implements PasskeysBrowserProxy {
 
   delete(credentialId: string) {
     return sendWithPromise('passkeysDelete', credentialId);
+  }
+
+  edit(credentialId: string, newUsername: string) {
+    return sendWithPromise('passkeysEdit', credentialId, newUsername);
   }
 
   static getInstance(): PasskeysBrowserProxy {

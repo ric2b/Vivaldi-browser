@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -288,7 +288,7 @@ void WindowTreeHost::ConvertDIPToPixels(gfx::Point* point) const {
 }
 
 void WindowTreeHost::ConvertDIPToPixels(gfx::PointF* point) const {
-  GetRootTransform().TransformPoint(point);
+  *point = GetRootTransform().MapPoint(*point);
 }
 
 void WindowTreeHost::ConvertPixelsToDIP(gfx::Point* point) const {
@@ -298,7 +298,7 @@ void WindowTreeHost::ConvertPixelsToDIP(gfx::Point* point) const {
 }
 
 void WindowTreeHost::ConvertPixelsToDIP(gfx::PointF* point) const {
-  GetInverseRootTransform().TransformPoint(point);
+  *point = GetInverseRootTransform().MapPoint(*point);
 }
 
 void WindowTreeHost::SetCursor(gfx::NativeCursor cursor) {
@@ -429,6 +429,7 @@ void WindowTreeHost::SetNativeWindowOcclusionState(
     return;
 
   occlusion_state_ = state;
+  occluded_region_ = occluded_region;
 
   if (compositor() && accelerated_widget_made_visible_ &&
       NativeWindowOcclusionTracker::
@@ -735,9 +736,7 @@ void WindowTreeHost::OnDisplayMetricsChanged(const display::Display& display,
 
 gfx::Rect WindowTreeHost::GetTransformedRootWindowBoundsFromPixelSize(
     const gfx::Size& size_in_pixels) const {
-  gfx::RectF new_bounds = gfx::RectF(gfx::Rect(size_in_pixels));
-  GetInverseRootTransform().TransformRect(&new_bounds);
-  return gfx::ToEnclosingRect(new_bounds);
+  return GetInverseRootTransform().MapRect(gfx::Rect(size_in_pixels));
 }
 
 void WindowTreeHost::SetNativeWindowOcclusionEnabled(bool enable) {

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,7 +48,10 @@ enum class PaintBenchmarkMode {
 // corresponding frame. They are never reset to false. First-paint is defined in
 // https://github.com/WICG/paint-timing. It excludes default background paint.
 struct FrameFirstPaint {
-  FrameFirstPaint(const void* frame)
+  DISALLOW_NEW();
+
+ public:
+  explicit FrameFirstPaint(const void* frame)
       : frame(frame),
         first_painted(false),
         text_painted(false),
@@ -350,6 +353,7 @@ class PLATFORM_EXPORT PaintController {
     wtf_size_t start_chunk_index = 0;
     wtf_size_t end_chunk_index = 0;
     bool is_moved_from_cached_subsequence = false;
+    DISALLOW_NEW();
   };
 
   wtf_size_t GetSubsequenceIndex(DisplayItemClientId) const;
@@ -438,6 +442,7 @@ class PLATFORM_EXPORT PaintController {
     HashMap<DisplayItemClientId, wtf_size_t> map;
     // A pre-order list of the subsequence tree.
     Vector<SubsequenceMarkers> tree;
+    DISALLOW_NEW();
   };
   SubsequencesData current_subsequences_;
   SubsequencesData new_subsequences_;

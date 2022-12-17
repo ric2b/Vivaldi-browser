@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,6 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/login/auth/public/key.h"
-#include "ash/components/login/auth/public/user_context.h"
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
@@ -31,6 +29,8 @@
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
+#include "chromeos/ash/components/login/auth/public/key.h"
+#include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "chromeos/dbus/constants/dbus_paths.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
@@ -168,9 +168,10 @@ void AffiliationTestHelper::SetUserAffiliationIDs(
 
 // static
 void AffiliationTestHelper::PreLoginUser(const AccountId& account_id) {
-  ListPrefUpdate users_pref(g_browser_process->local_state(), "LoggedInUsers");
+  ScopedListPrefUpdate users_pref(g_browser_process->local_state(),
+                                  "LoggedInUsers");
   base::Value email_value(account_id.GetUserEmail());
-  if (!base::Contains(users_pref->GetListDeprecated(), email_value))
+  if (!base::Contains(users_pref.Get(), email_value))
     users_pref->Append(std::move(email_value));
 
   user_manager::KnownUser(g_browser_process->local_state())

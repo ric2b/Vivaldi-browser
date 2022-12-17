@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,7 @@ void HttpAuth::ChooseBestChallenge(
     HttpAuthHandlerFactory* http_auth_handler_factory,
     const HttpResponseHeaders& response_headers,
     const SSLInfo& ssl_info,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     Target target,
     const url::SchemeHostPort& scheme_host_port,
     const std::set<Scheme>& disabled_schemes,
@@ -54,7 +54,7 @@ void HttpAuth::ChooseBestChallenge(
   while (response_headers.EnumerateHeader(&iter, header_name, &cur_challenge)) {
     std::unique_ptr<HttpAuthHandler> cur;
     int rv = http_auth_handler_factory->CreateAuthHandlerFromString(
-        cur_challenge, target, ssl_info, network_isolation_key,
+        cur_challenge, target, ssl_info, network_anonymization_key,
         scheme_host_port, net_log, host_resolver, &cur);
     if (rv != OK) {
       VLOG(1) << "Unable to create AuthHandler. Status: "

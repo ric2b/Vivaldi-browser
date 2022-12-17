@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/settings/cros_settings_names.h"
-#include "ash/components/settings/timezone_settings.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/environment.h"
@@ -48,6 +46,8 @@
 #include "chromeos/ash/components/dbus/seneschal/seneschal_client.h"
 #include "chromeos/ash/components/dbus/update_engine/fake_update_engine_client.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/settings/timezone_settings.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
 #include "chromeos/login/login_state/login_state.h"
@@ -547,8 +547,7 @@ TEST_F(ChildStatusCollectorTest, ReportingActivityTimesIdleTransitions) {
 }
 
 TEST_F(ChildStatusCollectorTest, ActivityKeptInPref) {
-  EXPECT_THAT(pref_service()->GetValueDict(prefs::kUserActivityTimes),
-              IsEmpty());
+  EXPECT_THAT(pref_service()->GetDict(prefs::kUserActivityTimes), IsEmpty());
   task_environment_.AdvanceClock(kHour);
 
   DeviceStateTransitions test_states[] = {
@@ -564,7 +563,7 @@ TEST_F(ChildStatusCollectorTest, ActivityKeptInPref) {
       DeviceStateTransitions::kLeaveSessionActive};
   SimulateStateChanges(test_states,
                        sizeof(test_states) / sizeof(DeviceStateTransitions));
-  EXPECT_THAT(pref_service()->GetValueDict(prefs::kUserActivityTimes),
+  EXPECT_THAT(pref_service()->GetDict(prefs::kUserActivityTimes),
               Not(IsEmpty()));
 
   // Process the list a second time after restarting the collector. It should be
@@ -615,8 +614,7 @@ TEST_F(ChildStatusCollectorTest, BeforeDayStart) {
   Time initial_time =
       Time::Now().LocalMidnight() + base::Days(1) + base::Hours(4);
   FastForwardTo(initial_time);
-  EXPECT_THAT(pref_service()->GetValueDict(prefs::kUserActivityTimes),
-              IsEmpty());
+  EXPECT_THAT(pref_service()->GetDict(prefs::kUserActivityTimes), IsEmpty());
 
   DeviceStateTransitions test_states[] = {
       DeviceStateTransitions::kEnterSessionActive,
@@ -770,10 +768,8 @@ TEST_F(ChildStatusCollectorTest, ReportingAppActivityNoReport) {
   {
     ash::app_time::AppTimeLimitsPolicyBuilder builder;
     builder.SetAppActivityReportingEnabled(/* enabled */ false);
-    DictionaryPrefUpdate update(testing_profile()->GetPrefs(),
-                                prefs::kPerAppTimeLimitsPolicy);
-    base::Value* value = update.Get();
-    *value = builder.value().Clone();
+    testing_profile()->GetPrefs()->SetDict(prefs::kPerAppTimeLimitsPolicy,
+                                           builder.value().GetDict().Clone());
   }
 
   SimulateAppActivity(app1, app1_interval);

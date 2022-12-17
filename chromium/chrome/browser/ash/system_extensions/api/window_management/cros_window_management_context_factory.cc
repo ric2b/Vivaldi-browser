@@ -1,12 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/system_extensions/api/window_management/cros_window_management_context_factory.h"
 
-#include "base/logging.h"
 #include "base/no_destructor.h"
-#include "base/scoped_observation.h"
 #include "chrome/browser/ash/system_extensions/api/window_management/cros_window_management_context.h"
 #include "chrome/browser/ash/system_extensions/system_extensions_profile_utils.h"
 #include "chrome/browser/ash/system_extensions/system_extensions_provider_factory.h"

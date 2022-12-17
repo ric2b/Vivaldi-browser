@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,13 +73,6 @@ class GL_EXPORT GLImage : public base::RefCounted<GLImage> {
   // It is valid for an implementation to always return false.
   virtual bool BindTexImage(unsigned target);
 
-  // Bind image to texture currently bound to |target|, forcing the texture's
-  // internal format to the specified one. This is a feature not available on
-  // all platforms. Returns true on success.  It is valid for an implementation
-  // to always return false.
-  virtual bool BindTexImageWithInternalformat(unsigned target,
-                                              unsigned internalformat);
-
   // Release image from texture currently bound to |target|.
   virtual void ReleaseTexImage(unsigned target);
 
@@ -151,10 +144,6 @@ class GL_EXPORT GLImage : public base::RefCounted<GLImage> {
     DCOMP_SURFACE,
   };
   virtual Type GetType() const;
-
-  // Workaround for StreamTexture which must be re-copied on each access.
-  // TODO(ericrk): Remove this once SharedImage transition is complete.
-  virtual bool HasMutableState() const;
 
   // Returns the NativePixmap backing the GLImage. If not backed by a
   // NativePixmap, returns null.

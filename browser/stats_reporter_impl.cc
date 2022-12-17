@@ -40,7 +40,7 @@ constexpr base::TimeDelta kLockDelay = base::Minutes(2);  // minutes
 constexpr int kMatomoId = 36;        // Browser Usage - New implementation.
 constexpr int kScheduleJitter = 15;  // minutes
 #else
-constexpr base::TimeDelta kLockDelay = base::Minutes(0);  // minutes
+constexpr base::TimeDelta kLockDelay = base::Seconds(1);  // minutes
 constexpr int kMatomoId = 13;                             // Blackhole
 constexpr int kScheduleJitter = 1;                        // minutes
 #endif
@@ -447,6 +447,8 @@ bool StatsReporterImpl::GeneratePingRequest(
       // We ignore the user profile value in this case as they are potentially
       // for a different user.
       next_pings = local_state_reporting_data.next_pings;
+      pings_since_last_month =
+          local_state_reporting_data.pings_since_last_month;
       break;
 
     default:
@@ -661,8 +663,8 @@ bool StatsReporterImpl::GeneratePingRequest(
 
   body = base::StringPrintf(
       kReportRequest, kMatomoId,
-      base::EscapeUrlEncodedData(user_agent, true).c_str(), display_size.width(),
-      display_size.height(),
+      base::EscapeUrlEncodedData(user_agent, true).c_str(),
+      display_size.width(), display_size.height(),
       base::EscapeUrlEncodedData(architecture, true).c_str(),
       base::EscapeUrlEncodedData(vivaldi_version, true).c_str(),
       base::EscapeUrlEncodedData(architecture, true).c_str(),
@@ -742,8 +744,24 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
 
   absl::optional<base::Value> os_profile_reporting_data_json;
   if (!os_profile_reporting_data.empty()) {
+    base::StringPiece fixed_os_profile_reporting_data(
+        os_profile_reporting_data);
     os_profile_reporting_data_json =
-        base::JSONReader::Read(os_profile_reporting_data);
+        base::JSONReader::Read(fixed_os_profile_reporting_data);
+
+    while (!os_profile_reporting_data_json) {
+      fixed_os_profile_reporting_data.remove_suffix(1);
+      // There was a bug where the file would not be truncated before overwrite,
+      // causing some data to be potentially left over after the last brace.
+      size_t last_brace = fixed_os_profile_reporting_data.rfind('}');
+      if (last_brace == base::StringPiece::npos)
+        break;
+
+      fixed_os_profile_reporting_data =
+          fixed_os_profile_reporting_data.substr(0, last_brace + 1);
+      os_profile_reporting_data_json =
+          base::JSONReader::Read(fixed_os_profile_reporting_data);
+    }
   }
   if (!os_profile_reporting_data_json ||
       !os_profile_reporting_data_json->is_dict()) {
@@ -809,6 +827,8 @@ void StatsReporterImpl::OnURLLoadComplete(
         {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
         base::BindOnce(
             [](base::File file, std::string content) {
+              // Clear existing content
+              file.SetLength(0);
               file.Write(0, content.c_str(), content.length());
               file.Close();
             },

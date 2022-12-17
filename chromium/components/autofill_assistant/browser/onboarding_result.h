@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,7 @@ enum class OnboardingResult {
   // The onboarding was interrupted by a website navigation.
   NAVIGATION = 2,
 
-  // THe onboarding was explicitly accepted.
+  // The onboarding was explicitly accepted.
   ACCEPTED = 3,
 };
 

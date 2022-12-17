@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,6 +120,8 @@ bool WebContentsViewChildFrame::CloseTabAfterEventTrackingIfNeeded() {
 
 void WebContentsViewChildFrame::OnCapturerCountChanged() {}
 
+void WebContentsViewChildFrame::FullscreenStateChanged(bool is_fullscreen) {}
+
 void WebContentsViewChildFrame::RestoreFocus() {
   NOTREACHED();
 }
@@ -176,12 +178,13 @@ void WebContentsViewChildFrame::StartDragging(
     const DropData& drop_data,
     DragOperationsMask ops,
     const gfx::ImageSkia& image,
-    const gfx::Vector2d& image_offset,
+    const gfx::Vector2d& cursor_offset,
+    const gfx::Rect& drag_obj_rect,
     const blink::mojom::DragEventSourceInfo& event_info,
     RenderWidgetHostImpl* source_rwh) {
   if (auto* view = GetOuterDelegateView()) {
-    view->StartDragging(
-        drop_data, ops, image, image_offset, event_info, source_rwh);
+    view->StartDragging(drop_data, ops, image, cursor_offset, drag_obj_rect,
+                        event_info, source_rwh);
   } else {
     web_contents_->GetOuterWebContents()->SystemDragEnded(source_rwh);
   }

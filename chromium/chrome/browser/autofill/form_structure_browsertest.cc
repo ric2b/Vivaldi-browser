@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -109,24 +109,25 @@ std::string FormStructuresToString(
     const auto* form = kv.second.get();
     std::map<std::string, int> section_to_index;
     for (const auto& field : *form) {
-      // Normalize the section by replacing the unique but platform-dependent
-      // integers in |field->section| with consecutive unique integers.
-      // The section string is of the form "fieldname_id1_id2-suffix", where
-      // id1, id2 are platform-dependent and thus need to be substituted.
       std::string section = field->section.ToString();
-      size_t last_underscore = section.find_last_of('_');
-      size_t second_last_underscore =
-          section.find_last_of('_', last_underscore - 1);
-      size_t next_dash = section.find_first_of('-', last_underscore);
-      int new_section_index = static_cast<int>(section_to_index.size() + 1);
-      int section_index =
-          section_to_index.insert(std::make_pair(section, new_section_index))
-              .first->second;
-      if (second_last_underscore != std::string::npos &&
-          next_dash != std::string::npos) {
-        section = base::StringPrintf(
-            "%s%d%s", section.substr(0, second_last_underscore + 1).c_str(),
-            section_index, section.substr(next_dash).c_str());
+
+      if (field->section.is_from_fieldidentifier()) {
+        // Normalize the section by replacing the unique but platform-dependent
+        // integers in `field->section` with consecutive unique integers.
+        // The section string is of the form "fieldname_id1_id2", where id1, id2
+        // are platform-dependent and thus need to be substituted.
+        size_t last_underscore = section.find_last_of('_');
+        size_t second_last_underscore =
+            section.find_last_of('_', last_underscore - 1);
+        int new_section_index = static_cast<int>(section_to_index.size() + 1);
+        int section_index =
+            section_to_index.insert(std::make_pair(section, new_section_index))
+                .first->second;
+        if (second_last_underscore != std::string::npos) {
+          section = base::StringPrintf(
+              "%s%d", section.substr(0, second_last_underscore + 1).c_str(),
+              section_index);
+        }
       }
 
       forms_string += base::JoinString(
@@ -206,14 +207,8 @@ FormStructureBrowserTest::FormStructureBrowserTest()
       // Enabled
       {// TODO(crbug.com/1187842): Remove once experiment is over.
        features::kAutofillAcrossIframes,
-       // TODO(crbug.com/1098943): Remove once experiment is over.
-       features::kAutofillEnableSupportForMoreStructureInNames,
-       // TODO(crbug.com/1125978): Remove once launched.
-       features::kAutofillEnableSupportForMoreStructureInAddresses,
        // TODO(crbug.com/1076175) Remove once launched.
        features::kAutofillUseNewSectioningMethod,
-       // Remove once launched
-       features::kAutofillEnableAugmentedPhoneCountryCode,
        // TODO(crbug.com/1157405) Remove once launched.
        features::kAutofillEnableDependentLocalityParsing,
        // TODO(crbug.com/1150895) Remove once launched.
@@ -221,18 +216,20 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        features::kAutofillPageLanguageDetection,
        // TODO(crbug.com/1165780): Remove once shared labels are launched.
        features::kAutofillEnableSupportForParsingWithSharedLabels,
-       // TODO(crbug.com/1277480): Remove once launched.
-       features::kAutofillEnableNameSurenameParsing,
        // TODO(crbug.com/1190334): Remove once launched.
        features::kAutofillParseMerchantPromoCodeFields,
-       // TODO(crbug.com/1113970): Remove once launched.
-       features::kAutofillSectionUponRedundantNameInfo,
        // TODO(crbug.com/1335549): Remove once launched.
        features::kAutofillParseIBANFields,
        // TODO(crbug.com/1341387): Remove once launched.
-       features::kAutofillParseVcnCardOnFileStandaloneCvcFields},
+       features::kAutofillParseVcnCardOnFileStandaloneCvcFields,
+       // TODO(crbug.com/1311937): Remove once launched.
+       features::kAutofillEnableSupportForPhoneNumberTrunkTypes,
+       features::kAutofillInferCountryCallingCode},
       // Disabled
-      {});
+      {// TODO(crbug.com/1311937): Remove once launched.
+       // This feature is part of the AutofillRefinedPhoneNumberTypes rollout.
+       // As it is not supported on iOS yet, it is disabled.
+       features::kAutofillConsiderPhoneNumberSeparatorsValidLabels});
 }
 
 FormStructureBrowserTest::~FormStructureBrowserTest() = default;

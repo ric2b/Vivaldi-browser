@@ -1,16 +1,16 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 
-#include "base/strings/sys_string_conversions.h"
-#include "components/open_from_clipboard/clipboard_recent_content.h"
-#include "components/prefs/pref_service.h"
-#include "components/search_engines/template_url_service.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/open_from_clipboard/clipboard_recent_content.h"
+#import "components/prefs/pref_service.h"
+#import "components/search_engines/template_url_service.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
@@ -22,7 +22,7 @@
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/url_loading/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
@@ -30,6 +30,13 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -99,6 +106,14 @@
     };
   }
 
+  if (IsVivaldiRunning()) {
+    UIImage* image = [UIImage imageNamed:@"popup_menu_new_incognito_tab"];
+    return [self actionWithTitle:l10n_util::GetNSString(
+                                     IDS_IOS_OPEN_IN_PRIVATE_ACTION_TITLE)
+                           image:image
+                            type:MenuActionType::OpenInNewIncognitoTab
+                           block:block];
+  } else {
   UIImage* image = UseSymbols() ? CustomSymbolWithPointSize(
                                       kIncognitoSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"open_in_incognito"];
@@ -107,6 +122,7 @@
                          image:image
                           type:MenuActionType::OpenInNewIncognitoTab
                          block:block];
+  } // End Vivaldi
 }
 
 - (UIAction*)actionToOpenInNewWindowWithURL:(const GURL)URL
@@ -211,11 +227,11 @@
 - (UIAction*)actionToOpenNewIncognitoTab {
   id<ApplicationCommands> handler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
-  // TODO(crbug.com/1285015): Add the image.
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(
                                 IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB)
-                      image:nil
+                      image:CustomSymbolWithPointSize(kIncognitoSymbol,
+                                                      kSymbolActionPointSize)
                        type:MenuActionType::OpenNewIncognitoTab
                       block:^{
                         [handler openURLInNewTab:[OpenNewTabCommand
@@ -293,11 +309,11 @@
 - (UIAction*)actionToStartNewIncognitoSearch {
   id<ApplicationCommands> handler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
-  // TODO(crbug.com/1285015): Add the image.
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(
                                 IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_SEARCH)
-                      image:nil
+                      image:CustomSymbolWithPointSize(kIncognitoSymbol,
+                                                      kSymbolActionPointSize)
                        type:MenuActionType::StartNewIcognitoSearch
                       block:^{
                         OpenNewTabCommand* command =

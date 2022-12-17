@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,10 +25,9 @@ class CONTENT_EXPORT FirstPartySetsSiteDataRemover {
   // enum, 0 indicates success.
   //
   // Currently it only accounts for cookie and storage data types.
-  static void HandleRemovingSiteData(
-      BrowsingDataRemover* remover,
-      std::vector<net::SchemefulSite> sites,
-      base::OnceCallback<void(uint64_t)> callback);
+  static void RemoveSiteData(BrowsingDataRemover& remover,
+                             std::vector<net::SchemefulSite> sites,
+                             base::OnceCallback<void(uint64_t)> callback);
 };
 
 }  // namespace content

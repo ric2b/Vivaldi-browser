@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -195,9 +195,9 @@ bool ScrollableAreaPainter::PaintOverflowControls(
     DCHECK(frame_view);
     const auto* page = frame_view->GetPage();
     const auto& viewport = page->GetVisualViewport();
-    if (const auto* overscroll_transform =
-            viewport.GetOverscrollElasticityTransformNode()) {
-      transform = overscroll_transform->Parent();
+    if (const auto* scrollbar_transform =
+            viewport.TransformNodeForViewportScrollbars()) {
+      transform = scrollbar_transform;
     }
   }
 

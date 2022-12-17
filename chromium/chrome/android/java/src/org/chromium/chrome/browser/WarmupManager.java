@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -171,7 +171,7 @@ public class WarmupManager {
             // exceptions to monitor any spikes or stacks that point to Chrome code.
             Throwable throwable = new Throwable(
                     "This is not a crash. See https://crbug.com/1259276 for details.", e);
-            ChromePureJavaExceptionReporter.postReportJavaException(throwable);
+            ChromePureJavaExceptionReporter.reportJavaException(throwable);
             return null;
         }
     }

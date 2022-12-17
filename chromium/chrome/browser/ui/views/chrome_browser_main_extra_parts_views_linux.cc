@@ -1,9 +1,10 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/themes/theme_service_aura_linux.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/theme_profile_key.h"
@@ -13,18 +14,24 @@
 #include "ui/linux/linux_ui.h"
 #include "ui/linux/linux_ui_delegate.h"
 #include "ui/linux/linux_ui_factory.h"
+#include "ui/linux/linux_ui_getter.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/ozone/public/ozone_platform.h"
 
 namespace {
 
-std::unique_ptr<ui::LinuxUi> BuildLinuxUI() {
-  // If the ozone backend hasn't provided a LinuxUiDelegate, don't try to create
-  // a LinuxUi instance as this may result in a crash in toolkit initialization.
-  if (!ui::LinuxUiDelegate::GetInstance())
-    return nullptr;
-
-  return ui::CreateLinuxUi();
-}
+class LinuxUiGetterImpl : public ui::LinuxUiGetter {
+ public:
+  LinuxUiGetterImpl() = default;
+  ~LinuxUiGetterImpl() override = default;
+  ui::LinuxUiTheme* GetForWindow(aura::Window* window) override {
+    return window ? GetForProfile(GetThemeProfileForWindow(window)) : nullptr;
+  }
+  ui::LinuxUiTheme* GetForProfile(Profile* profile) override {
+    return ui::GetLinuxUiTheme(
+        ThemeServiceAuraLinux::GetSystemThemeForProfile(profile));
+  }
+};
 
 }  // namespace
 
@@ -37,19 +44,17 @@ ChromeBrowserMainExtraPartsViewsLinux::
 void ChromeBrowserMainExtraPartsViewsLinux::ToolkitInitialized() {
   ChromeBrowserMainExtraPartsViews::ToolkitInitialized();
 
-  if (auto linux_ui = BuildLinuxUI()) {
-    linux_ui->SetUseSystemThemeCallback(
-        base::BindRepeating([](aura::Window* window) {
-          if (!window)
-            return true;
-          return ThemeServiceAuraLinux::ShouldUseSystemThemeForProfile(
-              GetThemeProfileForWindow(window));
-        }));
-    ui::LinuxUi::SetInstance(std::move(linux_ui));
+  if (auto* linux_ui = ui::GetDefaultLinuxUi()) {
+    linux_ui_getter_ = std::make_unique<LinuxUiGetterImpl>();
+    ui::LinuxUi::SetInstance(linux_ui);
 
     // Cursor theme changes are tracked by LinuxUI (via a CursorThemeManager
     // implementation). Start observing them once it's initialized.
     ui::CursorFactory::GetInstance()->ObserveThemeChanges();
+  }
+  if (auto* linux_ui_theme = ui::GetDefaultLinuxUiTheme()) {
+    UMA_HISTOGRAM_ENUMERATION("Linux.SystemTheme.Default",
+                              linux_ui_theme->GetNativeTheme()->system_theme());
   }
 }
 

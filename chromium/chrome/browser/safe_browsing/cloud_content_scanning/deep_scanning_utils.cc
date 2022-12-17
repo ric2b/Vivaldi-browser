@@ -1,12 +1,13 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
-#include <algorithm>
 
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
@@ -136,6 +137,8 @@ void ModifyKey(ScanningCrashKey key, int delta) {
 void MaybeReportDeepScanningVerdict(
     Profile* profile,
     const GURL& url,
+    const std::string& source,
+    const std::string& destination,
     const std::string& file_name,
     const std::string& download_digest_sha256,
     const std::string& mime_type,
@@ -145,11 +148,7 @@ void MaybeReportDeepScanningVerdict(
     BinaryUploadService::Result result,
     const enterprise_connectors::ContentAnalysisResponse& response,
     EventResult event_result) {
-  DCHECK(std::all_of(download_digest_sha256.begin(),
-                     download_digest_sha256.end(), [](const char& c) {
-                       return (c >= '0' && c <= '9') ||
-                              (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
-                     }));
+  DCHECK(base::ranges::all_of(download_digest_sha256, base::IsHexDigit<char>));
   auto* router =
       extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile);
   if (!router)
@@ -157,9 +156,9 @@ void MaybeReportDeepScanningVerdict(
 
   std::string unscanned_reason = MaybeGetUnscannedReason(result);
   if (!unscanned_reason.empty()) {
-    router->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
-                                 mime_type, trigger, access_point,
-                                 unscanned_reason, content_size, event_result);
+    router->OnUnscannedFileEvent(
+        url, source, destination, file_name, download_digest_sha256, mime_type,
+        trigger, access_point, unscanned_reason, content_size, event_result);
   }
 
   if (result != BinaryUploadService::Result::SUCCESS)
@@ -174,15 +173,15 @@ void MaybeReportDeepScanningVerdict(
       else if (response_result.tag() == "dlp")
         unscanned_reason = "DLP_SCAN_FAILED";
 
-      router->OnUnscannedFileEvent(url, file_name, download_digest_sha256,
-                                   mime_type, trigger, access_point,
-                                   std::move(unscanned_reason), content_size,
-                                   event_result);
+      router->OnUnscannedFileEvent(url, source, destination, file_name,
+                                   download_digest_sha256, mime_type, trigger,
+                                   access_point, std::move(unscanned_reason),
+                                   content_size, event_result);
     } else if (response_result.triggered_rules_size() > 0) {
       router->OnAnalysisConnectorResult(
-          url, file_name, download_digest_sha256, mime_type, trigger,
-          response.request_token(), access_point, response_result, content_size,
-          event_result);
+          url, source, destination, file_name, download_digest_sha256,
+          mime_type, trigger, response.request_token(), access_point,
+          response_result, content_size, event_result);
     }
   }
 }
@@ -190,6 +189,8 @@ void MaybeReportDeepScanningVerdict(
 void ReportAnalysisConnectorWarningBypass(
     Profile* profile,
     const GURL& url,
+    const std::string& source,
+    const std::string& destination,
     const std::string& file_name,
     const std::string& download_digest_sha256,
     const std::string& mime_type,
@@ -198,11 +199,7 @@ void ReportAnalysisConnectorWarningBypass(
     const int64_t content_size,
     const enterprise_connectors::ContentAnalysisResponse& response,
     absl::optional<std::u16string> user_justification) {
-  DCHECK(std::all_of(download_digest_sha256.begin(),
-                     download_digest_sha256.end(), [](const char& c) {
-                       return (c >= '0' && c <= '9') ||
-                              (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
-                     }));
+  DCHECK(base::ranges::all_of(download_digest_sha256, base::IsHexDigit<char>));
   auto* router =
       extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile);
   if (!router)
@@ -214,8 +211,8 @@ void ReportAnalysisConnectorWarningBypass(
       continue;
 
     router->OnAnalysisConnectorWarningBypassed(
-        url, file_name, download_digest_sha256, mime_type, trigger,
-        response.request_token(), access_point, result, content_size,
+        url, source, destination, file_name, download_digest_sha256, mime_type,
+        trigger, response.request_token(), access_point, result, content_size,
         user_justification);
   }
 }

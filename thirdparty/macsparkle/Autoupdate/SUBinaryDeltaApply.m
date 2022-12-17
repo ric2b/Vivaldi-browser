@@ -282,6 +282,21 @@ BOOL applyBinaryDelta(NSString *source, NSString *finalDestination, NSString *pa
                 clonedRelativePath = nil;
             }
             
+            // Decide if we need to preserve original file permissions from the original file
+            // applyBinaryDeltaToFile() normally preserves file permissions on the file it's replacing.
+            // However this is not possible if the destination file we're patching is not writable.
+            // We also need to preserve permissions for clones except when we'll be changing permissions later anyway.
+            BOOL needsToCopyFilePermissions;
+            if (![fileManager isWritableFileAtPath:destinationFilePath]) {
+                // Remove the file non-writable we're patching that may cause issues
+                [fileManager removeItemAtPath:destinationFilePath error:NULL];
+                
+                // We will need to preserve permissons if there is no need to make permission changes later on
+                needsToCopyFilePermissions = (commands & SPUDeltaItemCommandModifyPermissions) == 0;
+            } else {
+                needsToCopyFilePermissions = ((commands & SPUDeltaItemCommandClone) != 0) && ((commands & SPUDeltaItemCommandModifyPermissions) == 0);
+            }
+            
             if (!applyBinaryDeltaToFile(tempDiffFile, sourceDiffFilePath, destinationFilePath)) {
                 if (verbose) {
                     fprintf(stderr, "\n");
@@ -293,12 +308,7 @@ BOOL applyBinaryDelta(NSString *source, NSString *finalDestination, NSString *pa
                 return;
             }
             
-            // Preserve original file permissions from the original file
-            // Only necessary for clones because applyBinaryDeltaToFile() otherwise preserves
-            // file permissions on the file it's replacing. Also not necessary if we're going to
-            // change permissions later
-            if ((commands & SPUDeltaItemCommandClone) != 0 && (commands & SPUDeltaItemCommandModifyPermissions) == 0) {
-                
+            if (needsToCopyFilePermissions) {
                 struct stat sourceFileInfo = {0};
                 if (lstat(sourceDiffFilePath.fileSystemRepresentation, &sourceFileInfo) != 0) {
                     if (verbose) {
@@ -398,32 +408,17 @@ BOOL applyBinaryDelta(NSString *source, NSString *finalDestination, NSString *pa
         
         NSTask *dittoTask = [[NSTask alloc] init];
         
-        if (@available(macOS 10.13, *)) {
-            dittoTask.executableURL = [NSURL fileURLWithPath:@"/usr/bin/ditto" isDirectory:NO];
-        } else {
-            dittoTask.launchPath = @"/usr/bin/ditto";
-        }
-        
+        dittoTask.executableURL = [NSURL fileURLWithPath:@"/usr/bin/ditto" isDirectory:NO];
         dittoTask.arguments = @[@"--hfsCompression", destination, finalDestination];
         
         // If we fail to apply file system compression, we will try falling back to not doing this
         BOOL failedToApplyFileSystemCompression = NO;
         
-        if (@available(macOS 10.13, *)) {
-            NSError *launchError = nil;
-            if (![dittoTask launchAndReturnError:&launchError]) {
-                failedToApplyFileSystemCompression = YES;
-                
-                fprintf(stderr, "\nWarning: failed to launch ditto task for file compression: %s", launchError.localizedDescription.UTF8String);
-            }
-        } else {
-            @try {
-                [dittoTask launch];
-            } @catch (NSException *exception) {
-                failedToApplyFileSystemCompression = YES;
-                
-                fprintf(stderr, "\nWarning: failed to launch ditto task for file compression: %s", exception.reason.UTF8String);
-            }
+        NSError *launchError = nil;
+        if (![dittoTask launchAndReturnError:&launchError]) {
+            failedToApplyFileSystemCompression = YES;
+            
+            fprintf(stderr, "\nWarning: failed to launch ditto task for file compression: %s", launchError.localizedDescription.UTF8String);
         }
         
         if (!failedToApplyFileSystemCompression) {

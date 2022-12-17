@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,13 +70,27 @@ dictionary MLClampOptions {
 
   // Element-wise binary operations
   [RaisesException] MLOperand add(MLOperand a, MLOperand b);
+  [RaisesException] MLOperand sub(MLOperand a, MLOperand b);
+  [RaisesException] MLOperand mul(MLOperand a, MLOperand b);
+  [RaisesException] MLOperand div(MLOperand a, MLOperand b);
+  [RaisesException] MLOperand max(MLOperand a, MLOperand b);
+  [RaisesException] MLOperand min(MLOperand a, MLOperand b);
 
   [RaisesException] MLOperand gemm(MLOperand a, MLOperand b, optional MLGemmOptions options = {});
 
+  [RaisesException] MLOperand hardSwish(MLOperand x);
+  [RaisesException] MLOperator hardSwish();
+
   // Pooling operations
   [RaisesException] MLOperand averagePool2d(MLOperand input, optional MLPool2dOptions options = {});
+  [RaisesException] MLOperand maxPool2d(MLOperand input, optional MLPool2dOptions options = {});
+
+  [RaisesException] MLOperand relu(MLOperand input);
+  [RaisesException] MLOperator relu();
 
   [RaisesException] MLOperand reshape(MLOperand input, sequence<long> newShape);
 
   [RaisesException] MLOperand softmax(MLOperand input);
+
+  [CallWith=ScriptState, RaisesException] Promise<MLGraph> buildAsync(MLNamedOperands outputs);
 };

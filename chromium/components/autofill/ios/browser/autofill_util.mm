@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/autofill/core/browser/autofill_field.h"
+#include "components/autofill/core/common/autocomplete_parsing_util.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -101,7 +102,7 @@ bool ExtractFormsData(NSString* forms_json,
 
   // Iterate through all the extracted forms and copy the data from JSON into
   // BrowserAutofillManager structures.
-  for (const auto& form_dict : forms_value->GetListDeprecated()) {
+  for (const auto& form_dict : forms_value->GetList()) {
     autofill::FormData form;
     if (ExtractFormData(form_dict, filtered, form_name, main_frame_url,
                         frame_origin, &form))
@@ -224,16 +225,18 @@ bool ExtractFormFieldData(const base::Value::Dict& field,
   if (const std::string* value = field.FindString("value")) {
     field_data->value = base::UTF8ToUTF16(*value);
   }
+  field_data->is_autofilled =
+      field.FindBool("is_autofilled").value_or(field_data->is_autofilled);
+
   if (const std::string* autocomplete_attribute =
           field.FindString("autocomplete_attribute")) {
     field_data->autocomplete_attribute = *autocomplete_attribute;
   }
-  field_data->is_autofilled =
-      field.FindBool("is_autofilled").value_or(field_data->is_autofilled);
-
   if (absl::optional<int> max_length = field.FindInt("max_length")) {
     field_data->max_length = *max_length;
   }
+  field_data->parsed_autocomplete = ParseAutocompleteAttribute(
+      field_data->autocomplete_attribute, field_data->max_length);
 
   // TODO(crbug.com/427614): Extract |is_checked|.
   bool is_checkable = field.FindBool("is_checkable").value_or(false);
@@ -333,7 +336,7 @@ bool ExtractIDs(NSString* json_string, std::vector<FieldRendererId>* ids) {
   if (!ids_value->is_list())
     return false;
 
-  for (const auto& unique_id : ids_value->GetListDeprecated()) {
+  for (const auto& unique_id : ids_value->GetList()) {
     if (!unique_id.is_string())
       return false;
     uint32_t id_num = 0;

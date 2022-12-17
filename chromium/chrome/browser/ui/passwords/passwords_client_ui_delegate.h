@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/prefs/pref_service.h"
 
 namespace content {
 class WebContents;
@@ -106,6 +107,11 @@ class PasswordsClientUIDelegate {
   virtual void OnShowMoveToAccountBubble(
       std::unique_ptr<password_manager::PasswordFormManagerForUI>
           form_to_move) = 0;
+
+  // Called when trying to enable biometric authentication for filling from
+  // bubble promp.
+  virtual void OnBiometricAuthenticationForFilling(
+      PrefService* pref_service) = 0;
 
  protected:
   virtual ~PasswordsClientUIDelegate() = default;

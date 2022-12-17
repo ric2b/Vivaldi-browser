@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
   testActivities?: chrome.activityLogPrivate.ActivityResultSet;
   userSiteSettings?: chrome.developerPrivate.UserSiteSettings;
   siteGroups?: chrome.developerPrivate.SiteGroup[];
+  matchingExtensionsInfo?: chrome.developerPrivate.MatchingExtensionInfo[];
 
   private retryLoadUnpackedError_?: chrome.developerPrivate.LoadError;
   private forceReloadItemError_: boolean = false;
@@ -36,6 +37,7 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
       'getExtensionsInfo',
       'getExtensionSize',
       'getFilteredExtensionActivityLog',
+      'getMatchingExtensionsForSite',
       'getProfileConfiguration',
       'getUserAndExtensionSitesByEtld',
       'getUserSiteSettings',
@@ -61,6 +63,7 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
       'setItemHostAccess',
       'setProfileInDevMode',
       'setShortcutHandlingSuspended',
+      'setShowAccessRequestsInToolbar',
       'shouldIgnoreUpdate',
       'showInFolder',
       'showItemOptionsPage',
@@ -329,13 +332,13 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
   }
 
   addUserSpecifiedSites(
-      siteSet: chrome.developerPrivate.UserSiteSet, hosts: string[]) {
+      siteSet: chrome.developerPrivate.SiteSet, hosts: string[]) {
     this.methodCalled('addUserSpecifiedSites', [siteSet, hosts]);
     return Promise.resolve();
   }
 
   removeUserSpecifiedSites(
-      siteSet: chrome.developerPrivate.UserSiteSet, hosts: string[]) {
+      siteSet: chrome.developerPrivate.SiteSet, hosts: string[]) {
     this.methodCalled('removeUserSpecifiedSites', [siteSet, hosts]);
     return Promise.resolve();
   }
@@ -343,5 +346,14 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
   getUserAndExtensionSitesByEtld() {
     this.methodCalled('getUserAndExtensionSitesByEtld');
     return Promise.resolve(this.siteGroups!);
+  }
+
+  setShowAccessRequestsInToolbar(id: string, showRequests: boolean) {
+    this.methodCalled('setShowAccessRequestsInToolbar', id, showRequests);
+  }
+
+  getMatchingExtensionsForSite(site: string) {
+    this.methodCalled('getMatchingExtensionsForSite', site);
+    return Promise.resolve(this.matchingExtensionsInfo!);
   }
 }

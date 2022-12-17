@@ -1,13 +1,13 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/update_client/protocol_parser_json.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "base/json/json_reader.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -67,7 +67,7 @@ bool ParseManifest(const base::Value& manifest_node,
     return false;
   }
 
-  for (const auto& package : package_node->GetListDeprecated()) {
+  for (const auto& package : package_node->GetList()) {
     if (!package.is_dict()) {
       *error = "'package' is not a dictionary.";
       return false;
@@ -114,7 +114,7 @@ void ParseActions(const base::Value& actions_node,
   if (!action_node || !action_node->is_list())
     return;
 
-  const auto& action_list = action_node->GetListDeprecated();
+  const auto& action_list = action_node->GetList();
   if (action_list.empty() || !action_list[0].is_dict())
     return;
 
@@ -134,7 +134,7 @@ bool ParseUrls(const base::Value& urls_node,
     return false;
   }
 
-  for (const auto& url : url_node->GetListDeprecated()) {
+  for (const auto& url : url_node->GetList()) {
     if (!url.is_dict())
       continue;
     const auto* codebase = url.FindKey("codebase");
@@ -270,9 +270,9 @@ bool ParseApp(const base::Value& app_node,
 
   if (const auto* data_node = app_node.FindKey("data")) {
     if (const auto* data_list = data_node->GetIfList()) {
-      std::for_each(
-          data_list->begin(), data_list->end(),
-          [&result](const base::Value& data) { ParseData(data, result); });
+      base::ranges::for_each(*data_list, [&result](const base::Value& data) {
+        ParseData(data, result);
+      });
     }
   }
 
@@ -342,7 +342,7 @@ bool ProtocolParserJSON::DoParse(const std::string& response_json,
 
   const auto* app_node = response_node->FindKey("app");
   if (app_node && app_node->is_list()) {
-    for (const auto& app : app_node->GetListDeprecated()) {
+    for (const auto& app : app_node->GetList()) {
       Result result;
       std::string error;
       if (ParseApp(app, &result, &error))

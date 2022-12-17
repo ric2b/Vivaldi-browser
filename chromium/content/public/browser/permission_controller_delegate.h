@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,11 +7,14 @@
 
 #include "base/types/id_type.h"
 #include "content/common/content_export.h"
-#include "content/public/browser/devtools_permission_overrides.h"
 #include "content/public/browser/permission_result.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 
 class GURL;
+
+namespace url {
+class Origin;
+}
 
 namespace blink {
 enum class PermissionType;
@@ -23,8 +26,6 @@ class RenderProcessHost;
 
 class CONTENT_EXPORT PermissionControllerDelegate {
  public:
-  using PermissionOverrides = DevToolsPermissionOverrides::PermissionOverrides;
-
   // Identifier for an active subscription.
   using SubscriptionId = base::IdType64<PermissionControllerDelegate>;
 
@@ -131,20 +132,8 @@ class CONTENT_EXPORT PermissionControllerDelegate {
   virtual void UnsubscribePermissionStatusChange(
       SubscriptionId subscription_id) = 0;
 
-  // Manually overrides default permission settings of delegate, if overrides
-  // are tracked by the delegate. This method should only be called by the
-  // PermissionController owning the delegate.
-  virtual void SetPermissionOverridesForDevTools(
-      const absl::optional<url::Origin>& origin,
-      const PermissionOverrides& overrides) {}
-
-  // Removes overrides that have been set, if any, for all origins. If delegate
-  // does not maintain own permission set, then nothing happens.
-  virtual void ResetPermissionOverridesForDevTools() {}
-
-  // Returns whether permission can be overridden by
-  // DevToolsPermissionOverrides.
-  virtual bool IsPermissionOverridableByDevTools(
+  // Returns whether permission can be overridden.
+  virtual bool IsPermissionOverridable(
       blink::PermissionType permission,
       const absl::optional<url::Origin>& origin);
 };

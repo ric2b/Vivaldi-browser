@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,11 +10,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/containers/adapters.h"
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -67,9 +69,6 @@
 #include "chrome/browser/ui/views/page_action/page_action_icon_params.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
-#include "chrome/browser/ui/views/permissions/permission_chip.h"
-#include "chrome/browser/ui/views/permissions/permission_quiet_chip.h"
-#include "chrome/browser/ui/views/permissions/permission_request_chip.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_icon_view.h"
 #include "chrome/browser/ui/views/sharing_hub/sharing_hub_icon_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
@@ -78,6 +77,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
+#include "components/commerce/core/commerce_feature_list.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -87,6 +87,8 @@
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/performance_manager/public/features.h"
+#include "components/permissions/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/search_engines/template_url.h"
@@ -98,6 +100,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_registry.h"
@@ -274,7 +277,7 @@ void LocationBarView::Init() {
   selected_keyword_view_ = AddChildView(std::make_unique<SelectedKeywordView>(
       this, TemplateURLServiceFactory::GetForProfile(profile_), font_list));
 
-  if (apps::features::LinkCapturingUiUpdateEnabled()) {
+  if (browser_ && apps::features::LinkCapturingUiUpdateEnabled()) {
     intent_chip_ =
         AddChildView(std::make_unique<IntentChipButton>(browser_, this));
   }
@@ -299,10 +302,15 @@ void LocationBarView::Init() {
     // first so that they appear on the left side of the icon container.
     // TODO(crbug.com/1318890): Improve the ordering heuristics for page action
     // icons and determine a way to handle simultaneous icon animations.
+    if (base::FeatureList::IsEnabled(commerce::kShoppingList)) {
+      params.types_enabled.push_back(PageActionIconType::kPriceTracking);
+    }
+
     if (side_search::IsDSESupportEnabled(profile_) &&
         side_search::IsEnabledForBrowser(browser_)) {
       params.types_enabled.push_back(PageActionIconType::kSideSearch);
     }
+
     params.types_enabled.push_back(PageActionIconType::kSendTabToSelf);
     params.types_enabled.push_back(PageActionIconType::kClickToCall);
     params.types_enabled.push_back(PageActionIconType::kQRCodeGenerator);
@@ -323,6 +331,10 @@ void LocationBarView::Init() {
     params.types_enabled.push_back(PageActionIconType::kCookieControls);
     params.types_enabled.push_back(
         PageActionIconType::kPaymentsOfferNotification);
+    if (base::FeatureList::IsEnabled(
+            performance_manager::features::kHighEfficiencyModeAvailable)) {
+      params.types_enabled.push_back(PageActionIconType::kHighEfficiency);
+    }
   }
   // Add icons only when feature is not enabled. Otherwise icons will
   // be added to the ToolbarPageActionIconContainerView.
@@ -580,6 +592,15 @@ void LocationBarView::Layout() {
   constexpr int kTextJogIndentDp = 11;
   int leading_edit_item_padding = should_indent ? kTextJogIndentDp : 0;
 
+  // Additionally, the text should be indented further if a chip is visible
+  // and the lock icon is hidden. This is treated separately, because the
+  // indentation constant has a distinct value.
+  if (chip_controller_ && chip_controller_->chip()->GetVisible() &&
+      ShouldChipOverrideLocationIcon()) {
+    constexpr int kTextIndentLocationBarIconOverriddenDp = 8;
+    leading_edit_item_padding += kTextIndentLocationBarIconOverriddenDp;
+  }
+
   // We always subtract the left padding of the OmniboxView itself to allow for
   // an extended I-beam click target without affecting actual layout.
   leading_edit_item_padding -= omnibox_view_->GetInsets().left();
@@ -600,13 +621,15 @@ void LocationBarView::Layout() {
   // label/chip.
   const double kLeadingDecorationMaxFraction = 0.5;
 
-  if (chip_ && chip_->GetVisible() && !ShouldShowKeywordBubble()) {
+  if (chip_controller_ && chip_controller_->chip()->GetVisible() &&
+      !ShouldShowKeywordBubble()) {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
-                                      0, edge_padding, chip_);
+                                      0, edge_padding,
+                                      chip_controller_->chip());
   }
 
+  location_icon_view_->SetVisible(false);
   if (ShouldShowKeywordBubble()) {
-    location_icon_view_->SetVisible(false);
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, selected_keyword_view_);
@@ -633,11 +656,14 @@ void LocationBarView::Layout() {
       }
       selected_keyword_view_->SetCustomImage(image);
     }
-  } else if (location_icon_view_->GetShowText()) {
+  } else if (location_icon_view_->GetShowText() &&
+             !ShouldChipOverrideLocationIcon()) {
+    location_icon_view_->SetVisible(true);
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, location_icon_view_);
-  } else {
+  } else if (!ShouldChipOverrideLocationIcon()) {
+    location_icon_view_->SetVisible(true);
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       0, edge_padding, location_icon_view_);
   }
@@ -774,10 +800,18 @@ void LocationBarView::ChildPreferredSizeChanged(views::View* child) {
 }
 
 void LocationBarView::Update(WebContents* contents) {
+  if (contents)
+    page_action_icon_controller_->UpdateWebContents(contents);
+
   RefreshContentSettingViews();
 
   RefreshPageActionIconViews();
   location_icon_view_->Update(/*suppress_animations=*/contents);
+
+  if (is_initialized_ && chip_controller_) {
+    chip_controller_->OnWebContentsChanged();
+  }
+
   if (intent_chip_)
     intent_chip_->Update();
 
@@ -810,12 +844,8 @@ bool LocationBarView::ActivateFirstInactiveBubbleForAccessibility() {
       ->ActivateFirstInactiveBubbleForAccessibility();
 }
 
-bool LocationBarView::IsChipActive() {
-  return chip_ && chip_->IsActive();
-}
-
 void LocationBarView::CreateChip() {
-  DCHECK(!chip_);
+  DCHECK(!chip_controller_);
 
   if (!browser_)
     return;
@@ -823,37 +853,10 @@ void LocationBarView::CreateChip() {
   if (web_app::AppBrowserController::IsWebApp(browser_))
     return;
 
-  chip_ = AddChildViewAt(std::make_unique<PermissionChip>(), 0);
-}
-
-PermissionChip* LocationBarView::DisplayChip(
-    permissions::PermissionPrompt::Delegate* delegate,
-    bool should_bubble_start_open) {
-  DCHECK(delegate);
-  DCHECK(chip_);
-
-  chip_->SetupChip(std::make_unique<PermissionRequestChip>(
-      browser(), delegate, should_bubble_start_open));
-
-  return chip_;
-}
-
-PermissionChip* LocationBarView::DisplayQuietChip(
-    permissions::PermissionPrompt::Delegate* delegate,
-    bool should_expand) {
-  DCHECK(delegate);
-  DCHECK(chip_);
-
-  chip_->SetupChip(std::make_unique<PermissionQuietChip>(browser(), delegate,
-                                                         should_expand));
-
-  return chip_;
-}
-
-void LocationBarView::FinalizeChip() {
-  DCHECK(chip_);
-  chip_->Finalize();
-  InvalidateLayout();
+  chip_controller_ = std::make_unique<ChipController>(
+      browser_, AddChildViewAt(std::make_unique<OmniboxChipButton>(
+                                   OmniboxChipButton::PressedCallback()),
+                               0));
 }
 
 void LocationBarView::UpdateWithoutTabRestore() {
@@ -1367,6 +1370,14 @@ void LocationBarView::OnTouchUiChanged() {
   PreferredSizeChanged();
 }
 
+bool LocationBarView::ShouldChipOverrideLocationIcon() {
+  bool has_visible_chip =
+      chip_controller_ && chip_controller_->chip()->GetVisible();
+  return has_visible_chip &&
+         base::FeatureList::IsEnabled(
+             permissions::features::kChipLocationBarIconOverride);
+}
+
 bool LocationBarView::IsEditingOrEmpty() const {
   return omnibox_view_ && omnibox_view_->IsEditingOrEmpty();
 }
@@ -1428,7 +1439,34 @@ bool LocationBarView::ShowPageInfoDialog() {
                          weak_factory_.GetWeakPtr()));
   bubble->SetHighlightedButton(location_icon_view_);
   bubble->GetWidget()->Show();
+  RecordPageInfoMetrics();
   return true;
+}
+
+void LocationBarView::RecordPageInfoMetrics() {
+  if (base::FeatureList::IsEnabled(permissions::features::kConfirmationChip) &&
+      chip_controller_) {
+    bool confirmation_chip_collapsed_recently =
+        base::TimeTicks::Now() - confirmation_chip_collapsed_time_ <=
+        permissions::kConfirmationConsiderationDurationForUma;
+
+    if (!chip_controller_->chip()->GetVisible() &&
+        !confirmation_chip_collapsed_recently) {
+      permissions::PermissionUmaUtil::RecordPageInfoDialogAccessType(
+          permissions::PageInfoDialogAccessType::LOCK_CLICK);
+    } else if (chip_controller_->chip()->GetVisible()) {
+      permissions::PermissionUmaUtil::RecordPageInfoDialogAccessType(
+          permissions::PageInfoDialogAccessType::
+              LOCK_CLICK_DURING_CONFIRMATION_CHIP);
+    } else {
+      permissions::PermissionUmaUtil::RecordPageInfoDialogAccessType(
+          permissions::PageInfoDialogAccessType::
+              LOCK_CLICK_SHORTLY_AFTER_CONFIRMATION_CHIP);
+    }
+  } else {
+    permissions::PermissionUmaUtil::RecordPageInfoDialogAccessType(
+        permissions::PageInfoDialogAccessType::LOCK_CLICK);
+  }
 }
 
 ui::ImageModel LocationBarView::GetLocationIcon(
@@ -1441,14 +1479,14 @@ ui::ImageModel LocationBarView::GetLocationIcon(
 }
 
 void LocationBarView::UpdateChipVisibility() {
-  if (!IsChipActive()) {
+  if (!chip_controller_ || !chip_controller_->chip()->GetVisible()) {
     return;
   }
 
   if (IsEditingOrEmpty()) {
     // If a user starts typing, a permission request should be ignored and the
     // chip finalized.
-    chip_->Finalize();
+    chip_controller_->ResetChip();
   }
 }
 

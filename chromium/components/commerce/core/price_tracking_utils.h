@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,9 @@
 #include "base/scoped_observation.h"
 #include "components/bookmarks/browser/base_bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
+
+class PrefService;
 
 namespace bookmarks {
 class BookmarkModel;
@@ -20,12 +23,17 @@ class BookmarkNode;
 
 namespace commerce {
 
+struct ProductInfo;
 class ShoppingService;
 
 // Return whether a bookmark is price tracked. This does not check the
 // subscriptions backend, only the flag in the bookmark meta.
 bool IsBookmarkPriceTracked(bookmarks::BookmarkModel* model,
                             const bookmarks::BookmarkNode* node);
+
+// Return whether the |node| is a product bookmark.
+bool IsProductBookmark(bookmarks::BookmarkModel* model,
+                       const bookmarks::BookmarkNode* node);
 
 // Set the state of price tracking for all bookmarks with the cluster ID of the
 // provided bookmark. A subscription update will attempted on the backend and,
@@ -43,6 +51,36 @@ void SetPriceTrackingStateForBookmark(ShoppingService* service,
 std::vector<const bookmarks::BookmarkNode*> GetBookmarksWithClusterId(
     bookmarks::BookmarkModel* model,
     uint64_t cluster_id);
+
+// Get all bookmarks that are price tracked. This only checks the bit in the
+// bookmark metadata and does not make a call to the backend. The returned
+// vector of BookmarkNodes is owned by the caller, but the nodes pointed to
+// are not -- those live for as long as the BookmarkModel (|model|) is alive
+// which has the same lifetime as the current BrowserContext.
+std::vector<const bookmarks::BookmarkNode*> GetAllPriceTrackedBookmarks(
+    bookmarks::BookmarkModel* model);
+
+// Get all shopping bookmarks. The returned vector of BookmarkNodes is owned by
+// the caller, but the nodes pointed to are not -- those live for as long as
+// the BookmarkModel (|model|) is alive which has the same lifetime as the
+// current BrowserContext.
+std::vector<const bookmarks::BookmarkNode*> GetAllShoppingBookmarks(
+    bookmarks::BookmarkModel* model);
+
+// Populate or update the provided |out_meta| with information from |info|. The
+// returned boolean indicated whether any information actually changed.
+bool PopulateOrUpdateBookmarkMetaIfNeeded(
+    power_bookmarks::PowerBookmarkMeta* out_meta,
+    const ProductInfo& info);
+
+// Attempts to enable price email notifications for users. This will only set
+// the setting to true if it is the first time being called, after that this is
+// a noop.
+void MaybeEnableEmailNotifications(PrefService* pref_service);
+
+// Whether the email notification is explicitly disabled by the user. Return
+// false if we are using the default preference value.
+bool IsEmailDisabledByUser(PrefService* pref_service);
 
 }  // namespace commerce
 

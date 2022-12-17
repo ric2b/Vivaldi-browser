@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,9 +22,10 @@
 
 namespace apps {
 
-// When adding a new item, update
-//   components/services/app_service/public/cpp/macros.h
-// macros if necessary.
+// When updating the enum below, update
+// //components/services/app_service/public/cpp/macros.h
+// macros if necessary, as well as the ApplicationType enum in
+// //components/services/app_service/public/protos/app_types.proto.
 ENUM(AppType,
      kUnknown,
      kArc,                         // Android app.
@@ -62,8 +63,10 @@ ENUM(Readiness,
      kUninstalledByMigration)
 
 // How the app was installed.
-// This should be kept in sync with histograms.xml, and InstallReason in
-// enums.xml.
+// This should be kept in sync with histograms.xml, InstallReason in
+// enums.xml as well as ApplicationInstallReason in
+// //components/services/app_service/public/protos/app_types.proto.
+//
 // Note the enumeration is used in UMA histogram so entries should not be
 // re-ordered or removed. New entries should be added at the bottom.
 ENUM(InstallReason,
@@ -74,12 +77,16 @@ ENUM(InstallReason,
      kDefault,  // Preinstalled by default, but is not considered a system app.
      kSync,     // Installed by sync.
      kUser,     // Installed by user action.
-     kSubApp    // Installed by the SubApp API call.
+     kSubApp,   // Installed by the SubApp API call.
+     kKiosk,    // Installed by Kiosk on Chrome OS.
+     kCommandLine  // Installed by command line argument.
 )
 
 // Where the app was installed from.
-// This should be kept in sync with histograms.xml, and InstallSource in
-// enums.xml.
+// This should be kept in sync with histograms.xml, InstallSource in
+// enums.xml as well as ApplicationInstallSource in
+// //components/services/app_service/public/protos/app_types.proto.
+//
 // Note the enumeration is used in UMA histogram so entries should not be
 // re-ordered or removed. New entries should be added at the bottom.
 ENUM(InstallSource,
@@ -92,7 +99,9 @@ ENUM(InstallSource,
 )
 
 // What caused the app to be uninstalled.
-// This should be kept in sync with UninstallSource in enums.xml, so entries
+// This should be kept in sync with UninstallSource in enums.xml as well as
+// ApplicationUninstallSource in
+// //components/services/app_service/public/protos/app_types.proto, so entries
 // should not be re-ordered or removed. New entries should be added at the
 // bottom.
 ENUM(UninstallSource,
@@ -159,9 +168,9 @@ struct COMPONENT_EXPORT(APP_TYPES) App {
   // Store, etc.
   InstallSource install_source = InstallSource::kUnknown;
 
-  // An optional ID used for policy to identify the app.
-  // For web apps, it contains the install URL.
-  absl::optional<std::string> policy_id;
+  // IDs used for policy to identify the app.
+  // For web apps, it contains the install URL(s).
+  std::vector<std::string> policy_ids;
 
   // Whether the app is an extensions::Extensions where is_platform_app()
   // returns true.

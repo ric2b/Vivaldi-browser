@@ -1,10 +1,9 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 module media.mojom;
 
-import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
 [Stable, Extensible]
@@ -95,15 +94,8 @@ enum VideoCaptureTransportType {
 [Stable, Extensible]
 enum VideoCaptureBufferType {
   kSharedMemory,
-
-  // Warning: This case is a workaround for compatibility with an older version
-  // of Mojo only and will be deleted as soon as the Mojo version of ChromiumOS
-  // becomes compatible with the |kSharedMemory|.
-  // TODO(chfremer): Remove this when https://crbug.com/857537 is resolved.
-  kSharedMemoryViaRawFileDescriptor,
-
+  kSharedMemoryViaRawFileDescriptor_DEPRECATED,  // DEPRECATED, DO NOT USE
   kMailboxHolder,
-
   kGpuMemoryBuffer
 };
 
@@ -282,7 +274,8 @@ enum VideoCaptureFrameDropReason {
   kResolutionAdapterFrameRateIsHigherThanRequested,
   kResolutionAdapterHasNoCallbacks,
   kVideoTrackFrameDelivererNotEnabledReplacingWithBlackFrame,
-  kRendererSinkFrameDelivererIsNotStarted
+  kRendererSinkFrameDelivererIsNotStarted,
+  [MinVersion=1] kCropVersionNotCurrent
 };
 
 [Stable]
@@ -379,7 +372,7 @@ struct VideoCaptureDeviceInfo {
 };
 
 // The result of an attempt by the client to start/stop cropping.
-// TODO(crbug.com/1247761): Remove kNotImplemented.
+// TODO(crbug.com/1264849): Remove kNotImplemented.
 enum CropRequestResult {
   kSuccess,
   kErrorGeneric,

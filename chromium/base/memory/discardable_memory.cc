@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,13 +21,15 @@ namespace features {
 #if BUILDFLAG(IS_POSIX)
 // Feature flag allowing the use of MADV_FREE discardable memory when there are
 // multiple supported discardable memory backings.
-const base::Feature kMadvFreeDiscardableMemory{
-    "MadvFreeDiscardableMemory", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMadvFreeDiscardableMemory,
+             "MadvFreeDiscardableMemory",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_POSIX)
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-const base::Feature kDiscardableMemoryBackingTrial{
-    "DiscardableMemoryBackingTrial", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kDiscardableMemoryBackingTrial,
+             "DiscardableMemoryBackingTrial",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Association of trial group names to trial group enum. Array order must match
 // order of DiscardableMemoryTrialGroup enum.

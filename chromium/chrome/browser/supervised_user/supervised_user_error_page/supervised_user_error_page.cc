@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -101,6 +101,8 @@ std::string BuildHtml(bool allow_access_requests,
   strings.Set("isWebFilterInterstitialRefreshEnabled",
               web_filter_interstitial_refresh_enabled);
   strings.Set("isLocalWebApprovalsEnabled", local_web_approvals_enabled);
+  strings.Set("isLocalWebApprovalsPreferred",
+              supervised_users::IsLocalWebApprovalThePreferredButton());
   bool is_automatically_blocked = ReasonIsAutomatic(reason);
 
   std::string block_header;
@@ -111,10 +113,10 @@ std::string BuildHtml(bool allow_access_requests,
   } else if (allow_access_requests) {
     block_header =
         l10n_util::GetStringUTF8(IDS_CHILD_BLOCK_INTERSTITIAL_HEADER);
-    block_message = l10n_util::GetStringUTF8(
-        web_filter_interstitial_refresh_enabled && is_automatically_blocked
-            ? IDS_CHILD_BLOCK_INTERSTITIAL_MESSAGE_SAFE_SITES_BLOCKED
-            : IDS_CHILD_BLOCK_INTERSTITIAL_MESSAGE);
+    block_message =
+        l10n_util::GetStringUTF8(web_filter_interstitial_refresh_enabled
+                                     ? IDS_CHILD_BLOCK_INTERSTITIAL_MESSAGE_V2
+                                     : IDS_CHILD_BLOCK_INTERSTITIAL_MESSAGE);
   } else {
     block_header = l10n_util::GetStringUTF8(
         IDS_BLOCK_INTERSTITIAL_HEADER_ACCESS_REQUESTS_DISABLED);
@@ -125,6 +127,8 @@ std::string BuildHtml(bool allow_access_requests,
                                         reason, second_custodian.empty())));
   strings.Set("blockReasonHeader",
               l10n_util::GetStringUTF8(IDS_SUPERVISED_USER_BLOCK_HEADER));
+  strings.Set("siteBlockHeader",
+              l10n_util::GetStringUTF8(IDS_GENERIC_SITE_BLOCK_HEADER));
 
   strings.Set("showFeedbackLink", is_automatically_blocked);
   strings.Set("feedbackLink",
@@ -144,6 +148,9 @@ std::string BuildHtml(bool allow_access_requests,
   strings.Set(
       "localApprovalsButton",
       l10n_util::GetStringUTF8(IDS_BLOCK_INTERSTITIAL_ASK_IN_PERSON_BUTTON));
+  strings.Set("localApprovalsRemoteRequestSentButton",
+              l10n_util::GetStringUTF8(
+                  IDS_BLOCK_INTERSTITIAL_ASK_IN_PERSON_INSTEAD_BUTTON));
   strings.Set("showDetailsLink",
               l10n_util::GetStringUTF8(IDS_BLOCK_INTERSTITIAL_SHOW_DETAILS));
   strings.Set("hideDetailsLink",
@@ -179,7 +186,9 @@ std::string BuildHtml(bool allow_access_requests,
   webui::SetLoadTimeDataDefaults(app_locale, &strings);
   std::string html =
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
-          IDR_SUPERVISED_USER_BLOCK_INTERSTITIAL_HTML);
+          web_filter_interstitial_refresh_enabled
+              ? IDR_SUPERVISED_USER_BLOCK_INTERSTITIAL_V2_HTML
+              : IDR_SUPERVISED_USER_BLOCK_INTERSTITIAL_HTML);
   webui::AppendWebUiCssTextDefaults(&html);
   std::string error_html = webui::GetI18nTemplateHtml(html, strings);
   return error_html;

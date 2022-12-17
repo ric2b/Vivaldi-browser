@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -281,11 +281,6 @@ INSTANTIATE_TEST_SUITE_P(ServiceWorker,
                          ::testing::Values(ContextType::kServiceWorker));
 
 IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, PrintJobSuccess) {
-  // TODO(https://crbug.com/1196789): This Service Worker version of this test
-  // is extremely flaky.
-  if (GetParam() == ContextType::kServiceWorker)
-    return;
-
   RunPrintRequestTestExtension("OK", PRINT_REQUEST_DATA_TYPE_BYTES, "OK");
 }
 

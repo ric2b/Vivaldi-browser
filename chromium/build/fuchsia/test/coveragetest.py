@@ -1,5 +1,5 @@
 #!/usr/bin/env vpython3
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Ensure files in the directory are thoroughly tested."""
@@ -12,7 +12,8 @@ import unittest
 import coverage  # pylint: disable=import-error
 
 COVERED_FILES = [
-    'flash_device.py', 'log_manager.py', 'publish_package.py', 'serve_repo.py'
+    'flash_device.py', 'log_manager.py', 'publish_package.py', 'serve_repo.py',
+    'test_server.py'
 ]
 
 

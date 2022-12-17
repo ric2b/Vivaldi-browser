@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -124,6 +124,11 @@ extern const char kPaymentManifestCrossSiteRedirectNotAllowed[];
 // Used when downloading payment manifest URL A has failed. This format should
 // be used with base::ReplaceStringPlaceholders(fmt, {A}, nullptr).
 extern const char kPaymentManifestDownloadFailed[];
+
+// Used when Content Security Policy (CSP) denied downloading payment manifest
+// URL A. This format should be used with base::ReplaceStringPlaceholders(fmt,
+// {A}, nullptr).
+extern const char kPaymentManifestCSPDenied[];
 
 // Payment handler passed a non-object field "details" in response to the
 // "paymentrequest" event.

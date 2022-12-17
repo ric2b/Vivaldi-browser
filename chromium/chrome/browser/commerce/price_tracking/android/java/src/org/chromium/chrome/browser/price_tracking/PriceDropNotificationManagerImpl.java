@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
+import org.chromium.chrome.browser.bookmarks.BookmarkModelObserver;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
@@ -92,7 +93,7 @@ public class PriceDropNotificationManagerImpl implements PriceDropNotificationMa
             "Commerce.PriceDrops.UserManaged.NotificationCount";
 
     private static NotificationManagerProxy sNotificationManagerForTesting;
-    private static BookmarkBridge sBookmarkBridgeForTesting;
+    private static BookmarkModel sBookmarkModelForTesting;
 
     /**
      * Used to host click logic for "turn off alert" action intent.
@@ -243,11 +244,11 @@ public class PriceDropNotificationManagerImpl implements PriceDropNotificationMa
                         String.format(
                                 Locale.US, "Failed to remove subscriptions. Status: %d", status));
             };
-            final BookmarkBridge bookmarkBridge;
-            if (sBookmarkBridgeForTesting != null) {
-                bookmarkBridge = sBookmarkBridgeForTesting;
+            final BookmarkModel bookmarkModel;
+            if (sBookmarkModelForTesting != null) {
+                bookmarkModel = sBookmarkModelForTesting;
             } else {
-                bookmarkBridge = new BookmarkBridge(Profile.getLastUsedRegularProfile());
+                bookmarkModel = new BookmarkModel(Profile.getLastUsedRegularProfile());
             }
 
             Runnable unsubscribeRunnable = () -> {
@@ -268,14 +269,14 @@ public class PriceDropNotificationManagerImpl implements PriceDropNotificationMa
             };
 
             // Only attempt to unsubscribe once the corresponding bookmarks can also be updated.
-            if (bookmarkBridge.isBookmarkModelLoaded()) {
+            if (bookmarkModel.isBookmarkModelLoaded()) {
                 unsubscribeRunnable.run();
             } else {
-                bookmarkBridge.addObserver(new BookmarkBridge.BookmarkModelObserver() {
+                bookmarkModel.addObserver(new BookmarkModelObserver() {
                     @Override
                     public void bookmarkModelLoaded() {
                         unsubscribeRunnable.run();
-                        bookmarkBridge.removeObserver(this);
+                        bookmarkModel.removeObserver(this);
                     }
 
                     @Override
@@ -360,7 +361,7 @@ public class PriceDropNotificationManagerImpl implements PriceDropNotificationMa
         if (channel != null) return;
         new ChannelsInitializer(mNotificationManager, ChromeChannelDefinitions.getInstance(),
                 mContext.getResources())
-                .ensureInitialized(ChromeChannelDefinitions.ChannelId.PRICE_DROP);
+                .ensureInitialized(ChromeChannelDefinitions.ChannelId.PRICE_DROP_DEFAULT);
     }
 
     @Override
@@ -383,8 +384,8 @@ public class PriceDropNotificationManagerImpl implements PriceDropNotificationMa
             if (areAppNotificationsEnabled()) {
                 intent.setAction(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
                 intent.putExtra(Settings.EXTRA_APP_PACKAGE, mContext.getPackageName());
-                intent.putExtra(
-                        Settings.EXTRA_CHANNEL_ID, ChromeChannelDefinitions.ChannelId.PRICE_DROP);
+                intent.putExtra(Settings.EXTRA_CHANNEL_ID,
+                        ChromeChannelDefinitions.ChannelId.PRICE_DROP_DEFAULT);
             } else {
                 intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
                 intent.putExtra(Settings.EXTRA_APP_PACKAGE, mContext.getPackageName());
@@ -403,7 +404,7 @@ public class PriceDropNotificationManagerImpl implements PriceDropNotificationMa
     @RequiresApi(Build.VERSION_CODES.O)
     public NotificationChannel getNotificationChannel() {
         return mNotificationManager.getNotificationChannel(
-                ChromeChannelDefinitions.ChannelId.PRICE_DROP);
+                ChromeChannelDefinitions.ChannelId.PRICE_DROP_DEFAULT);
     }
 
     /**
@@ -418,13 +419,13 @@ public class PriceDropNotificationManagerImpl implements PriceDropNotificationMa
     }
 
     /**
-     * Set a mock BookmarkBridge for testing so we don't need to access Profile.
+     * Set a mock BookmarkModel for testing so we don't need to access Profile.
      *
-     * @param bookmarkBridge The bookmark bridge to use.
+     * @param bookmarkModel The bookmark bridge to use.
      */
     @VisibleForTesting
-    public static void setBookmarkBridgeForTesting(BookmarkBridge bookmarkBridge) {
-        sBookmarkBridgeForTesting = bookmarkBridge;
+    public static void setBookmarkModelForTesting(BookmarkModel bookmarkModel) {
+        sBookmarkModelForTesting = bookmarkModel;
     }
 
     /**
@@ -435,7 +436,7 @@ public class PriceDropNotificationManagerImpl implements PriceDropNotificationMa
     @RequiresApi(Build.VERSION_CODES.O)
     public void deleteChannelForTesting() {
         mNotificationManager.deleteNotificationChannel(
-                ChromeChannelDefinitions.ChannelId.PRICE_DROP);
+                ChromeChannelDefinitions.ChannelId.PRICE_DROP_DEFAULT);
     }
 
     @Override

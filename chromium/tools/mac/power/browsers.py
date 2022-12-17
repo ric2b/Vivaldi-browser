@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -103,9 +103,10 @@ class ChromiumDriver(BrowserDriver):
 
   def Launch(self):
     open_args = ["-a", self.process_name]
-    subprocess.call(["open"] + open_args + ["--args"] +
-                    ["--enable-benchmarking", "--disable-stack-profiler"] +
-                    self.extra_args)
+    subprocess.call(["open"] + open_args + ["--args"] + [
+        "--enable-benchmarking", "--disable-stack-profiler", "--no-first-run",
+        "--no-default-browser-check"
+    ] + self.extra_args)
 
     self._EnsureStarted()
 

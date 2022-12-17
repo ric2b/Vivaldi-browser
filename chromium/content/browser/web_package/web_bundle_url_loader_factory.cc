@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -131,8 +131,8 @@ class WebBundleURLLoaderFactory::EntryLoader final
 
     auto result =
         mojo::CreateDataPipe(&options, producer_handle, consumer_handle);
-    loader_client_->OnReceiveResponse(std::move(response_head),
-                                      std::move(consumer_handle));
+    loader_client_->OnReceiveResponse(
+        std::move(response_head), std::move(consumer_handle), absl::nullopt);
     if (result != MOJO_RESULT_OK) {
       loader_client_->OnComplete(
           network::URLLoaderCompletionStatus(net::ERR_INSUFFICIENT_RESOURCES));

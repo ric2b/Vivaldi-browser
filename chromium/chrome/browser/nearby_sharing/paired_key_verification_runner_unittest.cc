@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <stdint.h>
 #include <vector>
 
-#include "ash/services/nearby/public/cpp/mock_nearby_process_manager.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/run_loop.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/nearby_sharing/incoming_frames_reader.h"
 #include "chrome/browser/nearby_sharing/share_target.h"
 #include "chrome/services/sharing/public/proto/wire_format.pb.h"
+#include "chromeos/ash/services/nearby/public/cpp/mock_nearby_process_manager.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"

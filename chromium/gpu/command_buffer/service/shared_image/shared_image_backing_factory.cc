@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,15 +7,17 @@
 
 namespace gpu {
 
-std::vector<std::unique_ptr<SharedImageBacking>>
-SharedImageBackingFactory::CreateSharedImageVideoPlanes(
-    base::span<const Mailbox> mailboxes,
-    gfx::GpuMemoryBufferHandle handle,
-    gfx::BufferFormat format,
-    const gfx::Size& size,
-    uint32_t usage) {
-  NOTREACHED();
-  return {};
+SharedImageBackingFactory::SharedImageBackingFactory() = default;
+
+SharedImageBackingFactory::~SharedImageBackingFactory() = default;
+
+base::WeakPtr<SharedImageBackingFactory>
+SharedImageBackingFactory::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
+void SharedImageBackingFactory::InvalidateWeakPtrsForTesting() {
+  weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
 }  // namespace gpu

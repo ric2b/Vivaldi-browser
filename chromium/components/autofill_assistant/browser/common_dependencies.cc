@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,18 +8,15 @@ namespace autofill_assistant {
 
 CommonDependencies::~CommonDependencies() = default;
 
-bool CommonDependencies::IsAllowedForMachineLearning(
-    content::BrowserContext* browser_context) const {
+bool CommonDependencies::IsAllowedForMachineLearning() const {
   return true;
 }
 
-bool CommonDependencies::GetMakeSearchesAndBrowsingBetterEnabled(
-    content::BrowserContext* browser_context) const {
+bool CommonDependencies::GetMakeSearchesAndBrowsingBetterEnabled() const {
   return false;
 }
 
-bool CommonDependencies::GetMetricsReportingEnabled(
-    content::BrowserContext* browser_context) const {
+bool CommonDependencies::GetMetricsReportingEnabled() const {
   return false;
 }
 

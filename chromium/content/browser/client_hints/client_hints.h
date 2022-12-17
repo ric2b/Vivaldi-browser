@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -126,7 +126,7 @@ ParseAndPersistAcceptCHForNavigation(
 // `delegate` cannot be nullptr.
 CONTENT_EXPORT void PersistAcceptCH(
     const url::Origin& origin,
-    content::RenderFrameHost* parent_rfh,
+    FrameTreeNode& frame_tree_node,
     ClientHintsControllerDelegate* delegate,
     const std::vector<network::mojom::WebClientHintsType>& hints);
 

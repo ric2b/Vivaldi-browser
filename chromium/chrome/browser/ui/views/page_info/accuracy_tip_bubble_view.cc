@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -211,7 +211,7 @@ void AccuracyTipBubbleView::OnWidgetDestroying(views::Widget* widget) {
   std::move(close_callback_).Run(action_taken_);
 }
 
-void AccuracyTipBubbleView::OnBubbleAdded() {
+void AccuracyTipBubbleView::OnPromptAdded() {
   // The page requested a permission that triggered a permission prompt.
   // Accuracy tips have lower priority and have to be closed.
   action_taken_ = AccuracyTipInteraction::kPermissionRequested;

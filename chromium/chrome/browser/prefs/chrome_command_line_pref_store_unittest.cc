@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,7 +41,7 @@ class TestCommandLinePrefStore : public ChromeCommandLinePrefStore {
     const base::Value* value = nullptr;
     ASSERT_TRUE(GetValue(proxy_config::prefs::kProxy, &value));
     ASSERT_TRUE(value->is_dict());
-    ProxyConfigDictionary dict(value->Clone());
+    ProxyConfigDictionary dict(value->GetDict().Clone());
     ProxyPrefs::ProxyMode actual_mode;
     ASSERT_TRUE(dict.GetMode(&actual_mode));
     EXPECT_EQ(expected_mode, actual_mode);
@@ -119,7 +119,7 @@ TEST(ChromeCommandLinePrefStoreTest, MultipleSwitches) {
   const base::Value* value = nullptr;
   ASSERT_TRUE(store->GetValue(proxy_config::prefs::kProxy, &value));
   ASSERT_TRUE(value->is_dict());
-  ProxyConfigDictionary dict(value->Clone());
+  ProxyConfigDictionary dict(value->GetDict().Clone());
 
   std::string string_result;
 

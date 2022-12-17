@@ -1,21 +1,25 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import android.util.ArraySet;
+import android.content.res.ColorStateList;
+import android.view.View;
+import android.widget.ImageView;
+import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.modelutil.ListModelChangeProcessor;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyListModel;
 import org.chromium.ui.modelutil.PropertyModel;
 
-import java.util.Set;
-
 /**
- * Binds an {@link TabSelectionEditorAction}'s {@link PropertyModel} to an
- * {@link TabSelectionEditorMenu}.
+ * Binds {@link TabSelectionEditorAction}'s {@link PropertyModel} to an
+ * {@link TabSelectionEditorMenu} and {@link TabSelectionEditorMenuItem}'s {@link ListItem} to a
+ * menu view.
  */
 public class TabSelectionEditorMenuAdapter implements ListModelChangeProcessor.ViewBinder<
         PropertyListModel<PropertyModel, PropertyKey>, TabSelectionEditorMenu, PropertyKey> {
@@ -27,28 +31,24 @@ public class TabSelectionEditorMenuAdapter implements ListModelChangeProcessor.V
         // consider handling or asserting.
         for (int i = index; i < index + count; i++) {
             PropertyModel actionModel = actionModels.get(i);
-            menu.add(actionModel.get(TabSelectionEditorActionProperties.MENU_ITEM_ID),
-                    actionModel.get(TabSelectionEditorActionProperties.TITLE_RESOURCE_ID));
+            menu.add(actionModel.get(TabSelectionEditorActionProperties.MENU_ITEM_ID));
         }
         // Bind all properties.
         onItemsChanged(actionModels, menu, index, count, null);
+        for (int i = index; i < index + count; i++) {
+            PropertyModel actionModel = actionModels.get(i);
+            menu.menuItemInitialized(
+                    actionModel.get(TabSelectionEditorActionProperties.MENU_ITEM_ID));
+        }
     }
 
     @Override
     public void onItemsRemoved(PropertyListModel<PropertyModel, PropertyKey> actionModels,
             TabSelectionEditorMenu menu, int index, int count) {
-        if (actionModels.size() == 0) {
-            menu.clear();
-            return;
+        if (actionModels.size() != 0) {
+            throw new IllegalArgumentException("Partial removal of items is not supported");
         }
-
-        // TODO(ckitagawa): Consider removing this as realisitically 1-by-1 removal should never
-        // occur. Assert or throw an error instead.
-        Set<Integer> menuIds = new ArraySet<>();
-        for (PropertyModel actionModel : actionModels) {
-            menuIds.add(actionModel.get(TabSelectionEditorActionProperties.MENU_ITEM_ID));
-        }
-        menu.keep(menuIds);
+        menu.clear();
     }
 
     @Override
@@ -74,7 +74,7 @@ public class TabSelectionEditorMenuAdapter implements ListModelChangeProcessor.V
     private void bindAllProperties(PropertyModel actionModel, TabSelectionEditorMenuItem menuItem) {
         menuItem.initActionView(actionModel.get(TabSelectionEditorActionProperties.SHOW_MODE),
                 actionModel.get(TabSelectionEditorActionProperties.BUTTON_TYPE));
-        for (PropertyKey key : TabSelectionEditorActionProperties.ALL_KEYS) {
+        for (PropertyKey key : TabSelectionEditorActionProperties.ACTION_KEYS) {
             bindMenuItemProperty(actionModel, menuItem, key);
         }
     }
@@ -82,14 +82,14 @@ public class TabSelectionEditorMenuAdapter implements ListModelChangeProcessor.V
     private void bindMenuItemProperty(
             PropertyModel actionModel, TabSelectionEditorMenuItem menuItem, PropertyKey key) {
         if (key == TabSelectionEditorActionProperties.TITLE_RESOURCE_ID) {
-            menuItem.setTitleResourceId(
-                    actionModel.get(TabSelectionEditorActionProperties.TITLE_RESOURCE_ID));
-        } else if (key == TabSelectionEditorActionProperties.CONTENT_DESCRIPTION_RESOURCE_ID
-                || key == TabSelectionEditorActionProperties.ITEM_COUNT) {
-            menuItem.setContentDescription(
-                    actionModel.get(
-                            TabSelectionEditorActionProperties.CONTENT_DESCRIPTION_RESOURCE_ID),
-                    actionModel.get(TabSelectionEditorActionProperties.ITEM_COUNT));
+            updateTitle(actionModel, menuItem);
+        } else if (key == TabSelectionEditorActionProperties.CONTENT_DESCRIPTION_RESOURCE_ID) {
+            updateContentDescription(actionModel, menuItem);
+        } else if (key == TabSelectionEditorActionProperties.ITEM_COUNT) {
+            if (actionModel.get(TabSelectionEditorActionProperties.TITLE_IS_PLURAL)) {
+                updateTitle(actionModel, menuItem);
+            }
+            updateContentDescription(actionModel, menuItem);
         } else if (key == TabSelectionEditorActionProperties.ICON_POSITION
                 || key == TabSelectionEditorActionProperties.ICON) {
             menuItem.setIcon(actionModel.get(TabSelectionEditorActionProperties.ICON_POSITION),
@@ -103,9 +103,70 @@ public class TabSelectionEditorMenuAdapter implements ListModelChangeProcessor.V
         } else if (key == TabSelectionEditorActionProperties.ON_CLICK_LISTENER) {
             menuItem.setOnClickListener(
                     actionModel.get(TabSelectionEditorActionProperties.ON_CLICK_LISTENER));
+        } else if (key == TabSelectionEditorActionProperties.SHOULD_DISMISS_MENU) {
+            menuItem.setShouldDismissMenu(
+                    actionModel.get(TabSelectionEditorActionProperties.SHOULD_DISMISS_MENU));
         } else if (key == TabSelectionEditorActionProperties.ON_SELECTION_STATE_CHANGE) {
             menuItem.setOnSelectionStateChange(
                     actionModel.get(TabSelectionEditorActionProperties.ON_SELECTION_STATE_CHANGE));
+        } else if (key == TabSelectionEditorActionProperties.ON_SHOWN_IN_MENU) {
+            menuItem.setOnShownInMenu(
+                    actionModel.get(TabSelectionEditorActionProperties.ON_SHOWN_IN_MENU));
+        }
+    }
+
+    private void updateTitle(PropertyModel actionModel, TabSelectionEditorMenuItem menuItem) {
+        int itemCount = actionModel.get(TabSelectionEditorActionProperties.TITLE_IS_PLURAL)
+                ? actionModel.get(TabSelectionEditorActionProperties.ITEM_COUNT)
+                : -1;
+        menuItem.setTitle(
+                actionModel.get(TabSelectionEditorActionProperties.TITLE_RESOURCE_ID), itemCount);
+    }
+
+    private void updateContentDescription(
+            PropertyModel actionModel, TabSelectionEditorMenuItem menuItem) {
+        menuItem.setContentDescription(
+                actionModel.get(TabSelectionEditorActionProperties.CONTENT_DESCRIPTION_RESOURCE_ID),
+                actionModel.get(TabSelectionEditorActionProperties.ITEM_COUNT));
+    }
+
+    public static void bindMenuItem(PropertyModel model, View view, PropertyKey propertyKey) {
+        TextView textView = view.findViewById(R.id.menu_item_text);
+        ImageView startIcon = view.findViewById(R.id.menu_item_icon);
+        ImageView endIcon = view.findViewById(R.id.menu_item_end_icon);
+        if (propertyKey == TabSelectionEditorActionProperties.TITLE) {
+            textView.setText(model.get(TabSelectionEditorActionProperties.TITLE));
+        } else if (propertyKey == TabSelectionEditorActionProperties.ICON) {
+            startIcon.setImageDrawable(model.get(TabSelectionEditorActionProperties.ICON));
+            textView.setPaddingRelative(
+                    view.getResources().getDimensionPixelOffset(R.dimen.menu_padding_start),
+                    textView.getPaddingTop(), textView.getPaddingEnd(),
+                    textView.getPaddingBottom());
+            startIcon.setVisibility(View.VISIBLE);
+            endIcon.setVisibility(View.GONE);
+        } else if (propertyKey == TabSelectionEditorActionProperties.ENABLED
+                || propertyKey == TabSelectionEditorActionProperties.CONTENT_DESCRIPTION) {
+            // Content description changes don't affect enabled state; however, enabled state
+            // changes do affect content description. Updating enabled state is low-cost so
+            // it can be updated regardless to minimize complexity.
+            final boolean enabled = model.get(TabSelectionEditorActionProperties.ENABLED);
+            view.setEnabled(enabled);
+            textView.setEnabled(enabled);
+            startIcon.setEnabled(enabled);
+            endIcon.setEnabled(enabled);
+
+            // Disabled state should just read out the text rather than the plural string details.
+            if (enabled) {
+                textView.setContentDescription(
+                        model.get(TabSelectionEditorActionProperties.CONTENT_DESCRIPTION));
+            } else {
+                textView.setContentDescription(null);
+            }
+        } else if (propertyKey == TabSelectionEditorActionProperties.ICON_TINT) {
+            ColorStateList colorStateList = model.get(TabSelectionEditorActionProperties.ICON_TINT);
+            if (colorStateList != null) {
+                ApiCompatibilityUtils.setImageTintList(startIcon, colorStateList);
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,7 +94,7 @@ testcase.listUpdatedWhenGuestsChanged = async () => {
 
 /**
  * Tests that clicking on a Guest OS entry in the sidebar mounts the
- * corresponding volume, and that the UI is update appropriately (volume in
+ * corresponding volume, and that the UI is updated appropriately (volume in
  * sidebar and not fake, contents show up once done loading, etc).
  */
 testcase.mountGuestSuccess = async () => {

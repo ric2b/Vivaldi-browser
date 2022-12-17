@@ -1,13 +1,13 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/webui/eche_app_ui/eche_signaler.h"
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/webui/eche_app_ui/mojom/eche_app.mojom.h"
 #include "ash/webui/eche_app_ui/proto/exo_messages.pb.h"
 #include "base/metrics/histogram_functions.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 
 namespace ash {
 

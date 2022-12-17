@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,7 @@
 
 #include <string>
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 // The UI implementations maintain corresponding definitions of this
 // enumeration in remoting/protocol/errors.cc and
@@ -43,7 +42,6 @@ bool ParseErrorCode(const std::string& name, ErrorCode* result);
 // Returns the literal string of |error|.
 const char* ErrorCodeToString(ErrorCode error);
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_ERRORS_H_

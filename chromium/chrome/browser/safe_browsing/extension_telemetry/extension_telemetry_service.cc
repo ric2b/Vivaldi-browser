@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,9 +20,12 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/extension_telemetry/cookies_get_all_signal_processor.h"
+#include "chrome/browser/safe_browsing/extension_telemetry/cookies_get_signal_processor.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_signal.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_persister.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_uploader.h"
+#include "chrome/browser/safe_browsing/extension_telemetry/potential_password_theft_signal_processor.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/remote_host_contacted_signal_processor.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/tabs_execute_script_signal_processor.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -51,14 +54,11 @@ using ExtensionInfo =
 
 // Delay before the Telemetry Service checks its last upload time.
 base::TimeDelta kStartupUploadCheckDelaySeconds = base::Seconds(15);
-// The maximum number of telemetry reports stored as files on disk.
-// 35 files will accommodate a planned upload interval of 8 hours
-// with a write interval of 15 minutes with extra space for writes
-// that happen during shutdown.
-int kMaxNumFilesPersisted = 35;
-void RecordSignalType(ExtensionSignalType signal_type) {
-  base::UmaHistogramEnumeration(
-      "SafeBrowsing.ExtensionTelemetry.Signals.SignalType", signal_type);
+
+void RecordWhenFileWasPersisted(bool persisted_at_write_interval) {
+  base::UmaHistogramBoolean(
+      "SafeBrowsing.ExtensionTelemetry.FilePersistedAtWriteInterval",
+      persisted_at_write_interval);
 }
 
 static_assert(extensions::Manifest::NUM_LOAD_TYPES == 10,
@@ -174,6 +174,12 @@ ExtensionTelemetryService::ExtensionTelemetryService(
   SetEnabled(IsEnhancedProtectionEnabled(*pref_service_));
 }
 
+void ExtensionTelemetryService::RecordSignalType(
+    ExtensionSignalType signal_type) {
+  base::UmaHistogramEnumeration(
+      "SafeBrowsing.ExtensionTelemetry.Signals.SignalType", signal_type);
+}
+
 void ExtensionTelemetryService::OnPrefChanged() {
   SetEnabled(IsEnhancedProtectionEnabled(*pref_service_));
 }
@@ -187,13 +193,63 @@ void ExtensionTelemetryService::SetEnabled(bool enable) {
 
   if (enabled_) {
     // Create signal processors.
+    // Map the processors to the signals they eventually generate.
+    signal_processors_.emplace(ExtensionSignalType::kCookiesGet,
+                               std::make_unique<CookiesGetSignalProcessor>());
+    signal_processors_.emplace(
+        ExtensionSignalType::kCookiesGetAll,
+        std::make_unique<CookiesGetAllSignalProcessor>());
     signal_processors_.emplace(
         ExtensionSignalType::kTabsExecuteScript,
         std::make_unique<TabsExecuteScriptSignalProcessor>());
     signal_processors_.emplace(
         ExtensionSignalType::kRemoteHostContacted,
         std::make_unique<RemoteHostContactedSignalProcessor>());
+    signal_processors_.emplace(
+        ExtensionSignalType::kPotentialPasswordTheft,
+        std::make_unique<PotentialPasswordTheftSignalProcessor>());
+
+    // Create subscriber lists for each telemetry signal type.
+    // Map the signal processors to the signals that they consume.
+    std::vector<ExtensionSignalProcessor*> subscribers_for_cookies_get = {
+        signal_processors_[ExtensionSignalType::kCookiesGet].get()};
+    std::vector<ExtensionSignalProcessor*> subscribers_for_cookies_get_all = {
+        signal_processors_[ExtensionSignalType::kCookiesGetAll].get()};
+    std::vector<ExtensionSignalProcessor*> subscribers_for_tabs_execute_script =
+        {signal_processors_[ExtensionSignalType::kTabsExecuteScript].get()};
+    std::vector<ExtensionSignalProcessor*>
+        subscribers_for_remote_host_contacted = {
+            signal_processors_[ExtensionSignalType::kRemoteHostContacted].get(),
+            signal_processors_[ExtensionSignalType::kPotentialPasswordTheft]
+                .get()};
+    std::vector<ExtensionSignalProcessor*> subscribers_for_password_reuse = {
+        signal_processors_[ExtensionSignalType::kPotentialPasswordTheft].get()};
+
+    signal_subscribers_.emplace(ExtensionSignalType::kCookiesGet,
+                                std::move(subscribers_for_cookies_get));
+    signal_subscribers_.emplace(ExtensionSignalType::kCookiesGetAll,
+                                std::move(subscribers_for_cookies_get_all));
+    signal_subscribers_.emplace(ExtensionSignalType::kTabsExecuteScript,
+                                std::move(subscribers_for_tabs_execute_script));
+    signal_subscribers_.emplace(
+        ExtensionSignalType::kRemoteHostContacted,
+        std::move(subscribers_for_remote_host_contacted));
+    signal_subscribers_.emplace(ExtensionSignalType::kPasswordReuse,
+                                std::move(subscribers_for_password_reuse));
+
     if (current_reporting_interval_.is_positive()) {
+      int max_files_supported =
+          ExtensionTelemetryPersister::MaxFilesSupported();
+      int writes_per_interval = std::min(
+          max_files_supported, kExtensionTelemetryWritesPerInterval.Get());
+      if (writes_per_interval < 1)
+        writes_per_interval = 1;
+      // Configure persister for the maximum number of reports to be persisted
+      // on disk. This number is the sum of reports written at every
+      // write interval plus an additional allocation (3) for files written at
+      // browser/profile shutdown.
+      int max_reports_to_persist =
+          std::min(writes_per_interval + 3, max_files_supported);
       // Instantiate persister which is used to read/write telemetry reports to
       // disk and start timer for sending periodic telemetry reports.
       if (base::FeatureList::IsEnabled(kExtensionTelemetryPersistence)) {
@@ -201,15 +257,8 @@ void ExtensionTelemetryService::SetEnabled(bool enable) {
             base::ThreadPool::CreateSequencedTaskRunner(
                 {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                  base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}),
-            kMaxNumFilesPersisted, profile_->GetPath());
+            max_reports_to_persist, profile_->GetPath());
         persister_.AsyncCall(&ExtensionTelemetryPersister::PersisterInit);
-        int writes_per_interval = kExtensionTelemetryWritesPerInterval.Get();
-        // Ensure that the `writes_per_interval` is never larger than the
-        // persister cache or smaller than 1.
-        if (writes_per_interval < 1)
-          writes_per_interval = 1;
-        else if (writes_per_interval > kMaxNumFilesPersisted)
-          writes_per_interval = kMaxNumFilesPersisted;
         timer_.Start(FROM_HERE,
                      current_reporting_interval_ / writes_per_interval, this,
                      &ExtensionTelemetryService::PersistOrUploadData);
@@ -233,6 +282,8 @@ void ExtensionTelemetryService::SetEnabled(bool enable) {
     timer_.Stop();
     // Clear all data stored by the service.
     extension_store_.clear();
+    // Destruct signal subscribers.
+    signal_subscribers_.clear();
     // Destruct signal processors.
     signal_processors_.clear();
     // Delete persisted files.
@@ -253,6 +304,8 @@ void ExtensionTelemetryService::Shutdown() {
     active_report_->SerializeToString(&write_string);
     persister_.AsyncCall(&ExtensionTelemetryPersister::WriteReport)
         .WithArgs(std::move(write_string));
+
+    RecordWhenFileWasPersisted(/*persisted_at_write_interval=*/false);
   }
   timer_.Stop();
   pref_change_registrar_.RemoveAll();
@@ -267,8 +320,7 @@ void ExtensionTelemetryService::AddSignal(
   ExtensionSignalType signal_type = signal->GetType();
   RecordSignalType(signal_type);
 
-  DCHECK(base::Contains(signal_processors_, signal_type));
-  ExtensionSignalProcessor& processor = *signal_processors_[signal_type];
+  DCHECK(base::Contains(signal_subscribers_, signal_type));
 
   if (extension_store_.find(signal->extension_id()) == extension_store_.end()) {
     // This is the first signal triggered by this extension since the last
@@ -286,11 +338,11 @@ void ExtensionTelemetryService::AddSignal(
     extension_store_.emplace(signal->extension_id(),
                              GetExtensionInfoForReport(*extension));
   }
-
-  // Pass the signal as reference instead of relinquishing ownership to the
-  // signal processor. This change paves the way for passing the signal
-  // information to multiple signal processors in a future CL.
-  processor.ProcessSignal(*signal);
+  for (auto* processor : signal_subscribers_[signal_type]) {
+    // Pass the signal as reference instead of relinquishing ownership to the
+    // signal processor.
+    processor->ProcessSignal(*signal);
+  }
 }
 
 void ExtensionTelemetryService::CreateAndUploadReport() {
@@ -308,6 +360,9 @@ void ExtensionTelemetryService::CreateAndUploadReport() {
 }
 
 void ExtensionTelemetryService::OnUploadComplete(bool success) {
+  if (success) {
+    SetLastUploadTimeForExtensionTelemetry(*pref_service_, base::Time::Now());
+  }
   if (base::FeatureList::IsEnabled(kExtensionTelemetryPersistence) &&
       enabled_ && !persister_.is_null()) {
     // Upload saved report(s) if there are any.
@@ -318,34 +373,35 @@ void ExtensionTelemetryService::OnUploadComplete(bool success) {
                          weak_factory_.GetWeakPtr());
       persister_.AsyncCall(&ExtensionTelemetryPersister::ReadReport)
           .Then(std::move(read_callback));
-      SetLastUploadTimeForExtensionTelemetry(*pref_service_, base::Time::Now());
     } else {
       // Save report to disk on a failed upload.
       std::string write_string;
       active_report_->SerializeToString(&write_string);
       persister_.AsyncCall(&ExtensionTelemetryPersister::WriteReport)
           .WithArgs(std::move(write_string));
-      active_uploader_.reset();
-      active_report_.reset();
     }
-  } else {
-    active_report_.reset();
-    active_uploader_.reset();
   }
+  active_report_.reset();
+  active_uploader_.reset();
 }
 
 void ExtensionTelemetryService::UploadPersistedFile(std::string report) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!report.empty()) {
     auto upload_data = std::make_unique<std::string>(report);
-    if (!active_report_->SerializeToString(upload_data.get())) {
+    // Ensure that `upload_data` is a properly formatted protobuf. If it
+    // isn't, skip the upload and attempt to upload the next persisted file.
+    active_report_ = std::make_unique<ExtensionTelemetryReportRequest>();
+    if (active_report_->ParseFromString(*upload_data.get())) {
+      UploadReport(std::move(upload_data));
+    } else {
       active_report_.reset();
-      return;
+      auto read_callback =
+          base::BindOnce(&ExtensionTelemetryService::UploadPersistedFile,
+                         weak_factory_.GetWeakPtr());
+      persister_.AsyncCall(&ExtensionTelemetryPersister::ReadReport)
+          .Then(std::move(read_callback));
     }
-    UploadReport(std::move(upload_data));
-  } else {
-    active_report_.reset();
-    active_uploader_.reset();
   }
 }
 
@@ -392,6 +448,7 @@ void ExtensionTelemetryService::PersistOrUploadData() {
     }
     persister_.AsyncCall(&ExtensionTelemetryPersister::WriteReport)
         .WithArgs(std::move(write_string));
+    RecordWhenFileWasPersisted(/*persisted_at_write_interval=*/true);
   }
 }
 

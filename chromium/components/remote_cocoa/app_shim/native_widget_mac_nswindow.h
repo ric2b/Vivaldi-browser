@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,6 +77,9 @@ REMOTE_COCOA_APP_SHIM_EXPORT
 
 // Whether this window functions as a tooltip.
 @property(assign, nonatomic) BOOL isTooltip;
+
+// Called whenever a child window is added to the receiver.
+@property(nonatomic, copy) void (^childWindowAddedHandler)(NSWindow* child);
 @end
 
 #endif  // COMPONENTS_REMOTE_COCOA_APP_SHIM_NATIVE_WIDGET_MAC_NSWINDOW_H_

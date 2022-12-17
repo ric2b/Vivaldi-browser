@@ -33,7 +33,7 @@
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/common/security_context/insecure_request_policy.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
+#include "third_party/blink/renderer/bindings/core/v8/capture_source_location.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -48,6 +48,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
@@ -88,7 +89,7 @@ static void AppendMailtoPostFormDataToURL(KURL& url,
 
   StringBuilder query;
   query.Append(url.Query());
-  if (!query.IsEmpty())
+  if (!query.empty())
     query.Append('&');
   query.Append(body);
   url.SetQuery(query.ToString());
@@ -225,7 +226,7 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
   }
 
   Document& document = form->GetDocument();
-  KURL action_url = document.CompleteURL(copied_attributes.Action().IsEmpty()
+  KURL action_url = document.CompleteURL(copied_attributes.Action().empty()
                                              ? document.Url().GetString()
                                              : copied_attributes.Action());
 
@@ -281,7 +282,7 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
 
   form_data->SetIdentifier(GenerateFormDataIdentifier());
   form_data->SetContainsPasswordData(dom_form_data->ContainsPasswordData());
-  AtomicString target_or_base_target = copied_attributes.Target().IsEmpty()
+  AtomicString target_or_base_target = copied_attributes.Target().empty()
                                            ? document.BaseTarget()
                                            : copied_attributes.Target();
 
@@ -299,7 +300,7 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
     resource_request->SetHttpBody(form_data);
 
     // construct some user headers if necessary
-    if (boundary.IsEmpty()) {
+    if (boundary.empty()) {
       resource_request->SetHTTPContentType(encoding_type);
     } else {
       resource_request->SetHTTPContentType(encoding_type +
@@ -367,7 +368,7 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
       std::move(resource_request), target_frame, load_type,
       form->GetDocument().domWindow(),
       form->GetDocument().GetFrame()->GetLocalFrameToken(),
-      SourceLocation::Capture(form->GetDocument().domWindow()),
+      CaptureSourceLocation(form->GetDocument().domWindow()),
       form->GetDocument()
           .domWindow()
           ->GetPolicyContainer()

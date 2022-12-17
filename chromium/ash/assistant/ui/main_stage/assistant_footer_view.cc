@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,11 +30,7 @@ constexpr base::TimeDelta kAnimationFadeInDelay = base::Milliseconds(167);
 constexpr base::TimeDelta kAnimationFadeInDuration = base::Milliseconds(167);
 constexpr base::TimeDelta kAnimationFadeOutDuration = base::Milliseconds(167);
 
-// Returns the preferred height in DIPs. Not named GetPreferredHeight() so it
-// looks less like a views::View method.
-int GetPreferredHeightDip() {
-  return features::IsProductivityLauncherEnabled() ? 64 : 48;
-}
+constexpr int kPreferredHeightDip = 64;
 
 }  // namespace
 
@@ -65,7 +61,7 @@ gfx::Size AssistantFooterView::CalculatePreferredSize() const {
 }
 
 int AssistantFooterView::GetHeightForWidth(int width) const {
-  return GetPreferredHeightDip();
+  return kPreferredHeightDip;
 }
 
 void AssistantFooterView::InitLayout() {

@@ -1,11 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {DEFAULT_MAX_COPIES, PrintPreviewCopiesSettingsElement, PrintPreviewModelElement} from 'chrome://print/print_preview.js';
-
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {fakeDataBind} from 'chrome://webui-test/test_util.js';
+import {fakeDataBind} from 'chrome://webui-test/polymer_test_util.js';
 
 import {triggerInputEvent} from './print_preview_test_utils.js';
 
@@ -15,7 +14,8 @@ suite('CopiesSettingsTest', function() {
   let model: PrintPreviewModelElement;
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     model = document.createElement('print-preview-model');
     document.body.appendChild(model);
     model.set('settings.collate.available', true);

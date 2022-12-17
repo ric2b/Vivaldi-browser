@@ -1,11 +1,11 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chromeos/ash/components/audio/audio_device.h"
 
 #include <stdint.h>
-
+#include "ash/constants/ash_features.h"
 #include "base/format_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -154,6 +154,7 @@ AudioDevice::AudioDevice(const AudioNode& node) {
   plugged_time = node.plugged_time;
   max_supported_channels = node.max_supported_channels;
   audio_effect = node.audio_effect;
+  number_of_volume_steps = node.number_of_volume_steps;
 }
 
 AudioDevice::AudioDevice(const AudioDevice& other) = default;
@@ -178,9 +179,14 @@ std::string AudioDevice::ToString() const {
   base::StringAppendF(&result, "device_name = %s ", device_name.c_str());
   base::StringAppendF(&result, "type = %s ", GetTypeString(type).c_str());
   base::StringAppendF(&result, "active = %s ", active ? "true" : "false");
-  base::StringAppendF(&result, "plugged_time= %s ",
+  base::StringAppendF(&result, "plugged_time = %s ",
                       base::NumberToString(plugged_time).c_str());
-
+  base::StringAppendF(&result, "max_supported_channels = %s ",
+                      base::NumberToString(max_supported_channels).c_str());
+  base::StringAppendF(&result, "audio_effect = %s ",
+                      base::NumberToString(audio_effect).c_str());
+  base::StringAppendF(&result, "number_of_volume_steps = %s ",
+                      base::NumberToString(number_of_volume_steps).c_str());
   return result;
 }
 
@@ -203,6 +209,38 @@ bool AudioDevice::IsInternalMic() const {
       return true;
     default:
       return false;
+  }
+}
+
+bool LessBuiltInPriority(const AudioDevice& a, const AudioDevice& b) {
+  if (a.priority < b.priority) {
+    return true;
+  } else if (b.priority < a.priority) {
+    return false;
+  } else if (a.plugged_time < b.plugged_time) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool LessUserPriority(const AudioDevice& a, const AudioDevice& b) {
+  if (a.user_priority < b.user_priority) {
+    return true;
+  } else if (b.user_priority < a.user_priority) {
+    return false;
+  } else {
+    return LessBuiltInPriority(a, b);
+  }
+}
+
+bool AudioDeviceCompare::operator()(const AudioDevice& a,
+                                    const AudioDevice& b) const {
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kRobustAudioDeviceSelectLogic)) {
+    return LessUserPriority(a, b);
+  } else {
+    return LessBuiltInPriority(a, b);
   }
 }
 

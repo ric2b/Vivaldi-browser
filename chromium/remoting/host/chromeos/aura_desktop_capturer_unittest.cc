@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,12 +11,11 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
-#include "remoting/host/chromeos/ash_display_util.h"
-#include "remoting/host/chromeos/features.h"
-#include "remoting/host/chromeos/scoped_fake_ash_display_util.h"
+#include "remoting/host/chromeos/ash_proxy.h"
+#include "remoting/host/chromeos/scoped_fake_ash_proxy.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -52,6 +51,10 @@ const unsigned char expected_frame[] = {
     0xe6, 0x84, 0x8f, 0xa3, 0x9d, 0x65, 0x4e, 0x2f, 0x57, 0xe3, 0xf6, 0xe6,
     0x20, 0x3c, 0x00, 0xc6, 0xe1, 0x73, 0x34, 0xe2, 0x23, 0x99, 0xc4, 0xfa,
     0x91, 0xc2, 0xd5, 0x97, 0xc1, 0x8b, 0xd0, 0x3c, 0x13, 0xba, 0xf0, 0xd7};
+const char kUmaKeyForCapturerCreated[] =
+    "Enterprise.DeviceRemoteCommand.Crd.Capturer.Aura.Created";
+const char kUmaKeyForCapturerDestroyed[] =
+    "Enterprise.DeviceRemoteCommand.Crd.Capturer.Aura.Destroyed";
 
 SkBitmap TestBitmap() {
   SkBitmap bitmap;
@@ -103,36 +106,36 @@ class AuraDesktopCapturerTest : public testing::Test {
  public:
   AuraDesktopCapturerTest() = default;
 
-  test::ScopedFakeAshDisplayUtil& display_util() { return display_util_; }
+  test::ScopedFakeAshProxy& ash_proxy() { return ash_proxy_; }
 
   DesktopCapturerCallback& desktop_capturer_callback() { return callback_; }
 
  protected:
   base::test::SingleThreadTaskEnvironment environment_;
-  test::ScopedFakeAshDisplayUtil display_util_;
+  test::ScopedFakeAshProxy ash_proxy_;
   DesktopCapturerCallback callback_;
-  AuraDesktopCapturer capturer_{display_util_};
+  AuraDesktopCapturer capturer_{ash_proxy_};
 };
 
 TEST_F(AuraDesktopCapturerTest, ShouldSendScreenshotRequestForPrimaryDisplay) {
-  display_util().AddPrimaryDisplay(111);
+  ash_proxy().AddPrimaryDisplay(111);
 
   capturer_.Start(&desktop_capturer_callback());
   capturer_.CaptureFrame();
 
-  test::ScreenshotRequest request = display_util().WaitForScreenshotRequest();
+  test::ScreenshotRequest request = ash_proxy().WaitForScreenshotRequest();
 
   EXPECT_THAT(request.display, Eq(111));
 }
 
 TEST_F(AuraDesktopCapturerTest, ShouldSendScreenshotToCapturer) {
-  display_util().AddPrimaryDisplay();
+  ash_proxy().AddPrimaryDisplay();
 
   capturer_.Start(&desktop_capturer_callback());
   capturer_.CaptureFrame();
 
   const SkBitmap expected_bitmap = TestBitmap();
-  display_util().ReplyWithScreenshot(expected_bitmap);
+  ash_proxy().ReplyWithScreenshot(expected_bitmap);
 
   CaptureResult result = desktop_capturer_callback().WaitForResult();
   EXPECT_THAT(result.result, Eq(webrtc::DesktopCapturer::Result::SUCCESS));
@@ -142,12 +145,12 @@ TEST_F(AuraDesktopCapturerTest, ShouldSendScreenshotToCapturer) {
 }
 
 TEST_F(AuraDesktopCapturerTest, ShouldSetUpdatedRegion) {
-  display_util().AddPrimaryDisplay();
+  ash_proxy().AddPrimaryDisplay();
 
   capturer_.Start(&desktop_capturer_callback());
   capturer_.CaptureFrame();
 
-  display_util().ReplyWithScreenshot(TestBitmap());
+  ash_proxy().ReplyWithScreenshot(TestBitmap());
 
   CaptureResult result = desktop_capturer_callback().WaitForResult();
   ASSERT_THAT(result.frame, NotNull());
@@ -159,12 +162,12 @@ TEST_F(AuraDesktopCapturerTest, ShouldSetDpi) {
   // scale_factor = dpi / default_dpi (and default_dpi is 96).
   const int dpi = static_cast<int>(scale_factor * 96);
 
-  display_util().AddPrimaryDisplay().set_device_scale_factor(scale_factor);
+  ash_proxy().AddPrimaryDisplay().set_device_scale_factor(scale_factor);
 
   capturer_.Start(&desktop_capturer_callback());
   capturer_.CaptureFrame();
 
-  display_util().ReplyWithScreenshot(TestBitmap());
+  ash_proxy().ReplyWithScreenshot(TestBitmap());
 
   CaptureResult result = desktop_capturer_callback().WaitForResult();
   ASSERT_THAT(result.frame, NotNull());
@@ -178,13 +181,13 @@ TEST_F(AuraDesktopCapturerTest, ShouldSetDisplayBounds) {
   const int width = 300;
   const int height = 400;
 
-  display_util().AddPrimaryDisplay().set_bounds(
+  ash_proxy().AddPrimaryDisplay().set_bounds(
       gfx::Rect(left, top, width, height));
 
   capturer_.Start(&desktop_capturer_callback());
   capturer_.CaptureFrame();
 
-  display_util().ReplyWithScreenshot(CreateBitmap(width, height));
+  ash_proxy().ReplyWithScreenshot(CreateBitmap(width, height));
 
   CaptureResult result = desktop_capturer_callback().WaitForResult();
   ASSERT_THAT(result.frame, NotNull());
@@ -197,11 +200,11 @@ TEST_F(AuraDesktopCapturerTest, ShouldSetDisplayBounds) {
 TEST_F(AuraDesktopCapturerTest, ShouldNotCrashIfDisplayIsUnavailable) {
   capturer_.Start(&desktop_capturer_callback());
 
-  display_util().AddDisplayWithId(111);
+  ash_proxy().AddDisplayWithId(111);
 
   capturer_.SelectSource(111);
 
-  display_util().RemoveDisplay(111);
+  ash_proxy().RemoveDisplay(111);
 
   capturer_.CaptureFrame();
 
@@ -212,12 +215,12 @@ TEST_F(AuraDesktopCapturerTest, ShouldNotCrashIfDisplayIsUnavailable) {
 }
 
 TEST_F(AuraDesktopCapturerTest, ShouldReturnTemporaryErrorIfScreenshotFails) {
-  display_util().AddPrimaryDisplay();
+  ash_proxy().AddPrimaryDisplay();
 
   capturer_.Start(&desktop_capturer_callback());
   capturer_.CaptureFrame();
 
-  display_util().ReplyWithScreenshot(absl::nullopt);
+  ash_proxy().ReplyWithScreenshot(absl::nullopt);
 
   CaptureResult result = desktop_capturer_callback().WaitForResult();
   EXPECT_THAT(result.result,
@@ -225,57 +228,50 @@ TEST_F(AuraDesktopCapturerTest, ShouldReturnTemporaryErrorIfScreenshotFails) {
   EXPECT_THAT(result.frame, IsNull());
 }
 
-TEST_F(AuraDesktopCapturerTest,
-       ShouldNotAllowSwitchingToSecondaryMonitorIfFeatureFlagIsDisabled) {
-  base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(features::kEnableMultiMonitorsInCrd);
-
-  display_util().AddDisplayWithId(111);
-
-  capturer_.Start(&desktop_capturer_callback());
-  EXPECT_FALSE(capturer_.SelectSource(111));
-}
-
-TEST_F(AuraDesktopCapturerTest,
-       ShouldAllowSwitchingToSecondaryMonitorIfFeatureFlagIsEnabled) {
-  base::test::ScopedFeatureList features{features::kEnableMultiMonitorsInCrd};
-
+TEST_F(AuraDesktopCapturerTest, ShouldAllowSwitchingToSecondaryMonitor) {
   // We're using a value bigger than 32 bit to ensure nothing gets truncated.
   constexpr int64_t display_id = 123456789123456789;
 
-  display_util().AddPrimaryDisplay();
-  display_util().AddDisplayWithId(display_id);
+  ash_proxy().AddPrimaryDisplay();
+  ash_proxy().AddDisplayWithId(display_id);
 
   capturer_.Start(&desktop_capturer_callback());
   capturer_.SelectSource(display_id);
 
   capturer_.CaptureFrame();
 
-  test::ScreenshotRequest request = display_util().WaitForScreenshotRequest();
+  test::ScreenshotRequest request = ash_proxy().WaitForScreenshotRequest();
   EXPECT_THAT(request.display, Eq(display_id));
 }
 
 TEST_F(AuraDesktopCapturerTest, ShouldFailSwitchingToNonExistingMonitor) {
-  base::test::ScopedFeatureList features{features::kEnableMultiMonitorsInCrd};
-
   capturer_.Start(&desktop_capturer_callback());
   EXPECT_FALSE(capturer_.SelectSource(222));
 }
 
 TEST_F(AuraDesktopCapturerTest, ShouldUseCorrectDisplayAfterSwitching) {
-  base::test::ScopedFeatureList features{features::kEnableMultiMonitorsInCrd};
-
-  display_util().AddPrimaryDisplay();
-  display_util().AddDisplayWithId(222);
-  display_util().AddDisplayWithId(333);
+  ash_proxy().AddPrimaryDisplay();
+  ash_proxy().AddDisplayWithId(222);
+  ash_proxy().AddDisplayWithId(333);
 
   capturer_.Start(&desktop_capturer_callback());
   capturer_.SelectSource(333);
 
   capturer_.CaptureFrame();
 
-  test::ScreenshotRequest request = display_util().WaitForScreenshotRequest();
+  test::ScreenshotRequest request = ash_proxy().WaitForScreenshotRequest();
   EXPECT_THAT(request.display, Eq(333));
+}
+
+TEST_F(AuraDesktopCapturerTest,
+       ShouldSendUmaLogsOnCapturerConstructionAndDestruction) {
+  base::HistogramTester histogram_tester;
+
+  auto my_capturer = std::make_unique<AuraDesktopCapturer>();
+  histogram_tester.ExpectUniqueSample(kUmaKeyForCapturerCreated, true, 1);
+
+  my_capturer = nullptr;
+  histogram_tester.ExpectUniqueSample(kUmaKeyForCapturerDestroyed, true, 1);
 }
 
 }  // namespace remoting

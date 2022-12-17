@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -140,27 +140,6 @@ void CastMirroringServiceHost::GetForTab(
   if (target_contents) {
     const content::DesktopMediaID media_id =
         BuildMediaIdForWebContents(target_contents);
-    mojo::MakeSelfOwnedReceiver(
-        std::make_unique<CastMirroringServiceHost>(media_id),
-        std::move(receiver));
-  }
-}
-
-// static
-void CastMirroringServiceHost::GetForDesktop(
-    content::WebContents* initiator_contents,
-    const std::string& desktop_stream_id,
-    mojo::PendingReceiver<mojom::MirroringServiceHost> receiver) {
-  DCHECK(!desktop_stream_id.empty());
-  if (initiator_contents) {
-    std::string original_extension_name;
-    const content::DesktopMediaID media_id =
-        content::DesktopStreamsRegistry::GetInstance()->RequestMediaForStreamId(
-            desktop_stream_id,
-            initiator_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
-            initiator_contents->GetPrimaryMainFrame()->GetRoutingID(),
-            url::Origin::Create(initiator_contents->GetVisibleURL()),
-            &original_extension_name, content::kRegistryStreamTypeDesktop);
     mojo::MakeSelfOwnedReceiver(
         std::make_unique<CastMirroringServiceHost>(media_id),
         std::move(receiver));

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,10 +53,11 @@ class CONTENT_EXPORT DocumentPictureInPictureWindowControllerImpl
   void CloseAndFocusInitiator() override;
   void OnWindowDestroyed(bool should_pause_video) override;
   WebContents* GetWebContents() override;
+  absl::optional<gfx::Rect> GetWindowBounds() override;
+  WebContents* GetChildWebContents() override;
 
   // DocumentPictureInPictureWindowController:
   void SetChildWebContents(WebContents* child_contents) override;
-  WebContents* GetChildWebContents() override;
 
   // WebContentsObserver:
   void WebContentsDestroyed() override;

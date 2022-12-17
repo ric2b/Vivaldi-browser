@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -335,6 +335,11 @@ void ScopedFeatureList::Reset() {
   // Restore params to how they were before.
   FieldTrialParamAssociator::GetInstance()->ClearAllParamsForTesting();
   if (!original_params_.empty()) {
+    // Before restoring params, we need to make all field trials in-active,
+    // because FieldTrialParamAssociator checks whether the given field trial
+    // is active or not, and associates no parameters if the trial is active.
+    // So temporarily restore field trial list to be nullptr.
+    FieldTrialList::RestoreInstanceForTesting(nullptr);
     AssociateFieldTrialParamsFromString(original_params_, &HexDecodeString);
   }
 
@@ -359,7 +364,7 @@ void ScopedFeatureList::InitWithNullFeatureAndFieldTrialLists() {
   DCHECK(!init_called_);
 
   // Back up the current field trial parameters to be restored in Reset().
-  original_params_ = FieldTrialList::AllParamsToString(true, &HexEncodeString);
+  original_params_ = FieldTrialList::AllParamsToString(&HexEncodeString);
 
   // Back up the current field trial list, to be restored in Reset().
   original_field_trial_list_ = FieldTrialList::BackupInstanceForTesting();
@@ -409,8 +414,8 @@ void ScopedFeatureList::InitFromCommandLine(
 }
 
 void ScopedFeatureList::InitWithFeatures(
-    const std::vector<Feature>& enabled_features,
-    const std::vector<Feature>& disabled_features) {
+    const std::vector<FeatureRef>& enabled_features,
+    const std::vector<FeatureRef>& disabled_features) {
   InitWithFeaturesImpl(enabled_features, {}, disabled_features);
 }
 
@@ -432,9 +437,9 @@ void ScopedFeatureList::InitWithFeatureState(const Feature& feature,
 }
 
 void ScopedFeatureList::InitWithFeaturesImpl(
-    const std::vector<Feature>& enabled_features,
+    const std::vector<FeatureRef>& enabled_features,
     const std::vector<FeatureAndParams>& enabled_features_and_params,
-    const std::vector<Feature>& disabled_features,
+    const std::vector<FeatureRef>& disabled_features,
     bool keep_existing_states) {
   DCHECK(!init_called_);
   DCHECK(enabled_features.empty() || enabled_features_and_params.empty());
@@ -464,10 +469,10 @@ void ScopedFeatureList::InitWithFeaturesImpl(
     create_associated_field_trials = true;
   } else {
     for (const auto& feature : enabled_features)
-      merged_features.enabled_feature_list.emplace_back(feature.name);
+      merged_features.enabled_feature_list.emplace_back(feature->name);
   }
   for (const auto& feature : disabled_features)
-    merged_features.disabled_feature_list.emplace_back(feature.name);
+    merged_features.disabled_feature_list.emplace_back(feature->name);
 
   InitWithMergedFeatures(std::move(merged_features),
                          create_associated_field_trials, keep_existing_states);
@@ -481,7 +486,7 @@ void ScopedFeatureList::InitAndEnableFeatureWithParameters(
 
 void ScopedFeatureList::InitWithFeaturesAndParameters(
     const std::vector<FeatureAndParams>& enabled_features,
-    const std::vector<Feature>& disabled_features) {
+    const std::vector<FeatureRef>& disabled_features) {
   InitWithFeaturesImpl({}, enabled_features, disabled_features);
 }
 
@@ -501,7 +506,7 @@ void ScopedFeatureList::InitWithMergedFeatures(
 
   std::vector<FieldTrial::State> all_states =
       FieldTrialList::GetAllFieldTrialStates(PassKey());
-  original_params_ = FieldTrialList::AllParamsToString(true, &HexEncodeString);
+  original_params_ = FieldTrialList::AllParamsToString(&HexEncodeString);
 
   std::vector<ScopedFeatureList::FeatureWithStudyGroup>
       parsed_current_enabled_features;
@@ -516,8 +521,7 @@ void ScopedFeatureList::InitWithMergedFeatures(
   // Create a field trial list, to which we'll add trials corresponding to the
   // features that have params, before restoring the field trial state from the
   // previous instance, further down in this function.
-  field_trial_list_ =
-      std::make_unique<FieldTrialList>(std::make_unique<MockEntropyProvider>());
+  field_trial_list_ = std::make_unique<FieldTrialList>();
 
   auto* field_trial_param_associator = FieldTrialParamAssociator::GetInstance();
   for (const auto& feature : merged_features.enabled_feature_list) {

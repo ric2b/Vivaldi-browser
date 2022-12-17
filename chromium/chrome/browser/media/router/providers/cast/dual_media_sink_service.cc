@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/providers/cast/cast_app_discovery_service.h"
 #include "chrome/browser/media/router/providers/cast/chrome_cast_message_handler.h"
-#include "components/cast_channel/cast_socket_service.h"
+#include "components/media_router/common/providers/cast/channel/cast_socket_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
@@ -115,37 +115,12 @@ void DualMediaSinkService::OnSinksDiscovered(
   sinks_discovered_callbacks_.Notify(provider_name, sinks_for_provider);
 }
 
-void DualMediaSinkService::BindLogger(LoggerImpl* logger_impl) {
-  // TODO(crbug.com/1293535): Simplify how logger instances are made available
-  // to their clients.
-
-  if (logger_is_bound_)
-    return;
-  logger_is_bound_ = true;
-  cast_media_sink_service_->BindLogger(logger_impl);
-
-  if (dial_media_sink_service_) {
-    mojo::PendingRemote<mojom::Logger> dial_pending_remote;
-    logger_impl->BindReceiver(
-        dial_pending_remote.InitWithNewPipeAndPassReceiver());
-    dial_media_sink_service_->BindLogger(std::move(dial_pending_remote));
-  }
-
-  mojo::PendingRemote<mojom::Logger> cast_discovery_pending_remote;
-  logger_impl->BindReceiver(
-      cast_discovery_pending_remote.InitWithNewPipeAndPassReceiver());
-  cast_app_discovery_service_->task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&CastAppDiscoveryService::BindLogger,
-                     base::Unretained(cast_app_discovery_service_.get()),
-                     std::move(cast_discovery_pending_remote)));
+void DualMediaSinkService::AddLogger(LoggerImpl* logger_impl) {
+  LoggerList::GetInstance()->AddLogger(logger_impl);
 }
 
-void DualMediaSinkService::RemoveLogger() {
-  if (!logger_is_bound_)
-    return;
-  logger_is_bound_ = false;
-  cast_media_sink_service_->RemoveLogger();
+void DualMediaSinkService::RemoveLogger(LoggerImpl* logger_impl) {
+  LoggerList::GetInstance()->RemoveLogger(logger_impl);
 }
 
 }  // namespace media_router

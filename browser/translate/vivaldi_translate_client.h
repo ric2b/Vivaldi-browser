@@ -45,7 +45,7 @@ using extensions::vivaldi::tabs_private::TranslateError;
 using extensions::vivaldi::tabs_private::TranslateStep;
 
 TranslateStep ToVivaldiTranslateStep(translate::TranslateStep step);
-TranslateError ToVivaldiTranslateError(translate::TranslateErrors::Type error);
+TranslateError ToVivaldiTranslateError(translate::TranslateErrors error);
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 class VivaldiTranslateClient
@@ -98,7 +98,7 @@ class VivaldiTranslateClient
   bool ShowTranslateUI(translate::TranslateStep step,
                        const std::string& source_language,
                        const std::string& target_language,
-                       translate::TranslateErrors::Type error_type,
+                       translate::TranslateErrors error_type,
                        bool triggered_from_menu) override;
   bool IsTranslatableURL(const GURL& url) override;
 

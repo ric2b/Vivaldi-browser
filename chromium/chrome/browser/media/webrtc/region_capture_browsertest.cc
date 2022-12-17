@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -378,6 +378,53 @@ class RegionCaptureBrowserTest : public WebRtcTestBase {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+class RegionCaptureBrowserCropTest
+    : public RegionCaptureBrowserTest,
+      public testing::WithParamInterface<const char*> {
+ public:
+  ~RegionCaptureBrowserCropTest() override = default;
+
+  void TestCanCropToElementTag(const char* tag) {
+    TabInfo& tab = tabs_[kMainTab];
+
+    const std::string element_id = base::StrCat({"new_id_", tag});
+    ASSERT_TRUE(
+        tab.CreateNewElement(Frame::kTopLevelDocument, tag, element_id));
+    const std::string crop_target =
+        tab.CropTargetFromElement(Frame::kTopLevelDocument, element_id);
+    ASSERT_THAT(crop_target, IsExpectedCropTarget("0"));
+
+    EXPECT_TRUE(tab.CropTo(crop_target, Frame::kTopLevelDocument));
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(RegionCaptureBrowserCropTestInstantiation,
+                         RegionCaptureBrowserCropTest,
+                         Values("a",
+                                "blockquote",
+                                "body",
+                                "button",
+                                "canvas",
+                                "col",
+                                "div",
+                                "fieldset",
+                                "form",
+                                "h1",
+                                "header",
+                                "hr"
+                                "iframe",
+                                "img",
+                                "input",
+                                "output",
+                                "span",
+                                "svg",
+                                "video"));
+
+IN_PROC_BROWSER_TEST_P(RegionCaptureBrowserCropTest, CanCropTo) {
+  SetUpTest(Frame::kTopLevelDocument, /*self_capture=*/true);
+  TestCanCropToElementTag(GetParam());
+}
+
 IN_PROC_BROWSER_TEST_F(RegionCaptureBrowserTest,
                        CropTargetFromElementReturnsValidIdInMainPage) {
   SetUpTest(Frame::kTopLevelDocument, /*self_capture=*/true);
@@ -476,44 +523,6 @@ IN_PROC_BROWSER_TEST_F(RegionCaptureBrowserTest,
       tab.CropTargetFromElement(Frame::kTopLevelDocument, "div");
   ASSERT_THAT(crop_target, IsExpectedCropTarget("0"));
   EXPECT_TRUE(tab.CropTo(crop_target, Frame::kTopLevelDocument));
-}
-
-IN_PROC_BROWSER_TEST_F(RegionCaptureBrowserTest, CropToWorksForAllElements) {
-  // NOTE: this list is intentionally non-exhaustive, but represents a wide
-  // variety of element types.
-  static const std::vector<const char*> kElementTags{"a",
-                                                     "blockquote",
-                                                     "body",
-                                                     "button",
-                                                     "canvas",
-                                                     "col",
-                                                     "div",
-                                                     "fieldset",
-                                                     "form",
-                                                     "h1",
-                                                     "header",
-                                                     "hr"
-                                                     "iframe",
-                                                     "img",
-                                                     "input",
-                                                     "output",
-                                                     "span",
-                                                     "svg",
-                                                     "video"};
-
-  SetUpTest(Frame::kTopLevelDocument, /*self_capture=*/true);
-  TabInfo& tab = tabs_[kMainTab];
-
-  for (size_t i = 0; i < kElementTags.size(); ++i) {
-    const std::string element_id = ("new_id_" + base::NumberToString(i));
-    ASSERT_TRUE(tab.CreateNewElement(Frame::kTopLevelDocument, kElementTags[i],
-                                     element_id));
-    const std::string crop_target =
-        tab.CropTargetFromElement(Frame::kTopLevelDocument, element_id);
-    ASSERT_THAT(crop_target, IsExpectedCropTarget(base::NumberToString(i)));
-
-    EXPECT_TRUE(tab.CropTo(crop_target, Frame::kTopLevelDocument));
-  }
 }
 
 IN_PROC_BROWSER_TEST_F(RegionCaptureBrowserTest, MaxCropIdsInTopLevelDocument) {
@@ -712,7 +721,7 @@ IN_PROC_BROWSER_TEST_F(RegionCaptureClonesBrowserTest,
 }
 
 // Original track becomes unblocked for cropping after clone is GCed 1/3.
-// Flaky on Mac crbug.com/1353349
+// TODO(crbug.com/1353349)  Re-enable for macOS after flakes are resolved.
 #if BUILDFLAG(IS_MAC)
 #define MAYBE_CanCropOriginalTrackAfterCloneIsGarbageCollected \
   DISABLED_CanCropOriginalTrackAfterCloneIsGarbageCollected
@@ -733,7 +742,7 @@ IN_PROC_BROWSER_TEST_F(RegionCaptureClonesBrowserTest,
 }
 
 // Original track becomes unblocked for cropping after clone is GCed 2/3.
-// Flaky on Mac crbug.com/1353349
+// TODO(crbug.com/1353349)  Re-enable for macOS after flakes are resolved.
 #if BUILDFLAG(IS_MAC)
 #define MAYBE_CanRecropOriginalTrackAfterCloneIsGarbageCollected \
   DISABLED_CanRecropOriginalTrackAfterCloneIsGarbageCollected
@@ -756,8 +765,10 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // Original track becomes unblocked for cropping after clone is GCed 3/3.
-IN_PROC_BROWSER_TEST_F(RegionCaptureClonesBrowserTest,
-                       CanUncropOriginalTrackAfterCloneIsGarbageCollected) {
+IN_PROC_BROWSER_TEST_F(
+    RegionCaptureClonesBrowserTest,
+    // TODO(crbug.com/1356788): Re-enable this test
+    DISABLED_CanUncropOriginalTrackAfterCloneIsGarbageCollected) {
   ManualSetUp();
 
   ASSERT_TRUE(CropTo(kCropTarget0, Frame::kTopLevelDocument, Track::kOriginal));

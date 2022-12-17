@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -82,14 +82,6 @@ class InstallAttributesClientImpl : public InstallAttributesClient {
       const ::user_data_auth::InstallAttributesGetRequest& request,
       InstallAttributesGetCallback callback) override {
     CallProtoMethod(::user_data_auth::kInstallAttributesGet,
-                    ::user_data_auth::kInstallAttributesInterface, request,
-                    std::move(callback));
-  }
-
-  void InstallAttributesSet(
-      const ::user_data_auth::InstallAttributesSetRequest& request,
-      InstallAttributesSetCallback callback) override {
-    CallProtoMethod(::user_data_auth::kInstallAttributesSet,
                     ::user_data_auth::kInstallAttributesInterface, request,
                     std::move(callback));
   }

@@ -1,24 +1,24 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller.h"
 
-#include <stdint.h>
+#import <stdint.h>
 
 #import <MaterialComponents/MaterialSnackbar.h>
 
-#include "base/check_op.h"
-#include "base/mac/foundation_util.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "base/notreached.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/time/time.h"
-#include "components/bookmarks/browser/bookmark_model.h"
-#include "components/bookmarks/browser/bookmark_utils.h"
-#include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "base/check_op.h"
+#import "base/mac/foundation_util.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "base/notreached.h"
+#import "base/strings/utf_string_conversions.h"
+#import "base/time/time.h"
+#import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/browser/bookmark_utils.h"
+#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
@@ -40,19 +40,20 @@
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller_delegate.h"
-#include "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/url_with_title.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/url_loading/url_loading_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/navigation/navigation_manager.h"
-#include "ios/web/public/navigation/referrer.h"
+#import "ios/web/public/navigation/referrer.h"
 #import "ios/web/public/web_state.h"
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
+#include "ios/panel/panel_interaction_controller.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -100,8 +101,11 @@ enum class PresentedState {
 // The navigation controller that is being presented, if any.
 // `self.bookmarkBrowser`, `self.bookmarkEditor`, and `self.folderEditor` are
 // children of this navigation controller.
+
+#ifndef VIVALDI_BUILD
 @property(nonatomic, strong)
     UINavigationController* bookmarkNavigationController;
+#endif
 
 // The delegate provided to `self.bookmarkNavigationController`.
 @property(nonatomic, strong)
@@ -277,6 +281,15 @@ enum class PresentedState {
         [self.bookmarkBrowser cachedViewControllerStack];
   }
 
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+      [self showHomeViewController:self.bookmarkBrowser
+          withReplacementViewControllers:replacementViewControllers];
+      self.currentPresentedState = PresentedState::BOOKMARK_BROWSER;
+      return;
+  }
+  // End Vivaldi
+
   [self presentTableViewController:self.bookmarkBrowser
       withReplacementViewControllers:replacementViewControllers];
   self.currentPresentedState = PresentedState::BOOKMARK_BROWSER;
@@ -386,6 +399,21 @@ enum class PresentedState {
         inIncognito:inIncognito
              newTab:newTab];
   };
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+      ProceduralBlock dismissCompletion = ^{
+        [self.panelDelegate panelDismissed];
+      };
+      [self.bookmarkBrowser dismissViewControllerAnimated:animated
+                                               completion:dismissCompletion];
+      if (_parentController.presentedViewController)
+        [_parentController dismissViewControllerAnimated:animated
+                                            completion:dismissCompletion];
+    self.currentPresentedState = PresentedState::NONE;
+    return;
+  }
+  // End Vivaldi
 
   if (_parentController.presentedViewController) {
     [_parentController dismissViewControllerAnimated:animated
@@ -597,6 +625,11 @@ bookmarkHomeViewControllerWantsDismissal:(BookmarkHomeViewController*)controller
 
 - (BOOL)presentationControllerShouldDismissOnTouchOutside:
     (TableViewPresentationController*)controller {
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) return NO;
+  // End Vivaldi
+
   BOOL shouldDismissOnTouchOutside = YES;
 
   ChromeTableViewController* tableViewController =
@@ -617,6 +650,8 @@ bookmarkHomeViewControllerWantsDismissal:(BookmarkHomeViewController*)controller
 #pragma mark - BookmarksCommands
 
 - (void)bookmark:(BookmarkAddCommand*)command {
+  DCHECK(command.URLs.count > 0) << "URLs are missing";
+
   if (!self.bookmarkModel->loaded())
     return;
 
@@ -679,11 +714,6 @@ bookmarkHomeViewControllerWantsDismissal:(BookmarkHomeViewController*)controller
       [navController setModalPresentationStyle:UIModalPresentationFormSheet];
       useCustomPresentation = NO;
 
-    if (vivaldi::IsVivaldiRunning()) {
-        [self.bookmarkNavigationController
-            setModalPresentationStyle:UIModalPresentationFullScreen];
-    }
-
   if (useCustomPresentation) {
     self.bookmarkTransitioningDelegate =
         [[BookmarkTransitioningDelegate alloc] init];
@@ -698,6 +728,8 @@ bookmarkHomeViewControllerWantsDismissal:(BookmarkHomeViewController*)controller
         presentationController;
   }
 
+  if (!vivaldi::IsVivaldiRunning() ||
+      self.currentPresentedState != PresentedState::BOOKMARK_BROWSER)
   [_parentController presentViewController:navController
                                   animated:YES
                                 completion:nil];
@@ -723,5 +755,25 @@ bookmarkHomeViewControllerWantsDismissal:(BookmarkHomeViewController*)controller
   params.in_incognito = inIncognito;
   UrlLoadingBrowserAgent::FromBrowser(_browser)->Load(params);
 }
+
+#pragma mark - Vivaldi
+
+- (void)showHomeViewController:
+            (ChromeTableViewController<
+                UIAdaptivePresentationControllerDelegate>*)viewController
+    withReplacementViewControllers:
+        (NSArray<ChromeTableViewController*>*)replacementViewControllers {
+  TableViewNavigationController* navController =
+      [[TableViewNavigationController alloc] initWithTable:viewController];
+  self.bookmarkNavigationController = navController;
+  if (replacementViewControllers) {
+    [navController setViewControllers:replacementViewControllers];
+  }
+
+  navController.toolbarHidden = YES;
+  self.bookmarkNavigationControllerDelegate =
+      [[BookmarkNavigationControllerDelegate alloc] init];
+  navController.delegate = self.bookmarkNavigationControllerDelegate;
+ }
 
 @end

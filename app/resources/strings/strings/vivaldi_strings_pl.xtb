@@ -9,6 +9,8 @@
 <translation id="5167047459440711824">Ostrzeżenie: Vivaldi nie może uniemożliwić rozszerzeniom dostępu do historii przeglądania. Aby wyłączyć to rozszerzenie w trybie prywatnym, odznacz tę opcję.</translation>
 <translation id="5288672417093782294">Otwórz ustawienia powiadomień Vivaldi</translation>
 <translation id="5743878272102782872">Menedżer zadań – Vivaldi</translation>
+<translation id="6524604576097824284">Po włączeniu, Vivaldi zwalnia pamięć z nieaktywnych kart. Daje to aktywnym kartom i innym aplikacjom więcej zasobów komputera i sprawia, że przeglądarka Vivaldi jest szybsza. Twoje nieaktywne karty automatycznie stają się ponownie aktywne, gdy do nich wrócisz. <ph name="BEGIN_LINK" />Dowiedz się więcej<ph name="END_LINK" /></translation>
 <translation id="6569282126279967574">Ups! Przeglądarka Vivaldi uległa awarii. Uruchomić ją teraz ponownie?</translation>
+<translation id="7642161109152167169">Po włączeniu, Vivaldi oszczędza baterię, ograniczając aktywność w tle i efekty wizualne, takie jak płynne przewijanie czy liczbę klatek na sekundę plików wideo. <ph name="BEGIN_LINK" />Dowiedz się więcej<ph name="END_LINK" /></translation>
 <translation id="8031581238030785388">Aplikacje Vivaldi</translation>
 </translationbundle>

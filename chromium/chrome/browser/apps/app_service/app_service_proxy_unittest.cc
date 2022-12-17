@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,8 +27,6 @@
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/cpp/preferred_app.h"
 #include "components/services/app_service/public/cpp/publisher_base.h"
-#include "components/services/app_service/public/mojom/types.mojom-shared.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -137,11 +135,6 @@ class FakeSubscriberForProxyTest : public SubscriberCrosapi {
 class AppServiceProxyTest : public testing::Test {
  protected:
   using UniqueReleaser = std::unique_ptr<apps::IconLoader::Releaser>;
-
-  AppServiceProxyTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        kAppServicePreferredAppsWithoutMojom);
-  }
 
   class FakeIconLoader : public apps::IconLoader {
    public:
@@ -358,6 +351,28 @@ TEST_F(AppServiceProxyTest, ProxyAccessPerProfile) {
 #endif
 }
 
+TEST_F(AppServiceProxyTest, ReinitializeClearsCache) {
+  constexpr char kTestAppId[] = "pwa";
+  TestingProfile profile;
+  AppServiceProxy* const proxy =
+      AppServiceProxyFactory::GetForProfile(&profile);
+
+  {
+    std::vector<AppPtr> apps;
+    AppPtr app = std::make_unique<App>(AppType::kWeb, kTestAppId);
+    apps.push_back(std::move(app));
+    proxy->OnApps(std::move(apps), AppType::kWeb,
+                  /*should_notify_initialized=*/true);
+  }
+
+  EXPECT_EQ(proxy->AppRegistryCache().GetAppType(kTestAppId), AppType::kWeb);
+
+  proxy->ReinitializeForTesting(proxy->profile());
+
+  EXPECT_EQ(proxy->AppRegistryCache().GetAppType(kTestAppId),
+            AppType::kUnknown);
+}
+
 #if !BUILDFLAG(IS_CHROMEOS_LACROS)
 class AppServiceProxyPreferredAppsTest : public AppServiceProxyTest {
  public:
@@ -404,7 +419,6 @@ TEST_F(AppServiceProxyPreferredAppsTest, UpdatedOnUninstall) {
 
     OnApps(std::move(apps), AppType::kWeb);
     proxy()->AddPreferredApp(kTestAppId, kTestUrl);
-    proxy()->FlushMojoCallsForTesting();
 
     absl::optional<std::string> preferred_app =
         proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl);
@@ -419,7 +433,6 @@ TEST_F(AppServiceProxyPreferredAppsTest, UpdatedOnUninstall) {
     apps.push_back(std::move(app));
 
     OnApps(std::move(apps), AppType::kWeb);
-    proxy()->FlushMojoCallsForTesting();
 
     absl::optional<std::string> preferred_app =
         proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl);
@@ -434,7 +447,6 @@ TEST_F(AppServiceProxyPreferredAppsTest, UpdatedOnUninstall) {
     apps.push_back(std::move(app));
 
     OnApps(std::move(apps), AppType::kWeb);
-    proxy()->FlushMojoCallsForTesting();
 
     absl::optional<std::string> preferred_app =
         proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl);
@@ -471,7 +483,6 @@ TEST_F(AppServiceProxyPreferredAppsTest, SetPreferredApp) {
   // non-link filter is ignored.
 
   proxy()->SetSupportedLinksPreference(kTestAppId1);
-  proxy()->FlushMojoCallsForTesting();
 
   ASSERT_EQ(kTestAppId1,
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl1));
@@ -487,7 +498,6 @@ TEST_F(AppServiceProxyPreferredAppsTest, SetPreferredApp) {
   // be removed.
 
   proxy()->SetSupportedLinksPreference(kTestAppId2);
-  proxy()->FlushMojoCallsForTesting();
 
   ASSERT_EQ(kTestAppId2,
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl1));
@@ -497,7 +507,6 @@ TEST_F(AppServiceProxyPreferredAppsTest, SetPreferredApp) {
   // Remove all supported link preferences for app 2.
 
   proxy()->RemoveSupportedLinksPreference(kTestAppId2);
-  proxy()->FlushMojoCallsForTesting();
 
   ASSERT_EQ(absl::nullopt,
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl1));
@@ -521,7 +530,6 @@ TEST_F(AppServiceProxyPreferredAppsTest, AddPreferredAppForLink) {
   OnApps(std::move(apps), AppType::kWeb);
 
   proxy()->AddPreferredApp(kTestAppId, GURL("https://www.foo.com/something/"));
-  proxy()->FlushMojoCallsForTesting();
 
   ASSERT_EQ(kTestAppId,
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl1));
@@ -555,12 +563,10 @@ TEST_F(AppServiceProxyPreferredAppsTest, AddPreferredAppBrowser) {
   OnApps(std::move(apps), AppType::kWeb);
 
   proxy()->AddPreferredApp(kTestAppId1, kTestUrl1);
-  proxy()->FlushMojoCallsForTesting();
 
   // Setting "use browser" for a URL currently handled by App 1 should unset
   // both of App 1's links.
   proxy()->AddPreferredApp(apps_util::kUseBrowserForLink, kTestUrl1);
-  proxy()->FlushMojoCallsForTesting();
 
   ASSERT_EQ(apps_util::kUseBrowserForLink,
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl1));
@@ -568,14 +574,12 @@ TEST_F(AppServiceProxyPreferredAppsTest, AddPreferredAppBrowser) {
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl2));
 
   proxy()->AddPreferredApp(apps_util::kUseBrowserForLink, kTestUrl3);
-  proxy()->FlushMojoCallsForTesting();
   ASSERT_EQ(apps_util::kUseBrowserForLink,
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl3));
 
   // Changing the setting back from "use browser" to App 1 should only update
   // that "use-browser" setting, settings for other URLs are unchanged.
   proxy()->AddPreferredApp(kTestAppId1, kTestUrl1);
-  proxy()->FlushMojoCallsForTesting();
   ASSERT_EQ(apps_util::kUseBrowserForLink,
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl3));
 }
@@ -645,7 +649,7 @@ TEST_F(AppServiceProxyPreferredAppsTest, PreferredApps) {
 // initialized queues the write for after initialization.
 TEST_F(AppServiceProxyPreferredAppsTest, PreferredAppsWriteBeforeInit) {
   base::RunLoop run_loop_read;
-  proxy()->ReInitializeForTesting(proxy()->profile(),
+  proxy()->ReinitializeForTesting(proxy()->profile(),
                                   run_loop_read.QuitClosure());
   GURL filter_url("https://www.abc.com/");
 
@@ -681,7 +685,7 @@ TEST_F(AppServiceProxyPreferredAppsTest, PreferredAppsPersistency) {
   {
     base::RunLoop run_loop_read;
     base::RunLoop run_loop_write;
-    proxy()->ReInitializeForTesting(proxy()->profile(),
+    proxy()->ReinitializeForTesting(proxy()->profile(),
                                     run_loop_read.QuitClosure(),
                                     run_loop_write.QuitClosure());
     run_loop_read.Run();
@@ -694,7 +698,7 @@ TEST_F(AppServiceProxyPreferredAppsTest, PreferredAppsPersistency) {
   // Create a new impl to initialize preferred apps from the disk.
   {
     base::RunLoop run_loop_read;
-    proxy()->ReInitializeForTesting(proxy()->profile(),
+    proxy()->ReinitializeForTesting(proxy()->profile(),
                                     run_loop_read.QuitClosure());
     run_loop_read.Run();
     EXPECT_EQ(kAppId1,

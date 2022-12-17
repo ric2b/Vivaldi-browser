@@ -5,6 +5,7 @@
 
 #include <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 // Height and width of the slider.
 extern const CGFloat vSliderHeight;
@@ -34,6 +35,8 @@ extern const CGFloat vSliderCornerRadius;
 
 // Color for background
 extern NSString* const vBackgroundColor;
+// Color for slider
+extern UIColor* const vSliderColor;
 
 // Color for icons in unselected state
 extern NSString* const vNotSelectedColor;
@@ -42,5 +45,14 @@ extern NSString* const vNotSelectedColor;
 extern NSString* const kImagePageControlClosedSelected;
 // Icon for recently closed tab not selected state
 extern NSString* const kImagePageControlClosedNotSelected;
+
+// Slider shadow offset
+extern const CGSize vSliderShadowOffset;
+// Slider shadow radius
+extern const CGFloat vSliderShadowRadius;
+// Slider shadow opacity
+extern const CGFloat vSliderShadowOpacity;
+// Slider shadow color
+extern UIColor* const vSliderShadowColor;
 
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_TAB_GRID_PAGE_CONTROL_CONSTANTS_VIVALDI_H_

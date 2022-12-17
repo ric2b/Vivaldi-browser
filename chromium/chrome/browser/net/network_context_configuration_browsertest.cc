@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -463,9 +462,9 @@ class NetworkContextConfigurationBrowserTest
   // Sets the proxy preference on a PrefService based on the NetworkContextType,
   // and waits for it to be applied.
   void SetProxyPref(const net::HostPortPair& host_port_pair) {
-    GetPrefService()->Set(proxy_config::prefs::kProxy,
-                          ProxyConfigDictionary::CreateFixedServers(
-                              host_port_pair.ToString(), std::string()));
+    GetPrefService()->SetDict(proxy_config::prefs::kProxy,
+                              ProxyConfigDictionary::CreateFixedServers(
+                                  host_port_pair.ToString(), std::string()));
 
     // Wait for the new ProxyConfig to be passed over the pipe. Needed because
     // Mojo doesn't guarantee ordering of events on different Mojo pipes, and
@@ -722,7 +721,6 @@ class NetworkContextConfigurationBrowserTest
   }
 
   raw_ptr<Browser> incognito_ = nullptr;
-  base::test::ScopedFeatureList feature_list_;
 
   net::EmbeddedTestServer https_server_;
   std::unique_ptr<net::test_server::ControllableHttpResponse>
@@ -1092,8 +1090,8 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest, DiskCache) {
 // Make sure that NetworkContexts have separate DNS caches.
 IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
                        DnsCacheIsolation) {
-  net::NetworkIsolationKey network_isolation_key =
-      net::NetworkIsolationKey::CreateTransient();
+  net::NetworkAnonymizationKey network_anonymization_key =
+      net::NetworkAnonymizationKey::CreateTransient();
   net::HostPortPair host_port_pair(kHostname, 0);
   network::mojom::ResolveHostParametersPtr params =
       network::mojom::ResolveHostParameters::New();
@@ -1105,7 +1103,7 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   // NetworkContext's cache.
   network::DnsLookupResult result =
       network::BlockingDnsLookup(network_context(), host_port_pair,
-                                 std::move(params), network_isolation_key);
+                                 std::move(params), network_anonymization_key);
   EXPECT_EQ(net::OK, result.error);
   ASSERT_TRUE(result.resolved_addresses.has_value());
   ASSERT_EQ(1u, result.resolved_addresses->size());
@@ -1123,7 +1121,7 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
         params->source = net::HostResolverSource::LOCAL_ONLY;
         network::DnsLookupResult result = network::BlockingDnsLookup(
             GetNetworkContextForContextType(network_context_type),
-            host_port_pair, std::move(params), network_isolation_key);
+            host_port_pair, std::move(params), network_anonymization_key);
         EXPECT_EQ(net::ERR_NAME_NOT_RESOLVED, result.error);
       }));
   // Do a cache-only lookup using the original network context, which should
@@ -1134,8 +1132,9 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   params->source = net::HostResolverSource::LOCAL_ONLY;
   params->cache_usage =
       network::mojom::ResolveHostParameters::CacheUsage::STALE_ALLOWED;
-  result = network::BlockingDnsLookup(network_context(), host_port_pair,
-                                      std::move(params), network_isolation_key);
+  result =
+      network::BlockingDnsLookup(network_context(), host_port_pair,
+                                 std::move(params), network_anonymization_key);
   EXPECT_EQ(net::OK, result.error);
   ASSERT_TRUE(result.resolved_addresses.has_value());
   ASSERT_EQ(1u, result.resolved_addresses->size());

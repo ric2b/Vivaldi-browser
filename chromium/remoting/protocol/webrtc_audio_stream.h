@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,8 +19,7 @@ namespace webrtc {
 class PeerConnectionInterface;
 }  // namespace webrtc
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class AudioSource;
 class WebrtcAudioSourceAdapter;
@@ -48,7 +47,6 @@ class WebrtcAudioStream : public AudioStream {
   scoped_refptr<webrtc::PeerConnectionInterface> peer_connection_;
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_WEBRTC_AUDIO_STREAM_H_

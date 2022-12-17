@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,6 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "base/unguessable_token.h"
-#include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/service/image_factory.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
@@ -51,14 +50,12 @@
 #include "gpu/ipc/service/gles2_command_buffer_stub.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
-#include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "gpu/ipc/service/image_decode_accelerator_stub.h"
 #include "gpu/ipc/service/raster_command_buffer_stub.h"
 #include "gpu/ipc/service/webgpu_command_buffer_stub.h"
 #include "ipc/ipc_channel.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "ui/gl/gl_context.h"
-#include "ui/gl/gl_image_shared_memory.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_utils.h"
 
@@ -140,10 +137,6 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
   void BindGpuChannel(
       mojo::PendingAssociatedReceiver<mojom::GpuChannel> receiver) {
     receiver_.Bind(std::move(receiver));
-  }
-
-  ImageDecodeAcceleratorStub* image_decode_accelerator_stub() const {
-    return image_decode_accelerator_stub_.get();
   }
 
  private:
@@ -664,6 +657,13 @@ void GpuChannel::OnChannelError() {
   gpu_channel_manager_->RemoveChannel(client_id_);
 }
 
+void GpuChannel::GetIsolationKey(
+    const blink::WebGPUExecutionContextToken& token,
+    GetIsolationKeyCallback cb) {
+  gpu_channel_manager_->delegate()->GetIsolationKey(client_id_, token,
+                                                    std::move(cb));
+}
+
 void GpuChannel::OnCommandBufferScheduled(CommandBufferStub* stub) {
   scheduler_->EnableSequence(stub->sequence_id());
 }
@@ -784,12 +784,6 @@ void GpuChannel::WaitForGetOffsetInRange(
 
 mojom::GpuChannel& GpuChannel::GetGpuChannelForTesting() {
   return *filter_;
-}
-
-ImageDecodeAcceleratorStub*
-GpuChannel::GetImageDecodeAcceleratorStubForTesting() const {
-  DCHECK(filter_);
-  return filter_->image_decode_accelerator_stub();
 }
 
 bool GpuChannel::CreateSharedImageStub() {
@@ -1060,6 +1054,15 @@ void GpuChannel::ReleaseSysmemBufferCollection(
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
+absl::optional<gpu::GpuDiskCacheHandle> GpuChannel::GetCacheHandleForType(
+    gpu::GpuDiskCacheType type) {
+  auto it = caches_.find(type);
+  if (it == caches_.end()) {
+    return {};
+  }
+  return it->second;
+}
+
 void GpuChannel::RegisterCacheHandle(const gpu::GpuDiskCacheHandle& handle) {
   gpu::GpuDiskCacheType type = gpu::GetHandleType(handle);
 
@@ -1077,11 +1080,11 @@ void GpuChannel::RegisterCacheHandle(const gpu::GpuDiskCacheHandle& handle) {
 void GpuChannel::CacheBlob(gpu::GpuDiskCacheType type,
                            const std::string& key,
                            const std::string& shader) {
-  auto it = caches_.find(type);
-  if (it == caches_.end()) {
+  auto handle = GetCacheHandleForType(type);
+  if (!handle) {
     return;
   }
-  gpu_channel_manager_->delegate()->StoreBlobToDisk(it->second, key, shader);
+  gpu_channel_manager_->delegate()->StoreBlobToDisk(*handle, key, shader);
 }
 
 uint64_t GpuChannel::GetMemoryUsage() const {
@@ -1101,39 +1104,6 @@ uint64_t GpuChannel::GetMemoryUsage() const {
   size += shared_image_stub_->GetSize();
 
   return size;
-}
-
-scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
-    gfx::GpuMemoryBufferHandle handle,
-    const gfx::Size& size,
-    gfx::BufferFormat format,
-    gfx::BufferPlane plane,
-    SurfaceHandle surface_handle) {
-  switch (handle.type) {
-    case gfx::SHARED_MEMORY_BUFFER: {
-      if (plane != gfx::BufferPlane::DEFAULT)
-        return nullptr;
-      auto image = base::MakeRefCounted<gl::GLImageSharedMemory>(size);
-      if (!image->Initialize(handle.region, handle.id, format, handle.offset,
-                             handle.stride)) {
-        return nullptr;
-      }
-
-      return image;
-    }
-    default: {
-      GpuChannelManager* manager = gpu_channel_manager();
-      if (!manager->gpu_memory_buffer_factory())
-        return nullptr;
-
-      // TODO(b/220336463): plumb the right color space.
-      return manager->gpu_memory_buffer_factory()
-          ->AsImageFactory()
-          ->CreateImageForGpuMemoryBuffer(std::move(handle), size, format,
-                                          gfx::ColorSpace(), plane, client_id_,
-                                          surface_handle);
-    }
-  }
 }
 
 }  // namespace gpu

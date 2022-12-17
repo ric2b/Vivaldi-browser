@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -63,13 +63,13 @@ class SupervisedUserManager {
   // Fill `result` with public password-specific data for `user_id` from Local
   // State.
   virtual void GetPasswordInformation(const std::string& user_id,
-                                      base::DictionaryValue* result) = 0;
+                                      base::Value::Dict* result) = 0;
 
   // Stores public password-specific data from `password_info` for `user_id` in
   // Local State.
   virtual void SetPasswordInformation(
       const std::string& user_id,
-      const base::DictionaryValue* password_info) = 0;
+      const base::Value::Dict* password_info) = 0;
 };
 
 }  // namespace ash

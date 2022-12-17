@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,24 +10,32 @@ declare namespace chrome {
     // Implemented in read_anything_app_controller.cc and consumed by ts.
     /////////////////////////////////////////////////////////////////////
 
-    // A list of AXNodeIDs corresponding to the content node IDs identified by
-    // the AXTree distillation process.
-    let contentNodeIds: number[];
+    // A list of AXNodeIDs whose subtree should be displayed.
+    let displayNodeIds: number[];
 
     // Items in the ReadAnythingTheme struct, see read_anything.mojom for info.
     let fontName: string;
     let fontSize: number;
     let foregroundColor: number;
     let backgroundColor: number;
+    let lineSpacing: number;
+    let letterSpacing: number;
 
     // Returns a list of AXNodeIDs corresponding to the unignored children of
-    // the AXNode for the provided AXNodeID.
+    // the AXNode for the provided AXNodeID. If there is a selection contained
+    // in this node, only returns children which are partially or entirely
+    // contained within the selection.
     function getChildren(nodeId: number): number[];
 
     // Returns the HTML tag of the AXNode for the provided AXNodeID.
     function getHtmlTag(nodeId: number): string;
 
-    // Returns the text content of the AXNode for the provided AXNodeID.
+    // Returns the language of the AXNode for the provided AXNodeID.
+    function getLanguage(nodeId: number): string;
+
+    // Returns the text content of the AXNode for the provided AXNodeID. If a
+    // selection begins or ends in this node, truncates the text to only return
+    // the selected text.
     function getTextContent(nodeId: number): string;
 
     // Returns the url of the AXNode for the provided AXNodeID.
@@ -60,7 +68,8 @@ declare namespace chrome {
     // Set the theme. Used by tests only.
     function setThemeForTesting(
         fontName: string, fontSize: number, foregroundColor: number,
-        backgroundColor: number): void;
+        backgroundColor: number, lineSpacing: number,
+        letterSpacing: number): void;
 
     ////////////////////////////////////////////////////////////////
     // Implemented in read_anything/app.ts and called by native c++.

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/multidevice/remote_device.h"
 #include "ash/services/device_sync/public/cpp/device_sync_client.h"
+#include "chromeos/ash/components/multidevice/remote_device.h"
 
 namespace ash {
 

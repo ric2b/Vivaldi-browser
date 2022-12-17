@@ -1,10 +1,9 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_client_factory.h"
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/multidevice_setup/multidevice_setup_service.h"
 #include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client_impl.h"
@@ -15,6 +14,7 @@
 #include "chrome/browser/ash/device_sync/device_sync_client_factory.h"
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"

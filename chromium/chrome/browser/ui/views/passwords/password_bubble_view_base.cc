@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,11 @@
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "ui/views/controls/button/button.h"
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#include "chrome/browser/ui/views/passwords/biometric_authentication_confirmation_bubble_view.h"
+#include "chrome/browser/ui/views/passwords/biometric_authentication_for_filling_bubble_view.h"
+#endif
 
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
@@ -154,6 +159,19 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
              model_state ==
                  password_manager::ui::PASSWORD_UPDATED_MORE_TO_FIX) {
     view = new PostSaveCompromisedBubbleView(web_contents, anchor_view);
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  } else if (model_state ==
+             password_manager::ui::BIOMETRIC_AUTHENTICATION_FOR_FILLING_STATE) {
+    view = new BiometricAuthenticationForFillingBubbleView(
+        web_contents, anchor_view,
+        Profile::FromBrowserContext(web_contents->GetBrowserContext())
+            ->GetPrefs(),
+        reason);
+  } else if (model_state == password_manager::ui::
+                                BIOMETRIC_AUTHENTICATION_CONFIRMATION_STATE) {
+    view = new BiometricAuthenticationConfirmationBubbleView(web_contents,
+                                                             anchor_view);
+#endif
   } else {
     NOTREACHED();
   }

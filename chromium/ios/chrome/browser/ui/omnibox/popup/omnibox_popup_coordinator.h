@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,13 @@
 
 #include <memory>
 
-@protocol OmniboxPopupPresenterDelegate;
 @protocol OmniboxCommands;
-@class OmniboxTextFieldIOS;
-@class PedalSectionExtractor;
+@protocol OmniboxKeyboardDelegate;
+@protocol OmniboxPopupPresenterDelegate;
 class OmniboxPopupViewIOS;
+@protocol OmniboxReturnDelegate;
+@class OmniboxTextFieldIOS;
+@protocol PopupMatchPreviewDelegate;
 
 // Coordinator for the Omnibox Popup.
 @interface OmniboxPopupCoordinator : ChromeCoordinator
@@ -33,8 +35,18 @@ class OmniboxPopupViewIOS;
 @property(nonatomic, assign, readonly) BOOL hasResults;
 // Whether the popup is open.
 @property(nonatomic, assign, readonly) BOOL isOpen;
-// The pedal extractor that wraps pedals as a separate suggestion section.
-@property(nonatomic, strong) PedalSectionExtractor* pedalExtractor;
+
+// Object implementing OmniboxReturnDelegate in OmniboxPopupCoordinator.
+@property(nonatomic, weak, readonly) id<OmniboxReturnDelegate>
+    popupReturnDelegate;
+// Object implementing OmniboxKeyboardDelegate in OmniboxPopupCoordinator.
+@property(nonatomic, weak, readonly) id<OmniboxKeyboardDelegate>
+    KeyboardDelegate;
+// Delegate for OmniboxReturnDelegate used in OmniboxPopupCoordinator.
+@property(nonatomic, weak) id<OmniboxReturnDelegate> acceptReturnDelegate;
+// Delegate for PopupMatchPreviewDelegate used in OmniboxPopupCoordinator.
+@property(nonatomic, weak) id<PopupMatchPreviewDelegate>
+    popupMatchPreviewDelegate;
 
 @end
 

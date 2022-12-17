@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,16 +9,13 @@
 
 #include "base/feature_list.h"
 
-// Feature flag to enable NTP UI pending loader blocker.
-extern const base::Feature kBlockNewTabPagePendingLoad;
-
 // Feature flag to enable feed background refresh.
 // Use IsFeedBackgroundRefreshEnabled() instead of this constant directly.
-extern const base::Feature kEnableFeedBackgroundRefresh;
+BASE_DECLARE_FEATURE(kEnableFeedBackgroundRefresh);
 
 // Feature flag to enable the Following feed in the NTP.
 // Use IsWebChannelsEnabled() instead of this constant directly.
-extern const base::Feature kEnableWebChannels;
+BASE_DECLARE_FEATURE(kEnableWebChannels);
 
 // Feature param under `kEnableFeedBackgroundRefresh` to also enable background
 // refresh for the Following feed.
@@ -48,15 +45,25 @@ extern const char kBackgroundRefreshMaxAgeInSeconds[];
 // Whether the Following Feed is enabled on NTP.
 bool IsWebChannelsEnabled();
 
+// Whether the Discover service is created early, alongside the app creation.
+bool IsDiscoverFeedServiceCreatedEarly();
+
 // Whether feed background refresh is enabled. Returns the value in
 // NSUserDefaults set by `SaveFeedBackgroundRefreshEnabledForNextColdStart()`.
 // This function always returns false if the `IOS_BACKGROUND_MODE_ENABLED`
 // buildflag is not defined.
 bool IsFeedBackgroundRefreshEnabled();
 
+// Whether Good Visits metric logging is enabled.
+bool IsGoodVisitsMetricEnabled();
+
 // Saves the current value for feature `kEnableFeedBackgroundRefresh`. This call
 // DCHECKs on the availability of `base::FeatureList`.
 void SaveFeedBackgroundRefreshEnabledForNextColdStart();
+
+// Sets `timestamp` for key `NSUserDefaultsKey` to be displayed in Experimental
+// Settings in the Settings App. This is not available in stable.
+void SetFeedRefreshTimestamp(NSDate* timestamp, NSString* NSUserDefaultsKey);
 
 // Returns the override value from Experimental Settings in the Settings App. If
 // enabled, all values in Experimental Settings will override all corresponding

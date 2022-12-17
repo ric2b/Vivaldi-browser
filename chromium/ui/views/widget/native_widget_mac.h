@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,6 +88,13 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
       int32_t command,
       remote_cocoa::mojom::ValidateUserInterfaceItemResult* result) {}
 
+  // Returns in |will_execute| whether or not ExecuteCommand() will execute
+  // the chrome command |command| with |window_open_disposition| and
+  // |is_before_first_responder|.
+  virtual bool WillExecuteCommand(int32_t command,
+                                  WindowOpenDisposition window_open_disposition,
+                                  bool is_before_first_responder);
+
   // Execute the chrome command |command| with |window_open_disposition|. If
   // |is_before_first_responder| then only call ExecuteCommand if the command
   // is reserved and extension shortcut handling is not suspended. Returns in
@@ -143,6 +150,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   void SetSize(const gfx::Size& size) override;
   void StackAbove(gfx::NativeView native_view) override;
   void StackAtTop() override;
+  bool IsStackedAbove(gfx::NativeView native_view) override;
   void SetShape(std::unique_ptr<Widget::ShapeRects> shape) override;
   void Close() override;
   void CloseNow() override;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,11 +64,9 @@ class ChromeAppListItemTest : public InProcessBrowserTest {
   void ShowLauncherAppsGrid() {
     EXPECT_FALSE(client_->GetAppListWindow());
     ash::AcceleratorController::Get()->PerformActionIfEnabled(
-        ash::TOGGLE_APP_LIST_FULLSCREEN, {});
-    if (ash::features::IsProductivityLauncherEnabled()) {
-      ash::AppListTestApi().WaitForBubbleWindow(
-          /*wait_for_opening_animation=*/false);
-    }
+        ash::TOGGLE_APP_LIST, {});
+    ash::AppListTestApi().WaitForBubbleWindow(
+        /*wait_for_opening_animation=*/false);
     EXPECT_TRUE(client_->GetAppListWindow());
   }
 

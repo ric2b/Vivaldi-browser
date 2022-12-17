@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -488,7 +488,7 @@ IN_PROC_BROWSER_TEST_F(WebUIImplBrowserTest,
         ~Controller() override { web_contents.reset(); }
       };
       return std::make_unique<Controller>(web_ui);
-    };
+    }
   };
 
   content::WebUIConfigMap::GetInstance().AddUntrustedWebUIConfig(

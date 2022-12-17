@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -192,7 +192,8 @@ void TestStoragePartition::ClearData(uint32_t remove_mask,
 void TestStoragePartition::ClearData(
     uint32_t remove_mask,
     uint32_t quota_storage_remove_mask,
-    StorageKeyPolicyMatcherFunction storage_key_matcher,
+    BrowsingDataFilterBuilder* filter_builder,
+    StorageKeyPolicyMatcherFunction storage_key_policy_matcher,
     network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
     bool perform_storage_cleanup,
     const base::Time begin,

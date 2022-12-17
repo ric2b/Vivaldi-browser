@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,12 +6,12 @@
 
 #include <algorithm>
 
-#include "ash/components/geolocation/geoposition.h"
 #include "ash/shell.h"
 #include "ash/system/time/time_of_day.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/time/clock.h"
+#include "chromeos/ash/components/geolocation/geoposition.h"
 #include "third_party/icu/source/i18n/astro.h"
 
 namespace ash {
@@ -43,14 +43,14 @@ GeolocationController::GeolocationController(
                 SimpleGeolocationProvider::DefaultGeolocationProviderURL()),
       backoff_delay_(kMinimumDelayAfterFailure),
       timer_(std::make_unique<base::OneShotTimer>()) {
-  auto* timezone_settings = chromeos::system::TimezoneSettings::GetInstance();
+  auto* timezone_settings = system::TimezoneSettings::GetInstance();
   current_timezone_id_ = timezone_settings->GetCurrentTimezoneID();
   timezone_settings->AddObserver(this);
   chromeos::PowerManagerClient::Get()->AddObserver(this);
 }
 
 GeolocationController::~GeolocationController() {
-  chromeos::system::TimezoneSettings::GetInstance()->RemoveObserver(this);
+  system::TimezoneSettings::GetInstance()->RemoveObserver(this);
   chromeos::PowerManagerClient::Get()->RemoveObserver(this);
 }
 
@@ -77,7 +77,7 @@ void GeolocationController::RemoveObserver(Observer* observer) {
 
 void GeolocationController::TimezoneChanged(const icu::TimeZone& timezone) {
   const std::u16string timezone_id =
-      chromeos::system::TimezoneSettings::GetTimezoneID(timezone);
+      system::TimezoneSettings::GetTimezoneID(timezone);
   if (current_timezone_id_ == timezone_id)
     return;
 

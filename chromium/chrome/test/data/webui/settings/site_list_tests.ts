@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,8 @@ import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min
 import {AddSiteDialogElement, ContentSetting, ContentSettingsTypes, SettingsEditExceptionDialogElement, SITE_EXCEPTION_WILDCARD, SiteException, SiteListElement, SiteSettingSource, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
 import {CrSettingsPrefs, loadTimeData, Router} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {eventToPromise, waitBeforeNextRender} from 'chrome://webui-test/test_util.js';
+import {eventToPromise} from 'chrome://webui-test/test_util.js';
+import {waitBeforeNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {TestSiteSettingsPrefsBrowserProxy} from './test_site_settings_prefs_browser_proxy.js';
 import {createContentSettingTypeToValuePair, createRawSiteException, createSiteSettingsPrefs, SiteSettingsPref} from './test_util.js';
@@ -288,7 +289,8 @@ suite('SiteListEmbargoedOrigin', function() {
 
     browserProxy = new TestSiteSettingsPrefsBrowserProxy();
     SiteSettingsPrefsBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     testElement = document.createElement('site-list');
     testElement.searchFilter = '';
     document.body.appendChild(testElement);
@@ -365,7 +367,8 @@ suite('SiteList', function() {
 
     browserProxy = new TestSiteSettingsPrefsBrowserProxy();
     SiteSettingsPrefsBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     testElement = document.createElement('site-list');
     testElement.searchFilter = '';
     document.body.appendChild(testElement);
@@ -1011,7 +1014,8 @@ suite('EditExceptionDialog', function() {
 
     browserProxy = new TestSiteSettingsPrefsBrowserProxy();
     SiteSettingsPrefsBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     dialog = document.createElement('settings-edit-exception-dialog');
     dialog.model = cookieException;
     document.body.appendChild(dialog);
@@ -1032,7 +1036,8 @@ suite('EditExceptionDialog', function() {
 
     // Simulate user input of whitespace only text.
     input!.value = '  ';
-    input!.fire('input');
+    input!.dispatchEvent(
+        new CustomEvent('input', {bubbles: true, composed: true}));
     flush();
     assertTrue(actionButton.disabled);
     assertTrue(input!.invalid);
@@ -1041,7 +1046,8 @@ suite('EditExceptionDialog', function() {
     browserProxy.setIsPatternValidForType(false);
     const expectedPattern = '*';
     input!.value = expectedPattern;
-    input!.fire('input');
+    input!.dispatchEvent(
+        new CustomEvent('input', {bubbles: true, composed: true}));
 
     return browserProxy.whenCalled('isPatternValidForType').then(function([
       pattern,
@@ -1095,7 +1101,8 @@ suite('AddExceptionDialog', function() {
 
     browserProxy = new TestSiteSettingsPrefsBrowserProxy();
     SiteSettingsPrefsBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     dialog = document.createElement('add-site-dialog');
     dialog.category = ContentSettingsTypes.GEOLOCATION;
     dialog.contentSetting = ContentSetting.ALLOW;
@@ -1133,7 +1140,8 @@ suite('AddExceptionDialog', function() {
     browserProxy.setIsPatternValidForType(false);
     const expectedPattern = 'foobarbaz';
     input!.value = expectedPattern;
-    input!.fire('input');
+    input!.dispatchEvent(
+        new CustomEvent('input', {bubbles: true, composed: true}));
 
     return browserProxy.whenCalled('isPatternValidForType').then(function([
       pattern,

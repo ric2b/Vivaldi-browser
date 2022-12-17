@@ -140,6 +140,8 @@ class CORE_EXPORT WindowPerformance final : public Performance,
 
   void AddLayoutShiftEntry(LayoutShift*);
   void AddVisibilityStateEntry(bool is_visible, base::TimeTicks start_time);
+  void AddSoftNavigationEntry(const AtomicString& name,
+                              base::TimeTicks start_time);
 
   // PageVisibilityObserver
   void PageVisibilityChanged() override;
@@ -202,10 +204,6 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   // Notify observer that an event timing entry is ready and add it to the event
   // timing buffer if needed.
   void NotifyAndAddEventTimingBuffer(PerformanceEventTiming* entry);
-
-  // NotifyAndAddEventTimingBuffer() when interactionId feature is enabled.
-  void MaybeNotifyInteractionAndAddEventTimingBuffer(
-      PerformanceEventTiming* entry);
 
   // The last time the page visibility was changed.
   base::TimeTicks last_visibility_change_timestamp_;

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "build/branding_buildflags.h"
+#include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/crash_client.h"
@@ -121,6 +122,8 @@ TEST_F(UpdateUsageStatsTaskTest, NoApps) {
                    ->UsageStatsAllowed({"app1", "app2"}));
 }
 
+// TODO(crbug.com/1367437): Enable tests once updater is implemented for Linux
+#if !BUILDFLAG(IS_LINUX)
 TEST_F(UpdateUsageStatsTaskTest, OneAppEnabled) {
   SetAppUsageStats("app1", true);
   SetAppUsageStats("app2", false);
@@ -128,6 +131,7 @@ TEST_F(UpdateUsageStatsTaskTest, OneAppEnabled) {
                                                          persisted_data_)
                   ->UsageStatsAllowed({"app1", "app2"}));
 }
+#endif  // !BUILDFLAG(IS_LINUX)
 
 TEST_F(UpdateUsageStatsTaskTest, ZeroAppsEnabled) {
   SetAppUsageStats("app1", false);

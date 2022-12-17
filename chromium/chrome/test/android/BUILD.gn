@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -289,6 +289,7 @@ android_library("chrome_java_integration_test_support") {
     "//base:base_java_test_support",
     "//build/android:build_java",
     "//chrome/android:base_module_java",
+    "//chrome/android:browser_java_test_support",
     "//chrome/android:chrome_java",
     "//chrome/browser/android/browserservices/constants:java",
     "//chrome/browser/android/browserservices/intents:java",

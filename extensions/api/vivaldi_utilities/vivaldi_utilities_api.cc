@@ -347,8 +347,9 @@ void VivaldiUtilitiesAPI::OsReauthCall(
     password_manager::PasswordAccessAuthenticator::AuthResultCallback
         callback) {
 #if BUILDFLAG(IS_WIN)
-  bool result =
-      password_manager_util_win::AuthenticateUser(native_window_, purpose);
+  bool result = password_manager_util_win::AuthenticateUser(
+      native_window_,
+      password_manager_util_win::GetMessageForLoginPrompt(purpose));
   std::move(callback).Run(result);
 #elif BUILDFLAG(IS_MAC)
   bool result = password_manager_util_mac::AuthenticateUser(purpose);
@@ -664,25 +665,25 @@ namespace {
 // parameter should be set. Both `theme_id` and `thumbnail_bookmark_id` can be
 // null to indicate absence of the correspong keys in JS parameter object.
 int ParseImagePlaceParams(VivaldiImageStore::ImagePlace& place,
-                          const std::string* theme_id,
-                          const std::string* thumbnail_bookmark_id,
+                          const std::string& theme_id,
+                          const std::string& thumbnail_bookmark_id,
                           std::string& error) {
   int case_count = 0;
-  if (thumbnail_bookmark_id && !thumbnail_bookmark_id->empty()) {
+  if (!thumbnail_bookmark_id.empty()) {
     if (++case_count == 1) {
       int64_t bookmark_id = 0;
-      if (!base::StringToInt64(*thumbnail_bookmark_id, &bookmark_id) ||
+      if (!base::StringToInt64(thumbnail_bookmark_id, &bookmark_id) ||
           bookmark_id <= 0) {
         error = "thumbnailBookmarkId is not a valid positive integer - " +
-                *thumbnail_bookmark_id;
+                thumbnail_bookmark_id;
       } else {
         place.SetBookmarkId(bookmark_id);
       }
     }
   }
-  if (theme_id && !theme_id->empty()) {
+  if (!theme_id.empty()) {
     if (++case_count == 1) {
-      place.SetThemeId(*theme_id);
+      place.SetThemeId(theme_id);
     }
   }
   return case_count;
@@ -698,9 +699,9 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
   VivaldiImageStore::ImagePlace place;
   bool profile_image = false;
   std::string error;
-  int case_count =
-      ParseImagePlaceParams(place, params->params.theme_id.get(),
-                            params->params.thumbnail_bookmark_id.get(), error);
+  int case_count = ParseImagePlaceParams(
+      place, params->params.theme_id.value_or(std::string()),
+      params->params.thumbnail_bookmark_id.value_or(std::string()), error);
   if (!error.empty()) {
     return RespondNow(Error(error));
   }
@@ -779,9 +780,9 @@ ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
-  int case_count =
-      ParseImagePlaceParams(place_, params->options.theme_id.get(),
-                            params->options.thumbnail_bookmark_id.get(), error);
+  int case_count = ParseImagePlaceParams(
+      place_, params->options.theme_id.value_or(std::string()),
+      params->options.thumbnail_bookmark_id.value_or(std::string()), error);
   if (!error.empty())
     return RespondNow(Error(std::move(error)));
   if (case_count != 1) {
@@ -790,12 +791,12 @@ ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
               "thumbnailBookmarkId must be given"));
   }
   case_count = 0;
-  if (params->options.data) {
+  if (params->options.data.has_value()) {
     if (++case_count == 1) {
       if (params->options.data->empty()) {
         return RespondNow(Error("blob option cannot be empty"));
       }
-      if (!params->options.mime_type || params->options.mime_type->empty()) {
+      if (!params->options.mime_type.has_value() || params->options.mime_type->empty()) {
         return RespondNow(Error("mimeType must be given"));
       }
 
@@ -805,7 +806,7 @@ ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
         return RespondNow(
             Error("unsupported mimeType - " + *params->options.mime_type));
       }
-      StoreImage(base::RefCountedBytes::TakeVector(params->options.data.get()));
+      StoreImage(base::RefCountedBytes::TakeVector(&params->options.data.value()));
     }
   }
   if (params->options.url && !params->options.url->empty()) {
@@ -899,7 +900,7 @@ ExtensionFunction::ResponseAction UtilitiesSetSharedDataFunction::Run() {
       VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
 
   bool added = api->SetSharedData(params->key_value_pair.key,
-                                  std::move(*params->key_value_pair.value));
+                                  std::move(params->key_value_pair.value));
   // Respond before sending an event
   Respond(ArgumentList(Results::Create(added)));
 
@@ -909,7 +910,7 @@ ExtensionFunction::ResponseAction UtilitiesSetSharedDataFunction::Run() {
       vivaldi::utilities::OnSharedDataUpdated::kEventName,
       vivaldi::utilities::OnSharedDataUpdated::Create(
           params->key_value_pair.key,
-          value ? *value : *params->key_value_pair.value),
+          value ? *value : params->key_value_pair.value),
       browser_context());
   return AlreadyResponded();
 }
@@ -926,7 +927,7 @@ ExtensionFunction::ResponseAction UtilitiesGetSharedDataFunction::Run() {
 
   const base::Value* value = api->GetSharedData(params->key_value_pair.key);
   return RespondNow(ArgumentList(
-      Results::Create(value ? *value : *params->key_value_pair.value)));
+      Results::Create(value ? *value : params->key_value_pair.value)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesTakeMutexFunction::Run() {
@@ -983,7 +984,7 @@ ExtensionFunction::ResponseAction UtilitiesReleaseMutexFunction::Run() {
     return true;
   };
 
-  if (!is_valid_handle(params->handle.get()) ||
+  if (!is_valid_handle(&params->handle) ||
       !api->ReleaseMutex(*name, *release_token)) {
     return RespondNow(Error("Invalid token"));
   }
@@ -1772,7 +1773,6 @@ ExtensionFunction::ResponseAction UtilitiesGenerateQRCodeFunction::Run() {
       qrcode_generator::mojom::GenerateQRCodeRequest::New();
   request->data = params->data;
   request->should_render = true;
-  request->render_dino = false;
   request->render_module_style =
       qrcode_generator::mojom::ModuleStyle::DEFAULT_SQUARES;
   request->render_locator_style =
@@ -1920,6 +1920,30 @@ UtilitiesGetYOAuthClientSecretFunction::Run() {
 #endif  // VIVALDI_YAHOO_OAUTH_API_CLIENT_SECRET
 }
 
+ExtensionFunction::ResponseAction
+UtilitiesGetVivaldiNetOAuthClientSecretFunction::Run() {
+  namespace Results =
+      vivaldi::utilities::GetVivaldiNetOAuthClientSecret::Results;
+
+#ifdef VIVALDI_NET_OAUTH_CLIENT_SECRET
+  return RespondNow(
+      ArgumentList(Results::Create(VIVALDI_NET_OAUTH_CLIENT_SECRET)));
+#else
+  return RespondNow(Error("No Vivaldi.net client secret defined"));
+#endif  // VIVALDI_NET_OAUTH_CLIENT_SECRET
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesGetVivaldiNetOAuthClientIdFunction::Run() {
+  namespace Results = vivaldi::utilities::GetVivaldiNetOAuthClientId::Results;
+
+#ifdef VIVALDI_NET_OAUTH_CLIENT_ID
+  return RespondNow(ArgumentList(Results::Create(VIVALDI_NET_OAUTH_CLIENT_ID)));
+#else
+  return RespondNow(Error("No Vivaldi.net client id defined"));
+#endif  // VIVALDI_NET_OAUTH_CLIENT_ID
+}
+
 UtilitiesGetCommandLineValueFunction::~UtilitiesGetCommandLineValueFunction() {}
 
 UtilitiesGetCommandLineValueFunction::UtilitiesGetCommandLineValueFunction() {}
@@ -2024,7 +2048,7 @@ ExtensionFunction::ResponseAction UtilitiesTranslateTextFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   request_ = std::make_unique<::vivaldi::VivaldiTranslateServerRequest>(
-      browser_context()->GetWeakPtr(),
+      Profile::FromBrowserContext(browser_context())->GetWeakPtr(),
       base::BindOnce(&UtilitiesTranslateTextFunction::OnTranslateFinished,
                      this));
 

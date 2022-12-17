@@ -1,10 +1,10 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import {alphabeticalCompare} from 'chrome://scanning/scanning_app_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {assertEquals, assertTrue} from '../../chai_assert.js';
-import {flushTasks} from '../../test_util.js';
 
 /**
  * @param {!Array} arr
@@ -52,7 +52,7 @@ export function createScannerSource(
  */
 function strToMojoString16(str) {
   const arr = [];
-  for (var i = 0; i < str.length; i++) {
+  for (let i = 0; i < str.length; i++) {
     arr[i] = str.charCodeAt(i);
   }
 

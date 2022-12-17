@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -674,14 +674,6 @@ export class FakeEntryImpl {
    * @return {string}
    */
   get iconName() {
-    // Recent roots use "recent-file-type" to customize the icon.
-    // TODO(lucmult): Change the CSS to use only root-type-icon and fix the test
-    // selectors.
-    if (this.rootType === VolumeManagerCommon.RootType.RECENT_AUDIO ||
-        this.rootType === VolumeManagerCommon.RootType.RECENT_IMAGES ||
-        this.rootType === VolumeManagerCommon.RootType.RECENT_VIDEOS) {
-      return /** @type {string}  */ (VolumeManagerCommon.RootType.RECENT);
-    }
     // When Drive volume isn't available yet, the FakeEntry should show the
     // "drive" icon.
     if (this.rootType === VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT) {

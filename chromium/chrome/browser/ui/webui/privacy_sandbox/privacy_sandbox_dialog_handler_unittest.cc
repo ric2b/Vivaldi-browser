@@ -1,9 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/webui/privacy_sandbox/privacy_sandbox_dialog_handler.h"
 
+#include "chrome/browser/privacy_sandbox/mock_privacy_sandbox_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/test/base/testing_profile.h"
@@ -24,19 +25,6 @@ class MockPrivacySandboxDialogView {
   MOCK_METHOD(void, ShowNativeView, ());
   MOCK_METHOD(void, OpenPrivacySandboxSettings, ());
 };
-
-class MockPrivacySandboxService : public PrivacySandboxService {
- public:
-  MOCK_METHOD(void,
-              PromptActionOccurred,
-              (PrivacySandboxService::PromptAction),
-              (override));
-};
-
-std::unique_ptr<KeyedService> BuildMockPrivacySandboxService(
-    content::BrowserContext* context) {
-  return std::make_unique<::testing::StrictMock<MockPrivacySandboxService>>();
-}
 
 }  // namespace
 

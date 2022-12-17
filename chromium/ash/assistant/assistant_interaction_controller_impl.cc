@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -360,7 +360,7 @@ void AssistantInteractionControllerImpl::OnInteractionStarted(
   }
 
   const bool is_voice_interaction =
-      chromeos::assistant::AssistantInteractionType::kVoice == metadata.type;
+      assistant::AssistantInteractionType::kVoice == metadata.type;
 
   if (is_voice_interaction) {
     // If the Assistant UI is not visible yet, and |is_voice_interaction| is
@@ -713,7 +713,7 @@ void AssistantInteractionControllerImpl::OnOpenUrlResponse(const GURL& url,
 }
 
 void AssistantInteractionControllerImpl::OnOpenAppResponse(
-    const chromeos::assistant::AndroidAppInfo& app_info) {
+    const assistant::AndroidAppInfo& app_info) {
   if (!HasActiveInteraction()) {
     DVLOG(1) << "Assistant: Dropping response outside of active interaction";
     return;

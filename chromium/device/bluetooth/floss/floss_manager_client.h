@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,12 +62,12 @@ class DEVICE_BLUETOOTH_EXPORT FlossManagerClient
       if (cb_) {
         std::move(cb_).Run(base::unexpected(Error(kErrorNoResponse, "")));
       }
-    };
+    }
     void RunNoError() {
       if (cb_) {
         std::move(cb_).Run(Void{});
       }
-    };
+    }
 
    private:
     void PostDelayedError();
@@ -76,9 +76,6 @@ class DEVICE_BLUETOOTH_EXPORT FlossManagerClient
     int timeout_ms_;
     base::WeakPtrFactory<PoweredCallback> weak_ptr_factory_{this};
   };
-
-  // Convert adapter number to object path.
-  static dbus::ObjectPath GenerateAdapterPath(int adapter);
 
   // Creates the instance.
   static std::unique_ptr<FlossManagerClient> Create();
@@ -112,10 +109,13 @@ class DEVICE_BLUETOOTH_EXPORT FlossManagerClient
                                  bool enabled,
                                  ResponseCallback<Void> callback);
 
+  // Invoke D-Bus API to enable or disable LL privacy.
+  virtual void SetLLPrivacy(ResponseCallback<Void> callback, const bool enable);
+
   // Initializes the manager client.
   void Init(dbus::Bus* bus,
             const std::string& service_name,
-            const std::string& adapter_path) override;
+            const int adapter_index) override;
 
  protected:
   friend class FlossManagerClientTest;
@@ -214,6 +214,15 @@ class DEVICE_BLUETOOTH_EXPORT FlossManagerClient
   // Handle response to SetAdapterEnabled
   void OnSetAdapterEnabled(dbus::Response* response,
                            dbus::ErrorResponse* error_response);
+
+  // Call methods in floss experimental interface
+  template <typename R, typename... Args>
+  void CallExperimentalMethod(ResponseCallback<R> callback,
+                              const char* member,
+                              Args... args) {
+    CallMethod(std::move(callback), bus_, service_name_, kExperimentalInterface,
+               dbus::ObjectPath(kManagerObject), member, args...);
+  }
 
   // Object path for exported callbacks registered against manager interface.
   static const char kExportedCallbacksPath[];

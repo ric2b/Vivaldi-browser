@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Definitions of builders in the tryserver.chromium.linux builder group."""
@@ -19,69 +19,19 @@ try_.defaults.set(
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     goma_backend = goma.backend.RBE_PROD,
     compilator_goma_jobs = goma.jobs.J150,
+    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
+    compilator_reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
     os = os.LINUX_DEFAULT,
     pool = try_.DEFAULT_POOL,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
+
+    # TODO(crbug.com/1362440): remove this.
+    omit_python2 = False,
 )
 
 consoles.list_view(
     name = "tryserver.chromium.linux",
     branch_selector = branches.CROS_LTS_MILESTONE,
-)
-
-try_.builder(
-    name = "cast_shell_audio_linux",
-    mirrors = [
-        "ci/Cast Audio Linux",
-    ],
-)
-
-try_.builder(
-    name = "cast_shell_linux",
-    branch_selector = branches.STANDARD_MILESTONE,
-    mirrors = [
-        "ci/Cast Linux",
-    ],
-    builderless = not settings.is_main,
-    main_list_view = "try",
-    tryjob = try_.job(),
-)
-
-try_.builder(
-    name = "cast_shell_linux_dbg",
-    branch_selector = branches.STANDARD_MILESTONE,
-    mirrors = [
-        "ci/Cast Linux Debug",
-    ],
-    main_list_view = "try",
-    tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/chromecast/.+",
-        ],
-    ),
-)
-
-try_.builder(
-    name = "cast_shell_linux_arm64",
-    branch_selector = branches.MAIN,
-    mirrors = [
-        "ci/Cast Linux ARM64",
-    ],
-    main_list_view = "try",
-    tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/chromecast/.+",
-        ],
-    ),
-    os = os.LINUX_BIONIC,
-)
-
-try_.builder(
-    name = "fuchsia-fyi-arm64-rel",
-)
-
-try_.builder(
-    name = "fuchsia-fyi-x64-rel",
 )
 
 try_.builder(
@@ -106,6 +56,7 @@ try_.builder(
     ),
     builderless = False,
     goma_jobs = goma.jobs.J150,
+    reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
     tryjob = try_.job(
         experiment_percentage = 5,
     ),
@@ -118,6 +69,21 @@ try_.builder(
 
 try_.builder(
     name = "linux-annotator-rel",
+)
+
+try_.builder(
+    name = "linux-arm64-castos",
+    branch_selector = branches.MAIN,
+    mirrors = [
+        "ci/Cast Linux ARM64",
+    ],
+    main_list_view = "try",
+    tryjob = try_.job(
+        location_filters = [
+            "chromecast/.+",
+        ],
+    ),
+    os = os.LINUX_BIONIC,
 )
 
 try_.builder(
@@ -162,6 +128,7 @@ try_.builder(
         "ci/linux-gcc-rel",
     ],
     goma_backend = None,
+    os = os.LINUX_FOCAL,
 )
 
 try_.builder(
@@ -206,20 +173,17 @@ try_.builder(
     executable = "recipe:chromium_libfuzzer_trybot",
     main_list_view = "try",
     tryjob = try_.job(),
-    experiments = {
-        "enable_weetbix_queries": 100,
-    },
 )
 
 try_.builder(
     name = "linux-perfetto-rel",
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/base/trace_event/.+",
-            ".+/[+]/base/tracing/.+",
-            ".+/[+]/components/tracing/.+",
-            ".+/[+]/content/browser/tracing/.+",
-            ".+/[+]/services/tracing/.+",
+        location_filters = [
+            "base/trace_event/.+",
+            "base/tracing/.+",
+            "components/tracing/.+",
+            "content/browser/tracing/.+",
+            "services/tracing/.+",
         ],
     ),
 )
@@ -228,7 +192,8 @@ try_.orchestrator_builder(
     name = "linux-rel",
     compilator = "linux-rel-compilator",
     branch_selector = branches.STANDARD_MILESTONE,
-    check_for_flakiness = True,
+    # Disabling due to crbug.com/1359208
+    # check_for_flakiness = True,
     mirrors = [
         "ci/Linux Builder",
         "ci/Linux Tests",
@@ -246,10 +211,10 @@ try_.orchestrator_builder(
     tryjob = try_.job(),
     experiments = {
         "remove_src_checkout_experiment": 100,
-        "enable_weetbix_queries": 100,
-        "retry_findit_exonerations": 100,
     },
-    use_orchestrator_pool = True,
+    # TODO(crbug.com/1372179): Use orchestrator pool once overloaded test pools
+    # are addressed
+    # use_orchestrator_pool = True,
 )
 
 try_.compilator_builder(
@@ -257,33 +222,6 @@ try_.compilator_builder(
     branch_selector = branches.STANDARD_MILESTONE,
     check_for_flakiness = True,
     main_list_view = "try",
-)
-
-# crbug.com/1270571: Experimental bot to test pre-warming
-try_.orchestrator_builder(
-    name = "linux-rel-warmed",
-    compilator = "linux-rel-warmed-compilator",
-    mirrors = [
-        "ci/Linux Builder",
-        "ci/Linux Tests",
-        "ci/GPU Linux Builder",
-        "ci/Linux Release (NVIDIA)",
-    ],
-    try_settings = builder_config.try_settings(
-        rts_config = builder_config.rts_config(
-            condition = builder_config.rts_condition.QUICK_RUN_ONLY,
-        ),
-    ),
-    main_list_view = "try",
-    use_clang_coverage = True,
-    coverage_test_types = ["unit", "overall"],
-)
-
-# crbug.com/1270571: Experimental bot to test pre-warming
-try_.compilator_builder(
-    name = "linux-rel-warmed-compilator",
-    main_list_view = "try",
-    builder_cache_name = "linux_rel_warmed_compilator_warmed_cache",
 )
 
 try_.builder(
@@ -301,19 +239,36 @@ try_.builder(
     builderless = not settings.is_main,
     main_list_view = "try",
     tryjob = try_.job(),
-    experiments = {
-        "enable_weetbix_queries": 100,
-    },
 )
 
-# b/236069482: Experimental builder to test reclient migration
-try_.builder(
-    name = "linux-wayland-rel-reclient",
-    mirrors = builder_config.copy_from("linux-wayland-rel"),
-    reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
-    tryjob = try_.job(
-        experiment_percentage = 5,
+# TODO (crbug.com/1287228): Remove when orchestrator is confirmed to work
+try_.orchestrator_builder(
+    name = "linux-wayland-rel-orchestrator",
+    compilator = "linux-wayland-rel-compilator",
+    branch_selector = branches.STANDARD_MILESTONE,
+    mirrors = [
+        "ci/Linux Builder (Wayland)",
+        "ci/Linux Tests (Wayland)",
+    ],
+    try_settings = builder_config.try_settings(
+        rts_config = builder_config.rts_config(
+            condition = builder_config.rts_condition.QUICK_RUN_ONLY,
+        ),
     ),
+    main_list_view = "try",
+    experiments = {
+        "remove_src_checkout_experiment": 100,
+    },
+    use_orchestrator_pool = True,
+)
+
+try_.compilator_builder(
+    name = "linux-wayland-rel-compilator",
+    branch_selector = branches.STANDARD_MILESTONE,
+    main_list_view = "try",
+    # TODO (crbug.com/1287228): Set correct values once bots are set up
+    ssd = None,
+    cores = None,
 )
 
 try_.builder(
@@ -328,6 +283,13 @@ try_.builder(
 )
 
 try_.builder(
+    name = "linux-wpt-content-shell-fyi-rel",
+    mirrors = [
+        "ci/linux-wpt-content-shell-fyi-rel",
+    ],
+)
+
+try_.builder(
     name = "linux-wpt-fyi-rel",
 )
 
@@ -337,6 +299,38 @@ try_.builder(
 
 try_.builder(
     name = "linux-wpt-input-fyi-rel",
+)
+
+try_.builder(
+    name = "linux-x64-castos",
+    branch_selector = branches.STANDARD_MILESTONE,
+    mirrors = [
+        "ci/Cast Linux",
+    ],
+    builderless = not settings.is_main,
+    main_list_view = "try",
+    tryjob = try_.job(),
+)
+
+try_.builder(
+    name = "linux-x64-castos-audio",
+    mirrors = [
+        "ci/Cast Audio Linux",
+    ],
+)
+
+try_.builder(
+    name = "linux-x64-castos-dbg",
+    branch_selector = branches.STANDARD_MILESTONE,
+    mirrors = [
+        "ci/Cast Linux Debug",
+    ],
+    main_list_view = "try",
+    tryjob = try_.job(
+        location_filters = [
+            "chromecast/.+",
+        ],
+    ),
 )
 
 try_.builder(
@@ -367,9 +361,10 @@ try_.orchestrator_builder(
     ),
     experiments = {
         "remove_src_checkout_experiment": 100,
-        "enable_weetbix_queries": 100,
     },
-    use_orchestrator_pool = True,
+    # TODO (crbug.com/1372179): Use orchestrator pool once overloaded test pools
+    # are addressed
+    # use_orchestrator_pool = True,
 )
 
 try_.compilator_builder(
@@ -454,7 +449,7 @@ try_.builder(
             path = "linux_debug",
         ),
     ],
-    goma_jobs = goma.jobs.J150,
+    reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
     main_list_view = "try",
     tryjob = try_.job(),
 )
@@ -485,8 +480,8 @@ try_.builder(
     ],
     main_list_view = "try",
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/build/.*check_gn_headers.*",
+        location_filters = [
+            "build/.*check_gn_headers.*",
         ],
     ),
 )
@@ -528,9 +523,10 @@ try_.orchestrator_builder(
     tryjob = try_.job(),
     experiments = {
         "remove_src_checkout_experiment": 100,
-        "enable_weetbix_queries": 100,
     },
-    use_orchestrator_pool = True,
+    # TODO (crbug.com/1372179): Use orchestrator pool once overloaded test pools
+    # are addressed
+    # use_orchestrator_pool = True,
 )
 
 try_.compilator_builder(
@@ -575,14 +571,14 @@ try_.builder(
     ),
     main_list_view = "try",
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/third_party/blink/renderer/core/editing/.+",
-            ".+/[+]/third_party/blink/renderer/core/layout/.+",
-            ".+/[+]/third_party/blink/renderer/core/paint/.+",
-            ".+/[+]/third_party/blink/renderer/core/svg/.+",
-            ".+/[+]/third_party/blink/renderer/platform/fonts/shaping/.+",
-            ".+/[+]/third_party/blink/renderer/platform/graphics/.+",
-            ".+/[+]/third_party/blink/web_tests/.+",
+        location_filters = [
+            "third_party/blink/renderer/core/editing/.+",
+            "third_party/blink/renderer/core/layout/.+",
+            "third_party/blink/renderer/core/paint/.+",
+            "third_party/blink/renderer/core/svg/.+",
+            "third_party/blink/renderer/platform/fonts/shaping/.+",
+            "third_party/blink/renderer/platform/graphics/.+",
+            "third_party/blink/web_tests/.+",
         ],
     ),
 )
@@ -609,9 +605,9 @@ try_.builder(
     ],
     main_list_view = "try",
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/chrome/browser/vr/.+",
-            ".+/[+]/content/browser/xr/.+",
+        location_filters = [
+            "chrome/browser/vr/.+",
+            "content/browser/xr/.+",
         ],
     ),
 )
@@ -663,33 +659,61 @@ try_.gpu.optional_tests_builder(
     branch_selector = branches.STANDARD_MILESTONE,
     main_list_view = "try",
     tryjob = try_.job(
-        location_regexp = [
-            ".+/[+]/chrome/browser/vr/.+",
-            ".+/[+]/content/browser/xr/.+",
-            ".+/[+]/content/test/gpu/.+",
-            ".+/[+]/gpu/.+",
-            ".+/[+]/media/audio/.+",
-            ".+/[+]/media/base/.+",
-            ".+/[+]/media/capture/.+",
-            ".+/[+]/media/filters/.+",
-            ".+/[+]/media/gpu/.+",
-            ".+/[+]/media/mojo/.+",
-            ".+/[+]/media/renderers/.+",
-            ".+/[+]/media/video/.+",
-            ".+/[+]/testing/buildbot/tryserver.chromium.linux.json",
-            ".+/[+]/testing/trigger_scripts/.+",
-            ".+/[+]/third_party/blink/renderer/modules/mediastream/.+",
-            ".+/[+]/third_party/blink/renderer/modules/webcodecs/.+",
-            ".+/[+]/third_party/blink/renderer/modules/webgl/.+",
-            ".+/[+]/third_party/blink/renderer/platform/graphics/gpu/.+",
-            ".+/[+]/tools/clang/scripts/update.py",
-            ".+/[+]/tools/mb/mb_config_expectations/tryserver.chromium.linux.json",
-            ".+/[+]/ui/gl/.+",
+        location_filters = [
+            "chrome/browser/vr/.+",
+            "content/browser/xr/.+",
+            "content/test/gpu/.+",
+            "gpu/.+",
+            "media/audio/.+",
+            "media/base/.+",
+            "media/capture/.+",
+            "media/filters/.+",
+            "media/gpu/.+",
+            "media/mojo/.+",
+            "media/renderers/.+",
+            "media/video/.+",
+            "testing/buildbot/tryserver.chromium.linux.json",
+            "testing/trigger_scripts/.+",
+            "third_party/blink/renderer/modules/mediastream/.+",
+            "third_party/blink/renderer/modules/webcodecs/.+",
+            "third_party/blink/renderer/modules/webgl/.+",
+            "third_party/blink/renderer/platform/graphics/gpu/.+",
+            "tools/clang/scripts/update.py",
+            "tools/mb/mb_config_expectations/tryserver.chromium.linux.json",
+            "ui/gl/.+",
         ],
     ),
 )
 
 # RTS builders
+try_.orchestrator_builder(
+    name = "linux-rel-inverse-fyi",
+    compilator = "linux-rel-compilator",
+    # Disabling due to crbug.com/1359208
+    # check_for_flakiness = True,
+    mirrors = [
+        "ci/Linux Builder",
+        "ci/Linux Tests",
+        "ci/GPU Linux Builder",
+        "ci/Linux Release (NVIDIA)",
+    ],
+    try_settings = builder_config.try_settings(
+        rts_config = builder_config.rts_config(
+            condition = builder_config.rts_condition.QUICK_RUN_ONLY,
+        ),
+    ),
+    use_clang_coverage = True,
+    coverage_test_types = ["unit", "overall"],
+    tryjob = try_.job(
+        experiment_percentage = 25,
+    ),
+    experiments = {
+        "remove_src_checkout_experiment": 100,
+        "chromium_rts.inverted_rts": 100,
+        "chromium_rts.inverted_rts_bail_early": 100,
+    },
+    use_orchestrator_pool = True,
+)
 
 # ML experimental builder, modifies RTS itself to use a ml model
 try_.builder(

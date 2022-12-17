@@ -1,10 +1,11 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.features.start_surface;
 
 import static android.os.Build.VERSION_CODES.O_MR1;
+import static android.os.Build.VERSION_CODES.Q;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
@@ -85,7 +86,6 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -296,6 +296,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS})
+    @DisabledTest(message = "https://crbug.com/1373499")
     public void testSwitchTabModel_ScrollToSelectedTab() throws IOException {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         prepareTabs(10, 0, "about:blank");
@@ -369,6 +370,9 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @DisableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
     @CommandLineFlags.Add({BASE_PARAMS})
+    @DisableIf.Build(message = "https://crbug.com/1365708",
+            supported_abis_includes = "x86",
+            sdk_is_greater_than = O_MR1, sdk_is_less_than = Q)
     public void testTabToGridFromLiveTab() throws InterruptedException {
         assertFalse(TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
         assertEquals(0, mTabListDelegate.getSoftCleanupDelayForTesting());
@@ -394,6 +398,9 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @DisableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
     @CommandLineFlags.Add({BASE_PARAMS + "/soft-cleanup-delay/2000/cleanup-delay/10000"})
+    @DisableIf.Build(message = "https://crbug.com/1365708",
+            supported_abis_includes = "x86",
+            sdk_is_greater_than = O_MR1, sdk_is_less_than = Q)
     public void testTabToGridFromLiveTabWarm() throws InterruptedException {
         assertFalse(TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
         assertEquals(2000, mTabListDelegate.getSoftCleanupDelayForTesting());
@@ -444,7 +451,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS})
-    @FlakyTest(message = "crbug.com/1130830")
+    @DisabledTest(message = "crbug.com/1130830")
     public void testTabToGridFromNtp() throws InterruptedException {
         prepareTabs(2, 0, NTP_URL);
         testTabToGrid(NTP_URL);
@@ -495,6 +502,9 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @Test
     @MediumTest
     @DisableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
+    @DisableIf.Build(message = "https://crbug.com/1365708",
+            supported_abis_includes = "x86",
+            sdk_is_greater_than = O_MR1, sdk_is_less_than = Q)
     public void testGridToTabToCurrentLive() throws InterruptedException {
         assertFalse(TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
         prepareTabs(1, 0, mUrl);
@@ -687,7 +697,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS + "/soft-cleanup-delay/2000/cleanup-delay/10000"})
-    @FlakyTest(message = "crbug.com/1130830")
+    @DisabledTest(message = "crbug.com/1130830")
     public void testInvisibleTabsDontFetchWarm() throws InterruptedException {
         // Get the GTS in the warm state.
         prepareTabs(2, 0, NTP_URL);
@@ -712,7 +722,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS + "/cleanup-delay/10000"})
-    @FlakyTest(message = "crbug.com/1130830")
+    @DisabledTest(message = "crbug.com/1130830")
     public void testInvisibleTabsDontFetchSoft() throws InterruptedException {
         // Get the GTS in the soft cleaned up state.
         prepareTabs(2, 0, NTP_URL);
@@ -1274,6 +1284,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     // clang-format off
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS + "/thumbnail_aspect_ratio/0.75"})
+    @DisabledTest(message = "https://crbug.com/1367310")
     public void testExpandTab_withAspectRatioPoint75() {
         // clang-format on
         prepareTabs(1, 0, mUrl);
@@ -1288,6 +1299,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID,
             ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS + "/thumbnail_aspect_ratio/1.0"})
+    @DisabledTest(message = "https://crbug.com/1359687")
     public void testRenderGrid_withAspectRatioOfOne() throws IOException {
         // clang-format on
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -1471,7 +1483,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @MediumTest
     @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
     @DisableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
-    @FlakyTest(message = "crbug.com/1096997")
+    @DisabledTest(message = "crbug.com/1096997")
     public void testTabGroupManualSelection() throws InterruptedException {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         TabSelectionEditorTestingRobot robot = new TabSelectionEditorTestingRobot();
@@ -1546,6 +1558,26 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
         enterTabSwitcher(cta);
         onView(tabSwitcherViewMatcher()).check(TabCountAssertion.havingTabCount(2));
         enterTabGroupManualSelection(cta);
+        robot.resultRobot.verifyTabSelectionEditorIsVisible();
+
+        // Pressing system back should dismiss the selection editor.
+        Espresso.pressBack();
+        robot.resultRobot.verifyTabSelectionEditorIsHidden();
+    }
+
+    @Test
+    @MediumTest
+    // clang-format off
+    @EnableFeatures({ChromeFeatureList.TAB_SELECTION_EDITOR_V2,
+                     ChromeFeatureList.TAB_TO_GTS_ANIMATION})
+    public void testTabSelectionEditorV2_SystemBackDismiss() {
+        // clang-format on
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        TabSelectionEditorTestingRobot robot = new TabSelectionEditorTestingRobot();
+        createTabs(cta, false, 2);
+        enterTabSwitcher(cta);
+        onView(tabSwitcherViewMatcher()).check(TabCountAssertion.havingTabCount(2));
+        enterTabSelectionEditorV2(cta);
         robot.resultRobot.verifyTabSelectionEditorIsVisible();
 
         // Pressing system back should dismiss the selection editor.
@@ -1806,6 +1838,11 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     private void enterTabGroupManualSelection(ChromeTabbedActivity cta) {
         MenuUtils.invokeCustomMenuActionSync(
                 InstrumentationRegistry.getInstrumentation(), cta, R.id.menu_group_tabs);
+    }
+
+    private void enterTabSelectionEditorV2(ChromeTabbedActivity cta) {
+        MenuUtils.invokeCustomMenuActionSync(
+                InstrumentationRegistry.getInstrumentation(), cta, R.id.menu_select_tabs);
     }
 
     /**

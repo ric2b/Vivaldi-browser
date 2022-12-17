@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{फाइल सम्पादन गर्नुहोस्}other{फाइलहरू सम्पादन गर्नुहोस्}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" />GHz</translation>
 <translation id="3291996639387199448">मुख्य डिरेक्सन</translation>
+<translation id="3294437725009624529">पाहुना</translation>
 <translation id="3310640316857623290">DNS को विलम्बता तोकिएको समयसीमाभन्दा अत्याधिक मात्रामा बढी छ</translation>
 <translation id="3328783797891415197">परीक्षण चलिरहेको छ</translation>
 <translation id="3340011300870565703">यो डिभाइसको दायाँपट्टिको बडमा <ph name="BATTERY_PERCENTAGE" />% ब्याट्री बाँकी छ।</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">फर्मवेयर अपडेट भइरहेका बेला यो बाह्य डिभाइस अनप्लग गर्ने वा कम्प्युटर सट डाउन गर्ने काम नगर्नुहोस्। तपाईं यो विन्डो मिनिमाइज गर्न सक्नुहुन्छ। फर्मवेयर अपडेट गर्न केही मिनेट लाग्न सक्छ र अपडेट भइरहेका बेला तपाईंको बाह्य डिभाइसले काम नगर्न सक्छ।</translation>
 <translation id="3486220673238053218">परिभाषा</translation>
 <translation id="3488065109653206955">आंशिक रूपमा सक्रिय बनाइएको</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />पर्फर्मेन्स ट्रेस डेटा<ph name="END_LINK1" /> पठाउनुहोस्</translation>
 <translation id="3517001332549868749">ChromeOS को अपडेट</translation>
 <translation id="3527036260304016759">प्रिन्ट गर्न सकिएन - अज्ञात त्रुटि भयो</translation>
 <translation id="3532980081107202182"><ph name="MIN_REMAINING" /> मिनेट जति बाँकी छ</translation>
@@ -424,7 +426,7 @@
 <translation id="5166918508782100047">द्रुत जवाफसम्बन्धी सेटिङ</translation>
 <translation id="5168185087976003268">ब्याट्रीको अवस्था</translation>
 <translation id="5170568018924773124">फोल्डरमा देखाउनुहोस्</translation>
-<translation id="5190187232518914472">आफूलाई मन पर्ने स्मरणीय पलहरूको आनन्द लिनुहोस्। एल्बमहरू हाल्न वा परिवर्तन गर्न <ph name="LINK_BEGIN" />Google Photos<ph name="LINK_END" /> मा जानुहोस्।</translation>
+<translation id="5190187232518914472">आफूलाई स्मरणीय पलहरूको आनन्द लिनुहोस्। एल्बमहरू हाल्न वा परिवर्तन गर्न <ph name="LINK_BEGIN" />Google Photos<ph name="LINK_END" /> मा जानुहोस्।</translation>
 <translation id="5212543919916444558">मैले तपाईंको स्क्रिनमा आफूले मद्दत गर्न मिल्ने कुनै पनि कुरा फेला पार्न सकिन। मलाई केही कुरा सोध्न माइकमा ट्याप गरी हेर्नुहोस्।</translation>
 <translation id="5212593641110061691">ट्याब्लोइड</translation>
 <translation id="5222676887888702881">साइन आउट गर्नुहोस्</translation>
@@ -467,6 +469,7 @@
 <translation id="5502931783115429516">Android चलिरहेको छैन</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">सूर्यास्तपछि स्वतः अँध्यारो थिम लागू गरियोस्</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">पुनः स्क्यान गर्नुहोस्</translation>
 <translation id="5583640892426849032">ब्याकस्पेस</translation>

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -115,7 +115,11 @@ std::string BuildClientDataJson(ClientDataJsonParams params) {
   if (params.payment_options) {
     ret.append(R"(,"payment":{)");
 
-    ret.append(R"("rp":)");
+    ret.append(R"("rpId":)");
+    ret.append(ToJSONString(params.payment_rp));
+
+    // TODO(crbug.com/1356224): Remove legacy 'rp' parameter.
+    ret.append(R"(,"rp":)");
     ret.append(ToJSONString(params.payment_rp));
 
     ret.append(R"(,"topOrigin":)");

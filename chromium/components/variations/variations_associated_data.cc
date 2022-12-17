@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,7 +25,8 @@ class GroupMapAccessor {
 
   // Retrieve the singleton.
   static GroupMapAccessor* GetInstance() {
-    return base::Singleton<GroupMapAccessor>::get();
+    return base::Singleton<GroupMapAccessor,
+                           base::LeakySingletonTraits<GroupMapAccessor>>::get();
   }
 
   GroupMapAccessor(const GroupMapAccessor&) = delete;

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/payment_request_state.h"
 #include "components/payments/content/service_worker_payment_app.h"
+#include "components/payments/core/csp_checker.h"
 #include "components/payments/core/journey_logger.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -57,6 +58,7 @@ class PaymentRequest : public content::DocumentService<mojom::PaymentRequest>,
                        public PaymentRequestSpec::Observer,
                        public PaymentRequestState::Delegate,
                        public InitializationTask::Observer,
+                       public CSPChecker,
                        public content::WebContentsObserver {
  public:
   class ObserverForTest {
@@ -161,6 +163,13 @@ class PaymentRequest : public content::DocumentService<mojom::PaymentRequest>,
   base::WeakPtr<PaymentRequest> GetWeakPtr();
 
  private:
+  // CSPChecker.
+  void AllowConnectToSource(
+      const GURL& url,
+      const GURL& url_before_redirects,
+      bool did_follow_redirect,
+      base::OnceCallback<void(bool)> result_callback) override;
+
   // InitializationTask::Observer.
   void OnInitialized(InitializationTask* initialization_task) override;
 

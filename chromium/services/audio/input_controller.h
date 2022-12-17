@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace media {
+class AecdumpRecordingManager;
 class AudioBus;
 class AudioInputStream;
 class AudioManager;
@@ -39,11 +40,9 @@ class UserInputMonitor;
 
 namespace audio {
 class AudioProcessorHandler;
-class AecdumpRecordingManager;
 class AudioCallback;
 class OutputTapper;
 class DeviceOutputListener;
-class InputStreamActivityMonitor;
 class ProcessingAudioFifo;
 
 // Only do power monitoring for non-mobile platforms to save resources.
@@ -182,9 +181,8 @@ class InputController final : public StreamMonitor {
       EventHandler* event_handler,
       SyncWriter* sync_writer,
       media::UserInputMonitor* user_input_monitor,
-      InputStreamActivityMonitor* activity_monitor,
       DeviceOutputListener* device_output_listener,
-      AecdumpRecordingManager* aecdump_recording_manager,
+      media::AecdumpRecordingManager* aecdump_recording_manager,
       media::mojom::AudioProcessingConfigPtr processing_config,
       const media::AudioParameters& params,
       const std::string& device_id,
@@ -235,9 +233,8 @@ class InputController final : public StreamMonitor {
   InputController(EventHandler* event_handler,
                   SyncWriter* sync_writer,
                   media::UserInputMonitor* user_input_monitor,
-                  InputStreamActivityMonitor* activity_monitor,
                   DeviceOutputListener* device_output_listener,
-                  AecdumpRecordingManager* aecdump_recording_manager,
+                  media::AecdumpRecordingManager* aecdump_recording_manager,
                   media::mojom::AudioProcessingConfigPtr processing_config,
                   const media::AudioParameters& output_params,
                   const media::AudioParameters& device_params,
@@ -301,7 +298,7 @@ class InputController final : public StreamMonitor {
       const media::AudioParameters& processing_output_params,
       const media::AudioParameters& device_params,
       DeviceOutputListener* device_output_listener,
-      AecdumpRecordingManager* aecdump_recording_manager);
+      media::AecdumpRecordingManager* aecdump_recording_manager);
 
   // Used as a callback for |audio_processor_handler_|.
   void DeliverProcessedAudio(const media::AudioBus& audio_bus,
@@ -344,9 +341,6 @@ class InputController final : public StreamMonitor {
 #endif
 
   const raw_ptr<media::UserInputMonitor> user_input_monitor_;
-
-  // Notified when the stream starts/stops recording.
-  const raw_ptr<InputStreamActivityMonitor> activity_monitor_;
 
 #if defined(AUDIO_POWER_MONITORING)
   // Whether the silence state and microphone levels should be checked and sent

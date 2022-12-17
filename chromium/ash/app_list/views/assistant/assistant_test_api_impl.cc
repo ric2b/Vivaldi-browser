@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,8 +55,7 @@ void AssistantTestApiImpl::DisableAnimations() {
 }
 
 bool AssistantTestApiImpl::IsVisible() {
-  if (!TabletMode::Get()->InTabletMode() &&
-      features::IsProductivityLauncherEnabled()) {
+  if (!TabletMode::Get()->InTabletMode()) {
     return Shell::Get()->app_list_controller()->IsVisible() &&
            GetAppListBubbleView()->assistant_page_->GetVisible();
   }
@@ -75,8 +74,7 @@ void AssistantTestApiImpl::SendTextQuery(const std::string& query) {
 }
 
 views::View* AssistantTestApiImpl::page_view() {
-  if (!TabletMode::Get()->InTabletMode() &&
-      features::IsProductivityLauncherEnabled()) {
+  if (!TabletMode::Get()->InTabletMode()) {
     auto* bubble_view = GetAppListBubbleView();
     DCHECK(bubble_view)
         << "App list is not showing. Display the assistant UI first.";

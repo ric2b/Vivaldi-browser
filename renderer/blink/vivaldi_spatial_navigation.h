@@ -20,10 +20,17 @@ gfx::Rect CORE_EXPORT RevertDeviceScaling(const gfx::Rect& rect, float scale);
 gfx::Rect CORE_EXPORT FindImageElementRect(blink::WebElement element);
 std::string CORE_EXPORT ElementPath(blink::WebElement& element);
 
+bool CORE_EXPORT IsVisible(blink::WebElement element);
+
 blink::ScrollableArea CORE_EXPORT *ScrollableAreaFor(const blink::Node* node);
-void CORE_EXPORT DispatchMouseMoveAt(blink::Element* element);
+
+void CORE_EXPORT HoverElement(blink::Element* element);
+void CORE_EXPORT ClearHover(blink::Element* element);
+
 std::vector<blink::WebElement> CORE_EXPORT
-GetSpatialNavigationElements(blink::WebLocalFrame* frame, float scale);
+GetSpatialNavigationElements(blink::Document* document,
+                             float scale,
+                             std::vector<blink::WebElement>& spatnav_elements);
 
 }  // namespace vivaldi
 

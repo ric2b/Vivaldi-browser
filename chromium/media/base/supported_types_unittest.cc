@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,9 +52,6 @@ TEST(SupportedTypesTest, IsSupportedVideoTypeBasics) {
   EXPECT_FALSE(
       IsSupportedVideoType({VideoCodec::kMPEG2, VIDEO_CODEC_PROFILE_UNKNOWN,
                             kUnspecifiedLevel, kColorSpace}));
-  EXPECT_FALSE(
-      IsSupportedVideoType({VideoCodec::kHEVC, VIDEO_CODEC_PROFILE_UNKNOWN,
-                            kUnspecifiedLevel, kColorSpace}));
 
   // Expect conditional support for the following.
   EXPECT_EQ(kPropCodecsEnabled,
@@ -64,6 +61,16 @@ TEST(SupportedTypesTest, IsSupportedVideoTypeBasics) {
       kMpeg4Supported,
       IsSupportedVideoType({VideoCodec::kMPEG4, VIDEO_CODEC_PROFILE_UNKNOWN,
                             kUnspecifiedLevel, kColorSpace}));
+
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC) && BUILDFLAG(IS_ANDROID)
+  EXPECT_TRUE(
+      IsSupportedVideoType({VideoCodec::kHEVC, VIDEO_CODEC_PROFILE_UNKNOWN,
+                            kUnspecifiedLevel, kColorSpace}));
+#else
+  EXPECT_FALSE(
+      IsSupportedVideoType({VideoCodec::kHEVC, VIDEO_CODEC_PROFILE_UNKNOWN,
+                            kUnspecifiedLevel, kColorSpace}));
+#endif
 }
 
 TEST(SupportedTypesTest, IsSupportedVideoType_VP9TransferFunctions) {
@@ -236,14 +243,13 @@ TEST(SupportedTypesTest, IsSupportedAudioTypeWithSpatialRenderingBasics) {
   EXPECT_FALSE(IsSupportedAudioType({AudioCodec::kMpegHAudio,
                                      AudioCodecProfile::kUnknown,
                                      is_spatial_rendering}));
-#if BUILDFLAG(USE_PROPRIETARY_CODECS) && BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
+#if BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
   EXPECT_FALSE(IsSupportedAudioType(
       {AudioCodec::kDTS, AudioCodecProfile::kUnknown, is_spatial_rendering}));
   EXPECT_FALSE(
       IsSupportedAudioType({AudioCodec::kDTSXP2, AudioCodecProfile::kUnknown,
                             is_spatial_rendering}));
-#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS) &&
-        // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
+#endif  // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
   EXPECT_FALSE(
       IsSupportedAudioType({AudioCodec::kUnknown, AudioCodecProfile::kUnknown,
                             is_spatial_rendering}));
@@ -316,5 +322,45 @@ TEST(SupportedTypesTest, IsSupportedVideoTypeWithHdrMetadataBasics) {
   EXPECT_FALSE(IsSupportedVideoType({VideoCodec::kVP8, VP8PROFILE_ANY,
                                      kUnspecifiedLevel, color_space,
                                      gfx::HdrMetadataType::kSmpteSt2094_40}));
+}
+
+TEST(SupportedTypesTest, IsBuiltInVideoCodec) {
+#if BUILDFLAG(USE_PROPRIETARY_CODECS) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+  EXPECT_TRUE(IsBuiltInVideoCodec(VideoCodec::kH264));
+#else
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kH264));
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS) &&
+        // BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+  EXPECT_TRUE(IsBuiltInVideoCodec(VideoCodec::kTheora));
+#else
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kTheora));
+#endif  // BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS) || BUILDFLAG(ENABLE_LIBVPX)
+  EXPECT_TRUE(IsBuiltInVideoCodec(VideoCodec::kVP8));
+#else
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kVP8));
+#endif  // BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS) || BUILDFLAG(ENABLE_LIBVPX)
+
+#if BUILDFLAG(ENABLE_LIBVPX)
+  EXPECT_TRUE(IsBuiltInVideoCodec(VideoCodec::kVP9));
+#else
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kVP9));
+#endif  // BUILDFLAG(ENABLE_LIBVPX)
+
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+  EXPECT_TRUE(IsBuiltInVideoCodec(VideoCodec::kAV1));
+#else
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kAV1));
+#endif  // BUILDFLAG(ENABLE_AV1_DECODER)
+
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kUnknown));
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kMPEG4));
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kVC1));
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kMPEG2));
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kHEVC));
+  EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kDolbyVision));
 }
 }  // namespace media

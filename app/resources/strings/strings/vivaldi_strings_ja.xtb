@@ -9,6 +9,8 @@
 <translation id="5167047459440711824">警告: 拡張機能による閲覧履歴の記録を Vivaldi で停止することはできません。プライベートモードでこの拡張機能を無効にするには、このオプションの選択を解除してください。</translation>
 <translation id="5288672417093782294">Vivaldi の通知設定に移動</translation>
 <translation id="5743878272102782872">タスクマネージャー - Vivaldi</translation>
+<translation id="6524604576097824284">オンにすると、Vivaldi は非アクティブなタブからメモリを解放します。これにより、アクティブなタブやその他のアプリにより多くのコンピューターリソースが提供され、Vivaldi が高速に維持されます。非アクティブなタブは、タブに戻ると自動的に再びアクティブになります。<ph name="BEGIN_LINK" /> 詳細 <ph name="END_LINK" /></translation>
 <translation id="6569282126279967574">エラー: Vivaldi で問題が発生しました。今すぐ再起動しますか？</translation>
+<translation id="7642161109152167169">オンになっている場合、Vivaldi はバックグラウンドアクティビティとスムーズなスクロールやビデオフレームレートなどの視覚効果を制限することにより、バッテリーの電力を節約します。<ph name="BEGIN_LINK" />詳細<ph name="END_LINK" /></translation>
 <translation id="8031581238030785388">Vivaldi アプリ</translation>
 </translationbundle>

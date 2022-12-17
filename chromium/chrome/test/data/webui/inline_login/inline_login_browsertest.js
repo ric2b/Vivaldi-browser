@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,13 +16,11 @@ GEN('#if BUILDFLAG(IS_CHROMEOS_ASH)');
 GEN('#include "ash/constants/ash_features.h"');
 GEN('#endif');
 
-/* eslint-disable no-var */
-
 var InlineLoginBrowserTest = class extends PolymerTest {
   /** @override */
   get browsePreload() {
     // See Reason enum in components/signin/public/base/signin_metrics.h.
-    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_test.js&reason=5&host=test';
+    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_test.js&reason=5';
   }
 
   get suiteName() {
@@ -52,9 +50,14 @@ TEST_F('InlineLoginBrowserTest', 'BackButton', function() {
 });
 
 GEN('#if BUILDFLAG(IS_CHROMEOS_ASH)');
+TEST_F('InlineLoginBrowserTest', 'OkButton', function() {
+  this.runMochaTest(inline_login_test.TestNames.OkButton);
+});
+GEN('#endif')
+
+GEN('#if BUILDFLAG(IS_CHROMEOS_ASH)');
 // TODO(crbug.com/1347746): Merge this test suite with the test above after the
 // feature is launched.
-// eslint-disable-next-line no-var
 var InlineLoginBrowserTestWithArcAccountRestrictionsEnabled =
     class extends InlineLoginBrowserTest {
   /** @override */
@@ -91,12 +94,11 @@ TEST_F(
       this.runMochaTest(inline_login_test.TestNames.BackButton);
     });
 
-// eslint-disable-next-line no-var
 var InlineLoginWelcomePageBrowserTest = class extends InlineLoginBrowserTest {
   /** @override */
   get browsePreload() {
     // See Reason enum in components/signin/public/base/signin_metrics.h.
-    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_welcome_page_test.js&reason=5&host=test';
+    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_welcome_page_test.js&reason=5';
   }
 
   get suiteName() {
@@ -122,7 +124,6 @@ TEST_F('InlineLoginWelcomePageBrowserTest', 'GoBack', function() {
 
 // TODO(crbug.com/1347746): Make this test the default one, and remove the test
 // suite above when the feature is enabled by default.
-// eslint-disable-next-line no-var
 var InlineLoginWelcomePageBrowserTestWithArcAccountRestrictionsEnabled =
     class extends InlineLoginWelcomePageBrowserTest {
   /** @override */
@@ -173,13 +174,12 @@ TEST_F(
       this.runMochaTest(inline_login_welcome_page_test.TestNames.LinkClick);
     });
 
-// eslint-disable-next-line no-var
 var InlineLoginArcAccountPickerBrowserTest =
     class extends InlineLoginBrowserTest {
   /** @override */
   get browsePreload() {
     // See Reason enum in components/signin/public/base/signin_metrics.h.
-    return 'chrome://chrome-signin/test_loader.html?module=inline_login/arc_account_picker_page_test.js&reason=5&host=test';
+    return 'chrome://chrome-signin/test_loader.html?module=inline_login/arc_account_picker_page_test.js&reason=5';
   }
 
   get suiteName() {
@@ -224,13 +224,12 @@ TEST_F(
           arc_account_picker_page_test.TestNames.MakeAvailableInArc);
     });
 
-// eslint-disable-next-line no-var
 var InlineLoginSigninBlockedByPolicyPageBrowserTest =
     class extends InlineLoginBrowserTest {
   get browsePreload() {
     // Reason 1: Add secondary account.
     // See Reason enum in components/signin/public/base/signin_metrics.h.
-    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_signin_blocked_by_policy_page_test.js&reason=1&host=test';
+    return 'chrome://chrome-signin/test_loader.html?module=inline_login/inline_login_signin_blocked_by_policy_page_test.js&reason=1';
   }
 
   get suiteName() {

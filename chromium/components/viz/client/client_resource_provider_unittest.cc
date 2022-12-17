@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -511,14 +511,14 @@ TEST_P(ClientResourceProviderTest, ReturnedSyncTokensArePassedToClient) {
   gpu::Mailbox mailbox = sii->CreateSharedImage(
       ResourceFormat::RGBA_8888, gfx::Size(1, 1), gfx::ColorSpace(),
       kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
-      gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_DISPLAY,
+      gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_DISPLAY_READ,
       gpu::kNullSurfaceHandle);
   gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
 
   constexpr gfx::Size size(64, 64);
-  auto tran = TransferableResource::MakeGL(mailbox, GL_LINEAR, GL_TEXTURE_2D,
-                                           sync_token, size,
-                                           false /* is_overlay_candidate */);
+  auto tran = TransferableResource::MakeGpu(mailbox, GL_LINEAR, GL_TEXTURE_2D,
+                                            sync_token, size, RGBA_8888,
+                                            false /* is_overlay_candidate */);
   ResourceId resource = provider().ImportResource(
       tran, base::BindOnce(&MockReleaseCallback::Released,
                            base::Unretained(&release)));

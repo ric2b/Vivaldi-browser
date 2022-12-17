@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,8 +22,6 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.AsyncTask;
-import org.chromium.base.task.PostTask;
-import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
@@ -192,7 +190,9 @@ public class ChromeSurveyController implements InfoBarAnimationListener {
      */
     @VisibleForTesting
     void onSurveyAvailable(String siteId) {
-        if (attemptToShowOnTab(mTabModelSelector.getCurrentTab(), siteId)) return;
+        if (!isUMAEnabled() || attemptToShowOnTab(mTabModelSelector.getCurrentTab(), siteId)) {
+            return;
+        }
 
         mTabModelObserver = new TabModelSelectorObserver() {
             @Override
@@ -213,6 +213,13 @@ public class ChromeSurveyController implements InfoBarAnimationListener {
      * @return If the survey prompt was successfully shown.
      */
     private boolean attemptToShowOnTab(Tab tab, String siteId) {
+        if (!isUMAEnabled()) {
+            if (mTabModelObserver != null) {
+                mTabModelSelector.removeObserver(mTabModelObserver);
+                mTabModelObserver = null;
+            }
+            return false;
+        }
         if (!isValidTabForSurvey(tab)) return false;
 
         if (tab.isLoading() || !tab.isUserInteractable()) {
@@ -245,10 +252,7 @@ public class ChromeSurveyController implements InfoBarAnimationListener {
                 String logMessage = String.format(
                         "The survey prompt for survey with ID %s has already been shown.", siteId);
                 Log.w(TAG, logMessage);
-                PostTask.postTask(TaskTraits.BEST_EFFORT_MAY_BLOCK,
-                        ()
-                                -> ChromePureJavaExceptionReporter.reportJavaException(
-                                        new Throwable(logMessage)));
+                ChromePureJavaExceptionReporter.reportJavaException(new Throwable(logMessage));
                 return;
             }
 
@@ -259,10 +263,7 @@ public class ChromeSurveyController implements InfoBarAnimationListener {
                                         + "with ID %s has expired.",
                                 siteId);
                 Log.w(TAG, logMessage);
-                PostTask.postTask(TaskTraits.BEST_EFFORT_MAY_BLOCK,
-                        ()
-                                -> ChromePureJavaExceptionReporter.reportJavaException(
-                                        new Throwable(logMessage)));
+                ChromePureJavaExceptionReporter.reportJavaException(new Throwable(logMessage));
                 return;
             }
             Resources resources = mActivity.getResources();
@@ -291,13 +292,16 @@ public class ChromeSurveyController implements InfoBarAnimationListener {
             // Dismiss an enqueued message when the survey has expired so that it does not get shown
             // subsequently.
             message.set(MessageBannerProperties.ON_STARTED_SHOWING, () -> {
-                if (!SurveyController.getInstance().isSurveyExpired(siteId)) {
+                boolean surveyExpired = SurveyController.getInstance().isSurveyExpired(siteId);
+                if (!surveyExpired && isUMAEnabled()) {
                     return true;
                 }
-                Log.w(TAG,
-                        "The survey message prompt was dismissed because the survey "
-                                + "with ID %s has expired.",
-                        siteId);
+                if (surveyExpired) {
+                    Log.w(TAG,
+                            "The survey message prompt was dismissed because the survey "
+                                    + "with ID %s has expired.",
+                            siteId);
+                }
                 new Handler(ThreadUtils.getUiThreadLooper())
                         .post(()
                                         -> mMessageDispatcher.dismissMessage(
@@ -327,10 +331,8 @@ public class ChromeSurveyController implements InfoBarAnimationListener {
                                             + " because the survey with ID %s has expired.",
                                     siteId);
                             Log.w(TAG, logMessage);
-                            PostTask.postTask(TaskTraits.BEST_EFFORT_MAY_BLOCK,
-                                    ()
-                                            -> ChromePureJavaExceptionReporter.reportJavaException(
-                                                    new Throwable(logMessage)));
+                            ChromePureJavaExceptionReporter.reportJavaException(
+                                    new Throwable(logMessage));
                             mMessageDispatcher.dismissMessage(
                                     message, DismissReason.DISMISSED_BY_FEATURE);
                         }
@@ -435,8 +437,9 @@ public class ChromeSurveyController implements InfoBarAnimationListener {
     @VisibleForTesting
     void showInfoBarIfApplicable(Tab tab, String siteId, TabObserver observer) {
         if (!tab.isUserInteractable() || tab.isLoading()) return;
-
-        showSurveyPrompt(tab, siteId);
+        if (isUMAEnabled()) {
+            showSurveyPrompt(tab, siteId);
+        }
         tab.removeObserver(observer);
     }
 

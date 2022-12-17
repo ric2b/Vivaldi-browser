@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,10 @@ namespace content {
 class RenderFrameHost;
 class WebContents;
 class WebUI;
+}
+
+namespace extensions {
+class WebViewGuest;
 }
 
 namespace signin {
@@ -39,7 +43,7 @@ using SigninChoiceCallback = base::OnceCallback<void(SigninChoice)>;
 content::RenderFrameHost* GetAuthFrame(content::WebContents* web_contents,
                                        const std::string& parent_frame_name);
 
-content::WebContents* GetAuthFrameWebContents(
+extensions::WebViewGuest* GetAuthWebViewGuest(
     content::WebContents* web_contents,
     const std::string& parent_frame_name);
 

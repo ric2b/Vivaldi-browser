@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,8 @@
 #include "components/crx_file/id_util.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_set.h"
+
+namespace app_list {
 
 const char AppListTestBase::kHostedAppId[] = "dceacbkfkmllgmjmbhgkpjegnodmildf";
 const char AppListTestBase::kPackagedApp1Id[] =
@@ -135,3 +137,5 @@ syncer::SyncData CreateAppRemoteData(
   return syncer::SyncData::CreateRemoteData(
       specifics, syncer::ClientTagHash::FromHashed("unused"));
 }
+
+}  // namespace app_list

@@ -1,10 +1,9 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/services/app_service/public/cpp/intent_util.h"
 
-#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,6 +13,7 @@
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -366,8 +366,8 @@ bool FileMatchesConditionValue(
 bool FileMatchesAnyConditionValue(
     const apps::mojom::IntentFilePtr& file,
     const std::vector<apps::mojom::ConditionValuePtr>& condition_values) {
-  return std::any_of(
-      condition_values.begin(), condition_values.end(),
+  return base::ranges::any_of(
+      condition_values,
       [&file](const apps::mojom::ConditionValuePtr& condition_value) {
         return FileMatchesConditionValue(file, condition_value);
       });
@@ -381,11 +381,10 @@ bool IntentMatchesFileCondition(const apps::mojom::IntentPtr& intent,
     return false;
   }
 
-  return std::all_of(intent->files->begin(), intent->files->end(),
-                     [&condition](const apps::mojom::IntentFilePtr& file) {
-                       return FileMatchesAnyConditionValue(
-                           file, condition->condition_values);
-                     });
+  return base::ranges::all_of(
+      *intent->files, [&condition](const apps::mojom::IntentFilePtr& file) {
+        return FileMatchesAnyConditionValue(file, condition->condition_values);
+      });
 }
 
 bool IntentMatchesCondition(const apps::mojom::IntentPtr& intent,
@@ -396,16 +395,12 @@ bool IntentMatchesCondition(const apps::mojom::IntentPtr& intent,
 
   absl::optional<std::string> value_to_match =
       GetIntentConditionValueByType(condition->condition_type, intent);
-  if (!value_to_match.has_value()) {
-    return false;
-  }
-
-  bool matched_any = std::any_of(
-      condition->condition_values.begin(), condition->condition_values.end(),
-      [&value_to_match](const auto& condition_value) {
-        return ConditionValueMatches(value_to_match.value(), condition_value);
-      });
-  return matched_any;
+  return value_to_match.has_value() &&
+         base::ranges::any_of(condition->condition_values,
+                              [&value_to_match](const auto& condition_value) {
+                                return ConditionValueMatches(
+                                    value_to_match.value(), condition_value);
+                              });
 }
 
 bool IntentMatchesFilter(const apps::mojom::IntentPtr& intent,
@@ -684,9 +679,6 @@ bool OnlyShareToDrive(const apps::mojom::IntentPtr& intent) {
 }
 
 bool IsIntentValid(const apps::mojom::IntentPtr& intent) {
-  // TODO(crbug.com/853604):Add more checks here to make this a general intent
-  // validity check. Return false if this is a share intent with no file or
-  // text.
   if (IsShareIntent(intent))
     return intent->share_text || intent->files;
 
@@ -842,22 +834,26 @@ apps::IntentPtr ConvertValueToIntent(base::Value&& value) {
   if (!dict)
     return nullptr;
 
-  auto action = GetStringValueFromDict(*dict, kActionKey);
+  return ConvertDictToIntent(*dict);
+}
+
+apps::IntentPtr ConvertDictToIntent(const base::Value::Dict& dict) {
+  auto action = GetStringValueFromDict(dict, kActionKey);
   if (!action.has_value())
     return nullptr;
   auto intent = std::make_unique<apps::Intent>(action.value());
-  intent->url = GetGurlValueFromDict(*dict, kUrlKey);
-  intent->mime_type = GetStringValueFromDict(*dict, kMimeTypeKey);
-  intent->files = GetFilesFromDict(*dict, kFileUrlsKey);
-  intent->activity_name = GetStringValueFromDict(*dict, kActivityNameKey);
-  intent->drive_share_url = GetGurlValueFromDict(*dict, kDriveShareUrlKey);
-  intent->share_text = GetStringValueFromDict(*dict, kShareTextKey);
-  intent->share_title = GetStringValueFromDict(*dict, kShareTitleKey);
-  intent->start_type = GetStringValueFromDict(*dict, kStartTypeKey);
-  intent->categories = GetCategoriesFromDict(*dict, kCategoriesKey);
-  intent->data = GetStringValueFromDict(*dict, kDataKey);
-  intent->ui_bypassed = GetBoolValueFromDict(*dict, kUiBypassedKey);
-  intent->extras = GetExtrasFromDict(*dict, kExtrasKey);
+  intent->url = GetGurlValueFromDict(dict, kUrlKey);
+  intent->mime_type = GetStringValueFromDict(dict, kMimeTypeKey);
+  intent->files = GetFilesFromDict(dict, kFileUrlsKey);
+  intent->activity_name = GetStringValueFromDict(dict, kActivityNameKey);
+  intent->drive_share_url = GetGurlValueFromDict(dict, kDriveShareUrlKey);
+  intent->share_text = GetStringValueFromDict(dict, kShareTextKey);
+  intent->share_title = GetStringValueFromDict(dict, kShareTitleKey);
+  intent->start_type = GetStringValueFromDict(dict, kStartTypeKey);
+  intent->categories = GetCategoriesFromDict(dict, kCategoriesKey);
+  intent->data = GetStringValueFromDict(dict, kDataKey);
+  intent->ui_bypassed = GetBoolValueFromDict(dict, kUiBypassedKey);
+  intent->extras = GetExtrasFromDict(dict, kExtrasKey);
 
   return intent;
 }

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,6 @@ const AutomationNode = chrome.automation.AutomationNode;
 const RoleType = chrome.automation.RoleType;
 
 export class AutomationUtil {
-  constructor() {}
-
   /**
    * Find a node in subtree of |cur| satisfying |pred| using pre-order
    * traversal.

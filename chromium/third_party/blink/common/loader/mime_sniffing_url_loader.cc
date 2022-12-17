@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,7 +94,8 @@ void MimeSniffingURLLoader::OnReceiveEarlyHints(
 
 void MimeSniffingURLLoader::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr response_head,
-    mojo::ScopedDataPipeConsumerHandle body) {
+    mojo::ScopedDataPipeConsumerHandle body,
+    absl::optional<mojo_base::BigBuffer> cached_metadata) {
   // OnReceiveResponse() shouldn't be called because MimeSniffingURLLoader is
   // created by MimeSniffingThrottle::WillProcessResponse(), which is equivalent
   // to OnReceiveResponse().
@@ -116,10 +117,6 @@ void MimeSniffingURLLoader::OnUploadProgress(
     OnUploadProgressCallback ack_callback) {
   destination_url_loader_client_->OnUploadProgress(current_position, total_size,
                                                    std::move(ack_callback));
-}
-
-void MimeSniffingURLLoader::OnReceiveCachedMetadata(mojo_base::BigBuffer data) {
-  destination_url_loader_client_->OnReceiveCachedMetadata(std::move(data));
 }
 
 void MimeSniffingURLLoader::OnTransferSizeUpdated(int32_t transfer_size_diff) {
@@ -212,6 +209,7 @@ void MimeSniffingURLLoader::OnBodyReadable(MojoResult) {
       CompleteSniffing();
       return;
     case MOJO_RESULT_SHOULD_WAIT:
+      buffered_body_.resize(start_size);
       body_consumer_watcher_.ArmOrNotify();
       return;
     default:

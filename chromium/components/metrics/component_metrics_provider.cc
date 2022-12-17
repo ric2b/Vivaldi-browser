@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,6 +70,8 @@ SystemProfileProto_ComponentId CrxIdToComponentId(const std::string& app_id) {
            SystemProfileProto_ComponentId_ZXCVBN_DATA},
           {"aemllinfpjdgcldgaelcgakpjmaekbai",
            SystemProfileProto_ComponentId_WEBVIEW_APPS_PACKAGE_NAMES_ALLOWLIST},
+          {"ggkkehgbnfjpeggfpleeakpidbkibbmn",
+           SystemProfileProto_ComponentId_CROWD_DENY},
       });
 
   const auto* result = kComponentMap.find(app_id);

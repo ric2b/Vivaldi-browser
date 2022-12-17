@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@ import '../strings.m.js';
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {skColorToRgba} from 'chrome://resources/js/color_utils.js';
-import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {WebUIListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -69,17 +69,26 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   }
 
   private buildNode_(nodeId: number): Node|null {
-    const htmlTag = chrome.readAnything.getHtmlTag(nodeId);
+    let htmlTag = chrome.readAnything.getHtmlTag(nodeId);
     // Text nodes do not have an html tag.
     if (!htmlTag.length) {
       const textContent = chrome.readAnything.getTextContent(nodeId);
       return document.createTextNode(textContent);
+    }
+    // getHtmlTag might return '#document' which is not a valid to pass to
+    // createElement.
+    if (htmlTag === '#document') {
+      htmlTag = 'div';
     }
 
     const element = document.createElement(htmlTag);
     const url = chrome.readAnything.getUrl(nodeId);
     if (url) {
       element.setAttribute('href', url);
+    }
+    const language = chrome.readAnything.getLanguage(nodeId);
+    if (language) {
+      element.setAttribute('lang', language);
     }
     this.appendChildNodes_(element, nodeId);
     return element;
@@ -113,7 +122,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     // would create a shadow node element representing each AXNode, because
     // experimentation found the shadow node creation to be ~8-10x slower than
     // constructing and appending nodes directly to the container element.
-    for (const nodeId of chrome.readAnything.contentNodeIds) {
+    for (const nodeId of chrome.readAnything.displayNodeIds) {
       const node = this.buildNode_(nodeId);
       if (node) {
         container.appendChild(node);
@@ -135,10 +144,12 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
         SkColor = {value: chrome.readAnything.backgroundColor};
 
     this.updateStyles({
-      '--foreground-color': skColorToRgba(foregroundColor),
       '--background-color': skColorToRgba(backgroundColor),
-      '--read-anything-font-family': this.validatedFontName(),
-      '--read-anything-font-size': chrome.readAnything.fontSize + 'px',
+      '--font-family': this.validatedFontName(),
+      '--font-size': chrome.readAnything.fontSize + 'em',
+      '--foreground-color': skColorToRgba(foregroundColor),
+      '--letter-spacing': chrome.readAnything.letterSpacing + 'em',
+      '--line-height': chrome.readAnything.lineSpacing,
     });
   }
 }

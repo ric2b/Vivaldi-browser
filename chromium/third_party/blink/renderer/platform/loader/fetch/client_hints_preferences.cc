@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,9 +92,9 @@ bool ClientHintsPreferences::UpdateFromMetaCH(
 
   if (context) {
     for (const auto& elem : network::GetClientHintToNameMap()) {
-      const auto& type = elem.first;
-      if (enabled_hints_.IsEnabled(type))
-        context->CountClientHints(type);
+      const auto& hint_type = elem.first;
+      if (enabled_hints_.IsEnabled(hint_type))
+        context->CountClientHints(hint_type);
     }
   }
   return true;

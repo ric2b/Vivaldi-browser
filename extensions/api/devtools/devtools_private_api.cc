@@ -66,7 +66,6 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
 
   int tab_id = params->tab_id;
   bool success = false;
-  content::WebContents* contents;
 
   if (params->window_id) {
     int window_id = *params->window_id;
@@ -79,8 +78,8 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
               DevToolsWindow::GetInstanceForInspectedWebContents(contents);
           if (window) {
             window->ForceCloseWindow();
-            int tab_id = sessions::SessionTabHelper::IdForTab(contents).id();
-            DevtoolsConnectorAPI::SendClosed(browser_context(), tab_id);
+            int tab_id_w = sessions::SessionTabHelper::IdForTab(contents).id();
+            DevtoolsConnectorAPI::SendClosed(browser_context(), tab_id_w);
           }
         }
         success = true;
@@ -88,6 +87,7 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
       }
     }
   } else {
+    content::WebContents* contents = nullptr;
     Browser* browser;
     int tab_index;
 
@@ -113,10 +113,11 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   PanelType panelType = params->panel_type;
+  int windowId = params->window_id;
 
-  // Note this is always called via an action where the last active browser
-  // makes the most sense.
-  Browser* browser = BrowserList::GetInstance()->GetLastActive();
+  Browser* browser =
+      ::vivaldi::FindBrowserByWindowId(windowId);
+
   content::WebContents* current_tab =
       browser->tab_strip_model()->GetActiveWebContents();
   DevToolsWindow* window =

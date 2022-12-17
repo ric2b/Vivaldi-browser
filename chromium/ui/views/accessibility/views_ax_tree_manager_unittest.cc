@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -147,7 +147,7 @@ void ViewsAXTreeManagerTest::CloseWidget() {
 ui::AXNode* ViewsAXTreeManagerTest::FindNode(
     const ax::mojom::Role role,
     const std::string& name_or_value) const {
-  ui::AXNode* root = manager()->GetRootAsAXNode();
+  ui::AXNode* root = manager()->GetRoot();
 
   // If the manager has been closed, it will return nullptr as root.
   if (!root)

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,7 +75,7 @@ class WebRtcInternalsPerfBrowserTest : public WebRtcTestBase {
     absl::optional<base::Value> parsed_json =
         base::JSONReader::Read(all_stats_json);
     if (parsed_json.has_value() && parsed_json->is_dict()) {
-      return absl::make_optional(std::move(parsed_json->GetDict()));
+      return absl::make_optional(std::move(*parsed_json).TakeDict());
     }
 
     return absl::nullopt;
@@ -163,7 +163,7 @@ class WebRtcInternalsPerfBrowserTest : public WebRtcTestBase {
 
     const base::Value::Dict* first_pc_dict =
         GetDataOnPeerConnection(all_data.value(), 0);
-    ASSERT_TRUE(first_pc_dict != NULL);
+    ASSERT_TRUE(first_pc_dict != nullptr);
     const std::string print_modifier = video_codec_print_modifier.empty()
                                            ? video_codec
                                            : video_codec_print_modifier;
@@ -224,7 +224,7 @@ class WebRtcInternalsPerfBrowserTest : public WebRtcTestBase {
     // data store, and the receiving second.
     const base::Value::Dict* first_pc_dict =
         GetDataOnPeerConnection(all_data.value(), 0);
-    ASSERT_TRUE(first_pc_dict != NULL);
+    ASSERT_TRUE(first_pc_dict != nullptr);
     test::PrintBweForVideoMetrics(
         *first_pc_dict, MakePerfTestLabel("_sendonly", opus_dtx), video_codec);
     test::PrintMetricsForSendStreams(
@@ -232,7 +232,7 @@ class WebRtcInternalsPerfBrowserTest : public WebRtcTestBase {
 
     const base::Value::Dict* second_pc_dict =
         GetDataOnPeerConnection(all_data.value(), 1);
-    ASSERT_TRUE(second_pc_dict != NULL);
+    ASSERT_TRUE(second_pc_dict != nullptr);
     test::PrintBweForVideoMetrics(
         *second_pc_dict, MakePerfTestLabel("_recvonly", opus_dtx), video_codec);
     test::PrintMetricsForRecvStreams(

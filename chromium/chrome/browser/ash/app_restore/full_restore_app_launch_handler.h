@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,8 +22,7 @@ enum class AppTypeName;
 
 class Profile;
 
-namespace ash {
-namespace full_restore {
+namespace ash::full_restore {
 
 // This is used for logging, so do not remove or reorder existing entries.
 enum class RestoreTabResult {
@@ -186,7 +185,6 @@ class ScopedLaunchBrowserForTesting {
   ~ScopedLaunchBrowserForTesting();
 };
 
-}  // namespace full_restore
-}  // namespace ash
+}  // namespace ash::full_restore
 
 #endif  // CHROME_BROWSER_ASH_APP_RESTORE_FULL_RESTORE_APP_LAUNCH_HANDLER_H_

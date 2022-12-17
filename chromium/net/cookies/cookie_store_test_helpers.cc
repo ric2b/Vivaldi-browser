@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,10 +72,8 @@ DelayedCookieMonsterChangeDispatcher::AddCallbackForAllChanges(
 }
 
 DelayedCookieMonster::DelayedCookieMonster()
-    : cookie_monster_(std::make_unique<CookieMonster>(
-          nullptr /* store */,
-          nullptr /* netlog */,
-          false /* first_party_sets_enabled */)),
+    : cookie_monster_(std::make_unique<CookieMonster>(nullptr /* store */,
+                                                      nullptr /* netlog */)),
       result_(CookieAccessResult(CookieInclusionStatus(
           CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE))) {}
 

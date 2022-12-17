@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,7 +72,8 @@ void BrowserAccessibilityFuchsia::OnDataChanged() {
 
   // Declare this node as the fuchsia tree root if it's the root of the main
   // frame's tree.
-  if (manager()->IsRootTree() && manager()->GetRoot() == this) {
+  if (manager()->IsRootFrameManager() &&
+      manager()->GetBrowserAccessibilityRoot() == this) {
     ui::AccessibilityBridgeFuchsia* accessibility_bridge =
         GetAccessibilityBridge();
     if (accessibility_bridge)
@@ -372,7 +373,7 @@ fuchsia::ui::gfx::mat4 BrowserAccessibilityFuchsia::GetFuchsiaTransform()
 
   // Convert to fuchsia's transform type.
   std::array<float, 16> mat = {};
-  transform.matrix().getColMajor(mat.data());
+  transform.GetColMajorF(mat.data());
   fuchsia::ui::gfx::Matrix4Value fuchsia_transform =
       scenic::NewMatrix4Value(mat);
   return fuchsia_transform.value;
@@ -382,7 +383,7 @@ uint32_t BrowserAccessibilityFuchsia::GetOffsetContainerOrRootNodeID() const {
   int offset_container_id = GetData().relative_bounds.offset_container_id;
 
   BrowserAccessibility* offset_container =
-      offset_container_id == -1 ? manager()->GetRoot()
+      offset_container_id == -1 ? manager()->GetBrowserAccessibilityRoot()
                                 : manager()->GetFromID(offset_container_id);
 
   BrowserAccessibilityFuchsia* fuchsia_container =
@@ -425,7 +426,8 @@ bool BrowserAccessibilityFuchsia::IsListElement() const {
 bool BrowserAccessibilityFuchsia::AccessibilityPerformAction(
     const ui::AXActionData& action_data) {
   if (action_data.action == ax::mojom::Action::kHitTest) {
-    BrowserAccessibilityManager* root_manager = manager()->GetRootManager();
+    BrowserAccessibilityManager* root_manager =
+        manager()->GetManagerForRootFrame();
     DCHECK(root_manager);
 
     ui::AccessibilityBridgeFuchsia* accessibility_bridge =

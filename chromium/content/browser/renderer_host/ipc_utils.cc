@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -233,14 +233,14 @@ bool VerifyNavigationInitiator(
   // frame has the same fenced frame nonce as the initiator frame (e.g. in a
   // A(A1,A2(FF)) setup, A, A1, and A2 are all allowed to navigate FF).
   absl::optional<base::UnguessableToken> initiator_fenced_frame_nonce =
-      initiator_render_frame_host->frame_tree_node()->fenced_frame_nonce();
+      initiator_render_frame_host->frame_tree_node()->GetFencedFrameNonce();
   if (initiator_fenced_frame_nonce !=
-      current_rfh->frame_tree_node()->fenced_frame_nonce()) {
+      current_rfh->frame_tree_node()->GetFencedFrameNonce()) {
     if (!current_rfh->IsFencedFrameRoot() ||
         current_rfh->frame_tree_node()
                 ->GetParentOrOuterDocument()
                 ->frame_tree_node()
-                ->fenced_frame_nonce() != initiator_fenced_frame_nonce) {
+                ->GetFencedFrameNonce() != initiator_fenced_frame_nonce) {
       mojo::ReportBadMessage(
           "The fenced frame nonces of initiator and current frame don't match, "
           "nor is the current frame a fenced frame root whose owner frame has "

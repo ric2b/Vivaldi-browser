@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,16 +9,14 @@
 #include <string>
 #include <vector>
 
-#include "ash/public/cpp/style/color_mode_observer.h"
-#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/ui/views/extensions/extension_dialog_observer.h"
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/color/color_provider_source_observer.h"
 #include "ui/gfx/native_widget_types.h"  // gfx::NativeWindow
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "url/gurl.h"
 
-class ExtensionDialog;
 class Profile;
 
 namespace aura {
@@ -37,9 +35,7 @@ class SelectFilePolicy;
 
 // Shows a dialog box for selecting a file or a folder, using the
 // file manager extension implementation.
-class SelectFileDialogExtension : public ui::SelectFileDialog,
-                                  public ExtensionDialogObserver,
-                                  public ash::ColorModeObserver {
+class SelectFileDialogExtension : public ui::SelectFileDialog {
  public:
   // Opaque ID type for identifying the tab spawned each dialog, unique for
   // every WebContents or every Android task ID.
@@ -55,13 +51,6 @@ class SelectFileDialogExtension : public ui::SelectFileDialog,
   // ui::SelectFileDialog:
   bool IsRunning(gfx::NativeWindow owner_window) const override;
   void ListenerDestroyed() override;
-
-  // ExtensionDialogObserver:
-  void ExtensionDialogClosing(ExtensionDialog* dialog) override;
-  void ExtensionTerminated(ExtensionDialog* dialog) override;
-
-  // ash::ColorModeObserver:
-  void OnColorModeChanged(bool dark_mode_enabled) override;
 
   // Routes callback to appropriate SelectFileDialog::Listener based on the
   // owning |web_contents|.
@@ -96,6 +85,11 @@ class SelectFileDialogExtension : public ui::SelectFileDialog,
   struct Owner {
     Owner();
     ~Owner();
+    Owner(const Owner&);
+    Owner& operator=(const Owner&);
+    Owner(Owner&&);
+    Owner& operator=(Owner&&);
+
     // The native window that opened the dialog.
     aura::Window* window = nullptr;
     // Android task ID if the owner window is an Android app.
@@ -106,6 +100,10 @@ class SelectFileDialogExtension : public ui::SelectFileDialog,
     absl::optional<std::string> lacros_window_id;
     // Set to true only if SelectFileAsh opened the dialog.
     bool is_lacros = false;
+    // The URL or Component type of the caller that opened the dialog (Save
+    // As/File Picker).
+    absl::optional<policy::DlpFilesController::DlpFileDestination>
+        dialog_caller;
   };
   void SelectFileWithFileManagerParams(Type type,
                                        const std::u16string& title,
@@ -127,7 +125,8 @@ class SelectFileDialogExtension : public ui::SelectFileDialog,
                       int file_type_index,
                       const base::FilePath::StringType& default_extension,
                       gfx::NativeWindow owning_window,
-                      void* params) override;
+                      void* params,
+                      const GURL* caller) override;
   bool HasMultipleFileTypeChoicesImpl() override;
 
  private:
@@ -135,6 +134,10 @@ class SelectFileDialogExtension : public ui::SelectFileDialog,
   friend class SelectFileDialogExtensionTest;
   friend class SelectFileDialogExtensionTestFactory;
   friend class SystemFilesAppDialogDelegate;
+  FRIEND_TEST_ALL_PREFIXES(SelectFileDialogExtensionTest, FileSelected);
+  FRIEND_TEST_ALL_PREFIXES(SelectFileDialogExtensionTest,
+                           FileSelectionCanceled);
+  FRIEND_TEST_ALL_PREFIXES(SelectFileDialogExtensionTest, SelfDeleting);
 
   // For the benefit of SystemFilesAppDialogDelegate.
   void OnSystemDialogShown(content::WebContents* content,
@@ -162,9 +165,6 @@ class SelectFileDialogExtension : public ui::SelectFileDialog,
 
   bool has_multiple_file_type_choices_ = false;
 
-  // Host for the extension that implements this dialog.
-  scoped_refptr<ExtensionDialog> extension_dialog_;
-
   // If System Files App is enabled it stores the web contents associated with
   // System File App dialog. Not owned by this class. Set only while System
   // Files App dialog is opened.
@@ -176,8 +176,8 @@ class SelectFileDialogExtension : public ui::SelectFileDialog,
   // Pointer to the profile the dialog is running in.
   Profile* profile_ = nullptr;
 
-  // The window that created the dialog.
-  aura::Window* owner_window_ = nullptr;
+  // Information about the dialog's owner, such as the window or app type.
+  Owner owner_;
 
   // We defer the callback into SelectFileDialog::Listener until the window
   // closes, to match the semantics of file selection on Windows and Mac.

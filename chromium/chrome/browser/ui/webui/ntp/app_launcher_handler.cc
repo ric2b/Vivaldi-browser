@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -672,12 +672,12 @@ void AppLauncherHandler::FillAppDictionary(base::Value::Dict* dictionary) {
                                          deprecated_app_ids_.size()));
 
   const base::Value::List& app_page_names =
-      prefs->GetValueList(prefs::kNtpAppPageNames);
+      prefs->GetList(prefs::kNtpAppPageNames);
   if (!app_page_names.size()) {
-    ListPrefUpdate update(prefs, prefs::kNtpAppPageNames);
-    base::Value* list = update.Get();
-    list->Append(l10n_util::GetStringUTF16(IDS_APP_DEFAULT_PAGE_NAME));
-    dictionary->Set("appPageNames", list->Clone());
+    ScopedListPrefUpdate update(prefs, prefs::kNtpAppPageNames);
+    base::Value::List& list = update.Get();
+    list.Append(l10n_util::GetStringUTF16(IDS_APP_DEFAULT_PAGE_NAME));
+    dictionary->Set("appPageNames", list.Clone());
   } else {
     dictionary->Set("appPageNames", app_page_names.Clone());
   }
@@ -994,7 +994,7 @@ void AppLauncherHandler::HandleUninstallApp(const base::Value::List& args) {
     } else {
       auto uninstall_success_callback = base::BindOnce(
           [](base::WeakPtr<AppLauncherHandler> app_launcher_handler,
-             bool success) {
+             webapps::UninstallResultCode code) {
             if (app_launcher_handler) {
               app_launcher_handler->CleanupAfterUninstall();
             }
@@ -1173,12 +1173,12 @@ void AppLauncherHandler::HandleSaveAppPageName(const base::Value::List& args) {
 
   base::AutoReset<bool> auto_reset(&ignore_changes_, true);
   PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
-  ListPrefUpdate update(prefs, prefs::kNtpAppPageNames);
-  base::Value* list = update.Get();
-  if (page_index < list->GetListDeprecated().size()) {
-    list->GetListDeprecated()[page_index] = base::Value(name);
+  ScopedListPrefUpdate update(prefs, prefs::kNtpAppPageNames);
+  base::Value::List& list = update.Get();
+  if (page_index < list.size()) {
+    list[page_index] = base::Value(name);
   } else {
-    list->Append(name);
+    list.Append(name);
   }
 }
 

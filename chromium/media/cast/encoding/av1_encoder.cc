@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "media/cast/common/sender_encoded_frame.h"
 #include "media/cast/constants.h"
 #include "third_party/libaom/source/libaom/aom/aomcx.h"
+#include "third_party/openscreen/src/cast/streaming/encoded_frame.h"
 
 namespace media {
 namespace cast {
@@ -191,15 +192,15 @@ void Av1Encoder::Encode(scoped_refptr<media::VideoFrame> video_frame,
   aom_image_t aom_image;
   aom_image_t* const result = aom_img_wrap(
       &aom_image, aom_format, frame_size.width(), frame_size.height(), 1,
-      video_frame->data(VideoFrame::kYPlane));
+      video_frame->writable_data(VideoFrame::kYPlane));
   DCHECK_EQ(result, &aom_image);
 
   aom_image.planes[AOM_PLANE_Y] =
-      video_frame->visible_data(VideoFrame::kYPlane);
+      video_frame->GetWritableVisibleData(VideoFrame::kYPlane);
   aom_image.planes[AOM_PLANE_U] =
-      video_frame->visible_data(VideoFrame::kUPlane);
+      video_frame->GetWritableVisibleData(VideoFrame::kUPlane);
   aom_image.planes[AOM_PLANE_V] =
-      video_frame->visible_data(VideoFrame::kVPlane);
+      video_frame->GetWritableVisibleData(VideoFrame::kVPlane);
   aom_image.stride[AOM_PLANE_Y] = video_frame->stride(VideoFrame::kYPlane);
   aom_image.stride[AOM_PLANE_U] = video_frame->stride(VideoFrame::kUPlane);
   aom_image.stride[AOM_PLANE_V] = video_frame->stride(VideoFrame::kVPlane);
@@ -245,10 +246,12 @@ void Av1Encoder::Encode(scoped_refptr<media::VideoFrame> video_frame,
       continue;
     if (pkt->data.frame.flags & AOM_FRAME_IS_KEY) {
       // TODO(hubbe): Replace "dependency" with a "bool is_key_frame".
-      encoded_frame->dependency = EncodedFrame::KEY;
+      encoded_frame->dependency =
+          openscreen::cast::EncodedFrame::Dependency::kKeyFrame;
       encoded_frame->referenced_frame_id = encoded_frame->frame_id;
     } else {
-      encoded_frame->dependency = EncodedFrame::DEPENDENT;
+      encoded_frame->dependency =
+          openscreen::cast::EncodedFrame::Dependency::kDependent;
       // Frame dependencies could theoretically be relaxed by looking for the
       // AOM_FRAME_IS_DROPPABLE flag, but in recent testing (Oct 2014), this
       // flag never seems to be set.
@@ -297,7 +300,8 @@ void Av1Encoder::Encode(scoped_refptr<media::VideoFrame> video_frame,
            << ", lossiness: " << encoded_frame->lossiness
            << " (quantizer chosen by the encoder was " << quantizer << ')';
 
-  if (encoded_frame->dependency == EncodedFrame::KEY) {
+  if (encoded_frame->dependency ==
+      openscreen::cast::EncodedFrame::Dependency::kKeyFrame) {
     key_frame_requested_ = false;
     encoding_speed_acc_.Reset(kHighestEncodingSpeed, video_frame->timestamp());
   } else {

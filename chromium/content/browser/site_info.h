@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,10 +45,13 @@ class CONTENT_EXPORT SiteInfo {
   // Helper to create a SiteInfo that will be used for an error page.  This is
   // used only when error page isolation is enabled.  Note that when site
   // isolation for guests is enabled, an error page SiteInfo may also be
-  // associated with a guest.
+  // associated with a guest. Similarly, when process isolation for fenced
+  // frames is enabled, error pages inside fenced frames will be isolated from
+  // embedders.
   static SiteInfo CreateForErrorPage(
       const StoragePartitionConfig storage_partition_config,
-      bool is_guest);
+      bool is_guest,
+      bool is_fenced);
 
   // Helper to create a SiteInfo for default SiteInstances.  Default
   // SiteInstances are used for non-isolated sites on platforms without strict
@@ -137,7 +140,8 @@ class CONTENT_EXPORT SiteInfo {
            bool is_guest,
            bool does_site_request_dedicated_process_for_coop,
            bool is_jit_disabled,
-           bool is_pdf);
+           bool is_pdf,
+           bool is_fenced);
   SiteInfo() = delete;
   SiteInfo(const SiteInfo& rhs);
   ~SiteInfo();
@@ -148,10 +152,6 @@ class CONTENT_EXPORT SiteInfo {
   // the original SiteInfo, minus any OAC opt-in request.
   SiteInfo GetNonOriginKeyedEquivalentForMetrics(
       const IsolationContext& isolation_context) const;
-
-  // Returns a copy of `this` but with `is_sandboxed_` set to true, and
-  // `unique_sandbox_id_` set to `document_unique_id`.
-  SiteInfo SandboxedClone(int document_unique_id) const;
 
   // Returns the site URL associated with all of the documents and workers in
   // this principal, as described above.
@@ -222,6 +222,7 @@ class CONTENT_EXPORT SiteInfo {
   bool is_error_page() const;
   bool is_jit_disabled() const { return is_jit_disabled_; }
   bool is_pdf() const { return is_pdf_; }
+  bool is_fenced() const { return is_fenced_; }
 
   // See comments on `does_site_request_dedicated_process_for_coop_` for more
   // details.
@@ -391,6 +392,13 @@ class CONTENT_EXPORT SiteInfo {
 
   // Indicates that this SiteInfo is for PDF content.
   bool is_pdf_ = false;
+
+  // Indicates that this SiteInfo is for content inside a fenced frame. We use
+  // just a bool as opposed to a GUID here in order to group same-origin fenced
+  // frames together. See more details around fenced frame process isolation
+  // here:
+  // https://github.com/WICG/fenced-frame/blob/master/explainer/process_isolation.md.
+  bool is_fenced_ = false;
 };
 
 CONTENT_EXPORT std::ostream& operator<<(std::ostream& out,

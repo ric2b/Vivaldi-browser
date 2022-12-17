@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/lock.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "components/embedder_support/android/util/input_stream.h"
 #include "components/embedder_support/android/util/web_resource_response.h"
@@ -449,16 +450,6 @@ bool AwContentsIoThreadClient::ShouldBlockNetworkLoads() const {
   JNIEnv* env = AttachCurrentThread();
   return Java_AwContentsIoThreadClient_shouldBlockNetworkLoads(env,
                                                                java_object_);
-}
-
-AwSettings::RequestedWithHeaderMode
-AwContentsIoThreadClient::GetRequestedWithHeaderMode() const {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  JNIEnv* env = AttachCurrentThread();
-  return static_cast<AwSettings::RequestedWithHeaderMode>(
-      Java_AwContentsIoThreadClient_getRequestedWithHeaderMode(env,
-                                                               java_object_));
 }
 
 }  // namespace android_webview

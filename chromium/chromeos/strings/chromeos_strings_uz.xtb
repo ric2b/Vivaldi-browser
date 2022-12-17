@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Faylni tahrirlash}other{Fayllarni tahrirlash}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Kalit yoʻnalishi</translation>
+<translation id="3294437725009624529">Mehmon</translation>
 <translation id="3310640316857623290">DNS kutish vaqti ruxsat etilgan chegaradan juda baland</translation>
 <translation id="3328783797891415197">Tekshirilmoqda</translation>
 <translation id="3340011300870565703">Qurilmaning oʻng quloqlik batareyasi quvvati: <ph name="BATTERY_PERCENTAGE" />%</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Mikrodastur yangilanayotganda tashqi qurilmani uzmay va kompyuterni oʻchirmay turing. Bu oynani yigʻish mumkin. Bu yangilanish bir necha daqiqa vaqt oladi va bu vaqtda tashqi qurilma ishlamay turishi mumkin.</translation>
 <translation id="3486220673238053218">ta’rif</translation>
 <translation id="3488065109653206955">Qisman faollashtirilgan</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />Unumdorlik kuzatuvi maʼlumotlarini<ph name="END_LINK1" /> joʻnatish</translation>
 <translation id="3517001332549868749">ChromeOS yangilanishi</translation>
 <translation id="3527036260304016759">Bajarilmadi - Notanish xato</translation>
 <translation id="3532980081107202182">Taxminan <ph name="MIN_REMAINING" /> daqiqa qoldi</translation>
@@ -468,6 +470,7 @@ Mikrofon ustiga bosing va savolni ayting.</translation>
 <translation id="5502931783115429516">Android orqali bajarilmadi</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Quyosh botganida tungi mavzuga avtomatik almashish</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Qayta skanerlash</translation>
 <translation id="5583640892426849032">Backspace</translation>

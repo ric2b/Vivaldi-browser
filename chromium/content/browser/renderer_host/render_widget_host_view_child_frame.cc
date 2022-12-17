@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,7 +91,7 @@ RenderWidgetHostViewChildFrame::~RenderWidgetHostViewChildFrame() {
 void RenderWidgetHostViewChildFrame::Init() {
   RegisterFrameSinkId();
   host()->SetView(this);
-
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // NOTE(igor@vivaldi.com) Delay initialization of text input for Vivaldi
   // tabs, devtools etc. until they are attached to the outer web_contents,
   // VB-50662 VB-52024
@@ -106,8 +106,11 @@ void RenderWidgetHostViewChildFrame::Init() {
   }
   // clang-format off
   if (!vivaldi_skip_text_init)
+#endif // !IS_ANDROID && !IS_IOS
   GetTextInputManager();
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // clang-format on
+#endif // !IS_ANDROID && !IS_IOS
 }
 
 void RenderWidgetHostViewChildFrame::
@@ -115,6 +118,7 @@ void RenderWidgetHostViewChildFrame::
   if (!selection_controller_client_)
     return;
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // NOTE(igor@vivaldi.com): Chromium code assumes that the root view stays the
   // same. This is wrong. The root view changes whenever the code calls
   // WebContentsImpl::DetachFromOuterWebContents() leading later to attempt to
@@ -123,6 +127,7 @@ void RenderWidgetHostViewChildFrame::
     selection_controller_client_->manager_->RemoveObserver(this);
   } else {
     /* clang-format off */
+#endif // !IS_ANDROID && !IS_IOS
   auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
   if (root_view) {
     auto* manager = root_view->GetTouchSelectionControllerClientManager();
@@ -134,9 +139,10 @@ void RenderWidgetHostViewChildFrame::
     // https://crbug.com/760074.
     base::debug::DumpWithoutCrashing();
   }
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
     /* clang-format on */
   }
-
+#endif // !IS_ANDROID && !IS_IOS
   selection_controller_client_.reset();
 }
 
@@ -208,6 +214,12 @@ void RenderWidgetHostViewChildFrame::InitAsChild(gfx::NativeView parent_view) {
 
 void RenderWidgetHostViewChildFrame::SetSize(const gfx::Size& size) {
   // Resizing happens in CrossProcessFrameConnector for child frames.
+  // NOTE(andre@vivaldi.com) : We have to store the size we have here to be able
+  // to report the correct size for early-access to view-rects like in
+  // document-onload stage. Otherwise the cross-process frame connector might
+  // report 0,0 as it has not been notified early enough. VB-90521.
+  gfx::Rect view_rect(0, 0, size.width(), size.height());
+  last_screen_rect_ = view_rect;
 }
 
 void RenderWidgetHostViewChildFrame::SetBounds(const gfx::Rect& rect) {
@@ -280,7 +292,7 @@ void RenderWidgetHostViewChildFrame::WasUnOccluded() {
 }
 
 gfx::Rect RenderWidgetHostViewChildFrame::GetViewBounds() {
-  gfx::Rect screen_space_rect;
+  gfx::Rect screen_space_rect = last_screen_rect_;
   if (frame_connector_) {
     screen_space_rect = frame_connector_->rect_in_parent_view_in_dip();
 
@@ -624,6 +636,7 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     is_scroll_sequence_bubbling_ =
         ack_result == blink::mojom::InputEventResultState::kNotConsumed ||
         ack_result == blink::mojom::InputEventResultState::kNoConsumerExists;
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
     if (vivaldi::IsVivaldiRunning() && RenderViewHostImpl::From(host()) &&
         static_cast<WebContentsImpl*>(
             WebContents::FromRenderViewHost(RenderViewHostImpl::From(host())))
@@ -640,6 +653,7 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
           // ch89 so we do not test for it anymore. Same logic otherwise.
           is_scroll_sequence_bubbling_ = false;
     }
+#endif // !IS_ANDROID && !IS_IOS
   }
 
   if (is_scroll_sequence_bubbling_ &&
@@ -662,7 +676,7 @@ void RenderWidgetHostViewChildFrame::ProcessTouchpadZoomEventAckInRoot(
     blink::mojom::InputEventResultState ack_result,
     blink::mojom::ScrollResultDataPtr scroll_result_data) {
   DCHECK(event.IsTouchpadZoomEvent());
-
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // NOTE(espen@vivaldi.com): We run the pinch sequence/protocol in a child
   // frame from the start. The acks need to be sent to same view. Regular chrome
   // will start in the root view which is where the forwarding below ends.
@@ -671,7 +685,7 @@ void RenderWidgetHostViewChildFrame::ProcessTouchpadZoomEventAckInRoot(
                                                                   ack_result);
     return;
   }
-
+#endif // !IS_ANDROID && !IS_IOS
   frame_connector_->ForwardAckedTouchpadZoomEvent(
       event, ack_result, std::move(scroll_result_data));
 }
@@ -778,18 +792,19 @@ const viz::LocalSurfaceId& RenderWidgetHostViewChildFrame::GetLocalSurfaceId()
 
 void RenderWidgetHostViewChildFrame::NotifyHitTestRegionUpdated(
     const viz::AggregatedHitTestRegion& region) {
-  gfx::RectF screen_rect(region.rect);
-  if (!region.transform.TransformRectReverse(&screen_rect)) {
+  absl::optional<gfx::RectF> screen_rect =
+      region.transform.InverseMapRect(gfx::RectF(region.rect));
+  if (!screen_rect) {
     last_stable_screen_rect_ = gfx::RectF();
     screen_rect_stable_since_ = base::TimeTicks::Now();
     return;
   }
-  if ((ToRoundedSize(screen_rect.size()) !=
+  if ((ToRoundedSize(screen_rect->size()) !=
        ToRoundedSize(last_stable_screen_rect_.size())) ||
-      (std::abs(last_stable_screen_rect_.x() - screen_rect.x()) +
-           std::abs(last_stable_screen_rect_.y() - screen_rect.y()) >
+      (std::abs(last_stable_screen_rect_.x() - screen_rect->x()) +
+           std::abs(last_stable_screen_rect_.y() - screen_rect->y()) >
        blink::mojom::kMaxChildFrameScreenRectMovement)) {
-    last_stable_screen_rect_ = screen_rect;
+    last_stable_screen_rect_ = *screen_rect;
     screen_rect_stable_since_ = base::TimeTicks::Now();
   }
 }
@@ -1011,6 +1026,7 @@ RenderWidgetHostViewChildFrame::FilterInputEvent(
     // child's TouchActionFilter filter them, but we may encounter
     // https://crbug.com/771330 which would let the pinch events through.
     if (gesture_event.SourceDevice() == blink::WebGestureDevice::kTouchscreen) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
       // NOTE(espen@vivaldi.com): In Vivaldi we must receive pinch events in
       // child renderers since that is what we have in guest view layout.
       // Both tests were added with ch68.
@@ -1019,6 +1035,7 @@ RenderWidgetHostViewChildFrame::FilterInputEvent(
               WebContents::FromRenderViewHost(RenderViewHostImpl::From(host())))
               ->IsGuest())
         return blink::mojom::InputEventResultState::kNotConsumed;
+#endif // !IS_ANDROID && !IS_IOS
       return blink::mojom::InputEventResultState::kConsumed;
     }
     NOTREACHED();

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,15 @@
 #import <QuartzCore/CAAnimation.h>
 #import <QuartzCore/CAMediaTimingFunction.h>
 
-#include "base/check_op.h"
+#import "base/check_op.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
-#include "ios/chrome/browser/ui/util/rtl_geometry.h"
-#include "ios/chrome/browser/ui/util/ui_util.h"
+#import "ios/chrome/browser/ui/util/rtl_geometry.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -105,6 +110,14 @@ const CGFloat kStrokeEndAtApogee = 1;
 
 // Initializes the pathLayers.
 - (void)initializeShapeLayers {
+
+  // Vivaldi
+  // These shape layers are used as the 'three dots' menu iticonem for the iPad.
+  // But, we don't need that in Vivaldi since 'three dots' menu icon is replaced
+  // 'Vivaldi' icon. Therefore we don't need to render the shape layers.
+  if (IsVivaldiRunning())
+    return; // End Vivaldi
+
   for (NSUInteger i = 0; i < _pathLayers.count; i++) {
     [_pathLayers[i] removeFromSuperlayer];
   }

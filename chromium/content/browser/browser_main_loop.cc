@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,6 +68,7 @@
 #include "content/browser/download/save_file_manager.h"
 #include "content/browser/field_trial_synchronizer.h"
 #include "content/browser/first_party_sets/first_party_sets_handler_impl.h"
+#include "content/browser/first_party_sets/local_set_declaration.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/browser_gpu_client_delegate.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -77,7 +78,7 @@
 #include "content/browser/media/media_internals.h"
 #include "content/browser/media/media_keys_listener_manager_impl.h"
 #include "content/browser/metrics/histogram_synchronizer.h"
-#include "content/browser/net/browser_online_state_observer.h"
+#include "content/browser/network/browser_online_state_observer.h"
 #include "content/browser/network_service_instance_impl.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -188,6 +189,7 @@
 #include "content/browser/renderer_host/dwrite_font_lookup_table_builder_win.h"
 #include "net/base/winsock_init.h"
 #include "sandbox/policy/win/sandbox_win.h"
+#include "sandbox/win/src/sandbox.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -390,8 +392,9 @@ mojo::PendingRemote<data_decoder::mojom::BleScanParser> GetBleScanParser() {
 // dynamic code or modifying executable code. See comments in
 // sandbox/win/src/security_level.h. Only available on Windows 10 RS1 (1607,
 // Build 14393) onwards.
-const base::Feature kBrowserDynamicCodeDisabled{
-    "BrowserDynamicCodeDisabled", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kBrowserDynamicCodeDisabled,
+             "BrowserDynamicCodeDisabled",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 class OopDataDecoder : public data_decoder::ServiceProvider {
@@ -586,11 +589,11 @@ int BrowserMainLoop::EarlyInitialization() {
 #endif
 
 #if BUILDFLAG(IS_WIN)
-  if (!parsed_command_line_.HasSwitch(switches::kSingleProcess)) {
-    if (base::FeatureList::IsEnabled(kBrowserDynamicCodeDisabled)) {
-      sandbox::ApplyProcessMitigationsToCurrentProcess(
-          sandbox::MITIGATION_DYNAMIC_CODE_DISABLE_WITH_OPT_OUT);
-    }
+  if (!parsed_command_line_.HasSwitch(switches::kSingleProcess) &&
+      base::FeatureList::IsEnabled(kBrowserDynamicCodeDisabled) &&
+      parameters_.sandbox_info && parameters_.sandbox_info->broker_services) {
+    parameters_.sandbox_info->broker_services->RatchetDownSecurityMitigations(
+        sandbox::MITIGATION_DYNAMIC_CODE_DISABLE_WITH_OPT_OUT);
   }
 #endif
 
@@ -951,10 +954,13 @@ int BrowserMainLoop::PreMainMessageLoopRun() {
   // ShellBrowserMainParts initializes a ShellBrowserContext with user data
   // directory only in PreMainMessageLoopRun(). First-Party Sets handler needs
   // to access this directory, hence triggering after this stage has run.
-  FirstPartySetsHandlerImpl::GetInstance()->Init(
-      GetContentClient()->browser()->GetFirstPartySetsDirectory(),
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          network::switches::kUseFirstPartySet));
+  if (result_code_ == RESULT_CODE_NORMAL_EXIT) {
+    FirstPartySetsHandlerImpl::GetInstance()->Init(
+        GetContentClient()->browser()->GetFirstPartySetsDirectory(),
+        LocalSetDeclaration(
+            base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+                network::switches::kUseFirstPartySet)));
+  }
 
   variations::MaybeScheduleFakeCrash();
 
@@ -1109,6 +1115,15 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
 
 #if BUILDFLAG(IS_MAC)
   BrowserCompositorMac::DisableRecyclingForShutdown();
+#endif
+
+#if defined(USE_AURA)
+  if (env_) {
+    // ContextFactory is owned by ImageTransportFactory, which will delete the
+    // object in the `Terminate` call below. We need to make sure aura::Env
+    // doesn't reference it anymore when that happens.
+    env_->set_context_factory(nullptr);
+  }
 #endif
 
 #if defined(USE_AURA) || BUILDFLAG(IS_MAC)

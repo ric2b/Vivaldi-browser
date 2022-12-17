@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +43,7 @@ device_test::mojom::ControllerFrameDataPtr DeviceToMojoControllerFrameData(
   ret->pose_data->device_to_origin = gfx::Transform();
   for (int col = 0; col < 4; ++col) {
     for (int row = 0; row < 4; ++row) {
-      ret->pose_data->device_to_origin->matrix().setRC(
+      ret->pose_data->device_to_origin->set_rc(
           row, col, data.pose_data.device_to_origin[row + col * 4]);
     }
   }

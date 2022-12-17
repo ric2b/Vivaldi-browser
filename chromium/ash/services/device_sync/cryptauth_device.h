@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,11 @@
 #include <ostream>
 #include <string>
 
-#include "ash/components/multidevice/software_feature.h"
-#include "ash/components/multidevice/software_feature_state.h"
 #include "ash/services/device_sync/proto/cryptauth_better_together_device_metadata.pb.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chromeos/ash/components/multidevice/software_feature.h"
+#include "chromeos/ash/components/multidevice/software_feature_state.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {

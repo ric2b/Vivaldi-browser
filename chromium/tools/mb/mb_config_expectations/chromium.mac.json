@@ -8,7 +8,7 @@
       "is_debug": false,
       "proprietary_codecs": true,
       "symbol_level": 1,
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "Mac Builder (dbg)": {
@@ -18,7 +18,7 @@
       "is_debug": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "ios-catalyst": {
@@ -33,26 +33,11 @@
       "target_cpu": "x64",
       "target_environment": "catalyst",
       "target_os": "ios",
-      "use_goma": true,
-      "use_libfuzzer": true
+      "use_libfuzzer": true,
+      "use_remoteexec": true
     }
   },
   "ios-device": {
-    "gn_args": {
-      "dcheck_always_on": false,
-      "ios_code_signing_identity_description": "Apple Development",
-      "ios_enable_code_signing": false,
-      "ios_set_attributes_for_xcode_project_generation": false,
-      "is_component_build": false,
-      "is_debug": false,
-      "symbol_level": 0,
-      "target_cpu": "arm64",
-      "target_environment": "device",
-      "target_os": "ios",
-      "use_goma": true
-    }
-  },
-  "ios-device (reclient shadow)": {
     "gn_args": {
       "dcheck_always_on": false,
       "ios_code_signing_identity_description": "Apple Development",
@@ -77,7 +62,7 @@
       "target_cpu": "x64",
       "target_environment": "simulator",
       "target_os": "ios",
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "ios-simulator-full-configs": {
@@ -87,10 +72,10 @@
       "is_component_build": false,
       "is_debug": true,
       "symbol_level": 1,
-      "target_cpu": "arm64",
+      "target_cpu": "x64",
       "target_environment": "simulator",
       "target_os": "ios",
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "ios-simulator-noncq": {
@@ -103,7 +88,7 @@
       "target_cpu": "x64",
       "target_environment": "simulator",
       "target_os": "ios",
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "mac-arm64-on-arm64-rel": {
@@ -112,23 +97,10 @@
       "is_component_build": false,
       "is_debug": false,
       "target_cpu": "arm64",
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "mac-arm64-rel": {
-    "gn_args": {
-      "dcheck_always_on": false,
-      "enable_nacl": false,
-      "ffmpeg_branding": "Chrome",
-      "is_component_build": false,
-      "is_debug": false,
-      "proprietary_codecs": true,
-      "symbol_level": 1,
-      "target_cpu": "arm64",
-      "use_goma": true
-    }
-  },
-  "mac-arm64-rel (reclient shadow)": {
     "gn_args": {
       "dcheck_always_on": false,
       "enable_nacl": false,

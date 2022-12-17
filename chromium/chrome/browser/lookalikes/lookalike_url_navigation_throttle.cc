@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
@@ -49,14 +50,14 @@ bool IsInterstitialReload(const GURL& current_url,
          stored_redirect_chain[stored_redirect_chain.size() - 1] == current_url;
 }
 
-const base::Feature kOptimizeLookalikeUrlNavigationThrottle{
-    "OptimizeLookalikeUrlNavigationThrottle",
+BASE_FEATURE(kOptimizeLookalikeUrlNavigationThrottle,
+             "OptimizeLookalikeUrlNavigationThrottle",
 #if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
+             base::FEATURE_ENABLED_BY_DEFAULT
 #else
-    base::FEATURE_DISABLED_BY_DEFAULT
+             base::FEATURE_DISABLED_BY_DEFAULT
 #endif
-};
+);
 
 // Records latency histograms for an invocation of PerformChecks() just before
 // it will return a value of PROCEED.
@@ -114,10 +115,7 @@ ThrottleCheckResult LookalikeUrlNavigationThrottle::WillProcessResponse() {
   content::NavigationHandle* handle = navigation_handle();
 
   // Ignore errors and same document navigations.
-  // TODO(crbug.com/1199724): The throttle would have to cancel the prerender
-  // if we should show an interstitial after activation.
-  if (handle->GetNetErrorCode() != net::OK || !handle->IsInMainFrame() ||
-      handle->IsSameDocument()) {
+  if (handle->GetNetErrorCode() != net::OK || handle->IsSameDocument()) {
     return content::NavigationThrottle::PROCEED;
   }
 
@@ -233,12 +231,16 @@ LookalikeUrlNavigationThrottle::MaybeCreateNavigationThrottle(
 }
 
 ThrottleCheckResult
-LookalikeUrlNavigationThrottle::CheckManifestsAndMaybeShowInterstitial(
+LookalikeUrlNavigationThrottle::CheckAndMaybeShowInterstitial(
     const GURL& safe_domain,
     const GURL& lookalike_domain,
     ukm::SourceId source_id,
     LookalikeUrlMatchType match_type,
     bool triggered_by_initial_url) {
+  // Cancel the prerender to show an interstitial after activation.
+  if (navigation_handle()->IsInPrerenderedMainFrame())
+    return content::NavigationThrottle::CANCEL;
+
   RecordUMAFromMatchType(match_type);
 
   // Punycode interstitial doesn't have a target site, so safe_domain isn't
@@ -400,15 +402,15 @@ ThrottleCheckResult LookalikeUrlNavigationThrottle::PerformChecks(
 
   if (first_is_lookalike &&
       ShouldBlockLookalikeUrlNavigation(first_match_type)) {
-    return CheckManifestsAndMaybeShowInterstitial(
-        first_suggested_url, first_url, source_id, first_match_type,
-        first_is_lookalike);
+    return CheckAndMaybeShowInterstitial(first_suggested_url, first_url,
+                                         source_id, first_match_type,
+                                         first_is_lookalike);
   }
 
   if (last_is_lookalike && ShouldBlockLookalikeUrlNavigation(last_match_type)) {
-    return CheckManifestsAndMaybeShowInterstitial(last_suggested_url, last_url,
-                                                  source_id, last_match_type,
-                                                  first_is_lookalike);
+    return CheckAndMaybeShowInterstitial(last_suggested_url, last_url,
+                                         source_id, last_match_type,
+                                         first_is_lookalike);
   }
 
   LookalikeUrlMatchType match_type =
@@ -484,13 +486,8 @@ bool LookalikeUrlNavigationThrottle::IsLookalikeUrl(
   // ignores the scheme which is okay since it's more conservative: If the user
   // is engaged with http://domain.test, not showing the warning on
   // https://domain.test is acceptable.
-  const auto already_engaged =
-      std::find_if(engaged_sites.begin(), engaged_sites.end(),
-                   [navigated_domain](const DomainInfo& engaged_domain) {
-                     return (navigated_domain.domain_and_registry ==
-                             engaged_domain.domain_and_registry);
-                   });
-  if (already_engaged != engaged_sites.end()) {
+  if (base::Contains(engaged_sites, navigated_domain.domain_and_registry,
+                     &DomainInfo::domain_and_registry)) {
     return false;
   }
 

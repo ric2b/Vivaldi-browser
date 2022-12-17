@@ -11,11 +11,11 @@ exports_files(["AndroidManifest.xml"])
 android_library_with_tflite(
     name = "task_library_text",
     srcs = [
+        "//tensorflow_lite_support/java/src/java/org/tensorflow/lite/task/text/bertclu:bert_clu_annotator_src",
         "//tensorflow_lite_support/java/src/java/org/tensorflow/lite/task/text/nlclassifier:nl_classifier_src",
         "//tensorflow_lite_support/java/src/java/org/tensorflow/lite/task/text/qa:bert_question_answerer_src",
         "//tensorflow_lite_support/java/src/java/org/tensorflow/lite/task/text/searcher:text_searcher_src",
     ],
-    javacopts = ["-source 7 -target 7"],
     manifest = "AndroidManifest.xml",
     tflite_exports = [
         "//tensorflow_lite_support/java/src/native/task/text:task_text_native",

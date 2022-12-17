@@ -23,3 +23,38 @@ NSString* const vTabGridEmptyStateTitleTextColor =
     @"grid_empty_state_title_text_color";
 NSString* const vTabGridEmptyStateBodyTextColor =
     @"grid_empty_state_body_text_color";
+
+// Colors for grid cell item
+NSString* const vTabGridSelectedColor =
+    @"grid_selected_color";
+NSString* const vTabGridNotSelectedColor =
+    @"grid_not_selected_color";
+
+// Edge padding for tab grid empty state view label
+CGFloat const vTabGridEmptyStateViewContainerPadding = 16.0;
+// Border width for selected cell
+CGFloat const vTabGridSelectedBorderWidth = 3.0;
+// Border width for not selected cell
+CGFloat const vTabGridNotSelectedBorderWidth = 2.0;
+// Tab grid collection top padding
+const CGFloat vTabGridCollectionTopPadding = 24.0;
+// Tab grid collection bottom padding
+const CGFloat vTabGridCollectionBottomPadding = 24.0;
+// Tab grid item size multiplier for iPad
+const CGFloat vTabGridItemSizeMultiplieriPad = 0.25;
+// Tab grid item size multiplier for iPhone portrait
+const CGFloat vTabGridItemSizeMultiplieriPhonePortrait = 0.5;
+// Tab grid item size multiplier for iPhone landscape
+const CGFloat vTabGridItemSizeMultiplieriPhoneLandscape = 0.25;
+// Tab grid item padding for iPhone
+const CGFloat vTabGridItemPaddingiPhone = 8.0;
+// Tab grid item padding for iPad
+const CGFloat vTabGridItemPaddingiPad = 12.0;
+// Tab grid section padding for iPhone portrait
+const CGFloat vTabGridSectionPaddingiPhonePortrait = 8.0;
+// Tab grid section padding for iPhone landscape
+const CGFloat vTabGridSectionPaddingiPhoneLandscape = 36.0;
+// Tab grid section padding for iPad portrait
+const CGFloat vTabGridSectionPaddingiPadPortrait = 64.0;
+// Tab grid section padding for iPad landscape
+const CGFloat vTabGridSectionPaddingiPadLandscape = 64.0;

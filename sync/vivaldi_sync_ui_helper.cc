@@ -46,7 +46,6 @@ VivaldiSyncUIHelper::CycleData VivaldiSyncUIHelper::GetCycleData() {
     case syncer::SyncerError::SYNCER_OK:
       cycle_data.download_updates_status = SUCCESS;
       break;
-    case syncer::SyncerError::DATATYPE_TRIGGERED_RETRY:
     case syncer::SyncerError::SERVER_MORE_TO_DOWNLOAD:
       // We don't ever get notified of this case in practice, but we support it
       // anyway in case it becomes relevant in the future.
@@ -63,9 +62,6 @@ VivaldiSyncUIHelper::CycleData VivaldiSyncUIHelper::GetCycleData() {
     case syncer::SyncerError::NETWORK_CONNECTION_UNAVAILABLE:
     case syncer::SyncerError::NETWORK_IO_ERROR:
       cycle_data.download_updates_status = NETWORK_ERROR;
-      break;
-    case syncer::SyncerError::CANNOT_DO_WORK:
-      cycle_data.download_updates_status = CLIENT_ERROR;
       break;
     case syncer::SyncerError::SERVER_RETURN_THROTTLED:
       cycle_data.download_updates_status = THROTTLED;

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/task/task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
@@ -37,12 +38,12 @@ constexpr char kInvalidAudioDataError[] = "Invalid audio data received.";
 // static
 const char
     SpeechRecognitionRecognizerImpl::kCaptionBubbleVisibleHistogramName[] =
-        "Accessibility.LiveCaption.Duration.CaptionBubbleVisible2";
+        "Accessibility.LiveCaption.Duration.CaptionBubbleVisible3";
 
 // static
 const char
     SpeechRecognitionRecognizerImpl::kCaptionBubbleHiddenHistogramName[] =
-        "Accessibility.LiveCaption.Duration.CaptionBubbleHidden2";
+        "Accessibility.LiveCaption.Duration.CaptionBubbleHidden3";
 
 namespace {
 
@@ -124,14 +125,12 @@ SpeechRecognitionRecognizerImpl::~SpeechRecognitionRecognizerImpl() {
 void SpeechRecognitionRecognizerImpl::Create(
     mojo::PendingReceiver<media::mojom::SpeechRecognitionRecognizer> receiver,
     mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient> remote,
-    base::WeakPtr<SpeechRecognitionServiceImpl> speech_recognition_service_impl,
     media::mojom::SpeechRecognitionOptionsPtr options,
     const base::FilePath& binary_path,
     const base::FilePath& config_path) {
   mojo::MakeSelfOwnedReceiver(
       std::make_unique<SpeechRecognitionRecognizerImpl>(
-          std::move(remote), std::move(speech_recognition_service_impl),
-          std::move(options), binary_path, config_path),
+          std::move(remote), std::move(options), binary_path, config_path),
       std::move(receiver));
 }
 
@@ -174,7 +173,6 @@ void SpeechRecognitionRecognizerImpl::OnRecognitionStoppedCallback() {
 
 SpeechRecognitionRecognizerImpl::SpeechRecognitionRecognizerImpl(
     mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient> remote,
-    base::WeakPtr<SpeechRecognitionServiceImpl> speech_recognition_service_impl,
     media::mojom::SpeechRecognitionOptionsPtr options,
     const base::FilePath& binary_path,
     const base::FilePath& config_path)
@@ -193,7 +191,6 @@ SpeechRecognitionRecognizerImpl::SpeechRecognitionRecognizerImpl(
           &SpeechRecognitionRecognizerImpl::OnRecognitionStoppedCallback,
           weak_factory_.GetWeakPtr()));
 
-  // Unretained is safe because |this| owns the mojo::Remote.
   client_remote_.set_disconnect_handler(
       base::BindOnce(&SpeechRecognitionRecognizerImpl::OnClientHostDisconnected,
                      weak_factory_.GetWeakPtr()));
@@ -223,13 +220,16 @@ void SpeechRecognitionRecognizerImpl::SendAudioToSpeechRecognitionService(
   size_t buffer_size = 0;
 
   // Update watch time durations.
-  base::TimeDelta duration =
-      media::AudioTimestampHelper::FramesToTime(frame_count, sample_rate);
-  if (is_client_requesting_speech_recognition_) {
-    caption_bubble_visible_duration_ += duration;
-  } else {
-    caption_bubble_hidden_duration_ += duration;
-    return;
+  if (options_->recognizer_client_type ==
+      media::mojom::RecognizerClientType::kLiveCaption) {
+    base::TimeDelta duration =
+        media::AudioTimestampHelper::FramesToTime(frame_count, sample_rate);
+    if (is_client_requesting_speech_recognition_) {
+      caption_bubble_visible_duration_ += duration;
+    } else {
+      caption_bubble_hidden_duration_ += duration;
+      return;
+    }
   }
 
   // Verify the channel count.
@@ -293,25 +293,6 @@ void SpeechRecognitionRecognizerImpl::
 
 void SpeechRecognitionRecognizerImpl::OnLanguageChanged(
     const std::string& language) {
-  if (!task_runner_) {
-    task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
-        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
-  }
-
-  // Changing the language requires a blocking call to check if the language
-  // pack exists on the device.
-  scoped_refptr<base::SequencedTaskRunner> current_task_runner =
-      base::SequencedTaskRunnerHandle::Get();
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&SpeechRecognitionRecognizerImpl::ChangeLanguage,
-                     base::Unretained(this), language, current_task_runner));
-}
-
-void SpeechRecognitionRecognizerImpl::ChangeLanguage(
-    const std::string& language,
-    scoped_refptr<base::SequencedTaskRunner> main_sequence) {
   absl::optional<speech::SodaLanguagePackComponentConfig>
       language_component_config = GetLanguageComponentConfig(language);
   if (!language_component_config.has_value())
@@ -322,21 +303,51 @@ void SpeechRecognitionRecognizerImpl::ChangeLanguage(
   if (language_code == language_ || language_code == LanguageCode::kNone)
     return;
 
-  // Only change the language if the new language pack is installed.
-  base::FilePath config_path = GetLatestSodaLanguagePackDirectory(language);
-  if (base::PathExists(config_path)) {
-    config_path_ = config_path;
-    language_ = language_component_config.value().language_code;
+  if (!task_runner_) {
+    task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+  }
 
-    // SODA must be reset on the same sequence where it's actively used in order
-    // to avoid race conditions.
-    main_sequence->PostTask(
-        FROM_HERE, base::BindOnce(&SpeechRecognitionRecognizerImpl::ResetSoda,
-                                  base::Unretained(this)));
+  // Changing the language requires a blocking call to check if the language
+  // pack exists on the device.
+  scoped_refptr<base::SequencedTaskRunner> current_task_runner =
+      base::SequencedTaskRunnerHandle::Get();
+
+  base::FilePath config_file_path =
+      GetLatestSodaLanguagePackDirectory(language);
+
+  task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::FilePath config_path) {
+            return base::PathExists(config_path);
+          },
+          config_file_path),
+      base::BindOnce(&SpeechRecognitionRecognizerImpl::ResetSodaWithNewLanguage,
+                     weak_factory_.GetWeakPtr(), config_file_path,
+                     language_code));
+}
+
+void SpeechRecognitionRecognizerImpl::ResetSodaWithNewLanguage(
+    base::FilePath config_path,
+    speech::LanguageCode language_code,
+    bool config_exists) {
+  if (config_exists) {
+    config_path_ = config_path;
+    language_ = language_code;
+    ResetSoda();
   }
 }
 
 void SpeechRecognitionRecognizerImpl::RecordDuration() {
+  if (options_->recognizer_client_type !=
+      media::mojom::RecognizerClientType::kLiveCaption) {
+    return;
+  }
+
+  // TODO(b:245620092) Create metrics for other features using speech
+  // recognition.
   if (caption_bubble_visible_duration_.is_positive()) {
     base::UmaHistogramLongTimes100(kCaptionBubbleVisibleHistogramName,
                                    caption_bubble_visible_duration_);

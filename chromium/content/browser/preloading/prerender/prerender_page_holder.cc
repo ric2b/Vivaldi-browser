@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -152,7 +152,7 @@ std::unique_ptr<StoredPage> PrerenderPageHolder::Activate(
       std::make_unique<NavigationEntryRestoreContextImpl>();
   std::unique_ptr<NavigationEntryImpl> nav_entry =
       GetNavigationController()
-          .GetEntryWithUniqueID(page->render_frame_host->nav_entry_id())
+          .GetEntryWithUniqueID(page->render_frame_host()->nav_entry_id())
           ->CloneWithoutSharing(context.get());
 
   navigation_request.SetPrerenderActivationNavigationState(
@@ -164,9 +164,9 @@ std::unique_ptr<StoredPage> PrerenderPageHolder::Activate(
 
   // We support activating the prerenderd page only to the topmost
   // RenderFrameHost.
-  CHECK(!page->render_frame_host->GetParentOrOuterDocumentOrEmbedder());
+  CHECK(!page->render_frame_host()->GetParentOrOuterDocumentOrEmbedder());
 
-  page->render_frame_host->SetFrameTreeNode(*(target_frame_tree.root()));
+  page->render_frame_host()->SetFrameTreeNode(*(target_frame_tree.root()));
   // Copy frame name into the replication state of the primary main frame to
   // ensure that the replication state of the primary main frame after
   // activation matches the replication state stored in the renderer.
@@ -175,9 +175,9 @@ std::unique_ptr<StoredPage> PrerenderPageHolder::Activate(
   // from the StoredPage into RenderFrameHostManager. However, this is a
   // temporary solution until we move this into BrowsingContextState,
   // along with RenderFrameProxyHost.
-  page->render_frame_host->frame_tree_node()->set_frame_name_for_activation(
+  page->render_frame_host()->frame_tree_node()->set_frame_name_for_activation(
       prior_replication_state.unique_name, prior_replication_state.name);
-  for (auto& it : page->proxy_hosts) {
+  for (auto& it : page->proxy_hosts()) {
     it.second->set_frame_tree_node(*(target_frame_tree.root()));
   }
 
@@ -197,18 +197,16 @@ std::unique_ptr<StoredPage> PrerenderPageHolder::Activate(
     subframe_node->SetFrameTree(target_frame_tree);
   }
 
-  page->render_frame_host->ForEachRenderFrameHostIncludingSpeculative(
-      base::BindRepeating(
-          [](const WebContentsImpl& web_contents, RenderFrameHostImpl* rfh) {
-            // The visibility state of the prerendering page has not been
-            // updated by
-            // WebContentsImpl::UpdateVisibilityAndNotifyPageAndView(). So
-            // updates the visibility state using the PageVisibilityState of
-            // |web_contents|.
-            rfh->render_view_host()->SetFrameTreeVisibility(
-                web_contents.GetPageVisibilityState());
-          },
-          std::cref(web_contents_)));
+  page->render_frame_host()->ForEachRenderFrameHostIncludingSpeculative(
+      [this](RenderFrameHostImpl* rfh) {
+        // The visibility state of the prerendering page has not been
+        // updated by
+        // WebContentsImpl::UpdateVisibilityAndNotifyPageAndView(). So
+        // updates the visibility state using the PageVisibilityState of
+        // |web_contents|.
+        rfh->render_view_host()->SetFrameTreeVisibility(
+            web_contents_.GetPageVisibilityState());
+      });
 
   frame_tree_->Shutdown();
   frame_tree_.reset();
@@ -218,9 +216,19 @@ std::unique_ptr<StoredPage> PrerenderPageHolder::Activate(
 
 PrerenderHost::LoadingOutcome
 PrerenderPageHolder::WaitForLoadCompletionForTesting() {
+  PrerenderHost* prerender_host =
+      web_contents_.GetPrerenderHostRegistry()->FindNonReservedHostById(
+          frame_tree()->root()->frame_tree_node_id());
+  if (!prerender_host) {
+    // The prerender may be cancelled.
+    return PrerenderHost::LoadingOutcome::kPrerenderingCancelled;
+  }
+
   PrerenderHost::LoadingOutcome status =
       PrerenderHost::LoadingOutcome::kLoadingCompleted;
-  if (!frame_tree_->IsLoadingIncludingInnerFrameTrees())
+
+  if (!frame_tree_->IsLoadingIncludingInnerFrameTrees() &&
+      prerender_host->GetInitialNavigationId().has_value())
     return status;
 
   base::RunLoop loop;

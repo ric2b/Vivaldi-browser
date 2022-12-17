@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,6 +26,7 @@ import static org.hamcrest.Matchers.not;
 import static org.chromium.chrome.browser.tasks.tab_management.RecyclerViewMatcherUtils.atPosition;
 import static org.chromium.chrome.browser.tasks.tab_management.RecyclerViewMatcherUtils.atPositionWithViewHolder;
 import static org.chromium.chrome.browser.tasks.tab_management.RecyclerViewMatcherUtils.withItemType;
+import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 
 import android.view.View;
 
@@ -121,9 +122,16 @@ public class TabSelectionEditorTestingRobot {
             return this;
         }
 
+        public TabSelectionEditorTestingRobot.Action clickToolbarMenuButton() {
+            onView(inTabSelectionEditor(allOf(withId(R.id.list_menu_button),
+                           withParent(withId(R.id.action_view_layout)))))
+                    .perform(click());
+            return this;
+        }
+
         public TabSelectionEditorTestingRobot.Action clickToolbarActionButton() {
-            onView(inTabSelectionEditor(
-                           allOf(withId(R.id.action_button), withParent(withId(R.id.action_bar)))))
+            onView(inTabSelectionEditor(allOf(withId(R.id.action_button),
+                           withParent(withId(R.id.action_view_layout)))))
                     .perform(click());
             return this;
         }
@@ -139,10 +147,11 @@ public class TabSelectionEditorTestingRobot {
         }
 
         public TabSelectionEditorTestingRobot.Action clickToolbarNavigationButton() {
-            onView(inTabSelectionEditor(
-                           allOf(withContentDescription(
-                                         R.string.accessibility_tab_selection_editor_back_button),
-                                   withParent(withId(R.id.action_bar)))))
+            onView(inTabSelectionEditor(allOf(
+                           withContentDescription(TabUiFeatureUtilities.isLaunchPolishEnabled()
+                                           ? R.string.accessibility_tab_selection_editor_back_button
+                                           : R.string.close),
+                           withParent(withId(R.id.action_bar)))))
                     .perform(click());
             return this;
         }
@@ -202,22 +211,23 @@ public class TabSelectionEditorTestingRobot {
         }
 
         public TabSelectionEditorTestingRobot.Result verifyToolbarSelectionText(String text) {
-            onView(inTabSelectionEditor(withText(text))).check(matches(isDisplayed()));
+            // Text updates are animated. Wait for the right text if animations cannot be disabled.
+            onViewWaiting(inTabSelectionEditor(withText(text))).check(matches(isDisplayed()));
             return this;
         }
 
         public TabSelectionEditorTestingRobot.Result verifyToolbarActionButtonWithResourceId(
                 int resourceId) {
-            onView(inTabSelectionEditor(
-                           allOf(withId(R.id.action_button), withParent(withId(R.id.action_bar)))))
+            onView(inTabSelectionEditor(allOf(withId(R.id.action_button),
+                           withParent(withId(R.id.action_view_layout)))))
                     .check(matches(withText(resourceId)));
             return this;
         }
 
         public TabSelectionEditorTestingRobot.Result verifyToolbarActionButtonWithText(
                 String text) {
-            onView(inTabSelectionEditor(
-                           allOf(withId(R.id.action_button), withParent(withId(R.id.action_bar)))))
+            onView(inTabSelectionEditor(allOf(withId(R.id.action_button),
+                           withParent(withId(R.id.action_view_layout)))))
                     .check(matches(withText(text)));
             return this;
         }
@@ -229,8 +239,8 @@ public class TabSelectionEditorTestingRobot {
         }
 
         public TabSelectionEditorTestingRobot.Result verifyToolbarActionButtonDisabled() {
-            onView(inTabSelectionEditor(
-                           allOf(withId(R.id.action_button), withParent(withId(R.id.action_bar)))))
+            onView(inTabSelectionEditor(allOf(withId(R.id.action_button),
+                           withParent(withId(R.id.action_view_layout)))))
                     .check(matches(not(isEnabled())));
             return this;
         }
@@ -241,14 +251,27 @@ public class TabSelectionEditorTestingRobot {
         }
 
         public TabSelectionEditorTestingRobot.Result verifyToolbarActionButtonEnabled() {
-            onView(inTabSelectionEditor(
-                           allOf(withId(R.id.action_button), withParent(withId(R.id.action_bar)))))
+            onView(inTabSelectionEditor(allOf(withId(R.id.action_button),
+                           withParent(withId(R.id.action_view_layout)))))
                     .check(matches(isEnabled()));
             return this;
         }
 
         public TabSelectionEditorTestingRobot.Result verifyToolbarActionViewEnabled(int id) {
             onView(inTabSelectionEditor(withId(id))).check(matches(isEnabled()));
+            return this;
+        }
+
+        public TabSelectionEditorTestingRobot.Result verifyToolbarMenuItemState(
+                String text, boolean enabled) {
+            onView(withText(text)).check(matches(enabled ? isEnabled() : not(isEnabled())));
+            return this;
+        }
+
+        public TabSelectionEditorTestingRobot.Result verifyToolbarMenuItemWithContentDescription(
+                String text, String contentDescription) {
+            onView(allOf(withText(text), withContentDescription(contentDescription)))
+                    .check(matches(isDisplayed()));
             return this;
         }
 

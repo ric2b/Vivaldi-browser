@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,11 +54,9 @@ ThemeSelectionScreen::ThemeSelectionScreen(
 
 ThemeSelectionScreen::~ThemeSelectionScreen() = default;
 
-bool ThemeSelectionScreen::MaybeSkip(WizardContext& context) {
-  if (context.skip_post_login_screens_for_tests) {
-    exit_callback_.Run(Result::kNotApplicable);
+bool ThemeSelectionScreen::ShouldBeSkipped(const WizardContext& context) const {
+  if (context.skip_post_login_screens_for_tests)
     return true;
-  }
 
   const PrefService::Preference* pref =
       ProfileManager::GetActiveUserProfile()->GetPrefs()->FindPreference(
@@ -66,11 +64,18 @@ bool ThemeSelectionScreen::MaybeSkip(WizardContext& context) {
   if (pref->IsManaged() || pref->IsRecommended() ||
       !chromeos::features::IsOobeThemeSelectionEnabled() ||
       !features::IsDarkLightModeEnabled()) {
-    exit_callback_.Run(Result::kNotApplicable);
     return true;
   }
 
   return false;
+}
+
+bool ThemeSelectionScreen::MaybeSkip(WizardContext& context) {
+  if (!ShouldBeSkipped(context))
+    return false;
+
+  exit_callback_.Run(Result::kNotApplicable);
+  return true;
 }
 
 void ThemeSelectionScreen::ShowImpl() {

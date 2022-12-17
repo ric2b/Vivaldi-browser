@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,9 +61,9 @@ AXTreeServer::AXTreeServer(const AXTreeSelector& selector,
                                 AXTreeFormatter::kFiltersDefaultSet);
 
   // Get accessibility tree as a nested dictionary.
-  base::Value dict = formatter->BuildTreeForSelector(selector);
+  base::Value::Dict dict = formatter->BuildTreeForSelector(selector);
 
-  if (dict.DictEmpty()) {
+  if (dict.empty()) {
     LOG(ERROR) << "Failed to get accessibility tree.";
     error = true;
     return;

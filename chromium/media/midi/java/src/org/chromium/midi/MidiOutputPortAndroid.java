@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,9 +6,6 @@ package org.chromium.midi;
 
 import android.media.midi.MidiDevice;
 import android.media.midi.MidiInputPort;
-import android.os.Build;
-
-import androidx.annotation.RequiresApi;
 
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
@@ -22,7 +19,6 @@ import java.io.IOException;
 // Note "OutputPort" is named in the Web MIDI manner. It corresponds to MidiInputPort class in the
 // Android API.
 @JNINamespace("midi")
-@RequiresApi(Build.VERSION_CODES.M)
 class MidiOutputPortAndroid {
     /**
      * The underlying port.

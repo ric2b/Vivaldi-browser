@@ -1,10 +1,9 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/downgrade/downgrade_manager.h"
 
-#include <algorithm>
 #include <iterator>
 #include <utility>
 
@@ -17,6 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/syslog_logging.h"
@@ -68,11 +68,9 @@ void MoveUserData(const base::FilePath& source, const base::FilePath& target) {
         // Don't try to move the dir into which everything is being moved.
         if (name.FinalExtension() == kDowngradeDeleteSuffix)
           return true;
-        return std::find_if(std::begin(kFilesToKeep), std::end(kFilesToKeep),
-                            [&name](const auto& keep) {
-                              return base::EqualsCaseInsensitiveASCII(
-                                  name.value(), keep);
-                            }) != std::end(kFilesToKeep);
+        return base::ranges::any_of(kFilesToKeep, [&name](const auto& keep) {
+          return base::EqualsCaseInsensitiveASCII(name.value(), keep);
+        });
       });
   auto result = MoveContents(source, target, std::move(exclusion_predicate));
 

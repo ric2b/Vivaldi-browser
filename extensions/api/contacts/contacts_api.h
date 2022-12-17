@@ -18,6 +18,11 @@
 using contact::ContactModelObserver;
 using contact::ContactService;
 
+namespace thunderbirdContacts {
+void Read(std::string path, contact::ContactRows& contacts);
+
+}  // namespace thunderbirdContacts
+
 namespace extensions {
 
 using vivaldi::contacts::Contact;
@@ -63,6 +68,9 @@ class ContactsAPI : public BrowserContextKeyedAPI,
 
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
+
+  void ReadThunderbirdContacts(std::string path,
+                               contact::ContactRows& contacts);
 
  private:
   friend class BrowserContextKeyedAPIFactory<ContactsAPI>;
@@ -302,6 +310,18 @@ class ContactsUpdateEmailAddressFunction : public ContactAsyncFunction {
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
+};
+
+class ContactsReadThunderbirdContactsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contacts.readThunderbirdContacts",
+                             CONTACTS_READ_THUNDERBIRD_CONTACTS)
+  ContactsReadThunderbirdContactsFunction() = default;
+
+ private:
+  ~ContactsReadThunderbirdContactsFunction() override = default;
+
+  ResponseAction Run() override;
 };
 
 }  // namespace extensions

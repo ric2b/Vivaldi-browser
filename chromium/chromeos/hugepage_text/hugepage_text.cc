@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 // Author: Ken Chen <kenchen@google.com> Tiancong Wang <tcwang@google.com>
@@ -58,8 +58,9 @@ constexpr static bool kIsOrderfileEnabled = true;
 constexpr static bool kIsOrderfileEnabled = false;
 #endif
 
-const base::Feature kCrOSHugepageRemapAndLockZygote{
-    "CrOSHugepageRemapAndLockInZygote", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kCrOSHugepageRemapAndLockZygote,
+             "CrOSHugepageRemapAndLockInZygote",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const int kHpageShift = 21;
 const int kHpageSize = (1 << kHpageShift);

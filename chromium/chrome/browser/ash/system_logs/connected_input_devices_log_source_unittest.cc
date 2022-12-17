@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,7 @@ class ConnectedInputDevicesLogSourceTest : public ::testing::Test {
   static const uint16_t unknown_vid;
   static const char unknown_vendor_name[];
 
-  int num_callback_calls() const { return num_callback_calls_; }
+  size_t num_callback_calls() const { return num_callback_calls_; }
   const SystemLogsResponse& response() const { return response_; }
 
   SysLogsSourceCallback fetch_callback() {
@@ -56,7 +56,7 @@ class ConnectedInputDevicesLogSourceTest : public ::testing::Test {
   content::BrowserTaskEnvironment task_environment_;
   // Used to verify that OnGetFeedbackData was called the correct number of
   // times.
-  int num_callback_calls_ = 0;
+  size_t num_callback_calls_ = 0;
 
   // Stores results from the log source passed into fetch_callback().
   SystemLogsResponse response_;

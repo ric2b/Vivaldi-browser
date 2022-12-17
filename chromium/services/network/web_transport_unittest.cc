@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -208,8 +208,7 @@ class TestClient final : public mojom::WebTransportClient {
 
   // mojom::WebTransportClient implementation.
   void OnDatagramReceived(base::span<const uint8_t> data) override {
-    received_datagrams_.push_back(
-        std::vector<uint8_t>(data.begin(), data.end()));
+    received_datagrams_.emplace_back(data.begin(), data.end());
   }
   void OnIncomingStreamClosed(uint32_t stream_id, bool fin_received) override {
     closed_incoming_streams_.insert(std::make_pair(stream_id, fin_received));
@@ -340,7 +339,7 @@ class WebTransportTest : public testing::TestWithParam<base::StringPiece> {
   void CreateWebTransport(
       const GURL& url,
       const url::Origin& origin,
-      const net::NetworkIsolationKey& key,
+      const net::NetworkAnonymizationKey& key,
       std::vector<mojom::WebTransportCertificateFingerprintPtr> fingerprints,
       mojo::PendingRemote<mojom::WebTransportHandshakeClient>
           handshake_client) {
@@ -352,7 +351,7 @@ class WebTransportTest : public testing::TestWithParam<base::StringPiece> {
       const url::Origin& origin,
       mojo::PendingRemote<mojom::WebTransportHandshakeClient>
           handshake_client) {
-    CreateWebTransport(url, origin, net::NetworkIsolationKey(), {},
+    CreateWebTransport(url, origin, net::NetworkAnonymizationKey(), {},
                        std::move(handshake_client));
   }
 
@@ -362,7 +361,7 @@ class WebTransportTest : public testing::TestWithParam<base::StringPiece> {
       std::vector<mojom::WebTransportCertificateFingerprintPtr> fingerprints,
       mojo::PendingRemote<mojom::WebTransportHandshakeClient>
           handshake_client) {
-    CreateWebTransport(url, origin, net::NetworkIsolationKey(),
+    CreateWebTransport(url, origin, net::NetworkAnonymizationKey(),
                        std::move(fingerprints), std::move(handshake_client));
   }
 

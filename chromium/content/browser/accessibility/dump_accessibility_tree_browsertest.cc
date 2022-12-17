@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,9 +76,6 @@ std::vector<ui::AXPropertyFilter> DumpAccessibilityTreeTest::DefaultFilters()
 void DumpAccessibilityTreeTest::SetUpCommandLine(
     base::CommandLine* command_line) {
   DumpAccessibilityTestBase::SetUpCommandLine(command_line);
-  // Enable auto expand <details> element, which is used in some tests.
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kEnableBlinkFeatures, "AutoExpandDetailsElement");
   // Enable MathMLCore, used in other tests.
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kEnableBlinkFeatures, "MathMLCore");
@@ -121,8 +118,8 @@ std::vector<std::string> DumpAccessibilityTreeTest::Dump() {
 }
 
 void DumpAccessibilityTreeTest::ChooseFeatures(
-    std::vector<base::Feature>* enabled_features,
-    std::vector<base::Feature>* disabled_features) {
+    std::vector<base::test::FeatureRef>* enabled_features,
+    std::vector<base::test::FeatureRef>* disabled_features) {
   // http://crbug.com/1063155 - temporary until this is enabled
   // everywhere.
   enabled_features->emplace_back(
@@ -134,8 +131,8 @@ void DumpAccessibilityTreeTest::ChooseFeatures(
 }
 
 void DumpAccessibilityTreeTestWithIgnoredNodes::ChooseFeatures(
-    std::vector<base::Feature>* enabled_features,
-    std::vector<base::Feature>* disabled_features) {
+    std::vector<base::test::FeatureRef>* enabled_features,
+    std::vector<base::test::FeatureRef>* disabled_features) {
   // http://crbug.com/1063155 - temporary until this is enabled
   // everywhere.
   enabled_features->emplace_back(
@@ -606,6 +603,16 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaBanner) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaBlockquote) {
   RunAriaTest(FILE_PATH_LITERAL("aria-blockquote.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaBrailleLabel) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-braillelabel.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaBrailleRoleDescription) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-brailleroledescription.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaBusy) {
@@ -1221,7 +1228,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaParagraph) {
   RunAriaTest(FILE_PATH_LITERAL("aria-paragraph.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaPosinset) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       DISABLED_AccessibilityAriaPosinset) {
   RunAriaTest(FILE_PATH_LITERAL("aria-posinset.html"));
 }
 
@@ -2830,8 +2838,9 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityP) {
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityParam) {
   RunHtmlTest(FILE_PATH_LITERAL("param.html"));
 }
-
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityPopupApi) {
+// TODO(crbug.com/1367886): Test flaky on multiple platforms.
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       DISABLED_AccessibilityPopupApi) {
   RunHtmlTest(FILE_PATH_LITERAL("popup-api.html"));
 }
 
@@ -3271,7 +3280,14 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("node-changed-crash-in-editable-text.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityNoSourceVideo) {
+// TODO(https://crbug.com/1366446): This test is failing on Android.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_AccessibilityNoSourceVideo DISABLED_AccessibilityNoSourceVideo
+#else
+#define MAYBE_AccessibilityNoSourceVideo AccessibilityNoSourceVideo
+#endif  // BUILDFLAG(IS_ANDROID)
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       MAYBE_AccessibilityNoSourceVideo) {
 #if BUILDFLAG(IS_MAC)
   // The /blink test pass is different on macOS than on other platforms. See
   // https://crbug.com/1314896.
@@ -3405,8 +3421,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, DisplayContentsSelectCrash) {
   RunRegressionTest(FILE_PATH_LITERAL("display-contents-select-crash.html"));
 }
 
-// Flaky on all platforms. http://crbug.com/1055764
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, DISABLED_XmlInIframeCrash) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, XmlInIframeCrash) {
   RunRegressionTest(FILE_PATH_LITERAL("xml-in-iframe-crash.html"));
 }
 

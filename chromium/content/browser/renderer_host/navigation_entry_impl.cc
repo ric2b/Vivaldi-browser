@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <map>
 #include <string>
 #include <utility>
@@ -15,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -923,6 +923,7 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
           /*fenced_frame_reporting_metadata=*/nullptr,
           // This timestamp will be populated when the commit IPC is sent.
           base::TimeTicks() /* commit_sent */, std::string() /* srcdoc_value */,
+          GURL() /* fallback_srcdoc_baseurl */,
           false /* should_load_data_url */, ancestor_or_self_has_cspee,
           std::string() /* reduced_accept_language */);
 #if BUILDFLAG(IS_ANDROID)
@@ -1088,6 +1089,23 @@ FrameNavigationEntry* NavigationEntryImpl::GetFrameEntry(
   return tree_node ? tree_node->frame_entry.get() : nullptr;
 }
 
+void NavigationEntryImpl::ForEachFrameEntry(
+    FrameEntryIterationCallback on_frame_entry) {
+  NavigationEntryImpl::TreeNode* node = nullptr;
+  base::queue<NavigationEntryImpl::TreeNode*> work_queue;
+  work_queue.push(root_node());
+  while (!work_queue.empty()) {
+    node = work_queue.front();
+    work_queue.pop();
+
+    on_frame_entry(node->frame_entry.get());
+
+    // Enqueue any children.
+    for (const auto& child : node->children)
+      work_queue.push(child.get());
+  }
+}
+
 base::flat_map<std::string, bool> NavigationEntryImpl::GetSubframeUniqueNames(
     FrameTreeNode* frame_tree_node) const {
   base::flat_map<std::string, bool> names;
@@ -1150,11 +1168,9 @@ void NavigationEntryImpl::RemoveEntryForFrame(FrameTreeNode* frame_tree_node,
               true /* global_ walk_or_frame_removal */);
     }
     NavigationEntryImpl::TreeNode* parent_node = node->parent;
-    auto it = std::find_if(
-        parent_node->children.begin(), parent_node->children.end(),
-        [node](const std::unique_ptr<NavigationEntryImpl::TreeNode>& item) {
-          return item.get() == node;
-        });
+    auto it = base::ranges::find(
+        parent_node->children, node,
+        &std::unique_ptr<NavigationEntryImpl::TreeNode>::get);
     CHECK(it != parent_node->children.end());
     parent_node->children.erase(it);
   }

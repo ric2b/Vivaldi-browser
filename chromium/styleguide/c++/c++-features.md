@@ -39,6 +39,7 @@ The current status of existing standards and Abseil features is:
     *   absl::StatusOr: Initially supported September 3, 2020
     *   absl::Cleanup: Initially supported February 4, 2021
     *   absl::AnyInvocable: Initially supported June 20, 2022
+    *   Log library: Initially supported Aug 31, 2022
 
 [TOC]
 
@@ -683,6 +684,38 @@ require default-constructibility of the mapped type.
 [Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/Uv2tUfIwUfQ/m/ffMxCk9uAAAJ)
 ***
 
+### std::apply <sup>[allowed]</sup>
+
+```c++
+static_assert(std::apply(std::plus<>(), std::make_tuple(1, 2)) == 3);
+```
+
+**Description:** Invokes a `Callable` object with a tuple of arguments.
+
+**Documentation:**
+[std::apply](https://en.cppreference.com/w/cpp/utility/apply)
+
+**Notes:**
+*** promo
+[Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/cNZm_g39fyM)
+***
+
+### std::as_const <sup>[allowed]</sup>
+
+```c++
+auto&& const_ref = std::as_const(mutable_obj);
+```
+
+**Description:** Forms reference to const T.
+
+**Documentation:**
+[std::as_const](https://en.cppreference.com/w/cpp/utility/as_const)
+
+**Notes:**
+*** promo
+[Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/5Uo4iJK6Mf4)
+***
+
 ### Non-member std::size/std::empty/std::data <sup>[allowed]</sup>
 
 ```c++
@@ -750,6 +783,31 @@ func(T, Ts...) { ...
 **Notes:**
 *** promo
 [Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/YhlF_sTDSc0/m/QMzf42BtAAAJ)
+***
+
+### std::hardware_{constructive|destructive}_interference_size <sup>[allowed]</sup>
+
+```c++
+struct SharedData {
+  ReadOnlyFrequentlyUsed data;
+  alignas(std::hardware_destructive_interference_size) std::atomic<size_t> counter;
+};
+```
+
+**Description:** The `std::hardware_destructive_interference_size` constant is
+useful to avoid false sharing (destructive interference) between variables that
+would otherwise occupy the same cacheline. In contrast,
+`std::hardware_constructive_interference_size` is helpful to promote true
+sharing (constructive interference), e.g. to support better locality for
+non-contended data.
+
+**Documentation:**
+[std::hardware_destructive_interference_size](https://en.cppreference.com/w/cpp/thread/hardware_destructive_interference_size),
+[std::hardware_constructive_interference_size](https://en.cppreference.com/w/cpp/thread/hardware_destructive_interference_size)
+
+**Notes:**
+*** promo
+[Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/cwktrFxxUY4/m/sP-J-s61AQAJ)
 ***
 
 ## C++17 Banned Library Features {#library-blocklist-17}
@@ -1120,22 +1178,6 @@ a regular function.
 See also `base::invoke`.
 ***
 
-### std::apply <sup>[tbd]</sup>
-
-```c++
-static_assert(std::apply(std::plus<>(), std::make_tuple(1, 2)) == 3);
-```
-
-**Description:** Invokes a `Callable` object with a tuple of arguments.
-
-**Documentation:**
-[std::apply](https://en.cppreference.com/w/cpp/utility/apply)
-
-**Notes:**
-*** promo
-See also `absl::apply` and `base::apply`.
-***
-
 ### std::byte <sup>[tbd]</sup>
 
 ```c++
@@ -1227,22 +1269,6 @@ auto it = std::search(haystack.begin(), haystack.end(),
 **Notes:**
 *** promo
 None
-***
-
-### std::as_const <sup>[tbd]</sup>
-
-```c++
-auto&& const_ref = std::as_const(mutable_obj);
-```
-
-**Description:** Forms reference to const T.
-
-**Documentation:**
-[std::as_const](https://en.cppreference.com/w/cpp/utility/as_const)
-
-**Notes:**
-*** promo
-See also `base::as_const`.
 ***
 
 ### std::not_fn <sup>[tbd]</sup>
@@ -1506,24 +1532,6 @@ double dist = std::hypot(1.0, 2.5, 3.7);
 **Notes:**
 *** promo
 None
-***
-
-### Cache line interface <sup>[tbd]</sup>
-
-```c++
-alignas(std::hardware_destructive_interference_size) std::atomic<int> cat;
-static_assert(sizeof(S) <= std::hardware_constructive_interference_size);
-```
-
-**Description:** A portable way to access the L1 data cache line size.
-
-**Documentation:**
-[Hardware interference size](https://en.cppreference.com/w/cpp/thread/hardware_destructive_interference_size)
-
-**Notes:**
-*** promo
-May not be supported in libc++, according to the
-[library features table](https://en.cppreference.com/w/cpp/17)
 ***
 
 ### std::launder <sup>[tbd]</sup>
@@ -1948,6 +1956,25 @@ standard library.
 **Notes:**
 *** promo
 Overlaps with `base/ranges/algorithm.h`.
+***
+
+### Log macros are related classes <sup>[tbd]</sup>
+
+```c++
+LOG(INFO) << message;
+CHECK(condition);
+absl::AddLogSink(&custom_sink_to_capture_absl_logs);
+```
+
+**Description:** Macros and related classes to perform debug loggings
+
+**Documentation:**
+[log.h](https://source.chromium.org/chromium/chromium/src/+/main:third_party/abseil-cpp/absl/log.h)
+[check.h](https://source.chromium.org/chromium/chromium/src/+/main:third_party/abseil-cpp/absl/check.h)
+
+**Notes:**
+*** promo
+Overlaps and uses same macros names as `base/logging.h`.
 ***
 
 ### Random <sup>[tbd]</sup>

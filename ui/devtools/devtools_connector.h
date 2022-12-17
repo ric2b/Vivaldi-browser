@@ -60,29 +60,19 @@ class UIBindingsDelegate : public DevToolsUIBindings::Delegate {
   content::BrowserContext* browser_context_ = nullptr;
 };
 
-class DevtoolsConnectorItem : public content::WebContentsDelegate,
-                              public base::RefCounted<DevtoolsConnectorItem> {
+class DevtoolsConnectorItem : public content::WebContentsDelegate {
  public:
   DevtoolsConnectorItem() = default;
   DevtoolsConnectorItem(int tab_id, content::BrowserContext* context);
+  ~DevtoolsConnectorItem() override;
 
-  void set_guest_delegate(content::WebContentsDelegate* delegate) {
-    guest_delegate_ = delegate;
-  }
   void set_devtools_delegate(content::WebContentsDelegate* delegate) {
     devtools_delegate_ = delegate;
   }
 
   void set_ui_bindings_delegate(DevToolsUIBindings::Delegate* delegate) {
-    // should only be set once.
-    DCHECK(!connector_bindings_delegate_);
-
-    connector_bindings_delegate_ =
+    ui_bindings_bindings_delegate_ =
         new UIBindingsDelegate(browser_context_, tab_id(), delegate);
-  }
-
-  const content::WebContentsDelegate* guest_delegate() {
-    return guest_delegate_;
   }
 
   const content::WebContentsDelegate* devtoools_delegate() {
@@ -90,7 +80,7 @@ class DevtoolsConnectorItem : public content::WebContentsDelegate,
   }
 
   DevToolsUIBindings::Delegate* ui_bindings_delegate() {
-    return connector_bindings_delegate_;
+    return ui_bindings_bindings_delegate_;
   }
 
   int tab_id() { return tab_id_; }
@@ -108,15 +98,13 @@ class DevtoolsConnectorItem : public content::WebContentsDelegate,
  private:
   friend class base::RefCounted<DevtoolsConnectorItem>;
 
-  ~DevtoolsConnectorItem() override;
-
   // content::WebContentsDelegate:
   void ActivateContents(content::WebContents* contents) override;
   void AddNewContents(content::WebContents* source,
                       std::unique_ptr<content::WebContents> new_contents,
                       const GURL& target_url,
                       WindowOpenDisposition disposition,
-                      const gfx::Rect& initial_rect,
+                      const blink::mojom::WindowFeatures& window_features,
                       bool user_gesture,
                       bool* was_blocked) override;
   void WebContentsCreated(content::WebContents* source_contents,
@@ -154,14 +142,13 @@ class DevtoolsConnectorItem : public content::WebContentsDelegate,
 
   // These are the original delegates Chromium would normally use
   // and we call into them to allow existing functionality to work.
-  content::WebContentsDelegate* guest_delegate_ = nullptr;
   content::WebContentsDelegate* devtools_delegate_ = nullptr;
 
   int tab_id_ = 0;
   content::BrowserContext* browser_context_ = nullptr;
 
-  // This will be owned by the DevtoolsUIBindings class and deleted there.
-  UIBindingsDelegate* connector_bindings_delegate_ = nullptr;
+  // |ui_bindings_bindings_delegate_| is owned by DevToolsUIBindings.
+  UIBindingsDelegate* ui_bindings_bindings_delegate_ = nullptr;
 
   // Keeps track of the docking state per tab.
   std::string devtools_docking_state_ = "off";

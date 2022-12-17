@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,21 +13,21 @@ namespace webapps {
 namespace features {
 
 #if BUILDFLAG(IS_ANDROID)
-extern const base::Feature kAddToHomescreenMessaging;
-extern const base::Feature kInstallableAmbientBadgeInfoBar;
-extern const base::Feature kInstallableAmbientBadgeMessage;
+BASE_DECLARE_FEATURE(kAddToHomescreenMessaging);
+BASE_DECLARE_FEATURE(kInstallableAmbientBadgeInfoBar);
+BASE_DECLARE_FEATURE(kInstallableAmbientBadgeMessage);
 extern const base::FeatureParam<int>
     kInstallableAmbientBadgeMessage_ThrottleDomainsCapacity;
-extern const base::Feature kWebApkUniqueId;
+BASE_DECLARE_FEATURE(kWebApkUniqueId);
 #endif  // BUILDFLAG(IS_ANDROID)
 
-extern const base::Feature kCreateShortcutIgnoresManifest;
-extern const base::Feature kSkipServiceWorkerCheckAll;
-extern const base::Feature kSkipServiceWorkerCheckInstallOnly;
-extern const base::Feature kDesktopPWAsDetailedInstallDialog;
+BASE_DECLARE_FEATURE(kCreateShortcutIgnoresManifest);
+BASE_DECLARE_FEATURE(kSkipServiceWorkerCheckInstallOnly);
+BASE_DECLARE_FEATURE(kDesktopPWAsDetailedInstallDialog);
+BASE_DECLARE_FEATURE(kSkipServiceWorkerForInstallPrompt);
 
-bool SkipBannerServiceWorkerCheck();
 bool SkipInstallServiceWorkerCheck();
+bool SkipServiceWorkerForInstallPromotion();
 
 }  // namespace features
 }  // namespace webapps

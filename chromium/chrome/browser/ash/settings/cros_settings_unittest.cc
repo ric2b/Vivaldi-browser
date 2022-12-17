@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/memory/weak_ptr.h"
@@ -22,10 +21,12 @@
 #include "chrome/browser/ash/policy/core/device_policy_builder.h"
 #include "chrome/browser/ash/settings/device_settings_provider.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
+#include "chrome/browser/net/fake_nss_service.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/ownership/mock_owner_key_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
@@ -42,7 +43,9 @@ namespace em = enterprise_management;
 namespace ash {
 
 namespace {
-constexpr char kOwner[] = "me@owner";
+// For a user to be recognized as an owner, it needs to be the author of the
+// device settings. So use the default user name that DevicePolicyBuilder uses.
+const char* const kOwner = policy::PolicyBuilder::kFakeUsername;
 constexpr char kUser1[] = "h@xxor";
 
 void NotReached() {
@@ -66,7 +69,8 @@ class CrosSettingsTest : public testing::Test {
     fake_session_manager_client_.set_device_policy(device_policy_.GetBlob());
     owner_key_util_->SetPublicKeyFromPrivateKey(
         *device_policy_.GetSigningKey());
-    owner_key_util_->SetPrivateKey(device_policy_.GetSigningKey());
+    owner_key_util_->ImportPrivateKeyAndSetPublicKey(
+        device_policy_.GetSigningKey());
     OwnerSettingsServiceAshFactory::GetInstance()->SetOwnerKeyUtilForTesting(
         owner_key_util_);
     DeviceSettingsService::Get()->SetSessionManager(
@@ -91,6 +95,8 @@ class CrosSettingsTest : public testing::Test {
     profile_ = std::make_unique<TestingProfile>();
     profile_->set_profile_name(account_id.GetUserEmail());
 
+    FakeNssService::InitializeForBrowserContext(profile_.get(),
+                                                /*enable_system_slot=*/false);
     OwnerSettingsServiceAsh* service =
         OwnerSettingsServiceAshFactory::GetForBrowserContext(profile_.get());
     DCHECK(service);
@@ -132,7 +138,7 @@ class CrosSettingsTest : public testing::Test {
 
   bool IsAllowlisted(const std::string& username) {
     return CrosSettings::Get()->FindEmailInList(kAccountsPrefUsers, username,
-                                                NULL);
+                                                nullptr);
   }
 
   bool IsUserAllowed(const std::string& username,

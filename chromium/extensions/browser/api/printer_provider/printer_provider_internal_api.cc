@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "base/location.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/observer_list.h"
+#include "base/types/optional_util.h"
 #include "base/values.h"
 #include "content/public/browser/blob_handle.h"
 #include "content/public/browser/browser_context.h"
@@ -25,7 +26,6 @@
 #include "extensions/browser/api/printer_provider/printer_provider_api.h"
 #include "extensions/browser/api/printer_provider/printer_provider_api_factory.h"
 #include "extensions/browser/api/printer_provider/printer_provider_print_job.h"
-#include "extensions/browser/blob_holder.h"
 #include "extensions/common/api/printer_provider.h"
 #include "extensions/common/api/printer_provider_internal.h"
 
@@ -127,9 +127,8 @@ PrinterProviderInternalReportPrinterCapabilityFunction::Run() {
   if (params->capability) {
     PrinterProviderInternalAPI::GetFactoryInstance()
         ->Get(browser_context())
-        ->NotifyGetCapabilityResult(
-            extension(), params->request_id,
-            params->capability->additional_properties.GetDict());
+        ->NotifyGetCapabilityResult(extension(), params->request_id,
+                                    params->capability->additional_properties);
   } else {
     PrinterProviderInternalAPI::GetFactoryInstance()
         ->Get(browser_context())
@@ -193,16 +192,13 @@ PrinterProviderInternalGetPrintDataFunction::Run() {
   browser_context()->CreateMemoryBackedBlob(
       base::make_span(job->document_bytes->front(),
                       job->document_bytes->size()),
-      "",
+      job->content_type,
       base::BindOnce(&PrinterProviderInternalGetPrintDataFunction::OnBlob, this,
-                     job->content_type, job->document_bytes->size(),
                      job->document_bytes));
   return RespondLater();
 }
 
 void PrinterProviderInternalGetPrintDataFunction::OnBlob(
-    const std::string& type,
-    int size,
     const scoped_refptr<base::RefCountedMemory>& data,
     std::unique_ptr<content::BlobHandle> blob) {
   if (!blob) {
@@ -210,21 +206,11 @@ void PrinterProviderInternalGetPrintDataFunction::OnBlob(
     return;
   }
 
-  internal_api::BlobInfo info;
-  info.blob_uuid = blob->GetUUID();
-  info.type = type;
-  info.size = size;
+  std::vector<blink::mojom::SerializedBlobPtr> blobs;
+  blobs.push_back(blob->Serialize());
 
-  std::vector<std::string> uuids;
-  uuids.push_back(blob->GetUUID());
-
-  extensions::BlobHolder* holder =
-      extensions::BlobHolder::FromRenderProcessHost(
-          content::RenderProcessHost::FromID(source_process_id()));
-  holder->HoldBlobReference(std::move(blob));
-
-  SetTransferredBlobUUIDs(uuids);
-  Respond(ArgumentList(internal_api::GetPrintData::Results::Create(info)));
+  SetTransferredBlobs(std::move(blobs));
+  Respond(NoArguments());
 }
 
 PrinterProviderInternalReportUsbPrinterInfoFunction::
@@ -241,8 +227,9 @@ PrinterProviderInternalReportUsbPrinterInfoFunction::Run() {
 
   PrinterProviderInternalAPI::GetFactoryInstance()
       ->Get(browser_context())
-      ->NotifyGetUsbPrinterInfoResult(extension(), params->request_id,
-                                      params->printer_info.get());
+      ->NotifyGetUsbPrinterInfoResult(
+          extension(), params->request_id,
+          base::OptionalToPtr(params->printer_info));
   return RespondNow(NoArguments());
 }
 

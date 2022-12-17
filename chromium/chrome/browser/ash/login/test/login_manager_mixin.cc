@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,10 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/components/login/auth/auth_status_consumer.h"
-#include "ash/components/login/auth/public/key.h"
-#include "ash/components/login/auth/public/user_context.h"
-#include "ash/components/login/auth/stub_authenticator_builder.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/strings/string_util.h"
@@ -29,6 +25,10 @@
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
+#include "chromeos/ash/components/login/auth/auth_status_consumer.h"
+#include "chromeos/ash/components/login/auth/public/key.h"
+#include "chromeos/ash/components/login/auth/public/user_context.h"
+#include "chromeos/ash/components/login/auth/stub_authenticator_builder.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/user_manager/known_user.h"
@@ -128,21 +128,21 @@ bool LoginManagerMixin::SetUpUserDataDirectory() {
 
 void LoginManagerMixin::SetUpLocalState() {
   for (const auto& user : initial_users_) {
-    ListPrefUpdate users_pref(g_browser_process->local_state(),
-                              "LoggedInUsers");
+    ScopedListPrefUpdate users_pref(g_browser_process->local_state(),
+                                    "LoggedInUsers");
     base::Value email_value(user.account_id.GetUserEmail());
-    if (!base::Contains(users_pref->GetListDeprecated(), email_value))
+    if (!base::Contains(users_pref.Get(), email_value))
       users_pref->Append(std::move(email_value));
 
-    DictionaryPrefUpdate user_type_update(g_browser_process->local_state(),
+    ScopedDictPrefUpdate user_type_update(g_browser_process->local_state(),
                                           "UserType");
-    user_type_update->SetIntKey(user.account_id.GetAccountIdKey(),
-                                static_cast<int>(user.user_type));
+    user_type_update->Set(user.account_id.GetAccountIdKey(),
+                          static_cast<int>(user.user_type));
 
-    DictionaryPrefUpdate user_token_update(g_browser_process->local_state(),
+    ScopedDictPrefUpdate user_token_update(g_browser_process->local_state(),
                                            "OAuthTokenStatus");
-    user_token_update->SetIntKey(user.account_id.GetUserEmail(),
-                                 static_cast<int>(user.token_status));
+    user_token_update->Set(user.account_id.GetUserEmail(),
+                           static_cast<int>(user.token_status));
 
     user_manager::KnownUser known_user(g_browser_process->local_state());
     known_user.UpdateId(user.account_id);

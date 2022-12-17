@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,14 +37,14 @@ class NativeImageBuffer;
 class EGLImageBacking : public ClearTrackingSharedImageBacking {
  public:
   EGLImageBacking(const Mailbox& mailbox,
-                  viz::ResourceFormat format,
+                  viz::SharedImageFormat format,
                   const gfx::Size& size,
                   const gfx::ColorSpace& color_space,
                   GrSurfaceOrigin surface_origin,
                   SkAlphaType alpha_type,
                   uint32_t usage,
                   size_t estimated_size,
-                  const GLCommonImageBackingFactory::FormatInfo format_into,
+                  const GLCommonImageBackingFactory::FormatInfo& format_into,
                   const GpuDriverBugWorkarounds& workarounds,
                   bool use_passthrough,
                   base::span<const uint8_t> pixel_data);
@@ -57,7 +57,6 @@ class EGLImageBacking : public ClearTrackingSharedImageBacking {
   // SharedImageBacking implementation.
   SharedImageBackingType GetType() const override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
-  bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override;
   void MarkForDestruction() override;
 
  protected:

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,7 @@ public class CustomTabDownloadObserver extends EmptyTabObserver {
     }
 
     @Override
-    public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
+    public void onDidFinishNavigationInPrimaryMainFrame(Tab tab, NavigationHandle navigation) {
         // For a navigation from page A to page B, there can be any number of redirects in between.
         // The first navigation which opens the custom tab will have a transition of type FROM_API.
         // Each redirect can then be treated as its own navigation with a separate call to this
@@ -54,18 +54,28 @@ public class CustomTabDownloadObserver extends EmptyTabObserver {
         }
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_NEW_DOWNLOAD_TAB)
                 && navigation.isDownload()) {
+            Runnable urlRegistration = ()
+                    -> DownloadManagerService.getDownloadManagerService()
+                               .getMessageUiController(/* otrProfileId */ null)
+                               .addDownloadInterstitialSource(tab.getOriginalUrl());
+
             DownloadInterstitialCoordinator coordinator =
                     DownloadInterstitialCoordinatorFactory.create(tab::getContext,
-                            tab.getOriginalUrl().getSpec(), tab.getWindowAndroid());
+                            tab.getOriginalUrl().getSpec(), tab.getWindowAndroid(), () -> {
+                                tab.reload();
+                                urlRegistration.run();
+                            });
             // Register the download's original URL to prevent messages UI showing in
             // interstitial.
-            DeferredStartupHandler.getInstance().addDeferredTask(
-                    ()
-                            -> DownloadManagerService.getDownloadManagerService()
-                                       .getMessageUiController(/* otrProfileId */ null)
-                                       .addDownloadInterstitialSource(tab.getOriginalUrl()));
+            DeferredStartupHandler.getInstance().addDeferredTask(urlRegistration);
             NewDownloadTab.from(tab, coordinator, mActivity).show();
         }
+    }
+    @Override
+    public void onDidFinishNavigationNoop(Tab tab, NavigationHandle navigation) {
+        // In case something goes wrong, we can enable NotifyJavaSpuriouslyToMeasurePerf so
+        // didFinishNavigation has the same behavior as before.
+        onDidFinishNavigationInPrimaryMainFrame(tab, navigation);
     }
 
     private void unregister() {

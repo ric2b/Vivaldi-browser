@@ -80,6 +80,7 @@ class ScriptPromise;
 class ScriptState;
 class ScriptValue;
 class SecurityOrigin;
+class SoftNavigationEntry;
 class UserTiming;
 class V8ObjectBuilder;
 class V8UnionDoubleOrString;
@@ -211,6 +212,8 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
 
   void AddLargestContentfulPaint(LargestContentfulPaint*);
 
+  void AddSoftNavigationToPerformanceTimeline(SoftNavigationEntry*);
+
   PerformanceMark* mark(ScriptState*,
                         const AtomicString& mark_name,
                         PerformanceMarkOptions* mark_options,
@@ -307,6 +310,11 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
                                      bool* response_tainting_not_basic,
                                      bool* tainted_origin_flag);
 
+  static bool ShouldReportResponseStatus(
+      const ResourceResponse& response,
+      const SecurityOrigin& initiator_security_origin,
+      const network::mojom::RequestMode request_mode);
+
   static bool AllowsTimingRedirect(const Vector<ResourceResponse>&,
                                    const ResourceResponse&,
                                    const SecurityOrigin&,
@@ -390,6 +398,7 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   PerformanceEntryVector longtask_buffer_;
   PerformanceEntryVector visibility_state_buffer_;
   PerformanceEntryVector back_forward_cache_restoration_buffer_;
+  PerformanceEntryVector soft_navigation_buffer_;
   Member<PerformanceEntry> navigation_timing_;
   Member<UserTiming> user_timing_;
   Member<PerformanceEntry> first_paint_timing_;

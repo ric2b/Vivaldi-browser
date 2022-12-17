@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -78,8 +79,7 @@ const std::vector<std::string>& MimeTypesHandler::GetMIMETypeAllowlist() {
 // static
 void MimeTypesHandler::ReportUsedHandler(const std::string& extension_id) {
   auto* const* it =
-      std::find(std::begin(kMIMETypeHandlersAllowlist),
-                std::end(kMIMETypeHandlersAllowlist), extension_id);
+      base::ranges::find(kMIMETypeHandlersAllowlist, extension_id);
   if (it != std::end(kMIMETypeHandlersAllowlist)) {
     MimeHandlerType type = static_cast<MimeHandlerType>(
         it - std::begin(kMIMETypeHandlersAllowlist));
@@ -127,7 +127,7 @@ MimeTypesHandler* MimeTypesHandler::GetHandler(
       extension->GetManifestData(keys::kMimeTypesHandler));
   if (info)
     return &info->handler_;
-  return NULL;
+  return nullptr;
 }
 
 MimeTypesHandlerParser::MimeTypesHandlerParser() {

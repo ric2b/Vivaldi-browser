@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,7 +59,7 @@ public class PasswordGenerationDialogMediator {
                                 R.string.password_generation_dialog_use_password_button)
                         .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, resources,
                                 R.string.password_generation_dialog_cancel_button);
-        if (PasswordManagerHelper.usesUnifiedPasswordManagerUI()) {
+        if (PasswordManagerHelper.usesUnifiedPasswordManagerBranding()) {
             builder = builder.with(ModalDialogProperties.TITLE_ICON, customView.getContext(),
                                      new PasswordManagerResourceProviderImpl()
                                              .getPasswordManagerIcon())

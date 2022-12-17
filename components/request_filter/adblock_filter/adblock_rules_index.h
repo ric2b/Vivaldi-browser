@@ -37,7 +37,7 @@ class RulesIndex : public content::RenderProcessHostObserver {
     ~ActivationsFound();
     ActivationsFound& operator=(const ActivationsFound& other);
 
-    bool operator==(const ActivationsFound& other);
+    bool operator==(const ActivationsFound& other) const;
 
     uint8_t in_block_rules = 0;
     uint8_t in_allow_rules = 0;
@@ -110,9 +110,9 @@ class RulesIndex : public content::RenderProcessHostObserver {
     bool IsForDocument(const url::Origin& document_origin,
                        const GURL& url) const;
 
-    const url::Origin document_origin;
-    const GURL url;
-    const ActivationsFound activations;
+    const url::Origin document_origin_;
+    const GURL url_;
+    const ActivationsFound activations_;
   };
 
   ActivationsFound GetActivationsForSingleFrame(

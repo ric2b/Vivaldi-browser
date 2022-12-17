@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@ class TestImageBacking : public SharedImageBacking {
  public:
   // Constructor which uses a dummy GL texture ID for the backing.
   TestImageBacking(const Mailbox& mailbox,
-                   viz::ResourceFormat format,
+                   viz::SharedImageFormat format,
                    const gfx::Size& size,
                    const gfx::ColorSpace& color_space,
                    GrSurfaceOrigin surface_origin,
@@ -25,7 +25,7 @@ class TestImageBacking : public SharedImageBacking {
                    size_t estimated_size);
   // Constructor which uses a provided GL texture ID for the backing.
   TestImageBacking(const Mailbox& mailbox,
-                   viz::ResourceFormat format,
+                   viz::SharedImageFormat format,
                    const gfx::Size& size,
                    const gfx::ColorSpace& color_space,
                    GrSurfaceOrigin surface_origin,
@@ -36,6 +36,7 @@ class TestImageBacking : public SharedImageBacking {
   ~TestImageBacking() override;
 
   bool GetUploadFromMemoryCalledAndReset();
+  bool GetReadbackToMemoryCalledAndReset();
 
   // SharedImageBacking implementation.
   SharedImageBackingType GetType() const override;
@@ -43,11 +44,7 @@ class TestImageBacking : public SharedImageBacking {
   void SetClearedRect(const gfx::Rect& cleared_rect) override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {}
   bool UploadFromMemory(const SkPixmap& pixmap) override;
-  bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override;
-  void OnMemoryDump(const std::string& dump_name,
-                    base::trace_event::MemoryAllocatorDump* dump,
-                    base::trace_event::ProcessMemoryDump* pmd,
-                    uint64_t client_tracing_id) override {}
+  bool ReadbackToMemory(SkPixmap& pixmap) override;
 
   // Helper functions
   GLuint service_id() const { return service_id_; }
@@ -62,12 +59,14 @@ class TestImageBacking : public SharedImageBacking {
   ProduceGLTexturePassthrough(SharedImageManager* manager,
                               MemoryTypeTracker* tracker) override;
 
-  // ProduceSkia/Dawn/Overlay all create dummy representations that
-  // don't link up to a real texture.
+  // ProduceSkia creates a representation that is backed by |texture_|, which
+  // allows for the creation of SkImages from the representation.
   std::unique_ptr<SkiaImageRepresentation> ProduceSkia(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
       scoped_refptr<SharedContextState> context_state) override;
+  // ProduceDawn/Overlay all create dummy representations that
+  // don't link up to a real texture.
   std::unique_ptr<DawnImageRepresentation> ProduceDawn(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
@@ -84,6 +83,7 @@ class TestImageBacking : public SharedImageBacking {
   bool can_access_ = true;
 
   bool upload_from_memory_called_ = false;
+  bool readback_to_memory_called_ = true;
 };
 
 }  // namespace gpu

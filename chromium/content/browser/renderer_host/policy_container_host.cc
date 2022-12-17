@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,10 @@
 #include "base/lazy_instance.h"
 #include "content/browser/renderer_host/frame_navigation_entry.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/private_network_access_util.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_thread.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
 namespace content {
@@ -50,7 +52,9 @@ bool operator==(const PolicyContainerPolicies& lhs,
          lhs.cross_origin_opener_policy == rhs.cross_origin_opener_policy &&
          lhs.cross_origin_embedder_policy == rhs.cross_origin_embedder_policy &&
          lhs.sandbox_flags == rhs.sandbox_flags &&
-         lhs.is_anonymous == rhs.is_anonymous;
+         lhs.is_anonymous == rhs.is_anonymous &&
+         lhs.can_navigate_top_without_user_gesture ==
+             rhs.can_navigate_top_without_user_gesture;
 }
 
 bool operator!=(const PolicyContainerPolicies& lhs,
@@ -103,6 +107,8 @@ std::ostream& operator<<(std::ostream& out,
 
   out << ", sandbox_flags: " << policies.sandbox_flags;
   out << ", is_anonymous: " << policies.is_anonymous;
+  out << ", can_navigate_top_without_user_gesture: "
+      << policies.can_navigate_top_without_user_gesture;
 
   return out << " }";
 }
@@ -118,7 +124,8 @@ PolicyContainerPolicies::PolicyContainerPolicies(
     const network::CrossOriginOpenerPolicy& cross_origin_opener_policy,
     const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
     network::mojom::WebSandboxFlags sandbox_flags,
-    bool is_anonymous)
+    bool is_anonymous,
+    bool can_navigate_top_without_user_gesture)
     : referrer_policy(referrer_policy),
       ip_address_space(ip_address_space),
       is_web_secure_context(is_web_secure_context),
@@ -126,7 +133,42 @@ PolicyContainerPolicies::PolicyContainerPolicies(
       cross_origin_opener_policy(cross_origin_opener_policy),
       cross_origin_embedder_policy(cross_origin_embedder_policy),
       sandbox_flags(sandbox_flags),
-      is_anonymous(is_anonymous) {}
+      is_anonymous(is_anonymous),
+      can_navigate_top_without_user_gesture(
+          can_navigate_top_without_user_gesture) {}
+
+PolicyContainerPolicies::PolicyContainerPolicies(
+    const blink::mojom::PolicyContainerPolicies& policies)
+    : referrer_policy(policies.referrer_policy),
+      ip_address_space(policies.ip_address_space),
+      content_security_policies(
+          mojo::Clone(policies.content_security_policies)),
+      sandbox_flags(policies.sandbox_flags),
+      is_anonymous(policies.is_anonymous),
+      can_navigate_top_without_user_gesture(
+          policies.can_navigate_top_without_user_gesture) {
+  cross_origin_embedder_policy.value = policies.cross_origin_embedder_policy;
+}
+
+PolicyContainerPolicies::PolicyContainerPolicies(
+    const GURL& url,
+    network::mojom::URLResponseHead* response_head,
+    ContentBrowserClient* client)
+    : PolicyContainerPolicies(
+          network::mojom::ReferrerPolicy::kDefault,
+          CalculateIPAddressSpace(url, response_head, client),
+          network::IsUrlPotentiallyTrustworthy(url),
+          mojo::Clone(response_head->parsed_headers->content_security_policy),
+          response_head->parsed_headers->cross_origin_opener_policy,
+          response_head->parsed_headers->cross_origin_embedder_policy,
+          network::mojom::WebSandboxFlags::kNone,
+          /*is_anonymous=*/false,
+          /*can_navigate_top_without_user_gesture=*/true) {
+  for (auto& content_security_policy :
+       response_head->parsed_headers->content_security_policy) {
+    sandbox_flags |= content_security_policy->sandbox;
+  }
+}
 
 PolicyContainerPolicies::PolicyContainerPolicies(PolicyContainerPolicies&&) =
     default;
@@ -140,7 +182,8 @@ PolicyContainerPolicies PolicyContainerPolicies::Clone() const {
   return PolicyContainerPolicies(
       referrer_policy, ip_address_space, is_web_secure_context,
       mojo::Clone(content_security_policies), cross_origin_opener_policy,
-      cross_origin_embedder_policy, sandbox_flags, is_anonymous);
+      cross_origin_embedder_policy, sandbox_flags, is_anonymous,
+      can_navigate_top_without_user_gesture);
 }
 
 std::unique_ptr<PolicyContainerPolicies> PolicyContainerPolicies::ClonePtr()
@@ -153,6 +196,14 @@ void PolicyContainerPolicies::AddContentSecurityPolicies(
   content_security_policies.insert(content_security_policies.end(),
                                    std::make_move_iterator(policies.begin()),
                                    std::make_move_iterator(policies.end()));
+}
+
+blink::mojom::PolicyContainerPoliciesPtr
+PolicyContainerPolicies::ToMojoPolicyContainerPolicies() const {
+  return blink::mojom::PolicyContainerPolicies::New(
+      cross_origin_embedder_policy.value, referrer_policy,
+      mojo::Clone(content_security_policies), is_anonymous, sandbox_flags,
+      ip_address_space, can_navigate_top_without_user_gesture);
 }
 
 PolicyContainerHost::PolicyContainerHost() = default;
@@ -219,12 +270,7 @@ PolicyContainerHost::CreatePolicyContainerForBlink() {
       remote.InitWithNewEndpointAndPassReceiver()));
 
   return blink::mojom::PolicyContainer::New(
-      blink::mojom::PolicyContainerPolicies::New(
-          policies_.cross_origin_embedder_policy.value,
-          policies_.referrer_policy,
-          mojo::Clone(policies_.content_security_policies),
-          policies_.is_anonymous, policies_.sandbox_flags),
-      std::move(remote));
+      policies_.ToMojoPolicyContainerPolicies(), std::move(remote));
 }
 
 scoped_refptr<PolicyContainerHost> PolicyContainerHost::Clone() const {

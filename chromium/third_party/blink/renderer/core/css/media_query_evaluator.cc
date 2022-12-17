@@ -49,7 +49,9 @@
 #include "third_party/blink/renderer/core/css/media_values.h"
 #include "third_party/blink/renderer/core/css/media_values_dynamic.h"
 #include "third_party/blink/renderer/core/css/parser/css_variable_parser.h"
+#include "third_party/blink/renderer/core/css/properties/longhands/custom_property.h"
 #include "third_party/blink/renderer/core/css/resolver/media_query_result.h"
+#include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -57,6 +59,7 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/media_type_names.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/graphics/color_space_gamut.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -116,7 +119,7 @@ void MediaQueryEvaluator::Trace(Visitor* visitor) const {
 
 const String MediaQueryEvaluator::MediaType() const {
   // If a static mediaType was given by the constructor, we use it here.
-  if (!media_type_.IsEmpty())
+  if (!media_type_.empty())
     return media_type_;
   // Otherwise, we get one from mediaValues (which may be dynamic or cached).
   if (media_values_)
@@ -126,7 +129,7 @@ const String MediaQueryEvaluator::MediaType() const {
 
 bool MediaQueryEvaluator::MediaTypeMatch(
     const String& media_type_to_match) const {
-  return media_type_to_match.IsEmpty() ||
+  return media_type_to_match.empty() ||
          EqualIgnoringASCIICase(media_type_to_match, media_type_names::kAll) ||
          EqualIgnoringASCIICase(media_type_to_match, MediaType());
 }
@@ -1260,8 +1263,6 @@ static bool DevicePostureMediaFeatureEval(const MediaQueryExpValue& value,
       return device_posture == DevicePostureType::kContinuous;
     case CSSValueID::kFolded:
       return device_posture == DevicePostureType::kFolded;
-    case CSSValueID::kFoldedOver:
-      return device_posture == DevicePostureType::kFoldedOver;
     default:
       NOTREACHED();
       return false;
@@ -1359,16 +1360,16 @@ KleeneValue MediaQueryEvaluator::EvalFeature(
 
 namespace {
 
-void ConsumeWhitespace(Vector<CSSParserToken>::const_iterator& iterator,
-                       const Vector<CSSParserToken>::const_iterator& end) {
+void ConsumeWhitespace(base::span<CSSParserToken>::const_iterator& iterator,
+                       const base::span<CSSParserToken>::const_iterator& end) {
   while (iterator != end && (*iterator).GetType() == kWhitespaceToken) {
     iterator++;
   }
 }
 
 void ConsumeWhitespaceReverse(
-    Vector<CSSParserToken>::const_iterator& iterator,
-    const Vector<CSSParserToken>::const_iterator& start) {
+    base::span<CSSParserToken>::const_iterator& iterator,
+    const base::span<CSSParserToken>::const_iterator& start) {
   while (iterator != start && (*(iterator - 1)).GetType() == kWhitespaceToken) {
     iterator--;
   }
@@ -1384,13 +1385,13 @@ bool TokensEqualIgnoringLeadingAndTrailingSpaces(
     return false;
   }
 
-  const Vector<CSSParserToken>& tokens1 = value1->Tokens();
-  const Vector<CSSParserToken>& tokens2 = value2->Tokens();
+  const base::span<CSSParserToken> tokens1 = value1->Tokens();
+  const base::span<CSSParserToken> tokens2 = value2->Tokens();
 
-  Vector<CSSParserToken>::const_iterator tokens1_start = tokens1.begin();
-  Vector<CSSParserToken>::const_iterator tokens1_end = tokens1.end();
-  Vector<CSSParserToken>::const_iterator tokens2_start = tokens2.begin();
-  Vector<CSSParserToken>::const_iterator tokens2_end = tokens2.end();
+  base::span<CSSParserToken>::const_iterator tokens1_start = tokens1.begin();
+  base::span<CSSParserToken>::const_iterator tokens1_end = tokens1.end();
+  base::span<CSSParserToken>::const_iterator tokens2_start = tokens2.begin();
+  base::span<CSSParserToken>::const_iterator tokens2_end = tokens2.end();
 
   ConsumeWhitespace(tokens1_start, tokens1_end);
   ConsumeWhitespaceReverse(tokens1_end, tokens1_start);
@@ -1418,21 +1419,44 @@ KleeneValue MediaQueryEvaluator::EvalStyleFeature(
   DCHECK(bounds.right.op == MediaQueryOperator::kNone);
   DCHECK(bounds.right.IsValid());
   DCHECK(bounds.right.value.IsCSSValue());
-  DCHECK(media_values_->GetComputedStyle());
 
-  CSSVariableData* computed =
-      media_values_->GetComputedStyle()->GetVariableData(
-          AtomicString(feature.Name()));
-  CSSVariableData* queried =
-      To<CSSCustomPropertyDeclaration>(bounds.right.value.GetCSSValue())
-          .Value();
+  Element* container = media_values_->ContainerElement();
+  DCHECK(container);
 
-  // TODO(crbug.com/1220144): Compare the two CSSVariableData using
-  // base::ValuesEquivalent when we correctly strip leading and trailing
-  // whitespaces for custom property values.
-  if (TokensEqualIgnoringLeadingAndTrailingSpaces(computed, queried)) {
-    return KleeneValue::kTrue;
+  AtomicString property_name(feature.Name());
+
+  const CSSValue& query_specified = bounds.right.value.GetCSSValue();
+
+  if (query_specified.IsRevertValue() || query_specified.IsRevertLayerValue()) {
+    return KleeneValue::kFalse;
   }
+
+  const CSSValue* query_value = StyleResolver::ComputeValue(
+      container, CSSPropertyName(property_name), query_specified);
+
+  if (const auto* decl_value =
+          DynamicTo<CSSCustomPropertyDeclaration>(query_value)) {
+    CSSVariableData* query_computed =
+        decl_value ? &decl_value->Value() : nullptr;
+    CSSVariableData* computed =
+        container->ComputedStyleRef().GetVariableData(property_name);
+
+    // TODO(crbug.com/1220144): Compare the two CSSVariableData using
+    // base::ValuesEquivalent when we correctly strip leading and trailing
+    // whitespaces for custom property values.
+    if (TokensEqualIgnoringLeadingAndTrailingSpaces(computed, query_computed)) {
+      return KleeneValue::kTrue;
+    }
+    return KleeneValue::kFalse;
+  }
+
+  const CSSValue* computed_value =
+      CustomProperty(property_name, *media_values_->GetDocument())
+          .CSSValueFromComputedStyle(container->ComputedStyleRef(),
+                                     nullptr /* layout_object */,
+                                     false /* allow_visited_style */);
+  if (base::ValuesEquivalent(query_value, computed_value))
+    return KleeneValue::kTrue;
   return KleeneValue::kFalse;
 }
 

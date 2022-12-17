@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,8 @@ AutofillWalletModelTypeController::AutofillWalletModelTypeController(
       sync_service_(sync_service) {
   DCHECK(type == syncer::AUTOFILL_WALLET_DATA ||
          type == syncer::AUTOFILL_WALLET_METADATA ||
-         type == syncer::AUTOFILL_WALLET_OFFER);
+         type == syncer::AUTOFILL_WALLET_OFFER ||
+         type == syncer::AUTOFILL_WALLET_USAGE);
   SubscribeToPrefChanges();
   sync_service_->AddObserver(this);
 }
@@ -51,7 +52,8 @@ AutofillWalletModelTypeController::AutofillWalletModelTypeController(
       sync_service_(sync_service) {
   DCHECK(type == syncer::AUTOFILL_WALLET_DATA ||
          type == syncer::AUTOFILL_WALLET_METADATA ||
-         type == syncer::AUTOFILL_WALLET_OFFER);
+         type == syncer::AUTOFILL_WALLET_OFFER ||
+         type == syncer::AUTOFILL_WALLET_USAGE);
   SubscribeToPrefChanges();
   sync_service_->AddObserver(this);
 }

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "ash/public/cpp/app_list/app_list_notifier.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/check.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "extensions/common/constants.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -81,7 +82,8 @@ void ScheduleFadeOutAnimation(views::View* view,
   scale.Scale(0.75f, 0.75f);
   sequence->SetTransform(
       view->layer(),
-      gfx::TransformAboutPivot(view->GetLocalBounds().CenterPoint(), scale),
+      gfx::TransformAboutPivot(gfx::RectF(view->GetLocalBounds()).CenterPoint(),
+                               scale),
       gfx::Tween::FAST_OUT_LINEAR_IN);
   sequence->SetOpacity(view->layer(), 0.0f, gfx::Tween::FAST_OUT_LINEAR_IN);
 }
@@ -332,8 +334,7 @@ ContinueTaskContainerView::GetRemovalAnimationForTaskView(
     return TaskViewRemovalAnimation::kFadeOut;
 
   const std::string& task_id = task_view->result()->id();
-  auto new_ids_it =
-      std::find(new_task_ids.begin(), new_task_ids.end(), task_id);
+  auto new_ids_it = base::ranges::find(new_task_ids, task_id);
 
   // If the associated result was removed from the task list, animate it out.
   if (new_ids_it == new_task_ids.end())

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -201,24 +201,6 @@ export async function sendBrowserTestCommand(command, callback, opt_debug) {
 }
 
 /**
- * Waits for an app window with the URL |windowUrl|.
- * @param {string} windowUrl URL of the app window to wait for.
- * @return {Promise} Promise to be fulfilled with the window ID of the
- *     app window.
- */
-export function waitForAppWindow(windowUrl) {
-  const caller = getCaller();
-  const command = {'name': 'getAppWindowId', 'windowUrl': windowUrl};
-  return repeatUntil(async () => {
-    const result = await sendTestMessage(command);
-    if (result == 'none') {
-      return pending(caller, 'getAppWindowId ' + windowUrl);
-    }
-    return result;
-  });
-}
-
-/**
  * Get all the browser windows.
  * @param {number} expectedInitialCount The number of windows expected before
  *     opening a new one.
@@ -384,6 +366,8 @@ export let TestEntryFolderFeature;
  *
  * pinned: Drive pinned status of this file. Defaults to false.
  *
+ * availableOffline: Whether the file is available offline. Defaults to false.
+ *
  * alternateUrl: File's Drive alternate URL. Defaults to an empty string.
  *
  * @typedef {{
@@ -401,6 +385,7 @@ export let TestEntryFolderFeature;
  *    capabilities: (TestEntryCapabilities|undefined),
  *    folderFeature: (TestEntryFolderFeature|undefined),
  *    pinned: (boolean|undefined),
+ *    availableOffline: (boolean|undefined),
  *    alternateUrl: (string|undefined),
  * }}
  */
@@ -433,6 +418,7 @@ export class TestEntryInfo {
     this.capabilities = options.capabilities;
     this.folderFeature = options.folderFeature;
     this.pinned = !!options.pinned;
+    this.availableOffline = !!options.availableOffline;
     this.alternateUrl = options.alternateUrl || '';
     Object.freeze(this);
   }
@@ -1585,6 +1571,35 @@ export const ENTRIES = {
     nameText: 'invalidLastModifiedDate.txt',
     sizeText: '51 bytes',
     typeText: 'Plain text',
+  }),
+
+  trashRootDirectory: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: '.Trash',
+    lastModifiedTime: 'Jan 1, 1980, 11:59 PM',
+    nameText: '.Trash',
+    sizeText: '--',
+    typeText: 'Folder',
+  }),
+
+  trashInfoDirectory: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: '.Trash/info',
+    lastModifiedTime: 'Jan 1, 1980, 11:59 PM',
+    nameText: 'info',
+    sizeText: '--',
+    typeText: 'Folder',
+  }),
+
+  oldTrashInfoFile: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'old_file.trashinfo',
+    targetPath: '.Trash/info/hello.txt.trashinfo',
+    lastModifiedTime: 'Jan 1, 1980, 11:59 PM',
+    mimeType: 'text/plan',
+    nameText: 'hello.txt.trashinfo',
+    sizeText: '64 bytes',
+    typeText: 'TRASHINFO',
   }),
 };
 

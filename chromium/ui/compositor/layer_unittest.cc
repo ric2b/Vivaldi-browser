@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,6 +35,7 @@
 #include "cc/animation/keyframe_effect.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/mirror_layer.h"
+#include "cc/paint/filter_operation.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_utils.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -583,9 +584,9 @@ TEST(LayerStandaloneTest, ReleaseMailboxOnDestruction) {
   bool callback_run = false;
 
   constexpr gfx::Size size(64, 64);
-  auto resource = viz::TransferableResource::MakeGL(
+  auto resource = viz::TransferableResource::MakeGpu(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
-      size, false /* is_overlay_candidate */);
+      size, viz::RGBA_8888, false /* is_overlay_candidate */);
   layer->SetTransferableResource(resource,
                                  base::BindOnce(ReturnMailbox, &callback_run),
                                  gfx::Size(10, 10));
@@ -775,9 +776,19 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   gfx::LinearGradient gradient_mask(45);
   gradient_mask.AddStep(.5, 50);
 
+  cc::FilterOperation::Matrix color_matrix({
+      0, 0, 1, 2, 2, 0, 1, 9, 7, 3, 0, 7, 0, 2, 0, 0, 0, 0, 1, 4,
+  });
+
+  constexpr float initial_sepia_amount = 0.1973f;
+  constexpr float initial_hue_amount = 180.0f;
+
   layer->SetTransform(transform);
   layer->SetColor(SK_ColorRED);
   layer->SetLayerInverted(true);
+  layer->SetLayerSepia(initial_sepia_amount);
+  layer->SetLayerHueRotation(initial_hue_amount);
+  layer->SetLayerCustomColorMatrix(color_matrix);
   layer->AddCacheRenderSurfaceRequest();
   layer->AddTrilinearFilteringRequest();
   layer->SetClipRect(clip_rect);
@@ -793,6 +804,10 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_EQ(SK_ColorRED, clone->background_color());
   EXPECT_EQ(SK_ColorRED, clone->GetTargetColor());
   EXPECT_TRUE(clone->layer_inverted());
+  EXPECT_FLOAT_EQ(initial_sepia_amount, clone->layer_sepia());
+  EXPECT_FLOAT_EQ(initial_hue_amount, clone->layer_hue_rotation());
+  EXPECT_TRUE(clone->LayerHasCustomColorMatrix());
+  EXPECT_EQ(*(clone->GetLayerCustomColorMatrix()), color_matrix);
   // Cloning should not preserve cache_render_surface flag.
   EXPECT_NE(layer->cc_layer_for_testing()->cache_render_surface(),
             clone->cc_layer_for_testing()->cache_render_surface());
@@ -808,9 +823,15 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_TRUE(layer->GetSubtreeCaptureId().is_valid());
   EXPECT_FALSE(clone->GetSubtreeCaptureId().is_valid());
 
+  constexpr float new_layer_sepia = 0.1965f;
+  constexpr float new_layer_hue_rotation = 42.0f;
+
   layer->SetTransform(gfx::Transform());
   layer->SetColor(SK_ColorGREEN);
   layer->SetLayerInverted(false);
+  layer->SetLayerSepia(new_layer_sepia);
+  layer->SetLayerHueRotation(new_layer_hue_rotation);
+  layer->ClearLayerCustomColorMatrix();
   layer->SetClipRect(gfx::Rect(10, 10, 10, 10));
   layer->SetIsFastRoundedCorner(false);
   layer->SetRoundedCornerRadius({3, 6, 9, 12});
@@ -824,6 +845,10 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_EQ(SK_ColorRED, clone->background_color());
   EXPECT_EQ(SK_ColorRED, clone->GetTargetColor());
   EXPECT_TRUE(clone->layer_inverted());
+  EXPECT_FLOAT_EQ(initial_sepia_amount, clone->layer_sepia());
+  EXPECT_FLOAT_EQ(initial_hue_amount, clone->layer_hue_rotation());
+  EXPECT_TRUE(clone->LayerHasCustomColorMatrix());
+  EXPECT_EQ(*(clone->GetLayerCustomColorMatrix()), color_matrix);
   EXPECT_EQ(clip_rect, clone->clip_rect());
   EXPECT_FALSE(layer->is_fast_rounded_corner());
   EXPECT_TRUE(clone->is_fast_rounded_corner());
@@ -844,6 +869,9 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_EQ(kTransparent, clone->background_color());
   EXPECT_EQ(kTransparent, clone->GetTargetColor());
   EXPECT_FALSE(clone->layer_inverted());
+  EXPECT_FLOAT_EQ(new_layer_sepia, clone->layer_sepia());
+  EXPECT_FLOAT_EQ(new_layer_hue_rotation, clone->layer_hue_rotation());
+  EXPECT_FALSE(clone->LayerHasCustomColorMatrix());
   EXPECT_FALSE(clone->fills_bounds_opaquely());
 
   // A solid color layer with transparent color can be marked as opaque. The
@@ -857,6 +885,10 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_EQ(kTransparent, clone->background_color());
   EXPECT_EQ(kTransparent, clone->GetTargetColor());
   EXPECT_FALSE(clone->layer_inverted());
+  // Sepia and hue rotation should be off by default.
+  EXPECT_FLOAT_EQ(0, layer->layer_sepia());
+  EXPECT_FLOAT_EQ(0, clone->layer_hue_rotation());
+  EXPECT_FALSE(clone->LayerHasCustomColorMatrix());
   EXPECT_TRUE(clone->fills_bounds_opaquely());
 
   layer = CreateLayer(LAYER_SOLID_COLOR);
@@ -1085,9 +1117,9 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
 
   bool callback1_run = false;
   constexpr gfx::Size size(64, 64);
-  auto resource = viz::TransferableResource::MakeGL(
+  auto resource = viz::TransferableResource::MakeGpu(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
-      size, false /* is_overlay_candidate */);
+      size, viz::RGBA_8888, false /* is_overlay_candidate */);
   l1->SetTransferableResource(resource,
                               base::BindOnce(ReturnMailbox, &callback1_run),
                               gfx::Size(10, 10));
@@ -1110,9 +1142,9 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
   EXPECT_FALSE(callback1_run);
 
   bool callback2_run = false;
-  resource = viz::TransferableResource::MakeGL(
+  resource = viz::TransferableResource::MakeGpu(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
-      size, false /* is_overlay_candidate */);
+      size, viz::RGBA_8888, false /* is_overlay_candidate */);
   l1->SetTransferableResource(resource,
                               base::BindOnce(ReturnMailbox, &callback2_run),
                               gfx::Size(10, 10));
@@ -1136,9 +1168,9 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
 
   // Back to a texture, without changing the bounds of the layer or the texture.
   bool callback3_run = false;
-  resource = viz::TransferableResource::MakeGL(
+  resource = viz::TransferableResource::MakeGpu(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
-      size, false /* is_overlay_candidate */);
+      size, viz::RGBA_8888, false /* is_overlay_candidate */);
   l1->SetTransferableResource(resource,
                               base::BindOnce(ReturnMailbox, &callback3_run),
                               gfx::Size(10, 10));
@@ -1483,9 +1515,9 @@ TEST_F(LayerWithNullDelegateTest, EmptyDamagedRect) {
 
   std::unique_ptr<Layer> root = CreateLayer(LAYER_SOLID_COLOR);
   constexpr gfx::Size size(64, 64);
-  auto resource = viz::TransferableResource::MakeGL(
+  auto resource = viz::TransferableResource::MakeGpu(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
-      size, false /* is_overlay_candidate */);
+      size, viz::RGBA_8888, false /* is_overlay_candidate */);
   root->SetTransferableResource(resource, std::move(callback),
                                 gfx::Size(10, 10));
   compositor()->SetRootLayer(root.get());
@@ -2383,9 +2415,9 @@ TEST_F(LayerWithDelegateTest, TransferableResourceMirroring) {
   std::unique_ptr<Layer> layer = CreateLayer(LAYER_SOLID_COLOR);
 
   constexpr gfx::Size size(64, 64);
-  auto resource = viz::TransferableResource::MakeGL(
+  auto resource = viz::TransferableResource::MakeGpu(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
-      size, false /* is_overlay_candidate */);
+      size, viz::RGBA_8888, false /* is_overlay_candidate */);
   bool release_callback_run = false;
 
   layer->SetTransferableResource(
@@ -2412,9 +2444,9 @@ TEST_F(LayerWithDelegateTest, TransferableResourceMirroring) {
   EXPECT_FALSE(layer->has_external_content());
   EXPECT_FALSE(mirror->has_external_content());
 
-  resource = viz::TransferableResource::MakeGL(
+  resource = viz::TransferableResource::MakeGpu(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
-      size, false /* is_overlay_candidate */);
+      size, viz::RGBA_8888, false /* is_overlay_candidate */);
   release_callback_run = false;
 
   // Setting a transferable resource on the source layer should set it on the

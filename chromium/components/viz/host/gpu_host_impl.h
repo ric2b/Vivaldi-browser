@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -85,6 +85,9 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
 #endif
     virtual void BlockDomainsFrom3DAPIs(const std::set<GURL>& urls,
                                         gpu::DomainGuilt guilt) = 0;
+    virtual std::string GetIsolationKey(
+        int32_t client_id,
+        const blink::WebGPUExecutionContextToken& token) = 0;
     virtual void DisableGpuCompositing() = 0;
     virtual bool GpuAccessAllowed() const = 0;
     virtual gpu::GpuDiskCacheFactory* GetGpuDiskCacheFactory() = 0;
@@ -261,6 +264,9 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
   void SetChildSurface(gpu::SurfaceHandle parent,
                        gpu::SurfaceHandle child) override;
 #endif
+  void GetIsolationKey(int32_t client_id,
+                       const blink::WebGPUExecutionContextToken& token,
+                       GetIsolationKeyCallback cb) override;
   void StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
                        const std::string& key,
                        const std::string& blob) override;

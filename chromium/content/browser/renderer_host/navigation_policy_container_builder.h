@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -176,6 +176,10 @@ class CONTENT_EXPORT NavigationPolicyContainerBuilder {
   // Whether either of `ComputePolicies()` or `ComputePoliciesForError()` has
   // been called yet.
   bool HasComputedPolicies() const;
+
+  // Modifies the bit that would allow top-level navigation without sticky
+  // user activation.
+  void SetAllowTopNavigationWithoutUserGesture(bool allow_top);
 
  private:
   // Sets `delivered_policies_.is_web_secure_context` to its final value.

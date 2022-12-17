@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -109,7 +109,7 @@ bool CreateEULASentinel() {
 namespace first_run {
 namespace internal {
 
-void DoPostImportPlatformSpecificTasks(Profile* /* profile */) {
+void DoPostImportPlatformSpecificTasks() {
   // Trigger the Active Setup command for system-level Chromes to finish
   // configuring this user's install (e.g. per-user shortcuts).
   if (!InstallUtil::IsPerUserInstall()) {

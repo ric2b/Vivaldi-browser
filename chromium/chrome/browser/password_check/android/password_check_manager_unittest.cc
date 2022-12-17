@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,7 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
-#include "components/sync/driver/test_sync_service.h"
+#include "components/sync/test/test_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/browser_task_environment.h"
@@ -187,8 +187,8 @@ auto ExpectCompromisedCredentialForUI(
   return AllOf(
       Field(&CompromisedCredentialForUI::display_username, display_username),
       Field(&CompromisedCredentialForUI::display_origin, display_origin),
-      Field(&CompromisedCredentialForUI::url, url), package_name_field_matcher,
-      change_password_url_field_matcher,
+      Property(&CompromisedCredentialForUI::GetURL, url),
+      package_name_field_matcher, change_password_url_field_matcher,
       Field(&CompromisedCredentialForUI::password_issues,
             MatchInsecureType(insecure_type)),
       Property(&CompromisedCredentialForUI::IsLeaked,
@@ -208,6 +208,14 @@ class PasswordCheckManagerTest : public testing::Test {
   void InitializeManager() {
     manager_ =
         std::make_unique<PasswordCheckManager>(&profile_, &mock_observer_);
+
+    // Fetch scripts availability. This it normally done externally before a
+    // password check is triggered.
+    EXPECT_CALL(fetcher(), RefreshScriptsIfNecessary)
+        .WillOnce(Invoke(
+            [](base::OnceClosure callback) { std::move(callback).Run(); }));
+
+    manager_->RefreshScripts();
   }
 
   void RunUntilIdle() { task_env_.RunUntilIdle(); }
@@ -303,7 +311,10 @@ TEST_F(PasswordCheckManagerTest,
        RunCheckAfterLastInitializationAutomaticChangeOn) {
   identity_test_env().MakeAccountAvailable(kTestEmail);
   // Enable password sync
-  sync_service().SetActiveDataTypes(syncer::ModelTypeSet(syncer::PASSWORDS));
+  sync_service().GetUserSettings()->SetSelectedTypes(
+      /*sync_everything=*/false,
+      /*types=*/syncer::UserSelectableTypeSet(
+          syncer::UserSelectableType::kPasswords));
   feature_list().InitWithFeatures(
       {password_manager::features::kPasswordScriptsFetching,
        password_manager::features::kPasswordDomainCapabilitiesFetching,
@@ -423,7 +434,9 @@ TEST_F(PasswordCheckManagerTest,
        CorrectlyCreatesUIStructWithPasswordScriptsSyncOff) {
   InitializeManager();
   // Disable password sync
-  sync_service().SetActiveDataTypes(syncer::ModelTypeSet());
+  sync_service().GetUserSettings()->SetSelectedTypes(
+      /*sync_everything=*/false,
+      /*types=*/syncer::UserSelectableTypeSet());
   feature_list().InitWithFeatures(
       {password_manager::features::kPasswordScriptsFetching,
        password_manager::features::kPasswordDomainCapabilitiesFetching,
@@ -454,7 +467,10 @@ TEST_F(PasswordCheckManagerTest,
        CorrectlyCreatesUIStructWithPasswordScriptsSyncOn) {
   InitializeManager();
   // Enable password sync
-  sync_service().SetActiveDataTypes(syncer::ModelTypeSet(syncer::PASSWORDS));
+  sync_service().GetUserSettings()->SetSelectedTypes(
+      /*sync_everything=*/false,
+      /*types=*/syncer::UserSelectableTypeSet(
+          syncer::UserSelectableType::kPasswords));
   feature_list().InitWithFeatures(
       {password_manager::features::kPasswordScriptsFetching,
        password_manager::features::kPasswordDomainCapabilitiesFetching,
@@ -485,7 +501,10 @@ TEST_F(PasswordCheckManagerTest,
        CorrectlyCreatesUIStructWithPasswordScriptsEmptyUsername) {
   InitializeManager();
   // Enable password sync
-  sync_service().SetActiveDataTypes(syncer::ModelTypeSet(syncer::PASSWORDS));
+  sync_service().GetUserSettings()->SetSelectedTypes(
+      /*sync_everything=*/false,
+      /*types=*/syncer::UserSelectableTypeSet(
+          syncer::UserSelectableType::kPasswords));
   feature_list().InitWithFeatures(
       {password_manager::features::kPasswordScriptsFetching,
        password_manager::features::kPasswordDomainCapabilitiesFetching,
@@ -520,7 +539,10 @@ TEST_F(PasswordCheckManagerTest,
        CorrectlyCreatesUIStructWithScriptsFetchingButAutomaticChangeOff) {
   InitializeManager();
   // Enable password sync
-  sync_service().SetActiveDataTypes(syncer::ModelTypeSet(syncer::PASSWORDS));
+  sync_service().GetUserSettings()->SetSelectedTypes(
+      /*sync_everything=*/false,
+      /*types=*/syncer::UserSelectableTypeSet(
+          syncer::UserSelectableType::kPasswords));
   feature_list().InitWithFeatures(
       /*enabled_features=*/
       {password_manager::features::kPasswordScriptsFetching,
@@ -555,7 +577,10 @@ TEST_F(PasswordCheckManagerTest,
        CorrectlyCreatesUIStructWithScriptsFetchingButNoAvailableScript) {
   InitializeManager();
   // Enable password sync
-  sync_service().SetActiveDataTypes(syncer::ModelTypeSet(syncer::PASSWORDS));
+  sync_service().GetUserSettings()->SetSelectedTypes(
+      /*sync_everything=*/false,
+      /*types=*/syncer::UserSelectableTypeSet(
+          syncer::UserSelectableType::kPasswords));
   feature_list().InitWithFeatures(
       {password_manager::features::kPasswordScriptsFetching,
        password_manager::features::kPasswordDomainCapabilitiesFetching,

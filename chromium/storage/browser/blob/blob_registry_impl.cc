@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -651,11 +651,22 @@ void BlobRegistryImpl::URLStoreForOrigin(
         "BlobRegistryImpl::URLStoreForOrigin");
     return;
   }
-  auto self_owned_associated_receiver = mojo::MakeSelfOwnedAssociatedReceiver(
-      std::make_unique<BlobURLStoreImpl>(origin, url_registry_),
-      std::move(receiver));
-  if (g_url_store_creation_hook)
-    g_url_store_creation_hook->Run(self_owned_associated_receiver);
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](const url::Origin& origin,
+             mojo::PendingAssociatedReceiver<blink::mojom::BlobURLStore>
+                 receiver,
+             base::WeakPtr<BlobUrlRegistry> url_registry) {
+            auto self_owned_associated_receiver =
+                mojo::MakeSelfOwnedAssociatedReceiver(
+                    std::make_unique<BlobURLStoreImpl>(
+                        blink::StorageKey(origin), std::move(url_registry)),
+                    std::move(receiver));
+            if (g_url_store_creation_hook)
+              g_url_store_creation_hook->Run(self_owned_associated_receiver);
+          },
+          origin, std::move(receiver), url_registry_));
 }
 
 // static

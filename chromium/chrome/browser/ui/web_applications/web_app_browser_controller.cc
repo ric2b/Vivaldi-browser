@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,17 +32,21 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
-#include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/mojom/types.mojom-forward.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_features.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/native_theme/native_theme.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
+#include "chrome/common/chrome_features.h"
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/apps/apk_web_app_service.h"
@@ -158,6 +162,15 @@ bool WebAppBrowserController::AppUsesBorderlessMode() const {
   return display == DisplayMode::kBorderless;
 }
 
+bool WebAppBrowserController::IsIsolatedWebApp() const {
+  if (!web_contents())
+    return false;
+
+  return web_contents()->GetPrimaryMainFrame()->GetWebExposedIsolationLevel() >=
+         content::RenderFrameHost::WebExposedIsolationLevel::
+             kMaybeIsolatedApplication;
+}
+
 gfx::Rect WebAppBrowserController::GetDefaultBounds() const {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (system_app_) {
@@ -213,9 +226,11 @@ void WebAppBrowserController::CheckDigitalAssetLinkRelationshipForAndroidApp(
     const std::string& fingerprint) {
   // base::Unretained is safe as |asset_link_handler_| is owned by this object
   // and will be destroyed if this object is destroyed.
+  // TODO(swestphal): Support passing several fingerprints for verification.
+  std::vector<std::string> fingerprints{fingerprint};
   const std::string origin = GetAppStartUrl().DeprecatedGetOriginAsURL().spec();
   asset_link_handler_->CheckDigitalAssetLinkRelationshipForAndroidApp(
-      origin, kRelationship, fingerprint, package_name,
+      origin, kRelationship, std::move(fingerprints), package_name,
       base::BindOnce(&WebAppBrowserController::OnRelationshipCheckComplete,
                      base::Unretained(this)));
 }
@@ -305,6 +320,18 @@ absl::optional<SkColor> WebAppBrowserController::GetThemeColor() const {
   if (web_theme_color)
     return web_theme_color;
 
+#if BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(
+          features::kMicrosoftOfficeWebAppExperiment)) {
+    if (absl::optional<SkColor> fallback_page_theme_color =
+            ChromeOsWebAppExperiments::GetFallbackPageThemeColor(
+                app_id(),
+                browser()->tab_strip_model()->GetActiveWebContents())) {
+      return fallback_page_theme_color;
+    }
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   if (ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors()) {
     absl::optional<SkColor> dark_mode_color =
         registrar().GetAppDarkModeThemeColor(app_id());
@@ -349,6 +376,16 @@ bool WebAppBrowserController::IsUrlInAppScope(const GURL& url) const {
     return true;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(
+          features::kMicrosoftOfficeWebAppExperiment)) {
+    size_t extended_scope_score =
+        ChromeOsWebAppExperiments::GetExtendedScopeScore(app_id(), url.spec());
+    if (extended_scope_score > 0)
+      return true;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   GURL app_scope = registrar().GetAppScope(app_id());
   if (!app_scope.is_valid())
     return false;
@@ -387,9 +424,6 @@ std::u16string WebAppBrowserController::GetTitle() const {
   }
 
   std::u16string raw_title = AppBrowserController::GetTitle();
-
-  if (!base::FeatureList::IsEnabled(features::kPrefixWebAppWindowsWithAppName))
-    return raw_title;
 
   std::u16string app_name =
       base::UTF8ToUTF16(provider_.registrar().GetAppShortName(app_id()));

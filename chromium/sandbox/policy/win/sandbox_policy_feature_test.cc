@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,8 +8,8 @@ namespace sandbox {
 namespace policy {
 
 SandboxFeatureTest::SandboxFeatureTest() {
-  std::vector<base::Feature> enabled_features;
-  std::vector<base::Feature> disabled_features;
+  std::vector<base::test::FeatureRef> enabled_features;
+  std::vector<base::test::FeatureRef> disabled_features;
 
   if (::testing::get<TestParameter::kEnableRendererAppContainer>(GetParam()))
     enabled_features.push_back(features::kRendererAppContainer);
@@ -74,27 +74,27 @@ std::vector<base::win::Sid> SandboxFeatureTest::GetExpectedCapabilities() {
   return {};
 }
 
-void SandboxFeatureTest::ValidateSecurityLevels(TargetPolicy* policy) {
-  EXPECT_EQ(policy->GetIntegrityLevel(), GetExpectedIntegrityLevel());
-  EXPECT_EQ(policy->GetLockdownTokenLevel(), GetExpectedLockdownTokenLevel());
-  EXPECT_EQ(policy->GetInitialTokenLevel(), GetExpectedInitialTokenLevel());
+void SandboxFeatureTest::ValidateSecurityLevels(TargetConfig* config) {
+  EXPECT_EQ(config->GetIntegrityLevel(), GetExpectedIntegrityLevel());
+  EXPECT_EQ(config->GetLockdownTokenLevel(), GetExpectedLockdownTokenLevel());
+  EXPECT_EQ(config->GetInitialTokenLevel(), GetExpectedInitialTokenLevel());
 }
 
-void SandboxFeatureTest::ValidatePolicyFlagSettings(TargetPolicy* policy) {
-  EXPECT_EQ(policy->GetProcessMitigations(), GetExpectedMitigationFlags());
-  EXPECT_EQ(policy->GetDelayedProcessMitigations(),
+void SandboxFeatureTest::ValidatePolicyFlagSettings(TargetConfig* config) {
+  EXPECT_EQ(config->GetProcessMitigations(), GetExpectedMitigationFlags());
+  EXPECT_EQ(config->GetDelayedProcessMitigations(),
             GetExpectedDelayedMitigationFlags());
 }
 
-void SandboxFeatureTest::ValidateAppContainerSettings(TargetPolicy* policy) {
+void SandboxFeatureTest::ValidateAppContainerSettings(TargetConfig* config) {
   if (GetExpectedAppContainerType() == ::sandbox::AppContainerType::kLowbox) {
     EXPECT_EQ(GetExpectedAppContainerType(),
-              policy->GetAppContainer()->GetAppContainerType());
+              config->GetAppContainer()->GetAppContainerType());
 
-    EqualSidList(policy->GetAppContainer()->GetCapabilities(),
+    EqualSidList(config->GetAppContainer()->GetCapabilities(),
                  GetExpectedCapabilities());
   } else {
-    EXPECT_EQ(policy->GetAppContainer().get(), nullptr);
+    EXPECT_EQ(config->GetAppContainer().get(), nullptr);
   }
 }
 }  // namespace policy

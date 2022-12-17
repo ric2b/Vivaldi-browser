@@ -1,10 +1,9 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <memory>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/shell.h"
@@ -23,6 +22,7 @@
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/api/system_display/display_info_provider.h"
@@ -64,35 +64,22 @@ const gfx::Size kDefaultSecondDisplayResolution(1920, 1080);
 const int kDefaultDisplayScale = 100;
 
 PolicyValue GetPolicySetting() {
-  const base::DictionaryValue* resolution_pref = nullptr;
+  const base::Value::Dict* resolution_pref = nullptr;
   ash::CrosSettings::Get()->GetDictionary(ash::kDeviceDisplayResolution,
                                           &resolution_pref);
   EXPECT_TRUE(resolution_pref) << "DeviceDisplayResolution setting is not set";
-  const base::Value* width = resolution_pref->FindKeyOfType(
-      {ash::kDeviceDisplayResolutionKeyExternalWidth},
-      base::Value::Type::INTEGER);
-  const base::Value* height = resolution_pref->FindKeyOfType(
-      {ash::kDeviceDisplayResolutionKeyExternalHeight},
-      base::Value::Type::INTEGER);
-  const base::Value* external_scale = resolution_pref->FindKeyOfType(
-      {ash::kDeviceDisplayResolutionKeyExternalScale},
-      base::Value::Type::INTEGER);
-  const base::Value* use_native = resolution_pref->FindKeyOfType(
-      {ash::kDeviceDisplayResolutionKeyExternalUseNative},
-      base::Value::Type::BOOLEAN);
-  const base::Value* internal_scale = resolution_pref->FindKeyOfType(
-      {ash::kDeviceDisplayResolutionKeyInternalScale},
-      base::Value::Type::INTEGER);
   PolicyValue result;
-  if (width)
-    result.external_width = width->GetInt();
-  if (height)
-    result.external_height = height->GetInt();
-  if (external_scale)
-    result.external_scale_percentage = external_scale->GetInt();
-  if (internal_scale)
-    result.internal_scale_percentage = internal_scale->GetInt();
-  if (use_native && use_native->GetBool())
+  result.external_width =
+      resolution_pref->FindInt(ash::kDeviceDisplayResolutionKeyExternalWidth);
+  result.external_height =
+      resolution_pref->FindInt(ash::kDeviceDisplayResolutionKeyExternalHeight);
+  result.external_scale_percentage =
+      resolution_pref->FindInt(ash::kDeviceDisplayResolutionKeyExternalScale);
+  result.internal_scale_percentage =
+      resolution_pref->FindInt(ash::kDeviceDisplayResolutionKeyInternalScale);
+  const absl::optional<bool> use_native = resolution_pref->FindBool(
+      ash::kDeviceDisplayResolutionKeyExternalUseNative);
+  if (use_native && *use_native)
     result.use_native = true;
   return result;
 }
@@ -135,29 +122,28 @@ void SetPolicyValue(em::ChromeDeviceSettingsProto* proto,
       "{" + base::JoinString(json_entries, ",") + "}");
 }
 
-std::unique_ptr<extensions::api::system_display::DisplayMode> CreateDisplayMode(
+extensions::api::system_display::DisplayMode CreateDisplayMode(
     int64_t display_id,
     int width,
     int height,
     const display::DisplayManager* display_manager) {
-  auto result =
-      std::make_unique<extensions::api::system_display::DisplayMode>();
+  extensions::api::system_display::DisplayMode result;
   const display::ManagedDisplayInfo& info =
       display_manager->GetDisplayInfo(display_id);
   for (const display::ManagedDisplayMode& mode : info.display_modes()) {
     if (mode.size().width() == width && mode.size().height() == height) {
-      result->width = mode.size().width();
-      result->height = mode.size().height();
-      result->width_in_native_pixels = mode.size().width();
-      result->height_in_native_pixels = mode.size().height();
-      result->refresh_rate = mode.refresh_rate();
-      result->is_native = mode.native();
-      result->device_scale_factor = mode.device_scale_factor();
+      result.width = mode.size().width();
+      result.height = mode.size().height();
+      result.width_in_native_pixels = mode.size().width();
+      result.height_in_native_pixels = mode.size().height();
+      result.refresh_rate = mode.refresh_rate();
+      result.is_native = mode.native();
+      result.device_scale_factor = mode.device_scale_factor();
       return result;
     }
   }
-  result->width = width;
-  result->height = height;
+  result.width = width;
+  result.height = height;
   return result;
 }
 
@@ -452,7 +438,7 @@ IN_PROC_BROWSER_TEST_P(DeviceDisplayResolutionRecommendedTest, Internal) {
 
   extensions::api::system_display::DisplayProperties props;
   double user_scale = 50;
-  props.display_zoom_factor = std::make_unique<double>(user_scale / 100.0);
+  props.display_zoom_factor = user_scale / 100.0;
   SetUserProperties(display_helper()->GetFirstDisplayId(), std::move(props));
 
   EXPECT_EQ(user_scale, display_helper()->GetScaleOfFirstDisplay())
@@ -493,7 +479,7 @@ IN_PROC_BROWSER_TEST_P(DeviceDisplayResolutionRecommendedTest,
   double user_scale = 50;
   double user_width = 1920;
   double user_height = 1080;
-  props.display_zoom_factor = std::make_unique<double>(user_scale / 100.0);
+  props.display_zoom_factor = user_scale / 100.0;
   props.display_mode =
       CreateDisplayMode(display_helper()->GetSecondDisplayId(), user_width,
                         user_height, display_helper()->GetDisplayManager());

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,7 @@ namespace password_manager {
 namespace {
 
 MATCHER_P3(FormHasOriginUsernamePassword, origin, username, password, "") {
-  return arg.signon_realm == origin && arg.url == GURL(origin) &&
+  return arg.GetFirstSignonRealm() == origin && arg.GetURL() == GURL(origin) &&
          arg.username == base::UTF8ToUTF16(username) &&
          arg.password == base::UTF8ToUTF16(password);
 }

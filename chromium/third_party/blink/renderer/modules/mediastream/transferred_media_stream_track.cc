@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -341,10 +341,10 @@ ImageCapture* TransferredMediaStreamTrack::GetImageCapture() {
   return nullptr;
 }
 
-absl::optional<base::UnguessableToken>
-TransferredMediaStreamTrack::serializable_session_id() const {
+absl::optional<const MediaStreamDevice> TransferredMediaStreamTrack::device()
+    const {
   if (track_) {
-    return track_->serializable_session_id();
+    return track_->device();
   }
   // TODO(https://crbug.com/1288839): Return transferred data
   return absl::nullopt;

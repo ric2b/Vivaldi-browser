@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,8 @@
 #include "chrome/browser/ui/webui/realbox/realbox.mojom.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/favicon_cache.h"
+#include "components/omnibox/browser/omnibox.mojom-shared.h"
+#include "components/url_formatter/spoof_checks/idna_metrics.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -83,6 +85,9 @@ class RealboxHandler : public realbox::mojom::PageHandler,
                      bool ctrl_key,
                      bool meta_key,
                      bool shift_key) override;
+  void OnNavigationLikely(
+      uint8_t line,
+      omnibox::mojom::NavigationPredictor navigation_predictor) override;
 
   // AutocompleteController::Observer:
   void OnResultChanged(AutocompleteController* controller,
@@ -105,7 +110,8 @@ class RealboxHandler : public realbox::mojom::PageHandler,
                bool destination_url_entered_without_scheme,
                const std::u16string&,
                const AutocompleteMatch&,
-               const AutocompleteMatch&);
+               const AutocompleteMatch&,
+               IDNA2008DeviationCharacter);
 
  private:
   raw_ptr<Profile> profile_;

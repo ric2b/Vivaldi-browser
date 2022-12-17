@@ -30,13 +30,13 @@
 #include "base/memory/scoped_refptr.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url_request.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_void_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
@@ -70,7 +70,7 @@
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/bindings/microtask.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/fonts/font_matching_metrics.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
@@ -80,6 +80,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher_properties.h"
 #include "third_party/blink/renderer/platform/network/content_security_policy_parsers.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -90,7 +91,7 @@ namespace blink {
 namespace {
 
 void RemoveURLFromMemoryCacheInternal(const KURL& url) {
-  GetMemoryCache()->RemoveURLFromCache(url);
+  MemoryCache::Get()->RemoveURLFromCache(url);
 }
 
 scoped_refptr<SecurityOrigin> CreateSecurityOrigin(
@@ -264,7 +265,7 @@ void WorkerGlobalScope::ImportScriptsInternal(const Vector<String>& urls) {
   // |this| roughly corresponds to the current settings object.
 
   // Step 3: "If urls is empty, return."
-  if (urls.IsEmpty())
+  if (urls.empty())
     return;
 
   // Step 4: "Parse each value in urls relative to settings object. If any fail,
@@ -331,9 +332,8 @@ void WorkerGlobalScope::ImportScriptsInternal(const Vector<String>& urls) {
     // source text, settings object, response's url, the default classic script
     // fetch options, and muted errors.
     // TODO(crbug.com/1082086): Fix the base URL.
-    SingleCachedMetadataHandler* handler(
-        CreateWorkerScriptCachedMetadataHandler(complete_url,
-                                                std::move(cached_meta_data)));
+    CachedMetadataHandler* handler(CreateWorkerScriptCachedMetadataHandler(
+        complete_url, std::move(cached_meta_data)));
     ClassicScript* script = ClassicScript::Create(
         source_code, ClassicScript::StripFragmentIdentifier(complete_url),
         response_url /* base_url */, ScriptFetchOptions(),
@@ -430,9 +430,8 @@ void WorkerGlobalScope::EvaluateClassicScript(
     const v8_inspector::V8StackTraceId& stack_id) {
   DCHECK(!IsContextPaused());
 
-  SingleCachedMetadataHandler* handler =
-      CreateWorkerScriptCachedMetadataHandler(script_url,
-                                              std::move(cached_meta_data));
+  CachedMetadataHandler* handler = CreateWorkerScriptCachedMetadataHandler(
+      script_url, std::move(cached_meta_data));
   // Cross-origin workers are disallowed, so use
   // SanitizeScriptErrors::kDoNotSanitize.
   Script* worker_script = ClassicScript::Create(
@@ -626,6 +625,15 @@ WorkerGlobalScope::WorkerGlobalScope(
   DCHECK(creation_params->worker_permissions_policy);
   GetSecurityContext().SetPermissionsPolicy(
       std::move(creation_params->worker_permissions_policy));
+
+  // UKM recorder is needed in the Dispose() method but sometimes it is not
+  // initialized by then because of a race problem.
+  // If the Identifiability Study is enabled, we need the UKM recorder in any
+  // case so it should not affect anything if we initialize it here.
+  // TODO(crbug.com/1370978): Check if there is another fix instead of
+  // initializing UKM Recorder here.
+  if (blink::IdentifiabilityStudySettings::Get()->IsActive())
+    UkmRecorder();
 }
 
 void WorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {
@@ -638,8 +646,8 @@ void WorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {
 void WorkerGlobalScope::RemoveURLFromMemoryCache(const KURL& url) {
   // MemoryCache can be accessed only from the main thread.
   PostCrossThreadTask(
-      *Thread::MainThread()->GetDeprecatedTaskRunner(), FROM_HERE,
-      CrossThreadBindOnce(&RemoveURLFromMemoryCacheInternal, url));
+      *Thread::MainThread()->GetTaskRunner(MainThreadTaskRunnerRestricted()),
+      FROM_HERE, CrossThreadBindOnce(&RemoveURLFromMemoryCacheInternal, url));
 }
 
 NOINLINE void WorkerGlobalScope::InitializeURL(const KURL& url) {
@@ -670,8 +678,8 @@ void WorkerGlobalScope::SetWorkerMainScriptLoadingParametersForModules(
 
 void WorkerGlobalScope::queueMicrotask(V8VoidFunction* callback) {
   GetAgent()->event_loop()->EnqueueMicrotask(
-      WTF::Bind(&V8VoidFunction::InvokeAndReportException,
-                WrapPersistent(callback), nullptr));
+      WTF::BindOnce(&V8VoidFunction::InvokeAndReportException,
+                    WrapPersistent(callback), nullptr));
 }
 
 void WorkerGlobalScope::SetWorkerSettings(

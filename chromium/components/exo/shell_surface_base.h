@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,8 +95,13 @@ class ShellSurfaceBase : public SurfaceTreeHost,
     client_supports_window_bounds_ = enable;
   }
 
-  // Activates the shell surface.
+  // Activates the shell surface. Brings it to the foreground.
   void Activate();
+  void RequestActivation();
+
+  // Deactivates the shell surface. Makes it not the foreground.
+  void Deactivate();
+  void RequestDeactivation();
 
   // Set title for the surface.
   void SetTitle(const std::u16string& title);

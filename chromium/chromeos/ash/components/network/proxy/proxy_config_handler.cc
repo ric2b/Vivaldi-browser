@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,7 +88,7 @@ std::unique_ptr<ProxyConfigDictionary> GetProxyConfigForNetwork(
   const base::Value& value = network.proxy_config();
   if (value.is_none())
     return nullptr;
-  return std::make_unique<ProxyConfigDictionary>(value.Clone());
+  return std::make_unique<ProxyConfigDictionary>(value.GetDict().Clone());
 }
 
 void SetProxyConfigForNetwork(const ProxyConfigDictionary& proxy_config,

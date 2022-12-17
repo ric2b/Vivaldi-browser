@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -197,6 +197,10 @@ public class ManagedPreferencesUtils {
 
         ImageView button = view.findViewById(R.id.image_view_widget);
         button.setImageDrawable(getManagedIconDrawable(delegate, preference));
+        if (delegate.isPreferenceControlledByPolicy(preference)) {
+            button.setContentDescription(preference.getContext().getResources().getString(
+                    R.string.managed_by_your_organization));
+        }
         button.setOnClickListener((View v) -> {
             if (delegate.isPreferenceControlledByPolicy(preference)) {
                 showManagedByAdministratorToast(preference.getContext());

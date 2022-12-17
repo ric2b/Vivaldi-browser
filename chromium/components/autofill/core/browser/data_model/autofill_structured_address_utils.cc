@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,21 +62,9 @@ bool SortedTokenComparisonResult::TokensMatch() const {
   return status == MATCH;
 }
 
-bool StructuredNamesEnabled() {
-  return base::FeatureList::IsEnabled(
-      features::kAutofillEnableSupportForMoreStructureInNames);
-}
-
-bool StructuredAddressesEnabled() {
-  return base::FeatureList::IsEnabled(
-      features::kAutofillEnableSupportForMoreStructureInAddresses);
-}
-
 bool HonorificPrefixEnabled() {
   return base::FeatureList::IsEnabled(
-             features::kAutofillEnableSupportForHonorificPrefixes) &&
-         base::FeatureList::IsEnabled(
-             features::kAutofillEnableSupportForMoreStructureInNames);
+      features::kAutofillEnableSupportForHonorificPrefixes);
 }
 
 Re2RegExCache::Re2RegExCache() = default;

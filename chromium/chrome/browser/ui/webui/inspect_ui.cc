@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -275,7 +275,7 @@ void InspectMessageHandler::HandleInitUICommand(const base::Value::List&) {
 static bool ParseStringArgs(const base::Value::List& args,
                             std::string* arg0,
                             std::string* arg1,
-                            std::string* arg2 = 0) {
+                            std::string* arg2 = nullptr) {
   int arg_size = args.size();
   if (arg0) {
     if (arg_size < 1 || !args[0].is_string()) {
@@ -705,14 +705,16 @@ void InspectUI::SetPortForwardingDefaults() {
 
   auto enabled =
       GetPrefValue(prefs::kDevToolsPortForwardingEnabled)->GetIfBool();
-  const base::DictionaryValue* config;
-  if (!enabled || !GetPrefValue(prefs::kDevToolsPortForwardingConfig)
-                       ->GetAsDictionary(&config)) {
+  if (!enabled)
     return;
-  }
+
+  const base::Value::Dict* config =
+      GetPrefValue(prefs::kDevToolsPortForwardingConfig)->GetIfDict();
+  if (!config)
+    return;
 
   // Do nothing if user already took explicit action.
-  if (enabled.value() || !config->DictEmpty())
+  if (enabled.value() || !config->empty())
     return;
 
   base::DictionaryValue default_config;

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,28 +48,6 @@ class TestTargetConfig : public TargetConfig {
  public:
   ~TestTargetConfig() override {}
   bool IsConfigured() const override { return false; }
-  ResultCode AddRule(SubSystem subsystem,
-                     Semantics semantics,
-                     const wchar_t* pattern) override {
-    return SBOX_ALL_OK;
-  }
-  ResultCode AddDllToUnload(const wchar_t* dll_name) override {
-    blocklisted_dlls_.push_back(dll_name);
-    return SBOX_ALL_OK;
-  }
-  const std::vector<std::wstring>& blocklisted_dlls() const {
-    return blocklisted_dlls_;
-  }
-
- private:
-  std::vector<std::wstring> blocklisted_dlls_;
-};
-
-class TestTargetPolicy : public TargetPolicy {
- public:
-  ~TestTargetPolicy() override {}
-  // TargetPolicy:
-  TargetConfig* GetConfig() override { return &config_; }
   ResultCode SetTokenLevel(sandbox::TokenLevel initial,
                            TokenLevel lockdown) override {
     return SBOX_ALL_OK;
@@ -81,24 +59,25 @@ class TestTargetPolicy : public TargetPolicy {
     return SBOX_ALL_OK;
   }
   JobLevel GetJobLevel() const override { return sandbox::JobLevel{}; }
-  ResultCode SetJobMemoryLimit(size_t memory_limit) override {
+  void SetJobMemoryLimit(size_t memory_limit) override {}
+  void SetAllowNoSandboxJob() override { NOTREACHED(); }
+  bool GetAllowNoSandboxJob() override { return false; }
+  ResultCode AddRule(SubSystem subsystem,
+                     Semantics semantics,
+                     const wchar_t* pattern) override {
     return SBOX_ALL_OK;
   }
-  ResultCode SetAlternateDesktop(bool alternate_winstation) override {
-    return SBOX_ALL_OK;
+  void AddDllToUnload(const wchar_t* dll_name) override {
+    blocklisted_dlls_.push_back(dll_name);
   }
-  std::wstring GetAlternateDesktop() const override { return std::wstring(); }
-  ResultCode CreateAlternateDesktop(bool alternate_winstation) override {
-    return SBOX_ALL_OK;
+  const std::vector<std::wstring>& blocklisted_dlls() const {
+    return blocklisted_dlls_;
   }
-  void DestroyAlternateDesktop() override {}
   ResultCode SetIntegrityLevel(IntegrityLevel level) override {
     return SBOX_ALL_OK;
   }
   IntegrityLevel GetIntegrityLevel() const override { return IntegrityLevel{}; }
-  ResultCode SetDelayedIntegrityLevel(IntegrityLevel level) override {
-    return SBOX_ALL_OK;
-  }
+  void SetDelayedIntegrityLevel(IntegrityLevel level) override {}
   ResultCode SetLowBox(const wchar_t* sid) override { return SBOX_ALL_OK; }
   ResultCode SetProcessMitigations(MitigationFlags flags) override {
     return SBOX_ALL_OK;
@@ -110,17 +89,13 @@ class TestTargetPolicy : public TargetPolicy {
   MitigationFlags GetDelayedProcessMitigations() const override {
     return MitigationFlags{};
   }
-  ResultCode SetDisconnectCsrss() override { return SBOX_ALL_OK; }
-  void SetStrictInterceptions() override {}
-  ResultCode SetStdoutHandle(HANDLE handle) override { return SBOX_ALL_OK; }
-  ResultCode SetStderrHandle(HANDLE handle) override { return SBOX_ALL_OK; }
+  void AddRestrictingRandomSid() override {}
+  void SetLockdownDefaultDacl() override {}
   ResultCode AddKernelObjectToClose(const wchar_t* handle_type,
                                     const wchar_t* handle_name) override {
     return SBOX_ALL_OK;
   }
-  void AddHandleToShare(HANDLE handle) override {}
-  void SetLockdownDefaultDacl() override {}
-  void AddRestrictingRandomSid() override {}
+  ResultCode SetDisconnectCsrss() override { return SBOX_ALL_OK; }
 
   ResultCode AddAppContainerProfile(const wchar_t* package_name,
                                     bool create_profile) override {
@@ -142,15 +117,26 @@ class TestTargetPolicy : public TargetPolicy {
   scoped_refptr<AppContainerBase> GetAppContainerBase() {
     return app_container_;
   }
+  void SetDesktop(Desktop desktop) override {}
+
+ private:
+  std::vector<std::wstring> blocklisted_dlls_;
+  scoped_refptr<AppContainerBase> app_container_;
+};
+
+class TestTargetPolicy : public TargetPolicy {
+ public:
+  ~TestTargetPolicy() override {}
+  // TargetPolicy:
+  TargetConfig* GetConfig() override { return &config_; }
+  ResultCode SetStdoutHandle(HANDLE handle) override { return SBOX_ALL_OK; }
+  ResultCode SetStderrHandle(HANDLE handle) override { return SBOX_ALL_OK; }
+  void AddHandleToShare(HANDLE handle) override {}
 
   void SetEffectiveToken(HANDLE token) override {}
 
-  void SetAllowNoSandboxJob() override { NOTREACHED(); }
-  bool GetAllowNoSandboxJob() override { return false; }
-
  private:
   TestTargetConfig config_;
-  scoped_refptr<AppContainerBase> app_container_;
 };
 
 // Drops a temporary file granting RX access to a list of capabilities.
@@ -209,10 +195,12 @@ class SandboxWinTest : public ::testing::Test {
     appcontainer_id +=
         testing::UnitTest::GetInstance()->current_test_info()->name();
     TestTargetPolicy policy;
-    ResultCode result = SandboxWin::AddAppContainerProfileToPolicy(
-        command_line, sandbox_type, appcontainer_id, &policy);
-    if (result == SBOX_ALL_OK)
-      *profile = policy.GetAppContainerBase();
+    ResultCode result = SandboxWin::AddAppContainerProfileToConfig(
+        command_line, sandbox_type, appcontainer_id, policy.GetConfig());
+    if (result == SBOX_ALL_OK) {
+      *profile = static_cast<TestTargetConfig*>(policy.GetConfig())
+                     ->GetAppContainerBase();
+    }
     return result;
   }
 
@@ -407,9 +395,11 @@ TEST_F(SandboxWinTest, GeneratedPolicyTest) {
   // Check some default values come back. No need to check the exact policy in
   // detail, but just that GeneratePolicyForSandboxedProcess generated some kind
   // of valid policy.
-  EXPECT_EQ(IntegrityLevel::INTEGRITY_LEVEL_LOW, policy->GetIntegrityLevel());
-  EXPECT_EQ(JobLevel::kLockdown, policy->GetJobLevel());
-  EXPECT_EQ(TokenLevel::USER_LOCKDOWN, policy->GetLockdownTokenLevel());
+  EXPECT_EQ(IntegrityLevel::INTEGRITY_LEVEL_LOW,
+            policy->GetConfig()->GetIntegrityLevel());
+  EXPECT_EQ(JobLevel::kLockdown, policy->GetConfig()->GetJobLevel());
+  EXPECT_EQ(TokenLevel::USER_LOCKDOWN,
+            policy->GetConfig()->GetLockdownTokenLevel());
 }
 
 TEST_F(SandboxWinTest, GeneratedPolicyTestNoSandbox) {

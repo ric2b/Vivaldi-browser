@@ -1,25 +1,26 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/accessibility/browser_accessibility.h"
 
 #include <cstddef>
-
-#include <algorithm>
 #include <iterator>
 
+#include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
+#include "content/browser/accessibility/web_ax_platform_tree_manager_delegate.h"
 #include "content/common/ax_serialization_utils.h"
 #include "content/public/common/content_client.h"
 #include "third_party/blink/public/strings/grit/blink_accessibility_strings.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_role_properties.h"
+#include "ui/accessibility/ax_selection.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
 #include "ui/base/buildflags.h"
@@ -49,9 +50,10 @@ BrowserAccessibility* BrowserAccessibility::FromAXPlatformNodeDelegate(
 
 BrowserAccessibility::BrowserAccessibility(BrowserAccessibilityManager* manager,
                                            ui::AXNode* node)
-    : manager_(manager), node_(node) {
+    : AXPlatformNodeDelegate(node), manager_(manager) {
   DCHECK(manager);
   DCHECK(node);
+  DCHECK(node->IsDataValid());
 }
 
 BrowserAccessibility::~BrowserAccessibility() = default;
@@ -252,48 +254,44 @@ BrowserAccessibility* BrowserAccessibility::InternalDeepestLastChild() const {
   return manager()->GetFromAXNode(deepest_child);
 }
 
-void BrowserAccessibility::SetNode(ui::AXNode& node) {
-  node_ = &node;
-}
-
 size_t BrowserAccessibility::InternalChildCount() const {
-  return node_->GetUnignoredChildCount();
+  return node()->GetUnignoredChildCount();
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalGetChild(
     size_t child_index) const {
   // By design, this method should be able to traverse platform leaves, hence we
   // don't check for leafiness.
-  ui::AXNode* child_node = node_->GetUnignoredChildAtIndex(child_index);
+  ui::AXNode* child_node = node()->GetUnignoredChildAtIndex(child_index);
   return manager_->GetFromAXNode(child_node);
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalGetParent() const {
-  ui::AXNode* parent_node = node_->GetUnignoredParent();
+  ui::AXNode* parent_node = node()->GetUnignoredParent();
   return manager_->GetFromAXNode(parent_node);
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalGetFirstChild() const {
   // By design, this method should be able to traverse platform leaves, hence we
   // don't check for leafiness.
-  ui::AXNode* child_node = node_->GetFirstUnignoredChild();
+  ui::AXNode* child_node = node()->GetFirstUnignoredChild();
   return manager_->GetFromAXNode(child_node);
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalGetLastChild() const {
   // By design, this method should be able to traverse platform leaves, hence we
   // don't check for leafiness.
-  ui::AXNode* child_node = node_->GetLastUnignoredChild();
+  ui::AXNode* child_node = node()->GetLastUnignoredChild();
   return manager_->GetFromAXNode(child_node);
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalGetNextSibling() const {
-  ui::AXNode* sibling_node = node_->GetNextUnignoredSibling();
+  ui::AXNode* sibling_node = node()->GetNextUnignoredSibling();
   return manager_->GetFromAXNode(sibling_node);
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalGetPreviousSibling() const {
-  ui::AXNode* sibling_node = node_->GetPreviousUnignoredSibling();
+  ui::AXNode* sibling_node = node()->GetPreviousUnignoredSibling();
   return manager_->GetFromAXNode(sibling_node);
 }
 
@@ -316,10 +314,6 @@ BrowserAccessibility::AllChildrenRange::Iterator::operator*() {
   // `AXNode::GetChildAtIndexCrossingTreeBoundary()`.
   ui::AXNode* child = parent_->node()->GetChildAtIndex(index_);
   return parent_->manager()->GetFromAXNode(child);
-}
-
-ui::AXNodeID BrowserAccessibility::GetId() const {
-  return node()->id();
 }
 
 gfx::RectF BrowserAccessibility::GetLocation() const {
@@ -746,11 +740,11 @@ BrowserAccessibility::CreatePositionForSelectionAt(int offset) const {
 }
 
 const std::string& BrowserAccessibility::GetName() const {
-  return node_->GetNameUTF8();
+  return node()->GetNameUTF8();
 }
 
 std::u16string BrowserAccessibility::GetNameAsString16() const {
-  return node_->GetNameUTF16();
+  return node()->GetNameUTF16();
 }
 
 const std::string& BrowserAccessibility::GetDescription() const {
@@ -765,7 +759,7 @@ std::u16string BrowserAccessibility::GetHypertext() const {
 
 const std::map<int, int>&
 BrowserAccessibility::GetHypertextOffsetToHyperlinkChildIndex() const {
-  return node_->GetHypertextOffsetToHyperlinkChildIndex();
+  return node()->GetHypertextOffsetToHyperlinkChildIndex();
 }
 
 std::u16string BrowserAccessibility::GetTextContentUTF16() const {
@@ -816,7 +810,7 @@ gfx::Rect BrowserAccessibility::RelativeToAbsoluteBounds(
     if (coordinate_system == ui::AXCoordinateSystem::kFrame)
       break;
 
-    const BrowserAccessibility* root = manager->GetRoot();
+    const BrowserAccessibility* root = manager->GetBrowserAccessibilityRoot();
     node = root->PlatformGetParent();
   }
 
@@ -829,7 +823,8 @@ gfx::Rect BrowserAccessibility::RelativeToAbsoluteBounds(
     // TODO(crbug.com/1074116): this should probably apply visual viewport
     // offset as well.
     if (!content::AXShouldIncludePageScaleFactorInRoot()) {
-      BrowserAccessibilityManager* root_manager = manager()->GetRootManager();
+      BrowserAccessibilityManager* root_manager =
+          manager()->GetManagerForRootFrame();
       if (root_manager)
         bounds.Scale(root_manager->GetPageScaleFactor());
     }
@@ -898,7 +893,7 @@ ui::AXPlatformNode* BrowserAccessibility::GetTargetNodeForRelation(
   DCHECK(ui::IsNodeIdIntAttribute(attr));
 
   int target_id;
-  if (!node_->GetIntAttribute(attr, &target_id))
+  if (!node()->GetIntAttribute(attr, &target_id))
     return nullptr;
 
   return GetFromNodeID(target_id);
@@ -920,7 +915,7 @@ BrowserAccessibility::GetTargetNodesForRelation(
   std::vector<ui::AXPlatformNode*> nodes;
   for (int32_t target_id : target_ids) {
     if (ui::AXPlatformNode* node = GetFromNodeID(target_id)) {
-      if (std::find(nodes.begin(), nodes.end(), node) == nodes.end())
+      if (!base::Contains(nodes, node))
         nodes.push_back(node);
     }
   }
@@ -931,7 +926,6 @@ BrowserAccessibility::GetTargetNodesForRelation(
 std::set<ui::AXPlatformNode*> BrowserAccessibility::GetReverseRelations(
     ax::mojom::IntAttribute attr) {
   DCHECK(manager_);
-  DCHECK(node_);
   DCHECK(ui::IsNodeIdIntAttribute(attr));
   return GetNodesForNodeIdSet(
       manager_->ax_tree()->GetReverseRelations(attr, GetData().id));
@@ -940,7 +934,6 @@ std::set<ui::AXPlatformNode*> BrowserAccessibility::GetReverseRelations(
 std::set<ui::AXPlatformNode*> BrowserAccessibility::GetReverseRelations(
     ax::mojom::IntListAttribute attr) {
   DCHECK(manager_);
-  DCHECK(node_);
   DCHECK(ui::IsNodeIdIntListAttribute(attr));
   return GetNodesForNodeIdSet(
       manager_->ax_tree()->GetReverseRelations(attr, GetData().id));
@@ -1001,7 +994,7 @@ gfx::NativeViewAccessible BrowserAccessibility::GetNativeViewAccessible() {
 //
 
 const ui::AXNodeData& BrowserAccessibility::GetData() const {
-  return node_->data();
+  return node()->data();
 }
 
 const ui::AXTreeData& BrowserAccessibility::GetTreeData() const {
@@ -1021,33 +1014,33 @@ ax::mojom::Role BrowserAccessibility::GetRole() const {
 
 bool BrowserAccessibility::HasBoolAttribute(
     ax::mojom::BoolAttribute attribute) const {
-  return node_->HasBoolAttribute(attribute);
+  return node()->HasBoolAttribute(attribute);
 }
 
 bool BrowserAccessibility::GetBoolAttribute(
     ax::mojom::BoolAttribute attribute) const {
-  return node_->GetBoolAttribute(attribute);
+  return node()->GetBoolAttribute(attribute);
 }
 
 bool BrowserAccessibility::GetBoolAttribute(ax::mojom::BoolAttribute attribute,
                                             bool* value) const {
-  return node_->GetBoolAttribute(attribute, value);
+  return node()->GetBoolAttribute(attribute, value);
 }
 
 bool BrowserAccessibility::HasFloatAttribute(
     ax::mojom::FloatAttribute attribute) const {
-  return node_->HasFloatAttribute(attribute);
+  return node()->HasFloatAttribute(attribute);
 }
 
 float BrowserAccessibility::GetFloatAttribute(
     ax::mojom::FloatAttribute attribute) const {
-  return node_->GetFloatAttribute(attribute);
+  return node()->GetFloatAttribute(attribute);
 }
 
 bool BrowserAccessibility::GetFloatAttribute(
     ax::mojom::FloatAttribute attribute,
     float* value) const {
-  return node_->GetFloatAttribute(attribute, value);
+  return node()->GetFloatAttribute(attribute, value);
 }
 
 const std::vector<std::pair<ax::mojom::IntAttribute, int32_t>>&
@@ -1057,17 +1050,17 @@ BrowserAccessibility::GetIntAttributes() const {
 
 bool BrowserAccessibility::HasIntAttribute(
     ax::mojom::IntAttribute attribute) const {
-  return node_->HasIntAttribute(attribute);
+  return node()->HasIntAttribute(attribute);
 }
 
 int BrowserAccessibility::GetIntAttribute(
     ax::mojom::IntAttribute attribute) const {
-  return node_->GetIntAttribute(attribute);
+  return node()->GetIntAttribute(attribute);
 }
 
 bool BrowserAccessibility::GetIntAttribute(ax::mojom::IntAttribute attribute,
                                            int* value) const {
-  return node_->GetIntAttribute(attribute, value);
+  return node()->GetIntAttribute(attribute, value);
 }
 
 const std::vector<std::pair<ax::mojom::StringAttribute, std::string>>&
@@ -1077,39 +1070,39 @@ BrowserAccessibility::GetStringAttributes() const {
 
 bool BrowserAccessibility::HasStringAttribute(
     ax::mojom::StringAttribute attribute) const {
-  return node_->HasStringAttribute(attribute);
+  return node()->HasStringAttribute(attribute);
 }
 
 const std::string& BrowserAccessibility::GetStringAttribute(
     ax::mojom::StringAttribute attribute) const {
-  return node_->GetStringAttribute(attribute);
+  return node()->GetStringAttribute(attribute);
 }
 
 bool BrowserAccessibility::GetStringAttribute(
     ax::mojom::StringAttribute attribute,
     std::string* value) const {
-  return node_->GetStringAttribute(attribute, value);
+  return node()->GetStringAttribute(attribute, value);
 }
 
 std::u16string BrowserAccessibility::GetString16Attribute(
     ax::mojom::StringAttribute attribute) const {
-  return node_->GetString16Attribute(attribute);
+  return node()->GetString16Attribute(attribute);
 }
 
 bool BrowserAccessibility::GetString16Attribute(
     ax::mojom::StringAttribute attribute,
     std::u16string* value) const {
-  return node_->GetString16Attribute(attribute, value);
+  return node()->GetString16Attribute(attribute, value);
 }
 
 const std::string& BrowserAccessibility::GetInheritedStringAttribute(
     ax::mojom::StringAttribute attribute) const {
-  return node_->GetInheritedStringAttribute(attribute);
+  return node()->GetInheritedStringAttribute(attribute);
 }
 
 std::u16string BrowserAccessibility::GetInheritedString16Attribute(
     ax::mojom::StringAttribute attribute) const {
-  return node_->GetInheritedString16Attribute(attribute);
+  return node()->GetInheritedString16Attribute(attribute);
 }
 
 const std::vector<std::pair<ax::mojom::IntListAttribute, std::vector<int32_t>>>&
@@ -1119,38 +1112,38 @@ BrowserAccessibility::GetIntListAttributes() const {
 
 bool BrowserAccessibility::HasIntListAttribute(
     ax::mojom::IntListAttribute attribute) const {
-  return node_->HasIntListAttribute(attribute);
+  return node()->HasIntListAttribute(attribute);
 }
 
 const std::vector<int32_t>& BrowserAccessibility::GetIntListAttribute(
     ax::mojom::IntListAttribute attribute) const {
-  return node_->GetIntListAttribute(attribute);
+  return node()->GetIntListAttribute(attribute);
 }
 
 bool BrowserAccessibility::GetIntListAttribute(
     ax::mojom::IntListAttribute attribute,
     std::vector<int32_t>* value) const {
-  return node_->GetIntListAttribute(attribute, value);
+  return node()->GetIntListAttribute(attribute, value);
 }
 
 bool BrowserAccessibility::HasStringListAttribute(
     ax::mojom::StringListAttribute attribute) const {
-  return node_->HasStringListAttribute(attribute);
+  return node()->HasStringListAttribute(attribute);
 }
 
 const std::vector<std::string>& BrowserAccessibility::GetStringListAttribute(
     ax::mojom::StringListAttribute attribute) const {
-  return node_->GetStringListAttribute(attribute);
+  return node()->GetStringListAttribute(attribute);
 }
 
 bool BrowserAccessibility::GetStringListAttribute(
     ax::mojom::StringListAttribute attribute,
     std::vector<std::string>* value) const {
-  return node_->GetStringListAttribute(attribute, value);
+  return node()->GetStringListAttribute(attribute, value);
 }
 
 bool BrowserAccessibility::HasHtmlAttribute(const char* attribute) const {
-  return node_->HasHtmlAttribute(attribute);
+  return node()->HasHtmlAttribute(attribute);
 }
 
 const BrowserAccessibility::HtmlAttributes&
@@ -1160,52 +1153,54 @@ BrowserAccessibility::GetHtmlAttributes() const {
 
 bool BrowserAccessibility::GetHtmlAttribute(const char* attribute,
                                             std::string* value) const {
-  return node_->GetHtmlAttribute(attribute, value);
+  return node()->GetHtmlAttribute(attribute, value);
 }
 
 bool BrowserAccessibility::GetHtmlAttribute(const char* attribute,
                                             std::u16string* value) const {
-  return node_->GetHtmlAttribute(attribute, value);
+  return node()->GetHtmlAttribute(attribute, value);
 }
 
 ui::AXTextAttributes BrowserAccessibility::GetTextAttributes() const {
-  return node_->GetTextAttributes();
+  return node()->GetTextAttributes();
 }
 
 bool BrowserAccessibility::HasState(ax::mojom::State state) const {
-  return node_->HasState(state);
+  return node()->HasState(state);
 }
 
 ax::mojom::State BrowserAccessibility::GetState() const {
-  return node_->GetState();
+  return node()->GetState();
 }
 
 bool BrowserAccessibility::HasAction(ax::mojom::Action action) const {
-  return node_->HasAction(action);
+  return node()->HasAction(action);
 }
 
 bool BrowserAccessibility::HasTextStyle(ax::mojom::TextStyle text_style) const {
-  return node_->HasTextStyle(text_style);
+  return node()->HasTextStyle(text_style);
 }
 
 ax::mojom::NameFrom BrowserAccessibility::GetNameFrom() const {
-  return node_->GetNameFrom();
+  return node()->GetNameFrom();
 }
 
 ax::mojom::DescriptionFrom BrowserAccessibility::GetDescriptionFrom() const {
   return GetData().GetDescriptionFrom();
 }
 
-const ui::AXTree::Selection BrowserAccessibility::GetUnignoredSelection()
-    const {
+const ui::AXSelection BrowserAccessibility::GetUnignoredSelection() const {
   return node()->GetUnignoredSelection();
 }
 
 BrowserAccessibility::AXPosition BrowserAccessibility::CreateTextPositionAt(
     int offset,
     ax::mojom::TextAffinity affinity) const {
-  return ui::AXNodePosition::CreateTextPosition(manager_->ax_tree_id(), GetId(),
-                                                offset, affinity);
+  DCHECK(node()->IsDataValid());
+  DCHECK(manager_->GetNode(GetId()))
+      << "No node for id: " << GetId() << "   " << node()->id() << "  "
+      << node()->data().id;
+  return ui::AXNodePosition::CreateTextPosition(*node(), offset, affinity);
 }
 
 gfx::NativeViewAccessible BrowserAccessibility::GetNSWindow() {
@@ -1218,11 +1213,10 @@ gfx::NativeViewAccessible BrowserAccessibility::GetParent() const {
   if (parent)
     return parent->GetNativeViewAccessible();
 
-  BrowserAccessibilityDelegate* delegate =
+  WebAXPlatformTreeManagerDelegate* delegate =
       manager_->GetDelegateFromRootManager();
   if (!delegate)
     return nullptr;
-
   return delegate->AccessibilityGetNativeViewAccessible();
 }
 
@@ -1469,7 +1463,8 @@ ui::AXPlatformNode* BrowserAccessibility::GetFromTreeIDAndNodeID(
 }
 
 absl::optional<size_t> BrowserAccessibility::GetIndexInParent() {
-  if (manager()->GetRoot() == this && PlatformGetParent() == nullptr) {
+  if (manager()->GetBrowserAccessibilityRoot() == this &&
+      PlatformGetParent() == nullptr) {
     // If it is a root node of WebContent, it doesn't have a parent and a
     // valid index in parent. So it returns -1 in order to compute its
     // index at AXPlatformNodeBase.
@@ -1480,7 +1475,7 @@ absl::optional<size_t> BrowserAccessibility::GetIndexInParent() {
 
 gfx::AcceleratedWidget
 BrowserAccessibility::GetTargetForNativeAccessibilityEvent() {
-  BrowserAccessibilityDelegate* root_delegate =
+  WebAXPlatformTreeManagerDelegate* root_delegate =
       manager()->GetDelegateFromRootManager();
   if (!root_delegate)
     return gfx::kNullAcceleratedWidget;
@@ -1617,7 +1612,7 @@ bool BrowserAccessibility::AccessibilityPerformAction(
     case ax::mojom::Action::kScrollToPoint: {
       // Convert the target point from screen coordinates to frame coordinates.
       gfx::Point target =
-          data.target_point - manager_->GetRoot()
+          data.target_point - manager_->GetBrowserAccessibilityRoot()
                                   ->GetUnclippedScreenBoundsRect()
                                   .OffsetFromOrigin();
       manager_->ScrollToPoint(*this, target);
@@ -2001,6 +1996,11 @@ std::u16string BrowserAccessibility::GetLocalizedStringForRoleDescription()
       return content_client->GetLocalizedString(IDS_AX_ROLE_COLOR_WELL);
     case ax::mojom::Role::kColumnHeader:
       return content_client->GetLocalizedString(IDS_AX_ROLE_COLUMN_HEADER);
+    case ax::mojom::Role::kComboBoxSelect:
+      // TODO(crbug.com/1362834): This is used for Mac AXRoleDescription. This
+      // should be changed at the same time we map this role to
+      // NSAccessibilityComboBoxRole.
+      return content_client->GetLocalizedString(IDS_AX_ROLE_POP_UP_BUTTON);
     case ax::mojom::Role::kComment:
       return content_client->GetLocalizedString(IDS_AX_ROLE_COMMENT);
     case ax::mojom::Role::kComplementary:
@@ -2232,11 +2232,13 @@ bool BrowserAccessibility::IsOrderedSet() const {
 }
 
 absl::optional<int> BrowserAccessibility::GetPosInSet() const {
-  return node()->GetPosInSet();
+  // TODO(nektar): Make `AXNode::GetPosInSet()` const and remove const_cast.
+  return const_cast<ui::AXNode*>(node())->GetPosInSet();
 }
 
 absl::optional<int> BrowserAccessibility::GetSetSize() const {
-  return node()->GetSetSize();
+  // TODO(nektar): Make `AXNode::GetSetSize()` const and remove const_cast.
+  return const_cast<ui::AXNode*>(node())->GetSetSize();
 }
 
 SkColor BrowserAccessibility::GetColor() const {
@@ -2251,13 +2253,9 @@ bool BrowserAccessibility::IsInListMarker() const {
   return node()->IsInListMarker();
 }
 
-bool BrowserAccessibility::IsCollapsedMenuListPopUpButton() const {
-  return node()->IsCollapsedMenuListPopUpButton();
-}
-
-BrowserAccessibility*
-BrowserAccessibility::GetCollapsedMenuListPopUpButtonAncestor() const {
-  ui::AXNode* popup_button = node()->GetCollapsedMenuListPopUpButtonAncestor();
+BrowserAccessibility* BrowserAccessibility::GetCollapsedMenuListSelectAncestor()
+    const {
+  ui::AXNode* popup_button = node()->GetCollapsedMenuListSelectAncestor();
   return manager()->GetFromAXNode(popup_button);
 }
 
@@ -2280,14 +2278,15 @@ BrowserAccessibility* BrowserAccessibility::PlatformGetRootOfChildTree() const {
                           &child_tree_id)) {
     return nullptr;
   }
-  DCHECK_EQ(node_->children().size(), 0u)
+  DCHECK_EQ(node()->children().size(), 0u)
       << "A node should not have both children and a child tree.";
 
   BrowserAccessibilityManager* child_manager =
       BrowserAccessibilityManager::FromID(
           ui::AXTreeID::FromString(child_tree_id));
-  if (child_manager && child_manager->GetRoot()->PlatformGetParent() == this)
-    return child_manager->GetRoot();
+  if (child_manager &&
+      child_manager->GetBrowserAccessibilityRoot()->PlatformGetParent() == this)
+    return child_manager->GetBrowserAccessibilityRoot();
   return nullptr;
 }
 
@@ -2464,10 +2463,7 @@ ui::TextAttributeMap BrowserAccessibility::ComputeTextAttributeMap(
 // static
 bool BrowserAccessibility::HasInvalidAttribute(
     const ui::TextAttributeList& attributes) {
-  return std::find_if(attributes.begin(), attributes.end(),
-                      [](const ui::TextAttribute& attribute) {
-                        return attribute.first == "invalid";
-                      }) != attributes.end();
+  return base::Contains(attributes, "invalid", &ui::TextAttribute::first);
 }
 
 static bool HasListAncestor(const BrowserAccessibility* node) {

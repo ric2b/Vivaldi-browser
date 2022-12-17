@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -290,7 +290,7 @@ void WebFeedSubscriptionCoordinator::FollowWebFeedComplete(
 
   if (result.request_status == WebFeedSubscriptionRequestStatus::kSuccess) {
     model_->OnSubscribed(result.web_feed_info);
-    feed_stream_->SetStreamStale(kWebFeedStream, true);
+    feed_stream_->SetStreamStale(StreamType(StreamKind::kFollowing), true);
   }
 
   SubscriptionsChanged();
@@ -304,6 +304,7 @@ void WebFeedSubscriptionCoordinator::FollowWebFeedComplete(
       index_.IsRecommended(result.followed_web_feed_id);
   callback_result.request_status = result.request_status;
   callback_result.subscription_count = index_.SubscriptionCount();
+  callback_result.change_reason = result.change_reason;
   feed_stream_->GetMetricsReporter().OnFollowAttempt(followed_with_id,
                                                      callback_result);
   std::move(callback).Run(std::move(callback_result));
@@ -363,7 +364,7 @@ void WebFeedSubscriptionCoordinator::UnfollowWebFeedComplete(
     UnsubscribeFromWebFeedTask::Result result) {
   if (!result.unsubscribed_feed_name.empty()) {
     model_->OnUnsubscribed(result.unsubscribed_feed_name);
-    feed_stream_->SetStreamStale(kWebFeedStream, true);
+    feed_stream_->SetStreamStale(StreamType(StreamKind::kFollowing), true);
   }
 
   WebFeedInFlightChange change = DequeueInflightChange();

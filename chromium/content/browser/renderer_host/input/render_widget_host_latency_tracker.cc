@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,6 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
 #include "ui/events/blink/web_input_event_traits.h"
-#include "ui/latency/latency_histogram_macros.h"
 
 using blink::WebGestureEvent;
 using blink::WebInputEvent;

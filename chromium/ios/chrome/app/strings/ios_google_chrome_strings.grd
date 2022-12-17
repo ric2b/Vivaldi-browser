@@ -326,9 +326,6 @@ Things to consider:
       <message name="IDS_IOS_FIRST_RUN_UMA_DIALOG_TITLE" desc="In Title Case: Title of the dialog where users can change their Chrome metrics sharing settings, like usage data. The title communicates that allowing Chrome to see this data can improve Chrome; this happens because we can better invent/improve features based on usage. This appears when they open the Chrome app for the first time on their phone. [iOS only]">
         Make Chrome Better
         </message>
-      <message name="IDS_IOS_FIRST_RUN_WELCOME_SCREEN_METRICS_CONSENT" desc="The label next to the metrics reporting consent checkbox of the welcome screen presented to the user on First Run [iOS only]">
-        Help improve Chrome by sending usage statistics and crash reports to Google
-      </message>
       <message name="IDS_IOS_FIRST_RUN_WELCOME_SCREEN_TITLE_ENTERPRISE" desc="The title of the welcome screen presented to the user on First Run when the browser is managed [iOS only]">
         Get More Done with Chrome
       </message>
@@ -389,9 +386,6 @@ Things to consider:
       <message name="IDS_IOS_MANAGED_SYNC_WITH_USER_POLICY_SUBTITLE" desc="The subtitle of the Sync with a managed account dialog when User Policy is enabled (alternative to IDS_IOS_MANAGED_SIGNIN_SUBTITLE). [300em][iOS only]">
         Your organization <ph name="DOMAIN">$1<ex>doe.com</ex></ph> will have access to your Chrome data, bookmarks, history, passwords and other settings you store in this account. When you sign out, your data will be cleared from this device.  However, your data will remain stored in your managed Google Account and be available to your organization. Your organization can also set user policies specific to that account that can change the behavior of Chrome.
       </message>
-      <message name="IDS_IOS_MOVE_TO_DOCK_TIP" desc="Text displayed on the New Tab Page for the move Chrome to the dock promo. [iOS only]">
-        Tip: <ph name="BEGIN_LINK"><ex>BEGIN_LINK</ex>BEGIN_LINK</ph>Move Chrome to your dock<ph name="END_LINK"><ex>END_LINK</ex>END_LINK</ph>
-      </message>
       <message name="IDS_IOS_OPTIONS_IMPORT_DATA_HEADER" desc="The header for the Import Data settings screen. [400em]">
         <ph name="USER_EMAIL1">$1<ex>johndoe@gmail.com</ex></ph> was using Chrome and left bookmarks, passwords, and other settings on this device.
       </message>
@@ -438,7 +432,7 @@ Things to consider:
         To save images, tap on Settings to let Chrome add to your photos
       </message>
       <message name="IDS_IOS_SAVE_PASSWORD_FOOTER_NOT_SYNCING" desc="Helper text above the save credentials modal's primary action button. [Length: unlimited] [iOS only]">
-        Passwords are saved to Google Password Manager on this device only.
+        Passwords are saved to Google Password Manager on this device.
       </message>
       <message name="IDS_IOS_SCANNER_CAMERA_IN_USE_ALERT_DETAIL" desc="Body of a modal dialog shown when the user tries to open the QR scanner but the camera is in use by another application. [Length: 140em] [iOS only]">
         Google Chrome can't use your camera because it's in use by another application
@@ -475,6 +469,9 @@ Things to consider:
       </message>
       <message name="IDS_IOS_SIGNOUT_DIALOG_TITLE_WITH_SYNCING_ACCOUNT" desc="The signout dialog title. This dialog is used when the user have a gmail account and sync is turned on [iOS only].">
         Choose whether to clear your Chrome data from this device or keep it
+      </message>
+      <message name="IDS_IOS_SIGNOUT_DIALOG_TITLE_WITHOUT_SYNCING_ACCOUNT" desc="Title of sign-out button, warning the user they’ll have access to less features once signed out. [iOS only].">
+        Some Chrome features won’t be available anymore.
       </message>
       <message name="IDS_IOS_SIGNOUT_DIALOG_TITLE_WITH_SYNCING_MANAGED_ACCOUNT" desc="The signout dialog title. This dialog is used when the user have a managed account (other than gmail account) [iOS only].">
         Your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex></ph>, so your Chrome data will be cleared from this device
@@ -567,10 +564,10 @@ Things to consider:
         Chrome couldn't check all passwords. Try again later.
       </message>
       <message name="IDS_IOS_CHANGE_COMPROMISED_PASSWORD_DESCRIPTION" desc="Text inside Password Details screen shown when password was compromised. [iOS only]" meaning="Text which explains the user that current password is compromised and it should be changed.">
-        Your password was exposed in a data breach. Chrome recommends changing the password now.
+        This password was found in a data breach. Chrome recommends changing your password now.
       </message>
       <message name="IDS_IOS_CHANGE_COMPROMISED_PASSWORD_DESCRIPTION_BRANDED" desc="Text inside Password Details screen shown when password was compromised. [iOS only]" meaning="Text which explains the user that current password is compromised and it should be changed.">
-        Your password was exposed in a data breach. Google Password Manager recommends changing it now.
+        This password was found in a data breach. Google Password Manager recommends changing your password now.
       </message>
       <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_ALLOW_SIGNIN_DETAIL" desc="Feature detail text in the Google services Settings for the user to enable/disable Chrome express sign-in from the web [iOS only]">
         Shows prompts to sign in to Chrome.
@@ -589,6 +586,9 @@ Things to consider:
       </message>
       <message name="IDS_IOS_PASSWORD_SUGGESTIONS_TIP_VOICEOVER" desc="The VoiceOver announcement when the tip explaining to the user they can select Autofill password suggestions." meaning="The VoiceOver announcement when the tip explaining to the user they can select Autofill password suggestions.">
         Chrome tip. Sign in faster by selecting your saved password at the top of the keyboard.
+      </message>
+      <message name="IDS_IOS_OVERFLOW_MENU_TIP" desc="The text of the tip explaining to the user that the Overflow Menu has new items">
+        Get to know the new Chrome menu
       </message>
     </messages>
   </release>

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@ static const char kContentHintStringVideoText[] = "text";
 
 class AudioSourceProvider;
 class ImageCapture;
+class MediaConstraints;
 class MediaTrackCapabilities;
 class MediaTrackConstraints;
 class MediaStream;
@@ -57,6 +58,7 @@ class MODULES_EXPORT MediaStreamTrack
 
   // For carrying data to the FromTransferredState method.
   struct TransferredValues {
+    const WrapperTypeInfo* track_impl_subtype;
     base::UnguessableToken session_id;
     base::UnguessableToken transfer_id;
     String kind;
@@ -66,7 +68,14 @@ class MODULES_EXPORT MediaStreamTrack
     bool muted;
     WebMediaStreamTrack::ContentHintType content_hint;
     MediaStreamSource::ReadyState ready_state;
+    // Set only if
+    // track_impl_subtype->IsSubclass(BrowserCaptureMediaStreamTrack::GetStaticWrapperTypeInfo())
+    absl::optional<uint32_t> crop_version;
   };
+
+  // See SetFromTransferredStateImplForTesting in ./test/transfer_test_utils.h.
+  using FromTransferredStateImplForTesting =
+      base::RepeatingCallback<MediaStreamTrack*(const TransferredValues&)>;
 
   // Create a MediaStreamTrack instance as a result of a transfer into this
   // context, eg when receiving a postMessage() with an MST in the transfer
@@ -124,8 +133,7 @@ class MODULES_EXPORT MediaStreamTrack
       int context_sample_rate) = 0;
 
   virtual ImageCapture* GetImageCapture() = 0;
-  virtual absl::optional<base::UnguessableToken> serializable_session_id()
-      const = 0;
+  virtual absl::optional<const MediaStreamDevice> device() const = 0;
   // This function is called on the track by the serializer once it has been
   // serialized for transfer to another context.
   // Prepares the track for a potentially cross-renderer transfer. After this
@@ -146,6 +154,15 @@ class MODULES_EXPORT MediaStreamTrack
   void Trace(Visitor* visitor) const override {
     EventTargetWithInlineData::Trace(visitor);
   }
+
+ private:
+  // Friend in order to allow setting a new impl for FromTransferredState.
+  friend void SetFromTransferredStateImplForTesting(
+      FromTransferredStateImplForTesting impl);
+  // Provides access to the global mock impl of FromTransferredState. Set to
+  // base::NullCallback() to restore the real impl.
+  static FromTransferredStateImplForTesting&
+  GetFromTransferredStateImplForTesting();
 };
 
 typedef HeapVector<Member<MediaStreamTrack>> MediaStreamTrackVector;

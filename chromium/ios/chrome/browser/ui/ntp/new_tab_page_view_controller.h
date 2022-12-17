@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,11 +46,7 @@
 // controller.
 @property(nonatomic, weak) ViewRevealingVerticalPanHandler* panGestureHandler;
 
-// Identity disc shown in the NTP.
-// TODO(crbug.com/1170995): Remove once the Feed header properly supports
-// ContentSuggestions.
-@property(nonatomic, weak) UIButton* identityDiscButton;
-
+// The view controller representing the content suggestions.
 @property(nonatomic, strong)
     ContentSuggestionsViewController* contentSuggestionsViewController;
 
@@ -131,6 +127,13 @@
 // Checks the content size of the feed and updates the bottom content inset to
 // ensure the feed is still scrollable to the minimum height.
 - (void)updateFeedInsetsForMinimumHeight;
+
+// Updates the scroll position to account for the feed promo being removed.
+- (void)updateScrollPositionForFeedTopSectionClosed;
+
+// Forces the elements that stick to the top when scrolling (eg. omnibox, feed
+// header) to update for the current scroll position.
+- (void)updateStickyElements;
 
 @end
 

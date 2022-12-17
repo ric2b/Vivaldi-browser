@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -35,7 +36,7 @@ class RenderFrameHostImpl;
 //
 // - Triggers (e.g., SpeculationHostImpl) start prerendering by
 //   CreateAndStartHost() and notify the registry of destruction of the trigger
-//   by OnTriggerDestroyed().
+//   by CancelHosts().
 // - Activators (i.e., NavigationRequest) can reserve the prerender host on
 //   activation start by ReserveHostToActivate(), activate it by
 //   ActivateReservedHost(), and notify the registry of completion of the
@@ -88,6 +89,11 @@ class CONTENT_EXPORT PrerenderHostRegistry {
   bool CancelHost(int frame_tree_node_id,
                   PrerenderHost::FinalStatus final_status);
 
+  // Cancels the existing hosts specified in the vector with the same final
+  // status.
+  void CancelHosts(const std::vector<int>& frame_tree_node_ids,
+                   PrerenderHost::FinalStatus final_status);
+
   // Applies CancelHost for all existing PrerenderHost.
   void CancelAllHosts(PrerenderHost::FinalStatus final_status);
 
@@ -124,16 +130,14 @@ class CONTENT_EXPORT PrerenderHostRegistry {
   RenderFrameHostImpl* GetRenderFrameHostForReservedHost(
       int frame_tree_node_id);
 
-  // For triggers.
-  // Called from the triggers (e.g., SpeculationHostImpl) when they are
-  // destroyed. `frame_tree_node_id` should be the id returned by
-  // CreateAndStartHost().
-  void OnTriggerDestroyed(int frame_tree_node_id);
-
   // For activators.
   // Called from the destructor of NavigationRequest that reserved the host.
   // `frame_tree_node_id` should be the id returned by ReserveHostToActivate().
   void OnActivationFinished(int frame_tree_node_id);
+
+  // Called from PrerenderHost::DidFinishNavigation. This is called only for the
+  // main frame navigation, not for iframe navigations, in a prerendered page.
+  void OnPrerenderNavigationFinished(int frame_tree_node_id);
 
   // Returns the non-reserved host with the given id. Returns nullptr if the id
   // does not match any non-reserved host.
@@ -179,6 +183,14 @@ class CONTENT_EXPORT PrerenderHostRegistry {
 
   void NotifyTrigger(const GURL& url);
 
+  // Pops one PrerenderHost from the queue and starts the prerendering if
+  // there's no running prerender and `kNoFrameTreeNode` is passed as
+  // `frame_tree_node_id`. If the given `frame_tree_node_id` is valid, this
+  // function starts prerendering for the id. Returns starting prerender host id
+  // when it succeeds, and returns `RenderFrameHost::kNoFrameTreeNodeId` if it's
+  // cancelled.
+  int StartPrerendering(int frame_tree_node_id);
+
   // Returns whether a certain type of PrerenderTriggerType is allowed to be
   // added to PrerenderHostRegistry according to the limit of the given
   // PrerenderTriggerType.
@@ -193,7 +205,24 @@ class CONTENT_EXPORT PrerenderHostRegistry {
       bool success,
       std::unique_ptr<memory_instrumentation::GlobalMemoryDump> dump);
 
-  // Hosts that are not reserved for activation yet.
+  // Holds the frame_tree_node_id of running PrerenderHost. Reset to
+  // RenderFrameHost::kNoFrameTreeNodeId when there's no running PrerenderHost.
+  // Tracks only the host id of speculation rules triggers and ignores requests
+  // from embedder because embedder requests are more urgent and we'd like to
+  // handle embedder prerender independently from speculation rules requests.
+  // This is valid only when kPrerender2SequentialPrerendering is enabled.
+  int running_prerender_host_id_ = RenderFrameHost::kNoFrameTreeNodeId;
+
+  // Holds the ids of upcoming prerender requests. The requests from embedder
+  // trigger are prioritized and pushed to the front of the queue, while the
+  // requests from the speculation rules are appended to the back. This may
+  // contain ids of cancelled requests. You can identify cancelled requests by
+  // checking if an id is in `prerender_host_by_frame_tree_node_id_`.
+  // This is valid only when kPrerender2SequentialPrerendering is enabled.
+  base::circular_deque<int> pending_prerenders_;
+
+  // Hosts that are not reserved for activation yet. This map also includes the
+  // hosts still waiting for their start.
   // TODO(https://crbug.com/1132746): Expire prerendered contents if they are
   // not used for a while.
   base::flat_map<int, std::unique_ptr<PrerenderHost>>

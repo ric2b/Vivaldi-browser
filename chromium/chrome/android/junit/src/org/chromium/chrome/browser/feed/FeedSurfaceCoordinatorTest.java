@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,7 +42,6 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.feed.componentinterfaces.SurfaceCoordinator;
 import org.chromium.chrome.browser.feed.sections.SectionHeaderListProperties;
@@ -87,9 +86,20 @@ import java.util.ArrayList;
  */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
-@Features.DisableFeatures({ChromeFeatureList.WEB_FEED, ChromeFeatureList.WEB_FEED_SORT,
-        ChromeFeatureList.WEB_FEED_ONBOARDING, ChromeFeatureList.INTEREST_FEED_V2_AUTOPLAY,
-        ChromeFeatureList.FEED_INTERACTIVE_REFRESH, ChromeFeatureList.FEED_BACK_TO_TOP})
+@Features.DisableFeatures({
+        ChromeFeatureList.WEB_FEED,
+        ChromeFeatureList.WEB_FEED_SORT,
+        ChromeFeatureList.WEB_FEED_ONBOARDING,
+        ChromeFeatureList.INTEREST_FEED_V2_AUTOPLAY,
+        ChromeFeatureList.FEED_INTERACTIVE_REFRESH,
+        ChromeFeatureList.FEED_BACK_TO_TOP,
+        ChromeFeatureList.FEED_MULTI_COLUMN,
+        // TODO(crbug.com/1353777): Disabling the feature explicitly, because native is not
+        // available to provide a default value. This should be enabled if the feature is enabled by
+        // default or removed if the flag is removed.
+        ChromeFeatureList.SYNC_ANDROID_LIMIT_NTP_PROMO_IMPRESSIONS,
+})
+@Features.EnableFeatures({ChromeFeatureList.FEED_CLIENT_GOOD_VISITS})
 public class FeedSurfaceCoordinatorTest {
     private static final @SurfaceType int SURFACE_TYPE = SurfaceType.NEW_TAB_PAGE;
     private static final long SURFACE_CREATION_TIME_NS = 1234L;
@@ -163,8 +173,6 @@ public class FeedSurfaceCoordinatorTest {
     private Supplier<ShareDelegate> mShareDelegateSupplier;
     @Mock
     private SectionHeaderView mSectionHeaderView;
-    @Mock
-    private BookmarkBridge mBookmarkBridge;
     @Mock
     private FeedActionDelegate mFeedActionDelegate;
 
@@ -266,7 +274,8 @@ public class FeedSurfaceCoordinatorTest {
         when(mProcessScope.obtainSurfaceScope(any(SurfaceScopeDependencyProvider.class)))
                 .thenReturn(mSurfaceScope);
         when(mSurfaceScope.provideListRenderer()).thenReturn(mRenderer);
-        when(mRenderer.bind(mContentManagerCaptor.capture(), isNull())).thenReturn(mRecyclerView);
+        when(mRenderer.bind(mContentManagerCaptor.capture(), isNull(), eq(false)))
+                .thenReturn(mRecyclerView);
         when(mSurfaceScope.getFeedLaunchReliabilityLogger()).thenReturn(mLaunchReliabilityLogger);
         TrackerFactory.setTrackerForTests(mTracker);
         when(mTabModelSelector.getModel(eq(false))).thenReturn(mTabModel);

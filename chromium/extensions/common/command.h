@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,11 @@ class Command {
   // keys: Next Track key, Previous Track key, Stop Media key, Play/Pause Media
   // key, without any modifiers.
   static bool IsMediaKey(const ui::Accelerator& accelerator);
+
+  // Return true if the |command_name| is one of the following action events:
+  // Action Command Event, Browser Action Command Event, Page Action Command
+  // Event.
+  static bool IsActionRelatedCommand(const std::string& command_name);
 
   // Parse the command.
   bool Parse(const base::DictionaryValue* command,

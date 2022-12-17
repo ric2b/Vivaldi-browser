@@ -1,10 +1,9 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/thumbnail/cc/thumbnail_cache.h"
 
-#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -18,6 +17,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -534,7 +534,7 @@ void ThumbnailCache::MakeSpaceForNewItemIfNecessary(TabId tab_id) {
 }
 
 void ThumbnailCache::RemoveFromReadQueue(TabId tab_id) {
-  auto read_iter = std::find(read_queue_.begin(), read_queue_.end(), tab_id);
+  auto read_iter = base::ranges::find(read_queue_, tab_id);
   if (read_iter != read_queue_.end())
     read_queue_.erase(read_iter);
 }
@@ -922,7 +922,7 @@ void ThumbnailCache::PostReadTask(TabId tab_id,
                                   const gfx::Size& content_size) {
   read_in_progress_ = false;
 
-  auto iter = std::find(read_queue_.begin(), read_queue_.end(), tab_id);
+  auto iter = base::ranges::find(read_queue_, tab_id);
   if (iter == read_queue_.end()) {
     ReadNextThumbnail();
     return;

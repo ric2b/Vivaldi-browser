@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,6 @@
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/keyed_service/core/keyed_service.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_result.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-forward.h"
@@ -67,8 +66,7 @@ using BrowserPermissionCallback = base::OnceCallback<void(ContentSetting)>;
 // See midi_permission_context.h/cc or push_permission_context.cc/h for some
 // examples.
 
-class PermissionContextBase : public KeyedService,
-                              public content_settings::Observer {
+class PermissionContextBase : public content_settings::Observer {
  public:
   PermissionContextBase(
       content::BrowserContext* browser_context,
@@ -167,7 +165,7 @@ class PermissionContextBase : public KeyedService,
                                     bool is_one_time);
 
   // Whether the permission should be restricted to secure origins.
-  virtual bool IsRestrictedToSecureOrigins() const = 0;
+  virtual bool IsRestrictedToSecureOrigins() const;
 
   // Called by PermissionDecided when the user has made a permission decision.
   // Subclasses may override this method to perform context-specific logic

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,11 @@
 namespace base {
 
 using FooToken = TokenType<class Foo>;
+static_assert(std::is_trivially_copy_constructible_v<FooToken>);
+static_assert(std::is_trivially_copy_assignable_v<FooToken>);
+static_assert(std::is_trivially_move_constructible_v<FooToken>);
+static_assert(std::is_trivially_move_assignable_v<FooToken>);
+static_assert(std::is_trivially_destructible_v<FooToken>);
 
 TEST(TokenType, TokenApi) {
   // Test default initialization.

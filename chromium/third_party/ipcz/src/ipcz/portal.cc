@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 
 #include "ipcz/api_object.h"
 #include "ipcz/local_router_link.h"
+#include "ipcz/operation_context.h"
 #include "ipcz/router.h"
 #include "third_party/abseil-cpp/absl/types/span.h"
 #include "util/log.h"
@@ -47,10 +48,11 @@ Portal::Pair Portal::CreatePair(Ref<Node> node) {
   DVLOG(5) << "Created new portal pair with routers " << routers.first.get()
            << " and " << routers.second.get();
 
+  const OperationContext context{OperationContext::kAPICall};
   auto links = LocalRouterLink::CreatePair(LinkType::kCentral, routers,
                                            LocalRouterLink::kStable);
-  routers.first->SetOutwardLink(std::move(links.first));
-  routers.second->SetOutwardLink(std::move(links.second));
+  routers.first->SetOutwardLink(context, std::move(links.first));
+  routers.second->SetOutwardLink(context, std::move(links.second));
   return {MakeRefCounted<Portal>(node, std::move(routers.first)),
           MakeRefCounted<Portal>(node, std::move(routers.second))};
 }
@@ -146,7 +148,7 @@ IpczResult Portal::BeginPut(IpczBeginPutFlags flags,
 
   num_data_bytes = pending_parcel_->data_view().size();
   if (data) {
-    *data = pending_parcel_->data_view().data();
+    *data = num_data_bytes ? pending_parcel_->data_view().data() : nullptr;
   }
   return IPCZ_RESULT_OK;
 }
@@ -207,9 +209,10 @@ IpczResult Portal::Get(IpczGetFlags flags,
                        void* data,
                        size_t* num_data_bytes,
                        IpczHandle* handles,
-                       size_t* num_handles) {
+                       size_t* num_handles,
+                       IpczHandle* validator) {
   return router_->GetNextInboundParcel(flags, data, num_data_bytes, handles,
-                                       num_handles);
+                                       num_handles, validator);
 }
 
 IpczResult Portal::BeginGet(const void** data,
@@ -233,14 +236,15 @@ IpczResult Portal::BeginGet(const void** data,
 }
 
 IpczResult Portal::CommitGet(size_t num_data_bytes_consumed,
-                             absl::Span<IpczHandle> handles) {
+                             absl::Span<IpczHandle> handles,
+                             IpczHandle* validator) {
   absl::MutexLock lock(&mutex_);
   if (!in_two_phase_get_) {
     return IPCZ_RESULT_FAILED_PRECONDITION;
   }
 
-  IpczResult result =
-      router_->CommitGetNextIncomingParcel(num_data_bytes_consumed, handles);
+  IpczResult result = router_->CommitGetNextIncomingParcel(
+      num_data_bytes_consumed, handles, validator);
   if (result == IPCZ_RESULT_OK) {
     in_two_phase_get_ = false;
   }

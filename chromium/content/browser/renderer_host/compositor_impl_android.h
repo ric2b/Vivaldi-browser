@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -138,6 +138,7 @@ class CONTENT_EXPORT CompositorImpl
       bool,
       cc::PaintHoldingReason,
       absl::optional<cc::PaintHoldingCommitTrigger>) override {}
+  void OnPauseRenderingChanged(bool) override {}
   void BeginMainFrameNotExpectedSoon() override {}
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
   void UpdateLayerTreeHost() override;
@@ -188,8 +189,11 @@ class CONTENT_EXPORT CompositorImpl
   void OnUpdateRefreshRate(float refresh_rate) override;
   void OnUpdateSupportedRefreshRates(
       const std::vector<float>& supported_refresh_rates) override;
+  void OnUpdateOverlayTransform() override;
   std::unique_ptr<ui::CompositorLock> GetCompositorLock(
       base::TimeDelta timeout) override;
+  void PostRequestPresentationTimeForNextFrame(
+      PresentationTimeCallback callback) override;
 
   // viz::HostFrameSinkClient implementation.
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;

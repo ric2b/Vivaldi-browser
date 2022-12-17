@@ -1,15 +1,18 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="az">
+<translation id="1057925581724305206">Tam HD (1080p)</translation>
+<translation id="1076394037877376434"><ph name="PAGE_NUMBER" /> saylı səhifəni silin</translation>
 <translation id="1113173431709655881">Kamera rejimi</translation>
 <translation id="1153190633558910465">Tor deaktivdir</translation>
 <translation id="1175958423215084756">Keçid aşkarlanıb. <ph name="HOSTNAME" /></translation>
+<translation id="1197694886744716213">Səhifə <ph name="PAGE_NUMBER" /> silindi</translation>
 <translation id="1258009455399840361">Saat əqrəbi istiqamətində 90 dərəcə fırladın</translation>
 <translation id="1276998909102132017">Qalereya şəkilləri</translation>
 <translation id="1300209025925956156">Sənədinizi skanlayın</translation>
 <translation id="1309250603447638106">Sənədin skan edilməsi üçün güncəlləmələr endirilir</translation>
 <translation id="137991641490787891"><ph name="ASPECT_RATIO_WIDTH" />. Daxil olmaq üçün Axtarış + Sol ox.</translation>
-<translation id="1393338179284529051">Dördqat HD</translation>
+<translation id="1417314334557041815">Bu səhifəni redaktə edin: <ph name="INDEX" /></translation>
 <translation id="1430915738399379752">Çap edin</translation>
 <translation id="1467231725790366244"><ph name="CAMERA" /> kabeli çıxarılıb.</translation>
 <translation id="1473110567575736769">3 saniyəlik taymer</translation>
@@ -19,8 +22,10 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627744224761163218">4 x 4</translation>
+<translation id="1644345013557678440">HD (720p)</translation>
 <translation id="1664224225747386870">Heç nə çəkilməyib</translation>
 <translation id="1838104802459806957">Yuxarı əyin</translation>
+<translation id="1843105061469674856">Əlavə səhifəni skan edin</translation>
 <translation id="1851169887664797861">Əlavə kamera nizamlayıcıları əlçatandır</translation>
 <translation id="1851616744363735765">DURDURULUB</translation>
 <translation id="1862930711583847113"><ph name="FILE" /> faylını eksport etmək mümkün deyil</translation>
@@ -45,7 +50,6 @@
 <translation id="2599796128805996109">Arxa kamera</translation>
 <translation id="2759905922487820242"><ph name="CURRENT" /> / <ph name="MAXIMAL" /> san</translation>
 <translation id="2761536921376153655">Skan növü</translation>
-<translation id="2816865716882637212">HD</translation>
 <translation id="28682968802727151">Önizləməni əks etdirin</translation>
 <translation id="2879583609344924966"><ph name="CAMERA" /> kabeli birləşdirilib.</translation>
 <translation id="2904654629665923749">Sənəd skanı əlçatandır</translation>
@@ -77,7 +81,9 @@
 <translation id="414641094616694804">Bu kamera ayırdetmə dəqiqliyini dəyişə bilmir</translation>
 <translation id="4269820728363426813">Link ünvanını kopyalayın</translation>
 <translation id="4281620174117014503">Orta ayırdetmə dəqiqliyi</translation>
+<translation id="428234092390943511">Səhifə miniatürü</translation>
 <translation id="4329152592498422850">Kvadrat foto çəkmək üçün keçid edin</translation>
+<translation id="4340659173795395806">İndi çoxsəhifəli PDF yarada bilərsiniz</translation>
 <translation id="4383571725254449280">Performans jurnallarını çap edin</translation>
 <translation id="4445542136948522167">Foto çəkməyi dayandırın</translation>
 <translation id="4497569853498380347">(<ph name="ASPECT_RATIO_WIDTH" />:<ph name="ASPECT_RATIO_HEIGHT" />) <ph name="MEGAPIXEL" /> meqa piksel</translation>
@@ -89,6 +95,7 @@
 <translation id="4705093842003735294">Tam ayırdetmə dəqiqliyi</translation>
 <translation id="4890010094662541459">3 x 3</translation>
 <translation id="491895758387112773">Çox-yayımlı video çəkilişi</translation>
+<translation id="4984613436295737187">Quad HD (1440p)</translation>
 <translation id="5034763830503483128">Fotonun tərəflər nisbəti</translation>
 <translation id="5057360777601936059">Kamera hazırda əlçatan deyil.
         Kameranın düzgün qoşulub-qoşulmadığını yoxlayın.</translation>
@@ -97,7 +104,9 @@
 <translation id="5266635337630551423">Sənədin yuxarı sol küncü</translation>
 <translation id="5317780077021120954">Yadda saxlayın</translation>
 <translation id="5320594929574852403">Sol tərəfə daşınır</translation>
+<translation id="5374917190292010970">4K (2160p)</translation>
 <translation id="5444515100983837161">Sənədin bütün kənarlarını çərçivənin daxilinə yerləşdirin. Sənəd və arxa fon fərqli rənglərdə olduqda skanlama daha keyfiyyətli olur.</translation>
+<translation id="5662366948659129155">Səhifə <ph name="COUNT" /> skanlanır</translation>
 <translation id="5671277269877808209">Kvadrat</translation>
 <translation id="5746169159649715125">PDF olaraq saxlayın</translation>
 <translation id="5753488212459587150">Ekspert rejimini aktiv edin</translation>
@@ -108,7 +117,6 @@
 <translation id="5916664084637901428">Aktiv</translation>
 <translation id="5975083100439434680">Kiçildin</translation>
 <translation id="5976160379964388480">Digərləri</translation>
-<translation id="603973421174355542">Tam HD</translation>
 <translation id="6073451960410192870">Çəkməyi dayandırın</translation>
 <translation id="6197807149213783179">Metadatanı yadda saxlayın</translation>
 <translation id="6233780560267770709">3x3</translation>
@@ -131,7 +139,6 @@ Rəyiniz şəkil və ya video keyfiyyəti ilə bağlıdırsa, nümunə foto və 
 <translation id="698156982839284926">3 saniyə</translation>
 <translation id="712848772518857951"><ph name="COUNT" /> elementi silmək istəyirsiniz?</translation>
 <translation id="7134221860976209830">10 saniyəlik taymer</translation>
-<translation id="7150591439198955032">4K</translation>
 <translation id="7191890674911603392">Qeydəalma növü</translation>
 <translation id="7243947652761655814">Videonun ayırdetmə dəqiqliyi</translation>
 <translation id="7337660886763914220">Fayl sistemi xətaları.</translation>
@@ -158,6 +165,7 @@ Rəyiniz şəkil və ya video keyfiyyəti ilə bağlıdırsa, nümunə foto və 
 <translation id="8261506727792406068">Silin</translation>
 <translation id="8425673304802773841">Aşağı əyin</translation>
 <translation id="8428213095426709021">Ayarlar</translation>
+<translation id="8629662593426079630">360p</translation>
 <translation id="8687491812650032292">HD <ph name="HEIGHT" />p (<ph name="WIDTH" />:<ph name="HEIGHT" />)</translation>
 <translation id="8711011893539266636">Mikrofonu səssisə keçirin. Susdurma düyməsi aktivdir</translation>
 <translation id="8712637175834984815">Anladım</translation>

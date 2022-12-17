@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,6 @@ class MainFrameCounterTestImpl final : public mojom::MainFrameCounterTest {
   mojo::Receiver<mojom::MainFrameCounterTest> receiver_{this};
 };
 
-};  // namespace content
+}  // namespace content
 
 #endif  // CONTENT_SHELL_COMMON_MAIN_FRAME_COUNTER_TEST_IMPL_H_

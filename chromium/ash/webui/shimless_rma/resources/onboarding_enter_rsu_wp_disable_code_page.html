@@ -31,10 +31,10 @@
 
   #rsuCodeDialogLink {
     color: var(--cros-link-color);
-    text-decoration: none;
   }
 
   #qrCodeCanvas {
+      background-color: white;
       border: 1px solid;
       border-color: var(--google-grey-200);
       border-radius: 8px;
@@ -49,11 +49,22 @@
     justify-content: center;
     width: 100%;
   }
+
+  #qrCodeBorder {
+    --border-size: 286px;
+    align-items: center;
+    background-color: var(--google-blue-600);
+    border-radius: 40px;
+    display: flex;
+    height: var(--border-size);
+    justify-content: center;
+    width: var(--border-size);
+  }
 </style>
 
 <base-page>
   <div slot="left-pane">
-    <h1>[[i18n('rsuCodePageTitleText')]]</h1>
+    <h1 tabindex="-1">[[i18n('rsuCodePageTitleText')]]</h1>
     <div class="instructions">
       <span inner-h-t-m-l="[[rsuInstructionsText_]]"></span>
     </div>
@@ -65,7 +76,9 @@
           maxlength="[[rsuCodeExpectedLength_]]"
           invalid="[[rsuCodeInvalid_]]"
           disabled="[[allButtonsDisabled]]"
-          error-message="[[i18n('rsuCodeErrorLabelText')]]">
+          error-message="[[i18n('rsuCodeErrorLabelText')]]"
+          aria-label="[[i18n('rsuCodePageTitleText')]]"
+          aria-description="[[getRsuAriaDescription_(rsuCodeInvalid_)]]">
       </cr-input>
       <div id="inputValidationLabel">
         [[getRsuCodeLabelText_(rsuCodeInvalid_)]]
@@ -74,7 +87,10 @@
   </div>
   <div slot="right-pane">
     <div id="qrCodeWrapper">
-      <canvas id="qrCodeCanvas" width="[[canvasSize_]]" height="[[canvasSize_]]">
+      <div id="qrCodeBorder">
+        <canvas id="qrCodeCanvas" width="[[canvasSize_]]"
+            height="[[canvasSize_]]">
+      </div>
     </div>
     </canvas>
   </div>

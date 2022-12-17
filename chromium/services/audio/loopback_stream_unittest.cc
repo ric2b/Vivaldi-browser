@@ -1,10 +1,9 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "services/audio/loopback_stream.h"
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -13,6 +12,7 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
@@ -60,7 +60,7 @@ const media::AudioParameters& GetLoopbackStreamParams() {
   // 48 kHz, 2-channel audio, with 10 ms buffers.
   static const media::AudioParameters params(
       media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-      media::CHANNEL_LAYOUT_STEREO, 48000, 480);
+      media::ChannelLayoutConfig::Stereo(), 48000, 480);
   return params;
 }
 
@@ -151,17 +151,18 @@ class LoopbackStreamTest : public testing::Test {
   void RunMojoTasks() { task_environment_.RunUntilIdle(); }
 
   FakeLoopbackGroupMember* AddSource(int channels, int sample_rate) {
-    sources_.emplace_back(std::make_unique<FakeLoopbackGroupMember>(
-        media::AudioParameters(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                               media::GuessChannelLayout(channels), sample_rate,
-                               (sample_rate * kBufferDuration).InSeconds())));
+    sources_.emplace_back(
+        std::make_unique<FakeLoopbackGroupMember>(media::AudioParameters(
+            media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
+            media::ChannelLayoutConfig::Guess(channels), sample_rate,
+            (sample_rate * kBufferDuration).InSeconds())));
     coordinator_.RegisterMember(group_id_, sources_.back().get());
     return sources_.back().get();
   }
 
   void RemoveSource(FakeLoopbackGroupMember* source) {
-    const auto it = std::find_if(sources_.begin(), sources_.end(),
-                                 base::MatchesUniquePtr(source));
+    const auto it =
+        base::ranges::find_if(sources_, base::MatchesUniquePtr(source));
     if (it != sources_.end()) {
       coordinator_.UnregisterMember(group_id_, source);
       sources_.erase(it);

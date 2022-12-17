@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/url_constants.h"
 #include "mojo/public/js/grit/mojo_bindings_resources.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "ui/webui/webui_allowlist.h"
 
 namespace ash {
@@ -89,6 +90,12 @@ EcheAppUI::EcheAppUI(content::WebUI* web_ui,
     webui_allowlist->RegisterAutoGrantedPermission(untrusted_eche_app_origin,
                                                    permission);
   }
+
+  // Set untrusted URL of Eche app in WebApp scope for allowing AutoPlay.
+  auto* web_contents = web_ui->GetWebContents();
+  auto prefs = web_contents->GetOrCreateWebPreferences();
+  prefs.web_app_scope = GURL(kChromeUIEcheAppGuestURL);
+  web_contents->SetWebPreferences(prefs);
 }
 
 EcheAppUI::~EcheAppUI() = default;

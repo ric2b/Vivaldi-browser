@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,11 +44,6 @@ SimpleMainThreadScheduler::V8TaskRunner() {
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-SimpleMainThreadScheduler::DeprecatedDefaultTaskRunner() {
-  return base::ThreadTaskRunnerHandle::Get();
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
 SimpleMainThreadScheduler::NonWakingTaskRunner() {
   return base::ThreadTaskRunnerHandle::Get();
 }
@@ -81,6 +76,14 @@ MainThreadScheduler* SimpleMainThreadScheduler::ToMainThreadScheduler() {
 std::unique_ptr<MainThreadScheduler::RendererPauseHandle>
 SimpleMainThreadScheduler::PauseScheduler() {
   return nullptr;
+}
+
+void SimpleMainThreadScheduler::SetV8Isolate(v8::Isolate* isolate) {
+  isolate_ = isolate;
+}
+
+v8::Isolate* SimpleMainThreadScheduler::Isolate() {
+  return isolate_;
 }
 
 }  // namespace blink::scheduler

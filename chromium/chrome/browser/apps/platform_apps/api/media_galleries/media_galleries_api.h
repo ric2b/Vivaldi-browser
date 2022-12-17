@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -186,7 +186,7 @@ class MediaGalleriesGetMetadataFunction : public ExtensionFunction {
   void ConstructNextBlob(
       base::Value::Dict result_dictionary,
       std::unique_ptr<std::vector<metadata::AttachedImage>> attached_images,
-      std::unique_ptr<std::vector<std::string>> blob_uuids,
+      std::vector<blink::mojom::SerializedBlobPtr> blobs,
       std::unique_ptr<content::BlobHandle> current_blob);
 };
 

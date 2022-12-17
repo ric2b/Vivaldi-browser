@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,6 +45,11 @@ SkColor GetIconTopLeftColor(const base::FilePath& shortcut_path);
 // Navigates to |app_url| and installs app without any installability checks.
 // Always selects to open app in its own window.
 AppId InstallWebAppFromPage(Browser* browser, const GURL& app_url);
+
+// Same as InstallWebAppFromPage() but waits for the app browser window to
+// appear and closes it.
+AppId InstallWebAppFromPageAndCloseAppBrowser(Browser* browser,
+                                              const GURL& app_url);
 
 // Navigates to |app_url|, verifies WebApp installability, and installs app.
 AppId InstallWebAppFromManifest(Browser* browser, const GURL& app_url);
@@ -111,13 +116,6 @@ void CloseAndWait(Browser* browser);
 
 bool IsBrowserOpen(const Browser* test_browser);
 
-void UninstallWebApp(Profile* profile, const AppId& app_id);
-
-using UninstallWebAppCallback = base::OnceCallback<void(bool uninstalled)>;
-void UninstallWebAppWithCallback(Profile* profile,
-                                 const AppId& app_id,
-                                 UninstallWebAppCallback callback);
-
 // Helper class that lets you await one Browser added and one Browser removed
 // event. Optionally filters to a specific Browser with |filter|. Useful for
 // closing the web app window that appears after installation from page.
@@ -161,6 +159,9 @@ class UpdateAwaiter : public WebAppInstallManagerObserver {
   base::ScopedObservation<WebAppInstallManager, WebAppInstallManagerObserver>
       scoped_observation_{this};
 };
+
+// Creates a temporary file with the |extension|.
+base::FilePath CreateTestFileWithExtension(base::StringPiece extension);
 
 }  // namespace web_app
 

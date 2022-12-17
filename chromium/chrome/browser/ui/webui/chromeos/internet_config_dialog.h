@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -74,5 +74,10 @@ class InternetConfigDialogUI : public ui::MojoWebDialogUI {
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when it moved to ash.
+namespace ash {
+using ::chromeos::InternetConfigDialog;
+}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_CHROMEOS_INTERNET_CONFIG_DIALOG_H_

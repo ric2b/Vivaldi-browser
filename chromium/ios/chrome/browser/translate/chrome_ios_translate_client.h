@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,9 +43,6 @@ class ChromeIOSTranslateClient
 
   ~ChromeIOSTranslateClient() override;
 
-  // Creates a translation client tab helper and attaches it to |web_state|
-  static void CreateForWebState(web::WebState* web_state);
-
   // Helper method to return a new TranslatePrefs instance.
   static std::unique_ptr<translate::TranslatePrefs> CreateTranslatePrefs(
       PrefService* prefs);
@@ -65,13 +62,12 @@ class ChromeIOSTranslateClient
   bool ShowTranslateUI(translate::TranslateStep step,
                        const std::string& source_language,
                        const std::string& target_language,
-                       translate::TranslateErrors::Type error_type,
+                       translate::TranslateErrors error_type,
                        bool triggered_from_menu) override;
   bool IsTranslatableURL(const GURL& url) override;
   bool IsAutofillAssistantRunning() const override;
 
  private:
-  ChromeIOSTranslateClient(web::WebState* web_state);
   friend class web::WebStateUserData<ChromeIOSTranslateClient>;
   FRIEND_TEST_ALL_PREFIXES(ChromeIOSTranslateClientTest,
                            NewMetricsOnPageLoadCommits);
@@ -79,6 +75,8 @@ class ChromeIOSTranslateClient
                            NoNewMetricsOnErrorPage);
   FRIEND_TEST_ALL_PREFIXES(ChromeIOSTranslateClientTest,
                            PageTranslationCorrectlyUpdatesMetrics);
+
+  explicit ChromeIOSTranslateClient(web::WebState* web_state);
 
   // web::WebStateObserver implementation.
   void DidStartNavigation(web::WebState* web_state,

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -248,11 +248,9 @@ class AutoLaunchedKioskTest : public AutoLaunchedKioskTestBase,
  public:
   AutoLaunchedKioskTest() {
     if (GetParam()) {
-      feature_list_.InitAndEnableFeature(
-          features::kUseAuthsessionAuthentication);
+      feature_list_.InitAndEnableFeature(features::kUseAuthFactors);
     } else {
-      feature_list_.InitAndDisableFeature(
-          features::kUseAuthsessionAuthentication);
+      feature_list_.InitAndDisableFeature(features::kUseAuthFactors);
     }
   }
 

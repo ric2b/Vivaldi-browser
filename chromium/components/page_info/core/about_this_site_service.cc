@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,9 +29,6 @@ void RecordAboutThisSiteInteraction(AboutThisSiteInteraction interaction) {
 
 }  // namespace
 
-const char kBannerInteractionHistogram[] =
-    "Privacy.AboutThisSite.BannerInteraction";
-
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 // Keep in sync with AboutThisSiteBannerInteraction in enums.xml.
@@ -42,8 +39,10 @@ enum class BannerInteraction {
   kMaxValue = kDismissed
 };
 
-AboutThisSiteService::AboutThisSiteService(std::unique_ptr<Client> client)
-    : client_(std::move(client)) {}
+AboutThisSiteService::AboutThisSiteService(std::unique_ptr<Client> client,
+                                           bool allow_missing_description)
+    : client_(std::move(client)),
+      allow_missing_description_(allow_missing_description) {}
 
 absl::optional<proto::SiteInfo> AboutThisSiteService::GetAboutThisSiteInfo(
     const GURL& url,
@@ -57,7 +56,7 @@ absl::optional<proto::SiteInfo> AboutThisSiteService::GetAboutThisSiteInfo(
       decision == OptimizationGuideDecision::kUnknown
           ? AboutThisSiteStatus::kUnknown
           : about_this_site_validation::ValidateMetadata(
-                about_this_site_metadata);
+                about_this_site_metadata, allow_missing_description_);
   base::UmaHistogramEnumeration("Security.PageInfo.AboutThisSiteStatus",
                                 status);
   RecordAboutThisSiteInteraction(
@@ -87,8 +86,7 @@ absl::optional<proto::SiteInfo> AboutThisSiteService::GetAboutThisSiteInfo(
   if (kShowSampleContent.Get()) {
     page_info::proto::SiteInfo site_info;
     if (url == GURL("https://example.com")) {
-      if (!base::FeatureList::IsEnabled(
-              kPageInfoAboutThisSiteDescriptionPlaceholder)) {
+      if (!allow_missing_description_) {
         auto* description = site_info.mutable_description();
         description->set_name("Example website");
         description->set_subtitle("Website");
@@ -119,28 +117,17 @@ absl::optional<proto::SiteInfo> AboutThisSiteService::GetAboutThisSiteInfo(
   return absl::nullopt;
 }
 
-bool AboutThisSiteService::CanShowBanner(GURL url) {
-  return !dismissed_banners_.contains(url::Origin::Create(url));
-}
-
-void AboutThisSiteService::OnBannerDismissed(GURL url,
-                                             ukm::SourceId source_id) {
-  base::UmaHistogramEnumeration(kBannerInteractionHistogram,
-                                BannerInteraction::kDismissed);
-  dismissed_banners_.insert(url::Origin::Create(url));
-}
-
-void AboutThisSiteService::OnBannerURLOpened(GURL url,
-                                             ukm::SourceId source_id) {
-  base::UmaHistogramEnumeration(kBannerInteractionHistogram,
-                                BannerInteraction::kUrlOpened);
-}
-
 // static
 void AboutThisSiteService::OnAboutThisSiteRowClicked(bool with_description) {
   RecordAboutThisSiteInteraction(
       with_description ? AboutThisSiteInteraction::kClickedWithDescription
                        : AboutThisSiteInteraction::kClickedWithoutDescription);
+}
+
+// static
+void AboutThisSiteService::OnOpenedDirectlyFromSidePanel() {
+  RecordAboutThisSiteInteraction(
+      AboutThisSiteInteraction::kOpenedDirectlyFromSidePanel);
 }
 
 base::WeakPtr<AboutThisSiteService> AboutThisSiteService::GetWeakPtr() {

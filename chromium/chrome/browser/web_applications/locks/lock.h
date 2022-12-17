@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@
 #include "chrome/browser/web_applications/web_app_id.h"
 
 namespace content {
-struct LeveledLockHolder;
+struct PartitionedLockHolder;
 }
 
 namespace web_app {
@@ -62,7 +62,7 @@ class Lock {
     kMaxValue = kApp,
   };
 
-  std::unique_ptr<content::LeveledLockHolder> holder_;
+  std::unique_ptr<content::PartitionedLockHolder> holder_;
   const base::flat_set<AppId> app_ids_{};
   const Type type_;
 

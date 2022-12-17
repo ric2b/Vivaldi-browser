@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,12 +6,12 @@
 
 #include <algorithm>
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/multidevice_setup/eligible_host_devices_provider.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 
 namespace ash {
 

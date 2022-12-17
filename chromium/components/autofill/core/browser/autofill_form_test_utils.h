@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "base/strings/string_piece.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/common/autocomplete_parsing_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -30,10 +31,17 @@ constexpr char kFormActionUrl[] = "http://example.com/submit.html";
 
 namespace internal {
 
-// Expected FormFieldData are constructed based on these descriptions.
+// Expected FormFieldData and type predictions are constructed based on these
+// descriptions.
 template <typename = void>
-struct FieldDataDescription {
+struct FieldDescription {
   ServerFieldType role = ServerFieldType::EMPTY_TYPE;
+  // If the server type is not set explcitly, it is assumed to be given by the
+  // role.
+  absl::optional<ServerFieldType> server_type;
+  // If the heuristic type is not set explcitly, it is assumed to be given by
+  // the role.
+  absl::optional<ServerFieldType> heuristic_type;
   absl::optional<LocalFrameToken> host_frame;
   absl::optional<FieldRendererId> unique_renderer_id;
   bool is_focusable = true;
@@ -42,6 +50,7 @@ struct FieldDataDescription {
   absl::optional<std::u16string> name;
   absl::optional<std::u16string> value;
   const std::string autocomplete_attribute;
+  absl::optional<AutocompleteParsingResult> parsed_autocomplete;
   const std::string form_control_type = "text";
   bool should_autocomplete = true;
   absl::optional<bool> is_autofilled;
@@ -52,9 +61,9 @@ struct FieldDataDescription {
 
 // Attributes provided to the test form.
 template <typename = void>
-struct FormDataDescription {
+struct FormDescription {
   const std::string description_for_logging;
-  std::vector<FieldDataDescription<>> fields;
+  std::vector<FieldDescription<>> fields;
   absl::optional<LocalFrameToken> host_frame;
   absl::optional<FormRendererId> unique_renderer_id;
   const std::u16string name = u"TestForm";
@@ -97,15 +106,15 @@ struct ExpectedFieldTypeValues {
 // Describes a test case for the parser.
 template <typename = void>
 struct FormStructureTestCase {
-  FormDataDescription<> form_attributes;
+  FormDescription<> form_attributes;
   TestFormFlags<> form_flags;
   ExpectedFieldTypeValues<> expected_field_types;
 };
 
 }  // namespace internal
 
-using FieldDataDescription = internal::FieldDataDescription<>;
-using FormDataDescription = internal::FormDataDescription<>;
+using FieldDescription = internal::FieldDescription<>;
+using FormDescription = internal::FormDescription<>;
 using FormStructureTestCase = internal::FormStructureTestCase<>;
 
 // Describes the |form_data|. Use this in SCOPED_TRACE if other logging
@@ -116,7 +125,18 @@ testing::Message DescribeFormData(const FormData& form_data);
 FormFieldData CreateFieldByRole(ServerFieldType role);
 
 // Creates a FormData to be fed to the parser.
-FormData GetFormData(const FormDataDescription& test_form_attributes);
+FormData GetFormData(const FormDescription& test_form_attributes);
+
+// Extracts the heuristic types from the form description. If the heuristic type
+// is not explicitly set for a given field it is extracted from the field's
+// role.
+std::vector<ServerFieldType> GetHeuristicTypes(
+    const FormDescription& form_description);
+
+// Extracts the server types from the form description. If the server type
+// is not explicitly set for field it is extracted from the fiel's role.
+std::vector<ServerFieldType> GetServerTypes(
+    const FormDescription& form_description);
 
 class FormStructureTest : public testing::Test {
  protected:

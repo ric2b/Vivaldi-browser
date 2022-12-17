@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,27 +7,20 @@
 #include <algorithm>
 #include <string>
 
-#include "ash/constants/ash_features.h"
-#include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/window_backdrop.h"
-#include "ash/public/cpp/window_properties.h"
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
-#include "base/feature_list.h"
 #include "base/json/json_writer.h"
-#include "base/metrics/histogram_functions.h"
-#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
-#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/account_manager_core/account_addition_options.h"
 #include "components/account_manager_core/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
+#include "components/user_manager/user_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -166,12 +159,7 @@ InlineLoginDialogChromeOS::InlineLoginDialogChromeOS()
     : InlineLoginDialogChromeOS(GetInlineLoginUrl(std::string())) {}
 
 InlineLoginDialogChromeOS::InlineLoginDialogChromeOS(const GURL& url)
-    : SystemWebDialogDelegate(url, std::u16string() /* title */),
-      delegate_(this),
-      url_(url) {
-  DCHECK(!dialog);
-  dialog = this;
-}
+    : InlineLoginDialogChromeOS(url, absl::nullopt, base::DoNothing()) {}
 
 InlineLoginDialogChromeOS::InlineLoginDialogChromeOS(
     const GURL& url,

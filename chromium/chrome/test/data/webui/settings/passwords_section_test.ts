@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,17 +7,19 @@
 // clang-format off
 import 'chrome://settings/lazy_load.js';
 
-import {isChromeOS, isLacros, webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {isMac, isWindows, isChromeOS, isLacros, webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {PasswordsSectionElement} from 'chrome://settings/lazy_load.js';
 import {buildRouter, HatsBrowserProxyImpl, PasswordCheckReferrer, PasswordManagerImpl, Router, routes, SettingsPluralStringProxyImpl,StatusAction, TrustedVaultBannerState, TrustSafetyInteraction} from 'chrome://settings/settings.js';
 import {SettingsRoutes} from 'chrome://settings/settings_routes.js';
-import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {SettingsToggleButtonElement} from 'chrome://settings/settings.js';
+import {assertDeepEquals, assertEquals, assertFalse, assertTrue, assertNotEquals} from 'chrome://webui-test/chai_assert.js';
 import {TestPluralStringProxy} from 'chrome://webui-test/test_plural_string_proxy.js';
-import {eventToPromise, flushTasks, isVisible} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
-import {createExceptionEntry, createPasswordEntry, makeCompromisedCredential, makePasswordCheckStatus, PasswordSectionElementFactory} from './passwords_and_autofill_fake_data.js';
+import {createExceptionEntry, createPasswordEntry, makeInsecureCredential, makePasswordCheckStatus, PasswordSectionElementFactory} from './passwords_and_autofill_fake_data.js';
 import {getSyncAllPrefs, simulateStoredAccounts, simulateSyncStatus} from './sync_test_util.js';
 import {TestHatsBrowserProxy} from './test_hats_browser_proxy.js';
 import {TestPasswordManagerProxy} from './test_password_manager_proxy.js';
@@ -234,7 +236,8 @@ suite('PasswordsSection', function() {
   let testHatsBrowserProxy: TestHatsBrowserProxy;
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     // Override the PasswordManagerImpl for testing.
     passwordManager = new TestPasswordManagerProxy();
     pluralString = new TestPluralStringProxy();
@@ -247,7 +250,7 @@ suite('PasswordsSection', function() {
     loadTimeData.overrideValues({
       enableAutomaticPasswordChangeInSettings: false,
       enablePasswordViewPage: false,
-      unifiedPasswordManagerEnabled: false,
+      biometricAuthenticationForFilling: false,
     });
   });
 
@@ -267,6 +270,65 @@ suite('PasswordsSection', function() {
     assertTrue(
         !!element.shadowRoot!.querySelector('#passwordsExtensionIndicator'));
   });
+
+  if (isMac || isWindows) {
+    test('testBiometricAuthenticationForFillingToggleVisibility', function() {
+      loadTimeData.overrideValues({biometricAuthenticationForFilling: false});
+      const passwordsSectionBiometricForFillingDisabled =
+          elementFactory.createPasswordsSection(passwordManager, [], []);
+      assertFalse(
+          isVisible(passwordsSectionBiometricForFillingDisabled.shadowRoot!
+                        .querySelector<HTMLElement>(
+                            '#biometricAuthenticationForFillingToggle')));
+
+      loadTimeData.overrideValues({biometricAuthenticationForFilling: true});
+      const passwordsSectionBiometricForFillingEnabled =
+          elementFactory.createPasswordsSection(passwordManager, [], []);
+      assertTrue(
+          isVisible(passwordsSectionBiometricForFillingEnabled.shadowRoot!
+                        .querySelector<HTMLElement>(
+                            '#biometricAuthenticationForFillingToggle')));
+    });
+
+    test('testNoSwitchBiometricAuthBeforeFillingToggle', function() {
+      loadTimeData.overrideValues({biometricAuthenticationForFilling: true});
+      const passwordsSection =
+          elementFactory.createPasswordsSection(passwordManager, [], []);
+      const biometricAuthenticationForFillingToggle =
+          passwordsSection.shadowRoot!
+              .querySelector<SettingsToggleButtonElement>(
+                  '#biometricAuthenticationForFillingToggle');
+      const initialState = biometricAuthenticationForFillingToggle!.checked;
+
+      biometricAuthenticationForFillingToggle!.click();
+
+      const afterClickState = biometricAuthenticationForFillingToggle!.checked;
+      assertEquals(initialState, afterClickState);
+    });
+
+    test('testSwitchBiometricAuthBeforeFillingToggle', function() {
+      loadTimeData.overrideValues({biometricAuthenticationForFilling: true});
+      const passwordsSection =
+          elementFactory.createPasswordsSection(passwordManager, [], []);
+      passwordsSection.set(
+          'prefs.password_manager.biometric_authentication_filling.value',
+          false);
+      const biometricAuthenticationForFillingToggle =
+          passwordsSection.shadowRoot!
+              .querySelector<SettingsToggleButtonElement>(
+                  '#biometricAuthenticationForFillingToggle');
+      const initialState = biometricAuthenticationForFillingToggle!.checked;
+
+      biometricAuthenticationForFillingToggle!.click();
+      // Simulate successful authentication
+      passwordsSection.set(
+          'prefs.password_manager.biometric_authentication_filling.value',
+          true);
+
+      const afterClickState = biometricAuthenticationForFillingToggle!.checked;
+      assertNotEquals(initialState, afterClickState);
+    });
+  }
 
   test('verifyNoSavedPasswords', function() {
     const passwordsSection =
@@ -964,7 +1026,7 @@ suite('PasswordsSection', function() {
         passwordManager, passwordList, []);
 
     validatePasswordList(passwordsSection, passwordList);
-    assertTrue(passwordsSection.$.menuExportPassword.hidden);
+    assertTrue(passwordsSection.$.menuExportPassword.disabled);
   });
 
   test(
@@ -1251,44 +1313,6 @@ suite('PasswordsSection', function() {
     });
   }
 
-  test('hideLinkToPasswordManagerWhenEncrypted', function() {
-    const passwordsSection =
-        elementFactory.createPasswordsSection(passwordManager, [], []);
-    const syncPrefs = getSyncAllPrefs();
-    syncPrefs.encryptAllData = true;
-    webUIListenerCallback('sync-prefs-changed', syncPrefs);
-    simulateSyncStatus({signedIn: true, statusAction: StatusAction.NO_ACTION});
-    flush();
-    assertTrue(passwordsSection.$.manageLink.hidden);
-  });
-
-  test('showLinkToPasswordManagerWhenNotEncrypted', function() {
-    const passwordsSection =
-        elementFactory.createPasswordsSection(passwordManager, [], []);
-    const syncPrefs = getSyncAllPrefs();
-    syncPrefs.encryptAllData = false;
-    webUIListenerCallback('sync-prefs-changed', syncPrefs);
-    flush();
-    assertFalse(passwordsSection.$.manageLink.hidden);
-  });
-
-  test('hideLinkToPasswordManagerWhenUnifiedPasswordManagerEnabled', () => {
-    loadTimeData.overrideValues({unifiedPasswordManagerEnabled: true});
-    const passwordsSection =
-        elementFactory.createPasswordsSection(passwordManager, [], []);
-    assertTrue(passwordsSection.$.manageLink.hidden);
-  });
-
-  test('showLinkToPasswordManagerWhenNotSignedIn', function() {
-    const passwordsSection =
-        elementFactory.createPasswordsSection(passwordManager, [], []);
-    const syncPrefs = getSyncAllPrefs();
-    simulateSyncStatus({signedIn: false, statusAction: StatusAction.NO_ACTION});
-    webUIListenerCallback('sync-prefs-changed', syncPrefs);
-    flush();
-    assertFalse(passwordsSection.$.manageLink.hidden);
-  });
-
   test(
       'showPasswordCheckBannerWhenNotCheckedBeforeAndSignedInAndHavePasswords',
       function() {
@@ -1325,17 +1349,17 @@ suite('PasswordsSection', function() {
           createPasswordEntry({url: 'site2.com', username: 'luigi', id: 1}),
         ];
         passwordManager.data.checkStatus.state = PasswordCheckState.CANCELED;
-        passwordManager.data.leakedCredentials = [
-          makeCompromisedCredential(
+        passwordManager.data.insecureCredentials = [
+          makeInsecureCredential(
               'site1.com', 'luigi',
-              chrome.passwordsPrivate.CompromiseType.LEAKED),
+              [chrome.passwordsPrivate.CompromiseType.LEAKED]),
         ];
         pluralString.text = '1 compromised password';
 
         const passwordsSection = elementFactory.createPasswordsSection(
             passwordManager, passwordList, []);
 
-        await passwordManager.whenCalled('getCompromisedCredentials');
+        await passwordManager.whenCalled('getInsecureCredentials');
         await pluralString.whenCalled('getPluralString');
 
         flush();
@@ -1387,7 +1411,7 @@ suite('PasswordsSection', function() {
       'showPasswordCheckLinkButtonWithoutWarningWhenNoCredentialsLeaked',
       function() {
         // Suppose no leaks initially, non-empty list of passwords, signed in.
-        passwordManager.data.leakedCredentials = [];
+        passwordManager.data.insecureCredentials = [];
         passwordManager.data.checkStatus.elapsedTimeSinceLastCheck =
             '5 min ago';
         const passwordList = [
@@ -1410,13 +1434,13 @@ suite('PasswordsSection', function() {
       'showPasswordCheckLinkButtonWithWarningWhenSomeCredentialsLeaked',
       function() {
         // Suppose no leaks initially, non-empty list of passwords, signed in.
-        passwordManager.data.leakedCredentials = [
-          makeCompromisedCredential(
+        passwordManager.data.insecureCredentials = [
+          makeInsecureCredential(
               'one.com', 'test4',
-              chrome.passwordsPrivate.CompromiseType.LEAKED),
-          makeCompromisedCredential(
+              [chrome.passwordsPrivate.CompromiseType.LEAKED]),
+          makeInsecureCredential(
               'two.com', 'test3',
-              chrome.passwordsPrivate.CompromiseType.PHISHED),
+              [chrome.passwordsPrivate.CompromiseType.PHISHED]),
         ];
         passwordManager.data.checkStatus.elapsedTimeSinceLastCheck =
             '5 min ago';
@@ -1441,7 +1465,7 @@ suite('PasswordsSection', function() {
     // signed in.
     assertEquals(
         passwordManager.data.checkStatus.elapsedTimeSinceLastCheck, undefined);
-    passwordManager.data.leakedCredentials = [];
+    passwordManager.data.insecureCredentials = [];
     passwordManager.data.checkStatus.elapsedTimeSinceLastCheck = '5 min ago';
     const passwordList = [
       createPasswordEntry({url: 'one.com', username: 'test4', id: 0}),
@@ -1458,18 +1482,20 @@ suite('PasswordsSection', function() {
       assertTrue(passwordsSection.$.checkPasswordWarningIcon.hidden);
       assertTrue(passwordsSection.$.checkPasswordLeakCount.hidden);
       // Suppose two newly detected leaks come in.
-      const leakedCredentials = [
-        makeCompromisedCredential(
-            'one.com', 'test4', chrome.passwordsPrivate.CompromiseType.LEAKED),
-        makeCompromisedCredential(
-            'two.com', 'test3', chrome.passwordsPrivate.CompromiseType.PHISHED),
+      const insecureCredentials = [
+        makeInsecureCredential(
+            'one.com', 'test4',
+            [chrome.passwordsPrivate.CompromiseType.LEAKED]),
+        makeInsecureCredential(
+            'two.com', 'test3',
+            [chrome.passwordsPrivate.CompromiseType.PHISHED]),
       ];
       const elapsedTimeSinceLastCheck = 'just now';
-      passwordManager.data.leakedCredentials = leakedCredentials;
+      passwordManager.data.insecureCredentials = insecureCredentials;
       passwordManager.data.checkStatus.elapsedTimeSinceLastCheck =
           elapsedTimeSinceLastCheck;
-      passwordManager.lastCallback.addCompromisedCredentialsListener!
-          (leakedCredentials);
+      passwordManager.lastCallback.addInsecureCredentialsListener!
+          (insecureCredentials);
       passwordManager.lastCallback.addPasswordCheckStatusListener!
           (makePasswordCheckStatus(
               /*state=*/ PasswordCheckState.RUNNING,
@@ -1635,5 +1661,25 @@ suite('PasswordsSection', function() {
     document.body.removeChild(passwordsSection);
     flush();
     assertFalse(toastManager.open);
+  });
+
+  test('routingWithAuthTimeoutParamShowsRemovalDialog', function() {
+    const passwordEntry =
+        createPasswordEntry({url: 'goo.gl', username: 'bart'});
+    const passwordsSection = elementFactory.createPasswordsSection(
+        passwordManager, [passwordEntry], []);
+    const authTimeoutDialog = passwordsSection.$.authTimeoutDialog;
+
+    const params = new URLSearchParams();
+    params.set('authTimeout', 'true');
+    Router.getInstance().navigateTo(routes.PASSWORDS, params);
+
+    flush();
+    assertTrue(authTimeoutDialog.open);
+
+    authTimeoutDialog.close();
+    flush();
+    assertFalse(authTimeoutDialog.open);
+    assertFalse(!!Router.getInstance().getQueryParameters().get('authTimeout'));
   });
 });

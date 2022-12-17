@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
+#include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
 
 namespace blink {
 
@@ -15,7 +16,7 @@ CSSContainerValues::CSSContainerValues(Document& document,
                                        absl::optional<double> width,
                                        absl::optional<double> height)
     : MediaValuesDynamic(document.GetFrame()),
-      style_(container.GetComputedStyle()),
+      element_(&container),
       width_(width),
       height_(height),
       writing_mode_(container.ComputedStyleRef().GetWritingMode()),
@@ -26,6 +27,7 @@ CSSContainerValues::CSSContainerValues(Document& document,
       container_sizes_(container.ParentOrShadowHostElement()) {}
 
 void CSSContainerValues::Trace(Visitor* visitor) const {
+  visitor->Trace(element_);
   visitor->Trace(container_sizes_);
   MediaValuesDynamic::Trace(visitor);
 }
@@ -48,6 +50,12 @@ float CSSContainerValues::ChFontSize() const {
 
 float CSSContainerValues::IcFontSize() const {
   return font_sizes_.Ic();
+}
+
+float CSSContainerValues::LineHeight() const {
+  return AdjustForAbsoluteZoom::AdjustFloat(
+      element_->ComputedStyleRef().ComputedLineHeight(),
+      element_->ComputedStyleRef());
 }
 
 double CSSContainerValues::ContainerWidth() const {

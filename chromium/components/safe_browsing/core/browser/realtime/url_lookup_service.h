@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,8 +76,10 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
   bool CanPerformFullURLLookup() const override;
   bool CanCheckSubresourceURL() const override;
   bool CanCheckSafeBrowsingDb() const override;
+  bool CanCheckSafeBrowsingHighConfidenceAllowlist() const override;
   void Shutdown() override;
   bool CanSendRTSampleRequest() const override;
+  std::string GetMetricSuffix() const override;
 
 #if defined(UNIT_TEST)
   void set_bypass_probability_for_tests(
@@ -102,7 +104,6 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
       RTLookupResponseCallback response_callback,
       scoped_refptr<base::SequencedTaskRunner> callback_task_runner) override;
   absl::optional<std::string> GetDMTokenString() const override;
-  std::string GetMetricSuffix() const override;
   bool ShouldIncludeCredentials() const override;
   void OnResponseUnauthorized(const std::string& invalid_access_token) override;
   double GetMinAllowedTimestampForReferrerChains() const override;

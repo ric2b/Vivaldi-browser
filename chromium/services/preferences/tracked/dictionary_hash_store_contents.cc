@@ -1,4 +1,4 @@
-// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,14 +66,13 @@ bool DictionaryHashStoreContents::GetSplitMacs(
   const base::DictionaryValue* split_macs_dict = NULL;
   if (!macs_dict || !macs_dict->GetDictionary(path, &split_macs_dict))
     return false;
-  for (base::DictionaryValue::Iterator it(*split_macs_dict); !it.IsAtEnd();
-       it.Advance()) {
-    const std::string* mac_string = it.value().GetIfString();
+  for (const auto item : split_macs_dict->GetDict()) {
+    const std::string* mac_string = item.second.GetIfString();
     if (!mac_string) {
       NOTREACHED();
       continue;
     }
-    split_macs->insert(make_pair(it.key(), *mac_string));
+    split_macs->insert(make_pair(item.first, *mac_string));
   }
   return true;
 }

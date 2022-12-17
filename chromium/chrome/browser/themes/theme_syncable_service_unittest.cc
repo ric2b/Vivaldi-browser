@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,6 +94,13 @@ class FakeThemeService : public ThemeService {
     using_system_theme_ = false;
     using_default_theme_ = false;
     using_policy_theme_ = false;
+  }
+
+  void UseTheme(ui::SystemTheme system_theme) override {
+    if (system_theme == ui::SystemTheme::kDefault)
+      UseDefaultTheme();
+    else
+      UseSystemTheme();
   }
 
   void UseDefaultTheme() override {
@@ -268,9 +275,8 @@ class ThemeSyncableServiceTest : public testing::Test,
     sync_pb::EntitySpecifics entity_specifics;
     entity_specifics.mutable_theme()->CopyFrom(theme_specifics);
     list.push_back(syncer::SyncData::CreateLocalData(
-        ThemeSyncableService::kCurrentThemeClientTag,
-        ThemeSyncableService::kCurrentThemeNodeTitle,
-        entity_specifics));
+        ThemeSyncableService::kSyncEntityClientTag,
+        ThemeSyncableService::kSyncEntityTitle, entity_specifics));
     return list;
   }
 
@@ -529,7 +535,6 @@ TEST_F(ThemeSyncableServiceTest, UpdateThemeSpecifics_CurrentTheme_Extension) {
   EXPECT_FALSE(error.has_value()) << error.value().message();
   const syncer::SyncChangeList& changes = fake_change_processor_->changes();
   ASSERT_EQ(1u, changes.size());
-  EXPECT_TRUE(changes[0].IsValid());
   EXPECT_EQ(syncer::SyncChange::ACTION_ADD, changes[0].change_type());
   EXPECT_EQ(syncer::THEMES, changes[0].sync_data().GetDataType());
 
@@ -560,7 +565,6 @@ TEST_F(ThemeSyncableServiceTest,
   EXPECT_FALSE(error.has_value()) << error.value().message();
   const syncer::SyncChangeList& changes = fake_change_processor_->changes();
   ASSERT_EQ(1u, changes.size());
-  EXPECT_TRUE(changes[0].IsValid());
   EXPECT_EQ(syncer::SyncChange::ACTION_ADD, changes[0].change_type());
   EXPECT_EQ(syncer::THEMES, changes[0].sync_data().GetDataType());
 

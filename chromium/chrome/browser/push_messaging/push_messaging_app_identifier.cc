@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -160,7 +160,7 @@ PushMessagingAppIdentifier PushMessagingAppIdentifier::FindByAppId(
             base::ToUpperASCII(app_id.substr(app_id.size() - kGuidLength)));
 
   const base::Value::Dict& map =
-      profile->GetPrefs()->GetValueDict(prefs::kPushMessagingAppIdentifierMap);
+      profile->GetPrefs()->GetDict(prefs::kPushMessagingAppIdentifierMap);
 
   const std::string* map_value = map.FindString(app_id);
 
@@ -194,7 +194,7 @@ PushMessagingAppIdentifier PushMessagingAppIdentifier::FindByServiceWorker(
       MakePrefValue(origin, service_worker_registration_id);
 
   const base::Value::Dict& map =
-      profile->GetPrefs()->GetValueDict(prefs::kPushMessagingAppIdentifierMap);
+      profile->GetPrefs()->GetDict(prefs::kPushMessagingAppIdentifierMap);
   for (auto entry : map) {
     if (entry.second.is_string() &&
         base::StartsWith(entry.second.GetString(), base_pref_value,
@@ -211,7 +211,7 @@ std::vector<PushMessagingAppIdentifier> PushMessagingAppIdentifier::GetAll(
   std::vector<PushMessagingAppIdentifier> result;
 
   const base::Value::Dict& map =
-      profile->GetPrefs()->GetValueDict(prefs::kPushMessagingAppIdentifierMap);
+      profile->GetPrefs()->GetDict(prefs::kPushMessagingAppIdentifierMap);
   for (auto entry : map) {
     result.push_back(FindByAppId(profile, entry.first));
   }
@@ -221,16 +221,14 @@ std::vector<PushMessagingAppIdentifier> PushMessagingAppIdentifier::GetAll(
 
 // static
 void PushMessagingAppIdentifier::DeleteAllFromPrefs(Profile* profile) {
-  DictionaryPrefUpdate update(profile->GetPrefs(),
-                              prefs::kPushMessagingAppIdentifierMap);
-  base::Value* map = update.Get();
-  map->DictClear();
+  profile->GetPrefs()->SetDict(prefs::kPushMessagingAppIdentifierMap,
+                               base::Value::Dict());
 }
 
 // static
 size_t PushMessagingAppIdentifier::GetCount(Profile* profile) {
   return profile->GetPrefs()
-      ->GetValueDict(prefs::kPushMessagingAppIdentifierMap)
+      ->GetDict(prefs::kPushMessagingAppIdentifierMap)
       .size();
 }
 
@@ -259,29 +257,28 @@ bool PushMessagingAppIdentifier::IsExpired() const {
 void PushMessagingAppIdentifier::PersistToPrefs(Profile* profile) const {
   DCheckValid();
 
-  DictionaryPrefUpdate update(profile->GetPrefs(),
+  ScopedDictPrefUpdate update(profile->GetPrefs(),
                               prefs::kPushMessagingAppIdentifierMap);
-  base::Value* map = update.Get();
+  base::Value::Dict& map = update.Get();
 
   // Delete any stale entry with the same origin and Service Worker
   // registration id (hence we ensure there is a 1:1 not 1:many mapping).
   PushMessagingAppIdentifier old =
       FindByServiceWorker(profile, origin_, service_worker_registration_id_);
   if (!old.is_null())
-    map->RemoveKey(old.app_id_);
+    map.Remove(old.app_id_);
 
-  map->SetKey(app_id_,
-              base::Value(MakePrefValue(
-                  origin_, service_worker_registration_id_, expiration_time_)));
+  map.Set(app_id_, MakePrefValue(origin_, service_worker_registration_id_,
+                                 expiration_time_));
 }
 
 void PushMessagingAppIdentifier::DeleteFromPrefs(Profile* profile) const {
   DCheckValid();
 
-  DictionaryPrefUpdate update(profile->GetPrefs(),
+  ScopedDictPrefUpdate update(profile->GetPrefs(),
                               prefs::kPushMessagingAppIdentifierMap);
-  base::Value* map = update.Get();
-  map->RemoveKey(app_id_);
+  base::Value::Dict& map = update.Get();
+  map.Remove(app_id_);
 }
 
 void PushMessagingAppIdentifier::DCheckValid() const {

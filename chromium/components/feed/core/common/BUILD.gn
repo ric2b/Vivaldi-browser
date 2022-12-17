@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -16,5 +16,18 @@ source_set("feed_core_common") {
   public_deps = [
     "//base",
     "//components/feed:feature_list",
+  ]
+}
+
+source_set("feed_core_common_unit_tests") {
+  testonly = true
+  sources = [ "pref_names_unittest.cc" ]
+
+  # public_deps = [ ":test_helpers" ]
+  deps = [
+    ":feed_core_common",
+    "//base",
+    "//components/prefs:test_support",
+    "//testing/gtest",
   ]
 }

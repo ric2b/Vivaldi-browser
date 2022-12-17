@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Stampa...</translation>
 <translation id="1181037720776840403">Rimuovi</translation>
 <translation id="1187722533808055681">Riattivazioni</translation>
-<translation id="119944043368869598">Cancella tutto</translation>
 <translation id="1221825588892235038">Solo selezione</translation>
 <translation id="1234736487471201993">Crea codice QR per questa immagine</translation>
 <translation id="1244303850296295656">Errore delle estensioni</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Selezion&amp;a tutto</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Specifica un numero per indicare la quantità di copie da stampare (da 1 a <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Rimuovi tutto</translation>
 <translation id="1994173015038366702">URL sito</translation>
 <translation id="2019718679933488176">&amp;Apri audio in nuova scheda</translation>
 <translation id="2050339315714019657">Verticale</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Incolla come testo semplice</translation>
 <translation id="2249605167705922988">ad es. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Autorizza gli identificatori a mostrare contenuti protetti (potrebbe essere necessario un riavvio del computer)</translation>
-<translation id="2277255602909579701">Tutti i cookie e i dati dei siti</translation>
 <translation id="2280486287150724112">Margine destro</translation>
 <translation id="2282146716419988068">Processo GPU</translation>
 <translation id="2301382460326681002">Directory principale dell'estensione non valida.</translation>
@@ -93,8 +90,10 @@
 <translation id="2550212893339833758">Memoria in swap</translation>
 <translation id="2553440850688409052">Nascondi questo plug-in</translation>
 <translation id="26224892172169984">Non consentire ad alcun sito di gestire i protocolli</translation>
+<translation id="2653275834716714682">Sostituzione testo</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Riattiva</translation>
+<translation id="2678100101831051676">Impossibile trasmettere.</translation>
 <translation id="2721037002783622288">&amp;Cerca immagine con <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Crea scorciatoia...</translation>
 <translation id="2785873697295365461">Descrittori di file</translation>
@@ -122,7 +121,6 @@
 <translation id="3084548735795614657">Rilasciare il mouse per l'installazione</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Risorse UTENTE</translation>
-<translation id="3127156390846601284">Sanno eliminati tutti i dati memorizzati sul dispositivo relativi a tutti i siti mostrati. Continuare?</translation>
 <translation id="3129173833825111527">Margine sinistro</translation>
 <translation id="3144647712221361880">Apri link come</translation>
 <translation id="3222066309010235055">Prerenderizza: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +143,6 @@
 <translation id="3387614642886316601">Usa il controllo ortografico avanzato</translation>
 <translation id="3390013585654699824">Dettagli applicazione</translation>
 <translation id="3393582007140394275">Impossibile trasmettere schermo.</translation>
-<translation id="3432227430032737297">Rimuovi tutti i cookie visualizzati</translation>
 <translation id="345693547134384690">Apri &amp;immagine in una nuova scheda</translation>
 <translation id="3494769164076977169">Chiedi conferma quando un sito tenta di scaricare automaticamente file dopo il primo file (opzione consigliata)</translation>
 <translation id="3505030558724226696">Revoca accesso ai dispositivi</translation>
@@ -204,10 +201,10 @@
 <translation id="4409697491990005945">Margini</translation>
 <translation id="4423376891418188461">Ripristina Impostazioni</translation>
 <translation id="4478664379124702289">Salva lin&amp;k come...</translation>
-<translation id="4579581181964204535">Impossibile trasmettere <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">Vai alla pa&amp;gina <ph name="URL" /></translation>
 <translation id="4595560905247879544">Le app e le estensioni possono essere modificate solo dal gestore (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Un'estensione ha cambiato la pagina visualizzata all'apertura di una nuova scheda.</translation>
+<translation id="4616405296204756919">Puoi utilizzare le password salvate su qualsiasi dispositivo. Vengono salvate in <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Apri video in nuova scheda</translation>
 <translation id="4677772697204437347">Memoria GPU</translation>
 <translation id="4681930562518940301">Apri &amp;immagine originale in una nuova scheda</translation>
@@ -241,10 +238,12 @@
 <translation id="5233231016133573565">ID processo</translation>
 <translation id="5233736638227740678">&amp;Incolla</translation>
 <translation id="5256861893479663409">Su Tutti i Siti</translation>
+<translation id="5260334392110301220">Virgolette intelligenti</translation>
 <translation id="5269977353971873915">Stampa non riuscita</translation>
 <translation id="5284445933715251131">Continua il Trasferimento</translation>
 <translation id="52912272896845572">Il file della chiave privata non è valido.</translation>
 <translation id="5301954838959518834">OK</translation>
+<translation id="5302932258331363306">Mostra sostituzioni</translation>
 <translation id="5317780077021120954">Salva</translation>
 <translation id="5334142896108694079">Cache script</translation>
 <translation id="5355926466126177564">L'estensione "<ph name="EXTENSION_NAME" />" ha cambiato la pagina mostrata quando esegui ricerche dalla omnibox.</translation>
@@ -277,7 +276,6 @@
 <translation id="5747809636523347288">I&amp;ncolla e vai all'indirizzo <ph name="URL" /></translation>
 <translation id="5759728514498647443">I documenti inviati alla stampante tramite <ph name="APP_NAME" /> possono essere letti da <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Sal&amp;va audio come...</translation>
-<translation id="577624874850706961">Cerca cookie</translation>
 <translation id="5780973441651030252">Priorità processo</translation>
 <translation id="5804241973901381774">Autorizzazioni</translation>
 <translation id="5828633471261496623">Stampa in corso...</translation>
@@ -290,7 +288,6 @@
 <translation id="5965661248935608907">Controlla anche la pagina visualizzata quando fai clic sul pulsante Pagina iniziale o quando esegui ricerche dalla Omnibox.</translation>
 <translation id="5978277834170881274">&amp;Usa il controllo ortografico di base</translation>
 <translation id="5979421442488174909">&amp;Traduci in <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Cancella i dati del sito</translation>
 <translation id="6042308850641462728">Di più</translation>
 <translation id="6086846494333236931">Installato dall'amministratore</translation>
 <translation id="6101226222197207147">Nuova applicazione aggiunta (<ph name="EXTENSION_NAME" />)</translation>
@@ -346,6 +343,7 @@
 <translation id="7053983685419859001">Blocca</translation>
 <translation id="7070484045139057854">Può leggere e cambiare i dati del sito</translation>
 <translation id="708060913198414444">C&amp;opia l'indirizzo dell'audio</translation>
+<translation id="7121728544325372695">Trattini intelligenti</translation>
 <translation id="7175353351958621980">Caricato da:</translation>
 <translation id="7186088072322679094">Tieni nella barra degli strumenti</translation>
 <translation id="7287143125007575591">Accesso negato.</translation>
@@ -404,7 +402,6 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
         =1 {Trasferimento è in corso} other {Trasferimenti sono in corso}}</translation>
 <translation id="8230134520748321204">Salvare la password per <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Questa estensione non è elencata nel <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e potrebbe essere stata aggiunta a tua insaputa.</translation>
-<translation id="8339059274628563283">Dati memorizzati di <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Questa estensione ha assunto il controllo delle tue impostazioni proxy, il che significa che può cambiare, interrompere o spiare tutto ciò che fai online. Se non sei sicuro del motivo per cui si sia verificato questo cambiamento, è probabile che sia indesiderato.</translation>
 <translation id="8382913212082956454">Copia indirizzo &amp;email</translation>
 <translation id="8413385045638830869">Chiedi prima (opzione consigliata)</translation>
@@ -430,6 +427,7 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Copia testo del lin&amp;k</translation>
 <translation id="8823704566850948458">Suggerisci password...</translation>
+<translation id="883062543841130884">Sostituzioni</translation>
 <translation id="8859174528519900719">Frame secondario: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Apri link in un'altra &amp;finestra</translation>
 <translation id="8915370057835397490">Caricamento suggerimento</translation>

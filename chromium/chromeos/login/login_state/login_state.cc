@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,11 +98,6 @@ bool LoginState::IsGuestSessionUser() const {
 }
 
 bool LoginState::IsPublicSessionUser() const {
-  return logged_in_user_type_ == LOGGED_IN_USER_PUBLIC_ACCOUNT ||
-         logged_in_user_type_ == LOGGED_IN_USER_PUBLIC_ACCOUNT_MANAGED;
-}
-
-bool LoginState::ArePublicSessionRestrictionsEnabled() const {
   return logged_in_user_type_ == LOGGED_IN_USER_PUBLIC_ACCOUNT;
 }
 

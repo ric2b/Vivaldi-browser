@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,12 @@ class TimeTicks;
 }
 
 namespace component_updater {
+
+// A command-line switch that can also be set from chrome://flags for opting in
+// or out of DCHECK binaries for Lacros (where available).
+extern const char kPreferDcheckSwitch[];
+extern const char kPreferDcheckOptIn[];
+extern const char kPreferDcheckOptOut[];
 
 // The name of the directory under DIR_COMPONENT_USER that cros component
 // installers puts all of the installed components.

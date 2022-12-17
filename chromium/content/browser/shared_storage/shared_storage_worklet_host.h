@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -105,6 +105,8 @@ class CONTENT_EXPORT SharedStorageWorkletHost
           shared_storage_worklet::mojom::SharedStorageEntriesListener>
           pending_listener) override;
   void SharedStorageLength(SharedStorageLengthCallback callback) override;
+  void SharedStorageRemainingBudget(
+      SharedStorageRemainingBudgetCallback callback) override;
   void ConsoleLog(const std::string& message) override;
   void RecordUseCounters(
       const std::vector<blink::mojom::WebFeature>& features) override;
@@ -122,11 +124,13 @@ class CONTENT_EXPORT SharedStorageWorkletHost
       const std::string& error_message);
 
   virtual void OnRunOperationOnWorkletFinished(
+      base::TimeTicks start_time,
       bool success,
       const std::string& error_message);
 
   virtual void OnRunURLSelectionOperationOnWorkletFinished(
       const GURL& urn_uuid,
+      base::TimeTicks start_time,
       bool script_execution_succeeded,
       const std::string& script_execution_error_message,
       uint32_t index,
@@ -139,6 +143,7 @@ class CONTENT_EXPORT SharedStorageWorkletHost
  private:
   void OnRunURLSelectionOperationOnWorkletScriptExecutionFinished(
       const GURL& urn_uuid,
+      base::TimeTicks start_time,
       bool success,
       const std::string& error_message,
       uint32_t index);
@@ -225,6 +230,13 @@ class CONTENT_EXPORT SharedStorageWorkletHost
   // Timer for starting and ending the keep-alive phase.
   base::OneShotTimer keep_alive_timer_;
 
+  // Time when worklet host is constructed.
+  base::TimeTicks creation_time_;
+
+  // Last time when `pending_operations_count_` reaches 0u after being positive.
+  base::TimeTicks last_operation_finished_time_;
+
+  // Time when worklet host entered keep-alive, if applicable.
   base::TimeTicks enter_keep_alive_time_;
 
   // Tracks whether the worklet has ever been kept-alive (in order to be

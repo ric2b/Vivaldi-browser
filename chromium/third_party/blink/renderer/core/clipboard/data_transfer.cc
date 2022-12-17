@@ -47,10 +47,10 @@
 #include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
-#include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/drag_image.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/cull_rect_updater.h"
+#include "third_party/blink/renderer/core/paint/old_cull_rect_updater.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_painter.h"
@@ -61,7 +61,6 @@
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-blink.h"
-#include "ui/display/screen_info.h"
 
 namespace blink {
 
@@ -129,6 +128,8 @@ class DraggedNodeImageBuilder {
     cull_rect.Offset(
         gfx::Vector2dF(layer->GetLayoutObject().FirstFragment().PaintOffset()));
     OverriddenCullRectScope cull_rect_scope(
+        *layer, CullRect(gfx::ToEnclosingRect(cull_rect)));
+    OverriddenOldCullRectScope old_cull_rect_scope(
         *layer, CullRect(gfx::ToEnclosingRect(cull_rect)));
     auto* builder = MakeGarbageCollected<PaintRecordBuilder>();
 
@@ -317,6 +318,7 @@ bool DataTransfer::hasDataStoreItemListChanged() const {
 
 void DataTransfer::OnItemListChanged() {
   data_store_item_list_changed_ = true;
+  files_->clear();
 }
 
 Vector<String> DataTransfer::types() {
@@ -328,19 +330,23 @@ Vector<String> DataTransfer::types() {
 }
 
 FileList* DataTransfer::files() const {
-  auto* files = MakeGarbageCollected<FileList>();
-  if (!CanReadData())
-    return files;
+  if (!CanReadData()) {
+    files_->clear();
+    return files_;
+  }
+
+  if (!files_->IsEmpty())
+    return files_;
 
   for (uint32_t i = 0; i < data_object_->length(); ++i) {
     if (data_object_->Item(i)->Kind() == DataObjectItem::kFileKind) {
       Blob* blob = data_object_->Item(i)->GetAsFile();
       if (auto* file = DynamicTo<File>(blob))
-        files->Append(file);
+        files_->Append(file);
     }
   }
 
-  return files;
+  return files_;
 }
 
 void DataTransfer::setDragImage(Element* image, int x, int y) {
@@ -349,7 +355,13 @@ void DataTransfer::setDragImage(Element* image, int x, int y) {
   if (!IsForDragAndDrop())
     return;
 
-  gfx::Point location(x, y);
+  // Convert `drag_loc_` from CSS px to physical pixels.
+  // `LocalFrame::PageZoomFactor` converts from CSS px to physical px by taking
+  // into account both device scale factor and page zoom.
+  LocalFrame* frame = image->GetDocument().GetFrame();
+  gfx::Point location =
+      gfx::ScaleToRoundedPoint(gfx::Point(x, y), frame->PageZoomFactor());
+
   auto* html_image_element = DynamicTo<HTMLImageElement>(image);
   if (html_image_element && !image->isConnected())
     SetDragImageResource(html_image_element->CachedImage(), location);
@@ -370,6 +382,7 @@ void DataTransfer::SetDragImageElement(Node* node, const gfx::Point& loc) {
   setDragImage(nullptr, node, loc);
 }
 
+// static
 gfx::RectF DataTransfer::ClipByVisualViewport(const gfx::RectF& absolute_rect,
                                               const LocalFrame& frame) {
   gfx::Rect viewport_in_root_frame =
@@ -379,9 +392,10 @@ gfx::RectF DataTransfer::ClipByVisualViewport(const gfx::RectF& absolute_rect,
   return IntersectRects(absolute_viewport, absolute_rect);
 }
 
-// static
 // Returns a DragImage whose bitmap contains |contents|, positioned and scaled
 // in device space.
+//
+// static
 std::unique_ptr<DragImage> DataTransfer::CreateDragImageForFrame(
     LocalFrame& frame,
     float opacity,
@@ -412,16 +426,12 @@ std::unique_ptr<DragImage> DataTransfer::CreateDragImageForFrame(
 
   scoped_refptr<Image> image =
       UnacceleratedStaticBitmapImage::Create(surface->makeImageSnapshot());
-  ChromeClient& chrome_client = frame.GetPage()->GetChromeClient();
-  float screen_device_scale_factor =
-      chrome_client.GetScreenInfo(frame).device_scale_factor;
 
   // There is no orientation information in the image, so pass
   // kDoNotRespectImageOrientation in order to avoid wasted work looking
   // at orientation.
   return DragImage::Create(image.get(), kDoNotRespectImageOrientation,
-                           screen_device_scale_factor, kInterpolationDefault,
-                           opacity);
+                           kInterpolationDefault, opacity);
 }
 
 // static
@@ -433,15 +443,17 @@ std::unique_ptr<DragImage> DataTransfer::NodeImage(LocalFrame& frame,
 
 std::unique_ptr<DragImage> DataTransfer::CreateDragImage(
     gfx::Point& loc,
+    float device_scale_factor,
     LocalFrame* frame) const {
+  loc = drag_loc_;
   if (drag_image_element_) {
-    loc = drag_loc_;
-
     return NodeImage(*frame, *drag_image_element_);
   }
-  if (drag_image_) {
-    loc = drag_loc_;
-    return DragImage::Create(drag_image_->GetImage());
+  std::unique_ptr<DragImage> drag_image =
+      drag_image_ ? DragImage::Create(drag_image_->GetImage()) : nullptr;
+  if (drag_image) {
+    drag_image->Scale(device_scale_factor, device_scale_factor);
+    return drag_image;
   }
   return nullptr;
 }
@@ -596,7 +608,8 @@ DataTransfer::DataTransfer(DataTransferType type,
       effect_allowed_("uninitialized"),
       transfer_type_(type),
       data_object_(data_object),
-      data_store_item_list_changed_(true) {
+      data_store_item_list_changed_(true),
+      files_(MakeGarbageCollected<FileList>()) {
   data_object_->AddObserver(this);
 }
 
@@ -637,6 +650,7 @@ void DataTransfer::Trace(Visitor* visitor) const {
   visitor->Trace(data_object_);
   visitor->Trace(drag_image_);
   visitor->Trace(drag_image_element_);
+  visitor->Trace(files_);
   ScriptWrappable::Trace(visitor);
 }
 

@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -42,13 +42,6 @@ source_set("blink_platform_unittests") {
   data = [ "//testing/buildbot/filters/android.emulator_n.blink_platform_unittests.filter" ]
 }
 
-source_set("blink_unittests_filters") {
-  testonly = true
-
-  data =
-      [ "//testing/buildbot/filters/android.emulator.blink_unittests.filter" ]
-}
-
 source_set("blink_web_tests_filter") {
   testonly = true
 
@@ -90,7 +83,6 @@ source_set("chrome_public_test_apk_filters") {
     "//testing/buildbot/filters/android.pie_arm64_rel.chrome_public_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_11.chrome_public_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_12.chrome_public_test_apk.filter",
-    "//testing/buildbot/filters/android.emulator_m.chrome_public_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_n.chrome_public_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_p.chrome_public_test_apk.filter",
   ]
@@ -99,7 +91,10 @@ source_set("chrome_public_test_apk_filters") {
 source_set("chrome_public_unit_test_apk_filters") {
   testonly = true
 
-  data = [ "//testing/buildbot/filters/android.emulator_12.chrome_public_unit_test_apk.filter" ]
+  data = [
+    "//testing/buildbot/filters/android.emulator_12.chrome_public_unit_test_apk.filter",
+    "//testing/buildbot/filters/android.emulator_n.chrome_public_unit_test_apk.filter",
+  ]
 }
 
 source_set("chromeos_filters") {
@@ -129,7 +124,6 @@ source_set("content_browsertests_filters") {
     "//testing/buildbot/filters/android.asan.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_12.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_12.oop_network_service_content_browsertests.filter",
-    "//testing/buildbot/filters/android.emulator_m.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_n.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_p.content_browsertests.filter",
     "//testing/buildbot/filters/android.marshmallow_tablet_tester.content_browsertests.filter",
@@ -153,7 +147,6 @@ source_set("content_shell_test_apk_filters") {
   data = [
     "//testing/buildbot/filters/android.emulator_11.content_shell_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_12.content_shell_test_apk.filter",
-    "//testing/buildbot/filters/android.emulator_m.content_shell_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_n.content_shell_test_apk.filter",
   ]
 }
@@ -162,6 +155,7 @@ source_set("content_unittests_filters") {
   testonly = true
 
   data = [
+    "//testing/buildbot/filters/android.emulator_n.content_unittests.filter",
     "//testing/buildbot/filters/fuchsia.lsan.content_unittests.filter",
     "//testing/buildbot/filters/webrtc.content_unittests.filter",
   ]
@@ -263,6 +257,7 @@ source_set("gl_tests_filters") {
     "//testing/buildbot/filters/android.emulator_12.gl_tests.filter",
     "//testing/buildbot/filters/android.emulator_n.gl_tests.filter",
     "//testing/buildbot/filters/android.pie_arm64_rel.gl_tests.filter",
+    "//testing/buildbot/filters/android.samsung_a23.gl_tests.filter",
   ]
 }
 source_set("gl_unittests_filters") {
@@ -303,7 +298,6 @@ source_set("linux_trusty_rel_browser_tests_filters") {
 source_set("media_unittests_filters") {
   data = [
     "//testing/buildbot/filters/android.emulator_11_12.media_unittests.filter",
-    "//testing/buildbot/filters/android.emulator_m.media_unittests.filter",
     "//testing/buildbot/filters/fuchsia.debug.media_unittests.filter",
   ]
 }
@@ -312,7 +306,6 @@ source_set("net_unittests_filters") {
   data = [
     "//testing/buildbot/filters/android.emulator.net_unittests.filter",
     "//testing/buildbot/filters/android.emulator_10.net_unittests.filter",
-    "//testing/buildbot/filters/android.emulator_11.net_unittests.filter",
     "//testing/buildbot/filters/android.emulator_l.net_unittests.filter",
     "//testing/buildbot/filters/android.emulator_k.net_unittests.filter",
     "//testing/buildbot/filters/fuchsia.net_unittests.filter",

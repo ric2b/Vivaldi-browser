@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -222,10 +222,9 @@ class CrossFadeUpdateTransformObserver
     // Apply the transform on the bounds to get the location of |window_|.
     // Transforms are calculated in a way where scale does not affect position,
     // so use the same logic here.
-    gfx::RectF effective_bounds(new_bounds.size());
-    new_transform.TransformRect(&effective_bounds);
-    effective_bounds.set_x(effective_bounds.x() + new_bounds.x());
-    effective_bounds.set_y(effective_bounds.y() + new_bounds.y());
+    gfx::RectF effective_bounds =
+        new_transform.MapRect(gfx::RectF(new_bounds.size()));
+    effective_bounds.Offset(new_bounds.OffsetFromOrigin());
 
     const gfx::Transform old_transform =
         gfx::TransformBetweenRects(old_bounds, effective_bounds);
@@ -256,15 +255,15 @@ void CrossFadeAnimationInternal(
   ui::Layer* new_layer = window->layer();
 
   DCHECK(old_layer);
-  const gfx::Rect old_bounds(old_layer_owner->root()->bounds());
+  const gfx::Rect old_bounds(old_layer->bounds());
 
-  gfx::RectF old_transformed_bounds(old_bounds);
-  gfx::Transform old_transform(old_layer_owner->root()->transform());
+  gfx::Transform old_transform(old_layer->transform());
   gfx::Transform old_transform_in_root;
   old_transform_in_root.Translate(old_bounds.x(), old_bounds.y());
-  old_transform_in_root.PreconcatTransform(old_transform);
+  old_transform_in_root.PreConcat(old_transform);
   old_transform_in_root.Translate(-old_bounds.x(), -old_bounds.y());
-  old_transform_in_root.TransformRect(&old_transformed_bounds);
+  gfx::RectF old_transformed_bounds =
+      old_transform_in_root.MapRect(gfx::RectF(old_bounds));
   const gfx::Rect new_bounds(window->bounds());
   const bool old_on_top = (old_bounds.width() > new_bounds.width());
 
@@ -282,7 +281,6 @@ void CrossFadeAnimationInternal(
 
   // Scale up the old layer while translating to new position.
   {
-    ui::Layer* old_layer = old_layer_owner->root();
     old_layer->GetAnimator()->StopAnimating();
     // If Overview exit animation is in the sequence, stopping animation may
     // trigger `OverviewController::OnEndingAnimationComplete` which may finally

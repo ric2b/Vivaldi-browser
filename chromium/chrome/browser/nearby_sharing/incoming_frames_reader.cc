@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,10 +6,10 @@
 
 #include <type_traits>
 
-#include "ash/services/nearby/public/mojom/nearby_decoder.mojom.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/nearby_sharing/logging/logging.h"
 #include "chrome/browser/nearby_sharing/nearby_connection.h"
+#include "chromeos/ash/services/nearby/public/mojom/nearby_decoder.mojom.h"
 
 namespace {
 

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,7 @@
 #include "media/base/limits.h"
 #include "media/base/media_content_type.h"
 #include "media/base/media_log.h"
+#include "media/base/media_player_logging_id.h"
 #include "media/base/media_switches.h"
 #include "media/base/media_url_demuxer.h"
 #include "media/base/memory_dump_provider_proxy.h"
@@ -112,12 +113,6 @@ using ::media::Demuxer;
 using ::media::MediaLogEvent;
 using ::media::MediaLogProperty;
 using ::media::MediaTrack;
-
-const char kWatchTimeHistogram[] = "Media.WebMediaPlayerImpl.WatchTime";
-
-void RecordSimpleWatchTimeUMA(media::RendererType type) {
-  UMA_HISTOGRAM_ENUMERATION(kWatchTimeHistogram, type);
-}
 
 void SetSinkIdOnMediaThread(scoped_refptr<WebAudioSourceProviderImpl> sink,
                             const std::string& device_id,
@@ -399,8 +394,6 @@ MimeType TranslateMimeTypeToHistogramEnum(const std::string& mime_type) {
 
 }  // namespace
 
-class BufferedDataSourceHostImpl;
-
 STATIC_ASSERT_ENUM(WebMediaPlayer::kCorsModeUnspecified,
                    UrlData::CORS_UNSPECIFIED);
 STATIC_ASSERT_ENUM(WebMediaPlayer::kCorsModeAnonymous, UrlData::CORS_ANONYMOUS);
@@ -416,6 +409,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
     UrlIndex* url_index,
     std::unique_ptr<VideoFrameCompositor> compositor,
     std::unique_ptr<media::MediaLog> media_log,
+    media::MediaPlayerLoggingID player_id,
     WebMediaPlayerBuilder::DeferLoadCB defer_load_cb,
     scoped_refptr<media::SwitchableAudioRendererSink> audio_renderer_sink,
     scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
@@ -442,6 +436,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       main_task_runner_(frame->GetTaskRunner(TaskType::kMediaElementEvent)),
       media_task_runner_(std::move(media_task_runner)),
       worker_task_runner_(std::move(worker_task_runner)),
+      media_player_id_(player_id),
       media_log_(std::move(media_log)),
       client_(client),
       encrypted_client_(encrypted_client),
@@ -572,7 +567,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
   main_thread_mem_dumper_ = std::make_unique<media::MemoryDumpProviderProxy>(
       "WebMediaPlayer_MainThread", main_task_runner_,
       base::BindRepeating(&WebMediaPlayerImpl::OnMainThreadMemoryDump,
-                          weak_this_, media_log_->id()));
+                          weak_this_, media_player_id_));
 
   media_metrics_provider_->AcquirePlaybackEventsRecorder(
       playback_events_recorder_.BindNewPipeAndPassReceiver());
@@ -848,7 +843,7 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
                                 const WebURL& url,
                                 CorsMode cors_mode,
                                 bool is_cache_disabled) {
-  TRACE_EVENT1("media", "WebMediaPlayerImpl::DoLoad", "id", media_log_->id());
+  TRACE_EVENT1("media", "WebMediaPlayerImpl::DoLoad", "id", media_player_id_);
   DVLOG(1) << __func__;
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
@@ -1055,6 +1050,17 @@ void WebMediaPlayerImpl::Pause() {
   UpdatePlayState();
 }
 
+void WebMediaPlayerImpl::OnFrozen() {
+  DVLOG(1) << __func__;
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+
+  // We should already be paused before we are frozen.
+  DCHECK(paused_);
+
+  if (observer_)
+    observer_->OnFrozen();
+}
+
 void WebMediaPlayerImpl::Seek(double seconds) {
   DVLOG(1) << __func__ << "(" << seconds << "s)";
   DCHECK(main_task_runner_->BelongsToCurrentThread());
@@ -1065,7 +1071,7 @@ void WebMediaPlayerImpl::Seek(double seconds) {
 void WebMediaPlayerImpl::DoSeek(base::TimeDelta time, bool time_updated) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT2("media", "WebMediaPlayerImpl::DoSeek", "target",
-               time.InSecondsF(), "id", media_log_->id());
+               time.InSecondsF(), "id", media_player_id_);
 
   ReadyState old_state = ready_state_;
   if (ready_state_ > WebMediaPlayer::kReadyStateHaveMetadata)
@@ -1151,8 +1157,10 @@ void WebMediaPlayerImpl::SetVolume(double volume) {
   if (delegate_has_audio_ != HasUnmutedAudio()) {
     delegate_has_audio_ = HasUnmutedAudio();
     media::MediaContentType content_type = GetMediaContentType();
-    client_->DidMediaMetadataChange(delegate_has_audio_, HasVideo(),
-                                    content_type);
+    client_->DidMediaMetadataChange(
+        delegate_has_audio_, HasVideo(),
+        pipeline_metadata_.audio_decoder_config.codec(),
+        pipeline_metadata_.video_decoder_config.codec(), content_type);
     delegate_->DidMediaMetadataChange(delegate_id_, delegate_has_audio_,
                                       HasVideo(), content_type);
   }
@@ -1725,7 +1733,7 @@ void WebMediaPlayerImpl::OnCdmAttached(bool success) {
 
 void WebMediaPlayerImpl::OnPipelineSeeked(bool time_updated) {
   TRACE_EVENT2("media", "WebMediaPlayerImpl::OnPipelineSeeked", "target",
-               seek_time_.InSecondsF(), "id", media_log_->id());
+               seek_time_.InSecondsF(), "id", media_player_id_);
   seeking_ = false;
   seek_time_ = base::TimeDelta();
 
@@ -2014,7 +2022,7 @@ void WebMediaPlayerImpl::OnError(media::PipelineStatus status) {
 
 void WebMediaPlayerImpl::OnEnded() {
   TRACE_EVENT2("media", "WebMediaPlayerImpl::OnEnded", "duration", Duration(),
-               "id", media_log_->id());
+               "id", media_player_id_);
   DVLOG(1) << __func__;
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
@@ -2088,8 +2096,10 @@ void WebMediaPlayerImpl::OnMetadata(const media::PipelineMetadata& metadata) {
 
   delegate_has_audio_ = HasUnmutedAudio();
   media::MediaContentType content_type = GetMediaContentType();
-  client_->DidMediaMetadataChange(delegate_has_audio_, HasVideo(),
-                                  content_type);
+  client_->DidMediaMetadataChange(
+      delegate_has_audio_, HasVideo(),
+      pipeline_metadata_.audio_decoder_config.codec(),
+      pipeline_metadata_.video_decoder_config.codec(), content_type);
   delegate_->DidMediaMetadataChange(delegate_id_, delegate_has_audio_,
                                     HasVideo(), content_type);
 
@@ -2280,7 +2290,7 @@ void WebMediaPlayerImpl::OnBufferingStateChangeInternal(
 
   if (state == media::BUFFERING_HAVE_ENOUGH) {
     TRACE_EVENT1("media", "WebMediaPlayerImpl::BufferingHaveEnough", "id",
-                 media_log_->id());
+                 media_player_id_);
     // The SetReadyState() call below may clear
     // `skip_metrics_due_to_startup_suspend_` so report this first.
     if (!have_reported_time_to_play_ready_ &&
@@ -2376,8 +2386,10 @@ void WebMediaPlayerImpl::OnDurationChange() {
 
   client_->DurationChanged();
   media::MediaContentType content_type = GetMediaContentType();
-  client_->DidMediaMetadataChange(delegate_has_audio_, HasVideo(),
-                                  content_type);
+  client_->DidMediaMetadataChange(
+      delegate_has_audio_, HasVideo(),
+      pipeline_metadata_.audio_decoder_config.codec(),
+      pipeline_metadata_.video_decoder_config.codec(), content_type);
   delegate_->DidMediaMetadataChange(delegate_id_, delegate_has_audio_,
                                     HasVideo(), content_type);
 
@@ -2690,6 +2702,9 @@ void WebMediaPlayerImpl::ScheduleRestart() {
 void WebMediaPlayerImpl::RequestRemotePlaybackDisabled(bool disabled) {
   if (observer_)
     observer_->OnRemotePlaybackDisabled(disabled);
+  if (client_) {
+    client_->OnRemotePlaybackDisabled(disabled);
+  }
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -3366,7 +3381,7 @@ void WebMediaPlayerImpl::SetDemuxer(std::unique_ptr<Demuxer> demuxer) {
   media_thread_mem_dumper_ = std::make_unique<media::MemoryDumpProviderProxy>(
       "WebMediaPlayer_MediaThread", media_task_runner_,
       base::BindRepeating(&WebMediaPlayerImpl::OnMediaThreadMemoryDump,
-                          media_log_->id(), base::Unretained(demuxer_.get())));
+                          media_player_id_, base::Unretained(demuxer_.get())));
 }
 
 void WebMediaPlayerImpl::ReportMemoryUsage() {
@@ -3431,7 +3446,7 @@ void WebMediaPlayerImpl::FinishMemoryUsageReport(int64_t demuxer_memory_usage) {
 }
 
 void WebMediaPlayerImpl::OnMainThreadMemoryDump(
-    int32_t id,
+    media::MediaPlayerLoggingID id,
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
   const auto stats = GetPipelineStatistics();
@@ -3460,7 +3475,7 @@ void WebMediaPlayerImpl::OnMainThreadMemoryDump(
 
 // static
 void WebMediaPlayerImpl::OnMediaThreadMemoryDump(
-    int32_t id,
+    media::MediaPlayerLoggingID id,
     Demuxer* demuxer,
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
@@ -3941,9 +3956,15 @@ void WebMediaPlayerImpl::OnFirstFrame(base::TimeTicks frame_time) {
   media_metrics_provider_->SetTimeToFirstFrame(elapsed);
   RecordTimingUMA("Media.TimeToFirstFrame", elapsed);
 
-  // Needed to signal HTMLVideoElement that it should remove the poster image.
-  if (client_ && has_poster_)
-    client_->Repaint();
+  media::PipelineStatistics ps = GetPipelineStatistics();
+  if (client_) {
+    client_->OnFirstFrame(frame_time, ps.video_bytes_decoded);
+
+    // Needed to signal HTMLVideoElement that it should remove the poster image.
+    if (has_poster_) {
+      client_->Repaint();
+    }
+  }
 }
 
 void WebMediaPlayerImpl::RecordTimingUMA(const std::string& key,
@@ -4004,8 +4025,6 @@ void WebMediaPlayerImpl::MaybeUpdateBufferSizesForPlayback() {
 }
 
 void WebMediaPlayerImpl::OnSimpleWatchTimerTick() {
-  RecordSimpleWatchTimeUMA(renderer_type_);
-
   if (playback_events_recorder_)
     playback_events_recorder_->OnPipelineStatistics(GetPipelineStatistics());
 }
@@ -4114,6 +4133,13 @@ void WebMediaPlayerImpl::ReportSessionUMAs() const {
     base::UmaHistogramCounts10M(uma_name, video_frame_readback_count_);
   }
 }
+
+bool WebMediaPlayerImpl::PassedTimingAllowOriginCheck() const {
+  if (mb_data_source_)
+    return mb_data_source_->PassedTimingAllowOriginCheck();
+  return true;
+}
+
 
 #if defined(VIVALDI_USE_SYSTEM_MEDIA_DEMUXER)
 void WebMediaPlayerImpl::SniffProtocol() {

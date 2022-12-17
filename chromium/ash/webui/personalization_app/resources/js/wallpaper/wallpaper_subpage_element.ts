@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,8 +47,7 @@ export class WallpaperSubpage extends WithPersonalizationStore {
   }
 
   private onCurrentSelectedChanged_(value: CurrentWallpaper|null) {
-    if (value && value.type === WallpaperType.kPolicy &&
-        loadTimeData.getBoolean('isPersonalizationHubEnabled')) {
+    if (value && value.type === WallpaperType.kPolicy) {
       PersonalizationRouter.reloadAtRoot();
     }
   }

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,7 +45,7 @@ class CORE_EXPORT NGGridTrackCollectionBase {
 class CORE_EXPORT TrackSpanProperties {
  public:
   enum PropertyId : unsigned {
-    kNone = 0,
+    kNoPropertyId = 0,
     kHasAutoMinimumTrack = 1 << 1,
     kHasFixedMaximumTrack = 1 << 2,
     kHasFixedMinimumTrack = 1 << 3,
@@ -59,10 +59,10 @@ class CORE_EXPORT TrackSpanProperties {
 
   inline bool HasProperty(PropertyId id) const { return bitmask_ & id; }
   inline void SetProperty(PropertyId id) { bitmask_ |= id; }
-  inline void Reset() { bitmask_ = kNone; }
+  inline void Reset() { bitmask_ = kNoPropertyId; }
 
  private:
-  wtf_size_t bitmask_{kNone};
+  wtf_size_t bitmask_{kNoPropertyId};
 };
 
 class CORE_EXPORT NGGridBlockTrackCollection
@@ -206,6 +206,10 @@ class CORE_EXPORT NGGridLayoutTrackCollection
   LayoutUnit GetSetOffset(wtf_size_t set_index) const;
   wtf_size_t GetSetTrackCount(wtf_size_t set_index) const;
 
+  bool HasBaselines() const {
+    DCHECK_EQ(major_baselines_.empty(), minor_baselines_.empty());
+    return !major_baselines_.empty();
+  }
   LayoutUnit MajorBaseline(wtf_size_t set_index) const;
   LayoutUnit MinorBaseline(wtf_size_t set_index) const;
 

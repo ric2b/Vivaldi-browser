@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
@@ -29,7 +30,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_activity_monitor.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/privacy_mode.h"
 #include "net/base/url_util.h"
 #include "net/cert/signed_certificate_timestamp_and_status.h"
@@ -295,8 +296,8 @@ base::Value NetLogQuicClientSessionParams(
   dict.Set("port", session_key->server_id().port());
   dict.Set("privacy_mode",
            PrivacyModeToDebugString(session_key->privacy_mode()));
-  dict.Set("network_isolation_key",
-           session_key->network_isolation_key().ToDebugString());
+  dict.Set("network_anonymization_key",
+           session_key->network_anonymization_key().ToDebugString());
   dict.Set("require_confirmation", require_confirmation);
   dict.Set("cert_verify_flags", cert_verify_flags);
   dict.Set("connection_id", connection_id.ToString());
@@ -342,14 +343,13 @@ class QuicServerPushHelper : public ServerPushDelegate::ServerPushHelper {
       session_->CancelPush(request_url_);
     }
   }
-
   const GURL& GetURL() const override { return request_url_; }
 
-  NetworkIsolationKey GetNetworkIsolationKey() const override {
+  NetworkAnonymizationKey GetNetworkAnonymizationKey() const override {
     if (session_) {
-      return session_->quic_session_key().network_isolation_key();
+      return session_->quic_session_key().network_anonymization_key();
     }
-    return NetworkIsolationKey();
+    return NetworkAnonymizationKey();
   }
 
  private:
@@ -824,7 +824,8 @@ void QuicChromiumClientSession::ConnectionMigrationValidationResultDelegate::
 void QuicChromiumClientSession::ConnectionMigrationValidationResultDelegate::
     OnPathValidationFailure(
         std::unique_ptr<quic::QuicPathValidationContext> context) {
-  session_->connection()->OnPathValidationFailureAtClient();
+  session_->connection()->OnPathValidationFailureAtClient(
+      /*is_multi_port=*/false);
   // Note that socket, packet writer, and packet reader in |context| will be
   // discarded.
   auto* chrome_context =
@@ -852,7 +853,8 @@ void QuicChromiumClientSession::PortMigrationValidationResultDelegate::
 void QuicChromiumClientSession::PortMigrationValidationResultDelegate::
     OnPathValidationFailure(
         std::unique_ptr<quic::QuicPathValidationContext> context) {
-  session_->connection()->OnPathValidationFailureAtClient();
+  session_->connection()->OnPathValidationFailureAtClient(
+      /*is_multi_port=*/false);
   // Note that socket, packet writer, and packet reader in |context| will be
   // discarded.
   auto* chrome_context =
@@ -1018,8 +1020,8 @@ QuicChromiumClientSession::QuicChromiumClientSession(
     connection->SetMaxPacketLength(connection->max_packet_length() -
                                    kAdditionalOverheadForIPv6);
   }
-  connect_timing_.dns_start = dns_resolution_start_time;
-  connect_timing_.dns_end = dns_resolution_end_time;
+  connect_timing_.domain_lookup_start = dns_resolution_start_time;
+  connect_timing_.domain_lookup_end = dns_resolution_end_time;
   if (!retransmittable_on_wire_timeout.IsZero()) {
     connection->set_initial_retransmittable_on_wire_timeout(
         retransmittable_on_wire_timeout);
@@ -1068,8 +1070,6 @@ QuicChromiumClientSession::~QuicChromiumClientSession() {
 
   UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.NumTotalStreams",
                           num_total_streams_);
-  UMA_HISTOGRAM_COUNTS_1M("Net.QuicNumSentClientHellos",
-                          crypto_stream_->num_sent_client_hellos());
   UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.Pushed", streams_pushed_count_);
   UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.PushedAndClaimed",
                           streams_pushed_and_claimed_count_);
@@ -1314,8 +1314,7 @@ int QuicChromiumClientSession::TryCreateStream(StreamRequest* request) {
 void QuicChromiumClientSession::CancelRequest(StreamRequest* request) {
   // Remove |request| from the queue while preserving the order of the
   // other elements.
-  auto it =
-      std::find(stream_requests_.begin(), stream_requests_.end(), request);
+  auto it = base::ranges::find(stream_requests_, request);
   if (it != stream_requests_.end()) {
     it = stream_requests_.erase(it);
   }
@@ -1536,9 +1535,9 @@ bool QuicChromiumClientSession::CanPool(
     return false;
   }
 
-  return SpdySession::CanPool(transport_security_state_, ssl_info,
-                              *ssl_config_service_, session_key_.host(),
-                              hostname, session_key_.network_isolation_key());
+  return SpdySession::CanPool(
+      transport_security_state_, ssl_info, *ssl_config_service_,
+      session_key_.host(), hostname, session_key_.network_anonymization_key());
 }
 
 bool QuicChromiumClientSession::ShouldCreateIncomingStream(
@@ -1843,6 +1842,40 @@ void QuicChromiumClientSession::OnConnectionClosed(
   DCHECK(!connection()->connected());
 
   logger_->OnConnectionClosed(frame, source);
+
+  const quic::QuicConnection::MultiPortStats* multi_port_stats =
+      connection()->multi_port_stats();
+  if (multi_port_stats != nullptr) {
+    UMA_HISTOGRAM_COUNTS_1000("Net.QuicMultiPort.NumDefaultPathDegrading",
+                              multi_port_stats->num_path_degrading);
+    UMA_HISTOGRAM_COUNTS_1000(
+        "Net.QuicMultiPort.NumMultiPortFailureWhenPathNotDegrading",
+        multi_port_stats
+            ->num_multi_port_probe_failures_when_path_not_degrading);
+    if (multi_port_stats->num_path_degrading > 0) {
+      base::UmaHistogramSparse(
+          "Net.QuicMultiPort.AltPortRttWhenPathDegradingVsGeneral",
+          static_cast<int>(
+              multi_port_stats->rtt_stats_when_default_path_degrading
+                  .smoothed_rtt()
+                  .ToMilliseconds() *
+              100 /
+              multi_port_stats->rtt_stats.smoothed_rtt().ToMilliseconds()));
+      UMA_HISTOGRAM_COUNTS_1000(
+          "Net.QuicMultiPort.NumMultiPortFailureWhenPathDegrading",
+          multi_port_stats->num_multi_port_probe_failures_when_path_degrading);
+      base::UmaHistogramPercentage(
+          "Net.QuicMultiPort.AltPortFailureWhenPathDegradingVsGeneral",
+          static_cast<int>(
+              multi_port_stats
+                  ->num_multi_port_probe_failures_when_path_degrading *
+              100 /
+              (multi_port_stats
+                   ->num_multi_port_probe_failures_when_path_not_degrading +
+               multi_port_stats
+                   ->num_multi_port_probe_failures_when_path_degrading)));
+    }
+  }
 
   RecordConnectionCloseErrorCode(frame, source, session_key_.host(),
                                  OneRttKeysAvailable());
@@ -2705,7 +2738,7 @@ void QuicChromiumClientSession::OnPathDegrading() {
   for (auto& observer : connectivity_observer_list_)
     observer.OnSessionPathDegrading(this, current_network);
 
-  if (!stream_factory_)
+  if (!stream_factory_ || connection()->multi_port_enabled())
     return;
 
   if (allow_port_migration_ && !migrate_session_early_v2_) {
@@ -3280,8 +3313,10 @@ base::Value QuicChromiumClientSession::GetInfoAsValue(
 
   dict.Set("total_streams", static_cast<int>(num_total_streams_));
   dict.Set("peer_address", peer_address().ToString());
+  // TODO(https://crbug.com/1343856): Update "network_isolation_key" to
+  // "network_anonymization_key" and change NetLog viewer.
   dict.Set("network_isolation_key",
-           session_key_.network_isolation_key().ToDebugString());
+           session_key_.network_anonymization_key().ToDebugString());
   dict.Set("connection_id", connection_id().ToString());
   if (!connection()->client_connection_id().IsEmpty()) {
     dict.Set("client_connection_id",
@@ -3403,9 +3438,10 @@ void QuicChromiumClientSession::OnCryptoHandshakeComplete() {
       connect_timing_.connect_end - connect_timing_.connect_start);
   // Track how long it has taken to finish handshake after we have finished
   // DNS host resolution.
-  if (!connect_timing_.dns_end.is_null()) {
-    UMA_HISTOGRAM_TIMES("Net.QuicSession.HostResolution.HandshakeConfirmedTime",
-                        tick_clock_->NowTicks() - connect_timing_.dns_end);
+  if (!connect_timing_.domain_lookup_end.is_null()) {
+    UMA_HISTOGRAM_TIMES(
+        "Net.QuicSession.HostResolution.HandshakeConfirmedTime",
+        tick_clock_->NowTicks() - connect_timing_.domain_lookup_end);
   }
 
   auto it = handles_.begin();

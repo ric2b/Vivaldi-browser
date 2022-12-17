@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -638,7 +638,7 @@ void TouchSelectionControllerImpl::QuickMenuTimerFired() {
     return;
 
   ui::TouchSelectionMenuRunner::GetInstance()->OpenMenu(
-      this, menu_anchor, GetMaxHandleImageSize(),
+      GetWeakPtr(), menu_anchor, GetMaxHandleImageSize(),
       client_view_->GetNativeView());
 }
 

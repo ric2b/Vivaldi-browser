@@ -9,7 +9,6 @@
 <translation id="1165039591588034296">Eroare</translation>
 <translation id="1175364870820465910">Ti&amp;părește...</translation>
 <translation id="1181037720776840403">Elimină</translation>
-<translation id="119944043368869598">Șterge tot</translation>
 <translation id="1221825588892235038">Numai selecția</translation>
 <translation id="1244303850296295656">Eroare de extensie</translation>
 <translation id="125220115284141797">Implicit</translation>
@@ -36,7 +35,6 @@
 <translation id="1828901632669367785">Tipărește folosind dialogul de sistem...</translation>
 <translation id="1886996562706621347">Permiteți site-urilor web să solicite să devină gestionarele implicite pentru protocoale (recomandat)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
-<translation id="1963227389609234879">Elimină tot</translation>
 <translation id="1994173015038366702">URL-ul site-ului web</translation>
 <translation id="2019718679933488176">Deschide audi&amp;oul într-o filă nouă</translation>
 <translation id="2050339315714019657">Portret</translation>
@@ -47,7 +45,6 @@
 <translation id="2177950615300672361">Filă incognito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modúl de client nativ: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">de ex. 1-5, 8, 11-13</translation>
-<translation id="2277255602909579701">Toate cookie-urile și toate datele site-urilor web</translation>
 <translation id="2280486287150724112">Marginea din dreapta</translation>
 <translation id="2282146716419988068">Proces GPU</translation>
 <translation id="2301382460326681002">Directorul rădăcină pentru extensie este nevalid.</translation>
@@ -85,7 +82,6 @@
 <translation id="3080207940057008665">Un alt program de pe calculator a adăugat o temă care poate schimba modul în care funcționează Vivaldi.</translation>
 <translation id="3084548735795614657">Plasați aici pentru instalare</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3127156390846601284">Această acțiune va șterge toate datele stocate pe dispozitiv pentru toate site-urile afișate. Vreți să continuați ?</translation>
 <translation id="3129173833825111527">Marginea din stânga</translation>
 <translation id="3222066309010235055">Program de randare în avans: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Selectează directorul rădăcină al extensiei ce trebuie împachetată. Pentru a actualiza o extensie, selectează și fișierul cu cheia privată pentru reutilizare.</translation>
@@ -99,7 +95,6 @@
 <translation id="3347086966102161372">C&amp;opiază adresa imaginii</translation>
 <translation id="3360297538363969800">Tipărirea a eșuat. Verificați imprimanta și încercați din nou.</translation>
 <translation id="3378572629723696641">Este posibil ca această extensie să fie deteriorată.</translation>
-<translation id="3432227430032737297">Elimină toate cookie-urile arătate</translation>
 <translation id="3494769164076977169">Întreabă atunci când un site web încearcă să descarce automat fișiere după primul fișier (recomandat)</translation>
 <translation id="3505030558724226696">Revocă accesul la dispozitiv</translation>
 <translation id="3560034655160545939">&amp;Verificare ortografică</translation>
@@ -140,7 +135,6 @@
 <translation id="4384652540891215547">Activați extensia</translation>
 <translation id="4394049700291259645">Dezactivează</translation>
 <translation id="4409697491990005945">Margini</translation>
-<translation id="4579581181964204535">Nu se poate proiecta <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Accesează <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicațiile și extensiile pot fi modificate numai de administrator (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">O extensie a modificat pagina care este afișată la deschiderea unei file noi.</translation>
@@ -186,7 +180,6 @@
 <translation id="5715711091495208045">Broker de plugin-uri: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Salvează ca PDF</translation>
 <translation id="5759728514498647443">Documentele pe care le trimiteți prin <ph name="APP_NAME" /> pentru a fi tipărite pot fi citite de <ph name="APP_NAME" />.</translation>
-<translation id="577624874850706961">Caută cookie-uri</translation>
 <translation id="5804241973901381774">Permisiuni</translation>
 <translation id="5828633471261496623">Se tipărește...</translation>
 <translation id="583281660410589416">Necunoscut</translation>
@@ -196,7 +189,6 @@
 <translation id="5965661248935608907">De asemenea controlează ce pagină să fie afișată la clic pe butonul Pagina inițială sau la căutare din Omnibox.</translation>
 <translation id="5978277834170881274">Folosește verificarea de bază a ortografiei</translation>
 <translation id="5979421442488174909">&amp;Tradu în <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Șterge datele site-ului web</translation>
 <translation id="6042308850641462728">Mai multe</translation>
 <translation id="6101226222197207147">A fost adăugată o aplicație nouă (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Conexiunea la internet este controlată</translation>
@@ -278,7 +270,6 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
         =1 {Descărcarea este în desfășurare} other {Descărcările sunt în desfășurare}}</translation>
 <translation id="8230134520748321204">Salvați parola pentru <ph name="ORIGIN" /> ?</translation>
 <translation id="8261378640211443080">Această extensie nu este inclusă în <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> și este posibil să fi fost adăugată fără să aveți cunoștință despre acest lucru.</translation>
-<translation id="8339059274628563283">Date salvate local pentru <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Această extensie a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faceți online. Dacă nu știți sigur de ce a apărut această modificare, probabil că nu ați aprobat-o.</translation>
 <translation id="8413385045638830869">Mai întâi întreabă (recomandat)</translation>
 <translation id="8569682776816196752">Nu s-a găsit nicio destinație</translation>

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,8 +73,12 @@ void SegmentationInternalsPageHandlerImpl::OnClientInfoAvailable(
   for (const auto& info : client_info) {
     auto client = segmentation_internals::mojom::ClientInfo::New();
     client->segmentation_key = info.segmentation_key;
-    client->selected_segment =
-        segmentation_platform::proto::SegmentId_Name(info.selected_segment);
+    if (info.selected_segment) {
+      client->selected_segment =
+          segmentation_platform::proto::SegmentId_Name(*info.selected_segment);
+    } else {
+      client->selected_segment = "Not Ready";
+    }
     for (const auto& status : info.segment_status) {
       auto segment_data = segmentation_internals::mojom::SegmentInfo::New();
       segment_data->segment_name =

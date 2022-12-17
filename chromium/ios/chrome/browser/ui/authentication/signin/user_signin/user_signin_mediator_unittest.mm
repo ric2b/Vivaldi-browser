@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,16 +8,18 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "components/consent_auditor/fake_consent_auditor.h"
-#import "components/sync/driver/mock_sync_service.h"
+#import "components/sync/test/mock_sync_service.h"
 #import "components/sync_preferences/pref_service_mock_factory.h"
 #import "components/sync_preferences/pref_service_syncable.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
+#import "ios/chrome/browser/consent_auditor/consent_auditor_test_utils.h"
 #import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service_fake.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
-#import "ios/chrome/browser/sync/consent_auditor_factory.h"
+#import "ios/chrome/browser/sync/mock_sync_service_utils.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service_mock.h"
@@ -39,18 +41,6 @@
 #error "This file requires ARC support."
 #endif
 
-namespace {
-std::unique_ptr<KeyedService> CreateMockSyncService(
-    web::BrowserState* context) {
-  return std::make_unique<syncer::MockSyncService>();
-}
-
-std::unique_ptr<KeyedService> CreateFakeConsentAuditor(
-    web::BrowserState* context) {
-  return std::make_unique<consent_auditor::FakeConsentAuditor>();
-}
-}  // namespace
-
 class UserSigninMediatorTest : public PlatformTest {
  public:
   UserSigninMediatorTest() : consent_string_ids_(ExpectedConsentStringIds()) {}
@@ -68,7 +58,7 @@ class UserSigninMediatorTest : public PlatformTest {
         base::BindRepeating(
             &AuthenticationServiceFake::CreateAuthenticationService));
     builder.AddTestingFactory(ConsentAuditorFactory::GetInstance(),
-                              base::BindRepeating(&CreateFakeConsentAuditor));
+                              base::BindRepeating(&BuildFakeConsentAuditor));
     builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
                               base::BindRepeating(&CreateMockSyncService));
     builder.AddTestingFactory(
@@ -131,13 +121,10 @@ class UserSigninMediatorTest : public PlatformTest {
         });
     OCMExpect([performer_mock_ signInIdentity:identity_
                              withHostedDomain:nil
-                               toBrowserState:browser_state_.get()
-                                   completion:[OCMArg any]])
+                               toBrowserState:browser_state_.get()])
         .andDo(^(NSInvocation* invocation) {
           NSLog(@" signInIdentity ");
-          signin_ui::CompletionCallback callback;
-          [invocation getArgument:&callback atIndex:5];
-          authentication_service()->SignIn(identity_, callback);
+          authentication_service()->SignIn(identity_);
         });
     if (postSignInAction == POST_SIGNIN_ACTION_COMMIT_SYNC) {
       OCMExpect([performer_mock_
@@ -517,7 +504,7 @@ TEST_F(UserSigninMediatorTest, OpenSettingsLinkWithDifferentIdentityAndCancel) {
                                      gaiaID:@"foo2ID"
                                        name:@"Fake Foo 2"];
   identity_service()->AddIdentity(identity2);
-  authentication_service()->SignIn(identity2, nil);
+  authentication_service()->SignIn(identity2);
 
   // Opens the settings link with identity 1.
   CreateAuthenticationFlow(POST_SIGNIN_ACTION_NONE);
@@ -569,7 +556,7 @@ TEST_F(UserSigninMediatorTest,
                                      gaiaID:@"foo2ID"
                                        name:@"Fake Foo 2"];
   identity_service()->AddIdentity(identity2);
-  authentication_service()->SignIn(identity2, nil);
+  authentication_service()->SignIn(identity2);
 
   // Opens the settings link with identity 1.
   CreateAuthenticationFlow(POST_SIGNIN_ACTION_NONE);

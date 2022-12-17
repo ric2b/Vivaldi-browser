@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,7 @@
 #include "base/memory/raw_ptr.h"
 #include "remoting/protocol/channel_dispatcher_base.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class AudioStub;
 
@@ -29,7 +28,6 @@ class AudioReader : public ChannelDispatcherBase {
   raw_ptr<AudioStub> audio_stub_;
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_AUDIO_READER_H_

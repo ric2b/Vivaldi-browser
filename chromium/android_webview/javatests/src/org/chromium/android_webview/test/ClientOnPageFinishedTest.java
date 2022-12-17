@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,8 @@ import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.test.TestAwContentsClient.OnReceivedErrorHelper;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.JSUtils;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.util.TestWebServer;
@@ -72,7 +72,7 @@ public class ClientOnPageFinishedTest {
     @Test
     @MediumTest
     @Feature({"AndroidWebView"})
-    @FlakyTest(message = "crbug.com/652577")
+    @DisabledTest(message = "crbug.com/652577")
     public void testCalledAfterError() throws Throwable {
         class LocalTestClient extends TestAwContentsClient {
             private boolean mIsOnReceivedErrorCalled;

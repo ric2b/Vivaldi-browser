@@ -1,14 +1,14 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/webid/fedcm_account_selection_view_desktop.h"
 
-#include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
 using DismissReason = content::IdentityRequestDialogController::DismissReason;
@@ -48,28 +48,70 @@ FedCmAccountSelectionView::~FedCmAccountSelectionView() {
 
 void FedCmAccountSelectionView::Show(
     const std::string& rp_etld_plus_one,
-    const std::string& idp_etld_plus_one,
-    base::span<const Account> accounts,
-    const content::IdentityProviderMetadata& idp_metadata,
-    const content::ClientIdData& client_data,
+    const absl::optional<std::string>& iframe_etld_plus_one,
+    const std::vector<content::IdentityProviderData>& identity_provider_data,
     Account::SignInMode sign_in_mode) {
   Browser* browser =
       chrome::FindBrowserWithWebContents(delegate_->GetWebContents());
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  views::View* anchor_view = browser_view->contents_web_view();
-  TabStripModel* tab_strip_model = browser_view->browser()->tab_strip_model();
-  tab_strip_model->AddObserver(this);
+  // `browser` is null in unit tests.
+  if (browser)
+    browser->tab_strip_model()->AddObserver(this);
+
+  size_t accounts_size = 0u;
+  for (const auto& identity_provider : identity_provider_data) {
+    idp_data_list_.emplace_back(
+        base::UTF8ToUTF16(identity_provider.idp_for_display),
+        identity_provider.idp_metadata, identity_provider.client_id_data,
+        identity_provider.accounts);
+    accounts_size += identity_provider.accounts.size();
+  }
+  state_ = accounts_size == 1u ? State::PERMISSION : State::ACCOUNT_PICKER;
+
+  absl::optional<std::u16string> idp_title =
+      identity_provider_data.size() == 1u
+          ? absl::make_optional<std::u16string>(
+                base::UTF8ToUTF16(identity_provider_data[0].idp_for_display))
+          : absl::nullopt;
+  absl::optional<std::u16string> iframe_url_for_display =
+      iframe_etld_plus_one.has_value()
+          ? absl::make_optional<std::u16string>(
+                base::UTF8ToUTF16(iframe_etld_plus_one.value()))
+          : absl::nullopt;
+  std::u16string rp_for_display = base::UTF8ToUTF16(rp_etld_plus_one);
+  rp_in_title_ = iframe_url_for_display.value_or(rp_for_display);
   bubble_widget_ =
-      views::BubbleDialogDelegateView::CreateBubble(
-          new AccountSelectionBubbleView(
-              rp_etld_plus_one, idp_etld_plus_one, accounts, idp_metadata,
-              client_data, anchor_view,
-              SystemNetworkContextManager::GetInstance()
-                  ->GetSharedURLLoaderFactory(),
-              tab_strip_model,
-              base::BindOnce(&FedCmAccountSelectionView::OnAccountSelected,
-                             base::Unretained(this))))
+      CreateBubble(browser, rp_for_display, idp_title, iframe_url_for_display)
           ->GetWeakPtr();
+  GetBubbleView()->ShowAccountPicker(idp_data_list_,
+                                     /*show_back_button=*/false);
+  bubble_widget_->Show();
+  bubble_widget_->AddObserver(this);
+}
+
+void FedCmAccountSelectionView::ShowFailureDialog(
+    const std::string& rp_etld_plus_one,
+    const std::string& idp_etld_plus_one,
+    const absl::optional<std::string>& iframe_url_for_display) {
+  Browser* browser =
+      chrome::FindBrowserWithWebContents(delegate_->GetWebContents());
+  // `browser` is null in unit tests.
+  if (browser)
+    browser->tab_strip_model()->AddObserver(this);
+
+  absl::optional<std::u16string> iframe_etld_plus_one =
+      iframe_url_for_display.has_value()
+          ? absl::make_optional<std::u16string>(
+                base::UTF8ToUTF16(*iframe_url_for_display))
+          : absl::nullopt;
+
+  bubble_widget_ =
+      CreateBubble(browser, base::UTF8ToUTF16(rp_etld_plus_one),
+                   base::UTF8ToUTF16(idp_etld_plus_one), iframe_etld_plus_one)
+          ->GetWeakPtr();
+  rp_in_title_ =
+      iframe_etld_plus_one.value_or(base::UTF8ToUTF16(rp_etld_plus_one));
+  GetBubbleView()->ShowFailureDialog(rp_in_title_,
+                                     base::UTF8ToUTF16(idp_etld_plus_one));
   bubble_widget_->Show();
   bubble_widget_->AddObserver(this);
 }
@@ -80,8 +122,14 @@ void FedCmAccountSelectionView::OnVisibilityChanged(
     return;
 
   if (visibility == content::Visibility::VISIBLE) {
+    bubble_widget_->widget_delegate()->SetCanActivate(true);
     bubble_widget_->Show();
   } else {
+    // On Mac, NativeWidgetMac::Activate() ignores the views::Widget visibility.
+    // Make the views::Widget non-activatable while it is hidden to prevent the
+    // views::Widget from being shown during focus traversal.
+    // TODO(crbug.com/1367309): fix the issue on Mac.
+    bubble_widget_->widget_delegate()->SetCanActivate(false);
     bubble_widget_->Hide();
   }
 }
@@ -107,6 +155,28 @@ void FedCmAccountSelectionView::OnTabStripModelChanged(
   }
 }
 
+views::Widget* FedCmAccountSelectionView::CreateBubble(
+    Browser* browser,
+    const std::u16string& rp_etld_plus_one,
+    const absl::optional<std::u16string>& idp_title,
+    const absl::optional<std::u16string>& iframe_url_for_display) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  views::View* anchor_view = browser_view->contents_web_view();
+
+  return views::BubbleDialogDelegateView::CreateBubble(
+      new AccountSelectionBubbleView(rp_etld_plus_one, idp_title,
+                                     iframe_url_for_display, anchor_view,
+                                     SystemNetworkContextManager::GetInstance()
+                                         ->GetSharedURLLoaderFactory(),
+                                     this));
+}
+
+AccountSelectionBubbleViewInterface*
+FedCmAccountSelectionView::GetBubbleView() {
+  return static_cast<AccountSelectionBubbleView*>(
+      bubble_widget_->widget_delegate());
+}
+
 void FedCmAccountSelectionView::OnWidgetDestroying(views::Widget* widget) {
   DismissReason dismiss_reason =
       (bubble_widget_->closed_reason() ==
@@ -117,9 +187,44 @@ void FedCmAccountSelectionView::OnWidgetDestroying(views::Widget* widget) {
 }
 
 void FedCmAccountSelectionView::OnAccountSelected(
-    const content::IdentityRequestAccount& account) {
-  notify_delegate_of_dismiss_ = false;
-  delegate_->OnAccountSelected(account);
+    const Account& account,
+    const IdentityProviderDisplayData& idp_data) {
+  state_ = (state_ == State::ACCOUNT_PICKER &&
+            account.login_state == Account::LoginState::kSignUp)
+               ? State::PERMISSION
+               : State::VERIFYING;
+  if (state_ == State::VERIFYING) {
+    notify_delegate_of_dismiss_ = false;
+    delegate_->OnAccountSelected(idp_data.idp_metadata_.config_url, account);
+
+    GetBubbleView()->ShowVerifyingSheet(account, idp_data);
+    return;
+  }
+  GetBubbleView()->ShowSingleAccountConfirmDialog(rp_in_title_, account,
+                                                  idp_data);
+}
+
+void FedCmAccountSelectionView::OnLinkClicked(const GURL& url) {
+  Browser* browser =
+      chrome::FindBrowserWithWebContents(delegate_->GetWebContents());
+  TabStripModel* tab_strip_model = browser->tab_strip_model();
+
+  DCHECK(tab_strip_model);
+  // Add a tab for the URL at the end of the tab strip, in the foreground.
+  tab_strip_model->delegate()->AddTabAt(url, -1, true);
+}
+
+void FedCmAccountSelectionView::OnBackButtonClicked() {
+  state_ = State::ACCOUNT_PICKER;
+  GetBubbleView()->ShowAccountPicker(idp_data_list_,
+                                     /*show_back_button=*/false);
+}
+
+void FedCmAccountSelectionView::OnCloseButtonClicked() {
+  UMA_HISTOGRAM_BOOLEAN("Blink.FedCm.CloseVerifySheet.Desktop",
+                        state_ == State::VERIFYING);
+  bubble_widget_->CloseWithReason(
+      views::Widget::ClosedReason::kCloseButtonClicked);
 }
 
 void FedCmAccountSelectionView::Close() {

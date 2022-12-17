@@ -1,15 +1,18 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="mr">
+<translation id="1057925581724305206">फुल HD (1080p)</translation>
+<translation id="1076394037877376434"><ph name="PAGE_NUMBER" /> पेज हटवा</translation>
 <translation id="1113173431709655881">कॅमेरा मोड</translation>
 <translation id="1153190633558910465">ग्रिड बंद करा</translation>
 <translation id="1175958423215084756">लिंक डिटेक्ट केली. <ph name="HOSTNAME" /></translation>
+<translation id="1197694886744716213"><ph name="PAGE_NUMBER" /> पेज हटवले</translation>
 <translation id="1258009455399840361">घड्याळाच्या काट्याच्या दिशेने ९० अंशात फिरवा</translation>
 <translation id="1276998909102132017">गॅलरी इमेज</translation>
 <translation id="1300209025925956156">तुमचा दस्तऐवज स्कॅन करा</translation>
 <translation id="1309250603447638106">दस्तऐवज स्कॅनिंगसाठी अपडेट डाउनलोड करत आहे</translation>
 <translation id="137991641490787891"><ph name="ASPECT_RATIO_WIDTH" />. अ‍ॅक्सेस करण्यासाठी Search + Left arrow दाबा.</translation>
-<translation id="1393338179284529051">Quad HD</translation>
+<translation id="1417314334557041815"><ph name="INDEX" /> पेज संपादित करा</translation>
 <translation id="1430915738399379752">प्रिंट</translation>
 <translation id="1467231725790366244"><ph name="CAMERA" /> अनप्लग केला आहे.</translation>
 <translation id="1473110567575736769">तीन सेकंदांचा टायमर</translation>
@@ -19,8 +22,10 @@
 <translation id="1588438908519853928">सामान्य</translation>
 <translation id="1620510694547887537">कॅमेरा</translation>
 <translation id="1627744224761163218">४ x ४</translation>
+<translation id="1644345013557678440">HD (720p)</translation>
 <translation id="1664224225747386870">काहीही रेकॉर्ड केले गेले नाही</translation>
 <translation id="1838104802459806957">वर टिल्ट करा</translation>
+<translation id="1843105061469674856">अतिरिक्त पेज स्कॅन करा</translation>
 <translation id="1851169887664797861">अतिरिक्त कॅमेरा नियंत्रणे उपलब्ध आहेत</translation>
 <translation id="1851616744363735765">थांबवले</translation>
 <translation id="1862930711583847113"><ph name="FILE" /> एक्सपोर्ट करता आली नाही</translation>
@@ -45,7 +50,6 @@
 <translation id="2599796128805996109">मागील कॅमेरा</translation>
 <translation id="2759905922487820242"><ph name="CURRENT" /> / <ph name="MAXIMAL" />से</translation>
 <translation id="2761536921376153655">स्कॅनचा प्रकार</translation>
-<translation id="2816865716882637212">HD</translation>
 <translation id="28682968802727151">पूर्वावलोकन मिरर करा</translation>
 <translation id="2879583609344924966"><ph name="CAMERA" /> प्लग इन केला आहे.</translation>
 <translation id="2904654629665923749">दस्तऐवज स्कॅन उपलब्ध आहे</translation>
@@ -79,7 +83,9 @@
 <translation id="414641094616694804">हा कॅमेरा रेझोल्यूशन बदलू शकत नाही</translation>
 <translation id="4269820728363426813">लिंकचा पत्ता कॉपी करा</translation>
 <translation id="4281620174117014503">मध्यम रेझोल्यूशन</translation>
+<translation id="428234092390943511">पेज थंबनेल</translation>
 <translation id="4329152592498422850">चौरस फोटो काढण्यासाठी स्विच करा</translation>
+<translation id="4340659173795395806">तुम्ही आता मल्टी-पेज PDF तयार करू शकता</translation>
 <translation id="4383571725254449280">परफॉर्मन्स लॉग प्रिंट करा</translation>
 <translation id="4445542136948522167">फोटो घेणे थांबवा</translation>
 <translation id="4497569853498380347">(<ph name="ASPECT_RATIO_WIDTH" />:<ph name="ASPECT_RATIO_HEIGHT" />) <ph name="MEGAPIXEL" /> मेगा पिक्सेल</translation>
@@ -91,6 +97,7 @@
 <translation id="4705093842003735294">पूर्ण रेझोल्यूशन</translation>
 <translation id="4890010094662541459">३ x ३</translation>
 <translation id="491895758387112773">मल्टिस्ट्रीम व्हिडिओ रेकॉर्डिंग</translation>
+<translation id="4984613436295737187">Quad HD (1440p)</translation>
 <translation id="5034763830503483128">फोटोचा आस्पेक्ट रेशो</translation>
 <translation id="5057360777601936059">तुमचा कॅमेरा सध्या उपलब्ध नाही.
         कॅमेरा योग्य प्रकारे कनेक्ट केला आहे का ते तपासा.</translation>
@@ -99,7 +106,9 @@
 <translation id="5266635337630551423">दस्तऐवजाचा सर्वात वरील डावीकडील कोपरा</translation>
 <translation id="5317780077021120954">सेव्ह करा</translation>
 <translation id="5320594929574852403">डाव्या दिशेने हलत आहे</translation>
+<translation id="5374917190292010970">4K (2160p)</translation>
 <translation id="5444515100983837161">दस्तऐवजाच्या सर्व कडा फ्रेमच्या आत ठेवा. दस्तऐवज आणि बॅकग्राउंड हे दोन्ही वेगळ्या रंगांचे असल्यास, आणखी चांगल्या प्रकारे स्कॅन करता येते.</translation>
+<translation id="5662366948659129155">पेज <ph name="COUNT" /> स्कॅन करत आहे</translation>
 <translation id="5671277269877808209">चौरस</translation>
 <translation id="5746169159649715125">पीडीएफ म्हणून सेव्ह करा</translation>
 <translation id="5753488212459587150">एक्सपोर्ट मोड सुरू करा</translation>
@@ -110,7 +119,6 @@
 <translation id="5916664084637901428">सुरू</translation>
 <translation id="5975083100439434680">झूम कमी करा</translation>
 <translation id="5976160379964388480">इतर</translation>
-<translation id="603973421174355542">फुल HD</translation>
 <translation id="6073451960410192870">रेकॉर्डिंग थांबवा</translation>
 <translation id="6197807149213783179">मेटाडेटा सेव्ह करा</translation>
 <translation id="6233780560267770709">३ बाय ३</translation>
@@ -133,7 +141,6 @@
 <translation id="698156982839284926">तीन सेकंद</translation>
 <translation id="712848772518857951">तुम्हाला <ph name="COUNT" /> आयटम खरोखर काढायचे आहेत का?</translation>
 <translation id="7134221860976209830">१० सेकंदांचा टायमर</translation>
-<translation id="7150591439198955032">4K</translation>
 <translation id="7191890674911603392">रेकॉर्डचा प्रकार</translation>
 <translation id="7243947652761655814">व्हिडिओ रिझोल्युशन</translation>
 <translation id="7337660886763914220">फाइल सिस्टम एरर.</translation>
@@ -160,6 +167,7 @@
 <translation id="8261506727792406068">हटवा</translation>
 <translation id="8425673304802773841">खाली टिल्ट करा</translation>
 <translation id="8428213095426709021">सेटिंग्ज</translation>
+<translation id="8629662593426079630">360p</translation>
 <translation id="8687491812650032292">HD <ph name="HEIGHT" />p (<ph name="WIDTH" />:<ph name="HEIGHT" />)</translation>
 <translation id="8711011893539266636">मायक्रोफोन म्यूट टॉगल करा. म्यूट सुरू आहे</translation>
 <translation id="8712637175834984815">समजले</translation>

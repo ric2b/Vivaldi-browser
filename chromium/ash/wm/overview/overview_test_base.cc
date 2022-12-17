@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,8 +22,6 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/window_preview_view.h"
 #include "components/app_constants/constants.h"
-#include "components/desks_storage/core/desk_test_util.h"
-#include "components/services/app_service/public/cpp/app_registry_cache_wrapper.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/presentation_time_recorder.h"
@@ -82,29 +80,23 @@ SplitViewController* OverviewTestBase::GetSplitViewController() {
 }
 
 gfx::Rect OverviewTestBase::GetTransformedBounds(aura::Window* window) {
-  gfx::Rect bounds_in_screen = window->layer()->bounds();
-  wm::ConvertRectToScreen(window->parent(), &bounds_in_screen);
-  gfx::RectF bounds(bounds_in_screen);
-  gfx::Transform transform(gfx::TransformAboutPivot(
-      gfx::ToFlooredPoint(bounds.origin()), window->layer()->transform()));
-  transform.TransformRect(&bounds);
-  return ToStableSizeRoundedRect(bounds);
+  gfx::RectF bounds(window->layer()->bounds());
+  wm::TranslateRectToScreen(window->parent(), &bounds);
+  const gfx::Transform transform =
+      gfx::TransformAboutPivot(bounds.origin(), window->layer()->transform());
+  return ToStableSizeRoundedRect(transform.MapRect(bounds));
 }
 
 gfx::Rect OverviewTestBase::GetTransformedTargetBounds(aura::Window* window) {
-  gfx::Rect bounds_in_screen = window->layer()->GetTargetBounds();
-  wm::ConvertRectToScreen(window->parent(), &bounds_in_screen);
-  gfx::RectF bounds(bounds_in_screen);
-  gfx::Transform transform(
-      gfx::TransformAboutPivot(gfx::ToFlooredPoint(bounds.origin()),
-                               window->layer()->GetTargetTransform()));
-  transform.TransformRect(&bounds);
-  return ToStableSizeRoundedRect(bounds);
+  gfx::RectF bounds(window->layer()->GetTargetBounds());
+  wm::TranslateRectToScreen(window->parent(), &bounds);
+  const gfx::Transform transform = gfx::TransformAboutPivot(
+      bounds.origin(), window->layer()->GetTargetTransform());
+  return ToStableSizeRoundedRect(transform.MapRect(bounds));
 }
 
 gfx::Rect OverviewTestBase::GetTransformedBoundsInRootWindow(
     aura::Window* window) {
-  gfx::RectF bounds = gfx::RectF(gfx::SizeF(window->bounds().size()));
   aura::Window* root = window->GetRootWindow();
   CHECK(window->layer());
   CHECK(root->layer());
@@ -113,8 +105,7 @@ gfx::Rect OverviewTestBase::GetTransformedBoundsInRootWindow(
                                                      &transform)) {
     return gfx::Rect();
   }
-  transform.TransformRect(&bounds);
-  return gfx::ToEnclosingRect(bounds);
+  return transform.MapRect(gfx::Rect(window->bounds().size()));
 }
 
 OverviewItem* OverviewTestBase::GetDropTarget(int grid_index) {
@@ -170,28 +161,6 @@ void OverviewTestBase::CheckWindowAndCloseButtonInScreen(
 
 void OverviewTestBase::SetUp() {
   AshTestBase::SetUp();
-
-  // Set the created model as the one shell will reference.
-  EXPECT_TRUE(user_data_temp_dir_.CreateUniqueTempDir());
-  account_id_ = AccountId::FromUserEmail("test@gmail.com");
-  cache_ = std::make_unique<apps::AppRegistryCache>();
-  desk_model_ = std::make_unique<desks_storage::LocalDeskDataManager>(
-      user_data_temp_dir_.GetPath(), account_id_);
-
-  // Wait for desk model to become ready.
-  while (!desk_model_->IsReady()) {
-    base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(50));
-    run_loop.Run();
-  }
-
-  desk_model_->SetExcludeSaveAndRecallDeskInMaxEntryCountForTesting(false);
-  desks_storage::desk_test_util::PopulateAppRegistryCache(account_id_,
-                                                          cache_.get());
-  static_cast<TestDesksTemplatesDelegate*>(
-      Shell::Get()->desks_templates_delegate())
-      ->set_desk_model(desk_model_.get());
 
   aura::Env::GetInstance()->set_throttle_input_on_resize_for_testing(false);
   shelf_view_test_api_ = std::make_unique<ShelfViewTestAPI>(

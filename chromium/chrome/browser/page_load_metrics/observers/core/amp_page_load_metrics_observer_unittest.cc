@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -565,19 +565,19 @@ TEST_P(AMPPageLoadMetricsObserverTest,
 
   std::vector<std::pair<std::string, int64_t>> ukm_list = {
       std::make_pair("SubFrame.InteractiveTiming.WorstUserInteractionLatency."
-                     "MaxEventduration",
+                     "MaxEventDuration2",
                      150),
       std::make_pair(
           "SubFrame.InteractiveTiming.AverageUserInteractionLatencyOverBudget."
-          "MaxEventduration",
+          "MaxEventDuration2",
           16),
       std::make_pair(
           "SubFrame.InteractiveTiming.SumOfUserInteractionLatencyOverBudget."
-          "MaxEventduration",
+          "MaxEventDuration2",
           50),
       std::make_pair(
           "SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget."
-          "HighPercentile2.MaxEventduration",
+          "HighPercentile2.MaxEventDuration2",
           50),
       std::make_pair("SubFrame.InteractiveTiming.UserInteractionLatency."
                      "HighPercentile2.MaxEventDuration",
@@ -649,22 +649,22 @@ TEST_P(AMPPageLoadMetricsObserverTest,
 
   std::vector<std::pair<std::string, int64_t>> ukm_list = {
       std::make_pair("SubFrame.InteractiveTiming.WorstUserInteractionLatency."
-                     "MaxEventduration",
+                     "MaxEventDuration2",
                      150),
       std::make_pair(
           "SubFrame.InteractiveTiming.AverageUserInteractionLatencyOverBudget."
-          "MaxEventduration",
+          "MaxEventDuration2",
           16),
       std::make_pair(
           "SubFrame.InteractiveTiming.SumOfUserInteractionLatencyOverBudget."
-          "MaxEventduration",
+          "MaxEventDuration2",
           50),
       std::make_pair("SubFrame.InteractiveTiming.UserInteractionLatency."
                      "HighPercentile2.MaxEventDuration",
                      150),
       std::make_pair(
           "SubFrame.InteractiveTiming.SlowUserInteractionLatencyOverBudget."
-          "HighPercentile2.MaxEventduration",
+          "HighPercentile2.MaxEventDuration2",
           50),
   };
 

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -142,7 +142,7 @@ class TestUrlCheckInterceptor : public safe_browsing::UrlCheckInterceptor {
     RunCallbackOnIOThread(std::move(callback), Find(url),
                           safe_browsing::ThreatMetadata());
   }
-  ~TestUrlCheckInterceptor() override{};
+  ~TestUrlCheckInterceptor() override {}
 
  private:
   safe_browsing::SBThreatType Find(const GURL& url) const {

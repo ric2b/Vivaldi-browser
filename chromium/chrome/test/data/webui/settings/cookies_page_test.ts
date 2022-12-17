@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,9 +6,10 @@
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {ContentSetting, ContentSettingsTypes,CookiePrimarySetting, SettingsCookiesPageElement, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
-import {CrLinkRowElement, CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacyElementInteractions, Router, routes, SettingsPrefsElement} from 'chrome://settings/settings.js';
+import {CrLinkRowElement, CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacyElementInteractions, Router, routes, SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {flushTasks, isChildVisible} from 'chrome://webui-test/test_util.js';
+import {isChildVisible} from 'chrome://webui-test/test_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 import {TestSiteSettingsPrefsBrowserProxy} from './test_site_settings_prefs_browser_proxy.js';
@@ -24,7 +25,6 @@ suite('CrSettingsCookiesPageTest', function() {
 
   suiteSetup(function() {
     loadTimeData.overrideValues({
-      consolidatedSiteStorageControlsEnabled: false,
       // <if expr="chromeos_lacros">
       isSecondaryUser: false,
       // </if>
@@ -38,13 +38,13 @@ suite('CrSettingsCookiesPageTest', function() {
     MetricsBrowserProxyImpl.setInstance(testMetricsBrowserProxy);
     siteSettingsBrowserProxy = new TestSiteSettingsPrefsBrowserProxy();
     SiteSettingsPrefsBrowserProxyImpl.setInstance(siteSettingsBrowserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     page = document.createElement('settings-cookies-page');
     page.prefs = settingsPrefs.prefs!;
     page.set('prefs.generated.cookie_session_only', {
       value: false,
     });
-    page.set('prefs.privacy_sandbox.apis_enabled.value', true);
     page.set('prefs.privacy_sandbox.apis_enabled_v2.value', true);
     page.set(
         'prefs.generated.cookie_primary_setting.value',
@@ -236,7 +236,6 @@ suite('CrSettingsCookiesPageTest', function() {
 
     // The toast should not be displayed if the user has the privacy sandbox
     // APIs disabled.
-    page.set('prefs.privacy_sandbox.apis_enabled.value', false);
     page.set('prefs.privacy_sandbox.apis_enabled_v2.value', false);
     page.$.blockAll.click();
     await flushTasks();
@@ -244,7 +243,6 @@ suite('CrSettingsCookiesPageTest', function() {
     assertEquals(0, testMetricsBrowserProxy.getCallCount('recordAction'));
 
     // Disabling only 3P cookies should display the toast.
-    page.set('prefs.privacy_sandbox.apis_enabled.value', true);
     page.set('prefs.privacy_sandbox.apis_enabled_v2.value', true);
     page.set(
         'prefs.generated.cookie_primary_setting.value',
@@ -286,91 +284,6 @@ suite('CrSettingsCookiesPageTest', function() {
   });
 });
 
-suite('CrSettingsCookiesPageTest_consolidatedControlsDisabled', function() {
-  let page: SettingsCookiesPageElement;
-  let settingsPrefs: SettingsPrefsElement;
-
-  suiteSetup(function() {
-    settingsPrefs = document.createElement('settings-prefs');
-    return CrSettingsPrefs.initialized;
-  });
-
-  setup(function() {
-    document.body.innerHTML = '';
-    page = document.createElement('settings-cookies-page');
-    page.prefs = settingsPrefs.prefs!;
-    page.set('prefs.generated.cookie_session_only', {
-      value: false,
-    });
-    page.set('prefs.privacy_sandbox.apis_enabled.value', true);
-    page.set('prefs.privacy_sandbox.apis_enabled_v2.value', true);
-    page.set(
-        'prefs.generated.cookie_primary_setting.value',
-        CookiePrimarySetting.ALLOW_ALL);
-    document.body.appendChild(page);
-    flush();
-  });
-
-  teardown(function() {
-    page.remove();
-    Router.getInstance().resetRouteForTesting();
-  });
-
-  test('AllSiteDataLink_consolidatedControlsDisabled', function() {
-    const siteDataLinkRow =
-        page.shadowRoot!.querySelector<CrLinkRowElement>('#site-data-trigger')!;
-    assertEquals(siteDataLinkRow.label, page.i18n('siteSettingsCookieLink'));
-
-    siteDataLinkRow.click();
-    assertEquals(
-        Router.getInstance().getCurrentRoute(), routes.SITE_SETTINGS_SITE_DATA);
-  });
-});
-
-suite('CrSettingsCookiesPageTest_consolidatedControlsEnabled', function() {
-  let page: SettingsCookiesPageElement;
-  let settingsPrefs: SettingsPrefsElement;
-
-  suiteSetup(function() {
-    loadTimeData.overrideValues({
-      consolidatedSiteStorageControlsEnabled: true,
-    });
-    settingsPrefs = document.createElement('settings-prefs');
-    return CrSettingsPrefs.initialized;
-  });
-
-  setup(function() {
-    document.body.innerHTML = '';
-    page = document.createElement('settings-cookies-page');
-    page.prefs = settingsPrefs.prefs!;
-    page.set('prefs.generated.cookie_session_only', {
-      value: false,
-    });
-    page.set('prefs.privacy_sandbox.apis_enabled.value', true);
-    page.set('prefs.privacy_sandbox.apis_enabled_v2.value', true);
-    page.set(
-        'prefs.generated.cookie_primary_setting.value',
-        CookiePrimarySetting.ALLOW_ALL);
-    document.body.appendChild(page);
-    flush();
-  });
-
-  teardown(function() {
-    page.remove();
-    Router.getInstance().resetRouteForTesting();
-  });
-
-  test('AllSiteDataLink_consolidatedControlsEnabled', function() {
-    const siteDataLinkRow =
-        page.shadowRoot!.querySelector<CrLinkRowElement>('#site-data-trigger')!;
-    assertEquals(siteDataLinkRow.label, page.i18n('cookiePageAllSitesLink'));
-
-    siteDataLinkRow.click();
-    assertEquals(
-        Router.getInstance().getCurrentRoute(), routes.SITE_SETTINGS_ALL);
-  });
-});
-
 // <if expr="chromeos_lacros">
 suite('CrSettingsCookiesPageTest_lacrosSecondaryProfile', function() {
   let page: SettingsCookiesPageElement;
@@ -383,7 +296,8 @@ suite('CrSettingsCookiesPageTest_lacrosSecondaryProfile', function() {
   });
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     page = document.createElement('settings-cookies-page');
     page.prefs = settingsPrefs.prefs!;
     document.body.appendChild(page);
@@ -403,3 +317,62 @@ suite('CrSettingsCookiesPageTest_lacrosSecondaryProfile', function() {
   });
 });
 // </if>
+
+suite('CrSettingsCookiesPageTest_FirstPartySetsUIEnabled', function() {
+  let page: SettingsCookiesPageElement;
+  let settingsPrefs: SettingsPrefsElement;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({firstPartySetsUIEnabled: true});
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(function() {
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
+    page = document.createElement('settings-cookies-page');
+    page.prefs = settingsPrefs.prefs!;
+    document.body.appendChild(page);
+    flush();
+  });
+
+  teardown(function() {
+    page.remove();
+  });
+
+  test('Disabled Toggle', function() {
+    // Confirm that when the user has not selected the block 3PC setting, the
+    // FPS toggle is disabled.
+    const firstPartySetsToggle =
+        page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
+            '#firstPartySetsToggle')!;
+    page.$.blockThirdParty.click();
+    flush();
+    assertEquals(
+        CookiePrimarySetting.BLOCK_THIRD_PARTY,
+        page.prefs.generated.cookie_primary_setting.value);
+    assertFalse(firstPartySetsToggle.disabled);
+
+    page.$.allowAll.click();
+    flush();
+    assertEquals(
+        CookiePrimarySetting.ALLOW_ALL,
+        page.prefs.generated.cookie_primary_setting.value);
+    assertTrue(firstPartySetsToggle.disabled);
+
+    page.$.blockThirdPartyIncognito.click();
+    flush();
+    assertEquals(
+        CookiePrimarySetting.BLOCK_THIRD_PARTY_INCOGNITO,
+        page.prefs.generated.cookie_primary_setting.value);
+    assertTrue(firstPartySetsToggle.disabled);
+
+    page.$.blockAll.click();
+    flush();
+    assertEquals(
+        CookiePrimarySetting.BLOCK_ALL,
+        page.prefs.generated.cookie_primary_setting.value);
+    assertTrue(firstPartySetsToggle.disabled);
+  });
+});

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,7 +148,7 @@ struct MessageService::MessageChannel {
 
 struct MessageService::OpenChannelParams {
   ChannelEndpoint source;
-  std::unique_ptr<base::DictionaryValue> source_tab;
+  absl::optional<base::Value::Dict> source_tab;
   ExtensionApiFrameIdMap::FrameData source_frame;
   std::unique_ptr<MessagePort> receiver;
   PortId receiver_port_id;
@@ -162,7 +162,7 @@ struct MessageService::OpenChannelParams {
 
   // Takes ownership of receiver.
   OpenChannelParams(const ChannelEndpoint& source,
-                    std::unique_ptr<base::DictionaryValue> source_tab,
+                    absl::optional<base::Value::Dict> source_tab,
                     const ExtensionApiFrameIdMap::FrameData& source_frame,
                     MessagePort* receiver,
                     const PortId& receiver_port_id,
@@ -342,14 +342,14 @@ void MessageService::OpenChannelToExtension(
   bool include_guest_process_info = false;
 
   // Get information about the opener's tab, if applicable.
-  std::unique_ptr<base::DictionaryValue> source_tab =
+  absl::optional<base::Value::Dict> source_tab =
       messaging_delegate_->MaybeGetTabInfo(source_contents);
 
   absl::optional<url::Origin> source_origin;
   if (source_render_frame_host)
     source_origin = source_render_frame_host->GetLastCommittedOrigin();
 
-  if (source_tab.get()) {
+  if (source_tab) {
     DCHECK(source_render_frame_host);
     source_frame = ExtensionApiFrameIdMap::Get()->GetFrameData(
         source_render_frame_host->GetGlobalId());
@@ -357,7 +357,8 @@ void MessageService::OpenChannelToExtension(
     // Check to see if it was a WebView making the request.
     // Sending messages from WebViews to extensions breaks webview isolation,
     // so only allow component extensions to receive messages from WebViews.
-    bool is_web_view = !!WebViewGuest::FromWebContents(source_contents);
+    bool is_web_view =
+        !!WebViewGuest::FromRenderFrameHost(source_render_frame_host);
     if (is_web_view &&
         Manifest::IsComponentLocation(target_extension->location())) {
       include_guest_process_info = true;
@@ -561,13 +562,10 @@ void MessageService::OpenChannelToTab(const ChannelEndpoint& source,
   std::unique_ptr<OpenChannelParams> params =
       std::make_unique<OpenChannelParams>(
           source,
-          std::unique_ptr<base::DictionaryValue>(),  // Source tab doesn't make
-                                                     // sense
-                                                     // for opening to tabs.
-          ExtensionApiFrameIdMap::FrameData(),       // There is no frame.
-          receiver.release(), receiver_port_id,
-          MessagingEndpoint::ForExtension(extension_id), std::move(opener_port),
-          extension_id,
+          absl::nullopt,  // No source_tab, as there is no frame.
+          ExtensionApiFrameIdMap::FrameData(), receiver.release(),
+          receiver_port_id, MessagingEndpoint::ForExtension(extension_id),
+          std::move(opener_port), extension_id,
           GURL(),         // Source URL doesn't make sense for opening to tabs.
           url::Origin(),  // Origin URL doesn't make sense for opening to tabs.
           channel_name,
@@ -641,8 +639,7 @@ void MessageService::OpenChannelImpl(BrowserContext* browser_context,
     DCHECK(port_context.frame);
     guest_render_frame_routing_id = port_context.frame->routing_id;
 
-    DCHECK(WebViewGuest::FromWebContents(
-        WebContents::FromRenderFrameHost(source.GetRenderFrameHost())));
+    DCHECK(WebViewGuest::FromRenderFrameHost(source.GetRenderFrameHost()));
   }
 
   // Send the connect event to the receiver.  Give it the opener's port ID (the

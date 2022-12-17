@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,8 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
+#include "components/remote_cocoa/app_shim/immersive_mode_controller.h"
+#include "components/remote_cocoa/app_shim/immersive_mode_delegate_mac.h"
 #include "components/remote_cocoa/app_shim/mouse_capture.h"
 #include "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
@@ -35,7 +37,6 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/native_theme/native_theme_mac.h"
-#include "ui/views/cocoa/immersive_mode_delegate_mac.h"
 #include "ui/views/cocoa/text_input_host.h"
 #include "ui/views/cocoa/tooltip_manager_mac.h"
 #include "ui/views/controls/label.h"
@@ -44,7 +45,6 @@
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/widget/widget_delegate.h"
-#include "ui/views/widget/widget_utils_mac.h"
 #include "ui/views/window/dialog_delegate.h"
 #include "ui/views/word_lookup_client.h"
 
@@ -84,6 +84,7 @@ class BridgedNativeWidgetHostDummy
       bool target_fullscreen_state) override {}
   void OnWindowFullscreenTransitionComplete(bool is_fullscreen) override {}
   void OnWindowMiniaturizedChanged(bool miniaturized) override {}
+  void OnWindowZoomedChanged(bool zoomed) override {}
   void OnWindowDisplayChanged(const display::Display& display) override {}
   void OnWindowWillClose() override {}
   void OnWindowHasClosed() override {}
@@ -184,7 +185,7 @@ class BridgedNativeWidgetHostDummy
   void GetRootViewAccessibilityToken(
       GetRootViewAccessibilityTokenCallback callback) override {
     std::vector<uint8_t> token;
-    int64_t pid = 0;
+    base::ProcessId pid = base::kNullProcessId;
     std::move(callback).Run(pid, token);
   }
   void ValidateUserInterfaceItem(
@@ -192,6 +193,13 @@ class BridgedNativeWidgetHostDummy
       ValidateUserInterfaceItemCallback callback) override {
     remote_cocoa::mojom::ValidateUserInterfaceItemResultPtr result;
     std::move(callback).Run(std::move(result));
+  }
+  void WillExecuteCommand(int32_t command,
+                          WindowOpenDisposition window_open_disposition,
+                          bool is_before_first_responder,
+                          ExecuteCommandCallback callback) override {
+    bool will_execute = false;
+    std::move(callback).Run(will_execute);
   }
   void ExecuteCommand(int32_t command,
                       WindowOpenDisposition window_open_disposition,
@@ -241,7 +249,9 @@ NativeWidgetMacNSWindowHost* NativeWidgetMacNSWindowHost::GetFromNativeWindow(
 
   // If the window is a system created NSToolbarFullScreenWindow we need to do
   // some additional work to find the original window.
-  if (views::IsNSToolbarFullScreenWindow(window)) {
+  // TODO(mek): Figure out how to make this work with remote remote_cocoa
+  // windows.
+  if (remote_cocoa::IsNSToolbarFullScreenWindow(window)) {
     NSWindow* original = OriginalHostingWindowFromFullScreenWindow(window);
     if (NativeWidgetMacNSWindow* widget_window =
             base::mac::ObjCCast<NativeWidgetMacNSWindow>(original)) {
@@ -492,6 +502,9 @@ void NativeWidgetMacNSWindowHost::CloseWindowNow() {
 }
 
 void NativeWidgetMacNSWindowHost::SetBoundsInScreen(const gfx::Rect& bounds) {
+  DCHECK(!bounds.IsEmpty() ||
+         !native_widget_mac_->GetWidget()->GetMinimumSize().IsEmpty())
+      << "Zero-sized windows are not supported on Mac";
   UpdateLocalWindowFrame(bounds);
   GetNSWindowMojo()->SetBounds(
       bounds, native_widget_mac_->GetWidget()->GetMinimumSize());
@@ -831,6 +844,14 @@ void NativeWidgetMacNSWindowHost::RemoveRemoteWindowControlsOverlayView(
     remote_cocoa::mojom::WindowControlsOverlayNSViewType overlay_type) {
   GetNSWindowMojo()->RemoveWindowControlsOverlayNSView(overlay_type);
 }
+
+void NativeWidgetMacNSWindowHost::CanGoBack(bool can_go_back) {
+  GetNSWindowMojo()->SetCanGoBack(can_go_back);
+}
+
+void NativeWidgetMacNSWindowHost::CanGoForward(bool can_go_forward) {
+  GetNSWindowMojo()->SetCanGoForward(can_go_forward);
+}
 ////////////////////////////////////////////////////////////////////////////////
 // NativeWidgetMacNSWindowHost, remote_cocoa::BridgedNativeWidgetHostHelper:
 
@@ -1156,6 +1177,10 @@ void NativeWidgetMacNSWindowHost::OnWindowMiniaturizedChanged(
     native_widget_mac_->GetWidget()->OnNativeWidgetWindowShowStateChanged();
 }
 
+void NativeWidgetMacNSWindowHost::OnWindowZoomedChanged(bool zoomed) {
+  is_zoomed_ = zoomed;
+}
+
 void NativeWidgetMacNSWindowHost::OnWindowDisplayChanged(
     const display::Display& new_display) {
   bool display_id_changed = display_.id() != new_display.id();
@@ -1311,10 +1336,11 @@ void NativeWidgetMacNSWindowHost::SetRemoteAccessibilityTokens(
   [remote_view_accessible_ setWindowUIElement:remote_window_accessible_.get()];
   [remote_view_accessible_
       setTopLevelUIElement:remote_window_accessible_.get()];
+  [NSAccessibilityRemoteUIElement setRemoteUIApp:YES];
 }
 
 bool NativeWidgetMacNSWindowHost::GetRootViewAccessibilityToken(
-    int64_t* pid,
+    base::ProcessId* pid,
     std::vector<uint8_t>* token) {
   *pid = getpid();
   id element_id = GetNativeViewAccessible();
@@ -1327,6 +1353,16 @@ bool NativeWidgetMacNSWindowHost::ValidateUserInterfaceItem(
     remote_cocoa::mojom::ValidateUserInterfaceItemResultPtr* out_result) {
   *out_result = remote_cocoa::mojom::ValidateUserInterfaceItemResult::New();
   native_widget_mac_->ValidateUserInterfaceItem(command, out_result->get());
+  return true;
+}
+
+bool NativeWidgetMacNSWindowHost::WillExecuteCommand(
+    int32_t command,
+    WindowOpenDisposition window_open_disposition,
+    bool is_before_first_responder,
+    bool* will_execute) {
+  *will_execute = native_widget_mac_->WillExecuteCommand(
+      command, window_open_disposition, is_before_first_responder);
   return true;
 }
 
@@ -1484,7 +1520,7 @@ void NativeWidgetMacNSWindowHost::GetWindowFrameTitlebarHeight(
 void NativeWidgetMacNSWindowHost::GetRootViewAccessibilityToken(
     GetRootViewAccessibilityTokenCallback callback) {
   std::vector<uint8_t> token;
-  int64_t pid;
+  base::ProcessId pid;
   GetRootViewAccessibilityToken(&pid, &token);
   std::move(callback).Run(pid, token);
 }
@@ -1495,6 +1531,17 @@ void NativeWidgetMacNSWindowHost::ValidateUserInterfaceItem(
   remote_cocoa::mojom::ValidateUserInterfaceItemResultPtr result;
   ValidateUserInterfaceItem(command, &result);
   std::move(callback).Run(std::move(result));
+}
+
+void NativeWidgetMacNSWindowHost::WillExecuteCommand(
+    int32_t command,
+    WindowOpenDisposition window_open_disposition,
+    bool is_before_first_responder,
+    ExecuteCommandCallback callback) {
+  bool will_execute = false;
+  WillExecuteCommand(command, window_open_disposition,
+                     is_before_first_responder, &will_execute);
+  std::move(callback).Run(will_execute);
 }
 
 void NativeWidgetMacNSWindowHost::ExecuteCommand(

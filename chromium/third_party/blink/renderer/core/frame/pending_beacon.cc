@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,7 +47,8 @@ PendingBeacon::PendingBeacon(ExecutionContext* ec,
                              const String& method,
                              int32_t background_timeout,
                              int32_t timeout)
-    : ec_(ec),
+    : ExecutionContextLifecycleObserver(ec),
+      ec_(ec),
       remote_(ec),
       url_(url),
       method_(method),
@@ -76,6 +77,7 @@ PendingBeacon::PendingBeacon(ExecutionContext* ec,
 
 void PendingBeacon::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
   visitor->Trace(ec_);
   visitor->Trace(remote_);
   visitor->Trace(timeout_timer_);
@@ -86,9 +88,7 @@ void PendingBeacon::deactivate() {
     remote_->Deactivate();
     pending_ = false;
 
-    auto* dispatcher = PendingBeaconDispatcher::From(*ec_);
-    DCHECK(dispatcher);
-    dispatcher->Unregister(this);
+    UnregisterFromDispatcher();
   }
 }
 
@@ -97,9 +97,7 @@ void PendingBeacon::sendNow() {
     remote_->SendNow();
     pending_ = false;
 
-    auto* dispatcher = PendingBeaconDispatcher::From(*ec_);
-    DCHECK(dispatcher);
-    dispatcher->Unregister(this);
+    UnregisterFromDispatcher();
   }
 }
 
@@ -165,11 +163,20 @@ void PendingBeacon::Send() {
 }
 
 scoped_refptr<base::SingleThreadTaskRunner> PendingBeacon::GetTaskRunner() {
-  return ec_->GetTaskRunner(PendingBeaconDispatcher::kTaskType);
+  return GetExecutionContext()->GetTaskRunner(
+      PendingBeaconDispatcher::kTaskType);
 }
 
 void PendingBeacon::TimeoutTimerFired(TimerBase*) {
   sendNow();
+}
+
+void PendingBeacon::ContextDestroyed() {
+  // Updates state to disallow any subsequent actions.
+  pending_ = false;
+  // Cancels timer task when the Document is destroyed.
+  // The browser will take over the responsibility.
+  timeout_timer_.Stop();
 }
 
 }  // namespace blink

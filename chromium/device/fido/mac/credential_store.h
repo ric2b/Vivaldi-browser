@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,13 +28,27 @@
 class LAContext;
 #endif
 
+// This enum represents the error or success statuses of calling
+// TouchIdCredentialStore.UpdateCredential.
+// This enum is used for UMA histograms and the values should not be
+// reassigned. New error statuses should be reflected in the
+// WebAuthenticationTouchIdCredentialStoreUpdateCredentialStatus enum.
+enum class TouchIdCredentialStoreUpdateCredentialStatus {
+  kUpdateCredentialSuccess = 0,
+  kNoCredentialsFound = 1,
+  kNoMatchingCredentialId = 2,
+  kSecItemUpdateFailure = 3,
+  kMaxValue = kSecItemUpdateFailure,
+};
+
 namespace device::fido::mac {
 
 // Credential represents a WebAuthn credential from the keychain.
 struct COMPONENT_EXPORT(DEVICE_FIDO) Credential {
   Credential(base::ScopedCFTypeRef<SecKeyRef> private_key,
              std::vector<uint8_t> credential_id,
-             CredentialMetadata metadata);
+             CredentialMetadata metadata,
+             std::string rp_id);
   Credential(const Credential&);
   Credential(Credential&& other);
   Credential& operator=(const Credential&);
@@ -53,6 +67,8 @@ struct COMPONENT_EXPORT(DEVICE_FIDO) Credential {
   std::vector<uint8_t> credential_id;
 
   CredentialMetadata metadata;
+
+  std::string rp_id;
 };
 
 // TouchIdCredentialStore allows operations on Touch ID platform authenticator
@@ -111,9 +127,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) TouchIdCredentialStore
       const std::vector<PublicKeyCredentialDescriptor>& descriptors) const;
 
   // FindResidentCredentials returns the client-side discoverable credentials
-  // for the given |rp_id|, or base::nulltopt if an error occurred.
+  // for the given |rp_id|. If |rp_id| is not specified, all resident
+  // credentials are returned. base::nulltopt is returned if an error occurred.
   absl::optional<std::list<Credential>> FindResidentCredentials(
-      const std::string& rp_id) const;
+      const absl::optional<std::string>& rp_id) const;
 
   // DeleteCredentialsForUserId deletes all credentials for the given RP and
   // user ID. Returns true if deleting succeeded or no matching credential
@@ -133,6 +150,11 @@ class COMPONENT_EXPORT(DEVICE_FIDO) TouchIdCredentialStore
   bool DeleteCredentialsSync(base::Time created_not_before,
                              base::Time created_not_after);
 
+  bool DeleteCredentialById(base::span<const uint8_t> credential_id) const;
+
+  bool UpdateCredential(base::span<uint8_t> credential_id,
+                        const std::string& username);
+
   size_t CountCredentialsSync(base::Time created_not_before,
                               base::Time created_not_after);
 
@@ -143,10 +165,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) TouchIdCredentialStore
 
  private:
   absl::optional<std::list<Credential>> FindCredentialsImpl(
-      const std::string& rp_id,
+      const absl::optional<std::string>& rp_id,
       const std::set<std::vector<uint8_t>>& credential_ids) const;
-
-  bool DeleteCredentialById(base::span<const uint8_t> credential_id) const;
 
   AuthenticatorConfig config_;
   LAContext* authentication_context_ = nullptr;

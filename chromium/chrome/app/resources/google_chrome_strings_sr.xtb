@@ -15,6 +15,7 @@
 <translation id="1152920704813762236">О Chrome ОС-у</translation>
 <translation id="1154147086299354128">&amp;Отвори у Chrome-у</translation>
 <translation id="1203500561924088507">Хвала вам на инсталацији. Потребно је да рестартујете прегледач пре него што почнете да користите <ph name="BUNDLE_NAME" />.</translation>
+<translation id="1236866257838264361">Можете да уживате у Chrome-у на најбољи начин</translation>
 <translation id="1278833599417554002">Поново покрени да би се &amp;Chrome ажурирао</translation>
 <translation id="1302523850133262269">Сачекајте да Chrome инсталира најновија ажурирања система.</translation>
 <translation id="1335640173511558774"><ph name="MANAGER" /> захтева да прочитате и прихватите следеће Услове коришћења услуге пре коришћења овог уређаја. Ови услови не проширују, мењају нити ограничавају Услове за Google Chrome OS Flex.</translation>
@@ -32,6 +33,7 @@
 <translation id="1587223624401073077">Google Chrome користи камеру.</translation>
 <translation id="1587325591171447154">Датотека <ph name="FILE_NAME" /> је опасна, па ју је Chrome блокирао.</translation>
 <translation id="1597911401261118146">Да бисте проверили да ли су лозинке безбедне од упада у податке и других безбедносних проблема, <ph name="BEGIN_LINK" />пријавите се у Chrome<ph name="END_LINK" />.</translation>
+<translation id="1599904803480101533">Chrome је блокирао овај фајл архиве јер можда крије малвер</translation>
 <translation id="1619887657840448962">Да бисмо учинили Chrome безбеднијим, онемогућили смо следећи додатак који <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> не наводи и који је можда додат без вашег знања.</translation>
 <translation id="1627304841979541023"><ph name="BEGIN_BOLD" />Како можете да управљате подацима:<ph name="END_BOLD" /> Ради заштите приватности аутоматски бришемо интересовања старија од 4 недеље. Када наставите да прегледате, интересовање ће се можда поново појавити на листи. Можете и да уклањате интересовања за која не желите да их Chrome узима у обзир.</translation>
 <translation id="1628000112320670027">Пронађите помоћ за Chrome</translation>
@@ -58,6 +60,7 @@
 <translation id="2018879682492276940">Инсталација није успела. Пробајте поново.</translation>
 <translation id="2071318482926839249">Други налог је већ пријављен. Да би вам прегледање било раздвојено, Chrome може да направи засебан профил за вас.</translation>
 <translation id="207902854391093810">Док пробни периоди трају, Мерење огласа омогућава сајтовима које посећујете да од Chrome-а затраже информације које сајту помажу да мери учинак огласа. Мерење огласа ограничава праћење на више сајтова тако што преноси што мање информација између сајтова.</translation>
+<translation id="2091012649849228750">Да бисте добијали будућа Google Chrome ажурирања, треба вам Windows 10 или новија верзија. Овај рачунар користи Windows 8.</translation>
 <translation id="2094648590148273905">Chrome OS Flex услови</translation>
 <translation id="2094919256425865063">Желите ли ипак да затворите Chrome?</translation>
 <translation id="2106831557840787829">Chrome OS Flex је омогућен захваљујући додатном <ph name="BEGIN_LINK_CROS_OSS" />софтверу са отвореним кодом<ph name="END_LINK_CROS_OSS" />, као што је <ph name="BEGIN_LINK_LINUX_OSS" />Linux окружење за програмирање<ph name="END_LINK_LINUX_OSS" />.</translation>
@@ -132,6 +135,7 @@
 <translation id="3360895254066713204">Chrome помоћник</translation>
 <translation id="3379938682270551431">{0,plural, =0{Поново ћемо покренути Chrome}=1{Поново ћемо покренути Chrome за 1 секунду}one{Поново ћемо покренути Chrome за # секунду}few{Поново ћемо покренути Chrome за # секунде}other{Поново ћемо покренути Chrome за # секунди}}</translation>
 <translation id="3396977131400919238">Током инсталације је дошло до грешке у оперативном систему. Преузмите Google Chrome поново.</translation>
+<translation id="3426646014273736870">Уштеда меморије је убрзала Chrome</translation>
 <translation id="3428747202529429621">Штити вас у Chrome-у и може да се користи за побољшање безбедности у другим Google апликацијама када сте пријављени</translation>
 <translation id="3434246496373299699">Chrome може да вам проверава лозинке када се пријавите помоћу Google налога</translation>
 <translation id="3451115285585441894">Додавање у Chrome...</translation>
@@ -177,6 +181,7 @@
 <translation id="4262915912852657291"><ph name="BEGIN_BOLD" />Који подаци се користе:<ph name="END_BOLD" /> Историја прегледања, евиденција сајтова које сте посетили помоћу Chrome-а на овом уређају.</translation>
 <translation id="4281844954008187215">Услови коришћења услуге</translation>
 <translation id="4293420128516039005">Пријавите се да бисте синхронизовали и персонализовали Chrome на свим уређајима</translation>
+<translation id="430327780270213103">Дозволи додатку да приказује захтеве за приступ на Chrome траци с алаткама</translation>
 <translation id="4328355335528187361">Програмерска верзија Google Chrome-а (mDNS-In)</translation>
 <translation id="4334294535648607276">Преузимање је довршено.</translation>
 <translation id="4335235004908507846">Chrome може да вас штити од упада у податке, неисправних додатака и других проблема</translation>
@@ -232,6 +237,7 @@
 
 Google Chrome не може да врати подешавања.</translation>
 <translation id="5524761631371622910">Док пробни периоди трају и ако вас је Chrome насумично поставио у активни пробни период, историја прегледања утиче на огласе које видите и интересовања процењена у наставку. Ради заштите приватности Chrome брише интересовања сваког месеца чим постану доступна.</translation>
+<translation id="5530733413481476019">Убрзајте Chrome</translation>
 <translation id="556024056938947818">Google Chrome покушава да прикаже лозинке.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
 <translation id="565744775970812598">Датотека <ph name="FILE_NAME" /> је можда опасна, па ју је Chrome блокирао.</translation>
@@ -258,6 +264,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="608006075545470555">Додајте пословни профил у овај прегледач</translation>
 <translation id="6113794647360055231">Управо смо побољшали Chrome</translation>
 <translation id="6145313976051292476">Отварајте PDF-ове у Chrome-у</translation>
+<translation id="6155960517327665396">Уштеда меморије је убрзала Chrome</translation>
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> – Google Chrome</translation>
 <translation id="6173637689840186878"><ph name="PAGE_TITLE" /> – Google Chrome бета</translation>
 <translation id="6235018212288296708">Правило за долазни саобраћај за Google Chrome да бисте омогућили mDNS саобраћај.</translation>
@@ -265,6 +272,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="6273793429163604305">Припремате се...</translation>
 <translation id="6291089322031436445">Chrome апликације за програмерски канал</translation>
 <translation id="6291549208091401781">Google Chrome је већ инсталиран за све кориснике на рачунару.</translation>
+<translation id="6326175484149238433">Уклони из Chrome-а</translation>
 <translation id="6327105987658262776">Нема доступних ажурирања.</translation>
 <translation id="6412673304250309937">Проверава URL-ове са листом небезбедних сајтова који се чувају у Chrome-у. Ако неки сајт покуша да украде вашу лозинку или пробате да преузмете штетну датотеку, Chrome може да пошаље URL-ове, укључујући делове садржаја странице, у Безбедно прегледање.</translation>
 <translation id="6418662306461808273">Желите да пређете на постојећи Chrome профил?</translation>
@@ -275,6 +283,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="6676384891291319759">Приступите Интернету</translation>
 <translation id="6679975945624592337">Нека Google Chrome ради у позадини</translation>
 <translation id="6696915334902295848">Chrome-у треба дозвола за микрофон за овај сајт</translation>
+<translation id="6718739135284199302">Убрзајте Chrome</translation>
 <translation id="6735387454586646204">Chrome OS Flex систем</translation>
 <translation id="6739177684496155661">Желите да наставите на новом Chrome профилу?</translation>
 <translation id="6750954913813541382">Да би исправио правописне грешке, Chrome Google-у шаље текст који уносите у прегледач</translation>
@@ -284,6 +293,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="6881299373831449287">Ажурирамо Chrome</translation>
 <translation id="6885412569789873916">Chrome апликације за бета канал</translation>
 <translation id="6933858244219479645">Систем Chrome ОС</translation>
+<translation id="6938166777909186039">Да бисте добијали будућа Google Chrome ажурирања, треба вам Windows 10 или новија верзија. Овај рачунар користи Windows 8.1.</translation>
 <translation id="6943584222992551122">Подаци прегледања ове особе ће бити избрисани са овог уређаја. Да бисте вратили податке, пријавите се у Chrome као <ph name="USER_EMAIL" />.</translation>
 <translation id="6967962315388095737">Правило за долазни саобраћај за Google Chrome бета да бисте омогућили mDNS саобраћај.</translation>
 <translation id="6989339256997917931">Google Chrome је ажуриран, али га нисте користили најмање 30 дана.</translation>
@@ -356,6 +366,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="8286862437124483331">Google Chrome покушава да прикаже лозинке. Унесите лозинку за Windows да бисте то омогућили.</translation>
 <translation id="828798499196665338">Родитељ је искључио „Дозволе за сајтове, апликације и додатке“ за Chrome. Омогућавање ове ставке (<ph name="EXTENSION_TYPE_PARAMETER" />) није дозвољено.</translation>
 <translation id="8290100596633877290">Опа! Google Chrome је отказао. Желите ли да га одмах поново покренете?</translation>
+<translation id="8341646175450781745">Када је укључено, Chrome ослобађа меморију са неактивних картица. То активним картицама и другим апликацијама пружа више рачунарских ресурса и одржава Chrome брзим. Неактивне картице се аутоматски поново активирају када се вратите на њих. <ph name="BEGIN_LINK" />Сазнајте више<ph name="END_LINK" /> или <ph name="BEGIN_LINK_2" />пошаљите повратне информације<ph name="END_LINK_2" /></translation>
 <translation id="8342675569599923794">Ова датотека је опасна, па ју је Chrome блокирао.</translation>
 <translation id="8349795646647783032"><ph name="BEGIN_BOLD" />Како користимо ове податке:<ph name="END_BOLD" /> Сајтови могу да чувају информације о вашим интересовањима у Chrome-у. На пример, ако посетите сајт да бисте купили патике за маратон, тај сајт може да дефинише ваше интересовање као трчање маратона. Касније, ако посетите неки други сајт да бисте се пријавили за трку, тај сајт може да вам прикаже оглас за патике за трчање на основу интересовања.</translation>
 <translation id="8370517070665726704">Ауторска права <ph name="YEAR" />. Google LLC. Сва права задржана.</translation>
@@ -386,6 +397,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="8686817260976772516">Помоћу Chrome профила можете да раздвојите све Chrome садржаје. Направите профиле за пријатеље и породицу или раздвојите посао и забаву.</translation>
 <translation id="8712767363896337380">Скоро је ажуриран! Поново покрените Chrome да бисте завршили ажурирање.</translation>
 <translation id="873133009373065397">Google Chrome не може да одреди ни да подеси подразумевани прегледач</translation>
+<translation id="8821043148920470810">Да бисте добијали будућа Google Chrome ажурирања, треба вам Windows 10 или новија верзија. Овај рачунар користи Windows 7.</translation>
 <translation id="8823341990149967727">Chrome је застарео</translation>
 <translation id="8825634023950448068">Ради заштите приватности аутоматски бришемо интересовања старија од 4 недеље. Када наставите да прегледате, интересовање ће се можда поново појавити на листи. Ако Chrome погреши или не желите да вам се приказују одређени огласи, можете да уклоните интересовање.</translation>
 <translation id="8834965163890861871">Google Chrome покушава да измени лозинке. Унесите лозинку за Windows да бисте то омогућили.</translation>
@@ -397,6 +409,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="8986207147630327271">Додајете пословни профил у овај прегледач и дајете администратору контролу само над овим пословним профилом.</translation>
 <translation id="8989968390305463310">Историја прегледања утиче на огласе који вам се приказују и интересовања процењена у наставку. Ради заштите приватности Chrome аутоматски брише интересовања сваког месеца чим постану доступна. Интересовања могу да се освежавају ако их не уклоните.</translation>
 <translation id="8999208279178790196">{0,plural, =0{Ажурирање за Chrome је доступно}=1{Ажурирање за Chrome је доступно}one{Ажурирање за Chrome је доступно већ # дан}few{Ажурирање за Chrome је доступно већ # дана}other{Ажурирање за Chrome је доступно већ # дана}}</translation>
+<translation id="9003498785844995646">Када је укљученa, Chrome штеди батерију тако што ограничава активности у позадини и визуелне ефекте, као што је глатко скроловање и брзине кадрова у видеу. <ph name="BEGIN_LINK" />Сазнајте више<ph name="END_LINK" /> или <ph name="BEGIN_LINK_2" />пошаљите повратне информације<ph name="END_LINK_2" /></translation>
 <translation id="9053892488859122171">Chrome OS Flex систем</translation>
 <translation id="9067395829937117663">За Google Chrome је потребан Windows 7 или новија верзија.</translation>
 <translation id="911206726377975832">Желите ли да избришете и податке прегледања?</translation>

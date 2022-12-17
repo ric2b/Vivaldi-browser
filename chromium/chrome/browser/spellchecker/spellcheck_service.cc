@@ -1,10 +1,9 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 
-#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <set>
@@ -15,6 +14,7 @@
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/no_destructor.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/supports_user_data.h"
 #include "base/synchronization/waitable_event.h"
@@ -70,7 +70,7 @@ SpellcheckService::SpellCheckerBinder& GetSpellCheckerBinderOverride() {
 // transition.
 // An event used by browser tests to receive status events from this class and
 // its derived classes.
-base::WaitableEvent* g_status_event = NULL;
+base::WaitableEvent* g_status_event = nullptr;
 SpellcheckService::EventType g_status_type =
     SpellcheckService::BDICT_NOTINITIALIZED;
 
@@ -119,8 +119,9 @@ SpellcheckService::SpellcheckService(content::BrowserContext* context)
     // preferences for non-Hunspell languages so that there is no attempt to
     // load a non-existent Hunspell dictionary, and so that Hunspell
     // spellchecking isn't broken because of the failed load.
-    ListPrefUpdate update(prefs, spellcheck::prefs::kSpellCheckDictionaries);
-    update->GetList().EraseIf([](const base::Value& entry) {
+    ScopedListPrefUpdate update(prefs,
+                                spellcheck::prefs::kSpellCheckDictionaries);
+    update->EraseIf([](const base::Value& entry) {
       return spellcheck::GetCorrespondingSpellCheckLanguage(entry.GetString())
           .empty();
     });
@@ -191,7 +192,7 @@ void SpellcheckService::GetDictionaries(
   PrefService* prefs = user_prefs::UserPrefs::Get(browser_context);
   std::set<std::string> spellcheck_dictionaries;
   for (const auto& value :
-       prefs->GetValueList(spellcheck::prefs::kSpellCheckDictionaries)) {
+       prefs->GetList(spellcheck::prefs::kSpellCheckDictionaries)) {
     const std::string* dictionary = value.GetIfString();
     if (dictionary)
       spellcheck_dictionaries.insert(*dictionary);
@@ -279,12 +280,12 @@ std::string SpellcheckService::GetSupportedAcceptLanguageCode(
   // First try exact match. Per BCP47, tags are in ASCII and should be treated
   // as case-insensitive (although there are conventions for the capitalization
   // of subtags).
-  auto iter =
-      std::find_if(accept_languages.begin(), accept_languages.end(),
-                   [supported_language_full_tag](const auto& accept_language) {
-                     return base::EqualsCaseInsensitiveASCII(
-                         supported_language_full_tag, accept_language);
-                   });
+  auto iter = base::ranges::find_if(
+      accept_languages,
+      [supported_language_full_tag](const auto& accept_language) {
+        return base::EqualsCaseInsensitiveASCII(supported_language_full_tag,
+                                                accept_language);
+      });
   if (iter != accept_languages.end())
     return *iter;
 
@@ -296,17 +297,17 @@ std::string SpellcheckService::GetSupportedAcceptLanguageCode(
   if (!base::Contains(supported_language_full_tag, "-"))
     return "";
 
-  iter =
-      std::find_if(accept_languages.begin(), accept_languages.end(),
-                   [supported_language_full_tag](const auto& accept_language) {
-                     return base::EqualsCaseInsensitiveASCII(
-                         SpellcheckService::GetLanguageAndScriptTag(
-                             supported_language_full_tag,
-                             /* include_script_tag= */ true),
-                         SpellcheckService::GetLanguageAndScriptTag(
-                             accept_language,
-                             /* include_script_tag= */ true));
-                   });
+  iter = base::ranges::find_if(
+      accept_languages,
+      [supported_language_full_tag](const auto& accept_language) {
+        return base::EqualsCaseInsensitiveASCII(
+            SpellcheckService::GetLanguageAndScriptTag(
+                supported_language_full_tag,
+                /* include_script_tag= */ true),
+            SpellcheckService::GetLanguageAndScriptTag(
+                accept_language,
+                /* include_script_tag= */ true));
+      });
 
   if (iter != accept_languages.end())
     return *iter;
@@ -330,7 +331,7 @@ void SpellcheckService::EnableFirstUserLanguageForSpellcheck(
   // Ensure that spellcheck is enabled for the first language in the
   // accept languages list.
   base::Value::List user_dictionaries =
-      prefs->GetValueList(spellcheck::prefs::kSpellCheckDictionaries).Clone();
+      prefs->GetList(spellcheck::prefs::kSpellCheckDictionaries).Clone();
   std::vector<std::string> user_languages =
       base::SplitString(prefs->GetString(language::prefs::kAcceptLanguages),
                         ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
@@ -424,13 +425,13 @@ void SpellcheckService::LoadDictionaries() {
   DCHECK(prefs);
 
   const base::Value::List& user_dictionaries =
-      prefs->GetValueList(spellcheck::prefs::kSpellCheckDictionaries);
+      prefs->GetList(spellcheck::prefs::kSpellCheckDictionaries);
   const base::Value::List& forced_dictionaries =
-      prefs->GetValueList(spellcheck::prefs::kSpellCheckForcedDictionaries);
+      prefs->GetList(spellcheck::prefs::kSpellCheckForcedDictionaries);
 
   // Build a lookup of blocked dictionaries to skip loading them.
-  const base::Value::List& blocked_dictionaries = prefs->GetValueList(
-      spellcheck::prefs::kSpellCheckBlocklistedDictionaries);
+  const base::Value::List& blocked_dictionaries =
+      prefs->GetList(spellcheck::prefs::kSpellCheckBlocklistedDictionaries);
   std::unordered_set<std::string> blocked_dictionaries_lookup;
   for (const auto& blocked_dict : blocked_dictionaries) {
     blocked_dictionaries_lookup.insert(blocked_dict.GetString());
@@ -653,16 +654,17 @@ void SpellcheckService::InitWindowsDictionaryLanguages(
   DCHECK(prefs);
   // When following object goes out of scope, preference change observers will
   // be notified (even if there is no preference change).
-  ListPrefUpdate update(prefs, spellcheck::prefs::kSpellCheckDictionaries);
-  update->GetList().EraseIf([this](const base::Value& entry) {
+  ScopedListPrefUpdate update(prefs,
+                              spellcheck::prefs::kSpellCheckDictionaries);
+  update->EraseIf([this](const base::Value& entry) {
     const std::string dictionary_name = entry.GetString();
     return (!UsesWindowsDictionary(dictionary_name) &&
             spellcheck::GetCorrespondingSpellCheckLanguage(dictionary_name)
                 .empty());
   });
 
-  // No need to call LoadDictionaries() as when the ListPrefUpdate object goes
-  // out of scope, the preference change handler will do this.
+  // No need to call LoadDictionaries() as when the ScopedListPrefUpdate object
+  // goes out of scope, the preference change handler will do this.
 }
 
 bool SpellcheckService::UsesWindowsDictionary(
@@ -711,17 +713,17 @@ std::string SpellcheckService::GetLanguageAndScriptTag(
 std::string SpellcheckService::GetSupportedAcceptLanguageCodeGenericOnly(
     const std::string& supported_language_full_tag,
     const std::vector<std::string>& accept_languages) {
-  auto iter =
-      std::find_if(accept_languages.begin(), accept_languages.end(),
-                   [supported_language_full_tag](const auto& accept_language) {
-                     return base::EqualsCaseInsensitiveASCII(
-                         SpellcheckService::GetLanguageAndScriptTag(
-                             supported_language_full_tag,
-                             /* include_script_tag= */ false),
-                         SpellcheckService::GetLanguageAndScriptTag(
-                             accept_language,
-                             /* include_script_tag= */ false));
-                   });
+  auto iter = base::ranges::find_if(
+      accept_languages,
+      [supported_language_full_tag](const auto& accept_language) {
+        return base::EqualsCaseInsensitiveASCII(
+            SpellcheckService::GetLanguageAndScriptTag(
+                supported_language_full_tag,
+                /* include_script_tag= */ false),
+            SpellcheckService::GetLanguageAndScriptTag(
+                accept_language,
+                /* include_script_tag= */ false));
+      });
 
   if (iter != accept_languages.end()) {
     // Special case for Serbian--"sr" implies Cyrillic script. Don't mark it as

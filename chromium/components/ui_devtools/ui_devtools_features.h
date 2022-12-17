@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@ namespace ui_devtools {
 // Enables UI debugging tools to send synthetic events.
 // This is used by the telemetry benchmarking tools only.
 COMPONENT_EXPORT(UI_DEVTOOLS_FEATURES)
-extern const base::Feature kUIDebugToolsEnableSyntheticEvents;
+BASE_DECLARE_FEATURE(kUIDebugToolsEnableSyntheticEvents);
 
 }  // namespace ui_devtools
 

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,7 +55,7 @@ class ClickToCallUiControllerTest : public testing::Test {
         web_contents_.get(),
         /*initiating_origin=*/absl::nullopt,
         /*initiator_document=*/content::WeakDocumentPtr(),
-        GURL(base::StrCat({"tel:", kPhoneNumber})), false);
+        GURL(base::StrCat({"tel:", kPhoneNumber})), false, u"TestApp");
     controller_ = ClickToCallUiController::GetOrCreateFromWebContents(
         web_contents_.get());
   }

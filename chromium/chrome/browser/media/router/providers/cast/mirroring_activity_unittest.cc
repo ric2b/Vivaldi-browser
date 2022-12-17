@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,7 @@
 #include "chrome/browser/media/router/providers/cast/cast_activity_test_base.h"
 #include "chrome/browser/media/router/providers/cast/test_util.h"
 #include "chrome/browser/media/router/test/mock_mojo_media_router.h"
-#include "components/cast_channel/cast_test_util.h"
+#include "components/media_router/common/providers/cast/channel/cast_test_util.h"
 #include "components/mirroring/mojom/session_parameters.mojom.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -36,6 +36,7 @@ constexpr int kTabId = 234;
 constexpr char kDescription[] = "";
 constexpr char kDesktopMediaId[] = "theDesktopMediaId";
 constexpr char kPresentationId[] = "thePresentationId";
+constexpr char kDestinationId[] = "theTransportId";
 
 // Metrics constants.
 constexpr char kHistogramSessionLength[] =
@@ -63,7 +64,7 @@ class MockMirroringServiceHost : public mirroring::mojom::MirroringServiceHost {
 
 class MockCastMessageChannel : public mirroring::mojom::CastMessageChannel {
  public:
-  MOCK_METHOD1(Send, void(mirroring::mojom::CastMessagePtr message));
+  MOCK_METHOD1(OnMessage, void(mirroring::mojom::CastMessagePtr message));
 };
 
 }  // namespace
@@ -125,6 +126,10 @@ class MirroringActivityTest
 
     activity_->SetOrUpdateSession(*session_, sink_, kHashToken);
     RunUntilIdle();
+  }
+
+  const std::string& MessageSourceId() const {
+    return message_handler_.source_id();
   }
 
   bool route_is_local_ = true;
@@ -255,8 +260,8 @@ TEST_F(MirroringActivityTest, SendWebRtc) {
   EXPECT_CALL(message_handler_, SendCastMessage(kChannelId, _))
       .WillOnce(
           WithArg<1>([this](const cast::channel::CastMessage& cast_message) {
-            EXPECT_EQ(message_handler_.sender_id(), cast_message.source_id());
-            EXPECT_EQ("theTransportId", cast_message.destination_id());
+            EXPECT_EQ(message_handler_.source_id(), cast_message.source_id());
+            EXPECT_EQ(kDestinationId, cast_message.destination_id());
             EXPECT_EQ(mirroring::mojom::kWebRtcNamespace,
                       cast_message.namespace_());
             EXPECT_TRUE(cast_message.has_payload_utf8());
@@ -265,7 +270,7 @@ TEST_F(MirroringActivityTest, SendWebRtc) {
             return cast_channel::Result::kOk;
           }));
 
-  activity_->Send(
+  activity_->OnMessage(
       mirroring::mojom::CastMessage::New("the_namespace", kPayload));
   RunUntilIdle();
 }
@@ -280,16 +285,38 @@ TEST_F(MirroringActivityTest, SendRemoting) {
         return cast_channel::Result::kOk;
       }));
 
-  activity_->Send(
+  activity_->OnMessage(
       mirroring::mojom::CastMessage::New("the_namespace", kPayload));
   RunUntilIdle();
 }
 
 TEST_F(MirroringActivityTest, OnAppMessageWrongNamespace) {
   MakeActivity();
-  EXPECT_CALL(*channel_to_service_, Send).Times(0);
+  EXPECT_CALL(*channel_to_service_, OnMessage).Times(0);
   cast::channel::CastMessage message;
   message.set_namespace_("wrong_namespace");
+  message.set_destination_id(kDestinationId);
+  message.set_source_id(MessageSourceId());
+  activity_->OnAppMessage(message);
+}
+
+TEST_P(MirroringActivityTest, OnAppMessageWrongDestination) {
+  MakeActivity();
+  EXPECT_CALL(*channel_to_service_, OnMessage).Times(0);
+  cast::channel::CastMessage message;
+  message.set_namespace_(GetParam());
+  message.set_destination_id("someOtherDestination");
+  message.set_source_id(MessageSourceId());
+  activity_->OnAppMessage(message);
+}
+
+TEST_P(MirroringActivityTest, OnAppMessageWrongSource) {
+  MakeActivity();
+  EXPECT_CALL(*channel_to_service_, OnMessage).Times(0);
+  cast::channel::CastMessage message;
+  message.set_namespace_(GetParam());
+  message.set_destination_id(kDestinationId);
+  message.set_source_id("someRandomStranger");
   activity_->OnAppMessage(message);
 }
 
@@ -299,6 +326,8 @@ TEST_P(MirroringActivityTest, OnAppMessageWrongNonlocal) {
   ASSERT_FALSE(channel_to_service_);
   cast::channel::CastMessage message;
   message.set_namespace_(GetParam());
+  message.set_destination_id(kDestinationId);
+  message.set_source_id(MessageSourceId());
   activity_->OnAppMessage(message);
 }
 
@@ -307,7 +336,7 @@ TEST_P(MirroringActivityTest, OnAppMessage) {
 
   static constexpr char kPayload[] = R"({"foo": "bar"})";
 
-  EXPECT_CALL(*channel_to_service_, Send)
+  EXPECT_CALL(*channel_to_service_, OnMessage)
       .WillOnce([](mirroring::mojom::CastMessagePtr message) {
         EXPECT_EQ(GetParam(), message->message_namespace);
         EXPECT_EQ(kPayload, message->json_format_data);
@@ -315,6 +344,8 @@ TEST_P(MirroringActivityTest, OnAppMessage) {
 
   cast::channel::CastMessage message;
   message.set_namespace_(GetParam());
+  message.set_destination_id(kDestinationId);
+  message.set_source_id(MessageSourceId());
   message.set_protocol_version(
       cast::channel::CastMessage_ProtocolVersion_CASTV2_1_0);
   message.set_payload_utf8(kPayload);
@@ -336,7 +367,7 @@ TEST_F(MirroringActivityTest, OnInternalMessage) {
   static constexpr char kPayload[] = R"({"foo": "bar"})";
   static constexpr char kNamespace[] = "the_namespace";
 
-  EXPECT_CALL(*channel_to_service_, Send)
+  EXPECT_CALL(*channel_to_service_, OnMessage)
       .WillOnce([](mirroring::mojom::CastMessagePtr message) {
         EXPECT_EQ(kNamespace, message->message_namespace);
         EXPECT_THAT(message->json_format_data, IsJson(kPayload));
@@ -383,9 +414,10 @@ TEST_F(MirroringActivityTest, GetScrubbedLogMessage) {
 
   absl::optional<base::Value> message_json = base::JSONReader::Read(message);
   EXPECT_TRUE(message_json);
+  EXPECT_TRUE(message_json.value().is_dict());
   EXPECT_THAT(scrubbed_message,
               base::test::IsJson(MirroringActivity::GetScrubbedLogMessage(
-                  message_json.value())));
+                  message_json.value().GetDict())));
 }
 
 // Site-initiated mirroring activities must be able to send messages to the

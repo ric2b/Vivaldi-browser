@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,32 +17,20 @@
 #include "base/logging.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
-#include "chrome/browser/metrics/testing/sync_metrics_test_utils.h"
 #include "chrome/browser/privacy_budget/identifiability_study_state.h"
 #include "chrome/browser/privacy_budget/privacy_budget_browsertest_util.h"
 #include "chrome/browser/privacy_budget/privacy_budget_prefs.h"
-#include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/sync/test/integration/sync_service_impl_harness.h"
-#include "chrome/browser/sync/test/integration/sync_test.h"
-#include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "chrome/common/privacy_budget/privacy_budget_features.h"
 #include "chrome/common/privacy_budget/scoped_privacy_budget_config.h"
 #include "chrome/common/privacy_budget/types.h"
-#include "chrome/test/base/chrome_test_utils.h"
-#include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/test/fake_server.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/ukm/ukm_test_helper.h"
-#include "components/unified_consent/unified_consent_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -50,8 +38,6 @@
 #include "services/metrics/public/mojom/ukm_interface.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_sample_collector.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
@@ -74,6 +60,7 @@ namespace {
 
 using testing::IsSupersetOf;
 using testing::Key;
+using testing::UnorderedElementsAreArray;
 
 uint64_t HashFeature(const blink::mojom::WebFeature& feature) {
   return blink::IdentifiableSurface::FromTypeAndToken(
@@ -151,8 +138,7 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
 
   // We collect all metrics together and check that there is one that contains
   // the web feature metrics.
-  auto it = merged_entries.begin();
-  auto metrics = it->second->metrics;
+  auto metrics = merged_entries.begin()->second->metrics;
 
   for (auto& it : merged_entries) {
     metrics.insert(it.second->metrics.begin(), it.second->metrics.end());
@@ -175,6 +161,56 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
               blink::mojom::WebFeature::kV8Screen_AvailWidth_AttributeGetter)),
       }));
 }
+
+IN_PROC_BROWSER_TEST_P(PrivacyBudgetBrowserTestWithTestRecorder,
+                       RecordingFeaturesCalledInWorker) {
+  const auto file_path = GetParam();
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  content::DOMMessageQueue messages(web_contents());
+  base::RunLoop run_loop;
+
+  std::vector<uint64_t> expected_keys = {
+      HashFeature(blink::mojom::WebFeature::kNavigatorUserAgent),
+  };
+
+  // We wait for the expected metrics to be reported. Since some of the
+  // metrics are reported from the renderer process, this is the only reliable
+  // way to be sure we waited long enough.
+  auto quit_run_loop = [this, &expected_keys, &run_loop]() {
+    if (GetReportedSurfaceKeys(expected_keys).size() == expected_keys.size())
+      run_loop.Quit();
+  };
+  recorder().SetOnAddEntryCallback(ukm::builders::Identifiability::kEntryName,
+                                   base::BindLambdaForTesting(quit_run_loop));
+
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents(), embedded_test_server()->GetURL(file_path)));
+
+  // The document calls a bunch of instrumented functions and sends a message
+  // back to the test. Receipt of the message indicates that the script
+  // successfully completed.
+  std::string done;
+  ASSERT_TRUE(messages.WaitForMessage(&done));
+
+  // Wait for the metrics to come down the pipe.
+  run_loop.Run();
+
+  // Test succeeds if there is no timeout. However, let's recheck the metrics
+  // here, so that if there is a timeout we get an output of which metrics are
+  // missing.
+  EXPECT_THAT(GetReportedSurfaceKeys(expected_keys), expected_keys);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    PrivacyBudgetBrowserTestWithTestRecorderParameterized,
+    PrivacyBudgetBrowserTestWithTestRecorder,
+    ::testing::Values("/privacy_budget/calls_dedicated_worker.html",
+// Shared workers are not supported on Android.
+#if !BUILDFLAG(IS_ANDROID)
+                      "/privacy_budget/calls_shared_worker.html",
+#endif
+                      "/privacy_budget/calls_service_worker.html"));
 
 IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
                        EveryNavigationRecordsDocumentCreatedMetrics) {
@@ -291,8 +327,7 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
 
   // We collect all metrics together and check that there is one that contains
   // the canvas readback metrics.
-  auto it = merged_entries.begin();
-  auto metrics = it->second->metrics;
+  auto metrics = merged_entries.begin()->second->metrics;
 
   for (auto& it : merged_entries) {
     metrics.insert(it.second->metrics.begin(), it.second->metrics.end());
@@ -362,8 +397,7 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
   constexpr uint64_t input_digest = UINT64_C(33457614533296512);
   // We collect all metrics together and check that there is one that contains
   // the canvas readback metrics.
-  auto it = merged_entries.begin();
-  auto metrics = it->second->metrics;
+  auto metrics = merged_entries.begin()->second->metrics;
 
   for (auto& it : merged_entries) {
     metrics.insert(it.second->metrics.begin(), it.second->metrics.end());
@@ -390,74 +424,9 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestWithTestRecorder,
 namespace {
 
 // Test class that allows to enable UKM recording.
-class PrivacyBudgetBrowserTestWithUkmRecording : private EnableRandomSampling,
-                                                 public SyncTest {
- public:
-  PrivacyBudgetBrowserTestWithUkmRecording() : SyncTest(SINGLE_CLIENT) {}
-
-  static ukm::UkmService* ukm_service() {
-    return g_browser_process->GetMetricsServicesManager()->GetUkmService();
-  }
-
-  static PrefService* local_state() { return g_browser_process->local_state(); }
-
-  bool EnableUkmRecording() {
-    // 1. Enable sync.
-    Profile* profile = ProfileManager::GetLastUsedProfileIfLoaded();
-    sync_test_harness_ = metrics::test::InitializeProfileForSync(
-        profile, GetFakeServer()->AsWeakPtr());
-    EXPECT_TRUE(sync_test_harness_->SetupSync());
-
-    // 2. Signal consent for UKM reporting.
-    unified_consent::UnifiedConsentService* consent_service =
-        UnifiedConsentServiceFactory::GetForProfile(profile);
-    if (consent_service != nullptr)
-      consent_service->SetUrlKeyedAnonymizedDataCollectionEnabled(true);
-
-    // 3. Enable metrics reporting.
-    is_metrics_reporting_enabled_ = true;
-    ChromeMetricsServiceAccessor::SetMetricsAndCrashReportingForTesting(
-        &is_metrics_reporting_enabled_);
-
-    // UpdateUploadPermissions causes the MetricsServicesManager to look at the
-    // consent signals and re-evaluate whether reporting should be enabled.
-    g_browser_process->GetMetricsServicesManager()->UpdateUploadPermissions(
-        true);
-
-    // The following sequence synchronously completes UkmService initialization
-    // (if it wasn't initialized yet) and flushes any accumulated metrics.
-    ukm::UkmTestHelper ukm_test_helper(ukm_service());
-    ukm_test_helper.BuildAndStoreLog();
-    std::unique_ptr<ukm::Report> report_to_discard =
-        ukm_test_helper.GetUkmReport();
-
-    ukm_service()->SetSamplingForTesting(1);
-    return ukm::UkmTestHelper(ukm_service()).IsRecordingEnabled();
-  }
-
-  bool DisableUkmRecording() {
-    EXPECT_TRUE(is_metrics_reporting_enabled_)
-        << "DisableUkmRecording() should only be called after "
-           "EnableUkmRecording()";
-    is_metrics_reporting_enabled_ = false;
-    g_browser_process->GetMetricsServicesManager()->UpdateUploadPermissions(
-        true);
-    ChromeMetricsServiceAccessor::SetMetricsAndCrashReportingForTesting(
-        nullptr);
-    return !ukm::UkmTestHelper(ukm_service()).IsRecordingEnabled();
-  }
-
-  void TearDown() override {
-    if (is_metrics_reporting_enabled_) {
-      ChromeMetricsServiceAccessor::SetMetricsAndCrashReportingForTesting(
-          nullptr);
-    }
-  }
-
- private:
-  bool is_metrics_reporting_enabled_ = false;
-  std::unique_ptr<SyncServiceImplHarness> sync_test_harness_;
-};
+class PrivacyBudgetBrowserTestWithUkmRecording
+    : private EnableRandomSampling,
+      public PrivacyBudgetBrowserTestBaseWithUkmRecording {};
 
 }  // namespace
 
@@ -631,53 +600,75 @@ class PrivacyBudgetBrowserTestActiveSampling : public PlatformBrowserTest {
     params.enable_active_sampling = true;
     params.actively_sampled_fonts = {"Arial", "Helvetica"};
     privacy_budget_config_.Apply(params);
+
+    expected_keys_ = {
+        blink::IdentifiableSurface::FromTypeAndToken(
+            blink::IdentifiableSurface::Type::
+                kNavigatorUAData_GetHighEntropyValues,
+            blink::IdentifiableToken("model"))
+            .ToUkmMetricHash(),
+        blink::IdentifiableSurface::FromTypeAndToken(
+            blink::IdentifiableSurface::Type::kFontFamilyAvailable,
+            blink::IdentifiableToken("arial"))
+            .ToUkmMetricHash(),
+        blink::IdentifiableSurface::FromTypeAndToken(
+            blink::IdentifiableSurface::Type::kFontFamilyAvailable,
+            blink::IdentifiableToken("helvetica"))
+            .ToUkmMetricHash()};
   }
 
   void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
     PlatformBrowserTest::CreatedBrowserMainParts(parts);
     ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
+
+    // We wait for the expected metrics to be reported. Since some of the
+    // metrics are reported from the renderer process, this is the only reliable
+    // way to be sure we waited long enough.
+    run_loop_ = std::make_unique<base::RunLoop>();
+    ukm_recorder_->SetOnAddEntryCallback(
+        ukm::builders::Identifiability::kEntryName,
+        base::BindLambdaForTesting([this]() {
+          if (GetReportedSurfaceKeys().size() == expected_keys_.size())
+            run_loop_->Quit();
+        }));
   }
 
-  ukm::TestUkmRecorder& ukm_recorder() { return *ukm_recorder_; }
+  base::flat_set<uint64_t> GetReportedSurfaceKeys() {
+    std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> merged_entries =
+        ukm_recorder_->GetMergedEntriesByName(
+            ukm::builders::Identifiability::kEntryName);
+
+    base::flat_set<uint64_t> reported_surface_keys;
+    for (const auto& entry : merged_entries) {
+      for (const auto& metric : entry.second->metrics) {
+        if (base::Contains(expected_keys_, metric.first))
+          reported_surface_keys.insert(metric.first);
+      }
+    }
+    return reported_surface_keys;
+  }
+
+  base::RunLoop& run_loop() { return *run_loop_; }
+
+  const std::vector<uint64_t> expected_keys() const { return expected_keys_; }
 
  private:
   test::ScopedPrivacyBudgetConfig privacy_budget_config_;
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
   std::unique_ptr<base::RunLoop> run_loop_;
+
+  std::vector<uint64_t> expected_keys_;
 };
 
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTestActiveSampling,
                        ActiveSamplingIsPerformed) {
-  content::NavigateToURLBlockUntilNavigationsComplete(
-      chrome_test_utils::GetActiveWebContents(this), GURL("about:blank"), 1);
-  content::RunAllTasksUntilIdle();
-  auto merged_entries = ukm_recorder().GetMergedEntriesByName(
-      ukm::builders::Identifiability::kEntryName);
+  run_loop().Run();
 
-  std::vector<uint64_t> reported_surface_keys;
-  for (const auto& entry : merged_entries) {
-    for (const auto& metric : entry.second->metrics) {
-      reported_surface_keys.push_back(metric.first);
-    }
-  }
-
-  uint64_t key_model = blink::IdentifiableSurface::FromTypeAndToken(
-                           blink::IdentifiableSurface::Type::
-                               kNavigatorUAData_GetHighEntropyValues,
-                           blink::IdentifiableToken("model"))
-                           .ToUkmMetricHash();
-  uint64_t key_arial =
-      blink::IdentifiableSurface::FromTypeAndToken(
-          blink::IdentifiableSurface::Type::kFontFamilyAvailable,
-          blink::IdentifiableToken("arial"))
-          .ToUkmMetricHash();
-  uint64_t key_helvetica =
-      blink::IdentifiableSurface::FromTypeAndToken(
-          blink::IdentifiableSurface::Type::kFontFamilyAvailable,
-          blink::IdentifiableToken("helvetica"))
-          .ToUkmMetricHash();
-  EXPECT_THAT(reported_surface_keys,
-              testing::IsSupersetOf({key_model, key_arial, key_helvetica}));
+  // Test succeeds if there is no timeout. However, let's recheck the metrics
+  // here, so that if there is a timeout we get an output of which metrics are
+  // missing.
+  EXPECT_THAT(GetReportedSurfaceKeys(),
+              UnorderedElementsAreArray(expected_keys()));
 }

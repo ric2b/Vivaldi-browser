@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -557,6 +557,11 @@ bool CreatePlatformShortcuts(const base::FilePath& web_app_path,
   if (creation_locations.applications_menu_location == APP_MENU_LOCATION_HIDDEN)
     return true;
 
+  // If this is set, then keeping this as a local variable ensures it is not
+  // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
+  scoped_refptr<ShortcutOverrideForTesting> shortcut_override =
+      web_app::GetShortcutOverrideForTesting();
+
   // Shortcut paths under which to create shortcuts.
   std::vector<base::FilePath> shortcut_paths =
       GetShortcutPaths(creation_locations);
@@ -600,6 +605,10 @@ void UpdatePlatformShortcuts(const base::FilePath& web_app_path,
                              const ShortcutInfo& shortcut_info) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
+  // If this is set, then keeping this as a local variable ensures it is not
+  // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
+  scoped_refptr<ShortcutOverrideForTesting> shortcut_override =
+      web_app::GetShortcutOverrideForTesting();
 
   // Update the icon if necessary.
   const base::FilePath icon_file =
@@ -626,6 +635,10 @@ ShortcutLocations GetAppExistingShortCutLocationImpl(
     const ShortcutInfo& shortcut_info) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
+  // If this is set, then keeping this as a local variable ensures it is not
+  // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
+  scoped_refptr<ShortcutOverrideForTesting> shortcut_override =
+      web_app::GetShortcutOverrideForTesting();
   ShortcutLocations result;
   ShortcutLocations desktop;
   desktop.on_desktop = true;
@@ -698,6 +711,10 @@ void DeletePlatformShortcuts(const base::FilePath& web_app_path,
                              const ShortcutInfo& shortcut_info,
                              scoped_refptr<base::TaskRunner> result_runner,
                              DeleteShortcutsCallback callback) {
+  // If this is set, then keeping this as a local variable ensures it is not
+  // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
+  scoped_refptr<ShortcutOverrideForTesting> shortcut_override =
+      web_app::GetShortcutOverrideForTesting();
   GetShortcutLocationsAndDeleteShortcuts(
       web_app_path, shortcut_info.profile_path, shortcut_info.title,
       base::BindOnce(&FinishDeletingPlatformShortcuts, web_app_path,
@@ -718,6 +735,10 @@ void FinishDeletingAllShortcutsForProfile(bool result) {
 void DeleteAllShortcutsForProfile(const base::FilePath& profile_path) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
+  // If this is set, then keeping this as a local variable ensures it is not
+  // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
+  scoped_refptr<ShortcutOverrideForTesting> shortcut_override =
+      web_app::GetShortcutOverrideForTesting();
   GetShortcutLocationsAndDeleteShortcuts(
       base::FilePath(), profile_path, std::u16string(),
       base::BindOnce(&FinishDeletingAllShortcutsForProfile));
@@ -728,7 +749,7 @@ std::vector<base::FilePath> GetShortcutPaths(
   // Shortcut paths under which to create shortcuts.
   std::vector<base::FilePath> shortcut_paths;
   // if there is no ShortcutOverrirdeForTesting, set it to empty.
-  ScopedShortcutOverrideForTesting* testing_shortcuts =
+  scoped_refptr<ShortcutOverrideForTesting> testing_shortcuts =
       GetShortcutOverrideForTesting();
   // Locations to add to shortcut_paths.
   struct {

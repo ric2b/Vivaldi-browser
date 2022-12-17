@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,27 +66,6 @@ void PasswordStoreBackendMetricsRecorder::RecordMetrics(
     if (absl::holds_alternative<AndroidBackendError>(error.value())) {
       RecordErrorCode(std::move(absl::get<1>(error.value())));
     }
-  }
-}
-
-void PasswordStoreBackendMetricsRecorder::RecordMetricsForUnenrolledClients(
-    const absl::optional<AndroidBackendError>& error) const {
-  base::UmaHistogramBoolean(BuildMetricName("UnenrolledFromUPM.Success"),
-                            !error.has_value());
-  if (!error.has_value())
-    return;
-
-  base::UmaHistogramEnumeration(BuildMetricName("UnenrolledFromUPM.ErrorCode"),
-                                error->type);
-  if (error->type == AndroidBackendErrorType::kExternalError) {
-    DCHECK(error->api_error_code.has_value());
-    base::UmaHistogramSparse(BuildMetricName("UnenrolledFromUPM.APIError"),
-                             error->api_error_code.value());
-  }
-  if (error->connection_result_code.has_value()) {
-    base::UmaHistogramSparse(
-        BuildMetricName("UnenrolledFromUPM.ConnectionResultCode"),
-        error->connection_result_code.value());
   }
 }
 

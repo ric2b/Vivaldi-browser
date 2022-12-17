@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -49,14 +50,13 @@ struct CaptureAccessHandlerBase::Session {
   }
 
   void SetWebContents(int render_process_id, int render_frame_id) {
-    auto* target_web_contents = content::WebContents::FromRenderFrameHost(
+    auto* web_contents = content::WebContents::FromRenderFrameHost(
         content::RenderFrameHost::FromID(render_process_id, render_frame_id));
     // Use the outermost WebContents in the WebContents tree, if possible.
     // If we can't find the WebContents, clear |target_web_contents|.
-    this->target_web_contents =
-        target_web_contents
-            ? target_web_contents->GetOutermostWebContents()->GetWeakPtr()
-            : nullptr;
+    target_web_contents =
+        web_contents ? web_contents->GetOutermostWebContents()->GetWeakPtr()
+                     : nullptr;
   }
 
   content::WebContents* GetWebContents() const {
@@ -131,14 +131,13 @@ std::list<CaptureAccessHandlerBase::Session>::iterator
 CaptureAccessHandlerBase::FindSession(int render_process_id,
                                       int render_frame_id,
                                       int page_request_id) {
-  return std::find_if(sessions_.begin(), sessions_.end(),
-                      [render_process_id, render_frame_id,
-                       page_request_id](const Session& session) {
-                        return session.request_process_id ==
-                                   render_process_id &&
-                               session.request_frame_id == render_frame_id &&
-                               session.page_request_id == page_request_id;
-                      });
+  return base::ranges::find_if(
+      sessions_, [render_process_id, render_frame_id,
+                  page_request_id](const Session& session) {
+        return session.request_process_id == render_process_id &&
+               session.request_frame_id == render_frame_id &&
+               session.page_request_id == page_request_id;
+      });
 }
 
 void CaptureAccessHandlerBase::UpdateMediaRequestState(

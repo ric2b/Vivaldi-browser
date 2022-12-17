@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,9 +11,6 @@
 #include <vector>
 
 #include "ash/components/arc/arc_util.h"
-#include "ash/components/disks/disk.h"
-#include "ash/components/disks/disk_mount_manager.h"
-#include "ash/components/disks/mock_disk_mount_manager.h"
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
@@ -43,6 +40,9 @@
 #include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_client.h"
 #include "chromeos/ash/components/dbus/vm_plugin_dispatcher/fake_vm_plugin_dispatcher_client.h"
+#include "chromeos/ash/components/disks/disk.h"
+#include "chromeos/ash/components/disks/disk_mount_manager.h"
+#include "chromeos/ash/components/disks/mock_disk_mount_manager.h"
 #include "services/device/public/cpp/test/fake_usb_device_info.h"
 #include "services/device/public/cpp/test/fake_usb_device_manager.h"
 #include "services/device/public/mojom/usb_device.mojom.h"
@@ -207,23 +207,26 @@ class CrosUsbDetectorTest : public BrowserWithTestWindowTest {
                            const std::string& guid,
                            bool vm_success = true,
                            bool container_success = true) {
-    absl::optional<vm_tools::concierge::AttachUsbDeviceResponse> response;
-    response.emplace();
-    response->set_success(vm_success);
-    response->set_guest_port(0);
-    fake_concierge_client_->set_attach_usb_device_response(response);
+    absl::optional<vm_tools::concierge::AttachUsbDeviceResponse>
+        attach_device_response;
+    attach_device_response.emplace();
+    attach_device_response->set_success(vm_success);
+    attach_device_response->set_guest_port(0);
+    fake_concierge_client_->set_attach_usb_device_response(
+        std::move(attach_device_response));
 
     if (vm_success && !guest_id.container_name.empty()) {
-      vm_tools::cicerone::AttachUsbToContainerResponse response;
-      response.set_status(
+      vm_tools::cicerone::AttachUsbToContainerResponse
+          attach_container_response;
+      attach_container_response.set_status(
           container_success
               ? vm_tools::cicerone::AttachUsbToContainerResponse_Status_OK
               : vm_tools::cicerone::AttachUsbToContainerResponse_Status_FAILED);
       if (!container_success) {
-        response.set_failure_reason("Expected failure");
+        attach_container_response.set_failure_reason("Expected failure");
       }
       fake_cicerone_client_->set_attach_usb_to_container_response(
-          std::move(response));
+          std::move(attach_container_response));
 
       EXPECT_CALL(*this, OnAttach(container_success));
     } else {

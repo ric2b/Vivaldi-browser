@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,7 +73,8 @@ suite('AboutPageTest_AllBuilds', function() {
   function initNewPage(): Promise<void> {
     aboutBrowserProxy.reset();
     lifetimeBrowserProxy.reset();
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     page = document.createElement('settings-about-page');
     Router.getInstance().navigateTo(testRoutes.ABOUT);
     document.body.appendChild(page);
@@ -315,7 +316,8 @@ suite('AboutPageTest_OfficialBuilds', function() {
     setupRouter();
     browserProxy = new TestAboutPageBrowserProxy();
     AboutPageBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     page = document.createElement('settings-about-page');
     document.body.appendChild(page);
   });

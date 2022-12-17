@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -426,9 +426,9 @@ RenderProcessHost* DedicatedAuctionProcessManager::LaunchProcess(
           // TODO(https://crbug.com/1281311) add a utility helper for Jit.
           .WithChildFlags(ChildProcessHost::CHILD_RENDERER)
 #endif
-          .WithProcessCallback(
-              base::BindOnce(&ProcessHandle::OnBaseProcessLaunched,
-                             process_handle->weak_ptr_factory_.GetWeakPtr()))
+          .WithProcessCallback(base::BindOnce(
+              &ProcessHandle::OnBaseProcessLaunched,
+              process_handle->weak_ptr_factory_.GetMutableWeakPtr()))
           .Pass());
   return nullptr;
 }

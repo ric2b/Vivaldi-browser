@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,11 +51,13 @@ class AboutThisSiteService : public KeyedService {
     kShownWithoutDescription = 2,
     kClickedWithDescription = 3,
     kClickedWithoutDescription = 4,
+    kOpenedDirectlyFromSidePanel = 5,
 
-    kMaxValue = kClickedWithoutDescription
+    kMaxValue = kOpenedDirectlyFromSidePanel
   };
 
-  explicit AboutThisSiteService(std::unique_ptr<Client> client);
+  explicit AboutThisSiteService(std::unique_ptr<Client> client,
+                                bool allow_missing_description);
   ~AboutThisSiteService() override;
 
   AboutThisSiteService(const AboutThisSiteService&) = delete;
@@ -66,17 +68,15 @@ class AboutThisSiteService : public KeyedService {
       const GURL& url,
       ukm::SourceId source_id) const;
 
-  bool CanShowBanner(GURL url);
-  void OnBannerDismissed(GURL url, ukm::SourceId source_id);
-  void OnBannerURLOpened(GURL url, ukm::SourceId source_id);
-
   static void OnAboutThisSiteRowClicked(bool with_description);
+  static void OnOpenedDirectlyFromSidePanel();
 
   base::WeakPtr<AboutThisSiteService> GetWeakPtr();
 
  private:
   std::unique_ptr<Client> client_;
   base::flat_set<url::Origin> dismissed_banners_;
+  const bool allow_missing_description_;
 
   base::WeakPtrFactory<AboutThisSiteService> weak_ptr_factory_{this};
 };

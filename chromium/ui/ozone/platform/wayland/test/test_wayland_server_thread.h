@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -74,6 +74,9 @@ class TestWaylandServerThread : public base::Thread,
   TestWaylandServerThread& operator=(const TestWaylandServerThread&) = delete;
 
   ~TestWaylandServerThread() override;
+
+  // TODO(1365887): This shouldn't really exist.
+  static void FlushClientForResource(wl_resource* resource);
 
   // Starts the test Wayland server thread. If this succeeds, the WAYLAND_SOCKET
   // environment variable will be set to the string representation of a file

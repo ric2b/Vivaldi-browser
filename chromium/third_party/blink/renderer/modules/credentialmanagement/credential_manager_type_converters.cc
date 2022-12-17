@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_arraybuffer_arraybufferview.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_client_inputs.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_device_public_key_inputs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_large_blob_inputs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_payment_inputs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authenticator_selection_criteria.h"
@@ -50,6 +51,8 @@ using blink::mojom::blink::CableRegistrationPtr;
 using blink::mojom::blink::CredentialInfo;
 using blink::mojom::blink::CredentialInfoPtr;
 using blink::mojom::blink::CredentialType;
+using blink::mojom::blink::DevicePublicKeyRequest;
+using blink::mojom::blink::DevicePublicKeyRequestPtr;
 using blink::mojom::blink::IdentityProvider;
 using blink::mojom::blink::IdentityProviderPtr;
 using blink::mojom::blink::LargeBlobSupport;
@@ -341,12 +344,6 @@ TypeConverter<PublicKeyCredentialUserEntityPtr,
   auto entity = PublicKeyCredentialUserEntity::New();
   // PublicKeyCredentialEntity
   entity->name = user.name();
-  if (user.hasIcon()) {
-    if (user.icon().IsEmpty())
-      entity->icon = blink::KURL();
-    else
-      entity->icon = blink::KURL(user.icon());
-  }
   // PublicKeyCredentialUserEntity
   entity->id = ConvertTo<Vector<uint8_t>>(user.id());
   entity->display_name = user.displayName();
@@ -364,12 +361,6 @@ TypeConverter<PublicKeyCredentialRpEntityPtr,
     return nullptr;
   }
   entity->name = rp.name();
-  if (rp.hasIcon()) {
-    if (rp.icon().IsEmpty())
-      entity->icon = blink::KURL();
-    else
-      entity->icon = blink::KURL(rp.icon());
-  }
   // PublicKeyCredentialRpEntity
   if (rp.hasId()) {
     entity->id = rp.id();
@@ -388,7 +379,7 @@ TypeConverter<PublicKeyCredentialDescriptorPtr,
   mojo_descriptor->type = ConvertTo<PublicKeyCredentialType>(
       blink::IDLEnumAsString(descriptor.type()));
   mojo_descriptor->id = ConvertTo<Vector<uint8_t>>(descriptor.id());
-  if (descriptor.hasTransports() && !descriptor.transports().IsEmpty()) {
+  if (descriptor.hasTransports() && !descriptor.transports().empty()) {
     for (const auto& transport : descriptor.transports()) {
       auto maybe_transport(
           ConvertTo<absl::optional<AuthenticatorTransport>>(transport));
@@ -449,7 +440,7 @@ TypeConverter<PublicKeyCredentialCreationOptionsPtr,
         parameters.push_back(std::move(normalized_parameter));
       }
     }
-    if (parameters.IsEmpty()) {
+    if (parameters.empty()) {
       return nullptr;
     }
   }
@@ -548,6 +539,10 @@ TypeConverter<PublicKeyCredentialCreationOptionsPtr,
           RemoteDesktopClientOverride::From(
               *extensions->remoteDesktopClientOverride());
     }
+    if (extensions->hasDevicePubKey()) {
+      mojo_options->device_public_key =
+          DevicePublicKeyRequest::From(*extensions->devicePubKey());
+    }
   }
 
   return mojo_options;
@@ -565,9 +560,8 @@ TypeConverter<CableAuthenticationPtr, blink::CableAuthenticationData>::Convert(
       entity->authenticator_eid =
           ConvertFixedSizeArray(data.authenticatorEid(), 16);
       entity->session_pre_key = ConvertFixedSizeArray(data.sessionPreKey(), 32);
-      if (entity->client_eid->IsEmpty() ||
-          entity->authenticator_eid->IsEmpty() ||
-          entity->session_pre_key->IsEmpty()) {
+      if (entity->client_eid->empty() || entity->authenticator_eid->empty() ||
+          entity->session_pre_key->empty()) {
         return nullptr;
       }
       break;
@@ -575,7 +569,7 @@ TypeConverter<CableAuthenticationPtr, blink::CableAuthenticationData>::Convert(
     case 2:
       entity->server_link_data =
           ConvertTo<Vector<uint8_t>>(data.sessionPreKey());
-      if (entity->server_link_data->IsEmpty()) {
+      if (entity->server_link_data->empty()) {
         return nullptr;
       }
       entity->experiments = ConvertTo<Vector<uint8_t>>(data.clientEid());
@@ -596,7 +590,7 @@ TypeConverter<CableRegistrationPtr, blink::CableRegistrationData>::Convert(
   entity->versions = data.versions();
   entity->relying_party_public_key =
       ConvertFixedSizeArray(data.rpPublicKey(), 65);
-  if (entity->relying_party_public_key.IsEmpty()) {
+  if (entity->relying_party_public_key.empty()) {
     return nullptr;
   }
   return entity;
@@ -680,6 +674,10 @@ TypeConverter<PublicKeyCredentialRequestOptionsPtr,
           RemoteDesktopClientOverride::From(
               *extensions->remoteDesktopClientOverride());
     }
+    if (extensions->hasDevicePubKey()) {
+      mojo_options->device_public_key =
+          DevicePublicKeyRequest::From(*extensions->devicePubKey());
+    }
   }
 
   return mojo_options;
@@ -705,6 +703,20 @@ TypeConverter<IdentityProviderPtr, blink::IdentityProvider>::Convert(
   mojo_provider->client_id = provider.clientId();
   mojo_provider->nonce = provider.getNonceOr("");
   return mojo_provider;
+}
+
+// static
+DevicePublicKeyRequestPtr
+TypeConverter<DevicePublicKeyRequestPtr,
+              blink::AuthenticationExtensionsDevicePublicKeyInputs>::
+    Convert(const blink::AuthenticationExtensionsDevicePublicKeyInputs&
+                device_public_key) {
+  auto ret = DevicePublicKeyRequest::New();
+  ret->attestation = ConvertTo<absl::optional<AttestationConveyancePreference>>(
+                         device_public_key.attestation())
+                         .value_or(AttestationConveyancePreference::NONE);
+  ret->attestation_formats = device_public_key.attestationFormats();
+  return ret;
 }
 
 }  // namespace mojo

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,6 @@
 #include <ostream>
 #include <sstream>
 
-#include "ash/components/multidevice/logging/logging.h"
-#include "ash/components/multidevice/remote_device_cache.h"
 #include "ash/services/secure_channel/active_connection_manager_impl.h"
 #include "ash/services/secure_channel/authenticated_channel.h"
 #include "ash/services/secure_channel/ble_connection_manager_impl.h"
@@ -23,6 +21,8 @@
 #include "ash/services/secure_channel/secure_channel_disconnector_impl.h"
 #include "ash/services/secure_channel/timer_factory_impl.h"
 #include "base/memory/ptr_util.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
+#include "chromeos/ash/components/multidevice/remote_device_cache.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 
 namespace ash::secure_channel {

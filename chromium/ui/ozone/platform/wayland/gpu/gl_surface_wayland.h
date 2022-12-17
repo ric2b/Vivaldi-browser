@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,12 +43,14 @@ class GLSurfaceWayland : public gl::NativeViewGLSurfaceEGL {
               const gfx::ColorSpace& color_space,
               bool has_alpha) override;
   EGLConfig GetConfig() override;
-  gfx::SwapResult SwapBuffers(PresentationCallback callback) override;
+  gfx::SwapResult SwapBuffers(PresentationCallback callback,
+                              gl::FrameData data) override;
   gfx::SwapResult PostSubBuffer(int x,
                                 int y,
                                 int width,
                                 int height,
-                                PresentationCallback callback) override;
+                                PresentationCallback callback,
+                                gl::FrameData data) override;
 
  private:
   ~GLSurfaceWayland() override;

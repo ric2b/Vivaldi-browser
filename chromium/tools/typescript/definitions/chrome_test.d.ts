@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@ declare namespace chrome {
     export function assertTrue(value: boolean, message?: string): asserts value;
     export function fail(message?: string): never;
     export function runTests(tests: Array<() => void>): void;
+    export function runWithUserGesture(callback: () => void): void;
     export function succeed(message?: string): void;
   }
 }

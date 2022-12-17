@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,8 +29,6 @@ class CrosSpeechRecognitionRecognizerImpl
   CrosSpeechRecognitionRecognizerImpl(
       mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient>
           remote,
-      base::WeakPtr<SpeechRecognitionServiceImpl>
-          speech_recognition_service_impl,
       media::mojom::SpeechRecognitionOptionsPtr options,
       const base::FilePath& binary_path,
       const base::FilePath& config_path);
@@ -40,8 +38,6 @@ class CrosSpeechRecognitionRecognizerImpl
       mojo::PendingReceiver<media::mojom::SpeechRecognitionRecognizer> receiver,
       mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient>
           remote,
-      base::WeakPtr<SpeechRecognitionServiceImpl>
-          speech_recognition_service_impl,
       media::mojom::SpeechRecognitionOptionsPtr options,
       const base::FilePath& binary_path,
       const base::FilePath& config_path);

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,6 +40,7 @@ class TrackedDictionary {
 
   // Type-specific setter for convenience.
   void SetBoolean(const std::string& path, bool new_value);
+  void SetInteger(const std::string& path, int new_value);
   void SetString(const std::string& path, const std::string& new_value);
 
  private:

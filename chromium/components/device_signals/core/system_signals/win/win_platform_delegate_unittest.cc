@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,12 +6,15 @@
 
 #include <array>
 
+#include "base/base64.h"
+#include "base/base_paths.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "components/device_signals/test/test_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace device_signals {
@@ -22,6 +25,13 @@ namespace {
 // to construct all sorts of file paths, and also non-file-paths.
 constexpr char kEnvironmentVariableName[] = "TestEnvironmentVariablePath";
 constexpr char kTestFileName[] = "test_file";
+
+constexpr char kExpectedSignedBase64PublicKey[] =
+    "Rsw3wqh8gUxnMU8j2jGvvBMZqpe6OhIxn/WeEVg+pYQ=";
+constexpr char kExpectedMultiSignedPrimaryBase64PublicKey[] =
+    "ir/0opX6HPqsQlv4dFWqSx+nilORf7Q9474b2lGYZ94=";
+constexpr char kExpectedMultiSignedSecondaryBase64PublicKey[] =
+    "tzTDLyjSfGIMobYniu5f0JwZ5uSo0nmBV7T566A3vcQ=";
 
 constexpr base::FilePath::CharType kInexistantFileName[] =
     FILE_PATH_LITERAL("does_not_exit");
@@ -75,6 +85,75 @@ TEST_F(WinPlatformDelegateTest, ResolveFilePath_Fail) {
   EXPECT_FALSE(platform_delegate_.ResolveFilePath(
       scoped_dir_.GetPath().Append(kInexistantFileName), &resolved_fp));
   EXPECT_EQ(resolved_fp, base::FilePath());
+}
+
+TEST_F(WinPlatformDelegateTest,
+       GetSigningCertificatesPublicKeyHashes_InvalidPath) {
+  auto public_keys = platform_delegate_.GetSigningCertificatesPublicKeyHashes(
+      base::FilePath());
+  ASSERT_TRUE(public_keys);
+  EXPECT_EQ(public_keys->size(), 0U);
+}
+
+TEST_F(WinPlatformDelegateTest, GetSigningCertificatesPublicKeyHashes_Signed) {
+  base::FilePath signed_exe_path = test::GetSignedExePath();
+  ASSERT_TRUE(base::PathExists(signed_exe_path));
+
+  auto public_keys =
+      platform_delegate_.GetSigningCertificatesPublicKeyHashes(signed_exe_path);
+  ASSERT_TRUE(public_keys);
+  ASSERT_EQ(public_keys->size(), 1U);
+
+  std::string base64_encoded_public_key;
+  base::Base64Encode(public_keys.value()[0], &base64_encoded_public_key);
+  EXPECT_EQ(base64_encoded_public_key, kExpectedSignedBase64PublicKey);
+}
+
+TEST_F(WinPlatformDelegateTest,
+       GetSigningCertificatesPublicKeyHashes_MultiSigned) {
+  base::FilePath multi_signed_exe_path = test::GetMultiSignedExePath();
+  ASSERT_TRUE(base::PathExists(multi_signed_exe_path));
+
+  auto public_keys = platform_delegate_.GetSigningCertificatesPublicKeyHashes(
+      multi_signed_exe_path);
+  ASSERT_TRUE(public_keys);
+  ASSERT_EQ(public_keys->size(), 2U);
+
+  std::string base64_encoded_public_key;
+  base::Base64Encode(public_keys.value()[0], &base64_encoded_public_key);
+  EXPECT_EQ(base64_encoded_public_key,
+            kExpectedMultiSignedPrimaryBase64PublicKey);
+  base::Base64Encode(public_keys.value()[1], &base64_encoded_public_key);
+  EXPECT_EQ(base64_encoded_public_key,
+            kExpectedMultiSignedSecondaryBase64PublicKey);
+}
+
+TEST_F(WinPlatformDelegateTest, GetSigningCertificatePublicKeysHash_Empty) {
+  base::FilePath empty_exe_path = test::GetEmptyExePath();
+  ASSERT_TRUE(base::PathExists(empty_exe_path));
+
+  auto public_keys =
+      platform_delegate_.GetSigningCertificatesPublicKeyHashes(empty_exe_path);
+  ASSERT_TRUE(public_keys);
+  EXPECT_EQ(public_keys->size(), 0U);
+}
+
+TEST_F(WinPlatformDelegateTest, GetProductMetadata_Success) {
+  base::FilePath metadata_exe_path = test::GetMetadataExePath();
+  ASSERT_TRUE(base::PathExists(metadata_exe_path));
+
+  auto metadata = platform_delegate_.GetProductMetadata(metadata_exe_path);
+
+  ASSERT_TRUE(metadata);
+  EXPECT_EQ(metadata->name, test::GetMetadataProductName());
+  EXPECT_EQ(metadata->version, test::GetMetadataProductVersion());
+}
+
+TEST_F(WinPlatformDelegateTest, GetProductMetadata_Empty) {
+  base::FilePath empty_exe_path = test::GetEmptyExePath();
+  ASSERT_TRUE(base::PathExists(empty_exe_path));
+
+  EXPECT_FALSE(platform_delegate_.GetProductMetadata(empty_exe_path));
 }
 
 }  // namespace device_signals

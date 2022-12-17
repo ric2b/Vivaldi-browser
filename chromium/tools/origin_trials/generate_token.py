@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -145,7 +145,7 @@ def ParseArgs():
   parser = argparse.ArgumentParser(
       description="Generate tokens for enabling experimental features")
   parser.add_argument("--version",
-                      help="Token version to use. Currently only version 2"
+                      help="Token version to use. Currently only version 2 "
                       "and version 3 are supported.",
                       default='3',
                       type=VersionFromArg)

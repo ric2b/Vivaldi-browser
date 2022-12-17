@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -296,7 +296,7 @@ class PolicyTestCase {
 
     const base::Value* os_list = test_case.FindListKey("os");
     if (os_list) {
-      for (const auto& os : os_list->GetListDeprecated()) {
+      for (const auto& os : os_list->GetList()) {
         if (os.is_string())
           supported_os_.push_back(os.GetString());
       }
@@ -305,8 +305,7 @@ class PolicyTestCase {
     const base::Value* policy_pref_mapping_tests =
         test_case.FindListKey("policy_pref_mapping_tests");
     if (policy_pref_mapping_tests) {
-      for (const auto& mapping :
-           policy_pref_mapping_tests->GetListDeprecated()) {
+      for (const auto& mapping : policy_pref_mapping_tests->GetList()) {
         if (mapping.is_dict()) {
           policy_pref_mapping_tests_.push_back(
               std::make_unique<PolicyPrefMappingTest>(mapping));
@@ -400,18 +399,20 @@ class PolicyTestCases {
       ADD_FAILURE() << "Error reading: " << test_case_path;
       return;
     }
-    base::DictionaryValue* dict = nullptr;
     auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(json);
     if (!parsed_json.has_value()) {
       ADD_FAILURE() << "Error parsing policy_test_cases.json: "
                     << parsed_json.error().message;
       return;
-    } else if (!parsed_json->GetAsDictionary(&dict)) {
+    }
+
+    base::Value::Dict* dict = parsed_json->GetIfDict();
+    if (!dict) {
       ADD_FAILURE()
           << "Error parsing policy_test_cases.json: Expected dictionary.";
       return;
     }
-    for (auto it : dict->DictItems()) {
+    for (auto it : *dict) {
       const std::string policy_name = GetPolicyName(it.first);
       if (policy_name == kInstructionKeyName)
         continue;

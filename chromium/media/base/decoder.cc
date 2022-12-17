@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,6 +77,8 @@ std::string GetDecoderName(AudioDecoderType type) {
       return "MediaCodecAudioDecoder";
     case AudioDecoderType::kBroker:
       return "AudioDecoderBroker";
+    case AudioDecoderType::kPassthroughDTS:
+      return "PassthroughDTSAudioDecoder";
     case AudioDecoderType::kTesting:
       return "Testing or Mock Audio decoder";
     case AudioDecoderType::kAudioToolbox:

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -681,7 +681,7 @@ struct StructTraits<media::stable::mojom::MediaLogRecordDataView,
 
   static media::MediaLogRecord::Type type(const media::MediaLogRecord& input);
 
-  static const base::Value& params(const media::MediaLogRecord& input);
+  static const base::Value::Dict& params(const media::MediaLogRecord& input);
 
   static base::TimeTicks time(const media::MediaLogRecord& input);
 

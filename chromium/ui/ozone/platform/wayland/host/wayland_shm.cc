@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,8 @@ void WaylandShm::Instantiate(WaylandConnection* connection,
                              uint32_t name,
                              const std::string& interface,
                              uint32_t version) {
-  DCHECK_EQ(interface, kInterfaceName);
+  CHECK_EQ(interface, kInterfaceName) << "Expected \"" << kInterfaceName
+                                      << "\" but got \"" << interface << "\"";
 
   auto* buffer_factory = connection->wayland_buffer_factory();
   if (buffer_factory->wayland_shm_ ||
@@ -61,7 +62,7 @@ wl::Object<wl_buffer> WaylandShm::CreateBuffer(const base::ScopedFD& fd,
       with_alpha_channel ? WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888;
   wl::Object<wl_buffer> shm_buffer(wl_shm_pool_create_buffer(
       pool.get(), 0, size.width(), size.height(), size.width() * 4, format));
-  connection_->ScheduleFlush();
+  connection_->Flush();
   return shm_buffer;
 }
 

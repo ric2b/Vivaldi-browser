@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -477,20 +477,19 @@ export class Service implements ServiceInterface {
   }
 
   addUserSpecifiedSites(
-      siteSet: chrome.developerPrivate.UserSiteSet,
+      siteSet: chrome.developerPrivate.SiteSet,
       hosts: string[]): Promise<void> {
     return new Promise(function(resolve) {
-      chrome.developerPrivate.addUserSpecifiedSites(
-          {siteList: siteSet, hosts}, resolve);
+      chrome.developerPrivate.addUserSpecifiedSites({siteSet, hosts}, resolve);
     });
   }
 
   removeUserSpecifiedSites(
-      siteSet: chrome.developerPrivate.UserSiteSet,
+      siteSet: chrome.developerPrivate.SiteSet,
       hosts: string[]): Promise<void> {
     return new Promise(function(resolve) {
       chrome.developerPrivate.removeUserSpecifiedSites(
-          {siteList: siteSet, hosts}, resolve);
+          {siteSet, hosts}, resolve);
     });
   }
 
@@ -501,8 +500,20 @@ export class Service implements ServiceInterface {
     });
   }
 
+  getMatchingExtensionsForSite(site: string):
+      Promise<chrome.developerPrivate.MatchingExtensionInfo[]> {
+    return chrome.developerPrivate.getMatchingExtensionsForSite(site);
+  }
+
   getUserSiteSettingsChangedTarget() {
     return chrome.developerPrivate.onUserSiteSettingsChanged;
+  }
+
+  setShowAccessRequestsInToolbar(id: string, showRequests: boolean) {
+    chrome.developerPrivate.updateExtensionConfiguration({
+      extensionId: id,
+      showAccessRequestsInToolbar: showRequests,
+    });
   }
 
   static getInstance(): ServiceInterface {

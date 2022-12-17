@@ -30,6 +30,10 @@ namespace sync_notes {
 class NoteSyncService;
 }
 
+namespace file_sync {
+class SyncedFileStore;
+}
+
 namespace vivaldi {
 
 class NoteLoadDetails;
@@ -44,7 +48,8 @@ class NotesModel : public KeyedService {
   };
 
  public:
-  explicit NotesModel(sync_notes::NoteSyncService* sync_service);
+  explicit NotesModel(sync_notes::NoteSyncService* sync_service,
+                      file_sync::SyncedFileStore* synced_file_store);
   ~NotesModel() override;
   NotesModel(const NotesModel&) = delete;
   NotesModel& operator=(const NotesModel&) = delete;
@@ -54,9 +59,6 @@ class NotesModel : public KeyedService {
   // loaded() will return true and observers will be notified via
   // NotesModelLoaded().
   void Load(const base::FilePath& profile_path);
-
-  bool LoadNotes();
-  bool SaveNotes();
 
   void AddObserver(NotesModelObserver* observer);
   void RemoveObserver(NotesModelObserver* observer);
@@ -75,20 +77,16 @@ class NotesModel : public KeyedService {
 
   // The root node, parent of the main node, trash and other nodes
   const NoteNode* root_node() const { return root_.get(); }
-  NoteNode* root_node() { return root_.get(); }
 
   // The parent node of all normal notes (deleted  notes are parented by the
   // trash node). Child of the root node
   const NoteNode* main_node() const { return main_node_; }
-  NoteNode* main_node() { return main_node_; }
 
   // Returns the 'other' node. This is NULL until loaded. Child of the root node
   const NoteNode* other_node() const { return other_node_; }
-  NoteNode* other_node() { return other_node_; }
 
   // Returns the trash node. This is NULL until loaded. Child of the root node
   const NoteNode* trash_node() const { return trash_node_; }
-  NoteNode* trash_node() { return trash_node_; }
 
   // Returns whether the given |node| is one of the permanent nodes - root node,
   bool is_permanent_node(const NoteNode* node) const {
@@ -98,45 +96,67 @@ class NotesModel : public KeyedService {
   // Adds a new folder node at the specified position with the given
   // |creation_time| and |guid|. If no GUID is provided (i.e. nullopt), then a
   // random one will be generated. If a GUID is provided, it must be valid.
-  NoteNode* AddFolder(const NoteNode* parent,
-                      size_t index,
-                      const std::u16string& name,
-                      absl::optional<base::Time> creation_time = absl::nullopt,
-                      absl::optional<base::GUID> guid = absl::nullopt);
+  const NoteNode* AddFolder(
+      const NoteNode* parent,
+      size_t index,
+      const std::u16string& name,
+      absl::optional<base::Time> creation_time = absl::nullopt,
+      absl::optional<base::GUID> guid = absl::nullopt);
 
   // Adds a note at the specified position with the given |creation_time| and
   // |guid|. If no GUID is provided (i.e. nullopt), then a random one will be
   // generated. If a GUID is provided, it must be valid.
-  NoteNode* AddNote(const NoteNode* parent,
-                    size_t index,
-                    const std::u16string& subject,
-                    const GURL& url,
-                    const std::u16string& content,
-                    absl::optional<base::Time> creation_time = absl::nullopt,
-                    absl::optional<base::GUID> guid = absl::nullopt);
+  const NoteNode* AddNote(
+      const NoteNode* parent,
+      size_t index,
+      const std::u16string& title,
+      const GURL& url,
+      const std::u16string& content,
+      absl::optional<base::Time> creation_time = absl::nullopt,
+      absl::optional<base::GUID> guid = absl::nullopt);
 
   // Adds a separator at the specified position with the given |creation_time|
   // and |guid|. If no GUID is provided (i.e. nullopt), then a random one will
   // be generated. If a GUID is provided, it must be valid.
-  NoteNode* AddSeparator(
+  const NoteNode* AddSeparator(
       const NoteNode* parent,
       size_t index,
       absl::optional<std::u16string> name = absl::nullopt,
       absl::optional<base::Time> creation_time = absl::nullopt,
       absl::optional<base::GUID> guid = absl::nullopt);
 
-  NoteNode* AddNode(NoteNode* parent,
-                    int index,
-                    std::unique_ptr<NoteNode> node);
+  // Adds an attachment for which only the |checksum| is known at the specified
+  // position with the given |creation_time| and |guid|. If no GUID is provided
+  // (i.e. nullopt), then a random one will be generated. If a GUID is provided,
+  // it must be valid.
+  const NoteNode* AddAttachmentFromChecksum(
+      const NoteNode* parent,
+      size_t index,
+      const std::u16string& title,
+      const GURL& url,
+      const std::string& checksum,
+      absl::optional<base::Time> creation_time = absl::nullopt,
+      absl::optional<base::GUID> guid = absl::nullopt);
 
-  NoteNode* ImportNote(const NoteNode* parent,
-                       size_t index,
-                       const ImportedNotesEntry& node);
+  // Adds an attachment at the specified position with the given |creation_time|
+  // and |guid|. If no GUID is provided (i.e. nullopt), then a random one will
+  // be generated. If a GUID is provided, it must be valid.
+  const NoteNode* AddAttachment(
+      const NoteNode* parent,
+      size_t index,
+      const std::u16string& title,
+      const GURL& url,
+      std::vector<uint8_t> content,
+      absl::optional<base::Time> creation_time = absl::nullopt,
+      absl::optional<base::GUID> guid = absl::nullopt);
+
+  const NoteNode* ImportNote(const NoteNode* parent,
+                             size_t index,
+                             const ImportedNotesEntry& node);
 
   // Removes the node at the given |index| from |parent|. Removing a folder node
   // recursively removes all nodes.
   void Remove(const NoteNode* node);
-  bool Remove(NoteNode* parent, size_t index);
 
   // Removes all the non-permanent notes nodes that are editable by the user.
   // Observers are only notified when all nodes have been removed. There is no
@@ -144,7 +164,7 @@ class NotesModel : public KeyedService {
   void RemoveAllUserNotes();
 
   // Moves |node| to |new_parent| and inserts it at the given |index|.
-  bool Move(const NoteNode* node, const NoteNode* new_parent, size_t index);
+  void Move(const NoteNode* node, const NoteNode* new_parent, size_t index);
 
   void SetURL(const NoteNode* node, const GURL& url);
   void SetTitle(const NoteNode* node, const std::u16string& title);
@@ -154,10 +174,6 @@ class NotesModel : public KeyedService {
   void SetDateFolderModified(const NoteNode* parent, const base::Time time);
 
   void SetContent(const NoteNode* node, const std::u16string& content);
-
-  void ClearAttachments(const NoteNode* node);
-  void AddAttachment(const NoteNode* node, NoteAttachment&& attachment);
-  void SwapAttachments(const NoteNode* node1, const NoteNode* node2);
 
   // Returns, by reference in |notes|, the set of notes urls and their titles
   // and content. This returns the unique set of URLs. For example, if two notes
@@ -200,9 +216,6 @@ class NotesModel : public KeyedService {
   // a lock on |url_lock_|.
   bool IsNotesNoLock(const GURL& url);
 
-  // Removes the node from internal maps and recurses through all children. If
-  // the node is a url, its url is added to removed_urls.
-  //
   // Returns the set of nodes with the |url|.
   void GetNodesByURL(const GURL& url, std::vector<const NoteNode*>* nodes);
 
@@ -211,6 +224,8 @@ class NotesModel : public KeyedService {
   void GetNotesMatching(const std::u16string& text,
                         size_t max_count,
                         std::vector<std::pair<int, NoteNode::Type>>* matches);
+
+  const NoteNode* GetNoteNodeByID(int64_t id) const;
 
   sync_notes::NoteSyncService* sync_service() { return sync_service_; }
 
@@ -236,9 +251,15 @@ class NotesModel : public KeyedService {
   // Remove |node| and all its children from |nodes_ordered_by_url_set_|.
   void RemoveNodeTreeFromURLSet(NoteNode* node);
 
-  void RemoveAndDeleteNode(NoteNode* parent, size_t index, NoteNode* node_ptr);
+  void RemoveAttachmentsRecursive(NoteNode* node);
 
   void DoneLoading(std::unique_ptr<NoteLoadDetails> details);
+  void OnSyncedFilesStoreLoaded(std::unique_ptr<NoteLoadDetails> details);
+  void MigrateAttachmentsRecursive(NoteNode* node);
+
+  NoteNode* AddNode(NoteNode* parent,
+                    int index,
+                    std::unique_ptr<NoteNode> node);
 
   content::BrowserContext* context_;
   std::unique_ptr<NoteNode> root_;
@@ -270,14 +291,10 @@ class NotesModel : public KeyedService {
   int64_t next_node_id_ = 1;
 
   sync_notes::NoteSyncService* sync_service_;
+  file_sync::SyncedFileStore* synced_file_store_;
 
   base::WeakPtrFactory<NotesModel> weak_factory_{this};
 };
-
-const NoteNode* GetNotesNodeByID(const NotesModel* model, int64_t id);
-const NoteNode* GetNodeByID(const NoteNode* node, int64_t id);
-
-NoteNode* AsMutable(const NoteNode* node);
 
 }  // namespace vivaldi
 

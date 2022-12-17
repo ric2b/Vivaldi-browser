@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_SERIAL_SERIAL_PORT_H_
 
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/device/public/mojom/serial.mojom-blink-forward.h"
 #include "services/device/public/mojom/serial.mojom-blink.h"
 #include "third_party/blink/public/mojom/serial/serial.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
@@ -95,6 +94,7 @@ class SerialPort final : public EventTargetWithInlineData,
                       mojo::ScopedDataPipeConsumerHandle* consumer);
   void OnConnectionError();
   void OnOpen(mojo::PendingReceiver<device::mojom::blink::SerialPortClient>,
+              ScriptPromiseResolver*,
               mojo::PendingRemote<device::mojom::blink::SerialPort>);
   void OnGetSignals(ScriptPromiseResolver*,
                     device::mojom::blink::SerialPortControlSignalsPtr);

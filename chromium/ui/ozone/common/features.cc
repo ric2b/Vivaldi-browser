@@ -1,5 +1,4 @@
-
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,26 +8,37 @@
 
 namespace ui {
 
-const base::Feature kWaylandOverlayDelegation{"WaylandOverlayDelegation",
-                                              base::FEATURE_ENABLED_BY_DEFAULT};
+// Overlay delegation is required for delegated compositing. Linux doesn't
+// support many protocols that are required for delegated compositing. Thus,
+// enable that only on LaCrOS that uses exo, which implements all the required
+// protocols.
+BASE_FEATURE(kWaylandOverlayDelegation,
+             "WaylandOverlayDelegation",
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 // This feature flag enables a mode where the wayland client would submit
 // buffers at a scale of 1 and the server applies the respective scale transform
 // to properly composite the buffers. This mode is used to support fractional
 // scale factor.
-const base::Feature kWaylandSurfaceSubmissionInPixelCoordinates{
-  "WaylandSurfaceSubmissionInPixelCoordinates",
+BASE_FEATURE(kWaylandSurfaceSubmissionInPixelCoordinates,
+             "WaylandSurfaceSubmissionInPixelCoordinates",
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-      base::FEATURE_ENABLED_BY_DEFAULT
+             base::FEATURE_ENABLED_BY_DEFAULT
 #else
-      base::FEATURE_DISABLED_BY_DEFAULT
+             base::FEATURE_DISABLED_BY_DEFAULT
 #endif
-};
+);
 
 // This debug/dev flag pretty-prints DRM modeset configuration logs for ease
 // of reading. For more information, see: http://b/233006802
-const base::Feature kPrettyPrintDrmModesetConfigLogs{
-    "PrettyPrintDrmModesetConfigLogs", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kPrettyPrintDrmModesetConfigLogs,
+             "PrettyPrintDrmModesetConfigLogs",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsWaylandSurfaceSubmissionInPixelCoordinatesEnabled() {
   return base::FeatureList::IsEnabled(

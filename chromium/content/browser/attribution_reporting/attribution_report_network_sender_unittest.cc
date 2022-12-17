@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -216,7 +216,7 @@ TEST_F(AttributionReportNetworkSenderTest,
       kEventLevelReportUrl, ""));
 }
 
-TEST_F(AttributionReportNetworkSenderTest, DebugReportSent_NoMetricsRecorded) {
+TEST_F(AttributionReportNetworkSenderTest, DebugReportSent_MetricsRecorded) {
   base::HistogramTester histograms;
 
   auto source = SourceBuilder().BuildStored();
@@ -228,10 +228,25 @@ TEST_F(AttributionReportNetworkSenderTest, DebugReportSent_NoMetricsRecorded) {
   network_sender_->SendReport(report, /*is_debug_report=*/true,
                               base::DoNothing());
 
+  ASSERT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
+      GURL(kDebugEventLevelReportUrl),
+      network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED),
+      network::mojom::URLResponseHead::New(), ""));
+
+  ASSERT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
+      kDebugEventLevelReportUrl, ""));
+
   histograms.ExpectTotalCount("Conversions.ReportStatus2", 0);
   histograms.ExpectTotalCount("Conversions.Report.HttpResponseOrNetErrorCode",
                               0);
   histograms.ExpectTotalCount("Conversions.ReportRetrySucceed2", 0);
+
+  // kOk = 0.
+  histograms.ExpectUniqueSample("Conversions.DebugReport.ReportStatus", 0, 1);
+  histograms.ExpectUniqueSample(
+      "Conversions.DebugReport.HttpResponseOrNetErrorCode", net::HTTP_OK, 1);
+  histograms.ExpectUniqueSample("Conversions.DebugReport.ReportRetrySucceed",
+                                true, 1);
 }
 
 TEST_F(AttributionReportNetworkSenderTest,
@@ -304,7 +319,7 @@ TEST_F(AttributionReportNetworkSenderTest, ReportSent_RequestAttributesSet) {
   auto impression =
       SourceBuilder(base::Time())
           .SetReportingOrigin(url::Origin::Create(GURL("https://a.com")))
-          .SetConversionOrigin(url::Origin::Create(GURL("https://sub.b.com")))
+          .SetDestinationOrigin(url::Origin::Create(GURL("https://sub.b.com")))
           .BuildStored();
   AttributionReport report =
       ReportBuilder(AttributionInfoBuilder(impression).Build()).Build();

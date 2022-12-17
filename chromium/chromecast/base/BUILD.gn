@@ -1,4 +1,4 @@
-# Copyright 2015 The Chromium Authors. All rights reserved.
+# Copyright 2015 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -255,9 +255,6 @@ group("default_create_sys_info") {
   if (is_android) {
     public_deps = [ ":android_create_sys_info" ]
   } else if (chromecast_branding == "public") {
-    public_deps = [ ":dummy_create_sys_info" ]
-  } else if (enable_cast_media_runtime) {
-    # TODO(b/200723084): Replace the dummy implementation with real one.
     public_deps = [ ":dummy_create_sys_info" ]
   } else {
     public_deps = [ ":shlib_create_sys_info" ]

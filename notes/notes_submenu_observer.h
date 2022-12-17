@@ -45,7 +45,7 @@ class NotesSubMenuObserver : public RenderViewContextMenuObserver {
   int GetRootId();
 
  private:
-  typedef std::map<ui::MenuModel*, vivaldi::NoteNode*> MenuModelToNotesMap;
+  typedef std::map<ui::MenuModel*, const vivaldi::NoteNode*> MenuModelToNotesMap;
   typedef std::map<int, bool> IdToBoolMap;
 
   std::unique_ptr<NotesSubMenuObserverHelper> helper_;

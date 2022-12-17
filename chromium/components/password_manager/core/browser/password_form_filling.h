@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,10 @@
 namespace autofill {
 struct PasswordFormFillData;
 }  // namespace autofill
+
+namespace url {
+class Origin;
+}  // namespace url
 
 namespace password_manager {
 class PasswordFormMetricsRecorder;
@@ -57,6 +61,7 @@ autofill::PasswordFormFillData CreatePasswordFormFillData(
     const PasswordForm& form_on_page,
     const std::vector<const PasswordForm*>& matches,
     const PasswordForm& preferred_match,
+    const url::Origin& main_frame_origin,
     bool wait_for_username);
 
 }  // namespace password_manager

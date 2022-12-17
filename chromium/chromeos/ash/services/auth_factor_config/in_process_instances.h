@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,11 +14,18 @@
 
 namespace ash::auth {
 
+namespace mojom {
+class AuthFactorConfigAsyncWaiter;
+class RecoveryFactorEditorAsyncWaiter;
+}  // namespace mojom
+
 void BindToAuthFactorConfig(
     mojo::PendingReceiver<mojom::AuthFactorConfig> receiver);
+mojom::AuthFactorConfigAsyncWaiter GetAuthFactorConfigForTesting();
 
 void BindToRecoveryFactorEditor(
     mojo::PendingReceiver<mojom::RecoveryFactorEditor> receiver);
+mojom::RecoveryFactorEditorAsyncWaiter GetRecoveryFactorEditorForTesting();
 
 }  // namespace ash::auth
 

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,11 +14,14 @@
 #include <fuchsia/fonts/cpp/fidl.h>
 #include <fuchsia/hwinfo/cpp/fidl.h>
 #include <fuchsia/intl/cpp/fidl.h>
+#include <fuchsia/kernel/cpp/fidl.h>
 #include <fuchsia/logger/cpp/fidl.h>
 #include <fuchsia/media/cpp/fidl.h>
 #include <fuchsia/memorypressure/cpp/fidl.h>
 #include <fuchsia/net/interfaces/cpp/fidl.h>
 #include <fuchsia/sysmem/cpp/fidl.h>
+#include <fuchsia/tracing/perfetto/cpp/fidl.h>
+#include <fuchsia/tracing/provider/cpp/fidl.h>
 #include <fuchsia/ui/scenic/cpp/fidl.h>
 #include <lib/sys/cpp/component_context.h>
 #include <lib/sys/cpp/service_directory.h>
@@ -88,6 +91,7 @@ constexpr auto kMinimalServices = base::make_span((const char* const[]){
 
     fuchsia::intl::PropertyProvider::Name_,
     fuchsia::logger::LogSink::Name_,
+    fuchsia::tracing::perfetto::ProducerConnector::Name_,
 });
 // clang-format on
 
@@ -103,6 +107,7 @@ constexpr SandboxConfig kGpuConfig = {
         fuchsia::media::ProfileProvider::Name_,
         fuchsia::sysmem::Allocator::Name_,
         "fuchsia.vulkan.loader.Loader",
+        fuchsia::tracing::provider::Registry::Name_,
         fuchsia::ui::composition::Allocator::Name_,
         fuchsia::ui::composition::Flatland::Name_,
         fuchsia::ui::scenic::Scenic::Name_,
@@ -122,6 +127,7 @@ constexpr SandboxConfig kNetworkConfig = {
 constexpr SandboxConfig kRendererConfig = {
     base::make_span((const char* const[]){
         fuchsia::fonts::Provider::Name_,
+        fuchsia::kernel::VmexResource::Name_,
         // TODO(crbug.com/1224707): Use the fuchsia.scheduler API instead.
         fuchsia::media::ProfileProvider::Name_,
         fuchsia::memorypressure::Provider::Name_,
@@ -140,7 +146,8 @@ constexpr SandboxConfig kVideoCaptureConfig = {
 };
 
 constexpr SandboxConfig kServiceWithJitConfig = {
-    base::span<const char* const>(),
+    base::make_span(
+        (const char* const[]){fuchsia::kernel::VmexResource::Name_}),
     kAmbientMarkVmoAsExecutable,
 };
 

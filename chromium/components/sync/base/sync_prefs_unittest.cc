@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -235,6 +235,38 @@ TEST_F(SyncPrefsTest, GetSelectedOsTypesNotAllOsTypesSelected) {
     EXPECT_EQ(UserSelectableOsTypeSet{type}, sync_prefs_->GetSelectedOsTypes());
     // Browser types are not changed.
     EXPECT_EQ(browser_types, sync_prefs_->GetSelectedTypes());
+  }
+}
+
+TEST_F(SyncPrefsTest, SelectedOsTypesKeepEverythingSyncedButPolicyRestricted) {
+  ASSERT_TRUE(sync_prefs_->HasKeepEverythingSynced());
+  pref_service_.SetManagedPref(prefs::kSyncOsPreferences,
+                               std::make_unique<base::Value>(false));
+
+  UserSelectableOsTypeSet expected_type_set = UserSelectableOsTypeSet::All();
+  expected_type_set.Remove(UserSelectableOsType::kOsPreferences);
+  EXPECT_EQ(expected_type_set, sync_prefs_->GetSelectedOsTypes());
+}
+
+TEST_F(SyncPrefsTest,
+       SelectedOsTypesNotKeepEverythingSyncedAndPolicyRestricted) {
+  pref_service_.SetManagedPref(prefs::kSyncOsPreferences,
+                               std::make_unique<base::Value>(false));
+  sync_prefs_->SetSelectedOsTypes(
+      /*sync_all_os_types=*/false,
+      /*registered_types=*/UserSelectableOsTypeSet::All(),
+      /*selected_types=*/UserSelectableOsTypeSet());
+
+  ASSERT_FALSE(sync_prefs_->GetSelectedOsTypes().Has(
+      UserSelectableOsType::kOsPreferences));
+  for (UserSelectableOsType type : UserSelectableOsTypeSet::All()) {
+    sync_prefs_->SetSelectedOsTypes(
+        /*sync_all_os_types=*/false,
+        /*registered_types=*/UserSelectableOsTypeSet::All(),
+        /*selected_types=*/{type});
+    UserSelectableOsTypeSet expected_type_set = UserSelectableOsTypeSet{type};
+    expected_type_set.Remove(UserSelectableOsType::kOsPreferences);
+    EXPECT_EQ(expected_type_set, sync_prefs_->GetSelectedOsTypes());
   }
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

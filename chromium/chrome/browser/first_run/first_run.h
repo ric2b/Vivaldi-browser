@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -132,7 +132,7 @@ void AutoImport(Profile* profile,
 // linux. |make_chrome_default_for_user| is the value of
 // kMakeChromeDefaultForUser in master_preferences which contributes to the
 // decision of making chrome default browser in post import tasks.
-void DoPostImportTasks(Profile* profile, bool make_chrome_default_for_user);
+void DoPostImportTasks(bool make_chrome_default_for_user);
 
 // Returns the current state of AutoImport as recorded in a bitfield formed from
 // values in AutoImportState.

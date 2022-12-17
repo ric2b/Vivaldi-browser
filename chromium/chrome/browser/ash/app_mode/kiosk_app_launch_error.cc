@@ -1,15 +1,15 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
 
-#include "ash/components/login/auth/public/auth_failure.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/login/auth/public/auth_failure.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -76,9 +76,9 @@ std::string KioskAppLaunchError::GetErrorMessage(Error error) {
 // static
 void KioskAppLaunchError::Save(KioskAppLaunchError::Error error) {
   PrefService* local_state = g_browser_process->local_state();
-  DictionaryPrefUpdate dict_update(local_state,
+  ScopedDictPrefUpdate dict_update(local_state,
                                    KioskAppManager::kKioskDictionaryName);
-  dict_update->SetIntPath(kKeyLaunchError, static_cast<int>(error));
+  dict_update->SetByDottedPath(kKeyLaunchError, static_cast<int>(error));
   s_last_error = error;
 }
 
@@ -86,9 +86,9 @@ void KioskAppLaunchError::Save(KioskAppLaunchError::Error error) {
 void KioskAppLaunchError::SaveCryptohomeFailure(
     const AuthFailure& auth_failure) {
   PrefService* local_state = g_browser_process->local_state();
-  DictionaryPrefUpdate dict_update(local_state,
+  ScopedDictPrefUpdate dict_update(local_state,
                                    KioskAppManager::kKioskDictionaryName);
-  dict_update->SetIntPath(kKeyCryptohomeFailure, auth_failure.reason());
+  dict_update->SetByDottedPath(kKeyCryptohomeFailure, auth_failure.reason());
 }
 
 // static
@@ -98,7 +98,7 @@ KioskAppLaunchError::Error KioskAppLaunchError::Get() {
   s_last_error = Error::kNone;
   PrefService* local_state = g_browser_process->local_state();
   const base::Value::Dict& dict =
-      local_state->GetValueDict(KioskAppManager::kKioskDictionaryName);
+      local_state->GetDict(KioskAppManager::kKioskDictionaryName);
 
   absl::optional<int> error = dict.FindInt(kKeyLaunchError);
   if (error.has_value()) {
@@ -112,27 +112,27 @@ KioskAppLaunchError::Error KioskAppLaunchError::Get() {
 // static
 void KioskAppLaunchError::RecordMetricAndClear() {
   PrefService* local_state = g_browser_process->local_state();
-  DictionaryPrefUpdate dict_update(local_state,
+  ScopedDictPrefUpdate dict_update(local_state,
                                    KioskAppManager::kKioskDictionaryName);
 
-  absl::optional<int> error = dict_update->FindIntKey(kKeyLaunchError);
+  absl::optional<int> error = dict_update->FindInt(kKeyLaunchError);
   if (error) {
     base::UmaHistogramEnumeration("Kiosk.Launch.Error",
                                   static_cast<Error>(*error));
   }
 
-  dict_update->RemoveKey(kKeyLaunchError);
+  dict_update->Remove(kKeyLaunchError);
   s_last_error = absl::nullopt;
 
   absl::optional<int> cryptohome_failure =
-      dict_update->FindIntKey(kKeyCryptohomeFailure);
+      dict_update->FindInt(kKeyCryptohomeFailure);
   if (cryptohome_failure) {
     UMA_HISTOGRAM_ENUMERATION(
         "Kiosk.Launch.CryptohomeFailure",
         static_cast<AuthFailure::FailureReason>(*cryptohome_failure),
         AuthFailure::NUM_FAILURE_REASONS);
   }
-  dict_update->RemoveKey(kKeyCryptohomeFailure);
+  dict_update->Remove(kKeyCryptohomeFailure);
 }
 
 }  // namespace ash

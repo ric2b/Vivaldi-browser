@@ -15,5 +15,7 @@
   "native_debug_symbols": {
     "files": [ "lib.unstripped/libchrome.so" ],
     "archive_type": "ARCHIVE_TYPE_ZIP"
-  }
+  },
+  "dump_syms": {},
+  "minidump_stackwalk": {}
 }

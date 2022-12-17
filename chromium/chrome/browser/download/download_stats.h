@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -135,6 +135,11 @@ void RecordOpenedDangerousConfirmDialog(
 // Record that a download was opened.
 void RecordDownloadOpen(ChromeDownloadOpenMethod open_method,
                         const std::string& mime_type_string);
+
+// TODO(crbug.com/1372476): Remove this function after debugging.
+// Record that a download open button was pressed, either on download shelf or
+// download bubble.
+void RecordDownloadOpenButtonPressed(bool is_download_completed);
 
 // Record if the database is available to provide the next download id before
 // starting all downloads.

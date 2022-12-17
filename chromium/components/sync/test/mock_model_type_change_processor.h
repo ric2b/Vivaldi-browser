@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,6 +88,10 @@ class MockModelTypeChangeProcessor : public ModelTypeChangeProcessor {
               GetPossiblyTrimmedRemoteSpecifics,
               (const std::string& storage_key),
               (const override));
+  MOCK_METHOD(base::WeakPtr<ModelTypeChangeProcessor>,
+              GetWeakPtr,
+              (),
+              (override));
 
   // Returns a processor that forwards all calls to
   // |this|. |*this| must outlive the returned processor.

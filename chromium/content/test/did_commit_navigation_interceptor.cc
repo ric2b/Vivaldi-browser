@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,13 +48,11 @@ class DidCommitNavigationInterceptor::FrameAgent
 DidCommitNavigationInterceptor::DidCommitNavigationInterceptor(
     WebContents* web_contents)
     : WebContentsObserver(web_contents) {
-  web_contents->ForEachRenderFrameHost(base::BindRepeating(
-      [](DidCommitNavigationInterceptor* interceptor,
-         RenderFrameHost* render_frame_host) {
+  web_contents->ForEachRenderFrameHost(
+      [this](RenderFrameHost* render_frame_host) {
         if (render_frame_host->IsRenderFrameLive())
-          interceptor->RenderFrameCreated(render_frame_host);
-      },
-      this));
+          RenderFrameCreated(render_frame_host);
+      });
 }
 
 DidCommitNavigationInterceptor::~DidCommitNavigationInterceptor() = default;

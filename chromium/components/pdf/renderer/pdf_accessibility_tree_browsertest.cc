@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1469,9 +1469,7 @@ TEST_F(PdfAccessibilityTreeTest, TextRunsAndCharsMismatch) {
   WaitForThreadTasks();
 
   // In case of invalid data, only the initialized data should be in the tree.
-  ASSERT_EQ(ax::mojom::Role::kUnknown,
-            pdf_accessibility_tree.GetRoot()->GetRole());
-  ASSERT_EQ(0u, pdf_accessibility_tree.GetRoot()->children().size());
+  ASSERT_FALSE(pdf_accessibility_tree.GetRoot());
 }
 
 TEST_F(PdfAccessibilityTreeTest, UnsortedLinkVector) {
@@ -1515,9 +1513,7 @@ TEST_F(PdfAccessibilityTreeTest, UnsortedLinkVector) {
   WaitForThreadTasks();
 
   // In case of invalid data, only the initialized data should be in the tree.
-  ASSERT_EQ(ax::mojom::Role::kUnknown,
-            pdf_accessibility_tree.GetRoot()->GetRole());
-  ASSERT_EQ(0u, pdf_accessibility_tree.GetRoot()->children().size());
+  ASSERT_FALSE(pdf_accessibility_tree.GetRoot());
 }
 
 TEST_F(PdfAccessibilityTreeTest, OutOfBoundLink) {
@@ -1552,9 +1548,7 @@ TEST_F(PdfAccessibilityTreeTest, OutOfBoundLink) {
   WaitForThreadTasks();
 
   // In case of invalid data, only the initialized data should be in the tree.
-  ASSERT_EQ(ax::mojom::Role::kUnknown,
-            pdf_accessibility_tree.GetRoot()->GetRole());
-  ASSERT_EQ(0u, pdf_accessibility_tree.GetRoot()->children().size());
+  ASSERT_FALSE(pdf_accessibility_tree.GetRoot());
 }
 
 TEST_F(PdfAccessibilityTreeTest, UnsortedImageVector) {
@@ -1596,9 +1590,7 @@ TEST_F(PdfAccessibilityTreeTest, UnsortedImageVector) {
   WaitForThreadTasks();
 
   // In case of invalid data, only the initialized data should be in the tree.
-  ASSERT_EQ(ax::mojom::Role::kUnknown,
-            pdf_accessibility_tree.GetRoot()->GetRole());
-  ASSERT_EQ(0u, pdf_accessibility_tree.GetRoot()->children().size());
+  ASSERT_FALSE(pdf_accessibility_tree.GetRoot());
 }
 
 TEST_F(PdfAccessibilityTreeTest, OutOfBoundImage) {
@@ -1631,9 +1623,7 @@ TEST_F(PdfAccessibilityTreeTest, OutOfBoundImage) {
   WaitForThreadTasks();
 
   // In case of invalid data, only the initialized data should be in the tree.
-  ASSERT_EQ(ax::mojom::Role::kUnknown,
-            pdf_accessibility_tree.GetRoot()->GetRole());
-  ASSERT_EQ(0u, pdf_accessibility_tree.GetRoot()->children().size());
+  ASSERT_FALSE(pdf_accessibility_tree.GetRoot());
 }
 
 TEST_F(PdfAccessibilityTreeTest, UnsortedHighlightVector) {
@@ -1680,9 +1670,7 @@ TEST_F(PdfAccessibilityTreeTest, UnsortedHighlightVector) {
   WaitForThreadTasks();
 
   // In case of invalid data, only the initialized data should be in the tree.
-  ASSERT_EQ(ax::mojom::Role::kUnknown,
-            pdf_accessibility_tree.GetRoot()->GetRole());
-  ASSERT_EQ(0u, pdf_accessibility_tree.GetRoot()->children().size());
+  ASSERT_FALSE(pdf_accessibility_tree.GetRoot());
 }
 
 TEST_F(PdfAccessibilityTreeTest, OutOfBoundHighlight) {
@@ -1718,9 +1706,7 @@ TEST_F(PdfAccessibilityTreeTest, OutOfBoundHighlight) {
   WaitForThreadTasks();
 
   // In case of invalid data, only the initialized data should be in the tree.
-  ASSERT_EQ(ax::mojom::Role::kUnknown,
-            pdf_accessibility_tree.GetRoot()->GetRole());
-  ASSERT_EQ(0u, pdf_accessibility_tree.GetRoot()->children().size());
+  ASSERT_FALSE(pdf_accessibility_tree.GetRoot());
 }
 
 TEST_F(PdfAccessibilityTreeTest, TestActionDataConversion) {
@@ -1973,8 +1959,7 @@ TEST_F(PdfAccessibilityTreeTest, TestZoomAndScaleChanges) {
   CompareRect({{26.0f, 189.0f}, {84.0f, 13.0f}}, rect);
   gfx::Transform* transform = root_node->data().relative_bounds.transform.get();
   ASSERT_TRUE(transform);
-  transform->TransformRect(&rect);
-  CompareRect({{83.0f, 245.0f}, {84.0f, 13.0f}}, rect);
+  CompareRect({{83.0f, 245.0f}, {84.0f, 13.0f}}, transform->MapRect(rect));
 
   float new_device_scale = 1.5f;
   float new_zoom = 1.5f;
@@ -1986,8 +1971,8 @@ TEST_F(PdfAccessibilityTreeTest, TestZoomAndScaleChanges) {
   rect = para_node->data().relative_bounds.bounds;
   transform = root_node->data().relative_bounds.transform.get();
   ASSERT_TRUE(transform);
-  transform->TransformRect(&rect);
-  CompareRect({{186.75f, 509.25f}, {189.00f, 29.25f}}, rect);
+  CompareRect({{186.75f, 509.25f}, {189.00f, 29.25f}},
+              transform->MapRect(rect));
 }
 
 TEST_F(PdfAccessibilityTreeTest, TestSelectionActionDataConversion) {

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,12 +26,10 @@ JsonGenerationParams::JsonGenerationParams() = default;
 JsonGenerationParams::~JsonGenerationParams() = default;
 JsonGenerationParams::JsonGenerationParams(JsonGenerationParams&&) = default;
 
-std::string GenerateJson(std::unique_ptr<PolicyConversionsClient> client,
+std::string GenerateJson(base::Value::Dict policy_values,
                          base::Value::Dict status,
                          const JsonGenerationParams& params) {
-  base::Value::Dict dict =
-      policy::DictionaryPolicyConversions(std::move(client)).ToValueDict();
-
+  base::Value::Dict dict = std::move(policy_values);
   dict.Set("chromeMetadata", GetChromeMetadataValue(params));
   dict.Set("status", std::move(status));
 

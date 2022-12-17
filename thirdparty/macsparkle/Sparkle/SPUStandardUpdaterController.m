@@ -78,15 +78,6 @@
 
 - (void)startUpdater
 {
-#if defined(VIVALDI_TEST_BUILD)
-       // Delay the alert four seconds so it doesn't show RIGHT as the app launches, but also doesn't interrupt the user once they really get to work.
-       dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-           NSAlert *alert = [[NSAlert alloc] init];
-           alert.messageText = @"Beware - No signature checking";
-           alert.informativeText = @"You are running a test build with no signature checking in sparkle. Controlled by the 'sparkle_ignore_signing_checks' GN variable.";
-           [alert runModal];
-       });
-#endif
     NSError *updaterError = nil;
     if (![self.updater startUpdater:&updaterError]) {
         SULog(SULogLevelError, @"Fatal updater error (%ld): %@", updaterError.code, updaterError.localizedDescription);

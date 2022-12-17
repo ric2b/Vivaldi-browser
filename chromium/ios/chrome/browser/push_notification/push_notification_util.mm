@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,8 +13,24 @@
 
 @implementation PushNotificationUtil
 
-+ (void)registerDeviceWithAPNS:(UIApplication*)application {
-  [application registerForRemoteNotifications];
++ (void)registerDeviceWithAPNS {
+  [PushNotificationUtil
+      getPermissionSettings:^(UNNotificationSettings* settings) {
+        if (settings.authorizationStatus == UNAuthorizationStatusAuthorized) {
+          // iOS instructs that registering the device with APNS must be done on
+          // the main thread. Otherwise, a runtime warning is generated.
+          dispatch_async(dispatch_get_main_queue(), ^{
+            [[UIApplication sharedApplication] registerForRemoteNotifications];
+          });
+        }
+      }];
+}
+
++ (void)registerActionableNotifications:
+    (NSSet<UNNotificationCategory*>*)categories {
+  UNUserNotificationCenter* center =
+      UNUserNotificationCenter.currentNotificationCenter;
+  [center setNotificationCategories:categories];
 }
 
 + (void)requestPushNotificationPermission:

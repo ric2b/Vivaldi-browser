@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,10 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "components/account_manager_core/mock_account_manager_facade.h"
+#endif
 
 namespace signin {
 
@@ -50,6 +54,9 @@ class ConsistencyCookieManagerTest : public testing::Test {
     signin_client_.set_cookie_manager(std::move(mock_cookie_manager));
     reconcilor_ = std::make_unique<AccountReconcilor>(
         /*identity_manager=*/nullptr, &signin_client_,
+#if BUILDFLAG(IS_CHROMEOS)
+        &account_manager_facade_,
+#endif
         std::make_unique<AccountReconcilorDelegate>());
   }
 
@@ -129,6 +136,9 @@ class ConsistencyCookieManagerTest : public testing::Test {
   TestSigninClient signin_client_{/*prefs=*/nullptr};
   raw_ptr<MockCookieManager> cookie_manager_ =
       nullptr;  // Owned by `signin_client_`.
+#if BUILDFLAG(IS_CHROMEOS)
+  account_manager::MockAccountManagerFacade account_manager_facade_;
+#endif
   std::unique_ptr<AccountReconcilor> reconcilor_;
 };
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,9 @@
 #include "build/buildflag.h"
 #include "components/commerce/core/commerce_heuristics_data.h"
 #include "components/commerce/core/commerce_heuristics_data_metrics_helper.h"
+#include "components/commerce/core/pref_names.h"
+#include "components/commerce/core/test_utils.h"
+#include "components/prefs/testing_pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {

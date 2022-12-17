@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 class Browser;
 @protocol BrowsingDataCommands;
 class ChromeBrowserState;
-@class ChromeIdentity;
+@protocol SystemIdentity;
 
 // Performs the sign-in steps and user interactions as part of the sign-in flow.
 @interface AuthenticationFlowPerformer : NSObject
@@ -34,14 +34,12 @@ class ChromeBrowserState;
 
 // Fetches the managed status for `identity`.
 - (void)fetchManagedStatus:(ChromeBrowserState*)browserState
-               forIdentity:(ChromeIdentity*)identity;
+               forIdentity:(id<SystemIdentity>)identity;
 
-// Signs `identity` with `hostedDomain` into `browserState` and calls
-// `completion` after sign-in is complete.
-- (void)signInIdentity:(ChromeIdentity*)identity
+// Signs `identity` with `hostedDomain` into `browserState`.
+- (void)signInIdentity:(id<SystemIdentity>)identity
       withHostedDomain:(NSString*)hostedDomain
-        toBrowserState:(ChromeBrowserState*)browserState
-            completion:(signin_ui::CompletionCallback)completion;
+        toBrowserState:(ChromeBrowserState*)browserState;
 
 // Signs out of `browserState` and sends `didSignOut` to the delegate when
 // complete.
@@ -54,7 +52,7 @@ class ChromeBrowserState;
 // that of `identity` or cancel sign-in, sending `didChooseClearDataPolicy:`
 // or `didChooseCancel` to the delegate when complete according to the user
 // action.
-- (void)promptMergeCaseForIdentity:(ChromeIdentity*)identity
+- (void)promptMergeCaseForIdentity:(id<SystemIdentity>)identity
                            browser:(Browser*)browser
                     viewController:(UIViewController*)viewController;
 
@@ -66,7 +64,7 @@ class ChromeBrowserState;
 
 // Determines whether the user must decide what to do with `identity`'s browsing
 // data before signing into `browserState`.
-- (BOOL)shouldHandleMergeCaseForIdentity:(ChromeIdentity*)identity
+- (BOOL)shouldHandleMergeCaseForIdentity:(id<SystemIdentity>)identity
                             browserState:(ChromeBrowserState*)browserState;
 
 // Shows a confirmation dialog for signing in to an account managed by
@@ -82,12 +80,12 @@ class ChromeBrowserState;
                         browser:(Browser*)browser;
 
 - (void)registerUserPolicy:(ChromeBrowserState*)browserState
-               forIdentity:(ChromeIdentity*)identity;
+               forIdentity:(id<SystemIdentity>)identity;
 
 - (void)fetchUserPolicy:(ChromeBrowserState*)browserState
             withDmToken:(NSString*)dmToken
                clientID:(NSString*)clientID
-               identity:(ChromeIdentity*)identity;
+               identity:(id<SystemIdentity>)identity;
 
 @property(nonatomic, weak, readonly) id<AuthenticationFlowPerformerDelegate>
     delegate;

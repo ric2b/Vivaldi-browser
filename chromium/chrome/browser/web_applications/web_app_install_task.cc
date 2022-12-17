@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -172,46 +172,6 @@ void WebAppInstallTask::ExpectAppId(const AppId& expected_app_id) {
   expected_app_id_ = expected_app_id;
 }
 
-void WebAppInstallTask::SetInstallParams(
-    const WebAppInstallParams& install_params) {
-  if (!install_params.locally_installed) {
-    DCHECK(!install_params.add_to_applications_menu);
-    DCHECK(!install_params.add_to_desktop);
-    DCHECK(!install_params.add_to_quick_launch_bar);
-  }
-  install_params_ = install_params;
-}
-
-void WebAppInstallTask::LoadWebAppAndCheckManifest(
-    const GURL& url,
-    WebAppUrlLoader* url_loader,
-    LoadWebAppAndCheckManifestCallback callback) {
-  DCHECK(url_loader);
-  CheckInstallPreconditions();
-  // Create a WebContents instead of reusing a shared one because we will pass
-  // it back to be used for opening the web app.
-  // TODO(loyso): Implement stealing of shared web_contents in upcoming
-  // WebContentsManager.
-  std::unique_ptr<content::WebContents> web_contents =
-      CreateWebContents(profile_);
-
-  // Grab WebContents pointer now, before the call to BindOnce might null out
-  // |web_contents|.
-  content::WebContents* web_contents_ptr = web_contents.get();
-
-  Observe(web_contents.get());
-  background_installation_ = false;
-  install_callback_ =
-      base::BindOnce(std::move(callback), std::move(web_contents));
-
-  url_loader->LoadUrl(
-      url, web_contents_ptr,
-      WebAppUrlLoader::UrlComparison::kIgnoreQueryParamsAndRef,
-      base::BindOnce(
-          &WebAppInstallTask::OnWebAppUrlLoadedCheckAndRetrieveManifest,
-          GetWeakPtr(), url, web_contents_ptr));
-}
-
 void WebAppInstallTask::InstallWebAppFromManifest(
     content::WebContents* contents,
     bool bypass_service_worker_check,
@@ -251,35 +211,6 @@ void WebAppInstallTask::InstallWebAppFromManifestWithFallback(
   data_retriever_->GetWebAppInstallInfo(
       web_contents(),
       base::BindOnce(&WebAppInstallTask::OnGetWebAppInstallInfo, GetWeakPtr()));
-}
-
-void WebAppInstallTask::LoadAndInstallSubAppFromURL(
-    const GURL& install_url,
-    const AppId& expected_app_id,
-    content::WebContents* contents,
-    WebAppUrlLoader* url_loader,
-    WebAppInstallDialogCallback dialog_callback,
-    OnceInstallCallback install_callback) {
-  DCHECK(AreWebAppsUserInstallable(profile_));
-  CheckInstallPreconditions();
-
-  Observe(contents);
-
-  if (ShouldStopInstall())
-    return;
-
-  ExpectAppId(expected_app_id);
-
-  // TODO(https://crbug.com/1326843): Change to background installation in case
-  // of relevant policy.
-  dialog_callback_ = std::move(dialog_callback);
-  install_callback_ = std::move(install_callback);
-
-  url_loader->LoadUrl(
-      install_url, contents,
-      WebAppUrlLoader::UrlComparison::kIgnoreQueryParamsAndRef,
-      base::BindOnce(&WebAppInstallTask::OnWebAppUrlLoadedGetWebAppInstallInfo,
-                     GetWeakPtr(), install_url));
 }
 
 // static
@@ -475,60 +406,6 @@ void WebAppInstallTask::OnWebAppUrlLoadedGetWebAppInstallInfo(
   data_retriever_->GetWebAppInstallInfo(
       web_contents(),
       base::BindOnce(&WebAppInstallTask::OnGetWebAppInstallInfo, GetWeakPtr()));
-}
-
-void WebAppInstallTask::OnWebAppUrlLoadedCheckAndRetrieveManifest(
-    const GURL& url_to_load,
-    content::WebContents* web_contents,
-    WebAppUrlLoader::Result result) {
-  if (ShouldStopInstall())
-    return;
-
-  if (result != WebAppUrlLoader::Result::kUrlLoaded) {
-    log_entry_.LogUrlLoaderError("OnWebAppUrlLoaded", url_to_load.spec(),
-                                 result);
-  }
-
-  if (result == WebAppUrlLoader::Result::kRedirectedUrlLoaded) {
-    CallInstallCallback(expected_app_id_.value_or(AppId()),
-                        webapps::InstallResultCode::kInstallURLRedirected);
-    return;
-  }
-
-  if (result == WebAppUrlLoader::Result::kFailedPageTookTooLong) {
-    CallInstallCallback(expected_app_id_.value_or(AppId()),
-                        webapps::InstallResultCode::kInstallURLLoadTimeOut);
-    return;
-  }
-
-  if (result != WebAppUrlLoader::Result::kUrlLoaded) {
-    CallInstallCallback(expected_app_id_.value_or(AppId()),
-                        webapps::InstallResultCode::kInstallURLLoadFailed);
-    return;
-  }
-
-  data_retriever_->CheckInstallabilityAndRetrieveManifest(
-      web_contents,
-      /*bypass_service_worker_check=*/true,
-      base::BindOnce(&WebAppInstallTask::OnWebAppInstallabilityChecked,
-                     GetWeakPtr()));
-}
-
-void WebAppInstallTask::OnWebAppInstallabilityChecked(
-    blink::mojom::ManifestPtr opt_manifest,
-    const GURL& manifest_url,
-    bool valid_manifest_for_web_app,
-    bool is_installable) {
-  if (ShouldStopInstall())
-    return;
-
-  if (is_installable) {
-    DCHECK(opt_manifest);
-    CallInstallCallback(GenerateAppIdFromManifest(*opt_manifest),
-                        webapps::InstallResultCode::kSuccessNewInstall);
-  } else {
-    CallInstallCallback(AppId(), webapps::InstallResultCode::kNotInstallable);
-  }
 }
 
 void WebAppInstallTask::OnGetWebAppInstallInfo(

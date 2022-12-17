@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -195,7 +195,7 @@ class ManagedPkgRepo(PkgRepo):
     })
 
     return_code = self._target.RunCommand(
-        ['pkgctl', 'rule', 'replace', 'json', "'{}'".format(rule)], silent)
+        ['pkgctl', 'rule', 'replace', 'json', "'{}'".format(rule)])
     if not silent and return_code != 0:
       raise Exception(
           'Error code {} when running pkgctl rule replace with {}'.format(

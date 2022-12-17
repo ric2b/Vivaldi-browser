@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.base.ServiceTracingProxyProvider;
 import org.chromium.chrome.browser.base.SplitChromeApplication;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.language.GlobalAppLocaleController;
@@ -51,6 +52,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             new ObservableSupplierImpl<>();
     private NightModeStateProvider mNightModeStateProvider;
     private LinkedHashSet<Integer> mThemeResIds = new LinkedHashSet<>();
+    private ServiceTracingProxyProvider mServiceTracingProxyProvider;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -72,6 +74,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             BundleUtils.checkContextClassLoader(newBase, this);
         }
+
+        mServiceTracingProxyProvider = ServiceTracingProxyProvider.create(newBase);
 
         mNightModeStateProvider = createNightModeStateProvider();
 
@@ -275,5 +279,17 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     @Override
     public SharedPreferences getSharedPreferences(String name, int mode) {
         return ContextUtils.getApplicationContext().getSharedPreferences(name, mode);
+    }
+
+    // Note that we do not need to (and can't) override getSystemService(Class<T>) as internally
+    // that just gets the name of the Service and calls getSystemService(String) for backwards
+    // compatibility with overrides like this one.
+    @Override
+    public Object getSystemService(String name) {
+        Object service = super.getSystemService(name);
+        if (mServiceTracingProxyProvider != null) {
+            mServiceTracingProxyProvider.traceSystemServices();
+        }
+        return service;
     }
 }

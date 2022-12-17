@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -206,6 +206,29 @@ const char* ProtoEnumToString(
   return "";
 }
 
+const char* ProtoEnumToString(
+    sync_pb::SegmentationSpecifics::DeviceMetadata::PlatformType
+        platform_type) {
+  ASSERT_ENUM_BOUNDS(sync_pb::SegmentationSpecifics::DeviceMetadata,
+                     PlatformType, PLATFORM_TYPE_UNSPECIFIED,
+                     PLATFORM_CHROMEOS_LACROS);
+  switch (platform_type) {
+    ENUM_CASE(sync_pb::SegmentationSpecifics::DeviceMetadata,
+              PLATFORM_TYPE_UNSPECIFIED);
+    ENUM_CASE(sync_pb::SegmentationSpecifics::DeviceMetadata, PLATFORM_WINDOWS);
+    ENUM_CASE(sync_pb::SegmentationSpecifics::DeviceMetadata, PLATFORM_MAC);
+    ENUM_CASE(sync_pb::SegmentationSpecifics::DeviceMetadata, PLATFORM_LINUX);
+    ENUM_CASE(sync_pb::SegmentationSpecifics::DeviceMetadata,
+              PLATFORM_CHROMEOS_ASH);
+    ENUM_CASE(sync_pb::SegmentationSpecifics::DeviceMetadata, PLATFORM_ANDROID);
+    ENUM_CASE(sync_pb::SegmentationSpecifics::DeviceMetadata, PLATFORM_IOS);
+    ENUM_CASE(sync_pb::SegmentationSpecifics::DeviceMetadata,
+              PLATFORM_CHROMEOS_LACROS);
+  }
+  NOTREACHED();
+  return "";
+}
+
 const char* ProtoEnumToString(sync_pb::SessionTab::FaviconType favicon_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::SessionTab, FaviconType, TYPE_WEB_FAVICON,
                      TYPE_WEB_FAVICON);
@@ -215,9 +238,10 @@ const char* ProtoEnumToString(sync_pb::SessionTab::FaviconType favicon_type) {
 }
 
 const char* ProtoEnumToString(sync_pb::SyncEnums::BrowserType browser_type) {
-  ASSERT_ENUM_BOUNDS(sync_pb::SyncEnums, BrowserType, TYPE_TABBED,
+  ASSERT_ENUM_BOUNDS(sync_pb::SyncEnums, BrowserType, BROWSER_TYPE_UNKNOWN,
                      TYPE_CUSTOM_TAB);
   switch (browser_type) {
+    ENUM_CASE(sync_pb::SyncEnums, BROWSER_TYPE_UNKNOWN);
     ENUM_CASE(sync_pb::SyncEnums, TYPE_TABBED);
     ENUM_CASE(sync_pb::SyncEnums, TYPE_POPUP);
     ENUM_CASE(sync_pb::SyncEnums, TYPE_CUSTOM_TAB);
@@ -520,6 +544,20 @@ const char* ProtoEnumToString(
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, ENROLLED);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNENROLLED_AND_NOT_ELIGIBLE);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNENROLLED_AND_ELIGIBLE);
+  }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(
+    sync_pb::WalletMaskedCreditCard::VirtualCardEnrollmentType
+        virtual_card_enrollment_type) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WalletMaskedCreditCard, VirtualCardEnrollmentType,
+                     TYPE_UNSPECIFIED, NETWORK);
+  switch (virtual_card_enrollment_type) {
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, TYPE_UNSPECIFIED);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, ISSUER);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, NETWORK);
   }
   NOTREACHED();
   return "";

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,6 +47,8 @@
 //       : ProfileKeyedServiceFactory("MyDefaultKeyedService") {}
 //   }
 // };
+// Any change to this class should also be reflected on
+// `RefcountedProfileKeyedServiceFactory`.
 class ProfileKeyedServiceFactory : public BrowserContextKeyedServiceFactory {
  public:
   ProfileKeyedServiceFactory(const ProfileKeyedServiceFactory&) = delete;
@@ -70,6 +72,16 @@ class ProfileKeyedServiceFactory : public BrowserContextKeyedServiceFactory {
   // mapping in `ProfileSelections`.
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const final;
+
+  // Since `ProfileKeyedServiceFactory` API uses `ProfileSelections`, there is
+  // still no way to prevent the creation of services for ChromeOS irregular
+  // profiles, with `ProfileSelections`. In order not to create services with
+  // these specific conditions, returning nullptr in `BuildServiceInstanceFor()`
+  // is accepted despite the recommendataion in
+  // `BrowserContextKeyedServiceFactory::BuildServiceInstanceFor()` until the
+  // API is adapted (crbug/1284664).
+  KeyedService* BuildServiceInstanceFor(
+      content::BrowserContext* context) const override = 0;
 
  private:
   const ProfileSelections profile_selections_;

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -316,11 +316,8 @@ ScopedJavaLocalRef<jobject> WebContentsAndroid::GetRenderFrameHostFromId(
 ScopedJavaLocalRef<jobjectArray> WebContentsAndroid::GetAllRenderFrameHosts(
     JNIEnv* env) const {
   std::vector<RenderFrameHost*> frames;
-  web_contents_->ForEachRenderFrameHost(base::BindRepeating(
-      [](std::vector<RenderFrameHost*>* frames, RenderFrameHostImpl* rfh) {
-        frames->push_back(rfh);
-      },
-      &frames));
+  web_contents_->ForEachRenderFrameHost(
+      [&frames](RenderFrameHostImpl* rfh) { frames.push_back(rfh); });
   ScopedJavaLocalRef<jobjectArray> jframes =
       Java_WebContentsImpl_createRenderFrameHostArray(env, frames.size());
   for (size_t i = 0; i < frames.size(); i++) {
@@ -338,6 +335,10 @@ ScopedJavaLocalRef<jstring> WebContentsAndroid::GetTitle(JNIEnv* env) const {
 ScopedJavaLocalRef<jobject> WebContentsAndroid::GetVisibleURL(
     JNIEnv* env) const {
   return url::GURLAndroid::FromNativeGURL(env, web_contents_->GetVisibleURL());
+}
+
+jint WebContentsAndroid::GetVirtualKeyboardMode(JNIEnv* env) const {
+  return static_cast<jint>(web_contents_->GetVirtualKeyboardMode());
 }
 
 bool WebContentsAndroid::IsLoading(JNIEnv* env) const {
@@ -486,7 +487,8 @@ void WebContentsAndroid::ScrollFocusedEditableNodeIntoView(JNIEnv* env) {
   if (!input_handler)
     return;
   bool should_overlay_content =
-      web_contents_->GetPrimaryPage().virtual_keyboard_overlays_content();
+      web_contents_->GetPrimaryPage().virtual_keyboard_mode() ==
+      ui::mojom::VirtualKeyboardMode::kOverlaysContent;
   // TODO(bokan): Autofill is notified of focus changes at the end of the
   // scrollIntoView call using DidCompleteFocusChangeInFrame, see
   // https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/frame/web_local_frame_impl.cc;l=3047;drc=aeadb03c8553c39e88d5d11d10f706d42f06a1d7.

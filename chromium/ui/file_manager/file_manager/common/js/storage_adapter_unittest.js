@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,9 +36,9 @@ export function setUp() {
 export async function testPropagateLocally(done) {
   // Check: That the listener receives the update.
   await storage.local.setAsync({'local key': 'local value'});
-  await waitUntil(() => nsCalled['test-local']);
+  await waitUntil(() => nsCalled['local']);
   assertDeepEquals(
-      valuesChanged['test-local'], {'local key': {newValue: 'local value'}});
+      valuesChanged['local'], {'local key': {newValue: 'local value'}});
 
   done();
 }
@@ -50,8 +50,8 @@ export async function testPropagateLocally(done) {
 export async function testNumberBool(done) {
   // Check: That the listener from `tracker` receives the update.
   await storage.local.setAsync({'number': 33, 'boolean': true});
-  await waitUntil(() => nsCalled['test-local']);
-  assertDeepEquals(valuesChanged['test-local'], {
+  await waitUntil(() => nsCalled['local']);
+  assertDeepEquals(valuesChanged['local'], {
     'number': {newValue: 33},
     'boolean': {newValue: true},
   });

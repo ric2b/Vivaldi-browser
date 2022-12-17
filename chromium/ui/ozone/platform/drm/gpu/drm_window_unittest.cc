@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,7 @@
 #include "ui/ozone/platform/drm/gpu/drm_framebuffer.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_controller.h"
 #include "ui/ozone/platform/drm/gpu/mock_drm_device.h"
+#include "ui/ozone/platform/drm/gpu/page_flip_watchdog.h"
 #include "ui/ozone/platform/drm/gpu/screen_manager.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
 
@@ -376,7 +377,7 @@ TEST_F(DrmWindowTest, CheckPageflipFailureOnFailedSwap) {
   const std::string gpu_crash_log =
       "Failed to modeset within " +
       base::NumberToString(ui::kWaitForModesetTimeout.InSeconds()) +
-      " s of the first page flip failure. Crashing GPU process. Goodbye.";
+      " s of the first page flip failure. Crashing GPU process.";
   EXPECT_DEATH_IF_SUPPORTED(
       task_environment_.FastForwardBy(ui::kWaitForModesetTimeout),
       gpu_crash_log);

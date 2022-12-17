@@ -1,11 +1,11 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/paint/ng/ng_text_painter.h"
 
 #include "base/auto_reset.h"
-#include "base/stl_util.h"
+#include "base/types/optional_util.h"
 #include "cc/paint/paint_flags.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -62,15 +62,13 @@ SelectionStyleScope::SelectionStyleScope(const LayoutObject& layout_object,
   if (styles_are_equal_)
     return;
   DCHECK(!layout_object.IsSVGInlineText());
-  auto& element = To<SVGElement>(*layout_object_.GetNode());
-  SVGResources::UpdatePaints(element, nullptr, selection_style_);
+  SVGResources::UpdatePaints(layout_object_, nullptr, selection_style_);
 }
 
 SelectionStyleScope::~SelectionStyleScope() {
   if (styles_are_equal_)
     return;
-  auto& element = To<SVGElement>(*layout_object_.GetNode());
-  SVGResources::ClearPaints(element, &selection_style_);
+  SVGResources::ClearPaints(layout_object_, &selection_style_);
 }
 
 enum class SvgPaintMode { kText, kTextDecoration };
@@ -184,7 +182,7 @@ void NGTextPainter::Paint(const NGTextFragmentPaintInfo& fragment_paint_info,
   PaintInternal<kPaintText>(fragment_paint_info, length, node_id,
                             auto_dark_mode);
 
-  if (!emphasis_mark_.IsEmpty()) {
+  if (!emphasis_mark_.empty()) {
     if (text_style.emphasis_mark_color != text_style.fill_color)
       graphics_context_.SetFillColor(text_style.emphasis_mark_color);
     PaintInternal<kPaintEmphasisMark>(fragment_paint_info, length, node_id,
@@ -583,7 +581,7 @@ NGTextPainter::SvgTextPaintState& NGTextPainter::SetSvgState(
 }
 
 NGTextPainter::SvgTextPaintState* NGTextPainter::GetSvgState() {
-  return base::OptionalOrNullptr(svg_text_paint_state_);
+  return base::OptionalToPtr(svg_text_paint_state_);
 }
 
 NGTextPainter::SvgTextPaintState::SvgTextPaintState(
@@ -661,7 +659,7 @@ AffineTransform& NGTextPainter::SvgTextPaintState::EnsureShaderTransform() {
 
 const AffineTransform* NGTextPainter::SvgTextPaintState::GetShaderTransform()
     const {
-  return base::OptionalOrNullptr(shader_transform_);
+  return base::OptionalToPtr(shader_transform_);
 }
 
 }  // namespace blink

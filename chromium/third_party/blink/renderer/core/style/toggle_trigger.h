@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,7 +35,7 @@ class ToggleTrigger {
 
   const AtomicString& Name() const { return name_; }
   ToggleTriggerMode Mode() const { return mode_; }
-  State Value() const { return value_; }
+  const State& Value() const { return value_; }
 
  private:
   const AtomicString name_;

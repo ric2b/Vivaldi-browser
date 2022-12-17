@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,22 +6,26 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/cxx17_backports.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "remoting/base/logging.h"
+#include "remoting/host/desktop_display_layout_util.h"
 #include "remoting/host/linux/x11_util.h"
 #include "remoting/host/x11_crtc_resizer.h"
+#include "remoting/host/x11_display_util.h"
+#include "remoting/proto/control.pb.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_capture_types.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 #include "ui/gfx/x/future.h"
 #include "ui/gfx/x/randr.h"
-#include "ui/gfx/x/scoped_ignore_errors.h"
 
-// On Linux, we use the xrandr extension to change the desktop resolution. In
-// curtain mode, we do exact resize where supported. Otherwise, we try to pick
-// the best resolution from the existing modes.
+// On Linux, we use the xrandr extension to change the desktop resolution.
 //
 // Xrandr has a number of restrictions that make exact resize more complex:
 //
@@ -72,6 +76,16 @@ int PixelsToMillimeters(int pixels, int dpi) {
 // TODO(jamiewalch): Use the correct DPI for the mode: http://crbug.com/172405.
 const int kDefaultDPI = 96;
 
+x11::RandR::Output GetOutputFromContext(void* context) {
+  return reinterpret_cast<x11::RandR::MonitorInfo*>(context)->outputs[0];
+}
+
+std::string GetModeNameForOutput(x11::RandR::Output output) {
+  // The name of the mode representing the current client view resolution. This
+  // must be unique per Output, so that Outputs can be resized independently.
+  return "CRD_" + base::NumberToString(base::to_underlying(output));
+}
+
 }  // namespace
 
 namespace remoting {
@@ -108,8 +122,7 @@ DesktopResizerX11::DesktopResizerX11()
       randr_(&connection_->randr()),
       screen_(&connection_->default_screen()),
       root_(screen_->root),
-      exact_resize_(base::CommandLine::ForCurrentProcess()->HasSwitch(
-          "server-supports-exact-resize")) {
+      is_virtual_session_(IsVirtualSession(connection_)) {
   has_randr_ = randr_->present();
   if (!has_randr_)
     return;
@@ -129,6 +142,23 @@ ScreenResolution DesktopResizerX11::GetCurrentResolution(
   if (has_randr_)
     connection_->DispatchAll();
 
+  // RANDR does not allow fetching information on a particular monitor. So
+  // fetch all of them and try to find the requested monitor.
+  auto reply = randr_->GetMonitors({root_}).Sync();
+  if (reply) {
+    for (const auto& monitor : reply->monitors) {
+      if (static_cast<webrtc::ScreenId>(monitor.name) != screen_id) {
+        continue;
+      }
+      return ScreenResolution(
+          webrtc::DesktopSize(monitor.width, monitor.height),
+          GetMonitorDpi(monitor));
+    }
+  }
+
+  LOG(ERROR) << "Cannot find current resolution for screen ID " << screen_id
+             << ". Resolution of the default screen will be returned.";
+
   ScreenResolution result(
       webrtc::DesktopSize(connection_->default_screen().width_in_pixels,
                           connection_->default_screen().height_in_pixels),
@@ -140,46 +170,31 @@ std::list<ScreenResolution> DesktopResizerX11::GetSupportedResolutions(
     const ScreenResolution& preferred,
     webrtc::ScreenId screen_id) {
   std::list<ScreenResolution> result;
-  if (!has_randr_)
+  if (!has_randr_ || !is_virtual_session_)
     return result;
-  if (exact_resize_) {
-    // Clamp the specified size to something valid for the X server.
-    if (auto response = randr_->GetScreenSizeRange({root_}).Sync()) {
-      int width =
-          base::clamp(static_cast<uint16_t>(preferred.dimensions().width()),
-                      response->min_width, response->max_width);
-      int height =
-          base::clamp(static_cast<uint16_t>(preferred.dimensions().height()),
-                      response->min_height, response->max_height);
-      // Additionally impose a minimum size of 640x480, since anything smaller
-      // doesn't seem very useful.
-      ScreenResolution actual(
-          webrtc::DesktopSize(std::max(640, width), std::max(480, height)),
-          webrtc::DesktopVector(kDefaultDPI, kDefaultDPI));
-      result.push_back(actual);
-    }
-  } else {
-    // Retrieve supported resolutions with RandR
-    if (auto response = randr_->GetScreenInfo({root_}).Sync()) {
-      for (const auto& size : response->sizes) {
-        result.emplace_back(webrtc::DesktopSize(size.width, size.height),
-                            webrtc::DesktopVector(kDefaultDPI, kDefaultDPI));
-      }
-    }
+
+  // Clamp the specified size to something valid for the X server.
+  if (auto response = randr_->GetScreenSizeRange({root_}).Sync()) {
+    int width =
+        base::clamp(static_cast<uint16_t>(preferred.dimensions().width()),
+                    response->min_width, response->max_width);
+    int height =
+        base::clamp(static_cast<uint16_t>(preferred.dimensions().height()),
+                    response->min_height, response->max_height);
+    // Additionally impose a minimum size of 640x480, since anything smaller
+    // doesn't seem very useful.
+    ScreenResolution actual(
+        webrtc::DesktopSize(std::max(640, width), std::max(480, height)),
+        webrtc::DesktopVector(kDefaultDPI, kDefaultDPI));
+    result.push_back(actual);
   }
   return result;
 }
 
 void DesktopResizerX11::SetResolution(const ScreenResolution& resolution,
                                       webrtc::ScreenId screen_id) {
-  if (!has_randr_)
+  if (!has_randr_ || !is_virtual_session_)
     return;
-
-  // Ignore X errors encountered while resizing the display. We might hit an
-  // error, for example if xrandr has been used to add a mode with the same
-  // name as our mode, or to remove it. We don't want to terminate the process
-  // if this happens.
-  x11::ScopedIgnoreErrors ignore_errors(connection_);
 
   // Grab the X server while we're changing the display resolution. This ensures
   // that the display configuration doesn't change under our feet.
@@ -221,11 +236,7 @@ void DesktopResizerX11::SetResolution(const ScreenResolution& resolution,
       return;
     }
 
-    auto output = monitor.outputs[0];
-    if (exact_resize_)
-      SetResolutionNewMode(output, resolution);
-    else
-      SetResolutionExistingMode(resolution);
+    SetResolutionForOutput(monitor.outputs[0], resolution);
     return;
   }
   LOG(ERROR) << "Monitor " << screen_id << " not found.";
@@ -236,14 +247,136 @@ void DesktopResizerX11::RestoreResolution(const ScreenResolution& original,
   SetResolution(original, screen_id);
 }
 
-void DesktopResizerX11::SetResolutionNewMode(
+void DesktopResizerX11::SetVideoLayout(const protocol::VideoLayout& layout) {
+  if (!has_randr_ || !is_virtual_session_)
+    return;
+
+  // Grab the X server while we're changing the display resolution. This ensures
+  // that the display configuration doesn't change under our feet.
+  ScopedXGrabServer grabber(connection_);
+
+  if (!resources_.Refresh(randr_, root_))
+    return;
+
+  auto reply = randr_->GetMonitors({root_}).Sync();
+  if (!reply) {
+    return;
+  }
+
+  std::vector<VideoTrackLayoutWithContext> current_displays;
+  for (auto& monitor : reply->monitors) {
+    // This implementation only supports resizing synthesized Monitors which
+    // automatically track their Outputs.
+    // TODO(crbug.com/1326339): Maybe support resizing manually-created
+    // monitors?
+    if (monitor.automatic) {
+      current_displays.push_back(
+          {.layout = ToVideoTrackLayout(monitor), .context = &monitor});
+    }
+  }
+  // TODO(yuweih): Verify that the layout is valid, e.g. no overlaps or gaps
+  // between displays.
+  DisplayLayoutDiff diff = CalculateDisplayLayoutDiff(current_displays, layout);
+
+  X11CrtcResizer resizer(resources_.get(), connection_);
+  resizer.FetchActiveCrtcs();
+
+  // Add displays
+  if (!diff.new_displays.empty()) {
+    auto outputs = GetDisabledOutputs();
+    size_t i = 0u;
+    for (; i < outputs.size() && i < diff.new_displays.size(); i++) {
+      auto& output_pair = outputs[i];
+      auto output = output_pair.first;
+      auto& output_info = output_pair.second;
+      // For the video-dummy driver, the size of |crtcs| is exactly 1 and is
+      // different for each Output. In general, this is not true for other
+      // video-drivers, and the lists can overlap.
+      // TODO(yuweih): Consider making CRTC allocation smarter so it works with
+      // non-video-dummy drivers.
+      if (output_info.crtcs.empty()) {
+        LOG(ERROR) << "No available CRTC found associated with "
+                   << reinterpret_cast<char*>(output_info.name.data());
+        continue;
+      }
+      auto crtc = output_info.crtcs.front();
+      auto track_layout = diff.new_displays[i];
+      // Note that this has a weird behavior in GNOME, such that, if |output| is
+      // "disconnected", creating the mode somehow resizes all existing displays
+      // to 1024x768. Once the output is successfully enabled, it will remain
+      // "connected" and will no longer have the problem. The problem doesn't
+      // occur on XFCE or Cinnamon.
+      // TODO(yuweih): See if this is fixable, or at least implement some
+      // workaround, such as re-applying the layout.
+      auto mode =
+          UpdateMode(output, track_layout.width(), track_layout.height());
+      if (mode == kInvalidMode) {
+        LOG(ERROR) << "Failed to create new mode.";
+        continue;
+      }
+      resizer.AddActiveCrtc(
+          crtc, mode, {output},
+          webrtc::DesktopRect::MakeXYWH(
+              track_layout.position_x(), track_layout.position_y(),
+              track_layout.width(), track_layout.height()));
+      HOST_LOG << "Added display with crtc: " << base::to_underlying(crtc)
+               << ", output: " << base::to_underlying(output);
+    }
+    if (i < diff.new_displays.size()) {
+      LOG(WARNING) << "Failed to create " << (diff.new_displays.size() - i)
+                   << " display(s) due to insufficient resources.";
+    }
+  }
+
+  // Update displays
+  for (const auto& updated_display : diff.updated_displays) {
+    auto track_layout = updated_display.layout;
+    auto output = GetOutputFromContext(updated_display.context);
+    auto crtc = resizer.GetCrtcForOutput(output);
+    if (crtc == kDisabledCrtc) {
+      // This is not expected to happen. Disabled Outputs are not expected to
+      // have any Monitor, but |output| was found in the RRGetMonitors response,
+      // so it should have a CRTC attached.
+      LOG(ERROR) << "No CRTC found for output: " << base::to_underlying(output);
+      continue;
+    }
+    resizer.DisableCrtc(crtc);
+    auto mode = UpdateMode(output, track_layout.width(), track_layout.height());
+    if (mode == kInvalidMode) {
+      LOG(ERROR) << "Failed to create new mode.";
+      continue;
+    }
+    resizer.UpdateActiveCrtc(
+        crtc, mode,
+        webrtc::DesktopRect::MakeXYWH(
+            track_layout.position_x(), track_layout.position_y(),
+            track_layout.width(), track_layout.height()));
+    HOST_LOG << "Updated display with screen ID: "
+             << updated_display.layout.screen_id();
+  }
+
+  // Remove displays
+  for (const auto& removed_display : diff.removed_displays) {
+    auto output = GetOutputFromContext(removed_display.context);
+    auto crtc = resizer.GetCrtcForOutput(output);
+    if (crtc == kDisabledCrtc) {
+      LOG(ERROR) << "No CRTC found for output: " << base::to_underlying(output);
+      continue;
+    }
+    resizer.DisableCrtc(crtc);
+    resizer.RemoveActiveCrtc(crtc);
+    DeleteMode(output, GetModeNameForOutput(output));
+    HOST_LOG << "Removed display with screen ID: "
+             << removed_display.layout.screen_id();
+  }
+
+  resizer.NormalizeCrtcs();
+  UpdateRootWindow(resizer);
+}
+
+void DesktopResizerX11::SetResolutionForOutput(
     x11::RandR::Output output,
     const ScreenResolution& resolution) {
-  // The name of the mode representing the current client view resolution. This
-  // must be unique per Output, so that Outputs can be resized independently.
-  std::string mode_name =
-      "CRD_" + base::NumberToString(base::to_underlying(output));
-
   // Actually do the resize operation, preserving the current mode name. Note
   // that we have to detach the output from the mode in order to delete the
   // mode and re-create it with the new resolution. The output may also need to
@@ -251,7 +384,7 @@ void DesktopResizerX11::SetResolutionNewMode(
   HOST_LOG << "Changing desktop size to " << resolution.dimensions().width()
            << "x" << resolution.dimensions().height();
 
-  X11CrtcResizer resizer(resources_.get(), randr_);
+  X11CrtcResizer resizer(resources_.get(), connection_);
 
   resizer.FetchActiveCrtcs();
   auto crtc = resizer.GetCrtcForOutput(output);
@@ -269,8 +402,7 @@ void DesktopResizerX11::SetResolutionNewMode(
   // and offsets will be stored in |resizer|.
   resizer.DisableCrtc(crtc);
 
-  DeleteMode(output, mode_name);
-  auto mode = CreateMode(output, mode_name, resolution.dimensions().width(),
+  auto mode = UpdateMode(output, resolution.dimensions().width(),
                          resolution.dimensions().height());
   if (mode == kInvalidMode) {
     // The CRTC is disabled, but there's no easy way to recover it here
@@ -281,7 +413,49 @@ void DesktopResizerX11::SetResolutionNewMode(
 
   // Update |active_crtcs_| with new sizes and offsets.
   resizer.UpdateActiveCrtcs(crtc, mode, resolution.dimensions());
+  UpdateRootWindow(resizer);
+}
 
+x11::RandR::Mode DesktopResizerX11::UpdateMode(x11::RandR::Output output,
+                                               int width,
+                                               int height) {
+  std::string mode_name = GetModeNameForOutput(output);
+  DeleteMode(output, mode_name);
+
+  // Set some clock values so that the computed refresh-rate is a realistic
+  // number:
+  // 60Hz = dot_clock / (htotal * vtotal).
+  // This allows GNOME's Display Settings tool to apply new settings for
+  // resolution/scaling - see crbug.com/1374488.
+  x11::RandR::ModeInfo mode;
+  mode.width = width;
+  mode.height = height;
+  mode.dot_clock = 60 * 1e6;
+  mode.htotal = 1000;
+  mode.vtotal = 1000;
+  mode.name_len = mode_name.size();
+  if (auto reply =
+          randr_->CreateMode({root_, mode, mode_name.c_str()}).Sync()) {
+    randr_->AddOutputMode({
+        output,
+        reply->mode,
+    });
+    return reply->mode;
+  }
+  return kInvalidMode;
+}
+
+void DesktopResizerX11::DeleteMode(x11::RandR::Output output,
+                                   const std::string& name) {
+  x11::RandR::Mode mode_id = resources_.GetIdForMode(name);
+  if (mode_id != kInvalidMode) {
+    randr_->DeleteOutputMode({output, mode_id});
+    randr_->DestroyMode({mode_id});
+    resources_.Refresh(randr_, root_);
+  }
+}
+
+void DesktopResizerX11::UpdateRootWindow(X11CrtcResizer& resizer) {
   // Disable any CRTCs that have been changed, so that the root window can be
   // safely resized to the bounding-box of the new CRTCs.
   // This is non-optimal: the only CRTCs that need disabling are those whose
@@ -302,58 +476,28 @@ void DesktopResizerX11::SetResolutionNewMode(
                          static_cast<uint16_t>(dimensions.height()), width_mm,
                          height_mm});
 
+  resizer.MoveApplicationWindows();
+
   // Apply the new CRTCs, which will re-enable any that were disabled.
   resizer.ApplyActiveCrtcs();
 }
 
-void DesktopResizerX11::SetResolutionExistingMode(
-    const ScreenResolution& resolution) {
-  if (auto config = randr_->GetScreenInfo({root_}).Sync()) {
-    x11::RandR::Rotation current_rotation = config->rotation;
-    const std::vector<x11::RandR::ScreenSize>& sizes = config->sizes;
-    for (size_t i = 0; i < sizes.size(); ++i) {
-      if (sizes[i].width == resolution.dimensions().width() &&
-          sizes[i].height == resolution.dimensions().height()) {
-        randr_->SetScreenConfig({
-            .window = root_,
-            .timestamp = x11::Time::CurrentTime,
-            .config_timestamp = config->config_timestamp,
-            .sizeID = static_cast<uint16_t>(i),
-            .rotation = current_rotation,
-            .rate = 0,
-        });
-        break;
-      }
+DesktopResizerX11::OutputInfoList DesktopResizerX11::GetDisabledOutputs() {
+  OutputInfoList disabled_outputs;
+  for (x11::RandR::Output output : resources_.get()->outputs) {
+    auto reply = randr_
+                     ->GetOutputInfo({.output = output,
+                                      .config_timestamp =
+                                          resources_.get()->config_timestamp})
+                     .Sync();
+    if (!reply) {
+      continue;
+    }
+    if (reply->crtc == kDisabledCrtc) {
+      disabled_outputs.emplace_back(output, std::move(*reply.reply));
     }
   }
-}
-
-x11::RandR::Mode DesktopResizerX11::CreateMode(x11::RandR::Output output,
-                                               const std::string& name,
-                                               int width,
-                                               int height) {
-  x11::RandR::ModeInfo mode;
-  mode.width = width;
-  mode.height = height;
-  mode.name_len = name.size();
-  if (auto reply = randr_->CreateMode({root_, mode, name.c_str()}).Sync()) {
-    randr_->AddOutputMode({
-        output,
-        reply->mode,
-    });
-    return reply->mode;
-  }
-  return kInvalidMode;
-}
-
-void DesktopResizerX11::DeleteMode(x11::RandR::Output output,
-                                   const std::string& name) {
-  x11::RandR::Mode mode_id = resources_.GetIdForMode(name);
-  if (mode_id != kInvalidMode) {
-    randr_->DeleteOutputMode({output, mode_id});
-    randr_->DestroyMode({mode_id});
-    resources_.Refresh(randr_, root_);
-  }
+  return disabled_outputs;
 }
 
 // static

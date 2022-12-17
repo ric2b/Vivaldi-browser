@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "base/check.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -27,7 +26,6 @@ std::unique_ptr<AppsModelTypeController> AppsModelTypeController::Create(
     base::WeakPtr<syncer::SyncableService> syncable_service,
     const base::RepeatingClosure& dump_stack,
     Profile* profile) {
-  DCHECK(chromeos::features::IsSyncSettingsCategorizationEnabled());
   // Create the bridge here so it can be used to construct a forwarding delegate
   // passed to the superclass constructor.
   auto bridge = std::make_unique<SyncableServiceBasedBridge>(

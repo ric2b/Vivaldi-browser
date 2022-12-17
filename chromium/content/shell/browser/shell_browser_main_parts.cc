@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -116,7 +116,7 @@ ShellBrowserMainParts::~ShellBrowserMainParts() = default;
 
 void ShellBrowserMainParts::PostCreateMainMessageLoop() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::DBusThreadManager::Initialize();
+  ash::DBusThreadManager::Initialize();
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   chromeos::LacrosDBusThreadManager::Initialize();
 #endif
@@ -154,7 +154,7 @@ void ShellBrowserMainParts::ToolkitInitialized() {
     return;
 
 #if BUILDFLAG(IS_LINUX)
-  ui::LinuxUi::SetInstance(ui::CreateLinuxUi());
+  ui::LinuxUi::SetInstance(ui::GetDefaultLinuxUi());
 #endif
 }
 
@@ -212,7 +212,7 @@ void ShellBrowserMainParts::PostDestroyThreads() {
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::DBusThreadManager::Shutdown();
+  ash::DBusThreadManager::Shutdown();
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   chromeos::LacrosDBusThreadManager::Shutdown();
 #endif

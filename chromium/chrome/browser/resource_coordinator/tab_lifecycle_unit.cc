@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
+#include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/intervention_policy_database.h"
@@ -142,8 +143,9 @@ class TabLifecycleUnitExternalImpl : public TabLifecycleUnitExternal {
     tab_lifecycle_unit_->SetAutoDiscardable(auto_discardable);
   }
 
-  bool DiscardTab(LifecycleUnitDiscardReason reason) override {
-    return tab_lifecycle_unit_->Discard(reason);
+  bool DiscardTab(LifecycleUnitDiscardReason reason,
+                  uint64_t resident_set_size_estimate) override {
+    return tab_lifecycle_unit_->Discard(reason, resident_set_size_estimate);
   }
 
   bool IsDiscarded() const override {
@@ -466,7 +468,8 @@ void TabLifecycleUnitSource::TabLifecycleUnit::SetAutoDiscardable(
 }
 
 void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
-    LifecycleUnitDiscardReason discard_reason) {
+    LifecycleUnitDiscardReason discard_reason,
+    uint64_t tab_resident_set_size_estimate) {
   UMA_HISTOGRAM_BOOLEAN(
       "TabManager.Discarding.DiscardedTabHasBeforeUnloadHandler",
       web_contents()->NeedToFireBeforeUnloadOrUnloadEvents());
@@ -487,6 +490,10 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
   std::unique_ptr<content::WebContents> null_contents =
       content::WebContents::Create(create_params);
   content::WebContents* raw_null_contents = null_contents.get();
+
+  performance_manager::user_tuning::UserPerformanceTuningManager::
+      PreDiscardResourceUsage::CreateForWebContents(
+          null_contents.get(), tab_resident_set_size_estimate);
 
   // Attach the ResourceCoordinatorTabHelper. In production code this has
   // already been attached by now due to AttachTabHelpers, but there's a long
@@ -572,7 +579,8 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
 }
 
 bool TabLifecycleUnitSource::TabLifecycleUnit::Discard(
-    LifecycleUnitDiscardReason reason) {
+    LifecycleUnitDiscardReason reason,
+    uint64_t tab_resident_set_size_estimate) {
   // Can't discard a tab when it isn't in a tabstrip.
   if (!tab_strip_model_) {
     // Logs are used to diagnose user feedback reports.
@@ -592,7 +600,7 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::Discard(
 
   discard_reason_ = reason;
 
-  FinishDiscard(reason);
+  FinishDiscard(reason, tab_resident_set_size_estimate);
 
   return true;
 }

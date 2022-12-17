@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,10 +11,10 @@
 #include <map>
 #include <set>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include "base/containers/flat_set.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_functions.h"
@@ -46,6 +46,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_node_position.h"
 #include "ui/accessibility/ax_role_properties.h"
+#include "ui/accessibility/ax_selection.h"
 #include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
@@ -209,7 +210,7 @@ namespace ui {
 
 namespace {
 
-typedef base::flat_set<AXPlatformNodeWin*> AXPlatformNodeWinSet;
+typedef std::unordered_set<AXPlatformNodeWin*> AXPlatformNodeWinSet;
 // Set of all AXPlatformNodeWin objects that were the target of an
 // alert event.
 base::LazyInstance<AXPlatformNodeWinSet>::Leaky g_alert_targets =
@@ -863,6 +864,10 @@ AXPlatformNodeWin::UIARoleProperties AXPlatformNodeWin::GetUIARoleProperties() {
       return {UIALocalizationStrategy::kSupply, UIA_ComboBoxControlTypeId,
               L"combobox"};
 
+    case ax::mojom::Role::kComboBoxSelect:
+      return {UIALocalizationStrategy::kDeferToControlType,
+              UIA_ComboBoxControlTypeId, L"combobox"};
+
     case ax::mojom::Role::kComplementary:
       return {UIALocalizationStrategy::kDeferToAriaRole, UIA_GroupControlTypeId,
               L"complementary"};
@@ -1226,16 +1231,9 @@ AXPlatformNodeWin::UIARoleProperties AXPlatformNodeWin::GetUIARoleProperties() {
       return {UIALocalizationStrategy::kSupply, UIA_DocumentControlTypeId,
               L"document"};
 
-    case ax::mojom::Role::kPopUpButton: {
-      const std::string& html_tag =
-          GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
-      if (html_tag == "select") {
-        return {UIALocalizationStrategy::kDeferToControlType,
-                UIA_ComboBoxControlTypeId, L"combobox"};
-      }
+    case ax::mojom::Role::kPopUpButton:
       return {UIALocalizationStrategy::kDeferToControlType,
               UIA_ButtonControlTypeId, L"button"};
-    }
 
     case ax::mojom::Role::kPortal:
       return {UIALocalizationStrategy::kSupply, UIA_ButtonControlTypeId,
@@ -2309,8 +2307,7 @@ IFACEMETHODIMP AXPlatformNodeWin::get_selectionRanges(IA2Range** ranges,
                                                       LONG* nRanges) {
   COM_OBJECT_VALIDATE_2_ARGS(ranges, nRanges);
   AXPlatformNode::NotifyAddAXModeFlags(kScreenReaderAndHTMLAccessibilityModes);
-  AXTree::Selection unignored_selection =
-      GetDelegate()->GetUnignoredSelection();
+  AXSelection unignored_selection = GetDelegate()->GetUnignoredSelection();
 
   AXNodeID anchor_id = unignored_selection.anchor_object_id;
   auto* anchor_node =
@@ -4467,8 +4464,7 @@ AXPlatformNodeWin::get_selections(IA2TextSelection** selections,
 
   COM_OBJECT_VALIDATE_2_ARGS(selections, nSelections);
 
-  AXTree::Selection unignored_selection =
-      GetDelegate()->GetUnignoredSelection();
+  AXSelection unignored_selection = GetDelegate()->GetUnignoredSelection();
 
   AXNodeID anchor_id = unignored_selection.anchor_object_id;
   AXPlatformNodeWin* anchor_node =
@@ -5210,6 +5206,16 @@ HRESULT AXPlatformNodeWin::GetPropertyValueImpl(PROPERTYID property_id,
       break;
 
     case UIA_LocalizedControlTypePropertyId: {
+      // Always favor the explicitly set aria-roledescription value if there's
+      // one.
+      std::u16string role_description;
+      if (GetString16Attribute(ax::mojom::StringAttribute::kRoleDescription,
+                               &role_description)) {
+        result->vt = VT_BSTR;
+        result->bstrVal = SysAllocString(base::as_wcstr(role_description));
+        break;
+      }
+
       // UIA core handles Localized Control type for some built-in types and
       // also has a mapping for ARIA roles. To get these defaults, we need to
       // have returned VT_EMPTY.
@@ -6187,6 +6193,7 @@ int AXPlatformNodeWin::MSAARole() {
 
     case ax::mojom::Role::kComboBoxGrouping:
     case ax::mojom::Role::kComboBoxMenuButton:
+    case ax::mojom::Role::kComboBoxSelect:
       return ROLE_SYSTEM_COMBOBOX;
 
     case ax::mojom::Role::kComplementary:
@@ -6474,13 +6481,8 @@ int AXPlatformNodeWin::MSAARole() {
         return ROLE_SYSTEM_CLIENT;
       }
 
-    case ax::mojom::Role::kPopUpButton: {
-      std::string html_tag =
-          GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
-      if (html_tag == "select")
-        return ROLE_SYSTEM_COMBOBOX;
+    case ax::mojom::Role::kPopUpButton:
       return ROLE_SYSTEM_BUTTONMENU;
-    }
 
     case ax::mojom::Role::kPortal:
       return ROLE_SYSTEM_PUSHBUTTON;

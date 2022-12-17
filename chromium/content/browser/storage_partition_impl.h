@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,6 +46,7 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_settings.h"
+#include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/dom_storage/dom_storage.mojom.h"
 
@@ -69,6 +70,7 @@ class BackgroundFetchContext;
 class BlobRegistryWrapper;
 class BluetoothAllowedDevicesMap;
 class BroadcastChannelService;
+class BrowsingDataFilterBuilder;
 class BucketManager;
 class CacheStorageControlWrapper;
 class CookieStoreManager;
@@ -152,6 +154,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   // StoragePartition interface.
   base::FilePath GetPath() override;
   network::mojom::NetworkContext* GetNetworkContext() override;
+  network::mojom::URLLoaderFactoryParamsPtr CreateURLLoaderFactoryParams();
   scoped_refptr<network::SharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcess() override;
   std::unique_ptr<network::PendingSharedURLLoaderFactory>
@@ -213,7 +216,8 @@ class CONTENT_EXPORT StoragePartitionImpl
                  base::OnceClosure callback) override;
   void ClearData(uint32_t remove_mask,
                  uint32_t quota_storage_remove_mask,
-                 StorageKeyPolicyMatcherFunction storage_key_matcher,
+                 BrowsingDataFilterBuilder* filter_builder,
+                 StorageKeyPolicyMatcherFunction storage_key_policy_matcher,
                  network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
                  bool perform_storage_cleanup,
                  const base::Time begin,
@@ -556,13 +560,15 @@ class CONTENT_EXPORT StoragePartitionImpl
   // state.
   void OnStorageServiceDisconnected();
 
-  // Clears the data specified by the `storage_key` or `storage_key_matcher`.
-  // `storage_key` and `storage_key_matcher` will never both be populated.
+  // Clears the data specified by the `storage_key` or
+  // `filter_builder`/`storage_key_policy_matcher`. `storage_key` and
+  // `filter_builder`/`storage_key_policy_matcher` will never both be populated.
   void ClearDataImpl(
       uint32_t remove_mask,
       uint32_t quota_storage_remove_mask,
       const blink::StorageKey& storage_key,
-      StorageKeyPolicyMatcherFunction storage_key_matcher,
+      BrowsingDataFilterBuilder* filter_builder,
+      StorageKeyPolicyMatcherFunction storage_key_policy_matcher,
       network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
       bool perform_storage_cleanup,
       const base::Time begin,
@@ -594,6 +600,10 @@ class CONTENT_EXPORT StoragePartitionImpl
   // rejects the connection, this will be reflected asynchronously by a call to
   // OnLocalTrustTokenFulfillerConnectionError.
   void ProvisionallyBindUnboundLocalTrustTokenFulfillerIfSupportedBySystem();
+
+  absl::optional<blink::StorageKey> CalculateStorageKey(
+      const url::Origin& origin,
+      const base::UnguessableToken* nonce);
 
   // Raw pointer that should always be valid. The BrowserContext owns the
   // StoragePartitionImplMap which then owns StoragePartitionImpl. When the

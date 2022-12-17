@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -276,7 +276,6 @@ void ModuleScriptLoader::NotifyFetchFinishedSuccess(
   // url, and options.</spec>
   switch (params.GetModuleType()) {
     case ModuleType::kJSON:
-      DCHECK(base::FeatureList::IsEnabled(blink::features::kJSONModules));
       module_script_ = ValueWrapperSyntheticModuleScript::
           CreateJSONWrapperSyntheticModuleScript(params, modulator_);
       break;

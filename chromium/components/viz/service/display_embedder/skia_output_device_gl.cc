@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "base/callback_helpers.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/debug/alias.h"
+#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/viz/common/gpu/context_lost_reason.h"
@@ -29,7 +30,6 @@
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/buffer_format_util.h"
-#include "ui/gl/dc_renderer_layer_params.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_image.h"
@@ -39,6 +39,7 @@
 
 #if BUILDFLAG(IS_WIN)
 #include "components/viz/service/display/dc_layer_overlay.h"
+#include "ui/gl/dc_renderer_layer_params.h"
 #endif
 
 namespace viz {
@@ -58,17 +59,11 @@ NOINLINE void CheckForLoopFailures() {
 
 }  // namespace
 
-// Holds reference needed to keep overlay textures alive. Can either hold a
-// shared image or legacy GL texture.
-// TODO(kylechar): Merge with SkiaOutputDeviceBufferQueue::OverlayData when we
-// dont need to support TexturePassthrough anymore.
+// Holds reference needed to keep overlay textures alive.
+// TODO(kylechar): We can probably merge OverlayData in with
+// SkiaOutputSurfaceImplOnGpu overlay data.
 class SkiaOutputDeviceGL::OverlayData {
  public:
-  // TODO(crbug.com/1011555): Remove ability to hold TexturePassthrough after
-  // all Window video paths use shared image API.
-  explicit OverlayData(scoped_refptr<gpu::gles2::TexturePassthrough> texture)
-      : texture_(std::move(texture)) {}
-
   explicit OverlayData(
       std::unique_ptr<gpu::OverlayImageRepresentation> representation)
       : representation_(std::move(representation)) {}
@@ -76,20 +71,17 @@ class SkiaOutputDeviceGL::OverlayData {
   ~OverlayData() = default;
   OverlayData(OverlayData&& other) = default;
   OverlayData& operator=(OverlayData&& other) {
-    texture_ = std::move(other.texture_);
+    // `access_` must be overwritten before `representation_`.
     access_ = std::move(other.access_);
     representation_ = std::move(other.representation_);
     return *this;
   }
 
-  scoped_refptr<gl::GLImage> GetImage() {
-    if (texture_)
-      return texture_->GetLevelImage(texture_->target(), 0);
-
+  gpu::OverlayImageRepresentation::ScopedReadAccess* BeginOverlayAccess() {
     DCHECK(representation_);
     access_ = representation_->BeginScopedReadAccess(/*needs_gl_image=*/true);
     DCHECK(access_);
-    return access_->gl_image();
+    return access_.get();
   }
 
   void EndOverlayAccess() { access_.reset(); }
@@ -97,7 +89,6 @@ class SkiaOutputDeviceGL::OverlayData {
  private:
   std::unique_ptr<gpu::OverlayImageRepresentation> representation_;
   std::unique_ptr<gpu::OverlayImageRepresentation::ScopedReadAccess> access_;
-  scoped_refptr<gpu::gles2::TexturePassthrough> texture_;
 };
 
 SkiaOutputDeviceGL::SkiaOutputDeviceGL(
@@ -121,11 +112,9 @@ SkiaOutputDeviceGL::SkiaOutputDeviceGL(
   capabilities_.supports_post_sub_buffer = gl_surface_->SupportsPostSubBuffer();
 #if BUILDFLAG(IS_WIN)
   if (gl_surface_->SupportsDCLayers()) {
-    // We need to set this bit to allow viz to track the previous damage rect
-    // of a backbuffer in a multiple backbuffer system, so backbuffers always
-    // have valid pixels, even outside the current damage rect.
-    capabilities_.preserve_buffer_content =
-        gl::ShouldForceDirectCompositionRootSurfaceFullDamage();
+    // DWM handles preserving the contents of the backbuffer in Present1, so we
+    // don't need to have SkiaOutputSurface handle it.
+    capabilities_.preserve_buffer_content = false;
     capabilities_.number_of_buffers =
         gl::DirectCompositionRootSurfaceBufferCount();
     capabilities_.supports_delegated_ink = gl_surface_->SupportsDelegatedInk();
@@ -318,13 +307,16 @@ void SkiaOutputDeviceGL::SwapBuffers(BufferPresentedCallback feedback,
   gfx::Size surface_size =
       gfx::Size(sk_surface_->width(), sk_surface_->height());
 
+  auto data = std::move(frame.data);
   if (supports_async_swap_) {
     auto callback = base::BindOnce(
         &SkiaOutputDeviceGL::DoFinishSwapBuffersAsync,
         weak_ptr_factory_.GetWeakPtr(), surface_size, std::move(frame));
-    gl_surface_->SwapBuffersAsync(std::move(callback), std::move(feedback));
+    gl_surface_->SwapBuffersAsync(std::move(callback), std::move(feedback),
+                                  std::move(data));
   } else {
-    gfx::SwapResult result = gl_surface_->SwapBuffers(std::move(feedback));
+    gfx::SwapResult result =
+        gl_surface_->SwapBuffers(std::move(feedback), std::move(data));
     DoFinishSwapBuffers(surface_size, std::move(frame),
                         gfx::SwapCompletionResult(result));
   }
@@ -338,16 +330,18 @@ void SkiaOutputDeviceGL::PostSubBuffer(const gfx::Rect& rect,
   gfx::Size surface_size =
       gfx::Size(sk_surface_->width(), sk_surface_->height());
 
+  auto data = std::move(frame.data);
   if (supports_async_swap_) {
     auto callback = base::BindOnce(
         &SkiaOutputDeviceGL::DoFinishSwapBuffersAsync,
         weak_ptr_factory_.GetWeakPtr(), surface_size, std::move(frame));
     gl_surface_->PostSubBufferAsync(rect.x(), rect.y(), rect.width(),
                                     rect.height(), std::move(callback),
-                                    std::move(feedback));
+                                    std::move(feedback), std::move(data));
   } else {
     gfx::SwapResult result = gl_surface_->PostSubBuffer(
-        rect.x(), rect.y(), rect.width(), rect.height(), std::move(feedback));
+        rect.x(), rect.y(), rect.width(), rect.height(), std::move(feedback),
+        std::move(data));
     DoFinishSwapBuffers(surface_size, std::move(frame),
                         gfx::SwapCompletionResult(result));
   }
@@ -360,15 +354,16 @@ void SkiaOutputDeviceGL::CommitOverlayPlanes(BufferPresentedCallback feedback,
   gfx::Size surface_size =
       gfx::Size(sk_surface_->width(), sk_surface_->height());
 
+  auto data = std::move(frame.data);
   if (supports_async_swap_) {
     auto callback = base::BindOnce(
         &SkiaOutputDeviceGL::DoFinishSwapBuffersAsync,
         weak_ptr_factory_.GetWeakPtr(), surface_size, std::move(frame));
     gl_surface_->CommitOverlayPlanesAsync(std::move(callback),
-                                          std::move(feedback));
+                                          std::move(feedback), std::move(data));
   } else {
     gfx::SwapResult result =
-        gl_surface_->CommitOverlayPlanes(std::move(feedback));
+        gl_surface_->CommitOverlayPlanes(std::move(feedback), std::move(data));
     DoFinishSwapBuffers(surface_size, std::move(frame),
                         gfx::SwapCompletionResult(result));
   }
@@ -427,15 +422,23 @@ void SkiaOutputDeviceGL::ScheduleOverlays(
       if (i > 0 && mailbox.IsZero())
         break;
 
-      auto image = GetGLImageForMailbox(mailbox);
-      if (!image) {
+      auto* read_access = BeginOverlayAccess(mailbox);
+      if (!read_access) {
+        success = false;
+        break;
+      }
+
+      if (auto dcomp_surface_proxy = read_access->GetDCOMPSurfaceProxy()) {
+        params->dcomp_surface_proxy = std::move(dcomp_surface_proxy);
+      } else if (auto* image = read_access->gl_image()) {
+        image->SetColorSpace(dc_layer.color_space);
+        params->images[i] = std::move(image);
+      } else {
         success = false;
         break;
       }
 
       scheduled_overlay_mailboxes_.insert(mailbox);
-      image->SetColorSpace(dc_layer.color_space);
-      params->images[i] = std::move(image);
     }
 
     if (!success) {
@@ -451,7 +454,8 @@ void SkiaOutputDeviceGL::ScheduleOverlays(
     params->clip_rect = dc_layer.clip_rect;
     params->protected_video_type = dc_layer.protected_video_type;
     params->hdr_metadata = dc_layer.hdr_metadata;
-    params->is_video_fullscreen_mode = dc_layer.is_video_fullscreen_mode;
+    params->is_video_fullscreen_letterboxing =
+        dc_layer.is_video_fullscreen_letterboxing;
 
     // Schedule DC layer overlay to be presented at next SwapBuffers().
     if (!gl_surface_->ScheduleDCLayer(std::move(params)))
@@ -476,33 +480,18 @@ SkSurface* SkiaOutputDeviceGL::BeginPaint(
 
 void SkiaOutputDeviceGL::EndPaint() {}
 
-scoped_refptr<gl::GLImage> SkiaOutputDeviceGL::GetGLImageForMailbox(
-    const gpu::Mailbox& mailbox) {
+gpu::OverlayImageRepresentation::ScopedReadAccess*
+SkiaOutputDeviceGL::BeginOverlayAccess(const gpu::Mailbox& mailbox) {
   auto it = overlays_.find(mailbox);
   if (it != overlays_.end())
-    return it->second.GetImage();
-
-  // TODO(crbug.com/1005306): Stop using MailboxManager for lookup once all
-  // clients are using SharedImageInterface to create textures.
-  // For example, the legacy mailbox still uses GL textures (no overlay)
-  // and is still used.
-  auto* texture_base = mailbox_manager_->ConsumeTexture(mailbox);
-  if (texture_base) {
-    DCHECK_EQ(texture_base->GetType(), gpu::TextureBase::Type::kPassthrough);
-    std::tie(it, std::ignore) = overlays_.insert(
-        {mailbox,
-         OverlayData(base::WrapRefCounted(
-             static_cast<gpu::gles2::TexturePassthrough*>(texture_base)))});
-    return it->second.GetImage();
-  }
+    return it->second.BeginOverlayAccess();
 
   auto overlay = shared_image_representation_factory_->ProduceOverlay(mailbox);
   if (!overlay)
     return nullptr;
 
-  std::tie(it, std::ignore) =
-      overlays_.try_emplace(mailbox, std::move(overlay));
-  return it->second.GetImage();
+  std::tie(it, std::ignore) = overlays_.emplace(mailbox, std::move(overlay));
+  return it->second.BeginOverlayAccess();
 }
 
 }  // namespace viz

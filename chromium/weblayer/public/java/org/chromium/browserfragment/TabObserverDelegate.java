@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,76 +8,66 @@ import android.os.Handler;
 import android.os.Looper;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import org.chromium.base.ObserverList;
 import org.chromium.browserfragment.interfaces.ITabObserverDelegate;
-import org.chromium.browserfragment.interfaces.ITabParams;
 
 /**
- * TabObserverDelegate notifies TabObservers of Tab-events in weblayer.
+ * {@link TabObserverDelegate} notifies registered {@Link TabObserver}s of events in the Tab.
  */
 class TabObserverDelegate extends ITabObserverDelegate.Stub {
     private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     private ObserverList<TabObserver> mTabObservers = new ObserverList<TabObserver>();
 
+    public TabObserverDelegate() {
+        // Assert on UI thread as ObserverList can only be accessed from one thread.
+        ThreadCheck.ensureOnUiThread();
+    }
+
     /**
-     * Register a TabObserver.
+     * Registers a {@link TabObserver}. Call only from the UI thread.
      *
      * @return true if the observer was added to the list of observers.
      */
     boolean registerObserver(TabObserver tabObserver) {
+        ThreadCheck.ensureOnUiThread();
         return mTabObservers.addObserver(tabObserver);
     }
 
     /**
-     * Unregister a TabObserver.
+     * Unregisters a {@link TabObserver}. Call only from the UI thread.
      *
      * @return true if the observer was removed from the list of observers.
      */
     boolean unregisterObserver(TabObserver tabObserver) {
+        ThreadCheck.ensureOnUiThread();
         return mTabObservers.removeObserver(tabObserver);
     }
 
     @Override
-    public void notifyActiveTabChanged(@Nullable ITabParams tabParams) {
+    public void notifyVisibleUriChanged(@NonNull String uri) {
         mHandler.post(() -> {
-            Tab tab = null;
-            if (tabParams != null) {
-                tab = new Tab(tabParams);
-            }
             for (TabObserver observer : mTabObservers) {
-                observer.onActiveTabChanged(tab);
+                observer.onVisibleUriChanged(uri);
             }
         });
     }
 
     @Override
-    public void notifyTabAdded(@NonNull ITabParams tabParams) {
+    public void notifyTitleUpdated(@NonNull String title) {
         mHandler.post(() -> {
-            Tab tab = new Tab(tabParams);
             for (TabObserver observer : mTabObservers) {
-                observer.onTabAdded(tab);
+                observer.onTitleUpdated(title);
             }
         });
     }
 
     @Override
-    public void notifyTabRemoved(@NonNull ITabParams tabParams) {
-        mHandler.post(() -> {
-            Tab tab = new Tab(tabParams);
-            for (TabObserver observer : mTabObservers) {
-                observer.onTabRemoved(tab);
-            }
-        });
-    }
-
-    @Override
-    public void notifyWillDestroyBrowserAndAllTabs() {
+    public void notifyRenderProcessGone() {
         mHandler.post(() -> {
             for (TabObserver observer : mTabObservers) {
-                observer.onWillDestroyBrowserAndAllTabs();
+                observer.onRenderProcessGone();
             }
         });
     }

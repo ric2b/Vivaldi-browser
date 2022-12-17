@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,10 +14,6 @@
 #include "components/payments/core/currency_formatter.h"
 #import "ios/web/public/web_state_observer.h"
 #import "ios/web/public/web_state_user_data.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 // Price drop data is logged at different stages during the user's session.
 // These identifiers enable differentiation in the metrics based on when
@@ -38,8 +34,6 @@ class ShoppingPersistedDataTabHelper
       public web::WebStateUserData<ShoppingPersistedDataTabHelper> {
  public:
   ~ShoppingPersistedDataTabHelper() override;
-
-  static void CreateForWebState(web::WebState* web_state);
 
   // Reduction in price for the offer corresponding to the
   // ShoppingPersistedDataTabHelper::WebState::URL - if it exists.
@@ -132,4 +126,5 @@ class ShoppingPersistedDataTabHelper
 
   base::WeakPtrFactory<ShoppingPersistedDataTabHelper> weak_factory_{this};
 };
+
 #endif  // IOS_CHROME_BROWSER_COMMERCE_SHOPPING_PERSISTED_DATA_TAB_HELPER_H_

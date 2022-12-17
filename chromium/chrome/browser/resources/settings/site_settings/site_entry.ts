@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,29 +9,27 @@
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
-import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import '../settings_shared.css.js';
 import '../site_favicon.js';
 
 import {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
-import {FocusRowBehavior} from 'chrome://resources/js/cr/ui/focus_row_behavior.m.js';
-import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
+import {EventTracker} from 'chrome://resources/js/event_tracker.js';
+import {FocusRowMixin} from 'chrome://resources/js/focus_row_mixin.js';
 import {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
-import {DomRepeatEvent, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {BaseMixin, BaseMixinInterface} from '../base_mixin.js';
-import {loadTimeData} from '../i18n_setup.js';
+import {BaseMixin} from '../base_mixin.js';
 import {routes} from '../route.js';
 import {Router} from '../router.js';
 
 import {AllSitesAction2, SortMethod} from './constants.js';
-import {LocalDataBrowserProxy, LocalDataBrowserProxyImpl} from './local_data_browser_proxy.js';
 import {getTemplate} from './site_entry.html.js';
-import {SiteSettingsMixin, SiteSettingsMixinInterface} from './site_settings_mixin.js';
+import {SiteSettingsMixin} from './site_settings_mixin.js';
 import {OriginInfo, SiteGroup} from './site_settings_prefs_browser_proxy.js';
 
 
@@ -40,6 +38,7 @@ export interface SiteEntryElement {
     expandIcon: CrIconButtonElement,
     collapseParent: HTMLElement,
     cookies: HTMLElement,
+    fpsMembership: HTMLElement,
     displayName: HTMLElement,
     originList: CrLazyRenderElement<IronCollapseElement>,
     toggleButton: HTMLElement,
@@ -47,12 +46,7 @@ export interface SiteEntryElement {
 }
 
 const SiteEntryElementBase =
-    mixinBehaviors(
-        [FocusRowBehavior],
-        BaseMixin(SiteSettingsMixin(I18nMixin(PolymerElement)))) as {
-      new (): PolymerElement & I18nMixinInterface & SiteSettingsMixinInterface &
-          BaseMixinInterface,
-    };
+    FocusRowMixin(BaseMixin(SiteSettingsMixin(I18nMixin(PolymerElement))));
 
 export class SiteEntryElement extends SiteEntryElementBase {
   static get is() {
@@ -83,6 +77,19 @@ export class SiteEntryElement extends SiteEntryElementBase {
        * The string to display when there is a non-zero number of cookies.
        */
       cookieString_: String,
+
+      /**
+       * The first party set info for a site including owner and members count.
+       */
+      fpsMembershipLabel_: {
+        type: String,
+        value: '',
+      },
+
+      /**
+       * Mock preference used to power managed policy icon for first party sets.
+       */
+      fpsEnterprisePref_: Object,
 
       /**
        * The position of this site-entry in its parent list.
@@ -123,28 +130,28 @@ export class SiteEntryElement extends SiteEntryElementBase {
        * The selected sort method.
        */
       sortMethod: {type: String, observer: 'updateOrigins_'},
-
-      enableConsolidatedSiteStorageControls_: {
-        type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('consolidatedSiteStorageControlsEnabled'),
-      },
     };
+  }
+
+  static get observers() {
+    return [
+      'updateFpsMembershipLabel_(siteGroup.fpsNumMembers, siteGroup.fpsOwner)',
+      'updatePolicyPref_(siteGroup.fpsEnterpriseManaged)',
+    ];
   }
 
   siteGroup: SiteGroup;
   private displayName_: string;
   private cookieString_: string;
+  private fpsMembershipLabel_: string;
   listIndex: number;
   private overallUsageString_: string;
   private originUsages_: string[];
   private cookiesNum_: string[];
   sortMethod?: SortMethod;
-  private enableConsolidatedSiteStorageControls_: boolean;
+  private fpsEnterprisePref_: chrome.settingsPrivate.PrefObject;
 
   private button_: Element|null = null;
-  private localDataBrowserProxy_: LocalDataBrowserProxy =
-      LocalDataBrowserProxyImpl.getInstance();
   private eventTracker_: EventTracker = new EventTracker();
 
   override disconnectedCallback() {
@@ -308,6 +315,11 @@ export class SiteEntryElement extends SiteEntryElementBase {
     });
   }
 
+
+  private isFpsMember_(): boolean {
+    return this.siteGroup.fpsOwner !== undefined;
+  }
+
   /**
    * Get display string for number of cookies.
    */
@@ -315,7 +327,47 @@ export class SiteEntryElement extends SiteEntryElementBase {
     if (numCookies === 0) {
       return Promise.resolve('');
     }
-    return this.localDataBrowserProxy_.getNumCookiesString(numCookies);
+    return this.browserProxy.getNumCookiesString(numCookies);
+  }
+
+  /**
+   * Updates the display string for FPS information of owner and member count.
+   * @param fpsNumMembers The number of members in the first party set.
+   * @param fpsOwner The eTLD+1 for the first party set owner.
+   */
+  private updateFpsMembershipLabel_() {
+    if (!this.siteGroup.fpsOwner) {
+      this.fpsMembershipLabel_ = '';
+    } else {
+      this.browserProxy
+          .getFpsMembershipLabel(
+              this.siteGroup.fpsNumMembers!, this.siteGroup.fpsOwner!)
+          .then(label => this.fpsMembershipLabel_ = label);
+    }
+  }
+
+  /**
+   * Evaluates whether the policy icon should be shown.
+   * @returns True when `this.siteGroup.fpsEnterpriseManaged` is true,
+   * otherwise false.
+   */
+  private shouldShowPolicyPrefIndicator_(): boolean {
+    return !!this.siteGroup.fpsEnterpriseManaged;
+  }
+
+  /**
+   * Updates `fpsEnterprisePref_` based on `siteGroup.fpsEnterpriseManaged`.
+   */
+  private updatePolicyPref_() {
+    this.fpsEnterprisePref_ = this.siteGroup.fpsEnterpriseManaged ?
+        Object.assign({
+          enforcement: chrome.settingsPrivate.Enforcement.ENFORCED,
+          controlledBy: chrome.settingsPrivate.ControlledBy.DEVICE_POLICY,
+        }) :
+        Object.assign({
+          enforcement: undefined,
+          controlledBy: undefined,
+        });
   }
 
   /**
@@ -387,6 +439,8 @@ export class SiteEntryElement extends SiteEntryElementBase {
     collapseChild.toggle();
     this.$.toggleButton.setAttribute(
         'aria-expanded', collapseChild.opened ? 'true' : 'false');
+    this.$.expandIcon.setAttribute(
+        'aria-expanded', collapseChild.opened ? 'true' : 'false');
     this.$.expandIcon.toggleClass('icon-expand-more');
     this.$.expandIcon.toggleClass('icon-expand-less');
     this.fire('iron-resize');
@@ -432,6 +486,10 @@ export class SiteEntryElement extends SiteEntryElementBase {
         'siteSettingsCookieRemoveSite', this.originRepresentation(origin));
   }
 
+  private getMoreActionsLabel_(): string {
+    return this.i18n(
+        'firstPartySetsMoreActionsTitle', this.siteGroup.etldPlus1);
+  }
   /**
    * Update the order and data display text for origins.
    */

@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;چاپ...</translation>
 <translation id="1181037720776840403">حذف</translation>
 <translation id="1187722533808055681">تعداد خروج از حالت بی‌کار</translation>
-<translation id="119944043368869598">پاک کردن همه</translation>
 <translation id="1221825588892235038">فقط محتوای انتخاب شده</translation>
 <translation id="1234736487471201993">ایجاد QR Code برای این تصویر</translation>
 <translation id="1244303850296295656">خطای افزونه</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">انتخاب &amp;همه</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> نقطه در اینچ</translation>
 <translation id="1936931585862840749">تعداد نسخه‌های لازم برای چاپ را با یک عدد تعیین نمایید (۱ تا <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">حذف همه</translation>
 <translation id="1994173015038366702">نشانی وب سایت</translation>
 <translation id="2019718679933488176">&amp;باز کردن فایل صوتی در زبانه جدید</translation>
 <translation id="2050339315714019657">عمودی</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">جای‌گذاری به‌عنوان نوشتار ساده</translation>
 <translation id="2249605167705922988">برای مثال 5-1، 8، 13-11</translation>
 <translation id="225240747099314620">اجازه به شناسه‌ها برای محتوای محافظت شده (ممکن است نیاز به راه‌اندازی مجدد رایانه باشد)</translation>
-<translation id="2277255602909579701">همه کوکی‌ها و داده‌های سایت</translation>
 <translation id="2280486287150724112">حاشیه راست</translation>
 <translation id="2282146716419988068">‏پردازش GPU</translation>
 <translation id="2301382460326681002">دایرکتوری ریشه برنامهٔ افزودنی نامعتبر است.</translation>
@@ -93,8 +90,10 @@
 <translation id="2550212893339833758">حافظه‌ی بخش سواپ</translation>
 <translation id="2553440850688409052">پنهان‌سازی این افزونه</translation>
 <translation id="26224892172169984">به هیچ سایتی برای کنترل پروتکل‌ها اجازه داده نشود</translation>
+<translation id="2653275834716714682">جایگزینی متن</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">فعال کردن مجدد</translation>
+<translation id="2678100101831051676">پخش محتوا امکان‌پذیر نیست.</translation>
 <translation id="2721037002783622288">&amp;جستجوی <ph name="SEARCH_ENGINE" /> برای تصویر</translation>
 <translation id="2783321960289401138">ایجاد میان‌بر...</translation>
 <translation id="2785873697295365461">توصیف‌گرهای فایل</translation>
@@ -122,7 +121,6 @@
 <translation id="3084548735795614657">برای نصب رها کنید</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">کنترل‌های کاربر</translation>
-<translation id="3127156390846601284">این کار باعث حذف تمام داده‌های ذخیره‌شده روی دستگاهتان برای همه سایت‌های نشان‌داده‌شده می‌شود. می‌خواهید ادامه دهید؟</translation>
 <translation id="3129173833825111527">حاشیه چپ</translation>
 <translation id="3144647712221361880">گشودن پیوند به‌عنوان</translation>
 <translation id="3222066309010235055">پیش رندر: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +143,6 @@
 <translation id="3387614642886316601">استفاده از غلط‌گیر املایی بهبودیافته</translation>
 <translation id="3390013585654699824">جزئیات برنامه</translation>
 <translation id="3393582007140394275">اشتراک‌گذاری محتوای صفحه نمایش ممکن نیست.</translation>
-<translation id="3432227430032737297">حذف همه‌ی موارد نشان‌ داده شده</translation>
 <translation id="345693547134384690">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
 <translation id="3494769164076977169">هنگامی که سایتی پس از اولین فایل سعی در دانلود خودکار سایر فایل‌ها دارد، از کاربر سوال شود (توصیه می‌شود)</translation>
 <translation id="3505030558724226696">لغو دسترسی دستگاه</translation>
@@ -204,10 +201,10 @@
 <translation id="4409697491990005945">حاشیه‌ها</translation>
 <translation id="4423376891418188461">بازیابی تنظیمات</translation>
 <translation id="4478664379124702289">ذخیره‌ی &amp;پیوند به‌عنوان...</translation>
-<translation id="4579581181964204535">ارسال محتوای <ph name="HOST_NAME" /> امکان‌پذیر نیست.</translation>
 <translation id="4593021220803146968">&amp;رفتن به <ph name="URL" /></translation>
 <translation id="4595560905247879544">برنامه‌ها و افزونه‌ها فقط توسط مدیر (<ph name="CUSTODIAN_NAME" />) قابل تغییر هستند.</translation>
 <translation id="4613271546271159013">یک برنامه افزودنی صفحه‌ای را که موقع باز کردن برگه جدید نشان داده می‌شود، تغییر داده است.</translation>
+<translation id="4616405296204756919">می‌توانید از رمزهای عبور ذخیره شده در هر دستگاهی استفاده کنید. آن‌ها در <ph name="VIVALDI_PASSWORD_MANAGER" /> ذخیره می‌شوند.</translation>
 <translation id="4643612240819915418">&amp;باز کردن فایل ویدویی در زبانه جدید</translation>
 <translation id="4677772697204437347">‏حافظه‌ی واحد گرافیکی</translation>
 <translation id="4681930562518940301">گشودن تصویر اصلی در زبانه‌ی جدید</translation>
@@ -241,10 +238,12 @@
 <translation id="5233231016133573565">شناسه فرایند</translation>
 <translation id="5233736638227740678">&amp;چسباندن</translation>
 <translation id="5256861893479663409">در همه‌ی سایت‌ها</translation>
+<translation id="5260334392110301220">نقل‌قول‌های هوشمند</translation>
 <translation id="5269977353971873915">چاپ نشد</translation>
 <translation id="5284445933715251131">ادامه‌ی دانلود</translation>
 <translation id="52912272896845572">فایل کلید خصوصی نامعتبر است.</translation>
 <translation id="5301954838959518834">بله، متوجه شدم</translation>
+<translation id="5302932258331363306">نمایش جایگزین‌ها</translation>
 <translation id="5317780077021120954">ذخیره</translation>
 <translation id="5334142896108694079">حافظه‌ی نهان اسکریپت</translation>
 <translation id="5355926466126177564">‏افزونه «<ph name="EXTENSION_NAME" />»، صفحه‌ای را تغییر داده است که هنگام جستجو از Omnibox نشان داده می‌شود.</translation>
@@ -277,7 +276,6 @@
 <translation id="5747809636523347288">&amp;جای‌گذاری و رفتن به <ph name="URL" /></translation>
 <translation id="5759728514498647443">اسنادی که از طریق <ph name="APP_NAME" /> برای چاپ ارسال می‌کنید، می‌توانند توسط <ph name="APP_NAME" /> خوانده شوند.</translation>
 <translation id="5764483294734785780">ذ&amp;خیره‌ی فایل صوتی به‌عنوان...</translation>
-<translation id="577624874850706961">جستجوی کوکی‌ها</translation>
 <translation id="5780973441651030252">اولویت پردازش</translation>
 <translation id="5804241973901381774">مجوزها</translation>
 <translation id="5828633471261496623">در حال چاپ...</translation>
@@ -290,7 +288,6 @@
 <translation id="5965661248935608907">‏این برنامه افزودنی همچنین صفحه‌ای را که هنگام کلیک کردن روی دکمه صفحه اصلی یا جستجو از Omnibox نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="5978277834170881274">&amp;استفاده از غلط‌گیر املای پایه</translation>
 <translation id="5979421442488174909">ترجمه به <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">پاک کردن داده‌های سایت</translation>
 <translation id="6042308850641462728">بیشتر</translation>
 <translation id="6086846494333236931">نصب‌ شده توسط مدیر شما</translation>
 <translation id="6101226222197207147">برنامه جدید اضافه شده (<ph name="EXTENSION_NAME" />)</translation>
@@ -346,6 +343,7 @@
 <translation id="7053983685419859001">مسدود کردن</translation>
 <translation id="7070484045139057854">می‌تواند داده‌های سایت را خوانده و تغییر دهد</translation>
 <translation id="708060913198414444">کپی آدرس صوت</translation>
+<translation id="7121728544325372695">خط تیره‌های هوشمند</translation>
 <translation id="7175353351958621980">بارگذاری شده از:</translation>
 <translation id="7186088072322679094">نگهداری در نوار ابزار</translation>
 <translation id="7287143125007575591">دسترسی رد شد.</translation>
@@ -404,7 +402,6 @@
         =1 {بارگیری درحال انجام است} other {بارگیری‌ها درحال انجام است}}</translation>
 <translation id="8230134520748321204">رمز عبور <ph name="ORIGIN" /> ذخیره شود؟</translation>
 <translation id="8261378640211443080">این برنامه‌افزودنی در <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> فهرست نشده است و ممکن است بدون اطلاع شما اضافه شده باشد.</translation>
-<translation id="8339059274628563283"><ph name="SITE" /> داده‌های ذخیره‌شده‌ی محلی</translation>
 <translation id="8351419472474436977">این برنامه افزودنی کنترل تنظیمات پروکسی شما را در اختیار گرفته است یعنی می‌تواند هر چیزی را در که حالت آنلاین انجام می‌دهید تغییر دهد، خراب کند یا استراق سمع کند. اگر مطمئن نیستید چرا این تغییر اتفاق افتاده، احتمالاً این برنامه را نمی‌خواهید.</translation>
 <translation id="8382913212082956454">کپی آدرس ایمیل</translation>
 <translation id="8413385045638830869">ابتدا سؤال شود (توصیه می‌شود)</translation>
@@ -430,6 +427,7 @@
 <translation id="8808478386290700967">فروشگاه وب</translation>
 <translation id="8823514049557262177">کپی &amp;متن پیوند</translation>
 <translation id="8823704566850948458">پیشنهاد رمز عبور…</translation>
+<translation id="883062543841130884">جایگزین‌ها</translation>
 <translation id="8859174528519900719">قاب فرعی: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">گشودن پیوند در &amp;پنجره‌ی جدید</translation>
 <translation id="8915370057835397490">در حال بارگیری پیشنهادات</translation>

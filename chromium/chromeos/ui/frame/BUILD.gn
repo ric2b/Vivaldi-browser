@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -56,8 +56,8 @@ source_set("frame") {
     "multitask_menu/multitask_menu_constants.h",
     "multitask_menu/multitask_menu_view.cc",
     "multitask_menu/multitask_menu_view.h",
-    "multitask_menu/split_button.cc",
-    "multitask_menu/split_button.h",
+    "multitask_menu/split_button_view.cc",
+    "multitask_menu/split_button_view.h",
   ]
 
   deps = [

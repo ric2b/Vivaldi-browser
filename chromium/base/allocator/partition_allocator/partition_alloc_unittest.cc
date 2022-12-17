@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 #include "base/allocator/partition_allocator/address_space_randomization.h"
 #include "base/allocator/partition_allocator/chromecast_buildflags.h"
 #include "base/allocator/partition_allocator/dangling_raw_ptr_checks.h"
+#include "base/allocator/partition_allocator/freeslot_bitmap.h"
 #include "base/allocator/partition_allocator/page_allocator_constants.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/bits.h"
@@ -47,6 +48,7 @@
 #include "base/allocator/partition_allocator/reservation_offset_table.h"
 #include "base/allocator/partition_allocator/tagging.h"
 #include "base/system/sys_info.h"
+#include "base/test/gtest_util.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -60,7 +62,7 @@
 #include <sys/time.h>
 #endif  // BUILDFLAG(IS_POSIX)
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(IS_MAC)
+#if BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && BUILDFLAG(IS_MAC)
 #include <OpenCL/opencl.h>
 #endif
 
@@ -204,6 +206,7 @@ class CountDanglingRawPtr {
 // For ease of reading, the tests are placed into the latter namespace.
 namespace partition_alloc::internal {
 
+using BucketDistribution = ThreadSafePartitionRoot::BucketDistribution;
 using SlotSpan = SlotSpanMetadata<ThreadSafe>;
 
 const size_t kTestAllocSize = 16;
@@ -219,6 +222,21 @@ const size_t kRealAllocSize = partition_alloc::internal::base::bits::AlignUp(
     kAlignment);
 
 const char* type_name = nullptr;
+
+void SetDistributionForPartitionRoot(ThreadSafePartitionRoot* root,
+                                     BucketDistribution distribution) {
+  switch (distribution) {
+    case BucketDistribution::kDefault:
+      root->SwitchToDefaultBucketDistribution();
+      break;
+    case BucketDistribution::kCoarser:
+      root->ResetBucketDistributionForTesting();
+      break;
+    case BucketDistribution::kDenser:
+      root->SwitchToDenserBucketDistribution();
+      break;
+  }
+}
 
 class ScopedPageAllocation {
  public:
@@ -247,7 +265,7 @@ class ScopedPageAllocation {
   char* ptr_;
 };
 
-class PartitionAllocTest : public testing::TestWithParam<bool> {
+class PartitionAllocTest : public testing::TestWithParam<BucketDistribution> {
  protected:
   PartitionAllocTest() = default;
 
@@ -257,7 +275,8 @@ class PartitionAllocTest : public testing::TestWithParam<bool> {
     PartitionRoot<ThreadSafe>::EnableSortActiveSlotSpans();
     PartitionAllocGlobalInit(HandleOOM);
     allocator.init({
-#if !BUILDFLAG(USE_BACKUP_REF_PTR) || BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+#if !BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) || \
+    BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
       // AlignedAllocWithFlags() can't be called when BRP is in the "before
       // allocation" mode, because this mode adds extras before the allocation.
       // Extras after the allocation are ok.
@@ -268,7 +287,7 @@ class PartitionAllocTest : public testing::TestWithParam<bool> {
           PartitionOptions::ThreadCache::kDisabled,
           PartitionOptions::Quarantine::kDisallowed,
           PartitionOptions::Cookie::kAllowed,
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
           PartitionOptions::BackupRefPtr::kEnabled,
           PartitionOptions::BackupRefPtrZapping::kEnabled,
 #else
@@ -291,16 +310,19 @@ class PartitionAllocTest : public testing::TestWithParam<bool> {
     allocator.root()->UncapEmptySlotSpanMemoryForTesting();
     aligned_allocator.root()->UncapEmptySlotSpanMemoryForTesting();
 
-    if (GetParam())
-      allocator.root()->SwitchToDenserBucketDistribution();
-    else
-      allocator.root()->ResetBucketDistributionForTesting();
+    SetDistributionForPartitionRoot(allocator.root(), GetParam());
+    SetDistributionForPartitionRoot(aligned_allocator.root(), GetParam());
   }
 
   size_t SizeToIndex(size_t size) {
-    const bool with_denser_bucket_distribution = GetParam();
+    const auto distribution_to_use = GetParam();
     return PartitionRoot<internal::ThreadSafe>::SizeToBucketIndex(
-        size, with_denser_bucket_distribution);
+        size, distribution_to_use);
+  }
+
+  size_t SizeToBucketSize(size_t size) {
+    const auto index = SizeToIndex(size);
+    return allocator.root()->buckets[index].slot_size;
   }
 
   void TearDown() override {
@@ -460,7 +482,19 @@ class PartitionAllocTest : public testing::TestWithParam<bool> {
   size_t test_bucket_index_;
 };
 
+// Death tests misbehave on Android, http://crbug.com/643760.
+#if defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID)
+#define PA_HAS_DEATH_TESTS
+
 class PartitionAllocDeathTest : public PartitionAllocTest {};
+
+INSTANTIATE_TEST_SUITE_P(AlternateBucketDistribution,
+                         PartitionAllocDeathTest,
+                         testing::Values(BucketDistribution::kDefault,
+                                         BucketDistribution::kCoarser,
+                                         BucketDistribution::kDenser));
+
+#endif
 
 namespace {
 
@@ -544,7 +578,9 @@ class MockPartitionStatsDumper : public PartitionStatsDumper {
 
 INSTANTIATE_TEST_SUITE_P(AlternateBucketDistribution,
                          PartitionAllocTest,
-                         testing::Values(false, true));
+                         testing::Values(BucketDistribution::kDefault,
+                                         BucketDistribution::kCoarser,
+                                         BucketDistribution::kDenser));
 
 // Check that the most basic of allocate / free pairs work.
 TEST_P(PartitionAllocTest, Basic) {
@@ -563,6 +599,7 @@ TEST_P(PartitionAllocTest, Basic) {
   // Check that the offset appears to include a guard page.
   EXPECT_EQ(PartitionPageSize() +
                 partition_alloc::internal::ReservedTagBitmapSize() +
+                partition_alloc::internal::ReservedFreeSlotBitmapSize() +
                 kPointerOffset,
             UntagPtr(ptr) & kSuperPageOffsetMask);
 
@@ -834,7 +871,8 @@ TEST_P(PartitionAllocTest, MultiPageAllocs) {
   // 1 super page has 2 guard partition pages and a tag bitmap.
   size_t num_slot_spans_needed =
       (NumPartitionPagesPerSuperPage() - 2 -
-       partition_alloc::internal::NumPartitionPagesPerTagBitmap()) /
+       partition_alloc::internal::NumPartitionPagesPerTagBitmap() -
+       partition_alloc::internal::NumPartitionPagesPerFreeSlotBitmap()) /
       num_pages_per_slot_span;
 
   // We need one more slot span in order to cross super page boundary.
@@ -857,7 +895,8 @@ TEST_P(PartitionAllocTest, MultiPageAllocs) {
       // Check that we allocated a guard page and the reserved tag bitmap for
       // the second page.
       EXPECT_EQ(PartitionPageSize() +
-                    partition_alloc::internal::ReservedTagBitmapSize(),
+                    partition_alloc::internal::ReservedTagBitmapSize() +
+                    partition_alloc::internal::ReservedFreeSlotBitmapSize(),
                 second_super_page_offset);
     }
   }
@@ -989,11 +1028,10 @@ TEST_P(PartitionAllocTest, AllocSizes) {
   }
 
   {
+    // Single-slot slot span size.
     const size_t size =
-        (((PartitionPageSize() * kMaxPartitionPagesPerRegularSlotSpan) -
-          SystemPageSize()) /
-         2) -
-        kExtraAllocSize;
+        PartitionPageSize() * kMaxPartitionPagesPerRegularSlotSpan + 1;
+
     void* ptr = allocator.root()->Alloc(size, type_name);
     EXPECT_TRUE(ptr);
     memset(ptr, 'A', size);
@@ -1081,13 +1119,13 @@ TEST_P(PartitionAllocTest, AllocGetSizeAndStart) {
       allocator.root()->AllocationCapacityFromSlotStart(slot_start);
   EXPECT_EQ(predicted_capacity, actual_capacity);
   EXPECT_LT(requested_size, actual_capacity);
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   uintptr_t address = UntagPtr(ptr);
   for (size_t offset = 0; offset < requested_size; ++offset) {
     EXPECT_EQ(PartitionAllocGetSlotStartInBRPPool(address + offset),
               slot_start);
   }
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   allocator.root()->Free(ptr);
 
   // Allocate a size that should be a perfect match for a bucket, because it
@@ -1102,13 +1140,13 @@ TEST_P(PartitionAllocTest, AllocGetSizeAndStart) {
       allocator.root()->AllocationCapacityFromSlotStart(slot_start);
   EXPECT_EQ(predicted_capacity, actual_capacity);
   EXPECT_EQ(requested_size, actual_capacity);
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   address = UntagPtr(ptr);
   for (size_t offset = 0; offset < requested_size; offset += 877) {
     EXPECT_EQ(PartitionAllocGetSlotStartInBRPPool(address + offset),
               slot_start);
   }
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   allocator.root()->Free(ptr);
 
   // Allocate a size that is a system page smaller than a bucket.
@@ -1128,13 +1166,13 @@ TEST_P(PartitionAllocTest, AllocGetSizeAndStart) {
       allocator.root()->AllocationCapacityFromSlotStart(slot_start);
   EXPECT_EQ(predicted_capacity, actual_capacity);
   EXPECT_EQ(requested_size + SystemPageSize(), actual_capacity);
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   address = UntagPtr(ptr);
   for (size_t offset = 0; offset < requested_size; offset += 4999) {
     EXPECT_EQ(PartitionAllocGetSlotStartInBRPPool(address + offset),
               slot_start);
   }
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
   // Allocate the maximum allowed bucketed size.
   requested_size = kMaxBucketed - kExtraAllocSize;
@@ -1147,13 +1185,13 @@ TEST_P(PartitionAllocTest, AllocGetSizeAndStart) {
       allocator.root()->AllocationCapacityFromSlotStart(slot_start);
   EXPECT_EQ(predicted_capacity, actual_capacity);
   EXPECT_EQ(requested_size, actual_capacity);
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   address = UntagPtr(ptr);
   for (size_t offset = 0; offset < requested_size; offset += 4999) {
     EXPECT_EQ(PartitionAllocGetSlotStartInBRPPool(address + offset),
               slot_start);
   }
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
   // Check that we can write at the end of the reported size too.
   char* char_ptr = static_cast<char*>(ptr);
@@ -1172,13 +1210,13 @@ TEST_P(PartitionAllocTest, AllocGetSizeAndStart) {
         allocator.root()->AllocationCapacityFromSlotStart(slot_start);
     EXPECT_EQ(predicted_capacity, actual_capacity);
     EXPECT_LT(requested_size, actual_capacity);
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
     address = UntagPtr(ptr);
     for (size_t offset = 0; offset < requested_size; offset += 16111) {
       EXPECT_EQ(PartitionAllocGetSlotStartInBRPPool(address + offset),
                 slot_start);
     }
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
     allocator.root()->Free(ptr);
   }
 
@@ -1189,7 +1227,7 @@ TEST_P(PartitionAllocTest, AllocGetSizeAndStart) {
   EXPECT_EQ(requested_size, predicted_capacity);
 }
 
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 TEST_P(PartitionAllocTest, IsValidPtrDelta) {
   const size_t kMinReasonableTestSize =
       partition_alloc::internal::base::bits::AlignUp(kExtraAllocSize + 1,
@@ -1323,7 +1361,7 @@ TEST_P(PartitionAllocTest, GetSlotStartMultiplePages) {
     allocator.root()->Free(ptr);
   }
 }
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
 // Test the realloc() contract.
 TEST_P(PartitionAllocTest, Realloc) {
@@ -1814,7 +1852,8 @@ TEST_P(PartitionAllocTest, MappingCollision) {
   // guard pages. We also discount the partition pages used for the tag bitmap.
   size_t num_slot_span_needed =
       (NumPartitionPagesPerSuperPage() - 2 -
-       partition_alloc::internal::NumPartitionPagesPerTagBitmap()) /
+       partition_alloc::internal::NumPartitionPagesPerTagBitmap() -
+       partition_alloc::internal::NumPartitionPagesPerFreeSlotBitmap()) /
       num_pages_per_slot_span;
   size_t num_partition_pages_needed =
       num_slot_span_needed * num_pages_per_slot_span;
@@ -1830,11 +1869,14 @@ TEST_P(PartitionAllocTest, MappingCollision) {
 
   uintptr_t slot_spart_start =
       SlotSpan::ToSlotSpanStart(first_super_page_pages[0]);
-  EXPECT_EQ(
-      PartitionPageSize() + partition_alloc::internal::ReservedTagBitmapSize(),
-      slot_spart_start & kSuperPageOffsetMask);
-  uintptr_t super_page = slot_spart_start - PartitionPageSize() -
-                         partition_alloc::internal::ReservedTagBitmapSize();
+  EXPECT_EQ(PartitionPageSize() +
+                partition_alloc::internal::ReservedTagBitmapSize() +
+                partition_alloc::internal::ReservedFreeSlotBitmapSize(),
+            slot_spart_start & kSuperPageOffsetMask);
+  uintptr_t super_page =
+      slot_spart_start - PartitionPageSize() -
+      partition_alloc::internal::ReservedTagBitmapSize() -
+      partition_alloc::internal::ReservedFreeSlotBitmapSize();
   // Map a single system page either side of the mapping for our allocations,
   // with the goal of tripping up alignment of the next mapping.
   uintptr_t map1 = AllocPages(
@@ -1855,11 +1897,13 @@ TEST_P(PartitionAllocTest, MappingCollision) {
   FreePages(map2, PageAllocationGranularity());
 
   super_page = SlotSpan::ToSlotSpanStart(second_super_page_pages[0]);
-  EXPECT_EQ(
-      PartitionPageSize() + partition_alloc::internal::ReservedTagBitmapSize(),
-      super_page & kSuperPageOffsetMask);
-  super_page -=
-      PartitionPageSize() - partition_alloc::internal::ReservedTagBitmapSize();
+  EXPECT_EQ(PartitionPageSize() +
+                partition_alloc::internal::ReservedTagBitmapSize() +
+                partition_alloc::internal::ReservedFreeSlotBitmapSize(),
+            super_page & kSuperPageOffsetMask);
+  super_page -= PartitionPageSize() +
+                partition_alloc::internal::ReservedTagBitmapSize() +
+                partition_alloc::internal::ReservedFreeSlotBitmapSize();
   // Map a single system page either side of the mapping for our allocations,
   // with the goal of tripping up alignment of the next mapping.
   map1 = AllocPages(super_page - PageAllocationGranularity(),
@@ -2037,12 +2081,7 @@ TEST_P(PartitionAllocTest, LostFreeSlotSpansBug) {
   EXPECT_TRUE(bucket->decommitted_slot_spans_head);
 }
 
-// Death tests misbehave on Android, http://crbug.com/643760.
-#if defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID)
-
-INSTANTIATE_TEST_SUITE_P(AlternateBucketDistribution,
-                         PartitionAllocDeathTest,
-                         testing::Values(false, true));
+#if defined(PA_HAS_DEATH_TESTS)
 
 // Unit tests that check if an allocation fails in "return null" mode,
 // repeating it doesn't crash, and still returns null. The tests need to
@@ -2152,7 +2191,7 @@ TEST_P(PartitionAllocDeathTest, LargeAllocs) {
 // quarantine it and return early, before PA_CHECK(slot_start != freelist_head)
 // is reached.
 // TODO(bartekn): Enable in the BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT) case.
-#if !BUILDFLAG(USE_BACKUP_REF_PTR) || \
+#if !BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) || \
     (defined(PA_HAS_64_BITS_POINTERS) && defined(ARCH_CPU_LITTLE_ENDIAN))
 
 // Check that our immediate double-free detection works.
@@ -2193,7 +2232,7 @@ TEST_P(PartitionAllocDeathTest, NumAllocatedSlotsDoubleFree) {
   EXPECT_DEATH(allocator.root()->Free(ptr), "");
 }
 
-#endif  // !BUILDFLAG(USE_BACKUP_REF_PTR) || \
+#endif  // !BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) || \
         // (defined(PA_HAS_64_BITS_POINTERS) && defined(ARCH_CPU_LITTLE_ENDIAN))
 
 // Check that guard pages are present where expected.
@@ -2223,7 +2262,7 @@ TEST_P(PartitionAllocDeathTest, DirectMapGuardPages) {
   }
 }
 
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)) && defined(ARCH_CPU_ARM64)
+#if defined(PA_HAS_MEMORY_TAGGING)
 TEST_P(PartitionAllocTest, MTEProtectsFreedPtr) {
   // This test checks that Arm's memory tagging extension is correctly
   // protecting freed pointers. Writes to a freed pointer should cause a crash.
@@ -2255,10 +2294,11 @@ TEST_P(PartitionAllocTest, MTEProtectsFreedPtr) {
       },
       testing::KilledBySignal(SIGSEGV), "");
 }
-#endif
+#endif  // defined(PA_HAS_MEMORY_TAGGING)
 
 // These tests rely on precise layout. They handle cookie, not ref-count.
-#if !BUILDFLAG(USE_BACKUP_REF_PTR) && defined(PA_HAS_FREELIST_SHADOW_ENTRY)
+#if !BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) && \
+    defined(PA_HAS_FREELIST_SHADOW_ENTRY)
 
 TEST_P(PartitionAllocDeathTest, UseAfterFreeDetection) {
   base::CPU cpu;
@@ -2338,10 +2378,10 @@ TEST_P(PartitionAllocDeathTest, OffByOneDetectionWithRealisticData) {
 }
 #endif  // !BUILDFLAG(PA_DCHECK_IS_ON)
 
-#endif  // !BUILDFLAG(USE_BACKUP_REF_PTR) &&
+#endif  // !BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) &&
         // defined(PA_HAS_FREELIST_SHADOW_ENTRY)
 
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#endif  // !defined(PA_HAS_DEATH_TESTS)
 
 // Tests that |PartitionDumpStats| and |PartitionDumpStats| run without
 // crashing and return non-zero values when memory is allocated.
@@ -2535,8 +2575,7 @@ TEST_P(PartitionAllocTest, DumpMemoryStats) {
                                   &dumper);
       EXPECT_TRUE(dumper.IsMemoryAllocationRecorded());
 
-      size_t slot_size =
-          requested_size + (requested_size / kNumBucketsPerOrder);
+      size_t slot_size = SizeToBucketSize(requested_size + 1);
       const PartitionBucketMemoryStats* stats =
           dumper.GetBucketStats(slot_size);
       ASSERT_TRUE(stats);
@@ -2547,7 +2586,9 @@ TEST_P(PartitionAllocTest, DumpMemoryStats) {
       EXPECT_EQ(1u, stats->active_count);
       EXPECT_EQ(slot_size, stats->resident_bytes);
       EXPECT_EQ(0u, stats->decommittable_bytes);
-      EXPECT_EQ(3 * SystemPageSize(), stats->discardable_bytes);
+      EXPECT_EQ((slot_size - (requested_size + 1)) / SystemPageSize() *
+                    SystemPageSize(),
+                stats->discardable_bytes);
       EXPECT_EQ(1u, stats->num_full_slot_spans);
       EXPECT_EQ(0u, stats->num_active_slot_spans);
       EXPECT_EQ(0u, stats->num_empty_slot_spans);
@@ -2562,8 +2603,7 @@ TEST_P(PartitionAllocTest, DumpMemoryStats) {
                                   &dumper);
       EXPECT_FALSE(dumper.IsMemoryAllocationRecorded());
 
-      size_t slot_size =
-          requested_size + (requested_size / kNumBucketsPerOrder);
+      size_t slot_size = SizeToBucketSize(requested_size + 1);
       const PartitionBucketMemoryStats* stats =
           dumper.GetBucketStats(slot_size);
       EXPECT_TRUE(stats);
@@ -2591,7 +2631,7 @@ TEST_P(PartitionAllocTest, DumpMemoryStats) {
       EXPECT_TRUE(dumper.IsMemoryAllocationRecorded());
 
       size_t slot_size =
-          requested_size + (requested_size / kNumBucketsPerOrder);
+          SizeToBucketSize(requested_size + SystemPageSize() + 1);
       const PartitionBucketMemoryStats* stats =
           dumper.GetBucketStats(slot_size);
       EXPECT_TRUE(stats);
@@ -2603,7 +2643,9 @@ TEST_P(PartitionAllocTest, DumpMemoryStats) {
       EXPECT_EQ(1u, stats->active_count);
       EXPECT_EQ(slot_size, stats->resident_bytes);
       EXPECT_EQ(0u, stats->decommittable_bytes);
-      EXPECT_EQ(2 * SystemPageSize(), stats->discardable_bytes);
+      EXPECT_EQ((slot_size - (requested_size + SystemPageSize() + 1)) /
+                    SystemPageSize() * SystemPageSize(),
+                stats->discardable_bytes);
       EXPECT_EQ(1u, stats->num_full_slot_spans);
       EXPECT_EQ(0u, stats->num_active_slot_spans);
       EXPECT_EQ(0u, stats->num_empty_slot_spans);
@@ -3207,7 +3249,7 @@ TEST_P(PartitionAllocTest, Bug_897585) {
   // Need sizes big enough to be direct mapped and a delta small enough to
   // allow re-use of the slot span when cookied. These numbers fall out of the
   // test case in the indicated bug.
-  size_t kInitialSize = 983040;
+  size_t kInitialSize = 983050;
   size_t kDesiredSize = 983100;
   ASSERT_GT(kInitialSize, kMaxBucketed);
   ASSERT_GT(kDesiredSize, kMaxBucketed);
@@ -3388,7 +3430,8 @@ TEST_P(PartitionAllocTest, AlignedAllocations) {
 
       // Verify alignment on the regular allocator only when BRP is off, or when
       // it's on in the "previous slot" mode. See the comment in SetUp().
-#if !BUILDFLAG(USE_BACKUP_REF_PTR) || BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+#if !BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) || \
+    BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
       VerifyAlignment(allocator.root(), alloc_size, alignment);
 #endif
     }
@@ -3421,12 +3464,31 @@ TEST_P(PartitionAllocTest, GetUsableSize) {
     void* ptr = allocator.root()->Alloc(size, "");
     EXPECT_TRUE(ptr);
     size_t usable_size = PartitionRoot<ThreadSafe>::GetUsableSize(ptr);
+    size_t usable_size_with_hack =
+        PartitionRoot<ThreadSafe>::GetUsableSizeWithMac11MallocSizeHack(ptr);
+#if defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+    if (size != 32)
+#endif
+      EXPECT_EQ(usable_size_with_hack, usable_size);
     EXPECT_LE(size, usable_size);
     memset(ptr, 0xDE, usable_size);
     // Should not crash when free the ptr.
     allocator.root()->Free(ptr);
   }
 }
+
+#if defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+TEST_P(PartitionAllocTest, GetUsableSizeWithMac11MallocSizeHack) {
+  allocator.root()->EnableMac11MallocSizeHackForTesting();
+  size_t size = internal::kMac11MallocSizeHackRequestedSize;
+  void* ptr = allocator.root()->Alloc(size, "");
+  size_t usable_size = PartitionRoot<ThreadSafe>::GetUsableSize(ptr);
+  size_t usable_size_with_hack =
+      PartitionRoot<ThreadSafe>::GetUsableSizeWithMac11MallocSizeHack(ptr);
+  EXPECT_EQ(usable_size, internal::kMac11MallocSizeHackUsableSize);
+  EXPECT_EQ(usable_size_with_hack, size);
+}
+#endif  // defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
 
 TEST_P(PartitionAllocTest, Bookkeeping) {
   auto& root = *allocator.root();
@@ -3508,7 +3570,13 @@ TEST_P(PartitionAllocTest, Bookkeeping) {
   EXPECT_EQ(expected_super_pages_size, root.total_size_of_super_pages);
 
   // Single-slot slot spans...
-  size_t big_size = kMaxBucketed - SystemPageSize();
+  //
+  // When the system page size is larger than 4KiB, we don't necessarily have
+  // enough space in the superpage to store two of the largest bucketed
+  // allocations, particularly when we reserve extra space for e.g. bitmaps.
+  // To avoid this, we use something just below kMaxBucketed.
+  size_t big_size = kMaxBucketed * 4 / 5 - SystemPageSize();
+
   ASSERT_GT(big_size, MaxRegularSlotSpanSize());
   ASSERT_LE(big_size, kMaxBucketed);
   bucket_index = SizeToIndex(big_size - kExtraAllocSize);
@@ -3672,7 +3740,7 @@ TEST_P(PartitionAllocTest, Bookkeeping) {
   }
 }
 
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
 TEST_P(PartitionAllocTest, RefCountBasic) {
   constexpr uint64_t kCookie = 0x1234567890ABCDEF;
@@ -3778,7 +3846,72 @@ TEST_P(PartitionAllocTest, RefCountRealloc) {
   }
 }
 
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+int g_unretained_dangling_raw_ptr_detected_count = 0;
+
+class UnretainedDanglingRawPtrTest : public PartitionAllocTest {
+ public:
+  void SetUp() override {
+    PartitionAllocTest::SetUp();
+    g_unretained_dangling_raw_ptr_detected_count = 0;
+    old_detected_fn_ = partition_alloc::GetUnretainedDanglingRawPtrDetectedFn();
+
+    partition_alloc::SetUnretainedDanglingRawPtrDetectedFn(
+        &UnretainedDanglingRawPtrTest::DanglingRawPtrDetected);
+    old_unretained_dangling_ptr_enabled_ =
+        partition_alloc::SetUnretainedDanglingRawPtrCheckEnabled(true);
+  }
+  void TearDown() override {
+    partition_alloc::SetUnretainedDanglingRawPtrDetectedFn(old_detected_fn_);
+    partition_alloc::SetUnretainedDanglingRawPtrCheckEnabled(
+        old_unretained_dangling_ptr_enabled_);
+    PartitionAllocTest::TearDown();
+  }
+
+ private:
+  static void DanglingRawPtrDetected(uintptr_t) {
+    g_unretained_dangling_raw_ptr_detected_count++;
+  }
+
+  partition_alloc::DanglingRawPtrDetectedFn* old_detected_fn_;
+  bool old_unretained_dangling_ptr_enabled_;
+};
+
+INSTANTIATE_TEST_SUITE_P(AlternateBucketDistribution,
+                         UnretainedDanglingRawPtrTest,
+                         testing::Values(false, true));
+
+TEST_P(UnretainedDanglingRawPtrTest, UnretainedDanglingPtrNoReport) {
+  void* ptr = allocator.root()->Alloc(kTestAllocSize, type_name);
+  EXPECT_TRUE(ptr);
+  auto* ref_count =
+      PartitionRefCountPointer(allocator.root()->ObjectToSlotStart(ptr));
+  ref_count->Acquire();
+  EXPECT_TRUE(ref_count->IsAlive());
+  // Allocation is still live, so calling ReportIfDangling() should not result
+  // in any detections.
+  ref_count->ReportIfDangling();
+  EXPECT_EQ(g_unretained_dangling_raw_ptr_detected_count, 0);
+  EXPECT_FALSE(ref_count->Release());
+  allocator.root()->Free(ptr);
+}
+
+TEST_P(UnretainedDanglingRawPtrTest, UnretainedDanglingPtrShouldReport) {
+  void* ptr = allocator.root()->Alloc(kTestAllocSize, type_name);
+  EXPECT_TRUE(ptr);
+  auto* ref_count =
+      PartitionRefCountPointer(allocator.root()->ObjectToSlotStart(ptr));
+  ref_count->Acquire();
+  EXPECT_TRUE(ref_count->IsAlive());
+  allocator.root()->Free(ptr);
+  // At this point, memory shouldn't be alive...
+  EXPECT_FALSE(ref_count->IsAlive());
+  // ...and we should report the ptr as dangling.
+  ref_count->ReportIfDangling();
+  EXPECT_EQ(g_unretained_dangling_raw_ptr_detected_count, 1);
+  EXPECT_TRUE(ref_count->Release());
+}
+
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
 #if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
 
@@ -4023,6 +4156,11 @@ TEST_P(PartitionAllocTest, RawPtrReleasedBeforeFree) {
   EXPECT_EQ(g_dangling_raw_ptr_released_count, 0);
 }
 
+#if defined(PA_HAS_DEATH_TESTS)
+// DCHECK message are stripped in official build. It causes death tests with
+// matchers to fail.
+#if !defined(OFFICIAL_BUILD) || !defined(NDEBUG)
+
 // Acquire() once, Release() twice => CRASH
 TEST_P(PartitionAllocDeathTest, ReleaseUnderflowRawPtr) {
   void* ptr = allocator.root()->Alloc(64 - kExtraAllocSize, type_name);
@@ -4030,7 +4168,7 @@ TEST_P(PartitionAllocDeathTest, ReleaseUnderflowRawPtr) {
       PartitionRefCountPointer(allocator.root()->ObjectToSlotStart(ptr));
   ref_count->Acquire();
   EXPECT_FALSE(ref_count->Release());
-  EXPECT_DEATH(ref_count->Release(), "");
+  EXPECT_DCHECK_DEATH(ref_count->Release());
   allocator.root()->Free(ptr);
 }
 
@@ -4041,10 +4179,12 @@ TEST_P(PartitionAllocDeathTest, ReleaseUnderflowDanglingPtr) {
       PartitionRefCountPointer(allocator.root()->ObjectToSlotStart(ptr));
   ref_count->AcquireFromUnprotectedPtr();
   EXPECT_FALSE(ref_count->ReleaseFromUnprotectedPtr());
-  EXPECT_DEATH(ref_count->ReleaseFromUnprotectedPtr(), "");
+  EXPECT_DCHECK_DEATH(ref_count->ReleaseFromUnprotectedPtr());
   allocator.root()->Free(ptr);
 }
 
+#endif  //! defined(OFFICIAL_BUILD) || !defined(NDEBUG)
+#endif  // defined(PA_HAS_DEATH_TESTS)
 #endif  // BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
 
 TEST_P(PartitionAllocTest, ReservationOffset) {
@@ -4202,6 +4342,7 @@ TEST_P(PartitionAllocTest, CrossPartitionRootRealloc) {
       PartitionOptions::BackupRefPtrZapping::kDisabled,
       PartitionOptions::UseConfigurablePool::kNo,
   });
+  SetDistributionForPartitionRoot(new_root, GetParam());
 
   // Realloc from |allocator.root()| into |new_root|.
   void* ptr2 = new_root->ReallocWithFlags(AllocFlags::kReturnNull, ptr,
@@ -4245,27 +4386,24 @@ TEST_P(PartitionAllocTest, FastPathOrReturnNull) {
   allocator.root()->FreeNoHooks(ptr2);
 }
 
-// Death tests misbehave on Android, http://crbug.com/643760.
-#if defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID)
+#if defined(PA_HAS_DEATH_TESTS)
+// DCHECK message are stripped in official build. It causes death tests with
+// matchers to fail.
 #if !defined(OFFICIAL_BUILD) || !defined(NDEBUG)
 
 TEST_P(PartitionAllocDeathTest, CheckTriggered) {
-  using ::testing::ContainsRegex;
-#if BUILDFLAG(PA_DCHECK_IS_ON)
-  EXPECT_DEATH(PA_CHECK(5 == 7), ContainsRegex("Check failed.*5 == 7"));
-#endif
-  EXPECT_DEATH(PA_CHECK(5 == 7), ContainsRegex("Check failed.*5 == 7"));
+  EXPECT_DCHECK_DEATH_WITH(PA_CHECK(5 == 7), "Check failed.*5 == 7");
+  EXPECT_DEATH(PA_CHECK(5 == 7), "Check failed.*5 == 7");
 }
 
 #endif  // !defined(OFFICIAL_BUILD) && !defined(NDEBUG)
-#endif  // defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID)
+#endif  // defined(PA_HAS_DEATH_TESTS)
 
 // Not on chromecast, since gtest considers extra output from itself as a test
 // failure:
 // https://ci.chromium.org/ui/p/chromium/builders/ci/Cast%20Audio%20Linux/98492/overview
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) &&                \
-    defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID) && \
-    !BUILDFLAG(PA_IS_CASTOS)
+#if BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && \
+    defined(PA_HAS_DEATH_TESTS) && !BUILDFLAG(PA_IS_CASTOS)
 
 namespace {
 
@@ -4341,9 +4479,8 @@ TEST_P(PartitionAllocTest, DISABLED_PreforkHandler) {
   }
 }
 
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) &&
-        // defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID) &&
-        // !BUILDFLAG(PA_IS_CASTOS)
+#endif  // BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) &&
+        // defined(PA_HAS_DEATH_TESTS) &&  !BUILDFLAG(PA_IS_CASTOS)
 
 // Checks the bucket index logic.
 TEST_P(PartitionAllocTest, GetIndex) {
@@ -4409,6 +4546,7 @@ TEST_P(PartitionAllocTest, ConfigurablePool) {
         PartitionOptions::UseConfigurablePool::kIfAvailable,
     });
     root->UncapEmptySlotSpanMemoryForTesting();
+    SetDistributionForPartitionRoot(root, GetParam());
 
     const size_t count = 250;
     std::vector<void*> allocations(count, nullptr);
@@ -4416,7 +4554,11 @@ TEST_P(PartitionAllocTest, ConfigurablePool) {
       const size_t size = kTestSizes[base::RandGenerator(kTestSizesCount)];
       allocations[i] = root->Alloc(size, nullptr);
       EXPECT_NE(nullptr, allocations[i]);
-      uintptr_t allocation_base = UntagPtr(allocations[i]);
+      // We don't Untag allocations here because MTE is disabled for
+      // configurable pools used by V8.
+      // https://bugs.chromium.org/p/v8/issues/detail?id=13117
+      uintptr_t allocation_base = reinterpret_cast<uintptr_t>(allocations[i]);
+      EXPECT_EQ(allocation_base, UntagPtr(allocations[i]));
       EXPECT_TRUE(allocation_base >= pool_base &&
                   allocation_base < pool_base + pool_size);
     }
@@ -4441,6 +4583,7 @@ TEST_P(PartitionAllocTest, EmptySlotSpanSizeIsCapped) {
       PartitionOptions::BackupRefPtrZapping::kDisabled,
       PartitionOptions::UseConfigurablePool::kNo,
   });
+  SetDistributionForPartitionRoot(&root, GetParam());
 
   // Allocate some memory, don't free it to keep committed memory.
   std::vector<void*> allocated_memory;
@@ -4499,6 +4642,7 @@ TEST_P(PartitionAllocTest, IncreaseEmptySlotSpanRingSize) {
       PartitionOptions::UseConfigurablePool::kIfAvailable,
   });
   root.UncapEmptySlotSpanMemoryForTesting();
+  SetDistributionForPartitionRoot(&root, GetParam());
 
   std::vector<void*> single_slot_allocated_memory;
   constexpr size_t single_slot_count = kDefaultEmptySlotSpanRingSize + 10;
@@ -4553,7 +4697,7 @@ TEST_P(PartitionAllocTest, IncreaseEmptySlotSpanRingSize) {
             kMaxFreeableSpans * bucket_size);
 }
 
-#if defined(PA_USE_MTE_CHECKED_PTR_WITH_64_BITS_POINTERS)
+#if defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
 
 // Verifies basic PA support for `MTECheckedPtr`.
 TEST_P(PartitionAllocTest, PartitionTagBasic) {
@@ -4650,9 +4794,10 @@ TEST_P(PartitionAllocTest, PartitionTagDirectMapBasic) {
   allocator.root()->Free(object);
 }
 
-#endif  // defined(PA_USE_MTE_CHECKED_PTR_WITH_64_BITS_POINTERS)
+#endif  // defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
 
-#if BUILDFLAG(PA_IS_CAST_ANDROID) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if BUILDFLAG(PA_IS_CAST_ANDROID) && \
+    BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT)
 extern "C" {
 void* __real_malloc(size_t);
 }  // extern "C"
@@ -4717,16 +4862,16 @@ TEST_P(PartitionAllocTest, SortFreelist) {
   allocator.root()->Free(first_ptr);
 }
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(IS_LINUX) && \
-    defined(ARCH_CPU_64_BITS)
+#if BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && \
+    BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_64_BITS)
 TEST_P(PartitionAllocTest, CrashOnUnknownPointer) {
   int not_a_heap_object = 42;
   EXPECT_DEATH(allocator.root()->Free(&not_a_heap_object), "");
 }
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(IS_LINUX) &&
-        // defined(ARCH_CPU_64_BITS)
+#endif  // BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) &&
+        // BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_64_BITS)
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(IS_MAC)
+#if BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && BUILDFLAG(IS_MAC)
 
 // Adapted from crashpad tests.
 class ScopedOpenCLNoOpKernel {
@@ -4821,11 +4966,12 @@ TEST_P(PartitionAllocTest, OpenCL) {
 #endif
 }
 
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) &&
+        // BUILDFLAG(IS_MAC)
 
 TEST_P(PartitionAllocTest, SmallSlotSpanWaste) {
   for (PartitionRoot<ThreadSafe>::Bucket& bucket : allocator.root()->buckets) {
-    size_t slot_size = bucket.slot_size;
+    const size_t slot_size = bucket.slot_size;
     if (slot_size == kInvalidBucketSize)
       continue;
 
@@ -4908,6 +5054,54 @@ TEST_P(PartitionAllocTest, SortActiveSlotSpans) {
   run_test(0);
   run_test(1);
 }
+
+#if BUILDFLAG(USE_FREESLOT_BITMAP)
+TEST_P(PartitionAllocTest, FreeSlotBitmapMarkedAsUsedAfterAlloc) {
+  void* ptr = allocator.root()->Alloc(kTestAllocSize, type_name);
+  uintptr_t slot_start = allocator.root()->ObjectToSlotStart(ptr);
+  EXPECT_TRUE(FreeSlotBitmapSlotIsUsed(slot_start));
+}
+
+TEST_P(PartitionAllocTest, FreeSlotBitmapMarkedAsFreeAfterFree) {
+  void* ptr = allocator.root()->Alloc(kTestAllocSize, type_name);
+  uintptr_t slot_start = allocator.root()->ObjectToSlotStart(ptr);
+  EXPECT_TRUE(FreeSlotBitmapSlotIsUsed(slot_start));
+
+  allocator.root()->Free(ptr);
+  EXPECT_FALSE(FreeSlotBitmapSlotIsUsed(slot_start));
+}
+
+TEST_P(PartitionAllocTest, FreeSlotBitmapResetAfterDecommit) {
+  void* ptr1 =
+      allocator.root()->Alloc(SystemPageSize() - kExtraAllocSize, type_name);
+  uintptr_t slot_start = allocator.root()->ObjectToSlotStart(ptr1);
+  allocator.root()->Free(ptr1);
+
+  EXPECT_FALSE(FreeSlotBitmapSlotIsUsed(slot_start));
+  // Decommit the slot span. Bitmap will be rewritten in Decommit().
+  allocator.root()->PurgeMemory(PurgeFlags::kDecommitEmptySlotSpans);
+  EXPECT_TRUE(FreeSlotBitmapSlotIsUsed(slot_start));
+}
+
+TEST_P(PartitionAllocTest, FreeSlotBitmapResetAfterPurge) {
+  void* ptr1 =
+      allocator.root()->Alloc(SystemPageSize() - kExtraAllocSize, type_name);
+  char* ptr2 = static_cast<char*>(
+      allocator.root()->Alloc(SystemPageSize() - kExtraAllocSize, type_name));
+  uintptr_t slot_start = allocator.root()->ObjectToSlotStart(ptr2);
+  allocator.root()->Free(ptr2);
+
+  CHECK_PAGE_IN_CORE(ptr2 - kPointerOffset, true);
+  EXPECT_FALSE(FreeSlotBitmapSlotIsUsed(slot_start));
+  // Bitmap will be rewritten in PartitionPurgeSlotSpan().
+  allocator.root()->PurgeMemory(PurgeFlags::kDiscardUnusedSystemPages);
+  CHECK_PAGE_IN_CORE(ptr2 - kPointerOffset, false);
+  EXPECT_TRUE(FreeSlotBitmapSlotIsUsed(slot_start));
+
+  allocator.root()->Free(ptr1);
+}
+
+#endif  // BUILDFLAG(USE_FREESLOT_BITMAP)
 
 }  // namespace partition_alloc::internal
 

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,8 +87,8 @@ NGInlineBoxState* NGInlineLayoutAlgorithm::HandleOpenTag(
     const NGInlineItemResult& item_result,
     NGLogicalLineItems* line_box,
     NGInlineLayoutStateStack* box_states) const {
-  NGInlineBoxState* box =
-      box_states->OnOpenTag(item, item_result, baseline_type_, line_box);
+  NGInlineBoxState* box = box_states->OnOpenTag(
+      ConstraintSpace(), item, item_result, baseline_type_, line_box);
   // Compute text metrics for all inline boxes since even empty inlines
   // influence the line height, except when quirks mode and the box is empty
   // for the purpose of empty block calculation.
@@ -577,8 +577,8 @@ NGInlineBoxState* NGInlineLayoutAlgorithm::PlaceAtomicInline(
   layout_object->SetIsTruncated(false);
 
   item_result->has_edge = true;
-  NGInlineBoxState* box =
-      box_states_->OnOpenTag(item, *item_result, baseline_type_, *line_box);
+  NGInlineBoxState* box = box_states_->OnOpenTag(
+      ConstraintSpace(), item, *item_result, baseline_type_, *line_box);
 
   if (LIKELY(!IsA<LayoutNGTextCombine>(layout_object))) {
     PlaceLayoutResult(item_result, line_box, box, box->margin_inline_start);
@@ -915,7 +915,7 @@ absl::optional<LayoutUnit> NGInlineLayoutAlgorithm::ApplyJustify(
   // Append a hyphen if the last word is hyphenated. The hyphen is in
   // |ShapeResult|, but not in text. |ShapeResultSpacing| needs the text that
   // matches to the |ShapeResult|.
-  DCHECK(!line_info->Results().IsEmpty());
+  DCHECK(!line_info->Results().empty());
   const NGInlineItemResult& last_item_result = line_info->Results().back();
   if (last_item_result.hyphen_string)
     line_text_builder.Append(last_item_result.hyphen_string);
@@ -926,8 +926,7 @@ absl::optional<LayoutUnit> NGInlineLayoutAlgorithm::ApplyJustify(
   DCHECK_GT(line_text.length(), 0u);
 
   ShapeResultSpacing<String> spacing(line_text, Node().IsSvgText());
-  spacing.SetExpansion(space, line_info->BaseDirection(),
-                       line_info->LineStyle().GetTextJustify());
+  spacing.SetExpansion(space, line_info->BaseDirection());
   const LayoutObject* box = Node().GetLayoutBox();
   if (!spacing.HasExpansion()) {
     // See AdjustInlineDirectionLineBounds() of LayoutRubyBase and
@@ -951,8 +950,7 @@ absl::optional<LayoutUnit> NGInlineLayoutAlgorithm::ApplyJustify(
       inset =
           std::min(LayoutUnit(2 * line_info->LineStyle().FontSize()), inset);
     }
-    spacing.SetExpansion(space - inset, line_info->BaseDirection(),
-                         line_info->LineStyle().GetTextJustify());
+    spacing.SetExpansion(space - inset, line_info->BaseDirection());
   }
 
   for (NGInlineItemResult& item_result : *line_info->MutableResults()) {
@@ -1068,7 +1066,7 @@ LayoutUnit NGInlineLayoutAlgorithm::SetAnnotationOverflow(
 bool NGInlineLayoutAlgorithm::AddAnyClearanceAfterLine(
     const NGLineInfo& line_info) {
   const NGInlineItemResults& line_items = line_info.Results();
-  if (line_items.IsEmpty())
+  if (line_items.empty())
     return true;
 
   // If the last item was a <br> we need to adjust the content_size to clear

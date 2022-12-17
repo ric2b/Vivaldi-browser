@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,12 +8,12 @@
 #include <lib/sys/inspect/cpp/component.h>
 #include <lib/ui/scenic/cpp/view_ref_pair.h>
 
-#include <algorithm>
-
 #include "base/callback.h"
+#include "base/containers/adapters.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/fuchsia/process_context.h"
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "fuchsia_web/webengine/browser/frame_window_tree_host.h"
@@ -653,17 +653,17 @@ bool AccessibilityBridge::UpdateAXTreeID(const ui::AXTreeID& tree_id) {
   auto old_tree_iter = ax_trees_.find(old_tree_id);
   if (old_tree_iter != ax_trees_.end()) {
     // This AXTree has changed its AXTreeID. Update the map with the new key.
-    auto data = std::move(old_tree_iter->second);
+    auto tree_data = std::move(old_tree_iter->second);
     ax_trees_.erase(old_tree_iter);
-    ax_trees_[tree_id] = std::move(data);
+    ax_trees_[tree_id] = std::move(tree_data);
 
     // If this tree is connected to a parent tree or is the parent tree of
     // another tree, also update its ID in the tree connections map.
     auto connected_tree_iter = tree_connections_.find(old_tree_id);
     if (connected_tree_iter != tree_connections_.end()) {
-      auto data = std::move(connected_tree_iter->second);
+      auto connected_tree_data = std::move(connected_tree_iter->second);
       tree_connections_.erase(connected_tree_iter);
-      tree_connections_[tree_id] = std::move(data);
+      tree_connections_[tree_id] = std::move(connected_tree_data);
       MaybeDisconnectTreeFromParentTree(ax_trees_[tree_id].get());
     }
     for (auto& kv : tree_connections_) {
@@ -756,11 +756,8 @@ AccessibilityBridge::GetNodeIfChangingInUpdate(const ui::AXTreeID& tree_id,
 
   for (auto& update_batch : to_update_) {
     auto result =
-        std::find_if(update_batch.rbegin(), update_batch.rend(),
-                     [&fuchsia_node_id](
-                         const fuchsia::accessibility::semantics::Node& node) {
-                       return node.node_id() == fuchsia_node_id;
-                     });
+        base::ranges::find(base::Reversed(update_batch), fuchsia_node_id,
+                           &fuchsia::accessibility::semantics::Node::node_id);
     if (result != update_batch.rend())
       return &(*result);
   }

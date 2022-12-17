@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,9 @@ bool IsAccessAllowedChromeOS(const base::FilePath& path,
       "/home/chronos/user/MyFiles",
       "/home/chronos/user/WebRTC Logs",
       "/home/chronos/user/google-assistant-library/log",
+      "/home/chronos/user/lacros/Crash Reports",
       "/home/chronos/user/lacros/lacros.log",
+      "/home/chronos/user/lacros/lacros.log.PREVIOUS",
       "/home/chronos/user/log",
       "/home/chronos/user/crostini.icons",
       "/media",

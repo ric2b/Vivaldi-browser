@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,6 @@
 #include "ash/system/audio/unified_volume_slider_controller.h"
 #include "ash/system/bluetooth/bluetooth_detailed_view_controller.h"
 #include "ash/system/bluetooth/bluetooth_feature_pod_controller.h"
-#include "ash/system/bluetooth/bluetooth_feature_pod_controller_legacy.h"
-#include "ash/system/bluetooth/unified_bluetooth_detailed_view_controller.h"
 #include "ash/system/brightness/unified_brightness_slider_controller.h"
 #include "ash/system/camera/autozoom_feature_pod_controller.h"
 #include "ash/system/cast/cast_feature_pod_controller.h"
@@ -50,13 +48,14 @@
 #include "ash/system/rotation/rotation_lock_feature_pod_controller.h"
 #include "ash/system/time/calendar_metrics.h"
 #include "ash/system/time/unified_calendar_view_controller.h"
-#include "ash/system/tray/system_tray_item_uma_type.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/deferred_update_dialog.h"
 #include "ash/system/unified/detailed_view_controller.h"
 #include "ash/system/unified/feature_pod_button.h"
 #include "ash/system/unified/feature_pod_controller_base.h"
 #include "ash/system/unified/feature_pods_container_view.h"
+#include "ash/system/unified/quick_settings_metrics_util.h"
+#include "ash/system/unified/quick_settings_view.h"
 #include "ash/system/unified/quiet_mode_feature_pod_controller.h"
 #include "ash/system/unified/unified_notifier_settings_controller.h"
 #include "ash/system/unified/unified_system_tray_bubble.h"
@@ -156,9 +155,13 @@ void UnifiedSystemTrayController::OnActiveUserPrefServiceChanged(
   active_user_prefs_ = prefs;
 }
 
-UnifiedSystemTrayView* UnifiedSystemTrayController::CreateView() {
+std::unique_ptr<UnifiedSystemTrayView>
+UnifiedSystemTrayController::CreateUnifiedQuickSettingsView() {
   DCHECK(!unified_view_);
-  unified_view_ = new UnifiedSystemTrayView(this, model_->IsExpandedOnOpen());
+  auto unified_view =
+      std::make_unique<UnifiedSystemTrayView>(this, model_->IsExpandedOnOpen());
+  unified_view_ = unified_view.get();
+
   InitFeaturePods();
 
   if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForChromeOS) &&
@@ -166,19 +169,45 @@ UnifiedSystemTrayView* UnifiedSystemTrayController::CreateView() {
       !MediaTray::IsPinnedToShelf()) {
     media_controls_controller_ =
         std::make_unique<UnifiedMediaControlsController>(this);
-    unified_view_->AddMediaControlsView(
+    unified_view->AddMediaControlsView(
         media_controls_controller_->CreateView());
   }
 
   volume_slider_controller_ =
       std::make_unique<UnifiedVolumeSliderController>(this);
-  unified_view_->AddSliderView(volume_slider_controller_->CreateView());
+  unified_view->AddSliderView(volume_slider_controller_->CreateView());
 
   brightness_slider_controller_ =
       std::make_unique<UnifiedBrightnessSliderController>(model_);
-  unified_view_->AddSliderView(brightness_slider_controller_->CreateView());
+  unified_view->AddSliderView(brightness_slider_controller_->CreateView());
 
-  return unified_view_;
+  return unified_view;
+}
+
+std::unique_ptr<QuickSettingsView>
+UnifiedSystemTrayController::CreateQuickSettingsView() {
+  DCHECK(!quick_settings_view_);
+  auto qs_view = std::make_unique<QuickSettingsView>(this);
+  quick_settings_view_ = qs_view.get();
+
+  InitFeaturePods();
+
+  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForChromeOS) &&
+      !Shell::Get()->session_controller()->IsScreenLocked() &&
+      !MediaTray::IsPinnedToShelf()) {
+    media_controls_controller_ =
+        std::make_unique<UnifiedMediaControlsController>(this);
+    qs_view->AddMediaControlsView(media_controls_controller_->CreateView());
+  }
+
+  volume_slider_controller_ =
+      std::make_unique<UnifiedVolumeSliderController>(this);
+  qs_view->AddSliderView(volume_slider_controller_->CreateView());
+
+  brightness_slider_controller_ =
+      std::make_unique<UnifiedBrightnessSliderController>(model_);
+  qs_view->AddSliderView(brightness_slider_controller_->CreateView());
+  return qs_view;
 }
 
 void UnifiedSystemTrayController::HandleSignOutAction() {
@@ -203,6 +232,14 @@ void UnifiedSystemTrayController::HandleLockAction() {
 
 void UnifiedSystemTrayController::HandleSettingsAction() {
   base::RecordAction(base::UserMetricsAction("Tray_Settings"));
+  if (features::IsQsRevampEnabled()) {
+    Shell::Get()->system_tray_model()->client()->ShowSettings(
+        display::Screen::GetScreen()
+            ->GetDisplayNearestView(
+                quick_settings_view_->GetWidget()->GetNativeView())
+            .id());
+    return;
+  }
   Shell::Get()->system_tray_model()->client()->ShowSettings(
       display::Screen::GetScreen()
           ->GetDisplayNearestView(unified_view_->GetWidget()->GetNativeView())
@@ -303,7 +340,17 @@ void UnifiedSystemTrayController::UpdateDrag(const gfx::PointF& location) {
 }
 
 void UnifiedSystemTrayController::StartAnimation(bool expand) {
-  // UnifiedSystemTrayControllerTest does not add |unified_view_| to a widget.
+  // UnifiedSystemTrayControllerTest does not add `unified_view_` to a widget.
+  if (features::IsQsRevampEnabled() && quick_settings_view_->GetWidget()) {
+    animation_tracker_.emplace(quick_settings_view_->GetWidget()
+                                   ->GetCompositor()
+                                   ->RequestNewThroughputTracker());
+    animation_tracker_->Start(metrics_util::ForSmoothness(
+        expand ? base::BindRepeating(&ReportExpandAnimationSmoothness)
+               : base::BindRepeating(&ReportCollapseAnimationSmoothness)));
+    return;
+  }
+
   if (unified_view_->GetWidget()) {
     animation_tracker_.emplace(unified_view_->GetWidget()
                                    ->GetCompositor()
@@ -376,8 +423,7 @@ void UnifiedSystemTrayController::ShowNetworkDetailedView(bool force) {
 
   base::RecordAction(base::UserMetricsAction("StatusArea_Network_Detailed"));
 
-  if (ash::features::IsQuickSettingsNetworkRevampEnabled() &&
-      ash::features::IsBluetoothRevampEnabled()) {
+  if (ash::features::IsQuickSettingsNetworkRevampEnabled()) {
     ShowDetailedView(std::make_unique<NetworkDetailedViewController>(this));
   } else {
     ShowDetailedView(
@@ -390,12 +436,7 @@ void UnifiedSystemTrayController::ShowBluetoothDetailedView() {
     return;
 
   base::RecordAction(base::UserMetricsAction("StatusArea_Bluetooth_Detailed"));
-  if (ash::features::IsBluetoothRevampEnabled()) {
-    ShowDetailedView(std::make_unique<BluetoothDetailedViewController>(this));
-  } else {
-    ShowDetailedView(
-        std::make_unique<UnifiedBluetoothDetailedViewController>(this));
-  }
+  ShowDetailedView(std::make_unique<BluetoothDetailedViewController>(this));
 }
 
 void UnifiedSystemTrayController::ShowCastDetailedView() {
@@ -463,13 +504,30 @@ void UnifiedSystemTrayController::TransitionToMainView(bool restore_focus) {
   }
 
   showing_audio_detailed_view_ = false;
-  detailed_view_controller_.reset();
+
+  // Transfer `detailed_view_controller_` to a scoped object, which will be
+  // destroyed once it's out of this method's scope (after resetting
+  // `quick_settings_view_`'s `detailed_view_`). Because the detailed view has a
+  // reference to its `detailed_view_controller_` which is used in shutdown.
+  auto scoped_detailed_view_controller = std::move(detailed_view_controller_);
+
+  if (features::IsQsRevampEnabled()) {
+    quick_settings_view_->ResetDetailedView();
+    if (restore_focus)
+      quick_settings_view_->RestoreFocus();
+    return;
+  }
   unified_view_->ResetDetailedView();
   if (restore_focus)
     unified_view_->RestoreFocus();
 }
 
 void UnifiedSystemTrayController::CloseBubble() {
+  if (features::IsQsRevampEnabled()) {
+    if (quick_settings_view_->GetWidget())
+      quick_settings_view_->GetWidget()->CloseNow();
+    return;
+  }
   if (unified_view_->GetWidget())
     unified_view_->GetWidget()->CloseNow();
 }
@@ -487,8 +545,15 @@ void UnifiedSystemTrayController::EnsureCollapsed() {
 void UnifiedSystemTrayController::EnsureExpanded() {
   if (detailed_view_controller_) {
     showing_audio_detailed_view_ = false;
+    if (features::IsQsRevampEnabled())
+      quick_settings_view_->ResetDetailedView();
+    else
+      unified_view_->ResetDetailedView();
+
+    // Destroy `detailed_view_controller_` after resetting
+    // `quick_settings_view_`'s `detailed_view_` because the detailed view has a
+    // reference to its `detailed_view_controller_` which is used in shutdown.
     detailed_view_controller_.reset();
-    unified_view_->ResetDetailedView();
   }
   StartAnimation(true /*expand*/);
 
@@ -522,6 +587,10 @@ void UnifiedSystemTrayController::OnAudioSettingsButtonClicked() {
 }
 
 void UnifiedSystemTrayController::ShowMediaControls() {
+  if (features::IsQsRevampEnabled()) {
+    quick_settings_view_->ShowMediaControls();
+    return;
+  }
   unified_view_->ShowMediaControls();
 }
 
@@ -540,18 +609,18 @@ void UnifiedSystemTrayController::LoadIsExpandedPref() {
 }
 
 void UnifiedSystemTrayController::InitFeaturePods() {
+  // TODO(crbug/1368717): use FeatureTiles.
+  if (ash::features::IsQsRevampEnabled())
+    return;
+
   if (ash::features::IsQuickSettingsNetworkRevampEnabled()) {
     AddFeaturePodItem(std::make_unique<NetworkFeaturePodController>(this));
   } else {
     AddFeaturePodItem(
         std::make_unique<NetworkFeaturePodControllerLegacy>(this));
   }
-  if (ash::features::IsBluetoothRevampEnabled()) {
-    AddFeaturePodItem(std::make_unique<BluetoothFeaturePodController>(this));
-  } else {
-    AddFeaturePodItem(
-        std::make_unique<BluetoothFeaturePodControllerLegacy>(this));
-  }
+
+  AddFeaturePodItem(std::make_unique<BluetoothFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<AccessibilityFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<QuietModeFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<RotationLockFeaturePodController>());
@@ -567,37 +636,29 @@ void UnifiedSystemTrayController::InitFeaturePods() {
     AddFeaturePodItem(std::make_unique<DarkModeFeaturePodController>(this));
   if (base::FeatureList::IsEnabled(features::kShelfParty))
     AddFeaturePodItem(std::make_unique<ShelfPartyFeaturePodController>());
-
   if (media::ShouldEnableAutoFraming())
     AddFeaturePodItem(std::make_unique<AutozoomFeaturePodController>());
-
   // If you want to add a new feature pod item, add here.
 
-  if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
-    UMA_HISTOGRAM_COUNTS_100("ChromeOS.SystemTray.Tablet.FeaturePodCountOnOpen",
-                             unified_view_->GetVisibleFeaturePodCount());
-  } else {
-    UMA_HISTOGRAM_COUNTS_100("ChromeOS.SystemTray.FeaturePodCountOnOpen",
-                             unified_view_->GetVisibleFeaturePodCount());
-  }
+  quick_settings_metrics_util::RecordQsFeaturePodCount(
+      unified_view_->GetVisibleFeaturePodCount(),
+      Shell::Get()->tablet_mode_controller()->InTabletMode());
 }
 
 void UnifiedSystemTrayController::AddFeaturePodItem(
     std::unique_ptr<FeaturePodControllerBase> controller) {
-  DCHECK(unified_view_);
+  DCHECK(unified_view_ || quick_settings_view_);
   FeaturePodButton* button = controller->CreateButton();
   button->SetExpandedAmount(IsExpanded() ? 1.0 : 0.0,
                             false /* fade_icon_button */);
 
-  // Record DefaultView.VisibleRows UMA.
-  SystemTrayItemUmaType uma_type = controller->GetUmaType();
-  if (uma_type != SystemTrayItemUmaType::UMA_NOT_RECORDED &&
-      button->visible_preferred()) {
-    UMA_HISTOGRAM_ENUMERATION("Ash.SystemMenu.DefaultView.VisibleRows",
-                              uma_type, SystemTrayItemUmaType::UMA_COUNT);
+  // Records visible pods.
+  if (button->visible_preferred()) {
+    quick_settings_metrics_util::RecordVisibleQsFeature(
+        controller->GetCatalogName());
   }
-
   unified_view_->AddFeaturePodButton(button);
+
   feature_pod_controllers_.push_back(std::move(controller));
 }
 
@@ -605,14 +666,24 @@ void UnifiedSystemTrayController::ShowDetailedView(
     std::unique_ptr<DetailedViewController> controller) {
   animation_->Reset(1.0);
   UpdateExpandedAmount();
+  views::FocusManager* manager;
+  if (features::IsQsRevampEnabled()) {
+    quick_settings_view_->SaveFocus();
+    manager = quick_settings_view_->GetFocusManager();
+  } else {
+    unified_view_->SaveFocus();
+    manager = unified_view_->GetFocusManager();
+  }
 
-  unified_view_->SaveFocus();
-  views::FocusManager* manager = unified_view_->GetFocusManager();
   if (manager && manager->GetFocusedView())
     manager->ClearFocus();
 
   showing_audio_detailed_view_ = false;
-  unified_view_->SetDetailedView(controller->CreateView());
+  if (features::IsQsRevampEnabled())
+    quick_settings_view_->SetDetailedView(controller->CreateView());
+  else
+    unified_view_->SetDetailedView(controller->CreateView());
+
   detailed_view_controller_ = std::move(controller);
 
   // |bubble_| may be null in tests.
@@ -624,6 +695,8 @@ void UnifiedSystemTrayController::ShowDetailedView(
 }
 
 void UnifiedSystemTrayController::UpdateExpandedAmount() {
+  if (quick_settings_view_)
+    return;
   double expanded_amount = animation_->GetCurrentValue();
   unified_view_->SetExpandedAmount(expanded_amount);
 
@@ -635,6 +708,8 @@ void UnifiedSystemTrayController::UpdateExpandedAmount() {
 }
 
 void UnifiedSystemTrayController::ResetToCollapsedIfRequired() {
+  if (quick_settings_view_)
+    return;
   if (model_->IsExplicitlyExpanded())
     return;
 
@@ -672,6 +747,9 @@ bool UnifiedSystemTrayController::IsExpanded() const {
 }
 
 bool UnifiedSystemTrayController::IsMessageCenterCollapseRequired() const {
+  if (quick_settings_view_)
+    return false;
+
   // Note: This calculaton should be the same as
   // UnifiedMessageCenterBubble::CalculateAvailableHeight().
   return (bubble_ && bubble_->CalculateMaxHeight() -

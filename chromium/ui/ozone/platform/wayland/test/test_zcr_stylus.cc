@@ -1,10 +1,12 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ui/ozone/platform/wayland/test/test_zcr_stylus.h"
 
 #include "base/notreached.h"
+#include "ui/ozone/platform/wayland/test/mock_pointer.h"
+#include "ui/ozone/platform/wayland/test/mock_zcr_pointer_stylus.h"
 #include "ui/ozone/platform/wayland/test/mock_zcr_touch_stylus.h"
 #include "ui/ozone/platform/wayland/test/server_object.h"
 #include "ui/ozone/platform/wayland/test/test_touch.h"
@@ -31,8 +33,14 @@ void GetTouchStylus(wl_client* client,
 void GetPointerStylus(wl_client* client,
                       wl_resource* resource,
                       uint32_t id,
-                      wl_resource* touch_resource) {
-  NOTIMPLEMENTED();
+                      wl_resource* pointer_resource) {
+  wl_resource* pointer_stylus_resource =
+      CreateResourceWithImpl<MockZcrPointerStylus>(
+          client, &zcr_pointer_stylus_v2_interface,
+          wl_resource_get_version(resource), &kMockZcrPointerStylusImpl, id);
+  GetUserDataAs<MockPointer>(pointer_resource)
+      ->set_pointer_stylus(
+          GetUserDataAs<MockZcrPointerStylus>(pointer_stylus_resource));
 }
 
 const struct zcr_stylus_v2_interface kTestZcrStylusImpl = {&GetTouchStylus,

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,8 +59,6 @@ class PLATFORM_EXPORT WorkerThreadScheduler : public NonMainThreadSchedulerBase,
                            Thread::IdleTask) override;
   void PostNonNestableIdleTask(const base::Location&,
                                Thread::IdleTask) override;
-  scoped_refptr<base::SingleThreadTaskRunner> DeprecatedDefaultTaskRunner()
-      override;
   base::TimeTicks MonotonicallyIncreasingVirtualTime() override;
   void SetV8Isolate(v8::Isolate* isolate) override;
   void Shutdown() override;

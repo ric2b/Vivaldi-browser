@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,14 +87,8 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
     // Whether Drive should act as if offline.
     bool offline = false;
 
-    // Whether test needs the files-swa feature.
-    bool files_swa = false;
-
     // Whether test needs the files-app-experimental feature.
     bool files_experimental = false;
-
-    // Whether test needs the media-swa apps.
-    bool media_swa = false;
 
     // Whether test needs a native SMB file system provider.
     bool native_smb = true;
@@ -124,9 +118,6 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
     // feature.
     bool enable_dlp_files_restriction = false;
 
-    // Whether test should run with the Web Drive Office feature.
-    bool enable_web_drive_office = false;
-
     // Whether test should run with the Upload Office to Cloud feature.
     bool enable_upload_office_to_cloud = false;
 
@@ -136,14 +127,20 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
     // Whether test should run Android with the virtio-blk for /data.
     bool enable_virtio_blk_for_data = false;
 
-    // Whether test needs the files-filters-in-recents flag.
-    bool enable_filters_in_recents = false;
-
     // Whether test needs the files-filters-in-recents-v2 flag.
     bool enable_filters_in_recents_v2 = false;
 
     // Whether test should run with the DriveFsMirroring flag.
     bool enable_mirrorsync = false;
+
+    // Whether test should run with the FilesInlineSyncStatus flag.
+    bool enable_inline_status_sync = false;
+
+    // Whether test should enable the file transfer connector.
+    bool enable_file_transfer_connector = false;
+
+    // Whether test should use report-only mode for the file transfer connector.
+    bool file_transfer_connector_report_only = false;
   };
 
   FileManagerBrowserTestBase(const FileManagerBrowserTestBase&) = delete;
@@ -184,6 +181,8 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
   void StartTest();
 
  private:
+  using IdToWebContents = std::map<std::string, content::WebContents*>;
+
   class MockFileTasksObserver;
 
   // Launches the test extension with manifest |manifest_name|. The extension
@@ -213,6 +212,12 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
   virtual bool HandleDlpCommands(const std::string& name,
                                  const base::Value::Dict& value,
                                  std::string* output);
+
+  // Checks if the command is from enterprise connectors. If so, handles it and
+  // returns true, otherwise it returns false.
+  virtual bool HandleEnterpriseConnectorCommands(const std::string& name,
+                                                 const base::Value::Dict& value,
+                                                 std::string* output);
 
   // Called during setup if needed, to create a drive integration service for
   // the given |profile|. Caller owns the return result.
@@ -251,7 +256,7 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
 
   // Maps the app_id to WebContents* for all launched SWA apps. NOTE: if the
   // window is closed in the JS the WebContents* will remain invalid here.
-  std::map<std::string, content::WebContents*> swa_web_contents_;
+  IdToWebContents swa_web_contents_;
 
   std::unique_ptr<base::test::ScopedFeatureList> feature_list_;
   crostini::FakeCrostiniFeatures crostini_features_;

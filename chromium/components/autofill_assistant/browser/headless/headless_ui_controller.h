@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,7 +67,15 @@ class HeadlessUiController : public ScriptExecutorUiDelegate,
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)> end_action_callback,
       base::OnceCallback<void(const ClientStatus&)>
-          view_inflation_finished_callback) override;
+          view_inflation_finished_callback,
+      base::RepeatingCallback<void(const RequestBackendDataProto&)>
+          request_backend_data_callback,
+      base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+          show_account_screen_callback) override;
+
+  void ShowAccountScreen(const ShowAccountScreenProto& proto,
+                         const std::string& email_address) override;
+
   void SetPersistentGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)>
@@ -87,6 +95,7 @@ class HeadlessUiController : public ScriptExecutorUiDelegate,
   bool SupportsExternalActions() override;
   void ExecuteExternalAction(
       const external::Action& external_action,
+      bool is_interrupt,
       base::OnceCallback<void(ExternalActionDelegate::DomUpdateCallback)>
           start_dom_checks_callback,
       base::OnceCallback<void(const external::Result& result)>

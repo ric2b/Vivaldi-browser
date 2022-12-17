@@ -1,10 +1,10 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 module ash.multidevice_setup.mojom;
 
-import "ash/components/multidevice/mojom/multidevice_types.mojom";
+import "chromeos/ash/components/multidevice/mojom/multidevice_types.mojom";
 import "ash/services/device_sync/public/mojom/device_sync.mojom";
 
 // Enumeration of possible opt-in entry points for Phone Hub Camera Roll
@@ -60,7 +60,7 @@ enum HostStatus {
 // those in c/b/r/s/chromeos/multidevice_page/multidevice_constants.js,
 // and all features should be reflected in the FeatureStateMaps generated in
 // ash/services/multidevice_setup/public/cpp/multidevice_setup_client.cc
-// and chrome/browser/ui/webui/settings/chromeos/multidevice_handler.cc
+// and chrome/browser/ui/webui/settings/ash/multidevice_handler.cc
 enum Feature {
   kBetterTogetherSuite = 0,
   kInstantTethering = 1,

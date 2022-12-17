@@ -1,5 +1,5 @@
 #!/usr/bin/env vpython3
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Simple helper script to run pytype on //testing code."""
@@ -22,6 +22,7 @@ EXTRA_PATHS.append(TESTING_DIR)
 
 FILES_AND_DIRECTORIES_TO_CHECK = [
     'unexpected_passes_common',
+    'flake_suppressor_common',
 ]
 FILES_AND_DIRECTORIES_TO_CHECK = [
     os.path.join(TESTING_DIR, f) for f in FILES_AND_DIRECTORIES_TO_CHECK

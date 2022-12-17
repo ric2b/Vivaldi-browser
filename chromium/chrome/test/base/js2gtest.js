@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -539,10 +539,7 @@ ${testF}(${testFixture}, ${testFunction}) {
   set_preload_test_fixture("${testFixture}");
   set_preload_test_name("${testFunction}");`);
   }
-  if (testType == 'mojo_lite_webui') {
-    output(`
-  set_use_mojo_lite_bindings();`);
-  } else if (testType == 'mojo_webui') {
+  if (testType == 'mojo_webui') {
     output(`
   set_use_mojo_modules();`);
   }

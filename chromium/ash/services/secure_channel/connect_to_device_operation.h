@@ -1,14 +1,14 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef ASH_SERVICES_SECURE_CHANNEL_CONNECT_TO_DEVICE_OPERATION_H_
 #define ASH_SERVICES_SECURE_CHANNEL_CONNECT_TO_DEVICE_OPERATION_H_
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/public/cpp/shared/connection_priority.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 
 namespace ash::secure_channel {
 

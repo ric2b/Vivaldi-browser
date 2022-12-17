@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,6 +70,8 @@ class EnrollmentScreenView {
 
   // Sets which flow should GAIA show.
   virtual void SetFlowType(FlowType flow_type) = 0;
+
+  virtual void ShowSkipConfirmationDialog() = 0;
 
   // Sets which buttons should GAIA screen show.
   virtual void SetGaiaButtonsType(GaiaButtonsType buttons_type) = 0;

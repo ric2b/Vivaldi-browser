@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -63,6 +63,7 @@ android_resources("java_resources") {
     "java/res/drawable/page_zoom_background.xml",
     "java/res/layout/custom_preference.xml",
     "java/res/layout/page_zoom_preference.xml",
+    "java/res/layout/page_zoom_slider.xml",
     "java/res/layout/page_zoom_view.xml",
     "java/res/layout/preference_text_scale.xml",
     "java/res/values/dimens.xml",

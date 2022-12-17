@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,13 +6,15 @@ package org.chromium.components.messages;
 
 import android.animation.Animator;
 import android.content.res.Resources;
+import android.provider.Settings;
 
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
-import org.chromium.base.annotations.MockedInTests;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.MockedInTests;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton.PopupMenuShownListener;
+import org.chromium.components.messages.MessageStateHandler.Position;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -88,16 +90,26 @@ class MessageBannerCoordinator {
 
     /**
      * Shows the message banner.
+     * @param fromIndex The initial position.
+     * @param toIndex The target position the message is moving to.
+     * @return The animator which shows the message view.
      */
-    void show() {
-        mMediator.show(() -> {
-            setOnTouchRunnable(mTimer::resetTimer);
-            announceForAccessibility();
-            setOnTitleChanged(() -> {
-                mTimer.resetTimer();
+    Animator show(@Position int fromIndex, @Position int toIndex) {
+        mView.dismissSecondaryMenuIfShown();
+        return mMediator.show(fromIndex, toIndex, () -> {
+            if (toIndex != Position.FRONT) {
+                setOnTouchRunnable(null);
+                setOnTitleChanged(null);
+                mTimer.cancelTimer();
+            } else {
+                setOnTouchRunnable(mTimer::resetTimer);
                 announceForAccessibility();
-            });
-            mTimer.startTimer(mAutodismissDurationMs.get(), mOnTimeUp);
+                setOnTitleChanged(() -> {
+                    mTimer.resetTimer();
+                    announceForAccessibility();
+                });
+                mTimer.startTimer(mAutodismissDurationMs.get(), mOnTimeUp);
+            }
         });
     }
 
@@ -105,10 +117,18 @@ class MessageBannerCoordinator {
      * Hides the message banner.
      * @param animate Whether to hide with an animation.
      * @param messageHidden The {@link Runnable} that will run once the message banner is hidden.
+     * @return The animator which hides the message view.
      */
-    void hide(boolean animate, Runnable messageHidden) {
+    Animator hide(boolean animate, Runnable messageHidden) {
+        mView.dismissSecondaryMenuIfShown();
         mTimer.cancelTimer();
-        mMediator.hide(animate, () -> {
+        // Skip animation if animation has been globally disabled.
+        // Otherwise, child animator's listener's onEnd will be called immediately after onStart,
+        // even before parent animatorSet's listener's onStart.
+        var isAnimationDisabled = Settings.Global.getFloat(mView.getContext().getContentResolver(),
+                                          Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+                == 0;
+        return mMediator.hide(animate && !isAnimationDisabled, () -> {
             setOnTouchRunnable(null);
             setOnTitleChanged(null);
             messageHidden.run();

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,6 +34,7 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/color_util.h"
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/time/time_of_day.h"
@@ -57,7 +58,6 @@
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/color_analysis.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/interpolated_transform.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -201,32 +201,6 @@ ui::CallbackLayerAnimationObserver* BuildObserverToNotifyA11yLocationChanged(
       view));
 }
 
-// Clears the password for the given |LoginPasswordView| instance, hides it, and
-// then deletes itself.
-class ClearPasswordAndHideAnimationObserver
-    : public ui::ImplicitAnimationObserver {
- public:
-  explicit ClearPasswordAndHideAnimationObserver(LoginPasswordView* view)
-      : password_view_(view) {}
-
-  ClearPasswordAndHideAnimationObserver(
-      const ClearPasswordAndHideAnimationObserver&) = delete;
-  ClearPasswordAndHideAnimationObserver& operator=(
-      const ClearPasswordAndHideAnimationObserver&) = delete;
-
-  ~ClearPasswordAndHideAnimationObserver() override = default;
-
-  // ui::ImplicitAnimationObserver:
-  void OnImplicitAnimationsCompleted() override {
-    password_view_->Reset();
-    password_view_->SetVisible(false);
-    delete this;
-  }
-
- private:
-  LoginPasswordView* const password_view_;
-};
-
 // The label shown below the fingerprint icon.
 // TODO(https://crbug.com/1233614): Remove this class after the Smart Lock UI
 // revamp is complete.
@@ -286,7 +260,7 @@ class FingerprintLabel : public views::Label {
   // views::Label:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     node_data->role = ax::mojom::Role::kStaticText;
-    node_data->SetName(accessible_name_);
+    node_data->SetNameChecked(accessible_name_);
   }
 
   // views::Label:
@@ -531,7 +505,7 @@ class LoginAuthUserView::FingerprintView : public views::View {
         state == FingerprintState::AVAILABLE_DEFAULT ||
                 state == FingerprintState::AVAILABLE_WITH_TOUCH_SENSOR_WARNING
             ? icon_color
-            : AshColorProvider::Get()->GetDisabledColor(icon_color);
+            : ColorUtil::GetDisabledColor(icon_color);
     switch (state) {
       case FingerprintState::UNAVAILABLE:
       case FingerprintState::AVAILABLE_DEFAULT:
@@ -1486,8 +1460,7 @@ void LoginAuthUserView::ApplyAnimationPostLayout(bool animate) {
           base::Milliseconds(login::kChangeUserAnimationDurationMs));
       settings.SetTweenType(gfx::Tween::Type::FAST_OUT_SLOW_IN);
       if (previous_state_->has_password && !current_state.has_password) {
-        settings.AddObserver(
-            new ClearPasswordAndHideAnimationObserver(password_view_));
+        settings.AddObserver(password_view_);
       }
 
       password_view_->layer()->SetOpacity(opacity_end);

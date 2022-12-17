@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -66,8 +66,12 @@ blink_core_sources_timing = [
   "background_tracing_helper.h",
   "responsiveness_metrics.cc",
   "responsiveness_metrics.h",
+  "render_blocking_metrics_reporter.cc",
+  "render_blocking_metrics_reporter.h",
   "soft_navigation_heuristics.cc",
   "soft_navigation_heuristics.h",
+  "soft_navigation_entry.cc",
+  "soft_navigation_entry.h",
   "task_attribution_timing.cc",
   "task_attribution_timing.h",
   "time_clamper.cc",

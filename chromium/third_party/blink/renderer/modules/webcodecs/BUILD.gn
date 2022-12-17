@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -23,6 +23,8 @@ blink_modules_sources("webcodecs") {
     "audio_decoder_broker.h",
     "audio_encoder.cc",
     "audio_encoder.h",
+    "background_readback.cc",
+    "background_readback.h",
     "codec_config_eval.h",
     "codec_logger.cc",
     "codec_logger.h",
@@ -67,6 +69,8 @@ blink_modules_sources("webcodecs") {
     "video_decoder.h",
     "video_decoder_broker.cc",
     "video_decoder_broker.h",
+    "video_decoder_helper.cc",
+    "video_decoder_helper.h",
     "video_encoder.cc",
     "video_encoder.h",
     "video_frame.cc",
@@ -106,6 +110,9 @@ blink_modules_sources("webcodecs") {
   }
   if (media_use_openh264) {
     deps += [ "//third_party/openh264:encoder" ]
+  }
+  if (is_fuchsia) {
+    deps += [ "//media/fuchsia/video" ]
   }
   public_deps = [ "//third_party/blink/renderer/modules/webaudio:webaudio" ]
 }

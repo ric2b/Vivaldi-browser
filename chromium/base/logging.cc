@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,7 +97,6 @@ typedef FILE* FileHandle;
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -333,6 +332,17 @@ PathString GetDefaultLogFile() {
 // provides this functionality.
 #if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
 
+// Provides a lock to synchronize appending to the log file across
+// threads. This can be required to support NFS file systems even on OSes that
+// provide atomic append operations in most cases. It should be noted that this
+// lock is not not shared across processes. When using NFS filesystems
+// protection against clobbering between different processes will be best-effort
+// and provided by the OS. See
+// https://man7.org/linux/man-pages/man2/open.2.html.
+//
+// The lock also protects initializing and closing the log file which can
+// happen concurrently with logging on some platforms like ChromeOS that need to
+// redirect logging by calling BaseInitLoggingImpl() twice.
 base::Lock& GetLoggingLock() {
   static base::NoDestructor<base::Lock> lock;
   return *lock;
@@ -883,14 +893,12 @@ LogMessage::~LogMessage() {
   }
 
   if ((g_logging_destination & LOG_TO_FILE) != 0) {
-    // We can have multiple threads and/or processes, so try to prevent them
-    // from clobbering each other's writes.
-    // If the client app did not call InitLogging, and the lock has not
-    // been created do it now. We do this on demand, but if two threads try
-    // to do this at the same time, there will be a race condition to create
-    // the lock. This is why InitLogging should be called from the main
-    // thread at the beginning of execution.
 #if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
+    // If the client app did not call InitLogging() and the lock has not
+    // been created it will be done now on calling GetLoggingLock(). We do this
+    // on demand, but if two threads try to do this at the same time, there will
+    // be a race condition to create the lock. This is why InitLogging should be
+    // called from the main thread at the beginning of execution.
     base::AutoLock guard(GetLoggingLock());
 #endif
     if (InitializeLogFileHandle()) {

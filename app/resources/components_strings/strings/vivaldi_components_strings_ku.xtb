@@ -42,7 +42,7 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Gihîştina bo pelê hate redkirin</translation>
 <translation id="2705137772291741111">Jêgirtina (pêşbîrî) tomarkirî a vê malperê nayê xwendin.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Venasîna girêdanê bide xebitandin<ph name="END_LINK" /></translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Nasîna girêdanê bide xebitandin<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Girêdan ji nû ve hate sazkirin.</translation>
 <translation id="2826760142808435982">Girêdan hatiye şîfrekirin û piştrastkirin bi riya karanîna <ph name="CIPHER" />ê û bikaranîna <ph name="KX" />ê wekî mekanîzmaya pevguhertina kilîd.</translation>
 <translation id="2856444702002559011">Dibe ku êrîşkar hewl didin ku diziya agahiyên te bikin <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (mînak pêborîn, peyam an kartên krediyê). <ph name="BEGIN_LEARN_MORE_LINK" /> Bêhtir tişt fêr bibe<ph name="END_LEARN_MORE_LINK" /></translation>
@@ -105,7 +105,7 @@
 <translation id="4558551763791394412">Hewl bide, pêvekên xwe neçalak bikî.</translation>
 <translation id="4592951414987517459">Girêdana te bo <ph name="DOMAIN" />ê bi rêbazên nûjen hatiye şîfrekirin.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /><ph name="SENTENCE2" /></translation>
-<translation id="4708268264240856090">Têkiliya te qut bû</translation>
+<translation id="4708268264240856090">Girêdana te qut bû</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Venasîna torê ya Windows-ê bide xebitandin<ph name="END_LINK" /></translation>
 <translation id="4736016046474602958">Astengkera Şopgeran</translation>
 <translation id="4744603770635761495">Riya bicîhkirî</translation>

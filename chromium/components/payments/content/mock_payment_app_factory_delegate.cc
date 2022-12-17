@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,9 +7,9 @@
 namespace payments {
 
 MockPaymentAppFactoryDelegate::MockPaymentAppFactoryDelegate(
-    mojom::PaymentMethodDataPtr method_data,
-    content::BrowserContext* context)
-    : web_contents_(web_contents_factory_.CreateWebContents(context)),
+    content::WebContents* web_contents,
+    mojom::PaymentMethodDataPtr method_data)
+    : web_contents_(web_contents),
       top_origin_("https://top-origin.test"),
       frame_origin_("https://frame-origin.test") {
   SetRequestedPaymentMethod(std::move(method_data));

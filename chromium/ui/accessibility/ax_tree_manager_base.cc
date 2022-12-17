@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,9 +25,10 @@ AXTreeManagerBase* AXTreeManagerBase::GetManager(const AXTreeID& tree_id) {
 }
 
 // static
-base::flat_map<AXTreeID, AXTreeManagerBase*>&
+std::unordered_map<AXTreeID, AXTreeManagerBase*, AXTreeIDHash>&
 AXTreeManagerBase::GetTreeManagerMapInstance() {
-  static base::NoDestructor<base::flat_map<AXTreeID, AXTreeManagerBase*>>
+  static base::NoDestructor<
+      std::unordered_map<AXTreeID, AXTreeManagerBase*, AXTreeIDHash>>
       map_instance;
   return *map_instance;
 }

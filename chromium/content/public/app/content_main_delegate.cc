@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,6 +70,10 @@ absl::optional<int> ContentMainDelegate::PreBrowserMain() {
 }
 
 bool ContentMainDelegate::ShouldCreateFeatureList(InvokedIn invoked_in) {
+  return true;
+}
+
+bool ContentMainDelegate::ShouldInitializeMojo(InvokedIn invoked_in) {
   return true;
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,6 +68,11 @@ class GEOMETRY_EXPORT Vector2dF {
   // Scale the x and y components of the vector by |x_scale| and |y_scale|
   // respectively.
   void Scale(float x_scale, float y_scale);
+
+  // Divides all components of the vector by |scale|.
+  void InvScale(float inv_scale) { InvScale(inv_scale, inv_scale); }
+  // Divides each component of the vector by the given scale factors.
+  void InvScale(float inv_x_scale, float inv_y_scale);
 
   void Transpose() {
     using std::swap;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 
 #import "base/bind.h"
 #import "base/notreached.h"
-#include "base/threading/sequenced_task_runner_handle.h"
+#import "base/threading/sequenced_task_runner_handle.h"
 
 #import <UIKit/UIKit.h>
 
@@ -31,12 +31,20 @@ enum ChromiumLensProviderErrors : NSInteger {
 
 }
 
+using LensWebParamsCallback =
+    base::OnceCallback<void(web::NavigationManager::WebLoadParams)>;
+
 id<ChromeLensController> NewChromeLensController(LensConfiguration* config) {
   // Lens is not supported in Chromium.
   return nil;
 }
 
 bool IsLensSupported() {
+  // Lens is not supported in Chromium.
+  return false;
+}
+
+bool IsLensWebResultsURL(const GURL& url) {
   // Lens is not supported in Chromium.
   return false;
 }
@@ -48,6 +56,13 @@ web::NavigationManager::WebLoadParams GenerateLensLoadParamsForImage(
   // Lens is not supported in Chromium; this function will never be called.
   NOTREACHED() << "Lens is not supported.";
   return web::NavigationManager::WebLoadParams({});
+}
+
+void GenerateLensLoadParamsForImageAsync(UIImage* image,
+                                         LensEntrypoint entry_point,
+                                         bool is_incognito,
+                                         LensWebParamsCallback completion) {
+  NOTREACHED() << "Lens is not supported.";
 }
 
 }  // namespace provider

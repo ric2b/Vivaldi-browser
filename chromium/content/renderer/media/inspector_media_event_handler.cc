@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,26 +14,26 @@ namespace content {
 namespace {
 
 absl::optional<blink::InspectorPlayerError> ErrorFromParams(
-    const base::Value& param) {
-  absl::optional<int> code = param.FindIntKey(media::StatusConstants::kCodeKey);
+    const base::Value::Dict& param) {
+  absl::optional<int> code = param.FindInt(media::StatusConstants::kCodeKey);
   const std::string* group =
-      param.FindStringKey(media::StatusConstants::kGroupKey);
+      param.FindString(media::StatusConstants::kGroupKey);
   const std::string* message =
-      param.FindStringKey(media::StatusConstants::kMsgKey);
+      param.FindString(media::StatusConstants::kMsgKey);
 
   // message might be empty or not present, but group and code are required.
   CHECK(code.has_value() && group);
 
   blink::InspectorPlayerErrors caused_by;
-  if (const auto* c = param.FindDictKey(media::StatusConstants::kCauseKey)) {
+  if (const auto* c = param.FindDict(media::StatusConstants::kCauseKey)) {
     auto parsed_cause = ErrorFromParams(*c);
     if (parsed_cause.has_value())
       caused_by.push_back(*parsed_cause);
   }
 
   blink::WebVector<blink::InspectorPlayerError::SourceLocation> stack_vec;
-  if (const auto* vec = param.FindDictKey(media::StatusConstants::kStackKey)) {
-    for (const auto& loc : vec->GetListDeprecated()) {
+  if (const auto* vec = param.FindList(media::StatusConstants::kStackKey)) {
+    for (const auto& loc : *vec) {
       const std::string* file =
           loc.FindStringKey(media::StatusConstants::kFileKey);
       absl::optional<int> line =
@@ -47,8 +47,8 @@ absl::optional<blink::InspectorPlayerError> ErrorFromParams(
   }
 
   blink::WebVector<blink::InspectorPlayerError::Data> data_vec;
-  if (auto* data = param.FindDictKey(media::StatusConstants::kDataKey)) {
-    for (const auto pair : data->DictItems()) {
+  if (auto* data = param.FindDict(media::StatusConstants::kDataKey)) {
+    for (const auto pair : *data) {
       std::string json;
       base::JSONWriter::Write(pair.second, &json);
       blink::InspectorPlayerError::Data entry = {
@@ -73,6 +73,12 @@ blink::WebString ToString(const base::Value& value) {
   if (value.is_string()) {
     return blink::WebString::FromUTF8(value.GetString());
   }
+  std::string output_str;
+  base::JSONWriter::Write(value, &output_str);
+  return blink::WebString::FromUTF8(output_str);
+}
+
+blink::WebString ToString(const base::Value::Dict& value) {
   std::string output_str;
   base::JSONWriter::Write(value, &output_str);
   return blink::WebString::FromUTF8(output_str);
@@ -117,7 +123,7 @@ void InspectorMediaEventHandler::SendQueuedMediaEvents(
   for (media::MediaLogRecord event : events_to_send) {
     switch (event.type) {
       case media::MediaLogRecord::Type::kMessage: {
-        for (auto&& itr : event.params.DictItems()) {
+        for (auto&& itr : event.params) {
           blink::InspectorPlayerMessage msg = {
               LevelFromString(itr.first),
               blink::WebString::FromUTF8(itr.second.GetString())};
@@ -126,7 +132,7 @@ void InspectorMediaEventHandler::SendQueuedMediaEvents(
         break;
       }
       case media::MediaLogRecord::Type::kMediaPropertyChange: {
-        for (auto&& itr : event.params.DictItems()) {
+        for (auto&& itr : event.params) {
           blink::InspectorPlayerProperty prop = {
               blink::WebString::FromUTF8(itr.first), ToString(itr.second)};
           properties.emplace_back(std::move(prop));

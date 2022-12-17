@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,6 +27,7 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane_listener.h"
+#include "ui/views/controls/throbber.h"
 #include "ui/views/window/non_client_view.h"
 
 namespace views {
@@ -58,9 +59,7 @@ class PartialTranslateBubbleView : public LocationBarBubbleDelegateView,
 
   PartialTranslateBubbleView(views::View* anchor_view,
                              std::unique_ptr<PartialTranslateBubbleModel> model,
-                             translate::TranslateErrors::Type error_type,
                              content::WebContents* web_contents,
-                             const std::u16string& text_selection,
                              base::OnceClosure on_closing);
 
   PartialTranslateBubbleView(const PartialTranslateBubbleView&) = delete;
@@ -89,7 +88,7 @@ class PartialTranslateBubbleView : public LocationBarBubbleDelegateView,
 
   // Initialize the bubble in the correct view state when it is shown.
   void SetViewState(PartialTranslateBubbleModel::ViewState view_state,
-                    translate::TranslateErrors::Type error_type);
+                    translate::TranslateErrors error_type);
 
   // LocationBarBubbleDelegateView:
   void CloseBubble() override;
@@ -107,9 +106,11 @@ class PartialTranslateBubbleView : public LocationBarBubbleDelegateView,
 
   friend class PartialTranslateBubbleViewTest;
   FRIEND_TEST_ALL_PREFIXES(PartialTranslateBubbleViewTest,
-                           TargetLanguageTabTriggersTranslate);
+                           TargetLanguageTabDoesntTriggerTranslate);
   FRIEND_TEST_ALL_PREFIXES(PartialTranslateBubbleViewTest,
                            TabSelectedAfterTranslation);
+  FRIEND_TEST_ALL_PREFIXES(PartialTranslateBubbleViewTest,
+                           UpdateLanguageTabsFromResponse);
   FRIEND_TEST_ALL_PREFIXES(PartialTranslateBubbleViewTest,
                            SourceLanguageTabUpdatesViewState);
   FRIEND_TEST_ALL_PREFIXES(PartialTranslateBubbleViewTest,
@@ -146,6 +147,9 @@ class PartialTranslateBubbleView : public LocationBarBubbleDelegateView,
   // Creates the 'error' view skeleton UI with no title.
   std::unique_ptr<views::View> CreateViewErrorNoTitle(
       std::unique_ptr<views::Button> advanced_button);
+
+  // Creates the 'waiting' view that shows an empty bubble with a throbber.
+  std::unique_ptr<views::View> CreateViewWaiting();
 
   // Creates source language label and combobox for Tab UI advanced view. Caller
   // takes ownership of the returned view.
@@ -188,13 +192,13 @@ class PartialTranslateBubbleView : public LocationBarBubbleDelegateView,
   void SwitchTabForViewState(PartialTranslateBubbleModel::ViewState view_state);
 
   // Switches to the error view.
-  void SwitchToErrorView(translate::TranslateErrors::Type error_type);
+  void SwitchToErrorView(translate::TranslateErrors error_type);
 
   // Updates the advanced view.
   void UpdateAdvancedView();
 
   // Actions for button presses shared with accelerators.
-  void Translate();
+  void ShowTranslated();
   void ShowOriginal();
   void ConfirmAdvancedOptions();
 
@@ -206,22 +210,38 @@ class PartialTranslateBubbleView : public LocationBarBubbleDelegateView,
   // Handles the reset button in advanced view under Tab UI.
   void ResetLanguage();
 
-  // Retrieve the names of the from/to languages and reset the language
-  // indices.
-  void UpdateLanguageNames(std::u16string* source_language_name,
-                           std::u16string* target_language_name);
+  // Updates the body text for the bubble based on the view state (either the
+  // source text if we're pre-translate or translating, or the target text if
+  // we're done translating).
+  void UpdateTextForViewState(
+      PartialTranslateBubbleModel::ViewState view_state);
+
+  // Update the names of the source/target language tabs.
+  void UpdateLanguageTabNames();
 
   void UpdateInsets(PartialTranslateBubbleModel::ViewState state);
 
   // Function bound to the "Translate full page" button.
   void TranslateFullPage();
 
+  // Update the alignment of |partial_text_label_| to match the direction of
+  // the locale being used.
+  void SetTextAlignmentForLocaleTextDirection(std::string locale);
+
+  // Forces announcement of translation state and conditionally also accounces
+  // the translated text.
+  void AnnounceForAccessibility(
+      PartialTranslateBubbleModel::ViewState view_state);
+
   static PartialTranslateBubbleView* partial_translate_bubble_view_;
 
+  raw_ptr<views::View> translate_view_waiting_ = nullptr;
   raw_ptr<views::View> translate_view_ = nullptr;
   raw_ptr<views::View> error_view_ = nullptr;
   raw_ptr<views::View> advanced_view_source_ = nullptr;
   raw_ptr<views::View> advanced_view_target_ = nullptr;
+
+  views::Throbber* throbber_;
 
   raw_ptr<views::Combobox> source_language_combobox_ = nullptr;
   raw_ptr<views::Combobox> target_language_combobox_ = nullptr;
@@ -239,12 +259,16 @@ class PartialTranslateBubbleView : public LocationBarBubbleDelegateView,
   size_t previous_source_language_index_;
   size_t previous_target_language_index_;
 
+  // Whether or not user changed target language and triggered translation from
+  // the advanced options.
+  bool target_language_changed_ = false;
+
   std::unique_ptr<ui::SimpleMenuModel> options_menu_model_;
   std::unique_ptr<views::MenuRunner> options_menu_runner_;
 
   std::unique_ptr<PartialTranslateBubbleModel> model_;
 
-  translate::TranslateErrors::Type error_type_;
+  translate::TranslateErrors error_type_;
 
   std::unique_ptr<WebContentMouseHandler> mouse_handler_;
 

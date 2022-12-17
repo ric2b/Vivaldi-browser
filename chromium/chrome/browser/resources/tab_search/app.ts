@@ -1,9 +1,9 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
-import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/cr_elements/mwb_element_shared_style.css.js';
 import 'chrome://resources/cr_elements/mwb_shared_style.css.js';
 import 'chrome://resources/cr_elements/mwb_shared_vars.css.js';
@@ -19,7 +19,7 @@ import './strings.m.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {MetricsReporter, MetricsReporterImpl} from 'chrome://resources/js/metrics_reporter/metrics_reporter.js';
-import {listenOnce} from 'chrome://resources/js/util.m.js';
+import {listenOnce} from 'chrome://resources/js/util.js';
 import {Token} from 'chrome://resources/mojo/mojo/public/mojom/base/token.mojom-webui.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
 import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -283,7 +283,9 @@ export class TabSearchAppElement extends PolymerElement {
             .then(
                 e => this.metricsReporter.umaReportTime(
                     'Tabs.TabSearch.WebUI.TabListDataReceived2', e))
-            .then(() => this.metricsReporter.clearMark('TabListDataReceived'));
+            .then(() => this.metricsReporter.clearMark('TabListDataReceived'))
+            // Ignore silently if mark 'TabListDataReceived' is missing.
+            .catch(() => {});
       }
       // The infinite-list produces viewport-filled events whenever a data or
       // scroll position change triggers the the viewport fill logic.
@@ -293,7 +295,12 @@ export class TabSearchAppElement extends PolymerElement {
         setTimeout(() => this.apiProxy_.showUI(), 0);
       });
 
-      this.availableHeight_ = profileData.windows.find((t) => t.active)!.height;
+      // TODO(crbug.com/c/1349350): Determine why no active window is reported
+      // in some cases on ChromeOS and Linux.
+      const activeWindow = profileData.windows.find((t) => t.active);
+      this.availableHeight_ =
+          activeWindow ? activeWindow!.height : profileData.windows[0]!.height;
+
       this.tabsChanged_(profileData);
     });
   }
@@ -324,7 +331,9 @@ export class TabSearchAppElement extends PolymerElement {
           .then(
               e => this.metricsReporter.umaReportTime(
                   'Tabs.TabSearch.Mojo.TabUpdated', e))
-          .then(() => this.metricsReporter.clearMark('TabUpdated'));
+          .then(() => this.metricsReporter.clearMark('TabUpdated'))
+          // Ignore silently if mark 'TabUpdated' is missing.
+          .catch(() => {});
     }
   }
 
@@ -401,10 +410,7 @@ export class TabSearchAppElement extends PolymerElement {
     this.tabItemAction_(tabItem, e.model.index);
   }
 
-  private recordMetricsForAction(
-      action: string, isMediaTab: boolean, tabIndex: number,
-      indexRelativeToSection: number,
-      distanceFromInitiallySelectedIndex: number) {
+  private recordMetricsForAction(action: string, tabIndex: number) {
     const withSearch = !!this.searchText_;
     if (action === 'SwitchTab') {
       chrome.metricsPrivate.recordEnumerationValue(
@@ -417,21 +423,6 @@ export class TabSearchAppElement extends PolymerElement {
         withSearch ? `Tabs.TabSearch.WebUI.IndexOf${action}InFilteredList` :
                      `Tabs.TabSearch.WebUI.IndexOf${action}InUnfilteredList`,
         tabIndex);
-    chrome.metricsPrivate.recordSmallCount(
-        withSearch ? `Tabs.TabSearch.DistanceOf${
-                         action}FromInitiallySelectedTabInFilteredList` :
-                     `Tabs.TabSearch.DistanceOf${
-                         action}FromInitiallySelectedTabInUnfilteredList`,
-        distanceFromInitiallySelectedIndex);
-    if (isMediaTab) {
-      chrome.metricsPrivate.recordBoolean(
-          `Tabs.TabSearch.WebUI.MediaTab${action}Action`, withSearch);
-    } else if (!withSearch) {
-      chrome.metricsPrivate.recordSmallCount(
-          `Tabs.TabSearch.WebUI.IndexRelativeToOpenTabsSectionOf${
-              action}InUnfilteredList`,
-          indexRelativeToSection);
-    }
   }
 
   /**
@@ -452,12 +443,7 @@ export class TabSearchAppElement extends PolymerElement {
           }
         }
 
-        const isMediaTab = tabHasMediaAlerts((itemData as TabData).tab as Tab);
-        const tabIndexRelativeToSection =
-            isMediaTab ? tabIndex : tabIndex - this.filteredMediaTabsCount_;
-        this.recordMetricsForAction(
-            'SwitchTab', isMediaTab, tabIndex, tabIndexRelativeToSection,
-            Math.abs(this.initiallySelectedTabIndex_ - tabIndex));
+        this.recordMetricsForAction('SwitchTab', tabIndex);
         this.apiProxy_.switchToTab({tabId: (itemData as TabData).tab.tabId});
         action = 'SwitchTab';
         break;
@@ -486,12 +472,7 @@ export class TabSearchAppElement extends PolymerElement {
     performance.mark('tab_search:close_tab:metric_begin');
     const tabId = e.model.item.tab.tabId;
     const tabIndex = e.model.index;
-    const isMediaTab = tabHasMediaAlerts(e.model.item.tab as Tab);
-    const tabIndexRelativeToSection =
-        isMediaTab ? tabIndex : tabIndex - this.filteredMediaTabsCount_;
-    this.recordMetricsForAction(
-        'CloseTab', isMediaTab, tabIndex, tabIndexRelativeToSection,
-        Math.abs(this.initiallySelectedTabIndex_ - tabIndex));
+    this.recordMetricsForAction('CloseTab', tabIndex);
     this.apiProxy_.closeTab(tabId);
     this.announceA11y_(loadTimeData.getString('a11yTabClosed'));
     listenOnce(this.$.tabsList, 'iron-items-changed', () => {
@@ -697,8 +678,7 @@ export class TabSearchAppElement extends PolymerElement {
           filteredMediaTabs.length;
     }
 
-    if (!loadTimeData.getBoolean('alsoShowMediaTabsinOpenTabsSection') &&
-        this.searchText_.length === 0) {
+    if (this.searchText_.length === 0) {
       filteredOpenTabs = filteredOpenTabs.filter(
           tabData => !tabHasMediaAlerts(tabData.tab as Tab));
     }
@@ -780,6 +760,10 @@ export class TabSearchAppElement extends PolymerElement {
 
   getSearchTextForTesting(): string {
     return this.searchText_;
+  }
+
+  getAvailableHeightForTesting(): number {
+    return this.availableHeight_;
   }
 
   static get template() {

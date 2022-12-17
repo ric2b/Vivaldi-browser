@@ -79,11 +79,8 @@ void VivaldiTranslateLanguageList::StartUpdateTimer() {
 
 void VivaldiTranslateLanguageList::SetPrefsListAsDefault() {
   PrefService* prefs = g_browser_process->local_state();
-  const base::Value* list =
-      prefs->GetList(vivaldiprefs::kVivaldiTranslateLanguageList);
-  if (list) {
-    SetListInChromium(list->GetList());
-  }
+  auto& list = prefs->GetList(vivaldiprefs::kVivaldiTranslateLanguageList);
+  SetListInChromium(list);
 }
 
 void VivaldiTranslateLanguageList::SetListInChromium(

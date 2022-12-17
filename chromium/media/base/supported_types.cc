@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -205,7 +205,8 @@ bool IsHevcProfileSupported(const VideoType& type) {
     return false;
 
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_MAC)
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // TODO(b/171813538): For Lacros, the supplemental profile cache will be
   // asking lacros-gpu, but we will be doing decoding in ash-gpu. Until the
@@ -217,14 +218,6 @@ bool IsHevcProfileSupported(const VideoType& type) {
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   return GetSupplementalProfileCache()->IsProfileSupported(type.profile);
-#elif BUILDFLAG(IS_MAC)
-  if (__builtin_available(macOS 11.0, *))
-    return base::FeatureList::IsEnabled(kPlatformHEVCDecoderSupport) &&
-           (type.profile == HEVCPROFILE_MAIN ||
-            type.profile == HEVCPROFILE_MAIN10 ||
-            type.profile == HEVCPROFILE_MAIN_STILL_PICTURE ||
-            type.profile == HEVCPROFILE_REXT);
-  return false;
 #elif BUILDFLAG(IS_ANDROID)
   // Technically android 5.0 mandates support for only HEVC main profile,
   // however some platforms (like chromecast) have had more profiles supported
@@ -232,7 +225,8 @@ bool IsHevcProfileSupported(const VideoType& type) {
   return base::FeatureList::IsEnabled(kPlatformHEVCDecoderSupport);
 #else
   return true;
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_MAC)
 #else
   return false;
 #endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC)
@@ -402,6 +396,28 @@ bool IsDefaultSupportedAudioType(const AudioType& type) {
       return false;
 #endif
   }
+}
+
+bool IsBuiltInVideoCodec(VideoCodec codec) {
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+  if (codec == VideoCodec::kTheora)
+    return true;
+  if (codec == VideoCodec::kVP8)
+    return true;
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+  if (codec == VideoCodec::kH264)
+    return true;
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+#endif  // BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+#if BUILDFLAG(ENABLE_LIBVPX)
+  if (codec == VideoCodec::kVP8 || codec == VideoCodec::kVP9)
+    return true;
+#endif  // BUILDFLAG(ENABLE_LIBVPX)
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+  if (codec == VideoCodec::kAV1)
+    return true;
+#endif  // BUILDFLAG(ENABLE_AV1_DECODER)
+  return false;
 }
 
 void UpdateDefaultSupportedVideoProfiles(

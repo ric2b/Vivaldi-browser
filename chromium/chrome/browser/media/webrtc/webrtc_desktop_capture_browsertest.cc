@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
@@ -150,10 +151,9 @@ class InfobarUIChangeObserver : public TabStripModelObserver {
 
  public:
   void EraseObserver(InfoBarChangeObserver* observer) {
-    auto iter = std::find_if(observers_.begin(), observers_.end(),
-                             [observer](const auto& observer_iter) {
-                               return observer_iter.second.get() == observer;
-                             });
+    auto iter = base::ranges::find(
+        observers_, observer,
+        [](const auto& observer_iter) { return observer_iter.second.get(); });
     observers_.erase(iter);
   }
 

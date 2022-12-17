@@ -1,33 +1,29 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/https_upgrades/https_only_mode_upgrade_tab_helper.h"
 
-#include "base/logging.h"
-#include "base/metrics/histogram_functions.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
-#include "components/prefs/pref_service.h"
-#include "components/security_interstitials/core/https_only_mode_metrics.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/https_upgrades/https_upgrade_service_factory.h"
-#include "ios/chrome/browser/pref_names.h"
+#import "base/logging.h"
+#import "base/metrics/histogram_functions.h"
+#import "base/strings/string_number_conversions.h"
+#import "base/threading/sequenced_task_runner_handle.h"
+#import "components/prefs/pref_service.h"
+#import "components/security_interstitials/core/https_only_mode_metrics.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
-#import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_blocking_page.h"
-#include "ios/components/security_interstitials/https_only_mode/https_only_mode_container.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_container.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_controller_client.h"
-#include "ios/components/security_interstitials/https_only_mode/https_only_mode_error.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_error.h"
 #import "ios/components/security_interstitials/https_only_mode/https_upgrade_service.h"
 #import "ios/web/public/navigation/navigation_context.h"
-#include "ios/web/public/navigation/navigation_item.h"
-#include "ios/web/public/navigation/navigation_manager.h"
+#import "ios/web/public/navigation/navigation_item.h"
+#import "ios/web/public/navigation/navigation_manager.h"
 #import "net/base/mac/url_conversions.h"
-#include "net/base/url_util.h"
-#include "url/url_constants.h"
+#import "net/base/url_util.h"
+#import "url/url_constants.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -58,33 +54,11 @@ bool HttpsOnlyModeUpgradeTabHelper::IsTimerRunningForTesting() const {
 }
 
 void HttpsOnlyModeUpgradeTabHelper::ClearAllowlistForTesting() {
-  HttpsUpgradeService* service = HttpsUpgradeServiceFactory::GetForBrowserState(
-      web_state()->GetBrowserState());
-  service->ClearAllowlist(base::Time(), base::Time::Max());
+  service_->ClearAllowlist(base::Time(), base::Time::Max());
 }
 
 bool HttpsOnlyModeUpgradeTabHelper::IsHttpAllowedForUrl(const GURL& url) const {
-  HttpsUpgradeService* service = HttpsUpgradeServiceFactory::GetForBrowserState(
-      web_state()->GetBrowserState());
-  return service->IsHttpAllowedForHost(url.host());
-}
-
-// static
-void HttpsOnlyModeUpgradeTabHelper::CreateForWebState(web::WebState* web_state,
-                                                      PrefService* prefs) {
-  DCHECK(web_state);
-  DCHECK(prefs);
-  if (!FromWebState(web_state)) {
-    PrerenderService* prerender_service =
-        PrerenderServiceFactory::GetForBrowserState(
-            ChromeBrowserState::FromBrowserState(web_state->GetBrowserState()));
-    HttpsUpgradeService* service =
-        HttpsUpgradeServiceFactory::GetForBrowserState(
-            web_state->GetBrowserState());
-    web_state->SetUserData(UserDataKey(),
-                           base::WrapUnique(new HttpsOnlyModeUpgradeTabHelper(
-                               web_state, prefs, prerender_service, service)));
-  }
+  return service_->IsHttpAllowedForHost(url.host());
 }
 
 HttpsOnlyModeUpgradeTabHelper::HttpsOnlyModeUpgradeTabHelper(
@@ -107,12 +81,12 @@ void HttpsOnlyModeUpgradeTabHelper::DidStartNavigation(
   }
   if (state_ == State::kUpgraded) {
     DCHECK(!timer_.IsRunning());
-    // |timer_| is deleted when the tab helper is deleted, so it's safe to use
+    // `timer_` is deleted when the tab helper is deleted, so it's safe to use
     // Unretained here.
     timer_.Start(
         FROM_HERE, service_->GetFallbackDelay(),
         base::BindOnce(&HttpsOnlyModeUpgradeTabHelper::OnHttpsLoadTimeout,
-                       base::Unretained(this)));
+                       base::Unretained(this), web_state->GetWeakPtr()));
     return;
   }
   if (state_ == State::kNone) {
@@ -221,10 +195,13 @@ void HttpsOnlyModeUpgradeTabHelper::ResetState() {
   timer_.Stop();
 }
 
-void HttpsOnlyModeUpgradeTabHelper::OnHttpsLoadTimeout() {
+void HttpsOnlyModeUpgradeTabHelper::OnHttpsLoadTimeout(
+    base::WeakPtr<web::WebState> weak_web_state) {
   DCHECK(state_ == State::kUpgraded);
   state_ = State::kStoppedWithTimeout;
-  web_state()->Stop();
+  if (weak_web_state) {
+    weak_web_state->Stop();
+  }
 }
 
 void HttpsOnlyModeUpgradeTabHelper::ShouldAllowResponse(
@@ -303,10 +280,13 @@ void HttpsOnlyModeUpgradeTabHelper::ShouldAllowResponse(
     // If the tab is being prerendered, cancel the HTTP response.
     if (prerender_service_ &&
         prerender_service_->IsWebStatePrerendered(web_state())) {
-      prerender_service_->CancelPrerender();
+      RecordUMA(Event::kPrerenderCancelled);
       ResetState();
       std::move(callback).Run(
           web::WebStatePolicyDecider::PolicyDecision::Cancel());
+      prerender_service_->CancelPrerender();
+      // IMPORTANT: CancelPrerender() destroys the web state. Do not access
+      // it after here.
       return;
     }
     StopToUpgrade(url, item_pending->GetReferrer(), std::move(callback));

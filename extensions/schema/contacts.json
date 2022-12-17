@@ -599,6 +599,28 @@
             }
           ]
         }
+      },
+      {
+        "name": "readThunderbirdContacts",
+        "type": "function",
+        "description": "Read thunderbird contacts from db files.",
+        "parameters": [
+          {
+            "name": "path",
+            "type": "string",
+            "description": "Profile Path to thunderbird directory, containing: abook.sqlite and history.sqlite files."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "Contact" }
+            }
+          ]
+        }
       }
     ],
     "events": [

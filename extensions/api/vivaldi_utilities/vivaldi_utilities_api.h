@@ -875,6 +875,29 @@ class UtilitiesGetYOAuthClientSecretFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class UtilitiesGetVivaldiNetOAuthClientSecretFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getVivaldiNetOAuthClientSecret",
+                             UTILITIES_GET_VIVALDINET_API_CLIENT_SECRET)
+  UtilitiesGetVivaldiNetOAuthClientSecretFunction() = default;
+
+ private:
+  ~UtilitiesGetVivaldiNetOAuthClientSecretFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesGetVivaldiNetOAuthClientIdFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getVivaldiNetOAuthClientId",
+                             UTILITIES_GET_VIVALDINET_API_CLIENT_ID)
+  UtilitiesGetVivaldiNetOAuthClientIdFunction() = default;
+
+ private:
+  ~UtilitiesGetVivaldiNetOAuthClientIdFunction() override = default;
+  ResponseAction Run() override;
+};
+
 class UtilitiesGetCommandLineValueFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getCommandLineValue",
@@ -912,7 +935,8 @@ class UtilitiesOsDecryptFunction : public ExtensionFunction {
 
 class UtilitiesTranslateTextFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("utilities.translateText", UTILITIES_TRANSLATE_TEXT)
+  DECLARE_EXTENSION_FUNCTION("utilities.translateText",
+                             UTILITIES_TRANSLATE_TEXT)
   UtilitiesTranslateTextFunction();
 
  private:

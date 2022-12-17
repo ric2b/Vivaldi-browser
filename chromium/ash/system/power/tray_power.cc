@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 #include "base/command_line.h"
 #include "base/metrics/histogram.h"
 #include "base/time/time.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -60,7 +61,9 @@ gfx::Size PowerTrayView::CalculatePreferredSize() const {
 }
 
 void PowerTrayView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->SetName(accessible_name_);
+  // A valid role must be set prior to setting the name.
+  node_data->role = ax::mojom::Role::kImage;
+  node_data->SetNameChecked(accessible_name_);
 }
 
 views::View* PowerTrayView::GetTooltipHandlerForPoint(const gfx::Point& point) {
@@ -121,7 +124,7 @@ void PowerTrayView::UpdateImage(bool icon_color_changed) {
   // Note: The icon color (both fg and bg) changes when the UI in in OOBE mode.
   const SkColor icon_fg_color = TrayIconColor(session_state_);
   const SkColor icon_bg_color = color_utils::GetResultingPaintColor(
-      ShelfConfig::Get()->GetShelfControlButtonColor(),
+      ShelfConfig::Get()->GetShelfControlButtonColor(GetWidget()),
       GetColorProvider()->GetColor(kColorAshShieldAndBaseOpaque));
 
   image_view()->SetImage(PowerStatus::GetBatteryImage(

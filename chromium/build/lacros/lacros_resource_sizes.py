@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Reports binary size metrics for LaCrOS build artifacts.
@@ -91,11 +91,19 @@ class _Group:
     self.track_stripped = track_stripped
     self.track_compressed = track_compressed
 
+  def __eq__(self, other):
+    """Overrides the default implementation"""
+    if isinstance(other, _Group):
+      return (self.paths == other.paths) & (self.title == other.title) & (
+          self.track_stripped == other.track_stripped) & (
+              self.track_compressed == other.track_compressed)
+    return False
 
 # Common artifacts in official builder lacros-arm32 and lacros64 in
 # src-internal. The artifcts can be found in
 # chromium/src-internal/testing/buildbot/archive/lacros64.json and
 # chromium/src-internal/testing/buildbot/archive/lacros-arm32.json
+# chromium/src-internal/testing/buildbot/archive/lacros-arm64.json
 _TRACKED_GROUPS = [
     _Group(paths=['chrome'],
            title='File: chrome',
@@ -300,7 +308,11 @@ def _run_resource_sizes(args):
     tracked_groups.append(
         _Group(paths=['nacl_helper_bootstrap'],
                title='File: nacl_helper_bootstrap'))
-
+  # TODO(https://crbug.com/1356761): remove the following part once nacl files
+  # are available.
+  elif args.arch == 'arm64':
+    tracked_groups.remove(
+        _Group(paths=['nacl_helper'], title='File: nacl_helper'))
   for g in tracked_groups:
     sizes = sum(
         map(_get_catagorized_filesizes, _visit_paths(args.out_dir, g.paths)),
@@ -330,7 +342,8 @@ def main():
   argparser.add_argument('--arch',
                          required=True,
                          type=str,
-                         help='The architecture of lacros.')
+                         help='The architecture of lacros, valid values: amd64,'
+                         ' arm32, arm64')
 
   output_group = argparser.add_mutually_exclusive_group()
 

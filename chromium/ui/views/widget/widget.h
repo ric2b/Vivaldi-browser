@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,7 @@ namespace views {
 class DesktopWindowTreeHost;
 class NativeWidget;
 class NonClientFrameView;
+class SublevelManager;
 class TooltipManager;
 class View;
 class WidgetDelegate;
@@ -274,8 +275,15 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
     Activatable activatable = Activatable::kDefault;
 
-    // The class of window and its overall z-order.
+    // The class of window and its overall z-order level. This level is visible
+    // to other applications in the system. A value other than `kNormal` will
+    // create an "always on top" widget.
     absl::optional<ui::ZOrderLevel> z_order;
+
+    // The z-order sublevel that is invisible to other applications in the
+    // system. Widgets of the same `z_order` are stacked in the order specified
+    // by their sub-levels.
+    int sublevel = 0;
 
     bool visible_on_all_workspaces = false;
 
@@ -611,7 +619,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   gfx::Rect GetRestoredBounds() const;
 
   // Retrieves the current workspace for the window. (On macOS: an opaque
-  // binary blob that encodes the workspace and other window state.)
+  // binary blob that encodes the workspace and other window state. On ChromeOS,
+  // this returns empty string if this widget is a window that appears on all
+  // desks.)
   std::string GetWorkspace() const;
 
   // Sizes and/or places the widget to the specified bounds, size or position.
@@ -655,6 +665,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   void StackAboveWidget(Widget* widget);
   void StackAbove(gfx::NativeView native_view);
   void StackAtTop();
+
+  // Returns true if widget is above the specified window in z-order.
+  bool IsStackedAbove(gfx::NativeView native_view);
 
   // Sets a shape on the widget. Passing a NULL |shape| reverts the widget to
   // be rectangular.
@@ -718,6 +731,14 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // Gets the z-order of the widget. This only applies to top-level widgets.
   ui::ZOrderLevel GetZOrderLevel() const;
+
+  // Sets the z-order sublevel of the widget. This applies to both top-level
+  // and non top-level widgets.
+  void SetZOrderSublevel(int sublevel);
+
+  // Gets the z-order sublevel of the widget. This applies to both top-level
+  // and non top-level widgets.
+  int GetZOrderSublevel() const;
 
   // Sets the widget to be visible on all work spaces.
   void SetVisibleOnAllWorkspaces(bool always_visible);
@@ -803,6 +824,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // Returns the ui::InputMethod for this widget.
   ui::InputMethod* GetInputMethod();
+
+  // Returns the SublevelManager for this widget.
+  SublevelManager* GetSublevelManager();
 
   // Starts a drag operation for the specified view. This blocks until the drag
   // operation completes. |view| can be NULL.
@@ -975,8 +999,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   //   with its parent.
   // * The native widget may change a widget's parent.
   // * The native view's parent might or might not be the parent's native view.
-  Widget* parent() { return parent_; }
-  const Widget* parent() const { return parent_; }
+  // * For a desktop widget with a non-desktop parent, this value might be
+  //   nullptr during shutdown.
+  Widget* parent() { return parent_.get(); }
+  const Widget* parent() const { return parent_.get(); }
 
   // True if the widget is considered top level widget. Top level widget
   // is a widget of TYPE_WINDOW, TYPE_PANEL, TYPE_WINDOW_FRAMELESS, BUBBLE,
@@ -1198,6 +1224,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // If a descendent of |root_view_| is focused, then clear the focus.
   void ClearFocusFromWidget();
 
+  // This holds logic that needs to called synchronously after showing, before
+  // the native widget asynchronously invokes OnNativeWidgetVisibilityChanged().
+  void HandleShowRequested();
+
   static DisableActivationChangeHandlingType
       g_disable_activation_change_handling_;
 
@@ -1209,12 +1239,14 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // Non-owned pointer to the Widget's delegate. If a NULL delegate is supplied
   // to Init() a default WidgetDelegate is created.
-  raw_ptr<WidgetDelegate, DanglingUntriaged> widget_delegate_ = nullptr;
+  raw_ptr<WidgetDelegate> widget_delegate_ = nullptr;
 
   // The parent of this widget. This is the widget that associates with
   // the |params.parent| supplied to Init(). If no parent is given or the native
   // view parent has no associating Widget, this value will be nullptr.
-  raw_ptr<Widget> parent_ = nullptr;
+  // For a desktop widget with a non-desktop parent, this value might be nullptr
+  // during shutdown.
+  base::WeakPtr<Widget> parent_ = nullptr;
 
   // The root of the View hierarchy attached to this window.
   // WARNING: see warning in tooltip_manager_ for ordering dependencies with
@@ -1232,6 +1264,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // WARNING: RootView's destructor calls into the FocusManager. As such, this
   // must be destroyed AFTER root_view_. This is enforced in DestroyRootView().
   std::unique_ptr<FocusManager> focus_manager_;
+
+  // The sublevel manager that ensures that the children are stacked in the
+  // order specified by their InitParams::sublevel.
+  std::unique_ptr<SublevelManager> sublevel_manager_;
 
   // Valid for the lifetime of RunShellDrag(), indicates the view the drag
   // started from.

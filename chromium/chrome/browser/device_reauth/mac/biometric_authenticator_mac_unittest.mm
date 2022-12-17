@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,6 +39,8 @@ class BiometricAuthenticatorMacTest : public testing::Test {
 
   MockAuthResultCallback& result_callback() { return result_callback_; }
 
+  void ResetAuthenticator() { authenticator_.reset(); }
+
  private:
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
@@ -60,29 +62,22 @@ TEST_F(BiometricAuthenticatorMacTest, NoReauthenticationIfLessThan60Seconds) {
   EXPECT_CALL(result_callback(), Run(/*success=*/true));
 
   authenticator()->AuthenticateWithMessage(
-      // TODO(crbug.com/1350393): Change requester to Mac specific.
-      BiometricAuthRequester::kAllPasswordsList, /*message=*/u"",
+      BiometricAuthRequester::kPasswordsInSettings,
+      /*message=*/u"Chrome is trying to show passwords.",
       result_callback().Get());
 
-  // Make the next touch ID prompt auth fail.
-  touch_id_enviroment()->SimulateTouchIdPromptFailure();
-  // But since the delay is smaller than kAuthValidityPeriod there shouldn't be
-  // another prompt, so the auth should be reported as successful.
+  // Since the delay is smaller than kAuthValidityPeriod there shouldn't be
+  // another prompt, so the auth should be reported as successful. If there is a
+  // call to touchIdContext test will fail as TouchIdEnviroment will crash since
+  // there is no prompt expected.
   task_environment().FastForwardBy(
       PasswordAccessAuthenticator::kAuthValidityPeriod / 2);
 
   EXPECT_CALL(result_callback(), Run(/*success=*/true));
   authenticator()->AuthenticateWithMessage(
-      // TODO(crbug.com/1350393): Change requester to Mac specific.
-      BiometricAuthRequester::kAllPasswordsList,
+      BiometricAuthRequester::kPasswordsInSettings,
       /*message=*/u"Chrome is trying to show passwords.",
       result_callback().Get());
-
-  // ScopedTouchIdTestEnvironment requires the test to use an instance of the
-  // context after calling to simulate a successful/failed auth. In this test,
-  // because of kAuthValidityPeriod no new authenticator will be created so the
-  // useless dummy one is created instead.
-  device::fido::mac::TouchIdContext::Create();
 }
 
 // If the time since the last reauthentication is greater than
@@ -92,8 +87,7 @@ TEST_F(BiometricAuthenticatorMacTest, ReauthenticationIfMoreThan60Seconds) {
   EXPECT_CALL(result_callback(), Run(/*success=*/true));
 
   authenticator()->AuthenticateWithMessage(
-      // TODO(crbug.com/1350393): Change requester to Mac specific.
-      BiometricAuthRequester::kAllPasswordsList,
+      BiometricAuthRequester::kPasswordsInSettings,
       /*message=*/u"Chrome is trying to show passwords.",
       result_callback().Get());
 
@@ -107,23 +101,21 @@ TEST_F(BiometricAuthenticatorMacTest, ReauthenticationIfMoreThan60Seconds) {
 
   EXPECT_CALL(result_callback(), Run(/*success=*/false));
   authenticator()->AuthenticateWithMessage(
-      // TODO(crbug.com/1350393): Change requester to Mac specific.
-      BiometricAuthRequester::kAllPasswordsList,
+      BiometricAuthRequester::kPasswordsInSettings,
       /*message=*/u"Chrome is trying to show passwords.",
       result_callback().Get());
 }
 
 // If prevoius authentication failed kAuthValidityPeriod isn't started and
-// rauthentication will be needed.
+// reauthentication will be needed.
 TEST_F(BiometricAuthenticatorMacTest, ReauthenticationIfPreviousFailed) {
   touch_id_enviroment()->SimulateTouchIdPromptFailure();
 
-  // First authetication failes, no last_good_auth_timestamp_ should be
+  // First authetication fails, no last_good_auth_timestamp_ should be
   // recorded, which fill force reauthentication.
   EXPECT_CALL(result_callback(), Run(/*success=*/false));
   authenticator()->AuthenticateWithMessage(
-      // TODO(crbug.com/1350393): Change requester to Mac specific.
-      BiometricAuthRequester::kAllPasswordsList,
+      BiometricAuthRequester::kPasswordsInSettings,
       /*message=*/u"Chrome is trying to show passwords.",
       result_callback().Get());
 
@@ -135,8 +127,23 @@ TEST_F(BiometricAuthenticatorMacTest, ReauthenticationIfPreviousFailed) {
 
   EXPECT_CALL(result_callback(), Run(/*success=*/false));
   authenticator()->AuthenticateWithMessage(
-      // TODO(crbug.com/1350393): Change requester to Mac specific.
-      BiometricAuthRequester::kAllPasswordsList,
+      BiometricAuthRequester::kPasswordsInSettings,
       /*message=*/u"Chrome is trying to show passwords.",
       result_callback().Get());
+}
+
+// If pending authentication can be canceled.
+TEST_F(BiometricAuthenticatorMacTest, CancelPendngAuthentication) {
+  touch_id_enviroment()->SimulateTouchIdPromptSuccess();
+  touch_id_enviroment()->DoNotResolveNextPrompt();
+
+  authenticator()->AuthenticateWithMessage(
+      BiometricAuthRequester::kPasswordsInSettings,
+      /*message=*/u"Chrome is trying to show passwords.",
+      result_callback().Get());
+
+  // Authentication should fail as it will take 10 seconds to authenticate, and
+  // there will be a cancelation in the meantime.
+  EXPECT_CALL(result_callback(), Run(/*success=*/false));
+  authenticator()->Cancel(BiometricAuthRequester::kPasswordsInSettings);
 }

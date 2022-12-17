@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/components/phonehub/camera_roll_item.h"
 #include "ash/components/phonehub/fake_phone_hub_manager.h"
 #include "ash/components/phonehub/notification.h"
@@ -20,6 +19,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/ash/phonehub/phone_hub_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"

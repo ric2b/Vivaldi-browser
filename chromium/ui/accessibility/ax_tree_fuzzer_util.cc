@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -215,8 +215,8 @@ bool AXTreeFuzzerGenerator::GenerateTreeUpdate(FuzzerData& fuzz_data,
                                                size_t node_count) {
   ui::AXTreeUpdate tree_update;
   std::set<ui::AXNodeID> updated_nodes;
-  RecursiveGenerateUpdate(tree_manager_.GetRootAsAXNode(), tree_update,
-                          fuzz_data, updated_nodes);
+  RecursiveGenerateUpdate(tree_manager_.GetRoot(), tree_update, fuzz_data,
+                          updated_nodes);
   return GetTree()->Unserialize(tree_update);
 }
 

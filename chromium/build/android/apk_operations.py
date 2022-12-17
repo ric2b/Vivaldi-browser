@@ -1,5 +1,5 @@
 #!/usr/bin/env vpython3
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -1844,15 +1844,23 @@ class _BuildBundleApks(_Command):
 
 class _ManifestCommand(_Command):
   name = 'dump-manifest'
-  description = 'Dump the android manifest from this bundle, as XML, to stdout.'
+  description = 'Dump the android manifest as XML, to stdout.'
   need_device_args = False
+  needs_apk_helper = True
 
   def Run(self):
-    sys.stdout.write(
-        bundletool.RunBundleTool([
-            'dump', 'manifest', '--bundle',
-            self.bundle_generation_info.bundle_path
-        ]))
+    if self.is_bundle:
+      sys.stdout.write(
+          bundletool.RunBundleTool([
+              'dump', 'manifest', '--bundle',
+              self.bundle_generation_info.bundle_path
+          ]))
+    else:
+      apkanalyzer = os.path.join(_DIR_SOURCE_ROOT, 'third_party', 'android_sdk',
+                                 'public', 'cmdline-tools', 'latest', 'bin',
+                                 'apkanalyzer')
+      subprocess.check_call(
+          [apkanalyzer, 'manifest', 'print', self.apk_helper.path])
 
 
 class _StackCommand(_Command):
@@ -1900,12 +1908,12 @@ _COMMANDS = [
     _ProfileCommand,
     _RunCommand,
     _StackCommand,
+    _ManifestCommand,
 ]
 
 # Commands specific to app bundles.
 _BUNDLE_COMMANDS = [
     _BuildBundleApks,
-    _ManifestCommand,
 ]
 
 

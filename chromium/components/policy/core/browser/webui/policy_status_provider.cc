@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,17 @@
 namespace em = enterprise_management;
 
 namespace policy {
+
+const char kPolicyDescriptionKey[] = "policyDescriptionKey";
+
+const char kAssetIdKey[] = "assetId";
+const char kLocationKey[] = "location";
+const char kDirectoryApiIdKey[] = "directoryApiId";
+const char kGaiaIdKey[] = "gaiaId";
+const char kClientIdKey[] = "clientId";
+const char kUsernameKey[] = "username";
+const char kEnterpriseDomainManagerKey[] = "enterpriseDomainManager";
+const char kDomainKey[] = "domain";
 
 namespace {
 
@@ -63,12 +74,14 @@ PolicyStatusProvider::PolicyStatusProvider() = default;
 
 PolicyStatusProvider::~PolicyStatusProvider() = default;
 
-void PolicyStatusProvider::SetStatusChangeCallback(
-    const base::RepeatingClosure& callback) {
-  callback_ = callback;
+void PolicyStatusProvider::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
 }
 
-// static
+void PolicyStatusProvider::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 base::Value::Dict PolicyStatusProvider::GetStatus() {
   // This method is called when the client is not enrolled.
   // Thus return an empty dictionary.
@@ -76,8 +89,8 @@ base::Value::Dict PolicyStatusProvider::GetStatus() {
 }
 
 void PolicyStatusProvider::NotifyStatusChange() {
-  if (callback_)
-    callback_.Run();
+  for (auto& observer : observers_)
+    observer.OnPolicyStatusChanged();
 }
 
 // static
@@ -137,24 +150,24 @@ base::Value::Dict PolicyStatusProvider::GetStatusFromPolicyData(
 
   base::Value::Dict dict;
   if (policy && policy->has_annotated_asset_id())
-    dict.Set("assetId", policy->annotated_asset_id());
+    dict.Set(kAssetIdKey, policy->annotated_asset_id());
   if (policy && policy->has_annotated_location())
-    dict.Set("location", policy->annotated_location());
+    dict.Set(kLocationKey, policy->annotated_location());
   if (policy && policy->has_directory_api_id())
-    dict.Set("directoryApiId", policy->directory_api_id());
+    dict.Set(kDirectoryApiIdKey, policy->directory_api_id());
   if (policy && policy->has_gaia_id())
-    dict.Set("gaiaId", policy->gaia_id());
+    dict.Set(kGaiaIdKey, policy->gaia_id());
 
-  dict.Set("clientId", client_id);
-  dict.Set("username", username);
+  dict.Set(kClientIdKey, client_id);
+  dict.Set(kUsernameKey, username);
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // Include the "Managed by:" attribute for the user policy legend.
   if (policy->state() == enterprise_management::PolicyData::ACTIVE) {
     if (policy->has_managed_by())
-      dict.Set("enterpriseDomainManager", policy->managed_by());
+      dict.Set(kEnterpriseDomainManagerKey, policy->managed_by());
     else if (policy->has_display_domain())
-      dict.Set("enterpriseDomainManager", policy->display_domain());
+      dict.Set(kEnterpriseDomainManagerKey, policy->display_domain());
   }
 #endif
   return dict;

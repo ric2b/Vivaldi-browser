@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -178,6 +178,11 @@ class MEDIA_EXPORT SourceBufferStream {
   void set_memory_limit(size_t memory_limit) {
     memory_limit_ = memory_limit;
   }
+
+  // A helper function for detecting video/audio config change, so that we
+  // can "peek" the next buffer instead of dequeuing it directly from the source
+  // stream buffer queue.
+  bool IsNextBufferConfigChanged();
 
  private:
   friend class SourceBufferStreamTest;

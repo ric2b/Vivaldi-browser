@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,9 +15,10 @@
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/suggestion_answer.h"
-#include "components/omnibox/browser/suggestion_group.h"
+#include "components/omnibox/browser/suggestion_group_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/metrics_proto/chrome_searchbox_stats.pb.h"
+#include "third_party/omnibox_proto/types.pb.h"
 #include "url/gurl.h"
 
 class AutocompleteInput;
@@ -30,6 +31,9 @@ class Value;
 namespace network {
 class SimpleURLLoader;
 }
+
+// Returns the omnibox::SuggestSubtype enum object corresponding to `value`.
+omnibox::SuggestSubtype SuggestSubtypeForNumber(int value);
 
 class SearchSuggestionParser {
  public:
@@ -140,6 +144,7 @@ class SearchSuggestionParser {
                   const std::u16string& match_contents_prefix,
                   const std::u16string& annotation,
                   const std::string& additional_query_params,
+                  const std::string& entity_id,
                   const std::string& deletion_url,
                   const std::string& image_dominant_color,
                   const std::string& image_url,
@@ -162,11 +167,13 @@ class SearchSuggestionParser {
     const std::string& additional_query_params() const {
       return additional_query_params_;
     }
+    const std::string& entity_id() const { return entity_id_; }
 
-    void set_suggestion_group_id(SuggestionGroupId suggestion_group_id) {
+    void set_suggestion_group_id(
+        absl::optional<omnibox::GroupId> suggestion_group_id) {
       suggestion_group_id_ = suggestion_group_id;
     }
-    absl::optional<SuggestionGroupId> suggestion_group_id() const {
+    absl::optional<omnibox::GroupId> suggestion_group_id() const {
       return suggestion_group_id_;
     }
 
@@ -210,13 +217,13 @@ class SearchSuggestionParser {
     // Optional additional parameters to be added to the search URL.
     std::string additional_query_params_;
 
-    // The suggestion group ID based on the SuggestionGroupIds enum in
-    // suggestion_config.proto. Used to look up the suggestion group info this
-    // suggestion belong to such as the header text this suggestion must appear
-    // under.
-    // Note: Use SuggestionGroupId::kInvalid in place of a missing suggestion
-    // group Id when this is to be converted to a primitive type.
-    absl::optional<SuggestionGroupId> suggestion_group_id_;
+    // Optional entity id for entity suggestions. Empty string means no entity
+    // ID.
+    std::string entity_id_;
+
+    // The optional suggestion group ID used to look up the suggestion group
+    // config for the group this suggestion belongs to from the server response.
+    absl::optional<omnibox::GroupId> suggestion_group_id_;
 
     // Optional short answer to the input that produced this suggestion.
     absl::optional<SuggestionAnswer> answer_;
@@ -336,8 +343,8 @@ class SearchSuggestionParser {
     // If the relevance values of the results are from the server.
     bool relevances_from_server;
 
-    // The server supplied map of suggestion group IDs to suggestion group info.
-    SuggestionGroupsMap suggestion_groups_map;
+    // The map of suggestion group IDs to suggestion group information.
+    omnibox::GroupConfigMap suggestion_groups_map;
   };
 
   // Converts JSON loaded by a SimpleURLLoader into UTF-8 and returns the

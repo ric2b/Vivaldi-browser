@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -111,7 +111,7 @@ class SupervisedUserSettingsService : public KeyedService,
   //
   // This handles updating local and remote state for this setting, and
   // notifying observers.
-  void RecordLocalWebsiteApproval(const std::string& host);
+  virtual void RecordLocalWebsiteApproval(const std::string& host);
 
   // Subscribe for a notification when the keyed service is shut down. The
   // subscription can be destroyed to unsubscribe.

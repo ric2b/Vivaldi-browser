@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,7 @@
 #include "net/base/completion_repeating_callback.h"
 #include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_request_headers.h"
@@ -337,7 +337,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
 
   // Copied from |request_|, as it's needed after the response body has been
   // read.
-  NetworkIsolationKey network_isolation_key_;
+  NetworkAnonymizationKey network_anonymization_key_;
 
   // |proxy_info_| is the ProxyInfo used by the HttpStreamRequest.
   ProxyInfo proxy_info_;

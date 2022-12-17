@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,10 +47,10 @@ class KioskAppDataBase : public KioskAppIconLoader::Delegate {
   ~KioskAppDataBase() override;
 
   // Helper to save name and icon to provided dictionary.
-  void SaveToDictionary(DictionaryPrefUpdate& dict_update);
+  void SaveToDictionary(ScopedDictPrefUpdate& dict_update);
 
   // Helper to save icon to provided dictionary.
-  void SaveIconToDictionary(DictionaryPrefUpdate& dict_update);
+  void SaveIconToDictionary(ScopedDictPrefUpdate& dict_update);
 
   // Helper to load name and icon from provided dictionary.
   // if |lazy_icon_load| is set to true, the icon will not be updated, only

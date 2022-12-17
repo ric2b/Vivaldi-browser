@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,6 +56,9 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
 
     // Internal State
     /** A {@link TitleCache} instance that stores all title/favicon bitmaps as CC resources. */
+    // This cache should not be cleared in LayoutManagerImpl#emptyCachesExcept(), since that method
+    // is currently called when returning to the static layout, which is when these titles will be
+    // visible. See https://crbug.com/1329293.
     protected LayerTitleCache mLayerTitleCache;
 
     private final Supplier<StartSurface> mStartSurfaceSupplier;
@@ -186,12 +189,6 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             }
         }
         super.showLayout(layoutType, animate);
-    }
-
-    @Override
-    protected void emptyCachesExcept(int tabId) {
-        super.emptyCachesExcept(tabId);
-        if (mLayerTitleCache != null) mLayerTitleCache.clearExcept(tabId);
     }
 
     @Override

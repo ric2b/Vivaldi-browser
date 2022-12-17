@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,8 @@ namespace autofill_assistant {
 
 class FakeStarterPlatformDelegate : public StarterPlatformDelegate {
  public:
-  FakeStarterPlatformDelegate();
+  explicit FakeStarterPlatformDelegate(
+      std::unique_ptr<FakeCommonDependencies> fake_common_dependencies);
   ~FakeStarterPlatformDelegate() override;
 
   // Implements StarterPlatformDelegate:
@@ -63,7 +64,7 @@ class FakeStarterPlatformDelegate : public StarterPlatformDelegate {
   base::WeakPtr<StarterPlatformDelegate> GetWeakPtr() override;
 
   // Intentionally public to give tests direct access.
-  FakeCommonDependencies fake_common_dependencies_;
+  std::unique_ptr<FakeCommonDependencies> fake_common_dependencies_;
   FakePlatformDependencies fake_platform_dependencies_;
   std::unique_ptr<TriggerScriptCoordinator::UiDelegate>
       trigger_script_ui_delegate_;
@@ -85,7 +86,7 @@ class FakeStarterPlatformDelegate : public StarterPlatformDelegate {
   bool is_supervised_user_ = false;
   bool is_allowed_for_machine_learning_ = true;
   bool is_custom_tab_ = true;
-  bool is_web_layer_ = true;
+  bool is_web_layer_ = false;
   bool is_tab_created_by_gsa_ = true;
   std::unique_ptr<AssistantFieldTrialUtil> field_trial_util_;
   bool is_attached_ = true;

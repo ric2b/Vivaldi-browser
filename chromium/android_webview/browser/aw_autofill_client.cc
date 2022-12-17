@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,7 @@ AwAutofillClient::GetAutocompleteHistoryManager() {
 }
 
 PrefService* AwAutofillClient::GetPrefs() {
-  return const_cast<PrefService*>(base::as_const(*this).GetPrefs());
+  return const_cast<PrefService*>(std::as_const(*this).GetPrefs());
 }
 
 const PrefService* AwAutofillClient::GetPrefs() const {
@@ -102,8 +102,12 @@ autofill::AddressNormalizer* AwAutofillClient::GetAddressNormalizer() {
   return nullptr;
 }
 
-const GURL& AwAutofillClient::GetLastCommittedURL() const {
-  return GetWebContents().GetLastCommittedURL();
+const GURL& AwAutofillClient::GetLastCommittedPrimaryMainFrameURL() const {
+  return GetWebContents().GetPrimaryMainFrame()->GetLastCommittedURL();
+}
+
+url::Origin AwAutofillClient::GetLastCommittedPrimaryMainFrameOrigin() const {
+  return GetWebContents().GetPrimaryMainFrame()->GetLastCommittedOrigin();
 }
 
 security_state::SecurityLevel
@@ -187,6 +191,35 @@ bool AwAutofillClient::HasCreditCardScanFeature() {
 
 void AwAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {
   NOTIMPLEMENTED();
+}
+
+bool AwAutofillClient::IsFastCheckoutSupported() {
+  return false;
+}
+
+bool AwAutofillClient::IsFastCheckoutTriggerForm(
+    const autofill::FormData& form,
+    const autofill::FormFieldData& field) {
+  return false;
+}
+
+bool AwAutofillClient::FastCheckoutScriptSupportsConsentlessExecution(
+    const url::Origin& origin) {
+  return false;
+}
+
+bool AwAutofillClient::FastCheckoutClientSupportsConsentlessExecution() {
+  return false;
+}
+
+bool AwAutofillClient::ShowFastCheckout(
+    base::WeakPtr<autofill::FastCheckoutDelegate> delegate) {
+  NOTREACHED();
+  return false;
+}
+
+void AwAutofillClient::HideFastCheckout() {
+  NOTREACHED();
 }
 
 bool AwAutofillClient::IsTouchToFillCreditCardSupported() {
@@ -333,9 +366,7 @@ void AwAutofillClient::SuggestionSelected(JNIEnv* env,
                                           const JavaParamRef<jobject>& object,
                                           jint position) {
   if (delegate_) {
-    delegate_->DidAcceptSuggestion(suggestions_[position].main_text.value,
-                                   suggestions_[position].frontend_id,
-                                   suggestions_[position].payload, position);
+    delegate_->DidAcceptSuggestion(suggestions_[position], position);
   }
 }
 
@@ -374,7 +405,11 @@ void AwAutofillClient::ShowAutofillPopupImpl(
     ScopedJavaLocalRef<jstring> name =
         ConvertUTF16ToJavaString(env, suggestions[i].main_text.value);
     ScopedJavaLocalRef<jstring> label =
-        ConvertUTF16ToJavaString(env, suggestions[i].label);
+        base::android::ConvertUTF8ToJavaString(env, std::string());
+    // For Android, we only show the primary/first label in the matrix.
+    if (!suggestions[i].labels.empty())
+      label = ConvertUTF16ToJavaString(env, suggestions[i].labels[0][0].value);
+
     Java_AwAutofillClient_addToAutofillSuggestionArray(
         env, data_array, i, name, label, suggestions[i].frontend_id);
   }

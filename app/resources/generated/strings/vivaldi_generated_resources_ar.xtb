@@ -5,7 +5,6 @@
 <translation id="1165039591588034296">خطأ</translation>
 <translation id="1175364870820465910">ط&amp;باعة...</translation>
 <translation id="1181037720776840403">حذف</translation>
-<translation id="119944043368869598">حذف جميع التنزيلات</translation>
 <translation id="1244303850296295656">خطأ في الإضافة</translation>
 <translation id="150411034776756821">حذف <ph name="SITE" /></translation>
 <translation id="1546280085599573572">غيّرت هذه الإضافة الصفحة التي تظهر عند النقر على زر الصفحة الرئيسية.</translation>
@@ -15,7 +14,6 @@
 <translation id="1729533290416704613">كما أنها تتحكم في الصفحة التي تظهر عند إجراء بحث من المربع متعدد الاستخدامات.</translation>
 <translation id="1744108098763830590">خلفية الصفحة</translation>
 <translation id="1828901632669367785">طباعة باستخدام مربع حوار النظام ...</translation>
-<translation id="1963227389609234879">حذف كلمات المرور كلّها</translation>
 <translation id="2050339315714019657">صورة</translation>
 <translation id="2087822576218954668">الطباعة: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">علامة تبويب التصفح المتخفي: <ph name="TAB_NAME" /></translation>
@@ -48,7 +46,6 @@
 <translation id="3305661444342691068">فتح ملف PDF في المعاينة</translation>
 <translation id="3341703758641437857">السماح بالوصول إلى عناوين URL للملفات</translation>
 <translation id="3378572629723696641">قد تكون هذه الإضافة تالفة.</translation>
-<translation id="3432227430032737297">حذف كل العناصر المعروضة</translation>
 <translation id="3505030558724226696">إبطال الوصول إلى الجهاز</translation>
 <translation id="3678156199662914018">الإضافة: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">إصلاح التطبيق</translation>
@@ -98,12 +95,10 @@
 <translation id="5627086634964711283">كما أنها تتحكم في الصفحة التي تظهر عند  النقر على زر الصفحة الرئيسية.</translation>
 <translation id="5707185214361380026">فشل تحميل الإضافة من:</translation>
 <translation id="5715711091495208045">وسيط المكوّن الإضافي: <ph name="PLUGIN_NAME" /></translation>
-<translation id="577624874850706961">البحث في ملفات تعريف ارتباط</translation>
 <translation id="583281660410589416">غير معروف</translation>
 <translation id="5956585768868398362">هل هذه هي صفحة البحث التي كنت تتوقع ظهورها؟</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> في الذروة)</translation>
 <translation id="5965661248935608907">كما أنها تتحكم في الصفحة التي تظهر عند النقر على زر الصفحة الرئيسية أو إجراء بحث من المربع متعدد الاستخدامات.</translation>
-<translation id="6011449291337289699">حذف بيانات الموقع</translation>
 <translation id="6101226222197207147">تمت إضافة تطبيق جديد (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">يتم التحكم في اتصال الإنترنت التابع لك</translation>
 <translation id="6196854373336333322">أصبح بإمكان الإضافة "<ph name="EXTENSION_NAME" />" التحكم في إعدادات الخادم الوكيل التابعة لك، مما يعني أن بإمكانها تغيير أي إجراء لك عبر الإنترنت أو قطعه أو التجسس عليه. إذا كنت غير متيقن من سبب حدوث هذا التغيير، فأنت لا ترغب فيه على الأرجح.</translation>

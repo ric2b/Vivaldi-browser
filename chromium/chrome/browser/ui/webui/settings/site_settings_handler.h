@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
@@ -27,6 +28,7 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+class BrowsingDataModel;
 class PrefChangeRegistrar;
 
 namespace settings {
@@ -54,6 +56,8 @@ class SiteSettingsHandler
 
   // Usage info.
   void OnGetUsageInfo();
+
+  void BrowsingDataModelCreated(std::unique_ptr<BrowsingDataModel> model);
 
   // CookiesTreeModel::Observer:
   // TODO(https://crbug.com/835712): Listen for backend data changes and notify
@@ -138,11 +142,34 @@ class SiteSettingsHandler
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
                            IncludeWebUISchemesInGetOriginPermissions);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, HandleGetUsageInfo);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
+                           HandleGetFpsMembershipLabel);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, NonTreeModelDeletion);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, FirstPartySetsMembership);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
+                           HandleIgnoreOriginsForNotificationPermissionReview);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
+                           HandleBlockNotificationPermissionForOrigins);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
+                           HandleAllowNotificationPermissionForOrigins);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
+                           HandleResetNotificationPermissionForOrigins);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
+                           PopulateNotificationPermissionReviewData);
+  FRIEND_TEST_ALL_PREFIXES(
+      SiteSettingsHandlerTest,
+      HandleUndoIgnoreOriginsForNotificationPermissionReview);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
+                           SendNotificationPermissionReviewList_FeatureEnabled);
+  FRIEND_TEST_ALL_PREFIXES(
+      SiteSettingsHandlerTest,
+      SendNotificationPermissionReviewList_FeatureDisabled);
 
-  // Creates the CookiesTreeModel if necessary.
-  void EnsureCookiesTreeModelCreated();
+  // Rebuilds the BrowsingDataModel & CookiesTreeModel. Pending requests are
+  // serviced when both models are built.
+  void RebuildModels();
+  void ModelBuilt();
+  void ServicePendingRequests();
 
   // Add or remove this class as an observer for content settings and chooser
   // contexts corresponding to |profile|.
@@ -167,6 +194,9 @@ class SiteSettingsHandler
   // Asynchronously fetches the usage for a given origin. Replies back with
   // OnGetUsageInfo above.
   void HandleFetchUsageTotal(const base::Value::List& args);
+
+  // Asynchronously fetches the fps membership information label.
+  void HandleGetFpsMembershipLabel(const base::Value::List& args);
 
   // Deletes the storage being used for a given host.
   void HandleClearUnpartitionedUsage(const base::Value::List& args);
@@ -218,6 +248,9 @@ class SiteSettingsHandler
   // Returns the list of chooser exceptions for a given chooser type.
   void HandleGetChooserExceptionList(const base::Value::List& args);
 
+  // Returns the list of notification permissions that needs to be reviewed.
+  void HandleGetNotificationPermissionReviewList(const base::Value::List& args);
+
   // Gets and sets a list of ContentSettingTypes for an origin.
   // TODO(https://crbug.com/739241): Investigate replacing the
   // '*CategoryPermissionForPattern' equivalents below with these methods.
@@ -233,6 +266,28 @@ class SiteSettingsHandler
   // simply (origin) and update all call sites.
   // Handles resetting a chooser exception for the given site.
   void HandleResetChooserExceptionForSite(const base::Value::List& args);
+
+  // Handles ignoring origins for the review notification permissions feature.
+  void HandleIgnoreOriginsForNotificationPermissionReview(
+      const base::Value::List& args);
+
+  // Handles resetting a notification permission for given origins.
+  void HandleResetNotificationPermissionForOrigins(
+      const base::Value::List& args);
+
+  // Handles blocking notification permissions for multiple origins.
+  void HandleBlockNotificationPermissionForOrigins(
+      const base::Value::List& args);
+
+  // Handles allowing notification permissions for multiple origins.
+  void HandleAllowNotificationPermissionForOrigins(
+      const base::Value::List& args);
+
+  // Handles reverting the action of ignoring origins for review notification
+  // permissions feature by removing them from the notification permission
+  // verification blocklist.
+  void HandleUndoIgnoreOriginsForNotificationPermissionReview(
+      const base::Value::List& args);
 
   // Returns whether a given string is a valid origin.
   void HandleIsOriginValid(const base::Value::List& args);
@@ -270,20 +325,32 @@ class SiteSettingsHandler
   // Record metrics for actions on All Sites Page.
   void HandleRecordAction(const base::Value::List& args);
 
+  // Gets a plural string for the given number of cookies.
+  void HandleGetNumCookiesString(const base::Value::List& args);
+
   // Provides an opportunity for site data which is not integrated into the
   // tree model to be removed when entries for |origins| are removed.
   // TODO(crbug.com/1271155): This function is a temporary hack while the
   // CookiesTreeModel is deprecated.
   void RemoveNonTreeModelData(const std::vector<url::Origin>& origins);
 
-  void SetCookiesTreeModelForTesting(
-      std::unique_ptr<CookiesTreeModel> cookies_tree_model);
+  void SetModelsForTesting(
+      std::unique_ptr<CookiesTreeModel> cookies_tree_model,
+      std::unique_ptr<BrowsingDataModel> browsing_data_model);
 
   void ClearAllSitesMapForTesting();
 
   // Notifies the JS side the effective cookies setting has changed and
   // provides the updated description label for display.
   void SendCookieSettingDescription();
+
+  // Returns a list of domains to be shown on the 'Review Notification
+  // Permissions' module in site settings notification page. Those domains send
+  // a lot of notifications, but have low site engagement.
+  base::Value::List PopulateNotificationPermissionReviewData();
+
+  // Sends the list of notification permissions to review to the WebUI.
+  void SendNotificationPermissionReviewList();
 
   const raw_ptr<Profile> profile_;
 
@@ -313,13 +380,17 @@ class SiteSettingsHandler
   // Change observer for prefs.
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 
+  // Models which power the UI.
   std::unique_ptr<CookiesTreeModel> cookies_tree_model_;
+  std::unique_ptr<BrowsingDataModel> browsing_data_model_;
 
-  // Whether the tree model was set for testing. Allows the handler to avoid
-  // resetting the tree model.
-  bool tree_model_set_for_testing_ = false;
+  int num_models_being_built_ = 0;
 
-  // Whether to send all sites list on cookie tree model update.
+  // Whether the models was set for testing. Allows the handler to avoid
+  // resetting the models.
+  bool models_set_for_testing_ = false;
+
+  // Whether to send all sites list on model update.
   bool send_sites_list_ = false;
 
   // Populated every time the user reloads the All Sites page.
@@ -328,8 +399,14 @@ class SiteSettingsHandler
   // Store the origins that has permission settings.
   std::set<std::string> origin_permission_set_;
 
-  // Whether to send site detail data on cookie tree model update.
+  // Whether to send site detail data on model update.
   bool update_site_details_ = false;
+
+  // Time when all sites list was requested. Used to record metrics on how long
+  // does it take to fetch storage.
+  base::TimeTicks request_started_time_;
+
+  base::WeakPtrFactory<SiteSettingsHandler> weak_ptr_factory_{this};
 };
 
 }  // namespace settings

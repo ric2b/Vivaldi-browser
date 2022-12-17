@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,9 +8,9 @@
 #include "base/task/thread_pool.h"
 #include "base/trace_event/trace_arguments.h"
 #include "base/trace_event/trace_event.h"
+#include "gpu/command_buffer/service/dawn_caching_interface.h"
 
-namespace gpu {
-namespace webgpu {
+namespace gpu::webgpu {
 
 namespace {
 
@@ -78,7 +78,9 @@ class AsyncWorkerTaskPool : public dawn::platform::WorkerTaskPool {
 
 }  // anonymous namespace
 
-DawnPlatform::DawnPlatform() = default;
+DawnPlatform::DawnPlatform(
+    std::unique_ptr<DawnCachingInterface> dawn_caching_interface)
+    : dawn_caching_interface_(std::move(dawn_caching_interface)) {}
 
 DawnPlatform::~DawnPlatform() = default;
 
@@ -125,10 +127,13 @@ uint64_t DawnPlatform::AddTraceEvent(
   return result;
 }
 
+dawn::platform::CachingInterface* DawnPlatform::GetCachingInterface() {
+  return dawn_caching_interface_.get();
+}
+
 std::unique_ptr<dawn::platform::WorkerTaskPool>
 DawnPlatform::CreateWorkerTaskPool() {
   return std::make_unique<AsyncWorkerTaskPool>();
 }
 
-}  // namespace webgpu
-}  // namespace gpu
+}  // namespace gpu::webgpu

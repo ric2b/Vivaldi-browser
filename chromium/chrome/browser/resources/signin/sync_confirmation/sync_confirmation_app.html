@@ -59,11 +59,13 @@
   .heading {
     font-weight: normal;
     margin-bottom: 32px;
+    margin-top: 0;
     padding: 0 24px;
     text-align: center;
   }
 
   .signin-intercept-design .heading {
+    font-size: 20px;
     line-height: 24px;
     margin-bottom: 24px;
   }
@@ -86,7 +88,7 @@
     font-style: normal;
     font-weight: 400;
     line-height: 24px;
-    padding: 0 57px;
+    padding: 0 55px;
     text-align: center;
   }
 
@@ -218,6 +220,7 @@
     background: center 36px no-repeat
         url(./images/sync_confirmation_signin_intercept_illustration.svg);
     height: 170px;
+    margin-bottom: 14px;
   }
 
   .signin-intercept-design #avatarContainer {
@@ -245,9 +248,14 @@
 
   .signin-intercept-design .work-badge > iron-icon {
     --work-icon-size: 16px;
+    background-color: var(--signin-work-badge-background-color);
     margin: auto;
   }
 
+  .signin-intercept-design .action-container {
+    --action-container-padding: 24px;
+    column-gap: 12px;
+  }
 
   @media (prefers-color-scheme: dark) {
     /* Modal dialog design */
@@ -309,9 +317,11 @@
     </h1>
     <div class="message-container">
       <div consent-description>$i18n{syncConfirmationSyncInfoTitle}</div>
-      <div class="secondary" consent-description>
-        $i18n{syncConfirmationSyncInfoDesc}
-      </div>
+      <template is="dom-if" if="[[!isSigninInterceptFre_]]">
+        <div class="secondary" consent-description>
+          $i18n{syncConfirmationSyncInfoDesc}
+        </div>
+      </template>
     </div>
     <template is="dom-if" if="[[!isSigninInterceptFre_]]">
       <div id="modal-footer" class="message-container secondary">

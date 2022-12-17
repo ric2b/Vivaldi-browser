@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,7 +148,12 @@ class CONTENT_EXPORT VRServiceImpl : public device::mojom::VRService,
   void GetPermissionStatus(SessionRequestData request,
                            BrowserXRRuntimeImpl* runtime);
 
-  void OnPermissionResults(
+  void OnPermissionResultsForMode(
+      SessionRequestData request,
+      const std::vector<blink::PermissionType>& permissions,
+      const std::vector<blink::mojom::PermissionStatus>& permission_statuses);
+
+  void OnPermissionResultsForFeatures(
       SessionRequestData request,
       const std::vector<blink::PermissionType>& permissions,
       const std::vector<blink::mojom::PermissionStatus>& permission_statuses);

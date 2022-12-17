@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
+#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -236,34 +237,25 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // If the path is valid and the value at the end of the path matches the type
   // specified, it will return the specified value.  Otherwise, the default
   // value (set when the pref was registered) will be returned.
-  bool GetBoolean(const std::string& path) const;
-  int GetInteger(const std::string& path) const;
-  double GetDouble(const std::string& path) const;
-  std::string GetString(const std::string& path) const;
-  base::FilePath GetFilePath(const std::string& path) const;
-
-  // DEPRECATED: Prefer GetValue(), GetValueDict(), and GetValueList().
-  // Returns the branch if it exists, or the registered default value otherwise.
-  // Note that |path| must point to a registered preference. In that case, these
-  // functions will never return NULL.
-  // TODO(https://crbug.com/1334665): Remove these methods.
-  const base::Value* Get(const std::string& path) const;
-  const base::Value* GetDictionary(const std::string& path) const;
-  const base::Value* GetList(const std::string& path) const;
+  bool GetBoolean(base::StringPiece path) const;
+  int GetInteger(base::StringPiece path) const;
+  double GetDouble(base::StringPiece path) const;
+  const std::string& GetString(base::StringPiece path) const;
+  base::FilePath GetFilePath(base::StringPiece path) const;
 
   // Returns the branch if it exists, or the registered default value otherwise.
   // `path` must point to a registered preference (DCHECK).
-  const base::Value& GetValue(const std::string& path) const;
+  const base::Value& GetValue(base::StringPiece path) const;
 
   // Returns the branch if it exists, or the registered default value otherwise.
   // `path` must point to a registered preference whose value and registered
   // default are of type `base::Value::Type::DICT (DCHECK).
-  const base::Value::Dict& GetValueDict(const std::string& path) const;
+  const base::Value::Dict& GetDict(base::StringPiece path) const;
 
   // Returns the branch if it exists, or the registered default value otherwise.
   // `path` must point to a registered preference whose value and registered
   // default are of type `base::Value::Type::LIST (DCHECK).
-  const base::Value::List& GetValueList(const std::string& path) const;
+  const base::Value::List& GetList(base::StringPiece path) const;
 
   // Removes a user pref and restores the pref to its default value.
   void ClearPref(const std::string& path);
@@ -276,7 +268,7 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   //
   // To set the value of dictionary or list values in the pref tree, use
   // SetDict()/SetList(), but to modify the value of a dictionary or list use
-  // either DictionaryPrefUpdate or ListPrefUpdate from
+  // either ScopedDictPrefUpdate or ScopedListPrefUpdate from
   // scoped_user_pref_update.h.
   void Set(const std::string& path, const base::Value& value);
   void SetBoolean(const std::string& path, bool value);
@@ -382,21 +374,6 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // Invoked when the store is deleted from disk. Allows this PrefService
   // to tangentially cleanup data it may have saved outside the store.
   void OnStoreDeletionFromDisk();
-
-  // Add new pref stores to the existing PrefValueStore. Only adding new
-  // stores are allowed. If a corresponding store already exists, calling this
-  // will cause DCHECK failures. If the newly added stores already contain
-  // values, PrefNotifier associated with this object will be notified with
-  // these values. |delegate| can be passed to observe events of the new
-  // PrefValueStore.
-  // TODO(qinmin): packaging all the input params in a struct, and do the same
-  // for the constructor.
-  void ChangePrefValueStore(
-      PrefStore* managed_prefs,
-      PrefStore* supervised_user_prefs,
-      PrefStore* extension_prefs,
-      PrefStore* recommended_prefs,
-      std::unique_ptr<PrefValueStore::Delegate> delegate = nullptr);
 
   // A low level function for registering an observer for every single
   // preference changed notification. The caller must ensure that the observer
@@ -529,8 +506,8 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // not need to find or create a Preference object to get the
   // value (GetValue() calls back though the preference service to
   // actually get the value.).
-  const base::Value* GetPreferenceValue(const std::string& path) const;
-  const base::Value* GetPreferenceValueChecked(const std::string& path) const;
+  const base::Value* GetPreferenceValue(base::StringPiece path) const;
+  const base::Value* GetPreferenceValueChecked(base::StringPiece path) const;
 
   const scoped_refptr<PrefRegistry> pref_registry_;
 

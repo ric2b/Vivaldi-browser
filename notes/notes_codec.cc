@@ -43,6 +43,7 @@ const char NotesCodec::kSyncMetadata[] = "sync_metadata";
 const char NotesCodec::kTypeNote[] = "note";
 const char NotesCodec::kTypeFolder[] = "folder";
 const char NotesCodec::kTypeSeparator[] = "separator";
+const char NotesCodec::kTypeAttachment[] = "attachment";
 const char NotesCodec::kTypeOther[] = "other";
 const char NotesCodec::kTypeTrash[] = "trash";
 
@@ -132,26 +133,30 @@ base::Value NotesCodec::EncodeNode(
   value.SetStringKey(kGuidKey, guid);
 
   std::string type;
-  bool is_folder = false;
+  bool can_have_children = false;
   switch (node->type()) {
     case NoteNode::FOLDER:
     case NoteNode::MAIN:
       type = kTypeFolder;
-      is_folder = true;
+      can_have_children = true;
       break;
     case NoteNode::NOTE:
+      can_have_children = true;
       type = kTypeNote;
       break;
     case NoteNode::TRASH:
       type = kTypeTrash;
-      is_folder = true;
+      can_have_children = true;
       break;
     case NoteNode::OTHER:
       type = kTypeOther;
-      is_folder = true;
+      can_have_children = true;
       break;
     case NoteNode::SEPARATOR:
       type = kTypeSeparator;
+      break;
+    case NoteNode::ATTACHMENT:
+      type = kTypeAttachment;
       break;
     default:
       NOTREACHED();
@@ -164,7 +169,16 @@ base::Value NotesCodec::EncodeNode(
       kDateAddedKey,
       base::NumberToString(node->GetCreationTime().ToInternalValue()));
 
-  if (is_folder) {
+  if (node->type() == NoteNode::NOTE || node->type() == NoteNode::ATTACHMENT) {
+    value.SetStringKey(kContentKey, node->GetContent());
+    UpdateChecksum(node->GetContent());
+
+    std::string url = node->GetURL().possibly_invalid_spec();
+    value.SetStringKey(kURLKey, url);
+    UpdateChecksum(url);
+  }
+
+  if (can_have_children) {
     base::Value child_list(base::Value::Type::LIST);
 
     for (const auto& child : node->children()) {
@@ -176,23 +190,6 @@ base::Value NotesCodec::EncodeNode(
       }
     }
     value.SetKey(kChildrenKey, std::move(child_list));
-  } else if (node->type() == NoteNode::NOTE) {
-    value.SetStringKey(kContentKey, node->GetContent());
-    UpdateChecksum(node->GetContent());
-
-    std::string url = node->GetURL().possibly_invalid_spec();
-    value.SetStringKey(kURLKey, url);
-    UpdateChecksum(url);
-
-    if (node->GetAttachments().size()) {
-      base::Value attachments(base::Value::Type::LIST);
-
-      for (const auto& attachment : node->GetAttachments()) {
-        attachments.Append(attachment.second.Encode(this));
-      }
-
-      value.SetKey(kAttachmentsKey, std::move(attachments));
-    }
   }
 
   return value;
@@ -323,6 +320,8 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     type = NoteNode::NOTE;
   else if (*type_string == kTypeSeparator)
     type = NoteNode::SEPARATOR;
+  else if (*type_string == kTypeAttachment)
+    type = NoteNode::ATTACHMENT;
   else if (*type_string == kTypeFolder)
     type = NoteNode::FOLDER;
   else if (!node || (*type_string != kTypeOther && *type_string != kTypeTrash))
@@ -330,7 +329,9 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     return false;
   UpdateChecksum(*type_string);
 
-  if (*type_string == kTypeNote) {
+  const base::Value* child_list = value.FindListKey(kChildrenKey);
+
+  if (*type_string == kTypeNote || *type_string == kTypeAttachment) {
     const std::string* content_string = value.FindStringKey(kContentKey);
     if (!content_string)
       return false;
@@ -350,23 +351,22 @@ bool NotesCodec::DecodeNode(const base::Value& value,
       node->SetURL(GURL(*url_string));
     UpdateChecksum(node->GetURL().possibly_invalid_spec());
 
-    const base::Value* attachments = value.FindListKey(kAttachmentsKey);
-    if (attachments) {
-      for (const auto& attachment : attachments->GetList()) {
-        if (!attachment.is_dict())
-          continue;
-        std::unique_ptr<NoteAttachment> item(
-            NoteAttachment::Decode(attachment, this));
-        if (item)
-          node->AddAttachment(std::move(*item));
+    if (*type_string == kTypeNote) {
+      const base::Value* attachments = value.FindListKey(kAttachmentsKey);
+      if (attachments) {
+        for (const auto& attachment : attachments->GetList()) {
+          if (!attachment.is_dict())
+            continue;
+          std::unique_ptr<DeprecatedNoteAttachment> item(
+              DeprecatedNoteAttachment::Decode(attachment, this));
+          if (item) {
+            node->AddAttachmentDeprecated(std::move(*item));
+            has_deprecated_attachments_ = true;
+          }
+        }
       }
     }
-
-    if (parent)
-      parent->Add(base::WrapUnique(node));
   } else if (*type_string != kTypeSeparator) {
-    const base::Value* child_list = value.FindListKey(kChildrenKey);
-
     if (!child_list)
       return false;
 
@@ -376,10 +376,20 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     } else {
       node->set_id(id);
     }
+  } else {
+    DCHECK(*type_string == kTypeSeparator);
 
-    if (parent)
-      parent->Add(base::WrapUnique(node));
+    if (!node) {
+      DCHECK(guid.is_valid());
 
+      node = new NoteNode(id, guid, type);
+    } else {
+      return false;
+    }
+  }
+
+  if (*type_string != kTypeSeparator && *type_string != kTypeAttachment &&
+      child_list) {
     for (const auto& child_value : child_list->GetList()) {
       if (!child_value.is_dict())
         return false;
@@ -404,21 +414,10 @@ bool NotesCodec::DecodeNode(const base::Value& value,
 
       DecodeNode(child_value, node, nullptr, nullptr, nullptr);
     }
-  } else {
-    DCHECK(*type_string == kTypeSeparator);
-
-    if (!node) {
-      DCHECK(guid.is_valid());
-
-      node = new NoteNode(id, guid, type);
-    } else {
-      node->set_id(id);
-    }
-
-    if (parent)
-      parent->Add(base::WrapUnique(node));
   }
 
+  if (parent)
+    parent->Add(base::WrapUnique(node));
   node->SetTitle(title);
   node->SetCreationTime(creation_time);
 

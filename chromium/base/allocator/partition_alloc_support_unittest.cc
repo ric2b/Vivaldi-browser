@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "base/allocator/partition_allocator/dangling_raw_ptr_checks.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/feature_list.h"
+#include "base/test/gtest_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -28,8 +29,8 @@ using testing::HasSubstr;
 TEST(PartitionAllocSupportTest, ProposeSyntheticFinchTrials_BRPAndPCScan) {
   for (bool pcscan_enabled : {false, true}) {
     test::ScopedFeatureList pcscan_scope;
-    std::vector<Feature> empty_list = {};
-    std::vector<Feature> pcscan_list = {
+    std::vector<test::FeatureRef> empty_list = {};
+    std::vector<test::FeatureRef> pcscan_list = {
         features::kPartitionAllocPCScanBrowserOnly};
     pcscan_scope.InitWithFeatures(pcscan_enabled ? pcscan_list : empty_list,
                                   pcscan_enabled ? empty_list : pcscan_list);
@@ -73,11 +74,21 @@ TEST(PartitionAllocSupportTest, ProposeSyntheticFinchTrials_BRPAndPCScan) {
       brp_expectation = "Unavailable";
 #if BUILDFLAG(USE_BACKUP_REF_PTR)
       brp_expectation = pcscan_enabled ? "Ignore_PCScanIsOn"
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || \
+    (BUILDFLAG(USE_ASAN_BACKUP_REF_PTR) && BUILDFLAG(IS_LINUX))
+#if BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+                                       : "EnabledPrevSlot_NonRenderer";
+#else
+                                       : "EnabledBeforeAlloc_NonRenderer";
+#endif  // BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+#else
 #if BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
                                        : "EnabledPrevSlot_BrowserOnly";
 #else
                                        : "EnabledBeforeAlloc_BrowserOnly";
 #endif  // BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) ||
+        // (BUILDFLAG(USE_ASAN_BACKUP_REF_PTR) && BUILDFLAG(IS_LINUX))
 #endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
       pcscan_expectation = "Unavailable";
 #if defined(PA_ALLOW_PCSCAN)
@@ -214,16 +225,16 @@ TEST(PartitionAllocDanglingPtrChecks, FreeNotRecorded) {
             HasSubstr("The dangling raw_ptr was released at:")));
 }
 
+// DCHECK message are stripped in official build. It causes death tests with
+// matchers to fail.
+#if !defined(OFFICIAL_BUILD) || !defined(NDEBUG)
 TEST(PartitionAllocDanglingPtrChecks, DoubleDetection) {
   ScopedInstallDanglingRawPtrChecks scoped_install_dangling_checks;
   partition_alloc::GetDanglingRawPtrDetectedFn()(42);
-#if DCHECK_IS_ON()
-  EXPECT_DEATH(partition_alloc::GetDanglingRawPtrDetectedFn()(42),
-               AllOf(HasSubstr("Check failed: !entry || entry->id != id")));
-#else
-  partition_alloc::GetDanglingRawPtrDetectedFn()(42);
-#endif
+  EXPECT_DCHECK_DEATH_WITH(partition_alloc::GetDanglingRawPtrDetectedFn()(42),
+                           "Check failed: !entry \\|\\| entry->id != id");
 }
+#endif  // !defined(OFFICIAL_BUILD) || !defined(NDEBUG)
 
 #endif
 

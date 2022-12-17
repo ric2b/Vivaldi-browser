@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -115,7 +115,8 @@ RootWindowController::RootWindowController(
       std::make_unique<ScreenPositionClient>(host_->window());
 
   // Ensure the window fills the display.
-  host_->window()->SetLayoutManager(new FillLayout(host_->window()));
+  host_->window()->SetLayoutManager(
+      std::make_unique<FillLayout>(host_->window()));
 
   host_->AddObserver(this);
   host_->Show();

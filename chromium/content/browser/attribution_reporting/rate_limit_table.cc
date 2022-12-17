@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@
 #include "content/browser/attribution_reporting/rate_limit_result.h"
 #include "content/browser/attribution_reporting/sql_utils.h"
 #include "content/browser/attribution_reporting/storable_source.h"
-#include "content/public/browser/attribution_reporting.h"
+#include "content/public/browser/attribution_config.h"
 #include "net/base/schemeful_site.h"
 #include "sql/database.h"
 #include "sql/statement.h"
@@ -28,7 +28,6 @@ namespace content {
 RateLimitTable::RateLimitTable(const AttributionStorageDelegate* delegate)
     : delegate_(delegate) {
   DCHECK(delegate_);
-  DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
 RateLimitTable::~RateLimitTable() {
@@ -53,8 +52,8 @@ bool RateLimitTable::CreateTable(sql::Database* db) {
   // `RateLimitTable::Scope::kSource` and contains the source's expiry time,
   // otherwise it is set to `base::Time()`.
   static constexpr char kRateLimitTableSql[] =
-      "CREATE TABLE IF NOT EXISTS rate_limits"
-      "(id INTEGER PRIMARY KEY NOT NULL,"
+      "CREATE TABLE rate_limits("
+      "id INTEGER PRIMARY KEY NOT NULL,"
       "scope INTEGER NOT NULL,"
       "source_id INTEGER NOT NULL,"
       "source_site TEXT NOT NULL,"
@@ -72,7 +71,7 @@ bool RateLimitTable::CreateTable(sql::Database* db) {
 
   // Optimizes calls to `SourceAllowedForDestinationLimit()`.
   static constexpr char kRateLimitSourceSiteReportingOriginIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS rate_limit_source_site_reporting_origin_idx "
+      "CREATE INDEX rate_limit_source_site_reporting_origin_idx "
       "ON rate_limits(scope,source_site,reporting_origin)";
   if (!db->Execute(kRateLimitSourceSiteReportingOriginIndexSql))
     return false;
@@ -80,7 +79,7 @@ bool RateLimitTable::CreateTable(sql::Database* db) {
   // Optimizes calls to `AllowedForReportingOriginLimit()` and
   // `AttributionAllowedForAttributionLimit()`.
   static constexpr char kRateLimitReportingOriginIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS rate_limit_reporting_origin_idx "
+      "CREATE INDEX rate_limit_reporting_origin_idx "
       "ON rate_limits(scope,destination_site,source_site)";
   if (!db->Execute(kRateLimitReportingOriginIndexSql))
     return false;
@@ -88,13 +87,13 @@ bool RateLimitTable::CreateTable(sql::Database* db) {
   // Optimizes calls to |DeleteExpiredRateLimits()|, |ClearAllDataInRange()|,
   // |ClearDataForOriginsInRange()|.
   static constexpr char kRateLimitTimeIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS rate_limit_time_idx ON rate_limits(time)";
+      "CREATE INDEX rate_limit_time_idx ON rate_limits(time)";
   if (!db->Execute(kRateLimitTimeIndexSql))
     return false;
 
   // Optimizes calls to |ClearDataForSourceIds()|.
   static constexpr char kRateLimitImpressionIdIndexSql[] =
-      "CREATE INDEX IF NOT EXISTS rate_limit_source_id_idx "
+      "CREATE INDEX rate_limit_source_id_idx "
       "ON rate_limits(source_id)";
   return db->Execute(kRateLimitImpressionIdIndexSql);
 }
@@ -103,7 +102,7 @@ bool RateLimitTable::AddRateLimitForSource(sql::Database* db,
                                            const StoredSource& source) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return AddRateLimit(db, Scope::kSource, source,
-                      source.common_info().impression_time());
+                      source.common_info().source_time());
 }
 
 bool RateLimitTable::AddRateLimitForAttribution(
@@ -151,10 +150,10 @@ bool RateLimitTable::AddRateLimit(sql::Database* db,
       db->GetCachedStatement(SQL_FROM_HERE, kStoreRateLimitSql));
   statement.BindInt(0, static_cast<int>(scope));
   statement.BindInt64(1, *source.source_id());
-  statement.BindString(2, common_info.ImpressionSite().Serialize());
-  statement.BindString(3, SerializeOrigin(common_info.impression_origin()));
-  statement.BindString(4, common_info.ConversionDestination().Serialize());
-  statement.BindString(5, SerializeOrigin(common_info.conversion_origin()));
+  statement.BindString(2, common_info.SourceSite().Serialize());
+  statement.BindString(3, SerializeOrigin(common_info.source_origin()));
+  statement.BindString(4, common_info.DestinationSite().Serialize());
+  statement.BindString(5, SerializeOrigin(common_info.destination_origin()));
   statement.BindString(6, SerializeOrigin(common_info.reporting_origin()));
   statement.BindTime(7, time);
   statement.BindTime(8, expiry_time);
@@ -169,7 +168,8 @@ RateLimitResult RateLimitTable::AttributionAllowedForAttributionLimit(
 
   const CommonSourceInfo& common_info = attribution_info.source.common_info();
 
-  const AttributionRateLimitConfig rate_limits = delegate_->GetRateLimits();
+  const AttributionConfig::RateLimitConfig rate_limits =
+      delegate_->GetRateLimits();
   DCHECK_GT(rate_limits.time_window, base::TimeDelta());
   DCHECK_GT(rate_limits.max_attributions, 0);
 
@@ -188,8 +188,8 @@ RateLimitResult RateLimitTable::AttributionAllowedForAttributionLimit(
       "AND time>?";
   sql::Statement statement(
       db->GetCachedStatement(SQL_FROM_HERE, kAttributionAllowedSql));
-  statement.BindString(0, common_info.ConversionDestination().Serialize());
-  statement.BindString(1, common_info.ImpressionSite().Serialize());
+  statement.BindString(0, common_info.DestinationSite().Serialize());
+  statement.BindString(1, common_info.SourceSite().Serialize());
   statement.BindString(2, SerializeOrigin(common_info.reporting_origin()));
   statement.BindTime(3, min_timestamp);
 
@@ -208,7 +208,7 @@ RateLimitResult RateLimitTable::SourceAllowedForReportingOriginLimit(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return AllowedForReportingOriginLimit(db, Scope::kSource,
                                         source.common_info(),
-                                        source.common_info().impression_time());
+                                        source.common_info().source_time());
 }
 
 RateLimitResult RateLimitTable::SourceAllowedForDestinationLimit(
@@ -232,12 +232,12 @@ RateLimitResult RateLimitTable::SourceAllowedForDestinationLimit(
       db->GetCachedStatement(SQL_FROM_HERE, kSourceAllowedSql));
 
   const CommonSourceInfo& common_info = source.common_info();
-  statement.BindString(0, common_info.ImpressionSite().Serialize());
+  statement.BindString(0, common_info.SourceSite().Serialize());
   statement.BindString(1, SerializeOrigin(common_info.reporting_origin()));
-  statement.BindTime(2, common_info.impression_time());
+  statement.BindTime(2, common_info.source_time());
 
   const std::string serialized_destination_site =
-      common_info.ConversionDestination().Serialize();
+      common_info.DestinationSite().Serialize();
 
   const int limit = delegate_->GetMaxDestinationsPerSourceSiteReportingOrigin();
   DCHECK_GT(limit, 0);
@@ -278,7 +278,8 @@ RateLimitResult RateLimitTable::AllowedForReportingOriginLimit(
     Scope scope,
     const CommonSourceInfo& common_info,
     base::Time time) {
-  const AttributionRateLimitConfig rate_limits = delegate_->GetRateLimits();
+  const AttributionConfig::RateLimitConfig rate_limits =
+      delegate_->GetRateLimits();
   DCHECK_GT(rate_limits.time_window, base::TimeDelta());
 
   int64_t max;
@@ -306,8 +307,8 @@ RateLimitResult RateLimitTable::AllowedForReportingOriginLimit(
       "AND time>?";
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSelectSql));
   statement.BindInt(0, static_cast<int>(scope));
-  statement.BindString(1, common_info.ImpressionSite().Serialize());
-  statement.BindString(2, common_info.ConversionDestination().Serialize());
+  statement.BindString(1, common_info.SourceSite().Serialize());
+  statement.BindString(2, common_info.DestinationSite().Serialize());
   statement.BindTime(3, min_timestamp);
 
   base::flat_set<std::string> reporting_origins;

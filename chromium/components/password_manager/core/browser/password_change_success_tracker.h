@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -144,7 +144,8 @@ class PasswordChangeSuccessTracker : public KeyedService {
   // it emits a report about a successful password change.
   virtual void OnChangePasswordFlowCompleted(const GURL& url,
                                              const std::string& username,
-                                             EndEvent event_type) = 0;
+                                             EndEvent event_type,
+                                             bool phished) = 0;
 };
 }  // namespace password_manager
 

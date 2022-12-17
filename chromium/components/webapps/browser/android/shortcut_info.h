@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -135,9 +135,6 @@ struct ShortcutInfo {
   // Returns a set of icons including |best_primary_icon_url|,
   // |splash_image_url| and |best_shortcut_icon_urls| if they are not empty
   std::set<GURL> GetWebApkIcons();
-
-  // Generate the formatted id field from web manifest.
-  static GURL GetManifestId(const blink::mojom::Manifest& manifest);
 
   GURL manifest_url;
   GURL url;

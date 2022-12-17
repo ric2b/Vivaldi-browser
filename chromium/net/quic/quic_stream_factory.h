@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,7 @@
 #include "net/base/address_list.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_handle.h"
@@ -41,7 +42,9 @@
 #include "net/quic/quic_session_key.h"
 #include "net/socket/client_socket_pool.h"
 #include "net/ssl/ssl_config_service.h"
+#include "net/third_party/quiche/src/quiche/quic/core/deterministic_connection_id_generator.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_config.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_connection_id.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_crypto_stream.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_packets.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_server_id.h"
@@ -54,8 +57,11 @@ class Value;
 namespace quic {
 class QuicAlarmFactory;
 class QuicClock;
-class QuicRandom;
 }  // namespace quic
+
+namespace quiche {
+class QuicRandom;
+}  // namespace quiche
 
 namespace net {
 
@@ -65,7 +71,7 @@ class ClientSocketFactory;
 class HostResolver;
 class HttpServerProperties;
 class NetLog;
-class NetworkIsolationKey;
+class NetworkAnonymizationKey;
 class QuicChromiumConnectionHelper;
 class QuicCryptoClientStreamFactory;
 class QuicServerInfo;
@@ -85,8 +91,8 @@ class QuicStreamFactoryPeer;
 //
 // TODO(mmenke): Should figure out a reasonable value of this, using field
 // trials. The optimal value may increase over time, as QUIC becomes more
-// prevalent. Whether or not NetworkIsolationKeys end up including subframe URLs
-// will also influence the ideal value.
+// prevalent. Whether or not NetworkAnonymizationKeys end up including subframe
+// URLs will also influence the ideal value.
 const int kMaxRecentCryptoConfigs = 100;
 
 enum QuicPlatformNotification {
@@ -129,7 +135,7 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
               PrivacyMode privacy_mode,
               RequestPriority priority,
               const SocketTag& socket_tag,
-              const NetworkIsolationKey& network_isolation_key,
+              const NetworkAnonymizationKey& network_anonymization_key,
               SecureDnsPolicy secure_dns_policy,
               bool use_dns_aliases,
               bool require_dns_https_alpn,
@@ -184,13 +190,14 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
 
   const NetLogWithSource& net_log() const { return net_log_; }
 
-  bool CanUseExistingSession(const GURL& url,
-                             PrivacyMode privacy_mode,
-                             const SocketTag& socket_tag,
-                             const NetworkIsolationKey& network_isolation_key,
-                             SecureDnsPolicy secure_dns_policy,
-                             bool require_dns_https_alpn,
-                             const url::SchemeHostPort& destination) const;
+  bool CanUseExistingSession(
+      const GURL& url,
+      PrivacyMode privacy_mode,
+      const SocketTag& socket_tag,
+      const NetworkAnonymizationKey& network_anonymization_key,
+      SecureDnsPolicy secure_dns_policy,
+      bool require_dns_https_alpn,
+      const url::SchemeHostPort& destination) const;
 
  private:
   raw_ptr<QuicStreamFactory> factory_;
@@ -401,11 +408,12 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   using DnsAliasesBySessionKeyMap =
       std::map<QuicSessionKey, std::set<std::string>>;
   using QuicCryptoClientConfigMap =
-      std::map<NetworkIsolationKey,
+      std::map<NetworkAnonymizationKey,
                std::unique_ptr<QuicCryptoClientConfigOwner>>;
 
   bool HasMatchingIpSession(const QuicSessionAliasKey& key,
-                            const AddressList& address_list,
+                            const std::vector<IPEndPoint>& ip_endpoints,
+                            const std::set<std::string>& aliases,
                             bool use_dns_aliases);
   void OnJobComplete(Job* job, int rv);
   bool HasActiveSession(const QuicSessionKey& session_key) const;
@@ -429,7 +437,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   void ConfigureInitialRttEstimate(
       const quic::QuicServerId& server_id,
-      const NetworkIsolationKey& network_isolation_key,
+      const NetworkAnonymizationKey& network_anonymization_key,
       quic::QuicConfig* config);
 
   // Returns |srtt| in micro seconds from ServerNetworkStats. Returns 0 if there
@@ -437,14 +445,14 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // have ServerNetworkStats for the given |server_id|.
   int64_t GetServerNetworkStatsSmoothedRttInMicroseconds(
       const quic::QuicServerId& server_id,
-      const NetworkIsolationKey& network_isolation_key) const;
+      const NetworkAnonymizationKey& network_anonymization_key) const;
 
   // Returns |srtt| from ServerNetworkStats. Returns null if there
   // is no |http_server_properties_| or if |http_server_properties_| doesn't
   // have ServerNetworkStats for the given |server_id|.
   const base::TimeDelta* GetServerNetworkStatsSmoothedRtt(
       const quic::QuicServerId& server_id,
-      const NetworkIsolationKey& network_isolation_key) const;
+      const NetworkAnonymizationKey& network_anonymization_key) const;
 
   // Helper methods.
   bool WasQuicRecentlyBroken(const QuicSessionKey& session_key) const;
@@ -481,13 +489,14 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // `session` from `session_aliases_`.
   void UnmapSessionFromSessionAliases(QuicChromiumClientSession* session);
 
-  // Creates a CreateCryptoConfigHandle for the specified NetworkIsolationKey.
-  // If there's already a corresponding entry in |active_crypto_config_map_|,
-  // reuses it. If there's a corresponding entry in |recent_crypto_config_map_|,
-  // promotes it to |active_crypto_config_map_| and then reuses it. Otherwise,
-  // creates a new entry in |active_crypto_config_map_|.
+  // Creates a CreateCryptoConfigHandle for the specified
+  // NetworkAnonymizationKey. If there's already a corresponding entry in
+  // |active_crypto_config_map_|, reuses it. If there's a corresponding entry in
+  // |recent_crypto_config_map_|, promotes it to |active_crypto_config_map_| and
+  // then reuses it. Otherwise, creates a new entry in
+  // |active_crypto_config_map_|.
   std::unique_ptr<CryptoClientConfigHandle> CreateCryptoConfigHandle(
-      const NetworkIsolationKey& network_isolation_key);
+      const NetworkAnonymizationKey& network_anonymization_key);
 
   // Salled when the indicated member of |active_crypto_config_map_| has no
   // outstanding references. The QuicCryptoClientConfigOwner is then moved to
@@ -504,11 +513,11 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       handles::NetworkHandle affected_network) const;
 
   std::unique_ptr<QuicCryptoClientConfigHandle> GetCryptoConfigForTesting(
-      const NetworkIsolationKey& network_isolation_key);
+      const NetworkAnonymizationKey& network_anonymization_key);
 
   bool CryptoConfigCacheIsEmptyForTesting(
       const quic::QuicServerId& server_id,
-      const NetworkIsolationKey& network_isolation_key);
+      const NetworkAnonymizationKey& network_anonymization_key);
 
   const quic::ParsedQuicVersionVector& supported_versions() const {
     return params_.supported_versions;
@@ -570,9 +579,9 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // |recent_crypto_config_map_|. If reused before it is evicted from LRUCache,
   // it will be removed from the cache and return to the active config map.
   // These two maps should never both have entries with the same
-  // NetworkIsolationKey.
+  // NetworkAnonymizationKey.
   QuicCryptoClientConfigMap active_crypto_config_map_;
-  base::LRUCache<NetworkIsolationKey,
+  base::LRUCache<NetworkAnonymizationKey,
                  std::unique_ptr<QuicCryptoClientConfigOwner>>
       recent_crypto_config_map_;
 
@@ -617,15 +626,18 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   const raw_ptr<SSLConfigService> ssl_config_service_;
 
-  // Whether NetworkIsolationKeys should be used for
+  // Whether NetworkAnonymizationKeys should be used for
   // |active_crypto_config_map_|. If false, there will just be one config with
-  // an empty NetworkIsolationKey. Whether QuicSessionAliasKeys all have an
+  // an empty NetworkAnonymizationKey. Whether QuicSessionAliasKeys all have an
   // empty NIK is based on whether socket pools are respecting NIKs, but whether
   // those NIKs are also used when accessing |active_crypto_config_map_| is also
   // gated this, which is set based on whether HttpServerProperties is
   // respecting NIKs, as that data is fed into the crypto config map using the
   // corresponding NIK.
-  const bool use_network_isolation_key_for_crypto_configs_;
+  const bool use_network_anonymization_key_for_crypto_configs_;
+
+  quic::DeterministicConnectionIdGenerator connection_id_generator_{
+      quic::kQuicDefaultConnectionIdLength};
 
   base::WeakPtrFactory<QuicStreamFactory> weak_factory_{this};
 };

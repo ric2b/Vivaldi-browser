@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,10 +48,6 @@ const char kUploadContentType[] = "multipart/related; boundary=";
 
 // Content type of the metadata and file contents.
 const char kDataContentType[] = "Content-Type: application/octet-stream";
-
-void RecordUploadSuccessHistogram(bool success) {
-  base::UmaHistogramBoolean("SBMultipartUploader.UploadSuccess", success);
-}
 
 std::unique_ptr<MultipartDataPipeGetter> CreateFileDataPipeGetterBlocking(
     const std::string& boundary,
@@ -137,8 +133,10 @@ MultipartUploadRequest::~MultipartUploadRequest() {
   if (file) {
     base::ThreadPool::PostTask(
         FROM_HERE, {base::MayBlock()},
-        base::BindOnce([](std::unique_ptr<base::MemoryMappedFile> file) {},
-                       std::move(file)));
+        base::BindOnce(
+            [](std::unique_ptr<
+                MultipartDataPipeGetter::InternalMemoryMappedFile> file) {},
+            std::move(file)));
   }
 }
 
@@ -193,8 +191,6 @@ void MultipartUploadRequest::SendStringRequest(
       network::SimpleURLLoader::Create(std::move(request), traffic_annotation_);
   url_loader_->SetAllowHttpErrorResults(true);
   std::string request_body = GenerateRequestBody(metadata_, data_);
-  base::UmaHistogramMemoryKB("SBMultipartUploader.UploadSize",
-                             request_body.size());
   url_loader_->AttachStringForUpload(request_body,
                                      kUploadContentType + boundary_);
   url_loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
@@ -285,24 +281,11 @@ void MultipartUploadRequest::RetryOrFinish(
     int net_error,
     int response_code,
     std::unique_ptr<std::string> response_body) {
-  base::UmaHistogramSparse(
-      "SBMultipartUploader.NetworkRequestResponseCodeOrError",
-      net_error == net::OK ? response_code : net_error);
-
   if (net_error == net::OK && response_code == net::HTTP_OK) {
-    RecordUploadSuccessHistogram(/*success=*/true);
-    base::UmaHistogramExactLinear("SBMultipartUploader.RetriesNeeded",
-                                  retry_count_, kMaxRetryAttempts);
-    base::UmaHistogramMediumTimes(
-        "SBMultipartUploader.SuccessfulUploadDuration",
-        base::Time::Now() - start_time_);
     std::move(callback_).Run(/*success=*/true, response_code,
                              *response_body.get());
   } else {
     if (response_code < 500 || retry_count_ >= kMaxRetryAttempts) {
-      RecordUploadSuccessHistogram(/*success=*/false);
-      base::UmaHistogramMediumTimes("SBMultipartUploader.FailedUploadDuration",
-                                    base::Time::Now() - start_time_);
       std::move(callback_).Run(/*success=*/false, response_code,
                                *response_body.get());
     } else {

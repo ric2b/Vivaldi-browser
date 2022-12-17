@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -122,19 +122,15 @@ class AudioLatencyTest : public testing::TestWithParam<AudioLatencyTestData> {
 // TODO(olka): extend unit tests, use real-world sample rates.
 
 TEST(AudioLatency, HighLatencyBufferSizes) {
+  for (int i = 6400; i <= 204800; i *= 2)
 #if BUILDFLAG(IS_WIN)
-  for (int i = 6400; i <= 204800; i *= 2) {
     EXPECT_EQ(2 * (i / 100),
               AudioLatency::GetHighLatencyBufferSize(i, i / 100));
-  }
-#else
-  for (int i = 6400; i <= 204800; i *= 2)
-#if defined(USE_CRAS)
+#elif defined(USE_CRAS) || BUILDFLAG(IS_FUCHSIA)
     EXPECT_EQ(8 * (i / 100), AudioLatency::GetHighLatencyBufferSize(i, 32));
 #else
     EXPECT_EQ(2 * (i / 100), AudioLatency::GetHighLatencyBufferSize(i, 32));
 #endif  // defined(USE_CRAS)
-#endif  // BUILDFLAG(IS_WIN)
 }
 
 TEST(AudioLatency, InteractiveBufferSizes) {

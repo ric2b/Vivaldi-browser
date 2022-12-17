@@ -29,6 +29,8 @@
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -41,6 +43,7 @@
 #include "third_party/blink/renderer/core/html/plugin_document.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
+#include "third_party/blink/renderer/core/layout/deferred_shaping_controller.h"
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_counter.h"
@@ -102,6 +105,9 @@ class HitTestLatencyRecorder {
 LayoutView::LayoutView(ContainerNode* document)
     : LayoutBlockFlow(document),
       frame_view_(To<Document>(document)->View()),
+      deferred_shaping_controller_(
+          MakeGarbageCollected<DeferredShapingController>(
+              *To<Document>(document))),
       layout_state_(nullptr),
       layout_quote_head_(nullptr),
       layout_counter_count_(0),
@@ -129,6 +135,7 @@ LayoutView::~LayoutView() = default;
 
 void LayoutView::Trace(Visitor* visitor) const {
   visitor->Trace(frame_view_);
+  visitor->Trace(deferred_shaping_controller_);
   visitor->Trace(fragmentation_context_);
   visitor->Trace(layout_quote_head_);
   visitor->Trace(svg_text_descendants_);
@@ -339,12 +346,13 @@ void LayoutView::UpdateBlockLayout(bool relayout_children) {
 void LayoutView::UpdateLayout() {
   NOT_DESTROYED();
   if (!GetDocument().Printing()) {
-    SetPageLogicalHeight(LayoutUnit());
+    page_size_ = PhysicalSize();
     named_pages_mapper_ = nullptr;
   }
 
   if (PageLogicalHeight() && ShouldUsePrintingLayout()) {
-    named_pages_mapper_ = std::make_unique<NamedPagesMapper>();
+    if (!RuntimeEnabledFeatures::LayoutNGPrintingEnabled())
+      named_pages_mapper_ = std::make_unique<NamedPagesMapper>();
     intrinsic_logical_widths_ = LogicalWidth();
     if (!fragmentation_context_) {
       fragmentation_context_ =
@@ -575,9 +583,32 @@ PhysicalRect LayoutView::ViewRect() const {
   NOT_DESTROYED();
   if (ShouldUsePrintingLayout())
     return PhysicalRect(PhysicalOffset(), Size());
-  if (frame_view_)
-    return PhysicalRect(PhysicalOffset(), PhysicalSize(frame_view_->Size()));
-  return PhysicalRect();
+
+  if (!frame_view_)
+    return PhysicalRect();
+
+  if (frame_view_->GetFrame().IsOutermostMainFrame()) {
+    auto* supplement =
+        DocumentTransitionSupplement::FromIfExists(GetDocument());
+    if (supplement && !supplement->GetTransition()->IsIdle()) {
+      // If we're capturing a transition snapshot, the root transition needs to
+      // produce the snapshot at a known stable size, excluding all insetting
+      // UI like mobile URL bars and virtual keyboards.
+
+      // This adjustment should always be an expansion of the current viewport.
+      DCHECK_GE(supplement->GetTransition()->GetSnapshotViewportRect().width(),
+                frame_view_->Size().width());
+      DCHECK_GE(supplement->GetTransition()->GetSnapshotViewportRect().height(),
+                frame_view_->Size().height());
+
+      return PhysicalRect(
+          PhysicalOffset(),
+          PhysicalSize(
+              supplement->GetTransition()->GetSnapshotViewportRect().size()));
+    }
+  }
+
+  return PhysicalRect(PhysicalOffset(), PhysicalSize(frame_view_->Size()));
 }
 
 PhysicalRect LayoutView::OverflowClipRect(
@@ -719,6 +750,12 @@ void LayoutView::CalculateScrollbarModes(
 #undef RETURN_SCROLLBAR_MODE
 }
 
+AtomicString LayoutView::NamedPageAtIndex(wtf_size_t page_index) const {
+  if (named_pages_mapper_)
+    return named_pages_mapper_->NamedPageAtIndex(page_index);
+  return AtomicString();
+}
+
 PhysicalRect LayoutView::DocumentRect() const {
   NOT_DESTROYED();
   return FlipForWritingMode(LayoutOverflowRect());
@@ -727,14 +764,8 @@ PhysicalRect LayoutView::DocumentRect() const {
 gfx::Size LayoutView::GetLayoutSize(
     IncludeScrollbarsInRect scrollbar_inclusion) const {
   NOT_DESTROYED();
-  if (ShouldUsePrintingLayout()) {
-    LayoutSize size = Size();
-    if (StyleRef().IsHorizontalWritingMode())
-      size.SetHeight(PageLogicalHeight());
-    else
-      size.SetWidth(PageLogicalHeight());
-    return ToFlooredSize(size);
-  }
+  if (ShouldUsePrintingLayout())
+    return ToFlooredSize(page_size_);
 
   if (!frame_view_)
     return gfx::Size();

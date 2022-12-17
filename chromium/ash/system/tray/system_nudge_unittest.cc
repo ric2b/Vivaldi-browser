@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/system/tray/system_nudge_label.h"
 #include "ash/test/ash_test_base.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "ui/gfx/vector_icon_types.h"
 
 namespace ash {
@@ -26,13 +27,13 @@ gfx::VectorIcon kEmptyIcon;
 
 class TestSystemNudge : public SystemNudge {
  public:
-  explicit TestSystemNudge(bool anchor_status_area)
+  explicit TestSystemNudge(
+      NudgeCatalogName catalog_name = NudgeCatalogName::kTestCatalogName)
       : SystemNudge(kNudgeName,
-                    NudgeCatalogName::kTestCatalogName,
+                    catalog_name,
                     kIconSize,
                     kIconLabelSpacing,
-                    kNudgePadding,
-                    anchor_status_area) {}
+                    kNudgePadding) {}
 
   gfx::Rect GetWidgetBounds() {
     return widget()->GetClientAreaBoundsInScreen();
@@ -50,6 +51,9 @@ class TestSystemNudge : public SystemNudge {
   }
 };
 
+constexpr char kNudgeShownCountHistogramName[] =
+    "Ash.NotifierFramework.Nudge.ShownCount";
+
 }  // namespace
 
 using SystemNudgeTest = AshTestBase;
@@ -61,7 +65,7 @@ TEST_F(SystemNudgeTest, NudgeDefaultOnLeftSide) {
   int shelf_size = ShelfConfig::Get()->shelf_size();
   gfx::Rect nudge_bounds;
 
-  TestSystemNudge nudge(/*anchor_status_area=*/false);
+  TestSystemNudge nudge;
 
   nudge.Show();
   nudge_bounds = nudge.GetWidgetBounds();
@@ -88,38 +92,22 @@ TEST_F(SystemNudgeTest, NudgeDefaultOnLeftSide) {
   EXPECT_EQ(nudge_bounds.bottom(), display_bounds.bottom());
 }
 
-TEST_F(SystemNudgeTest, NudgeAnchorStatusArea) {
-  Shelf* shelf = GetPrimaryShelf();
-  display::Display primary_display = GetPrimaryDisplay();
-  gfx::Rect display_bounds = primary_display.bounds();
-  int shelf_size = ShelfConfig::Get()->shelf_size();
-  gfx::Rect nudge_bounds;
+TEST_F(SystemNudgeTest, ShownCountMetric) {
+  base::HistogramTester histogram_tester;
 
-  TestSystemNudge nudge(/*anchor_status_area=*/true);
+  const NudgeCatalogName catalog_name_1 = static_cast<NudgeCatalogName>(1);
+  const NudgeCatalogName catalog_name_2 = static_cast<NudgeCatalogName>(2);
+  TestSystemNudge nudge_1(catalog_name_1);
+  TestSystemNudge nudge_2(catalog_name_2);
 
-  nudge.Show();
-  nudge_bounds = nudge.GetWidgetBounds();
-  nudge_bounds.Outset(kNudgeMargin);
-  EXPECT_EQ(nudge_bounds.right(), display_bounds.right());
-  EXPECT_EQ(nudge_bounds.bottom(), display_bounds.bottom() - shelf_size);
+  nudge_1.Show();
+  histogram_tester.ExpectBucketCount(kNudgeShownCountHistogramName,
+                                     catalog_name_1, 1);
 
-  shelf->SetAlignment(ShelfAlignment::kBottomLocked);
-  nudge_bounds = nudge.GetWidgetBounds();
-  nudge_bounds.Outset(kNudgeMargin);
-  EXPECT_EQ(nudge_bounds.right(), display_bounds.right());
-  EXPECT_EQ(nudge_bounds.bottom(), display_bounds.bottom() - shelf_size);
-
-  shelf->SetAlignment(ShelfAlignment::kRight);
-  nudge_bounds = nudge.GetWidgetBounds();
-  nudge_bounds.Outset(kNudgeMargin);
-  EXPECT_EQ(nudge_bounds.right(), display_bounds.right() - shelf_size);
-  EXPECT_EQ(nudge_bounds.bottom(), display_bounds.bottom());
-
-  shelf->SetAlignment(ShelfAlignment::kLeft);
-  nudge_bounds = nudge.GetWidgetBounds();
-  nudge_bounds.Outset(kNudgeMargin);
-  EXPECT_EQ(nudge_bounds.x(), display_bounds.x() + shelf_size);
-  EXPECT_EQ(nudge_bounds.bottom(), display_bounds.bottom());
+  nudge_2.Show();
+  nudge_2.Show();
+  histogram_tester.ExpectBucketCount(kNudgeShownCountHistogramName,
+                                     catalog_name_2, 2);
 }
 
 }  // namespace ash

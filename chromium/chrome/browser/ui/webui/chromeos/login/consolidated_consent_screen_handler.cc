@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,30 +6,20 @@
 
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
+#include "base/values.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/screens/consolidated_consent_screen.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/login/localized_values_builder.h"
+#include "ui/chromeos/devicetype_utils.h"
 
 namespace chromeos {
 
-ConsolidatedConsentScreenView::ScreenConfig::ScreenConfig() = default;
-
-ConsolidatedConsentScreenView::ScreenConfig::~ScreenConfig() = default;
-
-constexpr StaticOobeScreenId ConsolidatedConsentScreenView::kScreenId;
-
 ConsolidatedConsentScreenHandler::ConsolidatedConsentScreenHandler()
-    : BaseScreenHandler(kScreenId) {
-  set_user_acted_method_path_deprecated(
-      "login.ConsolidatedConsentScreen.userActed");
-}
+    : BaseScreenHandler(kScreenId) {}
 
-ConsolidatedConsentScreenHandler::~ConsolidatedConsentScreenHandler() {
-  if (screen_)
-    screen_->OnViewDestroyed(this);
-}
+ConsolidatedConsentScreenHandler::~ConsolidatedConsentScreenHandler() = default;
 
 void ConsolidatedConsentScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
@@ -52,10 +42,6 @@ void ConsolidatedConsentScreenHandler::DeclareLocalizedValues(
                IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_TITLE);
   builder->Add("consolidatedConsentUsageOptIn",
                IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_OWNER);
-  builder->Add("consolidatedConsentUsageOptInChild",
-               IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_CHILD_OWNER);
-  builder->Add("consolidatedConsentUsageOptInArcDisabled",
-               IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_ARC_DISABLED_OWNER);
   builder->Add("consolidatedConsentUsageOptInLearnMoreLink",
                IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE_LINK);
   builder->Add("consolidatedConsentBackupOptInTitle",
@@ -66,6 +52,11 @@ void ConsolidatedConsentScreenHandler::DeclareLocalizedValues(
                IDS_CONSOLIDATED_CONSENT_BACKUP_OPT_IN_CHILD);
   builder->Add("consolidatedConsenttBackupOptInLearnMoreLink",
                IDS_CONSOLIDATED_CONSENT_BACKUP_OPT_IN_LEARN_MORE_LINK);
+  builder->Add("consolidatedConsentRecoveryOptInTitle",
+               IDS_CONSOLIDATED_CONSENT_RECOVERY_OPT_IN_TITLE);
+  builder->AddF("consolidatedConsentRecoveryOptIn",
+                IDS_CONSOLIDATED_CONSENT_RECOVERY_OPT_IN,
+                ui::GetChromeOSDeviceTypeResourceId());
   builder->Add("consolidatedConsentLocationOptInTitle",
                IDS_CONSOLIDATED_CONSENT_LOCATION_OPT_IN_TITLE);
   builder->Add("consolidatedConsentLocationOptIn",
@@ -125,73 +116,26 @@ void ConsolidatedConsentScreenHandler::DeclareLocalizedValues(
   }
 }
 
-void ConsolidatedConsentScreenHandler::InitializeDeprecated() {}
-
-void ConsolidatedConsentScreenHandler::Show(const ScreenConfig& config) {
-  base::Value::Dict data;
-  // If ARC is enabled, show the ARC ToS and the related opt-ins.
-  data.Set("isArcEnabled", config.is_arc_enabled);
-  // In demo mode, don't show any opt-ins related to ARC and allow showing the
-  // offline ARC ToS if the online version failed to load.
-  data.Set("isDemo", config.is_demo);
-  // Child accounts have alternative strings for the opt-ins.
-  data.Set("isChildAccount", config.is_child_account);
-  // If the user is affiliated with the device management domain, ToS should be
-  // hidden.
-  data.Set("isTosHidden", config.is_tos_hidden);
-  // Country code is needed to load the ARC ToS.
-  data.Set("countryCode", config.country_code);
-  // URL for EULA, the URL should include the locale.
-  data.Set("googleEulaUrl", config.google_eula_url);
-  // URL for Chrome and ChromeOS additional terms of service, the URL should
-  // include the locale.
-  data.Set("crosEulaUrl", config.cros_eula_url);
+void ConsolidatedConsentScreenHandler::Show(base::Value::Dict data) {
   ShowInWebUI(std::move(data));
-}
-
-void ConsolidatedConsentScreenHandler::Bind(ConsolidatedConsentScreen* screen) {
-  screen_ = screen;
-  BaseScreenHandler::SetBaseScreenDeprecated(screen_);
-}
-
-void ConsolidatedConsentScreenHandler::Unbind() {
-  screen_ = nullptr;
-  BaseScreenHandler::SetBaseScreenDeprecated(nullptr);
-}
-
-void ConsolidatedConsentScreenHandler::RegisterMessages() {
-  BaseScreenHandler::RegisterMessages();
-
-  AddCallback("ToSAccept", &ConsolidatedConsentScreenHandler::HandleAccept);
-}
-
-void ConsolidatedConsentScreenHandler::HandleAccept(
-    bool enable_stats_usage,
-    bool enable_backup_restore,
-    bool enable_location_services,
-    const std::string& tos_content) {
-  if (screen_) {
-    screen_->OnAccept(enable_stats_usage, enable_backup_restore,
-                      enable_location_services, tos_content);
-  }
 }
 
 void ConsolidatedConsentScreenHandler::SetUsageMode(bool enabled,
                                                     bool managed) {
-  CallJS("login.ConsolidatedConsentScreen.setUsageMode", enabled, managed);
+  CallExternalAPI("setUsageMode", enabled, managed);
 }
 
 void ConsolidatedConsentScreenHandler::SetBackupMode(bool enabled,
                                                      bool managed) {
-  CallJS("login.ConsolidatedConsentScreen.setBackupMode", enabled, managed);
+  CallExternalAPI("setBackupMode", enabled, managed);
 }
 
 void ConsolidatedConsentScreenHandler::SetLocationMode(bool enabled,
                                                        bool managed) {
-  CallJS("login.ConsolidatedConsentScreen.setLocationMode", enabled, managed);
+  CallExternalAPI("setLocationMode", enabled, managed);
 }
 
-void ConsolidatedConsentScreenHandler::SetUsageOptinOptinHidden(bool hidden) {
-  CallJS("login.ConsolidatedConsentScreen.setUsageOptinHidden", hidden);
+void ConsolidatedConsentScreenHandler::SetUsageOptinHidden(bool hidden) {
+  CallExternalAPI("setUsageOptinHidden", hidden);
 }
 }  // namespace chromeos

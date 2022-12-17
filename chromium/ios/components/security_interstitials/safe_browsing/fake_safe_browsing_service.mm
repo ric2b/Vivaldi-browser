@@ -1,16 +1,16 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/components/security_interstitials/safe_browsing/fake_safe_browsing_service.h"
+#import "ios/components/security_interstitials/safe_browsing/fake_safe_browsing_service.h"
 
-#include "base/callback_helpers.h"
-#include "components/safe_browsing/core/browser/db/test_database_manager.h"
-#include "components/safe_browsing/core/browser/safe_browsing_url_checker_impl.h"
+#import "base/callback_helpers.h"
+#import "components/safe_browsing/core/browser/db/test_database_manager.h"
+#import "components/safe_browsing/core/browser/safe_browsing_url_checker_impl.h"
 #import "ios/components/security_interstitials/safe_browsing/url_checker_delegate_impl.h"
-#include "ios/web/public/thread/web_task_traits.h"
-#include "ios/web/public/thread/web_thread.h"
-#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#import "ios/web/public/thread/web_task_traits.h"
+#import "ios/web/public/thread/web_thread.h"
+#import "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -44,11 +44,15 @@ class FakeSafeBrowsingUrlCheckerImpl
     if (url.host() == FakeSafeBrowsingService::kUnsafeHost) {
       std::move(callback).Run(/*slow_check_notifier=*/nullptr,
                               /*proceed=*/false,
-                              /*showed_interstitial=*/true);
+                              /*showed_interstitial=*/true,
+                              /*did_perform_real_time_check=*/false,
+                              /*did_check_allowlist=*/true);
       return;
     }
     std::move(callback).Run(/*slow_check_notifier=*/nullptr, /*proceed=*/true,
-                            /*showed_interstitial=*/false);
+                            /*showed_interstitial=*/false,
+                            /*did_perform_real_time_check=*/false,
+                            /*did_check_allowlist=*/true);
   }
 };
 }  // namespace

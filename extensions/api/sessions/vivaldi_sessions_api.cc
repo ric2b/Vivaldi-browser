@@ -102,7 +102,9 @@ ExtensionFunction::ResponseAction SessionsPrivateSaveOpenTabsFunction::Run() {
   ::vivaldi::VivaldiSessionService service(profile);
 
   int save_window_id = params->options.save_only_window_id;
-  std::vector<int>* ids = params->options.ids.get();
+  std::vector<int> ids;
+  if (params->options.ids.has_value())
+    ids = params->options.ids.value();
 
   if (params->name.empty()) {
     error_code = SessionErrorCodes::kErrorMissingName;
@@ -227,7 +229,7 @@ ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {
   base::ThreadRestrictions::ScopedAllowIO allow_io;
 
   ::vivaldi::SessionOptions opts;
-  if (params->options.get()) {
+  if (params->options.has_value()) {
     opts.openInNewWindow_ = params->options->open_in_new_window;
   }
 

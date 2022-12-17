@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,8 @@ class LocationBarModelImpl : public LocationBarModel {
   security_state::SecurityLevel GetSecurityLevel() const override;
   net::CertStatus GetCertStatus() const override;
   metrics::OmniboxEventProto::PageClassification GetPageClassification(
-      OmniboxFocusSource focus_source) override;
+      OmniboxFocusSource focus_source,
+      bool is_prefetch = false) override;
   const gfx::VectorIcon& GetVectorIcon() const override;
   std::u16string GetSecureDisplayText() const override;
   std::u16string GetSecureAccessibilityText() const override;

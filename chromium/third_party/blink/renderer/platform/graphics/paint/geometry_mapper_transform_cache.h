@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,14 +65,14 @@ class PLATFORM_EXPORT GeometryMapperTransformCache {
   void ApplyToScreen(TransformationMatrix& m) const {
     DCHECK(screen_transform_updated_);
     if (UNLIKELY(screen_transform_))
-      m.Multiply(to_screen());
+      m.PreConcat(to_screen());
     else
       ApplyToPlaneRoot(m);
   }
   void ApplyProjectionFromScreen(TransformationMatrix& m) const {
     DCHECK(screen_transform_updated_);
     if (UNLIKELY(screen_transform_))
-      m.Multiply(projection_from_screen());
+      m.PreConcat(projection_from_screen());
     else
       ApplyFromPlaneRoot(m);
   }
@@ -92,14 +92,14 @@ class PLATFORM_EXPORT GeometryMapperTransformCache {
   }
   void ApplyToPlaneRoot(TransformationMatrix& m) const {
     if (UNLIKELY(plane_root_transform_)) {
-      m.Multiply(to_plane_root());
+      m.PreConcat(to_plane_root());
     } else {
       m.Translate(to_2d_translation_root_.x(), to_2d_translation_root_.y());
     }
   }
   void ApplyFromPlaneRoot(TransformationMatrix& m) const {
     if (UNLIKELY(plane_root_transform_)) {
-      m.Multiply(from_plane_root());
+      m.PreConcat(from_plane_root());
     } else {
       m.Translate(-to_2d_translation_root_.x(), -to_2d_translation_root_.y());
     }
@@ -204,6 +204,7 @@ class PLATFORM_EXPORT GeometryMapperTransformCache {
     TransformationMatrix from_plane_root;
     const TransformPaintPropertyNode* plane_root = nullptr;
     bool has_animation = false;
+    USING_FAST_MALLOC(PlaneRootTransform);
   };
   std::unique_ptr<PlaneRootTransform> plane_root_transform_;
 
@@ -212,6 +213,7 @@ class PLATFORM_EXPORT GeometryMapperTransformCache {
     TransformationMatrix projection_from_screen;
     bool projection_from_screen_is_valid = false;
     bool has_animation = false;
+    USING_FAST_MALLOC(ScreenTransform);
   };
   std::unique_ptr<ScreenTransform> screen_transform_;
 

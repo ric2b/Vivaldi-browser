@@ -1,10 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/printing/oauth2/authorization_zone_impl.h"
 
-#include <algorithm>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -17,6 +16,7 @@
 #include "base/containers/adapters.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/types/expected.h"
@@ -55,8 +55,8 @@ std::string RandBase64String() {
 // from Section 2.3 of [RFC3986], with a minimum length of 43 characters
 // and a maximum length of 128 characters."
 std::string CodeChallengeS256(const std::string& code_verifier) {
-  DCHECK_GE(code_verifier.size(), 43);
-  DCHECK_LE(code_verifier.size(), 128);
+  DCHECK_GE(code_verifier.size(), 43u);
+  DCHECK_LE(code_verifier.size(), 128u);
   std::string output;
   base::Base64Encode(crypto::SHA256HashString(code_verifier), &output);
   return output;
@@ -105,7 +105,7 @@ base::expected<std::string, std::string> ExtractParameter(
   if (value.empty()) {
     return base::unexpected(base::StrCat({"parameter '", name, "' is empty"}));
   }
-  return value;
+  return base::ok(std::move(value));
 }
 
 // Calls `callback` with `status` and `data` as parameters. When `status` equals
@@ -114,17 +114,6 @@ void NoDataForOK(StatusCallback callback,
                  StatusCode status,
                  const std::string& data) {
   std::move(callback).Run(status, (status == StatusCode::kOK) ? "" : data);
-}
-
-// Calls `callback`. Adds a prefix with `context` to an error sent in `data`.
-void PrefixForError(StatusCallback callback,
-                    const std::string& context,
-                    StatusCode status,
-                    const std::string& data) {
-  std::string msg = status == StatusCode::kOK
-                        ? data
-                        : base::StrCat({"[", context, "] ", data});
-  std::move(callback).Run(status, msg);
 }
 
 }  // namespace
@@ -154,7 +143,6 @@ AuthorizationZoneImpl::~AuthorizationZoneImpl() = default;
 void AuthorizationZoneImpl::InitAuthorization(const std::string& scope,
                                               StatusCallback callback) {
   DCHECK_LE(waiting_authorizations_.size(), kMaxNumberOfSessions);
-  AddContextToErrorMessage(callback);
 
   // If there are too many callbacks waiting, remove the oldest one.
   if (waiting_authorizations_.size() == kMaxNumberOfSessions) {
@@ -190,8 +178,6 @@ void AuthorizationZoneImpl::InitAuthorization(const std::string& scope,
 
 void AuthorizationZoneImpl::FinishAuthorization(const GURL& redirect_url,
                                                 StatusCallback callback) {
-  AddContextToErrorMessage(callback);
-
   // Parse the URL and retrieve the query segment.
   chromeos::Uri uri(redirect_url.spec());
   if (uri.GetLastParsingError().status !=
@@ -260,11 +246,11 @@ void AuthorizationZoneImpl::FinishAuthorization(const GURL& redirect_url,
   // Create and add a new session.
   if (sessions_.size() == kMaxNumberOfSessions) {
     // There are too many sessions. Remove the oldest one.
-    auto callbacks = sessions_.front()->TakeWaitingList();
+    auto sessions_callbacks = sessions_.front()->TakeWaitingList();
     sessions_.pop_front();
-    for (auto& callback : callbacks) {
-      std::move(callback).Run(StatusCode::kTooManySessions,
-                              "The oldest session was closed");
+    for (auto& sessions_callback : sessions_callbacks) {
+      std::move(sessions_callback)
+          .Run(StatusCode::kTooManySessions, "The oldest session was closed");
     }
     // TODO(b:228876367) - revoke the token in AuthorizationServerSession
   }
@@ -355,13 +341,13 @@ void AuthorizationZoneImpl::MarkAuthorizationZoneAsUntrusted() {
 
   // This method will call all callbacks from `waiting_authorizations_` and
   // empty it.
-  OnInitializeCallback(StatusCode::kUnknownAuthorizationServer, msg);
+  OnInitializeCallback(StatusCode::kUntrustedAuthorizationServer, msg);
 
   // Clear `sessions_`.
   for (std::unique_ptr<AuthorizationServerSession>& session : sessions_) {
     std::vector<StatusCallback> callbacks = session->TakeWaitingList();
     for (StatusCallback& callback : callbacks) {
-      std::move(callback).Run(StatusCode::kUnknownAuthorizationServer, msg);
+      std::move(callback).Run(StatusCode::kUntrustedAuthorizationServer, msg);
     }
   }
   sessions_.clear();
@@ -370,7 +356,7 @@ void AuthorizationZoneImpl::MarkAuthorizationZoneAsUntrusted() {
   for (auto& [_, ipp_endpoint] : ipp_endpoints_) {
     std::vector<StatusCallback> callbacks = ipp_endpoint->TakeWaitingList();
     for (StatusCallback& callback : callbacks) {
-      std::move(callback).Run(StatusCode::kUnknownAuthorizationServer, msg);
+      std::move(callback).Run(StatusCode::kUntrustedAuthorizationServer, msg);
     }
   }
   ipp_endpoints_.clear();
@@ -394,11 +380,8 @@ void AuthorizationZoneImpl::OnSendTokenRequestCallback(
     StatusCode status,
     const std::string& data) {
   // Find the session for which the request was completed.
-  auto it_session = std::find_if(
-      sessions_.begin(), sessions_.end(),
-      [&session](const std::unique_ptr<AuthorizationServerSession>& as) {
-        return as.get() == session;
-      });
+  auto it_session = base::ranges::find(
+      sessions_, session, &std::unique_ptr<AuthorizationServerSession>::get);
   DCHECK(it_session != sessions_.end());
 
   // Get the list of callbacks to run and copy the data.
@@ -555,9 +538,8 @@ bool AuthorizationZoneImpl::FindAndRemovePendingAuthorization(
     const std::string& state,
     base::flat_set<std::string>& scopes,
     std::string& code_verifier) {
-  std::list<PendingAuthorization>::iterator it = std::find_if(
-      pending_authorizations_.begin(), pending_authorizations_.end(),
-      [&state](const PendingAuthorization& pa) { return pa.state == state; });
+  std::list<PendingAuthorization>::iterator it = base::ranges::find(
+      pending_authorizations_, state, &PendingAuthorization::state);
   if (it == pending_authorizations_.end()) {
     return false;
   }
@@ -565,13 +547,6 @@ bool AuthorizationZoneImpl::FindAndRemovePendingAuthorization(
   code_verifier = std::move(it->code_verifier);
   pending_authorizations_.erase(it);
   return true;
-}
-
-void AuthorizationZoneImpl::AddContextToErrorMessage(StatusCallback& callback) {
-  // Wrap the `callback` with the function PrefixForError() defined above.
-  const std::string prefix = server_data_.AuthorizationServerURI().spec();
-  auto new_call = base::BindOnce(&PrefixForError, std::move(callback), prefix);
-  callback = std::move(new_call);
 }
 
 std::unique_ptr<AuthorizationZone> AuthorizationZone::Create(

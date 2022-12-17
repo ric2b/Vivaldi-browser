@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,7 @@ namespace gpu {
 class RawDrawImageBacking : public ClearTrackingSharedImageBacking {
  public:
   RawDrawImageBacking(const Mailbox& mailbox,
-                      viz::ResourceFormat format,
+                      viz::SharedImageFormat format,
                       const gfx::Size& size,
                       const gfx::ColorSpace& color_space,
                       GrSurfaceOrigin surface_origin,
@@ -34,12 +34,12 @@ class RawDrawImageBacking : public ClearTrackingSharedImageBacking {
 
   // SharedImageBacking implementation.
   SharedImageBackingType GetType() const override;
-  bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
   void OnMemoryDump(const std::string& dump_name,
-                    base::trace_event::MemoryAllocatorDump* dump,
+                    base::trace_event::MemoryAllocatorDumpGuid client_guid,
                     base::trace_event::ProcessMemoryDump* pmd,
                     uint64_t client_tracing_id) override;
+  size_t EstimatedSizeForMemTracking() const override;
 
  protected:
   std::unique_ptr<RasterImageRepresentation> ProduceRaster(

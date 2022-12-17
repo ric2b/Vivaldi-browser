@@ -290,6 +290,8 @@ class CORE_EXPORT ContainerNode : public Node {
                                    Node* node_after_change);
   void RecalcDescendantStyles(const StyleRecalcChange,
                               const StyleRecalcContext&);
+  void RecalcSubsequentSiblingStyles(const StyleRecalcChange,
+                                     const StyleRecalcContext&);
   void RebuildChildrenLayoutTrees(WhitespaceAttacher&);
   void RebuildLayoutTreeForChild(Node* child, WhitespaceAttacher&);
 
@@ -400,7 +402,7 @@ class CORE_EXPORT ContainerNode : public Node {
   void Trace(Visitor*) const override;
 
  protected:
-  ContainerNode(TreeScope*, ConstructionType = kCreateContainer);
+  ContainerNode(TreeScope*, ConstructionType);
 
   // |attr_name| and |owner_element| are only used for element attribute
   // modifications. |ChildrenChange| is either nullptr or points to a

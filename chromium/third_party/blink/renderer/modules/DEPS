@@ -19,6 +19,7 @@ include_rules = [
     "!third_party/blink/renderer/core/frame/web_local_frame_impl.h",
     "!third_party/blink/renderer/core/frame/web_remote_frame_impl.h",
     "+third_party/blink/renderer/modules",
+    "+ui/accessibility/accessibility_features.h",
     "+ui/accessibility/ax_mode.h",
     "+ui/display/screen_info.h",
     "+ui/display/screen_infos.h",
@@ -44,6 +45,9 @@ specific_include_rules = {
     ],
     ".*_fuzzer.cc": [
         "+testing/libfuzzer/proto/lpm_interface.h",
+    ],
+    ".*_(unit)?test\.cc": [
+        "+base/run_loop.h",
     ],
     "canvas_fuzzer.cc": [
         "+base/test/bind.h",

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,8 +26,9 @@ bool g_enable_hosted_apps_in_lacros_for_testing = false;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // Kill switch in case the feature causes problems.
-const base::Feature kStopMuxingLacrosExtensionAppIds{
-    "StopMuxingLacrosExtensionAppIds", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kStopMuxingLacrosExtensionAppIds,
+             "StopMuxingLacrosExtensionAppIds",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 }  // namespace
 

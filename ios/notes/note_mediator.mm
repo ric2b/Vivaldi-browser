@@ -8,7 +8,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/pref_names.h"
+#include "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 #include "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/url_with_title.h"
@@ -61,8 +61,7 @@ const int64_t kLastUsedFolderNone = -1;
   int64_t node_id = prefs->GetInt64(vivaldiprefs::kIosNoteFolderDefault);
   if (node_id == kLastUsedFolderNone)
     node_id = defaultFolder->id();
-  const NoteNode* result =
-      vivaldi::GetNotesNodeByID(notes, node_id);
+  const NoteNode* result = notes->GetNoteNodeByID(node_id);
 
   if (result)
     return result;

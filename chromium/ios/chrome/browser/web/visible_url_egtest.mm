@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/version_info/version_info.h"
-#import "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/web/features.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -53,7 +53,7 @@ id<GREYMatcher> ContextMenuMatcherForText(NSString* text) {
 }
 
 // Response provider which can be paused. When it is paused it buffers all
-// requests and does not respond to them until |set_paused(false)| is called.
+// requests and does not respond to them until `set_paused(false)` is called.
 class PausableResponseProvider : public HtmlResponseProvider {
  public:
   explicit PausableResponseProvider(
@@ -114,7 +114,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 // Pauses response server.
 - (void)setServerPaused:(BOOL)paused;
 
-// Waits until |_responseProvider| receives a request with the given |URL|.
+// Waits until `_responseProvider` receives a request with the given `URL`.
 // Returns YES if request was received, NO on timeout.
 - (BOOL)waitForServerToReceiveRequestWithURL:(GURL)URL;
 

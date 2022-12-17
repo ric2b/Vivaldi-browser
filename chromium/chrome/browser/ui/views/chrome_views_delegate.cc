@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,7 @@ namespace {
 
 Profile* GetProfileForWindow(const views::Widget* window) {
   if (!window)
-    return NULL;
+    return nullptr;
   return reinterpret_cast<Profile*>(
       window->GetNativeWindowProperty(Profile::kProfileKey));
 }
@@ -88,23 +88,23 @@ void ChromeViewsDelegate::SaveWindowPlacement(const views::Widget* window,
   if (!prefs)
     return;
 
-  std::unique_ptr<DictionaryPrefUpdate> pref_update =
-      chrome::GetWindowPlacementDictionaryReadWrite(window_name, prefs);
-  base::Value* window_preferences = pref_update->Get();
-  window_preferences->SetIntKey("left", bounds.x());
-  window_preferences->SetIntKey("top", bounds.y());
-  window_preferences->SetIntKey("right", bounds.right());
-  window_preferences->SetIntKey("bottom", bounds.bottom());
-  window_preferences->SetBoolKey("maximized",
-                                 show_state == ui::SHOW_STATE_MAXIMIZED);
+  std::unique_ptr<ScopedDictPrefUpdate> pref_update;
+  base::Value::Dict& window_preferences =
+      chrome::GetWindowPlacementDictionaryReadWrite(window_name, prefs,
+                                                    pref_update);
+  window_preferences.Set("left", bounds.x());
+  window_preferences.Set("top", bounds.y());
+  window_preferences.Set("right", bounds.right());
+  window_preferences.Set("bottom", bounds.bottom());
+  window_preferences.Set("maximized", show_state == ui::SHOW_STATE_MAXIMIZED);
 
   gfx::Rect work_area(display::Screen::GetScreen()
                           ->GetDisplayNearestView(window->GetNativeView())
                           .work_area());
-  window_preferences->SetIntKey("work_area_left", work_area.x());
-  window_preferences->SetIntKey("work_area_top", work_area.y());
-  window_preferences->SetIntKey("work_area_right", work_area.right());
-  window_preferences->SetIntKey("work_area_bottom", work_area.bottom());
+  window_preferences.Set("work_area_left", work_area.x());
+  window_preferences.Set("work_area_top", work_area.y());
+  window_preferences.Set("work_area_right", work_area.right());
+  window_preferences.Set("work_area_bottom", work_area.bottom());
 }
 
 bool ChromeViewsDelegate::GetSavedWindowPlacement(
@@ -117,7 +117,7 @@ bool ChromeViewsDelegate::GetSavedWindowPlacement(
     return false;
 
   DCHECK(prefs->FindPreference(window_name));
-  const base::Value::Dict& dictionary = prefs->GetValueDict(window_name);
+  const base::Value::Dict& dictionary = prefs->GetDict(window_name);
   absl::optional<int> left = dictionary.FindInt("left");
   absl::optional<int> top = dictionary.FindInt("top");
   absl::optional<int> right = dictionary.FindInt("right");

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,7 +72,8 @@ class NativeExtensionBindingsSystem {
   void HandleResponse(int request_id,
                       bool success,
                       const base::Value::List& response,
-                      const std::string& error);
+                      const std::string& error,
+                      mojom::ExtraResponseDataPtr extra_data = nullptr);
 
   // Returns the associated IPC message sender.
   IPCMessageSender* GetIPCMessageSender();

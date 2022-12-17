@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,12 +15,14 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
+#include "base/win/windows_version.h"
 #include "chrome/chrome_cleaner/buildflags.h"
 #include "chrome/chrome_cleaner/constants/chrome_cleaner_switches.h"
 #include "chrome/chrome_cleaner/ipc/chrome_prompt_test_util.h"
@@ -132,10 +134,10 @@ std::vector<std::wstring> GetUnsanitizedPaths() {
 
 bool ContainsAnyOf(const std::wstring& main_string,
                    const std::vector<std::wstring>& substrings) {
-  return std::any_of(substrings.begin(), substrings.end(),
-                     [&main_string](const std::wstring& path) -> bool {
-                       return main_string.find(path) != std::wstring::npos;
-                     });
+  return base::ranges::any_of(
+      substrings, [&main_string](const std::wstring& path) {
+        return main_string.find(path) != std::wstring::npos;
+      });
 }
 
 template <typename RepeatedTypeWithFileInformation>
@@ -548,6 +550,11 @@ TEST_P(CleanerTest, NoPotentialFalsePositivesOnCleanMachine) {
 }
 
 TEST_P(CleanerTest, NoUnsanitizedPaths) {
+  // Fails on Windows7
+  if (base::win::GetVersion() <= base::win::Version::WIN7) {
+    return;
+  }
+
   CreateRemovableUwS();
 
   base::CommandLine command_line = BuildCommandLine(kCleanerExecutable);

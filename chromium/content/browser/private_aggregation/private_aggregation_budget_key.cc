@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,11 +14,19 @@
 
 namespace content {
 
+namespace {
+base::Time FloorToDuration(base::Time time) {
+  // `FloorToMultiple` would no-op on `base::Time::Max()`.
+  DCHECK(!time.is_max());
+
+  return base::Time() + time.since_origin().FloorToMultiple(
+                            PrivateAggregationBudgetKey::TimeWindow::kDuration);
+}
+}  // namespace
+
 PrivateAggregationBudgetKey::TimeWindow::TimeWindow(
     base::Time api_invocation_time)
-    : start_time_(base::Time::UnixEpoch() +
-                  (api_invocation_time - base::Time::UnixEpoch())
-                      .FloorToMultiple(kDuration)) {}
+    : start_time_(FloorToDuration(api_invocation_time)) {}
 
 PrivateAggregationBudgetKey::PrivateAggregationBudgetKey(
     url::Origin origin,

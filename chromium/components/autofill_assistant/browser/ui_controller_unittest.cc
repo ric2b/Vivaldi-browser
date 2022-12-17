@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -779,7 +779,8 @@ TEST_F(UiControllerTest, SetTtsMessageReEnablesTtsButtonWithNonStickyStateExp) {
           /* initial_url= */ "http://a.example.com/path",
           /* is_in_chrome_triggered= */ false,
           /* is_externally_triggered= */ false,
-          /* skip_autofill_assistant_onboarding = */ false));
+          /* skip_autofill_assistant_onboarding = */ false,
+          /* suppress_browsing_features = */ true));
   EXPECT_CALL(mock_execution_delegate_, GetTriggerContext())
       .WillRepeatedly(Return(&trigger_context));
   ui_controller_->OnStart(trigger_context);
@@ -981,8 +982,21 @@ TEST_F(UiControllerTest, SetGenericUi) {
   }
   ui_controller_->SetGenericUi(
       std::make_unique<GenericUserInterfaceProto>(GenericUserInterfaceProto()),
-      base::DoNothing(), base::DoNothing());
+      base::DoNothing(), base::DoNothing(), base::DoNothing(),
+      base::DoNothing());
   ui_controller_->ClearGenericUi();
+}
+
+TEST_F(UiControllerTest, ShowAccountScreen) {
+  EXPECT_CALL(
+      mock_observer_,
+      OnShowAccountScreen(
+          Property(&ShowAccountScreenProto::gms_account_intent_screen_id, 4),
+          "abc@xyz.com"));
+
+  ShowAccountScreenProto proto;
+  proto.set_gms_account_intent_screen_id(4);
+  ui_controller_->ShowAccountScreen(proto, "abc@xyz.com");
 }
 
 TEST_F(UiControllerTest, OnShowFirstMessageShowsDefaultInitialStatusMessage) {

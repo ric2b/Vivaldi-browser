@@ -42,7 +42,7 @@ VivaldiDataSource::VivaldiDataSource(Profile* profile)
   handlers.emplace_back(PathType::kImage,
                         std::make_unique<LocalImageDataClassHandler>(
                             VivaldiImageStore::kImageUrl));
-  handlers.emplace_back(PathType::kNotesAttachment,
+  handlers.emplace_back(PathType::kSyncedStore,
                         std::make_unique<NotesAttachmentDataClassHandler>());
   handlers.emplace_back(PathType::kCSSMod,
                         std::make_unique<CSSModsDataClassHandler>());
@@ -80,7 +80,18 @@ void VivaldiDataSource::StartDataRequest(
 std::string VivaldiDataSource::GetMimeType(const GURL& url) {
   // We need to explicitly return a mime type, otherwise if the user tries to
   // drag the image they get no extension.
-  return vivaldi_data_url_utils::GetPathMimeType(url.spec());
+  // The |path| received here had its first '/' stripped
+  std::string data;
+  absl::optional<PathType> type =
+      vivaldi_data_url_utils::ParsePath(url.path_piece(), &data);
+  if (type) {
+    auto it = data_class_handlers_.find(*type);
+    if (it != data_class_handlers_.end()) {
+      return it->second->GetMimetype(profile_, data);
+    }
+  }
+
+  return vivaldi_data_url_utils::kMimeTypePNG;
 }
 
 bool VivaldiDataSource::AllowCaching(const GURL& url) {

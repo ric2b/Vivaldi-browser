@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,6 +44,11 @@ class ShoppingServiceAndroid : public base::SupportsUserData::Data {
                              const JavaParamRef<jobject>& obj,
                              const JavaParamRef<jobject>& j_gurl,
                              const JavaParamRef<jobject>& j_callback);
+
+  void FetchPriceEmailPref(JNIEnv* env, const JavaParamRef<jobject>& obj);
+
+  void ScheduleSavedProductUpdate(JNIEnv* env,
+                                  const JavaParamRef<jobject>& obj);
 
   ScopedJavaGlobalRef<jobject> java_ref() { return java_ref_; }
 

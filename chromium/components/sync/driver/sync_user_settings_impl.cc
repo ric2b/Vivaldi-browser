@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -141,12 +141,10 @@ UserSelectableTypeSet SyncUserSettingsImpl::GetRegisteredSelectableTypes()
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 bool SyncUserSettingsImpl::IsSyncAllOsTypesEnabled() const {
-  DCHECK(chromeos::features::IsSyncSettingsCategorizationEnabled());
   return prefs_->IsSyncAllOsTypesEnabled();
 }
 
 UserSelectableOsTypeSet SyncUserSettingsImpl::GetSelectedOsTypes() const {
-  DCHECK(chromeos::features::IsSyncSettingsCategorizationEnabled());
   UserSelectableOsTypeSet types = prefs_->GetSelectedOsTypes();
   types.RetainAll(GetRegisteredSelectableOsTypes());
   return types;
@@ -154,7 +152,6 @@ UserSelectableOsTypeSet SyncUserSettingsImpl::GetSelectedOsTypes() const {
 
 void SyncUserSettingsImpl::SetSelectedOsTypes(bool sync_all_os_types,
                                               UserSelectableOsTypeSet types) {
-  DCHECK(chromeos::features::IsSyncSettingsCategorizationEnabled());
   UserSelectableOsTypeSet registered_types = GetRegisteredSelectableOsTypes();
   DCHECK(registered_types.HasAll(types));
   prefs_->SetSelectedOsTypes(sync_all_os_types, registered_types, types);
@@ -162,7 +159,6 @@ void SyncUserSettingsImpl::SetSelectedOsTypes(bool sync_all_os_types,
 
 UserSelectableOsTypeSet SyncUserSettingsImpl::GetRegisteredSelectableOsTypes()
     const {
-  DCHECK(chromeos::features::IsSyncSettingsCategorizationEnabled());
   UserSelectableOsTypeSet registered_types;
   for (UserSelectableOsType type : UserSelectableOsTypeSet::All()) {
     if (!base::Intersection(registered_model_types_,
@@ -272,19 +268,18 @@ ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
   ModelTypeSet types = UserSelectableTypesToModelTypes(GetSelectedTypes());
   types.PutAll(AlwaysPreferredUserTypes());
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
-    types.PutAll(UserSelectableOsTypesToModelTypes(GetSelectedOsTypes()));
-  }
+  types.PutAll(UserSelectableOsTypesToModelTypes(GetSelectedOsTypes()));
 #endif
   types.RetainAll(registered_model_types_);
 
-  static_assert(40 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(42 + 1 /* notes */ == GetNumModelTypes(),
                 "If adding a new sync data type, update the list below below if"
                 " you want to disable the new data type for local sync.");
   types.PutAll(ControlTypes());
   if (prefs_->IsLocalSyncEnabled()) {
     types.Remove(APP_LIST);
     types.Remove(AUTOFILL_WALLET_OFFER);
+    types.Remove(AUTOFILL_WALLET_USAGE);
     types.Remove(SECURITY_EVENTS);
     types.Remove(SEND_TAB_TO_SELF);
     types.Remove(SHARING_MESSAGE);

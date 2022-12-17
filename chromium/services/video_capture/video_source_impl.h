@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,7 @@ class PushVideoStreamSubscriptionImpl;
 
 class VideoSourceImpl : public mojom::VideoSource {
  public:
-  VideoSourceImpl(mojom::DeviceFactory* device_factory,
+  VideoSourceImpl(DeviceFactory* device_factory,
                   const std::string& device_id,
                   base::RepeatingClosure on_last_binding_closed_cb);
 
@@ -70,7 +70,7 @@ class VideoSourceImpl : public mojom::VideoSource {
   void StopDeviceAsynchronously();
   void OnStopDeviceComplete();
 
-  const raw_ptr<mojom::DeviceFactory> device_factory_;
+  const raw_ptr<DeviceFactory> device_factory_;
   const std::string device_id_;
   mojo::ReceiverSet<mojom::VideoSource> receivers_;
   base::RepeatingClosure on_last_binding_closed_cb_;

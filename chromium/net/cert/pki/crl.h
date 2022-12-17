@@ -1,11 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef NET_CERT_PKI_CRL_H_
 #define NET_CERT_PKI_CRL_H_
 
-#include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
 #include "net/base/net_export.h"
 #include "net/cert/pki/general_names.h"
@@ -212,7 +211,7 @@ GetCRLStatusForCert(const der::Input& cert_serial,
 //        the |thisUpdate| field in the CRL TBSCertList. Responses older than
 //        |max_age| will be considered invalid.
 [[nodiscard]] NET_EXPORT CRLRevocationStatus
-CheckCRL(base::StringPiece raw_crl,
+CheckCRL(std::string_view raw_crl,
          const ParsedCertificateList& valid_chain,
          size_t target_cert_index,
          const ParsedDistributionPoint& cert_dp,

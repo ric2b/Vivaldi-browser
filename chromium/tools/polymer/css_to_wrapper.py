@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -27,33 +27,33 @@ _METADATA_START_REGEX = '#css_wrapper_metadata_start'
 _METADATA_END_REGEX = '#css_wrapper_metadata_end'
 _IMPORT_REGEX = '#import='
 _INCLUDE_REGEX = '#include='
+_SCHEME_REGEX = '#scheme='
 _TYPE_REGEX = '#type='
 
-_STYLE_TEMPLATE = """import \'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js\';
+_STYLE_TEMPLATE = """import {html} from \'%(scheme)s//resources/polymer/v3_0/polymer/polymer_bundled.min.js\';
 %(imports)s
 
 const styleMod = document.createElement(\'dom-module\');
-styleMod.innerHTML = `
+styleMod.appendChild(html`
   <template>
     <style%(include)s>
 %(content)s
     </style>
   </template>
-`;
+`.content);
 styleMod.register(\'%(id)s\');"""
 
-_VARS_TEMPLATE = """import \'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js\';
+_VARS_TEMPLATE = """import {html} from \'%(scheme)s//resources/polymer/v3_0/polymer/polymer_bundled.min.js\';
 %(imports)s
 
-const $_documentContainer = document.createElement('template');
-$_documentContainer.innerHTML = `
+const template = html`
 <custom-style>
   <style>
 %(content)s
   </style>
 </custom-style>
 `;
-document.head.appendChild($_documentContainer.content);"""
+document.head.appendChild(template.content);"""
 
 
 def _parse_style_line(line, metadata):
@@ -90,7 +90,7 @@ def _extract_metadata(css_file):
   metadata_start_line = -1
   metadata_end_line = -1
 
-  metadata = {'type': None}
+  metadata = {'type': None, 'scheme': 'default'}
 
   with io.open(css_file, encoding='utf-8', mode='r') as f:
     lines = f.read().splitlines()
@@ -116,12 +116,14 @@ def _extract_metadata(css_file):
                   'imports': [],
                   'include': None,
                   'metadata_end_line': -1,
+                  'scheme': metadata['scheme'],
                   'type': type,
               }
             elif type == 'vars':
               metadata = {
                   'imports': [],
                   'metadata_end_line': -1,
+                  'scheme': metadata['scheme'],
                   'type': type,
               }
 
@@ -129,6 +131,13 @@ def _extract_metadata(css_file):
           _parse_style_line(line, metadata)
         elif metadata['type'] == 'vars':
           _parse_vars_line(line, metadata)
+
+        if metadata['scheme'] == 'default':
+          scheme_match = re.search(_SCHEME_REGEX, line)
+          if scheme_match:
+            scheme = line[scheme_match.end():]
+            assert scheme in ['chrome', 'relative']
+            metadata['scheme'] = scheme
 
         if _METADATA_END_REGEX in line:
           assert metadata_start_line > -1
@@ -194,6 +203,13 @@ def main(argv):
     content = _extract_content(path.join(wrapper_in_folder, in_file), metadata,
                                args.minify)
 
+    # Extract the URL scheme that should be used for absolute URL imports.
+    scheme = None
+    if metadata['scheme'] in ['default', 'chrome']:
+      scheme = 'chrome:'
+    elif metadata['scheme'] == 'relative':
+      scheme = ''
+
     wrapper = None
     if metadata['type'] == 'style':
       include = ''
@@ -206,11 +222,13 @@ def main(argv):
           'content': content,
           'include': include,
           'id': metadata['id'],
+          'scheme': scheme,
       }
     elif metadata['type'] == 'vars':
       wrapper = _VARS_TEMPLATE % {
           'imports': _urls_to_imports(metadata['imports']),
           'content': content,
+          'scheme': scheme,
       }
 
     assert wrapper

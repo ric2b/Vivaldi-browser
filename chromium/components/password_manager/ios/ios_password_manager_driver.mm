@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/password_manager/core/browser/password_generation_frame_helper.h"
 #include "components/password_manager/core/browser/password_manager.h"
+#import "components/password_manager/ios/ios_password_manager_driver_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -19,23 +20,39 @@ using password_manager::PasswordManager;
 
 IOSPasswordManagerDriver::IOSPasswordManagerDriver(
     id<PasswordManagerDriverBridge> bridge,
-    password_manager::PasswordManager* password_manager)
-    : bridge_(bridge), password_manager_(password_manager) {
+    password_manager::PasswordManagerInterface* password_manager,
+    web::WebFrame* web_frame,
+    int driver_id)
+    : bridge_(bridge),
+      password_manager_(password_manager),
+      web_frame_(web_frame),
+      id_(driver_id) {
   password_generation_helper_ =
       std::make_unique<password_manager::PasswordGenerationFrameHelper>(
-          password_manager_->client(), this);
+          password_manager_->GetClient(), this);
+
+  // Cache these values early, so that it can be accessed after frame deletion.
+  is_in_main_frame_ = web_frame->IsMainFrame();
+  security_origin_ = web_frame->GetSecurityOrigin();
 }
 
 IOSPasswordManagerDriver::~IOSPasswordManagerDriver() = default;
 
 int IOSPasswordManagerDriver::GetId() const {
-  // There is only one driver per tab on iOS so returning 0 is fine.
-  return 0;
+  return id_;
 }
 
-void IOSPasswordManagerDriver::FillPasswordForm(
+void IOSPasswordManagerDriver::SetPasswordFillData(
     const autofill::PasswordFormFillData& form_data) {
-  [bridge_ fillPasswordForm:form_data completionHandler:nil];
+  // No need to cache data if the frame is already destroyed.
+  // (crbug.com/1383214): |web_frame_| is not guaranteed to be alive, that's
+  // why cached values for isMainFrame & forSecurityOrigin need to be passed.
+  if (web_frame_) {
+    [bridge_ processPasswordFormFillData:form_data
+                                 inFrame:web_frame_
+                             isMainFrame:is_in_main_frame_
+                       forSecurityOrigin:security_origin_];
+  }
 }
 
 void IOSPasswordManagerDriver::InformNoSavedCredentials(
@@ -77,7 +94,8 @@ IOSPasswordManagerDriver::GetPasswordGenerationHelper() {
   return password_generation_helper_.get();
 }
 
-PasswordManager* IOSPasswordManagerDriver::GetPasswordManager() {
+password_manager::PasswordManagerInterface*
+IOSPasswordManagerDriver::GetPasswordManager() {
   return password_manager_;
 }
 
@@ -89,8 +107,7 @@ IOSPasswordManagerDriver::GetPasswordAutofillManager() {
 }
 
 bool IOSPasswordManagerDriver::IsInPrimaryMainFrame() const {
-  // On IOS only processing of password forms in main frame is implemented.
-  return true;
+  return is_in_main_frame_;
 }
 
 bool IOSPasswordManagerDriver::CanShowAutofillUi() const {
@@ -103,4 +120,8 @@ bool IOSPasswordManagerDriver::CanShowAutofillUi() const {
 
 const GURL& IOSPasswordManagerDriver::GetLastCommittedURL() const {
   return bridge_.lastCommittedURL;
+}
+
+void IOSPasswordManagerDriver::ProcessFrameDeletion() {
+  web_frame_ = nullptr;
 }

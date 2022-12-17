@@ -1,10 +1,10 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
-import {decorate} from 'chrome://resources/js/cr/ui.m.js';
-import {Menu} from 'chrome://resources/js/cr/ui/menu.js';
+import {assert} from 'chrome://resources/js/assert.js';
+import {decorate} from 'chrome://resources/js/cr/ui.js';
+import {Menu} from './menu.js';
 
 import {util} from '../../../common/js/util.js';
 import {ProvidersModel} from '../providers_model.js';

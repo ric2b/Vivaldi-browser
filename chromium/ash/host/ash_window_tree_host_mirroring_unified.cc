@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,12 +53,12 @@ void AshWindowTreeHostMirroringUnified::ConvertDIPToPixels(
   // defined above, which only scales those local points to the right size, and
   // leaves the translation to be done by the MirroringScreenPositionClient
   // functions.
-  GetRootTransformForLocalEventCoordinates().TransformPoint(point);
+  *point = GetRootTransformForLocalEventCoordinates().MapPoint(*point);
 }
 
 void AshWindowTreeHostMirroringUnified::ConvertPixelsToDIP(
     gfx::PointF* point) const {
-  GetInverseRootTransformForLocalEventCoordinates().TransformPoint(point);
+  *point = GetInverseRootTransformForLocalEventCoordinates().MapPoint(*point);
 }
 
 void AshWindowTreeHostMirroringUnified::PrepareForShutdown() {

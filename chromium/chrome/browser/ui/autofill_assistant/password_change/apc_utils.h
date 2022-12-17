@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@ const gfx::VectorIcon& GetAssistantIconOrFallback();
 // Convert the protobuf enum that specifies a top icon for an Automate Password
 // Change flow to its correct `gfx::VectorIcon` counterpart.
 const gfx::VectorIcon& GetApcTopIconFromEnum(
-    autofill_assistant::password_change::TopIcon icon);
+    autofill_assistant::password_change::TopIcon icon,
+    bool dark_mode);
 
 #endif  // CHROME_BROWSER_UI_AUTOFILL_ASSISTANT_PASSWORD_CHANGE_APC_UTILS_H_

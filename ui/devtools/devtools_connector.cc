@@ -70,6 +70,8 @@ void DevtoolsConnectorAPI::RemoveDevtoolsConnectorItem(int tab_id) {
       return;
     }
   }
+  // Falltrough as both main and toolbox content refers to the same inspected
+  // tab-id.
 }
 
 // static
@@ -107,7 +109,7 @@ void DevtoolsConnectorAPI::CloseDevtoolsForBrowser(
           // This call removes the element from connector_items_.
           window->ForceCloseWindow();
           it = api->connector_items_.begin();
-        }
+        } else return;
       } else {
         it++;
       }
@@ -127,7 +129,7 @@ void DevtoolsConnectorAPI::SendOnUndockedEvent(
   Profile* profile = Profile::FromBrowserContext(browser_context);
   PrefService* prefs = profile->GetPrefs();
   const base::Value::Dict& pref_dict =
-      prefs->GetDictionary(prefs::kAppWindowPlacement)->GetDict();
+      prefs->GetDict(prefs::kAppWindowPlacement);
   if (const base::Value::Dict* state =
           pref_dict.FindDict(DevToolsWindow::kDevToolsApp)) {
     params.left = state->FindInt("left").value_or(0);
@@ -211,18 +213,14 @@ void DevtoolsConnectorItem::AddNewContents(
     std::unique_ptr<content::WebContents> new_contents,
     const GURL& target_url,
     WindowOpenDisposition disposition,
-    const gfx::Rect& initial_rect,
+    const blink::mojom::WindowFeatures& window_features,
     bool user_gesture,
     bool* was_blocked) {
   if (devtools_delegate_) {
+    // The webview is called in devtools_delegate_
     devtools_delegate_->AddNewContents(source, std::move(new_contents),
-                                       target_url, disposition, initial_rect,
+                                       target_url, disposition, window_features,
                                        user_gesture, was_blocked);
-  }
-  if (guest_delegate_) {
-    guest_delegate_->AddNewContents(source, std::move(new_contents), target_url,
-                                    disposition, initial_rect, user_gesture,
-                                    was_blocked);
   }
 }
 
@@ -238,17 +236,9 @@ void DevtoolsConnectorItem::WebContentsCreated(
         source_contents, opener_render_process_id, opener_render_frame_id,
         frame_name, target_url, new_contents);
   }
-  if (guest_delegate_) {
-    guest_delegate_->WebContentsCreated(
-        source_contents, opener_render_process_id, opener_render_frame_id,
-        frame_name, target_url, new_contents);
-  }
 }
 
 void DevtoolsConnectorItem::CloseContents(content::WebContents* source) {
-  if (guest_delegate_) {
-    guest_delegate_->CloseContents(source);
-  }
   if (devtools_delegate_) {
     devtools_delegate_->CloseContents(source);
     // at this point, |this| is not longer valid.
@@ -259,9 +249,6 @@ void DevtoolsConnectorItem::ContentsZoomChange(bool zoom_in) {
   if (devtools_delegate_) {
     devtools_delegate_->ContentsZoomChange(zoom_in);
   }
-  if (guest_delegate_) {
-    guest_delegate_->ContentsZoomChange(zoom_in);
-  }
 }
 
 void DevtoolsConnectorItem::BeforeUnloadFired(content::WebContents* tab,
@@ -269,9 +256,6 @@ void DevtoolsConnectorItem::BeforeUnloadFired(content::WebContents* tab,
                                               bool* proceed_to_fire_unload) {
   if (devtools_delegate_) {
     devtools_delegate_->BeforeUnloadFired(tab, proceed, proceed_to_fire_unload);
-  }
-  if (guest_delegate_) {
-    guest_delegate_->BeforeUnloadFired(tab, proceed, proceed_to_fire_unload);
   }
 }
 
@@ -285,19 +269,13 @@ DevtoolsConnectorItem::PreHandleKeyboardEvent(
   if (devtools_delegate_) {
     handled = devtools_delegate_->PreHandleKeyboardEvent(source, event);
   }
-  if (guest_delegate_ &&
-      handled != content::KeyboardEventProcessingResult::NOT_HANDLED) {
-    handled = guest_delegate_->PreHandleKeyboardEvent(source, event);
-  }
   return handled;
 }
 
 bool DevtoolsConnectorItem::HandleContextMenu(
     content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
-  if (guest_delegate_) {
-    return guest_delegate_->HandleContextMenu(render_frame_host, params);
-  } else if (devtools_delegate_) {
+  if (devtools_delegate_) {
     return devtools_delegate_->HandleContextMenu(render_frame_host, params);
   }
   return false;
@@ -322,8 +300,8 @@ bool ShouldForwardKeyCombo(std::string shortcut_text,
     content::BrowserContext* browser_context) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
   PrefService* prefs = profile->GetPrefs();
-  const base::Value* vivaldi_actions = prefs->GetList(vivaldiprefs::kActions);
-  const base::Value::Dict* dict = vivaldi_actions->GetList()[0].GetIfDict();
+  auto& vivaldi_actions = prefs->GetList(vivaldiprefs::kActions);
+  const base::Value::Dict* dict = vivaldi_actions[0].GetIfDict();
 
   for (int i = 0; i < (int)commands_to_fwd.size(); i++) {
     const base::Value::Dict* shortcut = dict->FindDict(commands_to_fwd.at(i));
@@ -383,9 +361,6 @@ bool DevtoolsConnectorItem::HandleKeyboardEvent(
 content::JavaScriptDialogManager*
 DevtoolsConnectorItem::GetJavaScriptDialogManager(
     content::WebContents* source) {
-  if (guest_delegate_) {
-    return guest_delegate_->GetJavaScriptDialogManager(source);
-  }
   if (devtools_delegate_) {
     return devtools_delegate_->GetJavaScriptDialogManager(source);
   }
@@ -398,11 +373,8 @@ void DevtoolsConnectorItem::RunFileChooser(
     scoped_refptr<content::FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
   if (devtools_delegate_) {
-    devtools_delegate_->RunFileChooser(render_frame_host, std::move(listener),
+    return devtools_delegate_->RunFileChooser(render_frame_host, std::move(listener),
                                        params);
-  } else if (guest_delegate_) {
-    guest_delegate_->RunFileChooser(render_frame_host, std::move(listener),
-                                    params);
   }
   NOTREACHED();
 }
@@ -412,8 +384,6 @@ bool DevtoolsConnectorItem::PreHandleGestureEvent(
     const blink::WebGestureEvent& event) {
   if (devtools_delegate_) {
     return devtools_delegate_->PreHandleGestureEvent(source, event);
-  } else if (guest_delegate_) {
-    return guest_delegate_->PreHandleGestureEvent(source, event);
   }
   NOTREACHED();
   return true;
@@ -425,9 +395,6 @@ content::WebContents* DevtoolsConnectorItem::OpenURLFromTab(
   if (devtools_delegate_) {
     return devtools_delegate_->OpenURLFromTab(source, params);
   }
-  if (guest_delegate_) {
-    return guest_delegate_->OpenURLFromTab(source, params);
-  }
   NOTREACHED();
   return nullptr;
 }
@@ -437,9 +404,6 @@ std::unique_ptr<content::EyeDropper> DevtoolsConnectorItem::OpenEyeDropper(
     content::EyeDropperListener* listener) {
   if (devtools_delegate_) {
     return devtools_delegate_->OpenEyeDropper(frame, listener);
-  }
-  if (guest_delegate_) {
-    return guest_delegate_->OpenEyeDropper(frame, listener);
   }
   NOTREACHED();
   return nullptr;

@@ -1,17 +1,21 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/system_extensions/system_extensions_sandboxed_unpacker.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "chrome/browser/ash/system_extensions/system_extension.h"
 #include "chrome/browser/ash/system_extensions/system_extensions_profile_utils.h"
 #include "chrome/browser/ash/system_extensions/system_extensions_provider.h"
 #include "content/public/common/url_constants.h"
@@ -32,18 +36,55 @@ const constexpr char kServiceWorkerUrlKey[] = "service_worker_url";
 GURL GetBaseURL(const std::string& id, SystemExtensionType type) {
   // The host is made of up a System Extension prefix based on the type and
   // the System Extension Id.
-
   base::StringPiece host_prefix;
   switch (type) {
-    case SystemExtensionType::kEcho:
-      static constexpr char kSystemExtensionEchoPrefix[] =
-          "system-extension-echo-";
-      host_prefix = kSystemExtensionEchoPrefix;
+    case SystemExtensionType::kWindowManagement:
+      static constexpr char kSystemExtensionWindowManagementPrefix[] =
+          "system-extension-window-management-";
+      host_prefix = kSystemExtensionWindowManagementPrefix;
+      break;
+    case SystemExtensionType::kPeripheralPrototype:
+      static constexpr char kSystemExtensionPeripheralPrototypePrefix[] =
+          "system-extension-peripheral-prototype-";
+      host_prefix = kSystemExtensionPeripheralPrototypePrefix;
+      break;
+    case SystemExtensionType::kManagedDeviceHealthServices:
+      static constexpr char
+          kSystemExtensionManagedDeviceHealthServicesPrefix[] =
+              "system-extension-managed-device-health-services-";
+      host_prefix = kSystemExtensionManagedDeviceHealthServicesPrefix;
       break;
   }
   const std::string host = base::StrCat({host_prefix, id});
   return GURL(base::StrCat({content::kChromeUIUntrustedScheme,
                             url::kStandardSchemeSeparator, host}));
+}
+
+SystemExtensionType* GetTypeFromString(base::StringPiece type_str) {
+  static base::NoDestructor<
+      base::flat_map<base::StringPiece, SystemExtensionType>>
+      kStrToType([]() {
+        std::vector<std::pair<base::StringPiece, SystemExtensionType>>
+            str_to_type_list;
+        str_to_type_list.emplace_back("window-management",
+                                      SystemExtensionType::kWindowManagement);
+        str_to_type_list.emplace_back(
+            "peripheral-prototype", SystemExtensionType::kPeripheralPrototype);
+
+        if (base::FeatureList::IsEnabled(
+                features::kSystemExtensionsManagedDeviceHealthServices)) {
+          str_to_type_list.emplace_back(
+              "managed-device-health-services",
+              SystemExtensionType::kManagedDeviceHealthServices);
+        }
+        return str_to_type_list;
+      }());
+
+  auto it = kStrToType->find(type_str);
+  if (it == kStrToType->end())
+    return nullptr;
+
+  return &it->second;
 }
 
 }  // namespace
@@ -128,10 +169,11 @@ SystemExtensionsSandboxedUnpacker::GetSystemExtensionFromValue(
   if (!type_str) {
     return SystemExtensionsInstallStatus::kFailedTypeMissing;
   }
-  if (base::CompareCaseInsensitiveASCII("echo", *type_str) != 0) {
+  SystemExtensionType* type = GetTypeFromString(*type_str);
+  if (type == nullptr) {
     return SystemExtensionsInstallStatus::kFailedTypeInvalid;
   }
-  system_extension.type = SystemExtensionType::kEcho;
+  system_extension.type = *type;
 
   // Parse base_url.
   const GURL base_url = GetBaseURL(*id_str, system_extension.type);

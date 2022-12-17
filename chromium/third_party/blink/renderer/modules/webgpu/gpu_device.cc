@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_compute_pipeline.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device_lost_info.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_external_texture.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_internal_error.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_out_of_memory_error.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_pipeline_layout.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_query_set.h"
@@ -43,7 +44,6 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_uncaptured_error_event.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_validation_error.h"
 #include "third_party/blink/renderer/modules/webgpu/string_utils.h"
-#include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 
 namespace blink {
@@ -236,7 +236,7 @@ bool GPUDevice::ValidateTextureFormatUsage(V8GPUTextureFormat format,
 
 std::string GPUDevice::formattedLabel() const {
   std::string deviceLabel =
-      label().IsEmpty() ? "[Device]" : "[Device \"" + label().Utf8() + "\"]";
+      label().empty() ? "[Device]" : "[Device \"" + label().Utf8() + "\"]";
 
   return deviceLabel;
 }
@@ -259,6 +259,9 @@ void GPUDevice::OnUncapturedError(WGPUErrorType errorType,
         StringFromASCIIAndUTF8(message)));
   } else if (errorType == WGPUErrorType_OutOfMemory) {
     init->setError(MakeGarbageCollected<GPUOutOfMemoryError>(
+        StringFromASCIIAndUTF8(message)));
+  } else if (errorType == WGPUErrorType_Internal) {
+    init->setError(MakeGarbageCollected<GPUInternalError>(
         StringFromASCIIAndUTF8(message)));
   } else {
     return;
@@ -307,6 +310,8 @@ void GPUDevice::OnDeviceLostError(WGPUDeviceLostReason reason,
     return;
   AddConsoleWarning(message);
 
+  // Invalidate the adapter given that a device was lost.
+  adapter_->invalidate();
   if (lost_property_->GetState() == LostProperty::kPending) {
     auto* device_lost_info = MakeGarbageCollected<GPUDeviceLostInfo>(
         reason, StringFromASCIIAndUTF8(message));
@@ -387,6 +392,9 @@ GPUQueue* GPUDevice::queue() {
 void GPUDevice::destroy(ScriptState* script_state) {
   destroyed_ = true;
   DestroyAllExternalTextures();
+  // Dissociate mailboxes before destroying the device. This ensures that
+  // mailbox operations which run during dissociation can succeed.
+  DissociateMailboxes();
   UnmapAllMappableBuffers(script_state);
   GetProcs().deviceDestroy(GetHandle());
   FlushNow();
@@ -485,7 +493,7 @@ ScriptPromise GPUDevice::createRenderPipelineAsync(
 
   // WebGPU guarantees that promises are resolved in finite time so we need to
   // ensure commands are flushed.
-  EnsureFlush();
+  EnsureFlush(ToEventLoop(script_state));
   return promise;
 }
 
@@ -496,9 +504,9 @@ ScriptPromise GPUDevice::createComputePipelineAsync(
   ScriptPromise promise = resolver->Promise();
 
   std::string label;
-  OwnedProgrammableStageDescriptor computeStageDescriptor;
+  OwnedProgrammableStage computeStage;
   WGPUComputePipelineDescriptor dawn_desc =
-      AsDawnType(this, descriptor, &label, &computeStageDescriptor);
+      AsDawnType(this, descriptor, &label, &computeStage);
 
   auto* callback =
       BindWGPUOnceCallback(&GPUDevice::OnCreateComputePipelineAsyncCallback,
@@ -508,7 +516,7 @@ ScriptPromise GPUDevice::createComputePipelineAsync(
                                               callback->AsUserdata());
   // WebGPU guarantees that promises are resolved in finite time so we need to
   // ensure commands are flushed.
-  EnsureFlush();
+  EnsureFlush(ToEventLoop(script_state));
   return promise;
 }
 
@@ -553,7 +561,7 @@ ScriptPromise GPUDevice::popErrorScope(ScriptState* script_state) {
 
   // WebGPU guarantees that promises are resolved in finite time so we
   // need to ensure commands are flushed.
-  EnsureFlush();
+  EnsureFlush(ToEventLoop(script_state));
   return promise;
 }
 
@@ -571,6 +579,10 @@ void GPUDevice::OnPopErrorScopeCallback(ScriptPromiseResolver* resolver,
       break;
     case WGPUErrorType_Validation:
       resolver->Resolve(MakeGarbageCollected<GPUValidationError>(
+          StringFromASCIIAndUTF8(message)));
+      break;
+    case WGPUErrorType_Internal:
+      resolver->Resolve(MakeGarbageCollected<GPUInternalError>(
           StringFromASCIIAndUTF8(message)));
       break;
     case WGPUErrorType_Unknown:
@@ -598,6 +610,7 @@ void GPUDevice::Trace(Visitor* visitor) const {
   visitor->Trace(queue_);
   visitor->Trace(lost_property_);
   visitor->Trace(active_external_textures_);
+  visitor->Trace(textures_with_mailbox_);
   visitor->Trace(mappable_buffers_);
   ExecutionContextClient::Trace(visitor);
   EventTargetWithInlineData::Trace(visitor);
@@ -614,6 +627,13 @@ void GPUDevice::DestroyAllExternalTextures() {
     external_texture->Destroy();
   }
   active_external_textures_.clear();
+}
+
+void GPUDevice::DissociateMailboxes() {
+  for (auto& texture : textures_with_mailbox_) {
+    texture->DissociateMailbox();
+  }
+  textures_with_mailbox_.clear();
 }
 
 void GPUDevice::UnmapAllMappableBuffers(ScriptState* script_state) {
@@ -639,6 +659,16 @@ void GPUDevice::RemoveActiveExternalTexture(
     GPUExternalTexture* external_texture) {
   DCHECK(external_texture);
   active_external_textures_.erase(external_texture);
+}
+
+void GPUDevice::TrackTextureWithMailbox(GPUTexture* texture) {
+  DCHECK(texture);
+  textures_with_mailbox_.insert(texture);
+}
+
+void GPUDevice::UntrackTextureWithMailbox(GPUTexture* texture) {
+  DCHECK(texture);
+  textures_with_mailbox_.erase(texture);
 }
 
 }  // namespace blink

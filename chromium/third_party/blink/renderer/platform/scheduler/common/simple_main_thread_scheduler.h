@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,8 +54,6 @@ class SimpleMainThreadScheduler : public MainThreadScheduler {
   // Return the thread task runner (there's no separate task runner for them).
   scoped_refptr<base::SingleThreadTaskRunner> V8TaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> NonWakingTaskRunner() override;
-  scoped_refptr<base::SingleThreadTaskRunner> DeprecatedDefaultTaskRunner()
-      override;
 
   // Unsupported. Return nullptr.
   std::unique_ptr<WebAgentGroupScheduler> CreateAgentGroupScheduler() override;
@@ -71,11 +69,15 @@ class SimpleMainThreadScheduler : public MainThreadScheduler {
   void AddTaskObserver(base::TaskObserver*) override;
   void RemoveTaskObserver(base::TaskObserver*) override;
 
-  // Return nullptr.
+  // Return pointer to this.
   MainThreadScheduler* ToMainThreadScheduler() override;
 
-  void SetV8Isolate(v8::Isolate* isolate) override {}
+  void SetV8Isolate(v8::Isolate* isolate) override;
+  v8::Isolate* Isolate() override;
   std::unique_ptr<RendererPauseHandle> PauseScheduler() override;
+
+ private:
+  v8::Isolate* isolate_ = nullptr;
 };
 
 }  // namespace scheduler

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,7 +55,7 @@ class MODULES_EXPORT EncoderBase
   // *_encoder.idl implementation.
   uint32_t encodeQueueSize() { return requested_encodes_; }
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(dequeue, kDequeue);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(dequeue, kDequeue)
 
   void configure(const ConfigType*, ExceptionState&);
 

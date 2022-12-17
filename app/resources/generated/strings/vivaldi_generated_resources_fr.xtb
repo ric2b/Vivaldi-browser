@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">Im&amp;primer...</translation>
 <translation id="1181037720776840403">Supprimer</translation>
 <translation id="1187722533808055681">Sorties de veille</translation>
-<translation id="119944043368869598">Tout effacer</translation>
 <translation id="1221825588892235038">Sélection uniquement</translation>
 <translation id="1234736487471201993">Créer un code QR pour cette image</translation>
 <translation id="1244303850296295656">Erreur au niveau des extensions</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">&amp;Tout sélectionner</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> points par pouce</translation>
 <translation id="1936931585862840749">Indiquez le nombre de copies à imprimer (1 à <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Tout supprimer</translation>
 <translation id="1994173015038366702">URL du site</translation>
 <translation id="2019718679933488176">&amp;Ouvrir le fichier audio dans un nouvel onglet</translation>
 <translation id="2050339315714019657">Portrait</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Coller en texte brut</translation>
 <translation id="2249605167705922988">par exemple : 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Autoriser les identifiants d’accès aux contenus protégés (ceci nécessite le redémarrage de votre ordinateur)</translation>
-<translation id="2277255602909579701">Tous les cookies et données du site</translation>
 <translation id="2280486287150724112">Marge droite</translation>
 <translation id="2282146716419988068">Processeur graphique</translation>
 <translation id="2301382460326681002">Le répertoire racine de l’extension est incorrect.</translation>
@@ -93,8 +90,10 @@
 <translation id="2550212893339833758">Mémoire Swap</translation>
 <translation id="2553440850688409052">Masquer ce plug-in</translation>
 <translation id="26224892172169984">Interdire à tous les sites de gérer les protocoles</translation>
+<translation id="2653275834716714682">Remplacement du texte</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Réactiver</translation>
+<translation id="2678100101831051676">Impossible de caster.</translation>
 <translation id="2721037002783622288">Rechercher une &amp;image avec <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Créer un raccourci…</translation>
 <translation id="2785873697295365461">Descripteurs de fichiers</translation>
@@ -122,7 +121,6 @@
 <translation id="3084548735795614657">Déposez ici pour installer l’extension</translation>
 <translation id="3122464029669770682">Processeur</translation>
 <translation id="3124111068741548686">Ressources utilisateur</translation>
-<translation id="3127156390846601284">Toutes les données enregistrées sur votre appareil seront supprimées pour tous les sites affichés. Voulez-vous continuer ?</translation>
 <translation id="3129173833825111527">Marge gauche</translation>
 <translation id="3144647712221361880">Ouvrir le lien avec le compte</translation>
 <translation id="3222066309010235055">Pré-rendu : <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +143,6 @@
 <translation id="3387614642886316601">Utiliser le correcteur orthographique amélioré</translation>
 <translation id="3390013585654699824">Détails sur l’application</translation>
 <translation id="3393582007140394275">Impossible de caster l’écran.</translation>
-<translation id="3432227430032737297">Supprimer tous les cookies affichés</translation>
 <translation id="345693547134384690">Ouvrir l’&amp;image dans un nouvel onglet</translation>
 <translation id="3494769164076977169">Me demander lorsque le téléchargement automatique de fichiers est requis sur un site après le premier fichier (recommandé)</translation>
 <translation id="3505030558724226696">Retirer les droits d’accès aux appareils</translation>
@@ -204,10 +201,10 @@
 <translation id="4409697491990005945">Marges</translation>
 <translation id="4423376891418188461">Rétablir les paramètres</translation>
 <translation id="4478664379124702289">Enregistrer le lie&amp;n sous…</translation>
-<translation id="4579581181964204535">Impossible de caster <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Accéder à <ph name="URL" /></translation>
 <translation id="4595560905247879544">Seul l’administrateur (<ph name="CUSTODIAN_NAME" />) est autorisé à modifier les applications et les extensions.</translation>
 <translation id="4613271546271159013">Une extension a modifié la page qui s’affiche lorsque vous ouvrez un nouvel onglet.</translation>
+<translation id="4616405296204756919">Vous pouvez sauvegarder vos mots de passe sur n’importe quel appareil. Ils sont conservés par le <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">Ou&amp;vrir la vidéo dans un nouvel onglet</translation>
 <translation id="4677772697204437347">Mémoire du processeur graphique</translation>
 <translation id="4681930562518940301">Ouvrir l’image originale dans un nouvel onglet</translation>
@@ -241,10 +238,12 @@
 <translation id="5233231016133573565">ID du processus</translation>
 <translation id="5233736638227740678">Co&amp;ller</translation>
 <translation id="5256861893479663409">Sur tous les sites</translation>
+<translation id="5260334392110301220">Guillemets courbes</translation>
 <translation id="5269977353971873915">Échec de l’impression</translation>
 <translation id="5284445933715251131">Continuer le téléchargement</translation>
 <translation id="52912272896845572">Le fichier de clé privée est incorrect.</translation>
 <translation id="5301954838959518834">OK</translation>
+<translation id="5302932258331363306">Afficher les substitutions</translation>
 <translation id="5317780077021120954">Enregistrer</translation>
 <translation id="5334142896108694079">Cache des scripts</translation>
 <translation id="5355926466126177564">L’extension <ph name="EXTENSION_NAME" /> a modifié la page qui s’affiche lorsque vous effectuez une recherche dans la barre d’adresses.</translation>
@@ -277,7 +276,6 @@
 <translation id="5747809636523347288">Coller et accéder à <ph name="URL" /></translation>
 <translation id="5759728514498647443">Les documents envoyés pour impression via « <ph name="APP_NAME" /> » seront lisibles avec « <ph name="APP_NAME" /> ».</translation>
 <translation id="5764483294734785780">En&amp;registrer le fichier audio sous…</translation>
-<translation id="577624874850706961">Rechercher des cookies</translation>
 <translation id="5780973441651030252">Priorité de traitement</translation>
 <translation id="5804241973901381774">Autorisations</translation>
 <translation id="5828633471261496623">Impression...</translation>
@@ -290,7 +288,6 @@
 <translation id="5965661248935608907">Elle contrôle également la page qui s’affiche lorsque vous cliquez sur le bouton Accueil ou lorsque vous effectuez une recherche dans la barre d’adresses.</translation>
 <translation id="5978277834170881274">&amp;Utiliser le correcteur orthographique de base</translation>
 <translation id="5979421442488174909">&amp;Traduire en <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Effacer les données de sites</translation>
 <translation id="6042308850641462728">Plus</translation>
 <translation id="6086846494333236931">Installée par votre administrateur</translation>
 <translation id="6101226222197207147">Nouvelle application (<ph name="EXTENSION_NAME" />) ajoutée</translation>
@@ -346,6 +343,7 @@
 <translation id="7053983685419859001">Bloquer</translation>
 <translation id="7070484045139057854">Possibilité de lire et de modifier les données du site</translation>
 <translation id="708060913198414444">C&amp;opier l’adresse du fichier audio</translation>
+<translation id="7121728544325372695">Tirets intelligents</translation>
 <translation id="7175353351958621980">Chargée depuis :</translation>
 <translation id="7186088072322679094">Conserver dans la barre d’outils</translation>
 <translation id="7287143125007575591">Accès refusé.</translation>
@@ -404,7 +402,6 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
      =1{Téléchargement en cours} other {Téléchargements en cours}}</translation>
 <translation id="8230134520748321204">Enregistrer le mot de passe pour <ph name="ORIGIN" /> ?</translation>
 <translation id="8261378640211443080">Cette extension n’est pas répertoriée sur le <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> et a pu être ajoutée à votre insu.</translation>
-<translation id="8339059274628563283">Données stockées localement pour <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Cette extension a pris le contrôle de vos réglages de proxy, ce qui signifie que toutes vos activités en ligne peuvent être modifiées, interrompues ou espionnées. Si vous ne savez pas pourquoi cette modification s’est produite, c'est qu’elle est probablement indésirable.</translation>
 <translation id="8382913212082956454">Copi&amp;er l’adresse e-mail</translation>
 <translation id="8413385045638830869">Demander au préalable (recommandé)</translation>
@@ -430,6 +427,7 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Copier le te&amp;xte du lien</translation>
 <translation id="8823704566850948458">Suggérer un mot de passe…</translation>
+<translation id="883062543841130884">Substitutions</translation>
 <translation id="8859174528519900719">Sous-cadre : <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Ouvrir le lien dans une nouvelle &amp;fenêtre</translation>
 <translation id="8915370057835397490">Chargement des suggestions en cours…</translation>

@@ -1,13 +1,9 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/device_sync/remote_device_provider_impl.h"
 
-#include <algorithm>
-
-#include "ash/components/multidevice/logging/logging.h"
-#include "ash/components/multidevice/secure_message_delegate_impl.h"
 #include "ash/constants/ash_features.h"
 #include "ash/services/device_sync/remote_device_loader.h"
 #include "ash/services/device_sync/remote_device_v2_loader_impl.h"
@@ -15,10 +11,11 @@
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
+#include "chromeos/ash/components/multidevice/secure_message_delegate_impl.h"
 
-namespace ash {
-
-namespace device_sync {
+namespace ash::device_sync {
 
 namespace {
 
@@ -218,11 +215,8 @@ void RemoteDeviceProviderImpl::MergeV1andV2SyncedDevices() {
     ++num_v2_devices_with_decrypted_public_key;
 
     std::string v2_public_key = v2_device.public_key;
-    auto it = std::find_if(
-        synced_remote_devices_.begin(), synced_remote_devices_.end(),
-        [&v2_public_key](const multidevice::RemoteDevice& v1_device) {
-          return v1_device.public_key == v2_public_key;
-        });
+    auto it = base::ranges::find(synced_remote_devices_, v2_public_key,
+                                 &multidevice::RemoteDevice::public_key);
 
     // If a v1 device has the same public key as the v2 device, replace the
     // v1 device with the v2 device; otherwise, append the v2 device to the
@@ -253,6 +247,4 @@ RemoteDeviceProviderImpl::GetSyncedDevices() const {
   return synced_remote_devices_;
 }
 
-}  // namespace device_sync
-
-}  // namespace ash
+}  // namespace ash::device_sync

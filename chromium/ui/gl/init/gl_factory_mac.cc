@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,7 +42,8 @@ class NoOpGLSurface : public GLSurface {
   bool Initialize(GLSurfaceFormat format) override { return true; }
   void Destroy() override {}
   bool IsOffscreen() override { return true; }
-  gfx::SwapResult SwapBuffers(PresentationCallback callback) override {
+  gfx::SwapResult SwapBuffers(PresentationCallback callback,
+                              FrameData data) override {
     NOTREACHED() << "Cannot call SwapBuffers on a NoOpGLSurface.";
     return gfx::SwapResult::SWAP_FAILED;
   }

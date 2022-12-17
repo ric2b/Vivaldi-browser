@@ -139,6 +139,9 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
 
   // XMLParserScriptRunnerHost
   void NotifyScriptExecuted() override;
+  // |kDOMContentLoadedWaitForAsyncScript| experiment is not effective for XML
+  // documents and thus we don't have to do anything here.
+  void NotifyNoRemainingAsyncScripts() final {}
 
   void end();
 
@@ -203,6 +206,12 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
   HeapVector<Member<ContainerNode>> current_node_stack_;
 
   Member<Text> leaf_text_node_;
+
+  // Tracks whether we're processing a new input chunk. This is set right before
+  // submitting a new chunk to libxml and is reset by most emitted parse events.
+  // We use this as a signal to merge CDATA sections when they span a chunk
+  // boundary.
+  bool is_start_of_new_chunk_ = false;
 
   bool is_currently_parsing8_bit_chunk_;
   bool saw_error_;

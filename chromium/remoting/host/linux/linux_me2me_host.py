@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Copyright (c) 2012 The Chromium Authors. All rights reserved.
+# Copyright 2012 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -51,18 +51,11 @@ HOST_EXTRA_PARAMS_ENV_VAR = "CHROME_REMOTE_DESKTOP_HOST_EXTRA_PARAMS"
 # list of sizes in this environment variable.
 DEFAULT_SIZES_ENV_VAR = "CHROME_REMOTE_DESKTOP_DEFAULT_DESKTOP_SIZES"
 
-# By default, this script launches Xvfb as the virtual X display. When this
-# environment variable is set, the script will instead launch an instance of
-# Xorg using the dummy display driver and void input device. In order for this
-# to work, both the dummy display driver and void input device need to be
-# installed:
-#
-#     sudo apt-get install xserver-xorg-video-dummy
-#     sudo apt-get install xserver-xorg-input-void
-#
-# TODO(rkjnsn): Add xserver-xorg-video-dummy and xserver-xorg-input-void as
-# package dependencies at the same time we switch the default to Xorg
-USE_XORG_ENV_VAR = "CHROME_REMOTE_DESKTOP_USE_XORG"
+# By default, this script launches Xorg as the virtual X display, using the
+# dummy display driver and void input device, unless Xorg+Dummy is deemed
+# unsupported. When this environment variable is set, the script will instead
+# launch Xvfb.
+USE_XVFB_ENV_VAR = "CHROME_REMOTE_DESKTOP_USE_XVFB"
 
 # The amount of video RAM the dummy driver should claim to have, which limits
 # the maximum possible resolution.
@@ -76,14 +69,6 @@ XORG_DUMMY_VIDEO_RAM = 1048576 # KiB
 # resolutions that will be made available if the X server supports RANDR. These
 # defaults can be overridden in ~/.profile.
 DEFAULT_SIZES = "1600x1200,3840x2560"
-
-# Xorg's dummy driver only supports switching between preconfigured sizes. To
-# make resize-to-fit somewhat useful, include several common resolutions by
-# default.
-DEFAULT_SIZES_XORG = ("1600x1200,1600x900,1440x900,1366x768,1360x768,1280x1024,"
-                      "1280x800,1280x768,1280x720,1152x864,1024x768,1024x600,"
-                      "800x600,1680x1050,1920x1080,1920x1200,2560x1440,"
-                      "2560x1600,3840x2160,3840x2560")
 
 # Decides number of monitors and their resolution that should be run for the
 # wayland session.
@@ -203,6 +188,11 @@ def gen_xorg_config():
       # add additional devices.
       '  Option "CoreKeyboard" "true"\n'
       '  Option "CorePointer" "true"\n'
+      # The "void" driver is no longer available since Debian 11, but having an
+      # InputDevice section with an invalid driver will still prevent the Xorg
+      # server from using a fallback InputDevice setting. However, "Chrome
+      # Remote Desktop Input" will not appear in the device list if the driver
+      # is not available.
       '  Driver "void"\n'
       'EndSection\n'
       '\n'
@@ -434,7 +424,6 @@ class Desktop(abc.ABC):
     self.host_proc = None
     self.child_env = None
     self.host_ready = False
-    self.server_supports_exact_resize = False
     self.server_inhibitor = server_inhibitor
     self.session_inhibitor = session_inhibitor
     self.host_inhibitor = host_inhibitor
@@ -528,8 +517,6 @@ class Desktop(abc.ABC):
     args = [HOST_BINARY_PATH, "--host-config=-"]
     if self.audio_pipe:
       args.append("--audio-pipe-name=%s" % self.audio_pipe)
-    if self.server_supports_exact_resize:
-      args.append("--server-supports-exact-resize")
     if self.ssh_auth_sockname:
       args.append("--ssh-auth-sockname=%s" % self.ssh_auth_sockname)
 
@@ -834,7 +821,7 @@ class WaylandDesktop(Desktop):
     Return a candidate wayland socket that is not already taken by another
     compositor.
     """
-    socket_num = 1
+    socket_num = starting_socket_num = 0
     full_sock_path = os.path.join(self.runtime_dir, "wayland-%s" % socket_num)
     while ((os.path.exists(full_sock_path)) and
             socket_num <= self.MAX_WAYLAND_SOCKET_NUM):
@@ -842,7 +829,8 @@ class WaylandDesktop(Desktop):
       full_sock_path = os.path.join(self.runtime_dir, "wayland-%s" % socket_num)
     if socket_num > self.MAX_WAYLAND_SOCKET_NUM:
       logging.error("Unable to find an unused wayland socket (searched between "
-                    "'wayland-1' to 'wayland-%s' under runtime directory",
+                    "'wayland-%s' to 'wayland-%s' under runtime directory",
+                    starting_socket_num,
                     self.MAX_WAYLAND_SOCKET_NUM, self.runtime_dir)
       return None
     return "wayland-%s" % socket_num
@@ -860,21 +848,9 @@ class WaylandDesktop(Desktop):
     return True
 
   def _gnome_shell_cmd(self):
-    wayland_desktop_sizes = os.environ.get(
-      WAYLAND_DESKTOP_SIZES_ENV, DEFAULT_WAYLAND_DESKTOP_SIZES)
     gnome_shell_cmd = [
       "gnome-shell", "--wayland", "--headless", "--wayland-display",
       self._wayland_socket, "--no-x11", "--replace"]
-    try:
-      for resolution in wayland_desktop_sizes.strip().split(","):
-        width, height = re.split("x|X", resolution.strip())
-        gnome_shell_cmd.extend(["--virtual-monitor", "%sx%s" %
-                               (width.strip(), height.strip())])
-    except Exception as exc:
-      logging.error("Expected one or more comma separated resolutions in "
-                    "width1xheight1[,width2xheight2] format, got: %s" %
-                    wayland_desktop_sizes)
-      raise exc
     return gnome_shell_cmd
 
   def _launch_server(self, *args, **kwargs):
@@ -1014,9 +990,46 @@ class XDesktop(Desktop):
     self.server_supports_randr = False
     self.randr_add_sizes = False
     self.ssh_auth_sockname = None
+    self.use_xvfb = self.should_use_xvfb()
     global g_desktop
     assert(g_desktop is None)
     g_desktop = self
+
+  @staticmethod
+  def should_use_xvfb():
+    """Return whether XVFB should be used. This will be true if USE_XVFB_ENV_VAR
+    is set, or if installed dependencies can't support Xorg+Dummy. Note that
+    this method performs expensive IO so the output should be cached."""
+
+    if USE_XVFB_ENV_VAR in os.environ:
+      return True
+
+    # Check if xserver-xorg-video-dummy is up-to-date. Older versions don't
+    # support the DUMMY* outputs and can't be used.
+    # Unfortunately, dummy_drv.so doesn't seem to have any version info so we
+    # have to query the dpkg database.
+    try:
+      video_dummy_info = subprocess.check_output(
+          ['dpkg-query', '-s', 'xserver-xorg-video-dummy'])
+      matches = re.search(
+          br'^Version: (\S+)$', video_dummy_info, re.MULTILINE)
+      if not matches:
+        logging.error('Version line is not found')
+        return False
+      version = matches[1]
+      retcode = subprocess.call(
+          ['dpkg', '--compare-versions', version, 'ge', '1:0.4.0'])
+      if retcode != 0:
+        logging.info('xserver-xorg-video-dummy is not up-to-date')
+        return True
+    except subprocess.CalledProcessError:
+      logging.info('xserver-xorg-video-dummy is not installed')
+      return True
+    except Exception as e:
+      logging.warning(
+          'Failed to get xserver-xorg-video-dummy version: ' + str(e))
+
+    return False
 
   @staticmethod
   def get_unused_display_number():
@@ -1089,7 +1102,6 @@ class XDesktop(Desktop):
                                 stderr=subprocess.DEVNULL)
     if exit_code == 0:
       # RandR is supported
-      self.server_supports_exact_resize = True
       self.server_supports_randr = True
       self.randr_add_sizes = True
 
@@ -1099,7 +1111,6 @@ class XDesktop(Desktop):
         suffix=".conf", delete=False) as config_file:
       config_file.write(gen_xorg_config().encode())
 
-    self.server_supports_exact_resize = True
     self.server_supports_randr = True
     self.randr_add_sizes = True
     self.xorg_conf = config_file.name
@@ -1176,10 +1187,10 @@ class XDesktop(Desktop):
     if self.ssh_auth_sockname:
       self.child_env["SSH_AUTH_SOCK"] = self.ssh_auth_sockname
 
-    if USE_XORG_ENV_VAR in os.environ:
-      self._launch_xorg(display, x_auth_file, extra_x_args)
-    else:
+    if self.use_xvfb:
       self._launch_xvfb(display, x_auth_file, extra_x_args)
+    else:
+      self._launch_xorg(display, x_auth_file, extra_x_args)
 
     # The remoting host expects the server to use "evdev" keycodes, but Xvfb
     # starts configured to use the "base" ruleset, resulting in XKB configuring
@@ -1200,12 +1211,15 @@ class XDesktop(Desktop):
     # the "-screen" option.
     if self.randr_add_sizes:
       for width, height in self.sizes:
+        # This sets dot-clock, vtotal and htotal such that the computed
+        # refresh-rate will have a realistic value:
+        # 60Hz = dot-clock / (vtotal * htotal).
         label = "%dx%d" % (width, height)
-        args = ["xrandr", "--newmode", label, "0", str(width), "0", "0", "0",
-                str(height), "0", "0", "0"]
+        args = ["xrandr", "--newmode", label, "60", str(width), "0", "0",
+                "1000", str(height), "0", "0", "1000"]
         subprocess.call(args, env=self.child_env, stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL)
-        output_name = "DUMMY0" if USE_XORG_ENV_VAR in os.environ else "screen"
+        output_name = "screen" if self.use_xvfb else "DUMMY0"
         args = ["xrandr", "--addmode", output_name, label]
         subprocess.call(args, env=self.child_env, stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL)
@@ -1226,7 +1240,7 @@ class XDesktop(Desktop):
     subprocess.call(args, env=self.child_env, stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL)
 
-    if USE_XORG_ENV_VAR not in os.environ:
+    if self.use_xvfb:
       # Monitor for any automatic resolution changes from the desktop
       # environment. This is needed only for Xvfb sessions because Xvfb sets
       # the first mode to be the maximum supported resolution, and some
@@ -2110,10 +2124,7 @@ def main():
     # message if they go searching.
     syslog.syslog(syslog.LOG_WARNING | syslog.LOG_DAEMON, gdm_message)
 
-  if USE_XORG_ENV_VAR in os.environ:
-    default_sizes = DEFAULT_SIZES_XORG
-  else:
-    default_sizes = DEFAULT_SIZES
+  default_sizes = DEFAULT_SIZES
 
   # Collate the list of sizes that XRANDR should support.
   if not options.size:

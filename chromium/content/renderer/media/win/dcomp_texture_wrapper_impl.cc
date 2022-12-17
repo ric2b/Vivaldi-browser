@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -159,7 +159,7 @@ void DCOMPTextureWrapperImpl::CreateVideoFrame(
     DVLOG_FUNC(1) << "AddMailbox";
     mailbox_added_ = true;
     gpu::SharedImageInterface* sii = factory_->SharedImageInterface();
-    sii->NotifyMailboxAdded(mailbox_, gpu::SHARED_IMAGE_USAGE_DISPLAY |
+    sii->NotifyMailboxAdded(mailbox_, gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
                                           gpu::SHARED_IMAGE_USAGE_GLES2 |
                                           gpu::SHARED_IMAGE_USAGE_RASTER);
   }
@@ -195,7 +195,7 @@ void DCOMPTextureWrapperImpl::CreateVideoFrame(
 
   uint32_t usage = gpu::SHARED_IMAGE_USAGE_RASTER |
                    gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
-                   gpu::SHARED_IMAGE_USAGE_DISPLAY |
+                   gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
                    gpu::SHARED_IMAGE_USAGE_SCANOUT;
 
   std::unique_ptr<gfx::GpuMemoryBuffer> gmb =

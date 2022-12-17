@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -646,11 +646,6 @@ public class AwContents implements SmartClipProvider {
         @Override
         public boolean getSafeBrowsingEnabled() {
             return mSettings.getSafeBrowsingEnabled();
-        }
-
-        @Override
-        public int getRequestedWithHeaderMode() {
-            return mSettings.getRequestedWithHeaderMode();
         }
     }
 

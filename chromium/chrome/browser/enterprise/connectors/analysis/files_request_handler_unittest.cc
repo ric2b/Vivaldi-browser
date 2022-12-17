@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,6 +51,7 @@ namespace enterprise_connectors {
 namespace {
 
 constexpr char kDmToken[] = "dm_token";
+constexpr char kUserActionId[] = "123";
 constexpr char kTestUrl[] = "http://example.com/";
 base::TimeDelta kResponseDelay = base::Seconds(0);
 
@@ -219,8 +220,8 @@ class FilesRequestHandlerTest : public BaseTest {
             &FilesRequestHandlerTest::FakeFileUploadCallback,
             weak_ptr_factory_.GetWeakPtr(),
             settings.cloud_or_local_settings.is_cloud_analysis()),
-        /*upload_service=*/nullptr, profile_, settings, GURL(kTestUrl),
-        safe_browsing::DeepScanAccessPoint::UPLOAD, paths,
+        /*upload_service=*/nullptr, profile_, settings, GURL(kTestUrl), "", "",
+        kUserActionId, safe_browsing::DeepScanAccessPoint::UPLOAD, paths,
         base::BindOnce(
             [](base::RepeatingClosure runloop_closure,
                FilesRequestHandler::CompletionCallback callback,
@@ -234,10 +235,11 @@ class FilesRequestHandlerTest : public BaseTest {
     RunUntilDone();
 
     EXPECT_GE(paths.size(),
-              fake_files_request_handler_->GetRequestTokensForTesting().size());
-    for (auto& token :
-         fake_files_request_handler_->GetRequestTokensForTesting()) {
-      EXPECT_FALSE(token.empty());
+              fake_files_request_handler_->request_tokens_to_ack_final_actions()
+                  .size());
+    for (const auto& token_and_action :
+         fake_files_request_handler_->request_tokens_to_ack_final_actions()) {
+      EXPECT_FALSE(token_and_action.first.empty());
     }
   }
 
@@ -260,6 +262,10 @@ class FilesRequestHandlerTest : public BaseTest {
 
   void SetDLPResponse(ContentAnalysisResponse response) {
     dlp_response_ = std::move(response);
+  }
+
+  void SetExpectedUserActionRequestsCount(uint64_t requests_count) {
+    expected_user_action_requests_count_ = requests_count;
   }
 
   void PathFailsDeepScan(base::FilePath path,
@@ -303,16 +309,21 @@ class FilesRequestHandlerTest : public BaseTest {
       bool is_cloud_analysis,
       safe_browsing::BinaryUploadService::Result result,
       const base::FilePath& path,
-      std::unique_ptr<safe_browsing::BinaryUploadService::Request> request) {
+      std::unique_ptr<safe_browsing::BinaryUploadService::Request> request,
+      FakeFilesRequestHandler::FakeFileRequestCallback callback) {
     EXPECT_FALSE(path.empty());
-    if (is_cloud_analysis)
+    if (is_cloud_analysis) {
       EXPECT_EQ(request->device_token(), kDmToken);
+    } else {
+      EXPECT_EQ(request->user_action_requests_count(),
+                expected_user_action_requests_count_);
+      EXPECT_EQ(request->user_action_id(), kUserActionId);
+    }
 
     // Simulate a response.
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::BindOnce(&FilesRequestHandler::FileRequestCallbackForTesting,
-                       fake_files_request_handler_->GetWeakPtr(), path,
+        base::BindOnce(std::move(callback), path,
                        safe_browsing::BinaryUploadService::Result::SUCCESS,
                        ConnectorStatusCallback(path)),
         kResponseDelay);
@@ -354,6 +365,10 @@ class FilesRequestHandlerTest : public BaseTest {
 
   // DLP response to ovewrite in the callback if present.
   absl::optional<ContentAnalysisResponse> dlp_response_ = absl::nullopt;
+
+  // To verify user action requests count in local content analysis request is
+  // set correctly.
+  uint64_t expected_user_action_requests_count_ = 0;
 
   base::WeakPtrFactory<FilesRequestHandlerTest> weak_ptr_factory_{this};
 };
@@ -508,6 +523,7 @@ TEST_F(FilesRequestHandlerTest, FileIsEncrypted_LocalAnalysis) {
                  .AppendASCII("download_protection")
                  .AppendASCII("encrypted.zip");
   paths.emplace_back(test_zip);
+  SetExpectedUserActionRequestsCount(1);
 
   bool called = false;
   ScanUpload(paths,
@@ -585,6 +601,7 @@ TEST_F(FilesRequestHandlerTest, FileIsLarge_LocalAnalysis) {
       safe_browsing::BinaryUploadService::kMaxUploadSizeBytes + 1, 'a');
   base::WriteFile(file_path, contents.data(), contents.size());
   paths.emplace_back(file_path);
+  SetExpectedUserActionRequestsCount(1);
 
   bool called = false;
   ScanUpload(paths,
@@ -598,6 +615,38 @@ TEST_F(FilesRequestHandlerTest, FileIsLarge_LocalAnalysis) {
                    *called = true;
                  },
                  &called));
+
+  EXPECT_TRUE(called);
+}
+
+// With a local service provider, multiple file uploads should result in
+// multiple analysis requests.
+TEST_F(FilesRequestHandlerTest, MultipleFilesUpload_LocalAnalysis) {
+  content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
+
+  safe_browsing::SetAnalysisConnector(profile_->GetPrefs(),
+                                      AnalysisConnector::FILE_ATTACHED,
+                                      kLocalServiceProvider);
+  GURL url(kTestUrl);
+  std::vector<base::FilePath> paths = CreateFilesForTest(
+      {FILE_PATH_LITERAL("good.doc"), FILE_PATH_LITERAL("good2.doc")});
+  SetExpectedUserActionRequestsCount(2);
+
+  bool called = false;
+  ScanUpload(
+      paths,
+      base::BindOnce(
+          [](bool* called, std::vector<RequestHandlerResult> results) {
+            EXPECT_EQ(2u, results.size());
+            EXPECT_THAT(results[0],
+                        MatchesRequestHandlerResult(
+                            true, FinalContentAnalysisResult::SUCCESS, ""));
+            EXPECT_THAT(results[1],
+                        MatchesRequestHandlerResult(
+                            true, FinalContentAnalysisResult::SUCCESS, ""));
+            *called = true;
+          },
+          &called));
 
   EXPECT_TRUE(called);
 }

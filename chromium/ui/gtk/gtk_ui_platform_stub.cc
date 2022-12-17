@@ -1,10 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ui/gtk/gtk_ui_platform_stub.h"
 
 #include "base/callback.h"
+#include "ui/base/ime/linux/linux_input_method_context.h"
 
 namespace gtk {
 

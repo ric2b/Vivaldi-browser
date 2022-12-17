@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 #define BASE_MESSAGE_LOOP_MESSAGE_PUMP_ANDROID_H_
 
 #include <jni.h>
+#include <cstdint>
 #include <memory>
 
 #include "base/android/scoped_java_ref.h"
@@ -60,6 +61,7 @@ class BASE_EXPORT MessagePumpForUI : public MessagePump {
   // and should not be called from outside this class.
   void OnDelayedLooperCallback();
   void OnNonDelayedLooperCallback();
+  void OnResumeNonDelayedLooperCallback();
 
  protected:
   Delegate* SetDelegate(Delegate* delegate);
@@ -69,6 +71,8 @@ class BASE_EXPORT MessagePumpForUI : public MessagePump {
 
  private:
   void ScheduleWorkInternal(bool do_idle_work);
+  // Schedules an invocation of OnNonDelayedLoopedWork after |yield_duration_|.
+  void ScheduleWorkWithDelay();
   void DoIdleWork();
 
   // Unlike other platforms, we don't control the message loop as it's
@@ -96,11 +100,22 @@ class BASE_EXPORT MessagePumpForUI : public MessagePump {
   // If set, a callback to fire when the message pump is quit.
   base::OnceClosure on_quit_callback_;
 
-  // The file descriptor used to signal that non-delayed work is available.
+  // The file descriptor used to request an immediate invocation of
+  // OnNonDelayedLooperWork().
   int non_delayed_fd_;
+
+  // The file descriptor used to request an invocation of
+  // OnNonDelayedLooperWork() after |yield_duration_|.
+  int resume_after_yielding_non_delayed_fd_;
 
   // The file descriptor used to signal that delayed work is available.
   int delayed_fd_;
+
+  // Delay before invoking DoWork() again when yielding to native. This is
+  // initialized from the "non_delayed_looper_defer_for_ns" param of the
+  // "BrowserPeriodicYieldingToNative" feature on the first call to
+  // ScheduleWorkWithDelay().
+  absl::optional<base::TimeDelta> yield_duration_;
 
   // The Android Looper for this thread.
   raw_ptr<ALooper> looper_ = nullptr;

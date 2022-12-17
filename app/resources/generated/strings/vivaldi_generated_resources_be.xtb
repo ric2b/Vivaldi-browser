@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Друк...</translation>
 <translation id="1181037720776840403">Выдаліць</translation>
 <translation id="1187722533808055681">Пераход у актыўны рэжым</translation>
-<translation id="119944043368869598">Выдаліць усё</translation>
 <translation id="1221825588892235038">Толькі абраныя</translation>
 <translation id="1234736487471201993">Стварыць QR-код для гэтай выявы</translation>
 <translation id="1244303850296295656">Памылка пашырэння</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Абраць &amp;усё</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Увядзіце колькасць копій для друкавання (ад 1 да <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Выдаліць ўсё</translation>
 <translation id="1994173015038366702">Адрас сайта</translation>
 <translation id="2019718679933488176">&amp;Адкрыць аўдыё ў новай укладцы</translation>
 <translation id="2050339315714019657">Кніжная</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Уставіць як звычайны тэкст</translation>
 <translation id="2249605167705922988">Напрыклад: 1-5, 7, 16-18</translation>
 <translation id="225240747099314620">Дазволіць ідэнтыфікатары для абароненага змесціва (можа спатрэбіцца перазапуск камп'ютара)</translation>
-<translation id="2277255602909579701">Усе файлы cookie і даныя сайта</translation>
 <translation id="2280486287150724112">Правае поле</translation>
 <translation id="2282146716419988068">Працэс GPU</translation>
 <translation id="2301382460326681002">Няправільны каранёвы каталог пашырэння.</translation>
@@ -122,7 +119,6 @@
 <translation id="3084548735795614657">Перацягніце, каб усталяваць</translation>
 <translation id="3122464029669770682">Працэсар</translation>
 <translation id="3124111068741548686">Апрацоўнікі USER</translation>
-<translation id="3127156390846601284">Усе даныя пазначаных сайтаў выдаляцца з прылады. Хочаце працягнуць?</translation>
 <translation id="3129173833825111527">Левае поле</translation>
 <translation id="3144647712221361880">Адкрыць спасылку як</translation>
 <translation id="3222066309010235055">Папярэдняя адмалёўка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +141,6 @@
 <translation id="3387614642886316601">Палепшаная праверка правапісу</translation>
 <translation id="3390013585654699824">Звесткі пра праграму</translation>
 <translation id="3393582007140394275">Немагчыма трансляваць экран.</translation>
-<translation id="3432227430032737297">Выдаліць ўсе бачныя</translation>
 <translation id="345693547134384690">Адкрыць &amp;выяву ў новай укладцы</translation>
 <translation id="3494769164076977169">Папярэджваць пра спробы аўтаматычнага спампоўвання файлаў (рэкамендуецца)</translation>
 <translation id="3505030558724226696">Адклікаць доступ да прылад</translation>
@@ -204,7 +199,6 @@
 <translation id="4409697491990005945">Палі</translation>
 <translation id="4423376891418188461">Аднавіць налады</translation>
 <translation id="4478664379124702289">Захаваць &amp;спасылку як...</translation>
-<translation id="4579581181964204535">Немагчыма выканаць трансляцыю з сайта <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Перайсці да <ph name="URL" /></translation>
 <translation id="4595560905247879544">Змяняць праграмы і пашырэнні можа толькі кіраўнік (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Пашырэнне змяніла старонку, якая паказваецца пры адкрыцці новай укладкі.</translation>
@@ -277,7 +271,6 @@
 <translation id="5747809636523347288">Ус&amp;тавіць і перайсці да <ph name="URL" /></translation>
 <translation id="5759728514498647443"><ph name="APP_NAME" /> можа чытаць дакументы, адпраўленыя друкавацца праграмай <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Захаваць аўдыё як...</translation>
-<translation id="577624874850706961">Пошук файлаў cookie</translation>
 <translation id="5780973441651030252">Прыярытэт працэсаў</translation>
 <translation id="5804241973901381774">Правы доступу</translation>
 <translation id="5828633471261496623">Друкаванне...</translation>
@@ -290,7 +283,6 @@
 <translation id="5965661248935608907">Пашырэнне таксама змяніла хатнюю старонку і прадвызначаную сістэму пошуку.</translation>
 <translation id="5978277834170881274">&amp;Базавая праверка правапісу</translation>
 <translation id="5979421442488174909">&amp;Перакласці на <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Выдаленне даных сайтаў</translation>
 <translation id="6042308850641462728">Падрабязней</translation>
 <translation id="6086846494333236931">Усталявана адміністратарам</translation>
 <translation id="6101226222197207147">Дададзена новая праграма (<ph name="EXTENSION_NAME" />)</translation>
@@ -403,7 +395,6 @@
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Выконваецца спампоўванне}one{Выконваецца спампоўванне}few{Выконваюцца спампоўванні}many{Выконваюцца спампоўванні}other{Выконваюцца спампоўванні}}</translation>
 <translation id="8230134520748321204">Захаваць пароль для <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">У <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> няма звестак пра гэтае пашырэнне, яно магло быць усталявана без вашага ведама.</translation>
-<translation id="8339059274628563283">Захаваныя даныя <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Пашырэнне змяніла налады проксі. Зараз яно можа сачыць ці змяняць даныя, якія вы адпраўляеце, і перапыніць злучэнне. Калі вы не ведалі пра гэта, то адключыце гэтае пашырэнне.</translation>
 <translation id="8382913212082956454">Скапіяваць &amp;адрас электроннай пошты</translation>
 <translation id="8413385045638830869">Спачатку пытацца (рэкамендуецца)</translation>

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <algorithm>
 #include <string>
 
 #include "base/atomic_sequence_num.h"
@@ -18,6 +17,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -41,6 +41,7 @@
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "media/base/format_utils.h"
 #include "media/base/video_frame.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
 #include "media/video/half_float_maker.h"
@@ -75,19 +76,32 @@ gfx::ProtectedVideoType ProtectedVideoTypeFromMetadata(
 }
 
 VideoFrameResourceType ExternalResourceTypeForHardwarePlanes(
-    VideoPixelFormat format,
+    const VideoFrame& frame,
     GLuint target,
-    int num_textures,
     gfx::BufferFormat buffer_formats[VideoFrame::kMaxPlanes],
-    bool use_stream_video_draw_quad,
-    bool dcomp_surface) {
+    bool use_stream_video_draw_quad) {
+  const VideoPixelFormat format = frame.format();
+  const size_t num_textures = frame.NumTextures();
+
+  if (frame.RequiresExternalSampler()) {
+    // The texture |target| can be 0 for Fuchsia.
+    DCHECK(target == 0 || target == GL_TEXTURE_EXTERNAL_OES)
+        << "Unsupported target " << gl::GLEnums::GetStringEnum(target);
+    DCHECK_EQ(num_textures, 1u);
+    absl::optional<gfx::BufferFormat> buffer_format =
+        VideoPixelFormatToGfxBufferFormat(format);
+    DCHECK(buffer_format.has_value());
+    buffer_formats[0] = buffer_format.value();
+    return VideoFrameResourceType::RGB;
+  }
+
   switch (format) {
     case PIXEL_FORMAT_ARGB:
     case PIXEL_FORMAT_XRGB:
     case PIXEL_FORMAT_ABGR:
     case PIXEL_FORMAT_XBGR:
     case PIXEL_FORMAT_BGRA:
-      DCHECK_EQ(num_textures, 1);
+      DCHECK_EQ(num_textures, 1u);
       // This maps VideoPixelFormat back to GMB BufferFormat
       // NOTE: ABGR == RGBA and ARGB == BGRA, they differ only byte order
       // See: VideoFormat function in gpu_memory_buffer_video_frame_pool
@@ -104,7 +118,7 @@ VideoFrameResourceType ExternalResourceTypeForHardwarePlanes(
           // TODO(sunnyps): It's odd to reuse the Android path on Windows. There
           // could be other unknown assumptions in other parts of the rendering
           // stack about stream video quads. Investigate alternative solutions.
-          if (use_stream_video_draw_quad || dcomp_surface)
+          if (use_stream_video_draw_quad || frame.metadata().dcomp_surface)
             return VideoFrameResourceType::STREAM_TEXTURE;
           [[fallthrough]];
         case GL_TEXTURE_2D:
@@ -124,7 +138,7 @@ VideoFrameResourceType ExternalResourceTypeForHardwarePlanes(
                               : gfx::BufferFormat::RGBA_1010102;
       return VideoFrameResourceType::RGB;
     case PIXEL_FORMAT_I420:
-      DCHECK_EQ(num_textures, 3);
+      DCHECK_EQ(num_textures, 3u);
       buffer_formats[0] = gfx::BufferFormat::R_8;
       buffer_formats[1] = gfx::BufferFormat::R_8;
       buffer_formats[2] = gfx::BufferFormat::R_8;
@@ -132,35 +146,37 @@ VideoFrameResourceType ExternalResourceTypeForHardwarePlanes(
 
     case PIXEL_FORMAT_NV12:
       // |target| is set to 0 for Vulkan textures.
+      //
+      // TODO(https://crbug.com/1116101): Note that GL_TEXTURE_EXTERNAL_OES is
+      // allowed even for two-texture NV12 frames. This is intended to handle a
+      // couple of cases: a) when these textures are connected to the
+      // corresponding plane of the contents of an EGLStream using
+      // EGL_NV_stream_consumer_gltexture_yuv; b) when gl::GLImageD3D is used
+      // with GL_TEXTURE_EXTERNAL_OES (note that this case should be able to be
+      // migrated to GL_TEXTURE_2D after https://crrev.com/c/3856660).
       DCHECK(target == 0 || target == GL_TEXTURE_EXTERNAL_OES ||
              target == GL_TEXTURE_2D || target == GL_TEXTURE_RECTANGLE_ARB)
           << "Unsupported target " << gl::GLEnums::GetStringEnum(target);
-
-      if (num_textures == 1) {
-        // Single-texture multi-planar frames can be sampled as RGB.
-        buffer_formats[0] = gfx::BufferFormat::YUV_420_BIPLANAR;
-        return VideoFrameResourceType::RGB;
-      }
-
+      DCHECK_EQ(num_textures, 2u);
       buffer_formats[0] = gfx::BufferFormat::R_8;
       buffer_formats[1] = gfx::BufferFormat::RG_88;
       return VideoFrameResourceType::YUV;
 
     case PIXEL_FORMAT_P016LE:
-      if (num_textures == 1) {
-        // Single-texture multi-planar frames can be sampled as RGB.
-        buffer_formats[0] = gfx::BufferFormat::P010;
-        return VideoFrameResourceType::RGB;
-      }
+      DCHECK_EQ(num_textures, 2u);
       // TODO(mcasas): Support other formats such as e.g. P012.
       buffer_formats[0] = gfx::BufferFormat::R_16;
       // TODO(https://crbug.com/1233228): This needs to be
       // gfx::BufferFormat::RG_1616.
+#if BUILDFLAG(IS_MAC)
+      buffer_formats[1] = gfx::BufferFormat::RG_1616;
+#else
       buffer_formats[1] = gfx::BufferFormat::RG_88;
+#endif
       return VideoFrameResourceType::YUV;
 
     case PIXEL_FORMAT_RGBAF16:
-      DCHECK_EQ(num_textures, 1);
+      DCHECK_EQ(num_textures, 1u);
       buffer_formats[0] = gfx::BufferFormat::RGBA_F16;
       return VideoFrameResourceType::RGBA;
 
@@ -440,7 +456,7 @@ class VideoResourceUpdater::HardwarePlaneResource
                          caps.texture_storage_image &&
                          IsGpuMemoryBufferFormatSupported(format);
     uint32_t shared_image_usage =
-        gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_DISPLAY;
+        gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
     if (overlay_candidate_) {
       shared_image_usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
       texture_target_ = gpu::GetBufferTextureTarget(gfx::BufferUsage::SCANOUT,
@@ -613,12 +629,6 @@ void VideoResourceUpdater::AppendQuads(
       break;
     }
     case VideoFrameResourceType::YUV: {
-      const gfx::Size ya_tex_size = coded_size;
-
-      int u_width = frame->columns(VideoFrame::kUPlane);
-      int u_height = frame->rows(VideoFrame::kUPlane);
-      gfx::Size uv_tex_size(u_width, u_height);
-
       DCHECK_EQ(frame_resources_.size(),
                 VideoFrame::NumPlanes(frame->format()));
       if (frame->HasTextures()) {
@@ -627,34 +637,24 @@ void VideoResourceUpdater::AppendQuads(
                frame->format() == PIXEL_FORMAT_I420);
       }
 
-      // Compute the UV sub-sampling factor based on the ratio between
-      // |ya_tex_size| and |uv_tex_size|.
-      float uv_subsampling_factor_x =
-          static_cast<float>(ya_tex_size.width()) / uv_tex_size.width();
-      float uv_subsampling_factor_y =
-          static_cast<float>(ya_tex_size.height()) / uv_tex_size.height();
-      gfx::RectF ya_tex_coord_rect(visible_rect);
-      gfx::RectF uv_tex_coord_rect(
-          visible_rect.x() / uv_subsampling_factor_x,
-          visible_rect.y() / uv_subsampling_factor_y,
-          visible_rect.width() / uv_subsampling_factor_x,
-          visible_rect.height() / uv_subsampling_factor_y);
+      // Get the scaling factor of the YA texture relative to the UV texture.
+      const gfx::Size uv_sample_size =
+          VideoFrame::SampleSize(frame->format(), VideoFrame::kUPlane);
 
       auto* yuv_video_quad =
           render_pass->CreateAndAppendDrawQuad<viz::YUVVideoDrawQuad>();
       yuv_video_quad->SetNew(
           shared_quad_state, quad_rect, visible_quad_rect, needs_blending,
-          ya_tex_coord_rect, uv_tex_coord_rect, ya_tex_size, uv_tex_size,
-          frame_resources_[0].id, frame_resources_[1].id,
+          coded_size, visible_rect, uv_sample_size, frame_resources_[0].id,
+          frame_resources_[1].id,
           frame_resources_.size() > 2 ? frame_resources_[2].id
                                       : frame_resources_[1].id,
           frame_resources_.size() > 3 ? frame_resources_[3].id
                                       : viz::kInvalidResourceId,
           frame->ColorSpace(), frame_resource_offset_,
-          frame_resource_multiplier_, frame_bits_per_channel_);
-      yuv_video_quad->hdr_metadata = frame->hdr_metadata();
-      yuv_video_quad->protected_video_type =
-          ProtectedVideoTypeFromMetadata(frame->metadata());
+          frame_resource_multiplier_, frame_bits_per_channel_,
+          ProtectedVideoTypeFromMetadata(frame->metadata()),
+          frame->hdr_metadata());
 
       for (viz::ResourceId resource_id : yuv_video_quad->resources) {
         resource_provider_->ValidateResource(resource_id);
@@ -838,11 +838,11 @@ void VideoResourceUpdater::CopyHardwarePlane(
                              gpu::SyncToken());
   gpu::SyncToken sync_token = video_frame->UpdateReleaseSyncToken(&client);
 
-  auto transferable_resource = viz::TransferableResource::MakeGL(
+  auto transferable_resource = viz::TransferableResource::MakeGpu(
       hardware_resource->mailbox(), GL_LINEAR, GL_TEXTURE_2D, sync_token,
-      output_plane_resource_size, false /* is_overlay_candidate */);
+      output_plane_resource_size, copy_resource_format,
+      false /* is_overlay_candidate */);
   transferable_resource.color_space = resource_color_space;
-  transferable_resource.format = copy_resource_format;
   external_resources->resources.push_back(std::move(transferable_resource));
 
   external_resources->release_callbacks.push_back(base::BindOnce(
@@ -869,18 +869,19 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
 
   gfx::BufferFormat buffer_formats[VideoFrame::kMaxPlanes];
   external_resources.type = ExternalResourceTypeForHardwarePlanes(
-      video_frame->format(), target, video_frame->NumTextures(), buffer_formats,
-      use_stream_video_draw_quad_, video_frame->metadata().dcomp_surface);
+      *video_frame, target, buffer_formats, use_stream_video_draw_quad_);
 
   if (external_resources.type == VideoFrameResourceType::NONE) {
     DLOG(ERROR) << "Unsupported Texture format"
                 << VideoPixelFormatToString(video_frame->format());
     return external_resources;
   }
+  absl::optional<gfx::ColorSpace> resource_color_space_when_sampled;
   if (external_resources.type == VideoFrameResourceType::RGB ||
       external_resources.type == VideoFrameResourceType::RGBA ||
       external_resources.type == VideoFrameResourceType::RGBA_PREMULTIPLIED) {
-    resource_color_space = resource_color_space.GetAsFullRangeRGB();
+    resource_color_space_when_sampled =
+        resource_color_space.GetAsFullRangeRGB();
   }
 
   const size_t num_textures = video_frame->NumTextures();
@@ -890,23 +891,27 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
       break;
 
     if (copy_required) {
-      CopyHardwarePlane(video_frame.get(), resource_color_space, mailbox_holder,
-                        &external_resources);
+      CopyHardwarePlane(
+          video_frame.get(),
+          resource_color_space_when_sampled.value_or(resource_color_space),
+          mailbox_holder, &external_resources);
     } else {
       const size_t width = video_frame->columns(i);
       const size_t height = video_frame->rows(i);
       const gfx::Size plane_size(width, height);
-      auto transfer_resource = viz::TransferableResource::MakeGL(
+      auto transfer_resource = viz::TransferableResource::MakeGpu(
           mailbox_holder.mailbox, GL_LINEAR, mailbox_holder.texture_target,
           mailbox_holder.sync_token, plane_size,
+          viz::GetResourceFormat(buffer_formats[i]),
           video_frame->metadata().allow_overlay);
       transfer_resource.color_space = resource_color_space;
+      transfer_resource.color_space_when_sampled =
+          resource_color_space_when_sampled;
       transfer_resource.hdr_metadata = video_frame->hdr_metadata();
       if (video_frame->metadata().read_lock_fences_enabled) {
         transfer_resource.synchronization_type = viz::TransferableResource::
             SynchronizationType::kGpuCommandsCompleted;
       }
-      transfer_resource.format = viz::GetResourceFormat(buffer_formats[i]);
       transfer_resource.ycbcr_info = video_frame->ycbcr_info();
 
 #if BUILDFLAG(IS_ANDROID)
@@ -944,6 +949,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
          input_frame_format == PIXEL_FORMAT_Y16 || is_rgb);
 
   viz::ResourceFormat output_resource_format;
+  absl::optional<viz::ResourceFormat> subplane_resource_format;
   gfx::ColorSpace output_color_space = video_frame->ColorSpace();
   if (input_frame_format == PIXEL_FORMAT_XBGR) {
     output_resource_format = viz::RGBX_8888;
@@ -963,6 +969,25 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
   } else if (!software_compositor()) {
     // Can be composited directly from yuv planes.
     output_resource_format = YuvResourceFormat(bits_per_channel);
+
+    // Some YUV resources have different sized planes. If we lack the proper
+    // ResourceFormat just convert to RGB. We could do something better like
+    // unpacking to I420/I016, but texture_rg and r16 support should be pretty
+    // universal and we expect these frames to be rare.
+    if (input_frame_format == PIXEL_FORMAT_NV12) {
+      if (output_resource_format == viz::RED_8)
+        subplane_resource_format = viz::RG_88;
+      else
+        output_resource_format = viz::RGBA_8888;
+    } else if (input_frame_format == PIXEL_FORMAT_P016LE) {
+      if (output_resource_format == viz::R16_EXT)
+        subplane_resource_format = viz::RG16_EXT;
+      else
+        output_resource_format = viz::RGBA_8888;
+    } else {
+      DCHECK_EQ(VideoFrame::BytesPerElement(input_frame_format, 0),
+                VideoFrame::BytesPerElement(input_frame_format, 1));
+    }
   }
 
   // If GPU compositing is enabled, but the output resource format
@@ -1012,13 +1037,16 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
 
   // Delete recycled resources that are the wrong format or wrong size.
   auto can_delete_resource_fn =
-      [output_resource_format,
+      [output_resource_format, subplane_resource_format,
        &outplane_plane_sizes](const std::unique_ptr<PlaneResource>& resource) {
         // Resources that are still being used can't be deleted.
         if (resource->has_refs())
           return false;
 
-        return resource->resource_format() != output_resource_format ||
+        return (resource->resource_format() != output_resource_format &&
+                resource->resource_format() !=
+                    subplane_resource_format.value_or(
+                        output_resource_format)) ||
                !base::Contains(outplane_plane_sizes, resource->resource_size());
       };
   base::EraseIf(all_resources_, can_delete_resource_fn);
@@ -1028,8 +1056,10 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
   plane_resources.reserve(output_plane_count);
   for (size_t i = 0; i < output_plane_count; ++i) {
     plane_resources.push_back(RecycleOrAllocateResource(
-        outplane_plane_sizes[i], output_resource_format, output_color_space,
-        video_frame->unique_id(), i));
+        outplane_plane_sizes[i],
+        i == 0 ? output_resource_format
+               : subplane_resource_format.value_or(output_resource_format),
+        output_color_space, video_frame->unique_id(), i));
     plane_resources.back()->add_ref();
   }
 
@@ -1117,15 +1147,14 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
       gpu::SyncToken sync_token;
       auto* gl = ContextGL();
       GenerateCompositorSyncToken(gl, &sync_token);
-      transferable_resource = viz::TransferableResource::MakeGL(
+      transferable_resource = viz::TransferableResource::MakeGpu(
           hardware_resource->mailbox(), GL_LINEAR,
           hardware_resource->texture_target(), sync_token,
-          hardware_resource->resource_size(),
+          hardware_resource->resource_size(), output_resource_format,
           hardware_resource->overlay_candidate());
     }
 
     transferable_resource.color_space = output_color_space;
-    transferable_resource.format = output_resource_format;
     external_resources.resources.push_back(std::move(transferable_resource));
     external_resources.release_callbacks.push_back(base::BindOnce(
         &VideoResourceUpdater::RecycleResource, weak_ptr_factory_.GetWeakPtr(),
@@ -1134,8 +1163,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
     return external_resources;
   }
 
-  const viz::ResourceFormat yuv_resource_format =
-      YuvResourceFormat(bits_per_channel);
+  const auto yuv_resource_format = output_resource_format;
   DCHECK(yuv_resource_format == viz::LUMINANCE_F16 ||
          yuv_resource_format == viz::R16_EXT ||
          yuv_resource_format == viz::LUMINANCE_8 ||
@@ -1163,10 +1191,9 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
 
     const viz::ResourceFormat plane_resource_format =
         plane_resource->resource_format();
-    DCHECK_EQ(plane_resource_format, yuv_resource_format);
-
-    // TODO(hubbe): Move upload code to media/.
-    // TODO(reveman): Can use GpuMemoryBuffers here to improve performance.
+    DCHECK(plane_resource_format == yuv_resource_format ||
+           plane_resource_format ==
+               subplane_resource_format.value_or(yuv_resource_format));
 
     // |video_stride_bytes| is the width of the |video_frame| we are uploading
     // (including non-frame data to fill in the stride).
@@ -1238,7 +1265,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
           uint16_t* dst = reinterpret_cast<uint16_t*>(
               &upload_pixels_[upload_image_stride * row]);
           const uint16_t* src = reinterpret_cast<uint16_t*>(
-              video_frame->data(i) + (video_stride_bytes * row));
+              video_frame->writable_data(i) + (video_stride_bytes * row));
           half_float_maker->MakeHalfFloats(src, bytes_per_row / 2, dst);
         }
       } else if (needs_bit_downshifting) {
@@ -1246,7 +1273,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
                plane_resource_format == viz::RED_8);
         const int scale = 0x10000 >> (bits_per_channel - 8);
         libyuv::Convert16To8Plane(
-            reinterpret_cast<uint16_t*>(video_frame->data(i)),
+            reinterpret_cast<uint16_t*>(video_frame->writable_data(i)),
             video_stride_bytes / 2, upload_pixels_.get(), upload_image_stride,
             scale, bytes_per_row, resource_size_pixels.height());
       } else {
@@ -1284,12 +1311,13 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
 
   for (size_t i = 0; i < plane_resources.size(); ++i) {
     HardwarePlaneResource* plane_resource = plane_resources[i]->AsHardware();
-    auto transferable_resource = viz::TransferableResource::MakeGL(
+    auto transferable_resource = viz::TransferableResource::MakeGpu(
         plane_resource->mailbox(), GL_LINEAR, plane_resource->texture_target(),
         sync_token, plane_resource->resource_size(),
+        i == 0 ? output_resource_format
+               : subplane_resource_format.value_or(output_resource_format),
         plane_resource->overlay_candidate());
     transferable_resource.color_space = output_color_space;
-    transferable_resource.format = output_resource_format;
     external_resources.resources.push_back(std::move(transferable_resource));
     external_resources.release_callbacks.push_back(base::BindOnce(
         &VideoResourceUpdater::RecycleResource, weak_ptr_factory_.GetWeakPtr(),
@@ -1323,12 +1351,8 @@ void VideoResourceUpdater::ReturnTexture(scoped_refptr<VideoFrame> video_frame,
 void VideoResourceUpdater::RecycleResource(uint32_t plane_resource_id,
                                            const gpu::SyncToken& sync_token,
                                            bool lost_resource) {
-  auto matches_id_fn =
-      [plane_resource_id](const std::unique_ptr<PlaneResource>& resource) {
-        return resource->plane_resource_id() == plane_resource_id;
-      };
-  auto resource_it =
-      std::find_if(all_resources_.begin(), all_resources_.end(), matches_id_fn);
+  auto resource_it = base::ranges::find(all_resources_, plane_resource_id,
+                                        &PlaneResource::plane_resource_id);
   if (resource_it == all_resources_.end())
     return;
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -144,6 +144,12 @@ class CONTENT_EXPORT TtsController {
                           int char_index,
                           int length,
                           const std::string& error_message) = 0;
+
+  // Called when the utterance with |utterance_id| becomes invalid.
+  // For example, when the WebContents associated with the utterance
+  // living in a standalone browser is destroyed, the utterance becomes
+  // invalid and should not be spoken.
+  virtual void OnTtsUtteranceBecameInvalid(int utterance_id) = 0;
 
   // Return a list of all available voices, including the native voice,
   // if supported, and all voices registered by engines. |source_url|

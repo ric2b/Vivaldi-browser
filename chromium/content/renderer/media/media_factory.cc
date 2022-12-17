@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -240,14 +239,10 @@ void LogRoughness(
     // score we want.  For now, don't record anything so we don't have a mis-
     // match of UMA values.
   }
-
-  TRACE_EVENT2("media", "VideoPlaybackRoughness", "id", media_log->id(),
-               "roughness", measurement.roughness);
-  TRACE_EVENT2("media", "VideoPlaybackFreezing", "id", media_log->id(),
-               "freezing", measurement.freezing.InMilliseconds());
 }
 
 std::unique_ptr<media::DefaultRendererFactory> CreateDefaultRendererFactory(
+    media::MediaPlayerLoggingID player_id,
     media::MediaLog* media_log,
     media::DecoderFactory* decoder_factory,
     content::RenderThreadImpl* render_thread,
@@ -256,12 +251,14 @@ std::unique_ptr<media::DefaultRendererFactory> CreateDefaultRendererFactory(
   auto default_factory = std::make_unique<media::DefaultRendererFactory>(
       media_log, decoder_factory,
       base::BindRepeating(&content::RenderThreadImpl::GetGpuFactories,
-                          base::Unretained(render_thread)));
+                          base::Unretained(render_thread)),
+      player_id);
 #else
   auto default_factory = std::make_unique<media::DefaultRendererFactory>(
       media_log, decoder_factory,
       base::BindRepeating(&content::RenderThreadImpl::GetGpuFactories,
                           base::Unretained(render_thread)),
+      player_id,
       render_frame->CreateSpeechRecognitionClient(base::OnceClosure()));
 #endif
   return default_factory;
@@ -431,13 +428,13 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
           media::kMemoryPressureBasedSourceBufferGC,
           "enable_instant_source_buffer_gc", false);
 
+  media::MediaPlayerLoggingID player_id = media::GetNextMediaPlayerLoggingID();
   std::vector<std::unique_ptr<BatchingMediaLog::EventHandler>> handlers;
   handlers.push_back(
       std::make_unique<InspectorMediaEventHandler>(inspector_context));
-  handlers.push_back(std::make_unique<RenderMediaEventHandler>());
+  handlers.push_back(std::make_unique<RenderMediaEventHandler>(player_id));
 
-  // This must be created for every new WebMediaPlayer, each instance generates
-  // a new player id which is used to collate logs on the browser side.
+  // This must be created for every new WebMediaPlayer
   auto media_log = std::make_unique<BatchingMediaLog>(
       render_frame_->GetTaskRunner(blink::TaskType::kInternalMedia),
       std::move(handlers));
@@ -446,7 +443,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
 
   base::WeakPtr<media::MediaObserver> media_observer;
   auto factory_selector = CreateRendererFactorySelector(
-      media_log.get(), url, render_frame_->GetRenderFrameMediaPlaybackOptions(),
+      player_id, media_log.get(), url,
+      render_frame_->GetRenderFrameMediaPlaybackOptions(),
       decoder_factory_.get(),
       std::make_unique<blink::RemotePlaybackClientWrapperImpl>(client),
       &media_observer);
@@ -510,7 +508,7 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   return blink::WebMediaPlayerBuilder::Build(
       web_frame, client, encrypted_client, delegate,
       std::move(factory_selector), url_index_.get(), std::move(vfc),
-      std::move(media_log),
+      std::move(media_log), player_id,
       base::BindRepeating(&RenderFrameImpl::DeferMediaLoad,
                           base::Unretained(render_frame_),
                           delegate->has_played_media()),
@@ -551,6 +549,7 @@ blink::WebEncryptedMediaClient* MediaFactory::EncryptedMediaClient() {
 
 std::unique_ptr<media::RendererFactorySelector>
 MediaFactory::CreateRendererFactorySelector(
+    media::MediaPlayerLoggingID player_id,
     media::MediaLog* media_log,
     blink::WebURL url,
     const RenderFrameMediaPlaybackOptions& renderer_media_playback_options,
@@ -726,7 +725,7 @@ MediaFactory::CreateRendererFactorySelector(
         media_log, CreateMojoRendererFactory());
 #else   // BUILDFLAG(ENABLE_CAST_RENDERER)
     auto default_factory_remoting = CreateDefaultRendererFactory(
-        media_log, decoder_factory, render_thread, render_frame_);
+        player_id, media_log, decoder_factory, render_thread, render_frame_);
 #endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
     mojo::PendingRemote<media::mojom::Remotee> remotee;
     interface_broker_->GetInterface(remotee.InitWithNewPipeAndPassReceiver());
@@ -751,7 +750,7 @@ MediaFactory::CreateRendererFactorySelector(
     // Android/non-Android/Cast/etc...
     is_base_renderer_factory_set = true;
     auto default_factory = CreateDefaultRendererFactory(
-        media_log, decoder_factory, render_thread, render_frame_);
+        player_id, media_log, decoder_factory, render_thread, render_frame_);
     factory_selector->AddBaseFactory(RendererType::kDefault,
                                      std::move(default_factory));
   }
@@ -771,10 +770,11 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
     scoped_refptr<base::TaskRunner> compositor_worker_task_runner) {
   RenderThreadImpl* const render_thread = RenderThreadImpl::current();
 
+  media::MediaPlayerLoggingID player_id = media::GetNextMediaPlayerLoggingID();
   std::vector<std::unique_ptr<BatchingMediaLog::EventHandler>> handlers;
   handlers.push_back(
       std::make_unique<InspectorMediaEventHandler>(inspector_context));
-  handlers.push_back(std::make_unique<RenderMediaEventHandler>());
+  handlers.push_back(std::make_unique<RenderMediaEventHandler>(player_id));
 
   // This must be created for every new WebMediaPlayer, each instance generates
   // a new player id which is used to collate logs on the browser side.
@@ -826,8 +826,13 @@ void MediaFactory::EnsureDecoderFactory() {
     external_decoder_factory =
         std::make_unique<media::MojoDecoderFactory>(interface_factory);
 #elif BUILDFLAG(IS_FUCHSIA)
-    external_decoder_factory =
-        std::make_unique<media::FuchsiaDecoderFactory>(interface_broker_);
+    mojo::PendingRemote<media::mojom::FuchsiaMediaResourceProvider>
+        media_resource_provider;
+    interface_broker_->GetInterface(
+        media_resource_provider.InitWithNewPipeAndPassReceiver());
+
+    external_decoder_factory = std::make_unique<media::FuchsiaDecoderFactory>(
+        std::move(media_resource_provider), /*allow_overlay=*/true);
 #endif
     decoder_factory_ = std::make_unique<media::DefaultDecoderFactory>(
         std::move(external_decoder_factory));

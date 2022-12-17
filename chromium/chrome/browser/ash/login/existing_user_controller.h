@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,10 +10,6 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/login/auth/login_performer.h"
-#include "ash/components/login/auth/public/auth_failure.h"
-#include "ash/components/login/auth/public/user_context.h"
-#include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -24,7 +20,9 @@
 #include "chrome/browser/ash/login/screens/encryption_migration_mode.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/login/ui/login_display.h"
-#include "chrome/browser/ash/settings/device_settings_service.h"
+#include "chromeos/ash/components/login/auth/login_performer.h"
+#include "chromeos/ash/components/login/auth/public/auth_failure.h"
+#include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -33,12 +31,10 @@
 #include "content/public/browser/notification_registrar.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/dbus/cryptohome/dbus-constants.h"
-#include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 
 namespace base {
 class ElapsedTimer;
-class ListValue;
 }  // namespace base
 
 namespace ash {
@@ -100,7 +96,6 @@ class ExistingUserController : public LoginDisplay::Delegate,
   std::u16string GetConnectedNetworkName() const;
 
   // LoginDisplay::Delegate: implementation
-  bool IsSigninInProgress() const override;
   void Login(const UserContext& user_context,
              const SigninSpecifics& specifics) override;
   void OnStartKioskEnableScreen() override;
@@ -114,6 +109,10 @@ class ExistingUserController : public LoginDisplay::Delegate,
   bool IsUserAllowlisted(
       const AccountId& account_id,
       const absl::optional<user_manager::UserType>& user_type);
+
+  // This is virtual to be mocked in unit tests.
+  virtual bool IsSigninInProgress() const;
+  bool IsUserSigninCompleted() const;
 
   // user_manager::UserManager::Observer:
   void LocalStateChanged(user_manager::UserManager* user_manager) override;
@@ -259,7 +258,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // login.
   void SetPublicSessionKeyboardLayoutAndLogin(
       const UserContext& user_context,
-      std::unique_ptr<base::ListValue> keyboard_layouts);
+      base::Value::List keyboard_layouts);
 
   // Starts the actual login process for a public session. Invoked when all
   // preconditions have been verified.
@@ -355,6 +354,9 @@ class ExistingUserController : public LoginDisplay::Delegate,
 
   // Whether login attempt is running.
   bool is_login_in_progress_ = false;
+
+  // Whether user signin is completed.
+  bool is_signin_completed_ = false;
 
   // True if password has been changed for user who is completing sign in.
   // Set in OnLoginSuccess. Before that use LoginPerformer::password_changed().

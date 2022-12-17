@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -342,7 +342,25 @@ public class ChannelsInitializerTest {
         assertThat(channel.getName().toString(),
                 is(mContext.getString(
                         org.chromium.chrome.R.string.notification_category_price_drop)));
-        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_LOW));
+        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_DEFAULT));
+        assertThat(channel.getGroup(), is(ChromeChannelDefinitions.ChannelGroupId.GENERAL));
+    }
+
+    @Test
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @RequiresApi(Build.VERSION_CODES.O)
+    @Feature({"Browser", "Notifications"})
+    public void testEnsureInitialized_priceDropDefaultChannel() {
+        mChannelsInitializer.ensureInitialized(
+                ChromeChannelDefinitions.ChannelId.PRICE_DROP_DEFAULT);
+
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
+        assertThat(channel.getId(), is(ChromeChannelDefinitions.ChannelId.PRICE_DROP_DEFAULT));
+        assertThat(channel.getName().toString(),
+                is(mContext.getString(
+                        org.chromium.chrome.R.string.notification_category_price_drop)));
+        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_DEFAULT));
         assertThat(channel.getGroup(), is(ChromeChannelDefinitions.ChannelGroupId.GENERAL));
     }
 

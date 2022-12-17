@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -85,7 +85,7 @@ base::Value::List ReadJsonList(const std::string& file_name) {
   if (!parsed_content->is_list())
     return base::Value::List();
 
-  return std::move(parsed_content->GetList());
+  return std::move(*parsed_content).TakeList();
 }
 
 // This test uses input data of core features and the output of the training

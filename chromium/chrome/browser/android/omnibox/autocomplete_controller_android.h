@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,7 +48,9 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer,
              bool prefer_keyword,
              bool allow_exact_keyword_match,
              bool want_asynchronous_matches);
-  void StartPrefetch(JNIEnv* env);
+  void StartPrefetch(JNIEnv* env,
+                     const base::android::JavaRef<jstring>& j_current_url,
+                     jint j_page_classification);
   base::android::ScopedJavaLocalRef<jobject> Classify(
       JNIEnv* env,
       const base::android::JavaParamRef<jstring>& j_text,

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,8 @@
 #include "chromeos/ash/services/auth_factor_config/public/mojom/auth_factor_config.mojom.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
+
+class PrefRegistrySimple;
 
 namespace ash::auth {
 
@@ -24,6 +26,8 @@ class AuthFactorConfig : public mojom::AuthFactorConfig {
 
   AuthFactorConfig(const AuthFactorConfig&) = delete;
   AuthFactorConfig& operator=(const AuthFactorConfig&) = delete;
+
+  static void RegisterPrefs(PrefRegistrySimple* registry);
 
   void BindReceiver(mojo::PendingReceiver<mojom::AuthFactorConfig> receiver);
 

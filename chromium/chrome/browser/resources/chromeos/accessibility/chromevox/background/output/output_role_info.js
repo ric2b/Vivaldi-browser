@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,6 +41,11 @@ export const OutputRoleInfo = {
   comboBoxMenuButton: {msgId: 'role_combobox', earconId: 'LISTBOX'},
   comboBoxGrouping:
       {msgId: 'role_combobox', inherits: 'abstractFormFieldContainer'},
+  comboBoxSelect: {
+    msgId: 'role_button',
+    earconId: 'POP_UP_BUTTON',
+    inherits: 'comboBoxMenuButton',
+  },
   complementary: {msgId: 'role_complementary', inherits: 'abstractContainer'},
   comment: {
     msgId: 'role_comment',

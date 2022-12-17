@@ -1,17 +1,18 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/bubble_anchor_util_views.h"
 
 #include "build/build_config.h"
+#include "chrome/browser/ui/bubble_anchor_util.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/picture_in_picture_browser_frame_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "chrome/browser/ui/views/location_bar/location_icon_view.h"
-#include "chrome/browser/ui/views/permissions/permission_chip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/permissions/features.h"
+#include "ui/views/bubble/bubble_border.h"
 
 #include "app/vivaldi_apptools.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -29,10 +30,31 @@ AnchorConfiguration GetPageInfoAnchorConfiguration(Browser* browser,
   if (!browser_view)
     return {};
 
+  if (anchor == kLocationBar &&
+      browser_view->GetLocationBarView()->chip_controller() &&
+      browser_view->GetLocationBarView()
+          ->chip_controller()
+          ->chip()
+          ->GetVisible()) {
+    return {browser_view->GetLocationBarView()->chip_controller()->chip(),
+            browser_view->GetLocationBarView()->chip_controller()->chip(),
+            views::BubbleBorder::TOP_LEFT};
+  }
+
   if (anchor == kLocationBar && browser_view->GetLocationBarView()->IsDrawn())
     return {browser_view->GetLocationBarView(),
             browser_view->GetLocationBarView()->location_icon_view(),
             views::BubbleBorder::TOP_LEFT};
+
+// TODO(https://crbug.com/1346734): Enable this on all platforms.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  if (anchor == kLocationBar && browser_view->GetIsPictureInPictureType()) {
+    auto* frame_view = static_cast<PictureInPictureBrowserFrameView*>(
+        browser_view->frame()->GetFrameView());
+    return {frame_view->GetLocationIconView(),
+            frame_view->GetLocationIconView(), views::BubbleBorder::TOP_LEFT};
+  }
+#endif
 
   if (anchor == kCustomTabBar && browser_view->toolbar()->custom_tab_bar())
     return {browser_view->toolbar()->custom_tab_bar(),
@@ -61,9 +83,12 @@ AnchorConfiguration GetPermissionPromptBubbleAnchorConfiguration(
     return GetPageInfoAnchorConfiguration(browser);
   }
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  if (browser_view->GetLocationBarView()->IsChipActive()) {
+  if (browser_view->GetLocationBarView()->chip_controller() &&
+      browser_view->GetLocationBarView()
+          ->chip_controller()
+          ->IsPermissionPromptChipVisible()) {
     return {browser_view->GetLocationBarView(),
-            browser_view->GetLocationBarView()->chip()->button(),
+            browser_view->GetLocationBarView()->chip_controller()->chip(),
             views::BubbleBorder::TOP_LEFT};
   }
   return GetPageInfoAnchorConfiguration(browser);

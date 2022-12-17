@@ -10,12 +10,6 @@
 
 #import "SUTouchBarButtonGroup.h"
 
-#if __MAC_OS_X_VERSION_MAX_ALLOWED < 101200
-@interface NSButton (SierraSDK)
-+ (instancetype)buttonWithTitle:(NSString*)title target:(id)target action:(SEL)action;
-@end
-#endif
-
 @implementation SUTouchBarButtonGroup
 
 @synthesize buttons = _buttons;
@@ -32,10 +26,7 @@
 
     for (NSUInteger i = 0; i < buttons.count; i++) {
         NSButton *button = [buttons objectAtIndex:i];
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpartial-availability"
         NSButton *buttonCopy = [NSButton buttonWithTitle:button.title target:button.target action:button.action];
-#pragma clang diagnostic pop
         buttonCopy.tag = button.tag;
         buttonCopy.enabled = button.enabled;
 
@@ -65,10 +56,7 @@
             [constraints addObject:[NSLayoutConstraint constraintWithItem:buttonCopy attribute:NSLayoutAttributeLeading relatedBy:NSLayoutRelationEqual toItem:buttonGroup attribute:NSLayoutAttributeLeading multiplier:1.0 constant:0.0]];
         }
     }
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpartial-availability"
     [NSLayoutConstraint activateConstraints:constraints];
-#pragma clang diagnostic pop
 
     _buttons = buttonCopies;
     return self;

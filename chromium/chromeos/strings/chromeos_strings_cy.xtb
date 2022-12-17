@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Golygu'r ffeil}zero{Golygu ffeiliau}two{Golygu ffeiliau}few{Golygu ffeiliau}many{Golygu ffeiliau}other{Golygu ffeiliau}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" />GHz</translation>
 <translation id="3291996639387199448">Cyfeiriad allwedd</translation>
+<translation id="3294437725009624529">Gwestai</translation>
 <translation id="3310640316857623290">Mae cuddni DNS yn sylweddol uwch na'r trothwy a ganiateir</translation>
 <translation id="3328783797891415197">Mae prawf wrthi'n rhedeg</translation>
 <translation id="3340011300870565703">Mae gan y ddyfais <ph name="BATTERY_PERCENTAGE" />% o fatri bud dde.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Tra bod y gadarnwedd yn diweddaru, peidiwch â dadblygio'r ddyfais allanol hon na diffodd eich cyfrifiadur. Gallwch leihau'r ffenestr hon. Gall y diweddariad hwn gymryd ychydig funudau ac mae'n bosib na fydd eich dyfais allanol yn gweithio yn ystod y cyfnod hwn.</translation>
 <translation id="3486220673238053218">diffiniad</translation>
 <translation id="3488065109653206955">Wedi'i weithredu'n rhannol</translation>
+<translation id="3510890413042482857">Anfon <ph name="BEGIN_LINK1" />data olrhain perfformiad<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Diweddariad ChromeOS</translation>
 <translation id="3527036260304016759">Wedi methu - Gwall anhysbys</translation>
 <translation id="3532980081107202182">Tua <ph name="MIN_REMAINING" /> o funudau ar ôl</translation>
@@ -468,6 +470,7 @@ Rhowch gynnig ar dapio'r meic i ofyn unrhyw beth i fi.</translation>
 <translation id="5502931783115429516">Nid yw Android yn rhedeg</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Newid yn awtomatig i thema dywyll ar fachlud haul</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Ail-sganio</translation>
 <translation id="5583640892426849032">Backspace</translation>

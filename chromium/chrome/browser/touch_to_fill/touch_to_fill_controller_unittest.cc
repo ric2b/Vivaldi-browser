@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,8 +67,8 @@ class MockPasswordManagerClient
               (password_manager::ManagePasswordsReferrer),
               (override));
   MOCK_METHOD(password_manager::WebAuthnCredentialsDelegate*,
-              GetWebAuthnCredentialsDelegate,
-              (),
+              GetWebAuthnCredentialsDelegateForDriver,
+              (password_manager::PasswordManagerDriver*),
               (override));
 };
 
@@ -134,7 +134,7 @@ class TouchToFillControllerTest : public testing::Test {
 
     webauthn_credentials_delegate_ =
         std::make_unique<password_manager::MockWebAuthnCredentialsDelegate>();
-    ON_CALL(client_, GetWebAuthnCredentialsDelegate)
+    ON_CALL(client_, GetWebAuthnCredentialsDelegateForDriver)
         .WillByDefault(Return(webauthn_credentials_delegate_.get()));
     ON_CALL(*webauthn_credentials_delegate_, IsWebAuthnAutofillEnabled)
         .WillByDefault(Return(false));
@@ -400,14 +400,12 @@ TEST_F(TouchToFillControllerTest, Show_And_Fill_Auth_Available_Success) {
   UiCredential credentials[] = {
       MakeUiCredential({.username = "alice", .password = "p4ssw0rd"})};
 
-  // Without |kTouchToFillPasswordSubmission|, a form that is ready for
-  // submission doesn't affect UI.
   EXPECT_CALL(
       view(),
       Show(Eq(GURL(kExampleCom)), IsOriginSecure(true),
            ElementsAreArray(credentials),
            ElementsAreArray(std::vector<TouchToFillWebAuthnCredential>()),
-           /*trigger_submission=*/false));
+           /*trigger_submission=*/true));
   touch_to_fill_controller().Show(
       credentials, {}, driver().AsWeakPtr(),
       autofill::mojom::SubmissionReadinessState::kTwoFields);
@@ -423,9 +421,7 @@ TEST_F(TouchToFillControllerTest, Show_And_Fill_Auth_Available_Success) {
               Authenticate(BiometricAuthRequester::kTouchToFill, _,
                            /*use_last_valid_auth=*/true))
       .WillOnce(RunOnceCallback<1>(true));
-  // Without |kTouchToFillPasswordSubmission|, don't trigger a submission, but
-  // inform the client that a form can be submitted.
-  EXPECT_CALL(driver(), TriggerFormSubmission()).Times(0);
+  EXPECT_CALL(driver(), TriggerFormSubmission());
   EXPECT_CALL(client(), StartSubmissionTrackingAfterTouchToFill(Eq(u"alice")));
 
   touch_to_fill_controller().OnCredentialSelected(credentials[0]);
@@ -676,7 +672,6 @@ TEST_F(TouchToFillControllerTest, ShowWebAuthnCredential) {
 
   TouchToFillWebAuthnCredential credential(
       TouchToFillWebAuthnCredential::Username(u"alice@example.com"),
-      TouchToFillWebAuthnCredential::DisplayName(u"alice"),
       TouchToFillWebAuthnCredential::BackendId("12345"));
   std::vector<TouchToFillWebAuthnCredential> credentials({credential});
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,10 +11,6 @@ import androidx.annotation.Nullable;
 
 /**
  * A class that supplies custom view to TabSwitcher from other non tab switcher clients.
- *
- * TODO(crbug.com/1227656): This manager is only used by the re-auth client and once the re-auth
- * integration with tab-switcher design is further improved then remove this if no other clients
- * use this.
  */
 public class TabSwitcherCustomViewManager {
     /**

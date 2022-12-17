@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "build/buildflag.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_icon/icon_key_util.h"
+#include "chrome/browser/apps/app_service/launch_result_type.h"
 #include "chrome/browser/apps/app_service/paused_apps.h"
 #include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
@@ -95,6 +96,11 @@ void UninstallImpl(WebAppProvider* provider,
                    apps::UninstallSource uninstall_source,
                    gfx::NativeWindow parent_window);
 
+// Converts RunOnOsLoginMode from apps::mojom::RunOnOsLoginMode to
+// RunOnOsLoginMode.
+RunOnOsLoginMode ConvertOsLoginModeToWebAppConstants(
+    apps::mojom::RunOnOsLoginMode login_mode);
+
 class WebAppPublisherHelper : public AppRegistrarObserver,
                               public WebAppInstallManagerObserver,
 #if BUILDFLAG(IS_CHROMEOS)
@@ -125,12 +131,13 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
   WebAppPublisherHelper(Profile* profile,
                         WebAppProvider* provider,
                         ash::SystemWebAppManager* swa_manager,
-                        apps::AppType app_type,
                         Delegate* delegate,
                         bool observe_media_requests);
   WebAppPublisherHelper(const WebAppPublisherHelper&) = delete;
   WebAppPublisherHelper& operator=(const WebAppPublisherHelper&) = delete;
   ~WebAppPublisherHelper() override;
+
+  static apps::AppType GetWebAppType();
 
   // Indicates if |permission_type| is supported by Web Applications.
   static bool IsSupportedWebAppPermissionType(
@@ -220,7 +227,7 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
                            apps::IntentPtr intent,
                            apps::LaunchSource launch_source,
                            apps::WindowInfoPtr window_info,
-                           base::OnceCallback<void(bool)> callback);
+                           apps::LaunchCallback callback);
 
   content::WebContents* LaunchAppWithParams(apps::AppLaunchParams params);
 
@@ -234,8 +241,7 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
 
   apps::WindowMode GetWindowMode(const std::string& app_id);
 
-  void SetWindowMode(const std::string& app_id,
-                     apps::mojom::WindowMode window_mode);
+  void SetWindowMode(const std::string& app_id, apps::WindowMode window_mode);
 
   void SetRunOnOsLoginMode(const std::string& app_id,
                            apps::mojom::RunOnOsLoginMode run_on_os_login_mode);
@@ -243,11 +249,6 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
   // Converts |display_mode| to a |window_mode|.
   apps::WindowMode ConvertDisplayModeToWindowMode(
       blink::mojom::DisplayMode display_mode);
-
-  // Converts RunOnOsLoginMode from apps::mojom::RunOnOsLoginMode to
-  // RunOnOsLoginMode.
-  RunOnOsLoginMode ConvertOsLoginModeToWebAppConstants(
-      apps::mojom::RunOnOsLoginMode login_mode);
 
   void PublishWindowModeUpdate(const std::string& app_id,
                                blink::mojom::DisplayMode display_mode);
@@ -372,6 +373,8 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
 
   void Init(bool observe_media_requests);
 
+  void ObserveWebAppSubsystems();
+
   apps::IconEffects GetIconEffects(const WebApp* web_app);
 
   const WebApp* GetWebApp(const AppId& app_id) const;
@@ -388,9 +391,9 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
       base::OnceCallback<void(const std::vector<content::WebContents*>&)>
           callback);
 
-  // Get the identifier for the app that will be used in policy controls, such
-  // as force-installation and pinning. May be empty.
-  std::string GetPolicyId(const WebApp& web_app);
+  // Get the list of identifiers for the app that will be used in policy
+  // controls, such as force-installation and pinning. May be empty.
+  std::vector<std::string> GetPolicyIds(const WebApp& web_app) const;
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Updates app visibility.

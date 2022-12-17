@@ -1,5 +1,5 @@
 <!--
-Copyright 2021 The Chromium Authors. All rights reserved.
+Copyright 2021 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -53,6 +53,7 @@ chromium-metrics-reviews@google.com.
                the Autofill dropdown to educate users virtual cards come with
                better security"/>
   <variant name="IPH_BadgedReadingList" summary="badged reading list"/>
+  <variant name="IPH_BatterySaverMode" summary="battery saver mode"/>
   <variant name="IPH_Bookmark" summary="bookmark"/>
   <variant name="IPH_BottomToolbarTip" summary="bottom toolbar"/>
   <variant name="IPH_ChromeDuet"
@@ -112,6 +113,7 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_EphemeralTab"
       summary="new label on the context menu for Ephemeral Tab"/>
   <variant name="IPH_ExploreSitesTile" summary="Explore Sites feature"/>
+  <variant name="IPH_ExtensionsMenu" summary="extensions menu opened"/>
   <variant name="IPH_FeatureNotificationGuideDefaultBrowserNotificationShown"
       summary="feature notification guide default browser notification"/>
   <variant name="IPH_FeatureNotificationGuideDefaultBrowserPromo"
@@ -143,6 +145,9 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_GlobalMediaControls" summary="the Global Media Controls"/>
   <variant name="IPH_GMCCastStartStop"
       summary="Cast start stop in the Zenith dialog"/>
+  <variant name="IPH_HighEfficiencyInfoMode" summary="High efficiency info"/>
+  <variant name="IPH_HighEfficiencyMode"
+      summary="encourages users to turn on high efficiency mode"/>
   <variant name="IPH_IdentityDisc" summary="Identity Disc"/>
   <variant name="IPH_IncognitoWindow" summary="incognito window"/>
   <variant name="IPH_InstanceSwitcher" summary="instance switcher"/>
@@ -170,11 +175,18 @@ chromium-metrics-reviews@google.com.
       summary="passwords account storage"/>
   <variant name="IPH_PasswordSuggestions"
       summary="the Autofill password suggestions on iOS"/>
+  <variant name="IPH_PerformanceNewBadge"
+      summary="New badge shows next to performance item on the app menu"/>
   <variant name="IPH_PreviewsOmniboxUI"
       summary="the Previews UI in the Android Omnibox"/>
   <variant name="IPH_PriceDropNTP"
       summary="the in product help message to inform users that a price drop
                has occurred in a tab"/>
+  <variant name="IPH_PriceTrackingInSidePanel"
+      summary="first time user tracks a product to educate them to see the
+               price tracking list in side panel"/>
+  <variant name="IPH_PriceTrackingPageActionIconLabel"
+      summary="price tracking page action icon label triggering"/>
   <variant name="IPH_ProfileSwitch"
       summary="switching profiles using the profile menu"/>
   <variant name="IPH_PwaInstallAvailableFeature"
@@ -213,6 +225,8 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_SideSearch" summary="side search discovery"/>
   <variant name="IPH_SideSearchAutoTriggering"
       summary="side search automatic triggering"/>
+  <variant name="IPH_SideSearchPageActionLabel"
+      summary="side search page action label triggering"/>
   <variant name="IPH_TabGroupsDragAndDrop"
       summary="educating user to drop one tab on another tab to create group"/>
   <variant name="IPH_TabGroupsQuicklyComparePages"
@@ -252,7 +266,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="InProductHelp.Config.ParsingEvent" enum="ConfigParsingEvent"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if in-product help configuration is parsed correctly, and the
@@ -281,7 +295,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.Db.TotalEvents" units="events"
-    expires_after="2022-12-26">
+    expires_after="2023-02-26">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records the total number of event records in the database for in-product
@@ -296,6 +310,15 @@ chromium-metrics-reviews@google.com.
     Records if {IPHDatabase} database update succeeds for in-product help.
   </summary>
   <token key="IPHDatabase" variants="IPHDatabase"/>
+</histogram>
+
+<histogram name="InProductHelp.DismissalReason.iOS"
+    enum="InProductHelpDismissalReason" expires_after="2023-02-12">
+  <owner>lpromero@google.com</owner>
+  <owner>gambard@chromium.org</owner>
+  <summary>
+    Records how the in-product help bubble was dismissed on iOS.
+  </summary>
 </histogram>
 
 <histogram name="InProductHelp.NotifyEventReadyState.{IPHFeature}"
@@ -323,6 +346,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="InProductHelp.Promos.Snooze.{IPHFeature}" units="SnoozeType"
     expires_after="2021-11-21">
+  <obsolete>
+    Expired since 2021-11.
+  </obsolete>
   <owner>kerenzhu@chromium.org</owner>
   <owner>collinbaker@chromium.org</owner>
   <summary>
@@ -336,6 +362,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="InProductHelp.Promos.SnoozeCountAtAcknowledge.{IPHFeature}"
     units="times" expires_after="2021-11-21">
+  <obsolete>
+    Expired since 2021-11.
+  </obsolete>
   <owner>kerenzhu@chromium.org</owner>
   <owner>collinbaker@chromium.org</owner>
   <summary>
@@ -347,6 +376,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="InProductHelp.Promos.SnoozeCountAtFollow.{IPHFeature}"
     units="times" expires_after="2021-11-21">
+  <obsolete>
+    Expired since 2021-11.
+  </obsolete>
   <owner>kerenzhu@chromium.org</owner>
   <owner>collinbaker@chromium.org</owner>
   <summary>
@@ -359,6 +391,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="InProductHelp.Promos.SnoozeCountAtTrigger.{IPHFeature}"
     units="times" expires_after="2021-11-21">
+  <obsolete>
+    Expired since 2021-11.
+  </obsolete>
   <owner>kerenzhu@chromium.org</owner>
   <owner>collinbaker@chromium.org</owner>
   <summary>
@@ -380,6 +415,19 @@ chromium-metrics-reviews@google.com.
   <token key="IPHFeature" variants="IPHFeature"/>
 </histogram>
 
+<histogram name="InProductHelp.ShownTime.{IPHFeature}" units="ms"
+    expires_after="2023-09-21">
+  <owner>lpromero@google.com</owner>
+  <owner>gambard@chromium.org</owner>
+  <summary>
+    Records the time duration during which the in-product help for {IPHFeature}
+    is shown. The timer automatically starts when the feature engagement system
+    says a particular IPH should be displayed. The timer is stopped and recorded
+    when the IPH is dismissed.
+  </summary>
+  <token key="IPHFeature" variants="IPHFeature"/>
+</histogram>
+
 <histogram name="InProductHelp.SnoozeAction" enum="InProductHelpSnoozeAction"
     expires_after="2022-12-04">
   <owner>haileywang@chromium.org</owner>
@@ -390,7 +438,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.TextBubble.ShownTime" units="ms"
-    expires_after="2023-02-05">
+    expires_after="2023-04-09">
   <owner>haileywang@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <summary>
@@ -432,7 +480,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Tutorial.TabGroup.EditedTitle" enum="BooleanSuccess"
-    expires_after="2022-12-31">
+    expires_after="2023-03-05">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
   <summary>

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,7 @@ import java.util.Set;
  * Represents a single tab in a browser. More specifically, owns a NavigationController, and allows
  * configuring state of the tab, such as delegates and callbacks.
  */
-public class Tab {
+class Tab {
     // Maps from id (as returned from ITab.getId()) to Tab.
     private static final Map<Integer, Tab> sTabMap = new HashMap<Integer, Tab>();
 
@@ -55,6 +55,10 @@ public class Tab {
     private NewTabCallback mNewTabCallback;
     private final ObserverList<ScrollOffsetCallback> mScrollOffsetCallbacks;
     private @Nullable ActionModeCallback mActionModeCallback;
+
+    private TabProxy mTabProxy;
+    private TabNavigationControllerProxy mTabNavigationControllerProxy;
+
     // Id from the remote side.
     private final int mId;
     // Guid from the remote side.
@@ -70,6 +74,8 @@ public class Tab {
         mScrollOffsetCallbacks = null;
         mId = 0;
         mGuid = "";
+        mTabProxy = null;
+        mTabNavigationControllerProxy = null;
     }
 
     Tab(ITab impl, Browser browser) {
@@ -88,6 +94,10 @@ public class Tab {
         mNavigationController = NavigationController.create(mImpl);
         mFindInPageController = new FindInPageController(mImpl);
         mMediaCaptureController = new MediaCaptureController(mImpl);
+
+        mTabProxy = new TabProxy(this);
+        mTabNavigationControllerProxy = new TabNavigationControllerProxy(mNavigationController);
+
         registerTab(this);
     }
 
@@ -418,6 +428,16 @@ public class Tab {
     @NonNull
     public String getGuid() {
         return mGuid;
+    }
+
+    @NonNull
+    TabNavigationControllerProxy getTabNavigationControllerProxy() {
+        return mTabNavigationControllerProxy;
+    }
+
+    @NonNull
+    TabProxy getTabProxy() {
+        return mTabProxy;
     }
 
     /**

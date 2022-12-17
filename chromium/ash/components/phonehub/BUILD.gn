@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -37,6 +37,8 @@ static_library("phonehub") {
     "do_not_disturb_controller.h",
     "do_not_disturb_controller_impl.cc",
     "do_not_disturb_controller_impl.h",
+    "feature_setup_connection_operation.cc",
+    "feature_setup_connection_operation.h",
     "feature_setup_response_processor.cc",
     "feature_setup_response_processor.h",
     "feature_status.cc",
@@ -125,8 +127,6 @@ static_library("phonehub") {
   ]
 
   deps = [
-    "//ash/components/multidevice",
-    "//ash/components/multidevice/logging",
     "//ash/components/phonehub/proto",
     "//ash/constants",
     "//ash/resources/vector_icons",
@@ -137,6 +137,8 @@ static_library("phonehub") {
     "//ash/services/secure_channel/public/mojom",
     "//ash/webui/eche_app_ui:eche_app_ui_pref",
     "//base",
+    "//chromeos/ash/components/multidevice",
+    "//chromeos/ash/components/multidevice/logging",
     "//chromeos/dbus/power",
     "//chromeos/services/network_config",
     "//chromeos/services/network_config:in_process_instance",
@@ -191,11 +193,11 @@ static_library("debug") {
   public_deps = [ ":phonehub" ]
 
   deps = [
-    "//ash/components/multidevice/logging",
     "//ash/components/phonehub/proto",
     "//ash/constants",
     "//ash/services/multidevice_setup/public/mojom",
     "//base",
+    "//chromeos/ash/components/multidevice/logging",
   ]
 }
 
@@ -267,8 +269,6 @@ source_set("unit_tests") {
     ":debug",
     ":phonehub",
     ":test_support",
-    "//ash/components/multidevice",
-    "//ash/components/multidevice:test_support",
     "//ash/components/phonehub/proto",
     "//ash/constants",
     "//ash/services/device_sync/public/cpp",
@@ -281,6 +281,8 @@ source_set("unit_tests") {
     "//ash/webui/eche_app_ui:eche_app_ui_pref",
     "//base",
     "//base/test:test_support",
+    "//chromeos/ash/components/multidevice",
+    "//chromeos/ash/components/multidevice:test_support",
     "//chromeos/ash/components/network",
     "//chromeos/ash/components/network:test_support",
     "//chromeos/dbus/power",

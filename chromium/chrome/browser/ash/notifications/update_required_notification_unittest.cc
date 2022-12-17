@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -26,6 +25,7 @@
 #include "chromeos/ash/components/dbus/update_engine/fake_update_engine_client.h"
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "chromeos/ash/components/network/network_handler_test_helper.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -60,8 +60,8 @@ class UpdateRequiredNotificationTest
   void TearDown() override;
 
   // MinimumVersionPolicyHandler::Delegate:
-  base::Version GetCurrentVersion() const;
-  bool IsUserEnterpriseManaged() const;
+  base::Version GetCurrentVersion() const override;
+  bool IsUserEnterpriseManaged() const override;
   MOCK_METHOD0(ShowUpdateRequiredScreen, void());
   MOCK_METHOD0(RestartToLoginScreen, void());
   MOCK_METHOD0(HideUpdateRequiredScreenIfShown, void());
@@ -77,7 +77,7 @@ class UpdateRequiredNotificationTest
   const MinimumVersionRequirement* GetState() const;
 
   // Set new value for policy pref.
-  void SetPolicyPref(base::Value value);
+  void SetPolicyPref(base::Value::Dict value);
 
   void VerifyUpdateRequiredNotification(const std::u16string& expected_title,
                                         const std::u16string& expected_message);
@@ -175,9 +175,9 @@ base::Version UpdateRequiredNotificationTest::GetCurrentVersion() const {
   return *current_version_;
 }
 
-void UpdateRequiredNotificationTest::SetPolicyPref(base::Value value) {
-  scoped_testing_cros_settings_.device_settings()->Set(kDeviceMinimumVersion,
-                                                       value);
+void UpdateRequiredNotificationTest::SetPolicyPref(base::Value::Dict value) {
+  scoped_testing_cros_settings_.device_settings()->Set(
+      kDeviceMinimumVersion, base::Value(std::move(value)));
 }
 
 void UpdateRequiredNotificationTest::VerifyUpdateRequiredNotification(

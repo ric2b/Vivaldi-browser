@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -174,10 +174,10 @@ void CdmPrefServiceHelper::ClearCdmPreferenceData(
     const base::RepeatingCallback<bool(const GURL&)>& filter) {
   DVLOG(1) << __func__ << " From [" << start << ", " << end << "]";
 
-  DictionaryPrefUpdate update(user_prefs, prefs::kMediaCdmOriginData);
+  ScopedDictPrefUpdate update(user_prefs, prefs::kMediaCdmOriginData);
 
   std::vector<std::string> origins_to_delete;
-  for (auto key_value : update->DictItems()) {
+  for (auto key_value : *update) {
     const std::string& origin = key_value.first;
 
     // Null filter indicates that we should delete everything.
@@ -211,7 +211,7 @@ void CdmPrefServiceHelper::ClearCdmPreferenceData(
 
   // Remove CDM preference data.
   for (const auto& origin_str : origins_to_delete)
-    update->RemoveKey(origin_str);
+    update->Remove(origin_str);
 
   DVLOG(1) << __func__ << "Done removing CDM preference data";
 }
@@ -224,7 +224,7 @@ std::unique_ptr<CdmPrefData> CdmPrefServiceHelper::GetCdmPrefData(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   const base::Value::Dict& dict =
-      user_prefs->GetValueDict(prefs::kMediaCdmOriginData);
+      user_prefs->GetDict(prefs::kMediaCdmOriginData);
 
   DCHECK(!cdm_origin.opaque());
   if (cdm_origin.opaque()) {
@@ -244,12 +244,11 @@ std::unique_ptr<CdmPrefData> CdmPrefServiceHelper::GetCdmPrefData(
   // Create an new entry or overwrite the existing one in case we weren't able
   // to get a valid origin ID from `FromDictValue()`.
   if (!cdm_pref_data) {
-    DictionaryPrefUpdate update(user_prefs, prefs::kMediaCdmOriginData);
-    base::Value* update_dict = update.Get();
+    ScopedDictPrefUpdate update(user_prefs, prefs::kMediaCdmOriginData);
 
     cdm_pref_data = std::make_unique<CdmPrefData>(
         base::UnguessableToken::Create(), base::Time::Now());
-    update_dict->SetKey(serialized_cdm_origin, ToDictValue(*cdm_pref_data));
+    update->Set(serialized_cdm_origin, ToDictValue(*cdm_pref_data));
   }
 
   return cdm_pref_data;
@@ -268,8 +267,8 @@ void CdmPrefServiceHelper::SetCdmClientToken(
   const std::string serialized_cdm_origin = cdm_origin.Serialize();
   DCHECK(!serialized_cdm_origin.empty());
 
-  DictionaryPrefUpdate update(user_prefs, prefs::kMediaCdmOriginData);
-  base::Value::Dict& dict = update->GetDict();
+  ScopedDictPrefUpdate update(user_prefs, prefs::kMediaCdmOriginData);
+  base::Value::Dict& dict = update.Get();
 
   base::Value::Dict* dict_value = dict.FindDict(serialized_cdm_origin);
   if (!dict_value) {
@@ -296,7 +295,7 @@ std::map<std::string, url::Origin> CdmPrefServiceHelper::GetOriginIdMapping(
     PrefService* user_prefs) {
   std::map<std::string, url::Origin> mapping;
   const base::Value::Dict& dict =
-      user_prefs->GetValueDict(prefs::kMediaCdmOriginData);
+      user_prefs->GetDict(prefs::kMediaCdmOriginData);
 
   for (auto key_value : dict) {
     const base::Value* origin_id_value = key_value.second.FindKey(kOriginId);

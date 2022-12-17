@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -304,8 +304,8 @@ void MojoURLLoaderClient::Freeze(WebLoaderFreezeMode mode) {
   }
   if (mode == WebLoaderFreezeMode::kNone) {
     task_runner_->PostTask(
-        FROM_HERE, WTF::Bind(&MojoURLLoaderClient::FlushDeferredMessages,
-                             weak_factory_.GetWeakPtr()));
+        FROM_HERE, WTF::BindOnce(&MojoURLLoaderClient::FlushDeferredMessages,
+                                 weak_factory_.GetWeakPtr()));
   } else if (mode == WebLoaderFreezeMode::kBufferIncoming &&
              !has_received_complete_ &&
              !back_forward_cache_eviction_timer_.IsRunning()) {
@@ -314,8 +314,9 @@ void MojoURLLoaderClient::Freeze(WebLoaderFreezeMode mode) {
     back_forward_cache_eviction_timer_.SetTaskRunner(task_runner_);
     back_forward_cache_eviction_timer_.Start(
         FROM_HERE, back_forward_cache_timeout_,
-        WTF::Bind(&MojoURLLoaderClient::EvictFromBackForwardCacheDueToTimeout,
-                  weak_factory_.GetWeakPtr()));
+        WTF::BindOnce(
+            &MojoURLLoaderClient::EvictFromBackForwardCacheDueToTimeout,
+            weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -324,7 +325,8 @@ void MojoURLLoaderClient::OnReceiveEarlyHints(
 
 void MojoURLLoaderClient::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr response_head,
-    mojo::ScopedDataPipeConsumerHandle body) {
+    mojo::ScopedDataPipeConsumerHandle body,
+    absl::optional<mojo_base::BigBuffer> cached_metadata) {
   TRACE_EVENT1("loading", "MojoURLLoaderClient::OnReceiveResponse", "url",
                last_loaded_url_.GetString().Utf8());
 
@@ -342,6 +344,23 @@ void MojoURLLoaderClient::OnReceiveResponse(
 
   if (!weak_this)
     return;
+
+  // Send the cached metadata, if any, before starting to load the body, so that
+  // resources using the cached data (e.g. script resources deserialising the
+  // code cache) immediately know whether the cache is available before starting
+  // to process the response body.
+  if (cached_metadata) {
+    if (NeedsStoringMessage()) {
+      StoreAndDispatch(std::make_unique<DeferredOnReceiveCachedMetadata>(
+          std::move(*cached_metadata)));
+    } else {
+      resource_request_sender_->OnReceivedCachedMetadata(
+          std::move(*cached_metadata));
+    }
+
+    if (!weak_this)
+      return;
+  }
 
   if (!body)
     return;
@@ -459,15 +478,6 @@ void MojoURLLoaderClient::OnUploadProgress(
     resource_request_sender_->OnUploadProgress(current_position, total_size);
   }
   std::move(ack_callback).Run();
-}
-
-void MojoURLLoaderClient::OnReceiveCachedMetadata(mojo_base::BigBuffer data) {
-  if (NeedsStoringMessage()) {
-    StoreAndDispatch(
-        std::make_unique<DeferredOnReceiveCachedMetadata>(std::move(data)));
-  } else {
-    resource_request_sender_->OnReceivedCachedMetadata(std::move(data));
-  }
 }
 
 void MojoURLLoaderClient::OnTransferSizeUpdated(int32_t transfer_size_diff) {

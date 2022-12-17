@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/logging.h"
-#include "base/strings/strcat.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
@@ -22,7 +21,6 @@
 #include "components/segmentation_platform/internal/stats.h"
 #include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/field_trial_register.h"
-#include "components/segmentation_platform/public/model_provider.h"
 #include "components/segmentation_platform/public/proto/model_metadata.pb.h"
 #include "components/segmentation_platform/public/segment_selection_result.h"
 
@@ -110,15 +108,16 @@ SegmentSelectorImpl::SegmentSelectorImpl(
   if (selected_segment.has_value()) {
     selected_segment_last_session_.segment = selected_segment->segment_id;
     selected_segment_last_session_.is_ready = true;
+    selected_segment_last_session_.rank = selected_segment->rank;
     stats::RecordSegmentSelectionFailure(
-        config_->segmentation_key,
+        *config_,
         stats::SegmentationSelectionFailureReason::kSelectionAvailableInPrefs);
 
     group_name = config_->GetSegmentUmaName(selected_segment->segment_id);
   } else {
     stats::RecordSegmentSelectionFailure(
-        config_->segmentation_key, stats::SegmentationSelectionFailureReason::
-                                       kInvalidSelectionResultInPrefs);
+        *config_, stats::SegmentationSelectionFailureReason::
+                      kInvalidSelectionResultInPrefs);
     group_name = "Unselected";
   }
 
@@ -198,7 +197,7 @@ bool SegmentSelectorImpl::IsPreviousSelectionInvalid() {
     if (!platform_options_.force_refresh_results &&
         previous_selection->selection_time + ttl_to_use > clock_->Now()) {
       stats::RecordSegmentSelectionFailure(
-          config_->segmentation_key,
+          *config_,
           stats::SegmentationSelectionFailureReason::kSelectionTtlNotExpired);
       VLOG(1) << __func__ << ": previous selection of segment="
               << SegmentId_Name(previous_selection->segment_id)
@@ -227,7 +226,7 @@ void SegmentSelectorImpl::GetRankForNextSegment(
       auto options =
           std::make_unique<SegmentResultProvider::GetResultOptions>();
       options->segment_id = needed_segment.first;
-      options->segmentation_key = config_->segmentation_key;
+      options->discrete_mapping_key = config_->segmentation_key;
       options->ignore_db_scores = config_->on_demand_execution;
       options->input_context = input_context;
       options->callback = base::BindOnce(
@@ -241,17 +240,21 @@ void SegmentSelectorImpl::GetRankForNextSegment(
   }
 
   // Finished fetching ranks for all segments.
-  SegmentId selected_segment = FindBestSegment(*ranks);
+  auto segment_id_and_rank = FindBestSegment(*ranks);
   if (config_->on_demand_execution) {
     DCHECK(!callback.is_null());
     SegmentSelectionResult result;
     result.is_ready = true;
-    result.segment = selected_segment;
+    result.segment = segment_id_and_rank.first;
+    result.rank = segment_id_and_rank.second;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), result));
+    stats::RecordSegmentSelectionComputed(*config_, segment_id_and_rank.first,
+                                          absl::nullopt);
   } else {
     DCHECK(callback.is_null());
-    UpdateSelectedSegment(selected_segment);
+    UpdateSelectedSegment(segment_id_and_rank.first,
+                          segment_id_and_rank.second);
   }
 }
 
@@ -262,7 +265,7 @@ void SegmentSelectorImpl::OnGetResultForSegmentSelection(
     SegmentId current_segment_id,
     std::unique_ptr<SegmentResultProvider::SegmentResult> result) {
   if (!result->rank) {
-    stats::RecordSegmentSelectionFailure(config_->segmentation_key,
+    stats::RecordSegmentSelectionFailure(*config_,
                                          GetFailureReason(result->state));
     if (config_->on_demand_execution && !callback.is_null()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -276,39 +279,44 @@ void SegmentSelectorImpl::OnGetResultForSegmentSelection(
   GetRankForNextSegment(std::move(ranks), input_context, std::move(callback));
 }
 
-SegmentId SegmentSelectorImpl::FindBestSegment(
+std::pair<SegmentId, float> SegmentSelectorImpl::FindBestSegment(
     const SegmentRanks& segment_results) {
-  int max_rank = 0;
+  const float kMinRank = 0;
+  float max_rank = kMinRank;
   SegmentId max_rank_id = SegmentId::OPTIMIZATION_TARGET_UNKNOWN;
   // Loop through all the results. Convert them to discrete ranks. Select the
   // one with highest discrete rank.
   for (const auto& pair : segment_results) {
     SegmentId id = pair.first;
-    int rank = pair.second;
+    float rank = pair.second;
     if (rank > max_rank) {
       max_rank = rank;
       max_rank_id = id;
-    } else if (rank == max_rank && rank > 0) {
+    } else if (rank == max_rank && rank > kMinRank) {
       // TODO(shaktisahu): Use fallback priority.
     }
   }
 
-  return max_rank_id;
+  return std::make_pair(max_rank_id, max_rank);
 }
 
-void SegmentSelectorImpl::UpdateSelectedSegment(SegmentId new_selection) {
+void SegmentSelectorImpl::UpdateSelectedSegment(SegmentId new_selection,
+                                                float rank) {
   VLOG(1) << __func__
-          << ": Updating selected segment=" << SegmentId_Name(new_selection);
+          << ": Updating selected segment=" << SegmentId_Name(new_selection)
+          << " rank=" << rank;
   const auto& previous_selection =
       result_prefs_->ReadSegmentationResultFromPref(config_->segmentation_key);
 
   // Auto-extend the results, if
-  // (1) segment selection hasn't changed.
+  // (1) segment selection and rank hasn't changed.
   // (2) or, UNKNOWN selection TTL = 0 and the new segment is UNKNOWN, and the
   //     previous one was a valid one.
   bool skip_updating_prefs = false;
   if (previous_selection.has_value()) {
-    skip_updating_prefs = new_selection == previous_selection->segment_id;
+    skip_updating_prefs =
+        new_selection == previous_selection->segment_id &&
+        (previous_selection->rank && rank == *previous_selection->rank);
     skip_updating_prefs |=
         config_->unknown_selection_ttl == base::TimeDelta() &&
         new_selection == SegmentId::OPTIMIZATION_TARGET_UNKNOWN;
@@ -316,17 +324,19 @@ void SegmentSelectorImpl::UpdateSelectedSegment(SegmentId new_selection) {
   }
 
   stats::RecordSegmentSelectionComputed(
-      config_->segmentation_key, new_selection,
+      *config_, new_selection,
       previous_selection.has_value()
           ? absl::make_optional(previous_selection->segment_id)
           : absl::nullopt);
 
-  VLOG(1) << __func__ << ": skip_updating_prefs=" << skip_updating_prefs;
+  VLOG(1) << __func__ << " Key=" << config_->segmentation_key
+          << " : skip_updating_prefs=" << skip_updating_prefs;
   if (skip_updating_prefs)
     return;
 
   // Write result to prefs.
-  auto updated_selection = absl::make_optional<SelectedSegment>(new_selection);
+  auto updated_selection =
+      absl::make_optional<SelectedSegment>(new_selection, rank);
   updated_selection->selection_time = clock_->Now();
 
   result_prefs_->SaveSegmentationResultToPref(config_->segmentation_key,

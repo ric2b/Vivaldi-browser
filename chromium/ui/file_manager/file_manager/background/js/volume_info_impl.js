@@ -1,8 +1,8 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 
 import {FakeEntryImpl} from '../../common/js/files_app_entry_types.js';
 import {str} from '../../common/js/util.js';
@@ -25,7 +25,7 @@ export class VolumeInfoImpl {
    * @param {(string|undefined)} error The error if an error is found.
    * @param {(string|undefined)} deviceType The type of device
    *     ('usb'|'sd'|'optical'|'mobile'|'unknown') (as defined in
-   *     ash/components/disks/disk_mount_manager.cc). Can be undefined.
+   *     chromeos/ash/components/disks/disk_mount_manager.cc). Can be undefined.
    * @param {(string|undefined)} devicePath Identifier of the device that the
    *     volume belongs to. Can be undefined.
    * @param {boolean} isReadOnly True if the volume is read only.

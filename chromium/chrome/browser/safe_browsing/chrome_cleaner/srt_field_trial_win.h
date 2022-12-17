@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -57,7 +57,7 @@ enum PromptTypeHistogramValue {
 
 // Feature, parameters of which control which software reporter and cleanup tool
 // versions will be downloaded. When not enabled, default versions will be used.
-extern const base::Feature kChromeCleanupDistributionFeature;
+BASE_DECLARE_FEATURE(kChromeCleanupDistributionFeature);
 
 // A "tag" value to be sent with the component update request in
 // SwReporterInstallerPolicy, controlling which version of the reporter

@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Udskriv...</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1187722533808055681">Aktivering efter dvale</translation>
-<translation id="119944043368869598">Ryd alle</translation>
 <translation id="1221825588892235038">Kun det markerede</translation>
 <translation id="1234736487471201993">Opret en QR-kode for dette billede</translation>
 <translation id="1244303850296295656">Udvidelsesfejl</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Vælg &amp;alle</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Brug et tal til at angive, hvor mange kopier der skal udskrives (1 til <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Slet alle</translation>
 <translation id="1994173015038366702">Webadresse</translation>
 <translation id="2019718679933488176">&amp;Åbn lyd på ny fane</translation>
 <translation id="2050339315714019657">Stående</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Indsæt som almindelig tekst</translation>
 <translation id="2249605167705922988">f.eks. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Tillad identifikatorer til beskyttet indhold (Genstart af computeren kan være nødvendig)</translation>
-<translation id="2277255602909579701">Alle cookies og websitedata</translation>
 <translation id="2280486287150724112">Højre-margen</translation>
 <translation id="2282146716419988068">GPU-proces</translation>
 <translation id="2301382460326681002">Udvidelsens rodmappe er ugyldig.</translation>
@@ -93,8 +90,10 @@
 <translation id="2550212893339833758">Ombyttet hukommelse</translation>
 <translation id="2553440850688409052">Skjul dette plugin</translation>
 <translation id="26224892172169984">Tillad ingen websites at håndtere protokoller</translation>
+<translation id="2653275834716714682">Teksterstatning</translation>
 <translation id="2662876636500006917">Chromes Webshop</translation>
 <translation id="2678063897982469759">Genaktiver</translation>
+<translation id="2678100101831051676">Det var ikke muligt at caste.</translation>
 <translation id="2721037002783622288">&amp;Søg efter billedet på <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Opret genvej...</translation>
 <translation id="2785873697295365461">Filbeskrivelser</translation>
@@ -122,7 +121,6 @@
 <translation id="3084548735795614657">Slip for at installere</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">BRUGER-håndtag</translation>
-<translation id="3127156390846601284">Dette sletter data, der er gemt på din enhed, for alle de viste websites. Vil du fortsætte?</translation>
 <translation id="3129173833825111527">Venstre-margen</translation>
 <translation id="3144647712221361880">Åbn linket som</translation>
 <translation id="3222066309010235055">Forhåndsgengivelse: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +143,6 @@
 <translation id="3387614642886316601">Brug forbedret stavekontrol</translation>
 <translation id="3390013585654699824">Info om appen</translation>
 <translation id="3393582007140394275">Skærmen kan ikke castes.</translation>
-<translation id="3432227430032737297">Fjern alle viste</translation>
 <translation id="345693547134384690">Åbn &amp;billede på ny fane</translation>
 <translation id="3494769164076977169">Spørg om tilladelse, når et website automatisk forsøger at downloade flere filer efter den første fil (anbefales)</translation>
 <translation id="3505030558724226696">Tilbagekald adgang til enhed</translation>
@@ -204,10 +201,10 @@
 <translation id="4409697491990005945">Margener</translation>
 <translation id="4423376891418188461">Gendan indstillinger</translation>
 <translation id="4478664379124702289">Gem lin&amp;k som...</translation>
-<translation id="4579581181964204535"><ph name="HOST_NAME" /> kunne ikke castes.</translation>
 <translation id="4593021220803146968">&amp;Gå til <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps og udvidelser kan kun ændres af administratoren (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">En udvidelse har ændret, hvilken side der vises, når du åbner en ny fane.</translation>
+<translation id="4616405296204756919">Du kan bruge gemte adgangskoder på enhver enhed. De gemmes på <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Åbn video på ny fane</translation>
 <translation id="4677772697204437347">GPU-hukommelse</translation>
 <translation id="4681930562518940301">Åbn originalt &amp;billede på ny fane</translation>
@@ -241,10 +238,12 @@
 <translation id="5233231016133573565">Behandling af ID</translation>
 <translation id="5233736638227740678">&amp;Indsæt</translation>
 <translation id="5256861893479663409">På alle websites</translation>
+<translation id="5260334392110301220">Smarte citationstegn</translation>
 <translation id="5269977353971873915">Udskrift mislykkedes</translation>
 <translation id="5284445933715251131">Fortsæt download</translation>
 <translation id="52912272896845572">Den private nøglefil er ugyldig.</translation>
 <translation id="5301954838959518834">OK, det er forstået</translation>
+<translation id="5302932258331363306">Vis erstatninger</translation>
 <translation id="5317780077021120954">Gem</translation>
 <translation id="5334142896108694079">Scriptcache</translation>
 <translation id="5355926466126177564">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du søger via omnifeltet.</translation>
@@ -277,7 +276,6 @@
 <translation id="5747809636523347288">Ind&amp;sæt, og gå til <ph name="URL" /></translation>
 <translation id="5759728514498647443">De dokumenter, du sender til udskrift via <ph name="APP_NAME" />, kan læses af <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">&amp;Gem lyd som...</translation>
-<translation id="577624874850706961">Søg i cookies</translation>
 <translation id="5780973441651030252">Procesprioritet</translation>
 <translation id="5804241973901381774">Tilladelser</translation>
 <translation id="5828633471261496623">Udskriver...</translation>
@@ -290,7 +288,6 @@
 <translation id="5965661248935608907">Den styrer også, hvilken side der vises, når du klikker på knappen Startside eller søger via omnifeltet.</translation>
 <translation id="5978277834170881274">&amp;Brug grundlæggende stavekontrol</translation>
 <translation id="5979421442488174909">&amp;Oversæt til <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Ryd websitedata</translation>
 <translation id="6042308850641462728">Mere</translation>
 <translation id="6086846494333236931">Installeret af din administrator</translation>
 <translation id="6101226222197207147">Ny app er tilføjet (<ph name="EXTENSION_NAME" />)</translation>
@@ -346,6 +343,7 @@
 <translation id="7053983685419859001">Bloker</translation>
 <translation id="7070484045139057854">Udvidelsen kan læse og ændre websitedata</translation>
 <translation id="708060913198414444">K&amp;opiér webadressen til lyden</translation>
+<translation id="7121728544325372695">Smarte bindestreger</translation>
 <translation id="7175353351958621980">Indlæst fra:</translation>
 <translation id="7186088072322679094">Behold i værktøjslinje</translation>
 <translation id="7287143125007575591">Adgang nægtet.</translation>
@@ -404,7 +402,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
          =1 {Download er i gang} other {Downloads er i gang}}</translation>
 <translation id="8230134520748321204">Vil du gemme adgangskoden til <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Denne udvidelse er ikke anført i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> og er muligvis blevet tilføjet, uden at du vidste det.</translation>
-<translation id="8339059274628563283">Data fra <ph name="SITE" />, der er gemt lokalt</translation>
 <translation id="8351419472474436977">En udvidelse har taget kontrol over dine proxyindstillinger, hvilket betyder, at den kan ændre, ødelægge eller aflytte alt, hvad du foretager dig på nettet. Hvis du ikke er sikker på, hvorfor denne ændring er sket, er den sandsynligvis uønsket.</translation>
 <translation id="8382913212082956454">Kopier &amp;email-adresse</translation>
 <translation id="8413385045638830869">Spørg først (anbefales)</translation>
@@ -430,6 +427,7 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8808478386290700967">Webshop</translation>
 <translation id="8823514049557262177">Kopiér linkte&amp;kst</translation>
 <translation id="8823704566850948458">Foreslå adgangskode...</translation>
+<translation id="883062543841130884">Erstatninger</translation>
 <translation id="8859174528519900719">Underramme: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Åbn link i nyt &amp;vindue</translation>
 <translation id="8915370057835397490">Indlæser forslag</translation>

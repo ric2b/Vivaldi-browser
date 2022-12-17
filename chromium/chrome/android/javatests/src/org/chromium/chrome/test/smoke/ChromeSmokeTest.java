@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.test.pagecontroller.rules.ChromeUiApplicationTestRule;
 import org.chromium.chrome.test.pagecontroller.rules.ChromeUiAutomatorTestRule;
@@ -127,11 +126,18 @@ public class ChromeSmokeTest {
         while (true) {
             // Wait for an FRE page to show up.
             waitUntilAnyVisible(frePageDetectors);
-            // If the update play services alert is visible, dismiss it.
-            if (uiLocatorHelper.isOnScreen(playServicesUpdateText)) {
-                UiAutomatorUtils.getInstance().clickOutsideOf(updatePlayServicesPanel);
-                // Different FRE versions show up randomly and in different order,
-                // figure out which one we are on and proceed.
+            // Different FRE versions show up randomly and in different order,
+            // figure out which one we are on and proceed.
+            if (uiLocatorHelper.isOnScreen(urlBar)) {
+                // FRE is over.
+                break;
+            } else if (uiLocatorHelper.isOnScreen(playServicesUpdateText)) {
+                // If the update play services alert is a modal, dismiss it.
+                // Otherwise its just a toast/notification that should not
+                // interfere with the test.
+                if (uiLocatorHelper.isOnScreen(updatePlayServicesPanel)) {
+                    UiAutomatorUtils.getInstance().clickOutsideOf(updatePlayServicesPanel);
+                }
             } else if (uiLocatorHelper.isOnScreen(termsAcceptButton)) {
                 // Click on the accept terms in FRE.
                 UiAutomatorUtils.getInstance().click(termsAcceptButton);
@@ -150,9 +156,6 @@ public class ChromeSmokeTest {
             } else if (uiLocatorHelper.isOnScreen(defaultSearchEngineNextButton)) {
                 // Just press next on choosing the default SE.
                 UiAutomatorUtils.getInstance().click(defaultSearchEngineNextButton);
-            } else if (uiLocatorHelper.isOnScreen(urlBar)) {
-                // FRE is over.
-                break;
             } else {
                 throw new RuntimeException("Unexpected FRE or Start page detected.");
             }
@@ -165,8 +168,6 @@ public class ChromeSmokeTest {
                 ChromeUiApplicationTestRule.PACKAGE_NAME_ARG, "org.chromium.chrome");
     }
 
-    // Test is flaky: https://crbug.com/1335513
-    @DisabledTest
     @Test
     public void testHello() {
         Context context = InstrumentationRegistry.getContext();

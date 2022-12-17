@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,8 @@
 #include <memory>
 #include <string>
 
-namespace google_breakpad {
-class LibcurlWrapper;
-}
-
 namespace chromecast {
+class LibcurlWrapper;
 
 struct CastCrashdumpData {
   CastCrashdumpData();
@@ -36,9 +33,8 @@ struct CastCrashdumpData {
 
 class CastCrashdumpUploader {
  public:
-  CastCrashdumpUploader(
-      const CastCrashdumpData& data,
-      std::unique_ptr<google_breakpad::LibcurlWrapper> http_layer);
+  CastCrashdumpUploader(const CastCrashdumpData& data,
+                        std::unique_ptr<LibcurlWrapper> http_layer);
   explicit CastCrashdumpUploader(const CastCrashdumpData& data);
 
   CastCrashdumpUploader(const CastCrashdumpUploader&) = delete;
@@ -54,7 +50,7 @@ class CastCrashdumpUploader {
  private:
   bool CheckRequiredParametersArePresent();
 
-  std::unique_ptr<google_breakpad::LibcurlWrapper> http_layer_;
+  std::unique_ptr<LibcurlWrapper> http_layer_;
   CastCrashdumpData data_;
 
   // Holds the following mapping for attachments: <label, filepath>

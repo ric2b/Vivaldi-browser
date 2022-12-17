@@ -1,26 +1,26 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_mediator.h"
 
-#include "base/auto_reset.h"
-#include "base/check_op.h"
-#include "base/mac/foundation_util.h"
-#include "base/notreached.h"
-#include "components/autofill/core/common/autofill_prefs.h"
-#include "components/prefs/pref_service.h"
+#import "base/auto_reset.h"
+#import "base/check_op.h"
+#import "base/mac/foundation_util.h"
+#import "base/notreached.h"
+#import "components/autofill/core/common/autofill_prefs.h"
+#import "components/prefs/pref_service.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
-#include "components/strings/grit/components_strings.h"
-#include "components/sync/base/pref_names.h"
-#include "components/sync/driver/sync_service.h"
+#import "components/strings/grit/components_strings.h"
+#import "components/sync/base/pref_names.h"
+#import "components/sync/driver/sync_service.h"
 #import "ios/chrome/browser/net/crurl.h"
-#include "ios/chrome/browser/sync/sync_observer_bridge.h"
-#include "ios/chrome/browser/sync/sync_setup_service.h"
+#import "ios/chrome/browser/sync/sync_observer_bridge.h"
+#import "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/icons/item_icon.h"
+#import "ios/chrome/browser/ui/icons/settings_icon.h"
 #import "ios/chrome/browser/ui/list_model/list_model.h"
-#import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_command_handler.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
@@ -28,18 +28,19 @@
 #import "ios/chrome/browser/ui/settings/google_services/sync_error_settings_command_handler.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_image_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
-#include "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
-#include "ios/chrome/grit/ios_chromium_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "url/gurl.h"
+#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -48,6 +49,14 @@
 using l10n_util::GetNSString;
 
 namespace {
+
+// Returns the configuration to be used for the accessory.
+UIImageConfiguration* AccessoryConfiguration() {
+  return [UIImageSymbolConfiguration
+      configurationWithPointSize:kSymbolAccessoryPointSize
+                          weight:UIImageSymbolWeightRegular
+                           scale:UIImageSymbolScaleMedium];
+}
 
 // Enterprise icon.
 NSString* const kGoogleServicesEnterpriseImage = @"google_services_enterprise";
@@ -293,8 +302,8 @@ const std::map<SyncSetupService::SyncableDatatype, const char*>
       SyncSetupService::kSyncServiceNeedsTrustedVaultKey;
   if (hasDisclosureIndicator) {
     self.encryptionItem.accessoryView = [[UIImageView alloc]
-        initWithImage:DefaultSymbolTemplateWithPointSize(
-                          kChevronForwardSymbol, kSymbolAccessoryPointSize)];
+        initWithImage:DefaultSymbolWithConfiguration(kChevronForwardSymbol,
+                                                     AccessoryConfiguration())];
     self.encryptionItem.accessoryView.tintColor =
         [UIColor colorNamed:kTextQuaternaryColor];
   } else {
@@ -309,8 +318,8 @@ const std::map<SyncSetupService::SyncableDatatype, const char*>
   TableViewImageItem* googleActivityControlsItem =
       [[TableViewImageItem alloc] initWithType:GoogleActivityControlsItemType];
   googleActivityControlsItem.accessoryView = [[UIImageView alloc]
-      initWithImage:DefaultSymbolTemplateWithPointSize(
-                        kExternalLinkSmbol, kSymbolAccessoryPointSize)];
+      initWithImage:DefaultSymbolWithConfiguration(kExternalLinkSmbol,
+                                                   AccessoryConfiguration())];
   googleActivityControlsItem.accessoryView.tintColor =
       [UIColor colorNamed:kTextQuaternaryColor];
   googleActivityControlsItem.title =
@@ -325,8 +334,8 @@ const std::map<SyncSetupService::SyncableDatatype, const char*>
   TableViewImageItem* dataFromChromeSyncItem =
       [[TableViewImageItem alloc] initWithType:DataFromChromeSync];
   dataFromChromeSyncItem.accessoryView = [[UIImageView alloc]
-      initWithImage:DefaultSymbolTemplateWithPointSize(
-                        kExternalLinkSmbol, kSymbolAccessoryPointSize)];
+      initWithImage:DefaultSymbolWithConfiguration(kExternalLinkSmbol,
+                                                   AccessoryConfiguration())];
   dataFromChromeSyncItem.accessoryView.tintColor =
       [UIColor colorNamed:kTextQuaternaryColor];
   dataFromChromeSyncItem.title =
@@ -702,8 +711,9 @@ const std::map<SyncSetupService::SyncableDatatype, const char*>
          (itemType == SyncNeedsTrustedVaultKeyErrorItemType) ||
          (itemType == SyncTrustedVaultRecoverabilityDegradedErrorItemType))
       << "itemType: " << itemType;
-  SettingsImageDetailTextItem* syncErrorItem =
-      [[SettingsImageDetailTextItem alloc] initWithType:itemType];
+  TableViewDetailIconItem* syncErrorItem =
+      [[TableViewDetailIconItem alloc] initWithType:itemType];
+  syncErrorItem.textLayoutConstraintAxis = UILayoutConstraintAxisVertical;
   syncErrorItem.text = GetNSString(IDS_IOS_SYNC_ERROR_TITLE);
   syncErrorItem.detailText =
       GetSyncErrorDescriptionForSyncSetupService(self.syncSetupService);
@@ -736,7 +746,15 @@ const std::map<SyncSetupService::SyncableDatatype, const char*>
       syncErrorItem.text = GetNSString(IDS_SYNC_NEEDS_VERIFICATION_TITLE);
       break;
   }
-  syncErrorItem.image = [UIImage imageNamed:kGoogleServicesSyncErrorImage];
+  if (UseSymbols()) {
+    syncErrorItem.iconImage = DefaultSettingsRootSymbol(kSyncErrorSymbol);
+    syncErrorItem.iconBackgroundColor = [UIColor colorNamed:kRed500Color];
+    syncErrorItem.iconTintColor = UIColor.whiteColor;
+    syncErrorItem.iconCornerRadius = kColorfulBackgroundSymbolCornerRadius;
+  } else {
+    syncErrorItem.iconImage =
+        [UIImage imageNamed:kGoogleServicesSyncErrorImage];
+  }
   return syncErrorItem;
 }
 
@@ -751,7 +769,7 @@ const std::map<SyncSetupService::SyncableDatatype, const char*>
 // Updates the sync errors section. If `notifyConsumer` is YES, the consumer is
 // notified about model changes.
 - (void)updateSyncErrorsSection:(BOOL)notifyConsumer {
-  if (!self.syncSetupService->HasFinishedInitialSetup()) {
+  if (self.syncSetupService->IsInitialSetupOngoing()) {
     return;
   }
 

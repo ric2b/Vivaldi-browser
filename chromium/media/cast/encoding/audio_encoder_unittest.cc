@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,7 @@
 #include "media/cast/common/sender_encoded_frame.h"
 #include "media/cast/test/utility/audio_utility.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/openscreen/src/cast/streaming/encoded_frame.h"
 
 namespace media {
 namespace cast {
@@ -57,7 +58,8 @@ class TestEncodedAudioFrameReceiver {
 
   void FrameEncoded(std::unique_ptr<SenderEncodedFrame> encoded_frame,
                     int samples_skipped) {
-    EXPECT_EQ(encoded_frame->dependency, EncodedFrame::KEY);
+    EXPECT_EQ(encoded_frame->dependency,
+              openscreen::cast::EncodedFrame::Dependency::kKeyFrame);
     EXPECT_EQ(frames_received_, encoded_frame->frame_id - FrameId::first());
     EXPECT_EQ(encoded_frame->frame_id, encoded_frame->referenced_frame_id);
     // RTP timestamps should be monotonically increasing and integer multiples
@@ -147,6 +149,18 @@ class AudioEncoderTest : public ::testing::TestWithParam<TestScenario> {
                                     testing_clock_.NowTicks());
         task_runner_->RunTasks();
         testing_clock_.Advance(duration);
+      }
+
+      if (codec == CODEC_AUDIO_OPUS) {
+        const int bitrate = audio_encoder_->GetBitrate();
+        EXPECT_GT(bitrate, 0);
+        // Typically Opus has a max of 120000, but this may change if the
+        // library gets rolled. It would be very surprising for it to
+        // surpass this value and getting a test failure is reasonable.
+        EXPECT_LT(bitrate, 256000);
+      } else {
+        // Bit rate is only implemented for opus.
+        EXPECT_EQ(0, audio_encoder_->GetBitrate());
       }
     }
 

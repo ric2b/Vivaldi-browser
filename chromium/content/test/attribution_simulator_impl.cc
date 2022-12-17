@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/files/file_path.h"
+#include "base/functional/overloaded.h"
 #include "base/guid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/numerics/safe_conversions.h"
@@ -25,7 +26,6 @@
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/values_test_util.h"
-#include "base/thread_annotations.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/time/time_to_iso8601.h"
@@ -52,7 +52,6 @@
 #include "content/browser/attribution_reporting/stored_source.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/test/attribution_config.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/attribution_simulator_input_parser.h"
@@ -71,25 +70,18 @@ namespace content {
 namespace {
 
 base::Time GetEventTime(const AttributionSimulationEventAndValue& event) {
-  struct Visitor {
-    base::Time operator()(const StorableSource& source) {
-      return source.common_info().impression_time();
-    }
-
-    base::Time operator()(const AttributionTriggerAndTime& trigger) {
-      return trigger.time;
-    }
-
-    base::Time operator()(const AttributionSimulatorCookie& cookie) {
-      return cookie.cookie.CreationDate();
-    }
-
-    base::Time operator()(const AttributionDataClear& clear) {
-      return clear.time;
-    }
-  };
-
-  return absl::visit(Visitor(), event.first);
+  return absl::visit(
+      base::Overloaded{
+          [](const StorableSource& source) {
+            return source.common_info().source_time();
+          },
+          [](const AttributionTriggerAndTime& trigger) { return trigger.time; },
+          [](const AttributionSimulatorCookie& cookie) {
+            return cookie.cookie.CreationDate();
+          },
+          [](const AttributionDataClear& clear) { return clear.time; },
+      },
+      event.first);
 }
 
 class AlwaysSetCookieChecker : public AttributionCookieChecker {
@@ -241,11 +233,11 @@ class SentReportAccumulator : public AttributionReportSender {
                   ReportSentCallback sent_callback) override {
     base::Value::List* reports;
     switch (report.GetReportType()) {
-      case AttributionReport::ReportType::kEventLevel:
+      case AttributionReport::Type::kEventLevel:
         reports = is_debug_report ? &debug_event_level_reports_
                                   : &event_level_reports_;
         break;
-      case AttributionReport::ReportType::kAggregatableAttribution:
+      case AttributionReport::Type::kAggregatableAttribution:
         reports = is_debug_report ? &debug_aggregatable_reports_
                                   : &aggregatable_reports_;
         break;
@@ -347,6 +339,7 @@ class AttributionEventHandler : public AttributionObserver {
         base::BindOnce(&AttributionManagerImpl::ClearData,
                        base::Unretained(manager_), clear.delete_begin,
                        clear.delete_end, std::move(filter),
+                       /*filter_builder=*/nullptr,
                        /*delete_rate_limit_data=*/true, base::DoNothing()));
   }
 
@@ -436,6 +429,7 @@ class AttributionEventHandler : public AttributionObserver {
       case AttributionTrigger::AggregatableResult::kNoMatchingSourceFilterData:
       case AttributionTrigger::AggregatableResult::kNoHistograms:
       case AttributionTrigger::AggregatableResult::kProhibitedByBrowserPolicy:
+      case AttributionTrigger::AggregatableResult::kDeduplicated:
         aggregatable_reason << result.aggregatable_status();
         break;
     }
@@ -472,116 +466,6 @@ class AttributionEventHandler : public AttributionObserver {
   base::circular_deque<base::Value> input_values_;
 };
 
-class SimulatorStorageDelegate : public AttributionStorageDelegateImpl {
- public:
-  SimulatorStorageDelegate(AttributionNoiseMode noise_mode,
-                           AttributionDelayMode delay_mode,
-                           std::unique_ptr<AttributionRandomGenerator> rng,
-                           AttributionConfig config)
-      : AttributionStorageDelegateImpl(noise_mode, delay_mode, std::move(rng)),
-        config_(config) {
-    DCHECK(config.Validate());
-  }
-
-  ~SimulatorStorageDelegate() override = default;
-
-  int GetMaxAttributionsPerSource(
-      AttributionSourceType source_type) const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    switch (source_type) {
-      case AttributionSourceType::kNavigation:
-        return config_.event_level_limit.max_attributions_per_navigation_source;
-      case AttributionSourceType::kEvent:
-        return config_.event_level_limit.max_attributions_per_event_source;
-    }
-  }
-
-  int GetMaxSourcesPerOrigin() const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return config_.max_sources_per_origin;
-  }
-
-  int GetMaxReportsPerDestination(
-      AttributionReport::ReportType report_type) const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    switch (report_type) {
-      case AttributionReport::ReportType::kEventLevel:
-        return config_.event_level_limit.max_reports_per_destination;
-      case AttributionReport::ReportType::kAggregatableAttribution:
-        return config_.aggregate_limit.max_reports_per_destination;
-    }
-  }
-
-  int GetMaxDestinationsPerSourceSiteReportingOrigin() const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return config_.max_destinations_per_source_site_reporting_origin;
-  }
-
-  AttributionRateLimitConfig GetRateLimits() const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return config_.rate_limit;
-  }
-
-  double GetRandomizedResponseRate(
-      AttributionSourceType source_type) const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    switch (source_type) {
-      case AttributionSourceType::kNavigation:
-        return config_.event_level_limit
-            .navigation_source_randomized_response_rate;
-      case AttributionSourceType::kEvent:
-        return config_.event_level_limit.event_source_randomized_response_rate;
-    }
-  }
-
-  int64_t GetAggregatableBudgetPerSource() const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return config_.aggregate_limit.aggregatable_budget_per_source;
-  }
-
-  uint64_t TriggerDataCardinality(
-      AttributionSourceType source_type) const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    switch (source_type) {
-      case AttributionSourceType::kNavigation:
-        return config_.event_level_limit
-            .navigation_source_trigger_data_cardinality;
-      case AttributionSourceType::kEvent:
-        return config_.event_level_limit.event_source_trigger_data_cardinality;
-    }
-  }
-
-  uint64_t SanitizeSourceEventId(uint64_t source_event_id) const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    if (!config_.source_event_id_cardinality)
-      return source_event_id;
-
-    return source_event_id % *config_.source_event_id_cardinality;
-  }
-
-  base::Time GetAggregatableReportTime(base::Time trigger_time) const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-    switch (delay_mode_) {
-      case AttributionDelayMode::kDefault:
-        switch (noise_mode_) {
-          case AttributionNoiseMode::kDefault:
-            return trigger_time + config_.aggregate_limit.min_delay +
-                   rng_->RandDouble() * config_.aggregate_limit.delay_span;
-          case AttributionNoiseMode::kNone:
-            return trigger_time + config_.aggregate_limit.min_delay +
-                   config_.aggregate_limit.delay_span;
-        }
-
-      case AttributionDelayMode::kNone:
-        return trigger_time;
-    }
-  }
-
- private:
-  const AttributionConfig config_ GUARDED_BY_CONTEXT(sequence_checker_);
-};
-
 }  // namespace
 
 base::Value RunAttributionSimulation(
@@ -605,12 +489,6 @@ base::Value RunAttributionSimulation(
 
   base::ranges::stable_sort(*events, /*comp=*/{}, &GetEventTime);
   task_environment.FastForwardBy(GetEventTime(events->at(0)) - time_origin);
-
-  // Avoid creating an on-disk sqlite DB.
-  content::AttributionManagerImpl::RunInMemoryForTesting();
-
-  // This isn't needed because the DB is completely in memory for testing.
-  const base::FilePath user_data_directory;
 
   std::unique_ptr<AttributionRandomGenerator> rng;
   if (options.noise_seed.has_value()) {
@@ -641,12 +519,13 @@ base::Value RunAttributionSimulation(
   }
 
   auto manager = AttributionManagerImpl::CreateForTesting(
-      user_data_directory,
+      // Avoid creating an on-disk sqlite DB.
+      /*user_data_directory=*/base::FilePath(),
       /*max_pending_events=*/std::numeric_limits<size_t>::max(),
       /*special_storage_policy=*/nullptr,
-      std::make_unique<SimulatorStorageDelegate>(
-          options.noise_mode, options.delay_mode, std::move(rng),
-          options.config),
+      AttributionStorageDelegateImpl::CreateForTesting(
+          options.noise_mode, options.delay_mode, options.config,
+          std::move(rng)),
       std::move(cookie_checker),
       std::make_unique<SentReportAccumulator>(
           event_level_reports, debug_event_level_reports, aggregatable_reports,

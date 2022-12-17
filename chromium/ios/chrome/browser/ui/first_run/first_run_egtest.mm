@@ -1,12 +1,12 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/strings/string_util.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/policy/core/common/policy_loader_ios_constants.h"
-#include "components/policy/policy_constants.h"
-#include "components/signin/ios/browser/features.h"
+#import "base/strings/string_util.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/policy/core/common/policy_loader_ios_constants.h"
+#import "components/policy/policy_constants.h"
+#import "components/signin/ios/browser/features.h"
 #import "ios/chrome/browser/policy/policy_app_interface.h"
 #import "ios/chrome/browser/policy/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/ui/authentication/authentication_constants.h"
@@ -16,28 +16,27 @@
 #import "ios/chrome/browser/ui/authentication/views/views_constants.h"
 #import "ios/chrome/browser/ui/first_run/first_run_app_interface.h"
 #import "ios/chrome/browser/ui/first_run/first_run_constants.h"
-#include "ios/chrome/browser/ui/first_run/fre_field_trial.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
-#include "ios/chrome/common/string_util.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/promo_style/constants.h"
-#include "ios/chrome/grit/ios_chromium_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#include "ios/chrome/test/earl_grey/test_switches.h"
+#import "ios/chrome/test/earl_grey/test_switches.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_interaction_manager_constants.h"
 #import "ios/testing/earl_grey/app_launch_manager.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service_constants.h"
-#include "ios/third_party/earl_grey2/src/CommonLib/Matcher/GREYLayoutConstraint.h"  // nogncheck
+#import "ios/third_party/earl_grey2/src/CommonLib/Matcher/GREYLayoutConstraint.h"  // nogncheck
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -48,16 +47,8 @@ using chrome_test_util::AdvancedSyncSettingsDoneButtonMatcher;
 
 namespace {
 
-NSString* const kMetricsConsentCheckboxAccessibilityIdentifier =
-    @"kMetricsConsentCheckboxAccessibilityIdentifier";
-
 NSString* const kBeginBoldTag = @"BEGIN_BOLD[ \t]*";
 NSString* const kEndBoldTag = @"[ \t]*END_BOLD";
-
-// Returns a matcher for the welcome screen UMA checkbox button.
-id<GREYMatcher> GetUMACheckboxButton() {
-  return grey_accessibilityID(kMetricsConsentCheckboxAccessibilityIdentifier);
-}
 
 // Returns a matcher for the welcome screen accept button.
 id<GREYMatcher> GetAcceptButton() {
@@ -260,11 +251,6 @@ GREYLayoutConstraint* BelowConstraint() {
       l10n_util::GetNSString(IDS_IOS_FIRST_RUN_WELCOME_SCREEN_SUBTITLE));
   [self scrollToElementAndAssertVisibility:subtitle];
 
-  // Validate the Metrics Consent box.
-  id<GREYMatcher> metricsConsent = grey_text(
-      l10n_util::GetNSString(IDS_IOS_FIRST_RUN_WELCOME_SCREEN_METRICS_CONSENT));
-  [self scrollToElementAndAssertVisibility:metricsConsent];
-
   // Validate the Accept box.
   [self scrollToElementAndAssertVisibility:GetAcceptButton()];
 }
@@ -304,11 +290,6 @@ GREYLayoutConstraint* BelowConstraint() {
   id<GREYMatcher> managed = grey_text(
       l10n_util::GetNSString(IDS_IOS_FIRST_RUN_WELCOME_SCREEN_MANAGED));
   [self scrollToElementAndAssertVisibility:managed];
-
-  // Validate the Metrics Consent box.
-  id<GREYMatcher> metricsConsent = grey_text(
-      l10n_util::GetNSString(IDS_IOS_FIRST_RUN_WELCOME_SCREEN_METRICS_CONSENT));
-  [self scrollToElementAndAssertVisibility:metricsConsent];
 
   // Validate the Accept box.
   [self scrollToElementAndAssertVisibility:GetAcceptButton()];
@@ -748,15 +729,7 @@ GREYLayoutConstraint* BelowConstraint() {
 // If browser is already signed in and the user opens the advanced settings then
 // selects "No thanks", the user should stay signed in, but sync should be
 // turned off.
-// TODO(crbug.com/1352970): Flaky on iOS simulator.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_testAdvancedSettingsSignedInSyncOff \
-  DISABLED_testAdvancedSettingsSignedInSyncOff
-#else
-#define MAYBE_testAdvancedSettingsSignedInSyncOff \
-  testAdvancedSettingsSignedInSyncOff
-#endif
-- (void)MAYBE_testAdvancedSettingsSignedInSyncOff {
+- (void)testAdvancedSettingsSignedInSyncOff {
   // Sign-in browser.
   FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity enableSync:NO];
@@ -1003,68 +976,6 @@ GREYLayoutConstraint* BelowConstraint() {
 
   // Close opened settings for proper tear down.
   [[self class] removeAnyOpenMenusAndInfoBars];
-}
-
-// Tests that metrics collection is enabled when the checkmark is checked on
-// the Welcome screen.
-- (void)testMetricsEnabled {
-  // Verify the metrics collection pref is disabled prior to going through the
-  // Welcome screen.
-  GREYAssertFalse(
-      [FirstRunAppInterface isUMACollectionEnabled],
-      @"kMetricsReportingEnabled pref was unexpectedly true by default.");
-
-  // Verify the metrics checkbox is checked by default.
-  [[EarlGrey selectElementWithMatcher:GetUMACheckboxButton()]
-      assertWithMatcher:grey_selected()];
-
-  // Verify the metrics checkbox is checked after tapping it twice.
-  [self scrollToElementAndAssertVisibility:GetUMACheckboxButton()];
-  [[EarlGrey selectElementWithMatcher:GetUMACheckboxButton()]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:GetUMACheckboxButton()]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:GetUMACheckboxButton()]
-      assertWithMatcher:grey_selected()];
-
-  // Verify the metrics collection pref is enabled after going through the
-  // Welcome screen with the UMA checkbox checked.
-  [self scrollToElementAndAssertVisibility:GetAcceptButton()];
-  [[EarlGrey selectElementWithMatcher:GetAcceptButton()]
-      performAction:grey_tap()];
-  GREYAssertTrue([FirstRunAppInterface isUMACollectionEnabled],
-                 @"kMetricsReportingEnabled pref was unexpectedly false after "
-                 @"checking the UMA checkbox.");
-}
-
-// Tests that metrics collection is disabled when the checkmark is unchecked on
-// the Welcome screen.
-- (void)testMetricsDisabled {
-  // Verify the metrics collection pref is disabled prior to going through the
-  // Welcome screen.
-  GREYAssertFalse(
-      [FirstRunAppInterface isUMACollectionEnabled],
-      @"kMetricsReportingEnabled pref was unexpectedly true by default.");
-
-  // Verify the metrics checkbox is checked by default.
-  [[EarlGrey selectElementWithMatcher:GetUMACheckboxButton()]
-      assertWithMatcher:grey_selected()];
-
-  // Verify the metrics checkbox is unchecked after tapping it.
-  [self scrollToElementAndAssertVisibility:GetUMACheckboxButton()];
-  [[EarlGrey selectElementWithMatcher:GetUMACheckboxButton()]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:GetUMACheckboxButton()]
-      assertWithMatcher:grey_not(grey_selected())];
-
-  // Verify the metrics collection pref is disabled after going through the
-  // Welcome screen with the checkmark unchecked.
-  [self scrollToElementAndAssertVisibility:GetAcceptButton()];
-  [[EarlGrey selectElementWithMatcher:GetAcceptButton()]
-      performAction:grey_tap()];
-  GREYAssertFalse([FirstRunAppInterface isUMACollectionEnabled],
-                  @"kMetricsReportingEnabled pref was unexpectedly true after "
-                  @"leaving the UMA checkbox unchecked.");
 }
 
 // Checks that the sync screen doesn't appear when the SyncDisabled policy is

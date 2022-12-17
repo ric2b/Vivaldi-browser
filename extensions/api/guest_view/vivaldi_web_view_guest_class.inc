@@ -107,8 +107,9 @@
   // Starts loading in the current WebContents if this is needed.
   void LoadTabContentsIfNecessary();
 
-  void VivaldiCreateWebContents(const base::Value::Dict& create_params,
-                                  WebContentsCreatedCallback callback);
+  void VivaldiCreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
+                                const base::Value::Dict& create_params,
+                                WebContentsCreatedCallback callback);
 
   // vivaldi addition:
   bool IsMouseGesturesEnabled() const;
@@ -125,8 +126,8 @@
   bool is_navigating_away_from_vivaldi_ui_ = false;
 
   // NOTE(david@vivaldi.com): |connector_item_| is a proxy delegate which is
-  // required by Vivaldi.
-  scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;
+  // required by Vivaldi. connector_item_ is owned by the DevtoolsConnectorAPI.
+  extensions::DevtoolsConnectorItem* connector_item_ = nullptr;
 
 #if defined(USE_AURA)
 

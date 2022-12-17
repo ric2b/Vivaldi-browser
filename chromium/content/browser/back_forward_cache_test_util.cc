@@ -1,8 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/back_forward_cache_test_util.h"
+#include "base/ranges/algorithm.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace content {
@@ -17,9 +18,7 @@ using ::testing::UnorderedElementsAreArray;
 
 void AddSampleToBuckets(std::vector<base::Bucket>* buckets,
                         base::HistogramBase::Sample sample) {
-  auto it = std::find_if(
-      buckets->begin(), buckets->end(),
-      [sample](const base::Bucket& bucket) { return bucket.min == sample; });
+  auto it = base::ranges::find(*buckets, sample, &base::Bucket::min);
   if (it == buckets->end()) {
     buckets->push_back(base::Bucket(sample, 1));
   } else {
@@ -28,6 +27,11 @@ void AddSampleToBuckets(std::vector<base::Bucket>* buckets,
 }
 
 }  // namespace
+
+BackForwardCacheMetricsTestMatcher::BackForwardCacheMetricsTestMatcher() =
+    default;
+BackForwardCacheMetricsTestMatcher::~BackForwardCacheMetricsTestMatcher() =
+    default;
 
 void BackForwardCacheMetricsTestMatcher::DisableCheckingMetricsForAllSites() {
   check_all_sites_ = false;

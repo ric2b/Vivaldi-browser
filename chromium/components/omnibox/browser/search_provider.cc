@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,6 @@
 #include "components/omnibox/browser/url_prefix.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search/search.h"
-#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
 #include "components/strings/grit/components_strings.h"
@@ -52,6 +51,7 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/url_constants.h"
@@ -213,15 +213,12 @@ void SearchProvider::ResetSession() {
   set_field_trial_triggered_in_session(false);
 }
 
-// static
 bool SearchProvider::CanSendCurrentPageURLInRequest(
     const GURL& current_page_url,
-    const GURL& suggest_url,
     const TemplateURL* template_url,
     metrics::OmniboxEventProto::PageClassification page_classification,
     const SearchTermsData& search_terms_data,
-    const AutocompleteProviderClient* client,
-    bool sending_search_terms) {
+    const AutocompleteProviderClient* client) {
   // Send the current page URL if the request eligiblility and the user settings
   // requirements are met and the URL is valid with an HTTP(S) scheme.
   // Don't bother sending the URL of an NTP page; it's not useful. The server
@@ -229,9 +226,8 @@ bool SearchProvider::CanSendCurrentPageURLInRequest(
   // classification.
   return !IsNTPPage(page_classification) &&
          CanSendPageURLInRequest(current_page_url) &&
-         BaseSearchProvider::CanSendRequestWithURL(
-             current_page_url, suggest_url, template_url, search_terms_data,
-             client, sending_search_terms);
+         CanSendSuggestRequestWithURL(current_page_url, template_url,
+                                      search_terms_data, client);
 }
 
 SearchProvider::~SearchProvider() = default;
@@ -319,7 +315,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
 
   providers_.set(default_provider_keyword, keyword_provider_keyword);
 
-  if (input.focus_type() != OmniboxFocusType::DEFAULT) {
+  if (input.focus_type() != metrics::OmniboxFocusType::INTERACTION_DEFAULT) {
     // Don't display any suggestions for on-focus requests.
     DCHECK(done_);
     ClearAllResults();
@@ -344,7 +340,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
 
   // Don't search the query history database for on-focus inputs; these inputs
   // should only be used to warm up the suggest server.
-  if (input.focus_type() == OmniboxFocusType::DEFAULT) {
+  if (input.focus_type() == metrics::OmniboxFocusType::INTERACTION_DEFAULT) {
     DoHistoryQuery(minimal_changes);
     // Answers needs scored history results before any suggest query has been
     // started, since the query for answer-bearing results needs additional
@@ -463,7 +459,8 @@ void SearchProvider::OnURLLoadComplete(
   // that's left to ZeroSuggestProvider and friends.  Furthermore, it's not
   // clear if the suggest server will send back sensible results to the
   // request we're constructing here for on-focus inputs.
-  if (input_.focus_type() == OmniboxFocusType::DEFAULT && request_succeeded) {
+  if (input_.focus_type() == metrics::OmniboxFocusType::INTERACTION_DEFAULT &&
+      request_succeeded) {
     std::unique_ptr<base::Value> data(
         SearchSuggestionParser::DeserializeJsonData(
             SearchSuggestionParser::ExtractJsonData(source,
@@ -573,7 +570,7 @@ void SearchProvider::UpdateMatches() {
   // enforce constraints about inlinability in this case.  Indeed, most of
   // these steps would be bad, as they'd add a suggestion of some form, thus
   // opening the dropdown (which we do not want to happen).
-  if (input_.focus_type() == OmniboxFocusType::DEFAULT) {
+  if (input_.focus_type() == metrics::OmniboxFocusType::INTERACTION_DEFAULT) {
     PersistTopSuggestions(&default_results_);
     PersistTopSuggestions(&keyword_results_);
     ConvertResultsToAutocompleteMatches();
@@ -989,16 +986,16 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
       template_url, search_terms_data, input.current_page_classification(),
       &empty_search_term_args);
   GURL suggest_url(template_url->suggestions_url_ref().ReplaceSearchTerms(
-      input.focus_type() != OmniboxFocusType::DEFAULT ? empty_search_term_args
-                                                      : search_term_args,
+      input.focus_type() != metrics::OmniboxFocusType::INTERACTION_DEFAULT
+          ? empty_search_term_args
+          : search_term_args,
       search_terms_data));
   if (!suggest_url.is_valid())
     return nullptr;
 
-  if (CanSendCurrentPageURLInRequest(input.current_url(), suggest_url,
-                                     template_url,
+  if (CanSendCurrentPageURLInRequest(input.current_url(), template_url,
                                      input.current_page_classification(),
-                                     search_terms_data, client(), true)) {
+                                     search_terms_data, client())) {
     search_term_args.current_page_url = input.current_url().spec();
     // Create the suggest URL again with the current page URL.
     suggest_url = GURL(template_url->suggestions_url_ref().ReplaceSearchTerms(
@@ -1571,7 +1568,9 @@ AutocompleteMatch SearchProvider::NavigationToMatch(
   AutocompleteMatch match(this, navigation.relevance(), false,
                           navigation.type());
   match.destination_url = navigation.url();
-  match.subtypes = navigation.subtypes();
+  for (const int subtype : navigation.subtypes()) {
+    match.subtypes.insert(SuggestSubtypeForNumber(subtype));
+  }
   BaseSearchProvider::SetDeletionURL(navigation.deletion_url(), &match);
   // First look for the user's input inside the formatted url as it would be
   // without trimming the scheme, so we can find matches at the beginning of the

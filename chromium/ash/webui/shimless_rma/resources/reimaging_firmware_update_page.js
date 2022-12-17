@@ -1,19 +1,19 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/icons.m.js';
+import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import './shimless_rma_shared_css.js';
 import './base_page.js';
 import './icons.js';
 
-import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getShimlessRmaService} from './mojo_interface_provider.js';
-import {ShimlessRmaServiceInterface, StateResult, UpdateRoFirmwareObserverInterface, UpdateRoFirmwareObserverReceiver, UpdateRoFirmwareStatus} from './shimless_rma_types.js';
-import {disableNextButton, enableNextButton} from './shimless_rma_util.js';
+import {ExternalDiskStateObserverInterface, ExternalDiskStateObserverReceiver, ShimlessRmaServiceInterface, StateResult, UpdateRoFirmwareObserverInterface, UpdateRoFirmwareObserverReceiver, UpdateRoFirmwareStatus} from './shimless_rma_types.js';
+import {executeThenTransitionState, focusPageTitle} from './shimless_rma_util.js';
 
 /** @type {!Object<!UpdateRoFirmwareStatus, string>} */
 const STATUS_TEXT_KEY_MAP = {
@@ -123,6 +123,20 @@ export class UpdateRoFirmwarePage extends UpdateRoFirmwarePageBase {
 
     this.shimlessRmaService_.observeRoFirmwareUpdateProgress(
         this.updateRoFirmwareObserverReceiver_.$.bindNewPipeAndPassRemote());
+
+    /** @private {!ExternalDiskStateObserverReceiver} */
+    this.externalDiskStateReceiver_ = new ExternalDiskStateObserverReceiver(
+        /** @type {!ExternalDiskStateObserverInterface} */ (this));
+
+    this.shimlessRmaService_.observeExternalDiskState(
+        this.externalDiskStateReceiver_.$.bindNewPipeAndPassRemote());
+  }
+
+  /** @override */
+  ready() {
+    super.ready();
+
+    focusPageTitle(this);
   }
 
   static get observers() {
@@ -139,21 +153,16 @@ export class UpdateRoFirmwarePage extends UpdateRoFirmwarePageBase {
     this.shouldShowSpinner_ = this.status_ === UpdateRoFirmwareStatus.kUpdating;
     this.shouldShowWarning_ =
         this.status_ === UpdateRoFirmwareStatus.kFileNotFound;
-
-    const disabled = this.status_ != UpdateRoFirmwareStatus.kComplete;
-    if (disabled) {
-      disableNextButton(this);
-    } else {
-      enableNextButton(this);
-    }
   }
 
-  /** @return {!Promise<!{stateResult: !StateResult}>} */
-  onNextButtonClick() {
-    if (this.status_ == UpdateRoFirmwareStatus.kComplete) {
-      return this.shimlessRmaService_.roFirmwareUpdateComplete();
-    } else {
-      return Promise.reject(new Error('RO Firmware update is not complete.'));
+  /**
+   * Implements ExternalDiskStateObserver.onExternalDiskStateChanged()
+   * @param {boolean} detected
+   */
+  onExternalDiskStateChanged(detected) {
+    if (!detected && this.status_ === UpdateRoFirmwareStatus.kComplete) {
+      executeThenTransitionState(
+          this, () => this.shimlessRmaService_.roFirmwareUpdateComplete());
     }
   }
 

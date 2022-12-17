@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,14 +37,6 @@ class FirstPartySetsPolicyServiceFactory
       content::BrowserContext* context);
 
   static FirstPartySetsPolicyServiceFactory* GetInstance();
-
-  // Checks the criteria for applying the First-Party Sets Overrides policy
-  // and returns a pointer to a representation of the policy if all criteria are
-  // met. If not, this method returns a nullptr.
-  //
-  // The returned pointer has the same lifetime as anything returned by the
-  // PrefService.
-  static const base::Value::Dict* GetPolicyIfEnabled(const Profile& profile);
 
   // Stores `test_factory` to inject test logic into BuildServiceInstanceFor.
   void SetTestingFactoryForTesting(TestingFactory test_factory);

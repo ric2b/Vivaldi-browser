@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -281,9 +281,6 @@ class NET_EXPORT URLRequestContextBuilder {
   void set_throttling_enabled(bool throttling_enabled) {
     throttling_enabled_ = throttling_enabled;
   }
-  void set_first_party_sets_enabled(bool enabled) {
-    first_party_sets_enabled_ = enabled;
-  }
 
   void set_ct_policy_enforcer(
       std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer);
@@ -345,7 +342,7 @@ class NET_EXPORT URLRequestContextBuilder {
   }
 
   // Sets a ClientSocketFactory when the network service sandbox is enabled. The
-  // unique_ptr is moved to a URLRequestContextStorage once Build() is called.
+  // unique_ptr is moved to a URLRequestContext once Build() is called.
   void set_client_socket_factory(
       std::unique_ptr<ClientSocketFactory> client_socket_factory) {
     set_client_socket_factory(client_socket_factory.get());
@@ -416,7 +413,6 @@ class NET_EXPORT URLRequestContextBuilder {
   bool throttling_enabled_ = false;
   bool cookie_store_set_by_client_ = false;
   bool suppress_setting_socket_performance_watcher_factory_for_testing_ = false;
-  bool first_party_sets_enabled_ = false;
 
   handles::NetworkHandle bound_network_ = handles::kInvalidNetworkHandle;
   // Used only if the context is bound to a network to customize the

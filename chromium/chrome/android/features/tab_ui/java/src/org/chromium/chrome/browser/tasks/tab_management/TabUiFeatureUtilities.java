@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,19 +98,25 @@ public class TabUiFeatureUtilities {
     private static final String GRID_TAB_SWITCHER_FOR_TABLETS_POLISH_PARAM = "enable_launch_polish";
     public static final BooleanCachedFieldTrialParameter GRID_TAB_SWITCHER_FOR_TABLETS_POLISH =
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS,
-                    GRID_TAB_SWITCHER_FOR_TABLETS_POLISH_PARAM, false);
+                    GRID_TAB_SWITCHER_FOR_TABLETS_POLISH_PARAM, false); // Vivaldi
 
     // Field trial parameter for controlling delay grid tab switcher creation for tablets.
     private static final String DELAY_GTS_CREATION_PARAM = "delay_creation";
     public static final BooleanCachedFieldTrialParameter DELAY_GTS_CREATION =
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS,
-                    DELAY_GTS_CREATION_PARAM, false);
+                    DELAY_GTS_CREATION_PARAM, true);
 
     // Field trial parameter for defining tab width for tab strip improvements.
     private static final String TAB_STRIP_IMPROVEMENTS_TAB_WIDTH_PARAM = "min_tab_width";
     public static final DoubleCachedFieldTrialParameter TAB_STRIP_TAB_WIDTH =
             new DoubleCachedFieldTrialParameter(ChromeFeatureList.TAB_STRIP_IMPROVEMENTS,
                     TAB_STRIP_IMPROVEMENTS_TAB_WIDTH_PARAM, 108.f);
+
+    // Field trial parameter for controlling share tabs in TabSelectionEditorV2.
+    private static final String TAB_SELECTION_EDITOR_V2_SHARE_PARAM = "enable_share";
+    public static final BooleanCachedFieldTrialParameter ENABLE_TAB_SELECTION_EDITOR_V2_SHARE =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_SELECTION_EDITOR_V2,
+                    TAB_SELECTION_EDITOR_V2_SHARE_PARAM, false);
 
     private static Boolean sTabManagementModuleSupportedForTesting;
     private static Boolean sGridTabSwitcherPolishEnabledForTesting;
@@ -175,7 +181,8 @@ public class TabUiFeatureUtilities {
         return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
                 && ChromeFeatureList.sGridTabSwitcherForTablets.isEnabled()
                 && ChromeFeatureList.sTabStripImprovements.isEnabled()
-                && ChromeFeatureList.sTabGroupsForTablets.isEnabled();
+                && ChromeFeatureList.sTabGroupsForTablets.isEnabled()
+                && !DeviceClassManager.enableAccessibilityLayout(context);
     }
 
     /**
@@ -234,6 +241,15 @@ public class TabUiFeatureUtilities {
         return isTabGroupsAndroidEnabled(context); /* Vivaldi
                 && ChromeFeatureList.sTabGroupsContinuationAndroid.isEnabled();
                  */
+    }
+
+    /**
+     * @return Whether the tab selection editor v2 is enabled and available for use.
+     * @param context The activity context.
+     */
+    public static boolean isTabSelectionEditorV2Enabled(Context context) {
+        return isTabGroupsAndroidEnabled(context)
+                && ChromeFeatureList.sTabSelectionEditorV2.isEnabled();
     }
 
     /**

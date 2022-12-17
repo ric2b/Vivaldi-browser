@@ -18,7 +18,7 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -318,7 +318,7 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
   bool has_custom_avatars = false;
 
   for (ProfileAttributesEntry* entry : storage.GetAllProfilesAttributes()) {
-    vivaldi::runtime_private::UserProfile profile;
+    vivaldi::runtime_private::UserProfile user_profile;
 
     if (entry->IsSupervised() || entry->IsChild()) {
       // Skip supervised accounts.
@@ -327,39 +327,39 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
     if (!active_only || (active_only && active_entry == entry)) {
       const size_t icon_index = entry->GetAvatarIconIndex();
 
-      profile.active = (active_entry == entry);
-      profile.guest = false;
-      profile.name = base::UTF16ToUTF8(entry->GetUserName());
-      if (profile.name.empty()) {
-        profile.name = base::UTF16ToUTF8(entry->GetName());
+      user_profile.active = (active_entry == entry);
+      user_profile.guest = false;
+      user_profile.name = base::UTF16ToUTF8(entry->GetUserName());
+      if (user_profile.name.empty()) {
+        user_profile.name = base::UTF16ToUTF8(entry->GetName());
       }
-      profile.image = profiles::GetDefaultAvatarIconUrl(icon_index);
-      profile.image_index = icon_index;
-      profile.path = entry->GetPath().AsUTF8Unsafe();
+      user_profile.image = profiles::GetDefaultAvatarIconUrl(icon_index);
+      user_profile.image_index = icon_index;
+      user_profile.path = entry->GetPath().AsUTF8Unsafe();
 
       // Check for custom profile image.
       std::string custom_avatar = ::vivaldi::GetImagePathFromProfilePath(
-          vivaldiprefs::kVivaldiProfileImagePath, profile.path);
+          vivaldiprefs::kVivaldiProfileImagePath, user_profile.path);
       if (!custom_avatar.empty()) {
         // We set the path here, then convert it to base64 in a separate
         // operation below.
-        profile.custom_avatar = custom_avatar;
+        user_profile.custom_avatar = custom_avatar;
         has_custom_avatars = true;
       }
-      profiles.push_back(std::move(profile));
+      profiles.push_back(std::move(user_profile));
     }
   }
   if (!active_entry) {
     // We might be a guest profile.
     if (profile->IsGuestSession()) {
-      vivaldi::runtime_private::UserProfile profile;
+      vivaldi::runtime_private::UserProfile user_profile;
 
-      // We'll add a "fake" profile here.
-      profile.active = true;
-      profile.guest = true;
-      profile.name = "Guest";  // Translated on the js side.
+      // We'll add a "fake" user_profile here.
+      user_profile.active = true;
+      user_profile.guest = true;
+      user_profile.name = "Guest";  // Translated on the js side.
 
-      profiles.push_back(std::move(profile));
+      profiles.push_back(std::move(user_profile));
     }
   }
   if (has_custom_avatars) {
@@ -524,13 +524,13 @@ RuntimePrivateUpdateActiveProfileFunction::Run() {
       profiles::UpdateProfileName(profile, name);
       success = true;
     }
-    if (params->create_desktop_icon.get()) {
+    if (params->create_desktop_icon.has_value()) {
       if (ProfileShortcutManager::IsFeatureEnabled()) {
         ProfileShortcutManager* shortcut_manager =
             g_browser_process->profile_manager()->profile_shortcut_manager();
         DCHECK(shortcut_manager);
 
-        if (*params->create_desktop_icon.get()) {
+        if (params->create_desktop_icon.value()) {
           shortcut_manager->CreateProfileShortcut(profile->GetPath());
         } else {
           shortcut_manager->RemoveProfileShortcuts(profile->GetPath());
@@ -576,24 +576,8 @@ ExtensionFunction::ResponseAction RuntimePrivateCreateProfileFunction::Run() {
 
 void RuntimePrivateCreateProfileFunction::OnProfileCreated(
     bool create_shortcut,
-    Profile* profile,
-    Profile::CreateStatus status) {
-  namespace Results = vivaldi::runtime_private::CreateProfile::Results;
-
-  switch (status) {
-    case Profile::CREATE_STATUS_LOCAL_FAIL: {
-      Respond(ArgumentList(Results::Create(false)));
-      break;
-    }
-    case Profile::CREATE_STATUS_CREATED: {
-      // Do nothing for an intermediate status.
-      break;
-    }
-    case Profile::CREATE_STATUS_INITIALIZED: {
-      CreateShortcutAndShowSuccess(create_shortcut, profile);
-      break;
-    }
-  }
+    Profile* profile) {
+  CreateShortcutAndShowSuccess(create_shortcut, profile);
 }
 
 void RuntimePrivateCreateProfileFunction::CreateShortcutAndShowSuccess(

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -118,6 +118,12 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     orthogonal_fallback_inline_size_ = size;
   }
 
+  void SetPageName(const AtomicString& name) {
+    if (!name && !space_.rare_data_)
+      return;
+    space_.EnsureRareData()->page_name = name;
+  }
+
   void SetFragmentainerBlockSize(LayoutUnit size) {
 #if DCHECK_IS_ON()
     DCHECK(!is_fragmentainer_block_size_set_);
@@ -137,13 +143,13 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     space_.rare_data_->fragmentainer_block_size -= space;
   }
 
-  void SetFragmentainerOffsetAtBfc(LayoutUnit offset) {
+  void SetFragmentainerOffset(LayoutUnit offset) {
 #if DCHECK_IS_ON()
-    DCHECK(!is_fragmentainer_offset_at_bfc_set_);
-    is_fragmentainer_offset_at_bfc_set_ = true;
+    DCHECK(!is_fragmentainer_offset_set_);
+    is_fragmentainer_offset_set_ = true;
 #endif
     if (offset != LayoutUnit())
-      space_.EnsureRareData()->fragmentainer_offset_at_bfc = offset;
+      space_.EnsureRareData()->fragmentainer_offset = offset;
   }
 
   void SetIsAtFragmentainerStart() {
@@ -345,6 +351,10 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     space_.EnsureRareData()->SetForcedBfcBlockOffset(forced_bfc_block_offset);
   }
 
+  LayoutUnit ExpectedBfcBlockOffset() const {
+    return space_.ExpectedBfcBlockOffset();
+  }
+
   void SetClearanceOffset(LayoutUnit clearance_offset) {
 #if DCHECK_IS_ON()
     DCHECK(!is_clearance_offset_set_);
@@ -407,6 +417,17 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     if (has_collapsed_borders) {
       space_.EnsureRareData()->SetIsTableCellWithCollapsedBorders(
           has_collapsed_borders);
+    }
+  }
+
+  void SetIsTableCellWithEffectiveRowspan(bool has_effective_rowspan) {
+#if DCHECK_IS_ON()
+    DCHECK(!is_table_cell_with_effective_rowspan_set_);
+    is_table_cell_with_effective_rowspan_set_ = true;
+#endif
+    if (has_effective_rowspan) {
+      space_.EnsureRareData()->SetIsTableCellWithEffectiveRowspan(
+          has_effective_rowspan);
     }
   }
 
@@ -473,6 +494,10 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     DCHECK(!is_new_fc_);
     if (clamp)
       space_.EnsureRareData()->SetLinesUntilClamp(*clamp);
+  }
+
+  void SetIsPushedByFloats() {
+    space_.EnsureRareData()->is_pushed_by_floats = true;
   }
 
   void SetTargetStretchInlineSize(LayoutUnit target_stretch_inline_size) {
@@ -543,7 +568,7 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
   bool is_available_size_set_ = false;
   bool is_percentage_resolution_size_set_ = false;
   bool is_fragmentainer_block_size_set_ = false;
-  bool is_fragmentainer_offset_at_bfc_set_ = false;
+  bool is_fragmentainer_offset_set_ = false;
   bool is_block_direction_fragmentation_type_set_ = false;
   bool is_margin_strut_set_ = false;
   bool is_optimistic_bfc_block_offset_set_ = false;
@@ -554,6 +579,7 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
   bool is_table_cell_column_index_set_ = false;
   bool is_table_cell_hidden_for_paint_set_ = false;
   bool is_table_cell_with_collapsed_borders_set_ = false;
+  bool is_table_cell_with_effective_rowspan_set_ = false;
   bool is_custom_layout_data_set_ = false;
   bool is_lines_until_clamp_set_ = false;
   bool is_table_row_data_set_ = false;

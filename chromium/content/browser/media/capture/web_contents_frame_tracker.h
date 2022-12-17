@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -192,6 +192,10 @@ class CONTENT_EXPORT WebContentsFrameTracker final
   // so that it can be undone and/or re-applied when the RenderFrameHost
   // changes.
   float capture_scale_override_ = 1.0f;
+
+  // Track the number of times the capture scale override mutates in a single
+  // session.
+  int scale_override_change_count_ = 0;
 
   // The consumer-requested capture size, set in |WillStartCapturingWebContents|
   // to indicate the preferred frame size from the video frame consumer. Note

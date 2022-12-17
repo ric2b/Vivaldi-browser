@@ -1,9 +1,10 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/shelf/shelf_party_feature_pod_controller.h"
 
+#include "ash/constants/quick_settings_catalogs.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
@@ -36,12 +37,16 @@ FeaturePodButton* ShelfPartyFeaturePodController::CreateButton() {
   return button_;
 }
 
-void ShelfPartyFeaturePodController::OnIconPressed() {
-  Shell::Get()->shelf_controller()->model()->ToggleShelfParty();
+QsFeatureCatalogName ShelfPartyFeaturePodController::GetCatalogName() {
+  return QsFeatureCatalogName::kShelfParty;
 }
 
-SystemTrayItemUmaType ShelfPartyFeaturePodController::GetUmaType() const {
-  return SystemTrayItemUmaType::UMA_SHELF_PARTY;
+void ShelfPartyFeaturePodController::OnIconPressed() {
+  TrackToggleUMA(/*target_toggle_state=*/!Shell::Get()
+                     ->shelf_controller()
+                     ->model()
+                     ->in_shelf_party());
+  Shell::Get()->shelf_controller()->model()->ToggleShelfParty();
 }
 
 void ShelfPartyFeaturePodController::OnSessionStateChanged(

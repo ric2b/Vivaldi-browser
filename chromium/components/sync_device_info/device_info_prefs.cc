@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,7 +62,7 @@ DeviceInfoPrefs::~DeviceInfoPrefs() = default;
 bool DeviceInfoPrefs::IsRecentLocalCacheGuid(
     const std::string& cache_guid) const {
   const base::Value::List& recent_local_cache_guids =
-      pref_service_->GetValueList(kDeviceInfoRecentGUIDsWithTimestamps);
+      pref_service_->GetList(kDeviceInfoRecentGUIDsWithTimestamps);
 
   for (const auto& v : recent_local_cache_guids) {
     if (MatchesGuidInDictionary(v, cache_guid)) {
@@ -74,9 +74,9 @@ bool DeviceInfoPrefs::IsRecentLocalCacheGuid(
 }
 
 void DeviceInfoPrefs::AddLocalCacheGuid(const std::string& cache_guid) {
-  ListPrefUpdate update_cache_guids(pref_service_,
-                                    kDeviceInfoRecentGUIDsWithTimestamps);
-  base::Value::List& update_list = update_cache_guids->GetList();
+  ScopedListPrefUpdate update_cache_guids(pref_service_,
+                                          kDeviceInfoRecentGUIDsWithTimestamps);
+  base::Value::List& update_list = update_cache_guids.Get();
 
   for (auto it = update_list.begin(); it != update_list.end(); it++) {
     if (MatchesGuidInDictionary(*it, cache_guid)) {
@@ -101,9 +101,9 @@ void DeviceInfoPrefs::AddLocalCacheGuid(const std::string& cache_guid) {
 }
 
 void DeviceInfoPrefs::GarbageCollectExpiredCacheGuids() {
-  ListPrefUpdate update_cache_guids(pref_service_,
-                                    kDeviceInfoRecentGUIDsWithTimestamps);
-  update_cache_guids->GetList().EraseIf([this](const auto& dict) {
+  ScopedListPrefUpdate update_cache_guids(pref_service_,
+                                          kDeviceInfoRecentGUIDsWithTimestamps);
+  update_cache_guids->EraseIf([this](const auto& dict) {
     // Avoid crashes if the preference contains corrupt entries that are not
     // dictionaries, and meanwhile clean up these corrupt entries.
     if (!dict.is_dict()) {

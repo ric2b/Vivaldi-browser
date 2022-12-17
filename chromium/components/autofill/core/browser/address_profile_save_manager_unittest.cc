@@ -1,13 +1,15 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/autofill/core/browser/address_profile_save_manager.h"
 
 #include "base/strings/strcat.h"
+#include "base/strings/string_piece.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "components/autofill/core/browser/autofill_profile_import_process.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_test_utils.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
@@ -16,12 +18,16 @@
 #include "components/autofill/core/browser/test_utils/test_profiles.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
 
 namespace {
+
+using UkmAddressProfileImportType =
+    ukm::builders::Autofill_AddressProfileImport;
 
 using UserDecision = AutofillClient::SaveAddressProfileOfferUserDecision;
 
@@ -49,8 +55,7 @@ constexpr char kProfileUpdateNumberOfEditsHistogram[] =
 constexpr char kProfileUpdateNumberOfAffectedTypesHistogram[] =
     "Autofill.ProfileImport.UpdateProfileNumberOfAffectedFields";
 
-// Histograms related to |kAutofillComplementCountryCodeOnImport|
-// TODO(crbug.com/1297032): Cleanup when launched.
+// Histograms related to the country complement logic.
 constexpr char kNewProfileWithComplementedCountryDecisionHistogram[] =
     "Autofill.ProfileImport.NewProfileWithComplementedCountryDecision";
 constexpr char kProfileUpdateWithComplementedCountryDecisionHistogram[] =
@@ -59,6 +64,13 @@ constexpr char kNewProfileEditComplementedCountryHistogram[] =
     "Autofill.ProfileImport.NewProfileEditedComplementedCountry";
 constexpr char kProfileUpdateEditComplementedCountryHistogram[] =
     "Autofill.ProfileImport.UpdateProfileEditedComplementedCountry";
+
+// Histograms related to `kAutofillIgnoreInvalidCountryOnImport`.
+// TODO(crbug.com/1362472): Cleanup when launched.
+constexpr char kNewProfileWithIgnoredCountryDecisionHistogram[] =
+    "Autofill.ProfileImport.NewProfileWithIgnoredCountryDecision";
+constexpr char kProfileUpdateWithIgnoredCountryDecisionHistogram[] =
+    "Autofill.ProfileImport.UpdateProfileWithIgnoredCountryDecision";
 
 // Histograms related to |kAutofillRemoveInvalidPhoneNumberOnImport|
 // TODO(crbug.com/1298424): Cleanup when launched.
@@ -170,17 +182,25 @@ struct ImportScenarioTestCase {
 
 class AddressProfileSaveManagerTest
     : public testing::Test,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+      public testing::WithParamInterface<std::tuple<bool, bool, bool, bool>> {
  public:
   void SetUp() override {
-    complement_country_ = std::get<0>(GetParam());
-    remove_invalid_phone_number_ = std::get<1>(GetParam());
+    // These parameters would typically be set by `FormDataImporter` when
+    // creating the `ImportScenarioTestCase::observed_profile`. This step
+    // precedes the saving logic tested here. They expand the
+    // `ImportScenarioTestCase`, but are part of the fixture, so they can be
+    // tested in a parameterized way.
+    import_metadata_ = {.did_complement_country = std::get<0>(GetParam()),
+                        .did_ignore_invalid_country = std::get<1>(GetParam()),
+                        .phone_import_status = std::get<2>(GetParam())
+                                                   ? PhoneImportStatus::kInvalid
+                                                   : PhoneImportStatus::kValid,
+                        .did_import_from_unrecognized_autocomplete_field =
+                            std::get<3>(GetParam())};
     // Enable both explicit save prompts and structured names.
     // The latter is needed to test the concept of silent updates.
-    scoped_feature_list_.InitWithFeatures(
-        {features::kAutofillAddressProfileSavePrompt,
-         features::kAutofillEnableSupportForMoreStructureInNames},
-        {});
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kAutofillAddressProfileSavePrompt);
   }
 
   void BlockProfileForUpdates(const std::string& guid) {
@@ -192,14 +212,58 @@ class AddressProfileSaveManagerTest
   // Tests the |test_scenario|.
   void TestImportScenario(ImportScenarioTestCase& test_scenario);
 
+  // Verifies the logged ukm data.
+  void VerifyUkmForAddressImport(const ukm::TestUkmRecorder* ukm_recorder,
+                                 ImportScenarioTestCase& test_scenario);
+
+  const ProfileImportMetadata& import_metadata() const {
+    return import_metadata_;
+  }
+
  protected:
   base::test::TaskEnvironment task_environment_;
   TestAutofillClient autofill_client_;
   MockPersonalDataManager mock_personal_data_manager_;
   base::test::ScopedFeatureList scoped_feature_list_;
-  bool complement_country_;
-  bool remove_invalid_phone_number_;
+  ProfileImportMetadata import_metadata_;
 };
+
+// Expects that none of the histograms `names` has any samples.
+void ExpectEmptyHistograms(const base::HistogramTester& histogram_tester,
+                           const std::vector<base::StringPiece>& names) {
+  for (base::StringPiece name : names)
+    histogram_tester.ExpectTotalCount(name, 0);
+}
+
+// Helper function that tests the reporting of feature-specific metrics around
+// the user decision. These metrics usually exist twice, once for new profile
+// creations and once for updates. Verifies that:
+// - If the feature that is being tested and supposed to emit these metrics is
+//   enabled (`feature_enabled`), a unique sample in either the
+//   `new_profile_histogram_name` or the `update_profile_histogram_name`
+//   histogram is collected, depending on the import type.
+// - If the feature is disabled, no metrics are collected.
+void TestFeatureSpecificNewOrUpdateProfileMetrics(
+    const base::HistogramTester& histogram_tester,
+    const ImportScenarioTestCase& test_scenario,
+    bool feature_enabled,
+    base::StringPiece new_profile_histogram_name,
+    base::StringPiece update_profile_histogram_name) {
+  bool is_new_profile = test_scenario.expected_import_type ==
+                        AutofillProfileImportType::kNewProfile;
+  if (feature_enabled) {
+    histogram_tester.ExpectUniqueSample(is_new_profile
+                                            ? new_profile_histogram_name
+                                            : update_profile_histogram_name,
+                                        test_scenario.user_decision, 1);
+    ExpectEmptyHistograms(histogram_tester,
+                          {!is_new_profile ? new_profile_histogram_name
+                                           : update_profile_histogram_name});
+  } else {
+    ExpectEmptyHistograms(histogram_tester, {new_profile_histogram_name,
+                                             update_profile_histogram_name});
+  }
+}
 
 void AddressProfileSaveManagerTest::TestImportScenario(
     ImportScenarioTestCase& test_scenario) {
@@ -257,13 +321,10 @@ void AddressProfileSaveManagerTest::TestImportScenario(
   mock_personal_data_manager_.SetProfiles(&test_scenario.existing_profiles);
 
   // Initiate the profile import.
-  ProfileImportMetadata import_metadata{
-      .did_complement_country = complement_country_,
-      .did_remove_invalid_phone_number = remove_invalid_phone_number_};
   save_manager.ImportProfileFromForm(
       test_scenario.observed_profile, "en-US", url,
       /*allow_only_silent_updates=*/test_scenario.allow_only_silent_updates,
-      import_metadata);
+      import_metadata());
 
   // Assert that there is a finished import process on record.
   ASSERT_NE(save_manager.last_import(), nullptr);
@@ -291,7 +352,8 @@ void AddressProfileSaveManagerTest::TestImportScenario(
           ? kSilentUpdatesProfileImportTypeHistogram
           : kProfileImportTypeHistogram,
       test_scenario.expected_import_type, 1);
-  if (test_scenario.allow_only_silent_updates && remove_invalid_phone_number_) {
+  if (test_scenario.allow_only_silent_updates &&
+      import_metadata().phone_import_status == PhoneImportStatus::kInvalid) {
     histogram_tester.ExpectUniqueSample(
         kSilentUpdatesWithRemovedPhoneNumberProfileImportTypeHistogram,
         test_scenario.expected_import_type, 1);
@@ -306,16 +368,16 @@ void AddressProfileSaveManagerTest::TestImportScenario(
           AutofillProfileImportType::kConfirmableMergeAndSilentUpdate;
 
   // If the import was neither a new profile or a confirmable merge, test that
-  // the corresponding updates are unchanged.
+  // the corresponding histograms are unchanged.
   if (!is_new_profile && !is_confirmable_merge) {
-    histogram_tester.ExpectTotalCount(kNewProfileEditsHistogram, 0);
-    histogram_tester.ExpectTotalCount(kNewProfileDecisionHistogram, 0);
-    histogram_tester.ExpectTotalCount(
-        kNewProfileWithComplementedCountryDecisionHistogram, 0);
-    histogram_tester.ExpectTotalCount(kProfileUpdateEditsHistogram, 0);
-    histogram_tester.ExpectTotalCount(kProfileUpdateDecisionHistogram, 0);
-    histogram_tester.ExpectTotalCount(
-        kProfileUpdateWithComplementedCountryDecisionHistogram, 0);
+    ExpectEmptyHistograms(
+        histogram_tester,
+        {kNewProfileEditsHistogram, kNewProfileDecisionHistogram,
+         kNewProfileWithComplementedCountryDecisionHistogram,
+         kNewProfileWithIgnoredCountryDecisionHistogram,
+         kProfileUpdateEditsHistogram, kProfileUpdateDecisionHistogram,
+         kProfileUpdateWithComplementedCountryDecisionHistogram,
+         kProfileUpdateWithIgnoredCountryDecisionHistogram});
   } else {
     DCHECK(!is_new_profile || !is_confirmable_merge);
 
@@ -350,7 +412,7 @@ void AddressProfileSaveManagerTest::TestImportScenario(
         test_scenario.expected_edited_types_for_metrics.size());
 
     // Metrics related to country complemention.
-    if (complement_country_) {
+    if (import_metadata().did_complement_country) {
       if (is_new_profile) {
         histogram_tester.ExpectTotalCount(
             kProfileUpdateWithComplementedCountryDecisionHistogram, 0);
@@ -391,29 +453,27 @@ void AddressProfileSaveManagerTest::TestImportScenario(
             kProfileUpdateEditComplementedCountryHistogram, 0);
       }
     } else {
-      histogram_tester.ExpectTotalCount(
-          kNewProfileWithComplementedCountryDecisionHistogram, 0);
-      histogram_tester.ExpectTotalCount(
-          kProfileUpdateWithComplementedCountryDecisionHistogram, 0);
-      histogram_tester.ExpectTotalCount(
-          kNewProfileEditComplementedCountryHistogram, 0);
-      histogram_tester.ExpectTotalCount(
-          kProfileUpdateEditComplementedCountryHistogram, 0);
+      ExpectEmptyHistograms(
+          histogram_tester,
+          {kNewProfileWithComplementedCountryDecisionHistogram,
+           kProfileUpdateWithComplementedCountryDecisionHistogram,
+           kNewProfileEditComplementedCountryHistogram,
+           kProfileUpdateEditComplementedCountryHistogram});
     }
 
-    // Metrics related to removing invalid phone numbers for non silent updates.
-    if (remove_invalid_phone_number_) {
-      histogram_tester.ExpectTotalCount(
-          !is_new_profile
-              ? kNewProfileWithRemovedPhoneNumberDecisionHistogram
-              : kProfileUpdateWithRemovedPhoneNumberDecisionHistogram,
-          0);
-      histogram_tester.ExpectUniqueSample(
-          is_new_profile
-              ? kNewProfileWithRemovedPhoneNumberDecisionHistogram
-              : kProfileUpdateWithRemovedPhoneNumberDecisionHistogram,
-          test_scenario.user_decision, 1);
-    }
+    // Metrics related to ignoring an invalid country.
+    TestFeatureSpecificNewOrUpdateProfileMetrics(
+        histogram_tester, test_scenario,
+        import_metadata().did_ignore_invalid_country,
+        kNewProfileWithIgnoredCountryDecisionHistogram,
+        kProfileUpdateWithIgnoredCountryDecisionHistogram);
+
+    // Metrics related to removing invalid phone numbers.
+    TestFeatureSpecificNewOrUpdateProfileMetrics(
+        histogram_tester, test_scenario,
+        import_metadata().phone_import_status == PhoneImportStatus::kInvalid,
+        kNewProfileWithRemovedPhoneNumberDecisionHistogram,
+        kProfileUpdateWithRemovedPhoneNumberDecisionHistogram);
 
     for (auto edited_type : test_scenario.expected_edited_types_for_metrics) {
       histogram_tester.ExpectBucketCount(affected_edits_histo, edited_type, 1);
@@ -493,6 +553,55 @@ void AddressProfileSaveManagerTest::TestImportScenario(
     // In all other cases, the number of strikes should be unaltered.
     EXPECT_EQ(1, mock_personal_data_manager_.GetProfileUpdateStrikeDatabase()
                      ->GetStrikes(test_scenario.merge_candidate->guid()));
+  }
+
+  VerifyUkmForAddressImport(autofill_client_.GetTestUkmRecorder(),
+                            test_scenario);
+}
+
+void AddressProfileSaveManagerTest::VerifyUkmForAddressImport(
+    const ukm::TestUkmRecorder* ukm_recorder,
+    ImportScenarioTestCase& test_scenario) {
+  ASSERT_TRUE(test_scenario.expected_import_type !=
+              AutofillProfileImportType::kImportTypeUnspecified);
+
+  // Verify logged UKM metrics in all scenarios except:
+  // 1. Duplicates
+  // 2. Blocked Domain or blocked profile if it is not a silent update.
+  bool is_ukm_logged =
+      test_scenario.expected_import_type !=
+          AutofillProfileImportType::kDuplicateImport &&
+      test_scenario.expected_import_type !=
+          AutofillProfileImportType::kSuppressedNewProfile &&
+      test_scenario.expected_import_type !=
+          AutofillProfileImportType::kSuppressedConfirmableMerge &&
+      test_scenario.expected_import_type !=
+          AutofillProfileImportType::kUnusableIncompleteProfile &&
+      test_scenario.expected_import_type !=
+          AutofillProfileImportType::kSuppressedConfirmableMergeAndSilentUpdate;
+
+  auto entries =
+      ukm_recorder->GetEntriesByName(UkmAddressProfileImportType::kEntryName);
+  ASSERT_EQ(entries.size(), is_ukm_logged ? 1u : 0u);
+
+  if (is_ukm_logged) {
+    ASSERT_EQ(5u, entries[0]->metrics.size());
+    ukm_recorder->ExpectEntryMetric(
+        entries[0],
+        UkmAddressProfileImportType::kAutocompleteUnrecognizedImportName,
+        import_metadata().did_import_from_unrecognized_autocomplete_field);
+    ukm_recorder->ExpectEntryMetric(
+        entries[0], UkmAddressProfileImportType::kImportTypeName,
+        static_cast<int64_t>(test_scenario.expected_import_type));
+    ukm_recorder->ExpectEntryMetric(
+        entries[0], UkmAddressProfileImportType::kNumberOfEditedFieldsName,
+        test_scenario.expected_edited_types_for_metrics.size());
+    ukm_recorder->ExpectEntryMetric(
+        entries[0], UkmAddressProfileImportType::kPhoneNumberStatusName,
+        static_cast<int64_t>(import_metadata().phone_import_status));
+    ukm_recorder->ExpectEntryMetric(
+        entries[0], UkmAddressProfileImportType::kUserDecisionName,
+        static_cast<int64_t>(test_scenario.user_decision));
   }
 }
 
@@ -699,6 +808,7 @@ TEST_P(AddressProfileSaveManagerTest, SilentlyUpdateProfile) {
       .existing_profiles = {updateable_profile},
       .observed_profile = observed_profile,
       .is_prompt_expected = false,
+      .user_decision = UserDecision::kUserNotAsked,
       .expected_import_type = AutofillProfileImportType::kSilentUpdate,
       .is_profile_change_expected = true,
       .merge_candidate = absl::nullopt,
@@ -720,6 +830,7 @@ TEST_P(AddressProfileSaveManagerTest, SilentlyUpdateProfileOnBlockedDomain) {
       .existing_profiles = {updateable_profile},
       .observed_profile = observed_profile,
       .is_prompt_expected = false,
+      .user_decision = UserDecision::kUserNotAsked,
       .expected_import_type = AutofillProfileImportType::kSilentUpdate,
       .is_profile_change_expected = true,
       .merge_candidate = absl::nullopt,
@@ -746,6 +857,7 @@ TEST_P(AddressProfileSaveManagerTest, SilentlyUpdateVerifiedProfile) {
       .existing_profiles = {updateable_profile},
       .observed_profile = observed_profile,
       .is_prompt_expected = false,
+      .user_decision = UserDecision::kUserNotAsked,
       .expected_import_type = AutofillProfileImportType::kSilentUpdate,
       .is_profile_change_expected = true,
       .merge_candidate = absl::nullopt,
@@ -1168,6 +1280,7 @@ TEST_P(AddressProfileSaveManagerTest,
       .existing_profiles = {updateable_profile},
       .observed_profile = observed_profile,
       .is_prompt_expected = false,
+      .user_decision = UserDecision::kUserNotAsked,
       .expected_import_type =
           AutofillProfileImportType::kSilentUpdateForIncompleteProfile,
       .is_profile_change_expected = true,
@@ -1216,6 +1329,7 @@ TEST_P(AddressProfileSaveManagerTest,
       .existing_profiles = {updateable_profile},
       .observed_profile = observed_profile,
       .is_prompt_expected = false,
+      .user_decision = UserDecision::kUserNotAsked,
       .expected_import_type =
           AutofillProfileImportType::kSilentUpdateForIncompleteProfile,
       .is_profile_change_expected = true,
@@ -1271,6 +1385,7 @@ TEST_P(AddressProfileSaveManagerTest,
       .existing_profiles = {updateable_profile},
       .observed_profile = observed_profile,
       .is_prompt_expected = false,
+      .user_decision = UserDecision::kUserNotAsked,
       .expected_import_type =
           AutofillProfileImportType::kSilentUpdateForIncompleteProfile,
       .is_profile_change_expected = true,
@@ -1292,6 +1407,7 @@ TEST_P(AddressProfileSaveManagerTest, SilentlyUpdateProfile_OnBlockedDomain) {
       .existing_profiles = {updateable_profile},
       .observed_profile = observed_profile,
       .is_prompt_expected = false,
+      .user_decision = UserDecision::kUserNotAsked,
       .expected_import_type =
           AutofillProfileImportType::kSilentUpdateForIncompleteProfile,
       .is_profile_change_expected = true,
@@ -1322,6 +1438,7 @@ TEST_P(AddressProfileSaveManagerTest,
                             updateable_profile},
       .observed_profile = observed_profile,
       .is_prompt_expected = false,
+      .user_decision = UserDecision::kUserNotAsked,
       .expected_import_type =
           AutofillProfileImportType::kSilentUpdateForIncompleteProfile,
       .is_profile_change_expected = true,
@@ -1353,12 +1470,15 @@ TEST_P(AddressProfileSaveManagerTest,
   TestImportScenario(test_scenario);
 }
 
-// Runs the suite as if the the country was (not) complemented using
-// |kAutofillComplementCountryCodeOnImport| and as if the phone number was (not)
-// removed with |kAutofillRemoveInvalidPhoneNumberOnImport|.
+// Runs the suite as if the the country was (not) complemented and as if the
+// phone number was (not) removed with
+// `kAutofillRemoveInvalidPhoneNumberOnImport`.
 INSTANTIATE_TEST_SUITE_P(,
                          AddressProfileSaveManagerTest,
-                         testing::Combine(testing::Bool(), testing::Bool()));
+                         testing::Combine(testing::Bool(),
+                                          testing::Bool(),
+                                          testing::Bool(),
+                                          testing::Bool()));
 
 }  // namespace
 

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,7 +47,7 @@ class KioskAppExternalLoader : public extensions::ExternalLoader {
 
   // Sends |prefs| through to the external loader owner (using
   // extensions::ExternalLoader interface).
-  void SendPrefs(base::DictionaryValue prefs);
+  void SendPrefs(base::Value::Dict prefs);
 
   // The class of kiosk apps this external extensions loader handles.
   const AppClass app_class_;

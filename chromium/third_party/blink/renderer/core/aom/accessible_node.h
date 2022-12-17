@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,8 @@ class QualifiedName;
 // All of the properties of AccessibleNode that have type "string".
 enum class AOMStringProperty {
   kAutocomplete,
+  kAriaBrailleLabel,
+  kAriaBrailleRoleDescription,
   kChecked,
   kCurrent,
   kDescription,
@@ -207,6 +209,12 @@ class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
 
   absl::optional<bool> busy() const;
   void setBusy(absl::optional<bool>);
+
+  AtomicString brailleLabel() const;
+  void setBrailleLabel(const AtomicString&);
+
+  AtomicString brailleRoleDescription() const;
+  void setBrailleRoleDescription(const AtomicString&);
 
   AtomicString checked() const;
   void setChecked(const AtomicString&);

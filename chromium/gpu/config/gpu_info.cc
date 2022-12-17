@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -320,6 +320,7 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
     bool in_process_gpu;
     bool passthrough_cmd_decoder;
     bool is_asan;
+    uint32_t target_cpu_bits;
     bool can_support_threaded_texture_mailbox;
 #if BUILDFLAG(IS_MAC)
     uint32_t macos_specific_texture_target;
@@ -329,6 +330,7 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
     uint32_t d3d12_feature_level;
     uint32_t vulkan_version;
     OverlayInfo overlay_info;
+    bool shared_image_d3d;
 #endif
 
     VideoDecodeAcceleratorSupportedProfiles
@@ -387,6 +389,7 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
   enumerator->AddBool("inProcessGpu", in_process_gpu);
   enumerator->AddBool("passthroughCmdDecoder", passthrough_cmd_decoder);
   enumerator->AddBool("isAsan", is_asan);
+  enumerator->AddInt("targetCpuBits", static_cast<int>(target_cpu_bits));
   enumerator->AddBool("canSupportThreadedTextureMailbox",
                       can_support_threaded_texture_mailbox);
 #if BUILDFLAG(IS_MAC)
@@ -402,6 +405,7 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
                         gpu::D3DFeatureLevelToString(d3d12_feature_level));
   enumerator->AddString("vulkanVersion",
                         gpu::VulkanVersionToString(vulkan_version));
+  enumerator->AddBool("supportsD3dSharedImages", shared_image_d3d);
 #endif
   for (const auto& profile : video_decode_accelerator_supported_profiles)
     EnumerateVideoDecodeAcceleratorSupportedProfile(profile, enumerator);

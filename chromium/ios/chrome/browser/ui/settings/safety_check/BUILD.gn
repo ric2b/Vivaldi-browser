@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -32,7 +32,12 @@ source_set("safety_check_ui") {
 swift_source_set("safety_check_ui_swift") {
   bridge_header = "safety_check_bridge.h"
   sources = [ "safety_check_table_view_controller.swift" ]
-  deps = [ ":safety_check_ui" ]
+  deps = [
+    ":safety_check_ui",
+    "//ios/chrome/browser/ui/settings:settings_root",
+    "//ios/chrome/browser/ui/settings/cells",
+    "//ui/base",
+  ]
 }
 
 source_set("safety_check") {
@@ -68,6 +73,7 @@ source_set("safety_check") {
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
+    "//ios/chrome/browser/ui/icons:settings_icons",
     "//ios/chrome/browser/ui/icons:symbols",
     "//ios/chrome/browser/ui/resources:legacy_password_key",
     "//ios/chrome/browser/ui/resources:password_key",

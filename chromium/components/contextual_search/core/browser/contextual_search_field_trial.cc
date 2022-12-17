@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,8 +33,9 @@ const int
     ContextualSearchFieldTrial::kContextualSearchDefaultSampleSurroundingSize =
         400;
 
-const base::Feature kContextualSearchDebug{"ContextualSearchDebug",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kContextualSearchDebug,
+             "ContextualSearchDebug",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 ContextualSearchFieldTrial::ContextualSearchFieldTrial()
     : is_resolver_url_prefix_cached_(false),

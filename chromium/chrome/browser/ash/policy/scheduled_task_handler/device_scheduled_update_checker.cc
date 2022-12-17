@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/settings/cros_settings_names.h"
-#include "ash/components/settings/timezone_settings.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
@@ -25,6 +23,8 @@
 #include "chrome/browser/ash/policy/scheduled_task_handler/scheduled_task_util.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/task_executor_with_retries.h"
 #include "chrome/common/chrome_features.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/settings/timezone_settings.h"
 
 namespace policy {
 

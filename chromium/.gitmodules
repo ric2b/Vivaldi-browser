@@ -148,9 +148,6 @@
 [submodule "third_party/libgav1/src"]
 	path = third_party/libgav1/src
 	url = ../../codecs/libgav1.git
-[submodule "third_party/libgifcodec"]
-	path = third_party/libgifcodec
-	url = ../../skia/libgifcodec.git
 [submodule "third_party/libipp/libipp"]
 	path = third_party/libipp/libipp
 	url = ../../chromiumos/platform2/libipp.git

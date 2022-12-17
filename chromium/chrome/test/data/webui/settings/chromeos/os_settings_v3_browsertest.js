@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,8 +16,6 @@ GEN('#include "components/app_restore/features.h"');
 GEN('#include "content/public/test/browser_test.h"');
 GEN('#include "ui/accessibility/accessibility_features.h"');
 
-/* eslint-disable no-var */
-
 /** Test fixture for shared Polymer 3 elements. */
 var OSSettingsV3BrowserTest = class extends PolymerTest {
   /** @override */
@@ -30,6 +28,9 @@ var OSSettingsV3BrowserTest = class extends PolymerTest {
     return {
       enabled: [
         'chromeos::features::kEnableHostnameSetting',
+        // TODO(b/217560706): Remove this explicit enabled flag when rollout
+        // completed.
+        'chromeos::features::kDiacriticsOnPhysicalKeyboardLongpress',
       ],
     };
   }
@@ -115,19 +116,10 @@ var OSSettingsNearbyShareSubPageV3Test = class extends OSSettingsV3BrowserTest {
 
 TEST_F('OSSettingsNearbyShareSubPageV3Test', 'All', () => mocha.run());
 
-// eslint-disable-next-line no-var
 var OSSettingsPeoplePageOsSyncV3Test = class extends OSSettingsV3BrowserTest {
   /** @override */
   get browsePreload() {
     return 'chrome://os-settings/test_loader.html?module=settings/chromeos/os_sync_controls_test.js&host=test';
-  }
-
-  /** @override */
-  get featureList() {
-    return {
-      enabled: super.featureList.enabled.concat(
-          ['chromeos::features::kSyncSettingsCategorization']),
-    };
   }
 };
 
@@ -209,22 +201,6 @@ var OSSettingsOsBluetoothSavedDevicesListV3Test =
 };
 
 TEST_F('OSSettingsOsBluetoothSavedDevicesListV3Test', 'AllJsTests', () => {
-  mocha.run();
-});
-
-var OSSettingsSearchEngineV3Test = class extends OSSettingsV3BrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://os-settings/test_loader.html?module=settings/chromeos/search_engine_test.js&host=test';
-  }
-
-  /** @override */
-  get featureList() {
-    return {disabled: ['chromeos::features::kSyncSettingsCategorization']};
-  }
-};
-
-TEST_F('OSSettingsSearchEngineV3Test', 'AllJsTests', () => {
   mocha.run();
 });
 
@@ -322,7 +298,6 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
  ],
  ['AppManagementToggleRow', 'app_management/toggle_row_test.js'],
  ['AppManagementUninstallButton', 'app_management/uninstall_button_test.js'],
- ['BluetoothPage', 'bluetooth_page_tests.js'],
  ['CellularNetworksList', 'cellular_networks_list_test.js'],
  ['CellularRoamingToggleButton', 'cellular_roaming_toggle_button_test.js'],
  ['CellularSetupDialog', 'cellular_setup_dialog_test.js'],
@@ -332,14 +307,14 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
  ],
  ['CupsPrinterEntry', 'cups_printer_entry_tests.js'],
  ['CupsPrinterLandingPage', 'cups_printer_landing_page_tests.js'],
- // TODO(crbug/1240970): Re-enable once flakiness is fixed.
- // ['CupsPrinterPage', 'cups_printer_page_tests.js'],
+ ['CupsPrinterPage', 'cups_printer_page_tests.js'],
  ['DateTimePage', 'date_time_page_tests.js'],
  ['EsimInstallErrorDialog', 'esim_install_error_dialog_test.js'],
  ['EsimRemoveProfileDialog', 'esim_remove_profile_dialog_test.js'],
  ['EsimRenameDialog', 'esim_rename_dialog_test.js'],
  ['FilesPage', 'os_files_page_test.js'],
  ['FingerprintPage', 'fingerprint_browsertest_chromeos.js'],
+ ['FindShortcutBehaviorTest', 'find_shortcut_behavior_test.js'],
  ['GoogleAssistantPage', 'google_assistant_page_test.js'],
  ['GuestOsSharedPaths', 'guest_os_shared_paths_test.js'],
  ['GuestOsSharedUsbDevices', 'guest_os_shared_usb_devices_test.js'],
@@ -353,6 +328,11 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
  ['InternetPage', 'internet_page_tests.js'],
  ['KerberosAccounts', 'kerberos_accounts_test.js'],
  ['KerberosPage', 'kerberos_page_test.js'],
+ [
+   'KeyboardAndTextInputPage',
+   'keyboard_and_text_input_page_tests.js',
+   {enabled: ['features::kAccessibilityOSSettingsVisibility']},
+ ],
  ['KeyboardShortcutBanner', 'keyboard_shortcut_banner_test.js'],
  ['LockScreenPage', 'lock_screen_tests.js'],
  ['ManageAccessibilityPage', 'manage_accessibility_page_tests.js'],
@@ -400,6 +380,10 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
    'os_bluetooth_change_device_name_dialog_tests.js',
  ],
  ['OsEditDictionaryPage', 'os_edit_dictionary_page_test.js'],
+ [
+   'OsClearPersonalizationDataPage',
+   'os_clear_personalization_data_page_test.js'
+ ],
  ['OsLanguagesPageV2', 'os_languages_page_v2_tests.js'],
  ['OsPairedBluetoothList', 'os_paired_bluetooth_list_tests.js'],
  [
@@ -413,24 +397,20 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
  ['OsPairedBluetoothListItem', 'os_paired_bluetooth_list_item_tests.js'],
  ['OsSettingsPage', 'os_settings_page_test.js'],
  ['OsSettingsUi', 'os_settings_ui_test.js'],
- ['OsSettingsUi2', 'os_settings_ui_test_2.js'],
+ /*
+   Flaky failures: https://crbug.com/1373052
+   ['OsSettingsUi2', 'os_settings_ui_test_2.js'],
+ */
  ['OsSettingsMain', 'os_settings_main_test.js'],
  ['OsSearchPage', 'os_search_page_test.js'],
  ['OsSettingsSearchBox', 'os_settings_search_box_test.js'],
  ['OSSettingsMenu', 'os_settings_menu_test.js'],
  ['ParentalControlsPage', 'parental_controls_page_test.js'],
  ['PeoplePage', 'os_people_page_test.js'],
- ['PeoplePageChangePicture', 'people_page_change_picture_test.js'],
  ['PeoplePageQuickUnlock', 'quick_unlock_authenticate_browsertest_chromeos.js'],
- [
-   'PersonalizationPage',
-   'personalization_page_test.js',
-   {disabled: ['ash::features::kPersonalizationHub']},
- ],
  [
    'PersonalizationPageWithPersonalizationHub',
    'personalization_page_with_personalization_hub_test.js',
-   {enabled: ['ash::features::kPersonalizationHub']},
  ],
  ['PrintingPage', 'os_printing_page_tests.js'],
  [
@@ -495,16 +475,16 @@ function registerTest(testName, module, featureList) {
       mocha.grep('AboutPageTest_OfficialBuild').run();
     });
     GEN('#endif');
-  } else if (testName === 'PrivacyPage') {
-    // PrivacyPage has a test suite that can only succeed on official builds
-    // where the is_chrome_branded build flag is enabled.
+  } else if (testName === 'PrivacyHubSubpage') {
+    // PrivacyHubSubpage has a test suite that can only succeed on official
+    // builds where the is_chrome_branded build flag is enabled.
     TEST_F(className, 'AllBuilds' || 'All', () => {
-      mocha.grep('/^(?!PrivacePageTest_OfficialBuild).*$/').run();
+      mocha.grep('/^(?!PrivacyHubSubpageTest_OfficialBuild).*$/').run();
     });
 
     GEN('#if BUILDFLAG(GOOGLE_CHROME_BRANDING)');
     TEST_F(className, 'OfficialBuild' || 'All', () => {
-      mocha.grep('PrivacePageTest_OfficialBuild').run();
+      mocha.grep('PrivacyHubSubpageTest_OfficialBuild').run();
     });
     GEN('#endif');
   } else {

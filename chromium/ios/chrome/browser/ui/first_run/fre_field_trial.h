@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,10 @@
 
 class PrefRegistrySimple;
 class PrefService;
+
+namespace base {
+class FeatureList;
+}  // namespace base
 
 // Version of the new Default Browser Promo FRE to show.
 enum class NewDefaultBrowserPromoFRE {
@@ -25,43 +29,18 @@ enum class NewDefaultBrowserPromoFRE {
 
 // Version of the new MICE FRE to show.
 enum class NewMobileIdentityConsistencyFRE {
-  // Old FRE with UMA dialog.
-  kUMADialog = 0,
-  // New MICE FRE with 3 steps (welcome + sign-in + sync screens).
-  kThreeSteps,
+  // New MICE FRE with tangible sync (welcome with sign-in + tangible sync
+  // screens).
+  // Strings in TangibleSyncViewController are set according to the A, B or C
+  // variants.
+  kTangibleSyncA = 0,
+  kTangibleSyncB,
+  kTangibleSyncC,
   // New MICE FRE with 2 steps (welcome with sign-in + sync screens).
   kTwoSteps,
   // Old FRE.
   kOld,
 };
-
-namespace base {
-class FeatureList;
-}  // namespace base
-
-// Name of current experiment.
-extern const char kIOSMICeAndDefaultBrowserTrialName[];
-
-// Indicates which FRE default browser promo variant to use.
-extern const char kFREDefaultBrowserPromoParam[];
-
-// Indicates if the FRE default browser promo variant "Wait 14 days after FRE
-// default browser promo" is enabled.
-extern const char kFREDefaultBrowserPromoDefaultDelayParam[];
-
-// Indicates if the FRE default browser promo variant "FRE default browser
-// promo only" is enabled.
-extern const char kFREDefaultBrowserPromoFirstRunOnlyParam[];
-
-// Indicates if the FRE default browser promo variant "Wait 3 days after FRE
-// default promo" is enabled.
-extern const char kFREDefaultBrowserPromoShortDelayParam[];
-
-// Indicates which variant of the new MICE FRE to use.
-extern const char kNewMobileIdentityConsistencyFREParam[];
-extern const char kNewMobileIdentityConsistencyFREParamUMADialog[];
-extern const char kNewMobileIdentityConsistencyFREParamThreeSteps[];
-extern const char kNewMobileIdentityConsistencyFREParamTwoSteps[];
 
 namespace fre_field_trial {
 

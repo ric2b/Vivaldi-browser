@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -223,10 +223,14 @@ class MODULES_EXPORT ManifestParser {
   Vector<mojom::blink::ManifestScreenshotPtr> ParseScreenshots(
       const JSONObject* object);
 
-  // Parse the 'platform' field of 'screenshots' as defined in:
-  // https://www.w3.org/TR/manifest-app-info/#platform-member
-  mojom::blink::ManifestScreenshot::Platform ParseScreenshotPlatform(
+  // Parse the 'form_factor' field of 'screenshots' as defined in:
+  // https://www.w3.org/TR/manifest-app-info/#form_factor-member
+  mojom::blink::ManifestScreenshot::FormFactor ParseScreenshotFormFactor(
       const JSONObject* screenshot);
+
+  // Parse the 'label' field of 'screenshots' as defined in:
+  // https://www.w3.org/TR/manifest-app-info/#label-member
+  String ParseScreenshotLabel(const JSONObject* object);
 
   // A helper function for parsing ImageResources under |key| in the manifest.
   Vector<mojom::blink::ManifestImageResourcePtr> ParseImageResourceArray(

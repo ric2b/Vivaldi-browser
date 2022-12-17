@@ -1,10 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <stddef.h>
 
 #include <memory>
+#include <utility>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -69,7 +70,7 @@ class MockAutofillClient : public autofill::TestAutofillClient {
   ~MockAutofillClient() override = default;
 
   PrefService* GetPrefs() override {
-    return const_cast<PrefService*>(base::as_const(*this).GetPrefs());
+    return const_cast<PrefService*>(std::as_const(*this).GetPrefs());
   }
   const PrefService* GetPrefs() const override { return prefs_.get(); }
 
@@ -111,7 +112,7 @@ class MockAutofillExternalDelegate : public AutofillExternalDelegate {
 
   void DidSelectSuggestion(const std::u16string& value,
                            int frontend_id,
-                           const std::string& backend_id) override {}
+                           const Suggestion::BackendId& backend_id) override {}
   bool RemoveSuggestion(const std::u16string& value, int frontend_id) override {
     return true;
   }
@@ -119,11 +120,9 @@ class MockAutofillExternalDelegate : public AutofillExternalDelegate {
     return AutofillExternalDelegate::GetWeakPtr();
   }
 
-  MOCK_METHOD0(ClearPreviewedForm, void());
-  MOCK_METHOD0(OnPopupSuppressed, void());
-  MOCK_METHOD4(
-      DidAcceptSuggestion,
-      void(const std::u16string&, int, const Suggestion::Payload&, int));
+  MOCK_METHOD(void, ClearPreviewedForm, (), (override));
+  MOCK_METHOD(void, OnPopupSuppressed, (), (override));
+  MOCK_METHOD(void, DidAcceptSuggestion, (const Suggestion&, int), (override));
 };
 
 class MockAutofillPopupView : public AutofillPopupView {
@@ -133,13 +132,15 @@ class MockAutofillPopupView : public AutofillPopupView {
   MockAutofillPopupView& operator=(MockAutofillPopupView&) = delete;
   ~MockAutofillPopupView() override = default;
 
-  MOCK_METHOD0(Show, void());
-  MOCK_METHOD0(Hide, void());
-  MOCK_METHOD2(OnSelectedRowChanged,
-               void(absl::optional<int> previous_row_selection,
-                    absl::optional<int> current_row_selection));
-  MOCK_METHOD0(OnSuggestionsChanged, void());
-  MOCK_METHOD0(GetAxUniqueId, absl::optional<int32_t>());
+  MOCK_METHOD(void, Show, (), (override));
+  MOCK_METHOD(void, Hide, (), (override));
+  MOCK_METHOD(void,
+              OnSelectedRowChanged,
+              (absl::optional<int> previous_row_selection,
+               absl::optional<int> current_row_selection),
+              (override));
+  MOCK_METHOD(void, OnSuggestionsChanged, (), (override));
+  MOCK_METHOD(absl::optional<int32_t>, GetAxUniqueId, (), (override));
 };
 
 class TestAutofillPopupController : public AutofillPopupControllerImpl {
@@ -160,7 +161,7 @@ class TestAutofillPopupController : public AutofillPopupControllerImpl {
   using AutofillPopupControllerImpl::GetLineCount;
   using AutofillPopupControllerImpl::GetRootAXPlatformNodeForWebContents;
   using AutofillPopupControllerImpl::GetSuggestionAt;
-  using AutofillPopupControllerImpl::GetSuggestionLabelAt;
+  using AutofillPopupControllerImpl::GetSuggestionLabelsAt;
   using AutofillPopupControllerImpl::GetSuggestionMainTextAt;
   using AutofillPopupControllerImpl::GetWeakPtr;
   using AutofillPopupControllerImpl::RemoveSelectedLine;
@@ -169,9 +170,12 @@ class TestAutofillPopupController : public AutofillPopupControllerImpl {
   using AutofillPopupControllerImpl::SelectPreviousLine;
   using AutofillPopupControllerImpl::SetSelectedLine;
   using AutofillPopupControllerImpl::SetValues;
-  MOCK_METHOD0(OnSuggestionsChanged, void());
-  MOCK_METHOD1(Hide, void(PopupHidingReason reason));
-  MOCK_METHOD0(GetRootAXPlatformNodeForWebContents, ui::AXPlatformNode*());
+  MOCK_METHOD(void, OnSuggestionsChanged, (), (override));
+  MOCK_METHOD(void, Hide, (PopupHidingReason reason), (override));
+  MOCK_METHOD(ui::AXPlatformNode*,
+              GetRootAXPlatformNodeForWebContents,
+              (),
+              (override));
 
   void DoHide() { DoHide(PopupHidingReason::kTabGone); }
 
@@ -185,10 +189,10 @@ class MockAxTreeManager : public ui::AXTreeManager {
   MockAxTreeManager() = default;
   MockAxTreeManager(MockAxTreeManager&) = delete;
   MockAxTreeManager& operator=(MockAxTreeManager&) = delete;
-  ~MockAxTreeManager() = default;
+  ~MockAxTreeManager() override = default;
 
   MOCK_CONST_METHOD2(GetNodeFromTree,
-                     ui::AXNode*(const ui::AXTreeID tree_id,
+                     ui::AXNode*(const ui::AXTreeID& tree_id,
                                  const int32_t node_id));
   MOCK_CONST_METHOD2(GetDelegate,
                      ui::AXPlatformNodeDelegate*(const ui::AXTreeID tree_id,
@@ -208,9 +212,11 @@ class MockAxPlatformNodeDelegate : public ui::AXPlatformNodeDelegateBase {
   MockAxPlatformNodeDelegate& operator=(MockAxPlatformNodeDelegate&) = delete;
   ~MockAxPlatformNodeDelegate() override = default;
 
-  MOCK_METHOD1(GetFromNodeID, ui::AXPlatformNode*(int32_t id));
-  MOCK_METHOD2(GetFromTreeIDAndNodeID,
-               ui::AXPlatformNode*(const ui::AXTreeID& tree_id, int32_t id));
+  MOCK_METHOD(ui::AXPlatformNode*, GetFromNodeID, (int32_t id), (override));
+  MOCK_METHOD(ui::AXPlatformNode*,
+              GetFromTreeIDAndNodeID,
+              (const ui::AXTreeID& tree_id, int32_t id),
+              (override));
 };
 
 class MockAxPlatformNode : public ui::AXPlatformNodeBase {
@@ -539,20 +545,23 @@ TEST_F(AutofillPopupControllerUnitTest, UpdateDataListValues) {
   Suggestion result0 = autofill_popup_controller_->GetSuggestionAt(0);
   EXPECT_EQ(value1, result0.main_text.value);
   EXPECT_EQ(value1, autofill_popup_controller_->GetSuggestionMainTextAt(0));
-  EXPECT_EQ(label1, result0.label);
+  ASSERT_EQ(1u, result0.labels.size());
+  ASSERT_EQ(1u, result0.labels[0].size());
+  EXPECT_EQ(label1, result0.labels[0][0].value);
   EXPECT_EQ(std::u16string(), result0.additional_label);
-  EXPECT_EQ(label1, autofill_popup_controller_->GetSuggestionLabelAt(0));
+  EXPECT_EQ(label1,
+            autofill_popup_controller_->GetSuggestionLabelsAt(0)[0][0].value);
   EXPECT_EQ(POPUP_ITEM_ID_DATALIST_ENTRY, result0.frontend_id);
 
   Suggestion result1 = autofill_popup_controller_->GetSuggestionAt(1);
   EXPECT_EQ(std::u16string(), result1.main_text.value);
-  EXPECT_EQ(std::u16string(), result1.label);
+  EXPECT_TRUE(result1.labels.empty());
   EXPECT_EQ(std::u16string(), result1.additional_label);
   EXPECT_EQ(POPUP_ITEM_ID_SEPARATOR, result1.frontend_id);
 
   Suggestion result2 = autofill_popup_controller_->GetSuggestionAt(2);
   EXPECT_EQ(std::u16string(), result2.main_text.value);
-  EXPECT_EQ(std::u16string(), result2.label);
+  EXPECT_TRUE(result2.labels.empty());
   EXPECT_EQ(std::u16string(), result2.additional_label);
   EXPECT_EQ(1, result2.frontend_id);
 
@@ -570,13 +579,21 @@ TEST_F(AutofillPopupControllerUnitTest, UpdateDataListValues) {
   EXPECT_EQ(value1,
             autofill_popup_controller_->GetSuggestionAt(0).main_text.value);
   EXPECT_EQ(value1, autofill_popup_controller_->GetSuggestionMainTextAt(0));
-  EXPECT_EQ(label1, autofill_popup_controller_->GetSuggestionAt(0).label);
+  ASSERT_EQ(1u, autofill_popup_controller_->GetSuggestionAt(0).labels.size());
+  ASSERT_EQ(1u,
+            autofill_popup_controller_->GetSuggestionAt(0).labels[0].size());
+  EXPECT_EQ(label1,
+            autofill_popup_controller_->GetSuggestionAt(0).labels[0][0].value);
   EXPECT_EQ(std::u16string(),
             autofill_popup_controller_->GetSuggestionAt(0).additional_label);
   EXPECT_EQ(value2,
             autofill_popup_controller_->GetSuggestionAt(1).main_text.value);
   EXPECT_EQ(value2, autofill_popup_controller_->GetSuggestionMainTextAt(1));
-  EXPECT_EQ(label2, autofill_popup_controller_->GetSuggestionAt(1).label);
+  ASSERT_EQ(1u, autofill_popup_controller_->GetSuggestionAt(1).labels.size());
+  ASSERT_EQ(1u,
+            autofill_popup_controller_->GetSuggestionAt(1).labels[0].size());
+  EXPECT_EQ(label2,
+            autofill_popup_controller_->GetSuggestionAt(1).labels[0][0].value);
   EXPECT_EQ(std::u16string(),
             autofill_popup_controller_->GetSuggestionAt(1).additional_label);
   EXPECT_EQ(POPUP_ITEM_ID_SEPARATOR,
@@ -611,7 +628,11 @@ TEST_F(AutofillPopupControllerUnitTest, PopupsWithOnlyDataLists) {
   ASSERT_EQ(1, autofill_popup_controller_->GetLineCount());
   EXPECT_EQ(value1,
             autofill_popup_controller_->GetSuggestionAt(0).main_text.value);
-  EXPECT_EQ(label1, autofill_popup_controller_->GetSuggestionAt(0).label);
+  ASSERT_EQ(1u, autofill_popup_controller_->GetSuggestionAt(0).labels.size());
+  ASSERT_EQ(1u,
+            autofill_popup_controller_->GetSuggestionAt(0).labels[0].size());
+  EXPECT_EQ(label1,
+            autofill_popup_controller_->GetSuggestionAt(0).labels[0][0].value);
   EXPECT_EQ(std::u16string(),
             autofill_popup_controller_->GetSuggestionAt(0).additional_label);
   EXPECT_EQ(POPUP_ITEM_ID_DATALIST_ENTRY,

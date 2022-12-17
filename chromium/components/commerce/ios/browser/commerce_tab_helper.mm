@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,17 +13,6 @@
 #endif
 
 namespace commerce {
-
-void CommerceTabHelper::CreateForWebState(web::WebState* web_state,
-                                          bool is_off_the_record,
-                                          ShoppingService* shopping_service) {
-  if (FromWebState(web_state))
-    return;
-
-  web_state->SetUserData(UserDataKey(),
-                         base::WrapUnique(new CommerceTabHelper(
-                             web_state, is_off_the_record, shopping_service)));
-}
 
 CommerceTabHelper::CommerceTabHelper(web::WebState* state,
                                      bool is_off_the_record,
@@ -74,6 +63,6 @@ void CommerceTabHelper::WebStateDestroyed(web::WebState* web_state) {
   scoped_observation_.Reset();
 }
 
-WEB_STATE_USER_DATA_KEY_IMPL(CommerceTabHelper);
+WEB_STATE_USER_DATA_KEY_IMPL(CommerceTabHelper)
 
 }  // namespace commerce

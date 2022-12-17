@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
 #include "device/bluetooth/test/fake_read_response.h"
@@ -91,8 +92,8 @@ bool FakeRemoteGattCharacteristic::AllResponsesConsumed() {
   // SetNextUnsubscribeFromNotificationsResponse is implemented.
   return !next_read_response_ && !next_write_response_ &&
          !next_subscribe_to_notifications_response_ &&
-         std::all_of(
-             descriptors_.begin(), descriptors_.end(), [](const auto& e) {
+         base::ranges::all_of(
+             descriptors_, [](const auto& e) {
                return static_cast<FakeRemoteGattDescriptor*>(e.second.get())
                    ->AllResponsesConsumed();
              });
@@ -242,8 +243,9 @@ void FakeRemoteGattCharacteristic::DispatchReadResponse(
       break;
     case mojom::kGATTInvalidHandle:
       DCHECK(!value);
-      std::move(callback).Run(device::BluetoothGattService::GATT_ERROR_FAILED,
-                              std::vector<uint8_t>());
+      std::move(callback).Run(
+          device::BluetoothGattService::GattErrorCode::kFailed,
+          std::vector<uint8_t>());
       break;
     default:
       NOTREACHED();
@@ -267,7 +269,7 @@ void FakeRemoteGattCharacteristic::DispatchWriteResponse(
       break;
     case mojom::kGATTInvalidHandle:
       std::move(error_callback)
-          .Run(device::BluetoothGattService::GATT_ERROR_FAILED);
+          .Run(device::BluetoothGattService::GattErrorCode::kFailed);
       break;
     default:
       NOTREACHED();
@@ -287,7 +289,7 @@ void FakeRemoteGattCharacteristic::DispatchSubscribeToNotificationsResponse(
       break;
     case mojom::kGATTInvalidHandle:
       std::move(error_callback)
-          .Run(device::BluetoothGattService::GATT_ERROR_FAILED);
+          .Run(device::BluetoothGattService::GattErrorCode::kFailed);
       break;
     default:
       NOTREACHED();
@@ -307,7 +309,7 @@ void FakeRemoteGattCharacteristic::DispatchUnsubscribeFromNotificationsResponse(
       break;
     case mojom::kGATTInvalidHandle:
       std::move(error_callback)
-          .Run(device::BluetoothGattService::GATT_ERROR_FAILED);
+          .Run(device::BluetoothGattService::GattErrorCode::kFailed);
       break;
     default:
       NOTREACHED();

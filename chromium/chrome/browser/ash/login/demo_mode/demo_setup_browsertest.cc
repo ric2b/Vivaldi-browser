@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time_to_iso8601.h"
 #include "base/timer/timer.h"
@@ -31,6 +32,7 @@
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/test/enrollment_helper_mixin.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
+#include "chrome/browser/ash/login/test/login_or_lock_screen_visible_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_screens_utils.h"
@@ -38,6 +40,7 @@
 #include "chrome/browser/ash/login/test/test_predicate_waiter.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
+#include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_status.h"
 #include "chrome/browser/component_updater/cros_component_installer_chromeos.h"
 #include "chrome/browser/ui/webui/chromeos/login/demo_preferences_screen_handler.h"
@@ -59,6 +62,7 @@
 #include "chromeos/system/fake_statistics_provider.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
+#include "content/public/test/browser_task_environment.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -279,6 +283,7 @@ class DemoSetupTestBase : public OobeBaseTest {
 
  protected:
   test::EnrollmentHelperMixin enrollment_helper_{&mixin_host_};
+  base::HistogramTester histogram_tester_;
 
  private:
   // TODO(agawronska): Maybe create a separate test fixture for offline setup.
@@ -332,12 +337,13 @@ class DemoSetupArcSupportedTest : public DemoSetupTestBase {
   }
 
   void AcceptTermsAndExpectDemoSetupProgress() {
+    test::LockDemoDeviceInstallAttributes();
+    // TODO(b/246012796): If possible, re-enable waiting on the setup screen to
+    // be shown
     if (chromeos::features::IsOobeConsolidatedConsentEnabled()) {
       WaitForConsolidatedConsentScreen();
 
-      OobeScreenWaiter setup_progress_waiter(DemoSetupScreenView::kScreenId);
       test::TapConsolidatedConsentAccept();
-      setup_progress_waiter.Wait();
     } else {
       test::WaitForEulaScreen();
       test::TapEulaAccept();
@@ -346,11 +352,7 @@ class DemoSetupArcSupportedTest : public DemoSetupTestBase {
 
       test::OobeJS().ExpectVisiblePath(kArcTosDemoAppsNotice);
 
-      // As setup screen shows only progress indicator and disappears afterwards
-      // we need to set up waiter before the action that triggers the screen.
-      OobeScreenWaiter setup_progress_waiter(DemoSetupScreenView::kScreenId);
       AcceptArcTos();
-      setup_progress_waiter.Wait();
     }
   }
 
@@ -426,16 +428,17 @@ class DemoSetupArcSupportedTest : public DemoSetupTestBase {
     EXPECT_EQ("admin-fr@cros-demo-mode.com",
               DemoSetupController::GetSubOrganizationEmail());
 
-    OobeScreenWaiter(GetFirstSigninScreen()).Wait();
+    // LoginOrLockScreen is shown at beginning of OOBE, so we need to wait until
+    // it's shown again when Demo setup completes
+    LoginOrLockScreenVisibleWaiter().WaitEvenIfShown();
 
     EXPECT_TRUE(StartupUtils::IsOobeCompleted());
     EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
   }
 };
 
-// TODO(crbug.com/1341234): flaky.
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_ShowConfirmationDialogAndProceed) {
+                       ShowConfirmationDialogAndProceed) {
   IsConfirmationDialogHidden();
 
   InvokeDemoModeWithAccelerator();
@@ -446,9 +449,8 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   OobeScreenWaiter(NetworkScreenView::kScreenId).Wait();
 }
 
-// TODO(crbug.com/1341234): flaky.
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_ShowConfirmationDialogAndCancel) {
+                       ShowConfirmationDialogAndCancel) {
   IsConfirmationDialogHidden();
 
   InvokeDemoModeWithAccelerator();
@@ -460,8 +462,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   test::OobeJS().ExpectHiddenPath(kDemoPreferencesScreen);
 }
 
-// TODO(crbug.com/1341234): flaky.
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_InvokeWithTaps) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, InvokeWithTaps) {
   // Use fake time to avoid flakiness.
   SetFakeTimeForMultiTapDetector(base::Time::UnixEpoch());
   IsConfirmationDialogHidden();
@@ -470,9 +471,8 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_InvokeWithTaps) {
   IsConfirmationDialogShown();
 }
 
-// TODO(crbug.com/1341234): flaky.
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_DoNotInvokeWithNonConsecutiveTaps) {
+                       DoNotInvokeWithNonConsecutiveTaps) {
   // Use fake time to avoid flakiness.
   const base::Time kFakeTime = base::Time::UnixEpoch();
   SetFakeTimeForMultiTapDetector(kFakeTime);
@@ -511,20 +511,31 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
 
   AcceptTermsAndExpectDemoSetupProgress();
 
+  if (chromeos::features::IsOobeConsolidatedConsentEnabled()) {
+    histogram_tester_.ExpectTotalCount(
+        "OOBE.StepCompletionTime.Consolidated-consent", 1);
+    histogram_tester_.ExpectTotalCount(
+        "OOBE.StepShownStatus.Consolidated-consent", 1);
+    histogram_tester_.ExpectTotalCount(
+        "OOBE.StepCompletionTimeByExitReason.Consolidated-consent."
+        "AcceptedDemo",
+        1);
+  }
+
   // Verify the email corresponds to US.
   EXPECT_EQ("admin-us@cros-demo-mode.com",
             DemoSetupController::GetSubOrganizationEmail());
 
-  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
+  // LoginOrLockScreen is shown at beginning of OOBE, so we need to wait until
+  // it's shown again when Demo setup completes
+  LoginOrLockScreenVisibleWaiter().WaitEvenIfShown();
 
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
 }
 
-// TODO(crbug.com/1341234): flaky.
-IN_PROC_BROWSER_TEST_F(
-    DemoSetupArcSupportedTest,
-    DISABLED_OnlineSetupFlowSuccessWithCountryCustomization) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
+                       OnlineSetupFlowSuccessWithCountryCustomization) {
   // Simulate successful online setup.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);
@@ -550,9 +561,8 @@ IN_PROC_BROWSER_TEST_F(
   SelectFranceAndFinishSetup();
 }
 
-// TODO(crbug.com/1341234): flaky.
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_OnlineSetupFlowSuccessWithRetailerAndStoreId) {
+                       OnlineSetupFlowSuccessWithRetailerAndStoreId) {
   // Simulate successful online setup.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);
@@ -580,7 +590,9 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
 
   EXPECT_EQ("admin-us@cros-demo-mode.com",
             DemoSetupController::GetSubOrganizationEmail());
-  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
+  // LoginOrLockScreen is shown at beginning of OOBE, so we need to wait until
+  // it's shown again when Demo setup completes
+  LoginOrLockScreenVisibleWaiter().WaitEvenIfShown();
 
   EXPECT_EQ("ABC", g_browser_process->local_state()->GetString(
                        prefs::kDemoModeRetailerId));
@@ -591,9 +603,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
 }
 
-// TODO(crbug.com/1341234): flaky.
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_OnlineSetupFlowErrorDefault) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, OnlineSetupFlowErrorDefault) {
   // Simulate online setup failure.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);
@@ -622,9 +632,8 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
 }
 
-// TODO(crbug.com/1341234): flaky.
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_OnlineSetupFlowErrorPowerwashRequired) {
+                       OnlineSetupFlowErrorPowerwashRequired) {
   // Simulate online setup failure that requires powerwash.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);
@@ -652,9 +661,8 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
 }
 
-// TODO(crbug.com/1341234): flaky.
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_OnlineSetupFlowCrosComponentFailure) {
+                       OnlineSetupFlowCrosComponentFailure) {
   // Simulate failure to load demo resources CrOS component.
   // There is no enrollment attempt, as process fails earlier.
   enrollment_helper_.ExpectNoEnrollment();
@@ -681,9 +689,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
 }
 
-// TODO(crbug.com/1341234): flaky.
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_OfflineDemoModeUnavailable) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, OfflineDemoModeUnavailable) {
   SimulateNetworkDisconnected();
 
   TriggerDemoModeOnWelcomeScreen();
@@ -691,9 +697,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   test::OobeJS().ExpectDisabledPath(kNetworkNextButton);
 }
 
-// TODO(crbug.com/1341234): flaky.
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_ClickNetworkOnNetworkScreen) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, ClickNetworkOnNetworkScreen) {
   TriggerDemoModeOnWelcomeScreen();
   test::WaitForNetworkSelectionScreen();
 
@@ -712,9 +716,8 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   }
 }
 
-// TODO(crbug.com/1341234): flaky.
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_ClickConnectedNetworkOnNetworkScreen) {
+                       ClickConnectedNetworkOnNetworkScreen) {
   SimulateNetworkConnected();
 
   TriggerDemoModeOnWelcomeScreen();
@@ -736,9 +739,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   }
 }
 
-// TODO(crbug.com/1341234): flaky.
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DISABLED_BackOnNetworkScreen) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnNetworkScreen) {
   SimulateNetworkConnected();
   TriggerDemoModeOnWelcomeScreen();
 
@@ -748,8 +749,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   OobeScreenWaiter(WelcomeView::kScreenId).Wait();
 }
 
-// TODO(crbug.com/1341234): flaky.
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_BackOnTermsScreen) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnTermsScreen) {
   SimulateNetworkConnected();
 
   TriggerDemoModeOnWelcomeScreen();
@@ -760,6 +760,14 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_BackOnTermsScreen) {
     test::OobeJS().ClickOnPath(kDemoPreferencesNext);
     test::WaitForConsolidatedConsentScreen();
     test::OobeJS().ClickOnPath(kCCBackButton);
+    histogram_tester_.ExpectTotalCount(
+        "OOBE.StepCompletionTime.Consolidated-consent", 1);
+    histogram_tester_.ExpectTotalCount(
+        "OOBE.StepShownStatus.Consolidated-consent", 1);
+    histogram_tester_.ExpectTotalCount(
+        "OOBE.StepCompletionTimeByExitReason.Consolidated-consent."
+        "BackDemo",
+        1);
   } else {
     // User cannot go to ARC ToS screen without accepting eula - simulate that.
     StartupUtils::MarkEulaAccepted();
@@ -772,8 +780,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_BackOnTermsScreen) {
   OobeScreenWaiter(DemoPreferencesScreenView::kScreenId).Wait();
 }
 
-// TODO(crbug.com/1341234): flaky.
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_BackOnErrorScreen) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnErrorScreen) {
   // Simulate online setup failure.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);
@@ -796,8 +803,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_BackOnErrorScreen) {
   OobeScreenWaiter(WelcomeView::kScreenId).Wait();
 }
 
-// TODO(crbug.com/1341234): flaky.
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_RetryOnErrorScreen) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, RetryOnErrorScreen) {
   // Simulate online setup failure.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);
@@ -813,6 +819,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_RetryOnErrorScreen) {
   test::OobeJS().ClickOnPath(kDemoPreferencesNext);
 
   AcceptTermsAndExpectDemoSetupFailure();
+  test::LockDemoDeviceInstallAttributes();
 
   // We need to create another mock after showing error dialog.
   enrollment_helper_.ResetMock();
@@ -823,7 +830,9 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_RetryOnErrorScreen) {
 
   test::OobeJS().ClickOnPath(kDemoSetupErrorDialogRetry);
 
-  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
+  // LoginOrLockScreen is shown at beginning of OOBE, so we need to wait until
+  // it's shown again when Demo setup completes
+  LoginOrLockScreenVisibleWaiter().WaitEvenIfShown();
 
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
@@ -865,8 +874,8 @@ class DemoSetupProgressStepsTest : public DemoSetupArcSupportedTest {
   }
 };
 
-// crbug.com/1341073 Disable due to flakiness.
 IN_PROC_BROWSER_TEST_F(DemoSetupProgressStepsTest,
+                       // TODO(crbug.com/1323032): Re-enable this test
                        DISABLED_SetupProgessStepsDisplayCorrectly) {
   SimulateNetworkConnected();
   TriggerDemoModeOnWelcomeScreen();
@@ -971,7 +980,9 @@ IN_PROC_BROWSER_TEST_F(DemoSetupVariantCountryCodeRegionTest,
   EXPECT_EQ("admin-ca@cros-demo-mode.com",
             DemoSetupController::GetSubOrganizationEmail());
 
-  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
+  // LoginOrLockScreen is shown at beginning of OOBE, so we need to wait until
+  // it's shown again when Demo setup completes
+  LoginOrLockScreenVisibleWaiter().WaitEvenIfShown();
 
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
@@ -1094,7 +1105,9 @@ IN_PROC_BROWSER_TEST_F(DemoSetupBlazeyDeviceTest,
   EXPECT_EQ("admin-us-blazey@cros-demo-mode.com",
             DemoSetupController::GetSubOrganizationEmail());
 
-  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
+  // LoginOrLockScreen is shown at beginning of OOBE, so we need to wait until
+  // it's shown again when Demo setup completes
+  LoginOrLockScreenVisibleWaiter().WaitEvenIfShown();
 
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,7 @@
 #include "ui/gfx/geometry/dip_util.h"
 
 #include "app/vivaldi_apptools.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "ui/content/vivaldi_event_hooks.h"
 
 namespace {
@@ -42,9 +43,8 @@ namespace {
 void TransformEventTouchPositions(blink::WebTouchEvent* event,
                                   const gfx::Transform& transform) {
   for (unsigned i = 0; i < event->touches_length; ++i) {
-    gfx::PointF point(event->touches[i].PositionInWidget());
-    transform.TransformPoint(&point);
-    event->touches[i].SetPositionInWidget(point);
+    event->touches[i].SetPositionInWidget(
+        transform.MapPoint(event->touches[i].PositionInWidget()));
   }
 }
 
@@ -474,7 +474,9 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindMouseEventTarget(
   if (route_to_root_for_devtools_)
     target = root_view;
 
-  if (!target && root_view->IsMouseLocked()) {
+  if (!target && root_view->IsMouseLocked() &&
+      // Vivaldi GUI web_contents may/will not have MouseLock widget (VB-68886)
+      root_view->host()->delegate()->GetMouseLockWidget()) {
     target = root_view->host()->delegate()->GetMouseLockWidget()->GetView();
   }
 
@@ -532,7 +534,9 @@ RenderWidgetHostInputEventRouter::FindMouseWheelEventTarget(
     const blink::WebMouseWheelEvent& event) const {
   RenderWidgetHostViewBase* target = nullptr;
   gfx::PointF transformed_point;
-  if (root_view->IsMouseLocked()) {
+  if (root_view->IsMouseLocked() &&
+      // Vivaldi GUI web_contents may/will not have MouseLock widget (VB-68886)
+      root_view->host()->delegate()->GetMouseLockWidget()) {
     target = root_view->host()->delegate()->GetMouseLockWidget()->GetView();
     if (!root_view->TransformPointToCoordSpaceForView(
             event.PositionInWidget(), target, &transformed_point)) {

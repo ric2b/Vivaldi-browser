@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <cmath>
 #include <list>
 #include <memory>
 #include <string>
@@ -14,10 +15,11 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/logging.h"
+#include "base/containers/flat_map.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
+#include "base/task/bind_post_task.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
@@ -48,6 +50,23 @@ namespace auction_worklet {
 
 namespace {
 
+bool InsertPrioritySignals(
+    AuctionV8Helper* v8_helper,
+    base::StringPiece key,
+    const base::flat_map<std::string, double>& priority_signals,
+    v8::Local<v8::Object> object) {
+  v8::Isolate* isolate = v8_helper->isolate();
+  v8::Local<v8::Object> v8_priority_signals = v8::Object::New(isolate);
+  for (const auto& signal : priority_signals) {
+    if (!v8_helper->InsertValue(signal.first,
+                                v8::Number::New(isolate, signal.second),
+                                v8_priority_signals)) {
+      return false;
+    }
+  }
+  return v8_helper->InsertValue(key, v8_priority_signals, object);
+}
+
 // Converts `auction_config` back to JSON format, and appends to args.
 // Returns true if conversion succeeded.
 //
@@ -67,8 +86,12 @@ namespace {
 //                       'https://www.another-buyer.com': 200,
 //                       '*': 150,
 //                       ...},
+//  'perBuyerPrioritySignals': {'https://www.example-dsp.com': {...},
+//                              'https://www.another-buyer.com': {...},
+//                              '*': {...},
+//                              ...},
 // }
-bool AppendAuctionConfig(AuctionV8Helper* const v8_helper,
+bool AppendAuctionConfig(AuctionV8Helper* v8_helper,
                          v8::Local<v8::Context> context,
                          const GURL& decision_logic_url,
                          const absl::optional<GURL>& trusted_coding_signals_url,
@@ -166,6 +189,30 @@ bool AppendAuctionConfig(AuctionV8Helper* const v8_helper,
   if (!per_buyer_timeouts.IsEmpty())
     auction_config_dict.Set("perBuyerTimeouts", per_buyer_timeouts);
 
+  if (auction_ad_config_non_shared_params.per_buyer_priority_signals ||
+      auction_ad_config_non_shared_params.all_buyers_priority_signals) {
+    v8::Local<v8::Object> per_buyer_priority_signals = v8::Object::New(isolate);
+    if (auction_ad_config_non_shared_params.per_buyer_priority_signals) {
+      for (const auto& kv :
+           *auction_ad_config_non_shared_params.per_buyer_priority_signals) {
+        if (!InsertPrioritySignals(v8_helper, kv.first.Serialize(), kv.second,
+                                   per_buyer_priority_signals)) {
+          return false;
+        }
+      }
+    }
+    if (auction_ad_config_non_shared_params.all_buyers_priority_signals) {
+      if (!InsertPrioritySignals(
+              v8_helper, "*",
+              *auction_ad_config_non_shared_params.all_buyers_priority_signals,
+              per_buyer_priority_signals)) {
+        return false;
+      }
+    }
+    auction_config_dict.Set("perBuyerPrioritySignals",
+                            per_buyer_priority_signals);
+  }
+
   const auto& component_auctions =
       auction_ad_config_non_shared_params.component_auctions;
   if (!component_auctions.empty()) {
@@ -213,6 +260,30 @@ bool AddOtherSeller(
   return browser_signals_dict.Set(
       "componentSeller",
       browser_signals_other_seller->get_component_seller().Serialize());
+}
+
+// Converts reject reason string to corresponding mojom enum.
+absl::optional<mojom::RejectReason> RejectReasonStringToEnum(
+    const std::string& reason) {
+  if (reason == "not-available") {
+    return mojom::RejectReason::kNotAvailable;
+  } else if (reason == "invalid-bid") {
+    return mojom::RejectReason::kInvalidBid;
+  } else if (reason == "bid-below-auction-floor") {
+    return mojom::RejectReason::kBidBelowAuctionFloor;
+  } else if (reason == "pending-approval-by-exchange") {
+    return mojom::RejectReason::kPendingApprovalByExchange;
+  } else if (reason == "disapproved-by-exchange") {
+    return mojom::RejectReason::kDisapprovedByExchange;
+  } else if (reason == "blocked-by-publisher") {
+    return mojom::RejectReason::kBlockedByPublisher;
+  } else if (reason == "language-exclusions") {
+    return mojom::RejectReason::kLanguageExclusions;
+  } else if (reason == "category-exclusions") {
+    return mojom::RejectReason::kCategoryExclusions;
+  }
+  // Invalid (out of range) reject reason.
+  return absl::nullopt;
 }
 
 }  // namespace
@@ -301,6 +372,13 @@ void SellerWorklet::ScoreAd(
   score_ad_task->seller_timeout = seller_timeout;
   score_ad_task->trace_id = trace_id;
   score_ad_task->score_ad_client.Bind(std::move(score_ad_client));
+
+  // Deleting `score_ad_task` will destroy `score_ad_client` and thus
+  // abort this callback, so it's safe to use Unretained(this) and
+  // `generate_bid_task` here.
+  score_ad_task->score_ad_client.set_disconnect_handler(
+      base::BindOnce(&SellerWorklet::OnScoreAdClientDestroyed,
+                     base::Unretained(this), score_ad_task));
 
   // If `trusted_signals_request_manager_` exists, there's a trusted scoring
   // signals URL which needs to be fetched before the auction can be run.
@@ -439,10 +517,15 @@ void SellerWorklet::V8State::ScoreAd(
     uint32_t browser_signal_bidding_duration_msecs,
     const absl::optional<base::TimeDelta> seller_timeout,
     uint64_t trace_id,
+    base::ScopedClosureRunner cleanup_score_ad_task,
     ScoreAdCallbackInternal callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
 
   TRACE_EVENT_NESTABLE_ASYNC_END0("fledge", "post_v8_task", trace_id);
+
+  // Don't need to run `cleanup_score_ad_task` if this method is invoked;
+  // it's bound to the closure to clean things up if this method got cancelled.
+  cleanup_score_ad_task.ReplaceClosure(base::OnceClosure());
 
   AuctionV8Helper::FullIsolateScope isolate_scope(v8_helper_.get());
   v8::Isolate* isolate = v8_helper_->isolate();
@@ -537,6 +620,7 @@ void SellerWorklet::V8State::ScoreAd(
     // `scoreAd()` might use them to detect script timeout or failures.
     PostScoreAdCallbackToUserThread(
         std::move(callback), /*score=*/0,
+        /*reject_reason=*/mojom::RejectReason::kNotAvailable,
         /*component_auction_modified_bid_params=*/nullptr,
         /*scoring_signals_data_version=*/absl::nullopt,
         /*debug_loss_report_url=*/
@@ -549,13 +633,14 @@ void SellerWorklet::V8State::ScoreAd(
   }
 
   double score;
+  mojom::RejectReason reject_reason = mojom::RejectReason::kNotAvailable;
   bool allow_component_auction = false;
   mojom::ComponentAuctionModifiedBidParamsPtr
       component_auction_modified_bid_params;
   // Try to parse the result as a number. On success, it's the desirability
   // score.
   if (!gin::ConvertFromV8(isolate, score_ad_result, &score)) {
-    // Otherwise, try it must be an object with the desireability score, and
+    // Otherwise, it must be an object with the desireability score, and
     // potentially other fields as well.
     if (!score_ad_result->IsObject()) {
       errors_out.push_back(
@@ -583,6 +668,30 @@ void SellerWorklet::V8State::ScoreAd(
 
     if (!result_dict.Get("allowComponentAuction", &allow_component_auction))
       allow_component_auction = false;
+
+    v8::Local<v8::Value> reject_reason_value;
+    if (score_ad_object
+            ->Get(context, v8_helper_->CreateStringFromLiteral("rejectReason"))
+            .ToLocal(&reject_reason_value) &&
+        !reject_reason_value->IsUndefined()) {
+      if (!reject_reason_value->IsString()) {
+        errors_out.push_back(base::StrCat(
+            {decision_logic_url_.spec(),
+             " rejectReason returned by scoreAd() must be a string."}));
+      } else {
+        std::string reject_reason_str;
+        result_dict.Get("rejectReason", &reject_reason_str);
+        auto reject_reason_opt = RejectReasonStringToEnum(reject_reason_str);
+
+        if (!reject_reason_opt.has_value()) {
+          errors_out.push_back(
+              base::StrCat({decision_logic_url_.spec(),
+                            " scoreAd() returned an invalid reject reason."}));
+        } else {
+          reject_reason = reject_reason_opt.value();
+        }
+      }
+    }
 
     // If this is the seller in a component auction (and thus it was passed a
     // top-level seller), need to return a
@@ -637,7 +746,7 @@ void SellerWorklet::V8State::ScoreAd(
     // Keep debug report URLs because we want to send debug loss reports if
     // seller rejected all bids.
     PostScoreAdCallbackToUserThread(
-        std::move(callback), /*score=*/0,
+        std::move(callback), /*score=*/0, reject_reason,
         /*component_auction_modified_bid_params=*/nullptr,
         scoring_signals_data_version,
         context_recycler.for_debugging_only_bindings()->TakeLossReportUrl(),
@@ -668,6 +777,7 @@ void SellerWorklet::V8State::ScoreAd(
 
   PostScoreAdCallbackToUserThread(
       std::move(callback), score,
+      /*reject_reason=*/mojom::RejectReason::kNotAvailable,
       std::move(component_auction_modified_bid_params),
       scoring_signals_data_version,
       context_recycler.for_debugging_only_bindings()->TakeLossReportUrl(),
@@ -846,6 +956,7 @@ void SellerWorklet::V8State::PostScoreAdCallbackToUserThreadOnError(
     PrivateAggregationRequests pa_requests) {
   PostScoreAdCallbackToUserThread(
       std::move(callback), /*score=*/0,
+      /*reject_reason=*/mojom::RejectReason::kNotAvailable,
       /*component_auction_modified_bid_params=*/nullptr,
       /*scoring_signals_data_version=*/absl::nullopt,
       /*debug_loss_report_url=*/absl::nullopt,
@@ -856,6 +967,7 @@ void SellerWorklet::V8State::PostScoreAdCallbackToUserThreadOnError(
 void SellerWorklet::V8State::PostScoreAdCallbackToUserThread(
     ScoreAdCallbackInternal callback,
     double score,
+    mojom::RejectReason reject_reason,
     mojom::ComponentAuctionModifiedBidParamsPtr
         component_auction_modified_bid_params,
     absl::optional<uint32_t> scoring_signals_data_version,
@@ -866,7 +978,7 @@ void SellerWorklet::V8State::PostScoreAdCallbackToUserThread(
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
   user_thread_->PostTask(
       FROM_HERE,
-      base::BindOnce(std::move(callback), score,
+      base::BindOnce(std::move(callback), score, reject_reason,
                      std::move(component_auction_modified_bid_params),
                      scoring_signals_data_version,
                      std::move(debug_loss_report_url),
@@ -917,6 +1029,8 @@ void SellerWorklet::OnDownloadComplete(WorkletLoader::Result worklet_script,
   base::UmaHistogramCounts10M(
       "Ads.InterestGroup.Net.ResponseSizeBytes.ScoringScriptJS",
       worklet_script.original_size_bytes());
+  base::UmaHistogramTimes("Ads.InterestGroup.Net.DownloadTime.ScoringScriptJS",
+                          worklet_script.download_time());
   worklet_loader_.reset();
 
   // On failure, delete `this`, as it can't do anything without a loaded script.
@@ -967,6 +1081,21 @@ void SellerWorklet::OnTrustedScoringSignalsDownloaded(
   ScoreAdIfReady(task);
 }
 
+void SellerWorklet::OnScoreAdClientDestroyed(ScoreAdTaskList::iterator task) {
+  // If the task hasn't finished loading trusted signals or loading the code,
+  // it also hasn't posted the iterator off-thread, so we can just remove the
+  // object and have it cancel everything else.
+  if (task->trusted_scoring_signals_request || !IsCodeReady()) {
+    score_ad_tasks_.erase(task);
+  } else {
+    // Otherwise, there should be a pending V8 call. Try to cancel that, but if
+    // it already started, it will just run and throw out the results thanks to
+    // the closed client pipe.
+    DCHECK_NE(task->task_id, base::CancelableTaskTracker::kBadTaskId);
+    cancelable_task_tracker_.TryCancel(task->task_id);
+  }
+}
+
 void SellerWorklet::ScoreAdIfReady(ScoreAdTaskList::iterator task) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
 
@@ -977,8 +1106,18 @@ void SellerWorklet::ScoreAdIfReady(ScoreAdTaskList::iterator task) {
                                   task->trace_id);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "post_v8_task", task->trace_id);
 
-  v8_runner_->PostTask(
-      FROM_HERE,
+  // Normally the PostTask below will eventually get `task` cleaned up once it
+  // posts back to DeliverScoreAdCallbackOnUserThread with its results, but that
+  // won't happen if it gets cancelled. To deal with that, a ScopedClosureRunner
+  // is passed to ask for `task` to get cleaned up in case the V8State::ScoreAd
+  // closure gets destroyed without running.
+  base::OnceClosure cleanup_score_ad_task = base::BindPostTask(
+      base::SequencedTaskRunnerHandle::Get(),
+      base::BindOnce(&SellerWorklet::CleanUpScoreAdTaskOnUserThread,
+                     weak_ptr_factory_.GetWeakPtr(), task));
+
+  task->task_id = cancelable_task_tracker_.PostTask(
+      v8_runner_.get(), FROM_HERE,
       base::BindOnce(
           &SellerWorklet::V8State::ScoreAd, base::Unretained(v8_state_.get()),
           task->ad_metadata_json, task->bid,
@@ -990,6 +1129,7 @@ void SellerWorklet::ScoreAdIfReady(ScoreAdTaskList::iterator task) {
           std::move(task->browser_signal_ad_components),
           task->browser_signal_bidding_duration_msecs,
           std::move(task->seller_timeout), task->trace_id,
+          base::ScopedClosureRunner(std::move(cleanup_score_ad_task)),
           base::BindOnce(&SellerWorklet::DeliverScoreAdCallbackOnUserThread,
                          weak_ptr_factory_.GetWeakPtr(), task)));
 }
@@ -997,6 +1137,7 @@ void SellerWorklet::ScoreAdIfReady(ScoreAdTaskList::iterator task) {
 void SellerWorklet::DeliverScoreAdCallbackOnUserThread(
     ScoreAdTaskList::iterator task,
     double score,
+    mojom::RejectReason reject_reason,
     mojom::ComponentAuctionModifiedBidParamsPtr
         component_auction_modified_bid_params,
     absl::optional<uint32_t> scoring_signals_data_version,
@@ -1005,7 +1146,6 @@ void SellerWorklet::DeliverScoreAdCallbackOnUserThread(
     PrivateAggregationRequests pa_requests,
     std::vector<std::string> errors) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
-
   if (load_script_error_msg_)
     errors.insert(errors.begin(), load_script_error_msg_.value());
   if (task->trusted_scoring_signals_error_msg)
@@ -1018,10 +1158,16 @@ void SellerWorklet::DeliverScoreAdCallbackOnUserThread(
   // it does. Only useful if the SellerWorklet object is still in use, so
   // unclear how useful it would be.
   task->score_ad_client->OnScoreAdComplete(
-      score, std::move(component_auction_modified_bid_params),
+      score, reject_reason, std::move(component_auction_modified_bid_params),
       scoring_signals_data_version.value_or(0),
       scoring_signals_data_version.has_value(), debug_loss_report_url,
       debug_win_report_url, std::move(pa_requests), std::move(errors));
+  score_ad_tasks_.erase(task);
+}
+
+void SellerWorklet::CleanUpScoreAdTaskOnUserThread(
+    ScoreAdTaskList::iterator task) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
   score_ad_tasks_.erase(task);
 }
 
@@ -1032,8 +1178,8 @@ void SellerWorklet::RunReportResult(ReportResultTaskList::iterator task) {
                                   task->trace_id);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "post_v8_task", task->trace_id);
 
-  v8_runner_->PostTask(
-      FROM_HERE,
+  cancelable_task_tracker_.PostTask(
+      v8_runner_.get(), FROM_HERE,
       base::BindOnce(
           &SellerWorklet::V8State::ReportResult,
           base::Unretained(v8_state_.get()),

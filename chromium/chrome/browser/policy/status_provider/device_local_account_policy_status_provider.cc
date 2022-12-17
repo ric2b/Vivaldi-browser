@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "base/values.h"
 #include "chrome/browser/policy/status_provider/status_provider_util.h"
 #include "components/policy/core/browser/cloud/message_util.h"
+#include "components/policy/core/browser/webui/policy_status_provider.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 
 DeviceLocalAccountPolicyStatusProvider::DeviceLocalAccountPolicyStatusProvider(
@@ -32,10 +33,12 @@ base::Value::Dict DeviceLocalAccountPolicyStatusProvider::GetStatus() {
     dict.Set("status", policy::FormatStoreStatus(
                            policy::CloudPolicyStore::STATUS_BAD_STATE,
                            policy::CloudPolicyValidatorBase::VALIDATION_OK));
-    dict.Set("username", std::string());
+    dict.Set(policy::kUsernameKey, std::string());
   }
   ExtractDomainFromUsername(&dict);
   dict.Set("publicAccount", true);
+  dict.Set(policy::kPolicyDescriptionKey, kUserPolicyStatusDescription);
+  SetDomainInUserStatus(dict);
   return dict;
 }
 

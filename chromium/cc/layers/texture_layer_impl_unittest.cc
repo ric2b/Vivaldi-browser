@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,11 +54,11 @@ TEST(TextureLayerImplTest, Occlusion) {
 
   LayerTreeImplTestBase impl;
 
-  auto resource = viz::TransferableResource::MakeGL(
+  auto resource = viz::TransferableResource::MakeGpu(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D,
       gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
                      gpu::CommandBufferId::FromUnsafeValue(0x234), 0x456),
-      layer_size, false /* is_overlay_candidate */);
+      layer_size, viz::RGBA_8888, false /* is_overlay_candidate */);
 
   TextureLayerImpl* texture_layer_impl = impl.AddLayer<TextureLayerImpl>();
   texture_layer_impl->SetBounds(layer_size);

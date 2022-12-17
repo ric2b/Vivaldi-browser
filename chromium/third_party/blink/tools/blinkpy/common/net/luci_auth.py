@@ -1,4 +1,4 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """An interface to luci-auth.
@@ -28,5 +28,5 @@ class LuciAuth(object):
     def get_access_token(self):
         # ScriptError will be raised if luci-auth fails.
         output = self._host.executive.run_command(
-            [self._luci_auth_executable, 'token'])
+            [self._luci_auth_executable, 'token'], debug_logging=False)
         return output.strip()

@@ -340,8 +340,10 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     OnReceiveResponse(network::mojom::URLResponseHeadPtr head,
-                      mojo::ScopedDataPipeConsumerHandle body) {
+                      mojo::ScopedDataPipeConsumerHandle body,
+                      absl::optional<::mojo_base::BigBuffer> cached_metadata) {
   current_body_ = std::move(body);
+  current_cached_metadata_ = std::move(cached_metadata);
   if (current_request_uses_header_client_) {
     // Use the cookie headers we got from OnHeadersReceived as that'll contain
     // Set-Cookie if it existed. Re-adding cookie headers here does not
@@ -404,11 +406,6 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnUploadProgress(
     OnUploadProgressCallback callback) {
   target_client_->OnUploadProgress(current_position, total_size,
                                    std::move(callback));
-}
-
-void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
-    OnReceiveCachedMetadata(mojo_base::BigBuffer data) {
-  target_client_->OnReceiveCachedMetadata(std::move(data));
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -868,6 +865,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     case URLLoaderFactoryType::kWorkerMainResource:
     case URLLoaderFactoryType::kServiceWorkerScript:
     case URLLoaderFactoryType::kDownload:
+    case URLLoaderFactoryType::kPrefetch:
       break;
   }
 
@@ -925,7 +923,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   factory_->request_handler_->OnResponseStarted(factory_->browser_context_,
                                                 &info_.value(), net::OK);
   target_client_->OnReceiveResponse(current_response_.Clone(),
-                                    std::move(current_body_));
+                                    std::move(current_body_),
+                                    std::move(current_cached_metadata_));
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::

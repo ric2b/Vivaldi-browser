@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -477,7 +477,7 @@ bool CanThrottleUpload(const FormStructure& form,
       "%03X",
       static_cast<int>(form.form_signature().value() % kNumUploadBuckets));
   const auto& upload_events =
-      pref_service->GetValueDict(prefs::kAutofillUploadEvents);
+      pref_service->GetDict(prefs::kAutofillUploadEvents);
   int value = upload_events.FindInt(key).value_or(0);
 
   // Calculate the mask we expect to be set for the form's upload bucket.
@@ -490,8 +490,8 @@ bool CanThrottleUpload(const FormStructure& form,
   // event pref to set the appropriate bit.
   bool is_first_upload_for_event = ((value & mask) == 0);
   if (is_first_upload_for_event) {
-    DictionaryPrefUpdate update(pref_service, prefs::kAutofillUploadEvents);
-    update->SetKey(std::move(key), base::Value(value | mask));
+    ScopedDictPrefUpdate update(pref_service, prefs::kAutofillUploadEvents);
+    update->Set(std::move(key), value | mask);
   }
 
   return !is_first_upload_for_event;

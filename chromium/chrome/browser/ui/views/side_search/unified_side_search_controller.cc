@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/side_search/side_search_utils.h"
@@ -19,6 +20,7 @@
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/url_formatter/elide_url.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/navigation_handle.h"
@@ -41,17 +43,8 @@ class SideSearchWebView : public views::WebView {
       return;
 
     auto* tab_web_contents = side_contents_helper->GetTabWebContents();
-
-    // (crbug.com/1348296) Do not clear side panel contents if the current tab's
-    // contextual entry is still active. This prevents the uaf bug also does not
-    // cause the side search to reload when switching back to a tab that has
-    // side search previously open.
-    auto* registry = SidePanelRegistry::Get(tab_web_contents);
-    if (registry && registry->active_entry().has_value() &&
-        registry->active_entry().value()->id() ==
-            SidePanelEntry::Id::kSideSearch) {
+    if (!tab_web_contents)
       return;
-    }
 
     auto* helper =
         SideSearchTabContentsHelper::FromWebContents(tab_web_contents);
@@ -60,6 +53,17 @@ class SideSearchWebView : public views::WebView {
   }
 };
 }  // namespace
+
+GURL UnifiedSideSearchController::GetOpenInNewTabURL() const {
+  auto* active_contents = GetBrowserView()->GetActiveWebContents();
+  DCHECK(active_contents);
+  auto* helper = SideSearchTabContentsHelper::FromWebContents(active_contents);
+  DCHECK(helper);
+  const auto* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(GetProfile());
+  return template_url_service->RemoveSideSearchParamFromURL(
+      helper->last_search_url().value());
+}
 
 UnifiedSideSearchController::UnifiedSideSearchController(
     content::WebContents* web_contents)
@@ -92,7 +96,7 @@ void UnifiedSideSearchController::SidePanelAvailabilityChanged(
   if (should_close) {
     auto* registry = SidePanelRegistry::Get(web_contents());
     if (registry && registry->active_entry().has_value() &&
-        registry->active_entry().value()->id() ==
+        registry->active_entry().value()->key().id() ==
             SidePanelEntry::Id::kSideSearch) {
       registry->ResetActiveEntry();
     }
@@ -204,11 +208,15 @@ std::u16string UnifiedSideSearchController::GetSideSearchName() const {
              : std::u16string();
 }
 
+// To make SidePanelOpenTrigger::kContextMenuSearchOption records correctly,
+// this function can only be called via tapping on menu search option.
 void UnifiedSideSearchController::OpenSidePanel() {
+  UpdateSidePanel();
   auto* browser_view = GetBrowserView();
   if (browser_view) {
     browser_view->side_panel_coordinator()->Show(
-        SidePanelEntry::Id::kSideSearch);
+        SidePanelEntry::Id::kSideSearch,
+        SidePanelUtil::SidePanelOpenTrigger::kContextMenuSearchOption);
   }
 }
 
@@ -225,7 +233,7 @@ BrowserView* UnifiedSideSearchController::GetBrowserView() const {
   return browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
 }
 
-Profile* UnifiedSideSearchController::GetProfile() {
+Profile* UnifiedSideSearchController::GetProfile() const {
   return Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 }
 
@@ -254,13 +262,15 @@ void UnifiedSideSearchController::UpdateSidePanelRegistry(bool is_available) {
   auto* registry = SidePanelRegistry::Get(web_contents());
   if (!registry)
     return;
-  auto* current_entry =
-      registry->GetEntryForId(SidePanelEntry::Id::kSideSearch);
+  auto* current_entry = registry->GetEntryForKey(
+      SidePanelEntry::Key(SidePanelEntry::Id::kSideSearch));
   if (!current_entry && is_available) {
     auto entry = std::make_unique<SidePanelEntry>(
         SidePanelEntry::Id::kSideSearch, GetSideSearchName(),
         GetSideSearchIcon(),
         base::BindRepeating(&UnifiedSideSearchController::GetSideSearchView,
+                            base::Unretained(this)),
+        base::BindRepeating(&UnifiedSideSearchController::GetOpenInNewTabURL,
                             base::Unretained(this)));
     entry->AddObserver(this);
     registry->Register(std::move(entry));
@@ -270,7 +280,7 @@ void UnifiedSideSearchController::UpdateSidePanelRegistry(bool is_available) {
 
   if (current_entry && !is_available) {
     current_entry->RemoveObserver(this);
-    registry->Deregister(SidePanelEntry::Id::kSideSearch);
+    registry->Deregister(SidePanelEntry::Key(SidePanelEntry::Id::kSideSearch));
     RecordSideSearchAvailabilityChanged(
         SideSearchAvailabilityChangeType::kBecomeUnavailable);
   }

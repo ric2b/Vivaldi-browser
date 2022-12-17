@@ -1,10 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/updater/win/manifest_util.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -13,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "chrome/updater/win/protocol_parser_xml.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -80,6 +80,11 @@ void ReadInstallCommandFromManifest(const base::FilePath& offline_dir,
                                     base::FilePath& installer_path,
                                     std::string& install_args,
                                     std::string& install_data) {
+  if (offline_dir.empty()) {
+    VLOG(1) << "Unexpected: offline install without an offline directory.";
+    return;
+  }
+
   std::unique_ptr<ProtocolParserXML> manifest_parser =
       ParseOfflineManifest(offline_dir, app_id);
   if (!manifest_parser) {
@@ -88,9 +93,8 @@ void ReadInstallCommandFromManifest(const base::FilePath& offline_dir,
 
   const std::vector<update_client::ProtocolParser::Result>& results =
       manifest_parser->results().list;
-  auto it = std::find_if(
-      std::begin(results), std::end(results),
-      [&app_id](const update_client::ProtocolParser::Result& result) {
+  auto it = base::ranges::find_if(
+      results, [&app_id](const update_client::ProtocolParser::Result& result) {
         return base::EqualsCaseInsensitiveASCII(result.extension_id, app_id);
       });
   if (it == std::end(results)) {
@@ -101,12 +105,9 @@ void ReadInstallCommandFromManifest(const base::FilePath& offline_dir,
   install_args = it->manifest.arguments;
 
   if (!install_data_index.empty()) {
-    auto data_iter = std::find_if(
-        std::begin(it->data), std::end(it->data),
-        [&install_data_index](
-            const update_client::ProtocolParser::Result::Data& data) {
-          return install_data_index == data.install_data_index;
-        });
+    auto data_iter = base::ranges::find(
+        it->data, install_data_index,
+        &update_client::ProtocolParser::Result::Data::install_data_index);
     if (data_iter == std::end(it->data)) {
       VLOG(2) << "Install data index not found: " << install_data_index;
       return;

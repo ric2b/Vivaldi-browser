@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,6 +39,8 @@ void DemoPreferencesScreenHandler::DeclareLocalizedValues(
                IDS_OOBE_DEMO_SETUP_PREFERENCES_RETAILER_ID_INPUT_PLACEHOLDER);
   builder->Add("retailerIdInputHelpText",
                IDS_OOBE_DEMO_SETUP_PREFERENCES_RETAILER_ID_INPUT_HELP_TEXT);
+  builder->Add("retailerIdInputPrivacyDisclaimer",
+               IDS_OOBE_DEMO_SETUP_PREFERENCES_RETAILER_ID_PRIVACY_DISCLAIMER);
   builder->Add("retailerIdInputErrorText",
                IDS_OOBE_DEMO_SETUP_PREFERENCES_RETAILER_ID_INPUT_ERROR_TEXT);
 }

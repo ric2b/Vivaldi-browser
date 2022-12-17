@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -308,8 +308,8 @@ std::ostream& operator<<(std::ostream& output, const ParseResult& result) {
     case ParseResult::ERROR_HEADER_VALUE_PRESENT:
       output << "ERROR_HEADER_VALUE_PRESENT";
       break;
-    case ParseResult::ERROR_APPEND_REQUEST_HEADER_UNSUPPORTED:
-      output << "ERROR_APPEND_REQUEST_HEADER_UNSUPPORTED";
+    case ParseResult::ERROR_APPEND_INVALID_REQUEST_HEADER:
+      output << "ERROR_APPEND_INVALID_REQUEST_HEADER";
       break;
     case ParseResult::ERROR_EMPTY_TAB_IDS_LIST:
       output << "ERROR_EMPTY_TAB_IDS_LIST";
@@ -435,9 +435,7 @@ dnr_api::ModifyHeaderInfo CreateModifyHeaderInfo(
 
   header_info.operation = operation;
   header_info.header = header;
-
-  if (value)
-    header_info.value = std::make_unique<std::string>(*value);
+  header_info.value = value;
 
   return header_info;
 }

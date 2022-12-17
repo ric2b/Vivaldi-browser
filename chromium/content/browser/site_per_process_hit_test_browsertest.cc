@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -852,11 +852,6 @@ class SitePerProcessHighDPIHitTestBrowserTest
 
   SitePerProcessHighDPIHitTestBrowserTest() {}
 
-// TODO(crbug.com/1350913): Re-enable when fixed.
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  void SetUp() override { GTEST_SKIP(); }
-#endif
-
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     SitePerProcessHitTestBrowserTest::SetUpCommandLine(command_line);
@@ -1599,10 +1594,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   ASSERT_TRUE(
       root_rwhv->GetTransformToViewCoordSpace(child_rwhv, &transform_to_child));
   EXPECT_TRUE(transform_to_child.IsScaleOrTranslation());
-  EXPECT_NEAR(2.f / scale_factor, transform_to_child.matrix().rc(0, 0),
-              kScaleTolerance);
-  EXPECT_NEAR(2.f / scale_factor, transform_to_child.matrix().rc(1, 1),
-              kScaleTolerance);
+  EXPECT_NEAR(2.f / scale_factor, transform_to_child.rc(0, 0), kScaleTolerance);
+  EXPECT_NEAR(2.f / scale_factor, transform_to_child.rc(1, 1), kScaleTolerance);
 
   gfx::PointF child_origin =
       child_rwhv->TransformPointToRootCoordSpaceF(gfx::PointF());
@@ -1611,12 +1604,12 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   ASSERT_TRUE(child_rwhv->GetTransformToViewCoordSpace(root_rwhv,
                                                        &transform_from_child));
   EXPECT_TRUE(transform_from_child.IsScaleOrTranslation());
-  EXPECT_NEAR(0.5f * scale_factor, transform_from_child.matrix().rc(0, 0),
+  EXPECT_NEAR(0.5f * scale_factor, transform_from_child.rc(0, 0),
               kScaleTolerance);
-  EXPECT_NEAR(0.5f * scale_factor, transform_from_child.matrix().rc(1, 1),
+  EXPECT_NEAR(0.5f * scale_factor, transform_from_child.rc(1, 1),
               kScaleTolerance);
-  EXPECT_EQ(child_origin.x(), transform_from_child.matrix().rc(0, 3));
-  EXPECT_EQ(child_origin.y(), transform_from_child.matrix().rc(1, 3));
+  EXPECT_EQ(child_origin.x(), transform_from_child.rc(0, 3));
+  EXPECT_EQ(child_origin.y(), transform_from_child.rc(1, 3));
 
   gfx::Transform transform_child_to_child =
       transform_from_child * transform_to_child;
@@ -1632,7 +1625,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     for (int row = 0; row < kDim; ++row) {
       for (int col = 0; col < kDim; ++col) {
         EXPECT_NEAR(row == col ? 1.f : 0.f,
-                    transform_child_to_child.matrix().rc(row, col), kTolerance);
+                    transform_child_to_child.rc(row, col), kTolerance);
       }
     }
   }
@@ -6915,14 +6908,12 @@ class SitePerProcessHitTestDataGenerationBrowserTest
         use_scale_factor ? gfx::ScaleToEnclosingRect(rect, device_scale_factor_,
                                                      device_scale_factor_)
                          : rect;
-    gfx::PointF p1(scaled_rect.origin());
-    gfx::PointF p2(scaled_rect.top_right());
-    gfx::PointF p3(scaled_rect.bottom_right());
-    gfx::PointF p4(scaled_rect.bottom_left());
-    transform.TransformPoint(&p1);
-    transform.TransformPoint(&p2);
-    transform.TransformPoint(&p3);
-    transform.TransformPoint(&p4);
+    // TODO(crbug.com/1359528): Add gfx::Transform::MapQuad().
+    gfx::PointF p1 = transform.MapPoint(gfx::PointF(scaled_rect.origin()));
+    gfx::PointF p2 = transform.MapPoint(gfx::PointF(scaled_rect.top_right()));
+    gfx::PointF p3 =
+        transform.MapPoint(gfx::PointF(scaled_rect.bottom_right()));
+    gfx::PointF p4 = transform.MapPoint(gfx::PointF(scaled_rect.bottom_left()));
     return gfx::QuadF(p1, p2, p3, p4);
   }
 
@@ -6947,9 +6938,7 @@ class SitePerProcessHitTestDataGenerationBrowserTest
   gfx::Rect AxisAlignedLayoutRectFromHitTest(
       const viz::AggregatedHitTestRegion& hit_test_region) {
     DCHECK(hit_test_region.transform.Preserves2dAxisAlignment());
-    gfx::RectF rect(hit_test_region.rect);
-    hit_test_region.transform.TransformRect(&rect);
-    return gfx::ToEnclosingRect(rect);
+    return hit_test_region.transform.MapRect(hit_test_region.rect);
   }
 
  public:
@@ -6981,7 +6970,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestDataGenerationBrowserTest,
   gfx::Transform translate;
   expected_transform.RotateAboutZAxis(-45);
   translate.Translate(-100 * device_scale_factor, -100 * device_scale_factor);
-  expected_transform.PreconcatTransform(translate);
+  expected_transform.PreConcat(translate);
 
   DCHECK(hit_test_data.size() >= 3);
   // The iframe element in main page is transformed and also clips the content
@@ -7139,7 +7128,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestDataGenerationBrowserTest,
   float device_scale_factor = current_device_scale_factor();
   gfx::Transform expected_transform1;
   gfx::Transform expected_transform2;
-  expected_transform2.matrix().postTranslate(-100 * device_scale_factor, 0, 0);
+  expected_transform2.PostTranslate(-100 * device_scale_factor, 0);
 
   gfx::Rect expected_region = gfx::ScaleToEnclosingRect(
       gfx::Rect(100, 100), device_scale_factor, device_scale_factor);

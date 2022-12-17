@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,9 @@
 
 #import <MaterialComponents/MaterialProgressView.h>
 
-#include "base/metrics/user_metrics.h"
-#include "base/notreached.h"
+#import "base/metrics/user_metrics.h"
+#import "base/notreached.h"
+#import "base/time/time.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
@@ -20,10 +21,11 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
-#include "ios/chrome/browser/ui/util/animation_util.h"
+#import "ios/chrome/browser/ui/util/animation_util.h"
 #import "ios/chrome/browser/ui/util/force_touch_long_press_gesture_recognizer.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
+#import "ui/base/device_form_factor.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -36,6 +38,8 @@ const CGFloat kScaleFactorDiff = 0.50;
 const CGFloat kTabGridAnimationsTotalDuration = 0.5;
 // The identifier for the context menu action trigger.
 NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
+// The duration of the slide in animation.
+const base::TimeDelta kToobarSlideInAnimationDuration = base::Milliseconds(500);
 }  // namespace
 
 @interface AdaptiveToolbarViewController ()
@@ -65,6 +69,32 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
 
 - (void)resetAfterSideSwipeSnapshot {
   self.view.progressBar.alpha = 1;
+}
+
+- (void)triggerToolbarSlideInAnimationFromBelow:(BOOL)fromBelow {
+  // Toolbar slide-in animations are disabled on iPads.
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+    return;
+  }
+
+  const UIView* view = self.view;
+  CGFloat toolbarHeight = view.frame.size.height;
+  view.transform = CGAffineTransformMakeTranslation(
+      0, fromBelow ? toolbarHeight : -toolbarHeight);
+  auto animations = ^{
+    [UIView addKeyframeWithRelativeStartTime:0
+                            relativeDuration:1
+                                  animations:^{
+                                    view.transform = CGAffineTransformIdentity;
+                                  }];
+  };
+
+  [UIView
+      animateKeyframesWithDuration:kToobarSlideInAnimationDuration.InSecondsF()
+                             delay:0
+                           options:UIViewAnimationCurveEaseOut
+                        animations:animations
+                        completion:nil];
 }
 
 #pragma mark - UIViewController
@@ -134,7 +164,7 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
 
 #pragma mark - Public
 
-- (ToolbarToolsMenuButton*)toolsMenuButton {
+- (ToolbarButton*)toolsMenuButton {
   return self.view.toolsMenuButton;
 }
 
@@ -457,7 +487,7 @@ NSString* const kContextMenuActionIdentifier = @"kContextMenuActionIdentifier";
       actionWithTitle:@""
                 image:nil
            identifier:kContextMenuActionIdentifier
-              handler:^(UIAction* action) {
+              handler:^(UIAction* uiAction) {
                 base::RecordAction(
                     base::UserMetricsAction("MobileMenuToolbarMenuTriggered"));
                 weakButton.menu =

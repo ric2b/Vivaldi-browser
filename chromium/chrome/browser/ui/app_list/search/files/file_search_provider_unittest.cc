@@ -1,23 +1,30 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/app_list/search/files/file_search_provider.h"
+#include <cctype>
 
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/test/test_app_list_color_provider.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
+#include "chrome/browser/ash/file_manager/trash_common_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/search/files/file_result.h"
 #include "chrome/browser/ui/app_list/search/test/test_search_controller.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
+#include "storage/browser/file_system/external_mount_points.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -51,7 +58,7 @@ class FileSearchProviderTest : public testing::Test {
   }
 
   base::FilePath Path(const std::string& filename) {
-    return scoped_temp_dir_.GetPath().AppendASCII(filename);
+    return scoped_temp_dir_.GetPath().Append(filename);
   }
 
   void WriteFile(const std::string& filename) {
@@ -106,6 +113,46 @@ TEST_F(FileSearchProviderTest, SearchIsCaseInsensitive) {
 
   EXPECT_THAT(LastResults(),
               UnorderedElementsAre(Title("FILE_1.png"), Title("FiLe_2.Png")));
+}
+
+TEST_F(FileSearchProviderTest, SearchIsAccentAndCaseInsensitive) {
+  WriteFile("FĪLE_1.png");
+  WriteFile("FīLe_2.Png");
+
+  provider_->Start(u"fīle");
+  Wait();
+
+  EXPECT_THAT(LastResults(),
+              UnorderedElementsAre(Title("FĪLE_1.png"), Title("FīLe_2.Png")));
+}
+
+TEST_F(FileSearchProviderTest, SearchIsAccentInsensitive) {
+  WriteFile("FILE_1.png");
+  WriteFile("FiLe_2.Png");
+  WriteFile("FĪLE_3.png");
+  WriteFile("FīLe_4.Png");
+  WriteFile("FiLË_5.png");
+  WriteFile("FILê_6.Png");
+
+  provider_->Start(u"file");
+  Wait();
+
+  EXPECT_THAT(LastResults(),
+              UnorderedElementsAre(Title("FILE_1.png"), Title("FiLe_2.Png"),
+                                   Title("FĪLE_3.png"), Title("FīLe_4.Png"),
+                                   Title("FiLË_5.png"), Title("FILê_6.Png")));
+}
+
+TEST_F(FileSearchProviderTest, SearchIsAccentHonored) {
+  WriteFile("FĪLE_1.png");
+  WriteFile("FīLe_2.Png");
+  WriteFile("file_3.png");
+
+  provider_->Start(u"fīle");
+  Wait();
+
+  EXPECT_THAT(LastResults(),
+              UnorderedElementsAre(Title("FĪLE_1.png"), Title("FīLe_2.Png")));
 }
 
 TEST_F(FileSearchProviderTest, SearchDirectories) {
@@ -192,6 +239,69 @@ TEST_F(FileSearchProviderTest, HighScoringFilesHaveScoreInRightRange) {
   // The scores should be properly in order and not exceed 1.0.
   EXPECT_GT(results[0]->relevance(), results[1]->relevance());
   EXPECT_LE(results[0]->relevance(), 1.0);
+}
+
+class FileSearchProviderTrashTest : public FileSearchProviderTest {
+ public:
+  FileSearchProviderTrashTest() {
+    std::vector<base::test::FeatureRef> enabled_features;
+    enabled_features.push_back(ash::features::kFilesTrash);
+    scoped_feature_list_.InitWithFeatures(enabled_features, {});
+  }
+
+  FileSearchProviderTrashTest(const FileSearchProviderTrashTest&) = delete;
+  FileSearchProviderTrashTest& operator=(const FileSearchProviderTrashTest&) =
+      delete;
+
+  void SetUp() override {
+    FileSearchProviderTest::SetUp();
+
+    // Ensure the My files and Downloads mount points are appropriately mocked
+    // to allow the trash locations to be parented at the test directory.
+    storage::ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
+        file_manager::util::GetDownloadsMountPointName(profile_.get()),
+        storage::kFileSystemTypeLocal, storage::FileSystemMountOption(),
+        scoped_temp_dir_.GetPath());
+
+    ToggleTrash(true);
+  }
+
+  void ToggleTrash(bool enabled) {
+    profile_->GetPrefs()->SetBoolean(ash::prefs::kFilesAppTrashEnabled,
+                                     enabled);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(FileSearchProviderTrashTest, FilesInTrashAreIgnored) {
+  using file_manager::trash::kTrashFolderName;
+
+  CreateDirectory(kTrashFolderName);
+  WriteFile("file");
+  WriteFile(base::FilePath(kTrashFolderName).Append("trashed_file").value());
+
+  provider_->Start(u"file");
+  Wait();
+
+  EXPECT_THAT(LastResults(), UnorderedElementsAre(Title("file")));
+}
+
+TEST_F(FileSearchProviderTrashTest, FilesInTrashArentIgnoredIfTrashDisabled) {
+  using file_manager::trash::kTrashFolderName;
+
+  ToggleTrash(false);
+
+  CreateDirectory(kTrashFolderName);
+  WriteFile("file");
+  WriteFile(base::FilePath(kTrashFolderName).Append("trashed_file").value());
+
+  provider_->Start(u"file");
+  Wait();
+
+  EXPECT_THAT(LastResults(),
+              UnorderedElementsAre(Title("file"), Title("trashed_file")));
 }
 
 }  // namespace app_list

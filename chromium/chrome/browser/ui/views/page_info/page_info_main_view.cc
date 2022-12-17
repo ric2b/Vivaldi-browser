@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/page_info/page_info_features.h"
 #include "chrome/browser/reputation/safety_tip_ui_helper.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
@@ -151,7 +152,7 @@ void PageInfoMainView::EnsureCookieInfo() {
                                                          PageInfoHoverButton>(
           base::BindRepeating(&PageInfoNavigationHandler::OpenCookiesPage,
                               base::Unretained(navigation_handler_)),
-          icon, IDS_PAGE_INFO_COOKIES, std::u16string(),
+          icon, IDS_PAGE_INFO_COOKIES_HEADER, std::u16string(),
           PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIES_SUBPAGE,
           tooltip, std::u16string(),
           PageInfoViewFactory::GetOpenSubpageIcon()));
@@ -347,7 +348,7 @@ void PageInfoMainView::SetIdentityInfo(const IdentityInfo& identity_info) {
   std::unique_ptr<PageInfoUI::SecurityDescription> security_description =
       GetSecurityDescription(identity_info);
 
-  title_->SetText(base::UTF8ToUTF16(identity_info.site_identity));
+  title_->SetText(presenter_->GetSiteOriginOrAppNameToDisplay());
 
   security_container_view_->RemoveAllChildViews();
   if (security_description->summary_style == SecuritySummaryColor::GREEN) {
@@ -576,7 +577,7 @@ std::unique_ptr<views::View> PageInfoMainView::CreateAboutThisSiteSection(
 
   PageInfoHoverButton* about_this_site_button = nullptr;
 
-  if (base::FeatureList::IsEnabled(page_info::kPageInfoAboutThisSiteMoreInfo)) {
+  if (page_info::IsMoreAboutThisSiteFeatureEnabled()) {
     const auto& description =
         info.has_description()
             ? base::UTF8ToUTF16(info.description().description())

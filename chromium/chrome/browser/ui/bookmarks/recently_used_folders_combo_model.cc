@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 
 #include "base/metrics/user_metrics.h"
 #include "base/observer_list.h"
+#include "base/ranges/algorithm.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -81,12 +82,12 @@ RecentlyUsedFoldersComboModel::RecentlyUsedFoldersComboModel(
     items_.erase(items_.begin() + kMaxMRUFolders, items_.end());
 
   // And put the bookmark bar and other nodes at the end of the list.
-  items_.push_back(Item(model->bookmark_bar_node(), Item::TYPE_NODE));
-  items_.push_back(Item(model->other_node(), Item::TYPE_NODE));
+  items_.emplace_back(model->bookmark_bar_node(), Item::TYPE_NODE);
+  items_.emplace_back(model->other_node(), Item::TYPE_NODE);
   if (model->mobile_node()->IsVisible())
-    items_.push_back(Item(model->mobile_node(), Item::TYPE_NODE));
-  items_.push_back(Item(NULL, Item::TYPE_SEPARATOR));
-  items_.push_back(Item(NULL, Item::TYPE_CHOOSE_ANOTHER_FOLDER));
+    items_.emplace_back(model->mobile_node(), Item::TYPE_NODE);
+  items_.emplace_back(nullptr, Item::TYPE_SEPARATOR);
+  items_.emplace_back(nullptr, Item::TYPE_CHOOSE_ANOTHER_FOLDER);
 }
 
 RecentlyUsedFoldersComboModel::~RecentlyUsedFoldersComboModel() {
@@ -125,8 +126,7 @@ absl::optional<size_t> RecentlyUsedFoldersComboModel::GetDefaultIndex() const {
   // that we don't remove `parent_node_`.
   // TODO(pbos): Look at returning -1 here if there's no default index. Right
   // now a lot of code in Combobox assumes an index within `items_` bounds.
-  auto it = std::find(items_.begin(), items_.end(),
-                      Item(parent_node_, Item::TYPE_NODE));
+  auto it = base::ranges::find(items_, Item(parent_node_, Item::TYPE_NODE));
   return it == items_.end() ? 0 : static_cast<int>(it - items_.begin());
 }
 
@@ -147,7 +147,8 @@ void RecentlyUsedFoldersComboModel::BookmarkNodeMoved(
 void RecentlyUsedFoldersComboModel::BookmarkNodeAdded(
     BookmarkModel* model,
     const BookmarkNode* parent,
-    size_t index) {}
+    size_t index,
+    bool added_by_user) {}
 
 void RecentlyUsedFoldersComboModel::OnWillRemoveBookmarks(
     BookmarkModel* model,
@@ -232,8 +233,7 @@ const BookmarkNode* RecentlyUsedFoldersComboModel::GetNodeAt(size_t index) {
 }
 
 void RecentlyUsedFoldersComboModel::RemoveNode(const BookmarkNode* node) {
-  auto it =
-      std::find(items_.begin(), items_.end(), Item(node, Item::TYPE_NODE));
+  auto it = base::ranges::find(items_, Item(node, Item::TYPE_NODE));
   if (it != items_.end())
     items_.erase(it);
 }

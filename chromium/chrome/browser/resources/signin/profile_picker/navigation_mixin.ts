@@ -1,8 +1,8 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {dedupingMixin, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {isBrowserSigninAllowed, isForceSigninEnabled, isSignInProfileCreationSupported} from './policy_helper.js';
@@ -77,11 +77,16 @@ if (!history.state || !history.state.route || !history.state.step) {
   const path = window.location.pathname.replace(/\/$/, '');
   switch (path) {
     case `/${Routes.NEW_PROFILE}`:
+      assert(history.length === 1);
+      // Enable accessing the main page when navigating back.
       history.replaceState(
+          {route: Routes.MAIN, step: computeStep(Routes.MAIN), isFirst: true},
+          '', '/');
+      history.pushState(
           {
             route: Routes.NEW_PROFILE,
             step: computeStep(Routes.NEW_PROFILE),
-            isFirst: true,
+            isFirst: false,
           },
           '', path);
       break;
@@ -172,17 +177,10 @@ export function navigateTo(route: Routes) {
 }
 
 /**
- * Navigates to the previous route if it belongs to the profile picker
- * otherwise to the main route.
+ * Navigates to the previous route if it belongs to the profile picker.
  */
 export function navigateToPreviousRoute() {
-  if (hasPreviousRoute()) {
-    window.history.back();
-  } else {
-    // This can happen if the profile creation flow is opened directly from the
-    // profile menu.
-    navigateTo(Routes.MAIN);
-  }
+  window.history.back();
 }
 
 /**

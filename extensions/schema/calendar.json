@@ -43,23 +43,6 @@
         }
       },
       {
-        "id": "EventException",
-        "type": "object",
-        "description": "A pattern describing how a event exception occurs. Used during import and create.",
-        "properties": {
-          "exceptionDate": {
-            "type": "number",
-            "optional": true,
-            "description": "The date an exception should be added to. In milliseconds since the epoch."
-          },
-          "cancelled": {
-            "type": "boolean",
-            "optional": true,
-            "description": "If a certain instance of recurring event is cancelled."
-          }
-        }
-      },
-      {
         "id": "CreateNotificationRow",
         "type": "object",
         "description": "An object describing notification to be created during event creation.",
@@ -303,7 +286,7 @@
             "description": "The recurring rule. In iCalendar format."
           },
           "recurrenceExceptions": {
-            "description": "List of recurrence exceptions.",
+            "description": "List of recurrence exceptions. Either cancelled instances or moved.",
             "type": "array",
             "optional": true,
             "items": {
@@ -481,21 +464,12 @@
             "optional": true,
             "description": "The organizer of the event."
           },
-          "eventExceptions": {
+          "recurrenceExceptions": {
             "description": "List of recurrence exceptions.",
             "type": "array",
             "optional": true,
             "items": {
-              "type": "object",
-              "properties": {
-                "exception": {
-                  "$ref": "EventException"
-                },
-                "exception_event": {
-                  "optional": true,
-                  "$ref": "CreateDetails"
-                }
-              }
+              "$ref": "RecurrenceException"
             }
           },
           "notifications": {
@@ -693,7 +667,6 @@
             "description": "The ctag field of the CalDAV calendar."
           },
           "supportedCalendarComponent": {
-            "optional": true,
             "$ref": "SupportedCalendarComponents"
           }
         }
@@ -762,7 +735,6 @@
             "description": "The timezone of the calendar."
           },
           "supportedCalendarComponent": {
-            "optional": true,
             "$ref": "SupportedCalendarComponents"
           }
         }
@@ -1075,6 +1047,54 @@
               "name": "result",
               "$ref": "CalendarEvent",
               "description": "The calendar event after removing the event exception."
+            }
+          ]
+        }
+      },
+      {
+        "name": "updateRecurrenceException",
+        "type": "function",
+        "description": "Updates the recurrence exception of an event. Specify only the properties that you want to change. Unspecified properties will be left unchanged.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "recurrenceId"
+          },
+          {
+            "type": "object",
+            "name": "changes",
+            "properties": {
+              "cancelled": {
+                "type": "boolean",
+                "optional": true,
+                "description": "If a certain instance of recurring event is cancelled."
+              },
+              "date": {
+                "type": "number",
+                "optional": true,
+                "description": "The date of a recurring event that an exception should be added to. In milliseconds since the epoch."
+              },
+              "exception_event_id": {
+                "type": "string",
+                "optional": true,
+                "description": "The id of the event that serves as exception to the event in a recurrence series."
+              },
+              "parent_event_id": {
+                "type": "string",
+                "optional": true,
+                "description": "The id of the event that is parent to all the others events in the recurrence series."
+              }
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "CalendarEvent",
+              "description": "The calendar event after updating the event exception."
             }
           ]
         }

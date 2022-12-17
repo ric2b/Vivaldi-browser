@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,11 +17,13 @@ import androidx.annotation.VisibleForTesting;
 import androidx.core.view.ViewCompat;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ObserverList;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
+import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.UrlBar.UrlTextChangeListener;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
@@ -35,6 +37,8 @@ import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProc
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.carousel.BaseCarouselSuggestionItemViewBuilder;
 import org.chromium.chrome.browser.omnibox.suggestions.carousel.BaseCarouselSuggestionViewBinder;
+import org.chromium.chrome.browser.omnibox.suggestions.dividerline.DividerLineView;
+import org.chromium.chrome.browser.omnibox.suggestions.dividerline.DividerLineViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.entity.EntitySuggestionViewBinder;
@@ -79,6 +83,8 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
     private final @NonNull AutocompleteMediator mMediator;
     private final @NonNull Supplier<ModalDialogManager> mModalDialogManagerSupplier;
     private @Nullable OmniboxSuggestionsDropdown mDropdown;
+    private @NonNull ObserverList<OmniboxSuggestionsDropdownScrollListener> mScrollListenerList =
+            new ObserverList<>();
 
     // Vivaldi
     private SearchEngineSuggestionView mSearchEngineSuggestionView;
@@ -96,7 +102,8 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
             @NonNull Callback<Tab> bringToForegroundCallback,
             @NonNull Supplier<TabWindowManager> tabWindowManagerSupplier,
             @NonNull BookmarkState bookmarkState, @NonNull JankTracker jankTracker,
-            @NonNull OmniboxPedalDelegate omniboxPedalDelegate) {
+            @NonNull OmniboxPedalDelegate omniboxPedalDelegate,
+            @NonNull OmniboxSuggestionsDropdownScrollListener scrollListener) {
         mParent = parent;
         mModalDialogManagerSupplier = modalDialogManagerSupplier;
         Context context = parent.getContext();
@@ -114,7 +121,14 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
                 tabWindowManagerSupplier, bookmarkState, jankTracker, omniboxPedalDelegate);
         mMediator.initDefaultProcessors();
 
-        listModel.set(SuggestionListProperties.OBSERVER, mMediator);
+        mScrollListenerList.addObserver(scrollListener);
+        mScrollListenerList.addObserver(mMediator);
+        listModel.set(SuggestionListProperties.GESTURE_OBSERVER, mMediator);
+        listModel.set(SuggestionListProperties.DROPDOWN_HEIGHT_CHANGE_LISTENER,
+                mMediator::onSuggestionDropdownHeightChanged);
+        listModel.set(SuggestionListProperties.DROPDOWN_SCROLL_LISTENER, this::dropdownScrolled);
+        listModel.set(SuggestionListProperties.DROPDOWN_SCROLL_TO_TOP_LISTENER,
+                this::dropdownOverscrolledToTop);
 
         ViewProvider<SuggestionListViewHolder> viewProvider =
                 createViewProvider(context, listItems);
@@ -159,7 +173,9 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
 
                 // Start with visibility GONE to ensure that show() is called.
                 // http://crbug.com/517438
-                dropdown.getViewGroup().setVisibility(View.GONE);
+                if (!OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls()) {
+                    dropdown.getViewGroup().setVisibility(View.GONE);
+                }
                 dropdown.getViewGroup().setClipToPadding(false);
 
                 OmniboxSuggestionsDropdownAdapter adapter =
@@ -216,10 +232,15 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
                         HeaderViewBinder::bind);
 
                 adapter.registerType(
-                        OmniboxSuggestionUiType.PEDAL_SUGGESTION,
-                        parent -> new PedalSuggestionView<View>(
-                                parent.getContext(), R.layout.omnibox_basic_suggestion),
-                        new PedalSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
+                    OmniboxSuggestionUiType.PEDAL_SUGGESTION,
+                    parent -> new PedalSuggestionView<View>(
+                            parent.getContext(), R.layout.omnibox_basic_suggestion),
+                    new PedalSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
+
+                adapter.registerType(
+                    OmniboxSuggestionUiType.DIVIDER_LINE,
+                    parent -> new DividerLineView(parent.getContext()),
+                    DividerLineViewBinder::bind);
                 // clang-format on
 
                 ViewGroup container = (ViewGroup) ((ViewStub) mParent.getRootView().findViewById(
@@ -250,6 +271,7 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
                     if (mSearchEngineSuggestionView != null) {
                         mSearchEngineSuggestionView.setLocationBarModel(mParent);
                         mSearchEngineSuggestionView.setLocationBarDataProvider(mLocationBarDataProvider);
+                        mMediator.setSearchEngineSuggestionView(mSearchEngineSuggestionView);
                     }
                 }
             }
@@ -268,11 +290,6 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
     @Override
     public void onUrlFocusChange(boolean hasFocus) {
         mMediator.onUrlFocusChange(hasFocus);
-
-        // Vivaldi - Handle the visibility of search engine suggestion layout as per url focus
-        if (BuildConfig.IS_VIVALDI && mSearchEngineSuggestionView != null)
-            mSearchEngineSuggestionView.setVisibility(
-                    hasFocus && showSearchEngineSuggestionBar() ? View.VISIBLE : View.GONE);
     }
 
     @Override
@@ -466,9 +483,28 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
         mMediator.stopAutocomplete(clearResults);
     }
 
+    /**
+     * Notify the {@link OmniboxSuggestionsDropdownScrollListener} that the dropdown is scrolled.
+     */
+    public void dropdownScrolled() {
+        for (OmniboxSuggestionsDropdownScrollListener listener : mScrollListenerList) {
+            listener.onSuggestionDropdownScroll();
+        }
+    }
+
+    /**
+     * Notify the {@link OmniboxSuggestionsDropdownScrollListener} that the dropdown is scrolled to
+     * the top.
+     */
+    public void dropdownOverscrolledToTop() {
+        for (OmniboxSuggestionsDropdownScrollListener listener : mScrollListenerList) {
+            listener.onSuggestionDropdownOverscrolledToTop();
+        }
+    }
+
     /** Vivaldi */
     public boolean showSearchEngineSuggestionBar() {
         return SharedPreferencesManager.getInstance().readBoolean(
-                "show_search_engine_suggestion", true);
+                "show_search_engine_suggestion", false);
     }
 }

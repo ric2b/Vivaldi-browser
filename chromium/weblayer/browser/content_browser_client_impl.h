@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -220,6 +220,7 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
 #endif  // BUILDFLAG(IS_ANDROID)
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
+  bool ShouldSandboxNetworkService() override;
 #if BUILDFLAG(ENABLE_ARCORE)
   content::XrIntegrationClient* GetXrIntegrationClient() override;
 #endif  // BUILDFLAG(ENABLE_ARCORE)

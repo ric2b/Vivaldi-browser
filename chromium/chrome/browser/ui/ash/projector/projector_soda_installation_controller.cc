@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/speech/on_device_speech_recognizer.h"
+#include "chrome/browser/speech/speech_recognition_recognizer_client_impl.h"
 #include "components/prefs/pref_service.h"
 #include "components/soda/constants.h"
 #include "components/soda/soda_installer.h"
@@ -40,8 +40,8 @@ ProjectorSodaInstallationController::ProjectorSodaInstallationController(
   soda_installer_observation_.Observe(speech::SodaInstaller::GetInstance());
   locale_change_observation_.Observe(ash::LocaleUpdateController::Get());
 
-  if (!OnDeviceSpeechRecognizer::IsOnDeviceSpeechRecognizerAvailable(
-          GetLocale())) {
+  if (!SpeechRecognitionRecognizerClientImpl::
+          IsOnDeviceSpeechRecognizerAvailable(GetLocale())) {
     projector_controller_->OnSpeechRecognitionAvailabilityChanged(
         ash::SpeechRecognitionAvailability::kSodaNotInstalled);
     return;

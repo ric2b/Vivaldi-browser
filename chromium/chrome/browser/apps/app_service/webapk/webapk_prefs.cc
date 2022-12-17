@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,17 +46,16 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
 void AddWebApk(Profile* profile,
                const std::string& app_id,
                const std::string& package_name) {
-  DictionaryPrefUpdate generated_webapks(profile->GetPrefs(),
+  ScopedDictPrefUpdate generated_webapks(profile->GetPrefs(),
                                          kGeneratedWebApksPref);
 
-  generated_webapks->SetPath({app_id, kPackageNameKey},
-                             base::Value(package_name));
+  generated_webapks->EnsureDict(app_id)->Set(kPackageNameKey, package_name);
 }
 
 absl::optional<std::string> GetWebApkPackageName(Profile* profile,
                                                  const std::string& app_id) {
   const base::Value::Dict* app_dict =
-      profile->GetPrefs()->GetValueDict(kGeneratedWebApksPref).FindDict(app_id);
+      profile->GetPrefs()->GetDict(kGeneratedWebApksPref).FindDict(app_id);
   if (!app_dict) {
     return absl::nullopt;
   }
@@ -72,7 +71,7 @@ absl::optional<std::string> GetWebApkPackageName(Profile* profile,
 base::flat_set<std::string> GetWebApkAppIds(Profile* profile) {
   base::flat_set<std::string> ids;
   const base::Value::Dict& generated_webapks =
-      profile->GetPrefs()->GetValueDict(kGeneratedWebApksPref);
+      profile->GetPrefs()->GetDict(kGeneratedWebApksPref);
 
   for (const auto kv : generated_webapks) {
     ids.insert(kv.first);
@@ -85,7 +84,7 @@ base::flat_set<std::string> GetInstalledWebApkPackageNames(Profile* profile) {
   base::flat_set<std::string> package_names;
 
   const base::Value::Dict& generated_webapks =
-      profile->GetPrefs()->GetValueDict(kGeneratedWebApksPref);
+      profile->GetPrefs()->GetDict(kGeneratedWebApksPref);
 
   for (const auto kv : generated_webapks) {
     const std::string* package_name = kv.second.FindStringKey(kPackageNameKey);
@@ -99,15 +98,15 @@ base::flat_set<std::string> GetInstalledWebApkPackageNames(Profile* profile) {
 absl::optional<std::string> RemoveWebApkByPackageName(
     Profile* profile,
     const std::string& package_name) {
-  DictionaryPrefUpdate generated_webapks(profile->GetPrefs(),
+  ScopedDictPrefUpdate generated_webapks(profile->GetPrefs(),
                                          kGeneratedWebApksPref);
 
-  for (auto kv : generated_webapks->DictItems()) {
+  for (auto kv : *generated_webapks) {
     const std::string* item_package_name =
         kv.second.FindStringKey(kPackageNameKey);
     if (item_package_name && *item_package_name == package_name) {
       std::string app_id = kv.first;
-      generated_webapks->RemoveKey(kv.first);
+      generated_webapks->Remove(kv.first);
       return app_id;
     }
   }
@@ -118,18 +117,17 @@ absl::optional<std::string> RemoveWebApkByPackageName(
 void SetUpdateNeededForApp(Profile* profile,
                            const std::string& app_id,
                            bool update_needed) {
-  DictionaryPrefUpdate generated_webapks(profile->GetPrefs(),
+  ScopedDictPrefUpdate generated_webapks(profile->GetPrefs(),
                                          kGeneratedWebApksPref);
-  if (generated_webapks->FindKey(app_id)) {
-    generated_webapks->SetPath({app_id, kUpdateNeededKey},
-                               base::Value(update_needed));
-  }
+  base::Value::Dict* app_dict = generated_webapks->FindDict(app_id);
+  if (app_dict)
+    app_dict->Set(kUpdateNeededKey, update_needed);
 }
 
 base::flat_set<std::string> GetUpdateNeededAppIds(Profile* profile) {
   base::flat_set<std::string> ids;
   const base::Value::Dict& generated_webapks =
-      profile->GetPrefs()->GetValueDict(kGeneratedWebApksPref);
+      profile->GetPrefs()->GetDict(kGeneratedWebApksPref);
 
   for (auto kv : generated_webapks) {
     absl::optional<bool> update_needed =

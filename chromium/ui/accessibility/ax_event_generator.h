@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,6 +31,7 @@ class AXLiveRegionTracker;
 class AX_EXPORT AXEventGenerator : public AXTreeObserver {
  public:
   enum class Event : int32_t {
+    NONE,
     ACCESS_KEY_CHANGED,
     ACTIVE_DESCENDANT_CHANGED,
     ALERT,
@@ -344,6 +345,8 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
           ancestor_ignored_changed_map);
   void PostprocessEvents();
 
+  AXLiveRegionTracker* GetOrCreateLiveRegionTracker();
+
   raw_ptr<AXTree> tree_ = nullptr;  // Not owned.
   std::map<AXNodeID, std::set<EventParams>> tree_events_;
 
@@ -368,6 +371,14 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
 AX_EXPORT std::ostream& operator<<(std::ostream& os,
                                    AXEventGenerator::Event event);
 AX_EXPORT const char* ToString(AXEventGenerator::Event event);
+
+// Parses the attribute and updates |result| and returns true if a match is
+// found, or returns false if no match is found.
+AX_EXPORT bool MaybeParseGeneratedEvent(const char* attribute,
+                                        AXEventGenerator::Event* result);
+
+// Does a NOTREACHED if no match is found.
+AX_EXPORT AXEventGenerator::Event ParseGeneratedEvent(const char* attribute);
 
 }  // namespace ui
 

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,8 +47,7 @@ class MetricsServiceUserDemographicsBrowserTest
       // Enable UMA and reporting of the synced user's birth year and gender.
       scoped_feature_list_.InitWithFeatures(
           // enabled_features =
-          {internal::kMetricsReportingFeature,
-           DemographicMetricsProvider::kDemographicMetricsReporting},
+          {internal::kMetricsReportingFeature, kDemographicMetricsReporting},
           // disabled_features =
           {});
     } else {
@@ -56,7 +55,7 @@ class MetricsServiceUserDemographicsBrowserTest
           // enabled_features =
           {internal::kMetricsReportingFeature},
           // disabled_features =
-          {DemographicMetricsProvider::kDemographicMetricsReporting});
+          {kDemographicMetricsReporting});
     }
   }
 

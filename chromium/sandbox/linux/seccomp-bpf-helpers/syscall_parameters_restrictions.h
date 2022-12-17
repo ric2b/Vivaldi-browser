@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -119,6 +119,9 @@ SANDBOX_EXPORT bpf_dsl::ResultExpr RestrictPtrace();
 
 // Restrict the flags argument for pkey_alloc. It's specified to always be 0.
 SANDBOX_EXPORT bpf_dsl::ResultExpr RestrictPkeyAllocFlags();
+
+// Restrict the which argument to getitimer() and setitimer().
+SANDBOX_EXPORT bpf_dsl::ResultExpr RestrictGoogle3Threading(int sysno);
 
 }  // namespace sandbox.
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,11 +78,9 @@ SecurityTokenSamlTest::SecurityTokenSamlTest()
                       &gaia_mixin_,
                       /*client_cert_authorities=*/{GetClientCertCaName()}) {
   if (GetParam()) {
-    scoped_feature_list_.InitAndEnableFeature(
-        ash::features::kUseAuthsessionAuthentication);
+    scoped_feature_list_.InitAndEnableFeature(ash::features::kUseAuthFactors);
   } else {
-    scoped_feature_list_.InitAndDisableFeature(
-        ash::features::kUseAuthsessionAuthentication);
+    scoped_feature_list_.InitAndDisableFeature(ash::features::kUseAuthFactors);
   }
   // Allow the forced installation of extensions in the background.
   needs_background_networking_ = true;

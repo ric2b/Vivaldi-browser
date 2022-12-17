@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,6 +35,7 @@
 #include "components/webapps/browser/banners/app_banner_settings_helper.h"
 #include "components/webapps/browser/features.h"
 #include "components/webapps/browser/installable/installable_data.h"
+#include "components/webapps/browser/installable/installable_manager.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/webapps_client.h"
 #include "content/public/browser/manifest_icon_downloader.h"
@@ -177,6 +178,27 @@ void AppBannerManagerAndroid::PerformInstallableWebAppCheck() {
     return;
   }
   AppBannerManager::PerformInstallableWebAppCheck();
+}
+
+void AppBannerManagerAndroid::PerformWorkerCheckForAmbientBadge() {
+  manager()->GetData(
+      ParamsToPerformWorkerCheck(),
+      base::BindOnce(
+          &AppBannerManagerAndroid::OnDidPerformWorkerCheckForAmbientBadge,
+          weak_factory_.GetWeakPtr()));
+}
+
+void AppBannerManagerAndroid::OnDidPerformWorkerCheckForAmbientBadge(
+    const InstallableData& data) {
+  if (!data.NoBlockingErrors()) {
+    return;
+  }
+
+  passed_worker_check_ = true;
+
+  if (state_ == State::PENDING_PROMPT_NOT_CANCELED) {
+    MaybeShowAmbientBadge();
+  }
 }
 
 void AppBannerManagerAndroid::ResetCurrentPageData() {
@@ -541,7 +563,11 @@ void AppBannerManagerAndroid::MaybeShowAmbientBadge() {
   if (infobar_visible || message_controller_.IsMessageEnqueued())
     return;
 
-  ShowAmbientBadge();
+  // Only show if it's native app, or the worker check already passed.
+  if (!features::SkipServiceWorkerForInstallPromotion() ||
+      passed_worker_check_ || native_app_data_) {
+    ShowAmbientBadge();
+  }
 }
 
 void AppBannerManagerAndroid::HideAmbientBadge() {
@@ -578,8 +604,8 @@ bool AppBannerManagerAndroid::IsWebAppConsideredInstalled() const {
   // one is in flight for the current site.
   return WebappsUtils::IsWebApkInstalled(web_contents()->GetBrowserContext(),
                                          manifest().start_url) ||
-         WebappsClient::Get()->IsInstallationInProgress(web_contents(),
-                                                        manifest_url_);
+         WebappsClient::Get()->IsInstallationInProgress(
+             web_contents(), manifest_url_, manifest_id_);
 }
 
 void AppBannerManagerAndroid::ShowAmbientBadge() {
@@ -632,6 +658,16 @@ JNI_AppBannerManager_GetInstallableWebAppName(
     const base::android::JavaParamRef<jobject>& java_web_contents) {
   return base::android::ConvertUTF16ToJavaString(
       env, AppBannerManager::GetInstallableWebAppName(
+               content::WebContents::FromJavaWebContents(java_web_contents)));
+}
+
+// static
+base::android::ScopedJavaLocalRef<jstring>
+JNI_AppBannerManager_GetInstallableWebAppManifestId(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& java_web_contents) {
+  return base::android::ConvertUTF8ToJavaString(
+      env, AppBannerManager::GetInstallableWebAppManifestId(
                content::WebContents::FromJavaWebContents(java_web_contents)));
 }
 

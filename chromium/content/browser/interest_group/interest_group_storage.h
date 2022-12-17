@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
@@ -17,6 +18,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
+#include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom-forward.h"
 #include "sql/database.h"
 #include "sql/statement.h"
 #include "url/gurl.h"
@@ -83,13 +85,12 @@ class CONTENT_EXPORT InterestGroupStorage {
   void RecordInterestGroupWin(const blink::InterestGroupKey& group_key,
                               const std::string& ad_json);
   // Records K-anonymity.
-  void UpdateKAnonymity(const StorageInterestGroup::KAnonymityData& data,
-                        const absl::optional<base::Time>& update_sent_time);
+  void UpdateKAnonymity(const StorageInterestGroup::KAnonymityData& data);
 
   // Gets the last time that the key was reported to the k-anonymity server.
-  base::Time GetLastKAnonymityReported(const GURL& key);
+  absl::optional<base::Time> GetLastKAnonymityReported(const std::string& key);
   // Updates the last time that the key was reported to the k-anonymity server.
-  void UpdateLastKAnonymityReported(const GURL& key);
+  void UpdateLastKAnonymityReported(const std::string& key);
 
   // Gets a single interest group.
   absl::optional<StorageInterestGroup> GetInterestGroup(
@@ -116,13 +117,25 @@ class CONTENT_EXPORT InterestGroupStorage {
   // will only appear once.
   std::vector<url::Origin> GetAllInterestGroupJoiningOrigins();
 
-  // Clear out storage for the matching owning storage key. If the callback is
-  // empty then apply to all storage keys.
+  // Clear out storage for the matching owning storage key.
   void DeleteInterestGroupData(
       StoragePartition::StorageKeyMatcherFunction storage_key_matcher);
+  // Clear out all interest group storage including k-anonymity store.
+  void DeleteAllInterestGroupData();
   // Update the interest group priority.
   void SetInterestGroupPriority(const blink::InterestGroupKey& group_key,
                                 double priority);
+
+  // Merges `update_priority_signals_overrides` with the currently stored
+  // priority signals of `group`. Doesn't take the cached overrides from the
+  // caller, which may already have them, in favor of reading them from the
+  // database, as the values may have been updated on disk since they were read
+  // by the caller.
+  void UpdateInterestGroupPriorityOverrides(
+      const blink::InterestGroupKey& group_key,
+      base::flat_map<std::string,
+                     auction_worklet::mojom::PrioritySignalsDoublePtr>
+          update_priority_signals_overrides);
 
   std::vector<StorageInterestGroup> GetAllInterestGroupsUnfilteredForTesting();
 

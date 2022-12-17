@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,6 +44,16 @@ apps::IconKeyPtr StructTraits<crosapi::mojom::AppDataView,
                                                r->icon_key.value().resource_id,
                                                r->icon_key.value().icon_effects)
              : nullptr;
+}
+
+// static
+absl::optional<std::string>
+StructTraits<crosapi::mojom::AppDataView, apps::AppPtr>::deprecated_policy_id(
+    const apps::AppPtr& r) {
+  if (!r->policy_ids.empty()) {
+    return r->policy_ids[0];
+  }
+  return {};
 }
 
 // static
@@ -178,8 +188,12 @@ bool StructTraits<crosapi::mojom::AppDataView, apps::AppPtr>::Read(
   if (!data.ReadInstallReason(&install_reason))
     return false;
 
-  absl::optional<std::string> policy_id;
-  if (!data.ReadPolicyId(&policy_id))
+  absl::optional<std::string> deprecated_policy_id;
+  if (!data.ReadDeprecatedPolicyId(&deprecated_policy_id))
+    return false;
+
+  std::vector<std::string> policy_ids;
+  if (!data.ReadPolicyIds(&policy_ids))
     return false;
 
   crosapi::mojom::OptionalBool recommendable;
@@ -249,13 +263,19 @@ bool StructTraits<crosapi::mojom::AppDataView, apps::AppPtr>::Read(
   app->publisher_id = publisher_id;
   app->description = description;
   app->version = version;
-  app->additional_search_terms = additional_search_terms;
+  app->additional_search_terms = std::move(additional_search_terms);
   if (icon_key)
     app->icon_key = std::move(*icon_key);
   app->last_launch_time = last_launch_time;
   app->install_time = install_time;
   app->install_reason = install_reason;
-  app->policy_id = policy_id;
+
+  if (!policy_ids.empty()) {
+    app->policy_ids = std::move(policy_ids);
+  } else if (deprecated_policy_id) {
+    app->policy_ids = {std::move(*deprecated_policy_id)};
+  }
+
   app->recommendable = ConvertMojomOptionalBoolToOptionalBool(recommendable);
   app->searchable = ConvertMojomOptionalBoolToOptionalBool(searchable);
   app->show_in_launcher =
@@ -430,6 +450,10 @@ EnumTraits<crosapi::mojom::InstallReason, apps::InstallReason>::ToMojom(
       return crosapi::mojom::InstallReason::kSync;
     case apps::InstallReason::kUser:
       return crosapi::mojom::InstallReason::kUser;
+    case apps::InstallReason::kKiosk:
+      return crosapi::mojom::InstallReason::kKiosk;
+    case apps::InstallReason::kCommandLine:
+      return crosapi::mojom::InstallReason::kCommandLine;
   }
 
   NOTREACHED();
@@ -462,6 +486,12 @@ bool EnumTraits<crosapi::mojom::InstallReason, apps::InstallReason>::FromMojom(
       return true;
     case crosapi::mojom::InstallReason::kSubApp:
       *output = apps::InstallReason::kSubApp;
+      return true;
+    case crosapi::mojom::InstallReason::kKiosk:
+      *output = apps::InstallReason::kKiosk;
+      return true;
+    case crosapi::mojom::InstallReason::kCommandLine:
+      *output = apps::InstallReason::kCommandLine;
       return true;
   }
 
@@ -704,26 +734,40 @@ bool EnumTraits<crosapi::mojom::UninstallSource, apps::UninstallSource>::
   return false;
 }
 
+// static
+crosapi::mojom::OptionalBool StructTraits<
+    crosapi::mojom::CapabilityAccessDataView,
+    apps::CapabilityAccessPtr>::camera(const apps::CapabilityAccessPtr& r) {
+  return ConvertOptionalBoolToMojomOptionalBool(r->camera);
+}
+
+// static
+crosapi::mojom::OptionalBool StructTraits<
+    crosapi::mojom::CapabilityAccessDataView,
+    apps::CapabilityAccessPtr>::microphone(const apps::CapabilityAccessPtr& r) {
+  return ConvertOptionalBoolToMojomOptionalBool(r->microphone);
+}
+
 bool StructTraits<crosapi::mojom::CapabilityAccessDataView,
-                  apps::mojom::CapabilityAccessPtr>::
+                  apps::CapabilityAccessPtr>::
     Read(crosapi::mojom::CapabilityAccessDataView data,
-         apps::mojom::CapabilityAccessPtr* out) {
+         apps::CapabilityAccessPtr* out) {
   std::string app_id;
   if (!data.ReadAppId(&app_id))
     return false;
 
-  apps::mojom::OptionalBool camera;
+  crosapi::mojom::OptionalBool camera;
   if (!data.ReadCamera(&camera))
     return false;
 
-  apps::mojom::OptionalBool microphone;
+  crosapi::mojom::OptionalBool microphone;
   if (!data.ReadMicrophone(&microphone))
     return false;
 
-  auto capability_access = apps::mojom::CapabilityAccess::New();
-  capability_access->app_id = std::move(app_id);
-  capability_access->camera = std::move(camera);
-  capability_access->microphone = std::move(microphone);
+  auto capability_access = std::make_unique<apps::CapabilityAccess>(app_id);
+  capability_access->camera = ConvertMojomOptionalBoolToOptionalBool(camera);
+  capability_access->microphone =
+      ConvertMojomOptionalBoolToOptionalBool(microphone);
   *out = std::move(capability_access);
   return true;
 }
@@ -894,6 +938,8 @@ EnumTraits<crosapi::mojom::LaunchSource, apps::LaunchSource>::ToMojom(
       return crosapi::mojom::LaunchSource::kFromProtocolHandler;
     case apps::LaunchSource::kFromUrlHandler:
       return crosapi::mojom::LaunchSource::kFromUrlHandler;
+    // TODO(crbug.com/1343692): Make lock screen apps use lacros browser.
+    case apps::LaunchSource::kFromLockScreen:
     case apps::LaunchSource::kFromCommandLine:
     case apps::LaunchSource::kFromBackgroundMode:
       NOTREACHED();

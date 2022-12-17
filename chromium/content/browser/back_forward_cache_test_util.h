@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,9 @@ namespace content {
 class BackForwardCacheMetricsTestMatcher {
  protected:
   using UkmMetrics = ukm::TestUkmRecorder::HumanReadableUkmMetrics;
+
+  BackForwardCacheMetricsTestMatcher();
+  ~BackForwardCacheMetricsTestMatcher();
 
   // Disables checking metrics that are recorded regardless of the domains. By
   // default, this class' Expect* function checks the metrics both for the

@@ -1,13 +1,9 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {isMac} from 'chrome://resources/js/cr.m.js';
-import {List} from 'chrome://resources/js/cr/ui/list.m.js';
-import {ListItem} from 'chrome://resources/js/cr/ui/list_item.m.js';
-import {ListSelectionController} from 'chrome://resources/js/cr/ui/list_selection_controller.m.js';
-import {ListSelectionModel} from 'chrome://resources/js/cr/ui/list_selection_model.m.js';
 
 import {FileType} from '../../../common/js/file_type.js';
 import {str, strf, util} from '../../../common/js/util.js';
@@ -20,6 +16,10 @@ import {A11yAnnounce} from './a11y_announce.js';
 import {DragSelector} from './drag_selector.js';
 import {FileListSelectionModel, FileListSingleSelectionModel} from './file_list_selection_model.js';
 import {FileTapHandler} from './file_tap_handler.js';
+import {List} from './list.js';
+import {ListItem} from './list_item.js';
+import {ListSelectionController} from './list_selection_controller.js';
+import {ListSelectionModel} from './list_selection_model.js';
 import {TableList} from './table/table_list.js';
 
 /**
@@ -471,6 +471,13 @@ filelist.updateListItemExternalProps = (li, externalProps, isTeamDriveRoot) => {
     iconDiv.classList.toggle('computers-root', !!externalProps.isMachineRoot);
     iconDiv.classList.toggle(
         'external-media-root', !!externalProps.isExternalMedia);
+  }
+
+  if (util.isInlineSyncStatusEnabled()) {
+    li.toggleAttribute(
+        'data-sync-status', externalProps.syncStatus !== 'not_found');
+    li.setAttribute('data-sync-status', externalProps.syncStatus);
+    // TODO(msalomao): set sync status aria-label.
   }
 };
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -85,6 +85,16 @@ struct CONTENT_EXPORT MediaStreamRequest {
   // If audio is requested, |exclude_system_audio| can indicate that
   // system-audio should nevertheless not be offered to the user.
   bool exclude_system_audio = false;
+
+  // Flag to indicate that the current tab should be excluded from the list of
+  // tabs offered to the user.
+  bool exclude_self_browser_surface = false;
+
+  // Flag to indicate a preference for which display surface type (screen,
+  // windows, or tabs) should be most prominently offered to the user. The
+  // browser may disregard this preference.
+  blink::mojom::PreferredDisplaySurface preferred_display_surface =
+      blink::mojom::PreferredDisplaySurface::NO_PREFERENCE;
 
   // Flag to indicate whether the request is for PTZ use.
   bool request_pan_tilt_zoom_permission;

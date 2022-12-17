@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,7 +87,7 @@ class MockBrowsingTopicsService : public BrowsingTopicsService {
 
   MOCK_METHOD(std::vector<blink::mojom::EpochTopicPtr>,
               GetBrowsingTopicsForJsApi,
-              (const url::Origin&, content::RenderFrameHost*),
+              (const url::Origin&, content::RenderFrameHost*, bool),
               (override));
   MOCK_METHOD(void,
               GetBrowsingTopicsStateForWebUi,

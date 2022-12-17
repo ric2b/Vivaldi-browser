@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,8 +13,10 @@
 #include "base/notreached.h"
 #include "components/autofill/core/browser/form_data_importer.h"
 #include "components/autofill/core/browser/logging/log_router.h"
+#import "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/common/autofill_prefs.h"
+#import "components/autofill/ios/browser/autofill_driver_ios.h"
 #include "components/autofill/ios/browser/autofill_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/security_state/ios/security_state_utils.h"
@@ -106,8 +108,15 @@ WebViewAutofillClientIOS::GetAutocompleteHistoryManager() {
   return autocomplete_history_manager_;
 }
 
+CreditCardCVCAuthenticator* WebViewAutofillClientIOS::GetCVCAuthenticator() {
+  if (!cvc_authenticator_) {
+    cvc_authenticator_ = std::make_unique<CreditCardCVCAuthenticator>(this);
+  }
+  return cvc_authenticator_.get();
+}
+
 PrefService* WebViewAutofillClientIOS::GetPrefs() {
-  return const_cast<PrefService*>(base::as_const(*this).GetPrefs());
+  return const_cast<PrefService*>(std::as_const(*this).GetPrefs());
 }
 
 const PrefService* WebViewAutofillClientIOS::GetPrefs() const {
@@ -148,8 +157,14 @@ AddressNormalizer* WebViewAutofillClientIOS::GetAddressNormalizer() {
   return nullptr;
 }
 
-const GURL& WebViewAutofillClientIOS::GetLastCommittedURL() const {
+const GURL& WebViewAutofillClientIOS::GetLastCommittedPrimaryMainFrameURL()
+    const {
   return web_state_->GetLastCommittedURL();
+}
+
+url::Origin WebViewAutofillClientIOS::GetLastCommittedPrimaryMainFrameOrigin()
+    const {
+  return url::Origin::Create(GetLastCommittedPrimaryMainFrameURL());
 }
 
 security_state::SecurityLevel
@@ -240,6 +255,36 @@ void WebViewAutofillClientIOS::ScanCreditCard(CreditCardScanCallback callback) {
   NOTREACHED();
 }
 
+bool WebViewAutofillClientIOS::IsFastCheckoutSupported() {
+  return false;
+}
+
+bool WebViewAutofillClientIOS::IsFastCheckoutTriggerForm(
+    const FormData& form,
+    const FormFieldData& field) {
+  return false;
+}
+
+bool WebViewAutofillClientIOS::FastCheckoutScriptSupportsConsentlessExecution(
+    const url::Origin& origin) {
+  return false;
+}
+
+bool WebViewAutofillClientIOS::
+    FastCheckoutClientSupportsConsentlessExecution() {
+  return false;
+}
+
+bool WebViewAutofillClientIOS::ShowFastCheckout(
+    base::WeakPtr<FastCheckoutDelegate> delegate) {
+  NOTREACHED();
+  return false;
+}
+
+void WebViewAutofillClientIOS::HideFastCheckout() {
+  NOTREACHED();
+}
+
 bool WebViewAutofillClientIOS::IsTouchToFillCreditCardSupported() {
   return false;
 }
@@ -304,7 +349,11 @@ bool WebViewAutofillClientIOS::IsPasswordManagerEnabled() {
 void WebViewAutofillClientIOS::PropagateAutofillPredictions(
     AutofillDriver* driver,
     const std::vector<FormStructure*>& forms) {
-  [bridge_ propagateAutofillPredictionsForForms:forms];
+  [bridge_
+      propagateAutofillPredictionsForForms:forms
+                                   inFrame:(static_cast<AutofillDriverIOS*>(
+                                                driver))
+                                               ->web_frame()];
 }
 
 void WebViewAutofillClientIOS::DidFillOrPreviewField(

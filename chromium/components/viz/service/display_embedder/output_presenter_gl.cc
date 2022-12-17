@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,16 +48,12 @@ std::unique_ptr<gfx::GpuFence> TakeGpuFence(gfx::GpuFenceHandle fence) {
 
 class PresenterImageGL : public OutputPresenter::Image {
  public:
-  PresenterImageGL() = default;
+  PresenterImageGL(
+      gpu::SharedImageFactory* factory,
+      gpu::SharedImageRepresentationFactory* representation_factory,
+      SkiaOutputSurfaceDependency* deps)
+      : Image(factory, representation_factory, deps) {}
   ~PresenterImageGL() override = default;
-
-  bool Initialize(gpu::SharedImageFactory* factory,
-                  gpu::SharedImageRepresentationFactory* representation_factory,
-                  const gfx::Size& size,
-                  const gfx::ColorSpace& color_space,
-                  ResourceFormat format,
-                  SkiaOutputSurfaceDependency* deps,
-                  uint32_t shared_image_usage);
 
   void BeginPresent() final;
   void EndPresent(gfx::GpuFenceHandle release_fence) final;
@@ -70,44 +66,7 @@ class PresenterImageGL : public OutputPresenter::Image {
     DCHECK(overlay_representation_);
     return overlay_representation_->color_space();
   }
-
- private:
-  std::unique_ptr<gpu::OverlayImageRepresentation> overlay_representation_;
-  std::unique_ptr<gpu::OverlayImageRepresentation::ScopedReadAccess>
-      scoped_overlay_read_access_;
-
-  int present_count_ = 0;
 };
-
-bool PresenterImageGL::Initialize(
-    gpu::SharedImageFactory* factory,
-    gpu::SharedImageRepresentationFactory* representation_factory,
-    const gfx::Size& size,
-    const gfx::ColorSpace& color_space,
-    ResourceFormat format,
-    SkiaOutputSurfaceDependency* deps,
-    uint32_t shared_image_usage) {
-  auto mailbox = gpu::Mailbox::GenerateForSharedImage();
-
-  if (!factory->CreateSharedImage(
-          mailbox, format, size, color_space, kTopLeft_GrSurfaceOrigin,
-          kPremul_SkAlphaType, deps->GetSurfaceHandle(), shared_image_usage)) {
-    DLOG(ERROR) << "CreateSharedImage failed.";
-    return false;
-  }
-
-  if (!Image::Initialize(factory, representation_factory, mailbox, deps))
-    return false;
-
-  overlay_representation_ = representation_factory->ProduceOverlay(mailbox);
-
-  if (!overlay_representation_) {
-    LOG(ERROR) << "ProduceOverlay() failed";
-    return false;
-  }
-
-  return true;
-}
 
 void PresenterImageGL::BeginPresent() {
   if (++present_count_ != 1) {
@@ -156,7 +115,8 @@ gl::GLImage* PresenterImageGL::GetGLImage(
 
 // static
 const uint32_t OutputPresenterGL::kDefaultSharedImageUsage =
-    gpu::SHARED_IMAGE_USAGE_SCANOUT | gpu::SHARED_IMAGE_USAGE_DISPLAY |
+    gpu::SHARED_IMAGE_USAGE_SCANOUT | gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+    gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE |
     gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT;
 
 // static
@@ -185,8 +145,8 @@ std::unique_ptr<OutputPresenterGL> OutputPresenterGL::Create(
     return nullptr;
   // TODO(https://crbug.com/1012401): don't depend on GL.
   auto gl_surface = base::MakeRefCounted<gl::GLSurfaceEGLSurfaceControl>(
-      gl::GLSurfaceEGL::GetGLDisplayEGL(), window,
-      base::ThreadTaskRunnerHandle::Get());
+      deps->GetSharedContextState()->display()->GetAs<gl::GLDisplayEGL>(),
+      window, base::ThreadTaskRunnerHandle::Get());
   if (!gl_surface->Initialize(gl::GLSurfaceFormat())) {
     LOG(ERROR) << "Failed to initialize GLSurfaceEGLSurfaceControl.";
     return nullptr;
@@ -286,10 +246,11 @@ OutputPresenterGL::AllocateImages(gfx::ColorSpace color_space,
                                   size_t num_images) {
   std::vector<std::unique_ptr<Image>> images;
   for (size_t i = 0; i < num_images; ++i) {
-    auto image = std::make_unique<PresenterImageGL>();
-    if (!image->Initialize(shared_image_factory_,
-                           shared_image_representation_factory_, image_size,
-                           color_space, image_format_, dependency_,
+    auto image = std::make_unique<PresenterImageGL>(
+        shared_image_factory_, shared_image_representation_factory_,
+        dependency_);
+    if (!image->Initialize(image_size, color_space,
+                           SharedImageFormat::SinglePlane(image_format_),
                            shared_image_usage_)) {
       DLOG(ERROR) << "Failed to initialize image.";
       return {};
@@ -303,10 +264,10 @@ OutputPresenterGL::AllocateImages(gfx::ColorSpace color_space,
 std::unique_ptr<OutputPresenter::Image> OutputPresenterGL::AllocateSingleImage(
     gfx::ColorSpace color_space,
     gfx::Size image_size) {
-  auto image = std::make_unique<PresenterImageGL>();
-  if (!image->Initialize(shared_image_factory_,
-                         shared_image_representation_factory_, image_size,
-                         color_space, image_format_, dependency_,
+  auto image = std::make_unique<PresenterImageGL>(
+      shared_image_factory_, shared_image_representation_factory_, dependency_);
+  if (!image->Initialize(image_size, color_space,
+                         SharedImageFormat::SinglePlane(image_format_),
                          shared_image_usage_)) {
     DLOG(ERROR) << "Failed to initialize image.";
     return nullptr;
@@ -316,12 +277,15 @@ std::unique_ptr<OutputPresenter::Image> OutputPresenterGL::AllocateSingleImage(
 
 void OutputPresenterGL::SwapBuffers(
     SwapCompletionCallback completion_callback,
-    BufferPresentedCallback presentation_callback) {
+    BufferPresentedCallback presentation_callback,
+    gl::FrameData data) {
   if (supports_async_swap_) {
     gl_surface_->SwapBuffersAsync(std::move(completion_callback),
-                                  std::move(presentation_callback));
+                                  std::move(presentation_callback),
+                                  std::move(data));
   } else {
-    auto result = gl_surface_->SwapBuffers(std::move(presentation_callback));
+    auto result = gl_surface_->SwapBuffers(std::move(presentation_callback),
+                                           std::move(data));
     std::move(completion_callback).Run(gfx::SwapCompletionResult(result));
   }
 }
@@ -329,7 +293,8 @@ void OutputPresenterGL::SwapBuffers(
 void OutputPresenterGL::PostSubBuffer(
     const gfx::Rect& rect,
     SwapCompletionCallback completion_callback,
-    BufferPresentedCallback presentation_callback) {
+    BufferPresentedCallback presentation_callback,
+    gl::FrameData data) {
 #if BUILDFLAG(IS_MAC)
   gl_surface_->SetCALayerErrorCode(ca_layer_error_code_);
 #endif
@@ -337,11 +302,12 @@ void OutputPresenterGL::PostSubBuffer(
   if (supports_async_swap_) {
     gl_surface_->PostSubBufferAsync(
         rect.x(), rect.y(), rect.width(), rect.height(),
-        std::move(completion_callback), std::move(presentation_callback));
+        std::move(completion_callback), std::move(presentation_callback),
+        std::move(data));
   } else {
-    auto result = gl_surface_->PostSubBuffer(rect.x(), rect.y(), rect.width(),
-                                             rect.height(),
-                                             std::move(presentation_callback));
+    auto result = gl_surface_->PostSubBuffer(
+        rect.x(), rect.y(), rect.width(), rect.height(),
+        std::move(presentation_callback), std::move(data));
     std::move(completion_callback).Run(gfx::SwapCompletionResult(result));
   }
 }
@@ -376,13 +342,15 @@ void OutputPresenterGL::SchedulePrimaryPlane(
 
 void OutputPresenterGL::CommitOverlayPlanes(
     SwapCompletionCallback completion_callback,
-    BufferPresentedCallback presentation_callback) {
+    BufferPresentedCallback presentation_callback,
+    gl::FrameData data) {
   if (supports_async_swap_) {
     gl_surface_->CommitOverlayPlanesAsync(std::move(completion_callback),
-                                          std::move(presentation_callback));
+                                          std::move(presentation_callback),
+                                          std::move(data));
   } else {
-    auto result =
-        gl_surface_->CommitOverlayPlanes(std::move(presentation_callback));
+    auto result = gl_surface_->CommitOverlayPlanes(
+        std::move(presentation_callback), std::move(data));
     std::move(completion_callback).Run(gfx::SwapCompletionResult(result));
   }
 }
@@ -412,7 +380,6 @@ void OutputPresenterGL::ScheduleOverlayPlane(
       LOG_IF(FATAL, !overlay_plane_candidate.color.has_value())
           << "Solid color quads must have color set.";
     }
-    CHECK(!overlay_plane_candidate.gpu_fence_id);
 
     if (acquire_fence && !acquire_fence->GetGpuFenceHandle().is_null()) {
       CHECK(access);
@@ -436,7 +403,7 @@ void OutputPresenterGL::ScheduleOverlayPlane(
         gl_image, std::move(acquire_fence),
         gfx::OverlayPlaneData(
             overlay_plane_candidate.plane_z_order,
-            overlay_plane_candidate.transform,
+            absl::get<gfx::OverlayTransform>(overlay_plane_candidate.transform),
             overlay_plane_candidate.display_rect,
             overlay_plane_candidate.uv_rect, !overlay_plane_candidate.is_opaque,
             ToEnclosingRect(overlay_plane_candidate.damage_rect),
@@ -445,7 +412,8 @@ void OutputPresenterGL::ScheduleOverlayPlane(
             overlay_plane_candidate.rounded_corners,
             overlay_plane_candidate.color_space,
             overlay_plane_candidate.hdr_metadata, overlay_plane_candidate.color,
-            overlay_plane_candidate.is_solid_color));
+            overlay_plane_candidate.is_solid_color,
+            overlay_plane_candidate.clip_rect));
   }
 #elif BUILDFLAG(IS_APPLE)
   gl_surface_->ScheduleCALayer(ui::CARendererLayerParams(

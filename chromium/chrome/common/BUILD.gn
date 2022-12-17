@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -34,7 +34,7 @@ grit("resources") {
 buildflag_header("buildflags") {
   header = "buildflags.h"
   flags = [
-    "BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED=$builtin_cert_verifier_policy_supported",
+    "CHROME_ENABLE_LOGGING_BY_DEFAULT=$chrome_enable_logging_by_default",
     "CHROME_ROOT_STORE_POLICY_SUPPORTED=$chrome_root_store_policy_supported",
     "ENABLE_BACKGROUND_MODE=$enable_background_mode",
     "ENABLE_BACKGROUND_CONTENTS=$enable_background_contents",
@@ -184,7 +184,6 @@ static_library("common_lib") {
     "//chrome/common/profiler",
     "//chrome/common/search:mojo_bindings",
     "//chrome/installer/util:with_no_strings",
-    "//components/cast_certificate",
     "//components/cdm/common",
     "//components/client_hints/common",
     "//components/cloud_devices/common",
@@ -306,8 +305,6 @@ static_library("common_lib") {
       "extensions/extension_metrics.h",
       "extensions/manifest_handlers/app_launch_info.cc",
       "extensions/manifest_handlers/app_launch_info.h",
-      "extensions/manifest_handlers/linked_app_icons.cc",
-      "extensions/manifest_handlers/linked_app_icons.h",
       "extensions/manifest_handlers/minimum_chrome_version_checker.cc",
       "extensions/manifest_handlers/minimum_chrome_version_checker.h",
       "extensions/manifest_handlers/natively_connectable_handler.cc",
@@ -586,7 +583,6 @@ static_library("constants") {
   ]
 
   deps = [
-    ":channel_info",
     ":version_header",
     "//base",
     "//base/third_party/dynamic_annotations",
@@ -629,6 +625,7 @@ static_library("constants") {
     public_deps += [ "//chromeos/crosapi/mojom" ]
   } else if (is_linux || is_chromeos) {
     sources += [ "chrome_paths_linux.cc" ]
+    deps += [ ":channel_info" ]
   }
   if (is_mac) {
     sources += [ "chrome_paths_mac.mm" ]
@@ -728,7 +725,7 @@ mojom("mojo_bindings") {
     "sync_encryption_keys_extension.mojom",
   ]
 
-  deps = []
+  deps = [ "//components/lens:lens_mojo" ]
 
   if (is_android) {
     sources += [ "sandbox_status_extension_android.mojom" ]

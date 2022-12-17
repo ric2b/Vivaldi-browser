@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,9 +33,6 @@ class ConsolidatedConsentScreen
     // The user accepted terms of service in online demo mode.
     ACCEPTED_DEMO_ONLINE,
 
-    // The user accepted terms of service in offline demo mode.
-    ACCEPTED_DEMO_OFFLINE,
-
     // Consolidated Consent screen skipped.
     NOT_APPLICABLE,
   };
@@ -50,7 +47,7 @@ class ConsolidatedConsentScreen
   using TView = ConsolidatedConsentScreenView;
   using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;
 
-  ConsolidatedConsentScreen(ConsolidatedConsentScreenView* view,
+  ConsolidatedConsentScreen(base::WeakPtr<ConsolidatedConsentScreenView> view,
                             const ScreenExitCallback& exit_callback);
   ~ConsolidatedConsentScreen() override;
   ConsolidatedConsentScreen(const ConsolidatedConsentScreen&) = delete;
@@ -58,10 +55,6 @@ class ConsolidatedConsentScreen
       delete;
 
   static std::string GetResultString(Result result);
-
-  // Called when the screen is being destroyed. This should call Unbind() on the
-  // associated View if this class is destroyed before that.
-  void OnViewDestroyed(ConsolidatedConsentScreenView* view);
 
   void set_exit_callback_for_testing(const ScreenExitCallback& exit_callback) {
     exit_callback_ = exit_callback;
@@ -77,7 +70,8 @@ class ConsolidatedConsentScreen
   void OnAccept(bool enable_stats_usage,
                 bool enable_backup_restore,
                 bool enable_location_services,
-                const std::string& tos_content);
+                const std::string& tos_content,
+                bool enable_recovery);
 
   // arc::ArcOptInPreferenceHandlerObserver:
   void OnMetricsModeChanged(bool enabled, bool managed) override;
@@ -89,7 +83,7 @@ class ConsolidatedConsentScreen
   bool MaybeSkip(WizardContext& context) override;
   void ShowImpl() override;
   void HideImpl() override;
-  void OnUserActionDeprecated(const std::string& action_id) override;
+  void OnUserAction(const base::Value::List& args) override;
   ScreenExitCallback* exit_callback() { return &exit_callback_; }
 
  private:
@@ -129,7 +123,7 @@ class ConsolidatedConsentScreen
 
   std::unique_ptr<arc::ArcOptInPreferenceHandler> pref_handler_;
 
-  ConsolidatedConsentScreenView* view_ = nullptr;
+  base::WeakPtr<ConsolidatedConsentScreenView> view_;
 
   ScreenExitCallback exit_callback_;
 

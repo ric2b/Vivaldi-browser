@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,7 +54,6 @@ interface DeviceFactory {
   AddSharedMemoryVirtualDevice(
       media.mojom.VideoCaptureDeviceInfo device_info,
       pending_remote<Producer> producer,
-      bool send_buffer_handles_to_producer_as_raw_file_descriptors,
       pending_receiver<SharedMemoryVirtualDevice> virtual_device_receiver);
 
   // Similar to AddSharedMemoryVirtualDevice() but for virtual devices that

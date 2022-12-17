@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,6 +39,7 @@ enum class DrawableIcon {
   GROCERY = 13,
   VISIBILITY_ON = 14,
   VISIBILITY_OFF = 15,
+  INFO = 16,
 };
 
 }  // namespace autofill_assistant

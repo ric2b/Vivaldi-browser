@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/prefs/scoped_user_pref_update.h"
 #include "components/url_formatter/url_fixer.h"
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -41,9 +40,10 @@ int TypeToPrefValue(SessionStartupPref::Type type) {
   }
 }
 
-void URLListToPref(const base::Value* url_list, SessionStartupPref* pref) {
+void URLListToPref(const base::Value::List& url_list,
+                   SessionStartupPref* pref) {
   pref->urls.clear();
-  for (const base::Value& i : url_list->GetListDeprecated()) {
+  for (const base::Value& i : url_list) {
     const std::string* url_text = i.GetIfString();
     if (url_text) {
       GURL fixed_url = url_formatter::FixupURL(*url_text, std::string());
@@ -98,13 +98,10 @@ void SessionStartupPref::SetStartupPref(PrefService* prefs,
   if (!SessionStartupPref::URLsAreManaged(prefs)) {
     // Always save the URLs, that way the UI can remain consistent even if the
     // user changes the startup type pref.
-    // Ownership of the list Value retains with the pref service.
-    ListPrefUpdate update(prefs, prefs::kURLsToRestoreOnStartup);
-    base::Value* url_pref_list = update.Get();
-    DCHECK(url_pref_list);
-    url_pref_list->ClearList();
+    base::Value::List url_pref_list;
     for (GURL url : pref.urls)
-      url_pref_list->Append(url.spec());
+      url_pref_list.Append(url.spec());
+    prefs->SetList(prefs::kURLsToRestoreOnStartup, std::move(url_pref_list));
   }
 }
 
@@ -129,7 +126,8 @@ SessionStartupPref SessionStartupPref::GetStartupPref(
 
   // Always load the urls, even if the pref type isn't URLS. This way the
   // preferences panels can show the user their last choice.
-  const base::Value* url_list = prefs->GetList(prefs::kURLsToRestoreOnStartup);
+  const base::Value::List& url_list =
+      prefs->GetList(prefs::kURLsToRestoreOnStartup);
   URLListToPref(url_list, &pref);
 
   return pref;

@@ -1,10 +1,9 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/media/session/media_session_impl.h"
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -1119,6 +1118,7 @@ MediaSessionImpl::GetMediaSessionInfoSync() {
 
   info->muted = is_muted_;
   info->has_presentation = has_presentation_;
+  info->remote_playback_metadata = remote_playback_metadata_.Clone();
 
   return info;
 }
@@ -1619,6 +1619,12 @@ void MediaSessionImpl::OnAudioOutputSinkChangingDisabled() {
   RebuildAndNotifyMediaSessionInfoChanged();
 }
 
+void MediaSessionImpl::SetRemotePlaybackMetadata(
+    media_session::mojom::RemotePlaybackMetadataPtr metadata) {
+  remote_playback_metadata_ = std::move(metadata);
+  RebuildAndNotifyMediaSessionInfoChanged();
+}
+
 bool MediaSessionImpl::ShouldRouteAction(
     media_session::mojom::MediaSessionAction action) const {
   return routed_service_ && base::Contains(routed_service_->actions(), action);
@@ -1760,11 +1766,10 @@ std::string MediaSessionImpl::GetSharedAudioOutputDeviceId() const {
 
   auto& first = normal_players_.begin()->first;
   const auto& first_id = first.observer->GetAudioOutputSinkId(first.player_id);
-  if (std::all_of(normal_players_.cbegin(), normal_players_.cend(),
-                  [&first_id](const auto& player) {
-                    return player.first.observer->GetAudioOutputSinkId(
-                               player.first.player_id) == first_id;
-                  })) {
+  if (base::ranges::all_of(normal_players_, [&first_id](const auto& player) {
+        return player.first.observer->GetAudioOutputSinkId(
+                   player.first.player_id) == first_id;
+      })) {
     return first_id;
   }
 

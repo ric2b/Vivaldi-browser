@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -496,8 +496,10 @@ void BrowsingHistoryHandler::OnQueryComplete(
       BookmarkModelFactory::GetForBrowserContext(profile);
 
   const syncer::DeviceInfoTracker* tracker =
+      // Vivaldi: can be NULL when adding as panel in private mode (VB-88975)
+      DeviceInfoSyncServiceFactory::GetForProfile(profile) ?
       DeviceInfoSyncServiceFactory::GetForProfile(profile)
-          ->GetDeviceInfoTracker();
+          ->GetDeviceInfoTracker() : nullptr;
 
   // Convert the result vector into a ListValue.
   DCHECK(tracker);

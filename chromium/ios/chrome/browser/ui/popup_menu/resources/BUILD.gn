@@ -1,4 +1,4 @@
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -221,6 +221,15 @@ imageset("popup_menu_new_window") {
     "popup_menu_new_window.imageset/Contents.json",
     "popup_menu_new_window.imageset/popup_menu_new_window@2x.png",
     "popup_menu_new_window.imageset/popup_menu_new_window@3x.png",
+  ]
+}
+
+imageset("popup_menu_price_notifications") {
+  sources = [
+    "popup_menu_price_notifications.imageset/Contents.json",
+    "popup_menu_price_notifications.imageset/popup_menu_price_notifications.png",
+    "popup_menu_price_notifications.imageset/popup_menu_price_notifications@2x.png",
+    "popup_menu_price_notifications.imageset/popup_menu_price_notifications@3x.png",
   ]
 }
 

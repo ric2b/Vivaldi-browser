@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -14,10 +14,22 @@ import("//third_party/fuchsia-sdk/sdk/build/cipd.gni")
 
 visibility = [ ":*" ]
 
-if (is_chrome_branded) {
-  package_base_path = "chrome_internal/fuchsia"
+# Allows a builder to explicitly declare the CIPD path. The base path is what
+# comes after `.../p/` in the CIPD URL.
+declare_args() {
+  fuchsia_cipd_package_base_path = ""
+}
+
+# TODO(zijiehe): Eliminate the use of 'package_base_path' during the
+# refactoring.
+if (fuchsia_cipd_package_base_path == "") {
+  if (is_chrome_branded) {
+    package_base_path = "chrome_internal/fuchsia"
+  } else {
+    package_base_path = "chromium/fuchsia"
+  }
 } else {
-  package_base_path = "chromium/fuchsia"
+  package_base_path = fuchsia_cipd_package_base_path
 }
 
 # Archives related specifically to `fuchsia.web`
@@ -134,8 +146,6 @@ template("cipd_archive") {
 #              set contains:
 #     manifest_path: The path to the generated manifest JSON file.
 #     far_sources: An optional list of CFv2 test component .far files.
-#     cfv1_far_sources: An optional list of legacy CFv1 test component .far
-#                       files.
 #
 # Required parameters used by the cipd_archive template:
 #   "package_subdirectory",
@@ -168,8 +178,7 @@ template("cipd_test_archive") {
     # archive.
     sources = []
     foreach(test_set, test_sets) {
-      assert(
-          defined(test_set.far_sources) || defined(test_set.cfv1_far_sources))
+      assert(defined(test_set.far_sources))
       sources += [ test_set.manifest_path ]
       _manifest_contents = []
       if (defined(test_set.far_sources)) {
@@ -184,19 +193,6 @@ template("cipd_test_archive") {
           ]
         }
         sources += test_set.far_sources
-      }
-      if (defined(test_set.cfv1_far_sources)) {
-        foreach(source, test_set.cfv1_far_sources) {
-          package_name = get_path_info(source, "name")
-
-          _manifest_contents += [
-            {
-              package = package_name
-              component_name = package_name + ".cmx"
-            },
-          ]
-        }
-        sources += test_set.cfv1_far_sources
       }
       write_file(test_set.manifest_path, _manifest_contents, "json")
     }
@@ -280,9 +276,9 @@ cipd_test_archive("tests") {
 
   deps = [
     "//base:base_unittests_pkg",
-    "//fuchsia_web/runners:cast_runner_integration_tests_cfv1_pkg",
     "//fuchsia_web/runners:cast_runner_integration_tests_pkg",
     "//fuchsia_web/runners:web_runner_integration_tests_pkg",
+    "//fuchsia_web/webengine:web_engine_integration_tests_cfv1_pkg",
     "//fuchsia_web/webengine:web_engine_integration_tests_pkg",
     "//ipc:ipc_tests_pkg",
     "//media:media_unittests_pkg",
@@ -297,16 +293,14 @@ cipd_test_archive("tests") {
       far_sources = [
         "${root_gen_dir}/base/base_unittests/base_unittests.far",
         "${root_gen_dir}/fuchsia_web/runners/cast_runner_integration_tests/cast_runner_integration_tests.far",
+        "${root_gen_dir}/fuchsia_web/runners/web_runner_integration_tests/web_runner_integration_tests.far",
+        "${root_gen_dir}/fuchsia_web/webengine/web_engine_integration_tests/web_engine_integration_tests.far",
+        "${root_gen_dir}/fuchsia_web/webengine/web_engine_integration_tests_cfv1/web_engine_integration_tests_cfv1.far",
         "${root_gen_dir}/ipc/ipc_tests/ipc_tests.far",
         "${root_gen_dir}/media/media_unittests/media_unittests.far",
         "${root_gen_dir}/mojo/mojo_unittests/mojo_unittests.far",
         "${root_gen_dir}/skia/skia_unittests/skia_unittests.far",
         "${root_gen_dir}/third_party/blink/common/blink_common_unittests/blink_common_unittests.far",
-      ]
-      cfv1_far_sources = [
-        "${root_gen_dir}/fuchsia_web/runners/cast_runner_integration_tests_cfv1/cast_runner_integration_tests_cfv1.far",
-        "${root_gen_dir}/fuchsia_web/runners/web_runner_integration_tests/web_runner_integration_tests.far",
-        "${root_gen_dir}/fuchsia_web/webengine/web_engine_integration_tests/web_engine_integration_tests.far",
       ]
     },
     {
@@ -322,15 +316,15 @@ cipd_test_archive("tests") {
     },
     {
       manifest_path = "${target_gen_dir}/web_engine_tests_manifest.json"
-      cfv1_far_sources = [
+      far_sources = [
         "${root_gen_dir}/fuchsia_web/runners/web_runner_integration_tests/web_runner_integration_tests.far",
         "${root_gen_dir}/fuchsia_web/webengine/web_engine_integration_tests/web_engine_integration_tests.far",
+        "${root_gen_dir}/fuchsia_web/webengine/web_engine_integration_tests_cfv1/web_engine_integration_tests_cfv1.far",
       ]
     },
     {
       manifest_path = "${target_gen_dir}/cast_runner_tests_manifest.json"
       far_sources = [ "${root_gen_dir}/fuchsia_web/runners/cast_runner_integration_tests/cast_runner_integration_tests.far" ]
-      cfv1_far_sources = [ "${root_gen_dir}/fuchsia_web/runners/cast_runner_integration_tests_cfv1/cast_runner_integration_tests_cfv1.far" ]
     },
   ]
 }
@@ -344,7 +338,7 @@ _web_engine_debug_symbols_outdir = "${target_gen_dir}/${_web_engine_debug_symbol
 build_id_dir(_web_engine_build_ids_target) {
   testonly = true  # Some of the archives contain test packages.
   output_path = _web_engine_debug_symbols_outdir
-  deps = [ ":web_engine_archives_with_symbols" ]
+  deps = [ ":web_engine_archives_with_tests" ]
 }
 
 fuchsia_cipd_package(_web_engine_debug_symbols_archive_name) {
@@ -402,7 +396,7 @@ group("web_engine_production_archives") {
 }
 
 # Used by both the main group as well as :debug_symbols.
-group("web_engine_archives_with_symbols") {
+group("web_engine_archives_with_tests") {
   testonly = true  # tests and web_engine_shell are testonly.
   deps = [
     ":tests${_archive_suffix}",
@@ -411,21 +405,22 @@ group("web_engine_archives_with_symbols") {
   ]
 }
 
+# TODO(zijiehe): Rename to "cipd_yaml" when possible.
+# This target only creates yaml files and related archives for cipd rather
+# than executing the cipd instance to upload them.
+# Currently it's named as "cipd" to match the folder name which introduces
+# confusions.
 group("cipd") {
   testonly = true  # Some archives are testonly.
   deps = [
-    ":web_engine_archives_with_symbols",
+    ":chrome${_archive_suffix}",
+    ":chrome_debug_symbols",
+    ":web_engine_archives_with_tests",
 
     # Symbols are not uploaded for the following.
     ":chromedriver${_archive_suffix}",
     ":web_engine_debug_symbols",
   ]
-  if (!is_chrome_branded) {
-    deps += [
-      ":chrome${_archive_suffix}",
-      ":chrome_debug_symbols",
-    ]
-  }
   visibility = []  # Required to replace the file default.
   visibility = [ "//:gn_all" ]
 }

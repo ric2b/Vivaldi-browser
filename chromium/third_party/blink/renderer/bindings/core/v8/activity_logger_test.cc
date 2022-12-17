@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,7 +97,7 @@ class ActivityLoggerTest : public testing::Test {
   }
 
   void ExecuteScriptInIsolatedWorld(const String& script) const {
-    v8::HandleScope scope(v8::Isolate::GetCurrent());
+    v8::HandleScope scope(local_frame_->DomWindow()->GetIsolate());
     ClassicScript::CreateUnspecifiedScript(script)
         ->RunScriptInIsolatedWorldAndReturnValue(local_frame_->DomWindow(),
                                                  kIsolatedWorldId);

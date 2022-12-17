@@ -150,3 +150,9 @@ void DesktopWallpaperDataClassHandlerWin::GetDataOnFileThread(
           base::Unretained(this), std::move(image_data), std::move(file_path),
           std::move(callback)));
 }
+
+std::string DesktopWallpaperDataClassHandlerWin::GetMimetype(
+    Profile* profile,
+    const std::string& data_id) {
+  return vivaldi_data_url_utils::kMimeTypePNG;
+}

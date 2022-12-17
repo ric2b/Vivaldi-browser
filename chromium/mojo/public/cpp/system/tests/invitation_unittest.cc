@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,12 @@
 #include <utility>
 
 #include "base/base_paths.h"
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
@@ -19,6 +21,8 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
+#include "mojo/core/embedder/embedder.h"
+#include "mojo/core/test/test_switches.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "mojo/public/cpp/system/platform_handle.h"
@@ -106,6 +110,17 @@ class InvitationCppTest : public testing::Test,
         break;
       }
 #endif  //  !BUILDFLAG(IS_FUCHSIA)
+    }
+
+    std::string enable_features;
+    std::string disable_features;
+    base::FeatureList::GetInstance()->GetCommandLineFeatureOverrides(
+        &enable_features, &disable_features);
+    command_line.AppendSwitchASCII(switches::kEnableFeatures, enable_features);
+    command_line.AppendSwitchASCII(switches::kDisableFeatures,
+                                   disable_features);
+    if (invitation_type == InvitationType::kIsolated) {
+      command_line.AppendSwitch(test_switches::kMojoIsBroker);
     }
 
     child_process_ = base::SpawnMultiProcessTestChild(
@@ -267,6 +282,13 @@ DEFINE_TEST_CLIENT(CppSendWithMultiplePipesClient) {
 }
 
 TEST(InvitationCppTest_NoParam, SendIsolatedInvitationWithDuplicateName) {
+  if (mojo::core::IsMojoIpczEnabled()) {
+    // This feature is not particularly useful in a world where isolated
+    // connections are only supported between broker nodes.
+    GTEST_SKIP() << "MojoIpcz does not support multiple isolated invitations "
+                 << "between the same two nodes.";
+  }
+
   base::test::TaskEnvironment task_environment;
   PlatformChannel channel1;
   PlatformChannel channel2;

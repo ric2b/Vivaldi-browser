@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -110,6 +110,20 @@ void CallReverseReplyToReadDir(uint64_t cookie,
   }
 }
 
+void ReplyToReadDir2(dbus::MethodCall* method_call,
+                     dbus::ExportedObject::ResponseSender sender,
+                     fusebox::ReadDir2ResponseProto response_proto) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  std::unique_ptr<dbus::Response> response =
+      dbus::Response::FromMethodCall(method_call);
+  dbus::MessageWriter writer(response.get());
+
+  writer.AppendProtoAsArrayOfBytes(response_proto);
+
+  std::move(sender).Run(std::move(response));
+}
+
 void ReplyToStat(dbus::MethodCall* method_call,
                  dbus::ExportedObject::ResponseSender sender,
                  int32_t posix_error_code,
@@ -121,15 +135,31 @@ void ReplyToStat(dbus::MethodCall* method_call,
       dbus::Response::FromMethodCall(method_call);
   dbus::MessageWriter writer(response.get());
 
-  int32_t mode_bits = info.is_directory ? S_IFDIR : S_IFREG;
-  mode_bits |= read_only ? 0550 : 0770;  // "r-xr-x---" versus "rwxrwx---".
-
   writer.AppendInt32(posix_error_code);
-  writer.AppendInt32(mode_bits);
+  // For historical reasons, the D-Bus protocol uses a *signed* int32_t, even
+  // though /usr/include/x86_64-linux-gnu/bits/typesizes.h says "#define
+  // __MODE_T_TYPE __U32_TYPE" (and hence MakeModeBits returns an *unsigned*
+  // uint32_t). We use a static_cast to convert between them.
+  writer.AppendInt32(static_cast<int32_t>(
+      fusebox::Server::MakeModeBits(info.is_directory, read_only)));
   writer.AppendInt64(info.size);
   writer.AppendDouble(info.last_accessed.ToDoubleT());
   writer.AppendDouble(info.last_modified.ToDoubleT());
   writer.AppendDouble(info.creation_time.ToDoubleT());
+
+  std::move(sender).Run(std::move(response));
+}
+
+void ReplyToListStorages(dbus::MethodCall* method_call,
+                         dbus::ExportedObject::ResponseSender sender,
+                         fusebox::ListStoragesResponseProto response_proto) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  std::unique_ptr<dbus::Response> response =
+      dbus::Response::FromMethodCall(method_call);
+  dbus::MessageWriter writer(response.get());
+
+  writer.AppendProtoAsArrayOfBytes(response_proto);
 
   std::move(sender).Run(std::move(response));
 }
@@ -164,10 +194,21 @@ void FuseBoxServiceProvider::Start(scoped_refptr<dbus::ExportedObject> object) {
                        base::BindRepeating(&FuseBoxServiceProvider::ReadDir,
                                            weak_ptr_factory_.GetWeakPtr()),
                        base::BindOnce(&OnExportedCallback));
+  object->ExportMethod(fusebox::kFuseBoxServiceInterface,
+                       fusebox::kReadDir2Method,
+                       base::BindRepeating(&FuseBoxServiceProvider::ReadDir2,
+                                           weak_ptr_factory_.GetWeakPtr()),
+                       base::BindOnce(&OnExportedCallback));
   object->ExportMethod(fusebox::kFuseBoxServiceInterface, fusebox::kStatMethod,
                        base::BindRepeating(&FuseBoxServiceProvider::Stat,
                                            weak_ptr_factory_.GetWeakPtr()),
                        base::BindOnce(&OnExportedCallback));
+
+  object->ExportMethod(
+      fusebox::kFuseBoxServiceInterface, fusebox::kListStoragesMethod,
+      base::BindRepeating(&FuseBoxServiceProvider::ListStorages,
+                          weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&OnExportedCallback));
 }
 
 void FuseBoxServiceProvider::OnRegisterFSURLPrefix(const std::string& subdir) {
@@ -264,6 +305,24 @@ void FuseBoxServiceProvider::ReadDir(
                   base::BindRepeating(&CallReverseReplyToReadDir));
 }
 
+void FuseBoxServiceProvider::ReadDir2(
+    dbus::MethodCall* method_call,
+    dbus::ExportedObject::ResponseSender sender) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  dbus::MessageReader reader(method_call);
+  fusebox::ReadDir2RequestProto request_proto;
+  if (!reader.PopArrayOfBytesAsProto(&request_proto)) {
+    fusebox::ReadDir2ResponseProto response_proto;
+    response_proto.set_posix_error_code(EINVAL);
+    ReplyToReadDir2(method_call, std::move(sender), response_proto);
+    return;
+  }
+
+  server_.ReadDir2(request_proto, base::BindOnce(&ReplyToReadDir2, method_call,
+                                                 std::move(sender)));
+}
+
 void FuseBoxServiceProvider::Stat(dbus::MethodCall* method_call,
                                   dbus::ExportedObject::ResponseSender sender) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -278,6 +337,25 @@ void FuseBoxServiceProvider::Stat(dbus::MethodCall* method_call,
 
   server_.Stat(fs_url_as_string,
                base::BindOnce(&ReplyToStat, method_call, std::move(sender)));
+}
+
+void FuseBoxServiceProvider::ListStorages(
+    dbus::MethodCall* method_call,
+    dbus::ExportedObject::ResponseSender sender) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  dbus::MessageReader reader(method_call);
+  fusebox::ListStoragesRequestProto request_proto;
+  if (!reader.PopArrayOfBytesAsProto(&request_proto)) {
+    fusebox::ListStoragesResponseProto response_proto;
+    response_proto.set_posix_error_code(EINVAL);
+    ReplyToListStorages(method_call, std::move(sender), response_proto);
+    return;
+  }
+
+  server_.ListStorages(
+      request_proto,
+      base::BindOnce(&ReplyToListStorages, method_call, std::move(sender)));
 }
 
 }  // namespace ash

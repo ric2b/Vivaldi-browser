@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,13 +15,12 @@
 #include "base/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "components/prefs/pref_store.h"
 #include "components/prefs/prefs_export.h"
 
-class PersistentPrefStore;
 class PrefNotifier;
-class PrefRegistry;
 class PrefStore;
 
 // The PrefValueStore manages various sources of values for Preferences
@@ -34,35 +33,6 @@ class PrefStore;
 class COMPONENTS_PREFS_EXPORT PrefValueStore {
  public:
   using PrefChangedCallback = base::RepeatingCallback<void(const std::string&)>;
-
-  // Delegate used to observe certain events in the |PrefValueStore|'s lifetime.
-  class Delegate {
-   public:
-    virtual ~Delegate() {}
-
-    // Called by the PrefValueStore constructor with the PrefStores passed to
-    // it.
-    virtual void Init(PrefStore* managed_prefs,
-                      PrefStore* supervised_user_prefs,
-                      PrefStore* extension_prefs,
-                      PrefStore* standalone_browser_prefs,
-                      PrefStore* command_line_prefs,
-                      PrefStore* user_prefs,
-                      PrefStore* recommended_prefs,
-                      PrefStore* default_prefs,
-                      PrefNotifier* pref_notifier) = 0;
-
-    virtual void InitIncognitoUserPrefs(
-        scoped_refptr<PersistentPrefStore> incognito_user_prefs_overlay,
-        scoped_refptr<PersistentPrefStore> incognito_user_prefs_underlay,
-        const std::vector<const char*>& overlay_pref_names) = 0;
-
-    virtual void InitPrefRegistry(PrefRegistry* pref_registry) = 0;
-
-    // Called whenever PrefValueStore::UpdateCommandLinePrefStore is called,
-    // with the same argument.
-    virtual void UpdateCommandLinePrefStore(PrefStore* command_line_prefs) = 0;
-  };
 
   // PrefStores must be listed here in order from highest to lowest priority.
   //   MANAGED contains all managed preferences that are provided by
@@ -116,8 +86,7 @@ class COMPONENTS_PREFS_EXPORT PrefValueStore {
                  PrefStore* user_prefs,
                  PrefStore* recommended_prefs,
                  PrefStore* default_prefs,
-                 PrefNotifier* pref_notifier,
-                 std::unique_ptr<Delegate> delegate = nullptr);
+                 PrefNotifier* pref_notifier);
 
   PrefValueStore(const PrefValueStore&) = delete;
   PrefValueStore& operator=(const PrefValueStore&) = delete;
@@ -137,8 +106,7 @@ class COMPONENTS_PREFS_EXPORT PrefValueStore {
       PrefStore* user_prefs,
       PrefStore* recommended_prefs,
       PrefStore* default_prefs,
-      PrefNotifier* pref_notifier,
-      std::unique_ptr<Delegate> delegate = nullptr);
+      PrefNotifier* pref_notifier);
 
   // A PrefValueStore can have exactly one callback that is directly
   // notified of preferences changing in the store. This does not
@@ -153,7 +121,7 @@ class COMPONENTS_PREFS_EXPORT PrefValueStore {
   // a non-matching |type| are silently skipped. Returns true if a valid value
   // was found in any of the available PrefStores. Most callers should use
   // Preference::GetValue() instead of calling this method directly.
-  bool GetValue(const std::string& name,
+  bool GetValue(base::StringPiece name,
                 base::Value::Type type,
                 const base::Value** out_value) const;
 
@@ -200,9 +168,6 @@ class COMPONENTS_PREFS_EXPORT PrefValueStore {
   void UpdateCommandLinePrefStore(PrefStore* command_line_prefs);
 
   bool IsInitializationComplete() const;
-
-  // Check whether a particular type of PrefStore exists.
-  bool HasPrefStore(PrefStoreType type) const;
 
  private:
   // Keeps a PrefStore reference on behalf of the PrefValueStore and monitors
@@ -264,12 +229,12 @@ class COMPONENTS_PREFS_EXPORT PrefValueStore {
   PrefStoreType ControllingPrefStoreForPref(const std::string& name) const;
 
   // Get a value from the specified |store|.
-  bool GetValueFromStore(const std::string& name,
+  bool GetValueFromStore(base::StringPiece name,
                          PrefStoreType store,
                          const base::Value** out_value) const;
 
   // Get a value from the specified |store| if its |type| matches.
-  bool GetValueFromStoreWithType(const std::string& name,
+  bool GetValueFromStoreWithType(base::StringPiece name,
                                  base::Value::Type type,
                                  PrefStoreType store,
                                  const base::Value** out_value) const;
@@ -318,9 +283,6 @@ class COMPONENTS_PREFS_EXPORT PrefValueStore {
 
   // True if not all of the PrefStores were initialized successfully.
   bool initialization_failed_;
-
-  // Might be null.
-  std::unique_ptr<Delegate> delegate_;
 };
 
 namespace std {

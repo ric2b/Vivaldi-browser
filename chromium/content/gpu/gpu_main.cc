@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,6 +80,7 @@
 #if BUILDFLAG(IS_WIN)
 #include "base/trace_event/trace_event_etw_export_win.h"
 #include "base/win/scoped_com_initializer.h"
+#include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "media/gpu/windows/dxva_video_decode_accelerator_win.h"
 #include "media/gpu/windows/media_foundation_video_encode_accelerator_win.h"
@@ -226,6 +227,7 @@ int GpuMain(MainFunctionParams parameters) {
   base::TimeTicks start_time = base::TimeTicks::Now();
 
 #if BUILDFLAG(IS_WIN)
+  base::win::EnableHighDPISupport();
   base::trace_event::TraceEventETWExport::EnableETWExport();
 
   // Prevent Windows from displaying a modal dialog on failures like not being

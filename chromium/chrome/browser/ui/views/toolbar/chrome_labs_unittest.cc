@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,15 +62,13 @@ const char kTestFeatureWithVariationId[] = "feature-2";
 const char kThirdTestFeatureId[] = "feature-3";
 const char kExpiredFlagTestFeatureId[] = "expired-feature";
 
-const base::Feature kTestFeature1{"FeatureName1",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kTestFeature2{"FeatureName2",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kTestFeature3{"FeatureName3",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kTestFeature1, "FeatureName1", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kTestFeature2, "FeatureName2", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kTestFeature3, "FeatureName3", base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kExpiredFlagTestFeature{"Expired",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kExpiredFlagTestFeature,
+             "Expired",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 const flags_ui::FeatureEntry::FeatureParam kTestVariationOther2[] = {
     {"Param1", "Value"}};
@@ -297,8 +295,7 @@ class ChromeLabsViewControllerTest : public TestWithBrowserView {
 #endif
 
     std::unique_ptr<ChromeLabsBubbleView> bubble_view =
-        std::make_unique<ChromeLabsBubbleView>(chrome_labs_button(),
-                                               browser_view()->browser());
+        std::make_unique<ChromeLabsBubbleView>(chrome_labs_button());
     bubble_view_ = bubble_view.get();
     bubble_widget_ =
         views::BubbleDialogDelegateView::CreateBubble(std::move(bubble_view));
@@ -614,10 +611,10 @@ TEST_F(ChromeLabsViewControllerTest, DISABLED_ShowFeedbackPage) {
 TEST_F(ChromeLabsViewControllerTest, CleanUpNewBadgePrefsTest) {
   const base::Value::Dict& new_badge_prefs =
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-      browser_view()->browser()->profile()->GetPrefs()->GetValueDict(
+      browser_view()->browser()->profile()->GetPrefs()->GetDict(
           chrome_labs_prefs::kChromeLabsNewBadgeDictAshChrome);
 #else
-      g_browser_process->local_state()->GetValueDict(
+      g_browser_process->local_state()->GetDict(
           chrome_labs_prefs::kChromeLabsNewBadgeDict);
 #endif
 

@@ -538,7 +538,7 @@ RulesIndex::ActivationsFound::ActivationsFound(const ActivationsFound& other) =
 RulesIndex::ActivationsFound::~ActivationsFound() = default;
 RulesIndex::ActivationsFound& RulesIndex::ActivationsFound::operator=(
     const ActivationsFound& other) = default;
-bool RulesIndex::ActivationsFound::operator==(const ActivationsFound& other) {
+bool RulesIndex::ActivationsFound::operator==(const ActivationsFound& other) const {
   return in_allow_rules == other.in_allow_rules &&
          in_block_rules == other.in_block_rules;
 }
@@ -598,7 +598,7 @@ RulesIndex::ActivationsFound RulesIndex::FindMatchingActivationsRules(
 
   for (const auto& cached_activation : cached_activations) {
     if (cached_activation.IsForDocument(document_origin, url)) {
-      return cached_activation.activations;
+      return cached_activation.activations_;
     }
   }
 
@@ -805,7 +805,7 @@ RulesIndex::CachedActivation::CachedActivation(
     const url::Origin& document_origin,
     const GURL& url,
     ActivationsFound activations)
-    : document_origin(document_origin), url(url), activations(activations) {}
+    : document_origin_(document_origin), url_(url), activations_(activations) {}
 RulesIndex::CachedActivation::CachedActivation(
     const CachedActivation& activation) = default;
 RulesIndex::CachedActivation::~CachedActivation() = default;
@@ -815,8 +815,8 @@ bool RulesIndex::CachedActivation::IsForDocument(
   DCHECK(url.is_valid());
   // Opaque origins give the same lookup result, so they are equal for this
   // purpose)
-  return this->url == url &&
-         (this->document_origin == document_origin ||
-          (this->document_origin.opaque() && document_origin.opaque()));
+  return url_ == url &&
+         (document_origin_ == document_origin ||
+          (document_origin_.opaque() && document_origin.opaque()));
 }
 }  // namespace adblock_filter

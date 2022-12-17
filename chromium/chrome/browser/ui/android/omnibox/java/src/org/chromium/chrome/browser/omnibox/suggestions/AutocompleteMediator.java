@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
+import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
@@ -63,13 +64,15 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 
 // Vivaldi
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
 
 /**
  * Handles updating the model state for the currently visible omnibox suggestions.
  */
 /* Vivaldi */ public class AutocompleteMediator implements OnSuggestionsReceivedListener,
-                                      OmniboxSuggestionsDropdown.Observer, SuggestionHost {
+                                      OmniboxSuggestionsDropdown.GestureObserver,
+                                      OmniboxSuggestionsDropdownScrollListener, SuggestionHost {
     private static final int SUGGESTION_NOT_FOUND = -1;
     private static final int SCHEDULE_FOR_IMMEDIATE_EXECUTION = -1;
 
@@ -106,7 +109,11 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
     // Vivaldi
     private Callback<Boolean> mNativeInitializedCallback;
+    private SearchEngineSuggestionView mSearchEngineSuggestionView;
 
+    // TODO(crbug.com/1373795): Remove interface SuggestionVisibilityState and
+    // mSuggestionVisibilityState after feature OmniboxRemoveExcessiveRecycledViewClearCalls is
+    // released to stable and ready to be removed.
     @IntDef({SuggestionVisibilityState.DISALLOWED, SuggestionVisibilityState.PENDING_ALLOW,
             SuggestionVisibilityState.ALLOWED})
     @Retention(RetentionPolicy.SOURCE)
@@ -211,11 +218,15 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         mNativeInitializedCallback = null;
     }
 
+    // TODO(crbug.com/1373795): Remove this function after feature
+    // OmniboxRemoveExcessiveRecycledViewClearCalls is released to stable and ready to be removed.
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     void setSuggestionVisibilityState(@SuggestionVisibilityState int state) {
         mSuggestionVisibilityState = state;
     }
 
+    // TODO(crbug.com/1373795): Remove this function after feature
+    // OmniboxRemoveExcessiveRecycledViewClearCalls is released to stable and ready to be removed.
     private @SuggestionVisibilityState int getSuggestionVisibilityState() {
         return mSuggestionVisibilityState;
     }
@@ -285,7 +296,10 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         // Note(Nagamani): Search engine suggestion layout is loaded after the native
         // initialization. Hence we skip showing the cached suggestion till the native is loaded to
         // avoid blank white space.
-        if (mNativeInitialized || showSearchEngineSuggestionBar()) return;
+        if (mNativeInitialized
+                || (mSearchEngineSuggestionView != null
+                           && mSearchEngineSuggestionView.showSearchEngineSuggestionBar()))
+            return;
         onSuggestionsReceived(CachedZeroSuggestionsManager.readFromCache(), "", true);
     }
 
@@ -305,6 +319,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
                 ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                         ChromeFeatureList.CLEAR_OMNIBOX_FOCUS_AFTER_NAVIGATION,
                         "clear_focus_asynchronously", false);
+        mDropdownViewInfoListManager.onNativeInitialized();
         mDropdownViewInfoListBuilder.onNativeInitialized();
         runPendingAutocompleteRequests();
 
@@ -322,7 +337,9 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
             mUrlFocusTime = System.currentTimeMillis();
             mJankTracker.startTrackingScenario(JankScenario.OMNIBOX_FOCUS);
 
-            setSuggestionVisibilityState(SuggestionVisibilityState.PENDING_ALLOW);
+            if (!OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls()) {
+                setSuggestionVisibilityState(SuggestionVisibilityState.PENDING_ALLOW);
+            }
 
             // Ask directly for zero-suggestions related to current input, unless the user is
             // currently visiting SearchActivity and the input is populated from the launch intent.
@@ -332,7 +349,8 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
             // suggestion would take the user to the DSE home page.
             // This is tracked by MobileStartup.LaunchCause / EXTERNAL_SEARCH_ACTION_INTENT
             // metric.
-            if (mDataProvider.getPageClassification(false)
+            if (mDataProvider.getPageClassification(
+                        /*isFocusedFromFakebox=*/false, /*isPrefetch=*/false)
                     != PageClassification.ANDROID_SEARCH_WIDGET_VALUE) {
                 postAutocompleteRequest(this::startZeroSuggest, SCHEDULE_FOR_IMMEDIATE_EXECUTION);
             } else {
@@ -346,10 +364,13 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
                     mOmniboxFocusResultedInNavigation);
             SuggestionsMetrics.recordRefineActionUsage(mRefineActionUsage);
             SuggestionsMetrics.recordSuggestionsListScrolled(
-                    mDataProvider.getPageClassification(mDelegate.didFocusUrlFromFakebox()),
+                    mDataProvider.getPageClassification(
+                            mDelegate.didFocusUrlFromFakebox(), /*isPrefetch=*/false),
                     mSuggestionsListScrolled);
 
-            setSuggestionVisibilityState(SuggestionVisibilityState.DISALLOWED);
+            if (!OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls()) {
+                setSuggestionVisibilityState(SuggestionVisibilityState.DISALLOWED);
+            }
             mEditSessionState = EditSessionState.INACTIVE;
             mNewOmniboxEditSessionTimestamp = -1;
             // Prevent any upcoming omnibox suggestions from showing once a URL is loaded (and as
@@ -365,9 +386,13 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
      * org.chromium.chrome.browser.omnibox.UrlFocusChangeListener#onUrlAnimationFinished(boolean)
      */
     void onUrlAnimationFinished(boolean hasFocus) {
-        setSuggestionVisibilityState(hasFocus ? SuggestionVisibilityState.ALLOWED
-                                              : SuggestionVisibilityState.DISALLOWED);
-        updateOmniboxSuggestionsVisibility();
+        if (OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls()) {
+            updateOmniboxSuggestionsVisibility(hasFocus);
+        } else {
+            setSuggestionVisibilityState(hasFocus ? SuggestionVisibilityState.ALLOWED
+                                                  : SuggestionVisibilityState.DISALLOWED);
+            updateOmniboxSuggestionsVisibility();
+        }
     }
 
     /**
@@ -699,8 +724,8 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
                                 == mUrlBarEditingTextProvider.getSelectionEnd()
                         ? mUrlBarEditingTextProvider.getSelectionStart()
                         : -1;
-                int pageClassification =
-                        mDataProvider.getPageClassification(mDelegate.didFocusUrlFromFakebox());
+                int pageClassification = mDataProvider.getPageClassification(
+                        mDelegate.didFocusUrlFromFakebox(), /*isPrefetch=*/false);
                 String currentUrl = mDataProvider.getCurrentUrl();
 
                 postAutocompleteRequest(() -> {
@@ -716,9 +741,11 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
     @Override
     public void onSuggestionsReceived(
             AutocompleteResult autocompleteResult, String inlineAutocompleteText, boolean isFinal) {
-        if (mShouldPreventOmniboxAutocomplete
-                || getSuggestionVisibilityState() == SuggestionVisibilityState.DISALLOWED) {
-            return;
+        if (!OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls()) {
+            if (mShouldPreventOmniboxAutocomplete
+                    || getSuggestionVisibilityState() == SuggestionVisibilityState.DISALLOWED) {
+                return;
+            }
         }
 
         if (mShouldCacheSuggestions) {
@@ -734,14 +761,16 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
             List<DropdownItemViewInfo> viewInfoList =
                     mDropdownViewInfoListBuilder.buildDropdownViewInfoList(autocompleteResult);
             mDropdownViewInfoListManager.setSourceViewInfoList(
-                    viewInfoList, autocompleteResult.getGroupsDetails());
+                    viewInfoList, autocompleteResult.getGroupsInfo());
             boolean defaultMatchIsSearch = true;
             if (!TextUtils.isEmpty(mUrlBarEditingTextProvider.getTextWithoutAutocomplete())
                     && !newSuggestions.isEmpty()) {
                 defaultMatchIsSearch = newSuggestions.get(0).isSearchSuggestion();
             }
             mDelegate.onSuggestionsChanged(inlineAutocompleteText, defaultMatchIsSearch);
-            updateOmniboxSuggestionsVisibility();
+            if (!OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls()) {
+                updateOmniboxSuggestionsVisibility();
+            }
         }
 
         mListPropertyModel.set(SuggestionListProperties.LIST_IS_FINAL, isFinal);
@@ -888,8 +917,11 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
      * Sends a zero suggest request to the server in order to pre-populate the result cache.
      */
     /* package */ void startPrefetch() {
-        postAutocompleteRequest(
-                () -> mAutocomplete.startPrefetch(), SCHEDULE_FOR_IMMEDIATE_EXECUTION);
+        int pageClassification = mDataProvider.getPageClassification(
+                /*isFocusedFromFakebox=*/false, /*isPrefetch=*/true);
+        postAutocompleteRequest(() -> {
+            mAutocomplete.startPrefetch(mDataProvider.getCurrentUrl(), pageClassification);
+        }, SCHEDULE_FOR_IMMEDIATE_EXECUTION);
     }
 
     /**
@@ -899,6 +931,9 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
      * This method should not be called directly. Schedule execution using postAutocompleteRequest.
      */
     private void startZeroSuggest() {
+        // Note(david@vivaldi.com): Do nothing if we focus the address field on a new tab. The
+        // suggestion will only appear after typing.
+        if (shouldFocusAddressBarOnNewTab()) return;
         // Reset "edited" state in the omnibox if zero suggest is triggered -- new edits
         // now count as a new session.
         mEditSessionState = EditSessionState.INACTIVE;
@@ -906,10 +941,13 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         assert mNativeInitialized
             : "startZeroSuggest should be scheduled using postAutocompleteRequest";
 
+        // Vivaldi
+        if (mDataProvider.hasTab() && mDataProvider.getTab().isNativePage()) return;
+
         if (mDelegate.isUrlBarFocused()
                 && (mDataProvider.hasTab() || mDataProvider.isInOverviewAndShowingOmnibox())) {
-            int pageClassification =
-                    mDataProvider.getPageClassification(mDelegate.didFocusUrlFromFakebox());
+            int pageClassification = mDataProvider.getPageClassification(
+                    mDelegate.didFocusUrlFromFakebox(), /*isPrefetch=*/false);
             mShouldCacheSuggestions =
                     pageClassification == PageClassification.ANDROID_SEARCH_WIDGET_VALUE;
             mAutocomplete.startZeroSuggest(mUrlBarEditingTextProvider.getTextWithAutocomplete(),
@@ -917,6 +955,8 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         }
     }
 
+    // TODO(crbug.com/1373795): Remove this function after feature
+    // OmniboxRemoveExcessiveRecycledViewClearCalls is released to stable and ready to be removed.
     /**
      * Update whether the omnibox suggestions are visible.
      */
@@ -924,8 +964,24 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         boolean shouldBeVisible =
                 getSuggestionVisibilityState() == SuggestionVisibilityState.ALLOWED
                 && getSuggestionCount() > 0;
+        updateOmniboxSuggestionsVisibility(shouldBeVisible);
+    }
+
+    /**
+     * Update whether the omnibox suggestions are visible.
+     *
+     * @param shouldBeVisible whether the omnibox suggestions are visible
+     */
+    private void updateOmniboxSuggestionsVisibility(boolean shouldBeVisible) {
         boolean wasVisible = mListPropertyModel.get(SuggestionListProperties.VISIBLE);
         mListPropertyModel.set(SuggestionListProperties.VISIBLE, shouldBeVisible);
+        // Note(david@vivaldi.com): Handle the visiblity of the |SearchSuggestView|.
+        if (mSearchEngineSuggestionView != null) {
+            mSearchEngineSuggestionView.setVisibility(
+                    (shouldBeVisible && mSearchEngineSuggestionView.showSearchEngineSuggestionBar())
+                            ? View.VISIBLE
+                            : View.GONE);
+        }
         if (shouldBeVisible && !wasVisible) {
             mIgnoreOmniboxItemSelection = true; // Reset to default value.
         }
@@ -946,7 +1002,10 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
         mDropdownViewInfoListManager.clear();
         mAutocompleteResult = AutocompleteResult.EMPTY_RESULT;
-        updateOmniboxSuggestionsVisibility();
+
+        if (!OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls()) {
+            updateOmniboxSuggestionsVisibility();
+        }
     }
 
     /**
@@ -969,7 +1028,9 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         stopAutocomplete(false);
         if (mDataProvider.hasTab()) {
             mAutocomplete.start(mDataProvider.getCurrentUrl(),
-                    mDataProvider.getPageClassification(false), query, -1, false);
+                    mDataProvider.getPageClassification(
+                            /*isFocusedFromFakebox=*/false, /*isPrefetch=*/false),
+                    query, -1, false);
         }
     }
 
@@ -980,7 +1041,6 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
      *
      * @param newHeightPx New height of the suggestion list in pixels.
      */
-    @Override
     public void onSuggestionDropdownHeightChanged(@Px int newHeight) {
         // Report the dropdown height whenever we intend to - or do show soft keyboard. This
         // addresses cases where hardware keyboard is attached to a device, or where user explicitly
@@ -1015,8 +1075,8 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         if (mAutocompleteResult.isFromCachedResult()) return;
 
         String currentPageUrl = mDataProvider.getCurrentUrl();
-        int pageClassification =
-                mDataProvider.getPageClassification(mDelegate.didFocusUrlFromFakebox());
+        int pageClassification = mDataProvider.getPageClassification(
+                mDelegate.didFocusUrlFromFakebox(), /*isPrefetch=*/false);
         long elapsedTimeSinceModified = getElapsedTimeSinceInputChange();
         int autocompleteLength = mUrlBarEditingTextProvider.getTextWithAutocomplete().length()
                 - mUrlBarEditingTextProvider.getTextWithoutAutocomplete().length();
@@ -1123,9 +1183,18 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         mNativeInitializedCallback = callback;
     }
 
-    /** Vivaldi */
-    public boolean showSearchEngineSuggestionBar() {
-        return SharedPreferencesManager.getInstance().readBoolean(
-                "show_search_engine_suggestion", true);
+    /** Vivaldi **/
+    public void setSearchEngineSuggestionView(SearchEngineSuggestionView view) {
+        mSearchEngineSuggestionView = view;
+    }
+
+    /** Vivaldi **/
+    private boolean shouldFocusAddressBarOnNewTab() {
+        if (mDataProvider.getTab() != null) {
+            if (VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                        VivaldiPreferences.FOCUS_ADDRESS_BAR_ON_NEW_TAB, false))
+                return true;
+        }
+        return false;
     }
 }

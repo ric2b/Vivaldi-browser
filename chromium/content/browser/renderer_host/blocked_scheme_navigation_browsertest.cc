@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,39 +120,35 @@ class BlockedURLWarningConsoleObserver {
 };
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-// This class registers a fake PDF plugin handler so that navigations with a PDF
+// Registers a fake PDF plugin handler so that navigations with a PDF
 // mime type end up with a navigation and don't simply download the file.
-class ScopedPluginRegister {
- public:
-  ScopedPluginRegister(content::PluginService* plugin_service)
-      : plugin_service_(plugin_service) {
-    const char16_t kPluginName[] = u"PDF";
-    const char kPdfMimeType[] = "application/pdf";
-    const char kPdfFileType[] = "pdf";
-    WebPluginInfo plugin_info;
-    plugin_info.type = WebPluginInfo::PLUGIN_TYPE_PEPPER_OUT_OF_PROCESS;
-    plugin_info.name = kPluginName;
-    plugin_info.mime_types.push_back(
-        WebPluginMimeType(kPdfMimeType, kPdfFileType, std::string()));
-    plugin_service_->RegisterInternalPlugin(plugin_info, false);
-    plugin_service_->RefreshPlugins();
-  }
+void RegisterFakePlugin() {
+  const char16_t kPluginName[] = u"PDF";
+  const char kPdfMimeType[] = "application/pdf";
+  const char kPdfFileType[] = "pdf";
+  WebPluginInfo plugin_info;
+  plugin_info.type = WebPluginInfo::PLUGIN_TYPE_PEPPER_OUT_OF_PROCESS;
+  plugin_info.name = kPluginName;
+  plugin_info.mime_types.emplace_back(kPdfMimeType, kPdfFileType,
+                                      std::string());
+  auto* plugin_service = PluginService::GetInstance();
+  plugin_service->RegisterInternalPlugin(plugin_info, false);
+  plugin_service->RefreshPlugins();
+}
 
-  ~ScopedPluginRegister() {
-    std::vector<WebPluginInfo> plugins;
-    plugin_service_->GetInternalPlugins(&plugins);
-    EXPECT_EQ(1u, plugins.size());
-    plugin_service_->UnregisterInternalPlugin(plugins[0].path);
-    plugin_service_->RefreshPlugins();
+void UnregisterFakePlugin() {
+  auto* plugin_service = PluginService::GetInstance();
+  std::vector<WebPluginInfo> plugins;
+  plugin_service->GetInternalPlugins(&plugins);
+  EXPECT_EQ(1u, plugins.size());
 
-    plugins.clear();
-    plugin_service_->GetInternalPlugins(&plugins);
-    EXPECT_TRUE(plugins.empty());
-  }
+  plugin_service->UnregisterInternalPlugin(plugins[0].path);
+  plugin_service->RefreshPlugins();
 
- private:
-  raw_ptr<content::PluginService> plugin_service_;
-};
+  plugins.clear();
+  plugin_service->GetInternalPlugins(&plugins);
+  EXPECT_TRUE(plugins.empty());
+}
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 }  // namespace
@@ -161,12 +157,7 @@ class BlockedSchemeNavigationBrowserTest
     : public ContentBrowserTest,
       public testing::WithParamInterface<const char*> {
  public:
-#if BUILDFLAG(ENABLE_PLUGINS)
-  BlockedSchemeNavigationBrowserTest()
-      : scoped_plugin_register_(PluginService::GetInstance()) {}
-#else
-  BlockedSchemeNavigationBrowserTest() {}
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
+  BlockedSchemeNavigationBrowserTest() = default;
 
   BlockedSchemeNavigationBrowserTest(
       const BlockedSchemeNavigationBrowserTest&) = delete;
@@ -175,6 +166,10 @@ class BlockedSchemeNavigationBrowserTest
 
  protected:
   void SetUpOnMainThread() override {
+#if BUILDFLAG(ENABLE_PLUGINS)
+    RegisterFakePlugin();
+#endif
+
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -196,6 +191,10 @@ class BlockedSchemeNavigationBrowserTest
                 ->GetDownloadManagerDelegate());
     delegate->SetDownloadBehaviorForTesting(downloads_directory_.GetPath());
   }
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+  void TearDownOnMainThread() override { UnregisterFakePlugin(); }
+#endif
 
   void Navigate(const GURL& url) {
     content::DOMMessageQueue message_queue(shell()->web_contents());
@@ -560,10 +559,6 @@ class BlockedSchemeNavigationBrowserTest
   }
 
   base::ScopedTempDir downloads_directory_;
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-  ScopedPluginRegister scoped_plugin_register_;
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
   GURL data_url_;
 };
@@ -1096,17 +1091,8 @@ IN_PROC_BROWSER_TEST_F(BlockedSchemeNavigationBrowserTest,
 //
 // Tests that a browser initiated navigation to a blocked scheme URL with PDF
 // mime type is allowed, or initiates a download on Android.
-// TODO(https://crbug.com/1273277): Enable on Fuchsia once PDF support is
-// working.
-#if BUILDFLAG(IS_FUCHSIA)
-#define MAYBE_PDF_BrowserInitiatedNavigation_Allow \
-  DISABLED_PDF_BrowserInitiatedNavigation_Allow
-#else
-#define MAYBE_PDF_BrowserInitiatedNavigation_Allow \
-  PDF_BrowserInitiatedNavigation_Allow
-#endif
 IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest,
-                       MAYBE_PDF_BrowserInitiatedNavigation_Allow) {
+                       PDF_BrowserInitiatedNavigation_Allow) {
   std::string pdf_base64;
   base::Base64Encode(kPDF, &pdf_base64);
   const GURL kPDFUrl(CreateURLWithBlockedScheme(
@@ -1152,15 +1138,8 @@ IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest,
 
 // Test that a navigation to a blocked scheme URL is blocked if the URL has a
 // mime type that will be handled by a plugin (PDF in this case).
-// TODO(https://crbug.com/1273277): Enable on Fuchsia once PDF support is
-// working.
-#if BUILDFLAG(IS_FUCHSIA)
-#define MAYBE_PDF_Navigation_Block DISABLED_PDF_Navigation_Block
-#else
-#define MAYBE_PDF_Navigation_Block PDF_Navigation_Block
-#endif
 IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest,
-                       MAYBE_PDF_Navigation_Block) {
+                       PDF_Navigation_Block) {
   Navigate(GetTestURL());
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -1186,15 +1165,7 @@ IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest,
 
 // Test that a form post to a blocked scheme is blocked if the URL has a mime
 // type that will be handled by a plugin (PDF in this case).
-// TODO(https://crbug.com/1273277): Enable on Fuchsia once PDF support is
-// working.
-#if BUILDFLAG(IS_FUCHSIA)
-#define MAYBE_PDF_FormPost_Block DISABLED_PDF_FormPost_Block
-#else
-#define MAYBE_PDF_FormPost_Block PDF_FormPost_Block
-#endif
-IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest,
-                       MAYBE_PDF_FormPost_Block) {
+IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest, PDF_FormPost_Block) {
   Navigate(GetTestURL());
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -1220,16 +1191,8 @@ IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest,
 
 // Tests that navigating the main frame to a blocked scheme with PDF mimetype
 // from a subframe is blocked, or is downloaded on Android.
-// TODO(https://crbug.com/1273277): Enable on Fuchsia once PDF support is
-// working.
-#if BUILDFLAG(IS_FUCHSIA)
-#define MAYBE_PDF_NavigationFromFrame_Block \
-  DISABLED_PDF_NavigationFromFrame_Block
-#else
-#define MAYBE_PDF_NavigationFromFrame_Block PDF_NavigationFromFrame_Block
-#endif
 IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest,
-                       MAYBE_PDF_NavigationFromFrame_Block) {
+                       PDF_NavigationFromFrame_Block) {
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL("a.com", "/simple_page.html")));
   AddIFrame(
@@ -1300,18 +1263,8 @@ IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest,
 // Tests that navigating the top frame to a blocked scheme with PDF mimetype
 // from a subframe is blocked even if the top frame already has a blocked
 // scheme.
-// TODO(https://crbug.com/1273277): Enable on Fuchsia once PDF support is
-// working.
-#if BUILDFLAG(IS_FUCHSIA)
-#define MAYBE_PDF_NavigationFromFrame_TopFrameHasBlockedScheme_Block \
-  DISABLED_PDF_NavigationFromFrame_TopFrameHasBlockedScheme_Block
-#else
-#define MAYBE_PDF_NavigationFromFrame_TopFrameHasBlockedScheme_Block \
-  PDF_NavigationFromFrame_TopFrameHasBlockedScheme_Block
-#endif
-IN_PROC_BROWSER_TEST_P(
-    BlockedSchemeNavigationBrowserTest,
-    MAYBE_PDF_NavigationFromFrame_TopFrameHasBlockedScheme_Block) {
+IN_PROC_BROWSER_TEST_P(BlockedSchemeNavigationBrowserTest,
+                       PDF_NavigationFromFrame_TopFrameHasBlockedScheme_Block) {
   EXPECT_TRUE(NavigateToURL(shell(), CreateEmptyURLWithBlockedScheme()));
   AddIFrame(shell()->web_contents()->GetPrimaryMainFrame(), GetTestURL());
 

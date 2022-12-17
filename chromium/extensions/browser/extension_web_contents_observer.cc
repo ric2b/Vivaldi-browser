@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/content_script_tracker.h"
@@ -83,15 +82,13 @@ void ExtensionWebContentsObserver::Initialize() {
 
   extension_frame_host_ = CreateExtensionFrameHost(web_contents());
 
-  web_contents()->ForEachRenderFrameHost(base::BindRepeating(
-      [](ExtensionWebContentsObserver* observer,
-         content::RenderFrameHost* render_frame_host) {
+  web_contents()->ForEachRenderFrameHost(
+      [this](content::RenderFrameHost* render_frame_host) {
         // We only initialize the frame if the renderer counterpart is live;
         // otherwise we wait for the RenderFrameCreated notification.
         if (render_frame_host->IsRenderFrameLive())
-          observer->InitializeRenderFrame(render_frame_host);
-      },
-      this));
+          InitializeRenderFrame(render_frame_host);
+      });
 
   // It would be ideal if SessionTabHelper was created before this object,
   // because then we could start observing it here instead of needing to be
@@ -321,21 +318,11 @@ void ExtensionWebContentsObserver::PepperInstanceDeleted() {
   }
 }
 
-std::string ExtensionWebContentsObserver::GetExtensionIdFromFrame(
-    content::RenderFrameHost* render_frame_host) const {
-  DCHECK(initialized_);
-  const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
-  if (!site.SchemeIs(kExtensionScheme))
-    return std::string();
-
-  return site.host();
-}
-
 const Extension* ExtensionWebContentsObserver::GetExtensionFromFrame(
     content::RenderFrameHost* render_frame_host,
     bool verify_url) const {
   DCHECK(initialized_);
-  std::string extension_id = GetExtensionIdFromFrame(render_frame_host);
+  std::string extension_id = util::GetExtensionIdFromFrame(render_frame_host);
   if (extension_id.empty())
     return nullptr;
 
@@ -381,14 +368,12 @@ mojom::LocalFrame* ExtensionWebContentsObserver::GetLocalFrame(
 }
 
 void ExtensionWebContentsObserver::OnWindowIdChanged(const SessionID& id) {
-  web_contents()->ForEachRenderFrameHost(base::BindRepeating(
-      [](int32_t window_id, ExtensionWebContentsObserver* observer,
-         content::RenderFrameHost* rfh) {
-        auto* local_frame = observer->GetLocalFrame(rfh);
+  web_contents()->ForEachRenderFrameHost(
+      [&id, this](content::RenderFrameHost* rfh) {
+        auto* local_frame = GetLocalFrame(rfh);
         if (local_frame)
-          local_frame->UpdateBrowserWindowId(window_id);
-      },
-      id.id(), base::Unretained(this)));
+          local_frame->UpdateBrowserWindowId(id.id());
+      });
 }
 
 }  // namespace extensions

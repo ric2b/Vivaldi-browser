@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,7 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.core.content.res.ResourcesCompat;
+import androidx.core.view.ViewCompat;
 import androidx.core.widget.ImageViewCompat;
 
 import com.google.android.material.tabs.TabLayout;
@@ -110,8 +111,11 @@ public class SectionHeaderView extends LinearLayout {
         // Null when unread indicator isn't shown.
         @Nullable
         public UnreadIndicator unreadIndicator;
+        // The text to show on the unreadIndicator, if any.
+        public String unreadIndicatorText;
         // The tab's displayed text.
         public String text = "";
+        public boolean shouldAnimateIndicator;
     }
 
     // Views in the header layout that are set during inflate.
@@ -126,6 +130,8 @@ public class SectionHeaderView extends LinearLayout {
 
     private boolean mTextsEnabled;
     private @Px int mToolbarHeight;
+    // Action ID for accessibility.
+    private int mActionId = -1;
 
     public SectionHeaderView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -141,19 +147,29 @@ public class SectionHeaderView extends LinearLayout {
         TabLayout.Tab tab = mTabLayout.getTabAt(index);
 
         ImageView optionsIndicatorView = tab.view.findViewById(R.id.options_indicator);
-        if (optionsIndicatorView == null) return;
+        // Skip setting visibility if indicator isn't visible.
+        if (optionsIndicatorView == null || optionsIndicatorView.getVisibility() != View.VISIBLE) {
+            return;
+        }
+
+        int actionTitleId;
 
         if (isVisible) {
             optionsIndicatorView.setImageDrawable(ResourcesCompat.getDrawable(
                     getResources(), R.drawable.mtrl_ic_arrow_drop_up, getContext().getTheme()));
-            tab.setContentDescription(getTabState(tab).text
-                    + getResources().getString(R.string.feed_options_dropdown_description_close));
+            actionTitleId = R.string.feed_options_dropdown_description_close;
         } else {
             optionsIndicatorView.setImageDrawable(ResourcesCompat.getDrawable(
                     getResources(), R.drawable.mtrl_ic_arrow_drop_down, getContext().getTheme()));
-            tab.setContentDescription(getTabState(tab).text
-                    + getResources().getString(R.string.feed_options_dropdown_description));
+            actionTitleId = R.string.feed_options_dropdown_description;
         }
+
+        ViewCompat.removeAccessibilityAction(tab.view, mActionId);
+        mActionId = ViewCompat.addAccessibilityAction(
+                tab.view, getResources().getString(actionTitleId), (view, arguments) -> {
+                    mTabListener.onTabReselected(tab);
+                    return true;
+                });
     }
 
     @Override
@@ -181,6 +197,9 @@ public class SectionHeaderView extends LinearLayout {
         mMenuView.addOnLayoutChangeListener(
                 (View v, int left, int top, int right, int bottom, int oldLeft, int oldTop,
                         int oldRight, int oldBottom) -> adjustMenuTouchDelegate(touchSize));
+
+        // Ensures that the whole header doesn't get focused for a11y.
+        setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 
     /** Updates header text for this view. */
@@ -218,12 +237,14 @@ public class SectionHeaderView extends LinearLayout {
      * Set the properties for the header tab at a particular index to text.
      *
      * Does nothing if index is invalid. Make sure to call addTab() beforehand.
-     *
      * @param text Text to set the tab to.
      * @param hasUnreadContent Whether there is unread content.
+     * @param unreadContentText Text to put in the unread content badge.
+     * @param shouldAnimate whether we should animate the unread content transition.
      * @param index Index of the tab to set.
      */
-    void setHeaderAt(String text, boolean hasUnreadContent, int index) {
+    void setHeaderAt(String text, boolean hasUnreadContent, String unreadContentText,
+            boolean shouldAnimate, int index) {
         TabLayout.Tab tab = getTabAt(index);
         if (tab == null) {
             return;
@@ -232,6 +253,8 @@ public class SectionHeaderView extends LinearLayout {
 
         state.text = text;
         state.hasUnreadContent = hasUnreadContent;
+        state.unreadIndicatorText = unreadContentText;
+        state.shouldAnimateIndicator = shouldAnimate;
         applyTabState(tab);
     }
 
@@ -255,12 +278,13 @@ public class SectionHeaderView extends LinearLayout {
         ImageView image = tab.view.findViewById(R.id.options_indicator);
         image.setVisibility(ViewVisibility.toVisibility(visibility));
 
-        // Child a11y aren't included in the tab's readout. Add together if visible.
         if (visibility == ViewVisibility.VISIBLE) {
-            tab.setContentDescription(getTabState(tab).text
-                    + getResources().getString(R.string.feed_options_dropdown_description));
+            tab.view.setClickable(true);
+            // Sets up a11y and ensures indicator is pointing in the right direction.
+            updateDrawable(index, false);
         } else {
-            tab.setContentDescription(getTabState(tab).text);
+            // If not visible, remove the expand/collapse actions.
+            ViewCompat.removeAccessibilityAction(tab.view, mActionId);
         }
     }
 
@@ -347,6 +371,27 @@ public class SectionHeaderView extends LinearLayout {
             mTabLayout.setEnabled(enabled);
         }
         mTitleView.setEnabled(enabled);
+    }
+
+    /**
+     * If the unread indicator is shown for the header tab at index, then animate the indicator.
+     * Otherwise, ignore and rely on the code for setting the unread indicator to animate.
+     */
+    void startAnimationForHeader(int index) {
+        if (mTabLayout != null) {
+            TabLayout.Tab tab = getTabAt(index);
+            if (tab == null) {
+                return;
+            }
+            TabState state = getTabState(tab);
+            // Skip animating if we don't have anything to animate yet.
+            // Rely on the unread indicator visibility controls to start the animation.
+            if (state.unreadIndicator == null || state.unreadIndicator.mNewBadge == null) {
+                return;
+            }
+            state.unreadIndicator.mNewBadge.startAnimation();
+            state.shouldAnimateIndicator = true;
+        }
     }
 
     /** Shows an IPH on the feed header menu button. */
@@ -504,6 +549,10 @@ public class SectionHeaderView extends LinearLayout {
                     state.unreadIndicator =
                             new UnreadIndicator(tab.view.findViewById(android.R.id.text1));
                 }
+            }
+            state.unreadIndicator.mNewBadge.setText(state.unreadIndicatorText);
+            if (state.shouldAnimateIndicator) {
+                state.unreadIndicator.mNewBadge.startAnimation();
             }
         } else {
             if (state.unreadIndicator != null) {

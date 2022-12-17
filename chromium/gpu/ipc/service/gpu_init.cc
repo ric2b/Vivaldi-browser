@@ -1,9 +1,10 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "gpu/ipc/service/gpu_init.h"
 
+#include <cstdlib>
 #include <string>
 
 #include "base/base_paths.h"
@@ -383,20 +384,6 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     watchdog_thread_ = GpuWatchdogThread::Create(
         gpu_preferences_.watchdog_starts_backgrounded, "GpuWatchdog");
     watchdog_init.SetGpuWatchdogPtr(watchdog_thread_.get());
-
-#if BUILDFLAG(IS_WIN)
-    // This is a workaround for an occasional deadlock between watchdog and
-    // current thread. Watchdog hangs at thread initialization in
-    // __acrt_thread_attach() and current thread in std::setlocale(...)
-    // (during InitializeGLOneOff()). Source of the deadlock looks like an old
-    // UCRT bug that was supposed to be fixed in 10.0.10586 release of UCRT,
-    // but we might have come accross a not-yet-covered scenario.
-    // References:
-    // https://bugs.python.org/issue26624
-    // http://stackoverflow.com/questions/35572792/setlocale-stuck-on-windows
-    bool watchdog_started = watchdog_thread_->WaitUntilThreadStarted();
-    DCHECK(watchdog_started);
-#endif  // BUILDFLAG(IS_WIN)
   }
 
   bool attempted_startsandbox = false;
@@ -464,16 +451,31 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 
   if (!gl_initialized) {
     // Pause watchdog. LoadLibrary in GLBindings may take long time.
-    if (watchdog_thread_)
-      watchdog_thread_->PauseWatchdog();
+    if (watchdog_thread_) {
+      if (base::FeatureList::IsEnabled(
+              features::kEnableWatchdogReportOnlyModeOnGpuInit)) {
+        watchdog_thread_->EnableReportOnlyMode();
+      } else {
+        watchdog_thread_->PauseWatchdog();
+      }
+    }
     gl_initialized = gl::init::InitializeStaticGLBindingsOneOff();
     if (!gl_initialized) {
       VLOG(1) << "gl::init::InitializeStaticGLBindingsOneOff failed";
       return false;
     }
-
-    if (watchdog_thread_)
-      watchdog_thread_->ResumeWatchdog();
+#if BUILDFLAG(IS_WIN)
+    UMA_HISTOGRAM_BOOLEAN("GPU.AppHelpIsLoaded",
+                          static_cast<bool>(::GetModuleHandle(L"apphelp.dll")));
+#endif
+    if (watchdog_thread_) {
+      if (base::FeatureList::IsEnabled(
+              features::kEnableWatchdogReportOnlyModeOnGpuInit)) {
+        watchdog_thread_->DisableReportOnlyMode();
+      } else {
+        watchdog_thread_->ResumeWatchdog();
+      }
+    }
     if (gl::GetGLImplementation() != gl::kGLImplementationDisabled) {
       gl_display = gl::init::InitializeGLNoExtensionsOneOff(
           /*init_bindings*/ false, system_device_id);
@@ -725,6 +727,16 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
       gl_use_swiftshader_ = true;
     }
   }
+#if BUILDFLAG(IS_LINUX) || \
+    (BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_CHROMEOS_DEVICE))
+  if (!gl_disabled && !gl_use_swiftshader_ && std::getenv("RUNNING_UNDER_RR")) {
+    // https://rr-project.org/ is a Linux-only record-and-replay debugger that
+    // is unhappy when things like GPU drivers write directly into the
+    // process's address space.  Using swiftshader helps ensure that doesn't
+    // happen and keeps Chrome and linux-chromeos usable with rr.
+    gl_use_swiftshader_ = true;
+  }
+#endif
   if (gl_use_swiftshader_ ||
       gl::IsSoftwareGLImplementation(gl::GetGLImplementationParts())) {
     gpu_info_.software_rendering = true;
@@ -856,6 +868,17 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
     return;
   }
   bool gl_disabled = gl::GetGLImplementation() == gl::kGLImplementationDisabled;
+
+#if BUILDFLAG(IS_LINUX) || \
+    (BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_CHROMEOS_DEVICE))
+  if (!gl_disabled && !gl_use_swiftshader_ && std::getenv("RUNNING_UNDER_RR")) {
+    // https://rr-project.org/ is a Linux-only record-and-replay debugger that
+    // is unhappy when things like GPU drivers write directly into the
+    // process's address space.  Using swiftshader helps ensure that doesn't
+    // happen and keeps Chrome and linux-chromeos usable with rr.
+    gl_use_swiftshader_ = true;
+  }
+#endif
 
   if (!gl_disabled && !gl_use_swiftshader_) {
     CollectContextGraphicsInfo(&gpu_info_);

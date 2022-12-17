@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,13 @@ std::string BuildCrl(
     EVP_PKEY* crl_issuer_key,
     const std::vector<uint64_t>& revoked_serials,
     absl::optional<SignatureAlgorithm> signature_algorithm = absl::nullopt);
+
+std::string BuildCrlWithAlgorithmTlvAndDigest(
+    const std::string& crl_issuer_subject,
+    EVP_PKEY* crl_issuer_key,
+    const std::vector<uint64_t>& revoked_serials,
+    const std::string& signature_algorithm_tlv,
+    const EVP_MD* digest);
 
 }  // namespace net
 

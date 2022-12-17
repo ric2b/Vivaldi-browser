@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,11 +31,12 @@ using RecentAppsUiState =
 // Appearance constants in DIPs.
 constexpr gfx::Insets kRecentAppButtonFocusPadding(4);
 constexpr auto kContentTextLabelInsetsDip = gfx::Insets::TLBR(0, 4, 0, 4);
-constexpr int kHeaderLabelLineHeight = 30;
+constexpr int kHeaderLabelLineHeight = 48;
 constexpr int kRecentAppButtonDefaultSpacing = 42;
-constexpr int kRecentAppButtonMinSpacing = 4;
-constexpr int kRecentAppButtonSize = 32;
-constexpr int kRecentAppButtonsViewTopPadding = 12;
+constexpr int kRecentAppButtonMinSpacing = 20;
+constexpr int kRecentAppButtonSize = 36;
+constexpr int kRecentAppButtonsViewTopPadding = 4;
+constexpr int kRecentAppButtonsViewHorizontalPadding = 6;
 constexpr int kContentLabelLineHeightDip = 20;
 
 // Typography.
@@ -153,13 +154,14 @@ void PhoneHubRecentAppsView::RecentAppButtonsView::Layout() {
                       });
   int spacing = 0;
   if (visible_children.size() > 1) {
-    spacing = (child_area.width() - visible_child_width) /
+    spacing = (child_area.width() - visible_child_width -
+               kRecentAppButtonsViewHorizontalPadding * 2) /
               (static_cast<int>(visible_children.size()) - 1);
     spacing = base::clamp(spacing, kRecentAppButtonMinSpacing,
                           kRecentAppButtonDefaultSpacing);
   }
 
-  int child_x = child_area.x();
+  int child_x = child_area.x() + kRecentAppButtonsViewHorizontalPadding;
   int child_y = child_area.y() + kRecentAppButtonsViewTopPadding +
                 kRecentAppButtonFocusPadding.bottom();
   for (auto* child : visible_children) {

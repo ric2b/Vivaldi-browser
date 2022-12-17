@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -104,6 +105,11 @@ class Profile : public content::BrowserContext {
     // Creates a unique OTR profile id to be used for media router.
     static OTRProfileID CreateUniqueForMediaRouter();
 
+#if BUILDFLAG(IS_CHROMEOS)
+    // Creates a unique OTR profile id to be used for captive portal signin on
+    // ChromeOS.
+    static OTRProfileID CreateUniqueForCaptivePortal();
+#endif
     // Creates a unique OTR profile id for tests.
     static OTRProfileID CreateUniqueForTesting();
 
@@ -287,7 +293,7 @@ class Profile : public content::BrowserContext {
   // profile is not OffTheRecord.
   virtual const Profile* GetOriginalProfile() const = 0;
 
-  // Returns whether the profile is associated with a child account.
+  // Returns whether the profile is associated with the account of a child.
   virtual bool IsChild() const = 0;
 
   // Returns whether opening browser windows is allowed in this profile. For
@@ -498,6 +504,11 @@ class Profile : public content::BrowserContext {
   // Returns whether the user has signed in this profile to an account.
   virtual bool IsSignedIn() = 0;
 
+ public:
+  friend class ProfileDestroyer;
+
+  base::WeakPtr<Profile> GetWeakPtr();
+
  private:
   // Created on the UI thread, and returned by GetResourceContext(), but
   // otherwise lives on and is destroyed on the IO thread.
@@ -517,10 +528,15 @@ class Profile : public content::BrowserContext {
   // true or false, so that calls can be nested.
   int accessibility_pause_level_ = 0;
 
-  base::ObserverList<ProfileObserver> observers_;
+  base::ObserverList<ProfileObserver,
+                     /*check_empty=*/true,
+                     /*allow_reentrancy=*/false>
+      observers_;
 
   class ChromeVariationsClient;
   std::unique_ptr<variations::VariationsClient> chrome_variations_client_;
+
+  base::WeakPtrFactory<Profile> weak_factory_{this};
 };
 
 // The comparator for profile pointers as key in a map.

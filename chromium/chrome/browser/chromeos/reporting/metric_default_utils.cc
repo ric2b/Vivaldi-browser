@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,8 +15,7 @@ const base::TimeDelta GetDefaultRate(base::TimeDelta default_rate,
                                      base::TimeDelta testing_rate) {
   // If telemetry testing rates flag is enabled, use `testing_rate` to reduce
   // time before metric collection and reporting.
-  return base::FeatureList::IsEnabled(
-             MetricRateController::kEnableTelemetryTestingRates)
+  return base::FeatureList::IsEnabled(kEnableTelemetryTestingRates)
              ? testing_rate
              : default_rate;
 }

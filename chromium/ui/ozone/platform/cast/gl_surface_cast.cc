@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,7 +67,8 @@ bool GLSurfaceCast::SupportsSwapBuffersWithBounds() {
 
 gfx::SwapResult GLSurfaceCast::SwapBuffersWithBounds(
     const std::vector<gfx::Rect>& rects,
-    PresentationCallback callback) {
+    PresentationCallback callback,
+    gl::FrameData data) {
   DCHECK(supports_swap_buffer_with_bounds_);
 
   // TODO(halliwell): Request new EGL extension so we're not abusing
@@ -80,8 +81,8 @@ gfx::SwapResult GLSurfaceCast::SwapBuffersWithBounds(
     rects_data[i * 4 + 3] = rects[i].height();
   }
 
-  return NativeViewGLSurfaceEGL::SwapBuffersWithDamage(rects_data,
-                                                       std::move(callback));
+  return NativeViewGLSurfaceEGL::SwapBuffersWithDamage(
+      rects_data, std::move(callback), std::move(data));
 }
 
 bool GLSurfaceCast::Resize(const gfx::Size& size,

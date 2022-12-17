@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,29 +7,52 @@
 
 #include "base/feature_list.h"
 
+// Store local state preference with whether the client has participated in
+// kModularHomeTrendingQueriesClientSideFieldTrialName experiment or not.
+extern const char kTrialPrefName[];
+
+// The current trial version of
+// kModularHomeTrendingQueriesClientSideFieldTrialName; should be updated when
+// the experiment is modified.
+extern const int kCurrentTrialVersion;
+
 // Feature to choose between the old Zine feed or the new Discover feed in the
 // Bling new tab page.
 // Use IsDiscoverFeedEnabled() instead of this constant directly.
-extern const base::Feature kDiscoverFeedInNtp;
+BASE_DECLARE_FEATURE(kDiscoverFeedInNtp);
 
 // Feature to use one NTP for all tabs in a Browser.
-extern const base::Feature kSingleNtp;
+BASE_DECLARE_FEATURE(kSingleNtp);
 
 // Feature to section the Content Suggestions into modules.
-extern const base::Feature kContentSuggestionsUIModuleRefresh;
+BASE_DECLARE_FEATURE(kContentSuggestionsUIModuleRefresh);
+// Feature version of kContentSuggestionsUIModuleRefresh used for client-side
+// study.
+BASE_DECLARE_FEATURE(kContentSuggestionsUIModuleRefreshNewUser);
+
+// Name of the field trial for when kContentSuggestionsUIModuleRefresh is
+// enabled in about_flags.
+extern const char
+    kContentSuggestionsUIModuleRefreshFlagOverrideFieldTrialName[];
 
 // Feature params for kContentSuggestionsUIModuleRefresh.
 extern const char kContentSuggestionsUIModuleRefreshMinimizeSpacingParam[];
 extern const char kContentSuggestionsUIModuleRefreshRemoveHeadersParam[];
 
 // Feature to show the Trending Queries module.
-extern const base::Feature kTrendingQueriesModule;
+BASE_DECLARE_FEATURE(kTrendingQueriesModule);
+// Feature version of kTrendingQueriesModule used for client-side study.
+BASE_DECLARE_FEATURE(kTrendingQueriesModuleNewUser);
 
 // Feature params for kTrendingQueriesModule.
 extern const char kTrendingQueriesHideShortcutsParam[];
 extern const char kTrendingQueriesDisabledFeedParam[];
-extern const char kTrendingQueriesSignedOutParam[];
-extern const char kTrendingQueriesNeverShowModuleParam[];
+
+// Name of the Modular Home + Trending Queries Client-side Field Trial.
+extern const char kModularHomeTrendingQueriesClientSideFieldTrialName[];
+
+// Name of the Trending Queries flag override field trial.
+extern const char kTrendingQueriesFlagOverrideFieldTrialName[];
 
 // A parameter to indicate whether the native UI is enabled for the discover
 // feed.
@@ -59,12 +82,5 @@ bool ShouldHideShortcutsForTrendingQueries();
 // Whether the Trending Queries module should only be shown to users who had the
 // feed disabled.
 bool ShouldOnlyShowTrendingQueriesForDisabledFeed();
-
-// Whether the Trending Queries module should only be shown to signed out users.
-bool ShouldOnlyShowTrendingQueriesForSignedOut();
-
-// Whether the Trending Queries module should not be shown even if the feature
-// is enabled.
-bool ShouldNeverShowTrendingQueriesModule();
 
 #endif  // IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_CONTENT_SUGGESTIONS_FEATURE_H_

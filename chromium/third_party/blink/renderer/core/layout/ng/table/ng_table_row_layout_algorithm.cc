@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,10 +43,11 @@ const NGLayoutResult* NGTableRowLayoutAlgorithm::Layout() {
           NGBlockNode cell, const NGTableConstraintSpaceData::Cell& cell_data,
           LayoutUnit row_block_size, absl::optional<LayoutUnit> row_baseline,
           bool min_block_size_should_encompass_intrinsic_size) {
-        const LayoutUnit cell_block_size =
-            cell_data.rowspan_block_size != kIndefiniteSize
-                ? cell_data.rowspan_block_size
-                : row_block_size;
+        bool has_effective_rowspan =
+            cell_data.rowspan_block_size != kIndefiniteSize;
+        const LayoutUnit cell_block_size = has_effective_rowspan
+                                               ? cell_data.rowspan_block_size
+                                               : row_block_size;
 
         DCHECK_EQ(table_data.table_writing_direction.GetWritingMode(),
                   ConstraintSpace().GetWritingMode());
@@ -61,7 +62,8 @@ const NGLayoutResult* NGTableRowLayoutAlgorithm::Layout() {
             container_builder_.InlineSize(), row_baseline,
             cell_data.start_column, cell_data.is_initial_block_size_indefinite,
             table_data.is_table_block_size_specified,
-            table_data.has_collapsed_borders, NGCacheSlot::kLayout, &builder);
+            table_data.has_collapsed_borders, has_effective_rowspan,
+            NGCacheSlot::kLayout, &builder);
 
         if (ConstraintSpace().HasBlockFragmentation()) {
           SetupSpaceBuilderForFragmentation(
@@ -208,10 +210,12 @@ const NGLayoutResult* NGTableRowLayoutAlgorithm::Layout() {
     }
   }
 
-  NGLayoutResult::EStatus status = PlaceCells(row.block_size, row_baseline);
-  if (status == NGLayoutResult::kOutOfFragmentainerSpace)
-    return container_builder_.Abort(status);
-  DCHECK_EQ(status, NGLayoutResult::kSuccess);
+  {
+    NGLayoutResult::EStatus status = PlaceCells(row.block_size, row_baseline);
+    if (status == NGLayoutResult::kOutOfFragmentainerSpace)
+      return container_builder_.Abort(status);
+    DCHECK_EQ(status, NGLayoutResult::kSuccess);
+  }
 
   LayoutUnit previous_consumed_row_block_size;
   if (IsResumingLayout(BreakToken())) {
@@ -260,7 +264,7 @@ const NGLayoutResult* NGTableRowLayoutAlgorithm::Layout() {
   if (UNLIKELY(InvolvedInBlockFragmentation(container_builder_))) {
     NGBreakStatus status = FinishFragmentation(
         Node(), ConstraintSpace(), /* trailing_border_padding */ LayoutUnit(),
-        FragmentainerSpaceAtBfcStart(ConstraintSpace()), &container_builder_);
+        FragmentainerSpaceLeft(ConstraintSpace()), &container_builder_);
 
     // TODO(mstensho): Deal with early-breaks.
     DCHECK_EQ(status, NGBreakStatus::kContinue);
@@ -272,7 +276,9 @@ const NGLayoutResult* NGTableRowLayoutAlgorithm::Layout() {
                 container_builder_.FragmentBlockSize()));
   }
 
-  container_builder_.SetBaseline(row_baseline_tabulator.ComputeBaseline(
+  // NOTE: When we support "align-content: last baseline" for tables there may
+  // be two baseline alignment contexts.
+  container_builder_.SetBaselines(row_baseline_tabulator.ComputeBaseline(
       container_builder_.FragmentBlockSize()));
 
   NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();

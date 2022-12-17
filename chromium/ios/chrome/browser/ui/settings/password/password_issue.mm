@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,7 @@
     _website =
         base::SysUTF8ToNSString(password_manager::GetShownOrigin(credential));
     _username = base::SysUTF16ToNSString(credential.username);
-    _URL = [[CrURL alloc] initWithGURL:credential.url];
+    _URL = [[CrURL alloc] initWithGURL:credential.GetURL()];
   }
   return self;
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -145,11 +145,6 @@ std::string GLContext::GetGLRenderer() {
   const char* renderer = reinterpret_cast<const char*>(
       gl_api_wrapper_->api()->glGetStringFn(GL_RENDERER));
   return std::string(renderer ? renderer : "");
-}
-
-YUVToRGBConverter* GLContext::GetYUVToRGBConverter(
-    const gfx::ColorSpace& color_space) {
-  return nullptr;
 }
 
 CurrentGL* GLContext::GetCurrentGL() {

@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,6 +55,19 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) AudioDevicesPrefHandler
   virtual bool GetDeviceActive(const AudioDevice& device,
                                bool* active,
                                bool* activate_by_user) = 0;
+
+  // Sets the user priority of `target` to be one level higher
+  // than `base`.
+  // Given the user priorities ranking as: [.., target, ..., base, A, B]
+  // After applying this function, the new ranking of user
+  // priorities will be [.., base, target, A, B].
+  // If both target and base have kUserPriorityNone,
+  // set the target's user priority to kUserPriorityMin.
+  // Do nothing if target already has a higher user priority.
+  virtual void SetUserPriorityHigherThan(const AudioDevice& target,
+                                         const AudioDevice& base) = 0;
+  // Reads the user priority from prefs.
+  virtual int32_t GetUserPriority(const AudioDevice& device) = 0;
 
   // Reads the audio output allowed value from prefs.
   virtual bool GetAudioOutputAllowedValue() const = 0;

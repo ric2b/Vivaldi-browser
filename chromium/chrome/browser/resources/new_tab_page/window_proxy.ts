@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,5 +69,9 @@ export class WindowProxy {
   /** Returns `window.location.href` wrapped in a URL object. */
   get url(): URL {
     return new URL(window.location.href);
+  }
+
+  get onLine(): boolean {
+    return window.navigator.onLine;
   }
 }

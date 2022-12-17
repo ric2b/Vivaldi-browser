@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -131,9 +131,7 @@ class SimpleFeature : public Feature {
   void set_developer_mode_only(bool is_developer_mode_only) {
     developer_mode_only_ = is_developer_mode_only;
   }
-  void set_disallow_for_service_workers(bool disallow) {
-    disallow_for_service_workers_ = disallow;
-  }
+  void set_disallow_for_service_workers(bool disallow);
   void set_location(Location location) { location_ = location; }
   // set_matches() is an exception to pass-by-value since we construct an
   // URLPatternSet from the vector of strings.

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -108,6 +108,9 @@ NetworkManagerWlanApi::NetworkManagerWlanApi() {}
 
 NetworkManagerWlanApi::~NetworkManagerWlanApi() {
   // Close the connection.
+  // This is owned by the system bus, so we need to make sure we're clearing
+  // the pointer before its shutdown.
+  network_manager_proxy_ = nullptr;
   system_bus_->ShutdownAndBlock();
 }
 

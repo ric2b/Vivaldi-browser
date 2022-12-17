@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,7 @@
 #include "build/buildflag.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -784,6 +785,7 @@ class StartupBrowserCreatorChromeAppShortcutTest
       case ChromeAppDeprecationFeatureValue::kEnabled:
         return false;
       case ChromeAppDeprecationFeatureValue::kDefault:
+        return !base::FeatureList::IsEnabled(features::kChromeAppsDeprecation);
       case ChromeAppDeprecationFeatureValue::kDisabled:
         return true;
     }
@@ -3186,9 +3188,14 @@ void StartupBrowserCreatorFirstRunTest::SetUpInProcessBrowserTestFixture() {
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && \
     BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // Set a policy that prevents the first-run dialog from being shown.
-  policy_map_.Set(policy::key::kMetricsReportingEnabled,
-                  policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-                  policy::POLICY_SOURCE_CLOUD, base::Value(false), nullptr);
+  policy_map_.Set(
+#if BUILDFLAG(IS_CHROMEOS)
+      policy::key::kDeviceMetricsReportingEnabled,
+#else
+      policy::key::kMetricsReportingEnabled,
+#endif
+      policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+      policy::POLICY_SOURCE_CLOUD, base::Value(false), nullptr);
   provider_.UpdateChromePolicy(policy_map_);
 #endif  // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) &&
         // BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -3966,6 +3973,9 @@ class StartupBrowserCreatorPickerTest
   // Prevent the browser from automatically relaunching in the PRE_ test. The
   // browser will be relaunched by the main test.
   upgrade_util::ScopedRelaunchChromeBrowserOverride relaunch_chrome_override_;
+
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kObserverBasedPostProfileInit};
 };
 
 // Create a secondary profile in a separate PRE run because the existence of
@@ -4017,6 +4027,12 @@ IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorPickerTest, TestSetup) {
     EXPECT_EQ(0u, chrome::GetTotalBrowserCount());
   } else {
     EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
+  }
+
+  // No Guest profile was created.
+  for (const Profile* profile :
+       g_browser_process->profile_manager()->GetLoadedProfiles()) {
+    EXPECT_FALSE(profile->IsGuestSession());
   }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,9 +14,6 @@
 #include "content/browser/compositor/image_transport_factory.h"
 #include "gpu/command_buffer/common/context_result.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
-#include "mojo/public/cpp/bindings/associated_remote.h"
-#include "services/viz/privileged/mojom/compositing/display_private.mojom.h"
-#include "services/viz/privileged/mojom/compositing/external_begin_frame_controller.mojom.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "ui/compositor/compositor.h"
@@ -90,12 +87,7 @@ class VizProcessTransportFactory : public ui::ContextFactory,
     CompositorData& operator=(CompositorData&& other);
     ~CompositorData();
 
-    // Privileged interface that controls the display for a root
-    // CompositorFrameSink.
-    mojo::AssociatedRemote<viz::mojom::DisplayPrivate> display_private;
     std::unique_ptr<viz::HostDisplayClient> display_client;
-    mojo::AssociatedRemote<viz::mojom::ExternalBeginFrameController>
-        external_begin_frame_controller;
   };
 
   // Disables GPU compositing. This notifies UI and renderer compositors to drop
@@ -132,7 +124,8 @@ class VizProcessTransportFactory : public ui::ContextFactory,
       compositing_mode_reporter_;
 
   // ContextProvider used on worker threads for rasterization.
-  scoped_refptr<viz::RasterContextProvider> worker_context_provider_;
+  scoped_refptr<cc::RasterContextProviderWrapper>
+      worker_context_provider_wrapper_;
 
   // ContextProvider used on the main thread. Shared by ui::Compositors and also
   // returned from GetSharedMainThreadContextProvider().

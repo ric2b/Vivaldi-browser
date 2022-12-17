@@ -62,9 +62,7 @@ class CORE_EXPORT StyleRuleBase : public GarbageCollected<StyleRuleBase> {
     kContainer,
     kCounterStyle,
     kScope,
-    kScrollTimeline,
     kSupports,
-    kViewport,
     kPositionFallback,
     kTry,
   };
@@ -94,9 +92,7 @@ class CORE_EXPORT StyleRuleBase : public GarbageCollected<StyleRuleBase> {
   bool IsPropertyRule() const { return GetType() == kProperty; }
   bool IsStyleRule() const { return GetType() == kStyle; }
   bool IsScopeRule() const { return GetType() == kScope; }
-  bool IsScrollTimelineRule() const { return GetType() == kScrollTimeline; }
   bool IsSupportsRule() const { return GetType() == kSupports; }
-  bool IsViewportRule() const { return GetType() == kViewport; }
   bool IsImportRule() const { return GetType() == kImport; }
   bool IsPositionFallbackRule() const { return GetType() == kPositionFallback; }
   bool IsTryRule() const { return GetType() == kTry; }
@@ -329,35 +325,6 @@ class CORE_EXPORT StyleRuleProperty : public StyleRuleBase {
   Member<const CascadeLayer> layer_;
 };
 
-class CORE_EXPORT StyleRuleScrollTimeline : public StyleRuleBase {
- public:
-  StyleRuleScrollTimeline(const String& name, const CSSPropertyValueSet*);
-  StyleRuleScrollTimeline(const StyleRuleScrollTimeline&) = default;
-
-  StyleRuleScrollTimeline* Copy() const {
-    return MakeGarbageCollected<StyleRuleScrollTimeline>(*this);
-  }
-
-  void TraceAfterDispatch(blink::Visitor*) const;
-
-  const AtomicString& GetName() const { return name_; }
-  const CSSValue* GetSource() const { return source_; }
-  const CSSValue* GetOrientation() const { return orientation_; }
-  const CSSValue* GetStart() const { return start_; }
-  const CSSValue* GetEnd() const { return end_; }
-
-  void SetCascadeLayer(const CascadeLayer* layer) { layer_ = layer; }
-  const CascadeLayer* GetCascadeLayer() const { return layer_; }
-
- private:
-  AtomicString name_;
-  Member<const CSSValue> source_;
-  Member<const CSSValue> orientation_;
-  Member<const CSSValue> start_;
-  Member<const CSSValue> end_;
-  Member<const CascadeLayer> layer_;
-};
-
 class CORE_EXPORT StyleRuleGroup : public StyleRuleBase {
  public:
   const HeapVector<Member<StyleRuleBase>>& ChildRules() const {
@@ -518,24 +485,6 @@ class CORE_EXPORT StyleRuleContainer : public StyleRuleCondition {
   Member<ContainerQuery> container_query_;
 };
 
-class StyleRuleViewport : public StyleRuleBase {
- public:
-  explicit StyleRuleViewport(CSSPropertyValueSet*);
-  StyleRuleViewport(const StyleRuleViewport&);
-
-  const CSSPropertyValueSet& Properties() const { return *properties_; }
-  MutableCSSPropertyValueSet& MutableProperties();
-
-  StyleRuleViewport* Copy() const {
-    return MakeGarbageCollected<StyleRuleViewport>(*this);
-  }
-
-  void TraceAfterDispatch(blink::Visitor*) const;
-
- private:
-  Member<CSSPropertyValueSet> properties_;  // Cannot be null
-};
-
 // This should only be used within the CSS Parser
 class StyleRuleCharset : public StyleRuleBase {
  public:
@@ -570,13 +519,6 @@ template <>
 struct DowncastTraits<StyleRuleProperty> {
   static bool AllowFrom(const StyleRuleBase& rule) {
     return rule.IsPropertyRule();
-  }
-};
-
-template <>
-struct DowncastTraits<StyleRuleScrollTimeline> {
-  static bool AllowFrom(const StyleRuleBase& rule) {
-    return rule.IsScrollTimelineRule();
   }
 };
 
@@ -628,13 +570,6 @@ template <>
 struct DowncastTraits<StyleRuleContainer> {
   static bool AllowFrom(const StyleRuleBase& rule) {
     return rule.IsContainerRule();
-  }
-};
-
-template <>
-struct DowncastTraits<StyleRuleViewport> {
-  static bool AllowFrom(const StyleRuleBase& rule) {
-    return rule.IsViewportRule();
   }
 };
 

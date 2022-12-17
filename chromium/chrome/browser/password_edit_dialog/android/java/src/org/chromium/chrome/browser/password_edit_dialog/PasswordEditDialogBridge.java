@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,6 +55,12 @@ public class PasswordEditDialogBridge implements PasswordEditDialogCoordinator.D
     }
 
     @Override
+    public void onLegacyDialogAccepted(int usernameIndex) {
+        assert mNativeDialog != 0;
+        PasswordEditDialogBridgeJni.get().onLegacyDialogAccepted(mNativeDialog, usernameIndex);
+    }
+
+    @Override
     public void onDialogDismissed(boolean dialogAccepted) {
         assert mNativeDialog != 0;
         PasswordEditDialogBridgeJni.get().onDialogDismissed(mNativeDialog, dialogAccepted);
@@ -65,6 +71,7 @@ public class PasswordEditDialogBridge implements PasswordEditDialogCoordinator.D
     interface Natives {
         void onDialogAccepted(
                 long nativePasswordEditDialogBridge, String username, String password);
+        void onLegacyDialogAccepted(long nativePasswordEditDialogBridge, int usernameIndex);
         void onDialogDismissed(long nativePasswordEditDialogBridge, boolean dialogAccepted);
     }
 }

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,6 +40,7 @@ class RemoteDesktopPortal
 
   // ScreenCapturePortalInterface overrides.
   void Start() override;
+  void Stop() override;
   void OnPortalDone(webrtc::xdg_portal::RequestResponse result) override;
   webrtc::xdg_portal::SessionDetails GetSessionDetails() override;
   void RequestSession(GDBusProxy* proxy) override;
@@ -51,7 +52,6 @@ class RemoteDesktopPortal
   void OnScreenCastSessionClosed() override;
 
  private:
-  void Cleanup();
   void UnsubscribeSignalHandlers();
   void RequestSources();
   void SelectDevices();

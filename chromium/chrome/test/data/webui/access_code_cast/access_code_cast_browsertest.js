@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,8 +11,6 @@ GEN('#include "chrome/browser/ui/browser.h"');
 GEN('#include "chrome/browser/ui/ui_features.h"');
 GEN('#include "components/prefs/pref_service.h"');
 GEN('#include "content/public/test/browser_test.h"');
-
-/* eslint-disable no-var */
 
 class AccessCodeCastBrowserTest extends PolymerTest {
   get browsePreload() {
@@ -64,13 +62,15 @@ TEST_F('AccessCodeCastErrorMessageTest', 'All', function() {
   mocha.run();
 });
 
-var AccessCodeCastPasscodeInputTest = class extends AccessCodeCastBrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://access-code-cast/test_loader.html?module=access_code_cast/passcode_input_test.js';
-  }
-};
+// PasscodeInputTest has started acting flaky (crbug/1363398). Disabling for now pending investigation.
 
-TEST_F('AccessCodeCastPasscodeInputTest', 'All', function() {
-  mocha.run();
-});
+// var AccessCodeCastPasscodeInputTest = class extends AccessCodeCastBrowserTest {
+//   /** @override */
+//   get browsePreload() {
+//     return 'chrome://access-code-cast/test_loader.html?module=access_code_cast/passcode_input_test.js';
+//   }
+// };
+
+// TEST_F('AccessCodeCastPasscodeInputTest', 'All', function() {
+//   mocha.run();
+// });

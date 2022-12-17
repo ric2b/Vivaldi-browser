@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@
 #include "base/features.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/stl_util.h"
+#include "base/types/optional_util.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -34,6 +34,7 @@
 #include "extensions/common/switches.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/extension_frame_helper.h"
+#include "extensions/renderer/extension_web_view_helper.h"
 #include "extensions/renderer/extensions_render_frame_observer.h"
 #include "extensions/renderer/extensions_renderer_client.h"
 #include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_container_manager.h"
@@ -149,6 +150,12 @@ void ChromeExtensionsRendererClient::RenderThreadStarted() {
           extension_dispatcher_.get());
 
   thread->AddObserver(extension_dispatcher_.get());
+}
+
+void ChromeExtensionsRendererClient::WebViewCreated(
+    blink::WebView* web_view,
+    const url::Origin* outermost_origin) {
+  new extensions::ExtensionWebViewHelper(web_view, outermost_origin);
 }
 
 void ChromeExtensionsRendererClient::RenderFrameCreated(

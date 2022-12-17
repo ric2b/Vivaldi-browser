@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,6 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "skia/buildflags.h"
 #include "skia/ext/legacy_display_globals.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
@@ -218,15 +217,13 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
           context_provider_wrapper,
       bool is_origin_top_left,
       bool is_accelerated,
-      bool skia_use_dawn,
       uint32_t shared_image_usage_flags)
-      : CanvasResourceProvider(
-            skia_use_dawn ? kSkiaDawnSharedImage : kSharedImage,
-            info,
-            filter_quality,
-            is_origin_top_left,
-            std::move(context_provider_wrapper),
-            nullptr /* resource_dispatcher */),
+      : CanvasResourceProvider(kSharedImage,
+                               info,
+                               filter_quality,
+                               is_origin_top_left,
+                               std::move(context_provider_wrapper),
+                               nullptr /* resource_dispatcher */),
         is_accelerated_(is_accelerated),
         shared_image_usage_flags_(shared_image_usage_flags),
         use_oop_rasterization_(is_accelerated && ContextProviderWrapper()
@@ -299,6 +296,14 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
         GetBackingMailboxForOverwrite(kOrderingBarrier), x, y,
         GetBackingTextureTarget(), base::checked_cast<GLuint>(row_bytes),
         orig_info, pixels);
+
+    // If the overdraw optimization kicked in, we need to indicate that the
+    // pixels do not need to be cleared, otherwise the subsequent
+    // rasterizations will clobber canvas contents.
+    if (x <= 0 && y <= 0 && orig_info.width() >= Size().width() &&
+        orig_info.height() >= Size().height())
+      is_cleared_ = true;
+
     return true;
   }
 
@@ -306,14 +311,6 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
     TRACE_EVENT0("blink", "CanvasResourceProviderSharedImage::CreateResource");
     if (IsGpuContextLost())
       return nullptr;
-
-#if BUILDFLAG(SKIA_USE_DAWN)
-    if (type_ == kSkiaDawnSharedImage) {
-      return CanvasResourceSkiaDawnSharedImage::Create(
-          GetSkImageInfo(), ContextProviderWrapper(), CreateWeakPtr(),
-          FilterQuality(), IsOriginTopLeft(), shared_image_usage_flags_);
-    }
-#endif
 
     return CanvasResourceRasterSharedImage::Create(
         GetSkImageInfo(), ContextProviderWrapper(), CreateWeakPtr(),
@@ -957,14 +954,9 @@ CanvasResourceProvider::CreateSharedImageProvider(
 
   const auto& capabilities =
       context_provider_wrapper->ContextProvider()->GetCapabilities();
-  bool skia_use_dawn =
-      raster_mode == RasterMode::kGPU &&
-      base::FeatureList::IsEnabled(blink::features::kDawn2dCanvas);
-  // TODO(senorblanco): once Dawn reports maximum texture size, Dawn Canvas
-  // should respect it.  http://crbug.com/1082760
-  if (!skia_use_dawn && (info.width() < 1 || info.height() < 1 ||
-                         info.width() > capabilities.max_texture_size ||
-                         info.height() > capabilities.max_texture_size)) {
+  if ((info.width() < 1 || info.height() < 1 ||
+       info.width() > capabilities.max_texture_size ||
+       info.height() > capabilities.max_texture_size)) {
     return nullptr;
   }
 
@@ -1011,8 +1003,7 @@ CanvasResourceProvider::CreateSharedImageProvider(
 
   auto provider = std::make_unique<CanvasResourceProviderSharedImage>(
       adjusted_info, filter_quality, context_provider_wrapper,
-      is_origin_top_left, is_accelerated, skia_use_dawn,
-      shared_image_usage_flags);
+      is_origin_top_left, is_accelerated, shared_image_usage_flags);
   if (provider->IsValid()) {
     if (should_initialize ==
         CanvasResourceProvider::ShouldInitialize::kCallClear)
@@ -1486,9 +1477,6 @@ void CanvasResourceProvider::RasterRecordOOP(
 }
 
 bool CanvasResourceProvider::IsGpuContextLost() const {
-  if (type_ == kSkiaDawnSharedImage) {
-    return false;
-  }
   auto* raster_interface = RasterInterface();
   return !raster_interface ||
          raster_interface->GetGraphicsResetStatusKHR() != GL_NO_ERROR;
@@ -1584,7 +1572,7 @@ void CanvasResourceProvider::OnDestroyResource() {
 }
 
 scoped_refptr<CanvasResource> CanvasResourceProvider::NewOrRecycledResource() {
-  if (canvas_resources_.IsEmpty()) {
+  if (canvas_resources_.empty()) {
     canvas_resources_.push_back(CreateResource());
     ++num_inflight_resources_;
     if (num_inflight_resources_ > max_inflight_resources_)
@@ -1622,7 +1610,7 @@ scoped_refptr<CanvasResource> CanvasResourceProvider::GetImportedResource()
   if (!IsSingleBuffered() || !SupportsSingleBuffering())
     return nullptr;
   DCHECK_LE(canvas_resources_.size(), 1u);
-  if (canvas_resources_.IsEmpty())
+  if (canvas_resources_.empty())
     return nullptr;
   return canvas_resources_.back();
 }

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -372,8 +372,8 @@ TEST_F(ComponentInstallerTest, InstallerRegister_CheckSequence) {
     MOCK_METHOD(void, RegisterComplete, (), (override));
 
    private:
-    void CheckSequence() { DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker); }
-    SEQUENCE_CHECKER(sequence_checker);
+    void CheckSequence() { DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_); }
+    SEQUENCE_CHECKER(sequence_checker_);
   };
 
   base::ScopedPathOverride scoped_path_override(DIR_COMPONENT_USER);

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,7 @@
 #include "net/dns/public/resolve_error_info.h"
 #include "net/http/http_response_info.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
-#include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-forward.h"
 #include "third_party/blink/public/common/navigation/impression.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
@@ -117,6 +117,13 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // value remains constant over the navigation lifetime.
   virtual bool IsInPrimaryMainFrame() const = 0;
 
+  // Whether the navigation is taking place in a main frame which does not have
+  // an outer document. For example, this will return true for the primary main
+  // frame and for a prerendered main frame, but false for a <fencedframe>. See
+  // documentation for `RenderFrameHost::GetParentOrOuterDocument()` for more
+  // details.
+  virtual bool IsInOutermostMainFrame() = 0;
+
   // Prerender2:
   // Whether the navigation is taking place in the main frame of the
   // prerendered frame tree. Prerender will create separate frame trees to load
@@ -130,12 +137,12 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // Prerender2:
   // Returns true if this navigation will activate a prerendered page. It is
   // only meaningful to call this after BeginNavigation().
-  virtual bool IsPrerenderedPageActivation() = 0;
+  virtual bool IsPrerenderedPageActivation() const = 0;
 
   // FencedFrame:
   // Returns true if the navigation is taking place in a frame in a fenced frame
   // tree.
-  virtual bool IsInFencedFrameTree() = 0;
+  virtual bool IsInFencedFrameTree() const = 0;
 
   // Returns the type of the frame in which this navigation is taking place.
   virtual FrameType GetNavigatingFrameType() const = 0;
@@ -291,7 +298,7 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // * reference fragment navigations
   // * pushState/replaceState
   // * same page history navigation
-  virtual bool IsSameDocument() = 0;
+  virtual bool IsSameDocument() const = 0;
 
   // Whether the navigation has encountered a server redirect or not.
   virtual bool WasServerRedirect() = 0;

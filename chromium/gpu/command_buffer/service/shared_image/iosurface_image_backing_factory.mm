@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,7 +40,7 @@ base::scoped_nsprotocol<id<MTLTexture>> CreateMetalTexture(
     id<MTLDevice> mtl_device,
     IOSurfaceRef io_surface,
     const gfx::Size& size,
-    viz::ResourceFormat format) {
+    viz::SharedImageFormat format) {
   TRACE_EVENT0("gpu", "IOSurfaceImageBackingFactory::CreateMetalTexture");
   base::scoped_nsprotocol<id<MTLTexture>> mtl_texture;
   MTLPixelFormat mtl_pixel_format =
@@ -125,9 +125,11 @@ class DawnIOSurfaceRepresentation : public DawnImageRepresentation {
     // copyTextureForBrowser.
     WGPUDawnTextureInternalUsageDescriptor internalDesc = {};
     internalDesc.chain.sType = WGPUSType_DawnTextureInternalUsageDescriptor;
-    internalDesc.internalUsage = WGPUTextureUsage_CopySrc |
-                                 WGPUTextureUsage_RenderAttachment |
-                                 WGPUTextureUsage_TextureBinding;
+    internalDesc.internalUsage =
+        WGPUTextureUsage_CopySrc | WGPUTextureUsage_TextureBinding;
+    if (wgpu_format_ != WGPUTextureFormat_R8BG8Biplanar420Unorm) {
+      internalDesc.internalUsage |= WGPUTextureUsage_RenderAttachment;
+    }
 
     texture_descriptor.nextInChain =
         reinterpret_cast<WGPUChainedStruct*>(&internalDesc);
@@ -216,7 +218,7 @@ IOSurfaceImageBackingFactory::ProduceDawn(SharedImageManager* manager,
 #if BUILDFLAG(USE_DAWN)
   // See comments in IOSurfaceImageBackingFactory::CreateSharedImage
   // regarding RGBA versus BGRA.
-  viz::ResourceFormat actual_format = backing->format();
+  viz::ResourceFormat actual_format = (backing->format()).resource_format();
   if (actual_format == viz::RGBA_8888)
     actual_format = viz::BGRA_8888;
 

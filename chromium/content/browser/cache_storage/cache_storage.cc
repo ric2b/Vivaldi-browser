@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -611,21 +612,21 @@ CacheStorage::CacheStorage(
                                     scheduler_task_runner)),
       directory_path_(path),
       cache_task_runner_(cache_task_runner),
-      quota_manager_proxy_(quota_manager_proxy),
+      quota_manager_proxy_(std::move(quota_manager_proxy)),
       blob_storage_context_(std::move(blob_storage_context)),
       owner_(owner),
       cache_storage_manager_(cache_storage_manager) {
   if (memory_only) {
     cache_loader_ = base::WrapUnique<CacheLoader>(
         new MemoryLoader(cache_task_runner_.get(),
-                         std::move(scheduler_task_runner), quota_manager_proxy,
+                         std::move(scheduler_task_runner), quota_manager_proxy_,
                          blob_storage_context_, this, bucket_locator_, owner));
     return;
   }
 
   cache_loader_ = base::WrapUnique<CacheLoader>(new SimpleCacheLoader(
       directory_path_, cache_task_runner_.get(),
-      std::move(scheduler_task_runner), quota_manager_proxy,
+      std::move(scheduler_task_runner), quota_manager_proxy_,
       blob_storage_context_, this, bucket_locator_, owner));
 
 #if BUILDFLAG(IS_ANDROID)

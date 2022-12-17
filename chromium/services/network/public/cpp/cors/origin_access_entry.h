@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,11 @@ class CorsOriginPattern;
 }  // namespace mojom
 
 namespace cors {
+
+// Returns true if the host and subdomain are the same, or if subdomain is a
+// subdomain of host. (e.g., bar.foo.com is a subdomain of foo.com).
+bool COMPONENT_EXPORT(NETWORK_CPP)
+    IsSubdomainOfHost(const std::string& subdomain, const std::string& host);
 
 // A class to hold a protocol and domain and port triple and to provide methods
 // to determine if a given origin or domain matches. The class can have a

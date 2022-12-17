@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,6 +44,7 @@ AccessCodeCastUI::AccessCodeCastUI(content::WebUI* web_ui)
       {"errorAccessCode", IDS_ACCESS_CODE_CAST_ERROR_ACCESS_CODE},
       {"errorNetwork", IDS_ACCESS_CODE_CAST_ERROR_NETWORK},
       {"errorPermission", IDS_ACCESS_CODE_CAST_ERROR_PERMISSION},
+      {"errorProfileSync", IDS_ACCESS_CODE_CAST_ERROR_PROFILE_SYNC},
       {"errorTooManyRequests", IDS_ACCESS_CODE_CAST_ERROR_TOO_MANY_REQUESTS},
       {"errorUnknown", IDS_ACCESS_CODE_CAST_ERROR_UNKNOWN},
       {"inputLabel", IDS_ACCESS_CODE_CAST_INPUT_ARIA_LABEL},

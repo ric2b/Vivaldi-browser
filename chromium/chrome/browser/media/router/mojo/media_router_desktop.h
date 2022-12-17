@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,7 +32,7 @@ class MediaRouterDesktop : public MediaRouterMojoImpl {
 
   // MediaRouter implementation.
   void OnUserGesture() override;
-  base::Value GetState() const override;
+  base::Value::Dict GetState() const override;
   void GetProviderState(
       mojom::MediaRouteProviderId provider_id,
       mojom::MediaRouteProvider::GetStateCallback callback) const override;

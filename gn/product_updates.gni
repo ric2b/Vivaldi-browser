@@ -163,7 +163,7 @@ if (is_android) {
 }
 
 if(!is_ios) {
-  update_template_instance("//chrome/app/vector_icons:chrome_vector_icons") {
+  update_template_instance("//components/vector_icons:components_vector_icons") {
     sources -= ["${branding_path_component}/product.icon"]
     sources += ["//vivaldi/app/resources/vector_icons/product.icon"]
   }

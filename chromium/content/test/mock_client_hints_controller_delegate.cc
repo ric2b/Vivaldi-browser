@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "content/public/common/origin_util.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "ui/gfx/geometry/size_f.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -101,6 +102,16 @@ void MockClientHintsControllerDelegate::SetAdditionalClientHints(
 
 void MockClientHintsControllerDelegate::ClearAdditionalClientHints() {
   additional_hints_.clear();
+}
+
+void MockClientHintsControllerDelegate::SetMostRecentMainFrameViewportSize(
+    const gfx::Size& viewport_size) {
+  viewport_size_ = viewport_size;
+}
+
+gfx::Size
+MockClientHintsControllerDelegate::GetMostRecentMainFrameViewportSize() {
+  return viewport_size_;
 }
 
 }  // end namespace content

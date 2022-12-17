@@ -1,15 +1,15 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef ASH_WEBUI_MULTIDEVICE_DEBUG_PROXIMITY_AUTH_WEBUI_HANDLER_H_
 #define ASH_WEBUI_MULTIDEVICE_DEBUG_PROXIMITY_AUTH_WEBUI_HANDLER_H_
 
-#include "ash/components/multidevice/logging/log_buffer.h"
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/device_sync/public/cpp/device_sync_client.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
+#include "chromeos/ash/components/multidevice/logging/log_buffer.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 #include "content/public/browser/web_ui_message_handler.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 

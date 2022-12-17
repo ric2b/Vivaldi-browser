@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,17 +84,6 @@ class NET_EXPORT TrustStoreMac : public TrustStore {
     kDomainCacheFullCerts = 4,
   };
 
-  enum class TrustDomains {
-    // Load trust settings and certificates from all three trust domains
-    // (user, admin, system).
-    kAll = 0,
-
-    // Load trust settings and certificates from only the user and admin trust
-    // domains. This will find trust settings that have been set locally or by
-    // an enterprise, but not those distributed with the OS.
-    kUserAndAdmin = 1,
-  };
-
   class ResultDebugData : public base::SupportsUserData::Data {
    public:
     static const ResultDebugData* Get(const base::SupportsUserData* debug_data);
@@ -125,10 +114,7 @@ class NET_EXPORT TrustStoreMac : public TrustStore {
   // |impl| selects which internal implementation is used for checking trust
   // settings, and the interpretation of |cache_size| varies depending on
   // |impl|.
-  TrustStoreMac(CFStringRef policy_oid,
-                TrustImplType impl,
-                size_t cache_size,
-                TrustDomains domains);
+  TrustStoreMac(CFStringRef policy_oid, TrustImplType impl, size_t cache_size);
 
   TrustStoreMac(const TrustStoreMac&) = delete;
   TrustStoreMac& operator=(const TrustStoreMac&) = delete;
@@ -137,10 +123,6 @@ class NET_EXPORT TrustStoreMac : public TrustStore {
 
   // Initializes the trust cache, if it isn't already initialized.
   void InitializeTrustCache() const;
-
-  // Returns true if the given certificate is present in the system trust
-  // domain.
-  bool IsKnownRoot(const ParsedCertificate* cert) const;
 
   // TrustStore implementation:
   void SyncGetIssuersOf(const ParsedCertificate* cert,
@@ -155,14 +137,11 @@ class NET_EXPORT TrustStoreMac : public TrustStore {
   class TrustImplNoCache;
   class TrustImplLRUCache;
 
-  FRIEND_TEST_ALL_PREFIXES(TrustStoreMacImplTest, MultiRootNotTrusted);
-
   // Finds certificates in the OS keychains whose Subject matches |name_data|.
   // The result is an array of CRYPTO_BUFFERs containing the DER certificate
   // data.
   static std::vector<bssl::UniquePtr<CRYPTO_BUFFER>>
-  FindMatchingCertificatesForMacNormalizedSubject(CFDataRef name_data,
-                                                  TrustDomains domains);
+  FindMatchingCertificatesForMacNormalizedSubject(CFDataRef name_data);
 
   // Returns the OS-normalized issuer of |cert|.
   // macOS internally uses a normalized form of subject/issuer names for
@@ -171,7 +150,6 @@ class NET_EXPORT TrustStoreMac : public TrustStore {
   static base::ScopedCFTypeRef<CFDataRef> GetMacNormalizedIssuer(
       const ParsedCertificate* cert);
 
-  TrustDomains domains_;
   std::unique_ptr<TrustImpl> trust_cache_;
 };
 

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -425,6 +425,14 @@ MediaSessionItemProducer::RegisterIsAudioOutputDeviceSwitchingSupportedCallback(
 
   return it->second.RegisterIsAudioDeviceSwitchingSupportedCallback(
       std::move(callback));
+}
+
+void MediaSessionItemProducer::UpdateMediaItemSourceOrigin(
+    const std::string& id,
+    const url::Origin& origin) {
+  auto it = sessions_.find(id);
+  if (it != sessions_.end())
+    it->second.item()->UpdatePresentationRequestOrigin(origin);
 }
 
 MediaSessionItemProducer::Session* MediaSessionItemProducer::GetSession(

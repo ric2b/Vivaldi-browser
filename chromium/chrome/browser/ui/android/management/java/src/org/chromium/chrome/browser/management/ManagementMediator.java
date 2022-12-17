@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,8 +30,8 @@ public class ManagementMediator {
         mModel = new PropertyModel.Builder(ManagementProperties.ALL_KEYS)
                          .with(ManagementProperties.BROWSER_IS_MANAGED,
                                  ManagedBrowserUtils.isBrowserManaged(profile))
-                         .with(ManagementProperties.ACCOUNT_MANAGER_NAME,
-                                 ManagedBrowserUtils.getAccountManagerName(profile))
+                         .with(ManagementProperties.BROWSER_MANAGER_NAME,
+                                 ManagedBrowserUtils.getBrowserManagerName(profile))
                          .with(ManagementProperties.LEARN_MORE_TEXT, getLearnMoreClickableText())
                          .build();
     }

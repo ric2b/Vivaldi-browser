@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/core/layout/ng/flex/ng_flex_item_iterator.h"
 #include "third_party/blink/renderer/core/layout/ng/flex/ng_flex_line.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_baseline_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
@@ -43,6 +44,81 @@
 namespace blink {
 
 namespace {
+
+class BaselineAccumulator {
+  STACK_ALLOCATED();
+
+ public:
+  explicit BaselineAccumulator(const ComputedStyle& style)
+      : font_baseline_(style.GetFontBaseline()) {}
+
+  void AccumulateItem(const NGBoxFragment& fragment,
+                      const LayoutUnit block_offset,
+                      bool is_first_line,
+                      bool is_last_line) {
+    if (is_first_line) {
+      if (!first_fallback_baseline_) {
+        first_fallback_baseline_ =
+            block_offset + fragment.FirstBaselineOrSynthesize(font_baseline_);
+      }
+    }
+
+    if (is_last_line) {
+      last_fallback_baseline_ =
+          block_offset + fragment.LastBaselineOrSynthesize(font_baseline_);
+    }
+  }
+
+  void AccumulateLine(const NGFlexLine& line,
+                      bool is_first_line,
+                      bool is_last_line) {
+    if (is_first_line) {
+      if (line.major_baseline != LayoutUnit::Min()) {
+        first_major_baseline_ = line.cross_axis_offset + line.major_baseline;
+      }
+      if (line.minor_baseline != LayoutUnit::Min()) {
+        first_minor_baseline_ =
+            line.cross_axis_offset + line.line_cross_size - line.minor_baseline;
+      }
+    }
+
+    if (is_last_line) {
+      if (line.major_baseline != LayoutUnit::Min()) {
+        last_major_baseline_ = line.cross_axis_offset + line.major_baseline;
+      }
+      if (line.minor_baseline != LayoutUnit::Min()) {
+        last_minor_baseline_ =
+            line.cross_axis_offset + line.line_cross_size - line.minor_baseline;
+      }
+    }
+  }
+
+  absl::optional<LayoutUnit> FirstBaseline() const {
+    if (first_major_baseline_)
+      return *first_major_baseline_;
+    if (first_minor_baseline_)
+      return *first_minor_baseline_;
+    return first_fallback_baseline_;
+  }
+  absl::optional<LayoutUnit> LastBaseline() const {
+    if (last_minor_baseline_)
+      return *last_minor_baseline_;
+    if (last_major_baseline_)
+      return *last_major_baseline_;
+    return last_fallback_baseline_;
+  }
+
+ private:
+  FontBaseline font_baseline_;
+
+  absl::optional<LayoutUnit> first_major_baseline_;
+  absl::optional<LayoutUnit> first_minor_baseline_;
+  absl::optional<LayoutUnit> first_fallback_baseline_;
+
+  absl::optional<LayoutUnit> last_major_baseline_;
+  absl::optional<LayoutUnit> last_minor_baseline_;
+  absl::optional<LayoutUnit> last_fallback_baseline_;
+};
 
 bool ContainsNonWhitespace(const LayoutBox* box) {
   const LayoutObject* next = box;
@@ -153,7 +229,8 @@ AxisEdge CrossAxisStaticPositionEdge(const ComputedStyle& style,
     return AxisEdge::kEnd;
   }
 
-  if (alignment == ItemPosition::kFlexEnd)
+  if (alignment == ItemPosition::kFlexEnd ||
+      alignment == ItemPosition::kLastBaseline)
     return AxisEdge::kEnd;
 
   if (alignment == ItemPosition::kCenter)
@@ -165,19 +242,36 @@ AxisEdge CrossAxisStaticPositionEdge(const ComputedStyle& style,
 }  // namespace
 
 void NGFlexLayoutAlgorithm::HandleOutOfFlowPositionedItems(
-    const HeapVector<Member<LayoutBox>>& oof_children) {
-  // If fragmentation is present we place all the OOF candidates within the
-  // last fragment. The last fragment has the most up-to-date container sizing
-  // info.
+    HeapVector<Member<LayoutBox>>& oof_children) {
+  if (oof_children.empty())
+    return;
+
+  HeapVector<Member<LayoutBox>> oofs;
+  std::swap(oofs, oof_children);
+
+  bool should_process_block_end = true;
+  bool should_process_block_center = true;
+  const LayoutUnit previous_consumed_block_size =
+      BreakToken() ? BreakToken()->ConsumedBlockSize() : LayoutUnit();
+
+  // We will attempt to add OOFs in the fragment in which their static
+  // position belongs. However, the last fragment has the most up-to-date flex
+  // size information (e.g. any expanded rows, etc), so for center aligned
+  // items, we could end up with an incorrect static position.
   if (UNLIKELY(InvolvedInBlockFragmentation(container_builder_))) {
-    if (container_builder_.DidBreakSelf() ||
-        container_builder_.HasChildBreakInside())
-      return;
-    // Recompute the total block size in case |total_intrinsic_block_size_|
-    // changed as a result of fragmentation.
-    total_block_size_ = ComputeBlockSizeForFragment(
-        ConstraintSpace(), Style(), BorderPadding(),
-        total_intrinsic_block_size_, container_builder_.InlineSize());
+    should_process_block_end = !container_builder_.DidBreakSelf() &&
+                               !container_builder_.HasChildBreakInside();
+    if (should_process_block_end) {
+      // Recompute the total block size in case |total_intrinsic_block_size_|
+      // changed as a result of fragmentation.
+      total_block_size_ = ComputeBlockSizeForFragment(
+          ConstraintSpace(), Style(), BorderPadding(),
+          total_intrinsic_block_size_, container_builder_.InlineSize());
+    } else {
+      LayoutUnit center = total_block_size_ / 2;
+      should_process_block_center = center - previous_consumed_block_size <=
+                                    FragmentainerCapacity(ConstraintSpace());
+    }
   }
 
   using InlineEdge = NGLogicalStaticPosition::InlineEdge;
@@ -187,14 +281,12 @@ void NGFlexLayoutAlgorithm::HandleOutOfFlowPositionedItems(
   border_scrollbar_padding.block_start =
       OriginalBorderScrollbarPaddingBlockStart();
 
-  const LayoutUnit previous_consumed_block_size =
-      BreakToken() ? BreakToken()->ConsumedBlockSize() : LayoutUnit();
   LogicalSize total_fragment_size = {container_builder_.InlineSize(),
                                      total_block_size_};
   total_fragment_size =
       ShrinkLogicalSize(total_fragment_size, border_scrollbar_padding);
 
-  for (LayoutBox* oof_child : oof_children) {
+  for (LayoutBox* oof_child : oofs) {
     NGBlockNode child(oof_child);
 
     AxisEdge main_axis_edge = MainAxisStaticPositionEdge(Style(), is_column_);
@@ -202,40 +294,44 @@ void NGFlexLayoutAlgorithm::HandleOutOfFlowPositionedItems(
         CrossAxisStaticPositionEdge(Style(), child.Style());
 
     // This code block just collects UMA stats.
-    const auto& style = Style();
-    const auto& child_style = child.Style();
-    const PhysicalToLogical<Length> insets_in_flexbox_writing_mode(
-        Style().GetWritingDirection(), child_style.Top(), child_style.Right(),
-        child_style.Bottom(), child_style.Left());
-    if (is_column_) {
-      const ItemPosition normalized_alignment =
-          FlexLayoutAlgorithm::AlignmentForChild(style, child_style);
-      const ItemPosition default_justify_self_behavior =
-          child.IsReplaced() ? ItemPosition::kStart : ItemPosition::kStretch;
-      const ItemPosition normalized_justify =
-          FlexLayoutAlgorithm::TranslateItemPosition(
-              style, child_style,
-              child_style.ResolvedJustifySelf(default_justify_self_behavior)
-                  .GetPosition());
+    if (!IsResumingLayout(BreakToken())) {
+      const auto& style = Style();
+      const auto& child_style = child.Style();
+      const PhysicalToLogical<Length> insets_in_flexbox_writing_mode(
+          Style().GetWritingDirection(), child_style.Top(), child_style.Right(),
+          child_style.Bottom(), child_style.Left());
+      if (is_column_) {
+        const ItemPosition normalized_alignment =
+            FlexLayoutAlgorithm::AlignmentForChild(style, child_style);
+        const ItemPosition default_justify_self_behavior =
+            child.IsReplaced() ? ItemPosition::kStart : ItemPosition::kStretch;
+        const ItemPosition normalized_justify =
+            FlexLayoutAlgorithm::TranslateItemPosition(
+                style, child_style,
+                child_style.ResolvedJustifySelf(default_justify_self_behavior)
+                    .GetPosition());
 
-      const bool are_cross_axis_insets_auto =
-          insets_in_flexbox_writing_mode.InlineStart().IsAuto() &&
-          insets_in_flexbox_writing_mode.InlineEnd().IsAuto();
+        const bool are_cross_axis_insets_auto =
+            insets_in_flexbox_writing_mode.InlineStart().IsAuto() &&
+            insets_in_flexbox_writing_mode.InlineEnd().IsAuto();
 
-      if (normalized_alignment != normalized_justify &&
-          are_cross_axis_insets_auto) {
-        UseCounter::Count(Node().GetDocument(), WebFeature::kFlexboxNewAbsPos);
+        if (normalized_alignment != normalized_justify &&
+            are_cross_axis_insets_auto) {
+          UseCounter::Count(Node().GetDocument(),
+                            WebFeature::kFlexboxNewAbsPos);
+        }
       }
-    }
-    if (main_axis_edge != AxisEdge::kStart) {
-      const bool are_main_axis_insets_auto =
-          is_column_ ? insets_in_flexbox_writing_mode.BlockStart().IsAuto() &&
-                           insets_in_flexbox_writing_mode.BlockEnd().IsAuto()
-                     : insets_in_flexbox_writing_mode.InlineStart().IsAuto() &&
-                           insets_in_flexbox_writing_mode.InlineEnd().IsAuto();
-      if (are_main_axis_insets_auto) {
-        UseCounter::Count(Node().GetDocument(),
-                          WebFeature::kFlexboxAbsPosJustifyContent);
+      if (main_axis_edge != AxisEdge::kStart) {
+        const bool are_main_axis_insets_auto =
+            is_column_
+                ? insets_in_flexbox_writing_mode.BlockStart().IsAuto() &&
+                      insets_in_flexbox_writing_mode.BlockEnd().IsAuto()
+                : insets_in_flexbox_writing_mode.InlineStart().IsAuto() &&
+                      insets_in_flexbox_writing_mode.InlineEnd().IsAuto();
+        if (are_main_axis_insets_auto) {
+          UseCounter::Count(Node().GetDocument(),
+                            WebFeature::kFlexboxAbsPosJustifyContent);
+        }
       }
     }
 
@@ -247,6 +343,25 @@ void NGFlexLayoutAlgorithm::HandleOutOfFlowPositionedItems(
     LogicalOffset offset = border_scrollbar_padding.StartOffset();
 
     // Determine the static-position based off the axis-edge.
+    if (block_axis_edge == AxisEdge::kStart) {
+      DCHECK(!IsResumingLayout(BreakToken()));
+      block_edge = BlockEdge::kBlockStart;
+    } else if (block_axis_edge == AxisEdge::kCenter) {
+      if (!should_process_block_center) {
+        oof_children.emplace_back(oof_child);
+        continue;
+      }
+      block_edge = BlockEdge::kBlockCenter;
+      offset.block_offset += total_fragment_size.block_size / 2;
+    } else {
+      if (!should_process_block_end) {
+        oof_children.emplace_back(oof_child);
+        continue;
+      }
+      block_edge = BlockEdge::kBlockEnd;
+      offset.block_offset += total_fragment_size.block_size;
+    }
+
     if (inline_axis_edge == AxisEdge::kStart) {
       inline_edge = InlineEdge::kInlineStart;
     } else if (inline_axis_edge == AxisEdge::kCenter) {
@@ -255,16 +370,6 @@ void NGFlexLayoutAlgorithm::HandleOutOfFlowPositionedItems(
     } else {
       inline_edge = InlineEdge::kInlineEnd;
       offset.inline_offset += total_fragment_size.inline_size;
-    }
-
-    if (block_axis_edge == AxisEdge::kStart) {
-      block_edge = BlockEdge::kBlockStart;
-    } else if (block_axis_edge == AxisEdge::kCenter) {
-      block_edge = BlockEdge::kBlockCenter;
-      offset.block_offset += total_fragment_size.block_size / 2;
-    } else {
-      block_edge = BlockEdge::kBlockEnd;
-      offset.block_offset += total_fragment_size.block_size;
     }
 
     // Make the child offset relative to our fragment.
@@ -328,11 +433,9 @@ bool NGFlexLayoutAlgorithm::IsItemCrossAxisLengthDefinite(
   // size to be definite. Block value of 'auto' is always indefinite.
   if (length.IsAuto())
     return false;
-  // But anything else in the inline direction is definite.
-  if (!MainAxisIsInlineAxis(child))
-    return true;
-  // If we get here, cross axis is block axis.
-  return !BlockLengthUnresolvable(BuildSpaceForFlexBasis(child), length);
+  if (MainAxisIsInlineAxis(child))
+    return !BlockLengthUnresolvable(BuildSpaceForFlexBasis(child), length);
+  return !InlineLengthUnresolvable(BuildSpaceForFlexBasis(child), length);
 }
 
 bool NGFlexLayoutAlgorithm::DoesItemCrossSizeComputeToAuto(
@@ -372,7 +475,8 @@ NGConstraintSpace NGFlexLayoutAlgorithm::BuildSpaceForIntrinsicInlineSize(
 }
 
 NGConstraintSpace NGFlexLayoutAlgorithm::BuildSpaceForIntrinsicBlockSize(
-    const NGBlockNode& flex_item) const {
+    const NGBlockNode& flex_item,
+    absl::optional<LayoutUnit> override_inline_size) const {
   const ComputedStyle& child_style = flex_item.Style();
   NGConstraintSpaceBuilder space_builder(ConstraintSpace(),
                                          child_style.GetWritingDirection(),
@@ -395,8 +499,14 @@ NGConstraintSpace NGFlexLayoutAlgorithm::BuildSpaceForIntrinsicBlockSize(
     child_percentage_size.block_size = kIndefiniteSize;
     space_builder.SetIsInitialBlockSizeIndefinite(true);
   }
-
-  space_builder.SetAvailableSize(ChildAvailableSize());
+  if (override_inline_size.has_value()) {
+    LogicalSize available_size = ChildAvailableSize();
+    available_size.inline_size = *override_inline_size;
+    space_builder.SetIsFixedInlineSize(true);
+    space_builder.SetAvailableSize(available_size);
+  } else {
+    space_builder.SetAvailableSize(ChildAvailableSize());
+  }
   space_builder.SetPercentageResolutionSize(child_percentage_size);
   // TODO(dgrogan): The SetReplacedPercentageResolutionSize calls in this file
   // may be untested. Write a test or determine why they're unnecessary.
@@ -442,6 +552,7 @@ Length NGFlexLayoutAlgorithm::GetUsedFlexBasis(const NGBlockNode& child) const {
 NGConstraintSpace NGFlexLayoutAlgorithm::BuildSpaceForLayout(
     const NGBlockNode& flex_item_node,
     LayoutUnit item_main_axis_final_size,
+    absl::optional<LayoutUnit> override_inline_size,
     absl::optional<LayoutUnit> line_cross_size_for_stretch,
     absl::optional<LayoutUnit> block_offset_for_fragmentation,
     bool min_block_size_should_encompass_intrinsic_size) const {
@@ -458,6 +569,15 @@ NGConstraintSpace NGFlexLayoutAlgorithm::BuildSpaceForLayout(
     available_size.inline_size = line_cross_size_for_stretch
                                      ? *line_cross_size_for_stretch
                                      : ChildAvailableSize().inline_size;
+
+    if (override_inline_size) {
+      DCHECK(!line_cross_size_for_stretch.has_value())
+          << "We only override inline size when we are calculating intrinsic "
+             "width of multiline column flexboxes, and we don't do any "
+             "stretching during the intrinsic width calculation.";
+      available_size.inline_size = *override_inline_size;
+      space_builder.SetIsFixedInlineSize(true);
+    }
     available_size.block_size = item_main_axis_final_size;
     space_builder.SetIsFixedBlockSize(true);
     if (line_cross_size_for_stretch ||
@@ -473,6 +593,7 @@ NGConstraintSpace NGFlexLayoutAlgorithm::BuildSpaceForLayout(
       space_builder.SetIsInitialBlockSizeIndefinite(true);
     }
   } else {
+    DCHECK(!override_inline_size.has_value());
     available_size.inline_size = item_main_axis_final_size;
     available_size.block_size = line_cross_size_for_stretch
                                     ? *line_cross_size_for_stretch
@@ -521,10 +642,8 @@ NGConstraintSpace NGFlexLayoutAlgorithm::BuildSpaceForLayout(
 }
 
 void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems(
-    bool is_computing_intrinsic_size,
+    Phase phase,
     HeapVector<Member<LayoutBox>>* oof_children) {
-  NGFlexChildIterator iterator(Node());
-
   // This block sets up data collection for
   // https://github.com/w3c/csswg-drafts/issues/3052
   bool all_items_have_non_auto_cross_sizes = true;
@@ -541,23 +660,43 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems(
       /* number_of_items */ 1,
       /* is_reversed */ false);
 
+  bool is_wrap_reverse = Style().FlexWrap() == EFlexWrap::kWrapReverse;
+
+  NGFlexChildIterator iterator(Node());
   for (NGBlockNode child = iterator.NextChild(); child;
        child = iterator.NextChild()) {
     if (child.IsOutOfFlowPositioned()) {
-      if (!is_computing_intrinsic_size) {
+      if (phase == Phase::kLayout) {
         DCHECK(oof_children);
         oof_children->emplace_back(child.GetLayoutBox());
       }
       continue;
     }
 
+    absl::optional<LayoutUnit> max_content_contribution;
+    if (phase == Phase::kColumnWrapIntrinsicSize) {
+      auto space = BuildSpaceForIntrinsicInlineSize(child);
+      MinMaxSizesResult child_contributions =
+          ComputeMinAndMaxContentContribution(Style(), child, space);
+      max_content_contribution = child_contributions.sizes.max_size;
+      NGBoxStrut child_margins =
+          ComputeMarginsFor(space, child.Style(), ConstraintSpace());
+      child_contributions.sizes += child_margins.InlineSum();
+
+      largest_min_content_contribution_ =
+          std::max(child_contributions.sizes.min_size,
+                   largest_min_content_contribution_);
+    }
+
     const ComputedStyle& child_style = child.Style();
+    const auto child_writing_mode = child_style.GetWritingMode();
+
     if (is_alignment_behavior_change_possible &&
-        all_items_match_container_alignment && !is_computing_intrinsic_size) {
+        all_items_match_container_alignment && phase == Phase::kLayout) {
       LayoutUnit item_offset = FlexItem::AlignmentOffset(
           kAvailableFreeSpace,
           FlexLayoutAlgorithm::AlignmentForChild(Style(), child_style),
-          LayoutUnit(), LayoutUnit(), /* is_wrap_reverse */ false,
+          LayoutUnit(), /* is_wrap_reverse */ false,
           Style().IsDeprecatedWebkitBox());
       all_items_match_container_alignment = (item_offset == line_offset);
     }
@@ -592,9 +731,10 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems(
         // We want the child's intrinsic inline sizes in its writing mode, so
         // pass child's writing mode as the first parameter, which is nominally
         // |container_writing_mode|.
-        const auto child_space = BuildSpaceForIntrinsicBlockSize(child);
-        min_max_sizes = child.ComputeMinMaxSizes(child_style.GetWritingMode(),
-                                                 type, child_space);
+        const auto child_space =
+            BuildSpaceForIntrinsicBlockSize(child, max_content_contribution);
+        min_max_sizes =
+            child.ComputeMinMaxSizes(child_writing_mode, type, child_space);
       }
       return *min_max_sizes;
     };
@@ -638,10 +778,20 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems(
             flex_basis_space, child_style, border_padding_in_child_writing_mode,
             cross_axis_length_to_resolve, kIndefiniteSize);
       } else {
-        cross_size = ResolveMainInlineLength(
-            flex_basis_space, child_style, border_padding_in_child_writing_mode,
-            MinMaxSizesFunc, cross_axis_length_to_resolve);
+        if (cross_axis_length_to_resolve.IsFitContent() &&
+            flex_basis_space.AvailableSize().inline_size == kIndefiniteSize) {
+          // TODO(dgrogan): Figure out if orthogonal items require a similar
+          // branch in the MainAxisIsInlineAxis case just above this.
+          DCHECK(phase == Phase::kColumnWrapIntrinsicSize);
+          cross_size = *max_content_contribution;
+        } else {
+          cross_size = ResolveMainInlineLength(
+              flex_basis_space, child_style,
+              border_padding_in_child_writing_mode, MinMaxSizesFunc,
+              cross_axis_length_to_resolve);
+        }
       }
+
       DCHECK_GE(cross_size, LayoutUnit());
       cross_size = min_max_sizes_in_cross_axis_direction.ClampSizeToMinAndMax(
           cross_size);
@@ -678,7 +828,8 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems(
             border_padding_in_child_writing_mode);
       }
       if (!layout_result) {
-        NGConstraintSpace child_space = BuildSpaceForIntrinsicBlockSize(child);
+        NGConstraintSpace child_space =
+            BuildSpaceForIntrinsicBlockSize(child, max_content_contribution);
         layout_result = child.Layout(child_space, /* break_token */ nullptr);
         DCHECK(layout_result);
       }
@@ -732,7 +883,8 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems(
           // height of the captions before sending it through the flexing
           // algorithm, which will eventually lead to a forced block size.
           LayoutUnit caption_block_size = table_child->ComputeCaptionBlockSize(
-              BuildSpaceForIntrinsicBlockSize(*table_child));
+              BuildSpaceForIntrinsicBlockSize(*table_child,
+                                              max_content_contribution));
           flex_base_border_box += caption_block_size;
         }
       }
@@ -829,23 +981,38 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems(
     DCHECK_GE(min_max_sizes_in_main_axis_direction.min_size, 0);
     DCHECK_GE(min_max_sizes_in_main_axis_direction.max_size, 0);
 
-    NGBoxStrut scrollbars = ComputeScrollbarsForNonAnonymous(child);
+    const NGBoxStrut scrollbars = ComputeScrollbarsForNonAnonymous(child);
+
+    const auto container_writing_direction =
+        ConstraintSpace().GetWritingDirection();
+    bool is_last_baseline =
+        FlexLayoutAlgorithm::AlignmentForChild(Style(), child_style) ==
+        ItemPosition::kLastBaseline;
+    const auto baseline_writing_mode = DetermineBaselineWritingMode(
+        container_writing_direction, child_writing_mode,
+        /* is_parallel_context */ !is_column_);
+    const auto baseline_group = DetermineBaselineGroup(
+        container_writing_direction, baseline_writing_mode,
+        /* is_parallel_context */ !is_column_, is_last_baseline,
+        /* is_flipped */ is_wrap_reverse);
     algorithm_
         .emplace_back(nullptr, child.Style(), flex_base_content_size,
                       min_max_sizes_in_main_axis_direction,
                       min_max_sizes_in_cross_axis_direction,
                       main_axis_border_padding, cross_axis_border_padding,
-                      physical_child_margins, scrollbars,
-                      min_max_sizes.has_value())
+                      physical_child_margins, scrollbars, baseline_writing_mode,
+                      baseline_group, min_max_sizes.has_value())
         .ng_input_node_ = child;
     // Save the layout result so that we can maybe reuse it later.
     if (layout_result) {
       DCHECK(!MainAxisIsInlineAxis(child));
       algorithm_.all_items_.back().layout_result_ = layout_result;
     }
+    algorithm_.all_items_.back().max_content_contribution_ =
+        max_content_contribution;
   }
 
-  if (!is_computing_intrinsic_size && is_alignment_behavior_change_possible &&
+  if (phase == Phase::kLayout && is_alignment_behavior_change_possible &&
       algorithm_.all_items_.size() > 0 &&
       !all_items_match_container_alignment) {
     if (algorithm_.IsColumnFlow()) {
@@ -883,9 +1050,7 @@ const NGLayoutResult* NGFlexLayoutAlgorithm::Layout() {
     case NGLayoutResult::kNeedsEarlierBreak:
       // If we found a good break somewhere inside this block, re-layout and
       // break at that location.
-      DCHECK(result->GetEarlyBreak());
-      return RelayoutAndBreakEarlier<NGFlexLayoutAlgorithm>(
-          *result->GetEarlyBreak(), &column_early_breaks_);
+      return RelayoutAndBreakEarlierForFlex(result);
     case NGLayoutResult::kNeedsRelayoutWithNoChildScrollbarChanges:
       return RelayoutIgnoringChildScrollbarChanges();
     case NGLayoutResult::kDisableFragmentation:
@@ -908,6 +1073,18 @@ NGFlexLayoutAlgorithm::RelayoutIgnoringChildScrollbarChanges() {
   NGFlexLayoutAlgorithm algorithm(params);
   algorithm.ignore_child_scrollbar_changes_ = true;
   return algorithm.Layout();
+}
+
+const NGLayoutResult* NGFlexLayoutAlgorithm::RelayoutAndBreakEarlierForFlex(
+    const NGLayoutResult* previous_result) {
+  DCHECK(previous_result->GetEarlyBreak());
+  NGLayoutAlgorithmParams params(
+      Node(), container_builder_.InitialFragmentGeometry(), ConstraintSpace(),
+      BreakToken(), previous_result->GetEarlyBreak(), &column_early_breaks_);
+  NGFlexLayoutAlgorithm algorithm_with_break(params);
+  algorithm_with_break.ignore_child_scrollbar_changes_ =
+      ignore_child_scrollbar_changes_;
+  return RelayoutAndBreakEarlier(&algorithm_with_break);
 }
 
 const NGLayoutResult* NGFlexLayoutAlgorithm::LayoutInternal() {
@@ -937,12 +1114,12 @@ const NGLayoutResult* NGFlexLayoutAlgorithm::LayoutInternal() {
     oof_children = flex_data->oof_children;
 
     use_empty_line_block_size =
-        flex_line_outputs.IsEmpty() && Node().HasLineIfEmpty();
+        flex_line_outputs.empty() && Node().HasLineIfEmpty();
   } else {
     PlaceFlexItems(&flex_line_outputs, &oof_children);
 
     use_empty_line_block_size =
-        flex_line_outputs.IsEmpty() && Node().HasLineIfEmpty();
+        flex_line_outputs.empty() && Node().HasLineIfEmpty();
     CalculateTotalIntrinsicBlockSize(use_empty_line_block_size);
   }
 
@@ -1004,7 +1181,7 @@ const NGLayoutResult* NGFlexLayoutAlgorithm::LayoutInternal() {
   if (UNLIKELY(InvolvedInBlockFragmentation(container_builder_))) {
     NGBreakStatus break_status = FinishFragmentation(
         Node(), ConstraintSpace(), BorderPadding().block_end,
-        FragmentainerSpaceAtBfcStart(ConstraintSpace()), &container_builder_);
+        FragmentainerSpaceLeft(ConstraintSpace()), &container_builder_);
     if (break_status != NGBreakStatus::kContinue) {
       if (break_status == NGBreakStatus::kNeedsEarlierBreak)
         return container_builder_.Abort(NGLayoutResult::kNeedsEarlierBreak);
@@ -1027,7 +1204,7 @@ const NGLayoutResult* NGFlexLayoutAlgorithm::LayoutInternal() {
   // for the first items in each column and break-after rules for last items in
   // each column.
   if (ConstraintSpace().ShouldPropagateChildBreakValues()) {
-    DCHECK(!row_break_between_outputs.IsEmpty());
+    DCHECK(!row_break_between_outputs.empty());
     container_builder_.SetInitialBreakBefore(row_break_between_outputs.front());
     container_builder_.SetPreviousBreakAfter(row_break_between_outputs.back());
   }
@@ -1054,8 +1231,12 @@ const NGLayoutResult* NGFlexLayoutAlgorithm::LayoutInternal() {
 
 void NGFlexLayoutAlgorithm::PlaceFlexItems(
     HeapVector<NGFlexLine>* flex_line_outputs,
-    HeapVector<Member<LayoutBox>>* oof_children) {
-  ConstructAndAppendFlexItems(/* is_computing_intrinsic_size */ false,
+    HeapVector<Member<LayoutBox>>* oof_children,
+    bool is_computing_multiline_column_intrinsic_size) {
+  DCHECK(oof_children || is_computing_multiline_column_intrinsic_size);
+  ConstructAndAppendFlexItems(is_computing_multiline_column_intrinsic_size
+                                  ? Phase::kColumnWrapIntrinsicSize
+                                  : Phase::kLayout,
                               oof_children);
 
   LayoutUnit main_axis_start_offset;
@@ -1077,7 +1258,7 @@ void NGFlexLayoutAlgorithm::PlaceFlexItems(
     main_axis_end_offset = BorderScrollbarPadding().inline_end;
   }
 
-  flex_line_outputs->ReserveCapacity(algorithm_.NumItems());
+  flex_line_outputs->reserve(algorithm_.NumItems());
 
   FlexLine* line;
   while ((
@@ -1102,7 +1283,8 @@ void NGFlexLayoutAlgorithm::PlaceFlexItems(
       flex_item_output.main_axis_final_size = flex_item.FlexedBorderBoxSize();
 
       NGConstraintSpace child_space = BuildSpaceForLayout(
-          flex_item.ng_input_node_, flex_item.FlexedBorderBoxSize());
+          flex_item.ng_input_node_, flex_item.FlexedBorderBoxSize(),
+          flex_item.max_content_contribution_);
       auto minimum_top = DeferredShapingMinimumTopScope::CreateDelta(
           Node(), cross_axis_offset);
 
@@ -1152,6 +1334,8 @@ void NGFlexLayoutAlgorithm::PlaceFlexItems(
                                    cross_axis_offset);
     flex_line_outputs->back().line_cross_size = line->cross_axis_extent_;
     flex_line_outputs->back().cross_axis_offset = line->cross_axis_offset_;
+    flex_line_outputs->back().major_baseline = line->max_major_ascent_;
+    flex_line_outputs->back().minor_baseline = line->max_minor_ascent_;
   }
 }
 
@@ -1173,8 +1357,8 @@ void NGFlexLayoutAlgorithm::ApplyFinalAlignmentAndReversals(
     HeapVector<NGFlexLine>* flex_line_outputs) {
   auto& line_contexts = algorithm_.FlexLines();
   const LayoutUnit cross_axis_start_edge =
-      line_contexts.IsEmpty() ? LayoutUnit()
-                              : line_contexts[0].cross_axis_offset_;
+      line_contexts.empty() ? LayoutUnit()
+                            : line_contexts[0].cross_axis_offset_;
 
   LayoutUnit final_content_main_size =
       (container_builder_.InlineSize() - BorderScrollbarPadding().InlineSum())
@@ -1185,7 +1369,7 @@ void NGFlexLayoutAlgorithm::ApplyFinalAlignmentAndReversals(
   if (is_column_)
     std::swap(final_content_main_size, final_content_cross_size);
 
-  if (!algorithm_.IsMultiline() && !line_contexts.IsEmpty()) {
+  if (!algorithm_.IsMultiline() && !line_contexts.empty()) {
     line_contexts[0].cross_axis_extent_ = final_content_cross_size;
     (*flex_line_outputs)[0].line_cross_size = final_content_cross_size;
   }
@@ -1206,7 +1390,9 @@ void NGFlexLayoutAlgorithm::ApplyFinalAlignmentAndReversals(
   if (Style().ResolvedIsColumnReverseFlexDirection()) {
     algorithm_.LayoutColumnReverse(final_content_main_size,
                                    BorderScrollbarPadding().block_start);
-
+  }
+  if (Style().ResolvedIsColumnReverseFlexDirection() ||
+      Style().ResolvedIsRowReverseFlexDirection()) {
     for (auto& flex_line : *flex_line_outputs)
       flex_line.line_items.Reverse();
   }
@@ -1245,12 +1431,20 @@ NGLayoutResult::EStatus NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSize(
     }
   }
 
-  absl::optional<LayoutUnit> fallback_baseline;
+  BaselineAccumulator baseline_accumulator(Style());
   NGLayoutResult::EStatus status = NGLayoutResult::kSuccess;
-  bool is_wrap_reverse = Style().FlexWrap() == EFlexWrap::kWrapReverse;
+
   for (wtf_size_t flex_line_idx = 0; flex_line_idx < flex_line_outputs->size();
        ++flex_line_idx) {
     NGFlexLine& line_output = (*flex_line_outputs)[flex_line_idx];
+
+    bool is_first_line = flex_line_idx == 0;
+    bool is_last_line = flex_line_idx == flex_line_outputs->size() - 1;
+    if (!InvolvedInBlockFragmentation(container_builder_) && !is_column_) {
+      baseline_accumulator.AccumulateLine(line_output, is_first_line,
+                                          is_last_line);
+    }
+
     for (wtf_size_t flex_item_idx = 0;
          flex_item_idx < line_output.line_items.size(); ++flex_item_idx) {
       NGFlexItem& flex_item = line_output.line_items[flex_item_idx];
@@ -1262,6 +1456,7 @@ NGLayoutResult::EStatus NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSize(
       if (DoesItemStretch(flex_item.ng_input_node)) {
         NGConstraintSpace child_space = BuildSpaceForLayout(
             flex_item.ng_input_node, flex_item.main_axis_final_size,
+            /* override_inline_size */ absl::nullopt,
             line_output.line_cross_size);
         auto minimum_top = DeferredShapingMinimumTopScope::CreateDelta(
             Node(), offset.block_offset);
@@ -1321,14 +1516,8 @@ NGLayoutResult::EStatus NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSize(
                              physical_fragment);
       if (!InvolvedInBlockFragmentation(container_builder_)) {
         container_builder_.AddResult(*layout_result, offset);
-
-        // Only propagate baselines from children on the first flex-line.
-        if ((!is_wrap_reverse && flex_line_idx == 0) ||
-            (is_wrap_reverse &&
-             flex_line_idx == flex_line_outputs->size() - 1)) {
-          PropagateBaselineFromChild(flex_item.Style(), fragment,
-                                     offset.block_offset, &fallback_baseline);
-        }
+        baseline_accumulator.AccumulateItem(fragment, offset.block_offset,
+                                            is_first_line, is_last_line);
       } else {
         flex_item.total_remaining_block_size = fragment.BlockSize();
       }
@@ -1341,11 +1530,10 @@ NGLayoutResult::EStatus NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSize(
     }
   }
 
-  // Set the baseline to the fallback, if we didn't find any children with
-  // baseline alignment.
-  if (!InvolvedInBlockFragmentation(container_builder_) &&
-      !container_builder_.Baseline() && fallback_baseline)
-    container_builder_.SetBaseline(*fallback_baseline);
+  if (auto first_baseline = baseline_accumulator.FirstBaseline())
+    container_builder_.SetFirstBaseline(*first_baseline);
+  if (auto last_baseline = baseline_accumulator.LastBaseline())
+    container_builder_.SetLastBaseline(*last_baseline);
 
   // TODO(crbug.com/1131352): Avoid control-specific handling.
   if (Node().IsButton()) {
@@ -1353,8 +1541,8 @@ NGLayoutResult::EStatus NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSize(
     AdjustButtonBaseline(final_content_cross_size);
   } else if (Node().IsSlider()) {
     DCHECK(!InvolvedInBlockFragmentation(container_builder_));
-    container_builder_.SetBaseline(BorderScrollbarPadding().BlockSum() +
-                                   final_content_cross_size);
+    container_builder_.SetBaselines(BorderScrollbarPadding().BlockSum() +
+                                    final_content_cross_size);
   }
 
   // Signal if we need to relayout with new child scrollbar information.
@@ -1371,17 +1559,14 @@ NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
   DCHECK(row_break_between_outputs);
   DCHECK(broke_before_row);
 
-  absl::optional<LayoutUnit> fallback_baseline;
   NGFlexItemIterator item_iterator(*flex_line_outputs, BreakToken(),
                                    is_column_);
-  bool is_wrap_reverse = Style().FlexWrap() == EFlexWrap::kWrapReverse;
 
   Vector<bool> has_inflow_child_break_inside_line(flex_line_outputs->size(),
                                                   false);
   bool needs_earlier_break_in_column = false;
   NGLayoutResult::EStatus status = NGLayoutResult::kSuccess;
-  LayoutUnit fragmentainer_space =
-      FragmentainerSpaceAtBfcStart(ConstraintSpace());
+  LayoutUnit fragmentainer_space = FragmentainerSpaceLeft(ConstraintSpace());
 
   HeapVector<NGFlexColumnBreakInfo> column_break_info;
   if (is_column_) {
@@ -1393,6 +1578,7 @@ NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
   if (BreakToken())
     previously_consumed_block_size = BreakToken()->ConsumedBlockSize();
 
+  BaselineAccumulator baseline_accumulator(Style());
   for (auto entry = item_iterator.NextItem(*broke_before_row);
        NGFlexItem* flex_item = entry.flex_item;
        entry = item_iterator.NextItem(*broke_before_row)) {
@@ -1401,6 +1587,8 @@ NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
     NGFlexLine& line_output = (*flex_line_outputs)[flex_line_idx];
     const auto* item_break_token = To<NGBlockBreakToken>(entry.token);
     bool last_item_in_line = flex_item_idx == line_output.line_items.size() - 1;
+
+    bool is_first_line = flex_line_idx == 0;
     bool is_last_line = flex_line_idx == flex_line_outputs->size() - 1;
 
     // A child break in a parallel flow doesn't affect whether we should
@@ -1550,8 +1738,8 @@ NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
         MinBlockSizeShouldEncompassIntrinsicSize(*flex_item);
     NGConstraintSpace child_space = BuildSpaceForLayout(
         flex_item->ng_input_node, flex_item->main_axis_final_size,
-        line_cross_size_for_stretch, offset.block_offset,
-        min_block_size_should_encompass_intrinsic_size);
+        /* override_inline_size */ absl::nullopt, line_cross_size_for_stretch,
+        offset.block_offset, min_block_size_should_encompass_intrinsic_size);
     auto minimum_top = DeferredShapingMinimumTopScope::CreateDelta(
         Node(), offset.block_offset);
     const NGLayoutResult* layout_result = flex_item->ng_input_node.Layout(
@@ -1610,7 +1798,7 @@ NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
       }
       break_status = BreakBeforeChildIfNeeded(
           ConstraintSpace(), flex_item->ng_input_node, *layout_result,
-          ConstraintSpace().FragmentainerOffsetAtBfc() + offset.block_offset,
+          ConstraintSpace().FragmentainerOffset() + offset.block_offset,
           has_container_separation, &container_builder_, !is_column_,
           current_column_break_info);
     }
@@ -1710,7 +1898,7 @@ NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
         // to reflect the expansion.
         if (item_expansion > LayoutUnit()) {
           // Maps don't allow keys of 0, so adjust the index by 1.
-          if (row_cross_size_updates_.IsEmpty() ||
+          if (row_cross_size_updates_.empty() ||
               !row_cross_size_updates_.Contains(flex_line_idx + 1)) {
             row_cross_size_updates_.insert(flex_line_idx + 1, item_expansion);
             AdjustOffsetForNextLine(flex_line_outputs, flex_line_idx,
@@ -1742,13 +1930,8 @@ NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
                                  current_column_break_info
                                      ? &current_column_break_info->break_after
                                      : nullptr);
-
-    // Only propagate baselines from children on the first flex-line.
-    if ((!is_wrap_reverse && flex_line_idx == 0) ||
-        (is_wrap_reverse && is_last_line)) {
-      PropagateBaselineFromChild(flex_item->Style(), fragment,
-                                 offset.block_offset, &fallback_baseline);
-    }
+    baseline_accumulator.AccumulateItem(fragment, offset.block_offset,
+                                        is_first_line, is_last_line);
     if (last_item_in_line) {
       if (!has_inflow_child_break_inside_line[flex_line_idx])
         line_output.has_seen_all_children = true;
@@ -1775,7 +1958,7 @@ NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
       status == NGLayoutResult::kNeedsEarlierBreak)
     return NGLayoutResult::kNeedsEarlierBreak;
 
-  if (!row_cross_size_updates_.IsEmpty()) {
+  if (!row_cross_size_updates_.empty()) {
     DCHECK(!is_column_);
     return NGLayoutResult::kNeedsRelayoutWithRowCrossSizeChanges;
   }
@@ -1785,10 +1968,10 @@ NGFlexLayoutAlgorithm::GiveItemsFinalPositionAndSizeForFragmentation(
     container_builder_.SetHasSeenAllChildren();
   }
 
-  // Set the baseline to the fallback, if we didn't find any children with
-  // baseline alignment.
-  if (!container_builder_.Baseline() && fallback_baseline)
-    container_builder_.SetBaseline(*fallback_baseline);
+  if (auto first_baseline = baseline_accumulator.FirstBaseline())
+    container_builder_.SetFirstBaseline(*first_baseline);
+  if (auto last_baseline = baseline_accumulator.LastBaseline())
+    container_builder_.SetLastBaseline(*last_baseline);
 
   // Update the |total_intrinsic_block_size_| in case things expanded.
   total_intrinsic_block_size_ =
@@ -1821,7 +2004,10 @@ NGLayoutResult::EStatus NGFlexLayoutAlgorithm::PropagateFlexItemInfo(
     // devtools uses margin box.
     item_rect.Expand(flex_item->physical_margins_);
     DCHECK_GE(layout_info_for_devtools_->lines.size(), 1u);
-    DevtoolsFlexInfo::Item item(item_rect, flex_item->MarginBoxAscent());
+    DevtoolsFlexInfo::Item item(
+        item_rect, flex_item->MarginBoxAscent(
+                       flex_item->Alignment() == ItemPosition::kLastBaseline,
+                       Style().FlexWrap() == EFlexWrap::kWrapReverse));
     layout_info_for_devtools_->lines[flex_line_idx].items.push_back(item);
   }
 
@@ -1850,12 +2036,12 @@ void NGFlexLayoutAlgorithm::AdjustButtonBaseline(
     LayoutUnit final_content_cross_size) {
   // See LayoutButton::BaselinePosition()
   if (!Node().HasLineIfEmpty() && !Node().ShouldApplyLayoutContainment() &&
-      !container_builder_.Baseline()) {
+      !container_builder_.FirstBaseline()) {
     // To ensure that we have a consistent baseline when we have no children,
     // even when we have the anonymous LayoutBlock child, we calculate the
     // baseline for the empty case manually here.
-    container_builder_.SetBaseline(BorderScrollbarPadding().block_start +
-                                   final_content_cross_size);
+    container_builder_.SetBaselines(BorderScrollbarPadding().block_start +
+                                    final_content_cross_size);
     return;
   }
 
@@ -1878,7 +2064,7 @@ void NGFlexLayoutAlgorithm::AdjustButtonBaseline(
     absl::optional<LayoutUnit> baseline = layout_block->BaselineForEmptyLine(
         layout_block->IsHorizontalWritingMode() ? kHorizontalLine
                                                 : kVerticalLine);
-    if (container_builder_.Baseline() != baseline) {
+    if (container_builder_.FirstBaseline() != baseline) {
       UseCounter::Count(Node().GetDocument(),
                         WebFeature::kWrongBaselineOfEmptyLineButton);
     }
@@ -1891,12 +2077,12 @@ void NGFlexLayoutAlgorithm::AdjustButtonBaseline(
   NGBoxFragment fragment(space.GetWritingDirection(),
                          To<NGPhysicalBoxFragment>(*child.fragment));
   absl::optional<LayoutUnit> child_baseline =
-      space.BaselineAlgorithmType() == NGBaselineAlgorithmType::kFirstLine
+      space.BaselineAlgorithmType() == NGBaselineAlgorithmType::kDefault
           ? fragment.FirstBaseline()
-          : fragment.Baseline();
+          : fragment.LastBaseline();
   if (child_baseline)
     child_baseline = *child_baseline + child.offset.block_offset;
-  if (container_builder_.Baseline() != child_baseline) {
+  if (container_builder_.FirstBaseline() != child_baseline) {
     UseCounter::Count(Node().GetDocument(),
                       WebFeature::kWrongBaselineOfMultiLineButton);
     String text = Node().GetDOMNode()->textContent();
@@ -1906,38 +2092,6 @@ void NGFlexLayoutAlgorithm::AdjustButtonBaseline(
           WebFeature::kWrongBaselineOfMultiLineButtonWithNonSpace);
     }
   }
-}
-
-void NGFlexLayoutAlgorithm::PropagateBaselineFromChild(
-    const ComputedStyle& flex_item_style,
-    const NGBoxFragment& fragment,
-    LayoutUnit block_offset,
-    absl::optional<LayoutUnit>* fallback_baseline) {
-  // Check if we've already found an appropriate baseline.
-  if (container_builder_.Baseline())
-    return;
-
-  const auto baseline_type = Style().GetFontBaseline();
-  const LayoutUnit baseline_offset =
-      block_offset + (Node().IsButton()
-                          ? fragment.FirstBaselineOrSynthesize(baseline_type)
-                          : fragment.BaselineOrSynthesize(baseline_type));
-
-  // We prefer a baseline from a child with baseline alignment, and no
-  // auto-margins in the cross axis (even if we have to synthesize the
-  // baseline).
-  if (FlexLayoutAlgorithm::AlignmentForChild(Style(), flex_item_style) ==
-          ItemPosition::kBaseline &&
-      !FlexItem::HasAutoMarginsInCrossAxis(flex_item_style, &algorithm_)) {
-    container_builder_.SetBaseline(baseline_offset);
-    return;
-  }
-
-  // Set the fallback baseline if it doesn't have a value yet.
-  if (Style().ResolvedIsColumnReverseFlexDirection())
-    *fallback_baseline = baseline_offset;
-  else
-    *fallback_baseline = fallback_baseline->value_or(baseline_offset);
 }
 
 MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeItemContributions(
@@ -1982,6 +2136,25 @@ MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeItemContributions(
 
     item_contributions.sizes.Encompass(preferred_size);
   }
+
+  if (algorithm_.IsMultiline()) {
+    // This block implements the "capped" part at the end of 9.9.1:
+    // "for a multi-line container... each item’s contribution is capped by
+    // the item’s flex base size if the item is not growable, floored by the
+    // item’s flex base size if the item is not shrinkable"
+    const LayoutUnit flex_base_size_border_box =
+        item.flex_base_content_size_ + item.main_axis_border_padding_;
+    const ComputedStyle& parent_style = Style();
+    if (child_style.ResolvedFlexGrow(parent_style) == 0.f) {
+      item_contributions.sizes.min_size = std::min(
+          item_contributions.sizes.min_size, flex_base_size_border_box);
+    }
+    if (child_style.ResolvedFlexShrink(parent_style) == 0.f) {
+      item_contributions.sizes.min_size = std::max(
+          item_contributions.sizes.min_size, flex_base_size_border_box);
+    }
+  }
+
   item_contributions.sizes.Constrain(item.min_max_main_sizes_.max_size +
                                      item.main_axis_border_padding_);
   item_contributions.sizes.Encompass(item.min_max_main_sizes_.min_size +
@@ -1989,7 +2162,7 @@ MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeItemContributions(
   return item_contributions;
 }
 
-class NGFlexLayoutAlgorithm::FlexFractionParts {
+class FlexFractionParts {
  public:
   explicit FlexFractionParts(const ComputedStyle& parent_style)
       : parent_style_(parent_style) {}
@@ -2142,64 +2315,20 @@ class NGFlexLayoutAlgorithm::FlexFractionParts {
   const ComputedStyle& parent_style_;
 };
 
-std::tuple<NGFlexLayoutAlgorithm::FlexFractionParts,
-           NGFlexLayoutAlgorithm::FlexFractionParts,
-           bool>
-NGFlexLayoutAlgorithm::FindLargestFractions() const {
-  bool depends_on_block_constraints = false;
-  FlexFractionParts min_content_largest_fraction(Style());
-  FlexFractionParts max_content_largest_fraction(Style());
-  for (const FlexItem& item : algorithm_.all_items_) {
-    const NGBlockNode& child = item.ng_input_node_;
-
-    const NGConstraintSpace space = BuildSpaceForIntrinsicInlineSize(child);
-    const MinMaxSizesResult min_max_content_contributions =
-        ComputeItemContributions(space, item);
-    depends_on_block_constraints |=
-        min_max_content_contributions.depends_on_block_constraints;
-
-    min_content_largest_fraction.UpdateLargestFlexFraction(
-        item, min_max_content_contributions.sizes.min_size);
-    max_content_largest_fraction.UpdateLargestFlexFraction(
-        item, min_max_content_contributions.sizes.max_size);
-  }
-  min_content_largest_fraction.SetSumFactorsLessThanOneAdjustment();
-  max_content_largest_fraction.SetSumFactorsLessThanOneAdjustment();
-
-  return std::tuple(min_content_largest_fraction, max_content_largest_fraction,
-                    depends_on_block_constraints);
-}
-
 MinMaxSizesResult
 NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfMultilineColumnContainer() {
-  NGFlexChildIterator iterator(Node());
   MinMaxSizes largest_inline_size_contributions;
-  for (NGBlockNode child = iterator.NextChild(); child;
-       child = iterator.NextChild()) {
-    if (child.IsOutOfFlowPositioned())
-      continue;
-
-    auto space = BuildSpaceForIntrinsicInlineSize(child);
-    MinMaxSizesResult child_contributions =
-        ComputeMinAndMaxContentContribution(Style(), child, space);
-    NGBoxStrut child_margins =
-        ComputeMarginsFor(space, child.Style(), ConstraintSpace());
-    child_contributions.sizes += child_margins.InlineSum();
-
-    largest_inline_size_contributions.Encompass(child_contributions.sizes);
-  }
-
   // The algorithm for determining the max-content width of a column-wrap
   // container is simply: Run layout on the container but give the items an
   // overridden available size, equal to the largest max-content width of any
   // item, when they are laid out. The container's max-content width is then
   // the farthest outer inline-end point of all the items.
-  item_inline_available_size_override_ =
-      largest_inline_size_contributions.max_size;
   HeapVector<NGFlexLine> flex_line_outputs;
-  HeapVector<Member<LayoutBox>> dummy_oof_children;
-  PlaceFlexItems(&flex_line_outputs, &dummy_oof_children);
-  if (!flex_line_outputs.IsEmpty()) {
+  PlaceFlexItems(&flex_line_outputs, /* oof_children */ nullptr,
+                 /* is_computing_multiline_column_intrinsic_size */ true);
+  largest_inline_size_contributions.min_size =
+      largest_min_content_contribution_;
+  if (!flex_line_outputs.empty()) {
     largest_inline_size_contributions.max_size =
         flex_line_outputs.back().line_cross_size +
         flex_line_outputs.back().cross_axis_offset -
@@ -2218,10 +2347,7 @@ NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfMultilineColumnContainer() {
           /* depends_on_block_constraints */ true};
 }
 
-MinMaxSizesResult
-NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfSingleLineRowContainer() {
-  ConstructAndAppendFlexItems(/*is_computing_intrinsic_size*/ true);
-  MinMaxSizes container_sizes;
+MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfRowContainer() {
   // The goal of this algorithm is to find a container inline size such that
   // after running the flex algorithm, each item's final size will be at least
   // as large as its contribution. This is similar to regular non-flex
@@ -2231,18 +2357,60 @@ NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfSingleLineRowContainer() {
   // than the sum of the contributions in cases where not every item is going to
   // be at its exact contribution size after the main flex algorithm runs.
 
-  auto [min_content_largest_fraction, max_content_largest_fraction,
-        depends_on_block_constraints] = FindLargestFractions();
+  MinMaxSizes container_sizes;
+  bool depends_on_block_constraints = false;
 
+  FlexFractionParts min_content_largest_fraction(Style());
+  FlexFractionParts max_content_largest_fraction(Style());
+  LayoutUnit largest_outer_min_content_contribution;
+
+  // The intrinsic sizing algorithm uses lots of geometry and values from each
+  // item (e.g. flex base size, used minimum and maximum sizes including
+  // automatic minimum sizing), so re-use |ConstructAndAppendFlexItems| from the
+  // layout algorithm, which calculates all that.
+  ConstructAndAppendFlexItems(Phase::kRowIntrinsicSize);
+
+  // First pass: look for the most restrictive items that will influence the
+  // sizing of the rest.
+  for (const FlexItem& item : algorithm_.all_items_) {
+    const NGBlockNode& child = item.ng_input_node_;
+
+    const NGConstraintSpace space = BuildSpaceForIntrinsicInlineSize(child);
+    const MinMaxSizesResult min_max_content_contributions =
+        ComputeItemContributions(space, item);
+    depends_on_block_constraints |=
+        min_max_content_contributions.depends_on_block_constraints;
+
+    if (algorithm_.IsMultiline()) {
+      const LayoutUnit main_axis_margins =
+          is_horizontal_flow_ ? item.physical_margins_.HorizontalSum()
+                              : item.physical_margins_.VerticalSum();
+      largest_outer_min_content_contribution = std::max(
+          largest_outer_min_content_contribution,
+          min_max_content_contributions.sizes.min_size + main_axis_margins);
+    } else {
+      min_content_largest_fraction.UpdateLargestFlexFraction(
+          item, min_max_content_contributions.sizes.min_size);
+    }
+    max_content_largest_fraction.UpdateLargestFlexFraction(
+        item, min_max_content_contributions.sizes.max_size);
+  }
+  min_content_largest_fraction.SetSumFactorsLessThanOneAdjustment();
+  max_content_largest_fraction.SetSumFactorsLessThanOneAdjustment();
+
+  // Second pass: determine what each item's size will be when the container is
+  // at either of its intrinsic sizes.
   for (const FlexItem& item : algorithm_.all_items_) {
     const ComputedStyle& child_style = item.style_;
     const LayoutUnit flex_base_size_border_box =
         item.flex_base_content_size_ + item.main_axis_border_padding_;
     MinMaxSizes item_final_contribution{flex_base_size_border_box,
                                         flex_base_size_border_box};
-    item_final_contribution.min_size +=
-        min_content_largest_fraction.ApplyLargestFlexFractionToItem(
-            child_style, item.flex_base_content_size_);
+    if (!algorithm_.IsMultiline()) {
+      item_final_contribution.min_size +=
+          min_content_largest_fraction.ApplyLargestFlexFractionToItem(
+              child_style, item.flex_base_content_size_);
+    }
     item_final_contribution.max_size +=
         max_content_largest_fraction.ApplyLargestFlexFractionToItem(
             child_style, item.flex_base_content_size_);
@@ -2260,9 +2428,16 @@ NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfSingleLineRowContainer() {
     container_sizes += main_axis_margins;
   }
 
-  const LayoutUnit gap_inline_size =
-      (algorithm_.NumItems() - 1) * algorithm_.gap_between_items_;
-  container_sizes += gap_inline_size;
+  if (algorithm_.IsMultiline()) {
+    container_sizes.min_size = largest_outer_min_content_contribution;
+  } else {
+    DCHECK_EQ(largest_outer_min_content_contribution, LayoutUnit())
+        << "largest_outer_min_content_contribution is not filled in for "
+           "singleline containers.";
+    const LayoutUnit gap_inline_size =
+        (algorithm_.NumItems() - 1) * algorithm_.gap_between_items_;
+    container_sizes += gap_inline_size;
+  }
 
   // Due to negative margins, it is possible that we calculated a negative
   // intrinsic width. Make sure that we never return a negative width.
@@ -2286,10 +2461,8 @@ MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizes(
       } else {
         // singleline column flexbox
       }
-    } else if (algorithm_.IsMultiline()) {
-      // multiline row flexbox
     } else {
-      return ComputeMinMaxSizeOfSingleLineRowContainer();
+      return ComputeMinMaxSizeOfRowContainer();
     }
   }
 
@@ -2343,7 +2516,7 @@ MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizes(
 
 LayoutUnit NGFlexLayoutAlgorithm::FragmentainerSpaceAvailable(
     LayoutUnit block_offset) const {
-  return (FragmentainerSpaceAtBfcStart(ConstraintSpace()) - block_offset)
+  return (FragmentainerSpaceLeft(ConstraintSpace()) - block_offset)
       .ClampNegativeToZero();
 }
 
@@ -2383,7 +2556,7 @@ NGBreakStatus NGFlexLayoutAlgorithm::BreakBeforeRowIfNeeded(
   DCHECK(InvolvedInBlockFragmentation(container_builder_));
 
   LayoutUnit fragmentainer_block_offset =
-      ConstraintSpace().FragmentainerOffsetAtBfc() + row.cross_axis_offset;
+      ConstraintSpace().FragmentainerOffset() + row.cross_axis_offset;
   if (BreakToken())
     fragmentainer_block_offset -= BreakToken()->ConsumedBlockSize();
 
@@ -2493,7 +2666,7 @@ const NGLayoutResult* NGFlexLayoutAlgorithm::RelayoutWithNewRowSizes() {
   DCHECK(!cross_size_adjustments_);
 
   // There should be no more than two row expansions per fragmentainer.
-  DCHECK(!row_cross_size_updates_.IsEmpty());
+  DCHECK(!row_cross_size_updates_.empty());
   DCHECK_LE(row_cross_size_updates_.size(), 2u);
 
   NGLayoutAlgorithmParams params(
@@ -2576,7 +2749,8 @@ void NGFlexLayoutAlgorithm::CheckFlexLines(
   if (Style().FlexWrap() == EFlexWrap::kWrapReverse)
     flex_line_outputs.Reverse();
 
-  if (Style().ResolvedIsColumnReverseFlexDirection()) {
+  if (Style().ResolvedIsColumnReverseFlexDirection() ||
+      Style().ResolvedIsRowReverseFlexDirection()) {
     for (auto& flex_line : flex_line_outputs)
       flex_line.line_items.Reverse();
   }
@@ -2602,14 +2776,5 @@ void NGFlexLayoutAlgorithm::CheckFlexLines(
   }
 }
 #endif
-
-LogicalSize NGFlexLayoutAlgorithm::ChildAvailableSize() const {
-  LogicalSize available_size = NGLayoutAlgorithm::ChildAvailableSize();
-  if (UNLIKELY(item_inline_available_size_override_.has_value())) {
-    DCHECK_EQ(container_builder_.InlineSize(), kIndefiniteSize);
-    available_size.inline_size = *item_inline_available_size_override_;
-  }
-  return available_size;
-}
 
 }  // namespace blink

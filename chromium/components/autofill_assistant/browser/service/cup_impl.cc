@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,37 +79,59 @@ std::string CUPImpl::GetPublicKey() {
 }
 
 std::unique_ptr<client_update_protocol::Ecdsa> CUPImpl::CreateQuerySigner() {
-  return client_update_protocol::Ecdsa::Create(GetKeyVersion(), GetPublicKey());
+  const int public_key_version = GetKeyVersion();
+
+  VLOG(1) << "Resolved CUP public key version: '" << public_key_version << "'";
+
+  return client_update_protocol::Ecdsa::Create(public_key_version,
+                                               GetPublicKey());
 }
 
 CUPImpl::CUPImpl(std::unique_ptr<client_update_protocol::Ecdsa> query_signer,
                  RpcType rpc_type)
     : query_signer_{std::move(query_signer)}, rpc_type_{rpc_type} {
   DCHECK(query_signer_);
+  VLOG(2) << "CUPImpl instance created";
 }
 
-CUPImpl::~CUPImpl() = default;
+CUPImpl::~CUPImpl() {
+  VLOG(2) << "CUPImpl instance destroyed";
+}
 
 std::string CUPImpl::PackAndSignRequest(const std::string& original_request) {
-  if (rpc_type_ != RpcType::GET_ACTIONS) {
-    // Failsafe in case the method is called for a non-supported |rpc_type|.
-    return original_request;
+  switch (rpc_type_) {
+    case RpcType::GET_ACTIONS:
+      return InternalPackAndSignRequest<ScriptActionRequestProto>(
+          original_request);
+    case RpcType::GET_NO_ROUNDTRIP_SCRIPTS_BY_HASH_PREFIX:
+      return InternalPackAndSignRequest<
+          GetNoRoundTripScriptsByHashPrefixRequestProto>(original_request);
+    default:
+      LOG(DFATAL) << "CUPImpl::PackAndSignRequest was called for "
+                     "unsupported type. No packing was performed.";
+      return original_request;
   }
-  return PackGetActionsRequest(original_request);
 }
 
 absl::optional<std::string> CUPImpl::UnpackResponse(
     const std::string& original_response) {
-  if (rpc_type_ != RpcType::GET_ACTIONS) {
-    // Failsafe in case the method is called for a non-supported |rpc_type|.
-    return original_response;
+  switch (rpc_type_) {
+    case RpcType::GET_ACTIONS:
+      return InternalUnpackResponse<ActionsResponseProto>(original_response);
+    case RpcType::GET_NO_ROUNDTRIP_SCRIPTS_BY_HASH_PREFIX:
+      return InternalUnpackResponse<
+          GetNoRoundTripScriptsByHashPrefixResponseProto>(original_response);
+    default:
+      LOG(DFATAL) << "CUPImpl::UnpackResponse was called for "
+                     "unsupported type. No unpacking was performed.";
+      return original_response;
   }
-  return UnpackGetActionsResponse(original_response);
 }
 
-std::string CUPImpl::PackGetActionsRequest(
+template <class RequestProtoType>
+std::string CUPImpl::InternalPackAndSignRequest(
     const std::string& original_request) {
-  autofill_assistant::ScriptActionRequestProto actions_request;
+  RequestProtoType actions_request;
   actions_request.mutable_cup_data()->set_request(original_request);
 
   client_update_protocol::Ecdsa::RequestParameters request_parameters =
@@ -123,32 +145,34 @@ std::string CUPImpl::PackGetActionsRequest(
   return serialized_request;
 }
 
-absl::optional<std::string> CUPImpl::UnpackGetActionsResponse(
+template <class ResponseProtoType>
+absl::optional<std::string> CUPImpl::InternalUnpackResponse(
     const std::string& original_response) {
-  autofill_assistant::ActionsResponseProto actions_response;
-  if (!actions_response.ParseFromString(original_response)) {
+  ResponseProtoType response;
+  if (!response.ParseFromString(original_response)) {
     LOG(ERROR) << "Failed to parse server response";
     Metrics::RecordCupRpcVerificationEvent(
         Metrics::CupRpcVerificationEvent::PARSING_FAILED);
     return absl::nullopt;
   }
 
-  if (actions_response.cup_data().ecdsa_signature().empty()) {
+  if (response.cup_data().ecdsa_signature().empty()) {
     LOG(ERROR) << "Signature not provided for CUP RPC response";
     Metrics::RecordCupRpcVerificationEvent(
         Metrics::CupRpcVerificationEvent::EMPTY_SIGNATURE);
     return absl::nullopt;
   }
 
-  std::string serialized_response = actions_response.cup_data().response();
-  if (!query_signer_->ValidateResponse(
-          serialized_response, actions_response.cup_data().ecdsa_signature())) {
+  std::string serialized_response = response.cup_data().response();
+  if (!query_signer_->ValidateResponse(serialized_response,
+                                       response.cup_data().ecdsa_signature())) {
     LOG(ERROR) << "CUP RPC response verification failed";
     Metrics::RecordCupRpcVerificationEvent(
         Metrics::CupRpcVerificationEvent::VERIFICATION_FAILED);
     return absl::nullopt;
   }
 
+  VLOG(1) << "CUP RPC response verification succeeded";
   Metrics::RecordCupRpcVerificationEvent(
       Metrics::CupRpcVerificationEvent::VERIFICATION_SUCCEEDED);
   return serialized_response;

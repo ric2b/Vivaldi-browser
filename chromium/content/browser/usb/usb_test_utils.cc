@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,11 +22,13 @@ std::unique_ptr<UsbChooser> MockUsbDelegate::RunChooser(
   return nullptr;
 }
 
-void MockUsbDelegate::AddObserver(RenderFrameHost& frame, Observer* observer) {
+void MockUsbDelegate::AddObserver(BrowserContext* browser_context,
+                                  Observer* observer) {
   observer_list_.AddObserver(observer);
 }
 
-void MockUsbDelegate::RemoveObserver(Observer* observer) {
+void MockUsbDelegate::RemoveObserver(BrowserContext* browser_context,
+                                     Observer* observer) {
   observer_list_.RemoveObserver(observer);
 }
 

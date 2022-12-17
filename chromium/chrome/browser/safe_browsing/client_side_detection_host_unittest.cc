@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -408,8 +408,9 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
 
   void AdvanceTimeTickClock(base::TimeDelta delta) { clock_.Advance(delta); }
 
-  void SetFeatures(const std::vector<base::Feature>& enabled_features,
-                   const std::vector<base::Feature>& disabled_features) {
+  void SetFeatures(
+      const std::vector<base::test::FeatureRef>& enabled_features,
+      const std::vector<base::test::FeatureRef>& disabled_features) {
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
@@ -1165,8 +1166,8 @@ TEST_F(ClientSideDetectionHostTest, TestPreClassificationAllowlistedByPolicy) {
     GTEST_SKIP();
 
   // Configures enterprise allowlist.
-  ListPrefUpdate update(profile()->GetPrefs(),
-                        prefs::kSafeBrowsingAllowlistDomains);
+  ScopedListPrefUpdate update(profile()->GetPrefs(),
+                              prefs::kSafeBrowsingAllowlistDomains);
   update->Append("example.com");
 
   EXPECT_CALL(*csd_service_, GetModelStr())

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,6 +83,8 @@ class PLATFORM_EXPORT ScrollbarDisplayItem final : public DisplayItem {
     CompositorElementId element_id_;
     // This is lazily created for non-composited scrollbar.
     mutable sk_sp<const PaintRecord> record_;
+
+    USING_FAST_MALLOC(Data);
   };
   // This is to make ScrollbarDisplayItem not bigger than other DisplayItems,
   // so that we can store different types of DisplayItems in DisplayItemList

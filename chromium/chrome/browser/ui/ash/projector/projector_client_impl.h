@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,7 @@ namespace views {
 class WebView;
 }  // namespace views
 
-class OnDeviceSpeechRecognizer;
+class SpeechRecognitionRecognizerClientImpl;
 
 // The client implementation for the ProjectorController in ash/. This client is
 // responsible for handling requests that have browser dependencies.
@@ -55,6 +55,9 @@ class ProjectorClientImpl : public ash::ProjectorClient,
   void CloseProjectorApp() const override;
   void OnNewScreencastPreconditionChanged(
       const ash::NewScreencastPrecondition& precondition) const override;
+  void ToggleFileSyncingNotificationForPaths(
+      const std::vector<base::FilePath>& screencast_paths,
+      bool suppress) override;
 
   // SpeechRecognizerDelegate:
   void OnSpeechResult(
@@ -96,7 +99,7 @@ class ProjectorClientImpl : public ash::ProjectorClient,
   ash::ProjectorController* const controller_;
   SpeechRecognizerStatus recognizer_status_ =
       SpeechRecognizerStatus::SPEECH_RECOGNIZER_OFF;
-  std::unique_ptr<OnDeviceSpeechRecognizer> speech_recognizer_;
+  std::unique_ptr<SpeechRecognitionRecognizerClientImpl> speech_recognizer_;
 
   base::ScopedObservation<session_manager::SessionManager,
                           session_manager::SessionManagerObserver>

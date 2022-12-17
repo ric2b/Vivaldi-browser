@@ -1,30 +1,31 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/search_engines/search_engine_tab_helper.h"
 
-#include "base/bind.h"
-#include "base/strings/utf_string_conversions.h"
+#import "base/bind.h"
+#import "base/containers/contains.h"
+#import "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "components/favicon/core/favicon_service.h"
-#include "components/favicon/ios/web_favicon_driver.h"
-#include "components/keyed_service/core/service_access_type.h"
-#include "components/search_engines/template_url_service.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#include "ios/chrome/browser/favicon/favicon_service_factory.h"
-#include "ios/chrome/browser/search_engines/template_url_service_factory.h"
-#include "ios/chrome/browser/web/chrome_web_client.h"
+#import "components/favicon/core/favicon_service.h"
+#import "components/favicon/ios/web_favicon_driver.h"
+#import "components/keyed_service/core/service_access_type.h"
+#import "components/search_engines/template_url_service.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/favicon/favicon_service_factory.h"
+#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/web/chrome_web_client.h"
 #import "ios/web/public/test/scoped_testing_web_client.h"
 #import "ios/web/public/test/web_state_test_util.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
-#include "net/test/embedded_test_server/embedded_test_server.h"
-#include "net/test/embedded_test_server/http_request.h"
-#include "net/test/embedded_test_server/http_response.h"
-#include "testing/gtest/include/gtest/gtest.h"
-#include "testing/platform_test.h"
+#import "net/test/embedded_test_server/embedded_test_server.h"
+#import "net/test/embedded_test_server/http_request.h"
+#import "net/test/embedded_test_server/http_response.h"
+#import "testing/gtest/include/gtest/gtest.h"
+#import "testing/platform_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -141,7 +142,7 @@ TEST_F(SearchEngineTabHelperTest, AddTemplateURLByOpenSearch) {
   // added and others remain untouched.
   TemplateURL* new_url = nullptr;
   for (TemplateURL* url : template_url_service()->GetTemplateURLs()) {
-    if (std::find(old_urls.begin(), old_urls.end(), url) == old_urls.end()) {
+    if (!base::Contains(old_urls, url)) {
       ASSERT_FALSE(new_url);
       new_url = url;
     }
@@ -191,7 +192,7 @@ TEST_F(SearchEngineTabHelperTest, AddTemplateURLBySearchableURL) {
   // added and others remain untouched.
   TemplateURL* new_url = nullptr;
   for (TemplateURL* url : template_url_service()->GetTemplateURLs()) {
-    if (std::find(old_urls.begin(), old_urls.end(), url) == old_urls.end()) {
+    if (!base::Contains(old_urls, url)) {
       ASSERT_FALSE(new_url);
       new_url = url;
     }

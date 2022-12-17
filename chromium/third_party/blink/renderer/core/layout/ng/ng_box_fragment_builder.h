@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/core/layout/ng/table/ng_table_fragment_data.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
+#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
 namespace blink {
 
@@ -288,6 +289,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // Specify whether this will be the first fragment generated for the node.
   void SetIsFirstForNode(bool is_first) { is_first_for_node_ = is_first; }
 
+  void SetIsMonolithic(bool b) { is_monolithic_ = b; }
+
   // Set how much of the block-size we've used so far for this box. This will be
   // the sum of the block-size of all previous fragments PLUS the one we're
   // building now.
@@ -322,7 +325,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     // We should either do block fragmentation as part of normal layout, or
     // pre-set a break token.
     DCHECK(!did_break_self_);
-    DCHECK(child_break_tokens_.IsEmpty());
+    DCHECK(child_break_tokens_.empty());
 
     break_token_ = break_token;
   }
@@ -346,7 +349,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // token for this fragment nevertheless, so that we re-enter, descend and
   // resume at the broken children in the next fragmentainer.
   bool HasChildBreakInside() const {
-    if (!child_break_tokens_.IsEmpty())
+    if (!child_break_tokens_.empty())
       return true;
     // Inline nodes produce a "finished" trailing break token even if we don't
     // need to block-fragment.
@@ -415,6 +418,24 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     previous_break_after_ = break_after;
   }
 
+  void SetStartPageNameIfNeeded(AtomicString name) {
+    if (start_page_name_ == g_null_atom)
+      start_page_name_ = name;
+  }
+  void SetPreviousPageName(AtomicString name) { previous_page_name_ = name; }
+  AtomicString PreviousPageName() const { return previous_page_name_; }
+
+  void SetPageName(const AtomicString name) {
+    if (!name)
+      return;
+    if (page_name_) {
+      DCHECK_EQ(page_name_, name);
+      return;
+    }
+    page_name_ = name;
+  }
+  AtomicString PageName() const { return page_name_; }
+
   // Join/"collapse" the previous (stored) break-after value with the next
   // break-before value, to determine how to deal with breaking between two
   // in-flow siblings.
@@ -440,6 +461,10 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   }
 
   void SetDisableSimplifiedLayout() { disable_simplified_layout = true; }
+
+  void SetIsTruncatedByFragmentationLine() {
+    is_truncated_by_fragmentation_line = true;
+  }
 
   // See |NGPhysicalBoxFragment::InflowBounds|.
   void SetInflowBounds(const LogicalRect& inflow_bounds) {
@@ -549,21 +574,25 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     custom_layout_data_ = std::move(custom_layout_data);
   }
 
-  // Sets the alignment baseline for this fragment.
-  void SetBaseline(LayoutUnit baseline) { baseline_ = baseline; }
-  absl::optional<LayoutUnit> Baseline() const { return baseline_; }
+  // Sets the first baseline for this fragment.
+  void SetFirstBaseline(LayoutUnit baseline) { first_baseline_ = baseline; }
+  absl::optional<LayoutUnit> FirstBaseline() const { return first_baseline_; }
 
   // Sets the last baseline for this fragment.
-  void SetLastBaseline(LayoutUnit baseline) {
-    DCHECK_EQ(space_.BaselineAlgorithmType(),
-              NGBaselineAlgorithmType::kInlineBlock);
-    last_baseline_ = baseline;
-  }
+  void SetLastBaseline(LayoutUnit baseline) { last_baseline_ = baseline; }
   absl::optional<LayoutUnit> LastBaseline() const { return last_baseline_; }
 
-  // The inline block baseline is at the block end margin edge under some
-  // circumstances. This function updates |LastBaseline| in such cases.
-  void SetLastBaselineToBlockEndMarginEdgeIfNeeded();
+  // Sets both the first and last baseline to the same value.
+  void SetBaselines(LayoutUnit baseline) {
+    first_baseline_ = baseline;
+    last_baseline_ = baseline;
+  }
+
+  // Lets the parent layout algorithm know if it should use the first or last
+  // baseline for the special inline-block baseline algorithm.
+  void SetUseLastBaselineForInlineBaseline() {
+    use_last_baseline_for_inline_baseline_ = true;
+  }
 
   void SetTableGridRect(const LogicalRect& table_grid_rect) {
     table_grid_rect_ = table_grid_rect;
@@ -684,7 +713,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool HasForcedBreak() const { return has_forced_break_; }
 
   const NGBreakToken* LastChildBreakToken() const {
-    DCHECK(!child_break_tokens_.IsEmpty());
+    DCHECK(!child_break_tokens_.empty());
     return child_break_tokens_.back().Get();
   }
 
@@ -728,6 +757,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool is_known_to_fit_in_fragmentainer_ = false;
   bool requires_content_before_breaking_ = false;
   bool is_block_size_for_fragmentation_clamped_ = false;
+  bool is_monolithic_ = true;
   bool is_first_for_node_ = true;
   bool did_break_self_ = false;
   bool has_inflow_child_break_inside_ = false;
@@ -741,6 +771,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool is_at_block_end_ = false;
   bool disable_oof_descendants_propagation_ = false;
   bool disable_simplified_layout = false;
+  bool is_truncated_by_fragmentation_line = false;
+  bool use_last_baseline_for_inline_baseline_ = false;
   LayoutUnit block_offset_for_additional_columns_;
 
   LayoutUnit minimal_space_shortage_ = kIndefiniteSize;
@@ -754,10 +786,15 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // The break-after value of the previous in-flow sibling.
   EBreakBetween previous_break_after_ = EBreakBetween::kAuto;
 
+  AtomicString start_page_name_ = g_null_atom;
+  AtomicString previous_page_name_;
+
+  AtomicString page_name_;
+
   // The appeal of breaking inside this container.
   NGBreakAppeal break_appeal_ = kBreakAppealPerfect;
 
-  absl::optional<LayoutUnit> baseline_;
+  absl::optional<LayoutUnit> first_baseline_;
   absl::optional<LayoutUnit> last_baseline_;
   LayoutUnit math_italic_correction_;
 

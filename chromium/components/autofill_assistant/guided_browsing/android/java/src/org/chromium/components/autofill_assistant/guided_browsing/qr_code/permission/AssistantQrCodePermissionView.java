@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat;
 
 import org.chromium.components.autofill_assistant.guided_browsing.LayoutUtils;
 import org.chromium.components.autofill_assistant.guided_browsing.R;
+import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.widget.ButtonCompat;
 import org.chromium.ui.widget.ChromeImageView;
 
@@ -46,7 +47,8 @@ public class AssistantQrCodePermissionView {
      * The AssistantQrCodePermissionView constructor.
      */
     @SuppressWarnings("DiscouragedApi")
-    public AssistantQrCodePermissionView(Context context, AssistantQrCodePermissionType permission,
+    public AssistantQrCodePermissionView(Context context, WindowAndroid windowAndroid,
+            AssistantQrCodePermissionType permission,
             AssistantQrCodePermissionView.Delegate delegate,
             AssistantQrCodePermissionCallback permissionCallback) {
         mContext = context;
@@ -61,14 +63,13 @@ public class AssistantQrCodePermissionView {
 
         mPermissionMetric = permission.getAndroidPermissionMetric();
         mHasPromptedForPermissionOnce = true;
-        mAlreadyHasPermission = AssistantQrCodePermissionUtils.hasPermission(mContext, permission);
+        mAlreadyHasPermission =
+                AssistantQrCodePermissionUtils.hasPermission(windowAndroid, permission);
 
         // Updating permission view image based on the permission type.
         ChromeImageView permissionImageView = mPermissionView.findViewById(R.id.permission_image);
-        int permissionImageResouce = mContext.getResources().getIdentifier(
-                permission.getAndroidPermissionImage(), "drawable", mContext.getPackageName());
         permissionImageView.setImageDrawable(
-                ContextCompat.getDrawable(mContext, permissionImageResouce));
+                ContextCompat.getDrawable(mContext, permission.getAndroidPermissionImage()));
 
         updatePermissionButtonBehaviour();
     }

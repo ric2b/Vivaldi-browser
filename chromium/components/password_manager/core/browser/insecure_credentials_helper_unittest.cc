@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,7 +64,8 @@ class InsecureCredentialsHelperTest : public testing::Test {
     std::vector<std::unique_ptr<PasswordForm>> results;
     for (auto& form : password_forms)
       results.push_back(std::make_unique<PasswordForm>(std::move(form)));
-    consumer_->OnGetPasswordStoreResults(std::move(results));
+    consumer_->OnGetPasswordStoreResultsOrErrorFrom(store_.get(),
+                                                    std::move(results));
   }
 
   void TearDown() override { store()->ShutdownOnUIThread(); }

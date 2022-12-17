@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,6 @@
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/identity/gaia_remote_consent_flow.h"
 #include "chrome/browser/extensions/api/identity/identity_api.h"
 #include "chrome/browser/extensions/api/identity/identity_constants.h"
@@ -54,6 +53,9 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/crx_file/id_util.h"
 #include "components/guest_view/browser/guest_view_base.h"
+#include "components/guest_view/browser/guest_view_manager_delegate.h"
+#include "components/guest_view/browser/guest_view_manager_factory.h"
+#include "components/guest_view/browser/test_guest_view_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_reconcilor.h"
 #include "components/signin/public/base/list_accounts_test_utils.h"
@@ -62,11 +64,10 @@
 #include "components/signin/public/identity_manager/accounts_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
+#include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/common/api/oauth2.h"
 #include "extensions/common/extension_builder.h"
@@ -99,7 +100,11 @@
 #include "chromeos/startup/browser_init_params.h"
 #endif
 
+using extensions::ExtensionsAPIClient;
 using guest_view::GuestViewBase;
+using guest_view::GuestViewManager;
+using guest_view::TestGuestViewManager;
+using guest_view::TestGuestViewManagerFactory;
 using testing::_;
 using testing::Return;
 
@@ -218,7 +223,7 @@ class AsyncExtensionBrowserTest : public ExtensionBrowserTest {
 class TestHangOAuth2MintTokenFlow : public OAuth2MintTokenFlow {
  public:
   TestHangOAuth2MintTokenFlow()
-      : OAuth2MintTokenFlow(NULL, OAuth2MintTokenFlow::Parameters()) {}
+      : OAuth2MintTokenFlow(nullptr, OAuth2MintTokenFlow::Parameters()) {}
 
   void Start(scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
              const std::string& access_token) override {
@@ -286,52 +291,6 @@ class TestOAuth2MintTokenFlow : public OAuth2MintTokenFlow {
   raw_ptr<const std::set<std::string>> requested_scopes_;
   std::set<std::string> granted_scopes_;
   raw_ptr<OAuth2MintTokenFlow::Delegate> delegate_;
-};
-
-// Waits for a specific GURL to generate a NOTIFICATION_LOAD_STOP event and
-// saves a pointer to the window embedding the WebContents, which can be later
-// closed.
-class WaitForGURLAndCloseWindow : public content::WindowedNotificationObserver {
- public:
-  explicit WaitForGURLAndCloseWindow(GURL url)
-      : WindowedNotificationObserver(
-            content::NOTIFICATION_LOAD_STOP,
-            content::NotificationService::AllSources()),
-        url_(std::move(url)),
-        embedder_web_contents_(nullptr) {}
-
-  // NotificationObserver:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override {
-    content::NavigationController* web_auth_flow_controller =
-        content::Source<content::NavigationController>(source).ptr();
-    content::WebContents* web_contents =
-        web_auth_flow_controller->DeprecatedGetWebContents();
-
-    if (web_contents->GetLastCommittedURL() == url_) {
-      // It is safe to keep the pointer here, because we know in a test, that
-      // the WebContents won't go away before CloseEmbedderWebContents is
-      // called. Don't copy this code to production.
-      GuestViewBase* guest = GuestViewBase::FromWebContents(web_contents);
-      embedder_web_contents_ = guest->embedder_web_contents();
-      // Condtionally invoke parent class so that Wait will not exit
-      // until the target URL arrives.
-      content::WindowedNotificationObserver::Observe(type, source, details);
-    }
-  }
-
-  // Closes the window embedding the WebContents. The action is separated from
-  // the Observe method to make sure the list of observers is not deleted,
-  // while some event is already being processed. (That causes ASAN failures.)
-  void CloseEmbedderWebContents() {
-    if (embedder_web_contents_)
-      embedder_web_contents_->Close();
-  }
-
- private:
-  GURL url_;
-  raw_ptr<content::WebContents> embedder_web_contents_;
 };
 
 }  // namespace
@@ -624,38 +583,37 @@ class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
         ExtensionBuilder("Test").SetID(kExtensionId).Build().get());
     if (!utils::RunFunction(func.get(), std::string("[]"), browser(),
                             api_test_utils::NONE)) {
-      return GenerateFailureResult(gaia_ids, absl::nullopt)
+      return GenerateFailureResult(gaia_ids, nullptr)
              << "getAccounts did not return a result.";
     }
     const base::Value::List* callback_arguments_list = func->GetResultList();
     if (!callback_arguments_list)
-      return GenerateFailureResult(gaia_ids, absl::nullopt) << "NULL result";
+      return GenerateFailureResult(gaia_ids, nullptr) << "NULL result";
 
     if (callback_arguments_list->size() != 1u) {
-      return GenerateFailureResult(gaia_ids, absl::nullopt)
+      return GenerateFailureResult(gaia_ids, nullptr)
              << "Expected 1 argument but got "
              << callback_arguments_list->size();
     }
 
     if (!(*callback_arguments_list)[0].is_list())
-      GenerateFailureResult(gaia_ids, absl::nullopt)
-          << "Result was not an array";
-    base::Value::ConstListView results =
-        (*callback_arguments_list)[0].GetListDeprecated();
+      GenerateFailureResult(gaia_ids, nullptr) << "Result was not an array";
+    const base::Value::List& results = (*callback_arguments_list)[0].GetList();
 
     std::set<std::string> result_ids;
     for (const base::Value& item : results) {
       std::unique_ptr<api::identity::AccountInfo> info =
           api::identity::AccountInfo::FromValue(item);
-      if (info.get())
+      if (info.get()) {
         result_ids.insert(info->id);
-      else
-        return GenerateFailureResult(gaia_ids, results);
+      } else {
+        return GenerateFailureResult(gaia_ids, &results);
+      }
     }
 
     for (const std::string& gaia_id : gaia_ids) {
       if (result_ids.find(gaia_id) == result_ids.end())
-        return GenerateFailureResult(gaia_ids, results);
+        return GenerateFailureResult(gaia_ids, &results);
     }
 
     return testing::AssertionResult(true);
@@ -663,16 +621,16 @@ class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
 
   testing::AssertionResult GenerateFailureResult(
       const ::std::vector<std::string>& gaia_ids,
-      absl::optional<base::Value::ConstListView> results) {
+      const base::Value::List* results) {
     testing::Message msg("Expected: ");
     for (const std::string& gaia_id : gaia_ids) {
       msg << gaia_id << " ";
     }
     msg << "Actual: ";
-    if (!results.has_value()) {
+    if (!results) {
       msg << "NULL";
     } else {
-      for (const auto& result : results.value()) {
+      for (const auto& result : *results) {
         std::unique_ptr<api::identity::AccountInfo> info =
             api::identity::AccountInfo::FromValue(result);
         if (info.get())
@@ -903,7 +861,7 @@ class GetAuthTokenFunctionTest
     OAuth2Info& oauth2_info =
         const_cast<OAuth2Info&>(OAuth2ManifestHandler::GetOAuth2Info(*ext));
     if ((fields_to_set & CLIENT_ID) != 0)
-      oauth2_info.client_id = std::make_unique<std::string>("client1");
+      oauth2_info.client_id = "client1";
     if ((fields_to_set & SCOPES) != 0) {
       oauth2_info.scopes.push_back("scope1");
       oauth2_info.scopes.push_back("scope2");
@@ -995,9 +953,9 @@ class GetAuthTokenFunctionTest
         api::identity::GetAuthTokenResult::FromValue(*result_value);
     ASSERT_TRUE(result);
 
-    EXPECT_NE(nullptr, result->token);
+    EXPECT_TRUE(result->token);
     *access_token = *result->token;
-    EXPECT_NE(nullptr, result->granted_scopes);
+    EXPECT_TRUE(result->granted_scopes);
     std::set<std::string> granted_scopes_map(result->granted_scopes->begin(),
                                              result->granted_scopes->end());
     *granted_scopes = std::move(granted_scopes_map);
@@ -1018,9 +976,9 @@ class GetAuthTokenFunctionTest
         api::identity::GetAuthTokenResult::FromValue(result_value);
     ASSERT_TRUE(result);
 
-    ASSERT_NE(nullptr, result->token);
+    ASSERT_TRUE(result->token);
     *access_token = *result->token;
-    ASSERT_NE(nullptr, result->granted_scopes);
+    ASSERT_TRUE(result->granted_scopes);
     std::set<std::string> granted_scopes_map(result->granted_scopes->begin(),
                                              result->granted_scopes->end());
     *granted_scopes = std::move(granted_scopes_map);
@@ -3272,11 +3230,39 @@ IN_PROC_BROWSER_TEST_F(RemoveCachedAuthTokenFunctionTest, MatchingToken) {
 
 class LaunchWebAuthFlowFunctionTest : public AsyncExtensionBrowserTest {
  public:
+  void SetUp() override {
+    GuestViewManager::set_factory_for_testing(&factory_);
+    AsyncExtensionBrowserTest::SetUp();
+  }
+
+  void TearDown() override {
+    AsyncExtensionBrowserTest::TearDown();
+    GuestViewManager::set_factory_for_testing(nullptr);
+  }
+
   void SetUpCommandLine(base::CommandLine* command_line) override {
     AsyncExtensionBrowserTest::SetUpCommandLine(command_line);
     // Reduce performance test variance by disabling background networking.
     command_line->AppendSwitch(switches::kDisableBackgroundNetworking);
   }
+
+  TestGuestViewManager* GetGuestViewManager() {
+    TestGuestViewManager* manager = static_cast<TestGuestViewManager*>(
+        TestGuestViewManager::FromBrowserContext(browser()->profile()));
+    // Test code may access the TestGuestViewManager before it would be created
+    // during creation of the first guest.
+    if (!manager) {
+      manager = static_cast<TestGuestViewManager*>(
+          GuestViewManager::CreateWithDelegate(
+              browser()->profile(),
+              ExtensionsAPIClient::Get()->CreateGuestViewManagerDelegate(
+                  browser()->profile())));
+    }
+    return manager;
+  }
+
+ private:
+  TestGuestViewManagerFactory factory_;
 };
 
 IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest, UserCloseWindow) {
@@ -3292,14 +3278,19 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest, UserCloseWindow) {
       ExtensionBuilder("Test").Build());
   function->set_extension(empty_extension.get());
 
-  WaitForGURLAndCloseWindow popup_observer(auth_url);
-
   std::string args =
       "[{\"interactive\": true, \"url\": \"" + auth_url.spec() + "\"}]";
   RunFunctionAsync(function.get(), args);
 
-  popup_observer.Wait();
-  popup_observer.CloseEmbedderWebContents();
+  TestGuestViewManager* guest_view_manager = GetGuestViewManager();
+  auto* guest_view = guest_view_manager->WaitForSingleGuestViewCreated();
+  ASSERT_TRUE(guest_view);
+
+  guest_view_manager->WaitUntilAttached(guest_view);
+
+  auto* embedder_web_contents = guest_view->embedder_web_contents();
+  ASSERT_TRUE(embedder_web_contents);
+  embedder_web_contents->Close();
 
   EXPECT_EQ(std::string(errors::kUserRejected), WaitForError(function.get()));
 }

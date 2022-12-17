@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,13 +83,6 @@ public class AutofillAssistantClient {
     public static @Nullable AutofillAssistantClient createForWebContents(
             WebContents webContents, AssistantDependencies dependencies) {
         return AutofillAssistantClientJni.get().createForWebContents(webContents, dependencies);
-    }
-
-    /**
-     * Notifies that an onboarding UI is shown or hidden.
-     */
-    public static void onOnboardingUiChange(WebContents webContents, boolean shown) {
-        AutofillAssistantClientJni.get().onOnboardingUiChange(webContents, shown);
     }
 
     @CalledByNative
@@ -393,7 +386,6 @@ public class AutofillAssistantClient {
         AutofillAssistantClient fromWebContents(WebContents webContents);
         AutofillAssistantClient createForWebContents(
                 WebContents webContents, AssistantDependencies dependencies);
-        void onOnboardingUiChange(WebContents webContents, boolean shown);
         void onAccessToken(long nativeClientAndroid, AutofillAssistantClient caller,
                 boolean success, String accessToken);
         void onPaymentsClientToken(

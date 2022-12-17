@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,6 +65,41 @@ void TestFencedFrameURLMappingResultObserver::OnFencedFrameURLMappingComplete(
     pending_ad_components_map_ = absl::nullopt;
     reporting_metadata_ = ReportingMetadata();
   }
+}
+
+bool FencedFrameURLMappingTestPeer::HasObserver(
+    const GURL& urn_uuid,
+    FencedFrameURLMapping::MappingResultObserver* observer) {
+  return fenced_frame_url_mapping_->IsPendingMapped(urn_uuid) &&
+         fenced_frame_url_mapping_->pending_urn_uuid_to_url_map_.at(urn_uuid)
+             .count(observer);
+}
+
+void FencedFrameURLMappingTestPeer::GetSharedStorageReportingMap(
+    const GURL& urn_uuid,
+    SharedStorageReportingMap* out_reporting_map) {
+  DCHECK(out_reporting_map);
+
+  auto urn_it = fenced_frame_url_mapping_->urn_uuid_to_url_map_.find(urn_uuid);
+  DCHECK(urn_it != fenced_frame_url_mapping_->urn_uuid_to_url_map_.end());
+
+  if (urn_it->second.reporting_metadata.metadata.empty())
+    return;
+
+  auto data_it = urn_it->second.reporting_metadata.metadata.find(
+      blink::mojom::ReportingDestination::kSharedStorageSelectUrl);
+
+  if (data_it != urn_it->second.reporting_metadata.metadata.end())
+    *out_reporting_map = data_it->second;
+}
+
+void FencedFrameURLMappingTestPeer::FillMap(const GURL& url) {
+  while (!fenced_frame_url_mapping_->IsFull()) {
+    auto it = fenced_frame_url_mapping_->AddMappingForUrl(url);
+    DCHECK(it.has_value());
+  }
+
+  DCHECK(fenced_frame_url_mapping_->IsFull());
 }
 
 }  // namespace content

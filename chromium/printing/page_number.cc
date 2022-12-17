@@ -1,4 +1,4 @@
-// Copyright (c) 2006-2008 The Chromium Authors. All rights reserved.
+// Copyright 2006-2008 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,10 @@ uint32_t PageNumber::operator++() {
       *this = npos();
     } else {
       page_number_ = (*ranges_)[page_range_index_].from;
+      if (page_number_ >= document_page_count_) {
+        // Finished.
+        *this = npos();
+      }
     }
   }
   return ToUint();

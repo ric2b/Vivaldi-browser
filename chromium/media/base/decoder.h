@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,7 @@ enum class AudioDecoderType : int {
   kTesting = 6,          // Never send this to UKM, for tests only.
   kAudioToolbox = 7,     // AudioToolbox (macOS)
   kMediaFoundation = 8,  // MediaFoundationAudioDecoder
+  kPassthroughDTS = 9,   // Passthrough DTS audio
 
 
   kVivPassThrough,

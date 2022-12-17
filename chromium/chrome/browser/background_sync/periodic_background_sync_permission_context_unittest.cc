@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -192,8 +192,7 @@ class PeriodicBackgroundSyncPermissionContextWithPermissionTest
     : public PeriodicBackgroundSyncPermissionContextTest {
  private:
   base::test::ScopedFeatureList feature_list_{
-      base::Feature{"PeriodicSyncPermissionForDefaultSearchEngine",
-                    base::FEATURE_ENABLED_BY_DEFAULT}};
+      features::kPeriodicSyncPermissionForDefaultSearchEngine};
 };
 
 TEST_F(PeriodicBackgroundSyncPermissionContextWithPermissionTest,

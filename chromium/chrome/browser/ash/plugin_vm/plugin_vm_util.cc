@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
-#include "chromeos/dbus/dlcservice/dlcservice_client.h"
+#include "chromeos/ash/components/dbus/dlcservice/dlcservice_client.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -75,11 +75,11 @@ void SetFakePluginVmPolicy(Profile* profile,
                            const std::string& image_url,
                            const std::string& image_hash,
                            const std::string& license_key) {
-  DictionaryPrefUpdate update(profile->GetPrefs(),
+  ScopedDictPrefUpdate update(profile->GetPrefs(),
                               plugin_vm::prefs::kPluginVmImage);
-  base::Value* dict = update.Get();
-  dict->SetStringPath(prefs::kPluginVmImageUrlKeyName, image_url);
-  dict->SetStringPath(prefs::kPluginVmImageHashKeyName, image_hash);
+  base::Value::Dict& dict = update.Get();
+  dict.SetByDottedPath(prefs::kPluginVmImageUrlKeyName, image_url);
+  dict.SetByDottedPath(prefs::kPluginVmImageHashKeyName, image_hash);
   plugin_vm::PluginVmInstallerFactory::GetForProfile(profile)
       ->SkipLicenseCheckForTesting();  // IN-TEST
   MutableFakeLicenseKey() = license_key;

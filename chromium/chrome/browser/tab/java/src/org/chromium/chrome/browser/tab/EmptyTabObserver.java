@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@ import org.chromium.components.find_in_page.FindNotificationDetails;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.net.NetError;
+import org.chromium.ui.mojom.VirtualKeyboardMode;
 import org.chromium.url.GURL;
 
 /**
@@ -106,7 +107,11 @@ public class EmptyTabObserver implements TabObserver {
     public void onDidRedirectNavigation(Tab tab, NavigationHandle navigationHandle) {}
 
     @Override
-    public void onDidFinishNavigation(Tab tab, NavigationHandle navigationHandle) {}
+    public void onDidFinishNavigationInPrimaryMainFrame(
+            Tab tab, NavigationHandle navigationHandle) {}
+
+    @Override
+    public void onDidFinishNavigationNoop(Tab tab, NavigationHandle navigationHandle) {}
 
     @Override
     public void didFirstVisuallyNonEmptyPaint(Tab tab) {}
@@ -116,6 +121,9 @@ public class EmptyTabObserver implements TabObserver {
 
     @Override
     public void onBackgroundColorChanged(Tab tab, int color) {}
+
+    @Override
+    public void onVirtualKeyboardModeChanged(Tab tab, @VirtualKeyboardMode.EnumType int mode) {}
 
     @Override
     public void onInteractabilityChanged(Tab tab, boolean isInteractable) {}

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,14 +84,14 @@ class StyleEnvironmentVariablesTest : public PageTestBase {
     ASSERT_EQ(url.GetString(), GetDocument().Url().GetString());
   }
 
-  const String& GetRootVariableValue(UADefinedVariable name) {
+  String GetRootVariableValue(UADefinedVariable name) {
     CSSVariableData* data =
         StyleEnvironmentVariables::GetRootInstance().ResolveVariable(
             StyleEnvironmentVariables::GetVariableName(
                 name, /*feature_context=*/nullptr),
             {});
     EXPECT_NE(nullptr, data);
-    return data->BackingStrings()[0];
+    return data->Serialize();
   }
 
   void SetVariableOnRoot(const AtomicString& name, const String& value) {

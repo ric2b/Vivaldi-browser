@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,8 @@ FakeRgbkbdClient::~FakeRgbkbdClient() = default;
 
 void FakeRgbkbdClient::GetRgbKeyboardCapabilities(
     GetRgbKeyboardCapabilitiesCallback callback) {
-  std::move(callback).Run(capabilities_);
+  callback_ = std::move(callback);
+  attempt_run_rgb_keyboard_capabilities_callback();
 }
 
 void FakeRgbkbdClient::SetCapsLockState(bool enabled) {

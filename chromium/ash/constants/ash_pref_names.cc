@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,11 @@ const char kAssistPersonalInfoEnabled[] =
 // A boolean pref of whether assist predictive writing is enabled.
 const char kAssistPredictiveWritingEnabled[] =
     "assistive_input.predictive_writing_enabled";
+
+// A boolean pref of whether Google Calendar Integration is enabled.
+// Disabling this pref would stop the user from getting their
+// Google Calendar events from the system tray - Calendar widget.
+const char kCalendarIntegrationEnabled[] = "ash.calendar_integration_enabled";
 
 // A boolean pref of whether emoji suggestion is enabled.
 const char kEmojiSuggestionEnabled[] =
@@ -76,6 +81,18 @@ const char kAudioVolumePercent[] = "settings.audio.volume_percent";
 // Different state values indicate whether or not a device has been selected
 // as the active one for audio I/O, or it's a new plugged device.
 const char kAudioDevicesState[] = "settings.audio.device_state";
+
+// A dictionary maps each input device to a unique natural number
+// representing the user preference priority among all.
+// E.g {(0x9a, 1), (0xab, 2), (0xbc, 3), (0xcd, 4)}
+const char kAudioInputDevicesUserPriority[] =
+    "settings.audio.input_user_priority";
+
+// A dictionary maps each input device to a unique natural number
+// representing the user preference priority among all.
+// E.g {(0x9a, 1), (0xab, 2), (0xbc, 3), (0xcd, 4)}
+const char kAudioOutputDevicesUserPriority[] =
+    "settings.audio.output_user_priority";
 
 // A string pref storing an identifier that is getting sent with parental
 // consent in EDU account addition flow.
@@ -273,6 +290,15 @@ const char kAccessibilityAutoclickMovementThreshold[] =
 // The Autoclick menu position on the screen, an AutoclickMenuPosition.
 const char kAccessibilityAutoclickMenuPosition[] =
     "settings.a11y.autoclick_menu_position";
+// How much to greyscale the display.
+const char kAccessibilityGreyscaleAmount[] = "settings.a11y.greyscale_amount";
+// How much to saturate the display.
+const char kAccessibilitySaturationAmount[] = "settings.a11y.saturation_amount";
+// How much sepia the display.
+const char kAccessibilitySepiaAmount[] = "settings.a11y.sepia_amount";
+// How much to rotate the hue on the display.
+const char kAccessibilityHueRotationAmount[] =
+    "settings.a11y.hue_rotation_amount";
 // A boolean pref which determines whether caret highlighting is enabled.
 const char kAccessibilityCaretHighlightEnabled[] =
     "settings.a11y.caret_highlight";
@@ -696,6 +722,10 @@ const char kShelfAlignmentLocal[] = "shelf_alignment_local";
 // String value corresponding to ash::ShelfAutoHideBehavior (e.g. "Never").
 const char kShelfAutoHideBehavior[] = "auto_hide_behavior";
 const char kShelfAutoHideBehaviorLocal[] = "auto_hide_behavior_local";
+const char kShelfAutoHideTabletModeBehavior[] =
+    "auto_hide_tablet_mode_behavior";
+const char kShelfAutoHideTabletModeBehaviorLocal[] =
+    "auto_hide_tablet_mode_behavior_local";
 
 // Dictionary value that determines when the launcher navigation nudge should
 // show to the users.
@@ -756,6 +786,9 @@ const char kUserCameraAllowed[] = "ash.user.camera_allowed";
 
 // A boolean pref indicating whether the microphone is allowed to be used.
 const char kUserMicrophoneAllowed[] = "ash.user.microphone_allowed";
+
+// A boolean pref indicating whether the geolocation is allowed to be used.
+const char kUserGeolocationAllowed[] = "ash.user.geolocation_allowed";
 
 // A boolean pref which determines whether tap-dragging is enabled.
 const char kTapDraggingEnabled[] = "settings.touchpad.enable_tap_dragging";
@@ -1033,6 +1066,10 @@ const char kFilesAppFolderShortcuts[] = "ash.filesapp.folder_shortcuts";
 // the Chrome app to System Web App.
 const char kFilesAppUIPrefsMigrated[] = "ash.filesapp.ui_prefs_migrated";
 
+// A boolean pref that indicates if files can be trashed (on a supported
+// filesystem) or must be always permanently deleted.
+const char kFilesAppTrashEnabled[] = "ash.filesapp.trash_enabled";
+
 // Boolean value for the DeviceLoginScreenWebUILazyLoading device policy.
 const char kLoginScreenWebUILazyLoading[] =
     "ash.login.LoginScreenWebUILazyLoading";
@@ -1056,6 +1093,12 @@ const char kAutozoomState[] = "ash.camera.autozoom_state";
 // A dictionary storing the number of times and most recent time the autozoom
 // nudge was shown.
 const char kAutozoomNudges[] = "ash.camera.autozoom_nudges";
+
+// An boolean pref that specifies the recovery service activation for user.
+// When the pref is set to `true`, the user data recovery is activated. When the
+// pref is set to `false`, the user data recovery is not activated. The default
+// value of the pref is `true`. Controlled by RecoveryFactorBehavior policy.
+const char kRecoveryFactorBehavior[] = "ash.recovery.recovery_factor_behavior";
 
 // NOTE: New prefs should start with the "ash." prefix. Existing prefs moved
 // into this file should not be renamed, since they may be synced.

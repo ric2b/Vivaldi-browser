@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -194,7 +194,7 @@ const char kPrintPdfAsImage[] = "printPdfAsImage";
 // Preview WebUI does not send over invalid data.
 base::Value::Dict GetSettingsDictionary(const std::string& json_str) {
   absl::optional<base::Value> settings = base::JSONReader::Read(json_str);
-  base::Value::Dict dict = std::move(settings->GetDict());
+  base::Value::Dict dict = std::move(*settings).TakeDict();
   CHECK(!dict.empty());
   return dict;
 }
@@ -513,7 +513,7 @@ void PrintPreviewHandler::ReadPrinterTypeDenyListFromPrefs() {
     return;
 
   const base::Value::List& deny_list_from_prefs =
-      prefs->GetValueList(prefs::kPrinterTypeDenyList);
+      prefs->GetList(prefs::kPrinterTypeDenyList);
 
   std::vector<mojom::PrinterType> deny_list;
   deny_list.reserve(deny_list_from_prefs.size());
@@ -1194,8 +1194,7 @@ void PrintPreviewHandler::HandleManagePrinters(const base::Value::List& args) {
   }
   local_printer_->ShowSystemPrintSettings(base::DoNothing());
 #else
-  printing::PrinterManagerDialog::ShowPrinterManagerDialog(
-      Profile::FromWebUI(web_ui()));
+  printing::PrinterManagerDialog::ShowPrinterManagerDialog();
 #endif
 }
 

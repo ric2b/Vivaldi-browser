@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,6 +77,7 @@ const char kGnubbyV3ExtensionId[] = "lfboplenmmjcmpbkeemecobbadnmpfhi";
 const char kGCSEExtensionId[] = "cfmgaohenjcikllcgjpepfadgbflcjof";
 const char kContactCenterInsightsExtensionId[] =
     "oebfonohdfogiaaaelfmjlkjbgdbaahf";
+const char kDeskApiExtensionId[] = "kflgdebkpepnpjobkdfeeipcjdahoomc";
 const char kBruSecurityKeyForwarderExtensionId[] =
     "lcooaekmckohjjnpaaokodoepajbnill";
 #endif

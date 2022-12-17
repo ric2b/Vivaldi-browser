@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,10 +14,11 @@ import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
+import org.chromium.base.FeatureList;
 import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
-import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.browser_ui.widget.highlight.PulseDrawable.Bounds;
@@ -128,13 +129,21 @@ public class OptionalButtonCoordinator {
             mIphCommandBuilder = null;
         }
 
-        if (buttonData != null
-                && buttonData.getButtonSpec().getButtonVariant()
-                        == AdaptiveToolbarButtonVariant.PRICE_TRACKING
-                && buttonData.getButtonSpec().getActionChipLabelResId() != Resources.ID_NULL) {
-            if (!mFeatureEngagementTracker.isInitialized()
-                    || !mFeatureEngagementTracker.shouldTriggerHelpUI(
-                            FeatureConstants.CONTEXTUAL_PAGE_ACTIONS_PRICE_TRACKING_ACTION_CHIP)) {
+        boolean hasActionChipResourceId = buttonData != null
+                && buttonData.getButtonSpec().getActionChipLabelResId() != Resources.ID_NULL;
+
+        // Dynamic buttons include an action chip resource ID by default regardless of variant.
+        if (hasActionChipResourceId) {
+            // We should only show the action chip if the action chip variant is enabled.
+            boolean isActionChipVariant =
+                    FeatureList.isInitialized() && AdaptiveToolbarFeatures.shouldShowActionChip();
+            // And if feature engagement allows it.
+            boolean shouldShowActionChip = isActionChipVariant
+                    && mFeatureEngagementTracker.isInitialized()
+                    && mFeatureEngagementTracker.shouldTriggerHelpUI(
+                            FeatureConstants.CONTEXTUAL_PAGE_ACTIONS_ACTION_CHIP);
+
+            if (!shouldShowActionChip) {
                 ((ButtonDataImpl) buttonData).updateActionChipResourceId(Resources.ID_NULL);
             }
         }
@@ -218,7 +227,7 @@ public class OptionalButtonCoordinator {
             mFeatureEngagementTracker.addOnInitializedCallback(isReady -> {
                 if (!isReady) return;
                 mFeatureEngagementTracker.dismissed(
-                        FeatureConstants.CONTEXTUAL_PAGE_ACTIONS_PRICE_TRACKING_ACTION_CHIP);
+                        FeatureConstants.CONTEXTUAL_PAGE_ACTIONS_ACTION_CHIP);
             });
         }
 

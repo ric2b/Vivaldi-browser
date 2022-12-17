@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,18 +26,24 @@ int RunOpenProcessTest(bool unsandboxed,
                        DWORD access_mask) {
   TestRunner runner(JobLevel::kNone, USER_RESTRICTED_SAME_ACCESS,
                     USER_LOCKDOWN);
-  runner.GetPolicy()->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_UNTRUSTED);
-  runner.GetPolicy()->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  auto* config = runner.GetPolicy()->GetConfig();
+  config->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_UNTRUSTED);
+  ResultCode result = config->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  if (result != SBOX_ALL_OK)
+    return SBOX_TEST_FAILED_SETUP;
   if (lockdown_dacl)
-    runner.GetPolicy()->SetLockdownDefaultDacl();
+    config->SetLockdownDefaultDacl();
   runner.SetAsynchronous(true);
   // This spins up a renderer level process, we don't care about the result.
   runner.RunTest(L"IntegrationTestsTest_args 1");
 
   TestRunner runner2(JobLevel::kNone, USER_RESTRICTED_SAME_ACCESS,
                      USER_LIMITED);
-  runner2.GetPolicy()->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
-  runner2.GetPolicy()->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  auto* config2 = runner2.GetPolicy()->GetConfig();
+  config2->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  result = config2->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  if (result != SBOX_ALL_OK)
+    return SBOX_TEST_FAILED_SETUP;
   runner2.SetUnsandboxed(unsandboxed);
   return runner2.RunTest(
       base::StringPrintf(L"RestrictedTokenTest_openprocess %d 0x%08X",
@@ -49,11 +55,15 @@ int RunRestrictedOpenProcessTest(bool unsandboxed,
                                  bool lockdown_dacl,
                                  DWORD access_mask) {
   TestRunner runner(JobLevel::kNone, USER_RESTRICTED_SAME_ACCESS, USER_LIMITED);
-  runner.GetPolicy()->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
-  runner.GetPolicy()->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  auto* config = runner.GetPolicy()->GetConfig();
+  config->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  ResultCode result = config->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  if (result != SBOX_ALL_OK)
+    return SBOX_TEST_FAILED_SETUP;
+
   if (lockdown_dacl) {
-    runner.GetPolicy()->SetLockdownDefaultDacl();
-    runner.GetPolicy()->AddRestrictingRandomSid();
+    config->SetLockdownDefaultDacl();
+    config->AddRestrictingRandomSid();
   }
   runner.SetAsynchronous(true);
   // This spins up a GPU level process, we don't care about the result.
@@ -61,8 +71,11 @@ int RunRestrictedOpenProcessTest(bool unsandboxed,
 
   TestRunner runner2(JobLevel::kNone, USER_RESTRICTED_SAME_ACCESS,
                      USER_LIMITED);
-  runner2.GetPolicy()->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
-  runner2.GetPolicy()->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  auto* config2 = runner2.GetPolicy()->GetConfig();
+  config2->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  result = config2->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  if (result != SBOX_ALL_OK)
+    return SBOX_TEST_FAILED_SETUP;
   runner2.SetUnsandboxed(unsandboxed);
   return runner2.RunTest(
       base::StringPrintf(L"RestrictedTokenTest_openprocess %d 0x%08X",
@@ -72,11 +85,14 @@ int RunRestrictedOpenProcessTest(bool unsandboxed,
 
 int RunRestrictedSelfOpenProcessTest(bool add_random_sid, DWORD access_mask) {
   TestRunner runner(JobLevel::kNone, USER_RESTRICTED_SAME_ACCESS, USER_LIMITED);
-  runner.GetPolicy()->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
-  runner.GetPolicy()->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
-  runner.GetPolicy()->SetLockdownDefaultDacl();
+  auto* config = runner.GetPolicy()->GetConfig();
+  config->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  ResultCode result = config->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  if (result != SBOX_ALL_OK)
+    return SBOX_TEST_FAILED_SETUP;
+  config->SetLockdownDefaultDacl();
   if (add_random_sid)
-    runner.GetPolicy()->AddRestrictingRandomSid();
+    config->AddRestrictingRandomSid();
 
   return runner.RunTest(
       base::StringPrintf(L"RestrictedTokenTest_currentprocess_dup 0x%08X",

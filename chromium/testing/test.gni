@@ -1,4 +1,4 @@
-# Copyright 2015 The Chromium Authors. All rights reserved.
+# Copyright 2015 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -43,8 +43,9 @@ if (is_android) {
 } else if (is_fuchsia) {
   import("//build/config/chromecast_build.gni")
   import("//build/config/fuchsia/generate_runner_scripts.gni")
-  import("//build/config/fuchsia/package.gni")
   import("//third_party/fuchsia-sdk/sdk/build/cmc.gni")
+  import("//third_party/fuchsia-sdk/sdk/build/component.gni")
+  import("//third_party/fuchsia-sdk/sdk/build/package.gni")
 } else if (is_chromeos && is_chromeos_device) {
   import("//build/config/chromeos/rules.gni")
   import("//build/config/sanitizers/sanitizers.gni")
@@ -110,7 +111,7 @@ template("mixed_test") {
 #      The default value is true; set it to false explicitly to omit a .cm
 #      manifest from the package.
 #   use_cfv1: (Fuchsia, optional): build the test as a framework v1 component.
-#      The default value is true; set it to false explicitly to omit a .cmx
+#      The default value is false; set it to true explicitly to include a .cmx
 #      manifest from the package.
 #   test_runner_shard: (Fuchsia, optional): for CFv2 tests, use the given test
 #      runner shard rather than the default shard for the ELF runner. This is
@@ -251,9 +252,9 @@ template("test") {
         }
       }
     } else {
-      _library_target = "${target_name}__library"
+      _library_target_name = "${target_name}__library"
       _library_crate_name = "${target_name}_library"
-      _apk_target = "${target_name}__apk"
+      _apk_target_name = "${target_name}__apk"
       _apk_specific_vars = [
         "allow_cleartext_traffic",
         "android_manifest",
@@ -274,34 +275,53 @@ template("test") {
         "use_native_activity",
       ]
 
+      _add_unwind_tables_in_apk =
+          defined(invoker.add_unwind_tables_in_apk) &&
+          invoker.add_unwind_tables_in_apk && target_cpu == "arm"
+
       # Adds the unwind tables from unstripped binary as an asset file in the
       # apk, if |add_unwind_tables_in_apk| is specified by the test.
-      if (defined(invoker.add_unwind_tables_in_apk) &&
-          invoker.add_unwind_tables_in_apk) {
+      if (_add_unwind_tables_in_apk) {
+        # TODO(crbug.com/1315603): Remove generation of v1 unwind asset when
+        # `CFIBacktraceAndroid` is replaced with `ChromeUnwinderAndroidV2`.
+        _unwind_table_name = "${_library_target_name}_unwind_v1"
+        unwind_table_v1(_unwind_table_name) {
+          library_target = ":$_library_target_name"
+        }
+
         if (use_android_unwinder_v2) {
-          _unwind_table_asset_v2_name = "${target_name}_v2_unwind_assets"
-          unwind_table_asset_v2(_unwind_table_asset_v2_name) {
-            library_target = _library_target
-            deps = [ ":$_library_target" ]
+          _unwind_table_v2_name = "${_library_target_name}_unwind_v2"
+          unwind_table_v2(_unwind_table_v2_name) {
+            library_target = ":$_library_target_name"
           }
         }
 
-        # TODO(crbug.com/1315603): Remove generation of v1 unwind asset when
-        # `CFIBacktraceAndroid` is replaced with `ChromeUnwinderAndroidV2`.
-        _unwind_table_asset_name = "${target_name}_unwind_assets"
-        unwind_table_asset(_unwind_table_asset_name) {
-          library_target = _library_target
-          deps = [ ":$_library_target" ]
+        _unwind_table_asset_name = "${target_name}__unwind_assets"
+        android_assets(_unwind_table_asset_name) {
+          sources = [ "$target_out_dir/$_unwind_table_name/$unwind_table_asset_v1_filename" ]
+          disable_compression = true
+          deps = [ ":$_unwind_table_name" ]
+          if (use_android_unwinder_v2) {
+            sources += [ "$target_out_dir/$_unwind_table_v2_name/$unwind_table_asset_v2_filename" ]
+            deps += [ ":$_unwind_table_v2_name" ]
+          }
         }
       }
 
-      mixed_test(_library_target) {
+      mixed_test(_library_target_name) {
         target_type = "shared_library"
 
         # Configs will always be defined since we set_defaults in
         # BUILDCONFIG.gn.
         configs = []  # Prevent list overwriting warning.
         configs = invoker.configs
+
+        if (_add_unwind_tables_in_apk) {
+          # Remove -gz if present, as dump_syms does not support it.
+          # Add and then remove because "-=" removes all, but errors if none are found.
+          configs += [ "//build/config:compress_debug_sections" ]
+          configs -= [ "//build/config:compress_debug_sections" ]
+        }
 
         # Use a crate name that avoids creating a warning due to double
         # underscore (ie. `__`).
@@ -310,7 +330,10 @@ template("test") {
         forward_variables_from(
             invoker,
             "*",
-            [ "deps" ] + _apk_specific_vars + _wrapper_script_vars +
+            [
+                  "configs",
+                  "deps",
+                ] + _apk_specific_vars + _wrapper_script_vars +
                 TESTONLY_AND_VISIBILITY)
 
         # Native targets do not need to depend on java targets. Filter them out
@@ -318,21 +341,16 @@ template("test") {
         # dependent java targets.
         deps = []
         if (defined(invoker.deps)) {
-          foreach(_dep, invoker.deps) {
-            _target_label = get_label_info(_dep, "label_no_toolchain")
-            if (filter_exclude([ _target_label ], java_target_patterns) != []) {
-              deps += [ _dep ]
-            }
-          }
+          deps = filter_exclude(invoker.deps, java_target_patterns)
         }
 
         if (_use_default_launcher) {
           deps += [ "//testing/android/native_test:native_test_native_code" ]
         }
       }
-      unittest_apk(_apk_target) {
+      unittest_apk(_apk_target_name) {
         forward_variables_from(invoker, _apk_specific_vars)
-        shared_library = ":$_library_target"
+        shared_library = ":$_library_target_name"
         apk_name = invoker.target_name
         if (defined(invoker.output_name)) {
           apk_name = invoker.output_name
@@ -357,10 +375,6 @@ template("test") {
           deps += [ ":${_unwind_table_asset_name}" ]
         }
 
-        if (defined(_unwind_table_asset_v2_name)) {
-          deps += [ ":${_unwind_table_asset_v2_name}" ]
-        }
-
         if (use_rts) {
           data_deps = [ ":${invoker.target_name}__rts_filters" ]
         }
@@ -374,12 +388,12 @@ template("test") {
         executable_dist_dir = "$root_out_dir/$_dist_target"
         data_deps = [ ":$_exec_target" ]
       } else {
-        apk_target = ":$_apk_target"
+        apk_target = ":$_apk_target_name"
         incremental_apk = incremental_install
 
         # Dep needed for the test runner .runtime_deps file to pick up data
         # deps from the forward_variables_from(invoker, "*") on the library.
-        data_deps = [ ":$_library_target" ]
+        data_deps = [ ":$_library_target_name" ]
       }
       test_name = _output_name
       test_suite = _output_name
@@ -406,8 +420,8 @@ template("test") {
         # Dep needed for the swarming .isolate file to pick up data
         # deps from the forward_variables_from(invoker, "*") on the library.
         deps += [
-          ":$_apk_target",
-          ":$_library_target",
+          ":$_apk_target_name",
+          ":$_library_target_name",
         ]
       }
 
@@ -430,9 +444,11 @@ template("test") {
   } else if (is_fuchsia) {
     assert(!defined(invoker.use_xvfb) || !invoker.use_xvfb)
 
+    _use_cfv1 = defined(invoker.use_cfv1) && invoker.use_cfv1  # opt-in
+    _use_cfv2 = !defined(invoker.use_cfv2) || invoker.use_cfv2  # opt-out
+
     # It's meaningless to omit both types of manifest from the package.
-    assert(!defined(invoker.use_cfv2) || invoker.use_cfv2 ||
-           !defined(invoker.use_cfv1) || invoker.use_cfv1)
+    assert(_use_cfv1 || _use_cfv2)
 
     _output_name = invoker.target_name
     _pkg_target = "${_output_name}_pkg"
@@ -441,7 +457,7 @@ template("test") {
     _test_component_targets = []
 
     # Generate a CFv2 manifest unless the target opts-out via `use_cfv2=false`.
-    if (!defined(invoker.use_cfv2) || invoker.use_cfv2) {
+    if (_use_cfv2) {
       # Generate a CML fragment that provides the program name.
       _test_program_fragment_target = "${target_name}_program-fragment"
       _test_program_fragment =
@@ -504,8 +520,8 @@ template("test") {
       _test_component_targets += [ ":${_test_component_target}" ]
     }
 
-    # Generate a CFv1 manifest unless the target opts-out via `use_cfv1=false`.
-    if (!defined(invoker.use_cfv1) || invoker.use_cfv1) {
+    # Generate a CFv1 manifest if the target opts-in via `use_cfv1=true`.
+    if (_use_cfv1) {
       # Generate a CMX fragment that provides the program name.
       _test_program_fragment_target_v1 = "${target_name}_program-fragment_v1"
       _test_program_fragment_v1 =
@@ -1105,13 +1121,14 @@ set_defaults("test") {
     configs = default_shared_library_configs
     configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
     configs += [ "//build/config/android:hide_all_but_jni" ]
+
+    # Compress sections to stay under 4gb hard limit on 32-bit current_cpu.
+    # https://crbug.com/1354616
+    if (symbol_level == 2 && !use_debug_fission &&
+        (current_cpu == "arm" || current_cpu == "x86")) {
+      configs += [ "//build/config:compress_debug_sections" ]
+    }
   } else {
     configs = default_executable_configs
-    if (is_mac) {
-      # TODO(lgrey): Maybe restore this.
-      # Don't strip tests for visibility into test crashes/hangs.
-      # https://bugs.chromium.org/p/chromium/issues/detail?id=1244047#c49
-      configs -= [ "//build/config/mac:strip_all" ]
-    }
   }
 }

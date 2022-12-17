@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,10 +31,10 @@ IN_PROC_BROWSER_TEST_P(SettingsAppIntegrationTest, SettingsApp) {
 // via SystemFeaturesDisableList policy, but doesn't launch.
 IN_PROC_BROWSER_TEST_P(SettingsAppIntegrationTest, SettingsAppDisabled) {
   {
-    ListPrefUpdate update(TestingBrowserProcess::GetGlobal()->local_state(),
-                          policy::policy_prefs::kSystemFeaturesDisableList);
-    base::Value* list = update.Get();
-    list->Append(static_cast<int>(policy::SystemFeature::kOsSettings));
+    ScopedListPrefUpdate update(
+        TestingBrowserProcess::GetGlobal()->local_state(),
+        policy::policy_prefs::kSystemFeaturesDisableList);
+    update->Append(static_cast<int>(policy::SystemFeature::kOsSettings));
   }
 
   ASSERT_FALSE(GetManager()
@@ -103,8 +103,6 @@ IN_PROC_BROWSER_TEST_P(SettingsAppIntegrationTest,
       browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true);
   ash::LaunchSystemWebAppAsync(incognito_profile,
                                ash::SystemWebAppType::SETTINGS);
-  ash::FlushSystemWebAppLaunchesForTesting(
-      incognito_profile->GetOriginalProfile());
 
   // There should be a browser for the original profile, but not the incognito
   // profile.

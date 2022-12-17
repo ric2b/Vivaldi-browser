@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -360,7 +360,8 @@ class AutofillWalletMetadataSyncBridgeTest : public testing::Test {
     for (const WalletMetadataSpecifics& specifics : remote_data) {
       updates.push_back(SpecificsToUpdateResponse(specifics));
     }
-    real_processor_->OnUpdateReceived(state, std::move(updates));
+    real_processor_->OnUpdateReceived(state, std::move(updates),
+                                      /*gc_directive=*/absl::nullopt);
   }
 
   void ReceiveTombstones(
@@ -377,7 +378,8 @@ class AutofillWalletMetadataSyncBridgeTest : public testing::Test {
       updates.push_back(
           SpecificsToUpdateResponse(specifics, /*is_deleted=*/true));
     }
-    real_processor_->OnUpdateReceived(state, std::move(updates));
+    real_processor_->OnUpdateReceived(state, std::move(updates),
+                                      /*gc_directive=*/absl::nullopt);
   }
 
   EntityData SpecificsToEntity(const WalletMetadataSpecifics& specifics,

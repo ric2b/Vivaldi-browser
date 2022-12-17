@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -188,9 +188,9 @@ class ASH_EXPORT ProjectorControllerImpl
   // restriction check is not completed.
   void MaybeWrapUpRecording();
 
-  // Get the screencast file path without file extension. This will be used
-  // to construct media and metadata file path.
-  base::FilePath GetScreencastFilePathNoExtension() const;
+  // Returns all file paths related to current recording. Paths are calculated
+  // from the container folder.
+  std::vector<base::FilePath> GetScreencastFilePaths() const;
 
   ProjectorClient* client_ = nullptr;
   std::unique_ptr<ProjectorSessionImpl> projector_session_;

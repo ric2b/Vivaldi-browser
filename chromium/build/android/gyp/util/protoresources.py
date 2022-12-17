@@ -1,10 +1,10 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Functions that modify resources in protobuf format.
 
 Format reference:
-https://cs.android.com/android/platform/superproject/+/master:frameworks/base/tools/aapt2/Resources.proto
+https://cs.android.com/search?q=f:aapt2.*Resources.proto
 """
 
 import logging
@@ -267,7 +267,7 @@ class _ResourceStripper:
 
 
 def _TableFromFlatBytes(data):
-  # https://cs.android.com/android/platform/superproject/+/master:frameworks/base/tools/aapt2/format/Container.cpp
+  # https://cs.android.com/search?q=f:aapt2.*Container.cpp
   size_idx = len(_FLAT_ARSC_HEADER)
   proto_idx = size_idx + 8
   if data[:size_idx] != _FLAT_ARSC_HEADER:

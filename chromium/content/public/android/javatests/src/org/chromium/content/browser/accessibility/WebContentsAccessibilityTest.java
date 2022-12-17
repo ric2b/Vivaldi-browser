@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -465,6 +465,7 @@ public class WebContentsAccessibilityTest {
      */
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/1360513")
     public void testUMAHistograms_OnDemand_AXModeComplete_100Percent() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
         setupTestWithHTML("<p>This is a test 1</p>\n"
@@ -1020,6 +1021,7 @@ public class WebContentsAccessibilityTest {
      */
     @Test
     @LargeTest
+    @DisabledTest(message = "https://crbug.com/1360585")
     public void testEvent_contenteditable_SelectionON_CharacterGranularity() throws Throwable {
         setupTestWithHTML("<div contenteditable>Testing</div>");
 
@@ -1273,7 +1275,9 @@ public class WebContentsAccessibilityTest {
         // would be generated if spelling correction was enabled. Clear our cache for this node.
         int textNodeVirtualViewId =
                 waitForNodeMatching(sClassNameMatcher, "android.widget.EditText");
-        mActivityTestRule.mWcax.addSpellingErrorForTesting(textNodeVirtualViewId, 4, 9);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.mWcax.addSpellingErrorForTesting(textNodeVirtualViewId, 4, 9);
+        });
         mActivityTestRule.mWcax.clearNodeInfoCacheForGivenId(textNodeVirtualViewId);
 
         // Get |AccessibilityNodeInfo| object and confirm it is not null.

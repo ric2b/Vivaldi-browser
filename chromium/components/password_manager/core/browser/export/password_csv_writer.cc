@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,10 +42,10 @@ std::string PasswordCSVWriter::SerializePasswords(
 std::map<std::string, std::string> PasswordCSVWriter::PasswordFormToRecord(
     const CredentialUIEntry& credential) {
   std::map<std::string, std::string> record;
-  record[kUrlColumnName] = credential.url.spec();
+  record[kUrlColumnName] = credential.GetURL().spec();
   record[kUsernameColumnName] = base::UTF16ToUTF8(credential.username);
   record[kPasswordColumnName] = base::UTF16ToUTF8(credential.password);
-  record[kTitleColumnName] = credential.url.host();
+  record[kTitleColumnName] = credential.GetURL().host();
   return record;
 }
 

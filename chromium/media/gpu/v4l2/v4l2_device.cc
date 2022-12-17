@@ -1,13 +1,15 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "media/gpu/v4l2/v4l2_device.h"
 
+#include <errno.h>
 #include <fcntl.h>
-#include <poll.h>
 #include <linux/media.h>
+#include <poll.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <set>
@@ -128,6 +130,20 @@ void V4L2ProcessingTrace(const struct v4l2_buffer* v4l2_buffer, bool start) {
                                     TRACE_ID_LOCAL(timestamp), "timestamp",
                                     timestamp);
   }
+}
+
+bool LibV4L2Exists() {
+#if BUILDFLAG(USE_LIBV4L2)
+  return true;
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (access(V4L2Device::kLibV4l2Path, F_OK) == 0)
+    return true;
+  PLOG_IF(FATAL, errno != ENOENT)
+      << "access() failed for a reason other than ENOENT";
+  return false;
+#else
+  return false;
+#endif
 }
 
 }  // namespace
@@ -593,8 +609,10 @@ bool V4L2WritableBufferRef::DoQueue(V4L2RequestRef* request_ref,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(buffer_data_);
 
-  if (request_ref && buffer_data_->queue_->SupportsRequests())
-    request_ref->ApplyQueueBuffer(&(buffer_data_->v4l2_buffer_));
+  if (request_ref && buffer_data_->queue_->SupportsRequests() &&
+      !request_ref->ApplyQueueBuffer(&(buffer_data_->v4l2_buffer_))) {
+    return false;
+  }
 
   bool queued = buffer_data_->QueueBuffer(std::move(video_frame));
 
@@ -1012,7 +1030,8 @@ V4L2Queue::~V4L2Queue() {
 
   if (is_streaming_) {
     VQLOGF(1) << "Queue is still streaming, trying to stop it...";
-    Streamoff();
+    if (!Streamoff())
+      VQLOGF(1) << "Failed to stop queue";
   }
 
   DCHECK(queued_buffers_.empty());
@@ -1020,7 +1039,8 @@ V4L2Queue::~V4L2Queue() {
 
   if (!buffers_.empty()) {
     VQLOGF(1) << "Buffers are still allocated, trying to deallocate them...";
-    DeallocateBuffers();
+    if (!DeallocateBuffers())
+      VQLOGF(1) << "Failed to deallocate queue buffers";
   }
 
   std::move(destroy_cb_).Run();
@@ -1166,7 +1186,8 @@ size_t V4L2Queue::AllocateBuffers(size_t count,
     auto buffer = V4L2Buffer::Create(device_, type_, memory_, *format, i);
 
     if (!buffer) {
-      DeallocateBuffers();
+      if (!DeallocateBuffers())
+        VQLOGF(1) << "Failed to deallocate queue buffers";
 
       return 0;
     }
@@ -1961,6 +1982,12 @@ size_t V4L2Device::GetNumPlanesOfV4L2PixFmt(uint32_t pix_fmt) {
     return VideoFrame::NumPlanes(fourcc->ToVideoPixelFormat());
   }
   return 1u;
+}
+
+// static
+bool V4L2Device::UseLibV4L2() {
+  static const bool use_libv4l2 = LibV4L2Exists();
+  return use_libv4l2;
 }
 
 void V4L2Device::GetSupportedResolution(uint32_t pixelformat,

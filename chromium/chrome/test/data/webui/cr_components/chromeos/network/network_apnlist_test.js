@@ -1,11 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'chrome://os-settings/strings.m.js';
-import 'chrome://resources/cr_components/chromeos/network/network_apnlist.m.js';
+import 'chrome://resources/ash/common/network/network_apnlist.js';
 
-import {OncMojo} from 'chrome://resources/cr_components/chromeos/network/onc_mojo.m.js';
+import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 suite('NetworkNetworkApnlistTest', function() {
@@ -49,11 +49,13 @@ suite('NetworkNetworkApnlistTest', function() {
   }
 
   /**
-   * @param {String} attachApnStr Expected value of the attach field.
+   * @param {String?} attachApnStr Expected value of the attach field.
    */
   function apnEventToPromise(attachApnStr) {
     return new Promise(function(resolve, reject) {
       apnlist.addEventListener('apn-change', function f(e) {
+        assertTrue(!!e.detail.apnTypes);
+        assertEquals(1, e.detail.apnTypes.length);
         assertEquals(e.detail.attach, attachApnStr);
         apnlist.removeEventListener('apn-change', f);
         resolve(e);
@@ -71,6 +73,10 @@ suite('NetworkNetworkApnlistTest', function() {
               {
                 accessPointName: 'Access Point',
                 name: 'AP-name',
+              },
+              {
+                accessPointName: 'Access Point 2',
+                name: 'AP-name-2',
               },
             ],
           },
@@ -90,10 +96,11 @@ suite('NetworkNetworkApnlistTest', function() {
 
     const selectEl = apnlist.$.selectApn;
     assertTrue(!!selectEl);
-    assertEquals(2, selectEl.length);
+    assertEquals(3, selectEl.length);
     assertEquals(0, selectEl.selectedIndex);
     assertEquals('AP-name', selectEl.options.item(0).value);
-    assertEquals('Other', selectEl.options.item(1).value);
+    assertEquals('AP-name-2', selectEl.options.item(1).value);
+    assertEquals('Other', selectEl.options.item(2).value);
   });
 
   test('Disabled UI state', async function() {
@@ -116,6 +123,15 @@ suite('NetworkNetworkApnlistTest', function() {
     assertTrue(selectEl.disabled);
     assertTrue(propertyList.disabled);
     assertTrue(button.disabled);
+  });
+
+  test('Select different database APN', async function() {
+    const selectEl = apnlist.$.selectApn;
+    const expectedapnEvent = apnEventToPromise();
+
+    selectEl.value = 'AP-name-2';
+    selectEl.dispatchEvent(new Event('change'));
+    await expectedapnEvent;
   });
 
   test('Attach APN does not occur', async function() {

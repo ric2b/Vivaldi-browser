@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.mojom.VirtualKeyboardMode;
 import org.chromium.url.GURL;
 
 /**
@@ -217,7 +218,7 @@ public interface TabObserver {
     void onDidStartNavigationInPrimaryMainFrame(Tab tab, NavigationHandle navigationHandle);
 
     /**
-     * TODO(crbug.com/1337446) Remove when NotifyJavaSpuriouslyToMeasurePerf experiment is finished.
+     * TODO(crbug.com/1351884) Remove when NotifyJavaSpuriouslyToMeasurePerf experiment is finished.
      * No-op, for measuring performance of calling didStartNavigation in only the primary main
      * frame vs calling it in all frames.
      */
@@ -232,12 +233,20 @@ public interface TabObserver {
     void onDidRedirectNavigation(Tab tab, NavigationHandle navigationHandle);
 
     /**
-     * Called when a navigation is finished i.e. committed, aborted or replaced by a new one.
+     * Called when a navigation is finished i.e. committed, aborted or replaced by a new one, in the
+     * primary main frame.
      * @param tab The notifying {@link Tab}.
      * @param navigationHandle Pointer to a NavigationHandle representing the navigation.
      *                         Its lifetime end at the end of this function.
      */
-    void onDidFinishNavigation(Tab tab, NavigationHandle navigation);
+    void onDidFinishNavigationInPrimaryMainFrame(Tab tab, NavigationHandle navigation);
+
+    /**
+     * TODO(crbug.com/1351884) Remove when NotifyJavaSpuriouslyToMeasurePerf experiment is finished.
+     * No-op, for measuring performance of calling didFinishNavigation in only the primary main
+     * frame vs calling it in all frames.
+     */
+    void onDidFinishNavigationNoop(Tab tab, NavigationHandle navigationHandle);
 
     /**
      * Called when the page has painted something non-empty.
@@ -258,6 +267,13 @@ public interface TabObserver {
      * @param color The current background color.
      */
     void onBackgroundColorChanged(Tab tab, int color);
+
+    /**
+     * Called when the virtual keyboard mode in the tab's current page has been changed.
+     * @param tab The notifying {@link Tab}.
+     * @param mode The current virtual keyboard mode.
+     */
+    void onVirtualKeyboardModeChanged(Tab tab, @VirtualKeyboardMode.EnumType int mode);
 
     /**
      * Called when the Tab is attached or detached from an {@code Activity}. By default, this will

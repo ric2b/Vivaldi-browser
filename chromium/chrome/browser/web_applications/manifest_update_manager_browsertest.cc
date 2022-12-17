@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,13 +33,13 @@
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
-#include "chrome/browser/web_applications/commands/fetch_manifest_and_install_command.h"
-#include "chrome/browser/web_applications/commands/web_app_command.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/manifest_update_task.h"
@@ -53,7 +53,7 @@
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_callback_app_identity.h"
-#include "chrome/browser/web_applications/web_app_command_manager.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_icon_generator.h"
@@ -99,6 +99,8 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_family.h"
+#include "ui/views/widget/any_widget_observer.h"
+#include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -436,20 +438,18 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
 
     AppId app_id;
     base::RunLoop run_loop;
-    GetProvider().command_manager().ScheduleCommand(
-        std::make_unique<FetchManifestAndInstallCommand>(
-            &GetProvider().install_finalizer(), &GetProvider().registrar(),
-            webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON,
-            browser()->tab_strip_model()->GetActiveWebContents()->GetWeakPtr(),
-            /*bypass_service_worker_check=*/false,
-            base::BindOnce(test::TestAcceptDialogCallback),
-            base::BindLambdaForTesting([&](const AppId& new_app_id,
-                                           webapps::InstallResultCode code) {
+    GetProvider().scheduler().FetchManifestAndInstall(
+        webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON,
+        browser()->tab_strip_model()->GetActiveWebContents()->GetWeakPtr(),
+        /*bypass_service_worker_check=*/false,
+        base::BindOnce(test::TestAcceptDialogCallback),
+        base::BindLambdaForTesting(
+            [&](const AppId& new_app_id, webapps::InstallResultCode code) {
               EXPECT_EQ(code, webapps::InstallResultCode::kSuccessNewInstall);
               app_id = new_app_id;
               run_loop.Quit();
             }),
-            /*use_fallback=*/true, WebAppInstallFlow::kInstallSite));
+        /*use_fallback=*/true);
 
     run_loop.Run();
     return app_id;
@@ -488,6 +488,26 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
     install_options.add_to_applications_menu = false;
     install_options.add_to_desktop = false;
     install_options.add_to_quick_launch_bar = false;
+    install_options.install_placeholder = true;
+    GetProvider().externally_managed_app_manager().Install(
+        std::move(install_options),
+        base::BindLambdaForTesting(
+            [&](const GURL& installed_app_url,
+                ExternallyManagedAppManager::InstallResult result) {
+              EXPECT_EQ(installed_app_url, app_url);
+              EXPECT_EQ(result.code,
+                        webapps::InstallResultCode::kSuccessNewInstall);
+              run_loop.Quit();
+            }));
+    run_loop.Run();
+    return GetProvider().registrar().LookupExternalAppId(app_url).value();
+  }
+
+  AppId InstallKioskApp() {
+    const GURL app_url = GetAppURL();
+    base::RunLoop run_loop;
+    ExternalInstallOptions install_options(
+        app_url, UserDisplayMode::kStandalone, ExternalInstallSource::kKiosk);
     install_options.install_placeholder = true;
     GetProvider().externally_managed_app_manager().Install(
         std::move(install_options),
@@ -601,8 +621,8 @@ class ManifestUpdateManagerBrowserTest_UpdateDialog
       public testing::WithParamInterface<UpdateDialogParam> {
  public:
   ManifestUpdateManagerBrowserTest_UpdateDialog() {
-    std::vector<base::Feature> enabled_features;
-    std::vector<base::Feature> disabled_features;
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
     if (IsUpdateDialogEnabled()) {
       enabled_features.push_back(features::kPwaUpdateDialogForName);
       enabled_features.push_back(features::kPwaUpdateDialogForIcon);
@@ -978,6 +998,48 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_ExternalPrefMigration,
       kUpdateHistogramName, ManifestUpdateResult::kAppIsPlaceholder, 1);
 }
 
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_ExternalPrefMigration,
+                       CheckIgnoresPlaceholderAppsForKiosk) {
+  // Set up app URL to redirect to force placeholder app to install.
+  const GURL app_url = GetAppURL();
+  request_override_ = base::BindLambdaForTesting(
+      [&app_url](const net::test_server::HttpRequest& request)
+          -> std::unique_ptr<net::test_server::HttpResponse> {
+        if (request.GetURL() != app_url)
+          return nullptr;
+        auto http_response =
+            std::make_unique<net::test_server::BasicHttpResponse>();
+        http_response->set_code(net::HTTP_TEMPORARY_REDIRECT);
+        http_response->AddCustomHeader(
+            "Location", "http://other-origin.com/defaultresponse");
+        http_response->set_content("redirect page");
+        return std::move(http_response);
+      });
+
+  // Install via ExternallyManagedAppManager, the redirect to a different origin
+  // should cause it to install a placeholder app.
+  AppId app_id = InstallKioskApp();
+  EXPECT_TRUE(GetProvider().registrar().IsPlaceholderApp(
+      app_id, WebAppManagement::kKiosk));
+
+  // Manifest updating should ignore non-redirect loads for placeholder apps
+  // because the ExternallyManagedAppManager will handle these.
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {kInstallableIconList});
+  EXPECT_EQ(GetResultAfterPageLoad(app_url),
+            ManifestUpdateResult::kAppIsPlaceholder);
+  histogram_tester_.ExpectBucketCount(
+      kUpdateHistogramName, ManifestUpdateResult::kAppIsPlaceholder, 1);
+}
+
 INSTANTIATE_TEST_SUITE_P(All,
                          ManifestUpdateManagerBrowserTest_ExternalPrefMigration,
                          ::testing::Bool());
@@ -1151,8 +1213,16 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
 }
 
+// TODO(crbug.com/1342625): Test is flaky.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_CheckDoesFindIconUrlChangeForDefaultApps \
+  DISABLED_CheckDoesFindIconUrlChangeForDefaultApps
+#else
+#define MAYBE_CheckDoesFindIconUrlChangeForDefaultApps \
+  CheckDoesFindIconUrlChangeForDefaultApps
+#endif
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
-                       CheckDoesFindIconUrlChangeForDefaultApps) {
+                       MAYBE_CheckDoesFindIconUrlChangeForDefaultApps) {
   constexpr char kManifestTemplate[] = R"(
     {
       "name": "Test app name",
@@ -1210,6 +1280,41 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
 
   // Policy installed apps should continue to be not uninstallable by the user
+  // after updating.
+  EXPECT_FALSE(
+      GetProvider().install_finalizer().CanUserUninstallWebApp(app_id));
+}
+
+IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
+                       CheckUpdatedKioskAppsNotUninstallable) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "theme_color": "$1",
+      "icons": $2
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {"blue", kInstallableIconList});
+  AppId app_id = InstallKioskApp();
+  EXPECT_FALSE(
+      GetProvider().install_finalizer().CanUserUninstallWebApp(app_id));
+
+  OverrideManifest(kManifestTemplate, {"red", kInstallableIconList});
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL()),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+  ConfirmShortcutColors(app_id, {{{32, kAll}, kInstallableIconTopLeftColor},
+                                 {{48, kAll}, kInstallableIconTopLeftColor},
+                                 {{64, kWin}, kInstallableIconTopLeftColor},
+                                 {{96, kWin}, kInstallableIconTopLeftColor},
+                                 {{128, kAll}, kInstallableIconTopLeftColor},
+                                 {{256, kAll}, kInstallableIconTopLeftColor}});
+
+  // Kiosk installed apps should continue to be not uninstallable by the user
   // after updating.
   EXPECT_FALSE(
       GetProvider().install_finalizer().CanUserUninstallWebApp(app_id));
@@ -1430,6 +1535,64 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_PolicyAppsCanUpdate,
     EXPECT_EQ(GetProvider().registrar().GetAppShortName(app_id),
               "Test app name");
   }
+}
+
+// This test ensures app icon url can always be changed for Kiosk apps.
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_PolicyAppsCanUpdate,
+                       CheckDoesApplyIconURLChangeForKioskAppsIgnoringFlag) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "display": "standalone",
+      "icons": $1
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {kInstallableIconList});
+  AppId app_id = InstallKioskApp();
+
+  OverrideManifest(kManifestTemplate, {kAnotherInstallableIconList});
+
+  // The icon should have updated (regardless of flag status).
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL()),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+  ConfirmShortcutColors(
+      app_id, {{{32, kAll}, kAnotherInstallableIconTopLeftColor},
+               {{48, kAll}, kAnotherInstallableIconTopLeftColor},
+               {{64, kWin}, kAnotherInstallableIconTopLeftColor},
+               {{96, kWin}, kAnotherInstallableIconTopLeftColor},
+               {{128, kAll}, kAnotherInstallableIconTopLeftColor},
+               {{256, kAll}, kAnotherInstallableIconTopLeftColor},
+               {{512, kNotWin}, kAnotherInstallableIconTopLeftColor}});
+}
+
+// This test ensures app name can always be changed for Kiosk apps.
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_PolicyAppsCanUpdate,
+                       CheckNameUpdatesForKioskApps) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "$1",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $2
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {"Test app name", kInstallableIconList});
+  AppId app_id = InstallKioskApp();
+
+  OverrideManifest(kManifestTemplate,
+                   {"Different app name", kInstallableIconList});
+
+  // Name should have updated (regardless of flag status).
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL()),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+  EXPECT_EQ(GetProvider().registrar().GetAppShortName(app_id),
+            "Different app name");
 }
 
 INSTANTIATE_TEST_SUITE_P(PolicyAppParameterizedTest,
@@ -3787,17 +3950,94 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   EXPECT_TRUE(web_app->note_taking_new_note_url().is_empty());
 }
 
-class ManifestUpdateManagerBrowserTest_ManifestId
-    : public ManifestUpdateManagerBrowserTest {
+class BrowserAddedWaiter final : public BrowserListObserver {
  public:
-  ManifestUpdateManagerBrowserTest_ManifestId() {
-    scoped_feature_list_.InitAndEnableFeature(
-        blink::features::kWebAppEnableManifestId);
+  BrowserAddedWaiter() { BrowserList::AddObserver(this); }
+  ~BrowserAddedWaiter() override { BrowserList::RemoveObserver(this); }
+
+  void Wait() { run_loop_.Run(); }
+
+  // BrowserListObserver
+  void OnBrowserAdded(Browser* browser) override {
+    BrowserList::RemoveObserver(this);
+    // Post a task to ensure the Remove event has been dispatched to all
+    // observers.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  run_loop_.QuitClosure());
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  base::RunLoop run_loop_;
 };
+
+AppId InstallShortcutAppForCurrentUrl(Browser* browser,
+                                      bool open_as_window = false,
+                                      const char* override_title = nullptr) {
+  chrome::SetAutoAcceptWebAppDialogForTesting(
+      /*auto_accept=*/true,
+      /*auto_open_in_window=*/open_as_window);
+  chrome::SetOverrideTitleForTesting(override_title);
+  WebAppTestInstallWithOsHooksObserver observer(browser->profile());
+  observer.BeginListening();
+  BrowserAddedWaiter browser_added_waiter;
+  CHECK(chrome::ExecuteCommand(browser, IDC_CREATE_SHORTCUT));
+  AppId app_id = observer.Wait();
+  chrome::SetAutoAcceptWebAppDialogForTesting(false, false);
+  chrome::SetOverrideTitleForTesting(nullptr);
+  return app_id;
+}
+
+IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
+                       CheckShortcutAppDoesntUpdate) {
+  // Override with a manifest that is missing a few things, so it is not
+  // installable, but we can create a shortcut for it.
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "$1",
+      "icons": $2,
+      "scope": "/banners/",
+      "start_url": "/banners/"
+    }
+  )";
+
+  OverrideManifest(kManifestTemplate, {"Test app", kInstallableIconList});
+
+  GURL app_url = GetAppURL();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), app_url));
+
+  // Install a shortcut to the app, but use a different name for it (necessary
+  // to reproduce the bug).
+  const char* override_title = "foo";
+  AppId app_id =
+      InstallShortcutAppForCurrentUrl(browser(), false, override_title);
+
+  // The app installed should be the only app installed.
+  auto app_ids = GetProvider().registrar().GetAppIds();
+  ASSERT_EQ(1u, app_ids.size());
+  app_id = app_ids[0];
+  EXPECT_EQ(override_title, GetProvider().registrar().GetAppShortName(app_id));
+
+  // Simulate the user accepting the App Identity update dialog (if it appears).
+  chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+
+  views::AnyWidgetObserver observer(views::test::AnyWidgetTestPasskey{});
+  observer.set_shown_callback(
+      base::BindLambdaForTesting([&](views::Widget* widget) {
+        // If the App Identity dialog was shown for the shortcut app, then
+        // something is wrong.
+        ASSERT_FALSE(widget->GetName() ==
+                     "WebAppIdentityUpdateConfirmationView");
+      }));
+
+  // Now navigate to the same url and allow the update mechanism to run.
+  UpdateCheckResultAwaiter result_awaiter(browser(), app_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), app_url));
+  EXPECT_EQ(std::move(result_awaiter).AwaitNextResult(),
+            ManifestUpdateResult::kAppUpToDate);
+}
+
+using ManifestUpdateManagerBrowserTest_ManifestId =
+    ManifestUpdateManagerBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ManifestId,
                        AllowStartUrlUpdate) {
@@ -3898,9 +4138,8 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ManifestId,
   )";
   OverrideManifest(kManifestTemplate, {"start", kInstallableIconList});
   AppId app_id = InstallWebApp();
-  // Manually set manifest_id to null. manifest_id can be null when the
-  // kWebAppEnableManifestId is turnned off or when the app is sync installed
-  // from older versions of Chromium.
+  // Manually set manifest_id to null. manifest_id can be null when the app is
+  // sync installed from older versions of Chromium.
   {
     ScopedRegistryUpdate update(&GetProvider().sync_bridge());
     WebApp* app = update->UpdateApp(app_id);
@@ -4101,21 +4340,22 @@ enum AppIdTestParam {
   kTypeWebApp = 1 << 1,
   kTypeDefaultApp = 1 << 2,
   kTypePolicyApp = 1 << 3,
-  kWithFlagNone = 1 << 4,
-  kWithFlagPolicyAppIdentity = 1 << 5,
-  kWithFlagAppIdDialogForIcon = 1 << 6,
-  kWithFlagAppIdDialogForName = 1 << 7,
-  kActionUpdateTitle = 1 << 8,
-  kActionUpdateTitleAndLauncherIcon = 1 << 9,
-  kActionUpdateLauncherIcon = 1 << 10,
-  kActionUpdateInstallIcon = 1 << 11,
-  kActionUpdateLauncherAndInstallIcon = 1 << 12,
-  kActionUpdateUnimportantIcon = 1 << 13,
-  kActionRemoveLauncherIcon = 1 << 14,
-  kActionRemoveInstallIcon = 1 << 15,
-  kActionRemoveUnimportantIcon = 1 << 16,
-  kActionSwitchFromLauncher = 1 << 17,
-  kActionSwitchToLauncher = 1 << 18,
+  kTypeKioskApp = 1 << 4,
+  kWithFlagNone = 1 << 5,
+  kWithFlagPolicyAppIdentity = 1 << 6,
+  kWithFlagAppIdDialogForIcon = 1 << 7,
+  kWithFlagAppIdDialogForName = 1 << 8,
+  kActionUpdateTitle = 1 << 9,
+  kActionUpdateTitleAndLauncherIcon = 1 << 10,
+  kActionUpdateLauncherIcon = 1 << 11,
+  kActionUpdateInstallIcon = 1 << 12,
+  kActionUpdateLauncherAndInstallIcon = 1 << 13,
+  kActionUpdateUnimportantIcon = 1 << 14,
+  kActionRemoveLauncherIcon = 1 << 15,
+  kActionRemoveInstallIcon = 1 << 16,
+  kActionRemoveUnimportantIcon = 1 << 17,
+  kActionSwitchFromLauncher = 1 << 18,
+  kActionSwitchToLauncher = 1 << 19,
 };
 
 class ManifestUpdateManagerBrowserTest_AppIdentityParameterized
@@ -4124,8 +4364,8 @@ class ManifestUpdateManagerBrowserTest_AppIdentityParameterized
           std::tuple<AppIdTestParam, AppIdTestParam, AppIdTestParam>> {
  public:
   ManifestUpdateManagerBrowserTest_AppIdentityParameterized() {
-    std::vector<base::Feature> enabled_features;
-    std::vector<base::Feature> disabled_features;
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
     if (IsAppIdentityUpdateDialogForIconEnabled()) {
       enabled_features.push_back(features::kPwaUpdateDialogForIcon);
     } else {
@@ -4155,6 +4395,9 @@ class ManifestUpdateManagerBrowserTest_AppIdentityParameterized
   }
   bool IsPolicyApp() const {
     return std::get<1>(GetParam()) & AppIdTestParam::kTypePolicyApp;
+  }
+  bool IsKioskApp() const {
+    return std::get<1>(GetParam()) & AppIdTestParam::kTypeKioskApp;
   }
 
   bool IsAppIdentityUpdateDialogForIconEnabled() const {
@@ -4230,7 +4473,7 @@ class ManifestUpdateManagerBrowserTest_AppIdentityParameterized
     if (!TitleUpdate())
       return false;  // Titles should not update without a request to update.
 
-    if (IsDefaultApp())
+    if (IsDefaultApp() || IsKioskApp())
       return true;
     if (IsPolicyApp())
       return IsPolicyAppIdentityOverrideEnabled();
@@ -4247,7 +4490,7 @@ class ManifestUpdateManagerBrowserTest_AppIdentityParameterized
     if (!AnyIconUpdate())
       return false;  // Icons should not update without a request to update.
 
-    if (IsDefaultApp())
+    if (IsDefaultApp() || IsKioskApp())
       return true;
     if (IsPolicyApp())
       return IsPolicyAppIdentityOverrideEnabled();
@@ -4294,6 +4537,8 @@ class ManifestUpdateManagerBrowserTest_AppIdentityParameterized
       result += "DefaultApp_";
     if (type & AppIdTestParam::kTypePolicyApp)
       result += "PolicyApp_";
+    if (type & AppIdTestParam::kTypeKioskApp)
+      result += "KioskApp_";
 
     AppIdTestParam flags = std::get<2>(param_info.param);
     result += "Flags_";
@@ -4390,7 +4635,7 @@ std::string GenerateColoredIconList(int installability_icon,
 // Disabled due to test flakiness: https://crbug.com/1341954
 IN_PROC_BROWSER_TEST_P(
     ManifestUpdateManagerBrowserTest_AppIdentityParameterized,
-    DISABLED_CheckCombinations) {
+    CheckCombinations) {
   constexpr char kManifestTemplate[] = R"(
     {
       "name": "$1",
@@ -4411,6 +4656,8 @@ IN_PROC_BROWSER_TEST_P(
                       ParamToString(param) + "\nType: ";
   if (IsPolicyApp())
     trace += "Policy";
+  if (IsKioskApp())
+    trace += "Kiosk";
   if (IsDefaultApp())
     trace += "Default";
   if (IsWebApp())
@@ -4692,6 +4939,8 @@ IN_PROC_BROWSER_TEST_P(
   AppId app_id;
   if (IsDefaultApp()) {
     app_id = InstallDefaultApp();
+  } else if (IsKioskApp()) {
+    app_id = InstallKioskApp();
   } else if (IsPolicyApp()) {
     app_id = InstallPolicyApp();
   } else if (IsWebApp()) {
@@ -4750,6 +4999,7 @@ INSTANTIATE_TEST_SUITE_P(
                         AppIdTestParam::kActionSwitchFromLauncher,
                         AppIdTestParam::kActionSwitchToLauncher),
         testing::Values(AppIdTestParam::kTypeDefaultApp,
+                        AppIdTestParam::kTypeKioskApp,
                         AppIdTestParam::kTypePolicyApp,
                         AppIdTestParam::kTypeWebApp),
         testing::Values(AppIdTestParam::kWithFlagNone,

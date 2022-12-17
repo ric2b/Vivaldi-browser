@@ -1,13 +1,13 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '../shared_vars_css.m.js';
+import '../cr_shared_vars.css.js';
 
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertNotReached} from '../../js/assert_ts.js';
-import {listenOnce} from '../../js/util.m.js';
+import {listenOnce} from '../../js/util.js';
 
 import {getTemplate} from './cr_drawer.html.js';
 

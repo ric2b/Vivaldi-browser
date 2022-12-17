@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,8 +18,8 @@
 #include "chrome/browser/ash/guest_os/public/types.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/dbus/concierge/fake_concierge_client.h"
-#include "chromeos/dbus/dlcservice/dlcservice.pb.h"
-#include "chromeos/dbus/dlcservice/fake_dlcservice_client.h"
+#include "chromeos/ash/components/dbus/dlcservice/dlcservice.pb.h"
+#include "chromeos/ash/components/dbus/dlcservice/fake_dlcservice_client.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -138,7 +138,7 @@ TEST_F(BruschettaLauncherTest, LaunchStartVmSuccess) {
 TEST_F(BruschettaLauncherTest, MultipleLaunchRequestsAreBatched) {
   std::vector<BruschettaResult> results;
   std::vector<BruschettaResult> expected;
-  int num_concurrent = 3;
+  size_t num_concurrent = 3;
   auto callback = base::BindLambdaForTesting(
       [this, &results, num_concurrent](BruschettaResult result) {
         results.push_back(result);
@@ -147,7 +147,7 @@ TEST_F(BruschettaLauncherTest, MultipleLaunchRequestsAreBatched) {
         }
       });
 
-  for (int n = 0; n < num_concurrent; n++) {
+  for (size_t n = 0; n < num_concurrent; n++) {
     launcher_->EnsureRunning(callback);
     expected.emplace_back(BruschettaResult::kSuccess);
   }

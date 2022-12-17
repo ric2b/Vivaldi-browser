@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,6 +40,9 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
+
+// Vivaldi
+import org.chromium.chrome.browser.homepage.HomepageManager;
 
 /**
  * This class creates various kinds of new tabs and adds them to the right {@link TabModel}.
@@ -281,6 +284,9 @@ public class ChromeTabCreator extends TabCreator {
 
     @Override
     public Tab launchUrl(String url, @TabLaunchType int type) {
+        // Note(david@vivaldi.com): We open a normal new tab with the specified homepage url.
+        if (!mTabModel.isIncognito() && HomepageManager.isHomepageEnabled())
+            if (UrlConstants.NTP_URL.equalsIgnoreCase(url)) url = HomepageManager.getHomepageUri();
         return launchUrl(url, type, null, 0);
     }
 

@@ -1,5 +1,5 @@
 <!--
-Copyright 2020 The Chromium Authors. All rights reserved.
+Copyright 2020 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -86,13 +86,6 @@ chromium-metrics-reviews@google.com.
     Reason why the X-Geo header was or was not included in a Google search from
     the omnibox.
   </summary>
-</histogram>
-
-<histogram name="Geolocation.LocationUpdate.ErrorCode"
-    enum="GeopositionErrorCode" expires_after="2022-11-20">
-  <owner>mattreynolds@chromium.org</owner>
-  <owner>device-dev@chromium.org</owner>
-  <summary>Error code for the geoposition sent to the renderers.</summary>
 </histogram>
 
 <histogram name="Geolocation.NetworkLocationRequest.AccessPoints" units="units"

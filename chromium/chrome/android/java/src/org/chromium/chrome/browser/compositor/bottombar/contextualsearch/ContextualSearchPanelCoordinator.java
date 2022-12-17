@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -300,6 +300,9 @@ public class ContextualSearchPanelCoordinator implements ContextualSearchPanelIn
     }
 
     @Override
+    public void setCanHideAndroidBrowserControls(boolean canHideAndroidBrowserControls) {}
+
+    @Override
     public boolean isPanelOpened() {
         return mBottomSheetController.isSheetOpen();
     }
@@ -327,6 +330,12 @@ public class ContextualSearchPanelCoordinator implements ContextualSearchPanelIn
     @Override
     public @PanelState int getPanelState() {
         return PanelState.UNDEFINED;
+    }
+
+    @Override
+    @VisibleForTesting
+    public boolean getCanHideAndroidBrowserControls() {
+        return false;
     }
 
     // ---------------------------------------------------------------------------------------------

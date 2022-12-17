@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/interaction/element_tracker.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/webui/resources/js/browser_command/browser_command.mojom.h"
 
 using browser_command::mojom::ClickInfo;
@@ -456,13 +457,16 @@ TEST_F(BrowserCommandHandlerTest, StartTabGroupTutorialCommand) {
 
   // The StartTabGroupTutorial command should start the tab group tutorial. if
   // there are no tab groups in the tabstrip
-  command_handler_->SetBrowserHasTabGroups(false);
-  ClickInfoPtr info = ClickInfo::New();
-  EXPECT_CALL(service, StartTutorial(kTabGroupTutorialId, kTestContext1,
-                                     testing::_, testing::_))
-      .WillOnce(testing::Return(true));
-  EXPECT_CALL(service, LogStartedFromWhatsNewPage(kTabGroupTutorialId, true));
-  EXPECT_TRUE(ExecuteCommand(Command::kStartTabGroupTutorial, std::move(info)));
+  {
+    command_handler_->SetBrowserHasTabGroups(false);
+    ClickInfoPtr info = ClickInfo::New();
+    EXPECT_CALL(service, StartTutorial(kTabGroupTutorialId, kTestContext1,
+                                       testing::_, testing::_))
+        .WillOnce(testing::Return(true));
+    EXPECT_CALL(service, LogStartedFromWhatsNewPage(kTabGroupTutorialId, true));
+    EXPECT_TRUE(
+        ExecuteCommand(Command::kStartTabGroupTutorial, std::move(info)));
+  }
 
   // The StartTabGroupTutorial command should start the "existing tab groups"
   // tab group tutorial. if there are tab groups in the tabstrip

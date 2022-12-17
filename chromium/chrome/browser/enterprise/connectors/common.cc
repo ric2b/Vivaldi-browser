@@ -1,10 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/enterprise/connectors/common.h"
 
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate_base.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_dialog.h"
@@ -38,6 +39,20 @@ bool ContentAnalysisActionAllowsDataUse(TriggeredRule::Action action) {
     case TriggeredRule::WARN:
     case TriggeredRule::BLOCK:
       return false;
+  }
+}
+
+ContentAnalysisAcknowledgement::FinalAction RuleActionToAckAction(
+    TriggeredRule::Action action) {
+  switch (action) {
+    case TriggeredRule::ACTION_UNSPECIFIED:
+      return ContentAnalysisAcknowledgement::ACTION_UNSPECIFIED;
+    case TriggeredRule::REPORT_ONLY:
+      return ContentAnalysisAcknowledgement::REPORT_ONLY;
+    case TriggeredRule::WARN:
+      return ContentAnalysisAcknowledgement::WARN;
+    case TriggeredRule::BLOCK:
+      return ContentAnalysisAcknowledgement::BLOCK;
   }
 }
 
@@ -115,6 +130,24 @@ safe_browsing::EventResult CalculateEventResult(
              ? safe_browsing::EventResult::ALLOWED
              : (should_warn ? safe_browsing::EventResult::WARNED
                             : safe_browsing::EventResult::BLOCKED);
+}
+
+ContentAnalysisAcknowledgement::FinalAction GetAckFinalAction(
+    const ContentAnalysisResponse& response) {
+  auto final_action = ContentAnalysisAcknowledgement::ALLOW;
+  for (const auto& result : response.results()) {
+    if (!result.has_status() ||
+        result.status() != ContentAnalysisResponse::Result::SUCCESS) {
+      continue;
+    }
+
+    for (const auto& rule : result.triggered_rules()) {
+      final_action = GetHighestPrecedenceAction(
+          final_action, RuleActionToAckAction(rule.action()));
+    }
+  }
+
+  return final_action;
 }
 
 ReportingSettings::ReportingSettings() = default;
@@ -245,6 +278,37 @@ TriggeredRule::Action GetHighestPrecedenceAction(
   return TriggeredRule::ACTION_UNSPECIFIED;
 }
 
+ContentAnalysisAcknowledgement::FinalAction GetHighestPrecedenceAction(
+    const ContentAnalysisAcknowledgement::FinalAction& action_1,
+    const ContentAnalysisAcknowledgement::FinalAction& action_2) {
+  // Don't use the enum's int values to determine precedence since that
+  // may introduce bugs for new actions later.
+  //
+  // The current precedence is BLOCK > WARN > REPORT_ONLY > ALLOW > UNSPECIFIED
+  if (action_1 == ContentAnalysisAcknowledgement::BLOCK ||
+      action_2 == ContentAnalysisAcknowledgement::BLOCK) {
+    return ContentAnalysisAcknowledgement::BLOCK;
+  }
+  if (action_1 == ContentAnalysisAcknowledgement::WARN ||
+      action_2 == ContentAnalysisAcknowledgement::WARN) {
+    return ContentAnalysisAcknowledgement::WARN;
+  }
+  if (action_1 == ContentAnalysisAcknowledgement::REPORT_ONLY ||
+      action_2 == ContentAnalysisAcknowledgement::REPORT_ONLY) {
+    return ContentAnalysisAcknowledgement::REPORT_ONLY;
+  }
+  if (action_1 == ContentAnalysisAcknowledgement::ALLOW ||
+      action_2 == ContentAnalysisAcknowledgement::ALLOW) {
+    return ContentAnalysisAcknowledgement::ALLOW;
+  }
+  if (action_1 == ContentAnalysisAcknowledgement::ACTION_UNSPECIFIED ||
+      action_2 == ContentAnalysisAcknowledgement::ACTION_UNSPECIFIED) {
+    return ContentAnalysisAcknowledgement::ACTION_UNSPECIFIED;
+  }
+  NOTREACHED();
+  return ContentAnalysisAcknowledgement::ACTION_UNSPECIFIED;
+}
+
 FileMetadata::FileMetadata(const std::string& filename,
                            const std::string& sha256,
                            const std::string& mime_type,
@@ -285,8 +349,7 @@ void RunSavePackageScanningCallback(download::DownloadItem* item,
 }
 
 bool ContainsMalwareVerdict(const ContentAnalysisResponse& response) {
-  const auto& results = response.results();
-  return std::any_of(results.begin(), results.end(), [](const auto& result) {
+  return base::ranges::any_of(response.results(), [](const auto& result) {
     return result.tag() == kMalwareTag && !result.triggered_rules().empty();
   });
 }
@@ -384,8 +447,7 @@ Profile* GetMainProfileLacros() {
   if (!profile_manager)
     return nullptr;
   auto profiles = g_browser_process->profile_manager()->GetLoadedProfiles();
-  const auto main_it = base::ranges::find_if(
-      profiles, [](Profile* profile) { return profile->IsMainProfile(); });
+  const auto main_it = base::ranges::find_if(profiles, &Profile::IsMainProfile);
   if (main_it == profiles.end())
     return nullptr;
   return *main_it;

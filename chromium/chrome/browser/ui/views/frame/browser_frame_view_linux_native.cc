@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,7 +72,8 @@ BrowserFrameViewLinuxNative::GetFrameButtonStyle() const {
 void BrowserFrameViewLinuxNative::PaintRestoredFrameBorder(
     gfx::Canvas* canvas) const {
   window_frame_provider_->PaintWindowFrame(
-      canvas, GetLocalBounds(), GetTopAreaHeight(), ShouldPaintAsActive());
+      canvas, GetLocalBounds(), GetTopAreaHeight(), ShouldPaintAsActive(),
+      GetTiledEdges());
 }
 
 void BrowserFrameViewLinuxNative::MaybeUpdateCachedFrameButtonImages() {

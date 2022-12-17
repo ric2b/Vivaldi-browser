@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,7 +55,10 @@ enum class ShutdownType {
   kEndSession = 3,
   // Exit without onbeforeunload or in-progress download prompts.
   kSilentExit = 4,
-  kMaxValue = kSilentExit
+  // The browser process is exiting but not by a user action. These exit paths
+  // can happen with early exit paths where the browser main is not executed.
+  kOtherExit = 5,
+  kMaxValue = kOtherExit
 };
 
 void RegisterPrefs(PrefRegistrySimple* registry);
@@ -121,6 +124,9 @@ bool IsTryingToQuit();
 // Allows setting a fake shutdown type for testing purposes.
 base::AutoReset<ShutdownType> SetShutdownTypeForTesting(
     ShutdownType shutdown_type);
+
+// Allows resetting the shutdown globals for testing purposes.
+void ResetShutdownGlobalsForTesting();
 
 }  // namespace browser_shutdown
 

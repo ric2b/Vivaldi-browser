@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@
 
 namespace url_param_filter::features {
 
-extern const base::Feature kIncognitoParamFilterEnabled;
+BASE_DECLARE_FEATURE(kIncognitoParamFilterEnabled);
 
 }  // namespace url_param_filter::features
 

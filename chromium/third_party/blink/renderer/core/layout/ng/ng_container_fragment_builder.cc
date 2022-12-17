@@ -1,9 +1,10 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/layout/ng/ng_container_fragment_builder.h"
 
+#include "base/containers/contains.h"
 #include "third_party/blink/renderer/core/layout/ng/exclusions/ng_exclusion_space.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_absolute_utils.h"
@@ -24,6 +25,38 @@ bool IsInlineContainerForNode(const NGBlockNode& node,
              node.Style().GetPosition());
 }
 
+NGLogicalAnchorQuery::SetOptions AnchorQuerySetOptions(
+    const NGPhysicalFragment& fragment,
+    const NGLayoutInputNode& container,
+    bool is_fragmentation_context_root) {
+  // If the |fragment| is not absolutely positioned, it's a valid anchor.
+  // https://tabatkins.github.io/specs/css-anchor-position/#determining
+  if (!fragment.IsOutOfFlowPositioned())
+    return NGLogicalAnchorQuery::SetOptions::kValidInOrder;
+
+  // If the OOF |fragment| is not in a block fragmentation context, it's a child
+  // of its containing block. Make it invalid.
+  DCHECK(fragment.GetLayoutObject());
+  if (!is_fragmentation_context_root)
+    return NGLogicalAnchorQuery::SetOptions::kInvalid;
+
+  // |container| is null if it's an inline box.
+  if (!container.GetLayoutBox())
+    return NGLogicalAnchorQuery::SetOptions::kInvalid;
+
+  // If the OOF |fragment| is in a block fragmentation context, it's a child of
+  // the fragmentation context root. If its containing block is the |container|,
+  // make it invalid.
+  const LayoutObject* layout_object = fragment.GetLayoutObject();
+  const LayoutObject* containing_block = layout_object->Container();
+  DCHECK(containing_block);
+  if (containing_block == container.GetLayoutBox())
+    return NGLogicalAnchorQuery::SetOptions::kInvalid;
+  // Otherwise its containing block is a descendant of the block fragmentation
+  // context, so it's valid, but the call order is not in the tree order.
+  return NGLogicalAnchorQuery::SetOptions::kValidOutOfOrder;
+}
+
 }  // namespace
 
 void NGContainerFragmentBuilder::ReplaceChild(
@@ -34,6 +67,44 @@ void NGContainerFragmentBuilder::ReplaceChild(
   children_[index] = NGLogicalLink{std::move(&new_child), offset};
 }
 
+NGLogicalAnchorQuery& NGContainerFragmentBuilder::EnsureAnchorQuery() {
+  if (!anchor_query_)
+    anchor_query_ = MakeGarbageCollected<NGLogicalAnchorQuery>();
+  return *anchor_query_;
+}
+
+void NGContainerFragmentBuilder::PropagateChildAnchors(
+    const NGPhysicalFragment& child,
+    const LogicalOffset& child_offset) {
+  absl::optional<NGLogicalAnchorQuery::SetOptions> options;
+  if (child.IsBox()) {
+    // Set the child's `anchor-name` before propagating its descendants', so
+    // that ancestors have precedence over their descendants.
+    if (const AtomicString& anchor_name = child.Style().AnchorName();
+        !anchor_name.IsNull()) {
+      DCHECK(RuntimeEnabledFeatures::CSSAnchorPositioningEnabled());
+      options = AnchorQuerySetOptions(child, node_,
+                                      IsBlockFragmentationContextRoot());
+      EnsureAnchorQuery().Set(
+          anchor_name, child,
+          LogicalRect{child_offset,
+                      child.Size().ConvertToLogical(GetWritingMode())},
+          *options);
+    }
+  }
+
+  // Propagate any descendants' anchor references.
+  if (const NGPhysicalAnchorQuery* anchor_query = child.AnchorQuery()) {
+    if (!options) {
+      options = AnchorQuerySetOptions(child, node_,
+                                      IsBlockFragmentationContextRoot());
+    }
+    const WritingModeConverter converter(GetWritingDirection(), child.Size());
+    EnsureAnchorQuery().SetFromPhysical(*anchor_query, converter, child_offset,
+                                        *options);
+  }
+}
+
 // Propagate data in |child| to this fragment. The |child| will then be added as
 // a child fragment or a child fragment item.
 void NGContainerFragmentBuilder::PropagateChildData(
@@ -42,19 +113,9 @@ void NGContainerFragmentBuilder::PropagateChildData(
     LogicalOffset relative_offset,
     const NGInlineContainer<LogicalOffset>* inline_container,
     absl::optional<LayoutUnit> adjustment_for_oof_propagation) {
-  // Set the child's `anchor-name` before propagating its descendants', so
-  // that ancestors have precedence over their descendants. Descendants' anchors
-  // are propagated in |PropagateOOFPositionedInfo| below.
-  if (child.IsBox()) {
-    if (const AtomicString& anchor_name = child.Style().AnchorName();
-        !anchor_name.IsNull()) {
-      DCHECK(RuntimeEnabledFeatures::CSSAnchorPositioningEnabled());
-      anchor_query_.Set(
-          anchor_name, child,
-          LogicalRect{child_offset + relative_offset,
-                      child.Size().ConvertToLogical(GetWritingMode())});
-    }
-  }
+  // Propagate anchors from the |child|. Anchors are in |OutOfFlowData| but the
+  // |child| itself may have an anchor.
+  PropagateChildAnchors(child, child_offset + relative_offset);
 
   if (adjustment_for_oof_propagation &&
       child.NeedsOOFPositionedInfoPropagation()) {
@@ -239,7 +300,7 @@ void NGContainerFragmentBuilder::AddOutOfFlowDescendant(
 
 void NGContainerFragmentBuilder::SwapOutOfFlowPositionedCandidates(
     HeapVector<NGLogicalOutOfFlowPositionedNode>* candidates) {
-  DCHECK(candidates->IsEmpty());
+  DCHECK(candidates->empty());
   std::swap(oof_positioned_candidates_, *candidates);
 }
 
@@ -255,13 +316,13 @@ void NGContainerFragmentBuilder::AddMulticolWithPendingOOFs(
 
 void NGContainerFragmentBuilder::SwapMulticolsWithPendingOOFs(
     MulticolCollection* multicols_with_pending_oofs) {
-  DCHECK(multicols_with_pending_oofs->IsEmpty());
+  DCHECK(multicols_with_pending_oofs->empty());
   std::swap(multicols_with_pending_oofs_, *multicols_with_pending_oofs);
 }
 
 void NGContainerFragmentBuilder::SwapOutOfFlowFragmentainerDescendants(
     HeapVector<NGLogicalOOFNodeForFragmentation>* descendants) {
-  DCHECK(descendants->IsEmpty());
+  DCHECK(descendants->empty());
   std::swap(oof_positioned_fragmentainer_descendants_, *descendants);
 }
 
@@ -291,7 +352,7 @@ void NGContainerFragmentBuilder::TransferOutOfFlowCandidates(
 
 void NGContainerFragmentBuilder::
     MoveOutOfFlowDescendantCandidatesToDescendants() {
-  DCHECK(oof_positioned_descendants_.IsEmpty());
+  DCHECK(oof_positioned_descendants_.empty());
   std::swap(oof_positioned_candidates_, oof_positioned_descendants_);
 
   if (!layout_object_->IsInline())
@@ -379,7 +440,16 @@ void NGContainerFragmentBuilder::PropagateOOFPositionedInfo(
           relative_offset - fixedpos_containing_block->RelativeOffset();
       if (fixedpos_inline_container)
         static_position.offset -= fixedpos_inline_container->relative_offset;
-      if (fixedpos_containing_block && fixedpos_containing_block->Fragment()) {
+      // The containing block for fixed-positioned elements should normally
+      // already be laid out, and therefore have a fragment - with one
+      // exception: If this is the pagination root, it obviously won't have a
+      // fragment, since it hasn't finished layout yet. But we still need to
+      // propagate the fixed-positioned descendant, so that it gets laid out
+      // inside the fragmentation context (and repeated on every page), instead
+      // of becoming a direct child of the LayoutNGView fragment (and thus a
+      // sibling of the page fragments).
+      if (fixedpos_containing_block &&
+          (fixedpos_containing_block->Fragment() || node_.IsPaginatedRoot())) {
         NGInlineContainer<LogicalOffset> new_fixedpos_inline_container;
         if (fixedpos_inline_container)
           new_fixedpos_inline_container = *fixedpos_inline_container;
@@ -393,31 +463,22 @@ void NGContainerFragmentBuilder::PropagateOOFPositionedInfo(
     static_position.offset += adjusted_offset;
 
     // |oof_positioned_candidates_| should not have duplicated entries.
-    DCHECK(std::none_of(
-        oof_positioned_candidates_.begin(), oof_positioned_candidates_.end(),
-        [&node](const NGLogicalOutOfFlowPositionedNode& oof_node) {
-          return oof_node.Node() == node;
-        }));
+    DCHECK(!base::Contains(oof_positioned_candidates_, node,
+                           &NGLogicalOutOfFlowPositionedNode::Node));
     oof_positioned_candidates_.emplace_back(node, static_position,
                                             new_inline_container);
-  }
-
-  // Collect any anchor references.
-  if (const NGPhysicalAnchorQuery* anchor_query = fragment.AnchorQuery()) {
-    anchor_query_.SetFromPhysical(*anchor_query, converter, adjusted_offset,
-                                  fragment.IsPositioned());
   }
 
   NGFragmentedOutOfFlowData* oof_data = fragment.FragmentedOutOfFlowData();
   if (!oof_data)
     return;
-  DCHECK(!oof_data->multicols_with_pending_oofs.IsEmpty() ||
-         !oof_data->oof_positioned_fragmentainer_descendants.IsEmpty());
+  DCHECK(!oof_data->multicols_with_pending_oofs.empty() ||
+         !oof_data->oof_positioned_fragmentainer_descendants.empty());
   const NGPhysicalBoxFragment* box_fragment =
       DynamicTo<NGPhysicalBoxFragment>(&fragment);
   bool is_column_spanner = box_fragment && box_fragment->IsColumnSpanAll();
 
-  if (!oof_data->multicols_with_pending_oofs.IsEmpty()) {
+  if (!oof_data->multicols_with_pending_oofs.empty()) {
     const auto& multicols_with_pending_oofs =
         oof_data->multicols_with_pending_oofs;
     for (auto& multicol : multicols_with_pending_oofs) {
@@ -497,7 +558,7 @@ void NGContainerFragmentBuilder::PropagateOOFFragmentainerDescendants(
     const NGContainingBlock<LogicalOffset>* fixedpos_containing_block,
     HeapVector<NGLogicalOOFNodeForFragmentation>* out_list) {
   NGFragmentedOutOfFlowData* oof_data = fragment.FragmentedOutOfFlowData();
-  if (!oof_data || oof_data->oof_positioned_fragmentainer_descendants.IsEmpty())
+  if (!oof_data || oof_data->oof_positioned_fragmentainer_descendants.empty())
     return;
 
   const WritingModeConverter converter(GetWritingDirection(), fragment.Size());

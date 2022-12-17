@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,6 @@
 #include "third_party/blink/renderer/core/inspector/inspector_dom_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_dom_debugger_agent.h"
 #include "third_party/blink/renderer/core/inspector/legacy_dom_snapshot_agent.h"
-#include "third_party/blink/renderer/core/inspector/thread_debugger.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_text.h"
@@ -41,6 +40,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_paint_order_iterator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/platform/bindings/thread_debugger.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "v8/include/v8-inspector.h"
 
@@ -102,15 +102,15 @@ String GetOriginUrl(const Node* node) {
   if (!isolate || !isolate->InContext() || !debugger)
     return String();
   v8::HandleScope handleScope(isolate);
-  String url = GetCurrentScriptUrl();
-  if (!url.IsEmpty())
+  String url = GetCurrentScriptUrl(isolate);
+  if (!url.empty())
     return url;
   // If we did not get anything from the sync stack, let's try the slow
   // way that also checks async stacks.
   auto trace = debugger->GetV8Inspector()->captureStackTrace(true);
   if (trace)
     url = ToCoreString(trace->firstNonEmptySourceURL());
-  if (!url.IsEmpty())
+  if (!url.empty())
     return url;
   // Fall back to document url.
   return node->GetDocument().Url().GetString();
@@ -152,7 +152,7 @@ class DOMTreeIterator {
                                    : FlatTreeTraversal::Parent(*current_);
       path_to_current_node_.pop_back();
     }
-    DCHECK(path_to_current_node_.IsEmpty());
+    DCHECK(path_to_current_node_.empty());
   }
 
   Node* CurrentNode() const { return current_; }
@@ -339,7 +339,7 @@ protocol::Response InspectorDOMSnapshotAgent::captureSnapshot(
 }
 
 int InspectorDOMSnapshotAgent::AddString(const String& string) {
-  if (string.IsEmpty())
+  if (string.empty())
     return -1;
   auto it = string_table_.find(string);
   int index;
@@ -664,7 +664,7 @@ int InspectorDOMSnapshotAgent::BuildLayoutTreeNode(
     if (include_blended_background_colors_) {
       if (colors.size()) {
         layout_tree_snapshot->getBlendedBackgroundColors(nullptr)->emplace_back(
-            AddString(colors[0].Serialized()));
+            AddString(colors[0].SerializeAsCSSColor()));
       } else {
         layout_tree_snapshot->getBlendedBackgroundColors(nullptr)->emplace_back(
             -1);
@@ -713,7 +713,7 @@ int InspectorDOMSnapshotAgent::BuildLayoutTreeNode(
 
   auto* layout_text = To<LayoutText>(layout_object);
   Vector<LayoutText::TextBoxInfo> text_boxes = layout_text->GetTextBoxInfo();
-  if (text_boxes.IsEmpty())
+  if (text_boxes.empty())
     return layout_index;
 
   for (const auto& text_box : text_boxes) {
@@ -732,7 +732,7 @@ std::unique_ptr<protocol::Array<int>>
 InspectorDOMSnapshotAgent::BuildStylesForNode(Node* node) {
   DCHECK(
       !node->GetDocument().NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked(
-          *node, true /* ignore_adjacent_style */));
+          *node));
   auto result = std::make_unique<protocol::Array<int>>();
   auto* layout_object = node->GetLayoutObject();
   if (!layout_object)

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -223,9 +224,8 @@ AccountInfo AccountTrackerService::GetAccountInfo(
 AccountInfo AccountTrackerService::FindAccountInfoByGaiaId(
     const std::string& gaia_id) const {
   if (!gaia_id.empty()) {
-    const auto iterator = std::find_if(
-        accounts_.begin(), accounts_.end(),
-        [&gaia_id](const auto& pair) { return pair.second.gaia == gaia_id; });
+    const auto iterator = base::ranges::find(
+        accounts_, gaia_id, [](const auto& pair) { return pair.second.gaia; });
     if (iterator != accounts_.end())
       return iterator->second;
   }
@@ -236,8 +236,8 @@ AccountInfo AccountTrackerService::FindAccountInfoByGaiaId(
 AccountInfo AccountTrackerService::FindAccountInfoByEmail(
     const std::string& email) const {
   if (!email.empty()) {
-    const auto iterator = std::find_if(
-        accounts_.begin(), accounts_.end(), [&email](const auto& pair) {
+    const auto iterator =
+        base::ranges::find_if(accounts_, [&email](const auto& pair) {
           return gaia::AreEmailsSame(pair.second.email, email);
         });
     if (iterator != accounts_.end())
@@ -298,12 +298,12 @@ void AccountTrackerService::StopTrackingAccount(
 
 void AccountTrackerService::SetAccountInfoFromUserInfo(
     const CoreAccountId& account_id,
-    const base::DictionaryValue* user_info) {
+    const base::Value::Dict& user_info) {
   DCHECK(base::Contains(accounts_, account_id));
   AccountInfo& account_info = accounts_[account_id];
 
   absl::optional<AccountInfo> maybe_account_info =
-      AccountInfoFromUserInfo(*user_info);
+      AccountInfoFromUserInfo(user_info);
   if (maybe_account_info) {
     // Should we DCHECK that the account stored in |accounts_| has the same
     // value for |gaia_id| and |email| as the value loaded from |user_info|?
@@ -556,9 +556,8 @@ void AccountTrackerService::OnAccountImageUpdated(
     return;
 
   base::Value::Dict* dict = nullptr;
-  ListPrefUpdate update(pref_service_, prefs::kAccountInfo);
-  base::Value::List& list = update->GetList();
-  for (base::Value& value : list) {
+  ScopedListPrefUpdate update(pref_service_, prefs::kAccountInfo);
+  for (base::Value& value : *update) {
     base::Value::Dict* maybe_dict = value.GetIfDict();
     if (maybe_dict) {
       const std::string* account_key = maybe_dict->FindString(kAccountKeyKey);
@@ -584,8 +583,7 @@ void AccountTrackerService::RemoveAccountImageFromDisk(
 }
 
 void AccountTrackerService::LoadFromPrefs() {
-  const base::Value::List& list =
-      pref_service_->GetValueList(prefs::kAccountInfo);
+  const base::Value::List& list = pref_service_->GetList(prefs::kAccountInfo);
   std::set<CoreAccountId> to_remove;
   for (size_t i = 0; i < list.size(); ++i) {
     const base::Value::Dict* dict = list[i].GetIfDict();
@@ -618,8 +616,8 @@ void AccountTrackerService::LoadFromPrefs() {
                                               ? signin::Tribool::kTrue
                                               : signin::Tribool::kFalse;
           // Migrate to kAccountChildAttributeKey.
-          ListPrefUpdate update(pref_service_, prefs::kAccountInfo);
-          base::Value::Dict& update_dict = update->GetList()[i].GetDict();
+          ScopedListPrefUpdate update(pref_service_, prefs::kAccountInfo);
+          base::Value::Dict& update_dict = (*update)[i].GetDict();
           update_dict.Set(kAccountChildAttributeKey,
                           static_cast<int>(account_info.is_child_account));
           update_dict.Remove(kDeprecatedChildStatusKey);
@@ -639,8 +637,8 @@ void AccountTrackerService::LoadFromPrefs() {
                 dict->FindIntByDottedPath(
                     kDeprecatedCanOfferExtendedChromeSyncPromosPrefPath)) {
           // Migrate to Capability names based pref paths.
-          ListPrefUpdate update(pref_service_, prefs::kAccountInfo);
-          base::Value::Dict& update_dict = update->GetList()[i].GetDict();
+          ScopedListPrefUpdate update(pref_service_, prefs::kAccountInfo);
+          base::Value::Dict& update_dict = (*update)[i].GetDict();
           SetAccountCapabilityState(
               update_dict, kCanOfferExtendedChromeSyncPromosCapabilityName,
               ParseTribool(can_offer_extended_chrome_sync_promos));
@@ -703,9 +701,8 @@ void AccountTrackerService::SaveToPrefs(const AccountInfo& account_info) {
     return;
 
   base::Value::Dict* dict = nullptr;
-  ListPrefUpdate update(pref_service_, prefs::kAccountInfo);
-  base::Value::List& list = update->GetList();
-  for (base::Value& value : list) {
+  ScopedListPrefUpdate update(pref_service_, prefs::kAccountInfo);
+  for (base::Value& value : *update) {
     base::Value::Dict* maybe_dict = value.GetIfDict();
     if (maybe_dict) {
       const std::string* account_key = maybe_dict->FindString(kAccountKeyKey);
@@ -717,8 +714,8 @@ void AccountTrackerService::SaveToPrefs(const AccountInfo& account_info) {
   }
 
   if (!dict) {
-    list.Append(base::Value::Dict());
-    dict = &list.back().GetDict();
+    update->Append(base::Value::Dict());
+    dict = &update->back().GetDict();
     dict->Set(kAccountKeyKey, account_info.account_id.ToString());
   }
 
@@ -748,9 +745,9 @@ void AccountTrackerService::RemoveFromPrefs(const AccountInfo& account_info) {
   if (!pref_service_)
     return;
 
-  ListPrefUpdate update(pref_service_, prefs::kAccountInfo);
+  ScopedListPrefUpdate update(pref_service_, prefs::kAccountInfo);
   const std::string account_id = account_info.account_id.ToString();
-  update->GetList().EraseIf([&account_id](const base::Value& value) {
+  update->EraseIf([&account_id](const base::Value& value) {
     if (!value.is_dict())
       return false;
     const std::string* account_key = value.GetDict().FindString(kAccountKeyKey);

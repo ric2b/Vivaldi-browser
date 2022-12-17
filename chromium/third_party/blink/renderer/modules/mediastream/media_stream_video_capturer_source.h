@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,10 +38,13 @@ class MODULES_EXPORT MediaStreamVideoCapturerSource
   using DeviceCapturerFactoryCallback =
       base::RepeatingCallback<std::unique_ptr<VideoCapturerSource>(
           const base::UnguessableToken& session_id)>;
-  MediaStreamVideoCapturerSource(LocalFrame* frame,
-                                 SourceStoppedCallback stop_callback,
-                                 std::unique_ptr<VideoCapturerSource> source);
   MediaStreamVideoCapturerSource(
+      scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
+      LocalFrame* frame,
+      SourceStoppedCallback stop_callback,
+      std::unique_ptr<VideoCapturerSource> source);
+  MediaStreamVideoCapturerSource(
+      scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
       LocalFrame* frame,
       SourceStoppedCallback stop_callback,
       const MediaStreamDevice& device,
@@ -54,11 +57,6 @@ class MODULES_EXPORT MediaStreamVideoCapturerSource
       const MediaStreamVideoCapturerSource&) = delete;
 
   ~MediaStreamVideoCapturerSource() override;
-
-  void KeepDeviceAliveForTransfer(
-      base::UnguessableToken session_id,
-      base::UnguessableToken transfer_id,
-      KeepDeviceAliveForTransferCallback keep_alive_cb) override;
 
   void SetDeviceCapturerFactoryCallbackForTesting(
       DeviceCapturerFactoryCallback testing_factory_callback);
@@ -92,8 +90,6 @@ class MODULES_EXPORT MediaStreamVideoCapturerSource
   void StopSourceForRestartImpl() override;
   void RestartSourceImpl(const media::VideoCaptureFormat& new_format) override;
   absl::optional<media::VideoCaptureFormat> GetCurrentFormat() const override;
-  absl::optional<media::VideoCaptureParams> GetCurrentCaptureParams()
-      const override;
   void ChangeSourceImpl(const MediaStreamDevice& new_device) override;
 #if !BUILDFLAG(IS_ANDROID)
   void Crop(const base::Token& crop_id,
@@ -103,7 +99,7 @@ class MODULES_EXPORT MediaStreamVideoCapturerSource
   absl::optional<uint32_t> GetNextCropVersion() override;
 #endif
   uint32_t GetCropVersion() const override;
-  base::WeakPtr<MediaStreamVideoSource> GetWeakPtr() const override;
+  base::WeakPtr<MediaStreamVideoSource> GetWeakPtr() override;
 
   // Method to bind as RunningCallback in VideoCapturerSource::StartCapture().
   void OnRunStateChanged(const media::VideoCaptureParams& new_capture_params,

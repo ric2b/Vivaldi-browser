@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,7 @@
 
 namespace net {
 
-class NetworkIsolationKey;
+class NetworkAnonymizationKey;
 
 namespace {
 
@@ -203,7 +203,7 @@ class ProxyResolverMac : public ProxyResolver {
 
   // ProxyResolver methods:
   int GetProxyForURL(const GURL& url,
-                     const NetworkIsolationKey& network_isolation_key,
+                     const NetworkAnonymizationKey& network_anonymization_key,
                      ProxyInfo* results,
                      CompletionOnceCallback callback,
                      std::unique_ptr<Request>* request,
@@ -223,7 +223,7 @@ ProxyResolverMac::~ProxyResolverMac() = default;
 // inspired by http://developer.apple.com/samplecode/CFProxySupportTool/
 int ProxyResolverMac::GetProxyForURL(
     const GURL& query_url,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     ProxyInfo* results,
     CompletionOnceCallback /*callback*/,
     std::unique_ptr<Request>* /*request*/,

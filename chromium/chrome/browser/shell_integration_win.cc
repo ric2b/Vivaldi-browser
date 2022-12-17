@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,8 +68,9 @@ namespace shell_integration {
 
 namespace {
 
-const base::Feature kWin10UnattendedDefault{"Win10UnattendedDefault",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kWin10UnattendedDefault,
+             "Win10UnattendedDefault",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool CanSetAsDefaultDirectly() {
   return base::win::GetVersion() >= base::win::Version::WIN10 &&

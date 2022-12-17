@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,9 +27,11 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
+import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.ui.display.DisplayAndroidManager;
 
 /**
@@ -38,6 +40,7 @@ import org.chromium.ui.display.DisplayAndroidManager;
 // clang-format off
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@Features.DisableFeatures(ChromeFeatureList.SUPPRESS_TOOLBAR_CAPTURES)
 @CommandLineFlags.Add({
     ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
     ChromeSwitches.DISABLE_NATIVE_INITIALIZATION
@@ -47,7 +50,7 @@ public class LaunchesWithColorSchemeTest {
     private ActivityScenario<CustomTabActivity> mActivityScenario;
 
     @Rule
-    public TestRule mCommandLineFlagsRule = CommandLineFlags.getTestRule();
+    public TestRule mProcessor = new Features.JUnitProcessor();
 
     @After
     public void tearDown() {

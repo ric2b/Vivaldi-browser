@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,6 +54,8 @@ class SavedTabGroupButton : public views::MenuButton {
     return tab_group_color_id_;
   }
 
+  const base::GUID guid() { return guid_; }
+
  private:
   std::unique_ptr<ui::DialogModel> CreateDialogModelForContextMenu();
 
@@ -65,6 +67,9 @@ class SavedTabGroupButton : public views::MenuButton {
 
   // Denotes if the tabgroup is currently open in the tabstrip.
   bool is_group_in_tabstrip_;
+
+  // The guid used to identify the group this button represents.
+  base::GUID guid_;
 
   // The tabs to be displayed in the context menu. Currently supports tab title,
   // url, and favicon.

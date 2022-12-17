@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -49,14 +49,14 @@ class AppMenuButton : public ToolbarButton {
   bool IsMenuShowing() const;
 
   AppMenu* app_menu() { return menu_.get(); }
+  AppMenuModel* app_menu_model() { return menu_model_.get(); }
 
  protected:
   // Show the menu. |menu_model| should be a newly created AppMenuModel.  The
   // other params are forwarded to the created AppMenu.
   void RunMenu(std::unique_ptr<AppMenuModel> menu_model,
                Browser* browser,
-               int run_flags,
-               bool alert_reopen_tab_items);
+               int run_flags);
 
   // Provided for subclasses to handle menu close, before observers are
   // notified. Default implementation does nothing.

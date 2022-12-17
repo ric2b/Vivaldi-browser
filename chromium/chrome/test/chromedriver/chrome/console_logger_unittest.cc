@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,7 +45,7 @@ class FakeDevToolsClient : public StubDevToolsClient {
   Status ConnectIfNecessary() override { return listener_->OnConnected(this); }
 
   Status SendCommandAndGetResult(const std::string& method,
-                                 const base::DictionaryValue& params,
+                                 const base::Value::Dict& params,
                                  base::Value* result) override {
     sent_command_queue_.push(method);
     *result = base::Value(base::Value::Type::DICTIONARY);

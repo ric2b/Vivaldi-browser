@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -381,6 +381,8 @@ PhysicalRect ComputeColumnsRect(const NGPhysicalBoxFragment& fragment) {
 // background to prevent it from covering the collapsed borders around the cell.
 // TODO(crbug.com/1181813): Investigate other methods.
 class TableCellBackgroundClipper {
+  STACK_ALLOCATED();
+
  public:
   TableCellBackgroundClipper(
       GraphicsContext& context,
@@ -445,7 +447,7 @@ void NGTablePainter::PaintBoxDecorationBackground(
     }
   }
 
-  if (column_geometries_with_background.IsEmpty())
+  if (column_geometries_with_background.empty())
     return;
 
   // Paint <colgroup>/<col> backgrounds.
@@ -488,9 +490,8 @@ bool IsStartRowFragmented(const NGPhysicalBoxFragment& section) {
     if (!child->IsTableNGRow())
       continue;
 
-    const auto* prev_break_token =
-        FindPreviousBreakToken(To<NGPhysicalBoxFragment>(*child));
-    return prev_break_token && !prev_break_token->IsRepeated();
+    return IsResumingLayout(
+        FindPreviousBreakToken(To<NGPhysicalBoxFragment>(*child)));
   }
 
   return false;
@@ -502,9 +503,8 @@ bool IsEndRowFragmented(const NGPhysicalBoxFragment& section) {
     const auto& child = *it;
     if (!child->IsTableNGRow())
       continue;
-    return child->BreakToken() &&
-           !To<NGBlockBreakToken>(child->BreakToken())->IsAtBlockEnd() &&
-           !To<NGBlockBreakToken>(child->BreakToken())->IsRepeated();
+    const auto* break_token = To<NGBlockBreakToken>(child->BreakToken());
+    return IsResumingLayout(break_token) && !break_token->IsAtBlockEnd();
   }
   return false;
 }
@@ -529,7 +529,7 @@ void NGTablePainter::PaintCollapsedBorders(const PaintInfo& paint_info,
   DrawingRecorder recorder(paint_info.context, layout_table, paint_info.phase,
                            visual_rect);
   AutoDarkMode auto_dark_mode(PaintAutoDarkMode(
-      fragment_.Style(), DarkModeFilter::ElementRole::kBackground));
+      fragment_.Style(), DarkModeFilter::ElementRole::kBorder));
 
   const wtf_size_t edges_per_row = collapsed_borders->EdgesPerRow();
   const wtf_size_t total_row_count =

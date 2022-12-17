@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,11 +47,9 @@ class ChromeDesksTemplatesDelegate : public ash::DesksTemplatesDelegate {
       const std::string& app_id,
       int desired_icon_size,
       base::OnceCallback<void(const gfx::ImageSkia&)> callback) const override;
-  void LaunchAppsFromTemplate(std::unique_ptr<ash::DeskTemplate> desk_template,
-                              base::Time time_launch_started,
-                              base::TimeDelta delay) override;
+  void LaunchAppsFromTemplate(
+      std::unique_ptr<ash::DeskTemplate> desk_template) override;
   bool IsWindowSupportedForDeskTemplate(aura::Window* window) const override;
-  void OpenFeedbackDialog(const std::string& extra_diagnostics) override;
   std::string GetAppShortName(const std::string& app_id) override;
   bool IsAppAvailable(const std::string& app_id) const override;
 

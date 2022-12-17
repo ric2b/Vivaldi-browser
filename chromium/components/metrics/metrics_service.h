@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,6 +34,7 @@
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_log_manager.h"
 #include "components/metrics/metrics_log_store.h"
+#include "components/metrics/metrics_logs_event_manager.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/metrics_reporting_service.h"
 
@@ -58,9 +59,6 @@ namespace metrics {
 class MetricsRotationScheduler;
 class MetricsServiceClient;
 class MetricsStateManager;
-
-// Exposed in the header file for tests.
-extern const base::Feature kConsolidateMetricsServiceInitialLogLogic;
 
 // See metrics_service.cc for a detailed description.
 class MetricsService : public base::HistogramFlattener {
@@ -252,6 +250,14 @@ class MetricsService : public base::HistogramFlattener {
   DelegatingProvider* GetDelegatingProviderForTesting() {
     return &delegating_provider_;
   }
+
+  // Adds/Removes a logs observer. Observers are notified when a log is newly
+  // created and is now known by the metrics service. This may occur when
+  // closing a log, or when loading a log from persistent storage. Observers are
+  // also notified when an event occurs on the log (e.g., log is staged,
+  // uploaded, etc.). See MetricsLogsEventManager::LogEvent for more details.
+  void AddLogsObserver(MetricsLogsEventManager::Observer* observer);
+  void RemoveLogsObserver(MetricsLogsEventManager::Observer* observer);
 
   // Observers will be notified when the enablement state changes. The callback
   // should accept one boolean argument, which will signal whether or not the
@@ -463,6 +469,11 @@ class MetricsService : public base::HistogramFlattener {
 
   // Indicates if loading of independent metrics is currently active.
   bool independent_loader_active_ = false;
+
+  // Logs event manager to keep track of the various logs that the metrics
+  // service interacts with. An unowned pointer of this instance is passed down
+  // to various objects that are owned by this class.
+  MetricsLogsEventManager logs_event_manager_;
 
   // A set of observers that keeps track of the metrics reporting state.
   base::RepeatingCallbackList<void(bool)> enablement_observers_;

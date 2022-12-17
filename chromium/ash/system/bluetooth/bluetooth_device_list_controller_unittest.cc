@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,26 +8,24 @@
 #include <string>
 #include <vector>
 
-#include "ash/constants/ash_features.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/bluetooth/bluetooth_detailed_view.h"
 #include "ash/system/bluetooth/bluetooth_device_list_item_view.h"
 #include "ash/system/bluetooth/fake_bluetooth_detailed_view.h"
 #include "ash/system/tray/tri_view.h"
 #include "ash/test/ash_test_base.h"
-#include "base/test/scoped_feature_list.h"
-#include "chromeos/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
+#include "chromeos/ash/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/separator.h"
 
 namespace ash {
+
 namespace {
 
-using chromeos::bluetooth_config::mojom::BluetoothDeviceProperties;
-using chromeos::bluetooth_config::mojom::DeviceConnectionState;
-using chromeos::bluetooth_config::mojom::PairedBluetoothDeviceProperties;
-using chromeos::bluetooth_config::mojom::PairedBluetoothDevicePropertiesPtr;
+using bluetooth_config::mojom::BluetoothDeviceProperties;
+using bluetooth_config::mojom::PairedBluetoothDeviceProperties;
+using bluetooth_config::mojom::PairedBluetoothDevicePropertiesPtr;
 
 const char kDeviceId1[] = "/device/id/1";
 const char kDeviceId2[] = "/device/id/2";
@@ -39,8 +37,6 @@ class BluetoothDeviceListControllerTest : public AshTestBase {
  public:
   void SetUp() override {
     AshTestBase::SetUp();
-
-    feature_list_.InitAndEnableFeature(features::kBluetoothRevamp);
 
     fake_bluetooth_detailed_view_ =
         std::make_unique<FakeBluetoothDetailedView>(/*delegate=*/nullptr);
@@ -185,7 +181,6 @@ class BluetoothDeviceListControllerTest : public AshTestBase {
     return nullptr;
   }
 
-  base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<FakeBluetoothDetailedView> fake_bluetooth_detailed_view_;
   std::unique_ptr<BluetoothDeviceListControllerImpl>
       bluetooth_device_list_controller_impl_;

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,8 +15,6 @@
 namespace segmentation_platform::processing {
 
 namespace {
-// Index not actually used for legacy code in FeatureQueryProcessor.
-const int kIndexNotUsed = 0;
 
 absl::optional<int> GetArgAsInt(
     const google::protobuf::Map<std::string, std::string>& args,
@@ -45,38 +43,18 @@ CustomInputProcessor::CustomInputProcessor(
       prediction_time_(prediction_time) {}
 
 CustomInputProcessor::CustomInputProcessor(
-    base::flat_map<FeatureIndex, proto::CustomInput>&& custom_inputs,
+    base::flat_map<FeatureIndex, Data>&& data,
     const base::Time prediction_time,
     InputDelegateHolder* input_delegate_holder)
     : input_delegate_holder_(input_delegate_holder),
-      custom_inputs_(std::move(custom_inputs)),
-      prediction_time_(prediction_time) {}
+      prediction_time_(prediction_time) {
+  for (const auto& item : data) {
+    custom_inputs_[item.first] =
+        std::move(item.second.input_feature->custom_input());
+  }
+}
 
 CustomInputProcessor::~CustomInputProcessor() = default;
-
-void CustomInputProcessor::ProcessCustomInput(
-    const proto::CustomInput& custom_input,
-    std::unique_ptr<FeatureProcessorState> feature_processor_state,
-    FeatureListQueryProcessorCallback callback) {
-  DCHECK(custom_inputs_.empty());
-  prediction_time_ = feature_processor_state->prediction_time();
-  custom_inputs_[kIndexNotUsed] = custom_input;
-  Process(std::move(feature_processor_state),
-          base::BindOnce(&CustomInputProcessor::OnFinishProcessing,
-                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-}
-
-void CustomInputProcessor::OnFinishProcessing(
-    FeatureListQueryProcessorCallback callback,
-    std::unique_ptr<FeatureProcessorState> feature_processor_state,
-    IndexedTensors result) {
-  custom_inputs_.clear();
-  feature_processor_state->AppendTensor(result[kIndexNotUsed],
-                                        true /*is_input*/);
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback), std::move(feature_processor_state)));
-}
 
 void CustomInputProcessor::Process(
     std::unique_ptr<FeatureProcessorState> feature_processor_state,
@@ -121,10 +99,8 @@ void CustomInputProcessor::ProcessIndexType(
       return;
     }
 
-    // Skip custom input with tensor length of 0.
-    if (custom_input.tensor_length() == 0) {
-      continue;
-    }
+    DCHECK(custom_input.tensor_length() != 0);
+
     // Validate the proto::CustomInput metadata.
     if (metadata_utils::ValidateMetadataCustomInput(custom_input) !=
         metadata_utils::ValidationResult::kValidationSuccess) {
@@ -211,6 +187,12 @@ QueryProcessor::Tensor CustomInputProcessor::ProcessSingleCustomInput(
       feature_processor_state->SetError(
           stats::FeatureProcessingError::kCustomInputError);
   } else if (custom_input.fill_policy() ==
+             proto::CustomInput::FILL_FROM_INPUT_CONTEXT) {
+    if (!AddFromInputContext(custom_input, feature_processor_state,
+                             tensor_result))
+      feature_processor_state->SetError(
+          stats::FeatureProcessingError::kCustomInputError);
+  } else if (custom_input.fill_policy() ==
              proto::CustomInput::PRICE_TRACKING_HINTS) {
     feature_processor_state->SetError(
         stats::FeatureProcessingError::kCustomInputError);
@@ -218,6 +200,29 @@ QueryProcessor::Tensor CustomInputProcessor::ProcessSingleCustomInput(
   }
 
   return tensor_result;
+}
+
+bool CustomInputProcessor::AddFromInputContext(
+    const proto::CustomInput& custom_input,
+    FeatureProcessorState* feature_processor_state,
+    std::vector<ProcessedValue>& out_tensor) {
+  if (custom_input.tensor_length() != 1) {
+    return false;
+  }
+  const auto& input_context = feature_processor_state->input_context();
+  auto custom_input_iter = custom_input.additional_args().find("name");
+  if (custom_input_iter == custom_input.additional_args().end()) {
+    return false;
+  }
+
+  auto input_context_iter =
+      input_context->metadata_args.find(custom_input_iter->second);
+  if (input_context_iter == input_context->metadata_args.end()) {
+    return false;
+  }
+
+  out_tensor.emplace_back(input_context_iter->second);
+  return true;
 }
 
 bool CustomInputProcessor::AddPredictionTime(

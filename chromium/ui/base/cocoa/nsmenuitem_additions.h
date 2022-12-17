@@ -1,4 +1,4 @@
-// Copyright (c) 2009 The Chromium Authors. All rights reserved.
+// Copyright 2009 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,12 @@ namespace cocoa {
 // source.
 void COMPONENT_EXPORT(UI_BASE)
     SetIsInputSourceCommandQwertyForTesting(bool is_command_qwerty);
+
+void COMPONENT_EXPORT(UI_BASE)
+    SetIsInputSourceDvorakRightOrLeftForTesting(bool is_dvorak_right_or_left);
+
+void COMPONENT_EXPORT(UI_BASE)
+    SetIsInputSourceCommandHebrewForTesting(bool is_command_hebrew);
 
 // Returns whether the named keyboard layout has the command-qwerty behavior,
 // meaning that the layout acts as though it was QWERTY when the command key is

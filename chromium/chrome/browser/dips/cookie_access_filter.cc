@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,9 +9,10 @@
 CookieAccessFilter::CookieAccessFilter() = default;
 CookieAccessFilter::~CookieAccessFilter() = default;
 
-void CookieAccessFilter::AddAccess(const GURL& url, Type type) {
-  CookieAccessType t = (type == Type::kChange ? CookieAccessType::kWrite
-                                              : CookieAccessType::kRead);
+void CookieAccessFilter::AddAccess(const GURL& url, CookieOperation op) {
+  CookieAccessType t =
+      (op == CookieOperation::kChange ? CookieAccessType::kWrite
+                                      : CookieAccessType::kRead);
   if (!accesses_.empty() && accesses_.back().url == url) {
     // Coalesce accesses for the same URL. They may have come from separate
     // visits, but we can't distinguish them from redundant calls, which are
@@ -77,6 +78,12 @@ bool CookieAccessFilter::Filter(const std::vector<GURL>& urls,
 
   // Return true iff we consumed all the cookie accesses recorded by calls to
   // AddAccess().
-  return access_idx == accesses_.size() ||
-         (access_idx == accesses_.size() - 1 && matched);
+  if (access_idx == accesses_.size() ||
+      (access_idx == accesses_.size() - 1 && matched)) {
+    return true;
+  }
+
+  // Otherwise, fill the entire result vector with kUnknown and return false.
+  std::fill(result->begin(), result->end(), CookieAccessType::kUnknown);
+  return false;
 }

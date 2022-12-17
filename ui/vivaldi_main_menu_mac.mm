@@ -359,10 +359,10 @@ void setMenuItemBold(NSMenuItem* item, bool bold) {
   [newTitle release];
 }
 
-NSMenuItem* MakeMenuItem(NSString* title, const std::string* shortcut, int tag) {
+NSMenuItem* MakeMenuItem(NSString* title, const std::string& shortcut, int tag) {
   std::string shortcut_copy;
-  if (shortcut) {
-    shortcut_copy = *shortcut;
+  if (!shortcut.empty()) {
+    shortcut_copy = shortcut;
   }
   NSEventModifierFlags modifiers = modifierMaskFromString(shortcut_copy);
   NSString* keyEquivalent = acceleratorFromString(shortcut_copy);
@@ -393,7 +393,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
   } else {
     // Either a sub menu item or a new top level item.
     if (item.type == menubar::ITEM_TYPE_SEPARATOR) {
-      NSMenuItem* menuItem = [NSMenuItem separatorItem];
+      menuItem = [NSMenuItem separatorItem];
       [menuItem setTag:item.id];
       if (index == -1) {
         [menu addItem:menuItem];
@@ -402,24 +402,24 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       }
     } else {
       menuItem = MakeMenuItem(base::SysUTF8ToNSString(item.name),
-          item.shortcut.get(), item.id);
-      bool visible = item.visible ? *item.visible : true;
+          item.shortcut.value_or(""), item.id);
+      bool visible = item.visible.value_or(true);
       [menuItem setHidden:!visible];
-      if (item.parameter) {
+      if (item.parameter.has_value()) {
         // This is used by the tab items (and other types if needed later) that
         // all share the same mac menu id. Information of what to do (like what
         // tab to activate is stored here).
         [menuItem setRepresentedObject:
-            base::SysUTF8ToNSString(*item.parameter.get())];
-      } else if (item.url) {
+            base::SysUTF8ToNSString(item.parameter.value())];
+      } else if (item.url.has_value()) {
         // Some commands reply on a url when executed.
         [menuItem setRepresentedObject:
-            base::SysUTF8ToNSString(*item.url.get())];
+            base::SysUTF8ToNSString(item.url.value())];
       }
-      if (item.emphasized && *item.emphasized.get()) {
+      if (item.emphasized.has_value() && item.emphasized.value()) {
         setMenuItemBold(menuItem, true);
       }
-      if (item.checked && *item.checked.get()) {
+      if (item.checked.has_value() && item.checked.value()) {
         [menuItem setState:NSOnState];
       }
 
@@ -466,7 +466,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       }
       [appController setVivaldiMenuItemAction:menuItem];
 
-      if (item.icon.get() && item.icon->length() > 0) {
+      if (item.icon.has_value() && item.icon.value().length() > 0) {
         std::string png_data;
         if (base::Base64Decode(*item.icon, &png_data)) {
           gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
@@ -475,8 +475,8 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           menuItem.image = img.ToNSImage();
         }
       }
-      if (faviconLoader && item.url.get() && item.url->length() > 0)
-        faviconLoader->LoadFavicon(menuItem, *item.url);
+      if (faviconLoader && item.url.has_value() && item.url.value().length() > 0)
+        faviconLoader->LoadFavicon(menuItem, item.url.value());
 
       if (index == -1) {
         [menu addItem:menuItem];
@@ -487,7 +487,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
   }
 
   if (menuItem && item.items) {
-    long index = -1;
+    long index2 = -1;
     NSMenu* subMenu;
     if ([menuItem hasSubmenu]) {
       subMenu = [menuItem submenu];
@@ -495,26 +495,26 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       [subMenu setTitle:base::SysUTF8ToNSString(item.name)];
       switch (item.id) {
         case IDC_EDIT_MENU:
-          for (NSMenuItem* item in [subMenu itemArray]) {
-            if (item.tag == IDC_SPELLCHECK_MENU ||
-                item.tag == IDC_VIV_SUBSTITUTIONS_MENU_MAC ||
-                item.tag == IDC_VIV_SPEECH_MENU_MAC ||
-                item.tag == IDC_VIV_EDIT_SEPARATOR_MAC) {
+          for (NSMenuItem* item2 in [subMenu itemArray]) {
+            if (item2.tag == IDC_SPELLCHECK_MENU ||
+                item2.tag == IDC_VIV_SUBSTITUTIONS_MENU_MAC ||
+                item2.tag == IDC_VIV_SPEECH_MENU_MAC ||
+                item2.tag == IDC_VIV_EDIT_SEPARATOR_MAC) {
               // Set up in vivaldi_main_menu_buider.mm It seems we have to do
               // it there to get it working. This means this submenu with
               // content is not configurable.
               continue;
-            } else if (item.action ==
+            } else if (item2.action ==
                        NSSelectorFromString(@"orderFrontCharacterPalette:") ||
-                       item.action ==
+                       item2.action ==
                        NSSelectorFromString(@"startDictation:")) {
               // These two are added by AppKit at end of the menu and we leave
               // them alone.
               continue;
             }
-            [subMenu removeItem:item];
+            [subMenu removeItem:item2];
           }
-          index = 0; // Our items always start from the top of the menu.
+          index2 = 0; // Our items always start from the top of the menu.
           break;
         case IDC_BOOKMARKS_MENU:
           // Special care for the bookmarks menu as we manage it two places.
@@ -522,10 +522,10 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           // been created earlier by this function.
           {
             for (auto id: GetBookmarkMenuIds()) {
-              NSMenuItem* item = [subMenu itemWithTag:id];
-              if (item) {
-                long index = [subMenu indexOfItem:item];
-                [subMenu removeItemAtIndex:index];
+              NSMenuItem* item4 = [subMenu itemWithTag:id];
+              if (item4) {
+                long index3 = [subMenu indexOfItem:item4];
+                [subMenu removeItemAtIndex:index3];
               }
             }
             GetBookmarkMenuIds().clear();
@@ -540,19 +540,19 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           // this one can not (adding it in vivaldi_main_menu_builder.mm fails
           // as well).
           {
-            NSMenuItem* item = [subMenu numberOfItems] > 0
+            NSMenuItem* item3 = [subMenu numberOfItems] > 0
               ? [subMenu itemAtIndex:0] : nullptr;
-            if (!item || item.tag != IDC_VIV_MAC_MINIMIZE) {
+            if (!item3 || item3.tag != IDC_VIV_MAC_MINIMIZE) {
               std::string shortcut = "Meta+M";
-              item = MakeMenuItem(
+              item3 = MakeMenuItem(
                 l10n_util::GetNSStringWithFixup(IDS_MINIMIZE_WINDOW_MAC),
-                &shortcut,
+                shortcut,
                 IDC_VIV_MAC_MINIMIZE);
               AppController* appController =
                   static_cast<AppController*>([NSApp delegate]);
-              [item setTarget:appController];
-              [subMenu insertItem:item atIndex:0];
-              [appController setVivaldiMenuItemAction:item];
+              [item3 setTarget:appController];
+              [subMenu insertItem:item3 atIndex:0];
+              [appController setVivaldiMenuItemAction:item3];
             }
           }
 
@@ -561,15 +561,15 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           // the "magic" separator with the tag value
           // IDC_VIV_WINDOW_SEPARATOR_MAC (see vivaldi_main_menu_builder.mm).
           // This means we can not configure all of this menu.
-          index = [subMenu indexOfItem:
+          index2 = [subMenu indexOfItem:
               [subMenu itemWithTag:IDC_VIV_WINDOW_SEPARATOR_MAC]];
-          for (NSMenuItem* item in [subMenu itemArray]) {
+          for (NSMenuItem* item5 in [subMenu itemArray]) {
             // MacOS adds a window list at bottom. Items are tagged with 0.
-            if ([subMenu indexOfItem:item] > index && item.tag != 0) {
-              [subMenu removeItem:item];
+            if ([subMenu indexOfItem:item5] > index2 && item5.tag != 0) {
+              [subMenu removeItem:item5];
             }
           }
-          index ++; // Start after the separator
+          index2 ++; // Start after the separator
           break;
         default:
           [subMenu removeAllItems];
@@ -593,8 +593,8 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       // In the first pass we add all UI items to the menu.
       for (const menubar::MenuItem& child: *item.items) {
         GetBookmarkMenuIds().push_back(child.id);
-        index = pos + extra_index;
-        PopulateMenu(child, subMenu, false, index, faviconLoader, 0, 0);
+        index2 = pos + extra_index;
+        PopulateMenu(child, subMenu, false, index2, faviconLoader, 0, 0);
         if (child.id == IDC_VIV_BOOKMARK_CONTAINER) {
           extra_index = num_installed_bookmarks;
         }
@@ -613,10 +613,10 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       }
     } else {
       for (const menubar::MenuItem& child: *item.items) {
-        PopulateMenu(child, subMenu, false, index, faviconLoader, min_tag,
+        PopulateMenu(child, subMenu, false, index2, faviconLoader, min_tag,
                     max_tag);
-        if (index != -1) {
-          index ++;
+        if (index2 != -1) {
+          index2 ++;
         }
       }
     }
@@ -625,13 +625,13 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
 }
 
 void UpdateMenuItem(const menubar::MenuItem& item, NSMenuItem* menuItem) {
-  if (item.checked) {
-    [menuItem setState:*item.checked ? NSOnState : NSOffState];
+  if (item.checked.has_value()) {
+    [menuItem setState:item.checked.value() ? NSOnState : NSOffState];
   }
-  if (item.emphasized) {
-    setMenuItemBold(menuItem, *item.emphasized.get() ? true : false);
+  if (item.emphasized.has_value()) {
+    setMenuItemBold(menuItem, item.emphasized.value() ? true : false);
   }
-  bool visible = item.visible ? *item.visible : true;
+  bool visible = item.visible.value_or(true);
   [menuItem setHidden:!visible];
 }
 

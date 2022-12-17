@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,8 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/viz/common/resources/resource_format.h"
+#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
@@ -20,10 +22,10 @@
 #include "gpu/command_buffer/service/context_state.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/image_factory.h"
-#include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/gl_image_backing.h"
+#include "gpu/command_buffer/service/shared_image/gl_repack_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
@@ -64,37 +66,78 @@ namespace gpu {
 
 namespace {
 
-size_t EstimatedSize(viz::ResourceFormat format, const gfx::Size& size) {
-  size_t estimated_size = 0;
-  viz::ResourceSizes::MaybeSizeInBytes(size, format, &estimated_size);
-  return estimated_size;
-}
-
 using InitializeGLTextureParams =
     GLTextureImageBackingHelper::InitializeGLTextureParams;
+
+int BytesPerPixel(viz::SharedImageFormat format) {
+  int bits = viz::BitsPerPixel(format);
+  DCHECK_GE(bits, 8);
+  return bits / 8;
+}
+
+bool HasFourByteAlignment(size_t stride) {
+  return (stride & 3) == 0;
+}
+
+// This value can't be cached as it may change for different contexts.
+bool SupportsUnpackSubimage() {
+  return gl::g_current_gl_version->is_es3_capable ||
+         gl::g_current_gl_driver->ext.b_GL_EXT_unpack_subimage;
+}
 
 }  // anonymous namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // GLTextureImageBacking
 
+bool GLTextureImageBacking::SupportsPixelUploadWithFormat(
+    viz::SharedImageFormat format) {
+  auto resource_format = format.resource_format();
+  switch (resource_format) {
+    case viz::ResourceFormat::RGBA_8888:
+    case viz::ResourceFormat::RGBA_4444:
+    case viz::ResourceFormat::BGRA_8888:
+    case viz::ResourceFormat::RED_8:
+    case viz::ResourceFormat::RG_88:
+    case viz::ResourceFormat::RGBA_F16:
+    case viz::ResourceFormat::R16_EXT:
+    case viz::ResourceFormat::RG16_EXT:
+    case viz::ResourceFormat::RGBX_8888:
+    case viz::ResourceFormat::BGRX_8888:
+    case viz::ResourceFormat::RGBA_1010102:
+    case viz::ResourceFormat::BGRA_1010102:
+      return true;
+    case viz::ResourceFormat::ALPHA_8:
+    case viz::ResourceFormat::LUMINANCE_8:
+    case viz::ResourceFormat::RGB_565:
+    case viz::ResourceFormat::BGR_565:
+    case viz::ResourceFormat::ETC1:
+    case viz::ResourceFormat::LUMINANCE_F16:
+    case viz::ResourceFormat::YVU_420:
+    case viz::ResourceFormat::YUV_420_BIPLANAR:
+    case viz::ResourceFormat::P010:
+      return false;
+  }
+}
+
 GLTextureImageBacking::GLTextureImageBacking(const Mailbox& mailbox,
-                                             viz::ResourceFormat format,
+                                             viz::SharedImageFormat format,
                                              const gfx::Size& size,
                                              const gfx::ColorSpace& color_space,
                                              GrSurfaceOrigin surface_origin,
                                              SkAlphaType alpha_type,
                                              uint32_t usage,
                                              bool is_passthrough)
-    : ClearTrackingSharedImageBacking(mailbox,
-                                      format,
-                                      size,
-                                      color_space,
-                                      surface_origin,
-                                      alpha_type,
-                                      usage,
-                                      EstimatedSize(format, size),
-                                      false /* is_thread_safe */),
+    : ClearTrackingSharedImageBacking(
+          mailbox,
+          format,
+          size,
+          color_space,
+          surface_origin,
+          alpha_type,
+          usage,
+          viz::ResourceSizes::UncheckedSizeInBytes<size_t>(size, format),
+          false /* is_thread_safe */),
       is_passthrough_(is_passthrough) {}
 
 GLTextureImageBacking::~GLTextureImageBacking() {
@@ -122,15 +165,17 @@ GLuint GLTextureImageBacking::GetGLServiceId() const {
 
 void GLTextureImageBacking::OnMemoryDump(
     const std::string& dump_name,
-    base::trace_event::MemoryAllocatorDump* dump,
+    base::trace_event::MemoryAllocatorDumpGuid client_guid,
     base::trace_event::ProcessMemoryDump* pmd,
     uint64_t client_tracing_id) {
-  const auto client_guid = GetSharedImageGUIDForTracing(mailbox());
+  SharedImageBacking::OnMemoryDump(dump_name, client_guid, pmd,
+                                   client_tracing_id);
+
   if (!IsPassthrough()) {
     const auto service_guid =
         gl::GetGLTextureServiceGUIDForTracing(texture_->service_id());
     pmd->CreateSharedGlobalAllocatorDump(service_guid);
-    pmd->AddOwnershipEdge(client_guid, service_guid, /* importance */ 2);
+    pmd->AddOwnershipEdge(client_guid, service_guid, kOwningEdgeImportance);
     texture_->DumpLevelMemory(pmd, client_tracing_id, dump_name);
   }
 }
@@ -159,12 +204,59 @@ void GLTextureImageBacking::SetClearedRect(const gfx::Rect& cleared_rect) {
   ClearTrackingSharedImageBacking::SetClearedRect(cleared_rect);
 }
 
-bool GLTextureImageBacking::ProduceLegacyMailbox(
-    MailboxManager* mailbox_manager) {
-  if (IsPassthrough())
-    mailbox_manager->ProduceTexture(mailbox(), passthrough_texture_.get());
-  else
-    mailbox_manager->ProduceTexture(mailbox(), texture_);
+void GLTextureImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {}
+
+bool GLTextureImageBacking::UploadFromMemory(const SkPixmap& pixmap) {
+  DCHECK(SupportsPixelUploadWithFormat(format()));
+  DCHECK(gl::GLContext::GetCurrent());
+
+  const GLuint texture_id = GetGLServiceId();
+  const GLenum gl_format = texture_params_.format;
+  const GLenum gl_type = texture_params_.type;
+  const GLenum gl_target = texture_params_.target;
+
+  size_t pixmap_stride = pixmap.rowBytes();
+  DCHECK(HasFourByteAlignment(pixmap_stride));
+
+  size_t expected_stride = gfx::RowSizeForBufferFormat(
+      size().width(), viz::BufferFormat(format()), /*plane=*/0);
+  DCHECK(HasFourByteAlignment(expected_stride));
+  DCHECK_GE(pixmap_stride, expected_stride);
+
+  GLuint gl_unpack_row_length = 0;
+  std::vector<uint8_t> repacked_data;
+  auto resource_format = format().resource_format();
+  if (resource_format == viz::BGRX_8888 || resource_format == viz::RGBX_8888) {
+    DCHECK_EQ(gl_format, static_cast<GLenum>(GL_RGB));
+
+    // BGRX and RGBX data is uploaded as GL_RGB. Repack from 4 to 3 bytes per
+    // pixel.
+    repacked_data =
+        RepackPixelDataAsRgb(size(), pixmap, resource_format == viz::BGRX_8888);
+  } else if (pixmap_stride > expected_stride) {
+    if (SupportsUnpackSubimage()) {
+      // Use GL_UNPACK_ROW_LENGTH to skip data past end of each row on upload.
+      gl_unpack_row_length =
+          base::checked_cast<int>(pixmap_stride) / BytesPerPixel(format());
+    } else {
+      // If GL_UNPACK_ROW_LENGTH isn't supported then repack pixels with the
+      // expected stride.
+      repacked_data =
+          RepackPixelDataWithStride(size(), pixmap, expected_stride);
+    }
+  }
+
+  gl::ScopedTextureBinder scoped_texture_binder(gl_target, texture_id);
+  ScopedUnpackState scoped_unpack_state(/*uploading_data=*/true,
+                                        gl_unpack_row_length);
+
+  const void* pixels =
+      !repacked_data.empty() ? repacked_data.data() : pixmap.addr();
+  gl::GLApi* api = gl::g_current_gl_context;
+  api->glTexSubImage2DFn(gl_target, /*level=*/0, 0, 0, size().width(),
+                         size().height(), gl_format, gl_type, pixels);
+  DCHECK_EQ(api->glGetErrorFn(), static_cast<GLenum>(GL_NO_ERROR));
+
   return true;
 }
 
@@ -221,7 +313,7 @@ std::unique_ptr<SkiaImageRepresentation> GLTextureImageBacking::ProduceSkia(
   if (!cached_promise_texture_) {
     GrBackendTexture backend_texture;
     GetGrBackendTexture(context_state->feature_info(), GetGLTarget(), size(),
-                        GetGLServiceId(), format(),
+                        GetGLServiceId(), format().resource_format(),
                         context_state->gr_context()->threadSafeProxy(),
                         &backend_texture);
     cached_promise_texture_ = SkPromiseImageTexture::Make(backend_texture);
@@ -231,8 +323,6 @@ std::unique_ptr<SkiaImageRepresentation> GLTextureImageBacking::ProduceSkia(
       tracker);
 }
 
-void GLTextureImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {}
-
 void GLTextureImageBacking::InitializeGLTexture(
     GLuint service_id,
     const InitializeGLTextureParams& params) {
@@ -240,9 +330,10 @@ void GLTextureImageBacking::InitializeGLTexture(
       params.target, service_id, params.framebuffer_attachment_angle,
       IsPassthrough() ? &passthrough_texture_ : nullptr,
       IsPassthrough() ? nullptr : &texture_);
-
+  texture_params_ = params;
   if (IsPassthrough()) {
-    passthrough_texture_->SetEstimatedSize(EstimatedSize(format(), size()));
+    passthrough_texture_->SetEstimatedSize(
+        viz::ResourceSizes::UncheckedSizeInBytes<size_t>(size(), format()));
     SetClearedRect(params.is_cleared ? gfx::Rect(size()) : gfx::Rect());
   } else {
     texture_->SetLevelInfo(params.target, 0, params.internal_format,

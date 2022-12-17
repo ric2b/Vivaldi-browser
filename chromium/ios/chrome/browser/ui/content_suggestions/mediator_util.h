@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,9 +20,6 @@ ContentSuggestionsSectionInformation* ReturnToRecentTabSectionInformation();
 // Creates and returns a SectionInfo for the section containing the logo and
 // omnibox.
 ContentSuggestionsSectionInformation* LogoSectionInformation();
-
-// Creates and returns a SectionInfo for the What's New promo section.
-ContentSuggestionsSectionInformation* PromoSectionInformation();
 
 // Creates and returns a SectionInfo for the Most Visited section.
 ContentSuggestionsSectionInformation* MostVisitedSectionInformation();
@@ -47,5 +44,8 @@ ContentSuggestionsMostVisitedActionItem* RecentTabsActionItem();
 
 // Creates and returns a History action item.
 ContentSuggestionsMostVisitedActionItem* HistoryActionItem();
+
+// Creates and returns a Whats New action item.
+ContentSuggestionsMostVisitedActionItem* WhatsNewActionItem();
 
 #endif  // IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_MEDIATOR_UTIL_H_

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -348,6 +348,7 @@ void PageHandler::DidCloseJavaScriptDialog(bool success,
 
 Response PageHandler::Enable() {
   enabled_ = true;
+  RetrievePrerenderActivationFromWebContents();
   return Response::FallThrough();
 }
 
@@ -764,6 +765,36 @@ void PageHandler::CaptureSnapshot(
       std::move(callback));
 }
 
+// Sets a clip with full page dimensions. Calls CaptureScreenshot with updated
+// value to proceed with capturing the full page screenshot.
+// TODO(crbug.com/1363574): at the point this method is called, the page could
+// have changed its size.
+void PageHandler::CaptureFullPageScreenshot(
+    Maybe<std::string> format,
+    Maybe<int> quality,
+    std::unique_ptr<CaptureScreenshotCallback> callback,
+    const gfx::Size& full_page_size) {
+  // check width and height for validity
+  // max_size is needed to respect the limit of 16K of the headless mode
+  const int kMaxDimension = 128 * 1024;
+  if (full_page_size.width() >= kMaxDimension ||
+      full_page_size.height() >= kMaxDimension) {
+    callback->sendFailure(Response::ServerError("Page is too large."));
+    return;
+  }
+
+  auto clip = Page::Viewport::Create()
+                  .SetX(0)
+                  .SetY(0)
+                  .SetWidth(full_page_size.width())
+                  .SetHeight(full_page_size.height())
+                  .SetScale(1)
+                  .Build();
+  CaptureScreenshot(std::move(format), std::move(quality), std::move(clip),
+                    /*from_surface=*/true, /*capture_beyond_viewport=*/true,
+                    std::move(callback));
+}
+
 void PageHandler::CaptureScreenshot(
     Maybe<std::string> format,
     Maybe<int> quality,
@@ -778,6 +809,17 @@ void PageHandler::CaptureScreenshot(
   }
   if (!CanExecuteGlobalCommands(this, callback))
     return;
+
+  // Check if full page screenshot is expected and get dimensions accordingly.
+  if (from_surface.fromMaybe(true) &&
+      capture_beyond_viewport.fromMaybe(false) && !clip.isJust()) {
+    blink::mojom::LocalMainFrame* main_frame =
+        host_->GetAssociatedLocalMainFrame();
+    main_frame->GetFullPageSize(base::BindOnce(
+        &PageHandler::CaptureFullPageScreenshot, weak_factory_.GetWeakPtr(),
+        std::move(format), std::move(quality), std::move(callback)));
+    return;
+  }
   if (clip.isJust()) {
     if (clip.fromJust()->GetWidth() == 0) {
       callback->sendFailure(
@@ -1316,9 +1358,6 @@ Page::BackForwardCacheNotRestoredReason NotRestoredReasonToProtocol(
     case Reason::kRendererProcessCrashed:
       return Page::BackForwardCacheNotRestoredReasonEnum::
           RendererProcessCrashed;
-    case Reason::kSchedulerTrackedFeatureUsed:
-      return Page::BackForwardCacheNotRestoredReasonEnum::
-          SchedulerTrackedFeatureUsed;
     case Reason::kConflictingBrowsingInstance:
       return Page::BackForwardCacheNotRestoredReasonEnum::
           ConflictingBrowsingInstance;
@@ -1438,9 +1477,6 @@ Page::PrerenderFinalStatus PrerenderFinalStatusToProtocol(
     case PrerenderHost::FinalStatus::kEmbedderTriggeredAndCrossOriginRedirected:
       return Page::PrerenderFinalStatusEnum::
           EmbedderTriggeredAndCrossOriginRedirected;
-    case PrerenderHost::FinalStatus::kEmbedderTriggeredAndSameOriginRedirected:
-      return Page::PrerenderFinalStatusEnum::
-          EmbedderTriggeredAndSameOriginRedirected;
     case PrerenderHost::FinalStatus::kFailToGetMemoryUsage:
       return Page::PrerenderFinalStatusEnum::FailToGetMemoryUsage;
     case PrerenderHost::FinalStatus::kInProgressNavigation:
@@ -1485,6 +1521,16 @@ Page::PrerenderFinalStatus PrerenderFinalStatusToProtocol(
       return Page::PrerenderFinalStatusEnum::TriggerDestroyed;
     case PrerenderHost::FinalStatus::kUaChangeRequiresReload:
       return Page::PrerenderFinalStatusEnum::UaChangeRequiresReload;
+    case PrerenderHost::FinalStatus::kHasEffectiveUrl:
+      return Page::PrerenderFinalStatusEnum::HasEffectiveUrl;
+    case PrerenderHost::FinalStatus::kActivatedBeforeStarted:
+      return Page::PrerenderFinalStatusEnum::ActivatedBeforeStarted;
+    case PrerenderHost::FinalStatus::kInactivePageRestriction:
+      return Page::PrerenderFinalStatusEnum::InactivePageRestriction;
+    case PrerenderHost::FinalStatus::kStartFailed:
+      return Page::PrerenderFinalStatusEnum::StartFailed;
+    case PrerenderHost::FinalStatus::kTimeoutBackgrounded:
+      return Page::PrerenderFinalStatusEnum::TimeoutBackgrounded;
   }
 }
 
@@ -1725,7 +1771,6 @@ Page::BackForwardCacheNotRestoredReasonType MapNotRestoredReasonToType(
     case Reason::kJavaScriptExecution:
     case Reason::kRendererProcessKilled:
     case Reason::kRendererProcessCrashed:
-    case Reason::kSchedulerTrackedFeatureUsed:
     case Reason::kConflictingBrowsingInstance:
     case Reason::kCacheFlushed:
     case Reason::kServiceWorkerVersionActivation:
@@ -1945,6 +1990,7 @@ void PageHandler::BackForwardCacheNotUsed(
 }
 
 void PageHandler::DidActivatePrerender(const NavigationRequest& nav_request) {
+  has_dispatched_stored_prerender_activation_ = false;
   if (!enabled_)
     return;
   FrameTreeNode* ftn = nav_request.frame_tree_node();
@@ -1958,20 +2004,38 @@ void PageHandler::DidActivatePrerender(const NavigationRequest& nav_request) {
 void PageHandler::DidCancelPrerender(const GURL& prerendering_url,
                                      const std::string& initiating_frame_id,
                                      PrerenderHost::FinalStatus status,
-                                     const std::string& reason_details) {
+                                     const std::string& disallowed_api_method) {
+  has_dispatched_stored_prerender_activation_ = false;
   if (!enabled_)
     return;
   DCHECK_NE(status, PrerenderHost::FinalStatus::kActivated);
-  Maybe<std::string> opt_reason = reason_details.empty()
-                                      ? Maybe<std::string>()
-                                      : Maybe<std::string>(reason_details);
-  frontend_->PrerenderAttemptCompleted(
-      initiating_frame_id, prerendering_url.spec(),
-      PrerenderFinalStatusToProtocol(status), std::move(opt_reason));
+  Maybe<std::string> opt_disallowed_api_method =
+      disallowed_api_method.empty() ? Maybe<std::string>()
+                                    : Maybe<std::string>(disallowed_api_method);
+  frontend_->PrerenderAttemptCompleted(initiating_frame_id,
+                                       prerendering_url.spec(),
+                                       PrerenderFinalStatusToProtocol(status),
+                                       std::move(opt_disallowed_api_method));
 }
 
 bool PageHandler::ShouldBypassCSP() {
   return enabled_ && bypass_csp_;
+}
+
+void PageHandler::RetrievePrerenderActivationFromWebContents() {
+  if (!host_)
+    return;
+  WebContentsImpl* web_contents =
+      WebContentsImpl::FromRenderFrameHostImpl(host_);
+  if (web_contents->last_navigation_was_prerender_activation_for_devtools() &&
+      !has_dispatched_stored_prerender_activation_) {
+    std::string frame_token =
+        host_->frame_tree_node()->devtools_frame_token().ToString();
+    has_dispatched_stored_prerender_activation_ = true;
+    frontend_->PrerenderAttemptCompleted(
+        frame_token, host_->GetLastCommittedURL().spec(),
+        Page::PrerenderFinalStatusEnum::Activated);
+  }
 }
 
 }  // namespace protocol

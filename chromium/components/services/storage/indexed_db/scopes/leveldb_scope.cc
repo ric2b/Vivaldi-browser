@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -126,7 +126,7 @@ LevelDBScope::LevelDBScope(
     std::vector<uint8_t> prefix,
     size_t write_batch_size,
     scoped_refptr<LevelDBState> level_db,
-    std::vector<LeveledLock> locks,
+    std::vector<PartitionedLock> locks,
     std::vector<std::pair<std::string, std::string>> empty_ranges,
     RollbackCallback rollback_callback,
     TearDownCallback tear_down_callback)
@@ -420,7 +420,7 @@ void LevelDBScope::SetModeToUndoLog() {
   mode_ = Mode::kUndoLogOnDisk;
 
   LevelDBScopesScopeMetadata metadata;
-  for (LeveledLock& lock : locks_) {
+  for (PartitionedLock& lock : locks_) {
     auto* lock_proto = metadata.add_locks();
     lock_proto->set_level(lock.level());
     auto* range = lock_proto->mutable_range();

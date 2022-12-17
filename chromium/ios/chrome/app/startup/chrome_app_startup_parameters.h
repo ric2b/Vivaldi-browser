@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,12 +41,15 @@ enum MobileSessionCallerApp {
 @interface ChromeAppStartupParameters : AppStartupParameters
 
 - (instancetype)initWithExternalURL:(const GURL&)externalURL
-                        completeURL:(const GURL&)completeURL NS_UNAVAILABLE;
+                        completeURL:(const GURL&)completeURL
+                    applicationMode:(ApplicationModeForTabOpening)mode
+    NS_UNAVAILABLE;
 
 - (instancetype)initWithExternalURL:(const GURL&)externalURL
                   declaredSourceApp:(NSString*)declaredSourceApp
                     secureSourceApp:(NSString*)secureSourceApp
                         completeURL:(NSURL*)completeURL
+                    applicationMode:(ApplicationModeForTabOpening)mode
     NS_DESIGNATED_INITIALIZER;
 
 // Returns a ChromeAppStartupParameters instance containing the URL to

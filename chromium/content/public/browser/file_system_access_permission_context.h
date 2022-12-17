@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,6 @@
 #include "content/public/browser/global_routing_id.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom-forward.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom-shared.h"
-#include "ui/shell_dialogs/select_file_dialog.h"
 #include "url/origin.h"
 
 namespace content {
@@ -108,7 +107,7 @@ class FileSystemAccessPermissionContext {
       PathType path_type,
       const base::FilePath& path,
       HandleType handle_type,
-      ui::SelectFileDialog::Type dialog_type,
+      UserAction user_action,
       GlobalRenderFrameHostId frame_id,
       base::OnceCallback<void(SensitiveEntryResult)> callback) = 0;
 
@@ -144,9 +143,12 @@ class FileSystemAccessPermissionContext {
 
   // Return the path associated with well-known directories such as "desktop"
   // and "music", or a default path if the |directory| cannot be matched to a
-  // well-known directory.
+  // well-known directory. When |directory| is WellKnownDirectory.DIR_DOWNLOADS,
+  // |origin| is used to determine if browser-specified download directory
+  // should be returned instead of OS default download directory.
   virtual base::FilePath GetWellKnownDirectoryPath(
-      blink::mojom::WellKnownDirectory directory) = 0;
+      blink::mojom::WellKnownDirectory directory,
+      const url::Origin& origin) = 0;
 
   // Return the desired title of the file picker for the given `options`.
   virtual std::u16string GetPickerTitle(

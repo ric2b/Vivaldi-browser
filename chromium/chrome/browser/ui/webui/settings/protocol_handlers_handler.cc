@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,6 @@ namespace settings {
 
 namespace {
 
-// TODO(https://crbug.com/1251039): Remove usages of base::ListValue
 base::Value::List GetHandlersAsListValue(
     const custom_handlers::ProtocolHandlerRegistry* registry,
     const custom_handlers::ProtocolHandlerRegistry::ProtocolHandlerList&

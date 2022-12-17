@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,9 +7,7 @@
 
 #include <memory>
 
-#include "base/containers/flat_map.h"
 #include "chromecast/renderer/cast_content_renderer_client.h"
-#include "chromecast/renderer/url_rewrite_rules_provider.h"
 
 namespace cast_streaming {
 class ResourceProvider;
@@ -32,9 +30,6 @@ class CastRuntimeContentRendererClient
       CastRuntimeContentRendererClient&&) = delete;
 
   // content::ContentRendererClient overrides.
-  std::unique_ptr<blink::URLLoaderThrottleProvider>
-  CreateURLLoaderThrottleProvider(
-      blink::URLLoaderThrottleProviderType type) override;
   std::unique_ptr<cast_streaming::ResourceProvider>
   CreateCastStreamingResourceProvider() override;
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,11 +24,6 @@
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/models/dialog_model.h"
 #include "ui/gfx/native_widget_types.h"
-
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
-#include "chrome/browser/web_applications/web_app_id.h"
-#endif
 
 class Browser;
 class GURL;
@@ -74,6 +69,10 @@ namespace ui {
 class WebDialogDelegate;
 struct SelectedFileInfo;
 }  // namespace ui
+
+namespace webapps {
+struct Screenshot;
+}  // namespace webapps
 
 namespace chrome {
 
@@ -212,6 +211,9 @@ void ShowWebAppFileLaunchDialog(const std::vector<base::FilePath>& file_paths,
 void SetAutoAcceptWebAppDialogForTesting(bool auto_accept,
                                          bool auto_open_in_window);
 
+// Sets an override title for the installation.
+void SetOverrideTitleForTesting(const char* title_to_use);
+
 // Describes the state of in-product-help being shown to the user.
 enum class PwaInProductHelpState {
   // The in-product-help bubble was shown.
@@ -240,7 +242,7 @@ void ShowWebAppDetailedInstallDialog(
     content::WebContents* web_contents,
     std::unique_ptr<WebAppInstallInfo> web_app_info,
     AppInstallationAcceptanceCallback callback,
-    const std::vector<SkBitmap>& screenshots,
+    const std::vector<webapps::Screenshot>& screenshots,
     PwaInProductHelpState iph_state = PwaInProductHelpState::kNotShown);
 
 // Sets whether |ShowPWAInstallBubble| should accept immediately without any

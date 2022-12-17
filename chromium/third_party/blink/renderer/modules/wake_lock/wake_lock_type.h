@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,12 +15,6 @@ namespace blink {
 
 // This header contains constants and utility functions for converting between
 // V8WakeLockType and device.mojom.WakeLockType.
-
-// Useful for creating arrays with size N, where N is the number of different
-// wake lock types.
-constexpr size_t kWakeLockTypeCount =
-    static_cast<size_t>(V8WakeLockType::Enum::kSystem) + 1;
-static_assert(kWakeLockTypeCount == 2);
 
 MODULES_EXPORT device::mojom::blink::WakeLockType ToMojomWakeLockType(
     V8WakeLockType::Enum type);

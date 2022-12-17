@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -257,5 +257,53 @@ public class ApplicationStatusTest {
     public void testSubclassWrappedCallback() {
         Assert.assertTrue(ApplicationStatus.reachesWindowCallback(
                 new SubclassedCallbackWrapper(createWindowCallbackProxy())));
+    }
+
+    @Test
+    public void testTaskVisibilityForCreatedActivity() {
+        ActivityController<Activity> controller = Robolectric.buildActivity(Activity.class);
+
+        controller.create();
+        Assert.assertFalse(ApplicationStatus.isTaskVisible(controller.get().getTaskId()));
+    }
+
+    @Test
+    public void testTaskVisibilityForStartedActivity() {
+        ActivityController<Activity> controller = Robolectric.buildActivity(Activity.class);
+
+        controller.create().start();
+        Assert.assertFalse(ApplicationStatus.isTaskVisible(controller.get().getTaskId()));
+    }
+
+    @Test
+    public void testTaskVisibilityForResumedActivity() {
+        ActivityController<Activity> controller = Robolectric.buildActivity(Activity.class);
+
+        controller.create().resume();
+        Assert.assertTrue(ApplicationStatus.isTaskVisible(controller.get().getTaskId()));
+    }
+
+    @Test
+    public void testTaskVisibilityForPausedActivity() {
+        ActivityController<Activity> controller = Robolectric.buildActivity(Activity.class);
+
+        controller.create().pause();
+        Assert.assertTrue(ApplicationStatus.isTaskVisible(controller.get().getTaskId()));
+    }
+
+    @Test
+    public void testTaskVisibilityForStoppedActivity() {
+        ActivityController<Activity> controller = Robolectric.buildActivity(Activity.class);
+
+        controller.create().stop();
+        Assert.assertFalse(ApplicationStatus.isTaskVisible(controller.get().getTaskId()));
+    }
+
+    @Test
+    public void testTaskVisibilityForDestroyedActivity() {
+        ActivityController<Activity> controller = Robolectric.buildActivity(Activity.class);
+
+        controller.create().destroy();
+        Assert.assertFalse(ApplicationStatus.isTaskVisible(controller.get().getTaskId()));
     }
 }

@@ -1,15 +1,18 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/webui/chromeos/parent_access/parent_access_ui_handler_impl.h"
 
 #include <string>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/notreached.h"
+#include "base/time/time.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/webui/chromeos/parent_access/parent_access_callback.pb.h"
+#include "chrome/browser/ui/webui/chromeos/parent_access/parent_access_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/parent_access/parent_access_ui.mojom.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/access_token_fetcher.h"
@@ -71,6 +74,49 @@ void ParentAccessUIHandlerImpl::OnAccessTokenFetchComplete(
       access_token_info.token);
 }
 
+void ParentAccessUIHandlerImpl::GetParentAccessParams(
+    GetParentAccessParamsCallback callback) {
+  std::move(callback).Run(
+      ParentAccessDialog::GetInstance()->CloneParentAccessParams());
+  return;
+}
+
+void ParentAccessUIHandlerImpl::OnParentAccessDone(
+    parent_access_ui::mojom::ParentAccessResult result,
+    OnParentAccessDoneCallback callback) {
+  auto dialog_result = std::make_unique<ParentAccessDialog::Result>();
+
+  switch (result) {
+    case parent_access_ui::mojom::ParentAccessResult::kApproved:
+      DCHECK(parent_access_token_);
+      dialog_result->status = ParentAccessDialog::Result::Status::kApproved;
+      dialog_result->parent_access_token = parent_access_token_->token();
+      // Only keep the seconds, not the nanoseconds.
+      dialog_result->parent_access_token_expire_timestamp =
+          base::Time::FromDoubleT(
+              parent_access_token_->expire_time().seconds());
+      break;
+    case parent_access_ui::mojom::ParentAccessResult::kDeclined:
+      dialog_result->status = ParentAccessDialog::Result::Status::kDeclined;
+      break;
+    case parent_access_ui::mojom::ParentAccessResult::kCancelled:
+      dialog_result->status = ParentAccessDialog::Result::Status::kCancelled;
+      break;
+    case parent_access_ui::mojom::ParentAccessResult::kError:
+      dialog_result->status = ParentAccessDialog::Result::Status::kError;
+      break;
+  }
+
+  ParentAccessDialog::GetInstance()->SetResultAndClose(
+      std::move(dialog_result));
+  std::move(callback).Run();
+}
+
+const kids::platform::parentaccess::client::proto::ParentAccessToken*
+ParentAccessUIHandlerImpl::GetParentAccessTokenForTest() {
+  return parent_access_token_.get();
+}
+
 void ParentAccessUIHandlerImpl::OnParentAccessCallbackReceived(
     const std::string& encoded_parent_access_callback_proto,
     OnParentAccessCallbackReceivedCallback callback) {
@@ -99,15 +145,22 @@ void ParentAccessUIHandlerImpl::OnParentAccessCallbackReceived(
     return;
   }
 
-  //  TODO(b/200587178): Communicate parsed callback to ChromeOS caller.
-
   switch (parent_access_callback.callback_case()) {
     case kids::platform::parentaccess::client::proto::ParentAccessCallback::
         CallbackCase::kOnParentVerified:
-
       message->type = parent_access_ui::mojom::ParentAccessServerMessageType::
           kParentVerified;
 
+      if (parent_access_callback.on_parent_verified()
+              .verification_proof_case() ==
+          kids::platform::parentaccess::client::proto::OnParentVerified::
+              VerificationProofCase::kParentAccessToken) {
+        DCHECK(!parent_access_token_);
+        parent_access_token_ = std::make_unique<
+            kids::platform::parentaccess::client::proto::ParentAccessToken>();
+        parent_access_token_->CopyFrom(
+            parent_access_callback.on_parent_verified().parent_access_token());
+      }
       std::move(callback).Run(std::move(message));
       break;
     default:

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -379,12 +379,12 @@ TEST_F(ArcInputOverlayManagerTest, TestDisplayRotationChanged) {
   UpdateDisplay("800x600/r");
   EXPECT_TRUE(injector->rotation_transform());
   EXPECT_EQ(injector->content_bounds(), gfx::RectF(10, 10, 100, 100));
-  auto expect_pos = gfx::PointF(60, 60);
-  injector->rotation_transform()->TransformPoint(&expect_pos);
-  EXPECT_EQ(injector->actions()[0]->touch_down_positions()[0], expect_pos);
-  expect_pos = gfx::PointF(100, 100);
-  injector->rotation_transform()->TransformPoint(&expect_pos);
-  EXPECT_EQ(injector->actions()[1]->touch_down_positions()[0], expect_pos);
+  auto expected_pos = gfx::PointF(60, 60);
+  expected_pos = injector->rotation_transform()->MapPoint(expected_pos);
+  EXPECT_EQ(injector->actions()[0]->touch_down_positions()[0], expected_pos);
+  expected_pos = gfx::PointF(100, 100);
+  expected_pos = injector->rotation_transform()->MapPoint(expected_pos);
+  EXPECT_EQ(injector->actions()[1]->touch_down_positions()[0], expected_pos);
 }
 
 }  // namespace arc

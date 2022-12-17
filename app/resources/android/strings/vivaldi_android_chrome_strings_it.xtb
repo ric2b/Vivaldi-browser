@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
 <translation id="1397811292916898096">Cerca con <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi. Invia la parola selezionata e la pagina corrente come contesto a Ricerca di Google. Puoi disattivarlo in <ph name="BEGIN_LINK" />Impostazioni<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Mostra/nascondi le schede normali/private</translation>
 <translation id="1644574205037202324">Cronologia</translation>
 <translation id="17513872634828108">Schede aperte</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Nuova scheda privata</translation>
 <translation id="4243710787042215766">Apri in scheda privata</translation>
 <translation id="4526803704855831732">Schede private</translation>
+<translation id="4719086422742491124">Scopri gli argomenti sui siti Web senza uscire dalla pagina. Seleziona una o più parole nella pagina per cercarle.
+
+Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi.</translation>
 <translation id="4759238208242260848">Trasferimenti</translation>
 <translation id="4883379392681899581">Esci dalla modalità privata</translation>
 <translation id="4943872375798546930">Nessun risultato</translation>
@@ -39,6 +43,9 @@
 <translation id="5118676864324397542">Spazio di archiviazione di <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privato</translation>
 <translation id="5233638681132016545">Nuova scheda</translation>
+<translation id="5375131951310889874">Scopri gli argomenti sui siti Web senza uscire dalla pagina. Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi. Invia una parola e il contesto circostante a Ricerca di Google, restituendo definizioni, immagini, risultati di ricerca e altri dettagli.
+
+Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfezionare la ricerca, fai scorrere il pannello completamente in alto e tocca la casella di ricerca.</translation>
 <translation id="572328651809341494">Schede recenti</translation>
 <translation id="6150320133806434356">Segnalibro salvato</translation>
 <translation id="6336451774241870485">Nuova scheda privata</translation>

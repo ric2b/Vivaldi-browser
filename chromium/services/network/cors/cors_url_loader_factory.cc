@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
-#include "components/web_package/web_bundle_url_loader_factory.h"
+#include "base/types/optional_util.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/load_flags.h"
@@ -30,11 +30,10 @@
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
 #include "services/network/url_loader.h"
 #include "services/network/url_loader_factory.h"
+#include "services/network/web_bundle/web_bundle_url_loader_factory.h"
 #include "url/origin.h"
 
-namespace network {
-
-namespace cors {
+namespace network::cors {
 
 namespace {
 
@@ -79,6 +78,12 @@ bool VerifyTrustTokenParamsIntegrityIfPresent(
   }
 
   return true;
+}
+
+base::debug::CrashKeyString* GetRequestInitiatorOriginLockCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "request_initiator_origin_lock", base::debug::CrashKeySize::Size256);
+  return crash_key;
 }
 
 }  // namespace
@@ -171,6 +176,8 @@ CorsURLLoaderFactory::CorsURLLoaderFactory(
       ignore_isolated_world_origin_(params->ignore_isolated_world_origin),
       trust_token_redemption_policy_(params->trust_token_redemption_policy),
       isolation_info_(params->isolation_info),
+      automatically_assign_isolation_info_(
+          params->automatically_assign_isolation_info),
       debug_tag_(params->debug_tag),
       cross_origin_embedder_policy_(
           params->client_security_state
@@ -270,13 +277,12 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
       devtools_observer = GetDevToolsObserver(resource_request);
     }
 
-    base::WeakPtr<web_package::WebBundleURLLoaderFactory>
-        web_bundle_url_loader_factory =
-            context_->GetWebBundleManager().CreateWebBundleURLLoaderFactory(
-                resource_request.url, *resource_request.web_bundle_token_params,
-                process_id_, std::move(devtools_observer),
-                resource_request.devtools_request_id,
-                cross_origin_embedder_policy_, coep_reporter());
+    base::WeakPtr<WebBundleURLLoaderFactory> web_bundle_url_loader_factory =
+        context_->GetWebBundleManager().CreateWebBundleURLLoaderFactory(
+            resource_request.url, *resource_request.web_bundle_token_params,
+            process_id_, std::move(devtools_observer),
+            resource_request.devtools_request_id, cross_origin_embedder_policy_,
+            coep_reporter());
     client = web_bundle_url_loader_factory->MaybeWrapURLLoaderClient(
         std::move(client));
     if (!client)
@@ -291,6 +297,13 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer =
         GetDevToolsObserver(resource_request);
 
+    const net::IsolationInfo* isolation_info_ptr = &isolation_info_;
+    auto isolation_info = URLLoader::GetIsolationInfo(
+        isolation_info_, automatically_assign_isolation_info_,
+        resource_request);
+    if (isolation_info)
+      isolation_info_ptr = &isolation_info.value();
+
     auto loader = std::make_unique<CorsURLLoader>(
         std::move(receiver), process_id_, request_id, options,
         base::BindOnce(&CorsURLLoaderFactory::DestroyCorsURLLoader,
@@ -301,7 +314,7 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
         std::move(client), traffic_annotation, inner_url_loader_factory,
         factory_override_ ? nullptr : network_loader_factory_.get(),
         origin_access_list_, GetAllowAnyCorsExemptHeaderForBrowser(),
-        HasFactoryOverride(!!factory_override_), isolation_info_,
+        HasFactoryOverride(!!factory_override_), *isolation_info_ptr,
         std::move(devtools_observer), client_security_state_.get(),
         cross_origin_embedder_policy_, context_);
     auto* raw_loader = loader.get();
@@ -367,9 +380,9 @@ bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
     return false;
   }
 
-  // request's NetworkIsolationKey is not present. This is because the
+  // request's NetworkAnonymizationKey is not present. This is because the
   // restricted prefetch flag is only used when the browser sets the request's
-  // NetworkIsolationKey to correctly cache-partition the resource.
+  // NetworkAnonymizationKey to correctly cache-partition the resource.
   bool request_network_isolation_key_present =
       request.trusted_params &&
       !request.trusted_params->isolation_info.IsEmpty();
@@ -496,6 +509,9 @@ bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
 
     case InitiatorLockCompatibility::kIncorrectLock:
       // Requests from the renderer need to always specify a correct initiator.
+      url::debug::ScopedOriginCrashKey initiator_origin_lock_crash_key(
+          GetRequestInitiatorOriginLockCrashKey(),
+          base::OptionalToPtr(request_initiator_origin_lock_));
       mojo::ReportBadMessage(
           "CorsURLLoaderFactory: lock VS initiator mismatch");
       return false;
@@ -628,6 +644,4 @@ CorsURLLoaderFactory::GetDevToolsObserver(
   return devtools_observer;
 }
 
-}  // namespace cors
-
-}  // namespace network
+}  // namespace network::cors

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -190,7 +190,7 @@ class ServiceWorkerFileUploadTest : public testing::WithParamInterface<bool>,
     absl::optional<base::Value> parsed_result = base::test::ParseJson(result);
     ASSERT_TRUE(parsed_result);
     ASSERT_TRUE(parsed_result->is_dict());
-    out_result = std::move(parsed_result->GetDict());
+    out_result = std::move(*parsed_result).TakeDict();
   }
 
   // Helper for tests where the service worker falls back to network.
@@ -322,7 +322,7 @@ class ServiceWorkerFileUploadTest : public testing::WithParamInterface<bool>,
     base::ReplaceFirstSubstringAfterOffset(&expectation, 0, "@SIZE@",
                                            base::NumberToString(kFileSize));
     absl::optional<base::Value> result = base::test::ParseJson(expectation);
-    return std::move(result->GetDict());
+    return std::move(*result).TakeDict();
   }
 
  private:

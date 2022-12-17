@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,7 +91,7 @@ BrowserAccessibility* AccessibilityContentBrowserTest::GetRootAndAssertNonNull()
   // return type.
   auto GetRootAndAssertNonNull = [this](BrowserAccessibility** result) {
     BrowserAccessibility* root_browser_accessibility =
-        GetManagerAndAssertNonNull()->GetRoot();
+        GetManagerAndAssertNonNull()->GetBrowserAccessibilityRoot();
     ASSERT_NE(nullptr, result);
     *result = root_browser_accessibility;
   };

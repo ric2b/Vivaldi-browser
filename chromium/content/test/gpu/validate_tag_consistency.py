@@ -1,5 +1,5 @@
 #!/usr/bin/env vpython3
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Script to ensure that the same tags are in all expectation files."""
@@ -14,7 +14,7 @@ import sys
 TAG_HEADER = """\
 # OS
 # tags: [ android android-lollipop android-marshmallow android-nougat
-#             android-pie android-r android-s
+#             android-pie android-r android-s android-t
 #         chromeos
 #         fuchsia
 #         linux ubuntu
@@ -22,7 +22,8 @@ TAG_HEADER = """\
 #         win win8 win10 ]
 # Devices
 # tags: [ android-nexus-5 android-nexus-5x android-pixel-2 android-pixel-4
-#             android-pixel-6 android-shield-android-tv
+#             android-pixel-6 android-shield-android-tv android-sm-a135m
+#             android-sm-a235m
 #         chromeos-board-amd64-generic chromeos-board-kevin chromeos-board-eve
 #         fuchsia-board-astro fuchsia-board-sherlock fuchsia-board-qemu-x64 ]
 # Platform
@@ -38,13 +39,16 @@ TAG_HEADER = """\
 #         apple apple-apple-m1 apple-angle-metal-renderer:-apple-m1
 #         arm
 #         google google-0xffff
-#         intel intel-hd-630-family intel-gen-9 intel-0xa2e intel-0xd26
-#               intel-0xa011 intel-0x3e92 intel-0x3e9b intel-0x5912
-#               intel-0x9bc5
+#         intel intel-gen-9 intel-0xa2e intel-0xd26 intel-0xa011 intel-0x3e92
+#               intel-0x3e9b intel-0x5912 intel-0x9bc5
 #         nvidia nvidia-0xfe9 nvidia-0x1cb3 nvidia-0x2184
 #         qualcomm ]
+# Architecture
+# tags: [ mac-arm64 mac-x86_64 ]
 # Decoder
 # tags: [ passthrough no-passthrough ]
+# Browser Target CPU
+# tags: [ target-cpu-64 target-cpu-32 target-cpu-31 ]
 # ANGLE Backend
 # tags: [ angle-disabled
 #         angle-d3d9 angle-d3d11

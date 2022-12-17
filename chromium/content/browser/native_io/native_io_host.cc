@@ -1,10 +1,9 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/native_io/native_io_host.h"
 
-#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_runner.h"
@@ -53,7 +53,7 @@ bool IsValidNativeIOName(const std::string& name) {
   if (name.length() > kMaximumFilenameLength)
     return false;
 
-  return std::all_of(name.begin(), name.end(), &IsValidNativeIONameCharacter);
+  return base::ranges::all_of(name, &IsValidNativeIONameCharacter);
 }
 
 base::FilePath GetNativeIOFilePath(const base::FilePath& root_path,

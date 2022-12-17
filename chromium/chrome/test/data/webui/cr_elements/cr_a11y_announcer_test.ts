@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,8 @@ import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
 suite('CrA11yAnnouncerElementTest', () => {
   setup(() => {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
   });
 
   test('CreatesAndGetsAnnouncers', () => {

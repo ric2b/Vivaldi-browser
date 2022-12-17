@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -44,11 +44,6 @@ fuzzer_test("origin_trial_token_fuzzer") {
   dict =
       "//content/test/data/fuzzer_dictionaries/origin_trial_token_fuzzer.dict"
   seed_corpus = "//content/test/data/fuzzer_corpus/origin_trial_token_data/"
-}
-
-fuzzer_test("renderer_fuzzer") {
-  sources = [ "renderer_fuzzer.cc" ]
-  deps = [ ":fuzzer_support" ]
 }
 
 fuzzer_test("renderer_tree_fuzzer") {
@@ -234,6 +229,20 @@ fuzzer_test("attribution_simulator_fuzzer") {
   seed_corpus = "//content/test/data/fuzzer_corpus/attribution_simulator/"
 }
 
+fuzzer_test("attribution_source_fuzzer") {
+  sources = [ "attribution_source_fuzzer.cc" ]
+  deps = [
+    "//content/browser",
+    "//content/public/browser:browser_sources",
+    "//content/test:test_support",
+    "//testing/libfuzzer/proto:json_proto",
+    "//testing/libfuzzer/proto:json_proto_converter",
+    "//third_party/libprotobuf-mutator",
+  ]
+  seed_corpus =
+      "//testing/libfuzzer/fuzzers/attribution_source_registration_corpus/"
+}
+
 fuzzer_test("browser_accessibility_fuzzer") {
   sources = [ "browser_accessibility_fuzzer.cc" ]
   deps = [
@@ -320,21 +329,6 @@ fuzzer_test("first_party_set_parser_json_fuzzer") {
     "//testing/libfuzzer/proto:json_proto_converter",
     "//third_party/libprotobuf-mutator",
   ]
-}
-
-fuzzer_test("first_party_set_parser_map_fuzzer") {
-  sources = [
-    "../../browser/first_party_sets/test/first_party_set_parser_map_fuzzer.cc",
-  ]
-  deps = [
-    ":first_party_set_parser_fuzzer_support",
-    ":firstpartysets_proto",
-    "//third_party/libprotobuf-mutator",
-  ]
-}
-
-proto_library("firstpartysets_proto") {
-  sources = [ "../../browser/first_party_sets/test/first_party_set_parser_map_fuzzer.proto" ]
 }
 
 mojolpm_fuzzer_test("media_stream_dispatcher_host_mojolpm_fuzzer") {

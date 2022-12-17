@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,8 +43,9 @@ using ::testing::Ref;
 using ::testing::Return;
 
 namespace {
-base::Feature kSnoozeTestFeature("SnoozeTestFeature",
-                                 base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kSnoozeTestFeature,
+             "SnoozeTestFeature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 }
 
 class FeaturePromoSnoozeInteractiveTest : public InProcessBrowserTest {
@@ -309,13 +310,12 @@ IN_PROC_BROWSER_TEST_F(FeaturePromoSnoozeInteractiveTest,
   AttemptIPH(false);
 }
 
-IN_PROC_BROWSER_TEST_F(FeaturePromoSnoozeInteractiveTest,
-                       CloseBubbleSetsPrefs) {
+IN_PROC_BROWSER_TEST_F(FeaturePromoSnoozeInteractiveTest, EndPromoSetsPrefs) {
   base::Time show_time_min = base::Time::Now();
   ASSERT_NO_FATAL_FAILURE(AttemptIPH(true));
   base::Time show_time_max = base::Time::Now();
 
-  promo_controller_->CloseBubble(kSnoozeTestFeature);
+  promo_controller_->EndPromo(kSnoozeTestFeature);
 
   CheckSnoozePrefs(kSnoozeTestFeature,
                    /* is_dismiss */ false,

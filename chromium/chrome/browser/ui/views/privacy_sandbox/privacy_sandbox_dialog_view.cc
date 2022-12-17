@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,7 @@ class PrivacySandboxDialogDelegate : public views::DialogDelegate {
   explicit PrivacySandboxDialogDelegate(Browser* browser) : browser_(browser) {
     if (auto* privacy_sandbox_serivce =
             PrivacySandboxServiceFactory::GetForProfile(browser->profile())) {
-      privacy_sandbox_serivce->DialogOpenedForBrowser(browser);
+      privacy_sandbox_serivce->PromptOpenedForBrowser(browser);
     }
     SetCloseCallback(base::BindOnce(&PrivacySandboxDialogDelegate::OnClose,
                                     base::Unretained(this)));
@@ -50,7 +50,7 @@ class PrivacySandboxDialogDelegate : public views::DialogDelegate {
   void OnClose() {
     if (auto* privacy_sandbox_serivce =
             PrivacySandboxServiceFactory::GetForProfile(browser_->profile())) {
-      privacy_sandbox_serivce->DialogClosedForBrowser(browser_);
+      privacy_sandbox_serivce->PromptClosedForBrowser(browser_);
     }
   }
 

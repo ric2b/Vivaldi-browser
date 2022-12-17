@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -93,12 +93,6 @@ struct CaptureOptions {
   // Indicates if the group is required, optional or even lazy optional.
   MatchQuantifier quantifier = MATCH_REQUIRED;
 };
-
-// Returns true if the structured names feature is enabled.
-bool StructuredNamesEnabled();
-
-// Returns true if the structured address feature is enabled.
-bool StructuredAddressesEnabled();
 
 // Returns true if honorific prefixes are enabled.
 bool HonorificPrefixEnabled();

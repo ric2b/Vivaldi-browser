@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,8 @@ void ExternalProtocolHandler::RunExternalProtocolDialog(
     bool has_user_gesture,
     bool is_in_fenced_frame_tree,
     const absl::optional<url::Origin>& initiating_origin,
-    content::WeakDocumentPtr) {
+    content::WeakDocumentPtr,
+    const std::u16string& program_name) {
   navigation_interception::InterceptNavigationDelegate* delegate =
       navigation_interception::InterceptNavigationDelegate::Get(web_contents);
   if (!delegate)

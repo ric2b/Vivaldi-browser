@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,14 @@ const char kAccessibilityReadAnythingFontScale[] =
 const char kAccessibilityReadAnythingColorInfo[] =
     "settings.a11y.read_anything.color_info";
 
+// Int value to represent the user's preferred line spacing setting.
+const char kAccessibilityReadAnythingLineSpacing[] =
+    "settings.a11y.read_anything.line_spacing";
+
+// Int value to represent the user's preferred letter spacing setting.
+const char kAccessibilityReadAnythingLetterSpacing[] =
+    "settings.a11y.read_anything.letter_spacing";
+
 }  // namespace prefs
 
 void RegisterReadAnythingProfilePrefs(
@@ -36,6 +44,14 @@ void RegisterReadAnythingProfilePrefs(
   registry->RegisterIntegerPref(
       prefs::kAccessibilityReadAnythingColorInfo,
       (int)read_anything::mojom::Colors::kDefaultValue,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterIntegerPref(
+      prefs::kAccessibilityReadAnythingLineSpacing,
+      (int)read_anything::mojom::Spacing::kDefault,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterIntegerPref(
+      prefs::kAccessibilityReadAnythingLetterSpacing,
+      (int)read_anything::mojom::Spacing::kDefault,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 

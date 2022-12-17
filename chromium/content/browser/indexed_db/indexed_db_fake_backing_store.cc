@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -200,7 +200,7 @@ IndexedDBFakeBackingStore::FakeTransaction::FakeTransaction(
           mode),
       result_(result) {}
 void IndexedDBFakeBackingStore::FakeTransaction::Begin(
-    std::vector<LeveledLock> locks) {}
+    std::vector<PartitionedLock> locks) {}
 leveldb::Status IndexedDBFakeBackingStore::FakeTransaction::CommitPhaseOne(
     BlobWriteCallback callback) {
   return std::move(callback).Run(

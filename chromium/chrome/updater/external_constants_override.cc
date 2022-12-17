@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -192,7 +192,7 @@ ExternalConstantsOverrider::FromDefaultJSONFile(
   }
 
   return base::MakeRefCounted<ExternalConstantsOverrider>(
-      std::move(parsed_value->GetDict()), next_provider);
+      std::move(*parsed_value).TakeDict(), next_provider);
 }
 
 // Declared in external_constants.h. This implementation of the function is

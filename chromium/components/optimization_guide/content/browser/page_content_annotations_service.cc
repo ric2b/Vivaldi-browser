@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,6 @@
 #include "components/optimization_guide/content/browser/page_content_annotations_validator.h"
 #include "components/optimization_guide/core/entity_metadata.h"
 #include "components/optimization_guide/core/local_page_entities_metadata_provider.h"
-#include "components/optimization_guide/core/noisy_metrics_recorder.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_logger.h"
@@ -25,11 +24,6 @@
 #include "components/optimization_guide/core/optimization_guide_switches.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
-#include "services/metrics/public/cpp/metrics_utils.h"
-#include "services/metrics/public/cpp/ukm_builders.h"
-#include "services/metrics/public/cpp/ukm_recorder.h"
-#include "services/metrics/public/cpp/ukm_source.h"
-#include "services/metrics/public/cpp/ukm_source_id.h"
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 #include "components/optimization_guide/content/browser/page_content_annotations_model_manager.h"
@@ -74,40 +68,6 @@ void LogPageContentAnnotationsStorageStatus(
       status);
 }
 
-#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-// Record the visibility score of the provided visit as a RAPPOR-style record to
-// UKM.
-void MaybeRecordVisibilityUKM(
-    const HistoryVisit& visit,
-    const absl::optional<history::VisitContentModelAnnotations>&
-        content_annotations) {
-  if (!content_annotations)
-    return;
-
-  if (content_annotations->visibility_score < 0)
-    return;
-
-  int64_t score =
-      static_cast<int64_t>(100 * content_annotations->visibility_score);
-  // We want 2^|num_bits| buckets, linearly spaced.
-  uint32_t num_buckets =
-      std::pow(2, optimization_guide::features::NumBitsForRAPPORMetrics());
-  DCHECK_GT(num_buckets, 0u);
-  float bucket_size = 100.0 / num_buckets;
-  uint32_t bucketed_score = static_cast<uint32_t>(floor(score / bucket_size));
-  DCHECK_LE(bucketed_score, num_buckets);
-  uint32_t noisy_score = NoisyMetricsRecorder().GetNoisyMetric(
-      optimization_guide::features::NoiseProbabilityForRAPPORMetrics(),
-      bucketed_score, optimization_guide::features::NumBitsForRAPPORMetrics());
-  ukm::SourceId ukm_source_id = ukm::ConvertToSourceId(
-      visit.navigation_id, ukm::SourceIdType::NAVIGATION_ID);
-
-  ukm::builders::PageContentAnnotations(ukm_source_id)
-      .SetVisibilityScore(static_cast<int64_t>(noisy_score))
-      .Record(ukm::UkmRecorder::Get());
-}
-#endif /* BUILDFLAG(BUILD_WITH_TFLITE_LIB) */
-
 }  // namespace
 
 PageContentAnnotationsService::PageContentAnnotationsService(
@@ -118,7 +78,9 @@ PageContentAnnotationsService::PageContentAnnotationsService(
     const base::FilePath& database_dir,
     OptimizationGuideLogger* optimization_guide_logger,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner)
-    : last_annotated_history_visits_(
+    : min_page_category_score_to_persist_(
+          features::GetMinimumPageCategoryScoreToPersist()),
+      last_annotated_history_visits_(
           features::MaxContentAnnotationRequestsCached()),
       annotated_text_cache_(features::MaxVisitAnnotationCacheSize()),
       optimization_guide_logger_(optimization_guide_logger) {
@@ -421,8 +383,6 @@ void PageContentAnnotationsService::OnPageContentAnnotated(
     }
   }
 
-  MaybeRecordVisibilityUKM(visit, content_annotations);
-
   if (!features::ShouldWriteContentAnnotationsToHistoryService())
     return;
 
@@ -552,31 +512,53 @@ void PageContentAnnotationsService::GetMetadataForEntityId(
 #endif
 }
 
-void PageContentAnnotationsService::PersistRemotePageEntities(
-    const HistoryVisit& history_visit,
-    const std::vector<history::VisitContentModelAnnotations::Category>&
-        entities) {
-  history::VisitContentModelAnnotations annotations;
-  annotations.entities = entities;
-  QueryURL(history_visit,
-           base::BindOnce(
-               &history::HistoryService::AddContentModelAnnotationsForVisit,
-               history_service_->AsWeakPtr(), annotations),
-           // Even though we are persisting remote page entities, we store
-           // these as an override to the model annotations.
-           PageContentAnnotationsType::kModelAnnotations);
-}
-
 void PageContentAnnotationsService::PersistRemotePageMetadata(
     const HistoryVisit& visit,
-    const proto::PageEntitiesMetadata& page_metadata) {
-  if (!page_metadata.has_alternative_title())
-    return;
-  QueryURL(visit,
-           base::BindOnce(&history::HistoryService::AddPageMetadataForVisit,
-                          history_service_->AsWeakPtr(),
-                          page_metadata.alternative_title()),
-           PageContentAnnotationsType::kRemoteMetdata);
+    const proto::PageEntitiesMetadata& page_entities_metadata) {
+  // Persist entities and categories to VisitContentModelAnnotations if that
+  // feature is enabled.
+  history::VisitContentModelAnnotations model_annotations;
+  for (const auto& entity : page_entities_metadata.entities()) {
+    if (entity.entity_id().empty()) {
+      continue;
+    }
+    if (entity.score() < 0 || entity.score() > 100) {
+      continue;
+    }
+
+    model_annotations.entities.emplace_back(entity.entity_id(), entity.score());
+  }
+
+  std::vector<history::VisitContentModelAnnotations::Category> categories;
+  for (const auto& category : page_entities_metadata.categories()) {
+    int category_score = static_cast<int>(100 * category.score());
+    if (category_score < min_page_category_score_to_persist_) {
+      continue;
+    }
+    model_annotations.categories.emplace_back(category.category_id(),
+                                              category_score);
+  }
+
+  if (!model_annotations.entities.empty() ||
+      !model_annotations.categories.empty()) {
+    // Only persist if we have something to persist.
+    QueryURL(visit,
+             base::BindOnce(
+                 &history::HistoryService::AddContentModelAnnotationsForVisit,
+                 history_service_->AsWeakPtr(), model_annotations),
+             // Even though we are persisting remote page entities, we store
+             // these as an override to the model annotations.
+             PageContentAnnotationsType::kModelAnnotations);
+  }
+
+  // Persist any other metadata to VisitContentAnnotations, if enabled.
+  if (!page_entities_metadata.alternative_title().empty()) {
+    QueryURL(visit,
+             base::BindOnce(&history::HistoryService::AddPageMetadataForVisit,
+                            history_service_->AsWeakPtr(),
+                            page_entities_metadata.alternative_title()),
+             PageContentAnnotationsType::kRemoteMetdata);
+  }
 }
 
 void PageContentAnnotationsService::OnEntityMetadataRetrieved(

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -383,7 +383,7 @@ TEST(CommitContributionImplTest, ShouldPropagateFullCommitFailure) {
 
 TEST(CommitContributionImplTest, ShouldPopulatePasswordNotesBackup) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(syncer::kReadWritePasswordNotesBackupField);
+  feature_list.InitAndEnableFeature(syncer::kPasswordNotesWithBackup);
 
   const std::string kNoteValue = "Note Value";
   auto data = std::make_unique<syncer::EntityData>();
@@ -429,7 +429,7 @@ TEST(CommitContributionImplTest, ShouldPopulatePasswordNotesBackup) {
 TEST(CommitContributionImplTest,
      ShouldPopulatePasswordNotesBackupWhenNoLocalNotes) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(syncer::kReadWritePasswordNotesBackupField);
+  feature_list.InitAndEnableFeature(syncer::kPasswordNotesWithBackup);
 
   auto data = std::make_unique<syncer::EntityData>();
   data->client_tag_hash = kTag;

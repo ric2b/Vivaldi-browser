@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/callback_helpers.h"
-#include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -40,7 +38,6 @@
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "components/login/localized_values_builder.h"
 #include "components/policy/core/browser/cloud/message_util.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -209,13 +206,12 @@ EnrollmentScreenHandler::EnrollmentScreenHandler(
       histogram_helper_(new ErrorScreensHistogramHelper("Enrollment")) {
   DCHECK(network_state_informer_.get());
   DCHECK(error_screen_);
-  network_state_informer_->AddObserver(this);
   set_user_acted_method_path_deprecated(
       "login.OAuthEnrollmentScreen.userActed");
 }
 
 EnrollmentScreenHandler::~EnrollmentScreenHandler() {
-  network_state_informer_->RemoveObserver(this);
+  scoped_network_observation_.Reset();
   if (screen_)
     screen_->OnViewDestroyed(this);
 }
@@ -264,7 +260,9 @@ void EnrollmentScreenHandler::Show() {
     DoShow();
 }
 
-void EnrollmentScreenHandler::Hide() {}
+void EnrollmentScreenHandler::Hide() {
+  scoped_network_observation_.Reset();
+}
 
 void EnrollmentScreenHandler::Bind(ash::EnrollmentScreen* screen) {
   screen_ = screen;
@@ -277,7 +275,8 @@ void EnrollmentScreenHandler::Unbind() {
 }
 
 void EnrollmentScreenHandler::ShowSigninScreen() {
-  observe_network_failure_ = true;
+  if (!scoped_network_observation_.IsObserving())
+    scoped_network_observation_.Observe(network_state_informer_.get());
   ShowStep(kEnrollmentStepSignin);
 }
 
@@ -311,7 +310,7 @@ void EnrollmentScreenHandler::ShowActiveDirectoryScreen(
     const std::string& machine_name,
     const std::string& username,
     authpolicy::ErrorType error) {
-  observe_network_failure_ = false;
+  scoped_network_observation_.Reset();
   if (active_directory_join_type_ == ActiveDirectoryDomainJoinType::COUNT) {
     active_directory_join_type_ =
         ActiveDirectoryDomainJoinType::WITHOUT_CONFIGURATION;
@@ -536,6 +535,10 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
               IDS_ENTERPRISE_ENROLLMENT_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE,
               true);
           break;
+        case policy::DM_STATUS_SERVICE_INVALID_PACKAGED_DEVICE_FOR_KIOSK:
+          ShowError(IDS_ENTERPRISE_ENROLLMENT_INVALID_PACKAGED_DEVICE_FOR_KIOSK,
+                    true);
+          break;
         default:
           ShowErrorMessage(
               l10n_util::GetStringFUTF8(
@@ -710,6 +713,14 @@ void EnrollmentScreenHandler::DeclareLocalizedValues(
   builder->Add("TPMCheckSubtitle", IDS_TPM_CHECK_SUBTITLE);
   builder->Add("cancelButton", IDS_CANCEL);
 
+  // Skip Confirmation Dialogue strings
+  builder->Add("skipConfirmationDialogTitle", IDS_SKIP_ENROLLMENT_DIALOG_TITLE);
+  builder->Add("skipConfirmationDialogText", IDS_SKIP_ENROLLMENT_DIALOG_TEXT);
+  builder->Add("skipConfirmationgoBackButton",
+               IDS_SKIP_ENROLLMENT_DIALOG_GO_BACK_BUTTON);
+  builder->Add("skipConfirmationSkipButton",
+               IDS_SKIP_ENROLLMENT_DIALOG_SKIP_BUTTON);
+
   /* Active Directory strings */
   builder->Add("oauthEnrollAdMachineNameInput", IDS_AD_DEVICE_NAME_INPUT_LABEL);
   builder->Add("oauthEnrollAdDomainJoinWelcomeMessage",
@@ -785,6 +796,10 @@ void EnrollmentScreenHandler::UpdateState(NetworkError::ErrorReason reason) {
   UpdateStateInternal(reason, false);
 }
 
+void EnrollmentScreenHandler::ShowSkipConfirmationDialog() {
+  CallJS("login.OAuthEnrollmentScreen.showSkipConfirmationDialog");
+}
+
 // TODO(rsorokin): This function is mostly copied from SigninScreenHandler and
 // should be refactored in the future.
 void EnrollmentScreenHandler::UpdateStateInternal(
@@ -795,18 +810,17 @@ void EnrollmentScreenHandler::UpdateStateInternal(
     return;
   }
 
-  if (!force_update && !observe_network_failure_)
+  if (!force_update && !scoped_network_observation_.IsObserving())
     return;
 
   NetworkStateInformer::State state = network_state_informer_->state();
-  const std::string network_path = network_state_informer_->network_path();
   const bool is_online = (state == NetworkStateInformer::ONLINE);
   const bool is_behind_captive_portal =
       (state == NetworkStateInformer::CAPTIVE_PORTAL);
   const bool is_frame_error = reason == NetworkError::ERROR_REASON_FRAME_ERROR;
 
   LOG(WARNING) << "EnrollmentScreenHandler::UpdateState(): "
-               << "state=" << NetworkStateInformer::StatusString(state) << ", "
+               << "state=" << state << ", "
                << "reason=" << NetworkError::ErrorReasonString(reason);
 
   if (is_online || !is_behind_captive_portal)
@@ -910,7 +924,7 @@ void EnrollmentScreenHandler::HandleCompleteLogin(const std::string& user,
   // TODO(crbug.com/1271134): Logging as "WARNING" to make sure it's preserved
   // in the logs.
   LOG(WARNING) << "HandleCompleteLogin";
-  observe_network_failure_ = false;
+  scoped_network_observation_.Reset();
 
   // When the network service is enabled, the webRequest API doesn't expose
   // cookie headers. So manually fetch the cookies for the GAIA URL from the
@@ -1008,7 +1022,6 @@ void EnrollmentScreenHandler::HandleAdCompleteLogin(
     const std::string& encryption_types,
     const std::string& user_name,
     const std::string& password) {
-  observe_network_failure_ = false;
   DCHECK(controller_);
   controller_->OnActiveDirectoryCredsProvided(
       machine_name, distinguished_name,

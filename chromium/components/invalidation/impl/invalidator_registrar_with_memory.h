@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 
+#include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
@@ -24,6 +25,8 @@ class PrefRegistrySimple;
 class PrefService;
 
 namespace invalidation {
+
+BASE_DECLARE_FEATURE(kRestoreInterestingTopicsFeature);
 
 // A helper class for FCMInvalidationService.  It helps keep track of registered
 // handlers and which topic registrations are associated with each handler.

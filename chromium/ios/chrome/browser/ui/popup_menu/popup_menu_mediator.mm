@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,7 +27,7 @@
 #import "components/translate/core/browser/translate_manager.h"
 #import "components/translate/core/browser/translate_prefs.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/commerce/price_alert_util.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
 #import "ios/chrome/browser/follow/follow_browser_agent.h"
 #import "ios/chrome/browser/follow/follow_menu_updater.h"
@@ -52,7 +52,7 @@
 #import "ios/chrome/browser/ui/icons/action_icon.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/list_model/list_model.h"
-#import "ios/chrome/browser/ui/ntp/feed_metrics_recorder.h"
+#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_navigation_item.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_text_item.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_tools_item.h"
@@ -63,6 +63,7 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
@@ -72,9 +73,8 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/components/webui/web_ui_url_constants.h"
-#import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
-#import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
+#import "ios/public/provider/chrome/browser/user_feedback/user_feedback_api.h"
 #import "ios/web/common/features.h"
 #import "ios/web/common/user_agent.h"
 #import "ios/web/public/favicon/favicon_status.h"
@@ -220,6 +220,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 @property(nonatomic, strong) PopupMenuToolsItem* requestDesktopSiteItem;
 @property(nonatomic, strong) PopupMenuToolsItem* requestMobileSiteItem;
 @property(nonatomic, strong) PopupMenuToolsItem* readingListItem;
+@property(nonatomic, strong) PopupMenuToolsItem* priceNotificationsItem;
 
 // Vivaldi
 @property(nonatomic, strong) PopupMenuToolsItem* noteItem;
@@ -581,6 +582,8 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
       [specificItems addObject:self.requestMobileSiteItem];
     if (self.readingListItem)
       [specificItems addObject:self.readingListItem];
+    if (self.priceNotificationsItem)
+      [specificItems addObject:self.priceNotificationsItem];
     self.specificItems = specificItems;
       // Vivaldi noteItem
       if (self.noteItem)
@@ -763,6 +766,17 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   self.requestMobileSiteItem.enabled =
       [self userAgentType] == web::UserAgentType::DESKTOP;
 
+  // Update follow menu item.
+  if (self.followItem &&
+      GetFollowActionState(self.webState) != FollowActionStateHidden) {
+    DCHECK(IsWebChannelsEnabled());
+    FollowTabHelper* followTabHelper =
+        FollowTabHelper::FromWebState(self.webState);
+    if (followTabHelper) {
+      followTabHelper->UpdateFollowMenuItem();
+    }
+  }
+
   // Reload the items.
   [self.popupMenu itemsHaveChanged:self.specificItems];
 }
@@ -784,7 +798,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
         imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   } else {
     self.bookmarkItem.title =
-        l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_BOOKMARK);
+        l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_ADD_TO_BOOKMARKS);
     self.bookmarkItem.accessibilityIdentifier = kToolsMenuAddToBookmarks;
     self.bookmarkItem.image = [[UIImage imageNamed:@"popup_menu_add_bookmark"]
         imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
@@ -934,10 +948,22 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
     if ([self shouldUseIncognitoNTPResourcesForURL:navigationItem
                                                        ->GetVirtualURL()]) {
       item.title = l10n_util::GetNSStringWithFixup(IDS_IOS_NEW_INCOGNITO_TAB);
-      item.favicon = UseSymbols()
-                         ? CustomSymbolWithPointSize(kIncognitoCircleFillSymbol,
-                                                     kSymbolActionPointSize)
-                         : [UIImage imageNamed:@"incognito_badge"];
+      UIImage* image;
+      if (UseSymbols()) {
+        if (@available(iOS 15, *)) {
+          image = CustomPaletteSymbol(
+              kIncognitoCircleFillSymbol, kSymbolActionPointSize,
+              UIImageSymbolWeightMedium, UIImageSymbolScaleMedium, @[
+                [UIColor colorNamed:kGrey400Color],
+                [UIColor colorNamed:kGrey100Color]
+              ]);
+        } else {
+          image = [UIImage imageNamed:@"incognito_badge_ios14"];
+        }
+      } else {
+        image = [UIImage imageNamed:@"incognito_badge"];
+      }
+      item.favicon = image;
     } else {
       item.title =
           base::SysUTF16ToNSString(navigationItem->GetTitleForDisplay());
@@ -1111,8 +1137,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 - (NSArray<TableViewItem*>*)actionItems {
   NSMutableArray* actionsArray = [NSMutableArray array];
 
-  if (!self.isIncognito && IsWebChannelsEnabled() &&
-      GetFollowActionState(self.webState) != FollowActionStateHidden) {
+  if (GetFollowActionState(self.webState) != FollowActionStateHidden) {
     // Follow.
     self.followItem =
         CreateFollowItem(IDS_IOS_TOOLS_MENU_FOLLOW, PopupMenuActionFollow,
@@ -1125,9 +1150,17 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
       @"popup_menu_read_later", kToolsMenuReadLater);
   [actionsArray addObject:self.readLaterItem];
 
+  self.priceNotificationsItem = CreateTableViewItem(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_TITLE,
+      PopupMenuActionPriceNotifications, @"popup_menu_price_notifications",
+      kToolsMenuPriceNotifications);
+  if (IsPriceNotificationsEnabled()) {
+    [actionsArray addObject:self.priceNotificationsItem];
+  }
+
   // Add to bookmark.
   self.bookmarkItem = CreateTableViewItem(
-      IDS_IOS_TOOLS_MENU_BOOKMARK, PopupMenuActionPageBookmark,
+      IDS_IOS_TOOLS_MENU_ADD_TO_BOOKMARKS, PopupMenuActionPageBookmark,
       @"popup_menu_add_bookmark", kToolsMenuAddToBookmarks);
   [actionsArray addObject:self.bookmarkItem];
 
@@ -1189,9 +1222,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   [actionsArray addObject:self.siteInformationItem];
 
   // Report an Issue.
-  if (ios::GetChromeBrowserProvider()
-          .GetUserFeedbackProvider()
-          ->IsUserFeedbackEnabled()) {
+  if (ios::provider::IsUserFeedbackSupported()) {
     TableViewItem* reportIssue = CreateTableViewItem(
         IDS_IOS_OPTIONS_REPORT_AN_ISSUE, PopupMenuActionReportIssue,
         @"popup_menu_report_an_issue", kToolsMenuReportAnIssueId);

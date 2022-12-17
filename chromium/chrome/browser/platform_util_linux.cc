@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -355,7 +355,7 @@ void ShowItemInFolder(Profile* profile, const base::FilePath& full_path) {
   ShowItemHelper::GetInstance().ShowItemInFolder(profile, full_path);
 }
 
-void OpenExternal(Profile* profile, const GURL& url) {
+void OpenExternal(const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (url.SchemeIs("mailto"))
     XDGEmail(url.spec());

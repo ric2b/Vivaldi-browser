@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -129,7 +129,7 @@ bool ChromeOmniboxClient::IsPasteAndGoEnabled() const {
 }
 
 bool ChromeOmniboxClient::IsDefaultSearchProviderEnabled() const {
-  const base::Value::Dict& url_dict = profile_->GetPrefs()->GetValueDict(
+  const base::Value::Dict& url_dict = profile_->GetPrefs()->GetDict(
       DefaultSearchManager::kDefaultSearchProviderDataPrefName);
   return !url_dict.FindBool(DefaultSearchManager::kDisabledByPolicy)
               .value_or(false);
@@ -380,6 +380,11 @@ void ChromeOmniboxClient::OnURLOpenedFromOmnibox(OmniboxLog* log) {
   // PrerenderManager.
   content::WebContents* web_contents = controller_->GetWebContents();
   if (web_contents) {
+    if (SearchPrefetchService* search_prefetch_service =
+            SearchPrefetchServiceFactory::GetForProfile(profile_)) {
+      search_prefetch_service->OnURLOpenedFromOmnibox(log, web_contents);
+    }
+
     auto* prerender_manager = PrerenderManager::FromWebContents(web_contents);
     if (!prerender_manager ||
         !prerender_manager->HasSearchResultPagePrerendered()) {
@@ -425,13 +430,14 @@ void ChromeOmniboxClient::FocusWebContents() {
     controller_->GetWebContents()->Focus();
 }
 
-void ChromeOmniboxClient::OnSelectedMatchChanged(
+void ChromeOmniboxClient::OnNavigationLikely(
     size_t index,
-    const AutocompleteMatch& match) {
+    const AutocompleteMatch& match,
+    omnibox::mojom::NavigationPredictor navigation_predictor) {
   if (SearchPrefetchService* search_prefetch_service =
           SearchPrefetchServiceFactory::GetForProfile(profile_)) {
-    search_prefetch_service->MaybePrefetchLikelyMatch(
-        index, match, controller_->GetWebContents());
+    search_prefetch_service->OnNavigationLikely(
+        index, match, navigation_predictor, controller_->GetWebContents());
   }
 }
 

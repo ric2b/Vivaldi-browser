@@ -1,11 +1,11 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {ENTRIES, getCaller, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
+import {ENTRIES, EntryType, getCaller, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
-import {isSinglePartitionFormat, navigateWithDirectoryTree, remoteCall, setupAndWaitUntilReady, waitForMediaApp} from './background.js';
+import {navigateWithDirectoryTree, remoteCall, setupAndWaitUntilReady, waitForMediaApp} from './background.js';
 import {BASIC_DRIVE_ENTRY_SET, FILE_MANAGER_EXTENSIONS_ID, OFFLINE_ENTRY_SET, SHARED_WITH_ME_ENTRY_SET} from './test_data.js';
 
 /**
@@ -570,56 +570,6 @@ function formatDate(date) {
 }
 
 /**
- * Test that a images within a DCIM directory on removable media is backed up to
- * Drive, in the Chrome OS Cloud backup/<current date> directory.
- */
-testcase.driveBackupPhotos = async () => {
-  const USB_VOLUME_QUERY = '#directory-tree [volume-type-icon="removable"]';
-
-  // Open Files app on local downloads.
-  const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
-
-  // Mount USB volume in the Downloads window.
-  await sendTestMessage({name: 'mountFakeUsbDcim'});
-
-  // Wait for the USB mount.
-  await remoteCall.waitForElement(appId, USB_VOLUME_QUERY);
-
-  if (await isSinglePartitionFormat(appId)) {
-    // Navigate to the DCIM directory.
-    await navigateWithDirectoryTree(appId, '/FAKEUSB/fake-usb/DCIM');
-  } else {
-    // Navigate to the DCIM directory.
-    await remoteCall.navigateWithDirectoryTree(
-        appId, '/DCIM', 'fake-usb', 'removable');
-  }
-
-  // Wait for the import button to be ready.
-  await remoteCall.waitForElement(
-      appId, '#cloud-import-button [icon="files:cloud-upload"]');
-
-  // Start the import.
-  const date = new Date();
-  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
-      'fakeMouseClick', appId, ['#cloud-import-button']));
-
-  // Wait for the image to be marked as imported.
-  await remoteCall.waitForElement(
-      appId, '.status-icon[file-status-icon="imported"]');
-
-  // Navigate to today's backup directory in Drive.
-  const formattedDate = formatDate(date);
-  await remoteCall.navigateWithDirectoryTree(
-      appId, `/root/Chrome OS Cloud backup/${formattedDate}`, 'My Drive',
-      'drive');
-
-  // Verify the backed-up file list contains only a copy of the image within
-  // DCIM in the removable storage.
-  const files = TestEntryInfo.getExpectedRows([ENTRIES.image3]);
-  await remoteCall.waitForFiles(appId, files, {ignoreLastModifiedTime: true});
-};
-
-/**
  * Verify that "Available Offline" is not available from the gear menu for a
  * drive file.
  */
@@ -939,6 +889,51 @@ testcase.driveOfflineInfoBannerWithoutFlag = async () => {
 };
 
 /**
+ * Tests that the inline file sync icons are displayed in Drive as files
+ * start syncing.
+ */
+testcase.driveInlineSyncStatus = async () => {
+  const toBeUploaded = new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'video.ogv',
+    thumbnailFileName: 'image.png',
+    targetPath: 'world.ogv',
+    mimeType: 'video/ogg',
+    lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
+    nameText: 'world.ogv',
+    sizeText: '59 KB',
+    typeText: 'OGG video',
+    availableOffline: true,
+  });
+
+  // Open Files app on Drive and copy over entry to be uploaded.
+  const appId =
+      await setupAndWaitUntilReady(RootPath.DRIVE, [], [toBeUploaded]);
+
+  // Fake syncing the file to Drive.
+  await sendTestMessage({
+    name: 'setDriveFileSyncStatus',
+    path: `/root/${toBeUploaded.targetPath}`,
+    syncStatus: 'in_progress',
+  });
+
+  const syncStatusQuery = '[data-sync-status=in_progress]';
+
+  // Verify the "sync in progress" icon is displayed.
+  await remoteCall.waitForElement(appId, syncStatusQuery);
+
+  // Fake completing the file sync.
+  await sendTestMessage({
+    name: 'setDriveFileSyncStatus',
+    path: `/root/${toBeUploaded.targetPath}`,
+    syncStatus: 'completed',
+  });
+
+  // Verify the "sync in progress" icon is no longer displayed.
+  await remoteCall.waitForElementLost(appId, syncStatusQuery);
+};
+
+/**
  * Tests that the Enable Docs Offline dialog appears in the Files App.
  */
 testcase.driveEnableDocsOfflineDialog = async () => {
@@ -967,9 +962,6 @@ testcase.driveEnableDocsOfflineDialog = async () => {
 
   // Open the Enable Docs Offline dialog.
   await openAndWaitForEnableDocsOfflineDialog(appId);
-
-  // Close Files App.
-  await remoteCall.closeWindowAndWait(appId);
 
   // Check: the last dialog result should be 3 (dismiss).
   await waitForLastDriveDialogResult('3');

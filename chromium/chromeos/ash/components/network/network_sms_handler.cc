@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -291,7 +291,7 @@ void NetworkSmsHandler::ManagerPropertiesCallback(
 }
 
 void NetworkSmsHandler::UpdateDevices(const base::Value& devices) {
-  for (const auto& item : devices.GetListDeprecated()) {
+  for (const auto& item : devices.GetList()) {
     if (!item.is_string())
       continue;
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #import "components/search_engines/default_search_manager.h"
 #import "components/search_engines/template_url.h"
 #import "components/search_engines/template_url_service.h"
+#import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -31,7 +32,7 @@
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
@@ -42,6 +43,7 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/lens_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
@@ -53,6 +55,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_metrics.h"
 #import "ios/chrome/browser/ui/context_menu/link_preview/link_preview_coordinator.h"
+#import "ios/chrome/browser/ui/main/layout_guide_util.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/main/scene_state_observer.h"
@@ -64,16 +67,15 @@
 #import "ios/chrome/browser/ui/ntp/feed_management/feed_management_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/feed_management/feed_management_navigation_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_menu_commands.h"
-#import "ios/chrome/browser/ui/ntp/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/feed_wrapper_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/incognito_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_content_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_follow_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_view_controller.h"
-#import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
@@ -89,14 +91,27 @@
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_new_tab_page_view_controller.h"
+#import "ios/chrome/app/application_delegate/url_opener.h"
+#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/url_loading_util.h"
+#include "url/gurl.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 namespace {
 // Flag to enable the checking of new content for the Follow Feed.
-const base::Feature kEnableCheckForNewFollowContent{
-    "EnableCheckForNewFollowContent", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kEnableCheckForNewFollowContent,
+             "EnableCheckForNewFollowContent",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace
 
 @interface NewTabPageCoordinator () <AppStateObserver,
@@ -109,12 +124,14 @@ const base::Feature kEnableCheckForNewFollowContent{
                                      FeedManagementNavigationDelegate,
                                      FeedMenuCommands,
                                      FeedWrapperViewControllerDelegate,
+                                     IdentityManagerObserverBridgeDelegate,
                                      NewTabPageContentDelegate,
                                      NewTabPageDelegate,
                                      NewTabPageFollowDelegate,
                                      OverscrollActionsControllerDelegate,
                                      PrefObserverDelegate,
-                                     SceneStateObserver> {
+                                     SceneStateObserver,
+                                     VivaldiNewTabPageViewControllerDelegate> {
   // Helper object managing the availability of the voice search feature.
   VoiceSearchAvailability _voiceSearchAvailability;
 
@@ -122,6 +139,10 @@ const base::Feature kEnableCheckForNewFollowContent{
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
   std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
+
+  // Observes changes in the IdentityManager.
+  std::unique_ptr<signin::IdentityManagerObserverBridge>
+      _identityObserverBridge;
 
   // Observes changes in the DiscoverFeed.
   std::unique_ptr<DiscoverFeedObserverBridge> _discoverFeedObserverBridge;
@@ -216,12 +237,14 @@ const base::Feature kEnableCheckForNewFollowContent{
 @property(nonatomic, strong)
     FeedTopSectionCoordinator* feedTopSectionCoordinator;
 
+// Currently selected feed. Redefined to readwrite.
+@property(nonatomic, assign, readwrite) FeedType selectedFeed;
+
 @end
 
 @implementation NewTabPageCoordinator
 
 // Synthesize NewTabPageConfiguring properties.
-@synthesize selectedFeed = _selectedFeed;
 @synthesize shouldScrollIntoFeed = _shouldScrollIntoFeed;
 @synthesize baseViewController = _baseViewController;
 
@@ -237,8 +260,9 @@ const base::Feature kEnableCheckForNewFollowContent{
 }
 
 - (void)start {
-  if (self.started)
+  if (self.started) {
     return;
+  }
 
   DCHECK(self.browser);
   DCHECK(self.webState);
@@ -256,99 +280,22 @@ const base::Feature kEnableCheckForNewFollowContent{
     return;
   }
 
-  // Gets services.
-  self.authService = AuthenticationServiceFactory::GetForBrowserState(
-      self.browser->GetBrowserState());
-  self.templateURLService = ios::TemplateURLServiceFactory::GetForBrowserState(
-      self.browser->GetBrowserState());
-  self.discoverFeedService = DiscoverFeedServiceFactory::GetForBrowserState(
-      self.browser->GetBrowserState());
-  self.prefService =
-      ChromeBrowserState::FromBrowserState(self.browser->GetBrowserState())
-          ->GetPrefs();
+  [self initializeServices];
+  [self initializeNTPComponents];
+  [self startObservers];
 
-  self.ntpViewController = [[NewTabPageViewController alloc] init];
-  self.ntpMediator = [self createNTPMediator];
+  // Updates feed asynchronously if the account is subject to parental controls.
+  [self updateFeedVisibilityForSupervision];
 
-  // Start observing Prefs.
-  _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
-  _prefChangeRegistrar->Init(_prefService);
-  _prefObserverBridge.reset(new PrefObserverBridge(self));
-  _prefObserverBridge->ObserveChangesForPreference(
-      prefs::kArticlesForYouEnabled, _prefChangeRegistrar.get());
-  _prefObserverBridge->ObserveChangesForPreference(
-      prefs::kNTPContentSuggestionsEnabled, _prefChangeRegistrar.get());
-  _prefObserverBridge->ObserveChangesForPreference(
-      DefaultSearchManager::kDefaultSearchProviderDataPrefName,
-      _prefChangeRegistrar.get());
-  self.feedExpandedPref = [[PrefBackedBoolean alloc]
-      initWithPrefService:_prefService
-                 prefName:feed::prefs::kArticlesListVisible];
-  // Observer is necessary for multiwindow NTPs to remain in sync.
-  [self.feedExpandedPref setObserver:self];
-
-  // Start observing DiscoverFeedService.
-  _discoverFeedObserverBridge = std::make_unique<DiscoverFeedObserverBridge>(
-      self, self.discoverFeedService);
-
-  self.feedMetricsRecorder = self.discoverFeedService->GetFeedMetricsRecorder();
-  self.feedMetricsRecorder.feedControlDelegate = self;
-  self.feedMetricsRecorder.followDelegate = self;
-
-  self.headerController = [[ContentSuggestionsHeaderViewController alloc] init];
-  // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
-  // clean up.
-  self.headerController.dispatcher =
-      static_cast<id<ApplicationCommands, BrowserCommands, OmniboxCommands,
-                     FakeboxFocuser>>(self.browser->GetCommandDispatcher());
-  self.headerController.commandHandler = self;
-  self.headerController.delegate = self.ntpMediator;
-
-  self.headerController.readingListModel =
-      ReadingListModelFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
-  self.headerController.toolbarDelegate = self.toolbarDelegate;
-  self.ntpMediator.consumer = self.headerController;
-  self.headerController.baseViewController = self.baseViewController;
-
-  // Only handle app state for the new First Run UI.
-  if (base::FeatureList::IsEnabled(kEnableFREUIModuleIOS)) {
-    SceneState* sceneState =
-        SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
-    AppState* appState = sceneState.appState;
-    [appState addObserver:self];
-
-    // Do not focus on omnibox for voice over if there are other screens to
-    // show.
-    if (appState.initStage < InitStageFinal) {
-      self.headerController.focusOmniboxWhenViewAppears = NO;
-    }
-  }
-
-  if (IsDiscoverFeedTopSyncPromoEnabled()) {
-    self.feedTopSectionCoordinator = [self createFeedTopSectionCoordinator];
-  }
-
-  self.contentSuggestionsCoordinator =
-      [self createContentSuggestionsCoordinator];
-
-  self.headerController.promoCanShow =
-      [self.contentSuggestionsCoordinator notificationPromo]->CanShow();
-
-  // Fetches feed header and conditionally fetches feed. Feed can only be
-  // visible if feed header is visible.
+  // Configures NTP components.
   if ([self isFeedHeaderVisible]) {
     [self configureFeedAndHeader];
   }
-
+  [self configureHeaderController];
+  [self configureNTPMediator];
+  [self configureContentSuggestionsCoordinator];
+  [self configureFeedMetricsRecorder];
   [self configureNTPViewController];
-
-  base::RecordAction(base::UserMetricsAction("MobileNTPShowMostVisited"));
-  SceneState* sceneState =
-      SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
-  [sceneState addObserver:self];
-  self.sceneInForeground =
-      sceneState.activationLevel >= SceneActivationLevelForegroundInactive;
 
   self.started = YES;
 }
@@ -385,6 +332,9 @@ const base::Feature kEnableCheckForNewFollowContent{
   self.ntpViewController = nil;
   self.feedHeaderViewController.ntpDelegate = nil;
   self.feedHeaderViewController = nil;
+  self.feedTopSectionCoordinator.ntpDelegate = nil;
+  self.feedTopSectionCoordinator = nil;
+
   self.alertCoordinator = nil;
   self.authService = nil;
   self.templateURLService = nil;
@@ -405,117 +355,12 @@ const base::Feature kEnableCheckForNewFollowContent{
   _prefChangeRegistrar.reset();
   _prefObserverBridge.reset();
   _discoverFeedObserverBridge.reset();
+  _identityObserverBridge.reset();
 
   self.started = NO;
 }
 
-// Updates the visible property based on viewPresented and sceneInForeground
-// properties.
-// Sends metrics when NTP becomes invisible.
-- (void)updateVisible {
-  BOOL visible = self.viewPresented && self.sceneInForeground;
-  if (visible == self.visible) {
-    return;
-  }
-  self.visible = visible;
-  if (self.browser->GetBrowserState()->IsOffTheRecord()) {
-    // Do not report metrics on incognito NTP.
-    return;
-  }
-  if (visible) {
-    self.didAppearTime = base::TimeTicks::Now();
-    if ([self isFeedHeaderVisible]) {
-      if ([self.feedExpandedPref value]) {
-        ntp_home::RecordNTPImpression(ntp_home::REMOTE_SUGGESTIONS);
-      } else {
-        ntp_home::RecordNTPImpression(ntp_home::REMOTE_COLLAPSED);
-      }
-    } else {
-      ntp_home::RecordNTPImpression(ntp_home::LOCAL_SUGGESTIONS);
-    }
-  } else {
-    if (!self.didAppearTime.is_null()) {
-      UmaHistogramMediumTimes("NewTabPage.TimeSpent",
-                              base::TimeTicks::Now() - self.didAppearTime);
-      self.didAppearTime = base::TimeTicks();
-    }
-  }
-}
-
-#pragma mark - ChromeCoordinatorHelpers
-
-// Configures `self.ntpViewController` and sets it up as the main ViewController
-// managed by this Coordinator.
-- (void)configureNTPViewController {
-  DCHECK(self.ntpViewController);
-
-  self.ntpViewController.contentSuggestionsViewController =
-      self.contentSuggestionsCoordinator.viewController;
-
-  self.ntpViewController.panGestureHandler = self.panGestureHandler;
-  self.ntpViewController.feedVisible = [self isFeedVisible];
-
-  self.feedWrapperViewController = [[FeedWrapperViewController alloc]
-        initWithDelegate:self
-      feedViewController:self.feedViewController];
-
-  if ([self isFeedTopSectionVisible]) {
-    self.ntpViewController.feedTopSectionViewController =
-        self.feedTopSectionCoordinator.viewController;
-  }
-
-  self.headerSynchronizer = [[ContentSuggestionsHeaderSynchronizer alloc]
-      initWithCollectionController:self.ntpViewController
-                  headerController:self.headerController];
-
-  self.ntpViewController.feedWrapperViewController =
-      self.feedWrapperViewController;
-  self.ntpViewController.overscrollDelegate = self;
-  self.ntpViewController.ntpContentDelegate = self;
-  self.ntpViewController.identityDiscButton =
-      [self.headerController identityDiscButton];
-
-  self.ntpViewController.headerController = self.headerController;
-
-  [self configureMainViewControllerUsing:self.ntpViewController];
-  self.ntpViewController.feedMetricsRecorder = self.feedMetricsRecorder;
-  self.ntpViewController.bubblePresenter = self.bubblePresenter;
-}
-
-// Configures the main ViewController managed by this Coordinator.
-- (void)configureMainViewControllerUsing:
-    (UIViewController*)containedViewController {
-  [containedViewController
-      willMoveToParentViewController:self.containerViewController];
-  [self.containerViewController addChildViewController:containedViewController];
-  [self.containerViewController.view addSubview:containedViewController.view];
-  [containedViewController
-      didMoveToParentViewController:self.containerViewController];
-
-  containedViewController.view.translatesAutoresizingMaskIntoConstraints = NO;
-  AddSameConstraints(containedViewController.view,
-                     self.containerViewController.view);
-
-  self.containedViewController = containedViewController;
-}
-
-#pragma mark - Properties
-
-- (UIViewController*)viewController {
-  // TODO(crbug.com/1348459): Stop lazy loading in NTPCoordinator.
-  [self start];
-  if (self.browser->GetBrowserState()->IsOffTheRecord()) {
-    return self.incognitoViewController;
-  } else {
-    return self.containerViewController;
-  }
-}
-
-- (id<ThumbStripSupporting>)thumbStripSupporting {
-  return self.ntpViewController;
-}
-
-#pragma mark - Public Methods
+#pragma mark - Public
 
 - (void)setWebState:(web::WebState*)webState {
   if (_webState == webState) {
@@ -595,18 +440,10 @@ const base::Feature kEnableCheckForNewFollowContent{
     return;
   }
   // When the visible feed has been updated, recalculate the minimum NTP height.
-  if (![self isFollowingFeedAvailable] ||
-      ([self isFollowingFeedAvailable] && feedType == self.selectedFeed)) {
+  if (feedType == self.selectedFeed) {
     [self.ntpViewController updateFeedInsetsForMinimumHeight];
+    [self.ntpViewController updateStickyElements];
   }
-}
-
-- (void)selectFeedType:(FeedType)feedType {
-  if (!self.ntpViewController.viewDidAppear) {
-    self.selectedFeed = feedType;
-    return;
-  }
-  [self handleFeedSelected:feedType];
 }
 
 - (void)ntpDidChangeVisibility:(BOOL)visible {
@@ -640,99 +477,300 @@ const base::Feature kEnableCheckForNewFollowContent{
           self.browser->GetCommandDispatcher(), OmniboxCommands);
       [omniboxCommandHandler cancelOmniboxEdit];
     }
+    // Check if feed is visible before reporting NTP visibility as the feed
+    // needs to be visible in order to use for metrics.
+    // TODO(crbug.com/1373650) Move isFeedVisible check to the metrics recorder
+    if (IsGoodVisitsMetricEnabled()) {
+      if (self.started && [self isFeedVisible]) {
+        [self.feedMetricsRecorder recordNTPDidChangeVisibility:visible];
+      }
+    }
   }
+
   self.viewPresented = visible;
   [self updateVisible];
 }
 
-#pragma mark - FeedControlDelegate
+#pragma mark - Initializers
 
-- (FollowingFeedSortType)followingFeedSortType {
-  // TODO(crbug.com/1352935): Add a DCHECK to make sure the coordinator isn't
-  // stopped when we check this. That would require us to use the NTPHelper to
-  // get this information.
-  return (FollowingFeedSortType)self.prefService->GetInteger(
-      prefs::kNTPFollowingFeedSortType);
+// Gets all NTP services from the browser state.
+- (void)initializeServices {
+  self.authService = AuthenticationServiceFactory::GetForBrowserState(
+      self.browser->GetBrowserState());
+  self.templateURLService = ios::TemplateURLServiceFactory::GetForBrowserState(
+      self.browser->GetBrowserState());
+  self.discoverFeedService = DiscoverFeedServiceFactory::GetForBrowserState(
+      self.browser->GetBrowserState());
+  self.prefService =
+      ChromeBrowserState::FromBrowserState(self.browser->GetBrowserState())
+          ->GetPrefs();
 }
 
-- (void)handleFeedSelected:(FeedType)feedType {
-  DCHECK([self isFollowingFeedAvailable]);
+// Starts all NTP observers.
+- (void)startObservers {
+  DCHECK(self.prefService);
+  DCHECK(self.headerController);
 
-  // Saves scroll position before changing feed.
-  CGFloat scrollPosition = [self.ntpViewController scrollPosition];
+  _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
+  _prefChangeRegistrar->Init(self.prefService);
+  _prefObserverBridge = std::make_unique<PrefObserverBridge>(self);
+  _prefObserverBridge->ObserveChangesForPreference(
+      prefs::kArticlesForYouEnabled, _prefChangeRegistrar.get());
+  _prefObserverBridge->ObserveChangesForPreference(
+      prefs::kNTPContentSuggestionsEnabled, _prefChangeRegistrar.get());
+  _prefObserverBridge->ObserveChangesForPreference(
+      prefs::kNTPContentSuggestionsForSupervisedUserEnabled,
+      _prefChangeRegistrar.get());
+  _prefObserverBridge->ObserveChangesForPreference(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName,
+      _prefChangeRegistrar.get());
+  self.feedExpandedPref = [[PrefBackedBoolean alloc]
+      initWithPrefService:self.prefService
+                 prefName:feed::prefs::kArticlesListVisible];
+  // Observer is necessary for multiwindow NTPs to remain in sync.
+  [self.feedExpandedPref setObserver:self];
 
-  if (feedType == FeedTypeFollowing) {
-    // Clears dot and notifies service that the Following feed content has
-    // been seen.
-    [self.feedHeaderViewController
-        updateFollowingSegmentDotForUnseenContent:NO];
-    self.discoverFeedService->SetFollowingFeedContentSeen();
+  // Start observing IdentityManager.
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  _identityObserverBridge =
+      std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
+                                                              self);
+
+  // Start observing DiscoverFeedService.
+  _discoverFeedObserverBridge = std::make_unique<DiscoverFeedObserverBridge>(
+      self, self.discoverFeedService);
+
+  SceneState* sceneState =
+      SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
+  [sceneState addObserver:self];
+  self.sceneInForeground =
+      sceneState.activationLevel >= SceneActivationLevelForegroundInactive;
+
+  // Only handle app state for the new First Run UI.
+  if (base::FeatureList::IsEnabled(kEnableFREUIModuleIOS)) {
+    AppState* appState = sceneState.appState;
+    [appState addObserver:self];
+
+    // Do not focus on omnibox for voice over if there are other screens to
+    // show.
+    if (appState.initStage < InitStageFinal) {
+      self.headerController.focusOmniboxWhenViewAppears = NO;
+    }
+  }
+}
+
+// Creates all the NTP components.
+- (void)initializeNTPComponents {
+  self.ntpViewController = [[NewTabPageViewController alloc] init];
+  self.ntpMediator = [[NTPHomeMediator alloc]
+             initWithWebState:self.webState
+           templateURLService:self.templateURLService
+                    URLLoader:UrlLoadingBrowserAgent::FromBrowser(self.browser)
+                  authService:self.authService
+              identityManager:IdentityManagerFactory::GetForBrowserState(
+                                  self.browser->GetBrowserState())
+        accountManagerService:ChromeAccountManagerServiceFactory::
+                                  GetForBrowserState(
+                                      self.browser->GetBrowserState())
+                   logoVendor:ios::provider::CreateLogoVendor(self.browser,
+                                                              self.webState)
+      voiceSearchAvailability:&_voiceSearchAvailability];
+  self.headerController = [[ContentSuggestionsHeaderViewController alloc] init];
+  self.headerSynchronizer = [[ContentSuggestionsHeaderSynchronizer alloc]
+      initWithCollectionController:self.ntpViewController
+                  headerController:self.headerController];
+  self.contentSuggestionsCoordinator = [[ContentSuggestionsCoordinator alloc]
+      initWithBaseViewController:nil
+                         browser:self.browser];
+  self.feedMetricsRecorder = self.discoverFeedService->GetFeedMetricsRecorder();
+}
+
+#pragma mark - Configurators
+
+// Creates and configures the feed and feed header based on user prefs.
+- (void)configureFeedAndHeader {
+  DCHECK([self isFeedHeaderVisible]);
+  DCHECK(self.ntpViewController);
+
+  self.ntpViewController.feedHeaderViewController =
+      self.feedHeaderViewController;
+
+  if ([self isFeedTopSectionVisible]) {
+    self.feedTopSectionCoordinator = [self createFeedTopSectionCoordinator];
   }
 
-  self.selectedFeed = feedType;
-  [self updateNTPForFeed];
-  [self updateFeedLayout];
-
-  [self.ntpViewController updateFeedInsetsForMinimumHeight];
-
-  // Scroll position resets when changing the feed, so we set it back to what it
-  // was.
-  [self.ntpViewController setContentOffsetToTopOfFeed:scrollPosition];
+  // Requests feeds here if the correct flags and prefs are enabled.
+  if ([self shouldFeedBeVisible]) {
+    if ([self isFollowingFeedAvailable]) {
+      switch (self.selectedFeed) {
+        case FeedTypeDiscover:
+          self.feedViewController = [self discoverFeed];
+          break;
+        case FeedTypeFollowing:
+          self.feedViewController = [self followingFeed];
+          break;
+      }
+    } else {
+      self.feedViewController = [self discoverFeed];
+    }
+  }
 }
 
-- (void)handleSortTypeForFollowingFeed:(FollowingFeedSortType)sortType {
-  DCHECK([self isFollowingFeedAvailable]);
+// Configures `self.headerController`.
+- (void)configureHeaderController {
+  DCHECK(self.headerController);
+  DCHECK(self.ntpMediator);
+  DCHECK(self.headerSynchronizer);
 
-  if (self.feedHeaderViewController.followingFeedSortType == sortType) {
+  self.headerController.isGoogleDefaultSearchEngine =
+      [self isGoogleDefaultSearchEngine];
+  // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
+  // clean up.
+  self.headerController.dispatcher =
+      static_cast<id<ApplicationCommands, BrowserCommands, OmniboxCommands,
+                     FakeboxFocuser, LensCommands>>(
+          self.browser->GetCommandDispatcher());
+  self.headerController.commandHandler = self;
+  self.headerController.delegate = self.ntpMediator;
+  self.headerController.layoutGuideCenter =
+      LayoutGuideCenterForBrowser(self.browser);
+  self.headerController.readingListModel =
+      ReadingListModelFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  self.headerController.toolbarDelegate = self.toolbarDelegate;
+  self.headerController.baseViewController = self.baseViewController;
+  self.headerController.collectionSynchronizer = self.headerSynchronizer;
+}
+
+// Configures `self.ntpMediator`.
+- (void)configureNTPMediator {
+  DCHECK(self.ntpMediator);
+  self.ntpMediator.headerCollectionInteractionHandler = self.headerSynchronizer;
+  self.ntpMediator.browser = self.browser;
+  self.ntpMediator.ntpViewController = self.ntpViewController;
+  self.ntpMediator.feedControlDelegate = self;
+  self.ntpMediator.consumer = self.headerController;
+}
+
+// Configures `self.contentSuggestionsCoordiantor`.
+- (void)configureContentSuggestionsCoordinator {
+  DCHECK(self.contentSuggestionsCoordinator);
+  self.contentSuggestionsCoordinator.webState = self.webState;
+  self.contentSuggestionsCoordinator.ntpMediator = self.ntpMediator;
+  self.contentSuggestionsCoordinator.ntpDelegate = self;
+  self.contentSuggestionsCoordinator.feedDelegate = self;
+  [self.contentSuggestionsCoordinator start];
+}
+
+// Configures `self.feedMetricsRecorder`.
+- (void)configureFeedMetricsRecorder {
+  self.feedMetricsRecorder.feedControlDelegate = self;
+  self.feedMetricsRecorder.followDelegate = self;
+}
+
+// Configures `self.ntpViewController` and sets it up as the main ViewController
+// managed by this Coordinator.
+- (void)configureNTPViewController {
+  DCHECK(self.ntpViewController);
+
+  self.ntpViewController.contentSuggestionsViewController =
+      self.contentSuggestionsCoordinator.viewController;
+
+  self.ntpViewController.panGestureHandler = self.panGestureHandler;
+  self.ntpViewController.feedVisible = [self isFeedVisible];
+  self.ntpViewController.headerSynchronizer = self.headerSynchronizer;
+
+  self.feedWrapperViewController = [[FeedWrapperViewController alloc]
+        initWithDelegate:self
+      feedViewController:self.feedViewController];
+
+  if ([self isFeedTopSectionVisible]) {
+    self.ntpViewController.feedTopSectionViewController =
+        self.feedTopSectionCoordinator.viewController;
+  }
+
+  self.ntpViewController.feedWrapperViewController =
+      self.feedWrapperViewController;
+  self.ntpViewController.overscrollDelegate = self;
+  self.ntpViewController.ntpContentDelegate = self;
+
+  self.ntpViewController.headerController = self.headerController;
+
+  [self configureMainViewControllerUsing:self.ntpViewController];
+  self.ntpViewController.feedMetricsRecorder = self.feedMetricsRecorder;
+  self.ntpViewController.bubblePresenter = self.bubblePresenter;
+}
+
+// Configures the main ViewController managed by this Coordinator.
+- (void)configureMainViewControllerUsing:
+    (UIViewController*)containedViewController {
+
+  // Vivaldi
+  // Set custom view controller as main view controller for vivaldi
+  if (IsVivaldiRunning()) {
+    VivaldiNewTabPageViewController* newVC =
+        [[VivaldiNewTabPageViewController alloc] initWithBrowser:self.browser];
+    [newVC
+        willMoveToParentViewController:self.containerViewController];
+    [self.containerViewController addChildViewController:newVC];
+    [self.containerViewController.view addSubview:newVC.view];
+    [newVC
+        didMoveToParentViewController:self.containerViewController];
+
+    newVC.view.translatesAutoresizingMaskIntoConstraints = NO;
+    newVC.delegate = self;
+    AddSameConstraints(newVC.view,
+                       self.containerViewController.view);
+    self.containedViewController = newVC;
+  } else {
+  [containedViewController
+      willMoveToParentViewController:self.containerViewController];
+  [self.containerViewController addChildViewController:containedViewController];
+  [self.containerViewController.view addSubview:containedViewController.view];
+  [containedViewController
+      didMoveToParentViewController:self.containerViewController];
+
+  containedViewController.view.translatesAutoresizingMaskIntoConstraints = NO;
+  AddSameConstraints(containedViewController.view,
+                     self.containerViewController.view);
+
+  self.containedViewController = containedViewController;
+  } // End Vivaldi
+}
+
+#pragma mark - Properties
+
+- (UIViewController*)viewController {
+  // TODO(crbug.com/1348459): Stop lazy loading in NTPCoordinator.
+  [self start];
+  if (self.browser->GetBrowserState()->IsOffTheRecord()) {
+    return self.incognitoViewController;
+  } else {
+    return self.containerViewController;
+  }
+}
+
+- (id<ThumbStripSupporting>)thumbStripSupporting {
+  return self.ntpViewController;
+}
+
+#pragma mark - NewTabPageConfiguring
+
+- (void)selectFeedType:(FeedType)feedType {
+  if (!self.ntpViewController.viewDidAppear ||
+      ![self isFollowingFeedAvailable]) {
+    self.selectedFeed = feedType;
     return;
   }
+  [self handleFeedSelected:feedType];
+}
 
-  [self.feedMetricsRecorder recordFollowingFeedSortTypeSelected:sortType];
-  [self.ntpViewController setContentOffsetToTop];
-  self.prefService->SetInteger(prefs::kNTPFollowingFeedSortType, sortType);
-  self.discoverFeedService->SetFollowingFeedSortType(sortType);
-  self.feedHeaderViewController.followingFeedSortType = sortType;
+#pragma mark - ContentSuggestionsHeaderCommands
 
-  // Changing the sort type affects the scroll position, so update the feed
-  // layout.
+- (void)updateForHeaderSizeChange {
   [self updateFeedLayout];
-}
-
-- (BOOL)shouldFeedBeVisible {
-  return [self isFeedHeaderVisible] && [self.feedExpandedPref value] &&
-         !IsFeedAblationEnabled();
-}
-
-- (BOOL)isFollowingFeedAvailable {
-  return IsWebChannelsEnabled() && self.authService &&
-         self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
-}
-
-#pragma mark - NewTabPageFollowDelegate
-
-- (NSUInteger)followedPublisherCount {
-  return self.followedWebSites.count;
-}
-
-- (BOOL)doesFollowingFeedHaveContent {
-  for (FollowedWebSite* web_site in self.followedWebSites) {
-    if (web_site.available)
-      return YES;
-  }
-
-  return NO;
-}
-
-- (NSArray<FollowedWebSite*>*)followedWebSites {
-  FollowBrowserAgent* followBrowserAgent =
-      FollowBrowserAgent::FromBrowser(self.browser);
-
-  // Return an empty list if the BrowserAgent is null (which can happen
-  // if e.g. the Browser is off-the-record).
-  if (!followBrowserAgent)
-    return @[];
-
-  return followBrowserAgent->GetFollowedWebSites();
 }
 
 #pragma mark - FeedMenuCommands
@@ -810,10 +848,159 @@ const base::Feature kEnableCheckForNewFollowContent{
   [self.alertCoordinator start];
 }
 
-#pragma mark - ContentSuggestionsHeaderCommands
+#pragma mark - DiscoverFeedPreviewDelegate
 
-- (void)updateForHeaderSizeChange {
+- (UIViewController*)discoverFeedPreviewWithURL:(const GURL)URL {
+  std::string referrerURL = base::GetFieldTrialParamValueByFeature(
+      kEnableDiscoverFeedPreview, kDiscoverReferrerParameter);
+  if (referrerURL.empty()) {
+    referrerURL = kDefaultDiscoverReferrer;
+  }
+
+  self.linkPreviewCoordinator =
+      [[LinkPreviewCoordinator alloc] initWithBrowser:self.browser URL:URL];
+  self.linkPreviewCoordinator.referrer =
+      web::Referrer(GURL(referrerURL), web::ReferrerPolicyDefault);
+  [self.linkPreviewCoordinator start];
+  return [self.linkPreviewCoordinator linkPreviewViewController];
+}
+
+- (void)didTapDiscoverFeedPreview {
+  DCHECK(self.linkPreviewCoordinator);
+  [self.linkPreviewCoordinator handlePreviewAction];
+  [self.linkPreviewCoordinator stop];
+  self.linkPreviewCoordinator = nil;
+}
+
+#pragma mark - FeedControlDelegate
+
+- (FollowingFeedSortType)followingFeedSortType {
+  if (IsFollowingFeedDefaultSortTypeEnabled()) {
+    BOOL hasDefaultBeenChanged = self.prefService->GetBoolean(
+        prefs::kDefaultFollowingFeedSortTypeChanged);
+    if (hasDefaultBeenChanged) {
+      return (FollowingFeedSortType)self.prefService->GetInteger(
+          prefs::kNTPFollowingFeedSortType);
+    } else {
+      return IsDefaultFollowingFeedSortTypeGroupedByPublisher()
+                 ? FollowingFeedSortTypeByPublisher
+                 : FollowingFeedSortTypeByLatest;
+    }
+  }
+  // TODO(crbug.com/1352935): Add a DCHECK to make sure the coordinator isn't
+  // stopped when we check this. That would require us to use the NTPHelper to
+  // get this information.
+  return (FollowingFeedSortType)self.prefService->GetInteger(
+      prefs::kNTPFollowingFeedSortType);
+}
+
+- (void)handleFeedSelected:(FeedType)feedType {
+  DCHECK([self isFollowingFeedAvailable]);
+
+  self.selectedFeed = feedType;
+
+  // Saves scroll position before changing feed.
+  CGFloat scrollPosition = [self.ntpViewController scrollPosition];
+
+  if (feedType == FeedTypeFollowing) {
+    // Clears dot and notifies service that the Following feed content has
+    // been seen.
+    [self.feedHeaderViewController
+        updateFollowingSegmentDotForUnseenContent:NO];
+    self.discoverFeedService->SetFollowingFeedContentSeen();
+  }
+
+  [self updateNTPForFeed];
+
+  // Scroll position resets when changing the feed, so we set it back to what it
+  // was.
+  [self.ntpViewController setContentOffsetToTopOfFeed:scrollPosition];
+}
+
+- (void)handleSortTypeForFollowingFeed:(FollowingFeedSortType)sortType {
+  DCHECK([self isFollowingFeedAvailable]);
+
+  if (self.feedHeaderViewController.followingFeedSortType == sortType) {
+    return;
+  }
+
+  // Save the scroll position before changing sort type.
+  CGFloat scrollPosition = [self.ntpViewController scrollPosition];
+
+  [self.feedMetricsRecorder recordFollowingFeedSortTypeSelected:sortType];
+  self.prefService->SetInteger(prefs::kNTPFollowingFeedSortType, sortType);
+  self.prefService->SetBoolean(prefs::kDefaultFollowingFeedSortTypeChanged,
+                               true);
+  self.discoverFeedService->SetFollowingFeedSortType(sortType);
+  self.feedHeaderViewController.followingFeedSortType = sortType;
+
+  [self updateNTPForFeed];
+
+  // Scroll position resets when changing the feed, so we set it back to what it
+  // was.
+  [self.ntpViewController setContentOffsetToTopOfFeed:scrollPosition];
+}
+
+- (BOOL)shouldFeedBeVisible {
+  return [self isFeedHeaderVisible] && [self.feedExpandedPref value] &&
+         !IsFeedAblationEnabled();
+}
+
+- (BOOL)isFollowingFeedAvailable {
+  return IsWebChannelsEnabled() && self.authService &&
+         self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
+}
+
+#pragma mark - FeedDelegate
+
+- (void)contentSuggestionsWasUpdated {
   [self updateFeedLayout];
+}
+
+- (void)returnToRecentTabWasAdded {
+  [self updateFeedLayout];
+  [self setContentOffsetToTop];
+}
+
+#pragma mark - FeedManagementNavigationDelegate
+
+- (void)handleNavigateToActivity {
+  [self.ntpMediator handleFeedManageActivityTapped];
+}
+
+- (void)handleNavigateToInterests {
+  [self.ntpMediator handleFeedManageInterestsTapped];
+}
+
+- (void)handleNavigateToHidden {
+  [self.ntpMediator handleFeedManageHiddenTapped];
+}
+
+- (void)handleNavigateToFollowedURL:(const GURL&)url {
+  [self.ntpMediator handleVisitSiteFromFollowManagementList:url];
+}
+
+#pragma mark - FeedWrapperViewControllerDelegate
+
+- (void)updateTheme {
+  self.discoverFeedService->UpdateTheme();
+}
+
+#pragma mark - NewTabPageContentDelegate
+
+- (void)reloadContentSuggestions {
+  // No need to reload ContentSuggestions since the mediator receives all
+  // model state changes and immediately updates the consumer with the new
+  // state.
+  return;
+}
+
+- (BOOL)isContentHeaderSticky {
+  return [self isFollowingFeedAvailable] && [self isFeedHeaderVisible];
+}
+
+- (void)feedTopSectionHasChangedVisibility:(BOOL)visible {
+  [self.feedTopSectionCoordinator feedTopSectionHasChangedVisibility:visible];
 }
 
 #pragma mark - NewTabPageDelegate
@@ -845,98 +1032,47 @@ const base::Feature kEnableCheckForNewFollowContent{
 }
 
 - (BOOL)isStartSurface {
+  DCHECK(self.webState);
   NewTabPageTabHelper* NTPHelper =
       NewTabPageTabHelper::FromWebState(self.webState);
   return NTPHelper && NTPHelper->ShouldShowStartSurface();
 }
 
-#pragma mark - AppStateObserver
+- (void)handleFeedTopSectionClosed {
+  [self.ntpViewController updateScrollPositionForFeedTopSectionClosed];
+}
 
-- (void)appState:(AppState*)appState
-    didTransitionFromInitStage:(InitStage)previousInitStage {
-  if (base::FeatureList::IsEnabled(kEnableFREUIModuleIOS)) {
-    if (previousInitStage == InitStageFirstRun) {
-      self.headerController.focusOmniboxWhenViewAppears = YES;
-      [self.headerController focusAccessibilityOnOmnibox];
+#pragma mark - NewTabPageFollowDelegate
 
-      [appState removeObserver:self];
-    }
+- (NSUInteger)followedPublisherCount {
+  return self.followedWebSites.count;
+}
+
+- (BOOL)doesFollowingFeedHaveContent {
+  for (FollowedWebSite* web_site in self.followedWebSites) {
+    if (web_site.available)
+      return YES;
   }
+
+  return NO;
+}
+
+- (NSArray<FollowedWebSite*>*)followedWebSites {
+  FollowBrowserAgent* followBrowserAgent =
+      FollowBrowserAgent::FromBrowser(self.browser);
+
+  // Return an empty list if the BrowserAgent is null (which can happen
+  // if e.g. the Browser is off-the-record).
+  if (!followBrowserAgent)
+    return @[];
+
+  return followBrowserAgent->GetFollowedWebSites();
 }
 
 #pragma mark - LogoAnimationControllerOwnerOwner
 
 - (id<LogoAnimationControllerOwner>)logoAnimationControllerOwner {
   return [self.headerController logoAnimationControllerOwner];
-}
-
-#pragma mark - SceneStateObserver
-
-- (void)sceneState:(SceneState*)sceneState
-    transitionedToActivationLevel:(SceneActivationLevel)level {
-  self.sceneInForeground = level >= SceneActivationLevelForegroundInactive;
-  [self updateVisible];
-}
-
-#pragma mark - BooleanObserver
-
-- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
-  [self handleFeedVisibilityDidChange];
-}
-
-#pragma mark - FeedDelegate
-
-- (void)contentSuggestionsWasUpdated {
-  [self updateFeedLayout];
-}
-
-- (void)returnToRecentTabWasAdded {
-  [self updateFeedLayout];
-  [self setContentOffsetToTop];
-}
-
-#pragma mark - DiscoverFeedObserverBridge
-
-- (void)discoverFeedModelWasCreated {
-  if (self.ntpViewController.viewDidAppear) {
-    [self updateNTPForFeed];
-
-    if (IsWebChannelsEnabled()) {
-      [self.feedHeaderViewController updateForFollowingFeedVisibilityChanged];
-      [self.ntpViewController updateNTPLayout];
-      [self updateFeedLayout];
-      [self.ntpViewController setContentOffsetToTop];
-    }
-  } else {
-    // If the NTP hasn't been completely configured (which happens by the time
-    // its view has appeared) just refresh the feed instead of updating the
-    // whole NTP.
-    self.discoverFeedService->RefreshFeed();
-  }
-}
-
-#pragma mark - DiscoverFeedPreviewDelegate
-
-- (UIViewController*)discoverFeedPreviewWithURL:(const GURL)URL {
-  std::string referrerURL = base::GetFieldTrialParamValueByFeature(
-      kEnableDiscoverFeedPreview, kDiscoverReferrerParameter);
-  if (referrerURL.empty()) {
-    referrerURL = kDefaultDiscoverReferrer;
-  }
-
-  self.linkPreviewCoordinator =
-      [[LinkPreviewCoordinator alloc] initWithBrowser:self.browser URL:URL];
-  self.linkPreviewCoordinator.referrer =
-      web::Referrer(GURL(referrerURL), web::ReferrerPolicyDefault);
-  [self.linkPreviewCoordinator start];
-  return [self.linkPreviewCoordinator linkPreviewViewController];
-}
-
-- (void)didTapDiscoverFeedPreview {
-  DCHECK(self.linkPreviewCoordinator);
-  [self.linkPreviewCoordinator handlePreviewAction];
-  [self.linkPreviewCoordinator stop];
-  self.linkPreviewCoordinator = nil;
 }
 
 #pragma mark - OverscrollActionsControllerDelegate
@@ -1005,21 +1141,59 @@ const base::Feature kEnableCheckForNewFollowContent{
   return nullptr;
 }
 
-#pragma mark - NewTabPageContentDelegate
+#pragma mark - AppStateObserver
 
-- (void)reloadContentSuggestions {
-  // No need to reload ContentSuggestions since the mediator receives all
-  // model state changes and immediately updates the consumer with the new
-  // state.
-  return;
+- (void)appState:(AppState*)appState
+    didTransitionFromInitStage:(InitStage)previousInitStage {
+  if (base::FeatureList::IsEnabled(kEnableFREUIModuleIOS)) {
+    if (previousInitStage == InitStageFirstRun) {
+      self.headerController.focusOmniboxWhenViewAppears = YES;
+      [self.headerController focusAccessibilityOnOmnibox];
+
+      [appState removeObserver:self];
+    }
+  }
 }
 
-- (BOOL)isContentHeaderSticky {
-  return [self isFollowingFeedAvailable] && [self isFeedHeaderVisible];
+#pragma mark - BooleanObserver
+
+- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
+  [self handleFeedVisibilityDidChange];
 }
 
-- (void)feedTopSectionHasChangedVisibility:(BOOL)visible {
-  [self.feedTopSectionCoordinator feedTopSectionHasChangedVisibility:visible];
+#pragma mark - DiscoverFeedObserverBridge
+
+- (void)discoverFeedModelWasCreated {
+  if (self.ntpViewController.viewDidAppear) {
+    [self updateNTPForFeed];
+
+    if (IsWebChannelsEnabled()) {
+      [self.feedHeaderViewController updateForFollowingFeedVisibilityChanged];
+      [self.ntpViewController updateNTPLayout];
+      [self updateFeedLayout];
+      [self.ntpViewController setContentOffsetToTop];
+    }
+  }
+}
+
+#pragma mark - IdentityManagerObserverBridgeDelegate
+
+- (void)onPrimaryAccountChanged:
+    (const signin::PrimaryAccountChangeEvent&)event {
+  // An account change may trigger after the coordinator has been stopped.
+  // In this case do not process the event.
+  if (!self.started) {
+    return;
+  }
+  switch (event.GetEventTypeFor(signin::ConsentLevel::kSignin)) {
+    case signin::PrimaryAccountChangeEvent::Type::kSet:
+    case signin::PrimaryAccountChangeEvent::Type::kCleared: {
+      [self updateFeedVisibilityForSupervision];
+      break;
+    }
+    case signin::PrimaryAccountChangeEvent::Type::kNone:
+      break;
+  }
 }
 
 #pragma mark - PrefObserverDelegate
@@ -1029,8 +1203,10 @@ const base::Feature kEnableCheckForNewFollowContent{
     return;
   }
   if (preferenceName == prefs::kArticlesForYouEnabled ||
-      preferenceName == prefs::kNTPContentSuggestionsEnabled) {
+      preferenceName == prefs::kNTPContentSuggestionsEnabled ||
+      preferenceName == prefs::kNTPContentSuggestionsForSupervisedUserEnabled) {
     [self updateNTPForFeed];
+    [self setContentOffsetToTop];
   }
   if (preferenceName ==
       DefaultSearchManager::kDefaultSearchProviderDataPrefName) {
@@ -1038,25 +1214,63 @@ const base::Feature kEnableCheckForNewFollowContent{
   }
 }
 
-#pragma mark - FeedManagementNavigationDelegate
+#pragma mark - SceneStateObserver
 
-- (void)handleNavigateToActivity {
-  [self.ntpMediator handleFeedManageActivityTapped];
-}
-
-- (void)handleNavigateToInterests {
-  [self.ntpMediator handleFeedManageInterestsTapped];
-}
-
-- (void)handleNavigateToHidden {
-  [self.ntpMediator handleFeedManageHiddenTapped];
-}
-
-- (void)handleNavigateToFollowedURL:(const GURL&)url {
-  [self.ntpMediator handleVisitSiteFromFollowManagementList:url];
+- (void)sceneState:(SceneState*)sceneState
+    transitionedToActivationLevel:(SceneActivationLevel)level {
+  self.sceneInForeground = level >= SceneActivationLevelForegroundInactive;
+  [self updateVisible];
 }
 
 #pragma mark - Private
+
+// Updates the feed visibility or content based on the supervision state
+// of the account defined in `value`.
+- (void)updateFeedWithIsSupervisedUser:(BOOL)value {
+  // This may be called asynchronously after the NTP has
+  // been stopped and the object has been stopped. Ignore
+  // the invocation.
+  PrefService* prefService = self.prefService;
+  if (!prefService) {
+    return;
+  }
+
+  prefService->SetBoolean(prefs::kNTPContentSuggestionsForSupervisedUserEnabled,
+                          !value);
+}
+
+// Updates the visible property based on viewPresented and sceneInForeground
+// properties.
+// Sends metrics when NTP becomes invisible.
+- (void)updateVisible {
+  BOOL visible = self.viewPresented && self.sceneInForeground;
+  if (visible == self.visible) {
+    return;
+  }
+  self.visible = visible;
+  if (self.browser->GetBrowserState()->IsOffTheRecord()) {
+    // Do not report metrics on incognito NTP.
+    return;
+  }
+  if (visible) {
+    self.didAppearTime = base::TimeTicks::Now();
+    if ([self isFeedHeaderVisible]) {
+      if ([self.feedExpandedPref value]) {
+        ntp_home::RecordNTPImpression(ntp_home::REMOTE_SUGGESTIONS);
+      } else {
+        ntp_home::RecordNTPImpression(ntp_home::REMOTE_COLLAPSED);
+      }
+    } else {
+      ntp_home::RecordNTPImpression(ntp_home::LOCAL_SUGGESTIONS);
+    }
+  } else {
+    if (!self.didAppearTime.is_null()) {
+      UmaHistogramMediumTimes("NewTabPage.TimeSpent",
+                              base::TimeTicks::Now() - self.didAppearTime);
+      self.didAppearTime = base::TimeTicks();
+    }
+  }
+}
 
 // Updates the NTP to take into account a new feed, or a change in feed
 // visibility.
@@ -1077,6 +1291,7 @@ const base::Feature kEnableCheckForNewFollowContent{
   self.ntpViewController.feedTopSectionViewController = nil;
   self.feedWrapperViewController = nil;
   self.feedViewController = nil;
+  self.feedTopSectionCoordinator = nil;
 
   // Fetches feed header and conditionally fetches feed. Feed can only be
   // visible if feed header is visible.
@@ -1102,30 +1317,8 @@ const base::Feature kEnableCheckForNewFollowContent{
       self.feedWrapperViewController;
 
   [self.ntpViewController layoutContentInParentCollectionView];
-}
 
-// Creates and configures the feed and feed header based on user prefs.
-- (void)configureFeedAndHeader {
-  DCHECK([self isFeedHeaderVisible]);
-
-  self.ntpViewController.feedHeaderViewController =
-      self.feedHeaderViewController;
-
-  // Requests feeds here if the correct flags and prefs are enabled.
-  if ([self shouldFeedBeVisible]) {
-    if ([self isFollowingFeedAvailable]) {
-      switch (self.selectedFeed) {
-        case FeedTypeDiscover:
-          self.feedViewController = [self discoverFeed];
-          break;
-        case FeedTypeFollowing:
-          self.feedViewController = [self followingFeed];
-          break;
-      }
-    } else {
-      self.feedViewController = [self discoverFeed];
-    }
-  }
+  [self updateFeedLayout];
 }
 
 // Feed header is always visible unless it is disabled from the Chrome settings
@@ -1133,7 +1326,8 @@ const base::Feature kEnableCheckForNewFollowContent{
 - (BOOL)isFeedHeaderVisible {
   return self.prefService->GetBoolean(prefs::kArticlesForYouEnabled) &&
          self.prefService->GetBoolean(prefs::kNTPContentSuggestionsEnabled) &&
-         !IsFeedAblationEnabled();
+         !IsFeedAblationEnabled() &&
+         IsContentSuggestionsForSupervisedUserEnabled(self.prefService);
 }
 
 // Returns `YES` if the feed is currently visible on the NTP.
@@ -1194,6 +1388,29 @@ const base::Feature kEnableCheckForNewFollowContent{
   return viewControllerConfig;
 }
 
+// Updates the visibility of the content suggestions on the NTP if the account
+// is subject to parental controls.
+- (void)updateFeedVisibilityForSupervision {
+  DCHECK(self.prefService);
+  DCHECK(self.authService);
+
+  ios::ChromeIdentityService* identity_service =
+      ios::GetChromeBrowserProvider().GetChromeIdentityService();
+  id<SystemIdentity> identity =
+      self.authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
+  if (!identity) {
+    [self updateFeedWithIsSupervisedUser:NO];
+    return;
+  }
+
+  __weak NewTabPageCoordinator* weakSelf = self;
+  identity_service->IsSubjectToParentalControls(
+      identity, ^(ios::ChromeIdentityCapabilityResult result) {
+        [weakSelf updateFeedWithIsSupervisedUser:
+                      result == ios::ChromeIdentityCapabilityResult::kTrue];
+      });
+}
+
 // Handles how the NTP reacts when the default search engine is changed.
 - (void)defaultSearchEngineDidChange {
   [self.feedHeaderViewController updateForDefaultSearchEngineChanged];
@@ -1209,42 +1426,6 @@ const base::Feature kEnableCheckForNewFollowContent{
   [self.feedExpandedPref setValue:visible];
   [self.feedMetricsRecorder recordDiscoverFeedVisibilityChanged:visible];
   [self handleFeedVisibilityDidChange];
-}
-
-// Configures and returns the NTP mediator.
-- (NTPHomeMediator*)createNTPMediator {
-  NTPHomeMediator* ntpMediator = [[NTPHomeMediator alloc]
-             initWithWebState:self.webState
-           templateURLService:self.templateURLService
-                    URLLoader:UrlLoadingBrowserAgent::FromBrowser(self.browser)
-                  authService:self.authService
-              identityManager:IdentityManagerFactory::GetForBrowserState(
-                                  self.browser->GetBrowserState())
-        accountManagerService:ChromeAccountManagerServiceFactory::
-                                  GetForBrowserState(
-                                      self.browser->GetBrowserState())
-                   logoVendor:ios::provider::CreateLogoVendor(self.browser,
-                                                              self.webState)
-      voiceSearchAvailability:&_voiceSearchAvailability];
-  ntpMediator.browser = self.browser;
-  ntpMediator.ntpViewController = self.ntpViewController;
-  ntpMediator.headerCollectionInteractionHandler = self.headerSynchronizer;
-  ntpMediator.feedControlDelegate = self;
-  return ntpMediator;
-}
-
-// Configures and returns a content suggestions coordinator.
-- (ContentSuggestionsCoordinator*)createContentSuggestionsCoordinator {
-  ContentSuggestionsCoordinator* contentSuggestionsCoordinator =
-      [[ContentSuggestionsCoordinator alloc]
-          initWithBaseViewController:nil
-                             browser:self.browser];
-  contentSuggestionsCoordinator.webState = self.webState;
-  contentSuggestionsCoordinator.ntpMediator = self.ntpMediator;
-  contentSuggestionsCoordinator.ntpDelegate = self;
-  contentSuggestionsCoordinator.feedDelegate = self;
-  [contentSuggestionsCoordinator start];
-  return contentSuggestionsCoordinator;
 }
 
 // Configures and returns the feed top section coordinator.
@@ -1276,6 +1457,7 @@ const base::Feature kEnableCheckForNewFollowContent{
 // changed.
 - (void)handleFeedVisibilityDidChange {
   [self updateNTPForFeed];
+  [self setContentOffsetToTop];
   [self.feedHeaderViewController updateForFeedVisibilityChanged];
 }
 
@@ -1306,10 +1488,23 @@ const base::Feature kEnableCheckForNewFollowContent{
   return _feedHeaderViewController;
 }
 
-#pragma mark - FeedWrapperViewControllerDelegate
-
-- (void)updateTheme {
-  self.discoverFeedService->UpdateTheme();
+// Vivaldi
+#pragma mark - VIVALDI
+-(void)didTapSearchBar {
+  // Open search result page focusing the search bar
+  [self focusFakebox];
 }
+
+-(void)didTapSpeedDial:(VivaldiSpeedDialItem *) item {
+  // Resign the edit mode of omnibox
+  id<OmniboxCommands> omniboxCommandHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), OmniboxCommands);
+  [omniboxCommandHandler cancelOmniboxEdit];
+
+  // Go to the website
+  UrlLoadParams params = UrlLoadParams::InCurrentTab(item.url);
+  params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+  UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
+} // End Vivaldi
 
 @end

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 - (void)dismissHistoryWithCompletion:(ProceduralBlock)completionHandler;
 // Notifies the coordinator that Privacy Settings should be displayed.
 - (void)displayPrivacySettings;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_HISTORY_HISTORY_UI_DELEGATE_H_

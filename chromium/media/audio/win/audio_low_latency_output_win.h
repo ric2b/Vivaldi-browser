@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -206,6 +206,9 @@ class MEDIA_EXPORT WASAPIAudioOutputStream
   // Extended PCM waveform format structure based on WAVEFORMATEXTENSIBLE.
   // Use this for multiple channel and hi-resolution PCM data.
   WAVEFORMATPCMEX format_;
+
+  // AudioParameters from the constructor.
+  const AudioParameters params_;
 
   // Set to true when stream is successfully opened.
   bool opened_;

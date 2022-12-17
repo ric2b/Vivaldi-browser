@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -99,6 +99,8 @@ class StubFeedApi : public FeedApi {
                                          int info_card_type) override {}
   void ResetInfoCardStates(const StreamType& stream_type,
                            int info_card_type) override {}
+  void ReportContentSliceVisibleTimeForGoodVisits(
+      base::TimeDelta elapsed) override {}
   DebugStreamData GetDebugStreamData() override;
   void ForceRefreshForDebugging(const StreamType& stream_type) override {}
   std::string DumpStateForDebugging() override;

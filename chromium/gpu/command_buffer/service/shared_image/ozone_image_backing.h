@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "gpu/command_buffer/common/mailbox.h"
-#include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/gl_ozone_image_representation.h"
@@ -40,7 +39,7 @@ class OzoneImageBacking final : public ClearTrackingSharedImageBacking {
  public:
   OzoneImageBacking(
       const Mailbox& mailbox,
-      viz::ResourceFormat format,
+      viz::SharedImageFormat format,
       gfx::BufferPlane plane,
       const gfx::Size& size,
       const gfx::ColorSpace& color_space,
@@ -50,7 +49,8 @@ class OzoneImageBacking final : public ClearTrackingSharedImageBacking {
       scoped_refptr<SharedContextState> context_state,
       scoped_refptr<gfx::NativePixmap> pixmap,
       scoped_refptr<base::RefCountedData<DawnProcTable>> dawn_procs,
-      const GpuDriverBugWorkarounds& workarounds);
+      const GpuDriverBugWorkarounds& workarounds,
+      bool use_passthrough);
 
   OzoneImageBacking(const OzoneImageBacking&) = delete;
   OzoneImageBacking& operator=(const OzoneImageBacking&) = delete;
@@ -61,7 +61,6 @@ class OzoneImageBacking final : public ClearTrackingSharedImageBacking {
   SharedImageBackingType GetType() const override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
   bool UploadFromMemory(const SkPixmap& pixmap) override;
-  bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override;
   scoped_refptr<gfx::NativePixmap> GetNativePixmap() override;
 
   enum class AccessStream { kGL, kVulkan, kWebGPU, kOverlay, kLast };
@@ -131,6 +130,7 @@ class OzoneImageBacking final : public ClearTrackingSharedImageBacking {
   AccessStream last_write_stream_;
   scoped_refptr<SharedContextState> context_state_;
   const GpuDriverBugWorkarounds workarounds_;
+  bool use_passthrough_;
 };
 
 }  // namespace gpu

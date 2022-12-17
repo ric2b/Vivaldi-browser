@@ -1,18 +1,17 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_SEARCH_SEARCH_CONCEPT_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_SEARCH_SEARCH_CONCEPT_H_
 
+#include "chrome/browser/ui/webui/settings/ash/os_settings_identifier.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search.mojom.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search_result_icon.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/setting.mojom.h"
-#include "chrome/browser/ui/webui/settings/chromeos/os_settings_identifier.h"
 
-namespace chromeos {
-namespace settings {
+namespace ash::settings {
 
 // Represents a potential search result. In this context, "concept" refers to
 // the fact that this search result represents an idea which may be described
@@ -65,7 +64,11 @@ struct SearchConcept {
   int alt_tag_ids[kMaxAltTagsPerConcept] = {kAltTagEnd};
 };
 
-}  // namespace settings
-}  // namespace chromeos
+}  // namespace ash::settings
+
+// TODO(https://crbug.com/1164001): remove when the migration is finished.
+namespace chromeos::settings {
+using ::ash::settings::SearchConcept;
+}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_SEARCH_SEARCH_CONCEPT_H_

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,15 +15,10 @@ import org.chromium.components.segmentation_platform.proto.SegmentationProto.Seg
 public class SegmentationPlatformConversionBridge {
     @CalledByNative
     private static SegmentSelectionResult createSegmentSelectionResult(
-            boolean isReady, int selectedSegment) {
+            boolean isReady, int selectedSegment, boolean hasRank, float rank) {
         SegmentId segment = SegmentId.forNumber(selectedSegment);
         if (segment == null) segment = SegmentId.OPTIMIZATION_TARGET_UNKNOWN;
-        return new SegmentSelectionResult(isReady, segment);
-    }
-
-    @CalledByNative
-    private static OnDemandSegmentSelectionResult createOnDemandSegmentSelectionResult(
-            SegmentSelectionResult selectedSegment, TriggerContext triggerContext) {
-        return new OnDemandSegmentSelectionResult(selectedSegment, triggerContext);
+        Float optionalRank = hasRank ? rank : null;
+        return new SegmentSelectionResult(isReady, segment, optionalRank);
     }
 }

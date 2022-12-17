@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,9 +79,8 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/jni_android.h"
 #include "chrome/android/chrome_jni_headers/PushMessagingServiceObserver_jni.h"
-#include "chrome/browser/installable/installed_webapp_bridge.h"
+#include "chrome/browser/android/shortcut_helper.h"
 #include "components/permissions/android/android_permission_util.h"
-#include "components/prefs/pref_service.h"
 #endif
 
 using instance_id::InstanceID;
@@ -442,22 +441,27 @@ bool PushMessagingServiceImpl::CheckAndRevokeNotificationPermissionIfNeeded(
     return false;
   }
 
-  bool webapp_can_display_notifications =
-      InstalledWebappBridge::GetPermission(ContentSettingsType::NOTIFICATIONS,
-                                           app_identifier.origin()) ==
-      ContentSetting::CONTENT_SETTING_ALLOW;
+  bool has_app_level_notification_permission =
+      enabled_app_level_notification_permission_for_testing_.has_value()
+          ? enabled_app_level_notification_permission_for_testing_.value()
+          : permissions::AreAppLevelNotificationsEnabled();
 
-  // An incoming push message will be displayed by an installed webapp.
-  if (webapp_can_display_notifications)
+  bool contains_webapk = ShortcutHelper::DoesOriginContainAnyInstalledWebApk(
+      app_identifier.origin());
+  bool contains_twa =
+      ShortcutHelper::DoesOriginContainAnyInstalledTrustedWebActivity(
+          app_identifier.origin());
+  bool contains_installed_webapp = contains_twa || contains_webapk;
+
+  // If Notifications permission delegation is enabled, for the
+  // `app_identifier.origin()`, we should not revoke permissions because
+  // Notifications permissions are automatically synced with an installed app.
+  if (contains_installed_webapp)
     return false;
 
   PrefService* prefs = prefs_for_testing_.has_value()
                            ? prefs_for_testing_.value()
                            : g_browser_process->local_state();
-
-  bool has_app_level_notification_permission =
-      enabled_app_level_notification_permission_for_testing_.value_or(
-          permissions::AreAppLevelNotificationsEnabled());
 
   if (has_app_level_notification_permission) {
     // Chrome has app-level Notifications permission. Reset the grace period

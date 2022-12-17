@@ -1,5 +1,5 @@
 #!/usr/bin/env vpython3
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -281,6 +281,44 @@ FYI_BUILDERS = {
             'pool': 'chrome.tests',
         },
     },
+    'fuchsia-perf-ast': {
+        'tests': [{
+            'isolate':
+            'performance_web_engine_test_suite',
+            'extra_args':
+            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
+            bot_platforms.FUCHSIA_EXEC_ARGS['astro'],
+            'type':
+            TEST_TYPES.TELEMETRY,
+        }],
+        'platform':
+        'fuchsia-wes',
+        'dimension': {
+            'cpu': None,
+            'device_type': 'Astro',
+            'os': 'Fuchsia',
+            'pool': 'chrome.tests',
+        },
+    },
+    'fuchsia-perf-shk': {
+        'tests': [{
+            'isolate':
+            'performance_web_engine_test_suite',
+            'extra_args':
+            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
+            bot_platforms.FUCHSIA_EXEC_ARGS['sherlock'],
+            'type':
+            TEST_TYPES.TELEMETRY,
+        }],
+        'platform':
+        'fuchsia-wes',
+        'dimension': {
+            'cpu': None,
+            'device_type': 'Sherlock',
+            'os': 'Fuchsia',
+            'pool': 'chrome.tests',
+        },
+    },
     'win-10_laptop_low_end-perf_HP-Candidate': {
         'tests': [
             {
@@ -332,11 +370,20 @@ FYI_BUILDERS = {
             'device_type': 'kevin',
         },
     },
+    'fuchsia-builder-perf-arm64': {
+        'additional_compile_targets': [
+            'web_engine_shell_pkg', 'cast_runner_pkg', 'web_runner_pkg',
+            'chromium_builder_perf', 'base_perftests'
+        ],
+    },
     'fuchsia-builder-perf-fyi': {
         'additional_compile_targets': [
             'web_engine_shell_pkg', 'cast_runner_pkg', 'web_runner_pkg',
             'chromium_builder_perf', 'base_perftests'
         ],
+    },
+    'fuchsia-builder-perf-x64': {
+        'additional_compile_targets': ['chrome_pkg', 'base_perftests'],
     },
 }
 
@@ -470,7 +517,6 @@ BUILDERS = {
             'push_apps_to_background_apk',
             'system_webview_apk',
             'system_webview_shell_apk',
-            'telemetry_weblayer_apks',
         ],
         'tests': [
             {
@@ -558,7 +604,6 @@ BUILDERS = {
             'push_apps_to_background_apk',
             'system_webview_apk',
             'system_webview_shell_apk',
-            'telemetry_weblayer_apks',
         ],
         'dimension': {
             'cpu': 'x86',
@@ -567,15 +612,6 @@ BUILDERS = {
         },
         'perf_trigger':
         False,
-    },
-    'fuchsia-builder-perf-arm64': {
-        'additional_compile_targets': [
-            'web_engine_shell_pkg', 'cast_runner_pkg', 'web_runner_pkg',
-            'chromium_builder_perf', 'base_perftests'
-        ],
-    },
-    'fuchsia-builder-perf-x64': {
-        'additional_compile_targets': ['chrome_pkg', 'base_perftests'],
     },
     'linux-builder-perf': {
         'additional_compile_targets': ['chromedriver', 'chromium_builder_perf'],
@@ -757,19 +793,6 @@ BUILDERS = {
             'device_os_flavor': 'google',
         },
     },
-    'android-pixel2_weblayer-perf': {
-        'tests': [{
-            'isolate': 'performance_weblayer_test_suite',
-        }],
-        'platform': 'android-weblayer',
-        'dimension': {
-            'pool': 'chrome.tests.perf-weblayer',
-            'os': 'Android',
-            'device_type': 'walleye',
-            'device_os': 'OPM1.171019.021',
-            'device_os_flavor': 'google',
-        },
-    },
     'android-pixel2-perf': {
         'tests': [{
             'isolate':
@@ -807,32 +830,6 @@ BUILDERS = {
         'platform': 'android-webview-trichrome-google-bundle',
         'dimension': {
             'pool': 'chrome.tests.perf-webview',
-            'os': 'Android',
-            'device_type': 'flame',
-            'device_os': 'RP1A.201105.002',
-            'device_os_flavor': 'google',
-        },
-    },
-    'android-pixel4_weblayer-perf': {
-        'tests': [{
-            'isolate': 'performance_weblayer_test_suite',
-        }],
-        'platform': 'android-weblayer-trichrome-google-bundle',
-        'dimension': {
-            'pool': 'chrome.tests.perf-weblayer',
-            'os': 'Android',
-            'device_type': 'flame',
-            'device_os': 'RP1A.201105.002',
-            'device_os_flavor': 'google',
-        },
-    },
-    'android-pixel4_weblayer-perf-pgo': {
-        'tests': [{
-            'isolate': 'performance_weblayer_test_suite',
-        }],
-        'platform': 'android-weblayer-trichrome-google-bundle',
-        'dimension': {
-            'pool': 'chrome.tests.perf-weblayer',
             'os': 'Android',
             'device_type': 'flame',
             'device_os': 'RP1A.201105.002',
@@ -902,6 +899,42 @@ BUILDERS = {
             'device_os': 'RQ1D.201205.012',
             'device_os_flavor': 'google',
         },
+    },
+    'android-new-pixel-perf': {
+        'tests': [{
+            'isolate':
+            'performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle',
+        }],
+        'platform':
+        'android-trichrome-chrome-google-64-32-bundle',
+        'dimension': {},
+    },
+    'android-new-pixel-perf-pgo': {
+        'tests': [{
+            'isolate':
+            'performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle',
+        }],
+        'platform':
+        'android-trichrome-chrome-google-64-32-bundle',
+        'dimension': {},
+    },
+    'android-new-pixel-pro-perf': {
+        'tests': [{
+            'isolate':
+            'performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle',
+        }],
+        'platform':
+        'android-trichrome-chrome-google-64-32-bundle',
+        'dimension': {},
+    },
+    'android-new-pixel-pro-perf-pgo': {
+        'tests': [{
+            'isolate':
+            'performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle',
+        }],
+        'platform':
+        'android-trichrome-chrome-google-64-32-bundle',
+        'dimension': {},
     },
     'win-10_laptop_low_end-perf': {
         'tests': [
@@ -1182,44 +1215,6 @@ BUILDERS = {
             'synthetic_product_name': 'PowerEdge R230 (Dell Inc.)'
         },
     },
-    'fuchsia-perf-ast': {
-        'tests': [{
-            'isolate':
-            'performance_web_engine_test_suite',
-            'extra_args':
-            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
-            bot_platforms.FUCHSIA_EXEC_ARGS['astro'],
-            'type':
-            TEST_TYPES.TELEMETRY,
-        }],
-        'platform':
-        'fuchsia-wes',
-        'dimension': {
-            'cpu': None,
-            'device_type': 'Astro',
-            'os': 'Fuchsia',
-            'pool': 'chrome.tests',
-        },
-    },
-    'fuchsia-perf-shk': {
-        'tests': [{
-            'isolate':
-            'performance_web_engine_test_suite',
-            'extra_args':
-            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
-            bot_platforms.FUCHSIA_EXEC_ARGS['sherlock'],
-            'type':
-            TEST_TYPES.TELEMETRY,
-        }],
-        'platform':
-        'fuchsia-wes',
-        'dimension': {
-            'cpu': None,
-            'device_type': 'Sherlock',
-            'os': 'Fuchsia',
-            'pool': 'chrome.tests',
-        },
-    },
     'mac-laptop_high_end-perf': {
         'tests': [
             {
@@ -1355,6 +1350,29 @@ BUILDERS = {
                 },
                 'extra_args': [
                     '--arch=arm32',
+                ],
+            },
+        ],
+        'dimension': {
+            'cpu': 'x86-64',
+            'os': 'Ubuntu-18.04',
+            'pool': 'chrome.tests',
+        },
+        'perf_trigger':
+        False,
+    },
+    'chromeos-arm64-generic-lacros-builder-perf': {
+        'additional_compile_targets': ['chrome'],
+        'tests': [
+            {
+                'name': 'resource_sizes_lacros_chrome',
+                'isolate': 'resource_sizes_lacros_chrome',
+                'type': TEST_TYPES.GENERIC,
+                'resultdb': {
+                    'has_native_resultdb_integration': True,
+                },
+                'extra_args': [
+                    '--arch=arm64',
                 ],
             },
         ],
@@ -1602,7 +1620,6 @@ PERFORMANCE_TEST_SUITES = [
     'performance_test_suite_eve',
     'performance_test_suite_octopus',
     'performance_webview_test_suite',
-    'performance_weblayer_test_suite',
     'performance_web_engine_test_suite',
 ]
 for suffix in android_browser_types.TELEMETRY_ANDROID_BROWSER_TARGET_SUFFIXES:
@@ -1802,7 +1819,7 @@ def update_system_health_stories(filepath):
 def update_labs_docs_md(filepath):
   configs = collections.defaultdict(list)
   for tester in bot_platforms.ALL_PLATFORMS:
-    if not tester.is_fyi:
+    if not tester.is_fyi and not tester.pinpoint_only:
       configs[tester.platform].append(tester)
 
   with open(filepath, 'w', newline='') if sys.version_info.major == 3 else open(

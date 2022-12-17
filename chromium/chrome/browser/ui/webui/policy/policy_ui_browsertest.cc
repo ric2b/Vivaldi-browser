@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/cfi_buildflags.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -66,6 +67,8 @@
 #include "ui/shell_dialogs/select_file_dialog.h"          // nogncheck
 #include "ui/shell_dialogs/select_file_dialog_factory.h"  // nogncheck
 #include "ui/shell_dialogs/select_file_policy.h"          // nogncheck
+#else
+#include "chrome/browser/toolbar_manager_test_helper_android.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 using testing::_;
@@ -174,9 +177,7 @@ void SetChromeMetaData(base::DictionaryValue* expected) {
   expected->SetPath({prefix, "application"}, base::Value(""));
   expected->SetPath({prefix, "version"}, base::Value(""));
   expected->SetPath({prefix, "revision"}, base::Value(""));
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  expected->SetPath({prefix, "platform"}, base::Value(""));
-#else
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   expected->SetPath({prefix, "OS"}, base::Value(""));
 #endif
 }
@@ -256,7 +257,8 @@ class TestSelectFileDialog : public ui::SelectFileDialog {
                       int file_type_index,
                       const base::FilePath::StringType& default_extension,
                       gfx::NativeWindow owning_window,
-                      void* params) override {
+                      void* params,
+                      const GURL* caller) override {
     listener_->FileSelected(export_policies_test_file_path, 0, nullptr);
   }
 
@@ -283,7 +285,14 @@ class TestSelectFileDialogFactory : public ui::SelectFileDialogFactory {
 };
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-PolicyUITest::PolicyUITest() = default;
+PolicyUITest::PolicyUITest() {
+#if BUILDFLAG(IS_ANDROID)
+  // Skips recreating the Android activity when homepage settings are changed.
+  // This happens when the feature chrome::android::kStartSurfaceAndroid is
+  // enabled.
+  toolbar_manager::setSkipRecreateForTesting(true);
+#endif  // BUILDFLAG(IS_ANDROID)
+}
 
 PolicyUITest::~PolicyUITest() = default;
 
@@ -336,15 +345,14 @@ void PolicyUITest::VerifyPolicies(
   absl::optional<base::Value> value_ptr = base::JSONReader::Read(json);
   ASSERT_TRUE(value_ptr);
   ASSERT_TRUE(value_ptr->is_list());
-  base::Value::ConstListView actual_policies = value_ptr->GetListDeprecated();
+  const base::Value::List& actual_policies = value_ptr->GetList();
 
   // Verify that the cells contain the expected strings for all policies.
   ASSERT_EQ(expected_policies.size(), actual_policies.size());
   for (size_t i = 0; i < expected_policies.size(); ++i) {
     const std::vector<std::string> expected_policy = expected_policies[i];
     ASSERT_TRUE(actual_policies[i].is_list());
-    base::Value::ConstListView actual_policy =
-        actual_policies[i].GetListDeprecated();
+    const base::Value::List& actual_policy = actual_policies[i].GetList();
     ASSERT_EQ(expected_policy.size(), actual_policy.size());
     for (size_t j = 0; j < expected_policy.size(); ++j) {
       const std::string* value = actual_policy[j].GetIfString();
@@ -415,8 +423,12 @@ void PolicyUITest::VerifyExportingPolicies(
   EXPECT_EQ(expected, *value_ptr);
 }
 
-#if !defined(NDEBUG)
-// Slow and hangs often in debug builds. https://crbug.com/1338642
+#if !defined(NDEBUG) ||                                          \
+    (BUILDFLAG(IS_LINUX) &&                                      \
+     (BUILDFLAG(CFI_CAST_CHECK) || BUILDFLAG(CFI_ICALL_CHECK) || \
+      BUILDFLAG(CFI_ENFORCEMENT_TRAP) ||                         \
+      BUILDFLAG(CFI_ENFORCEMENT_DIAGNOSTIC)))
+// Slow in debug and CFI builds crbug.com/1338642
 #define MAYBE_WritePoliciesToJSONFile DISABLED_WritePoliciesToJSONFile
 #else
 #define MAYBE_WritePoliciesToJSONFile WritePoliciesToJSONFile

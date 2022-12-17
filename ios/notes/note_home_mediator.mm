@@ -205,8 +205,8 @@ class NoteModelBridge;
         kMaxNotesSearchResults,
         &results);
   for (const std::pair<int, NoteNode::Type>& node : results) {
-      const NoteNode* noteNode = vivaldi::GetNotesNodeByID(
-            self.sharedState.notesModel, static_cast<int64_t>(node.first));
+      const NoteNode* noteNode = self.sharedState.notesModel->GetNoteNodeByID(
+            static_cast<int64_t>(node.first));
       nodes.push_back(noteNode);
   }
   int count = 0;

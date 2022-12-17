@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,7 +84,7 @@ const NGLayoutResult* NGMathPaddedLayoutAlgorithm::Layout() {
     NGBoxFragment fragment(ConstraintSpace().GetWritingDirection(),
                            content_fragment);
     content_ascent = content_margins.block_start +
-                     fragment.Baseline().value_or(fragment.BlockSize());
+                     fragment.FirstBaseline().value_or(fragment.BlockSize());
     content_descent =
         fragment.BlockSize() + content_margins.BlockSum() - content_ascent;
   }
@@ -106,7 +106,7 @@ const NGLayoutResult* NGMathPaddedLayoutAlgorithm::Layout() {
   container_builder_.SetIntrinsicBlockSize(total_block_size);
   container_builder_.SetFragmentsTotalBlockSize(total_block_size);
 
-  container_builder_.SetBaseline(ascent);
+  container_builder_.SetBaselines(ascent);
 
   NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,8 +29,6 @@ class CONTENT_EXPORT BackForwardCache {
  public:
   // Returns true if BackForwardCache is enabled.
   static bool IsBackForwardCacheFeatureEnabled();
-  // Returns true if BackForwardCache is enabled for same-site navigations.
-  static bool IsSameSiteBackForwardCacheFeatureEnabled();
 
   // Back/forward cache can be disabled from within content and also from
   // embedders. This means we cannot have a unified enum that covers reasons
@@ -57,10 +55,20 @@ class CONTENT_EXPORT BackForwardCache {
   // passed devtools. It preserves the |description| and |context| that
   // accompany it, however they are ignored for <, == and !=.
   struct CONTENT_EXPORT DisabledReason {
+    DisabledReason(BackForwardCache::DisabledSource source,
+                   BackForwardCache::DisabledReasonType id,
+                   std::string description,
+                   std::string context,
+                   std::string report_string);
+    DisabledReason(const DisabledReason&);
+
     const BackForwardCache::DisabledSource source;
     const BackForwardCache::DisabledReasonType id;
     const std::string description;
     const std::string context;
+    // Report string used for NotRestoredReasons API. This will be brief and
+    // will mask extension related reasons as "Extensions".
+    const std::string report_string;
 
     bool operator<(const DisabledReason&) const;
     bool operator==(const DisabledReason&) const;

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -261,14 +261,7 @@ gfx::RectF FrameTestUtil::TransformSimilarly(const gfx::Rect& original,
     return gfx::RectF(transformed.x() - original.x(),
                       transformed.y() - original.y(), 0.0f, 0.0f);
   }
-  // The following is the scale-then-translate 2D matrix.
-  const gfx::Transform transform(transformed.width() / original.width(), 0.0f,
-                                 0.0f, transformed.height() / original.height(),
-                                 transformed.x() - original.x(),
-                                 transformed.y() - original.y());
-  gfx::RectF result(rect);
-  transform.TransformRect(&result);
-  return result;
+  return gfx::MapRect(gfx::RectF(rect), gfx::RectF(original), transformed);
 }
 
 std::ostream& operator<<(std::ostream& out, const FrameTestUtil::RGB& rgb) {

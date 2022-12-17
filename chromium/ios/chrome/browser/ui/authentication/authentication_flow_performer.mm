@@ -1,52 +1,52 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/authentication/authentication_flow_performer.h"
 
-#include <memory>
+#import <memory>
 
-#include "base/bind.h"
-#include "base/check_op.h"
-#include "base/ios/block_types.h"
-#include "base/metrics/user_metrics.h"
-#include "base/notreached.h"
-#include "base/strings/sys_string_conversions.h"
-#include "base/time/time.h"
-#include "base/timer/timer.h"
-#include "components/policy/core/common/policy_pref_names.h"
-#include "components/prefs/pref_service.h"
-#include "components/signin/public/base/signin_pref_names.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/strings/grit/components_strings.h"
-#include "google_apis/gaia/gaia_auth_util.h"
-#include "google_apis/gaia/gaia_urls.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/main/browser.h"
-#include "ios/chrome/browser/policy/cloud/user_policy_signin_service.h"
-#include "ios/chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
-#include "ios/chrome/browser/policy/cloud/user_policy_switch.h"
-#include "ios/chrome/browser/signin/authentication_service.h"
-#include "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "base/bind.h"
+#import "base/check_op.h"
+#import "base/ios/block_types.h"
+#import "base/metrics/user_metrics.h"
+#import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/time/time.h"
+#import "base/timer/timer.h"
+#import "components/policy/core/common/policy_pref_names.h"
+#import "components/prefs/pref_service.h"
+#import "components/signin/public/base/signin_pref_names.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/strings/grit/components_strings.h"
+#import "google_apis/gaia/gaia_auth_util.h"
+#import "google_apis/gaia/gaia_urls.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/flags/system_flags.h"
+#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/policy/cloud/user_policy_signin_service.h"
+#import "ios/chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
+#import "ios/chrome/browser/policy/cloud/user_policy_switch.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
+#import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/constants.h"
-#include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/sync/sync_setup_service.h"
-#include "ios/chrome/browser/sync/sync_setup_service_factory.h"
-#include "ios/chrome/browser/system_flags.h"
-#include "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/sync/sync_setup_service.h"
+#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
+#import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/settings/import_data_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
-#include "ios/chrome/grit/ios_chromium_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 #import "ios/web/public/web_state.h"
-#include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "services/network/public/cpp/shared_url_loader_factory.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -100,7 +100,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 }
 
 - (void)fetchManagedStatus:(ChromeBrowserState*)browserState
-               forIdentity:(ChromeIdentity*)identity {
+               forIdentity:(id<SystemIdentity>)identity {
   ios::ChromeIdentityService* identityService =
       ios::GetChromeBrowserProvider().GetChromeIdentityService();
   NSString* hostedDomain =
@@ -122,12 +122,11 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
           });
 }
 
-- (void)signInIdentity:(ChromeIdentity*)identity
+- (void)signInIdentity:(id<SystemIdentity>)identity
       withHostedDomain:(NSString*)hostedDomain
-        toBrowserState:(ChromeBrowserState*)browserState
-            completion:(signin_ui::CompletionCallback)completion {
+        toBrowserState:(ChromeBrowserState*)browserState {
   AuthenticationServiceFactory::GetForBrowserState(browserState)
-      ->SignIn(identity, completion);
+      ->SignIn(identity);
 }
 
 - (void)signOutBrowserState:(ChromeBrowserState*)browserState {
@@ -145,7 +144,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
                 /*force_clear_browsing_data=*/false, nil);
 }
 
-- (void)promptMergeCaseForIdentity:(ChromeIdentity*)identity
+- (void)promptMergeCaseForIdentity:(id<SystemIdentity>)identity
                            browser:(Browser*)browser
                     viewController:(UIViewController*)viewController {
   DCHECK(browser);
@@ -176,7 +175,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
         base::SysUTF8ToNSString(primaryAccountInfo.hosted_domain);
     [self promptSwitchFromManagedEmail:lastSyncingEmail
                       withHostedDomain:hostedDomain
-                               toEmail:[identity userEmail]
+                               toEmail:identity.userEmail
                         viewController:viewController
                                browser:browser];
     return;
@@ -186,7 +185,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
                             delegate:self
                   importDataDelegate:self
                            fromEmail:lastSyncingEmail
-                             toEmail:[identity userEmail]];
+                             toEmail:identity.userEmail];
   [_delegate presentViewController:_navigationController
                           animated:YES
                         completion:nil];
@@ -196,9 +195,10 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
               commandHandler:(id<BrowsingDataCommands>)handler {
   DCHECK(browser);
   ChromeBrowserState* browserState = browser->GetBrowserState();
-
-  DCHECK(!AuthenticationServiceFactory::GetForBrowserState(browserState)
-              ->HasPrimaryIdentity(signin::ConsentLevel::kSignin));
+  // The user needs to be signed out when clearing the data to avoid deleting
+  // data on server side too.
+  CHECK(!AuthenticationServiceFactory::GetForBrowserState(browserState)
+             ->HasPrimaryIdentity(signin::ConsentLevel::kSignin));
 
   // Workaround for crbug.com/1003578
   //
@@ -241,15 +241,16 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
                              }];
 }
 
-- (BOOL)shouldHandleMergeCaseForIdentity:(ChromeIdentity*)identity
+- (BOOL)shouldHandleMergeCaseForIdentity:(id<SystemIdentity>)identity
                             browserState:(ChromeBrowserState*)browserState {
-  CoreAccountId lastSignedInAccountId = CoreAccountId::FromString(
+  const std::string currentSignedInEmail =
+      base::SysNSStringToUTF8(identity.userEmail);
+  const CoreAccountId lastSignedInAccountId = CoreAccountId::FromString(
       browserState->GetPrefs()->GetString(prefs::kGoogleServicesLastAccountId));
-  CoreAccountId currentSignedInAccountId =
+  const CoreAccountId currentSignedInAccountId =
       IdentityManagerFactory::GetForBrowserState(browserState)
-          ->PickAccountIdForAccount(
-              base::SysNSStringToUTF8([identity gaiaID]),
-              base::SysNSStringToUTF8([identity userEmail]));
+          ->PickAccountIdForAccount(base::SysNSStringToUTF8(identity.gaiaID),
+                                    currentSignedInEmail);
   if (!lastSignedInAccountId.empty()) {
     // Merge case exists if the id of the previously signed in account is
     // different from the one of the account being signed in.
@@ -258,10 +259,8 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 
   // kGoogleServicesLastAccountId pref might not have been populated yet,
   // check the old kGoogleServicesLastUsername pref.
-  std::string lastSignedInEmail =
+  const std::string lastSignedInEmail =
       browserState->GetPrefs()->GetString(prefs::kGoogleServicesLastUsername);
-  std::string currentSignedInEmail =
-      base::SysNSStringToUTF8([identity userEmail]);
   return !lastSignedInEmail.empty() &&
          !gaia::AreEmailsSame(currentSignedInEmail, lastSignedInEmail);
 }
@@ -302,9 +301,9 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
     // browser object at that moment, in which case the browser object may have
     // been deleted before the callback block is called. This is to avoid
     // potential bad memory accesses.
-    Browser* browser = weakAlert.browser;
-    if (browser) {
-      PrefService* prefService = browser->GetBrowserState()->GetPrefs();
+    Browser* alertedBrowser = weakAlert.browser;
+    if (alertedBrowser) {
+      PrefService* prefService = alertedBrowser->GetBrowserState()->GetPrefs();
       // TODO(crbug.com/1325115): Remove this line once we determined that the
       // notification isn't needed anymore.
       [strongSelf updateUserPolicyNotificationStatusIfNeeded:prefService];
@@ -358,14 +357,14 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 }
 
 - (void)registerUserPolicy:(ChromeBrowserState*)browserState
-               forIdentity:(ChromeIdentity*)identity {
+               forIdentity:(id<SystemIdentity>)identity {
   // Should only fetch user policies when the feature is enabled.
   DCHECK(policy::IsUserPolicyEnabled());
 
-  std::string userEmail = base::SysNSStringToUTF8([identity userEmail]);
+  std::string userEmail = base::SysNSStringToUTF8(identity.userEmail);
   CoreAccountId accountID =
       IdentityManagerFactory::GetForBrowserState(browserState)
-          ->PickAccountIdForAccount(base::SysNSStringToUTF8([identity gaiaID]),
+          ->PickAccountIdForAccount(base::SysNSStringToUTF8(identity.gaiaID),
                                     userEmail);
 
   policy::UserPolicySigninService* userPolicyService =
@@ -392,7 +391,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 - (void)fetchUserPolicy:(ChromeBrowserState*)browserState
             withDmToken:(NSString*)dmToken
                clientID:(NSString*)clientID
-               identity:(ChromeIdentity*)identity {
+               identity:(id<SystemIdentity>)identity {
   // Should only fetch user policies when the feature is enabled.
   DCHECK(policy::IsUserPolicyEnabled());
 
@@ -402,11 +401,11 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 
   policy::UserPolicySigninService* policy_service =
       policy::UserPolicySigninServiceFactory::GetForBrowserState(browserState);
-  const std::string userEmail = base::SysNSStringToUTF8([identity userEmail]);
+  const std::string userEmail = base::SysNSStringToUTF8(identity.userEmail);
 
-  AccountId accountID = AccountId::FromUserEmailGaiaId(
-      gaia::CanonicalizeEmail(userEmail),
-      base::SysNSStringToUTF8([identity gaiaID]));
+  AccountId accountID =
+      AccountId::FromUserEmailGaiaId(gaia::CanonicalizeEmail(userEmail),
+                                     base::SysNSStringToUTF8(identity.gaiaID));
 
   __weak __typeof(self) weakSelf = self;
 

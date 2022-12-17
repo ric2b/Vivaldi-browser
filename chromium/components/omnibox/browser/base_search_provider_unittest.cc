@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -182,6 +182,7 @@ TEST_F(BaseSearchProviderTest, MatchTailSuggestionProperly) {
       /*match_contents_prefix=*/u"...",
       /*annotation=*/std::u16string(),
       /*additional_query_params=*/std::string(),
+      /*entity_id=*/"",
       /*deletion_url=*/std::string(),
       /*image_dominant_color=*/std::string(),
       /*image_url=*/std::string(),
@@ -258,6 +259,7 @@ SearchSuggestionParser::SuggestResult BuildPrerenderSuggestion(
       /*match_contents_prefix=*/u"...",
       /*annotation=*/std::u16string(),
       /*additional_query_params=*/std::string(),
+      /*entity_id=*/"",
       /*deletion_url=*/std::string(),
       /*image_dominant_color=*/std::string(),
       /*image_url=*/std::string(),

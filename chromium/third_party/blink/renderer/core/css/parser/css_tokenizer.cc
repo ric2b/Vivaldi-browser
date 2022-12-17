@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,6 +48,13 @@ std::unique_ptr<CachedCSSTokenizer> CSSTokenizer::CreateCachedTokenizer(
   return std::make_unique<CachedCSSTokenizer>(
       input, std::move(tokens), std::move(offsets),
       std::move(tokenizer.string_pool_));
+}
+
+std::unique_ptr<CachedCSSTokenizer> CachedCSSTokenizer::DuplicateForTesting()
+    const {
+  return std::make_unique<CachedCSSTokenizer>(
+      input_.RangeAt(0, input_.length()).ToString(), tokens_, offsets_,
+      string_pool_);
 }
 
 CSSTokenizer::CSSTokenizer(const String& string, wtf_size_t offset)
@@ -135,7 +142,7 @@ CSSParserToken CSSTokenizer::BlockStart(CSSParserTokenType block_type,
 
 CSSParserToken CSSTokenizer::BlockEnd(CSSParserTokenType type,
                                       CSSParserTokenType start_type) {
-  if (!block_stack_.IsEmpty() && block_stack_.back() == start_type) {
+  if (!block_stack_.empty() && block_stack_.back() == start_type) {
     block_stack_.pop_back();
     return CSSParserToken(type, CSSParserToken::kBlockEnd);
   }

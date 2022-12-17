@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,9 +12,9 @@ namespace features {
 
 // Decides whether leak checks may be performed on saving a manually
 // submitted password in an automated password change flow.
-const base::Feature kAutofillAssistantAPCLeakCheckOnSaveSubmittedPassword{
-    "AutofillAssistantAPCLeakCheckOnSaveSubmittedPassword",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kAutofillAssistantAPCLeakCheckOnSaveSubmittedPassword,
+             "AutofillAssistantAPCLeakCheckOnSaveSubmittedPassword",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features
 }  // namespace password_change

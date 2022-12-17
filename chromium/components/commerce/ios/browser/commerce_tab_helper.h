@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,10 +32,6 @@ class CommerceTabHelper : public web::WebStateObserver,
   ~CommerceTabHelper() override;
   CommerceTabHelper(const CommerceTabHelper& other) = delete;
   CommerceTabHelper& operator=(const CommerceTabHelper& other) = delete;
-
-  static void CreateForWebState(web::WebState* web_state,
-                                bool is_off_the_record,
-                                ShoppingService* shopping_service);
 
   // web::WebStateObserver implementation
   void DidFinishNavigation(web::WebState* web_state,

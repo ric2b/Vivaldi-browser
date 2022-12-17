@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -415,15 +415,15 @@ views::FocusTraversable* QuickAnswersView::GetPaneFocusTraversable() {
 }
 
 void QuickAnswersView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ax::mojom::Role::kDialog;
+
   // The view itself is not focused for retry-mode, so should not be announced
   // by the screen reader.
   if (retry_label_) {
-    node_data->AddState(ax::mojom::State::kIgnored);
     node_data->SetNameExplicitlyEmpty();
     return;
   }
 
-  node_data->role = ax::mojom::Role::kDialog;
   node_data->SetName(
       l10n_util::GetStringUTF8(IDS_ASH_QUICK_ANSWERS_VIEW_A11Y_NAME_TEXT));
 }
@@ -569,7 +569,7 @@ void QuickAnswersView::AddFrameButtons() {
             &QuickAnswersUiController::OnReportQueryButtonPressed,
             controller_)));
     dogfood_feedback_button_->SetTooltipText(l10n_util::GetStringUTF16(
-        IDS_ASH_QUICK_ANSWERS_SETTINGS_BUTTON_TOOLTIP_TEXT));
+        IDS_ASH_QUICK_ANSWERS_DOGFOOD_FEEDBACK_BUTTON_TOOLTIP_TEXT));
   }
 
   settings_button_ = buttons_view->AddChildView(

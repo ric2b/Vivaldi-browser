@@ -1,13 +1,13 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/segmentation_platform/internal/execution/processing/feature_aggregator_impl.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "base/notreached.h"
 #include "base/numerics/clamped_math.h"
 #include "base/numerics/safe_conversions.h"
@@ -221,7 +221,7 @@ FeatureAggregatorImpl::FeatureAggregatorImpl() = default;
 
 FeatureAggregatorImpl::~FeatureAggregatorImpl() = default;
 
-std::vector<float> FeatureAggregatorImpl::Process(
+absl::optional<std::vector<float>> FeatureAggregatorImpl::Process(
     proto::SignalType signal_type,
     proto::Aggregation aggregation,
     uint64_t bucket_count,
@@ -264,6 +264,13 @@ std::vector<float> FeatureAggregatorImpl::Process(
     case proto::Aggregation::BUCKETED_CUMULATIVE_SUM:
       return BucketedCumulativeSumAggregation(
           signal_type, bucket_count, end_time, bucket_duration, samples);
+    case proto::Aggregation::LATEST_OR_DEFAULT:
+      if (samples.empty()) {
+        // If empty, then latest data cannot be found.
+        return absl::nullopt;
+      }
+      return std::vector<float>(
+          {static_cast<float>(samples[samples.size() - 1].second)});
   }
 }
 
@@ -275,10 +282,7 @@ void FeatureAggregatorImpl::FilterEnumSamples(
 
   auto new_end = std::remove_if(
       samples.begin(), samples.end(), [&accepted_enum_ids](Sample sample) {
-        auto found =
-            std::find(accepted_enum_ids.begin(), accepted_enum_ids.end(),
-                      sample.second) != accepted_enum_ids.end();
-        return !found;
+        return !base::Contains(accepted_enum_ids, sample.second);
       });
   samples.erase(new_end, samples.end());
 }

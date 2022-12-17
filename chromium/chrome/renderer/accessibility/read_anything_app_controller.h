@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,13 +71,16 @@ class ReadAnythingAppController
       read_anything::mojom::ReadAnythingThemePtr new_theme) override;
 
   // gin templates:
-  std::vector<ui::AXNodeID> ContentNodeIds();
+  std::vector<ui::AXNodeID> DisplayNodeIds();
+  SkColor BackgroundColor();
   std::string FontName();
   float FontSize();
   SkColor ForegroundColor();
-  SkColor BackgroundColor();
+  float LetterSpacing();
+  float LineSpacing();
   std::vector<ui::AXNodeID> GetChildren(ui::AXNodeID ax_node_id);
   std::string GetHtmlTag(ui::AXNodeID ax_node_id);
+  std::string GetLanguage(ui::AXNodeID ax_node_id);
   std::string GetTextContent(ui::AXNodeID ax_node_id);
   std::string GetUrl(ui::AXNodeID ax_node_id);
   void OnConnected();
@@ -104,9 +107,21 @@ class ReadAnythingAppController
   void SetThemeForTesting(const std::string& font_name,
                           float font_size,
                           SkColor foreground_color,
-                          SkColor background_color);
+                          SkColor background_color,
+                          int line_spacing,
+                          int letter_spacing);
+  double GetLetterSpacingValue(read_anything::mojom::Spacing letter_spacing);
+  double GetLineSpacingValue(read_anything::mojom::Spacing line_spacing);
 
   ui::AXNode* GetAXNode(ui::AXNodeID ax_node_id);
+
+  // Returns whether the node is part of the selection. Returns true for partial
+  // containment as well; it also returns true if part of the node is part of
+  // the selection (e.g. a node in which some children are part of the selection
+  // and others are not).
+  bool SelectionContainsNode(ui::AXNode* ax_node);
+
+  bool NodeIsContentNode(ui::AXNodeID ax_node_id);
 
   content::RenderFrame* render_frame_;
   mojo::Remote<read_anything::mojom::PageHandlerFactory> page_handler_factory_;
@@ -116,10 +131,19 @@ class ReadAnythingAppController
   // State
   std::unique_ptr<ui::AXTree> tree_;
   std::vector<ui::AXNodeID> content_node_ids_;
+  std::vector<ui::AXNodeID> selection_node_ids_;
+  bool has_selection_ = false;
+  ui::AXNode* start_node_ = nullptr;
+  ui::AXNode* end_node_ = nullptr;
+  int32_t start_offset_ = -1;
+  int32_t end_offset_ = -1;
+
+  SkColor background_color_;
   std::string font_name_;
   float font_size_;
   SkColor foreground_color_;
-  SkColor background_color_;
+  float letter_spacing_;
+  float line_spacing_;
 };
 
 #endif  // CHROME_RENDERER_ACCESSIBILITY_READ_ANYTHING_APP_CONTROLLER_H_

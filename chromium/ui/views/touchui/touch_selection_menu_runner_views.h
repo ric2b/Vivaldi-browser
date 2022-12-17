@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,7 @@ class VIEWS_EXPORT TouchSelectionMenuRunnerViews
   bool IsMenuAvailable(
       const ui::TouchSelectionMenuClient* client) const override;
   void CloseMenu() override;
-  void OpenMenu(ui::TouchSelectionMenuClient* client,
+  void OpenMenu(base::WeakPtr<ui::TouchSelectionMenuClient> client,
                 const gfx::Rect& anchor_rect,
                 const gfx::Size& handle_image_size,
                 aura::Window* context) override;

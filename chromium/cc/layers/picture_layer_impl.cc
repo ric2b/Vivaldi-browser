@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
+#include "cc/base/features.h"
 #include "cc/base/math_util.h"
 #include "cc/benchmarks/micro_benchmark_impl.h"
 #include "cc/debug/debug_colors.h"
@@ -276,8 +277,8 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
     if (high_res) {
       const float epsilon = 1.f;
       gfx::SizeF scaled_tiling_size(high_res->tiling_size());
-      scaled_tiling_size.Scale(1 / raster_contents_scale_.x(),
-                               1 / raster_contents_scale_.y());
+      scaled_tiling_size.InvScale(raster_contents_scale_.x(),
+                                  raster_contents_scale_.y());
       if (raster_contents_scale_.x() >= 1.f)
         DCHECK(std::abs(bounds().width() - scaled_tiling_size.width()) <
                epsilon);
@@ -1156,7 +1157,7 @@ bool PictureLayerImpl::ShouldDirectlyCompositeImage(float raster_scale) const {
   // this is the same set of operations that will happen when using the tiling
   // at that raster scale.
   gfx::RectF content_rect(gfx::ToEnclosingRect(scaled_bounds_rect));
-  content_rect.Scale(1 / raster_scale);
+  content_rect.InvScale(raster_scale);
 
   return std::abs(layer_bounds.width() - content_rect.width()) < 1.f &&
          std::abs(layer_bounds.height() - content_rect.height()) < 1.f;
@@ -1307,8 +1308,8 @@ void PictureLayerImpl::UpdateTilingsForRasterScaleAndTranslation(
 
   if (!high_res) {
     // We always need a high res tiling, so create one if it doesn't exist.
-    high_res = AddTiling(
-        gfx::AxisTransform2d(raster_contents_scale_, raster_translation));
+    high_res = AddTiling(gfx::AxisTransform2d::FromScaleAndTranslation(
+        raster_contents_scale_, raster_translation));
   } else if (high_res->may_contain_low_resolution_tiles()) {
     // If the tiling we find here was LOW_RESOLUTION previously, it may not be
     // fully rastered, so destroy the old tiles.
@@ -1375,12 +1376,27 @@ bool PictureLayerImpl::ShouldAdjustRasterScale() const {
 
   if (was_screen_space_transform_animating_ !=
       draw_properties().screen_space_transform_is_animating) {
-    // Skip adjusting raster scale when animations finish if we have a
-    // will-change: transform hint to preserve maximum resolution tiles
-    // needed.
-    if (draw_properties().screen_space_transform_is_animating ||
-        !AffectedByWillChangeTransformHint())
-      return true;
+    if (draw_properties().screen_space_transform_is_animating) {
+      // Entering animation.
+      // Skip adjusting raster scale if max animation scale already matches
+      // raster scale.
+      float maximum_animation_scale =
+          layer_tree_impl()->property_trees()->MaximumAnimationToScreenScale(
+              transform_tree_index());
+      if (!base::FeatureList::IsEnabled(
+              features::kAvoidRasterDuringElasticOverscroll) ||
+          (maximum_animation_scale != raster_contents_scale_.x() ||
+           maximum_animation_scale != raster_contents_scale_.y())) {
+        return true;
+      }
+    } else {
+      // Exiting animation.
+      // Skip adjusting raster scale when animations finish if we have a
+      // will-change: transform hint to preserve maximum resolution tiles
+      // needed.
+      if (!AffectedByWillChangeTransformHint())
+        return true;
+    }
   }
 
   bool is_pinching = layer_tree_impl()->PinchGestureActive();
@@ -1708,10 +1724,9 @@ bool PictureLayerImpl::CalculateRasterTranslation(
   static constexpr float kScaleErrorThreshold = kPixelErrorThreshold / 10000;
   auto is_raster_scale = [this](const gfx::Transform& transform) -> bool {
     // The matrix has the X scale at (0,0), and the Y scale at (1,1).
-    return std::abs(transform.matrix().rc(0, 0) - raster_contents_scale_.x()) <=
-               kScaleErrorThreshold &&
-           std::abs(transform.matrix().rc(1, 1) - raster_contents_scale_.y()) <=
-               kScaleErrorThreshold;
+    gfx::Vector2dF scale_diff = transform.To2dScale() - raster_contents_scale_;
+    return std::abs(scale_diff.x()) <= kScaleErrorThreshold &&
+           std::abs(scale_diff.y()) <= kScaleErrorThreshold;
   };
   if (!is_raster_scale(screen_transform) || !is_raster_scale(draw_transform))
     return false;
@@ -1719,10 +1734,12 @@ bool PictureLayerImpl::CalculateRasterTranslation(
   // Extract the fractional part of layer origin in the screen space and in the
   // target space.
   auto fraction = [](float f) -> float { return f - floorf(f); };
-  float screen_x_fraction = fraction(screen_transform.matrix().rc(0, 3));
-  float screen_y_fraction = fraction(screen_transform.matrix().rc(1, 3));
-  float target_x_fraction = fraction(draw_transform.matrix().rc(0, 3));
-  float target_y_fraction = fraction(draw_transform.matrix().rc(1, 3));
+  gfx::Vector2dF screen_translation = screen_transform.To2dTranslation();
+  float screen_x_fraction = fraction(screen_translation.x());
+  float screen_y_fraction = fraction(screen_translation.y());
+  gfx::Vector2dF draw_translation = draw_transform.To2dTranslation();
+  float target_x_fraction = fraction(draw_translation.x());
+  float target_y_fraction = fraction(draw_translation.y());
 
   // If the origin is different in the screen space and in the target space,
   // it means the render target is not aligned to physical pixels, and the

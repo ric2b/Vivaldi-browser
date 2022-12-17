@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,17 +55,6 @@ class WebsiteLoginManager {
   virtual void GetPasswordForLogin(
       const Login& login,
       base::OnceCallback<void(bool, std::string)> callback) = 0;
-
-  // Deletes the password for |login|.
-  virtual void DeletePasswordForLogin(
-      const Login& login,
-      base::OnceCallback<void(bool)> callback) = 0;
-
-  // Edits the password for |login|.
-  virtual void EditPasswordForLogin(
-      const Login& login,
-      const std::string& new_password,
-      base::OnceCallback<void(bool)> callback) = 0;
 
   // Read the last date a password was used for |login|. In case no match is
   // found for the given login returns nullptr.

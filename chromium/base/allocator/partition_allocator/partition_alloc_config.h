@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,8 +20,8 @@ static_assert(sizeof(void*) == 8, "");
 static_assert(sizeof(void*) != 8, "");
 #endif  // defined(ARCH_CPU_64_BITS) && !BUILDFLAG(IS_NACL)
 
-// PCScan supports 64 bits only.
-#if defined(PA_HAS_64_BITS_POINTERS)
+// PCScan supports 64 bits only and is disabled outside Chromium.
+#if defined(PA_HAS_64_BITS_POINTERS) && BUILDFLAG(STARSCAN)
 #define PA_ALLOW_PCSCAN
 #endif
 
@@ -31,18 +31,18 @@ static_assert(sizeof(void*) != 8, "");
 #endif
 
 #if defined(PA_HAS_64_BITS_POINTERS) && (BUILDFLAG(IS_IOS) || BUILDFLAG(IS_WIN))
-// Use dynamically sized GigaCage. This allows to query the size at run-time,
-// before initialization, instead of using a hardcoded constexpr.
+// Allow PA to select an alternate pool size at run-time before initialization,
+// rather than using a single constexpr value.
 //
-// This is needed on iOS because iOS test processes can't handle a large cage
+// This is needed on iOS because iOS test processes can't handle large pools
 // (see crbug.com/1250788).
 //
 // This is needed on Windows, because OS versions <8.1 incur commit charge even
-// on reserved address space, thus don't handle large cage well (see
+// on reserved address space, thus don't handle large pools well (see
 // crbug.com/1101421 and crbug.com/1217759).
 //
 // This setting is specific to 64-bit, as 32-bit has a different implementation.
-#define PA_USE_DYNAMICALLY_SIZED_GIGA_CAGE
+#define PA_DYNAMICALLY_SELECT_POOL_SIZE
 #endif  // defined(PA_HAS_64_BITS_POINTERS) &&
         // (BUILDFLAG(IS_IOS) || BUILDFLAG(IS_WIN))
 
@@ -56,7 +56,7 @@ static_assert(sizeof(void*) != 8, "");
 #endif  // defined(PA_HAS_64_BITS_POINTERS) &&
         // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID))
 
-#if defined(PA_HAS_64_BITS_POINTERS)
+#if defined(PA_HAS_64_BITS_POINTERS) && BUILDFLAG(STARSCAN)
 // Use card table to avoid races for PCScan configuration without safepoints.
 // The card table provides the guaranteee that for a marked card the underling
 // super-page is fully initialized.
@@ -114,7 +114,8 @@ static_assert(sizeof(void*) != 8, "");
 // Too expensive for official builds, as it adds cache misses to all
 // allocations. On the other hand, we want wide metrics coverage to get
 // realistic profiles.
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && !defined(OFFICIAL_BUILD)
+#if BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && \
+    !defined(OFFICIAL_BUILD)
 #define PA_THREAD_CACHE_ALLOC_STATS
 #endif
 
@@ -138,7 +139,7 @@ static_assert(sizeof(void*) != 8, "");
 #endif
 
 // Specifies whether allocation extras need to be added.
-#if BUILDFLAG(PA_DCHECK_IS_ON) || BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(PA_DCHECK_IS_ON) || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 #define PA_EXTRAS_REQUIRED
 #endif
 
@@ -173,7 +174,8 @@ static_assert(sizeof(void*) != 8, "");
 // - BUILDFLAG(PA_DCHECK_IS_ON) due to runtime cost
 // - thread_local TLS to simplify the implementation
 // - Not on Android due to bot failures
-#if BUILDFLAG(PA_DCHECK_IS_ON) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && \
+#if BUILDFLAG(PA_DCHECK_IS_ON) &&                          \
+    BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && \
     defined(PA_THREAD_LOCAL_TLS) && !BUILDFLAG(IS_ANDROID)
 #define PA_HAS_ALLOCATION_GUARD
 #endif
@@ -201,7 +203,8 @@ constexpr bool kUseLazyCommit = false;
 
 // PartitionAlloc uses PartitionRootEnumerator to acquire all
 // PartitionRoots at BeforeFork and to release at AfterFork.
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_HAS_ATFORK_HANDLER)
+#if BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && \
+    defined(PA_HAS_ATFORK_HANDLER)
 #define PA_USE_PARTITION_ROOT_ENUMERATOR
 #endif
 
@@ -243,10 +246,33 @@ constexpr bool kUseLazyCommit = false;
 //
 // Only applicable to code with 64-bit pointers. Currently conflicts with true
 // hardware MTE.
-#if BUILDFLAG(USE_MTE_CHECKED_PTR) && defined(PA_HAS_64_BITS_POINTERS) && \
-    !defined(PA_HAS_MEMORY_TAGGING)
-#define PA_USE_MTE_CHECKED_PTR_WITH_64_BITS_POINTERS
-#endif  // BUILDFLAG(USE_MTE_CHECKED_PTR) && defined(PA_HAS_64_BITS_POINTERS) &&
-        // !defined(PA_HAS_MEMORY_TAGGING)
+#if BUILDFLAG(ENABLE_MTE_CHECKED_PTR_SUPPORT) && \
+    defined(PA_HAS_64_BITS_POINTERS) && !defined(PA_HAS_MEMORY_TAGGING)
+#define PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS
+#endif  // BUILDFLAG(ENABLE_MTE_CHECKED_PTR_SUPPORT) &&
+        // defined(PA_HAS_64_BITS_POINTERS) && !defined(PA_HAS_MEMORY_TAGGING)
+
+// Enable shadow metadata.
+//
+// With this flag, shadow pools will be mapped, on which writable shadow
+// metadatas are placed, and the real metadatas are set to read-only instead.
+// This feature is only enabled with 64-bit environment because pools work
+// differently with 32-bits pointers (see glossary).
+#if BUILDFLAG(ENABLE_SHADOW_METADATA_FOR_64_BITS_POINTERS) && \
+    defined(PA_HAS_64_BITS_POINTERS)
+#define PA_ENABLE_SHADOW_METADATA
+#endif
+
+// According to crbug.com/1349955#c24, macOS 11 has a bug where they asset that
+// malloc_size() of an allocation is equal to the requested size. This is
+// generally not true. The assert passed only because it happened to be true for
+// the sizes they requested. BRP changes that, hence can't be deployed without a
+// workaround.
+//
+// The bug has been fixed in macOS 12. Here we can only check the platform, and
+// the version is checked dynamically later.
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) && BUILDFLAG(IS_MAC)
+#define PA_ENABLE_MAC11_MALLOC_SIZE_HACK
+#endif
 
 #endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_PARTITION_ALLOC_CONFIG_H_

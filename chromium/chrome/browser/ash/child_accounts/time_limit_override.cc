@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,7 +94,7 @@ absl::optional<TimeLimitOverride> TimeLimitOverride::MostRecentFromList(
 
   // The most recent override created.
   absl::optional<TimeLimitOverride> last_override;
-  for (const base::Value& override_value : list->GetListDeprecated()) {
+  for (const base::Value& override_value : list->GetList()) {
     absl::optional<TimeLimitOverride> current_override =
         FromDictionary(&override_value.GetDict());
     if (!current_override.has_value()) {

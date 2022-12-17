@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -209,8 +209,8 @@ class SharedStorageManager {
                             bool perform_storage_cleanup = false);
 
   // Fetches a vector of `mojom::StorageUsageInfoPtr`, with one
-  // `mojom::StorageUsageInfoPtr` for each origin currently using shared storage
-  // in this profile. Called by
+  // `mojom::StorageUsageInfoPtr` for each origin currently using shared
+  // storage in this profile. Called by
   // `browsing_data::SharedStorageHelper::StartFetching`. If
   // `exclude_empty_origins` is true, then only those with positive `length` are
   // included in the vector.

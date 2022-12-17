@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,8 +16,7 @@
 #include "remoting/protocol/jingle_messages.h"
 #include "remoting/protocol/transport.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class ChannelMultiplexer;
 class PseudoTcpChannelFactory;
@@ -113,7 +112,6 @@ class IceTransport : public Transport,
   base::WeakPtrFactory<IceTransport> weak_factory_{this};
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_ICE_TRANSPORT_H_

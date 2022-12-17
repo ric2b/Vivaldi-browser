@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #ifndef IOS_WEB_PUBLIC_UI_CONTEXT_MENU_PARAMS_H_
@@ -44,12 +44,15 @@ struct ContextMenuParams {
   // The view in which to present the menu.
   UIView* view;
 
-  // The location in |view| to present the menu.
+  // The location in `view` to present the menu.
   CGPoint location;
 
   // The text associated with the link or text element. It is either nil or
   // nonempty (it can not be empty).
   NSString* text;
+
+  // The text associated with the selected character after a long press.
+  NSString* surrounding_text;
 
   // The text for the "title" attribute of the HTML element. Can be null.
   NSString* title_attribute;
@@ -59,6 +62,9 @@ struct ContextMenuParams {
 
   // The offset in text where the tap occurs. Can be null = 0.
   double text_offset;
+
+  // The offset in surrounding_text where the long press occurs. Can be 0.
+  double surrounding_text_offset;
 };
 
 }  // namespace web

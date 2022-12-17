@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,10 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_util.h"
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
+#include "chrome/browser/ui/app_list/chrome_app_list_model_updater.h"
 #include "chrome/common/apps/platform_apps/api/enterprise_remote_apps.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/services/app_service/public/cpp/menu.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -248,6 +250,11 @@ RemoteAppsError RemoteAppsManager::DeleteApp(const std::string& id) {
   return RemoteAppsError::kNone;
 }
 
+void RemoteAppsManager::SortLauncherWithRemoteAppsFirst() {
+  static_cast<ChromeAppListModelUpdater*>(model_updater_)
+      ->RequestAppListSort(AppListSortOrder::kAlphabeticalEphemeralAppFirst);
+}
+
 std::string RemoteAppsManager::AddFolder(const std::string& folder_name,
                                          bool add_to_front) {
   const RemoteAppsModel::FolderInfo& folder_info =
@@ -353,12 +360,11 @@ gfx::ImageSkia RemoteAppsManager::GetPlaceholderIcon(const std::string& id,
   return icon;
 }
 
-apps::mojom::MenuItemsPtr RemoteAppsManager::GetMenuModel(
-    const std::string& id) {
-  apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
+apps::MenuItems RemoteAppsManager::GetMenuModel(const std::string& id) {
+  apps::MenuItems menu_items;
   // TODO(b/236785623): Temporary string for menu item.
   apps::AddCommandItem(ash::LAUNCH_NEW, IDS_APP_CONTEXT_MENU_ACTIVATE_ARC,
-                       &menu_items);
+                       menu_items);
   return menu_items;
 }
 

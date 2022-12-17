@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <cstdint>
 
 #include "ipcz/ipcz.h"
+#include "ipcz/operation_context.h"
 #include "third_party/abseil-cpp/absl/container/inlined_vector.h"
 
 namespace ipcz {
@@ -51,9 +52,24 @@ class TrapSet {
 
   // Indicates whether any installed traps in this set require monitoring of
   // remote queue state.
-  bool need_remote_state() const {
-    return num_traps_monitoring_remote_state_ > 0;
+  bool need_remote_parcels() const {
+    return num_traps_monitoring_remote_parcels_ > 0;
   }
+  bool need_remote_bytes() const {
+    return num_traps_monitoring_remote_bytes_ > 0;
+  }
+  bool need_remote_state() const {
+    return need_remote_parcels() || need_remote_bytes();
+  }
+
+  // Returns the set of trap condition flags within `conditions` that would be
+  // raised right now if a trap were installed to watch for them, given
+  // `current_status` as the status of the portal being watched. If this returns
+  // zero (IPCZ_NO_FLAGS), then no watched conditions are satisfied and a
+  // corresponding call to Add() would succeed.
+  static IpczTrapConditionFlags GetSatisfiedConditions(
+      const IpczTrapConditions& conditions,
+      const IpczPortalStatus& current_status);
 
   // Attempts to install a new trap in the set. This effectively implements
   // the ipcz Trap() API. If `conditions` are already met, returns
@@ -70,13 +86,15 @@ class TrapSet {
   // If the state change is interesting to any trap in the set, an appropriate
   // event may be appended to `dispatcher` for imminent dispatch and the trap is
   // removed from the set before returning.
-  void UpdatePortalStatus(const IpczPortalStatus& status,
+  void UpdatePortalStatus(const OperationContext& context,
+                          const IpczPortalStatus& status,
                           UpdateReason reason,
                           TrapEventDispatcher& dispatcher);
 
   // Immediately removes all traps from the set. Every trap present appends an
   // IPCZ_TRAP_REMOVED event to `dispatcher` before removal.
-  void RemoveAll(TrapEventDispatcher& dispatcher);
+  void RemoveAll(const OperationContext& context,
+                 TrapEventDispatcher& dispatcher);
 
  private:
   struct Trap {
@@ -92,7 +110,8 @@ class TrapSet {
 
   using TrapList = absl::InlinedVector<Trap, 4>;
   TrapList traps_;
-  size_t num_traps_monitoring_remote_state_ = 0;
+  size_t num_traps_monitoring_remote_parcels_ = 0;
+  size_t num_traps_monitoring_remote_bytes_ = 0;
   IpczPortalStatus last_known_status_ = {.size = sizeof(last_known_status_)};
 };
 

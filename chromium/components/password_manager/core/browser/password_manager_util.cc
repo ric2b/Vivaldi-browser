@@ -1,10 +1,9 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/password_manager/core/browser/password_manager_util.h"
 
-#include <algorithm>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -111,15 +110,15 @@ void TrimUsernameOnlyCredentials(
                 });
 
   // Set "skip_zero_click" on federated credentials.
-  std::for_each(android_credentials->begin(), android_credentials->end(),
-                [](const std::unique_ptr<PasswordForm>& form) {
-                  if (form->scheme == PasswordForm::Scheme::kUsernameOnly)
-                    form->skip_zero_click = true;
-                });
+  base::ranges::for_each(
+      *android_credentials, [](const std::unique_ptr<PasswordForm>& form) {
+        if (form->scheme == PasswordForm::Scheme::kUsernameOnly)
+          form->skip_zero_click = true;
+      });
 }
 
-bool IsLoggingActive(const password_manager::PasswordManagerClient* client) {
-  const autofill::LogManager* log_manager = client->GetLogManager();
+bool IsLoggingActive(password_manager::PasswordManagerClient* client) {
+  autofill::LogManager* log_manager = client->GetLogManager();
   return log_manager && log_manager->IsLoggingActive();
 }
 
@@ -139,12 +138,13 @@ bool ManualPasswordGenerationEnabled(
 
 bool ShowAllSavedPasswordsContextMenuEnabled(
     password_manager::PasswordManagerDriver* driver) {
-  password_manager::PasswordManager* password_manager =
+  password_manager::PasswordManagerInterface* password_manager =
       driver ? driver->GetPasswordManager() : nullptr;
   if (!password_manager)
     return false;
 
-  password_manager::PasswordManagerClient* client = password_manager->client();
+  password_manager::PasswordManagerClient* client =
+      password_manager->GetClient();
   if (!client ||
       !client->IsFillingFallbackEnabled(driver->GetLastCommittedURL()))
     return false;
@@ -389,11 +389,46 @@ PasswordForm MakeNormalizedBlocklistedForm(
   return result;
 }
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+bool ShouldBiometricAuthenticationForFillingToggleBeVisible(
+    const PrefService* local_state) {
+  return local_state->GetBoolean(
+             password_manager::prefs::kHadBiometricsAvailable) &&
+         base::FeatureList::IsEnabled(
+             password_manager::features::kBiometricAuthenticationForFilling);
+}
+
+bool ShouldShowBiometricAuthenticationBeforeFillingPromo(
+    password_manager::PasswordManagerClient* client) {
+  return client && client->GetBiometricAuthenticator() &&
+         client->GetBiometricAuthenticator()->CanAuthenticate(
+             device_reauth::BiometricAuthRequester::kAutofillSuggestion) &&
+         base::FeatureList::IsEnabled(
+             password_manager::features::kBiometricAuthenticationForFilling) &&
+         !client->GetPrefs()->GetBoolean(
+             password_manager::prefs::kBiometricAuthenticationBeforeFilling);
+}
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+
 bool CanUseBiometricAuth(device_reauth::BiometricAuthenticator* authenticator,
-                         device_reauth::BiometricAuthRequester requester) {
+                         device_reauth::BiometricAuthRequester requester,
+                         password_manager::PasswordManagerClient* client) {
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  if (!client || !client->GetLocalStatePrefs() || !client->GetPrefs() ||
+      !authenticator) {
+    return false;
+  }
+  if (authenticator->CanAuthenticate(requester)) {
+    client->GetLocalStatePrefs()->SetBoolean(
+        password_manager::prefs::kHadBiometricsAvailable, true);
+  }
+  return client->GetPasswordFeatureManager()
+      ->IsBiometricAuthenticationBeforeFillingEnabled();
+#else
   return authenticator && authenticator->CanAuthenticate(requester) &&
          base::FeatureList::IsEnabled(
              password_manager::features::kBiometricTouchToFill);
+#endif
 }
 
 GURL StripAuthAndParams(const GURL& gurl) {
@@ -421,7 +456,9 @@ GURL ConstructGURLWithScheme(const std::string& url) {
 }
 
 bool IsValidPasswordURL(const GURL& url) {
-  return url.is_valid() && url.SchemeIsHTTPOrHTTPS();
+  return url.is_valid() &&
+         (url.SchemeIsHTTPOrHTTPS() ||
+          password_manager::IsValidAndroidFacetURI(url.spec()));
 }
 
 std::string GetSignonRealm(const GURL& url) {

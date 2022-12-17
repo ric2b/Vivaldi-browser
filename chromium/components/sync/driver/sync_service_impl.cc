@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,6 +53,10 @@ namespace syncer {
 
 namespace {
 
+BASE_FEATURE(kListenForInvalidationsInLocalSync,
+             "ListenForInvalidationsInLocalSync",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // The initial state of sync, for the Sync.InitialState histogram. Even if
 // this value is CAN_START, sync startup might fail for reasons that we may
 // want to consider logging in the future, such as a passphrase needed for
@@ -71,7 +75,8 @@ enum SyncInitialState {
 };
 
 void RecordSyncInitialState(SyncService::DisableReasonSet disable_reasons,
-                            bool first_setup_complete) {
+                            bool first_setup_complete,
+                            bool is_regular_profile_for_uma) {
   SyncInitialState sync_state = CAN_START;
   if (disable_reasons.Has(SyncService::DISABLE_REASON_NOT_SIGNED_IN)) {
     sync_state = NOT_SIGNED_IN;
@@ -88,6 +93,9 @@ void RecordSyncInitialState(SyncService::DisableReasonSet disable_reasons,
     sync_state = NEEDS_CONFIRMATION;
   }
   base::UmaHistogramEnumeration("Sync.InitialState", sync_state);
+  if (is_regular_profile_for_uma) {
+    base::UmaHistogramEnumeration("Sync.InitialState2", sync_state);
+  }
 }
 
 EngineComponentsFactory::Switches EngineSwitchesFromCommandLine() {
@@ -156,6 +164,7 @@ SyncServiceImpl::SyncServiceImpl(InitParams init_params)
       create_http_post_provider_factory_cb_(
           base::BindRepeating(&CreateHttpBridgeFactory)),
       start_behavior_(init_params.start_behavior),
+      is_regular_profile_for_uma_(init_params.is_regular_profile_for_uma),
       is_setting_sync_requested_(false),
       should_record_trusted_vault_error_shown_on_startup_(true),
 #if BUILDFLAG(IS_ANDROID)
@@ -171,21 +180,16 @@ SyncServiceImpl::SyncServiceImpl(InitParams init_params)
   // shouldn't be instantiated.
   DCHECK(IsSyncAllowedByFlag());
 
-  bool should_wait_for_policies =
-      base::FeatureList::IsEnabled(kSyncRequiresPoliciesLoaded);
-
   startup_controller_ = std::make_unique<StartupController>(
       base::BindRepeating(&SyncServiceImpl::GetPreferredDataTypes,
                           base::Unretained(this)),
       base::BindRepeating(&SyncServiceImpl::IsEngineAllowedToRun,
                           base::Unretained(this)),
       base::BindRepeating(&SyncServiceImpl::StartUpSlowEngineComponents,
-                          base::Unretained(this)),
-      should_wait_for_policies ? init_params.policy_service.get() : nullptr);
+                          base::Unretained(this)));
 
   sync_stopped_reporter_ = std::make_unique<SyncStoppedReporter>(
-      sync_service_url_, MakeUserAgentForSync(channel_), url_loader_factory_,
-      SyncStoppedReporter::ResultCallback());
+      sync_service_url_, MakeUserAgentForSync(channel_), url_loader_factory_);
 
   if (identity_manager_)
     identity_manager_->AddObserver(this);
@@ -221,7 +225,6 @@ void SyncServiceImpl::Initialize() {
     SyncInvalidationsService* sync_invalidations_service =
         sync_client_->GetSyncInvalidationsService();
     if (sync_invalidations_service) {
-      sync_invalidations_service->SetActive(IsSignedIn());
       // Trigger a refresh when additional data types get enabled for
       // invalidations. This is needed to get the latest data after subscribing
       // for the updates.
@@ -244,7 +247,8 @@ void SyncServiceImpl::Initialize() {
   // RegisterForAuthNotifications(), because before that the authenticated
   // account isn't initialized.
   RecordSyncInitialState(GetDisableReasons(),
-                         user_settings_->IsFirstSetupComplete());
+                         user_settings_->IsFirstSetupComplete(),
+                         is_regular_profile_for_uma_);
 
   if (!HasSyncConsent()) {
     // Remove after 11/2021. Migration logic to set SyncRequested to false if
@@ -268,7 +272,6 @@ void SyncServiceImpl::Initialize() {
 }
 
 void SyncServiceImpl::StartSyncingWithServer() {
-  DCHECK(startup_controller_->ArePoliciesReady());
   if (engine_)
     engine_->StartSyncingWithServer();
   if (IsLocalSyncEnabled()) {
@@ -302,13 +305,6 @@ void SyncServiceImpl::GetThrottledDataTypesForTest(
   engine_->GetThrottledDataTypesForTest(std::move(cb));
 }
 
-void SyncServiceImpl::TriggerPoliciesLoadedForTest() {
-  if (!startup_controller_->ArePoliciesReady()) {
-    startup_controller_->OnFirstPoliciesLoaded(
-        policy::PolicyDomain::POLICY_DOMAIN_CHROME);
-  }
-}
-
 bool SyncServiceImpl::IsDataTypeControllerRunningForTest(ModelType type) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto iter = data_type_controllers_.find(type);
@@ -337,14 +333,6 @@ void SyncServiceImpl::AccountStateChanged() {
     } else {
       ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
     }
-  }
-
-  // Propagate the (potentially) changed account state to the invalidations
-  // system.
-  SyncInvalidationsService* sync_invalidations_service =
-      sync_client_->GetSyncInvalidationsService();
-  if (sync_invalidations_service) {
-    sync_invalidations_service->SetActive(IsSignedIn());
   }
 }
 
@@ -515,12 +503,26 @@ void SyncServiceImpl::ResetEngine(ShutdownReason shutdown_reason,
   }
 
   base::UmaHistogramEnumeration("Sync.ResetEngineReason", reset_reason);
+  SyncInvalidationsService* sync_invalidations_service =
+      sync_client_->GetSyncInvalidationsService();
   switch (shutdown_reason) {
     case ShutdownReason::STOP_SYNC_AND_KEEP_DATA:
-    case ShutdownReason::DISABLE_SYNC_AND_CLEAR_DATA:
+      if (sync_invalidations_service) {
+        sync_invalidations_service->StopListening();
+      }
       RemoveClientFromServer();
       break;
+    case ShutdownReason::DISABLE_SYNC_AND_CLEAR_DATA: {
+      if (sync_invalidations_service) {
+        sync_invalidations_service->StopListeningPermanently();
+      }
+      RemoveClientFromServer();
+      break;
+    }
     case ShutdownReason::BROWSER_SHUTDOWN_AND_KEEP_DATA:
+      if (sync_invalidations_service) {
+        sync_invalidations_service->StopListening();
+      }
       break;
   }
 
@@ -828,8 +830,15 @@ void SyncServiceImpl::OnActionableError(const SyncProtocolError& error) {
       break;
     case DISABLE_SYNC_ON_CLIENT:
       if (error.error_type == NOT_MY_BIRTHDAY) {
-        UMA_HISTOGRAM_ENUMERATION("Sync.StopSource", BIRTHDAY_ERROR,
-                                  STOP_SOURCE_LIMIT);
+        base::UmaHistogramEnumeration("Sync.StopSource", BIRTHDAY_ERROR,
+                                      STOP_SOURCE_LIMIT);
+      }
+
+      if (error.error_type == NOT_MY_BIRTHDAY ||
+          error.error_type == ENCRYPTION_OBSOLETE) {
+        base::UmaHistogramEnumeration(
+            "Sync.PassphraseTypeUponNotMyBirthdayOrEncryptionObsolete",
+            crypto_.GetPassphraseType());
       }
 
       // Security domain state might be reset, reset local state as well.
@@ -926,9 +935,19 @@ void SyncServiceImpl::OnConfigureDone(
   // Update configured data types and start handling incoming invalidations. The
   // order is important to guarantee that data types are configured to prevent
   // filtering out invalidations. If there are incoming invalidations, they will
-  // be handled immediately after StartHandlingInvalidations() call.
+  // be handled immediately after StartListening() call.
   UpdateDataTypesForInvalidations();
   engine_->StartHandlingInvalidations();
+  SyncInvalidationsService* invalidations_service =
+      sync_client_->GetSyncInvalidationsService();
+  if (invalidations_service) {
+    // Do not start listening for invalidations since they are not supported for
+    // local sync.
+    if (!IsLocalSyncEnabled() ||
+        base::FeatureList::IsEnabled(kListenForInvalidationsInLocalSync)) {
+      invalidations_service->StartListening();
+    }
+  }
 
   if (migrator_.get() && migrator_->state() != BackendMigrator::IDLE) {
     // Migration in progress.  Let the migrator know we just finished
@@ -1119,8 +1138,18 @@ ModelTypeSet SyncServiceImpl::GetPreferredDataTypes() const {
 
 ModelTypeSet SyncServiceImpl::GetActiveDataTypes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!data_type_manager_ || GetAuthError().IsPersistentError())
+
+  if (!data_type_manager_) {
     return ModelTypeSet();
+  }
+
+  if (GetAuthError().IsPersistentError()) {
+    // If kSyncPauseUponAnyPersistentAuthError is enabled, a persistent auth
+    // error leads to PAUSED, which implies data_type_manager_==null above.
+    DCHECK(!base::FeatureList::IsEnabled(kSyncPauseUponAnyPersistentAuthError));
+    return ModelTypeSet();
+  }
+
   return data_type_manager_->GetActiveDataTypes();
 }
 
@@ -1201,15 +1230,20 @@ void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
             UserSelectableTypeToCanonicalModelType(type));
         base::UmaHistogramEnumeration("Sync.CustomSync3", canonical_model_type);
       }
+    }
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+    bool sync_everything_os = sync_prefs_.IsSyncAllOsTypesEnabled();
+    base::UmaHistogramBoolean("Sync.SyncEverythingOS", sync_everything_os);
+    if (!sync_everything_os) {
       for (UserSelectableOsType type : user_settings_->GetSelectedOsTypes()) {
         ModelTypeForHistograms canonical_model_type = ModelTypeHistogramValue(
             UserSelectableOsTypeToCanonicalModelType(type));
         base::UmaHistogramEnumeration("Sync.CustomOSSync",
                                       canonical_model_type);
       }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
 }
 
@@ -1305,10 +1339,9 @@ BackendMigrator* SyncServiceImpl::GetBackendMigratorForTest() {
   return migrator_.get();
 }
 
-std::unique_ptr<base::Value> SyncServiceImpl::GetTypeStatusMapForDebugging()
-    const {
+base::Value::List SyncServiceImpl::GetTypeStatusMapForDebugging() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  auto result = std::make_unique<base::ListValue>();
+  base::Value::List result;
 
   if (!engine_ || !engine_->IsInitialized()) {
     return result;
@@ -1325,7 +1358,7 @@ std::unique_ptr<base::Value> SyncServiceImpl::GetTypeStatusMapForDebugging()
   type_status_header.Set("num_live", "Live Entries");
   type_status_header.Set("message", "Message");
   type_status_header.Set("state", "State");
-  result->Append(base::Value(std::move(type_status_header)));
+  result.Append(base::Value(std::move(type_status_header)));
 
   for (const auto& [type, controller] : data_type_controllers_) {
     base::Value::Dict type_status;
@@ -1384,7 +1417,7 @@ std::unique_ptr<base::Value> SyncServiceImpl::GetTypeStatusMapForDebugging()
     type_status.Set("state",
                     DataTypeController::StateToString(controller->state()));
 
-    result->Append(base::Value(std::move(type_status)));
+    result.Append(base::Value(std::move(type_status)));
   }
   return result;
 }

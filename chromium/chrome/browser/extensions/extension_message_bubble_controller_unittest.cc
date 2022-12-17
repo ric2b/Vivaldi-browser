@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -529,7 +529,7 @@ TEST_F(ExtensionMessageBubbleTest, WipeoutControllerTest) {
   EXPECT_TRUE(controller->ShouldShow());
   suspicious_extensions = controller->GetExtensionList();
   ASSERT_EQ(1U, suspicious_extensions.size());
-  EXPECT_TRUE(u"Extension 1" == suspicious_extensions[0]);
+  EXPECT_EQ(u"Extension 1", suspicious_extensions[0]);
   bubble.set_controller(controller.get());
   bubble.Show();  // Simulate showing the bubble.
   EXPECT_EQ(0U, controller->link_click_count());
@@ -553,8 +553,8 @@ TEST_F(ExtensionMessageBubbleTest, WipeoutControllerTest) {
   EXPECT_TRUE(controller->ShouldShow());
   suspicious_extensions = controller->GetExtensionList();
   ASSERT_EQ(2U, suspicious_extensions.size());
-  EXPECT_TRUE(u"Extension 1" == suspicious_extensions[1]);
-  EXPECT_TRUE(u"Extension 2" == suspicious_extensions[0]);
+  EXPECT_EQ(u"Extension 1", suspicious_extensions[1]);
+  EXPECT_EQ(u"Extension 2", suspicious_extensions[0]);
   bubble.set_controller(controller.get());
   bubble.Show();  // Simulate showing the bubble.
   EXPECT_EQ(1U, controller->link_click_count());
@@ -587,8 +587,8 @@ TEST_F(ExtensionMessageBubbleTest, DevModeControllerTest) {
   std::vector<std::u16string> dev_mode_extensions =
       controller->GetExtensionList();
   ASSERT_EQ(2U, dev_mode_extensions.size());
-  EXPECT_TRUE(u"Extension 2" == dev_mode_extensions[0]);
-  EXPECT_TRUE(u"Extension 1" == dev_mode_extensions[1]);
+  EXPECT_EQ(u"Extension 2", dev_mode_extensions[0]);
+  EXPECT_EQ(u"Extension 1", dev_mode_extensions[1]);
   EXPECT_EQ(0U, controller->link_click_count());
   EXPECT_EQ(0U, controller->dismiss_click_count());
   EXPECT_EQ(0U, controller->action_click_count());
@@ -603,8 +603,8 @@ TEST_F(ExtensionMessageBubbleTest, DevModeControllerTest) {
   EXPECT_EQ(0U, controller->action_click_count());
   EXPECT_EQ(1U, controller->dismiss_click_count());
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId1) != NULL);
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId2) != NULL);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId1) != nullptr);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId2) != nullptr);
 
   // Do it again, but now press different button (Disable).
   bubble.set_action_on_show(
@@ -626,8 +626,8 @@ TEST_F(ExtensionMessageBubbleTest, DevModeControllerTest) {
   EXPECT_EQ(0U, controller->link_click_count());
   EXPECT_EQ(1U, controller->action_click_count());
   EXPECT_EQ(0U, controller->dismiss_click_count());
-  EXPECT_TRUE(registry->disabled_extensions().GetByID(kId1) != NULL);
-  EXPECT_TRUE(registry->disabled_extensions().GetByID(kId2) != NULL);
+  EXPECT_TRUE(registry->disabled_extensions().GetByID(kId1) != nullptr);
+  EXPECT_TRUE(registry->disabled_extensions().GetByID(kId2) != nullptr);
 
   // Re-enable the extensions (disabled by the action button above).
   service_->EnableExtension(kId1);
@@ -775,7 +775,7 @@ TEST_F(ExtensionMessageBubbleTest, SettingsApiControllerTest) {
     std::vector<std::u16string> override_extensions =
         controller->GetExtensionList();
     ASSERT_EQ(1U, override_extensions.size());
-    EXPECT_TRUE(u"Extension 2" == override_extensions[0]);
+    EXPECT_EQ(u"Extension 2", override_extensions[0]);
     EXPECT_EQ(0U, controller->link_click_count());
     EXPECT_EQ(0U, controller->dismiss_click_count());
     EXPECT_EQ(0U, controller->action_click_count());
@@ -935,7 +935,7 @@ TEST_F(ExtensionMessageBubbleTest,
   EXPECT_TRUE(controller->ShouldShow());
   suspicious_extensions = controller->GetExtensionList();
   ASSERT_EQ(1U, suspicious_extensions.size());
-  EXPECT_TRUE(u"Extension 1" == suspicious_extensions[0]);
+  EXPECT_EQ(u"Extension 1", suspicious_extensions[0]);
   bubble.set_controller(controller.get());
   bubble.set_action_on_show(FakeExtensionMessageBubble::BUBBLE_ACTION_IGNORE);
   bubble.Show();  // Simulate showing the bubble.
@@ -1071,9 +1071,9 @@ TEST_F(ExtensionMessageBubbleTest, MAYBE_ProxyOverriddenControllerTest) {
   EXPECT_EQ(1U, controller->dismiss_click_count());
   // No extension should have become disabled.
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId1) != NULL);
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId2) != NULL);
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId3) != NULL);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId1) != nullptr);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId2) != nullptr);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId3) != nullptr);
   // Only extension 2 should have been acknowledged.
   EXPECT_FALSE(controller->delegate()->HasBubbleInfoBeenAcknowledged(kId1));
   EXPECT_TRUE(controller->delegate()->HasBubbleInfoBeenAcknowledged(kId2));
@@ -1094,9 +1094,9 @@ TEST_F(ExtensionMessageBubbleTest, MAYBE_ProxyOverriddenControllerTest) {
   EXPECT_EQ(0U, controller->action_click_count());
   EXPECT_EQ(0U, controller->dismiss_click_count());
   // No extension should have become disabled.
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId1) != NULL);
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId2) != NULL);
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId3) != NULL);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId1) != nullptr);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId2) != nullptr);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId3) != nullptr);
   // Only extension 2 should have been acknowledged.
   EXPECT_FALSE(controller->delegate()->HasBubbleInfoBeenAcknowledged(kId1));
   EXPECT_TRUE(controller->delegate()->HasBubbleInfoBeenAcknowledged(kId2));
@@ -1119,9 +1119,9 @@ TEST_F(ExtensionMessageBubbleTest, MAYBE_ProxyOverriddenControllerTest) {
   EXPECT_EQ(1U, controller->action_click_count());
   EXPECT_EQ(0U, controller->dismiss_click_count());
   // Only extension 2 should have become disabled.
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId1) != NULL);
-  EXPECT_TRUE(registry->disabled_extensions().GetByID(kId2) != NULL);
-  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId3) != NULL);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId1) != nullptr);
+  EXPECT_TRUE(registry->disabled_extensions().GetByID(kId2) != nullptr);
+  EXPECT_TRUE(registry->enabled_extensions().GetByID(kId3) != nullptr);
 
   // No extension should have been acknowledged (it got disabled).
   EXPECT_FALSE(controller->delegate()->HasBubbleInfoBeenAcknowledged(kId1));
@@ -1129,15 +1129,12 @@ TEST_F(ExtensionMessageBubbleTest, MAYBE_ProxyOverriddenControllerTest) {
   EXPECT_FALSE(controller->delegate()->HasBubbleInfoBeenAcknowledged(kId3));
 
   // Clean up after ourselves.
-  service_->UninstallExtension(kId1,
-                               extensions::UNINSTALL_REASON_FOR_TESTING,
-                               NULL);
-  service_->UninstallExtension(kId2,
-                               extensions::UNINSTALL_REASON_FOR_TESTING,
-                               NULL);
-  service_->UninstallExtension(kId3,
-                               extensions::UNINSTALL_REASON_FOR_TESTING,
-                               NULL);
+  service_->UninstallExtension(kId1, extensions::UNINSTALL_REASON_FOR_TESTING,
+                               nullptr);
+  service_->UninstallExtension(kId2, extensions::UNINSTALL_REASON_FOR_TESTING,
+                               nullptr);
+  service_->UninstallExtension(kId3, extensions::UNINSTALL_REASON_FOR_TESTING,
+                               nullptr);
 }
 
 // Tests that a bubble outliving the associated browser object doesn't crash.

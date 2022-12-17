@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,8 @@ import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.app.appmenu.AppMenuPropertiesDelegateImpl;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
+import org.chromium.chrome.browser.app.creator.CreatorActivity;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
 import org.chromium.chrome.browser.feed.FeedFeatures;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedFaviconFetcher;
@@ -38,7 +39,7 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
-import org.vivaldi.browser.appmenu.AppMenuIconRowFooter;
+import org.vivaldi.browser.appmenu.AppMenuIconRow;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -51,7 +52,8 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     SnackbarManager mSnackbarManager;
 
     // Vivaldi
-    private final ObservableSupplier<BookmarkBridge> mBookmarkBridgeSupplier;
+    private final ObservableSupplier<BookmarkModel> mBookmarkModelSupplier;
+    private AppMenuIconRow mMenuBarView;
 
     public TabbedAppMenuPropertiesDelegate(Context context, ActivityTabProvider activityTabProvider,
             MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
@@ -59,21 +61,21 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
             AppMenuDelegate appMenuDelegate,
             OneshotSupplier<LayoutStateProvider> layoutStateProvider,
             OneshotSupplier<StartSurface> startSurfaceSupplier,
-            ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
+            ObservableSupplier<BookmarkModel> bookmarkModelSupplier,
             WebFeedSnackbarController.FeedLauncher feedLauncher,
             ModalDialogManager modalDialogManager, SnackbarManager snackbarManager,
             @NonNull OneshotSupplier<IncognitoReauthController>
                     incognitoReauthControllerOneshotSupplier) {
         super(context, activityTabProvider, multiWindowModeStateDispatcher, tabModelSelector,
                 toolbarManager, decorView, layoutStateProvider, startSurfaceSupplier,
-                bookmarkBridgeSupplier, incognitoReauthControllerOneshotSupplier);
+                bookmarkModelSupplier, incognitoReauthControllerOneshotSupplier);
         mAppMenuDelegate = appMenuDelegate;
         mFeedLauncher = feedLauncher;
         mModalDialogManager = modalDialogManager;
         mSnackbarManager = snackbarManager;
 
         // Vivaldi
-        mBookmarkBridgeSupplier = bookmarkBridgeSupplier;
+        mBookmarkModelSupplier = bookmarkModelSupplier;
     }
 
     private boolean shouldShowWebFeedMenuItem() {
@@ -93,7 +95,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     public int getFooterResourceId() {
         // Vivaldi
         if (!mIsTablet && !VivaldiUtils.isTopToolbarOn())
-            return R.layout.icon_row_menu_footer;
+            return R.layout.icon_row_menu_layout;
 
         if (shouldShowWebFeedMenuItem()) {
             return R.layout.web_feed_main_menu_item;
@@ -107,23 +109,39 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
             ((WebFeedMainMenuItem) view)
                     .initialize(mActivityTabProvider.get(), appMenuHandler,
                             WebFeedFaviconFetcher.createDefault(), mFeedLauncher,
-                            mModalDialogManager, mSnackbarManager, new CrowButtonDelegateImpl());
+                            mModalDialogManager, mSnackbarManager, new CrowButtonDelegateImpl(),
+                            CreatorActivity.class);
         }
 
-        if (ChromeApplicationImpl.isVivaldi() && view instanceof AppMenuIconRowFooter) {
-                ((AppMenuIconRowFooter) view).initialize(appMenuHandler,
+        if (ChromeApplicationImpl.isVivaldi() && view instanceof AppMenuIconRow) {
+                ((AppMenuIconRow) view).initialize(appMenuHandler,
+                        mBookmarkModelSupplier,
                                                          mActivityTabProvider.get(),
                                                          mAppMenuDelegate);
+            mMenuBarView = (AppMenuIconRow)view;
         }
     }
 
     @Override
     public int getHeaderResourceId() {
+        if (!mIsTablet && VivaldiUtils.isTopToolbarOn())
+            return R.layout.icon_row_menu_layout;
+
         return 0;
     }
 
+    // Vivaldi
     @Override
-    public void onHeaderViewInflated(AppMenuHandler appMenuHandler, View view) {}
+    public void onHeaderViewInflated(AppMenuHandler appMenuHandler, View view) {
+        if (!mIsTablet && VivaldiUtils.isTopToolbarOn()) {
+            ((AppMenuIconRow) view).initialize(appMenuHandler,
+                    mBookmarkModelSupplier,
+                    mActivityTabProvider.get(),
+                    mAppMenuDelegate);
+
+            mMenuBarView = (AppMenuIconRow)view;
+        }
+    }
 
     @Override
     public boolean shouldShowFooter(int maxMenuHeight) {
@@ -150,5 +168,27 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     @Override
     public boolean shouldShowIconBeforeItem() {
         return true;
+    }
+
+    // Vivaldi - Passes tab loading status to Vivaldi menu bar for updating refresh icon
+    @Override
+    public void loadingStateChanged(boolean isLoading) {
+        super.loadingStateChanged(isLoading);
+        if (mMenuBarView != null) mMenuBarView.loadingStateChanged(isLoading);
+    }
+
+    // Vivaldi
+    @Override
+    public boolean shouldShowHeader(int maxMenuHeight) {
+        if (ChromeApplicationImpl.isVivaldi()) {
+            boolean showHeader = VivaldiUtils.isTopToolbarOn();
+            // Check if we have a current tab; if not we are in the tab switcher and should not
+            // show a header (icon row menu).
+            showHeader &= (mActivityTabProvider != null
+                    && mActivityTabProvider.get() != null);
+            return showHeader;
+        }
+
+        return super.shouldShowHeader(maxMenuHeight);
     }
 }

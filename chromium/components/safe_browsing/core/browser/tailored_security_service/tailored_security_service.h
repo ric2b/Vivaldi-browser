@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -141,8 +141,7 @@ class TailoredSecurityService : public KeyedService {
   // After `kAccountTailoredSecurityUpdateTimestamp` is updated, we check the
   // true value of the account tailored security preference and run this
   // callback.
-  virtual void MaybeNotifySyncUser(bool is_enabled,
-                                   base::Time previous_update) = 0;
+  virtual void MaybeNotifySyncUser(bool is_enabled, base::Time previous_update);
 
   PrefService* prefs() { return prefs_; }
 

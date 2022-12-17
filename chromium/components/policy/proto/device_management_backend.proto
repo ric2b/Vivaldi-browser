@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,13 +23,14 @@ message LicenseType {
   enum LicenseTypeEnum {
     // Unknown/undefined
     UNDEFINED = 0;
-    // Chrome Device Management Perpetual, unused as 1 & 2 are in the same
-    // license pool.
+    // Chrome Device Management Perpetual
     CDM_PERPETUAL = 1;
-    // Chrome Device Management Annual, unused
+    // Chrome Device Management Annual
     CDM_ANNUAL = 2;
     // Chrome Kiosk
     KIOSK = 3;
+    // Chrome Enterprise bundled license
+    CDM_PACKAGED = 4;
   }
 
   optional LicenseTypeEnum license_type = 1;
@@ -1097,7 +1098,7 @@ message DiskLifetimeEstimation {
 }
 
 // Status of the single storage device
-// Next id: 27
+// Next id: 29
 message DiskInfo {
   optional string serial = 1;
   optional string manufacturer = 2;
@@ -1130,6 +1131,7 @@ message DiskInfo {
     // https://screenshot.googleplex.com/eZWNnV8qGnc
     uint32 emmc_oemid = 15;
     uint32 other_vendor = 16;
+    uint32 jedec_manfid = 27;
   }
 
   // The manufacturer-specific product identifier.
@@ -1151,6 +1153,7 @@ message DiskInfo {
     uint64 nvme_firmware_rev = 23;
     uint64 emmc_firmware_rev = 24;
     uint32 other_firmware_rev = 25;
+    uint32 ufs_firmware_rev = 28;
   }
 
   // The purpose of the device on the system.
@@ -2530,6 +2533,9 @@ message DeviceStateRetrievalResponse {
 
   // Initial device state if |restore_mode| is |RESTORE_MODE_NONE|.
   optional DeviceInitialEnrollmentStateResponse initial_state_response = 4;
+
+  // license type the device used in last enrollment
+  optional LicenseType license_type = 5;
 }
 
 // Request from device to server to retrieve the enrollment mode and domain for
@@ -2758,7 +2764,7 @@ message RemoteCommand {
   // params_dict}, where params_dict varies by routine.
   // |DEVICE_GET_DIAGNOSTIC_ROUTINE_UPDATE|: {"id" : id_integer, "command" :
   // command, "includeOutput" : include_output_bool}, where command must be a
-  // valid chromeos::cros_healthd::mojom::DiagnosticRoutineCommandEnum.
+  // valid `ash::cros_healthd::mojom::DiagnosticRoutineCommandEnum`.
   optional string payload = 4;
 
   // An identifier for the target this command is for. This is the same as

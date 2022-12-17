@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,8 @@ class BrowserAppShelfItemController : public ash::ShelfItemDelegate,
   void OnBrowserAppRemoved(const apps::BrowserAppInstance& instance) override;
 
  private:
+  using CommandToInstanceMap = base::flat_map<int, base::UnguessableToken>;
+
   // Gets a list of instances (a pair of app menu command ID and instance ID)
   // matching the predicate.
   std::vector<std::pair<int, base::UnguessableToken>> GetMatchingInstances(
@@ -90,7 +92,7 @@ class BrowserAppShelfItemController : public ash::ShelfItemDelegate,
   // association of instances to command IDs and to order the items by launch
   // time. The set of instances is usually under 10 items so a flat map is
   // sufficient.
-  base::flat_map<int, base::UnguessableToken> command_to_instance_map_;
+  CommandToInstanceMap command_to_instance_map_;
   int last_command_id_{0};
 
   base::ScopedObservation<apps::BrowserAppInstanceRegistry,

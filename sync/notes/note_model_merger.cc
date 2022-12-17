@@ -144,7 +144,8 @@ bool NodeSemanticsMatch(
     return false;
   }
 
-  if (remote_type == sync_pb::NotesSpecifics::NORMAL &&
+  if ((remote_type == sync_pb::NotesSpecifics::NORMAL ||
+       remote_type == sync_pb::NotesSpecifics::ATTACHMENT) &&
       (local_node->GetURL() != remote_url ||
        local_node->GetContent() != remote_content)) {
     return false;
@@ -176,7 +177,8 @@ bool CompareDuplicateUpdates(const UpdateResponseData& next_update,
   if (next_update.entity.specifics.notes().special_node_type() !=
       previous_update.entity.specifics.notes().special_node_type()) {
     // There are two entities, one of them is a folder and another one is a
-    // regular note. Prefer to save the folder as it may contain many notes.
+    // regular note or an attachment. Prefer to save the folder as it may
+    // contain many notes.
     return next_update.entity.specifics.notes().special_node_type() ==
            sync_pb::NotesSpecifics::FOLDER;
   }
@@ -380,10 +382,12 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
   DCHECK(!updates_per_parent_guid_iter->second.empty());
   DCHECK(guid.is_valid());
 
-  // Only folders may have descendants (ignore them otherwise). Treat
-  // permanent nodes as folders explicitly.
+  // Only folders and regular notes may have descendants (ignore them
+  // otherwise). Treat permanent nodes as folders explicitly.
   if (node.update_.entity.specifics.notes().special_node_type() !=
           sync_pb::NotesSpecifics::FOLDER &&
+      node.update_.entity.specifics.notes().special_node_type() !=
+          sync_pb::NotesSpecifics::NORMAL &&
       node.update_.entity.server_defined_unique_tag.empty()) {
     for (UpdateResponseData& child_update :
          updates_per_parent_guid_iter->second) {
@@ -402,8 +406,20 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
               guid.AsLowercaseString());
     DCHECK(IsValidNotesSpecifics(child_update.entity.specifics.notes()));
 
-    node.children_.push_back(BuildTree(std::move(child_update), max_depth - 1,
-                                       updates_per_parent_guid));
+    if ((node.update_.entity.specifics.notes().special_node_type() ==
+             sync_pb::NotesSpecifics::FOLDER &&
+         child_update.entity.specifics.notes().special_node_type() ==
+             sync_pb::NotesSpecifics::ATTACHMENT) ||
+        (node.update_.entity.specifics.notes().special_node_type() ==
+             sync_pb::NotesSpecifics::NORMAL &&
+         child_update.entity.specifics.notes().special_node_type() !=
+             sync_pb::NotesSpecifics::ATTACHMENT)) {
+      // Ignore children of the wrong type.
+      child_update.entity = EntityData();
+    } else {
+      node.children_.push_back(BuildTree(std::move(child_update), max_depth - 1,
+                                         updates_per_parent_guid));
+    }
   }
 
   // Sort the children according to their unique position.
@@ -505,9 +521,9 @@ NoteModelMerger::RemoteForest NoteModelMerger::BuildRemoteForest(
 
   // All remaining entries in |updates_per_parent_guid| must be unreachable from
   // permanent entities, since otherwise they would have been moved away.
-  for (const auto& [parent_guid, updates] :
+  for (const auto& [parent_guid, updates_for_guid] :
        grouped_updates.updates_per_parent_guid) {
-    for (const UpdateResponseData& update : updates) {
+    for (const UpdateResponseData& update : updates_for_guid) {
       if (update.entity.specifics.has_notes()) {
         tracker_for_recording_ignored_updates
             ->RecordIgnoredServerUpdateDueToMissingParent(
@@ -563,10 +579,7 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
 
     if (GetProtoTypeFromNoteNode(node) !=
             remote_entity.specifics.notes().special_node_type() ||
-        (node->is_separator() &&
-         remote_entity.specifics.notes().special_node_type() !=
-             sync_pb::NotesSpecifics::SEPARATOR) ||
-        (node->is_note() &&
+        ((node->is_note() || node->is_attachment()) &&
          node->GetContent() !=
              base::UTF8ToUTF16(remote_entity.specifics.notes().content()))) {
       // If local node and its remote node match are conflicting in node type or
@@ -837,7 +850,8 @@ size_t NoteModelMerger::FindMatchingChildBySemanticsStartingAt(
       remote_entity.specifics.notes().special_node_type();
   GURL remote_url;
   std::u16string remote_content;
-  if (remote_type == sync_pb::NotesSpecifics::NORMAL) {
+  if (remote_type == sync_pb::NotesSpecifics::NORMAL ||
+      remote_type == sync_pb::NotesSpecifics::ATTACHMENT) {
     remote_url = GURL(remote_entity.specifics.notes().url());
     remote_content =
         base::UTF8ToUTF16(remote_entity.specifics.notes().content());

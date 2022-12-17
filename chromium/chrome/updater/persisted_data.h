@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -119,7 +119,8 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData> {
   const base::Value::Dict* GetAppKey(const std::string& id) const;
 
   // Returns an existing or newly created app key under a root pref.
-  base::Value* GetOrCreateAppKey(const std::string& id, base::Value* root);
+  base::Value::Dict* GetOrCreateAppKey(const std::string& id,
+                                       base::Value::Dict& root);
 
   std::string GetString(const std::string& id, const std::string& key) const;
   void SetString(const std::string& id,

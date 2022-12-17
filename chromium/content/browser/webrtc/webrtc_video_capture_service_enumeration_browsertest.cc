@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,12 +112,12 @@ class WebRtcVideoCaptureServiceEnumerationBrowserTest
         switch (GetParam().api_to_use) {
           case ServiceApi::kSingleClient:
             factory_->AddSharedMemoryVirtualDevice(
-                info, std::move(producer), false,
+                info, std::move(producer),
                 virtual_device.InitWithNewPipeAndPassReceiver());
             break;
           case ServiceApi::kMultiClient:
             video_source_provider_->AddSharedMemoryVirtualDevice(
-                info, std::move(producer), false,
+                info, std::move(producer),
                 virtual_device.InitWithNewPipeAndPassReceiver());
             break;
         }

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,6 +26,7 @@
 #include "media/base/video_decoder.h"
 #include "media/base/video_frame.h"
 #include "media/fuchsia/mojom/fuchsia_media_resource_provider.mojom.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -178,18 +179,22 @@ class TestSharedImageInterface : public gpu::SharedImageInterface {
     EXPECT_FALSE(collection);
     collection = std::make_unique<TestBufferCollection>(std::move(token));
   }
+
   void ReleaseSysmemBufferCollection(
       gfx::SysmemBufferCollectionId id) override {
     EXPECT_EQ(sysmem_buffer_collections_.erase(id), 1U);
   }
 
   gpu::SyncToken GenVerifiedSyncToken() override {
+    gpu::SyncToken token(gpu::CommandBufferNamespace::GPU_IO,
+                         gpu::CommandBufferId(33), 1);
+    token.SetVerifyFlush();
+    return token;
+  }
+
+  gpu::SyncToken GenUnverifiedSyncToken() override {
     ADD_FAILURE();
     return gpu::SyncToken();
-  }
-  gpu::SyncToken GenUnverifiedSyncToken() override {
-    return gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
-                          gpu::CommandBufferId(33), 1);
   }
 
   void WaitSyncToken(const gpu::SyncToken& sync_token) override {
@@ -300,10 +305,11 @@ class TestFuchsiaMediaResourceProvider
   }
   void CreateVideoDecoder(
       media::VideoCodec codec,
-      bool secure_memory,
+      media::mojom::VideoDecoderSecureMemoryMode secure_mode,
       fidl::InterfaceRequest<fuchsia::media::StreamProcessor>
           stream_processor_request) final {
-    EXPECT_FALSE(secure_memory);
+    EXPECT_TRUE(secure_mode ==
+                media::mojom::VideoDecoderSecureMemoryMode::CLEAR);
 
     fuchsia::mediacodec::CreateDecoder_Params decoder_params;
     decoder_params.mutable_input_details()->set_format_details_version_ordinal(
@@ -332,6 +338,8 @@ class TestFuchsiaMediaResourceProvider
     decoder_factory->CreateDecoder(std::move(decoder_params),
                                    std::move(stream_processor_request));
   }
+
+  mojo::Receiver<media::mojom::FuchsiaMediaResourceProvider> receiver_{this};
 };
 
 }  // namespace
@@ -343,7 +351,10 @@ class FuchsiaVideoDecoderTest : public testing::Test {
             base::MakeRefCounted<TestRasterContextProvider>()),
         decoder_(std::make_unique<FuchsiaVideoDecoder>(
             raster_context_provider_.get(),
-            &test_media_resource_provider_)) {}
+            mojo::SharedRemote<media::mojom::FuchsiaMediaResourceProvider>(
+                test_media_resource_provider_.receiver_
+                    .BindNewPipeAndPassRemote()),
+            /*allow_overlays=*/false)) {}
 
   FuchsiaVideoDecoderTest(const FuchsiaVideoDecoderTest&) = delete;
   FuchsiaVideoDecoderTest& operator=(const FuchsiaVideoDecoderTest&) = delete;

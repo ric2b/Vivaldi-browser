@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,8 +25,9 @@ namespace {
 const size_t kImageCacheSingleAllocationByteLimit = 64 * 1024 * 1024;
 
 // Decreases the size of the font cache to 1MiB.
-const base::Feature kSmallerFontCache{"SmallerFontCache",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kSmallerFontCache,
+             "SmallerFontCache",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace
 

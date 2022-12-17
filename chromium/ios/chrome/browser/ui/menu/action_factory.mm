@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/icons/action_icon.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -20,7 +20,12 @@
 #endif
 
 // Vivaldi
+#import "app/vivaldi_apptools.h"
 #import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+using l10n_util::GetNSString;
+// End Vivaldi
 
 @interface ActionFactory ()
 
@@ -59,6 +64,10 @@
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kLinkActionSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"copy_link_url"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage systemImageNamed:@"link.badge.plus"]; // End Vivaldi
+
   return [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_COPY_LINK_ACTION_TITLE)
                 image:image
@@ -72,6 +81,9 @@
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kShareSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"share"];
+  if (IsVivaldiRunning())
+    image = [UIImage systemImageNamed:@"square.and.arrow.up"]; // End Vivaldi
+
   return
       [self actionWithTitle:l10n_util::GetNSString(IDS_IOS_SHARE_BUTTON_LABEL)
                       image:image
@@ -84,6 +96,10 @@
                        ? DefaultSymbolWithPointSize(kDeleteActionSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"delete"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage systemImageNamed:@"trash"]; // End Vivaldi
+
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(IDS_IOS_DELETE_ACTION_TITLE)
                       image:image
@@ -98,6 +114,12 @@
                        ? DefaultSymbolWithPointSize(kNewTabActionSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"open_in_new_tab"];
+
+  if (IsVivaldiRunning())
+    image =
+      [UIImage systemImageNamed:@"rectangle.center.inset.filled.badge.plus"];
+  // End Vivaldi
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)
                          image:image
@@ -131,6 +153,10 @@
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kEditActionSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"edit"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage systemImageNamed:@"pencil"]; // End Vivaldi
+
   return [self actionWithTitle:l10n_util::GetNSString(IDS_IOS_EDIT_ACTION_TITLE)
                          image:image
                           type:MenuActionType::Edit
@@ -152,11 +178,21 @@
 }
 
 - (UIAction*)actionToMoveFolderWithBlock:(ProceduralBlock)block {
+
+  if (IsVivaldiRunning()) {
+    return [self
+        actionWithTitle:GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
+                  image:[UIImage systemImageNamed:@"move.3d"]
+                   type:MenuActionType::Move
+                  block:block];
+  } else {
   return [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
                 image:[UIImage imageNamed:@"move_folder"]
                  type:MenuActionType::Move
                 block:block];
+  } // End Vivaldi
+
 }
 
 - (UIAction*)actionToMarkAsReadWithBlock:(ProceduralBlock)block {
@@ -184,9 +220,13 @@
 
 - (UIAction*)actionToOpenOfflineVersionInNewTabWithBlock:
     (ProceduralBlock)block {
+  UIImage* image = UseSymbols()
+                       ? DefaultSymbolWithPointSize(kCheckMarkCircleSymbol,
+                                                    kSymbolActionPointSize)
+                       : [UIImage imageNamed:@"offline"];
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_READING_LIST_OPEN_OFFLINE_BUTTON)
-                         image:[UIImage imageNamed:@"offline"]
+                         image:image
                           type:MenuActionType::ViewOffline
                          block:block];
 }
@@ -305,10 +345,13 @@
 }
 
 - (UIAction*)actionToSearchImageUsingLensWithBlock:(ProceduralBlock)block {
+  UIImage* image = UseSymbols() ? CustomSymbolWithPointSize(
+                                      kCameraLensSymbol, kSymbolActionPointSize)
+                                : [UIImage imageNamed:@"lens_icon"];
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(
                                 IDS_IOS_CONTEXT_MENU_SEARCHIMAGEWITHGOOGLE)
-                      image:[UIImage imageNamed:@"lens_icon"]
+                      image:image
                        type:MenuActionType::SearchImageWithLens
                       block:block];
   return action;

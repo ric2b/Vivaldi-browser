@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -36,6 +36,8 @@ source_set("browser") {
     "aw_browser_process.h",
     "aw_browser_terminator.cc",
     "aw_browser_terminator.h",
+    "aw_client_hints_controller_delegate.cc",
+    "aw_client_hints_controller_delegate.h",
     "aw_content_browser_client.cc",
     "aw_content_browser_client.h",
     "aw_content_browser_client_receiver_bindings.cc",
@@ -45,6 +47,8 @@ source_set("browser") {
     "aw_contents_client_bridge.h",
     "aw_contents_io_thread_client.cc",
     "aw_contents_io_thread_client.h",
+    "aw_contents_origin_matcher.cc",
+    "aw_contents_origin_matcher.h",
     "aw_contents_statics.cc",
     "aw_cookie_access_policy.cc",
     "aw_cookie_access_policy.h",

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -433,36 +433,6 @@ var defaultTests = [
   },
 
   // This test verifies that api to wait for launcher state transition
-  // to peeking works as expected
-  function waitForLauncherStatePeeking() {
-    var togglePeeking = newAccelerator('search', false /* shift */);
-    chrome.autotestPrivate.activateAccelerator(
-        togglePeeking, function(success) {
-          chrome.test.assertNoLastError();
-          chrome.test.assertFalse(success);
-          togglePeeking.pressed = false;
-          chrome.autotestPrivate.activateAccelerator(
-              togglePeeking, function(success) {
-                chrome.test.assertNoLastError();
-                chrome.test.assertTrue(success);
-                chrome.autotestPrivate.waitForLauncherState(
-                    'Peeking', function() {
-                      if (chrome.runtime.lastError) {
-                        var errorMessage = chrome.runtime.lastError.message;
-                        closeLauncher(chrome.test.callbackPass(function() {
-                          chrome.test.assertEq(
-                              'Not supported for bubble launcher',
-                              errorMessage);
-                        }));
-                        return;
-                      }
-                      closeLauncher(chrome.test.callbackPass());
-                    });
-              });
-        });
-  },
-
-  // This test verifies that api to wait for launcher state transition
   // works as expected
   function waitForLauncherStateFullscreen() {
     var toggleFullscreen = newAccelerator('search', true /* shift */);
@@ -552,13 +522,20 @@ var defaultTests = [
         })
         .then(function() {
           return promisify(
-              chrome.autotestPrivate.stopThroughputTrackerDataCollection);
+              chrome.autotestPrivate.getThroughputTrackerData);
         })
         .then(function(data) {
           chrome.test.assertTrue(data.length > 0);
           return promisify(unminimizeBrowserWindow);
         })
         .then(function() {
+          return promisify(
+              chrome.autotestPrivate.stopThroughputTrackerDataCollection);
+        })
+        .then(function(data) {
+          // `unminimizeBrowserWindow` might produce 0 frames on build bots
+          // and end up not being captured in `data`.
+          chrome.test.assertTrue(data.length >= 0);
           chrome.test.succeed();
         })
         .catch(function(err) {
@@ -806,6 +783,8 @@ var defaultTests = [
         chrome.test.assertEq('Normal', window.frameMode);
         chrome.test.assertTrue(window.isFrameVisible);
         chrome.test.assertFalse(window.hasOwnProperty('overviewInfo'));
+        chrome.test.assertEq(null, window.fullRestoreWindowAppId);
+        chrome.test.assertEq('mgndgikekgjfcpckkfioiadnlibdjbkf', window.appId);
 
         var change = new Object();
         change.eventType = 'WMEventFullscreen';
@@ -1134,13 +1113,6 @@ var defaultTests = [
         });
       });
     });
-  },
-
-  function isLacrosPrimaryBrowser() {
-    chrome.autotestPrivate.isLacrosPrimaryBrowser(
-        chrome.test.callbackPass(function(primary) {
-          chrome.test.assertTrue(typeof primary === 'boolean');
-        }));
   },
 
   // KEEP |lockScreen()| TESTS AT THE BOTTOM OF THE defaultTests AS IT WILL
@@ -1577,20 +1549,43 @@ var systemWebAppsTests = [
   },
 ]
 
-var test_suites = {
-  'default': defaultTests,
-  'arcEnabled': arcEnabledTests,
-  'arcProcess': arcProcessTests,
-  'enterprisePolicies': policyTests,
-  'arcPerformanceTracing': arcPerformanceTracingTests,
-  'overviewDefault': overviewTests,
-  'overviewDrag': overviewDragTests,
-  'splitviewLeftSnapped': splitviewLeftSnappedTests,
-  'scrollableShelf': scrollableShelfTests,
-  'shelf': shelfTests,
-  'holdingSpace': holdingSpaceTests,
-  'systemWebApps': systemWebAppsTests,
-};
+    var lacrosEnabledTests = [
+      function checkLacrosInfoFields() {
+        chrome.autotestPrivate.getLacrosInfo(
+            chrome.test.callbackPass(function(lacrosInfo) {
+              chrome.test.assertEq(typeof lacrosInfo, 'object');
+              chrome.test.assertTrue(lacrosInfo.hasOwnProperty('state'));
+              chrome.test.assertTrue(lacrosInfo.hasOwnProperty('isKeepAlive'));
+              chrome.test.assertTrue(lacrosInfo.hasOwnProperty('lacrosPath'));
+              chrome.test.assertTrue(lacrosInfo.hasOwnProperty('mode'));
+            }));
+      },
+      function checkLacrosInfoFieldValue() {
+        chrome.autotestPrivate.getLacrosInfo(
+            chrome.test.callbackPass(function(lacrosInfo) {
+              chrome.test.assertEq('Stopped', lacrosInfo['state']);
+              chrome.test.assertTrue(!lacrosInfo['isKeepAlive']);
+              chrome.test.assertEq('/run/lacros', lacrosInfo['lacrosPath']);
+              chrome.test.assertEq('SideBySide', lacrosInfo['mode']);
+            }));
+      },
+    ]
+
+    var test_suites = {
+      'default': defaultTests,
+      'arcEnabled': arcEnabledTests,
+      'arcProcess': arcProcessTests,
+      'enterprisePolicies': policyTests,
+      'arcPerformanceTracing': arcPerformanceTracingTests,
+      'overviewDefault': overviewTests,
+      'overviewDrag': overviewDragTests,
+      'splitviewLeftSnapped': splitviewLeftSnappedTests,
+      'scrollableShelf': scrollableShelfTests,
+      'shelf': shelfTests,
+      'holdingSpace': holdingSpaceTests,
+      'systemWebApps': systemWebAppsTests,
+      'lacrosEnabled': lacrosEnabledTests,
+    };
 
 chrome.test.getConfig(function(config) {
   var customArg = JSON.parse(config.customArg);

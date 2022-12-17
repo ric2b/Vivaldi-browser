@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,11 +67,13 @@ void GlRenderer::RenderFrame() {
         base::BindOnce(&GlRenderer::PostRenderFrameTask,
                        weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&GlRenderer::OnPresentation,
-                       weak_ptr_factory_.GetWeakPtr()));
+                       weak_ptr_factory_.GetWeakPtr()),
+        gl::FrameData());
   } else {
-    PostRenderFrameTask(
-        gfx::SwapCompletionResult(gl_surface_->SwapBuffers(base::BindOnce(
-            &GlRenderer::OnPresentation, weak_ptr_factory_.GetWeakPtr()))));
+    PostRenderFrameTask(gfx::SwapCompletionResult(
+        gl_surface_->SwapBuffers(base::BindOnce(&GlRenderer::OnPresentation,
+                                                weak_ptr_factory_.GetWeakPtr()),
+                                 gl::FrameData())));
   }
 }
 

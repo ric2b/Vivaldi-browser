@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@ HttpAuthHandlerNTLM::Factory::~Factory() = default;
 bool HttpAuthHandlerNTLM::Init(
     HttpAuthChallengeTokenizer* tok,
     const SSLInfo& ssl_info,
-    const NetworkIsolationKey& network_isolation_key) {
+    const NetworkAnonymizationKey& network_anonymization_key) {
   auth_scheme_ = HttpAuth::AUTH_SCHEME_NTLM;
   score_ = 3;
   properties_ = ENCRYPTS_IDENTITY | IS_CONNECTION_BASED;

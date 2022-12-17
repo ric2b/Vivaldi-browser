@@ -63,8 +63,6 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
                         const vivaldi::NoteNode* node) override;
   void NotesNodeChanged(vivaldi::NotesModel* model,
                         const vivaldi::NoteNode* node) override;
-  void NotesNodeAttachmentChanged(vivaldi::NotesModel* model,
-                                  const vivaldi::NoteNode* node) override;
   void NotesNodeChildrenReordered(vivaldi::NotesModel* model,
                                   const vivaldi::NoteNode* node) override;
   void OnWillRemoveAllNotes(vivaldi::NotesModel* model) override;

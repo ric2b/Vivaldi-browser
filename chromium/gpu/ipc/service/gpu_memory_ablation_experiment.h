@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,7 @@ class SharedContextState;
 class SharedImageFactory;
 class SharedImageRepresentationFactory;
 
-extern const base::Feature kGPUMemoryAblationFeature;
+BASE_DECLARE_FEATURE(kGPUMemoryAblationFeature);
 
 // When enabled, this experiment allocates additional memory alongside each
 // normal allocation. This will allow a study of the correlation between

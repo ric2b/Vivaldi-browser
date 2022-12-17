@@ -1,10 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CONTENT_PUBLIC_BROWSER_FRAME_TYPE_H_
 #define CONTENT_PUBLIC_BROWSER_FRAME_TYPE_H_
 
+#include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -42,6 +43,9 @@ enum class FrameType {
   // TODO(crbug.com/1267506): Consider if we need to have the types for portals
   // or guestviews.
 };
+
+perfetto::protos::pbzero::FrameTreeNodeInfo::FrameType FrameTypeToProto(
+    FrameType frame_type);
 
 }  // namespace content
 

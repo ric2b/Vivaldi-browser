@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -149,22 +149,24 @@ TEST_F(VisibleTimeRequestTriggerTest, MergeFlags) {
                  << "With field bitmask " << std::hex << i);
     const auto fields = RequestFieldSet::FromEnumBitmask(i);
 
-    // Check that these fields are set in the result if they're set in either or
-    // both of the requests.
-    const auto expected = request_with_fields(fields);
+    {
+      // Check that these fields are set in the result if they're set in either
+      // or both of the requests.
+      const auto expected = request_with_fields(fields);
 
-    ExpectEqualRequests(VisibleTimeRequestTrigger::ConsumeAndMergeRequests(
-                            RecordContentToVisibleTimeRequest::New(),
-                            request_with_fields(fields)),
-                        *expected);
-    ExpectEqualRequests(VisibleTimeRequestTrigger::ConsumeAndMergeRequests(
-                            request_with_fields(fields),
-                            RecordContentToVisibleTimeRequest::New()),
-                        *expected);
-    ExpectEqualRequests(
-        VisibleTimeRequestTrigger::ConsumeAndMergeRequests(
-            request_with_fields(fields), request_with_fields(fields)),
-        *expected);
+      ExpectEqualRequests(VisibleTimeRequestTrigger::ConsumeAndMergeRequests(
+                              RecordContentToVisibleTimeRequest::New(),
+                              request_with_fields(fields)),
+                          *expected);
+      ExpectEqualRequests(VisibleTimeRequestTrigger::ConsumeAndMergeRequests(
+                              request_with_fields(fields),
+                              RecordContentToVisibleTimeRequest::New()),
+                          *expected);
+      ExpectEqualRequests(
+          VisibleTimeRequestTrigger::ConsumeAndMergeRequests(
+              request_with_fields(fields), request_with_fields(fields)),
+          *expected);
+    }
 
     // Check that when these fields are combined with another set of fields,
     // all fields are set in the result.

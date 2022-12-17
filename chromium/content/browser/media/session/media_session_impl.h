@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -317,6 +317,10 @@ class MediaSessionImpl : public MediaSession,
   // device switching.
   void OnAudioOutputSinkChangingDisabled();
 
+  // Update the value of `remote_playback_metadata_`.
+  void SetRemotePlaybackMetadata(
+      media_session::mojom::RemotePlaybackMetadataPtr metadata);
+
   // Returns whether the action should be routed to |routed_service_|.
   bool ShouldRouteAction(media_session::mojom::MediaSessionAction action) const;
 
@@ -605,6 +609,8 @@ class MediaSessionImpl : public MediaSession,
   bool has_presentation_ = false;
 
   absl::optional<PlayerIdentifier> guarding_player_id_;
+
+  media_session::mojom::RemotePlaybackMetadataPtr remote_playback_metadata_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

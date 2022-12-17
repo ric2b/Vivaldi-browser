@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -171,9 +171,6 @@ void ArcWallpaperService::OnWallpaperDecoded(const gfx::ImageSkia& image,
                                              int32_t android_id) {
   const AccountId account_id =
       UserManager::Get()->GetPrimaryUser()->GetAccountId();
-
-  WallpaperControllerClientImpl::Get()->RecordWallpaperSourceUMA(
-      ash::WallpaperType::kThirdParty);
 
   const bool result =
       WallpaperControllerClientImpl::Get()->SetThirdPartyWallpaper(

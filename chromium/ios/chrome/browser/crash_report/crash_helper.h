@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ namespace crash_helper {
 
 // Kill switch guarding a workaround for too many calls to SetUploadConsent
 // see crbug.com/1361334 for details.
-extern const base::Feature kLimitSetUploadConsentCalls;
+BASE_DECLARE_FEATURE(kLimitSetUploadConsentCalls);
 
 // Sync the kCrashpadIOS feature to kCrashpadStartOnNextRun NSUserDefault.
 void SyncCrashpadEnabledOnNextRun();
@@ -43,7 +43,7 @@ void ProcessIntermediateReportsForSafeMode();
 int GetPendingCrashReportCount();
 
 // Gets the number of pending crash reports on a background thread and invokes
-// |callback| with the result when complete.
+// `callback` with the result when complete.
 void GetPendingCrashReportCount(void (^callback)(int));
 
 // Check if there is currently a crash report to upload. This function will wait

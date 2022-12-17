@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "content/public/browser/web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+// TODO(crbug.con/1364238): Move MockMediaSession to content/public/test/.
 class MockMediaSession : public content::MediaSession {
  public:
   MOCK_METHOD(void,

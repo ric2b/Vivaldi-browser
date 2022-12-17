@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,7 @@
 #include "base/notreached.h"
 #include "components/browser_ui/site_settings/android/site_settings_jni_headers/WebsitePreferenceBridge_jni.h"
 #include "components/browser_ui/site_settings/android/storage_info_fetcher.h"
+#include "components/browsing_data/content/cookie_helper.h"
 #include "components/browsing_data/content/local_storage_helper.h"
 #include "components/cdm/browser/media_drm_storage_impl.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -41,6 +42,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/storage_partition.h"
+#include "net/cookies/cookie_util.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
@@ -521,6 +523,24 @@ void OnCookiesReceived(network::mojom::CookieManager* cookie_manager,
   }
 }
 
+void OnCookiesInfoReady(const ScopedJavaGlobalRef<jobject>& java_callback,
+                        const net::CookieList& entries) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> map =
+      Java_WebsitePreferenceBridge_createCookiesInfoMap(env);
+
+  for (const net::CanonicalCookie& cookie : entries) {
+    std::string origin =
+        net::cookie_util::CookieOriginToURL(cookie.Domain(), cookie.IsSecure())
+            .spec();
+    ScopedJavaLocalRef<jstring> java_origin =
+        ConvertUTF8ToJavaString(env, origin);
+    Java_WebsitePreferenceBridge_insertCookieIntoMap(env, map, java_origin);
+  }
+
+  base::android::RunObjectCallbackAndroid(java_callback, map);
+}
+
 void OnStorageInfoReady(const ScopedJavaGlobalRef<jobject>& java_callback,
                         const storage::UsageInfoEntries& entries) {
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -569,7 +589,7 @@ void OnLocalStorageModelInfoLoaded(
   std::transform(local_storage_info.begin(), local_storage_info.end(),
                  important_notations.begin(),
                  [](const content::StorageUsageInfo& info) {
-                   return std::make_pair(info.origin, false);
+                   return std::make_pair(info.storage_key.origin(), false);
                  });
   if (fetch_important) {
     permissions::PermissionsClient::Get()->AreSitesImportant(
@@ -579,7 +599,7 @@ void OnLocalStorageModelInfoLoaded(
   int i = 0;
   for (const content::StorageUsageInfo& info : local_storage_info) {
     ScopedJavaLocalRef<jstring> java_origin =
-        ConvertUTF8ToJavaString(env, info.origin.Serialize());
+        ConvertUTF8ToJavaString(env, info.storage_key.origin().Serialize());
     Java_WebsitePreferenceBridge_insertLocalStorageInfoIntoMap(
         env, map, java_origin, info.total_size_bytes,
         important_notations[i++].second);
@@ -599,6 +619,17 @@ void OnLocalStorageModelInfoLoaded(
 // are asynchronous. A "use after free" error is not possible because the
 // helpers keep a reference to themselves for the duration of their tasks,
 // which includes callback invocation.
+
+static void JNI_WebsitePreferenceBridge_FetchCookiesInfo(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jbrowser_context_handle,
+    const JavaParamRef<jobject>& java_callback) {
+  BrowserContext* browser_context = unwrap(jbrowser_context_handle);
+  auto cookie_helper = base::MakeRefCounted<browsing_data::CookieHelper>(
+      browser_context->GetDefaultStoragePartition(), base::NullCallback());
+  cookie_helper->StartFetching(base::BindOnce(
+      &OnCookiesInfoReady, ScopedJavaGlobalRef<jobject>(java_callback)));
+}
 
 static void JNI_WebsitePreferenceBridge_FetchLocalStorageInfo(
     JNIEnv* env,
@@ -956,4 +987,32 @@ static jboolean JNI_WebsitePreferenceBridge_GetLocationAllowedByPolicy(
   return GetHostContentSettingsMap(jbrowser_context_handle)
              ->GetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
                                         nullptr) == CONTENT_SETTING_ALLOW;
+}
+
+static ScopedJavaLocalRef<jstring>
+JNI_WebsitePreferenceBridge_ToDomainWildcardPattern(
+    JNIEnv* env,
+    const JavaParamRef<jstring>& pattern) {
+  std::string pattern_string = ConvertJavaStringToUTF8(env, pattern);
+  ContentSettingsPattern original_pattern =
+      ContentSettingsPattern::FromString(pattern_string);
+  ContentSettingsPattern domain_wildcard_pattern =
+      ContentSettingsPattern::ToDomainWildcardPattern(original_pattern);
+  std::string domain_wildcard_pattern_string =
+      domain_wildcard_pattern.IsValid()
+          ? domain_wildcard_pattern.ToString()
+          : ContentSettingsPattern::ToHostOnlyPattern(original_pattern)
+                .ToString();
+  return ConvertUTF8ToJavaString(env, domain_wildcard_pattern_string);
+}
+
+static ScopedJavaLocalRef<jstring>
+JNI_WebsitePreferenceBridge_ToHostOnlyPattern(
+    JNIEnv* env,
+    const JavaParamRef<jstring>& pattern) {
+  std::string pattern_string = ConvertJavaStringToUTF8(env, pattern);
+  ContentSettingsPattern host_only_pattern =
+      ContentSettingsPattern::ToHostOnlyPattern(
+          ContentSettingsPattern::FromString(pattern_string));
+  return ConvertUTF8ToJavaString(env, host_only_pattern.ToString());
 }

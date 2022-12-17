@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_constants/constants.h"
@@ -29,26 +30,24 @@ using extensions::Extension;
 namespace {
 
 bool AccessingCamera(Profile* profile, const std::string& app_id) {
-  auto accessing_camera = apps::mojom::OptionalBool::kUnknown;
+  absl::optional<bool> accessing_camera;
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile);
-  proxy->FlushMojoCallsForTesting();
   proxy->AppCapabilityAccessCache().ForOneApp(
       app_id, [&accessing_camera](const apps::CapabilityAccessUpdate& update) {
         accessing_camera = update.Camera();
       });
-  return accessing_camera == apps::mojom::OptionalBool::kTrue;
+  return accessing_camera.value_or(false);
 }
 
 bool AccessingMicrophone(Profile* profile, const std::string& app_id) {
-  auto accessing_microphone = apps::mojom::OptionalBool::kUnknown;
+  absl::optional<bool> accessing_microphone;
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile);
-  proxy->FlushMojoCallsForTesting();
   proxy->AppCapabilityAccessCache().ForOneApp(
       app_id,
       [&accessing_microphone](const apps::CapabilityAccessUpdate& update) {
         accessing_microphone = update.Microphone();
       });
-  return accessing_microphone == apps::mojom::OptionalBool::kTrue;
+  return accessing_microphone.value_or(false);
 }
 
 class FakeMediaObserver : public MediaCaptureDevicesDispatcher::Observer {
@@ -122,7 +121,6 @@ class MediaAccessExtensionAppsTest : public extensions::PlatformAppBrowserTest {
   void UninstallApp(const std::string& app_id) {
     auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
     proxy->UninstallSilently(app_id, apps::UninstallSource::kAppList);
-    proxy->FlushMojoCallsForTesting();
   }
 
   GURL GetUrl1() {
@@ -407,9 +405,10 @@ class MediaAccessWebAppsTest : public web_app::WebAppControllerBrowserTest {
   }
 
   void UninstallWebApp(const std::string& app_id) const {
-    web_app::UninstallWebApp(browser()->profile(), app_id);
-    apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
-        ->FlushMojoCallsForTesting();
+    web_app::WebAppTestUninstallObserver app_listener(browser()->profile());
+    app_listener.BeginListening();
+    web_app::test::UninstallWebApp(browser()->profile(), app_id);
+    app_listener.Wait();
   }
 
   GURL GetUrl1() {

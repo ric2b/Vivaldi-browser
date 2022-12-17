@@ -56,14 +56,14 @@ PrefService* GetPrefService(content::BrowserContext* browser_context,
 }
 
 base::Value TranslateEnumValue(
-    const base::Value* original,
+    const base::Value& original,
     const ::vivaldi::PrefProperties* pref_properties) {
   if (!pref_properties->enum_properties())
-    return original->Clone();
-  if (!original->is_int())
+    return original.Clone();
+  if (!original.is_int())
     return base::Value();
   const std::string* name =
-      pref_properties->enum_properties()->FindName(original->GetInt());
+      pref_properties->enum_properties()->FindName(original.GetInt());
   if (!name)
     return base::Value();
   return base::Value(*name);
@@ -72,14 +72,14 @@ base::Value TranslateEnumValue(
 base::Value GetPrefValueForJS(PrefService* prefs,
                               const std::string& path,
                               const ::vivaldi::PrefProperties* properties) {
-  return TranslateEnumValue(prefs->Get(path), properties);
+  return TranslateEnumValue(prefs->GetValue(path), properties);
 }
 
 base::Value GetPrefDefaultValueForJS(
     PrefService* prefs,
     const std::string& path,
     const ::vivaldi::PrefProperties* properties) {
-  return TranslateEnumValue(prefs->GetDefaultPrefValue(path), properties);
+  return TranslateEnumValue(*prefs->GetDefaultPrefValue(path), properties);
 }
 
 }  // anonymous namespace
@@ -142,14 +142,11 @@ void VivaldiPrefsApiNotification::OnChanged(const std::string& path) {
   const ::vivaldi::PrefProperties* properties = nullptr;
   PrefService* prefs = GetPrefService(profile_, path, &properties);
   DCHECK(prefs);
-  base::Value value;
-  if (!prefs->FindPreference(path)->IsDefaultValue()) {
-    value = GetPrefValueForJS(prefs, path, properties);
-  }
-
   vivaldi::prefs::PreferenceValue pref_value;
   pref_value.path = path;
-  pref_value.value = std::make_unique<base::Value>(std::move(value));
+  if (!prefs->FindPreference(path)->IsDefaultValue()) {
+    pref_value.value = GetPrefValueForJS(prefs, path, properties);
+  }
 
   ::vivaldi::BroadcastEvent(vivaldi::prefs::OnChanged::kEventName,
                             vivaldi::prefs::OnChanged::Create(pref_value),
@@ -219,9 +216,6 @@ ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
   const std::string& path = params->new_value.path;
   const auto& value = params->new_value.value;
 
-  if (!value)
-    return RespondNow(Error("Expected new value"));
-
   const ::vivaldi::PrefProperties* properties;
   PrefService* prefs = GetPrefService(browser_context(), path, &properties);
   if (!prefs)
@@ -230,11 +224,16 @@ ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
   DCHECK(!base::StartsWith(path, "vivaldi.system",
                            base::CompareCase::INSENSITIVE_ASCII));
 
+  if (!value) {
+    prefs->ClearPref(path);
+    return RespondNow(NoArguments());
+  }
+
   if (!properties->enum_properties()) {
-    const base::Value* pref = prefs->Get(path);
-    if (pref->type() == value->type()) {
+    const base::Value& pref = prefs->GetValue(path);
+    if (pref.type() == value->type()) {
       prefs->Set(path, *value);
-    } else if (pref->type() == base::Value::Type::DOUBLE &&
+    } else if (pref.type() == base::Value::Type::DOUBLE &&
                value->type() == base::Value::Type::INTEGER) {
       // JS doesn't have an explicit distinction between integer and double
       // and will send us an integer even when explicitly using a decimal
@@ -244,7 +243,7 @@ ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
       return RespondNow(Error(
           std::string("Cannot assign a ") +
           base::Value::GetTypeName(value->type()) + " value to a " +
-          base::Value::GetTypeName(pref->type()) + " preference: " + path));
+          base::Value::GetTypeName(pref.type()) + " preference: " + path));
     }
   } else {
     if (!value->is_string()) {
@@ -264,23 +263,6 @@ ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
     prefs->Set(path, base::Value(*enum_value));
   }
 
-  return RespondNow(NoArguments());
-}
-
-ExtensionFunction::ResponseAction PrefsResetFunction::Run() {
-  using vivaldi::prefs::Reset::Params;
-
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  const std::string& path = params->path;
-
-  const ::vivaldi::PrefProperties* properties;
-  PrefService* prefs = GetPrefService(browser_context(), path, &properties);
-  if (!prefs)
-    return RespondNow(Error(UnknownPrefError(path)));
-
-  prefs->ClearPref(path);
   return RespondNow(NoArguments());
 }
 

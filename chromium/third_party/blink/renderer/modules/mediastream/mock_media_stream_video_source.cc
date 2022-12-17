@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,8 +72,7 @@ void MockMediaStreamVideoSource::OnHasConsumers(bool has_consumers) {
   is_suspended_ = !has_consumers;
 }
 
-base::WeakPtr<MediaStreamVideoSource> MockMediaStreamVideoSource::GetWeakPtr()
-    const {
+base::WeakPtr<MediaStreamVideoSource> MockMediaStreamVideoSource::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
@@ -88,9 +87,11 @@ void MockMediaStreamVideoSource::StartSourceImpl(
     VideoCaptureCropVersionCB crop_version_callback) {
   DCHECK(frame_callback_.is_null());
   DCHECK(encoded_frame_callback_.is_null());
+  DCHECK(crop_version_callback_.is_null());
   attempted_to_start_ = true;
   frame_callback_ = std::move(frame_callback);
   encoded_frame_callback_ = std::move(encoded_frame_callback);
+  crop_version_callback_ = std::move(crop_version_callback);
 }
 
 void MockMediaStreamVideoSource::StopSourceImpl() {}
@@ -99,13 +100,6 @@ absl::optional<media::VideoCaptureFormat>
 MockMediaStreamVideoSource::GetCurrentFormat() const {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return absl::optional<media::VideoCaptureFormat>(format_);
-}
-
-absl::optional<media::VideoCaptureParams>
-MockMediaStreamVideoSource::GetCurrentCaptureParams() const {
-  media::VideoCaptureParams params;
-  params.requested_format = format_;
-  return params;
 }
 
 void MockMediaStreamVideoSource::DeliverVideoFrame(
@@ -126,6 +120,13 @@ void MockMediaStreamVideoSource::DeliverEncodedVideoFrame(
   PostCrossThreadTask(*io_task_runner(), FROM_HERE,
                       CrossThreadBindOnce(encoded_frame_callback_,
                                           std::move(frame), base::TimeTicks()));
+}
+
+void MockMediaStreamVideoSource::DeliverNewCropVersion(uint32_t crop_version) {
+  DCHECK(!crop_version_callback_.is_null());
+  PostCrossThreadTask(
+      *io_task_runner(), FROM_HERE,
+      CrossThreadBindOnce(crop_version_callback_, crop_version));
 }
 
 void MockMediaStreamVideoSource::StopSourceForRestartImpl() {

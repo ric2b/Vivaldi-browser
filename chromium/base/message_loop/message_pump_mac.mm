@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,9 +41,9 @@ namespace {
 // - Skip calling CFRunLoopTimerSetNextFireDate if the next delayed wake up
 //  time hasn't changed.
 // - Cancel an already scheduled timer wake up if there is no delayed work.
-const base::Feature kMessagePumpMacDelayedWorkOptimizations{
-    "MessagePumpMacDelayedWorkOptimizations",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMessagePumpMacDelayedWorkOptimizations,
+             "MessagePumpMacDelayedWorkOptimizations",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Caches the state of the "MessagePumpMacDelayedWorkOptimizations"
 // feature for efficiency.

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -227,6 +227,10 @@ const char kUseCastBrowserPrefConfig[] = "use-cast-browser-pref-config";
 // Creates the service broker inside of this process. Only one process should
 // host the service broker.
 const char kInProcessBroker[] = "in-process-broker";
+
+// Command-line arg to change the Unix domain socket path to connect to the
+// Cast Mojo broker.
+const char kCastMojoBrokerPath[] = "cast-mojo-broker-path";
 
 }  // namespace switches
 

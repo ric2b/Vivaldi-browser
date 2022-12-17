@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,8 +36,14 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
         mRedirectHandler = RedirectHandler.create();
         mWebContentsObserver = new WebContentsObserver() {
             @Override
-            public void didFinishNavigation(NavigationHandle navigationHandle) {
-                mInterceptNavigationDelegate.onNavigationFinished(navigationHandle);
+            public void didFinishNavigationInPrimaryMainFrame(NavigationHandle navigationHandle) {
+                mInterceptNavigationDelegate.onNavigationFinishedInPrimaryMainFrame(
+                        navigationHandle);
+            }
+
+            @Override
+            public void didFinishNavigationNoop(NavigationHandle navigation) {
+                mInterceptNavigationDelegate.onNavigationFinishedNoop(navigation);
             }
         };
     }

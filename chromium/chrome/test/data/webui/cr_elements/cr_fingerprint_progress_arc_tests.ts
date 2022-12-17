@@ -1,8 +1,8 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_lottie/cr_lottie.m.js';
+import 'chrome://resources/cr_elements/cr_lottie/cr_lottie.js';
 
 import {CrFingerprintProgressArcElement, FINGERPRINT_CHECK_DARK_URL, FINGERPRINT_CHECK_LIGHT_URL, FINGERPRINT_SCANNED_ICON_DARK, FINGERPRINT_SCANNED_ICON_LIGHT, PROGRESS_CIRCLE_BACKGROUND_COLOR_DARK, PROGRESS_CIRCLE_BACKGROUND_COLOR_LIGHT, PROGRESS_CIRCLE_FILL_COLOR_DARK, PROGRESS_CIRCLE_FILL_COLOR_LIGHT} from 'chrome://resources/cr_elements/cr_fingerprint/cr_fingerprint_progress_arc.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -82,7 +82,8 @@ suite('cr_fingerprint_progress_arc_test', function() {
     fakeMediaQueryList = new FakeMediaQueryList('(prefers-color-scheme: dark)');
     matchMediaMock.returnValue = fakeMediaQueryList;
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     progressArc = /** @type {!CrFingerprintProgressArcElement} */ (
         document.createElement('cr-fingerprint-progress-arc'));
     document.body.appendChild(progressArc);

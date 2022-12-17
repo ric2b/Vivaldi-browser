@@ -1,5 +1,5 @@
 <!--
-Copyright 2020 The Chromium Authors. All rights reserved.
+Copyright 2020 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -86,8 +86,6 @@ chromium-metrics-reviews@google.com.
   <variant name=".ShelfButton" summary="ShelfButton"/>
   <variant name=".SuggestedAppFullscreen"
       summary="Suggested App, Fullscreen Launcher"/>
-  <variant name=".SuggestedAppPeeking"
-      summary="Suggested App, Peeking Launcher"/>
 </variants>
 
 <variants name="HomeLauncherVisibility">
@@ -105,6 +103,8 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <variants name="InstallReason">
+  <variant name="CommandLine" summary="Installed by a command line argument"/>
+  <variant name="Kiosk" summary="Installed by Kiosk on Chrome OS"/>
   <variant name="Oem" summary="Installed by an OEM"/>
   <variant name="Policy" summary="Installed by policy"/>
   <variant name="Preload" summary="Preinstalled by default"/>
@@ -200,7 +200,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppInfoDialog.CreateWebAppShortcutSuccess" enum="Boolean"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>dmurph@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -210,7 +210,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Apps.AppLaunch" enum="AppLaunch" expires_after="2023-01-15">
+<histogram name="Apps.AppLaunch" enum="AppLaunch" expires_after="2023-03-19">
   <owner>tapted@chromium.org</owner>
   <owner>benwells@chromium.org</owner>
   <summary>
@@ -308,7 +308,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.AppListSortDiscoveryDurationAfterActivation"
-    units="ms" expires_after="2022-12-18">
+    units="ms" expires_after="2023-02-19">
   <owner>andrewxu@chromium.org</owner>
   <owner>tbarzic@chromium.org</owner>
   <summary>
@@ -319,10 +319,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.AppSearchProvider.QueryTime" units="ms"
-    expires_after="2022-12-24">
+    expires_after="2023-06-24">
+  <owner>wrong@chromium.org</owner>
   <owner>tbarzic@chromium.org</owner>
-  <owner>jennyz@chromium.org</owner>
-  <owner>newcomer@chromium.org</owner>
   <summary>
     The time between sending a non-empty query to AppSearchProvider and
     receiving results back.
@@ -336,16 +335,6 @@ chromium-metrics-reviews@google.com.
   <summary>
     The time between sending an empty query to AppSearchProvider and receiving
     Zero State recommendation results back.
-  </summary>
-</histogram>
-
-<histogram name="Apps.AppList.AppsGridAddPage" enum="AppListAddPageType"
-    expires_after="2023-03-22">
-  <owner>anasalazar@chromium.org</owner>
-  <owner>newcomer@chromium.org</owner>
-  <summary>
-    The different ways to add page in app list's apps grid. Logged when the page
-    is created.
   </summary>
 </histogram>
 
@@ -421,7 +410,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.ContinueSectionHiddenByUser{TabletOrClamshell}"
-    enum="Boolean" expires_after="2022-11-01">
+    enum="Boolean" expires_after="2023-05-01">
   <owner>jamescook@chromium.org</owner>
   <owner>tbarzic@chromium.org</owner>
   <summary>
@@ -465,18 +454,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Apps.AppList.DriveZeroStateProvider.HypotheticalQuery"
-    enum="DriveZeroStateProviderThrottleInterval" expires_after="2023-02-12">
-  <owner>tby@chromium.org</owner>
-  <owner>thanhdng@chromium.org</owner>
-  <owner>wrong@chromium.org</owner>
-  <summary>
-    We intend to change the query trigger logic for ItemSuggest. This records an
-    event each time we would query ItemSuggest under the new logic, recorded
-    separately for each throttling interval. To be used for evaluating QPS.
-  </summary>
-</histogram>
-
 <histogram name="Apps.AppList.DriveZeroStateProvider.Latency" units="ms"
     expires_after="2023-02-12">
   <owner>tby@chromium.org</owner>
@@ -488,19 +465,12 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Apps.AppList.DriveZeroStateProvider.ShouldWarm" enum="Boolean"
-    expires_after="2022-10-04">
-  <owner>tby@chromium.org</owner>
-  <owner>thanhdng@chromium.org</owner>
-  <owner>wrong@chromium.org</owner>
-  <summary>
-    Whether or not the the ItemSuggest cache should be warmed on login. Reported
-    once per login, when the DriveZeroStateProvider is created.
-  </summary>
-</histogram>
-
 <histogram name="Apps.AppList.DriveZeroStateProvider.Status"
     enum="DriveZeroStateProviderStatus" expires_after="2023-02-12">
+  <obsolete>
+    Deprecated September 2022, now that it's replaced by
+    Ash.Search.DriveFileSuggestDataValidation.Status
+  </obsolete>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
   <owner>wrong@chromium.org</owner>
@@ -536,7 +506,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.FileSearchProvider.Latency" units="ms"
-    expires_after="2022-11-30">
+    expires_after="2023-03-05">
   <owner>wrong@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
@@ -558,7 +528,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.FileSearchProvider.TimedOut"
-    enum="BooleanTimedOut" expires_after="2022-11-30">
+    enum="BooleanTimedOut" expires_after="2023-03-05">
   <owner>wrong@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
@@ -600,9 +570,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Apps.AppList.HelpAppProvider.ListSearchResultState"
     enum="HelpAppProviderListSearchResultState" expires_after="2022-10-19">
+  <owner>wrong@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
-  <owner>wrong@chromium.org</owner>
   <owner>zufeng@google.com</owner>
   <summary>
     The end result of list searches by the provider for the help app in the CrOS
@@ -614,9 +584,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Apps.AppList.HelpAppProvider.QueryTime" units="ms"
     expires_after="2022-10-19">
+  <owner>wrong@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
   <owner>tby@chromium.org</owner>
-  <owner>wrong@chromium.org</owner>
   <owner>zufeng@google.com</owner>
   <summary>
     The latency of a search in the HelpAppProvider. Recorded each time a search
@@ -626,10 +596,10 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.ItemSuggestCache.ResponseSize" units="bytes"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
+  <owner>wrong@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
-  <owner>wrong@chromium.org</owner>
   <summary>
     Records the size of a response from the ItemSuggest API. Reported once per
     successful response. Will not be reported if the response exceeds the
@@ -638,10 +608,10 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.ItemSuggestCache.Status"
-    enum="ItemSuggestCacheStatus" expires_after="2022-12-18">
+    enum="ItemSuggestCacheStatus" expires_after="2023-02-19">
+  <owner>wrong@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
-  <owner>wrong@chromium.org</owner>
   <summary>
     Records the outcome of a call to ItemSuggest. Reported once per call to
     UpdateCache that passes the minimum time between udpates check.
@@ -649,10 +619,10 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.ItemSuggestCache.UpdateCacheLatency" units="ms"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
+  <owner>wrong@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
-  <owner>wrong@chromium.org</owner>
   <summary>
     Records the latency from the start of a call to UpdateCache to the time when
     results are finalised. Reported once each time results are successfully
@@ -672,17 +642,6 @@ chromium-metrics-reviews@google.com.
     the user does not launch any results.
   </summary>
   <token key="TabletOrClamshell" variants="TabletOrClamshellMode"/>
-</histogram>
-
-<histogram name="Apps.AppList.LauncherSearchProvider.QueryTime" units="ms"
-    expires_after="2022-12-31">
-  <owner>tbarzic@chromium.org</owner>
-  <owner>jennyz@chromium.org</owner>
-  <owner>newcomer@chromium.org</owner>
-  <summary>
-    The time between sending a non-empty query and receiving results back from
-    the extension which performs the file search.
-  </summary>
 </histogram>
 
 <histogram name="Apps.AppList.NumberOfApps" units="count"
@@ -708,7 +667,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.NumberOfFolders" units="count"
-    expires_after="2022-12-01">
+    expires_after="2023-03-05">
   <owner>jamescook@chromium.org</owner>
   <owner>tbarzic@chromium.org</owner>
   <owner>mmourgos@chromium.org</owner>
@@ -743,10 +702,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.OmniboxProvider.QueryTime" units="ms"
-    expires_after="2022-10-04">
+    expires_after="2023-06-04">
+  <owner>wrong@chromium.org</owner>
   <owner>tbarzic@chromium.org</owner>
-  <owner>jennyz@chromium.org</owner>
-  <owner>newcomer@chromium.org</owner>
   <summary>
     The time between sending an non-empty query and receiving search results
     back from OmniboxProvider which queries chrome AutocompelteController's
@@ -754,20 +712,9 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Apps.AppList.OmniboxProvider.ZeroStateLatency" units="ms"
-    expires_after="2021-08-29">
-  <owner>jennyz@chromium.org</owner>
-  <owner>newcomer@chromium.org</owner>
-  <summary>
-    The time between sending an empty query and receiving zero state
-    recommendations back from OmniboxProvider which queries chrome
-    ZeroStateProvider and gets recent queries back from Google Autocomplete
-    server.
-  </summary>
-</histogram>
-
 <histogram name="Apps.AppList.OsSettingsProvider.Error"
     enum="OsSettingsProviderError" expires_after="2023-02-24">
+  <owner>wrong@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
   <summary>
@@ -779,6 +726,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Apps.AppList.OsSettingsProvider.QueryTime" units="ms"
     expires_after="2023-02-10">
+  <owner>wrong@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <summary>
@@ -893,7 +841,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.Search.Error" enum="AppListUserEventError"
-    expires_after="2023-01-31">
+    expires_after="2023-04-09">
   <owner>wrong@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
   <owner>tby@chromium.org</owner>
@@ -1008,7 +956,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.SortDiscoveryDurationAfterEducationNudge"
-    units="ms" expires_after="2023-02-12">
+    units="ms" expires_after="2023-02-26">
   <owner>andrewxu@chromium.org</owner>
   <owner>tbarzic@chromium.org</owner>
   <summary>
@@ -1035,7 +983,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.SortOrderOnSessionStart.{TabletOrClamshell}"
-    enum="AppListSortOrder" expires_after="2022-09-01">
+    enum="AppListSortOrder" expires_after="M112">
   <owner>andrewxu@chromium.org</owner>
   <owner>chromeos-launcher@google.com</owner>
   <summary>
@@ -1061,7 +1009,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppList.SuggestedContent.Enabled" enum="BooleanEnabled"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>wrong@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
@@ -1319,16 +1267,14 @@ chromium-metrics-reviews@google.com.
     <variant name=".Closed" summary=""/>
     <variant name=".FullscreenAllApps" summary=""/>
     <variant name=".FullscreenSearch" summary=""/>
-    <variant name=".Half" summary=""/>
     <variant name=".HomecherAllApps" summary=""/>
     <variant name=".HomecherClosed" summary=""/>
     <variant name=".HomecherSearch" summary=""/>
-    <variant name=".Peeking" summary=""/>
   </token>
 </histogram>
 
 <histogram name="Apps.AppListAppMovingType" enum="AppListAppMovingType"
-    expires_after="2022-12-17">
+    expires_after="2023-02-19">
   <owner>tbarzic@chromium.org</owner>
   <owner>mmourgos@chromium.org</owner>
   <owner>newcomer@chromium.org</owner>
@@ -1395,7 +1341,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppListContinueTaskOpenType" enum="AppListSearchResult"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
 <!-- Name completed by histogram_suffixes name="TabletOrClamshellMode" -->
 
   <owner>anasalazar@chromium.org</owner>
@@ -1407,7 +1353,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppListCreationTime" units="ms"
-    expires_after="2022-12-18">
+    expires_after="2023-02-19">
   <owner>tbarzic@chromium.org</owner>
   <owner>mmourgos@chromium.org</owner>
   <summary>
@@ -1433,7 +1379,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppListFolder.ShowHide.AnimationSmoothness" units="%"
-    expires_after="2022-11-06">
+    expires_after="2023-05-06">
   <owner>tbarzic@chromium.org</owner>
   <owner>jamescook@chromium.org</owner>
   <owner>chromeos-launcher@google.com</owner>
@@ -1450,7 +1396,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="Apps.AppListFolderNameLength" units="characters"
-    expires_after="2022-12-01">
+    expires_after="2023-02-19">
 <!-- Name completed by histogram_suffixes
      name="TabletOrClamshellMode" -->
 
@@ -1465,7 +1411,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppListFolderOpened" enum="AppListFolderOpened"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>mmourgos@chromium.org</owner>
   <owner>tbarzic@chromium.org</owner>
   <owner>newcomer@chromium.org</owner>
@@ -1508,7 +1454,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppListLauncherIssuedSearchQueryLength"
-    units="characters" expires_after="2023-01-15">
+    units="characters" expires_after="2023-03-19">
   <owner>jennyz@chromium.org</owner>
   <owner>tbarzic@chromium.org</owner>
   <owner>newcomer@chromium.org</owner>
@@ -1538,18 +1484,8 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="Apps.AppListPageOpened" enum="AppListPage"
-    expires_after="2023-02-12">
-  <owner>tbarzic@chromium.org</owner>
-  <owner>src/ash/app_list/OWNERS</owner>
-  <summary>
-    The page that the app list goes to. This is gathered every time the user
-    initiates a transition to another page in the launcher.
-  </summary>
-</histogram>
-
 <histogram name="Apps.AppListPageSwitcherSource"
-    enum="AppListPageSwitcherSource" expires_after="2023-01-22">
+    enum="AppListPageSwitcherSource" expires_after="2023-03-26">
 <!-- Name completed by histogram_suffixes name="TabletOrClamshellMode" -->
 
   <owner>tbarzic@chromium.org</owner>
@@ -1558,24 +1494,6 @@ chromium-metrics-reviews@google.com.
   <summary>
     The source used to switch pages in the app list's app grid. Logged when the
     page switch succeeds.
-  </summary>
-</histogram>
-
-<histogram name="Apps.AppListPeekingToFullscreen"
-    enum="AppListPeekingToFullscreenSource" expires_after="M85">
-  <owner>newcomer@chromium.org</owner>
-  <summary>
-    Replaced with Apps.AppListPeekingToFullscreenSource on 9/2017.
-  </summary>
-</histogram>
-
-<histogram name="Apps.AppListPeekingToFullscreenSource"
-    enum="AppListPeekingToFullscreenSource" expires_after="2021-09-19">
-  <owner>newcomer@chromium.org</owner>
-  <owner>mmourgos@chromium.org</owner>
-  <summary>
-    The source which transitions the app list from Peeking to Fullscreen. This
-    is logged when the transition method is used.
   </summary>
 </histogram>
 
@@ -1590,7 +1508,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppListPlayStoreQueryState"
-    enum="AppListPlayStoreQueryState" expires_after="2023-01-15">
+    enum="AppListPlayStoreQueryState" expires_after="2023-03-19">
   <owner>hejq@chromium.org</owner>
   <summary>The state of a Play Store app search request.</summary>
 </histogram>
@@ -1729,7 +1647,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppListSearchResultOpenTypeV2" enum="AppListSearchResult"
-    expires_after="2023-01-29">
+    expires_after="2023-04-02">
 <!-- Name completed by histogram_suffixes name="TabletOrClamshellMode" -->
 
   <owner>tbarzic@chromium.org</owner>
@@ -1743,7 +1661,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.AppListShow.InputLatency" units="ms"
-    expires_after="2022-12-31">
+    expires_after="2023-03-05">
   <owner>tbarzic@chromium.org</owner>
   <owner>newcomer@chromium.org</owner>
   <owner>mmourgos@chromium.org</owner>
@@ -1908,7 +1826,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.ClamshellLauncher.AnimationSmoothness.{Transition}"
-    units="%" expires_after="2022-09-01">
+    units="%" expires_after="M112">
 <!-- This metric is used in Tast tests. Do not rename the metric or variants. -->
 
   <owner>tbarzic@chromium.org</owner>
@@ -1979,7 +1897,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.CreateShortcutIcon.Linux.Result"
-    enum="WebAppCreateShortcutIconLinuxResult" expires_after="2023-01-15">
+    enum="WebAppCreateShortcutIconLinuxResult" expires_after="2023-03-19">
   <owner>estade@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -1997,7 +1915,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.CreateShortcuts.Mac.Result"
-    enum="WebAppCreateShortcutMacResult" expires_after="2023-01-15">
+    enum="WebAppCreateShortcutMacResult" expires_after="2023-03-19">
   <owner>phillis@chromium.org</owner>
   <owner>cmumford@chromium.org</owner>
   <summary>
@@ -2034,6 +1952,7 @@ chromium-metrics-reviews@google.com.
     <variant name=".FromKeyboard" summary="From keyboard shortcut."/>
     <variant name=".FromKiosk" summary="From Kiosk."/>
     <variant name=".FromLink" summary="From Link."/>
+    <variant name=".FromLockScreen" summary="From lock screen app launcher."/>
     <variant name=".FromManagementApi" summary="From management API."/>
     <variant name=".FromMenu" summary="From menu."/>
     <variant name=".FromNewTabPage" summary="From new tab page."/>
@@ -2073,7 +1992,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.FileHandler.Registration.Win.Result"
-    enum="FileHandlerRegistrationWinResult" expires_after="M110">
+    enum="FileHandlerRegistrationWinResult" expires_after="2023-02-26">
   <owner>estade@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -2129,10 +2048,6 @@ chromium-metrics-reviews@google.com.
   </summary>
   <token key="AppListTabletModeTransition">
     <variant name=""/>
-    <variant name=".DragReleaseHide"
-        summary="Release drag to hide the app list"/>
-    <variant name=".DragReleaseShow"
-        summary="Release drag to show the app list"/>
     <variant name=".EnterFullscreenAllApps"
         summary="Enter kFullScreenAllApps state in tablet"/>
     <variant name=".EnterFullscreenSearch"
@@ -2158,12 +2073,25 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.Launcher.AppListSortClearAction.{TabletOrClamshell}"
-    enum="AppListOrderUpdateEvent" expires_after="2022-09-01">
+    enum="AppListOrderUpdateEvent" expires_after="M112">
   <owner>andrewxu@chromium.org</owner>
   <owner>chromeos-launcher@google.com</owner>
   <summary>
     The events that reset the app list pref sort order. Triggered when the pref
     sort order is reset.
+  </summary>
+  <token key="TabletOrClamshell" variants="DisplayModes"/>
+</histogram>
+
+<histogram
+    name="Apps.Launcher.DragReorderAnimationSmoothness.{TabletOrClamshell}"
+    units="%" expires_after="M112">
+  <owner>mmourgos@chromium.org</owner>
+  <owner>chromeos-launcher@google.com</owner>
+  <summary>
+    Emitted when an app list drag reorder animation completes. Reports the
+    smoothness of this animation. 100% represents the ideally smooth 60 frames
+    per second.
   </summary>
   <token key="TabletOrClamshell" variants="DisplayModes"/>
 </histogram>
@@ -2192,7 +2120,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.Launcher.ProductivityReorderAction.{TabletOrClamshell}"
-    enum="AppListSortOrder" expires_after="2022-09-01">
+    enum="AppListSortOrder" expires_after="M112">
   <owner>andrewxu@chromium.org</owner>
   <owner>chromeos-launcher@google.com</owner>
   <summary>
@@ -2204,11 +2132,11 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Apps.Launcher.ProductivityReorderAnimationSmoothness.{TabletOrClamshell}"
-    units="%" expires_after="2022-09-01">
+    units="%" expires_after="M112">
   <owner>andrewxu@chromium.org</owner>
   <owner>chromeos-launcher@google.com</owner>
   <summary>
-    Emitted when the app list reorder animation completes. Reports the
+    Emitted when the app list sort reorder animation completes. Reports the
     smoothness of this animation. 100% represents the ideally smooth 60 frames
     per second.
   </summary>
@@ -2349,7 +2277,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.LockScreen.NoteTakingApp.AvailabilityOnScreenLock"
-    enum="LockScreenActionAvailability" expires_after="2022-12-01">
+    enum="LockScreenActionAvailability" expires_after="2023-02-26">
   <owner>glenrob@chromium.org</owner>
   <owner>tbuckley@chromium.org</owner>
   <summary>
@@ -2506,7 +2434,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.NoteTakingApp.PreferredLaunchResult"
-    enum="NoteTakingAppLaunchResult" expires_after="2022-12-01">
+    enum="NoteTakingAppLaunchResult" expires_after="2023-02-19">
   <owner>glenrob@chromium.org</owner>
   <owner>tbuckley@chromium.org</owner>
   <summary>
@@ -2547,23 +2475,12 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Apps.NumberOfPages" units="page(s)" expires_after="2022-12-18">
+<histogram name="Apps.NumberOfPages" units="page(s)" expires_after="2023-02-19">
   <owner>mmourgos@chromium.org</owner>
   <owner>tbarzic@chromium.org</owner>
   <owner>newcomer@chromium.org</owner>
   <summary>
     The number of pages that users have in the top level apps grid of their
-    Launcher. This metric is recorded every time the launcher is shown.
-  </summary>
-</histogram>
-
-<histogram name="Apps.NumberOfPagesNotFull" units="page(s)"
-    expires_after="2022-10-17">
-  <owner>mmourgos@chromium.org</owner>
-  <owner>tbarzic@chromium.org</owner>
-  <owner>newcomer@chromium.org</owner>
-  <summary>
-    The number of pages that are not full in the top level apps grid of
     Launcher. This metric is recorded every time the launcher is shown.
   </summary>
 </histogram>
@@ -2642,7 +2559,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Apps.PreferredApps.EntryCount" units="entries"
-    expires_after="2023-01-01">
+    expires_after="2023-03-05">
   <owner>mxcai@chromium.org</owner>
   <owner>chromeos-apps-foundation-team@google.com</owner>
   <summary>
@@ -2871,35 +2788,8 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram base="true" name="Apps.StateTransition.Drag.PresentationTime"
-    units="ms" expires_after="2022-10-17">
-<!-- Name completed by histogram_suffixes
-     name="TabletOrClamshellMode" -->
-
-  <owner>omrilio@chromium.org</owner>
-  <owner>tbarzic@chromium.org</owner>
-  <owner>newcomer@chromium.org</owner>
-  <summary>
-    Presentation time of the app launcher drag operation in milliseconds.
-  </summary>
-</histogram>
-
-<histogram base="true"
-    name="Apps.StateTransition.Drag.PresentationTime.MaxLatency" units="ms"
-    expires_after="2022-10-17">
-<!-- Name completed by histogram_suffixes
-     name="TabletOrClamshellMode" -->
-
-  <owner>omrilio@chromium.org</owner>
-  <owner>tbarzic@chromium.org</owner>
-  <owner>newcomer@chromium.org</owner>
-  <summary>
-    Maximum latency of the presentation time of the app laucnher drag operation.
-  </summary>
-</histogram>
-
 <histogram name="Apps.TimeBetweenAppInstallAndLaunch{TabletOrClamshell}"
-    units="ms" expires_after="2022-09-01">
+    units="ms" expires_after="M112">
   <owner>tbarzic@chromium.org</owner>
   <owner>jamescook@chromium.org</owner>
   <owner>chromeos-launcher@google.com</owner>

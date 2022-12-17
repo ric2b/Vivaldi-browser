@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -85,7 +85,6 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::MEDIASTREAM_MIC, "media-stream-mic"},
     {ContentSettingsType::MEDIASTREAM_CAMERA, "media-stream-camera"},
     {ContentSettingsType::PROTOCOL_HANDLERS, "register-protocol-handler"},
-    {ContentSettingsType::PPAPI_BROKER, "ppapi-broker"},
     {ContentSettingsType::AUTOMATIC_DOWNLOADS, "multiple-automatic-downloads"},
     {ContentSettingsType::MIDI_SYSEX, "midi-sysex"},
     {ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER, "protected-content"},
@@ -110,7 +109,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::BLUETOOTH_GUARD, "bluetooth-devices"},
     {ContentSettingsType::BLUETOOTH_CHOOSER_DATA,
      kBluetoothChooserDataGroupType},
-    {ContentSettingsType::WINDOW_PLACEMENT, "window-placement"},
+    {ContentSettingsType::WINDOW_MANAGEMENT, "window-placement"},
     {ContentSettingsType::LOCAL_FONTS, "local-fonts"},
     {ContentSettingsType::FILE_SYSTEM_ACCESS_CHOOSER_DATA,
      "file-system-access-handles-data"},
@@ -142,7 +141,6 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::WAKE_LOCK_SCREEN, nullptr},
     {ContentSettingsType::WAKE_LOCK_SYSTEM, nullptr},
     {ContentSettingsType::LEGACY_COOKIE_ACCESS, nullptr},
-    {ContentSettingsType::INSTALLED_WEB_APP_METADATA, nullptr},
     {ContentSettingsType::NFC, nullptr},
     {ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA, nullptr},
     {ContentSettingsType::FILE_SYSTEM_READ_GUARD, nullptr},
@@ -162,6 +160,10 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::GET_DISPLAY_MEDIA_SET_SELECT_ALL_SCREENS, nullptr},
     {ContentSettingsType::NOTIFICATION_INTERACTIONS, nullptr},
     {ContentSettingsType::REDUCED_ACCEPT_LANGUAGE, nullptr},
+    {ContentSettingsType::NOTIFICATION_PERMISSION_REVIEW, nullptr},
+    // PPAPI_BROKER has been deprecated. The content setting is not used or
+    // called from UI, so we don't need a representation JS string.
+    {ContentSettingsType::DEPRECATED_PPAPI_BROKER, nullptr},
 };
 
 static_assert(std::size(kContentSettingsTypeGroupNames) ==
@@ -264,20 +266,6 @@ SiteSettingSource CalculateSiteSettingSource(
 
   NOTREACHED();
   return SiteSettingSource::kPreference;
-}
-
-// Whether |pattern| applies to a single origin.
-bool PatternAppliesToSingleOrigin(const ContentSettingPatternSource& pattern) {
-  const GURL url(pattern.primary_pattern.ToString());
-  // Default settings and other patterns apply to multiple origins.
-  if (url::Origin::Create(url).opaque())
-    return false;
-  // Embedded content settings only match when |url| is embedded in another
-  // origin, so ignore non-wildcard secondary patterns.
-  if (pattern.secondary_pattern != ContentSettingsPattern::Wildcard()) {
-    return false;
-  }
-  return true;
 }
 
 bool PatternAppliesToWebUISchemes(const ContentSettingPatternSource& pattern) {
@@ -434,7 +422,7 @@ const std::vector<ContentSettingsType>& GetVisiblePermissionCategories() {
       ContentSettingsType::SOUND,
       ContentSettingsType::USB_GUARD,
       ContentSettingsType::VR,
-      ContentSettingsType::WINDOW_PLACEMENT,
+      ContentSettingsType::WINDOW_MANAGEMENT,
 
 #if defined(VIVALDI_BUILD)
       ContentSettingsType::AUTOPLAY,
@@ -779,7 +767,7 @@ ContentSetting GetContentSettingForOrigin(
       CalculateSiteSettingSource(profile, content_type, origin, info, result));
   *display_name = GetDisplayNameForGURL(origin, extension_registry);
 
-  if (info.session_model == content_settings::SessionModel::OneTime) {
+  if (info.metadata.session_model == content_settings::SessionModel::OneTime) {
     DCHECK_EQ(content_type, ContentSettingsType::GEOLOCATION);
     DCHECK_EQ(result.content_setting, CONTENT_SETTING_ALLOW);
     return CONTENT_SETTING_DEFAULT;
@@ -792,12 +780,12 @@ std::vector<ContentSettingPatternSource> GetSiteExceptionsForContentType(
     ContentSettingsType content_type) {
   ContentSettingsForOneType entries;
   map->GetSettingsForOneType(content_type, &entries);
-  entries.erase(std::remove_if(entries.begin(), entries.end(),
-                               [](const ContentSettingPatternSource& e) {
-                                 return !PatternAppliesToSingleOrigin(e) ||
-                                        PatternAppliesToWebUISchemes(e);
-                               }),
-                entries.end());
+  // Exclude any entries that don't represent a single webby top-frame origin.
+  base::EraseIf(entries, [](const ContentSettingPatternSource& e) {
+    return !content_settings::PatternAppliesToSingleOrigin(
+               e.primary_pattern, e.secondary_pattern) ||
+           PatternAppliesToWebUISchemes(e);
+  });
   return entries;
 }
 
@@ -813,9 +801,9 @@ void GetPolicyAllowedUrls(
   Profile* profile = Profile::FromWebUI(web_ui);
   PrefService* prefs = profile->GetPrefs();
   const base::Value::List& policy_urls =
-      prefs->GetValueList(type == ContentSettingsType::MEDIASTREAM_MIC
-                              ? prefs::kAudioCaptureAllowedUrls
-                              : prefs::kVideoCaptureAllowedUrls);
+      prefs->GetList(type == ContentSettingsType::MEDIASTREAM_MIC
+                         ? prefs::kAudioCaptureAllowedUrls
+                         : prefs::kVideoCaptureAllowedUrls);
 
   // Convert the URLs to |ContentSettingsPattern|s. Ignore any invalid ones.
   std::vector<ContentSettingsPattern> patterns;

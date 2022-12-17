@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,7 +97,7 @@ class PkitsTest : public ::testing::Test {
       crl_ders.push_back(net::ReadTestFileToString(
           "net/third_party/nist-pkits/crls/" + s + ".crl"));
 
-    base::StringPiece test_number = info.test_number;
+    std::string_view test_number = info.test_number;
 
     // Some of the PKITS tests are intentionally given different expectations
     // from PKITS.pdf.

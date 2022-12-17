@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,15 +6,15 @@
 
 #import <MobileCoreServices/MobileCoreServices.h>
 
-#include "base/mac/foundation_util.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/bookmarks/browser/bookmark_model.h"
-#include "components/prefs/pref_service.h"
-#include "ios/chrome/browser/pref_names.h"
-#include "ios/chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
+#import "base/mac/foundation_util.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "base/strings/string_number_conversions.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/bookmarks/browser/bookmark_model.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #import "ios/chrome/browser/ui/activity_services/activities/bookmark_activity.h"
 #import "ios/chrome/browser/ui/activity_services/activities/copy_activity.h"
 #import "ios/chrome/browser/ui/activity_services/activities/find_in_page_activity.h"
@@ -25,10 +25,12 @@
 #import "ios/chrome/browser/ui/activity_services/activities/send_tab_to_self_activity.h"
 #import "ios/chrome/browser/ui/activity_services/activity_service_histograms.h"
 #import "ios/chrome/browser/ui/activity_services/activity_type_util.h"
+#import "ios/chrome/browser/ui/activity_services/data/chrome_activity_file_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_image_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_item_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_text_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_url_source.h"
+#import "ios/chrome/browser/ui/activity_services/data/share_file_data.h"
 #import "ios/chrome/browser/ui/activity_services/data/share_image_data.h"
 #import "ios/chrome/browser/ui/activity_services/data/share_to_data.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
@@ -171,6 +173,11 @@
   }
 
   return applicationActivities;
+}
+
+- (NSArray<ChromeActivityFileSource*>*)activityItemsForFileData:
+    (ShareFileData*)data {
+  return @[ [[ChromeActivityFileSource alloc] initWithFilePath:data.filePath] ];
 }
 
 - (NSArray<ChromeActivityImageSource*>*)activityItemsForImageData:

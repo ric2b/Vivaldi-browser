@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,6 +79,12 @@ constexpr const wchar_t* const kMediaFoundationVideoEncoderDLLs[] = {
     L"mfplat.dll",
 };
 
+static const CLSID kIntelAV1HybridEncoderCLSID = {
+    0x62c053ce,
+    0x5357,
+    0x4794,
+    {0x8c, 0x5a, 0xfb, 0xef, 0xfe, 0xff, 0xb8, 0x2d}};
+
 eAVEncH264VProfile GetH264VProfile(VideoCodecProfile profile,
                                    bool is_constrained_h264) {
   switch (profile) {
@@ -115,6 +121,8 @@ bool IsSvcSupported(IMFActivate* activate) {
   // More info: https://crbug.com/1253748
   return false;
 #else
+  // crbug.com/1350257
+  TRACE_EVENT0("catan_investigation", "IsSvcSupported");
   Microsoft::WRL::ComPtr<IMFTransform> encoder;
   Microsoft::WRL::ComPtr<ICodecAPI> codec_api;
   HRESULT hr = activate->ActivateObject(IID_PPV_ARGS(&encoder));
@@ -229,6 +237,33 @@ uint32_t EnumerateHardwareEncoders(VideoCodec codec,
   return count;
 }
 
+// Per
+// https://learn.microsoft.com/en-us/windows/win32/medfound/handling-stream-changes,
+// encoders should only accept an input type that matches the currently
+// configured output type. If we want to change the frame rate, a
+// stream restart flow is needed, which in turn generates a key-frame on the
+// stream restart. This is not friendly for WebRTC encoding, which adjusts the
+// encoding frame rate frequently.
+// To mitigate this, we only configure the frame rate during HMFT
+// initialization. On subsequent frame rate update request, if new frame rate is
+// larger than currently configured frame rate and bitrate is kept unchanged,
+// this implies average encoded frame size should decrease proportionally. Since
+// we don't actually configure the new frame rate into HMFT(to avoid stream
+// restart), we emulate this average frame size decrease by proportionally
+// decreasing the target/peak bitrate(which does not require stream restart).
+// This is similar for frame rate update request that is lower than currently
+// configured, by increasing bitrate to emulate average frame size increase.
+// See https://crbug.com/1295815 for more details.
+uint32_t AdjustBitrateToFrameRate(uint32_t bitrate,
+                                  uint32_t configured_framerate,
+                                  uint32_t requested_framerate) {
+  if (requested_framerate == 0u) {
+    return 0u;
+  }
+
+  return bitrate * configured_framerate / requested_framerate;
+}
+
 }  // namespace
 
 class MediaFoundationVideoEncodeAccelerator::EncodeOutput {
@@ -282,8 +317,6 @@ MediaFoundationVideoEncodeAccelerator::MediaFoundationVideoEncodeAccelerator(
     CHROME_LUID luid)
     : compatible_with_win7_(
           gpu_preferences.enable_media_foundation_vea_on_windows7),
-      disable_dynamic_framerate_update_(
-          gpu_workarounds.disable_dynamic_video_encode_framerate_update),
       frame_rate_(kMaxFrameRateNumerator / kMaxFrameRateDenominator),
       bitrate_(Bitrate::ConstantBitrate(kDefaultTargetBitrate)),
       input_required_(false),
@@ -314,26 +347,7 @@ MediaFoundationVideoEncodeAccelerator::GetSupportedProfiles() {
   SupportedProfiles profiles;
 
   for (auto codec : {VideoCodec::kH264, VideoCodec::kVP9, VideoCodec::kAV1}) {
-    auto codec_profiles = GetSupportedProfilesForCodec(codec, true);
-    profiles.insert(profiles.end(), codec_profiles.begin(),
-                    codec_profiles.end());
-  }
-
-  ReleaseEncoderResources();
-  return profiles;
-}
-
-VideoEncodeAccelerator::SupportedProfiles
-MediaFoundationVideoEncodeAccelerator::GetSupportedProfilesLight() {
-  TRACE_EVENT0(
-      "gpu,startup",
-      "MediaFoundationVideoEncodeAccelerator::GetSupportedProfilesLight");
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  SupportedProfiles profiles;
-
-  for (auto codec : {VideoCodec::kH264, VideoCodec::kVP9, VideoCodec::kAV1}) {
-    auto codec_profiles = GetSupportedProfilesForCodec(codec, false);
+    auto codec_profiles = GetSupportedProfilesForCodec(codec);
     profiles.insert(profiles.end(), codec_profiles.begin(),
                     codec_profiles.end());
   }
@@ -344,8 +358,7 @@ MediaFoundationVideoEncodeAccelerator::GetSupportedProfilesLight() {
 
 VideoEncodeAccelerator::SupportedProfiles
 MediaFoundationVideoEncodeAccelerator::GetSupportedProfilesForCodec(
-    VideoCodec codec,
-    bool populate_svc_info) {
+    VideoCodec codec) {
   SupportedProfiles profiles;
   if ((codec == VideoCodec::kVP9 &&
        !base::FeatureList::IsEnabled(kMediaFoundationVP9Encoding)) ||
@@ -367,10 +380,8 @@ MediaFoundationVideoEncodeAccelerator::GetSupportedProfilesForCodec(
   if (pp_activate) {
     for (UINT32 i = 0; i < encoder_count; i++) {
       if (pp_activate[i]) {
-        if (populate_svc_info && !svc_supported &&
-            IsSvcSupported(pp_activate[i])) {
+        if (!svc_supported && IsSvcSupported(pp_activate[i]))
           svc_supported = true;
-        }
 
         // Release the enumerated instances if any.
         // According to Windows Dev Center,
@@ -460,7 +471,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
       std::make_unique<base::WeakPtrFactory<Client>>(client);
   main_client_ = main_client_weak_factory_->GetWeakPtr();
   input_visible_size_ = config.input_visible_size;
-  if (config.initial_framerate.has_value())
+  if (config.initial_framerate.has_value() && config.initial_framerate.value())
     frame_rate_ = config.initial_framerate.value();
   else
     frame_rate_ = kMaxFrameRateNumerator / kMaxFrameRateDenominator;
@@ -558,7 +569,7 @@ void MediaFoundationVideoEncodeAccelerator::EncoderInitializeTask(
 
   VideoEncoderInfo encoder_info;
   encoder_info.implementation_name = "MediaFoundationVideoEncodeAccelerator";
-  encoder_info.has_trusted_rate_controller = true;
+  encoder_info.has_trusted_rate_controller = false;
   DCHECK(encoder_info.is_hardware_accelerated);
   DCHECK(encoder_info.supports_native_handle);
   DCHECK(!encoder_info.supports_simulcast);
@@ -682,52 +693,52 @@ bool MediaFoundationVideoEncodeAccelerator::ActivateAsyncEncoder(
   // Try to create the encoder with priority according to merit value.
   HRESULT hr = E_FAIL;
   for (UINT32 i = 0; i < encoder_count; i++) {
-    if (FAILED(hr)) {
-      DCHECK(!encoder_);
-      DCHECK(!activate_);
-      hr = pp_activate[i]->ActivateObject(IID_PPV_ARGS(&encoder_));
-      if (encoder_.Get() != nullptr) {
-        DCHECK(SUCCEEDED(hr));
-        auto vendor = GetDriverVendor(pp_activate[i]);
-
-        // Skip NVIDIA GPU due to https://crbug.com/1088650 for constrained
-        // baseline profile H.264 encoding, and go to the next instance
-        // according to merit value.
-        if (codec_ == VideoCodec::kH264 && is_constrained_h264) {
-          // Get the vendor id.
-          base::win::ScopedCoMem<WCHAR> vendor_id;
-          UINT32 id_length;
-          pp_activate[i]->GetAllocatedString(
-              MFT_ENUM_HARDWARE_VENDOR_ID_Attribute, &vendor_id, &id_length);
-          if (!_wcsnicmp(vendor_id, L"VEN_10DE", id_length)) {
-            DLOG(WARNING)
-                << "Skipped NVIDIA GPU due to https://crbug.com/1088650";
-            pp_activate[i]->ShutdownObject();
-            encoder_.Reset();
-            hr = E_FAIL;
-            continue;
-          }
-        }
-
-        activate_ = pp_activate[i];
-        vendor_ = vendor;
-        pp_activate[i] = nullptr;
-
-        // Print the friendly name.
-        base::win::ScopedCoMem<WCHAR> friendly_name;
-        UINT32 name_length;
-        activate_->GetAllocatedString(MFT_FRIENDLY_NAME_Attribute,
-                                      &friendly_name, &name_length);
-        DVLOG(3) << "Selected asynchronous hardware encoder's friendly name: "
-                 << friendly_name;
-      } else {
-        DCHECK(FAILED(hr));
-
-        // The component that calls ActivateObject is
-        // responsible for calling ShutdownObject,
-        // https://docs.microsoft.com/en-us/windows/win32/api/mfobjects/nf-mfobjects-imfactivate-shutdownobject.
-        pp_activate[i]->ShutdownObject();
+    auto vendor = GetDriverVendor(pp_activate[i]);
+    // Skip flawky Intel hybrid AV1 encoder.
+    if (codec_ == VideoCodec::kAV1 && vendor == DriverVendor::kIntel) {
+      // Get the CLSID GUID of the HMFT.
+      GUID mft_guid = {0};
+      pp_activate[i]->GetGUID(MFT_TRANSFORM_CLSID_Attribute, &mft_guid);
+      if (mft_guid == kIntelAV1HybridEncoderCLSID) {
+        DLOG(WARNING) << "Skipped Intel hybrid AV1 encoder MFT.";
+        continue;
       }
+    }
+
+    // Skip NVIDIA GPU due to https://crbug.com/1088650 for constrained
+    // baseline profile H.264 encoding, and go to the next instance according
+    // to merit value.
+    if (codec_ == VideoCodec::kH264 && is_constrained_h264 &&
+        vendor == DriverVendor::kNvidia) {
+      DLOG(WARNING) << "Skipped NVIDIA GPU due to https://crbug.com/1088650";
+      continue;
+    }
+
+    DCHECK(!encoder_);
+    DCHECK(!activate_);
+    hr = pp_activate[i]->ActivateObject(IID_PPV_ARGS(&encoder_));
+    if (encoder_.Get() != nullptr) {
+      DCHECK(SUCCEEDED(hr));
+      activate_ = pp_activate[i];
+      vendor_ = vendor;
+      pp_activate[i] = nullptr;
+
+      // Print the friendly name.
+      base::win::ScopedCoMem<WCHAR> friendly_name;
+      UINT32 name_length;
+      activate_->GetAllocatedString(MFT_FRIENDLY_NAME_Attribute, &friendly_name,
+                                    &name_length);
+      DVLOG(3) << "Selected asynchronous hardware encoder's friendly name: "
+               << friendly_name;
+      // Encoder is successfully activated.
+      break;
+    } else {
+      DCHECK(FAILED(hr));
+
+      // The component that calls ActivateObject is
+      // responsible for calling ShutdownObject,
+      // https://docs.microsoft.com/en-us/windows/win32/api/mfobjects/nf-mfobjects-imfactivate-shutdownobject.
+      pp_activate[i]->ShutdownObject();
     }
   }
 
@@ -803,11 +814,15 @@ bool MediaFoundationVideoEncodeAccelerator::InitializeInputOutputParameters(
   hr = imf_output_media_type_->SetGUID(MF_MT_SUBTYPE,
                                        VideoCodecToMFSubtype(codec_));
   RETURN_ON_HR_FAILURE(hr, "Couldn't set video format", false);
-  hr = imf_output_media_type_->SetUINT32(MF_MT_AVG_BITRATE,
-                                         bitrate_.target_bps());
+
+  hr = imf_output_media_type_->SetUINT32(
+      MF_MT_AVG_BITRATE, AdjustBitrateToFrameRate(bitrate_.target_bps(),
+                                                  frame_rate_, frame_rate_));
   RETURN_ON_HR_FAILURE(hr, "Couldn't set bitrate", false);
+  configured_frame_rate_ = frame_rate_;
+
   hr = MFSetAttributeRatio(imf_output_media_type_.Get(), MF_MT_FRAME_RATE,
-                           frame_rate_, 1);
+                           configured_frame_rate_, 1);
   RETURN_ON_HR_FAILURE(hr, "Couldn't set frame rate", false);
   hr = MFSetAttributeSize(imf_output_media_type_.Get(), MF_MT_FRAME_SIZE,
                           input_visible_size_.width(),
@@ -837,7 +852,7 @@ bool MediaFoundationVideoEncodeAccelerator::InitializeInputOutputParameters(
   hr = imf_input_media_type_->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
   RETURN_ON_HR_FAILURE(hr, "Couldn't set video format", false);
   hr = MFSetAttributeRatio(imf_input_media_type_.Get(), MF_MT_FRAME_RATE,
-                           frame_rate_, 1);
+                           configured_frame_rate_, 1);
   RETURN_ON_HR_FAILURE(hr, "Couldn't set frame rate", false);
   hr = MFSetAttributeSize(imf_input_media_type_.Get(), MF_MT_FRAME_SIZE,
                           input_visible_size_.width(),
@@ -891,14 +906,16 @@ bool MediaFoundationVideoEncodeAccelerator::SetEncoderModes() {
     }
   }
 
-  var.ulVal = bitrate_.target_bps();
+  var.ulVal = AdjustBitrateToFrameRate(bitrate_.target_bps(),
+                                       configured_frame_rate_, frame_rate_);
   hr = codec_api_->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &var);
   if (!compatible_with_win7_) {
     RETURN_ON_HR_FAILURE(hr, "Couldn't set bitrate", false);
   }
 
   if (bitrate_.mode() == Bitrate::Mode::kVariable) {
-    var.ulVal = bitrate_.peak_bps();
+    var.ulVal = AdjustBitrateToFrameRate(bitrate_.peak_bps(),
+                                         configured_frame_rate_, frame_rate_);
     hr = codec_api_->SetValue(&CODECAPI_AVEncCommonMaxBitRate, &var);
     if (!compatible_with_win7_) {
       RETURN_ON_HR_FAILURE(hr, "Couldn't set bitrate", false);
@@ -1468,78 +1485,21 @@ void MediaFoundationVideoEncodeAccelerator::RequestEncodingParametersChangeTask(
 
   framerate = base::clamp(framerate, 1u, uint32_t{kMaxFrameRateNumerator});
 
-  if (frame_rate_ != framerate) {
-    // When dynamic framerate update is disabled, fallback from current encoder.
-    if (disable_dynamic_framerate_update_) {
-      DLOG(ERROR) << "Dynamic encode framerate update disabled.";
-      NotifyError(kPlatformFailureError);
-    }
-    HRESULT hr = MFSetAttributeRatio(imf_output_media_type_.Get(),
-                                     MF_MT_FRAME_RATE, framerate, 1);
-    RETURN_ON_HR_FAILURE(hr, "Couldn't set frame rate for output type", );
-
-    imf_output_media_type_->SetUINT32(MF_MT_AVG_BITRATE, bitrate.target_bps());
-    RETURN_ON_HR_FAILURE(hr, "Couldn't set average bitrate for output type", );
-
-    hr = MFSetAttributeRatio(imf_input_media_type_.Get(), MF_MT_FRAME_RATE,
-                             framerate, 1);
-    RETURN_ON_HR_FAILURE(hr, "Couldn't set frame rate for input type", );
-
-    // Some HMFTs will reject output type change with MF_E_INVALIDTYPE due
-    // to temporary mismatch between output/input media types, so we always
-    // clear the input/output media types before reconfiguring them
-    // dynamically.
-    hr = encoder_->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
-    RETURN_ON_HR_FAILURE(
-        hr, "Couldn't process message MFT_MESSAGE_COMMAND_DRAIN", );
-
-    DrainPendingOutputs();
-
-    hr = encoder_->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
-    RETURN_ON_HR_FAILURE(
-        hr, "Couldn't process message MFT_MESSAGE_NOTIFY_END_OF_STREAM", );
-
-    hr = encoder_->ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
-    RETURN_ON_HR_FAILURE(
-        hr, "Couldn't process message MFT_MESSAGE_NOTIFY_END_STREAMING", );
-
-    hr = encoder_->SetInputType(input_stream_id_, nullptr, 0);
-    RETURN_ON_HR_FAILURE(hr, "Couldn't clear input media type.", );
-
-    hr = encoder_->SetOutputType(output_stream_id_, nullptr, 0);
-    RETURN_ON_HR_FAILURE(hr, "Couldn't clear ouput media type.", );
-
-    hr = encoder_->SetOutputType(output_stream_id_,
-                                 imf_output_media_type_.Get(), 0);
-    RETURN_ON_HR_FAILURE(hr, "Couldn't set output media type", );
-
-    hr = encoder_->SetInputType(input_stream_id_, imf_input_media_type_.Get(),
-                                0);
-    RETURN_ON_HR_FAILURE(hr, "Couldn't set input media type", );
-
-    hr = encoder_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
-    RETURN_ON_HR_FAILURE(
-        hr, "Couldn't process message MFT_MESSAGE_NOTIFY_BEGIN_STREAMING", );
-
-    hr = encoder_->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
-    RETURN_ON_HR_FAILURE(
-        hr, "Couldn't process message MFT_MESSAGE_NOTIFY_START_OF_STREAM", );
-
-    frame_rate_ = framerate;
-  }
-
-  if (bitrate_ != bitrate) {
+  if (bitrate_ != bitrate || frame_rate_ != framerate) {
     bitrate_ = bitrate;
+    frame_rate_ = framerate;
     VARIANT var;
     var.vt = VT_UI4;
-    var.ulVal = bitrate.target_bps();
+    var.ulVal = AdjustBitrateToFrameRate(bitrate.target_bps(),
+                                         configured_frame_rate_, framerate);
     HRESULT hr = codec_api_->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &var);
     if (!compatible_with_win7_) {
       RETURN_ON_HR_FAILURE(hr, "Couldn't update mean bitrate", );
     }
 
     if (bitrate.mode() == Bitrate::Mode::kVariable) {
-      var.ulVal = bitrate.peak_bps();
+      var.ulVal = AdjustBitrateToFrameRate(bitrate.peak_bps(),
+                                           configured_frame_rate_, framerate);
       hr = codec_api_->SetValue(&CODECAPI_AVEncCommonMaxBitRate, &var);
       if (!compatible_with_win7_) {
         RETURN_ON_HR_FAILURE(hr, "Couldn't set max bitrate", );
@@ -1737,24 +1697,6 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PerformD3DScaling(
   }
 
   return hr;
-}
-
-void MediaFoundationVideoEncodeAccelerator::DrainPendingOutputs() {
-  Microsoft::WRL::ComPtr<IMFMediaEvent> media_event;
-
-  while ((SUCCEEDED(
-      event_generator_->GetEvent(MF_EVENT_FLAG_NO_WAIT, &media_event)))) {
-    MediaEventType event_type;
-    HRESULT hr = media_event->GetType(&event_type);
-    if (FAILED(hr)) {
-      DLOG(ERROR) << "Failed to get the type of media event.";
-      continue;
-    }
-
-    if (event_type == METransformHaveOutput) {
-      ProcessOutput();
-    }
-  }
 }
 
 }  // namespace media

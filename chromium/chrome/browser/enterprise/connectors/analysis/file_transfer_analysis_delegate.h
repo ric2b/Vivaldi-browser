@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include "base/callback.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate_base.h"
 #include "chrome/browser/enterprise/connectors/common.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "storage/browser/file_system/file_system_url.h"
@@ -29,7 +28,11 @@ class FilesRequestHandler;
 // `FileTransferAnalysisDelegate` handles scanning and reporting of ChromeOS
 // file system transfers.
 // A user of `FileTransferAnalysisDelegate` should first check whether scanning
-// is enabled for a pair of filesystem urls using `IsEnabled()`.
+// is enabled for a pair of filesystem urls using `IsEnabledVec()`.
+// Note: `IsEnabledVec()` allows checking for multiple source urls at once. In
+// this case, a user has to create a FileTransferAnalysisDelegate for each
+// source url.
+//
 // If scanning is enabled, a user proceeds with the creation of the class and
 // then calls `UploadData()` to start the scan. Once the scans are complete,
 // `callback_` is run.
@@ -42,6 +45,15 @@ class FilesRequestHandler;
 // file will be scanned.
 class FileTransferAnalysisDelegate : public ContentAnalysisDelegateBase {
  public:
+  using FileTransferAnalysisDelegateFactory = base::RepeatingCallback<
+      std::unique_ptr<enterprise_connectors::FileTransferAnalysisDelegate>(
+          safe_browsing::DeepScanAccessPoint access_point,
+          storage::FileSystemURL source_url,
+          storage::FileSystemURL destination_url,
+          Profile* profile,
+          storage::FileSystemContext* file_system_context,
+          enterprise_connectors::AnalysisSettings settings)>;
+
   enum FileTransferAnalysisResult {
     RESULT_ALLOWED,
     RESULT_BLOCKED,
@@ -50,25 +62,41 @@ class FileTransferAnalysisDelegate : public ContentAnalysisDelegateBase {
 
   ~FileTransferAnalysisDelegate() override;
 
-  static absl::optional<AnalysisSettings> IsEnabled(
-      Profile* profile,
+  // Create the FileTransferAnalysisDelegate. This function uses the factory if
+  // it is set via `SetFactorForTesting()`.
+  //
+  // For `block_until_verdict == 0`, the `destination_url` has to point to the
+  // copied file/directory and not its parent. If it points to the parent, all
+  // files within the destination directory are scanned.
+  static std::unique_ptr<FileTransferAnalysisDelegate> Create(
+      safe_browsing::DeepScanAccessPoint access_point,
       storage::FileSystemURL source_url,
-      storage::FileSystemURL destination_url);
+      storage::FileSystemURL destination_url,
+      Profile* profile,
+      storage::FileSystemContext* file_system_context,
+      AnalysisSettings settings);
 
-  FileTransferAnalysisDelegate(safe_browsing::DeepScanAccessPoint access_point,
-                               storage::FileSystemURL source_url,
-                               storage::FileSystemURL destination_url,
-                               Profile* profile,
-                               storage::FileSystemContext* file_system_context,
-                               AnalysisSettings settings,
-                               base::OnceClosure result_callback);
+  // Set a factory for the FileTransferAnalysisDelegate.
+  // Can be used in testing to create `MockFileTransferAnalysisDelegate`s.
+  static void SetFactorForTesting(FileTransferAnalysisDelegateFactory factory);
+
+  // Returns a vector with the AnalysisSettings for file transfers from the
+  // respective source url to the destination_url.
+  // If the transfer is not enabled for any of the transfers an empty vector is
+  // returned.
+  // Each entry in the returned vector corresponds to the entry in the
+  // `source_urls` vector with the same index.
+  static std::vector<absl::optional<AnalysisSettings>> IsEnabledVec(
+      Profile* profile,
+      const std::vector<storage::FileSystemURL>& source_urls,
+      storage::FileSystemURL destination_url);
 
   // Main entrypoint to start the file uploads.
   // Once scanning is complete `callback_` will be called.
-  void UploadData();
+  virtual void UploadData(base::OnceClosure completion_callback);
 
   // Calling this function is only allowed after the scan is complete!
-  FileTransferAnalysisResult GetAnalysisResultAfterScan(
+  virtual FileTransferAnalysisResult GetAnalysisResultAfterScan(
       storage::FileSystemURL url);
 
   // ContentAnalysisDelegateBase:
@@ -83,15 +111,27 @@ class FileTransferAnalysisDelegate : public ContentAnalysisDelegateBase {
 
   FilesRequestHandler* GetFilesRequestHandlerForTesting();
 
+ protected:
+  // For `block_until_verdict == 0`, the `destination_url` has to point to the
+  // copied file/directory and not its parent. If it points to the parent, all
+  // files within the destination directory are scanned.
+  FileTransferAnalysisDelegate(safe_browsing::DeepScanAccessPoint access_point,
+                               storage::FileSystemURL source_url,
+                               storage::FileSystemURL destination_url,
+                               Profile* profile,
+                               storage::FileSystemContext* file_system_context,
+                               AnalysisSettings settings);
+
  private:
-  void OnGotFileSourceURLs(std::vector<storage::FileSystemURL> source_urls);
+  void OnGotFileURLs(std::vector<storage::FileSystemURL> source_urls);
 
   void ContentAnalysisCompleted(std::vector<RequestHandlerResult> results);
 
   AnalysisSettings settings_;
   Profile* profile_;
   safe_browsing::DeepScanAccessPoint access_point_;
-  std::vector<storage::FileSystemURL> source_urls_;
+  std::vector<storage::FileSystemURL> scanning_urls_;
+  storage::FileSystemURL source_url_;
   storage::FileSystemURL destination_url_;
   base::OnceClosure callback_;
   std::vector<RequestHandlerResult> results_;

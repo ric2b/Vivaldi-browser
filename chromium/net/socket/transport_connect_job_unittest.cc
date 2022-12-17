@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,7 +70,7 @@ class TransportConnectJobTest : public WithTaskEnvironment,
   static scoped_refptr<TransportSocketParams> DefaultParams() {
     return base::MakeRefCounted<TransportSocketParams>(
         url::SchemeHostPort(url::kHttpScheme, kHostName, 80),
-        NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+        NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
         OnHostResolutionCallback(),
         /*supported_alpns=*/base::flat_set<std::string>());
   }
@@ -78,7 +78,7 @@ class TransportConnectJobTest : public WithTaskEnvironment,
   static scoped_refptr<TransportSocketParams> DefaultHttpsParams() {
     return base::MakeRefCounted<TransportSocketParams>(
         url::SchemeHostPort(url::kHttpsScheme, kHostName, 443),
-        NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+        NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
         OnHostResolutionCallback(),
         /*supported_alpns=*/base::flat_set<std::string>{"h2", "http/1.1"});
   }
@@ -248,7 +248,7 @@ TEST_F(TransportConnectJobTest, HandlesHttpsEndpoint) {
       DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_,
       base::MakeRefCounted<TransportSocketParams>(
           url::SchemeHostPort(url::kHttpsScheme, kHostName, 80),
-          NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+          NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
           OnHostResolutionCallback(),
           /*supported_alpns=*/base::flat_set<std::string>{"h2", "http/1.1"}),
       &test_delegate, nullptr /* net_log */);
@@ -263,7 +263,7 @@ TEST_F(TransportConnectJobTest, HandlesNonStandardEndpoint) {
   TransportConnectJob transport_connect_job(
       DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_,
       base::MakeRefCounted<TransportSocketParams>(
-          HostPortPair(kHostName, 80), NetworkIsolationKey(),
+          HostPortPair(kHostName, 80), NetworkAnonymizationKey(),
           SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
           /*supported_alpns=*/base::flat_set<std::string>()),
       &test_delegate, nullptr /* net_log */);
@@ -279,7 +279,7 @@ TEST_F(TransportConnectJobTest, SecureDnsPolicy) {
         DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_,
         base::MakeRefCounted<TransportSocketParams>(
             url::SchemeHostPort(url::kHttpScheme, kHostName, 80),
-            NetworkIsolationKey(), secure_dns_policy,
+            NetworkAnonymizationKey(), secure_dns_policy,
             OnHostResolutionCallback(),
             /*supported_alpns=*/base::flat_set<std::string>{}),
         &test_delegate, nullptr /* net_log */);

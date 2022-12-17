@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,7 +55,6 @@ WebPreferences::WebPreferences()
       allow_scripts_to_close_windows(false),
       remote_fonts_enabled(true),
       javascript_can_access_clipboard(false),
-      xslt_enabled(true),
       dns_prefetching_enabled(true),
       data_saver_enabled(false),
       local_storage_enabled(false),

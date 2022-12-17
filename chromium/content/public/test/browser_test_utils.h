@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,6 +40,8 @@
 #include "content/public/test/fake_frame_widget.h"
 #include "content/public/test/test_utils.h"
 #include "ipc/message_filter.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/self_owned_associated_receiver.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "net/base/load_flags.h"
 #include "net/cookies/cookie_options.h"
@@ -48,10 +50,13 @@
 #include "storage/common/file_system/file_system_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/common/context_menu_data/untrustworthy_context_menu_params.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/mojom/blob/blob_url_store.mojom-test-utils.h"
+#include "third_party/blink/public/mojom/blob/blob_url_store.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-test-utils.h"
 #include "third_party/blink/public/mojom/frame/remote_frame.mojom-test-utils.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
@@ -152,6 +157,12 @@ void NavigateToURLBlockUntilNavigationsComplete(
     const GURL& url,
     int number_of_navigations,
     bool ignore_uncommitted_navigations = true);
+// Same, but allows specifying the full LoadURLParams instead of just the URL.
+void NavigateToURLBlockUntilNavigationsComplete(
+    WebContents* web_contents,
+    const NavigationController::LoadURLParams& params,
+    int number_of_navigations,
+    bool ignore_uncommitted_navigations = true);
 
 // Perform a renderer-initiated navigation of |window| to |url|, blocking
 // until the navigation finishes.  The navigation is done by assigning
@@ -168,6 +179,13 @@ void NavigateToURLBlockUntilNavigationsComplete(
 [[nodiscard]] bool NavigateToURLFromRendererWithoutUserGesture(
     const ToRenderFrameHost& adapter,
     const GURL& url);
+// Similar to above but takes in an additional URL, |expected_commit_url|, to
+// which the navigation should eventually commit. (See the browser-initiated
+// counterpart for more details).
+[[nodiscard]] bool NavigateToURLFromRendererWithoutUserGesture(
+    const ToRenderFrameHost& adapter,
+    const GURL& url,
+    const GURL& expected_commit_url);
 
 // Perform a renderer-initiated navigation of |window| to |url|. Unlike the
 // previous set of helpers, does not block. The navigation is done by assigning
@@ -321,15 +339,28 @@ void SimulateTouchscreenPinch(WebContents* web_contents,
 #endif  // !BUILDFLAG(IS_MAC)
 
 // Sends a GesturePinch Begin/Update/End sequence.
+void SimulateGesturePinchSequence(RenderWidgetHost* render_widget_host,
+                                  const gfx::Point& point,
+                                  float scale,
+                                  blink::WebGestureDevice source_device);
+
 void SimulateGesturePinchSequence(WebContents* web_contents,
                                   const gfx::Point& point,
                                   float scale,
                                   blink::WebGestureDevice source_device);
 
 // Sends a simple, three-event (Begin/Update/End) gesture scroll.
+void SimulateGestureScrollSequence(RenderWidgetHost* render_widget_host,
+                                   const gfx::Point& point,
+                                   const gfx::Vector2dF& delta);
+
 void SimulateGestureScrollSequence(WebContents* web_contents,
                                    const gfx::Point& point,
                                    const gfx::Vector2dF& delta);
+
+void SimulateGestureEvent(RenderWidgetHost* render_widget_host,
+                          const blink::WebGestureEvent& gesture_event,
+                          const ui::LatencyInfo& latency);
 
 void SimulateGestureEvent(WebContents* web_contents,
                           const blink::WebGestureEvent& gesture_event,
@@ -962,6 +993,18 @@ bool SetCookie(BrowserContext* browser_context,
                net::SamePartyContext::Type party_context =
                    net::SamePartyContext::Type::kSameParty);
 
+// Same as `SetCookie`, but sets a Partitioned cookie with the given partition
+// key. `value` is expected to use the `Partitioned` attribute.
+bool SetPartitionedCookie(
+    BrowserContext* browser_context,
+    const GURL& url,
+    const std::string& value,
+    const net::CookiePartitionKey& cookie_partition_key,
+    net::CookieOptions::SameSiteCookieContext context =
+        net::CookieOptions::SameSiteCookieContext::MakeInclusive(),
+    net::SamePartyContext::Type party_context =
+        net::SamePartyContext::Type::kSameParty);
+
 // Deletes cookies matching the provided filter. Returns the number of cookies
 // that were deleted.
 uint32_t DeleteCookies(BrowserContext* browser_context,
@@ -1350,6 +1393,7 @@ class RenderFrameSubmissionObserver
       RenderFrameMetadataProviderImpl* render_frame_metadata_provider);
   explicit RenderFrameSubmissionObserver(FrameTreeNode* node);
   explicit RenderFrameSubmissionObserver(WebContents* web_contents);
+  explicit RenderFrameSubmissionObserver(RenderFrameHost* rfh);
   ~RenderFrameSubmissionObserver() override;
 
   // Resets the current |render_frame_count|;
@@ -2004,7 +2048,34 @@ class UpdateUserActivationStateInterceptor
   bool update_user_activation_state_ = false;
 };
 
-WebContents* GetEmbedderForGuest(content::WebContents* guest);
+// Helper class to interpose on Blob URL registrations, replacing the URL
+// contained in incoming registration requests with the specified URL.
+class BlobURLStoreInterceptor
+    : public blink::mojom::BlobURLStoreInterceptorForTesting {
+ public:
+  static void Intercept(
+      GURL target_url,
+      mojo::SelfOwnedAssociatedReceiverRef<blink::mojom::BlobURLStore>
+          receiver);
+
+  ~BlobURLStoreInterceptor() override;
+
+  blink::mojom::BlobURLStore* GetForwardingInterface() override;
+
+  void Register(
+      mojo::PendingRemote<blink::mojom::Blob> blob,
+      const GURL& url,
+      // TODO(https://crbug.com/1224926): Remove these once experiment is over.
+      const base::UnguessableToken& unsafe_agent_cluster_id,
+      const absl::optional<net::SchemefulSite>& unsafe_top_level_site,
+      RegisterCallback callback) override;
+
+ private:
+  explicit BlobURLStoreInterceptor(GURL target_url);
+
+  std::unique_ptr<blink::mojom::BlobURLStore> url_store_;
+  GURL target_url_;
+};
 
 // Load the given |url| with |network_context| and return the |net::Error| code.
 //
@@ -2030,7 +2101,7 @@ void EnsureCookiesFlushed(BrowserContext* browser_context);
 // Performs a simple auto-resize flow and ensures that the embedder gets a
 // single response messages back from the guest, with the expected values.
 bool TestGuestAutoresize(WebContents* embedder_web_contents,
-                         WebContents* guest_web_contents);
+                         RenderFrameHost* guest_main_frame);
 
 // Class to intercept SynchronizeVisualProperties method. This allows the
 // message to continue to the target child so that processing can be verified by
@@ -2292,6 +2363,13 @@ RegisterWebContentsCreationCallback(
 [[nodiscard]] bool HistoryGoToOffset(WebContents* wc, int offset);
 [[nodiscard]] bool HistoryGoBack(WebContents* wc);
 [[nodiscard]] bool HistoryGoForward(WebContents* wc);
+
+#if BUILDFLAG(IS_MAC)
+// Grant native windows the ability to activate, allowing them to become key
+// and/or main. This can be useful to enable when the process hosting the window
+// is a standalone executable without an Info.plist.
+bool EnableNativeWindowActivation();
+#endif  // BUILDFLAG(IS_MAC)
 
 }  // namespace content
 

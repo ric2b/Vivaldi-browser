@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -119,26 +119,6 @@ class MEDIA_EXPORT GenericSourceString {
   base::StringPiece str_;
   ResolutionState resolution_state_;
 };
-
-// `SourceLineIterator` may not create resolved source strings
-template <>
-ResolvedSourceString ResolvedSourceString::Create(
-    base::PassKey<SourceLineIterator>,
-    size_t line,
-    base::StringPiece str) = delete;
-
-// `VariableDictionary` may not create unresolved source strings
-template <>
-SourceString SourceString::Create(base::PassKey<VariableDictionary>,
-                                  size_t line,
-                                  size_t column,
-                                  base::StringPiece str,
-                                  SourceStringState resolution_state) = delete;
-
-// Resolved source strings may not skip variable substitution
-template <>
-ResolvedSourceString ResolvedSourceString::SkipVariableSubstitution() const =
-    delete;
 
 // Exposes a line-based iteration API over the source text of an HLS manifest.
 struct MEDIA_EXPORT SourceLineIterator {

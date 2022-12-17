@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,6 +87,8 @@ class PasswordManager : public PasswordManagerInterface {
       autofill::FormRendererId form_id,
       autofill::FieldRendererId generation_element,
       autofill::password_generation::PasswordGenerationType type) override;
+
+  PasswordManagerClient* GetClient() override;
 #if BUILDFLAG(IS_IOS)
   void OnSubframeFormSubmission(PasswordManagerDriver* driver,
                                 const autofill::FormData& form_data) override;
@@ -162,6 +164,12 @@ class PasswordManager : public PasswordManagerInterface {
   // Handles a request to hide manual fallback for password saving.
   void HideManualFallbackForSaving();
 
+  // Checks whether all |FormFetcher|s belonging to the |driver|-corresponding
+  // frame have finished fetching logins.
+  // Used to determine whether manual password generation can be offered
+  // Automatic password generation already waits for that signal.
+  bool HaveFormManagersReceivedData(const PasswordManagerDriver* driver);
+
   void ProcessAutofillPredictions(
       PasswordManagerDriver* driver,
       const std::vector<autofill::FormStructure*>& forms);
@@ -176,8 +184,6 @@ class PasswordManager : public PasswordManagerInterface {
 
   // Returns true if password element is detected on the current page.
   bool IsPasswordFieldDetectedOnPage();
-
-  PasswordManagerClient* client() { return client_; }
 
 #if defined(UNIT_TEST)
   const std::vector<std::unique_ptr<PasswordFormManager>>& form_managers()

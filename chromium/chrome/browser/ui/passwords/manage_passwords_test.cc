@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,7 +34,7 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "components/sync/driver/test_sync_service.h"
+#include "components/sync/test/test_sync_service.h"
 #include "content/public/test/test_utils.h"
 
 using base::ASCIIToUTF16;
@@ -210,12 +210,17 @@ void ManagePasswordsTest::ConfigurePasswordSync(bool is_enabled) {
   if (is_enabled) {
     sync_service->SetHasSyncConsent(true);
     sync_service->SetDisableReasons({});
-    sync_service->SetActiveDataTypes({syncer::ModelTypeSet(syncer::PASSWORDS)});
+    sync_service->GetUserSettings()->SetSelectedTypes(
+        /*sync_everything=*/false,
+        /*types=*/syncer::UserSelectableTypeSet(
+            syncer::UserSelectableType::kPasswords));
   } else {
     sync_service->SetHasSyncConsent(false);
     sync_service->SetDisableReasons(
         syncer::SyncService::DISABLE_REASON_USER_CHOICE);
-    sync_service->SetActiveDataTypes({});
+    sync_service->GetUserSettings()->SetSelectedTypes(
+        /*sync_everything=*/false,
+        /*types=*/syncer::UserSelectableTypeSet());
   }
 }
 

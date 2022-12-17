@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -150,11 +150,10 @@ absl::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
   additional_fields.Set(
       "source_registration_time",
       SerializeTimeRoundedDownToWholeDayInSeconds(
-          attribution_info.source.common_info().impression_time()));
-  additional_fields.Set("attribution_destination",
-                        attribution_info.source.common_info()
-                            .ConversionDestination()
-                            .Serialize());
+          attribution_info.source.common_info().source_time()));
+  additional_fields.Set(
+      "attribution_destination",
+      attribution_info.source.common_info().DestinationSite().Serialize());
   return AggregatableReportRequest::Create(
       AggregationServicePayloadContents(
           AggregationServicePayloadContents::Operation::kHistogram,

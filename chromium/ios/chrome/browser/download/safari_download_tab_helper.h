@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,12 +20,8 @@ class WebState;
 class SafariDownloadTabHelper
     : public web::WebStateUserData<SafariDownloadTabHelper> {
  public:
-  SafariDownloadTabHelper() = default;
   SafariDownloadTabHelper(const SafariDownloadTabHelper&) = delete;
   SafariDownloadTabHelper& operator=(const SafariDownloadTabHelper&) = delete;
-
-  // Creates TabHelper. `web_state` must not be null.
-  static void CreateForWebState(web::WebState* web_state);
 
   id<SafariDownloadTabHelperDelegate> delegate() { return delegate_; }
 
@@ -42,6 +38,9 @@ class SafariDownloadTabHelper
 
  private:
   friend class web::WebStateUserData<SafariDownloadTabHelper>;
+
+  explicit SafariDownloadTabHelper(web::WebState* web_state);
+
   __weak id<SafariDownloadTabHelperDelegate> delegate_ = nil;
 
   WEB_STATE_USER_DATA_KEY_DECL();

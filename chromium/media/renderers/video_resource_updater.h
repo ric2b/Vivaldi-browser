@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -201,6 +201,7 @@ class MEDIA_EXPORT VideoResourceUpdater
   // base::trace_event::MemoryDumpProvider implementation.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
+
   const raw_ptr<viz::ContextProvider> context_provider_;
   const raw_ptr<viz::RasterContextProvider> raster_context_provider_;
   const raw_ptr<viz::SharedBitmapReporter> shared_bitmap_reporter_;

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+#include "chrome/browser/ui/performance_controls/high_efficiency_iph_controller.h"
 #include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
@@ -42,9 +43,13 @@
 #include "chrome/browser/ui/views/user_education/browser_feature_promo_controller.h"
 #include "chrome/common/buildflags.h"
 #include "components/infobars/core/infobar_container.h"
+#include "components/user_education/common/feature_promo_controller.h"
 #include "components/user_education/common/feature_promo_handle.h"
 #include "components/webapps/browser/banners/app_banner_manager.h"
+#include "content/public/browser/permission_controller.h"
+#include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/models/simple_menu_model.h"
@@ -150,6 +155,8 @@ class BrowserView : public BrowserWindow,
   // (and hide immediately).
   static void SetDisableRevealerDelayForTesting(bool disable);
 
+  bool IsLoadingAnimationRunningForTesting() const;
+
   // Returns a Browser instance of this view.
   Browser* browser() { return browser_.get(); }
   const Browser* browser() const { return browser_.get(); }
@@ -187,12 +194,17 @@ class BrowserView : public BrowserWindow,
 
 #if BUILDFLAG(IS_MAC)
   views::Widget* overlay_widget() { return overlay_widget_.get(); }
+
+  // Returns if this browser view will use immersive fullscreen mode, based
+  // on the state of the two relevant base::Features, as well as the type of
+  // browser this is a view for.
+  bool UsesImmersiveFullscreenMode() const;
 #endif
 
   // Container for the web contents.
   views::View* contents_container() { return contents_container_; }
 
-  SidePanel* right_aligned_side_panel() { return right_aligned_side_panel_; }
+  SidePanel* unified_side_panel() { return unified_side_panel_; }
 
   SidePanel* lens_side_panel() { return lens_side_panel_; }
 
@@ -386,6 +398,11 @@ class BrowserView : public BrowserWindow,
   base::CallbackListSubscription AddOnLinkOpeningFromGestureCallback(
       OnLinkOpeningFromGestureCallback callback);
 
+  // Updates the variable keeping track of the borderless mode visibility, which
+  // together with the `window_placement_permission_granted_` controls whether
+  // the title bar is shown or not.
+  void UpdateBorderlessModeEnabled();
+
   // Returns true when an app's effective display mode is
   // window-controls-overlay.
   bool AppUsesWindowControlsOverlay() const;
@@ -397,13 +414,19 @@ class BrowserView : public BrowserWindow,
   // of a full titlebar. This is only supported for desktop web apps.
   bool IsWindowControlsOverlayEnabled() const;
 
-  // Returns true when the borderless mode should be displayed instead
-  // of a full titlebar. This is only supported for desktop web apps.
-  bool IsBorderlessModeEnabled() const;
-
   // Enable or disable the window controls overlay and notify the browser frame
   // view of the update.
   void ToggleWindowControlsOverlayEnabled();
+
+  bool borderless_mode_enabled_for_testing() const {
+    return borderless_mode_enabled_;
+  }
+
+  bool window_placement_permission_granted_for_testing() const {
+    return window_placement_permission_granted_;
+  }
+
+  void set_isolated_web_app_true_for_testing() { is_isolated_web_app_ = true; }
 
   // Update the side panel's horizontal alignment when
   // prefs::kSidePanelHorizontalAlignment is changed from the appearance
@@ -441,7 +464,7 @@ class BrowserView : public BrowserWindow,
   void BookmarkBarStateChanged(
       BookmarkBar::AnimateChangeType change_type) override;
   void UpdateDevTools() override;
-  void UpdateLoadingAnimations(bool should_animate) override;
+  void UpdateLoadingAnimations(bool is_visible) override;
   void SetStarredState(bool is_starred) override;
   void SetTranslateIconToggled(bool is_lit) override;
   void OnActiveTabChanged(content::WebContents* old_contents,
@@ -504,6 +527,7 @@ class BrowserView : public BrowserWindow,
   bool IsToolbarVisible() const override;
   bool IsToolbarShowing() const override;
   bool IsLocationBarVisible() const override;
+  bool IsBorderlessModeEnabled() const override;
 
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
@@ -539,14 +563,11 @@ class BrowserView : public BrowserWindow,
       translate::TranslateStep step,
       const std::string& source_language,
       const std::string& target_language,
-      translate::TranslateErrors::Type error_type,
+      translate::TranslateErrors error_type,
       bool is_user_gesture) override;
-  void ShowPartialTranslateBubble(
-      PartialTranslateBubbleModel::ViewState view_state,
-      const std::string& source_language,
-      const std::string& target_language,
-      const std::u16string& text_selection,
-      translate::TranslateErrors::Type error_type) override;
+  void StartPartialTranslate(const std::string& source_language,
+                             const std::string& target_language,
+                             const std::u16string& text_selection) override;
   void ShowOneClickSigninConfirmation(
       const std::u16string& email,
       base::OnceCallback<void(bool)> confirmed_callback) override;
@@ -594,13 +615,19 @@ class BrowserView : public BrowserWindow,
   LocationBarView* GetLocationBarView() const;
 
   BrowserFeaturePromoController* GetFeaturePromoController() override;
-  bool IsFeaturePromoActive(
-      const base::Feature& iph_feature,
-      bool include_continued_promos = false) const override;
+  bool IsFeaturePromoActive(const base::Feature& iph_feature) const override;
   bool MaybeShowFeaturePromo(
       const base::Feature& iph_feature,
       user_education::FeaturePromoSpecification::StringReplacements
           body_text_replacements = {},
+      user_education::FeaturePromoController::BubbleCloseCallback
+          close_callback = base::DoNothing()) override;
+  bool MaybeShowStartupFeaturePromo(
+      const base::Feature& iph_feature,
+      user_education::FeaturePromoSpecification::StringReplacements
+          body_text_replacements = {},
+      user_education::FeaturePromoController::StartupPromoCallback
+          promo_callback = base::DoNothing(),
       user_education::FeaturePromoController::BubbleCloseCallback
           close_callback = base::DoNothing()) override;
   bool CloseFeaturePromo(const base::Feature& iph_feature) override;
@@ -663,6 +690,7 @@ class BrowserView : public BrowserWindow,
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
   void OnWidgetBoundsChanged(views::Widget* widget,
                              const gfx::Rect& new_bounds) override;
+  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
 
   // views::ClientView:
   views::CloseRequestResult OnWindowCloseRequested() override;
@@ -749,7 +777,7 @@ class BrowserView : public BrowserWindow,
     return accessibility_focus_highlight_.get();
   }
 
-  // Closes an open right aligned side panel, returns true if there is an open
+  // Closes an opened right aligned side panel, returns true if there is an open
   // side panel being closed.
   bool CloseOpenRightAlignedSidePanel(bool exclude_lens = false,
                                       bool exclude_side_search = false);
@@ -759,9 +787,16 @@ class BrowserView : public BrowserWindow,
   void MaybeClobberAllSideSearchSidePanels();
 
   // Called by right aligned side panels when they are explicitly closed by
-  // users. This is used to implement improved clobbering logic for the right
-  // aligned side panels.
+  // users. This is used to implement improved clobbering logic for the
+  // right aligned side panels.
   void RightAlignedSidePanelWasClosed();
+
+  bool should_show_window_controls_overlay_toggle() const {
+    return should_show_window_controls_overlay_toggle_;
+  }
+
+  void SetLoadingAnimationStateChangeClosureForTesting(
+      base::OnceClosure closure);
 
  private:
   // Do not friend BrowserViewLayout. Use the BrowserViewLayoutDelegate
@@ -908,9 +943,6 @@ class BrowserView : public BrowserWindow,
   // Called when ui::TouchUiController changes the current touch mode.
   void TouchModeChanged();
 
-  // Called when the in-product help backend is initialized.
-  void OnFeatureEngagementTrackerInitialized(bool initialized);
-
   // Attempts to show in-product help for the WebUI tab strip. Should be
   // called when the IPH backend is initialized or whenever the touch
   // mode changes.
@@ -926,9 +958,18 @@ class BrowserView : public BrowserWindow,
   // Updates the visibility of the Window Controls Overlay toggle button.
   void UpdateWindowControlsOverlayToggleVisible();
 
-  // Updates the variable keeping track of the borderless mode visibility, which
-  // controls whether the title bar is shown or not.
-  void UpdateBorderlessModeEnabled();
+  // Updates the variable keeping track of the window-placement permission,
+  // which together with borderless_mode_enabled_ controls whether the title bar
+  // is shown or not.
+  void UpdateWindowPlacementPermission(blink::mojom::PermissionStatus status);
+
+  // Sets the callback which is called when the status of the window-placement
+  // permission changes.
+  void SetWindowPlacementPermissionSubscriptionForBorderlessMode(
+      content::WebContents* web_contents);
+
+  // Updates whether the web app is an isolated web app.
+  void UpdateIsIsolatedWebApp();
 
   // The BrowserFrame that hosts this view.
   raw_ptr<BrowserFrame> frame_ = nullptr;
@@ -1029,8 +1070,9 @@ class BrowserView : public BrowserWindow,
   // Handled by ContentsLayoutManager.
   raw_ptr<views::View> contents_container_ = nullptr;
 
-  // The side panel aligned to the right side of the browser window.
-  raw_ptr<SidePanel> right_aligned_side_panel_ = nullptr;
+  // The side panel aligned to the left or the right side of the browser window
+  // depending on the kSidePanelHorizontalAlignment pref's value.
+  raw_ptr<SidePanel> unified_side_panel_ = nullptr;
   raw_ptr<views::View> right_aligned_side_panel_separator_ = nullptr;
 
   // The side search side panel.
@@ -1103,6 +1145,9 @@ class BrowserView : public BrowserWindow,
   // The timer used to update frames for tab-loading animations.
   base::RepeatingTimer loading_animation_timer_;
 
+  // Closure invoked when the state of the loading animation changes.
+  base::OnceClosure loading_animation_state_change_closure_;
+
   // Start timestamp for all throbbers. Set when |loading_animation_timer_|
   // starts and used for all consecutive tabs (while any are loading) to keep
   // throbbers in sync.
@@ -1168,6 +1213,8 @@ class BrowserView : public BrowserWindow,
 
   OnLinkOpeningFromGestureCallbackList link_opened_from_gesture_callbacks_;
 
+  std::unique_ptr<HighEfficiencyIPHController> high_efficiency_iph_controller_;
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // |loading_animation_tracker_| is used to measure animation smoothness for
   // tab loading animation.
@@ -1177,6 +1224,10 @@ class BrowserView : public BrowserWindow,
   bool window_controls_overlay_enabled_ = false;
   bool should_show_window_controls_overlay_toggle_ = false;
   bool borderless_mode_enabled_ = false;
+  bool window_placement_permission_granted_ = false;
+  bool is_isolated_web_app_ = false;
+  absl::optional<content::PermissionController::SubscriptionId>
+      window_placement_subscription_id_;
 
   mutable base::WeakPtrFactory<BrowserView> weak_ptr_factory_{this};
 };

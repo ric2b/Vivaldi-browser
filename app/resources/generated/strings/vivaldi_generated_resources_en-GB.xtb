@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Print...</translation>
 <translation id="1181037720776840403">Remove</translation>
 <translation id="1187722533808055681">Idle wake ups</translation>
-<translation id="119944043368869598">Clear all</translation>
 <translation id="1221825588892235038">Selection only</translation>
 <translation id="1244303850296295656">Extension error</translation>
 <translation id="125220115284141797">Default</translation>
@@ -50,7 +49,6 @@
 <translation id="1901303067676059328">Select &amp;all</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Use a number to indicate how many copies to print (1 to <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Remove All</translation>
 <translation id="1994173015038366702">Site URL</translation>
 <translation id="2019718679933488176">&amp;Open Audio in New Tab</translation>
 <translation id="2050339315714019657">Portrait</translation>
@@ -66,7 +64,6 @@
 <translation id="2218515861914035131">Paste as plain text</translation>
 <translation id="2249605167705922988">e.g. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Allow identifiers for protected content (computer restart may be required)</translation>
-<translation id="2277255602909579701">All cookies and site data</translation>
 <translation id="2280486287150724112">Right margin</translation>
 <translation id="2282146716419988068">GPU Process</translation>
 <translation id="2301382460326681002">Extension root directory is invalid.</translation>
@@ -118,7 +115,6 @@
 <translation id="3084548735795614657">Drop to install</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">USER handles</translation>
-<translation id="3127156390846601284">This will delete any data stored on your device for all the sites shown. Do you want to continue?</translation>
 <translation id="3129173833825111527">Left margin</translation>
 <translation id="3144647712221361880">Open link as</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -137,7 +133,6 @@
 <translation id="3360297538363969800">Printing failed. Please check your printer and try again.</translation>
 <translation id="3378572629723696641">This extension may have been corrupted.</translation>
 <translation id="3387614642886316601">Use enhanced spell check</translation>
-<translation id="3432227430032737297">Remove all shown</translation>
 <translation id="345693547134384690">Open &amp;image in new tab</translation>
 <translation id="3494769164076977169">Ask when a site tries to download files automatically after the first file (recommended)</translation>
 <translation id="3505030558724226696">Revoke device access</translation>
@@ -194,7 +189,6 @@
 <translation id="4409697491990005945">Margins</translation>
 <translation id="4423376891418188461">Restore Settings</translation>
 <translation id="4478664379124702289">Save Lin&amp;k As...</translation>
-<translation id="4579581181964204535">Unable to cast <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Go to <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps and extensions can only be modified by the manager (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">An extension has changed what page is shown when you open a new tab.</translation>
@@ -263,7 +257,6 @@
 <translation id="5747809636523347288">Pa&amp;ste and go to <ph name="URL" /></translation>
 <translation id="5759728514498647443">Documents you send to print via <ph name="APP_NAME" /> can be read by <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Sa&amp;ve audio as...</translation>
-<translation id="577624874850706961">Search cookies</translation>
 <translation id="5780973441651030252">Process priority</translation>
 <translation id="5804241973901381774">Permissions</translation>
 <translation id="5828633471261496623">Printing...</translation>
@@ -276,7 +269,6 @@
 <translation id="5965661248935608907">It also controls what page is shown when you click the Home button or search from the Omnibox.</translation>
 <translation id="5978277834170881274">&amp;Use basic spell check</translation>
 <translation id="5979421442488174909">&amp;Translate to <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Clear site data</translation>
 <translation id="6042308850641462728">More</translation>
 <translation id="6086846494333236931">Installed by your administrator</translation>
 <translation id="6101226222197207147">New app added (<ph name="EXTENSION_NAME" />)</translation>
@@ -389,7 +381,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
         =1 {Download is in progress} other {Downloads are in progress}}</translation>
 <translation id="8230134520748321204">Save password for <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">This extension is not listed in the <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> and may have been added without your knowledge.</translation>
-<translation id="8339059274628563283"><ph name="SITE" /> locally stored data</translation>
 <translation id="8351419472474436977">This extension has taken control of your proxy settings, which means it can change, break or eavesdrop on anything that you do online. If you aren't sure why this change happened, you probably don't want it.</translation>
 <translation id="8382913212082956454">Copy &amp;email address</translation>
 <translation id="8413385045638830869">Ask first (recommended)</translation>

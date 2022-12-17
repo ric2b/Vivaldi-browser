@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,7 @@
 #include "remoting/protocol/client_authentication_config.h"
 #include "remoting/protocol/pairing_authenticator_base.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class PairingClientAuthenticator : public PairingAuthenticatorBase {
  public:
@@ -58,7 +57,6 @@ class PairingClientAuthenticator : public PairingAuthenticatorBase {
   base::WeakPtrFactory<PairingClientAuthenticator> weak_factory_{this};
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_PAIRING_CLIENT_AUTHENTICATOR_H_

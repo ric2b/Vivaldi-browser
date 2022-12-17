@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,8 @@
 #include "components/leveldb_proto/public/proto_database.h"
 #include "components/segmentation_platform/public/proto/segmentation_platform.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+class PrefService;
 
 namespace base {
 class Clock;
@@ -66,7 +68,8 @@ class StorageService {
                  base::Clock* clock,
                  UkmDataManager* ukm_data_manager,
                  const base::flat_set<proto::SegmentId>& all_segment_ids,
-                 ModelProviderFactory* model_provider_factory);
+                 ModelProviderFactory* model_provider_factory,
+                 PrefService* profile_prefs);
 
   // For tests:
   StorageService(
@@ -79,7 +82,8 @@ class StorageService {
       base::Clock* clock,
       UkmDataManager* ukm_data_manager,
       const base::flat_set<proto::SegmentId>& all_segment_ids,
-      ModelProviderFactory* model_provider_factory);
+      ModelProviderFactory* model_provider_factory,
+      PrefService* profile_prefs);
 
   // For tests:
   StorageService(std::unique_ptr<SegmentInfoDatabase> segment_info_database,

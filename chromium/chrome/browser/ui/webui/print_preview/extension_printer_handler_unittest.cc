@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -425,7 +425,7 @@ class FakePrinterProviderAPI : public PrinterProviderAPI {
   const PrinterProviderPrintJob* GetNextPendingPrintJob() const {
     EXPECT_GT(pending_print_count(), 0u);
     if (pending_print_count() == 0)
-      return NULL;
+      return nullptr;
     return &pending_print_requests_.front().job;
   }
 
@@ -661,7 +661,7 @@ TEST_F(ExtensionPrinterHandlerTest, GetCapability) {
   printer->Set("dpi", std::move(dpi_dict));
 
   fake_api->TriggerNextGetCapabilityCallback(
-      std::move(original_capability.GetDict()));
+      std::move(original_capability).TakeDict());
 
   EXPECT_EQ(1u, call_count);
   EXPECT_EQ(capability, original_capability_with_dpi_dict);

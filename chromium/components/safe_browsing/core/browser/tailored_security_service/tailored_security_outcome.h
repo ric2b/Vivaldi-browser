@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,8 @@ enum class TailoredSecurityOutcome {
   kSettings = 2,
   kShown = 3,
   kRejected = 4,
-  kMaxValue = kRejected,
+  kClosedByAnotherDialog = 5,
+  kMaxValue = kClosedByAnotherDialog,
 };
 
 #endif  // COMPONENTS_SAFE_BROWSING_CORE_BROWSER_TAILORED_SECURITY_SERVICE_TAILORED_SECURITY_OUTCOME_H_

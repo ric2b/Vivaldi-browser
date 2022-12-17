@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 
 namespace blink {
 namespace scheduler {
@@ -53,7 +54,7 @@ WebThreadScheduler::DeprecatedDefaultTaskRunner() {
   return nullptr;
 }
 
-std::unique_ptr<Thread> WebThreadScheduler::CreateMainThread() {
+std::unique_ptr<MainThread> WebThreadScheduler::CreateMainThread() {
   NOTREACHED();
   return nullptr;
 }

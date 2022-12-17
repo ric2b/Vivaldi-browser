@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@ export class TestInternetPageBrowserProxy extends TestBrowserProxy {
   constructor() {
     super([
       'showCarrierAccountDetail',
+      'showPortalSignin',
       'showCellularSetupUI',
       'configureThirdPartyVpn',
       'addThirdPartyVpn',
@@ -22,6 +23,11 @@ export class TestInternetPageBrowserProxy extends TestBrowserProxy {
   /** @override */
   showCarrierAccountDetail(guid) {
     this.methodCalled('showCarrierAccountDetail');
+  }
+
+  /** @override */
+  showPortalSignin(guid) {
+    this.methodCalled('showPortalSignin', guid);
   }
 
   /** @override */

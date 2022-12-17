@@ -56,6 +56,11 @@ extern const char kOldVivaldiUseNativeWindowDecoration[];
 extern const char kIosNoteFolderDefault[];
 extern const char kIosNoteCachedTopMostRow[];
 extern const char kIosNoteCachedFolderId[];
+
+// Speed dial sorting mode
+extern const char kVivaldiSpeedDialSortingMode[];
+// Setting for folder visiblity on bookmark folder page
+extern const char kVivaldiBookmarkFoldersViewMode[];
 #endif
 
 }  // namespace vivaldiprefs

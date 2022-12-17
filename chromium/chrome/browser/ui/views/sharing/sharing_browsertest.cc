@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -152,7 +152,8 @@ void SharingBrowserTest::AddDeviceInfo(
           base::StrCat(
               {"testing_device_", base::NumberToString(fake_device_id)}),
           original_device.chrome_version(), original_device.sync_user_agent(),
-          original_device.device_type(),
+          original_device.device_type(), original_device.os_type(),
+          original_device.form_factor(),
           original_device.signin_scoped_device_id(), "Google",
           base::StrCat({"model", base::NumberToString(fake_device_id)}),
           original_device.full_hardware_class(),

@@ -226,29 +226,10 @@ void CalendarBackend::CreateCalendarEvent(
     ev.id = id;
     if (ev.event_exceptions.size() > 0) {
       for (const auto& exception : ev.event_exceptions) {
-        EventID exception_event_id = 0;
-        if (!exception.cancelled) {
-          EventRow exception_event;
-          exception_event = *exception.event;
-          exception_event.calendar_id = ev.calendar_id;
-          exception_event_id = db_->CreateCalendarEvent(exception_event);
-
-          if (exception_event.invites_to_create.size() > 0) {
-            for (const auto& invite : exception_event.invites_to_create) {
-              InviteRow invite_row;
-              invite_row.event_id = exception_event_id;
-              invite_row.name = invite.name;
-              invite_row.partstat = invite.partstat;
-              invite_row.address = invite.address;
-              db_->CreateInvite(invite_row);
-            }
-          }
-        }
-
         RecurrenceExceptionRow row;
-        row.exception_event_id = exception_event_id;
+        row.exception_event_id = exception.exception_event_id;
         row.parent_event_id = id;
-        row.exception_day = exception.exception_date;
+        row.exception_day = exception.exception_day;
         row.cancelled = exception.cancelled;
         db_->CreateRecurrenceException(row);
       }
@@ -337,6 +318,42 @@ void CalendarBackend::CreateRecurrenceException(
     NotifyCalendarChanged();
   } else {
     result->success = false;
+  }
+}
+
+void CalendarBackend::UpdateRecurrenceException(
+    RecurrenceExceptionID recurrence_id,
+    const RecurrenceExceptionRow& recurrence,
+    std::shared_ptr<EventResultCB> result) {
+  RecurrenceExceptionRow recurrence_row;
+  if (db_->GetRecurrenceException(recurrence_id, &recurrence_row)) {
+    if (recurrence.updateFields & calendar::CANCELLED) {
+      recurrence_row.cancelled = recurrence.cancelled;
+    }
+
+    if (recurrence.updateFields & calendar::EXCEPTION_EVENT_ID) {
+      recurrence_row.exception_event_id = recurrence.exception_event_id;
+    }
+
+    if (recurrence.updateFields & calendar::EXCEPTION_DAY) {
+      recurrence_row.exception_day = recurrence.exception_day;
+    }
+
+    if (recurrence.updateFields & calendar::PARENT_EVENT_ID) {
+      recurrence_row.parent_event_id = recurrence.parent_event_id;
+    }
+  }
+
+  result->success = db_->UpdateRecurrenceExceptionRow(recurrence_row);
+
+  if (result->success) {
+    result->event = FillEvent(recurrence_row.parent_event_id);
+    NotifyCalendarChanged();
+  } else {
+    result->success = false;
+    result->message = "Could not find recurrence exception row in DB";
+    NOTREACHED() << "Could not find recurrence exception row in DB";
+    return;
   }
 }
 

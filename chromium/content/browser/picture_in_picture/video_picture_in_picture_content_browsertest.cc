@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -446,6 +446,31 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureContentBrowserTest,
   WaitForPlaybackState(VideoOverlayWindow::PlaybackState::kPaused);
 }
 
+// Tests that the pip window bounds are accordingly updated when the window size
+// is updated.
+IN_PROC_BROWSER_TEST_F(VideoPictureInPictureContentBrowserTest,
+                       CheckWindowBounds) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GetTestUrl("media/picture_in_picture", "two-videos.html")));
+
+  // Play first video.
+  ASSERT_TRUE(ExecJs(shell(), "videos[0].play();"));
+
+  WaitForTitle(u"videos[0] playing");
+  // Send first video in Picture-in-Picture.
+  ASSERT_TRUE(ExecJs(shell(), "videos[0].requestPictureInPicture();"));
+
+  WaitForTitle(u"videos[0] entered picture-in-picture");
+  EXPECT_TRUE(web_contents_delegate()->is_in_picture_in_picture());
+
+  ASSERT_TRUE(overlay_window()->IsVisible());
+  gfx::Size new_size(50, 50);
+  overlay_window()->UpdateNaturalSize(new_size);
+
+  EXPECT_EQ(window_controller()->GetWindowBounds().value(),
+            gfx::Rect(new_size));
+}
+
 class MediaSessionPictureInPictureContentBrowserTest
     : public VideoPictureInPictureContentBrowserTest {
  public:
@@ -639,6 +664,17 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureContentBrowserTest,
   // Show page and check that video left Picture-in-Picture automatically.
   shell()->web_contents()->WasShown();
   WaitForTitle(u"leavepictureinpicture");
+}
+
+IN_PROC_BROWSER_TEST_F(VideoPictureInPictureContentBrowserTest,
+                       EnterPictureInPictureHasNoChildWebContents) {
+  ASSERT_TRUE(NavigateToURL(
+      shell(), GetTestUrl("media/picture_in_picture", "one-video.html")));
+  ASSERT_EQ(true, EvalJs(shell(), "enterPictureInPicture();"));
+  ASSERT_TRUE(web_contents_delegate()->is_in_picture_in_picture());
+
+  ASSERT_TRUE(window_controller()->GetWebContents());
+  ASSERT_FALSE(window_controller()->GetChildWebContents());
 }
 
 }  // namespace content

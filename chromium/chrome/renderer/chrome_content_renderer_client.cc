@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -488,6 +488,17 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   WebString chrome_search_scheme(
       WebString::FromASCII(chrome::kChromeSearchScheme));
 
+  if (base::FeatureList::IsEnabled(features::kIsolatedWebApps)) {
+    // isolated-app: is the scheme used for Isolated Web Apps, which are web
+    // applications packaged in Signed Web Bundles.
+    WebString isolated_app_scheme(
+        WebString::FromASCII(chrome::kIsolatedAppScheme));
+    // Resources contained in Isolated Web Apps are HTTP-like and safe to expose
+    // to the fetch API.
+    WebSecurityPolicy::RegisterURLSchemeAsSupportingFetchAPI(
+        isolated_app_scheme);
+  }
+
   // The Instant process can only display the content but not read it.  Other
   // processes can't display it or read it.
   if (!command_line->HasSwitch(switches::kInstantProcess))
@@ -517,6 +528,7 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   // This doesn't work in single-process mode.
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSingleProcess)) {
+    using HeapProfilerController = heap_profiling::HeapProfilerController;
     // The HeapProfilerController should have been created in
     // ChromeMainDelegate::PostEarlyInitialization.
     DCHECK_NE(HeapProfilerController::GetProfilingEnabled(),
@@ -762,9 +774,16 @@ void ChromeContentRendererClient::RenderFrameCreated(
   VivaldiRenderFrameBlinkProxyImpl::PrepareFrame(render_frame, registry);
 }
 
-void ChromeContentRendererClient::WebViewCreated(blink::WebView* web_view,
-                                                 bool was_created_by_renderer) {
+void ChromeContentRendererClient::WebViewCreated(
+    blink::WebView* web_view,
+    bool was_created_by_renderer,
+    const url::Origin* outermost_origin) {
   new prerender::NoStatePrefetchClient(web_view);
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  ChromeExtensionsRendererClient::GetInstance()->WebViewCreated(
+      web_view, outermost_origin);
+#endif
 }
 
 SkBitmap* ChromeContentRendererClient::GetSadPluginBitmap() {
@@ -1132,37 +1151,6 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
             l10n_util::GetStringFUTF16(IDS_PLUGIN_DISABLED, group_name));
         break;
       }
-      case chrome::mojom::PluginStatus::kOutdatedBlocked: {
-        placeholder = create_blocked_plugin(
-            IDR_BLOCKED_PLUGIN_HTML,
-            l10n_util::GetStringFUTF16(IDS_PLUGIN_OUTDATED, group_name));
-        placeholder->AllowLoading();
-        mojo::AssociatedRemote<chrome::mojom::PluginHost> plugin_host;
-        render_frame->GetRemoteAssociatedInterfaces()->GetInterface(
-            plugin_host.BindNewEndpointAndPassReceiver());
-        plugin_host->BlockedOutdatedPlugin(placeholder->BindPluginRenderer(),
-                                           identifier);
-        break;
-      }
-      case chrome::mojom::PluginStatus::kOutdatedDisallowed: {
-        placeholder = create_blocked_plugin(
-            IDR_BLOCKED_PLUGIN_HTML,
-            l10n_util::GetStringFUTF16(IDS_PLUGIN_OUTDATED, group_name));
-        break;
-      }
-      case chrome::mojom::PluginStatus::kDeprecated: {
-        // kDeprecatedPlugins act similarly to kOutdatedBlocked ones, but do
-        // not allow for loading. They still show an infobar.
-        placeholder = create_blocked_plugin(
-            IDR_BLOCKED_PLUGIN_HTML,
-            l10n_util::GetStringFUTF16(IDS_PLUGIN_DEPRECATED, group_name));
-        mojo::AssociatedRemote<chrome::mojom::PluginHost> plugin_host;
-        render_frame->GetRemoteAssociatedInterfaces()->GetInterface(
-            plugin_host.BindNewEndpointAndPassReceiver());
-        plugin_host->BlockedOutdatedPlugin(placeholder->BindPluginRenderer(),
-                                           identifier);
-        break;
-      }
       case chrome::mojom::PluginStatus::kUnauthorized: {
         placeholder = create_blocked_plugin(
             IDR_BLOCKED_PLUGIN_HTML,
@@ -1191,14 +1179,6 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
                                        group_name));
         RenderThread::Get()->RecordAction(
             UserMetricsAction("Plugin_BlockedByPolicy"));
-        content_settings_agent->DidBlockContentType(content_type);
-        break;
-      }
-      case chrome::mojom::PluginStatus::kBlockedNoLoading: {
-        placeholder = create_blocked_plugin(
-            IDR_BLOCKED_PLUGIN_HTML,
-            l10n_util::GetStringFUTF16(IDS_PLUGIN_BLOCKED_NO_LOADING,
-                                       group_name));
         content_settings_agent->DidBlockContentType(content_type);
         break;
       }
@@ -1482,7 +1462,7 @@ bool ChromeContentRendererClient::IsOriginIsolatedPepperPlugin(
 
 #if BUILDFLAG(ENABLE_NACL)
   // Don't isolate the NaCl plugin (preserving legacy behavior).
-  if (plugin_path.value() == ChromeContentClient::kNaClPluginFileName)
+  if (plugin_path.value() == nacl::kInternalNaClPluginFileName)
     return false;
 #endif
 
@@ -1641,15 +1621,21 @@ void ChromeContentRendererClient::
     blink::WebRuntimeFeatures::EnablePrerender2RelatedFeatures(true);
   }
 
-#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(ENABLE_EXTENSIONS)
-  // WebHID on service workers is only available in extension for now with
-  // feature enabled.
-  if (IsStandaloneContentExtensionProcess() &&
-      base::FeatureList::IsEnabled(
-          features::kEnableWebHidOnExtensionServiceWorker)) {
-    blink::WebRuntimeFeatures::EnableWebHIDOnServiceWorkers(true);
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // WebHID and WebUSB on service workers is only available in extensions.
+  if (IsStandaloneContentExtensionProcess()) {
+    if (base::FeatureList::IsEnabled(
+            features::kEnableWebUsbOnExtensionServiceWorker)) {
+      blink::WebRuntimeFeatures::EnableWebUSBOnServiceWorkers(true);
+    }
+#if !BUILDFLAG(IS_ANDROID)
+    if (base::FeatureList::IsEnabled(
+            features::kEnableWebHidOnExtensionServiceWorker)) {
+      blink::WebRuntimeFeatures::EnableWebHIDOnServiceWorkers(true);
+    }
+#endif  // !BUILDFLAG(IS_ANDROID)
   }
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 }
 
 bool ChromeContentRendererClient::AllowScriptExtensionForServiceWorker(

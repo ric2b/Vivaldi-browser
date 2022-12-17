@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,7 @@ LayoutNGMixin<Base>::LayoutNGMixin(ContainerNode* node) : Base(node) {
   static_assert(
       std::is_base_of<LayoutBlock, Base>::value,
       "Base class of LayoutNGMixin must be LayoutBlock or derived class.");
-  if (node && node->IsElementNode())
+  if (node)
     Base::GetDocument().IncLayoutBlockCounterNG();
 }
 
@@ -364,16 +364,9 @@ void LayoutNGMixin<Base>::UpdateOutOfFlowBlockLayout() {
       NGBlockNode(this), static_position,
       DynamicTo<LayoutInline>(css_container));
 
-  absl::optional<LogicalSize> initial_containing_block_fixed_size;
-  auto* layout_view = DynamicTo<LayoutView>(container);
-  if (layout_view && !Base::GetDocument().Printing()) {
-    if (LocalFrameView* frame_view = layout_view->GetFrameView()) {
-      PhysicalSize size(
-          frame_view->LayoutViewport()->ExcludeScrollbars(frame_view->Size()));
-      initial_containing_block_fixed_size =
-          size.ConvertToLogical(container->Style()->GetWritingMode());
-    }
-  }
+  absl::optional<LogicalSize> initial_containing_block_fixed_size =
+      NGOutOfFlowLayoutPart::InitialContainingBlockFixedSize(
+          NGBlockNode(container));
   // We really only want to lay out ourselves here, so we pass |this| to
   // Run(). Otherwise, NGOutOfFlowLayoutPart may also lay out other objects
   // it discovers that are part of the same containing block, but those
@@ -427,7 +420,7 @@ const NGLayoutResult* LayoutNGMixin<Base>::UpdateInFlowBlockLayout() {
   // cooperate on e.g. margin collapsing.
   DCHECK(this->CreatesNewFormattingContext());
 
-  const NGLayoutResult* previous_result = Base::GetCachedLayoutResult();
+  const NGLayoutResult* previous_result = Base::GetSingleCachedLayoutResult();
   bool is_layout_root = !Base::View()->GetLayoutState()->Next();
 
   // If we are a layout root, use the previous space if available. This will
@@ -450,13 +443,23 @@ const NGLayoutResult* LayoutNGMixin<Base>::UpdateInFlowBlockLayout() {
 
   // Even if we are a layout root, our baseline may have shifted. In this
   // (rare) case, mark our containing-block for layout.
-  // The baseline of SVG <text> doesn't affect other boxes.
-  if (is_layout_root && previous_result && !Base::IsNGSVGText()) {
+  if (is_layout_root && previous_result) {
     if (To<NGPhysicalBoxFragment>(previous_result->PhysicalFragment())
-            .Baseline() != physical_fragment.Baseline()) {
+            .FirstBaseline() != physical_fragment.FirstBaseline()) {
       if (auto* containing_block = Base::ContainingBlock()) {
-        containing_block->SetNeedsLayout(
-            layout_invalidation_reason::kChildChanged, kMarkContainerChain);
+        // Baselines inside replaced elements don't affect other boxes.
+        bool is_in_replaced = false;
+        for (auto* parent = Base::Parent();
+             parent && parent != containing_block; parent = parent->Parent()) {
+          if (parent->IsLayoutReplaced()) {
+            is_in_replaced = true;
+            break;
+          }
+        }
+        if (!is_in_replaced) {
+          containing_block->SetNeedsLayout(
+              layout_invalidation_reason::kChildChanged, kMarkContainerChain);
+        }
       }
     }
   }

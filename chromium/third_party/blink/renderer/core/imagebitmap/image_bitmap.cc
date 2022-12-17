@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/platform/graphics/video_frame_image_util.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/image-decoders/image_decoder.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/worker_pool.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
@@ -887,6 +888,7 @@ ScriptPromise ImageBitmap::CreateAsync(
     ImageElementBase* image,
     absl::optional<gfx::Rect> crop_rect,
     ScriptState* script_state,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     mojom::blink::PreferredColorScheme preferred_color_scheme,
     ExceptionState& exception_state,
     const ImageBitmapOptions* options) {
@@ -945,14 +947,13 @@ ScriptPromise ImageBitmap::CreateAsync(
   ScriptPromise promise = resolver->Promise();
 
   worker_pool::PostTask(
-      FROM_HERE,
-      CrossThreadBindOnce(
-          &RasterizeImageOnBackgroundThread, std::move(paint_record),
-          draw_dst_rect, Thread::MainThread()->GetDeprecatedTaskRunner(),
-          CrossThreadBindOnce(&ResolvePromiseOnOriginalThread,
-                              WrapCrossThreadPersistent(resolver),
-                              !image->WouldTaintOrigin(),
-                              std::move(passed_parsed_options))));
+      FROM_HERE, CrossThreadBindOnce(
+                     &RasterizeImageOnBackgroundThread, std::move(paint_record),
+                     draw_dst_rect, std::move(task_runner),
+                     CrossThreadBindOnce(&ResolvePromiseOnOriginalThread,
+                                         WrapCrossThreadPersistent(resolver),
+                                         !image->WouldTaintOrigin(),
+                                         std::move(passed_parsed_options))));
   return promise;
 }
 

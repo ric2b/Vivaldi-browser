@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,9 +148,9 @@ class StubMediaRouterMojoImpl : public MediaRouterMojoImpl {
   ~StubMediaRouterMojoImpl() override = default;
 
   // media_router::MediaRouter:
-  base::Value GetState() const override {
+  base::Value::Dict GetState() const override {
     NOTIMPLEMENTED();
-    return base::Value();
+    return base::Value::Dict();
   }
 
   void GetProviderState(

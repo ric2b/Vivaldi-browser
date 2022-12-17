@@ -1,9 +1,10 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chromecast/cast_core/runtime/browser/streaming_receiver_session_client.h"
 
+#include "base/containers/contains.h"
 #include "base/test/task_environment.h"
 #include "chromecast/browser/test/mock_cast_web_view.h"
 #include "chromecast/cast_core/runtime/browser/streaming_controller.h"
@@ -77,7 +78,7 @@ class StreamingReceiverSessionClientTest : public testing::Test {
             this, &StreamingReceiverSessionClientTest::CreateReceiverSession));
   }
 
-  ~StreamingReceiverSessionClientTest() {
+  ~StreamingReceiverSessionClientTest() override {
     ResetMessagePort();
     task_environment_.FastForwardBy(
         StreamingReceiverSessionClient::kMaxAVSettingsWaitTime);
@@ -183,12 +184,8 @@ TEST_F(StreamingReceiverSessionClientTest, OnSingleValidMessageWithCodecs) {
 
   auto video_codecs = session_constraints_.video_codecs;
   EXPECT_EQ(video_codecs.size(), size_t{3});
-  EXPECT_NE(std::find(video_codecs.begin(), video_codecs.end(),
-                      openscreen::cast::VideoCodec::kVp9),
-            video_codecs.end());
-  EXPECT_NE(std::find(video_codecs.begin(), video_codecs.end(),
-                      openscreen::cast::VideoCodec::kVp8),
-            video_codecs.end());
+  EXPECT_TRUE(base::Contains(video_codecs, openscreen::cast::VideoCodec::kVp9));
+  EXPECT_TRUE(base::Contains(video_codecs, openscreen::cast::VideoCodec::kVp8));
   EXPECT_TRUE(session_constraints_.video_limits.empty());
 }
 

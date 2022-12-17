@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -102,9 +102,6 @@ void SiteDataCountingHelper::CountAndDestroySelfWhenFinished() {
   const ContentSettingsType content_settings[] = {
     ContentSettingsType::DURABLE_STORAGE,
     ContentSettingsType::APP_BANNER,
-#if !BUILDFLAG(IS_ANDROID)
-    ContentSettingsType::INSTALLED_WEB_APP_METADATA,
-#endif
   };
   for (auto type : content_settings) {
     tasks_ += 1;
@@ -161,8 +158,9 @@ void SiteDataCountingHelper::GetLocalStorageUsageInfoCallback(
   std::vector<GURL> origins;
   for (const auto& info : infos) {
     if (info.last_modified >= begin_ && info.last_modified < end_ &&
-        (!policy || !policy->IsStorageProtected(info.origin.GetURL()))) {
-      origins.push_back(info.origin.GetURL());
+        (!policy ||
+         !policy->IsStorageProtected(info.storage_key.origin().GetURL()))) {
+      origins.push_back(info.storage_key.origin().GetURL());
     }
   }
   Done(origins);

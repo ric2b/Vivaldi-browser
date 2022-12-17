@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -81,7 +81,7 @@ TEST_F(ArcAppShortcutsMenuBuilderTest, Basic) {
   run_loop.Run();
 
   DCHECK(menu);
-  int i = 0;
+  size_t i = 0;
   EXPECT_EQ(first_item_label, menu->GetLabelAt(i++));
   EXPECT_EQ(ui::DOUBLE_SEPARATOR, menu->GetSeparatorTypeAt(i++));
   // There is a separator between each app shortcut.

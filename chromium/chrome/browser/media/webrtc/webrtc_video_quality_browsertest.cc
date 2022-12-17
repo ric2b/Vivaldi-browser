@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -203,7 +203,7 @@ class WebRtcVideoQualityBrowserTest : public WebRtcTestBase,
     // Note: don't append switches to this command since it will mess up the
     // -u in the python invocation!
     base::CommandLine compare_command(base::CommandLine::NO_PROGRAM);
-    EXPECT_TRUE(GetPythonCommand(&compare_command));
+    EXPECT_TRUE(GetPython3Command(&compare_command));
 
     compare_command.AppendArgPath(path_to_compare_script);
     compare_command.AppendArg("--label=" + test_label);

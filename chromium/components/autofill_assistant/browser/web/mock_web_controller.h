@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -166,7 +166,7 @@ class MockWebController : public WebController {
                     const ElementFinderResult& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
-  base::WeakPtr<WebController> GetWeakPtr() const override {
+  base::WeakPtr<WebController> GetWeakPtr() override {
     return weak_ptr_factory_.GetWeakPtr();
   }
 

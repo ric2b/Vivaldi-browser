@@ -87,6 +87,10 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
       const base::UnguessableToken& guid,
       content::RenderFrameHost* render_frame_host) override;
 #endif
+  void BeforeUnloadFired(content::WebContents* tab,
+                         bool proceed,
+                         bool* proceed_to_fire_unload) override;
+
 
  private:
   // content::WebContentsObserver
@@ -102,10 +106,13 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
   void PrimaryMainDocumentElementAvailable() override;
+  void BeforeUnloadFired(bool proceed, const base::TimeTicks& proceed_time) override;
 
   void UpdateDraggableRegions(
       content::RenderFrameHost* sender,
       const std::vector<extensions::DraggableRegion>& regions);
+
+  bool has_resumed_ = false;
 
   VivaldiBrowserWindow* window_;  // owner
 };

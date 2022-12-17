@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -153,21 +153,20 @@ TEST(CommanderHandlerTest, DisplayResultsViewModelPassed) {
   EXPECT_EQ("view-model-updated", call_data.arg1()->GetString());
 
   const base::Value* arg = call_data.arg2();
-  EXPECT_EQ("Test item", arg->FindPath("options")
-                             ->GetListDeprecated()[0]
-                             .FindPath("title")
-                             ->GetString());
+  EXPECT_EQ(
+      "Test item",
+      arg->FindPath("options")->GetList()[0].FindPath("title")->GetString());
   EXPECT_EQ(0, arg->FindPath("options")
-                   ->GetListDeprecated()[0]
+                   ->GetList()[0]
                    .FindPath("matchedRanges")
-                   ->GetListDeprecated()[0]
-                   .GetListDeprecated()[0]
+                   ->GetList()[0]
+                   .GetList()[0]
                    .GetInt());
   EXPECT_EQ(4, arg->FindPath("options")
-                   ->GetListDeprecated()[0]
+                   ->GetList()[0]
                    .FindPath("matchedRanges")
-                   ->GetListDeprecated()[0]
-                   .GetListDeprecated()[1]
+                   ->GetList()[0]
+                   .GetList()[1]
                    .GetInt());
   EXPECT_EQ(42, arg->FindPath("resultSetId")->GetInt());
 }

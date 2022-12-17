@@ -19,9 +19,6 @@
 
 + (BOOL)codeSignatureAtBundleURL:(NSURL *)oldBundleURL matchesSignatureAtBundleURL:(NSURL *)newBundleURL error:(NSError * __autoreleasing *)error
 {
-#if defined(VIVALDI_TEST_BUILD) && !defined(VIVALDI_SIGNED_BUILD)
-    return YES;
-#endif
     OSStatus result;
     SecRequirementRef requirement = NULL;
     SecStaticCodeRef staticCode = NULL;
@@ -131,17 +128,11 @@ finally:
 
 + (BOOL)codeSignatureIsValidAtBundleURL:(NSURL *)bundleURL error:(NSError *__autoreleasing *)error
 {
-#if defined(VIVALDI_TEST_BUILD) && !defined(VIVALDI_SIGNED_BUILD)
-    return YES;
-#endif
     return [self codeSignatureIsValidAtBundleURL:bundleURL checkNestedCode:NO error:error];
 }
 
 + (BOOL)codeSignatureIsValidAtBundleURL:(NSURL *)bundleURL checkNestedCode:(BOOL)checkNestedCode error:(NSError *__autoreleasing *)error
 {
-#if defined(VIVALDI_TEST_BUILD) && !defined(VIVALDI_SIGNED_BUILD)
-    return YES;
-#endif
     OSStatus result;
     SecStaticCodeRef staticCode = NULL;
     CFErrorRef cfError = NULL;
@@ -258,9 +249,6 @@ finally:
 
 + (BOOL)bundleAtURLIsCodeSigned:(NSURL *)bundleURL
 {
-#if defined(VIVALDI_TEST_BUILD) && !defined(VIVALDI_SIGNED_BUILD)
-    return YES;
-#endif
     OSStatus result;
     SecStaticCodeRef staticCode = NULL;
 

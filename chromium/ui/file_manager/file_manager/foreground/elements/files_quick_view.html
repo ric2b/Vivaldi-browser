@@ -1,6 +1,7 @@
-<!-- Copyright 2016 The Chromium Authors. All rights reserved.
-  -- Use of this source code is governed by a BSD-style license that can be
-  -- found in the LICENSE file.
+<!--
+Copyright 2016 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
 -->
 
 <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
@@ -33,12 +34,7 @@
       <div id="innerContentPanel" type$="[[type]]">
         <!-- PDF, Text -->
         <template is="dom-if" if="[[browsable]]">
-          <template is="dom-if" if="[[isLegacy]]">
-            <webview style="color: transparent; background: transparent;" on-contentload='applyTextCss' class="content text-content" src="[[generateBrowsableUrl_(sourceContent, subtype)]]"></webview>
-          </template>
-          <template is="dom-if" if="[[!isLegacy]]">
-            <iframe id="untrusted" style="color: transparent; background: transparent; width: 100%; height: 100%; border: 0px;" on-load="refreshUntrustedIframe_" class="content text-content" src="chrome-untrusted://file-manager/untrusted_resources/files_browsable_content.html"></iframe>
-          </template>
+          <iframe id="untrusted" style="color: transparent; background: transparent; width: 100%; height: 100%; border: 0px;" on-load="refreshUntrustedIframe_" class="content text-content" src="chrome-untrusted://file-manager/untrusted_resources/files_browsable_content.html"></iframe>
         </template>
         <!-- document/HTML -->
         <template is="dom-if" if="[[isHtml_(type, subtype)]]">

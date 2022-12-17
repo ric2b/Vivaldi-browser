@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,11 +91,11 @@
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_history_commit_type.h"
-#include "third_party/blink/public/web/web_history_entry.h"
 #include "third_party/blink/public/web/web_history_item.h"
 #include "third_party/blink/public/web/web_input_method_controller.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
+#include "third_party/blink/public/web/web_navigation_type.h"
 #include "third_party/blink/public/web/web_origin_trials.h"
 #include "third_party/blink/public/web/web_page_popup.h"
 #include "third_party/blink/public/web/web_performance.h"
@@ -716,9 +716,8 @@ TEST_F(RenderViewImplTest, OnNavigationHttpPost) {
 
   // Check post data sent to browser matches
   EXPECT_TRUE(last_commit_params->page_state.IsValid());
-  std::unique_ptr<blink::WebHistoryEntry> entry =
-      PageStateToHistoryEntry(last_commit_params->page_state);
-  blink::WebHTTPBody body = entry->root().HttpBody();
+  blink::WebHTTPBody body =
+      blink::WebHistoryItem(last_commit_params->page_state).HttpBody();
   blink::WebHTTPBody::Element element;
   bool successful = body.ElementAt(0, element);
   EXPECT_TRUE(successful);
@@ -764,14 +763,7 @@ class RenderViewImplUpdateTitleTest : public RenderViewImplTest {
   }
 };
 
-#if BUILDFLAG(IS_ANDROID)
-// Failing on Android: http://crbug.com/1080328
-#define MAYBE_OnNavigationLoadDataWithBaseURL \
-  DISABLED_OnNavigationLoadDataWithBaseURL
-#else
-#define MAYBE_OnNavigationLoadDataWithBaseURL OnNavigationLoadDataWithBaseURL
-#endif
-TEST_F(RenderViewImplUpdateTitleTest, MAYBE_OnNavigationLoadDataWithBaseURL) {
+TEST_F(RenderViewImplUpdateTitleTest, OnNavigationLoadDataWithBaseURL) {
   auto common_params = blink::CreateCommonNavigationParams();
   common_params->url = GURL("data:text/html,");
   common_params->navigation_type =
@@ -781,19 +773,17 @@ TEST_F(RenderViewImplUpdateTitleTest, MAYBE_OnNavigationLoadDataWithBaseURL) {
   auto commit_params = DummyCommitNavigationParams();
   commit_params->data_url_as_string =
       "data:text/html,<html><head><title>Data page</title></head></html>";
-  FrameLoadWaiter waiter(frame());
-  frame()->Navigate(std::move(common_params), std::move(commit_params));
-  waiter.Wait();
-
-  // While LocalFrame is initialized, it's called with an empty title.
-  const absl::optional<::std::u16string> null_title;
-  EXPECT_CALL(*title_mock_frame_host(), UpdateTitle(null_title, testing::_))
-      .Times(1);
 
   const absl::optional<::std::u16string>& title =
       absl::make_optional(u"Data page");
   EXPECT_CALL(*title_mock_frame_host(), UpdateTitle(title, testing::_))
       .Times(1);
+  FrameLoadWaiter waiter(frame());
+  frame()->Navigate(std::move(common_params), std::move(commit_params));
+  waiter.Wait();
+
+  base::RunLoop().RunUntilIdle();
+  testing::Mock::VerifyAndClearExpectations(title_mock_frame_host());
 }
 #endif
 
@@ -879,7 +869,8 @@ TEST_F(RenderViewImplTest, BeginNavigationHandlesAllTopLevel) {
       blink::kWebNavigationTypeFormSubmitted,
       blink::kWebNavigationTypeBackForward,
       blink::kWebNavigationTypeReload,
-      blink::kWebNavigationTypeFormResubmitted,
+      blink::kWebNavigationTypeFormResubmittedBackForward,
+      blink::kWebNavigationTypeFormResubmittedReload,
       blink::kWebNavigationTypeOther,
   };
 
@@ -1153,7 +1144,8 @@ TEST_F(RenderViewImplScaleFactorTest, DeviceScaleCorrectAfterCrossOriginNav) {
       base::UnguessableToken::Create(), blink::mojom::TreeScopeType::kDocument,
       std::move(replication_state), std::move(widget_params),
       blink::mojom::FrameOwnerProperties::New(),
-      /*is_on_initial_empty_document=*/true, CreateStubPolicyContainer());
+      /*is_on_initial_empty_document=*/true, blink::DocumentToken(),
+      CreateStubPolicyContainer());
 
   TestRenderFrame* provisional_frame =
       static_cast<TestRenderFrame*>(RenderFrameImpl::FromRoutingID(routing_id));
@@ -1219,7 +1211,8 @@ TEST_F(RenderViewImplTest, DetachingProxyAlsoDestroysProvisionalFrame) {
       base::UnguessableToken::Create(), blink::mojom::TreeScopeType::kDocument,
       std::move(replication_state),
       /*widget_params=*/nullptr, blink::mojom::FrameOwnerProperties::New(),
-      /*is_on_initial_empty_document=*/true, CreateStubPolicyContainer());
+      /*is_on_initial_empty_document=*/true, blink::DocumentToken(),
+      CreateStubPolicyContainer());
   {
     TestRenderFrame* provisional_frame = static_cast<TestRenderFrame*>(
         RenderFrameImpl::FromRoutingID(routing_id));
@@ -2978,7 +2971,7 @@ TEST_F(RenderViewImplAddMessageToConsoleTest,
   base::RunLoop run_loop;
   bool was_callback_run = false;
   message_mock_frame_host()->SetDidAddMessageToConsoleCallback(
-      base::BindOnce(base::BindLambdaForTesting([&](const std::u16string& msg) {
+      base::BindLambdaForTesting([&](const std::u16string& msg) {
         // Makes sure this happens during the beforeunload handler.
         EXPECT_EQ(u"OnBeforeUnload called", msg);
 
@@ -2990,7 +2983,7 @@ TEST_F(RenderViewImplAddMessageToConsoleTest,
 
         was_callback_run = true;
         run_loop.Quit();
-      })));
+      }));
 
   // Simulate a BeforeUnload IPC received from the browser.
   frame()->SimulateBeforeUnload(false);

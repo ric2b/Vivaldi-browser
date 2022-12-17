@@ -335,14 +335,11 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       translate::TranslateStep step,
       const std::string& source_language,
       const std::string& target_language,
-      translate::TranslateErrors::Type error_type,
+      translate::TranslateErrors error_type,
       bool is_user_gesture) override;
-  void ShowPartialTranslateBubble(
-      PartialTranslateBubbleModel::ViewState view_state,
-      const std::string& source_language,
-      const std::string& target_language,
-      const std::u16string& text_selection,
-      translate::TranslateErrors::Type error_type) override {}
+  void StartPartialTranslate(const std::string& source_language,
+                             const std::string& target_language,
+                             const std::u16string& text_selection) override {}
   void ShowAvatarBubbleFromAvatarButton(bool is_source_accelerator) override {}
   bool IsDownloadShelfVisible() const override;
   DownloadShelf* GetDownloadShelf() override;
@@ -410,29 +407,39 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void CloseTabSearchBubble() override {}
   user_education::FeaturePromoController* GetFeaturePromoController() override;
   bool IsFeaturePromoActive(
-      const base::Feature& iph_feature,
-      bool include_continued_promos = false) const override;
+      const base::Feature& iph_feature) const override;
   bool MaybeShowFeaturePromo(
       const base::Feature& iph_feature,
       user_education::FeaturePromoSpecification::StringReplacements
           body_text_replacements = {},
       user_education::FeaturePromoController::BubbleCloseCallback
           close_callback = base::DoNothing()) override;
+  bool MaybeShowStartupFeaturePromo(
+      const base::Feature& iph_feature,
+      user_education::FeaturePromoSpecification::StringReplacements
+          body_text_replacements = {},
+      user_education::FeaturePromoController::StartupPromoCallback
+          promo_callback = base::DoNothing(),
+      user_education::FeaturePromoController::BubbleCloseCallback
+          close_callback = base::DoNothing()) override;
   bool CloseFeaturePromo(const base::Feature& iph_feature) override;
-  user_education::FeaturePromoHandle
-  CloseFeaturePromoAndContinue(const base::Feature& iph_feature) override;
+  user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
+      const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override {}
   void ShowIncognitoClearBrowsingDataDialog() override {}
   void ShowIncognitoHistoryDisclaimerDialog() override {}
   std::string GetWorkspace() const override;
   bool IsVisibleOnAllWorkspaces() const override;
   bool IsLocationBarVisible() const override;
+  bool IsBorderlessModeEnabled() const override;
 
   // BrowserWindow overrides end
 
   // BaseWindow overrides
   ui::ZOrderLevel GetZOrderLevel() const override;
   void SetZOrderLevel(ui::ZOrderLevel order) override {}
+
+  void BeforeUnloadFired(content::WebContents* source);
 
  private:
   // Implementation of various interface-like Chromium classes is in this inner
@@ -470,6 +477,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void ContinueClose(bool quiting, bool close, bool stop_asking);
 
   void OnDidFinishNavigation(bool success);
+
+  void InjectVivaldiWindowIdComplete(base::Value result);
 
   void ReportWebsiteSettingsState(bool visible);
   void OnWebsiteSettingsStatClosed(views::Widget::ClosedReason closed_reason,
@@ -517,7 +526,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool quit_dialog_shown_ = false;
   bool close_dialog_shown_ = false;
 
-  // When true, use the system frame with the maximized button etc.
+  // When true, use the system frame with OS-rendered titlebar and window
+  // control buttons.
   bool with_native_frame_ = false;
 
   // Allow resize for clicks this many pixels inside the bounds.
@@ -556,6 +566,11 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool last_motion_ = false;
   WindowStateData window_state_data_;
 
+  // Coordinates of the bounds of the maximize button as rendered by our UI.
+  // This is used to implement the Snap Layout maximized button menu on Windows.
+  //
+  // TODO(igor@vivaldi.com): Figure out how to use this on Mac to show the
+  // maximized menu there.
   gfx::Rect maximize_button_bounds_;
 
   // The icon family for the task bar and elsewhere.

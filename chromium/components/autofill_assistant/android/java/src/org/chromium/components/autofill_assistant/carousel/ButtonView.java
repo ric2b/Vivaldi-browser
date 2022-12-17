@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 package org.chromium.components.autofill_assistant.carousel;
@@ -8,6 +8,7 @@ import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.ContextThemeWrapper;
+import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -15,13 +16,16 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.ColorRes;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.IdRes;
 import androidx.annotation.Px;
 import androidx.annotation.StyleRes;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.components.autofill_assistant.LayoutUtils;
 import org.chromium.components.autofill_assistant.R;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.widget.ChromeImageView;
@@ -78,6 +82,8 @@ public class ButtonView extends LinearLayout {
                 R.styleable.ButtonView_primaryTextAppearance, R.style.TextAppearance_ChipText);
         mSecondaryTextAppearanceId = a.getResourceId(
                 R.styleable.ButtonView_secondaryTextAppearance, R.style.TextAppearance_ChipText);
+        @ColorRes
+        int textColorRes = a.getResourceId(R.styleable.ButtonView_buttonTextColor, -1);
         int borderWidth =
                 a.getResourceId(R.styleable.ButtonView_chipBorderWidth, R.dimen.chip_border_width);
         int verticalInset = a.getDimensionPixelSize(R.styleable.ButtonView_verticalInset,
@@ -90,8 +96,16 @@ public class ButtonView extends LinearLayout {
 
         ViewCompat.setPaddingRelative(this, leadingElementPadding, 0, leadingElementPadding, 0);
 
-        mPrimaryText = new TextView(new ContextThemeWrapper(getContext(), R.style.ChipTextView));
+        LayoutInflater layoutInflater = LayoutUtils.createInflater(getContext());
+        // Creating TextView from the layout file. Creating it programmatically using TextView
+        // constructor was not setting the required font (see b/245452057).
+        mPrimaryText = (TextView) layoutInflater.inflate(
+                R.layout.autofill_assistant_button_text_view, /* root= */ null);
+
         ApiCompatibilityUtils.setTextAppearance(mPrimaryText, primaryTextAppearance);
+        if (textColorRes != -1) {
+            mPrimaryText.setTextColor(ContextCompat.getColorStateList(getContext(), textColorRes));
+        }
         ViewCompat.setPaddingRelative(mPrimaryText, ViewUtils.dpToPx(context, 4), 0, 0, 0);
         addView(mPrimaryText);
         setPrimaryTextMargins(4);
@@ -165,8 +179,9 @@ public class ButtonView extends LinearLayout {
      */
     public TextView getSecondaryTextView() {
         if (mSecondaryText == null) {
-            mSecondaryText =
-                    new TextView(new ContextThemeWrapper(getContext(), R.style.ChipTextView));
+            LayoutInflater layoutInflater = LayoutUtils.createInflater(getContext());
+            mSecondaryText = (TextView) layoutInflater.inflate(
+                    R.layout.autofill_assistant_button_text_view, /* root= */ null);
             ApiCompatibilityUtils.setTextAppearance(mSecondaryText, mSecondaryTextAppearanceId);
             addView(mSecondaryText);
         }

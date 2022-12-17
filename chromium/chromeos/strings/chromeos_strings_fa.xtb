@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{ویرایش فایل}one{ویرایش فایل}other{ویرایش فایل‌ها}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> گیگاهرتز</translation>
 <translation id="3291996639387199448">جهت کلید</translation>
+<translation id="3294437725009624529">مهمان</translation>
 <translation id="3310640316857623290">تأخیر در ساناد به‌میزان قابل‌توجهی از آستانه مجاز بالاتر است</translation>
 <translation id="3328783797891415197">درحال اجرای آزمایش</translation>
 <translation id="3340011300870565703">باتری هدفون توگوشی سمت راست دستگاه <ph name="BATTERY_PERCENTAGE" />٪ شارژ دارد.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">وقتی سفت‌افزار درحال به‌روزرسانی است، این دستگاه خارجی را جدا نکنید و رایانه را خاموش نکنید. می‌توانید این پنجره را کمینه کنید. این به‌روزرسانی ممکن است چند دقیقه طول بکشد و در این مدت ممکن است دستگاه خارجی‌تان کار نکند.</translation>
 <translation id="3486220673238053218">معنی</translation>
 <translation id="3488065109653206955">به‌طور نسبی فعال شده است</translation>
+<translation id="3510890413042482857">ارسال <ph name="BEGIN_LINK1" />داده‌های ردیابی عملکرد<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">‏به‌روزرسانی ChromeOS</translation>
 <translation id="3527036260304016759">انجام نشد - خطای نامشخص</translation>
 <translation id="3532980081107202182">تقریباً <ph name="MIN_REMAINING" /> دقیقه باقی مانده است</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">‏Android اجرا نمی‌شود</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">رفتن خودکار به زمینه تیره هنگام غروب</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">اسکن مجدد</translation>
 <translation id="5583640892426849032">Backspace</translation>

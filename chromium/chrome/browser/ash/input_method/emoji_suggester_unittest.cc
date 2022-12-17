@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -155,6 +155,11 @@ class EmojiSuggesterTest : public testing::Test {
 
 TEST_F(EmojiSuggesterTest, SuggestWhenStringEndsWithSpace) {
   EXPECT_TRUE(emoji_suggester_->TrySuggestWithSurroundingText(u"happy ", 6, 6));
+}
+
+TEST_F(EmojiSuggesterTest, SuggestWhenStringEndsWithSpaceInNewLine) {
+  EXPECT_TRUE(emoji_suggester_->TrySuggestWithSurroundingText(
+      u"oldline\nhappy ", 14, 14));
 }
 
 TEST_F(EmojiSuggesterTest, PassesContextIdToHandlerOnSuggestion) {

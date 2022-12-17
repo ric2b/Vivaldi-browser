@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -303,7 +303,8 @@ PageLoadTracker::~PageLoadTracker() {
   for (const auto& observer : observers_) {
     if (failed_provisional_load_info_) {
       observer->OnFailedProvisionalLoad(*failed_provisional_load_info_);
-    } else if (did_commit_) {
+    } else {
+      DCHECK(did_commit_);
       observer->OnComplete(metrics_update_dispatcher_.timing());
     }
   }
@@ -315,17 +316,33 @@ void PageLoadTracker::PageHidden() {
       (!back_forward_cache_restores_.empty() &&
        !back_forward_cache_restores_.back()
             .first_background_time.has_value())) {
-    // Make sure we either started in the foreground and haven't been
-    // foregrounded yet, or started in the background and have already been
-    // foregrounded.
-    base::TimeTicks background_time;
-
-    if (!first_background_time_.has_value() &&
-        (prerendering_state_ == PrerenderingState::kNoPrerendering)) {
-      DCHECK_EQ(started_in_foreground_, !first_foreground_time_.has_value());
+    // The possible visibility state transitions and events are:
+    //
+    // A. navigation_start (fg) -> first background (bg)
+    //    -> first foreground (fg)
+    // B. navigation_start (bg) -> first foreground (fg)
+    //    -> first background (bg)
+    // C. navigation_start (bg) -> activation_start (fg)
+    //    -> first background (bg) -> first foreground (fg)
+    //
+    // where fg = foreground, bg = background. A and B are non prerendered and C
+    // is prerendered.
+    //
+    // PageShown and PgaeHidden are not called for navigation_start and
+    // actiivation_start; called when the visibility is changed after
+    // navigation_start (resp. activation_start) for non prerendered (resp.
+    // prerendered) pages.
+    //
+    // Here we check that the first background follows some event in foreground.
+    if (!first_background_time_.has_value()) {
+      if (prerendering_state_ == PrerenderingState::kNoPrerendering) {
+        DCHECK_EQ(!started_in_foreground_, first_foreground_time_.has_value());
+      } else {
+        DCHECK(!first_foreground_time_.has_value());
+      }
     }
 
-    background_time = base::TimeTicks::Now();
+    base::TimeTicks background_time = base::TimeTicks::Now();
     ClampBrowserTimestampIfInterProcessTimeTickSkew(&background_time);
     DCHECK_GE(background_time, navigation_start_);
 
@@ -354,12 +371,16 @@ void PageLoadTracker::PageHidden() {
 void PageLoadTracker::PageShown() {
   // Only log the first time we foreground in a given page load.
   if (!first_foreground_time_.has_value()) {
-    // Make sure we either started in the background and haven't been
-    // backgrounded yet, or started in the foreground and have already been
-    // backgrounded.
-    base::TimeTicks foreground_time;
-    DCHECK_NE(started_in_foreground_, !first_background_time_.has_value());
-    foreground_time = base::TimeTicks::Now();
+    // See comment about visibility state transitions in PageHidden.
+    //
+    // Here we check that the first foreground follows some event in background.
+    if (prerendering_state_ == PrerenderingState::kNoPrerendering) {
+      DCHECK_EQ(started_in_foreground_, first_background_time_.has_value());
+    } else {
+      DCHECK(first_background_time_.has_value());
+    }
+
+    base::TimeTicks foreground_time = base::TimeTicks::Now();
     ClampBrowserTimestampIfInterProcessTimeTickSkew(&foreground_time);
     DCHECK_GE(foreground_time, navigation_start_);
     first_foreground_time_ = foreground_time;
@@ -649,13 +670,9 @@ void PageLoadTracker::StopTracking() {
 }
 
 void PageLoadTracker::AddObserver(
-    std::unique_ptr<PageLoadMetricsObserver> observer) {
-  observer->SetDelegate(this);
-  AddObserverInterface(std::move(observer));
-}
-
-void PageLoadTracker::AddObserverInterface(
     std::unique_ptr<PageLoadMetricsObserverInterface> observer) {
+  observer->SetDelegate(this);
+
   if (observer->GetObserverName()) {
     DCHECK(observers_map_.find(observer->GetObserverName()) ==
            observers_map_.end())
@@ -665,6 +682,7 @@ void PageLoadTracker::AddObserverInterface(
            "the test. See also constructor of PageLoadMetricsTestWaiter.";
     observers_map_.emplace(observer->GetObserverName(), observer.get());
   }
+
   observers_.push_back(std::move(observer));
 }
 
@@ -772,10 +790,10 @@ void PageLoadTracker::UpdatePageEndInternal(
   page_end_reason_ = page_end_reason;
   page_end_time_ = timestamp;
   // A client redirect can never be user initiated. Due to the way Blink
-  // implements user gesture tracking, where all events that occur within 1
-  // second after a user interaction are considered to be triggered by user
-  // activation (based on HTML spec:
-  // https://html.spec.whatwg.org/multipage/interaction.html#triggered-by-user-activation),
+  // implements user gesture tracking, where all events that occur within a few
+  // seconds after a user interaction are considered to be triggered by user
+  // activation (based on the HTML spec:
+  // https://html.spec.whatwg.org/multipage/interaction.html#tracking-user-activation),
   // these navs may sometimes be reported as user initiated by Blink. Thus, we
   // explicitly filter these types of aborts out when deciding if the abort was
   // user initiated.
@@ -810,6 +828,7 @@ void PageLoadTracker::OnTimingChanged() {
     DCHECK(prerendering_state_ ==
            PrerenderingState::kActivatedNoActivationStart);
     prerendering_state_ = PrerenderingState::kActivated;
+    activation_start_ = new_timing.activation_start;
   }
 
   const mojom::PaintTimingPtr& paint_timing =
@@ -1015,6 +1034,10 @@ PrerenderingState PageLoadTracker::GetPrerenderingState() const {
   return prerendering_state_;
 }
 
+absl::optional<base::TimeDelta> PageLoadTracker::GetActivationStart() const {
+  return activation_start_;
+}
+
 const UserInitiatedInfo& PageLoadTracker::GetUserInitiatedInfo() const {
   return user_initiated_info_;
 }
@@ -1173,6 +1196,11 @@ void PageLoadTracker::OnV8MemoryChanged(
     observer->OnV8MemoryChanged(memory_updates);
 }
 
+void PageLoadTracker::OnSharedStorageWorkletHostCreated() {
+  for (const auto& observer : observers_)
+    observer->OnSharedStorageWorkletHostCreated();
+}
+
 void PageLoadTracker::UpdateMetrics(
     content::RenderFrameHost* render_frame_host,
     mojom::PageLoadTimingPtr timing,
@@ -1244,7 +1272,7 @@ void PageLoadTracker::InvokeAndPruneObservers(
   for (auto& observer : forward_observers) {
     DCHECK(observers_map_.find(observer->GetObserverName()) ==
            observers_map_.end());
-    AddObserverInterface(std::move(observer));
+    AddObserver(std::move(observer));
   }
 }
 

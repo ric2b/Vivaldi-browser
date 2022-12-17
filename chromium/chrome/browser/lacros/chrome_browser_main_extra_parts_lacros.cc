@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,10 @@
 #include "base/feature_list.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/reporting/metric_reporting_manager_lacros.h"
 #include "chrome/browser/chromeos/tablet_mode/tablet_mode_page_behavior.h"
 #include "chrome/browser/lacros/app_mode/chrome_kiosk_launch_controller_lacros.h"
+#include "chrome/browser/lacros/app_mode/device_local_account_extension_installer_lacros.h"
 #include "chrome/browser/lacros/app_mode/kiosk_session_service_lacros.h"
 #include "chrome/browser/lacros/arc/arc_icon_cache.h"
 #include "chrome/browser/lacros/automation_manager_lacros.h"
@@ -41,6 +43,7 @@
 #include "chrome/browser/ui/quick_answers/quick_answers_controller_impl.h"
 #include "chromeos/components/quick_answers/public/cpp/controller/quick_answers_controller.h"
 #include "chromeos/components/quick_answers/quick_answers_client.h"
+#include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "chromeos/startup/browser_params_proxy.h"
 #include "components/arc/common/intent_helper/arc_icon_cache_delegate.h"
@@ -64,6 +67,15 @@ extensions::mojom::FeatureSessionType GetExtSessionType() {
   return FeatureSessionType::kUnknown;
 }
 
+bool IsSessionTypeDeviceLocalAccountSession(
+    crosapi::mojom::SessionType session_type) {
+  using crosapi::mojom::SessionType;
+
+  return session_type == SessionType::kAppKioskSession ||
+         session_type == crosapi::mojom::SessionType::kWebKioskSession ||
+         session_type == crosapi::mojom::SessionType::kPublicSession;
+}
+
 }  // namespace
 
 ChromeBrowserMainExtraPartsLacros::ChromeBrowserMainExtraPartsLacros() =
@@ -76,6 +88,12 @@ void ChromeBrowserMainExtraPartsLacros::PreProfileInit() {
   extensions::SetCurrentFeatureSessionType(GetExtSessionType());
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   tablet_mode_page_behavior_ = std::make_unique<TabletModePageBehavior>();
+
+  if (IsSessionTypeDeviceLocalAccountSession(
+          chromeos::BrowserParamsProxy::Get()->SessionType())) {
+    device_local_account_extension_installer_ =
+        std::make_unique<DeviceLocalAccountExtensionInstallerLacros>();
+  }
 }
 
 void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
@@ -193,6 +211,12 @@ void ChromeBrowserMainExtraPartsLacros::PostProfileInit(
       std::make_unique<quick_answers::QuickAnswersClient>(
           g_browser_process->shared_url_loader_factory(),
           QuickAnswersController::Get()->GetQuickAnswersDelegate()));
+
+  // Initialize the metric reporting manager so we can start recording relevant
+  // telemetry metrics and events on managed devices. The reporting manager
+  // checks for profile affiliation, so we do not need any additional checks
+  // here.
+  ::reporting::metrics::MetricReportingManagerLacros::GetForProfile(profile);
 
   if (chromeos::BrowserParamsProxy::Get()->SessionType() ==
       crosapi::mojom::SessionType::kAppKioskSession) {

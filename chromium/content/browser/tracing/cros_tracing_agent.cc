@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,7 @@ class CrOSSystemTracingSession {
   // |true| if tracing was started and |false| otherwise.
   void StartTracing(const std::string& config, SuccessCallback callback) {
     DCHECK(!is_tracing_);
-    if (!chromeos::DBusThreadManager::IsInitialized()) {
+    if (!ash::DBusThreadManager::IsInitialized()) {
       if (callback)
         std::move(callback).Run(/*success=*/false);
       return;

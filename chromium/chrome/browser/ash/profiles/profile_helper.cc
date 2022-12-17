@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -34,9 +35,6 @@
 
 namespace ash {
 namespace {
-
-// As defined in /chromeos/ash/components/dbus/cryptohome/cryptohome_client.cc.
-static const char kUserIdHashSuffix[] = "-hash";
 
 class UsernameHashMatcher {
  public:
@@ -96,8 +94,6 @@ class ProfileHelperImpl : public ProfileHelper {
   const user_manager::User* GetUserByProfile(
       const Profile* profile) const override;
   user_manager::User* GetUserByProfile(Profile* profile) const override;
-
-  void SetActiveUserIdForTesting(const std::string& user_id) override;
 
   void FlushProfile(Profile* profile) override;
 
@@ -302,12 +298,6 @@ void ProfileHelper::SetAlwaysReturnPrimaryUserForTesting(bool value) {
   ProfileHelper::SetProfileToUserForTestingEnabled(value);
 }
 
-// static
-std::string ProfileHelper::GetUserIdHashByUserIdForTesting(
-    const std::string& user_id) {
-  return user_id + kUserIdHashSuffix;
-}
-
 ProfileHelperImpl::ProfileHelperImpl(
     std::unique_ptr<BrowserContextHelper::Delegate> delegate)
     : browser_context_helper_(
@@ -377,7 +367,7 @@ Profile* ProfileHelperImpl::GetProfileByUser(const user_manager::User* user) {
   }
 
   if (!user->is_profile_created())
-    return NULL;
+    return nullptr;
 
   Profile* profile = Profile::FromBrowserContext(
       browser_context_helper_->delegate()->GetBrowserContextByPath(
@@ -437,8 +427,8 @@ const user_manager::User* ProfileHelperImpl::GetUserByProfile(
   const std::string username_hash =
       ProfileHelper::GetUserIdHashFromProfile(profile);
   const user_manager::UserList& users = user_manager->GetLoggedInUsers();
-  const user_manager::UserList::const_iterator pos = std::find_if(
-      users.begin(), users.end(), UsernameHashMatcher(username_hash));
+  const user_manager::UserList::const_iterator pos =
+      base::ranges::find_if(users, UsernameHashMatcher(username_hash));
   if (pos != users.end())
     return *pos;
 
@@ -449,7 +439,7 @@ const user_manager::User* ProfileHelperImpl::GetUserByProfile(
                  browser_context_helper_->GetBrowserContextPathByUserIdHash(
                      active_user->username_hash()) == profile->GetPath()
              ? active_user
-             : NULL;
+             : nullptr;
 }
 
 user_manager::User* ProfileHelperImpl::GetUserByProfile(
@@ -478,17 +468,10 @@ void ProfileHelperImpl::SetUserToProfileMappingForTesting(
 
 void ProfileHelperImpl::RemoveUserFromListForTesting(
     const AccountId& account_id) {
-  auto it =
-      std::find_if(user_list_for_testing_.begin(), user_list_for_testing_.end(),
-                   [&account_id](const user_manager::User* user) {
-                     return user->GetAccountId() == account_id;
-                   });
+  auto it = base::ranges::find(user_list_for_testing_, account_id,
+                               &user_manager::User::GetAccountId);
   if (it != user_list_for_testing_.end())
     user_list_for_testing_.erase(it);
-}
-
-void ProfileHelperImpl::SetActiveUserIdForTesting(const std::string& user_id) {
-  active_user_id_hash_ = GetUserIdHashByUserIdForTesting(user_id);
 }
 
 void ProfileHelperImpl::FlushProfile(Profile* profile) {

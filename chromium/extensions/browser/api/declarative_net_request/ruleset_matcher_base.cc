@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <tuple>
 
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "components/url_pattern_index/flat/url_pattern_index_generated.h"
 #include "content/public/browser/navigation_handle.h"
@@ -118,9 +119,8 @@ bool GetModifiedQuery(const GURL& url,
       continue;
     }
 
-    auto replace_iterator = std::find_if(
-        add_or_replace_query_params.begin(), add_or_replace_query_params.end(),
-        [&key](const QueryReplace& param) { return param.key == key; });
+    auto replace_iterator = base::ranges::find(add_or_replace_query_params, key,
+                                               &QueryReplace::key);
 
     // Nothing to do.
     if (replace_iterator == add_or_replace_query_params.end()) {

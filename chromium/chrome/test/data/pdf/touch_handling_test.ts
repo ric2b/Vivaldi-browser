@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,7 +67,7 @@ chrome.test.runTests([
   // The test passes locally on MacOS, ChromeOS and Linux. Disable until it's
   // possible to repro the bot issue. https://crbug.com/723632
   // function testLongPressSelectsText() {
-  //   var client = new PDFScriptingAPI(window, window);
+  //   var client = new PdfScriptingApi(window, window);
   //   sendTouchStart([{x: 336, y: 163}]);
   //   window.setTimeout(function() {
   //     client.getSelectedText(

@@ -1,9 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.customtabs;
 
+import android.content.Intent;
 import android.graphics.Rect;
 import android.text.TextUtils;
 import android.view.View;
@@ -12,6 +13,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import org.chromium.base.Callback;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.jank_tracker.DummyJankTracker;
 import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -20,9 +23,10 @@ import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.app.reengagement.ReengagementActivity;
 import org.chromium.chrome.browser.back_press.BackPressManager;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
@@ -35,6 +39,7 @@ import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabContro
 import org.chromium.chrome.browser.customtabs.features.branding.BrandingController;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarCoordinator;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
@@ -48,7 +53,9 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.reengagement.ReengagementNotificationController;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareDelegate;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.RequestDesktopUtils;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
@@ -59,6 +66,7 @@ import org.chromium.chrome.browser.ui.system.StatusBarColorController.StatusBarC
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.base.ActivityWindowAndroid;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
@@ -83,7 +91,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
      * @param shareDelegateSupplier Supplies the {@link ShareDelegate}.
      * @param tabProvider The {@link ActivityTabProvider} to get current tab of the activity.
      * @param profileSupplier Supplier of the currently applicable profile.
-     * @param bookmarkBridgeSupplier Supplier of the bookmark bridge for the current profile.
+     * @param bookmarkModelSupplier Supplier of the bookmark bridge for the current profile.
      * @param tabBookmarkerSupplier Supplier of {@link TabBookmarker} for bookmarking a given tab.
      * @param contextualSearchManagerSupplier Supplier of the {@link ContextualSearchManager}.
      * @param tabModelSelectorSupplier Supplies the {@link TabModelSelector}.
@@ -117,7 +125,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             @NonNull ObservableSupplier<ShareDelegate> shareDelegateSupplier,
             @NonNull ActivityTabProvider tabProvider,
             @NonNull ObservableSupplier<Profile> profileSupplier,
-            @NonNull ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
+            @NonNull ObservableSupplier<BookmarkModel> bookmarkModelSupplier,
             @NonNull ObservableSupplier<TabBookmarker> tabBookmarkerSupplier,
             @NonNull Supplier<ContextualSearchManager> contextualSearchManagerSupplier,
             @NonNull ObservableSupplier<TabModelSelector> tabModelSelectorSupplier,
@@ -149,7 +157,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             @NonNull Supplier<CustomTabActivityTabController> tabController) {
         // clang-format off
         super(activity, null, shareDelegateSupplier, tabProvider,
-                profileSupplier, bookmarkBridgeSupplier, tabBookmarkerSupplier,
+                profileSupplier, bookmarkModelSupplier, tabBookmarkerSupplier,
                 contextualSearchManagerSupplier, tabModelSelectorSupplier,
                 new OneshotSupplierImpl<>(), new OneshotSupplierImpl<>(),
                 new OneshotSupplierImpl<>(), new OneshotSupplierImpl<>(), () -> null,
@@ -196,10 +204,20 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         }
         toolbar.setCloseButtonPosition(mIntentDataProvider.get().getCloseButtonPosition());
         if (mIntentDataProvider.get().isPartialHeightCustomTab()) {
-            Runnable softInputCallback =
+            Callback<Runnable> softInputCallback =
                     ((PartialCustomTabHeightStrategy) mCustomTabHeightStrategy)::onShowSoftInput;
             mTabController.get().registerTabObserver(
                     new PartialCustomTabTabObserver(softInputCallback));
+            mTabController.get().registerTabObserver(new EmptyTabObserver() {
+                @Override
+                public void didFirstVisuallyNonEmptyPaint(Tab tab) {
+                    BaseCustomTabActivity baseActivity = (BaseCustomTabActivity) mActivity;
+                    assert baseActivity != null;
+                    baseActivity.getContextualSearchManagerSupplier()
+                            .get()
+                            .setCanHideAndroidBrowserControls(false);
+                }
+            });
         }
     }
 
@@ -219,12 +237,18 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
 
     @Override
     protected IncognitoReauthCoordinatorFactory getIncognitoReauthCoordinatorFactory() {
+        Intent showRegularOverviewIntent = new Intent(Intent.ACTION_MAIN);
+        showRegularOverviewIntent.setClass(mActivity, ChromeLauncherActivity.class);
+        showRegularOverviewIntent.putExtra(IntentHandler.EXTRA_OPEN_REGULAR_OVERVIEW_MODE, true);
+        IntentUtils.addTrustedIntentExtras(showRegularOverviewIntent);
+
         return new IncognitoReauthCoordinatorFactory(mActivity, mTabModelSelectorSupplier.get(),
                 mModalDialogManagerSupplier.get(), new IncognitoReauthManager(),
                 new SettingsLauncherImpl(),
                 /*tabSwitcherCustomViewManagerOneshotSupplier= */ null,
                 /*incognitoReauthTopToolbarDelegate= */ null,
                 /*layoutManager=*/null,
+                /*showRegularOverviewIntent= */ showRegularOverviewIntent,
                 /*isTabbedActivity= */ false);
     }
 
@@ -252,8 +276,10 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                 intentDataProvider.getInitialActivityHeight(),
                 intentDataProvider.getColorProvider().getNavigationBarColor(),
                 intentDataProvider.getColorProvider().getNavigationBarDividerColor(),
+                intentDataProvider.isPartialCustomTabFixedHeight(),
                 CustomTabsConnection.getInstance(), intentDataProvider.getSession(),
-                mActivityLifecycleDispatcher);
+                mActivityLifecycleDispatcher, mFullscreenManager,
+                DeviceFormFactor.isWindowOnTablet(mWindowAndroid));
     }
 
     @Override
@@ -272,8 +298,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
     @Override
     protected Rect getAppRectInWindow() {
         // This is necessary if app handler cannot rely on the popup window that ensures the menu
-        // will not be clipped off the screen, which can happen if Window#FLAGS_LAYOUT_NO_LIMITS
-        // is set to allow the app to be drawn outside the screen in partial CCT.
+        // will not be clipped off the screen, which can happen in partial CCT.
         if (mIntentDataProvider.get().isPartialHeightCustomTab()) {
             View coord = mActivity.findViewById(R.id.coordinator);
             int[] location = new int[2];
@@ -285,8 +310,30 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
     }
 
     @Override
+    protected Supplier<Integer> getBaseHeightProvider() {
+        if (mIntentDataProvider.get().isPartialHeightCustomTab()
+                && !ChromeFeatureList.sCctResizableWindowAboveNavbar.isEnabled()) {
+            return () -> mActivity.findViewById(R.id.coordinator).getHeight();
+        } else {
+            return null;
+        }
+    }
+
+    @Override
     protected boolean canDrawOutsideScreen() {
         return mCustomTabHeightStrategy.canDrawOutsideScreen();
+    }
+
+    @Override
+    protected void onFindToolbarShown() {
+        super.onFindToolbarShown();
+        mCustomTabHeightStrategy.onFindToolbarShown();
+    }
+
+    @Override
+    protected void onFindToolbarHidden() {
+        super.onFindToolbarHidden();
+        mCustomTabHeightStrategy.onFindToolbarHidden();
     }
 
     @Override
@@ -297,6 +344,8 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             mBrandingController.destroy();
             mBrandingController = null;
         }
+
+        mCustomTabHeightStrategy.destroy();
     }
 
     /**

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,6 +41,9 @@ enum class DisplayLockActivationReason {
   kUserFocus = 1 << 7,
   // Intersection observer activation
   kViewportIntersection = 1 << 8,
+  // NOTE: We don't need an activation reason for CSS toggles, since toggle
+  // state changes trigger restyles that update the context through a call to
+  // SetRequestedState().
 
   // Shorthands
   kViewport = static_cast<uint16_t>(kSelection) |
@@ -55,7 +58,24 @@ enum class DisplayLockActivationReason {
          static_cast<uint16_t>(kSelection) |
          static_cast<uint16_t>(kSimulatedClick) |
          static_cast<uint16_t>(kUserFocus) |
-         static_cast<uint16_t>(kViewportIntersection)
+         static_cast<uint16_t>(kViewportIntersection),
+  kAuto = kAny,
+
+  // The css-toggles specification says that toggle-visibility works like
+  // content-visibility, except it's not activated by being on-screen.
+  //
+  // TODO(https://crbug.com/1250716): Conceptually I *think* we might want to
+  // omit kUserFocus from kToggleVisibility.  However, omitting kUserFocus but
+  // retaining kScriptFocus doesn't appear to work in practice.  (Is this
+  // because kUserFocus affects Element::IsFocusableStyle?)
+  //
+  // TODO(https://github.com/tabatkins/css-toggle/issues/42): While this
+  // doesn't match the current specification draft, we also exclude kSelection
+  // because the presence of a selection shouldn't prevent other user actions
+  // from changing the toggle and making the element skip its contents.
+  kToggleVisibility = static_cast<uint16_t>(kAny) &
+                      ~(static_cast<uint16_t>(kViewportIntersection) |
+                        static_cast<uint16_t>(kSelection)),
 };
 
 // Instead of specifying an underlying type, which would propagate throughout
@@ -76,8 +96,14 @@ class CORE_EXPORT DisplayLockContext final
   explicit DisplayLockContext(Element*);
   ~DisplayLockContext() = default;
 
-  // Called by style to update the current state of content-visibility.
-  void SetRequestedState(EContentVisibility state);
+  // Called by style to update the current state of content-visibility and
+  // toggle-visibility.
+  // toggle_visibility should be non-null when toggle-visibility is set
+  // to a toggle *and* the toggle is currently inactive (meaning the
+  // element should be hidden due to the toggle).  Otherwise it should
+  // be g_null_atom.
+  void SetRequestedState(EContentVisibility state,
+                         const AtomicString& toggle_visibility);
   // Called by style to adjust the element's style based on the current state.
   void AdjustElementStyle(ComputedStyle* style) const;
 
@@ -90,12 +116,9 @@ class CORE_EXPORT DisplayLockContext final
   bool ShouldStyleChildren() const;
   void DidStyleSelf();
   void DidStyleChildren();
-  // This returns |true| for an IsShapingDeferred element.
   bool ShouldLayoutChildren() const;
   void DidLayoutChildren();
-  // This returns |true| for an IsShapingDeferred element.
   bool ShouldPrePaintChildren() const;
-  // This returns |true| for an IsShapingDeferred element.
   bool ShouldPaintChildren() const;
 
   // Returns true if the last style recalc traversal was blocked at this
@@ -194,7 +217,13 @@ class CORE_EXPORT DisplayLockContext final
   // Debugging functions.
   String RenderAffectingStateToString() const;
 
-  bool IsAuto() const { return state_ == EContentVisibility::kAuto; }
+  bool IsAlwaysVisible() const {
+    return state_ == EContentVisibility::kVisible && toggle_name_.IsNull();
+  }
+
+  bool IsAuto() const {
+    return state_ == EContentVisibility::kAuto && toggle_name_.IsNull();
+  }
   bool HadLifecycleUpdateSinceLastUnlock() const {
     return had_lifecycle_update_since_last_unlock_;
   }
@@ -217,9 +246,6 @@ class CORE_EXPORT DisplayLockContext final
   void ClearHasTopLayerElement();
 
   void ScheduleTopLayerCheck();
-
-  bool IsShapingDeferred() const;
-  bool IsInclusiveDescendantOf(const LayoutObject& ancestor) const;
 
   // This updates the rendering state to account for the fact that one of the
   // ancestor may be a non-root shared element, which should cause the
@@ -378,6 +404,7 @@ class CORE_EXPORT DisplayLockContext final
   WeakMember<Element> element_;
   WeakMember<Document> document_;
   EContentVisibility state_ = EContentVisibility::kVisible;
+  AtomicString toggle_name_;
 
   // A struct to keep track of forced unlocks, and reasons for it.
   struct UpdateForcedInfo {

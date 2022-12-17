@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "ash/constants/ash_features.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
+#include "base/ranges/algorithm.h"
 #include "ui/views/view_model.h"
 
 namespace ash {
@@ -43,19 +44,6 @@ void PagedViewStructure::Init(Mode mode) {
 std::unique_ptr<PagedViewStructure::ScopedSanitizeLock>
 PagedViewStructure::GetSanitizeLock() {
   return std::make_unique<ScopedSanitizeLock>(this);
-}
-
-void PagedViewStructure::AllowEmptyPages() {
-  empty_pages_allowed_ = true;
-}
-
-void PagedViewStructure::LoadFromOther(const PagedViewStructure& other) {
-  DCHECK_EQ(apps_grid_view_, other.apps_grid_view_);
-
-  mode_ = other.mode_;
-  pages_ = other.pages_;
-
-  Sanitize();
 }
 
 void PagedViewStructure::LoadFromMetadata() {
@@ -109,7 +97,7 @@ void PagedViewStructure::LoadFromMetadata() {
   }
 
   // Remove trailing empty page if exist.
-  if (!empty_pages_allowed_ && sanitize_locks_ == 0 && pages_.back().empty())
+  if (sanitize_locks_ == 0 && pages_.back().empty())
     pages_.pop_back();
 }
 
@@ -189,7 +177,7 @@ void PagedViewStructure::Move(AppListItemView* view,
 
 void PagedViewStructure::Remove(AppListItemView* view) {
   for (auto& page : pages_) {
-    auto iter = std::find(page.begin(), page.end(), view);
+    auto iter = base::ranges::find(page, view);
     if (iter != page.end()) {
       page.erase(iter);
       break;
@@ -334,12 +322,7 @@ int PagedViewStructure::GetTargetModelIndexForMove(
     // Skip the item view to be moved in the page if found.
     // Decrement |target_model_index| if |moved_view| is in this page because it
     // is represented by a placeholder.
-    auto it =
-        std::find_if(page.begin(), page.end(), [&](AppListItemView* item_view) {
-          return item_view->item() == moved_item;
-        });
-
-    if (it != page.end())
+    if (base::Contains(page, moved_item, &AppListItemView::item))
       --target_model_index;
   }
 
@@ -427,8 +410,7 @@ bool PagedViewStructure::IsValidReorderTargetIndex(
   // The user can drag an item view to another page's end. Also covers the case
   // where a dragged folder item is being reparented to the last target index of
   // the root level grid.
-  if ((index.page < total_pages() ||
-       (index.page == total_pages() && mode_ == Mode::kPartialPages)) &&
+  if (index.page < total_pages() &&
       GetLastTargetIndexOfPage(index.page) == index) {
     return true;
   }
@@ -456,11 +438,10 @@ int PagedViewStructure::CalculateTargetSlot(const Page& page) const {
 }
 
 void PagedViewStructure::Sanitize() {
-  if (sanitize_locks_ == 0)
+  if (sanitize_locks_ == 0) {
     ClearOverflow();
-
-  if (!empty_pages_allowed_ && sanitize_locks_ == 0)
     ClearEmptyPages();
+  }
 }
 
 void PagedViewStructure::ClearOverflow() {

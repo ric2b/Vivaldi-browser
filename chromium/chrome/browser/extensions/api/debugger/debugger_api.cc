@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/types/optional_util.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
@@ -81,12 +83,9 @@ namespace {
 // Helpers --------------------------------------------------------------------
 
 void CopyDebuggee(Debuggee* dst, const Debuggee& src) {
-  if (src.tab_id)
-    dst->tab_id = std::make_unique<int>(*src.tab_id);
-  if (src.extension_id)
-    dst->extension_id = std::make_unique<std::string>(*src.extension_id);
-  if (src.target_id)
-    dst->target_id = std::make_unique<std::string>(*src.target_id);
+  dst->tab_id = src.tab_id;
+  dst->extension_id = src.extension_id;
+  dst->target_id = src.target_id;
 }
 
 bool ExtensionMayAttachToTargetProfile(Profile* extension_profile,
@@ -162,14 +161,13 @@ bool ExtensionMayAttachToRenderFrameHost(
     content::RenderFrameHost* render_frame_host,
     std::string* error) {
   bool result = true;
-  render_frame_host->ForEachRenderFrameHost(base::BindRepeating(
-      [](const Extension& extension, Profile* extension_profile,
-         std::string* error, bool& result, content::RenderFrameHost* rfh) {
+  render_frame_host->ForEachRenderFrameHostWithAction(
+      [&extension, extension_profile, error,
+       &result](content::RenderFrameHost* rfh) {
         // If |rfh| is attached to an inner MimeHandlerViewGuest skip it.
         // This is done to fix crbug.com/1293856 because an extension cannot
         // inspect another extension.
-        WebContents* rfh_web_contents = WebContents::FromRenderFrameHost(rfh);
-        if (MimeHandlerViewGuest::FromWebContents(rfh_web_contents)) {
+        if (MimeHandlerViewGuest::FromRenderFrameHost(rfh)) {
           return content::RenderFrameHost::FrameIterationAction::kSkipChildren;
         }
 
@@ -193,8 +191,7 @@ bool ExtensionMayAttachToRenderFrameHost(
         }
 
         return content::RenderFrameHost::FrameIterationAction::kContinue;
-      },
-      std::ref(extension), extension_profile, error, std::ref(result)));
+      });
   return result;
 }
 
@@ -395,14 +392,14 @@ void ExtensionDevToolsClientHost::SendMessageToBackend(
     DebuggerSendCommandFunction* function,
     const std::string& method,
     SendCommand::Params::CommandParams* command_params) {
-  base::Value protocol_request(base::Value::Type::DICTIONARY);
+  base::Value::Dict protocol_request;
   int request_id = ++last_request_id_;
   pending_requests_[request_id] = function;
-  protocol_request.SetIntKey("id", request_id);
-  protocol_request.SetStringKey("method", method);
+  protocol_request.Set("id", request_id);
+  protocol_request.Set("method", method);
   if (command_params) {
-    protocol_request.SetKey("params",
-                            command_params->additional_properties.Clone());
+    protocol_request.Set("params",
+                         command_params->additional_properties.Clone());
   }
 
   std::string json;
@@ -474,8 +471,7 @@ void ExtensionDevToolsClientHost::DispatchProtocolMessage(
 
     OnEvent::Params params;
     if (base::Value* params_value = dictionary.FindDictKey("params")) {
-      params.additional_properties.Swap(
-          static_cast<base::DictionaryValue*>(params_value));
+      params.additional_properties = std::move(params_value->GetDict());
     }
 
     auto args(OnEvent::Create(debuggee_, *method_name, params));
@@ -597,9 +593,8 @@ bool DebuggerFunction::InitAgentHost(std::string* error) {
       // Re-use existing browser agent hosts.
       const std::string& extension_id = extension()->id();
       AttachedClientHosts& hosts = g_attached_client_hosts.Get();
-      auto it = std::find_if(
-          hosts.begin(), hosts.end(),
-          [&extension_id](ExtensionDevToolsClientHost* client_host) {
+      auto it = base::ranges::find_if(
+          hosts, [&extension_id](ExtensionDevToolsClientHost* client_host) {
             return client_host->extension_id() == extension_id &&
                    client_host->agent_host() &&
                    client_host->agent_host()->GetType() ==
@@ -643,8 +638,8 @@ ExtensionDevToolsClientHost* DebuggerFunction::FindClientHost() {
   const std::string& extension_id = extension()->id();
   DevToolsAgentHost* agent_host = agent_host_.get();
   AttachedClientHosts& hosts = g_attached_client_hosts.Get();
-  auto it = std::find_if(
-      hosts.begin(), hosts.end(),
+  auto it = base::ranges::find_if(
+      hosts,
       [&agent_host, &extension_id](ExtensionDevToolsClientHost* client_host) {
         return client_host->agent_host() == agent_host &&
                client_host->extension_id() == extension_id;
@@ -737,8 +732,8 @@ ExtensionFunction::ResponseAction DebuggerSendCommandFunction::Run() {
   if (!InitClientHost(&error))
     return RespondNow(Error(std::move(error)));
 
-  client_host_->SendMessageToBackend(this, params->method,
-      params->command_params.get());
+  client_host_->SendMessageToBackend(
+      this, params->method, base::OptionalToPtr(params->command_params));
   if (did_respond())
     return AlreadyResponded();
   return RespondLater();
@@ -754,8 +749,7 @@ void DebuggerSendCommandFunction::SendResponseBody(base::Value response) {
 
   SendCommand::Results::Result result;
   if (base::Value* result_body = response.FindDictKey("result")) {
-    result.additional_properties.Swap(
-        static_cast<base::DictionaryValue*>(result_body));
+    result.additional_properties = std::move(result_body->GetDict());
   }
 
   Respond(ArgumentList(SendCommand::Results::Create(result)));

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -189,10 +189,9 @@ Vector<device::mojom::blink::EntityTypeForHitTest> GetEntityTypesForHitTest(
   }
 
   DVLOG(2) << __func__ << ": result_set.size()=" << result_set.size();
-  DCHECK(!result_set.IsEmpty());
+  DCHECK(!result_set.empty());
 
-  Vector<device::mojom::blink::EntityTypeForHitTest> result;
-  CopyToVector(result_set, result);
+  Vector<device::mojom::blink::EntityTypeForHitTest> result(result_set);
 
   DVLOG(2) << __func__ << ": result.size()=" << result.size();
   return result;
@@ -510,7 +509,7 @@ const String& XRSession::depthDataFormat(ExceptionState& exception_state) {
 
 void XRSession::UpdateViews(
     const Vector<device::mojom::blink::XRViewPtr>& views) {
-  if (views.IsEmpty()) {
+  if (views.empty()) {
     // If there are no views provided for this frame, keep the views we
     // currently have from the previous frame.
     return;
@@ -658,21 +657,22 @@ ScriptPromise XRSession::CreateAnchorHelper(
            << ", maybe_native_origin_from_anchor_pose->position()= "
            << maybe_native_origin_from_anchor_pose->position().ToString();
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = resolver->Promise();
 
   if (maybe_plane_id) {
     xr_->xrEnvironmentProviderRemote()->CreatePlaneAnchor(
         native_origin_information->Clone(),
         *maybe_native_origin_from_anchor_pose, *maybe_plane_id,
-        WTF::Bind(&XRSession::OnCreateAnchorResult, WrapPersistent(this),
-                  WrapPersistent(resolver)));
+        resolver->WrapCallbackInScriptScope(WTF::BindOnce(
+            &XRSession::OnCreateAnchorResult, WrapPersistent(this))));
   } else {
     xr_->xrEnvironmentProviderRemote()->CreateAnchor(
         native_origin_information->Clone(),
         *maybe_native_origin_from_anchor_pose,
-        WTF::Bind(&XRSession::OnCreateAnchorResult, WrapPersistent(this),
-                  WrapPersistent(resolver)));
+        resolver->WrapCallbackInScriptScope(WTF::BindOnce(
+            &XRSession::OnCreateAnchorResult, WrapPersistent(this))));
   }
 
   create_anchor_promises_.insert(resolver);
@@ -797,7 +797,7 @@ ScriptPromise XRSession::requestHitTestSource(
       options_init->space()->NativeFromOffsetMatrix();
 
   if (RuntimeEnabledFeatures::WebXRHitTestEntityTypesEnabled() &&
-      options_init->hasEntityTypes() && options_init->entityTypes().IsEmpty()) {
+      options_init->hasEntityTypes() && options_init->entityTypes().empty()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kEntityTypesNotSpecified);
     return {};
@@ -828,18 +828,20 @@ ScriptPromise XRSession::requestHitTestSource(
 
   // Zero out the translation of origin_from_ray matrix to correctly map a 3D
   // vector.
-  origin_from_ray.Translate3d(-origin_from_ray.M41(), -origin_from_ray.M42(),
-                              -origin_from_ray.M43());
+  gfx::Vector3dF translation = origin_from_ray.To3dTranslation();
+  origin_from_ray.Translate3d(-translation.x(), -translation.y(),
+                              -translation.z());
 
   ray_mojo->direction = origin_from_ray.MapPoint({0, 0, -1}).OffsetFromOrigin();
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = resolver->Promise();
 
   xr_->xrEnvironmentProviderRemote()->SubscribeToHitTest(
       maybe_native_origin->Clone(), entity_types, std::move(ray_mojo),
-      WTF::Bind(&XRSession::OnSubscribeToHitTestResult, WrapPersistent(this),
-                WrapPersistent(resolver)));
+      resolver->WrapCallbackInScriptScope(WTF::BindOnce(
+          &XRSession::OnSubscribeToHitTestResult, WrapPersistent(this))));
   request_hit_test_source_promises_.insert(resolver);
 
   return promise;
@@ -871,7 +873,7 @@ ScriptPromise XRSession::requestHitTestSourceForTransientInput(
   }
 
   if (RuntimeEnabledFeatures::WebXRHitTestEntityTypesEnabled() &&
-      options_init->hasEntityTypes() && options_init->entityTypes().IsEmpty()) {
+      options_init->hasEntityTypes() && options_init->entityTypes().empty()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kEntityTypesNotSpecified);
     return {};
@@ -891,13 +893,15 @@ ScriptPromise XRSession::requestHitTestSourceForTransientInput(
                          static_cast<float>(offsetRay->direction()->y()),
                          static_cast<float>(offsetRay->direction()->z())};
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = resolver->Promise();
 
   xr_->xrEnvironmentProviderRemote()->SubscribeToHitTestForTransientInput(
       options_init->profile(), entity_types, std::move(ray_mojo),
-      WTF::Bind(&XRSession::OnSubscribeToHitTestForTransientInputResult,
-                WrapPersistent(this), WrapPersistent(resolver)));
+      resolver->WrapCallbackInScriptScope(
+          WTF::BindOnce(&XRSession::OnSubscribeToHitTestForTransientInputResult,
+                        WrapPersistent(this))));
   request_hit_test_source_promises_.insert(resolver);
 
   return promise;
@@ -914,8 +918,8 @@ void XRSession::OnSubscribeToHitTestResult(
   request_hit_test_source_promises_.erase(resolver);
 
   if (result != device::mojom::SubscribeToHitTestResult::SUCCESS) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kOperationError, kHitTestSubscriptionFailed));
+    resolver->RejectWithDOMException(DOMExceptionCode::kOperationError,
+                                     kHitTestSubscriptionFailed);
     return;
   }
 
@@ -940,8 +944,8 @@ void XRSession::OnSubscribeToHitTestForTransientInputResult(
   request_hit_test_source_promises_.erase(resolver);
 
   if (result != device::mojom::SubscribeToHitTestResult::SUCCESS) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kOperationError, kHitTestSubscriptionFailed));
+    resolver->RejectWithDOMException(DOMExceptionCode::kOperationError,
+                                     kHitTestSubscriptionFailed);
     return;
   }
 
@@ -969,8 +973,8 @@ void XRSession::OnCreateAnchorResult(ScriptPromiseResolver* resolver,
     // must contain newly created anchor data.
     anchor_ids_to_pending_anchor_promises_.insert(id, resolver);
   } else {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kOperationError, kAnchorCreationFailed));
+    resolver->RejectWithDOMException(DOMExceptionCode::kOperationError,
+                                     kAnchorCreationFailed);
   }
 }
 
@@ -984,7 +988,7 @@ void XRSession::EnsureEnvironmentErrorHandler() {
   if (!environment_error_handler_subscribed_ &&
       xr_->xrEnvironmentProviderRemote()) {
     environment_error_handler_subscribed_ = true;
-    xr_->AddEnvironmentProviderErrorHandler(WTF::Bind(
+    xr_->AddEnvironmentProviderErrorHandler(WTF::BindOnce(
         &XRSession::OnEnvironmentProviderError, WrapWeakPersistent(this)));
   }
 }
@@ -993,22 +997,40 @@ void XRSession::OnEnvironmentProviderError() {
   HeapHashSet<Member<ScriptPromiseResolver>> create_anchor_promises;
   create_anchor_promises_.swap(create_anchor_promises);
   for (ScriptPromiseResolver* resolver : create_anchor_promises) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kInvalidStateError, kDeviceDisconnected));
+    ScriptState* resolver_script_state = resolver->GetScriptState();
+    if (!IsInParallelAlgorithmRunnable(resolver->GetExecutionContext(),
+                                       resolver_script_state)) {
+      continue;
+    }
+    ScriptState::Scope script_state_scope(resolver_script_state);
+    resolver->RejectWithDOMException(DOMExceptionCode::kInvalidStateError,
+                                     kDeviceDisconnected);
   }
 
   HeapHashSet<Member<ScriptPromiseResolver>> request_hit_test_source_promises;
   request_hit_test_source_promises_.swap(request_hit_test_source_promises);
   for (ScriptPromiseResolver* resolver : request_hit_test_source_promises) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kInvalidStateError, kDeviceDisconnected));
+    ScriptState* resolver_script_state = resolver->GetScriptState();
+    if (!IsInParallelAlgorithmRunnable(resolver->GetExecutionContext(),
+                                       resolver_script_state)) {
+      continue;
+    }
+    ScriptState::Scope script_state_scope(resolver_script_state);
+    resolver->RejectWithDOMException(DOMExceptionCode::kInvalidStateError,
+                                     kDeviceDisconnected);
   }
 
   HeapVector<Member<ScriptPromiseResolver>> image_score_promises;
   image_scores_resolvers_.swap(image_score_promises);
   for (ScriptPromiseResolver* resolver : image_score_promises) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kInvalidStateError, kDeviceDisconnected));
+    ScriptState* resolver_script_state = resolver->GetScriptState();
+    if (!IsInParallelAlgorithmRunnable(resolver->GetExecutionContext(),
+                                       resolver_script_state)) {
+      continue;
+    }
+    ScriptState::Scope script_state_scope(resolver_script_state);
+    resolver->RejectWithDOMException(DOMExceptionCode::kInvalidStateError,
+                                     kDeviceDisconnected);
   }
 }
 
@@ -1088,7 +1110,7 @@ void XRSession::ProcessAnchorsData(
 
   anchor_ids_to_anchors_.swap(updated_anchors);
 
-  DCHECK(anchor_ids_to_pending_anchor_promises_.IsEmpty())
+  DCHECK(anchor_ids_to_pending_anchor_promises_.empty())
       << "All anchors should be updated in the frame in which they were "
          "created, got "
       << anchor_ids_to_pending_anchor_promises_.size()
@@ -1314,7 +1336,7 @@ void XRSession::ForceEnd(ShutdownPolicy shutdown_policy) {
   }
 
   xr_->ExitPresent(
-      WTF::Bind(&XRSession::OnExitPresent, WrapWeakPersistent(this)));
+      WTF::BindOnce(&XRSession::OnExitPresent, WrapWeakPersistent(this)));
 
   if (wait_for_response) {
     waiting_for_shutdown_ = true;
@@ -1475,7 +1497,7 @@ void XRSession::MaybeRequestFrame() {
   // If we have an outstanding callback registered, then we know that the page
   // actually wants frames.
   bool page_wants_frame =
-      !callback_collection_->IsEmpty() || !vfc_execution_queue_.IsEmpty();
+      !callback_collection_->IsEmpty() || !vfc_execution_queue_.empty();
 
   // A page can process frames if it has its appropriate base layer set and has
   // indicated that it actually wants frames.
@@ -1655,7 +1677,8 @@ ScriptPromise XRSession::getTrackedImageScores(
     return ScriptPromise();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = resolver->Promise();
 
   if (tracked_image_scores_available_) {
@@ -2045,7 +2068,7 @@ void XRSession::OnInputStateChangeInternal(
   }
 
   // If there have been any changes, fire the input sources change event.
-  if (!added.IsEmpty() || !removed.IsEmpty()) {
+  if (!added.empty() || !removed.empty()) {
     DispatchEvent(*XRInputSourcesChangeEvent::Create(
         event_type_names::kInputsourceschange, this, added, removed));
   }
@@ -2249,7 +2272,7 @@ const HeapVector<Member<XRViewData>>& XRSession::views() {
         views_.clear();
         canvas_was_resized_ = false;
       }
-      if (views_.IsEmpty()) {
+      if (views_.empty()) {
         views_.emplace_back(MakeGarbageCollected<XRViewData>(
             device::mojom::blink::XREye::kNone,
             gfx::Rect(0, 0, output_width_, output_height_)));
@@ -2281,8 +2304,7 @@ const HeapVector<Member<XRViewData>>& XRSession::views() {
 }
 
 bool XRSession::HasPendingActivity() const {
-  return (!callback_collection_->IsEmpty() ||
-          !vfc_execution_queue_.IsEmpty()) &&
+  return (!callback_collection_->IsEmpty() || !vfc_execution_queue_.empty()) &&
          !ended_;
 }
 

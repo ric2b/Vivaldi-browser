@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,15 @@
 
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#include "ios/components/ui_util/dynamic_type_util.h"
+#import "ios/chrome/common/ui/util/ui_util.h"
+#import "ios/components/ui_util/dynamic_type_util.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -50,6 +58,12 @@ CGFloat ToolbarCollapsedHeight(UIContentSizeCategory category) {
 
 CGFloat ToolbarExpandedHeight(UIContentSizeCategory category) {
   category = NormalizedCategory(category);
+
+  if (IsVivaldiRunning())
+    return Interpolate(category,
+                       vNTPSearchBarHeight,
+                       kNonDynamicToolbarHeight); // End Vivaldi
+
   return Interpolate(category, kPrimaryToolbarHeight, kNonDynamicToolbarHeight);
 }
 

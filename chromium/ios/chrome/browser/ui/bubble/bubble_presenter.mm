@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,17 +12,17 @@
 #import "components/feature_engagement/public/feature_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
-#import "ios/chrome/browser/system_flags.h"
+#import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/ui/bubble/bubble_presenter_delegate.h"
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
 #import "ios/chrome/browser/ui/commands/toolbar_commands.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/named_guide_util.h"
-#import "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
+#import "ios/chrome/browser/url/url_util.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
@@ -67,6 +67,8 @@ const CGFloat kBubblePresentationDelay = 1;
     BubbleViewControllerPresenter* followWhileBrowsingBubbleTipPresenter;
 @property(nonatomic, strong)
     BubbleViewControllerPresenter* defaultPageModeTipBubblePresenter;
+@property(nonatomic, strong)
+    BubbleViewControllerPresenter* whatsNewBubblePresenter;
 
 @property(nonatomic, assign) ChromeBrowserState* browserState;
 
@@ -252,6 +254,12 @@ const CGFloat kBubblePresentationDelay = 1;
   if (![self canPresentBubble])
     return;
 
+  web::WebState* webState =
+      [self.delegate currentWebStateForBubblePresenter:self];
+  if (!webState ||
+      ShouldLoadUrlInDesktopMode(webState->GetVisibleURL(), self.browserState))
+    return;
+
   BubbleArrowDirection arrowDirection =
       IsSplitToolbarMode(self.rootViewController) ? BubbleArrowDirectionDown
                                                   : BubbleArrowDirectionUp;
@@ -274,9 +282,34 @@ const CGFloat kBubblePresentationDelay = 1;
     return;
 
   self.defaultPageModeTipBubblePresenter = presenter;
-  feature_engagement::TrackerFactory::GetForBrowserState(self.browserState)
-      ->NotifyEvent(feature_engagement::events::kDefaultSiteViewShown);
   base::UmaHistogramBoolean("IOS.IPH.DefaultSite.Presented", true);
+}
+
+- (void)presentWhatsNewBottomToolbarBubble {
+  if (![self canPresentBubble])
+    return;
+
+  BubbleArrowDirection arrowDirection =
+      IsSplitToolbarMode(self.rootViewController) ? BubbleArrowDirectionDown
+                                                  : BubbleArrowDirectionUp;
+  NSString* text = l10n_util::GetNSString(IDS_IOS_WHATS_NEW_IPH_TEXT);
+  CGPoint toolsMenuAnchor = [self anchorPointToGuide:kToolsMenuGuide
+                                           direction:arrowDirection];
+
+  // If the feature engagement tracker does not consider it valid to display
+  // the tip, then end early to prevent the potential reassignment of the
+  // existing `whatsNewBubblePresenter` to nil.
+  BubbleViewControllerPresenter* presenter = [self
+      presentBubbleForFeature:feature_engagement::kIPHWhatsNewFeature
+                    direction:arrowDirection
+                    alignment:BubbleAlignmentTrailing
+                         text:text
+        voiceOverAnnouncement:l10n_util::GetNSString(IDS_IOS_WHATS_NEW_IPH_TEXT)
+                  anchorPoint:toolsMenuAnchor];
+  if (!presenter)
+    return;
+
+  self.whatsNewBubblePresenter = presenter;
 }
 
 #pragma mark - Private

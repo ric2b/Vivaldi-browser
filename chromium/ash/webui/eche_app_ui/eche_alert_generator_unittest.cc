@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -168,6 +168,11 @@ TEST_F(EcheAlertGeneratorTest, ShowNotification) {
               ShowNotification(testing::_, testing::_, testing::_));
   ShowNotification(title.value(), message.value(),
                    mojom::WebNotificationType::TABLET_MODE);
+  // WIFI_NOT_READY
+  EXPECT_CALL(*launch_app_helper_,
+              ShowNotification(testing::_, testing::_, testing::_));
+  ShowNotification(title.value(), message.value(),
+                   mojom::WebNotificationType::WIFI_NOT_READY);
 }
 
 TEST_F(EcheAlertGeneratorTest, ShowToast) {

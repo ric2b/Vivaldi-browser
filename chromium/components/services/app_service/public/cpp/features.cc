@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,19 +6,32 @@
 
 namespace apps {
 
-const base::Feature kAppServicePreferredAppsWithoutMojom{
-    "AppServicePreferredAppsWithoutMojom", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kAppServiceLaunchWithoutMojom,
+             "AppServiceLaunchWithoutMojom",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kAppServiceLaunchWithoutMojom{
-    "AppServiceLaunchWithoutMojom", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kAppServiceSetPermissionWithoutMojom,
+             "AppServiceSetPermissionWithoutMojom",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kAppServiceSetPermissionWithoutMojom{
-    "AppServiceSetPermissionWithoutMojom", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kAppServiceUninstallWithoutMojom,
+             "AppServiceUninstallWithoutMojom",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kAppServiceUninstallWithoutMojom{
-    "AppServiceUninstallWithoutMojom", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kAppServiceWithoutMojom,
+             "AppServiceWithoutMojom",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kAppServiceWithoutMojom{"AppServiceWithoutMojom",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kAppServiceGetMenuWithoutMojom,
+             "AppServiceGetMenuWithoutMojom",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kAppServiceCapabilityAccessWithoutMojom,
+             "AppServiceCapabilityAccessWithoutMojom",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kStopMojomAppService,
+             "StopMojomAppService",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace apps

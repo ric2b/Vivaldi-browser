@@ -1,0 +1,16 @@
+// Copyright 2021 Vivaldi Technologies AS. All rights reserved.
+
+// This file is included as part of an enum. last item must have a comma
+// following it.
+
+  // Vivaldi search engines:
+  VIVALDI_SEARCH_ENGINE_STARTPAGE_COM,
+  VIVALDI_SEARCH_ENGINE_WIKIPEDIA,
+  VIVALDI_SEARCH_ENGINE_NEEVA,
+  VIVALDI_SEARCH_ENGINE_WOLFRAM_ALPHA,
+  VIVALDI_SEARCH_ENGINE_OZON,
+  VIVALDI_SEARCH_ENGINE_AMAZON,
+  VIVALDI_SEARCH_ENGINE_EBAY,
+  VIVALDI_SEARCH_ENGINE_QWANT,
+  VIVALDI_SEARCH_ENGINE_YELP,
+  VIVALDI_SEARCH_ENGINE_YOU,

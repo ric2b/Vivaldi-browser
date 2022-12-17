@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,16 @@ public class OmniboxFeatures {
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
                     "enable_modernize_visual_update_on_tablet", false);
 
+    public static final BooleanCachedFieldTrialParameter
+            MODERNIZE_VISUAL_UPDATE_ACTIVE_COLOR_ON_OMNIBOX = new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
+                    "modernize_visual_update_active_color_on_omnibox", false);
+
+    public static final BooleanCachedFieldTrialParameter
+            MODERNIZE_VISUAL_UPDATE_SMALL_BOTTOM_MARGIN = new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
+                    "modernize_visual_update_small_bottom_margin", false);
+
     /**
      * @param context The activity context.
      * @return Whether the new modernize visual UI update should be shown.
@@ -26,6 +36,22 @@ public class OmniboxFeatures {
     public static boolean shouldShowModernizeVisualUpdate(Context context) {
         return ChromeFeatureList.sOmniboxModernizeVisualUpdate.isEnabled()
                 && (!isTablet(context) || enabledModernizeVisualUpdateOnTablet());
+    }
+
+    /**
+     * @return Whether to show an active color for Omnibox which has a different background color
+     *         than toolbar.
+     */
+    public static boolean shouldShowActiveColorOnOmnibox() {
+        return MODERNIZE_VISUAL_UPDATE_ACTIVE_COLOR_ON_OMNIBOX.getValue();
+    }
+
+    /**
+     * @return Whether to show an active color for Omnibox which has a different background color
+     *         than toolbar.
+     */
+    public static boolean shouldShowSmallBottomMargin() {
+        return MODERNIZE_VISUAL_UPDATE_SMALL_BOTTOM_MARGIN.getValue();
     }
 
     /**
@@ -41,5 +67,12 @@ public class OmniboxFeatures {
      */
     private static boolean enabledModernizeVisualUpdateOnTablet() {
         return ENABLE_MODERNIZE_VISUAL_UPDATE_ON_TABLET.getValue();
+    }
+
+    /**
+     * Returns whether excessive calls to RecycledViewPool#clear should be removed.
+     */
+    public static boolean shouldRemoveExcessiveRecycledViewClearCalls() {
+        return ChromeFeatureList.sOmniboxRemoveExcessiveRecycledViewClearCalls.isEnabled();
     }
 }

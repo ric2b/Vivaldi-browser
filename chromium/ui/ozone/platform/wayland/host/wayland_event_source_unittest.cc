@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,7 @@ class WaylandEventSourceTest : public WaylandTest {
     WaylandTest::SetUp();
 
     pointer_delegate_ = connection_->event_source();
-    DCHECK(pointer_delegate_);
+    ASSERT_TRUE(pointer_delegate_);
   }
 
  protected:
@@ -84,7 +84,7 @@ TEST_P(WaylandEventSourceTest, CheckPointerButtonHandling) {
   uint32_t tstamp = 0;
   wl_resource* surface_res =
       server_
-          .GetObject<wl::MockSurface>(window1->root_surface()->GetSurfaceId())
+          .GetObject<wl::MockSurface>(window1->root_surface()->get_surface_id())
           ->resource();
   wl_resource* pointer_res = server_.seat()->pointer()->resource();
 
@@ -92,6 +92,7 @@ TEST_P(WaylandEventSourceTest, CheckPointerButtonHandling) {
   wl_pointer_send_frame(pointer_res);
   wl_pointer_send_button(pointer_res, serial++, tstamp++, BTN_LEFT,
                          WL_POINTER_BUTTON_STATE_PRESSED);
+  wl_pointer_send_frame(pointer_res);
   EXPECT_CALL(delegate, DispatchEvent(_)).Times(2);
   Sync();
 
@@ -99,6 +100,7 @@ TEST_P(WaylandEventSourceTest, CheckPointerButtonHandling) {
 
   wl_pointer_send_button(pointer_res, serial++, tstamp++, BTN_RIGHT,
                          WL_POINTER_BUTTON_STATE_PRESSED);
+  wl_pointer_send_frame(pointer_res);
   EXPECT_CALL(delegate, DispatchEvent(_)).Times(1);
   Sync();
 
@@ -106,8 +108,10 @@ TEST_P(WaylandEventSourceTest, CheckPointerButtonHandling) {
 
   wl_pointer_send_button(pointer_res, serial++, tstamp++, BTN_LEFT,
                          WL_POINTER_BUTTON_STATE_RELEASED);
+  wl_pointer_send_frame(pointer_res);
   wl_pointer_send_button(pointer_res, serial++, tstamp++, BTN_RIGHT,
                          WL_POINTER_BUTTON_STATE_RELEASED);
+  wl_pointer_send_frame(pointer_res);
   EXPECT_CALL(delegate, DispatchEvent(_)).Times(2);
   Sync();
 
@@ -133,7 +137,7 @@ TEST_P(WaylandEventSourceTest, DeleteBeforeTouchFrame) {
   uint32_t tstamp = 0;
   wl_resource* surface_res =
       server_
-          .GetObject<wl::MockSurface>(window1->root_surface()->GetSurfaceId())
+          .GetObject<wl::MockSurface>(window1->root_surface()->get_surface_id())
           ->resource();
   wl_resource* touch_res = server_.seat()->touch()->resource();
 

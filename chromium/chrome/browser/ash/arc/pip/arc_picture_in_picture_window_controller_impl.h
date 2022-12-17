@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,6 +40,8 @@ class ArcPictureInPictureWindowControllerImpl
   void CloseAndFocusInitiator() override;
   void OnWindowDestroyed(bool should_pause_video) override;
   content::WebContents* GetWebContents() override;
+  absl::optional<gfx::Rect> GetWindowBounds() override;
+  content::WebContents* GetChildWebContents() override;
 
  private:
   arc::ArcPipBridge* const arc_pip_bridge_;

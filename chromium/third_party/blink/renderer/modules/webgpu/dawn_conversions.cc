@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -190,28 +190,6 @@ const char* ValidateTextureDataLayout(const GPUImageDataLayout* webgpu_layout,
   dawn_layout->rowsPerImage = rowsPerImage;
 
   return nullptr;
-}
-
-OwnedProgrammableStageDescriptor AsDawnType(
-    const GPUProgrammableStage* webgpu_stage) {
-  DCHECK(webgpu_stage);
-
-  std::string entry_point = webgpu_stage->entryPoint().Utf8();
-  // Compute the byte size of C-style null-terminated string for entry point
-  // name. length() is in bytes, and Non-ASCII codepoints are also considered as
-  // they are encoded as multiple bytes in UTF-8.
-  size_t byte_size = entry_point.length() + 1;
-
-  std::unique_ptr<char[]> entry_point_keepalive =
-      std::make_unique<char[]>(byte_size);
-  char* entry_point_ptr = entry_point_keepalive.get();
-  memcpy(entry_point_ptr, entry_point.c_str(), byte_size);
-
-  WGPUProgrammableStageDescriptor dawn_stage = {};
-  dawn_stage.module = webgpu_stage->module()->GetHandle();
-  dawn_stage.entryPoint = entry_point_ptr;
-
-  return std::make_tuple(dawn_stage, std::move(entry_point_keepalive));
 }
 
 WGPUTextureFormat AsDawnType(SkColorType color_type) {

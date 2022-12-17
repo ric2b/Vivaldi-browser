@@ -1,9 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_toolbar_view.h"
 
+#include "base/test/scoped_feature_list.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_coordinator.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
@@ -19,6 +21,11 @@ class MockReadAnythingToolbarViewDelegate
   MOCK_METHOD(void, OnFontSizeChanged, (bool increase), (override));
   MOCK_METHOD(void, OnColorsChanged, (int new_index), (override));
   MOCK_METHOD(ui::ComboboxModel*, GetColorsModel, (), (override));
+  MOCK_METHOD(ui::ColorId, GetForegroundColorId, (), (override));
+  MOCK_METHOD(void, OnLineSpacingChanged, (int new_index), (override));
+  MOCK_METHOD(ui::ComboboxModel*, GetLineSpacingModel, (), (override));
+  MOCK_METHOD(void, OnLetterSpacingChanged, (int new_index), (override));
+  MOCK_METHOD(ui::ComboboxModel*, GetLetterSpacingModel, (), (override));
 };
 
 class MockReadAnythingFontComboboxDelegate
@@ -48,7 +55,9 @@ class MockReadAnythingCoordinator : public ReadAnythingCoordinator {
 
 class ReadAnythingToolbarViewTest : public InProcessBrowserTest {
  public:
-  ReadAnythingToolbarViewTest() = default;
+  ReadAnythingToolbarViewTest() {
+    scoped_feature_list_.InitWithFeatures({features::kUnifiedSidePanel}, {});
+  }
   ~ReadAnythingToolbarViewTest() override = default;
 
   // InProcessBrowserTest:
@@ -69,11 +78,25 @@ class ReadAnythingToolbarViewTest : public InProcessBrowserTest {
 
   void ChangeColorsCallback() { toolbar_view_->ChangeColorsCallback(); }
 
+  void ChangeLineSpacingCallback() {
+    toolbar_view_->ChangeLineSpacingCallback();
+  }
+
+  void ChangeLetterSpacingCallback() {
+    toolbar_view_->ChangeLetterSpacingCallback();
+  }
+
+  void OnReadAnythingThemeChanged(
+      read_anything::mojom::ReadAnythingThemePtr new_theme) {
+    toolbar_view_->OnReadAnythingThemeChanged(std::move(new_theme));
+  }
+
  protected:
   MockReadAnythingToolbarViewDelegate toolbar_delegate_;
   MockReadAnythingFontComboboxDelegate font_combobox_delegate_;
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<ReadAnythingToolbarView> toolbar_view_;
   std::unique_ptr<MockReadAnythingCoordinator> coordinator_;
 };
@@ -96,4 +119,25 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingToolbarViewTest, ChangeColorsCallback) {
   EXPECT_CALL(toolbar_delegate_, OnColorsChanged(0)).Times(1);
 
   ChangeColorsCallback();
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingToolbarViewTest, ChangeSeparatorColor) {
+  // GetForegroundColorId() called for each separator (2 separators total)
+  EXPECT_CALL(toolbar_delegate_, GetForegroundColorId()).Times(2);
+
+  auto theme = read_anything::mojom::ReadAnythingTheme::New();
+  OnReadAnythingThemeChanged(std::move(theme));
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingToolbarViewTest, ChangeLineSpacingCallback) {
+  EXPECT_CALL(toolbar_delegate_, OnLineSpacingChanged(1)).Times(1);
+
+  ChangeLineSpacingCallback();
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingToolbarViewTest,
+                       ChangeLetterSpacingCallback) {
+  EXPECT_CALL(toolbar_delegate_, OnLetterSpacingChanged(1)).Times(1);
+
+  ChangeLetterSpacingCallback();
 }

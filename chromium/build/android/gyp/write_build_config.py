@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -2035,6 +2035,18 @@ def main(argv):
       secondary_abi_library_paths = _ExtractSharedLibsFromRuntimeDeps(
           options.secondary_abi_shared_libraries_runtime_deps)
       secondary_abi_library_paths.sort()
+      paths_without_parent_dirs = [
+          p for p in secondary_abi_library_paths if os.path.sep not in p
+      ]
+      if paths_without_parent_dirs:
+        sys.stderr.write('Found secondary native libraries from primary '
+                         'toolchain directory. This is a bug!\n')
+        sys.stderr.write('\n'.join(paths_without_parent_dirs))
+        sys.stderr.write('\n\nIt may be helpful to run: \n')
+        sys.stderr.write('    gn path out/Default //chrome/android:'
+                         'monochrome_secondary_abi_lib //base:base\n')
+        sys.exit(1)
+
       all_inputs.append(options.secondary_abi_shared_libraries_runtime_deps)
 
     native_library_placeholder_paths = build_utils.ParseGnList(

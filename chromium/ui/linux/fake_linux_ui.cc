@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,7 +84,7 @@ gfx::Image FakeLinuxUi::GetIconForContentType(const std::string& content_type,
   return gfx::Image();
 }
 
-LinuxUi::WindowFrameAction FakeLinuxUi::GetWindowFrameAction(
+LinuxUiTheme::WindowFrameAction FakeLinuxUi::GetWindowFrameAction(
     WindowFrameActionSource source) {
   return WindowFrameAction::kNone;
 }
@@ -121,7 +121,7 @@ int FakeLinuxUi::GetCursorThemeSize() {
   return 0;
 }
 
-ui::NativeTheme* FakeLinuxUi::GetNativeThemeImpl() const {
+ui::NativeTheme* FakeLinuxUi::GetNativeTheme() const {
   return nullptr;
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -268,6 +268,13 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   // Returns the FrameNavigationEntry corresponding to |frame_tree_node|, if
   // there is one in this NavigationEntry.
   FrameNavigationEntry* GetFrameEntry(FrameTreeNode* frame_tree_node) const;
+
+  // Calls |on_frame_entry| for each FrameNavigationEntry in this
+  // NavigationEntry. More efficient than calling GetFrameEntry() N times while
+  // iterating over the current tree of FrameTreeNodes.
+  using FrameEntryIterationCallback =
+      base::FunctionRef<void(FrameNavigationEntry*)>;
+  void ForEachFrameEntry(FrameEntryIterationCallback on_frame_entry);
 
   // Returns a map of frame unique names to |is_about_blank| for immediate
   // children of the TreeNode associated with |frame_tree_node|.  The renderer

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,12 +79,6 @@ export class AlbumList extends WithPersonalizationStore {
     return !!album && album.checked;
   }
 
-  private getAriaSelected_(
-      changedAlbum: AmbientModeAlbum|null,
-      albums: AmbientModeAlbum[]|null): string {
-    return this.isAlbumSelected_(changedAlbum, albums).toString();
-  }
-
   private getAlbumItemClass_(
       album: AmbientModeAlbum|null, albums: AmbientModeAlbum[]|null): string {
     return album && this.isAlbumSelected_(album, albums) ?
@@ -112,6 +106,10 @@ export class AlbumList extends WithPersonalizationStore {
 
   private getAriaIndex_(index: number): number {
     return index + 1;
+  }
+
+  private isGooglePhotos_(topicSource: TopicSource): boolean {
+    return topicSource === TopicSource.kGooglePhotos;
   }
 }
 

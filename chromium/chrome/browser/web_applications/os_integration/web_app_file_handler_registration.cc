@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,9 +24,11 @@ bool FileHandlingIconsSupportedByOs() {
 void RegisterFileHandlersWithOs(const AppId& app_id,
                                 const std::string& app_name,
                                 Profile* profile,
-                                const apps::FileHandlers& file_handlers) {
+                                const apps::FileHandlers& file_handlers,
+                                ResultCallback callback) {
   DCHECK(ShouldRegisterFileHandlersWithOs());
   // Stub function for OS's which don't register file handlers with the OS.
+  std::move(callback).Run(Result::kOk);
 }
 
 void UnregisterFileHandlersWithOs(const AppId& app_id,

@@ -21,13 +21,17 @@ namespace vivaldi {
 class NotesModel;
 }
 
+namespace file_sync {
+class SyncedFileStore;
+}
+
 namespace sync_notes {
 class NoteModelTypeProcessor;
 
 // This service owns the NoteModelTypeProcessor.
 class NoteSyncService : public KeyedService {
  public:
-  NoteSyncService();
+  NoteSyncService(file_sync::SyncedFileStore* synced_file_store);
 
   NoteSyncService(const NoteSyncService&) = delete;
   NoteSyncService& operator=(const NoteSyncService&) = delete;

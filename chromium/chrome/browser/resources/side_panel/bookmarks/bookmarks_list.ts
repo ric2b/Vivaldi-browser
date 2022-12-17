@@ -1,13 +1,13 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import './commerce/shopping_list.js';
 
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
-import {FocusOutlineManager} from 'chrome://resources/js/cr/ui/focus_outline_manager.m.js';
+import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {listenOnce} from 'chrome://resources/js/util.m.js';
+import {listenOnce} from 'chrome://resources/js/util.js';
 import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BookmarkFolderElement, FOLDER_OPEN_CHANGED_EVENT, getBookmarkFromElement, isBookmarkFolderElement} from './bookmark_folder.js';
@@ -70,6 +70,7 @@ export class BookmarksListElement extends PolymerElement {
   private productInfos_: BookmarkProductInfo[];
   hoverVisible: boolean;
   private openFolders_: string[];
+  private shoppingListenerIds_: number[] = [];
 
   override ready() {
     super.ready();
@@ -85,12 +86,12 @@ export class BookmarksListElement extends PolymerElement {
   override connectedCallback() {
     super.connectedCallback();
     this.setAttribute('role', 'tree');
-    this.focusOutlineManager_ = FocusOutlineManager.forDocument(document);
     if (loadTimeData.getBoolean('unifiedSidePanel')) {
       listenOnce(this.$.bookmarksContainer, 'dom-change', () => {
         setTimeout(() => this.bookmarksApi_.showUI(), 0);
       });
     }
+    this.focusOutlineManager_ = FocusOutlineManager.forDocument(document);
     this.bookmarksApi_.getFolders().then(folders => {
       this.folders_ = folders;
 
@@ -124,9 +125,19 @@ export class BookmarksListElement extends PolymerElement {
       this.bookmarksDragManager_.startObserving();
     });
 
-    this.shoppingListApi_.getAllBookmarkProductInfo().then(res => {
+    this.shoppingListApi_.getAllPriceTrackedBookmarkProductInfo().then(res => {
       this.productInfos_ = res.productInfos;
+      if (this.productInfos_.length > 0) {
+        chrome.metricsPrivate.recordUserAction(
+            'Commerce.PriceTracking.SidePanel.TrackedProductsShown');
+      }
     });
+    const callbackRouter = this.shoppingListApi_.getCallbackRouter();
+    this.shoppingListenerIds_.push(
+        callbackRouter.priceTrackedForBookmark.addListener(
+            (product: BookmarkProductInfo) =>
+                this.onBookmarkPriceTracked(product)),
+    );
   }
 
   override disconnectedCallback() {
@@ -134,6 +145,8 @@ export class BookmarksListElement extends PolymerElement {
       this.bookmarksApi_.callbackRouter[eventName]!.removeListener(callback);
     }
     this.bookmarksDragManager_.stopObserving();
+    this.shoppingListenerIds_.forEach(
+        id => this.shoppingListApi_.getCallbackRouter().removeListener(id));
   }
 
   /** BookmarksDragDelegate */
@@ -387,6 +400,8 @@ export class BookmarksListElement extends PolymerElement {
 
     getAnnouncerInstance().announce(loadTimeData.getStringF(
         'bookmarkDeleted', getBookmarkName(removedNode)));
+    this.productInfos_ =
+        this.productInfos_.filter(item => item.bookmarkId !== BigInt(id));
   }
 
   private focusBookmark_(id: string) {
@@ -408,6 +423,18 @@ export class BookmarksListElement extends PolymerElement {
     if (bookmarkElement) {
       bookmarkElement.focus();
     }
+  }
+
+  private onBookmarkPriceTracked(product: BookmarkProductInfo) {
+    // Here we only control the visibility of ShoppingListElement. The same
+    // signal will also be handled in ShoppingListElement to update shopping
+    // list.
+    if (this.productInfos_.length > 0) {
+      return;
+    }
+    this.push('productInfos_', product);
+    chrome.metricsPrivate.recordUserAction(
+        'Commerce.PriceTracking.SidePanel.TrackedProductsShown');
   }
 }
 

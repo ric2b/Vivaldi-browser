@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,8 @@ extern const char kWebSQLNonSecureContextEnabled[];
 extern const char kPersistentQuotaEnabled[];
 
 extern const char kPrefixedStorageInfoEnabled[];
+
+extern const char kFileSystemSyncAccessHandleAsyncInterfaceEnabled[];
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry);
 

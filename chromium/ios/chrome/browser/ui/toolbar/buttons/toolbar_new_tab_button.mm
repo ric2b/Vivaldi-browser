@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,12 @@
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -38,6 +44,14 @@ const CGFloat kSpotlightHeight = 36.0f;
 #pragma mark - Subclassing
 
 - (void)configureSpotlightView {
+
+  // Vivaldi
+  // Avoid configuring the rounded background behind new tab icon if vivaldi
+  // is running.
+  if (IsVivaldiRunning()) {
+    return;
+  } // End Vivaldi
+
   UIView* spotlightView = [[UIView alloc] init];
   spotlightView.translatesAutoresizingMaskIntoConstraints = NO;
   spotlightView.userInteractionEnabled = NO;

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -324,9 +324,6 @@ class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
   // Gets the style information from the display attribute for the actively
   // composed text.
   void GetStyle(const TF_DISPLAYATTRIBUTE& attribute, ImeTextSpan* span);
-
-  // Clear all of the pending supported attributes values and count.
-  void ClearSupportedAttributes();
 
   // The reference count of this instance.
   volatile LONG ref_count_ = 0;

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -4237,6 +4237,114 @@ TEST_F(AffectedByPseudoTest, AffectedByHasAfterInsertion6) {
                 GetCSSPropertyColor()));
 }
 
+TEST_F(AffectedByPseudoTest, AffectedByHasAfterWiping) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .a:has(.b) { color: green; }
+    </style>
+    <div id='div1' class='a'>
+      <div id='div11'>
+        div11 <div id='div111' class='b'></div>
+      </div>
+      <div id='div12'>
+        div12 <div id='div121' class='b'></div>
+      </div>
+    </div>
+    <div id='div2'>
+      div2 <div id='div21' class='b'></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, true},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div111", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div121", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div2", {{kAffectedBySubjectHas, false},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div21", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div11")->setInnerHTML(
+      String::FromUTF8(R"HTML(div11)HTML"));
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(0U, GetStyleEngine().StyleForElementCount() - start_count);
+
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, true},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div121", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div2", {{kAffectedBySubjectHas, false},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div21", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div12")->setInnerHTML(
+      String::FromUTF8(R"HTML(div12)HTML"));
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(1U, GetStyleEngine().StyleForElementCount() - start_count);
+
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, true},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div2", {{kAffectedBySubjectHas, false},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div21", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div2")->setInnerHTML(
+      String::FromUTF8(R"HTML(div2)HTML"));
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(0U, GetStyleEngine().StyleForElementCount() - start_count);
+
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, true},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div2", {{kAffectedBySubjectHas, false},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+}
+
 TEST_F(AffectedByPseudoTest, AffectedByLogicalCombinationsInHas) {
   SetHtmlInnerHTML(R"HTML(
     <style>
@@ -4313,6 +4421,865 @@ TEST_F(AffectedByPseudoTest, AffectedByLogicalCombinationsInHas) {
   GetElementById("div12")->setAttribute(html_names::kClassAttr, "d e");
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(0U, GetStyleEngine().StyleForElementCount() - start_count);
+}
+
+TEST_F(AffectedByPseudoTest,
+       AncestorsOrSiblingsAffectedByHoverInHasWithFastRejection) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .a:has(nonexistent), .a:has(.b:hover) { color: green }
+    </style>
+    <div id=div1 class='a'>
+      <div id=div11></div>
+      <div id=div12 class='b'></div>
+      <div id=div13></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, true},
+               {kAffectedByPseudoInHas, true},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+                {kAncestorsOrSiblingsAffectedByHoverInHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+                {kAncestorsOrSiblingsAffectedByHoverInHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div13", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+                {kAncestorsOrSiblingsAffectedByHoverInHas, false}});
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetElementById("div13")->SetHovered(true);
+  UpdateAllLifecyclePhasesForTest();
+  unsigned element_count =
+      GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+  GetElementById("div13")->SetHovered(false);
+  UpdateAllLifecyclePhasesForTest();
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetElementById("div12")->SetHovered(true);
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+  GetElementById("div12")->SetHovered(false);
+  UpdateAllLifecyclePhasesForTest();
+}
+
+TEST_F(AffectedByPseudoTest, AffectedByHasAfterRemoval1) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .a:has(.b) { color: green }
+    </style>
+    <div id=div1 class='a'>
+      <div id=div11></div>
+      <div id=div12 class='b'>
+        <div id=div121 class='b'></div>
+      </div>
+      <div id=div13 class='b'></div>
+      <div id=div14 class='b'></div>
+      <div id=div15></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, true},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div121", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div13", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div14", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div15", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div12")->RemoveChild(
+      GetDocument().getElementById("div121"));
+  UpdateAllLifecyclePhasesForTest();
+  unsigned element_count =
+      GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div13", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div14", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div12"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div13", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div14", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div14"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div13", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div13"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+}
+
+TEST_F(AffectedByPseudoTest, AffectedByHasAfterRemoval2) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .a:has(> .b > .c) { color: green }
+    </style>
+    <div id=div1 class='a'>
+      <div id=div11></div>
+      <div id=div12 class='b'>
+        <div id=div121 class='c'></div>
+        <div id=div122 class='c'></div>
+      </div>
+      <div id=div13 class='b'>
+        <div id=div131 class='c'></div>
+        <div id=div132 class='c'></div>
+        <div id=div133 class='c'></div>
+        <div id=div134></div>
+      </div>
+      <div id=div14></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, true},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div121", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div122", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div13", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div131", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div132", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div133", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div134", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div14", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div14"));
+  UpdateAllLifecyclePhasesForTest();
+  unsigned element_count =
+      GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div13")->RemoveChild(
+      GetDocument().getElementById("div134"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div13")->RemoveChild(
+      GetDocument().getElementById("div131"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div13")->RemoveChild(
+      GetDocument().getElementById("div133"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, true},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div121", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div122", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div13", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div132", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div13"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, true},
+               {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+  CheckAffectedByFlagsForHas(
+      "div121", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, false}});
+  CheckAffectedByFlagsForHas(
+      "div122", {{kAffectedBySubjectHas, false},
+                 {kAncestorsOrAncestorSiblingsAffectedByHas, true}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div12")->RemoveChild(
+      GetDocument().getElementById("div121"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+}
+
+TEST_F(AffectedByPseudoTest, AffectedByHasAfterRemoval3) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .a:has(~ .b) { color: green }
+    </style>
+    <div id=div1>
+      <div id=div11 class='a'>
+        <div id=div111 class='a'></div>
+        <div id=div112 class='b'></div>
+        <div id=div113 class='b'></div>
+        <div id=div114></div>
+      </div>
+      <div id=div12>
+        <div id=div121 class='b'></div>
+        <div id=div122 class='b'></div>
+      </div>
+      <div id=div13>
+        <div id=div131></div>
+      </div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, false},
+               {kSiblingsAffectedByHasForSiblingRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, true},
+                {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div111", {{kAffectedBySubjectHas, true},
+                 {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div112", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div113", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div114", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div12", {{kAffectedBySubjectHas, false},
+                {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div121", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div122", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div13", {{kAffectedBySubjectHas, false},
+                {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div131", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, false}});
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div11")->RemoveChild(
+      GetDocument().getElementById("div114"));
+  UpdateAllLifecyclePhasesForTest();
+  unsigned element_count =
+      GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div11")->RemoveChild(
+      GetDocument().getElementById("div112"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div11")->RemoveChild(
+      GetDocument().getElementById("div113"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div12")->RemoveChild(
+      GetDocument().getElementById("div122"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div13"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div12"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+}
+
+TEST_F(AffectedByPseudoTest, AffectedByHasAfterRemoval4) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .a:has(+ .b + .c) { color: green }
+    </style>
+    <div id=div1>
+      <div id=div11 class='a'>
+        <div id=div111 class='a'></div>
+        <div id=div112 class='b'></div>
+        <div id=div113 class='c'></div>
+        <div id=div114 class='c'></div>
+        <div id=div115 class='c'></div>
+        <div id=div116></div>
+      </div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  CheckAffectedByFlagsForHas(
+      "div1", {{kAffectedBySubjectHas, false},
+               {kSiblingsAffectedByHasForSiblingRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div11", {{kAffectedBySubjectHas, true},
+                {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div111", {{kAffectedBySubjectHas, true},
+                 {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div112", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div113", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div114", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div115", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div116", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, false}});
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div11")->RemoveChild(
+      GetDocument().getElementById("div115"));
+  UpdateAllLifecyclePhasesForTest();
+  unsigned element_count =
+      GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div11")->RemoveChild(
+      GetDocument().getElementById("div113"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div114", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div116", {{kAffectedBySubjectHas, false},
+                 {kSiblingsAffectedByHasForSiblingRelationship, false}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div11")->RemoveChild(
+      GetDocument().getElementById("div116"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div11")->RemoveChild(
+      GetDocument().getElementById("div114"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+}
+
+TEST_F(AffectedByPseudoTest, AffectedByHasAfterRemoval5) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .a:has(~ .b .c) { color: green }
+    </style>
+    <div id=div1>
+      <div id=div11 class='a'>
+        <div id=div111 class='c'></div>
+      </div>
+      <div id=div12>
+        <div id=div121></div>
+        <div id=div122 class='c'></div>
+      </div>
+      <div id=div13>
+        <div id=div131 class='c'></div>
+      </div>
+      <div id=div14 class='b'>
+        <div id=div141></div>
+        <div id=div142 class='c'></div>
+        <div id=div143 class='c'></div>
+      </div>
+      <div id=div15 class='b'>
+        <div id=div151 class='c'></div>
+        <div id=div152></div>
+      </div>
+      <div id=div16 class='b'>
+        <div id=div161 class='c'></div>
+      </div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  CheckAffectedByFlagsForHas(
+      "div1",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div11",
+      {{kAffectedBySubjectHas, true},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div111",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div12",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div121",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div122",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div13",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div131",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div14",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div141",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div142",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div143",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div15",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div151",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div152",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div16",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div161",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div11")->RemoveChild(
+      GetDocument().getElementById("div111"));
+  UpdateAllLifecyclePhasesForTest();
+  unsigned element_count =
+      GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div12")->RemoveChild(
+      GetDocument().getElementById("div122"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div12"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div13"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div1",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div11",
+      {{kAffectedBySubjectHas, true},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div14",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div141",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div142",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div143",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div15",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div151",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div152",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div16",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div161",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div16"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div143",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div15",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div151",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div152",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div15")->RemoveChild(
+      GetDocument().getElementById("div152"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div15")->RemoveChild(
+      GetDocument().getElementById("div151"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div14",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div141",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div142",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div143",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div15",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div14")->RemoveChild(
+      GetDocument().getElementById("div142"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+}
+
+TEST_F(AffectedByPseudoTest, AffectedByHasAfterRemoval6) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .a:has(+ .b > .c) { color: green }
+    </style>
+    <div id=div1>
+      <div id=div11 class='a'></div>
+      <div id=div12 class='b'>
+        <div id=div121></div>
+        <div id=div122 class='c'>
+          <div id=div1221 class='c'></div>
+        </div>
+      </div>
+      <div id=div13 class='b'>
+        <div id=div131></div>
+        <div id=div132 class='c'></div>
+      </div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  CheckAffectedByFlagsForHas(
+      "div1",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div11",
+      {{kAffectedBySubjectHas, true},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div12",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div121",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div122",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div1221",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div13",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div131",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div132",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div122")->RemoveChild(
+      GetDocument().getElementById("div1221"));
+  UpdateAllLifecyclePhasesForTest();
+  unsigned element_count =
+      GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(0U, element_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().getElementById("div1")->RemoveChild(
+      GetDocument().getElementById("div12"));
+  UpdateAllLifecyclePhasesForTest();
+  element_count = GetStyleEngine().StyleForElementCount() - start_count;
+  ASSERT_EQ(1U, element_count);
+
+  CheckAffectedByFlagsForHas(
+      "div1",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div11",
+      {{kAffectedBySubjectHas, true},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div13",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, true}});
+  CheckAffectedByFlagsForHas(
+      "div131",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, false},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+  CheckAffectedByFlagsForHas(
+      "div132",
+      {{kAffectedBySubjectHas, false},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
 }
 
 }  // namespace blink

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,6 +55,17 @@ extern const char kAutoSignInEnabledGMS[];
 // mapped to `kCredentialEnableService` will be applied.
 extern const char kOfferToSavePasswordsEnabledGMS[];
 
+// Boolean that disables saving by overriding kOfferToSavePasswordsEnabledGMS.
+// If there are errors that prevent successful saves, this pref will be true and
+// users should act as if kOfferToSavePasswordsEnabledGMS was disabled. If this
+// pref is false, the value of kOfferToSavePasswordsEnabledGMS applies. This
+// pref is not synced since errors presumably affect only the local client. Its
+// value is set automatically whenever communication with GMS succeeds or fails.
+//
+// This pref doesn't have a policy mapped to it. It is temporary in nature and
+// can only be stricter than any policy applied
+extern const char kSavePasswordsSuspendedByError[];
+
 // Boolean value indicating whether the regular prefs were migrated to UPM
 // settings.
 extern const char kSettingsMigratedToUPM[];
@@ -86,6 +97,34 @@ extern const char kUnenrolledFromGoogleMobileServicesDueToErrors[];
 // caused the last unenrollment from the UPM experience. Only set if
 // |kUnenrolledFromGoogleMobileServicesDueToErrors| is true.
 extern const char kUnenrolledFromGoogleMobileServicesAfterApiErrorCode[];
+
+// Integer value indicating the version of the ignored/retriable error list
+// during the last unenrollment from the UPM experience. User will not be
+// re-enrolled if this value is set and is not less than the in the current
+// error list version.
+extern const char kUnenrolledFromGoogleMobileServicesWithErrorListVersion[];
+
+// Timestamp at which the last UPM error message was shown to the user in
+// milliseconds since UNIX epoch (used in Java).
+// This is needed to ensure that the UI is prompted only once per given
+// time interval (currently 24h).
+extern const char kUPMErrorUIShownTimestamp[];
+
+// Integer value indicating the number of times the client was reenrolled into
+// the UPM experiment after experiencing user-unresolvable errors in
+// communication with Google Mobile Services.
+extern const char kTimesReenrolledToGoogleMobileServices[];
+
+// Integer value indicating the number of times the client has attempted a
+// migration in an attempt to reenroll into the UPM experiment. Reset to zero
+// after a successful reenrollment.
+extern const char kTimesAttemptedToReenrollToGoogleMobileServices[];
+
+// Integer value indicating the number of consecutive times the password manager
+// auth error UI was displayed to the user. Reset once the error is resolved
+// (detected by a successful backend request) or when the user is unenrolled
+// from UPM.
+extern const char kTimesUPMAuthErrorShown[];
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -95,6 +134,9 @@ extern const char kOsPasswordBlank[];
 
 // The number of seconds since epoch that the OS password was last changed.
 extern const char kOsPasswordLastChanged[];
+
+// Whether biometric authentication is available on this device.
+extern const char kIsBiometricAvailable[];
 #endif
 
 #if BUILDFLAG(IS_APPLE)
@@ -163,6 +205,21 @@ extern const char kPasswordChangeSuccessTrackerFlows[];
 // Integer indicating the format version of the list saved under
 // |kPasswordChangeSuccessTrackerFlows|.
 extern const char kPasswordChangeSuccessTrackerVersion[];
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+// Integer indicating how many times user saw biometric authentication before
+// filling promo.
+extern const char kBiometricAuthBeforeFillingPromoShownCounter[];
+// Boolean indicating whether user interacted with biometric authentication
+// before filling promo.
+extern const char kHasUserInteractedWithBiometricAuthPromo[];
+// Boolean indicating whether user enabled biometric authentication before
+// filling.
+extern const char kBiometricAuthenticationBeforeFilling[];
+// Boolean indicating whether user had ever biometrics available on their
+// device.
+extern const char kHadBiometricsAvailable[];
+#endif
 
 }  // namespace prefs
 }  // namespace password_manager

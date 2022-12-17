@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,10 +16,6 @@
 #include "components/sync/base/user_selectable_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/constants/ash_features.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 namespace syncer {
 namespace {
 
@@ -33,16 +29,14 @@ void DisableSyncType(const std::string& type_name, PrefValueMap* prefs) {
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
-    // Check for OS types. This includes types that used to be browser types,
-    // like "apps" and "preferences".
-    absl::optional<UserSelectableOsType> os_type =
-        GetUserSelectableOsTypeFromString(type_name);
-    if (os_type.has_value()) {
-      const char* os_pref = SyncPrefs::GetPrefNameForOsType(*os_type);
-      if (os_pref)
-        prefs->SetValue(os_pref, base::Value(false));
-    }
+  // Check for OS types. This includes types that used to be browser types,
+  // like "apps" and "preferences".
+  absl::optional<UserSelectableOsType> os_type =
+      GetUserSelectableOsTypeFromString(type_name);
+  if (os_type.has_value()) {
+    const char* os_pref = SyncPrefs::GetPrefNameForOsType(*os_type);
+    if (os_pref)
+      prefs->SetValue(os_pref, base::Value(false));
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
@@ -66,8 +60,7 @@ void SyncPolicyHandler::ApplyPolicySettings(const policy::PolicyMap& policies,
   const base::Value* disabled_sync_types_value = policies.GetValue(
       policy::key::kSyncTypesListDisabled, base::Value::Type::LIST);
   if (disabled_sync_types_value) {
-    base::Value::ConstListView list =
-        disabled_sync_types_value->GetListDeprecated();
+    const base::Value::List& list = disabled_sync_types_value->GetList();
     for (const base::Value& type_name : list) {
       if (!type_name.is_string())
         continue;

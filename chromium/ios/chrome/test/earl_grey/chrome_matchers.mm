@@ -1,10 +1,10 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 
-#include "base/strings/sys_string_conversions.h"
+#import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers_app_interface.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 
@@ -360,6 +360,14 @@ id<GREYMatcher> SettingsPrivacySafeBrowsingTableView() {
   return [ChromeMatchersAppInterface settingsPrivacySafeBrowsingTableView];
 }
 
+id<GREYMatcher> SettingsPriceNotificationsTableView() {
+  return [ChromeMatchersAppInterface settingsPriceNotificationsTableView];
+}
+
+id<GREYMatcher> SettingsTrackingPriceTableView() {
+  return [ChromeMatchersAppInterface settingsTrackingPriceTableView];
+}
+
 id<GREYMatcher> ContentSettingsButton() {
   return [ChromeMatchersAppInterface contentSettingsButton];
 }
@@ -387,6 +395,10 @@ id<GREYMatcher> SettingsMenuBackButton(int window_number) {
 
 id<GREYMatcher> SettingsMenuPrivacyButton() {
   return [ChromeMatchersAppInterface settingsMenuPrivacyButton];
+}
+
+id<GREYMatcher> SettingsMenuPriceNotificationsButton() {
+  return [ChromeMatchersAppInterface settingsMenuPriceNotificationsButton];
 }
 
 id<GREYMatcher> SettingsMenuPasswordsButton() {

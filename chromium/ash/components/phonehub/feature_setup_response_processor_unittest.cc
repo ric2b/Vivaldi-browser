@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #include "ash/components/phonehub/feature_setup_response_processor.h"
@@ -6,7 +6,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/components/phonehub/combined_access_setup_operation.h"
 #include "ash/components/phonehub/fake_message_receiver.h"
 #include "ash/components/phonehub/fake_multidevice_feature_access_manager.h"
@@ -14,6 +13,7 @@
 #include "ash/constants/ash_features.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
@@ -79,6 +79,23 @@ class FeatureSetupResponseProcessorTest : public testing::Test {
       feature_setup_response_processor_;
   FakeCombinedAccessSetupOperationDelegate fake_combined_delegate_;
 };
+TEST_F(FeatureSetupResponseProcessorTest, ResponseReceived_Not_In_Setup) {
+  CreateFeatureSetupResponseProcessor();
+  proto::FeatureSetupResponse setupResponse;
+  setupResponse.set_camera_roll_setup_result(
+      proto::FeatureSetupResult::RESULT_ERROR_USER_REJECT);
+  setupResponse.set_notification_setup_result(
+      proto::FeatureSetupResult::RESULT_ERROR_USER_REJECT);
+
+  EXPECT_FALSE(fake_multidevice_feature_access_manager_
+                   ->IsCombinedSetupOperationInProgress());
+
+  fake_message_receiver_->NotifyFeatureSetupResponseReceived(setupResponse);
+
+  // Should not be updated.
+  EXPECT_EQ(CombinedAccessSetupOperation::Status::kConnecting,
+            GetCombinedSetupOperationStatus());
+}
 
 TEST_F(FeatureSetupResponseProcessorTest, ResponseReceived_All_Access_Granted) {
   auto operation =

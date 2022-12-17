@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/base/owned_window_anchor.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
@@ -1811,32 +1812,44 @@ void MenuController::Accept(MenuItemView* item, int event_flags) {
       views::ElementTrackerViews::GetInstance()->NotifyViewActivated(id, item);
   }
 
+  // EndPopupFocusOverride before closing the menu, the focus should move on
+  // after closing the menu.
+  item->GetViewAccessibility().EndPopupFocusOverride();
+
+  // Setting `result_` now means that a future Cancel() call will include that
+  // `result_` in its delegate notification, and thus the clicked command will
+  // still be executed even if the menu is canceled during the close animation.
+  // See crbug.com/1251450. Note that we don't set the exit type at this point,
+  // because we want the Cancel's exit type to take precedence.
+  result_ = item;
+  accept_event_flags_ = event_flags;
+
 #if BUILDFLAG(IS_MAC)
   menu_closure_animation_ = std::make_unique<MenuClosureAnimationMac>(
       item, item->GetParentMenuItem()->GetSubmenu(),
-      base::BindOnce(&MenuController::ReallyAccept, base::Unretained(this),
-                     base::Unretained(item), event_flags));
+      base::BindOnce(&MenuController::ReallyAccept, base::Unretained(this)));
   menu_closure_animation_->Start();
 #else
-  ReallyAccept(item, event_flags);
+  ReallyAccept();
 #endif
 }
 
-void MenuController::ReallyAccept(MenuItemView* item, int event_flags) {
+void MenuController::ReallyAccept() {
   DCHECK(!for_drop_);
-  result_ = item;
 #if BUILDFLAG(IS_MAC)
   // Reset the closure animation since it's now finished - this also unblocks
   // input events for the menu.
   menu_closure_animation_.reset();
 #endif
-  if (item && !menu_stack_.empty() &&
-      !item->GetDelegate()->ShouldCloseAllMenusOnExecute(item->GetCommand())) {
+
+  if (result_ && !menu_stack_.empty() &&
+      !result_->GetDelegate()->ShouldCloseAllMenusOnExecute(
+          result_->GetCommand())) {
     SetExitType(ExitType::kOutermost);
   } else {
     SetExitType(ExitType::kAll);
   }
-  accept_event_flags_ = event_flags;
+
   ExitMenu();
 }
 
@@ -2879,7 +2892,7 @@ void MenuController::SetSelectionIndices(MenuItemView* parent) {
   SubmenuView* const submenu = parent->GetSubmenu();
 
   for (MenuItemView* item : submenu->GetMenuItems()) {
-    if (!item->GetVisible() || !item->GetEnabled())
+    if (!item->IsTraversableByKeyboard())
       continue;
 
     bool found_focusable = false;
@@ -3147,7 +3160,7 @@ void MenuController::SetDropMenuItem(MenuItemView* new_target,
 }
 
 void MenuController::UpdateScrolling(const MenuPart& part) {
-  if (!part.is_scroll() && !scroll_task_.get())
+  if ((!part.is_scroll() && !scroll_task_.get()) || !scroll_buttons_enabled)
     return;
 
   if (!scroll_task_.get())
@@ -3518,6 +3531,15 @@ bool MenuController::CanProcessInputEvents() const {
 #else
   return true;
 #endif
+}
+
+void MenuController::OnMenuEdgeReached() {
+  StopScrolling();
+  SetEnabledScrollButtons(false);
+}
+
+void MenuController::SetEnabledScrollButtons(bool enabled) {
+  scroll_buttons_enabled = enabled;
 }
 
 }  // namespace views

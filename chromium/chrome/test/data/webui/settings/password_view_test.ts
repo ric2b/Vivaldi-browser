@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,8 @@ import {PasswordViewElement} from 'chrome://settings/lazy_load.js';
 import {buildRouter, PasswordManagerImpl, Router, routes} from 'chrome://settings/settings.js';
 import {SettingsRoutes} from 'chrome://settings/settings_routes.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {flushTasks, isVisible} from 'chrome://webui-test/test_util.js';
+import {isVisible} from 'chrome://webui-test/test_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {createPasswordEntry} from './passwords_and_autofill_fake_data.js';
 import {TestPasswordManagerProxy} from './test_password_manager_proxy.js';
@@ -93,7 +94,8 @@ suite('PasswordViewTest', function() {
     Router.resetInstanceForTesting(buildRouter());
     routes.PASSWORD_VIEW =
         (Router.getInstance().getRoutes() as SettingsRoutes).PASSWORD_VIEW;
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     passwordManager = new TestPasswordManagerProxy();
     PasswordManagerImpl.setInstance(passwordManager);
   });
@@ -120,10 +122,10 @@ suite('PasswordViewTest', function() {
                   assertEquals(
                       NOTE,
                       page.shadowRoot!.querySelector(
-                                          'settings-textarea')!.value);
+                                          '#note')!.innerHTML.trim());
                 } else {
-                  assertFalse(isVisible(
-                      page.shadowRoot!.querySelector('settings-textarea')));
+                  assertFalse(
+                      isVisible(page.shadowRoot!.querySelector('#note')));
                 }
               }));
 
@@ -203,7 +205,7 @@ suite('PasswordViewTest', function() {
     const page = await loadViewPage(passwordEntry);
     assertEquals(
         'No note added',
-        page.shadowRoot!.querySelector('settings-textarea')!.value);
+        page.shadowRoot!.querySelector('#note')!.innerHTML.trim());
   });
 
   test('Federated credential layout', async function() {
@@ -400,4 +402,21 @@ suite('PasswordViewTest', function() {
         await flushTasks();
         assertEquals(1, eventCount);
       });
+
+  test('Timeout listener closes the view page', async function() {
+    const passwordEntry =
+        createPasswordEntry({url: SITE, username: USERNAME, id: ID});
+
+    const page = await loadViewPage(passwordEntry);
+
+    assertTrue(
+        !!passwordManager.lastCallback.addPasswordManagerAuthTimeoutListener);
+    assertTrue(!!page.credential);
+
+    passwordManager.lastCallback.addPasswordManagerAuthTimeoutListener();
+    await flushTasks();
+
+    assertFalse(!!page.credential);
+    assertEquals(routes.PASSWORDS, Router.getInstance().getCurrentRoute());
+  });
 });

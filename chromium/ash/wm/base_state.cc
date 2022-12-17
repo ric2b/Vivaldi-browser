@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -155,13 +155,14 @@ void BaseState::CycleSnap(WindowState* window_state, WMEventType event) {
       // restrictive than |WindowState::CanSnap|.
       DCHECK(SplitViewController::Get(window)->IsWindowInSplitView(window));
       SplitViewController::Get(window)->SnapWindow(
-          window, is_desired_primary_snapped ? SplitViewController::LEFT
-                                             : SplitViewController::RIGHT);
+          window, is_desired_primary_snapped
+                      ? SplitViewController::SnapPosition::kPrimary
+                      : SplitViewController::SnapPosition::kSecondary);
     } else {
-      const WindowSnapWMEvent event(is_desired_primary_snapped
-                                        ? WM_EVENT_SNAP_PRIMARY
-                                        : WM_EVENT_SNAP_SECONDARY);
-      window_state->OnWMEvent(&event);
+      const WindowSnapWMEvent wm_event(is_desired_primary_snapped
+                                           ? WM_EVENT_SNAP_PRIMARY
+                                           : WM_EVENT_SNAP_SECONDARY);
+      window_state->OnWMEvent(&wm_event);
     }
     window_state->ReadOutWindowCycleSnapAction(
         is_desired_primary_snapped ? IDS_WM_SNAP_WINDOW_TO_LEFT_ON_SHORTCUT
@@ -226,8 +227,8 @@ gfx::Rect BaseState::GetSnappedWindowBoundsInParent(
     bounds_in_parent =
         SplitViewController::Get(window)->GetSnappedWindowBoundsInParent(
             (state_type == WindowStateType::kPrimarySnapped)
-                ? SplitViewController::LEFT
-                : SplitViewController::RIGHT,
+                ? SplitViewController::SnapPosition::kPrimary
+                : SplitViewController::SnapPosition::kSecondary,
             window, snap_ratio);
   } else {
     // Use `window_positioning_utils` to calculate the snapped window bounds.

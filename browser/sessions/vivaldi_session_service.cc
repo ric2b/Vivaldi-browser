@@ -323,7 +323,7 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
 
 // Based on SessionService::BuildCommandsForBrowser
 void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser,
-                                                    std::vector<int>* ids) {
+                                                    std::vector<int>& ids) {
   DCHECK(browser);
   DCHECK(browser->session_id().id());
 
@@ -346,10 +346,10 @@ void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser,
   for (int i = 0; i < tab_strip->count(); ++i) {
     content::WebContents* tab = tab_strip->GetWebContentsAt(i);
     DCHECK(tab);
-    if (ids) {
+    if (!ids.empty()) {
       int id = extensions::ExtensionTabUtil::GetTabId(tab);
-      for (unsigned j = 0; j < ids->size(); j++) {
-        if (ids->at(j) == id) {
+      for (unsigned j = 0; j < ids.size(); j++) {
+        if (ids.at(j) == id) {
           BuildCommandsForTab(browser->session_id(), tab, j,
                               tab_strip->IsTabPinned(i));
         }

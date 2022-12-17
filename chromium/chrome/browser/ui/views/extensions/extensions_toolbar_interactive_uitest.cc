@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include "base/containers/cxx20_erase.h"
 #include "base/path_service.h"
+#include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -15,6 +16,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_paths.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/views/layout/animating_layout_manager_test_util.h"
@@ -44,6 +46,59 @@ ExtensionsToolbarUITest::LoadTestExtension(const std::string& path,
   auto* container = GetExtensionsToolbarContainer();
   container->GetWidget()->LayoutRootViewIfNecessary();
 
+  return extension;
+}
+
+scoped_refptr<const extensions::Extension>
+ExtensionsToolbarUITest::InstallExtension(const std::string& name) {
+  return InstallExtensionWithHostPermissions(name, std::string());
+}
+
+scoped_refptr<const extensions::Extension>
+ExtensionsToolbarUITest::InstallExtensionWithHostPermissions(
+    const std::string& name,
+    const std::string& host_permission,
+    const std::string& content_script_run_location) {
+  std::string host_permissions_entry;
+  if (!host_permission.empty()) {
+    host_permissions_entry = base::StringPrintf(
+        R"(
+        "host_permissions": ["%s"],
+      )",
+        host_permission.c_str());
+  }
+
+  extensions::TestExtensionDir extension_dir;
+  std::string content_script_entry;
+  if (!content_script_run_location.empty()) {
+    content_script_entry = base::StringPrintf(
+        R"(
+          "content_scripts": [{
+            "matches": ["%s"],
+            "js": ["script.js"],
+            "run_at": "%s"
+          }], )",
+        host_permission.c_str(), content_script_run_location.c_str());
+
+    extension_dir.WriteFile(FILE_PATH_LITERAL("script.js"),
+                            base::StringPrintf("chrome.test.sendMessage('%s');",
+                                               "injection succeeded"));
+  }
+
+  extension_dir.WriteManifest(base::StringPrintf(
+      R"({
+            "name": "%s",
+            "manifest_version": 3,
+            %s
+            %s
+            "version": "0.1"
+          })",
+      name.c_str(), content_script_entry.c_str(),
+      host_permissions_entry.c_str()));
+  scoped_refptr<const extensions::Extension> extension =
+      extensions::ChromeTestExtensionLoader(profile()).LoadExtension(
+          extension_dir.UnpackedPath());
+  AppendExtension(extension);
   return extension;
 }
 

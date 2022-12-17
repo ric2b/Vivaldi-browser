@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,8 +29,9 @@
 namespace discardable_memory {
 namespace {
 
-const base::Feature kShorterPeriodicPurge{"ShorterPeriodicPurge",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kShorterPeriodicPurge,
+             "ShorterPeriodicPurge",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Global atomic to generate unique discardable shared memory IDs.
 base::AtomicSequenceNumber g_next_discardable_shared_memory_id;

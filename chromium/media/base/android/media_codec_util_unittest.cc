@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 namespace media {
 
 // These will come from mockable BuildInfo, once it exists.
-using base::android::SDK_VERSION_MARSHMALLOW;
 using base::android::SDK_VERSION_NOUGAT;
 using base::android::SDK_VERSION_NOUGAT_MR1;
 
@@ -26,8 +25,6 @@ class MediaCodecUtilTest : public testing::Test {
 };
 
 TEST_F(MediaCodecUtilTest, TestCbcsAvailableIfNewerVersion) {
-  EXPECT_FALSE(
-      MediaCodecUtil::PlatformSupportsCbcsEncryption(SDK_VERSION_MARSHMALLOW));
   EXPECT_FALSE(
       MediaCodecUtil::PlatformSupportsCbcsEncryption(SDK_VERSION_NOUGAT));
   EXPECT_TRUE(

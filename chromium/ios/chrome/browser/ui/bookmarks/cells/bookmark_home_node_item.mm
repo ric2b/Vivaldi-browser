@@ -1,16 +1,25 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_home_node_item.h"
 
-#include "base/mac/foundation_util.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/bookmarks/browser/bookmark_node.h"
-#include "components/url_formatter/elide_url.h"
+#import "base/mac/foundation_util.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/bookmarks/browser/bookmark_node.h"
+#import "components/url_formatter/elide_url.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_folder_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
+
+using vivaldi::IsVivaldiRunning;
+using vivaldi_bookmark_kit::GetSpeeddial;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -36,6 +45,20 @@
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:cell withStyler:styler];
   if (_bookmarkNode->is_folder()) {
+    if (IsVivaldiRunning()) {
+      TableViewBookmarkFolderCell* bookmarkCell =
+        base::mac::ObjCCastStrict<TableViewBookmarkFolderCell>(cell);
+      bookmarkCell.folderTitleTextField.text =
+        bookmark_utils_ios::TitleForBookmarkNode(_bookmarkNode);
+      bookmarkCell.folderImageView.image = GetSpeeddial(_bookmarkNode) ?
+        [UIImage imageNamed: vSpeedDialFolderIcon] :
+        [UIImage imageNamed: vBookmarksFolderIcon];
+      bookmarkCell.bookmarkAccessoryType =
+          TableViewBookmarkFolderAccessoryTypeDisclosureIndicator;
+      bookmarkCell.accessibilityIdentifier =
+          bookmark_utils_ios::TitleForBookmarkNode(_bookmarkNode);
+      bookmarkCell.accessibilityTraits |= UIAccessibilityTraitButton;
+    } else {
     TableViewBookmarkFolderCell* bookmarkCell =
         base::mac::ObjCCastStrict<TableViewBookmarkFolderCell>(cell);
     bookmarkCell.folderTitleTextField.text =
@@ -47,6 +70,7 @@
     bookmarkCell.accessibilityIdentifier =
         bookmark_utils_ios::TitleForBookmarkNode(_bookmarkNode);
     bookmarkCell.accessibilityTraits |= UIAccessibilityTraitButton;
+    }
   } else {
     TableViewURLCell* urlCell =
         base::mac::ObjCCastStrict<TableViewURLCell>(cell);

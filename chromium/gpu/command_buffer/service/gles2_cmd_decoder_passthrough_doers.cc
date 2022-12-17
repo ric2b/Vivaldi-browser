@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,8 +26,6 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/overlay_plane_data.h"
 #include "ui/gfx/overlay_priority_hint.h"
-#include "ui/gl/ca_renderer_layer_params.h"
-#include "ui/gl/dc_renderer_layer_params.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/gl_version_info.h"
 
@@ -3845,11 +3843,12 @@ error::Error GLES2DecoderPassthroughImpl::DoSwapBuffers(uint64_t swap_id,
         base::BindOnce(
             &GLES2DecoderPassthroughImpl::CheckSwapBuffersAsyncResult,
             weak_ptr_factory_.GetWeakPtr(), "SwapBuffers", swap_id),
-        base::DoNothing());
+        base::DoNothing(), gl::FrameData());
     return error::kNoError;
   } else {
-    return CheckSwapBuffersResult(surface_->SwapBuffers(base::DoNothing()),
-                                  "SwapBuffers");
+    return CheckSwapBuffersResult(
+        surface_->SwapBuffers(base::DoNothing(), gl::FrameData()),
+        "SwapBuffers");
   }
 }
 
@@ -4849,14 +4848,7 @@ error::Error GLES2DecoderPassthroughImpl::DoUnlockDiscardableTextureCHROMIUM(
 error::Error
 GLES2DecoderPassthroughImpl::DoCreateAndTexStorage2DSharedImageINTERNAL(
     GLuint texture_client_id,
-    GLenum internalformat,
     const volatile GLbyte* mailbox) {
-  // RGB emulation is not needed here.
-  if (internalformat != GL_NONE) {
-    InsertError(GL_INVALID_ENUM, "internal format not supported.");
-    return error::kNoError;
-  }
-
   if (!texture_client_id ||
       resources_->texture_id_map.HasClientID(texture_client_id)) {
     InsertError(GL_INVALID_OPERATION, "invalid client ID");

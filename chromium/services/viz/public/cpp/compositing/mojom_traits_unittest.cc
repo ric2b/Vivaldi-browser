@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
+#include "base/test/gtest_util.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
@@ -16,6 +17,7 @@
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_settings.h"
 #include "components/viz/common/resources/returned_resource.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/common/surfaces/region_capture_bounds.h"
 #include "components/viz/common/surfaces/subtree_capture_id.h"
@@ -153,7 +155,7 @@ void ExpectEqual(const cc::FilterOperation& input,
       EXPECT_EQ(input.drop_shadow_color(), output.drop_shadow_color());
       break;
     case cc::FilterOperation::COLOR_MATRIX:
-      EXPECT_EQ(0, memcmp(input.matrix(), output.matrix(), 20));
+      EXPECT_EQ(input.matrix(), output.matrix());
       break;
     case cc::FilterOperation::ZOOM:
       EXPECT_EQ(input.amount(), output.amount());
@@ -438,9 +440,9 @@ TEST_F(StructTraitsTest, Selection) {
 }
 
 TEST_F(StructTraitsTest, SharedQuadState) {
-  const gfx::Transform quad_to_target_transform(1.f, 2.f, 3.f, 4.f, 5.f, 6.f,
-                                                7.f, 8.f, 9.f, 10.f, 11.f, 12.f,
-                                                13.f, 14.f, 15.f, 16.f);
+  const auto quad_to_target_transform =
+      gfx::Transform::RowMajor(1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f, 9.f,
+                               10.f, 11.f, 12.f, 13.f, 14.f, 15.f, 16.f);
   const gfx::Rect layer_rect(1234, 5678);
   const gfx::Rect visible_layer_rect(12, 34, 56, 78);
   const gfx::MaskFilterInfo mask_filter_info(
@@ -480,9 +482,9 @@ TEST_F(StructTraitsTest, CompositorFrame) {
                       gfx::Rect(2, 3), gfx::Transform());
 
   // SharedQuadState.
-  const gfx::Transform sqs_quad_to_target_transform(
-      1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f, 9.f, 10.f, 11.f, 12.f, 13.f, 14.f,
-      15.f, 16.f);
+  const auto sqs_quad_to_target_transform =
+      gfx::Transform::RowMajor(1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f, 9.f,
+                               10.f, 11.f, 12.f, 13.f, 14.f, 15.f, 16.f);
   const gfx::Rect sqs_layer_rect(1234, 5678);
   const gfx::Rect sqs_visible_layer_rect(12, 34, 56, 78);
   const gfx::MaskFilterInfo sqs_mask_filter_info(
@@ -515,15 +517,26 @@ TEST_F(StructTraitsTest, CompositorFrame) {
   solid_quad->SetNew(sqs, rect2, rect2, color2, force_anti_aliasing_off);
 
   // TransferableResource constants.
-  const ResourceId tr_id(1337);
-  const ResourceFormat tr_format = ALPHA_8;
+  const ResourceId single_plane_id(1337);
+  const ResourceId multi_plane_id(1338);
+  const SharedImageFormat single_plane_format =
+      SharedImageFormat::SinglePlane(ALPHA_8);
+  const SharedImageFormat multi_plane_format =
+      SharedImageFormat::MultiPlane(SharedImageFormat::PlaneConfig::kY_UV,
+                                    SharedImageFormat::Subsampling::k420,
+                                    SharedImageFormat::ChannelFormat::k8);
   const uint32_t tr_filter = 1234;
   const gfx::Size tr_size(1234, 5678);
-  TransferableResource resource;
-  resource.id = tr_id;
-  resource.format = tr_format;
-  resource.filter = tr_filter;
-  resource.size = tr_size;
+  TransferableResource single_plane_resource;
+  single_plane_resource.id = single_plane_id;
+  single_plane_resource.format = single_plane_format;
+  single_plane_resource.filter = tr_filter;
+  single_plane_resource.size = tr_size;
+  TransferableResource multi_plane_resource;
+  multi_plane_resource.id = multi_plane_id;
+  multi_plane_resource.format = multi_plane_format;
+  multi_plane_resource.filter = tr_filter;
+  multi_plane_resource.size = tr_size;
 
   // CompositorFrameMetadata constants.
   const float device_scale_factor = 2.6f;
@@ -538,7 +551,8 @@ TEST_F(StructTraitsTest, CompositorFrame) {
   input.metadata.page_scale_factor = page_scale_factor;
   input.metadata.scrollable_viewport_size = scrollable_viewport_size;
   input.render_pass_list.push_back(std::move(render_pass));
-  input.resource_list.push_back(resource);
+  input.resource_list.push_back(single_plane_resource);
+  input.resource_list.push_back(multi_plane_resource);
   input.metadata.begin_frame_ack = begin_frame_ack;
   input.metadata.frame_token = 1;
 
@@ -551,12 +565,17 @@ TEST_F(StructTraitsTest, CompositorFrame) {
   EXPECT_EQ(scrollable_viewport_size, output.metadata.scrollable_viewport_size);
   EXPECT_EQ(begin_frame_ack, output.metadata.begin_frame_ack);
 
-  ASSERT_EQ(1u, output.resource_list.size());
-  TransferableResource out_resource = output.resource_list[0];
-  EXPECT_EQ(tr_id, out_resource.id);
-  EXPECT_EQ(tr_format, out_resource.format);
-  EXPECT_EQ(tr_filter, out_resource.filter);
-  EXPECT_EQ(tr_size, out_resource.size);
+  ASSERT_EQ(2u, output.resource_list.size());
+  TransferableResource out_resource1 = output.resource_list[0];
+  EXPECT_EQ(single_plane_id, out_resource1.id);
+  EXPECT_EQ(single_plane_format, out_resource1.format);
+  EXPECT_EQ(tr_filter, out_resource1.filter);
+  EXPECT_EQ(tr_size, out_resource1.size);
+  TransferableResource out_resource2 = output.resource_list[1];
+  EXPECT_EQ(multi_plane_id, out_resource2.id);
+  EXPECT_EQ(multi_plane_format, out_resource2.format);
+  EXPECT_EQ(tr_filter, out_resource2.filter);
+  EXPECT_EQ(tr_size, out_resource2.size);
 
   EXPECT_EQ(1u, output.render_pass_list.size());
   const CompositorRenderPass* out_render_pass =
@@ -604,9 +623,7 @@ TEST_F(StructTraitsTest, CompositorFrameTransitionDirective) {
   element.render_pass_id = frame.render_pass_list.front()->id;
   frame.metadata.transition_directives.push_back(
       CompositorFrameTransitionDirective(
-          1u, CompositorFrameTransitionDirective::Type::kSave, false,
-          CompositorFrameTransitionDirective::Effect::kNone,
-          CompositorFrameTransitionDirective::TransitionConfig(), {element}));
+          1u, CompositorFrameTransitionDirective::Type::kSave, {element}));
 
   // This ensures de-serialization succeeds if all passes are present.
   CompositorFrame output;
@@ -617,9 +634,7 @@ TEST_F(StructTraitsTest, CompositorFrameTransitionDirective) {
       frame.render_pass_list.back()->id.GetUnsafeValue() + 1);
   frame.metadata.transition_directives.push_back(
       CompositorFrameTransitionDirective(
-          1u, CompositorFrameTransitionDirective::Type::kSave, false,
-          CompositorFrameTransitionDirective::Effect::kNone,
-          CompositorFrameTransitionDirective::TransitionConfig(), {element}));
+          1u, CompositorFrameTransitionDirective::Type::kSave, {element}));
 
   // This ensures de-serialization fails if a pass is missing.
   ASSERT_FALSE(mojo::test::SerializeAndDeserialize<mojom::CompositorFrame>(
@@ -751,7 +766,7 @@ TEST_F(StructTraitsTest, RenderPass) {
   const CompositorRenderPassId render_pass_id{3u};
   const gfx::Rect output_rect(45, 22, 120, 13);
   const gfx::Transform transform_to_root =
-      gfx::Transform(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
+      gfx::Transform::AffineForTesting(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
   const gfx::Rect damage_rect(56, 123, 19, 43);
   cc::FilterOperations filters;
   filters.Append(cc::FilterOperation::CreateBlurFilter(0.f));
@@ -781,16 +796,18 @@ TEST_F(StructTraitsTest, RenderPass) {
 
   SharedQuadState* shared_state_1 = input->CreateAndAppendSharedQuadState();
   shared_state_1->SetAll(
-      gfx::Transform(16.1f, 15.3f, 14.3f, 13.7f, 12.2f, 11.4f, 10.4f, 9.8f,
-                     8.1f, 7.3f, 6.3f, 5.7f, 4.8f, 3.4f, 2.4f, 1.2f),
+      gfx::Transform::RowMajor(16.1f, 15.3f, 14.3f, 13.7f, 12.2f, 11.4f, 10.4f,
+                               9.8f, 8.1f, 7.3f, 6.3f, 5.7f, 4.8f, 3.4f, 2.4f,
+                               1.2f),
       gfx::Rect(1, 2), gfx::Rect(1337, 5679, 9101112, 131415),
       gfx::MaskFilterInfo(gfx::RRectF(gfx::RectF(5.f, 6.f, 70.f, 89.f), 10.f)),
       gfx::Rect(1357, 2468, 121314, 1337), true, 2, SkBlendMode::kSrcOver, 1);
 
   SharedQuadState* shared_state_2 = input->CreateAndAppendSharedQuadState();
   shared_state_2->SetAll(
-      gfx::Transform(1.1f, 2.3f, 3.3f, 4.7f, 5.2f, 6.4f, 7.4f, 8.8f, 9.1f,
-                     10.3f, 11.3f, 12.7f, 13.8f, 14.4f, 15.4f, 16.2f),
+      gfx::Transform::RowMajor(1.1f, 2.3f, 3.3f, 4.7f, 5.2f, 6.4f, 7.4f, 8.8f,
+                               9.1f, 10.3f, 11.3f, 12.7f, 13.8f, 14.4f, 15.4f,
+                               16.2f),
       gfx::Rect(1337, 1234), gfx::Rect(1234, 5678, 9101112, 13141516),
       gfx::MaskFilterInfo(gfx::RRectF(gfx::RectF(23.f, 45.f, 60.f, 70.f), 8.f)),
       gfx::Rect(1357, 2468, 121314, 1337), true, 2, SkBlendMode::kSrcOver, 1);
@@ -907,7 +924,7 @@ TEST_F(StructTraitsTest, RenderPassWithEmptySharedQuadStateList) {
   const gfx::Rect output_rect(45, 22, 120, 13);
   const gfx::Rect damage_rect(56, 123, 19, 43);
   const gfx::Transform transform_to_root =
-      gfx::Transform(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
+      gfx::Transform::AffineForTesting(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
   const absl::optional<gfx::RRectF> backdrop_filter_bounds;
   SubtreeCaptureId subtree_capture_id;
   const bool has_transparent_background = true;
@@ -1132,7 +1149,7 @@ TEST_F(StructTraitsTest, SurfaceId) {
 
 TEST_F(StructTraitsTest, TransferableResource) {
   const ResourceId id(1337);
-  const ResourceFormat format = ALPHA_8;
+  const SharedImageFormat format = SharedImageFormat::SinglePlane(ALPHA_8);
   const uint32_t filter = 1234;
   const gfx::Size size(1234, 5678);
   const int8_t mailbox_name[GL_MAILBOX_SIZE_CHROMIUM] = {
@@ -1180,6 +1197,40 @@ TEST_F(StructTraitsTest, TransferableResource) {
   EXPECT_EQ(is_overlay_candidate, output.is_overlay_candidate);
 }
 
+TEST_F(StructTraitsTest, SharedImageFormatWithSinglePlane) {
+  const ResourceFormat resource_format = RED_8;
+  SharedImageFormat input = SharedImageFormat::SinglePlane(resource_format);
+
+  SharedImageFormat output;
+  mojo::test::SerializeAndDeserialize<mojom::SharedImageFormat>(input, output);
+
+  EXPECT_EQ(input, output);
+}
+
+TEST_F(StructTraitsTest, SharedImageFormatWithMultiPlane) {
+  const SharedImageFormat::PlaneConfig plane_config =
+      SharedImageFormat::PlaneConfig::kY_UV;
+  const SharedImageFormat::Subsampling subsampling =
+      SharedImageFormat::Subsampling::k420;
+  const SharedImageFormat::ChannelFormat channel_format =
+      SharedImageFormat::ChannelFormat::k8;
+  SharedImageFormat input =
+      SharedImageFormat::MultiPlane(plane_config, subsampling, channel_format);
+
+  SharedImageFormat output;
+  mojo::test::SerializeAndDeserialize<mojom::SharedImageFormat>(input, output);
+
+  EXPECT_EQ(input, output);
+}
+
+TEST_F(StructTraitsTest, SharedImageFormatWithUnknownPlane) {
+  SharedImageFormat input = SharedImageFormat();
+  SharedImageFormat output;
+  EXPECT_CHECK_DEATH(
+      mojo::test::SerializeAndDeserialize<mojom::SharedImageFormat>(input,
+                                                                    output));
+}
+
 TEST_F(StructTraitsTest, YUVDrawQuad) {
   auto render_pass = CompositorRenderPass::Create();
   render_pass->SetNew(CompositorRenderPassId{1}, gfx::Rect(), gfx::Rect(),
@@ -1189,10 +1240,9 @@ TEST_F(StructTraitsTest, YUVDrawQuad) {
   const gfx::Rect rect(1234, 4321, 1357, 7531);
   const gfx::Rect visible_rect(1337, 7331, 561, 293);
   const bool needs_blending = true;
-  const gfx::RectF ya_tex_coord_rect(1234.1f, 5678.2f, 9101112.3f, 13141516.4f);
-  const gfx::RectF uv_tex_coord_rect(1234.1f, 4321.2f, 1357.3f, 7531.4f);
-  const gfx::Size ya_tex_size(1234, 5678);
-  const gfx::Size uv_tex_size(4321, 8765);
+  const gfx::Size coded_size(1234, 5678);
+  const gfx::Rect video_visible_rect(123, 456, 789, 1011);
+  const gfx::Size uv_sample_size(1, 2);
   const ResourceId y_plane_resource_id(1337);
   const ResourceId u_plane_resource_id(1234);
   const ResourceId v_plane_resource_id(2468);
@@ -1210,8 +1260,8 @@ TEST_F(StructTraitsTest, YUVDrawQuad) {
   SharedQuadState* sqs = render_pass->CreateAndAppendSharedQuadState();
   YUVVideoDrawQuad* quad =
       render_pass->CreateAndAppendDrawQuad<YUVVideoDrawQuad>();
-  quad->SetAll(sqs, rect, visible_rect, needs_blending, ya_tex_coord_rect,
-               uv_tex_coord_rect, ya_tex_size, uv_tex_size, y_plane_resource_id,
+  quad->SetAll(sqs, rect, visible_rect, needs_blending, coded_size,
+               video_visible_rect, uv_sample_size, y_plane_resource_id,
                u_plane_resource_id, v_plane_resource_id, a_plane_resource_id,
                video_color_space, resource_offset, resource_multiplier,
                bits_per_channel, protected_video_type, hdr_metadata);
@@ -1228,10 +1278,10 @@ TEST_F(StructTraitsTest, YUVDrawQuad) {
   EXPECT_EQ(rect, out_quad->rect);
   EXPECT_EQ(visible_rect, out_quad->visible_rect);
   EXPECT_EQ(needs_blending, out_quad->needs_blending);
-  EXPECT_EQ(ya_tex_coord_rect, out_quad->ya_tex_coord_rect);
-  EXPECT_EQ(uv_tex_coord_rect, out_quad->uv_tex_coord_rect);
-  EXPECT_EQ(ya_tex_size, out_quad->ya_tex_size);
-  EXPECT_EQ(uv_tex_size, out_quad->uv_tex_size);
+  EXPECT_EQ(coded_size, out_quad->coded_size);
+  EXPECT_EQ(video_visible_rect, out_quad->video_visible_rect);
+  EXPECT_EQ(uv_sample_size.width(), out_quad->u_scale);
+  EXPECT_EQ(uv_sample_size.height(), out_quad->v_scale);
   EXPECT_EQ(y_plane_resource_id, out_quad->y_plane_resource_id());
   EXPECT_EQ(u_plane_resource_id, out_quad->u_plane_resource_id());
   EXPECT_EQ(v_plane_resource_id, out_quad->v_plane_resource_id());

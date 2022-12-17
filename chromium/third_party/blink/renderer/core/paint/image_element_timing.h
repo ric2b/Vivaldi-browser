@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,6 +120,8 @@ class CORE_EXPORT ImageElementTiming final
 
     base::TimeTicks load_time_;
     bool is_painted_ = false;
+
+    DISALLOW_NEW();
   };
   typedef std::pair<const LayoutObject*, const ImageResourceContent*> RecordId;
   // Hashmap of pairs of elements, LayoutObjects (for the elements) and

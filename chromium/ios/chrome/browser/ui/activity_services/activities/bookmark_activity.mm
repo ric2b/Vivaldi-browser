@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,8 @@
 #import "ios/chrome/browser/ui/commands/bookmark_add_command.h"
 #import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/popup_menu/public/features.h"
+#import "ios/chrome/browser/ui/icons/action_icon.h"
+#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
@@ -72,10 +73,19 @@ NSString* const kBookmarkActivityType = @"com.google.chrome.bookmarkActivity";
 - (NSString*)activityTitle {
   if (self.bookmarked)
     return l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_EDIT_BOOKMARK);
-  return l10n_util::GetNSString(GetBookmarkStringID());
+  return l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_ADD_TO_BOOKMARKS);
 }
 
 - (UIImage*)activityImage {
+  if (UseSymbols()) {
+    if (self.bookmarked) {
+      return DefaultSymbolWithPointSize(kEditActionSymbol,
+                                        kSymbolActionPointSize);
+    }
+    return DefaultSymbolWithPointSize(kAddBookmarkActionSymbol,
+                                      kSymbolActionPointSize);
+  }
+
   if (self.bookmarked)
     return [UIImage imageNamed:@"activity_services_edit_bookmark"];
   return [UIImage imageNamed:@"activity_services_add_bookmark"];

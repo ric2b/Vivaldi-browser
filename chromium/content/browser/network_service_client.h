@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "content/browser/buildflags.h"
-#include "content/browser/net/socket_broker_impl.h"
+#include "content/browser/network/socket_broker_impl.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -82,7 +82,9 @@ class NetworkServiceClient
 
   // net::NetworkChangeNotifier::DNSObserver implementation:
   void OnDNSChanged() override;
+#endif  // BUILDFLAG(IS_ANDROID)
 
+#if BUILDFLAG(USE_SOCKET_BROKER)
   // Called when the network service sandbox is enabled.
   mojo::PendingRemote<network::mojom::SocketBroker> BindSocketBroker();
 #endif

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -399,10 +399,10 @@ void V4L2VideoEncodeAccelerator::InitializeTask(const Config& config) {
   // Notify VideoEncoderInfo after initialization.
   VideoEncoderInfo encoder_info;
   encoder_info.implementation_name = "V4L2VideoEncodeAccelerator";
-  encoder_info.has_trusted_rate_controller = true;
-  encoder_info.is_hardware_accelerated = true;
-  encoder_info.supports_native_handle = true;
-  encoder_info.supports_simulcast = false;
+  DCHECK(!encoder_info.has_trusted_rate_controller);
+  DCHECK(encoder_info.is_hardware_accelerated);
+  DCHECK(encoder_info.supports_native_handle);
+  DCHECK(!encoder_info.supports_simulcast);
 
   // V4L2VideoEncodeAccelerator doesn't support either temporal-SVC or
   // spatial-SVC. A single stream shall be output at the desired FPS.
@@ -431,7 +431,7 @@ bool V4L2VideoEncodeAccelerator::CreateImageProcessor(
 
   VideoFrame::StorageType input_storage_type =
       native_input_mode_ ? VideoFrame::STORAGE_GPU_MEMORY_BUFFER
-                         : VideoFrame::STORAGE_MOJO_SHARED_BUFFER;
+                         : VideoFrame::STORAGE_SHMEM;
   auto input_config = VideoFrameLayoutToPortConfig(
       *ip_input_layout, input_visible_rect, {input_storage_type});
   if (!input_config) {
@@ -617,6 +617,14 @@ void V4L2VideoEncodeAccelerator::Flush(FlushCallback flush_callback) {
 void V4L2VideoEncodeAccelerator::FlushTask(FlushCallback flush_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_sequence_checker_);
 
+  if (encoder_state_ == kInitialized) {
+    // Flush() is called before either Encode() or UseOutputBitstreamBuffer() is
+    // called. Just return as successful.
+    child_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(std::move(flush_callback), true));
+    return;
+  }
+
   if (flush_callback_ || encoder_state_ != kEncoding) {
     VLOGF(1) << "Flush failed: there is a pending flush, "
              << "or VideoEncodeAccelerator is not in kEncoding state";
@@ -776,7 +784,7 @@ void V4L2VideoEncodeAccelerator::EncodeTask(scoped_refptr<VideoFrame> frame,
     const bool is_expected_storage_type =
         native_input_mode_
             ? frame->storage_type() == VideoFrame::STORAGE_GPU_MEMORY_BUFFER
-            : frame->IsMappable();
+            : frame->storage_type() == VideoFrame::STORAGE_SHMEM;
     if (!is_expected_storage_type) {
       VLOGF(1) << "Unexpected storage: "
                << VideoFrame::StorageTypeToString(frame->storage_type());
@@ -793,6 +801,12 @@ void V4L2VideoEncodeAccelerator::EncodeTask(scoped_refptr<VideoFrame> frame,
     // not been called yet.
     if (input_buffer_map_.empty() && !CreateInputBuffers())
       return;
+
+    if (encoder_state_ == kInitialized) {
+      if (!StartDevicePoll())
+        return;
+      encoder_state_ = kEncoding;
+    }
   }
 
   if (image_processor_) {
@@ -1157,8 +1171,14 @@ void V4L2VideoEncodeAccelerator::Enqueue() {
     DCHECK(!output_queue_->IsStreaming() && !input_queue_->IsStreaming());
     // When VIDIOC_STREAMON can be executed in OUTPUT queue, it is fine to call
     // STREAMON in CAPTURE queue.
-    output_queue_->Streamon();
-    input_queue_->Streamon();
+    if (!output_queue_->Streamon()) {
+      NOTIFY_ERROR(kPlatformFailureError);
+      return;
+    }
+    if (!input_queue_->Streamon()) {
+      NOTIFY_ERROR(kPlatformFailureError);
+      return;
+    }
   }
 }
 
@@ -1368,14 +1388,44 @@ bool V4L2VideoEncodeAccelerator::EnqueueInputRecord(
 
   switch (input_buf.Memory()) {
     case V4L2_MEMORY_USERPTR: {
-      std::vector<void*> user_ptrs;
-      for (size_t i = 0; i < num_planes; ++i)
-        user_ptrs.push_back(frame->data(i));
-      std::move(input_buf).QueueUserPtr(std::move(user_ptrs));
+      if (frame->storage_type() != VideoFrame::STORAGE_SHMEM) {
+        VLOGF(1) << "VideoFrame doesn't have shared memory";
+        NOTIFY_ERROR(kPlatformFailureError);
+      }
+
+      // TODO(b/243883312): This copies the video frame to a writable buffer
+      // since the USERPTR API requires writable permission. Remove this
+      // workaround once the unreasonable permission is fixed.
+      const size_t buffer_size = frame->shm_region()->GetSize();
+      std::vector<uint8_t> writable_buffer(buffer_size);
+      std::memcpy(writable_buffer.data(), frame->data(0), buffer_size);
+      std::vector<void*> user_ptrs(num_planes);
+      for (size_t i = 0; i < num_planes; ++i) {
+        const std::intptr_t plane_offset =
+            reinterpret_cast<std::intptr_t>(frame->data(i)) -
+            reinterpret_cast<std::intptr_t>(frame->data(0));
+        user_ptrs[i] = writable_buffer.data() + plane_offset;
+      }
+
+      if (!std::move(input_buf).QueueUserPtr(std::move(user_ptrs))) {
+        VPLOGF(1) << "Failed to queue a USRPTR buffer to input queue";
+        NOTIFY_ERROR(kPlatformFailureError);
+        return false;
+      }
+      frame->AddDestructionObserver(base::BindOnce([](std::vector<uint8_t>) {},
+                                                   std::move(writable_buffer)));
       break;
     }
     case V4L2_MEMORY_DMABUF: {
-      std::move(input_buf).QueueDMABuf(gmb_handle.native_pixmap_handle.planes);
+      if (!std::move(input_buf).QueueDMABuf(
+              gmb_handle.native_pixmap_handle.planes)) {
+        VPLOGF(1) << "Failed queue a DMABUF buffer to input queue";
+        return false;
+      }
+      // Keep |gmb_handle| alive as long as |frame| is alive so that fds passed
+      // to the driver are valid during encoding.
+      frame->AddDestructionObserver(base::BindOnce(
+          [](gfx::GpuMemoryBufferHandle) {}, std::move(gmb_handle)));
       break;
     }
     default:
@@ -1383,11 +1433,6 @@ bool V4L2VideoEncodeAccelerator::EnqueueInputRecord(
                    << static_cast<int>(input_buf.Memory());
       return false;
   }
-
-  // Keep |gmb_handle| alive as long as |frame| is alive so that fds passed
-  // to the driver are valid during encoding.
-  frame->AddDestructionObserver(
-      base::BindOnce([](gfx::GpuMemoryBufferHandle) {}, std::move(gmb_handle)));
 
   InputRecord& input_record = input_buffer_map_[buffer_id];
   input_record.frame = frame;
@@ -1969,7 +2014,9 @@ void V4L2VideoEncodeAccelerator::DestroyInputBuffers() {
     return;
 
   DCHECK(!input_queue_->IsStreaming());
-  input_queue_->DeallocateBuffers();
+  if (!input_queue_->DeallocateBuffers())
+    VLOGF(1) << "Failed to deallocate V4L2 input buffers";
+
   input_buffer_map_.clear();
 }
 
@@ -1981,7 +2028,8 @@ void V4L2VideoEncodeAccelerator::DestroyOutputBuffers() {
     return;
 
   DCHECK(!output_queue_->IsStreaming());
-  output_queue_->DeallocateBuffers();
+  if (!output_queue_->DeallocateBuffers())
+    VLOGF(1) << "Failed to deallocate V4L2 output buffers";
 }
 
 }  // namespace media

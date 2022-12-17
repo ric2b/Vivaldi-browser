@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,7 +64,8 @@ export class ProgressCenterImpl {
   updateItem(item) {
     // Update item.
     const index = this.getItemIndex_(item.id);
-    if (item.state === ProgressItemState.PROGRESSING) {
+    if (item.state === ProgressItemState.PROGRESSING ||
+        item.state === ProgressItemState.SCANNING) {
       if (index === -1) {
         this.items_.push(item);
       } else {

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -150,7 +150,7 @@ bool RenderingTest::WillDrawOnRT(HardwareRendererDrawParams* params) {
   params->width = window_->surface_size().width();
   params->height = window_->surface_size().height();
   gfx::Transform transform;
-  transform.matrix().getColMajor(params->transform);
+  transform.GetColMajorF(params->transform);
   return true;
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,15 +17,15 @@
 namespace chromecast {
 
 // Add Cast Features here.
-extern const base::Feature kAllowUserMediaAccess;
-extern const base::Feature kEnableQuic;
-extern const base::Feature kTripleBuffer720;
-extern const base::Feature kSingleBuffer;
-extern const base::Feature kDisableIdleSocketsCloseOnMemoryPressure;
-extern const base::Feature kEnableGeneralAudienceBrowsing;
-extern const base::Feature kEnableSideGesturePassThrough;
-extern const base::Feature kEnableChromeAudioManagerAndroid;
-extern const base::Feature kEnableCastAudioOutputDevice;
+BASE_DECLARE_FEATURE(kAllowUserMediaAccess);
+BASE_DECLARE_FEATURE(kEnableQuic);
+BASE_DECLARE_FEATURE(kTripleBuffer720);
+BASE_DECLARE_FEATURE(kSingleBuffer);
+BASE_DECLARE_FEATURE(kDisableIdleSocketsCloseOnMemoryPressure);
+BASE_DECLARE_FEATURE(kEnableGeneralAudienceBrowsing);
+BASE_DECLARE_FEATURE(kEnableSideGesturePassThrough);
+BASE_DECLARE_FEATURE(kEnableChromeAudioManagerAndroid);
+BASE_DECLARE_FEATURE(kEnableCastAudioOutputDevice);
 
 // Get an iterable list of all of the cast features for checking all features as
 // a collection.

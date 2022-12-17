@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,4 +59,20 @@ TEST_F(TemplateURLServiceUnitTest, SessionToken) {
       template_url_service().token_expiration_time_;
   EXPECT_GT(expiration_time_2, expiration_time_1);
   EXPECT_GE(expiration_time_2, expiration_time_1 + kSmallDelta);
+}
+
+TEST_F(TemplateURLServiceUnitTest, GenerateSearchURL) {
+  // Set the default search provider to a custom one.
+  TemplateURLData template_url_data;
+  template_url_data.SetURL("https://www.example.com/?q={searchTerms}");
+  template_url_service().SetUserSelectedDefaultSearchProvider(
+      template_url_service().Add(
+          std::make_unique<TemplateURL>(template_url_data)));
+
+  EXPECT_EQ(
+      "https://www.example.com/?q=foo",
+      template_url_service().GenerateSearchURLForDefaultSearchProvider(u"foo"));
+  EXPECT_EQ(
+      "https://www.example.com/?q=",
+      template_url_service().GenerateSearchURLForDefaultSearchProvider(u""));
 }

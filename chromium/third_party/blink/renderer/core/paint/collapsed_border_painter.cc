@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -358,7 +358,7 @@ void CollapsedBorderPainter::PaintCollapsedBorders(
           paint_state.PaintOffset()));
 
   AutoDarkMode auto_dark_mode(PaintAutoDarkMode(
-      cell_.StyleRef(), DarkModeFilter::ElementRole::kBackground));
+      cell_.StyleRef(), DarkModeFilter::ElementRole::kBorder));
 
   // We never paint diagonals at the joins.  We simply let the border with the
   // highest precedence paint on top of borders with lower precedence.

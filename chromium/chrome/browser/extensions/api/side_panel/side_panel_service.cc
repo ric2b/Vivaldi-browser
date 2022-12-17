@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,8 +22,8 @@ api::side_panel::PanelOptions GetPanelOptionsFromManifest(
   auto path = SidePanelInfo::GetDefaultPath(&extension);
   api::side_panel::PanelOptions options;
   if (!path.empty()) {
-    options.path = std::make_unique<std::string>(std::string(path));
-    options.enabled = std::make_unique<bool>(true);
+    options.path = std::string(path);
+    options.enabled = true;
   }
   return options;
 }
@@ -31,8 +31,8 @@ api::side_panel::PanelOptions GetPanelOptionsFromManifest(
 // TODO(crbug.com/1332599): Add a Clone() method for generated types.
 api::side_panel::PanelOptions CloneOptions(
     const api::side_panel::PanelOptions& options) {
-  auto clone = api::side_panel::PanelOptions::FromValue(
-      base::Value(std::move(options.ToValue()->GetDict())));
+  auto clone =
+      api::side_panel::PanelOptions::FromValue(base::Value(options.ToValue()));
   return clone ? std::move(*clone) : api::side_panel::PanelOptions();
 }
 
@@ -41,7 +41,11 @@ api::side_panel::PanelOptions CloneOptions(
 SidePanelService::~SidePanelService() = default;
 
 SidePanelService::SidePanelService(content::BrowserContext* context)
-    : browser_context_(context) {}
+    : browser_context_(context) {
+  extensions::ExtensionRegistry* extension_registry =
+      extensions::ExtensionRegistry::Get(context);
+  extension_registry_observation_.Observe(extension_registry);
+}
 
 api::side_panel::PanelOptions SidePanelService::GetOptions(
     const Extension& extension,
@@ -96,6 +100,10 @@ void SidePanelService::SetOptions(const Extension& extension,
   }
 }
 
+bool SidePanelService::HasExtensionPanelOptionsForTest(const ExtensionId& id) {
+  return panels_.count(id) != 0;
+}
+
 // static
 BrowserContextKeyedAPIFactory<SidePanelService>*
 SidePanelService::GetFactoryInstance() {
@@ -107,6 +115,24 @@ SidePanelService::GetFactoryInstance() {
 // static
 SidePanelService* SidePanelService::Get(content::BrowserContext* context) {
   return BrowserContextKeyedAPIFactory<SidePanelService>::Get(context);
+}
+
+void SidePanelService::RemoveExtensionOptions(const ExtensionId& id) {
+  panels_.erase(id);
+}
+
+void SidePanelService::OnExtensionUnloaded(
+    content::BrowserContext* browser_context,
+    const Extension* extension,
+    UnloadedExtensionReason reason) {
+  RemoveExtensionOptions(extension->id());
+}
+
+void SidePanelService::OnExtensionUninstalled(
+    content::BrowserContext* browser_context,
+    const Extension* extension,
+    UninstallReason reason) {
+  RemoveExtensionOptions(extension->id());
 }
 
 }  // namespace extensions

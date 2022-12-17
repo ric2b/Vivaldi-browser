@@ -1,10 +1,9 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.features.start_surface;
 
-import android.app.Activity;
 import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
@@ -25,12 +24,13 @@ public class FeedPlaceholderCoordinator {
     private FeedPlaceholderLayout mFeedPlaceholderView;
 
     public FeedPlaceholderCoordinator(
-            Activity activity, ViewGroup parentView, boolean isBackgroundDark) {
+            Context context, ViewGroup parentView, boolean isBackgroundDark) {
         mParentView = parentView;
-        mContext = activity;
+        mContext = context;
+        setUpPlaceholderView();
     }
 
-    public void setUpPlaceholderView() {
+    private void setUpPlaceholderView() {
         mFeedPlaceholderView = (FeedPlaceholderLayout) LayoutInflater.from(mContext).inflate(
                 R.layout.feed_placeholder_layout, null, false);
         // Header blank size should be consistent with

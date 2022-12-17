@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -221,14 +221,16 @@ TEST_F(ServiceWorkerContextWrapperTest, DeleteRegistrationsForPartitionedKeys) {
   // Make two registrations for same origin, but different top-level site.
   GURL scope("https://example1.com/abc/");
   url::Origin site1 = url::Origin::Create(GURL("https://site1.example"));
-  blink::StorageKey key1(url::Origin::Create(scope), site1);
+  blink::StorageKey key1 =
+      blink::StorageKey::CreateForTesting(url::Origin::Create(scope), site1);
   GURL script("https://example1.com/abc/sw.js");
   scoped_refptr<ServiceWorkerRegistration> registration1 =
       CreateServiceWorkerRegistrationAndVersion(context(), scope, script, key1,
                                                 /*resource_id=*/1);
 
   url::Origin site2 = url::Origin::Create(GURL("https://site2.example"));
-  blink::StorageKey key2(url::Origin::Create(scope), site2);
+  blink::StorageKey key2 =
+      blink::StorageKey::CreateForTesting(url::Origin::Create(scope), site2);
   scoped_refptr<ServiceWorkerRegistration> registration2 =
       CreateServiceWorkerRegistrationAndVersion(context(), scope, script, key2,
                                                 2);

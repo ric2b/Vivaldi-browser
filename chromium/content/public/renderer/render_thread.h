@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,7 +77,8 @@ class CONTENT_EXPORT RenderThread : virtual public ChildThread {
   virtual bool GenerateFrameRoutingID(
       int32_t& routing_id,
       blink::LocalFrameToken& frame_token,
-      base::UnguessableToken& devtools_frame_token) = 0;
+      base::UnguessableToken& devtools_frame_token,
+      blink::DocumentToken& document_token) = 0;
 
   // These map to IPC::ChannelProxy methods.
   virtual void AddFilter(IPC::MessageFilter* filter) = 0;

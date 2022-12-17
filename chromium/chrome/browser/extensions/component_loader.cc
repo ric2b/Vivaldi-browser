@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -17,6 +16,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
+#include "base/task/task_runner_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/branding_buildflags.h"
@@ -129,7 +129,7 @@ std::unique_ptr<base::DictionaryValue> LoadManifestOnFileThread(
     // from a read-only rootfs partition, so it is safe to set
     // |gzip_permission| to kAllowForTrustedSource.
     bool localized = extension_l10n_util::LocalizeExtension(
-        root_directory, manifest.get(),
+        root_directory, &manifest->GetDict(),
         extension_l10n_util::GzippedMessagesPermission::kAllowForTrustedSource,
         &error);
     CHECK(localized) << error;
@@ -195,7 +195,8 @@ void ComponentLoader::LoadAll() {
 std::unique_ptr<base::DictionaryValue> ComponentLoader::ParseManifest(
     base::StringPiece manifest_contents) const {
   JSONStringValueDeserializer deserializer(manifest_contents);
-  std::unique_ptr<base::Value> manifest = deserializer.Deserialize(NULL, NULL);
+  std::unique_ptr<base::Value> manifest =
+      deserializer.Deserialize(nullptr, nullptr);
 
   if (!manifest.get() || !manifest->is_dict()) {
     LOG(ERROR) << "Failed to parse extension manifest.";
@@ -386,16 +387,6 @@ void ComponentLoader::AddChromeApp() {
       l10n_util::GetStringUTF8(IDS_CHROME_SHORTCUT_DESCRIPTION));
 }
 
-void ComponentLoader::AddFileManagerExtension() {
-  if (!ash::features::IsFileManagerSwaEnabled()) {
-    AddWithNameAndDescription(
-        IDR_FILEMANAGER_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("file_manager")),
-        l10n_util::GetStringUTF8(IDS_FILEMANAGER_APP_NAME),
-        l10n_util::GetStringUTF8(IDS_FILEMANAGER_APP_DESCRIPTION));
-  }
-}
-
 void ComponentLoader::AddImageLoaderExtension() {
   Add(IDR_IMAGE_LOADER_MANIFEST,
       base::FilePath(FILE_PATH_LITERAL("image_loader")));
@@ -496,9 +487,6 @@ void ComponentLoader::AddDefaultComponentExtensionsForKioskMode(
     return;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Component extensions needed for kiosk apps.
-  AddFileManagerExtension();
-
   // Add virtual keyboard.
   AddKeyboardApp();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -561,7 +549,6 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
           switches::kLoadGuestModeTestExtension));
       AddGuestModeTestExtension(path);
     }
-    AddFileManagerExtension();
     AddImageLoaderExtension();
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)

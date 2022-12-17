@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,6 +39,9 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Collection of utility methods that operates on Tab.
@@ -199,6 +202,9 @@ public class TabUtils {
     public static boolean readRequestDesktopSiteContentSettings(
             Profile profile, @Nullable GURL url) {
         if (ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)) {
+            // Vivaldi: The global setting overrides the site exceptions setting.
+            if (BuildConfig.IS_VIVALDI && url != null &&
+                    TabUtils.isDesktopSiteGlobalEnabled(profile)) return true;
             return url != null && TabUtils.isDesktopSiteEnabled(profile, url);
         } else {
             return TabUtils.isDesktopSiteGlobalEnabled(profile);

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,7 +25,7 @@ class PrefRegistrySimple;
 namespace ash {
 
 // Local state pref name, which is used to keep track of what step migration is
-// at. This ensures that ash does not get repeatedly for migration.
+// at. This ensures that ash does not get restarted repeatedly for migration.
 // 1. The user logs in and restarts ash if necessary to apply flags.
 // 2. Migration check runs.
 // 3. Restart ash to run migration.

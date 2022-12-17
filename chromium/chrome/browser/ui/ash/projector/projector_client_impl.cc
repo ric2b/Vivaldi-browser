@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/speech/on_device_speech_recognizer.h"
+#include "chrome/browser/speech/speech_recognition_recognizer_client_impl.h"
 #include "chrome/browser/ui/ash/projector/projector_utils.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -31,6 +31,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "media/base/media_switches.h"
+#include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -49,7 +50,7 @@ inline const std::string& GetLocale() {
 void ProjectorClientImpl::InitForProjectorAnnotator(views::WebView* web_view) {
   if (!ash::features::IsProjectorAnnotatorEnabled())
     return;
-  web_view->LoadInitialURL(GURL(ash::kChromeUITrustedAnnotatorAppUrl));
+  web_view->LoadInitialURL(GURL(ash::kChromeUITrustedAnnotatorUrl));
 }
 
 // Using base::Unretained for callback is safe since the ProjectorClientImpl
@@ -77,15 +78,18 @@ void ProjectorClientImpl::StartSpeechRecognition() {
   // ProjectorController should only request for speech recognition after it
   // has been informed that recognition is available.
   // TODO(crbug.com/1165437): Dynamically determine language code.
-  DCHECK(OnDeviceSpeechRecognizer::IsOnDeviceSpeechRecognizerAvailable(
-      GetLocale()));
+  DCHECK(SpeechRecognitionRecognizerClientImpl::
+             IsOnDeviceSpeechRecognizerAvailable(GetLocale()));
 
   DCHECK_EQ(speech_recognizer_.get(), nullptr);
   recognizer_status_ = SPEECH_RECOGNIZER_OFF;
-  speech_recognizer_ = std::make_unique<OnDeviceSpeechRecognizer>(
+  speech_recognizer_ = std::make_unique<SpeechRecognitionRecognizerClientImpl>(
       weak_ptr_factory_.GetWeakPtr(), ProfileManager::GetActiveUserProfile(),
-      GetLocale(), /*recognition_mode_ime=*/false,
-      /*enable_formatting=*/true);
+      media::mojom::SpeechRecognitionOptions::New(
+          media::mojom::SpeechRecognitionMode::kCaption,
+          /*enable_formatting=*/true, GetLocale(),
+          /*is_server_based=*/false,
+          media::mojom::RecognizerClientType::kProjector));
 }
 
 void ProjectorClientImpl::StopSpeechRecognition() {
@@ -127,7 +131,8 @@ bool ProjectorClientImpl::IsDriveFsMountFailed() const {
 }
 
 void ProjectorClientImpl::OpenProjectorApp() const {
-  LaunchProjectorAppWithFiles(/*files=*/{});
+  auto* profile = ProfileManager::GetActiveUserProfile();
+  ash::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::PROJECTOR);
 }
 
 void ProjectorClientImpl::MinimizeProjectorApp() const {
@@ -151,6 +156,15 @@ void ProjectorClientImpl::OnNewScreencastPreconditionChanged(
   ash::ProjectorAppClient* app_client = ash::ProjectorAppClient::Get();
   if (app_client)
     app_client->OnNewScreencastPreconditionChanged(precondition);
+}
+
+void ProjectorClientImpl::ToggleFileSyncingNotificationForPaths(
+    const std::vector<base::FilePath>& screencast_paths,
+    bool suppress) {
+  if (auto* app_client = ash::ProjectorAppClient::Get()) {
+    app_client->ToggleFileSyncingNotificationForPaths(screencast_paths,
+                                                      suppress);
+  }
 }
 
 void ProjectorClientImpl::OnSpeechResult(

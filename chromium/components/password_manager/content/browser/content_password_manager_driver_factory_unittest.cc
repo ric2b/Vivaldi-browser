@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,7 @@ class ContentPasswordManagerDriverFactoryFencedFramesTest
  public:
   ContentPasswordManagerDriverFactoryFencedFramesTest() {
     std::vector<base::test::ScopedFeatureList::FeatureAndParams> enabled;
-    std::vector<base::Feature> disabled;
+    std::vector<base::test::FeatureRef> disabled;
     enabled.push_back(
         {blink::features::kFencedFrames, {{"implementation_type", "mparch"}}});
     if (password_manager_enabled_in_fencedframe()) {

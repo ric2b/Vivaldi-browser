@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -222,6 +222,29 @@ TEST_F(IncomingStreamTest, ReadThenClosedWithoutFin) {
             static_cast<uint16_t>(DOMExceptionCode::kNetworkError));
   EXPECT_EQ(exception->message(),
             "The stream was aborted by the remote server");
+}
+
+// Reading after remote close should not lose data.
+TEST_F(IncomingStreamTest, ClosedWithFinThenRead) {
+  V8TestingScope scope;
+
+  auto* incoming_stream = CreateIncomingStream(scope);
+
+  EXPECT_CALL(mock_on_abort_, Run(absl::optional<uint8_t>()));
+
+  auto* script_state = scope.GetScriptState();
+  auto* reader = incoming_stream->Readable()->GetDefaultReaderForTesting(
+      script_state, ASSERT_NO_EXCEPTION);
+  WriteToPipe({'B'});
+  incoming_stream->OnIncomingStreamClosed(true);
+  ClosePipe();
+
+  Iterator result1 = Read(scope, reader);
+  EXPECT_FALSE(result1.done);
+  EXPECT_THAT(result1.value, ElementsAre('B'));
+
+  Iterator result2 = Read(scope, reader);
+  EXPECT_TRUE(result2.done);
 }
 
 // reader.closed is fulfilled without any read() call, when the stream is empty.

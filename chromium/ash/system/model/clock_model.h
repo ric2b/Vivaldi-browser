@@ -1,14 +1,14 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef ASH_SYSTEM_MODEL_CLOCK_MODEL_H_
 #define ASH_SYSTEM_MODEL_CLOCK_MODEL_H_
 
-#include "ash/components/settings/timezone_settings.h"
 #include "base/i18n/time_formatting.h"
 #include "base/observer_list.h"
 #include "chromeos/ash/components/dbus/system_clock/system_clock_client.h"
+#include "chromeos/ash/components/settings/timezone_settings.h"
 
 namespace ash {
 

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,9 +20,9 @@ enum class LargestContentfulPaintType {
   kText = 1 << 1,
 
   kAnimatedImage = 1 << 2,
+  kVideo = 1 << 3,
 
   // The enum values below are not yet used and will be added later.
-  kVideo = 1 << 3,
   kDataURI = 1 << 4,
   kPNG = 1 << 5,
   kJPG = 1 << 6,

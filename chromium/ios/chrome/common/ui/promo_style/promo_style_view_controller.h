@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,6 +37,18 @@
 // When set to YES, the banner is hidden. Defaults to NO.
 @property(nonatomic, assign) BOOL shouldHideBanner;
 
+// When set to `YES`, an avatar image view is shown. This value has to be set
+// before the view is loaded. Defaults to NO.
+// See `avatarImage` to set the avatar image.
+@property(nonatomic, assign) BOOL hasAvatarImage;
+
+// Sets the avatar image. Needs to `hasAvatarImage` to `YES` before.
+@property(nonatomic, strong) UIImage* avatarImage;
+
+// Sets the avatar accessibility label. Needs to `hasAvatarImage` to `YES`
+// before.
+@property(nonatomic, copy) NSString* avatarAccessibilityLabel;
+
 // The label of the headline below the image. Must be set before the view is
 // loaded. This is declared public so the accessibility can be enabled.
 @property(nonatomic, strong) UILabel* titleLabel;
@@ -50,6 +62,11 @@
 
 // The subtitle below the title. Must be set before the view is loaded.
 @property(nonatomic, copy) NSString* subtitleText;
+
+// The margin between the subtitle and the specificContentView. In cases where
+// subtitle is blank, views may want to set this to zero to avoid adding extra
+// spacing.
+@property(nonatomic, assign) CGFloat subtitleBottomMargin;
 
 // The disclaimer that shows at the bottom of the view, above the action items.
 // The disclaimer does not move on scroll.

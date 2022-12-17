@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 #include "components/password_manager/core/browser/sync_username_test_base.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/sync/driver/test_sync_service.h"
+#include "components/sync/test/test_sync_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::ASCIIToUTF16;
@@ -139,6 +139,7 @@ TEST_F(PasswordSyncUtilTest, SyncDisabled) {
   sync_service.SetTransportState(syncer::SyncService::TransportState::DISABLED);
   sync_service.SetHasSyncConsent(false);
   EXPECT_FALSE(IsPasswordSyncEnabled(&sync_service));
+  EXPECT_FALSE(IsPasswordSyncActive(&sync_service));
   EXPECT_EQ(absl::nullopt, GetSyncingAccount(&sync_service));
 }
 
@@ -150,6 +151,7 @@ TEST_F(PasswordSyncUtilTest, SyncEnabledButNotForPasswords) {
       ->SetSelectedTypes(/*sync_everything=*/false,
                          {syncer::UserSelectableType::kHistory});
   EXPECT_FALSE(IsPasswordSyncEnabled(&sync_service));
+  EXPECT_FALSE(IsPasswordSyncActive(&sync_service));
   EXPECT_EQ(absl::nullopt, GetSyncingAccount(&sync_service));
 }
 
@@ -161,8 +163,34 @@ TEST_F(PasswordSyncUtilTest, SyncEnabled) {
   active_info.email = "test@email.com";
   sync_service.SetAccountInfo(active_info);
   EXPECT_TRUE(IsPasswordSyncEnabled(&sync_service));
+  EXPECT_TRUE(IsPasswordSyncActive(&sync_service));
   EXPECT_TRUE(GetSyncingAccount(&sync_service).has_value());
   EXPECT_EQ(active_info.email, GetSyncingAccount(&sync_service).value());
+}
+
+TEST_F(PasswordSyncUtilTest, SyncPausedDueToWebSignout) {
+  syncer::TestSyncService sync_service;
+  sync_service.SetHasSyncConsent(true);
+  sync_service.SetPersistentAuthErrorWithWebSignout();
+  ASSERT_EQ(sync_service.GetTransportState(),
+            syncer::SyncService::TransportState::PAUSED);
+  EXPECT_TRUE(IsPasswordSyncEnabled(&sync_service));
+  EXPECT_FALSE(IsPasswordSyncActive(&sync_service));
+  EXPECT_NE(absl::nullopt, GetSyncingAccount(&sync_service));
+}
+
+TEST_F(PasswordSyncUtilTest, SyncWithPersistentAuthErrorOtherThanWebSignout) {
+  syncer::TestSyncService sync_service;
+  sync_service.SetHasSyncConsent(true);
+  sync_service.SetPersistentAuthErrorOtherThanWebSignout();
+  ASSERT_NE(sync_service.GetTransportState(),
+            syncer::SyncService::TransportState::PAUSED);
+  EXPECT_TRUE(IsPasswordSyncEnabled(&sync_service));
+  // As opposed to web signout, other persistent auth errors don't cause Sync to
+  // become inactive.
+  // TODO(crbug.com/1156584): Unify the behavior for all persistent auth errors.
+  EXPECT_TRUE(IsPasswordSyncActive(&sync_service));
+  EXPECT_NE(absl::nullopt, GetSyncingAccount(&sync_service));
 }
 
 }  // namespace sync_util

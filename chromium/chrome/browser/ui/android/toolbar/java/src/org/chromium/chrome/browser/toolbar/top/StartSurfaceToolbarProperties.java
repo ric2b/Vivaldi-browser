@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,8 +36,6 @@ class StartSurfaceToolbarProperties {
     public static final PropertyModel.WritableBooleanPropertyKey IDENTITY_DISC_IS_VISIBLE =
             new PropertyModel.WritableBooleanPropertyKey();
     public static final PropertyModel.WritableBooleanPropertyKey IS_VISIBLE =
-            new PropertyModel.WritableBooleanPropertyKey();
-    public static final PropertyModel.WritableBooleanPropertyKey LOGO_IS_VISIBLE =
             new PropertyModel.WritableBooleanPropertyKey();
     public static final PropertyModel.WritableBooleanPropertyKey IS_INCOGNITO =
             new PropertyModel.WritableBooleanPropertyKey();
@@ -77,7 +75,7 @@ class StartSurfaceToolbarProperties {
             new PropertyModel.WritableFloatPropertyKey();
 
     public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {NEW_TAB_CLICK_HANDLER,
-            IS_NEW_TAB_ENABLED, IS_VISIBLE, LOGO_IS_VISIBLE, IS_INCOGNITO, INCOGNITO_STATE_PROVIDER,
+            IS_NEW_TAB_ENABLED, IS_VISIBLE, IS_INCOGNITO, INCOGNITO_STATE_PROVIDER,
             ACCESSIBILITY_ENABLED, MENU_IS_VISIBLE, NEW_TAB_VIEW_IS_VISIBLE,
             NEW_TAB_VIEW_TEXT_IS_VISIBLE, BUTTONS_CLICKABLE, GRID_TAB_SWITCHER_ENABLED,
             IDENTITY_DISC_AT_START, INCOGNITO_SWITCHER_VISIBLE, IDENTITY_DISC_IS_VISIBLE,

@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -13,6 +13,7 @@ static_library("renderer") {
   sources = [
     "autofill_assistant_agent.cc",
     "autofill_assistant_agent.h",
+    "autofill_assistant_model_executor_result.h",
   ]
 
   deps = [
@@ -32,6 +33,8 @@ static_library("renderer") {
 
   if (build_with_tflite_lib) {
     sources += [
+      "autofill_assistant_agent_debug_utils.cc",
+      "autofill_assistant_agent_debug_utils.h",
       "autofill_assistant_model_executor.cc",
       "autofill_assistant_model_executor.h",
     ]
@@ -50,7 +53,10 @@ source_set("unit_tests") {
   sources = []
 
   if (build_with_tflite_lib) {
-    sources += [ "autofill_assistant_model_executor_unittest.cc" ]
+    sources += [
+      "autofill_assistant_agent_debug_utils_unittest.cc",
+      "autofill_assistant_model_executor_unittest.cc",
+    ]
   }
 
   deps = [

@@ -1,22 +1,22 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_control.h"
 
 #import <CoreGraphics/CoreGraphics.h>
-#include <algorithm>
+#import <algorithm>
 
-#include "base/check_op.h"
-#include "base/cxx17_backports.h"
+#import "base/check_op.h"
+#import "base/cxx17_backports.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h"
 #import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
@@ -237,11 +237,9 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
 - (instancetype)init {
   CGRect frame = CGRectMake(0, 0, kOverallWidth, kOverallHeight);
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     frame = CGRectMake(0, 0, vOverallWidth, vOverallHeight);
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   if (self = [super initWithFrame:frame]) {
     // Default to the regular tab page as the selected page.
@@ -308,7 +306,6 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
   // `_selectedPage` should be kept in sync with the slider position.
   TabGridPage previousSelectedPage = _selectedPage;
 
-  // Vivaldi
   // The position ranges from 0.0 to 1.0 for four tabs
   if (IsVivaldiRunning()) {
     if (sliderPosition < 0.25)
@@ -324,8 +321,7 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
       [self updateSelectedPageAccessibility];
 
     return;
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   if (sliderPosition < 0.25)
     _selectedPage = TabGridPageIncognitoTabs;
@@ -456,11 +452,9 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
 
 - (CGSize)intrinsicContentSize {
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     return  CGSizeMake(vOverallWidth, vOverallHeight);
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   return CGSizeMake(kOverallWidth, kOverallHeight);
 }
@@ -518,13 +512,11 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
   self.sliderRange =
       CGRectGetMidX(self.remoteGuide.layoutFrame) - self.sliderOrigin;
 
-  // Vivaldi
   // Set slider range from recently closed tab layout guide
   if (IsVivaldiRunning()) {
     self.sliderRange =
         CGRectGetMidX(self.closedGuide.layoutFrame) - self.sliderOrigin;
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   // Set the slider position using the new slider origin and range.
   self.sliderPosition = _sliderPosition;
@@ -594,6 +586,12 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
   UIImageView* iconNotSelected;
   switch (tab) {
     case TabGridPageRegularTabs: {
+
+      if (IsVivaldiRunning()) {
+        iconSelected = ImageViewForImageNamed(kImagePageControlRegularSelected);
+        iconNotSelected =
+            ImageViewForImageNamed(kImagePageControlRegularNotSelected);
+      } else {
       if (UseSymbols()) {
         iconSelected = ImageViewForSymbolNamed(kSquareNumberSymbol);
         iconNotSelected = ImageViewForSymbolNamed(kSquareNumberSymbol);
@@ -602,11 +600,20 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
         iconNotSelected =
             ImageViewForImageNamed(kImagePageControlRegularNotSelected);
       }
+      } // End Vivaldi
+
       self.regularSelectedIcon = iconSelected;
       self.regularNotSelectedIcon = iconNotSelected;
       break;
     }
     case TabGridPageIncognitoTabs: {
+
+      if (IsVivaldiRunning()) {
+        iconSelected =
+            ImageViewForImageNamed(kImagePageControlIncognitoSelected);
+        iconNotSelected =
+            ImageViewForImageNamed(kImagePageControlIncognitoNotSelected);
+      } else {
       if (UseSymbols()) {
         iconSelected = ImageViewForSymbolNamed(kIncognitoSymbol);
         iconNotSelected = ImageViewForSymbolNamed(kIncognitoSymbol);
@@ -616,14 +623,21 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
         iconNotSelected =
             ImageViewForImageNamed(kImagePageControlIncognitoNotSelected);
       }
+      } // End Vivaldi
+
       self.incognitoSelectedIcon = iconSelected;
       self.incognitoNotSelectedIcon = iconNotSelected;
       break;
     }
     case TabGridPageRemoteTabs: {
-      iconSelected = ImageViewForImageNamed(kImagePageControlRemoteSelected);
-      iconNotSelected =
-          ImageViewForImageNamed(kImagePageControlRemoteNotSelected);
+      if (UseSymbols()) {
+        iconSelected = ImageViewForSymbolNamed(kRecentTabsSymbol);
+        iconNotSelected = ImageViewForSymbolNamed(kRecentTabsSymbol);
+      } else {
+        iconSelected = ImageViewForImageNamed(kImagePageControlRemoteSelected);
+        iconNotSelected =
+            ImageViewForImageNamed(kImagePageControlRemoteNotSelected);
+      }
       self.remoteSelectedIcon = iconSelected;
       self.remoteNotSelectedIcon = iconNotSelected;
       break;
@@ -642,11 +656,9 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
 
   iconNotSelected.tintColor = UIColorFromRGB(kSliderColor);
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     iconNotSelected.tintColor = [UIColor colorNamed: vNotSelectedColor];
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   iconSelected.tintColor = UIColorFromRGB(kSelectedColor);
 
@@ -665,13 +677,11 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
   backgroundView.center =
       CGPointMake(kOverallWidth / 2.0, kOverallHeight / 2.0);
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     backgroundView.layer.cornerRadius = vCornerRadius;
     backgroundView.center =
       CGPointMake(vOverallWidth / 2.0, vOverallHeight / 2.0);
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   // Set up the layout guides for the segments.
   UILayoutGuide* incognitoGuide = [[UILayoutGuide alloc] init];
@@ -695,12 +705,10 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
   for (UILayoutGuide* guide in @[ incognitoGuide, regularGuide, remoteGuide ]) {
     [guide.heightAnchor constraintEqualToConstant:kOverallHeight].active = YES;
 
-    // Vivaldi
     if (IsVivaldiRunning()) {
       [guide.heightAnchor
           constraintEqualToConstant:vOverallHeight].active = YES;
-    }
-    // End Vivaldi
+    } // End Vivaldi
 
     [guide.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active =
         YES;
@@ -711,7 +719,6 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
   // control, and the incognito and remote guides are on the leading and
   // trailing sides of it.
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
 
     [closedGuide.heightAnchor
@@ -739,40 +746,40 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
           constraintEqualToAnchor:remoteGuide.trailingAnchor],
     ]];
   } else {
-    [NSLayoutConstraint activateConstraints:@[
-      [incognitoGuide.widthAnchor constraintEqualToConstant:kSegmentWidth],
-      [regularGuide.widthAnchor
-          constraintEqualToConstant:kSegmentWidth + 2 * kSeparatorWidth],
-      [remoteGuide.widthAnchor constraintEqualToConstant:kSegmentWidth],
-      [regularGuide.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-      [incognitoGuide.trailingAnchor
-          constraintEqualToAnchor:regularGuide.leadingAnchor],
-      [remoteGuide.leadingAnchor
-          constraintEqualToAnchor:regularGuide.trailingAnchor]
-    ]];
-  }
-  // End Vivaldi
+  [NSLayoutConstraint activateConstraints:@[
+    [incognitoGuide.widthAnchor constraintEqualToConstant:kSegmentWidth],
+    [regularGuide.widthAnchor
+        constraintEqualToConstant:kSegmentWidth + 2 * kSeparatorWidth],
+    [remoteGuide.widthAnchor constraintEqualToConstant:kSegmentWidth],
+    [regularGuide.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+    [incognitoGuide.trailingAnchor
+        constraintEqualToAnchor:regularGuide.leadingAnchor],
+    [remoteGuide.leadingAnchor
+        constraintEqualToAnchor:regularGuide.trailingAnchor]
+  ]];
+  } // End Vivaldi
 
   // Add the slider above the section images and labels.
   CGRect sliderFrame = CGRectMake(0, 0, kSliderWidth, kSliderHeight);
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     sliderFrame = CGRectMake(0, 4, vSliderWidth, vSliderHeight);
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   UIView* slider = [[UIView alloc] initWithFrame:sliderFrame];
   slider.layer.cornerRadius = kCornerRadius;
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     slider.layer.cornerRadius = vSliderCornerRadius;
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   slider.layer.masksToBounds = YES;
+
+  if (IsVivaldiRunning()) {
+    slider.backgroundColor = vSliderColor;
+  } else {
   slider.backgroundColor = UIColorFromRGB(kSliderColor);
+  } // End Vivaldi
 
   [self addSubview:slider];
   self.sliderView = slider;
@@ -782,11 +789,9 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
   UIView* selectedImageView = [[UIView alloc]
       initWithFrame:(CGRectMake(0, 0, kOverallWidth, kOverallHeight))];
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     selectedImageView.frame = CGRectMake(0, 0, vOverallWidth, vOverallHeight);
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   selectedImageView.userInteractionEnabled = NO;
   [self.sliderView addSubview:selectedImageView];
@@ -809,11 +814,9 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
 
   CGRect segmentRect = CGRectMake(0, 0, kSegmentWidth, kOverallHeight);
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     segmentRect = CGRectMake(0, 0, vSegmentWidth, vOverallHeight);
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   UIView* incognitoHoverView = [[UIView alloc] initWithFrame:segmentRect];
   UIView* regularHoverView = [[UIView alloc] initWithFrame:segmentRect];
@@ -872,13 +875,12 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
   UIColor* color =
       selected ? UIColorFromRGB(kSelectedColor) : UIColorFromRGB(kSliderColor);
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     color =
         selected ? UIColorFromRGB(kSelectedColor) :
                    [UIColor colorNamed: vNotSelectedColor];
-  }
-  // End Vivaldi
+    size = kLabelSize;
+  } // End Vivaldi
 
   UILabel* label = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, size, size)];
   label.backgroundColor = UIColor.clearColor;
@@ -953,17 +955,14 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
       [UIPointerShape shapeWithRoundedRect:interaction.view.frame
                               cornerRadius:kCornerRadius];
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     shape = [UIPointerShape shapeWithRoundedRect:interaction.view.frame
                               cornerRadius:vCornerRadius];
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   return [UIPointerStyle styleWithEffect:effect shape:shape];
 }
 
-// Vivaldi
 #pragma mark - Vivaldi
 
 - (void)setupRecentlyClosedTabAccessibilityElement {
@@ -1016,11 +1015,9 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
   self =
       [super initWithFrame:CGRectMake(0, 0, kBackgroundWidth, kSegmentHeight)];
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     self.frame = CGRectMake(0, 0, vBackgroundWidth, vSegmentHeight);
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   if (self) {
     self.backgroundColor = UIColor.clearColor;
@@ -1030,18 +1027,15 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
 
 - (CGSize)intrinsicContentsSize {
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     return CGSizeMake(vBackgroundWidth, vSegmentHeight);
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   return CGSizeMake(kBackgroundWidth, kSegmentHeight);
 }
 
 - (void)drawRect:(CGRect)rect {
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     CGContextRef drawing = UIGraphicsGetCurrentContext();
     UIColor* backgroundColor = [UIColor colorNamed:vBackgroundColor];
@@ -1055,8 +1049,7 @@ UIImageView* ImageViewForSymbolNamed(NSString* symbolName) {
     fillRect.origin.x += vSegmentWidth;
     CGContextFillRect(drawing, fillRect);
     return;
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   CGContextRef drawing = UIGraphicsGetCurrentContext();
   UIColor* backgroundColor = UIColorFromRGB(kBackgroundColor, kBackgroundAlpha);

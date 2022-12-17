@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -103,9 +103,6 @@ AX_BASE_EXPORT bool IsGridLike(const ax::mojom::Role role);
 
 // Returns true if the provided role belongs to a heading.
 AX_BASE_EXPORT bool IsHeading(const ax::mojom::Role role);
-
-// Returns true if the provided role belongs to a heading or a table header.
-AX_BASE_EXPORT bool IsHeadingOrTableHeader(const ax::mojom::Role role);
 
 // Returns true if the provided role belongs to an iframe.
 AX_BASE_EXPORT bool IsIframe(const ax::mojom::Role role);

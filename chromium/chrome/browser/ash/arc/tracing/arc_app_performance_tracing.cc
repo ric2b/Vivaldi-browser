@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -434,16 +434,9 @@ void ArcAppPerformanceTracing::MaybeStartTracing() {
   const syncer::SyncUserSettings* sync_user_settings =
       sync_service->GetUserSettings();
 
-  bool apps_sync_enabled = false;
-  if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
-    apps_sync_enabled = sync_service->CanSyncFeatureStart() &&
-                        sync_user_settings->GetSelectedOsTypes().Has(
-                            syncer::UserSelectableOsType::kOsApps);
-  } else {
-    apps_sync_enabled = sync_service->CanSyncFeatureStart() &&
-                        sync_user_settings->GetSelectedTypes().Has(
-                            syncer::UserSelectableType::kApps);
-  }
+  const bool apps_sync_enabled = sync_service->CanSyncFeatureStart() &&
+                                 sync_user_settings->GetSelectedOsTypes().Has(
+                                     syncer::UserSelectableOsType::kOsApps);
 
   if (!apps_sync_enabled) {
     VLOG(1) << "Cannot trace: App Sync is not enabled.";

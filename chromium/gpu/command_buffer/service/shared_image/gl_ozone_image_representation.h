@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -81,7 +81,7 @@ class GLTextureOzoneImageRepresentation : public GLTextureImageRepresentation {
   ~GLTextureOzoneImageRepresentation() override;
 
   // GLTextureImageRepresentation implementation.
-  gles2::Texture* GetTexture() override;
+  gles2::Texture* GetTexture(int plane_index) override;
   bool BeginAccess(GLenum mode) override;
   void EndAccess() override;
 
@@ -120,8 +120,8 @@ class GLTexturePassthroughOzoneImageRepresentation
   ~GLTexturePassthroughOzoneImageRepresentation() override;
 
   // GLTexturePassthroughImageRepresentation implementation.
-  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough()
-      override;
+  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough(
+      int plane_index) override;
   bool BeginAccess(GLenum mode) override;
   void EndAccess() override;
 

@@ -1,33 +1,34 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_coordinator.h"
 
-#include <vector>
+#import <vector>
 
-#include "base/bind.h"
-#include "base/ios/ios_util.h"
-#include "base/mac/foundation_util.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
-#include "base/time/time.h"
-#include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/autofill/core/common/autofill_features.h"
-#include "components/feature_engagement/public/event_constants.h"
-#include "components/feature_engagement/public/feature_constants.h"
-#include "components/feature_engagement/public/tracker.h"
-#include "components/keyed_service/core/service_access_type.h"
-#include "components/password_manager/core/browser/manage_passwords_referrer.h"
-#include "components/password_manager/core/browser/password_ui_utils.h"
+#import "base/bind.h"
+#import "base/ios/ios_util.h"
+#import "base/mac/foundation_util.h"
+#import "base/metrics/histogram_macros.h"
+#import "base/strings/utf_string_conversions.h"
+#import "base/threading/sequenced_task_runner_handle.h"
+#import "base/time/time.h"
+#import "components/autofill/core/browser/personal_data_manager.h"
+#import "components/autofill/core/common/autofill_features.h"
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/feature_constants.h"
+#import "components/feature_engagement/public/tracker.h"
+#import "components/keyed_service/core/service_access_type.h"
+#import "components/password_manager/core/browser/manage_passwords_referrer.h"
+#import "components/password_manager/core/browser/password_ui_utils.h"
+#import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/ios/password_generation_provider.h"
-#include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/feature_engagement/tracker_factory.h"
+#import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/main/browser.h"
-#include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_mediator.h"
@@ -46,20 +47,17 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/security_alert_commands.h"
-#import "ios/chrome/browser/ui/main/layout_guide_scene_agent.h"
-#import "ios/chrome/browser/ui/main/scene_state.h"
-#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
+#import "ios/chrome/browser/ui/main/layout_guide_util.h"
 #import "ios/chrome/browser/ui/util/layout_guide_names.h"
-#include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
-#include "ios/chrome/grit/ios_chromium_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/web_state.h"
-#include "ui/base/device_form_factor.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ui/base/device_form_factor.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -80,7 +78,6 @@ const CGFloat kIPHVerticalOffset = -5;
 
 // Returns BubbleViewType param from kBubbleRichIPH feature flag.
 BubbleViewType BubbleTypeFromFeature() {
-  DCHECK(base::FeatureList::IsEnabled(kBubbleRichIPH));
   std::string bubbleTypeName = base::GetFieldTrialParamValueByFeature(
       kBubbleRichIPH, kBubbleRichIPHParameterName);
   if (bubbleTypeName == kBubbleRichIPHParameterExplicitDismissal) {
@@ -148,9 +145,6 @@ BubbleViewType BubbleTypeFromFeature() {
 @property(nonatomic, readonly)
     feature_engagement::Tracker* featureEngagementTracker;
 
-// The layout guide center to use to coordinate views.
-@property(nonatomic, readonly) LayoutGuideCenter* layoutGuideCenter;
-
 @end
 
 @implementation FormInputAccessoryCoordinator
@@ -181,8 +175,9 @@ BubbleViewType BubbleTypeFromFeature() {
   self.formInputAccessoryViewController =
       [[FormInputAccessoryViewController alloc]
           initWithManualFillAccessoryViewControllerDelegate:self];
-  self.formInputAccessoryViewController.layoutGuideCenter =
-      self.layoutGuideCenter;
+  LayoutGuideCenter* layoutGuideCenter =
+      LayoutGuideCenterForBrowser(self.browser);
+  self.formInputAccessoryViewController.layoutGuideCenter = layoutGuideCenter;
 
   DCHECK(self.browserState);
   auto passwordStore = IOSChromePasswordStoreFactory::GetForBrowserState(
@@ -206,11 +201,13 @@ BubbleViewType BubbleTypeFromFeature() {
       reauthenticationModule:self.reauthenticationModule];
   self.formInputAccessoryViewController.formSuggestionClient =
       self.formInputAccessoryMediator;
+  self.formInputAccessoryViewController.brandingViewControllerDelegate =
+      self.formInputAccessoryMediator;
   [self.formInputAccessoryViewController.view
       addGestureRecognizer:self.formInputAccessoryTapRecognizer];
 
-  self.layoutGuide = [self.layoutGuideCenter
-      makeLayoutGuideNamed:kAutofillFirstSuggestionGuide];
+  self.layoutGuide =
+      [layoutGuideCenter makeLayoutGuideNamed:kAutofillFirstSuggestionGuide];
   [self.baseViewController.view addLayoutGuide:self.layoutGuide];
 }
 
@@ -239,16 +236,7 @@ BubbleViewType BubbleTypeFromFeature() {
   [self.formInputAccessoryViewController reset];
 
   self.formInputViewController = nil;
-  if (@available(iOS 16, *)) {
-    @try {
-      [GetFirstResponder() reloadInputViews];
-    } @catch (NSException* e) {
-      // TODO(crbug.com/1334530) iOS 16 beta 5 is still throwing an
-      // NSInternalInconsistencyException.
-    }
-  } else {
-    [GetFirstResponder() reloadInputViews];
-  }
+  [GetFirstResponder() reloadInputViews];
 }
 
 #pragma mark - Presenting Children
@@ -350,7 +338,6 @@ BubbleViewType BubbleTypeFromFeature() {
 }
 
 - (void)showPasswordSuggestionIPHIfNeeded {
-  DCHECK(base::FeatureList::IsEnabled(kBubbleRichIPH));
   if (self.bubblePresenter) {
     // Already showing a bubble.
     return;
@@ -360,6 +347,7 @@ BubbleViewType BubbleTypeFromFeature() {
   base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::BindOnce(^{
         [weakSelf tryPresentingBubble];
+        [weakSelf notifyPasswordSuggestionsShown];
       }),
       kPasswordSuggestionHighlightDelay);
 }
@@ -544,28 +532,23 @@ BubbleViewType BubbleTypeFromFeature() {
   return tracker;
 }
 
-- (LayoutGuideCenter*)layoutGuideCenter {
-  SceneState* sceneState =
-      SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
-  LayoutGuideSceneAgent* layoutGuideSceneAgent =
-      [LayoutGuideSceneAgent agentFromScene:sceneState];
-  if (self.browserState && self.browserState->IsOffTheRecord()) {
-    return layoutGuideSceneAgent.incognitoLayoutGuideCenter;
-  } else {
-    return layoutGuideSceneAgent.layoutGuideCenter;
-  }
-}
-
 // Shows confirmation dialog before opening Other passwords.
 - (void)showConfirmationDialogToUseOtherPassword {
   WebStateList* webStateList = self.browser->GetWebStateList();
   const GURL& URL = webStateList->GetActiveWebState()->GetLastCommittedURL();
   std::u16string origin = base::ASCIIToUTF16(
       password_manager::GetShownOrigin(url::Origin::Create(URL)));
-  NSString* title =
-      l10n_util::GetNSString(IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_TITLE);
+
+  bool useUpdatedStrings = base::FeatureList::IsEnabled(
+      password_manager::features::kIOSPasswordUISplit);
+
+  NSString* title = l10n_util::GetNSString(
+      useUpdatedStrings ? IDS_IOS_MANUAL_FALLBACK_SELECT_PASSWORD_DIALOG_TITLE
+                        : IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_TITLE);
   NSString* message = l10n_util::GetNSStringF(
-      IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_DESCRIPTION, origin);
+      useUpdatedStrings ? IDS_IOS_MANUAL_FALLBACK_SELECT_PASSWORD_DIALOG_MESSAGE
+                        : IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_DESCRIPTION,
+      origin);
 
   self.alertCoordinator = [[AlertCoordinator alloc]
       initWithBaseViewController:self.baseViewController

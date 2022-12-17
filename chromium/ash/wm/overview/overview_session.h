@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -290,11 +290,10 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // |active_window_before_overview_|.
   bool IsWindowActiveWindowBeforeOverview(aura::Window* window) const;
 
-  // Shows the desks templates grids on all displays. If `was_zero_state` is
-  // true then we will expand the desks bars. Focuses the item which matches
+  // Shows the desks templates grids on all displays. This will expand desk bars
+  // if they are not already expanded. Focuses the item which matches
   // `item_to_focus` on the display associated with `root_window`.
-  void ShowDesksTemplatesGrids(bool was_zero_state,
-                               const base::GUID& item_to_focus,
+  void ShowDesksTemplatesGrids(const base::GUID& item_to_focus,
                                const std::u16string& saved_desk_name,
                                aura::Window* const root_window);
 
@@ -348,6 +347,10 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   OverviewDelegate* delegate() { return delegate_; }
 
+  void set_ignore_activations(bool ignore_activations) {
+    ignore_activations_ = ignore_activations;
+  }
+
   bool is_shutting_down() const { return is_shutting_down_; }
   void set_is_shutting_down(bool is_shutting_down) {
     is_shutting_down_ = is_shutting_down;
@@ -368,6 +371,10 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   OverviewWindowDragController* window_drag_controller() {
     return window_drag_controller_.get();
+  }
+
+  ScopedOverviewHideWindows* hide_windows_for_saved_desks_grid() {
+    return hide_windows_for_saved_desks_grid_.get();
   }
 
   OverviewHighlightController* highlight_controller() {
@@ -479,6 +486,11 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   std::unique_ptr<OverviewWindowDragController> window_drag_controller_;
 
   std::unique_ptr<ScopedOverviewHideWindows> hide_overview_windows_;
+
+  // Scoped windows to hide for saved desks grid. For now, this contains the
+  // overview item window and its corresponding real window to make sure such
+  // windows are not shown via other events for saved desks grid.
+  std::unique_ptr<ScopedOverviewHideWindows> hide_windows_for_saved_desks_grid_;
 
   std::unique_ptr<OverviewHighlightController> highlight_controller_;
 

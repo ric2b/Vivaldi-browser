@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@ struct WebPreferences;
 
 namespace android_webview {
 
+class AwContentsOriginMatcher;
 class AwRenderViewHostExt;
 
 class AwSettings : public content::WebContentsObserver {
@@ -35,11 +36,17 @@ class AwSettings : public content::WebContentsObserver {
     PREFER_MEDIA_QUERY_OVER_FORCE_DARK = 2,
   };
 
-  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.android_webview.settings
   enum RequestedWithHeaderMode {
     NO_HEADER = 0,
     APP_PACKAGE_NAME = 1,
     CONSTANT_WEBVIEW = 2,
+  };
+
+  enum MixedContentMode {
+    MIXED_CONTENT_ALWAYS_ALLOW = 0,
+    MIXED_CONTENT_NEVER_ALLOW = 1,
+    MIXED_CONTENT_COMPATIBILITY_MODE = 2,
+    COUNT,
   };
 
   static AwSettings* FromWebContents(content::WebContents* web_contents);
@@ -54,6 +61,7 @@ class AwSettings : public content::WebContentsObserver {
 
   bool GetJavaScriptCanOpenWindowsAutomatically();
   bool GetAllowThirdPartyCookies();
+  MixedContentMode GetMixedContentMode();
 
   // Called from Java. Methods with "Locked" suffix require that the settings
   // access lock is held during their execution.
@@ -93,6 +101,9 @@ class AwSettings : public content::WebContentsObserver {
   void UpdateAllowFileAccessLocked(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+  void UpdateMixedContentModeLocked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   void PopulateWebPreferences(blink::web_pref::WebPreferences* web_prefs);
   bool GetAllowFileAccess();
@@ -110,6 +121,12 @@ class AwSettings : public content::WebContentsObserver {
     return enterprise_authentication_app_link_policy_enabled_;
   }
 
+  base::android::ScopedJavaLocalRef<jobjectArray>
+  UpdateXRequestedWithAllowListOriginMatcher(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobjectArray>& rules);
+  scoped_refptr<AwContentsOriginMatcher> xrw_allowlist_matcher();
+
  private:
   AwRenderViewHostExt* GetAwRenderViewHostExt();
   void UpdateEverything();
@@ -124,6 +141,9 @@ class AwSettings : public content::WebContentsObserver {
   bool allow_third_party_cookies_;
   bool allow_file_access_;
   bool enterprise_authentication_app_link_policy_enabled_;
+  MixedContentMode mixed_content_mode_;
+
+  scoped_refptr<AwContentsOriginMatcher> xrw_allowlist_matcher_;
 
   JavaObjectWeakGlobalRef aw_settings_;
 };

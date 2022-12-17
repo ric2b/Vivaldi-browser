@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,8 @@ class ContextMenuNotificationObserver {
   explicit ContextMenuNotificationObserver(
       int command_to_execute,
       int event_flags = 0,
-      base::OnceClosure callback = base::NullCallback());
+      base::OnceCallback<void(RenderViewContextMenu*)> callback =
+          base::NullCallbackAs<void(RenderViewContextMenu*)>());
 
   ContextMenuNotificationObserver(const ContextMenuNotificationObserver&) =
       delete;
@@ -36,7 +37,7 @@ class ContextMenuNotificationObserver {
 
   int command_to_execute_;
   int event_flags_;
-  base::OnceClosure callback_;
+  base::OnceCallback<void(RenderViewContextMenu*)> callback_;
 };
 
 class ContextMenuWaiter {

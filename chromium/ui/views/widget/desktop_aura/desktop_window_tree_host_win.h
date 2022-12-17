@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
@@ -110,6 +111,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void SetSize(const gfx::Size& size) override;
   void StackAbove(aura::Window* window) override;
   void StackAtTop() override;
+  bool IsStackedAbove(aura::Window* window) override;
   void CenterWindow(const gfx::Size& size) override;
   void GetWindowPlacement(gfx::Rect* bounds,
                           ui::WindowShowState* show_state) const override;
@@ -144,7 +146,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
   void FrameTypeChanged() override;
-  void SetFullscreen(bool fullscreen) override;
+  void SetFullscreen(bool fullscreen, int64_t target_display_id) override;
   bool IsFullscreen() const override;
   void SetOpacity(float opacity) override;
   void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
@@ -293,7 +295,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   raw_ptr<DesktopNativeWidgetAura> desktop_native_widget_aura_;
 
   // Owned by DesktopNativeWidgetAura.
-  raw_ptr<DesktopDragDropClientWin> drag_drop_client_;
+  base::WeakPtr<DesktopDragDropClientWin> drag_drop_client_;
 
   // When certain windows are being shown, we augment the window size
   // temporarily for animation. The following two members contain the top left

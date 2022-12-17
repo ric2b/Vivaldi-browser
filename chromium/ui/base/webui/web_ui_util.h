@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,14 +65,6 @@ void ParsePathAndScale(const GURL& url, std::string* path, float* scale_factor);
 // Helper function to set some default values (e.g., font family, size,
 // language, and text direction) into the given dictionary. Requires an
 // application locale (i.e. g_browser_process->GetApplicationLocale()).
-COMPONENT_EXPORT(UI_BASE)
-void SetLoadTimeDataDefaults(const std::string& app_locale,
-                             base::Value* localized_strings);
-// Helper function to set some default values (e.g., font family, size,
-// language, and text direction) into the given dictionary. Requires an
-// application locale (i.e. g_browser_process->GetApplicationLocale()).
-// TODO(https://crbug.com/1187023): Remove base::Value version above
-// once all callers have been converted to use this method.
 COMPONENT_EXPORT(UI_BASE)
 void SetLoadTimeDataDefaults(const std::string& app_locale,
                              base::Value::Dict* localized_strings);

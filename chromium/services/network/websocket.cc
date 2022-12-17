@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -506,7 +506,7 @@ void WebSocket::SendMessage(mojom::WebSocketMessageType type,
   const bool do_not_fragment =
       reassemble_short_messages_ && data_length <= kSmallMessageThreshhold;
 
-  pending_send_data_frames_.push(DataFrame(type, data_length, do_not_fragment));
+  pending_send_data_frames_.emplace(type, data_length, do_not_fragment);
 
   // Safe if ReadAndSendFromDataPipe() deletes |this| because this method is
   // only called from mojo.
@@ -697,8 +697,8 @@ void WebSocket::SendDataFrame(base::span<const char>* payload) {
   DCHECK_GT(payload->size(), 0u);
   MojoResult begin_result;
   void* buffer;
-  uint32_t writable_size = 0;
-  while (payload->size() > 0 &&
+  uint32_t writable_size;
+  while ((writable_size = static_cast<uint32_t>(payload->size())) > 0 &&
          (begin_result = writable_->BeginWriteData(
               &buffer, &writable_size, MOJO_WRITE_DATA_FLAG_NONE)) ==
              MOJO_RESULT_OK) {

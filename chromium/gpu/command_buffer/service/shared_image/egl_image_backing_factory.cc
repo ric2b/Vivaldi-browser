@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,7 @@ EGLImageBackingFactory::~EGLImageBackingFactory() = default;
 
 std::unique_ptr<SharedImageBacking> EGLImageBackingFactory::CreateSharedImage(
     const Mailbox& mailbox,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     SurfaceHandle surface_handle,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
@@ -52,7 +52,7 @@ std::unique_ptr<SharedImageBacking> EGLImageBackingFactory::CreateSharedImage(
 
 std::unique_ptr<SharedImageBacking> EGLImageBackingFactory::CreateSharedImage(
     const Mailbox& mailbox,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
@@ -80,13 +80,13 @@ std::unique_ptr<SharedImageBacking> EGLImageBackingFactory::CreateSharedImage(
 }
 
 bool EGLImageBackingFactory::IsSupported(uint32_t usage,
-                                         viz::ResourceFormat format,
+                                         viz::SharedImageFormat format,
+                                         const gfx::Size& size,
                                          bool thread_safe,
                                          gfx::GpuMemoryBufferType gmb_type,
                                          GrContextType gr_context_type,
-                                         bool* allow_legacy_mailbox,
-                                         bool is_pixel_used) {
-  if (is_pixel_used && gr_context_type != GrContextType::kGL) {
+                                         base::span<const uint8_t> pixel_data) {
+  if (!pixel_data.empty() && gr_context_type != GrContextType::kGL) {
     return false;
   }
 
@@ -97,7 +97,8 @@ bool EGLImageBackingFactory::IsSupported(uint32_t usage,
 
   // Doesn't support contexts other than GL for OOPR Canvas
   if (gr_context_type != GrContextType::kGL &&
-      ((usage & SHARED_IMAGE_USAGE_DISPLAY) ||
+      ((usage & SHARED_IMAGE_USAGE_DISPLAY_READ) ||
+       (usage & SHARED_IMAGE_USAGE_DISPLAY_WRITE) ||
        (usage & SHARED_IMAGE_USAGE_RASTER))) {
     return false;
   }
@@ -107,13 +108,14 @@ bool EGLImageBackingFactory::IsSupported(uint32_t usage,
   if (usage & kInvalidUsage) {
     return false;
   }
-  *allow_legacy_mailbox = false;
-  return true;
+
+  return CanCreateSharedImage(size, pixel_data, GetFormatInfo(format),
+                              GL_TEXTURE_2D);
 }
 
 std::unique_ptr<SharedImageBacking> EGLImageBackingFactory::MakeEglImageBacking(
     const Mailbox& mailbox,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
@@ -121,12 +123,6 @@ std::unique_ptr<SharedImageBacking> EGLImageBackingFactory::MakeEglImageBacking(
     uint32_t usage,
     base::span<const uint8_t> pixel_data) {
   DCHECK(!(usage & SHARED_IMAGE_USAGE_SCANOUT));
-
-  const FormatInfo& format_info = format_info_[format];
-  GLenum target = GL_TEXTURE_2D;
-  if (!CanCreateSharedImage(size, pixel_data, format_info, target)) {
-    return nullptr;
-  }
 
   // Calculate SharedImage size in bytes.
   size_t estimated_size;
@@ -137,7 +133,8 @@ std::unique_ptr<SharedImageBacking> EGLImageBackingFactory::MakeEglImageBacking(
 
   return std::make_unique<EGLImageBacking>(
       mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-      estimated_size, format_info, workarounds_, use_passthrough_, pixel_data);
+      estimated_size, GetFormatInfo(format), workarounds_, use_passthrough_,
+      pixel_data);
 }
 
 }  // namespace gpu

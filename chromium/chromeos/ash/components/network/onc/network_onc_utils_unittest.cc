@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,11 +30,11 @@ TEST(ONCUtils, ProxySettingsToProxyConfig) {
   base::Value additional_tests =
       test_utils::ReadTestJson("proxy_config_from_onc.json");
   ASSERT_TRUE(additional_tests.is_list());
-  for (const base::Value& value : additional_tests.GetListDeprecated())
+  for (const base::Value& value : additional_tests.GetList())
     list_of_tests.Append(value.Clone());
 
   int index = 0;
-  for (const base::Value& test_case : list_of_tests.GetListDeprecated()) {
+  for (const base::Value& test_case : list_of_tests.GetList()) {
     SCOPED_TRACE("Test case #" + base::NumberToString(index++));
 
     ASSERT_TRUE(test_case.is_dict());
@@ -46,10 +46,9 @@ TEST(ONCUtils, ProxySettingsToProxyConfig) {
         test_case.FindKey("ONC_ProxySettings");
     ASSERT_TRUE(onc_proxy_settings);
 
-    base::Value actual_proxy_config =
+    base::Value::Dict actual_proxy_config =
         ConvertOncProxySettingsToProxyConfig(*onc_proxy_settings);
-    EXPECT_TRUE(
-        test_utils::Equals(expected_proxy_config, &actual_proxy_config));
+    EXPECT_EQ(*expected_proxy_config, actual_proxy_config);
   }
 }
 
@@ -58,7 +57,7 @@ TEST(ONCUtils, ProxyConfigToOncProxySettings) {
   ASSERT_TRUE(list_of_tests.is_list());
 
   int index = 0;
-  for (const base::Value& test_case : list_of_tests.GetListDeprecated()) {
+  for (const base::Value& test_case : list_of_tests.GetList()) {
     SCOPED_TRACE("Test case #" + base::NumberToString(index++));
 
     const base::Value* shill_proxy_config = test_case.FindKey("ProxyConfig");
@@ -78,8 +77,8 @@ TEST(ONCPasswordVariable, PasswordAvailable) {
   const auto wifi_onc = test_utils::ReadTestDictionaryValue(
       "wifi_eap_ttls_with_password_variable.onc");
 
-  EXPECT_TRUE(HasUserPasswordSubsitutionVariable(kNetworkConfigurationSignature,
-                                                 &wifi_onc));
+  EXPECT_TRUE(HasUserPasswordSubsitutionVariable(
+      chromeos::onc::kNetworkConfigurationSignature, &wifi_onc));
 }
 
 TEST(ONCPasswordVariable, PasswordNotAvailable) {
@@ -87,7 +86,7 @@ TEST(ONCPasswordVariable, PasswordNotAvailable) {
       test_utils::ReadTestDictionaryValue("wifi_eap_ttls.onc");
 
   EXPECT_FALSE(HasUserPasswordSubsitutionVariable(
-      kNetworkConfigurationSignature, &wifi_onc));
+      chromeos::onc::kNetworkConfigurationSignature, &wifi_onc));
 }
 
 TEST(ONCPasswordVariable, PasswordHarcdoded) {
@@ -95,7 +94,7 @@ TEST(ONCPasswordVariable, PasswordHarcdoded) {
       "wifi_eap_ttls_with_hardcoded_password.onc");
 
   EXPECT_FALSE(HasUserPasswordSubsitutionVariable(
-      kNetworkConfigurationSignature, &wifi_onc));
+      chromeos::onc::kNetworkConfigurationSignature, &wifi_onc));
 }
 
 TEST(ONCPasswordVariable, MultipleNetworksPasswordAvailable) {

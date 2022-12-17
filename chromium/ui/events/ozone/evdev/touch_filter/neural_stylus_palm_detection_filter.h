@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -81,6 +81,8 @@ class COMPONENT_EXPORT(EVDEV) NeuralStylusPalmDetectionFilter
   std::vector<float> ExtractFeatures(int tracking_id) const;
   void AppendFeatures(const PalmFilterStroke& stroke,
                       std::vector<float>* features) const;
+  void AppendResampledFeatures(const PalmFilterStroke& stroke,
+                               std::vector<float>* features) const;
   void AppendFeaturesAsNeighbor(const PalmFilterStroke& stroke,
                                 float distance,
                                 std::vector<float>* features) const;

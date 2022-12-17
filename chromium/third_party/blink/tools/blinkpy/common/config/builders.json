@@ -1,5 +1,5 @@
 {
-    "Fuchsia x64": {
+    "fuchsia-x64-rel": {
         "main": "chromium.linux",
         "port_name": "fuchsia",
         "specifiers": ["Fuchsia", "Release"]
@@ -54,33 +54,32 @@
         "port_name": "win-win11",
         "specifiers": ["Win11", "Release"]
     },
-    "fuchsia_x64": {
+    "fuchsia-x64-rel": {
         "main": "tryserver.chromium.linux",
         "port_name": "fuchsia",
         "specifiers": ["Fuchsia", "Release"],
         "steps": {
             "blink_web_tests (with patch)": {},
-	    "blink_wpt_tests (with patch)": {}
+            "blink_wpt_tests (with patch)": {}
         },
         "is_try_builder": true
     },
-    "linux-wpt-identity-fyi-rel": {
-        "main": "tryserver.chromium.linux",
+    "linux-wpt-fyi-rel": {
+        "main": "chromium.fyi",
         "port_name": "linux-trusty",
         "specifiers": ["Trusty", "Release"],
-        "is_try_builder": true,
         "steps": {
-            "wpt_tests_suite (with patch)": {}
+            "wpt_tests_suite (experimental)": {}
         }
     },
-    "linux-wpt-input-fyi-rel": {
-        "main": "tryserver.chromium.linux",
+    "linux-wpt-content-shell-fyi-rel": {
+        "main": "chromium.fyi",
         "port_name": "linux-trusty",
         "specifiers": ["Trusty", "Release"],
-        "is_try_builder": true,
         "steps": {
-            "wpt_tests_suite (with patch, experimental)": {}
-        }
+            "wpt_tests_suite (experimental)": {}
+        },
+        "is_try_builder": true
     },
     "linux-blink-rel": {
         "main": "tryserver.blink",
@@ -247,17 +246,19 @@
         "is_try_builder": true,
         "is_cq_builder":true
     },
+    "android-webview-pie-x86-wpt-fyi-rel": {
+        "port_name": "android-android-pie",
+        "main": "chromium.android.fyi",
+        "specifiers": ["Android", "android_webview", "Release"]
+    },
     "android-weblayer-pie-x86-wpt-fyi-rel": {
         "port_name": "android-android-pie",
         "main": "chromium.android.fyi",
-        "specifiers": [
-            "Android", "android_weblayer", "Release"
-        ]
+        "specifiers": ["Android", "android_weblayer", "Release"]
     },
     "android-chrome-pie-x86-wpt-fyi-rel": {
         "port_name": "android-android-pie",
         "main": "chromium.android.fyi",
-        "specifiers": [
-            "Android", "chrome_android", "Release"]
+        "specifiers": ["Android", "chrome_android", "Release"]
     }
 }

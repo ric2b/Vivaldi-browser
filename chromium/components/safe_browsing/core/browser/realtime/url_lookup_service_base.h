@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,9 @@ class SharedURLLoaderFactory;
 }  // namespace network
 
 namespace safe_browsing {
+
+// Suffix for metrics when there is no URL lookup service.
+constexpr char kNoRealTimeURLLookupService[] = ".None";
 
 using RTLookupRequestCallback =
     base::OnceCallback<void(std::unique_ptr<RTLookupRequest>, std::string)>;
@@ -116,12 +119,20 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
   // check is enabled.
   virtual bool CanCheckSafeBrowsingDb() const = 0;
 
+  // Returns whether safe browsing high confidence allowlist can be checked when
+  // real time URL check is enabled. This should only be used when
+  // CanCheckSafeBrowsingDb() returns true.
+  virtual bool CanCheckSafeBrowsingHighConfidenceAllowlist() const = 0;
+
   // Checks if a sample ping can be sent to Safe Browsing.
   virtual bool CanSendRTSampleRequest() const = 0;
 
   // KeyedService:
   // Called before the actual deletion of the object.
   void Shutdown() override;
+
+  // Suffix for logging metrics.
+  virtual std::string GetMetricSuffix() const = 0;
 
  protected:
   // Fragments, usernames and passwords are removed, because fragments are only
@@ -130,12 +141,12 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
   static GURL SanitizeURL(const GURL& url);
 
   // Called to send the request to the Safe Browsing backend over the network.
-  // It also attached an auth header if |access_token_string| has a value.
+  // It also attached an auth header if |access_token_string| is non-empty.
   void SendRequest(
       const GURL& url,
       const GURL& last_committed_url,
       bool is_mainframe,
-      absl::optional<std::string> access_token_string,
+      const std::string& access_token_string,
       RTLookupRequestCallback request_callback,
       RTLookupResponseCallback response_callback,
       scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
@@ -183,9 +194,6 @@ class RealTimeUrlLookupServiceBase : public KeyedService {
 
   // Gets a dm token string to be set in a request proto.
   virtual absl::optional<std::string> GetDMTokenString() const = 0;
-
-  // Suffix for logging metrics.
-  virtual std::string GetMetricSuffix() const = 0;
 
   // Returns whether real time URL requests should include credentials.
   virtual bool ShouldIncludeCredentials() const = 0;

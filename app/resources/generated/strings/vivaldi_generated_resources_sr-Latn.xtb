@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Odštampaj...</translation>
 <translation id="1181037720776840403">Ukloni</translation>
 <translation id="1187722533808055681">Aktiviranja iz stanja mirovanja</translation>
-<translation id="119944043368869598">Obriši sve</translation>
 <translation id="1221825588892235038">Samo izabrani sadržaj</translation>
 <translation id="1234736487471201993">Kreiraj QR kôd za ovu sliku</translation>
 <translation id="1244303850296295656">Greška proširenja</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Izaberi &amp;sve</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> tpi</translation>
 <translation id="1936931585862840749">Navedite broj primeraka za štampanje (1–<ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Ukloni sve</translation>
 <translation id="1994173015038366702">URL sajta</translation>
 <translation id="2019718679933488176">&amp;Otvori zvučni zapis u novoj kartici</translation>
 <translation id="2050339315714019657">Uspravno</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Nalepi kao čist tekst</translation>
 <translation id="2249605167705922988">npr. 1–5, 8, 11–13</translation>
 <translation id="225240747099314620">Dozvoli identifikatore za zaštićeni sadržaj (možda je potrebno ponovno pokretanje računara)</translation>
-<translation id="2277255602909579701">Svi kolačići i podaci o sajtovima</translation>
 <translation id="2280486287150724112">Desna margina</translation>
 <translation id="2282146716419988068">GPU proces</translation>
 <translation id="2301382460326681002">Osnovni direktorijum proširenja je nevažeći.</translation>
@@ -93,8 +90,10 @@
 <translation id="2550212893339833758">Zamenjena memorija</translation>
 <translation id="2553440850688409052">Sakrij ovu dodatnu komponentu</translation>
 <translation id="26224892172169984">Ne dozvoli nijednom sajtu da rukuje protokolima</translation>
+<translation id="2653275834716714682">Zamena teksta</translation>
 <translation id="2662876636500006917">Chrome veb-prodavnica</translation>
 <translation id="2678063897982469759">Ponovo omogući</translation>
+<translation id="2678100101831051676">Nije moguće prebaciti.</translation>
 <translation id="2721037002783622288">&amp;Traži sliku pomoću <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Kreiraj prečicu...</translation>
 <translation id="2785873697295365461">Deskriptori datoteka</translation>
@@ -122,7 +121,6 @@
 <translation id="3084548735795614657">Otpusti za instalaciju</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">USER regulatori</translation>
-<translation id="3127156390846601284">Ovo će izbrisati sve podatke sačuvane na uređaju za sve prikazane sajtove. Da li želite da nastavite?</translation>
 <translation id="3129173833825111527">Leva margina</translation>
 <translation id="3144647712221361880">Otvori vezu kao</translation>
 <translation id="3222066309010235055">Pretprikazivanje: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +143,6 @@
 <translation id="3387614642886316601">Koristi poboljšanu proveru pravopisa</translation>
 <translation id="3390013585654699824">Detalji o aplikaciji</translation>
 <translation id="3393582007140394275">Nije moguće prebacivanje ekrana.</translation>
-<translation id="3432227430032737297">Ukloni sve prikazano</translation>
 <translation id="345693547134384690">Otvori &amp;sliku u novoj kartici</translation>
 <translation id="3494769164076977169">Pitaj kada sajt pokuša da automatski preuzima datoteke posle prve datoteke (preporučeno)</translation>
 <translation id="3505030558724226696">Opozovi pristup uređaju</translation>
@@ -204,10 +201,10 @@
 <translation id="4409697491990005945">Margine</translation>
 <translation id="4423376891418188461">Vrati podešavanja</translation>
 <translation id="4478664379124702289">Sačuvaj &amp;vezu kao...</translation>
-<translation id="4579581181964204535">Nije moguće prebacivanje za <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Idi na <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacije i proširenja može da menja samo menadžer (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Proširenje je promenilo stranicu koja se prikazuje kada otvorite novu karticu.</translation>
+<translation id="4616405296204756919">Sačuvane lozinke možete koristiti na bilo kom uređaju. One se čuvaju u <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Otvori video zapis u novoj kartici</translation>
 <translation id="4677772697204437347">GPU memorija</translation>
 <translation id="4681930562518940301">Otvori originalnu &amp;sliku u novoj kartici</translation>
@@ -241,10 +238,12 @@
 <translation id="5233231016133573565">ID procesa</translation>
 <translation id="5233736638227740678">&amp;Nalepi</translation>
 <translation id="5256861893479663409">Na svim sajtovima</translation>
+<translation id="5260334392110301220">Pametni navodnici</translation>
 <translation id="5269977353971873915">Štampanje nije uspelo</translation>
 <translation id="5284445933715251131">Nastavi preuzimanje</translation>
 <translation id="52912272896845572">Datoteka privatnog ključa je nevažeća.</translation>
 <translation id="5301954838959518834">U redu, shvatam</translation>
+<translation id="5302932258331363306">Prikaži zamene</translation>
 <translation id="5317780077021120954">Sačuvaj</translation>
 <translation id="5334142896108694079">Keš skripte</translation>
 <translation id="5355926466126177564">Proširenje „<ph name="EXTENSION_NAME" />“ je promenilo stranicu koja se prikazuje kada pretražujete iz trake adrese.</translation>
@@ -277,7 +276,6 @@
 <translation id="5747809636523347288">Na&amp;lepi i idi na <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokumente koje šaljete na štampanje preko <ph name="APP_NAME" /> može da čita <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Sačuvaj &amp;zvučni zapis kao...</translation>
-<translation id="577624874850706961">Pretražite kolačiće</translation>
 <translation id="5780973441651030252">Prioritet procesa</translation>
 <translation id="5804241973901381774">Dozvole</translation>
 <translation id="5828633471261496623">Štampanje...</translation>
@@ -290,7 +288,6 @@
 <translation id="5965661248935608907">Kontroliše i koja stranica će se prikazati kada kliknete na dugme matične stranice ili pretražujete iz trake adrese.</translation>
 <translation id="5978277834170881274">&amp;Koristi osnovnu proveru pravopisa</translation>
 <translation id="5979421442488174909">&amp;Prevedi na <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Obriši podatke sajta</translation>
 <translation id="6042308850641462728">Više</translation>
 <translation id="6086846494333236931">Instalirao administrator</translation>
 <translation id="6101226222197207147">Nova aplikacija je dodata (<ph name="EXTENSION_NAME" />)</translation>
@@ -346,6 +343,7 @@
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="7070484045139057854">Ovo može da čita i menja podatke sajtova</translation>
 <translation id="708060913198414444">K&amp;opiraj adresu zvučnog zapisa</translation>
+<translation id="7121728544325372695">Pametne crtice</translation>
 <translation id="7175353351958621980">Učitano iz:</translation>
 <translation id="7186088072322679094">Zadrži na traci alata</translation>
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
@@ -404,7 +402,6 @@ Datoteka ključa: <ph name="KEY_FILE" />
 =1 {Preuzimanje je u toku} one {Preuzimanja su u toku} few {Preuzimanja su u toku} other {Preuzimanja su u toku}}</translation>
 <translation id="8230134520748321204">Sačuvati lozinku za <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080"><ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ne navodi ovo proširenje i možda je dodato bez vašeg znanja.</translation>
-<translation id="8339059274628563283">Lokalno sačuvani podaci sa sajta <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Ovo proširenje je preuzelo kontrolu nad podešavanjima proksija, što znači da može da menja, prekida ili špijunira sve što radite na mreži. Ako niste sigurni zašto je došlo do ove promene, verovatno vam nije potrebna.</translation>
 <translation id="8382913212082956454">Kopiraj adresu &amp;e-pošte</translation>
 <translation id="8413385045638830869">Prvo pitaj (preporučeno)</translation>
@@ -430,6 +427,7 @@ Datoteka ključa: <ph name="KEY_FILE" />
 <translation id="8808478386290700967">Veb-prodavnica</translation>
 <translation id="8823514049557262177">Kopiraj &amp;tekst veze</translation>
 <translation id="8823704566850948458">Predloži lozinku...</translation>
+<translation id="883062543841130884">Zamene</translation>
 <translation id="8859174528519900719">Podokvir: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Otvori vezu u novom &amp;prozoru</translation>
 <translation id="8915370057835397490">Učitavanje predloga</translation>

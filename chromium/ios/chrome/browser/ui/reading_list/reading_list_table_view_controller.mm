@@ -1,18 +1,18 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/reading_list/reading_list_table_view_controller.h"
 
-#include "base/check_op.h"
-#include "base/ios/ios_util.h"
-#include "base/mac/foundation_util.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "components/strings/grit/components_strings.h"
+#import "base/check_op.h"
+#import "base/ios/ios_util.h"
+#import "base/mac/foundation_util.h"
+#import "base/metrics/histogram_macros.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/app/tests_hook.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/main/browser.h"
@@ -34,10 +34,10 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -630,10 +630,25 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   [model addSectionWithIdentifier:sectionID];
   [model setHeader:[self headerForSectionIndex:sectionID]
       forSectionWithIdentifier:sectionID];
+  __weak __typeof(self) weakSelf = self;
   for (TableViewItem<ReadingListListItem>* item in items) {
     item.type = ItemTypeItem;
-    [self.dataSource fetchFaviconForItem:item];
     [model addItem:item toSectionWithIdentifier:sectionID];
+
+    // This function is currently reloading the model.
+    // It has been observed that the item just added is not fully available,
+    // the model containing the item but the item count of the section not
+    // being updated correctly.
+    // Updating the favicon can lead to synchronous update of the item if the
+    // icon is already available. To avoid causing a crash, update the trigger
+    // the favicon asynchronously.
+    // TODO(crbug.com/1368111): check the fix actually prevents crashing.
+    __weak __typeof(item) weakItem = item;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (weakSelf && weakItem) {
+        [weakSelf.dataSource fetchFaviconForItem:weakItem];
+      }
+    });
   }
 }
 

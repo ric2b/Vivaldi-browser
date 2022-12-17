@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2014 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2014 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Accessibility tab switcher -->
@@ -25,9 +27,6 @@
     <!-- Infobar dimensions -->
     <!-- Text size of descriptive controls on an infobar. -->
     <dimen name="infobar_descriptive_text_size">14sp</dimen>
-
-    <!-- Dimension applied to SyncErrorInfoBar icon. -->
-    <dimen name="sync_error_infobar_icon_size">48dp</dimen>
 
     <!-- Dimensions for compact translate infobar. -->
     <dimen name="infobar_translate_fade_edge_length">18dp</dimen>
@@ -142,6 +141,8 @@
     <dimen name="tab_modal_scrim_vertical_margin">16dp</dimen>
 
     <!-- Full Screen Dimensions -->
+    <dimen name="fullscreen_toast_elevation">@dimen/custom_tabs_elevation</dimen>
+
     <!-- Should match toolbar_height_no_shadow -->
     <dimen name="control_container_height">56dp</dimen>
     <dimen name="custom_tabs_control_container_height">56dp</dimen>
@@ -156,7 +157,6 @@
     <dimen name="find_in_page_popup_margin_end">62dp</dimen>
 
     <!-- NTP dimensions -->
-    <dimen name="tile_grid_layout_max_width">504dp</dimen>
     <dimen name="tile_grid_layout_top_margin">24dp</dimen>
     <dimen name="tile_grid_layout_top_margin_push_down_small">36dp</dimen>
     <dimen name="tile_grid_layout_top_margin_push_down_large">54dp</dimen>
@@ -176,11 +176,8 @@
     <dimen name="ntp_logo_margin_top">26dp</dimen>
     <dimen name="ntp_logo_margin_bottom">23dp</dimen>
     <dimen name="ntp_search_box_height">48dp</dimen>
+    <dimen name="ntp_search_box_bottom_margin">1dp</dimen>
     <dimen name="ntp_search_box_transition_length">16dp</dimen>
-    <dimen name="experimental_explore_sites_radius">8dp</dimen>
-    <dimen name="experimental_explore_sites_padding">8dp</dimen>
-    <dimen name="experimental_explore_sites_margin">16dp</dimen>
-    <dimen name="experimental_explore_sites_spacing">12dp</dimen>
     <dimen name="snippets_article_header_height">40dp</dimen>
     <dimen name="snippets_article_header_menu_size">56dp</dimen>
     <dimen name="content_suggestions_card_bottom_margin">12dp</dimen>
@@ -326,6 +323,9 @@
     <dimen name="sync_promo_view_padding">16dp</dimen>
     <!-- 18dp padding is added to each side of the remove button to limit the image width to 20dp (56dp - 2 * 18dp). -->
     <dimen name="history_item_remove_button_lateral_padding">18dp</dimen>
+    <!-- The List/Journeys toggle in the history UI is laid out at 40 dp (less than the typical minimum of 48dp)
+         but has its touch target expanded by 4dp on top and bottom to compensate. -->
+    <dimen name="history_toggle_added_touch_target_height">4dp</dimen>
 
     <!-- Context Menu Dimensions -->
     <!-- Prevent the chip from reaching the edges of the screen for long translations. -->

@@ -1,16 +1,23 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chromeos/ash/services/auth_factor_config/auth_factor_config.h"
 
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
+#include "components/prefs/pref_registry_simple.h"
 
 namespace ash::auth {
 
 AuthFactorConfig::AuthFactorConfig() = default;
 
 AuthFactorConfig::~AuthFactorConfig() = default;
+
+// static
+void AuthFactorConfig::RegisterPrefs(PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(ash::prefs::kRecoveryFactorBehavior, true);
+}
 
 void AuthFactorConfig::BindReceiver(
     mojo::PendingReceiver<mojom::AuthFactorConfig> receiver) {

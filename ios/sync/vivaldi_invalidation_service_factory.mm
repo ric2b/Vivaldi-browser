@@ -5,7 +5,7 @@
 #include "ios/sync/vivaldi_invalidation_service_factory.h"
 
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
-#include "ios/chrome/browser/application_context.h"
+#include "ios/chrome/browser/application_context/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/vivaldi_account/vivaldi_account_manager_factory.h"
 #include "prefs/vivaldi_pref_names.h"

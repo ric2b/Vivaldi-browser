@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,9 +7,12 @@
 #include "base/containers/flat_map.h"
 #include "base/memory/ref_counted.h"
 #include "base/notreached.h"
+#include "base/run_loop.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/commerce/core/commerce_feature_list.h"
+#include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/proto/merchant_trust.pb.h"
 #include "components/commerce/core/proto/price_tracking.pb.h"
 #include "components/optimization_guide/proto/common_types.pb.h"
@@ -45,13 +48,17 @@ void MockOptGuideDecider::CanApplyOptimization(
   bool url_matches = response_url_.has_value() && url == response_url_.value();
 
   if (!type_matches || !url_matches) {
-    std::move(callback).Run(OptimizationGuideDecision::kUnknown,
-                            OptimizationMetadata());
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), OptimizationGuideDecision::kUnknown,
+                       OptimizationMetadata()));
     return;
   }
 
-  std::move(callback).Run(optimization_decision_.value(),
-                          optimization_data_.value());
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), optimization_decision_.value(),
+                     optimization_data_.value()));
 }
 
 OptimizationGuideDecision MockOptGuideDecider::CanApplyOptimization(
@@ -80,8 +87,8 @@ void MockOptGuideDecider::CanApplyOptimizationOnDemand(
           decision_map;
       decision_map[OptimizationType::PRICE_TRACKING] =
           on_demand_shopping_responses_[url.spec()];
-
-      callback.Run(url, std::move(decision_map));
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(callback, url, std::move(decision_map)));
     }
   }
 }
@@ -182,11 +189,13 @@ void MockWebWrapper::RunJavascript(
     const std::u16string& script,
     base::OnceCallback<void(const base::Value)> callback) {
   if (!mock_js_result_) {
-    std::move(callback).Run(base::Value());
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), base::Value()));
     return;
   }
 
-  std::move(callback).Run(mock_js_result_->Clone());
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), mock_js_result_->Clone()));
 }
 
 void MockWebWrapper::SetMockJavaScriptResult(base::Value* result) {
@@ -200,12 +209,13 @@ ShoppingServiceTestBase::ShoppingServiceTestBase()
       identity_test_env_(std::make_unique<signin::IdentityTestEnvironment>()),
       test_url_loader_factory_(
           std::make_unique<network::TestURLLoaderFactory>()) {
+  RegisterPrefs(pref_service_->registry());
   shopping_service_ = std::make_unique<ShoppingService>(
       bookmark_model_.get(), opt_guide_.get(), pref_service_.get(),
       identity_test_env_->identity_manager(),
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
           test_url_loader_factory_.get()),
-      nullptr);
+      nullptr, nullptr);
 }
 
 ShoppingServiceTestBase::~ShoppingServiceTestBase() = default;
@@ -219,19 +229,23 @@ void ShoppingServiceTestBase::TearDown() {
 
 void ShoppingServiceTestBase::DidNavigatePrimaryMainFrame(WebWrapper* web) {
   shopping_service_->DidNavigatePrimaryMainFrame(web);
+  base::RunLoop().RunUntilIdle();
 }
 
 void ShoppingServiceTestBase::DidFinishLoad(WebWrapper* web) {
   shopping_service_->DidFinishLoad(web);
+  base::RunLoop().RunUntilIdle();
 }
 
 void ShoppingServiceTestBase::DidNavigateAway(WebWrapper* web,
                                               const GURL& url) {
   shopping_service_->DidNavigateAway(web, url);
+  base::RunLoop().RunUntilIdle();
 }
 
 void ShoppingServiceTestBase::WebWrapperDestroyed(WebWrapper* web) {
   shopping_service_->WebWrapperDestroyed(web);
+  base::RunLoop().RunUntilIdle();
 }
 
 void ShoppingServiceTestBase::MergeProductInfoData(

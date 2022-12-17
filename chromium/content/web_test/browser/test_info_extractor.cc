@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,66 +16,30 @@
 #include "build/build_config.h"
 #include "content/web_test/common/web_test_switches.h"
 #include "net/base/filename_util.h"
-#include "net/base/ip_address.h"
-#include "net/base/ip_endpoint.h"
-#include "net/base/url_util.h"
-
-#if BUILDFLAG(IS_FUCHSIA)
-#include <sys/socket.h>
-#include <unistd.h>
-#endif
 
 namespace content {
 
 namespace {
 
-#if BUILDFLAG(IS_FUCHSIA)
-// Fuchsia doesn't support stdin stream for packaged apps. This means that when
-// running content_shell on Fuchsia it's not possible to use stdin to pass list
-// of tests. To workaround this issue for web tests we redirect stdin stream
-// to a TCP socket connected to the web test runner. The runner uses
-// --stdin-redirect to specify address and port for stdin redirection.
-constexpr char kStdinRedirectSwitch[] = "stdin-redirect";
-
-void ConnectStdinSocket(const std::string& host_and_port) {
-  std::string host;
-  int port;
-  net::IPAddress address;
-  if (!net::ParseHostAndPort(host_and_port, &host, &port) ||
-      !address.AssignFromIPLiteral(host)) {
-    LOG(FATAL) << "Invalid stdin address: " << host_and_port;
-  }
-
-  sockaddr_storage sockaddr_storage;
-  sockaddr* addr = reinterpret_cast<sockaddr*>(&sockaddr_storage);
-  socklen_t addr_len = sizeof(sockaddr_storage);
-  net::IPEndPoint endpoint(address, port);
-  bool converted = endpoint.ToSockAddr(addr, &addr_len);
-  CHECK(converted);
-
-  int fd = socket(addr->sa_family, SOCK_STREAM, 0);
-  PCHECK(fd >= 0);
-  int result = connect(fd, addr, addr_len);
-  PCHECK(result == 0) << "Failed to connect to " << host_and_port;
-
-  result = dup2(fd, STDIN_FILENO);
-  PCHECK(result == STDIN_FILENO) << "Failed to dup socket to stdin";
-
-  PCHECK(close(fd) == 0);
-}
-
-#endif  // BUILDFLAG(IS_FUCHSIA)
-
 std::unique_ptr<TestInfo> GetTestInfoFromWebTestName(
     const std::string& test_name,
     bool protocol_mode) {
-  // A test name is formatted like file:///path/to/test'pixelhash
+  // A test name is formatted like file:///path/to/test['pixelhash['print]]
   std::string path_or_url = test_name;
   std::string::size_type separator_position = path_or_url.find('\'');
   std::string expected_pixel_hash;
+  bool wpt_print_mode = false;
   if (separator_position != std::string::npos) {
     expected_pixel_hash = path_or_url.substr(separator_position + 1);
     path_or_url.erase(separator_position);
+
+    separator_position = expected_pixel_hash.find('\'');
+
+    if (separator_position != std::string::npos) {
+      wpt_print_mode =
+          expected_pixel_hash.substr(separator_position + 1) == "print";
+      expected_pixel_hash.erase(separator_position);
+    }
   }
 
   GURL test_url(path_or_url);
@@ -110,7 +74,8 @@ std::unique_ptr<TestInfo> GetTestInfoFromWebTestName(
     base::GetCurrentDirectory(&current_working_directory);
 
   return std::make_unique<TestInfo>(test_url, expected_pixel_hash,
-                                    current_working_directory, protocol_mode);
+                                    current_working_directory, wpt_print_mode,
+                                    protocol_mode);
 }
 
 }  // namespace
@@ -118,21 +83,18 @@ std::unique_ptr<TestInfo> GetTestInfoFromWebTestName(
 TestInfo::TestInfo(const GURL& url,
                    const std::string& expected_pixel_hash,
                    const base::FilePath& current_working_directory,
+                   bool wpt_print_mode,
                    bool protocol_mode)
     : url(url),
       expected_pixel_hash(expected_pixel_hash),
       current_working_directory(current_working_directory),
+      wpt_print_mode(wpt_print_mode),
       protocol_mode(protocol_mode) {}
 
 TestInfo::~TestInfo() {}
 
 TestInfoExtractor::TestInfoExtractor(const base::CommandLine& cmd_line)
-    : cmdline_args_(cmd_line.GetArgs()), cmdline_position_(0) {
-#if BUILDFLAG(IS_FUCHSIA)
-  if (cmd_line.HasSwitch(kStdinRedirectSwitch))
-    ConnectStdinSocket(cmd_line.GetSwitchValueASCII(kStdinRedirectSwitch));
-#endif  // BUILDFLAG(IS_FUCHSIA)
-}
+    : cmdline_args_(cmd_line.GetArgs()), cmdline_position_(0) {}
 
 TestInfoExtractor::~TestInfoExtractor() {}
 

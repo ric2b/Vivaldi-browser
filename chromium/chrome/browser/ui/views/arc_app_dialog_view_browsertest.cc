@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -141,7 +141,6 @@ class ArcAppPermissionDialogViewBrowserTest
     auto* app_service_proxy =
         apps::AppServiceProxyFactory::GetForProfile(profile());
     ASSERT_TRUE(app_service_proxy);
-    app_service_proxy->FlushMojoCallsForTesting();
   }
 
   void set_accepted(bool accepted) { accepted_ = accepted; }

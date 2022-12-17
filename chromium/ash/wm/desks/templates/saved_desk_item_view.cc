@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/close_button.h"
 #include "ash/style/pill_button.h"
@@ -31,6 +32,7 @@
 #include "ash/wm/overview/overview_highlight_controller.h"
 #include "ash/wm/overview/overview_highlightable_view.h"
 #include "ash/wm/overview/overview_session.h"
+#include "ash/wm/overview/overview_utils.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -139,10 +141,8 @@ SavedDeskItemView::SavedDeskItemView(
       .SetUseDefaultFillLayout(true)
       .SetAccessibleName(template_name)
       .SetCallback(std::move(launch_template_callback))
-      .SetBackground(views::CreateRoundedRectBackground(
-          color_provider->GetBaseLayerColor(
-              AshColorProvider::BaseLayerType::kTransparent80),
-          kCornerRadius))
+      .SetBackground(views::CreateThemedRoundedRectBackground(
+          kColorAshShieldAndBase80, kCornerRadius))
       .SetBorder(std::make_unique<views::HighlightBorder>(
           kCornerRadius, views::HighlightBorder::Type::kHighlightBorder1,
           /*use_light_colors=*/false))
@@ -154,10 +154,8 @@ SavedDeskItemView::SavedDeskItemView(
               // TODO(richui): Consider splitting some of the children into
               // different files and/or classes.
               .AddChildren(
-                  views::Builder<views::BoxLayoutView>()
-                      .SetOrientation(
-                          views::BoxLayout::Orientation::kHorizontal)
-                      .SetBetweenChildSpacing(kManagedStatusIndicatorSpacing)
+                  views::Builder<views::FlexLayoutView>()
+                      .SetOrientation(views::LayoutOrientation::kHorizontal)
                       .SetPreferredSize(gfx::Size(
                           kTemplateNameAndTimePreferredWidth,
                           SavedDeskNameView::kSavedDeskNameViewHeight))
@@ -173,7 +171,23 @@ SavedDeskItemView::SavedDeskItemView(
                               // template is not modifiable.
                               .SetFocusBehavior(desk_template_->IsModifiable()
                                                     ? GetFocusBehavior()
-                                                    : FocusBehavior::NEVER),
+                                                    : FocusBehavior::NEVER)
+                              .SetProperty(
+                                  views::kFlexBehaviorKey,
+                                  views::FlexSpecification(
+                                      views::MinimumFlexSizeRule::kScaleToZero,
+                                      views::MaximumFlexSizeRule::kPreferred)),
+                          // This is a spacer between the name field and the
+                          // "managed-by-admin" admin icon.
+                          views::Builder<views::View>()
+                              .SetPreferredSize(
+                                  gfx::Size(kManagedStatusIndicatorSpacing, 1))
+                              .SetProperty(
+                                  views::kFlexBehaviorKey,
+                                  views::FlexSpecification(
+                                      views::MinimumFlexSizeRule::kPreferred,
+                                      views::MaximumFlexSizeRule::kPreferred))
+                              .SetVisible(is_admin_managed),
                           views::Builder<views::ImageView>()
                               .SetPreferredSize(
                                   gfx::Size(kManagedStatusIndicatorSize,
@@ -184,6 +198,11 @@ SavedDeskItemView::SavedDeskItemView(
                                   color_provider->GetContentLayerColor(
                                       AshColorProvider::ContentLayerType::
                                           kIconColorSecondary)))
+                              .SetProperty(
+                                  views::kFlexBehaviorKey,
+                                  views::FlexSpecification(
+                                      views::MinimumFlexSizeRule::kPreferred,
+                                      views::MaximumFlexSizeRule::kPreferred))
                               .SetVisible(is_admin_managed)),
                   views::Builder<views::Label>()
                       .CopyAddressTo(&time_view_)
@@ -223,7 +242,8 @@ SavedDeskItemView::SavedDeskItemView(
   launch_button_ = hover_container_->AddChildView(std::make_unique<PillButton>(
       base::BindRepeating(&SavedDeskItemView::OnGridItemPressed,
                           weak_ptr_factory_.GetWeakPtr()),
-      l10n_util::GetStringUTF16(button_text_id), PillButton::Type::kIconless,
+      l10n_util::GetStringUTF16(button_text_id),
+      PillButton::Type::kDefaultWithoutIcon,
       /*icon=*/nullptr));
 
   // Users cannot delete admin templates.
@@ -232,12 +252,10 @@ SavedDeskItemView::SavedDeskItemView(
         hover_container_->AddChildView(std::make_unique<CloseButton>(
             base::BindRepeating(&SavedDeskItemView::OnDeleteButtonPressed,
                                 weak_ptr_factory_.GetWeakPtr()),
-            CloseButton::Type::kMedium));
-    delete_button_->SetVectorIcon(kDeleteIcon);
+            CloseButton::Type::kMedium, &kDeleteIcon,
+            kColorAshControlBackgroundColorInactive));
     delete_button_->SetTooltipText(l10n_util::GetStringUTF16(
         IDS_ASH_DESKS_TEMPLATES_DELETE_DIALOG_CONFIRM_BUTTON));
-    delete_button_->SetBackgroundColor(color_provider->GetControlsLayerColor(
-        AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive));
   }
 
   // Use a border to create spacing between `name_view_`s background (set in
@@ -326,24 +344,18 @@ void SavedDeskItemView::MaybeRemoveNameNumber(
 
 void SavedDeskItemView::MaybeShowReplaceDialog(DeskTemplateType type,
                                                const base::GUID& uuid) {
-  // If the user has somehow exited the overview session don't attempt to
-  // show the dialogue in order to avoid the DCHECK crash.
-  // TODO(avynn): Find a more permanent fix for this.
-  if (!Shell::Get()->overview_controller()->InOverviewSession())
-    return;
-
   // Show replace template dialog. If accepted, replace old template and commit
   // name change.
   aura::Window* root_window = GetWidget()->GetNativeWindow()->GetRootWindow();
   saved_desk_util::GetSavedDeskDialogController()->ShowReplaceDialog(
       root_window, name_view_->GetText(), type,
       base::BindOnce(&SavedDeskItemView::ReplaceTemplate,
-                     weak_ptr_factory_.GetWeakPtr(), uuid.AsLowercaseString()),
+                     weak_ptr_factory_.GetWeakPtr(), uuid),
       base::BindOnce(&SavedDeskItemView::RevertTemplateName,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void SavedDeskItemView::ReplaceTemplate(const std::string& uuid) {
+void SavedDeskItemView::ReplaceTemplate(const base::GUID& uuid) {
   // Make sure we delete the template we are replacing first, so that we don't
   // get template name collisions. Passing `nullopt` as `record_for_type` since
   // we only record the delete operation when the user specifically deletes an
@@ -425,8 +437,6 @@ void SavedDeskItemView::Layout() {
 void SavedDeskItemView::OnThemeChanged() {
   views::View::OnThemeChanged();
   auto* color_provider = AshColorProvider::Get();
-  GetBackground()->SetNativeControlColor(color_provider->GetBaseLayerColor(
-      AshColorProvider::BaseLayerType::kTransparent80));
 
   time_view_->SetBackgroundColor(SK_ColorTRANSPARENT);
   time_view_->SetEnabledColor(color_provider->GetContentLayerColor(
@@ -519,8 +529,7 @@ void SavedDeskItemView::OnViewBlurred(views::View* observed_view) {
       if (SavedDeskLibraryView* library_view =
               overview_grid->GetSavedDeskLibraryView()) {
         for (auto* grid_view : library_view->grid_views()) {
-          grid_view->SortTemplateGridItems(
-              /*last_saved_template_uuid=*/base::GUID());
+          grid_view->SortEntries(/*order_first_uuid=*/{});
         }
       }
     }
@@ -548,17 +557,7 @@ void SavedDeskItemView::OnViewBlurred(views::View* observed_view) {
 }
 
 void SavedDeskItemView::OnFocus() {
-  auto* highlight_controller = Shell::Get()
-                                   ->overview_controller()
-                                   ->overview_session()
-                                   ->highlight_controller();
-  DCHECK(highlight_controller);
-  AccessibilityControllerImpl* accessibility_controller =
-      Shell::Get()->accessibility_controller();
-  if (highlight_controller->IsFocusHighlightVisible() ||
-      accessibility_controller->spoken_feedback().enabled()) {
-    highlight_controller->MoveHighlightToView(this);
-  }
+  UpdateOverviewHighlightForFocusAndSpokenFeedback(this);
   OnViewHighlighted();
   View::OnFocus();
 }
@@ -716,8 +715,8 @@ views::View* SavedDeskItemView::TargetForRect(views::View* root,
 }
 
 void SavedDeskItemView::OnDeleteTemplate() {
-  saved_desk_util::GetSavedDeskPresenter()->DeleteEntry(
-      desk_template_->uuid().AsLowercaseString(), desk_template_->type());
+  saved_desk_util::GetSavedDeskPresenter()->DeleteEntry(desk_template_->uuid(),
+                                                        desk_template_->type());
 }
 
 void SavedDeskItemView::OnDeleteButtonPressed() {
@@ -730,27 +729,17 @@ void SavedDeskItemView::OnDeleteButtonPressed() {
 }
 
 void SavedDeskItemView::OnGridItemPressed(const ui::Event& event) {
-  MaybeLaunchTemplate(event.IsShiftDown());
+  MaybeLaunchTemplate();
 }
 
-void SavedDeskItemView::MaybeLaunchTemplate(bool should_delay) {
+void SavedDeskItemView::MaybeLaunchTemplate() {
   if (is_template_name_being_modified_) {
     SavedDeskNameView::CommitChanges(GetWidget());
     return;
   }
 
-  // Make shift-click on the launch button launch apps with a delay. This allows
-  // developers to simulate delayed launch behaviors with ARC apps.
-  // TODO(crbug.com/1281685): Remove before feature launch.
-  base::TimeDelta delay;
-#if !defined(OFFICIAL_BUILD)
-  if (should_delay)
-    delay = base::Seconds(3);
-#endif
-
   saved_desk_util::GetSavedDeskPresenter()->LaunchSavedDesk(
-      desk_template_->Clone(), delay,
-      GetWidget()->GetNativeWindow()->GetRootWindow());
+      desk_template_->Clone(), GetWidget()->GetNativeWindow()->GetRootWindow());
 }
 
 void SavedDeskItemView::OnTemplateNameChanged(const std::u16string& new_name) {
@@ -773,7 +762,7 @@ views::View* SavedDeskItemView::GetView() {
 }
 
 void SavedDeskItemView::MaybeActivateHighlightedView() {
-  MaybeLaunchTemplate(/*should_delay=*/false);
+  MaybeLaunchTemplate();
 }
 
 void SavedDeskItemView::MaybeCloseHighlightedView(bool primary_action) {

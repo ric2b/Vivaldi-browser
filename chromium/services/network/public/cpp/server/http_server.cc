@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,9 +22,7 @@
 #include "services/network/public/cpp/server/http_server_response_info.h"
 #include "services/network/public/cpp/server/web_socket.h"
 
-namespace network {
-
-namespace server {
+namespace network::server {
 
 namespace {
 
@@ -532,6 +530,4 @@ bool HttpServer::HasClosedConnection(HttpConnection* connection) {
   return FindConnection(connection->id()) != connection;
 }
 
-}  // namespace server
-
-}  // namespace network
+}  // namespace network::server

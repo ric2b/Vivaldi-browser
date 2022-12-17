@@ -1,9 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.customtabs;
 
+import org.chromium.base.Callback;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.browser.ImeAdapter;
@@ -15,7 +16,7 @@ import org.chromium.content_public.browser.WebContents;
  * soft keyboard showing up.
  */
 public class PartialCustomTabTabObserver extends EmptyTabObserver {
-    private final Runnable mShowSoftInputCallback;
+    private final Callback<Runnable> mShowSoftInputCallback;
     private PartialCustomTabInputMethodWrapper mImmWrapper;
     private Tab mCurrentTab;
 
@@ -23,7 +24,7 @@ public class PartialCustomTabTabObserver extends EmptyTabObserver {
      * @param showSoftInputCallback Callback to invoke when {@link #onShowSoftInput}
      *        is triggered.
      */
-    public PartialCustomTabTabObserver(Runnable showSoftInputCallback) {
+    public PartialCustomTabTabObserver(Callback<Runnable> showSoftInputCallback) {
         mShowSoftInputCallback = showSoftInputCallback;
     }
 

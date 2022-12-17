@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Файлды өзгерту}other{Файлдарды өзгерту}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> ГГц</translation>
 <translation id="3291996639387199448">Кілт бағыты</translation>
+<translation id="3294437725009624529">Қонақ</translation>
 <translation id="3310640316857623290">DNS кідірісі рұқсат етілетін шектен әлдеқайда жоғары.</translation>
 <translation id="3328783797891415197">Тексерілуде</translation>
 <translation id="3340011300870565703">Оң құлақаспаптың батарея деңгейі: <ph name="BATTERY_PERCENTAGE" />%</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Микробағдарлама жаңартылып жатқанда, сыртқы құрылғыны ажыратпаңыз немесе компьютерді өшірмеңіз. Бұл терезені кішірейте аласыз. Бұл жаңарту бірнеше минутқа созылып, ол кезде сыртқы құрылғы жұмыс істемей қалуы мүмкін.</translation>
 <translation id="3486220673238053218">анықтама</translation>
 <translation id="3488065109653206955">Ішінара белсендірілген</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />Өнімділікті бақылау деректерін<ph name="END_LINK1" /> жіберу</translation>
 <translation id="3517001332549868749">Chrome OS жаңарту</translation>
 <translation id="3527036260304016759">Сәтсіз: белгісіз қате шықты</translation>
 <translation id="3532980081107202182">Шамамен <ph name="MIN_REMAINING" /> минут қалды.</translation>
@@ -467,6 +469,7 @@
 <translation id="5502931783115429516">Android іске қосылмаған.</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Күн батқанда, қараңғы режимге автоматты түрде ауысу</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Қайта сканерлеу</translation>
 <translation id="5583640892426849032">Backspace</translation>

@@ -1,18 +1,19 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/chrome/browser/infobars/infobar_badge_tab_helper.h"
+#import "ios/chrome/browser/infobars/infobar_badge_tab_helper.h"
 
-#include "ios/chrome/browser/infobars/infobar_badge_tab_helper_delegate.h"
-#include "ios/chrome/browser/infobars/infobar_manager_impl.h"
+#import "base/ranges/algorithm.h"
+#import "ios/chrome/browser/infobars/infobar_badge_tab_helper_delegate.h"
+#import "ios/chrome/browser/infobars/infobar_manager_impl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 namespace {
-// Returns |infobar|'s InfobarType.
+// Returns `infobar`'s InfobarType.
 InfobarType GetInfobarType(infobars::InfoBar* infobar) {
   return static_cast<InfoBarIOS*>(infobar)->infobar_type();
 }
@@ -101,8 +102,7 @@ void InfobarBadgeTabHelper::RegisterInfobar(infobars::InfoBar* infobar) {
 void InfobarBadgeTabHelper::UnregisterInfobar(infobars::InfoBar* infobar) {
   // Handling the case where an infobar is removed during prerendering.
   if (!delegate_) {
-    auto pos = std::find(infobars_added_when_prerendering_.begin(),
-                         infobars_added_when_prerendering_.end(), infobar);
+    auto pos = base::ranges::find(infobars_added_when_prerendering_, infobar);
     if (pos != infobars_added_when_prerendering_.end())
       infobars_added_when_prerendering_.erase(pos);
     return;

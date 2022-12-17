@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,6 +71,7 @@ class CONTENT_EXPORT VideoPictureInPictureWindowControllerImpl
   void UpdateLayerBounds() override;
   bool IsPlayerActive() override;
   WebContents* GetWebContents() override;
+  WebContents* GetChildWebContents() override;
   bool TogglePlayPause() override;
   void SkipAd() override;
   void NextTrack() override;
@@ -79,6 +80,7 @@ class CONTENT_EXPORT VideoPictureInPictureWindowControllerImpl
   void ToggleCamera() override;
   void HangUp() override;
   const gfx::Rect& GetSourceBounds() const override;
+  absl::optional<gfx::Rect> GetWindowBounds() override;
 
   // Called by the MediaSessionImpl when the MediaSessionInfo changes.
   void MediaSessionInfoChanged(

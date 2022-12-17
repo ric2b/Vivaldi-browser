@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,10 +6,10 @@
 
 #include <utility>
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/secure_channel/client_connection_parameters.h"
 #include "ash/services/secure_channel/public/mojom/secure_channel.mojom.h"
 #include "base/memory/ptr_util.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 
 namespace ash::secure_channel {
 

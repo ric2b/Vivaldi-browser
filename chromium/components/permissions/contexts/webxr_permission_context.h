@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,6 @@ class WebXrPermissionContext : public PermissionContextBase {
 
  private:
   // PermissionContextBase:
-  bool IsRestrictedToSecureOrigins() const override;
-
 #if BUILDFLAG(IS_ANDROID)
   // On Android we need to do some additional checking for OS level permissions,
   // which do not need to happen on Desktop. Note that NotifyPermissionSet is

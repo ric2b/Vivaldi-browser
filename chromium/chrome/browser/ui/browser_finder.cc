@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,7 @@
 
 #include <stdint.h>
 
-#include <algorithm>
-
+#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
@@ -18,6 +17,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "content/public/browser/navigation_controller.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
@@ -132,7 +132,7 @@ Browser* FindBrowserMatching(const T& begin,
     if (BrowserMatches(*i, profile, window_feature, match_types, display_id))
       return *i;
   }
-  return NULL;
+  return nullptr;
 }
 
 Browser* FindBrowserWithTabbedOrAnyType(
@@ -143,7 +143,7 @@ Browser* FindBrowserWithTabbedOrAnyType(
     int64_t display_id = display::kInvalidDisplayId) {
   BrowserList* browser_list_impl = BrowserList::GetInstance();
   if (!browser_list_impl)
-    return NULL;
+    return nullptr;
   uint32_t match_types = kMatchAny;
   if (match_tabbed)
     match_types |= kMatchNormal;
@@ -219,17 +219,17 @@ Browser* FindBrowserWithID(SessionID desired_id) {
     if (browser->session_id() == desired_id)
       return browser;
   }
-  return NULL;
+  return nullptr;
 }
 
 Browser* FindBrowserWithWindow(gfx::NativeWindow window) {
   if (!window)
-    return NULL;
+    return nullptr;
   for (auto* browser : *BrowserList::GetInstance()) {
     if (browser->window() && browser->window()->GetNativeWindow() == window)
       return browser;
   }
-  return NULL;
+  return nullptr;
 }
 
 Browser* FindBrowserWithActiveWindow() {
@@ -240,7 +240,7 @@ Browser* FindBrowserWithActiveWindow() {
 Browser* FindBrowserWithWebContents(const WebContents* web_contents) {
   DCHECK(web_contents);
   auto& all_tabs = AllTabContentses();
-  auto it = std::find(all_tabs.begin(), all_tabs.end(), web_contents);
+  auto it = base::ranges::find(all_tabs, web_contents);
 
   return (it == all_tabs.end()) ? nullptr : it.browser();
 }
@@ -251,6 +251,15 @@ Browser* FindBrowserWithGroup(tab_groups::TabGroupId group, Profile* profile) {
         browser->tab_strip_model() &&
         browser->tab_strip_model()->group_model() &&
         browser->tab_strip_model()->group_model()->ContainsTabGroup(group)) {
+      return browser;
+    }
+  }
+  return nullptr;
+}
+
+Browser* FindBrowserWithUiElementContext(ui::ElementContext context) {
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (browser->window()->GetElementContext() == context) {
       return browser;
     }
   }
@@ -270,7 +279,7 @@ Browser* FindLastActive() {
   BrowserList* browser_list_impl = BrowserList::GetInstance();
   if (browser_list_impl)
     return browser_list_impl->GetLastActive();
-  return NULL;
+  return nullptr;
 }
 
 size_t GetTotalBrowserCount() {

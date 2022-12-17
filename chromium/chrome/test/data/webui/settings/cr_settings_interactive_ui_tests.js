@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,9 +8,8 @@
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_interactive_ui_test.js']);
 
 GEN('#include "build/build_config.h"');
+GEN('#include "chrome/common/chrome_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
-
-/* eslint-disable no-var */
 
 /** Test fixture for shared Polymer 3 elements. */
 var CrSettingsInteractiveUITest = class extends PolymerInteractiveUITest {
@@ -115,3 +114,26 @@ var CrSettingsTextareaInteractiveTest =
 TEST_F('CrSettingsTextareaInteractiveTest', 'All', function() {
   mocha.run();
 });
+
+var CrSettingsReviewNotificationPermissionsInteractiveUITest =
+    class extends CrSettingsInteractiveUITest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/review_notification_permissions_interactive_ui_test.js';
+  }
+
+  /** @override */
+  get featureList() {
+    return {
+      enabled: [
+        'features::kSafetyCheckNotificationPermissions',
+      ],
+    };
+  }
+};
+
+TEST_F(
+    'CrSettingsReviewNotificationPermissionsInteractiveUITest', 'All',
+    function() {
+      mocha.run();
+    });

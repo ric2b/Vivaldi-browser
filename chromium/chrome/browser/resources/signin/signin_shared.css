@@ -1,12 +1,17 @@
-/* Copyright 2022 The Chromium Authors. All rights reserved.
+/* Copyright 2022 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
 /* #css_wrapper_metadata_start
  * #type=style
- * #import=chrome://resources/cr_elements/shared_vars_css.m.js
+ * #import=chrome://resources/cr_elements/cr_shared_vars.css.js
  * #import=./signin_vars.css.js
  * #css_wrapper_metadata_end */
+
+:host {
+  --scrollbar-background: var(--google-grey-100);
+  --scrollbar-width: 4px;
+}
 
 a {
   color: var(--cr-link-color);
@@ -28,13 +33,25 @@ a {
 }
 
 .action-container {
+  column-gap: 8px;
   display: flex;
   justify-content: flex-end;
   padding: var(--action-container-padding);
 }
 
-cr-button + cr-button {
-  margin-inline-start: 8px;
+.custom-scrollbar::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+}
+
+/* Track */
+.custom-scrollbar::-webkit-scrollbar-track {
+  border-radius: var(--scrollbar-width);
+}
+
+/* Handle */
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-background);
+  border-radius: var(--scrollbar-width);
 }
 
 <if expr="is_macosx or is_linux or is_chromeos">
@@ -42,9 +59,10 @@ cr-button + cr-button {
   flex-flow: row-reverse;
   justify-content: flex-start;
 }
-
-cr-button + cr-button {
-  margin-inline-end: 8px;
-  margin-inline-start: 0;
-}
 </if>
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    --scrollbar-background: var(--google-grey-800);
+  }
+}

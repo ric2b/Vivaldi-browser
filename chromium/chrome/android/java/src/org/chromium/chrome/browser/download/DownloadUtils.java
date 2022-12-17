@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,6 +70,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.Toast;
+import org.chromium.url.GURL;
 
 import java.io.File;
 
@@ -496,6 +497,15 @@ public class DownloadUtils {
         // Mapping generic MIME type to android openable type based on URL and file extension.
         String newMimeType = MimeUtils.remapGenericMimeType(mimeType, originalUrl, filePath);
         Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_NEW_DOWNLOAD_TAB)) {
+            DownloadMessageUiController messageUiController =
+                    DownloadManagerService.getDownloadManagerService().getMessageUiController(null);
+            if (messageUiController != null
+                    && messageUiController.isDownloadInterstitialItem(
+                            new GURL(originalUrl), downloadGuid)) {
+                return;
+            }
+        }
         boolean canOpen = DownloadUtils.openFile(filePath, newMimeType, downloadGuid, otrProfileID,
                 originalUrl, referer, source,
                 activity == null ? ContextUtils.getApplicationContext() : activity);

@@ -1,13 +1,12 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/fast_checkout/fast_checkout_external_action_delegate.h"
 
-#include "chrome/browser/fast_checkout/fast_checkout_util.h"
-#include "chrome/browser/ui/fast_checkout/fast_checkout_controller_impl.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill_assistant/browser/public/external_action_util.h"
 #include "components/autofill_assistant/browser/public/fast_checkout/proto/actions.pb.h"
 
 namespace {
@@ -24,6 +23,7 @@ FastCheckoutExternalActionDelegate::~FastCheckoutExternalActionDelegate() =
 
 void FastCheckoutExternalActionDelegate::OnActionRequested(
     const autofill_assistant::external::Action& action,
+    bool is_interrupt,
     base::OnceCallback<void(DomUpdateCallback)> start_dom_checks_callback,
     base::OnceCallback<void(const autofill_assistant::external::Result&)>
         end_action_callback) {
@@ -56,9 +56,10 @@ void FastCheckoutExternalActionDelegate::OnActionRequested(
 void FastCheckoutExternalActionDelegate::SetOptionsSelected(
     const autofill::AutofillProfile& selected_profile,
     const autofill::CreditCard& selected_credit_card) {
-  selected_profile_proto_ = fast_checkout::CreateProfileProto(selected_profile);
+  selected_profile_proto_ =
+      autofill_assistant::CreateProfileProto(selected_profile);
   selected_credit_card_proto_ =
-      fast_checkout::CreateCreditCardProto(selected_credit_card);
+      autofill_assistant::CreateCreditCardProto(selected_credit_card);
 
   if (wait_for_user_selection_action_callback_)
     EndWaitForUserSelectionAction();

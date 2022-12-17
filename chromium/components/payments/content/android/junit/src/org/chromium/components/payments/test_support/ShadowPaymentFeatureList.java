@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,7 @@ public class ShadowPaymentFeatureList {
         ShadowPaymentFeatureList.setFeatureEnabled(
                 PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION, true);
         ShadowPaymentFeatureList.setFeatureEnabled(
-                PaymentFeatureList.IDENTITY_IN_CAN_MAKE_PAYMENT_EVENT_FEATURE, true);
+                PaymentFeatureList.CLEAR_IDENTITY_IN_CAN_MAKE_PAYMENT_EVENT, false);
     }
 
     @Resetter

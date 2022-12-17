@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,8 +34,7 @@ namespace content {
 class WebUI;
 }  // namespace content
 
-namespace ash {
-namespace personalization_app {
+namespace ash::personalization_app {
 
 class PersonalizationAppUserProviderImpl
     : public PersonalizationAppUserProvider,
@@ -155,7 +154,6 @@ class PersonalizationAppUserProviderImpl
       image_decode_weak_ptr_factory_{this};
 };
 
-}  // namespace personalization_app
-}  // namespace ash
+}  // namespace ash::personalization_app
 
 #endif  // CHROME_BROWSER_ASH_WEB_APPLICATIONS_PERSONALIZATION_APP_PERSONALIZATION_APP_USER_PROVIDER_IMPL_H_

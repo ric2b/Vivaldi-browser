@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,7 @@
 #include "third_party/blink/public/common/responsiveness_metrics/user_interaction_latency.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/use_counter/use_counter_feature.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom-shared.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_meaningful_layout.h"
@@ -41,7 +42,6 @@ class WebSecurityOrigin;
 class WebString;
 class WebURLRequest;
 class WebWorkerFetchContext;
-struct MobileFriendliness;
 }  // namespace blink
 
 namespace gfx {
@@ -140,7 +140,6 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
                                         int32_t world_id) {}
   virtual void DidClearWindowObject() {}
   virtual void DidChangeScrollOffset() {}
-  virtual void WillSendSubmitEvent(const blink::WebFormElement& form) {}
   virtual void WillSubmitForm(const blink::WebFormElement& form) {}
   virtual void DidMatchCSS(
       const blink::WebVector<blink::WebString>& newly_matching_selectors,
@@ -177,11 +176,12 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   // internal), and |stack_trace| is the stack trace of the error in a
   // human-readable format (each frame is formatted as
   // "\n    at function_name (source:line_number:column_number)").
-  virtual void DetailedConsoleMessageAdded(const std::u16string& message,
-                                           const std::u16string& source,
-                                           const std::u16string& stack_trace,
-                                           uint32_t line_number,
-                                           int32_t severity_level) {}
+  virtual void DetailedConsoleMessageAdded(
+      const std::u16string& message,
+      const std::u16string& source,
+      const std::u16string& stack_trace,
+      uint32_t line_number,
+      blink::mojom::ConsoleMessageLevel level) {}
 
   // Called when an interesting (from document lifecycle perspective),
   // compositor-driven layout had happened. This is a reasonable hook to use
@@ -334,9 +334,6 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   virtual bool OnAssociatedInterfaceRequestForFrame(
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle* handle);
-
-  // Called when a page's mobile friendliness changed.
-  virtual void OnMobileFriendlinessChanged(const blink::MobileFriendliness&) {}
 
   // The smoothness metrics is shared over shared-memory. The interested
   // observer should invalidate |shared_memory| (by std::move()'ing it), and

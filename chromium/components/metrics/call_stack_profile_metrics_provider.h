@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,9 @@
 namespace metrics {
 
 class ChromeUserMetricsExtension;
+
+// base::Feature for reporting CPU profiles. Provided here for test use.
+BASE_DECLARE_FEATURE(kSamplingProfilerReporting);
 
 // Performs metrics logging for the stack sampling profiler.
 class CallStackProfileMetricsProvider : public MetricsProvider {
@@ -61,9 +64,6 @@ class CallStackProfileMetricsProvider : public MetricsProvider {
       ChromeUserMetricsExtension* uma_proto) override;
 
  protected:
-  // base::Feature for reporting CPU profiles. Provided here for test use.
-  static const base::Feature kSamplingProfilerReporting;
-
   // Reset the static state to the defaults after startup.
   static void ResetStaticStateForTesting();
 };

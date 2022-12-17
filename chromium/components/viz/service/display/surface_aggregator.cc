@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,9 +58,7 @@ struct MaskFilterInfoExt {
                     const gfx::Transform target_transform)
       : mask_filter_info(mask_filter_info_arg),
         is_fast_rounded_corner(is_fast_rounded_corner_arg) {
-    if (mask_filter_info.IsEmpty())
-      return;
-    bool success = mask_filter_info.Transform(target_transform);
+    bool success = mask_filter_info.ApplyTransform(target_transform);
     DCHECK(success);
   }
 
@@ -116,8 +114,8 @@ bool CalculateQuadSpaceDamageRect(
     const gfx::Transform& target_to_root_transform,
     const gfx::Rect& root_damage_rect,
     gfx::Rect* quad_space_damage_rect) {
-  gfx::Transform quad_to_root_transform(target_to_root_transform,
-                                        quad_to_target_transform);
+  gfx::Transform quad_to_root_transform =
+      target_to_root_transform * quad_to_target_transform;
   gfx::Transform inverse_transform(gfx::Transform::kSkipInitialization);
   bool inverse_valid = quad_to_root_transform.GetInverse(&inverse_transform);
   if (!inverse_valid)
@@ -126,20 +124,6 @@ bool CalculateQuadSpaceDamageRect(
   *quad_space_damage_rect = cc::MathUtil::ProjectEnclosingClippedRect(
       inverse_transform, root_damage_rect);
   return true;
-}
-
-gfx::Rect GetExpandedRectWithPixelMovingForegroundFilter(
-    const CompositorRenderPassDrawQuad* rpdq,
-    const CompositorRenderPass& child_render_pass) {
-  const SharedQuadState* shared_quad_state = rpdq->shared_quad_state;
-  float max_pixel_movement = child_render_pass.filters.MaximumPixelMovement();
-  gfx::RectF rect(rpdq->rect);
-  rect.Inset(-max_pixel_movement);
-  gfx::Rect expanded_rect = gfx::ToEnclosingRect(rect);
-
-  // expanded_rect in the target space
-  return cc::MathUtil::MapEnclosingClippedRect(
-      shared_quad_state->quad_to_target_transform, expanded_rect);
 }
 
 // Create a clip rect for an aggregated quad from the original clip rect and
@@ -197,7 +181,7 @@ SharedQuadState* CopyAndScaleSharedQuadState(
   // root draw pass from a surface into a pass when the surface draw quad's
   // transform is not identity.
   gfx::Transform new_transform = quad_to_target_transform;
-  new_transform.ConcatTransform(target_transform);
+  new_transform.PostConcat(target_transform);
 
   shared_quad_state->SetAll(
       new_transform, quad_layer_rect, visible_quad_layer_rect,
@@ -266,7 +250,7 @@ gfx::Rect TransformRectToDestRootTargetSpace(
     const gfx::Transform& dest_to_root_target_transform,
     const absl::optional<gfx::Rect>& dest_root_target_clip_rect) {
   gfx::Transform target_to_dest_root_target_transform =
-      gfx::Transform(dest_to_root_target_transform, target_to_dest_transform);
+      dest_to_root_target_transform * target_to_dest_transform;
 
   gfx::Rect rect_in_root_target_space = cc::MathUtil::MapEnclosingClippedRect(
       target_to_dest_root_target_transform, rect_in_target_space);
@@ -288,7 +272,6 @@ struct SurfaceAggregator::PrewalkResult {
   // not included in a SurfaceDrawQuad.
   base::flat_set<SurfaceId> undrawn_surfaces;
   bool video_capture_enabled = false;
-  bool may_contain_video = false;
   bool frame_sinks_changed = false;
   bool page_fullscreen_mode = false;
   gfx::ContentColorUsage content_color_usage = gfx::ContentColorUsage::kSRGB;
@@ -347,8 +330,8 @@ void SurfaceAggregator::AddRenderPassFilterDamageToDamageList(
     // The size of pixel-moving foreground filter is allowed to expand.
     // No intersecting shared_quad_state->clip_rect for the expanded rect.
     damage_rect_in_target_space =
-        GetExpandedRectWithPixelMovingForegroundFilter(render_pass_quad,
-                                                       child_render_pass);
+        GetExpandedRectWithPixelMovingForegroundFilter(
+            *render_pass_quad, child_render_pass.filters);
   } else if (child_render_pass.backdrop_filters.HasFilterThatMovesPixels()) {
     const auto* shared_quad_state = render_pass_quad->shared_quad_state;
     damage_rect_in_target_space = cc::MathUtil::MapEnclosingClippedRect(
@@ -728,8 +711,8 @@ void SurfaceAggregator::EmitSurfaceContent(
 
   const gfx::Rect& surface_quad_visible_rect = surface_quad->visible_rect;
   if (ignore_undamaged) {
-    gfx::Transform quad_to_target_transform(
-        target_transform, surface_quad_sqs->quad_to_target_transform);
+    gfx::Transform quad_to_target_transform =
+        target_transform * surface_quad_sqs->quad_to_target_transform;
     *damage_rect_in_quad_space_valid = CalculateQuadSpaceDamageRect(
         quad_to_target_transform, dest_pass->transform_to_root_target,
         root_damage_rect_, damage_rect_in_quad_space);
@@ -754,7 +737,7 @@ void SurfaceAggregator::EmitSurfaceContent(
   referenced_surfaces_.insert(surface_id);
 
   gfx::Transform combined_transform = scaled_quad_to_target_transform;
-  combined_transform.ConcatTransform(target_transform);
+  combined_transform.PostConcat(target_transform);
 
   // If the SurfaceDrawQuad is marked as being reflected and surface contents
   // are going to be scaled then keep the RenderPass. This allows the reflected
@@ -791,14 +774,12 @@ void SurfaceAggregator::EmitSurfaceContent(
   }
 
   if (frame.metadata.delegated_ink_metadata) {
-    // The metadata must be taken off of the surface, rather than a copy being
-    // made, in order to ensure that the delegated ink metadata is used for
-    // exactly one frame. Otherwise, it could potentially end up being used to
-    // draw the same trail on multiple frames if a new CompositorFrame wasn't
-    // generated.
+    // Copy delegated ink metadata from the compositor frame metadata. This
+    // prevents the delegated ink trail from flickering if a compositor frame
+    // is not generated due to a delayed main frame.
     TransformAndStoreDelegatedInkMetadata(
-        gfx::Transform(dest_pass->transform_to_root_target, combined_transform),
-        surface->TakeDelegatedInkMetadata());
+        dest_pass->transform_to_root_target * combined_transform,
+        frame.metadata.delegated_ink_metadata.get());
   }
 
   // TODO(fsamuel): Move this to a separate helper function.
@@ -835,8 +816,8 @@ void SurfaceAggregator::EmitSurfaceContent(
     // Contributing passes aggregated in to the pass list need to take the
     // transform of the surface quad into account to update their transform to
     // the root surface.
-    copy_pass->transform_to_root_target.ConcatTransform(combined_transform);
-    copy_pass->transform_to_root_target.ConcatTransform(
+    copy_pass->transform_to_root_target.PostConcat(combined_transform);
+    copy_pass->transform_to_root_target.PostConcat(
         dest_pass->transform_to_root_target);
 
     CopyQuadsToPass(resolved_frame, resolved_pass, copy_pass.get(),
@@ -1391,15 +1372,12 @@ void SurfaceAggregator::CopyPasses(const ResolvedFrameData& resolved_frame) {
   if (frame.metadata.delegated_ink_metadata) {
     DCHECK(surface->GetActiveFrameMetadata().delegated_ink_metadata ==
            frame.metadata.delegated_ink_metadata);
-    // The metadata must be taken off of the surface, rather than a copy being
-    // made, in order to ensure that the delegated ink metadata is used for
-    // exactly one frame. Otherwise, it could potentially end up being used to
-    // draw the same trail on multiple frames if a new CompositorFrame wasn't
-    // generated.
+    // Copy delegated ink metadata from the compositor frame metadata. This
+    // prevents the delegated ink trail from flickering if a compositor frame
+    // is not generated due to a delayed main frame.
     TransformAndStoreDelegatedInkMetadata(
-        gfx::Transform(source_pass_list.back()->transform_to_root_target,
-                       surface_transform),
-        surface->TakeDelegatedInkMetadata());
+        source_pass_list.back()->transform_to_root_target * surface_transform,
+        frame.metadata.delegated_ink_metadata.get());
   }
 
   bool apply_surface_transform_to_root_pass = true;
@@ -1431,7 +1409,7 @@ void SurfaceAggregator::CopyPasses(const ResolvedFrameData& resolved_frame) {
       // we will be adding another render pass for the surface transform, in
       // which this will no longer be the root.
       transform_to_root_target =
-          gfx::Transform(surface_transform, source.transform_to_root_target);
+          surface_transform * source.transform_to_root_target;
     }
 
     copy_pass->SetAll(
@@ -1515,7 +1493,8 @@ gfx::Rect SurfaceAggregator::PrewalkRenderPass(
     resolved_pass.aggregation().in_pixel_moving_filter_pass = true;
   }
 
-  if (render_pass.has_damage_from_contributing_content) {
+  if (render_pass.has_damage_from_contributing_content &&
+      !resolved_frame.IsSameFrameAsLastAggregation()) {
     resolved_pass.aggregation().has_damage_from_contributing_content = true;
   }
 
@@ -1692,8 +1671,8 @@ gfx::Rect SurfaceAggregator::PrewalkRenderPass(
       // has pixel-moving foreground filter.
       if (child_render_pass.filters.HasFilterThatMovesPixels()) {
         gfx::Rect expanded_rect_in_target_space =
-            GetExpandedRectWithPixelMovingForegroundFilter(render_pass_quad,
-                                                           child_render_pass);
+            GetExpandedRectWithPixelMovingForegroundFilter(
+                *render_pass_quad, child_render_pass.filters);
 
         if (expanded_rect_in_target_space.Intersects(damage_rect) ||
             expanded_rect_in_target_space.Intersects(damage_from_parent) ||
@@ -1704,9 +1683,9 @@ gfx::Rect SurfaceAggregator::PrewalkRenderPass(
 
       resolved_pass.aggregation().embedded_passes.insert(&child_resolved_pass);
 
-      const gfx::Transform child_to_root_transform(
-          target_to_root_transform,
-          quad->shared_quad_state->quad_to_target_transform);
+      const gfx::Transform child_to_root_transform =
+          target_to_root_transform *
+          quad->shared_quad_state->quad_to_target_transform;
       quad_damage_rect =
           PrewalkRenderPass(resolved_frame, child_resolved_pass, gfx::Rect(),
                             child_to_root_transform, &resolved_pass, result);
@@ -1721,11 +1700,11 @@ gfx::Rect SurfaceAggregator::PrewalkRenderPass(
       // same frame as last aggregation and there is no damage OR there is
       // already full damage for the surface.
       if (resolved_frame.IsNextFrameSinceLastAggregation()) {
-        auto& damage_rect = GetOptionalDamageRectFromQuad(quad);
-        DCHECK(damage_rect.has_value());
-        // The DrawQuad `damage_rect` is already in the render pass coordinate
-        // space instead of quad rect coordinate space.
-        quad_target_space_damage_rect = damage_rect.value();
+        auto& per_quad_damage_rect = GetOptionalDamageRectFromQuad(quad);
+        DCHECK(per_quad_damage_rect.has_value());
+        // The DrawQuad `per_quad_damage_rect` is already in the render pass
+        // coordinate space instead of quad rect coordinate space.
+        quad_target_space_damage_rect = per_quad_damage_rect.value();
       }
     }
 
@@ -1779,14 +1758,11 @@ void SurfaceAggregator::ProcessResolvedFrame(
   Surface* surface = resolved_frame.surface();
   const CompositorFrame& compositor_frame =
       surface->GetActiveOrInterpolatedFrame();
-  auto& resource_list = compositor_frame.resource_list;
 
   // Ref the resources in the surface, and let the provider know we've received
   // new resources from the compositor frame.
   if (surface->client())
-    surface->client()->RefResources(resource_list);
-
-  stats_->declare_resources_count += resource_list.size();
+    surface->client()->RefResources(compositor_frame.resource_list);
 
   resolved_frame.UpdateForActiveFrame(render_pass_id_generator_);
 }
@@ -1910,8 +1886,6 @@ gfx::Rect SurfaceAggregator::PrewalkSurface(ResolvedFrameData& resolved_frame,
   }
 
   referenced_surfaces_.erase(surface->surface_id());
-  if (!damage_rect.IsEmpty() && frame.metadata.may_contain_video)
-    result.may_contain_video = true;
   result.content_color_usage =
       std::max(result.content_color_usage, frame.metadata.content_color_usage);
 
@@ -2060,7 +2034,6 @@ AggregatedFrame SurfaceAggregator::Aggregate(
 
   frame.has_copy_requests = has_copy_requests_ && take_copy_requests_;
   frame.video_capture_enabled = prewalk_result.video_capture_enabled;
-  frame.may_contain_video = prewalk_result.may_contain_video;
   frame.content_color_usage = prewalk_result.content_color_usage;
   frame.page_fullscreen_mode = prewalk_result.page_fullscreen_mode;
 
@@ -2109,8 +2082,8 @@ AggregatedFrame SurfaceAggregator::Aggregate(
 
   ResetAfterAggregate();
 
-  for (auto& surface_id : previous_contained_surfaces_) {
-    surface = manager_->GetSurfaceForId(surface_id);
+  for (auto& contained_surface_id : previous_contained_surfaces_) {
+    surface = manager_->GetSurfaceForId(contained_surface_id);
     if (surface) {
       surface->allocation_group()->TakeAggregatedLatencyInfoUpTo(
           surface, &frame.latency_info);
@@ -2140,9 +2113,6 @@ void SurfaceAggregator::RecordStatHistograms() {
       stats_->prewalked_surface_count);
   UMA_HISTOGRAM_COUNTS_100("Compositing.SurfaceAggregator.CopiedSurfaceCount",
                            stats_->copied_surface_count);
-  UMA_HISTOGRAM_COUNTS_1000(
-      "Compositing.SurfaceAggregator.DeclareResourceCount",
-      stats_->declare_resources_count);
 
   UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
       "Compositing.SurfaceAggregator.PrewalkUs", stats_->prewalk_time,
@@ -2251,7 +2221,7 @@ bool SurfaceAggregator::IsRootSurface(const Surface* surface) const {
 // aggregated frame, after which the member is then cleared.
 void SurfaceAggregator::TransformAndStoreDelegatedInkMetadata(
     const gfx::Transform& parent_quad_to_root_target_transform,
-    std::unique_ptr<gfx::DelegatedInkMetadata> metadata) {
+    const gfx::DelegatedInkMetadata* metadata) {
   if (delegated_ink_metadata_) {
     // This member could already be populated in two scenarios:
     //   1. The delegated ink metadata was committed to a frame's metadata that
@@ -2270,10 +2240,10 @@ void SurfaceAggregator::TransformAndStoreDelegatedInkMetadata(
       return;
   }
 
-  gfx::PointF point(metadata->point());
-  gfx::RectF area(metadata->presentation_area());
-  parent_quad_to_root_target_transform.TransformPoint(&point);
-  parent_quad_to_root_target_transform.TransformRect(&area);
+  gfx::PointF point =
+      parent_quad_to_root_target_transform.MapPoint(metadata->point());
+  gfx::RectF area = parent_quad_to_root_target_transform.MapRect(
+      metadata->presentation_area());
   delegated_ink_metadata_ = std::make_unique<gfx::DelegatedInkMetadata>(
       point, metadata->diameter(), metadata->color(), metadata->timestamp(),
       area, metadata->frame_time(), metadata->is_hovering());
@@ -2428,7 +2398,7 @@ void SurfaceAggregator::CreateDeJellyRenderPassQuads(
 
   // Compute the required renderpass rect in target space.
   // First, find the un-transformed visible rect.
-  gfx::RectF render_pass_visible_rect_f(state->visible_quad_layer_rect);
+  gfx::Rect render_pass_visible_rect = state->visible_quad_layer_rect;
   // Next, if this is a RenderPass quad, find any filters and expand the
   // visible rect.
   if (quad->material == DrawQuad::Material::kCompositorRenderPass) {
@@ -2436,16 +2406,15 @@ void SurfaceAggregator::CreateDeJellyRenderPassQuads(
         CompositorRenderPassDrawQuad::MaterialCast(quad)->render_pass_id});
     for (auto& rp : *dest_pass_list_) {
       if (rp->id == target_id) {
-        render_pass_visible_rect_f = gfx::RectF(
-            rp->filters.MapRect(state->visible_quad_layer_rect, SkMatrix()));
+        render_pass_visible_rect =
+            rp->filters.MapRect(state->visible_quad_layer_rect, SkMatrix());
         break;
       }
     }
   }
   // Next, find the enclosing Rect for the transformed target space RectF.
-  state->quad_to_target_transform.TransformRect(&render_pass_visible_rect_f);
-  gfx::Rect render_pass_visible_rect =
-      gfx::ToEnclosingRect(render_pass_visible_rect_f);
+  render_pass_visible_rect =
+      state->quad_to_target_transform.MapRect(render_pass_visible_rect);
   // Finally, expand by our un_clip amounts.
   render_pass_visible_rect.Inset(
       gfx::Insets::TLBR(-un_clip_top, 0, -un_clip_bottom, 0));

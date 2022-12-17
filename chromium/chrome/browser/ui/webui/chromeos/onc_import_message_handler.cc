@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -115,7 +115,7 @@ void OncImportMessageHandler::ImportONCToNSSDB(const std::string& callback_id,
   }
   result +=
       base::StringPrintf("Networks imported: %d\n", num_networks_imported);
-  if (certificates.GetListDeprecated().empty()) {
+  if (certificates.GetList().empty()) {
     if (!num_networks_imported)
       has_error = true;
     Respond(callback_id, result, has_error);

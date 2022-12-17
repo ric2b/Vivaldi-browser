@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,8 +13,7 @@ namespace send_tab_to_self {
 
 // If this feature is enabled and a signed-out user attempts to share a tab,
 // they will see a promo to sign-in.
-inline constexpr base::Feature kSendTabToSelfSigninPromo{
-    "SendTabToSelfSigninPromo", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_DECLARE_FEATURE(kSendTabToSelfSigninPromo);
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 // If this feature is enabled, show received tabs in a new UI next to the
@@ -22,8 +21,7 @@ inline constexpr base::Feature kSendTabToSelfSigninPromo{
 //
 // V2 is the default on desktop and the V1 code path has been deleted there, so
 // this base::Feature no longer exists on desktop platforms.
-inline constexpr base::Feature kSendTabToSelfV2{
-    "SendTabToSelfV2", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_DECLARE_FEATURE(kSendTabToSelfV2);
 #endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 
 }  // namespace send_tab_to_self

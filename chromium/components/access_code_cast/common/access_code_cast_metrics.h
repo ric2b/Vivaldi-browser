@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,10 +41,11 @@ enum class AccessCodeCastCastMode {
   kPresentation = 0,
   kTabMirror = 1,
   kDesktopMirror = 2,
+  kRemotePlayback = 3,
 
   // NOTE: Do not reorder existing entries, and add entries only immediately
   // above this line.
-  kMaxValue = kDesktopMirror
+  kMaxValue = kRemotePlayback,
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -77,6 +78,7 @@ class AccessCodeCastMetrics {
   ~AccessCodeCastMetrics();
 
   // UMA histogram names.
+  static const char kHistogramAccessCodeNotFoundCount[];
   static const char kHistogramAddSinkResultNew[];
   static const char kHistogramAddSinkResultRemembered[];
   static const char kHistogramCastModeOnSuccess[];
@@ -89,6 +91,9 @@ class AccessCodeCastMetrics {
   // media_router::MediaCastMode.
   static void OnCastSessionResult(int route_request_result_code,
                                   AccessCodeCastCastMode mode);
+
+  // Records the count of ACCESS_CODE_NOT_FOUND errors per instance of dialog.
+  static void RecordAccessCodeNotFoundCount(int count);
 
   // Records the result of adding an access code sink.
   static void RecordAddSinkResult(bool is_remembered,

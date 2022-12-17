@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -528,4 +528,58 @@ export function sendOpenPTZPanelEvent(
         [MetricDimension.SUPPORT_TILT, capabilities.tilt],
         [MetricDimension.SUPPORT_ZOOM, capabilities.zoom],
       ]));
+}
+
+/**
+ * TODO(b/223089758): Remove `DocResultType` and `DocFixType` and mark the
+ * dimensions as obsolete once multi-page document scanning feature is fully
+ * landed.
+ */
+export enum DocScanFixType {
+  NONE = 0,
+  CORNER = 0b1,
+  ROTATION = 0b10,
+}
+
+export enum DocScanResultActionType {
+  CANCEL = 'cancel',
+  SAVE_AS_PDF = 'save-as-pdf',
+  SAVE_AS_PHOTO = 'save-as-photo',
+  SHARE = 'share',
+}
+
+/**
+ * Sends the multi-page document scanning result event. The actions will either
+ * remove all pages (cancel) or generate files from pages (save/share).
+ */
+export function sendDocScanResultEvent(
+    action: DocScanResultActionType,
+    fixType: DocScanFixType,
+    fixCount: number,
+    ): void {
+  sendEvent(
+      {
+        eventCategory: 'doc-scan',
+        eventAction: action,
+        eventValue: fixCount,
+      },
+      new Map([
+        [MetricDimension.DOC_FIX_TYPE, fixType],
+      ]));
+}
+
+export enum DocScanActionType {
+  ADD_PAGE = 'add-page',
+  DELETE_PAGE = 'delete-page',
+  FIX = 'fix',
+}
+
+/**
+ * Sends the multi-page document scanning event.
+ */
+export function sendDocScanEvent(action: DocScanActionType): void {
+  sendEvent({
+    eventCategory: 'doc-scan',
+    eventAction: action,
+  });
 }

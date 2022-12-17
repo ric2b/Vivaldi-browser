@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,17 +32,18 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/cast_channel/cast_socket.h"
-#include "components/cast_channel/cast_socket_service.h"
-#include "components/cast_channel/cast_test_util.h"
 #include "components/media_router/browser/media_router_factory.h"
 #include "components/media_router/browser/test/mock_media_router.h"
 #include "components/media_router/common/discovery/media_sink_service_base.h"
+#include "components/media_router/common/providers/cast/channel/cast_socket.h"
+#include "components/media_router/common/providers/cast/channel/cast_socket_service.h"
+#include "components/media_router/common/providers/cast/channel/cast_test_util.h"
 #include "components/media_router/common/test/test_helper.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -79,6 +80,11 @@ class AccessCodeCastSinkServiceTest : public testing::Test {
       delete;
 
   void SetUp() override {
+    content::SetNetworkConnectionTrackerForTesting(
+        network::TestNetworkConnectionTracker::GetInstance());
+    network::TestNetworkConnectionTracker::GetInstance()->SetConnectionType(
+        network::mojom::ConnectionType::CONNECTION_WIFI);
+
     feature_list_.InitWithFeatures({features::kAccessCodeCastRememberDevices},
                                    {});
     GetTestingPrefs()->SetManagedPref(::prefs::kEnableMediaRouter,
@@ -413,7 +419,6 @@ TEST_F(AccessCodeCastSinkServiceTest, SinkDoesntExistForPrefs) {
 
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -525,7 +530,6 @@ TEST_F(AccessCodeCastSinkServiceTest, TestChangeNetworksExpiration) {
 
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -562,10 +566,9 @@ TEST_F(AccessCodeCastSinkServiceTest, TestChangeNetworksExpiration) {
 
   // Now all the expiration timers should be completed and the devices should be
   // removed.
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
-          .size());
+          .empty());
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().size());
 }
@@ -628,7 +631,6 @@ TEST_F(AccessCodeCastSinkServiceTest, TestChangeNetworksNoExpiration) {
 
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -662,10 +664,9 @@ TEST_F(AccessCodeCastSinkServiceTest, TestChangeNetworksNoExpiration) {
   mock_time_task_runner_->FastForwardUntilNoTasksRemain();
 
   // The expiration should still not be triggered yet
-  EXPECT_TRUE(
+  EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
-          .size());
+          .empty());
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().size());
 }
@@ -699,7 +700,6 @@ TEST_F(AccessCodeCastSinkServiceTest,
 
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -780,7 +780,6 @@ TEST_F(AccessCodeCastSinkServiceTest, TestSetExpirationTimer) {
 
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -799,7 +798,6 @@ TEST_F(AccessCodeCastSinkServiceTest, TestSetExpirationTimer) {
 
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -913,7 +911,6 @@ TEST_F(AccessCodeCastSinkServiceTest, TestChangeEnabledPref) {
                   ->IsRunning());
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -928,7 +925,6 @@ TEST_F(AccessCodeCastSinkServiceTest, TestChangeEnabledPref) {
                   .empty());
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -1019,7 +1015,6 @@ TEST_F(AccessCodeCastSinkServiceTest, TestChangeNetworkWithRouteActive) {
   // pref service.
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -1085,7 +1080,6 @@ TEST_F(AccessCodeCastSinkServiceTest,
   // service.
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -1173,7 +1167,6 @@ TEST_F(AccessCodeCastSinkServiceTest,
   // service.
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -1232,7 +1225,6 @@ TEST_F(AccessCodeCastSinkServiceTest,
   // pref service.
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_FALSE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
@@ -1254,10 +1246,24 @@ TEST_F(AccessCodeCastSinkServiceTest,
   // service.
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDeviceAddedTimeDict()
-          ->GetDict()
           .empty());
   EXPECT_TRUE(
       access_code_cast_sink_service_->pref_updater_->GetDevicesDict().empty());
+}
+
+TEST_F(AccessCodeCastSinkServiceTest, TestOfflineDiscoverSink) {
+  // Test to ensure that discover sink triggers a network error callback if we
+  // are offline.
+  MockAddSinkResultCallback mock_callback;
+
+  network::TestNetworkConnectionTracker::GetInstance()->SetConnectionType(
+      network::mojom::ConnectionType::CONNECTION_NONE);
+  EXPECT_CALL(mock_callback,
+              Run(AddSinkResultCode::SERVICE_NOT_PRESENT, Eq(absl::nullopt)));
+
+  access_code_cast_sink_service_->DiscoverSink("", mock_callback.Get());
+
+  mock_time_task_runner()->FastForwardUntilNoTasksRemain();
 }
 
 }  // namespace media_router

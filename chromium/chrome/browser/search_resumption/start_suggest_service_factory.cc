@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,7 @@ KeyedService* StartSuggestServiceFactory::BuildServiceInstanceFor(
   return new StartSuggestService(
       template_url_service, url_loader_factory,
       std::make_unique<ChromeAutocompleteSchemeClassifier>(profile),
-      GURL(chrome::kChromeUINewTabURL));
+      std::string(), std::string(), GURL(chrome::kChromeUINewTabURL));
 }
 
 }  // namespace search_resumption_module

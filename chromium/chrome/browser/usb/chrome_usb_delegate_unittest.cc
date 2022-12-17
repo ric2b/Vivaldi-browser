@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -348,6 +348,7 @@ TEST_F(ChromeUsbDelegateTest, ReconnectDeviceManager) {
 
   // Reconnect the service.
   web_usb_service.reset();
+  base::RunLoop().RunUntilIdle();
   ConnectToService(web_usb_service.BindNewPipeAndPassReceiver());
   web_usb_service->SetClient(mock_client.CreateInterfacePtrAndBind());
 

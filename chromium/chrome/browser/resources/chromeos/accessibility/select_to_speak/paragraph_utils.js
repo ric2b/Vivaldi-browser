@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,8 +8,6 @@ var AutomationNode = chrome.automation.AutomationNode;
 var RoleType = chrome.automation.RoleType;
 
 export class ParagraphUtils {
-  constructor() {}
-
   /**
    * @param {!AutomationNode} node
    * @return {boolean} Whether the given node is a paragraph.
@@ -23,6 +21,12 @@ export class ParagraphUtils {
     if (node.display !== undefined && node.display !== 'inline' &&
         node.role !== RoleType.STATIC_TEXT &&
         (node.parent && node.parent.role !== RoleType.SVG_ROOT)) {
+      return true;
+    }
+    // Look at the SVGs in a single group as a block, even if they are inline.
+    // Google Docs with Canvas has this structure.
+    if (node.role === RoleType.GROUP && node.parent &&
+        node.parent.role === RoleType.SVG_ROOT) {
       return true;
     }
     return false;

@@ -1,11 +1,12 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ui/views/view_model_utils.h"
 
-#include <algorithm>
+#include <iterator>
 
+#include "base/ranges/algorithm.h"
 #include "ui/views/view.h"
 #include "ui/views/view_model.h"
 
@@ -28,10 +29,10 @@ void ViewModelUtils::SetViewBoundsToIdealBounds(const ViewModelBase& model) {
 
 // static
 bool ViewModelUtils::IsAtIdealBounds(const ViewModelBase& model) {
-  return std::all_of(model.entries().begin(), model.entries().end(),
-                     [](const ViewModelBase::Entry& entry) {
-                       return entry.view->bounds() == entry.ideal_bounds;
-                     });
+  return base::ranges::all_of(
+      model.entries(), [](const ViewModelBase::Entry& entry) {
+        return entry.view->bounds() == entry.ideal_bounds;
+      });
 }
 
 // static

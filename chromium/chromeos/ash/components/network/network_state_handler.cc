@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -90,13 +90,6 @@ bool ShouldIncludeNetworkInList(const NetworkState* network_state,
     // Tether network should not be included since they should only be shown
     // to the user as Tether networks.
     return false;
-  }
-
-  if (network_state->type() == shill::kTypeVPN) {
-    if (network_state->GetVpnProviderType() == shill::kProviderIKEv2 &&
-        !base::FeatureList::IsEnabled(features::kEnableIkev2Vpn)) {
-      return false;
-    }
   }
 
   return true;
@@ -1210,6 +1203,15 @@ void NetworkStateHandler::SetFastTransitionStatus(bool enabled) {
   shill_property_handler_->SetFastTransitionStatus(enabled);
 }
 
+void NetworkStateHandler::RequestPortalDetection() {
+  if (default_network_path_.empty()) {
+    return;
+  }
+  NET_LOG(USER) << "RequestPortalDetection for "
+                << NetworkPathId(default_network_path_);
+  shill_property_handler_->RequestPortalDetection(default_network_path_);
+}
+
 const NetworkState* NetworkStateHandler::GetEAPForEthernet(
     const std::string& service_path,
     bool connected_only) {
@@ -1289,7 +1291,7 @@ void NetworkStateHandler::UpdateManagedList(ManagedState::ManagedType type,
 
   ManagedStateList* managed_list = GetManagedList(type);
   NET_LOG(DEBUG) << "UpdateManagedList: " << ManagedState::TypeToString(type)
-                 << ": " << entries.GetListDeprecated().size();
+                 << ": " << entries.GetList().size();
   // Create a map of existing entries. Assumes all entries in |managed_list|
   // are unique.
   std::map<std::string, std::unique_ptr<ManagedState>> managed_map;
@@ -1302,7 +1304,7 @@ void NetworkStateHandler::UpdateManagedList(ManagedState::ManagedType type,
   managed_list->clear();
   // Updates managed_list and request updates for new entries.
   std::set<std::string> list_entries;
-  for (const auto& iter : entries.GetListDeprecated()) {
+  for (const auto& iter : entries.GetList()) {
     const std::string* path = iter.GetIfString();
     if (!path)
       continue;
@@ -2317,7 +2319,7 @@ void NetworkStateHandler::ProcessIsUserLoggedIn(
   }
   // The profile list contains the shared profile on the login screen. Once the
   // user is logged in there is more than one profile in the profile list.
-  is_user_logged_in_ = profile_list.GetListDeprecated().size() > 1;
+  is_user_logged_in_ = profile_list.GetList().size() > 1;
 }
 
 }  // namespace ash

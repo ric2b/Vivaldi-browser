@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -101,6 +101,8 @@ component("message_center") {
         "views/message_view.h",
         "views/notification_background_painter.cc",
         "views/notification_background_painter.h",
+        "views/notification_control_button_factory.cc",
+        "views/notification_control_button_factory.h",
         "views/notification_control_buttons_view.cc",
         "views/notification_control_buttons_view.h",
         "views/notification_header_view.cc",
@@ -235,7 +237,6 @@ if (enable_message_center) {
     }
 
     if (is_fuchsia) {
-      use_cfv1 = false
       additional_manifest_fragments = [
         "//build/config/fuchsia/test/fonts.shard.test-cml",
         "//build/config/fuchsia/test/present_view.shard.test-cml",

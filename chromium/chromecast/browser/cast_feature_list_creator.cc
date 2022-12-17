@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,11 +21,12 @@ namespace chromecast {
 namespace {
 
 // Convert the |features| vector into a comma separated string.
-std::string FeatureVectorToString(const std::vector<base::Feature>& features) {
+std::string FeatureVectorToString(
+    const std::vector<const base::Feature*>& features) {
   std::vector<std::string> feature_names;
 
-  for (auto& feature : features)
-    feature_names.push_back(feature.name);
+  for (const auto* feature : features)
+    feature_names.push_back(feature->name);
 
   return base::JoinString(feature_names, ",");
 }
@@ -47,9 +48,9 @@ void CastFeatureListCreator::CreatePrefServiceAndFeatureList(
       pref_registry.get(), process_type);
 
   const base::Value::Dict& features_dict =
-      pref_service_->GetValueDict(prefs::kLatestDCSFeatures);
+      pref_service_->GetDict(prefs::kLatestDCSFeatures);
   const base::Value::List& experiment_ids =
-      pref_service_->GetValueList(prefs::kActiveDCSExperiments);
+      pref_service_->GetList(prefs::kActiveDCSExperiments);
   auto* command_line = base::CommandLine::ForCurrentProcess();
   InitializeFeatureList(
       features_dict, experiment_ids,
@@ -63,12 +64,12 @@ std::unique_ptr<PrefService> CastFeatureListCreator::TakePrefService() {
 }
 
 void CastFeatureListCreator::SetExtraEnableFeatures(
-    const std::vector<base::Feature>& extra_enable_features) {
+    const std::vector<const base::Feature*>& extra_enable_features) {
   extra_enable_features_ = FeatureVectorToString(extra_enable_features);
 }
 
 void CastFeatureListCreator::SetExtraDisableFeatures(
-    const std::vector<base::Feature>& extra_disable_features) {
+    const std::vector<const base::Feature*>& extra_disable_features) {
   extra_disable_features_ = FeatureVectorToString(extra_disable_features);
 }
 

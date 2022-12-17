@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -218,11 +218,17 @@ public class TabGroupUiToolbarView extends FrameLayout {
     }
 
     /**
-     * Hide the UI widgets related to tab group continuation features.
+     * Hide the title widgets related to tab group continuation features.
      */
-    void hideTabGroupsContinuationWidgets() {
+    void hideTitleWidget() {
         mTitleTextView.setFocusable(false);
         mTitleTextView.setBackgroundColor(Color.TRANSPARENT);
+    }
+
+    /**
+     * Hide the menu button related to tab group continuation and selection editor features.
+     */
+    void hideMenuButton() {
         mMainContent.removeView(mMenuButton);
     }
 

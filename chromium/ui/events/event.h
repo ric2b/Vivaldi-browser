@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -324,7 +324,7 @@ class EVENTS_EXPORT Event {
   // responsible for tracking it.
   //
   // TODO(crbug.com/1298696): Breaks events_unittests.
-  raw_ptr<EventTarget, DegradeToNoOpWhenMTE> target_ = nullptr;
+  raw_ptr<EventTarget, DanglingUntriagedDegradeToNoOpWhenMTE> target_ = nullptr;
   EventPhase phase_ = EP_PREDISPATCH;
   EventResult result_ = ER_UNHANDLED;
 
@@ -568,6 +568,9 @@ class EVENTS_EXPORT MouseEvent : public LocatedEvent {
   std::string ToString() const override;
   std::unique_ptr<Event> Clone() const override;
 
+  // Resets the last_click_event_ for unit tests.
+  static void ResetLastClickForTest();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(EventTest, DoubleClickRequiresUniqueTimestamp);
   FRIEND_TEST_ALL_PREFIXES(EventTest, SingleClickRightLeft);
@@ -575,9 +578,6 @@ class EVENTS_EXPORT MouseEvent : public LocatedEvent {
   // Returns the repeat count based on the previous mouse click, if it is
   // recent enough and within a small enough distance.
   static int GetRepeatCount(const MouseEvent& click_event);
-
-  // Resets the last_click_event_ for unit tests.
-  static void ResetLastClickForTest();
 
   // See description above getter for details.
   int changed_button_flags_;

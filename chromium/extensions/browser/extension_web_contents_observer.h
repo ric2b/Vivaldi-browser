@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -139,11 +139,6 @@ class ExtensionWebContentsObserver
   // when a Pepper plugin instance is attached/detached in the page DOM.
   void PepperInstanceCreated() override;
   void PepperInstanceDeleted() override;
-
-  // Returns the extension id associated with the given |render_frame_host|, or
-  // the empty string if there is none.
-  std::string GetExtensionIdFromFrame(
-      content::RenderFrameHost* render_frame_host) const;
 
  private:
   using PassKey = base::PassKey<ExtensionWebContentsObserver>;

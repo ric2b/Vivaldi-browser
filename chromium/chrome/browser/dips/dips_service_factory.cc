@@ -1,12 +1,12 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/dips/dips_service_factory.h"
 
-#include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/dips/dips_service.h"
+#include "chrome/browser/engagement/site_engagement_service_factory.h"
 
 // static
 DIPSService* DIPSServiceFactory::GetForBrowserContext(
@@ -22,7 +22,9 @@ DIPSServiceFactory* DIPSServiceFactory::GetInstance() {
 DIPSServiceFactory::DIPSServiceFactory()
     : ProfileKeyedServiceFactory(
           "DIPSService",
-          ProfileSelections::BuildForRegularAndIncognito()) {}
+          ProfileSelections::BuildForRegularAndIncognito()) {
+  DependsOn(site_engagement::SiteEngagementServiceFactory::GetInstance());
+}
 
 DIPSServiceFactory::~DIPSServiceFactory() = default;
 

@@ -1,9 +1,10 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "remoting/host/ipc_screen_controls.h"
 
+#include "base/notreached.h"
 #include "remoting/host/desktop_session_proxy.h"
 
 namespace remoting {
@@ -20,6 +21,11 @@ void IpcScreenControls::SetScreenResolution(
     absl::optional<webrtc::ScreenId> screen_id) {
   // TODO(crbug.com/1326339): Pass |screen_id| over IPC.
   desktop_session_proxy_->SetScreenResolution(resolution);
+}
+
+void IpcScreenControls::SetVideoLayout(
+    const protocol::VideoLayout& video_layout) {
+  NOTIMPLEMENTED();
 }
 
 }  // namespace remoting

@@ -14,11 +14,13 @@
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/san</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
 <translation id="3291688615589870984">{DAYS, plural, =1 {1 gün} other {# gün}}</translation>
+<translation id="335581015389089642">Səsləndirmə</translation>
 <translation id="3600566671520689681">{DAYS, plural, =1 {1 gün qaldı} other {# gün qaldı}}</translation>
 <translation id="3618849550573277856">"<ph name="LOOKUP_STRING" /> axtarmaq</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> QB/san</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> QB</translation>
 <translation id="3889424535448813030">Ox sağa</translation>
+<translation id="4289300219472526559">Səsli daxiletməni başlat</translation>
 <translation id="4968171027979920686">{SECONDS, plural, =1 {1 saniyə} other {# saniyə}}</translation>
 <translation id="5076340679995252485">&amp;Yerləşdirmək</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
@@ -28,6 +30,7 @@
 <translation id="5906667377645263094">{SECONDS, plural, =1 {1 saniyə qaldı} other {# saniyə qaldı}}</translation>
 <translation id="5943826764092288734">{HOURS, plural, =1 {1 saat} other {# saat}}</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/san</translation>
+<translation id="6397363302884558537">Səsli daxiletməni dayandır</translation>
 <translation id="6404817160109697034">{SECONDS, plural, =1 {1 san əvvəl} other {# san əvvəl}}</translation>
 <translation id="6483402905448010557">{SECONDS, plural, =1 {1 saniyə qaldı} other {# saniyə qaldı}}</translation>
 <translation id="6863590663815976734">{HOURS, plural, =1 {1 saat qaldı} other {# saat qaldı}}</translation>

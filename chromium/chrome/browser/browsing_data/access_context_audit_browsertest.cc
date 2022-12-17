@@ -1,10 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <memory>
 
 #include "base/path_service.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
@@ -88,9 +89,9 @@ void CheckContainsCookieAndRecord(
     const std::string& domain,
     const std::string& path,
     bool compare_host_only = false) {
-  EXPECT_NE(
-      std::find_if(
-          record_list.begin(), record_list.end(),
+  EXPECT_TRUE(
+      base::ranges::any_of(
+          record_list,
           [=](const AccessContextAuditDatabase::AccessRecord& record) {
             return record.type ==
                        AccessContextAuditDatabase::StorageAPIType::kCookie &&
@@ -100,16 +101,13 @@ void CheckContainsCookieAndRecord(
                         : record.top_frame_origin == top_frame_origin) &&
                    record.name == name && record.domain == domain &&
                    record.path == path;
-          }),
-      record_list.end());
+          }));
 
-  EXPECT_NE(std::find_if(cookies.begin(), cookies.end(),
-                         [=](const net::CanonicalCookie& cookie) {
-                           return cookie.Name() == name &&
-                                  cookie.Domain() == domain &&
-                                  cookie.Path() == path;
-                         }),
-            cookies.end());
+  EXPECT_TRUE(
+      base::ranges::any_of(cookies, [=](const net::CanonicalCookie& cookie) {
+        return cookie.Name() == name && cookie.Domain() == domain &&
+               cookie.Path() == path;
+      }));
 }
 
 // Check that |record_list| contains a record indicating |origin| accessed
@@ -123,8 +121,8 @@ void CheckContainsOriginStorageRecords(
     const url::Origin& top_frame_origin,
     bool compare_host_only = false) {
   for (auto type : types) {
-    auto it = std::find_if(
-        record_list.begin(), record_list.end(),
+    bool found = base::ranges::any_of(
+        record_list,
         [=](const AccessContextAuditDatabase::AccessRecord& record) {
           return record.type == type &&
                  (compare_host_only
@@ -134,13 +132,11 @@ void CheckContainsOriginStorageRecords(
                       : record.top_frame_origin == top_frame_origin &&
                             record.origin == origin);
         });
-    if (origin != top_frame_origin &&
-        type == AccessContextAuditDatabase::StorageAPIType::kWebDatabase) {
-      // WebSQL in third-party contexts is disabled as of M97.
-      EXPECT_EQ(it, record_list.end());
-    } else {
-      EXPECT_NE(it, record_list.end());
-    }
+    // WebSQL in third-party contexts is disabled as of M97.
+    EXPECT_EQ(
+        found,
+        origin == top_frame_origin ||
+            type != AccessContextAuditDatabase::StorageAPIType::kWebDatabase);
   }
 }
 
@@ -148,12 +144,12 @@ void CheckContainsOriginStorageRecords(
 // each frame in the active web contents for |browser|.
 void EnsurePageAccessedStorage(content::WebContents* web_contents) {
   web_contents->GetPrimaryMainFrame()->ForEachRenderFrameHost(
-      base::BindRepeating([](content::RenderFrameHost* frame) {
+      [](content::RenderFrameHost* frame) {
         EXPECT_TRUE(
             content::EvalJs(frame,
                             "(async () => { return await accessStorage();})()")
                 .value.GetBool());
-      }));
+      });
 }
 
 }  // namespace
@@ -354,7 +350,13 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, PRE_RemoveRecords) {
                                     /* compare_host_only */ true);
 }
 
-IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, RemoveRecords) {
+// TODO(crbug.com/1317431): WebSQL does not work on Fuchsia.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_RemoveRecords DISABLED_RemoveRecords
+#else
+#define MAYBE_RemoveRecords RemoveRecords
+#endif
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MAYBE_RemoveRecords) {
   // Immediately remove all records and ensure no record remains.
   content::BrowsingDataRemover* remover =
       chrome_test_utils::GetProfile(this)->GetBrowsingDataRemover();
@@ -395,7 +397,13 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, PRE_CheckSessionOnly) {
             kEmbeddedPageCookieCount + kTopLevelPageCookieCount);
 }
 
-IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, CheckSessionOnly) {
+// TODO(crbug.com/1317431): WebSQL does not work on Fuchsia.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_CheckSessionOnly DISABLED_CheckSessionOnly
+#else
+#define MAYBE_CheckSessionOnly CheckSessionOnly
+#endif
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MAYBE_CheckSessionOnly) {
   // Confirm all records have been removed.
   auto records = GetAllAccessRecords();
   auto cookies = GetAllCookies();
@@ -403,7 +411,13 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, CheckSessionOnly) {
   EXPECT_EQ(cookies.size(), 0u);
 }
 
-IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, RemoveHistory) {
+// TODO(crbug.com/1317431): WebSQL does not work on Fuchsia.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_RemoveHistory DISABLED_RemoveHistory
+#else
+#define MAYBE_RemoveHistory RemoveHistory
+#endif
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MAYBE_RemoveHistory) {
   // Check that removing all history entries for an origin also removes all
   // records where that origin is the top frame origin.
   NavigateToTopLevelPage();
@@ -449,16 +463,20 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, RemoveHistory) {
   // the history deletion should only affect the access record.
   EXPECT_EQ(cookies.size(),
             kEmbeddedPageCookieCount + kTopLevelPageCookieCount);
-  EXPECT_NE(std::find_if(cookies.begin(), cookies.end(),
-                         [=](const net::CanonicalCookie& cookie) {
-                           return cookie.Name() == "embedder" &&
-                                  cookie.Domain() == kTopLevelHost &&
-                                  cookie.Path() == "/";
-                         }),
-            cookies.end());
+  EXPECT_TRUE(
+      base::ranges::any_of(cookies, [=](const net::CanonicalCookie& cookie) {
+        return cookie.Name() == "embedder" &&
+               cookie.Domain() == kTopLevelHost && cookie.Path() == "/";
+      }));
 }
 
-IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TreeModelDeletion) {
+// TODO(crbug.com/1317431): WebSQL does not work on Fuchsia.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_TreeModelDeletion DISABLED_TreeModelDeletion
+#else
+#define MAYBE_TreeModelDeletion TreeModelDeletion
+#endif
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MAYBE_TreeModelDeletion) {
   // Check that removing cookies and storage API usage via the CookiesTreeModel
   // also removes the associated access records.
   NavigateToTopLevelPage();
@@ -502,7 +520,13 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TreeModelDeletion) {
   EXPECT_EQ(cookies.size(), 0u);
 }
 
-IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MultipleAccesses) {
+// TODO(crbug.com/1317431): WebSQL does not work on Fuchsia.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_MultipleAccesses DISABLED_MultipleAccesses
+#else
+#define MAYBE_MultipleAccesses MultipleAccesses
+#endif
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MAYBE_MultipleAccesses) {
   // Ensure that renavigating to a page in the same tab correctly re-records
   // accesses.
   base::SimpleTestClock clock;
@@ -531,7 +555,13 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MultipleAccesses) {
     EXPECT_EQ(record.last_access_time, clock.Now());
 }
 
-IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TabClosed) {
+// TODO(crbug.com/1317431): WebSQL does not work on Fuchsia.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_TabClosed DISABLED_TabClosed
+#else
+#define MAYBE_TabClosed TabClosed
+#endif
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MAYBE_TabClosed) {
   // Ensure closing a tab correctly flushes access records.
   NavigateToTopLevelPage();
   NavigateToEmbeddedPage();
@@ -620,8 +650,14 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditSessionRestoreBrowserTest,
             kEmbeddedPageCookieCount + kTopLevelPageCookieCount);
 }
 
+// TODO(crbug.com/1317431): WebSQL does not work on Fuchsia.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_RestoreSession DISABLED_RestoreSession
+#else
+#define MAYBE_RestoreSession RestoreSession
+#endif
 IN_PROC_BROWSER_TEST_F(AccessContextAuditSessionRestoreBrowserTest,
-                       RestoreSession) {
+                       MAYBE_RestoreSession) {
   // Check all access records have been correctly persisted across restarts.
   auto records = GetAllAccessRecords();
   auto cookies = GetAllCookies();

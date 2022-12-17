@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,9 @@ GLTexturePassthroughAndroidImageRepresentation::
 }
 
 const scoped_refptr<gles2::TexturePassthrough>&
-GLTexturePassthroughAndroidImageRepresentation::GetTexturePassthrough() {
+GLTexturePassthroughAndroidImageRepresentation::GetTexturePassthrough(
+    int plane_index) {
+  DCHECK_EQ(plane_index, 0);
   return texture_;
 }
 

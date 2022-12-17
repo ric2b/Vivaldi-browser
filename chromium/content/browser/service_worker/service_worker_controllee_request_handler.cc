@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -425,40 +425,51 @@ void ServiceWorkerControlleeRequestHandler::ContinueWithActivatedVersion(
   DCHECK_NE(active_version->fetch_handler_existence(),
             ServiceWorkerVersion::FetchHandlerExistence::UNKNOWN);
 
+  base::UmaHistogramEnumeration(
+      "ServiceWorker.FetchHandler."
+      "TypeAtContinueWithActivatedVersion",
+      active_version->fetch_handler_type());
+
   if (blink::IsRequestDestinationFrame(destination_))
     container_host_->AddServiceWorkerToUpdate(active_version);
 
-  if (active_version->fetch_handler_existence() !=
-      ServiceWorkerVersion::FetchHandlerExistence::EXISTS) {
-    RecordSkipReason(FetchHandlerSkipReason::kNoFetchHandler);
-
-    TRACE_EVENT_WITH_FLOW1(
-        "ServiceWorker",
-        "ServiceWorkerControlleeRequestHandler::ContinueWithActivatedVersion",
-        TRACE_ID_LOCAL(this),
-        TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "Info",
-        "Skipped the ServiceWorker which has no fetch handler");
-    CompleteWithoutLoader();
-    return;
+  switch (active_version->EffectiveFetchHandlerType()) {
+    case ServiceWorkerVersion::FetchHandlerType::kNoHandler: {
+      RecordSkipReason(FetchHandlerSkipReason::kNoFetchHandler);
+      TRACE_EVENT_WITH_FLOW1(
+          "ServiceWorker",
+          "ServiceWorkerControlleeRequestHandler::ContinueWithActivatedVersion",
+          TRACE_ID_LOCAL(this),
+          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "Info",
+          "Skipping the ServiceWorker which has no fetch handler");
+      CompleteWithoutLoader();
+      return;
+    }
+    case ServiceWorkerVersion::FetchHandlerType::kEmptyFetchHandler: {
+      RecordSkipReason(FetchHandlerSkipReason::kSkippedForEmptyFetchHandler);
+      TRACE_EVENT_WITH_FLOW2(
+          "ServiceWorker",
+          "ServiceWorkerControlleeRequestHandler::ContinueWithActivatedVersion",
+          TRACE_ID_LOCAL(this),
+          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "Info",
+          "The fetch handler is skippable. Falling back to network",
+          "FetchHandlerType",
+          FetchHandlerTypeToString(
+              active_version->EffectiveFetchHandlerType()));
+      CompleteWithoutLoader();
+      return;
+    }
+    case ServiceWorkerVersion::FetchHandlerType::kNotSkippable: {
+      RecordSkipReason(FetchHandlerSkipReason::kNotSkipped);
+      TRACE_EVENT_WITH_FLOW1(
+          "ServiceWorker",
+          "ServiceWorkerControlleeRequestHandler::ContinueWithActivatedVersion",
+          TRACE_ID_LOCAL(this),
+          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "Info",
+          "Forwarding to the ServiceWorker");
+      break;
+    }
   }
-
-  if (features::kSkipEmptyFetchHandler.Get() &&
-      active_version->fetch_handler_type() ==
-          ServiceWorkerVersion::FetchHandlerType::kEmptyFetchHandler) {
-    RecordSkipReason(FetchHandlerSkipReason::kSkippedForEmptyFetchHandler);
-
-    TRACE_EVENT_WITH_FLOW2(
-        "ServiceWorker",
-        "ServiceWorkerControlleeRequestHandler::ContinueWithActivatedVersion",
-        TRACE_ID_LOCAL(this),
-        TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "Info",
-        "The fetch handler is skippable. Falling back to network",
-        "FetchHandlerType",
-        FetchHandlerTypeToString(active_version->fetch_handler_type()));
-    CompleteWithoutLoader();
-    return;
-  }
-  RecordSkipReason(FetchHandlerSkipReason::kNotSkipped);
 
   // Finally, we want to forward to the service worker! Make a
   // ServiceWorkerMainResourceLoader which does that work.
@@ -466,12 +477,6 @@ void ServiceWorkerControlleeRequestHandler::ContinueWithActivatedVersion(
       std::make_unique<ServiceWorkerMainResourceLoader>(
           std::move(fallback_callback_), container_host_, frame_tree_node_id_));
 
-  TRACE_EVENT_WITH_FLOW1(
-      "ServiceWorker",
-      "ServiceWorkerControlleeRequestHandler::ContinueWithActivatedVersion",
-      TRACE_ID_LOCAL(this),
-      TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "Info",
-      "Forwarded to the ServiceWorker");
   std::move(loader_callback_)
       .Run(base::MakeRefCounted<SingleRequestURLLoaderFactory>(
           base::BindOnce(&ServiceWorkerMainResourceLoader::StartRequest,

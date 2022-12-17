@@ -43,6 +43,7 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/blocked_by_response_reason.mojom-shared.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -718,8 +719,8 @@ void ResourceLoader::SetDefersLoading(LoaderFreezeMode mode) {
     if (freeze_mode_ == LoaderFreezeMode::kNone) {
       defers_handling_data_url_ = false;
       GetLoadingTaskRunner()->PostTask(
-          FROM_HERE,
-          WTF::Bind(&ResourceLoader::HandleDataUrl, WrapWeakPersistent(this)));
+          FROM_HERE, WTF::BindOnce(&ResourceLoader::HandleDataUrl,
+                                   WrapWeakPersistent(this)));
     }
   }
 
@@ -1183,8 +1184,8 @@ void ResourceLoader::DidStartLoadingResponseBody(
         std::max(static_cast<int64_t>(0), response.ExpectedContentLength()),
         std::move(body),
         progress_receiver_.BindNewEndpointAndPassRemote(GetLoadingTaskRunner()),
-        WTF::Bind(&ResourceLoader::FinishedCreatingBlob,
-                  WrapWeakPersistent(this)));
+        WTF::BindOnce(&ResourceLoader::FinishedCreatingBlob,
+                      WrapWeakPersistent(this)));
     return;
   }
 
@@ -1442,8 +1443,8 @@ void ResourceLoader::RequestAsynchronously(const ResourceRequestHead& request) {
     DCHECK(!code_cache_request_);
     // Handle DataURL in another task instead of using |loader_|.
     GetLoadingTaskRunner()->PostTask(
-        FROM_HERE,
-        WTF::Bind(&ResourceLoader::HandleDataUrl, WrapWeakPersistent(this)));
+        FROM_HERE, WTF::BindOnce(&ResourceLoader::HandleDataUrl,
+                                 WrapWeakPersistent(this)));
     return;
   }
 
@@ -1646,7 +1647,7 @@ bool ResourceLoader::ShouldBlockRequestBasedOnSubresourceFilterDnsAliasCheck(
   // aliases: if any one of the aliases is on the denylist, then the
   // request will be deemed on the denylist and treated accordingly (blocked
   // and/or tagged).
-  out_metric_info->has_aliases = !dns_aliases.IsEmpty();
+  out_metric_info->has_aliases = !dns_aliases.empty();
   out_metric_info->list_length = dns_aliases.size();
 
   // If there are no aliases, we have no reason to block based on them.

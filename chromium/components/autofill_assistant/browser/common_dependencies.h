@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,8 @@
 
 #include <memory>
 #include <string>
+
+class PrefService;
 
 namespace autofill {
 class PersonalDataManager;
@@ -18,12 +20,15 @@ class PasswordManagerClient;
 
 namespace content {
 class WebContents;
-class BrowserContext;
 }  // namespace content
 
 namespace signin {
 class IdentityManager;
 }  // namespace signin
+
+namespace consent_auditor {
+class ConsentAuditor;
+}  // namespace consent_auditor
 
 namespace version_info {
 enum class Channel;
@@ -47,38 +52,37 @@ class CommonDependencies {
 
   virtual std::string GetLocale() const = 0;
 
-  virtual std::string GetCountryCode() const = 0;
+  virtual std::string GetLatestCountryCode() const = 0;
 
-  virtual autofill::PersonalDataManager* GetPersonalDataManager(
-      content::BrowserContext* browser_context) const = 0;
+  virtual std::string GetStoredPermanentCountryCode() const = 0;
+
+  virtual autofill::PersonalDataManager* GetPersonalDataManager() const = 0;
 
   virtual password_manager::PasswordManagerClient* GetPasswordManagerClient(
       content::WebContents* web_contents) const = 0;
 
-  virtual std::string GetSignedInEmail(
-      content::BrowserContext* browser_context) const = 0;
+  virtual PrefService* GetPrefs() const = 0;
 
-  virtual bool IsSupervisedUser(
-      content::BrowserContext* browser_context) const = 0;
+  virtual std::string GetSignedInEmail() const = 0;
 
-  virtual bool IsAllowedForMachineLearning(
-      content::BrowserContext* browser_context) const;
+  virtual bool IsSupervisedUser() const = 0;
 
-  virtual AnnotateDomModelService* GetOrCreateAnnotateDomModelService(
-      content::BrowserContext* browser_context) const = 0;
+  virtual bool IsAllowedForMachineLearning() const;
+
+  virtual AnnotateDomModelService* GetOrCreateAnnotateDomModelService()
+      const = 0;
 
   virtual bool IsWebLayer() const = 0;
 
-  virtual signin::IdentityManager* GetIdentityManager(
-      content::BrowserContext* browser_context) const = 0;
+  virtual signin::IdentityManager* GetIdentityManager() const = 0;
+
+  virtual consent_auditor::ConsentAuditor* GetConsentAuditor() const = 0;
 
   virtual version_info::Channel GetChannel() const = 0;
 
-  virtual bool GetMakeSearchesAndBrowsingBetterEnabled(
-      content::BrowserContext* browser_context) const;
+  virtual bool GetMakeSearchesAndBrowsingBetterEnabled() const;
 
-  virtual bool GetMetricsReportingEnabled(
-      content::BrowserContext* browser_context) const;
+  virtual bool GetMetricsReportingEnabled() const;
 };
 
 }  // namespace autofill_assistant

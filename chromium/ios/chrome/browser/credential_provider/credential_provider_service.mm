@@ -1,31 +1,32 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/chrome/browser/credential_provider/credential_provider_service.h"
+#import "ios/chrome/browser/credential_provider/credential_provider_service.h"
 
 #import <AuthenticationServices/AuthenticationServices.h>
 
-#include "base/check.h"
-#include "base/metrics/histogram_functions.h"
-#include "base/notreached.h"
-#include "base/strings/sys_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
-#include "build/build_config.h"
-#include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
-#include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
-#include "components/password_manager/core/browser/password_manager_util.h"
-#include "components/password_manager/core/browser/password_store_change.h"
-#include "components/password_manager/core/browser/password_store_interface.h"
-#include "components/password_manager/core/browser/site_affiliation/affiliation_service.h"
-#include "components/password_manager/core/common/password_manager_features.h"
-#include "components/password_manager/core/common/password_manager_pref_names.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_user_settings.h"
-#include "ios/chrome/browser/credential_provider/archivable_credential+password_form.h"
+#import "base/check.h"
+#import "base/metrics/histogram_functions.h"
+#import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/threading/sequenced_task_runner_handle.h"
+#import "build/build_config.h"
+#import "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
+#import "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
+#import "components/password_manager/core/browser/password_manager_util.h"
+#import "components/password_manager/core/browser/password_store_change.h"
+#import "components/password_manager/core/browser/password_store_interface.h"
+#import "components/password_manager/core/browser/password_store_util.h"
+#import "components/password_manager/core/browser/site_affiliation/affiliation_service.h"
+#import "components/password_manager/core/common/password_manager_features.h"
+#import "components/password_manager/core/common/password_manager_pref_names.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/sync/driver/sync_service.h"
+#import "components/sync/driver/sync_user_settings.h"
+#import "ios/chrome/browser/credential_provider/archivable_credential+password_form.h"
 #import "ios/chrome/browser/credential_provider/credential_provider_util.h"
-#include "ios/chrome/common/app_group/app_group_constants.h"
+#import "ios/chrome/common/app_group/app_group_constants.h"
 #import "ios/chrome/common/credential_provider/archivable_credential.h"
 #import "ios/chrome/common/credential_provider/as_password_credential_identity+credential.h"
 #import "ios/chrome/common/credential_provider/constants.h"
@@ -217,7 +218,11 @@ void CredentialProviderService::RequestSyncAllCredentialsIfNeeded() {
 }
 
 void CredentialProviderService::SyncAllCredentials(
-    std::vector<std::unique_ptr<PasswordForm>> forms) {
+    absl::variant<std::vector<std::unique_ptr<PasswordForm>>,
+                  password_manager::PasswordStoreBackendError> forms_or_error) {
+  std::vector<std::unique_ptr<PasswordForm>> forms =
+      password_manager::GetLoginsOrEmptyListOnFailure(
+          std::move(forms_or_error));
   [credential_store_ removeAllCredentials];
   AddCredentials(std::move(forms));
   SyncStore(true);
@@ -272,12 +277,14 @@ void CredentialProviderService::RemoveCredentials(
   for (const auto& form : forms) {
     NSString* recordID = RecordIdentifierForPasswordForm(*form);
     DCHECK(recordID);
-    [credential_store_ removeCredentialWithRecordIdentifier:recordID];
+    if ([credential_store_ credentialWithRecordIdentifier:recordID]) {
+      [credential_store_ removeCredentialWithRecordIdentifier:recordID];
+    }
   }
 }
 
 void CredentialProviderService::UpdateAccountId() {
-  ChromeIdentity* identity = authentication_service_->GetPrimaryIdentity(
+  id<SystemIdentity> identity = authentication_service_->GetPrimaryIdentity(
       signin::ConsentLevel::kSignin);
   if (authentication_service_->HasPrimaryIdentityManaged(
           signin::ConsentLevel::kSignin)) {
@@ -291,15 +298,18 @@ void CredentialProviderService::UpdateAccountId() {
 }
 
 void CredentialProviderService::UpdateUserEmail() {
-  ChromeIdentity* identity =
-      authentication_service_->GetPrimaryIdentity(signin::ConsentLevel::kSync);
-
-  bool sync_enabled = sync_service_->IsSyncFeatureEnabled();
-  bool passwords_sync_enabled =
+  const bool sync_enabled = sync_service_->IsSyncFeatureEnabled();
+  const bool passwords_sync_enabled =
       sync_service_->GetUserSettings()->GetSelectedTypes().Has(
           syncer::UserSelectableType::kPasswords);
-  NSString* user_email =
-      (sync_enabled && passwords_sync_enabled) ? identity.userEmail : nil;
+
+  NSString* user_email = nil;
+  if (sync_enabled && passwords_sync_enabled) {
+    id<SystemIdentity> identity = authentication_service_->GetPrimaryIdentity(
+        signin::ConsentLevel::kSync);
+    user_email = identity.userEmail;
+  }
+
   [app_group::GetGroupUserDefaults()
       setObject:user_email
          forKey:AppGroupUserDefaultsCredentialProviderUserEmail()];
@@ -383,7 +393,11 @@ void CredentialProviderService::OnLoginsRetained(
 }
 
 void CredentialProviderService::OnInjectedAffiliationAfterLoginsChanged(
-    std::vector<std::unique_ptr<PasswordForm>> forms) {
+    absl::variant<std::vector<std::unique_ptr<PasswordForm>>,
+                  password_manager::PasswordStoreBackendError> forms_or_error) {
+  std::vector<std::unique_ptr<PasswordForm>> forms =
+      password_manager::GetLoginsOrEmptyListOnFailure(
+          std::move(forms_or_error));
   AddCredentials(std::move(forms));
   SyncStore(false);
 }

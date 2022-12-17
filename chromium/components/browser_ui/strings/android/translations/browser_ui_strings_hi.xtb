@@ -21,6 +21,7 @@
 <translation id="1426410128494586442">हां</translation>
 <translation id="1446450296470737166">MIDI डिवाइस के पूरे नियंत्रण की अनुमति दें</translation>
 <translation id="1620510694547887537">कैमरा</translation>
+<translation id="1633720957382884102">मिलती-जुलती साइटें</translation>
 <translation id="1644574205037202324">इतिहास</translation>
 <translation id="1647582022260550163">क्या आप वाकई में कुकी और साइट डेटा मिटाना चाहते हैं और अनुमतियों को रीसेट करना चाहते हैं?</translation>
 <translation id="1660204651932907780">साइटों को आवाज़ चलाने दें (सुझाया गया)</translation>
@@ -30,8 +31,10 @@
 <translation id="1717218214683051432">मोशन सेंसर</translation>
 <translation id="1743802530341753419">साइटों को डिवाइस से कनेक्ट करने की अनुमति देने से पहले पूछें (हम इस सेटिंग को चालू रखने का सुझाव देते हैं)</translation>
 <translation id="1779089405699405702">इमेज डीकोडर</translation>
+<translation id="1785415724048343560">बेहतरीन अनुभव पाने के लिए इसे चुनें</translation>
 <translation id="1818308510395330587"><ph name="APP_NAME" /> को एआर (ऑगमेंटेड रिएलिटी) का इस्तेमाल करने देने के लिए, <ph name="BEGIN_LINK" />Android की सेटिंग<ph name="END_LINK" /> में जाकर भी कैमरा चालू करें.</translation>
 <translation id="1864927262126810325"><ph name="SOURCE_NAME" /> से</translation>
+<translation id="187227595286001730">मिलती-जुलती साइटें, ग्रुप में आपकी गतिविधि देख सकती हैं</translation>
 <translation id="1887786770086287077">इस डिवाइस के लिए जगह की जानकारी का एक्सेस बंद है. उसे <ph name="BEGIN_LINK" />Android सेटिंग<ph name="END_LINK" /> में चालू करें.</translation>
 <translation id="1915307458270490472">कॉल खत्म करें</translation>
 <translation id="1919345977826869612">विज्ञापन</translation>
@@ -70,6 +73,7 @@
 <translation id="2490684707762498678"><ph name="APP_NAME" /> मैनेज करता है</translation>
 <translation id="2498359688066513246">सहायता और फ़ीडबैक</translation>
 <translation id="2501278716633472235">वापस जाएं</translation>
+<translation id="2546283357679194313">कुकी और साइट डेटा</translation>
 <translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 कुकी को ब्लॉक किया गया}one{# कुकी को ब्लॉक किया गया}other{# कुकी ब्लॉक किए गए}}</translation>
 <translation id="2570922361219980984">इस डिवाइस के लिए जगह की जानकारी का एक्सेस भी बंद है. उसे <ph name="BEGIN_LINK" />Android सेटिंग<ph name="END_LINK" /> में चालू करें.</translation>
 <translation id="257931822824936280">बड़ा किया गया - छोटा करने के लिए क्‍लिक करें.</translation>
@@ -83,7 +87,6 @@
 <translation id="2713106313042589954">कैमरा बंद करें</translation>
 <translation id="2717722538473713889">ईमेल पते</translation>
 <translation id="2750481671343847896">साइटें, पहचान करने वाली सेवा से जुड़े, साइन इन करने के अनुरोध दिखा सकती हैं.</translation>
-<translation id="2785051990912111074">यह विकल्प <ph name="WEBSITE" /> के लिए कुकी मिटाएगा</translation>
 <translation id="2822354292072154809">क्या आप वाकई <ph name="CHOSEN_OBJECT_NAME" /> की सभी साइट अनुमतियां रीसेट करना चाहते हैं?</translation>
 <translation id="2870560284913253234">साइट</translation>
 <translation id="2874939134665556319">पिछला ट्रैक</translation>
@@ -101,18 +104,22 @@
 <translation id="3115898365077584848">जानकारी दिखाएं</translation>
 <translation id="3123473560110926937">कुछ साइटों पर ब्लॉक किए गए हैं</translation>
 <translation id="3143754809889689516">शुरू से चलाएं</translation>
+<translation id="3162899666601560689">साइटें आपके ब्राउज़ करने के अनुभव को बेहतर बनाने के लिए कुकी का इस्तेमाल कर सकती हैं. जैसे, आपको साइन इन बनाए रखने के लिए या आपने शॉपिंग कार्ट में जो आइटम सेव किए हैं उन्हें याद रखने के लिए</translation>
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> संग्रहित डेटा</translation>
 <translation id="3203366800380907218">वेब से</translation>
 <translation id="321187648315454507"><ph name="BEGIN_LINK" />Android की सेटिंग<ph name="END_LINK" /> में जाकर भी सूचनाएं चालू करें, ताकि <ph name="APP_NAME" /> आपको सूचनाएं भेज सके.</translation>
 <translation id="3227137524299004712">माइक्रोफ़ोन</translation>
 <translation id="3248611290851046188">इस साइट से तय होता है कि दूसरी साइटें आपकी पसंद के किन विषयों से जुड़े विज्ञापन आपको दिखा सकती हैं. यह साइट, आपकी पसंद के विषयों के बारे में Chrome से भी पता करती है, ताकि आपको ज़्यादा काम के विज्ञापन दिखा सके.</translation>
 <translation id="3277252321222022663">साइटों को सेंसर ऐक्सेस करने दें (सुझाया गया)</translation>
+<translation id="3285500645985761267">मिलती-जुलती साइटों को ग्रुप में आपकी गतिविधि देखने की अनुमति दें</translation>
 <translation id="3295602654194328831">जानकारी छिपाएं</translation>
 <translation id="3328801116991980348">साइट जानकारी</translation>
 <translation id="3333961966071413176">सभी संपर्क</translation>
 <translation id="3362437373201486687">ब्लूटूथ डिवाइस के लिए स्कैन किया जा रहा है</translation>
 <translation id="3386292677130313581">साइटों को अपनी जगह की जानकारी देने से पहले अनुमति लेना ज़रूरी बनाएं (सुझाया गया)</translation>
+<translation id="3521663503435878242"><ph name="DOMAIN" /> की साइटें</translation>
 <translation id="3538390592868664640">साइटों को अपने आस-पास की जगह का 3D मैप बनाने या कैमरे की स्थिति ट्रैक करने से रोकें</translation>
+<translation id="3544058026430919413">कंपनी ऐसी साइटों का एक ग्रुप बना सकती है जो ग्रुप में आपकी गतिविधि शेयर करने के लिए, कुकी का इस्तेमाल कर सके. यह सुविधा गुप्त मोड में काम नहीं करती.</translation>
 <translation id="3551268116566418498">गुप्त मोड से बाहर निकलना है?</translation>
 <translation id="3586500876634962664">कैमरा और माइक्रोफ़ोन का इस्तेमाल</translation>
 <translation id="358794129225322306">किसी साइट को अपने आप एक से ज़्यादा फ़ाइलें लोड करने की मंज़ूरी दें.</translation>
@@ -125,7 +132,7 @@
 <translation id="3797520601150691162">कुछ खास साइटों पर गहरे रंग वाली थीम लागू न करें</translation>
 <translation id="3804247818991980532"><ph name="TYPE_1" />. <ph name="TYPE_2" />.</translation>
 <translation id="381841723434055211">फ़ोन नंबर</translation>
-<translation id="3826050100957962900">तीसरे पक्ष की सेवा के लिए, साइन इन करना</translation>
+<translation id="3826050100957962900">तीसरे पक्ष की सेवा के लिए साइन इन</translation>
 <translation id="3835233591525155343">आपके डिवाइस का इस्तेमाल</translation>
 <translation id="385051799172605136">वापस जाएं</translation>
 <translation id="3859306556332390985">आगे जाएं</translation>
@@ -149,11 +156,13 @@
 <translation id="429312253194641664">किसी साइट पर मीडिया चल रहा है</translation>
 <translation id="42981349822642051">विस्तृत करें</translation>
 <translation id="4336434711095810371">सारा डेटा मिटाएं</translation>
+<translation id="4338831206024587507"><ph name="DOMAIN" /> की सभी साइटें</translation>
 <translation id="4402755511846832236">साइटों को यह जानने से रोकें कि आप इस डिवाइस का इस्तेमाल कब करते हैं</translation>
 <translation id="4428065317363009941">दिलचस्पी के मुताबिक विज्ञापन</translation>
 <translation id="4434045419905280838">पॉप-अप और रीडायरेक्ट</translation>
 <translation id="445467742685312942">साइटों को सभी सुरक्षित सामग्री चलाने दें</translation>
 <translation id="4468959413250150279">किसी खास साइट के लिए आवाज़ बंद करें.</translation>
+<translation id="4475912480633855319">{COOKIES,plural, =1{# कुकी}one{# कुकी}other{# कुकी}}</translation>
 <translation id="4479647676395637221">साइटों को अपने कैमरे का इस्तेमाल करने देने से पहले अनुमति लेना ज़रूरी बनाएं (सुझाया गया )</translation>
 <translation id="4505788138578415521">यूआरएल बड़ा हो गया</translation>
 <translation id="4534723447064627427"><ph name="APP_NAME" /> को माइक्रोफ़ोन का ऐक्सेस देने के लिए, <ph name="BEGIN_LINK" />Android की सेटिंग<ph name="END_LINK" /> में जाकर भी माइक्रोफ़ोन चालू करें.</translation>
@@ -164,18 +173,21 @@
 <translation id="4751476147751820511">गति या लाइट सेंसर</translation>
 <translation id="4811450222531576619">इस पेज के स्रोत और विषय के बारे में जानें</translation>
 <translation id="4836046166855586901">साइटों को यह पूछने दें कि आप इस डिवाइस का इस्तेमाल कब करते हैं</translation>
+<translation id="483914009762354899">इस डोमेन की सभी साइटें शामिल करें</translation>
 <translation id="4883854917563148705">प्रबंधित सेटिंग रीसेट नहीं की जा सकती हैं</translation>
 <translation id="4887024562049524730">साइटों को अपने वर्चुअल रिएलिटी वाले डिवाइस और डेटा का इस्तेमाल करने की अनुमति देने से पहले पूछें (हम इसका सुझाव देते हैं)</translation>
+<translation id="4955223779495905865">किसी वेबसाइट को विज़िट करने पर, वह दूसरी साइटों का कॉन्टेंट एम्बेड कर सकती है, जैसे कि इमेज, विज्ञापन, और टेक्स्ट. आपके अनुभव को आपकी पसंद के हिसाब से बनाने के लिए, इनमें से कोई भी साइट, कुकी और अन्य डेटा को सेव कर सकती है.</translation>
 <translation id="4962975101802056554">डिवाइस की सभी अनुमतियां निरस्त करें</translation>
 <translation id="497421865427891073">आगे जाएं</translation>
 <translation id="4976702386844183910">पिछली बार <ph name="DATE" /> को देखा गया</translation>
 <translation id="4994033804516042629">कोई संपर्क नहीं मिला</translation>
 <translation id="4996978546172906250">इससे शेयर करें</translation>
-<translation id="5014906230196386306">क्या आप कुकी मिटाना चाहते हैं?</translation>
 <translation id="5039804452771397117">अनुमति दें</translation>
 <translation id="5048398596102334565">साइटों को मोशन सेंसर ऐक्‍सेस करने दें (सुझाया गया)</translation>
 <translation id="5050380848339752099">यह साइट गुप्त मोड से बाहर के किसी ऐप्लिकेशन के साथ जानकारी शेयर करने वाली है.</translation>
 <translation id="5063480226653192405">उपयोग</translation>
+<translation id="5082281938627763039">इससे <ph name="FPS_MEMBER" /> और <ph name="FPS_OWNER" /> की साइटों के ग्रुप में मौजूद साइटों की कुकी और साइट का अन्य डेटा मिटा दिया जाता है</translation>
+<translation id="5091013926750941408">मोबाइल साइट</translation>
 <translation id="509133520954049755">डेस्कटॉप व्यू के लिए अनुरोध करें</translation>
 <translation id="5100237604440890931">छोटा किया गया - पूरा खोलने के लिए क्लिक करें.</translation>
 <translation id="5123685120097942451">गुप्त टैब</translation>
@@ -191,7 +203,7 @@
 <translation id="5313967007315987356">साइट जोड़ें</translation>
 <translation id="5317780077021120954">सेव करें</translation>
 <translation id="5335288049665977812">साइटों को JavaScript चलाने की अनुमति दें (हम इस सेटिंग को चालू रखने का सुझाव देते हैं)</translation>
-<translation id="534295439873310000">NFC डिवाइस</translation>
+<translation id="534295439873310000">एनएफ़सी डिवाइस</translation>
 <translation id="5354152178998424783">इससे वे <ph name="DATASIZE" /> डेटा और कुकी मिट जाएंगे जिन्हें साइटों ने सेव किया है.</translation>
 <translation id="5394307150471348411">{DETAIL_COUNT,plural, =1{(+ 1 और)}one{(+ # और)}other{(+ # और)}}</translation>
 <translation id="5403592356182871684">नाम</translation>
@@ -206,11 +218,12 @@
 <translation id="5553374991681107062">नए विकल्प</translation>
 <translation id="5556459405103347317">फिर लोड करें</translation>
 <translation id="5596627076506792578">ज़्यादा विकल्प</translation>
-<translation id="5649053991847567735">अपने आप होने वाले डाउनलोड</translation>
+<translation id="5649053991847567735">अपने-आप होने वाले डाउनलोड</translation>
 <translation id="5668404140385795438">किसी वेबसाइट के वेबपेज ज़ूम इन न करने के नियम को बदल देता है</translation>
 <translation id="5677928146339483299">ब्लॉक किया गया है</translation>
-<translation id="5689516760719285838">स्थान</translation>
+<translation id="5689516760719285838">जगह की जानकारी</translation>
 <translation id="5690795753582697420">Android की सेटिंग में कैमरा बंद है</translation>
+<translation id="5706552988683188916">इससे, <ph name="WEBSITE" /> की कुकी और साइट का अन्य डेटा मिट जाता है</translation>
 <translation id="5719847187258001597">इससे वे सभी डेटा और कुकी मिट जाएंगे जिन्हें <ph name="ORIGIN" /> या इसके ऐप्लिकेशन ने आपकी होम स्क्रीन पर सेव किया है.</translation>
 <translation id="5771720122942595109"><ph name="PERMISSION_1" /> को ब्लॉक किया गया</translation>
 <translation id="5804241973901381774">अनुमतियां</translation>
@@ -219,6 +232,7 @@
 <translation id="5887687176710214216">साइट पर पिछली बार कल गए</translation>
 <translation id="5916664084637901428">चालू है</translation>
 <translation id="5922853908706496913">आपकी स्क्रीन शेयर की जा रही है</translation>
+<translation id="5922967540311291836">तीसरे पक्ष की कुकी ब्लॉक करें:</translation>
 <translation id="5939518447894949180">रीसेट करें</translation>
 <translation id="5975083100439434680">ज़ूम आउट</translation>
 <translation id="5976059395673079613"><ph name="PERMISSION" /> - <ph name="WARNING_MESSAGE" /></translation>
@@ -253,9 +267,9 @@
 <translation id="6561560012278703671">बिना आवाज़ के मैसेज पाएं (सूचनाओं में आवाज़ को रोकता है, ताकि आपके काम में रुकावट न आए)</translation>
 <translation id="6593061639179217415">डेस्कटॉप साइट</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> जीबी</translation>
-<translation id="6612358246767739896">सुरक्षित सामग्री</translation>
+<translation id="6612358246767739896">सुरक्षित कॉन्टेंट</translation>
 <translation id="662080504995468778">इसपर रहें</translation>
-<translation id="6643016212128521049">साफ़ करें</translation>
+<translation id="6643016212128521049">मिटाएं</translation>
 <translation id="6689172468748959065">प्रोफ़ाइल फ़ोटो</translation>
 <translation id="6697925417670533197">डाउनलोड हो रहे हैं</translation>
 <translation id="6722828510648505498">पहचान करने वाली सेवा से जुड़े, साइन इन करने के अनुरोध ब्लॉक करें.</translation>
@@ -303,13 +317,14 @@
 <translation id="780301667611848630">नहीं, रहने दें</translation>
 <translation id="7804248752222191302">कोई साइट आपका कैमरा इस्तेमाल कर रही है</translation>
 <translation id="7817023149356982970">आप इस साइट से साइन आउट हो जाएंगे.</translation>
-<translation id="7828557259026017104">आप जिन वेबसाइटों पर जाते हैं उनकी बनाई फ़ाइलें कुकी कहलाती हैं. आपकी प्राथमिकताओं को याद रखने के लिए, साइटें उनका इस्तेमाल करती हैं. अन्य साइटें, तीसरे पक्ष की कुकी बनाती हैं. इन साइटों पर विज्ञापन या इमेज जैसी कुछ सामग्री होती हैं. ये उस वेबपेज पर दिखती है जिस पर आप जाते हैं.</translation>
 <translation id="7835852323729233924">चलाया जा रहा मीडिया</translation>
 <translation id="783819812427904514">वीडियो अनम्यूट करें</translation>
 <translation id="7846076177841592234">चुना गया हटाएं</translation>
 <translation id="7846621471902887024">आप सभी साइटों से साइन आउट हो जाएंगे.</translation>
 <translation id="7882806643839505685">किसी खास साइट के लिए आवाज़ की अनुमति दें.</translation>
+<translation id="789180354981963912">गुप्त मोड में, तीसरे पक्ष की कुकी ब्लॉक करें:</translation>
 <translation id="7940722705963108451">मुझे याद दिलाएं</translation>
+<translation id="7974024493641668069">{COUNT,plural, =1{<ph name="FPS_OWNER" /> की साइटों के ग्रुप में मौजूद <ph name="FPS_MEMBERS_COUNT" /> साइट, ग्रुप में आपकी गतिविधि देख सकती है}one{<ph name="FPS_OWNER" /> की साइटों के ग्रुप में मौजूद <ph name="FPS_MEMBERS_COUNT" /> साइट, ग्रुप में आपकी गतिविधि देख सकती है}other{<ph name="FPS_OWNER" /> की साइटों के ग्रुप में मौजूद <ph name="FPS_MEMBERS_COUNT" /> साइटें, ग्रुप में आपकी गतिविधि देख सकती हैं}}</translation>
 <translation id="7986741934819883144">कोई संपर्क चुनें</translation>
 <translation id="7999064672810608036">क्‍या आप वाकई कुकी सहित इस वेबसाइट का सभी स्‍थानीय डेटा साफ़ करना और इसकी सभी अनुमतियों को रीसेट करना चाहते हैं?</translation>
 <translation id="8007176423574883786">इस डिवाइस के लिए बंद कर दिया गया है</translation>
@@ -331,13 +346,13 @@
 <translation id="8284326494547611709">कैप्शन</translation>
 <translation id="8300705686683892304">ऐप्लिकेशन मैनेज करता है</translation>
 <translation id="8324158725704657629">दोबारा न पूछें</translation>
+<translation id="834785183489258869">गुप्त मोड इस्तेमाल करने पर, अलग-अलग साइटों पर की गई आपकी ब्राउज़िंग गतिविधि देखने के लिए, साइटें, कुकी इस्तेमाल नहीं कर सकतीं. जैसे, लोगों के हिसाब से विज्ञापन दिखाने के लिए. हो सकता है कि कुछ साइटों पर खास सुविधाएं काम न करें.</translation>
 <translation id="8372893542064058268">किसी विशिष्ट साइट के लिए पृष्ठभूमि समन्वयन की अनुमति दें.</translation>
 <translation id="8376384591331888629">इस साइट पर मौजूद तीसरे पक्ष की कुकी शामिल करें</translation>
 <translation id="83792324527827022">कोई साइट आपके कैमरे और माइक्रोफ़ोन का इस्तेमाल कर रही है</translation>
 <translation id="8380167699614421159">इस साइट में तंग करने वाले या गुमराह करने वाले विज्ञापन दिखाई देते हैं</translation>
 <translation id="8394832520002899662">साइट पर वापस जाने के लिए टैप करें</translation>
 <translation id="8409345997656833551">किसी लेख के लिए, सरल बनाए गए व्यू की सुविधा उपलब्ध होने पर सूचना पाएं</translation>
-<translation id="8425213833346101688">बदलें</translation>
 <translation id="8428213095426709021">सेटिंग</translation>
 <translation id="8441146129660941386">पीछे जाएं</translation>
 <translation id="8444433999583714703"><ph name="APP_NAME" /> को अपनी जगह की जानकारी का ऐक्सेस देने के लिए, <ph name="BEGIN_LINK" />Android की सेटिंग<ph name="END_LINK" /> में भी जाकर भी, जगह की जानकारी चालू करें.</translation>
@@ -348,6 +363,7 @@
 <translation id="8499083585497694743">माइक्रोफ़ोन को अनम्यूट करें</translation>
 <translation id="851751545965956758">साइटों को डिवाइस से कनेक्ट होने से रोकें</translation>
 <translation id="8525306231823319788">फ़ुल स्‍क्रीन</translation>
+<translation id="8564613706851221529">{COUNT,plural, =1{<ph name="FPS_OWNER" /> की <ph name="FPS_MEMBERS_COUNT" /> साइट के लिए कुकी का इस्तेमाल किया जा सकता है}one{<ph name="FPS_OWNER" /> की <ph name="FPS_MEMBERS_COUNT" /> साइट के लिए कुकी का इस्तेमाल किया जा सकता है}other{<ph name="FPS_OWNER" /> की <ph name="FPS_MEMBERS_COUNT" /> साइटों के लिए कुकी का इस्तेमाल किया जा सकता है}}</translation>
 <translation id="857943718398505171">अनुमति दी गई (सुझाया गया)</translation>
 <translation id="8609465669617005112">ऊपर जाएं</translation>
 <translation id="8676374126336081632">इनपुट साफ़ करें</translation>
@@ -361,6 +377,7 @@
 <translation id="8751914237388039244">इमेज चुनें</translation>
 <translation id="8801436777607969138">किसी खास साइट के लिए JavaScript पर रोक लगाएं.</translation>
 <translation id="8816026460808729765">साइटों को सेंसर ऐक्सेस करने से रोकें</translation>
+<translation id="8823559166155093873">कुकी ब्लॉक करें</translation>
 <translation id="8847988622838149491">यूएसबी</translation>
 <translation id="8903921497873541725">ज़ूम इन करें</translation>
 <translation id="8921772741368021346"><ph name="POSITION" /> / <ph name="DURATION" /></translation>
@@ -372,9 +389,11 @@
 <translation id="8986362086234534611">भूल जाएं</translation>
 <translation id="9019902583201351841">आपके अभिभावकों द्वारा प्रबंधित</translation>
 <translation id="9074739597929991885">ब्लूटूथ</translation>
+<translation id="9090268041676521955">यह साइट ऐसे ग्रुप में है जिस पर आपकी गतिविधि देखी जा सकती है. यह ग्रुप <ph name="FPS_OWNER" /> ने तय किया है</translation>
+<translation id="9106233582039520022">क्या आपको कुकी को मिटाना है?</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, और <ph name="NUM_MORE" /> अन्य सुविधा}one{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, और <ph name="NUM_MORE" /> अन्य सुविधा}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, और <ph name="NUM_MORE" /> अन्य सुविधाएं}}</translation>
 <translation id="913657688200966289"><ph name="BEGIN_LINK" />Android की सेटिंग<ph name="END_LINK" /> में जाकर, <ph name="APP_NAME" /> के लिए अनुमतियां चालू करें.</translation>
 <translation id="9162462602695099906">यह पेज सुरक्षित नहीं है</translation>
 <translation id="930525582205581608">क्या आप इस साइट की सेव की गई जानकारी मिटाना चाहते हैं?</translation>
-<translation id="967624055006145463">डेटा संग्रहित किया गया</translation>
+<translation id="967624055006145463">डेटा सेव किया गया</translation>
 </translationbundle>

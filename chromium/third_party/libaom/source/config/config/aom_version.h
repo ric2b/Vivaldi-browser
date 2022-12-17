@@ -10,10 +10,10 @@
  */
 
 #define VERSION_MAJOR 3
-#define VERSION_MINOR 4
+#define VERSION_MINOR 5
 #define VERSION_PATCH 0
-#define VERSION_EXTRA "215-g5bd38c950"
+#define VERSION_EXTRA "289-g4ebecefe7"
 #define VERSION_PACKED \
   ((VERSION_MAJOR << 16) | (VERSION_MINOR << 8) | (VERSION_PATCH))
-#define VERSION_STRING_NOSP "3.4.0-215-g5bd38c950"
-#define VERSION_STRING " 3.4.0-215-g5bd38c950"
+#define VERSION_STRING_NOSP "3.5.0-289-g4ebecefe7"
+#define VERSION_STRING " 3.5.0-289-g4ebecefe7"

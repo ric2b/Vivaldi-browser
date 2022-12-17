@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,13 +25,13 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
-#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "base/types/optional_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "net/base/features.h"
@@ -39,6 +39,7 @@
 #include "net/base/http_user_agent_settings.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/network_delegate.h"
 #include "net/base/network_isolation_key.h"
 #include "net/base/privacy_mode.h"
@@ -53,13 +54,13 @@
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
-#include "net/cookies/first_party_set_metadata.h"
 #include "net/cookies/parsed_cookie.h"
-#include "net/cookies/same_party_context.h"
 #include "net/filter/brotli_source_stream.h"
 #include "net/filter/filter_source_stream.h"
 #include "net/filter/gzip_source_stream.h"
 #include "net/filter/source_stream.h"
+#include "net/first_party_sets/first_party_set_metadata.h"
+#include "net/first_party_sets/same_party_context.h"
 #include "net/http/http_content_disposition.h"
 #include "net/http/http_log_util.h"
 #include "net/http/http_network_session.h"
@@ -257,6 +258,8 @@ void URLRequestHttpJob::Start() {
 
   request_info_.network_isolation_key =
       request_->isolation_info().network_isolation_key();
+  request_info_.network_anonymization_key =
+      request_->isolation_info().network_anonymization_key();
   request_info_.possibly_top_frame_origin =
       request_->isolation_info().top_frame_origin();
   request_info_.is_subframe_document_resource =
@@ -298,6 +301,30 @@ void URLRequestHttpJob::Start() {
 void URLRequestHttpJob::OnGotFirstPartySetMetadata(
     FirstPartySetMetadata first_party_set_metadata) {
   first_party_set_metadata_ = std::move(first_party_set_metadata);
+
+  if (!request()->network_delegate()) {
+    OnGotFirstPartySetCacheFilterMatchInfo(
+        net::FirstPartySetsCacheFilter::MatchInfo());
+    return;
+  }
+  absl::optional<FirstPartySetsCacheFilter::MatchInfo> match_info =
+      request()
+          ->network_delegate()
+          ->GetFirstPartySetsCacheFilterMatchInfoMaybeAsync(
+              SchemefulSite(request()->url()),
+              base::BindOnce(
+                  &URLRequestHttpJob::OnGotFirstPartySetCacheFilterMatchInfo,
+                  weak_factory_.GetWeakPtr()));
+
+  if (match_info.has_value())
+    OnGotFirstPartySetCacheFilterMatchInfo(std::move(match_info.value()));
+}
+
+void URLRequestHttpJob::OnGotFirstPartySetCacheFilterMatchInfo(
+    FirstPartySetsCacheFilter::MatchInfo match_info) {
+  request_info_.fps_cache_filter = match_info.clear_at_run_id;
+  request_info_.browser_run_id = match_info.browser_run_id;
+
   // Privacy mode could still be disabled in SetCookieHeaderAndStart if we are
   // going to send previously saved cookies.
   request_info_.privacy_mode = DeterminePrivacyMode();
@@ -335,7 +362,7 @@ void URLRequestHttpJob::OnGotFirstPartySetMetadata(
 
     cookie_partition_key_ = CookiePartitionKey::FromNetworkIsolationKey(
         request_->isolation_info().network_isolation_key(),
-        base::OptionalOrNullptr(
+        base::OptionalToPtr(
             first_party_set_metadata_.top_frame_entry().has_value()
                 ? absl::make_optional(
                       first_party_set_metadata_.top_frame_entry()->primary())
@@ -799,7 +826,8 @@ void URLRequestHttpJob::AnnotateAndMoveUserBlockedCookies(
   if (request()->network_delegate()) {
     can_get_cookies =
         request()->network_delegate()->AnnotateAndMoveUserBlockedCookies(
-            *request(), maybe_included_cookies, excluded_cookies);
+            *request(), first_party_set_metadata_, maybe_included_cookies,
+            excluded_cookies);
   }
 
   if (!can_get_cookies) {
@@ -999,7 +1027,7 @@ void URLRequestHttpJob::ProcessExpectCTHeader() {
   if (has_expect_ct_header) {
     security_state->ProcessExpectCTHeader(
         value, HostPortPair::FromURL(request_info_.url), ssl_info,
-        request_->isolation_info().network_isolation_key());
+        request_->isolation_info().network_anonymization_key());
   }
 }
 
@@ -1078,7 +1106,6 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
   } else if (result == ERR_DNS_NAME_HTTPS_ONLY) {
     // If DNS indicated the name is HTTPS-only, synthesize a redirect to either
     // HTTPS or WSS.
-    DCHECK(features::kUseDnsHttpsSvcbHttpUpgrade.Get());
     DCHECK(!request_->url().SchemeIsCryptographic());
 
     base::Time request_time =

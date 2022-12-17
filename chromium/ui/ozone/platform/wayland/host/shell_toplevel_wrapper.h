@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -136,6 +136,12 @@ class ShellToplevelWrapper {
 
   // Sets the z order of the window.
   virtual void SetZOrder(ZOrderLevel z_order) = 0;
+
+  // Activation brings a window to the foreground. Deactivation makes a window
+  // non-foregrounded.
+  virtual bool SupportsActivation() = 0;
+  virtual void Activate() = 0;
+  virtual void Deactivate() = 0;
 };
 
 // Look for |value| in |wl_array| in C++ style.

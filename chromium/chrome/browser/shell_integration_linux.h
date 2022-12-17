@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -147,6 +147,13 @@ bool GetNoDisplayFromDesktopFile(const std::string& shortcut_contents);
 // Returns an empty path if the executable path could not be found, which should
 // never happen.
 base::FilePath GetChromeExePath();
+
+// Get the value of |key| from the [Desktop Entry] section of a .desktop file,
+// given in |shortcut_contents|. If the key is not found, returns an empty
+// string.
+std::string GetDesktopEntryStringValueFromFromDesktopFileForTest(
+    const std::string& key,
+    const std::string& shortcut_contents);
 
 }  // namespace internal
 

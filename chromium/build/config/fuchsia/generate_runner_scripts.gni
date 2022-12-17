@@ -1,4 +1,4 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -7,7 +7,6 @@ assert(is_fuchsia)
 import("//build/config/chromecast_build.gni")
 import("//build/config/fuchsia/config.gni")
 import("//build/config/fuchsia/fuchsia_package_metadata.gni")
-import("//build/config/fuchsia/package.gni")
 import("//build/config/gclient_args.gni")
 import("//build/config/sysroot.gni")
 import("//build/util/generate_wrapper.gni")
@@ -193,17 +192,11 @@ template("fuchsia_package_installer") {
                                  "package_deps",
                                ])
   }
-  if (!defined(data_deps)) {
-    data_deps = []
-  }
   fuchsia_run_script_with_packages(target_name) {
     forward_variables_from(invoker,
                            "*",
-                           [
-                             "runner_script",
-                             "executable_args",
-                           ])
-
+                           TESTONLY_AND_VISIBILITY + [ "executable_args" ])
+    forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
     executable = rebase_path("//build/fuchsia/deploy_to_pkg_repo.py")
     output_name_format = "deploy_%package%"
     include_fuchsia_build_dir = true
@@ -218,14 +211,13 @@ template("fuchsia_test_runner") {
 
   fuchsia_run_script_with_packages(_run_target) {
     forward_variables_from(invoker,
-                           [
-                             "data",
-                             "data_deps",
-                             "package",
-                             "package_name",
-                             "package_deps",
-                           ])
-    testonly = true
+                           TESTONLY_AND_VISIBILITY + [
+                                 "data",
+                                 "data_deps",
+                                 "package",
+                                 "package_name",
+                                 "package_deps",
+                               ])
 
     if (use_cfv2_script) {
       _test_runner_py = "//build/fuchsia/test/run_test.py"
@@ -261,16 +253,15 @@ template("fuchsia_test_runner") {
       executable_args += [ "--use-run-test-component" ]
     }
 
-    if (defined(invoker.use_test_server) && invoker.use_test_server &&
-        !use_cfv2_script) {
+    if (defined(invoker.use_test_server) && invoker.use_test_server) {
       # TODO(crbug.com/1254563): Tests that needs the test server need access
       # to the network and run-test-component doesn't support it. Provide the
       # necessary access via capability routing once the tests are running via
       # CFv2.
-      executable_args += [
-        "--enable-test-server",
-        "--use-run",
-      ]
+      executable_args += [ "--enable-test-server" ]
+      if (!use_cfv2_script) {
+        executable_args += [ "--use-run" ]
+      }
     }
 
     if ((!defined(invoker.use_cfv2) || invoker.use_cfv2) && !use_cfv2_script) {
@@ -308,15 +299,13 @@ template("fuchsia_test_runner") {
       package_name = invoker.package_name_override
     }
   }
-
   fuchsia_package_installer(_install_target) {
     forward_variables_from(invoker,
                            TESTONLY_AND_VISIBILITY + [
                                  "package",
                                  "package_name",
+                                 "package_deps",
                                ])
-    testonly = invoker.testonly
-    include_fuchsia_build_dir = true
   }
 }
 

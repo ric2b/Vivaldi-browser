@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,7 +46,7 @@ class TargetHandler : public DevToolsDomainHandler,
   TargetHandler(AccessMode access_mode,
                 const std::string& owner_target_id,
                 TargetAutoAttacher* auto_attacher,
-                DevToolsSession* root_session);
+                DevToolsSession* session);
 
   TargetHandler(const TargetHandler&) = delete;
   TargetHandler& operator=(const TargetHandler&) = delete;
@@ -58,13 +58,15 @@ class TargetHandler : public DevToolsDomainHandler,
   void Wire(UberDispatcher* dispatcher) override;
   Response Disable() override;
 
-  void UpdatePortals();
   bool ShouldThrottlePopups() const;
 
   // This is to support legacy protocol, where an autoattacher on service worker
   // targets would not auto-attach service workers.
   // TODO(caseq): update front-end logic and get rid of this.
   void DisableAutoAttachOfServiceWorkers();
+  // Unlike the one above, this one indicates the client has opted in into
+  // supporting tab targets, so portals are not reported for frame targets.
+  void DisableAutoAttachOfPortals();
 
   // Domain implementation.
   Response SetDiscoverTargets(
@@ -153,6 +155,7 @@ class TargetHandler : public DevToolsDomainHandler,
   std::unique_ptr<NavigationThrottle> CreateThrottleForNavigation(
       TargetAutoAttacher* auto_attacher,
       NavigationHandle* navigation_handle) override;
+  void TargetInfoChanged(DevToolsAgentHost* host) override;
   void AutoAttacherDestroyed(TargetAutoAttacher* auto_attacher) override;
 
   bool ShouldWaitForDebuggerOnStart(
@@ -179,6 +182,10 @@ class TargetHandler : public DevToolsDomainHandler,
                                 base::TerminationStatus status) override;
   bool discover() const { return !!discover_target_filter_; }
 
+  const AccessMode access_mode_;
+  const std::string owner_target_id_;
+  const DevToolsSession::Mode session_mode_;
+  DevToolsSession* const root_session_;
   TargetAutoAttacher* const auto_attacher_;
   std::unique_ptr<Target::Frontend> frontend_;
 
@@ -192,6 +199,7 @@ class TargetHandler : public DevToolsDomainHandler,
   base::flat_map<TargetAutoAttacher*, bool /* wait_for_debugger_on_start */>
       auto_attach_related_targets_;
   bool auto_attach_service_workers_ = true;
+  bool auto_attach_portals_ = true;
 
   std::unique_ptr<TargetFilter> discover_target_filter_;
   bool observing_agent_hosts_ = false;
@@ -199,9 +207,6 @@ class TargetHandler : public DevToolsDomainHandler,
   std::set<DevToolsAgentHost*> reported_hosts_;
   base::flat_set<std::string> dispose_on_detach_context_ids_;
   base::flat_map<std::string, net::ProxyConfig> contexts_with_overridden_proxy_;
-  AccessMode access_mode_;
-  std::string owner_target_id_;
-  DevToolsSession* root_session_;
   base::flat_set<Throttle*> throttles_;
   absl::optional<net::ProxyConfig> pending_proxy_config_;
   base::WeakPtrFactory<TargetHandler> weak_factory_{this};

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,11 +22,10 @@ namespace {
 const base::FieldTrial::Probability kTotalProbability = 100;
 
 // Creates the field trial.
-scoped_refptr<base::FieldTrial> CreateFieldTrial() {
+scoped_refptr<base::FieldTrial> CreateFieldTrial(
+    const base::FieldTrial::EntropyProvider& entropy_provider) {
   return base::FieldTrialList::FactoryGetFieldTrial(
-      kTrialName, kTotalProbability, kDisabledGroup,
-      base::FieldTrial::ONE_TIME_RANDOMIZED,
-      /*default_group_number=*/nullptr);
+      kTrialName, kTotalProbability, kDisabledGroup, entropy_provider);
 }
 
 // Sets the feature state based on the trial group.
@@ -46,7 +45,9 @@ void SetFeatureState(base::FeatureList* feature_list,
 
 // Creates a trial if there is no group name saved and enables the features
 // based on the randomly selected trial group. Returns the group name.
-std::string CreateFreshTrial(base::FeatureList* feature_list) {
+std::string CreateFreshTrial(
+    const base::FieldTrial::EntropyProvider& entropy_provider,
+    base::FeatureList* feature_list) {
   int enabled_percent;
   int disabled_percent;
   switch (chrome::GetChannel()) {
@@ -65,7 +66,7 @@ std::string CreateFreshTrial(base::FeatureList* feature_list) {
   DCHECK_EQ(kTotalProbability, enabled_percent + disabled_percent);
 
   // Set up the trial and groups.
-  scoped_refptr<base::FieldTrial> trial = CreateFieldTrial();
+  scoped_refptr<base::FieldTrial> trial = CreateFieldTrial(entropy_provider);
   trial->AppendGroup(kEnabledGroup, enabled_percent);
   trial->AppendGroup(kDisabledGroup, disabled_percent);
 
@@ -77,9 +78,11 @@ std::string CreateFreshTrial(base::FeatureList* feature_list) {
 
 // Creates a trial with a single group and sets the feature flag to the state
 // for that group.
-void CreateSubsequentRunTrial(base::FeatureList* feature_list,
-                              const std::string& group_name) {
-  scoped_refptr<base::FieldTrial> trial = CreateFieldTrial();
+void CreateSubsequentRunTrial(
+    const base::FieldTrial::EntropyProvider& entropy_provider,
+    base::FeatureList* feature_list,
+    const std::string& group_name) {
+  scoped_refptr<base::FieldTrial> trial = CreateFieldTrial(entropy_provider);
   trial->AppendGroup(group_name, kTotalProbability);
   SetFeatureState(feature_list, trial.get(), group_name);
 }
@@ -96,7 +99,9 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kTrialGroupPrefName, std::string());
 }
 
-void Create(base::FeatureList* feature_list, PrefService* local_state) {
+void Create(const base::FieldTrial::EntropyProvider& entropy_provider,
+            base::FeatureList* feature_list,
+            PrefService* local_state) {
   // Storing the pref before the experiment is enabled would cause a skew when
   // this experiment is rolled out as existing clients would be in the
   // |kDisabled| group.
@@ -110,14 +115,14 @@ void Create(base::FeatureList* feature_list, PrefService* local_state) {
 
   if (trial_group.empty()) {
     // No group assigned for the device yet. Assign a trial group.
-    trial_group = CreateFreshTrial(feature_list);
+    trial_group = CreateFreshTrial(entropy_provider, feature_list);
 
     // Persist the assigned group for subsequent runs.
     local_state->SetString(kTrialGroupPrefName, trial_group);
   } else {
     // Group already assigned. Toggle relevant features depending on
     // |trial_group| assigned.
-    CreateSubsequentRunTrial(feature_list, trial_group);
+    CreateSubsequentRunTrial(entropy_provider, feature_list, trial_group);
   }
 }
 

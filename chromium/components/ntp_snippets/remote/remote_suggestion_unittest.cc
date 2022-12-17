@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,7 +72,7 @@ base::Value::Dict TestSnippetJsonValue() {
       kJsonStr, base::JSON_PARSE_RFC);
   CHECK(json_parsed.has_value())
       << "error_message: " << json_parsed.error().message;
-  return std::move(json_parsed->GetDict());
+  return std::move(*json_parsed).TakeDict();
 }
 
 TEST(RemoteSuggestionTest, FromContentSuggestionsDictionary) {

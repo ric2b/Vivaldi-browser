@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,6 +50,8 @@ class PasswordGenerationPopupView;
 // determining the location of the popup, handling keypress events while the
 // popup is active, and notifying both the renderer and the password manager
 // if the password is accepted.
+// It is also used for computing the password strength for manually typed
+// passwords.
 //
 // NOTE: This is used on Android only to display the editing popup.
 //
@@ -86,11 +88,14 @@ class PasswordGenerationPopupControllerImpl
   ~PasswordGenerationPopupControllerImpl() override;
 
   // Create a PasswordGenerationPopupView if one doesn't already exist.
-  // Returns |true| in case of success, |false| otherwise.
-  bool Show(GenerationUIState state);
+  void Show(GenerationUIState state);
 
-  // Update the password to be displayed in the UI.
-  void UpdatePassword(std::u16string new_password);
+  // Update the password typed by the user.
+  void UpdateTypedPassword(const std::u16string& new_user_typed_password);
+
+  // Update the value of the generated password to be displayed in the UI (e.g.
+  // upon editing the generated password).
+  void UpdateGeneratedPassword(std::u16string new_password);
 
   // Hides the popup, since its position is no longer valid.
   void FrameWasScrolled();
@@ -106,9 +111,14 @@ class PasswordGenerationPopupControllerImpl
   // automatically on that field.
   void GeneratedPasswordRejected();
 
+  base::WeakPtr<PasswordGenerationPopupControllerImpl> GetWeakPtr();
+
   // content::WebContentsObserver overrides
   void WebContentsDestroyed() override;
   void PrimaryPageChanged(content::Page& page) override;
+
+  // Returns true if the popup is visible, or false otherwise.
+  bool IsVisible() const;
 
 #if !BUILDFLAG(IS_ANDROID)
   // ZoomObserver implementation.
@@ -153,8 +163,6 @@ class PasswordGenerationPopupControllerImpl
   std::u16string SuggestedText() override;
   const std::u16string& HelpText() override;
 
-  base::WeakPtr<PasswordGenerationPopupControllerImpl> GetWeakPtr();
-
   bool HandleKeyPressEvent(const content::NativeWebKeyboardEvent& event);
 
   // Set if the password is currently selected.
@@ -189,8 +197,14 @@ class PasswordGenerationPopupControllerImpl
   // Help text in the footer.
   std::u16string help_text_;
 
-  // The password value to be displayed in the UI.
-  std::u16string current_password_;
+  // Password typed by the user. Currently used for computing the password
+  // strength.
+  std::u16string user_typed_password_;
+
+  // The current password that is considered generated. This is the password to
+  // be displayed in the user generation dialog.
+  std::u16string current_generated_password_;
+
   // Whether the row with the password is currently selected/highlighted.
   bool password_selected_;
 

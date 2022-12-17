@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -49,5 +49,14 @@ public class StackUnwinderModuleProvider {
     @CalledByNative
     public static long getCreateNativeUnwinderFunction() {
         return StackUnwinderModule.getImpl().getCreateNativeUnwinderFunction();
+    }
+
+    /**
+     * Returns the pointer to the CreateLibunwindstackUnwinder native function within the module,
+     * encoded as a long. Can be called only if the module is installed.
+     */
+    @CalledByNative
+    public static long getCreateLibunwindstackUnwinderFunction() {
+        return StackUnwinderModule.getImpl().getCreateLibunwindstackUnwinderFunction();
     }
 }

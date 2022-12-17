@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,7 +34,8 @@ enum ImportItem {
   MASTER_PASSWORD    = 1 << 8, // Requires a master password
   SPEED_DIAL         = 1 << 9, // Speed Dials
   EMAIL              = 1 << 10,
-  ALL                = (1 << 11) - 1  // All the bits should be 1, hence the -1.
+  CONTACTS           = 1 << 11,
+  ALL                = (1 << 12) - 1  // All the bits should be 1, hence the -1.
 };
 
 // Contains information needed for importing bookmarks/search engine urls, etc.

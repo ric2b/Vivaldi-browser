@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -90,7 +90,7 @@ class AnnounceTextView : public View {
     // May require setting kLiveStatus, kContainerLiveStatus to "polite".
     node_data->role = ax::mojom::Role::kAlert;
 #endif
-    node_data->SetName(announce_text_);
+    node_data->SetNameChecked(announce_text_);
     node_data->AddState(ax::mojom::State::kInvisible);
   }
 
@@ -277,6 +277,14 @@ void RootView::DeviceScaleFactorChanged(float old_device_scale_factor,
 
 // Accessibility ---------------------------------------------------------------
 
+raw_ptr<AnnounceTextView> RootView::GetOrCreateAnnounceView() {
+  if (!announce_view_) {
+    announce_view_ = AddChildView(std::make_unique<AnnounceTextView>());
+    announce_view_->SetProperty(kViewIgnoredByLayoutKey, true);
+  }
+  return announce_view_;
+}
+
 void RootView::AnnounceText(const std::u16string& text) {
 #if BUILDFLAG(IS_MAC)
   gfx::NativeViewAccessible native = GetViewAccessibility().GetNativeObject();
@@ -286,12 +294,12 @@ void RootView::AnnounceText(const std::u16string& text) {
 #else
   DCHECK(GetWidget());
   DCHECK(GetContentsView());
-  if (!announce_view_) {
-    announce_view_ = AddChildView(std::make_unique<AnnounceTextView>());
-    announce_view_->SetProperty(kViewIgnoredByLayoutKey, true);
-  }
-  announce_view_->Announce(text);
+  GetOrCreateAnnounceView()->Announce(text);
 #endif
+}
+
+View* RootView::GetAnnounceViewForTesting() {
+  return GetOrCreateAnnounceView();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -468,6 +476,7 @@ bool RootView::OnMouseDragged(const ui::MouseEvent& event) {
         DispatchEvent(mouse_pressed_handler_, &mouse_event);
     if (dispatch_details.dispatcher_destroyed)
       return false;
+    return true;
   }
   return false;
 }

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,10 @@ AX_EXPORT extern const char kAXViewClassname[];
 AX_EXPORT extern const char kAXViewGroupClassname[];
 AX_EXPORT extern const char kAXWebViewClassname[];
 AX_EXPORT extern const char16_t kSecurePasswordBullet;
+
+// View constants.
+
+AX_EXPORT extern const int kAXAndroidInvalidViewId;
 
 }  // namespace ui
 

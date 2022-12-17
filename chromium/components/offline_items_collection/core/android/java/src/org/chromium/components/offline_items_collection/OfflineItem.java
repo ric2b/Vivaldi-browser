@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -110,7 +110,6 @@ public class OfflineItem implements Cloneable {
     public int failState;
     @PendingState
     public int pendingState;
-    public OfflineItemSchedule schedule;
 
     public OfflineItem() {
         id = new ContentId();
@@ -151,7 +150,6 @@ public class OfflineItem implements Cloneable {
         clone.timeRemainingMs = timeRemainingMs;
         clone.failState = failState;
         clone.pendingState = pendingState;
-        if (schedule != null) clone.schedule = schedule.clone();
 
         if (progress != null) {
             clone.progress = new Progress(progress.value, progress.max, progress.unit);

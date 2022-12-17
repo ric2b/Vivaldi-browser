@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/media/capture/web_contents_video_capture_device.h"
@@ -39,6 +40,15 @@
 namespace content {
 
 namespace {
+
+// A max factor above 2.0 would cause a quality degradation for local
+// rendering. The downscaling used by the compositor uses a linear filter
+// which only looks at 4 source pixels, so rendering more than 4 pixels per
+// destination pixel would result in information loss.
+static constexpr float kMaxScaleOverride = 2.0f;
+
+// A minimum factor of 1.0 means that no DPI scaling is applied.
+static constexpr float kMinScaleOverride = 1.0;
 
 // Note on lifetime: this context is deleted via WebContentsObserver's
 // WebContentsDestroyed() method when the WebContents is destroyed.
@@ -152,6 +162,10 @@ void WebContentsFrameTracker::DidStopCapturingWebContents() {
     DCHECK(is_capturing_);
     context_->DecrementCapturerCount();
     is_capturing_ = false;
+
+    UMA_HISTOGRAM_COUNTS_1000("Media.VideoCapture.ScaleOverrideChangeCount",
+                              scale_override_change_count_);
+    scale_override_change_count_ = 0;
   }
   DCHECK(!is_capturing_);
 }
@@ -241,15 +255,6 @@ float WebContentsFrameTracker::CalculatePreferredScaleFactor(
     const gfx::Size& unscaled_current_content_size) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // A max factor above 2.0 would cause a quality degradation for local
-  // rendering. The downscaling used by the compositor uses a linear filter
-  // which only looks at 4 source pixels, so rendering more than 4 pixels per
-  // destination pixel would result in information loss.
-  static constexpr float kMaxFactor = 2.0f;
-
-  // A minimum factor of 1.0 means that no DPI scaling is applied.
-  static constexpr float kMinFactor = 1.0;
-
   // The content size does not include letterboxing, meaning that there may
   // be an aspect ratio difference between the content size and the final
   // capture size. For example, if the video frame consumer requests a 1080P
@@ -299,10 +304,10 @@ float WebContentsFrameTracker::CalculatePreferredScaleFactor(
   // than upscale in the other direction, so we use the largest scale factor.
   const float largest_factor = std::max(factors.x(), factors.y());
 
-  // Finally, we return a value bounded by [kMinFactor, kMaxFactor] rounded to
-  // the nearest quarter.
-  const float preferred_factor =
-      base::clamp(std::round(largest_factor * 4) / 4, kMinFactor, kMaxFactor);
+  // Finally, we return a value bounded by [kMinScaleOverride,
+  // kMaxScaleOverride] rounded to the nearest quarter.
+  const float preferred_factor = base::clamp(
+      std::round(largest_factor * 4) / 4, kMinScaleOverride, kMaxScaleOverride);
   DVLOG(3) << __func__ << ":"
            << " capture_size_=" << capture_size_.ToString()
            << ", letterbox_size=" << letterbox_size.ToString()
@@ -447,7 +452,7 @@ void WebContentsFrameTracker::OnPossibleTargetChange() {
     frame_sink_id = context_->GetFrameSinkIdForCapture();
   }
 
-  // TODO(crbug.com/1247761): Clear |crop_id_| when share-this-tab-instead
+  // TODO(crbug.com/1264849): Clear |crop_id_| when share-this-tab-instead
   // is clicked.
   if (frame_sink_id != target_frame_sink_id_) {
     target_frame_sink_id_ = frame_sink_id;
@@ -486,6 +491,11 @@ void WebContentsFrameTracker::SetCaptureScaleOverride(float new_value) {
   if (new_value != capture_scale_override_) {
     capture_scale_override_ = new_value;
     context_->SetScaleOverrideForCapture(new_value);
+
+    ++scale_override_change_count_;
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Media.VideoCapture.ScaleOverride",
+                                new_value * 100, kMinScaleOverride * 100,
+                                kMaxScaleOverride * 100 + 1, 50);
   }
 }
 }  // namespace content

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -477,7 +477,8 @@ class BottomSheet extends FrameLayout
 
     @Override
     public boolean isTouchEventInToolbar(MotionEvent event) {
-        mToolbarHolder.getLocationInWindow(mCachedLocation);
+        mToolbarHolder.getLocationOnScreen(mCachedLocation);
+
         // This check only tests for collision for the Y component since the sheet is the full width
         // of the screen. We only care if the touch event is above the bottom of the toolbar since
         // we won't receive an event if the touch is outside the sheet.
@@ -1097,7 +1098,7 @@ class BottomSheet extends FrameLayout
 
         // Resizing is necessary if we have non-zero translation on Window Y, which can change
         // throughout the lifecycle. Ensure sheet content's bottom is aligned with the base layout.
-        if (mWindow.getAttributes().y != 0
+        if (mBaseHeightProvider != null && mWindow.getAttributes().y != 0
                 && (mCurrentState == SheetState.PEEK || mCurrentState == SheetState.HALF
                         || mCurrentState == SheetState.FULL)) {
             BottomSheetContent content = mSheetContent;

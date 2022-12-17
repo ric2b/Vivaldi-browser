@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -315,6 +315,10 @@ const char kDemoModeHighlightsApp[] = "demo-mode-highlights-extension";
 // App ID to use for screensaver app in demo mode.
 const char kDemoModeScreensaverApp[] = "demo-mode-screensaver-extension";
 
+// Directory from which to fetch the demo mode SWA content (instead of
+// downloading from Omaha).
+const char kDemoModeSwaContentDirectory[] = "demo-mode-swa-content-directory";
+
 // Time in seconds before a machine at OOBE is considered derelict.
 const char kDerelictDetectionTimeout[] = "derelict-detection-timeout";
 
@@ -558,6 +562,14 @@ const char kForceLaunchBrowser[] = "force-launch-browser";
 // tests can change how it's brought up. This flag disables that.
 const char kForceLoginManagerInTests[] = "force-login-manager-in-tests";
 
+// Forces the cursor to be shown even if we are mimicing touch events. Note that
+// cursor changes are locked when using this switch.
+const char kForceShowCursor[] = "force-show-cursor";
+
+// Force the "release track" UI to show in the system tray. Simulates the system
+// being on a non-stable release channel with feedback enabled.
+const char kForceShowReleaseTrack[] = "force-show-release-track";
+
 // Force system compositor mode when set.
 const char kForceSystemCompositorMode[] = "force-system-compositor-mode";
 
@@ -689,9 +701,22 @@ const char kLoginUser[] = "login-user";
 // Specifies the user that the browser data migration should happen for.
 const char kBrowserDataMigrationForUser[] = "browser-data-migration-for-user";
 
+// Specifies the user that the browser data backward migration should happen
+// for.
+const char kBrowserDataBackwardMigrationForUser[] =
+    "browser-data-backward-migration-for-user";
+
+// Tells Chrome to forcefully trigger backward data migration.
+extern const char kForceBrowserDataBackwardMigration[] =
+    "force-browser-data-backward-migration";
+
 // Run move migration instead of copy. Passed with
 // `kBrowserDataMigrationForUser`.
-const char kBrowserDataMigrationMoveMode[] = "browser-data-migration-move-mode";
+const char kBrowserDataMigrationMode[] = "browser-data-migration-mode";
+
+// Backward migration mode. Passed with `kBrowserDataBackwardMigrationForUser`.
+const char kBrowserDataBackwardMigrationMode[] =
+    "browser-data-backward-migration-mode";
 
 // Force skip or force migration. Should only be used for testing.
 const char kForceBrowserDataMigrationForTesting[] =
@@ -729,6 +754,11 @@ const char kOobeLargeScreenSpecialScaling[] =
 
 // Specifies directory for screenshots taken with OOBE UI Debugger.
 const char kOobeScreenshotDirectory[] = "oobe-screenshot-dir";
+
+// Shows a11y button on the marketing opt in without visiting gesture navigation
+// screen.
+const char kOobeShowAccessibilityButtonOnMarketingOptInForTesting[] =
+    "oobe-show-accessibility-button-on-marketing-opt-in-for-testing";
 
 // Skips all other OOBE pages after user login.
 const char kOobeSkipPostLogin[] = "oobe-skip-postlogin";
@@ -821,10 +851,6 @@ const char kSupportsClamshellAutoRotation[] =
 // Hides all Message Center notification popups (toasts). Used for testing.
 const char kSuppressMessageCenterPopups[] = "suppress-message-center-popups";
 
-// Enables System Extensions Debug mode e.g Force enable System Extensions APIs
-// on all Service Workers.
-const char kSystemExtensionsDebug[] = "system-extensions-debug";
-
 // Specifies directory for the Telemetry System Web Extension.
 const char kTelemetryExtensionDirectory[] = "telemetry-extension-dir";
 
@@ -869,6 +895,13 @@ const char kUnfilteredBluetoothDevices[] = "unfiltered-bluetooth-devices";
 // for testing the policy behaviour on the DUT.
 const char kUpdateRequiredAueForTest[] = "aue-reached-for-update-required-test";
 
+// Flag that stored MyFiles folder inside the user data directory.
+// $HOME/Downloads is used as MyFiles folder for ease access to local files for
+// debugging when running on Linux. By setting this flag, <cryptohome>/MyFiles
+// is used even on Linux.
+const char kUseMyFilesInUserDataDirForTesting[] =
+    "use-myfiles-in-user-data-dir-for-testing";
+
 // Used to tell the policy infrastructure to not let profile initialization
 // complete until policy is manually set by a test. This is used to provide
 // backward compatibility with a few tests that incorrectly use the
@@ -876,6 +909,15 @@ const char kUpdateRequiredAueForTest[] = "aue-reached-for-update-required-test";
 // uses of this flag.
 const char kWaitForInitialPolicyFetchForTest[] =
     "wait-for-initial-policy-fetch-for-test";
+
+// If provided, any webui will be loaded from <flag value>/<handler_name>, where
+// handler_name is the name passed to MaybeConfigureTestableDataSource, if the
+// file exists.
+// For example, if the flag is /tmp/resource_overrides, attempting to load
+// js/app_main.js from the data source named "help_app/untrusted" will first
+// attempt to load from /tmp/resource_overrides/help_app/untrusted/js/main.js.
+const char kWebUiDataSourcePathForTesting[] =
+    "web-ui-data-source-path-for-testing";
 
 // Used to determine if and how on-device handwriting recognition is supported
 // (e.g. via rootfs or downloadable content).
@@ -914,6 +956,11 @@ bool ShouldTetherHostScansIgnoreWiredConnections() {
 
 bool ShouldSkipOobePostLogin() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(kOobeSkipPostLogin);
+}
+
+bool ShouldShowAccessibilityButtonOnMarketingOptInForTesting() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kOobeShowAccessibilityButtonOnMarketingOptInForTesting);
 }
 
 bool IsTabletFormFactor() {

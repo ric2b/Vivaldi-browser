@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,6 +27,11 @@ float Smoothstep(float low, float high, float value) {
   DCHECK_NE(low, high);
   const float x = clamp((value - low) / (high - low), 0.0, 1.0);
   return x * x * (3 - 2 * x);
+}
+
+// Returns whether |visit| should be shown in the UI.
+bool IsShownVisitCandidate(const history::ClusterVisit& visit) {
+  return !visit.annotated_visit.url_row.title().empty();
 }
 
 }  // namespace
@@ -63,10 +68,6 @@ void RankingClusterFinalizer::CalculateVisitAttributeScoring(
     // Check if the visit contained a search query.
     if (!visit.annotated_visit.content_annotations.search_terms.empty()) {
       it->second.set_is_srp();
-    }
-
-    if (!visit.annotated_visit.url_row.title().empty()) {
-      it->second.set_has_page_title();
     }
 
     // Additional/future attribute checks go here.
@@ -121,21 +122,15 @@ void RankingClusterFinalizer::ComputeFinalVisitScores(
     base::flat_map<history::VisitID, VisitScores>& url_visit_scores) {
   float max_score = -1.0;
   for (history::ClusterVisit& visit : base::Reversed(cluster.visits)) {
-    // Only canonical visits should have scores > 0.0.
-    for (auto& duplicate_visit : visit.duplicate_visits) {
-      // Check that no individual scores have been given a visit that is not
-      // canonical a score.
-      DCHECK(url_visit_scores.find(
-                 duplicate_visit.annotated_visit.visit_row.visit_id) ==
-             url_visit_scores.end());
-      duplicate_visit.score = 0.0;
-    }
-
     // Determine the max score to use for normalizing all the scores.
     auto visit_scores_it =
         url_visit_scores.find(visit.annotated_visit.visit_row.visit_id);
     if (visit_scores_it != url_visit_scores.end()) {
-      visit.score = visit_scores_it->second.GetTotalScore();
+      if (IsShownVisitCandidate(visit)) {
+        visit.score = visit_scores_it->second.GetTotalScore();
+      } else {
+        visit.score = 0.0;
+      }
       if (visit.score > max_score) {
         max_score = visit.score;
       }
@@ -144,7 +139,7 @@ void RankingClusterFinalizer::ComputeFinalVisitScores(
   if (max_score <= 0.0)
     return;
 
-  // Now normalize the score by `max_score` so they values are all between 0
+  // Now normalize the score by `max_score` so the values are all between 0
   // and 1.
   for (history::ClusterVisit& visit : base::Reversed(cluster.visits)) {
     visit.score = visit.score / max_score;

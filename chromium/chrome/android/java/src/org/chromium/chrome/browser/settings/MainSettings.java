@@ -1,14 +1,16 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.settings;
 
 import static org.chromium.chrome.browser.password_manager.PasswordManagerHelper.hasChosenToSyncPasswords;
+import static org.chromium.chrome.browser.password_manager.PasswordManagerHelper.usesUnifiedPasswordManagerBranding;
 import static org.chromium.chrome.browser.password_manager.PasswordManagerHelper.usesUnifiedPasswordManagerUI;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -75,6 +77,7 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.ui.base.DeviceFormFactor;
 
+import org.vivaldi.browser.common.VivaldiRelaunchUtils;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.AdsAndTrackerPreference;
 import org.vivaldi.browser.preferences.AutomaticCloseTabsMainPreference;
@@ -209,8 +212,10 @@ public class MainSettings extends PreferenceFragmentCompat
         mSyncPromoPreference.setOnStateChangedCallback(this::onSyncPromoPreferenceStateChanged);
 
         if (ChromeApplicationImpl.isVivaldi()) {
-            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext()))
+            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                 removePreferenceIfPresent(VivaldiPreferences.SHOW_TAB_STRIP);
+                removePreferenceIfPresent(VivaldiPreferences.APP_MENU_BAR_SETTING);
+            }
             if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
                 removePreferenceIfPresent(VivaldiPreferences.ALWAYS_SHOW_CONTROLS);
                 removePreferenceIfPresent(PREF_DOWNLOADS); // Ref. POLE-20
@@ -230,16 +235,21 @@ public class MainSettings extends PreferenceFragmentCompat
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // If we are on Android O+ the Notifications preference should lead to the Android
             // Settings notifications page.
-            Preference notifications = findPreference(PREF_NOTIFICATIONS);
-            notifications.setOnPreferenceClickListener(preference -> {
-                Intent intent = new Intent();
-                intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
-                intent.putExtra(Settings.EXTRA_APP_PACKAGE,
-                        ContextUtils.getApplicationContext().getPackageName());
-                startActivity(intent);
-                // We handle the click so the default action isn't triggered.
-                return true;
-            });
+            Intent intent = new Intent();
+            intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+            intent.putExtra(Settings.EXTRA_APP_PACKAGE,
+                    ContextUtils.getApplicationContext().getPackageName());
+            PackageManager pm = getActivity().getPackageManager();
+            if (intent.resolveActivity(pm) != null) {
+                Preference notifications = findPreference(PREF_NOTIFICATIONS);
+                notifications.setOnPreferenceClickListener(preference -> {
+                    startActivity(intent);
+                    // We handle the click so the default action isn't triggered.
+                    return true;
+                });
+            } else {
+                removePreferenceIfPresent(PREF_NOTIFICATIONS);
+            }
         } else {
             // The per-website notification settings page can be accessed from Site
             // Settings, so we don't need to show this here.
@@ -257,6 +267,17 @@ public class MainSettings extends PreferenceFragmentCompat
             if (uiState.canShowUi) return;
             getPreferenceScreen().removePreference(findPreference(PREF_TOOLBAR_SHORTCUT));
         });
+
+        if (ChromeApplicationImpl.isVivaldi()) {
+            // Handle changes to reverse search suggestion order preference
+            Preference reverseSearchSuggestion =
+                    findPreference(VivaldiPreferences.REVERSE_SEARCH_SUGGESTION);
+            if (reverseSearchSuggestion != null)
+                reverseSearchSuggestion.setOnPreferenceChangeListener((preference, o) -> {
+                    VivaldiRelaunchUtils.showRelaunchDialog(getContext(), null);
+                    return true;
+                });
+        }
     }
 
     /**
@@ -331,6 +352,15 @@ public class MainSettings extends PreferenceFragmentCompat
         pref = getPreferenceScreen().findPreference("automatic_close_tabs");
         pref.setSummary(AutomaticCloseTabsMainPreference.updateSummary());
         updateSummary();
+        // Handling the home button here.
+        boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext());
+        String homeButton = "show_start_page_icon";
+        if (isTablet)
+            removePreferenceIfPresent(homeButton);
+        else
+            getPreferenceScreen()
+                    .findPreference(homeButton)
+                    .setEnabled(HomepageManager.isHomepageEnabled());
     }
 
     private Preference addPreferenceIfAbsent(String key) {
@@ -399,7 +429,7 @@ public class MainSettings extends PreferenceFragmentCompat
 
     private void updatePasswordsPreference() {
         Preference passwordsPreference = findPreference(PREF_PASSWORDS);
-        if (usesUnifiedPasswordManagerUI()) {
+        if (usesUnifiedPasswordManagerBranding()) {
             // TODO(crbug.com/1217070): Move this to the layout xml once the feature is rolled out
             passwordsPreference.setTitle(getPasswordsPreferenceElementTitle());
         }

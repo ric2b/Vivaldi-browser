@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -13,10 +13,9 @@ source_set("password") {
     "passwords_coordinator.mm",
     "passwords_mediator.h",
     "passwords_mediator.mm",
-    "saved_passwords_presenter_observer.h",
-    "saved_passwords_presenter_observer.mm",
   ]
   deps = [
+    ":common",
     ":password_ui",
     "//base",
     "//components/autofill/core/common",
@@ -36,6 +35,7 @@ source_set("password") {
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
     "//ios/chrome/browser/ui/settings/password/password_details",
+    "//ios/chrome/browser/ui/settings/password/password_settings",
     "//ios/chrome/browser/ui/settings/password/passwords_in_other_apps",
     "//ios/chrome/browser/ui/settings/utils",
     "//ios/chrome/browser/ui/table_view",
@@ -48,6 +48,18 @@ source_set("password") {
     "//url",
   ]
   frameworks = [ "MobileCoreServices.framework" ]
+}
+
+source_set("common") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "saved_passwords_presenter_observer.h",
+    "saved_passwords_presenter_observer.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/password_manager/core/browser",
+  ]
 }
 
 source_set("password_ui") {
@@ -74,6 +86,7 @@ source_set("password_ui") {
   ]
   deps = [
     ":password_constants",
+    ":title_view",
     "//base",
     "//components/autofill/core/common",
     "//components/google/core/common",
@@ -86,6 +99,7 @@ source_set("password_ui") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/flags:system_flags",
     "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/net:crurl",
     "//ios/chrome/browser/passwords",
@@ -103,6 +117,7 @@ source_set("password_ui") {
     "//ios/chrome/browser/ui/table_view:utils",
     "//ios/chrome/browser/ui/table_view/cells",
     "//ios/chrome/browser/ui/util",
+    "//ios/chrome/browser/url:constants",
     "//ios/chrome/common",
     "//ios/chrome/common:constants",
     "//ios/chrome/common/ui/colors",
@@ -126,6 +141,27 @@ source_set("password_constants") {
   deps = [
     "//base",
     "//ios/chrome/browser/ui/list_model:list_model",
+  ]
+}
+
+source_set("title_view") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "branded_navigation_item_title_view.h",
+    "branded_navigation_item_title_view.mm",
+    "create_password_manager_title_view.h",
+    "create_password_manager_title_view.mm",
+  ]
+  deps = [
+    "//ios/chrome/app/strings:ios_strings_grit",
+    "//ios/chrome/browser/ui/icons:symbols",
+    "//ios/chrome/common/ui/colors",
+    "//ios/public/provider/chrome/browser/font:font_api",
+    "//ui/base",
+  ]
+  frameworks = [
+    "UIKit.framework",
+    "Foundation.framework",
   ]
 }
 
@@ -161,7 +197,6 @@ source_set("unit_tests") {
     "//components/prefs:test_support",
     "//components/signin/public/identity_manager/objc",
     "//components/strings",
-    "//ios/chrome/app/strings",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/favicon",
@@ -210,8 +245,7 @@ source_set("eg_app_support+eg2") {
     "//components/password_manager/core/browser",
     "//components/password_manager/core/common",
     "//components/prefs",
-    "//components/strings:components_strings_grit",
-    "//ios/chrome/app/strings:ios_strings_grit",
+    "//components/strings",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/common/ui/reauthentication",
@@ -256,13 +290,15 @@ source_set("eg2_tests") {
     "//base:base",
     "//base/test:test_support",
     "//components/password_manager/core/common:features",
-    "//components/strings:components_strings_grit",
+    "//components/strings",
     "//components/sync/driver",
-    "//ios/chrome/app/strings:ios_strings_grit",
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/metrics:eg_test_support+eg2",
     "//ios/chrome/browser/ui/authentication:eg_test_support+eg2",
     "//ios/chrome/browser/ui/settings:settings_root_constants",
     "//ios/chrome/browser/ui/settings/google_services:constants",
+    "//ios/chrome/browser/ui/settings/password/password_settings:password_settings_constants",
+    "//ios/chrome/browser/ui/settings/password/passwords_in_other_apps:eg_test_support+eg2",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/common/ui/reauthentication",
     "//ios/chrome/common/ui/table_view:cells_constants",

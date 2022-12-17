@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,7 @@
 #include "base/test/simple_test_clock.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/unguessable_token.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/rand_callback.h"
 #include "net/reporting/reporting_cache.h"
 #include "net/reporting/reporting_context.h"
@@ -303,7 +303,7 @@ class TestReportingService : public ReportingService {
     Report(Report&& other);
 
     Report(const GURL& url,
-           const NetworkIsolationKey& network_isolation_key,
+           const NetworkAnonymizationKey& network_anonymization_key,
            const std::string& user_agent,
            const std::string& group,
            const std::string& type,
@@ -313,7 +313,7 @@ class TestReportingService : public ReportingService {
     ~Report();
 
     GURL url;
-    NetworkIsolationKey network_isolation_key;
+    NetworkAnonymizationKey network_anonymization_key;
     std::string user_agent;
     std::string group;
     std::string type;
@@ -344,16 +344,17 @@ class TestReportingService : public ReportingService {
   void QueueReport(
       const GURL& url,
       const absl::optional<base::UnguessableToken>& reporting_source,
-      const NetworkIsolationKey& network_isolation_key,
+      const NetworkAnonymizationKey& network_anonymization_key,
       const std::string& user_agent,
       const std::string& group,
       const std::string& type,
       base::Value::Dict body,
       int depth) override;
 
-  void ProcessReportToHeader(const url::Origin& url,
-                             const NetworkIsolationKey& network_isolation_key,
-                             const std::string& header_value) override;
+  void ProcessReportToHeader(
+      const url::Origin& url,
+      const NetworkAnonymizationKey& network_anonymization_key,
+      const std::string& header_value) override;
 
   void RemoveBrowsingData(
       uint64_t data_type_mask,

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -127,7 +127,7 @@ class AttributionAggregatableReportGoldenLatestVersionTest
               ASSERT_TRUE(data);
               data->assembled_report = std::move(*assembled_report);
               EXPECT_TRUE(VerifyReport(
-                  report.ReportBody(), std::move(expected_report.GetDict()),
+                  report.ReportBody(), std::move(expected_report).TakeDict(),
                   *base64_encoded_expected_cleartext_payload))
                   << "There was an error, consider bumping "
                      "AttributionReport::AggregatableAttributionData::kVersion,"
@@ -194,8 +194,8 @@ class AttributionAggregatableReportGoldenLatestVersionTest
     }
 
     return VerifyAggregationServicePayloads(
-        std::move(actual_payloads->GetList()),
-        std::move(expected_payloads->GetList()),
+        std::move(*actual_payloads).TakeList(),
+        std::move(*expected_payloads).TakeList(),
         base64_encoded_expected_cleartext_payload, *shared_info);
   }
 

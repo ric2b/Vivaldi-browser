@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -109,9 +109,6 @@ String SerializeServers(
 String SerializePeerConnectionMediaConstraints(
     const webrtc::PeerConnectionInterface::RTCConfiguration& config) {
   StringBuilder builder;
-  if (config.disable_ipv6) {
-    builder.Append("googIPv6: false");
-  }
 #if BUILDFLAG(IS_FUCHSIA)
   if (config.enable_dtls_srtp.has_value()) {
     if (builder.length())
@@ -193,10 +190,81 @@ String SerializeOptionalDirection(
   return direction ? SerializeDirection(*direction) : "null";
 }
 
+String SerializeTransceiverKind(const String& indent,
+                                const RTCRtpTransceiverPlatform& transceiver) {
+  DCHECK(transceiver.Receiver());
+  DCHECK(transceiver.Receiver()->Track());
+
+  auto kind = transceiver.Receiver()->Track()->GetSourceType();
+  StringBuilder result;
+  result.Append(indent);
+  result.Append("kind:");
+  if (kind == MediaStreamSource::StreamType::kTypeAudio) {
+    result.Append("'audio'");
+  } else if (kind == MediaStreamSource::StreamType::kTypeVideo) {
+    result.Append("'video'");
+  } else {
+    NOTREACHED();
+  }
+  result.Append(",\n");
+  return result.ToString();
+}
+
+String SerializeEncodingParameters(
+    const String& indent,
+    const std::vector<webrtc::RtpEncodingParameters>& encodings) {
+  StringBuilder result;
+  if (encodings.empty()) {
+    return result.ToString();
+  }
+  result.Append(indent);
+  result.Append("encodings: [\n");
+  for (const auto& encoding : encodings) {
+    result.Append(indent);
+    result.Append("    {");
+    result.Append("active: ");
+    result.Append(encoding.active ? "true" : "false");
+    result.Append(", ");
+    if (encoding.max_bitrate_bps) {
+      result.Append("maxBitrate: ");
+      result.AppendNumber(*encoding.max_bitrate_bps);
+      result.Append(", ");
+    }
+    if (encoding.scale_resolution_down_by) {
+      result.Append("scaleResolutionDownBy: ");
+      result.AppendNumber(*encoding.scale_resolution_down_by);
+      result.Append(", ");
+    }
+    if (!encoding.rid.empty()) {
+      result.Append("rid: ");
+      result.Append(String(encoding.rid));
+      result.Append(", ");
+    }
+    if (encoding.max_framerate) {
+      result.Append("maxFramerate: ");
+      result.AppendNumber(*encoding.max_framerate);
+      result.Append(", ");
+    }
+    if (encoding.adaptive_ptime) {
+      result.Append("adaptivePtime: true, ");
+    }
+    if (encoding.scalability_mode) {
+      result.Append("scalabilityMode: ");
+      result.Append(String(*encoding.scalability_mode));
+    }
+    result.Append("},\n");
+  }
+  result.Append(indent);
+  result.Append("  ],\n");
+  result.Append(indent);
+  return result.ToString();
+}
+
 String SerializeSender(const String& indent,
                        const blink::RTCRtpSenderPlatform& sender) {
   StringBuilder result;
-  result.Append("{\n");
+  result.Append(indent);
+  result.Append("sender:{\n");
   // track:'id',
   result.Append(indent);
   result.Append("  track:");
@@ -214,14 +282,18 @@ String SerializeSender(const String& indent,
   result.Append(SerializeMediaStreamIds(sender.StreamIds()));
   result.Append(",\n");
   result.Append(indent);
-  result.Append("}");
+  result.Append(
+      SerializeEncodingParameters(indent, sender.GetParameters()->encodings));
+  result.Append("},\n");
+
   return result.ToString();
 }
 
 String SerializeReceiver(const String& indent,
                          const RTCRtpReceiverPlatform& receiver) {
   StringBuilder result;
-  result.Append("{\n");
+  result.Append(indent);
+  result.Append("receiver:{\n");
   // track:'id',
   DCHECK(receiver.Track());
   result.Append(indent);
@@ -234,49 +306,37 @@ String SerializeReceiver(const String& indent,
   result.Append(SerializeMediaStreamIds(receiver.StreamIds()));
   result.Append(",\n");
   result.Append(indent);
-  result.Append("}");
+  result.Append("},\n");
   return result.ToString();
 }
 
 String SerializeTransceiver(const RTCRtpTransceiverPlatform& transceiver) {
-  if (transceiver.ImplementationType() ==
-      RTCRtpTransceiverPlatformImplementationType::kFullTransceiver) {
-    StringBuilder result;
-    result.Append("{\n");
-    // mid:'foo',
-    if (transceiver.Mid().IsNull()) {
-      result.Append("  mid:null,\n");
-    } else {
-      result.Append("  mid:'");
-      result.Append(String(transceiver.Mid()));
-      result.Append("',\n");
-    }
-    // sender:{...},
-    result.Append("  sender:");
-    result.Append(SerializeSender("  ", *transceiver.Sender()));
-    result.Append(",\n");
-    // receiver:{...},
-    result.Append("  receiver:");
-    result.Append(SerializeReceiver("  ", *transceiver.Receiver()));
-    result.Append(",\n");
-    // direction:'sendrecv',
-    result.Append("  direction:");
-    result.Append(SerializeDirection(transceiver.Direction()));
-    result.Append(",\n");
-    // currentDirection:null,
-    result.Append("  currentDirection:");
-    result.Append(SerializeOptionalDirection(transceiver.CurrentDirection()));
-    result.Append(",\n");
-    result.Append("}");
-    return result.ToString();
+  StringBuilder result;
+  result.Append("{\n");
+  // mid:'foo',
+  if (transceiver.Mid().IsNull()) {
+    result.Append("  mid:null,\n");
+  } else {
+    result.Append("  mid:'");
+    result.Append(String(transceiver.Mid()));
+    result.Append("',\n");
   }
-  if (transceiver.ImplementationType() ==
-      RTCRtpTransceiverPlatformImplementationType::kPlanBSenderOnly) {
-    return SerializeSender("", *transceiver.Sender());
-  }
-  DCHECK(transceiver.ImplementationType() ==
-         RTCRtpTransceiverPlatformImplementationType::kPlanBReceiverOnly);
-  return SerializeReceiver("", *transceiver.Receiver());
+  // kind:audio|video
+  result.Append(SerializeTransceiverKind("  ", transceiver));
+  // sender:{...},
+  result.Append(SerializeSender("  ", *transceiver.Sender()));
+  // receiver:{...},
+  result.Append(SerializeReceiver("  ", *transceiver.Receiver()));
+  // direction:'sendrecv',
+  result.Append("  direction:");
+  result.Append(SerializeDirection(transceiver.Direction()));
+  result.Append(",\n");
+  // currentDirection:null,
+  result.Append("  currentDirection:");
+  result.Append(SerializeOptionalDirection(transceiver.CurrentDirection()));
+  result.Append(",\n");
+  result.Append("}");
+  return result.ToString();
 }
 
 String SerializeIceTransportType(
@@ -336,21 +396,6 @@ String SerializeRtcpMuxPolicy(
   return policy_str;
 }
 
-String SerializeSdpSemantics(webrtc::SdpSemantics sdp_semantics) {
-  String sdp_semantics_str("");
-  switch (sdp_semantics) {
-    case webrtc::SdpSemantics::kPlanB:
-      sdp_semantics_str = "plan-b";
-      break;
-    case webrtc::SdpSemantics::kUnifiedPlan:
-      sdp_semantics_str = "unified-plan";
-      break;
-    default:
-      NOTREACHED();
-  }
-  return "\"" + sdp_semantics_str + "\"";
-}
-
 // Serializes things that are of interest from the RTCConfiguration. Note that
 // this does not include some parameters that were passed down via
 // GoogMediaConstraints; see SerializePeerConnectionMediaConstraints() for that.
@@ -369,13 +414,9 @@ String SerializeConfiguration(
   result.Append(SerializeRtcpMuxPolicy(config.rtcp_mux_policy));
   result.Append(", iceCandidatePoolSize: ");
   result.AppendNumber(config.ice_candidate_pool_size);
-  result.Append(", sdpSemantics: ");
-  result.Append(SerializeSdpSemantics(config.sdp_semantics));
   if (usesInsertableStreams) {
     result.Append(", encodedInsertableStreams: true");
   }
-  result.Append(", extmapAllowMixed: ");
-  result.Append(SerializeBoolean(config.offer_extmap_allow_mixed));
   result.Append(" }");
   return result.ToString();
 }
@@ -636,7 +677,7 @@ PeerConnectionTracker& PeerConnectionTracker::From(LocalDOMWindow& window) {
       Supplement<LocalDOMWindow>::From<PeerConnectionTracker>(window);
   if (!tracker) {
     tracker = MakeGarbageCollected<PeerConnectionTracker>(
-        window, Thread::MainThread()->GetDeprecatedTaskRunner(),
+        window, window.GetTaskRunner(TaskType::kNetworking),
         base::PassKey<PeerConnectionTracker>());
     ProvideTo(window, tracker);
   }
@@ -669,16 +710,20 @@ PeerConnectionTracker::PeerConnectionTracker(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
     base::PassKey<PeerConnectionTracker>)
     : Supplement<LocalDOMWindow>(window),
+      receiver_(this, &window),
       main_thread_task_runner_(std::move(main_thread_task_runner)) {
   window.GetBrowserInterfaceBroker().GetInterface(
       peer_connection_tracker_host_.BindNewPipeAndPassReceiver());
 }
 
+// Constructor used for testing. Note that receiver_ doesn't have a context
+// notifier in this case.
 PeerConnectionTracker::PeerConnectionTracker(
     mojo::Remote<blink::mojom::blink::PeerConnectionTrackerHost> host,
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner)
     : Supplement(nullptr),
       peer_connection_tracker_host_(std::move(host)),
+      receiver_(this, nullptr),
       main_thread_task_runner_(std::move(main_thread_task_runner)) {}
 
 PeerConnectionTracker::~PeerConnectionTracker() {}
@@ -949,15 +994,6 @@ void PeerConnectionTracker::TrackModifyTransceiver(
                    transceiver_index);
 }
 
-void PeerConnectionTracker::TrackRemoveTransceiver(
-    RTCPeerConnectionHandler* pc_handler,
-    PeerConnectionTracker::TransceiverUpdatedReason reason,
-    const RTCRtpTransceiverPlatform& transceiver,
-    size_t transceiver_index) {
-  TrackTransceiver("Removed", pc_handler, reason, transceiver,
-                   transceiver_index);
-}
-
 void PeerConnectionTracker::TrackTransceiver(
     const char* callback_type_ending,
     RTCPeerConnectionHandler* pc_handler,
@@ -968,34 +1004,15 @@ void PeerConnectionTracker::TrackTransceiver(
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
-  String callback_type;
-  if (transceiver.ImplementationType() ==
-      RTCRtpTransceiverPlatformImplementationType::kFullTransceiver) {
-    callback_type = "transceiver";
-  } else if (transceiver.ImplementationType() ==
-             RTCRtpTransceiverPlatformImplementationType::kPlanBSenderOnly) {
-    callback_type = "sender";
-  } else {
-    callback_type = "receiver";
-  }
-  callback_type = callback_type + callback_type_ending;
-
+  String callback_type = "transceiver" + String::FromUTF8(callback_type_ending);
   StringBuilder result;
   result.Append("Caused by: ");
   result.Append(GetTransceiverUpdatedReasonString(reason));
   result.Append("\n\n");
-  if (transceiver.ImplementationType() ==
-      RTCRtpTransceiverPlatformImplementationType::kFullTransceiver) {
-    result.Append("getTransceivers()");
-  } else if (transceiver.ImplementationType() ==
-             RTCRtpTransceiverPlatformImplementationType::kPlanBSenderOnly) {
-    result.Append("getSenders()");
-  } else {
-    DCHECK_EQ(transceiver.ImplementationType(),
-              RTCRtpTransceiverPlatformImplementationType::kPlanBReceiverOnly);
-    result.Append("getReceivers()");
-  }
-  result.Append(String("[" + String::Number(transceiver_index) + "]:"));
+  result.Append("getTransceivers()");
+  result.Append("[");
+  result.Append(String::Number(transceiver_index));
+  result.Append("]:");
   result.Append(SerializeTransceiver(transceiver));
   SendPeerConnectionUpdate(id, callback_type, result.ToString());
 }
@@ -1109,7 +1126,7 @@ void PeerConnectionTracker::TrackSessionId(RTCPeerConnectionHandler* pc_handler,
                                            const String& session_id) {
   DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   DCHECK(pc_handler);
-  DCHECK(!session_id.IsEmpty());
+  DCHECK(!session_id.empty());
   const int local_id = GetLocalIDForHandler(pc_handler);
   if (local_id == -1) {
     return;
@@ -1151,12 +1168,12 @@ void PeerConnectionTracker::TrackGetUserMediaSuccess(
   // Serialize audio and video track information (id and label) or an
   // empty string when there is no such track.
   String audio_track_info =
-      stream->getAudioTracks().IsEmpty()
+      stream->getAudioTracks().empty()
           ? String("")
           : String("id:") + stream->getAudioTracks()[0]->id() +
                 String(" label:") + stream->getAudioTracks()[0]->label();
   String video_track_info =
-      stream->getVideoTracks().IsEmpty()
+      stream->getVideoTracks().empty()
           ? String("")
           : String("id:") + stream->getVideoTracks()[0]->id() +
                 String(" label:") + stream->getVideoTracks()[0]->label();

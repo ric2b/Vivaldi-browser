@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -309,9 +309,9 @@ void PromoService::BlocklistPromo(const std::string& promo_id) {
     return;
   }
 
-  DictionaryPrefUpdate update(profile_->GetPrefs(), prefs::kNtpPromoBlocklist);
+  ScopedDictPrefUpdate update(profile_->GetPrefs(), prefs::kNtpPromoBlocklist);
   double now = base::Time::Now().ToDeltaSinceWindowsEpoch().InSecondsF();
-  update->SetDoubleKey(promo_id, now);
+  update->Set(promo_id, now);
 
   // Check if the promo id to be blocked is the same as the promo id of the
   // current promo being served.
@@ -328,8 +328,8 @@ void PromoService::UndoBlocklistPromo(const std::string& promo_id) {
     return;
   }
 
-  DictionaryPrefUpdate update(profile_->GetPrefs(), prefs::kNtpPromoBlocklist);
-  update->RemoveKey(promo_id);
+  ScopedDictPrefUpdate update(profile_->GetPrefs(), prefs::kNtpPromoBlocklist);
+  update->Remove(promo_id);
 
   // Refresh promo service since cached promo data was cleared in
   // BlocklistPromo(), which is called before UndoBlocklistPromo().
@@ -366,9 +366,8 @@ bool PromoService::IsBlockedAfterClearingExpired(
 
   std::vector<std::string> expired_ids;
 
-  for (auto blocked : profile_->GetPrefs()
-                          ->GetDictionary(prefs::kNtpPromoBlocklist)
-                          ->DictItems()) {
+  for (auto blocked :
+       profile_->GetPrefs()->GetDict(prefs::kNtpPromoBlocklist)) {
     if (!blocked.second.is_double() || blocked.second.GetDouble() < expired)
       expired_ids.emplace_back(blocked.first);
     else if (!found && blocked.first == promo_id)
@@ -376,10 +375,10 @@ bool PromoService::IsBlockedAfterClearingExpired(
   }
 
   if (!expired_ids.empty()) {
-    DictionaryPrefUpdate update(profile_->GetPrefs(),
+    ScopedDictPrefUpdate update(profile_->GetPrefs(),
                                 prefs::kNtpPromoBlocklist);
     for (const std::string& key : expired_ids)
-      update->RemoveKey(key);
+      update->Remove(key);
   }
 
   return found;

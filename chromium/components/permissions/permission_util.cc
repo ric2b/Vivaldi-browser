@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/permissions/features.h"
+#include "components/permissions/permission_request.h"
 #include "components/permissions/permission_result.h"
 #include "components/permissions/permissions_client.h"
 #include "content/public/browser/browser_context.h"
@@ -62,66 +63,11 @@ PermissionDelegationMode GetPermissionDelegationMode(
 // kill switch e.g. Permissions.Action.Geolocation etc..
 std::string PermissionUtil::GetPermissionString(
     ContentSettingsType content_type) {
-  switch (content_type) {
-    case ContentSettingsType::GEOLOCATION:
-      return "Geolocation";
-    case ContentSettingsType::NOTIFICATIONS:
-      return "Notifications";
-    case ContentSettingsType::MIDI_SYSEX:
-      return "MidiSysEx";
-    case ContentSettingsType::DURABLE_STORAGE:
-      return "DurableStorage";
-    case ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER:
-      return "ProtectedMediaIdentifier";
-    case ContentSettingsType::MEDIASTREAM_MIC:
-      return "AudioCapture";
-    case ContentSettingsType::MEDIASTREAM_CAMERA:
-      return "VideoCapture";
-    case ContentSettingsType::MIDI:
-      return "Midi";
-    case ContentSettingsType::BACKGROUND_SYNC:
-      return "BackgroundSync";
-    case ContentSettingsType::SENSORS:
-      return "Sensors";
-    case ContentSettingsType::ACCESSIBILITY_EVENTS:
-      return "AccessibilityEvents";
-    case ContentSettingsType::CLIPBOARD_READ_WRITE:
-      return "ClipboardReadWrite";
-    case ContentSettingsType::CLIPBOARD_SANITIZED_WRITE:
-      return "ClipboardSanitizedWrite";
-    case ContentSettingsType::PAYMENT_HANDLER:
-      return "PaymentHandler";
-    case ContentSettingsType::BACKGROUND_FETCH:
-      return "BackgroundFetch";
-    case ContentSettingsType::IDLE_DETECTION:
-      return "IdleDetection";
-    case ContentSettingsType::PERIODIC_BACKGROUND_SYNC:
-      return "PeriodicBackgroundSync";
-    case ContentSettingsType::WAKE_LOCK_SCREEN:
-      return "WakeLockScreen";
-    case ContentSettingsType::WAKE_LOCK_SYSTEM:
-      return "WakeLockSystem";
-    case ContentSettingsType::NFC:
-      return "NFC";
-    case ContentSettingsType::VR:
-      return "VR";
-    case ContentSettingsType::AR:
-      return "AR";
-    case ContentSettingsType::STORAGE_ACCESS:
-      return "StorageAccess";
-    case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
-      return "CameraPanTiltZoom";
-    case ContentSettingsType::WINDOW_PLACEMENT:
-      return "WindowPlacement";
-    case ContentSettingsType::LOCAL_FONTS:
-      return "LocalFonts";
-    case ContentSettingsType::DISPLAY_CAPTURE:
-      return "DisplayCapture";
-    default:
-      break;
-  }
-  NOTREACHED();
-  return std::string();
+  PermissionType permission;
+  bool success = PermissionUtil::GetPermissionType(content_type, &permission);
+  DCHECK(success);
+
+  return blink::GetPermissionString(permission);
 }
 
 PermissionRequestGestureType PermissionUtil::GetGestureType(bool user_gesture) {
@@ -171,6 +117,9 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     case ContentSettingsType::CLIPBOARD_READ_WRITE:
       *out = PermissionType::CLIPBOARD_READ_WRITE;
       break;
+    case ContentSettingsType::CLIPBOARD_SANITIZED_WRITE:
+      *out = PermissionType::CLIPBOARD_SANITIZED_WRITE;
+      break;
     case ContentSettingsType::PAYMENT_HANDLER:
       *out = PermissionType::PAYMENT_HANDLER;
       break;
@@ -201,7 +150,7 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
       *out = PermissionType::CAMERA_PAN_TILT_ZOOM;
       break;
-    case ContentSettingsType::WINDOW_PLACEMENT:
+    case ContentSettingsType::WINDOW_MANAGEMENT:
       *out = PermissionType::WINDOW_PLACEMENT;
       break;
     case ContentSettingsType::LOCAL_FONTS:
@@ -220,40 +169,14 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
 }
 
 bool PermissionUtil::IsPermission(ContentSettingsType type) {
-  switch (type) {
-    case ContentSettingsType::GEOLOCATION:
-    case ContentSettingsType::NOTIFICATIONS:
-    case ContentSettingsType::MIDI:
-    case ContentSettingsType::MIDI_SYSEX:
-    case ContentSettingsType::DURABLE_STORAGE:
-    case ContentSettingsType::MEDIASTREAM_CAMERA:
-    case ContentSettingsType::MEDIASTREAM_MIC:
-    case ContentSettingsType::BACKGROUND_SYNC:
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN) || \
-    BUILDFLAG(IS_FUCHSIA)
-    case ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER:
-#endif
-    case ContentSettingsType::SENSORS:
-    case ContentSettingsType::ACCESSIBILITY_EVENTS:
-    case ContentSettingsType::CLIPBOARD_READ_WRITE:
-    case ContentSettingsType::PAYMENT_HANDLER:
-    case ContentSettingsType::BACKGROUND_FETCH:
-    case ContentSettingsType::PERIODIC_BACKGROUND_SYNC:
-    case ContentSettingsType::WAKE_LOCK_SCREEN:
-    case ContentSettingsType::WAKE_LOCK_SYSTEM:
-    case ContentSettingsType::NFC:
-    case ContentSettingsType::VR:
-    case ContentSettingsType::AR:
-    case ContentSettingsType::STORAGE_ACCESS:
-    case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
-    case ContentSettingsType::WINDOW_PLACEMENT:
-    case ContentSettingsType::LOCAL_FONTS:
-    case ContentSettingsType::IDLE_DETECTION:
-    case ContentSettingsType::DISPLAY_CAPTURE:
-      return true;
-    default:
-      return false;
-  }
+  PermissionType permission;
+  return PermissionUtil::GetPermissionType(type, &permission);
+}
+
+bool PermissionUtil::IsLowPriorityPermissionRequest(
+    const PermissionRequest* request) {
+  return request->request_type() == RequestType::kNotifications ||
+         request->request_type() == RequestType::kGeolocation;
 }
 
 bool PermissionUtil::IsGuardContentSetting(ContentSettingsType type) {
@@ -360,7 +283,7 @@ ContentSettingsType PermissionUtil::PermissionTypeToContentSettingTypeSafe(
     case PermissionType::CAMERA_PAN_TILT_ZOOM:
       return ContentSettingsType::CAMERA_PAN_TILT_ZOOM;
     case PermissionType::WINDOW_PLACEMENT:
-      return ContentSettingsType::WINDOW_PLACEMENT;
+      return ContentSettingsType::WINDOW_MANAGEMENT;
     case PermissionType::LOCAL_FONTS:
       return ContentSettingsType::LOCAL_FONTS;
     case PermissionType::DISPLAY_CAPTURE:
@@ -384,66 +307,11 @@ ContentSettingsType PermissionUtil::PermissionTypeToContentSettingType(
 
 PermissionType PermissionUtil::ContentSettingTypeToPermissionType(
     ContentSettingsType permission) {
-  switch (permission) {
-    case ContentSettingsType::GEOLOCATION:
-      return PermissionType::GEOLOCATION;
-    case ContentSettingsType::NOTIFICATIONS:
-      return PermissionType::NOTIFICATIONS;
-    case ContentSettingsType::MIDI:
-      return PermissionType::MIDI;
-    case ContentSettingsType::MIDI_SYSEX:
-      return PermissionType::MIDI_SYSEX;
-    case ContentSettingsType::DURABLE_STORAGE:
-      return PermissionType::DURABLE_STORAGE;
-    case ContentSettingsType::MEDIASTREAM_CAMERA:
-      return PermissionType::VIDEO_CAPTURE;
-    case ContentSettingsType::MEDIASTREAM_MIC:
-      return PermissionType::AUDIO_CAPTURE;
-    case ContentSettingsType::BACKGROUND_SYNC:
-      return PermissionType::BACKGROUND_SYNC;
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN) || \
-    BUILDFLAG(IS_FUCHSIA)
-    case ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER:
-      return PermissionType::PROTECTED_MEDIA_IDENTIFIER;
-#endif
-    case ContentSettingsType::SENSORS:
-      return PermissionType::SENSORS;
-    case ContentSettingsType::ACCESSIBILITY_EVENTS:
-      return PermissionType::ACCESSIBILITY_EVENTS;
-    case ContentSettingsType::CLIPBOARD_READ_WRITE:
-      return PermissionType::CLIPBOARD_READ_WRITE;
-    case ContentSettingsType::PAYMENT_HANDLER:
-      return PermissionType::PAYMENT_HANDLER;
-    case ContentSettingsType::BACKGROUND_FETCH:
-      return PermissionType::BACKGROUND_FETCH;
-    case ContentSettingsType::PERIODIC_BACKGROUND_SYNC:
-      return PermissionType::PERIODIC_BACKGROUND_SYNC;
-    case ContentSettingsType::WAKE_LOCK_SCREEN:
-      return PermissionType::WAKE_LOCK_SCREEN;
-    case ContentSettingsType::WAKE_LOCK_SYSTEM:
-      return PermissionType::WAKE_LOCK_SYSTEM;
-    case ContentSettingsType::NFC:
-      return PermissionType::NFC;
-    case ContentSettingsType::VR:
-      return PermissionType::VR;
-    case ContentSettingsType::AR:
-      return PermissionType::AR;
-    case ContentSettingsType::STORAGE_ACCESS:
-      return PermissionType::STORAGE_ACCESS_GRANT;
-    case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
-      return PermissionType::CAMERA_PAN_TILT_ZOOM;
-    case ContentSettingsType::WINDOW_PLACEMENT:
-      return PermissionType::WINDOW_PLACEMENT;
-    case ContentSettingsType::LOCAL_FONTS:
-      return PermissionType::LOCAL_FONTS;
-    case ContentSettingsType::IDLE_DETECTION:
-      return PermissionType::IDLE_DETECTION;
-    case ContentSettingsType::DISPLAY_CAPTURE:
-      return PermissionType::DISPLAY_CAPTURE;
-    default:
-      NOTREACHED();
-      return PermissionType::NUM;
-  }
+  PermissionType permissionType;
+  bool success = PermissionUtil::GetPermissionType(permission, &permissionType);
+  DCHECK(success);
+
+  return permissionType;
 }
 
 ContentSetting PermissionUtil::PermissionStatusToContentSetting(
@@ -541,4 +409,14 @@ GURL PermissionUtil::GetCanonicalOrigin(ContentSettingsType permission,
   }
 }
 
+bool PermissionUtil::HasUserGesture(PermissionPrompt::Delegate* delegate) {
+  const std::vector<permissions::PermissionRequest*>& requests =
+      delegate->Requests();
+  return std::any_of(
+      requests.begin(), requests.end(),
+      [](permissions::PermissionRequest* request) {
+        return request->GetGestureType() ==
+               permissions::PermissionRequestGestureType::GESTURE;
+      });
+}
 }  // namespace permissions

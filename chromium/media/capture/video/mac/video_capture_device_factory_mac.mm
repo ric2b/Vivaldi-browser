@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/task/task_runner_util.h"
 #import "media/capture/video/mac/video_capture_device_avfoundation_mac.h"
 #import "media/capture/video/mac/video_capture_device_avfoundation_utils_mac.h"
 #import "media/capture/video/mac/video_capture_device_decklink_mac.h"
@@ -47,18 +46,18 @@ media::VideoCaptureFormats GetDeviceSupportedFormats(
   }
   if (device == nil)
     return media::VideoCaptureFormats();
-  for (AVCaptureDeviceFormat* format in device.formats) {
+  for (AVCaptureDeviceFormat* device_format in device.formats) {
     // MediaSubType is a CMPixelFormatType but can be used as CVPixelFormatType
     // as well according to CMFormatDescription.h
     const media::VideoPixelFormat pixelFormat = [VideoCaptureDeviceAVFoundation
         FourCCToChromiumPixelFormat:CMFormatDescriptionGetMediaSubType(
-                                        [format formatDescription])];
+                                        [device_format formatDescription])];
 
-    CMVideoDimensions dimensions =
-        CMVideoFormatDescriptionGetDimensions([format formatDescription]);
+    CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(
+        [device_format formatDescription]);
 
     for (AVFrameRateRange* frameRate in
-         [format videoSupportedFrameRateRanges]) {
+         [device_format videoSupportedFrameRateRanges]) {
       media::VideoCaptureFormat format(
           gfx::Size(dimensions.width, dimensions.height),
           frameRate.maxFrameRate, pixelFormat);

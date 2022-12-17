@@ -1,9 +1,9 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
-import {$} from 'chrome://resources/js/util.m.js';
+import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
+import {$} from 'chrome://resources/js/util.js';
 import {closeDrawer, initialize, openDrawer, promiseResolvers} from 'chrome://sys-internals/index.js';
 
 suite('Page_Drawer', function() {

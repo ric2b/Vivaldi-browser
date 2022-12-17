@@ -1,13 +1,16 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/ash/holding_space/holding_space_persistence_delegate.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/holding_space/holding_space_constants.h"
 #include "ash/public/cpp/holding_space/holding_space_image.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_progress.h"
+#include "base/containers/contains.h"
+#include "base/ranges/algorithm.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -64,10 +67,10 @@ void HoldingSpacePersistenceDelegate::OnHoldingSpaceItemsAdded(
     return;
 
   // Write the new finalized `items` to persistent storage.
-  ListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
+  ScopedListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
   for (const HoldingSpaceItem* item : items) {
     if (item->progress().IsComplete())
-      update->GetList().Append(item->Serialize());
+      update->Append(item->Serialize());
   }
 }
 
@@ -77,14 +80,11 @@ void HoldingSpacePersistenceDelegate::OnHoldingSpaceItemsRemoved(
     return;
 
   // Remove the `items` from persistent storage.
-  ListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
-  update->GetList().EraseIf([&items](const base::Value& persisted_item) {
+  ScopedListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
+  update->EraseIf([&items](const base::Value& persisted_item) {
     const std::string& persisted_item_id = HoldingSpaceItem::DeserializeId(
         base::Value::AsDictionaryValue(persisted_item));
-    return std::any_of(items.begin(), items.end(),
-                       [&persisted_item_id](const HoldingSpaceItem* item) {
-                         return persisted_item_id == item->id();
-                       });
+    return base::Contains(items, persisted_item_id, &HoldingSpaceItem::id);
   });
 }
 
@@ -99,12 +99,12 @@ void HoldingSpacePersistenceDelegate::OnHoldingSpaceItemUpdated(
     return;
 
   // Attempt to find the finalized `item` in persistent storage.
-  ListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
-  base::Value::List& list = update->GetList();
-  auto item_it = std::find_if(
-      list.begin(), list.end(), [&item](const base::Value& persisted_item) {
-        return HoldingSpaceItem::DeserializeId(base::Value::AsDictionaryValue(
-                   persisted_item)) == item->id();
+  ScopedListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
+  base::Value::List& list = update.Get();
+  auto item_it = base::ranges::find(
+      list, item->id(), [](const base::Value& persisted_item) {
+        return HoldingSpaceItem::DeserializeId(
+            base::Value::AsDictionaryValue(persisted_item));
       });
 
   // If the finalized `item` already exists in persistent storage, update it.
@@ -132,8 +132,11 @@ void HoldingSpacePersistenceDelegate::OnHoldingSpaceItemUpdated(
 void HoldingSpacePersistenceDelegate::RestoreModelFromPersistence() {
   DCHECK(model()->items().empty());
 
+  // Clear suggestions before restoration if needed.
+  MaybeRemoveSuggestionsFromPersistence();
+
   const auto& persisted_holding_space_items =
-      profile()->GetPrefs()->GetValueList(kPersistencePath);
+      profile()->GetPrefs()->GetList(kPersistencePath);
 
   // If persistent storage is empty we can immediately notify the callback of
   // persistence restoration completion and quit early.
@@ -156,6 +159,19 @@ void HoldingSpacePersistenceDelegate::RestoreModelFromPersistence() {
 
   // Notify completion of persistence restoration.
   std::move(persistence_restored_callback_).Run();
+}
+
+void HoldingSpacePersistenceDelegate::MaybeRemoveSuggestionsFromPersistence() {
+  DCHECK(is_restoring_persistence());
+
+  if (features::IsHoldingSpaceSuggestionsEnabled())
+    return;
+
+  ScopedListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
+  update->EraseIf([](const base::Value& persisted_item) {
+    return HoldingSpaceItem::IsSuggestion(HoldingSpaceItem::DeserializeType(
+        base::Value::AsDictionaryValue(persisted_item)));
+  });
 }
 
 }  // namespace ash

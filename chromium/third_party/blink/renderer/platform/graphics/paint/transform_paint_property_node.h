@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,7 @@
 namespace blink {
 
 using CompositorStickyConstraint = cc::StickyPositionConstraint;
+class AffineTransform;
 
 // A transform (e.g., created by css "transform" or "perspective", or for
 // internal positioning such as paint offset or scrolling) along with a
@@ -86,11 +87,12 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
 
   // Stores a transform and origin with an optimization for the identity and
   // 2d translation cases that avoids allocating a full matrix and origin.
-  class TransformAndOrigin {
+  class PLATFORM_EXPORT TransformAndOrigin {
     DISALLOW_NEW();
 
    public:
     TransformAndOrigin() = default;
+    explicit TransformAndOrigin(const AffineTransform&);
     // These constructors are not explicit so that we can use gfx::Vector2dF or
     // TransformationMatrix directly in the initialization list of State.
     // NOLINTNEXTLINE(google-explicit-constructor)
@@ -113,15 +115,13 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
       DCHECK(IsIdentityOr2DTranslation());
       return translation_2d_;
     }
+
     const TransformationMatrix& Matrix() const {
       DCHECK(matrix_and_origin_);
       return matrix_and_origin_->matrix;
     }
-    TransformationMatrix SlowMatrix() const {
-      return matrix_and_origin_ ? matrix_and_origin_->matrix
-                                : TransformationMatrix().Translate(
-                                      translation_2d_.x(), translation_2d_.y());
-    }
+    TransformationMatrix SlowMatrix() const;
+
     gfx::Point3F Origin() const {
       return matrix_and_origin_ ? matrix_and_origin_->origin : gfx::Point3F();
     }
@@ -149,6 +149,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
           : matrix(m), origin(o) {}
       TransformationMatrix matrix;
       gfx::Point3F origin;
+      USING_FAST_MALLOC(MatrixAndOrigin);
     };
     gfx::Vector2dF translation_2d_;
     std::unique_ptr<MatrixAndOrigin> matrix_and_origin_;
@@ -157,12 +158,16 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   struct AnimationState {
     AnimationState() {}
     bool is_running_animation_on_compositor = false;
+    STACK_ALLOCATED();
   };
 
   // For the purpose of computing the translation offset caused by CSS
   // `anchor-scroll`, this structure stores the range of the scroll containers
   // (both ends inclusive) whose scroll offsets are accumulated.
   struct AnchorScrollContainersData {
+    USING_FAST_MALLOC(AnchorScrollContainersData);
+
+   public:
     scoped_refptr<const TransformPaintPropertyNode> inner_most_scroll_container;
     scoped_refptr<const TransformPaintPropertyNode> outer_most_scroll_container;
     gfx::Vector2d accumulated_scroll_origin;
@@ -186,12 +191,19 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   // To make it less verbose and more readable to construct and update a node,
   // a struct with default values is used to represent the state.
   struct PLATFORM_EXPORT State {
+    DISALLOW_NEW();
+
+   public:
     TransformAndOrigin transform_and_origin;
     scoped_refptr<const ScrollPaintPropertyNode> scroll;
     scoped_refptr<const TransformPaintPropertyNode>
         scroll_translation_for_fixed;
+
     // Use bitfield packing instead of separate bools to save space.
     struct Flags {
+      DISALLOW_NEW();
+
+     public:
       bool flattens_inherited_transform : 1;
       bool in_subtree_of_page_scale : 1;
       bool animation_is_axis_aligned : 1;
@@ -200,6 +212,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
       bool is_frame_paint_offset_translation : 1;
       bool is_for_svg_child : 1;
     } flags = {false, true, false, false, false, false};
+
     BackfaceVisibility backface_visibility = BackfaceVisibility::kInherited;
     unsigned rendering_context_id = 0;
     CompositingReasons direct_compositing_reasons = CompositingReason::kNone;
@@ -210,9 +223,20 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
     // ID of the containing document.
     CompositorElementId visible_frame_element_id;
 
+    PaintPropertyChangeType ComputeTransformChange(
+        const TransformAndOrigin& other,
+        const AnimationState& animation_state) const;
     PaintPropertyChangeType ComputeChange(
         const State& other,
         const AnimationState& animation_state) const;
+
+    bool UsesCompositedScrolling() const {
+      return direct_compositing_reasons & CompositingReason::kOverflowScrolling;
+    }
+    bool RequiresCullRectExpansion() const {
+      return direct_compositing_reasons &
+             CompositingReason::kRequiresCullRectExpansion;
+    }
   };
 
   // This node is really a sentinel, and does not represent a real transform
@@ -255,16 +279,25 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   const TransformationMatrix& Matrix() const {
     return state_.transform_and_origin.Matrix();
   }
+
   TransformationMatrix MatrixWithOriginApplied() const {
-    return TransformationMatrix(Matrix()).ApplyTransformOrigin(Origin());
+    TransformationMatrix result = Matrix();
+    result.ApplyTransformOrigin(Origin());
+    return result;
   }
+
   // The slow version always return meaningful TransformationMatrix regardless
   // of IsIdentityOr2DTranslation(). Should be used only in contexts that are
   // not performance sensitive.
   TransformationMatrix SlowMatrix() const {
     return state_.transform_and_origin.SlowMatrix();
   }
+
   gfx::Point3F Origin() const { return state_.transform_and_origin.Origin(); }
+
+  PaintPropertyChangeType DirectlyUpdateTransformAndOrigin(
+      TransformAndOrigin&& transform_and_origin,
+      const AnimationState& animation_state);
 
   // The associated scroll node, or nullptr otherwise.
   const ScrollPaintPropertyNode* ScrollNode() const {
@@ -374,7 +407,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   }
 
   bool RequiresCompositingForFixedToViewport() const {
-    return DirectCompositingReasons() & CompositingReason::kFixedToViewport;
+    return DirectCompositingReasons() & CompositingReason::kUndoOverscroll;
   }
 
   bool RequiresCompositingForStickyPosition() const {
@@ -404,8 +437,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   // Cull rect expansion is required if the compositing reasons hint requirement
   // of high-performance movement, to avoid frequent change of cull rect.
   bool RequiresCullRectExpansion() const {
-    return state_.direct_compositing_reasons &
-           CompositingReason::kRequiresCullRectExpansion;
+    return state_.RequiresCullRectExpansion();
   }
 
   const CompositorElementId& GetCompositorElementId() const {

@@ -388,7 +388,7 @@ void FrameSerializer::SerializeCSSStyleSheet(CSSStyleSheet& style_sheet,
     for (unsigned i = 0; i < style_sheet.length(); ++i) {
       CSSRule* rule = style_sheet.item(i);
       String item_text = rule->cssText();
-      if (!item_text.IsEmpty()) {
+      if (!item_text.empty()) {
         css_text.Append(item_text);
         if (i < style_sheet.length() - 1)
           css_text.Append("\n\n");
@@ -460,7 +460,6 @@ void FrameSerializer::SerializeCSSRule(CSSRule* rule) {
     case CSSRule::kPropertyRule:
     case CSSRule::kKeyframesRule:
     case CSSRule::kKeyframeRule:
-    case CSSRule::kScrollTimelineRule:
     case CSSRule::kNamespaceRule:
     case CSSRule::kViewportRule:
     case CSSRule::kLayerStatementRule:

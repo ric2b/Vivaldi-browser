@@ -1,10 +1,10 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view.h"
 
-#include "base/check.h"
+#import "base/check.h"
 #import "base/ios/ios_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
@@ -16,12 +16,23 @@
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_progress_bar.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ui/gfx/ios/uikit_util.h"
+#import "ui/gfx/ios/uikit_util.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#include "ui/base/device_form_factor.h"
+
+using ui::GetDeviceFormFactor;
+using ui::DEVICE_FORM_FACTOR_PHONE;
+using ui::DEVICE_FORM_FACTOR_TABLET;
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -72,7 +83,7 @@
 // Button to display the share menu, redefined as readwrite.
 @property(nonatomic, strong, readwrite) ToolbarButton* shareButton;
 // Button to display the tools menu, redefined as readwrite.
-@property(nonatomic, strong, readwrite) ToolbarToolsMenuButton* toolsMenuButton;
+@property(nonatomic, strong, readwrite) ToolbarButton* toolsMenuButton;
 
 // Button to cancel the edit of the location bar, redefined as readwrite.
 @property(nonatomic, strong, readwrite) UIButton* cancelButton;
@@ -87,6 +98,11 @@
     NSMutableArray<NSLayoutConstraint*>* contractedConstraints;
 @property(nonatomic, strong, readwrite)
     NSMutableArray<NSLayoutConstraint*>* contractedNoMarginConstraints;
+
+// Vivaldi
+// Button to open and close, redefined as readwrite.
+@property(nonatomic, strong, readwrite) ToolbarButton* panelButton;
+// End Vivaldi
 
 @end
 
@@ -198,8 +214,14 @@
 
 // Sets up the toolbar background.
 - (void)setUpToolbarBackground {
+
+  if (IsVivaldiRunning()) {
+    self.backgroundColor = [UIColor colorNamed:vNTPBackgroundColor];
+  } else {
   self.backgroundColor =
       self.buttonFactory.toolbarConfiguration.backgroundColor;
+  } // End Vivaldi
+
   if (base::FeatureList::IsEnabled(kExpandedTabStrip)) {
     self.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
   }
@@ -217,9 +239,16 @@
 // Sets the location bar container and its view if present.
 - (void)setUpLocationBar {
   self.locationBarContainer = [[UIView alloc] init];
+
+  if (IsVivaldiRunning()) {
+    self.locationBarContainer.backgroundColor =
+      [UIColor colorNamed:vSearchbarBackgroundColor];
+  } else {
   self.locationBarContainer.backgroundColor =
       [self.buttonFactory.toolbarConfiguration
           locationBarBackgroundColorWithVisibility:1];
+  } // End Vivaldi
+
   [self.locationBarContainer
       setContentHuggingPriority:UILayoutPriorityDefaultLow
                         forAxis:UILayoutConstraintAxisHorizontal];
@@ -237,9 +266,22 @@
   self.stopButton.hiddenInCurrentState = YES;
   self.reloadButton = [self.buttonFactory reloadButton];
 
+  if (IsVivaldiRunning() &&
+      (GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET)) {
+    self.panelButton = [self.buttonFactory panelButton];
+    self.leadingStackViewButtons = @[
+      self.panelButton,
+      self.backButton,
+      self.forwardButton,
+      self.stopButton,
+      self.reloadButton
+    ];
+  } else {
   self.leadingStackViewButtons = @[
     self.backButton, self.forwardButton, self.stopButton, self.reloadButton
   ];
+  } // End Vivaldi
+
   self.leadingStackView = [[UIStackView alloc]
       initWithArrangedSubviews:self.leadingStackViewButtons];
   self.leadingStackView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -293,6 +335,9 @@
   self.separator.backgroundColor = [UIColor colorNamed:kToolbarShadowColor];
   self.separator.translatesAutoresizingMaskIntoConstraints = NO;
   [self addSubview:self.separator];
+  if (IsVivaldiRunning() &&
+      (GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE))
+    self.separator.backgroundColor = UIColor.clearColor;
 }
 
 // Sets the constraints up.
@@ -333,6 +378,17 @@
     self.locationBarBottomConstraint,
     self.locationBarHeight,
   ]];
+
+  if (IsVivaldiRunning()) {
+    [self.contractedConstraints addObjectsFromArray:@[
+      [self.locationBarContainer.trailingAnchor
+          constraintEqualToAnchor:self.trailingStackView.leadingAnchor
+                         constant:-kContractedLocationBarHorizontalMargin],
+      [self.locationBarContainer.leadingAnchor
+          constraintEqualToAnchor:self.leadingStackView.trailingAnchor
+                         constant:vLocationBarLeadingPadding],
+    ]];
+  } else {
   [self.contractedConstraints addObjectsFromArray:@[
     [self.locationBarContainer.trailingAnchor
         constraintEqualToAnchor:self.trailingStackView.leadingAnchor
@@ -341,10 +397,31 @@
         constraintEqualToAnchor:self.leadingStackView.trailingAnchor
                        constant:kContractedLocationBarHorizontalMargin],
   ]];
+  } // End Vivaldi
 
   CGFloat leadingMargin = IsOmniboxActionsEnabled()
                               ? kExpandedLocationBarLeadingMarginRefreshedPopup
                               : kExpandedLocationBarHorizontalMargin;
+
+  if (IsVivaldiRunning()) {
+
+    [self.contractedNoMarginConstraints addObjectsFromArray:@[
+      [self.locationBarContainer.leadingAnchor
+          constraintEqualToAnchor:safeArea.leadingAnchor
+                         constant:leadingMargin],
+      [self.locationBarContainer.trailingAnchor
+          constraintEqualToAnchor:safeArea.trailingAnchor
+                         constant:-kExpandedLocationBarHorizontalMargin]
+    ]];
+
+    [self.expandedConstraints addObjectsFromArray:@[
+      [self.locationBarContainer.trailingAnchor
+          constraintEqualToAnchor:self.cancelButton.leadingAnchor],
+      [self.locationBarContainer.leadingAnchor
+          constraintEqualToAnchor:safeArea.leadingAnchor
+                         constant:vLocationBarLeadingPadding]
+    ]];
+  } else {
 
   // Constraints for contractedNoMarginConstraints.
   [self.contractedNoMarginConstraints addObjectsFromArray:@[
@@ -363,6 +440,7 @@
         constraintEqualToAnchor:safeArea.leadingAnchor
                        constant:leadingMargin]
   ]];
+  } // End Vivaldi
 
   // Trailing StackView constraints.
   [NSLayoutConstraint activateConstraints:@[

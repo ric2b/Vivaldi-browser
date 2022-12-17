@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,8 @@ struct EnumTraits<gfx::mojom::OverlayPriorityHint, gfx::OverlayPriorityHint> {
         return gfx::mojom::OverlayPriorityHint::kLowLatencyCanvas;
       case gfx::OverlayPriorityHint::kHardwareProtection:
         return gfx::mojom::OverlayPriorityHint::kHardwareProtection;
+      case gfx::OverlayPriorityHint::kVideo:
+        return gfx::mojom::OverlayPriorityHint::kVideo;
     }
     NOTREACHED();
     return gfx::mojom::OverlayPriorityHint::kNone;
@@ -43,6 +45,9 @@ struct EnumTraits<gfx::mojom::OverlayPriorityHint, gfx::OverlayPriorityHint> {
         return true;
       case gfx::mojom::OverlayPriorityHint::kHardwareProtection:
         *out = gfx::OverlayPriorityHint::kHardwareProtection;
+        return true;
+      case gfx::mojom::OverlayPriorityHint::kVideo:
+        *out = gfx::OverlayPriorityHint::kVideo;
         return true;
     }
     NOTREACHED();

@@ -22,7 +22,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "calendar/calendar_typedefs.h"
-#include "calendar/event_exception_type.h"
 #include "calendar/invite_type.h"
 #include "calendar/notification_type.h"
 #include "calendar/recurrence_exception_type.h"
@@ -103,7 +102,7 @@ class EventRow {
   base::Time trash_time;
   int sequence;
   std::u16string ical;
-  EventExceptions event_exceptions;
+  RecurrenceExceptionRows event_exceptions;
   std::string rrule;
   NotificationRows notifications;
   InviteRows invites;

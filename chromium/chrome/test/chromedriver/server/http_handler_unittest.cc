@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,11 +20,10 @@
 
 namespace {
 
-void DummyCommand(
-    const Status& status,
-    const base::DictionaryValue& params,
-    const std::string& session_id,
-    const CommandCallback& callback) {
+void DummyCommand(const Status& status,
+                  const base::Value::Dict& params,
+                  const std::string& session_id,
+                  const CommandCallback& callback) {
   callback.Run(status, std::make_unique<base::Value>(1), "session_id", false);
 }
 

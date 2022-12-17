@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -85,6 +85,8 @@ GPUTestConfig::OS GetCurrentOS() {
       return GPUTestConfig::kOsMacBigSur;
     case 12:
       return GPUTestConfig::kOsMacMonterey;
+    case 13:
+      return GPUTestConfig::kOsMacVentura;
   }
   return GPUTestConfig::kOsUnknown;
 #elif BUILDFLAG(IS_ANDROID)
@@ -230,6 +232,7 @@ bool GPUTestBotConfig::IsValid() const {
     case kOsMacCatalina:
     case kOsMacBigSur:
     case kOsMacMonterey:
+    case kOsMacVentura:
     case kOsLinux:
     case kOsChromeOS:
     case kOsAndroid:

@@ -1,8 +1,8 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assertNotReached} from 'chrome://resources/js/assert.js';
 
 import {ProgressCenterItem, ProgressItemState, ProgressItemType} from '../../../common/js/progress_center_common.js';
 import {str, strf, util} from '../../../common/js/util.js';
@@ -78,6 +78,13 @@ export class ProgressCenterPanel {
           if (item.type === ProgressItemType.DELETE) {
             return strf('DELETE_FILE_NAME', source);
           }
+          if (item.type === ProgressItemType.TRASH) {
+            return strf('MOVE_TO_TRASH_FILE_NAME', source);
+          }
+          if (item.type === ProgressItemType.RESTORE_TO_DESTINATION ||
+              item.type === ProgressItemType.RESTORE) {
+            return strf('RESTORING_FROM_TRASH_FILE_NAME', source);
+          }
           return item.message;
         }
 
@@ -93,6 +100,13 @@ export class ProgressCenterPanel {
         }
         if (item.type === ProgressItemType.DELETE) {
           return strf('DELETE_ITEMS_REMAINING', count);
+        }
+        if (item.type === ProgressItemType.TRASH) {
+          return strf('MOVE_TO_TRASH_ITEMS_REMAINING', count);
+        }
+        if (item.type === ProgressItemType.RESTORE_TO_DESTINATION ||
+            item.type === ProgressItemType.RESTORE) {
+          return strf('RESTORING_FROM_TRASH_ITEMS_REMAINING', count);
         }
         return item.message;
         break;
@@ -136,6 +150,7 @@ export class ProgressCenterPanel {
     const {source, destination, count} = info;
     const hasDestination = this.isNonEmptyString_(destination);
     switch (item.state) {
+      case ProgressItemState.SCANNING:
       case ProgressItemState.PROGRESSING:
         // Source and primary string are the same for missing destination.
         if (!hasDestination) {
@@ -166,6 +181,17 @@ export class ProgressCenterPanel {
           if (item.type === ProgressItemType.DELETE) {
             return strf('DELETE_FILE_NAME', source);
           }
+          if (item.type === ProgressItemType.TRASH) {
+            return item.state == ProgressItemState.PROGRESSING ?
+                strf('MOVE_TO_TRASH_FILE_NAME', source) :
+                strf('UNDO_DELETE_ONE', source);
+          }
+          if (item.type === ProgressItemType.RESTORE_TO_DESTINATION ||
+              item.type === ProgressItemType.RESTORE) {
+            return item.state == ProgressItemState.PROGRESSING ?
+                strf('RESTORING_FROM_TRASH_FILE_NAME', source) :
+                strf('RESTORE_TRASH_FILE_NAME', source);
+          }
           return item.message;
         }
 
@@ -190,6 +216,17 @@ export class ProgressCenterPanel {
         }
         if (item.type === ProgressItemType.DELETE) {
           return strf('DELETE_ITEMS_REMAINING', count);
+        }
+        if (item.type === ProgressItemType.TRASH) {
+          return item.state == ProgressItemState.PROGRESSING ?
+              strf('MOVE_TO_TRASH_ITEMS_REMAINING', count) :
+              strf('UNDO_DELETE_SOME', count);
+        }
+        if (item.type === ProgressItemType.RESTORE_TO_DESTINATION ||
+            item.type === ProgressItemType.RESTORE) {
+          return item.state == ProgressItemState.PROGRESSING ?
+              strf('RESTORING_FROM_TRASH_ITEMS_REMAINING', count) :
+              strf('RESTORE_TRASH_MANY_ITEMS', count);
         }
         return item.message;
         break;
@@ -225,12 +262,16 @@ export class ProgressCenterPanel {
       return '';
     }
 
+    if (item.state === ProgressItemState.SCANNING) {
+      return str('SCANNING_LABEL');
+    }
+
     // Check if remaining time is valid (ie finite and positive).
     if (!(isFinite(seconds) && seconds > 0)) {
       // Return empty string for invalid remaining time in non progressing
       // state.
       return item.state === ProgressItemState.PROGRESSING ?
-          str('PENDING_LABEL') :
+          str('PREPARING_LABEL') :
           '';
     }
 
@@ -304,6 +345,10 @@ export class ProgressCenterPanel {
       panelItem.primaryText = primaryText;
       panelItem.setAttribute('data-progress-id', item.id);
 
+      // Certain visual signals have the functionality to display an extra
+      // button with an arbitrary callback.
+      let extraButton = null;
+
       // On progress panels, make the cancel button aria-label more useful.
       const cancelLabel = strf('CANCEL_ACTIVITY_LABEL', primaryText);
       panelItem.closeButtonAriaLabel = cancelLabel;
@@ -313,8 +358,13 @@ export class ProgressCenterPanel {
         } else if (signal === 'dismiss') {
           this.feedbackHost_.removePanelItem(panelItem);
           this.dismissErrorItemCallback(item.id);
-        } else if (signal === 'learn-more') {
-          window.open(item.learnMoreLink, '_blank');
+        } else if (
+            signal === 'extra-button' && extraButton && extraButton.callback) {
+          extraButton.callback();
+          this.feedbackHost_.removePanelItem(panelItem);
+          // The extra-button currently acts as a dismissal to invoke the
+          // error item callback as well.
+          this.dismissErrorItemCallback(item.id);
         }
       };
       panelItem.progress = item.progressRateInPercent.toString();
@@ -326,14 +376,27 @@ export class ProgressCenterPanel {
               item.type === ProgressItemType.MOVE ||
               item.type === ProgressItemType.FORMAT ||
               item.type === ProgressItemType.ZIP ||
-              item.type === ProgressItemType.DELETE) {
+              item.type === ProgressItemType.DELETE ||
+              item.type === ProgressItemType.TRASH ||
+              item.type === ProgressItemType.RESTORE_TO_DESTINATION ||
+              item.type === ProgressItemType.RESTORE) {
             const donePanelItem = this.feedbackHost_.addPanelItem(item.id);
+            if (item.extraButton.has(ProgressItemState.COMPLETED)) {
+              extraButton = item.extraButton.get(ProgressItemState.COMPLETED);
+              donePanelItem.dataset.extraButtonText = extraButton.text;
+            }
             donePanelItem.id = item.id;
             donePanelItem.panelType = donePanelItem.panelTypeDone;
             donePanelItem.primaryText = primaryText;
             donePanelItem.secondaryText = str('COMPLETE_LABEL');
             donePanelItem.signalCallback = (signal) => {
               if (signal === 'dismiss') {
+                this.feedbackHost_.removePanelItem(donePanelItem);
+                delete this.items_[donePanelItem.id];
+              } else if (
+                  signal === 'extra-button' && extraButton &&
+                  extraButton.callback) {
+                extraButton.callback();
                 this.feedbackHost_.removePanelItem(donePanelItem);
                 delete this.items_[donePanelItem.id];
               }
@@ -351,8 +414,9 @@ export class ProgressCenterPanel {
           this.feedbackHost_.removePanelItem(panelItem);
           break;
         case ProgressItemState.ERROR:
-          if (item.learnMoreLink) {
-            panelItem.dataset.learnMoreLink = item.learnMoreLink;
+          if (item.extraButton.has(ProgressItemState.ERROR)) {
+            extraButton = item.extraButton.get(ProgressItemState.ERROR);
+            panelItem.dataset.extraButtonText = extraButton.text;
           }
           panelItem.panelType = panelItem.panelTypeError;
           panelItem.primaryText = item.message;

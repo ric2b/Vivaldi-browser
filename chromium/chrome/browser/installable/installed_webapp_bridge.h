@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,9 +30,6 @@ class InstalledWebappBridge {
                                const GURL& origin_url,
                                const GURL& last_committed_url,
                                PermissionCallback callback);
-
-  static ContentSetting GetPermission(ContentSettingsType type,
-                                      const GURL& origin);
 };
 
 #endif  // CHROME_BROWSER_INSTALLABLE_INSTALLED_WEBAPP_BRIDGE_H_

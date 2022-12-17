@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,10 +27,6 @@ class WebStateListMetricsBrowserAgent
       const WebStateListMetricsBrowserAgent&) = delete;
 
   ~WebStateListMetricsBrowserAgent() override;
-
-  // Creates the WebStateListMetricsBrowserAgent associating it with |browser|.
-  static void CreateForBrowser(Browser* browser,
-                               SessionMetrics* session_metrics);
 
   // WebStateListObserver implementation.
   void WebStateInsertedAt(WebStateList* web_state_list,
@@ -69,6 +65,12 @@ class WebStateListMetricsBrowserAgent
   void PageLoaded(
       web::WebState* web_state,
       web::PageLoadCompletionStatus load_completion_status) override;
+
+  // WebStateListObserver:
+  void WillCloseWebStateAt(WebStateList* web_state_list,
+                           web::WebState* web_state,
+                           int index,
+                           bool user_action) override;
 
   // The WebStateList containing all the monitored tabs.
   WebStateList* web_state_list_ = nullptr;

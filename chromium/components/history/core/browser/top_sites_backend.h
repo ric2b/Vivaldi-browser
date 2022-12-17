@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,8 +11,6 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "components/history/core/browser/history_types.h"
-
-#include "browser/history/top_sites_convert.h"
 
 namespace base {
 class CancelableTaskTracker;
@@ -61,10 +59,6 @@ class TopSitesBackend : public base::RefCountedThreadSafe<TopSitesBackend> {
 
   // Deletes the database and recreates it.
   void ResetDatabase();
-
-  // Vivaldi: Set the conversion method.
-  void SetThumbnailConvertCallback(
-    ConvertThumbnailDataCallback callback);
 
  private:
   friend class base::RefCountedThreadSafe<TopSitesBackend>;

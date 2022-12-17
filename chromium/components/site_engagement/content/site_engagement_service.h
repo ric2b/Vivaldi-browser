@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,6 +27,11 @@ class Clock;
 
 namespace webapps {
 FORWARD_DECLARE_TEST(AppBannerManagerBrowserTest, WebAppBannerNeedsEngagement);
+}
+
+namespace settings {
+FORWARD_DECLARE_TEST(SiteSettingsHandlerTest,
+                     PopulateNotificationPermissionReviewData);
 }
 
 namespace content {
@@ -191,6 +196,7 @@ class SiteEngagementService : public KeyedService,
  protected:
   // Retrieves the SiteEngagementScore object for |origin|.
   SiteEngagementScore CreateEngagementScore(const GURL& origin) const;
+
   void SetLastEngagementTime(base::Time last_engagement_time) const;
 
   content::BrowserContext* browser_context() { return browser_context_; }
@@ -219,6 +225,8 @@ class SiteEngagementService : public KeyedService,
                            WebAppBannerNeedsEngagement);
   FRIEND_TEST_ALL_PREFIXES(AppBannerSettingsHelperTest, SiteEngagementTrigger);
   FRIEND_TEST_ALL_PREFIXES(HostedAppPWAOnlyTest, EngagementHistogram);
+  FRIEND_TEST_ALL_PREFIXES(settings::SiteSettingsHandlerTest,
+                           PopulateNotificationPermissionReviewData);
 
 #if BUILDFLAG(IS_ANDROID)
   // Shim class to expose the service to Java.

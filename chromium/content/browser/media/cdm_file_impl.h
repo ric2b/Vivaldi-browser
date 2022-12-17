@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,8 +55,8 @@ class CdmFileImpl final : public media::mojom::CdmFile {
   void DeleteFile();
   void DidDeleteFile(bool success);
 
-  // Report operation time to UMA.
-  void ReportFileOperationTimeUMA(const std::string& uma_name);
+  // Report file operation result and time to UMA.
+  void ReportFileOperationUMA(bool success, const std::string& operation);
 
   void OnReceiverDisconnect();
 

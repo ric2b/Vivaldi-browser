@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 #include "components/autofill_assistant/content/common/proto/semantic_feature_overrides.pb.h"
+#include "components/autofill_assistant/content/renderer/autofill_assistant_agent_debug_utils.h"
 #include "components/autofill_assistant/content/renderer/autofill_assistant_model_executor.h"
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 
@@ -30,37 +31,10 @@ namespace {
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 
+constexpr char16_t kSemanticPredictionAttributeName[] = u"semantic-prediction";
+
 using OverridesMap = AutofillAssistantModelExecutor::OverridesMap;
 using SparseVector = AutofillAssistantModelExecutor::SparseVector;
-
-std::string NodeSignalsToDebugString(
-    const blink::AutofillAssistantNodeSignals& node_signals) {
-  std::ostringstream out;
-
-  out << "AutofillAssistantNodeSignals {\n"
-      << "\tbackend_node_id: " << node_signals.backend_node_id
-      << "\n\tnode_features {";
-  for (const auto& text : node_signals.node_features.text) {
-    out << "\n\t\ttext: " << text.Utf16();
-  }
-  out << "\n\t\taria: " << node_signals.node_features.aria.Utf16()
-      << "\n\t\thtml_tag: " << node_signals.node_features.html_tag.Utf16()
-      << "\n\t\ttype: " << node_signals.node_features.type.Utf16()
-      << "\n\t\tinvisible_attributes: "
-      << node_signals.node_features.invisible_attributes.Utf16()
-      << "\n\t}\n\tlabel_features {";
-  for (const auto& text : node_signals.label_features.text) {
-    out << "\n\t\ttext: " << text.Utf16();
-  }
-  out << "\n\t}\n\tcontext_features {";
-  for (const auto& header_text : node_signals.context_features.header_text) {
-    out << "\n\t\theader_text: " << header_text.Utf16();
-  }
-  out << "\n\t\tform_type: " << node_signals.context_features.form_type.Utf16()
-      << "\n\t}\n}";
-
-  return out.str();
-}
 
 SparseVector KeyCoordinatesToSparseVector(
     const ::google::protobuf::RepeatedPtrField<SparseEncoding>&
@@ -107,6 +81,17 @@ AutofillAssistantAgent::AutofillAssistantAgent(
     : content::RenderFrameObserver(render_frame) {
   registry->AddInterface<mojom::AutofillAssistantAgent>(base::BindRepeating(
       &AutofillAssistantAgent::BindPendingReceiver, base::Unretained(this)));
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAutofillAssistantDebugAnnotateDom)) {
+    std::string jsonEncodedSemanticEnums =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            autofill_assistant::switches::kAutofillAssistantDebugAnnotateDom);
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+    semantic_labels =
+        DecodeSemanticPredictionLabelsJson(jsonEncodedSemanticEnums);
+#endif
+  }
 }
 
 // The destructor is not guaranteed to be called. Destruction happens (only)
@@ -118,6 +103,7 @@ void AutofillAssistantAgent::BindPendingReceiver(
     mojo::PendingAssociatedReceiver<mojom::AutofillAssistantAgent>
         pending_receiver) {
   receiver_.Bind(std::move(pending_receiver));
+  receiver_.reset_on_disconnect();
 }
 
 void AutofillAssistantAgent::OnDestruct() {
@@ -153,14 +139,23 @@ void AutofillAssistantAgent::GetAnnotateDomModel(
     base::TimeDelta model_timeout,
     base::OnceCallback<void(mojom::ModelStatus, base::File, const std::string&)>
         callback) {
-  GetDriver().GetAnnotateDomModel(model_timeout, std::move(callback));
+  mojo::AssociatedRemote<mojom::AutofillAssistantDriver>& driver = GetDriver();
+
+  if (!driver || !driver.is_connected()) {
+    std::move(callback).Run(mojom::ModelStatus::kUnexpectedError, base::File(),
+                            /*overrides_policy=*/"");
+    return;
+  }
+  driver->GetAnnotateDomModel(model_timeout, std::move(callback));
 }
 
-mojom::AutofillAssistantDriver& AutofillAssistantAgent::GetDriver() {
+mojo::AssociatedRemote<mojom::AutofillAssistantDriver>&
+AutofillAssistantAgent::GetDriver() {
   if (!driver_) {
     render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(&driver_);
+    driver_.reset_on_disconnect();
   }
-  return *driver_;
+  return driver_;
 }
 
 void AutofillAssistantAgent::OnGetModelFile(
@@ -216,16 +211,22 @@ void AutofillAssistantAgent::OnGetModelFile(
             switches::kAutofillAssistantDebugAnnotateDom)) {
       VLOG(3) << NodeSignalsToDebugString(node_signal);
       if (result) {
-        VLOG(3) << "Result { role: " << result->first
-                << ", objective: " << result->second
-                << (ignore_objective ? " (ignored)" : "") << " }";
+        std::u16string result_string = SemanticPredictionResultToDebugString(
+            semantic_labels.first, semantic_labels.second, result.value(),
+            ignore_objective);
+        VLOG(3) << "Result found " << result_string;
+
+        SetElementAttribute(node_signal.backend_node_id,
+                            kSemanticPredictionAttributeName, result_string,
+                            /*send_events=*/false);
       }
     }
 
-    if (result && result->first == role &&
-        (result->second == objective || ignore_objective)) {
+    if (result && result->role == role &&
+        (result->objective == objective || ignore_objective)) {
       NodeData node_data;
       node_data.backend_node_id = node_signal.backend_node_id;
+      node_data.used_override = result->used_override;
       nodes.push_back(node_data);
     }
   }
@@ -265,6 +266,31 @@ void AutofillAssistantAgent::SetElementValue(const int32_t backend_node_id,
   target_form_control_element.SetValue(blink::WebString::FromUTF16(value),
                                        send_events);
   std::move(callback).Run(true);
+}
+
+void AutofillAssistantAgent::SetElementAttribute(
+    const int32_t backend_node_id,
+    const std::u16string& attribute_name,
+    const std::u16string& value,
+    bool send_events) {
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
+  if (!frame) {
+    VLOG(1) << "Failed to set Element attribute, no frame.";
+    return;
+  }
+
+  blink::WebElement target_element =
+      frame->GetDocument().GetElementByDevToolsNodeId(backend_node_id);
+  if (target_element.IsNull() || !target_element.IsFormControlElement()) {
+    VLOG(3) << "Failed to set Element attribute, invalid target.";
+    return;
+  }
+
+  blink::WebFormControlElement target_form_control_element =
+      target_element.To<blink::WebFormControlElement>();
+  target_form_control_element.SetAttribute(
+      blink::WebString::FromUTF16(attribute_name),
+      blink::WebString::FromUTF16(value));
 }
 
 void AutofillAssistantAgent::SetElementChecked(

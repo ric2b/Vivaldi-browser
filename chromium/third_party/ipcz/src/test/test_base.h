@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,7 @@ namespace ipcz::test::internal {
 // use ipcz::test::Test as a base. For multinode tests, use ipcz::test:TestNode
 // as a base for MULTINODE_TEST_NODE() invocations, and use
 // ipcz::test::MultinodeTest<T> (where T is a subclass of TestNode) for
-// TEST_P() invocations for parameterized multinode test bodies.
+// MULTINODE_TEST() invocations for parameterized multinode test bodies.
 class TestBase {
  public:
   using TrapEventHandler = std::function<void(const IpczTrapEvent&)>;

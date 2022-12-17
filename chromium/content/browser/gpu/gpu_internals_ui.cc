@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -424,6 +424,9 @@ base::Value::List GetDisplayInfo() {
             gfx::BufferFormatToString(buffer_formats[i])));
       }
     }
+    display_info.Append(display::BuildGpuInfoEntry(
+        "Color volume", skia::SkColorSpacePrimariesToString(
+                            display.color_spaces().GetPrimaries())));
     display_info.Append(display::BuildGpuInfoEntry(
         "SDR white level in nits",
         base::NumberToString(display.color_spaces().GetSDRMaxLuminanceNits())));

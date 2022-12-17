@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,7 +78,7 @@ void QuotaBackendImpl::CommitQuotaUsage(const url::Origin& origin,
     return;
   ReserveQuotaInternal(QuotaReservationInfo(origin, type, delta));
   base::FileErrorOr<base::FilePath> path = GetUsageCachePath(origin, type);
-  if (path.is_error())
+  if (!path.has_value())
     return;
   bool result =
       file_system_usage_cache_->AtomicUpdateUsageByDelta(path.value(), delta);
@@ -90,7 +90,7 @@ void QuotaBackendImpl::IncrementDirtyCount(const url::Origin& origin,
   DCHECK(file_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!origin.opaque());
   base::FileErrorOr<base::FilePath> path = GetUsageCachePath(origin, type);
-  if (path.is_error())
+  if (!path.has_value())
     return;
   DCHECK(file_system_usage_cache_);
   file_system_usage_cache_->IncrementDirty(path.value());
@@ -101,7 +101,7 @@ void QuotaBackendImpl::DecrementDirtyCount(const url::Origin& origin,
   DCHECK(file_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!origin.opaque());
   base::FileErrorOr<base::FilePath> path = GetUsageCachePath(origin, type);
-  if (path.is_error())
+  if (!path.has_value())
     return;
   DCHECK(file_system_usage_cache_);
   file_system_usage_cache_->DecrementDirty(path.value());

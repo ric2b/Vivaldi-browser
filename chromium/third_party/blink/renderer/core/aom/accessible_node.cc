@@ -1,9 +1,10 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/aom/accessible_node.h"
 
+#include "base/ranges/algorithm.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/aom/accessible_node_list.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -25,6 +26,10 @@ QualifiedName GetCorrespondingARIAAttribute(AOMStringProperty property) {
   switch (property) {
     case AOMStringProperty::kAutocomplete:
       return html_names::kAriaAutocompleteAttr;
+    case AOMStringProperty::kAriaBrailleLabel:
+      return html_names::kAriaBraillelabelAttr;
+    case AOMStringProperty::kAriaBrailleRoleDescription:
+      return html_names::kAriaBrailleroledescriptionAttr;
     case AOMStringProperty::kChecked:
       return html_names::kAriaCheckedAttr;
     case AOMStringProperty::kCurrent:
@@ -316,7 +321,7 @@ absl::optional<float> AccessibleNode::GetProperty(Element* element,
 }
 
 bool AccessibleNode::IsUndefinedAttrValue(const AtomicString& value) {
-  return value.IsEmpty() || EqualIgnoringASCIICase(value, "undefined");
+  return value.empty() || EqualIgnoringASCIICase(value, "undefined");
 }
 
 // static
@@ -377,17 +382,17 @@ bool AccessibleNode::GetPropertyOrARIAAttribute(
   QualifiedName attribute = GetCorrespondingARIAAttribute(property);
   String value =
       GetElementOrInternalsARIAAttribute(*element, attribute).GetString();
-  if (value.IsEmpty() && property == AOMRelationListProperty::kLabeledBy) {
+  if (value.empty() && property == AOMRelationListProperty::kLabeledBy) {
     value = GetElementOrInternalsARIAAttribute(*element,
                                                html_names::kAriaLabeledbyAttr)
                 .GetString();
   }
-  if (value.IsEmpty())
+  if (value.empty())
     return false;
 
   Vector<String> ids;
   value.Split(' ', ids);
-  if (ids.IsEmpty())
+  if (ids.empty())
     return false;
 
   TreeScope& scope = element->GetTreeScope();
@@ -519,6 +524,26 @@ absl::optional<bool> AccessibleNode::busy() const {
 void AccessibleNode::setBusy(absl::optional<bool> value) {
   SetBooleanProperty(AOMBooleanProperty::kBusy, value);
   NotifyAttributeChanged(html_names::kAriaBusyAttr);
+}
+
+AtomicString AccessibleNode::brailleLabel() const {
+  return GetProperty(AOMStringProperty::kAriaBrailleLabel);
+}
+
+void AccessibleNode::setBrailleLabel(const AtomicString& braille_label) {
+  SetStringProperty(AOMStringProperty::kAriaBrailleLabel, braille_label);
+  NotifyAttributeChanged(html_names::kAriaBraillelabelAttr);
+}
+
+AtomicString AccessibleNode::brailleRoleDescription() const {
+  return GetProperty(AOMStringProperty::kAriaBrailleRoleDescription);
+}
+
+void AccessibleNode::setBrailleRoleDescription(
+    const AtomicString& braille_role_description) {
+  SetStringProperty(AOMStringProperty::kAriaBrailleRoleDescription,
+                    braille_role_description);
+  NotifyAttributeChanged(html_names::kAriaBrailleroledescriptionAttr);
 }
 
 AtomicString AccessibleNode::checked() const {
@@ -1004,10 +1029,8 @@ void AccessibleNode::removeChild(AccessibleNode* old_child,
         "Node to remove is not a child of this node.");
     return;
   }
-  auto* ix = std::find_if(children_.begin(), children_.end(),
-                          [old_child](const Member<AccessibleNode> child) {
-                            return child.Get() == old_child;
-                          });
+  auto* ix =
+      base::ranges::find(children_, old_child, &Member<AccessibleNode>::Get);
   if (ix == children_.end()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidAccessError,
@@ -1037,6 +1060,8 @@ bool AccessibleNode::IsStringTokenProperty(AOMStringProperty property) {
     case AOMStringProperty::kRelevant:
     case AOMStringProperty::kSort:
       return true;
+    case AOMStringProperty::kAriaBrailleLabel:
+    case AOMStringProperty::kAriaBrailleRoleDescription:
     case AOMStringProperty::kDescription:
     case AOMStringProperty::kKeyShortcuts:
     case AOMStringProperty::kLabel:

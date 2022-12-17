@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,8 +20,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/trace_event.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
@@ -358,6 +360,7 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
   DCHECK(model);
   DCHECK(favicon_service);
   DCHECK(IsValidBookmarkSpecifics(specifics));
+  TRACE_EVENT0("sync", "CreateBookmarkNodeFromSpecifics");
 
   const base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
   DCHECK(guid.is_valid());
@@ -443,11 +446,13 @@ void UpdateBookmarkNodeFromSpecifics(
   }
 
 
-  model->SetTitle(node, NodeTitleFromSpecifics(specifics));
+  model->SetTitle(node, NodeTitleFromSpecifics(specifics),
+                  bookmarks::metrics::BookmarkEditSource::kOther);
   model->SetNodeMetaInfoMap(node, map);
 
   if (!node->is_folder()) {
-    model->SetURL(node, GURL(specifics.url()));
+    model->SetURL(node, GURL(specifics.url()),
+                  bookmarks::metrics::BookmarkEditSource::kOther);
     SetBookmarkFaviconFromSpecifics(specifics, node, favicon_service);
 
     if (specifics.has_last_used_time_us()) {

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@ CONTENT_EXPORT extern const char kAllowInsecureLocalhost[];
 CONTENT_EXPORT extern const char kAllowLoopbackInPeerConnection[];
 CONTENT_EXPORT extern const char kAllowSyncXHRInPageDismissal[];
 CONTENT_EXPORT extern const char kAndroidFontsPath[];
+CONTENT_EXPORT extern const char kAshWebBrowserDisabled[];
 CONTENT_EXPORT extern const char kAttributionReportingDebugMode[];
 CONTENT_EXPORT extern const char kBrowserCrashTest[];
 CONTENT_EXPORT extern const char kBrowserStartupDialog[];
@@ -29,7 +30,6 @@ CONTENT_EXPORT extern const char kBrowserTest[];
 CONTENT_EXPORT extern const char kChangeStackGuardOnFork[];
 CONTENT_EXPORT extern const char kChangeStackGuardOnForkEnabled[];
 CONTENT_EXPORT extern const char kChangeStackGuardOnForkDisabled[];
-CONTENT_EXPORT extern const char kDisplayCapturePermissionsPolicyAllowed[];
 CONTENT_EXPORT extern const char kDisable2dCanvasAntialiasing[];
 CONTENT_EXPORT extern const char kDisable2dCanvasImageChromium[];
 CONTENT_EXPORT extern const char kDisable3DAPIs[];
@@ -122,6 +122,7 @@ CONTENT_EXPORT extern const char kEnableNetworkInformationDownlinkMax[];
 CONTENT_EXPORT extern const char kEnableCanvas2DLayers[];
 CONTENT_EXPORT extern const char kEnablePluginPlaceholderTesting[];
 CONTENT_EXPORT extern const char kEnablePreciseMemoryInfo[];
+CONTENT_EXPORT extern const char kEnablePrivacySandboxAdsApis[];
 CONTENT_EXPORT extern const char kEnableServiceBinaryLauncher[];
 extern const char kEnableSkiaBenchmarking[];
 CONTENT_EXPORT extern const char kEnableSmoothScrolling[];
@@ -141,6 +142,8 @@ CONTENT_EXPORT extern const char kEnableWebRtcSrtpAesGcm[];
 CONTENT_EXPORT extern const char kEnableWebRtcSrtpEncryptedHeaders[];
 CONTENT_EXPORT extern const char kEnforceWebRtcIPPermissionCheck[];
 CONTENT_EXPORT extern const char kEnableWebVR[];
+CONTENT_EXPORT extern const char
+    kFileSystemSyncAccessHandleAsyncInterfaceEnabled[];
 CONTENT_EXPORT extern const char kFileUrlPathAlias[];
 CONTENT_EXPORT extern const char kForceDisplayList2dCanvas[];
 CONTENT_EXPORT extern const char kForceMajorVersionToMinorPosition[];
@@ -179,6 +182,7 @@ CONTENT_EXPORT extern const char kPpapiInProcess[];
 extern const char kPpapiPluginLauncher[];
 CONTENT_EXPORT extern const char kPpapiPluginProcess[];
 extern const char kPpapiStartupDialog[];
+CONTENT_EXPORT extern const char kPrivateAggregationDeveloperMode[];
 CONTENT_EXPORT extern const char kProcessPerSite[];
 CONTENT_EXPORT extern const char kProcessPerTab[];
 CONTENT_EXPORT extern const char kProcessType[];

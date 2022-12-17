@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@ module media.mojom;
 
 import "media/mojo/mojom/decryptor.mojom";
 import "media/mojo/mojom/media_types.mojom";
-import "url/mojom/url.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
 
 // See media::EmeInitDataType.

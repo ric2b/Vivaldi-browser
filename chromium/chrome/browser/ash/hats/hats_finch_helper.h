@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,11 @@ struct HatsConfig;
 class HatsFinchHelper {
  public:
   static std::string GetTriggerID(const HatsConfig& config);
+
+  // New histogram entries must be added to
+  // tools/metrics/histograms/metadata/browser/histograms.xml, as a variant of
+  // "ChromeOS.HaTS".
+  static std::string GetHistogramName(const HatsConfig& config);
 
   // Returns a client-specific custom data as a string from the finch seed. If
   // the config contains no data, then an empty string is returned. The data is
@@ -49,6 +54,7 @@ class HatsFinchHelper {
   static const char kSurveyCycleLengthParam[];
   static const char kSurveyStartDateMsParam[];
   static const char kTriggerIdParam[];
+  static const char kHistogramNameParam[];
 
   // Loads all the param values from the finch seed and initializes the member
   // variables.

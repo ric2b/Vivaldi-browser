@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,12 +59,12 @@ TEST_F(OsFeedbackScreenshotManagerTest, DoNotTakeScreenshotIfExists) {
   auto* manager = OsFeedbackScreenshotManager::GetInstance();
   SetTestPngData();
   EXPECT_NE(nullptr, manager->GetScreenshotData());
-  EXPECT_EQ(3, manager->GetScreenshotData()->size());
+  EXPECT_EQ(3u, manager->GetScreenshotData()->size());
 
   manager->TakeScreenshot(future.GetCallback());
 
   EXPECT_FALSE(future.Get());
-  EXPECT_EQ(3, manager->GetScreenshotData()->size());
+  EXPECT_EQ(3u, manager->GetScreenshotData()->size());
 }
 
 // Test that TakeScreenshot will skip if there is not a window/display.

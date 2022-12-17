@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,8 +35,8 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHChromeReengagementNotification1Feature,
     &kIPHChromeReengagementNotification2Feature,
     &kIPHChromeReengagementNotification3Feature,
-    &kIPHContextualPageActionsPriceTrackingFeature,
-    &kIPHContextualPageActionsPriceTrackingActionChipFeature,
+    &kIPHContextualPageActionsQuietVariantFeature,
+    &kIPHContextualPageActionsActionChipFeature,
     &kIPHCrowFeature,
     &kIPHDownloadSettingsFeature,
     &kIPHDownloadInfoBarDownloadContinuingFeature,
@@ -109,6 +109,8 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHNewTabTipFeature,
     &kIPHNewIncognitoTabTipFeature,
     &kIPHBadgedReadingListFeature,
+    &kIPHBadgedWhatsNewFeature,
+    &kIPHWhatsNewFeature,
     &kIPHReadingListMessagesFeature,
     &kIPHBadgedTranslateManualTriggerFeature,
     &kIPHDiscoverFeedHeaderFeature,
@@ -119,18 +121,25 @@ const base::Feature* const kAllFeatures[] = {
 #endif  // BUILDFLAG(IS_IOS)
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
+    &kIPHBatterySaverModeFeature,
     &kIPHDesktopTabGroupsNewGroupFeature,
+    &kIPHExtensionsMenuFeature,
     &kIPHFocusHelpBubbleScreenReaderPromoFeature,
     &kIPHGMCCastStartStopFeature,
+    &kIPHHighEfficiencyInfoModeFeature,
+    &kIPHHighEfficiencyModeFeature,
     &kIPHLiveCaptionFeature,
     &kIPHTabAudioMutingFeature,
     &kIPHPasswordsAccountStorageFeature,
+    &kIPHPerformanceNewBadgeFeature,
+    &kIPHPriceTrackingPageActionIconLabelFeature,
     &kIPHReadingListDiscoveryFeature,
     &kIPHReadingListEntryPointFeature,
     &kIPHReadingListInSidePanelFeature,
     &kIPHReopenTabFeature,
     &kIPHSideSearchAutoTriggeringFeature,
     &kIPHSideSearchFeature,
+    &kIPHSideSearchPageActionLabelFeature,
     &kIPHTabSearchFeature,
     &kIPHWebUITabStripFeature,
     &kIPHDesktopPwaInstallFeature,
@@ -138,6 +147,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDesktopSharedHighlightingFeature,
     &kIPHIntentChipFeature,
     &kIPHWebUiHelpBubbleTestFeature,
+    &kIPHPriceTrackingInSidePanelFeature,
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 

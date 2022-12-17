@@ -142,6 +142,10 @@
         return NO;
     }
 
+#if defined(VIVALDI_TEST_BUILD)
+    return YES;
+#endif
+
     SUPublicKeys *publicKeys = host.publicKeys;
 
     SUHost *newHost = [[SUHost alloc] initWithBundle:newBundle];

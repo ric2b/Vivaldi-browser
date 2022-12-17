@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,6 +67,8 @@ storage::mojom::ServiceWorkerRegistrationDataPtr CreateRegistrationData(
   data->script = script_url;
   data->navigation_preload_state = blink::mojom::NavigationPreloadState::New();
   data->is_active = true;
+  data->policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
 
   int64_t resources_total_size_bytes = 0;
   for (auto& resource : resources) {
@@ -171,19 +173,25 @@ bool VerifyBasicResponse(
   storage->CreateResourceReader(id, reader.BindNewPipeAndPassReceiver());
 
   const int kBigEnough = 512;
-  MockServiceWorkerDataPipeStateNotifier notifier;
   mojo::ScopedDataPipeConsumerHandle data_consumer;
   base::RunLoop loop;
-  reader->ReadData(
-      kBigEnough, notifier.BindNewPipeAndPassRemote(),
+  reader->PrepareReadData(
+      kBigEnough,
       base::BindLambdaForTesting([&](mojo::ScopedDataPipeConsumerHandle pipe) {
         data_consumer = std::move(pipe);
         loop.Quit();
       }));
   loop.Run();
 
+  int32_t rv;
+  base::RunLoop loop2;
+  reader->ReadData(base::BindLambdaForTesting([&](int32_t status) {
+    rv = status;
+    loop2.Quit();
+  }));
+
   std::string body = ReadDataPipe(std::move(data_consumer));
-  int rv = notifier.WaitUntilComplete();
+  loop2.Run();
 
   EXPECT_EQ(static_cast<int>(kExpectedHttpBody.size()), rv);
   if (rv <= 0)
@@ -448,6 +456,21 @@ class ServiceWorkerRegistryTest : public testing::Test {
     registry()->UpdateLastUpdateCheckTime(
         registration->id(), registration->key(),
         registration->last_update_check(),
+        base::BindLambdaForTesting([&](blink::ServiceWorkerStatusCode status) {
+          result = status;
+          loop.Quit();
+        }));
+    loop.Run();
+    return result;
+  }
+
+  blink::ServiceWorkerStatusCode UpdateFetchHandlerType(
+      const ServiceWorkerRegistration* registration,
+      ServiceWorkerVersion::FetchHandlerType fetch_handler_type) {
+    base::RunLoop loop;
+    blink::ServiceWorkerStatusCode result;
+    registry()->UpdateFetchHandlerType(
+        registration->id(), registration->key(), fetch_handler_type,
         base::BindLambdaForTesting([&](blink::ServiceWorkerStatusCode status) {
           result = status;
           loop.Quit();
@@ -864,7 +887,12 @@ TEST_F(ServiceWorkerRegistryTest, StoreFindUpdateDeleteRegistration) {
   EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk,
             UpdateToActiveState(found_registration.get()));
   found_registration->set_last_update_check(kToday);
-  UpdateLastUpdateCheckTime(found_registration.get());
+  ASSERT_EQ(UpdateLastUpdateCheckTime(found_registration.get()),
+            blink::ServiceWorkerStatusCode::kOk);
+  ASSERT_EQ(UpdateFetchHandlerType(
+                found_registration.get(),
+                ServiceWorkerVersion::FetchHandlerType::kEmptyFetchHandler),
+            blink::ServiceWorkerStatusCode::kOk);
 
   found_registration = nullptr;
 
@@ -892,6 +920,8 @@ TEST_F(ServiceWorkerRegistryTest, StoreFindUpdateDeleteRegistration) {
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED,
             found_registration->active_version()->status());
   EXPECT_EQ(kToday, found_registration->last_update_check());
+  EXPECT_EQ(ServiceWorkerVersion::FetchHandlerType::kEmptyFetchHandler,
+            found_registration->active_version()->fetch_handler_type());
 
   // Confirm that we only notified a modification once.
   EXPECT_EQ(1,

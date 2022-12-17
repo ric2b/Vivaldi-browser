@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -16,12 +17,11 @@
 #include "chrome/browser/media/router/discovery/mdns/media_sink_util.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/net/system_network_context_manager.h"  // nogncheck
-#include "components/cast_channel/cast_channel_enum.h"
-#include "components/cast_channel/cast_socket_service.h"
-#include "components/cast_channel/logger.h"
 #include "components/media_router/common/discovery/media_sink_internal.h"
 #include "components/media_router/common/media_sink.h"
 #include "components/media_router/common/mojom/media_router.mojom.h"
+#include "components/media_router/common/providers/cast/channel/cast_channel_enum.h"
+#include "components/media_router/common/providers/cast/channel/cast_socket_service.h"
 #include "components/net_log/chrome_net_log.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/backoff_entry.h"
@@ -356,19 +356,20 @@ void CastMediaSinkServiceImpl::OnError(const cast_channel::CastSocket& socket,
   // Remove existing cast sink from |sinks|. It will be added back if
   // it can be successfully reconnected.
   const auto& sinks = GetSinks();
-  auto sink_it =
-      std::find_if(sinks.begin(), sinks.end(), [&socket_id](const auto& entry) {
-        return entry.second.cast_data().cast_channel_id == socket_id;
-      });
-  if (logger_.is_bound()) {
-    auto sink_id = sink_it == sinks.end() ? "" : sink_it->first;
-    logger_->LogError(
-        mojom::LogCategory::kDiscovery, kLoggerComponent,
-        base::StrCat({"Media Router Channel Error: ", EnumToString(error_code),
-                      ". channel_id: ", base::NumberToString(socket_id),
-                      ". IP endpoint: ", ip_endpoint.ToString()}),
-        sink_id, "", "");
-  }
+  auto sink_it = base::ranges::find(sinks, socket_id, [](const auto& entry) {
+    return entry.second.cast_data().cast_channel_id;
+  });
+
+  auto sink_id = sink_it == sinks.end() ? "" : sink_it->first;
+
+  LoggerList::GetInstance()->Log(
+      LoggerImpl::Severity::kError, mojom::LogCategory::kDiscovery,
+      kLoggerComponent,
+      base::StrCat({"Media Router Channel Error: ", EnumToString(error_code),
+                    ". channel_id: ", base::NumberToString(socket_id),
+                    ". IP endpoint: ", ip_endpoint.ToString()}),
+      sink_id, "", "");
+
   if (sink_it == sinks.end()) {
     return;
   }
@@ -416,13 +417,12 @@ void CastMediaSinkServiceImpl::OnNetworksChanged(
     sink_cache_[last_network_id] = std::move(current_sinks);
   }
 
-  if (logger_.is_bound()) {
-    logger_->LogError(mojom::LogCategory::kDiscovery, kLoggerComponent,
-                      base::StringPrintf(
-                          "Network ID chagned from \"%s\" to \"%s\".",
-                          last_network_id.c_str(), current_network_id_.c_str()),
-                      "", "", "");
-  }
+  LoggerList::GetInstance()->Log(
+      LoggerImpl::Severity::kError, mojom::LogCategory::kDiscovery,
+      kLoggerComponent,
+      base::StringPrintf("Network ID chagned from \"%s\" to \"%s\".",
+                         last_network_id.c_str(), current_network_id_.c_str()),
+      "", "", "");
 
   // TODO(imcheng): Maybe this should clear |sinks_| and call |StartTimer()|
   // so it is more responsive?
@@ -632,12 +632,11 @@ void CastMediaSinkServiceImpl::OnChannelOpenSucceeded(
   // IPEndPoint but different sink ID.
   const net::IPEndPoint& ip_endpoint = extra_data.ip_endpoint;
   const auto& sinks = GetSinks();
-  auto old_sink_it =
-      std::find_if(sinks.begin(), sinks.end(),
-                   [&cast_sink, &ip_endpoint](const auto& entry) {
-                     return entry.first != cast_sink.sink().id() &&
-                            entry.second.cast_data().ip_endpoint == ip_endpoint;
-                   });
+  auto old_sink_it = base::ranges::find_if(
+      sinks, [&cast_sink, &ip_endpoint](const auto& entry) {
+        return entry.first != cast_sink.sink().id() &&
+               entry.second.cast_data().ip_endpoint == ip_endpoint;
+      });
 
   if (old_sink_it != sinks.end())
     RemoveSink(old_sink_it->second);
@@ -667,14 +666,13 @@ void CastMediaSinkServiceImpl::OnChannelOpenFailed(
       !(ip_endpoint == existing_sink->cast_data().ip_endpoint))
     return;
 
-  if (logger_.is_bound()) {
-    logger_->LogError(
-        mojom::LogCategory::kDiscovery, kLoggerComponent,
-        base::StrCat({"Failed to open the channel. IP endpoint: ",
-                      ip_endpoint.ToString(), ". channel_id: ",
-                      base::NumberToString(existing_sink->cast_channel_id())}),
-        sink.sink().id(), "", "");
-  }
+  LoggerList::GetInstance()->Log(
+      LoggerImpl::Severity::kError, mojom::LogCategory::kDiscovery,
+      kLoggerComponent,
+      base::StrCat({"Failed to open the channel. IP endpoint: ",
+                    ip_endpoint.ToString(), ". channel_id: ",
+                    base::NumberToString(existing_sink->cast_channel_id())}),
+      sink.sink().id(), "", "");
   RemoveSink(sink);
 }
 
@@ -735,19 +733,6 @@ void CastMediaSinkServiceImpl::OpenChannelsNow(
 void CastMediaSinkServiceImpl::SetCastAllowAllIPs(bool allow_all_ips) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   allow_all_ips_ = allow_all_ips;
-}
-
-void CastMediaSinkServiceImpl::BindLogger(
-    mojo::PendingRemote<mojom::Logger> pending_remote) {
-  // TODO(crbug.com/1293535): Simplify how logger instances are made available
-  // to their clients.
-
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // Reset |logger_| if it is bound to a disconnected remote.
-  if (logger_.is_bound())
-    return;
-  logger_.Bind(std::move(pending_remote));
-  logger_.reset_on_disconnect();
 }
 
 bool CastMediaSinkServiceImpl::HasSink(const MediaSink::Id& sink_id) {

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,8 +27,7 @@ const int kReadBufferSize = 65536;  // Maximum size of a packet.
 const uint16_t kDefaultMtu = 1280;
 }  // namespace
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class PseudoTcpAdapter::Core : public cricket::IPseudoTcpNotify,
                                public base::RefCounted<Core> {
@@ -503,5 +502,4 @@ void PseudoTcpAdapter::SetWriteWaitsForSend(bool write_waits_for_send) {
   core_->SetWriteWaitsForSend(write_waits_for_send);
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

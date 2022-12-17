@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,7 @@
 #include "extensions/browser/extension_registry_factory.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/extension.h"
-#include "ui/base/ime/ash/ime_engine_handler_interface.h"
+#include "ui/base/ime/ash/text_input_method.h"
 #include "ui/base/ime/text_input_flags.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

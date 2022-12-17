@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,14 +44,14 @@ void KioskAppExternalLoader::SetPrefsChangedHandler(
   }
 }
 
-void KioskAppExternalLoader::SendPrefs(base::DictionaryValue prefs) {
+void KioskAppExternalLoader::SendPrefs(base::Value::Dict prefs) {
   const bool initial_load = state_ == State::kLoading;
   state_ = State::kLoaded;
 
   if (initial_load) {
-    LoadFinished(std::make_unique<base::DictionaryValue>(std::move(prefs)));
+    LoadFinishedWithDict(std::move(prefs));
   } else {
-    OnUpdated(std::make_unique<base::DictionaryValue>(std::move(prefs)));
+    OnUpdatedWithDict(std::move(prefs));
   }
 }
 

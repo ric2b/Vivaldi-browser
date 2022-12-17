@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,8 @@ import org.chromium.ui.base.WindowAndroid;
  * Provides a trusted CDN publisher URL for the current web contents in a Tab.
  */
 public class TrustedCdn extends TabWebContentsUserData {
-    private static final Class<TrustedCdn> USER_DATA_KEY = TrustedCdn.class;
+    @VisibleForTesting
+    public static final Class<TrustedCdn> USER_DATA_KEY = TrustedCdn.class;
 
     private final Tab mTab;
     private final long mNativeTrustedCdn;
@@ -141,7 +142,8 @@ public class TrustedCdn extends TabWebContentsUserData {
     }
 
     @Nullable
-    private String getPublisherUrl() {
+    @VisibleForTesting
+    public String getPublisherUrl() {
         WebContents webContents = mTab.getWebContents();
         if (webContents == null) return null;
 

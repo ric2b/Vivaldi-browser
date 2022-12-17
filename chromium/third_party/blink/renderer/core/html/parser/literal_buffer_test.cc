@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -105,6 +105,34 @@ TEST(LiteralBufferTest, Is8BitMove) {
 
   UCharLiteralBuffer<16> buf2(std::move(buf));
   EXPECT_FALSE(buf2.Is8Bit());
+}
+
+TEST(LiteralBufferTest, UCharAppendSpan) {
+  UCharLiteralBuffer<16> buf;
+  String string8("abc");
+  buf.Append(string8);
+  EXPECT_EQ(string8, buf.AsString());
+
+  String string16 = u"\x01D6";
+  ASSERT_FALSE(string16.Is8Bit());
+  buf.clear();
+  buf.Append(string16);
+  EXPECT_EQ(string16, buf.AsString());
+}
+
+TEST(LiteralBufferTest, LCharAppendSpan) {
+  LCharLiteralBuffer<16> buf;
+  String string8("abc");
+  buf.Append(string8.Span8());
+  EXPECT_EQ(string8, buf.AsString());
+}
+
+TEST(LiteralBufferTest, AsString) {
+  LCharLiteralBuffer<16> buf;
+  buf.AddChar('x');
+  const String as_string = buf.AsString();
+  EXPECT_TRUE(as_string.Is8Bit());
+  EXPECT_EQ("x", as_string);
 }
 
 TEST(LiteralBufferTest, AsStringIs8Bit) {

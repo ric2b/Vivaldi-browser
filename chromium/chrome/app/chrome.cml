@@ -58,6 +58,7 @@
                 "fuchsia.hwinfo.Product",
                 "fuchsia.input.virtualkeyboard.ControllerCreator",
                 "fuchsia.intl.PropertyProvider",
+                "fuchsia.kernel.VmexResource",
                 "fuchsia.media.Audio",
                 "fuchsia.media.AudioDeviceEnumerator",
                 "fuchsia.media.ProfileProvider",
@@ -73,6 +74,12 @@
                 "fuchsia.ui.input3.Keyboard",
                 "fuchsia.ui.scenic.Scenic",
             ],
+        },
+        {
+            protocol: [
+                "fuchsia.tracing.perfetto.ProducerConnector",
+            ],
+            availability: "optional",
         },
     ],
     expose: [

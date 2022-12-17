@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,7 @@ class COMPOSITOR_EXPORT TotalAnimationThroughputReporter
 
   // CompositorObserver:
   void OnFirstAnimationStarted(Compositor* compositor) override;
-  void OnLastAnimationEnded(Compositor* compositor) override;
+  void OnFirstNonAnimatedFrameStarted(Compositor* compositor) override;
   void OnCompositingShuttingDown(Compositor* compositor) override;
 
   bool IsMeasuringForTesting() const { return bool{throughput_tracker_}; }

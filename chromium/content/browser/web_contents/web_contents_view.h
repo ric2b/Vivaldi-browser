@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,6 +114,8 @@ class WebContentsView {
   // loop has ended.
   virtual bool CloseTabAfterEventTrackingIfNeeded() = 0;
 #endif
+
+  virtual void FullscreenStateChanged(bool is_fullscreen) = 0;
 };
 
 // Factory function to create `WebContentsView`s. Implemented in the platform

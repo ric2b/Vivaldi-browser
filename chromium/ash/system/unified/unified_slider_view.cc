@@ -1,11 +1,15 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/system/unified/unified_slider_view.h"
 
+#include "ash/constants/quick_settings_catalogs.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/color_util.h"
 #include "ash/system/tray/tray_popup_utils.h"
+#include "ash/system/unified/quick_settings_metrics_util.h"
+#include "base/check_op.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -41,7 +45,7 @@ class SystemSlider : public views::Slider {
 
   // views::Slider:
   SkColor GetTroughColor() const override {
-    return AshColorProvider::Get()->GetSecondToneColor(GetThumbColor());
+    return ColorUtil::GetSecondToneColor(GetThumbColor());
   }
 
   // views::View:
@@ -78,6 +82,18 @@ std::unique_ptr<views::Slider> CreateSlider(UnifiedSliderListener* listener,
 }
 
 }  // namespace
+
+void UnifiedSliderListener::TrackToggleUMA(bool target_toggle_state) {
+  DCHECK_NE(GetCatalogName(), QsSliderCatalogName::kUnknown);
+  quick_settings_metrics_util::RecordQsSliderToggle(
+      GetCatalogName(), /*enable=*/target_toggle_state);
+}
+
+void UnifiedSliderListener::TrackValueChangeUMA(bool going_up) {
+  DCHECK_NE(GetCatalogName(), QsSliderCatalogName::kUnknown);
+  quick_settings_metrics_util::RecordQsSliderValueChange(GetCatalogName(),
+                                                         /*going_up=*/going_up);
+}
 
 UnifiedSliderView::UnifiedSliderView(views::Button::PressedCallback callback,
                                      UnifiedSliderListener* listener,

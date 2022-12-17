@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,8 +20,8 @@ class ManagementViewBinder {
     public static void bind(PropertyModel model, ManagementView view, PropertyKey propertyKey) {
         if (propertyKey == ManagementProperties.BROWSER_IS_MANAGED) {
             view.setManaged(model.get(ManagementProperties.BROWSER_IS_MANAGED));
-        } else if (propertyKey == ManagementProperties.ACCOUNT_MANAGER_NAME) {
-            view.setManagerName(model.get(ManagementProperties.ACCOUNT_MANAGER_NAME));
+        } else if (propertyKey == ManagementProperties.BROWSER_MANAGER_NAME) {
+            view.setManagerName(model.get(ManagementProperties.BROWSER_MANAGER_NAME));
         } else if (propertyKey == ManagementProperties.LEARN_MORE_TEXT) {
             view.setLearnMoreText(model.get(ManagementProperties.LEARN_MORE_TEXT));
         }

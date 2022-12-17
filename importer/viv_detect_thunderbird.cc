@@ -19,7 +19,7 @@ void DetectThunderbirdProfiles(std::vector<importer::SourceProfile>* profiles) {
   thunderbird.importer_type = importer::TYPE_THUNDERBIRD;
   thunderbird.mail_path = GetThunderbirdMailDirectory();
   thunderbird.source_path = GetThunderbirdMailDirectory();
-  thunderbird.services_supported = importer::EMAIL;
+  thunderbird.services_supported = importer::EMAIL | importer::CONTACTS;
 
   profiles->push_back(thunderbird);
 }

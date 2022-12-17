@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,6 +37,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/public/test/theme_change_waiter.h"
 #include "extensions/browser/extension_registry.h"
+#include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "ui/display/types/display_constants.h"
 
 namespace {
@@ -178,12 +179,10 @@ IN_PROC_BROWSER_TEST_F(AppBrowserControllerBrowserTest, TabsTest) {
 
   EXPECT_TRUE(app_browser_->SupportsWindowFeature(Browser::FEATURE_TABSTRIP));
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // No favicons shown for ash system apps.
+  // No favicons shown for web apps.
   EXPECT_FALSE(
       app_browser_->tab_strip_model()->delegate()->ShouldDisplayFavicon(
           app_browser_->tab_strip_model()->GetActiveWebContents()));
-#endif
 
   // Tabbed PWAs only open URLs within the scope of the app. The manifest is
   // another URL besides |tabbed_app_url_| in scope.
@@ -218,6 +217,14 @@ IN_PROC_BROWSER_TEST_F(AppBrowserControllerBrowserTest, TabsTest) {
   chrome::CloseTab(app_browser_);
   EXPECT_EQ(app_browser_->tab_strip_model()->count(), 1);
   EXPECT_EQ(GetActiveTabURL(), tabbed_app_url_);
+
+  // Enter tab fullscreen, check tab strip not supported.
+  static_cast<content::WebContentsDelegate*>(app_browser_)
+      ->EnterFullscreenModeForTab(app_browser_->tab_strip_model()
+                                      ->GetActiveWebContents()
+                                      ->GetPrimaryMainFrame(),
+                                  {});
+  EXPECT_FALSE(app_browser_->SupportsWindowFeature(Browser::FEATURE_TABSTRIP));
 }
 
 IN_PROC_BROWSER_TEST_F(AppBrowserControllerBrowserTest, NonAppUrl) {

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -541,7 +541,7 @@ bool ArcSystemStatCollector::LoadFromValue(const base::Value& root) {
   if (!sample_list)
     return false;
 
-  for (const auto& sample_entry : sample_list->GetListDeprecated()) {
+  for (const auto& sample_entry : sample_list->GetList()) {
     if (!sample_entry.is_dict())
       return false;
 

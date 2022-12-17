@@ -35,7 +35,7 @@ Quad::~Quad() {}
 blink::Element* Quad::GetElement() {
   if (web_element_.IsNull())
     return nullptr;
-  return  web_element_.Unwrap<blink::Element>();
+  return web_element_.Unwrap<blink::Element>();
 }
 
 gfx::Rect Quad::GetRect() {

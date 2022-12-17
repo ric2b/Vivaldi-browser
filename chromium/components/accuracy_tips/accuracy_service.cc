@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,7 +112,7 @@ void AccuracyService::CheckAccuracyStatus(const GURL& url,
   DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
 
   const base::Value::List& last_interactions =
-      pref_service_->GetValueList(GetPreviousInteractionsPrefName(disable_ui_));
+      pref_service_->GetList(GetPreviousInteractionsPrefName(disable_ui_));
   const base::Value opt_out_value(
       static_cast<int>(AccuracyTipInteraction::kOptOut));
   if (base::Contains(last_interactions, opt_out_value)) {
@@ -162,7 +162,7 @@ void AccuracyService::MaybeShowAccuracyTip(content::WebContents* web_contents) {
   }
 
   bool show_opt_out =
-      pref_service_->GetValueList(GetPreviousInteractionsPrefName(disable_ui_))
+      pref_service_->GetList(GetPreviousInteractionsPrefName(disable_ui_))
           .size() >= static_cast<size_t>(features::kNumIgnorePrompts.Get());
 
   url_for_last_shown_tip_ = web_contents->GetLastCommittedURL();
@@ -181,8 +181,8 @@ void AccuracyService::MaybeShowAccuracyTip(content::WebContents* web_contents) {
 
 void AccuracyService::MaybeShowSurvey() {
   if (CanShowSurvey()) {
-    const auto& interactions_list = pref_service_->GetValueList(
-        GetPreviousInteractionsPrefName(disable_ui_));
+    const auto& interactions_list =
+        pref_service_->GetList(GetPreviousInteractionsPrefName(disable_ui_));
     const int last_interaction = interactions_list.back().GetInt();
     const bool ukm_enabled = pref_service_->GetBoolean(
         unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled);
@@ -234,16 +234,16 @@ void AccuracyService::OnAccuracyTipClosed(base::TimeTicks time_opened,
                                           ukm::SourceId ukm_source_id,
                                           AccuracyTipInteraction interaction) {
   DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
-  ListPrefUpdate update(pref_service_,
-                        GetPreviousInteractionsPrefName(disable_ui_));
-  base::Value* interaction_list = update.Get();
-  interaction_list->Append(static_cast<int>(interaction));
+  ScopedListPrefUpdate update(pref_service_,
+                              GetPreviousInteractionsPrefName(disable_ui_));
+  base::Value::List& interaction_list = update.Get();
+  interaction_list.Append(static_cast<int>(interaction));
 
   // Record metrics.
   base::UmaHistogramEnumeration("Privacy.AccuracyTip.AccuracyTipInteraction",
                                 interaction);
   base::UmaHistogramCounts100("Privacy.AccuracyTip.NumDialogsShown",
-                              interaction_list->GetListDeprecated().size());
+                              interaction_list.size());
   ukm::builders::AccuracyTipDialog ukm_builder(ukm_source_id);
   ukm_builder.SetInteraction(static_cast<int>(interaction));
 
@@ -256,7 +256,7 @@ void AccuracyService::OnAccuracyTipClosed(base::TimeTicks time_opened,
 
     const std::string suffix = GetHistogramSuffix(interaction);
     base::UmaHistogramCounts100("Privacy.AccuracyTip.NumDialogsShown." + suffix,
-                                interaction_list->GetListDeprecated().size());
+                                interaction_list.size());
     base::UmaHistogramMediumTimes(
         "Privacy.AccuracyTip.AccuracyTipTimeOpen." + suffix, time_open);
   }
@@ -287,7 +287,7 @@ bool AccuracyService::CanShowSurvey() {
     return false;
 
   int interactions_count =
-      pref_service_->GetValueList(GetPreviousInteractionsPrefName(disable_ui_))
+      pref_service_->GetList(GetPreviousInteractionsPrefName(disable_ui_))
           .size();
   return interactions_count >= features::kMinPromptCountRequiredForSurvey.Get();
 }

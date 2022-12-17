@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -373,7 +373,15 @@ IN_PROC_BROWSER_TEST_F(UnloadTest, BrowserListForceCloseWithBeforeUnload) {
 
 // Tests closing the browser by BrowserList::CloseAllBrowsersWithProfile, with a
 // beforeunload handler and clicking Stay in the beforeunload confirm dialog.
-IN_PROC_BROWSER_TEST_F(UnloadTest, BrowserListCloseBeforeUnloadCancel) {
+// TODO(crbug.com/1372484): Flaky on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_BrowserListCloseBeforeUnloadCancel \
+  DISABLED_BrowserListCloseBeforeUnloadCancel
+#else
+#define MAYBE_BrowserListCloseBeforeUnloadCancel \
+  BrowserListCloseBeforeUnloadCancel
+#endif
+IN_PROC_BROWSER_TEST_F(UnloadTest, MAYBE_BrowserListCloseBeforeUnloadCancel) {
   NavigateToDataURL(BEFORE_UNLOAD_HTML, "beforeunload");
   PrepareForDialog(browser());
 

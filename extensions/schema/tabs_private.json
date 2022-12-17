@@ -203,6 +203,21 @@
             "description": "The adopted language, usually a authoritive decision on the different language tags in a document."
           }
         }
+      },
+      {
+        "id": "CloseSpatnavParams",
+        "type": "object",
+        "description": "Reports layout change and element null check",
+        "properties": {
+          "layout_changed": {
+            "type": "boolean",
+            "description": "True if layout changed"
+          },
+          "current_element_valid": {
+            "type": "boolean",
+            "description": "True is current element is not null. Currently used to see if previous escape closed a menu that made our current element disappear."
+          }
+        }
       }
     ],
     "functions": [
@@ -361,18 +376,6 @@
         }
       },
       {
-        "name": "updateSpatnavRects",
-        "type": "function",
-        "description": "Update Rectangles for Spatial Navigation. Used when switching tabs while spatnav is active, for example.",
-        "parameters": [
-          {
-            "name": "tabId",
-            "type": "integer",
-            "minimum": 0
-          }
-        ]
-      },
-      {
         "name": "activateSpatnavElement",
         "type": "function",
         "description": "Activate currently focused spatnav element",
@@ -389,6 +392,27 @@
             "description": "Keyboard modifiers to simulate shift or ctrl-clicking"
           }
         ]
+      },
+      {
+        "name": "closeSpatnavOrCurrentOpenMenu",
+        "type": "function",
+        "description": "Returns true if layout changes by un-hovering the current spatnav element.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "params",
+              "$ref": "CloseSpatnavParams"
+            }
+          ]
+        }
       },
       {
         "name": "hasBeforeUnloadOrUnload",

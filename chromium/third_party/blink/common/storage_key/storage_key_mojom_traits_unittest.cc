@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,16 +33,21 @@ TEST(StorageKeyMojomTraitsTest, SerializeAndDeserialize) {
         StorageKey(url::Origin::Create(GURL("https://example.test"))),
         StorageKey(url::Origin::Create(GURL("https://sub.example.com"))),
         StorageKey(url::Origin::Create(GURL("http://sub2.example.com"))),
-        StorageKey(url::Origin::Create(GURL("https://example.com")),
-                   url::Origin::Create(GURL("https://example.com"))),
-        StorageKey(url::Origin::Create(GURL("http://example.com")),
-                   url::Origin::Create(GURL("https://example2.com"))),
-        StorageKey(url::Origin::Create(GURL("https://example.test")),
-                   url::Origin::Create(GURL("https://example.com"))),
-        StorageKey(url::Origin::Create(GURL("https://sub.example.com")),
-                   url::Origin::Create(GURL("https://example2.com"))),
-        StorageKey(url::Origin::Create(GURL("http://sub2.example.com")),
-                   url::Origin::Create(GURL("https://example.com"))),
+        StorageKey::CreateForTesting(
+            url::Origin::Create(GURL("https://example.com")),
+            url::Origin::Create(GURL("https://example.com"))),
+        StorageKey::CreateForTesting(
+            url::Origin::Create(GURL("http://example.com")),
+            url::Origin::Create(GURL("https://example2.com"))),
+        StorageKey::CreateForTesting(
+            url::Origin::Create(GURL("https://example.test")),
+            url::Origin::Create(GURL("https://example.com"))),
+        StorageKey::CreateForTesting(
+            url::Origin::Create(GURL("https://sub.example.com")),
+            url::Origin::Create(GURL("https://example2.com"))),
+        StorageKey::CreateForTesting(
+            url::Origin::Create(GURL("http://sub2.example.com")),
+            url::Origin::Create(GURL("https://example.com"))),
         StorageKey(url::Origin()),
         StorageKey::CreateWithNonce(
             url::Origin::Create(GURL("https://.example.com")),

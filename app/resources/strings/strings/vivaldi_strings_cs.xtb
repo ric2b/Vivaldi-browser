@@ -9,6 +9,8 @@
 <translation id="5167047459440711824">Upozornění: Vivaldi nemůže rozšířením zabránit v zaznamenávání vaší historie prohlížení. Chcete-li toto rozšíření v anonymním režimu deaktivovat, zrušte výběr této možnosti.</translation>
 <translation id="5288672417093782294">Přejít na nastavení oznámení prohlížeče Vivaldi</translation>
 <translation id="5743878272102782872">Správce úloh – Vivaldi</translation>
+<translation id="6524604576097824284">Je-li zapnuto, Vivaldi bude uvolňovat paměť neaktivních listů. To dodá aktivním listům a dalším aplikacím více výpočetních zdrojů a Vivaldi bude stále rychlý. Neaktivní listy se stanou automaticky aktivními jakmile se k nim vrátíte. <ph name="BEGIN_LINK" />Více informací<ph name="END_LINK" /></translation>
 <translation id="6569282126279967574">Ouha! Prohlížeč Vivaldi spadl. Restartovat?</translation>
+<translation id="7642161109152167169">Je-li zapnuto, Vivaldi šetří energii omezením aktivity na pozadí a vizuálních efektů, jako je například hladké rolování, a snímkové frekvence u videí. <ph name="BEGIN_LINK" />Více informací<ph name="END_LINK" /></translation>
 <translation id="8031581238030785388">Vivaldi aplikace</translation>
 </translationbundle>

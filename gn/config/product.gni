@@ -61,11 +61,19 @@ if (release_kind == "final") {
     "vivaldi_release_snapshot=${_is_snapshot}",
     "-D",
     "vivaldi_release_sopranos=${_is_dev}",
+    "-D",
+    "vivaldi_debug=${is_debug}"
   ]
 
 if (is_vivaldi_automotive && !is_vivaldi_polestar) {
   android_vivaldi_manifest_package += ".automotive"
   if (is_vivaldi_renault) {
     android_vivaldi_manifest_package += ".renault"
+  }
+  if (is_vivaldi_lynkco) {
+    android_vivaldi_manifest_package += ".lynkco"
+  }
+  if (is_vivaldi_mercedes) {
+    android_vivaldi_manifest_package += ".mercedes"
   }
 }

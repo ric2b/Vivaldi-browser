@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,11 +29,11 @@
 #include "components/omnibox/browser/verbatim_match.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
-#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_formatter.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_util.h"
@@ -42,9 +42,10 @@ namespace {
 
 const size_t kMaxClipboardSuggestionShownNumTimesSimpleSize = 20;
 
-// Clipboard suggestions should be placed above search and url suggestions
-// (including MostVisited tiles), but below query tiles.
-const int kClipboardMatchRelevanceScore = 1501;
+// Clipboard suggestion is placed in a dedicated SECTION_MOBILE_CLIPBOARD.
+// It is the only occupant of this section, making its relevance score not
+// important.
+const int kClipboardMatchRelevanceScore = 1;
 
 bool IsMatchDeletionEnabled() {
   return base::FeatureList::IsEnabled(
@@ -118,7 +119,6 @@ void RecordDeletingClipboardSuggestionMetrics(
                                  clipboard_contents_age);
   }
 }
-
 }  // namespace
 
 ClipboardProvider::ClipboardProvider(AutocompleteProviderClient* client,
@@ -142,7 +142,7 @@ void ClipboardProvider::Start(const AutocompleteInput& input,
   field_trial_triggered_ = false;
 
   // If the user started typing, do not offer clipboard based match.
-  if (input.focus_type() == OmniboxFocusType::DEFAULT)
+  if (input.focus_type() == metrics::OmniboxFocusType::INTERACTION_DEFAULT)
     return;
 
   // Image matched was kicked off asynchronously, so proceed when that ends.
@@ -248,14 +248,6 @@ void ClipboardProvider::AddCreatedMatchWithTracking(
   } else {
     current_url_suggested_ = match.destination_url;
     current_url_suggested_times_ = 1;
-  }
-
-  // If the omnibox is not empty, add a default match.
-  // This match will be opened when the user presses "Enter".
-  if (!input.text().empty()) {
-    AutocompleteMatch verbatim_match = VerbatimMatchForURL(
-        this, client_, input, input.current_url(), input.current_title(), -1);
-    matches_.push_back(verbatim_match);
   }
 
   RecordCreatingClipboardSuggestionMetrics(current_url_suggested_times_,
@@ -447,6 +439,7 @@ AutocompleteMatch ClipboardProvider::NewBlankURLMatch() {
                           IsMatchDeletionEnabled(),
                           AutocompleteMatchType::CLIPBOARD_URL);
 
+  match.suggestion_group_id = omnibox::GROUP_MOBILE_CLIPBOARD;
   match.description.assign(l10n_util::GetStringUTF16(IDS_LINK_FROM_CLIPBOARD));
   if (!match.description.empty())
     match.description_class.push_back({0, ACMatchClassification::NONE});
@@ -468,6 +461,7 @@ AutocompleteMatch ClipboardProvider::NewBlankTextMatch() {
                           IsMatchDeletionEnabled(),
                           AutocompleteMatchType::CLIPBOARD_TEXT);
 
+  match.suggestion_group_id = omnibox::GROUP_MOBILE_CLIPBOARD;
   match.description.assign(l10n_util::GetStringUTF16(IDS_TEXT_FROM_CLIPBOARD));
   if (!match.description.empty())
     match.description_class.push_back({0, ACMatchClassification::NONE});
@@ -491,6 +485,7 @@ AutocompleteMatch ClipboardProvider::NewBlankImageMatch() {
                           IsMatchDeletionEnabled(),
                           AutocompleteMatchType::CLIPBOARD_IMAGE);
 
+  match.suggestion_group_id = omnibox::GROUP_MOBILE_CLIPBOARD;
   match.description.assign(l10n_util::GetStringUTF16(IDS_IMAGE_FROM_CLIPBOARD));
   if (!match.description.empty())
     match.description_class.push_back({0, ACMatchClassification::NONE});

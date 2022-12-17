@@ -26,9 +26,22 @@ class NotesAPI : public BrowserContextKeyedAPI,
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
 
-  // vivaldi::NotesModelObserver:
-  // TODO(pettern): Wire up the other notifications to send events
-  // instead of sending them explicitly.
+  // NotesModelObserver implementation.
+  void NotesNodeMoved(::vivaldi::NotesModel* model,
+                      const ::vivaldi::NoteNode* old_parent,
+                      size_t old_index,
+                      const ::vivaldi::NoteNode* new_parent,
+                      size_t new_index) override;
+
+  void NotesNodeAdded(::vivaldi::NotesModel* model,
+                      const ::vivaldi::NoteNode* parent,
+                      size_t index) override;
+  void NotesNodeRemoved(::vivaldi::NotesModel* model,
+                        const ::vivaldi::NoteNode* parent,
+                        size_t old_index,
+                        const ::vivaldi::NoteNode* node) override;
+  void NotesNodeChanged(::vivaldi::NotesModel* model,
+                        const ::vivaldi::NoteNode* node) override;
   void ExtensiveNotesChangesBeginning(::vivaldi::NotesModel* model) override;
   void ExtensiveNotesChangesEnded(::vivaldi::NotesModel* model) override;
 

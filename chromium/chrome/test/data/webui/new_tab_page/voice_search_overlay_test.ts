@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,9 @@ import {VoiceSearchOverlayElement} from 'chrome://new-tab-page/lazy_load.js';
 import {$$, NewTabPageProxy, VoiceAction as Action, VoiceError as Error, WindowProxy} from 'chrome://new-tab-page/new_tab_page.js';
 import {PageCallbackRouter, PageHandlerRemote} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
-import {flushTasks, isVisible} from 'chrome://webui-test/test_util.js';
+import {isVisible} from 'chrome://webui-test/test_util.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
 
@@ -76,7 +77,8 @@ suite('NewTabPageVoiceSearchOverlayTest', () => {
   let metrics: MetricsTracker;
 
   setup(async () => {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     window.webkitSpeechRecognition =
         MockSpeechRecognition as unknown as typeof SpeechRecognition;
@@ -343,25 +345,20 @@ suite('NewTabPageVoiceSearchOverlayTest', () => {
     assertTrue(mockSpeechRecognition.abortCalled);
   });
 
-  ([
-    ['#retryLink', Action.TRY_AGAIN_LINK],
-    ['#micButton', Action.TRY_AGAIN_MIC_BUTTON],
-  ] as Array<[string, Action]>)
-      .forEach(([id, action]) => {
-        test(`clicking '${id}' starts voice search if in retry state`, () => {
-          // Arrange.
-          mockSpeechRecognition.onnomatch!();
-          mockSpeechRecognition.startCalled = false;
+  test(`clicking '#retryLink' starts voice search if in retry state`, () => {
+    // Arrange.
+    mockSpeechRecognition.onnomatch!();
+    mockSpeechRecognition.startCalled = false;
 
-          // Act.
-          $$<HTMLElement>(voiceSearchOverlay, id)!.click();
+    // Act.
+    $$<HTMLElement>(voiceSearchOverlay, '#retryLink')!.click();
 
-          // Assert.
-          assertTrue(mockSpeechRecognition.startCalled);
-          assertEquals(1, metrics.count('NewTabPage.VoiceActions'));
-          assertEquals(1, metrics.count('NewTabPage.VoiceActions', action));
-        });
-      });
+    // Assert.
+    assertTrue(mockSpeechRecognition.startCalled);
+    assertEquals(1, metrics.count('NewTabPage.VoiceActions'));
+    assertEquals(
+        1, metrics.count('NewTabPage.VoiceActions', Action.TRY_AGAIN_LINK));
+  });
 
   [' ', 'Enter'].forEach(key => {
     test(`'${key}' submits query if result`, () => {

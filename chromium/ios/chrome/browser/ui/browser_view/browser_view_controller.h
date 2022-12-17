@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,6 +44,7 @@ class FullscreenController;
 @protocol HelpCommands;
 @class KeyCommandsProvider;
 @class NewTabPageCoordinator;
+@class LensCoordinator;
 @protocol PopupMenuCommands;
 @class PopupMenuCoordinator;
 // TODO(crbug.com/1328039): Remove all use of the prerender service from BVC
@@ -59,6 +60,10 @@ class PrerenderService;
 @class ToolbarAccessoryPresenter;
 @protocol IncognitoReauthCommands;
 
+// Vivaldi
+@class PanelInteractionController;
+// End Vivaldi
+
 // TODO(crbug.com/1328039): Remove all use of the prerender service from BVC
 // TODO(crbug.com/1331229): Remove all use of the download manager coordinator
 // from BVC
@@ -69,6 +74,7 @@ typedef struct {
   PopupMenuCoordinator* popupMenuCoordinator;
   DownloadManagerCoordinator* downloadManagerCoordinator;
   NewTabPageCoordinator* ntpCoordinator;
+  LensCoordinator* lensCoordinator;
   PrimaryToolbarCoordinator* primaryToolbarCoordinator;
   SecondaryToolbarCoordinator* secondaryToolbarCoordinator;
   TabStripCoordinator* tabStripCoordinator;
@@ -80,6 +86,11 @@ typedef struct {
   id<HelpCommands> helpHandler;
   id<PopupMenuCommands> popupMenuCommandsHandler;
   id<SnackbarCommands> snackbarCommandsHandler;
+
+  // Vivaldi
+  PanelInteractionController* panelInteractionController;
+  // End Vivaldi
+
 } BrowserViewControllerDependencies;
 
 // The top-level view controller for the browser UI. Manages other controllers

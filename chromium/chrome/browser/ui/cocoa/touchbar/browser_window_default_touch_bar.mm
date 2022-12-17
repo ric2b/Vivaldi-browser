@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,30 +112,6 @@ NSButton* CreateTouchBarButton(const gfx::VectorIcon& icon,
                                SkColor color = kTouchBarDefaultIconColor) {
   return CreateTouchBarButtonWithImage(CreateNSImageFromIcon(icon, color),
                                        owner, command, tooltip_id);
-}
-
-ui::TouchBarAction TouchBarActionFromCommand(int command) {
-  switch (command) {
-    case IDC_BACK:
-      return ui::TouchBarAction::BACK;
-    case IDC_FORWARD:
-      return ui::TouchBarAction::FORWARD;
-    case IDC_STOP:
-      return ui::TouchBarAction::STOP;
-    case IDC_RELOAD:
-      return ui::TouchBarAction::RELOAD;
-    case IDC_HOME:
-      return ui::TouchBarAction::HOME;
-    case IDC_FOCUS_LOCATION:
-      return ui::TouchBarAction::SEARCH;
-    case IDC_BOOKMARK_THIS_TAB:
-      return ui::TouchBarAction::STAR;
-    case IDC_NEW_TAB:
-      return ui::TouchBarAction::NEW_TAB;
-    default:
-      NOTREACHED();
-      return ui::TouchBarAction::TOUCH_BAR_ACTION_COUNT;
-  }
 }
 
 // A class registered for C++ notifications. This is used to detect changes in
@@ -579,7 +555,7 @@ class TouchBarNotificationBridge : public CommandObserver,
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   if (isGoogle) {
     image = NSImageFromImageSkiaWithColorSpace(
-        gfx::CreateVectorIcon(kGoogleGLogoIcon, kTouchBarIconSize,
+        gfx::CreateVectorIcon(vector_icons::kGoogleGLogoIcon, kTouchBarIconSize,
                               gfx::kPlaceholderColor),
         base::mac::GetSRGBColorSpace());
   } else {
@@ -612,7 +588,6 @@ class TouchBarNotificationBridge : public CommandObserver,
 
 - (void)executeCommand:(id)sender {
   int command = [sender tag];
-  ui::LogTouchBarUMA(TouchBarActionFromCommand(command));
   _browser->command_controller()->ExecuteCommand(command);
 }
 

@@ -1,10 +1,10 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import '../elements/files_toggle_ripple.js';
 
-import {Menu} from 'chrome://resources/js/cr/ui/menu.js';
+import {Menu} from './ui/menu.js';
 
 import {util} from '../../common/js/util.js';
 import {FilesTooltip} from '../elements/files_tooltip.js';

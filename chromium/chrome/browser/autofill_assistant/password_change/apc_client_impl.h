@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,7 @@
 
 class ApcExternalActionDelegate;
 class ApcScrimManager;
+class AssistantStoppedBubbleCoordinator;
 
 namespace autofill_assistant {
 class WebsiteLoginManager;
@@ -58,6 +59,10 @@ class ApcClientImpl : public content::WebContentsUserData<ApcClientImpl>,
  protected:
   // The following protected methods are factory functions that may be
   // overridden in tests.
+
+  // Creates an assistant stopped bubble coordinator.
+  virtual std::unique_ptr<AssistantStoppedBubbleCoordinator>
+  CreateAssistantStoppedBubbleCoordinator();
 
   // Creates an onboarding coordinator.
   virtual std::unique_ptr<ApcOnboardingCoordinator>
@@ -98,6 +103,10 @@ class ApcClientImpl : public content::WebContentsUserData<ApcClientImpl>,
  private:
   friend class content::WebContentsUserData<ApcClientImpl>;
 
+  // Returns a map of script parameters that used to start an Autofill Assistant
+  // flow.
+  base::flat_map<std::string, std::string> GetScriptParameters() const;
+
   // Registers whether onboarding was successful or not (i.e. whether consent
   // has been given). Used in callbacks.
   void OnOnboardingComplete(bool success);
@@ -106,7 +115,7 @@ class ApcClientImpl : public content::WebContentsUserData<ApcClientImpl>,
   void OnRunComplete(
       autofill_assistant::HeadlessScriptController::ScriptResult result);
 
-  // AssistantSidePanelCoordinator::Observer:
+  // AssistantSidePanelCoordinator::Observer
   void OnHidden() override;
 
   void CloseSidePanel();
@@ -150,6 +159,10 @@ class ApcClientImpl : public content::WebContentsUserData<ApcClientImpl>,
 
   // Manages the scrim shown during a password change run.
   std::unique_ptr<ApcScrimManager> scrim_manager_;
+
+  // Bubble that is shown when a flow ends without script completion.
+  std::unique_ptr<AssistantStoppedBubbleCoordinator>
+      assistant_stopped_bubble_coordinator_;
 
   // The website login manager used to handle iteractions with the password
   // manager.

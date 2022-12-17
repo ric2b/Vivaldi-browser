@@ -9,6 +9,7 @@
     std::string title;
     KeywordID keyword_id = -1;
     std::string terms;
+    int typed_count;
   };
 
   typedef std::vector<TypedUrlResult> TypedUrlResults;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,8 +13,17 @@ typedef NS_ENUM(NSInteger, InstructionViewStyle) {
   InstructionViewStyleGrayscale,
 };
 
+// Listen to tap on a line of the instruction.
+@protocol InstructionLineTappedListener
+//  Called when a line of the instruction view is tapped.
+- (void)tappedOnLineNumber:(NSInteger)index;
+@end
+
 // View containing an instruction list with their step number.
 @interface InstructionView : UIView
+
+// A listener for line taps.
+@property(nonatomic, weak) id<InstructionLineTappedListener> tapListener;
 
 // Creates the numbered instructions view list with `instructionList` which
 // contains instructions strings. Strings can have bold part in it.

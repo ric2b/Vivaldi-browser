@@ -1,11 +1,8 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/search_engines/template_url_service.h"
-
-#include <algorithm>
-#include <numeric>
 
 #include "base/auto_reset.h"
 #include "base/base64.h"
@@ -16,7 +13,6 @@
 #include "base/containers/contains.h"
 #include "base/debug/crash_logging.h"
 #include "base/format_macros.h"
-#include "base/hash/hash.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -50,7 +46,10 @@
 #include "components/search_engines/android/template_url_service_android.h"
 #endif
 
+#include <numeric>
+
 #include "app/vivaldi_apptools.h"
+#include "base/hash/hash.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/search_engines/vivaldi_pref_names.h"
 
@@ -677,8 +676,8 @@ void TemplateURLService::Remove(const TemplateURL* template_url) {
   if (vivaldi_default_override_ == template_url)
     VivaldiResetDefaultOverride();
 
-  auto i = FindTemplateURL(&template_urls_, template_url);
-  if (i == template_urls_.end())
+  auto it = FindTemplateURL(&template_urls_, template_url);
+  if (it == template_urls_.end())
     return;
 
   Scoper scoper(this);
@@ -687,8 +686,8 @@ void TemplateURLService::Remove(const TemplateURL* template_url) {
   RemoveFromMaps(template_url);
 
   // Remove it from the vector containing all TemplateURLs.
-  std::unique_ptr<TemplateURL> scoped_turl = std::move(*i);
-  template_urls_.erase(i);
+  std::unique_ptr<TemplateURL> scoped_turl = std::move(*it);
+  template_urls_.erase(it);
 
   if (template_url->type() == TemplateURL::NORMAL) {
     if (web_data_service_)
@@ -730,6 +729,8 @@ void TemplateURLService::RemoveExtensionControlledTURL(
   // NULL this out so that we can call Remove.
   if (default_search_provider_[kDefaultSearchMain] == url)
     default_search_provider_[kDefaultSearchMain] = nullptr;
+  if (default_search_provider_[kDefaultSearchPrivate] == url)
+    default_search_provider_[kDefaultSearchPrivate] = nullptr;
   Remove(url);
 }
 
@@ -831,6 +832,7 @@ void TemplateURLService::SetIsActiveTemplateURL(TemplateURL* url,
   std::string histogram_name = kKeywordModeUsageByEngineTypeHistogramName;
   if (is_active) {
     data.is_active = TemplateURLData::ActiveStatus::kTrue;
+    data.safe_for_autoreplace = false;
     histogram_name.append(".Activated");
   } else {
     data.is_active = TemplateURLData::ActiveStatus::kFalse;
@@ -1004,12 +1006,11 @@ TemplateURLService::GetDefaultSearchProviderIgnoringExtensions() const {
     return nullptr;
 
   // Find the TemplateURL matching the data retrieved.
-  auto iter = std::find_if(template_urls_.begin(), template_urls_.end(),
-                           [this, &next_search](const auto& turl_to_check) {
-                             return TemplateURL::MatchesData(
-                                 turl_to_check.get(), next_search.get(),
-                                 search_terms_data());
-                           });
+  auto iter = base::ranges::find_if(
+      template_urls_, [this, &next_search](const auto& turl_to_check) {
+        return TemplateURL::MatchesData(turl_to_check.get(), next_search.get(),
+                                        search_terms_data());
+      });
   return iter == template_urls_.end() ? nullptr : iter->get();
 }
 
@@ -1020,9 +1021,23 @@ bool TemplateURLService::IsSearchResultsPageFromDefaultSearchProvider(
       default_provider->IsSearchURL(url, search_terms_data());
 }
 
+GURL TemplateURLService::GenerateSearchURLForDefaultSearchProvider(
+    const std::u16string& search_terms) const {
+  const TemplateURL* default_provider = GetDefaultSearchProvider();
+  return default_provider ? default_provider->GenerateSearchURL(
+                                search_terms_data(), search_terms)
+                          : GURL();
+}
+
 bool TemplateURLService::IsSideSearchSupportedForDefaultSearchProvider() const {
   const TemplateURL* default_provider = GetDefaultSearchProvider();
   return default_provider && default_provider->IsSideSearchSupported();
+}
+
+bool TemplateURLService::IsSideImageSearchSupportedForDefaultSearchProvider()
+    const {
+  const TemplateURL* default_provider = GetDefaultSearchProvider();
+  return default_provider && default_provider->IsSideImageSearchSupported();
 }
 
 GURL TemplateURLService::GenerateSideSearchURLForDefaultSearchProvider(
@@ -1031,6 +1046,29 @@ GURL TemplateURLService::GenerateSideSearchURLForDefaultSearchProvider(
   DCHECK(IsSideSearchSupportedForDefaultSearchProvider());
   return GetDefaultSearchProvider()->GenerateSideSearchURL(search_url, version,
                                                            search_terms_data());
+}
+
+GURL TemplateURLService::RemoveSideSearchParamFromURL(
+    const GURL& search_url) const {
+  if (!IsSideSearchSupportedForDefaultSearchProvider())
+    return search_url;
+  return GetDefaultSearchProvider()->RemoveSideSearchParamFromURL(search_url);
+}
+
+GURL TemplateURLService::GenerateSideImageSearchURLForDefaultSearchProvider(
+    const GURL& search_url,
+    const std::string& version) const {
+  DCHECK(IsSideImageSearchSupportedForDefaultSearchProvider());
+  return GetDefaultSearchProvider()->GenerateSideImageSearchURL(search_url,
+                                                                version);
+}
+
+GURL TemplateURLService::RemoveSideImageSearchParamFromURL(
+    const GURL& search_url) const {
+  if (!IsSideImageSearchSupportedForDefaultSearchProvider())
+    return search_url;
+  return GetDefaultSearchProvider()->RemoveSideImageSearchParamFromURL(
+      search_url);
 }
 
 bool TemplateURLService::IsExtensionControlledDefaultSearch() const {
@@ -1256,8 +1294,8 @@ void TemplateURLService::OnWebDataServiceRequestDone(
   }
 
   if (default_search_provider_[kDefaultSearchMain]) {
-    UMA_HISTOGRAM_ENUMERATION(
-        "Search.DefaultSearchProviderType",
+    base::UmaHistogramEnumeration(
+        "Search.DefaultSearchProviderType2",
         default_search_provider_[kDefaultSearchMain]->GetEngineType(search_terms_data()),
         SEARCH_ENGINE_MAX);
   }
@@ -1983,7 +2021,7 @@ bool TemplateURLService::CanAddAutogeneratedKeywordForHost(
   if (!urls)
     return true;
 
-  return std::all_of(urls->begin(), urls->end(), [](const TemplateURL* turl) {
+  return base::ranges::all_of(*urls, [](const TemplateURL* turl) {
     return turl->safe_for_autoreplace();
   });
 }
@@ -2069,6 +2107,53 @@ void TemplateURLService::UpdateKeywordSearchTermsForURL(
   if (!urls_for_host)
     return;
 
+  if (vivaldi::IsVivaldiRunning()) {
+    TemplateURL* best_match_url = nullptr;
+    std::u16string best_search_terms;
+
+    for (auto i = urls_for_host->begin(); i != urls_for_host->end(); ++i) {
+      bool perfect_match = false;
+      if ((*i)->is_active() == TemplateURLData::ActiveStatus::kFalse)
+        continue;
+      for (const auto& turl_ref : (*i)->url_refs()) {
+        std::u16string search_terms;
+        if (turl_ref.ExtractSearchTermsFromURL(details.url, &search_terms,
+                                               search_terms_data(), nullptr,
+                                               nullptr)) {
+          TemplateURLRef::SearchTermsArgs search_terms_args(search_terms);
+          if (turl_ref.ReplaceSearchTerms(search_terms_args,
+                                          search_terms_data()) ==
+              details.url.spec()) {
+            perfect_match = true;
+          }
+
+          if (perfect_match || !best_match_url ||
+              (best_match_url->keyword().empty() && !(*i)->keyword().empty())) {
+            best_match_url = *i;
+            best_search_terms = search_terms;
+            break;
+          }
+        }
+      }
+
+      if (perfect_match) {
+        break;
+      }
+    }
+
+    if (best_match_url) {
+      if (client_) {
+        client_->SetKeywordSearchTermsForURL(details.url, best_match_url->id(),
+                                             best_search_terms);
+      }
+
+      if (!IsCreatedByExtension(best_match_url))
+        UpdateTemplateURLVisitTime(best_match_url);
+    }
+
+    return;
+  }
+
   TemplateURL* visited_url = nullptr;
   for (auto i = urls_for_host->begin(); i != urls_for_host->end(); ++i) {
     std::u16string search_terms;
@@ -2077,7 +2162,7 @@ void TemplateURLService::UpdateKeywordSearchTermsForURL(
         !search_terms.empty()) {
       // We don't really use these in Vivaldi and they can cause trouble with
       // our single-letter keywords.
-      if (details.is_keyword_transition && !vivaldi::IsVivaldiRunning()) {
+      if (details.is_keyword_transition) {
         // The visit is the result of the user entering a keyword, generate a
         // KEYWORD_GENERATED visit for the KEYWORD so that the keyword typed
         // count is boosted.
@@ -2132,10 +2217,6 @@ void TemplateURLService::ApplyDefaultSearchChange(
     DefaultSearchManager::Source source) {
   if (!ApplyDefaultSearchChangeNoMetrics(type, data, source))
     return;
-
-  if (type == kDefaultSearchMain)
-  UMA_HISTOGRAM_ENUMERATION(
-      "Search.DefaultSearchChangeOrigin", dsp_change_origin_, DSP_CHANGE_MAX);
 
   if (type == kDefaultSearchMain && GetDefaultSearchProvider(type) &&
       GetDefaultSearchProvider(type)->HasGoogleBaseURLs(search_terms_data()) &&
@@ -2580,6 +2661,7 @@ void TemplateURLService::MaybeSetIsActiveSearchEngines(
     if (turl->is_active() == TemplateURLData::ActiveStatus::kUnspecified &&
         (!turl->safe_for_autoreplace() || turl->usage_count() > 0)) {
       turl->data_.is_active = TemplateURLData::ActiveStatus::kTrue;
+      turl->data_.safe_for_autoreplace = false;
       if (web_data_service_)
         web_data_service_->UpdateKeyword(turl->data());
     }

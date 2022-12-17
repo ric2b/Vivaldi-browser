@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -320,6 +320,13 @@ class DownloadUIModel {
   // Change what's returned by WasUINotified().
   virtual void SetWasUINotified(bool should_notify);
 
+  // Returns |true| if the download was actioned on. This governs if the
+  // download should be shown in the Download Bubble's partial view.
+  virtual bool WasActionedOn() const;
+
+  // Change what's returned by WasActionedOn().
+  virtual void SetActionedOn(bool actioned_on);
+
   // Returns |true| if the Download Bubble UI has shown this download warning.
   // By default, this value is |false| and should be changed explicitly using
   // SetWasUIWarningShown().
@@ -498,9 +505,13 @@ class DownloadUIModel {
       offline_items_collection::FailState fail_state) const;
   BubbleUIInfo GetBubbleUIInfoForInProgressOrComplete(
       bool is_download_bubble_v2) const;
+  virtual BubbleUIInfo GetBubbleUIInfoForTailoredWarning() const;
 
   // Returns |true| if this download should be displayed in the download bubble.
   virtual bool ShouldShowInBubble() const;
+
+  // Should this download trigger a tailored warning?
+  virtual bool ShouldShowTailoredWarning() const;
 
   // Ephemeral warnings are ones that are quickly removed from the bubble if the
   // user has not acted on them, and later deleted altogether. Is this that kind

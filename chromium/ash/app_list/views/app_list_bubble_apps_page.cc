@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "ash/app_list/app_list_model_provider.h"
+#include "ash/app_list/app_list_util.h"
 #include "ash/app_list/app_list_view_delegate.h"
 #include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/views/app_list_keyboard_controller.h"
@@ -192,11 +193,9 @@ AppListBubbleAppsPage::AppListBubbleAppsPage(
       kVerticalPaddingBetweenSections));
   layout->set_cross_axis_alignment(BoxLayout::CrossAxisAlignment::kStretch);
 
-  // When feature LauncherHideContinueSection is enabled, the "Continue where
-  // you left off" label is in a container that is a child of this view.
-  // Otherwise the label is a child of the ContinueSectionView.
-  if (features::IsLauncherHideContinueSectionEnabled())
-    InitContinueLabelContainer(scroll_contents.get());
+  // The "Continue where you left off" label is in a container that is a child
+  // of this view.
+  InitContinueLabelContainer(scroll_contents.get());
 
   // Continue section row.
   continue_section_ = scroll_contents->AddChildView(
@@ -205,12 +204,10 @@ AppListBubbleAppsPage::AppListBubbleAppsPage(
   continue_section_->SetBorder(
       views::CreateEmptyBorder(kContinueSectionInsets));
   continue_section_->SetNudgeController(app_list_nudge_controller_.get());
-  if (features::IsLauncherHideContinueSectionEnabled()) {
-    // Decrease the between-sections spacing so the continue label is closer to
-    // the continue tasks section.
-    continue_section_->SetProperty(views::kMarginsKey,
-                                   gfx::Insets::TLBR(-14, 0, 0, 0));
-  }
+  // Decrease the between-sections spacing so the continue label is closer to
+  // the continue tasks section.
+  continue_section_->SetProperty(views::kMarginsKey,
+                                 gfx::Insets::TLBR(-14, 0, 0, 0));
 
   // Observe changes in continue section visibility, to keep separator
   // visibility in sync.
@@ -249,7 +246,6 @@ AppListBubbleAppsPage::AppListBubbleAppsPage(
           app_list_keyboard_controller_.get()));
   scrollable_apps_grid_view_->SetDragAndDropHostOfCurrentAppList(
       drag_and_drop_host);
-  scrollable_apps_grid_view_->Init();
   scrollable_apps_grid_view_->UpdateAppListConfig(app_list_config);
   scrollable_apps_grid_view_->SetMaxColumns(5);
   AppListModel* const model = AppListModelProvider::Get()->model();
@@ -351,6 +347,12 @@ void AppListBubbleAppsPage::AnimateShowLauncher(bool is_side_shelf) {
   // Use a special cleanup callback to show the gradient mask at the end of the
   // animation. No need to use SlideViewIntoPosition() because this view always
   // has a layer.
+
+  // Set up fade in/fade out gradients at top/bottom of scroll view.
+  gradient_helper_ = std::make_unique<ScrollViewGradientHelper>(
+      scroll_view_, kScrollViewGradientSize);
+  gradient_helper_->UpdateGradientMask();
+
   StartSlideInAnimation(
       scrollable_apps_grid_view_, vertical_offset, slide_duration, tween_type,
       base::BindRepeating(&AppListBubbleAppsPage::OnAppsGridViewAnimationEnded,
@@ -491,6 +493,10 @@ void AppListBubbleAppsPage::AbortAllAnimations() {
 }
 
 void AppListBubbleAppsPage::DisableFocusForShowingActiveFolder(bool disabled) {
+  toggle_continue_section_button_->SetEnabled(!disabled);
+  // Prevent container items from being accessed by ChromeVox.
+  SetViewIgnoredForAccessibility(continue_label_container_, disabled);
+
   continue_section_->DisableFocusForShowingActiveFolder(disabled);
   recent_apps_->DisableFocusForShowingActiveFolder(disabled);
   if (toast_container_)
@@ -512,7 +518,8 @@ void AppListBubbleAppsPage::UpdateForNewSortingOrder(
   // on the toast. Note that when `new_order` is null, `animate` was set to true
   // only if the sort was reverted.
   if (new_order) {
-    toast_container_->AnnounceSortOrder(*new_order);
+    if (*new_order != AppListSortOrder::kAlphabeticalEphemeralAppFirst)
+      toast_container_->AnnounceSortOrder(*new_order);
   } else if (animate) {
     toast_container_->AnnounceUndoSort();
   }
@@ -576,7 +583,7 @@ bool AppListBubbleAppsPage::MaybeScrollToShowToast() {
 void AppListBubbleAppsPage::Layout() {
   views::View::Layout();
   if (gradient_helper_)
-    gradient_helper_->UpdateGradientZone();
+    gradient_helper_->UpdateGradientMask();
 }
 
 void AppListBubbleAppsPage::VisibilityChanged(views::View* starting_from,
@@ -695,11 +702,9 @@ void AppListBubbleAppsPage::InitContinueLabelContainer(
       continue_label_container_->AddChildView(std::make_unique<IconButton>(
           base::BindRepeating(&AppListBubbleAppsPage::OnToggleContinueSection,
                               base::Unretained(this)),
-          IconButton::Type::kTinyFloating, &kChevronUpIcon,
+          IconButton::Type::kXSmallFloating, &kChevronUpIcon,
           /*is_togglable=*/false,
           /*has_border=*/false));
-  // The icon is scaled down since the button is tiny.
-  toggle_continue_section_button_->SetIconSize(16);
   // See ButtonFocusSkipper in app_list_bubble_view.cc for focus handling.
 }
 
@@ -745,18 +750,6 @@ void AppListBubbleAppsPage::DestroyLayerForView(views::View* view) {
 }
 
 void AppListBubbleAppsPage::OnAppsGridViewAnimationEnded() {
-  // If the window is destroyed during an animation the animation will end, but
-  // there's no need to build the gradient mask layer.
-  if (GetWidget()->GetNativeWindow()->is_destroying())
-    return;
-
-  // Set up fade in/fade out gradients at top/bottom of scroll view. Wait until
-  // the end of the show animation because the animation performs better without
-  // the gradient mask layer.
-  gradient_helper_ = std::make_unique<ScrollViewGradientHelper>(
-      scroll_view_, kScrollViewGradientSize);
-  gradient_helper_->UpdateGradientZone();
-
   // Show the scroll bar for keyboard-driven scroll position changes.
   scroll_bar_->SetShowOnThumbBoundsChanged(true);
 }

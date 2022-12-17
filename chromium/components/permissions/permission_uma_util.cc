@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -106,8 +106,8 @@ RequestTypeForUma GetUmaValueForRequestType(RequestType request_type) {
     case RequestType::kVrSession:
       return RequestTypeForUma::PERMISSION_VR;
 #if !BUILDFLAG(IS_ANDROID)
-    case RequestType::kWindowPlacement:
-      return RequestTypeForUma::PERMISSION_WINDOW_PLACEMENT;
+    case RequestType::kWindowManagement:
+      return RequestTypeForUma::PERMISSION_WINDOW_MANAGEMENT;
 #endif
   }
 }
@@ -152,7 +152,7 @@ std::string GetPermissionRequestString(RequestTypeForUma type) {
       return "StorageAccess";
     case RequestTypeForUma::PERMISSION_CAMERA_PAN_TILT_ZOOM:
       return "CameraPanTiltZoom";
-    case RequestTypeForUma::PERMISSION_WINDOW_PLACEMENT:
+    case RequestTypeForUma::PERMISSION_WINDOW_MANAGEMENT:
       return "WindowPlacement";
     case RequestTypeForUma::PERMISSION_LOCAL_FONTS:
       return "LocalFonts";
@@ -714,9 +714,7 @@ PermissionUmaUtil::ScopedRevocationReporter::ScopedRevocationReporter(
   content_settings::SettingInfo setting_info;
   settings_map->GetWebsiteSetting(primary_url, secondary_url, content_type_,
                                   &setting_info);
-  last_modified_date_ = settings_map->GetSettingLastModifiedDate(
-      setting_info.primary_pattern, setting_info.secondary_pattern,
-      content_type);
+  last_modified_date_ = setting_info.metadata.last_modified;
 }
 
 PermissionUmaUtil::ScopedRevocationReporter::ScopedRevocationReporter(
@@ -895,7 +893,7 @@ void PermissionUmaUtil::RecordPermissionAction(
       base::UmaHistogramEnumeration("Permissions.Action.CameraPanTiltZoom",
                                     action, PermissionAction::NUM);
       break;
-    case ContentSettingsType::WINDOW_PLACEMENT:
+    case ContentSettingsType::WINDOW_MANAGEMENT:
       base::UmaHistogramEnumeration("Permissions.Action.WindowPlacement",
                                     action, PermissionAction::NUM);
       break;
@@ -1019,6 +1017,53 @@ void PermissionUmaUtil::RecordPermissionPredictionServiceHoldback(
         "Permissions.PredictionService.Response." +
             GetPermissionRequestString(GetUmaValueForRequestType(request_type)),
         is_heldback);
+  }
+}
+
+// static
+void PermissionUmaUtil::RecordPageInfoDialogAccessType(
+    PageInfoDialogAccessType access_type) {
+  base::UmaHistogramEnumeration(
+      "Permissions.ConfirmationChip.PageInfoDialogAccessType", access_type);
+}
+
+// static
+void PermissionUmaUtil::RecordPageInfoPermissionChangeWithin1m(
+    ContentSettingsType type,
+    PermissionAction previous_action,
+    ContentSetting setting_after) {
+  DCHECK(IsRequestablePermissionType(type));
+  std::string permission_type = GetPermissionRequestString(
+      GetUmaValueForRequestType(ContentSettingsTypeToRequestType(type)));
+  std::string histogram_name =
+      "Permissions.PageInfo.ChangedWithin1m." + permission_type;
+  switch (previous_action) {
+    case PermissionAction::GRANTED:
+    case PermissionAction::GRANTED_ONCE:
+      if (setting_after == ContentSetting::CONTENT_SETTING_BLOCK) {
+        base::UmaHistogramEnumeration(histogram_name,
+                                      PermissionChangeAction::REVOKED);
+      } else if (setting_after == ContentSetting::CONTENT_SETTING_DEFAULT) {
+        base::UmaHistogramEnumeration(
+            histogram_name, PermissionChangeAction::RESET_FROM_ALLOWED);
+      }
+      break;
+    case PermissionAction::DENIED:
+      if (setting_after == ContentSetting::CONTENT_SETTING_ALLOW) {
+        base::UmaHistogramEnumeration(histogram_name,
+                                      PermissionChangeAction::REALLOWED);
+      } else if (setting_after == ContentSetting::CONTENT_SETTING_DEFAULT) {
+        base::UmaHistogramEnumeration(
+            histogram_name, PermissionChangeAction::RESET_FROM_DENIED);
+      }
+      break;
+    case PermissionAction::DISMISSED:  // dismissing had no effect on content
+                                       // setting
+    case PermissionAction::IGNORED:    // ignoring has no effect on content
+                                       // settings
+    case PermissionAction::REVOKED:  // not a relevant use case for this metric
+    case PermissionAction::NUM:      // placeholder
+      break;                         // NOP
   }
 }
 

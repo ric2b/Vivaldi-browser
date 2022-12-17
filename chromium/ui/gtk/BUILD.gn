@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -137,7 +137,7 @@ component("gtk") {
     "//ui/gfx",
     "//ui/gfx:native_widget_types",
     "//ui/gfx/geometry",
-    "//ui/linux:linux_ui_impl",
+    "//ui/linux:linux_ui",
     "//ui/native_theme",
     "//ui/shell_dialogs",
     "//ui/strings",

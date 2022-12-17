@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -135,7 +135,7 @@ TEST_F(ArcContentFileSystemAsyncFileUtilTest, Truncate) {
       ash::switches::kEnableArcVm);
 
   GURL externalfile_url = ArcUrlToExternalFileUrl(GURL(kArcUrl));
-  const int64_t kLength = strlen(kData) / 2;
+  const uint64_t kLength = strlen(kData) / 2;
 
   base::RunLoop run_loop;
   async_file_util_->Truncate(

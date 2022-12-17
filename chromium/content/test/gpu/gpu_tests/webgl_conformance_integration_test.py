@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -107,10 +107,6 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         # crbug.com/1345466. Can be removed once OpenGL is no longer used on
         # Mac.
         'deqp/functional/gles3/transformfeedback/*',
-        # crbug.com/1345782. Can be removed once OpenGL is no longer used on
-        # Mac.
-        'deqp/functional/gles3/texturefiltering/*',
-        'deqp/functional/gles3/texturespecification/*',
         # crbug.com/1347970. Flaking for unknown reasons on Metal backend.
         'deqp/functional/gles3/textureshadow/*',
     }
@@ -119,9 +115,6 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     return {
         # crbug.com/1347970.
         'conformance/textures/misc/texture-video-transparent.html',
-        # crbug.com/1345755, crbug.com/1345782. Can be removed onced OpenGL is
-        # no longer used on Mac.
-        'deqp/functional/gles3/shaderindexing/uniform.html',
     }
 
   @classmethod

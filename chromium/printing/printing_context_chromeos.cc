@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,25 +45,19 @@ bool IsUriSecure(base::StringPiece uri) {
          base::StartsWith(uri, "usb:") || base::StartsWith(uri, "ippusb:");
 }
 
-// Returns a new char buffer which is a null-terminated copy of `value`.  The
-// caller owns the returned string.
-char* DuplicateString(base::StringPiece value) {
-  char* dst = new char[value.size() + 1];
-  value.copy(dst, value.size());
-  dst[value.size()] = '\0';
-  return dst;
-}
-
-ScopedCupsOption ConstructOption(base::StringPiece name,
-                                 base::StringPiece value) {
+ScopedCupsOption ConstructOption(std::string name, std::string value) {
   // ScopedCupsOption frees the name and value buffers on deletion
-  ScopedCupsOption option = ScopedCupsOption(new cups_option_t);
-  option->name = DuplicateString(name);
-  option->value = DuplicateString(value);
-  return option;
+  cups_option_t* cups_option = nullptr;
+  int num_options = 0;
+  // Use cupsAddOption so that the pair of malloc and free are used.
+  num_options =
+      cupsAddOption(name.c_str(), value.c_str(), num_options, &cups_option);
+  DCHECK(cups_option);
+  DCHECK_EQ(num_options, 1);
+  return ScopedCupsOption(cups_option);
 }
 
-base::StringPiece GetCollateString(bool collate) {
+std::string GetCollateString(bool collate) {
   return collate ? kCollated : kUncollated;
 }
 

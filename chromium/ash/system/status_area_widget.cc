@@ -1,8 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/system/status_area_widget.h"
+
+#include <memory>
+#include <string>
 
 #include "ash/capture_mode/stop_recording_button_tray.h"
 #include "ash/constants/ash_features.h"
@@ -23,6 +26,7 @@
 #include "ash/system/media/media_tray.h"
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/system_tray_model.h"
+#include "ash/system/notification_center/notification_center_tray.h"
 #include "ash/system/overview/overview_button_tray.h"
 #include "ash/system/palette/palette_tray.h"
 #include "ash/system/phonehub/phone_hub_tray.h"
@@ -36,6 +40,7 @@
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm_mode/wm_mode_button_tray.h"
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
 #include "base/i18n/time_formatting.h"
@@ -45,6 +50,8 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/message_center_types.h"
 
 namespace ash {
 
@@ -107,13 +114,13 @@ void StatusAreaWidget::Initialize() {
       AddTrayButton(std::make_unique<HoldingSpaceTray>(shelf_));
   logout_button_tray_ =
       AddTrayButton(std::make_unique<LogoutButtonTray>(shelf_));
-  dictation_button_tray_ =
-      AddTrayButton(std::make_unique<DictationButtonTray>(shelf_));
-  select_to_speak_tray_ =
-      AddTrayButton(std::make_unique<SelectToSpeakTray>(shelf_));
+  dictation_button_tray_ = AddTrayButton(std::make_unique<DictationButtonTray>(
+      shelf_, TrayBackgroundViewCatalogName::kDictationStatusArea));
+  select_to_speak_tray_ = AddTrayButton(std::make_unique<SelectToSpeakTray>(
+      shelf_, TrayBackgroundViewCatalogName::kSelectToSpeakStatusArea));
   ime_menu_tray_ = AddTrayButton(std::make_unique<ImeMenuTray>(shelf_));
-  virtual_keyboard_tray_ =
-      AddTrayButton(std::make_unique<VirtualKeyboardTray>(shelf_));
+  virtual_keyboard_tray_ = AddTrayButton(std::make_unique<VirtualKeyboardTray>(
+      shelf_, TrayBackgroundViewCatalogName::kVirtualKeyboardStatusArea));
   stop_recording_button_tray_ =
       AddTrayButton(std::make_unique<StopRecordingButtonTray>(shelf_));
 
@@ -134,6 +141,17 @@ void StatusAreaWidget::Initialize() {
 
   if (chromeos::features::IsPhoneHubEnabled()) {
     phone_hub_tray_ = AddTrayButton(std::make_unique<PhoneHubTray>(shelf_));
+  }
+
+  if (features::IsWmModeEnabled()) {
+    wm_mode_button_tray_ =
+        AddTrayButton(std::make_unique<WmModeButtonTray>(shelf_));
+  }
+
+  if (chromeos::features::IsQsRevampEnabled()) {
+    notification_center_tray_ =
+        AddTrayButton(std::make_unique<NotificationCenterTray>(shelf_));
+    notification_center_tray_->AddObserver(this);
   }
 
   auto unified_system_tray = std::make_unique<UnifiedSystemTray>(shelf_);
@@ -175,6 +193,8 @@ void StatusAreaWidget::Initialize() {
 
 StatusAreaWidget::~StatusAreaWidget() {
   Shell::Get()->session_controller()->RemoveObserver(this);
+  if (features::IsQsRevampEnabled())
+    notification_center_tray_->RemoveObserver(this);
   status_area_widget_delegate_->Shutdown();
 }
 
@@ -193,14 +213,18 @@ void StatusAreaWidget::UpdateAfterLoginStatusChange(LoginStatus login_status) {
 }
 
 void StatusAreaWidget::SetSystemTrayVisibility(bool visible) {
-  TrayBackgroundView* tray = unified_system_tray_;
-  tray->SetVisiblePreferred(visible);
+  unified_system_tray_->SetVisiblePreferred(visible);
+
   if (features::IsCalendarViewEnabled())
     date_tray_->SetVisiblePreferred(visible);
+
+  if (features::IsQsRevampEnabled())
+    notification_center_tray_->OnSystemTrayVisibilityChanged(visible);
+
   if (visible) {
     Show();
   } else {
-    tray->CloseBubble();
+    unified_system_tray_->CloseBubble();
     Hide();
   }
 }
@@ -235,14 +259,40 @@ void StatusAreaWidget::UpdateCollapseState() {
 void StatusAreaWidget::LogVisiblePodCountMetric() {
   int visible_pod_count = 0;
   for (auto* tray_button : tray_buttons_) {
-    if (tray_button == overflow_button_tray_ ||
-        tray_button == overview_button_tray_ ||
-        tray_button == unified_system_tray_ || tray_button == date_tray_ ||
-        !tray_button->GetVisible()) {
-      continue;
-    }
+    switch (tray_button->catalog_name()) {
+      case TrayBackgroundViewCatalogName::kUnifiedSystem:
+      case TrayBackgroundViewCatalogName::kStatusAreaOverflowButton:
+      case TrayBackgroundViewCatalogName::kDateTray:
+      case TrayBackgroundViewCatalogName::kNotificationCenter:
+        // These pods always show, ignore them.
+        continue;
 
-    visible_pod_count += 1;
+      case TrayBackgroundViewCatalogName::kSelectToSpeakAccessibilityWindow:
+      case TrayBackgroundViewCatalogName::kDictationAccesibilityWindow:
+      case TrayBackgroundViewCatalogName::kVirtualKeyboardAccessibilityWindow:
+        // These pods show in an unrelated menu.
+        continue;
+
+      case TrayBackgroundViewCatalogName::kOverview:
+      case TrayBackgroundViewCatalogName::kTestCatalogName:
+      case TrayBackgroundViewCatalogName::kImeMenu:
+      case TrayBackgroundViewCatalogName::kHoldingSpace:
+      case TrayBackgroundViewCatalogName::kScreenCaptureStopRecording:
+      case TrayBackgroundViewCatalogName::kProjectorAnnotation:
+      case TrayBackgroundViewCatalogName::kDictationStatusArea:
+      case TrayBackgroundViewCatalogName::kSelectToSpeakStatusArea:
+      case TrayBackgroundViewCatalogName::kEche:
+      case TrayBackgroundViewCatalogName::kMediaPlayer:
+      case TrayBackgroundViewCatalogName::kPalette:
+      case TrayBackgroundViewCatalogName::kPhoneHub:
+      case TrayBackgroundViewCatalogName::kLogoutButton:
+      case TrayBackgroundViewCatalogName::kVirtualKeyboardStatusArea:
+      case TrayBackgroundViewCatalogName::kWmMode:
+        if (!tray_button->GetVisible())
+          continue;
+        visible_pod_count += 1;
+        break;
+    }
   }
 
   if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
@@ -551,9 +601,30 @@ bool StatusAreaWidget::ShouldShowShelf() const {
   if (unified_system_tray_->IsSliderBubbleShown())
     return false;
 
-  // All other tray bubbles on the same display with status area widget will
-  // force the shelf to be visible.
-  return tray_bubble_count_ > 0;
+  // Some TrayBackgroundViews' cache their bubble, the shelf should only be
+  // forced to show if the bubble is visible, and we should not show the shelf
+  // for cached, hidden bubbles.
+  if (tray_bubble_count_ > 0) {
+    for (TrayBackgroundView* tray_button : tray_buttons_) {
+      if (!tray_button->GetBubbleView())
+        continue;
+
+      // Any tray bubble is showing, show shelf.
+      if (tray_button->GetBubbleView()->GetVisible())
+        return true;
+
+      // Tray bubble view is not null and not visible, tray bubble is cached
+      // for hidden case. If the tray caches the view for hidden, we should
+      // hide self otherwise show shelf.
+      if (!tray_button->GetBubbleView()->GetVisible() &&
+          !tray_button->CacheBubbleViewForHide()) {
+        return true;
+      }
+    }
+  }
+
+  // No cases to show shelf, returns false to hide shelf.
+  return false;
 }
 
 bool StatusAreaWidget::IsMessageBubbleShown() const {
@@ -571,6 +642,14 @@ bool StatusAreaWidget::OnNativeWidgetActivationChanged(bool active) {
   if (active)
     status_area_widget_delegate_->SetPaneFocusAndFocusDefault();
   return true;
+}
+
+void StatusAreaWidget::OnViewVisibilityChanged(views::View* observed_view,
+                                               views::View* starting_view) {
+  if (observed_view != notification_center_tray_)
+    return;
+
+  UpdateDateTrayRoundedCorners();
 }
 
 void StatusAreaWidget::OnMouseEvent(ui::MouseEvent* event) {
@@ -646,6 +725,16 @@ StatusAreaWidget::LayoutInputs StatusAreaWidget::GetLayoutInputs() const {
   return {target_bounds_, CalculateCollapseState(),
           shelf_->shelf_layout_manager()->GetOpacity(),
           child_visibility_bitmask, should_animate};
+}
+
+void StatusAreaWidget::UpdateDateTrayRoundedCorners() {
+  if (!features::IsQsRevampEnabled() || !date_tray_)
+    return;
+
+  date_tray_->SetRoundedCornerBehavior(
+      notification_center_tray_->GetVisible()
+          ? TrayBackgroundView::RoundedCornerBehavior::kNotRounded
+          : TrayBackgroundView::RoundedCornerBehavior::kStartRounded);
 }
 
 int StatusAreaWidget::GetCollapseAvailableWidth(bool force_collapsible) const {

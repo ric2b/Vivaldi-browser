@@ -1,10 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.password_manager;
 
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID;
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID_BRANDING;
 
 import android.app.PendingIntent;
 import android.app.PendingIntent.CanceledException;
@@ -37,6 +38,7 @@ import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.sync.ModelType;
+import org.chromium.components.sync.UserSelectableType;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
@@ -290,7 +292,7 @@ public class PasswordManagerHelper {
      */
     public static boolean hasChosenToSyncPasswords(SyncService syncService) {
         return syncService != null && syncService.isSyncFeatureEnabled()
-                && syncService.getChosenDataTypes().contains(ModelType.PASSWORDS);
+                && syncService.getSelectedTypes().contains(UserSelectableType.PASSWORDS);
     }
 
     /**
@@ -342,6 +344,13 @@ public class PasswordManagerHelper {
         return false;
     }
 
+    public static boolean usesUnifiedPasswordManagerBranding() {
+        return usesUnifiedPasswordManagerUI()
+                || ChromeFeatureList.isEnabled(UNIFIED_PASSWORD_MANAGER_ANDROID_BRANDING);
+    }
+
+    // TODO(http://crbug.com/1371422): Remove method and manage eviction from native code
+    // as this is covered by chrome://password-manager-internals page.
     public static void resetUpmUnenrollment() {
         // Exit early if Chrome doesn't need UPM UI. Assumes the unenroll pref isn't included in the
         // usesUnifiedPasswordManagementUI check.

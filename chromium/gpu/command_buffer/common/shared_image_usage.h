@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,17 +21,17 @@ enum SharedImageUsage : uint32_t {
   SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT = 1 << 1,
   // Image will be used in RasterInterface
   SHARED_IMAGE_USAGE_RASTER = 1 << 2,
-  // Image will be used in Display
-  SHARED_IMAGE_USAGE_DISPLAY = 1 << 3,
+  // Image will be read from inside Display Compositor
+  SHARED_IMAGE_USAGE_DISPLAY_READ = 1 << 3,
+  // Image will be written to inside Display Compositor
+  SHARED_IMAGE_USAGE_DISPLAY_WRITE = 1 << 4,
   // Image will be used as a scanout buffer (overlay)
-  SHARED_IMAGE_USAGE_SCANOUT = 1 << 4,
+  SHARED_IMAGE_USAGE_SCANOUT = 1 << 5,
   // Image will be used in OOP rasterization. This flag is used on top of
   // SHARED_IMAGE_USAGE_RASTER to indicate that the client will only use
   // RasterInterface for OOP rasterization. TODO(backer): Eliminate once we can
   // CPU raster to SkImage via RasterInterface.
-  SHARED_IMAGE_USAGE_OOP_RASTERIZATION = 1 << 5,
-  // Image will be used for RGB emulation in WebGL on Mac.
-  SHARED_IMAGE_USAGE_RGB_EMULATION = 1 << 6,
+  SHARED_IMAGE_USAGE_OOP_RASTERIZATION = 1 << 6,
   // Image will be used by Dawn (for WebGPU)
   SHARED_IMAGE_USAGE_WEBGPU = 1 << 7,
   // Image will be used in a protected Vulkan context on Fuchsia.

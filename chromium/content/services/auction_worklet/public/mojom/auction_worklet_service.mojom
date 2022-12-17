@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@ module auction_worklet.mojom;
 
 import "content/services/auction_worklet/public/mojom/bidder_worklet.mojom";
 import "content/services/auction_worklet/public/mojom/seller_worklet.mojom";
-import "mojo/public/mojom/base/time.mojom";
 import "sandbox/policy/mojom/sandbox.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
 import "third_party/blink/public/mojom/interest_group/interest_group_types.mojom";

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,21 +45,14 @@ suite('Multidevice', function() {
   test('ChromeSyncLink navigates to appropriate route', async () => {
     const chromeSyncLink =
         localizedLink.shadowRoot.querySelector('#chromeSyncLink');
-    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled')) {
-      const advancedSyncOpenedPromise = eventToPromise(
-          'opened-browser-advanced-sync-settings', localizedLink);
+    const advancedSyncOpenedPromise =
+        eventToPromise('opened-browser-advanced-sync-settings', localizedLink);
 
-      chromeSyncLink.click();
+    chromeSyncLink.click();
 
-      await advancedSyncOpenedPromise;
-      assertNotEquals(Router.getInstance().getCurrentRoute(), routes.OS_SYNC);
-      assertNotEquals(
-          Router.getInstance().getCurrentRoute(), routes.SYNC_ADVANCED);
-    } else {
-      chromeSyncLink.click();
-      flush();
-      assertEquals(
-          Router.getInstance().getCurrentRoute(), routes.SYNC_ADVANCED);
-    }
+    await advancedSyncOpenedPromise;
+    assertNotEquals(Router.getInstance().getCurrentRoute(), routes.OS_SYNC);
+    assertNotEquals(
+        Router.getInstance().getCurrentRoute(), routes.SYNC_ADVANCED);
   });
 });

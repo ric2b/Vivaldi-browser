@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,28 +71,27 @@ void StabilityMetricsManager::RecordMetricsToUMA() {
 
 void StabilityMetricsManager::ResetMetrics() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DictionaryPrefUpdate update(local_state_, prefs::kStabilityMetrics);
-  update->DictClear();
+  local_state_->SetDict(prefs::kStabilityMetrics, base::Value::Dict());
 }
 
 absl::optional<bool> StabilityMetricsManager::GetArcEnabledState() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   const base::Value::Dict& dict =
-      local_state_->GetValueDict(prefs::kStabilityMetrics);
+      local_state_->GetDict(prefs::kStabilityMetrics);
   return dict.FindBool(kArcEnabledStateKey);
 }
 
 void StabilityMetricsManager::SetArcEnabledState(bool enabled) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DictionaryPrefUpdate update(local_state_, prefs::kStabilityMetrics);
-  update->SetBoolKey(kArcEnabledStateKey, enabled);
+  ScopedDictPrefUpdate update(local_state_, prefs::kStabilityMetrics);
+  update->Set(kArcEnabledStateKey, enabled);
 }
 
 absl::optional<NativeBridgeType>
 StabilityMetricsManager::GetArcNativeBridgeType() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   const base::Value::Dict& dict =
-      local_state_->GetValueDict(prefs::kStabilityMetrics);
+      local_state_->GetDict(prefs::kStabilityMetrics);
   absl::optional<int> native_bridge_type =
       dict.FindInt(kArcNativeBridgeTypeKey);
   if (native_bridge_type) {
@@ -105,9 +104,8 @@ StabilityMetricsManager::GetArcNativeBridgeType() {
 void StabilityMetricsManager::SetArcNativeBridgeType(
     NativeBridgeType native_bridge_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DictionaryPrefUpdate update(local_state_, prefs::kStabilityMetrics);
-  update->SetIntKey(kArcNativeBridgeTypeKey,
-                    static_cast<int>(native_bridge_type));
+  ScopedDictPrefUpdate update(local_state_, prefs::kStabilityMetrics);
+  update->Set(kArcNativeBridgeTypeKey, static_cast<int>(native_bridge_type));
 }
 
 }  // namespace arc

@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">Ya&amp;zdır...</translation>
 <translation id="1181037720776840403">Kaldır</translation>
 <translation id="1187722533808055681">Boşta kalma uyanmaları</translation>
-<translation id="119944043368869598">Tümünü temizle</translation>
 <translation id="1221825588892235038">Yalnızca seçilen</translation>
 <translation id="1244303850296295656">Eklenti hatası</translation>
 <translation id="125220115284141797">Varsayılan</translation>
@@ -50,7 +49,6 @@
 <translation id="1901303067676059328">&amp;Tümünü seç</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Yazdırılacak kopya sayısını göstermek için bir sayı (1-<ph name="MAX_COPIES" /> arası) kullanın.</translation>
-<translation id="1963227389609234879">Tümünü Kaldır</translation>
 <translation id="1994173015038366702">Site URL'si</translation>
 <translation id="2019718679933488176">Sesi Yeni Sekmede &amp;Aç</translation>
 <translation id="2050339315714019657">Dikey</translation>
@@ -66,7 +64,6 @@
 <translation id="2218515861914035131">Düz metin olarak yapıştır</translation>
 <translation id="2249605167705922988">örn. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Korumalı içerik için tanımlayıcılara izin ver (bilgisayarı yeniden başlatmak gerekebilir)</translation>
-<translation id="2277255602909579701">Tüm çerezler ve site verileri</translation>
 <translation id="2280486287150724112">Sağ kenar boşluğu</translation>
 <translation id="2282146716419988068">GPU İşlemi</translation>
 <translation id="2301382460326681002">Eklenti kök dizini geçersiz.</translation>
@@ -118,7 +115,6 @@
 <translation id="3084548735795614657">Kurulum için bırak</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">KULLANICI işleyicileri</translation>
-<translation id="3127156390846601284">Bu işlem, gösterilen tüm sitelerin cihazınıza kaydettiği bütün verileri silecek. Devam etmek istiyor musunuz?</translation>
 <translation id="3129173833825111527">Sol kenar boşluğu</translation>
 <translation id="3144647712221361880">Bağlantıyı farklı aç</translation>
 <translation id="3222066309010235055">Ön oluşturucu: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -137,7 +133,6 @@
 <translation id="3360297538363969800">Yazdırma işlemi başarısız oldu. Lütfen yazıcınızı kontrol edin ve tekrar deneyin.</translation>
 <translation id="3378572629723696641">Bu eklenti bozuk olabilir.</translation>
 <translation id="3387614642886316601">Gelişmiş yazım denetimini kullan</translation>
-<translation id="3432227430032737297">Tüm Gösterilenleri Kaldır</translation>
 <translation id="345693547134384690">&amp;Resmi yeni sekmede aç</translation>
 <translation id="3494769164076977169">Bir site ilk dosyadan sonraki dosyaları otomatik olarak indirmeye çalıştığında bana sor (önerilen)</translation>
 <translation id="3505030558724226696">Cihaz erişimini iptal et</translation>
@@ -194,7 +189,6 @@
 <translation id="4409697491990005945">Kenar Boşlukları</translation>
 <translation id="4423376891418188461">Ayarları Geri Yükle</translation>
 <translation id="4478664379124702289">Bağlantıyı Farklı Kay&amp;det...</translation>
-<translation id="4579581181964204535"><ph name="HOST_NAME" /> yayınlanamıyor.</translation>
 <translation id="4593021220803146968"><ph name="URL" /> adresine &amp;git</translation>
 <translation id="4595560905247879544">Uygulamalar ve eklentiler sadece yönetici (<ph name="CUSTODIAN_NAME" />) tarafından değiştirilebilir.</translation>
 <translation id="4613271546271159013">Bir eklenti, yeni sekme açtığınızda hangi sayfanın görüntüleneceğini değiştirdi.</translation>
@@ -263,7 +257,6 @@
 <translation id="5747809636523347288">Ya&amp;pıştır ve <ph name="URL" /> adresine git</translation>
 <translation id="5759728514498647443"><ph name="APP_NAME" /> aracılığıyla yazdırılmaları için gönderdiğiniz dokümanlar <ph name="APP_NAME" /> tarafından okunabilir.</translation>
 <translation id="5764483294734785780">Sesi farklı kay&amp;det...</translation>
-<translation id="577624874850706961">Çerezlerde ara</translation>
 <translation id="5780973441651030252">İşlem önceliği</translation>
 <translation id="5804241973901381774">İzinler</translation>
 <translation id="5828633471261496623">Yazdırılıyor...</translation>
@@ -276,7 +269,6 @@
 <translation id="5965661248935608907">Ayrıca Ana Sayfa düğmesini tıkladığınızda veya Çok Amaçlı Adres Çubuğu'ndan arama yaptığınızda gösterilecek sayfayı da denetler.</translation>
 <translation id="5978277834170881274">&amp;Temel yazım denetimini kullan</translation>
 <translation id="5979421442488174909"><ph name="LANGUAGE" /> Diline Çe&amp;vir</translation>
-<translation id="6011449291337289699">Site verilerini temizle</translation>
 <translation id="6042308850641462728">Daha Fazla</translation>
 <translation id="6086846494333236931">Yöneticiniz tarafından yüklendi</translation>
 <translation id="6101226222197207147">Yeni uygulama eklendi (<ph name="EXTENSION_NAME" />)</translation>
@@ -389,7 +381,6 @@ Anahtar dosyanızı güvenli bir yerde saklayın. Eklentinizin yeni sürümlerin
         =1 {İndirme işlemi devam ediyor} other {İndirme işlemi devam ediyor}}</translation>
 <translation id="8230134520748321204"><ph name="ORIGIN" /> için parolanız kaydedilsin mi?</translation>
 <translation id="8261378640211443080">Bu eklenti <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> altında listelenmiyor ve bilginiz dışında eklenmiş olabilir.</translation>
-<translation id="8339059274628563283">Yerel olarak depolanan <ph name="SITE" /> verileri</translation>
 <translation id="8351419472474436977">Bu eklenti proxy ayarlarınızın denetimini ele geçirdi. Bu, eklentinin çevrimiçinde yaptıklarınızı değiştirebileceği, kesebileceği veya dinleyebileceği anlamına gelir. Bu değişikliğin neden olduğundan emin değilseniz muhtemelen bu değişikliği yapmayı istememişsinizdir.</translation>
 <translation id="8382913212082956454">&amp;E-posta adresini kopyala</translation>
 <translation id="8413385045638830869">Önce sor (önerilen)</translation>

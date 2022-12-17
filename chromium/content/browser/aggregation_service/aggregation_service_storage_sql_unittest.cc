@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,6 +46,7 @@ using aggregation_service::RequestIdIs;
 using testing::ElementsAre;
 
 using RequestId = AggregationServiceStorage::RequestId;
+using RequestAndId = AggregationServiceStorage::RequestAndId;
 
 const char kExampleUrl[] =
     "https://helper.test/.well-known/aggregation-service/keys.json";
@@ -154,7 +155,7 @@ TEST_F(AggregationServiceStorageSqlTest,
 
   // DB creation UMA should not be recorded.
   histograms.ExpectTotalCount(
-      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime", 0);
+      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime2", 0);
 
   // Storing a public key should create and initialize the database.
   OpenDatabase();
@@ -163,9 +164,10 @@ TEST_F(AggregationServiceStorageSqlTest,
   storage_->SetPublicKeys(url, keyset);
   CloseDatabase();
 
-  // DB creation UMA should be recorded.
+  // DB creation UMA should be recorded if ThreadTicks is supported
   histograms.ExpectTotalCount(
-      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime", 1);
+      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime2",
+      base::ThreadTicks::IsSupported() ? 1 : 0);
 
   {
     sql::Database raw_db;
@@ -509,6 +511,43 @@ TEST_F(AggregationServiceStorageSqlTest, DeleteRequest_ExpectedResult) {
 }
 
 TEST_F(AggregationServiceStorageSqlTest,
+       UpdateReportForSendFailure_ExpectedResult) {
+  OpenDatabase();
+
+  // Trying to update an non-existing report should not crash
+  storage_->UpdateReportForSendFailure(RequestId(1),
+                                       /*new_report_time=*/base::Time::Now());
+
+  AggregatableReportRequest request =
+      aggregation_service::CreateExampleRequest();
+
+  storage_->StoreRequest(aggregation_service::CloneReportRequest(request));
+
+  base::Time next_run_time = base::Time::Now() + base::Minutes(5);
+
+  storage_->UpdateReportForSendFailure(RequestId(1), next_run_time);
+
+  // Report time is updated as expected
+  std::vector<RequestAndId> requests_before_next_run_time =
+      storage_->GetRequestsReportingOnOrBefore(next_run_time -
+                                               base::Microseconds(1));
+  EXPECT_EQ(requests_before_next_run_time.size(), 0u);
+  std::vector<RequestAndId> requests_at_run_time =
+      storage_->GetRequestsReportingOnOrBefore(next_run_time);
+  ASSERT_EQ(requests_at_run_time.size(), 1u);
+
+  // Failed send attempts has been increased
+  EXPECT_EQ(requests_at_run_time[0].request.failed_send_attempts(), 1);
+
+  // Fail again to ensure the number of failed attempts is increased
+  storage_->UpdateReportForSendFailure(RequestId(1), next_run_time);
+  requests_at_run_time =
+      storage_->GetRequestsReportingOnOrBefore(next_run_time);
+  ASSERT_EQ(requests_at_run_time.size(), 1u);
+  EXPECT_EQ(requests_at_run_time[0].request.failed_send_attempts(), 2);
+}
+
+TEST_F(AggregationServiceStorageSqlTest,
        RepeatGetPendingRequests_RequestReturnedAgain) {
   OpenDatabase();
 
@@ -582,6 +621,26 @@ TEST_F(AggregationServiceStorageSqlTest,
               test_case.number_requests)
         << test_case.not_after_time;
   }
+}
+
+TEST_F(AggregationServiceStorageSqlTest,
+       GetRequestsReportingOnOrBefore_ReturnValuesAlignWithLimit) {
+  OpenDatabase();
+
+  storage_->StoreRequest(aggregation_service::CreateExampleRequest());
+  storage_->StoreRequest(aggregation_service::CreateExampleRequest());
+  storage_->StoreRequest(aggregation_service::CreateExampleRequest());
+
+  // IDs autoincrement from 1.
+  EXPECT_THAT(
+      storage_->GetRequestsReportingOnOrBefore(
+          /*not_after_time=*/base::Time::Max(), /*limit=*/2),
+      ElementsAre(RequestIdIs(RequestId(1)), RequestIdIs(RequestId(2))));
+
+  EXPECT_THAT(storage_->GetRequestsReportingOnOrBefore(
+                  /*not_after_time=*/base::Time::Max()),
+              ElementsAre(RequestIdIs(RequestId(1)), RequestIdIs(RequestId(2)),
+                          RequestIdIs(RequestId(3))));
 }
 
 TEST_F(AggregationServiceStorageSqlTest, GetRequests_ReturnValuesAlignWithIds) {
@@ -1155,7 +1214,8 @@ TEST_F(AggregationServiceStorageSqlMigrationsTest, MigrateEmptyToCurrent) {
   }
 
   histograms.ExpectTotalCount(
-      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime", 1);
+      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime2",
+      base::ThreadTicks::IsSupported() ? 1 : 0);
   histograms.ExpectUniqueSample(
       "PrivacySandbox.AggregationService.Storage.Sql.InitStatus",
       AggregationServiceStorageSql::InitStatus::kSuccess, 1);
@@ -1204,7 +1264,7 @@ TEST_F(AggregationServiceStorageSqlMigrationsTest, MigrateVersion1ToCurrent) {
   }
 
   histograms.ExpectTotalCount(
-      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime", 0);
+      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime2", 0);
   histograms.ExpectUniqueSample(
       "PrivacySandbox.AggregationService.Storage.Sql.InitStatus",
       AggregationServiceStorageSql::InitStatus::kSuccess, 1);
@@ -1253,7 +1313,7 @@ TEST_F(AggregationServiceStorageSqlMigrationsTest, MigrateVersion2ToCurrent) {
   }
 
   histograms.ExpectTotalCount(
-      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime", 0);
+      "PrivacySandbox.AggregationService.Storage.Sql.CreationTime2", 0);
   histograms.ExpectUniqueSample(
       "PrivacySandbox.AggregationService.Storage.Sql.InitStatus",
       AggregationServiceStorageSql::InitStatus::kSuccess, 1);

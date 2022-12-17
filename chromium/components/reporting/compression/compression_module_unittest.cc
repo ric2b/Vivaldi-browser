@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,14 +67,10 @@ class CompressionModuleTest : public ::testing::Test {
   }
 
   void EnableCompression() {
-    // Enable compression.
-    scoped_feature_list_.InitFromCommandLine(
-        {CompressionModule::kCompressReportingFeature}, {});
+    scoped_feature_list_.InitAndEnableFeature(kCompressReportingPipeline);
   }
   void DisableCompression() {
-    // Disable compression.
-    scoped_feature_list_.InitFromCommandLine(
-        {}, {CompressionModule::kCompressReportingFeature});
+    scoped_feature_list_.InitAndDisableFeature(kCompressReportingPipeline);
   }
 
   scoped_refptr<ResourceInterface> memory_resource_;

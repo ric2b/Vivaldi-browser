@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,18 +7,21 @@
 #include "base/metrics/field_trial_params.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 
-const base::Feature kEnableSuggestionsScrollingOnIPad{
-    "EnableSuggestionsScrollingOnIPad", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kEnableSuggestionsScrollingOnIPad,
+             "EnableSuggestionsScrollingOnIPad",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kOmniboxPasteButton{"OmniboxPasteButton",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kOmniboxPasteButton,
+             "OmniboxPasteButton",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kOmniboxPasteButtonParameterName[] = "PasteButtonVariant";
 const char kOmniboxPasteButtonParameterBlueIconCapsule[] = "SuggestionIcon";
 const char kOmniboxPasteButtonParameterBlueFullCapsule[] = "SuggestionTextIcon";
 
-const base::Feature kOmniboxKeyboardPasteButton{
-    "OmniboxKeyboardPasteButton", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kOmniboxKeyboardPasteButton,
+             "OmniboxKeyboardPasteButton",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsOmniboxActionsEnabled() {
   return base::FeatureList::IsEnabled(kIOSOmniboxUpdatedPopupUI);
@@ -42,11 +45,5 @@ bool IsOmniboxActionsVisualTreatment2() {
 }
 
 bool IsSwiftUIPopupEnabled() {
-  if (!IsOmniboxActionsEnabled()) {
-    return false;
-  }
-  auto param = base::GetFieldTrialParamValueByFeature(
-      kIOSOmniboxUpdatedPopupUI, kIOSOmniboxUpdatedPopupUIVariationName);
-  return param == kIOSOmniboxUpdatedPopupUIVariation1 ||
-         param == kIOSOmniboxUpdatedPopupUIVariation2;
+  return false;
 }

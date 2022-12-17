@@ -154,24 +154,14 @@ void ApplyRemoteUpdate(const syncer::UpdateResponseData& update,
 
   DCHECK(old_parent);
   DCHECK(new_parent);
-  DCHECK(old_parent->is_folder());
-  DCHECK(new_parent->is_folder());
+  DCHECK((old_parent->is_folder() && !node->is_attachment()) ||
+         (old_parent->is_note() && node->is_attachment()));
+  DCHECK((new_parent->is_folder() && !node->is_attachment()) ||
+         (new_parent->is_note() && node->is_attachment()));
 
   if (update_entity.specifics.notes().special_node_type() !=
       GetProtoTypeFromNoteNode(node)) {
     DLOG(ERROR) << "Could not update note node due to conflicting types";
-    return;
-  }
-
-  if ((update_entity.specifics.notes().special_node_type() ==
-       sync_pb::NotesSpecifics::SEPARATOR) != node->is_separator()) {
-    DLOG(ERROR) << "Could not update node. Remote node is a "
-                << (update_entity.specifics.notes().special_node_type() ==
-                            sync_pb::NotesSpecifics::SEPARATOR
-                        ? "separator"
-                        : "regular note")
-                << " while local node is a "
-                << (node->is_separator() ? "separator" : "regular note");
     return;
   }
 
@@ -513,7 +503,12 @@ const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessCreate(
         update.response_version);
     return nullptr;
   }
-  if (!parent_node->is_folder()) {
+  if (!((parent_node->is_folder() &&
+         update_entity.specifics.notes().special_node_type() !=
+             sync_pb::NotesSpecifics::ATTACHMENT) ||
+        (parent_node->is_note() &&
+         update_entity.specifics.notes().special_node_type() ==
+             sync_pb::NotesSpecifics::ATTACHMENT))) {
     return nullptr;
   }
   const vivaldi::NoteNode* note_node = CreateNoteNodeFromSpecifics(
@@ -549,7 +544,8 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
   const vivaldi::NoteNode* node = tracked_entity->note_node();
   const vivaldi::NoteNode* old_parent = node->parent();
   DCHECK(old_parent);
-  DCHECK(old_parent->is_folder());
+  DCHECK((old_parent->is_folder() && !node->is_attachment()) ||
+         (old_parent->is_note() && node->is_attachment()));
 
   const SyncedNoteTrackerEntity* new_parent_entity =
       note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
@@ -560,7 +556,8 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
   if (!new_parent) {
     return;
   }
-  if (!new_parent->is_folder()) {
+  if (!((new_parent->is_folder() && !node->is_attachment()) ||
+        (new_parent->is_note() && node->is_attachment()))) {
     return;
   }
   // Node update could be either in the node data (e.g. title or
@@ -653,7 +650,8 @@ const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
   const vivaldi::NoteNode* node = tracked_entity->note_node();
   const vivaldi::NoteNode* old_parent = node->parent();
   DCHECK(old_parent);
-  DCHECK(old_parent->is_folder());
+  DCHECK((old_parent->is_folder() && !node->is_attachment()) ||
+         (old_parent->is_note() && node->is_attachment()));
 
   const SyncedNoteTrackerEntity* new_parent_entity =
       note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));

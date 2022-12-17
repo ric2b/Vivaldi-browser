@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,7 +48,7 @@ const NGLayoutResult* NGUnpositionedListMarker::Layout(
   // typical atomic-inline baseline.
   const NGLayoutResult* marker_layout_result = marker_node.LayoutAtomicInline(
       parent_space, parent_style, parent_space.UseFirstLineStyle(),
-      NGBaselineAlgorithmType::kFirstLine);
+      NGBaselineAlgorithmType::kDefault);
   DCHECK(marker_layout_result);
   return marker_layout_result;
 }

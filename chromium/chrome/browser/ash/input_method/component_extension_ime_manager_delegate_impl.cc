@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -271,7 +271,7 @@ bool ComponentExtensionIMEManagerDelegateImpl::ReadEngineComponent(
     if (language_value->is_string()) {
       languages.insert(language_value->GetString());
     } else if (language_value->is_list()) {
-      for (const base::Value& elem : language_value->GetListDeprecated()) {
+      for (const base::Value& elem : language_value->GetList()) {
         if (elem.is_string())
           languages.insert(elem.GetString());
       }
@@ -289,7 +289,7 @@ bool ComponentExtensionIMEManagerDelegateImpl::ReadEngineComponent(
   if (!dict.GetList(extensions::manifest_keys::kLayouts, &layouts))
     return false;
 
-  base::Value::ConstListView layouts_list = layouts->GetListDeprecated();
+  const base::Value::List& layouts_list = layouts->GetList();
   if (!layouts_list.empty() && layouts_list[0].is_string())
     out->layout = layouts_list[0].GetString();
   else
@@ -324,13 +324,13 @@ bool ComponentExtensionIMEManagerDelegateImpl::ReadEngineComponent(
       dict.FindStringKey(extensions::manifest_keys::kOptionsPage);
   if (option_page) {
     url_string = *option_page;
-    GURL url = extensions::Extension::GetResourceURL(
+    GURL options_page_url = extensions::Extension::GetResourceURL(
         extensions::Extension::GetBaseURLFromExtensionId(
             component_extension.id),
         url_string);
-    if (!url.is_valid())
+    if (!options_page_url.is_valid())
       return false;
-    out->options_page_url = url;
+    out->options_page_url = options_page_url;
   } else {
     // Fallback to extension level options page.
     out->options_page_url = component_extension.options_page_url;
@@ -412,7 +412,7 @@ void ComponentExtensionIMEManagerDelegateImpl::ReadComponentExtensionsInfo(
       continue;
     }
 
-    for (const base::Value& value : component_list->GetListDeprecated()) {
+    for (const base::Value& value : component_list->GetList()) {
       if (!value.is_dict())
         continue;
 
@@ -424,6 +424,11 @@ void ComponentExtensionIMEManagerDelegateImpl::ReadComponentExtensionsInfo(
       if (base::StartsWith(engine.engine_id, "experimental_",
                            base::CompareCase::SENSITIVE) &&
           !base::FeatureList::IsEnabled(features::kMultilingualTyping)) {
+        continue;
+      }
+
+      if (engine.engine_id == "vkd_hi_inscript" &&
+          !base::FeatureList::IsEnabled(features::kHindiInscriptLayout)) {
         continue;
       }
 

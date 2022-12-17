@@ -1,10 +1,9 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 module url_rewrite.mojom;
 
-import "mojo/public/mojom/base/time.mojom";
 import "url/mojom/url.mojom";
 
 // Used by the browser to push URL rewrite rules to renderers. There will be

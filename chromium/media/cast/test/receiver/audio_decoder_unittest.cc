@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "media/cast/test/utility/audio_utility.h"
 #include "media/cast/test/utility/standalone_cast_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/openscreen/src/cast/streaming/encoded_frame.h"
 #include "third_party/opus/src/include/opus.h"
 
 namespace media {
@@ -84,7 +85,8 @@ class AudioDecoderTest : public ::testing::TestWithParam<TestScenario> {
   void FeedMoreAudio(base::TimeDelta duration, int num_dropped_frames) {
     // Prepare a simulated EncodedFrame to feed into the AudioDecoder.
     std::unique_ptr<EncodedFrame> encoded_frame(new EncodedFrame());
-    encoded_frame->dependency = EncodedFrame::KEY;
+    encoded_frame->dependency =
+        openscreen::cast::EncodedFrame::Dependency::kKeyFrame;
     encoded_frame->frame_id = last_frame_id_ + 1 + num_dropped_frames;
     encoded_frame->referenced_frame_id = encoded_frame->frame_id;
     last_frame_id_ = encoded_frame->frame_id;

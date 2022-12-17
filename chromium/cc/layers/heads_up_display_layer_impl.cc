@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -296,7 +296,7 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
               ->settings()
               .resource_settings.use_gpu_memory_buffer_resources);
 
-      uint32_t flags = gpu::SHARED_IMAGE_USAGE_DISPLAY;
+      uint32_t flags = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
       if (gpu_raster) {
         flags |= gpu::SHARED_IMAGE_USAGE_RASTER |
                  gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;

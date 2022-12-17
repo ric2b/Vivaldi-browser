@@ -1,16 +1,20 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef SERVICES_NETWORK_PUBLIC_CPP_FIRST_PARTY_SETS_MOJOM_TRAITS_H_
 #define SERVICES_NETWORK_PUBLIC_CPP_FIRST_PARTY_SETS_MOJOM_TRAITS_H_
 
-#include "net/cookies/first_party_set_entry.h"
-
+#include "base/containers/flat_map.h"
 #include "mojo/public/cpp/bindings/enum_traits.h"
+#include "mojo/public/cpp/bindings/struct_traits.h"
 #include "net/base/schemeful_site.h"
-#include "net/cookies/first_party_set_metadata.h"
-#include "net/cookies/same_party_context.h"
+#include "net/first_party_sets/first_party_set_entry.h"
+#include "net/first_party_sets/first_party_set_metadata.h"
+#include "net/first_party_sets/first_party_sets_cache_filter.h"
+#include "net/first_party_sets/first_party_sets_context_config.h"
+#include "net/first_party_sets/global_first_party_sets.h"
+#include "net/first_party_sets/same_party_context.h"
 #include "services/network/public/mojom/first_party_sets.mojom-shared.h"
 
 namespace mojo {
@@ -100,6 +104,62 @@ struct COMPONENT_EXPORT(FIRST_PARTY_SETS_MOJOM_TRAITS)
 
   static bool Read(network::mojom::FirstPartySetMetadataDataView metadata,
                    net::FirstPartySetMetadata* out);
+};
+
+template <>
+struct COMPONENT_EXPORT(FIRST_PARTY_SETS_MOJOM_TRAITS)
+    StructTraits<network::mojom::GlobalFirstPartySetsDataView,
+                 net::GlobalFirstPartySets> {
+  static const base::flat_map<net::SchemefulSite, net::FirstPartySetEntry>&
+  sets(const net::GlobalFirstPartySets& sets) {
+    return sets.entries();
+  }
+
+  static const base::flat_map<net::SchemefulSite, net::SchemefulSite>& aliases(
+      const net::GlobalFirstPartySets& sets) {
+    return sets.aliases();
+  }
+
+  static const net::FirstPartySetsContextConfig& manual_config(
+      const net::GlobalFirstPartySets& sets) {
+    return sets.manual_config();
+  }
+
+  static bool Read(network::mojom::GlobalFirstPartySetsDataView sets,
+                   net::GlobalFirstPartySets* out_sets);
+};
+
+template <>
+struct COMPONENT_EXPORT(FIRST_PARTY_SETS_MOJOM_TRAITS)
+    StructTraits<network::mojom::FirstPartySetsContextConfigDataView,
+                 net::FirstPartySetsContextConfig> {
+  static const base::flat_map<net::SchemefulSite,
+                              absl::optional<net::FirstPartySetEntry>>&
+  customizations(const net::FirstPartySetsContextConfig& config) {
+    return config.customizations();
+  }
+
+  static bool Read(network::mojom::FirstPartySetsContextConfigDataView config,
+                   net::FirstPartySetsContextConfig* out_config);
+};
+
+template <>
+struct COMPONENT_EXPORT(FIRST_PARTY_SETS_MOJOM_TRAITS)
+    StructTraits<network::mojom::FirstPartySetsCacheFilterDataView,
+                 net::FirstPartySetsCacheFilter> {
+  static const base::flat_map<net::SchemefulSite, int64_t>& filter(
+      const net::FirstPartySetsCacheFilter& cache_filter) {
+    return cache_filter.filter();
+  }
+
+  static int64_t browser_run_id(
+      const net::FirstPartySetsCacheFilter& cache_filter) {
+    return cache_filter.browser_run_id();
+  }
+
+  static bool Read(
+      network::mojom::FirstPartySetsCacheFilterDataView cache_filter,
+      net::FirstPartySetsCacheFilter* out_cache_filter);
 };
 
 }  // namespace mojo

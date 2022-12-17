@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,7 @@
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/shelf_spinner_controller.h"
 #include "chrome/browser/ui/ash/shelf/shelf_spinner_item_controller.h"
-#include "chrome/browser/ui/webui/chromeos/crostini_upgrader/crostini_upgrader_dialog.h"
+#include "chrome/browser/ui/webui/ash/crostini_upgrader/crostini_upgrader_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
@@ -63,7 +63,8 @@ const char kCrostiniDefaultImageServerUrl[] =
     "https://storage.googleapis.com/cros-containers/%d";
 const char kCrostiniDlcName[] = "termina-dlc";
 
-const base::FilePath::CharType kHomeDirectory[] = FILE_PATH_LITERAL("/home");
+const base::FilePath::CharType kHomeDirectory[] =
+    FILE_PATH_LITERAL("/home/chronos/user");
 
 namespace {
 
@@ -316,7 +317,7 @@ void LaunchCrostiniAppWithIntent(Profile* profile,
 
   if (crostini_manager->GetCrostiniDialogStatus(DialogType::UPGRADER)) {
     // Reshow the existing dialog.
-    chromeos::CrostiniUpgraderDialog::Reshow();
+    ash::CrostiniUpgraderDialog::Reshow();
     VLOG(1) << "Reshowing upgrade dialog";
     std::move(callback).Run(
         false, "LaunchCrostiniApp called while upgrade dialog showing");

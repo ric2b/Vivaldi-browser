@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -225,6 +225,44 @@ TEST_F(SideSearchSideContentsHelperTest, EmitsPerJourneyMetricsAutotriggered) {
   histogram_tester_.ExpectUniqueSample(
       "SideSearch.AutoTrigger."
       "NavigationCommittedWithinSideSearchCountPerJourney",
+      1, 1);
+}
+
+TEST_F(SideSearchSideContentsHelperTest, EmitsPerJourneyMetricsFromMenuOption) {
+  // Set helper created from menu option.
+  helper()->set_is_created_from_menu_option(true);
+
+  // Ensure redirected navigations correctly log navigations
+  LoadURL(kNonMatchUrl);
+  EXPECT_TRUE(!GetLastCommittedSideContentsEntry() ||
+              GetLastCommittedSideContentsEntry()->IsInitialEntry());
+  EXPECT_TRUE(delegate().last_search_url().is_empty());
+  EXPECT_EQ(GURL(kNonMatchUrl), delegate().tab_contents_url());
+
+  // Metrics should not be emitted until the side contents is destroyed.
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch.RedirectionToTabCountPerJourneyFromMenuOption", 0);
+
+  // A matching navigation will be allowed to proceed
+  LoadURL(kSearchMatchUrl);
+  EXPECT_EQ(GURL(kSearchMatchUrl),
+            GetLastCommittedSideContentsEntry()->GetURL());
+  EXPECT_EQ(GURL(kSearchMatchUrl), delegate().last_search_url());
+  EXPECT_FALSE(delegate().tab_contents_url().is_empty());
+
+  // Metrics should not be emitted until the side contents is destroyed.
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch."
+      "NavigationCommittedWithinSideSearchCountPerJourneyFromMenuOption",
+      0);
+
+  ResetSideContents();
+  // Deleting the side contents should emit the search journey metris.
+  histogram_tester_.ExpectUniqueSample(
+      "SideSearch.RedirectionToTabCountPerJourneyFromMenuOption", 1, 1);
+  histogram_tester_.ExpectUniqueSample(
+      "SideSearch."
+      "NavigationCommittedWithinSideSearchCountPerJourneyFromMenuOption",
       1, 1);
 }
 

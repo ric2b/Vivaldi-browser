@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,10 +65,10 @@ void WriteDataToProducer(
   // the duration of the write.
   producer_raw->Write(
       std::move(data_source),
-      WTF::Bind([](std::unique_ptr<mojo::DataPipeProducer>,
-                   scoped_refptr<base::RefCountedData<Vector<uint8_t>>>,
-                   MojoResult) {},
-                std::move(producer), std::move(data)));
+      WTF::BindOnce([](std::unique_ptr<mojo::DataPipeProducer>,
+                       scoped_refptr<base::RefCountedData<Vector<uint8_t>>>,
+                       MojoResult) {},
+                    std::move(producer), std::move(data)));
 }
 
 }  // namespace
@@ -101,6 +101,7 @@ void FileSystemAccessIncognitoFileDelegate::Trace(Visitor* visitor) const {
 base::FileErrorOr<int> FileSystemAccessIncognitoFileDelegate::Read(
     int64_t offset,
     base::span<uint8_t> data) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK_GE(offset, 0);
 
   base::File::Error file_error;
@@ -126,12 +127,13 @@ base::FileErrorOr<int> FileSystemAccessIncognitoFileDelegate::Read(
 base::FileErrorOr<int> FileSystemAccessIncognitoFileDelegate::Write(
     int64_t offset,
     const base::span<uint8_t> data) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK_GE(offset, 0);
 
   mojo::ScopedDataPipeProducerHandle producer_handle;
   mojo::ScopedDataPipeConsumerHandle consumer_handle;
   if (!CreateDataPipeForSize(data.size(), producer_handle, consumer_handle)) {
-    return base::File::Error::FILE_ERROR_FAILED;
+    return base::unexpected(base::File::Error::FILE_ERROR_FAILED);
   }
 
   auto ref_counted_data =
@@ -159,28 +161,57 @@ base::FileErrorOr<int> FileSystemAccessIncognitoFileDelegate::Write(
   return file_error == base::File::Error::FILE_OK ? bytes_written : file_error;
 }
 
-void FileSystemAccessIncognitoFileDelegate::GetLength(
+base::FileErrorOr<int64_t> FileSystemAccessIncognitoFileDelegate::GetLength() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  base::File::Error file_error;
+  int64_t length;
+  mojo_ptr_->GetLength(&file_error, &length);
+  CHECK_GE(length, 0);
+  return file_error == base::File::Error::FILE_OK ? length : file_error;
+}
+
+void FileSystemAccessIncognitoFileDelegate::GetLengthAsync(
     base::OnceCallback<void(base::FileErrorOr<int64_t>)> callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-  mojo_ptr_->GetLength(WTF::Bind(
+  mojo_ptr_->GetLength(WTF::BindOnce(
       [](base::OnceCallback<void(base::FileErrorOr<int64_t>)> callback,
-         base::File::Error file_error, uint64_t length) {
+         base::File::Error file_error, int64_t length) {
+        CHECK_GE(length, 0);
         std::move(callback).Run(
             file_error == base::File::Error::FILE_OK ? length : file_error);
       },
       std::move(callback)));
 }
 
-void FileSystemAccessIncognitoFileDelegate::SetLength(
+base::FileErrorOr<bool> FileSystemAccessIncognitoFileDelegate::SetLength(
+    int64_t length) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_GE(length, 0);
+  base::File::Error file_error;
+  mojo_ptr_->SetLength(length, &file_error);
+  return file_error == base::File::Error::FILE_OK ? true : file_error;
+}
+
+void FileSystemAccessIncognitoFileDelegate::SetLengthAsync(
     int64_t length,
     base::OnceCallback<void(base::File::Error)> callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   CHECK_GE(length, 0);
 
-  mojo_ptr_->SetLength(length, WTF::Bind(std::move(callback)));
+  mojo_ptr_->SetLength(length, WTF::BindOnce(std::move(callback)));
 }
 
-void FileSystemAccessIncognitoFileDelegate::Flush(
+bool FileSystemAccessIncognitoFileDelegate::Flush() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Flush is a no-op for in-memory file systems. Even if the file delegate is
+  // used for other FS types, writes through the FileSystemOperationRunner are
+  // automatically flushed. If this proves to be too slow, we can consider
+  // changing the FileSystemAccessFileDelegateHostImpl to write with a
+  // FileStreamWriter and only flushing when this method is called.
+  return true;
+}
+
+void FileSystemAccessIncognitoFileDelegate::FlushAsync(
     base::OnceCallback<void(bool)> callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   // Flush is a no-op for in-memory file systems. Even if the file delegate is
@@ -189,10 +220,16 @@ void FileSystemAccessIncognitoFileDelegate::Flush(
   // changing the FileSystemAccessFileDelegateHostImpl to write with a
   // FileStreamWriter and only flushing when this method is called.
   task_runner_->PostTask(FROM_HERE,
-                         WTF::Bind(std::move(callback), /*success=*/true));
+                         WTF::BindOnce(std::move(callback), /*success=*/true));
 }
 
-void FileSystemAccessIncognitoFileDelegate::Close(base::OnceClosure callback) {
+void FileSystemAccessIncognitoFileDelegate::Close() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  mojo_ptr_.reset();
+}
+
+void FileSystemAccessIncognitoFileDelegate::CloseAsync(
+    base::OnceClosure callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   mojo_ptr_.reset();
 

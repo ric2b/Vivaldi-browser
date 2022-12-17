@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,6 @@ import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
@@ -86,7 +85,6 @@ public class IdentityDiscControllerTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1363220")
     public void testIdentityDiscWithSignin() {
         // When user is signed out, Identity Disc should not be visible on the NTP.
         onView(withId(R.id.optional_toolbar_button)).check((view, noViewException) -> {
@@ -101,11 +99,8 @@ public class IdentityDiscControllerTest {
         // TODO(https://crbug.com/1132291): Remove the reload once the sign-in without sync observer
         //  is implemented.
         TestThreadUtils.runOnUiThreadBlocking(mTab::reload);
-        waitForView(allOf(withId(R.id.optional_toolbar_button), isDisplayed()));
-
-        onView(withId(R.id.optional_toolbar_button))
-                .check(matches(
-                        withContentDescription(R.string.accessibility_toolbar_btn_identity_disc)));
+        waitForView(allOf(withId(R.id.optional_toolbar_button), isDisplayed(),
+                withContentDescription(R.string.accessibility_toolbar_btn_identity_disc)));
 
         mSigninTestRule.signOut();
         waitForView(allOf(withId(R.id.optional_toolbar_button),
@@ -114,7 +109,6 @@ public class IdentityDiscControllerTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1363220")
     public void testIdentityDiscWithSigninAndEnableSync() {
         // When user is signed out, Identity Disc should not be visible on the NTP.
         onView(withId(R.id.optional_toolbar_button)).check((view, noViewException) -> {
@@ -126,11 +120,9 @@ public class IdentityDiscControllerTest {
 
         // Identity Disc should be shown on sign-in state change without NTP refresh.
         mSigninTestRule.addTestAccountThenSigninAndEnableSync();
-        waitForView(allOf(withId(R.id.optional_toolbar_button), isDisplayed()));
-
-        onView(withId(R.id.optional_toolbar_button))
-                .check(matches(
-                        withContentDescription(R.string.accessibility_toolbar_btn_identity_disc)));
+        waitForView(allOf(withId(R.id.optional_toolbar_button),
+                withContentDescription(R.string.accessibility_toolbar_btn_identity_disc),
+                isDisplayed()));
 
         mSigninTestRule.signOut();
         waitForView(allOf(withId(R.id.optional_toolbar_button),

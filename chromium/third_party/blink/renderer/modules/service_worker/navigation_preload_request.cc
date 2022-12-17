@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,7 +46,8 @@ void NavigationPreloadRequest::OnReceiveEarlyHints(
 
 void NavigationPreloadRequest::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr response_head,
-    mojo::ScopedDataPipeConsumerHandle body) {
+    mojo::ScopedDataPipeConsumerHandle body,
+    absl::optional<mojo_base::BigBuffer> cached_metadata) {
   DCHECK(!response_);
   response_ = std::make_unique<WebURLResponse>();
   // TODO(horo): Set report_security_info to true when DevTools is attached.
@@ -83,9 +84,6 @@ void NavigationPreloadRequest::OnUploadProgress(
     OnUploadProgressCallback ack_callback) {
   NOTREACHED();
 }
-
-void NavigationPreloadRequest::OnReceiveCachedMetadata(
-    mojo_base::BigBuffer data) {}
 
 void NavigationPreloadRequest::OnTransferSizeUpdated(
     int32_t transfer_size_diff) {}

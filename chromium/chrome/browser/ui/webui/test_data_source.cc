@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,9 +41,6 @@ TestDataSource::TestDataSource(std::string root) {
   custom_paths_ = {
       {"/chai.js", "third_party/chaijs/chai.js"},
       {"/mocha.js", "third_party/mocha/mocha.js"},
-      {"/test_loader.html", "ui/webui/resources/html/test_loader.html"},
-      {"/test_loader.js", "ui/webui/resources/js/test_loader.js"},
-      {"/test_loader_util.js", "ui/webui/resources/js/test_loader_util.js"},
   };
 }
 

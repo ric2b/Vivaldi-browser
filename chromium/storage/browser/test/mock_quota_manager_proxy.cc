@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,14 +22,6 @@ MockQuotaManagerProxy::MockQuotaManagerProxy(
           std::move(quota_manager_task_runner),
           quota_manager ? quota_manager->profile_path() : base::FilePath()),
       mock_quota_manager_(quota_manager) {}
-
-void MockQuotaManagerProxy::RegisterClient(
-    mojo::PendingRemote<storage::mojom::QuotaClient> client,
-    QuotaClientType client_type,
-    const std::vector<blink::mojom::StorageType>& storage_types) {
-  DCHECK(!registered_client_);
-  registered_client_.Bind(std::move(client));
-}
 
 void MockQuotaManagerProxy::UpdateOrCreateBucket(
     const BucketInitParams& params,

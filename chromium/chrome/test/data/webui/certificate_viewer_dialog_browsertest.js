@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,7 @@ function loadTestModule() {
   const scriptPolicy =
       window.trustedTypes.createPolicy('certificate-test-script', {
         createScriptURL: () =>
-            'chrome://test/certificate_viewer_dialog_test.js',
+            'chrome://webui-test/certificate_viewer_dialog_test.js',
       });
   const s = document.createElement('script');
   s.type = 'module';

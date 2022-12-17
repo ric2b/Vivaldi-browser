@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,6 +71,7 @@ TEST_F(AccountConsistencyBrowserAgentTest, OnGoIncognitoWithNoURL) {
 
 // Tests the command sent by OnGoIncognito() when there is a valid URL.
 TEST_F(AccountConsistencyBrowserAgentTest, OnGoIncognitoWithURL) {
+  // This URL is not opened.
   GURL url("http://www.example.com");
   __block OpenNewTabCommand* received_command = nil;
   OCMExpect([application_commands_mock_

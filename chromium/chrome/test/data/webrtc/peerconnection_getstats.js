@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 The Chromium Authors. All rights reserved.
+ * Copyright 2016 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
@@ -113,6 +113,10 @@ let kRTCInboundRtpStreamStats = new RTCStats(kRTCReceivedRtpStreamStats, {
   totalProcessingDelay: 'number',
   totalInterFrameDelay: 'number',
   totalSquaredInterFrameDelay: 'number',
+  freezeCount: 'number',
+  pauseCount: 'number',
+  totalFreezesDuration: 'number',
+  totalPausesDuration: 'number',
   lastPacketReceivedTimestamp: 'number',
   fecPacketsReceived: 'number',
   fecPacketsDiscarded: 'number',
@@ -143,6 +147,9 @@ let kRTCInboundRtpStreamStats = new RTCStats(kRTCReceivedRtpStreamStats, {
   estimatedPlayoutTimestamp: 'number',
   fractionLost: 'number',  // Obsolete, moved to RTCRemoteInboundRtpStreamStats.
   decoderImplementation: 'string',
+  framesAssembledFromMultiplePackets: 'number',
+  totalAssemblyTime: 'number',
+  googTimingFrameInfo: 'string',
 });
 addRTCStatsToAllowlist(
     Presence.MANDATORY, 'inbound-rtp', kRTCInboundRtpStreamStats);
@@ -426,6 +433,11 @@ let kRTCIceCandidateStats = new RTCStats(null, {
   priority: 'number',
   url: 'string',
   deleted: 'boolean',
+  foundation: 'string',
+  relatedAddress:  'string',
+  relatedPort: 'number',
+  usernameFragment: 'string',
+  tcpType: 'string',
 });
 addRTCStatsToAllowlist(
     Presence.MANDATORY, 'local-candidate', kRTCIceCandidateStats);

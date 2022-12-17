@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,9 +27,9 @@
 #include "chrome/browser/media/router/providers/common/buffered_message_sender.h"
 #include "chrome/browser/media/router/test/mock_mojo_media_router.h"
 #include "chrome/browser/media/router/test/provider_test_helpers.h"
-#include "components/cast_channel/cast_message_util.h"
-#include "components/cast_channel/cast_test_util.h"
 #include "components/media_router/common/media_source.h"
+#include "components/media_router/common/providers/cast/channel/cast_message_util.h"
+#include "components/media_router/common/providers/cast/channel/cast_test_util.h"
 #include "components/media_router/common/test/mock_logger.h"
 #include "components/media_router/common/test/test_helper.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -44,7 +44,6 @@
 #include "third_party/openscreen/src/cast/common/public/cast_streaming_app_ids.h"
 
 using base::test::IsJson;
-using base::test::ParseJson;
 using base::test::ParseJsonDict;
 using testing::_;
 using testing::AnyNumber;
@@ -309,7 +308,7 @@ class CastActivityManagerTest : public testing::Test,
     SetSessionForTest(sink_.id(),
                       CastSession::From(sink_, *response.receiver_status));
 
-    std::move(launch_session_callback_).Run(std::move(response));
+    std::move(launch_session_callback_).Run(std::move(response), nullptr);
     RunUntilIdle();
   }
 
@@ -375,7 +374,7 @@ class CastActivityManagerTest : public testing::Test,
           mirroring_activity_callback_ = base::DoNothing();
         });
     // We expect EnsureConnection() to be called for both the sender client and
-    // |message_handler_.sender_id()|. The latter is captured in
+    // |message_handler_.source_id()|. The latter is captured in
     // ResolveMirroringSessionLaunch().
     //
     // CallLaunchSessionSuccess() calls VerifyAndClearExpectations() on
@@ -390,7 +389,7 @@ class CastActivityManagerTest : public testing::Test,
     // MediaRouter is notified of new route.
     ExpectSingleRouteUpdate();
     EXPECT_CALL(message_handler_,
-                EnsureConnection(kChannelId, message_handler_.sender_id(),
+                EnsureConnection(kChannelId, message_handler_.source_id(),
                                  "theTransportId",
                                  cast_channel::VirtualConnectionType::kStrong));
 
@@ -517,6 +516,37 @@ TEST_F(CastActivityManagerTest, LaunchAppSessionWithAppParams) {
   EXPECT_EQ(RouteControllerType::kGeneric, route_->controller_type());
 }
 
+TEST_F(CastActivityManagerTest, LaunchSessionSuccessWhenUserAllowed) {
+  CallLaunchSessionSuccess();
+
+  cast_channel::LaunchSessionCallbackWrapper out_callback;
+
+  cast_channel::LaunchSessionResponse response;
+  response.result =
+      cast_channel::LaunchSessionResponse::Result::kPendingUserAuth;
+  std::move(launch_session_callback_).Run(std::move(response), &out_callback);
+
+  EXPECT_FALSE(out_callback.callback.is_null());
+
+  cast_channel::LaunchSessionResponse response2;
+  response2.result = cast_channel::LaunchSessionResponse::Result::kUserAllowed;
+  std::move(out_callback.callback).Run(std::move(response2), &out_callback);
+
+  EXPECT_FALSE(out_callback.callback.is_null());
+
+  cast_channel::LaunchSessionResponse response3;
+  response3.result = cast_channel::LaunchSessionResponse::Result::kOk;
+  response3.receiver_status = MakeReceiverStatus(kAppId1);
+
+  std::move(out_callback.callback).Run(std::move(response3), &out_callback);
+
+  EXPECT_TRUE(out_callback.callback.is_null());
+
+  RunUntilIdle();
+
+  EXPECT_EQ(RouteControllerType::kGeneric, route_->controller_type());
+}
+
 TEST_F(CastActivityManagerTest, LaunchMirroringSession) {
   LaunchNonSdkMirroringSession();
   EXPECT_EQ(RouteControllerType::kMirroring, route_->controller_type());
@@ -563,7 +593,48 @@ TEST_F(CastActivityManagerTest, LaunchSessionFails) {
 
   cast_channel::LaunchSessionResponse response;
   response.result = cast_channel::LaunchSessionResponse::Result::kError;
-  std::move(launch_session_callback_).Run(std::move(response));
+  std::move(launch_session_callback_).Run(std::move(response), nullptr);
+  RunUntilIdle();
+}
+
+TEST_F(CastActivityManagerTest, LaunchSessionFailsWhenUserNotAllowed) {
+  CallLaunchSessionFailure();
+
+  cast_channel::LaunchSessionCallbackWrapper out_callback;
+  cast_channel::LaunchSessionResponse response;
+  response.result =
+      cast_channel::LaunchSessionResponse::Result::kPendingUserAuth;
+  std::move(launch_session_callback_).Run(std::move(response), &out_callback);
+
+  EXPECT_FALSE(out_callback.callback.is_null());
+
+  EXPECT_CALL(
+      *app_activity_,
+      ClosePresentationConnections(
+          blink::mojom::PresentationConnectionCloseReason::CONNECTION_ERROR));
+  ExpectEmptyRouteUpdate();
+
+  cast_channel::LaunchSessionResponse response2;
+  response2.result =
+      cast_channel::LaunchSessionResponse::Result::kUserNotAllowed;
+  std::move(out_callback.callback).Run(std::move(response2), &out_callback);
+  EXPECT_TRUE(out_callback.callback.is_null());
+}
+
+TEST_F(CastActivityManagerTest,
+       LaunchSessionFailsWhenNotificationsAreDisabledOnReceiver) {
+  CallLaunchSessionFailure();
+
+  EXPECT_CALL(
+      *app_activity_,
+      ClosePresentationConnections(
+          blink::mojom::PresentationConnectionCloseReason::CONNECTION_ERROR));
+  ExpectEmptyRouteUpdate();
+
+  cast_channel::LaunchSessionResponse response;
+  response.result =
+      cast_channel::LaunchSessionResponse::Result::kNotificationDisabled;
+  std::move(launch_session_callback_).Run(std::move(response), nullptr);
   RunUntilIdle();
 }
 
@@ -576,7 +647,7 @@ TEST_F(CastActivityManagerTest, LaunchSessionFailsWhenSessionIsRemoved) {
   EXPECT_CALL(*this, LaunchSessionFailed());
   cast_channel::LaunchSessionResponse response;
   response.result = cast_channel::LaunchSessionResponse::Result::kError;
-  std::move(launch_session_callback_).Run(std::move(response));
+  std::move(launch_session_callback_).Run(std::move(response), nullptr);
 }
 
 TEST_F(CastActivityManagerTest, LaunchAppSessionFailsWithAppParams) {
@@ -774,8 +845,8 @@ TEST_F(CastActivityManagerTest, AppMessageFromReceiver) {
 
   // Destination ID matches client ID.
   cast::channel::CastMessage message = cast_channel::CreateCastMessage(
-      "urn:x-cast:com.google.foo", base::Value(base::Value::Type::DICTIONARY),
-      "sourceId", "theClientId");
+      "urn:x-cast:com.google.foo", base::Value(base::Value::Dict()), "sourceId",
+      "theClientId");
 
   EXPECT_CALL(*app_activity_, OnAppMessage(IsCastChannelMessage(message)));
   manager_->OnAppMessage(kChannelId, message);
@@ -789,7 +860,7 @@ TEST_F(CastActivityManagerTest, OnMediaStatusUpdated) {
 
   EXPECT_CALL(*app_activity_,
               SendMediaStatusToClients(IsJson(status), request_id));
-  manager_->OnMediaStatusUpdated(sink_, ParseJson(status), request_id);
+  manager_->OnMediaStatusUpdated(sink_, ParseJsonDict(status), request_id);
 }
 
 TEST_F(CastActivityManagerTest, SecondPendingRequestCancelsTheFirst) {

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/browser_interface_broker_impl.h"
+#include "content/browser/buckets/bucket_context.h"
 #include "content/browser/renderer_host/code_cache_host_impl.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/common/content_export.h"
@@ -34,6 +35,7 @@
 #include "third_party/blink/public/mojom/service_worker/service_worker_container.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_container_type.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
+#include "third_party/blink/public/mojom/usb/web_usb_service.mojom-forward.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
 #include "third_party/blink/public/mojom/webtransport/web_transport_connector.mojom.h"
 #include "url/origin.h"
@@ -53,7 +55,7 @@ struct ServiceWorkerVersionBaseInfo;
 // execution context instance.
 //
 // Lives on the UI thread.
-class CONTENT_EXPORT ServiceWorkerHost {
+class CONTENT_EXPORT ServiceWorkerHost : public BucketContext {
  public:
   ServiceWorkerHost(mojo::PendingAssociatedReceiver<
                         blink::mojom::ServiceWorkerContainerHost> host_receiver,
@@ -63,7 +65,7 @@ class CONTENT_EXPORT ServiceWorkerHost {
   ServiceWorkerHost(const ServiceWorkerHost&) = delete;
   ServiceWorkerHost& operator=(const ServiceWorkerHost&) = delete;
 
-  ~ServiceWorkerHost();
+  ~ServiceWorkerHost() override;
 
   int worker_process_id() const { return worker_process_id_; }
   ServiceWorkerVersion* version() const { return version_; }
@@ -92,11 +94,15 @@ class CONTENT_EXPORT ServiceWorkerHost {
   void BindHidService(mojo::PendingReceiver<blink::mojom::HidService> receiver);
 #endif  // !BUILDFLAG(IS_ANDROID)
 
+  void BindUsbService(
+      mojo::PendingReceiver<blink::mojom::WebUsbService> receiver);
+
   content::ServiceWorkerContainerHost* container_host() {
     return container_host_.get();
   }
 
   net::NetworkIsolationKey GetNetworkIsolationKey() const;
+  net::NetworkAnonymizationKey GetNetworkAnonymizationKey() const;
   const base::UnguessableToken& GetReportingSource() const;
 
   StoragePartition* GetStoragePartition() const;
@@ -107,9 +113,20 @@ class CONTENT_EXPORT ServiceWorkerHost {
   void CreateBroadcastChannelProvider(
       mojo::PendingReceiver<blink::mojom::BroadcastChannelProvider> receiver);
 
+  void CreateBucketManagerHost(
+      mojo::PendingReceiver<blink::mojom::BucketManagerHost> receiver);
+
   base::WeakPtr<ServiceWorkerHost> GetWeakPtr();
 
   void ReportNoBinderForInterface(const std::string& error);
+
+  // BucketContext:
+  blink::StorageKey GetBucketStorageKey() override;
+  blink::mojom::PermissionStatus GetPermissionStatus(
+      blink::PermissionType permission_type) override;
+  void BindCacheStorageForBucket(
+      const storage::BucketInfo& bucket,
+      mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) override;
 
  private:
   int worker_process_id_ = ChildProcessHost::kInvalidUniqueID;

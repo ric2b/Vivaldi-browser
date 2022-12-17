@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,6 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/types/pass_key.h"
-#include "net/url_request/url_request.h"
 #include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/file_system/async_file_util.h"
 #include "storage/browser/file_system/copy_or_move_hook_delegate.h"

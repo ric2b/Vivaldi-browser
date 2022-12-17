@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@
 #include "components/translate/core/common/translate_metrics.h"
 #include "components/translate/core/common/translate_util.h"
 #include "components/translate/core/language_detection/language_detection_model.h"
-#import "components/translate/ios/browser/js_translate_manager.h"
+#import "components/translate/ios/browser/js_translate_web_frame_manager_factory.h"
 #import "components/translate/ios/browser/language_detection_controller.h"
 #include "components/translate/ios/browser/language_detection_model_service.h"
 #import "components/translate/ios/browser/translate_controller.h"
@@ -75,13 +75,9 @@ IOSTranslateDriver::IOSTranslateDriver(
           web_state, language_detection_model,
           translate_manager_->translate_client()->GetPrefs());
 
-  // Create the translate controller.
-  JsTranslateManager* js_translate_manager =
-      [[JsTranslateManager alloc] initWithWebState:web_state];
-  translate_controller_ =
-      std::make_unique<TranslateController>(web_state, js_translate_manager);
-
-  translate_controller_->set_observer(this);
+  TranslateController::CreateForWebState(
+      web_state, JSTranslateWebFrameManagerFactory::GetInstance());
+  TranslateController::FromWebState(web_state)->set_observer(this);
 }
 
 IOSTranslateDriver::~IOSTranslateDriver() {
@@ -166,13 +162,14 @@ void IOSTranslateDriver::TranslatePage(int page_seq_no,
   source_language_ = source_lang;
   target_language_ = target_lang;
   pending_page_seq_no_ = page_seq_no;
-  translate_controller_->InjectTranslateScript(translate_script);
+  TranslateController::FromWebState(web_state_)
+      ->InjectTranslateScript(translate_script);
 }
 
 void IOSTranslateDriver::RevertTranslation(int page_seq_no) {
   if (page_seq_no != page_seq_no_)
     return;  // The user navigated away.
-  translate_controller_->RevertTranslation();
+  TranslateController::FromWebState(web_state_)->RevertTranslation();
 }
 
 bool IOSTranslateDriver::IsIncognito() {
@@ -216,7 +213,7 @@ void IOSTranslateDriver::TranslationDidSucceed(
   if (!IsPageValid(page_seq_no))
     return;
   std::string actual_source_lang;
-  TranslateErrors::Type translate_errors = TranslateErrors::NONE;
+  TranslateErrors translate_errors = TranslateErrors::NONE;
   // Translation was successfull; if it was auto, retrieve the source
   // language the Translate Element detected.
   if (source_lang == kAutoDetectionLanguage) {
@@ -243,10 +240,9 @@ bool IOSTranslateDriver::IsPageValid(int page_seq_no) const {
 
 // TranslateController::Observer implementation.
 
-void IOSTranslateDriver::OnTranslateScriptReady(
-    TranslateErrors::Type error_type,
-    double load_time,
-    double ready_time) {
+void IOSTranslateDriver::OnTranslateScriptReady(TranslateErrors error_type,
+                                                double load_time,
+                                                double ready_time) {
   if (!IsPageValid(pending_page_seq_no_))
     return;
 
@@ -258,14 +254,14 @@ void IOSTranslateDriver::OnTranslateScriptReady(
 
   ReportTimeToLoad(load_time);
   ReportTimeToBeReady(ready_time);
-  const char kAutoDetectionLanguage[] = "auto";
   std::string source = (source_language_ != kUnknownLanguageCode)
                            ? source_language_
                            : kAutoDetectionLanguage;
-  translate_controller_->StartTranslation(source_language_, target_language_);
+  TranslateController::FromWebState(web_state_)
+      ->StartTranslation(source_language_, target_language_);
 }
 
-void IOSTranslateDriver::OnTranslateComplete(TranslateErrors::Type error_type,
+void IOSTranslateDriver::OnTranslateComplete(TranslateErrors error_type,
                                              const std::string& source_language,
                                              double translation_time) {
   if (!IsPageValid(pending_page_seq_no_))

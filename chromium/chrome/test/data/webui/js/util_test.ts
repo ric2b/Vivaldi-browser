@@ -1,8 +1,8 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {findAncestor, quoteString} from 'chrome://resources/js/util.m.js';
+import {findAncestor, quoteString} from 'chrome://resources/js/util.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 suite('UtilModuleTest', function() {

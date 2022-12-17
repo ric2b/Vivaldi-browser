@@ -29,20 +29,13 @@ Please visit [Sparkle's website](http://sparkle-project.org) for up to date docu
 
 ## Requirements
 
-* Runtime: macOS 10.11 or greater
+* Runtime: macOS 10.13 or greater for 2.3, macOS 10.11 or greater for 2.2.x
 * Build: Latest major Xcode (stable or beta, whichever is latest) and one major version less.
 * HTTPS server for serving updates (see [App Transport Security](http://sparkle-project.org/documentation/app-transport-security/))
 
 ## Usage
 
 See [getting started guide](https://sparkle-project.org/documentation/). No code is necessary, but a bit of Xcode configuration is required.
-
-## Development
-
-This repository uses git submodules, and will not build unless you clone recursively. Also, GitHub-provided ZIP/tar archives are broken due to GitHub not supporting git submodules properly.
-
-    git clone https://github.com/sparkle-project/Sparkle
-    git submodule update --init --recursive
 
 ### Troubleshooting
 

@@ -1,10 +1,9 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "services/network/public/cpp/cors/cors.h"
 
-#include <algorithm>
 #include <cctype>
 #include <set>
 #include <vector>
@@ -12,6 +11,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "net/base/mime_util.h"
@@ -107,7 +107,7 @@ bool IsCorsUnsafeRequestHeaderByte(char c) {
 // |value| should be lower case.
 bool IsCorsSafelistedLowerCaseContentType(const std::string& value) {
   DCHECK_EQ(value, base::ToLowerASCII(value));
-  if (std::any_of(value.begin(), value.end(), IsCorsUnsafeRequestHeaderByte))
+  if (base::ranges::any_of(value, IsCorsUnsafeRequestHeaderByte))
     return false;
 
   std::string mime_type = ExtractMIMETypeFromMediaType(value);
@@ -349,11 +349,20 @@ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
       // The `Sec-CH-Prefers-Color-Scheme` header field is modeled after the
       // prefers-color-scheme user preference media feature. It reflects the
       // user’s desire that the page use a light or dark color theme. This is
-      // currently pull from operating system preferences, although there may be
-      // internal UI in the future.
+      // currently pulled from operating system preferences, although there may
+      // be internal UI in the future.
       //
       // https://wicg.github.io/user-preference-media-features-headers/#sec-ch-prefers-color-scheme
       "sec-ch-prefers-color-scheme",
+
+      // The `Sec-CH-Prefers-Reduced-Motion` header field is modeled after the
+      // prefers-reduced-motion user preference media feature. It reflects the
+      // user’s desire that the page minimizes the amount of animation or motion
+      // it uses. This is currently pulled from operating system preferences,
+      // although there may be internal UI in the future.
+      //
+      // https://wicg.github.io/user-preference-media-features-headers/#sec-ch-prefers-reduced-motion
+      "sec-ch-prefers-reduced-motion",
 
       // The Device Memory header field is a number that indicates the client’s
       // device memory i.e. approximate amount of ram in GiB. The header value
@@ -402,12 +411,11 @@ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
     return lower_value == "on";
 
   if (lower_name == "accept") {
-    return !std::any_of(value.begin(), value.end(),
-                        IsCorsUnsafeRequestHeaderByte);
+    return !base::ranges::any_of(value, IsCorsUnsafeRequestHeaderByte);
   }
 
   if (lower_name == "accept-language" || lower_name == "content-language") {
-    return std::all_of(value.begin(), value.end(), [](char c) {
+    return base::ranges::all_of(value, [](char c) {
       return (0x30 <= c && c <= 0x39) || (0x41 <= c && c <= 0x5a) ||
              (0x61 <= c && c <= 0x7a) || c == 0x20 || c == 0x2a || c == 0x2c ||
              c == 0x2d || c == 0x2e || c == 0x3b || c == 0x3d;
@@ -424,7 +432,7 @@ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
     // - Only one range is provided
     // - No suffix (bytes=-x) ranges
 
-    if (std::any_of(lower_value.begin(), lower_value.end(), [](char c) {
+    if (base::ranges::any_of(lower_value, [](char c) {
           return net::HttpUtil::IsLWS(c) || c == ',';
         })) {
       return false;
@@ -497,10 +505,6 @@ bool IsForbiddenMethod(const std::string& method) {
   return upper_method == net::HttpRequestHeaders::kConnectMethod ||
          upper_method == net::HttpRequestHeaders::kTraceMethod ||
          upper_method == net::HttpRequestHeaders::kTrackMethod;
-}
-
-bool IsOkStatus(int status) {
-  return status >= 200 && status < 300;
 }
 
 bool IsCorsSameOriginResponseType(mojom::FetchResponseType type) {

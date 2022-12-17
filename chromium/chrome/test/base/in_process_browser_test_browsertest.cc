@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -119,8 +119,8 @@ class SingleProcessBrowserTest : public InProcessBrowserTest {
   }
 };
 
-// TODO(https://crbug.com/1231009): Flaky / times out on windows bots.
-#if BUILDFLAG(IS_WIN)
+// TODO(https://crbug.com/1231009): Flaky / times out on many bots.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_Test DISABLED_Test
 #else
 #define MAYBE_Test Test

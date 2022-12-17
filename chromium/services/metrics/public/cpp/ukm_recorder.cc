@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 
 namespace ukm {
 
-const base::Feature kUkmFeature = {"Ukm", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kUkmFeature, "Ukm", base::FEATURE_ENABLED_BY_DEFAULT);
 
 UkmRecorder::UkmRecorder() = default;
 
@@ -74,7 +74,7 @@ ukm::SourceId UkmRecorder::GetSourceIdForWebIdentityFromScope(
 
 // static
 ukm::SourceId UkmRecorder::GetSourceIdForRedirectUrl(
-    base::PassKey<DIPSBounceDetector>,
+    base::PassKey<DIPSNavigationHandle>,
     const GURL& redirect_url) {
   return UkmRecorder::GetSourceIdFromScopeImpl(redirect_url,
                                                SourceIdType::REDIRECT_ID);

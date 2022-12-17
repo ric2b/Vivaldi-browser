@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,6 +67,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       int32_t routing_id,
       mojo::PendingAssociatedRemote<mojom::Frame> frame_remote,
       const blink::LocalFrameToken& frame_token,
+      const blink::DocumentToken& document_token,
       LifecycleStateImpl lifecycle_state,
       scoped_refptr<BrowsingContextState> browsing_context_state);
 
@@ -267,8 +268,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       blink::mojom::ServiceWorkerContainerInfoForClientPtr container_info,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           prefetch_loader_factory,
-      const blink::ParsedPermissionsPolicy& permissions_policy,
+      const absl::optional<blink::ParsedPermissionsPolicy>& permissions_policy,
       blink::mojom::PolicyContainerPtr policy_container,
+      const blink::DocumentToken& document_token,
       const base::UnguessableToken& devtools_navigation_token) override;
   void SendCommitFailedNavigation(
       mojom::NavigationClient* navigation_client,
@@ -281,6 +283,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       const absl::optional<std::string>& error_page_content,
       std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
           subresource_loader_factories,
+      const blink::DocumentToken& document_token,
       blink::mojom::PolicyContainerPtr policy_container) override;
 
  private:

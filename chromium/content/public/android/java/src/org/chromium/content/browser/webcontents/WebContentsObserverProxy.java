@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@ import org.chromium.content_public.browser.LoadCommittedDetails;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.mojom.VirtualKeyboardMode;
 import org.chromium.url.GURL;
 
 /**
@@ -152,10 +153,20 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void didFinishNavigation(NavigationHandle navigation) {
+    public void didFinishNavigationInPrimaryMainFrame(NavigationHandle navigation) {
         handleObserverCall();
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didFinishNavigation(navigation);
+            mObserversIterator.next().didFinishNavigationInPrimaryMainFrame(navigation);
+        }
+        finishObserverCall();
+    }
+
+    @Override
+    @CalledByNative
+    public void didFinishNavigationNoop(NavigationHandle navigation) {
+        handleObserverCall();
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().didFinishNavigationNoop(navigation);
         }
         finishObserverCall();
     }
@@ -263,20 +274,38 @@ class WebContentsObserverProxy extends WebContentsObserver {
     }
 
     @CalledByNative
-    private void didFinishLoad(int renderProcessId, int renderFrameId, GURL url,
+    private void didFinishLoadInPrimaryMainFrame(int renderProcessId, int renderFrameId, GURL url,
+            boolean isKnownValid, @LifecycleState int frameLifecycleState) {
+        didFinishLoadInPrimaryMainFrame(new GlobalRenderFrameHostId(renderProcessId, renderFrameId),
+                url, isKnownValid, frameLifecycleState);
+    }
+
+    @Override
+    public void didFinishLoadInPrimaryMainFrame(GlobalRenderFrameHostId rfhId, GURL url,
+            boolean isKnownValid, @LifecycleState int rfhLifecycleState) {
+        handleObserverCall();
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().didFinishLoadInPrimaryMainFrame(
+                    rfhId, url, isKnownValid, rfhLifecycleState);
+        }
+        finishObserverCall();
+    }
+
+    @CalledByNative
+    private void didFinishLoadNoop(int renderProcessId, int renderFrameId, GURL url,
             boolean isKnownValid, boolean isInPrimaryMainFrame,
             @LifecycleState int frameLifecycleState) {
-        didFinishLoad(new GlobalRenderFrameHostId(renderProcessId, renderFrameId), url,
+        didFinishLoadNoop(new GlobalRenderFrameHostId(renderProcessId, renderFrameId), url,
                 isKnownValid, isInPrimaryMainFrame, frameLifecycleState);
     }
 
     @Override
-    public void didFinishLoad(GlobalRenderFrameHostId rfhId, GURL url, boolean isKnownValid,
+    public void didFinishLoadNoop(GlobalRenderFrameHostId rfhId, GURL url, boolean isKnownValid,
             boolean isInPrimaryMainFrame, @LifecycleState int rfhLifecycleState) {
         handleObserverCall();
         try { // Vivaldi: Catch potential exceptions here to avoid native crash. Ref. VAB-5600.
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didFinishLoad(
+            mObserversIterator.next().didFinishLoadNoop(
                     rfhId, url, isKnownValid, isInPrimaryMainFrame, rfhLifecycleState);
         }
         } catch (Exception ignored) {}
@@ -423,6 +452,16 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
+    public void virtualKeyboardModeChanged(@VirtualKeyboardMode.EnumType int mode) {
+        handleObserverCall();
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().virtualKeyboardModeChanged(mode);
+        }
+        finishObserverCall();
+    }
+
+    @Override
+    @CalledByNative
     public void onWebContentsFocused() {
         handleObserverCall();
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
@@ -462,7 +501,13 @@ class WebContentsObserverProxy extends WebContentsObserver {
         }
         // All observer destroy() implementations should result in their removal
         // from the proxy.
-        assert mObservers.isEmpty();
+        String remainingObservers = "These observers were not removed: ";
+        if (!mObservers.isEmpty()) {
+            for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+                remainingObservers += mObserversIterator.next().getClass().getName() + " ";
+            }
+        }
+        assert mObservers.isEmpty() : remainingObservers;
         mObservers.clear();
 
         if (mNativeWebContentsObserverProxy != 0) {

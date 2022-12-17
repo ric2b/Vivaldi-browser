@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,7 +65,7 @@ class AXVirtualViewTest : public ViewsTestBase {
     widget_->GetContentsView()->AddChildView(button_.get());
     virtual_label_ = new AXVirtualView;
     virtual_label_->GetCustomData().role = ax::mojom::Role::kStaticText;
-    virtual_label_->GetCustomData().SetName("Label");
+    virtual_label_->GetCustomData().SetNameChecked("Label");
     button_->GetViewAccessibility().AddVirtualChildView(
         base::WrapUnique(virtual_label_.get()));
     widget_->Show();
@@ -119,7 +119,7 @@ class AXVirtualViewTest : public ViewsTestBase {
   std::vector<
       std::pair<const ui::AXPlatformNodeDelegate*, const ax::mojom::Event>>
       accessibility_events_;
-  ui::testing::ScopedAxModeSetter ax_mode_setter_;
+  ScopedAXModeSetter ax_mode_setter_;
 };
 
 TEST_F(AXVirtualViewTest, AccessibilityRoleAndName) {
@@ -708,7 +708,7 @@ TEST_F(AXVirtualViewTest, TreeNavigationWithIgnoredVirtualViews) {
   // Test for mixed ignored and unignored root nodes.
   AXVirtualView* virtual_label_2 = new AXVirtualView;
   virtual_label_2->GetCustomData().role = ax::mojom::Role::kStaticText;
-  virtual_label_2->GetCustomData().SetName("Label");
+  virtual_label_2->GetCustomData().SetNameChecked("Label");
   button_->GetViewAccessibility().AddVirtualChildView(
       base::WrapUnique(virtual_label_2));
 

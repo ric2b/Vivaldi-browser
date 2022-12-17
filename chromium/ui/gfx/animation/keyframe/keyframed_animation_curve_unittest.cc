@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@ namespace {
 
 void ExpectTranslateX(SkScalar translate_x,
                       const gfx::TransformOperations& operations) {
-  EXPECT_FLOAT_EQ(translate_x, operations.Apply().matrix().rc(0, 3));
+  EXPECT_FLOAT_EQ(translate_x, operations.Apply().rc(0, 3));
 }
 
 // Tests that a color animation with one keyframe works as expected.
@@ -265,8 +265,8 @@ TEST(KeyframedAnimationCurveTest, RepeatedTransformKeyTimes) {
 
   // There is a discontinuity at 1. Any value between 4 and 6 is valid.
   gfx::Transform value = curve->GetValue(base::Seconds(1.f)).Apply();
-  EXPECT_GE(value.matrix().rc(0, 3), 4.f);
-  EXPECT_LE(value.matrix().rc(0, 3), 6.f);
+  EXPECT_GE(value.rc(0, 3), 4.f);
+  EXPECT_LE(value.rc(0, 3), 6.f);
 
   ExpectTranslateX(6.f, curve->GetValue(base::Seconds(1.5f)));
   ExpectTranslateX(6.f, curve->GetValue(base::Seconds(2.f)));
@@ -276,7 +276,7 @@ TEST(KeyframedAnimationCurveTest, RepeatedTransformKeyTimes) {
 // Tests that a discrete transform animation (e.g. where one or more keyframes
 // is a non-invertible matrix) works as expected.
 TEST(KeyframedAnimationCurveTest, DiscreteLinearTransformAnimation) {
-  gfx::Transform non_invertible_matrix(0, 0, 0, 0, 0, 0);
+  auto non_invertible_matrix = gfx::Transform::MakeScale(0);
   gfx::Transform identity_matrix;
 
   std::unique_ptr<KeyframedTransformAnimationCurve> curve(
@@ -320,7 +320,7 @@ TEST(KeyframedAnimationCurveTest, DiscreteLinearTransformAnimation) {
 }
 
 TEST(KeyframedAnimationCurveTest, DiscreteCubicBezierTransformAnimation) {
-  gfx::Transform non_invertible_matrix(0, 0, 0, 0, 0, 0);
+  auto non_invertible_matrix = gfx::Transform::MakeScale(0);
   gfx::Transform identity_matrix;
 
   std::unique_ptr<KeyframedTransformAnimationCurve> curve(

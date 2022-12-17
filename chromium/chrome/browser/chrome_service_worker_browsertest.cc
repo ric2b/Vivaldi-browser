@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -196,6 +196,7 @@ class ChromeServiceWorkerTest : public InProcessBrowserTest {
     NavigateToPageAndWaitForReadyTitle("/test.html");
     blink::TransferableMessage msg =
         blink::EncodeWebMessagePayload(message_data);
+    msg.sender_agent_cluster_id = base::UnguessableToken::Create();
 
     GURL url = embedded_test_server()->GetURL("/scope/");
     GetServiceWorkerContext()->StartServiceWorkerAndDispatchMessage(

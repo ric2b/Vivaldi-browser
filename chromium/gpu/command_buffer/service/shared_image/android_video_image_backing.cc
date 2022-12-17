@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/abstract_texture.h"
 #include "gpu/command_buffer/service/abstract_texture_impl.h"
-#include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/ref_counted_lock.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/video_image_reader_image_backing.h"
@@ -31,12 +30,12 @@ AndroidVideoImageBacking::AndroidVideoImageBacking(
     bool is_thread_safe)
     : AndroidImageBacking(
           mailbox,
-          viz::RGBA_8888,
+          viz::SharedImageFormat::SinglePlane(viz::RGBA_8888),
           size,
           color_space,
           surface_origin,
           alpha_type,
-          (SHARED_IMAGE_USAGE_DISPLAY | SHARED_IMAGE_USAGE_GLES2),
+          (SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_GLES2),
           viz::ResourceSizes::UncheckedSizeInBytes<size_t>(size,
                                                            viz::RGBA_8888),
           is_thread_safe,
@@ -124,15 +123,6 @@ void AndroidVideoImageBacking::SetClearedRect(const gfx::Rect& cleared_rect) {}
 
 void AndroidVideoImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {
   DCHECK(!in_fence);
-}
-
-bool AndroidVideoImageBacking::ProduceLegacyMailbox(
-    MailboxManager* mailbox_manager) {
-  // Android does not use legacy mailbox anymore. Hence marking this as
-  // NOTREACHED() now. Once all platform stops using legacy mailbox, this
-  // method can be removed.
-  NOTREACHED();
-  return false;
 }
 
 }  // namespace gpu

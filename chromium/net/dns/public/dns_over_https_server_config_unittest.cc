@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -124,7 +124,8 @@ TEST(DnsOverHttpsServerConfigTest, FromValueSimple) {
     }
   )");
 
-  auto parsed = DnsOverHttpsServerConfig::FromValue(std::move(input.GetDict()));
+  auto parsed =
+      DnsOverHttpsServerConfig::FromValue(std::move(input).TakeDict());
 
   auto expected = DnsOverHttpsServerConfig::FromString(
       "https://dnsserver.example.net/dns-query{?dns}");
@@ -143,7 +144,8 @@ TEST(DnsOverHttpsServerConfigTest, FromValueWithEndpoints) {
     }
   )");
 
-  auto parsed = DnsOverHttpsServerConfig::FromValue(std::move(input.GetDict()));
+  auto parsed =
+      DnsOverHttpsServerConfig::FromValue(std::move(input).TakeDict());
 
   auto expected = DnsOverHttpsServerConfig::FromString(
       "https://dnsserver.example.net/dns-query{?dns}", endpoints);
@@ -158,7 +160,8 @@ TEST(DnsOverHttpsServerConfigTest, FromValueWithUnknownKey) {
     }
   )");
 
-  auto parsed = DnsOverHttpsServerConfig::FromValue(std::move(input.GetDict()));
+  auto parsed =
+      DnsOverHttpsServerConfig::FromValue(std::move(input).TakeDict());
 
   auto expected = DnsOverHttpsServerConfig::FromString(
       "https://dnsserver.example.net/dns-query{?dns}");

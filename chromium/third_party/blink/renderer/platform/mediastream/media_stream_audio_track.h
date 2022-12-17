@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,7 +47,7 @@ class PLATFORM_EXPORT MediaStreamAudioTrack : public MediaStreamTrackPlatform {
 
   // Add a sink to the track. This function will trigger a OnSetFormat()
   // call on the |sink| before the first chunk of audio is delivered.
-  void AddSink(WebMediaStreamAudioSink* sink);
+  void AddSink(WebMediaStreamAudioSink* sink) override;
 
   // Remove a sink from the track. When this method returns, the sink's
   // OnSetFormat() and OnData() methods will not be called again on any thread.
@@ -103,7 +103,7 @@ class PLATFORM_EXPORT MediaStreamAudioTrack : public MediaStreamTrackPlatform {
 
   MediaStreamTrackPlatform::StreamType Type() const override {
     return MediaStreamTrackPlatform::StreamType::kAudio;
-  };
+  }
 
  private:
   // In debug builds, check that all methods that could cause object graph

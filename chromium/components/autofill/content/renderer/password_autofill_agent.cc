@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -20,6 +19,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -38,6 +38,7 @@
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/signatures.h"
+#include "components/password_manager/core/common/password_manager_constants.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/safe_browsing/buildflags.h"
 #include "content/public/renderer/render_frame.h"
@@ -333,7 +334,7 @@ WebInputElement FindUsernameElementPrecedingPasswordElement(
     elements = password_element.Form().GetFormControlElements().ReleaseVector();
   }
 
-  auto iter = std::find(elements.begin(), elements.end(), password_element);
+  auto iter = base::ranges::find(elements, password_element);
   if (iter == elements.end())
     return WebInputElement();
 
@@ -380,13 +381,28 @@ bool IsInCrossOriginIframeOrEmbeddedFrame(const WebInputElement& element) {
   return false;
 }
 
-// Whether any of the fields in |form| is a password field.
-bool FormHasPasswordField(const FormData& form) {
-  for (const auto& field : form.fields) {
-    if (field.IsPasswordInputElement())
-      return true;
-  }
-  return false;
+// Whether field has an autocomplete="username" attribute.
+bool FieldHasUsernameAutocompleteAttribute(const FormFieldData& field) {
+  return field.autocomplete_attribute.find(
+             password_manager::constants::kAutocompleteUsername) !=
+         std::string::npos;
+}
+
+// Whether field has an autocomplete="webauthn" attribute.
+bool FieldHasWebAuthnAutocompleteAttribute(const FormFieldData& field) {
+  return field.autocomplete_attribute.find(
+             password_manager::constants::kAutocompleteWebAuthn) !=
+         std::string::npos;
+}
+
+// Whether any of the fields in |form| suggest the need to autofill credentials.
+bool IsCredentialForm(const FormData& form) {
+  return std::any_of(form.fields.begin(), form.fields.end(),
+                     [](const auto& field) {
+                       return field.IsPasswordInputElement() ||
+                              FieldHasUsernameAutocompleteAttribute(field) ||
+                              FieldHasWebAuthnAutocompleteAttribute(field);
+                     });
 }
 
 void AnnotateFieldWithParsingResult(WebDocument doc,
@@ -1278,7 +1294,7 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
     }
 
     std::unique_ptr<FormData> form_data(GetFormDataFromWebForm(form));
-    if (!form_data || !FormHasPasswordField(*form_data))
+    if (!form_data || !IsCredentialForm(*form_data))
       continue;
 
     if (logger)
@@ -1318,7 +1334,7 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
 
   if (add_unowned_inputs) {
     std::unique_ptr<FormData> form_data(GetFormDataFromUnownedInputElements());
-    if (form_data && FormHasPasswordField(*form_data)) {
+    if (form_data && IsCredentialForm(*form_data)) {
       if (logger) {
         logger->LogFormData(Logger::STRING_FORM_IS_PASSWORD, *form_data);
       }
@@ -1421,7 +1437,7 @@ void PasswordAutofillAgent::ReadyToCommitNavigation(
 void PasswordAutofillAgent::OnProbablyFormSubmitted() {}
 
 // mojom::PasswordAutofillAgent:
-void PasswordAutofillAgent::FillPasswordForm(
+void PasswordAutofillAgent::SetPasswordFillData(
     const PasswordFormFillData& form_data) {
   std::unique_ptr<RendererSavePasswordProgressLogger> logger;
   if (logging_state_active_) {
@@ -1693,8 +1709,6 @@ void PasswordAutofillAgent::ShowSuggestionPopup(
     const WebInputElement& user_input,
     ShowAll show_all,
     OnPasswordField show_on_password_field) {
-  constexpr char kAutocompleteAttribute[] = "autocomplete";
-  constexpr char kAutocompleteWebAuthn[] = "webauthn";
   username_query_prefix_ = typed_username;
   FormData form;
   FormFieldData field;
@@ -1706,7 +1720,7 @@ void PasswordAutofillAgent::ShowSuggestionPopup(
     options |= SHOW_ALL;
   if (show_on_password_field)
     options |= IS_PASSWORD_FIELD;
-  if (user_input.GetAttribute(kAutocompleteAttribute) == kAutocompleteWebAuthn)
+  if (field.parsed_autocomplete && field.parsed_autocomplete->webauthn)
     options |= ACCEPTS_WEBAUTHN_CREDENTIALS;
 
   GetPasswordManagerDriver().ShowPasswordSuggestions(
@@ -1767,7 +1781,7 @@ void PasswordAutofillAgent::InformBrowserAboutUserInput(
   if (!form_data)
     return;
 
-  if (!FormHasPasswordField(*form_data))
+  if (!IsCredentialForm(*form_data))
     return;
 
   GetPasswordManagerDriver().InformAboutUserInput(*form_data);

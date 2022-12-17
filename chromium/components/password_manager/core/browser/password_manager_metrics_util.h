@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,6 +44,9 @@ enum UIDisplayDisposition {
   AUTOMATIC_SAVE_UNSYNCED_CREDENTIALS_LOCALLY = 10,
   AUTOMATIC_COMPROMISED_CREDENTIALS_REMINDER = 11,
   AUTOMATIC_MOVE_TO_ACCOUNT_STORE = 12,
+  MANUAL_BIOMETRIC_AUTHENTICATION_FOR_FILLING = 13,
+  AUTOMATIC_BIOMETRIC_AUTHENTICATION_FOR_FILLING = 14,
+  AUTOMATIC_BIOMETRIC_AUTHENTICATION_CONFIRMATION = 15,
   NUM_DISPLAY_DISPOSITIONS,
 };
 
@@ -570,7 +573,9 @@ enum class PasswordNoteAction {
   // Note changed from non-empty to empty from the password edit dialog in
   // settings.
   kNoteRemovedInEditDialog = 3,
-  kMaxValue = kNoteRemovedInEditDialog,
+  // Note did not change.
+  kNoteNotChanged = 4,
+  kMaxValue = kNoteNotChanged,
 };
 
 std::string GetPasswordAccountStorageUserStateHistogramSuffix(
@@ -616,7 +621,27 @@ enum class PasswordViewPageInteractions {
   // The credential's username, password or note is edited in settings password
   // view page.
   kCredentialEdited = 8,
-  kMaxValue = kCredentialEdited,
+  // The password view page is closed while the edit dialog is open after
+  // an authentication timeout.
+  kTimedOutInEditDialog = 9,
+  // The password view page is closed while the edit dialog is closed after
+  // an authentication timeout.
+  kTimedOutInViewPage = 10,
+  // The credential is requested by typing the URL.
+  kCredentialRequestedByUrl = 11,
+  kMaxValue = kCredentialRequestedByUrl,
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PasswordsImportDesktopInteractions {
+  // Import dialog opened from the three-dot menu.
+  kDialogOpenedFromThreeDot = 0,
+  // Import dialog opened from the empty passwords list.
+  kDialogOpenedFromEmptyState = 1,
+  // Import flow canceled before the file selection.
+  kCanceledBeforeFileSelect = 2,
+  kMaxValue = kCanceledBeforeFileSelect,
 };
 
 std::string GetPasswordAccountStorageUsageLevelHistogramSuffix(

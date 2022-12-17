@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,9 @@ GLTextureAndroidImageRepresentation::~GLTextureAndroidImageRepresentation() {
     texture_->RemoveLightweightRef(has_context());
 }
 
-gles2::Texture* GLTextureAndroidImageRepresentation::GetTexture() {
+gles2::Texture* GLTextureAndroidImageRepresentation::GetTexture(
+    int plane_index) {
+  DCHECK_EQ(plane_index, 0);
   return texture_;
 }
 

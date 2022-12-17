@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,10 +13,14 @@
 
 namespace views {
 class ImageView;
+class Label;
 }  // namespace views
 
-namespace ash {
-namespace full_restore {
+namespace arc {
+enum class GhostWindowType;
+}
+
+namespace ash::full_restore {
 
 // The view of ARC ghost window content. It shows the icon of app and a
 // throbber. It is used on ARC ghost window shell surface overlay, so it will
@@ -25,27 +29,34 @@ class ArcGhostWindowView : public views::View {
  public:
   METADATA_HEADER(ArcGhostWindowView);
 
-  explicit ArcGhostWindowView(int throbber_diameter, uint32_t theme_color);
+  ArcGhostWindowView(arc::GhostWindowType type,
+                     int throbber_diameter,
+                     uint32_t theme_color);
   ArcGhostWindowView(const ArcGhostWindowView&) = delete;
   ArcGhostWindowView operator=(const ArcGhostWindowView&) = delete;
   ~ArcGhostWindowView() override;
 
   void LoadIcon(const std::string& app_id);
 
+  void SetType(arc::GhostWindowType type);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ArcGhostWindowViewTest, IconLoadTest);
+  FRIEND_TEST_ALL_PREFIXES(ArcGhostWindowViewTest, FixupMessageTest);
 
-  void InitLayout(uint32_t theme_color, int diameter);
+  void InitLayout(arc::GhostWindowType type,
+                  uint32_t theme_color,
+                  int diameter);
   void OnIconLoaded(apps::IconValuePtr icon_value);
 
-  views::ImageView* icon_view_;
+  views::ImageView* icon_view_ = nullptr;
+  views::Label* message_label_ = nullptr;
   base::OnceCallback<void(apps::IconValuePtr icon_value)>
       icon_loaded_cb_for_testing_;
 
   base::WeakPtrFactory<ArcGhostWindowView> weak_ptr_factory_{this};
 };
 
-}  // namespace full_restore
-}  // namespace ash
+}  // namespace ash::full_restore
 
 #endif  // CHROME_BROWSER_ASH_APP_RESTORE_ARC_GHOST_WINDOW_VIEW_H_

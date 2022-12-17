@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">Skriv &amp;ut …</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1187722533808055681">Dvaleoppvaking</translation>
-<translation id="119944043368869598">Tøm alt</translation>
 <translation id="1221825588892235038">Berre utvalet</translation>
 <translation id="1244303850296295656">Utvidingsfeil</translation>
 <translation id="125220115284141797">Standard</translation>
@@ -50,7 +49,6 @@
 <translation id="1901303067676059328">Vel &amp;alle</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Bruk eit tal for å visa kor mange kopiar som skal skrivast ut (1 to <ph name= "MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Fjern alt</translation>
 <translation id="1994173015038366702">Nettstadadresse</translation>
 <translation id="2019718679933488176">Opna ly&amp;dfila i ei ny fane</translation>
 <translation id="2050339315714019657">Ståande</translation>
@@ -66,7 +64,6 @@
 <translation id="2218515861914035131">Lim inn som rein tekst</translation>
 <translation id="2249605167705922988">t.d. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Tillat identifikatorar for verna innhald (du må kanskje starta om att datamaskina)</translation>
-<translation id="2277255602909579701">Alle informasjonskapslane og nettstaddataa</translation>
 <translation id="2280486287150724112">Høgremarg</translation>
 <translation id="2282146716419988068">GPU-prosess</translation>
 <translation id="2301382460326681002">Utvidinga sin rotkatalog er ugyldig.</translation>
@@ -118,7 +115,6 @@
 <translation id="3084548735795614657">Legg her for å installera</translation>
 <translation id="3122464029669770682">Prosessor</translation>
 <translation id="3124111068741548686">BRUKAR-referansar</translation>
-<translation id="3127156390846601284">Dette vil sletta alle dataa lagra på eininga di for alle viste nettstadar. Vil du halda fram?</translation>
 <translation id="3129173833825111527">Venstremarg</translation>
 <translation id="3144647712221361880">Opna lenkja som</translation>
 <translation id="3222066309010235055">Førehandsoppteikning: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -138,7 +134,6 @@
 <translation id="3378572629723696641">Denne utvidinga kan ha vorten øydelagd.</translation>
 <translation id="3387614642886316601">Bruk utvida stavekontroll</translation>
 <translation id="3393582007140394275">Klarer ikkje å dela skjermen.</translation>
-<translation id="3432227430032737297">Fjern alt synleg</translation>
 <translation id="345693547134384690">Opna &amp;bildet i ei ny fane</translation>
 <translation id="3494769164076977169">Spør dersom ein nettstad prøver å lasta ned filer automatisk etter den første (tilrådd)</translation>
 <translation id="3505030558724226696">Attendekall einingstilgangen</translation>
@@ -195,7 +190,6 @@
 <translation id="4409697491990005945">Margar</translation>
 <translation id="4423376891418188461">Før attende innstillingane</translation>
 <translation id="4478664379124702289">Lagra &amp;lenkja som …</translation>
-<translation id="4579581181964204535">Klarer ikkje å senda til <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Gå til <ph name="URL" /></translation>
 <translation id="4595560905247879544">Appar og utvidingar kan berre verta endra av styraren (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Ei utviding har endra kva side som vert vist når du opnar ei ny fane.</translation>
@@ -266,7 +260,6 @@
 <translation id="5747809636523347288">Lim &amp;inn og gå til <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokument du sender til utskrift gjennom <ph name="APP_NAME" /> kan verta lesne av <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Lagra &amp;lydfila som …</translation>
-<translation id="577624874850706961">Søk informasjonskapslar</translation>
 <translation id="5780973441651030252">Prosessprioritet</translation>
 <translation id="5804241973901381774">Tilgangar</translation>
 <translation id="5828633471261496623">Skriv ut …</translation>
@@ -279,7 +272,6 @@
 <translation id="5965661248935608907">Ho kontrollerer ogso kva side som vert vist når du vel heim-knappen eller søkjer frå adressefeltet.</translation>
 <translation id="5978277834170881274">Bruk gr&amp;unnleggjande stavekontroll</translation>
 <translation id="5979421442488174909">&amp;Omset til <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Tøm nettstaddataa</translation>
 <translation id="6042308850641462728">Meir</translation>
 <translation id="6086846494333236931">Installert av administratoren din</translation>
 <translation id="6101226222197207147">Lagt til appen (<ph name="EXTENSION_NAME" />)</translation>
@@ -392,7 +384,6 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
         =1 {Nedlasting er i gang} other {Nedlastingar er i gang}}</translation>
 <translation id="8230134520748321204">Lagra passordet for <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Denne utvidinga er ikkje lista i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> og kan ha vorte lagt til utan din kjennskap.</translation>
-<translation id="8339059274628563283"><ph name="SITE" /> lokalt lagra data</translation>
 <translation id="8351419472474436977">Denne utvidinga har teke kontroll over mellomlagerinnstillingane dine. Det betyr ho kan endra, øydeleggja eller tjuvlytta på alt du gjer på nettet. Om du ikkje veit korfor endringa skjedde, vil du sannsynlegvis ikkje ha ho.</translation>
 <translation id="8382913212082956454">Kopier &amp;e-postadressa</translation>
 <translation id="8413385045638830869">Spør først (tilrådd)</translation>

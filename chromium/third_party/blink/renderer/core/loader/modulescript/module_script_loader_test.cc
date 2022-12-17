@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,7 +148,6 @@ class ModuleScriptLoaderTest : public PageTestBase {
   const base::TickClock* GetTickClock() override {
     return platform_->test_task_runner()->GetMockTickClock();
   }
-  base::test::ScopedFeatureList scoped_feature_list_;
 
  protected:
   const KURL url_;
@@ -169,7 +168,6 @@ void ModuleScriptLoaderTest::SetUp() {
 ModuleScriptLoaderTest::ModuleScriptLoaderTest()
     : url_("https://example.test"),
       security_origin_(SecurityOrigin::Create(url_)) {
-  scoped_feature_list_.InitAndEnableFeature(blink::features::kJSONModules);
   platform_->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings
 }
 

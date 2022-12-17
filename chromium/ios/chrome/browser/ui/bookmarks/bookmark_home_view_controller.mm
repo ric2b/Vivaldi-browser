@@ -1,28 +1,29 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_view_controller.h"
 
 #import "base/ios/ios_util.h"
-#include "base/mac/foundation_util.h"
-#include "base/metrics/user_metrics.h"
-#include "base/numerics/safe_conversions.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/bookmarks/browser/bookmark_model.h"
-#include "components/bookmarks/common/bookmark_pref_names.h"
-#include "components/bookmarks/managed/managed_bookmark_service.h"
-#include "components/prefs/pref_service.h"
-#include "components/strings/grit/components_strings.h"
+#import "base/mac/foundation_util.h"
+#import "base/metrics/user_metrics.h"
+#import "base/numerics/safe_conversions.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/common/bookmark_metrics.h"
+#import "components/bookmarks/common/bookmark_pref_names.h"
+#import "components/bookmarks/managed/managed_bookmark_service.h"
+#import "components/prefs/pref_service.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/app/tests_hook.h"
-#include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
+#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
-#include "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/policy/policy_util.h"
@@ -32,15 +33,15 @@
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_edit_view_controller.h"
-#include "ios/chrome/browser/ui/bookmarks/bookmark_empty_background.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_empty_background.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_folder_editor_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_folder_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_consumer.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_mediator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_shared_state.h"
-#include "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller_delegate.h"
-#include "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_navigation_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_path_cache.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
@@ -66,7 +67,6 @@
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#import "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
@@ -76,14 +76,17 @@
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_view.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/navigation/navigation_manager.h"
-#include "ios/web/public/navigation/referrer.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ios/web/public/navigation/referrer.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_folder_view_controller.h"
+#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_url_view_controller.h"
+#import "ios/panel/panel_constants.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -156,6 +159,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
   // The root node, whose child nodes are shown in the bookmark table view.
   const bookmarks::BookmarkNode* _rootNode;
+
+  // Vivaldi
+  UIView* searchBarContainer;
 }
 
 // Shared state between BookmarkHome classes.  Used as a temporary refactoring
@@ -367,10 +373,23 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   self.searchController.searchBar.accessibilityIdentifier =
       kBookmarkHomeSearchBarIdentifier;
 
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning())
+      self.searchController.hidesNavigationBarDuringPresentation = NO;
+  // End Vivaldi
+
   // UIKit needs to know which controller will be presenting the
   // searchController. If we don't add this trying to dismiss while
   // SearchController is active will fail.
+
+  // Vivaldi
+  if (!vivaldi::IsVivaldiRunning())
   self.definesPresentationContext = YES;
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning())
+    [self setupHeaderWithSearch];
+  // End Vivaldi
 
   self.scrimView = [[UIControl alloc] init];
   self.scrimView.backgroundColor = [UIColor colorNamed:kScrimBackgroundColor];
@@ -381,9 +400,14 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
            forControlEvents:UIControlEventTouchUpInside];
 
   // Place the search bar in the navigation bar.
+
+  // Vivaldi
+  if (!vivaldi::IsVivaldiRunning())
   self.navigationItem.searchController = self.searchController;
   self.navigationItem.hidesSearchBarWhenScrolling = NO;
 
+  // Vivaldi no need for this workaround any more (chr bug)
+  if (!vivaldi::IsVivaldiRunning()) {
   // Center search bar vertically so it looks centered in the header when
   // searching.  The cancel button is centered / decentered on
   // viewWillAppear and viewDidDisappear.
@@ -391,6 +415,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
   self.searchController.searchBar.searchFieldBackgroundPositionAdjustment =
       offset;
+  } // Vivaldi
 
   self.searchTerm = @"";
 
@@ -423,6 +448,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     [self refreshContents];
   }
 
+  // Vivaldi no need for this workaround any more (chr bug)
+  if (!vivaldi::IsVivaldiRunning()) {
   // Center search bar's cancel button vertically so it looks centered.
   // We change the cancel button proxy styles, so we will return it to
   // default in viewDidDisappear.
@@ -432,6 +459,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
   [cancelButton setTitlePositionAdjustment:offset
                              forBarMetrics:UIBarMetricsDefault];
+  } //Vivaldi
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -457,6 +485,12 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                                   animated:NO];
     self.cachedIndexPathRow = 0;
   }
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning())
+    self.searchController.searchBar.frame = searchBarContainer.bounds;
+  // End Vivaldi
+
 }
 
 - (BOOL)prefersStatusBarHidden {
@@ -688,6 +722,16 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 // Opens the editor on the given node.
 - (void)editNode:(const BookmarkNode*)node {
+
+  if (IsVivaldiRunning()) {
+    VivaldiSpeedDialItem* editingItem =
+      [[VivaldiSpeedDialItem alloc] initWithBookmark:node];
+    if (node->is_folder()) {
+      [self presentVivaldiBookmarkFolderEditor:editingItem isEditing:YES];
+    } else {
+      [self presentVivaldiBookmarkURLEditor:editingItem isEditing:YES];
+    }
+  } else {
   if (!self.bookmarkInteractionController) {
     self.bookmarkInteractionController =
         [[BookmarkInteractionController alloc] initWithBrowser:self.browser];
@@ -696,6 +740,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   }
 
   [self.bookmarkInteractionController presentEditorForNode:node];
+  } // End Vivaldi
+
 }
 
 - (void)openAllURLs:(std::vector<GURL>)urls
@@ -730,6 +776,13 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   base::RecordAction(base::UserMetricsAction("MobileBookmarkManagerClose"));
   LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeAllTabs);
   [self navigateAway];
+
+  // Vivaldi
+  if (self.searchController.active) {
+    self.searchController.active = NO;
+  }
+  // End Vivaldi
+
   [self dismissWithURL:GURL()];
 }
 
@@ -900,8 +953,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   DCHECK(self.sharedState.editingFolderNode);
   self.sharedState.addingNewFolder = NO;
   if (newName.length > 0) {
-    self.sharedState.bookmarkModel->SetTitle(self.sharedState.editingFolderNode,
-                                             base::SysNSStringToUTF16(newName));
+    self.sharedState.bookmarkModel->SetTitle(
+        self.sharedState.editingFolderNode, base::SysNSStringToUTF16(newName),
+        bookmarks::metrics::BookmarkEditSource::kUser);
   }
   self.sharedState.editingFolderNode = nullptr;
   self.sharedState.editingFolderCell = nil;
@@ -990,18 +1044,18 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
           weakSelf.spinnerView.alpha = 0.0;
         }
         completion:^(BOOL finished) {
-          BookmarkHomeViewController* strongSelf = weakSelf;
-          if (!strongSelf)
+          BookmarkHomeViewController* innerStrongSelf = weakSelf;
+          if (!innerStrongSelf)
             return;
 
           // By the time completion block is called, the backgroundView could be
           // another view, like the empty view background. Only clear the
           // background if it is still the spinner.
-          if (strongSelf.sharedState.tableView.backgroundView ==
-              strongSelf.spinnerView) {
-            strongSelf.sharedState.tableView.backgroundView = nil;
+          if (innerStrongSelf.sharedState.tableView.backgroundView ==
+              innerStrongSelf.spinnerView) {
+            innerStrongSelf.sharedState.tableView.backgroundView = nil;
           }
-          strongSelf.spinnerView = nil;
+          innerStrongSelf.spinnerView = nil;
         }];
     [strongSelf loadBookmarkViews];
     [strongSelf.sharedState.tableView reloadData];
@@ -1083,6 +1137,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                                    usingBookmarkNode:
                                        (const bookmarks::BookmarkNode*)node {
   viewController.navigationItem.leftBarButtonItem.action = @selector(back);
+
   // Disable large titles on every VC but the root controller.
   if (node != self.bookmarks->root_node()) {
     viewController.navigationItem.largeTitleDisplayMode =
@@ -1092,21 +1147,32 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   // Add custom title.
   viewController.title = bookmark_utils_ios::TitleForBookmarkNode(node);
 
+  if (vivaldi::IsVivaldiRunning()) {
+      if ([self isDisplayingBookmarkRoot]) {
+        viewController.navigationItem.rightBarButtonItem =
+          [self customizedDoneTextButton];
+      } else {
+        viewController.navigationItem.largeTitleDisplayMode =
+            UINavigationItemLargeTitleDisplayModeNever;
+        viewController.title = bookmark_utils_ios::TitleForBookmarkNode(node);
+        UIImage* image = [UIImage systemImageNamed:@"plus"];
+        UIBarButtonItem* plusButton =
+          [[UIBarButtonItem alloc]
+           initWithImage:image
+           style:UIBarButtonItemStyleDone
+           target:self
+           action:@selector(handleAddBarButtonTap)];
+        NSArray* items = @[plusButton, [self customizedDoneButton]];
+        viewController.navigationItem.rightBarButtonItems = items;
+      }
+      // Add custom title.
+      viewController.title = bookmark_utils_ios::TitleForBookmarkNode(node);
+      return;
+  } // End Vivaldi
+
   // Add custom done button.
   viewController.navigationItem.rightBarButtonItem =
       [self customizedDoneButton];
-
-  // Vivaldi
-  if (IsVivaldiRunning()) {
-    if ([self isDisplayingBookmarkRoot]) {
-      viewController.navigationItem.rightBarButtonItem =
-        [self customizedDoneTextButton];
-    } else {
-      viewController.title = bookmark_utils_ios::TitleForBookmarkNode(node);
-      viewController.navigationItem.rightBarButtonItem =
-        [self customizedDoneMenuButton];
-    }
-  }
 }
 
 // Back button callback for the new ui.
@@ -1170,6 +1236,12 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   if (!self.sharedState.tableViewDisplayedRootNode) {
     return;
   }
+
+  if (IsVivaldiRunning()) {
+    [self presentVivaldiBookmarkFolderEditor:nil isEditing:NO];
+    return;
+  } // End Vivaldi
+
   self.sharedState.addingNewFolder = YES;
   std::u16string folderTitle =
       l10n_util::GetStringUTF16(IDS_IOS_BOOKMARK_NEW_GROUP_DEFAULT_NAME);
@@ -1403,6 +1475,11 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 // Show scrim overlay and hide toolbar.
 - (void)showScrim {
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) return;
+  // End Vivaldi
+
   self.navigationController.toolbarHidden = YES;
   self.scrimView.alpha = 0.0f;
   [self.tableView addSubview:self.scrimView];
@@ -1424,6 +1501,11 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 // Hide scrim and restore toolbar.
 - (void)hideScrim {
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) return;
+  // End Vivaldi
+
   __weak BookmarkHomeViewController* weakSelf = self;
   [UIView animateWithDuration:kTableViewNavigationScrimFadeDuration
       animations:^{
@@ -1551,6 +1633,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   if (self.sharedState.tableView.backgroundView == self.emptyViewBackground) {
     self.sharedState.tableView.backgroundView = nil;
   }
+
+  // Vivaldi
+  if (!vivaldi::IsVivaldiRunning())
   self.navigationItem.searchController = self.searchController;
   if ([self isDisplayingBookmarkRoot]) {
     self.navigationItem.largeTitleDisplayMode =
@@ -1681,11 +1766,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 }
 
 - (void)setBookmarksContextBarButtonsDefaultState {
-
- // Vivaldi
- if (IsVivaldiRunning())
-    return;
-
   // Set New Folder button
   NSString* titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_NEW_FOLDER);
   UIBarButtonItem* newFolderButton =
@@ -1783,8 +1863,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                              return;
                            if ([strongSelf isIncognitoForced])
                              return;
-                           auto nodes = [strongSelf editNodes];
-                           [strongSelf openAllURLs:GetUrlsToOpen(nodes)
+                           auto editNodes = [strongSelf editNodes];
+                           [strongSelf openAllURLs:GetUrlsToOpen(editNodes)
                                        inIncognito:NO
                                             newTab:NO];
                          }
@@ -1799,8 +1879,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                              return;
                            if (![strongSelf isIncognitoAvailable])
                              return;
-                           auto nodes = [strongSelf editNodes];
-                           [strongSelf openAllURLs:GetUrlsToOpen(nodes)
+                           auto editNodes = [strongSelf editNodes];
+                           [strongSelf openAllURLs:GetUrlsToOpen(editNodes)
                                        inIncognito:YES
                                             newTab:NO];
                          }
@@ -2384,24 +2464,25 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       [menuElements addObject:[actionFactory actionToCopyURL:nodeURL]];
 
       UIAction* editAction = [actionFactory actionToEditWithBlock:^{
-        BookmarkHomeViewController* strongSelf = weakSelf;
-        if (!strongSelf)
+        BookmarkHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
           return;
         const bookmarks::BookmarkNode* nodeFromId =
-            bookmark_utils_ios::FindNodeById(strongSelf.bookmarks, nodeId);
+            bookmark_utils_ios::FindNodeById(innerStrongSelf.bookmarks, nodeId);
         if (nodeFromId) {
-          [strongSelf editNode:nodeFromId];
+          [innerStrongSelf editNode:nodeFromId];
         }
       }];
       [menuElements addObject:editAction];
 
       [menuElements
           addObject:[actionFactory actionToShareWithBlock:^{
-            BookmarkHomeViewController* strongSelf = weakSelf;
-            if (!strongSelf)
+            BookmarkHomeViewController* innerStrongSelf = weakSelf;
+            if (!innerStrongSelf)
               return;
             const bookmarks::BookmarkNode* nodeFromId =
-                bookmark_utils_ios::FindNodeById(strongSelf.bookmarks, nodeId);
+                bookmark_utils_ios::FindNodeById(innerStrongSelf.bookmarks,
+                                                 nodeId);
             if (nodeFromId) {
               [weakSelf
                    shareURL:nodeURL
@@ -2411,14 +2492,14 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
           }]];
 
       UIAction* deleteAction = [actionFactory actionToDeleteWithBlock:^{
-        BookmarkHomeViewController* strongSelf = weakSelf;
-        if (!strongSelf)
+        BookmarkHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
           return;
         const bookmarks::BookmarkNode* nodeFromId =
-            bookmark_utils_ios::FindNodeById(strongSelf.bookmarks, nodeId);
+            bookmark_utils_ios::FindNodeById(innerStrongSelf.bookmarks, nodeId);
         if (nodeFromId) {
           std::set<const BookmarkNode*> nodes{nodeFromId};
-          [strongSelf handleSelectNodesForDeletion:nodes];
+          [innerStrongSelf handleSelectNodesForDeletion:nodes];
           base::RecordAction(
               base::UserMetricsAction("MobileBookmarkManagerEntryDeleted"));
         }
@@ -2449,24 +2530,24 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
           [[NSMutableArray alloc] init];
 
       UIAction* editAction = [actionFactory actionToEditWithBlock:^{
-        BookmarkHomeViewController* strongSelf = weakSelf;
-        if (!strongSelf)
+        BookmarkHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
           return;
         const bookmarks::BookmarkNode* nodeFromId =
-            bookmark_utils_ios::FindNodeById(strongSelf.bookmarks, nodeId);
+            bookmark_utils_ios::FindNodeById(innerStrongSelf.bookmarks, nodeId);
         if (nodeFromId) {
-          [strongSelf editNode:nodeFromId];
+          [innerStrongSelf editNode:nodeFromId];
         }
       }];
       UIAction* moveAction = [actionFactory actionToMoveFolderWithBlock:^{
-        BookmarkHomeViewController* strongSelf = weakSelf;
-        if (!strongSelf)
+        BookmarkHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
           return;
         const bookmarks::BookmarkNode* nodeFromId =
-            bookmark_utils_ios::FindNodeById(strongSelf.bookmarks, nodeId);
+            bookmark_utils_ios::FindNodeById(innerStrongSelf.bookmarks, nodeId);
         if (nodeFromId) {
           std::set<const BookmarkNode*> nodes{nodeFromId};
-          [strongSelf moveNodes:nodes];
+          [innerStrongSelf moveNodes:nodes];
         }
       }];
 
@@ -2547,23 +2628,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 #pragma mark - Vivaldi
 
-- (UIBarButtonItem*)customizedDoneMenuButton {
-  UIMenu* menu = [self setupContextMenu];
-  UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
-      initWithTitle:GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
-                                 style:UIBarButtonItemStyleDone
-                                target:self
-                                action:@selector(navigationBarCancel:)];
-  doneButton.image = [UIImage systemImageNamed:@"ellipsis.circle"];
-  doneButton.menu = menu;
-  doneButton.accessibilityLabel =
-      GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
-  doneButton.accessibilityIdentifier =
-      kBookmarkHomeNavigationBarDoneButtonIdentifier;
-
-  return doneButton;
-}
-
 - (UIBarButtonItem*)customizedDoneTextButton {
     UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
         initWithTitle:GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
@@ -2597,8 +2661,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   NSMutableArray<UIMenuElement*>* menuElements =
           [[NSMutableArray alloc] init];
     UIAction* newFolderAction = [actionFactory actionToAddFolderWithBlock:^{
-        BookmarkHomeViewController* strongSelf = weakSelf;
-        if (!strongSelf)
+        BookmarkHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
           return;
         if ([self isAnyControllerPresenting]) {
           return;
@@ -2612,15 +2676,15 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
         [self addNewFolder];
     }];
   UIAction* editAction = [actionFactory actionToEditWithBlock:^{
-      BookmarkHomeViewController* strongSelf = weakSelf;
-      if (!strongSelf)
+      BookmarkHomeViewController* innerStrongSelf = weakSelf;
+      if (!innerStrongSelf)
         return;
       // Toggle edit mode.
       [self setTableViewEditing:!self.sharedState.currentlyInEditMode];
   }];
   UIAction* doneAction = [actionFactory actionDoneWithBlock:^{
-        BookmarkHomeViewController* strongSelf = weakSelf;
-        if (!strongSelf)
+        BookmarkHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
           return;
       if (!self.sharedState.currentlyInEditMode){
           [self setTableViewEditing:!self.sharedState.currentlyInEditMode];
@@ -2635,6 +2699,120 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   [menuElements addObject:newFolderAction];
 
   return [UIMenu menuWithTitle:@"" children:menuElements];
+}
+
+#pragma mark Vivaldi
+
+- (void)setupHeaderWithSearch {
+    UIView* headerView = [[UIView alloc] init];
+    headerView.frame = CGRectMake(0, 0, 0, panel_header_height);
+    UIView* topView = [[UIView alloc] init];
+    topView.frame = CGRectMake(0, 0, 0, panel_search_view_height);
+    [headerView addSubview:topView];
+
+    topView.translatesAutoresizingMaskIntoConstraints = NO;
+
+    [topView.leadingAnchor constraintEqualToAnchor:headerView.leadingAnchor]
+        .active = YES;
+    [topView.topAnchor constraintEqualToAnchor:headerView.topAnchor]
+        .active = YES;
+    [topView.heightAnchor constraintEqualToConstant:panel_top_view_height]
+        .active = YES;
+    [topView.widthAnchor constraintEqualToAnchor:headerView.widthAnchor].
+        active = YES;
+
+    searchBarContainer = [[UIView alloc] init];
+    searchBarContainer.frame = CGRectMake(0, 0, 0, search_bar_height);
+    searchBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    [searchBarContainer addSubview:self.searchController.searchBar];
+    [headerView addSubview:searchBarContainer];
+    self.searchController.searchBar.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.searchController.searchBar.backgroundColor =
+        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    self.searchController.searchBar.alpha = 1.0;
+    self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+
+    [searchBarContainer.widthAnchor
+      constraintEqualToAnchor:headerView.widthAnchor].active = YES;
+    [searchBarContainer.topAnchor constraintEqualToAnchor:topView.bottomAnchor]
+        .active = YES;
+    [searchBarContainer.bottomAnchor
+     constraintEqualToAnchor:headerView.bottomAnchor].active = YES;
+    [searchBarContainer.leadingAnchor
+     constraintEqualToAnchor:headerView.leadingAnchor].active = YES;
+
+    self.tableView.tableHeaderView = headerView;
+    headerView.translatesAutoresizingMaskIntoConstraints = NO;
+    [headerView.leadingAnchor
+     constraintEqualToAnchor:self.tableView.leadingAnchor].active = YES;
+    [headerView.trailingAnchor
+     constraintEqualToAnchor:self.tableView.trailingAnchor].active = YES;
+    [headerView.topAnchor
+     constraintEqualToAnchor:self.tableView.topAnchor].active = YES;
+    [headerView.heightAnchor
+     constraintEqualToConstant:panel_header_height].active = YES;
+    [headerView.widthAnchor constraintEqualToAnchor:self.view.widthAnchor]
+        .active = YES;
+    [self.searchController.searchBar sizeToFit];
+}
+
+- (void)handleAddBarButtonTap {
+  [self presentVivaldiBookmarkURLEditor:nil isEditing:NO];
+}
+
+/// 'editingItem' can be nil as this editor will be presented for both adding
+/// and editing item
+- (void)presentVivaldiBookmarkURLEditor:(VivaldiSpeedDialItem*)editingItem
+                              isEditing:(BOOL)isEditing {
+  VivaldiSpeedDialItem* parentItem =
+    [[VivaldiSpeedDialItem alloc]
+     initWithBookmark:self.sharedState.tableViewDisplayedRootNode];
+
+  VivaldiBookmarkAddEditURLViewController* controller =
+    [VivaldiBookmarkAddEditURLViewController
+     initWithBrowser:self.browser
+           bookmarks:self.bookmarks
+                item:editingItem
+              parent:parentItem
+           isEditing:isEditing
+        allowsCancel:YES];
+
+  UINavigationController *newVC =
+      [[UINavigationController alloc]
+        initWithRootViewController:controller];
+
+  // Present the nav bar controller on top of the parent
+  [self.parentViewController presentViewController:newVC
+                                          animated:YES
+                                        completion:nil];
+}
+
+/// 'editingItem' can be nil as this editor will be presented for both adding
+/// and editing item
+- (void)presentVivaldiBookmarkFolderEditor:(VivaldiSpeedDialItem*)editingItem
+                                 isEditing:(BOOL)isEditing {
+  VivaldiSpeedDialItem* parentItem =
+    [[VivaldiSpeedDialItem alloc]
+     initWithBookmark:self.sharedState.tableViewDisplayedRootNode];
+
+  VivaldiBookmarkAddEditFolderViewController* controller =
+    [VivaldiBookmarkAddEditFolderViewController
+       initWithBrowser:self.browser
+             bookmarks:self.bookmarks
+                  item:editingItem
+                parent:parentItem
+             isEditing:isEditing
+          allowsCancel:YES];
+
+  UINavigationController *newVC =
+      [[UINavigationController alloc]
+        initWithRootViewController:controller];
+
+  // Present the nav bar controller on top of the parent
+  [self.parentViewController presentViewController:newVC
+                                          animated:YES
+                                        completion:nil];
 }
 
 @end

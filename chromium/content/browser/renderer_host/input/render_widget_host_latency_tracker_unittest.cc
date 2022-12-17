@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -207,8 +207,6 @@ TEST_F(RenderWidgetHostLatencyTrackerTest, TestValidEventTiming) {
   histogram_tester().ExpectUniqueSample(
       "Event.Latency.ScrollBegin.Wheel.TimeToHandled2_Impl", 0, 1);
   histogram_tester().ExpectUniqueSample(
-      "Event.Latency.Scroll.Wheel.TimeToHandled2_Impl", 0, 1);
-  histogram_tester().ExpectUniqueSample(
       "Event.Latency.ScrollBegin.Wheel.HandledToRendererSwap2_Impl", 0, 1);
   histogram_tester().ExpectUniqueSample(
       "Event.Latency.ScrollBegin.Wheel.RendererSwapToBrowserNotified2", 0, 1);
@@ -286,12 +284,6 @@ TEST_F(RenderWidgetHostLatencyTrackerTest,
                           rendering_on_main ? 1 : 0));
       EXPECT_TRUE(
           HistogramSizeEq("Event.Latency.ScrollBegin.Wheel.TimeToHandled2_Impl",
-                          rendering_on_main ? 0 : 1));
-      EXPECT_TRUE(
-          HistogramSizeEq("Event.Latency.Scroll.Wheel.TimeToHandled2_Main",
-                          rendering_on_main ? 1 : 0));
-      EXPECT_TRUE(
-          HistogramSizeEq("Event.Latency.Scroll.Wheel.TimeToHandled2_Impl",
                           rendering_on_main ? 0 : 1));
       EXPECT_TRUE(HistogramSizeEq(
           "Event.Latency.ScrollBegin.Wheel.HandledToRendererSwap2_Main",
@@ -417,12 +409,6 @@ TEST_F(RenderWidgetHostLatencyTrackerTest, MAYBE_TestWheelToScrollHistograms) {
       EXPECT_TRUE(HistogramSizeEq(
           "Event.Latency.ScrollUpdate.Wheel.TimeToHandled2_Impl",
           rendering_on_main ? 0 : 1));
-      EXPECT_TRUE(
-          HistogramSizeEq("Event.Latency.Scroll.Wheel.TimeToHandled2_Main",
-                          rendering_on_main ? 1 : 0));
-      EXPECT_TRUE(
-          HistogramSizeEq("Event.Latency.Scroll.Wheel.TimeToHandled2_Impl",
-                          rendering_on_main ? 0 : 1));
       EXPECT_TRUE(HistogramSizeEq(
           "Event.Latency.ScrollUpdate.Wheel.HandledToRendererSwap2_Main",
           rendering_on_main ? 1 : 0));
@@ -1000,8 +986,6 @@ TEST_F(RenderWidgetHostLatencyTrackerTest, TouchpadPinchEvents) {
                                  base::TimeTicks() + base::Milliseconds(5));
   viz_tracker()->OnGpuSwapBuffersCompleted({latency});
 
-  EXPECT_TRUE(HistogramSizeEq("Event.Latency.EventToRender.TouchpadPinch", 1));
-  EXPECT_TRUE(HistogramSizeEq("Event.Latency.EndToEnd.TouchpadPinch", 1));
   EXPECT_TRUE(HistogramSizeEq("Event.Latency.EndToEnd.TouchpadPinch2", 1));
 }
 

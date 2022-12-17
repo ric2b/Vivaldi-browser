@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -139,7 +139,7 @@ void AccessibilityEventRecorderAuraLinux::ProcessATKEvent(
     unsigned int n_params,
     const GValue* params) {
   // If we don't have a root object, it means the tree is being destroyed.
-  if (!manager_->GetRoot()) {
+  if (!manager_->GetBrowserAccessibilityRoot()) {
     RemoveATKEventListeners();
     return;
   }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,6 +71,7 @@
 #include "content/browser/renderer_host/navigator.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
+#include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
@@ -90,6 +91,7 @@
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_process_host_priority_client.h"
 #include "content/public/browser/site_isolation_policy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
@@ -137,6 +139,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/permissions_policy/policy_value.h"
 #include "third_party/blink/public/common/switches.h"
@@ -178,9 +181,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/browser/web_contents/web_contents_view_android.h"
 #include "content/public/browser/android/child_process_importance.h"
-#include "content/public/common/content_client.h"
 #include "content/test/mock_overscroll_refresh_handler_android.h"
-#include "content/test/test_content_browser_client.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "ui/events/android/event_handler_android.h"
@@ -379,7 +380,8 @@ CreateParsedPermissionsPolicyDeclaration(
   declaration.matches_opaque_src = match_all_origins;
 
   for (const auto& origin : origins)
-    declaration.allowed_origins.push_back(url::Origin::Create(origin));
+    declaration.allowed_origins.emplace_back(url::Origin::Create(origin),
+                                             /*has_subdomain_wildcard=*/false);
 
   std::sort(declaration.allowed_origins.begin(),
             declaration.allowed_origins.end());
@@ -412,7 +414,7 @@ blink::ParsedPermissionsPolicy CreateParsedPermissionsPolicyMatchesNone(
 // Check frame depth on node, widget, and process all match expected depth.
 void CheckFrameDepth(unsigned int expected_depth, FrameTreeNode* node) {
   EXPECT_EQ(expected_depth, node->current_frame_host()->GetFrameDepth());
-  RenderProcessHost::Priority priority =
+  RenderProcessHostPriorityClient::Priority priority =
       node->current_frame_host()->GetRenderWidgetHost()->GetPriority();
   EXPECT_EQ(expected_depth, priority.frame_depth);
   EXPECT_EQ(expected_depth,
@@ -4428,8 +4430,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
     params->parent_frame_token =
         shell()->web_contents()->GetPrimaryMainFrame()->GetFrameToken();
     params->frame_owner_properties = blink::mojom::FrameOwnerProperties::New();
-    params->token = frame_token;
+    params->frame_token = frame_token;
     params->devtools_frame_token = base::UnguessableToken::Create();
+    params->document_token = blink::DocumentToken();
     params->policy_container = CreateStubPolicyContainer();
     params->replication_state = blink::mojom::FrameReplicationState::New();
     agent_scheduling_group->CreateFrame(std::move(params));
@@ -4527,8 +4530,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, ParentDetachRemoteChild) {
     params->replication_state = blink::mojom::FrameReplicationState::New();
     params->replication_state->name = "name";
     params->replication_state->unique_name = "name";
-    params->token = frame_token;
+    params->frame_token = frame_token;
     params->devtools_frame_token = base::UnguessableToken::Create();
+    params->document_token = blink::DocumentToken();
     params->policy_container = CreateStubPolicyContainer();
     agent_scheduling_group->CreateFrame(std::move(params));
   }
@@ -5873,13 +5877,13 @@ class ShowCreatedWindowInterceptor
 
   void ShowCreatedWindow(const blink::LocalFrameToken& opener_frame_token,
                          WindowOpenDisposition disposition,
-                         const gfx::Rect& initial_rect,
+                         blink::mojom::WindowFeaturesPtr window_features,
                          bool user_gesture,
                          ShowCreatedWindowCallback callback) override {
     show_callback_ = std::move(callback);
     opener_frame_token_ = opener_frame_token;
     user_gesture_ = user_gesture;
-    initial_rect_ = initial_rect;
+    window_features_ = std::move(window_features);
     disposition_ = disposition;
     std::move(test_callback_)
         .Run(render_frame_host_->GetRenderWidgetHost()->GetRoutingID());
@@ -5887,8 +5891,8 @@ class ShowCreatedWindowInterceptor
 
   void ResumeShowCreatedWindow() {
     GetForwardingInterface()->ShowCreatedWindow(
-        opener_frame_token_, disposition_, initial_rect_, user_gesture_,
-        std::move(show_callback_));
+        opener_frame_token_, disposition_, std::move(window_features_),
+        user_gesture_, std::move(show_callback_));
   }
 
  private:
@@ -5896,7 +5900,7 @@ class ShowCreatedWindowInterceptor
   base::OnceCallback<void(int32_t pending_widget_routing_id)> test_callback_;
   ShowCreatedWindowCallback show_callback_;
   blink::LocalFrameToken opener_frame_token_;
-  gfx::Rect initial_rect_;
+  blink::mojom::WindowFeaturesPtr window_features_;
   bool user_gesture_ = false;
   WindowOpenDisposition disposition_;
   mojo::test::ScopedSwapImplForTesting<
@@ -7299,7 +7303,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   const blink::ParsedPermissionsPolicy initial_effective_policy =
       root->child_at(2)->effective_frame_policy().container_policy;
   EXPECT_EQ(1UL, initial_effective_policy[0].allowed_origins.size());
-  EXPECT_FALSE(initial_effective_policy[0].allowed_origins.begin()->opaque());
+  EXPECT_FALSE(
+      initial_effective_policy[0].allowed_origins.begin()->origin.opaque());
 
   // Set the "sandbox" attribute; pending policy should update, and should now
   // be flagged as matching the opaque origin of the frame (without containing
@@ -7312,7 +7317,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   const blink::ParsedPermissionsPolicy updated_pending_policy =
       root->child_at(2)->pending_frame_policy().container_policy;
   EXPECT_EQ(1UL, updated_effective_policy[0].allowed_origins.size());
-  EXPECT_FALSE(updated_effective_policy[0].allowed_origins.begin()->opaque());
+  EXPECT_FALSE(
+      updated_effective_policy[0].allowed_origins.begin()->origin.opaque());
   EXPECT_TRUE(updated_pending_policy[0].matches_opaque_src);
   EXPECT_EQ(0UL, updated_pending_policy[0].allowed_origins.size());
 
@@ -8381,7 +8387,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // Cancel the pending main frame navigation, and verify that the subframe can
   // still communicate with the (old) main frame.
-  root->navigator().CancelNavigation(root);
+  root->navigator().CancelNavigation(root, NavigationDiscardReason::kCancelled);
   EXPECT_FALSE(root->render_manager()->speculative_frame_host());
 
   EXPECT_EQ("root-ping-reply",
@@ -8447,7 +8453,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // Cancel the pending main frame navigation, and verify that the subframe can
   // still communicate with the (old) main frame.
-  root->navigator().CancelNavigation(root);
+  root->navigator().CancelNavigation(root, NavigationDiscardReason::kCancelled);
   EXPECT_FALSE(root->render_manager()->speculative_frame_host());
 
   EXPECT_EQ("opener-ping-reply",
@@ -10603,7 +10609,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, FrameDepthTest) {
   FrameTreeNode* child0 = root->child_at(0);
   {
     EXPECT_EQ(1u, child0->current_frame_host()->GetFrameDepth());
-    RenderProcessHost::Priority priority =
+    RenderProcessHostPriorityClient::Priority priority =
         child0->current_frame_host()->GetRenderWidgetHost()->GetPriority();
     // Same site instance as root.
     EXPECT_EQ(0u, priority.frame_depth);
@@ -10624,7 +10630,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, FrameDepthTest) {
   FrameTreeNode* grand_child = root->child_at(1)->child_at(0);
   {
     EXPECT_EQ(2u, grand_child->current_frame_host()->GetFrameDepth());
-    RenderProcessHost::Priority priority =
+    RenderProcessHostPriorityClient::Priority priority =
         grand_child->current_frame_host()->GetRenderWidgetHost()->GetPriority();
     EXPECT_EQ(2u, priority.frame_depth);
     // Same process as root
@@ -11873,7 +11879,7 @@ IN_PROC_BROWSER_TEST_P(
   // b.com renderer process exits cleanly without a crash.  In
   // https://crbug.com/794625, the crash was caused by trying to recreate the
   // reused proxy, which had been incorrectly set as non-live.
-  popup_root->ResetNavigationRequest(false);
+  popup_root->ResetNavigationRequest(NavigationDiscardReason::kCancelled);
   b_process_observer.Wait();
   EXPECT_TRUE(b_process_observer.did_exit_normally());
 }

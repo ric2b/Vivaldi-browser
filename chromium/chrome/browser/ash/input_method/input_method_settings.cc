@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -81,16 +81,6 @@ bool IsPinyinEngine(const std::string& engine_id) {
 
 bool IsZhuyinEngine(const std::string& engine_id) {
   return engine_id == "zh-hant-t-i0-und";
-}
-
-std::string GetPrefKeyForEngineId(const std::string& engine_id) {
-  if (engine_id == "zh-t-i0-pinyin") {
-    return "pinyin";
-  }
-  if (engine_id == "zh-hant-t-i0-und") {
-    return "zhuyin";
-  }
-  return engine_id;
 }
 
 mojom::LatinSettingsPtr CreateLatinSettings(
@@ -250,7 +240,7 @@ mojom::InputMethodSettingsPtr CreateSettingsFromPrefs(
   // All input method settings are stored in a single pref whose value is a
   // dictionary.
   const base::Value::Dict& all_input_method_pref =
-      prefs.GetValueDict(::prefs::kLanguageInputMethodSpecificSettings);
+      prefs.GetDict(::prefs::kLanguageInputMethodSpecificSettings);
 
   // For each input method, the dictionary contains an entry, with the key being
   // a string that identifies the input method, and the value being a
@@ -259,7 +249,7 @@ mojom::InputMethodSettingsPtr CreateSettingsFromPrefs(
   // The subdictionary may be null if the user hasn't changed any settings for
   // that input method.
   const base::Value::Dict* input_method_specific_pref_or_null =
-      all_input_method_pref.FindDict(GetPrefKeyForEngineId(engine_id));
+      all_input_method_pref.FindDict(engine_id);
 
   // For convenience, pass an empty dictionary if there are no settings for this
   // input method yet.

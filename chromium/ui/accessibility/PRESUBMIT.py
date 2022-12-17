@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -231,7 +231,7 @@ def GetConstexprFromFile(fullpath):
     if m:
       value = m.group(1)
       # Skip first/last sentinels
-      if value == 'kFirstModeFlag' or value == 'kLastModeFlag':
+      if (value in ['kNone', 'kFirstModeFlag', 'kLastModeFlag']):
         continue
       values.append(value)
 

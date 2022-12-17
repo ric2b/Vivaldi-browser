@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/disks/disk_mount_manager.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
@@ -28,6 +27,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
+#include "chromeos/ash/components/disks/disk_mount_manager.h"
 #include "components/drive/event_logger.h"
 #include "components/services/unzip/content/unzip_service.h"
 #include "components/services/unzip/public/cpp/unzip.h"
@@ -208,13 +208,12 @@ ExtensionFunction::ResponseAction FileManagerPrivateRemoveMountFunction::Run() {
 
   switch (volume->type()) {
     case file_manager::VOLUME_TYPE_REMOVABLE_DISK_PARTITION:
-    case file_manager::VOLUME_TYPE_MOUNTED_ARCHIVE_FILE: {
+    case file_manager::VOLUME_TYPE_MOUNTED_ARCHIVE_FILE:
       DiskMountManager::GetInstance()->UnmountPath(
           volume->mount_path().value(),
           base::BindOnce(
               &FileManagerPrivateRemoveMountFunction::OnDiskUnmounted, this));
       return RespondLater();
-    }
 
     case file_manager::VOLUME_TYPE_PROVIDED: {
       auto* service =
@@ -237,6 +236,15 @@ ExtensionFunction::ResponseAction FileManagerPrivateRemoveMountFunction::Run() {
     case file_manager::VOLUME_TYPE_SMB:
       ash::smb_client::SmbServiceFactory::Get(profile)->UnmountSmbFs(
           volume->mount_path());
+      return RespondNow(WithArguments());
+
+    case file_manager::VOLUME_TYPE_TESTING:
+      file_manager::VolumeManager::Get(profile)
+          ->RemoveVolumeForTesting(  // IN-TEST
+              volume->mount_path(), volume->type(), volume->device_type(),
+              volume->is_read_only(), volume->storage_device_path(),
+              volume->drive_label(), volume->file_system_type());
+
       return RespondNow(WithArguments());
 
     case file_manager::VOLUME_TYPE_GUEST_OS:

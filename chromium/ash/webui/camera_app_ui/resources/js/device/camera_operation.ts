@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -137,6 +137,7 @@ class Reconfigurer {
       getConfigurationCandidates(cameraInfo: CameraInfo):
           AsyncIterable<ConfigureCandidate> {
     const deviceOperator = DeviceOperator.getInstance();
+    const hasAudio = await this.isAudioInputAvailable();
 
     for (const deviceId of this.getDeviceIdCandidates(cameraInfo)) {
       for (const mode of await this.getModeCandidates(deviceId)) {
@@ -144,12 +145,12 @@ class Reconfigurer {
         let photoResolutions;
         if (deviceOperator !== null) {
           assert(cameraInfo.camera3DevicesInfo !== null);
-          candidates = this.capturePreferrer.getSortedCandidates(
-              cameraInfo.camera3DevicesInfo, deviceId, mode);
+          candidates = await this.capturePreferrer.getSortedCandidates(
+              cameraInfo.camera3DevicesInfo, deviceId, mode, hasAudio);
           photoResolutions = await deviceOperator.getPhotoResolutions(deviceId);
         } else {
-          candidates =
-              [new FakeCameraCaptureCandidate(deviceId, mode === Mode.VIDEO)];
+          candidates = [new FakeCameraCaptureCandidate(
+              deviceId, mode === Mode.VIDEO, hasAudio)];
           photoResolutions = candidates.map((c) => c.resolution);
         }
         const maxResolution = photoResolutions.reduce(
@@ -173,6 +174,11 @@ class Reconfigurer {
         }
       }
     }
+  }
+
+  private async isAudioInputAvailable(): Promise<boolean> {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.some((device) => device.kind === 'audioinput');
   }
 
   /**

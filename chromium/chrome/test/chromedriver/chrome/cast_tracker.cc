@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ CastTracker::CastTracker(DevToolsClient* client)
     : sinks_(base::Value::List()), issue_("") {
   client->ConnectIfNecessary();
   client->AddListener(this);
-  client->SendCommand("Cast.enable", base::DictionaryValue());
+  client->SendCommand("Cast.enable", base::Value::Dict());
 }
 
 CastTracker::~CastTracker() = default;

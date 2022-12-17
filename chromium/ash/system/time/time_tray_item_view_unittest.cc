@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,12 +21,8 @@ class TimeTrayItemViewTest : public AshTestBase,
   // AshTestBase:
   void SetUp() override {
     AshTestBase::SetUp();
-    std::vector<base::Feature> features = {features::kScalableStatusArea,
-                                           features::kCalendarView};
-    if (IsCalendarViewEnabled())
-      scoped_feature_list_.InitWithFeatures(features, {});
-    else
-      scoped_feature_list_.InitWithFeatures({}, features);
+    scoped_feature_list_.InitWithFeatureState(features::kCalendarView,
+                                              IsCalendarViewEnabled());
 
     time_tray_item_view_ = std::make_unique<TimeTrayItemView>(
         GetPrimaryShelf(), TimeView::Type::kTime);

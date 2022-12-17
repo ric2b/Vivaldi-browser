@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,6 @@
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
@@ -111,14 +110,6 @@ bool IsOptimizationTypeAllowed(const google::protobuf::RepeatedPtrField<
     // metadata if applicable and return.
     if (optimization_metadata) {
       switch (optimization.metadata_case()) {
-        case proto::Optimization::kPerformanceHintsMetadata:
-          optimization_metadata->set_performance_hints_metadata(
-              optimization.performance_hints_metadata());
-          break;
-        case proto::Optimization::kPublicImageMetadata:
-          optimization_metadata->set_public_image_metadata(
-              optimization.public_image_metadata());
-          break;
         case proto::Optimization::kLoadingPredictorMetadata:
           optimization_metadata->set_loading_predictor_metadata(
               optimization.loading_predictor_metadata());
@@ -959,7 +950,7 @@ void HintsManager::RegisterOptimizationTypes(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   bool should_load_new_optimization_filter = false;
 
-  DictionaryPrefUpdate previously_registered_opt_types(
+  ScopedDictPrefUpdate previously_registered_opt_types(
       pref_service_, prefs::kPreviouslyRegisteredOptimizationTypes);
   for (const auto optimization_type : optimization_types) {
     if (optimization_type == proto::TYPE_UNSPECIFIED)
@@ -978,7 +969,7 @@ void HintsManager::RegisterOptimizationTypes(
           << "Registered new OptimizationType: " << optimization_type;
     }
 
-    absl::optional<double> value = previously_registered_opt_types->FindBoolKey(
+    absl::optional<double> value = previously_registered_opt_types->FindBool(
         proto::OptimizationType_Name(optimization_type));
     if (!value) {
       if (!is_off_the_record_ &&
@@ -987,7 +978,7 @@ void HintsManager::RegisterOptimizationTypes(
               switches::kHintsProtoOverride)) {
         should_clear_hints_for_new_type_ = true;
       }
-      previously_registered_opt_types->SetBoolKey(
+      previously_registered_opt_types->Set(
           proto::OptimizationType_Name(optimization_type), true);
     }
 
@@ -1687,12 +1678,6 @@ void HintsManager::AddHintForTesting(
   if (metadata->loading_predictor_metadata()) {
     *optimization->mutable_loading_predictor_metadata() =
         *metadata->loading_predictor_metadata();
-  } else if (metadata->performance_hints_metadata()) {
-    *optimization->mutable_performance_hints_metadata() =
-        *metadata->performance_hints_metadata();
-  } else if (metadata->public_image_metadata()) {
-    *optimization->mutable_public_image_metadata() =
-        *metadata->public_image_metadata();
   } else if (metadata->any_metadata()) {
     *optimization->mutable_any_metadata() = *metadata->any_metadata();
   } else {

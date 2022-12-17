@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -812,13 +812,19 @@ void BrowserNonClientFrameViewChromeOS::AddedToWidget() {
   if (!chromeos::features::IsDarkLightModeEnabled())
     return;
 
+  if (highlight_border_overlay_ ||
+      !GetWidget()->GetNativeWindow()->GetProperty(
+          chromeos::kShouldHaveHighlightBorderOverlay)) {
+    return;
+  }
+
   highlight_border_overlay_ =
       std::make_unique<HighlightBorderOverlay>(GetWidget());
 }
 
 bool BrowserNonClientFrameViewChromeOS::GetShowCaptionButtons() const {
   return GetShowCaptionButtonsWhenNotInOverview() && !GetOverviewMode() &&
-         !GetHideCaptionButtonsForFullscreen();
+         !GetHideCaptionButtonsForFullscreen() && !UseWebUITabStrip();
 }
 
 bool BrowserNonClientFrameViewChromeOS::GetShowCaptionButtonsWhenNotInOverview()
@@ -862,11 +868,8 @@ bool BrowserNonClientFrameViewChromeOS::GetShouldPaint() const {
 #if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
   // Normal windows that have a WebUI-based tab strip do not need a browser
   // frame as no tab strip is drawn on top of the browser frame.
-  if (WebUITabStripContainerView::UseTouchableTabStrip(
-          browser_view()->browser()) &&
-      browser_view()->GetSupportsTabStrip()) {
+  if (UseWebUITabStrip())
     return false;
-  }
 #endif  // BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
 
   // We need to paint when the top-of-window views are revealed in immersive
@@ -1106,6 +1109,12 @@ bool BrowserNonClientFrameViewChromeOS::ShouldEnableImmersiveModeController()
 
   // In clamshell mode, we want immersive mode if fullscreen.
   return frame()->IsFullscreen();
+}
+
+bool BrowserNonClientFrameViewChromeOS::UseWebUITabStrip() const {
+  return WebUITabStripContainerView::UseTouchableTabStrip(
+             browser_view()->browser()) &&
+         browser_view()->GetSupportsTabStrip();
 }
 
 const aura::Window* BrowserNonClientFrameViewChromeOS::GetFrameWindow() const {

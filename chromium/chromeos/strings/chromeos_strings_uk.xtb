@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Редагувати файл}one{Редагувати файли}few{Редагувати файли}many{Редагувати файли}other{Редагувати файли}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> ГГц</translation>
 <translation id="3291996639387199448">Напрямок ключа</translation>
+<translation id="3294437725009624529">Гість</translation>
 <translation id="3310640316857623290">Затримка DNS значно довша, ніж дозволено</translation>
 <translation id="3328783797891415197">Триває перевірка</translation>
 <translation id="3340011300870565703">Рівень заряду акумулятора правого навушника – <ph name="BATTERY_PERCENTAGE" />%.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Поки мікропрограма оновлюється, не відключайте цей зовнішній пристрій і не завершуйте роботу комп’ютера. Можете згорнути це вікно. Оновлення може зайняти кілька хвилин, і впродовж цього часу зовнішній пристрій, імовірно, не працюватиме.</translation>
 <translation id="3486220673238053218">визначення</translation>
 <translation id="3488065109653206955">Частково активовано</translation>
+<translation id="3510890413042482857">Надсилати <ph name="BEGIN_LINK1" />дані відстеження ефективності<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Оновлення ОС Chrome</translation>
 <translation id="3527036260304016759">Не надруковано – невідома помилка</translation>
 <translation id="3532980081107202182">Залишилося приблизно <ph name="MIN_REMAINING" /> хв</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">Android не працює</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Автоматично вмикати темну тему після заходу сонця</translation>
 <translation id="5578477003638479617">Технологія UMTS</translation>
 <translation id="5578519639599103840">Сканувати ще раз</translation>
 <translation id="5583640892426849032">Backspace</translation>

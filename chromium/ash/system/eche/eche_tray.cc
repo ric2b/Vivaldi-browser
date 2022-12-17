@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,8 @@
 #include <algorithm>
 
 #include "ash/accessibility/accessibility_controller_impl.h"
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/constants/notifier_catalogs.h"
+#include "ash/constants/tray_background_view_catalog.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/ash_web_view.h"
@@ -41,6 +41,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "components/account_id/account_id.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -109,6 +110,38 @@ constexpr char kEcheTrayCopyPasteNotImplementedToastId[] =
 constexpr char kEcheTrayTabletModeNotSupportedId[] =
     "eche_tray_toast_ids.tablet_mode_not_supported";
 
+// AcceleratorsActions which should be handled by the AcceleratorController, not
+// the eche tray.
+constexpr AcceleratorAction kLocallyProcessedAcceleratorActions[] = {
+    AcceleratorAction::OPEN_FEEDBACK_PAGE,            // Shift + Alt + I
+    AcceleratorAction::EXIT,                          // Shift + Ctrl + Q
+    AcceleratorAction::SHOW_SHORTCUT_VIEWER,          // Ctrl + Alt + /
+    AcceleratorAction::TOGGLE_CAPS_LOCK,              // Alt + Search
+    AcceleratorAction::NEW_WINDOW,                    // Ctrl + N
+    AcceleratorAction::NEW_INCOGNITO_WINDOW,          // Shift + Ctrl + N
+    AcceleratorAction::NEW_TAB,                       // Ctrl + T
+    AcceleratorAction::OPEN_FILE_MANAGER,             // Shift + Alt + M
+    AcceleratorAction::LAUNCH_APP_0,                  // Alt + 1
+    AcceleratorAction::LAUNCH_APP_1,                  // Alt + 2
+    AcceleratorAction::LAUNCH_APP_2,                  // Alt + 3
+    AcceleratorAction::LAUNCH_APP_3,                  // Alt + 4
+    AcceleratorAction::LAUNCH_APP_4,                  // Alt + 5
+    AcceleratorAction::LAUNCH_APP_5,                  // Alt + 6
+    AcceleratorAction::LAUNCH_APP_6,                  // Alt + 7
+    AcceleratorAction::LAUNCH_APP_7,                  // Alt + 8
+    AcceleratorAction::LAUNCH_LAST_APP,               // Alt + 9
+    AcceleratorAction::TOGGLE_MESSAGE_CENTER_BUBBLE,  // Shift + Alt + N
+    AcceleratorAction::SCALE_UI_UP,                   // Shift + Ctrl + "+"
+    AcceleratorAction::SCALE_UI_DOWN,                 // Shift + Ctrl + "-"
+    AcceleratorAction::SCALE_UI_RESET,                // Shift + Ctrl + 0
+    AcceleratorAction::ROTATE_SCREEN,                 // Shift + Ctrl + Refresh
+    AcceleratorAction::TOGGLE_SPOKEN_FEEDBACK,        // Ctrl + Alt + Z
+    AcceleratorAction::FOCUS_SHELF,                   // Shift + Alt + L
+    AcceleratorAction::FOCUS_NEXT_PANE,               // Ctrl + Back
+    AcceleratorAction::FOCUS_PREVIOUS_PANE,           // Ctrl + Forward
+    AcceleratorAction::TOGGLE_APP_LIST                // Launcher(Search)
+};
+
 // Creates a button with the given callback, icon, and tooltip text.
 // `message_id` is the resource id of the tooltip text of the icon.
 std::unique_ptr<views::Button> CreateButton(
@@ -143,10 +176,22 @@ void EcheTray::EventInterceptor::OnKeyEvent(ui::KeyEvent* event) {
 }
 
 EcheTray::EcheTray(Shelf* shelf)
-    : TrayBackgroundView(shelf),
+    : TrayBackgroundView(shelf, TrayBackgroundViewCatalogName::kEche),
       icon_(
           tray_container()->AddChildView(std::make_unique<views::ImageView>())),
       event_interceptor_(std::make_unique<EventInterceptor>(this)) {
+  SetPressedCallback(base::BindRepeating(
+      [](EcheTray* eche_tray, const ui::Event& event) {
+        // The `bubble_` is cached, so don't check for existence (which is the
+        // base TrayBackgroundView implementation), check for visibility to
+        // decide on whether to show or hide.
+        if (eche_tray->IsBubbleVisible()) {
+          eche_tray->HideBubble();
+          return;
+        }
+        eche_tray->ShowBubble();
+      },
+      base::Unretained(this)));
   const int icon_padding = (kTrayItemSize - kIconSize) / 2;
 
   icon_->SetBorder(
@@ -216,6 +261,12 @@ void EcheTray::CloseBubble() {
 }
 
 void EcheTray::ShowBubble() {
+#ifdef FAKE_BUBBLE_FOR_DEBUG
+  LoadBubble(GURL("http://google.com"), std::move(gfx::Image()),
+             u"visible_name");
+  return;
+#endif
+
   if (!bubble_)
     return;
   SetIconVisibility(true);
@@ -237,20 +288,7 @@ void EcheTray::ShowBubble() {
   window_state->set_ignore_keyboard_bounds_change(true);
   bubble_->GetBubbleWidget()->GetNativeWindow()->AddPreTargetHandler(
       event_interceptor_.get());
-}
-
-bool EcheTray::PerformAction(const ui::Event& event) {
-  // Simply toggle between visible/invisibvle
-  if (IsBubbleVisible()) {
-    HideBubble();
-  } else {
-#ifdef FAKE_BUBBLE_FOR_DEBUG
-    LoadBubble(GURL("http://google.com"), std::move(gfx::Image()),
-               u"visible_name");
-#endif
-    ShowBubble();
-  }
-  return true;
+  shelf()->UpdateAutoHideState();
 }
 
 TrayBubbleView* EcheTray::GetBubbleView() {
@@ -275,6 +313,10 @@ void EcheTray::OnAnyBubbleVisibilityChanged(views::Widget* bubble_widget,
   // Another bubble has become visible, so minimize this one.
   if (visible && IsBubbleVisible())
     HideBubble();
+}
+
+bool EcheTray::CacheBubbleViewForHide() const {
+  return true;
 }
 
 std::u16string EcheTray::GetAccessibleNameForBubble() {
@@ -316,13 +358,13 @@ void EcheTray::OnLockStateChanged(bool locked) {
 void EcheTray::OnKeyboardUIDestroyed() {
   if (!IsBubbleVisible())
     return;
-  UpdateBubbleBounds();
+  UpdateEcheSizeAndBubbleBounds();
 }
 
-void EcheTray::OnKeyboardVisibilityChanged(bool visible) {
-  if (visible || !IsBubbleVisible())
+void EcheTray::OnKeyboardHidden(bool is_temporary_hide) {
+  if (!IsBubbleVisible())
     return;
-  UpdateBubbleBounds();
+  UpdateEcheSizeAndBubbleBounds();
 }
 
 void EcheTray::SetUrl(const GURL& url) {
@@ -423,6 +465,7 @@ void EcheTray::HideBubble() {
   bubble_->bubble_view()->SetVisible(false);
   bubble_->GetBubbleWidget()->Deactivate();
   bubble_->GetBubbleWidget()->Hide();
+  shelf()->UpdateAutoHideState();
 }
 
 void EcheTray::InitBubble() {
@@ -643,22 +686,21 @@ EcheIconLoadingIndicatorView* EcheTray::GetLoadingIndicator() {
   return phone_hub_tray->eche_loading_indicator();
 }
 
-void EcheTray::UpdateBubbleBounds() {
+void EcheTray::UpdateEcheSizeAndBubbleBounds() {
   if (!bubble_ || !bubble_->GetBubbleView())
     return;
+  gfx::Size eche_size = CalculateSizeForEche();
+  bubble_->GetBubbleView()->SetPreferredWidth(eche_size.width());
+  web_view_->SetPreferredSize(eche_size);
   bubble_->GetBubbleView()->ChangeAnchorRect(GetAnchor());
 }
 
 void EcheTray::OnDisplayConfigurationChanged() {
-  UpdateBubbleBounds();
+  UpdateEcheSizeAndBubbleBounds();
 }
 
 void EcheTray::OnAutoHideStateChanged(ShelfAutoHideState state) {
-  UpdateBubbleBounds();
-}
-
-void EcheTray::OnShelfIconPositionsChanged() {
-  UpdateBubbleBounds();
+  UpdateEcheSizeAndBubbleBounds();
 }
 
 void EcheTray::OnTabletModeStarted() {
@@ -674,11 +716,11 @@ void EcheTray::OnTabletModeStarted() {
 }
 
 void EcheTray::OnTabletModeEnded() {
-  UpdateBubbleBounds();
+  UpdateEcheSizeAndBubbleBounds();
 }
 void EcheTray::OnShelfAlignmentChanged(aura::Window* root_window,
                                        ShelfAlignment old_alignment) {
-  UpdateBubbleBounds();
+  UpdateEcheSizeAndBubbleBounds();
 }
 
 gfx::Rect EcheTray::GetAnchor() {
@@ -705,14 +747,15 @@ bool EcheTray::ProcessAcceleratorKeys(ui::KeyEvent* event) {
     return true;
   }
 
-  if (accelerator_controller->DoesAcceleratorMatchAction(
-          accelerator, AcceleratorAction::OPEN_FEEDBACK_PAGE) ||
-      accelerator_controller->DoesAcceleratorMatchAction(
-          accelerator, AcceleratorAction::EXIT)) {
-    views::ViewsDelegate::GetInstance()->ProcessAcceleratorWhileMenuShowing(
-        accelerator);
-    event->StopPropagation();
-    return true;
+  for (AcceleratorAction accelerator_action :
+       kLocallyProcessedAcceleratorActions) {
+    if (accelerator_controller->DoesAcceleratorMatchAction(
+            accelerator, accelerator_action)) {
+      views::ViewsDelegate::GetInstance()->ProcessAcceleratorWhileMenuShowing(
+          accelerator);
+      event->StopPropagation();
+      return true;
+    }
   }
 
   const ui::KeyboardCode key_code = event->key_code();
@@ -746,6 +789,9 @@ bool EcheTray::ProcessAcceleratorKeys(ui::KeyEvent* event) {
       //
       // TODO(https://crbug/1338650): See if we can just leave this to be
       // handled upper in the chain.
+      StartGracefulClose();
+      return true;
+    case ui::VKEY_ESCAPE:
       StartGracefulClose();
       return true;
     case ui::VKEY_BROWSER_BACK:

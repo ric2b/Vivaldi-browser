@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/app_mode/app_session_browser_window_handler.h"
@@ -37,11 +38,15 @@ class KioskSessionPluginHandlerDelegate;
 class AppSession {
  public:
   AppSession();
-  explicit AppSession(base::OnceClosure attempt_user_exit,
-                      PrefService* local_state);
+  AppSession(base::OnceClosure attempt_user_exit, PrefService* local_state);
   AppSession(const AppSession&) = delete;
   AppSession& operator=(const AppSession&) = delete;
   virtual ~AppSession();
+
+  static std::unique_ptr<AppSession> CreateForTesting(
+      base::OnceClosure attempt_user_exit,
+      PrefService* local_state,
+      const std::vector<std::string>& crash_dirs);
 
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
@@ -60,16 +65,23 @@ class AppSession {
   void SetAttemptUserExitForTesting(base::OnceClosure closure);
 
   Browser* GetSettingsBrowserForTesting();
-  void SetOnHandleBrowserCallbackForTesting(base::RepeatingClosure closure);
+  void SetOnHandleBrowserCallbackForTesting(
+      base::RepeatingCallback<void(bool is_closing)> callback);
 
   KioskSessionPluginHandlerDelegate* GetPluginHandlerDelegateForTesting();
 
+  bool is_shutting_down() const { return is_shutting_down_; }
+
  protected:
+  AppSession(base::OnceClosure attempt_user_exit,
+             PrefService* local_state,
+             std::unique_ptr<AppSessionMetricsService> metrics_service);
+
   // Set the |profile_| object.
   void SetProfile(Profile* profile);
 
   // Create a |browser_window_handler_| object.
-  void CreateBrowserWindowHandler(Browser* browser);
+  void CreateBrowserWindowHandler(absl::optional<std::string> web_app_name);
 
  private:
   // AppWindowHandler watches for app window and exits the session when the
@@ -80,7 +92,7 @@ class AppSession {
   // PluginHandlerDelegateImpl handles callbacks from `plugin_handler_`.
   class PluginHandlerDelegateImpl;
 
-  void OnHandledNewBrowserWindow();
+  void OnHandledNewBrowserWindow(bool is_closing);
   void OnAppWindowAdded(extensions::AppWindow* app_window);
   void OnLastAppWindowClosed();
 
@@ -100,7 +112,7 @@ class AppSession {
 
   // Is called whenever a new browser creation was handled by the
   // BrowserWindowHandler.
-  base::RepeatingClosure on_handle_browser_callback_;
+  base::RepeatingCallback<void(bool is_closing)> on_handle_browser_callback_;
 
   base::WeakPtrFactory<AppSession> weak_ptr_factory_{this};
 };

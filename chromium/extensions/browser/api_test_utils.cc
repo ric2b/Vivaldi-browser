@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,7 +51,8 @@ bool SendResponseHelper::GetResponse() {
 
 void SendResponseHelper::OnResponse(ExtensionFunction::ResponseType response,
                                     base::Value::List results,
-                                    const std::string& error) {
+                                    const std::string& error,
+                                    mojom::ExtraResponseDataPtr) {
   ASSERT_NE(ExtensionFunction::BAD_MESSAGE, response);
   response_ = std::make_unique<bool>(response == ExtensionFunction::SUCCEEDED);
   run_loop_.Quit();

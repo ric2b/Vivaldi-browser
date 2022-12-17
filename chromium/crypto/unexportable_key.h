@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -93,11 +93,6 @@ class CRYPTO_EXPORT UnexportableKeyProvider {
 // |SetUnexportableSigningKeyProvider|.
 CRYPTO_EXPORT std::unique_ptr<UnexportableKeyProvider>
 GetUnexportableKeyProvider();
-
-#if BUILDFLAG(IS_WIN)
-// MeasureTPMAvailability records UMA metrics of TPM availability.
-CRYPTO_EXPORT void MeasureTPMAvailabilityWin();
-#endif  // BUILDFLAG(IS_WIN)
 
 namespace internal {
 

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -958,7 +958,7 @@ bool WebSocketChannel::ParseClose(base::span<const char> payload,
 
     DVLOG(1) << "Close frame with payload size " << size << " received "
              << "(the first byte is " << std::hex
-             << static_cast<int>(payload.data()[0]) << ")";
+             << static_cast<int>(payload[0]) << ")";
     *code = kWebSocketErrorProtocolError;
     *message =
         "Received a broken close frame containing an invalid size body.";

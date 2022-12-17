@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/io_task_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
+#include "chrome/browser/ash/file_manager/trash_common_util.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -38,8 +39,10 @@ RestoreIOTask::RestoreIOTask(
     std::vector<storage::FileSystemURL> file_urls,
     Profile* profile,
     scoped_refptr<storage::FileSystemContext> file_system_context,
-    const base::FilePath base_path)
-    : file_system_context_(file_system_context),
+    const base::FilePath base_path,
+    bool show_notification)
+    : IOTask(show_notification),
+      file_system_context_(file_system_context),
       profile_(profile),
       base_path_(base_path) {
   progress_.state = State::kQueued;
@@ -49,6 +52,19 @@ RestoreIOTask::RestoreIOTask(
 
   for (const auto& url : file_urls) {
     progress_.sources.emplace_back(url, absl::nullopt);
+  }
+
+  if (file_urls.size() > 0) {
+    base::FilePath source_path =
+        util::GetDisplayablePath(profile_, file_urls.front())
+            .value_or(base::FilePath())
+            .BaseName();
+
+    if (source_path.MatchesFinalExtension(trash::kTrashInfoExtension)) {
+      source_path = source_path.RemoveFinalExtension();
+    }
+
+    progress_.source_name = source_path.value();
   }
 }
 
@@ -112,7 +128,7 @@ void RestoreIOTask::ValidateTrashInfo(size_t idx) {
 void RestoreIOTask::EnsureParentRestorePathExists(
     size_t idx,
     base::FileErrorOr<trash::ParsedTrashInfoData> parsed_data) {
-  if (parsed_data.is_error()) {
+  if (!parsed_data.has_value()) {
     progress_.sources[idx].error = parsed_data.error();
     Complete(State::kError);
     return;
@@ -164,7 +180,7 @@ void RestoreIOTask::RestoreItem(
   storage::FileSystemURL source_url =
       CreateFileSystemURL(progress_.sources[idx].url,
                           MakeRelativeFromBasePath(trashed_file_location));
-  if (destination_result.is_error()) {
+  if (!destination_result.has_value()) {
     progress_.outputs.emplace_back(source_url, absl::nullopt);
     OnRestoreItem(idx, destination_result.error());
     return;

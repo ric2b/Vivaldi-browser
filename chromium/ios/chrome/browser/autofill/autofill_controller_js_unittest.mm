@@ -1,26 +1,26 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import <UIKit/UIKit.h>
 
-#include "base/format_macros.h"
-#include "base/strings/sys_string_conversions.h"
+#import "base/format_macros.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "components/autofill/core/common/autofill_constants.h"
+#import "components/autofill/core/common/autofill_constants.h"
 #import "components/autofill/ios/form_util/form_util_java_script_feature.h"
-#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#include "ios/chrome/browser/web/chrome_web_client.h"
-#include "ios/web/public/js_messaging/web_frame.h"
+#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/web/chrome_web_client.h"
+#import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
-#include "ios/web/public/test/scoped_testing_web_client.h"
+#import "ios/web/public/test/scoped_testing_web_client.h"
 #import "ios/web/public/test/web_state_test_util.h"
-#include "ios/web/public/test/web_task_environment.h"
+#import "ios/web/public/test/web_task_environment.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/public/web_state.h"
-#include "testing/gtest/include/gtest/gtest.h"
-#include "testing/gtest_mac.h"
-#include "testing/platform_test.h"
+#import "testing/gtest/include/gtest/gtest.h"
+#import "testing/gtest_mac.h"
+#import "testing/platform_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -805,12 +805,12 @@ NSString* GenerateTestItemVerifyingJavaScripts(NSString* results,
        ++indexOfTestData) {
     NSArray* expectedData = [expected objectAtIndex:indexOfTestData];
     for (NSUInteger i = 1; i < [expectedData count]; ++i, ++controlCount) {
-      NSDictionary* expected = [expectedData objectAtIndex:i];
+      NSDictionary* expectedDict = [expectedData objectAtIndex:i];
       NSString* itemVerifyingJavaScripts =
           GenerateElementItemVerifyingJavaScripts(
               [NSString stringWithFormat:@"%@['fields'][%" PRIuNS "]", results,
                                          controlCount],
-              extract_mask, expected, attributed_to_check, controlCount);
+              extract_mask, expectedDict, attributed_to_check, controlCount);
       [verifying_javascripts addObject:itemVerifyingJavaScripts];
     }
   }
@@ -1436,13 +1436,13 @@ void AutofillControllerJsTest::TestWebFormControlElementToFormField(
     NSArray* attributes_to_check =
         GetFormFieldAttributeListsToCheck(extract_mask);
 
-    for (NSUInteger i = 1; i < [test_data count]; ++i) {
+    for (NSUInteger j = 1; j < [test_data count]; ++j) {
       NSString* get_element_to_test =
           [NSString stringWithFormat:@"var element = "
                                       "window.document.getElementsByTagName('%"
                                       "@')[%" PRIuNS "]",
-                                     tag_name, i - 1];
-      NSDictionary* expected = [test_data objectAtIndex:i];
+                                     tag_name, j - 1];
+      NSDictionary* expected = [test_data objectAtIndex:j];
       // Generates JavaScripts to verify the results. Parameter `results` is
       // @"field" as in the evaluation JavaScripts the results are returned in
       // `field`.

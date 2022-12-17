@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,7 @@
 #include "ash/constants/ambient_animation_theme.h"
 #include "base/metrics/histogram_functions.h"
 
-namespace ash {
-namespace personalization_app {
+namespace ash::personalization_app {
 
 void LogPersonalizationTheme(ColorMode color_mode) {
   base::UmaHistogramEnumeration(kPersonalizationThemeColorModeHistogramName,
@@ -29,5 +28,4 @@ void LogKeyboardBacklightColor(mojom::BacklightColor backlight_color) {
       kPersonalizationKeyboardBacklightColorHistogramName, backlight_color);
 }
 
-}  // namespace personalization_app
-}  // namespace ash
+}  // namespace ash::personalization_app

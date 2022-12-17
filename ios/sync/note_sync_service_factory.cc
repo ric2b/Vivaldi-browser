@@ -5,6 +5,7 @@
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/sync/file_store_factory.h"
 #include "sync/notes/note_sync_service.h"
 
 namespace vivaldi {
@@ -25,13 +26,18 @@ NoteSyncServiceFactory* NoteSyncServiceFactory::GetInstance() {
 NoteSyncServiceFactory::NoteSyncServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "NoteSyncServiceFactory",
-          BrowserStateDependencyManager::GetInstance()) {}
+          BrowserStateDependencyManager::GetInstance()) {
+  DependsOn(SyncedFileStoreFactory::GetInstance());
+}
 
 NoteSyncServiceFactory::~NoteSyncServiceFactory() {}
 
 std::unique_ptr<KeyedService> NoteSyncServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  auto note_sync_service = std::make_unique<sync_notes::NoteSyncService>();
+  ChromeBrowserState* browser_state =
+      ChromeBrowserState::FromBrowserState(context);
+  auto note_sync_service = std::make_unique<sync_notes::NoteSyncService>(
+      SyncedFileStoreFactory::GetForBrowserState(browser_state));
   return note_sync_service;
 }
 

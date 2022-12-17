@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,12 +11,14 @@
 #include "ash/capture_mode/test_capture_mode_delegate.h"
 #include "ash/public/cpp/capture_mode/capture_mode_test_api.h"
 #include "ash/public/cpp/projector/projector_controller.h"
+#include "ash/public/cpp/projector/projector_new_screencast_precondition.h"
 #include "ash/public/cpp/projector/projector_session.h"
 #include "ash/shell.h"
 #include "ash/wm/cursor_manager_chromeos.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -187,6 +189,11 @@ void ProjectorCaptureModeIntegrationHelper::SetUp() {
       .WillRepeatedly(testing::Return(true));
 }
 
+bool ProjectorCaptureModeIntegrationHelper::CanStartProjectorSession() const {
+  return ProjectorController::Get()->GetNewScreencastPrecondition().state !=
+         NewScreencastPreconditionState::kDisabled;
+}
+
 void ProjectorCaptureModeIntegrationHelper::StartProjectorModeSession() {
   auto* projector_session = ProjectorSession::Get();
   EXPECT_FALSE(projector_session->is_active());
@@ -202,7 +209,7 @@ bool IsLayerStackedRightBelow(ui::Layer* layer, ui::Layer* sibling) {
   DCHECK_EQ(layer->parent(), sibling->parent());
   const auto& children = layer->parent()->children();
   const int sibling_index =
-      std::find(children.begin(), children.end(), sibling) - children.begin();
+      base::ranges::find(children, sibling) - children.begin();
   return sibling_index > 0 && children[sibling_index - 1] == layer;
 }
 

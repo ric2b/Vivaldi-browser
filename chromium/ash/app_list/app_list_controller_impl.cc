@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -195,10 +195,6 @@ TabletModeAnimationTransition CalculateAnimationTransitionForMetrics(
       return TabletModeAnimationTransition::kHideHomeLauncherForWindow;
     case HomeLauncherAnimationTrigger::kLauncherButton:
       return TabletModeAnimationTransition::kHomeButtonShow;
-    case HomeLauncherAnimationTrigger::kDragRelease:
-      return launcher_should_show
-                 ? TabletModeAnimationTransition::kDragReleaseShow
-                 : TabletModeAnimationTransition::kDragReleaseHide;
     case HomeLauncherAnimationTrigger::kOverviewModeFade:
       return launcher_should_show
                  ? TabletModeAnimationTransition::kFadeOutOverview
@@ -233,11 +229,6 @@ void SetSuggestedContentInfoDismissed() {
 bool IsSuggestedContentEnabled() {
   PrefService* prefs = GetLastActiveUserPrefService();
   return prefs->GetBoolean(chromeos::prefs::kSuggestedContentEnabled);
-}
-
-int GetOffset(int offset, const char* pref_name) {
-  PrefService* prefs = GetLastActiveUserPrefService();
-  return prefs->GetBoolean(pref_name) ? -offset : offset;
 }
 
 // Gets the MRU window shown over the applist when in tablet mode.
@@ -435,7 +426,7 @@ void AppListControllerImpl::ShowAppList() {
   }
   DCHECK(!features::IsProductivityLauncherEnabled() ||
          !bubble_presenter_->IsShowing());
-  fullscreen_presenter_->Show(AppListViewState::kPeeking,
+  fullscreen_presenter_->Show(AppListViewState::kFullscreenAllApps,
                               GetDisplayIdToShowAppListOn(), base::TimeTicks(),
                               /*show_source=*/absl::nullopt);
 }
@@ -547,36 +538,8 @@ void AppListControllerImpl::Show(int64_t display_id,
     bubble_presenter_->Show(display_id);
     return;
   }
-  fullscreen_presenter_->Show(AppListViewState::kPeeking, display_id,
+  fullscreen_presenter_->Show(AppListViewState::kFullscreenAllApps, display_id,
                               event_time_stamp, show_source);
-}
-
-void AppListControllerImpl::UpdateYPositionAndOpacity(
-    int y_position_in_screen,
-    float background_opacity) {
-  // Avoid changing app list opacity and position when homecher is enabled.
-  if (IsTabletMode())
-    return;
-  fullscreen_presenter_->UpdateYPositionAndOpacity(y_position_in_screen,
-                                                   background_opacity);
-}
-
-void AppListControllerImpl::EndDragFromShelf(AppListViewState app_list_state) {
-  // Avoid dragging app list when homecher is enabled.
-  if (IsTabletMode())
-    return;
-  fullscreen_presenter_->EndDragFromShelf(app_list_state);
-}
-
-void AppListControllerImpl::ProcessMouseWheelEvent(
-    const ui::MouseWheelEvent& event) {
-  fullscreen_presenter_->ProcessMouseWheelOffset(event.location(),
-                                                 event.offset());
-}
-
-void AppListControllerImpl::ProcessScrollEvent(const ui::ScrollEvent& event) {
-  gfx::Vector2d offset(event.x_offset(), event.y_offset());
-  fullscreen_presenter_->ProcessScrollOffset(event.location(), offset);
 }
 
 void AppListControllerImpl::UpdateAppListWithNewTemporarySortOrder(
@@ -681,8 +644,8 @@ bool AppListControllerImpl::GoHome(int64_t display_id) {
   // home screen).
   std::vector<aura::Window*> foreground_windows;
   if (split_view_active) {
-    foreground_windows = {split_view_controller->left_window(),
-                          split_view_controller->right_window()};
+    foreground_windows = {split_view_controller->primary_window(),
+                          split_view_controller->secondary_window()};
     base::EraseIf(foreground_windows,
                   [](aura::Window* window) { return !window; });
   } else if (!windows.empty() && !WindowState::Get(windows[0])->IsMinimized()) {
@@ -1046,8 +1009,8 @@ void AppListControllerImpl::OnUiVisibilityChanged(
           IgnoreResult(close_assistant_ui_runner_.Release());
         }
 
-        Show(GetDisplayIdToShowAppListOn(), kAssistantEntryPoint,
-             base::TimeTicks());
+        Show(GetDisplayIdToShowAppListOn(),
+             AppListShowSource::kAssistantEntryPoint, base::TimeTicks());
       }
       if (ShouldShowAppListBubble()) {
         bubble_presenter_->ShowEmbeddedAssistantUI();
@@ -1109,24 +1072,9 @@ void AppListControllerImpl::OnUiVisibilityChanged(
   }
 }
 
-base::ScopedClosureRunner
-AppListControllerImpl::DisableHomeScreenBackgroundBlur() {
-  AppListView* const app_list_view = fullscreen_presenter_->GetView();
-  if (!app_list_view)
-    return base::ScopedClosureRunner(base::DoNothing());
-  return app_list_view->app_list_main_view()
-      ->contents_view()
-      ->apps_container_view()
-      ->DisableSuggestionChipsBlur();
-}
-
 void AppListControllerImpl::OnHomeLauncherAnimationComplete(
     bool shown,
     int64_t display_id) {
-  // Stop disabling background blur in home screen when the home screen
-  // transition ends.
-  home_screen_blur_disabler_.reset();
-
   home_launcher_transition_state_ = HomeLauncherTransitionState::kFinished;
 
   AssistantUiController::Get()->CloseUi(
@@ -1140,12 +1088,6 @@ void AppListControllerImpl::OnHomeLauncherAnimationComplete(
 
 void AppListControllerImpl::OnHomeLauncherPositionChanged(int percent_shown,
                                                           int64_t display_id) {
-  // Disable home screen background blur if the home launcher transition is
-  // staring - the blur disabler will be reset when the transition ends (in
-  // OnHomeLauncherAnimationComplete()).
-  if (home_launcher_transition_state_ == HomeLauncherTransitionState::kFinished)
-    home_screen_blur_disabler_ = DisableHomeScreenBackgroundBlur();
-
   const bool mostly_shown = percent_shown >= 50;
   home_launcher_transition_state_ =
       mostly_shown ? HomeLauncherTransitionState::kMostlyShown
@@ -1224,16 +1166,6 @@ bool AppListControllerImpl::IsShowingEmbeddedAssistantUI() const {
     return true;
   }
   return fullscreen_presenter_->IsShowingEmbeddedAssistantUI();
-}
-
-AppListViewState AppListControllerImpl::CalculateStateAfterShelfDrag(
-    const ui::LocatedEvent& event_in_screen,
-    float launcher_above_shelf_bottom_amount) const {
-  if (fullscreen_presenter_->GetView()) {
-    return fullscreen_presenter_->GetView()->CalculateStateAfterShelfDrag(
-        event_in_screen, launcher_above_shelf_bottom_amount);
-  }
-  return AppListViewState::kClosed;
 }
 
 void AppListControllerImpl::SetStateTransitionAnimationCallbackForTesting(
@@ -1395,11 +1327,6 @@ void AppListControllerImpl::ViewClosing() {
     client_->ViewClosing();
 
   split_view_observation_.Reset();
-}
-
-const std::vector<SkColor>&
-AppListControllerImpl::GetWallpaperProminentColors() {
-  return Shell::Get()->wallpaper_controller()->GetWallpaperColors();
 }
 
 void AppListControllerImpl::ActivateItem(const std::string& id,
@@ -1600,31 +1527,6 @@ void AppListControllerImpl::ScheduleCloseAssistant() {
   }
 }
 
-int AppListControllerImpl::AdjustAppListViewScrollOffset(int offset,
-                                                         ui::EventType type) {
-  Shelf* shelf = Shelf::ForWindow(
-      fullscreen_presenter_->GetView()->GetWidget()->GetNativeView());
-
-  // When Natural/Reverse Scrolling is turned on, the events we receive have had
-  // their offsets inverted to make that feature work. Certain behaviors, like
-  // scrolling on the shelf to expand the app list, only make sense in their
-  // original direction, so we undo that inversion.
-  int adjusted_offset =
-      (type == ui::ET_SCROLL || type == ui::ET_SCROLL_FLING_START)
-          ? GetOffset(offset, prefs::kNaturalScroll)
-          : GetOffset(offset, prefs::kMouseReverseScroll);
-
-  // If the shelf is side mounted, we set the offset in terms of being toward
-  // the shelf to simplify the logic later.
-  if (!shelf->IsHorizontalAlignment()) {
-    adjusted_offset = shelf->alignment() == ShelfAlignment::kLeft
-                          ? adjusted_offset
-                          : -adjusted_offset;
-  }
-
-  return adjusted_offset;
-}
-
 void AppListControllerImpl::LoadIcon(const std::string& app_id) {
   if (client_)
     client_->LoadIcon(profile_id_, app_id);
@@ -1635,9 +1537,6 @@ bool AppListControllerImpl::HasValidProfile() const {
 }
 
 bool AppListControllerImpl::ShouldHideContinueSection() const {
-  if (!features::IsLauncherHideContinueSectionEnabled())
-    return false;
-
   PrefService* prefs = GetLastActiveUserPrefService();
   return prefs->GetBoolean(prefs::kLauncherContinueSectionHidden);
 }
@@ -1928,7 +1827,7 @@ void AppListControllerImpl::ShowHomeScreen() {
   // transition.
   absl::optional<AppListShowSource> show_source;
   if (!GetTopVisibleWindow())
-    show_source = kTabletMode;
+    show_source = AppListShowSource::kTabletMode;
 
   Show(GetDisplayIdToShowAppListOn(), show_source, base::TimeTicks());
   UpdateHomeScreenVisibility();

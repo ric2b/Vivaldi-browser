@@ -1,10 +1,14 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/arc/pip/arc_picture_in_picture_window_controller_impl.h"
 
 #include "chrome/browser/ash/arc/pip/arc_pip_bridge.h"
+#include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/base/window_state_type.h"
+#include "ui/aura/window.h"
 
 namespace arc {
 
@@ -43,6 +47,22 @@ void ArcPictureInPictureWindowControllerImpl::OnWindowDestroyed(
 content::WebContents*
 ArcPictureInPictureWindowControllerImpl::GetWebContents() {
   // Should be a no-op on ARC. This is managed on the Android side.
+  return nullptr;
+}
+
+absl::optional<gfx::Rect>
+ArcPictureInPictureWindowControllerImpl::GetWindowBounds() {
+  for (auto* window : ChromeShelfController::instance()->GetArcWindows()) {
+    if (window->GetProperty(chromeos::kWindowStateTypeKey) ==
+        chromeos::WindowStateType::kPip) {
+      return window->GetBoundsInScreen();
+    }
+  }
+  return absl::nullopt;
+}
+
+content::WebContents*
+ArcPictureInPictureWindowControllerImpl::GetChildWebContents() {
   return nullptr;
 }
 

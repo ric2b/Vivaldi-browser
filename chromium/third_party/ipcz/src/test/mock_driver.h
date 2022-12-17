@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,6 +67,9 @@ class MockDriver {
                size_t,
                uint32_t,
                const void*));
+  MOCK_METHOD(IpczResult,
+              ReportBadTransportActivity,
+              (IpczDriverHandle, uintptr_t, uint32_t, const void*));
   MOCK_METHOD(IpczResult,
               AllocateSharedMemory,
               (size_t, uint32_t, const void*, IpczDriverHandle*));

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,7 @@ class WebFakeThreadScheduler : public WebThreadScheduler {
   ~WebFakeThreadScheduler() override;
 
   // RendererScheduler implementation.
-  std::unique_ptr<Thread> CreateMainThread() override;
+  std::unique_ptr<MainThread> CreateMainThread() override;
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
   std::unique_ptr<WebAgentGroupScheduler> CreateAgentGroupScheduler() override;
   WebAgentGroupScheduler* GetCurrentAgentGroupScheduler() override;

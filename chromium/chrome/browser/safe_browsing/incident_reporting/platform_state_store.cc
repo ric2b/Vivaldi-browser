@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,20 +41,19 @@ using google::protobuf::RepeatedPtrField;
 // Copies the (key, digest) pairs from |keys_and_digests| (a dict of string
 // values) to the |key_digest_pairs| protobuf.
 void KeysAndDigestsToProtobuf(
-    const base::DictionaryValue& keys_and_digests,
+    const base::Value::Dict& keys_and_digests,
     RepeatedPtrField<StateStoreData::Incidents::KeyDigestMapFieldEntry>*
         key_digest_pairs) {
-  for (base::DictionaryValue::Iterator iter(keys_and_digests); !iter.IsAtEnd();
-       iter.Advance()) {
+  for (const auto item : keys_and_digests) {
     uint32_t digest = 0;
-    if (!iter.value().is_string() ||
-        !base::StringToUint(iter.value().GetString(), &digest)) {
+    if (!item.second.is_string() ||
+        !base::StringToUint(item.second.GetString(), &digest)) {
       NOTREACHED();
       continue;
     }
     StateStoreData::Incidents::KeyDigestMapFieldEntry* key_digest =
         key_digest_pairs->Add();
-    key_digest->set_key(iter.key());
+    key_digest->set_key(item.first);
     key_digest->set_digest(digest);
   }
 }
@@ -62,20 +61,19 @@ void KeysAndDigestsToProtobuf(
 // Copies the (type, dict) pairs from |incidents_sent| (a dict of dict values)
 // to the |typed_incidents| protobuf.
 void IncidentsSentToProtobuf(
-    const base::DictionaryValue& incidents_sent,
+    const base::Value::Dict& incidents_sent,
     RepeatedPtrField<StateStoreData::TypeIncidentsMapFieldEntry>*
         type_incidents_pairs) {
-  for (base::DictionaryValue::Iterator iter(incidents_sent); !iter.IsAtEnd();
-       iter.Advance()) {
-    const base::DictionaryValue* keys_and_digests = nullptr;
-    if (!iter.value().GetAsDictionary(&keys_and_digests)) {
+  for (const auto item : incidents_sent) {
+    const base::Value::Dict* keys_and_digests = item.second.GetIfDict();
+    if (!keys_and_digests) {
       NOTREACHED();
       continue;
     }
-    if (keys_and_digests->DictEmpty())
+    if (keys_and_digests->empty())
       continue;
     int incident_type = 0;
-    if (!base::StringToInt(iter.key(), &incident_type)) {
+    if (!base::StringToInt(item.first, &incident_type)) {
       NOTREACHED();
       continue;
     }
@@ -156,7 +154,7 @@ absl::optional<base::Value> Load(Profile* profile) {
 #endif
 }
 
-void Store(Profile* profile, const base::DictionaryValue* incidents_sent) {
+void Store(Profile* profile, const base::Value::Dict& incidents_sent) {
 #if defined(USE_PLATFORM_STATE_STORE)
   std::string data;
   SerializeIncidentsSent(incidents_sent, &data);
@@ -166,11 +164,11 @@ void Store(Profile* profile, const base::DictionaryValue* incidents_sent) {
 
 #if defined(USE_PLATFORM_STATE_STORE)
 
-void SerializeIncidentsSent(const base::DictionaryValue* incidents_sent,
+void SerializeIncidentsSent(const base::Value::Dict& incidents_sent,
                             std::string* data) {
   StateStoreData store_data;
 
-  IncidentsSentToProtobuf(*incidents_sent,
+  IncidentsSentToProtobuf(incidents_sent,
                           store_data.mutable_type_to_incidents());
   store_data.SerializeToString(data);
 }

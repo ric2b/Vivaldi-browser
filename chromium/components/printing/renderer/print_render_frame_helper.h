@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -149,8 +149,6 @@ class PrintRenderFrameHelper
   // Disable print preview and switch to system dialog printing even if full
   // printing is build-in. This method is used by CEF.
   static void DisablePreview();
-
-  bool IsPrintingEnabled() const;
 
   void PrintNode(const blink::WebNode& node);
 
@@ -574,6 +572,7 @@ class PrintRenderFrameHelper
     void SetIsForArc(bool is_for_arc);
 #endif
     void set_error(enum PrintPreviewErrorBuckets error);
+    void set_error_details(const std::string& details);
 
     // Getters
     // Original frame for which preview was requested.
@@ -594,6 +593,7 @@ class PrintRenderFrameHelper
     MetafileSkia* metafile();
     ContentProxySet* typeface_content_info();
     int last_error() const;
+    const std::string& last_error_details() const;
 
    private:
     enum State {
@@ -647,6 +647,7 @@ class PrintRenderFrameHelper
     base::TimeTicks begin_time_;
 
     enum PrintPreviewErrorBuckets error_ = PREVIEW_ERROR_NONE;
+    std::string error_details_;
 
     State state_ = UNINITIALIZED;
   };

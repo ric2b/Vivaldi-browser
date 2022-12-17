@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,12 +75,9 @@ const char kTestParam2[] = "param2";
 const char kTestParam3[] = "param:/3";
 const char kTestParamValue[] = "value";
 
-const base::Feature kTestFeature1{"FeatureName1",
-                                  base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kTestFeature2{"FeatureName2",
-                                  base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kTestFeature3{"FeatureName3",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kTestFeature1, "FeatureName1", base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kTestFeature2, "FeatureName2", base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kTestFeature3, "FeatureName3", base::FEATURE_DISABLED_BY_DEFAULT);
 
 const FeatureEntry::FeatureParam kTestVariationOther1[] = {
     {kTestParam1, kTestParamValue}};
@@ -247,7 +244,7 @@ TEST_F(FlagsStateTest, AddTwoFlagsRemoveOne) {
 
   {
     const base::Value::List& entries_list =
-        prefs_.GetValueList(prefs::kAboutFlagsEntries);
+        prefs_.GetList(prefs::kAboutFlagsEntries);
     ASSERT_EQ(2u, entries_list.size());
 
     std::string s0 = entries_list[0].GetString();
@@ -262,7 +259,7 @@ TEST_F(FlagsStateTest, AddTwoFlagsRemoveOne) {
 
   {
     const base::Value::List& entries_list =
-        prefs_.GetValueList(prefs::kAboutFlagsEntries);
+        prefs_.GetList(prefs::kAboutFlagsEntries);
     ASSERT_EQ(1u, entries_list.size());
     std::string s0 = entries_list[0].GetString();
     EXPECT_TRUE(s0 == kFlags1);
@@ -275,7 +272,7 @@ TEST_F(FlagsStateTest, AddTwoFlagsRemoveBoth) {
   flags_state_->SetFeatureEntryEnabled(&flags_storage_, kFlags2, true);
   {
     const base::Value::List& entries_list =
-        prefs_.GetValueList(prefs::kAboutFlagsEntries);
+        prefs_.GetList(prefs::kAboutFlagsEntries);
     ASSERT_EQ(2u, entries_list.size());
   }
 
@@ -284,7 +281,7 @@ TEST_F(FlagsStateTest, AddTwoFlagsRemoveBoth) {
   flags_state_->SetFeatureEntryEnabled(&flags_storage_, kFlags2, false);
   {
     const base::Value::List& entries_list =
-        prefs_.GetValueList(prefs::kAboutFlagsEntries);
+        prefs_.GetList(prefs::kAboutFlagsEntries);
     EXPECT_TRUE(entries_list.empty());
   }
 }
@@ -586,7 +583,7 @@ TEST_F(FlagsStateTest, PersistAndPrune) {
 
   // FeatureEntry 3 should show still be persisted in preferences though.
   const base::Value::List& entries_list =
-      prefs_.GetValueList(prefs::kAboutFlagsEntries);
+      prefs_.GetList(prefs::kAboutFlagsEntries);
   EXPECT_EQ(2U, entries_list.size());
   std::string s0 = entries_list[0].GetString();
   EXPECT_EQ(kFlags1, s0);
@@ -638,7 +635,7 @@ TEST_F(FlagsStateTest, CheckValues) {
 
   // And it should persist.
   const base::Value::List& entries_list =
-      prefs_.GetValueList(prefs::kAboutFlagsEntries);
+      prefs_.GetList(prefs::kAboutFlagsEntries);
   EXPECT_EQ(2U, entries_list.size());
   std::string s0 = entries_list[0].GetString();
   EXPECT_EQ(kFlags1, s0);

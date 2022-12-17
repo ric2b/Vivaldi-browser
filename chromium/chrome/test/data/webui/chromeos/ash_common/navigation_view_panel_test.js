@@ -1,13 +1,14 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {SelectorItem} from 'chrome://resources/ash/common/navigation_selector.js';
 import {NavigationViewPanelElement} from 'chrome://resources/ash/common/navigation_view_panel.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {assertEquals, assertFalse, assertThrows, assertTrue} from '../../chai_assert.js';
-import {eventToPromise, flushTasks} from '../../test_util.js';
+import {eventToPromise} from '../../test_util.js';
 
 export function navigationViewPanelTestSuite() {
   /** @type {?NavigationViewPanelElement} */

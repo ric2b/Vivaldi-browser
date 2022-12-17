@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -147,7 +147,17 @@ bool WebGraphicsContext3DVideoFramePool::CopyRGBATextureToVideoFrame(
   DCHECK(ri);
   unsigned query_id = 0;
   ri->GenQueriesEXT(1, &query_id);
-  ri->BeginQueryEXT(GL_COMMANDS_COMPLETED_CHROMIUM, query_id);
+
+#if BUILDFLAG(IS_WIN)
+  // On Windows, GMB data read will do synchronization on its own.
+  // No need for GL_COMMANDS_COMPLETED_CHROMIUM QueryEXT.
+  GLenum queryTarget = GL_COMMANDS_ISSUED_CHROMIUM;
+#else
+  // QueryEXT functions are used to make sure that CopyRGBATextureToVideoFrame()
+  // texture copy is complete before we access GMB data.
+  GLenum queryTarget = GL_COMMANDS_COMPLETED_CHROMIUM;
+#endif
+  ri->BeginQueryEXT(queryTarget, query_id);
 
   const bool copy_succeeded = media::CopyRGBATextureToVideoFrame(
       raster_context_provider, src_format, src_size, src_color_space,
@@ -157,9 +167,7 @@ bool WebGraphicsContext3DVideoFramePool::CopyRGBATextureToVideoFrame(
     return false;
   }
 
-  // QueryEXT functions are used to make sure that CopyRGBATextureToVideoFrame()
-  // texture copy before we access GMB data.
-  ri->EndQueryEXT(GL_COMMANDS_COMPLETED_CHROMIUM);
+  ri->EndQueryEXT(queryTarget);
 
   auto on_query_done_cb =
       [](scoped_refptr<media::VideoFrame> frame,
@@ -209,14 +217,14 @@ void ApplyMetadataAndRunCallback(
   std::move(orig_callback).Run(std::move(wrapped));
 }
 
-const base::Feature kGpuMemoryBufferReadbackFromTexture {
-  "GpuMemoryBufferReadbackFromTexture",
+BASE_FEATURE(kGpuMemoryBufferReadbackFromTexture,
+             "GpuMemoryBufferReadbackFromTexture",
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
-      base::FEATURE_ENABLED_BY_DEFAULT
+             base::FEATURE_ENABLED_BY_DEFAULT
 #else
-      base::FEATURE_DISABLED_BY_DEFAULT
+             base::FEATURE_DISABLED_BY_DEFAULT
 #endif
-};
+);
 
 #if BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY)
 bool IsRK3399Board() {
@@ -273,8 +281,8 @@ bool WebGraphicsContext3DVideoFramePool::ConvertVideoFrame(
           ? kTopLeft_GrSurfaceOrigin
           : kBottomLeft_GrSurfaceOrigin,
       src_video_frame->mailbox_holder(0), dst_color_space,
-      WTF::Bind(ApplyMetadataAndRunCallback, src_video_frame,
-                std::move(callback)));
+      WTF::BindOnce(ApplyMetadataAndRunCallback, src_video_frame,
+                    std::move(callback)));
 }
 
 // static

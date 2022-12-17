@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import("//mojo/public/tools/bindings/mojom.gni")
@@ -77,6 +77,8 @@ component("browser") {
     "file_system/copy_or_move_file_validator.h",
     "file_system/copy_or_move_hook_delegate.cc",
     "file_system/copy_or_move_hook_delegate.h",
+    "file_system/copy_or_move_hook_delegate_composite.cc",
+    "file_system/copy_or_move_hook_delegate_composite.h",
     "file_system/copy_or_move_operation_delegate.cc",
     "file_system/copy_or_move_operation_delegate.h",
     "file_system/dragged_file_util.cc",
@@ -184,6 +186,7 @@ component("browser") {
     "file_system/watcher_manager.h",
     "quota/client_usage_tracker.cc",
     "quota/client_usage_tracker.h",
+    "quota/quota_availability.h",
     "quota/quota_callbacks.h",
     "quota/quota_client_type.cc",
     "quota/quota_client_type.h",
@@ -239,6 +242,7 @@ component("browser") {
     "//base/third_party/dynamic_annotations",
     "//build:chromeos_buildflags",
     "//components/crash/core/common:crash_key",
+    "//components/file_access:file_access",
     "//components/services/storage/public/cpp",
     "//components/services/storage/public/cpp/filesystem",
     "//mojo/public/cpp/bindings",
@@ -292,6 +296,7 @@ source_set("unittests") {
     "database/database_util_unittest.cc",
     "database/databases_table_unittest.cc",
     "file_system/copy_or_move_file_validator_unittest.cc",
+    "file_system/copy_or_move_hook_delegate_composite_unittest.cc",
     "file_system/copy_or_move_operation_delegate_unittest.cc",
     "file_system/dragged_file_util_unittest.cc",
     "file_system/external_mount_points_unittest.cc",
@@ -345,6 +350,7 @@ source_set("unittests") {
     ":test_support",
     "//base/test:test_support",
     "//build:chromeos_buildflags",
+    "//components/file_access:file_access",
     "//components/services/filesystem/public/mojom",
     "//components/services/storage/public/cpp",
     "//mojo/public/cpp/system",
@@ -382,6 +388,8 @@ static_library("test_support") {
     "test/mock_blob_util.h",
     "test/mock_bytes_provider.cc",
     "test/mock_bytes_provider.h",
+    "test/mock_copy_or_move_hook_delegate.cc",
+    "test/mock_copy_or_move_hook_delegate.h",
     "test/mock_file_change_observer.cc",
     "test/mock_file_change_observer.h",
     "test/mock_file_update_observer.cc",

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,8 @@ suite('cr-input', function() {
   });
 
   function regenerateNewInput() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     crInput = document.createElement('cr-input');
     document.body.appendChild(crInput);
     input = crInput.inputElement;
@@ -278,7 +279,8 @@ suite('cr-input', function() {
      * This function assumes attributes are passed in priority order.
      */
     function testAriaLabel(attributes: string[]) {
-      document.body.innerHTML = '';
+      document.body.innerHTML =
+          window.trustedTypes!.emptyHTML as unknown as string;
       crInput = document.createElement('cr-input');
       attributes.forEach(attribute => {
         // Using their name as the value out of convenience.

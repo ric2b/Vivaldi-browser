@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -212,7 +212,7 @@ public class PriceAlertsMessageCardTest {
                        withParent(withId(R.id.large_message_linear_layout))))
                 .perform(click());
         assertNotNull(mPriceDropNotificationManager.getNotificationChannel());
-        assertEquals(NotificationManager.IMPORTANCE_LOW,
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT,
                 mPriceDropNotificationManager.getNotificationChannel().getImportance());
         assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(

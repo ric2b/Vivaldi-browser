@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,7 +51,8 @@ SavedTabGroupButton::SavedTabGroupButton(
     bool animations_enabled)
     : MenuButton(std::move(callback), group.title()),
       tab_group_color_id_(group.color()),
-      is_group_in_tabstrip_(group.tab_group_id().has_value()),
+      is_group_in_tabstrip_(group.local_group_id().has_value()),
+      guid_(group.saved_guid()),
       tabs_(group.saved_tabs()),
       page_navigator_callback_(std::move(page_navigator)),
       context_menu_controller_(
@@ -76,7 +77,8 @@ SavedTabGroupButton::SavedTabGroupButton(
   ConfigureInkDropForToolbar(this);
   SetImageLabelSpacing(ChromeLayoutProvider::Get()->GetDistanceMetric(
       ChromeDistanceMetric::DISTANCE_RELATED_LABEL_HORIZONTAL_LIST));
-  views::InstallPillHighlightPathGenerator(this);
+  views::InstallRoundRectHighlightPathGenerator(this, GetInsets(),
+                                                kBorderRadius);
 
   show_animation_ = std::make_unique<gfx::SlideAnimation>(this);
   if (!animations_enabled) {

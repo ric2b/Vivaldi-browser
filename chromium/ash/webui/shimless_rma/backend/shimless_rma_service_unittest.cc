@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -122,7 +122,7 @@ class ShimlessRmaServiceTest : public testing::Test {
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
         {chromeos::features::kShimlessRMAOsUpdate}, {});
-    PowerManagerClient::InitializeFake();
+    chromeos::PowerManagerClient::InitializeFake();
     // VersionUpdater depends on UpdateEngineClient.
     UpdateEngineClient::InitializeFake();
 
@@ -150,7 +150,7 @@ class ShimlessRmaServiceTest : public testing::Test {
     cros_network_config_test_helper_.reset();
     chromeos::LoginState::Shutdown();
     UpdateEngineClient::Shutdown();
-    PowerManagerClient::Shutdown();
+    chromeos::PowerManagerClient::Shutdown();
   }
 
   void SetupFakeNetwork() {
@@ -1058,7 +1058,8 @@ TEST_F(ShimlessRmaServiceTest, AbortRmaRequestsFullReboot) {
       }));
   run_loop.Run();
 
-  EXPECT_EQ(1, FakePowerManagerClient::Get()->num_request_restart_calls());
+  EXPECT_EQ(
+      1, chromeos::FakePowerManagerClient::Get()->num_request_restart_calls());
 }
 
 TEST_F(ShimlessRmaServiceTest,
@@ -1076,7 +1077,8 @@ TEST_F(ShimlessRmaServiceTest,
       }));
   run_loop.Run();
 
-  EXPECT_EQ(0, FakePowerManagerClient::Get()->num_request_restart_calls());
+  EXPECT_EQ(
+      0, chromeos::FakePowerManagerClient::Get()->num_request_restart_calls());
 }
 
 TEST_F(ShimlessRmaServiceTest,
@@ -1097,7 +1099,8 @@ TEST_F(ShimlessRmaServiceTest,
   shimless_rma_provider_->ShutDownAfterHardwareError();
   run_loop.RunUntilIdle();
 
-  EXPECT_EQ(1, FakePowerManagerClient::Get()->num_request_shutdown_calls());
+  EXPECT_EQ(
+      1, chromeos::FakePowerManagerClient::Get()->num_request_shutdown_calls());
 }
 
 TEST_F(ShimlessRmaServiceTest,
@@ -1118,7 +1121,8 @@ TEST_F(ShimlessRmaServiceTest,
   shimless_rma_provider_->ShutDownAfterHardwareError();
   run_loop.RunUntilIdle();
 
-  EXPECT_EQ(1, FakePowerManagerClient::Get()->num_request_shutdown_calls());
+  EXPECT_EQ(
+      1, chromeos::FakePowerManagerClient::Get()->num_request_shutdown_calls());
 }
 
 TEST_F(ShimlessRmaServiceTest, CriticalErrorRebootRequestsFullReboot) {
@@ -1135,7 +1139,8 @@ TEST_F(ShimlessRmaServiceTest, CriticalErrorRebootRequestsFullReboot) {
       }));
   run_loop.Run();
 
-  EXPECT_EQ(1, FakePowerManagerClient::Get()->num_request_restart_calls());
+  EXPECT_EQ(
+      1, chromeos::FakePowerManagerClient::Get()->num_request_restart_calls());
 }
 
 TEST_F(ShimlessRmaServiceTest, SetSameOwner) {
@@ -3090,26 +3095,6 @@ TEST_F(ShimlessRmaServiceTest, GetLog) {
   run_loop.RunUntilIdle();
 }
 
-TEST_F(ShimlessRmaServiceTest, GetLogWrongStateEmpty) {
-  const std::vector<rmad::GetStateReply> fake_states = {CreateStateReply(
-      rmad::RmadState::kDeviceDestination, rmad::RMAD_ERROR_OK)};
-  fake_rmad_client_()->SetFakeStateReplies(std::move(fake_states));
-  base::RunLoop run_loop;
-  shimless_rma_provider_->GetCurrentState(
-      base::BindLambdaForTesting([&](mojom::StateResultPtr state_result_ptr) {
-        EXPECT_EQ(state_result_ptr->state, mojom::State::kChooseDestination);
-        EXPECT_EQ(state_result_ptr->error, rmad::RmadErrorCode::RMAD_ERROR_OK);
-      }));
-  run_loop.RunUntilIdle();
-
-  shimless_rma_provider_->GetLog(base::BindLambdaForTesting(
-      [&](const std::string& log, rmad::RmadErrorCode error) {
-        EXPECT_TRUE(log.empty());
-        EXPECT_EQ(error, rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
-      }));
-  run_loop.RunUntilIdle();
-}
-
 TEST_F(ShimlessRmaServiceTest, SaveLog) {
   const std::vector<rmad::GetStateReply> fake_states = {
       CreateStateReply(rmad::RmadState::kRepairComplete, rmad::RMAD_ERROR_OK)};
@@ -3132,26 +3117,6 @@ TEST_F(ShimlessRmaServiceTest, SaveLog) {
       [&](const base::FilePath& save_path, rmad::RmadErrorCode error) {
         EXPECT_EQ(save_path, *expected_save_path.get());
         EXPECT_EQ(error, rmad::RmadErrorCode::RMAD_ERROR_OK);
-      }));
-  run_loop.RunUntilIdle();
-}
-
-TEST_F(ShimlessRmaServiceTest, SaveLogWrongStateEmpty) {
-  const std::vector<rmad::GetStateReply> fake_states = {CreateStateReply(
-      rmad::RmadState::kDeviceDestination, rmad::RMAD_ERROR_OK)};
-  fake_rmad_client_()->SetFakeStateReplies(std::move(fake_states));
-  base::RunLoop run_loop;
-  shimless_rma_provider_->GetCurrentState(
-      base::BindLambdaForTesting([&](mojom::StateResultPtr state_result_ptr) {
-        EXPECT_EQ(state_result_ptr->state, mojom::State::kChooseDestination);
-        EXPECT_EQ(state_result_ptr->error, rmad::RmadErrorCode::RMAD_ERROR_OK);
-      }));
-  run_loop.RunUntilIdle();
-
-  shimless_rma_provider_->SaveLog(base::BindLambdaForTesting(
-      [&](const base::FilePath& save_path, rmad::RmadErrorCode error) {
-        EXPECT_TRUE(save_path.empty());
-        EXPECT_EQ(error, rmad::RmadErrorCode::RMAD_ERROR_REQUEST_INVALID);
       }));
   run_loop.RunUntilIdle();
 }
@@ -3614,6 +3579,53 @@ TEST_F(ShimlessRmaServiceTest, ObservePowerCableStateAfterSignal) {
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
   EXPECT_EQ(fake_observer.observations.size(), 1UL);
+}
+
+class FakeExternalDiskStateObserver : public mojom::ExternalDiskStateObserver {
+ public:
+  void OnExternalDiskStateChanged(bool detected) override {
+    observations.push_back(detected);
+  }
+
+  std::vector<bool> observations;
+  mojo::Receiver<mojom::ExternalDiskStateObserver> receiver{this};
+};
+
+TEST_F(ShimlessRmaServiceTest, ObserveExternalDiskState) {
+  FakeExternalDiskStateObserver fake_observer1;
+  FakeExternalDiskStateObserver fake_observer2;
+
+  // Shimless is expected to support multiple ExternalDiskState observers.
+  shimless_rma_provider_->ObserveExternalDiskState(
+      fake_observer1.receiver.BindNewPipeAndPassRemote());
+  shimless_rma_provider_->ObserveExternalDiskState(
+      fake_observer2.receiver.BindNewPipeAndPassRemote());
+  base::RunLoop run_loop;
+  fake_rmad_client_()->TriggerExternalDiskStateObservation(true);
+  run_loop.RunUntilIdle();
+  EXPECT_EQ(fake_observer1.observations.size(), 1UL);
+  EXPECT_EQ(fake_observer1.observations[0], true);
+  EXPECT_EQ(fake_observer2.observations.size(), 1UL);
+  EXPECT_EQ(fake_observer2.observations[0], true);
+}
+
+TEST_F(ShimlessRmaServiceTest, ObserveExternalDiskStateAfterSignal) {
+  FakeExternalDiskStateObserver fake_observer1;
+  FakeExternalDiskStateObserver fake_observer2;
+  fake_rmad_client_()->TriggerExternalDiskStateObservation(true);
+
+  // Shimless is expected to support multiple ExternalDiskState observers.
+  shimless_rma_provider_->ObserveExternalDiskState(
+      fake_observer1.receiver.BindNewPipeAndPassRemote());
+  shimless_rma_provider_->ObserveExternalDiskState(
+      fake_observer2.receiver.BindNewPipeAndPassRemote());
+  base::RunLoop run_loop;
+  run_loop.RunUntilIdle();
+  EXPECT_EQ(fake_observer1.observations.size(), 2UL);
+  EXPECT_EQ(fake_observer1.observations[0], true);
+  EXPECT_EQ(fake_observer1.observations[1], true);
+  EXPECT_EQ(fake_observer2.observations.size(), 1UL);
+  EXPECT_EQ(fake_observer2.observations[0], true);
 }
 
 class FakeHardwareVerificationStatusObserver

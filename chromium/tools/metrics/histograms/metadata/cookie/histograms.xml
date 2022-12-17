@@ -1,5 +1,5 @@
 <!--
-Copyright 2020 The Chromium Authors. All rights reserved.
+Copyright 2020 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -32,7 +32,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.ClockSkew.ExpiredWithoutSkew" enum="Boolean"
-    expires_after="2023-01-01">
+    expires_after="2023-03-05">
   <owner>kyraseevers@chromium.org</owner>
   <owner>bingler@chromium.org</owner>
   <summary>
@@ -81,7 +81,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.CommitProblem" enum="CookieCommitProblem"
-    expires_after="2022-10-30">
+    expires_after="2023-03-12">
   <owner>morlovich@chromium.org</owner>
   <summary>
     Recorded when a problem occurs trying to commit changes to the cookie store
@@ -102,7 +102,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.CookiePrefix" enum="CookiePrefix"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>estark@chromium.org</owner>
   <summary>
     Number of times a cookie was set with a name prefixed by
@@ -111,8 +111,59 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Cookie.CookiePrefix.CaseVariant" enum="CookiePrefix"
+    expires_after="2023-03-15">
+  <owner>bingler@chromium.org</owner>
+  <owner>miketaylr@chromium.org</owner>
+  <summary>
+    Number of times a cookie was set with a name prefixed by a case variant of
+    &quot;__Secure-&quot; or &quot;__Host-&quot;.
+
+    This is recorded whenever a cookie is created with a case variant prefix.
+    I.e.: Non-variants will not be recorded in this metric nor will cookies
+    without a prefix.
+
+    Case variant prefixes will case-insensitively match cookie prefixes, but
+    won't case-sensitively match. E.x.: &quot;__SeCuRe-&quot; or
+    &quot;__HOST&quot;.
+  </summary>
+</histogram>
+
+<histogram name="Cookie.CookiePrefix.CaseVariantCount" enum="Boolean"
+    expires_after="2023-03-15">
+  <owner>bingler@chromium.org</owner>
+  <owner>miketaylr@chromium.org</owner>
+  <summary>
+    Records whether or not a cookie prefix was a case variant or not. True
+    indicates a case variant. This is recorded whenever a cookie is created with
+    a cookie prefix.
+
+    Case variant prefixes will case-insensitively match cookie prefixes, but
+    won't case-sensitively match. E.x.: &quot;__SeCuRe-&quot; or
+    &quot;__HOST&quot;.
+  </summary>
+</histogram>
+
+<histogram name="Cookie.CookiePrefix.CaseVariantValid" enum="Boolean"
+    expires_after="2023-03-15">
+  <owner>bingler@chromium.org</owner>
+  <owner>miketaylr@chromium.org</owner>
+  <summary>
+    Records whether or not a cookie prefix case variant meets the requirements
+    for a cookie prefix. E.x.: `__SECURE-foo=bar` would be rejected due to the
+    lack of the `Secure` attribute. True indicates the cookie's prefix was valid
+    (the cookie may still be invalid for other reasons).
+
+    This is recorded whenever a cookie is created with a case variant prefix.
+
+    Case variant prefixes will case-insensitively match cookie prefixes, but
+    won't case-sensitively match. E.x.: &quot;__SeCuRe-&quot; or
+    &quot;__HOST&quot;.
+  </summary>
+</histogram>
+
 <histogram name="Cookie.CookieSchemeRequestScheme" enum="CookieRequestScheme"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>bingler@chromium.org</owner>
   <owner>miketaylr@chromium.org</owner>
   <summary>
@@ -123,7 +174,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.CookieSourceScheme" enum="CookieSourceScheme"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>estark@chromium.org</owner>
   <summary>
     For each cookie added to the store, record whether its source URL has a
@@ -132,7 +183,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.CookieSourceSchemeName" enum="CookieSourceSchemeName"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>bingler@chromium.org</owner>
   <owner>miketaylr@chromium.org</owner>
   <summary>
@@ -141,7 +192,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Cookie.Count2" units="units" expires_after="2022-12-18">
+<histogram name="Cookie.Count2" units="units" expires_after="2023-02-19">
   <owner>bingler@chromium.org</owner>
   <owner>morlovich@chromium.org</owner>
   <summary>
@@ -203,7 +254,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.DomainHasNonASCII" enum="Boolean"
-    expires_after="2023-01-01">
+    expires_after="2023-03-05">
   <owner>johannhof@chromium.org</owner>
   <owner>bingler@chromium.org</owner>
   <summary>
@@ -216,7 +267,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Cookie.DomainSet" enum="Boolean" expires_after="2022-12-25">
+<histogram name="Cookie.DomainSet" enum="Boolean" expires_after="2023-02-26">
   <owner>bingler@chromium.org</owner>
   <owner>miketaylr@chromium.org</owner>
   <summary>
@@ -288,7 +339,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.FirstPartySets.ContextMostDelayedQueryDelta" units="ms"
-    expires_after="M110">
+    expires_after="2023-03-26">
   <owner>shuuran@chromium.org</owner>
   <owner>kaustubhag@chromium.org</owner>
   <summary>
@@ -302,7 +353,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.FirstPartySets.DelayedQueriesCount" units="queries"
-    expires_after="M110">
+    expires_after="2023-03-12">
   <owner>cfredric@chromium.org</owner>
   <owner>kaustubhag@chromium.org</owner>
   <summary>
@@ -336,7 +387,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.FirstPartySets.FindOwner.Latency" units="microseconds"
-    expires_after="M110">
+    expires_after="2023-03-12">
   <owner>cfredric@chromium.org</owner>
   <owner>chrome-first-party-sets@chromium.org</owner>
   <summary>
@@ -374,7 +425,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.FirstPartySets.MostDelayedQueryDelta2" units="ms"
-    expires_after="M110">
+    expires_after="2023-03-26">
   <owner>cfredric@chromium.org</owner>
   <owner>kaustubhag@chromium.org</owner>
   <summary>
@@ -391,8 +442,30 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Cookie.FirstPartySets.NumBrowserQueriesBeforeInitialization"
+    units="queries" expires_after="2023-10-13">
+  <owner>kaklilu@chromium.org</owner>
+  <owner>cfredric@chromium.org</owner>
+  <owner>chrome-first-party-sets@chromium.org</owner>
+  <summary>
+    This histogram keeps count of how many times the First-Party Sets were
+    queried in the browser process before the browser-global First-Party Sets
+    were initialized.
+
+    This metric is recorded by the FirstPartySetsPolicyService when it has
+    completed its initialization flow, which is blocked until the service
+    receives its configuration from the FirstPartySetsHandler after the
+    browser-global sets have been initialized.
+
+    Since each profile has its own instance of the FirstPartySetPolicyService
+    the client may record this metric more than once. This metric is recorded
+    for a profile even when First-Party Sets is disabled globally or for this
+    profile, and is recorded for all kinds of profiles.
+  </summary>
+</histogram>
+
 <histogram name="Cookie.FromStorageWithValidLength" enum="BooleanValid"
-    expires_after="2022-09-18">
+    expires_after="2023-03-18">
   <owner>bingler@chromium.org</owner>
   <owner>awillia@chromium.org</owner>
   <summary>
@@ -429,7 +502,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.IsPartitionedValid" enum="BooleanValid"
-    expires_after="2023-02-01">
+    expires_after="2023-04-09">
   <owner>dylancutler@chromium.org</owner>
   <owner>bingler@chromium.org</owner>
   <summary>
@@ -463,7 +536,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.LoadProblem" enum="CookieLoadProblem"
-    expires_after="2023-01-01">
+    expires_after="2023-03-05">
   <owner>morlovich@chromium.org</owner>
   <summary>
     Recorded when a problem is recorded when loading the persistent cookie
@@ -472,7 +545,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.MaxSameSiteNoneCookiesPerKey" units="units"
-    expires_after="2023-02-01">
+    expires_after="2023-04-09">
   <owner>dylancutler@chromium.org</owner>
   <owner>src/net/cookies/OWNERS</owner>
   <summary>
@@ -497,7 +570,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Cookie.NumKeys" units="keys" expires_after="2022-12-25">
+<histogram name="Cookie.NumKeys" units="keys" expires_after="2023-02-26">
   <owner>cfredric@chromium.org</owner>
   <owner>kaustubhag@chromium.org</owner>
   <summary>
@@ -552,7 +625,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.Port.OmniboxURLNavigation.Localhost"
-    enum="InterestingCookiePorts" expires_after="2022-09-11">
+    enum="InterestingCookiePorts" expires_after="2023-03-11">
   <owner>bingler@chromium.org</owner>
   <owner>miketaylr@chromium.org</owner>
   <summary>
@@ -573,7 +646,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.Port.OmniboxURLNavigation.RemoteHost"
-    enum="InterestingCookiePorts" expires_after="2022-09-11">
+    enum="InterestingCookiePorts" expires_after="2023-03-11">
   <owner>bingler@chromium.org</owner>
   <owner>miketaylr@chromium.org</owner>
   <summary>
@@ -670,7 +743,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.RequestSameSiteContext" enum="SameSiteCookieContext"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>bingler@chromium.org</owner>
   <owner>morlovich@chromium.org</owner>
   <summary>
@@ -681,7 +754,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.SameParty.BlockedByThirdPartyCookieBlockingSetting"
-    enum="BooleanBlocked" expires_after="M110">
+    enum="BooleanBlocked" expires_after="2023-03-12">
   <owner>cfredric@chromium.org</owner>
   <owner>bingler@chromium.org</owner>
   <summary>
@@ -801,7 +874,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.SameSiteAttributeValue" enum="CookieSameSiteString"
-    expires_after="2023-01-01">
+    expires_after="2023-03-05">
   <owner>bingler@chromium.org</owner>
   <owner>miketaylr@chromium.org</owner>
   <summary>
@@ -811,7 +884,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.SameSiteNoneSizeBytes" units="bytes"
-    expires_after="2023-02-01">
+    expires_after="2023-04-09">
   <owner>dylancutler@chromium.org</owner>
   <owner>src/net/cookies/OWNERS</owner>
   <summary>
@@ -821,7 +894,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cookie.TimeBlockedOnLoad" units="ms"
-    expires_after="2023-01-01">
+    expires_after="2023-03-05">
   <owner>nharper@chromium.org</owner>
   <summary>
     The amount of time (ms) between the cookie store load starting and
@@ -915,7 +988,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Cookie.Type" enum="CookieType" expires_after="2023-01-01">
+<histogram name="Cookie.Type" enum="CookieType" expires_after="2023-03-05">
   <owner>mkwst@chromium.org</owner>
   <summary>For each cookie added to the store, record it's type(s).</summary>
 </histogram>

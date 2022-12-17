@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@ namespace switches {
 const char kForceControlFaceAe[] = "force-control-face-ae";
 const char kHdrNetOverride[] = "hdrnet-override";
 const char kAutoFramingOverride[] = "auto-framing-override";
+const char kEffectsOverride[] = "effects-override";
 
 }  // namespace switches
 
@@ -20,8 +21,9 @@ namespace features {
 
 // Controls if the camera frame is rotated to the upright display orientation in
 // the Chrome OS VideoCaptureDevice implementation.
-const base::Feature kDisableCameraFrameRotationAtSource{
-    "DisableCameraFrameRotationAtSource", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kDisableCameraFrameRotationAtSource,
+             "DisableCameraFrameRotationAtSource",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features
 
@@ -32,7 +34,7 @@ bool ShouldEnableAutoFraming() {
   // TODO(pihsun): Migrate the flag to use base::Feature.
   std::string value =
       command_line->GetSwitchValueASCII(media::switches::kAutoFramingOverride);
-  return value == media::switches::kAutoFramingForceEnabled;
+  return value != media::switches::kAutoFramingForceDisabled;
 }
 
 }  // namespace media

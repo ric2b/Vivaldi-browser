@@ -26,7 +26,6 @@
 #import "SPUDownloadData.h"
 #import "SUApplicationInfo.h"
 #import "SPUUpdaterSettings.h"
-#import "SUTouchBarForwardDeclarations.h"
 #import "SUTouchBarButtonGroup.h"
 #import "SPUXPCServiceInfo.h"
 #import "SPUUserUpdateState.h"
@@ -38,7 +37,7 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
 @property (strong) SUAppcastItem *updateItem;
 @property (strong) SUHost *host;
 @property (nonatomic) BOOL allowsAutomaticUpdates;
-@property (nonatomic, copy, nullable) void(^completionBlock)(SPUUserUpdateChoice);
+@property (nonatomic, copy, nullable) void(^completionBlock)(SPUUserUpdateChoice, NSRect, BOOL);
 @property (nonatomic) SPUUserUpdateState *state;
 
 @property (strong) NSProgressIndicator *releaseNotesSpinner;
@@ -59,6 +58,9 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
 @end
 
 @implementation SUUpdateAlert
+{
+    void (^_didBecomeKeyBlock)(void);
+}
 
 @synthesize completionBlock = _completionBlock;
 @synthesize state = _state;
@@ -83,7 +85,7 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
 
 @synthesize webView = _webView;
 
-- (instancetype)initWithAppcastItem:(SUAppcastItem *)item state:(SPUUserUpdateState *)state host:(SUHost *)aHost versionDisplayer:(id <SUVersionDisplay>)aVersionDisplayer completionBlock:(void (^)(SPUUserUpdateChoice))block
+- (instancetype)initWithAppcastItem:(SUAppcastItem *)item state:(SPUUserUpdateState *)state host:(SUHost *)aHost versionDisplayer:(id <SUVersionDisplay>)aVersionDisplayer completionBlock:(void (^)(SPUUserUpdateChoice, NSRect, BOOL))completionBlock didBecomeKeyBlock:(void (^)(void))didBecomeKeyBlock
 {
     self = [super initWithWindowNibName:@"SUUpdateAlert"];
     if (self != nil) {
@@ -92,11 +94,25 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
         versionDisplayer = aVersionDisplayer;
         
         _state = state;
-        _completionBlock = [block copy];
+        _completionBlock = [completionBlock copy];
+        _didBecomeKeyBlock = [didBecomeKeyBlock copy];
         
         SPUUpdaterSettings *updaterSettings = [[SPUUpdaterSettings alloc] initWithHostBundle:host.bundle];
-        _allowsAutomaticUpdates = updaterSettings.allowsAutomaticUpdates && updaterSettings.automaticallyChecksForUpdates && !item.informationOnlyUpdate;
+        
+        BOOL allowsAutomaticUpdates;
+        NSNumber *allowsAutomaticUpdatesOption = updaterSettings.allowsAutomaticUpdatesOption;
+        if (item.informationOnlyUpdate) {
+            allowsAutomaticUpdates = NO;
+        } else if (allowsAutomaticUpdatesOption == nil) {
+            allowsAutomaticUpdates = updaterSettings.automaticallyChecksForUpdates;
+        } else {
+            allowsAutomaticUpdates = allowsAutomaticUpdatesOption.boolValue;
+        }
+        _allowsAutomaticUpdates = allowsAutomaticUpdates;
+        
         [self setShouldCascadeWindows:NO];
+    } else {
+        assert(false);
     }
     return self;
 }
@@ -116,10 +132,14 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
 {
     [self.webView stopLoading];
     [self.webView.view removeFromSuperview]; // Otherwise it gets sent Esc presses (why?!) and gets very confused.
+    
+    BOOL wasKeyWindow = self.window.keyWindow;
+    NSRect windowFrame = self.window.frame;
+    
     [self close];
     
     if (self.completionBlock != nil) {
-        self.completionBlock(choice);
+        self.completionBlock(choice, windowFrame, wasKeyWindow);
         self.completionBlock = nil;
     }
 }
@@ -153,19 +173,17 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
 {
     [self adaptReleaseNotesAppearance];
 
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
     if (@available(macOS 10.14, *)) {
         if (!self.observingAppearance) {
             [self.webView.view addObserver:self forKeyPath:@"effectiveAppearance" options:0 context:nil];
             self.observingAppearance = YES;
         }
     }
-#endif
     
     // Stick a nice big spinner in the middle of the web view until the page is loaded.
     NSRect frame = [[self.webView.view superview] frame];
     self.releaseNotesSpinner = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(NSMidX(frame) - 16, NSMidY(frame) - 16, 32, 32)];
-    [self.releaseNotesSpinner setStyle:NSProgressIndicatorSpinningStyle];
+    [self.releaseNotesSpinner setStyle:NSProgressIndicatorStyleSpinning];
     [self.releaseNotesSpinner startAnimation:self];
     [[self.webView.view superview] addSubview:self.releaseNotesSpinner];
     
@@ -187,29 +205,24 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(__attribute__((unused)) NSDictionary<NSKeyValueChangeKey,id> *)change context:(__attribute__((unused)) void *)context {
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
     if (@available(macOS 10.14, *)) {
         if (object == self.webView.view && [keyPath isEqualToString:@"effectiveAppearance"]) {
             [self adaptReleaseNotesAppearance];
         }
     }
-#endif
 }
 
 - (void)dealloc {
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
     if (@available(macOS 10.14, *)) {
         if (self.observingAppearance) {
             [self.webView.view removeObserver:self forKeyPath:@"effectiveAppearance"];
             self.observingAppearance = NO;
         }
     }
-#endif
 }
 
 - (void)adaptReleaseNotesAppearance
 {
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
     if (@available(macOS 10.14, *))
     {
         NSAppearanceName bestAppearance = [self.webView.view.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]];
@@ -241,7 +254,6 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
             [self.webView setDrawsBackground:YES];
         }
     }
-#endif
 }
 
 - (void)showUpdateReleaseNotesWithDownloadData:(SPUDownloadData *)downloadData
@@ -291,6 +303,8 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
     BOOL showReleaseNotes = [self showsReleaseNotes];
     
     if (showReleaseNotes) {
+        self.window.frameAutosaveName = @"SUUpdateAlert";
+        
         NSURL *colorStyleURL = [[NSBundle bundleForClass:[self class]] URLForResource:@"ReleaseNotesColorStyle" withExtension:@"css"];
         
         // "-apple-system-font" is a reference to the system UI font. "-apple-system" is the new recommended token, but for backward compatibility we can't use it.
@@ -317,26 +331,29 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
         
         self.webView.view.frame = boxContentView.bounds;
         self.webView.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    } else {
+        // Update alert should not be resizable when no release notes are available
+        self.window.styleMask &= ~NSWindowStyleMaskResizable;
     }
-
-    [self.window setFrameAutosaveName: showReleaseNotes ? @"SUUpdateAlert" : @"SUUpdateAlertSmall" ];
 
     [self.window setLevel:NSStatusWindowLevel]; //for vivaldi
-    if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]]) {
-        [self.window setLevel:NSFloatingWindowLevel]; // This means the window will float over all other apps, if our app is switched out ?!
-    }
-
     if (self.updateItem.informationOnlyUpdate) {
-        [self.installButton setTitle:SULocalizedString(@"Learn More...", @"Alternate title for 'Install Update' button when there's no download in RSS feed.")];
+        [self.installButton setTitle:SULocalizedString(@"Learn More…", @"Alternate title for 'Install Update' button when there's no download in RSS feed.")];
         [self.installButton setAction:@selector(openInfoURL:)];
     }
 
+    BOOL allowsAutomaticUpdates = self.allowsAutomaticUpdates;
+    
     if (showReleaseNotes) {
         [self displayReleaseNotes];
     } else {
-        NSLayoutConstraint *automaticallyInstallUpdatesButtonToDescriptionFieldConstraint = [NSLayoutConstraint constraintWithItem:self.automaticallyInstallUpdatesButton attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:self.descriptionField attribute:NSLayoutAttributeBottom multiplier:1.0 constant:8.0];
-        
-        [self.window.contentView addConstraint:automaticallyInstallUpdatesButtonToDescriptionFieldConstraint];
+        // When automatic updates aren't allowed we won't show the automatic install updates button
+        // This button is removed later below
+        if (allowsAutomaticUpdates) {
+            NSLayoutConstraint *automaticallyInstallUpdatesButtonToDescriptionFieldConstraint = [NSLayoutConstraint constraintWithItem:self.automaticallyInstallUpdatesButton attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:self.descriptionField attribute:NSLayoutAttributeBottom multiplier:1.0 constant:8.0];
+            
+            [self.window.contentView addConstraint:automaticallyInstallUpdatesButtonToDescriptionFieldConstraint];
+        }
         
         [self.releaseNotesContainerView removeFromSuperview];
     }
@@ -345,19 +362,18 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
     
     // When we show release notes, it looks ugly if the install buttons are not closer to the release notes view
     // However when we don't show release notes, it looks ugly if the install buttons are too close to the description field. Shrugs.
-    if (!self.allowsAutomaticUpdates) {
+    if (!allowsAutomaticUpdates) {
         if (showReleaseNotes) {
             // Fix constraints so that buttons aren't far away from web view when we hide the automatic updates check box
             NSLayoutConstraint *skipButtonToReleaseNotesContainerConstraint = [NSLayoutConstraint constraintWithItem:self.skipButton attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:self.releaseNotesContainerView attribute:NSLayoutAttributeBottom multiplier:1.0 constant:12.0];
             
             [self.window.contentView addConstraint:skipButtonToReleaseNotesContainerConstraint];
-            
-            [self.automaticallyInstallUpdatesButton removeFromSuperview];
         } else {
-            // Disable automatic install updates option if the developer wishes for it in Info.plist
-            // If we are showing release notes, this button will be hidden instead
-            self.automaticallyInstallUpdatesButton.enabled = NO;
+            NSLayoutConstraint *skipButtonToDescriptionConstraint = [NSLayoutConstraint constraintWithItem:self.skipButton attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:self.descriptionField attribute:NSLayoutAttributeBottom multiplier:1.0 constant:20.0];
+
+            [self.window.contentView addConstraint:skipButtonToDescriptionConstraint];
         }
+        [self.automaticallyInstallUpdatesButton removeFromSuperview];
     }
     
     if (self.state.stage == SPUUserUpdateStageInstalling) {
@@ -379,6 +395,13 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
     }
 
     [self.window center];
+}
+
+- (void)windowDidBecomeKey:(NSNotification *)__unused note
+{
+    if (_didBecomeKeyBlock != NULL) {
+        _didBecomeKeyBlock();
+    }
 }
 
 - (BOOL)windowShouldClose:(NSNotification *) __unused note
@@ -424,16 +447,16 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
     NSString *finalString = nil;
 
     if (self.updateItem.informationOnlyUpdate) {
-        finalString = [NSString stringWithFormat:SULocalizedString(@"%@ %@ is now available--you have %@. Would you like to learn more about this update on the web?", @"Description text for SUUpdateAlert when the update informational with no download."), self.host.name, updateItemVersion, hostVersion];
+        finalString = [NSString stringWithFormat:SULocalizedString(@"%@ %@ is now available—you have %@. Would you like to learn more about this update on the web?", @"Description text for SUUpdateAlert when the update informational with no download."), self.host.name, updateItemVersion, hostVersion];
     } else if (self.updateItem.criticalUpdate) {
         if (self.state.stage == SPUUserUpdateStageNotDownloaded) {
-            finalString = [NSString stringWithFormat:SULocalizedString(@"%@ %@ is now available--you have %@. This is an important update; would you like to download it now?", @"Description text for SUUpdateAlert when the critical update is downloadable."), self.host.name, updateItemVersion, hostVersion];
+            finalString = [NSString stringWithFormat:SULocalizedString(@"%@ %@ is now available—you have %@. This is an important update; would you like to download it now?", @"Description text for SUUpdateAlert when the critical update is downloadable."), self.host.name, updateItemVersion, hostVersion];
         } else {
             finalString = [NSString stringWithFormat:SULocalizedString(@"%1$@ %2$@ has been downloaded and is ready to use! This is an important update; would you like to install it and relaunch %1$@ now?", @"Description text for SUUpdateAlert when the critical update has already been downloaded and ready to install."), self.host.name, updateItemVersion];
         }
     } else {
         if (self.state.stage == SPUUserUpdateStageNotDownloaded) {
-            finalString = [NSString stringWithFormat:SULocalizedString(@"%@ %@ is now available--you have %@. Would you like to download it now?", @"Description text for SUUpdateAlert when the update is downloadable."), self.host.name, updateItemVersion, hostVersion];
+            finalString = [NSString stringWithFormat:SULocalizedString(@"%@ %@ is now available—you have %@. Would you like to download it now?", @"Description text for SUUpdateAlert when the update is downloadable."), self.host.name, updateItemVersion, hostVersion];
         } else {
             finalString = [NSString stringWithFormat:SULocalizedString(@"%1$@ %2$@ has been downloaded and is ready to use! Would you like to install it and relaunch %1$@ now?", @"Description text for SUUpdateAlert when the update has already been downloaded and ready to install."), self.host.name, updateItemVersion];
         }
@@ -443,17 +466,17 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
 
 - (NSTouchBar *)makeTouchBar
 {
-    NSTouchBar *touchBar = [(NSTouchBar *)[NSClassFromString(@"NSTouchBar") alloc] init];
+    NSTouchBar *touchBar = [[NSTouchBar alloc] init];
     touchBar.defaultItemIdentifiers = @[SUUpdateAlertTouchBarIndentifier,];
     touchBar.principalItemIdentifier = SUUpdateAlertTouchBarIndentifier;
     touchBar.delegate = self;
     return touchBar;
 }
 
-- (NSTouchBarItem *)touchBar:(NSTouchBar * __unused)touchBar makeItemForIdentifier:(NSTouchBarItemIdentifier)identifier API_AVAILABLE(macos(10.12.2))
+- (NSTouchBarItem *)touchBar:(NSTouchBar * __unused)touchBar makeItemForIdentifier:(NSTouchBarItemIdentifier)identifier
 {
     if ([identifier isEqualToString:SUUpdateAlertTouchBarIndentifier]) {
-        NSCustomTouchBarItem* item = [(NSCustomTouchBarItem *)[NSClassFromString(@"NSCustomTouchBarItem") alloc] initWithIdentifier:identifier];
+        NSCustomTouchBarItem* item = [[NSCustomTouchBarItem alloc] initWithIdentifier:identifier];
         item.viewController = [[SUTouchBarButtonGroup alloc] initByReferencingButtons:@[self.installButton, self.laterButton, self.skipButton]];
         return item;
     }

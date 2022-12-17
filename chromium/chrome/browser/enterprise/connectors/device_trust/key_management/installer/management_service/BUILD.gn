@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -32,6 +32,7 @@ if (is_linux) {
       "//chrome/browser/enterprise/connectors/device_trust/key_management/core/network",
       "//chrome/common:channel_info",
       "//mojo/public/cpp/bindings",
+      "//services/network/public/cpp",
       "//services/network/public/mojom",
       "//third_party/abseil-cpp:absl",
       "//url",
@@ -45,15 +46,12 @@ if (is_linux || is_win) {
 
     sources = [ "rotate_util.cc" ]
 
-    public_deps = [
-      "//base",
-      "//chrome/browser/enterprise/connectors/device_trust/key_management/installer:elevated_rotation",
-      "//components/version_info",
-    ]
+    public_deps = [ "//components/version_info:channel" ]
 
     deps = [
+      "//base",
       "//chrome/browser/enterprise/connectors/device_trust/key_management/core:constants",
-      "//chrome/common:channel_info",
+      "//chrome/browser/enterprise/connectors/device_trust/key_management/installer:elevated_rotation",
       "//third_party/abseil-cpp:absl",
       "//url",
     ]

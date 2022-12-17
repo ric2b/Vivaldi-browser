@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -656,8 +656,8 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
   pcf_deps.signaling_thread = GetSignalingThread();
   pcf_deps.network_thread = GetNetworkThread();
   pcf_deps.task_queue_factory = CreateWebRtcTaskQueueFactory();
-  DCHECK(metronome_source_);
-  pcf_deps.metronome = metronome_source_->CreateWebRtcMetronome();
+  if (base::FeatureList::IsEnabled(blink::features::kWebRtcMetronome))
+    pcf_deps.metronome = metronome_source_->CreateWebRtcMetronome();
   pcf_deps.call_factory = webrtc::CreateCallFactory();
   pcf_deps.event_log_factory = std::make_unique<webrtc::RtcEventLogFactory>(
       pcf_deps.task_queue_factory.get());

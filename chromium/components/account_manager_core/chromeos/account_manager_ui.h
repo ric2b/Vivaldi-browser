@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@
 
 namespace account_manager {
 
-// This interface is used by `AccountManagerFacadeImpl` to show system UI
+// This interface is used by `AccountManagerMojoService` to show system UI
 // (system dialogs, OS Settings etc.)
 class COMPONENT_EXPORT(ACCOUNT_MANAGER_CORE) AccountManagerUI {
  public:

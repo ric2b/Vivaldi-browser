@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,7 +87,7 @@ TEST_F(URLAllowlistPolicyHandlerTest, ApplyPolicySettings_Empty) {
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(policy_prefs::kUrlAllowlist, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_EQ(0U, out->GetListDeprecated().size());
+  EXPECT_EQ(0U, out->GetList().size());
 }
 
 TEST_F(URLAllowlistPolicyHandlerTest, ApplyPolicySettings_WrongElementType) {
@@ -101,7 +101,7 @@ TEST_F(URLAllowlistPolicyHandlerTest, ApplyPolicySettings_WrongElementType) {
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(policy_prefs::kUrlAllowlist, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_EQ(0U, out->GetListDeprecated().size());
+  EXPECT_EQ(0U, out->GetList().size());
 }
 
 TEST_F(URLAllowlistPolicyHandlerTest, ApplyPolicySettings_Successful) {
@@ -113,9 +113,9 @@ TEST_F(URLAllowlistPolicyHandlerTest, ApplyPolicySettings_Successful) {
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(policy_prefs::kUrlAllowlist, &out));
   ASSERT_TRUE(out->is_list());
-  ASSERT_EQ(1U, out->GetListDeprecated().size());
+  ASSERT_EQ(1U, out->GetList().size());
 
-  const std::string* out_string = out->GetListDeprecated()[0].GetIfString();
+  const std::string* out_string = out->GetList()[0].GetIfString();
   ASSERT_TRUE(out_string);
   EXPECT_EQ(kTestAllowlistValue, *out_string);
 }
@@ -134,7 +134,7 @@ TEST_F(URLAllowlistPolicyHandlerTest,
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(policy_prefs::kUrlAllowlist, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_EQ(max_filters_per_policy, out->GetListDeprecated().size());
+  EXPECT_EQ(max_filters_per_policy, out->GetList().size());
 }
 
 // Test that the warning message, mapped to
@@ -151,7 +151,7 @@ TEST_F(URLAllowlistPolicyHandlerTest,
 
   ApplyPolicies();
 
-  auto error_str = errors_.GetErrors(key::kURLAllowlist);
+  auto error_str = errors_.GetErrorMessages(key::kURLAllowlist);
   auto expected_str = l10n_util::GetStringFUTF16(
       IDS_POLICY_URL_ALLOW_BLOCK_LIST_MAX_FILTERS_LIMIT_WARNING,
       base::NumberToString16(max_filters_per_policy));
@@ -160,7 +160,7 @@ TEST_F(URLAllowlistPolicyHandlerTest,
   base::Value* out;
   EXPECT_TRUE(prefs_.GetValue(policy_prefs::kUrlAllowlist, &out));
   ASSERT_TRUE(out->is_list());
-  EXPECT_EQ(max_filters_per_policy + 1, out->GetListDeprecated().size());
+  EXPECT_EQ(max_filters_per_policy + 1, out->GetList().size());
 }
 
 TEST_F(URLAllowlistPolicyHandlerTest, ValidatePolicy) {

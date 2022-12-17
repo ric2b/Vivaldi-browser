@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
@@ -38,13 +36,13 @@
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
 #include "ui/shell_dialogs/select_file_policy.h"
+#include "url/gurl.h"
 
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_suite.h"
 #include "ui/base/resource/resource_bundle.h"
 
-namespace ash {
-namespace diagnostics {
+namespace ash::diagnostics {
 namespace {
 
 constexpr char kHandlerFunctionName[] = "handlerFunctionName";
@@ -124,7 +122,8 @@ class TestSelectFileDialog : public ui::SelectFileDialog {
                       int file_type_index,
                       const base::FilePath::StringType& default_extension,
                       gfx::NativeWindow owning_window,
-                      void* params) override {
+                      void* params,
+                      const GURL* caller) override {
     if (selected_path_.empty()) {
       listener_->FileSelectionCanceled(params);
       return;
@@ -176,9 +175,7 @@ class SessionLogHandlerTest : public NoSessionAshTestBase {
   SessionLogHandlerTest()
       : NoSessionAshTestBase(
             base::test::TaskEnvironment::TimeSource::MOCK_TIME),
-        task_runner_(new base::TestSimpleTaskRunner()),
-        web_ui_(),
-        session_log_handler_() {}
+        task_runner_(new base::TestSimpleTaskRunner()) {}
   ~SessionLogHandlerTest() override = default;
 
   void SetUp() override {
@@ -236,8 +233,10 @@ class SessionLogHandlerTest : public NoSessionAshTestBase {
   testing::NiceMock<ash::MockHoldingSpaceClient> holding_space_client_;
 };
 
-// Flaky; see crbug.com/1336726
-TEST_F(SessionLogHandlerTest, DISABLED_SaveSessionLog) {
+TEST_F(SessionLogHandlerTest, SaveSessionLog) {
+  // Run until idle to finish necessary setup.
+  task_environment()->RunUntilIdle();
+
   base::RunLoop run_loop;
   // Populate routine log
   routine_log_->LogRoutineStarted(mojom::RoutineType::kCpuStress);
@@ -447,5 +446,4 @@ TEST_F(SessionLogHandlerTest, NoUseAfterFree) {
   EXPECT_NO_FATAL_FAILURE(task_runner_->RunUntilIdle());
 }
 
-}  // namespace diagnostics
-}  // namespace ash
+}  // namespace ash::diagnostics

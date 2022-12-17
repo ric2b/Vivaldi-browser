@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/permissions/permission_context_base.h"
+#include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permission_request_id.h"
 #include "components/permissions/permission_util.h"
 #include "content/public/browser/permission_controller_delegate.h"
@@ -42,7 +43,8 @@ class PermissionManagerTest;
 
 class PermissionManager : public KeyedService,
                           public content::PermissionControllerDelegate,
-                          public permissions::Observer {
+                          public permissions::Observer,
+                          public PermissionDecisionAutoBlocker::Observer {
  public:
   using PermissionContextMap =
       std::unordered_map<ContentSettingsType,
@@ -58,6 +60,10 @@ class PermissionManager : public KeyedService,
 
   // KeyedService implementation.
   void Shutdown() override;
+
+  // PermissionDecisionAutoBlocker::Observer
+  void OnEmbargoStarted(const GURL& origin,
+                        ContentSettingsType content_setting) override;
 
   PermissionContextBase* GetPermissionContextForTesting(
       ContentSettingsType type);
@@ -105,6 +111,13 @@ class PermissionManager : public KeyedService,
       base::OnceCallback<
           void(const std::vector<blink::mojom::PermissionStatus>&)> callback)
       override;
+  void RequestPermissionsInternal(
+      const std::vector<blink::PermissionType>& permissions,
+      content::RenderFrameHost* render_frame_host,
+      const GURL& requesting_origin,
+      bool user_gesture,
+      base::OnceCallback<
+          void(const std::vector<blink::mojom::PermissionStatus>&)> callback);
   void ResetPermission(blink::PermissionType permission,
                        const GURL& requesting_origin,
                        const GURL& embedding_origin) override;
@@ -132,7 +145,7 @@ class PermissionManager : public KeyedService,
       blink::PermissionType permission,
       content::RenderProcessHost* render_process_host,
       const GURL& worker_origin) override;
-  bool IsPermissionOverridableByDevTools(
+  bool IsPermissionOverridable(
       blink::PermissionType permission,
       const absl::optional<url::Origin>& origin) override;
   SubscriptionId SubscribePermissionStatusChange(
@@ -170,18 +183,6 @@ class PermissionManager : public KeyedService,
       const GURL& requesting_origin,
       const GURL& embedding_origin);
 
-  ContentSetting GetPermissionOverrideForDevTools(
-      const url::Origin& origin,
-      ContentSettingsType permission);
-
-  // content::PermissionControllerDelegate implementation.
-  // For the given |origin|, overrides permissions that belong to |overrides|.
-  // These permissions are in-sync with the PermissionController.
-  void SetPermissionOverridesForDevTools(
-      const absl::optional<url::Origin>& origin,
-      const PermissionOverrides& overrides) override;
-  void ResetPermissionOverridesForDevTools() override;
-
   raw_ptr<content::BrowserContext> browser_context_;
 
   PendingRequestsMap pending_requests_;
@@ -198,11 +199,6 @@ class PermissionManager : public KeyedService,
   SubscriptionTypeCounts subscription_type_counts_;
 
   PermissionContextMap permission_contexts_;
-  using ContentSettingsTypeOverrides =
-      base::flat_map<ContentSettingsType, ContentSetting>;
-  std::map<url::Origin, ContentSettingsTypeOverrides>
-      devtools_permission_overrides_;
-  url::Origin devtools_global_overrides_origin_;
 
   bool is_shutting_down_ = false;
 };

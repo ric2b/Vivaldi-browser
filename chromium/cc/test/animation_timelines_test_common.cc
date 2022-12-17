@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -512,7 +512,7 @@ void AnimationTimelinesTest::TickAnimationsTransferEvents(
 KeyframeEffect* AnimationTimelinesTest::GetKeyframeEffectForElementId(
     ElementId element_id) {
   const scoped_refptr<const ElementAnimations> element_animations =
-      host_->GetElementAnimationsForElementId(element_id);
+      host_->GetElementAnimationsForElementIdForTesting(element_id);
   return element_animations
              ? element_animations->FirstKeyframeEffectForTesting()
              : nullptr;
@@ -521,7 +521,7 @@ KeyframeEffect* AnimationTimelinesTest::GetKeyframeEffectForElementId(
 KeyframeEffect* AnimationTimelinesTest::GetImplKeyframeEffectForLayerId(
     ElementId element_id) {
   const scoped_refptr<const ElementAnimations> element_animations =
-      host_impl_->GetElementAnimationsForElementId(element_id);
+      host_impl_->GetElementAnimationsForElementIdForTesting(element_id);
   return element_animations
              ? element_animations->FirstKeyframeEffectForTesting()
              : nullptr;

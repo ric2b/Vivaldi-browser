@@ -9,6 +9,7 @@
 #include <vector>
 
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller.h"
+#import "ios/panel/panel_interaction_controller.h"
 
 @protocol ApplicationCommands;
 @class NoteHomeViewController;
@@ -33,6 +34,7 @@ class GURL;
                                 navigationToUrls:(const std::vector<GURL>&)urls
                                      inIncognito:(BOOL)inIncognito
                                           newTab:(BOOL)newTab;
+
 
 @end
 

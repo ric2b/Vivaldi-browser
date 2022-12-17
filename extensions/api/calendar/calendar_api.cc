@@ -15,7 +15,6 @@
 #include "calendar/calendar_service.h"
 #include "calendar/calendar_service_factory.h"
 #include "calendar/calendar_util.h"
-#include "calendar/event_exception_type.h"
 #include "calendar/invite_type.h"
 #include "calendar/notification_type.h"
 #include "chrome/browser/profiles/profile.h"
@@ -36,8 +35,6 @@ namespace extensions {
 
 using calendar::AccountRow;
 using calendar::CalendarRow;
-using calendar::EventExceptions;
-using calendar::EventExceptionType;
 using calendar::EventTypeRow;
 using calendar::GetIdAsInt64;
 using calendar::GetStdStringAsInt64;
@@ -55,7 +52,6 @@ using vivaldi::calendar::Calendar;
 using vivaldi::calendar::CreateEventsResults;
 using vivaldi::calendar::CreateInviteRow;
 using vivaldi::calendar::CreateNotificationRow;
-using vivaldi::calendar::EventException;
 using vivaldi::calendar::EventType;
 using vivaldi::calendar::Invite;
 using vivaldi::calendar::Notification;
@@ -81,22 +77,20 @@ typedef std::vector<vivaldi::calendar::RecurrenceException>
 // static
 RecurrenceException CreateException(const RecurrenceExceptionRow& row) {
   RecurrenceException exception;
-  exception.exception_id.reset(new std::string(base::NumberToString(row.id)));
-  exception.cancelled.reset(new bool(row.cancelled));
-  exception.date.reset(new double(MilliSecondsFromTime(row.exception_day)));
-  exception.exception_event_id.reset(
-      new std::string(base::NumberToString(row.exception_event_id)));
-  exception.parent_event_id.reset(
-      new std::string(base::NumberToString(row.parent_event_id)));
+  exception.exception_id = base::NumberToString(row.id);
+  exception.cancelled = row.cancelled;
+  exception.date = MilliSecondsFromTime(row.exception_day);
+  exception.exception_event_id = base::NumberToString(row.exception_event_id);
+  exception.parent_event_id = base::NumberToString(row.parent_event_id);
 
   return exception;
 }
 
-std::unique_ptr<std::vector<RecurrenceException>> CreateRecurrenceException(
+std::vector<RecurrenceException> CreateRecurrenceException(
     const RecurrenceExceptionRows& exceptions) {
-  auto new_exceptions = std::make_unique<std::vector<RecurrenceException>>();
+  std::vector<RecurrenceException> new_exceptions;
   for (const auto& exception : exceptions) {
-    new_exceptions->push_back(CreateException(exception));
+    new_exceptions.push_back(CreateException(exception));
   }
 
   return new_exceptions;
@@ -152,23 +146,21 @@ AccountType MapAccountTypeFromDb(int type) {
 Notification CreateNotification(const NotificationRow& row) {
   Notification notification;
   notification.id = base::NumberToString(row.id);
-  notification.event_id.reset(
-      new std::string(base::NumberToString(row.event_id)));
+  notification.event_id = base::NumberToString(row.event_id);
   notification.name = base::UTF16ToUTF8(row.name);
-  notification.description.reset(
-      new std::string(base::UTF16ToUTF8(row.description)));
+  notification.description = base::UTF16ToUTF8(row.description);
   notification.when = MilliSecondsFromTime(row.when);
-  notification.delay.reset(new int(row.delay));
-  notification.period.reset(new double(MilliSecondsFromTime(row.period)));
+  notification.delay = row.delay;
+  notification.period = MilliSecondsFromTime(row.period);
 
   return notification;
 }
 
-std::unique_ptr<std::vector<Notification>> CreateNotifications(
+std::vector<Notification> CreateNotifications(
     const NotificationRows& notifications) {
-  auto new_exceptions = std::make_unique<std::vector<Notification>>();
+  std::vector<Notification> new_exceptions;
   for (const auto& notification : notifications) {
-    new_exceptions->push_back(CreateNotification(notification));
+    new_exceptions.push_back(CreateNotification(notification));
   }
 
   return new_exceptions;
@@ -178,33 +170,32 @@ Invite CreateInviteItem(const InviteRow& row) {
   Invite invite;
   invite.id = base::NumberToString(row.id);
   invite.event_id = base::NumberToString(row.event_id);
-  invite.name.reset(new std::string(base::UTF16ToUTF8(row.name)));
+  invite.name = base::UTF16ToUTF8(row.name);
   invite.address = base::UTF16ToUTF8(row.address);
-  invite.partstat.reset(new std::string(row.partstat));
-  invite.sent.reset(new bool(row.sent));
+  invite.partstat = row.partstat;
+  invite.sent = row.sent;
 
   return invite;
 }
 
-std::unique_ptr<std::vector<Invite>> CreateInvites(const InviteRows& invites) {
-  auto new_invites = std::make_unique<std::vector<Invite>>();
+std::vector<Invite> CreateInvites(const InviteRows& invites) {
+  std::vector<Invite> new_invites;
   for (const auto& invite : invites) {
-    new_invites->push_back(CreateInviteItem(invite));
+    new_invites.push_back(CreateInviteItem(invite));
   }
 
   return new_invites;
 }
 
-std::unique_ptr<SupportedCalendarComponents> GetSupportedComponents(
+SupportedCalendarComponents GetSupportedComponents(
     int supported_component_set) {
   bool vevent = (supported_component_set & calendar::CALENDAR_VEVENT);
   bool vtodo = (supported_component_set & calendar::CALENDAR_VTODO);
   bool vjournal = (supported_component_set & calendar::CALENDAR_VJOURNAL);
-  auto supported_components_set =
-      std::make_unique<SupportedCalendarComponents>();
-  supported_components_set->vevent = vevent;
-  supported_components_set->vtodo = vtodo;
-  supported_components_set->vjournal = vjournal;
+  SupportedCalendarComponents supported_components_set;
+  supported_components_set.vevent = vevent;
+  supported_components_set.vtodo = vtodo;
+  supported_components_set.vjournal = vjournal;
 
   return supported_components_set;
 }
@@ -214,16 +205,14 @@ Calendar GetCalendarItem(const CalendarRow& row) {
   calendar.id = base::NumberToString(row.id());
   calendar.account_id = base::NumberToString(row.account_id());
   calendar.name = base::UTF16ToUTF8(row.name());
-  calendar.description.reset(
-      new std::string(base::UTF16ToUTF8(row.description())));
-  calendar.ctag.reset(new std::string(row.ctag()));
-  calendar.orderindex.reset(new int(row.orderindex()));
-  calendar.active.reset(new bool(row.active()));
-  calendar.iconindex.reset(new int(row.iconindex()));
-  calendar.color.reset(new std::string(row.color()));
-  calendar.last_checked.reset(
-      new double(MilliSecondsFromTime(row.last_checked())));
-  calendar.timezone.reset(new std::string(row.timezone()));
+  calendar.description = base::UTF16ToUTF8(row.description());
+  calendar.ctag = row.ctag();
+  calendar.orderindex = row.orderindex();
+  calendar.active = row.active();
+  calendar.iconindex = row.iconindex();
+  calendar.color = row.color();
+  calendar.last_checked = MilliSecondsFromTime(row.last_checked());
+  calendar.timezone = row.timezone();
   calendar.supported_calendar_component =
       GetSupportedComponents(row.supported_component_set());
 
@@ -234,8 +223,8 @@ EventType GetEventType(const EventTypeRow& row) {
   EventType event_type;
   event_type.id = base::NumberToString(row.id());
   event_type.name = base::UTF16ToUTF8(row.name());
-  event_type.color.reset(new std::string(row.color()));
-  event_type.iconindex.reset(new int(row.iconindex()));
+  event_type.color = row.color();
+  event_type.iconindex = row.iconindex();
 
   return event_type;
 }
@@ -247,7 +236,7 @@ Account GetAccountType(const AccountRow& row) {
   account.username = base::UTF16ToUTF8(row.username);
   account.account_type = MapAccountTypeFromDb(row.account_type);
   account.url = row.url.spec();
-  account.interval.reset(new int(row.interval));
+  account.interval = row.interval;
   return account;
 }
 
@@ -271,50 +260,43 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
 
   cal_event->id = base::NumberToString(event.id);
   cal_event->calendar_id = base::NumberToString(event.calendar_id);
-  cal_event->alarm_id.reset(
-      new std::string(base::NumberToString(event.alarm_id)));
+  cal_event->alarm_id = base::NumberToString(event.alarm_id);
 
   cal_event->title = base::UTF16ToUTF8(event.title);
-  cal_event->description.reset(
-      new std::string(base::UTF16ToUTF8(event.description)));
-  cal_event->start.reset(new double(MilliSecondsFromTime(event.start)));
-  cal_event->end.reset(new double(MilliSecondsFromTime(event.end)));
-  cal_event->all_day.reset(new bool(event.all_day));
-  cal_event->is_recurring.reset(new bool(event.is_recurring));
-  cal_event->location.reset(new std::string(base::UTF16ToUTF8(event.location)));
-  cal_event->url.reset(new std::string(base::UTF16ToUTF8(event.url)));
-  cal_event->etag.reset(new std::string(event.etag));
-  cal_event->href.reset(new std::string(event.href));
-  cal_event->uid.reset(new std::string(event.uid));
-  cal_event->event_type_id.reset(
-      new std::string(base::NumberToString(event.event_type_id)));
-  cal_event->task.reset(new bool(event.task));
-  cal_event->complete.reset(new bool(event.complete));
-  cal_event->trash.reset(new bool(event.trash));
-  cal_event->trash_time.reset(
-      new double(MilliSecondsFromTime(event.trash_time)));
-  cal_event->sequence.reset(new int(event.sequence));
-  cal_event->ical.reset(new std::string(base::UTF16ToUTF8(event.ical)));
-  cal_event->rrule.reset(new std::string(event.rrule));
+  cal_event->description = base::UTF16ToUTF8(event.description);
+  cal_event->start = MilliSecondsFromTime(event.start);
+  cal_event->end = MilliSecondsFromTime(event.end);
+  cal_event->all_day = event.all_day;
+  cal_event->is_recurring = event.is_recurring;
+  cal_event->location = base::UTF16ToUTF8(event.location);
+  cal_event->url = base::UTF16ToUTF8(event.url);
+  cal_event->etag = event.etag;
+  cal_event->href = event.href;
+  cal_event->uid = event.uid;
+  cal_event->event_type_id = base::NumberToString(event.event_type_id);
+  cal_event->task = event.task;
+  cal_event->complete = event.complete;
+  cal_event->trash = event.trash;
+  cal_event->trash_time = MilliSecondsFromTime(event.trash_time);
+  cal_event->sequence = event.sequence;
+  cal_event->ical = base::UTF16ToUTF8(event.ical);
+  cal_event->rrule = event.rrule;
   cal_event->recurrence_exceptions =
       CreateRecurrenceException(event.recurrence_exceptions);
 
   cal_event->notifications = CreateNotifications(event.notifications);
   cal_event->invites = CreateInvites(event.invites);
-  cal_event->organizer.reset(new std::string(event.organizer));
-  cal_event->timezone.reset(new std::string(event.timezone));
-  cal_event->priority.reset(new int(event.priority));
-  cal_event->status.reset(new std::string(event.status));
-  cal_event->percentage_complete.reset(new int(event.percentage_complete));
-  cal_event->categories.reset(
-      new std::string(base::UTF16ToUTF8(event.categories)));
-  cal_event->component_class.reset(
-      new std::string(base::UTF16ToUTF8(event.component_class)));
-  cal_event->attachment.reset(
-      new std::string(base::UTF16ToUTF8(event.attachment)));
-  cal_event->completed.reset(new double(MilliSecondsFromTime(event.completed)));
-  cal_event->sync_pending.reset(new bool(event.sync_pending));
-  cal_event->delete_pending.reset(new bool(event.delete_pending));
+  cal_event->organizer = event.organizer;
+  cal_event->timezone = event.timezone;
+  cal_event->priority = event.priority;
+  cal_event->status = event.status;
+  cal_event->percentage_complete = event.percentage_complete;
+  cal_event->categories = base::UTF16ToUTF8(event.categories);
+  cal_event->component_class = base::UTF16ToUTF8(event.component_class);
+  cal_event->attachment = base::UTF16ToUTF8(event.attachment);
+  cal_event->completed = MilliSecondsFromTime(event.completed);
+  cal_event->sync_pending = event.sync_pending;
+  cal_event->delete_pending = event.delete_pending;
   return cal_event;
 }
 void CalendarEventRouter::OnEventCreated(CalendarService* service,
@@ -344,8 +326,7 @@ void CalendarEventRouter::OnNotificationChanged(
     CalendarService* service,
     const calendar::NotificationRow& row) {
   Notification changedNotification = CreateNotification(row);
-  base::Value::List args =
-      OnNotificationChanged::Create(changedNotification);
+  base::Value::List args = OnNotificationChanged::Create(changedNotification);
   DispatchEvent(profile_, OnNotificationChanged::kEventName, std::move(args));
 }
 
@@ -584,18 +565,19 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
     return RespondNow(Error("Error. Invalid event id"));
   }
 
-  if (params->changes.calendar_id.get()) {
+  if (params->changes.calendar_id.has_value()) {
     calendar::CalendarID calendarId;
-    if (!GetStdStringAsInt64(*params->changes.calendar_id, &calendarId)) {
+    if (!GetStdStringAsInt64(params->changes.calendar_id.value(),
+                             &calendarId)) {
       return RespondNow(Error("Error. Invalid calendar_id"));
     }
     updatedEvent.calendar_id = calendarId;
     updatedEvent.updateFields |= calendar::CALENDAR_ID;
   }
 
-  if (params->changes.alarm_id.get()) {
+  if (params->changes.alarm_id.has_value()) {
     calendar::AlarmID alarmId;
-    if (!GetStdStringAsInt64(*params->changes.calendar_id, &alarmId)) {
+    if (!GetStdStringAsInt64(params->changes.calendar_id.value(), &alarmId)) {
       return RespondNow(Error("Error. Invalid alarm"));
     }
 
@@ -603,106 +585,108 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
     updatedEvent.updateFields |= calendar::ALARM_ID;
   }
 
-  if (params->changes.description.get()) {
-    updatedEvent.description = base::UTF8ToUTF16(*params->changes.description);
+  if (params->changes.description.has_value()) {
+    updatedEvent.description =
+        base::UTF8ToUTF16(params->changes.description.value());
     updatedEvent.updateFields |= calendar::DESCRIPTION;
   }
 
-  if (params->changes.title.get()) {
-    updatedEvent.title = base::UTF8ToUTF16(*params->changes.title);
+  if (params->changes.title.has_value()) {
+    updatedEvent.title = base::UTF8ToUTF16(params->changes.title.value());
     updatedEvent.updateFields |= calendar::TITLE;
   }
 
-  if (params->changes.start.get()) {
-    double start = *params->changes.start;
+  if (params->changes.start.has_value()) {
+    double start = params->changes.start.value();
     updatedEvent.start = GetTime(start);
     updatedEvent.updateFields |= calendar::START;
   }
 
-  if (params->changes.end.get()) {
-    double end = *params->changes.end;
+  if (params->changes.end.has_value()) {
+    double end = params->changes.end.value();
     updatedEvent.end = GetTime(end);
     updatedEvent.updateFields |= calendar::END;
   }
 
-  if (params->changes.all_day.get()) {
-    updatedEvent.all_day = *params->changes.all_day;
+  if (params->changes.all_day.has_value()) {
+    updatedEvent.all_day = params->changes.all_day.value();
     updatedEvent.updateFields |= calendar::ALLDAY;
   }
 
-  if (params->changes.is_recurring.get()) {
-    updatedEvent.is_recurring = *params->changes.is_recurring;
+  if (params->changes.is_recurring.has_value()) {
+    updatedEvent.is_recurring = params->changes.is_recurring.value();
     updatedEvent.updateFields |= calendar::ISRECURRING;
   }
 
-  if (params->changes.location.get()) {
-    updatedEvent.location = base::UTF8ToUTF16(*params->changes.location);
+  if (params->changes.location.has_value()) {
+    updatedEvent.location = base::UTF8ToUTF16(params->changes.location.value());
     updatedEvent.updateFields |= calendar::LOCATION;
   }
 
-  if (params->changes.url.get()) {
-    updatedEvent.url = base::UTF8ToUTF16(*params->changes.url);
+  if (params->changes.url.has_value()) {
+    updatedEvent.url = base::UTF8ToUTF16(params->changes.url.value());
     updatedEvent.updateFields |= calendar::URL;
   }
 
-  if (params->changes.etag.get()) {
-    updatedEvent.etag = *params->changes.etag;
+  if (params->changes.etag.has_value()) {
+    updatedEvent.etag = params->changes.etag.value();
     updatedEvent.updateFields |= calendar::ETAG;
   }
 
-  if (params->changes.href.get()) {
-    updatedEvent.href = *params->changes.href;
+  if (params->changes.href.has_value()) {
+    updatedEvent.href = params->changes.href.value();
     updatedEvent.updateFields |= calendar::HREF;
   }
 
-  if (params->changes.uid.get()) {
-    updatedEvent.uid = *params->changes.uid;
+  if (params->changes.uid.has_value()) {
+    updatedEvent.uid = params->changes.uid.value();
     updatedEvent.updateFields |= calendar::UID;
   }
 
-  if (params->changes.task.get()) {
-    updatedEvent.task = *params->changes.task;
+  if (params->changes.task.has_value()) {
+    updatedEvent.task = params->changes.task.value();
     updatedEvent.updateFields |= calendar::TASK;
   }
 
-  if (params->changes.complete.get()) {
-    updatedEvent.complete = *params->changes.complete;
+  if (params->changes.complete.has_value()) {
+    updatedEvent.complete = params->changes.complete.value();
     updatedEvent.updateFields |= calendar::COMPLETE;
   }
 
-  if (params->changes.trash.get()) {
-    updatedEvent.trash = *params->changes.trash;
+  if (params->changes.trash.has_value()) {
+    updatedEvent.trash = params->changes.trash.value();
     updatedEvent.updateFields |= calendar::TRASH;
   }
 
-  if (params->changes.sequence.get()) {
-    updatedEvent.sequence = *params->changes.sequence;
+  if (params->changes.sequence.has_value()) {
+    updatedEvent.sequence = params->changes.sequence.value();
     updatedEvent.updateFields |= calendar::SEQUENCE;
   }
 
-  if (params->changes.ical.get()) {
-    updatedEvent.ical = base::UTF8ToUTF16(*params->changes.ical);
+  if (params->changes.ical.has_value()) {
+    updatedEvent.ical = base::UTF8ToUTF16(params->changes.ical.value());
     updatedEvent.updateFields |= calendar::ICAL;
   }
 
-  if (params->changes.rrule.get()) {
-    updatedEvent.rrule = *params->changes.rrule;
+  if (params->changes.rrule.has_value()) {
+    updatedEvent.rrule = params->changes.rrule.value();
     updatedEvent.updateFields |= calendar::RRULE;
   }
 
-  if (params->changes.organizer.get()) {
-    updatedEvent.organizer = *params->changes.organizer;
+  if (params->changes.organizer.has_value()) {
+    updatedEvent.organizer = params->changes.organizer.value();
     updatedEvent.updateFields |= calendar::ORGANIZER;
   }
 
-  if (params->changes.timezone.get()) {
-    updatedEvent.timezone = *params->changes.timezone;
+  if (params->changes.timezone.has_value()) {
+    updatedEvent.timezone = params->changes.timezone.value();
     updatedEvent.updateFields |= calendar::TIMEZONE;
   }
 
-  if (params->changes.event_type_id.get()) {
+  if (params->changes.event_type_id.has_value()) {
     calendar::EventTypeID event_type_id;
-    if (!GetStdStringAsInt64(*params->changes.event_type_id, &event_type_id)) {
+    if (!GetStdStringAsInt64(params->changes.event_type_id.value(),
+                             &event_type_id)) {
       return RespondNow(Error("Error. Invalid event_type_id"));
     }
 
@@ -710,49 +694,52 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
     updatedEvent.updateFields |= calendar::EVENT_TYPE_ID;
   }
 
-  if (params->changes.priority.get()) {
-    updatedEvent.priority = *params->changes.priority;
+  if (params->changes.priority.has_value()) {
+    updatedEvent.priority = params->changes.priority.value();
     updatedEvent.updateFields |= calendar::PRIORITY;
   }
 
-  if (params->changes.status.get()) {
-    updatedEvent.status = *params->changes.status;
+  if (params->changes.status.has_value()) {
+    updatedEvent.status = params->changes.status.value();
     updatedEvent.updateFields |= calendar::STATUS;
   }
 
-  if (params->changes.percentage_complete.get()) {
-    updatedEvent.percentage_complete = *params->changes.percentage_complete;
+  if (params->changes.percentage_complete.has_value()) {
+    updatedEvent.percentage_complete =
+        params->changes.percentage_complete.value();
     updatedEvent.updateFields |= calendar::PERCENTAGE_COMPLETE;
   }
 
-  if (params->changes.categories.get()) {
-    updatedEvent.categories = base::UTF8ToUTF16(*params->changes.categories);
+  if (params->changes.categories.has_value()) {
+    updatedEvent.categories =
+        base::UTF8ToUTF16(params->changes.categories.value());
     updatedEvent.updateFields |= calendar::CATEGORIES;
   }
 
-  if (params->changes.component_class.get()) {
+  if (params->changes.component_class.has_value()) {
     updatedEvent.component_class =
-        base::UTF8ToUTF16(*params->changes.component_class);
+        base::UTF8ToUTF16(params->changes.component_class.value());
     updatedEvent.updateFields |= calendar::COMPONENT_CLASS;
   }
 
-  if (params->changes.attachment.get()) {
-    updatedEvent.attachment = base::UTF8ToUTF16(*params->changes.attachment);
+  if (params->changes.attachment.has_value()) {
+    updatedEvent.attachment =
+        base::UTF8ToUTF16(params->changes.attachment.value());
     updatedEvent.updateFields |= calendar::ATTACHMENT;
   }
 
-  if (params->changes.completed.get()) {
-    updatedEvent.completed = GetTime(*params->changes.completed);
+  if (params->changes.completed.has_value()) {
+    updatedEvent.completed = GetTime(params->changes.completed.value());
     updatedEvent.updateFields |= calendar::COMPLETED;
   }
 
-  if (params->changes.sync_pending.get()) {
-    updatedEvent.sync_pending = *params->changes.sync_pending;
+  if (params->changes.sync_pending.has_value()) {
+    updatedEvent.sync_pending = params->changes.sync_pending.value();
     updatedEvent.updateFields |= calendar::SYNC_PENDING;
   }
 
-  if (params->changes.delete_pending.get()) {
-    updatedEvent.delete_pending = *params->changes.delete_pending;
+  if (params->changes.delete_pending.has_value()) {
+    updatedEvent.delete_pending = params->changes.delete_pending.value();
     updatedEvent.updateFields |= calendar::DELETE_PENDING;
   }
 
@@ -809,6 +796,81 @@ void CalendarDeleteEventFunction::DeleteEventComplete(
   }
 }
 
+ExtensionFunction::ResponseAction
+CalendarUpdateRecurrenceExceptionFunction::Run() {
+  std::unique_ptr<vivaldi::calendar::UpdateRecurrenceException::Params> params(
+      vivaldi::calendar::UpdateRecurrenceException::Params::Create(args()));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::u16string id;
+  id = base::UTF8ToUTF16(params->recurrence_id);
+  calendar::RecurrenceExceptionID recurrence_id;
+
+  calendar::RecurrenceExceptionRow recurrence_row;
+
+  if (!GetIdAsInt64(id, &recurrence_id)) {
+    return RespondNow(Error("Error. Invalid exception id"));
+  }
+
+  if (params->changes.cancelled.has_value()) {
+    recurrence_row.cancelled = params->changes.cancelled.value();
+    recurrence_row.updateFields |= calendar::CANCELLED;
+  }
+
+  if (params->changes.date.has_value()) {
+    double date = params->changes.date.value();
+    recurrence_row.exception_day = GetTime(date);
+    recurrence_row.updateFields |= calendar::EXCEPTION_DAY;
+  }
+
+  if (params->changes.parent_event_id.has_value()) {
+    std::u16string parent_id;
+    parent_id = base::UTF8ToUTF16(params->changes.parent_event_id.value());
+    calendar::EventID parent_event_id;
+    if (!GetIdAsInt64(parent_id, &parent_event_id)) {
+      return RespondNow(Error("Error. Invalid parent event id"));
+    }
+    recurrence_row.parent_event_id = parent_event_id;
+    recurrence_row.updateFields |= calendar::PARENT_EVENT_ID;
+  }
+
+  if (params->changes.exception_event_id.has_value()) {
+    std::u16string exceptionId;
+    exceptionId = base::UTF8ToUTF16(params->changes.exception_event_id.value());
+    calendar::EventID exception_event_id;
+    if (!GetIdAsInt64(exceptionId, &exception_event_id)) {
+      return RespondNow(Error("Error. Invalid parent event id"));
+    }
+    recurrence_row.exception_event_id = exception_event_id;
+    recurrence_row.updateFields |= calendar::EXCEPTION_EVENT_ID;
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  model->UpdateRecurrenceException(
+      recurrence_id, recurrence_row,
+      base::BindOnce(&CalendarUpdateRecurrenceExceptionFunction::
+                         UpdateRecurrenceExceptionComplete,
+                     this),
+      &task_tracker_);
+  return RespondLater();  // CalendarUpdateRecurrenceExceptionFunction() will be
+                          // called asynchronously.
+}
+
+void CalendarUpdateRecurrenceExceptionFunction::
+    UpdateRecurrenceExceptionComplete(
+        std::shared_ptr<calendar::EventResultCB> results) {
+  if (!results->success) {
+    Respond(Error("Error updating recurrence exception"));
+  } else {
+    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
+    Respond(
+        ArgumentList(extensions::vivaldi::calendar::UpdateRecurrenceException::
+                         Results::Create(*event)));
+  }
+}
+
 ExtensionFunction::ResponseAction CalendarDeleteEventExceptionFunction::Run() {
   std::unique_ptr<vivaldi::calendar::DeleteEventException::Params> params(
       vivaldi::calendar::DeleteEventException::Params::Create(args()));
@@ -856,17 +918,15 @@ std::unique_ptr<vivaldi::calendar::Calendar> CreateVivaldiCalendar(
   calendar->account_id = base::NumberToString(result.account_id());
   calendar->name = base::UTF16ToUTF8(result.name());
 
-  calendar->description.reset(
-      new std::string(base::UTF16ToUTF8(result.description())));
-  calendar->orderindex.reset(new int(result.orderindex()));
-  calendar->color.reset(new std::string(result.color()));
-  calendar->hidden.reset(new bool(result.hidden()));
-  calendar->ctag.reset(new std::string(result.ctag()));
-  calendar->active.reset(new bool(result.active()));
-  calendar->iconindex.reset(new int(result.iconindex()));
-  calendar->last_checked.reset(
-      new double(MilliSecondsFromTime(result.last_checked())));
-  calendar->timezone.reset(new std::string(result.timezone()));
+  calendar->description = base::UTF16ToUTF8(result.description());
+  calendar->orderindex = result.orderindex();
+  calendar->color = result.color();
+  calendar->hidden = result.hidden();
+  calendar->ctag = result.ctag();
+  calendar->active = result.active();
+  calendar->iconindex = result.iconindex();
+  calendar->last_checked = MilliSecondsFromTime(result.last_checked());
+  calendar->timezone = result.timezone();
   calendar->supported_calendar_component =
       GetSupportedComponents(result.supported_component_set());
 
@@ -893,64 +953,58 @@ ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
 
   createCalendar.set_account_id(accountId);
 
-  if (params->calendar.description.get()) {
+  if (params->calendar.description.has_value()) {
     std::u16string description =
-        base::UTF8ToUTF16(*params->calendar.description);
+        base::UTF8ToUTF16(params->calendar.description.value());
     createCalendar.set_description(description);
   }
 
-  if (params->calendar.orderindex.get()) {
-    int orderindex = *params->calendar.orderindex.get();
+  if (params->calendar.orderindex.has_value()) {
+    int orderindex = params->calendar.orderindex.value();
     createCalendar.set_orderindex(orderindex);
   }
 
-  if (params->calendar.color.get()) {
-    std::string color = *params->calendar.color.get();
+  if (params->calendar.color.has_value()) {
+    std::string color = params->calendar.color.value();
     createCalendar.set_color(color);
   }
 
-  if (params->calendar.hidden.get()) {
-    bool hidden = *params->calendar.hidden.get();
+  if (params->calendar.hidden.has_value()) {
+    bool hidden = params->calendar.hidden.value();
     createCalendar.set_hidden(hidden);
   }
 
-  if (params->calendar.active.get()) {
-    bool active = *params->calendar.active.get();
+  if (params->calendar.active.has_value()) {
+    bool active = params->calendar.active.value();
     createCalendar.set_active(active);
   }
 
-  if (params->calendar.last_checked.get()) {
-    int last_checked = *params->calendar.last_checked.get();
+  if (params->calendar.last_checked.has_value()) {
+    int last_checked = params->calendar.last_checked.value();
     createCalendar.set_last_checked(GetTime(last_checked));
   }
 
-  if (params->calendar.timezone.get()) {
-    std::string timezone = *params->calendar.timezone.get();
+  if (params->calendar.timezone.has_value()) {
+    std::string timezone = params->calendar.timezone.value();
     createCalendar.set_timezone(timezone);
   }
 
-  if (params->calendar.ctag.get()) {
-    std::string timezone = *params->calendar.ctag.get();
+  if (params->calendar.ctag.has_value()) {
+    std::string timezone = params->calendar.ctag.value();
     createCalendar.set_ctag(timezone);
   }
 
   int supported_components = calendar::NONE;
-  if (params->calendar.supported_calendar_component.get()) {
-    if (params->calendar.supported_calendar_component->vevent)
-      supported_components |= calendar::CALENDAR_VEVENT;
-
-    if (params->calendar.supported_calendar_component->vtodo)
-      supported_components |= calendar::CALENDAR_VTODO;
-
-    if (params->calendar.supported_calendar_component->vjournal)
-      supported_components |= calendar::CALENDAR_VJOURNAL;
-
-    createCalendar.set_supported_component_set(supported_components);
-  } else {
+  if (params->calendar.supported_calendar_component.vevent)
     supported_components |= calendar::CALENDAR_VEVENT;
+
+  if (params->calendar.supported_calendar_component.vtodo)
     supported_components |= calendar::CALENDAR_VTODO;
-    createCalendar.set_supported_component_set(supported_components);
-  }
+
+  if (params->calendar.supported_calendar_component.vjournal)
+    supported_components |= calendar::CALENDAR_VJOURNAL;
+
+  createCalendar.set_supported_component_set(supported_components);
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
 
@@ -1016,58 +1070,59 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
     return RespondNow(Error("Error. Invalid calendar id"));
   }
 
-  if (params->changes.name.get()) {
-    updatedCalendar.name = base::UTF8ToUTF16(*params->changes.name);
+  if (params->changes.name.has_value()) {
+    updatedCalendar.name = base::UTF8ToUTF16(params->changes.name.value());
     updatedCalendar.updateFields |= calendar::CALENDAR_NAME;
   }
 
-  if (params->changes.description.get()) {
+  if (params->changes.description.has_value()) {
     updatedCalendar.description =
-        base::UTF8ToUTF16(*params->changes.description);
+        base::UTF8ToUTF16(params->changes.description.value());
     updatedCalendar.updateFields |= calendar::CALENDAR_DESCRIPTION;
   }
 
-  if (params->changes.orderindex.get()) {
-    updatedCalendar.orderindex = *params->changes.orderindex;
+  if (params->changes.orderindex.has_value()) {
+    updatedCalendar.orderindex = params->changes.orderindex.value();
     updatedCalendar.updateFields |= calendar::CALENDAR_ORDERINDEX;
   }
 
-  if (params->changes.color.get()) {
-    updatedCalendar.color = *params->changes.color;
+  if (params->changes.color.has_value()) {
+    updatedCalendar.color = params->changes.color.value();
     updatedCalendar.updateFields |= calendar::CALENDAR_COLOR;
   }
 
-  if (params->changes.hidden.get()) {
-    updatedCalendar.hidden = *params->changes.hidden;
+  if (params->changes.hidden.has_value()) {
+    updatedCalendar.hidden = params->changes.hidden.value();
     updatedCalendar.updateFields |= calendar::CALENDAR_HIDDEN;
   }
 
-  if (params->changes.active.get()) {
-    updatedCalendar.active = *params->changes.active;
+  if (params->changes.active.has_value()) {
+    updatedCalendar.active = params->changes.active.value();
     updatedCalendar.updateFields |= calendar::CALENDAR_ACTIVE;
   }
 
-  if (params->changes.iconindex.get()) {
-    updatedCalendar.iconindex = *params->changes.iconindex;
+  if (params->changes.iconindex.has_value()) {
+    updatedCalendar.iconindex = params->changes.iconindex.value();
     updatedCalendar.updateFields |= calendar::CALENDAR_ICONINDEX;
   }
 
-  if (params->changes.ctag.get()) {
-    updatedCalendar.ctag = *params->changes.ctag;
+  if (params->changes.ctag.has_value()) {
+    updatedCalendar.ctag = params->changes.ctag.value();
     updatedCalendar.updateFields |= calendar::CALENDAR_CTAG;
   }
 
-  if (params->changes.last_checked.get()) {
-    updatedCalendar.last_checked = GetTime(*params->changes.last_checked);
+  if (params->changes.last_checked.has_value()) {
+    updatedCalendar.last_checked =
+        GetTime(params->changes.last_checked.value());
     updatedCalendar.updateFields |= calendar::CALENDAR_LAST_CHECKED;
   }
 
-  if (params->changes.timezone.get()) {
-    updatedCalendar.timezone = *params->changes.timezone;
+  if (params->changes.timezone.has_value()) {
+    updatedCalendar.timezone = params->changes.timezone.value();
     updatedCalendar.updateFields |= calendar::CALENDAR_TIMEZONE;
   }
 
-  if (params->changes.supported_calendar_component.get()) {
+  if (params->changes.supported_calendar_component.has_value()) {
     int supported_components = calendar::NONE;
     if (params->changes.supported_calendar_component->vevent)
       supported_components |= calendar::CALENDAR_VEVENT;
@@ -1169,13 +1224,13 @@ ExtensionFunction::ResponseAction CalendarEventTypeCreateFunction::Run() {
   name = base::UTF8ToUTF16(params->event_type.name);
   create_event_type.set_name(name);
 
-  if (params->event_type.color.get()) {
-    std::string color = *params->event_type.color;
+  if (params->event_type.color.has_value()) {
+    std::string color = params->event_type.color.value();
     create_event_type.set_color(color);
   }
 
-  if (params->event_type.iconindex.get()) {
-    int iconindex = *params->event_type.iconindex;
+  if (params->event_type.iconindex.has_value()) {
+    int iconindex = params->event_type.iconindex.value();
     create_event_type.set_iconindex(iconindex);
   }
 
@@ -1213,21 +1268,21 @@ ExtensionFunction::ResponseAction CalendarEventTypeUpdateFunction::Run() {
 
   calendar::EventType update_event_type;
 
-  if (params->changes.name.get()) {
+  if (params->changes.name.has_value()) {
     std::u16string name;
-    name = base::UTF8ToUTF16(*params->changes.name);
+    name = base::UTF8ToUTF16(params->changes.name.value());
     update_event_type.name = name;
     update_event_type.updateFields |= calendar::NAME;
   }
 
-  if (params->changes.color.get()) {
-    std::string color = *params->changes.color;
+  if (params->changes.color.has_value()) {
+    std::string color = params->changes.color.value();
     update_event_type.color = color;
     update_event_type.updateFields |= calendar::COLOR;
   }
 
-  if (params->changes.iconindex.get()) {
-    int iconindex = *params->changes.iconindex;
+  if (params->changes.iconindex.has_value()) {
+    int iconindex = params->changes.iconindex.value();
     update_event_type.iconindex = iconindex;
     update_event_type.updateFields |= calendar::ICONINDEX;
   }
@@ -1299,11 +1354,11 @@ ExtensionFunction::ResponseAction CalendarCreateEventExceptionFunction::Run() {
 
   RecurrenceExceptionRow row;
   row.parent_event_id = parent_event_id;
-  row.exception_day = GetTime(*params->date.get());
+  row.exception_day = GetTime(params->date.value_or(0));
   row.cancelled = params->cancelled;
 
-  if (params->exception_event_id.get()) {
-    std::string ex_id = *params->exception_event_id;
+  if (params->exception_event_id.has_value()) {
+    std::string ex_id = params->exception_event_id.value();
     if (ex_id.length() > 0) {
       calendar::EventID exception_event_id;
       if (!GetStdStringAsInt64(ex_id, &exception_event_id)) {
@@ -1367,9 +1422,9 @@ ExtensionFunction::ResponseAction CalendarCreateNotificationFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   NotificationRow row;
-  if (params->create_notification.event_id.get()) {
+  if (params->create_notification.event_id.has_value()) {
     std::u16string id;
-    id = base::UTF8ToUTF16(*params->create_notification.event_id);
+    id = base::UTF8ToUTF16(params->create_notification.event_id.value());
     calendar::EventID event_id;
 
     if (!GetIdAsInt64(id, &event_id)) {
@@ -1380,17 +1435,17 @@ ExtensionFunction::ResponseAction CalendarCreateNotificationFunction::Run() {
 
   row.name = base::UTF8ToUTF16(params->create_notification.name);
   row.when = GetTime(params->create_notification.when);
-  if (params->create_notification.description.get()) {
+  if (params->create_notification.description.has_value()) {
     row.description =
-        base::UTF8ToUTF16(*params->create_notification.description);
+        base::UTF8ToUTF16(params->create_notification.description.value());
   }
 
-  if (params->create_notification.delay.get()) {
-    row.delay = *params->create_notification.delay;
+  if (params->create_notification.delay.has_value()) {
+    row.delay = params->create_notification.delay.value();
   }
 
-  if (params->create_notification.period.get()) {
-    row.period = GetTime(*params->create_notification.period);
+  if (params->create_notification.period.has_value()) {
+    row.period = GetTime(params->create_notification.period.value());
   }
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
@@ -1433,33 +1488,33 @@ ExtensionFunction::ResponseAction CalendarUpdateNotificationFunction::Run() {
 
   update_notification.notification_row.id = eventId;
 
-  if (params->changes.name.get()) {
+  if (params->changes.name.has_value()) {
     update_notification.notification_row.name =
-        base::UTF8ToUTF16(*params->changes.name);
+        base::UTF8ToUTF16(params->changes.name.value());
     update_notification.updateFields |= calendar::NOTIFICATION_NAME;
   }
 
-  if (params->changes.description.get()) {
+  if (params->changes.description.has_value()) {
     update_notification.notification_row.description =
-        base::UTF8ToUTF16(*params->changes.description);
+        base::UTF8ToUTF16(params->changes.description.value());
     update_notification.updateFields |= calendar::NOTIFICATION_DESCRIPTION;
   }
 
-  if (params->changes.when.get()) {
-    double when = *params->changes.when;
+  if (params->changes.when.has_value()) {
+    double when = params->changes.when.value();
 
     update_notification.notification_row.when = GetTime(when);
     update_notification.updateFields |= calendar::NOTIFICATION_WHEN;
   }
 
-  if (params->changes.period) {
+  if (params->changes.period.has_value()) {
     update_notification.notification_row.period =
-        GetTime(*params->changes.period);
+        GetTime(params->changes.period.value());
     update_notification.updateFields |= calendar::NOTIFICATION_PERIOD;
   }
 
-  if (params->changes.delay) {
-    update_notification.notification_row.delay = *params->changes.delay;
+  if (params->changes.delay.has_value()) {
+    update_notification.notification_row.delay = params->changes.delay.value();
     update_notification.updateFields |= calendar::NOTIFICATION_DELAY;
   }
 
@@ -1540,12 +1595,12 @@ ExtensionFunction::ResponseAction CalendarCreateInviteFunction::Run() {
   row.name = base::UTF8ToUTF16(params->create_invite.name);
   row.address = base::UTF8ToUTF16(params->create_invite.address);
 
-  if (params->create_invite.sent.get()) {
-    row.sent = *params->create_invite.sent;
+  if (params->create_invite.sent.has_value()) {
+    row.sent = params->create_invite.sent.value();
   }
 
-  if (params->create_invite.partstat.get()) {
-    row.partstat = *params->create_invite.partstat;
+  if (params->create_invite.partstat.has_value()) {
+    row.partstat = params->create_invite.partstat.value();
   }
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
@@ -1623,25 +1678,25 @@ ExtensionFunction::ResponseAction CalendarUpdateInviteFunction::Run() {
 
   updateInvite.invite_row.id = invite_id;
 
-  if (params->update_invite.address.get()) {
+  if (params->update_invite.address.has_value()) {
     updateInvite.invite_row.address =
-        base::UTF8ToUTF16(*params->update_invite.address);
+        base::UTF8ToUTF16(params->update_invite.address.value());
     updateInvite.updateFields |= calendar::INVITE_ADDRESS;
   }
 
-  if (params->update_invite.name.get()) {
+  if (params->update_invite.name.has_value()) {
     updateInvite.invite_row.name =
-        base::UTF8ToUTF16(*params->update_invite.name);
+        base::UTF8ToUTF16(params->update_invite.name.value());
     updateInvite.updateFields |= calendar::INVITE_NAME;
   }
 
-  if (params->update_invite.partstat.get()) {
-    updateInvite.invite_row.partstat = *params->update_invite.partstat;
+  if (params->update_invite.partstat.has_value()) {
+    updateInvite.invite_row.partstat = params->update_invite.partstat.value();
     updateInvite.updateFields |= calendar::INVITE_PARTSTAT;
   }
 
-  if (params->update_invite.sent.get()) {
-    updateInvite.invite_row.sent = *params->update_invite.sent;
+  if (params->update_invite.sent.has_value()) {
+    updateInvite.invite_row.sent = params->update_invite.sent.value();
     updateInvite.updateFields |= calendar::INVITE_SENT;
   }
 
@@ -1754,22 +1809,22 @@ ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
 
   row.id = accountId;
 
-  if (params->changes.name.get()) {
+  if (params->changes.name.has_value()) {
     std::u16string name;
-    name = base::UTF8ToUTF16(*params->changes.name);
+    name = base::UTF8ToUTF16(params->changes.name.value());
     row.name = name;
     row.updateFields |= calendar::ACCOUNT_NAME;
   }
 
-  if (params->changes.username.get()) {
+  if (params->changes.username.has_value()) {
     std::u16string username;
-    username = base::UTF8ToUTF16(*params->changes.username);
+    username = base::UTF8ToUTF16(params->changes.username.value());
     row.username = username;
     row.updateFields |= calendar::ACCOUNT_USERNAME;
   }
 
-  if (params->changes.url.get()) {
-    row.url = GURL(*params->changes.url);
+  if (params->changes.url.has_value()) {
+    row.url = GURL(params->changes.url.value());
     row.updateFields |= calendar::ACCOUNT_URL;
   }
 
@@ -1778,8 +1833,8 @@ ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
     row.updateFields |= calendar::ACCOUNT_TYPE;
   }
 
-  if (params->changes.interval.get()) {
-    row.interval = *params->changes.interval;
+  if (params->changes.interval.has_value()) {
+    row.interval = params->changes.interval.value();
     row.updateFields |= calendar::ACCOUNT_INTERVAL;
   }
 

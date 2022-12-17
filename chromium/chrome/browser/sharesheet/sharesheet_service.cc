@@ -1,14 +1,14 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/sharesheet/sharesheet_service.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/no_destructor.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -369,13 +369,11 @@ void SharesheetService::OnReadyToShowBubble(
   const std::u16string selected_app = GetSelectedApp();
   if (!selected_app.empty()) {
     SharesheetResult result = SharesheetResult::kCancel;
-    auto iter = std::find_if(targets.begin(), targets.end(),
-                             [selected_app](const auto& target) {
-                               return (target.type == TargetType::kArcApp ||
-                                       target.type == TargetType::kWebApp) &&
-                                      target.launch_name == selected_app;
-                             });
-    if (iter != targets.end()) {
+    if (base::ranges::any_of(targets, [selected_app](const auto& target) {
+          return (target.type == TargetType::kArcApp ||
+                  target.type == TargetType::kWebApp) &&
+                 target.launch_name == selected_app;
+        })) {
       LaunchApp(selected_app, std::move(intent));
       result = SharesheetResult::kSuccess;
     }
@@ -398,7 +396,8 @@ void SharesheetService::LaunchApp(const std::u16string& target_name,
         apps::GetEventFlags(WindowOpenDisposition::NEW_WINDOW,
                             /*prefer_container=*/true),
         std::move(intent), apps::LaunchSource::kFromSharesheet,
-        std::make_unique<apps::WindowInfo>(display::kDefaultDisplayId));
+        std::make_unique<apps::WindowInfo>(display::kDefaultDisplayId),
+        base::DoNothing());
   } else {
     app_service_proxy_->LaunchAppWithIntent(
         base::UTF16ToUTF8(target_name),
@@ -406,7 +405,7 @@ void SharesheetService::LaunchApp(const std::u16string& target_name,
                             /*prefer_container=*/true),
         apps::ConvertIntentToMojomIntent(intent),
         apps::mojom::LaunchSource::kFromSharesheet,
-        apps::MakeWindowInfo(display::kDefaultDisplayId));
+        apps::MakeWindowInfo(display::kDefaultDisplayId), {});
   }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,6 +65,7 @@ using GpuDiskCacheHandle = absl::variant<absl::monostate,
                                          GpuDiskCacheGlShaderHandle,
                                          GpuDiskCacheDawnWebGPUHandle>;
 GPU_EXPORT GpuDiskCacheType GetHandleType(const GpuDiskCacheHandle& handle);
+GPU_EXPORT int32_t GetHandleValue(const GpuDiskCacheHandle& handle);
 
 // Stream operator implemented for GpuDiskCacheHandle for debugging.
 GPU_EXPORT std::ostream& operator<<(std::ostream& s,

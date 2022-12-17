@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,8 +79,8 @@ public class SingleTabSwitcherMediator implements TabSwitcher.Controller {
         mPropertyModel.set(CLICK_LISTENER, v -> {
             if (mTabSelectingListener != null
                     && mTabModelSelector.getCurrentTabId() != TabList.INVALID_TAB_INDEX) {
-                selectTheCurrentTab();
                 StartSurfaceUserData.setOpenedFromStart(mTabModelSelector.getCurrentTab());
+                selectTheCurrentTab();
             }
         });
         mPropertyModel.addObserver((source, key) -> {

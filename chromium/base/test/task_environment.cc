@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -410,8 +410,9 @@ TaskEnvironment::TaskEnvironment(
   // If |subclass_creates_default_taskrunner| is true then initialization is
   // deferred until DeferredInitFromSubclass().
   if (!subclass_creates_default_taskrunner) {
-    task_queue_ = sequence_manager_->CreateTaskQueue(
-        sequence_manager::TaskQueue::Spec("task_environment_default"));
+    task_queue_ =
+        sequence_manager_->CreateTaskQueue(sequence_manager::TaskQueue::Spec(
+            sequence_manager::QueueName::TASK_ENVIRONMENT_DEFAULT_TQ));
     task_runner_ = task_queue_->task_runner();
     sequence_manager_->SetDefaultTaskRunner(task_runner_);
     if (mock_time_domain_)

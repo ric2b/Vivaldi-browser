@@ -73,6 +73,7 @@
 #include "third_party/blink/public/mojom/page_state/page_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-blink.h"
+#include "third_party/blink/public/mojom/window_features/window_features.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_cache.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
@@ -91,6 +92,7 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_navigation_timings.h"
+#include "third_party/blink/public/web/web_navigation_type.h"
 #include "third_party/blink/public/web/web_print_page_description.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/blink/public/web/web_range.h"
@@ -134,6 +136,7 @@
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
+#include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/browser_controls.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
@@ -184,7 +187,6 @@
 #include "third_party/blink/renderer/core/testing/scoped_fake_plugin_registry.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
-#include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/blob/testing/fake_blob.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_request.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
@@ -194,10 +196,12 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher_properties.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/testing/find_cc_layer.h"
 #include "third_party/blink/renderer/platform/testing/histogram_tester.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl_hash.h"
@@ -274,7 +278,8 @@ void ExecuteScriptsInMainWorld(
       DOMWrapperWorld::kMainWorldId, sources, user_gesture,
       mojom::blink::EvaluationTiming::kSynchronous,
       mojom::blink::LoadEventBlockingOption::kDoNotBlock, std::move(callback),
-      BackForwardCacheAware::kAllow, wait_for_promise);
+      BackForwardCacheAware::kAllow,
+      mojom::blink::WantResultOption::kWantResult, wait_for_promise);
 }
 
 // Same as above, but for a single script.
@@ -289,6 +294,12 @@ void ExecuteScriptInMainWorld(
   ExecuteScriptsInMainWorld(frame, base::make_span(&script_string, 1),
                             std::move(callback), wait_for_promise,
                             user_gesture);
+}
+
+const char* ViewBackgroundLayerName() {
+  return RuntimeEnabledFeatures::LayoutNGPrintingEnabled()
+             ? "Scrolling background of LayoutNGView #document"
+             : "Scrolling background of LayoutView #document";
 }
 
 }  // namespace
@@ -492,6 +503,8 @@ class WebFrameTest : public testing::Test {
   std::string base_url_;
   std::string not_base_url_;
   std::string chrome_url_;
+
+  ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;
 };
 
 TEST_F(WebFrameTest, ContentText) {
@@ -523,7 +536,7 @@ TEST_F(WebFrameTest, FrameForEnteredContext) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "iframes_test.html");
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   EXPECT_EQ(web_view_helper.GetWebView()->MainFrame(),
             WebLocalFrame::FrameForContext(web_view_helper.GetWebView()
                                                ->MainFrameImpl()
@@ -549,43 +562,42 @@ class ScriptExecutionCallbackHelper final {
   // Returns true if any results (even if they were empty) were passed to the
   // callback helper. This is generally false if the execution context was
   // invalidated while running the script.
-  bool HasAnyResults() const { return !string_values_.IsEmpty(); }
+  bool HasAnyResults() const { return !!result_; }
 
   // Returns the single value returned from the execution.
   String SingleStringValue() const {
-    if (string_values_.size() != 1u) {
-      ADD_FAILURE() << "Expected a single result, but found: "
-                    << string_values_.size();
+    if (!result_) {
+      ADD_FAILURE() << "Expected a single result, but found nullopt";
       return String();
     }
-    return string_values_[0];
-  }
+    if (const std::string* str = result_->GetIfString())
+      return String(*str);
 
-  // Returns the value at the given index.
-  String StringValueAt(wtf_size_t i) const {
-    if (i >= string_values_.size()) {
-      ADD_FAILURE() << "Attempted OOB access at index: " << i;
-      return String();
+    ADD_FAILURE() << "Type mismatch (not string)";
+    return String();
+  }
+  bool SingleBoolValue() const {
+    if (!result_) {
+      ADD_FAILURE() << "Expected a single result, but found nullopt";
+      return false;
     }
-    return string_values_[i];
+    if (absl::optional<bool> b = result_->GetIfBool())
+      return *b;
+
+    ADD_FAILURE() << "Type mismatch (not bool)";
+    return false;
   }
 
  private:
-  void Completed(const WebVector<v8::Local<v8::Value>>& values,
+  void Completed(absl::optional<base::Value> value,
                  base::TimeTicks start_time) {
     did_complete_ = true;
-    string_values_.Grow(static_cast<wtf_size_t>(values.size()));
-    for (wtf_size_t i = 0u; i < values.size(); ++i) {
-      if (values[i].IsEmpty())
-        continue;
-      string_values_[i] =
-          ToCoreString(values[i]->ToString(context_).ToLocalChecked());
-    }
+    result_ = std::move(value);
   }
 
+ private:
   bool did_complete_ = false;
-  Vector<String> string_values_;
-  v8::Local<v8::Context> context_;
+  absl::optional<base::Value> result_;
 };
 
 TEST_F(WebFrameTest, RequestExecuteScript) {
@@ -594,7 +606,7 @@ TEST_F(WebFrameTest, RequestExecuteScript) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "foo.html");
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
   ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
                            "'hello';", callback_helper.Callback());
@@ -609,7 +621,7 @@ TEST_F(WebFrameTest, SuspendedRequestExecuteScript) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "foo.html");
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
 
   // Suspend scheduled tasks so the script doesn't run.
@@ -630,7 +642,7 @@ TEST_F(WebFrameTest, ExecuteScriptWithError) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "foo.html");
 
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Isolate* isolate = web_view_helper.GetAgentGroupScheduler().Isolate();
   v8::HandleScope scope(isolate);
   v8::TryCatch try_catch(isolate);
   try_catch.SetVerbose(true);
@@ -643,7 +655,7 @@ TEST_F(WebFrameTest, ExecuteScriptWithError) {
   // script runner classes, so the caller never sees it. Instead, the error
   // is represented by an empty V8Value (stringified to an empty string).
   EXPECT_FALSE(try_catch.HasCaught());
-  EXPECT_EQ(String(), callback_helper.SingleStringValue());
+  EXPECT_FALSE(callback_helper.HasAnyResults());
 }
 
 TEST_F(WebFrameTest, ExecuteScriptWithPromiseWithoutWait) {
@@ -654,7 +666,7 @@ TEST_F(WebFrameTest, ExecuteScriptWithPromiseWithoutWait) {
 
   constexpr char kScript[] = R"(Promise.resolve('hello');)";
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
   ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
                            kScript, callback_helper.Callback(),
@@ -663,8 +675,10 @@ TEST_F(WebFrameTest, ExecuteScriptWithPromiseWithoutWait) {
   // Since the caller specified the script shouldn't wait for the promise to
   // be resolved, the callback should have completed normally and the result
   // value should be the promise.
+  // As `V8ValueConverterForTest` fails to convert the promise to `base::Value`,
+  // the callback receives `absl::nullopt`.
   EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_EQ("[object Promise]", callback_helper.SingleStringValue());
+  EXPECT_FALSE(callback_helper.HasAnyResults());
 }
 
 TEST_F(WebFrameTest, ExecuteScriptWithPromiseFulfilled) {
@@ -675,7 +689,7 @@ TEST_F(WebFrameTest, ExecuteScriptWithPromiseFulfilled) {
 
   constexpr char kScript[] = R"(Promise.resolve('hello');)";
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
   ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
                            kScript, callback_helper.Callback());
@@ -692,15 +706,15 @@ TEST_F(WebFrameTest, ExecuteScriptWithPromiseRejected) {
 
   constexpr char kScript[] = R"(Promise.reject('hello');)";
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
   ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
                            kScript, callback_helper.Callback());
   RunPendingTasks();
   EXPECT_TRUE(callback_helper.DidComplete());
-  // Promise rejection, similar to errors, are represented by empty V8Values
+  // Promise rejection, similar to errors, are represented by `absl::nullopt`
   // passed to the callback.
-  EXPECT_EQ(String(), callback_helper.SingleStringValue());
+  EXPECT_FALSE(callback_helper.HasAnyResults());
 }
 
 TEST_F(WebFrameTest, ExecuteScriptWithFrameRemovalBeforePromiseResolves) {
@@ -710,7 +724,7 @@ TEST_F(WebFrameTest, ExecuteScriptWithFrameRemovalBeforePromiseResolves) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "single_iframe.html");
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
 
   constexpr char kScript[] = R"((new Promise((r) => {}));)";
 
@@ -743,14 +757,14 @@ TEST_F(WebFrameTest, ExecuteScriptWithMultiplePromises) {
       "Promise.resolve('world');",
   };
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
   ExecuteScriptsInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
                             scripts, callback_helper.Callback());
   RunPendingTasks();
   EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_EQ("hello", callback_helper.StringValueAt(0));
-  EXPECT_EQ("world", callback_helper.StringValueAt(1));
+  // The result of the last script is returned.
+  EXPECT_EQ("world", callback_helper.SingleStringValue());
 }
 
 TEST_F(WebFrameTest, ExecuteScriptWithMultiplePromisesWithDelayedSettlement) {
@@ -764,7 +778,7 @@ TEST_F(WebFrameTest, ExecuteScriptWithMultiplePromisesWithDelayedSettlement) {
       "(new Promise((r) => { window.resolveSecond = r; }));",
   };
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
   ExecuteScriptsInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
                             scripts, callback_helper.Callback());
@@ -778,15 +792,15 @@ TEST_F(WebFrameTest, ExecuteScriptWithMultiplePromisesWithDelayedSettlement) {
                              second_callback_helper.Callback());
     RunPendingTasks();
     EXPECT_TRUE(second_callback_helper.DidComplete());
-    EXPECT_EQ("undefined", second_callback_helper.SingleStringValue());
+    // `undefined` is mapped to `nullopt`.
+    EXPECT_FALSE(second_callback_helper.HasAnyResults());
   }
 
   EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_EQ("hello", callback_helper.StringValueAt(0));
-  EXPECT_EQ("world", callback_helper.StringValueAt(1));
+  EXPECT_EQ("world", callback_helper.SingleStringValue());
 }
 
-TEST_F(WebFrameTest, ExecuteScriptWithMultipleSourcesWhereSomeArePromises) {
+TEST_F(WebFrameTest, ExecuteScriptWithMultipleSourcesWhereFirstIsPromise) {
   RegisterMockedHttpURLLoad("foo.html");
 
   frame_test_helpers::WebViewHelper web_view_helper;
@@ -797,18 +811,38 @@ TEST_F(WebFrameTest, ExecuteScriptWithMultipleSourcesWhereSomeArePromises) {
       "'world';",
   };
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
   ExecuteScriptsInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
                             scripts, callback_helper.Callback());
   RunPendingTasks();
 
   EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_EQ("hello", callback_helper.StringValueAt(0));
-  EXPECT_EQ("world", callback_helper.StringValueAt(1));
+  EXPECT_EQ("world", callback_helper.SingleStringValue());
 }
 
-TEST_F(WebFrameTest, ExecuteScriptWithPromisesWhereOnlySomeAreFulfilled) {
+TEST_F(WebFrameTest, ExecuteScriptWithMultipleSourcesWhereLastIsPromise) {
+  RegisterMockedHttpURLLoad("foo.html");
+
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.InitializeAndLoad(base_url_ + "foo.html");
+
+  const String scripts[] = {
+      "'hello';",
+      "Promise.resolve('world');",
+  };
+
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
+  ScriptExecutionCallbackHelper callback_helper;
+  ExecuteScriptsInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
+                            scripts, callback_helper.Callback());
+  RunPendingTasks();
+
+  EXPECT_TRUE(callback_helper.DidComplete());
+  EXPECT_EQ("world", callback_helper.SingleStringValue());
+}
+
+TEST_F(WebFrameTest, ExecuteScriptWithPromisesWhereOnlyFirstIsFulfilled) {
   RegisterMockedHttpURLLoad("foo.html");
 
   frame_test_helpers::WebViewHelper web_view_helper;
@@ -819,14 +853,35 @@ TEST_F(WebFrameTest, ExecuteScriptWithPromisesWhereOnlySomeAreFulfilled) {
       "Promise.reject('world');",
   };
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
   ExecuteScriptsInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
                             scripts, callback_helper.Callback());
   RunPendingTasks();
   EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_EQ("hello", callback_helper.StringValueAt(0));
-  EXPECT_EQ(String(), callback_helper.StringValueAt(1));
+  // Promise rejection, similar to errors, are represented by `absl::nullopt`
+  // passed to the callback.
+  EXPECT_FALSE(callback_helper.HasAnyResults());
+}
+
+TEST_F(WebFrameTest, ExecuteScriptWithPromisesWhereOnlyLastIsFulfilled) {
+  RegisterMockedHttpURLLoad("foo.html");
+
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.InitializeAndLoad(base_url_ + "foo.html");
+
+  String scripts[] = {
+      "Promise.reject('hello');",
+      "Promise.resolve('world');",
+  };
+
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
+  ScriptExecutionCallbackHelper callback_helper;
+  ExecuteScriptsInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
+                            scripts, callback_helper.Callback());
+  RunPendingTasks();
+  EXPECT_TRUE(callback_helper.DidComplete());
+  EXPECT_EQ("world", callback_helper.SingleStringValue());
 }
 
 TEST_F(WebFrameTest, RequestExecuteV8Function) {
@@ -841,7 +896,7 @@ TEST_F(WebFrameTest, RequestExecuteV8Function) {
     info.GetReturnValue().Set(info[1]);
   };
 
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Isolate* isolate = web_view_helper.GetAgentGroupScheduler().Isolate();
   v8::HandleScope scope(isolate);
   v8::Local<v8::Context> context =
       web_view_helper.LocalMainFrame()->MainWorldScriptContext();
@@ -872,7 +927,7 @@ TEST_F(WebFrameTest, RequestExecuteV8FunctionWhileSuspended) {
     info.GetReturnValue().Set(V8String(info.GetIsolate(), "hello"));
   };
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   v8::Local<v8::Context> context =
       web_view_helper.LocalMainFrame()->MainWorldScriptContext();
 
@@ -902,7 +957,7 @@ TEST_F(WebFrameTest, RequestExecuteV8FunctionWhileSuspendedWithUserGesture) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "foo.html");
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
 
   // Suspend scheduled tasks so the script doesn't run.
   web_view_helper.GetWebView()->GetPage()->SetPaused(true);
@@ -919,7 +974,7 @@ TEST_F(WebFrameTest, RequestExecuteV8FunctionWhileSuspendedWithUserGesture) {
   web_view_helper.GetWebView()->GetPage()->SetPaused(false);
   RunPendingTasks();
   EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_EQ("true", callback_helper.SingleStringValue());
+  EXPECT_TRUE(callback_helper.SingleBoolValue());
 }
 
 TEST_F(WebFrameTest, IframeScriptRemovesSelf) {
@@ -929,7 +984,7 @@ TEST_F(WebFrameTest, IframeScriptRemovesSelf) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "single_iframe.html");
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
   ScriptExecutionCallbackHelper callback_helper;
   ExecuteScriptInMainWorld(
       web_view_helper.GetWebView()
@@ -988,7 +1043,7 @@ TEST_F(WebFrameTest, CapabilityDelegationMessageEventTest) {
   child_frame->GetDocument()->domWindow()->addEventListener(
       event_type_names::kMessage, message_event_listener);
 
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper.GetAgentGroupScheduler().Isolate());
 
   {
     String post_message_wo_request(
@@ -1200,7 +1255,7 @@ TEST_F(WebFrameTest, LocationSetEmptyPort) {
 class EvaluateOnLoadWebFrameClient
     : public frame_test_helpers::TestWebFrameClient {
  public:
-  EvaluateOnLoadWebFrameClient() : executing_(false), was_executed_(false) {}
+  EvaluateOnLoadWebFrameClient() = default;
   ~EvaluateOnLoadWebFrameClient() override = default;
 
   // frame_test_helpers::TestWebFrameClient:
@@ -1208,14 +1263,14 @@ class EvaluateOnLoadWebFrameClient
     EXPECT_FALSE(executing_);
     was_executed_ = true;
     executing_ = true;
-    v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+    v8::HandleScope handle_scope(Frame()->GetAgentGroupScheduler()->Isolate());
     Frame()->ExecuteScriptAndReturnValue(
         WebScriptSource(WebString("window.someProperty = 42;")));
     executing_ = false;
   }
 
-  bool executing_;
-  bool was_executed_;
+  bool executing_ = false;
+  bool was_executed_ = false;
 };
 
 TEST_F(WebFrameTest, DidClearWindowObjectIsNotRecursive) {
@@ -1564,6 +1619,7 @@ TEST_F(WebFrameTest, PostMessageEvent) {
     message.message = SerializedScriptValue::NullValue();
     message.sender_origin =
         SecurityOrigin::CreateFromString("https://origin.com");
+    message.sender_agent_cluster_id = base::UnguessableToken::Create();
     return message;
   };
 
@@ -4739,11 +4795,13 @@ class ContextLifetimeTestWebFrameClient
       const FramePolicy&,
       const WebFrameOwnerProperties&,
       FrameOwnerElementType,
-      WebPolicyContainerBindParams policy_container_bind_params) override {
+      WebPolicyContainerBindParams policy_container_bind_params,
+      FinishChildFrameCreationFn finish_creation) override {
     return CreateLocalChild(*Frame(), scope,
                             std::make_unique<ContextLifetimeTestWebFrameClient>(
                                 create_notifications_, release_notifications_),
-                            std::move(policy_container_bind_params));
+                            std::move(policy_container_bind_params),
+                            finish_creation);
   }
 
   void DidCreateScriptContext(v8::Local<v8::Context> context,
@@ -4764,8 +4822,6 @@ class ContextLifetimeTestWebFrameClient
 };
 
 TEST_F(WebFrameTest, ContextNotificationsLoadUnload) {
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-
   RegisterMockedHttpURLLoad("context_notifications_test.html");
   RegisterMockedHttpURLLoad("context_notifications_test_frame.html");
 
@@ -4778,6 +4834,8 @@ TEST_F(WebFrameTest, ContextNotificationsLoadUnload) {
   ContextLifetimeTestWebFrameClient web_frame_client(create_notifications,
                                                      release_notifications);
   frame_test_helpers::WebViewHelper web_view_helper;
+  v8::HandleScope handle_scope(
+      web_view_helper.GetAgentGroupScheduler().Isolate());
   web_view_helper.InitializeAndLoad(
       base_url_ + "context_notifications_test.html", &web_frame_client);
 
@@ -4815,8 +4873,6 @@ TEST_F(WebFrameTest, ContextNotificationsLoadUnload) {
 }
 
 TEST_F(WebFrameTest, ContextNotificationsReload) {
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-
   RegisterMockedHttpURLLoad("context_notifications_test.html");
   RegisterMockedHttpURLLoad("context_notifications_test_frame.html");
 
@@ -4827,6 +4883,8 @@ TEST_F(WebFrameTest, ContextNotificationsReload) {
   ContextLifetimeTestWebFrameClient web_frame_client(create_notifications,
                                                      release_notifications);
   frame_test_helpers::WebViewHelper web_view_helper;
+  v8::HandleScope handle_scope(
+      web_view_helper.GetAgentGroupScheduler().Isolate());
   web_view_helper.InitializeAndLoad(
       base_url_ + "context_notifications_test.html", &web_frame_client);
 
@@ -4863,9 +4921,6 @@ TEST_F(WebFrameTest, ContextNotificationsReload) {
 }
 
 TEST_F(WebFrameTest, ContextNotificationsIsolatedWorlds) {
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
-  v8::HandleScope handle_scope(isolate);
-
   RegisterMockedHttpURLLoad("context_notifications_test.html");
   RegisterMockedHttpURLLoad("context_notifications_test_frame.html");
 
@@ -4876,6 +4931,8 @@ TEST_F(WebFrameTest, ContextNotificationsIsolatedWorlds) {
   ContextLifetimeTestWebFrameClient web_frame_client(create_notifications,
                                                      release_notifications);
   frame_test_helpers::WebViewHelper web_view_helper;
+  v8::Isolate* isolate = web_view_helper.GetAgentGroupScheduler().Isolate();
+  v8::HandleScope handle_scope(isolate);
   web_view_helper.InitializeAndLoad(
       base_url_ + "context_notifications_test.html", &web_frame_client);
 
@@ -5761,7 +5818,7 @@ static gfx::Point BottomRightMinusOne(const gfx::Rect& rect) {
 }
 
 static gfx::Rect ElementBounds(WebLocalFrame* frame, const WebString& id) {
-  return gfx::Rect(frame->GetDocument().GetElementById(id).BoundsInViewport());
+  return gfx::Rect(frame->GetDocument().GetElementById(id).BoundsInWidget());
 }
 
 static std::string SelectionAsString(WebFrame* frame) {
@@ -6479,7 +6536,8 @@ class CompositedSelectionBoundsTest
 
     UpdateAllLifecyclePhases(web_view_helper_.GetWebView());
 
-    v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+    v8::HandleScope handle_scope(
+        web_view_helper_.GetAgentGroupScheduler().Isolate());
     v8::Local<v8::Value> result =
         web_view_helper_.GetWebView()
             ->MainFrameImpl()
@@ -6490,8 +6548,9 @@ class CompositedSelectionBoundsTest
     v8::Array& expected_result = *v8::Array::Cast(*result);
     ASSERT_GE(expected_result.Length(), 10u);
 
-    v8::Local<v8::Context> context =
-        v8::Isolate::GetCurrent()->GetCurrentContext();
+    v8::Local<v8::Context> context = web_view_helper_.GetAgentGroupScheduler()
+                                         .Isolate()
+                                         ->GetCurrentContext();
 
     int start_edge_start_in_layer_x = expected_result.Get(context, 1)
                                           .ToLocalChecked()
@@ -6573,7 +6632,7 @@ class CompositedSelectionBoundsTest
     ASSERT_NE(selection.end, cc::LayerSelectionBound());
 
     blink::Node* layer_owner_node_for_start = V8Node::ToImplWithTypeCheck(
-        v8::Isolate::GetCurrent(),
+        web_view_helper_.GetAgentGroupScheduler().Isolate(),
         expected_result.Get(context, 0).ToLocalChecked());
     // Hidden selection does not always have a layer (might be hidden due to not
     // having been painted.
@@ -6602,7 +6661,7 @@ class CompositedSelectionBoundsTest
     EXPECT_NEAR(start_edge_end_in_layer_x, selection.start.edge_end.x(), 1);
 
     blink::Node* layer_owner_node_for_end = V8Node::ToImplWithTypeCheck(
-        v8::Isolate::GetCurrent(),
+        web_view_helper_.GetAgentGroupScheduler().Isolate(),
         expected_result.Get(context, 5).ToLocalChecked());
     // Hidden selection does not always have a layer (might be hidden due to not
     // having been painted.
@@ -6680,8 +6739,7 @@ class CompositedSelectionBoundsTest
   static int LayerIdFromNode(const cc::Layer* root_layer, blink::Node* node) {
     Vector<const cc::Layer*> layers;
     if (node->IsDocumentNode()) {
-      layers = CcLayersByName(root_layer,
-                              "Scrolling background of LayoutView #document");
+      layers = CcLayersByName(root_layer, ViewBackgroundLayerName());
     } else {
       DCHECK(node->IsElementNode());
       layers = CcLayersByDOMElementId(root_layer,
@@ -7180,7 +7238,7 @@ class TestAccessInitialDocumentLocalFrameHost
   void RequestClose() override {}
   void ShowCreatedWindow(const ::blink::LocalFrameToken& opener_frame_token,
                          ::ui::mojom::blink::WindowOpenDisposition disposition,
-                         const ::gfx::Rect& rect,
+                         const mojom::blink::WindowFeaturesPtr window_features,
                          bool opened_by_user_gesture,
                          ShowCreatedWindowCallback callback) override {
     std::move(callback).Run();
@@ -7654,7 +7712,7 @@ TEST_F(WebFrameTest, ReloadPost) {
 
   frame_test_helpers::ReloadFrame(frame);
   EXPECT_EQ(mojom::FetchCacheMode::kValidateCache, client.GetCacheMode());
-  EXPECT_EQ(kWebNavigationTypeFormResubmitted,
+  EXPECT_EQ(kWebNavigationTypeFormResubmittedReload,
             frame->GetDocumentLoader()->GetNavigationType());
 }
 
@@ -7681,12 +7739,14 @@ class TestCachePolicyWebFrameClient
       const FramePolicy&,
       const WebFrameOwnerProperties& frame_owner_properties,
       FrameOwnerElementType,
-      WebPolicyContainerBindParams policy_container_bind_params) override {
+      WebPolicyContainerBindParams policy_container_bind_params,
+      FinishChildFrameCreationFn finish_creation) override {
     auto child = std::make_unique<TestCachePolicyWebFrameClient>();
     auto* child_ptr = child.get();
     child_clients_.push_back(std::move(child));
     return CreateLocalChild(*Frame(), scope, child_ptr,
-                            std::move(policy_container_bind_params));
+                            std::move(policy_container_bind_params),
+                            finish_creation);
   }
   void BeginNavigation(std::unique_ptr<WebNavigationInfo> info) override {
     cache_mode_ = info->url_request.GetCacheMode();
@@ -8117,7 +8177,8 @@ class FailCreateChildFrame : public frame_test_helpers::TestWebFrameClient {
       const FramePolicy&,
       const WebFrameOwnerProperties& frame_owner_properties,
       FrameOwnerElementType,
-      WebPolicyContainerBindParams policy_container_bind_params) override {
+      WebPolicyContainerBindParams policy_container_bind_params,
+      FinishChildFrameCreationFn finish_creation) override {
     ++call_count_;
     return nullptr;
   }
@@ -8486,7 +8547,7 @@ TEST_F(WebFrameTest, FullscreenNestedExit) {
   Fullscreen::RequestFullscreen(*iframe_body);
 
   web_view_impl->DidEnterFullscreen();
-  Microtask::PerformCheckpoint(V8PerIsolateData::MainThreadIsolate());
+  top_doc->GetAgent()->event_loop()->PerformMicrotaskCheckpoint();
   UpdateAllLifecyclePhases(web_view_impl);
 
   // We are now in nested fullscreen, with both documents having a non-empty
@@ -8745,9 +8806,7 @@ TEST_F(WebFrameTest, WebXrImmersiveOverlay) {
   EXPECT_TRUE(document->IsXrOverlay());
 
   const cc::Layer* root_layer = layer_tree_host->root_layer();
-  const char* view_background_layer_name =
-      "Scrolling background of LayoutView #document";
-  EXPECT_EQ(1u, CcLayersByName(root_layer, view_background_layer_name).size());
+  EXPECT_EQ(1u, CcLayersByName(root_layer, ViewBackgroundLayerName()).size());
   EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "other").size());
   // The overlay is not composited when it's not in full screen.
   EXPECT_EQ(0u, CcLayersByDOMElementId(root_layer, "overlay").size());
@@ -8759,7 +8818,7 @@ TEST_F(WebFrameTest, WebXrImmersiveOverlay) {
   EXPECT_TRUE(!layer_tree_host->background_color().isOpaque());
 
   root_layer = layer_tree_host->root_layer();
-  EXPECT_EQ(0u, CcLayersByName(root_layer, view_background_layer_name).size());
+  EXPECT_EQ(0u, CcLayersByName(root_layer, ViewBackgroundLayerName()).size());
   EXPECT_EQ(0u, CcLayersByDOMElementId(root_layer, "other").size());
   EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "overlay").size());
   EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "inner").size());
@@ -8771,7 +8830,7 @@ TEST_F(WebFrameTest, WebXrImmersiveOverlay) {
   document->SetIsXrOverlay(false, overlay);
 
   root_layer = layer_tree_host->root_layer();
-  EXPECT_EQ(1u, CcLayersByName(root_layer, view_background_layer_name).size());
+  EXPECT_EQ(1u, CcLayersByName(root_layer, ViewBackgroundLayerName()).size());
   EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "other").size());
   // The overlay is not composited when it's not in full screen.
   EXPECT_EQ(0u, CcLayersByDOMElementId(root_layer, "overlay").size());
@@ -9135,10 +9194,11 @@ class WebFrameSwapTestClient : public frame_test_helpers::TestWebFrameClient {
       const FramePolicy&,
       const WebFrameOwnerProperties&,
       FrameOwnerElementType,
-      WebPolicyContainerBindParams policy_container_bind_params) override {
-    return CreateLocalChild(*Frame(), scope,
-                            std::make_unique<WebFrameSwapTestClient>(this),
-                            std::move(policy_container_bind_params));
+      WebPolicyContainerBindParams policy_container_bind_params,
+      FinishChildFrameCreationFn finish_creation) override {
+    return CreateLocalChild(
+        *Frame(), scope, std::make_unique<WebFrameSwapTestClient>(this),
+        std::move(policy_container_bind_params), finish_creation);
   }
 
   void DidChangeFrameOwnerProperties(
@@ -9388,6 +9448,49 @@ TEST_F(WebFrameSwapTest, SwapFirstChild) {
   EXPECT_EQ("  \n\nhello\n\nb \n\na\n\nc", content);
 }
 
+// Asserts that the `Settings::SetHighlightAds` is properly applied to a
+// `LocalFrame` even if `Settings::SetHighlightAds` is fired when the
+// `LocalFrame` is still provisional. See crbug/1312107. While the bug is first
+// observed on fenced frames, the underlying issue lies in the timing of the
+// `Settings::SetHighlightAds` call with respect to the navigation progress of
+// the frame.
+TEST_F(WebFrameSwapTest, AdHighlightEarlyApply) {
+  WebRemoteFrame* remote_frame = frame_test_helpers::CreateRemote();
+  SwapAndVerifyFirstChildConsistency("local->remote", MainFrame(),
+                                     remote_frame);
+
+  // Create the provisional frame and set its ad evidence.
+  WebLocalFrameImpl* local_frame =
+      web_view_helper_.CreateProvisional(*remote_frame);
+  // Value of `parent_is_ad` does not matter.
+  blink::FrameAdEvidence ad_evidence(/*parent_is_ad=*/false);
+  ad_evidence.set_created_by_ad_script(
+      mojom::FrameCreationStackEvidence::kCreatedByAdScript);
+  ad_evidence.set_is_complete();
+  local_frame->SetAdEvidence(ad_evidence);
+
+  // Toggle the settings for provisional local frame.
+  local_frame->View()->GetSettings()->SetHighlightAds(true);
+
+  // Assert that the local frame does not have any overlay color since it is not
+  // in the frame tree yet.
+  ASSERT_EQ(local_frame->GetFrame()->GetFrameOverlayColorForTesting(),
+            absl::nullopt);
+
+  WebDocument doc_before_navigation = local_frame->GetDocument();
+
+  auto params = std::make_unique<WebNavigationParams>();
+  params->url = url_test_helpers::ToKURL("about:blank");
+  // `CommitNavigation` will swap in the local frame to replace the remote
+  // frame.
+  local_frame->CommitNavigation(std::move(params), nullptr);
+
+  ASSERT_FALSE(local_frame->IsProvisional());
+  ASSERT_NE(doc_before_navigation, local_frame->GetDocument());
+  ASSERT_EQ(local_frame->GetFrame()->GetFrameOverlayColorForTesting(),
+            SkColorSetARGB(128, 255, 0, 0));
+}
+
 TEST_F(WebFrameSwapTest, DoNotPropagateDisplayNonePropertyOnSwap) {
   WebFrameSwapTestClient* main_frame_client =
       static_cast<WebFrameSwapTestClient*>(MainFrame()->Client());
@@ -9611,7 +9714,7 @@ TEST_F(WebFrameSwapTest, SwapParentShouldDetachChildren) {
 }
 
 TEST_F(WebFrameSwapTest, SwapPreservesGlobalContext) {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper_.GetAgentGroupScheduler().Isolate());
   v8::Local<v8::Value> window_top =
       MainFrame()->ExecuteScriptAndReturnValue(WebScriptSource("window"));
   ASSERT_TRUE(window_top->IsObject());
@@ -9648,7 +9751,7 @@ TEST_F(WebFrameSwapTest, SwapPreservesGlobalContext) {
 }
 
 TEST_F(WebFrameSwapTest, SetTimeoutAfterSwap) {
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Isolate* isolate = web_view_helper_.GetAgentGroupScheduler().Isolate();
   v8::HandleScope scope(isolate);
   MainFrame()->ExecuteScript(
       WebScriptSource("savedSetTimeout = window[0].setTimeout"));
@@ -9679,7 +9782,7 @@ TEST_F(WebFrameSwapTest, SetTimeoutAfterSwap) {
 }
 
 TEST_F(WebFrameSwapTest, SwapInitializesGlobal) {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper_.GetAgentGroupScheduler().Isolate());
 
   v8::Local<v8::Value> window_top =
       MainFrame()->ExecuteScriptAndReturnValue(WebScriptSource("window"));
@@ -9708,7 +9811,7 @@ TEST_F(WebFrameSwapTest, SwapInitializesGlobal) {
 }
 
 TEST_F(WebFrameSwapTest, RemoteFramesAreIndexable) {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper_.GetAgentGroupScheduler().Isolate());
 
   WebRemoteFrame* remote_frame = frame_test_helpers::CreateRemote();
   frame_test_helpers::SwapRemoteFrame(MainFrame()->LastChild(), remote_frame);
@@ -9722,7 +9825,7 @@ TEST_F(WebFrameSwapTest, RemoteFramesAreIndexable) {
 }
 
 TEST_F(WebFrameSwapTest, RemoteFrameLengthAccess) {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper_.GetAgentGroupScheduler().Isolate());
 
   WebRemoteFrame* remote_frame = frame_test_helpers::CreateRemote();
   frame_test_helpers::SwapRemoteFrame(MainFrame()->LastChild(), remote_frame);
@@ -9734,7 +9837,7 @@ TEST_F(WebFrameSwapTest, RemoteFrameLengthAccess) {
 }
 
 TEST_F(WebFrameSwapTest, RemoteWindowNamedAccess) {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper_.GetAgentGroupScheduler().Isolate());
 
   // TODO(dcheng): Once OOPIF unit test infrastructure is in place, test that
   // named window access on a remote window works. For now, just test that
@@ -9750,7 +9853,7 @@ TEST_F(WebFrameSwapTest, RemoteWindowNamedAccess) {
 }
 
 TEST_F(WebFrameSwapTest, RemoteWindowToString) {
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Isolate* isolate = web_view_helper_.GetAgentGroupScheduler().Isolate();
   v8::HandleScope scope(isolate);
 
   WebRemoteFrame* remote_frame = frame_test_helpers::CreateRemote();
@@ -9767,7 +9870,7 @@ TEST_F(WebFrameSwapTest, RemoteWindowToString) {
 // very little of the test fixture support in WebFrameSwapTest.  We should
 // clean these tests up.
 TEST_F(WebFrameSwapTest, FramesOfRemoteParentAreIndexable) {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper_.GetAgentGroupScheduler().Isolate());
 
   WebRemoteFrame* remote_parent_frame = frame_test_helpers::CreateRemote();
   frame_test_helpers::SwapRemoteFrame(MainFrame(), remote_parent_frame);
@@ -9795,7 +9898,7 @@ TEST_F(WebFrameSwapTest, FramesOfRemoteParentAreIndexable) {
 // Check that frames with a remote parent don't crash while accessing
 // window.frameElement.
 TEST_F(WebFrameSwapTest, FrameElementInFramesWithRemoteParent) {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(web_view_helper_.GetAgentGroupScheduler().Isolate());
 
   WebRemoteFrame* remote_parent_frame = frame_test_helpers::CreateRemote();
   frame_test_helpers::SwapRemoteFrame(MainFrame(), remote_parent_frame);
@@ -10118,7 +10221,7 @@ TEST_F(WebFrameTest, CrossDomainAccessErrorsUseCallingWindow) {
   popup_view->MainFrameImpl()->ExecuteScript(WebScriptSource(
       "try { opener.frames[1].location.href='data:text/html,foo'; } catch (e) "
       "{}"));
-  EXPECT_TRUE(web_frame_client.messages.IsEmpty());
+  EXPECT_TRUE(web_frame_client.messages.empty());
   ASSERT_EQ(1u, popup_web_frame_client.messages.size());
   EXPECT_TRUE(std::string::npos !=
               popup_web_frame_client.messages[0].text.Utf8().find(
@@ -10129,7 +10232,7 @@ TEST_F(WebFrameTest, CrossDomainAccessErrorsUseCallingWindow) {
   popup_view->MainFrameImpl()->ExecuteScript(
       WebScriptSource("opener.document.querySelectorAll('iframe')[1].src='"
                       "javascript:alert()'"));
-  EXPECT_TRUE(web_frame_client.messages.IsEmpty());
+  EXPECT_TRUE(web_frame_client.messages.empty());
   ASSERT_EQ(2u, popup_web_frame_client.messages.size());
   EXPECT_TRUE(
       std::string::npos !=
@@ -10202,7 +10305,7 @@ class DeviceEmulationTest : public WebFrameTest {
 
   String DumpSize(const String& id) {
     String code = "dumpSize('" + id + "')";
-    v8::HandleScope scope(v8::Isolate::GetCurrent());
+    v8::HandleScope scope(web_view_helper_.GetAgentGroupScheduler().Isolate());
     ScriptExecutionCallbackHelper callback_helper;
     ExecuteScriptInMainWorld(web_view_helper_.GetWebView()->MainFrameImpl(),
                              code, callback_helper.Callback());
@@ -10981,7 +11084,7 @@ TEST_F(WebFrameTest, CopyImageDocument) {
       document->GetFrame()->GetSystemClipboard();
   ASSERT_TRUE(system_clipboard);
 
-  EXPECT_TRUE(system_clipboard->ReadAvailableTypes().IsEmpty());
+  EXPECT_TRUE(system_clipboard->ReadAvailableTypes().empty());
 
   bool result = web_frame->ExecuteCommand("Copy");
   test::RunPendingTasks();
@@ -11026,7 +11129,7 @@ TEST_F(WebFrameTest, CopyTextInImageDocument) {
       document->GetFrame()->GetSystemClipboard();
   ASSERT_TRUE(system_clipboard);
 
-  EXPECT_TRUE(system_clipboard->ReadAvailableTypes().IsEmpty());
+  EXPECT_TRUE(system_clipboard->ReadAvailableTypes().empty());
 
   bool result = web_frame->ExecuteCommand("Copy");
   test::RunPendingTasks();
@@ -11186,9 +11289,11 @@ class WebLocalFrameVisibilityChangeTest
       const FramePolicy&,
       const WebFrameOwnerProperties&,
       FrameOwnerElementType,
-      WebPolicyContainerBindParams policy_container_bind_params) override {
+      WebPolicyContainerBindParams policy_container_bind_params,
+      FinishChildFrameCreationFn finish_creation) override {
     return CreateLocalChild(*Frame(), scope, &child_client_,
-                            std::move(policy_container_bind_params));
+                            std::move(policy_container_bind_params),
+                            finish_creation);
   }
 
   TestLocalFrameHostForVisibility& ChildHost() { return child_host_; }
@@ -11243,7 +11348,7 @@ TEST(WebFrameGlobalReuseTest, MainFrameWithNoOpener) {
   helper.Initialize();
 
   WebLocalFrame* main_frame = helper.LocalMainFrame();
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(helper.GetAgentGroupScheduler().Isolate());
   main_frame->ExecuteScript(WebScriptSource("hello = 'world';"));
   frame_test_helpers::LoadFrame(main_frame, "data:text/html,new page");
   v8::Local<v8::Value> result =
@@ -11262,7 +11367,7 @@ TEST(WebFrameGlobalReuseTest, ChildFrame) {
   frame_test_helpers::LoadFrame(main_frame, "data:text/html,<iframe></iframe>");
 
   WebLocalFrame* child_frame = main_frame->FirstChild()->ToWebLocalFrame();
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(helper.GetAgentGroupScheduler().Isolate());
   child_frame->ExecuteScript(WebScriptSource("hello = 'world';"));
   frame_test_helpers::LoadFrame(child_frame, "data:text/html,new page");
   v8::Local<v8::Value> result =
@@ -11281,7 +11386,7 @@ TEST(WebFrameGlobalReuseTest, MainFrameWithOpener) {
                               nullptr, EnableGlobalReuseForUnownedMainFrames);
 
   WebLocalFrame* main_frame = helper.LocalMainFrame();
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(helper.GetAgentGroupScheduler().Isolate());
   main_frame->ExecuteScript(WebScriptSource("hello = 'world';"));
   frame_test_helpers::LoadFrame(main_frame, "data:text/html,new page");
   v8::Local<v8::Value> result =
@@ -11299,7 +11404,7 @@ TEST(WebFrameGlobalReuseTest, ReuseForMainFrameIfEnabled) {
   helper.Initialize(nullptr, nullptr, EnableGlobalReuseForUnownedMainFrames);
 
   WebLocalFrame* main_frame = helper.LocalMainFrame();
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(helper.GetAgentGroupScheduler().Isolate());
   main_frame->ExecuteScript(WebScriptSource("hello = 'world';"));
   frame_test_helpers::LoadFrame(main_frame, "data:text/html,new page");
   v8::Local<v8::Value> result =
@@ -12940,9 +13045,11 @@ TEST_F(WebFrameTest, NoLoadingCompletionCallbacksInDetach) {
         const FramePolicy&,
         const WebFrameOwnerProperties&,
         FrameOwnerElementType,
-        WebPolicyContainerBindParams policy_container_bind_params) override {
+        WebPolicyContainerBindParams policy_container_bind_params,
+        FinishChildFrameCreationFn finish_creation) override {
       return CreateLocalChild(*Frame(), scope, &child_client_,
-                              std::move(policy_container_bind_params));
+                              std::move(policy_container_bind_params),
+                              finish_creation);
     }
 
     LoadingObserverFrameClient& ChildClient() { return child_client_; }
@@ -13304,16 +13411,16 @@ void RecursiveCollectTextRunDOMNodeIds(
     DOMNodeId dom_node_id,
     std::vector<TextRunDOMNodeIdInfo>* text_runs) {
   for (cc::PaintOpBuffer::Iterator it(paint_record.get()); it; ++it) {
-    if ((*it)->GetType() == cc::PaintOpType::DrawRecord) {
-      cc::DrawRecordOp* draw_record_op = static_cast<cc::DrawRecordOp*>(*it);
-      RecursiveCollectTextRunDOMNodeIds(draw_record_op->record, dom_node_id,
+    if (it->GetType() == cc::PaintOpType::DrawRecord) {
+      const auto& draw_record_op = static_cast<const cc::DrawRecordOp&>(*it);
+      RecursiveCollectTextRunDOMNodeIds(draw_record_op.record, dom_node_id,
                                         text_runs);
-    } else if ((*it)->GetType() == cc::PaintOpType::SetNodeId) {
-      cc::SetNodeIdOp* set_node_id_op = static_cast<cc::SetNodeIdOp*>(*it);
-      dom_node_id = set_node_id_op->node_id;
-    } else if ((*it)->GetType() == cc::PaintOpType::DrawTextBlob) {
-      cc::DrawTextBlobOp* draw_text_op = static_cast<cc::DrawTextBlobOp*>(*it);
-      SkTextBlob::Iter iter(*draw_text_op->blob);
+    } else if (it->GetType() == cc::PaintOpType::SetNodeId) {
+      const auto& set_node_id_op = static_cast<const cc::SetNodeIdOp&>(*it);
+      dom_node_id = set_node_id_op.node_id;
+    } else if (it->GetType() == cc::PaintOpType::DrawTextBlob) {
+      const auto& draw_text_op = static_cast<const cc::DrawTextBlobOp&>(*it);
+      SkTextBlob::Iter iter(*draw_text_op.blob);
       SkTextBlob::Iter::Run run;
       while (iter.next(&run)) {
         TextRunDOMNodeIdInfo text_run_info;
@@ -13325,7 +13432,55 @@ void RecursiveCollectTextRunDOMNodeIds(
   }
 }
 
+std::vector<TextRunDOMNodeIdInfo> GetPrintedTextRunDOMNodeIds(
+    WebLocalFrame* frame,
+    const WebVector<uint32_t>* pages = nullptr) {
+  WebPrintParams print_params;
+  gfx::Size page_size(500, 500);
+  print_params.print_content_area.set_size(page_size);
+
+  frame->PrintBegin(print_params, WebNode());
+  cc::PaintRecorder recorder;
+  frame->PrintPagesForTesting(recorder.beginRecording(SkRect::MakeEmpty()),
+                              page_size, page_size, pages);
+  frame->PrintEnd();
+
+  sk_sp<cc::PaintRecord> paint_record = recorder.finishRecordingAsPicture();
+  std::vector<TextRunDOMNodeIdInfo> text_runs;
+  RecursiveCollectTextRunDOMNodeIds(paint_record, 0, &text_runs);
+
+  return text_runs;
+}
+
 }  // namespace
+
+TEST_F(WebFrameTest, PrintSomePages) {
+  RegisterMockedHttpURLLoad("print-pages.html");
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.InitializeAndLoad(base_url_ + "print-pages.html");
+
+  WebVector<uint32_t> pages;
+  pages.push_back(1);
+  pages.push_back(4);
+  pages.push_back(8);
+  std::vector<TextRunDOMNodeIdInfo> text_runs =
+      GetPrintedTextRunDOMNodeIds(web_view_helper.LocalMainFrame(), &pages);
+
+  ASSERT_EQ(3u, text_runs.size());
+  EXPECT_EQ(2, text_runs[0].glyph_len);  // Page 2
+  EXPECT_EQ(5, text_runs[1].glyph_len);  // Page 5
+  EXPECT_EQ(9, text_runs[2].glyph_len);  // Page 9
+}
+
+TEST_F(WebFrameTest, PrintAllPages) {
+  RegisterMockedHttpURLLoad("print-pages.html");
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.InitializeAndLoad(base_url_ + "print-pages.html");
+
+  std::vector<TextRunDOMNodeIdInfo> text_runs =
+      GetPrintedTextRunDOMNodeIds(web_view_helper.LocalMainFrame());
+  EXPECT_EQ(10u, text_runs.size());
+}
 
 TEST_F(WebFrameTest, FirstLetterHasDOMNodeIdWhenPrinting) {
   // When printing, every DrawText painting op needs to have an associated
@@ -13339,21 +13494,8 @@ TEST_F(WebFrameTest, FirstLetterHasDOMNodeIdWhenPrinting) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "first-letter.html");
 
-  // Print the page and capture the PaintRecord.
-  WebPrintParams print_params;
-  gfx::Size page_size(500, 500);
-  print_params.print_content_area.set_size(page_size);
-  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
-  EXPECT_EQ(1u, frame->PrintBegin(print_params, WebNode()));
-  cc::PaintRecorder recorder;
-  frame->PrintPagesForTesting(recorder.beginRecording(SkRect::MakeEmpty()),
-                              page_size, page_size);
-  frame->PrintEnd();
-  sk_sp<PaintRecord> paint_record = recorder.finishRecordingAsPicture();
-
-  // Unpack the paint record and collect info about the text runs.
-  std::vector<TextRunDOMNodeIdInfo> text_runs;
-  RecursiveCollectTextRunDOMNodeIds(paint_record, 0, &text_runs);
+  std::vector<TextRunDOMNodeIdInfo> text_runs =
+      GetPrintedTextRunDOMNodeIds(web_view_helper.LocalMainFrame());
 
   // The first text run should be "Hello".
   ASSERT_EQ(3U, text_runs.size());
@@ -13568,14 +13710,9 @@ TEST_F(WebFrameSimTest, MainFrameTransformOffsetPixelSnapped) {
   RunPendingTasks();
   EXPECT_TRUE(remote_frame_host.GetIntersectionState()
                   ->main_frame_transform.IsIdentityOrIntegerTranslation());
-  EXPECT_EQ(remote_frame_host.GetIntersectionState()
-                ->main_frame_transform.matrix()
-                .rc(0, 3),
-            14.f);
-  EXPECT_EQ(remote_frame_host.GetIntersectionState()
-                ->main_frame_transform.matrix()
-                .rc(1, 3),
-            7.f);
+  EXPECT_EQ(gfx::Vector2dF(14.f, 7.f),
+            remote_frame_host.GetIntersectionState()
+                ->main_frame_transform.To2dTranslation());
   MainFrame().FirstChild()->Detach();
 }
 

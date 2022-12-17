@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,7 @@ bool CloudDeviceDescription::InitFromString(const std::string& json) {
 bool CloudDeviceDescription::InitFromValue(base::Value ticket) {
   if (!ticket.is_dict())
     return false;
-  root_ = std::move(ticket.GetDict());
+  root_ = std::move(ticket).TakeDict();
   return IsValidTicket(root_);
 }
 

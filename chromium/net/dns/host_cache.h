@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,9 +21,9 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/numerics/clamped_math.h"
-#include "base/stl_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "base/types/optional_util.h"
 #include "base/values.h"
 #include "net/base/address_family.h"
 #include "net/base/connection_endpoint_metadata.h"
@@ -32,9 +32,9 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
-#include "net/base/network_isolation_key.h"
-#include "net/dns/host_resolver_results.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/dns/public/dns_query_type.h"
+#include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/host_resolver_source.h"
 #include "net/log/net_log_capture_mode.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -58,7 +58,7 @@ class NET_EXPORT HostCache {
         DnsQueryType dns_query_type,
         HostResolverFlags host_resolver_flags,
         HostResolverSource host_resolver_source,
-        const NetworkIsolationKey& network_isolation_key);
+        const NetworkAnonymizationKey& network_anonymization_key);
     Key();
     Key(const Key& key);
     Key(Key&& key);
@@ -70,7 +70,7 @@ class NET_EXPORT HostCache {
     // assumption that integer comparisons are faster than string comparisons.
     static auto GetTuple(const Key* key) {
       return std::tie(key->dns_query_type, key->host_resolver_flags, key->host,
-                      key->host_resolver_source, key->network_isolation_key,
+                      key->host_resolver_source, key->network_anonymization_key,
                       key->secure);
     }
 
@@ -90,7 +90,7 @@ class NET_EXPORT HostCache {
     DnsQueryType dns_query_type = DnsQueryType::UNSPECIFIED;
     HostResolverFlags host_resolver_flags = 0;
     HostResolverSource host_resolver_source = HostResolverSource::ANY;
-    NetworkIsolationKey network_isolation_key;
+    NetworkAnonymizationKey network_anonymization_key;
     bool secure = false;
   };
 
@@ -188,7 +188,7 @@ class NET_EXPORT HostCache {
     absl::optional<std::vector<HostResolverEndpointResult>> GetEndpoints()
         const;
     const std::vector<IPEndPoint>* ip_endpoints() const {
-      return base::OptionalOrNullptr(ip_endpoints_);
+      return base::OptionalToPtr(ip_endpoints_);
     }
     void set_ip_endpoints(
         absl::optional<std::vector<IPEndPoint>> ip_endpoints) {
@@ -198,7 +198,7 @@ class NET_EXPORT HostCache {
         const;
     void ClearMetadatas() { endpoint_metadatas_.reset(); }
     const std::set<std::string>* aliases() const {
-      return base::OptionalOrNullptr(aliases_);
+      return base::OptionalToPtr(aliases_);
     }
     void set_aliases(std::set<std::string> aliases) {
       aliases_ = std::move(aliases);
@@ -217,7 +217,7 @@ class NET_EXPORT HostCache {
       hostnames_ = std::move(hostnames);
     }
     const std::vector<bool>* https_record_compatibility() const {
-      return base::OptionalOrNullptr(https_record_compatibility_);
+      return base::OptionalToPtr(https_record_compatibility_);
     }
     void set_https_record_compatibility(
         absl::optional<std::vector<bool>> https_record_compatibility) {
@@ -374,12 +374,12 @@ class NET_EXPORT HostCache {
 
   // The two ways to serialize the cache to a value.
   enum class SerializationType {
-    // Entries with transient NetworkIsolationKeys are not serialized, and
+    // Entries with transient NetworkAnonymizationKeys are not serialized, and
     // RestoreFromListValue() can load the returned value.
     kRestorable,
-    // Entries with transient NetworkIsolationKeys are serialized, and
+    // Entries with transient NetworkAnonymizationKeys are serialized, and
     // RestoreFromListValue() cannot load the returned value, since the debug
-    // serialization of NetworkIsolationKeys is used instead of the
+    // serialization of NetworkAnonymizationKeys is used instead of the
     // deserializable representation.
     kDebug,
   };

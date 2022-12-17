@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,8 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
-#include "base/callback_helpers.h"
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/chromeos_buildflags.h"
@@ -17,8 +16,6 @@
 #include "chrome/browser/sync/sync_startup_tracker.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
-#include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
-#include "components/policy/core/common/policy_service.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -30,6 +27,7 @@
 class Browser;
 class SigninUIError;
 class TurnSyncOnHelperPolicyFetchTracker;
+class AccountSelectionInProgressHandle;
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 class DiceSignedInProfileCreator;
@@ -168,8 +166,6 @@ class TurnSyncOnHelper {
   void OnSyncStartupStateChanged(SyncStartupTracker::ServiceStartupState state);
 
  private:
-  friend class base::DeleteHelper<TurnSyncOnHelper>;
-
   enum class ProfileMode {
     // Attempts to sign the user in |profile_|. Note that if the account to be
     // signed in is a managed account, then a profile confirmation dialog is
@@ -183,6 +179,9 @@ class TurnSyncOnHelper {
 
   // TurnSyncOnHelper deletes itself.
   ~TurnSyncOnHelper();
+
+  // Triggers the start of the flow.
+  void TurnSyncOnInternal();
 
   // Handles can offer sign-in errors.  It returns true if there is an error,
   // and false otherwise.
@@ -257,6 +256,10 @@ class TurnSyncOnHelper {
 
   // Prevents Sync from running until configuration is complete.
   std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;
+
+  // Prevents `SigninManager` from changing the unconsented primary account
+  // until the flow is complete.
+  std::unique_ptr<AccountSelectionInProgressHandle> account_change_blocker_;
 
   // Called when this object is deleted.
   base::ScopedClosureRunner scoped_callback_runner_;

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,10 @@ mojom::ReferrerPolicy ParseReferrerPolicy(
 COMPONENT_EXPORT(NETWORK_CPP)
 bool ShouldSniffContent(const GURL& url,
                         const mojom::URLResponseHead& response);
+
+// https://fetch.spec.whatwg.org/#ok-status aka a successful 2xx status code,
+// https://www.rfc-editor.org/rfc/rfc9110#status.2xx.
+COMPONENT_EXPORT(NETWORK_CPP) bool IsSuccessfulStatus(int status);
 
 }  // namespace network
 

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,6 @@
 #include "services/network/public/cpp/content_security_policy/content_security_policy.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/content_security_policy.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/space_split_string.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
@@ -22,6 +21,7 @@
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/crypto.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -80,13 +80,13 @@ network::mojom::blink::CSPHashAlgorithm ConvertHashAlgorithmToCSPHashAlgorithm(
 // IntegrityMetadata (from SRI) has base64-encoded digest values, but CSP uses
 // binary format. This converts from the former to the latter.
 bool ParseBase64Digest(String base64, Vector<uint8_t>& hash) {
-  DCHECK(hash.IsEmpty());
+  DCHECK(hash.empty());
 
   // We accept base64url-encoded data here by normalizing it to base64.
   Vector<char> out;
   if (!Base64Decode(NormalizeToBase64(base64), out))
     return false;
-  if (out.IsEmpty() || out.size() > kMaxDigestSize)
+  if (out.empty() || out.size() > kMaxDigestSize)
     return false;
   for (char el : out)
     hash.push_back(el);
@@ -186,7 +186,7 @@ void ReportViolationWithLocation(
                        ? "[Report Only] " + console_message
                        : console_message;
   std::unique_ptr<SourceLocation> source_location =
-      SourceLocation::Capture(context_url, context_line.OneBasedInt(), 0);
+      CaptureSourceLocation(context_url, context_line.OneBasedInt(), 0);
   policy->LogToConsole(MakeGarbageCollected<ConsoleMessage>(
       mojom::ConsoleMessageSource::kSecurity,
       mojom::ConsoleMessageLevel::kError, message, source_location->Clone()));
@@ -321,7 +321,7 @@ bool IsMatchingNoncePresent(
 bool AreAllMatchingHashesPresent(
     const network::mojom::blink::CSPSourceList* directive,
     const IntegrityMetadataSet& hashes) {
-  if (!directive || hashes.IsEmpty())
+  if (!directive || hashes.empty())
     return false;
   for (const std::pair<String, IntegrityAlgorithm>& hash : hashes) {
     // Convert the hash from integrity metadata format to CSP format.

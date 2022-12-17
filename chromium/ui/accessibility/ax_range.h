@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -130,6 +130,8 @@ class AXRange {
   //   nullopt - If positions are not comparable (see AXPosition::CompareTo).
   static absl::optional<int> CompareEndpoints(const AXPositionType* first,
                                               const AXPositionType* second) {
+    DCHECK(first->IsValid());
+    DCHECK(second->IsValid());
     absl::optional<int> tree_position_comparison =
         first->AsTreePosition()->CompareTo(*second->AsTreePosition());
 

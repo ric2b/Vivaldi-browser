@@ -1,10 +1,9 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/payments/content/payment_request.h"
 
-#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -12,6 +11,7 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "components/payments/content/can_make_payment_query_factory.h"
 #include "components/payments/content/content_payment_request_delegate.h"
@@ -164,10 +164,9 @@ void PaymentRequest::Init(
     return;
   }
 
-  if (std::any_of(method_data.begin(), method_data.end(),
-                  [](const auto& datum) {
-                    return !datum || datum->supported_method.empty();
-                  })) {
+  if (base::ranges::any_of(method_data, [](const auto& datum) {
+        return !datum || datum->supported_method.empty();
+      })) {
     log_.Error(errors::kMethodNameRequired);
     ResetAndDeleteThis();
     return;
@@ -201,7 +200,8 @@ void PaymentRequest::Init(
       frame_security_origin_, spec(),
       /*delegate=*/weak_ptr_factory_.GetWeakPtr(),
       delegate_->GetApplicationLocale(), delegate_->GetPersonalDataManager(),
-      delegate_->GetContentWeakPtr(), journey_logger_.GetWeakPtr());
+      delegate_->GetContentWeakPtr(), journey_logger_.GetWeakPtr(),
+      /*csp_checker=*/weak_ptr_factory_.GetWeakPtr());
 
   journey_logger_.SetRequestedInformation(
       spec_->request_shipping(), spec_->request_payer_email(),
@@ -211,15 +211,6 @@ void PaymentRequest::Init(
   GURL google_pay_url(methods::kGooglePay);
   GURL android_pay_url(methods::kAndroidPay);
   GURL google_play_billing_url(methods::kGooglePlayBilling);
-  // Looking for payment methods that are NOT google-related payment methods.
-  auto non_google_it =
-      std::find_if(spec_->url_payment_method_identifiers().begin(),
-                   spec_->url_payment_method_identifiers().end(),
-                   [google_pay_url, android_pay_url,
-                    google_play_billing_url](const GURL& url) {
-                     return url != google_pay_url && url != android_pay_url &&
-                            url != google_play_billing_url;
-                   });
   std::vector<JourneyLogger::PaymentMethodCategory> method_categories;
   if (base::Contains(spec_->url_payment_method_identifiers(), google_pay_url) ||
       base::Contains(spec_->url_payment_method_identifiers(),
@@ -235,7 +226,11 @@ void PaymentRequest::Init(
     method_categories.push_back(
         JourneyLogger::PaymentMethodCategory::kSecurePaymentConfirmation);
   }
-  if (non_google_it != spec_->url_payment_method_identifiers().end()) {
+  if (base::ranges::any_of(
+          spec_->url_payment_method_identifiers(), [&](const GURL& url) {
+            return url != google_pay_url && url != android_pay_url &&
+                   url != google_play_billing_url;
+          })) {
     method_categories.push_back(JourneyLogger::PaymentMethodCategory::kOther);
   }
   journey_logger_.SetRequestedPaymentMethods(method_categories);
@@ -678,6 +673,23 @@ void PaymentRequest::AreRequestedMethodsSupportedCallback(
 
 base::WeakPtr<PaymentRequest> PaymentRequest::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
+}
+
+void PaymentRequest::AllowConnectToSource(
+    const GURL& url,
+    const GURL& url_before_redirects,
+    bool did_follow_redirect,
+    base::OnceCallback<void(bool)> result_callback) {
+  if (!client_) {
+    std::move(result_callback).Run(false);
+    return;
+  }
+
+  // Round-trip to the renderer, even if the CSP will be bypassed due to a
+  // feature flag, so the renderer can print a deprecation warning about CSP
+  // bypass.
+  client_->AllowConnectToSource(url, url_before_redirects, did_follow_redirect,
+                                std::move(result_callback));
 }
 
 void PaymentRequest::OnInitialized(InitializationTask* initialization_task) {

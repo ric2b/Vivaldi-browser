@@ -15,6 +15,8 @@ class DesktopWallpaperDataClassHandlerWin : public VivaldiDataClassHandler {
   void GetData(Profile* profile,
                const std::string& data_id,
                content::URLDataSource::GotDataCallback callback) override;
+  std::string GetMimetype(Profile* profile,
+                          const std::string& data_id) override;
 
  private:
   void GetDataOnFileThread(std::wstring file_path,

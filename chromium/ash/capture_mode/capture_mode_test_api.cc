@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,6 +47,10 @@ void CaptureModeTestApi::StartForRegion(bool for_video) {
   SetType(for_video);
   controller_->SetSource(CaptureModeSource::kRegion);
   controller_->Start(CaptureModeEntryType::kQuickSettings);
+}
+
+void CaptureModeTestApi::SetCaptureModeSource(CaptureModeSource source) {
+  controller_->SetSource(source);
 }
 
 bool CaptureModeTestApi::IsSessionActive() const {
@@ -109,6 +113,10 @@ void CaptureModeTestApi::SetOnVideoRecordCountdownFinishedCallback(
 void CaptureModeTestApi::SetAudioRecordingEnabled(bool enabled) {
   DCHECK(!controller_->is_recording_in_progress());
   controller_->enable_audio_recording_ = enabled;
+}
+
+bool CaptureModeTestApi::GetAudioRecordingEnabled() const {
+  return controller_->GetAudioRecordingEnabled();
 }
 
 void CaptureModeTestApi::FlushRecordingServiceForTesting() {
@@ -192,6 +200,10 @@ void CaptureModeTestApi::SetOnCameraVideoFrameRendered(
   DCHECK(camera_controller->camera_preview_view_);
   camera_controller->camera_preview_view_->camera_video_renderer_
       .on_video_frame_rendered_for_test_ = std::move(callback);
+}
+
+views::Widget* CaptureModeTestApi::GetCameraPreviewWidget() {
+  return controller_->camera_controller()->camera_preview_widget();
 }
 
 void CaptureModeTestApi::SetType(bool for_video) {

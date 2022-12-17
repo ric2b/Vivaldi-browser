@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,9 @@ import androidx.annotation.RequiresApi;
 
 import org.chromium.content.R;
 import org.chromium.ui.base.DeviceFormFactor;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Paste popup implementation based on floating ActionModes.
@@ -99,6 +102,12 @@ public class FloatingPastePopupMenu implements PastePopupMenu {
             menu.removeItem(R.id.select_action_menu_copy);
             menu.removeItem(R.id.select_action_menu_share);
             menu.removeItem(R.id.select_action_menu_web_search);
+            // Vivaldi
+            if (BuildConfig.IS_VIVALDI) {
+                menu.removeItem(R.id.select_action_menu_translate);
+                menu.removeItem(R.id.select_action_menu_copy_to_note);
+                menu.removeItem(R.id.select_action_menu_append_to_note);
+            }
         }
 
         @Override

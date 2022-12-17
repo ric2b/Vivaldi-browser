@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,12 @@
 #include "third_party/cros_system_api/dbus/hermes/dbus-constants.h"
 
 namespace ash {
+
+const std::array<HermesResponseStatus, 4> kHermesUserErrorCodes = {
+    HermesResponseStatus::kErrorMalformedResponse,
+    HermesResponseStatus::kErrorAlreadyDisabled,
+    HermesResponseStatus::kErrorAlreadyEnabled,
+    HermesResponseStatus::kErrorInvalidActivationCode};
 
 HermesResponseStatus HermesResponseStatusFromErrorName(
     const std::string& error_name) {

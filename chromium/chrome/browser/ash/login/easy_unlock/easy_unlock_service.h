@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,8 @@
 #include <set>
 #include <string>
 
-#include "ash/components/multidevice/remote_device_ref.h"
-#include "ash/components/proximity_auth/smart_lock_metrics_recorder.h"
+// TODO(https://crbug.com/1164001): move to forward declaration
+#include "ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
@@ -19,15 +19,11 @@
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_metrics.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_types.h"
 #include "chrome/browser/ash/login/easy_unlock/smartlock_state_handler.h"
-// TODO(https://crbug.com/1164001): move to forward declaration
-#include "ash/services/secure_channel/public/cpp/client/secure_channel_client.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
+#include "chromeos/ash/components/proximity_auth/smart_lock_metrics_recorder.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 class AccountId;
-
-namespace base {
-class ListValue;
-}  // namespace base
 
 namespace user_manager {
 class User;
@@ -87,7 +83,7 @@ class EasyUnlockService : public KeyedService,
   // Retrieve the stored remote devices list:
   //   * If in regular context, device list is retrieved from prefs.
   //   * If in sign-in context, device list is retrieved from TPM.
-  virtual const base::ListValue* GetRemoteDevices() const = 0;
+  virtual const base::Value::List* GetRemoteDevices() const = 0;
 
   // Gets the challenge bytes for the user currently associated with the
   // service.

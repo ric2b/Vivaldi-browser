@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,6 +50,12 @@ std::string GetUserName(const std::string& email) {
 bool User::TypeHasGaiaAccount(UserType user_type) {
   return user_type == USER_TYPE_REGULAR ||
          user_type == USER_TYPE_CHILD;
+}
+
+// static
+bool User::TypeIsKiosk(UserType type) {
+  return type == USER_TYPE_KIOSK_APP || type == USER_TYPE_ARC_KIOSK_APP ||
+         type == USER_TYPE_WEB_KIOSK_APP;
 }
 
 // Also used for regular supervised users.
@@ -300,9 +306,7 @@ bool User::IsDeviceLocalAccount() const {
 }
 
 bool User::IsKioskType() const {
-  UserType type = GetType();
-  return type == USER_TYPE_KIOSK_APP || type == USER_TYPE_ARC_KIOSK_APP ||
-         type == USER_TYPE_WEB_KIOSK_APP;
+  return TypeIsKiosk(GetType());
 }
 
 User* User::CreateRegularUser(const AccountId& account_id,

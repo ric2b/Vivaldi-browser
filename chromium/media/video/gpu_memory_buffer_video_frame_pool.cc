@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <algorithm>
 #include <list>
 #include <memory>
 #include <utility>
@@ -26,6 +25,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
 #include "base/time/default_tick_clock.h"
@@ -54,82 +54,14 @@
 
 namespace media {
 
-namespace {
-
-const std::string PixelFormatToString(VideoPixelFormat format) {
-  switch (format) {
-    case PIXEL_FORMAT_YV12:
-      return "YV12";
-    case PIXEL_FORMAT_I420:
-      return "I420";
-    case PIXEL_FORMAT_YUV420P10:
-      return "YUV420P10";
-    case PIXEL_FORMAT_I420A:
-      return "I420A";
-    case PIXEL_FORMAT_NV12:
-      return "NV12";
-    default:
-      NOTREACHED();
-      return "UNKNOWN";
-  }
-}
-
-void RecordVideoFrameSizeAndOffsetHistogram(VideoPixelFormat pixel_format,
-                                            gfx::Size coded_size,
-                                            gfx::Rect visible_rect,
-                                            bool mappable) {
-  bool odd_width = (coded_size.width() % 2) == 1;
-  bool odd_height = (coded_size.height() % 2) == 1;
-  bool odd_x = (visible_rect.x() % 2) == 1;
-  bool odd_y = (visible_rect.y() % 2) == 1;
-
-  gfx::OddSize size_enum;
-  if (odd_width && odd_height)
-    size_enum = gfx::OddSize::kOddWidthAndHeight;
-  else if (odd_width)
-    size_enum = gfx::OddSize::kOddWidthOnly;
-  else if (odd_height)
-    size_enum = gfx::OddSize::kOddHeightOnly;
-  else
-    size_enum = gfx::OddSize::kEvenWidthAndHeight;
-
-  base::UmaHistogramEnumeration("Media.GpuMemoryBufferVideoFramePool.Size",
-                                size_enum);
-  base::UmaHistogramEnumeration("Media.GpuMemoryBufferVideoFramePool.Size." +
-                                    PixelFormatToString(pixel_format),
-                                size_enum);
-
-  gfx::OddOffset offset_enum;
-  if (odd_x && odd_y)
-    offset_enum = gfx::OddOffset::kOddXAndY;
-  else if (odd_x)
-    offset_enum = gfx::OddOffset::kOddXOnly;
-  else if (odd_y)
-    offset_enum = gfx::OddOffset::kOddYOnly;
-  else
-    offset_enum = gfx::OddOffset::kEvenXAndY;
-
-  base::UmaHistogramEnumeration("Media.GpuMemoryBufferVideoFramePool.Offset",
-                                offset_enum);
-  base::UmaHistogramEnumeration("Media.GpuMemoryBufferVideoFramePool.Offset." +
-                                    PixelFormatToString(pixel_format),
-                                offset_enum);
-
-  // Mappable for video frames with odd offset
-  if (offset_enum != gfx::OddOffset::kEvenXAndY)
-    base::UmaHistogramBoolean(
-        "Media.GpuMemoryBufferVideoFramePool.OddOffset.Mappable", mappable);
-}
-}  // namespace
-
-const base::Feature kMultiPlaneSoftwareVideoSharedImages {
-  "MultiPlaneSoftwareVideoSharedImages",
+BASE_FEATURE(kMultiPlaneSoftwareVideoSharedImages,
+             "MultiPlaneSoftwareVideoSharedImages",
 #if BUILDFLAG(IS_MAC)
-      base::FEATURE_ENABLED_BY_DEFAULT
+             base::FEATURE_ENABLED_BY_DEFAULT
 #else
-      base::FEATURE_DISABLED_BY_DEFAULT
+             base::FEATURE_DISABLED_BY_DEFAULT
 #endif
-};
+);
 
 bool GpuMemoryBufferVideoFramePool::MultiPlaneVideoSharedImagesEnabled() {
   return base::FeatureList::IsEnabled(kMultiPlaneSoftwareVideoSharedImages);
@@ -455,7 +387,8 @@ size_t NumGpuMemoryBuffers(GpuVideoAcceleratorFactories::OutputFormat format) {
 // GpuMemoryBuffer can be mapped to several SharedImages (one for each plane).
 size_t NumSharedImages(GpuVideoAcceleratorFactories::OutputFormat format) {
   if (GpuMemoryBufferVideoFramePool::MultiPlaneVideoSharedImagesEnabled()) {
-    if (format == GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB) {
+    if (format == GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB ||
+        format == GpuVideoAcceleratorFactories::OutputFormat::P010) {
       return 2;
     }
   }
@@ -469,7 +402,8 @@ size_t GpuMemoryBufferPlaneResourceIndexForPlane(
     GpuVideoAcceleratorFactories::OutputFormat format,
     size_t plane) {
   if (GpuMemoryBufferVideoFramePool::MultiPlaneVideoSharedImagesEnabled()) {
-    if (format == GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB) {
+    if (format == GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB ||
+        format == GpuVideoAcceleratorFactories::OutputFormat::P010) {
       return 0;
     }
   }
@@ -482,7 +416,8 @@ gfx::BufferPlane GetSharedImageBufferPlane(
     GpuVideoAcceleratorFactories::OutputFormat format,
     size_t plane) {
   if (GpuMemoryBufferVideoFramePool::MultiPlaneVideoSharedImagesEnabled()) {
-    if (format == GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB) {
+    if (format == GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB ||
+        format == GpuVideoAcceleratorFactories::OutputFormat::P010) {
       switch (plane) {
         case 0:
           return gfx::BufferPlane::Y;
@@ -822,9 +757,6 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     case PIXEL_FORMAT_YUV420P10:
     case PIXEL_FORMAT_I420A:
     case PIXEL_FORMAT_NV12:
-      RecordVideoFrameSizeAndOffsetHistogram(
-          pixel_format, video_frame->coded_size(), video_frame->visible_rect(),
-          video_frame->IsMappable());
       break;
     // Unsupported cases.
     case PIXEL_FORMAT_I422:
@@ -1161,8 +1093,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::OnCopiesDoneOnMediaThread(
     // Drop the resources if there was an error with them. If we're not in
     // shutdown we also need to remove the pool entry for them.
     if (!in_shutdown_) {
-      auto it = std::find(resources_pool_.begin(), resources_pool_.end(),
-                          frame_resources);
+      auto it = base::ranges::find(resources_pool_, frame_resources);
       DCHECK(it != resources_pool_.end());
       resources_pool_.erase(it);
     }
@@ -1212,7 +1143,7 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
   }
 
   gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
-  bool is_webgpu_compatible = true;
+  bool is_webgpu_compatible = false;
   // Set up the planes creating the mailboxes needed to refer to the textures.
   for (size_t plane = 0; plane < NumSharedImages(output_format_); plane++) {
     size_t gpu_memory_buffer_plane =
@@ -1223,15 +1154,19 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
         frame_resources->plane_resources[gpu_memory_buffer_plane]
             .gpu_memory_buffer.get();
 
+#if BUILDFLAG(IS_MAC)
+    // Shared image uses iosurface as native resource which is compatible to
+    // WebGPU always.
+    is_webgpu_compatible = (gpu_memory_buffer != nullptr);
+#endif
+
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-    is_webgpu_compatible &= (gpu_memory_buffer != nullptr);
+    is_webgpu_compatible = (gpu_memory_buffer != nullptr);
     if (is_webgpu_compatible) {
       is_webgpu_compatible &=
           gpu_memory_buffer->CloneHandle()
               .native_pixmap_handle.supports_zero_copy_webgpu_import;
     }
-#else
-    is_webgpu_compatible = false;
 #endif
 
     const gfx::BufferFormat buffer_format =
@@ -1239,11 +1174,12 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
     unsigned texture_target = gpu_factories_->ImageTextureTarget(buffer_format);
     // Bind the texture and create or rebind the image.
     if (gpu_memory_buffer && plane_resource.mailbox.IsZero()) {
-      uint32_t usage =
-          gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_RASTER |
-          gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_SCANOUT;
+      uint32_t usage = gpu::SHARED_IMAGE_USAGE_GLES2 |
+                       gpu::SHARED_IMAGE_USAGE_RASTER |
+                       gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+                       gpu::SHARED_IMAGE_USAGE_SCANOUT;
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
       // TODO(crbug.com/1241537): Always add the flag once the
       // OzoneImageBacking is by default turned on.
       if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -1272,13 +1208,6 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
     mailbox_holders[plane].sync_token = sync_token;
 
   VideoPixelFormat frame_format = VideoFormat(output_format_);
-
-#if BUILDFLAG(IS_MAC)
-  // TODO(https://crbug.com/1155760): Until individual planes can be bound as
-  // their own textures, P010 buffers are copied to F16 textures for sampling.
-  if (frame_format == PIXEL_FORMAT_P016LE)
-    frame_format = PIXEL_FORMAT_RGBAF16;
-#endif
 
   // Create the VideoFrame backed by native textures.
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(

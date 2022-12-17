@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,9 +20,8 @@
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_restore_util.h"
 #include "ash/wm/desks/desks_textfield.h"
-#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
-#include "ash/wm/overview/overview_highlight_controller.h"
+#include "ash/wm/overview/overview_utils.h"
 #include "base/bind.h"
 #include "base/cxx17_backports.h"
 #include "base/i18n/rtl.h"
@@ -93,7 +92,15 @@ DeskMiniView::DeskMiniView(DesksBarView* owner_bar,
   desk_name_view->AddObserver(this);
   desk_name_view->set_controller(this);
   desk_name_view->SetText(desk_->name());
-  desk_name_view->SetAccessibleName(desk_->name());
+
+  // Desks created by the new desk button are initialized with an empty name to
+  // encourage user to name the desk, but the `desk_name_view` needs a non-empty
+  // accessible name.
+  auto* desks_controller = DesksController::Get();
+  desk_name_view->SetAccessibleName(
+      desk_->name().empty() ? DesksController::GetDeskDefaultName(
+                                  desks_controller->GetDeskIndex(desk_))
+                            : desk_->name());
 
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
@@ -108,7 +115,7 @@ DeskMiniView::DeskMiniView(DesksBarView* owner_bar,
 
   if (features::IsDesksCloseAllEnabled()) {
     const std::u16string initial_combine_desks_target_name =
-        DesksController::Get()->GetCombineDesksTargetName(desk_);
+        desks_controller->GetCombineDesksTargetName(desk_);
 
     desk_action_view_ = AddChildView(std::make_unique<DeskActionView>(
         initial_combine_desks_target_name,
@@ -204,7 +211,8 @@ void DeskMiniView::OnWidgetGestureTap(const gfx::Rect& screen_rect,
   // the desk.
   const bool old_force_show_desk_buttons = force_show_desk_buttons_;
   force_show_desk_buttons_ =
-      !Shell::Get()->tablet_mode_controller()->InTabletMode() &&
+      !(features::IsDesksCloseAllEnabled() &&
+        Shell::Get()->tablet_mode_controller()->InTabletMode()) &&
       ((is_long_gesture && IsPointOnMiniView(screen_rect.CenterPoint())) ||
        (!is_long_gesture && view_to_update->GetVisible() &&
         view_to_update->HitTestRect(
@@ -500,12 +508,7 @@ void DeskMiniView::OnViewFocused(views::View* observed_view) {
   desk_name_view_->UpdateViewAppearance();
 
   // Set the Overview highlight to move focus with the DeskNameView.
-  auto* highlight_controller = Shell::Get()
-                                   ->overview_controller()
-                                   ->overview_session()
-                                   ->highlight_controller();
-  if (highlight_controller->IsFocusHighlightVisible())
-    highlight_controller->MoveHighlightToView(desk_name_view_);
+  UpdateOverviewHighlightForFocus(desk_name_view_);
 
   if (!defer_select_all_)
     desk_name_view_->SelectAll(false);

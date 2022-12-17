@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,7 +77,7 @@ UserFaultFDWriteProtector::UserFaultFDWriteProtector()
   PA_CHECK(-1 != ioctl(uffd_, UFFDIO_API, &uffdio_api));
   PA_CHECK(UFFD_API == uffdio_api.api);
 
-  // Register the giga-cage to listen uffd events.
+  // Register the regular pool to listen uffd events.
   struct uffdio_register uffdio_register;
   uffdio_register.range.start = PartitionAddressSpace::RegularPoolBase();
   uffdio_register.range.len = kPoolMaxSize;

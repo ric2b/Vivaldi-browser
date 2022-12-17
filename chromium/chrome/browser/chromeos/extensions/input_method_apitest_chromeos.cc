@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -157,7 +157,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionInputMethodApiTest, ImeMenuAPITest) {
       &extension_imes);
   InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
       kTestIMEID, false /* show_message */);
-  ui::IMEEngineHandlerInterface* engine_handler =
+  ui::TextInputMethod* engine_handler =
       ui::IMEBridge::Get()->GetCurrentEngineHandler();
   ASSERT_TRUE(engine_handler);
   engine_handler->Enable("test");

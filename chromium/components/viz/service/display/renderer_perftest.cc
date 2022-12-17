@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -171,14 +171,13 @@ TransferableResource CreateTestTexture(
   DCHECK(sii);
   gpu::Mailbox mailbox = sii->CreateSharedImage(
       RGBA_8888, size, gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin,
-      kPremul_SkAlphaType, gpu::SHARED_IMAGE_USAGE_DISPLAY,
+      kPremul_SkAlphaType, gpu::SHARED_IMAGE_USAGE_DISPLAY_READ,
       MakePixelSpan(pixels));
   gpu::SyncToken sync_token = sii->GenVerifiedSyncToken();
 
-  TransferableResource gl_resource = TransferableResource::MakeGL(
-      mailbox, GL_LINEAR, GL_TEXTURE_2D, sync_token, size,
+  TransferableResource gl_resource = TransferableResource::MakeGpu(
+      mailbox, GL_LINEAR, GL_TEXTURE_2D, sync_token, size, RGBA_8888,
       false /* is_overlay_candidate */);
-  gl_resource.format = RGBA_8888;
   gl_resource.color_space = gfx::ColorSpace();
   auto release_callback = base::BindOnce(
       &DeleteSharedImage, std::move(child_context_provider), mailbox);
@@ -398,10 +397,10 @@ class RendererPerfTest : public VizPerfTest {
                 YUVVideoDrawQuad::kAPlaneResourceIdIndex,
             };
             const gfx::Size kSize[] = {
-                yuv_quad->ya_tex_size,
-                yuv_quad->uv_tex_size,
-                yuv_quad->uv_tex_size,
-                yuv_quad->ya_tex_size,
+                yuv_quad->ya_tex_size(),
+                yuv_quad->uv_tex_size(),
+                yuv_quad->uv_tex_size(),
+                yuv_quad->ya_tex_size(),
             };
             for (size_t ii = 0; ii < yuv_quad->resources.count; ++ii) {
               ResourceId recorded_id = yuv_quad->resources.ids[kIndex[ii]];
@@ -568,7 +567,7 @@ class RendererPerfTest : public VizPerfTest {
                                /*premultiplied_alpha=*/false, shared_state,
                                pass.get());
 
-        current_transform.ConcatTransform(transform_step);
+        current_transform.PostConcat(transform_step);
       }
 
       CompositorRenderPassList pass_list;

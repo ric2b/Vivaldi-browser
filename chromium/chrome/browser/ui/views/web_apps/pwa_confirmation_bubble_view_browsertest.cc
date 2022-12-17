@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,9 +21,8 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/feature_engagement/public/feature_constants.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/test/browser_test.h"
-#include "services/preferences/public/cpp/dictionary_value_update.h"
-#include "services/preferences/public/cpp/scoped_pref_update.h"
 
 class PWAConfirmationBubbleViewBrowserTest : public InProcessBrowserTest {
  public:
@@ -134,7 +133,7 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
                   .has_value());
   {
     const auto& dict =
-        pref_service->GetValueDict(prefs::kWebAppsAppAgnosticIphState);
+        pref_service->GetDict(prefs::kWebAppsAppAgnosticIphState);
     EXPECT_EQ(dict.FindInt(web_app::kIphIgnoreCount).value_or(0), 1);
     EXPECT_TRUE(dict.contains(web_app::kIphLastIgnoreTime));
   }
@@ -155,9 +154,9 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
   web_app::UpdateIntWebAppPref(pref_service, app_id, web_app::kIphIgnoreCount,
                                1);
   {
-    prefs::ScopedDictionaryPrefUpdate update(
-        pref_service, prefs::kWebAppsAppAgnosticIphState);
-    update->SetInteger(web_app::kIphIgnoreCount, 1);
+    ScopedDictPrefUpdate update(pref_service,
+                                prefs::kWebAppsAppAgnosticIphState);
+    update->Set(web_app::kIphIgnoreCount, 1);
   }
   base::RunLoop loop;
   // Show the PWA install dialog.
@@ -182,7 +181,7 @@ IN_PROC_BROWSER_TEST_F(PWAConfirmationBubbleViewBrowserTest,
       0);
   {
     const auto& dict =
-        pref_service->GetValueDict(prefs::kWebAppsAppAgnosticIphState);
+        pref_service->GetDict(prefs::kWebAppsAppAgnosticIphState);
     EXPECT_EQ(dict.FindInt(web_app::kIphIgnoreCount).value_or(0), 0);
   }
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "base/task/task_runner_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "base/types/optional_util.h"
 #include "components/download/public/common/download_task_runner.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/download/mhtml_extra_parts_impl.h"
@@ -68,7 +69,7 @@ struct CloseFileResult {
 
   content::MHTMLGenerationResult toMHTMLGenerationResult() const {
     return content::MHTMLGenerationResult(file_size,
-                                          base::OptionalOrNullptr(file_digest));
+                                          base::OptionalToPtr(file_digest));
   }
 };
 

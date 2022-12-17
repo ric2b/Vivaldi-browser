@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,12 +71,12 @@ void WebTestTtsPlatform::Shutdown() {}
 void WebTestTtsPlatform::FinalizeVoiceOrdering(
     std::vector<content::VoiceData>& voices) {}
 
-void WebTestTtsPlatform::GetVoicesForBrowserContext(
-    content::BrowserContext* browser_context,
-    const GURL& source_url,
-    std::vector<content::VoiceData>* out_voices) {}
-
 void WebTestTtsPlatform::RefreshVoices() {}
+
+content::ExternalPlatformDelegate*
+WebTestTtsPlatform::GetExternalPlatformDelegate() {
+  return nullptr;
+}
 
 WebTestTtsPlatform::WebTestTtsPlatform() = default;
 

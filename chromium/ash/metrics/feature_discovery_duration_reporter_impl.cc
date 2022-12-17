@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,7 +112,7 @@ void FeatureDiscoveryDurationReporterImpl::MaybeActivateObservation(
     return;
 
   const base::Value::Dict& observed_features =
-      active_pref_service_->GetValueDict(kObservedFeatures);
+      active_pref_service_->GetDict(kObservedFeatures);
 
   // If `feature` is already under observation, return early.
   // TODO(https://crbug.com/1311344): implement the option that allows the
@@ -136,9 +136,8 @@ void FeatureDiscoveryDurationReporterImpl::MaybeActivateObservation(
                               TabletMode::Get()->IsInTabletMode());
   }
 
-  DictionaryPrefUpdate update(active_pref_service_, kObservedFeatures);
-  update->GetDict().Set(feature_name,
-                        base::Value(std::move(observed_feature_data)));
+  ScopedDictPrefUpdate update(active_pref_service_, kObservedFeatures);
+  update->Set(feature_name, std::move(observed_feature_data));
 
   // Record observation start time.
   DCHECK(active_time_recordings_.find(feature) ==
@@ -157,7 +156,7 @@ void FeatureDiscoveryDurationReporterImpl::MaybeFinishObservation(
     return;
 
   const base::Value::Dict& observed_features =
-      active_pref_service_->GetValueDict(kObservedFeatures);
+      active_pref_service_->GetDict(kObservedFeatures);
   const char* const feature_name = FindMappedName(feature);
   const base::Value::Dict* feature_pref_data =
       observed_features.Find(feature_name)->GetIfDict();
@@ -201,9 +200,8 @@ void FeatureDiscoveryDurationReporterImpl::MaybeFinishObservation(
   // 1. Clearing the cumulated duration
   // 2. Marking that the observation finishes
   // 3. Erasing the saved tablet state if any
-  DictionaryPrefUpdate update(active_pref_service_, kObservedFeatures);
-  base::Value::Dict* mutable_feature_pref_data =
-      update->GetDict().FindDict(feature_name);
+  ScopedDictPrefUpdate update(active_pref_service_, kObservedFeatures);
+  base::Value::Dict* mutable_feature_pref_data = update->FindDict(feature_name);
   mutable_feature_pref_data->Remove(kCumulatedDuration);
   mutable_feature_pref_data->Set(kIsObservationFinished, true);
   mutable_feature_pref_data->Remove(kActivatedInTablet);
@@ -249,7 +247,7 @@ void FeatureDiscoveryDurationReporterImpl::Activate() {
 
   is_active_ = true;
   const base::Value::Dict& observed_features =
-      active_pref_service_->GetValueDict(kObservedFeatures);
+      active_pref_service_->GetDict(kObservedFeatures);
   const base::Value::Dict& immutable_observed_features_dict = observed_features;
 
   // Iterate trackable features and resume unfinished observations.
@@ -277,11 +275,8 @@ void FeatureDiscoveryDurationReporterImpl::Activate() {
 
 void FeatureDiscoveryDurationReporterImpl::Deactivate() {
   if (!active_time_recordings_.empty()) {
-    DictionaryPrefUpdate update(active_pref_service_, kObservedFeatures);
-    base::Value* observed_features = update.Get();
-    DCHECK(observed_features);
-    base::Value::Dict& mutable_observed_features_dict =
-        observed_features->GetDict();
+    ScopedDictPrefUpdate update(active_pref_service_, kObservedFeatures);
+    base::Value::Dict& mutable_observed_features_dict = update.Get();
 
     // Store the accumulated time duration as pref data.
     for (const auto& name_timestamp_pair : active_time_recordings_) {

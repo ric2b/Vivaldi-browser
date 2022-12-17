@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -618,8 +618,10 @@ base::TimeTicks WebResourceRequestSender::ToLocalURLResponseHead(
   RemoteToLocalTimeTicks(converter, &load_timing->request_start);
   RemoteToLocalTimeTicks(converter, &load_timing->proxy_resolve_start);
   RemoteToLocalTimeTicks(converter, &load_timing->proxy_resolve_end);
-  RemoteToLocalTimeTicks(converter, &load_timing->connect_timing.dns_start);
-  RemoteToLocalTimeTicks(converter, &load_timing->connect_timing.dns_end);
+  RemoteToLocalTimeTicks(converter,
+                         &load_timing->connect_timing.domain_lookup_start);
+  RemoteToLocalTimeTicks(converter,
+                         &load_timing->connect_timing.domain_lookup_end);
   RemoteToLocalTimeTicks(converter, &load_timing->connect_timing.connect_start);
   RemoteToLocalTimeTicks(converter, &load_timing->connect_timing.connect_end);
   RemoteToLocalTimeTicks(converter, &load_timing->connect_timing.ssl_start);

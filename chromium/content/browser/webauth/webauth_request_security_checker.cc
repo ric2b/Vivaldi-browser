@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -317,23 +317,6 @@ WebAuthRequestSecurityChecker::ValidateAppIdExtension(
   }
 
   return blink::mojom::AuthenticatorStatus::INVALID_DOMAIN;
-}
-
-blink::mojom::AuthenticatorStatus
-WebAuthRequestSecurityChecker::ValidateAPrioriAuthenticatedUrl(
-    const GURL& url) {
-  if (url.is_empty())
-    return blink::mojom::AuthenticatorStatus::SUCCESS;
-
-  if (!url.is_valid()) {
-    return blink::mojom::AuthenticatorStatus::INVALID_ICON_URL;
-  }
-
-  // https://w3c.github.io/webappsec-secure-contexts/#is-url-trustworthy
-  if (!network::IsUrlPotentiallyTrustworthy(url))
-    return blink::mojom::AuthenticatorStatus::INVALID_ICON_URL;
-
-  return blink::mojom::AuthenticatorStatus::SUCCESS;
 }
 
 bool WebAuthRequestSecurityChecker::

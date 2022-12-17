@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,6 +78,6 @@ const struct zwp_text_input_v1_interface kMockZwpTextInputV1Impl = {
 MockZwpTextInput::MockZwpTextInput(wl_resource* resource)
     : ServerObject(resource) {}
 
-MockZwpTextInput::~MockZwpTextInput() {}
+MockZwpTextInput::~MockZwpTextInput() = default;
 
 }  // namespace wl

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,9 +71,19 @@ extension Color {
     return Color(kBlueColor)
   }
 
+  /// The blue halo color.
+  public static var blueHalo: Color {
+    return Color(kBlueHaloColor)
+  }
+
   /// The blue500 color.
   public static var blue500: Color {
     return Color(kBlue500Color)
+  }
+
+  /// The blue600 color.
+  public static var blue600: Color {
+    return Color(kBlue600Color)
   }
 
   /// The table row view highlight color.

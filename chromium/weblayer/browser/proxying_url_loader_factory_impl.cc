@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,7 +54,8 @@ void StartCachedLoad(
     return;
   }
 
-  client->OnReceiveResponse(std::move(response_head), std::move(consumer));
+  client->OnReceiveResponse(std::move(response_head), std::move(consumer),
+                            absl::nullopt);
 
   auto write_data = std::make_unique<WriteData>();
   write_data->client = std::move(client);

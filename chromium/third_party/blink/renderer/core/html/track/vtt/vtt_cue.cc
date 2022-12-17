@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
+#include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/html/track/text_track.h"
 #include "third_party/blink/renderer/core/html/track/text_track_cue_list.h"
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_cue_box.h"
@@ -668,8 +669,8 @@ void VTTCue::UpdatePastAndFutureNodes(double movie_time) {
 
     if (auto* child_vtt_element = DynamicTo<VTTElement>(child)) {
       child_vtt_element->SetIsPastNode(is_past_node);
-      // Make an elemenet id match a cue id for style matching purposes.
-      if (!id().IsEmpty())
+      // Make an element id match a cue id for style matching purposes.
+      if (!id().empty())
         To<Element>(child).SetIdAttribute(id());
     }
   }
@@ -746,9 +747,25 @@ void VTTCue::RemoveDisplayTree(RemovalNotification removal_notification) {
   display_tree_->remove(ASSERT_NO_EXCEPTION);
 }
 
-void VTTCue::UpdateSpeech(HTMLDivElement& container) {
-  // TODO: handle vocalization
-  // Text to be vocalized can be accessed through the variable text_
+void VTTCue::OnEnter(HTMLMediaElement& video) {
+  if (!track()->IsSpokenKind())
+    return;
+
+  // Clear the queue of utterances before speaking a current cue.
+  video.SpeechSynthesis()->Cancel();
+
+  video.SpeechSynthesis()->Speak(text_, track()->Language());
+}
+
+void VTTCue::OnExit(HTMLMediaElement& video) {
+  if (!track()->IsSpokenKind())
+    return;
+
+  // If SpeechSynthesis is speaking audio descriptions at the end time
+  // specified (when onExit runs), call PauseToLetDescriptionFinish so that only
+  // the video is paused and the audio descriptions can finish.
+  if (video.SpeechSynthesis()->Speaking())
+    video.PauseToLetDescriptionFinish();
 }
 
 void VTTCue::UpdateDisplay(HTMLDivElement& container) {

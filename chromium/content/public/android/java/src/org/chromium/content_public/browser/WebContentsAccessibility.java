@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 package org.chromium.content_public.browser;
@@ -117,9 +117,11 @@ public interface WebContentsAccessibility {
     void setShouldFocusOnPageLoad(boolean on);
 
     /**
-     * Sets whether or not the image descriptions feature should be allowed.
+     * Sets whether or not this instance is a candidate for the image descriptions feature to be
+     * enabled. This feature is dependent on embedder behavior and screen reader state.
+     * See BrowserAccessibilityState.java.
      */
-    void setAllowImageDescriptions(boolean allowImageDescriptions);
+    void setIsImageDescriptionsCandidate(boolean isImageDescriptionsCandidate);
 
     /**
      * Called when autofill popup is displayed. Used to upport navigation through the view.

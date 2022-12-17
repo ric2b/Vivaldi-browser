@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/task_traits.h"
@@ -40,13 +41,14 @@ HRESULT IsCOMCallerAllowed() {
   if (GetUpdaterScope() == UpdaterScope::kUser)
     return S_OK;
 
-  bool is_com_caller_admin = false;
-  if (HRESULT hr = IsCOMCallerAdmin(is_com_caller_admin); FAILED(hr)) {
+  HResultOr<bool> result = IsCOMCallerAdmin();
+  if (!result.has_value()) {
+    HRESULT hr = result.error();
     LOG(ERROR) << __func__ << ": IsCOMCallerAdmin failed: " << std::hex << hr;
     return hr;
   }
 
-  return is_com_caller_admin ? S_OK : E_ACCESSDENIED;
+  return result.value() ? S_OK : E_ACCESSDENIED;
 }
 
 }  // namespace
@@ -155,7 +157,29 @@ HRESULT UpdaterImpl::GetVersion(BSTR* version) {
   return S_OK;
 }
 
+HRESULT UpdaterImpl::FetchPolicies(IUpdaterCallback* callback) {
+  scoped_refptr<ComServerApp> com_server = AppServerSingletonInstance();
+  com_server->main_task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](scoped_refptr<UpdateService> update_service,
+             base::OnceCallback<void(int)> result_callback) {
+            update_service->FetchPolicies(std::move(result_callback));
+          },
+          com_server->update_service(),
+          base::BindPostTask(
+              base::ThreadPool::CreateSequencedTaskRunner(
+                  {base::MayBlock(),
+                   base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}),
+              base::BindOnce(
+                  [](Microsoft::WRL::ComPtr<IUpdaterCallback> callback,
+                     int result) { callback->Run(result); },
+                  Microsoft::WRL::ComPtr<IUpdaterCallback>(callback)))));
+  return S_OK;
+}
+
 HRESULT UpdaterImpl::CheckForUpdate(const wchar_t* app_id) {
+  NOTIMPLEMENTED();
   return E_NOTIMPL;
 }
 
@@ -165,7 +189,7 @@ HRESULT UpdaterImpl::RegisterApp(const wchar_t* app_id,
                                  const wchar_t* ap,
                                  const wchar_t* version,
                                  const wchar_t* existence_checker_path,
-                                 IUpdaterRegisterAppCallback* callback) {
+                                 IUpdaterCallback* callback) {
   if (!callback)
     return E_INVALIDARG;
 
@@ -208,8 +232,7 @@ HRESULT UpdaterImpl::RegisterApp(const wchar_t* app_id,
   if (!request)
     return E_INVALIDARG;
 
-  using IUpdaterRegisterAppCallbackPtr =
-      Microsoft::WRL::ComPtr<IUpdaterRegisterAppCallback>;
+  using IUpdaterCallbackPtr = Microsoft::WRL::ComPtr<IUpdaterCallback>;
   scoped_refptr<ComServerApp> com_server = AppServerSingletonInstance();
 
   // This task runner is responsible for sequencing the COM calls and callbacks.
@@ -221,18 +244,16 @@ HRESULT UpdaterImpl::RegisterApp(const wchar_t* app_id,
       base::BindOnce(
           [](scoped_refptr<UpdateService> update_service,
              scoped_refptr<base::SequencedTaskRunner> task_runner,
-             const RegistrationRequest& request,
-             IUpdaterRegisterAppCallbackPtr callback) {
+             const RegistrationRequest& request, IUpdaterCallbackPtr callback) {
             update_service->RegisterApp(
                 request,
                 base::BindOnce(
                     [](scoped_refptr<base::SequencedTaskRunner> task_runner,
-                       IUpdaterRegisterAppCallbackPtr callback,
-                       const RegistrationResponse& response) {
+                       IUpdaterCallbackPtr callback, int result) {
                       task_runner->PostTaskAndReplyWithResult(
                           FROM_HERE,
-                          base::BindOnce(&IUpdaterRegisterAppCallback::Run,
-                                         callback, response.status_code),
+                          base::BindOnce(&IUpdaterCallback::Run, callback,
+                                         result),
                           base::BindOnce([](HRESULT hr) {
                             VLOG(2) << "UpdaterImpl::RegisterApp "
                                     << "callback returned " << std::hex << hr;
@@ -241,7 +262,7 @@ HRESULT UpdaterImpl::RegisterApp(const wchar_t* app_id,
                     task_runner, callback));
           },
           com_server->update_service(), task_runner, *request,
-          IUpdaterRegisterAppCallbackPtr(callback)));
+          IUpdaterCallbackPtr(callback)));
 
   return S_OK;
 }
@@ -429,6 +450,7 @@ HRESULT UpdaterImpl::Install(const wchar_t* app_id,
                              const wchar_t* ap,
                              const wchar_t* version,
                              const wchar_t* existence_checker_path,
+                             const wchar_t* client_install_data,
                              const wchar_t* install_data_index,
                              LONG priority,
                              IUpdaterObserver* observer) {
@@ -438,9 +460,10 @@ HRESULT UpdaterImpl::Install(const wchar_t* app_id,
   // Validates that string parameters are not longer than 16K characters.
   absl::optional<RegistrationRequest> request =
       [app_id, brand_code, brand_path, ap, version, existence_checker_path,
-       install_data_index]() -> decltype(request) {
-    for (const auto* str : {app_id, brand_code, brand_path, ap, version,
-                            existence_checker_path, install_data_index}) {
+       client_install_data, install_data_index]() -> decltype(request) {
+    for (const auto* str :
+         {app_id, brand_code, brand_path, ap, version, existence_checker_path,
+          client_install_data, install_data_index}) {
       if (wcsnlen_s(str, kMaxStringLen) == kMaxStringLen) {
         return absl::nullopt;
       }
@@ -490,10 +513,11 @@ HRESULT UpdaterImpl::Install(const wchar_t* app_id,
           [](scoped_refptr<UpdateService> update_service,
              scoped_refptr<base::SequencedTaskRunner> task_runner,
              const RegistrationRequest& request,
+             const std::string& client_install_data,
              const std::string& install_data_index,
              UpdateService::Priority priority, IUpdaterObserverPtr observer) {
             update_service->Install(
-                request, install_data_index, priority,
+                request, client_install_data, install_data_index, priority,
                 base::BindRepeating(&StateChangeCallbackFilter::OnStateChange,
                                     base::Owned(new StateChangeCallbackFilter(
                                         task_runner, observer))),
@@ -515,6 +539,7 @@ HRESULT UpdaterImpl::Install(const wchar_t* app_id,
                     task_runner, observer));
           },
           com_server->update_service(), task_runner, *request,
+          base::WideToUTF8(client_install_data),
           base::WideToUTF8(install_data_index),
           static_cast<UpdateService::Priority>(priority), observer_local));
 

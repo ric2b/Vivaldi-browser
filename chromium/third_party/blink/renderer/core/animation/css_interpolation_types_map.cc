@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -231,11 +231,6 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
             std::make_unique<CSSLengthInterpolationType>(used_property));
         applicable_types->push_back(
             std::make_unique<CSSNumberInterpolationType>(used_property));
-        break;
-      case CSSPropertyID::kPopUpShowDelay:
-      case CSSPropertyID::kPopUpHideDelay:
-        applicable_types->push_back(
-            std::make_unique<CSSTimeInterpolationType>(used_property));
         break;
       case CSSPropertyID::kAccentColor:
       case CSSPropertyID::kBackgroundColor:

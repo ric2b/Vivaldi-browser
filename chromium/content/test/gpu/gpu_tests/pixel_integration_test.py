@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -179,13 +179,17 @@ class PixelIntegrationTest(
       self.fail('Could not capture screenshot')
     dpr = tab.EvaluateJavaScript('window.devicePixelRatio')
     if page.test_rect:
+      start_x = int(page.test_rect[0] * dpr)
+      start_y = int(page.test_rect[1] * dpr)
       # When actually clamping the value, it's possible we'll catch the
       # scrollbar, so account for its width in the clamp.
       end_x = min(int(page.test_rect[2] * dpr),
                   image_util.Width(screenshot) - SCROLLBAR_WIDTH)
       end_y = min(int(page.test_rect[3] * dpr), image_util.Height(screenshot))
-      screenshot = image_util.Crop(screenshot, int(page.test_rect[0] * dpr),
-                                   int(page.test_rect[1] * dpr), end_x, end_y)
+      crop_width = end_x - start_x
+      crop_height = end_y - start_y
+      screenshot = image_util.Crop(screenshot, start_x, start_y, crop_width,
+                                   crop_height)
 
     image_name = self._UrlToImageName(page.name)
     self._UploadTestResultToSkiaGold(image_name, screenshot, page)

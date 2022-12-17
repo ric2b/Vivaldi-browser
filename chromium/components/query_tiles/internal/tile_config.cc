@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -119,7 +119,8 @@ constexpr char kDefaultExperimentTagForINAndNG[] =
 
 // Default Json experiment tag for JP.
 constexpr char kDefaultExperimentTagForJP[] =
-    "{maxLevels : 1, rankTiles : true}";
+    "{maxLevels : 1, rankTiles : true, enableTrending : true, "
+    "maxTrendingQueries : 8, disableEntityTranslation: true}";
 
 const GURL BuildGetQueryTileURL(const GURL& base_url, const char* path) {
   GURL::Replacements replacements;

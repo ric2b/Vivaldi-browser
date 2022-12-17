@@ -1,4 +1,4 @@
-// Copyright 2010 The Chromium Authors. All rights reserved.
+// Copyright 2010 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,6 +75,14 @@ void TextureLayer::SetUV(const gfx::PointF& top_left,
     return;
   uv_top_left_.Write(*this) = top_left;
   uv_bottom_right_.Write(*this) = bottom_right;
+  SetNeedsCommit();
+}
+
+void TextureLayer::SetHDRMetadata(
+    absl::optional<gfx::HDRMetadata> hdr_metadata) {
+  if (hdr_metadata_.Read(*this) == hdr_metadata)
+    return;
+  hdr_metadata_.Write(*this) = hdr_metadata;
   SetNeedsCommit();
 }
 
@@ -207,6 +215,7 @@ void TextureLayer::PushPropertiesTo(
   texture_layer->SetPremultipliedAlpha(premultiplied_alpha_.Read(*this));
   texture_layer->SetBlendBackgroundColor(blend_background_color_.Read(*this));
   texture_layer->SetForceTextureToOpaque(force_texture_to_opaque_.Read(*this));
+  texture_layer->SetHDRMetadata(hdr_metadata_.Read(*this));
   if (needs_set_resource_.Read(*this)) {
     viz::TransferableResource resource;
     viz::ReleaseCallback release_callback;
@@ -252,7 +261,7 @@ SharedBitmapIdRegistration TextureLayer::RegisterSharedBitmapId(
   // notification instead of forcing it to happen as a side effect of this
   // method.
   SetNeedsPushProperties();
-  return SharedBitmapIdRegistration(weak_ptr_factory_.GetWeakPtr(), id);
+  return SharedBitmapIdRegistration(weak_ptr_factory_.GetMutableWeakPtr(), id);
 }
 
 void TextureLayer::UnregisterSharedBitmapId(viz::SharedBitmapId id) {

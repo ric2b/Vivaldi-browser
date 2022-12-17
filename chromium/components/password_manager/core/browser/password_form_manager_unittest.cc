@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/randomized_encoder.h"
+#include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -31,10 +32,12 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/browser/fake_form_fetcher.h"
 #include "components/password_manager/core/browser/field_info_manager.h"
+#include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "components/password_manager/core/browser/mock_password_change_success_tracker.h"
 #include "components/password_manager/core/browser/mock_webauthn_credentials_delegate.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
+#include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_save_manager_impl.h"
@@ -125,7 +128,7 @@ MATCHER_P(FormDataPointeeEqualTo, form_data, "") {
 class MockPasswordManagerDriver : public StubPasswordManagerDriver {
  public:
   MOCK_METHOD(void,
-              FillPasswordForm,
+              SetPasswordFillData,
               (const PasswordFormFillData&),
               (override));
   MOCK_METHOD(void,
@@ -180,9 +183,16 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MOCK_METHOD(PrefService*, GetPrefs, (), (const, override));
   MOCK_METHOD(const GURL&, GetLastCommittedURL, (), (const, override));
   MOCK_METHOD(WebAuthnCredentialsDelegate*,
-              GetWebAuthnCredentialsDelegate,
-              (),
+              GetWebAuthnCredentialsDelegateForDriver,
+              (PasswordManagerDriver*),
               (override));
+#if BUILDFLAG(IS_ANDROID)
+  MOCK_METHOD(void,
+              ShowPasswordManagerErrorMessage,
+              (password_manager::ErrorMessageFlowType,
+               password_manager::PasswordStoreBackendErrorType),
+              (override));
+#endif
 };
 
 void CheckPendingCredentials(const PasswordForm& expected,
@@ -337,6 +347,15 @@ class PasswordFormManagerTest : public testing::Test,
         true);
     pref_service_.registry()->RegisterStringPref(
         autofill::prefs::kAutofillUploadEncodingSeed, "seed");
+#if BUILDFLAG(IS_ANDROID)
+    pref_service_.registry()->RegisterBooleanPref(
+        password_manager::prefs::kUnenrolledFromGoogleMobileServicesDueToErrors,
+        false);
+#endif
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+    pref_service_.registry()->RegisterBooleanPref(
+        password_manager::prefs::kBiometricAuthenticationBeforeFilling, true);
+#endif
 
     form_manager_->set_wait_for_server_predictions_for_filling(true);
 
@@ -438,7 +457,7 @@ class PasswordFormManagerTest : public testing::Test,
 
     ON_CALL(client_, GetLastCommittedURL())
         .WillByDefault(ReturnRef(observed_form_.url));
-    ON_CALL(client_, GetWebAuthnCredentialsDelegate)
+    ON_CALL(client_, GetWebAuthnCredentialsDelegateForDriver)
         .WillByDefault(Return(&webauthn_credentials_delegate_));
     ON_CALL(webauthn_credentials_delegate_, IsWebAuthnAutofillEnabled)
         .WillByDefault(Return(false));
@@ -547,7 +566,7 @@ TEST_P(PasswordFormManagerTest, Autofill) {
   CreateFormManager(observed_form_);
   EXPECT_CALL(driver_, FormEligibleForGenerationFound(_)).Times(0);
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).WillOnce(SaveArg<0>(&fill_data));
   CreateFormManager(observed_form_);
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
 
@@ -570,19 +589,19 @@ TEST_P(PasswordFormManagerTest, Autofill) {
 }
 
 TEST_P(PasswordFormManagerTest, AutofillNotMoreThan5Times) {
-  EXPECT_CALL(driver_, FillPasswordForm(_));
+  EXPECT_CALL(driver_, SetPasswordFillData(_));
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
 
   task_environment_.FastForwardUntilNoTasksRemain();
   Mock::VerifyAndClearExpectations(&driver_);
 
   for (size_t i = 0; i < PasswordFormManager::kMaxTimesAutofill - 1; ++i) {
-    EXPECT_CALL(driver_, FillPasswordForm(_));
+    EXPECT_CALL(driver_, SetPasswordFillData(_));
     form_manager_->Fill();
     Mock::VerifyAndClearExpectations(&driver_);
   }
 
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(0);
   form_manager_->Fill();
 }
 
@@ -597,7 +616,7 @@ TEST_P(PasswordFormManagerTest, AutofillSignUpForm) {
   observed_form_.fields.back().autocomplete_attribute = "new-password";
 
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).WillOnce(SaveArg<0>(&fill_data));
 
   PasswordFormGenerationData generation_data;
   EXPECT_CALL(driver_, FormEligibleForGenerationFound(_))
@@ -655,7 +674,7 @@ TEST_P(PasswordFormManagerTest, GenerationOnNewAndConfirmPasswordFields) {
 
 TEST_P(PasswordFormManagerTest, AutofillWithBlocklistedMatch) {
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).WillOnce(SaveArg<0>(&fill_data));
   fetcher_->SetNonFederated({&saved_match_});
   fetcher_->SetBlocklisted(true);
   fetcher_->NotifyFetchCompleted();
@@ -717,7 +736,7 @@ TEST_P(PasswordFormManagerTest, ResetState) {
 // server predictions and fills on receiving them.
 TEST_P(PasswordFormManagerTest, ServerPredictionsWithinDelay) {
   // Expects no filling on save matches receiving.
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(0);
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
   Mock::VerifyAndClearExpectations(&driver_);
 
@@ -725,19 +744,19 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsWithinDelay) {
       observed_form_, {std::make_pair(2, autofill::PASSWORD)});
 
   // Expect filling without delay on receiving server predictions.
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(1);
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(1);
   form_manager_->ProcessServerPredictions(predictions);
   Mock::VerifyAndClearExpectations(&driver_);
 
   // Expect no filling on receiving predictions again.
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(0);
   form_manager_->ProcessServerPredictions(predictions);
 }
 
 // Tests that PasswordFormManager fills after some delay even without
 // server predictions.
 TEST_P(PasswordFormManagerTest, ServerPredictionsAfterDelay) {
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(1);
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(1);
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
   // Expect filling after passing filling delay.
 
@@ -750,7 +769,7 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsAfterDelay) {
 
   // Expect filling on receiving server predictions because it was less than
   // kMaxTimesAutofill attempts to fill.
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(1);
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(1);
   form_manager_->ProcessServerPredictions(predictions);
   task_environment_.FastForwardUntilNoTasksRemain();
 }
@@ -760,7 +779,7 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsAfterDelay) {
 TEST_P(PasswordFormManagerTest, ServerPredictionsBeforeFetcher) {
   // Expect no filling after receiving saved matches from |fetcher_|, since
   // |form_manager| is waiting for server-side predictions.
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(0);
   CreateFormManager(observed_form_);
 
   std::map<FormSignature, FormPredictions> predictions = CreatePredictions(
@@ -769,7 +788,7 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsBeforeFetcher) {
   Mock::VerifyAndClearExpectations(&driver_);
 
   // Expect filling without delay on receiving server predictions.
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(1);
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(1);
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
 }
 
@@ -1116,8 +1135,8 @@ TEST_P(PasswordFormManagerTest, UpdatePasswordOnChangePasswordForm) {
       *client_.GetPasswordChangeSuccessTracker(),
       OnChangePasswordFlowCompleted(
           submitted_form.url, base::UTF16ToUTF8(saved_match_.username_value),
-          PasswordChangeSuccessTracker::EndEvent::
-              kManualFlowOwnPasswordChosen));
+          PasswordChangeSuccessTracker::EndEvent::kManualFlowOwnPasswordChosen,
+          /* phished= */ false));
 
   form_manager_->Save();
 
@@ -1372,7 +1391,7 @@ bool ParsingSuccessReported(const ukm::mojom::UkmEntry* entry,
 // Test that an attempt to log to ReadonlyWhenFilling UKM is made when filling.
 TEST_P(PasswordFormManagerTest, RecordReadonlyWhenFilling) {
   ukm::TestAutoSetUkmRecorder test_ukm_recorder;
-  EXPECT_CALL(driver_, FillPasswordForm(_));
+  EXPECT_CALL(driver_, SetPasswordFillData(_));
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
 
   task_environment_.FastForwardUntilNoTasksRemain();
@@ -1739,7 +1758,7 @@ TEST_P(PasswordFormManagerTest, FillForm) {
     SCOPED_TRACE(testing::Message("observed_form_changed=")
                  << observed_form_changed);
     CreateFormManager(observed_form_);
-    EXPECT_CALL(driver_, FillPasswordForm(_));
+    EXPECT_CALL(driver_, SetPasswordFillData(_));
     SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
     task_environment_.FastForwardUntilNoTasksRemain();
     Mock::VerifyAndClearExpectations(&driver_);
@@ -1754,7 +1773,8 @@ TEST_P(PasswordFormManagerTest, FillForm) {
     }
 
     PasswordFormFillData fill_data;
-    EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
+    EXPECT_CALL(driver_, SetPasswordFillData(_))
+        .WillOnce(SaveArg<0>(&fill_data));
     form_manager_->FillForm(form, {});
     task_environment_.FastForwardUntilNoTasksRemain();
 
@@ -1792,13 +1812,13 @@ TEST_P(PasswordFormManagerTest, FillFormWaitForServerPredictions) {
 
   // Check that no filling until server predicions or filling timeout
   // expiration.
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(0);
   form_manager_->FillForm(changed_form, {});
 
   // Check that the changed form is filled after the filling timeout expires.
 
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).WillOnce(SaveArg<0>(&fill_data));
 
   task_environment_.FastForwardUntilNoTasksRemain();
   EXPECT_EQ(changed_form.fields[kUsernameFieldIndex].unique_renderer_id,
@@ -1823,7 +1843,7 @@ TEST_P(PasswordFormManagerTest, UpdateFormWaitForServerPredictions) {
 
   // Check that no filling until server predicions or filling timeout
   // expiration.
-  EXPECT_CALL(driver_, FillPasswordForm).Times(0);
+  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
 
   // Wait half-delay time before updating form
   task_environment_.FastForwardBy(kMaxFillingDelayForAsyncPredictions / 2);
@@ -1836,7 +1856,7 @@ TEST_P(PasswordFormManagerTest, UpdateFormWaitForServerPredictions) {
   task_environment_.FastForwardBy(kMaxFillingDelayForAsyncPredictions / 2);
 
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, SetPasswordFillData(_)).WillOnce(SaveArg<0>(&fill_data));
 
   // Check new fill task trigger form filling
   task_environment_.FastForwardUntilNoTasksRemain();
@@ -1870,11 +1890,12 @@ TEST_P(PasswordFormManagerTest, Update) {
                                      Pointee(saved_match_another_username)),
                                  saved_match_.password_value))
       .WillOnce(SaveArg<0>(&updated_form));
-  EXPECT_CALL(*client_.GetPasswordChangeSuccessTracker(),
-              OnChangePasswordFlowCompleted(
-                  submitted_form.url, base::UTF16ToUTF8(username),
-                  PasswordChangeSuccessTracker::EndEvent::
-                      kManualFlowOwnPasswordChosen));
+  EXPECT_CALL(
+      *client_.GetPasswordChangeSuccessTracker(),
+      OnChangePasswordFlowCompleted(
+          submitted_form.url, base::UTF16ToUTF8(username),
+          PasswordChangeSuccessTracker::EndEvent::kManualFlowOwnPasswordChosen,
+          /* phished= */ false));
   EXPECT_CALL(client_, UpdateFormManagers());
 
   const base::Time kNow = base::Time::Now();
@@ -1985,7 +2006,7 @@ TEST_P(PasswordFormManagerTest, SaveHttpAuthNoHttpAuthStored) {
     http_auth_form.scheme = PasswordForm::Scheme::kBasic;
 
     // Check that no filling because no http auth credentials are stored.
-    EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
+    EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(0);
     EXPECT_CALL(client_, AutofillHttpAuth(_, _)).Times(0);
 
     CreateFormManagerForNonWebForm(http_auth_form);
@@ -2752,6 +2773,92 @@ TEST_P(PasswordFormManagerTest, ReportSubmittedFormFrameCrossOriginIframe) {
       1);
 }
 
+#if BUILDFLAG(IS_ANDROID)
+TEST_P(PasswordFormManagerTest,
+       ClientShouldShowErrorMessageForAuthErrorResolvable) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      features::kUnifiedPasswordManagerErrorMessages);
+  fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
+      PasswordStoreBackendErrorType::kAuthErrorResolvable,
+      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+
+  EXPECT_CALL(client_,
+              ShowPasswordManagerErrorMessage(
+                  password_manager::ErrorMessageFlowType::kFillFlow,
+                  PasswordStoreBackendErrorType::kAuthErrorResolvable));
+  fetcher_->NotifyFetchCompleted();
+}
+
+TEST_P(PasswordFormManagerTest,
+       ClientShouldShowErrorMessageForAuthErrorUnresolvable) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      features::kUnifiedPasswordManagerErrorMessages);
+  fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
+      PasswordStoreBackendErrorType::kAuthErrorUnresolvable,
+      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+
+  EXPECT_CALL(client_,
+              ShowPasswordManagerErrorMessage(
+                  password_manager::ErrorMessageFlowType::kFillFlow,
+                  PasswordStoreBackendErrorType::kAuthErrorUnresolvable));
+  fetcher_->NotifyFetchCompleted();
+}
+
+TEST_P(PasswordFormManagerTest,
+       ClientShouldNotShowErrorMessageWhenFeatureIsDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      features::kUnifiedPasswordManagerErrorMessages);
+  fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
+      PasswordStoreBackendErrorType::kAuthErrorResolvable,
+      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+
+  EXPECT_CALL(client_, ShowPasswordManagerErrorMessage).Times(0);
+  fetcher_->NotifyFetchCompleted();
+}
+
+TEST_P(PasswordFormManagerTest,
+       ClientShouldNotShowErrorMessageWhenThereIsNoError) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      features::kUnifiedPasswordManagerErrorMessages);
+  fetcher_->SetProfileStoreBackendError(absl::nullopt);
+
+  EXPECT_CALL(client_, ShowPasswordManagerErrorMessage).Times(0);
+  fetcher_->NotifyFetchCompleted();
+}
+
+TEST_P(PasswordFormManagerTest,
+       ClientShouldNotShowErrorMessageWhenErrorIsNotAuthError) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      features::kUnifiedPasswordManagerErrorMessages);
+  fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
+      PasswordStoreBackendErrorType::kUncategorized,
+      PasswordStoreBackendErrorRecoveryType::kUnspecified));
+
+  EXPECT_CALL(client_, ShowPasswordManagerErrorMessage).Times(0);
+  fetcher_->NotifyFetchCompleted();
+}
+
+TEST_P(PasswordFormManagerTest, ClientShouldNotShowErrorMessageWhenUnenrolled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      features::kUnifiedPasswordManagerErrorMessages);
+  client_.GetPrefs()->SetBoolean(
+      password_manager::prefs::kUnenrolledFromGoogleMobileServicesDueToErrors,
+      true);
+  fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
+      PasswordStoreBackendErrorType::kAuthErrorResolvable,
+      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+
+  EXPECT_CALL(client_, ShowPasswordManagerErrorMessage).Times(0);
+  fetcher_->NotifyFetchCompleted();
+}
+#endif
+
 INSTANTIATE_TEST_SUITE_P(All,
                          PasswordFormManagerTest,
                          testing::Values(false, true));
@@ -2887,8 +2994,8 @@ TEST_F(PasswordFormManagerTestWithMockedSaver, SaveCredentials) {
       *client_.GetPasswordChangeSuccessTracker(),
       OnChangePasswordFlowCompleted(
           submitted_form.url, base::UTF16ToUTF8(saved_match_.username_value),
-          PasswordChangeSuccessTracker::EndEvent::
-              kManualFlowOwnPasswordChosen));
+          PasswordChangeSuccessTracker::EndEvent::kManualFlowOwnPasswordChosen,
+          /* phished= */ false));
   form_manager_->Save();
   std::string expected_signon_realm =
       submitted_form.url.DeprecatedGetOriginAsURL().spec();
@@ -3111,7 +3218,8 @@ TEST_F(PasswordFormManagerTestWithMockedSaver,
       OnChangePasswordFlowCompleted(
           submitted_form_.url, base::UTF16ToUTF8(saved_match_.username_value),
           PasswordChangeSuccessTracker::EndEvent::
-              kManualFlowGeneratedPasswordChosen));
+              kManualFlowGeneratedPasswordChosen,
+          /* phished= */ false));
   EXPECT_CALL(*mock_password_save_manager(),
               Save(FormDataPointeeEqualTo(submitted_form_), _))
       .WillOnce(SaveArg<1>(&updated_form));
@@ -3181,7 +3289,7 @@ TEST_F(PasswordFormManagerTestWithMockedSaver, SaveHttpAuthNoHttpAuthStored) {
     PasswordForm http_auth_form = parsed_observed_form_;
     http_auth_form.scheme = PasswordForm::Scheme::kBasic;
     // Check that no filling because no http auth credentials are stored.
-    EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
+    EXPECT_CALL(driver_, SetPasswordFillData(_)).Times(0);
     EXPECT_CALL(client_, AutofillHttpAuth(_, _)).Times(0);
     CreateFormManagerForNonWebForm(http_auth_form);
     std::vector<const PasswordForm*> saved_matches;
@@ -3204,7 +3312,8 @@ TEST_F(PasswordFormManagerTestWithMockedSaver, SaveHttpAuthNoHttpAuthStored) {
         OnChangePasswordFlowCompleted(
             http_auth_form.url, base::UTF16ToUTF8(saved_match_.username_value),
             PasswordChangeSuccessTracker::EndEvent::
-                kManualFlowOwnPasswordChosen));
+                kManualFlowOwnPasswordChosen,
+            /* phished= */ false));
     // Check that the password save manager is invoked.
     EXPECT_CALL(*mock_password_save_manager(), Save(_, http_auth_form));
     form_manager_->Save();
@@ -3230,8 +3339,8 @@ TEST_F(PasswordFormManagerTestWithMockedSaver, HTTPAuthAlreadySaved) {
       *client_.GetPasswordChangeSuccessTracker(),
       OnChangePasswordFlowCompleted(
           http_auth_form.url, base::UTF16ToUTF8(saved_match_.username_value),
-          PasswordChangeSuccessTracker::EndEvent::
-              kManualFlowOwnPasswordChosen));
+          PasswordChangeSuccessTracker::EndEvent::kManualFlowOwnPasswordChosen,
+          /* phished= */ false));
   // Check that the password save manager is invoked.
   EXPECT_CALL(*mock_password_save_manager(), Save(_, http_auth_form));
   form_manager_->Save();

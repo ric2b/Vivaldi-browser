@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include <tuple>
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "url/origin.h"
 
 namespace blink {
@@ -20,7 +21,7 @@ ParsedPermissionsPolicyDeclaration::ParsedPermissionsPolicyDeclaration(
 
 ParsedPermissionsPolicyDeclaration::ParsedPermissionsPolicyDeclaration(
     mojom::PermissionsPolicyFeature feature,
-    const std::vector<url::Origin>& allowed_origins,
+    const std::vector<blink::OriginWithPossibleWildcards>& allowed_origins,
     bool matches_all_origins,
     bool matches_opaque_src)
     : feature(feature),
@@ -34,6 +35,19 @@ ParsedPermissionsPolicyDeclaration::ParsedPermissionsPolicyDeclaration(
 ParsedPermissionsPolicyDeclaration&
 ParsedPermissionsPolicyDeclaration::operator=(
     const ParsedPermissionsPolicyDeclaration& rhs) = default;
+
+bool ParsedPermissionsPolicyDeclaration::Contains(
+    const url::Origin& origin) const {
+  if (matches_all_origins || (matches_opaque_src && origin.opaque())) {
+    return true;
+  }
+  for (const auto& origin_with_possible_wildcards : allowed_origins) {
+    if (origin_with_possible_wildcards.DoesMatchOrigin(origin)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 ParsedPermissionsPolicyDeclaration::~ParsedPermissionsPolicyDeclaration() =
     default;

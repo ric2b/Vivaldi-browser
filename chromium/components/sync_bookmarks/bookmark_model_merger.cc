@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
@@ -545,6 +546,7 @@ BookmarkModelMerger::BookmarkModelMerger(
     : bookmark_model_(bookmark_model),
       favicon_service_(favicon_service),
       bookmark_tracker_(bookmark_tracker),
+      remote_updates_size_(updates.size()),
       remote_forest_(BuildRemoteForest(std::move(updates), bookmark_tracker)),
       guid_to_match_map_(
           FindGuidMatchesOrReassignLocal(remote_forest_, bookmark_model_)) {
@@ -617,6 +619,8 @@ void BookmarkModelMerger::Merge() {
   base::UmaHistogramCounts100000(
       "Sync.BookmarkModelMerger.UnsyncedEntitiesUponCompletion",
       GetNumUnsyncedEntities(bookmark_tracker_));
+
+  ReportTimeMetrics();
 }
 
 // static
@@ -651,9 +655,9 @@ BookmarkModelMerger::RemoteForest BookmarkModelMerger::BuildRemoteForest(
 
   // All remaining entries in |updates_per_parent_guid| must be unreachable from
   // permanent entities, since otherwise they would have been moved away.
-  for (const auto& [parent_guid, updates] :
+  for (const auto& [parent_guid, updates_for_guid] :
        grouped_updates.updates_per_parent_guid) {
-    for (const UpdateResponseData& update : updates) {
+    for (const UpdateResponseData& update : updates_for_guid) {
       if (update.entity.specifics.has_bookmark()) {
         LogProblematicBookmark(RemoteBookmarkUpdateError::kMissingParentEntity);
         tracker_for_recording_ignored_updates
@@ -910,6 +914,7 @@ void BookmarkModelMerger::ProcessRemoteCreation(
     const RemoteTreeNode& remote_node,
     const bookmarks::BookmarkNode* local_parent,
     size_t index) {
+  TRACE_EVENT0("sync", "BookmarkModelMerger::ProcessRemoteCreation");
   DCHECK(!FindMatchingLocalNodeByGUID(remote_node));
 
   const EntityData& remote_update_entity = remote_node.entity();
@@ -999,6 +1004,8 @@ size_t BookmarkModelMerger::FindMatchingChildBySemanticsStartingAt(
     const bookmarks::BookmarkNode* local_parent,
     size_t starting_child_index) const {
   DCHECK(local_parent);
+  TRACE_EVENT0("sync",
+               "BookmarkModelMerger::FindMatchingChildBySemanticsStartingAt");
   const auto& children = local_parent->children();
   DCHECK_LE(starting_child_index, children.size());
   const EntityData& remote_entity = remote_node.entity();
@@ -1072,6 +1079,25 @@ BookmarkModelMerger::GenerateUniquePositionForLocalCreation(
     DCHECK(FindMatchingRemoteNodeByGUID(parent->children()[i - 1].get()));
   }
   return syncer::UniquePosition::InitialPosition(suffix);
+}
+
+void BookmarkModelMerger::ReportTimeMetrics() {
+  base::TimeDelta all_time_elapsed = base::TimeTicks::Now() - started_;
+
+  base::UmaHistogramMediumTimes("Sync.BookmarkModelMergerTime",
+                                all_time_elapsed);
+  if (remote_updates_size_ >= 10000) {
+    base::UmaHistogramMediumTimes("Sync.BookmarkModelMergerTime.10kUpdates",
+                                  all_time_elapsed);
+  }
+  if (remote_updates_size_ >= 50000) {
+    base::UmaHistogramMediumTimes("Sync.BookmarkModelMergerTime.50kUpdates",
+                                  all_time_elapsed);
+  }
+  if (remote_updates_size_ >= 100000) {
+    base::UmaHistogramMediumTimes("Sync.BookmarkModelMergerTime.100kUpdates",
+                                  all_time_elapsed);
+  }
 }
 
 }  // namespace sync_bookmarks

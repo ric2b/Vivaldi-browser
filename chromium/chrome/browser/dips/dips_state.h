@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "chrome/browser/dips/dips_utils.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 class DIPSStorage;
@@ -34,7 +35,10 @@ class DirtyBit {
 // DIPSState represents the state recorded by DIPSService itself.
 class DIPSState {
  public:
-  DIPSState(DIPSStorage* storage, std::string site, bool was_loaded);
+  DIPSState(DIPSStorage* storage, std::string site);
+  // For loaded DIPSState.
+  DIPSState(DIPSStorage* storage, std::string site, const StateValue& state);
+
   DIPSState(DIPSState&&);
   // Flushes changes to storage_.
   ~DIPSState();
@@ -44,23 +48,36 @@ class DIPSState {
   // default-initialized for a new site).
   bool was_loaded() const { return was_loaded_; }
 
-  absl::optional<base::Time> site_storage_time() const {
-    return site_storage_time_;
+  absl::optional<base::Time> first_site_storage_time() const {
+    return first_site_storage_time_;
   }
-  void set_site_storage_time(absl::optional<base::Time> time);
+  absl::optional<base::Time> last_site_storage_time() const {
+    return last_site_storage_time_;
+  }
+  void update_site_storage_time(base::Time time);
 
-  absl::optional<base::Time> user_interaction_time() const {
-    return user_interaction_time_;
+  absl::optional<base::Time> first_user_interaction_time() const {
+    return first_user_interaction_time_;
   }
-  void set_user_interaction_time(absl::optional<base::Time> time);
+  absl::optional<base::Time> last_user_interaction_time() const {
+    return last_user_interaction_time_;
+  }
+  void update_user_interaction_time(base::Time time);
+
+  StateValue ToStateValue() const {
+    return {first_site_storage_time_, last_site_storage_time_,
+            first_user_interaction_time_, last_user_interaction_time_};
+  }
 
  private:
   raw_ptr<DIPSStorage> storage_;
   std::string site_;
   bool was_loaded_;
   DirtyBit dirty_;
-  absl::optional<base::Time> site_storage_time_;
-  absl::optional<base::Time> user_interaction_time_;
+  absl::optional<base::Time> first_site_storage_time_;
+  absl::optional<base::Time> last_site_storage_time_;
+  absl::optional<base::Time> first_user_interaction_time_;
+  absl::optional<base::Time> last_user_interaction_time_;
 };
 
 #endif  // CHROME_BROWSER_DIPS_DIPS_STATE_H_

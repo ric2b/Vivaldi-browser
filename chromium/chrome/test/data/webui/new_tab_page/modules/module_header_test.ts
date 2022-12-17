@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,8 @@ suite('NewTabPageModulesModuleHeaderTest', () => {
   let moduleHeader: ModuleHeaderElement;
 
   setup(() => {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     moduleHeader = new ModuleHeaderElement();
     document.body.appendChild(moduleHeader);
     render(moduleHeader);

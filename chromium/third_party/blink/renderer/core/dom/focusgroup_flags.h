@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,8 @@
 namespace blink {
 
 class Element;
+
+namespace focusgroup {
 
 enum FocusgroupFlags : uint8_t {
   kNone = 0,
@@ -47,13 +49,16 @@ inline constexpr FocusgroupFlags operator~(FocusgroupFlags flags) {
   return static_cast<FocusgroupFlags>(~static_cast<uint8_t>(flags));
 }
 
-namespace focusgroup {
 FocusgroupFlags FindNearestFocusgroupAncestorFlags(const Element* element);
 // Implemented based on this explainer:
 // https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/main/Focusgroup/explainer.md
 FocusgroupFlags ParseFocusgroup(const Element* element,
                                 const AtomicString& input);
+
 }  // namespace focusgroup
+
+// The "::blink" prefix is to avoid false-positive of audit_non_blink_usages.py.
+using FocusgroupFlags = ::blink::focusgroup::FocusgroupFlags;
 
 }  // namespace blink
 

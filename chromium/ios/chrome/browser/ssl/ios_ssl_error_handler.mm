@@ -1,35 +1,33 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/chrome/browser/ssl/ios_ssl_error_handler.h"
+#import "ios/chrome/browser/ssl/ios_ssl_error_handler.h"
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/captive_portal/core/captive_portal_detector.h"
-#include "components/security_interstitials/core/metrics_helper.h"
-#include "components/security_interstitials/core/ssl_error_options_mask.h"
-#include "components/security_interstitials/core/ssl_error_ui.h"
-#include "ios/chrome/browser/application_context.h"
-#include "ios/chrome/browser/ssl/captive_portal_metrics.h"
-#include "ios/chrome/browser/ssl/ios_captive_portal_blocking_page.h"
-#include "ios/chrome/browser/ssl/ios_ssl_blocking_page.h"
+#import "base/bind.h"
+#import "base/callback.h"
+#import "base/feature_list.h"
+#import "base/memory/ptr_util.h"
+#import "base/metrics/histogram_macros.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/captive_portal/core/captive_portal_detector.h"
+#import "components/security_interstitials/core/metrics_helper.h"
+#import "components/security_interstitials/core/ssl_error_options_mask.h"
+#import "components/security_interstitials/core/ssl_error_ui.h"
+#import "ios/chrome/browser/application_context/application_context.h"
+#import "ios/chrome/browser/ssl/captive_portal_metrics.h"
+#import "ios/chrome/browser/ssl/ios_captive_portal_blocking_page.h"
+#import "ios/chrome/browser/ssl/ios_ssl_blocking_page.h"
 #import "ios/components/security_interstitials/ios_blocking_page_metrics_helper.h"
 #import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
-#include "ios/web/public/browser_state.h"
+#import "ios/web/public/browser_state.h"
 #import "ios/web/public/web_state.h"
-#include "net/ssl/ssl_info.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
+#import "net/ssl/ssl_info.h"
+#import "net/traffic_annotation/network_traffic_annotation.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-const int64_t kSSLInterstitialDelayInSeconds = 3;
 
 using captive_portal::CaptivePortalDetector;
 using security_interstitials::IOSBlockingPageTabHelper;
@@ -123,7 +121,7 @@ void IOSSSLErrorHandler::StartHandlingError() {
 
   // Default to presenting the SSL interstitial if Captive Portal detection
   // takes too long.
-  timer_.Start(FROM_HERE, base::Seconds(kSSLInterstitialDelayInSeconds), this,
+  timer_.Start(FROM_HERE, kSSLInterstitialDelay, this,
                &IOSSSLErrorHandler::ShowSSLInterstitial);
 }
 
@@ -144,7 +142,7 @@ void IOSSSLErrorHandler::ShowSSLInterstitial() {
   timer_.Stop();
 
   // Cancel the captive portal detection if it is still ongoing. This will be
-  // the case if |timer_| triggered the call of this method.
+  // the case if `timer_` triggered the call of this method.
   if (captive_portal_detector_) {
     captive_portal_detector_->Cancel();
     captive_portal_detector_.reset();

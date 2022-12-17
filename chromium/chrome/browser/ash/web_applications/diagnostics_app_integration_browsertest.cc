@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/system_web_apps/test_support/system_web_app_integration_test.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -82,7 +82,6 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest, LaunchMetricsTest) {
   WaitForTestSystemAppInstall();
 
   ash::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::DIAGNOSTICS);
-  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   histogram_tester_.ExpectUniqueSample(kFromChromeLaunch, kDiagnosticsApp, 1);
 }
@@ -153,10 +152,8 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
 
   EXPECT_TRUE(content::ExecuteScript(
       web_contents, "chrome.send('recordNavigation', [0, 1]);"));
-  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   chrome::CloseAllBrowsers();
-  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   histogram_tester_.ExpectTotalCount(
       "ChromeOS.DiagnosticsUi.System.OpenDuration", 1);
@@ -180,10 +177,8 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
       content::ExecuteScript(web_contents, "chrome.send('recordNavigation');"));
   EXPECT_TRUE(content::ExecuteScript(web_contents,
                                      "chrome.send('recordNavigation', []);"));
-  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   chrome::CloseAllBrowsers();
-  ash::FlushSystemWebAppLaunchesForTesting(profile());
 
   histogram_tester_.ExpectTotalCount(
       "ChromeOS.DiagnosticsUi.System.OpenDuration", 1);

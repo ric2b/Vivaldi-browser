@@ -1,10 +1,10 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
 
-import {AuthCompletedCredentials} from '../../gaia_auth_host/authenticator.m.js';
+import {AuthCompletedCredentials} from '../../gaia_auth_host/authenticator.js';
 
 /** TODO(yilkal): Improve the naming of methods in the proxy. */
 

@@ -1,13 +1,13 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "weblayer/browser/browser_list.h"
 
-#include <algorithm>
 #include <functional>
 
 #include "base/no_destructor.h"
+#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "weblayer/browser/browser_impl.h"
 #include "weblayer/browser/browser_list_observer.h"
@@ -26,8 +26,7 @@ BrowserList* BrowserList::GetInstance() {
 
 #if BUILDFLAG(IS_ANDROID)
 bool BrowserList::HasAtLeastOneResumedBrowser() {
-  return std::any_of(browsers_.begin(), browsers_.end(),
-                     std::mem_fn(&BrowserImpl::fragment_resumed));
+  return base::ranges::any_of(browsers_, &BrowserImpl::fragment_resumed);
 }
 #endif
 

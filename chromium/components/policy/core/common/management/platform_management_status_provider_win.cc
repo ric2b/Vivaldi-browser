@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,11 +26,7 @@ EnterpriseMDMManagementStatusProvider::EnterpriseMDMManagementStatusProvider()
 
 EnterpriseManagementAuthority
 EnterpriseMDMManagementStatusProvider::FetchAuthority() {
-  return base::win::OSInfo::GetInstance()->version_type() !=
-                     base::win::SUITE_HOME &&
-                 base::win::IsDeviceRegisteredWithManagement()
-             ? CLOUD
-             : NONE;
+  return base::win::IsDeviceRegisteredWithManagement() ? CLOUD : NONE;
 }
 
 AzureActiveDirectoryStatusProvider::AzureActiveDirectoryStatusProvider()

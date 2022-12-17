@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/values.h"
@@ -63,12 +64,10 @@ void OsTelemetryGetBatteryInfoFunction::OnResult(
   auto& battery_info = ptr->battery_result->get_battery_info();
 
   // Protect accessing the serial number by a permission.
-  std::unique_ptr<std::string> serial_number;
+  absl::optional<std::string> serial_number;
   if (extension()->permissions_data()->HasAPIPermission(
-          extensions::mojom::APIPermissionID::kChromeOSTelemetrySerialNumber) &&
-      battery_info->serial_number.has_value()) {
-    serial_number = std::make_unique<std::string>(
-        std::move(battery_info->serial_number.value()));
+          extensions::mojom::APIPermissionID::kChromeOSTelemetrySerialNumber)) {
+    serial_number = std::move(battery_info->serial_number);
   }
 
   api::os_telemetry::BatteryInfo result =
@@ -81,6 +80,42 @@ void OsTelemetryGetBatteryInfoFunction::OnResult(
 
   Respond(
       ArgumentList(api::os_telemetry::GetBatteryInfo::Results::Create(result)));
+}
+
+// OsTelemetryGetNonRemovableBlockDevicesInfoFunction --------------------------
+
+OsTelemetryGetNonRemovableBlockDevicesInfoFunction::
+    OsTelemetryGetNonRemovableBlockDevicesInfoFunction() = default;
+OsTelemetryGetNonRemovableBlockDevicesInfoFunction::
+    ~OsTelemetryGetNonRemovableBlockDevicesInfoFunction() = default;
+
+void OsTelemetryGetNonRemovableBlockDevicesInfoFunction::RunIfAllowed() {
+  auto cb = base::BindOnce(
+      &OsTelemetryGetNonRemovableBlockDevicesInfoFunction::OnResult, this);
+
+  GetRemoteService()->ProbeTelemetryInfo(
+      {crosapi::mojom::ProbeCategoryEnum::kNonRemovableBlockDevices},
+      std::move(cb));
+}
+
+void OsTelemetryGetNonRemovableBlockDevicesInfoFunction::OnResult(
+    crosapi::mojom::ProbeTelemetryInfoPtr ptr) {
+  if (!ptr || !ptr->block_device_result ||
+      !ptr->block_device_result->is_block_device_info()) {
+    Respond(Error("API internal error"));
+    return;
+  }
+  auto& block_device_info = ptr->block_device_result->get_block_device_info();
+
+  auto infos = converters::ConvertPtrVector<
+      api::os_telemetry::NonRemovableBlockDeviceInfo>(
+      std::move(block_device_info));
+  api::os_telemetry::NonRemovableBlockDeviceInfoResponse result;
+  result.device_infos = std::move(infos);
+
+  Respond(ArgumentList(
+      api::os_telemetry::GetNonRemovableBlockDevicesInfo::Results::Create(
+          result)));
 }
 
 // OsTelemetryGetCpuInfoFunction -----------------------------------------------
@@ -106,8 +141,7 @@ void OsTelemetryGetCpuInfoFunction::OnResult(
 
   api::os_telemetry::CpuInfo result;
   if (cpu_info->num_total_threads) {
-    result.num_total_threads =
-        std::make_unique<int32_t>(cpu_info->num_total_threads->value);
+    result.num_total_threads = cpu_info->num_total_threads->value;
   }
   result.architecture = converters::Convert(cpu_info->architecture);
   result.physical_cpus =
@@ -115,6 +149,50 @@ void OsTelemetryGetCpuInfoFunction::OnResult(
           std::move(cpu_info->physical_cpus));
 
   Respond(ArgumentList(api::os_telemetry::GetCpuInfo::Results::Create(result)));
+}
+
+// OsTelemetryGetInternetConnectivityInfoFunction ------------------------------
+
+OsTelemetryGetInternetConnectivityInfoFunction::
+    OsTelemetryGetInternetConnectivityInfoFunction() = default;
+OsTelemetryGetInternetConnectivityInfoFunction::
+    ~OsTelemetryGetInternetConnectivityInfoFunction() = default;
+
+void OsTelemetryGetInternetConnectivityInfoFunction::RunIfAllowed() {
+  auto cb = base::BindOnce(
+      &OsTelemetryGetInternetConnectivityInfoFunction::OnResult, this);
+
+  GetRemoteService()->ProbeTelemetryInfo(
+      {crosapi::mojom::ProbeCategoryEnum::kNetwork}, std::move(cb));
+}
+
+void OsTelemetryGetInternetConnectivityInfoFunction::OnResult(
+    crosapi::mojom::ProbeTelemetryInfoPtr ptr) {
+  if (!ptr || !ptr->network_result ||
+      !ptr->network_result->is_network_health()) {
+    Respond(Error("API internal error"));
+    return;
+  }
+  auto& network_info = ptr->network_result->get_network_health();
+
+  // TODO(b/249246037): This is not part of the converter since we will need to
+  // check permissions here for additional fields like MAC address that we want
+  // to add soon. Add the permission here as soon as it is available.
+  api::os_telemetry::InternetConnectivityInfo result;
+  for (auto& network : network_info->networks) {
+    auto converted_network =
+        converters::ConvertPtr<api::os_telemetry::NetworkInfo>(
+            std::move(network));
+
+    // Don't include networks with an undefined type.
+    if (converted_network.type !=
+        api::os_telemetry::NetworkType::NETWORK_TYPE_NONE) {
+      result.networks.push_back(std::move(converted_network));
+    }
+  }
+
+  Respond(ArgumentList(
+      api::os_telemetry::GetInternetConnectivityInfo::Results::Create(result)));
 }
 
 // OsTelemetryGetMemoryInfoFunction --------------------------------------------
@@ -140,20 +218,17 @@ void OsTelemetryGetMemoryInfoFunction::OnResult(
 
   const auto& memory_info = ptr->memory_result->get_memory_info();
   if (memory_info->total_memory_kib) {
-    result.total_memory_ki_b =
-        std::make_unique<int32_t>(memory_info->total_memory_kib->value);
+    result.total_memory_ki_b = memory_info->total_memory_kib->value;
   }
   if (memory_info->free_memory_kib) {
-    result.free_memory_ki_b =
-        std::make_unique<int32_t>(memory_info->free_memory_kib->value);
+    result.free_memory_ki_b = memory_info->free_memory_kib->value;
   }
   if (memory_info->available_memory_kib) {
-    result.available_memory_ki_b =
-        std::make_unique<int32_t>(memory_info->available_memory_kib->value);
+    result.available_memory_ki_b = memory_info->available_memory_kib->value;
   }
   if (memory_info->page_faults_since_last_boot) {
-    result.page_faults_since_last_boot = std::make_unique<double_t>(
-        memory_info->page_faults_since_last_boot->value);
+    result.page_faults_since_last_boot =
+        memory_info->page_faults_since_last_boot->value;
   }
 
   Respond(
@@ -188,8 +263,7 @@ void OsTelemetryGetOemDataFunction::OnResult(
   }
 
   api::os_telemetry::OemData result;
-  result.oem_data =
-      std::make_unique<std::string>(std::move(ptr->oem_data.value()));
+  result.oem_data = std::move(ptr->oem_data);
 
   Respond(ArgumentList(api::os_telemetry::GetOemData::Results::Create(result)));
 }
@@ -265,6 +339,32 @@ void OsTelemetryGetStatefulPartitionInfoFunction::OnResult(
       api::os_telemetry::GetStatefulPartitionInfo::Results::Create(result)));
 }
 
+// OsTelemetryGetTpmInfoFunction -----------------------------------------------
+
+OsTelemetryGetTpmInfoFunction::OsTelemetryGetTpmInfoFunction() = default;
+OsTelemetryGetTpmInfoFunction::~OsTelemetryGetTpmInfoFunction() = default;
+
+void OsTelemetryGetTpmInfoFunction::RunIfAllowed() {
+  auto cb = base::BindOnce(&OsTelemetryGetTpmInfoFunction::OnResult, this);
+
+  GetRemoteService()->ProbeTelemetryInfo(
+      {crosapi::mojom::ProbeCategoryEnum::kTpm}, std::move(cb));
+}
+
+void OsTelemetryGetTpmInfoFunction::OnResult(
+    crosapi::mojom::ProbeTelemetryInfoPtr ptr) {
+  if (!ptr || !ptr->tpm_result || !ptr->tpm_result->is_tpm_info()) {
+    Respond(Error("API internal error"));
+    return;
+  }
+  auto& tpm_info = ptr->tpm_result->get_tpm_info();
+
+  api::os_telemetry::TpmInfo result =
+      converters::ConvertPtr<api::os_telemetry::TpmInfo>(std::move(tpm_info));
+
+  Respond(ArgumentList(api::os_telemetry::GetTpmInfo::Results::Create(result)));
+}
+
 // OsTelemetryGetVpdInfoFunction -----------------------------------------------
 
 OsTelemetryGetVpdInfoFunction::OsTelemetryGetVpdInfoFunction() = default;
@@ -287,25 +387,14 @@ void OsTelemetryGetVpdInfoFunction::OnResult(
   api::os_telemetry::VpdInfo result;
 
   const auto& vpd_info = ptr->vpd_result->get_vpd_info();
-  if (vpd_info->first_power_date.has_value()) {
-    result.activate_date =
-        std::make_unique<std::string>(vpd_info->first_power_date.value());
-  }
-  if (vpd_info->model_name.has_value()) {
-    result.model_name =
-        std::make_unique<std::string>(vpd_info->model_name.value());
-  }
-  if (vpd_info->sku_number.has_value()) {
-    result.sku_number =
-        std::make_unique<std::string>(vpd_info->sku_number.value());
-  }
+  result.activate_date = vpd_info->first_power_date;
+  result.model_name = vpd_info->model_name;
+  result.sku_number = vpd_info->sku_number;
 
   // Protect accessing the serial number by a permission.
   if (extension()->permissions_data()->HasAPIPermission(
-          extensions::mojom::APIPermissionID::kChromeOSTelemetrySerialNumber) &&
-      vpd_info->serial_number.has_value()) {
-    result.serial_number =
-        std::make_unique<std::string>(vpd_info->serial_number.value());
+          extensions::mojom::APIPermissionID::kChromeOSTelemetrySerialNumber)) {
+    result.serial_number = vpd_info->serial_number;
   }
 
   Respond(ArgumentList(api::os_telemetry::GetVpdInfo::Results::Create(result)));

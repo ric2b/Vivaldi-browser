@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -210,7 +210,7 @@ base::span<const PageInfoUI::PermissionUIInfo> GetContentSettingsUIInfo() {
      IDS_SITE_SETTINGS_TYPE_IMAGES_MID_SENTENCE},
     {ContentSettingsType::SERIAL_GUARD, IDS_SITE_SETTINGS_TYPE_SERIAL_PORTS,
      IDS_SITE_SETTINGS_TYPE_SERIAL_PORTS_MID_SENTENCE},
-    {ContentSettingsType::WINDOW_PLACEMENT,
+    {ContentSettingsType::WINDOW_MANAGEMENT,
      IDS_SITE_SETTINGS_TYPE_WINDOW_MANAGEMENT,
      IDS_SITE_SETTINGS_TYPE_WINDOW_MANAGEMENT_MID_SENTENCE},
 #endif
@@ -334,7 +334,7 @@ std::u16string GetPermissionAskStateString(ContentSettingsType type) {
     case ContentSettingsType::AR:
       message_id = IDS_PAGE_INFO_STATE_TEXT_AR_ASK;
       break;
-    case ContentSettingsType::WINDOW_PLACEMENT:
+    case ContentSettingsType::WINDOW_MANAGEMENT:
       message_id = IDS_PAGE_INFO_STATE_TEXT_WINDOW_MANAGEMENT_ASK;
       break;
     case ContentSettingsType::LOCAL_FONTS:
@@ -377,9 +377,12 @@ PageInfoUI::CookieInfo::CookieInfo() : allowed(-1), blocked(-1) {}
 
 PageInfoUI::CookiesNewInfo::CookiesNewInfo() = default;
 
-PageInfoUI::CookiesFPSInfo::CookiesFPSInfo() = default;
+PageInfoUI::CookiesNewInfo::~CookiesNewInfo() = default;
 
-PageInfoUI::CookiesFPSInfo::~CookiesFPSInfo() = default;
+PageInfoUI::CookiesFpsInfo::CookiesFpsInfo(const std::u16string& owner_name)
+    : owner_name(owner_name) {}
+
+PageInfoUI::CookiesFpsInfo::~CookiesFpsInfo() = default;
 
 PageInfoUI::ChosenObjectInfo::ChosenObjectInfo(
     const PageInfo::ChooserUIInfo& ui_info,

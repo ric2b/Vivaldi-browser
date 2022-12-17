@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #include "base/process/kill.h"
 #include "base/process/process.h"
 #include "base/process/process_metrics.h"
-#include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/child_process_launcher_helper.h"
@@ -40,7 +39,12 @@
 
 namespace base {
 class CommandLine;
+#if BUILDFLAG(IS_ANDROID)
+namespace android {
+enum class ChildBindingState;
 }
+#endif
+}  // namespace base
 
 namespace perfetto {
 namespace protos {
@@ -264,6 +268,9 @@ class CONTENT_EXPORT ChildProcessLauncher {
   Client* ReplaceClientForTest(Client* client);
 
 #if BUILDFLAG(IS_ANDROID)
+  // Returns the highest binding state for the ChildProcessConnection.
+  base::android::ChildBindingState GetEffectiveChildBindingState();
+
   // Dumps the stack of the child process without crashing it.
   void DumpProcessStack();
 #endif
@@ -291,9 +298,11 @@ class CONTENT_EXPORT ChildProcessLauncher {
   // shutdown. Default behavior is to terminate the child.
   const bool terminate_child_on_shutdown_;
 
-  scoped_refptr<internal::ChildProcessLauncherHelper> helper_;
+  // Indicates if the child process should be launched with elevated privileges.
+  // Can only be true on Windows.
+  bool should_launch_elevated_ = false;
 
-  SEQUENCE_CHECKER(sequence_checker_);
+  scoped_refptr<internal::ChildProcessLauncherHelper> helper_;
 
   base::WeakPtrFactory<ChildProcessLauncher> weak_factory_{this};
 };

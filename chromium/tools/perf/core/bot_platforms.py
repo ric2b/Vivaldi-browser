@@ -1,4 +1,4 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import os
@@ -38,6 +38,7 @@ class PerfPlatform(object):
                is_fyi=False,
                is_calibration=False,
                run_reference_build=False,
+               pinpoint_only=False,
                executables=None):
     benchmark_configs = benchmark_configs.Frozenset()
     self._name = name
@@ -48,6 +49,7 @@ class PerfPlatform(object):
     self._is_fyi = is_fyi
     self._is_calibration = is_calibration
     self.run_reference_build = run_reference_build
+    self.pinpoint_only = pinpoint_only
     self.executables = executables or frozenset()
     assert num_shards
     self._num_shards = num_shards
@@ -227,6 +229,7 @@ OFFICIAL_BENCHMARK_CONFIGS = OFFICIAL_BENCHMARK_CONFIGS.Remove([
     'power.mobile',
     'blink_perf.sanitizer-api',
     'speedometer2-chrome-health',
+    'speedometer2-minormc',
 ])
 # TODO(crbug.com/965158): Remove OFFICIAL_BENCHMARK_NAMES once sharding
 # scripts are no longer using it.
@@ -316,7 +319,7 @@ _IMAGE_PATHS = {
     'sherlock': ('sherlock-release', 'smart_display_max_eng_arrested'),
 }
 _FUCHSIA_IMAGE_DIR = '../../third_party/fuchsia-sdk/images-internal/%s/%s'
-_COMMON_FUCHSIA_ARGS = ['-d', '--os-check=update']
+_COMMON_FUCHSIA_ARGS = ['-d', '--os-check=check']
 for board, path_parts in _IMAGE_PATHS.items():
   image_dir = _FUCHSIA_IMAGE_DIR % path_parts
   FUCHSIA_EXEC_ARGS[board] = _COMMON_FUCHSIA_ARGS + [
@@ -334,6 +337,10 @@ _LINUX_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
 ]).Add([
     'blink_perf.sanitizer-api',
 ])
+_LINUX_BENCHMARK_CONFIGS_WITH_MINORMC = PerfSuite(_LINUX_BENCHMARK_CONFIGS).Add(
+    [
+        'speedometer2-minormc',
+    ])
 _LINUX_EXECUTABLE_CONFIGS = frozenset([
     # TODO(crbug.com/811766): Add views_perftests.
     _base_perftests(200),
@@ -412,8 +419,7 @@ _ANDROID_GO_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('speedometer'),
     _GetBenchmarkConfig('speedometer2')])
 _ANDROID_GO_WEBVIEW_BENCHMARK_CONFIGS = _ANDROID_GO_BENCHMARK_CONFIGS
-_ANDROID_PIXEL2_BENCHMARK_CONFIGS = PerfSuite(
-    _OFFICIAL_EXCEPT_DISPLAY_LOCKING).Remove(['system_health.weblayer_startup'])
+_ANDROID_PIXEL2_BENCHMARK_CONFIGS = PerfSuite(_OFFICIAL_EXCEPT_DISPLAY_LOCKING)
 _ANDROID_PIXEL2_EXECUTABLE_CONFIGS = frozenset([
     _components_perftests(60),
 ])
@@ -421,17 +427,9 @@ _ANDROID_PIXEL2_WEBVIEW_BENCHMARK_CONFIGS = PerfSuite(
     OFFICIAL_BENCHMARK_CONFIGS).Remove([
         'blink_perf.display_locking',
         'jetstream2',
-        'system_health.weblayer_startup',
         'v8.browsing_mobile-future',
     ])
-_ANDROID_PIXEL2_WEBLAYER_BENCHMARK_CONFIGS = PerfSuite([
-    _GetBenchmarkConfig('system_health.common_mobile', True),
-    _GetBenchmarkConfig('system_health.memory_mobile', True),
-    _GetBenchmarkConfig('startup.mobile'),
-    _GetBenchmarkConfig('system_health.weblayer_startup')
-])
-_ANDROID_PIXEL4_BENCHMARK_CONFIGS = PerfSuite(
-    _OFFICIAL_EXCEPT_DISPLAY_LOCKING).Remove(['system_health.weblayer_startup'])
+_ANDROID_PIXEL4_BENCHMARK_CONFIGS = PerfSuite(_OFFICIAL_EXCEPT_DISPLAY_LOCKING)
 _ANDROID_PIXEL4_EXECUTABLE_CONFIGS = frozenset([
     _components_perftests(60),
 ])
@@ -439,15 +437,8 @@ _ANDROID_PIXEL4_WEBVIEW_BENCHMARK_CONFIGS = PerfSuite(
     OFFICIAL_BENCHMARK_CONFIGS).Remove([
         'blink_perf.display_locking',
         'jetstream2',
-        'system_health.weblayer_startup',
         'v8.browsing_mobile-future',
     ])
-_ANDROID_PIXEL4_WEBLAYER_BENCHMARK_CONFIGS = PerfSuite([
-    _GetBenchmarkConfig('system_health.common_mobile', True),
-    _GetBenchmarkConfig('system_health.memory_mobile', True),
-    _GetBenchmarkConfig('startup.mobile'),
-    _GetBenchmarkConfig('system_health.weblayer_startup')
-])
 _ANDROID_PIXEL4A_POWER_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('power.mobile'),
     _GetBenchmarkConfig('system_health.scroll_jank_mobile')
@@ -521,13 +512,12 @@ _ANDROID_PIXEL2_PERF_CALIBRATION_BENCHMARK_CONFIGS = PerfSuite([
 
 
 # Linux
-LINUX = PerfPlatform(
-    'linux-perf',
-    'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
-    _LINUX_BENCHMARK_CONFIGS,
-    26,
-    'linux',
-    executables=_LINUX_EXECUTABLE_CONFIGS)
+LINUX = PerfPlatform('linux-perf',
+                     'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
+                     _LINUX_BENCHMARK_CONFIGS_WITH_MINORMC,
+                     26,
+                     'linux',
+                     executables=_LINUX_EXECUTABLE_CONFIGS)
 LINUX_PGO = PerfPlatform('linux-perf-pgo',
                          'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
                          _LINUX_BENCHMARK_CONFIGS,
@@ -656,9 +646,6 @@ ANDROID_PIXEL2_WEBVIEW = PerfPlatform(
 ANDROID_PIXEL2_WEBVIEW_PGO = PerfPlatform(
     'android-pixel2_webview-perf-pgo', 'Android OPM1.171019.021',
     _ANDROID_PIXEL2_WEBVIEW_BENCHMARK_CONFIGS, 21, 'android')
-ANDROID_PIXEL2_WEBLAYER = PerfPlatform(
-    'android-pixel2_weblayer-perf', 'Android OPM1.171019.021',
-    _ANDROID_PIXEL2_WEBLAYER_BENCHMARK_CONFIGS, 4, 'android')
 ANDROID_PIXEL4 = PerfPlatform('android-pixel4-perf',
                               'Android R',
                               _ANDROID_PIXEL4_BENCHMARK_CONFIGS,
@@ -675,12 +662,6 @@ ANDROID_PIXEL4_PGO = PerfPlatform(
 ANDROID_PIXEL4_WEBVIEW = PerfPlatform(
     'android-pixel4_webview-perf', 'Android R',
     _ANDROID_PIXEL4_WEBVIEW_BENCHMARK_CONFIGS, 21, 'android')
-ANDROID_PIXEL4_WEBLAYER = PerfPlatform(
-    'android-pixel4_weblayer-perf', 'Android R',
-    _ANDROID_PIXEL4_WEBLAYER_BENCHMARK_CONFIGS, 4, 'android')
-ANDROID_PIXEL4_WEBLAYER_PGO = PerfPlatform(
-    'android-pixel4_weblayer-perf-pgo', 'Android R',
-    _ANDROID_PIXEL4_WEBLAYER_BENCHMARK_CONFIGS, 4, 'android')
 ANDROID_PIXEL4A_POWER = PerfPlatform('android-pixel4a_power-perf',
                                      'Android QD4A.200102.001.A1',
                                      _ANDROID_PIXEL4A_POWER_BENCHMARK_CONFIGS,
@@ -688,6 +669,30 @@ ANDROID_PIXEL4A_POWER = PerfPlatform('android-pixel4a_power-perf',
 ANDROID_PIXEL4A_POWER_PGO = PerfPlatform(
     'android-pixel4a_power-perf-pgo', 'Android QD4A.200102.001.A1',
     _ANDROID_PIXEL4A_POWER_BENCHMARK_CONFIGS, 12, 'android')
+ANDROID_NEW_PIXEL = PerfPlatform('android-new-pixel-perf',
+                                 'Android T',
+                                 PerfSuite([]),
+                                 1,
+                                 'android',
+                                 pinpoint_only=True)
+ANDROID_NEW_PIXEL_PGO = PerfPlatform('android-new-pixel-perf-pgo',
+                                     'Android T',
+                                     PerfSuite([]),
+                                     1,
+                                     'android',
+                                     pinpoint_only=True)
+ANDROID_NEW_PIXEL_PRO = PerfPlatform('android-new-pixel-pro-perf',
+                                     'Android T',
+                                     PerfSuite([]),
+                                     1,
+                                     'android',
+                                     pinpoint_only=True)
+ANDROID_NEW_PIXEL_PRO_PGO = PerfPlatform('android-new-pixel-pro-perf-pgo',
+                                         'Android T',
+                                         PerfSuite([]),
+                                         1,
+                                         'android',
+                                         pinpoint_only=True)
 
 # Cros/Lacros
 LACROS_EVE_PERF = PerfPlatform('lacros-eve-perf', '', _LACROS_BENCHMARK_CONFIGS,
@@ -700,6 +705,7 @@ FUCHSIA_PERF_ASTRO = PerfPlatform('fuchsia-perf-ast',
                                   _FUCHSIA_PERF_ASTRO_BENCHMARK_CONFIGS,
                                   1,
                                   'fuchsia',
+                                  is_fyi=True,
                                   executables=FUCHSIA_EXEC_CONFIGS['astro'])
 FUCHSIA_PERF_SHERLOCK = PerfPlatform(
     'fuchsia-perf-shk',
@@ -707,6 +713,7 @@ FUCHSIA_PERF_SHERLOCK = PerfPlatform(
     _FUCHSIA_PERF_SHERLOCK_BENCHMARK_CONFIGS,
     1,
     'fuchsia',
+    is_fyi=True,
     executables=FUCHSIA_EXEC_CONFIGS['sherlock'])
 
 # FYI bots

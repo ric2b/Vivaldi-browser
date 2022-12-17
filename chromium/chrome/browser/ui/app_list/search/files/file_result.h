@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,7 @@ class FileResult : public ChromeSearchResult, public ash::ColorModeObserver {
  public:
   enum class Type { kFile, kDirectory, kSharedDirectory };
 
-  FileResult(const std::string& schema,
+  FileResult(const std::string& id,
              const base::FilePath& filepath,
              const absl::optional<std::u16string>& details,
              ResultType result_type,

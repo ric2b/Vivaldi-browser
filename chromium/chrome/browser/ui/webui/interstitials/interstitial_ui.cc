@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -540,15 +540,17 @@ std::string InterstitialHTMLSource::GetSupervisedUserInterstitialHTML(
     allow_access_requests = allow_access_requests_string == "1";
   }
 
-  std::string custodian;
+  std::string custodian = "Alice";
   net::GetValueForKeyInQuery(url, "custodian", &custodian);
-  std::string second_custodian;
+  std::string second_custodian = "Bob";
   net::GetValueForKeyInQuery(url, "second_custodian", &second_custodian);
-  std::string custodian_email;
+  std::string custodian_email = "alice.bloggs@gmail.com";
   net::GetValueForKeyInQuery(url, "custodian_email", &custodian_email);
-  std::string second_custodian_email;
+  std::string second_custodian_email = "bob.bloggs@gmail.com";
   net::GetValueForKeyInQuery(url, "second_custodian_email",
                              &second_custodian_email);
+  // The interstitial implementation provides a fallback image so no need to set
+  // one here.
   std::string profile_image_url;
   net::GetValueForKeyInQuery(url, "profile_image_url", &profile_image_url);
   std::string profile_image_url2;

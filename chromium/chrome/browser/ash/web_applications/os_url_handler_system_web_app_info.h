@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@ class OsUrlHandlerSystemWebAppDelegate : public ash::SystemWebAppDelegate {
   bool ShouldShowInLauncher() const override;
   bool ShouldShowInSearch() const override;
   bool ShouldReuseExistingWindow() const override;
+  bool ShouldRestoreOverrideUrl() const override;
   bool IsUrlInSystemAppScope(const GURL& url) const override;
 
   // Can be called by a test to enforce the app to be enabled.

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@ import 'chrome://settings/settings.js';
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import { FontsBrowserProxy, FontsBrowserProxyImpl, FontsData,SettingsAppearanceFontsPageElement} from 'chrome://settings/lazy_load.js';
+import {FontsBrowserProxy, FontsBrowserProxyImpl, FontsData,SettingsAppearanceFontsPageElement} from 'chrome://settings/lazy_load.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
@@ -47,7 +47,8 @@ suite('AppearanceFontHandler', function() {
     fontsBrowserProxy = new TestFontsBrowserProxy();
     FontsBrowserProxyImpl.setInstance(fontsBrowserProxy);
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     fontsPage = document.createElement('settings-appearance-fonts-page');
     document.body.appendChild(fontsPage);

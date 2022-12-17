@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -42,6 +42,7 @@ source_set("authentication") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/flags:system_flags",
     "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/policy",
@@ -54,6 +55,7 @@ source_set("authentication") {
     "//ios/chrome/browser/ui/authentication/signin:signin_headers",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/infobars/resources:infobar_warning",
+    "//ios/chrome/browser/ui/ntp:feature_flags",
     "//ios/chrome/browser/ui/settings:settings_root",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/unified_consent",
@@ -132,6 +134,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/main:test_support",
     "//ios/chrome/browser/policy",
+    "//ios/chrome/browser/policy:constants",
     "//ios/chrome/browser/policy:policy_util",
     "//ios/chrome/browser/prefs:browser_prefs",
     "//ios/chrome/browser/signin",
@@ -176,7 +179,6 @@ source_set("eg_app_support+eg2") {
     "//components/bookmarks/browser",
     "//components/prefs",
     "//components/signin/public/identity_manager",
-    "//ios/chrome/app/strings",
     "//ios/chrome/browser/bookmarks",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/signin",

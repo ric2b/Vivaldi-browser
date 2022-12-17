@@ -1,10 +1,9 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
 
-#include <algorithm>
 #include <cctype>
 #include <utility>
 
@@ -12,8 +11,8 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
-#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
@@ -24,21 +23,15 @@
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
-#include "chrome/browser/ash/policy/core/device_local_account.h"
-#include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
-#include "chrome/browser/ash/policy/enrollment/auto_enrollment_type_checker.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_status.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "chromeos/system/statistics_provider.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -74,64 +67,6 @@ base::span<const DemoSetupStepInfo> GetDemoSetupStepsInfo() {
   return kDemoModeSetupStepsInfo;
 }
 
-// Get the DeviceLocalAccountPolicyStore for the account_id.
-policy::CloudPolicyStore* GetDeviceLocalAccountPolicyStore(
-    const std::string& account_id) {
-  policy::BrowserPolicyConnectorAsh* connector =
-      g_browser_process->platform_part()->browser_policy_connector_ash();
-  if (!connector)
-    return nullptr;
-
-  policy::DeviceLocalAccountPolicyService* local_account_service =
-      connector->GetDeviceLocalAccountPolicyService();
-  if (!local_account_service)
-    return nullptr;
-
-  const std::string user_id = policy::GenerateDeviceLocalAccountUserId(
-      account_id, policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION);
-  policy::DeviceLocalAccountPolicyBroker* broker =
-      local_account_service->GetBrokerForUser(user_id);
-  if (!broker)
-    return nullptr;
-
-  return broker->core()->store();
-}
-
-// A utility function of base::ReadFileToString which returns an optional
-// string.
-// TODO(mukai): move this to base/files.
-absl::optional<std::string> ReadFileToOptionalString(
-    const base::FilePath& file_path) {
-  std::string content;
-  absl::optional<std::string> result;
-  if (base::ReadFileToString(file_path, &content))
-    result = std::move(content);
-  return result;
-}
-
-// Returns whether online FRE check is required.
-bool IsOnlineFreCheckRequired() {
-  policy::AutoEnrollmentTypeChecker::FRERequirement fre_requirement =
-      policy::AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD();
-  bool enrollment_check_required =
-      fre_requirement != policy::AutoEnrollmentTypeChecker::FRERequirement::
-                             kExplicitlyNotRequired &&
-      fre_requirement !=
-          policy::AutoEnrollmentTypeChecker::FRERequirement::kNotRequired &&
-      policy::AutoEnrollmentTypeChecker::IsFREEnabled();
-
-  if (!enrollment_check_required)
-    return false;
-
-  std::string block_dev_mode_value;
-  system::StatisticsProvider* provider =
-      system::StatisticsProvider::GetInstance();
-  provider->GetMachineStatistic(system::kBlockDevModeKey,
-                                &block_dev_mode_value);
-
-  return block_dev_mode_value == "1";
-}
-
 DemoSetupController::DemoSetupError CreateFromClientStatus(
     policy::DeviceManagementStatus status,
     const std::string& debug_message) {
@@ -164,6 +99,7 @@ DemoSetupController::DemoSetupError CreateFromClientStatus(
     case policy::DM_STATUS_SERVICE_ENTERPRISE_ACCOUNT_IS_NOT_ELIGIBLE_TO_ENROLL:
     case policy::DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED:
     case policy::DM_STATUS_SERVICE_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE:
+    case policy::DM_STATUS_SERVICE_INVALID_PACKAGED_DEVICE_FOR_KIOSK:
       return DemoSetupController::DemoSetupError(ErrorCode::kDemoAccountError,
                                                  RecoveryMethod::kUnknown,
                                                  debug_message);
@@ -495,10 +431,7 @@ std::string DemoSetupController::GetSubOrganizationEmail() {
   std::string country_lowercase = base::ToLowerASCII(country);
 
   // Exclude US as it is the default country.
-  if (std::find(std::begin(DemoSession::kSupportedCountries),
-                std::end(DemoSession::kSupportedCountries),
-                country_uppercase) !=
-      std::end(DemoSession::kSupportedCountries)) {
+  if (base::Contains(DemoSession::kSupportedCountries, country_uppercase)) {
     if (chromeos::features::IsCloudGamingDeviceEnabled()) {
       return base::StringPrintf("admin-%s-blazey@%s", country_lowercase.c_str(),
                                 policy::kDemoModeDomain);

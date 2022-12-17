@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{تعديل الملف}zero{تعديل الملفات}two{تعديل الملفَين}few{تعديل الملفات}many{تعديل الملفات}other{تعديل الملفات}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> غيغاهرتز</translation>
 <translation id="3291996639387199448">اتجاه المفتاح</translation>
+<translation id="3294437725009624529">ضيف</translation>
 <translation id="3310640316857623290">وقت استجابة "نظام أسماء النطاقات" أعلى بكثير من الحدّ الأقصى المسموح به.</translation>
 <translation id="3328783797891415197">الاختبار قيد التشغيل.</translation>
 <translation id="3340011300870565703">مستوى شحن بطارية السماعة اليمنى هو %<ph name="BATTERY_PERCENTAGE" />.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">لا تفصل هذا الجهاز الخارجي أو توقف تشغيل الكمبيوتر أثناء تحديث البرامج الثابتة. يمكنك تصغير هذه النافذة. قد يستغرق هذا التحديث بضع دقائق وقد يتوقف الجهاز الخارجي عن العمل أثناء التحديث.</translation>
 <translation id="3486220673238053218">تعريف</translation>
 <translation id="3488065109653206955">نشطة جزئيًا</translation>
+<translation id="3510890413042482857">إرسال <ph name="BEGIN_LINK1" />بيانات تتبُّع مستوى الأداء<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">‏تحديث نظام التشغيل Chrome</translation>
 <translation id="3527036260304016759">تعذَّرت الطباعة - خطأ غير معروف</translation>
 <translation id="3532980081107202182">يتبقّى حوالي <ph name="MIN_REMAINING" /> دقيقة.</translation>
@@ -307,7 +309,7 @@
 <translation id="409427325554347132">حفظ تفاصيل الاختبار</translation>
 <translation id="4110686435123617899">اختيار ألبوم <ph name="TITLE" /> <ph name="DESC" /></translation>
 <translation id="4111761024568264522">‏لوحة لمس USB</translation>
-<translation id="4117637339509843559">الوضع المُعتِم</translation>
+<translation id="4117637339509843559">الوضع الداكن</translation>
 <translation id="4131410914670010031">أبيض وأسود</translation>
 <translation id="4145784616224233563">‏الجدار الناري لبروتوكل HTTP</translation>
 <translation id="4147897805161313378">‏صور Google‏‏</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">‏Android لا يعمل.</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">التبديل تلقائيًا إلى المظهر الداكن عند الغروب</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">إعادة المسح الضوئي</translation>
 <translation id="5583640892426849032">Backspace</translation>

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "base/values.h"
 #include "components/sync/driver/configure_context.h"
 #include "components/sync/engine/data_type_activation_response.h"
+#include "components/sync/model/sync_error.h"
 #include "components/sync/model/type_entities_count.h"
 
 namespace sync_sessions {

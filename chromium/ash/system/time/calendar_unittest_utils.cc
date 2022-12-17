@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,6 +73,32 @@ base::Time GetTimeFromString(const char* start_time) {
   bool result = base::Time::FromString(start_time, &date);
   DCHECK(result);
   return date;
+}
+
+CalendarClientTestImpl::CalendarClientTestImpl() = default;
+
+CalendarClientTestImpl::~CalendarClientTestImpl() = default;
+
+base::OnceClosure CalendarClientTestImpl::GetEventList(
+    google_apis::calendar::CalendarEventListCallback callback,
+    const base::Time& start_time,
+    const base::Time& end_time) {
+  // Give it a little bit of time to mock the api calling. This duration is a
+  // little longer than the settle down duration, so in the test after the
+  // animation settled down it can still be with `kFetching` status until
+  // somemethod like `WaitUntilFetched` is called.
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), error_, std::move(events_)),
+      kAnimationSettleDownDuration + base::Seconds(2));
+
+  return base::DoNothing();
+}
+
+void CalendarClientTestImpl::SetEventList(
+    std::unique_ptr<google_apis::calendar::EventList> events) {
+  events_.reset();
+  events_ = std::move(events);
 }
 
 }  // namespace calendar_test_utils

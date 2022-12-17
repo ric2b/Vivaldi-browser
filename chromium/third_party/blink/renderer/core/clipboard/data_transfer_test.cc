@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -426,6 +426,17 @@ TEST_P(DataTransferTest, NodeImageFixedChild) {
     for (int y = 50; y < 100; ++y)
       ASSERT_EQ(blue, bitmap.getColor(x, y));
   }
+}
+
+TEST_P(DataTransferTest, CreateDragImageWithEmptyImageResource) {
+  DataTransfer* data_transfer = DataTransfer::Create();
+  data_transfer->SetDragImageResource(
+      MakeGarbageCollected<ImageResourceContent>(nullptr), gfx::Point());
+
+  gfx::Point drag_offset;
+  std::unique_ptr<DragImage> drag_image = data_transfer->CreateDragImage(
+      drag_offset, /* device_scale_factor*/ 1, &GetFrame());
+  // The test passes if the above call does not crash.
 }
 
 }  // namespace blink

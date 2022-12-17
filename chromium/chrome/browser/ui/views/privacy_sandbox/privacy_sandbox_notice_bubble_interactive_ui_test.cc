@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,14 +59,6 @@ class PrivacySandboxNoticeBubbleInteractiveUiTest
             base::BindRepeating(&BuildMockPrivacySandboxService)));
   }
 
-  void SetUp() override {
-    const base::FieldTrialParams params = {
-        {privacy_sandbox::kPrivacySandboxSettings3NewNotice.name, "true"}};
-    feature_list_.InitWithFeaturesAndParameters(
-        {{privacy_sandbox::kPrivacySandboxSettings3, params}}, {});
-    InProcessBrowserTest::SetUp();
-  }
-
   MockPrivacySandboxService* mock_service() { return mock_service_; }
 
   ui::TrackedElement* GetElement(ui::ElementIdentifier id) {
@@ -80,7 +72,8 @@ class PrivacySandboxNoticeBubbleInteractiveUiTest
 };
 
 IN_PROC_BROWSER_TEST_F(PrivacySandboxNoticeBubbleInteractiveUiTest,
-                       AcknowledgeNotice) {
+                       // TODO(crbug.com/1356871): Re-enable this test
+                       DISABLED_AcknowledgeNotice) {
   EXPECT_CALL(
       *mock_service(),
       PromptActionOccurred(PrivacySandboxService::PromptAction::kNoticeShown));
@@ -102,7 +95,8 @@ IN_PROC_BROWSER_TEST_F(PrivacySandboxNoticeBubbleInteractiveUiTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PrivacySandboxNoticeBubbleInteractiveUiTest,
-                       OpenSettingsNotice) {
+                       // TODO(crbug.com/1356871): Re-enable this test
+                       DISABLED_OpenSettingsNotice) {
   EXPECT_CALL(
       *mock_service(),
       PromptActionOccurred(PrivacySandboxService::PromptAction::kNoticeShown));
@@ -124,7 +118,8 @@ IN_PROC_BROWSER_TEST_F(PrivacySandboxNoticeBubbleInteractiveUiTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PrivacySandboxNoticeBubbleInteractiveUiTest,
-                       OpenLearnMoreNotice) {
+                       // TODO(crbug.com/1356871): Re-enable this test
+                       DISABLED_OpenLearnMoreNotice) {
   EXPECT_CALL(
       *mock_service(),
       PromptActionOccurred(PrivacySandboxService::PromptAction::kNoticeShown));
@@ -152,7 +147,8 @@ IN_PROC_BROWSER_TEST_F(PrivacySandboxNoticeBubbleInteractiveUiTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PrivacySandboxNoticeBubbleInteractiveUiTest,
-                       EscapeClosesNotice) {
+                       // TODO(crbug.com/1356871): Re-enable this test
+                       DISABLED_EscapeClosesNotice) {
   // Check that when the escape key is pressed, the notice bubble is closed.
   EXPECT_CALL(
       *mock_service(),

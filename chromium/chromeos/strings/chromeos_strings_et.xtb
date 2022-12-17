@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Muuda faili}other{Muuda faile}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Võtme suund</translation>
+<translation id="3294437725009624529">Külaline</translation>
 <translation id="3310640316857623290">DNS-i latentsusaeg ületab märkimisväärselt lubatud piiri</translation>
 <translation id="3328783797891415197">Test on pooleli</translation>
 <translation id="3340011300870565703">Seadme parema kõrvaklapi aku laetus on <ph name="BATTERY_PERCENTAGE" />%.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Püsivara värskendamise ajal ärge seda välist seadet eemaldage ega arvutit välja lülitage. Võite selle akna minimeerida. Selle värskenduse lõpuleviimiseks võib kuluda mõni minut ja teie väline seade ei pruugi sel ajal töötada.</translation>
 <translation id="3486220673238053218">definitsioon</translation>
 <translation id="3488065109653206955">Osaliselt aktiveeritud</translation>
+<translation id="3510890413042482857">Saada <ph name="BEGIN_LINK1" />toimivuse jälgimiseandmeid<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Chrome OS-i värsken.</translation>
 <translation id="3527036260304016759">Ebaõnnestus – tundmatu viga</translation>
 <translation id="3532980081107202182">Jäänud on ligikaudu <ph name="MIN_REMAINING" /> minutit</translation>
@@ -468,6 +470,7 @@ Kui soovite mulle küsimuse esitada, puudutage mikrofoni.</translation>
 <translation id="5502931783115429516">Android ei tööta</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Päikeseloojangul automaatselt tumedale teemale lülitumine</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Skanni uuesti</translation>
 <translation id="5583640892426849032">Tagasilükkeklahv</translation>

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "ash/public/cpp/wallpaper/wallpaper_controller_observer.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom-shared.h"
 #include "base/scoped_observation.h"
+#include "components/session_manager/session_manager_types.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 class PrefRegistrySimple;
@@ -46,9 +47,7 @@ class ASH_EXPORT KeyboardBacklightColorController
 
   // SessionObserver:
   void OnActiveUserPrefServiceChanged(PrefService* pref_service) override;
-  // b/239967737: |OnActiveUserPrefServiceChanged| doesn't get triggered when
-  // chrome restarts.
-  void OnUserSessionUpdated(const AccountId& account_id) override;
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
   // WallpaperControllerObserver:
   void OnWallpaperColorsChanged() override;
@@ -56,7 +55,7 @@ class ASH_EXPORT KeyboardBacklightColorController
   KeyboardBacklightColorNudgeController*
   keyboard_backlight_color_nudge_controller() {
     return keyboard_backlight_color_nudge_controller_.get();
-  };
+  }
 
  private:
   friend class KeyboardBacklightColorControllerTest;

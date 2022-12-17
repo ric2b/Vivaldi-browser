@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@ import 'chrome://history/history.js';
 
 import {BrowserServiceImpl, ensureLazyLoaded, HistoryAppElement, HistoryEntry} from 'chrome://history/history.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {flushTasks} from 'chrome://webui-test/test_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {TestBrowserService} from './test_browser_service.js';
 import {createHistoryEntry, createHistoryInfo} from './test_util.js';
@@ -18,7 +18,8 @@ suite('history-toolbar', function() {
       [createHistoryEntry('2016-03-15', 'https://google.com')];
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     testService = new TestBrowserService();
     BrowserServiceImpl.setInstance(testService);
 

@@ -138,9 +138,9 @@
 <translation id="1812527064848182527">לרוחב</translation>
 <translation id="1829244130665387512">חיפוש בדף</translation>
 <translation id="1834891354138622109">עמודה</translation>
-<translation id="1845944666972354496">אפשר להפעיל באמצעות לחיצה פעמיים</translation>
 <translation id="1846771122725914429">‏צג ברייל תואם Bluetooth</translation>
 <translation id="1852018405765032699">‏כדי לפתוח ולסגור את התפריטים של ChromeVox, מקישים על המסך בעזרת ארבע אצבעות. התפריטים האלה כוללים מידע שימושי לגבי פקודות ומקשי קיצור. אחרי שפותחים את התפריטים, אפשר להחליק בעזרת אצבע אחת כדי לעבור בין פריטים וללחוץ פעמיים כדי להפעיל פריטים. כדי להמשיך יש להקיש על המסך בעזרת ארבע אצבעות.</translation>
+<translation id="1864430479908918647">יש להקיש על מקש החיפוש ועל מקש הרווח</translation>
 <translation id="1865601187525349519">סוף הטקסט</translation>
 <translation id="1876229593313240038">doc</translation>
 <translation id="1902396333223336119">תא</translation>
@@ -238,6 +238,7 @@
 <translation id="2619344480613750862">‏אפשר גם לעבור בין קטעים שונים במסך. למשל, ניתן לעבור בין מרכז האפליקציות למדף ולכרטיסיות Chrome. כדי לעבור לקטע הבא, מחליקים מימין לשמאל בעזרת ארבע אצבעות. כדי להמשיך, יש לנסות זאת עכשיו.</translation>
 <translation id="2624431853467395961">פתיחת מצב למידה</translation>
 <translation id="2626530649491650971">לחיץ</translation>
+<translation id="263637551280112393">‏צריך להקיש על מקש החיפוש + Shift + מקש הרווח</translation>
 <translation id="2637227747952042642">Math</translation>
 <translation id="2638785836053527382">ההורדה של <ph name="FILE_NAME" /> נמשכת</translation>
 <translation id="2639750663247012216">‏מקש צירוף של ChromeVox</translation>
@@ -529,6 +530,7 @@
 <translation id="4479068155583208887">אדום קיר-לבנים</translation>
 <translation id="4482330759234983253">הטבלה הקודמת</translation>
 <translation id="4491109536499578614">תמונה</translation>
+<translation id="4507332368061453500">יש ללחוץ לחיצה ארוכה על הפריט הנוכחי</translation>
 <translation id="4511186779140817916">שקד לבן</translation>
 <translation id="451510441928265982">אין כותרת קודמת מרמה 2</translation>
 <translation id="4515799157838123044">הצללת תוכן הרקע</translation>
@@ -597,7 +599,6 @@
 <translation id="4993152509206108683"><ph name="PERCENT" /> אחוזים מקצב הדיבור</translation>
 <translation id="4994420463726586413">הקראת מצב הסוללה הנוכחי</translation>
 <translation id="4997282455736854877"><ph name="NAME" />, לחצן בחירה מסומן</translation>
-<translation id="5011664330025416377">‏כדי להפעיל, יש להקיש על Search+מקש הרווח</translation>
 <translation id="5012724933919010465"><ph name="NAME" />, סימנת את לחצן הבחירה של האפשרות בתפריט</translation>
 <translation id="5020651427400641814">הפעלה של תיעוד דיבור</translation>
 <translation id="5041394372352067729">העברת תצוגת ברייל לחלק העליון של הדף</translation>
@@ -650,6 +651,7 @@
 <translation id="5355014376930441909">אין עוד קטעים</translation>
 <translation id="5368000168321181111">‏Earcons כבוי</translation>
 <translation id="5368505757342402527">‏הושלמו ‎<ph name="PROGRESS" />%‎ מההורדה של <ph name="FILE_NAME" />. נותרו עוד כ-<ph name="TIME" /> <ph name="UNITS" />.</translation>
+<translation id="5381388086899614489">לחיצה ארוכה</translation>
 <translation id="5400836586163650660">אפור</translation>
 <translation id="5402367795255837559">ברייל</translation>
 <translation id="5402791055281059602">התראה שמוצגת בחלון קופץ</translation>
@@ -762,6 +764,7 @@
 <translation id="6100239002225743044">העברת הסמן שורה אחת למעלה</translation>
 <translation id="6118126368611144850">‏אפליקציות Android ל-Chrome. אם במכשיר מותקנת האפליקציה של חנות Play, אפשר לקבל הצצה אל ChromeVox עם אפליקציות Android. ניתן לנסות את התמיכה הניסיונית על-ידי הורדת Google Chrome Canary מחנות Play.</translation>
 <translation id="611827076493383239">vtd</translation>
+<translation id="6119846243427417423">הפעלה</translation>
 <translation id="6122013438240733403">btn</translation>
 <translation id="6132506484792346370">תיבת רשימה או תיבה משולבת</translation>
 <translation id="613344593214611552">delete the previous sentence</translation>
@@ -778,6 +781,7 @@
 <translation id="6236061028292614533">הכותרת הבאה</translation>
 <translation id="6254901459154107917">האזור הבא בטקסט הניתן לעריכה</translation>
 <translation id="6259464875943891919">יצאת מ-<ph name="TYPE" />.</translation>
+<translation id="6280088282605782512">הקשה כפולה</translation>
 <translation id="6282062888058716985">nav</translation>
 <translation id="6295699829709583154">מקשים חיוניים: חיפוש</translation>
 <translation id="6305702903308659374">‏הפעלה בעוצמת שמע רגילה גם אם מכשיר ה-ChromeVox מקריא</translation>
@@ -981,6 +985,7 @@
 <translation id="7731785449856576010">אין עוד ווידג'טים של מדיה</translation>
 <translation id="7735498529470878067">בעזרת 'גילוי באמצעות מגע', קל להבין במהירות מה מוצג במסך.</translation>
 <translation id="773906353055481349">‏כדי לנווט לפי תא, יש להקיש על Search+Ctrl+Alt ביחד עם מקשי החיצים</translation>
+<translation id="7746976083433980639"><ph name="ACTION" /> עד <ph name="LABEL" /></translation>
 <translation id="7763537600611320912">ההורדה של <ph name="FILE_NAME" /> התחילה</translation>
 <translation id="7768784765476638775">הקראה</translation>
 <translation id="7776293189010177726">‏פתיחת תפריטי ChromeVox</translation>

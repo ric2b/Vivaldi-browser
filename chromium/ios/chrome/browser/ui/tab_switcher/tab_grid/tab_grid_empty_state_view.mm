@@ -1,20 +1,22 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_empty_state_view.h"
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -30,7 +32,7 @@ const CGFloat kImageWidth = 150.0;
 
 // Returns the image to display for the given grid `page`.
 UIImage* ImageForPage(TabGridPage page) {
-  // Vivaldi
+
   if (IsVivaldiRunning()) {
     switch (page) {
       case TabGridPageIncognitoTabs:
@@ -42,7 +44,8 @@ UIImage* ImageForPage(TabGridPage page) {
       case TabGridPageClosedTabs:
         return [UIImage imageNamed:@"tab_grid_closed_tabs_empty"];
     }
-  }
+  } // End Vivaldi
+
   switch (page) {
     case TabGridPageIncognitoTabs:
       return [UIImage imageNamed:@"tab_grid_incognito_tabs_empty"];
@@ -67,7 +70,6 @@ NSString* TitleForPageAndMode(TabGridPage page, TabGridMode mode) {
     return l10n_util::GetNSString(IDS_IOS_TAB_GRID_SEARCH_RESULTS_EMPTY_TITLE);
   }
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     switch (page) {
       case TabGridPageIncognitoTabs:
@@ -83,8 +85,7 @@ NSString* TitleForPageAndMode(TabGridPage page, TabGridMode mode) {
         return l10n_util::GetNSString(
             IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_EMPTY_TITLE);
     }
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   switch (page) {
     case TabGridPageIncognitoTabs:
@@ -113,7 +114,6 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
     return nil;
   }
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     switch (page) {
       case TabGridPageIncognitoTabs:
@@ -129,8 +129,7 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
         return l10n_util::GetNSString(
             IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_EMPTY_MESSAGE);
     }
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   switch (page) {
     case TabGridPageIncognitoTabs:
@@ -217,12 +216,25 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
     // The first time this moves to a superview, perform the view setup.
     if (self.subviews.count == 0)
       [self setupViews];
+
+    if (IsVivaldiRunning()) {
+      [self.container
+        anchorTop:nil
+          leading:self.safeAreaLayoutGuide.leadingAnchor
+           bottom:nil
+         trailing:self.safeAreaLayoutGuide.trailingAnchor
+          padding:UIEdgeInsetsMake(0, vTabGridEmptyStateViewContainerPadding,
+                                   0, vTabGridEmptyStateViewContainerPadding)];
+      [self.container centerXInSuperview];
+    } else {
     [self.container.widthAnchor
         constraintLessThanOrEqualToAnchor:self.safeAreaLayoutGuide.widthAnchor]
         .active = YES;
     [self.container.centerXAnchor
         constraintEqualToAnchor:self.safeAreaLayoutGuide.centerXAnchor]
         .active = YES;
+    } // End Vivaldi
+
   }
 }
 
@@ -263,14 +275,12 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
   _imageView = imageView;
   imageView.translatesAutoresizingMaskIntoConstraints = NO;
 
-  // Vivaldi
   if (IsVivaldiRunning()) {
     topLabel.textColor = [UIColor colorNamed:vTabGridEmptyStateTitleTextColor];
     bottomLabel.textColor =
         [UIColor colorNamed:vTabGridEmptyStateBodyTextColor];
     imageView.contentMode = UIViewContentModeScaleAspectFit;
-  }
-  // End Vivaldi
+  } // End Vivaldi
 
   [container addSubview:imageView];
 

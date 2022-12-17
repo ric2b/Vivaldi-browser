@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,32 +29,22 @@ class NetworkScreen : public BaseScreen, public NetworkStateHandlerObserver {
   using TView = NetworkScreenView;
 
   enum class Result {
-    CONNECTED_REGULAR,
-    CONNECTED_DEMO,
-    CONNECTED_REGULAR_CONSOLIDATED_CONSENT,
-    BACK_REGULAR,
-    BACK_DEMO,
-    BACK_OS_INSTALL,
+    CONNECTED,
+    BACK,
     NOT_APPLICABLE,
-    NOT_APPLICABLE_CONSOLIDATED_CONSENT,
-    NOT_APPLICABLE_CONNECTED_DEMO,
   };
 
   static std::string GetResultString(Result result);
 
   using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;
 
-  NetworkScreen(NetworkScreenView* view,
+  NetworkScreen(base::WeakPtr<NetworkScreenView> view,
                 const ScreenExitCallback& exit_callback);
 
   NetworkScreen(const NetworkScreen&) = delete;
   NetworkScreen& operator=(const NetworkScreen&) = delete;
 
   ~NetworkScreen() override;
-
-  // Called when `view` has been destroyed. If this instance is destroyed before
-  // the `view` it should call view->Unbind().
-  void OnViewDestroyed(NetworkScreenView* view);
 
   void set_exit_callback_for_testing(const ScreenExitCallback& exit_callback) {
     exit_callback_ = exit_callback;
@@ -81,7 +71,7 @@ class NetworkScreen : public BaseScreen, public NetworkStateHandlerObserver {
   bool MaybeSkip(WizardContext& context) override;
   void ShowImpl() override;
   void HideImpl() override;
-  void OnUserActionDeprecated(const std::string& action_id) override;
+  void OnUserAction(const base::Value::List& args) override;
   bool HandleAccelerator(LoginAcceleratorAction action) override;
 
   // NetworkStateHandlerObserver:
@@ -150,7 +140,7 @@ class NetworkScreen : public BaseScreen, public NetworkStateHandlerObserver {
   // Timer for connection timeout.
   base::OneShotTimer connection_timer_;
 
-  NetworkScreenView* view_ = nullptr;
+  base::WeakPtr<NetworkScreenView> view_;
   ScreenExitCallback exit_callback_;
   std::unique_ptr<login::NetworkStateHelper> network_state_helper_;
 

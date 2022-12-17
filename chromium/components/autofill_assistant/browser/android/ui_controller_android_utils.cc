@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,6 +80,8 @@ DrawableIcon MapDrawableIcon(DrawableProto::Icon icon) {
       return DrawableIcon::VISIBILITY_ON;
     case DrawableProto::VISIBILITY_OFF:
       return DrawableIcon::VISIBILITY_OFF;
+    case DrawableProto::INFO:
+      return DrawableIcon::INFO;
   }
 }
 
@@ -441,11 +443,11 @@ ValueProto ToNativeValue(JNIEnv* env,
   if (jdatetimes) {
     auto* mutable_dates = proto.mutable_dates();
     for (int i = 0; i < Java_AssistantValue_getListSize(env, jdatetimes); ++i) {
-      auto jvalue = Java_AssistantValue_getListAt(env, jdatetimes, i);
+      auto jdatetimes_value = Java_AssistantValue_getListAt(env, jdatetimes, i);
       DateProto date;
-      date.set_year(Java_AssistantDateTime_getYear(env, jvalue));
-      date.set_month(Java_AssistantDateTime_getMonth(env, jvalue));
-      date.set_day(Java_AssistantDateTime_getDay(env, jvalue));
+      date.set_year(Java_AssistantDateTime_getYear(env, jdatetimes_value));
+      date.set_month(Java_AssistantDateTime_getMonth(env, jdatetimes_value));
+      date.set_day(Java_AssistantDateTime_getDay(env, jdatetimes_value));
       *mutable_dates->add_values() = date;
     }
     return proto;
@@ -480,7 +482,8 @@ base::android::ScopedJavaLocalRef<jobject> CreateJavaInfoPopup(
     JNIEnv* env,
     const InfoPopupProto& info_popup_proto,
     const JavaRef<jobject>& jinfo_page_util,
-    const std::string& close_display_str) {
+    const std::string& close_display_str,
+    const JavaRef<jobject>& jdelegate) {
   base::android::ScopedJavaLocalRef<jobject> jpositive_button = nullptr;
   base::android::ScopedJavaLocalRef<jobject> jnegative_button = nullptr;
   base::android::ScopedJavaLocalRef<jobject> jneutral_button = nullptr;
@@ -512,7 +515,7 @@ base::android::ScopedJavaLocalRef<jobject> CreateJavaInfoPopup(
       env,
       base::android::ConvertUTF8ToJavaString(env, info_popup_proto.title()),
       base::android::ConvertUTF8ToJavaString(env, info_popup_proto.text()),
-      jpositive_button, jnegative_button, jneutral_button);
+      jpositive_button, jnegative_button, jneutral_button, jdelegate);
 }
 
 void ShowJavaInfoPopup(JNIEnv* env,
@@ -557,8 +560,8 @@ int ToJavaBottomSheetState(BottomSheetState state) {
     case BottomSheetState::COLLAPSED:
       return 1;
     case BottomSheetState::UNDEFINED:
-      // The current assumption is that Autobot always starts with the bottom
-      // sheet expanded.
+      // The current assumption is that AutofillAssistant always starts with the
+      // bottom sheet expanded.
     case BottomSheetState::EXPANDED:
       return 2;
     default:
@@ -652,12 +655,14 @@ std::unique_ptr<TriggerContext> CreateTriggerContext(
       env, jdevice_only_parameter_names, jdevice_only_parameter_values));
   return std::make_unique<TriggerContext>(
       std::move(script_parameters),
-      SafeConvertJavaStringToNative(env, jexperiment_ids), is_custom_tab,
-      onboarding_shown, is_direct_action,
-      SafeConvertJavaStringToNative(env, jinitial_url),
-      /* is_in_chrome_triggered = */ false,
-      /* is_externally_triggered = */ false,
-      /* skip_autofill_assistant_onboarding = */ false);
+      TriggerContext::Options(
+          SafeConvertJavaStringToNative(env, jexperiment_ids), is_custom_tab,
+          onboarding_shown, is_direct_action,
+          SafeConvertJavaStringToNative(env, jinitial_url),
+          /* is_in_chrome_triggered = */ false,
+          /* is_externally_triggered = */ false,
+          /* skip_autofill_assistant_onboarding = */ false,
+          /* suppress_browsing_features = */ true));
 }
 
 std::unique_ptr<Service> GetServiceToInject(JNIEnv* env,

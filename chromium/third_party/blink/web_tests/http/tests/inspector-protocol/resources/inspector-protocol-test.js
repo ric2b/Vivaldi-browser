@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -364,6 +364,11 @@ TestRunner.Session = class {
     const session = new TestRunner.Session(this._testRunner, sessionId);
     session._parentSessionId = this._sessionId;
     return session;
+  }
+
+  async attachChild(targetId) {
+    const {sessionId} = (await this.protocol.Target.attachToTarget({targetId, flatten: true})).result;
+    return this.createChild(sessionId);
   }
 
   async sendCommand(method, params) {

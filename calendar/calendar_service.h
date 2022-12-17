@@ -170,6 +170,12 @@ class CalendarService : public KeyedService {
       EventResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
+  base::CancelableTaskTracker::TaskId UpdateRecurrenceException(
+      RecurrenceExceptionID recurrence_id,
+      RecurrenceExceptionRow recurrence,
+      EventResultCallback callback,
+      base::CancelableTaskTracker* tracker);
+
   base::CancelableTaskTracker::TaskId CreateCalendar(
       CalendarRow ev,
       CreateCalendarCallback callback,

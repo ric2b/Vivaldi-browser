@@ -12,6 +12,7 @@
 #include "content/public/browser/url_data_source.h"
 
 class PrefService;
+class Profile;
 
 namespace content {
 class BrowserContext;
@@ -91,7 +92,7 @@ using ImportResult =
 // one of |theme_archive_path|, |theme_archive_data| must be non-empty. The
 // imported theme is stored in themes.preview preference and its id is passed to
 // the callback on success.
-void Import(base::WeakPtr<content::BrowserContext> browser_context,
+void Import(base::WeakPtr<Profile> profile,
             base::FilePath theme_archive_path,
             std::vector<uint8_t> theme_archive_data,
             ImportResult callback);

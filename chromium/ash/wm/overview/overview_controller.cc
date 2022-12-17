@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -367,8 +367,7 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
     DCHECK(CanEnterOverview());
     TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ui", "OverviewController::EnterOverview",
                                       this);
-    auto* active_window = window_util::GetActiveWindow();
-    if (active_window) {
+    if (auto* active_window = window_util::GetActiveWindow(); active_window) {
       auto* active_widget =
           views::Widget::GetWidgetForNativeView(active_window);
       if (active_widget)
@@ -391,9 +390,9 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
     const SplitViewController::State split_view_state =
         SplitViewController::Get(Shell::GetPrimaryRootWindow())->state();
     // Prevent overview from stealing focus if |split_view_state| is
-    // |SplitViewController::State::kLeftSnapped| or
-    // |SplitViewController::State::kRightSnapped|. Here are all the cases where
-    // |split_view_state| will now have one of those two values:
+    // |SplitViewController::State::kPrimarySnapped| or
+    // |SplitViewController::State::kSecondarySnapped|. Here are all the cases
+    // where |split_view_state| will now have one of those two values:
     // 1. The active window is maximized in tablet mode. The user presses Alt+[.
     // 2. The active window is maximized in tablet mode. The user presses Alt+].
     // 3. The active window is snapped on the right in tablet split view.
@@ -410,13 +409,13 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
     // |SplitViewController::OnOverviewModeStarting|, because in case of
     // |SplitViewController::State::kBothSnapped|, that function will insert one
     // of the two snapped windows to overview.
-    if (split_view_state == SplitViewController::State::kLeftSnapped ||
-        split_view_state == SplitViewController::State::kRightSnapped) {
+    if (split_view_state == SplitViewController::State::kPrimarySnapped ||
+        split_view_state == SplitViewController::State::kSecondarySnapped) {
       should_focus_overview_ = false;
     } else {
       // Avoid stealing activation from a dragged active window.
-      aura::Window* active_window = window_util::GetActiveWindow();
-      if (active_window && WindowState::Get(active_window)->is_dragged()) {
+      if (auto* active_window = window_util::GetActiveWindow();
+          active_window && WindowState::Get(active_window)->is_dragged()) {
         DCHECK(window_util::ShouldExcludeForOverview(active_window));
         should_focus_overview_ = false;
       }

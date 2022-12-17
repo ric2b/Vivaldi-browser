@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,13 +8,10 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/task/task_traits.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -28,27 +25,22 @@
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
-#include "chrome/browser/web_applications/externally_managed_app_manager_impl.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
-#include "chrome/browser/web_applications/test/fake_data_retriever.h"
 #include "chrome/browser/web_applications/test/fake_externally_managed_app_manager.h"
-#include "chrome/browser/web_applications/test/fake_web_app_database_factory.h"
-#include "chrome/browser/web_applications/test/fake_web_app_registry_controller.h"
+#include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/fake_web_app_ui_manager.h"
-#include "chrome/browser/web_applications/test/test_file_utils.h"
 #include "chrome/browser/web_applications/test/test_web_app_url_loader.h"
-#include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
-#include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
+#include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chromeos/login/login_state/login_state.h"
@@ -178,56 +170,36 @@ class SystemWebAppManagerTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
-    fake_registry_controller_ =
-        std::make_unique<web_app::FakeWebAppRegistryController>();
+    provider_ = web_app::FakeWebAppProvider::Get(profile());
+    provider_->SetDefaultFakeSubsystems();
 
-    controller().SetUp(profile());
-
-    install_manager_ =
+    auto install_manager =
         std::make_unique<web_app::WebAppInstallManager>(profile());
+    install_manager_ = install_manager.get();
+    provider_->SetInstallManager(std::move(install_manager));
+
+    auto install_finalizer =
+        std::make_unique<web_app::WebAppInstallFinalizer>(profile());
+    install_finalizer_ = install_finalizer.get();
+    provider_->SetInstallFinalizer(std::move(install_finalizer));
+
+    web_app::test::AwaitStartWebAppProviderAndSubsystems(profile());
+
+    // This is not a WebAppProvider subsystem, so this can be set
+    // after the WebAppProvider has started.
+    test_system_web_app_manager_ =
+        std::make_unique<TestSystemWebAppManager>(profile());
+
+    web_app_policy_manager().SetSystemWebAppDelegateMap(
+        &test_system_web_app_manager_->system_app_delegates());
+
+    test_system_web_app_manager_->SetSubsystems(
+        &externally_managed_app_manager(), &provider().registrar(),
+        &provider().sync_bridge(), &ui_manager(), &web_app_policy_manager());
+
     externally_installed_app_prefs_ =
         std::make_unique<web_app::ExternallyInstalledWebAppPrefs>(
             profile()->GetPrefs());
-    icon_manager_ = std::make_unique<web_app::WebAppIconManager>(
-        profile(), base::MakeRefCounted<web_app::TestFileUtils>());
-    web_app_policy_manager_ =
-        std::make_unique<web_app::WebAppPolicyManager>(profile());
-    install_finalizer_ =
-        std::make_unique<web_app::WebAppInstallFinalizer>(profile());
-    fake_externally_managed_app_manager_impl_ =
-        std::make_unique<web_app::FakeExternallyManagedAppManager>(profile());
-    test_system_web_app_manager_ =
-        std::make_unique<TestSystemWebAppManager>(profile());
-    test_ui_manager_ = std::make_unique<web_app::FakeWebAppUiManager>();
-    command_manager_ =
-        std::make_unique<web_app::WebAppCommandManager>(profile());
-
-    install_finalizer().SetSubsystems(
-        &install_manager(), &controller().registrar(), &ui_manager(),
-        &controller().sync_bridge(), &controller().os_integration_manager(),
-        &icon_manager(), web_app_policy_manager_.get(),
-        &controller().translation_manager(), &command_manager());
-
-    install_manager().SetSubsystems(
-        &controller().registrar(), &controller().os_integration_manager(),
-        &controller().command_manager(), &install_finalizer(), &icon_manager(),
-        &controller().sync_bridge(), &controller().translation_manager());
-
-    icon_manager().SetSubsystems(&controller().registrar(), &install_manager());
-
-    externally_managed_app_manager().SetSubsystems(
-        &controller().registrar(), &ui_manager(), &install_finalizer(),
-        &command_manager(), &controller().sync_bridge());
-
-    web_app_policy_manager().SetSubsystems(
-        &externally_managed_app_manager(), &controller().registrar(),
-        &controller().sync_bridge(), &controller().os_integration_manager());
-    web_app_policy_manager().SetSystemWebAppDelegateMap(
-        &system_web_app_manager().system_app_delegates());
-
-    system_web_app_manager().SetSubsystems(
-        &externally_managed_app_manager(), &controller().registrar(),
-        &controller().sync_bridge(), &ui_manager(), &web_app_policy_manager());
   }
 
   void TearDown() override {
@@ -236,92 +208,77 @@ class SystemWebAppManagerTest : public ChromeRenderViewHostTestHarness {
   }
 
   void DestroyManagers() {
-    // The reverse order of creation:
-    command_manager_->Shutdown();
-    command_manager_.reset();
-    test_ui_manager_.reset();
+    provider_->Shutdown();
     test_system_web_app_manager_.reset();
-    fake_externally_managed_app_manager_impl_.reset();
-    install_manager_.reset();
-    install_finalizer_.reset();
-    web_app_policy_manager_.reset();
-    icon_manager_.reset();
     externally_installed_app_prefs_.reset();
-    fake_registry_controller_.reset();
   }
 
-  void DestroyUiManager() { test_ui_manager_.reset(); }
+  void DestroyUiManager() { provider_->ShutDownUiManagerForTesting(); }
 
  protected:
-  web_app::FakeWebAppRegistryController& controller() {
-    return *fake_registry_controller_;
-  }
+  web_app::WebAppProvider& provider() { return *provider_; }
 
   web_app::ExternallyInstalledWebAppPrefs& externally_installed_app_prefs() {
     return *externally_installed_app_prefs_;
   }
 
-  web_app::WebAppIconManager& icon_manager() { return *icon_manager_; }
+  web_app::WebAppIconManager& icon_manager() {
+    return provider().icon_manager();
+  }
 
   web_app::WebAppInstallFinalizer& install_finalizer() {
     return *install_finalizer_;
   }
 
-  web_app::WebAppInstallManager& install_manager() { return *install_manager_; }
+  web_app::WebAppInstallManager& install_manager() {
+    return provider().install_manager();
+  }
 
-  web_app::WebAppCommandManager& command_manager() { return *command_manager_; }
+  web_app::WebAppCommandManager& command_manager() {
+    return provider().command_manager();
+  }
 
   web_app::FakeExternallyManagedAppManager& externally_managed_app_manager() {
-    return *fake_externally_managed_app_manager_impl_;
+    return static_cast<web_app::FakeExternallyManagedAppManager&>(
+        provider().externally_managed_app_manager());
   }
 
   TestSystemWebAppManager& system_web_app_manager() {
     return *test_system_web_app_manager_;
   }
 
-  web_app::FakeWebAppUiManager& ui_manager() { return *test_ui_manager_; }
+  web_app::FakeWebAppUiManager& ui_manager() {
+    return static_cast<web_app::FakeWebAppUiManager&>(provider().ui_manager());
+  }
 
   web_app::WebAppPolicyManager& web_app_policy_manager() {
-    return *web_app_policy_manager_;
+    return provider().policy_manager();
   }
 
   bool IsInstalled(const GURL& install_url) {
-    return controller().registrar().IsInstalled(
+    return provider().registrar().IsInstalled(
         web_app::GenerateAppId(/*manifest_id=*/absl::nullopt, install_url));
-  }
-
-  void InitRegistrarWithRegistry(const web_app::Registry& registry) {
-    controller().database_factory().WriteRegistry(registry);
-    controller().Init();
-
-    // Must come after registry controller initialization.
-    install_manager().Start();
-    install_finalizer().Start();
   }
 
   void InitRegistrarWithSystemApps(
       const std::vector<SystemAppData>& system_app_data_list) {
-    DCHECK(controller().registrar().is_empty());
+    DCHECK(provider().registrar().is_empty());
     DCHECK(!system_app_data_list.empty());
 
-    web_app::Registry registry;
     for (const SystemAppData& data : system_app_data_list) {
       std::unique_ptr<web_app::WebApp> web_app = web_app::test::CreateWebApp(
           data.url, web_app::WebAppManagement::Type::kSystem);
       const web_app::AppId app_id = web_app->app_id();
-      registry.emplace(app_id, std::move(web_app));
+      {
+        web_app::ScopedRegistryUpdate update(&provider().sync_bridge());
+        update->CreateApp(std::move(web_app));
+      }
 
       externally_installed_app_prefs().Insert(
           data.url,
           web_app::GenerateAppId(/*manifest_id=*/absl::nullopt, data.url),
           data.source);
     }
-    InitRegistrarWithRegistry(registry);
-  }
-
-  void InitEmptyRegistrar() {
-    web_app::Registry registry;
-    InitRegistrarWithRegistry(registry);
   }
 
   void StartAndWaitForAppsToSynchronize() {
@@ -331,19 +288,13 @@ class SystemWebAppManagerTest : public ChromeRenderViewHostTestHarness {
   }
 
  private:
-  std::unique_ptr<web_app::FakeWebAppRegistryController>
-      fake_registry_controller_;
+  raw_ptr<web_app::FakeWebAppProvider> provider_;
+  raw_ptr<web_app::WebAppInstallFinalizer> install_finalizer_;
+  raw_ptr<web_app::WebAppInstallManager> install_manager_;
+
+  std::unique_ptr<TestSystemWebAppManager> test_system_web_app_manager_;
   std::unique_ptr<web_app::ExternallyInstalledWebAppPrefs>
       externally_installed_app_prefs_;
-  std::unique_ptr<web_app::WebAppIconManager> icon_manager_;
-  std::unique_ptr<web_app::WebAppPolicyManager> web_app_policy_manager_;
-  std::unique_ptr<web_app::WebAppInstallFinalizer> install_finalizer_;
-  std::unique_ptr<web_app::WebAppInstallManager> install_manager_;
-  std::unique_ptr<web_app::FakeExternallyManagedAppManager>
-      fake_externally_managed_app_manager_impl_;
-  std::unique_ptr<TestSystemWebAppManager> test_system_web_app_manager_;
-  std::unique_ptr<web_app::FakeWebAppUiManager> test_ui_manager_;
-  std::unique_ptr<web_app::WebAppCommandManager> command_manager_;
 };
 
 class SystemWebAppManagerTest_PrefMigrationEnabled
@@ -432,8 +383,6 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 // Test that System Apps do install with the pref migration enabled.
 TEST_F(SystemWebAppManagerTest, Enabled) {
-  InitEmptyRegistrar();
-
   SystemWebAppDelegateMap system_apps;
   system_apps.emplace(SystemWebAppType::SETTINGS,
                       std::make_unique<UnittestingSystemAppDelegate>(
@@ -454,7 +403,6 @@ TEST_F(SystemWebAppManagerTest, AlwaysUpdate) {
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kAlwaysUpdate);
 
-  InitEmptyRegistrar();
   {
     SystemWebAppDelegateMap system_apps;
     system_apps.emplace(
@@ -498,7 +446,6 @@ TEST_F(SystemWebAppManagerTest, UpdateOnVersionChange) {
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kOnVersionChange);
 
-  InitEmptyRegistrar();
   {
     SystemWebAppDelegateMap system_apps;
     system_apps.emplace(
@@ -587,8 +534,6 @@ TEST_F(SystemWebAppManagerTest, UpdateOnLocaleChange) {
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kOnVersionChange);
 
-  InitEmptyRegistrar();
-
   SystemWebAppDelegateMap system_apps;
   system_apps.emplace(SystemWebAppType::SETTINGS,
                       std::make_unique<UnittestingSystemAppDelegate>(
@@ -631,7 +576,6 @@ TEST_F(SystemWebAppManagerTest, InstallResultHistogram) {
       std::string(SystemWebAppManager::kInstallResultHistogramName) +
       ".Profiles.Other";
 
-  InitEmptyRegistrar();
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kAlwaysUpdate);
 
@@ -765,7 +709,6 @@ TEST_F(SystemWebAppManagerTest,
       std::string(SystemWebAppManager::kInstallResultHistogramName) +
       ".Profiles.Other";
 
-  InitEmptyRegistrar();
   SystemWebAppDelegateMap system_apps;
   system_apps.emplace(SystemWebAppType::SETTINGS,
                       std::make_unique<UnittestingSystemAppDelegate>(
@@ -802,7 +745,6 @@ TEST_F(SystemWebAppManagerTest,
        InstallDurationHistogram_ExcludeNonForceInstall) {
   base::HistogramTester histograms;
 
-  InitEmptyRegistrar();
   SystemWebAppDelegateMap system_apps;
   system_apps.emplace(SystemWebAppType::SETTINGS,
                       std::make_unique<UnittestingSystemAppDelegate>(
@@ -862,8 +804,6 @@ TEST_F(SystemWebAppManagerTest, AbandonFailedInstalls) {
 
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kOnVersionChange);
-
-  InitEmptyRegistrar();
 
   SystemWebAppDelegateMap system_apps;
   system_apps.emplace(SystemWebAppType::SETTINGS,
@@ -935,8 +875,6 @@ TEST_F(SystemWebAppManagerTest, AbandonFailedInstallsLocaleChange) {
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kOnVersionChange);
 
-  InitEmptyRegistrar();
-
   SystemWebAppDelegateMap system_apps;
   system_apps.emplace(SystemWebAppType::SETTINGS,
                       std::make_unique<UnittestingSystemAppDelegate>(
@@ -1004,8 +942,6 @@ TEST_F(SystemWebAppManagerTest, SucceedsAfterOneRetry) {
 
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kOnVersionChange);
-
-  InitEmptyRegistrar();
 
   // Set up and install a baseline
   SystemWebAppDelegateMap system_apps;
@@ -1075,7 +1011,6 @@ TEST_F(SystemWebAppManagerTest, ForceReinstallFeature) {
   const std::vector<web_app::ExternalInstallOptions>& install_requests =
       externally_managed_app_manager().install_requests();
 
-  InitEmptyRegistrar();
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kOnVersionChange);
 
@@ -1114,8 +1049,6 @@ TEST_F(SystemWebAppManagerTest, IsSWABeforeSync) {
   system_web_app_manager().SetUpdatePolicy(
       SystemWebAppManager::UpdatePolicy::kOnVersionChange);
 
-  InitEmptyRegistrar();
-
   // Set up and install a baseline
   {
     SystemWebAppDelegateMap system_apps;
@@ -1135,8 +1068,8 @@ TEST_F(SystemWebAppManagerTest, IsSWABeforeSync) {
       std::make_unique<TestSystemWebAppManager>(profile());
 
   unsynced_system_web_app_manager->SetSubsystems(
-      &externally_managed_app_manager(), &controller().registrar(),
-      &controller().sync_bridge(), &ui_manager(), &web_app_policy_manager());
+      &externally_managed_app_manager(), &provider().registrar(),
+      &provider().sync_bridge(), &ui_manager(), &web_app_policy_manager());
   {
     SystemWebAppDelegateMap system_apps;
     system_apps.emplace(
@@ -1183,8 +1116,6 @@ class SystemWebAppManagerTimerTest : public SystemWebAppManagerTest {
             base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
   void SetupTimer(absl::optional<base::TimeDelta> period,
                   bool open_immediately) {
-    InitEmptyRegistrar();
-
     SystemWebAppDelegateMap system_apps;
     system_apps.emplace(
         SystemWebAppType::SETTINGS,
@@ -1197,8 +1128,6 @@ class SystemWebAppManagerTimerTest : public SystemWebAppManagerTest {
 };
 
 TEST_F(SystemWebAppManagerTimerTest, BackgroundTaskDisabled) {
-  InitEmptyRegistrar();
-
   // 1) Disabled app should not push to background tasks.
   {
     std::unique_ptr<TimerSystemAppDelegate> sys_app_delegate =
@@ -1524,8 +1453,6 @@ TEST_F(SystemWebAppManagerTimerTest, TestTimerRunsAfterIdleLimitReached) {
 
 TEST_F(SystemWebAppManagerTest,
        HonorsRegisteredAppsDespiteOfPersistedWebAppInfo) {
-  InitEmptyRegistrar();
-
   SystemWebAppDelegateMap system_apps;
   system_apps.emplace(
       SystemWebAppType::SETTINGS,
@@ -1554,12 +1481,12 @@ TEST_F(SystemWebAppManagerTest,
       std::make_unique<TestSystemWebAppManager>(profile());
 
   unsynced_system_web_app_manager->SetSubsystems(
-      &externally_managed_app_manager(), &controller().registrar(),
-      &controller().sync_bridge(), &ui_manager(), &web_app_policy_manager());
+      &externally_managed_app_manager(), &provider().registrar(),
+      &provider().sync_bridge(), &ui_manager(), &web_app_policy_manager());
 
   // Before Apps are synchronized, WebAppRegistry should know about the App.
   const web_app::WebApp* web_app =
-      controller().registrar().GetAppById(*opt_app_id);
+      provider().registrar().GetAppById(*opt_app_id);
   ASSERT_TRUE(web_app);
   ASSERT_TRUE(web_app->client_data().system_web_app_data.has_value());
   ASSERT_EQ(SystemWebAppType::SETTINGS,
@@ -1576,7 +1503,6 @@ TEST_F(SystemWebAppManagerTest,
 }
 
 TEST_F(SystemWebAppManagerTest, DestroyUiManager) {
-  InitEmptyRegistrar();
   StartAndWaitForAppsToSynchronize();
 
   base::RunLoop run_loop;
@@ -1603,9 +1529,6 @@ class SystemWebAppManagerInKioskTest : public ChromeRenderViewHostTestHarness {
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-    scoped_feature_list_->InitAndEnableFeature(
-        ::features::kKioskEnableAppService);
 
     chromeos::LoginState::Initialize();
     chromeos::LoginState::Get()->SetLoggedInState(
@@ -1617,7 +1540,6 @@ class SystemWebAppManagerInKioskTest : public ChromeRenderViewHostTestHarness {
 
   void TearDown() override {
     system_web_app_manager_.reset();
-    scoped_feature_list_.reset();
     chromeos::LoginState::Shutdown();
     ChromeRenderViewHostTestHarness::TearDown();
   }
@@ -1628,7 +1550,6 @@ class SystemWebAppManagerInKioskTest : public ChromeRenderViewHostTestHarness {
   }
 
  private:
-  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
   std::unique_ptr<SystemWebAppManager> system_web_app_manager_;
 };
 

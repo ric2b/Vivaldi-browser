@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,8 @@ LaunchResult::LaunchResult() = default;
 LaunchResult::~LaunchResult() = default;
 
 LaunchResult::LaunchResult(LaunchResult&& other) = default;
+
+LaunchResult::LaunchResult(LaunchResult::State state) : state(state) {}
 
 #if BUILDFLAG(IS_CHROMEOS)
 LaunchResult ConvertMojomLaunchResultToLaunchResult(
@@ -43,5 +45,13 @@ LaunchResultToMojomLaunchResultCallback(LaunchCallback callback) {
       std::move(callback));
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
+
+LaunchResult ConvertBoolToLaunchResult(bool success) {
+  return success ? LaunchResult(State::SUCCESS) : LaunchResult(State::FAILED);
+}
+
+bool ConvertLaunchResultToBool(const LaunchResult& result) {
+  return result.state == State::SUCCESS ? true : false;
+}
 
 }  // namespace apps

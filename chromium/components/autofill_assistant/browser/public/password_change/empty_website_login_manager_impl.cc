@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,26 +26,11 @@ void EmptyWebsiteLoginManagerImpl::GetPasswordForLogin(
   std::move(callback).Run(false, std::string());
 }
 
-void EmptyWebsiteLoginManagerImpl::DeletePasswordForLogin(
-    const Login& login,
-    base::OnceCallback<void(bool)> callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  std::move(callback).Run(false);
-}
-
 void EmptyWebsiteLoginManagerImpl::GetGetLastTimePasswordUsed(
     const Login& login,
     base::OnceCallback<void(absl::optional<base::Time>)> callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   std::move(callback).Run(absl::nullopt);
-}
-
-void EmptyWebsiteLoginManagerImpl::EditPasswordForLogin(
-    const Login& login,
-    const std::string& new_password,
-    base::OnceCallback<void(bool)> callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  std::move(callback).Run(false);
 }
 
 absl::optional<std::string> EmptyWebsiteLoginManagerImpl::GeneratePassword(

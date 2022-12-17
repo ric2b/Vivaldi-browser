@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <utility>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/system_tray.h"
@@ -24,6 +23,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
 #include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -301,11 +301,12 @@ void UpdateRequiredScreen::ShowErrorMessage() {
 }
 
 void UpdateRequiredScreen::UpdateErrorMessage(
-    const NetworkPortalDetector::CaptivePortalStatus status,
-    const NetworkError::ErrorState& error_state,
+    NetworkState::PortalState state,
+    NetworkError::ErrorState error_state,
     const std::string& network_name) {
   error_screen_->SetErrorState(error_state, network_name);
-  if (status == NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL) {
+  if (state == NetworkState::PortalState::kPortal ||
+      state == NetworkState::PortalState::kPortalSuspected) {
     if (is_first_portal_notification_) {
       is_first_portal_notification_ = false;
       error_screen_->FixCaptivePortal();

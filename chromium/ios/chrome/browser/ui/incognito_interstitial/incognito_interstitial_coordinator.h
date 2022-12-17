@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,14 +26,6 @@
 @property(nonatomic, assign) UrlLoadParams urlLoadParams;
 
 - (instancetype)init NS_UNAVAILABLE;
-
-// Stops the coordinator and dismisses the Incognito interstitial with
-// `completion` as a completion.
-- (void)stopWithCompletion:(ProceduralBlock)completion;
-
-// Starts the coordinator and shows the Incognito interstitial with `completion`
-// as a completion.
-- (void)startWithCompletion:(ProceduralBlock)completion;
 
 @end
 

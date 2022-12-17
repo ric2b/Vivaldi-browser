@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
@@ -39,6 +40,25 @@ import java.util.List;
  */
 class TabSelectionEditorCoordinator {
     static final String COMPONENT_NAME = "TabSelectionEditor";
+
+    // TODO(977271): Unify similar interfaces in other components that used the TabListCoordinator.
+    /**
+     * Interface for resetting the selectable tab grid.
+     */
+    interface ResetHandler {
+        /**
+         * Handles the reset event.
+         * @param tabs List of {@link Tab}s to reset.
+         * @param preSelectedCount First {@code preSelectedCount} {@code tabs} are pre-selected.
+         * @param quickMode whether to use quick mode.
+         */
+        void resetWithListOfTabs(@Nullable List<Tab> tabs, int preSelectedCount, boolean quickMode);
+
+        /**
+         * Handles cleanup.
+         */
+        void postHiding();
+    }
 
     /**
      * An interface to control the TabSelectionEditor.
@@ -108,10 +128,12 @@ class TabSelectionEditorCoordinator {
     public static class TabSelectionEditorNavigationProvider {
         private final TabSelectionEditorCoordinator
                 .TabSelectionEditorController mTabSelectionEditorController;
+        private final Context mContext;
 
-        public TabSelectionEditorNavigationProvider(
+        public TabSelectionEditorNavigationProvider(Context context,
                 TabSelectionEditorCoordinator
                         .TabSelectionEditorController tabSelectionEditorController) {
+            mContext = context;
             mTabSelectionEditorController = tabSelectionEditorController;
         }
 
@@ -119,7 +141,11 @@ class TabSelectionEditorCoordinator {
          * Defines what to do when the navigation button is clicked.
          */
         public void goBack() {
-            RecordUserAction.record("TabMultiSelect.Cancelled");
+            if (TabUiFeatureUtilities.isTabSelectionEditorV2Enabled(mContext)) {
+                RecordUserAction.record("TabMultiSelectV2.ClosedByUser");
+            } else {
+                RecordUserAction.record("TabMultiSelect.Cancelled");
+            }
             mTabSelectionEditorController.hide();
         }
     }
@@ -133,26 +159,36 @@ class TabSelectionEditorCoordinator {
     private final PropertyModel mModel;
     private final PropertyModelChangeProcessor mTabSelectionEditorLayoutChangeProcessor;
     private final TabSelectionEditorMediator mTabSelectionEditorMediator;
+    private MultiThumbnailCardProvider mMultiThumbnailCardProvider;
 
     public TabSelectionEditorCoordinator(Context context, ViewGroup parentView,
             TabModelSelector tabModelSelector, TabContentManager tabContentManager,
-            @TabListMode int mode, ViewGroup rootView) {
+            @TabListMode int mode, ViewGroup rootView, boolean displayGroups) {
         try (TraceEvent e = TraceEvent.scoped("TabSelectionEditorCoordinator.constructor")) {
             mContext = context;
             mParentView = parentView;
             mTabModelSelector = tabModelSelector;
             assert mode == TabListCoordinator.TabListMode.GRID
                     || mode == TabListCoordinator.TabListMode.LIST;
+            assert !displayGroups
+                    || (displayGroups
+                            && ChromeFeatureList.isEnabled(
+                                    ChromeFeatureList.TAB_SELECTION_EDITOR_V2));
 
             mTabSelectionEditorLayout =
                     LayoutInflater.from(context)
                             .inflate(R.layout.tab_selection_editor_layout, parentView, false)
                             .findViewById(R.id.selectable_list);
 
-            // TODO(ckitagawa): Modify this initializer to support group selection
-            // if requested.
+            TabListMediator.ThumbnailProvider thumbnailProvider =
+                    initThumbnailProvider(displayGroups, tabContentManager);
+            PseudoTab.TitleProvider titleProvider = displayGroups ? this::getTitle : null;
+
+            // TODO(ckitagawa): Lazily instantiate the TabSelectionEditorCoordinator. When doing so,
+            // the Coordinator hosting the TabSelectionEditorCoordinator could share and reconfigure
+            // its TabListCoordinator to work with the editor as an optimization.
             mTabListCoordinator = new TabListCoordinator(mode, context, mTabModelSelector,
-                    tabContentManager::getTabThumbnailWithCallback, null, false, null, null,
+                    thumbnailProvider, titleProvider, displayGroups, null, null,
                     TabProperties.UiType.SELECTABLE, this::getSelectionDelegate, null,
                     mTabSelectionEditorLayout, false, COMPONENT_NAME, rootView, null);
 
@@ -160,6 +196,9 @@ class TabSelectionEditorCoordinator {
             // initialized.
             assert LibraryLoader.getInstance().isInitialized();
             mTabListCoordinator.initWithNative(null);
+            if (mMultiThumbnailCardProvider != null) {
+                mMultiThumbnailCardProvider.initWithNative();
+            }
 
             mTabListCoordinator.registerItemType(TabProperties.UiType.DIVIDER,
                     new LayoutViewBuilder(R.layout.divider_preference),
@@ -195,9 +234,23 @@ class TabSelectionEditorCoordinator {
             mTabSelectionEditorLayoutChangeProcessor = PropertyModelChangeProcessor.create(
                     mModel, mTabSelectionEditorLayout, TabSelectionEditorLayoutBinder::bind, false);
 
+            ResetHandler resetHandler = new ResetHandler() {
+                @Override
+                public void resetWithListOfTabs(
+                        @Nullable List<Tab> tabs, int preSelectedCount, boolean quickMode) {
+                    TabSelectionEditorCoordinator.this.resetWithListOfTabs(
+                            tabs, preSelectedCount, quickMode);
+                }
+
+                @Override
+                public void postHiding() {
+                    mTabListCoordinator.postHiding();
+                    mTabListCoordinator.softCleanup();
+                }
+            };
             mTabSelectionEditorMediator = new TabSelectionEditorMediator(mContext,
-                    mTabModelSelector, this::resetWithListOfTabs, mModel, mSelectionDelegate,
-                    mTabSelectionEditorLayout.getToolbar());
+                    mTabModelSelector, mTabListCoordinator, resetHandler, mModel,
+                    mSelectionDelegate, mTabSelectionEditorLayout.getToolbar(), displayGroups);
         }
     }
 
@@ -224,6 +277,28 @@ class TabSelectionEditorCoordinator {
         }
     }
 
+    private String getTitle(Context context, PseudoTab tab) {
+        int numRelatedTabs = PseudoTab.getRelatedTabs(context, tab, mTabModelSelector).size();
+
+        if (numRelatedTabs == 1) return tab.getTitle();
+
+        return context.getResources().getQuantityString(
+                R.plurals.bottom_tab_grid_title_placeholder, numRelatedTabs, numRelatedTabs);
+    }
+
+    private TabListMediator.ThumbnailProvider initThumbnailProvider(
+            boolean displayGroups, TabContentManager tabContentManager) {
+        if (displayGroups) {
+            mMultiThumbnailCardProvider =
+                    new MultiThumbnailCardProvider(mContext, tabContentManager, mTabModelSelector);
+            return mMultiThumbnailCardProvider;
+        }
+        return (tabId, thumbnailSize, callback, forceUpdate, writeBack, isSelected) -> {
+            tabContentManager.getTabThumbnailWithCallback(
+                    tabId, thumbnailSize, callback, forceUpdate, writeBack);
+        };
+    }
+
     /**
      * @return {@link TabSelectionEditorController} that can control the TabSelectionEditor.
      */
@@ -239,6 +314,9 @@ class TabSelectionEditorCoordinator {
         mTabSelectionEditorLayout.destroy();
         mTabSelectionEditorMediator.destroy();
         mTabSelectionEditorLayoutChangeProcessor.destroy();
+        if (mMultiThumbnailCardProvider != null) {
+            mMultiThumbnailCardProvider.destroy();
+        }
     }
 
     /**

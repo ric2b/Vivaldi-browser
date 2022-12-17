@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,7 +42,7 @@ import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.FlakyTest;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ClientSettingsProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ClientSettingsProto.IntegrationTestSettings;
@@ -106,7 +106,7 @@ public class AutofillAssistantAccessibilityIntegrationTest {
 
     @Test
     @MediumTest
-    @FlakyTest(message = "see crbug.com/1207665")
+    @DisabledTest(message = "see crbug.com/1207665")
     public void testBottomSheetHasRestrictedFixedHeight() throws Exception {
         ArrayList<ActionProto> list = new ArrayList<>();
 
@@ -178,7 +178,7 @@ public class AutofillAssistantAccessibilityIntegrationTest {
 
     @Test
     @MediumTest
-    @FlakyTest(message = "https://crbug.com/1254423")
+    @DisabledTest(message = "https://crbug.com/1254423")
     public void testBottomSheetListensToAccessibilityChanges() throws Exception {
         ArrayList<ActionProto> list = new ArrayList<>();
 

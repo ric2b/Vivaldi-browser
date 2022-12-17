@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,20 +9,28 @@
 #include "chrome/browser/ui/web_applications/sub_apps_service_impl.h"
 
 #include "base/containers/flat_set.h"
+#include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/commands/sub_app_install_command.h"
+#include "chrome/browser/web_applications/manifest_update_task.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/webapps/browser/install_result_code.h"
+#include "components/webapps/browser/uninstall_result_code.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -81,6 +89,18 @@ class SubAppsServiceImplBrowserTest : public WebAppControllerBrowserTest {
   }
 
   void UninstallParentApp() { UninstallWebApp(parent_app_id_); }
+
+  void UninstallParentAppBySource(WebAppManagement::Type source) {
+    base::RunLoop run_loop;
+    provider().install_finalizer().UninstallExternalWebApp(
+        parent_app_id_, source,
+        webapps::WebappUninstallSource::kParentUninstall,
+        base::BindLambdaForTesting([&](webapps::UninstallResultCode code) {
+          EXPECT_EQ(code, webapps::UninstallResultCode::kSuccess);
+          run_loop.Quit();
+        }));
+    run_loop.Run();
+  }
 
   std::vector<AppId> GetAllSubAppIds(const AppId& parent_app_id) {
     return provider().registrar().GetAllSubAppIds(parent_app_id);
@@ -326,6 +346,11 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest, AddList) {
 
 // Verify that Add works if PWA is launched as standalone window.
 IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest, AddStandaloneWindow) {
+  // This is to ensure that for manifest updates, we auto
+  // accept the identity dialog and bypass the window closing requirement.
+  chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+  ManifestUpdateTask::BypassWindowCloseWaitingForTesting() = true;
+
   NavigateToParentApp();
   InstallParentApp();
   content::WebContents* web_contents = OpenApplication(parent_app_id_);
@@ -373,8 +398,9 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest,
           std::pair{
               unhashed_sub_app_id_1,
               blink::mojom::SubAppsServiceAddResultCode::kSuccessNewInstall},
-          std::pair{unhashed_sub_app_id_2,
-                    blink::mojom::SubAppsServiceAddResultCode::kFailure},
+          std::pair{
+              unhashed_sub_app_id_2,
+              blink::mojom::SubAppsServiceAddResultCode::kInstallUrlInvalid},
           std::pair{
               unhashed_sub_app_id_3,
               blink::mojom::SubAppsServiceAddResultCode::kSuccessNewInstall}));
@@ -422,9 +448,11 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest,
   UnhashedAppId unhashed_sub_app_id =
       GenerateAppIdUnhashed(/*manifest_id=*/absl::nullopt, kSubAppUrl);
 
-  std::vector<blink::mojom::SubAppsServiceAddResultPtr> results;
+  std::vector<blink::mojom::SubAppsServiceAddResultPtr> expected =
+      Result(blink::mojom::SubAppsServiceAddResultCode::kParentAppUninstalled,
+             unhashed_sub_app_id);
 
-  EXPECT_EQ(std::move(results), CallAdd({{unhashed_sub_app_id, kSubAppUrl}}));
+  EXPECT_EQ(expected, CallAdd({{unhashed_sub_app_id, kSubAppUrl}}));
 }
 
 // Add call should fail if the parent app is uninstalled between the add call
@@ -438,17 +466,17 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest,
       GenerateAppIdUnhashed(/*manifest_id=*/absl::nullopt, kSubAppUrl);
 
   AppInstallResults results;
-  base::flat_set<AppId> app_ids = {
-      GenerateAppIdFromUnhashed(unhashed_sub_app_id)};
   std::vector<std::pair<UnhashedAppId, GURL>> subapps = {
       {unhashed_sub_app_id, kSubAppUrl}};
   auto install_command = std::make_unique<SubAppInstallCommand>(
-      &provider().install_manager(), &provider().registrar(), parent_app_id_,
-      std::move(subapps), app_ids,
+      parent_app_id_, std::move(subapps),
       base::BindLambdaForTesting([&](AppInstallResults arg_results) {
         results = arg_results;
         loop.Quit();
-      }));
+      }),
+      profile(), &provider().registrar(), &provider().install_finalizer(),
+      std::make_unique<WebAppUrlLoader>(),
+      std::make_unique<WebAppDataRetriever>());
   provider().command_manager().ScheduleCommand(std::move(install_command));
   loop.Run();
 
@@ -476,9 +504,11 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest,
   UnhashedAppId unhashed_sub_app_id =
       GenerateAppIdUnhashed(/*manifest_id=*/absl::nullopt, kSubAppUrl);
 
-  std::vector<blink::mojom::SubAppsServiceAddResultPtr> results;
+  std::vector<blink::mojom::SubAppsServiceAddResultPtr> expected =
+      Result(blink::mojom::SubAppsServiceAddResultCode::kParentAppUninstalled,
+             unhashed_sub_app_id);
 
-  EXPECT_EQ(std::move(results), CallAdd({{unhashed_sub_app_id, kSubAppUrl}}));
+  EXPECT_EQ(expected, CallAdd({{unhashed_sub_app_id, kSubAppUrl}}));
 }
 
 // Verify that Add fails for an empty list.
@@ -548,9 +578,10 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest, AddNonExistent) {
   UnhashedAppId unhashed_sub_app_id =
       GenerateAppIdUnhashed(/*manifest_id=*/absl::nullopt, kSubAppUrl);
 
-  EXPECT_EQ(Result(blink::mojom::SubAppsServiceAddResultCode::kFailure,
-                   unhashed_sub_app_id),
-            CallAdd({{unhashed_sub_app_id, kSubAppUrl}}));
+  EXPECT_EQ(
+      Result(blink::mojom::SubAppsServiceAddResultCode::kInstallUrlInvalid,
+             unhashed_sub_app_id),
+      CallAdd({{unhashed_sub_app_id, kSubAppUrl}}));
   EXPECT_EQ(0ul, GetAllSubAppIds(parent_app_id_).size());
 }
 
@@ -599,6 +630,55 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest,
       GenerateAppIdFromUnhashed(unhashed_sub_app_id_2)));
   EXPECT_FALSE(provider().registrar().IsInstalled(
       GenerateAppIdFromUnhashed(unhashed_sub_app_id_3)));
+}
+
+// Verify that uninstalling an app that has multiple sources just
+// removes a source and does not end up removing the sub_apps.
+IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest,
+                       RemovingSourceFromParentAppDoesNotRemoveSubApps) {
+  NavigateToParentApp();
+  InstallParentApp();
+  BindRemote();
+
+  // Add another source to mock installation from 2 sources.
+  {
+    ScopedRegistryUpdate update(&provider().sync_bridge());
+    WebApp* web_app = update->UpdateApp(parent_app_id_);
+    if (web_app)
+      web_app->AddSource(WebAppManagement::kDefault);
+  }
+
+  // Verify that 2 subapps are installed.
+  UnhashedAppId unhashed_sub_app_id_1 =
+      GenerateAppIdUnhashed(/*manifest_id=*/absl::nullopt, GetURL(kSubAppPath));
+  UnhashedAppId unhashed_sub_app_id_2 = GenerateAppIdUnhashed(
+      /*manifest_id=*/absl::nullopt, GetURL(kSubAppPath2));
+
+  EXPECT_EQ(
+      Result(blink::mojom::SubAppsServiceAddResultCode::kSuccessNewInstall,
+             unhashed_sub_app_id_1),
+      CallAdd({{unhashed_sub_app_id_1, GetURL(kSubAppPath)}}));
+  EXPECT_EQ(
+      Result(blink::mojom::SubAppsServiceAddResultCode::kSuccessNewInstall,
+             unhashed_sub_app_id_2),
+      CallAdd({{unhashed_sub_app_id_2, GetURL(kSubAppPath2)}}));
+
+  EXPECT_TRUE(provider().registrar().IsInstalled(
+      GenerateAppIdFromUnhashed(unhashed_sub_app_id_1)));
+  EXPECT_TRUE(provider().registrar().IsInstalled(
+      GenerateAppIdFromUnhashed(unhashed_sub_app_id_2)));
+
+  UninstallParentAppBySource(WebAppManagement::kDefault);
+  // Verify that parent app and sub_apps are still installed, only
+  // the default install source is removed from the parent app.
+  EXPECT_TRUE(provider().registrar().IsInstalled(parent_app_id_));
+  EXPECT_FALSE(
+      provider().registrar().GetAppById(parent_app_id_)->IsPreinstalledApp());
+
+  EXPECT_TRUE(provider().registrar().IsInstalled(
+      GenerateAppIdFromUnhashed(unhashed_sub_app_id_1)));
+  EXPECT_TRUE(provider().registrar().IsInstalled(
+      GenerateAppIdFromUnhashed(unhashed_sub_app_id_2)));
 }
 
 // Make sure the Add API can't force manifest update. Add sub-app, verify
@@ -775,6 +855,11 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest,
 
 // Remove works with one app.
 IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest, RemoveOneApp) {
+  // This is to ensure that for manifest updates, we auto
+  // accept the identity dialog and bypass the window closing requirement.
+  chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+  ManifestUpdateTask::BypassWindowCloseWaitingForTesting() = true;
+
   InstallParentApp();
   NavigateToParentApp();
   BindRemote();
@@ -809,6 +894,11 @@ IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest, RemoveFailRegularApp) {
 
 // Remove fails for a sub-app with a different parent_app_id.
 IN_PROC_BROWSER_TEST_F(SubAppsServiceImplBrowserTest, RemoveFailWrongParent) {
+  // This is to ensure that for manifest updates, we auto
+  // accept the identity dialog and bypass the window closing requirement.
+  chrome::SetAutoAcceptAppIdentityUpdateForTesting(true);
+  ManifestUpdateTask::BypassWindowCloseWaitingForTesting() = true;
+
   // SubApp plays the parent app here, SubApp2 is its sub-app, SubApp3 is the
   // other "parent app".
   AppId parent_app = InstallPWA(GetURL(kSubAppPath));

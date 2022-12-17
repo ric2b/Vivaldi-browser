@@ -1,10 +1,9 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/quic/quic_stream_factory.h"
 
-#include <algorithm>
 #include <memory>
 #include <set>
 #include <tuple>
@@ -38,7 +37,6 @@
 #include "net/base/net_errors.h"
 #include "net/base/trace_constants.h"
 #include "net/cert/cert_verifier.h"
-#include "net/dns/dns_alias_utility.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/log/net_log.h"
@@ -126,8 +124,8 @@ base::Value NetLogQuicStreamFactoryJobParams(
   dict.Set("port", key->server_id().port());
   dict.Set("privacy_mode",
            PrivacyModeToDebugString(key->session_key().privacy_mode()));
-  dict.Set("network_isolation_key",
-           key->session_key().network_isolation_key().ToDebugString());
+  dict.Set("network_anonymization_key",
+           key->session_key().network_anonymization_key().ToDebugString());
   return base::Value(std::move(dict));
 }
 
@@ -475,11 +473,7 @@ class QuicStreamFactory::Job {
     IPEndPoint stale_address =
         resolve_host_request_->GetAddressResults()->front();
 
-    if (std::find(endpoints.begin(), endpoints.end(), stale_address) !=
-        endpoints.end()) {
-      return true;
-    }
-    return false;
+    return base::Contains(endpoints, stale_address);
   }
 
   void LogStaleHostRacing(bool used) {
@@ -662,8 +656,14 @@ void QuicStreamFactory::Job::OnResolveHostComplete(int rv) {
       resolve_host_request_ = std::move(fresh_resolve_host_request_);
       io_state_ = STATE_RESOLVE_HOST_COMPLETE;
     } else if (factory_->HasMatchingIpSession(
-                   key_, *fresh_resolve_host_request_->GetAddressResults(),
+                   key_,
+                   HostResolver::GetNonProtocolEndpoints(
+                       *fresh_resolve_host_request_->GetEndpointResults()),
+                   *fresh_resolve_host_request_->GetDnsAliasResults(),
                    use_dns_aliases_)) {
+      // TODO(crbug.com/1264933): Consider dealing with the other
+      // endpoints with protocol metadata.
+
       // Session with resolved IP has already existed, so close racing
       // connection, run callback, and return.
       LogRacingStatus(ConnectionStateAfterDNS::kIpPooled);
@@ -750,8 +750,8 @@ int QuicStreamFactory::Job::DoResolveHost() {
   }
   parameters.secure_dns_policy = key_.session_key().secure_dns_policy();
   resolve_host_request_ = host_resolver_->CreateRequest(
-      key_.destination(), key_.session_key().network_isolation_key(), net_log_,
-      parameters);
+      key_.destination(), key_.session_key().network_anonymization_key(),
+      net_log_, parameters);
   // Unretained is safe because |this| owns the request, ensuring cancellation
   // on destruction.
   // When race_stale_dns_on_connection_ is on, this request will query for stale
@@ -777,8 +777,8 @@ int QuicStreamFactory::Job::DoResolveHost() {
   parameters.cache_usage =
       HostResolver::ResolveHostParameters::CacheUsage::DISALLOWED;
   fresh_resolve_host_request_ = host_resolver_->CreateRequest(
-      key_.destination(), key_.session_key().network_isolation_key(), net_log_,
-      parameters);
+      key_.destination(), key_.session_key().network_anonymization_key(),
+      net_log_, parameters);
   // Unretained is safe because |this| owns the request, ensuring cancellation
   // on destruction.
   // This request will only query fresh host resolution.
@@ -828,9 +828,13 @@ int QuicStreamFactory::Job::DoResolveHostComplete(int rv) {
 
   // Inform the factory of this resolution, which will set up
   // a session alias, if possible.
+  // TODO(crbug.com/1264933): Consider dealing with the other endpoints
+  // with protocol metadata.
   if (factory_->HasMatchingIpSession(
-          key_, *resolve_host_request_->GetAddressResults(),
-          use_dns_aliases_)) {
+          key_,
+          HostResolver::GetNonProtocolEndpoints(
+              *resolve_host_request_->GetEndpointResults()),
+          *resolve_host_request_->GetDnsAliasResults(), use_dns_aliases_)) {
     LogConnectionIpPooling(true);
     return OK;
   }
@@ -1005,8 +1009,9 @@ int QuicStreamFactory::Job::DoConfirmConnection(int rv) {
   DCHECK(!factory_->HasActiveSession(key_.session_key()));
   // There may well now be an active session for this IP.  If so, use the
   // existing session instead.
-  AddressList address(ToIPEndPoint(session_->connection()->peer_address()));
-  if (factory_->HasMatchingIpSession(key_, address, use_dns_aliases_)) {
+  if (factory_->HasMatchingIpSession(
+          key_, {ToIPEndPoint(session_->connection()->peer_address())},
+          /*aliases=*/{}, use_dns_aliases_)) {
     LogConnectionIpPooling(true);
     session_->connection()->CloseConnection(
         quic::QUIC_CONNECTION_IP_POOLED,
@@ -1040,7 +1045,7 @@ int QuicStreamRequest::Request(
     PrivacyMode privacy_mode,
     RequestPriority priority,
     const SocketTag& socket_tag,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     SecureDnsPolicy secure_dns_policy,
     bool use_dns_aliases,
     bool require_dns_https_alpn,
@@ -1061,7 +1066,7 @@ int QuicStreamRequest::Request(
       std::move(failed_on_default_network_callback);
 
   session_key_ = QuicSessionKey(HostPortPair::FromURL(url), privacy_mode,
-                                socket_tag, network_isolation_key,
+                                socket_tag, network_anonymization_key,
                                 secure_dns_policy, require_dns_https_alpn);
 
   int rv = factory_->Create(session_key_, std::move(destination), quic_version,
@@ -1138,13 +1143,13 @@ bool QuicStreamRequest::CanUseExistingSession(
     const GURL& url,
     PrivacyMode privacy_mode,
     const SocketTag& socket_tag,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     SecureDnsPolicy secure_dns_policy,
     bool require_dns_https_alpn,
     const url::SchemeHostPort& destination) const {
   return factory_->CanUseExistingSession(
       QuicSessionKey(HostPortPair::FromURL(url), privacy_mode, socket_tag,
-                     network_isolation_key, secure_dns_policy,
+                     network_anonymization_key, secure_dns_policy,
                      require_dns_https_alpn),
       destination);
 }
@@ -1210,13 +1215,13 @@ QuicStreamFactory::QuicStreamFactory(
       default_network_(handles::kInvalidNetworkHandle),
       connectivity_monitor_(default_network_),
       ssl_config_service_(ssl_config_service),
-      use_network_isolation_key_for_crypto_configs_(
+      use_network_anonymization_key_for_crypto_configs_(
           base::FeatureList::IsEnabled(
               features::kPartitionHttpServerPropertiesByNetworkIsolationKey)) {
   DCHECK(transport_security_state_);
   DCHECK(http_server_properties_);
   if (params_.disable_tls_zero_rtt)
-    SetQuicFlag(FLAGS_quic_disable_client_tls_zero_rtt, true);
+    SetQuicFlag(quic_disable_client_tls_zero_rtt, true);
   InitializeMigrationOptions();
 }
 
@@ -1338,7 +1343,7 @@ int QuicStreamFactory::Create(const QuicSessionKey& session_key,
   QuicSessionAliasKey key(destination, session_key);
   std::unique_ptr<Job> job = std::make_unique<Job>(
       this, quic_version, host_resolver_, key,
-      CreateCryptoConfigHandle(session_key.network_isolation_key()),
+      CreateCryptoConfigHandle(session_key.network_anonymization_key()),
       WasQuicRecentlyBroken(session_key),
       params_.retry_on_alternate_network_before_handshake,
       params_.race_stale_dns_on_connection, priority, use_dns_aliases,
@@ -1711,9 +1716,9 @@ base::TimeDelta QuicStreamFactory::GetTimeDelayForWaitingJob(
     return base::TimeDelta();
   }
 
-  int64_t srtt =
-      1.5 * GetServerNetworkStatsSmoothedRttInMicroseconds(
-                session_key.server_id(), session_key.network_isolation_key());
+  int64_t srtt = 1.5 * GetServerNetworkStatsSmoothedRttInMicroseconds(
+                           session_key.server_id(),
+                           session_key.network_anonymization_key());
   // Picked 300ms based on mean time from
   // Net.QuicSession.HostResolution.HandshakeConfirmedTime histogram.
   const int kDefaultRTT = 300 * quic::kNumMicrosPerMilli;
@@ -1734,12 +1739,14 @@ const std::set<std::string>& QuicStreamFactory::GetDnsAliasesForSessionKey(
   return it->second;
 }
 
-bool QuicStreamFactory::HasMatchingIpSession(const QuicSessionAliasKey& key,
-                                             const AddressList& address_list,
-                                             bool use_dns_aliases) {
+bool QuicStreamFactory::HasMatchingIpSession(
+    const QuicSessionAliasKey& key,
+    const std::vector<IPEndPoint>& ip_endpoints,
+    const std::set<std::string>& aliases,
+    bool use_dns_aliases) {
   const quic::QuicServerId& server_id(key.server_id());
   DCHECK(!HasActiveSession(key.session_key()));
-  for (const IPEndPoint& address : address_list) {
+  for (const auto& address : ip_endpoints) {
     if (!base::Contains(ip_aliases_, address))
       continue;
 
@@ -1751,9 +1758,7 @@ bool QuicStreamFactory::HasMatchingIpSession(const QuicSessionAliasKey& key,
 
       std::set<std::string> dns_aliases;
       if (use_dns_aliases) {
-        base::ranges::copy(address_list.dns_aliases(),
-                           std::inserter(dns_aliases, dns_aliases.end()));
-        dns_aliases = dns_alias_utility::FixUpDnsAliases(dns_aliases);
+        dns_aliases = aliases;
       }
 
       MapSessionToAliasKey(session, key, std::move(dns_aliases));
@@ -1852,11 +1857,11 @@ int QuicStreamFactory::CreateSession(const QuicSessionAliasKey& key,
   std::unique_ptr<QuicServerInfo> server_info;
   if (params_.max_server_configs_stored_in_properties > 0) {
     server_info = std::make_unique<PropertiesBasedQuicServerInfo>(
-        server_id, key.session_key().network_isolation_key(),
+        server_id, key.session_key().network_anonymization_key(),
         http_server_properties_);
   }
   std::unique_ptr<CryptoClientConfigHandle> crypto_config_handle =
-      CreateCryptoConfigHandle(key.session_key().network_isolation_key());
+      CreateCryptoConfigHandle(key.session_key().network_anonymization_key());
   InitializeCachedStateInCryptoConfig(*crypto_config_handle, server_id,
                                       server_info);
 
@@ -1865,13 +1870,13 @@ int QuicStreamFactory::CreateSession(const QuicSessionAliasKey& key,
   quic::QuicConnection* connection = new quic::QuicConnection(
       connection_id, quic::QuicSocketAddress(), ToQuicSocketAddress(addr),
       helper_.get(), alarm_factory_.get(), writer, true /* owns_writer */,
-      quic::Perspective::IS_CLIENT, {quic_version});
+      quic::Perspective::IS_CLIENT, {quic_version}, connection_id_generator_);
   connection->set_keep_alive_ping_timeout(ping_timeout_);
   connection->SetMaxPacketLength(params_.max_packet_length);
 
   quic::QuicConfig config = config_;
   ConfigureInitialRttEstimate(
-      server_id, key.session_key().network_isolation_key(), &config);
+      server_id, key.session_key().network_anonymization_key(), &config);
   // QUIC versions that use the IETF invariant header all have NSTP
   // enabled by default, so we only need to add it for those that don't.
   if (!quic_version.HasIetfInvariantHeader() &&
@@ -1963,10 +1968,10 @@ void QuicStreamFactory::MarkAllActiveSessionsGoingAway(
 
 void QuicStreamFactory::ConfigureInitialRttEstimate(
     const quic::QuicServerId& server_id,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     quic::QuicConfig* config) {
   const base::TimeDelta* srtt =
-      GetServerNetworkStatsSmoothedRtt(server_id, network_isolation_key);
+      GetServerNetworkStatsSmoothedRtt(server_id, network_anonymization_key);
   // Sometimes *srtt is negative. See https://crbug.com/1225616.
   // TODO(ricea): When the root cause of the negative value is fixed, change the
   // non-negative assertion to a DCHECK.
@@ -1999,19 +2004,19 @@ void QuicStreamFactory::ConfigureInitialRttEstimate(
 
 int64_t QuicStreamFactory::GetServerNetworkStatsSmoothedRttInMicroseconds(
     const quic::QuicServerId& server_id,
-    const NetworkIsolationKey& network_isolation_key) const {
+    const NetworkAnonymizationKey& network_anonymization_key) const {
   const base::TimeDelta* srtt =
-      GetServerNetworkStatsSmoothedRtt(server_id, network_isolation_key);
+      GetServerNetworkStatsSmoothedRtt(server_id, network_anonymization_key);
   return srtt == nullptr ? 0 : srtt->InMicroseconds();
 }
 
 const base::TimeDelta* QuicStreamFactory::GetServerNetworkStatsSmoothedRtt(
     const quic::QuicServerId& server_id,
-    const NetworkIsolationKey& network_isolation_key) const {
+    const NetworkAnonymizationKey& network_anonymization_key) const {
   url::SchemeHostPort server("https", server_id.host(), server_id.port());
   const ServerNetworkStats* stats =
       http_server_properties_->GetServerNetworkStats(server,
-                                                     network_isolation_key);
+                                                     network_anonymization_key);
   if (stats == nullptr)
     return nullptr;
   return &(stats->srtt);
@@ -2023,7 +2028,7 @@ bool QuicStreamFactory::WasQuicRecentlyBroken(
       kProtoQUIC, HostPortPair(session_key.server_id().host(),
                                session_key.server_id().port()));
   return http_server_properties_->WasAlternativeServiceRecentlyBroken(
-      alternative_service, session_key.network_isolation_key());
+      alternative_service, session_key.network_anonymization_key());
 }
 
 void QuicStreamFactory::InitializeMigrationOptions() {
@@ -2140,25 +2145,25 @@ void QuicStreamFactory::ProcessGoingAwaySession(
   // Do nothing if QUIC is currently marked as broken.
   if (http_server_properties_->IsAlternativeServiceBroken(
           alternative_service,
-          session->quic_session_key().network_isolation_key())) {
+          session->quic_session_key().network_anonymization_key())) {
     return;
   }
 
   if (session->OneRttKeysAvailable()) {
     http_server_properties_->ConfirmAlternativeService(
         alternative_service,
-        session->quic_session_key().network_isolation_key());
+        session->quic_session_key().network_anonymization_key());
     ServerNetworkStats network_stats;
     network_stats.srtt = base::Microseconds(stats.srtt_us);
     network_stats.bandwidth_estimate = stats.estimated_bandwidth;
     http_server_properties_->SetServerNetworkStats(
-        server, session->quic_session_key().network_isolation_key(),
+        server, session->quic_session_key().network_anonymization_key(),
         network_stats);
     return;
   }
 
   http_server_properties_->ClearServerNetworkStats(
-      server, session->quic_session_key().network_isolation_key());
+      server, session->quic_session_key().network_anonymization_key());
 
   UMA_HISTOGRAM_COUNTS_1M("Net.QuicHandshakeNotConfirmedNumPacketsReceived",
                           stats.packets_received);
@@ -2178,7 +2183,8 @@ void QuicStreamFactory::ProcessGoingAwaySession(
   // avoid not using QUIC when we otherwise could, we mark it as recently
   // broken, which means that 0-RTT will be disabled but we'll still race.
   http_server_properties_->MarkAlternativeServiceRecentlyBroken(
-      alternative_service, session->quic_session_key().network_isolation_key());
+      alternative_service,
+      session->quic_session_key().network_anonymization_key());
 }
 
 void QuicStreamFactory::MapSessionToAliasKey(
@@ -2198,21 +2204,22 @@ void QuicStreamFactory::UnmapSessionFromSessionAliases(
 
 std::unique_ptr<QuicStreamFactory::CryptoClientConfigHandle>
 QuicStreamFactory::CreateCryptoConfigHandle(
-    const NetworkIsolationKey& network_isolation_key) {
-  NetworkIsolationKey actual_network_isolation_key =
-      use_network_isolation_key_for_crypto_configs_ ? network_isolation_key
-                                                    : NetworkIsolationKey();
+    const NetworkAnonymizationKey& network_anonymization_key) {
+  NetworkAnonymizationKey actual_network_anonymization_key =
+      use_network_anonymization_key_for_crypto_configs_
+          ? network_anonymization_key
+          : NetworkAnonymizationKey();
 
   // If there's a matching entry in |active_crypto_config_map_|, create a
   // CryptoClientConfigHandle for it.
   auto map_iterator =
-      active_crypto_config_map_.find(actual_network_isolation_key);
+      active_crypto_config_map_.find(actual_network_anonymization_key);
   if (map_iterator != active_crypto_config_map_.end()) {
     DCHECK_GT(map_iterator->second->num_refs(), 0);
 
     // If there's an active matching crypto config, there shouldn't also be an
     // inactive matching crypto config.
-    DCHECK(recent_crypto_config_map_.Peek(actual_network_isolation_key) ==
+    DCHECK(recent_crypto_config_map_.Peek(actual_network_anonymization_key) ==
            recent_crypto_config_map_.end());
 
     return std::make_unique<CryptoClientConfigHandle>(map_iterator);
@@ -2221,12 +2228,12 @@ QuicStreamFactory::CreateCryptoConfigHandle(
   // If there's a matching entry in |recent_crypto_config_map_|, move it to
   // |active_crypto_config_map_| and create a CryptoClientConfigHandle for it.
   auto mru_iterator =
-      recent_crypto_config_map_.Peek(actual_network_isolation_key);
+      recent_crypto_config_map_.Peek(actual_network_anonymization_key);
   if (mru_iterator != recent_crypto_config_map_.end()) {
     DCHECK_EQ(mru_iterator->second->num_refs(), 0);
 
     map_iterator = active_crypto_config_map_
-                       .emplace(std::make_pair(actual_network_isolation_key,
+                       .emplace(std::make_pair(actual_network_anonymization_key,
                                                std::move(mru_iterator->second)))
                        .first;
     recent_crypto_config_map_.Erase(mru_iterator);
@@ -2241,7 +2248,7 @@ QuicStreamFactory::CreateCryptoConfigHandle(
               cert_verifier_, ct_policy_enforcer_, transport_security_state_,
               sct_auditing_delegate_,
               HostsFromOrigins(params_.origins_to_force_quic_on),
-              actual_network_isolation_key),
+              actual_network_anonymization_key),
           std::make_unique<quic::QuicClientSessionCache>(), this);
 
   quic::QuicCryptoClientConfig* crypto_config = crypto_config_owner->config();
@@ -2266,7 +2273,7 @@ QuicStreamFactory::CreateCryptoConfigHandle(
   }
 
   map_iterator = active_crypto_config_map_
-                     .emplace(std::make_pair(actual_network_isolation_key,
+                     .emplace(std::make_pair(actual_network_anonymization_key,
                                              std::move(crypto_config_owner)))
                      .first;
   return std::make_unique<CryptoClientConfigHandle>(map_iterator);
@@ -2291,24 +2298,25 @@ void QuicStreamFactory::CollectDataOnPlatformNotification(
 
 std::unique_ptr<QuicCryptoClientConfigHandle>
 QuicStreamFactory::GetCryptoConfigForTesting(
-    const NetworkIsolationKey& network_isolation_key) {
-  return CreateCryptoConfigHandle(network_isolation_key);
+    const NetworkAnonymizationKey& network_anonymization_key) {
+  return CreateCryptoConfigHandle(network_anonymization_key);
 }
 
 bool QuicStreamFactory::CryptoConfigCacheIsEmptyForTesting(
     const quic::QuicServerId& server_id,
-    const NetworkIsolationKey& network_isolation_key) {
+    const NetworkAnonymizationKey& network_anonymization_key) {
   quic::QuicCryptoClientConfig::CachedState* cached = nullptr;
-  NetworkIsolationKey actual_network_isolation_key =
-      use_network_isolation_key_for_crypto_configs_ ? network_isolation_key
-                                                    : NetworkIsolationKey();
+  NetworkAnonymizationKey actual_network_anonymization_key =
+      use_network_anonymization_key_for_crypto_configs_
+          ? network_anonymization_key
+          : NetworkAnonymizationKey();
   auto map_iterator =
-      active_crypto_config_map_.find(actual_network_isolation_key);
+      active_crypto_config_map_.find(actual_network_anonymization_key);
   if (map_iterator != active_crypto_config_map_.end()) {
     cached = map_iterator->second->config()->LookupOrCreate(server_id);
   } else {
     auto mru_iterator =
-        recent_crypto_config_map_.Peek(actual_network_isolation_key);
+        recent_crypto_config_map_.Peek(actual_network_anonymization_key);
     if (mru_iterator != recent_crypto_config_map_.end()) {
       cached = mru_iterator->second->config()->LookupOrCreate(server_id);
     }

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,15 +8,15 @@
 
 #include "base/feature_list.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/core_probe_sink.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
-#include "third_party/blink/renderer/core/inspector/thread_debugger.h"
 #include "third_party/blink/renderer/core/probe/async_task_context.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
+#include "third_party/blink/renderer/platform/bindings/thread_debugger.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
@@ -53,8 +53,9 @@ String GenerateFakeUrlFromScriptId(int script_id) {
 namespace features {
 // Controls whether the AdTracker will look across async stacks to determine if
 // the currently running stack is ad related.
-const base::Feature kAsyncStackAdTagging{"AsyncStackAdTagging",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kAsyncStackAdTagging,
+             "AsyncStackAdTagging",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 }  // namespace features
 
 // static
@@ -147,7 +148,7 @@ void AdTracker::WillExecuteScript(ExecutionContext* execution_context,
   // src) by IDs instead. We also check the stack as they are executed
   // immediately and should be tagged based on the script inserting them.
   bool should_track_with_id =
-      script_url.IsEmpty() && script_id != v8::Message::kNoScriptIdInfo;
+      script_url.empty() && script_id != v8::Message::kNoScriptIdInfo;
   if (should_track_with_id) {
     // This primarily checks if |execution_context| is a known ad context as we
     // don't need to keep track of scripts in ad contexts. However, two scripts
@@ -352,12 +353,12 @@ bool AdTracker::IsKnownAdScriptForCheckedContext(
   if (it == known_ad_scripts_.end())
     return false;
 
-  if (it->value.IsEmpty())
+  if (it->value.empty())
     return false;
 
   // Delay calling ScriptAtTopOfStack() as much as possible due to its cost.
   String script_url = url.IsNull() ? ScriptAtTopOfStack() : url;
-  if (script_url.IsEmpty())
+  if (script_url.empty())
     return false;
   return it->value.Contains(script_url);
 }
@@ -365,7 +366,7 @@ bool AdTracker::IsKnownAdScriptForCheckedContext(
 // This is a separate function for testing purposes.
 void AdTracker::AppendToKnownAdScripts(ExecutionContext& execution_context,
                                        const String& url) {
-  DCHECK(!url.IsEmpty());
+  DCHECK(!url.empty());
   auto add_result =
       known_ad_scripts_.insert(&execution_context, HashSet<String>());
   add_result.stored_value->value.insert(url);

@@ -1,10 +1,9 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/wm/desks/desks_test_api.h"
 
-#include "ash/controls/gradient_layer_delegate.h"
 #include "ash/shell.h"
 #include "ash/system/toast/toast_manager_impl.h"
 #include "ash/wm/desks/desk.h"
@@ -14,10 +13,10 @@
 #include "ash/wm/desks/desks_bar_view.h"
 #include "ash/wm/desks/desks_restore_util.h"
 #include "ash/wm/desks/expanded_desks_bar_button.h"
-#include "ash/wm/desks/persistent_desks_bar_button.h"
-#include "ash/wm/desks/persistent_desks_bar_context_menu.h"
-#include "ash/wm/desks/persistent_desks_bar_controller.h"
-#include "ash/wm/desks/persistent_desks_bar_view.h"
+#include "ash/wm/desks/persistent_desks_bar/persistent_desks_bar_button.h"
+#include "ash/wm/desks/persistent_desks_bar/persistent_desks_bar_context_menu.h"
+#include "ash/wm/desks/persistent_desks_bar/persistent_desks_bar_controller.h"
+#include "ash/wm/desks/persistent_desks_bar/persistent_desks_bar_view.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -137,16 +136,20 @@ bool DesksTestApi::IsContextMenuRunningForDesk(int index) {
 
 // static
 bool DesksTestApi::IsDesksBarLeftGradientVisible() {
-  return !GetDesksBarView()
-              ->gradient_layer_delegate_->start_fade_zone_bounds()
-              .IsEmpty();
+  const auto& gradient_mask =
+      GetDesksBarView()->scroll_view_->layer()->gradient_mask();
+  return !gradient_mask.IsEmpty() &&
+         cc::MathUtil::IsWithinEpsilon(gradient_mask.steps()[0].fraction, 0.f);
 }
 
 // static
 bool DesksTestApi::IsDesksBarRightGradientVisible() {
-  return !GetDesksBarView()
-              ->gradient_layer_delegate_->end_fade_zone_bounds()
-              .IsEmpty();
+  const auto& gradient_mask =
+      GetDesksBarView()->scroll_view_->layer()->gradient_mask();
+  return !gradient_mask.IsEmpty() &&
+         cc::MathUtil::IsWithinEpsilon(
+             gradient_mask.steps()[gradient_mask.step_count() - 1].fraction,
+             1.f);
 }
 
 // static

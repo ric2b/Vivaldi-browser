@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,11 +84,10 @@ class ReportClientTest : public ::testing::TestWithParam<bool> {
         profile_->GetProfileUserName(), "12345"));
     const user_manager::User* user =
         mock_user_manager->AddPublicAccountUser(account_id);
-    ash::ProfileHelper::Get()->SetActiveUserIdForTesting(
-        profile_->GetProfileUserName());
     mock_user_manager->UserLoggedIn(account_id, user->username_hash(),
                                     /*browser_restart=*/false,
                                     /*is_child=*/false);
+    ash::ProfileHelper::Get()->ActiveUserHashChanged(user->username_hash());
     user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         std::move(mock_user_manager));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -439,30 +438,24 @@ TEST_P(ReportClientTest, SpeculativelyEnqueueMessageAndUpload) {
     }
   }
 
-  // Enqueue event right away, before attaching an actual queue.
-  test::TestEvent<Status> enqueue_record_event;
-  report_queue->Enqueue("Record", FAST_BATCH, enqueue_record_event.cb());
-  const auto enqueue_record_result = enqueue_record_event.result();
-  EXPECT_OK(enqueue_record_result) << enqueue_record_result;
-
   if (StorageSelector::is_uploader_required() &&
       !StorageSelector::is_use_missive()) {
-    // Note: there does not seem to be another way to define the expectations
-    // A+B for encrypted case and just B for non-encrypted.
     if (is_encryption_enabled()) {
       EXPECT_CALL(mock_client_,
                   UploadEncryptedReport(
                       IsEncryptionKeyRequestUploadRequestValid(), _, _))
           .WillOnce(WithArgs<0, 2>(Invoke(GetEncryptionKeyInvocation())));
-      EXPECT_CALL(mock_client_,
-                  UploadEncryptedReport(IsDataUploadRequestValid(), _, _))
-          .WillOnce(WithArgs<0, 2>(Invoke(GetVerifyDataInvocation())));
-    } else {
-      EXPECT_CALL(mock_client_,
-                  UploadEncryptedReport(IsDataUploadRequestValid(), _, _))
-          .WillOnce(WithArgs<0, 2>(Invoke(GetVerifyDataInvocation())));
     }
+    EXPECT_CALL(mock_client_,
+                UploadEncryptedReport(IsDataUploadRequestValid(), _, _))
+        .WillOnce(WithArgs<0, 2>(Invoke(GetVerifyDataInvocation())));
   }
+
+  // Enqueue event right away, before attaching an actual queue.
+  test::TestEvent<Status> enqueue_record_event;
+  report_queue->Enqueue("Record", FAST_BATCH, enqueue_record_event.cb());
+  const auto enqueue_record_result = enqueue_record_event.result();
+  EXPECT_OK(enqueue_record_result) << enqueue_record_result;
 
   // Trigger upload.
   task_environment_.FastForwardBy(base::Seconds(1));

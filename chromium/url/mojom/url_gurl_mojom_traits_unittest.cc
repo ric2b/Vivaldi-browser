@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -198,6 +198,12 @@ TEST_F(MojoGURLStructTraitsTest, OriginSerialization) {
   EXPECT_EQ(normalized, output);
   EXPECT_EQ(non_unique, output);
   EXPECT_FALSE(output.opaque());
+}
+
+// Test that the "kMaxURLChars" values are the same in url.mojom and
+// url_constants.cc.
+TEST_F(MojoGURLStructTraitsTest, TestMaxURLChars) {
+  EXPECT_EQ(kMaxURLChars, mojom::kMaxURLChars);
 }
 
 }  // namespace url

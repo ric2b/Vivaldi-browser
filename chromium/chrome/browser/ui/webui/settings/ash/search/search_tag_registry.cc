@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,8 @@
 #include "chromeos/ash/components/local_search_service/public/cpp/local_search_service_proxy.h"
 #include "ui/base/l10n/l10n_util.h"
 
-namespace chromeos {
-namespace settings {
+namespace ash::settings {
+
 namespace {
 
 std::vector<int> GetMessageIds(const SearchConcept* search_concept) {
@@ -212,5 +212,4 @@ void SearchTagRegistry::NotifyRegistryDeleted(uint32_t num_deleted) {
   NotifyRegistryUpdated();
 }
 
-}  // namespace settings
-}  // namespace chromeos
+}  // namespace ash::settings

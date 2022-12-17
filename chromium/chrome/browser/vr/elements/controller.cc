@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -74,8 +74,7 @@ std::unique_ptr<gfx::FloatAnimationCurve> CreateAlphaCurve(
 void AddVertex(const gfx::Point3F& local_vertex,
                const gfx::Transform& transform,
                std::vector<float>* vertices) {
-  gfx::Point3F vertex(local_vertex);
-  transform.TransformPoint(&vertex);
+  gfx::Point3F vertex = transform.MapPoint(local_vertex);
   vertices->push_back(vertex.x());
   vertices->push_back(vertex.y());
   vertices->push_back(vertex.z());

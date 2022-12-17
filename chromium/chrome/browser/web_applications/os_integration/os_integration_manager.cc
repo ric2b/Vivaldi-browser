@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/task/task_traits.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -142,20 +143,6 @@ void OsIntegrationManager::Start() {
   DCHECK(file_handler_manager_);
 
   registrar_observation_.Observe(registrar_.get());
-
-#if BUILDFLAG(IS_MAC)
-  // Ensure that all installed apps are included in the AppShimRegistry when the
-  // profile is loaded. This is redundant, because apps are registered when they
-  // are installed. It is necessary, however, because app registration was added
-  // long after app installation launched. This should be removed after shipping
-  // for a few versions (whereupon it may be assumed that most applications have
-  // been registered).
-  std::vector<AppId> app_ids = registrar_->GetAppIds();
-  for (const auto& app_id : app_ids) {
-    AppShimRegistry::Get()->OnAppInstalledForProfile(app_id,
-                                                     profile_->GetPath());
-  }
-#endif
   file_handler_manager_->Start();
   if (protocol_handler_manager_)
     protocol_handler_manager_->Start();
@@ -232,7 +219,7 @@ void OsIntegrationManager::InstallOsHooks(
   // TODO(ortuno): Make adding a shortcut to the applications menu independent
   // from adding a shortcut to desktop.
   if (options.os_hooks[OsHookType::kShortcuts]) {
-    CreateShortcuts(app_id, options.add_to_desktop,
+    CreateShortcuts(app_id, options.add_to_desktop, options.reason,
                     std::move(shortcuts_callback));
   } else {
     base::SequencedTaskRunnerHandle::Get()->PostTask(
@@ -264,7 +251,9 @@ void OsIntegrationManager::UninstallOsHooks(const AppId& app_id,
       os_hooks_errors, std::move(callback));
 
   if (os_hooks[OsHookType::kShortcutsMenu]) {
-    bool success = UnregisterShortcutsMenu(app_id);
+    bool success = UnregisterShortcutsMenu(
+        app_id,
+        barrier->CreateBarrierCallbackForType(OsHookType::kShortcutsMenu));
     if (!success)
       barrier->OnError(OsHookType::kShortcutsMenu);
   }
@@ -331,7 +320,9 @@ void OsIntegrationManager::UpdateOsHooks(
                   base::BindOnce(barrier->CreateBarrierCallbackForType(
                                      OsHookType::kShortcuts),
                                  Result::kOk));
-  UpdateShortcutsMenu(app_id, web_app_info);
+  UpdateShortcutsMenu(app_id, web_app_info,
+                      base::BindOnce(barrier->CreateBarrierCallbackForType(
+                          OsHookType::kShortcutsMenu)));
   UpdateUrlHandlers(
       app_id,
       base::BindOnce(
@@ -423,9 +414,10 @@ FakeOsIntegrationManager* OsIntegrationManager::AsTestOsIntegrationManager() {
 
 void OsIntegrationManager::CreateShortcuts(const AppId& app_id,
                                            bool add_to_desktop,
+                                           ShortcutCreationReason reason,
                                            CreateShortcutsCallback callback) {
   if (shortcut_manager_->CanCreateShortcuts()) {
-    shortcut_manager_->CreateShortcuts(app_id, add_to_desktop,
+    shortcut_manager_->CreateShortcuts(app_id, add_to_desktop, reason,
                                        std::move(callback));
   } else {
     std::move(callback).Run(false);
@@ -435,11 +427,15 @@ void OsIntegrationManager::CreateShortcuts(const AppId& app_id,
 void OsIntegrationManager::RegisterFileHandlers(const AppId& app_id,
                                                 ResultCallback callback) {
   DCHECK(file_handler_manager_);
-  file_handler_manager_->EnableAndRegisterOsFileHandlers(app_id);
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.FileHandlersRegistration.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
 
-  // TODO(crbug.com/1087219): callback should be run after all hooks are
-  // deployed, need to refactor filehandler to allow this.
-  std::move(callback).Run(Result::kOk);
+  file_handler_manager_->EnableAndRegisterOsFileHandlers(
+      app_id, std::move(metrics_callback));
 }
 
 void OsIntegrationManager::RegisterProtocolHandlers(const AppId& app_id,
@@ -483,13 +479,17 @@ void OsIntegrationManager::RegisterShortcutsMenu(
     return;
   }
 
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.ShortcutsMenuRegistration.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
+
   DCHECK(shortcut_manager_);
   shortcut_manager_->RegisterShortcutsMenuWithOs(
-      app_id, shortcuts_menu_item_infos, shortcuts_menu_icon_bitmaps);
-
-  // TODO(https://crbug.com/1098471): fix RegisterShortcutsMenuWithOs to
-  // take callback.
-  std::move(callback).Run(Result::kOk);
+      app_id, shortcuts_menu_item_infos, shortcuts_menu_icon_bitmaps,
+      std::move(metrics_callback));
 }
 
 void OsIntegrationManager::ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
@@ -500,8 +500,15 @@ void OsIntegrationManager::ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
     return;
   }
 
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.ShortcutsMenuRegistration.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
+
   shortcut_manager_->ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
-      app_id, std::move(callback));
+      app_id, std::move(metrics_callback));
 }
 
 void OsIntegrationManager::RegisterRunOnOsLogin(const AppId& app_id,
@@ -535,10 +542,22 @@ void OsIntegrationManager::RegisterWebAppOsUninstallation(
   }
 }
 
-bool OsIntegrationManager::UnregisterShortcutsMenu(const AppId& app_id) {
-  if (!ShouldRegisterShortcutsMenuWithOs())
+bool OsIntegrationManager::UnregisterShortcutsMenu(const AppId& app_id,
+                                                   ResultCallback callback) {
+  if (!ShouldRegisterShortcutsMenuWithOs()) {
+    std::move(callback).Run(Result::kOk);
     return true;
-  return UnregisterShortcutsMenuWithOs(app_id, profile_->GetPath());
+  }
+
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.ShortcutsMenuUnregistered.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
+
+  return UnregisterShortcutsMenuWithOs(app_id, profile_->GetPath(),
+                                       std::move(metrics_callback));
 }
 
 void OsIntegrationManager::UnregisterRunOnOsLogin(
@@ -571,9 +590,14 @@ void OsIntegrationManager::DeleteShortcuts(
 void OsIntegrationManager::UnregisterFileHandlers(const AppId& app_id,
                                                   ResultCallback callback) {
   DCHECK(file_handler_manager_);
-
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.FileHandlersUnregistration.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
   file_handler_manager_->DisableAndUnregisterOsFileHandlers(
-      app_id, std::move(callback));
+      app_id, std::move(metrics_callback));
 }
 
 void OsIntegrationManager::UnregisterProtocolHandlers(const AppId& app_id,
@@ -619,14 +643,14 @@ void OsIntegrationManager::UpdateShortcuts(const AppId& app_id,
 
 void OsIntegrationManager::UpdateShortcutsMenu(
     const AppId& app_id,
-    const WebAppInstallInfo& web_app_info) {
-  DCHECK(shortcut_manager_);
+    const WebAppInstallInfo& web_app_info,
+    ResultCallback callback) {
   if (web_app_info.shortcuts_menu_item_infos.empty()) {
-    shortcut_manager_->UnregisterShortcutsMenuWithOs(app_id);
+    UnregisterShortcutsMenu(app_id, std::move(callback));
   } else {
-    shortcut_manager_->RegisterShortcutsMenuWithOs(
-        app_id, web_app_info.shortcuts_menu_item_infos,
-        web_app_info.shortcuts_menu_icon_bitmaps);
+    RegisterShortcutsMenu(app_id, web_app_info.shortcuts_menu_item_infos,
+                          web_app_info.shortcuts_menu_icon_bitmaps,
+                          std::move(callback));
   }
 }
 
@@ -660,9 +684,6 @@ void OsIntegrationManager::UpdateFileHandlers(
         [](base::WeakPtr<OsIntegrationManager> os_integration_manager,
            const AppId& app_id, ResultCallback finished_callback,
            Result result) {
-          // Re-register file handlers regardless of `result`.
-          // TODO(https://crbug.com/1124047): Report `result` in
-          // an UMA metric.
           if (!os_integration_manager) {
             std::move(finished_callback).Run(Result::kError);
             return;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -102,9 +102,9 @@ TEST_F(DevToolsSettingsTest, MovingUnsycnedToSyncedDoesNotOverwrite) {
   // 2) Simulate the update to synced plus setting of a new value on a
   //    different device.
   {
-    DictionaryPrefUpdate update(profile_.GetPrefs(),
+    ScopedDictPrefUpdate update(profile_.GetPrefs(),
                                 prefs::kDevToolsSyncedPreferencesSyncEnabled);
-    update.Get()->SetStringKey("setting", "overwritten synced value");
+    update->Set("setting", "overwritten synced value");
   }
 
   // 3) Move the setting from unsynced to synced on this device but expect the

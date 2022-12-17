@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/shared_image/test_image_backing.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -24,7 +23,7 @@ class SharedImageRepresentationTest : public ::testing::Test {
   void SetUp() override {
     tracker_ = std::make_unique<MemoryTypeTracker>(nullptr);
     mailbox_ = Mailbox::GenerateForSharedImage();
-    auto format = viz::ResourceFormat::RGBA_8888;
+    auto format = viz::SharedImageFormat::kRGBA_8888;
     gfx::Size size(256, 256);
     auto color_space = gfx::ColorSpace::CreateSRGB();
     auto surface_origin = kTopLeft_GrSurfaceOrigin;

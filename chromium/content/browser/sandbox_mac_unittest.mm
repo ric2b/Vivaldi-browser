@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,7 +69,11 @@ class SandboxMacTest : public base::MultiProcessTest {
     sandbox::SeatbeltExecClient client;
     client.SetProfile(profile);
     SetupSandboxParameters(sandbox_type,
-                           *base::CommandLine::ForCurrentProcess(), &client);
+                           *base::CommandLine::ForCurrentProcess(),
+#if BUILDFLAG(ENABLE_PPAPI)
+                           /*plugins=*/{},
+#endif
+                           &client);
 
     pipe_ = client.GetReadFD();
     ASSERT_GE(pipe_, 0);
@@ -94,7 +98,7 @@ class SandboxMacTest : public base::MultiProcessTest {
         sandbox::mojom::Sandbox::kCdm,
         sandbox::mojom::Sandbox::kGpu,
         sandbox::mojom::Sandbox::kNaClLoader,
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
         sandbox::mojom::Sandbox::kPpapi,
 #endif
         sandbox::mojom::Sandbox::kPrintBackend,

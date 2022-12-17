@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,11 +48,13 @@ class ExtensionFrameHost : public mojom::LocalFrameHost {
                RequestCallback callback) override;
   void WatchedPageChange(
       const std::vector<std::string>& css_selectors) override;
+  void DetailedConsoleMessageAdded(
+      const std::u16string& message,
+      const std::u16string& source,
+      const StackTrace& stack_trace,
+      blink::mojom::ConsoleMessageLevel level) override;
 
  protected:
-  content::WebContents* web_contents() { return web_contents_; }
-
- private:
   // This raw pointer is safe to use because ExtensionWebContentsObserver whose
   // lifetime is tied to the WebContents owns this instance.
   raw_ptr<content::WebContents> web_contents_;

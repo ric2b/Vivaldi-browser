@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,11 @@ struct Config;
 // Returns a Config created from the finch feature params.
 std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
     content::BrowserContext* context);
+
+// Finds a list of configs from experiments and appends to `out_configs`.
+// Public for testing.
+void AppendConfigsFromExperiments(
+    std::vector<std::unique_ptr<Config>>& out_configs);
 
 // Implementation of FieldTrialRegister that uses synthetic field trials to
 // record segmentation groups.

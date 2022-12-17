@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -229,8 +229,8 @@ TEST_F(WebAppUtilsTest, AreWebAppsEnabled) {
 
   Profile* lock_screen_profile = profile_manager.CreateTestingProfile(
       ash::ProfileHelper::GetLockScreenAppProfileName());
-  EXPECT_FALSE(AreWebAppsEnabled(lock_screen_profile));
-  EXPECT_FALSE(AreWebAppsEnabled(
+  EXPECT_TRUE(AreWebAppsEnabled(lock_screen_profile));
+  EXPECT_TRUE(AreWebAppsEnabled(
       lock_screen_profile->GetPrimaryOTRProfile(/*create_if_needed=*/true)));
 
   using MockUserManager = testing::NiceMock<ash::MockUserManager>;
@@ -240,6 +240,8 @@ TEST_F(WebAppUtilsTest, AreWebAppsEnabled) {
     EXPECT_TRUE(AreWebAppsEnabled(regular_profile));
   }
   {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(features::kKioskEnableAppService);
     auto user_manager = std::make_unique<MockUserManager>();
     EXPECT_CALL(*user_manager, IsLoggedInAsKioskApp())
         .WillOnce(testing::Return(true));
@@ -247,6 +249,17 @@ TEST_F(WebAppUtilsTest, AreWebAppsEnabled) {
     EXPECT_FALSE(AreWebAppsEnabled(regular_profile));
   }
   {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(features::kKioskEnableAppService);
+    auto user_manager = std::make_unique<MockUserManager>();
+    EXPECT_CALL(*user_manager, IsLoggedInAsWebKioskApp())
+        .WillRepeatedly(testing::Return(true));
+    user_manager::ScopedUserManager enabler(std::move(user_manager));
+    EXPECT_FALSE(AreWebAppsEnabled(regular_profile));
+  }
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(features::kKioskEnableAppService);
     auto user_manager = std::make_unique<MockUserManager>();
     EXPECT_CALL(*user_manager, IsLoggedInAsArcKioskApp())
         .WillOnce(testing::Return(true));
@@ -254,13 +267,25 @@ TEST_F(WebAppUtilsTest, AreWebAppsEnabled) {
     EXPECT_FALSE(AreWebAppsEnabled(regular_profile));
   }
   {
-    base::test::ScopedFeatureList feature_list;
-    feature_list.InitAndEnableFeature(features::kKioskEnableAppService);
     auto user_manager = std::make_unique<MockUserManager>();
     EXPECT_CALL(*user_manager, IsLoggedInAsKioskApp())
         .WillOnce(testing::Return(true));
     user_manager::ScopedUserManager enabler(std::move(user_manager));
+    EXPECT_FALSE(AreWebAppsEnabled(regular_profile));
+  }
+  {
+    auto user_manager = std::make_unique<MockUserManager>();
+    EXPECT_CALL(*user_manager, IsLoggedInAsWebKioskApp())
+        .WillRepeatedly(testing::Return(true));
+    user_manager::ScopedUserManager enabler(std::move(user_manager));
     EXPECT_TRUE(AreWebAppsEnabled(regular_profile));
+  }
+  {
+    auto user_manager = std::make_unique<MockUserManager>();
+    EXPECT_CALL(*user_manager, IsLoggedInAsArcKioskApp())
+        .WillOnce(testing::Return(true));
+    user_manager::ScopedUserManager enabler(std::move(user_manager));
+    EXPECT_FALSE(AreWebAppsEnabled(regular_profile));
   }
 #endif
 }

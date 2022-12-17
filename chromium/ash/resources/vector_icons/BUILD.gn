@@ -1,5 +1,5 @@
-# Copyright 2016 The Chromium Authors.All rights reserved.
-# Use of this source code is governed by a BSD - style license that can be
+# Copyright 2016 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
@@ -65,8 +65,10 @@ aggregate_vector_icons("ash_vector_icons") {
     "check.icon",
     "check_circle.icon",
     "chevron_down.icon",
-    "chevron_right.icon",
+    "chevron_down_small.icon",
+    "chevron_right_small.icon",
     "chevron_up.icon",
+    "chevron_up_small.icon",
     "clipboard.icon",
     "clipboard_empty.icon",
     "clipboard_launcher_inner.icon",
@@ -102,6 +104,7 @@ aggregate_vector_icons("ash_vector_icons") {
     "hide_closed_caption.icon",
     "holding_space.icon",
     "holding_space_download.icon",
+    "holding_space_refresh.icon",
     "hollow_check_circle.icon",
     "ime_menu_emoticon.icon",
     "ime_menu_microphone.icon",
@@ -196,7 +199,9 @@ aggregate_vector_icons("ash_vector_icons") {
     "notification_center_settings.icon",
     "notification_charging_usb_c.icon",
     "notification_chromevox.icon",
+    "notification_help_app.icon",
     "notification_keyboard.icon",
+    "notification_linux.icon",
     "notification_low_power_charger.icon",
     "notification_monitor_warning.icon",
     "notification_multi_device_setup.icon",
@@ -242,8 +247,10 @@ aggregate_vector_icons("ash_vector_icons") {
     "phone_hub_silence_phone.icon",
     "pin_request_lock.icon",
     "pinned.icon",
+    "privacy_indicators.icon",
     "privacy_indicators_camera.icon",
     "privacy_indicators_microphone.icon",
+    "privacy_indicators_screen_share.icon",
     "privacy_screen.icon",
     "remove_outline.icon",
     "reorder.icon",
@@ -394,6 +401,7 @@ aggregate_vector_icons("ash_vector_icons") {
     "system_power_button_menu_feedback.icon",
     "system_power_button_menu_lock_screen.icon",
     "system_power_button_menu_power_off.icon",
+    "system_power_button_menu_restart.icon",
     "system_power_button_menu_sign_out.icon",
     "system_tray_accessibility.icon",
     "system_tray_app_badging.icon",
@@ -422,6 +430,7 @@ aggregate_vector_icons("ash_vector_icons") {
     "toolbar_position_top_center.icon",
     "touch_calibration_complete_check.icon",
     "touch_calibration_hand.icon",
+    "touch_indicator.icon",
     "trash_can.icon",
     "tray_action_new_lock_screen_note.icon",
     "two_files.icon",
@@ -480,6 +489,8 @@ aggregate_vector_icons("ash_vector_icons") {
     "visibility.icon",
     "visibility_off.icon",
     "wallpaper.icon",
+    "wm_mode_off.icon",
+    "wm_mode_on.icon",
     "zoom_in.icon",
     "zoom_out.icon",
   ]

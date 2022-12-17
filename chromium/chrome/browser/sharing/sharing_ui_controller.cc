@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -171,6 +171,10 @@ SharingDialogData SharingUiController::CreateDialogData(
 }
 
 bool SharingUiController::ShouldShowLoadingIcon() const {
+  return true;
+}
+
+bool SharingUiController::HasAccessibleUi() const {
   return true;
 }
 

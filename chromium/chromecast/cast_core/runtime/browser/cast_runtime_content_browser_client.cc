@@ -1,38 +1,77 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chromecast/cast_core/runtime/browser/cast_runtime_content_browser_client.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
-#include "base/ranges/algorithm.h"
-#include "chromecast/browser/cast_web_contents.h"
-#include "chromecast/browser/service_manager_connection.h"
+#include "base/memory/raw_ref.h"
+#include "chromecast/browser/cast_content_browser_client.h"
+#include "chromecast/browser/service/cast_service_simple.h"
 #include "chromecast/browser/webui/constants.h"
-#include "chromecast/cast_core/runtime/browser/cast_core_switches.h"
-#include "chromecast/cast_core/runtime/browser/core_browser_cast_service.h"
+#include "chromecast/cast_core/cast_core_switches.h"
 #include "chromecast/cast_core/runtime/browser/runtime_application.h"
-#include "chromecast/cast_core/runtime/common/cors_exempt_headers.h"
-#include "components/url_rewrite/browser/url_request_rewrite_rules_manager.h"
-#include "components/url_rewrite/common/url_loader_throttle.h"
+#include "chromecast/cast_core/runtime/browser/runtime_application_dispatcher.h"
+#include "chromecast/cast_core/runtime/browser/runtime_application_dispatcher_platform.h"
+#include "chromecast/cast_core/runtime/browser/runtime_application_dispatcher_platform_grpc.h"
+#include "chromecast/media/base/video_plane_controller.h"
+#include "components/cast_receiver/browser/public/application_client.h"
 #include "content/public/common/content_switches.h"
 #include "media/base/cdm_factory.h"
-#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 
 namespace chromecast {
 
-CastRuntimeContentBrowserClient::CastRuntimeContentBrowserClient(
-    CastFeatureListCreator* feature_list_creator)
-    : shell::CastContentBrowserClient(feature_list_creator) {}
+namespace {
 
-CastRuntimeContentBrowserClient::~CastRuntimeContentBrowserClient() {
-  if (core_browser_cast_service_) {
-    core_browser_cast_service_->app_dispatcher()->RemoveObserver(this);
-  }
+std::unique_ptr<RuntimeApplicationDispatcherPlatform>
+CreateApplicationDispatcherPlatform(
+    RuntimeApplicationDispatcherPlatform::Client& client,
+    CastWebService* web_service) {
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  std::string runtime_id =
+      command_line->GetSwitchValueASCII(cast::core::kCastCoreRuntimeIdSwitch);
+  std::string runtime_service_path =
+      command_line->GetSwitchValueASCII(cast::core::kRuntimeServicePathSwitch);
+
+  LOG(INFO) << "gRPC platform created";
+  return std::make_unique<RuntimeApplicationDispatcherPlatformGrpc>(
+      client, web_service, runtime_id, runtime_service_path);
 }
 
-CoreBrowserCastService* CastRuntimeContentBrowserClient::GetCastService() {
-  return core_browser_cast_service_;
+// CastServiceSimple impl for Cast Core that allows correct dispatcher start up
+// and tear down.
+class CoreCastService : public shell::CastServiceSimple {
+ public:
+  CoreCastService(CastWebService* web_service,
+                  RuntimeApplicationDispatcher& app_dispatcher)
+      : CastServiceSimple(web_service), app_dispatcher_(app_dispatcher) {}
+
+  // CastServiceSimple overrides:
+  void StartInternal() override {
+    if (!app_dispatcher_->Start()) {
+      base::Process::TerminateCurrentProcessImmediately(1);
+    }
+  }
+
+  void StopInternal() override { app_dispatcher_->Stop(); }
+
+ private:
+  base::raw_ref<RuntimeApplicationDispatcher> app_dispatcher_;
+};
+
+}  // namespace
+
+CastRuntimeContentBrowserClient::CastRuntimeContentBrowserClient(
+    CastFeatureListCreator* feature_list_creator)
+    : shell::CastContentBrowserClient(feature_list_creator) {
+  AddStreamingResolutionObserver(&application_client_observers_);
+  AddApplicationStateObserver(&application_client_observers_);
+}
+
+CastRuntimeContentBrowserClient::~CastRuntimeContentBrowserClient() {
+  RemoveStreamingResolutionObserver(&application_client_observers_);
+  RemoveApplicationStateObserver(&application_client_observers_);
 }
 
 std::unique_ptr<CastService> CastRuntimeContentBrowserClient::CreateCastService(
@@ -43,20 +82,12 @@ std::unique_ptr<CastService> CastRuntimeContentBrowserClient::CreateCastService(
     CastWindowManager* window_manager,
     CastWebService* web_service,
     DisplaySettingsManager* display_settings_manager) {
-  DCHECK(!core_browser_cast_service_);
-  auto network_context_getter = base::BindRepeating(
-      [](CastRuntimeContentBrowserClient* client)
-          -> network::mojom::NetworkContext* {
-        return client->GetSystemNetworkContext();
-      },
-      this);
-  auto core_browser_cast_service = std::make_unique<CoreBrowserCastService>(
-      web_service, std::move(network_context_getter), video_plane_controller);
-  core_browser_cast_service_ = core_browser_cast_service.get();
+  application_client_observers_.SetVideoPlaneController(video_plane_controller);
 
-  core_browser_cast_service_->app_dispatcher()->AddObserver(this);
+  InitializeCoreComponents(web_service);
 
-  return core_browser_cast_service;
+  // Unretained() is safe here because this instance will outlive CastService.
+  return std::make_unique<CoreCastService>(web_service, *app_dispatcher_);
 }
 
 std::unique_ptr<::media::CdmFactory>
@@ -86,18 +117,57 @@ bool CastRuntimeContentBrowserClient::IsWebUIAllowedToMakeNetworkRequests(
 }
 
 bool CastRuntimeContentBrowserClient::IsBufferingEnabled() {
+  return application_client_observers_.IsBufferingEnabled();
+}
+
+CastRuntimeContentBrowserClient::ApplicationClientObservers::
+    ~ApplicationClientObservers() = default;
+
+void CastRuntimeContentBrowserClient::ApplicationClientObservers::
+    SetVideoPlaneController(
+        media::VideoPlaneController* video_plane_controller) {
+  video_plane_controller_ = video_plane_controller;
+}
+
+bool CastRuntimeContentBrowserClient::ApplicationClientObservers::
+    IsBufferingEnabled() const {
   return is_buffering_enabled_.load();
 }
 
-void CastRuntimeContentBrowserClient::OnForegroundApplicationChanged(
-    RuntimeApplication* app) {
+void CastRuntimeContentBrowserClient::ApplicationClientObservers::
+    OnForegroundApplicationChanged(RuntimeApplication* app) {
   bool enabled = true;
   // Buffering must be disabled for streaming applications.
   if (app && app->IsStreamingApplication()) {
     enabled = false;
   }
+
   is_buffering_enabled_.store(enabled);
-  LOG(INFO) << "Buffering is " << (enabled ? "enabled" : "disabled");
+  DLOG(INFO) << "Buffering is " << (enabled ? "enabled" : "disabled");
+}
+
+void CastRuntimeContentBrowserClient::ApplicationClientObservers::
+    OnStreamingResolutionChanged(
+        const gfx::Rect& size,
+        const ::media::VideoTransformation& transformation) {
+  if (video_plane_controller_) {
+    video_plane_controller_->SetGeometryFromMediaType(size, transformation);
+  }
+}
+
+cast_receiver::ApplicationClient::NetworkContextGetter
+CastRuntimeContentBrowserClient::GetNetworkContextGetter() {
+  // Unretained() is safe here because this instance will outlive any
+  // application that would call it.
+  return base::BindRepeating(
+      &CastRuntimeContentBrowserClient::GetSystemNetworkContext,
+      base::Unretained(this));
+}
+
+void CastRuntimeContentBrowserClient::InitializeCoreComponents(
+    CastWebService* web_service) {
+  app_dispatcher_ = std::make_unique<RuntimeApplicationDispatcher>(
+      base::BindOnce(&CreateApplicationDispatcherPlatform), web_service, *this);
 }
 
 }  // namespace chromecast

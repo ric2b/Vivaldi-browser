@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,8 +11,10 @@
 #include "ash/public/cpp/schedule_enums.h"
 #include "ash/public/cpp/style/color_mode_observer.h"
 #include "ash/shell.h"
+#include "ash/style/color_util.h"
 #include "ash/style/dark_light_mode_nudge_controller.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
+#include "base/logging.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -34,36 +36,6 @@ DarkLightModeControllerImpl* g_instance = nullptr;
 constexpr OobeDialogState kStatesSupportingDarkTheme[] = {
     OobeDialogState::MARKETING_OPT_IN, OobeDialogState::THEME_SELECTION};
 
-// Gets the themed background color. The color will be set to `user_color` of
-// ColorProvider::Key and then can be assigned to Shield and Base layers for
-// dark/light mode feature. The algorithm to calculate the color and scope to
-// apply the color will change on Material Next project.
-SkColor GetThemedBackgroundColor(bool use_dark_color) {
-  const SkColor default_color =
-      use_dark_color ? gfx::kGoogleGrey900 : SK_ColorWHITE;
-  if (!Shell::HasInstance())
-    return default_color;
-
-  WallpaperControllerImpl* wallpaper_controller =
-      Shell::Get()->wallpaper_controller();
-  if (!wallpaper_controller)
-    return default_color;
-
-  color_utils::LumaRange luma_range = use_dark_color
-                                          ? color_utils::LumaRange::DARK
-                                          : color_utils::LumaRange::LIGHT;
-  SkColor muted_color =
-      wallpaper_controller->GetProminentColor(color_utils::ColorProfile(
-          luma_range, color_utils::SaturationRange::MUTED));
-  if (muted_color == kInvalidWallpaperColor)
-    return default_color;
-
-  return color_utils::GetResultingPaintColor(
-      SkColorSetA(use_dark_color ? SK_ColorBLACK : SK_ColorWHITE,
-                  SK_AlphaOPAQUE * 0.5f),
-      muted_color);
-}
-
 // Refresh colors of the system on the current color mode. Not only the SysUI,
 // but also all the other components like WebUI. And since
 // DarkLightModeController is kind of NativeTheme of ChromeOS. This will trigger
@@ -72,7 +44,10 @@ SkColor GetThemedBackgroundColor(bool use_dark_color) {
 // wallpaper changes as the background color is calculated from current
 // wallpaper.
 void RefreshColorsOnColorMode(bool is_dark_mode_enabled) {
-  const SkColor themed_color = GetThemedBackgroundColor(is_dark_mode_enabled);
+  const SkColor default_color =
+      is_dark_mode_enabled ? gfx::kGoogleGrey900 : SK_ColorWHITE;
+  const SkColor themed_color =
+      ColorUtil::GetBackgroundThemedColor(default_color, is_dark_mode_enabled);
   auto* native_theme = ui::NativeTheme::GetInstanceForNativeUi();
   native_theme->set_use_dark_colors(is_dark_mode_enabled);
   native_theme->set_user_color(themed_color);
@@ -96,6 +71,10 @@ DarkLightModeControllerImpl::DarkLightModeControllerImpl()
       nudge_controller_(std::make_unique<DarkLightModeNudgeController>()) {
   DCHECK(!g_instance);
   g_instance = this;
+
+  // TODO(crbug/1339004): Remove after fixing the crashes.
+  LOG(WARNING) << "Initial theme is "
+               << (IsDarkModeEnabled() ? "dark" : "light");
 
   // May be null in unit tests.
   if (Shell::HasInstance()) {
@@ -309,6 +288,10 @@ const char* DarkLightModeControllerImpl::GetFeatureName() const {
 
 void DarkLightModeControllerImpl::NotifyColorModeChanges() {
   const bool is_enabled = IsDarkModeEnabled();
+
+  // TODO(crbug/1339004): Remove after fixing the crashes.
+  LOG(WARNING) << "Theme is " << (is_enabled ? "dark" : "light");
+
   cros_styles::SetDarkModeEnabled(is_enabled);
   for (auto& observer : observers_)
     observer.OnColorModeChanged(is_enabled);

@@ -1,10 +1,9 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/updater/updater.h"
 
-#include <algorithm>
 #include <iterator>
 
 #include "base/at_exit.h"
@@ -16,6 +15,7 @@
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/process/memory.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/platform_thread.h"
@@ -161,7 +161,7 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
       command_line->HasSwitch(kTagSwitch) ||
       command_line->HasSwitch(kRuntimeSwitch) ||
       command_line->HasSwitch(kHandoffSwitch)) {
-    return MakeAppInstall()->Run();
+    return MakeAppInstall(command_line->HasSwitch(kSilentSwitch))->Run();
   }
 
   if (command_line->HasSwitch(kUninstallSwitch) ||
@@ -198,9 +198,9 @@ const char* GetUpdaterCommand(const base::CommandLine* command_line) {
       kHealthCheckSwitch,    kHandoffSwitch,
       kRuntimeSwitch,
   };
-  const char** it = std::find_if(
-      std::begin(commands), std::end(commands),
-      [command_line](auto cmd) { return command_line->HasSwitch(cmd); });
+  const char** it = base::ranges::find_if(commands, [command_line](auto cmd) {
+    return command_line->HasSwitch(cmd);
+  });
   // Return the command. As a workaround for recovery component invocations
   // that do not pass --recover, report the browser version switch as --recover.
   return it != std::end(commands)
@@ -227,6 +227,17 @@ constexpr const char* BuildArch() {
 #endif
 }
 
+base::CommandLine::StringType GetCommandLineString() {
+#if BUILDFLAG(IS_WIN)
+  // Gets the raw command line on Windows, because
+  // `base::CommandLine::GetCommandLineString()` could return an invalid string
+  // after the class re-arranges the legacy command line arguments.
+  return ::GetCommandLine();
+#else
+  return base::CommandLine::ForCurrentProcess()->GetCommandLineString();
+#endif
+}
+
 }  // namespace
 
 int UpdaterMain(int argc, const char* const* argv) {
@@ -246,8 +257,7 @@ int UpdaterMain(int argc, const char* const* argv) {
   InitLogging(updater_scope);
 
   VLOG(1) << "Version " << kUpdaterVersion << ", " << BuildFlavor() << ", "
-          << BuildArch()
-          << ", command line: " << command_line->GetCommandLineString();
+          << BuildArch() << ", command line: " << GetCommandLineString();
   const int retval = HandleUpdaterCommands(updater_scope, command_line);
   VLOG(1) << __func__ << " (--" << GetUpdaterCommand(command_line) << ")"
           << " returned " << retval << ".";

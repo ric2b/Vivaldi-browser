@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -107,10 +107,10 @@ struct TileQuadState {
 };
 
 struct YUVVideoQuadState {
-  gfx.mojom.RectF ya_tex_coord_rect;
-  gfx.mojom.RectF uv_tex_coord_rect;
-  gfx.mojom.Size ya_tex_size;
-  gfx.mojom.Size uv_tex_size;
+  gfx.mojom.Size coded_size;
+  gfx.mojom.Rect video_visible_rect;
+  uint8 u_scale;
+  uint8 v_scale;
   ResourceId y_plane_resource_id;
   ResourceId u_plane_resource_id;
   ResourceId v_plane_resource_id;

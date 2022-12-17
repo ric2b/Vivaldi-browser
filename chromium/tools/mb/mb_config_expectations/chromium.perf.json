@@ -3,6 +3,7 @@
     "gn_args": {
       "chrome_pgo_phase": 0,
       "clang_use_default_sample_profile": false,
+      "debuggable_apks": false,
       "ffmpeg_branding": "Chrome",
       "is_chrome_branded": true,
       "is_official_build": true,
@@ -17,6 +18,7 @@
     "gn_args": {
       "chrome_pgo_phase": 0,
       "clang_use_default_sample_profile": false,
+      "debuggable_apks": false,
       "ffmpeg_branding": "Chrome",
       "is_chrome_branded": true,
       "is_official_build": true,
@@ -32,6 +34,7 @@
     "gn_args": {
       "chrome_pgo_phase": 0,
       "clang_use_default_sample_profile": false,
+      "debuggable_apks": false,
       "ffmpeg_branding": "Chrome",
       "is_chrome_branded": true,
       "is_official_build": true,
@@ -45,6 +48,7 @@
   "android-builder-perf-pgo": {
     "gn_args": {
       "clang_use_default_sample_profile": false,
+      "debuggable_apks": false,
       "ffmpeg_branding": "Chrome",
       "is_chrome_branded": true,
       "is_official_build": true,
@@ -58,6 +62,7 @@
     "gn_args": {
       "chrome_pgo_phase": 0,
       "clang_use_default_sample_profile": false,
+      "debuggable_apks": false,
       "ffmpeg_branding": "Chrome",
       "is_chrome_branded": true,
       "is_official_build": true,
@@ -72,6 +77,7 @@
   "android_arm64-builder-perf-pgo": {
     "gn_args": {
       "clang_use_default_sample_profile": false,
+      "debuggable_apks": false,
       "ffmpeg_branding": "Chrome",
       "is_chrome_branded": true,
       "is_official_build": true,
@@ -85,7 +91,8 @@
   "chromecast-linux-builder-perf": {
     "gn_args": {
       "dcheck_always_on": false,
-      "is_chromecast": true,
+      "enable_cast_receiver": true,
+      "is_castos": true,
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
@@ -124,37 +131,20 @@
       "use_thin_lto": true
     }
   },
-  "fuchsia-builder-perf-arm64": {
+  "chromeos-arm64-generic-lacros-builder-perf": {
+    "args_file": "//build/args/chromeos/arm64-generic-crostoolchain.gni",
     "gn_args": {
-      "ffmpeg_branding": "Chrome",
-      "fuchsia_additional_boot_images": [
-        "//third_party/fuchsia-sdk/images-internal/astro-release/",
-        "//third_party/fuchsia-sdk/images-internal/sherlock-release/"
-      ],
+      "chromeos_is_browser_only": true,
+      "dcheck_always_on": false,
+      "is_cfi": true,
       "is_chrome_branded": true,
+      "is_chromeos_device": true,
       "is_official_build": true,
-      "proprietary_codecs": true,
+      "ozone_platform_headless": true,
       "symbol_level": 1,
-      "target_cpu": "arm64",
-      "target_os": "fuchsia",
-      "test_isolate_uses_emulator": false,
-      "use_goma": true
-    }
-  },
-  "fuchsia-builder-perf-x64": {
-    "gn_args": {
-      "ffmpeg_branding": "Chrome",
-      "fuchsia_additional_boot_images": [
-        "//third_party/fuchsia-sdk/images-internal/chromebook-x64-release/"
-      ],
-      "is_chrome_branded": true,
-      "is_official_build": true,
-      "proprietary_codecs": true,
-      "symbol_level": 1,
-      "target_cpu": "x64",
-      "target_os": "fuchsia",
-      "test_isolate_uses_emulator": false,
-      "use_goma": true
+      "target_os": "chromeos",
+      "use_goma": true,
+      "use_thin_lto": true
     }
   },
   "linux-builder-perf": {

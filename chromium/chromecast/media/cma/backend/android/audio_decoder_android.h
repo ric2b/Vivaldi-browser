@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,7 +40,7 @@ class AudioDecoderAndroid : public MediaPipelineBackend::AudioDecoder,
  public:
   using BufferStatus = MediaPipelineBackend::BufferStatus;
 
-  explicit AudioDecoderAndroid(MediaPipelineBackendAndroid* backend);
+  AudioDecoderAndroid(MediaPipelineBackendAndroid* backend, bool is_apk_audio);
 
   AudioDecoderAndroid(const AudioDecoderAndroid&) = delete;
   AudioDecoderAndroid& operator=(const AudioDecoderAndroid&) = delete;
@@ -64,6 +64,7 @@ class AudioDecoderAndroid : public MediaPipelineBackend::AudioDecoder,
   bool SetVolume(float multiplier) override;
   RenderingDelay GetRenderingDelay() override;
   AudioTrackTimestamp GetAudioTrackTimestamp() override;
+  int GetStartThresholdInFrames() override;
 
  private:
   struct RateShifterInfo {
@@ -95,6 +96,7 @@ class AudioDecoderAndroid : public MediaPipelineBackend::AudioDecoder,
   void UpdateStatistics(Statistics delta);
 
   MediaPipelineBackendAndroid* const backend_;
+  const bool is_apk_audio_;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   MediaPipelineBackend::Decoder::Delegate* delegate_;
 

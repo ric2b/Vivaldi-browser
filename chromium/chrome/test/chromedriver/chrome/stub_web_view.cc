@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -57,22 +57,25 @@ Status StubWebView::Resume(const Timeout* timeout) {
   return Status(kOk);
 }
 
+Status StubWebView::PostBidiCommand(base::Value::Dict command) {
+  return Status{kOk};
+}
+
 Status StubWebView::SendCommand(const std::string& cmd,
-                                const base::DictionaryValue& params) {
+                                const base::Value::Dict& params) {
   return Status(kOk);
 }
 
-Status StubWebView::SendCommandFromWebSocket(
-    const std::string& cmd,
-    const base::DictionaryValue& params,
-    const int client_cmd_id) {
+Status StubWebView::SendCommandFromWebSocket(const std::string& cmd,
+                                             const base::Value::Dict& params,
+                                             const int client_cmd_id) {
   return Status(kOk);
 }
 
 Status StubWebView::SendCommandAndGetResult(
-        const std::string& cmd,
-        const base::DictionaryValue& params,
-        std::unique_ptr<base::Value>* value) {
+    const std::string& cmd,
+    const base::Value::Dict& params,
+    std::unique_ptr<base::Value>* value) {
   return Status(kOk);
 }
 
@@ -212,13 +215,12 @@ Status StubWebView::OverrideDownloadDirectoryIfNeeded(
   return Status(kOk);
 }
 
-Status StubWebView::CaptureScreenshot(
-    std::string* screenshot,
-    const base::DictionaryValue& params) {
+Status StubWebView::CaptureScreenshot(std::string* screenshot,
+                                      const base::Value::Dict& params) {
   return Status(kOk);
 }
 
-Status StubWebView::PrintToPDF(const base::DictionaryValue& params,
+Status StubWebView::PrintToPDF(const base::Value::Dict& params,
                                std::string* pdf) {
   return Status(kOk);
 }

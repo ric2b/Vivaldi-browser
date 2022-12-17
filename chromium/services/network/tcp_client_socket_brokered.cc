@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "net/socket/tcp_client_socket.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/brokered_client_socket_factory.h"
+#include "services/network/public/cpp/transferable_socket.h"
 
 namespace network {
 
@@ -40,6 +41,7 @@ int TCPClientSocketBrokered::Bind(const net::IPEndPoint& address) {
 }
 
 bool TCPClientSocketBrokered::SetKeepAlive(bool enable, int delay) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return false;
   }
@@ -47,6 +49,7 @@ bool TCPClientSocketBrokered::SetKeepAlive(bool enable, int delay) {
 }
 
 bool TCPClientSocketBrokered::SetNoDelay(bool no_delay) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return false;
   }
@@ -55,11 +58,16 @@ bool TCPClientSocketBrokered::SetNoDelay(bool no_delay) {
 
 void TCPClientSocketBrokered::SetBeforeConnectCallback(
     const BeforeConnectCallback& before_connect_callback) {
-  // TODO(liza): Implement this.
-  NOTREACHED();
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!before_connect_callback_);
+  DCHECK(!IsConnected());
+  DCHECK(!is_connect_in_progress_);
+
+  before_connect_callback_ = before_connect_callback;
 }
 
 int TCPClientSocketBrokered::Connect(net::CompletionOnceCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // TODO(liza): add support for reconnecting disconnected socket, or look into
   // removing support for reconnection from TCPClientSocket if it's not needed.
   DCHECK(!callback.is_null());
@@ -96,16 +104,19 @@ void TCPClientSocketBrokered::DidCompleteOpenForBind(
 void TCPClientSocketBrokered::DidCompleteConnect(
     net::CompletionOnceCallback callback,
     int result) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_NE(result, net::ERR_IO_PENDING);
 
-  std::move(callback).Run(result);
   is_connect_in_progress_ = false;
+  // The callback may delete {this}.
+  std::move(callback).Run(result);
 }
 
 void TCPClientSocketBrokered ::DidCompleteCreate(
     net::CompletionOnceCallback callback,
-    mojo::PlatformHandle fd,
+    network::TransferableSocket socket,
     int result) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (result != net::OK) {
     std::move(callback).Run(result);
     return;
@@ -115,23 +126,29 @@ void TCPClientSocketBrokered ::DidCompleteCreate(
   // browser process.
   std::unique_ptr<net::TCPSocket> tcp_socket = std::make_unique<net::TCPSocket>(
       std::move(socket_performance_watcher_), net_log_, source_);
-// TODO(https://crbug.com/1311014): call TCPSocketWin::AdoptUnconnectedSocket
-#if BUILDFLAG(IS_WIN)
-  tcp_socket->Open(addresses_.begin()->GetFamily());
-#else
-  tcp_socket->AdoptUnconnectedSocket(fd.ReleaseFD());
-#endif
+  tcp_socket->AdoptUnconnectedSocket(socket.TakeSocket());
 
   // TODO(liza): Pass through the NetworkHandle.
   brokered_socket_ = std::make_unique<net::TCPClientSocket>(
       std::move(tcp_socket), addresses_, network_quality_estimator_);
   brokered_socket_->ApplySocketTag(tag_);
+
+  if (before_connect_callback_) {
+    int callback_result = before_connect_callback_.Run();
+    DCHECK_NE(net::ERR_IO_PENDING, callback_result);
+    if (callback_result != net::OK) {
+      std::move(callback).Run(callback_result);
+      return;
+    }
+  }
+
   brokered_socket_->Connect(base::BindOnce(
       &TCPClientSocketBrokered::DidCompleteConnect,
       brokered_weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void TCPClientSocketBrokered::Disconnect() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (brokered_socket_) {
     brokered_socket_->Disconnect();
   }
@@ -139,6 +156,7 @@ void TCPClientSocketBrokered::Disconnect() {
 }
 
 bool TCPClientSocketBrokered::IsConnected() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return false;
   }
@@ -147,6 +165,7 @@ bool TCPClientSocketBrokered::IsConnected() const {
 }
 
 bool TCPClientSocketBrokered::IsConnectedAndIdle() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return false;
   }
@@ -154,6 +173,7 @@ bool TCPClientSocketBrokered::IsConnectedAndIdle() const {
 }
 
 int TCPClientSocketBrokered::GetPeerAddress(net::IPEndPoint* address) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return net::ERR_SOCKET_NOT_CONNECTED;
   }
@@ -161,6 +181,7 @@ int TCPClientSocketBrokered::GetPeerAddress(net::IPEndPoint* address) const {
 }
 
 int TCPClientSocketBrokered::GetLocalAddress(net::IPEndPoint* address) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return net::ERR_SOCKET_NOT_CONNECTED;
   }
@@ -168,6 +189,7 @@ int TCPClientSocketBrokered::GetLocalAddress(net::IPEndPoint* address) const {
 }
 
 const net::NetLogWithSource& TCPClientSocketBrokered::NetLog() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return NetLog();
   }
@@ -175,6 +197,7 @@ const net::NetLogWithSource& TCPClientSocketBrokered::NetLog() const {
 }
 
 bool TCPClientSocketBrokered::WasEverUsed() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return false;
   }
@@ -194,6 +217,7 @@ bool TCPClientSocketBrokered::GetSSLInfo(net::SSLInfo* ssl_info) {
 }
 
 int64_t TCPClientSocketBrokered::GetTotalReceivedBytes() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return 0;
   }
@@ -201,6 +225,7 @@ int64_t TCPClientSocketBrokered::GetTotalReceivedBytes() const {
 }
 
 void TCPClientSocketBrokered::ApplySocketTag(const net::SocketTag& tag) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     tag_ = tag;
   } else {
@@ -211,6 +236,7 @@ void TCPClientSocketBrokered::ApplySocketTag(const net::SocketTag& tag) {
 int TCPClientSocketBrokered::Read(net::IOBuffer* buf,
                                   int buf_len,
                                   net::CompletionOnceCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return net::ERR_SOCKET_NOT_CONNECTED;
   }
@@ -220,6 +246,7 @@ int TCPClientSocketBrokered::Read(net::IOBuffer* buf,
 int TCPClientSocketBrokered::ReadIfReady(net::IOBuffer* buf,
                                          int buf_len,
                                          net::CompletionOnceCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return net::ERR_SOCKET_NOT_CONNECTED;
   }
@@ -227,6 +254,7 @@ int TCPClientSocketBrokered::ReadIfReady(net::IOBuffer* buf,
 }
 
 int TCPClientSocketBrokered::CancelReadIfReady() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return net::ERR_SOCKET_NOT_CONNECTED;
   }
@@ -238,6 +266,7 @@ int TCPClientSocketBrokered::Write(
     int buf_len,
     net::CompletionOnceCallback callback,
     const net::NetworkTrafficAnnotationTag& traffic_annotation) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return net::ERR_SOCKET_NOT_CONNECTED;
   }
@@ -246,6 +275,7 @@ int TCPClientSocketBrokered::Write(
 }
 
 int TCPClientSocketBrokered::SetReceiveBufferSize(int32_t size) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return net::ERR_SOCKET_NOT_CONNECTED;
   }
@@ -253,6 +283,7 @@ int TCPClientSocketBrokered::SetReceiveBufferSize(int32_t size) {
 }
 
 int TCPClientSocketBrokered::SetSendBufferSize(int32_t size) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!brokered_socket_) {
     return net::ERR_SOCKET_NOT_CONNECTED;
   }

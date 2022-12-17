@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -338,7 +338,7 @@ void CompareAudioData(const ::media::AudioBus& expected,
     const float* expected_data = expected.channel(c);
     const float* actual_data = actual.channel(c);
     for (int f = 0; f < expected.frames(); ++f) {
-      EXPECT_FLOAT_EQ(*expected_data++, *actual_data++)
+      EXPECT_NEAR(*expected_data++, *actual_data++, 0.0000001f)
           << c << " " << f << " " << token;
     }
   }
@@ -527,7 +527,6 @@ TEST_F(StreamMixerTest, RemoveInput) {
   }
 
   EXPECT_CALL(*mock_output_, Start(kTestSamplesPerSecond, _)).Times(1);
-  EXPECT_CALL(*mock_output_, Stop()).Times(0);
 
   for (size_t i = 0; i < inputs.size(); ++i) {
     EXPECT_CALL(*inputs[i], InitializeAudioPlayback(_, _)).Times(1);
@@ -542,6 +541,7 @@ TEST_F(StreamMixerTest, RemoveInput) {
   }
 
   WaitForMixer();
+  task_environment_.RunUntilIdle();
 }
 
 TEST_F(StreamMixerTest, WriteFrames) {

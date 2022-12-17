@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -510,6 +510,7 @@ void CommandLine::ParseFromString(StringPieceType command_line) {
   if (downlevel_shell32_dll)
     ::FreeLibrary(downlevel_shell32_dll);
 }
+
 #endif  // BUILDFLAG(IS_WIN)
 
 void CommandLine::AppendSwitchesAndArguments(
@@ -650,6 +651,7 @@ void CommandLine::ParseAsSingleArgument(
       single_arg_switch_position + single_arg_switch.length() + 1;
   if (arg_position >= raw_command_line_string_.length())
     return;
+  has_single_argument_switch_ = true;
   const StringPieceType arg = raw_command_line_string_.substr(arg_position);
   if (!arg.empty()) {
     AppendArgNative(arg);

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -121,6 +121,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
 
     absl::optional<std::array<uint8_t, 32>> large_blob_key;
     absl::optional<std::vector<uint8_t>> cred_blob;
+
+    // device_bound_key contains the optional device-bound key for this
+    // credential, thus simulating a multi-device credential.
+    absl::optional<std::unique_ptr<PrivateKey>> device_key;
   };
 
   // Stores the state of the device. Since |U2fDevice| objects only persist for
@@ -173,6 +177,9 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     // u2f_invalid_public_key causes the public key in a registration response
     // to be invalid. (U2F only.)
     bool u2f_invalid_public_key = false;
+
+    // ctap2_invalid_signature causes a bogus signature to be returned if true.
+    bool ctap2_invalid_signature = false;
 
     // Number of PIN retries remaining.
     int pin_retries = kMaxPinRetries;

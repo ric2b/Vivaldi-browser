@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,10 +11,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/permissions/permission_chip.h"
-#include "chrome/browser/ui/views/permissions/permission_request_chip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -22,12 +21,18 @@
 #include "chrome/test/permissions/permission_request_manager_test_api.h"
 #include "components/permissions/features.h"
 #include "components/permissions/request_type.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/test/widget_test.h"
+
+enum ChipFeatureConfig {
+  REQUEST_CHIP,
+  REQUEST_CHIP_LOCATION_BAR_ICON_OVERRIDE
+};
 
 class PermissionBubbleInteractiveUITest : public InProcessBrowserTest {
  public:
@@ -114,8 +119,9 @@ class PermissionBubbleInteractiveUITest : public InProcessBrowserTest {
     BrowserView* browser_view =
         BrowserView::GetBrowserViewForBrowser(browser());
     LocationBarView* lbv = browser_view->toolbar()->location_bar();
-    if (lbv->IsChipActive() && !lbv->chip()->IsBubbleShowing()) {
-      views::test::ButtonTestApi(lbv->chip()->button())
+    if (lbv->chip_controller()->IsPermissionPromptChipVisible() &&
+        !lbv->chip_controller()->IsBubbleShowing()) {
+      views::test::ButtonTestApi(lbv->chip_controller()->chip())
           .NotifyClick(ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(),
                                       gfx::Point(), ui::EventTimeForNow(),
                                       ui::EF_LEFT_MOUSE_BUTTON, 0));
@@ -230,4 +236,46 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleInteractiveUITest, MAYBE_SwitchTabs) {
 #if BUILDFLAG(IS_MAC)
   TestSwitchingTabsWithCurlyBraces();
 #endif
+}
+
+class PermissionPromptBubbleViewConfirmationTest
+    : public PermissionBubbleInteractiveUITest {
+ public:
+  PermissionPromptBubbleViewConfirmationTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {permissions::features::kConfirmationChip},
+        {permissions::features::kPermissionChip});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(PermissionPromptBubbleViewConfirmationTest,
+                       VerifyConfirmationChipShown) {
+  test_api_->manager()->Accept();
+  base::RunLoop().RunUntilIdle();
+
+  LocationBarView* location_bar_view =
+      BrowserView::GetBrowserViewForBrowser(browser())->GetLocationBarView();
+  EXPECT_NE(location_bar_view->chip_controller(), nullptr);
+  EXPECT_TRUE(location_bar_view->chip_controller()->chip()->GetVisible());
+  EXPECT_EQ(location_bar_view->chip_controller()->chip()->GetText(),
+            l10n_util::GetStringUTF16(
+                IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION));
+}
+
+IN_PROC_BROWSER_TEST_F(PermissionPromptBubbleViewConfirmationTest,
+                       VerifyFullScreenHandledCorrectly) {
+  FullscreenNotificationObserver fullscreen_observer(browser());
+  chrome::ToggleFullscreenMode(browser());
+  fullscreen_observer.Wait();
+
+  test_api_->manager()->Accept();
+  base::RunLoop().RunUntilIdle();
+
+  LocationBarView* location_bar_view =
+      BrowserView::GetBrowserViewForBrowser(browser())->GetLocationBarView();
+  EXPECT_NE(location_bar_view->chip_controller(), nullptr);
+  EXPECT_FALSE(location_bar_view->chip_controller()->chip()->GetVisible());
 }

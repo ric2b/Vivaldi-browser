@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -41,10 +42,15 @@ bool AshBrowserTestStarter::PrepareEnvironmentForLacros() {
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   scoped_feature_list_.InitWithFeatures(
-      {chromeos::features::kLacrosSupport, chromeos::features::kLacrosPrimary},
+      {chromeos::features::kLacrosSupport, chromeos::features::kLacrosPrimary,
+       chromeos::features::kLacrosOnly},
       {});
-  command_line->AppendSwitch("enable-wayland-server");
-  command_line->AppendSwitch("no-startup-window");
+  command_line->AppendSwitch(ash::switches::kAshEnableWaylandServer);
+  command_line->AppendSwitch(ash::switches::kDisableLacrosKeepAliveForTesting);
+  command_line->AppendSwitch(ash::switches::kDisableLoginLacrosOpening);
+  command_line->AppendSwitch(switches::kNoStartupWindow);
+  command_line->AppendSwitchASCII(ash::switches::kLacrosChromeAdditionalArgs,
+                                  "--no-first-run");
   return true;
 }
 

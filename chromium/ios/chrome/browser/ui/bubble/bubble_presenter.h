@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,6 +52,9 @@ class ChromeBrowserState;
 // Shows a help bubble to let the user know that they can change the default
 // mode (Desktop/Mobile) of the websites.
 - (void)presentDefaultSiteViewTipBubble;
+
+// Presents a help bubble for What's New, if applicable.
+- (void)presentWhatsNewBottomToolbarBubble;
 
 @end
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,15 +59,11 @@ function encodeBase64SourceMap(contents) {
  */
 async function mergeSourcemaps(sourceMaps) {
   let generator = null;
-  let originalSource = null;
-  for (const sourcemap of sourceMaps) {
+  for await (const sourcemap of sourceMaps) {
     const parsedMap = JSON.parse(sourcemap);
-    if (!originalSource) {
-      originalSource = parsedMap.sources[0];
-    }
     const consumer = await new SourceMapConsumer(parsedMap);
     if (generator) {
-      generator.applySourceMap(consumer, originalSource);
+      generator.applySourceMap(consumer);
     } else {
       generator = await SourceMapGenerator.fromSourceMap(consumer);
     }

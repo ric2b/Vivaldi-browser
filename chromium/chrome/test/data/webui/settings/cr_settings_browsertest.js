@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@ GEN('#include "build/build_config.h"');
 GEN('#include "build/chromeos_buildflags.h"');
 GEN('#include "chrome/browser/ui/ui_features.h"');
 GEN('#include "chrome/common/chrome_features.h"');
+GEN('#include "components/performance_manager/public/features.h"');
 GEN('#include "components/privacy_sandbox/privacy_sandbox_features.h"');
 GEN('#include "components/autofill/core/common/autofill_features.h"');
 GEN('#include "content/public/common/content_features.h"');
@@ -20,8 +21,6 @@ GEN('#include "content/public/test/browser_test.h"');
 GEN('#if !BUILDFLAG(IS_CHROMEOS)');
 GEN('#include "components/language/core/common/language_experiments.h"');
 GEN('#endif');
-
-/* eslint-disable no-var */
 
 /** Test fixture for shared Polymer 3 elements. */
 var CrSettingsBrowserTest = class extends PolymerTest {
@@ -80,18 +79,17 @@ var CrSettingsBasicPageTest = class extends CrSettingsBrowserTest {
   }
 };
 
-// TODO(crbug.com/1298753): Flaky on Mac.
-GEN('#if BUILDFLAG(IS_MAC)');
-GEN('#define MAYBE_BasicPage DISABLED_BasicPage');
-GEN('#else');
-GEN('#define MAYBE_BasicPage BasicPage');
-GEN('#endif');
-TEST_F('CrSettingsBasicPageTest', 'MAYBE_BasicPage', function() {
+// TODO(crbug.com/1298753): Flaky on all platforms.
+TEST_F('CrSettingsBasicPageTest', 'DISABLED_BasicPage', function() {
   runMochaSuite('SettingsBasicPage');
 });
 
 TEST_F('CrSettingsBasicPageTest', 'PrivacyGuidePromo', function() {
   runMochaSuite('PrivacyGuidePromo');
+});
+
+TEST_F('CrSettingsBasicPageTest', 'Performance', function() {
+  runMochaSuite('SettingsBasicPagePerformance');
 });
 
 GEN('#if !BUILDFLAG(IS_CHROMEOS_ASH)');
@@ -134,8 +132,8 @@ var CrSettingsTranslatePageTest = class extends CrSettingsBrowserTest {
   }
 };
 
-TEST_F('CrSettingsTranslatePageTest', 'TargetLanguageSelect', function() {
-  mocha.grep(translate_page_tests.TestNames.TargetLanguageSelect).run();
+TEST_F('CrSettingsTranslatePageTest', 'TranslateSettings', function() {
+  mocha.grep(translate_page_tests.TestNames.TranslateSettings).run();
 });
 
 TEST_F('CrSettingsTranslatePageTest', 'AlwaysTranslateDialog', function() {
@@ -144,10 +142,6 @@ TEST_F('CrSettingsTranslatePageTest', 'AlwaysTranslateDialog', function() {
 
 TEST_F('CrSettingsTranslatePageTest', 'NeverTranslateDialog', function() {
   mocha.grep(translate_page_tests.TestNames.NeverTranslateDialog).run();
-});
-
-TEST_F('CrSettingsTranslatePageTest', 'TranslateToggle', function() {
-  mocha.grep(translate_page_tests.TestNames.TranslateToggle).run();
 });
 
 var CrSettingsLanguagesPageMetricsTest = class extends CrSettingsBrowserTest {
@@ -355,7 +349,8 @@ var CrSettingsSafetyCheckPermissionsTest = class extends CrSettingsBrowserTest {
   get featureListInternal() {
     return {
       enabled: [
-        'features::kSafetyCheckPermissions',
+        'features::kSafetyCheckUnusedSitePermissions',
+        'features::kSafetyCheckNotificationPermissions',
       ],
     };
   }
@@ -426,6 +421,79 @@ TEST_F('CrSettingsSiteDetailsTest', 'MAYBE_SiteDetails', function() {
   mocha.run();
 });
 
+var CrSettingsPerformanceMenuTest = class extends CrSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/settings_performance_menu_test.js';
+  }
+
+  /** @override */
+  get featureListInternal() {
+    return {
+      enabled: [
+        'performance_manager::features::kHighEfficiencyModeAvailable',
+        'performance_manager::features::kBatterySaverModeAvailable',
+      ],
+    };
+  }
+};
+
+TEST_F('CrSettingsPerformanceMenuTest', 'All', function() {
+  mocha.run();
+});
+
+var CrSettingsPerformancePageTest = class extends CrSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/performance_page_test.js';
+  }
+
+  /** @override */
+  get featureListInternal() {
+    return {
+      enabled: [
+        'performance_manager::features::kHighEfficiencyModeAvailable',
+      ],
+    };
+  }
+};
+
+TEST_F('CrSettingsPerformancePageTest', 'All', function() {
+  mocha.run();
+});
+
+var CrSettingsBatteryPageTest = class extends CrSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/battery_page_test.js';
+  }
+
+  /** @override */
+  get featureListInternal() {
+    return {
+      enabled: [
+        'performance_manager::features::kBatterySaverModeAvailable',
+      ],
+    };
+  }
+};
+
+TEST_F('CrSettingsBatteryPageTest', 'All', function() {
+  mocha.run();
+});
+
+var CrSettingsTabDiscardExceptionDialogTest =
+    class extends CrSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/tab_discard_exception_dialog_test.js';
+  }
+};
+
+TEST_F('CrSettingsTabDiscardExceptionDialogTest', 'All', function() {
+  mocha.run();
+});
+
 var CrSettingsPersonalizationOptionsTest = class extends CrSettingsBrowserTest {
   /** @override */
   get browsePreload() {
@@ -486,6 +554,10 @@ TEST_F('CrSettingsPrivacyPageTest', 'PrivacyGuideRowTests', function() {
 
 TEST_F('CrSettingsPrivacyPageTest', 'PrivacyGuide2Disabled', function() {
   runMochaSuite('PrivacyGuide2Disabled');
+});
+
+TEST_F('CrSettingsPrivacyPageTest', 'NotificationPermissionReview', function() {
+  runMochaSuite('NotificationPermissionReview');
 });
 
 // TODO(crbug.com/1043665): flaky crash on Linux Tests (dbg).
@@ -616,15 +688,6 @@ var CrSettingsCookiesPageTest = class extends CrSettingsBrowserTest {
   get browsePreload() {
     return 'chrome://settings/test_loader.html?module=settings/cookies_page_test.js';
   }
-
-  /** @override */
-  get featureListInternal() {
-    return {
-      enabled: [
-        'features::kConsolidatedSiteStorageControls',
-      ],
-    };
-  }
 };
 
 // Flaky on MacOS bots and times out on Linux Dbg: https://crbug.com/1240747
@@ -637,49 +700,9 @@ TEST_F('CrSettingsCookiesPageTest', 'MAYBE_CookiesPageTest', function() {
   runMochaSuite('CrSettingsCookiesPageTest');
 });
 
-// Flaky on MacOS bots and times out on Linux Dbg: https://crbug.com/1240747
-GEN('#if (BUILDFLAG(IS_MAC)) || (BUILDFLAG(IS_LINUX) && !defined(NDEBUG))');
-GEN('#define MAYBE_ConsolidatedControlsEnabled DISABLED_ConsolidatedControlsEnabled');
-GEN('#else');
-GEN('#define MAYBE_ConsolidatedControlsEnabled ConsolidatedControlsEnabled');
-GEN('#endif');
-TEST_F(
-    'CrSettingsCookiesPageTest', 'MAYBE_ConsolidatedControlsEnabled',
-    function() {
-      runMochaSuite('CrSettingsCookiesPageTest_consolidatedControlsEnabled');
-    });
-
-var CrSettingsCookiesPageConsolidatedDisabledTest =
-    class extends CrSettingsBrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://settings/test_loader.html?module=settings/cookies_page_test.js';
-  }
-
-  /** @override */
-  get featureListInternal() {
-    return {
-      disabled: [
-        'features::kConsolidatedSiteStorageControls',
-        // TODO(crbug.com/1238757)- Remove this when consolidated storage
-        // launches.
-        'privacy_sandbox::kPrivacySandboxSettings3',
-      ],
-    };
-  }
-};
-
-// Flaky on MacOS bots and times out on Linux Dbg: https://crbug.com/1240747
-GEN('#if (BUILDFLAG(IS_MAC)) || (BUILDFLAG(IS_LINUX) && !defined(NDEBUG))');
-GEN('#define MAYBE_ConsolidatedControlsDisabled DISABLED_ConsolidatedControlsDisabled');
-GEN('#else');
-GEN('#define MAYBE_ConsolidatedControlsDisabled ConsolidatedControlsDisaled');
-GEN('#endif');
-TEST_F(
-    'CrSettingsCookiesPageConsolidatedDisabledTest',
-    'MAYBE_ConsolidatedControlsDisabled', function() {
-      runMochaSuite('CrSettingsCookiesPageTest_consolidatedControlsDisabled');
-    });
+TEST_F('CrSettingsCookiesPageTest', 'FirstPartySetsUIEnabled', function() {
+  runMochaSuite('CrSettingsCookiesPageTest_FirstPartySetsUIEnabled');
+});
 
 var CrSettingsRouteTest = class extends CrSettingsBrowserTest {
   /** @override */
@@ -735,49 +758,24 @@ TEST_F('CrSettingsAdvancedPageTest', 'MAYBE_Load', function() {
 });
 
 
-var CrSettingsSiteDataTest = class extends CrSettingsBrowserTest {
+var CrSettingsReviewNotificationPermissionsTest =
+    class extends CrSettingsBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://settings/test_loader.html?module=settings/site_data_test.js';
+    return 'chrome://settings/test_loader.html?module=settings/review_notification_permissions_test.js';
   }
 
   /** @override */
   get featureList() {
     return {
-      disabled: [
-        'features::kConsolidatedSiteStorageControls',
-        // TODO(crbug.com/1238757)- Remove this when consolidated storage
-        // launches.
-        'privacy_sandbox::kPrivacySandboxSettings3',
+      enabled: [
+        'features::kSafetyCheckNotificationPermissions',
       ],
     };
   }
 };
 
-TEST_F('CrSettingsSiteDataTest', 'All', function() {
-  mocha.run();
-});
-
-var CrSettingsSiteDataDetailsSubpageTest = class extends CrSettingsBrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://settings/test_loader.html?module=settings/site_data_details_subpage_tests.js';
-  }
-
-  /** @override */
-  get featureList() {
-    return {
-      disabled: [
-        'features::kConsolidatedSiteStorageControls',
-        // TODO(crbug.com/1238757)- Remove this when consolidated storage
-        // launches.
-        'privacy_sandbox::kPrivacySandboxSettings3',
-      ],
-    };
-  }
-};
-
-TEST_F('CrSettingsSiteDataDetailsSubpageTest', 'All', function() {
+TEST_F('CrSettingsReviewNotificationPermissionsTest', 'All', function() {
   mocha.run();
 });
 
@@ -879,7 +877,7 @@ GEN('#if !BUILDFLAG(IS_CHROMEOS_ASH)');
 ].forEach(test => registerTest(...test));
 GEN('#endif');
 
-GEN('#if BUILDFLAG(IS_WIN)');
+GEN('#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)');
 [['PasskeysSubpage', 'passkeys_subpage_test.js'],
 ].forEach(test => registerTest(...test));
 GEN('#endif');

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -170,7 +170,7 @@ class BFCachePolicyBrowserTest
   base::test::ScopedFeatureList feature_list_;
   std::vector<base::test::ScopedFeatureList::FeatureAndParams>
       enabled_features_;
-  std::vector<base::Feature> disabled_features_;
+  std::vector<base::test::FeatureRef> disabled_features_;
 };
 
 }  // namespace

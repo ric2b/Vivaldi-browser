@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,8 +120,12 @@ TestRunner::TestRunner(JobLevel job_level,
   if (!policy_)
     return;
 
-  policy_->SetJobLevel(job_level, 0);
-  policy_->SetTokenLevel(startup_token, main_token);
+  auto result = policy_->GetConfig()->SetJobLevel(job_level, 0);
+  if (result != SBOX_ALL_OK)
+    return;
+  result = policy_->GetConfig()->SetTokenLevel(startup_token, main_token);
+  if (result != SBOX_ALL_OK)
+    return;
 
   is_init_ = true;
 }
@@ -206,15 +210,18 @@ int TestRunner::InternalRunTest(const wchar_t* command) {
     target_process_id_ = 0;
   }
 
-  if (disable_csrss_)
-    policy_->SetDisconnectCsrss();
+  ResultCode result = SBOX_ALL_OK;
+  if (disable_csrss_) {
+    result = policy_->GetConfig()->SetDisconnectCsrss();
+    if (result != SBOX_ALL_OK)
+      return SBOX_TEST_FAILED_SETUP;
+  }
 
   // Get the path to the sandboxed process.
   wchar_t prog_name[MAX_PATH];
   GetModuleFileNameW(NULL, prog_name, MAX_PATH);
 
   // Launch the sandboxed process.
-  ResultCode result = SBOX_ALL_OK;
   ResultCode warning_result = SBOX_ALL_OK;
   DWORD last_error = ERROR_SUCCESS;
   PROCESS_INFORMATION target = {0};

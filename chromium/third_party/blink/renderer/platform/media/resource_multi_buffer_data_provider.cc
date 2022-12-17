@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -318,6 +318,9 @@ void ResourceMultiBufferDataProvider::DidReceiveResponse(
 
     destination_url_data->set_mime_type(response.MimeType().Utf8());
   }
+
+  destination_url_data->set_passed_timing_allow_origin_check(
+      response.TimingAllowPassed());
 
   if (destination_url_data != url_data_) {
     // At this point, we've encountered a redirect, or found a better url data

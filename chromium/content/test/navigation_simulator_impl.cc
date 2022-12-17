@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1302,7 +1302,7 @@ bool NavigationSimulatorImpl::SimulateBrowserInitiatedStart() {
 bool NavigationSimulatorImpl::SimulateRendererInitiatedStart() {
   if (session_history_offset_) {
     static_cast<NavigationControllerImpl&>(web_contents_->GetController())
-        .GoToOffsetFromRenderer(session_history_offset_);
+        .GoToOffsetFromRenderer(session_history_offset_, render_frame_host_);
     request_ = render_frame_host_->frame_tree_node()->navigation_request();
     return true;
   }

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,7 @@
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
@@ -3781,14 +3782,8 @@ INSTANTIATE_TEST_SUITE_P(All,
                                            TestMPArchType::kFencedFrame,
                                            TestMPArchType::kPortal));
 
-// TODO(https://crbug.com/1317838): The kPortal variant is flaky on Mac bots.
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_ShouldNotUpdateHistory DISABLED_ShouldNotUpdateHistory
-#else
-#define MAYBE_ShouldNotUpdateHistory ShouldNotUpdateHistory
-#endif
 IN_PROC_BROWSER_TEST_P(NavigationRequestMPArchBrowserTest,
-                       MAYBE_ShouldNotUpdateHistory) {
+                       ShouldNotUpdateHistory) {
   const auto get_observer = [&](WebContents* web_contents) {
     return DidFinishNavigationObserver(
         web_contents,
@@ -3837,24 +3832,18 @@ IN_PROC_BROWSER_TEST_P(NavigationRequestMPArchBrowserTest,
 
       case TestMPArchType::kPortal: {
         GURL portal_url(embedded_test_server()->GetURL("/title1.html"));
-        WebContentsAddedObserver contents_observer;
-        TestNavigationObserver portal_nav_observer(portal_url);
-        portal_nav_observer.StartWatchingNewWebContents();
 
         // Create a portal.
-        EXPECT_TRUE(
-            ExecJs(web_contents()->GetPrimaryMainFrame(),
-                   JsReplace("{"
-                             "  let portal = document.createElement('portal');"
-                             "  portal.src = $1;"
-                             "  document.body.appendChild(portal);"
-                             "}",
-                             portal_url),
-                   EXECUTE_SCRIPT_NO_USER_GESTURE));
-
-        const auto portal_observer =
-            get_observer(contents_observer.GetWebContents());
-        portal_nav_observer.WaitForNavigationFinished();
+        const char script[] = R"(
+           new Promise(async resolve => {
+             let portal = document.createElement('portal');
+             portal.src = $1;
+             portal.onload = resolve;
+             document.body.appendChild(portal);
+           });
+        )";
+        ASSERT_TRUE(ExecJs(web_contents()->GetPrimaryMainFrame(),
+                           content::JsReplace(script, portal_url)));
         break;
       }
     }

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,10 +18,12 @@ const char kDelayThresholdMinutesToUpdateGaiaCookie[] =
 const char kWaitThresholdMillisecondsForCapabilitiesApi[] =
     "wait-threshold-milliseconds-for-capabilities-api";
 
-const base::Feature kNewMobileIdentityConsistencyFRE{
-    "NewMobileIdentityConsistencyFRE", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kNewMobileIdentityConsistencyFRE,
+             "NewMobileIdentityConsistencyFRE",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kEnableUnicornAccountSupport{
-    "EnableUnicornAccountSupport", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kEnableUnicornAccountSupport,
+             "EnableUnicornAccountSupport",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace signin

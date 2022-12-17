@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,6 @@ using DownloadItem = download::DownloadItem;
 using ContentId = offline_items_collection::ContentId;
 using OfflineItem = offline_items_collection::OfflineItem;
 using OfflineItemFilter = offline_items_collection::OfflineItemFilter;
-using OfflineItemSchedule = offline_items_collection::OfflineItemSchedule;
 using OfflineItemState = offline_items_collection::OfflineItemState;
 using OfflineItemProgressUnit =
     offline_items_collection::OfflineItemProgressUnit;

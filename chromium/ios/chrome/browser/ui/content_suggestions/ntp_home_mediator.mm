@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
@@ -34,13 +33,14 @@
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_consumer.h"
 #import "ios/chrome/browser/ui/content_suggestions/user_account_image_update_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_control_delegate.h"
-#import "ios/chrome/browser/ui/ntp/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/ntp/feed_wrapper_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/logo_vendor.h"
-#import "ios/chrome/browser/ui/ntp/metrics.h"
+#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
+#import "ios/chrome/browser/ui/ntp/metrics/metrics.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_view_controller.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/voice/voice_search_availability.h"
@@ -266,7 +266,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
   _webState = webState;
   [self.logoVendor setWebState:webState];
   if (_webState && _webStateObserver) {
-    [self setContentOffsetForWebState:webState];
+    [self setContentOffsetForWebState:webState refreshFeedIfNeeded:NO];
     _webState->AddObserver(_webStateObserver.get());
   }
 }
@@ -278,7 +278,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 // changes.
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   DCHECK_EQ(_webState, webState);
-  [self setContentOffsetForWebState:webState];
+  [self setContentOffsetForWebState:webState refreshFeedIfNeeded:YES];
 }
 
 - (void)webStateWasHidden:(web::WebState*)webState {
@@ -293,7 +293,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 
 #pragma mark - ChromeAccountManagerServiceObserver
 
-- (void)identityChanged:(ChromeIdentity*)identity {
+- (void)identityChanged:(id<SystemIdentity>)identity {
   [self updateAccountImage];
 }
 
@@ -354,8 +354,10 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 
 #pragma mark - Private
 
-// Set the NTP scroll offset for the current navigation item.
-- (void)setContentOffsetForWebState:(web::WebState*)webState {
+// Set the NTP scroll offset for the current navigation item. If
+// `refreshFeedIfNeeded` is YES a feed refresh will be attempted.
+- (void)setContentOffsetForWebState:(web::WebState*)webState
+                refreshFeedIfNeeded:(BOOL)refreshFeedIfNeeded {
   if (webState->GetVisibleURL().DeprecatedGetOriginAsURL() !=
       kChromeUINewTabURL) {
     return;
@@ -382,7 +384,8 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
     [self.suggestionsMediator refreshMostVisitedTiles];
 
     // Refresh DiscoverFeed unless in off-the-record NTP.
-    if (!self.browser->GetBrowserState()->IsOffTheRecord()) {
+    if (!self.browser->GetBrowserState()->IsOffTheRecord() &&
+        refreshFeedIfNeeded) {
       DiscoverFeedServiceFactory::GetForBrowserState(
           self.browser->GetBrowserState())
           ->RefreshFeedIfNeeded();

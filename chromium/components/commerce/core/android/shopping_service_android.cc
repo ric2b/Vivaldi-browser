@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -117,6 +117,22 @@ void ShoppingServiceAndroid::HandleMerchantInfoCallback(
   Java_ShoppingService_runMerchantInfoCallback(
       env, callback, url::GURLAndroid::FromNativeGURL(env, url),
       info_java_object);
+}
+
+void ShoppingServiceAndroid::FetchPriceEmailPref(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  CHECK(shopping_service_);
+
+  shopping_service_->FetchPriceEmailPref();
+}
+
+void ShoppingServiceAndroid::ScheduleSavedProductUpdate(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  CHECK(shopping_service_);
+
+  shopping_service_->ScheduleSavedProductUpdate();
 }
 
 }  // namespace commerce

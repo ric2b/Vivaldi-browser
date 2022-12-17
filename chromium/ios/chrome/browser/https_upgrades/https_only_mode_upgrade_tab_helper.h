@@ -1,10 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef IOS_CHROME_BROWSER_HTTPS_UPGRADES_HTTPS_ONLY_MODE_UPGRADE_TAB_HELPER_H_
 #define IOS_CHROME_BROWSER_HTTPS_UPGRADES_HTTPS_ONLY_MODE_UPGRADE_TAB_HELPER_H_
 
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #import "ios/web/public/navigation/web_state_policy_decider.h"
@@ -29,9 +30,6 @@ class HttpsOnlyModeUpgradeTabHelper
       public web::WebStatePolicyDecider,
       public web::WebStateUserData<HttpsOnlyModeUpgradeTabHelper> {
  public:
-  // Creates TabHelper. |web_state| and |model| must not be null.
-  static void CreateForWebState(web::WebState* web_state, PrefService* prefs);
-
   ~HttpsOnlyModeUpgradeTabHelper() override;
   HttpsOnlyModeUpgradeTabHelper(const HttpsOnlyModeUpgradeTabHelper&) = delete;
   HttpsOnlyModeUpgradeTabHelper& operator=(
@@ -43,6 +41,8 @@ class HttpsOnlyModeUpgradeTabHelper
   void ClearAllowlistForTesting();
 
  private:
+  friend class web::WebStateUserData<HttpsOnlyModeUpgradeTabHelper>;
+
   enum class State {
     // Initial state. The navigation hasn't started yet, or started but hasn't
     // been upgraded because it's already HTTPS or a non-HTTP scheme.
@@ -67,13 +67,12 @@ class HttpsOnlyModeUpgradeTabHelper
                                 PrefService* prefs,
                                 PrerenderService* prerender_service,
                                 HttpsUpgradeService* service);
-  friend class web::WebStateUserData<HttpsOnlyModeUpgradeTabHelper>;
 
   // Returns true if url can be loaded over HTTP (e.g. it was previously
   // allowlisted).
   bool IsHttpAllowedForUrl(const GURL& url) const;
   // Called when the upgrade timer times out.
-  void OnHttpsLoadTimeout();
+  void OnHttpsLoadTimeout(base::WeakPtr<web::WebState> weak_web_state);
   // Stops the current navigation and sets the state so that an upgrade will be
   // started.
   void StopToUpgrade(

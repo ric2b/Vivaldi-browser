@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,7 @@ class NetworkConnectTestDelegate : public ash::NetworkConnect::Delegate {
   }
   void ShowMobileSetupDialog(const std::string& network_id) override {}
   void ShowCarrierAccountDetail(const std::string& network_id) override {}
+  void ShowPortalSignin(const std::string& network_id) override {}
   void ShowNetworkConnectError(const std::string& error_name,
                                const std::string& network_id) override {}
   void ShowMobileActivationError(const std::string& network_id) override {}

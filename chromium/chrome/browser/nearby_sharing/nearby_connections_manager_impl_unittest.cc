@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,9 +7,6 @@
 #include <algorithm>
 #include <memory>
 
-#include "ash/services/nearby/public/cpp/mock_nearby_connections.h"
-#include "ash/services/nearby/public/cpp/mock_nearby_process_manager.h"
-#include "ash/services/nearby/public/mojom/nearby_connections_types.mojom.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
@@ -20,6 +17,9 @@
 #include "chrome/browser/nearby_sharing/constants.h"
 #include "chrome/browser/nearby_sharing/nearby_connection_impl.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "chromeos/ash/services/nearby/public/cpp/mock_nearby_connections.h"
+#include "chromeos/ash/services/nearby/public/cpp/mock_nearby_process_manager.h"
+#include "chromeos/ash/services/nearby/public/mojom/nearby_connections_types.mojom.h"
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/mock_network_change_notifier.h"
@@ -356,7 +356,7 @@ class NearbyConnectionsManagerImplTest : public testing::Test {
 
   void SendPayload(
       int64_t payload_id,
-      const testing::NiceMock<MockPayloadStatusListener>& payload_listener) {
+      testing::NiceMock<MockPayloadStatusListener>& payload_listener) {
     const std::vector<uint8_t> expected_payload(std::begin(kPayload),
                                                 std::end(kPayload));
 
@@ -408,7 +408,7 @@ class NearbyConnectionsManagerImplTest : public testing::Test {
   testing::NiceMock<ash::nearby::MockNearbyProcessManager>
       nearby_process_manager_;
   NearbyConnectionsManagerImpl nearby_connections_manager_{
-      &nearby_process_manager_};
+      &nearby_process_manager_, kServiceId};
 };
 
 TEST_F(NearbyConnectionsManagerImplTest, DiscoveryFlow) {
@@ -528,8 +528,8 @@ TEST_P(NearbyConnectionsManagerImplTestConnectionMediums,
   bool is_webrtc_enabled = std::get<2>(GetParam());
   bool is_wifilan_enabled = std::get<3>(GetParam());
 
-  std::vector<base::Feature> enabled_features;
-  std::vector<base::Feature> disabled_features;
+  std::vector<base::test::FeatureRef> enabled_features;
+  std::vector<base::test::FeatureRef> disabled_features;
   if (is_webrtc_enabled) {
     enabled_features.push_back(features::kNearbySharingWebRtc);
   } else {

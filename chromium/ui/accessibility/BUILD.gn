@@ -1,10 +1,11 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
 import("//build/config/linux/pkg_config.gni")
 import("//build/config/ui.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
@@ -79,7 +80,7 @@ component("ax_base") {
     "ax_tree_update_forward.h",
   ]
 
-  if (!is_chromeos_ash) {
+  if (!is_chromeos) {
     sources += [
       "ax_enum_localization_util.cc",
       "ax_enum_localization_util.h",
@@ -94,7 +95,7 @@ component("ax_base") {
     "//ui/gfx/geometry",
   ]
 
-  if (!is_chromeos_ash) {
+  if (!is_chromeos) {
     public_deps += [
       "//base:i18n",
       "//ui/base",
@@ -128,6 +129,8 @@ component("accessibility") {
     "ax_computed_node_data.cc",
     "ax_computed_node_data.h",
     "ax_coordinate_system.h",
+    "ax_dummy_tree_manager.cc",
+    "ax_dummy_tree_manager.h",
     "ax_event_generator.cc",
     "ax_event_generator.h",
     "ax_export.h",
@@ -145,6 +148,8 @@ component("accessibility") {
     "ax_offscreen_result.h",
     "ax_position.h",
     "ax_range.h",
+    "ax_selection.cc",
+    "ax_selection.h",
     "ax_serializable_tree.cc",
     "ax_serializable_tree.h",
     "ax_table_info.cc",
@@ -171,8 +176,6 @@ component("accessibility") {
     "ax_tree_source_observer.h",
     "null_ax_action_target.cc",
     "null_ax_action_target.h",
-    "test_ax_tree_manager.cc",
-    "test_ax_tree_manager.h",
   ]
 
   deps = [
@@ -233,10 +236,12 @@ source_set("ax_assistant") {
 static_library("test_support") {
   testonly = true
   sources = [
-    "platform/test_ax_tree_update.cc",
-    "platform/test_ax_tree_update.h",
     "test_ax_node_helper.cc",
     "test_ax_node_helper.h",
+    "test_ax_tree_manager.cc",
+    "test_ax_tree_manager.h",
+    "test_ax_tree_update.cc",
+    "test_ax_tree_update.h",
     "test_ax_tree_update_json_reader.cc",
     "test_ax_tree_update_json_reader.h",
     "tree_generator.cc",
@@ -266,11 +271,13 @@ test("accessibility_unittests") {
     "ax_node_unittest.cc",
     "ax_range_unittest.cc",
     "ax_role_properties_unittest.cc",
+    "ax_selection_unittest.cc",
     "ax_table_info_unittest.cc",
     "ax_text_utils_unittest.cc",
     "ax_tree_combiner_unittest.cc",
     "ax_tree_id_unittest.cc",
     "ax_tree_manager_base_unittest.cc",
+    "ax_tree_manager_unittest.cc",
     "ax_tree_serializer_unittest.cc",
     "ax_tree_source_checker_unittest.cc",
     "ax_tree_unittest.cc",
@@ -308,6 +315,10 @@ test("accessibility_unittests") {
     "//ui/accessibility/mojom",
     "//ui/gfx:test_support",
   ]
+
+  if (enable_extensions) {
+    sources += [ "platform/automation/automation_api_util_unittest.cc" ]
+  }
 
   if (is_fuchsia) {
     sources += [
@@ -382,7 +393,11 @@ fuzzer_test("ax_node_position_fuzzer") {
     "ax_tree_fuzzer_util.h",
   ]
 
-  deps = [ ":accessibility" ]
+  deps = [
+    ":accessibility",
+    ":test_support",
+    "//base/test:test_support",
+  ]
 }
 
 if (is_win) {
@@ -398,6 +413,20 @@ if (is_win) {
       ":test_support",
       "//base/test:test_support",
     ]
+  }
+}
+
+if (is_android) {
+  java_cpp_features("java_features_srcjar") {
+    # External code should depend on ":accessibility_features_java" instead.
+    visibility = [ ":*" ]
+    sources = [ "//ui/accessibility/accessibility_features.cc" ]
+    template = "//ui/accessibility/android/java_templates/AccessibilityFeatures.java.tmpl"
+  }
+
+  # A minimal library used to expose accessibility features to webview.
+  android_library("accessibility_features_java") {
+    srcjar_deps = [ ":java_features_srcjar" ]
   }
 }
 

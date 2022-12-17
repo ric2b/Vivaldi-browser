@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,7 +97,7 @@ GestureCommandHandler.onAccessibilityGesture_ = function(gesture, x, y) {
     let node = range.start.node;
     while (node) {
       if (AutomationPredicate.menuItem(node) ||
-          (node.role === RoleType.POP_UP_BUTTON && node.state.expanded)) {
+          (AutomationPredicate.popUpButton(node) && node.state.expanded)) {
         inMenu = true;
         break;
       }

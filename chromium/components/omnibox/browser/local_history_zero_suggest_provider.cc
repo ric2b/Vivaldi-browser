@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,8 +36,8 @@
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/omnibox/common/omnibox_features.h"
-#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
+#include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "url/gurl.h"
 
 using metrics::OmniboxInputType;
@@ -77,13 +77,13 @@ bool AllowLocalHistoryZeroSuggestSuggestions(AutocompleteProviderClient* client,
   if (base::FeatureList::IsEnabled(
           omnibox::kLocalHistoryZeroSuggestBeyondNTP)) {
     // Allow local history zero-suggest where remote zero-suggest is eligible.
-    return ZeroSuggestProvider::ResultTypeToRun(client, input) !=
+    return ZeroSuggestProvider::ResultTypeToRun(input) !=
            ZeroSuggestProvider::ResultType::kNone;
   }
 
   // Allow local history query suggestions only when the omnibox is empty and is
   // focused from the NTP.
-  return input.focus_type() == OmniboxFocusType::ON_FOCUS &&
+  return input.focus_type() == metrics::OmniboxFocusType::INTERACTION_FOCUS &&
          input.type() == OmniboxInputType::EMPTY &&
          BaseSearchProvider::IsNTPPage(input.current_page_classification());
 }
@@ -239,12 +239,11 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
         /*relevance_from_server=*/false,
         /*input_text=*/base::ASCIIToUTF16(std::string()));
 
-    // Only provide a group ID, as the client does not know the header or the
-    // priority for SuggestionGroupId::kPersonalizedZeroSuggest. The suggestion
-    // group info will either be provided by the server (i.e., on SRP/Web) or
-    // this group ID will be dropped (i.e., on NTP).
+    // If the appropriate header text and section are not provided by the server
+    // the default omnibox::SECTION_LOCAL_HISTORY_ZPS will be used and the local
+    // history zero-prefix suggestions will be shown without a header.
     suggestion.set_suggestion_group_id(
-        SuggestionGroupId::kPersonalizedZeroSuggest);
+        omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST);
 
     AutocompleteMatch match = BaseSearchProvider::CreateSearchSuggestion(
         this, input, /*in_keyword_mode=*/false, suggestion,

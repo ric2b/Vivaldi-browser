@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,6 +59,7 @@ class ASH_EXPORT CaptureLabelView
   // views::View:
   void Layout() override;
   gfx::Size CalculatePreferredSize() const override;
+  void OnThemeChanged() override;
 
   // CaptureModeSessionFocusCycler::HighlightableView:
   views::View* GetView() override;

@@ -34,6 +34,7 @@
 
 #include <memory>
 
+#include "base/ranges/algorithm.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -77,8 +78,8 @@ void ReportUMA(ExecutionContext& context,
                const std::string& value,
                network::mojom::FetchResponseType response_type) {
   if (response_type == network::mojom::FetchResponseType::kCors &&
-      (value.size() > 128 || std::any_of(value.begin(), value.end(),
-                                         IsCorsUnsafeRequestHeaderByte))) {
+      (value.size() > 128 ||
+       base::ranges::any_of(value, IsCorsUnsafeRequestHeaderByte))) {
     UseCounter::Count(context,
                       WebFeature::kFetchEventSourceLastEventIdCorsUnSafe);
   }
@@ -157,7 +158,7 @@ void EventSource::Connect() {
   request.SetCacheMode(blink::mojom::FetchCacheMode::kNoStore);
   request.SetCorsPreflightPolicy(
       network::mojom::CorsPreflightPolicy::kPreventPreflight);
-  if (parser_ && !parser_->LastEventId().IsEmpty()) {
+  if (parser_ && !parser_->LastEventId().empty()) {
     // HTTP headers are Latin-1 byte strings, but the Last-Event-ID header is
     // encoded as UTF-8.
     // TODO(davidben): This should be captured in the type of
@@ -254,7 +255,7 @@ void EventSource::DidReceiveResponse(uint64_t identifier,
     const String& charset = response.TextEncodingName();
     // If we have a charset, the only allowed value is UTF-8 (case-insensitive).
     response_is_valid =
-        charset.IsEmpty() || EqualIgnoringASCIICase(charset, "UTF-8");
+        charset.empty() || EqualIgnoringASCIICase(charset, "UTF-8");
     if (!response_is_valid) {
       StringBuilder message;
       message.Append("EventSource's response has a charset (\"");

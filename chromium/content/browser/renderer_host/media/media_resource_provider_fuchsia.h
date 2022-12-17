@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,7 @@ class MediaResourceProviderFuchsia final
           request) final;
   void CreateVideoDecoder(
       media::VideoCodec codec,
-      bool secure_memory,
+      media::mojom::VideoDecoderSecureMemoryMode secure_mode,
       fidl::InterfaceRequest<fuchsia::media::StreamProcessor>
           stream_processor_request) final;
 };

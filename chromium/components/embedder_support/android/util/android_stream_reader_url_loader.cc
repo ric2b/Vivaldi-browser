@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,7 +94,18 @@ class InputStreamReaderWrapper
       // 0. In that case we still want to do a blocking read until there's data
       // or EOF.
       if (input_stream_->BytesAvailable(&available) && available > 0) {
-        // Make sure a bad app doesn't lead to reading past the buffer.
+        // Some implementations might return 1 even when there's more data. To
+        // avoid slowdowns in that case use a minimum of 1KB to read.
+        if (available <
+            net::features::
+                kOptimizeNetworkBuffersMinInputStreamAvailableValueToIgnore
+                    .Get()) {
+          available =
+              net::features::kOptimizeNetworkBuffersMinInputStreamReadSize
+                  .Get();
+        }
+
+        // Make sure a we don't read past the buffer size.
         buffer_size = std::min(available, buffer_size);
       } else {
         // `buffer_size' could be large since it comes from the size of the data
@@ -351,7 +362,7 @@ void AndroidStreamReaderURLLoader::SendResponseToClient() {
   cache_response_ =
       response_delegate_->ShouldCacheResponse(response_head_.get());
   client_->OnReceiveResponse(std::move(response_head_),
-                             std::move(consumer_handle_));
+                             std::move(consumer_handle_), absl::nullopt);
 }
 
 void AndroidStreamReaderURLLoader::ReadMore() {

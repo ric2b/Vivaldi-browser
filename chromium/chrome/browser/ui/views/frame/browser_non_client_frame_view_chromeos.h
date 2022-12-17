@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -244,6 +244,10 @@ class BrowserNonClientFrameViewChromeOS
 
   // Helper to check whether we should enable immersive mode.
   bool ShouldEnableImmersiveModeController() const;
+
+  // True if the the associated browser window should be using the WebUI tab
+  // strip.
+  bool UseWebUITabStrip() const;
 
   // Returns the top level aura::Window for this browser window.
   const aura::Window* GetFrameWindow() const;

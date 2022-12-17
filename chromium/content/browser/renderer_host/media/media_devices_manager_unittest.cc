@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -130,13 +130,15 @@ class MockAudioManager : public media::FakeAudioManager {
 
   media::AudioParameters GetDefaultOutputStreamParameters() override {
     return media::AudioParameters(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                  media::CHANNEL_LAYOUT_STEREO, 48000, 128);
+                                  media::ChannelLayoutConfig::Stereo(), 48000,
+                                  128);
   }
 
   media::AudioParameters GetOutputStreamParameters(
       const std::string& device_id) override {
     return media::AudioParameters(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                  media::CHANNEL_LAYOUT_STEREO, 48000, 128);
+                                  media::ChannelLayoutConfig::Stereo(), 48000,
+                                  128);
   }
 
   void RemoveInputAudioDeviceById(const std::string& device_id) {

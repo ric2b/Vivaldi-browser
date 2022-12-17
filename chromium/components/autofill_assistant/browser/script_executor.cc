@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,7 +75,8 @@ ScriptExecutor::ScriptExecutor(
     ScriptExecutor::Listener* listener,
     const std::vector<std::unique_ptr<Script>>* ordered_interrupts,
     ScriptExecutorDelegate* delegate,
-    ScriptExecutorUiDelegate* ui_delegate)
+    ScriptExecutorUiDelegate* ui_delegate,
+    bool is_interrupt_executor)
     : script_path_(script_path),
       additional_context_(std::move(additional_context)),
       last_global_payload_(global_payload),
@@ -86,7 +87,8 @@ ScriptExecutor::ScriptExecutor(
       ui_delegate_(ui_delegate),
       ordered_interrupts_(ordered_interrupts),
       element_store_(
-          std::make_unique<ElementStore>(delegate->GetWebContents())) {
+          std::make_unique<ElementStore>(delegate->GetWebContents())),
+      is_interrupt_executor_(is_interrupt_executor) {
   DCHECK(delegate_);
   DCHECK(ui_delegate_);
   DCHECK(ordered_interrupts_);
@@ -736,10 +738,16 @@ void ScriptExecutor::SetGenericUi(
     std::unique_ptr<GenericUserInterfaceProto> generic_ui,
     base::OnceCallback<void(const ClientStatus&)> end_action_callback,
     base::OnceCallback<void(const ClientStatus&)>
-        view_inflation_finished_callback) {
+        view_inflation_finished_callback,
+    base::RepeatingCallback<void(const RequestBackendDataProto&)>
+        request_backend_data_callback,
+    base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+        show_account_screen_callback) {
   ui_delegate_->SetGenericUi(std::move(generic_ui),
                              std::move(end_action_callback),
-                             std::move(view_inflation_finished_callback));
+                             std::move(view_inflation_finished_callback),
+                             std::move(request_backend_data_callback),
+                             std::move(show_account_screen_callback));
 }
 
 void ScriptExecutor::SetPersistentGenericUi(
@@ -840,7 +848,7 @@ bool ScriptExecutor::MaybeShowSlowWarning(const std::string& message,
   return true;
 }
 
-base::WeakPtr<ActionDelegate> ScriptExecutor::GetWeakPtr() const {
+base::WeakPtr<ActionDelegate> ScriptExecutor::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
@@ -1130,18 +1138,25 @@ ProcessedActionStatusDetailsProto& ScriptExecutor::GetLogInfo() {
 }
 
 void ScriptExecutor::RequestUserData(
-    UserDataEventField event_field,
     const CollectUserDataOptions& options,
     base::OnceCallback<void(bool, const GetUserDataResponseProto&)> callback) {
   auto* service = delegate_->GetService();
   DCHECK(service);
-
   delegate_->EnterState(AutofillAssistantState::RUNNING);
-  ui_delegate_->SetCollectUserDataUiState(/* loading= */ true, event_field);
   service->GetUserData(
       options, run_id_, user_data_,
       base::BindOnce(&ScriptExecutor::OnRequestUserData,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void ScriptExecutor::ShowAccountScreen(const ShowAccountScreenProto& proto,
+                                       const std::string& email_address) {
+  ui_delegate_->ShowAccountScreen(proto, email_address);
+}
+
+void ScriptExecutor::SetCollectUserDataUiState(bool loading,
+                                               UserDataEventField event_field) {
+  ui_delegate_->SetCollectUserDataUiState(/* loading= */ true, event_field);
 }
 
 void ScriptExecutor::OnRequestUserData(
@@ -1149,6 +1164,7 @@ void ScriptExecutor::OnRequestUserData(
     int http_status,
     const std::string& response,
     const ServiceRequestSender::ResponseInfo& response_info) {
+  delegate_->EnterState(AutofillAssistantState::PROMPT);
   if (http_status != net::HTTP_OK) {
     std::move(callback).Run(false, GetUserDataResponseProto());
     return;
@@ -1182,7 +1198,7 @@ void ScriptExecutor::RequestExternalAction(
   external::Action action;
   *action.mutable_info() = external_action.info();
   ui_delegate_->ExecuteExternalAction(
-      action, std::move(start_dom_checks_callback),
+      action, is_interrupt_executor_, std::move(start_dom_checks_callback),
       base::BindOnce(&ScriptExecutor::OnExternalActionFinished,
                      weak_ptr_factory_.GetWeakPtr(), external_action, prompt,
                      std::move(end_action_callback)));

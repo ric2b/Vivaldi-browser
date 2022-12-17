@@ -1,31 +1,39 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_view_controller.h"
 
-#include "base/format_macros.h"
+#import "base/format_macros.h"
 #import "base/logging.h"
-#include "base/mac/foundation_util.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/time/time.h"
+#import "base/mac/foundation_util.h"
+#import "base/metrics/histogram_macros.h"
+#import "base/time/time.h"
+#import "components/favicon/core/large_icon_service.h"
+#import "components/omnibox/common/omnibox_features.h"
+#import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
-#include "ios/chrome/browser/ui/elements/self_sizing_table_view.h"
-#include "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
+#import "ios/chrome/browser/ui/elements/self_sizing_table_view.h"
+#import "ios/chrome/browser/ui/favicon/favicon_attributes_provider.h"
+#import "ios/chrome/browser/ui/favicon/favicon_attributes_with_payload.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/popup/autocomplete_suggestion.h"
+#import "ios/chrome/browser/ui/omnibox/popup/carousel_item.h"
 #import "ios/chrome/browser/ui/omnibox/popup/content_providing.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_accessibility_identifier_constants.h"
+#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_carousel_cell.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_row_cell.h"
-#include "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
+#import "ios/chrome/browser/ui/omnibox/popup/popup_match_preview_delegate.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/util/keyboard_observer_helper.h"
 #import "ios/chrome/browser/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
-#include "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#include "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/device_util.h"
-#include "ui/base/device_form_factor.h"
+#import "ui/base/device_form_factor.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -41,10 +49,15 @@ const CGFloat kFooterHeightVariation2 = 16.0;
 // Percentage of the suggestion height that needs to be visible in order to
 // consider the suggestion as visible.
 const CGFloat kVisibleSuggestionThreshold = 0.6;
+// Minimum size of the fetched favicon for tiles.
+const CGFloat kMinTileFaviconSize = 32.0f;
+// Maximum size of the fetched favicon for tiles.
+const CGFloat kMaxTileFaviconSize = 48.0f;
 }  // namespace
 
 @interface OmniboxPopupViewController () <UITableViewDataSource,
                                           UITableViewDelegate,
+                                          OmniboxPopupCarouselCellDelegate,
                                           OmniboxPopupRowCellDelegate,
                                           KeyboardObserverHelperConsumer>
 
@@ -77,12 +90,24 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
 
 // Estimated maximum number of visible suggestions.
 // Only updated in `newResultsAvailable` method, were the value is used.
-@property(nonatomic, assign) NSInteger visibleSuggestionCount;
+@property(nonatomic, assign) NSUInteger visibleSuggestionCount;
 
 // Boolean to update visible suggestion count only once on event such as device
 // orientation change or multitasking window change, where multiple keyboard and
 // view updates are received.
 @property(nonatomic, assign) BOOL shouldUpdateVisibleSuggestionCount;
+
+// Index of the suggestion group that contains the first suggestion to preview
+// and highlight.
+@property(nonatomic, assign) NSUInteger preselectedMatchGroupIndex;
+
+// Provider used to fetch carousel favicons.
+@property(nonatomic, strong)
+    FaviconAttributesProvider* carouselAttributeProvider;
+
+// UITableViewCell displaying the most visited carousel in (Web and SRP) ZPS
+// state.
+@property(nonatomic, strong) OmniboxPopupCarouselCell* carouselCell;
 
 @end
 
@@ -91,6 +116,8 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
 - (instancetype)init {
   if (self = [super initWithNibName:nil bundle:nil]) {
     _forwardsScrollEvents = YES;
+    _preselectedMatchGroupIndex = 0;
+    _visibleSuggestionCount = 0;
     NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
     if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
       // The iPad keyboard can cover some of the rows of the scroll view. The
@@ -124,6 +151,15 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
 }
 
 - (void)loadView {
+  // TODO(crbug.com/1365374): Check why largeIconService not available in
+  // icognito.
+  if (self.largeIconService) {
+    _carouselAttributeProvider = [[FaviconAttributesProvider alloc]
+        initWithFaviconSize:kMaxTileFaviconSize
+             minFaviconSize:kMinTileFaviconSize
+           largeIconService:self.largeIconService];
+    _carouselAttributeProvider.cache = self.largeIconCache;
+  }
   UITableViewStyle style = IsOmniboxActionsVisualTreatment2()
                                ? UITableViewStyleInsetGrouped
                                : UITableViewStylePlain;
@@ -137,6 +173,29 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
   [self updateBackgroundColor];
+}
+
+#pragma mark - Getter/Setter
+
+- (void)setHighlightedIndexPath:(NSIndexPath*)highlightedIndexPath {
+  if (_highlightedIndexPath) {
+    [self unhighlightRowAtIndexPath:_highlightedIndexPath];
+  }
+  _highlightedIndexPath = highlightedIndexPath;
+  if (highlightedIndexPath) {
+    [self highlightRowAtIndexPath:_highlightedIndexPath];
+    [self didHighlightSelectedSuggestion];
+  }
+}
+
+- (OmniboxPopupCarouselCell*)carouselCell {
+  DCHECK(base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles));
+  if (!_carouselCell) {
+    _carouselCell = [[OmniboxPopupCarouselCell alloc] init];
+    _carouselCell.delegate = self;
+    _carouselCell.menuProvider = self.carouselMenuProvider;
+  }
+  return _carouselCell;
 }
 
 #pragma mark - View lifecycle
@@ -242,27 +301,22 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
 
 - (void)updateMatches:(NSArray<id<AutocompleteSuggestionGroup>>*)result
     preselectedMatchGroupIndex:(NSInteger)groupIndex {
+  DCHECK(groupIndex == 0 || groupIndex < (NSInteger)result.count);
   self.forwardsScrollEvents = NO;
   // Reset highlight state.
-  if (self.highlightedIndexPath) {
-    [self unhighlightRowAtIndexPath:self.highlightedIndexPath];
-    self.highlightedIndexPath = nil;
-  }
+  self.highlightedIndexPath = nil;
 
+  self.preselectedMatchGroupIndex = groupIndex;
   self.currentResult = result;
 
   [self.tableView reloadData];
   self.forwardsScrollEvents = YES;
-}
-
-- (void)highlightRowAtIndexPath:(NSIndexPath*)indexPath {
-  UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
-  [cell setHighlighted:YES animated:NO];
-}
-
-- (void)unhighlightRowAtIndexPath:(NSIndexPath*)indexPath {
-  UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
-  [cell setHighlighted:NO animated:NO];
+  id<AutocompleteSuggestion> firstSuggestionOfPreselectedGroup =
+      [self suggestionAtIndexPath:[NSIndexPath indexPathForRow:0
+                                                     inSection:groupIndex]];
+  [self.matchPreviewDelegate
+      setPreviewSuggestion:firstSuggestionOfPreselectedGroup
+             isFirstUpdate:YES];
 }
 
 // Set text alignment for popup cells.
@@ -278,12 +332,86 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
       requestResultsWithVisibleSuggestionCount:self.visibleSuggestionCount];
 }
 
+#pragma mark - OmniboxKeyboardDelegate
+
+- (BOOL)canPerformKeyboardAction:(OmniboxKeyboardAction)keyboardAction {
+  switch (keyboardAction) {
+    case OmniboxKeyboardActionUpArrow:
+    case OmniboxKeyboardActionDownArrow:
+      return YES;
+    case OmniboxKeyboardActionLeftArrow:
+    case OmniboxKeyboardActionRightArrow:
+      // TODO(crbug.com/1371453): Add left and right action for tile selection.
+      return NO;
+  }
+}
+
+- (void)performKeyboardAction:(OmniboxKeyboardAction)keyboardAction {
+  DCHECK([self canPerformKeyboardAction:keyboardAction]);
+  switch (keyboardAction) {
+    case OmniboxKeyboardActionUpArrow:
+      [self highlightPreviousSuggestion];
+      break;
+    case OmniboxKeyboardActionDownArrow:
+      [self highlightNextSuggestion];
+      break;
+    case OmniboxKeyboardActionLeftArrow:
+    case OmniboxKeyboardActionRightArrow:
+      // TODO(crbug.com/1371453): Add left and right action for tile selection.
+      NOTREACHED();
+      break;
+  }
+}
+
+#pragma mark - OmniboxPopupRowCellDelegate
+
+- (void)trailingButtonTappedForCell:(OmniboxPopupRowCell*)cell {
+  NSIndexPath* indexPath = [self.tableView indexPathForCell:cell];
+  id<AutocompleteSuggestion> suggestion =
+      [self suggestionAtIndexPath:indexPath];
+  DCHECK(suggestion);
+  [self.delegate autocompleteResultConsumer:self
+           didTapTrailingButtonOnSuggestion:suggestion
+                                      inRow:indexPath.row];
+}
+
+#pragma mark - OmniboxReturnDelegate
+
+- (void)omniboxReturnPressed:(id)sender {
+  if (self.highlightedIndexPath) {
+    id<AutocompleteSuggestion> suggestion =
+        [self suggestionAtIndexPath:self.highlightedIndexPath];
+    if (suggestion) {
+      [self.delegate autocompleteResultConsumer:self
+                            didSelectSuggestion:suggestion
+                                          inRow:self.highlightedIndexPath.row];
+      return;
+    }
+  }
+  [self.acceptReturnDelegate omniboxReturnPressed:sender];
+}
+
 #pragma mark - OmniboxSuggestionCommands
 
 - (void)highlightPreviousSuggestion {
   NSIndexPath* path = self.highlightedIndexPath;
   if (path == nil) {
-    // When nothing is highlighted, pressing Up Arrow doesn't do anything.
+    // If there is a section above `preselectedMatchGroupIndex` select the last
+    // suggestion of this section.
+    if (self.preselectedMatchGroupIndex > 0 &&
+        self.currentResult.count > self.preselectedMatchGroupIndex - 1) {
+      NSInteger sectionAbovePreselectedGroup =
+          self.preselectedMatchGroupIndex - 1;
+      NSIndexPath* suggestionIndex = [NSIndexPath
+          indexPathForRow:(NSInteger)self
+                              .currentResult[sectionAbovePreselectedGroup]
+                              .suggestions.count -
+                          1
+                inSection:sectionAbovePreselectedGroup];
+      if ([self suggestionAtIndexPath:suggestionIndex]) {
+        self.highlightedIndexPath = suggestionIndex;
+      }
+    }
     return;
   }
 
@@ -302,33 +430,25 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
       // Can't move up from first row. Call the delegate again so that the
       // inline autocomplete text is set again (in case the user exited the
       // inline autocomplete).
-      [self.delegate
-          autocompleteResultConsumer:self
-                     didHighlightRow:self.highlightedIndexPath.row
-                           inSection:self.highlightedIndexPath.section];
+      [self didHighlightSelectedSuggestion];
       return;
     }
   } else {
     path = [NSIndexPath indexPathForRow:path.row - 1 inSection:path.section];
   }
 
-  [self unhighlightRowAtIndexPath:self.highlightedIndexPath];
   self.highlightedIndexPath = path;
-  [self highlightRowAtIndexPath:self.highlightedIndexPath];
-
-  [self.delegate autocompleteResultConsumer:self
-                            didHighlightRow:self.highlightedIndexPath.row
-                                  inSection:self.highlightedIndexPath.section];
 }
 
 - (void)highlightNextSuggestion {
-  if ([self.tableView numberOfRowsInSection:0] == 0) {
-    return;
-  }
   if (!self.highlightedIndexPath) {
-    // Initialize the highlighted row to -1, so that pressing down when nothing
-    // is highlighted highlights the first row (at index 0).
-    self.highlightedIndexPath = [NSIndexPath indexPathForRow:-1 inSection:0];
+    NSIndexPath* preselectedSuggestionIndex =
+        [NSIndexPath indexPathForRow:0
+                           inSection:self.preselectedMatchGroupIndex];
+    if ([self suggestionAtIndexPath:preselectedSuggestionIndex]) {
+      self.highlightedIndexPath = preselectedSuggestionIndex;
+    }
+    return;
   }
 
   NSIndexPath* path = self.highlightedIndexPath;
@@ -346,10 +466,7 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
       // Can't go below last row. Call the delegate again so that the inline
       // autocomplete text is set again (in case the user exited the inline
       // autocomplete).
-      [self.delegate
-          autocompleteResultConsumer:self
-                     didHighlightRow:self.highlightedIndexPath.row
-                           inSection:self.highlightedIndexPath.section];
+      [self didHighlightSelectedSuggestion];
       return;
     }
   } else {
@@ -357,19 +474,26 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
   }
 
   // There is a row below, move highlight there.
-  [self unhighlightRowAtIndexPath:self.highlightedIndexPath];
   self.highlightedIndexPath = path;
-  [self highlightRowAtIndexPath:self.highlightedIndexPath];
-
-  [self.delegate autocompleteResultConsumer:self
-                            didHighlightRow:self.highlightedIndexPath.row
-                                  inSection:self.highlightedIndexPath.section];
 }
 
-- (void)keyCommandReturn {
-  [self.tableView selectRowAtIndexPath:self.highlightedIndexPath
-                              animated:YES
-                        scrollPosition:UITableViewScrollPositionNone];
+#pragma mark OmniboxSuggestionCommands Private
+
+- (void)highlightRowAtIndexPath:(NSIndexPath*)indexPath {
+  UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
+  [cell setHighlighted:YES animated:NO];
+}
+
+- (void)unhighlightRowAtIndexPath:(NSIndexPath*)indexPath {
+  UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
+  [cell setHighlighted:NO animated:NO];
+}
+
+- (void)didHighlightSelectedSuggestion {
+  id<AutocompleteSuggestion> suggestion =
+      [self suggestionAtIndexPath:self.highlightedIndexPath];
+  DCHECK(suggestion);
+  [self.matchPreviewDelegate setPreviewSuggestion:suggestion isFirstUpdate:NO];
 }
 
 #pragma mark - Table view delegate
@@ -392,28 +516,38 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
 
 - (BOOL)tableView:(UITableView*)tableView
     shouldHighlightRowAtIndexPath:(NSIndexPath*)indexPath {
+  // TODO(crbug.com/1365374): Handle Carousel's highlight.
   return YES;
 }
 
 - (void)tableView:(UITableView*)tableView
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
-  DCHECK_LT((NSUInteger)indexPath.row,
-            self.currentResult[indexPath.section].suggestions.count);
   NSUInteger row = indexPath.row;
+  NSUInteger section = indexPath.section;
+  DCHECK_LT(section, self.currentResult.count);
+  DCHECK_LT(row, self.currentResult[indexPath.section].suggestions.count);
 
-  // Crash reports tell us that `row` is sometimes indexed past the end of
-  // the results array. In those cases, just ignore the request and return
-  // early. See b/5813291.
-  if (row >= self.currentResult[indexPath.section].suggestions.count)
+  // Crash reports tell us that `section` and `row` are sometimes indexed past
+  // the end of the results array. In those cases, just ignore the request and
+  // return early. See crbug.com/1378590.
+  if (section >= self.currentResult.count ||
+      row >= self.currentResult[indexPath.section].suggestions.count)
     return;
-  [self.delegate autocompleteResultConsumer:self
-                               didSelectRow:row
-                                  inSection:indexPath.section];
+  // TODO(crbug.com/1365374): Handle Carousel's selection.
+  [self.delegate
+      autocompleteResultConsumer:self
+             didSelectSuggestion:[self suggestionAtIndexPath:indexPath]
+                           inRow:row];
 }
 
 - (CGFloat)tableView:(UITableView*)tableView
     heightForHeaderInSection:(NSInteger)section {
-  return FLT_MIN;
+  if (!IsOmniboxActionsEnabled() &&
+      !base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles)) {
+    return FLT_MIN;
+  }
+  BOOL hasTitle = self.currentResult[section].title.length > 0;
+  return hasTitle ? UITableViewAutomaticDimension : FLT_MIN;
 }
 
 - (CGFloat)tableView:(UITableView*)tableView
@@ -421,6 +555,8 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
   if (!IsOmniboxActionsEnabled()) {
     return FLT_MIN;
   }
+  // Don't show the footer on the last section, to not increase the size of the
+  // popup on iPad.
   if (section == (tableView.numberOfSections - 1)) {
     return FLT_MIN;
   }
@@ -470,7 +606,14 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
 
 - (NSInteger)tableView:(UITableView*)tableView
     numberOfRowsInSection:(NSInteger)section {
-  return self.currentResult[section].suggestions.count;
+  switch (self.currentResult[section].displayStyle) {
+    case SuggestionGroupDisplayStyleDefault:
+      return self.currentResult[section].suggestions.count;
+    case SuggestionGroupDisplayStyleCarousel:
+      DCHECK(base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles));
+      // The carousel displays suggestions on one row.
+      return 1;
+  }
 }
 
 - (BOOL)tableView:(UITableView*)tableView
@@ -482,6 +625,11 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
       self.currentResult[indexPath.section].suggestions.count)
     return NO;
 
+  if (self.currentResult[indexPath.section].displayStyle ==
+      SuggestionGroupDisplayStyleCarousel) {
+    return NO;
+  }
+
   return [self.currentResult[indexPath.section].suggestions[indexPath.row]
       supportsDeletion];
 }
@@ -491,11 +639,73 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
      forRowAtIndexPath:(NSIndexPath*)indexPath {
   DCHECK_LT((NSUInteger)indexPath.row,
             self.currentResult[indexPath.section].suggestions.count);
+  id<AutocompleteSuggestion> suggestion =
+      [self suggestionAtIndexPath:indexPath];
+  DCHECK(suggestion);
   if (editingStyle == UITableViewCellEditingStyleDelete) {
     [self.delegate autocompleteResultConsumer:self
-                      didSelectRowForDeletion:indexPath.row
-                                    inSection:indexPath.section];
+               didSelectSuggestionForDeletion:suggestion
+                                        inRow:indexPath.row];
   }
+}
+
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForRowAtIndexPath:(NSIndexPath*)indexPath {
+  return UITableViewAutomaticDimension;
+}
+
+- (NSString*)tableView:(UITableView*)tableView
+    titleForHeaderInSection:(NSInteger)section {
+  return self.currentResult[section].title;
+}
+
+// Customize the appearance of table view cells.
+- (UITableViewCell*)tableView:(UITableView*)tableView
+        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
+  DCHECK_LT((NSUInteger)indexPath.row,
+            self.currentResult[indexPath.section].suggestions.count);
+
+  switch (self.currentResult[indexPath.section].displayStyle) {
+    case SuggestionGroupDisplayStyleDefault: {
+      OmniboxPopupRowCell* cell = [self.tableView
+          dequeueReusableCellWithIdentifier:OmniboxPopupRowCellReuseIdentifier
+                               forIndexPath:indexPath];
+      cell.faviconRetriever = self.faviconRetriever;
+      cell.imageRetriever = self.imageRetriever;
+      [cell
+          setupWithAutocompleteSuggestion:self.currentResult[indexPath.section]
+                                              .suggestions[indexPath.row]
+                                incognito:self.incognito];
+      cell.showsSeparator =
+          (NSUInteger)indexPath.row <
+          self.currentResult[indexPath.section].suggestions.count - 1;
+      cell.delegate = self;
+      return cell;
+    }
+    case SuggestionGroupDisplayStyleCarousel: {
+      DCHECK(base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles));
+      NSArray<CarouselItem*>* carouselItems = [self
+          carouselItemsFromSuggestionGroup:self.currentResult[indexPath.section]
+                            groupIndexPath:indexPath];
+      [self.carouselCell setupWithCarouselItems:carouselItems];
+      for (CarouselItem* item in carouselItems) {
+        [self fetchFaviconForCarouselItem:item];
+      }
+      return self.carouselCell;
+    }
+  }
+}
+
+#pragma mark - OmniboxPopupCarouselCellDelegate
+
+- (void)didTapCarouselItem:(CarouselItem*)carouselItem {
+  id<AutocompleteSuggestion> suggestion =
+      [self suggestionAtIndexPath:carouselItem.indexPath];
+  DCHECK(suggestion);
+
+  [self.delegate autocompleteResultConsumer:self
+                        didSelectSuggestion:suggestion
+                                      inRow:carouselItem.indexPath.row];
 }
 
 #pragma mark - Internal API methods
@@ -572,44 +782,6 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
                                 animated:NO];
 }
 
-
-#pragma mark - Table view data source
-
-- (CGFloat)tableView:(UITableView*)tableView
-    heightForRowAtIndexPath:(NSIndexPath*)indexPath {
-  return UITableViewAutomaticDimension;
-}
-
-// Customize the appearance of table view cells.
-- (UITableViewCell*)tableView:(UITableView*)tableView
-        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
-  DCHECK_LT((NSUInteger)indexPath.row,
-            self.currentResult[indexPath.section].suggestions.count);
-  OmniboxPopupRowCell* cell = [self.tableView
-      dequeueReusableCellWithIdentifier:OmniboxPopupRowCellReuseIdentifier
-                           forIndexPath:indexPath];
-  cell.faviconRetriever = self.faviconRetriever;
-  cell.imageRetriever = self.imageRetriever;
-  [cell setupWithAutocompleteSuggestion:self.currentResult[indexPath.section]
-                                            .suggestions[indexPath.row]
-                              incognito:self.incognito];
-  cell.showsSeparator =
-      (NSUInteger)indexPath.row <
-      self.currentResult[indexPath.section].suggestions.count - 1;
-  cell.delegate = self;
-
-  return cell;
-}
-
-#pragma mark - OmniboxPopupRowCellDelegate
-
-- (void)trailingButtonTappedForCell:(OmniboxPopupRowCell*)cell {
-  NSIndexPath* indexPath = [self.tableView indexPathForCell:cell];
-  [self.delegate autocompleteResultConsumer:self
-                 didTapTrailingButtonForRow:indexPath.row
-                                  inSection:indexPath.section];
-}
-
 #pragma mark - Keyboard events
 
 - (void)keyboardDidShow:(NSNotification*)notification {
@@ -650,6 +822,19 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
 }
 
 #pragma mark - Private Methods
+
+- (id<AutocompleteSuggestion>)suggestionAtIndexPath:(NSIndexPath*)indexPath {
+  if (indexPath.section < 0 || indexPath.row < 0) {
+    return nil;
+  }
+  if (!self.currentResult || self.currentResult.count == 0 ||
+      self.currentResult.count <= (NSUInteger)indexPath.section ||
+      self.currentResult[indexPath.section].suggestions.count <=
+          (NSUInteger)indexPath.row) {
+    return nil;
+  }
+  return self.currentResult[indexPath.section].suggestions[indexPath.row];
+}
 
 - (void)updateVisibleSuggestionCount {
   CGFloat keyboardHeight =
@@ -704,6 +889,44 @@ const CGFloat kVisibleSuggestionThreshold = 0.6;
     return kTopBottomPaddingVariation2Ipad;
   }
   return kTopAndBottomPadding;
+}
+
+- (NSArray<CarouselItem*>*)
+    carouselItemsFromSuggestionGroup:(id<AutocompleteSuggestionGroup>)group
+                      groupIndexPath:(NSIndexPath*)groupIndexPath {
+  NSMutableArray* carouselItems =
+      [[NSMutableArray alloc] initWithCapacity:group.suggestions.count];
+  for (NSUInteger i = 0; i < group.suggestions.count; ++i) {
+    id<AutocompleteSuggestion> suggestion = group.suggestions[i];
+    NSIndexPath* itemIndexPath =
+        [NSIndexPath indexPathForRow:i inSection:groupIndexPath.section];
+    CarouselItem* item = [[CarouselItem alloc] init];
+    item.title = suggestion.text.string;
+    item.indexPath = itemIndexPath;
+    item.URL = suggestion.destinationUrl;
+    [carouselItems addObject:item];
+  }
+  return carouselItems;
+}
+
+// TODO(crbug.com/1365374): Move to a mediator.
+- (void)fetchFaviconForCarouselItem:(CarouselItem*)carouselItem {
+  __weak OmniboxPopupCarouselCell* weakCell = self.carouselCell;
+  __weak CarouselItem* weakItem = carouselItem;
+
+  void (^completion)(FaviconAttributes*) = ^(FaviconAttributes* attributes) {
+    OmniboxPopupCarouselCell* strongCell = weakCell;
+    CarouselItem* strongItem = weakItem;
+    if (!strongCell || !strongItem)
+      return;
+
+    strongItem.faviconAttributes = attributes;
+    [strongCell updateCarouselItem:strongItem];
+  };
+
+  [self.carouselAttributeProvider
+      fetchFaviconAttributesForURL:carouselItem.URL.gurl
+                        completion:completion];
 }
 
 @end

@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -472,6 +472,30 @@ class InputMethodPrivateOnAutocorrectFunction : public ExtensionFunction {
  private:
   DECLARE_EXTENSION_FUNCTION("inputMethodPrivate.onAutocorrect",
                              INPUTMETHODPRIVATE_ONAUTOCORRECT)
+};
+
+class InputMethodPrivateNotifyInputMethodReadyForTestingFunction
+    : public ExtensionFunction {
+ public:
+  InputMethodPrivateNotifyInputMethodReadyForTestingFunction() = default;
+
+  InputMethodPrivateNotifyInputMethodReadyForTestingFunction(
+      const InputMethodPrivateNotifyInputMethodReadyForTestingFunction&) =
+      delete;
+  InputMethodPrivateNotifyInputMethodReadyForTestingFunction& operator=(
+      const InputMethodPrivateNotifyInputMethodReadyForTestingFunction&) =
+      delete;
+
+ protected:
+  ~InputMethodPrivateNotifyInputMethodReadyForTestingFunction() override =
+      default;
+
+  ResponseAction Run() override;
+
+ private:
+  DECLARE_EXTENSION_FUNCTION(
+      "inputMethodPrivate.notifyInputMethodReadyForTesting",
+      INPUTMETHODPRIVATE_NOTIFYINPUTMETHODREADYFORTESTING)
 };
 
 class InputMethodAPI : public BrowserContextKeyedAPI,

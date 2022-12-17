@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,9 +11,9 @@
 import '../cr_icon_button/cr_icon_button.js';
 import '../cr_input/cr_input.js';
 import '../cr_input/cr_input_style.css.js';
-import '../icons.m.js';
-import '../shared_style_css.m.js';
-import '../shared_vars_css.m.js';
+import '../icons.html.js';
+import '../cr_shared_style.css.js';
+import '../cr_shared_vars.css.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';

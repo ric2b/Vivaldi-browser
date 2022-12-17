@@ -62,12 +62,17 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<ImportDataAPI>* GetFactoryInstance();
 
-  // Open ifstream to Thunderbird mailbox and set seek position.
-  bool OpenThunderbirdMailbox(std::string path, int seek_pos);
+  // Open ifstream to Thunderbird mailbox and set seek position. Leaves fsize
+  // unchanged if mailbox is already open.
+  bool OpenThunderbirdMailbox(std::string path,
+                              std::streampos seek_pos,
+                              std::streampos& fsize);
+
+  void CloseThunderbirdMailbox();
 
   // Read message from Thunderbird mailbox and return seek position after
   // reading. On failure return false and leave seek_pos unchanged.
-  bool ReadThunderbirdMessage(std::string& content, int& seek_pos);
+  bool ReadThunderbirdMessage(std::string& content, std::streampos& seek_pos);
 
   std::string GetThunderbirdPath() { return thunderbird_mailbox_path_; }
 
@@ -140,6 +145,18 @@ class ImportDataOpenThunderbirdMailboxFunction : public ExtensionFunction {
    ~ImportDataOpenThunderbirdMailboxFunction() override = default;
 
    ResponseAction Run() override;
+};
+
+class ImportDataCloseThunderbirdMailboxFunction : public ExtensionFunction {
+  public:
+   DECLARE_EXTENSION_FUNCTION("importData.closeThunderbirdMailbox",
+                              IMPORTDATA_CLOSETHUNDERBIRDMAILBOX)
+   ImportDataCloseThunderbirdMailboxFunction() = default;
+
+ private:
+  ~ImportDataCloseThunderbirdMailboxFunction() override = default;
+
+  ResponseAction Run() override;
 };
 
 class ImportDataReadMessageFromThunderbirdMailboxFunction

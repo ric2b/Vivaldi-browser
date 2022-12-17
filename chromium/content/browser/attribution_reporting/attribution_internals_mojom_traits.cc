@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,9 +75,9 @@ ReportIDDataView::Tag
 UnionTraits<ReportIDDataView, AttributionReport::Id>::GetTag(
     const AttributionReport::Id& id) {
   switch (AttributionReport::GetReportType(id)) {
-    case AttributionReport::ReportType::kEventLevel:
+    case AttributionReport::Type::kEventLevel:
       return ReportIDDataView::Tag::kEventLevelId;
-    case AttributionReport::ReportType::kAggregatableAttribution:
+    case AttributionReport::Type::kAggregatableAttribution:
       return ReportIDDataView::Tag::kAggregatableAttributionId;
   }
 }

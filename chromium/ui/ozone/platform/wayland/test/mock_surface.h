@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -49,6 +49,7 @@ class MockSurface : public ServerObject {
                void(int32_t x, int32_t y, int32_t width, int32_t height));
   MOCK_METHOD0(Commit, void());
   MOCK_METHOD1(SetBufferScale, void(int32_t scale));
+  MOCK_METHOD1(SetBufferTransform, void(int32_t transform));
   MOCK_METHOD4(DamageBuffer,
                void(int32_t x, int32_t y, int32_t width, int32_t height));
 
@@ -94,6 +95,9 @@ class MockSurface : public ServerObject {
                                 wl_resource* linux_buffer_release) {
     DCHECK(!linux_buffer_releases_.contains(buffer));
     linux_buffer_releases_.emplace(buffer, linux_buffer_release);
+  }
+  bool has_linux_buffer_release() const {
+    return !linux_buffer_releases_.empty();
   }
   void ClearBufferReleases();
 

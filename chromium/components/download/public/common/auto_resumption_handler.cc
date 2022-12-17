@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -243,8 +243,6 @@ void AutoResumptionHandler::RescheduleTaskIfNecessary() {
 
   if (!has_actionable_downloads) {
     task_manager_->NotifyTaskFinished(kResumptionTaskType, false);
-    task_manager_->NotifyTaskFinished(DownloadTaskType::DOWNLOAD_LATER_TASK,
-                                      false);
   }
 
   if (!has_resumable_downloads) {
@@ -300,8 +298,7 @@ bool AutoResumptionHandler::IsAutoResumableDownload(
   if (!item || item->IsDangerous())
     return false;
 
-  // Ignore downloads started a while ago. This doesn't include user scheduled
-  // downloads.
+  // Ignore downloads started a while ago.
   if (clock_->Now() - item->GetStartTime() > kAutoResumptionExpireInterval) {
     return false;
   }

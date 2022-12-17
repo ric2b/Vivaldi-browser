@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/dom/focusgroup_flags.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -18,8 +19,6 @@ class LayoutObject;
 class LayoutNGTableInterface;
 class LayoutNGTableCellInterface;
 class LayoutNGTableRowInterface;
-
-enum FocusgroupFlags : uint8_t;
 
 // This interface is used to expose the grid focusgroup navigation functions
 // while hiding the type of grid we're in. A grid focusgroup can either be

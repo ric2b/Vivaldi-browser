@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,7 +35,7 @@ class X11EventWatcherGlib : public X11EventWatcher {
   raw_ptr<X11EventSource> event_source_;
 
   // The GLib event source for X events.
-  raw_ptr<GSource, DanglingUntriaged> x_source_ = nullptr;
+  raw_ptr<GSource> x_source_ = nullptr;
 
   // The poll attached to |x_source_|.
   std::unique_ptr<GPollFD> x_poll_;

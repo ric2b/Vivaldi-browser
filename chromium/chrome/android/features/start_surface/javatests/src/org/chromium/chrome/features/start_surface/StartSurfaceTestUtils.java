@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -100,8 +100,8 @@ public class StartSurfaceTestUtils {
             "force-fieldtrial-params=Study.Group:"
             + ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS_PARAM + "/0";
     public static final String START_SURFACE_TEST_SINGLE_ENABLED_PARAMS =
-            "force-fieldtrial-params=Study.Group:"
-            + "show_last_active_tab_only/false/open_ntp_instead_of_start/false";
+            "force-fieldtrial-params=Study.Group:show_last_active_tab_only/false"
+            + "/open_ntp_instead_of_start/false/open_start_as_homepage/true";
     public static final String START_SURFACE_TEST_BASE_PARAMS =
             "force-fieldtrial-params=Study.Group:";
     public static List<ParameterSet> sClassParamsForStartSurfaceTest =

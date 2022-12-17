@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,8 +91,9 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
 
  protected:
   // Choose which feature flags to enable or disable.
-  virtual void ChooseFeatures(std::vector<base::Feature>* enabled_features,
-                              std::vector<base::Feature>* disabled_features);
+  virtual void ChooseFeatures(
+      std::vector<base::test::FeatureRef>* enabled_features,
+      std::vector<base::test::FeatureRef>* disabled_features);
 
   void ExecuteScript(const char* script) {
     shell()->web_contents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
@@ -137,7 +138,8 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
   }
 
   BrowserAccessibility* FindNode(const std::string& name_or_value) {
-    return FindNodeInSubtree(*GetManager()->GetRoot(), name_or_value);
+    return FindNodeInSubtree(*GetManager()->GetBrowserAccessibilityRoot(),
+                             name_or_value);
   }
 
   BrowserAccessibility* FindNodeInSubtree(BrowserAccessibility& node,
@@ -167,7 +169,8 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
   }
 
   BrowserAccessibility* FindFirstNodeWithRole(ax::mojom::Role role_value) {
-    return FindFirstNodeWithRoleInSubtree(*GetManager()->GetRoot(), role_value);
+    return FindFirstNodeWithRoleInSubtree(
+        *GetManager()->GetBrowserAccessibilityRoot(), role_value);
   }
 
   BrowserAccessibility* FindFirstNodeWithRoleInSubtree(
@@ -216,8 +219,8 @@ class CrossPlatformAccessibilityBrowserTest : public ContentBrowserTest {
 };
 
 void CrossPlatformAccessibilityBrowserTest::SetUp() {
-  std::vector<base::Feature> enabled_features;
-  std::vector<base::Feature> disabled_features;
+  std::vector<base::test::FeatureRef> enabled_features;
+  std::vector<base::test::FeatureRef> disabled_features;
   ChooseFeatures(&enabled_features, &disabled_features);
 
   scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
@@ -231,8 +234,8 @@ void CrossPlatformAccessibilityBrowserTest::SetUp() {
 }
 
 void CrossPlatformAccessibilityBrowserTest::ChooseFeatures(
-    std::vector<base::Feature>* enabled_features,
-    std::vector<base::Feature>* disabled_features) {
+    std::vector<base::test::FeatureRef>* enabled_features,
+    std::vector<base::test::FeatureRef>* disabled_features) {
   enabled_features->emplace_back(
       features::kEnableAccessibilityExposeHTMLElement);
 }
@@ -529,7 +532,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
       BrowserAccessibilityManager::FromID(iframe_tree_id);
   ASSERT_NE(nullptr, iframe_manager);
 
-  const ui::AXNode* sub_document = iframe_manager->GetRootAsAXNode();
+  const ui::AXNode* sub_document = iframe_manager->GetRoot();
   EXPECT_EQ(ax::mojom::Role::kRootWebArea, sub_document->data().role);
   ASSERT_EQ(1u, sub_document->children().size());
 
@@ -572,7 +575,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "Button 2");
 
-  const BrowserAccessibility* root = GetManager()->GetRoot();
+  const BrowserAccessibility* root =
+      GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_EQ(1U, root->PlatformChildCount());
   const BrowserAccessibility* body = root->PlatformGetChild(0);
   ASSERT_EQ(3U, body->PlatformChildCount());
@@ -628,7 +632,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "Text in iframe");
 
-  const BrowserAccessibility* root = GetManager()->GetRoot();
+  const BrowserAccessibility* root =
+      GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_NE(root, nullptr);
   const BrowserAccessibility* body = root->PlatformGetChild(0);
   ASSERT_NE(body, nullptr);
@@ -718,7 +723,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "Sample text");
 
-  const BrowserAccessibility* root = GetManager()->GetRoot();
+  const BrowserAccessibility* root =
+      GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_NE(root, nullptr);
   const BrowserAccessibility* body = root->PlatformGetChild(0);
   ASSERT_NE(body, nullptr);
@@ -758,7 +764,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "Select");
 
-  const BrowserAccessibility* root = GetManager()->GetRoot();
+  const BrowserAccessibility* root =
+      GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_NE(root, nullptr);
   const BrowserAccessibility* body = root->PlatformGetChild(0);
   ASSERT_NE(body, nullptr);
@@ -817,13 +824,14 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "Select");
 
-  const BrowserAccessibility* root = GetManager()->GetRoot();
+  const BrowserAccessibility* root =
+      GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_NE(root, nullptr);
   const BrowserAccessibility* body = root->PlatformGetChild(0);
   ASSERT_NE(body, nullptr);
   BrowserAccessibility* select = body->PlatformGetChild(0);
   ASSERT_NE(select, nullptr);
-  EXPECT_EQ(ax::mojom::Role::kPopUpButton, select->GetRole());
+  EXPECT_EQ(ax::mojom::Role::kComboBoxSelect, select->GetRole());
 
   {
     // Get popup via InternalGetChild so that hidden nodes are included.
@@ -981,7 +989,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "Select");
 
-  const BrowserAccessibility* root = GetManager()->GetRoot();
+  const BrowserAccessibility* root =
+      GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_NE(root, nullptr);
   const BrowserAccessibility* body = root->PlatformGetChild(0);
   ASSERT_NE(body, nullptr);
@@ -1026,7 +1035,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "Button 2");
-  const BrowserAccessibility* root = GetManager()->GetRoot();
+  const BrowserAccessibility* root =
+      GetManager()->GetBrowserAccessibilityRoot();
   BrowserAccessibility::PlatformChildIterator it =
       root->PlatformChildrenBegin();
   EXPECT_EQ(ax::mojom::Role::kGenericContainer, (*it).GetRole());
@@ -1170,7 +1180,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
       </body>
       </html>)HTML");
 
-  BrowserAccessibility* root = GetManager()->GetRoot();
+  BrowserAccessibility* root = GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root);
   ASSERT_EQ(18u, root->PlatformChildCount());
 
@@ -1249,7 +1259,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
       </body>
       </html>)HTML");
 
-  BrowserAccessibility* root = GetManager()->GetRoot();
+  BrowserAccessibility* root = GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root);
   ASSERT_EQ(20u, root->PlatformChildCount());
 
@@ -1296,7 +1306,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
       </body>
       </html>)HTML");
 
-  BrowserAccessibility* root = GetManager()->GetRoot();
+  BrowserAccessibility* root = GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root);
   ASSERT_EQ(1u, root->PlatformChildCount());
 
@@ -1415,7 +1425,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   BrowserAccessibilityManager* browser_accessibility_manager = GetManager();
   ASSERT_NE(nullptr, browser_accessibility_manager);
   BrowserAccessibility* root_browser_accessibility =
-      browser_accessibility_manager->GetRoot();
+      browser_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root_browser_accessibility);
   BrowserAccessibility* leaf_iframe_browser_accessibility =
       root_browser_accessibility->InternalDeepestLastChild();
@@ -1440,7 +1450,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
       BrowserAccessibilityManager::FromID(iframe_tree_id);
   ASSERT_NE(nullptr, iframe_browser_accessibility_manager);
   BrowserAccessibility* root_iframe_browser_accessibility =
-      iframe_browser_accessibility_manager->GetRoot();
+      iframe_browser_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root_iframe_browser_accessibility);
   ASSERT_EQ(ax::mojom::Role::kRootWebArea,
             root_iframe_browser_accessibility->GetRole());
@@ -1466,7 +1476,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   BrowserAccessibilityManager* browser_accessibility_manager = GetManager();
   ASSERT_NE(nullptr, browser_accessibility_manager);
   BrowserAccessibility* root_browser_accessibility =
-      browser_accessibility_manager->GetRoot();
+      browser_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root_browser_accessibility);
   BrowserAccessibility* leaf_iframe_browser_accessibility =
       root_browser_accessibility->InternalDeepestLastChild();
@@ -1490,7 +1500,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
       BrowserAccessibilityManager::FromID(iframe_tree_id);
   ASSERT_NE(nullptr, iframe_browser_accessibility_manager);
   BrowserAccessibility* root_iframe_browser_accessibility =
-      iframe_browser_accessibility_manager->GetRoot();
+      iframe_browser_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root_iframe_browser_accessibility);
   ASSERT_EQ(ax::mojom::Role::kRootWebArea,
             root_iframe_browser_accessibility->GetRole());
@@ -1526,7 +1536,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 
   BrowserAccessibilityManager* manager = GetManager();
   ASSERT_NE(nullptr, manager);
-  BrowserAccessibility* root = manager->GetRoot();
+  BrowserAccessibility* root = manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root);
 
   // Find the input control, and the popup-button
@@ -1600,7 +1610,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 
   BrowserAccessibilityManager* manager = GetManager();
   ASSERT_NE(nullptr, manager);
-  BrowserAccessibility* root = manager->GetRoot();
+  BrowserAccessibility* root = manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root);
 
   // Find the input control
@@ -1661,7 +1671,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "Anchor text");
 
-  const BrowserAccessibility* root = GetManager()->GetRoot();
+  const BrowserAccessibility* root =
+      GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_EQ(2u, root->PlatformChildCount());
   const BrowserAccessibility* target = root->PlatformGetChild(1);
   ASSERT_EQ(1u, target->PlatformChildCount());
@@ -1689,7 +1700,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest, GeneratedText) {
       </body>
       </html>)HTML");
 
-  const BrowserAccessibility* root = GetManager()->GetRoot();
+  const BrowserAccessibility* root =
+      GetManager()->GetBrowserAccessibilityRoot();
   ASSERT_EQ(1U, root->PlatformChildCount());
 
   const BrowserAccessibility* heading = root->PlatformGetChild(0);
@@ -1728,7 +1740,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   BrowserAccessibilityManager* root_accessibility_manager = GetManager();
   ASSERT_NE(nullptr, root_accessibility_manager);
   BrowserAccessibility* root_browser_accessibility =
-      root_accessibility_manager->GetRoot();
+      root_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root_browser_accessibility);
 
   // Focus the button within the second iframe to set focus on that document,
@@ -1778,7 +1790,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   BrowserAccessibilityManager* root_accessibility_manager = GetManager();
   ASSERT_NE(nullptr, root_accessibility_manager);
   BrowserAccessibility* root_browser_accessibility =
-      root_accessibility_manager->GetRoot();
+      root_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(nullptr, root_browser_accessibility);
   ASSERT_EQ(ax::mojom::Role::kRootWebArea,
             root_browser_accessibility->GetRole());
@@ -1830,15 +1842,15 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
       "/accessibility/scrolling/implicit-root-scroller.html");
 
   BrowserAccessibilityManager* manager = GetManager();
-  const BrowserAccessibility* heading =
-      FindNodeByRole(manager->GetRoot(), ax::mojom::Role::kHeading);
+  const BrowserAccessibility* heading = FindNodeByRole(
+      manager->GetBrowserAccessibilityRoot(), ax::mojom::Role::kHeading);
 
   // Ensure that this page has an implicit root scroller that's something
   // other than the root of the accessibility tree.
   ui::AXNodeID root_scroller_id = manager->GetTreeData().root_scroller_id;
   BrowserAccessibility* root_scroller = manager->GetFromID(root_scroller_id);
   ASSERT_TRUE(root_scroller);
-  EXPECT_NE(root_scroller_id, manager->GetRoot()->GetId());
+  EXPECT_NE(root_scroller_id, manager->GetBrowserAccessibilityRoot()->GetId());
 
   // If we take the root scroll offsets into account (most platforms)
   // the heading should be scrolled above the top.
@@ -1906,7 +1918,8 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 #endif
 
 #if defined(IS_FAST_BUILD)  // Avoid flakiness on slower debug/sanitizer builds.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+// TODO(crbug.com/1179057): Test is flaky on multiple platforms.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_DocumentSelectionChangesAreNotBatched \
   DISABLED_DocumentSelectionChangesAreNotBatched
 #else
@@ -2038,7 +2051,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 
   BrowserAccessibilityManager* browser_accessibility_manager = GetManager();
   BrowserAccessibility* root_browser_accessibility =
-      browser_accessibility_manager->GetRoot();
+      browser_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(root_browser_accessibility, nullptr);
 
   const ui::AXNode* root_node = root_browser_accessibility->node();
@@ -2110,7 +2123,7 @@ IN_PROC_BROWSER_TEST_F(
 
   BrowserAccessibilityManager* browser_accessibility_manager = GetManager();
   BrowserAccessibility* root_browser_accessibility =
-      browser_accessibility_manager->GetRoot();
+      browser_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(root_browser_accessibility, nullptr);
 
   BrowserAccessibility* input_browser_accessibility =
@@ -2186,7 +2199,7 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
 
   BrowserAccessibilityManager* browser_accessibility_manager = GetManager();
   BrowserAccessibility* root_browser_accessibility =
-      browser_accessibility_manager->GetRoot();
+      browser_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(root_browser_accessibility, nullptr);
 
   BrowserAccessibility* input_browser_accessibility =
@@ -2271,7 +2284,7 @@ IN_PROC_BROWSER_TEST_F(
 
   BrowserAccessibilityManager* browser_accessibility_manager = GetManager();
   BrowserAccessibility* root_browser_accessibility =
-      browser_accessibility_manager->GetRoot();
+      browser_accessibility_manager->GetBrowserAccessibilityRoot();
   ASSERT_NE(root_browser_accessibility, nullptr);
 
   BrowserAccessibility* input_browser_accessibility =

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,7 +40,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -105,15 +105,15 @@ public class PriceDropNotificationManagerTest {
     private SubscriptionsManagerImpl mMockSubscriptionsManager;
 
     @Mock
-    private BookmarkBridge mMockBookmarkBridge;
+    private BookmarkModel mMockBookmarkModel;
 
     @Before
     public void setUp() {
         mMockNotificationManager = new MockNotificationManagerProxy();
         PriceDropNotificationManagerImpl.setNotificationManagerForTesting(mMockNotificationManager);
         mPriceDropNotificationManager = PriceDropNotificationManagerFactory.create();
-        when(mMockBookmarkBridge.isBookmarkModelLoaded()).thenReturn(true);
-        PriceDropNotificationManagerImpl.setBookmarkBridgeForTesting(mMockBookmarkBridge);
+        when(mMockBookmarkModel.isBookmarkModelLoaded()).thenReturn(true);
+        PriceDropNotificationManagerImpl.setBookmarkModelForTesting(mMockBookmarkModel);
     }
 
     @After
@@ -177,7 +177,7 @@ public class PriceDropNotificationManagerTest {
 
             mPriceDropNotificationManager.createNotificationChannel();
             assertNotNull(mPriceDropNotificationManager.getNotificationChannel());
-            assertEquals(NotificationManager.IMPORTANCE_LOW,
+            assertEquals(NotificationManager.IMPORTANCE_DEFAULT,
                     mPriceDropNotificationManager.getNotificationChannel().getImportance());
 
             assertTrue(mPriceDropNotificationManager.canPostNotification());
@@ -219,7 +219,7 @@ public class PriceDropNotificationManagerTest {
             assertEquals(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS, intent.getAction());
             assertEquals(ContextUtils.getApplicationContext().getPackageName(),
                     intent.getStringExtra(Settings.EXTRA_APP_PACKAGE));
-            assertEquals(ChromeChannelDefinitions.ChannelId.PRICE_DROP,
+            assertEquals(ChromeChannelDefinitions.ChannelId.PRICE_DROP_DEFAULT,
                     intent.getStringExtra(Settings.EXTRA_CHANNEL_ID));
         }
         assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, intent.getFlags());

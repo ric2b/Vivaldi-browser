@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -104,8 +104,7 @@ void OsDiagnosticsGetRoutineUpdateFunction::OnResult(
   result.progress_percent = ptr->progress_percent;
 
   if (ptr->output.has_value() && !ptr->output.value().empty()) {
-    result.output =
-        std::make_unique<std::string>(std::move(ptr->output.value()));
+    result.output = std::move(ptr->output);
   }
 
   switch (ptr->routine_update_union->which()) {
@@ -150,7 +149,7 @@ void DiagnosticsApiRunRoutineFunctionBase::OnResult(
   api::os_diagnostics::RunRoutineResponse result;
   result.id = ptr->id;
   result.status = converters::ConvertRoutineStatus(ptr->status);
-  Respond(OneArgument(base::Value::FromUniquePtrValue(result.ToValue())));
+  Respond(WithArguments(result.ToValue()));
 }
 
 // OsDiagnosticsRunAcPowerRoutineFunction ------------------------------
@@ -169,18 +168,13 @@ void OsDiagnosticsRunAcPowerRoutineFunction::RunIfAllowed() {
     return;
   }
 
-  absl::optional<std::string> expected_power_type = absl::nullopt;
-  if (params->request.expected_power_type) {
-    expected_power_type = *params->request.expected_power_type.get();
-  }
-
   auto cb =
       base::BindOnce(&DiagnosticsApiRunRoutineFunctionBase::OnResult, this);
 
   GetRemoteService()->RunAcPowerRoutine(
       converters::ConvertAcPowerStatusRoutineType(
           params->request.expected_status),
-      expected_power_type, std::move(cb));
+      params->request.expected_power_type, std::move(cb));
 }
 
 // OsDiagnosticsRunBatteryCapacityRoutineFunction ------------------------------
@@ -379,6 +373,48 @@ void OsDiagnosticsRunDiskReadRoutineFunction::RunIfAllowed() {
       std::move(cb));
 }
 
+// OsDiagnosticsRunDnsResolutionRoutineFunction --------------------------------
+
+OsDiagnosticsRunDnsResolutionRoutineFunction::
+    OsDiagnosticsRunDnsResolutionRoutineFunction() = default;
+OsDiagnosticsRunDnsResolutionRoutineFunction::
+    ~OsDiagnosticsRunDnsResolutionRoutineFunction() = default;
+
+void OsDiagnosticsRunDnsResolutionRoutineFunction::RunIfAllowed() {
+  auto cb =
+      base::BindOnce(&DiagnosticsApiRunRoutineFunctionBase::OnResult, this);
+
+  GetRemoteService()->RunDnsResolutionRoutine(std::move(cb));
+}
+
+// OsDiagnosticsRunDnsResolverPresentRoutineFunction ---------------------------
+
+OsDiagnosticsRunDnsResolverPresentRoutineFunction::
+    OsDiagnosticsRunDnsResolverPresentRoutineFunction() = default;
+OsDiagnosticsRunDnsResolverPresentRoutineFunction::
+    ~OsDiagnosticsRunDnsResolverPresentRoutineFunction() = default;
+
+void OsDiagnosticsRunDnsResolverPresentRoutineFunction::RunIfAllowed() {
+  auto cb =
+      base::BindOnce(&DiagnosticsApiRunRoutineFunctionBase::OnResult, this);
+
+  GetRemoteService()->RunDnsResolverPresentRoutine(std::move(cb));
+}
+
+// OsDiagnosticsRunGatewayCanBePingedRoutineFunction ---------------------------
+
+OsDiagnosticsRunGatewayCanBePingedRoutineFunction::
+    OsDiagnosticsRunGatewayCanBePingedRoutineFunction() = default;
+OsDiagnosticsRunGatewayCanBePingedRoutineFunction::
+    ~OsDiagnosticsRunGatewayCanBePingedRoutineFunction() = default;
+
+void OsDiagnosticsRunGatewayCanBePingedRoutineFunction::RunIfAllowed() {
+  auto cb =
+      base::BindOnce(&DiagnosticsApiRunRoutineFunctionBase::OnResult, this);
+
+  GetRemoteService()->RunGatewayCanBePingedRoutine(std::move(cb));
+}
+
 // OsDiagnosticsRunLanConnectivityRoutineFunction ------------------------------
 
 OsDiagnosticsRunLanConnectivityRoutineFunction::
@@ -428,6 +464,20 @@ void OsDiagnosticsRunNvmeWearLevelRoutineFunction::RunIfAllowed() {
 
   GetRemoteService()->RunNvmeWearLevelRoutine(
       params->request.wear_level_threshold, std::move(cb));
+}
+
+// OsDiagnosticsRunSignalStrengthRoutineFunction -------------------------------
+
+OsDiagnosticsRunSignalStrengthRoutineFunction::
+    OsDiagnosticsRunSignalStrengthRoutineFunction() = default;
+OsDiagnosticsRunSignalStrengthRoutineFunction::
+    ~OsDiagnosticsRunSignalStrengthRoutineFunction() = default;
+
+void OsDiagnosticsRunSignalStrengthRoutineFunction::RunIfAllowed() {
+  auto cb =
+      base::BindOnce(&DiagnosticsApiRunRoutineFunctionBase::OnResult, this);
+
+  GetRemoteService()->RunSignalStrengthRoutine(std::move(cb));
 }
 
 // OsDiagnosticsRunSmartctlCheckRoutineFunction --------------------------------

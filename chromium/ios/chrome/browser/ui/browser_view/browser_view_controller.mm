@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/task/sequenced_task_runner.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
@@ -21,10 +22,9 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
-#import "ios/chrome/browser/application_context.h"
+#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #import "ios/chrome/browser/discover_feed/feed_constants.h"
 #import "ios/chrome/browser/feature_engagement/tracker_util.h"
@@ -67,7 +67,6 @@
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
@@ -75,6 +74,7 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_commands.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_view.h"
+#import "ios/chrome/browser/ui/lens/lens_coordinator.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/main_content/main_content_ui.h"
@@ -114,6 +114,7 @@
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/url_with_title.h"
 #import "ios/chrome/browser/upgrade/upgrade_center.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_observer_bridge.h"
@@ -132,11 +133,12 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/promo_style/promo_style_view_controller.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/components/webui/web_ui_url_constants.h"
+#import "ios/public/provider/chrome/browser/fullscreen/fullscreen_api.h"
 #import "ios/public/provider/chrome/browser/voice_search/voice_search_api.h"
 #import "ios/public/provider/chrome/browser/voice_search/voice_search_controller.h"
-#import "ios/web/public/deprecated/crw_js_injection_receiver.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "net/base/mac/url_conversions.h"
@@ -145,10 +147,16 @@
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
+#include "app/vivaldi_apptools.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
-
+#import "ios/panel/panel_interaction_controller.h"
 #import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+
+#import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+#import "app/vivaldi_apptools.h"
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -241,6 +249,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
 // Note other delegates defined in the Delegates category header.
 @interface BrowserViewController () <FindBarPresentationDelegate,
+                                     LensPresentationDelegate,
                                      FullscreenUIElement,
                                      MainContentUI,
                                      SideSwipeControllerDelegate,
@@ -504,6 +513,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     self.helpHandler = dependencies.helpHandler;
     self.popupMenuCommandsHandler = dependencies.popupMenuCommandsHandler;
     self.snackbarCommandsHandler = dependencies.snackbarCommandsHandler;
+
+    dependencies.lensCoordinator.delegate = self;
 
     _inNewTabAnimation = NO;
     self.fullscreenController = dependencies.fullscreenController;
@@ -788,7 +799,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 - (void)openNewTabFromOriginPoint:(CGPoint)originPoint
                      focusOmnibox:(BOOL)focusOmnibox
                     inheritOpener:(BOOL)inheritOpener {
-  NSTimeInterval startTime = [NSDate timeIntervalSinceReferenceDate];
+  const base::TimeTicks startTime = base::TimeTicks::Now();
   BOOL offTheRecord = _isOffTheRecord;
   ProceduralBlock oldForegroundTabWasAddedCompletionBlock =
       self.foregroundTabWasAddedCompletionBlock;
@@ -797,13 +808,12 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     if (oldForegroundTabWasAddedCompletionBlock) {
       oldForegroundTabWasAddedCompletionBlock();
     }
-    double duration = [NSDate timeIntervalSinceReferenceDate] - startTime;
-    base::TimeDelta timeDelta = base::Seconds(duration);
+    const base::TimeDelta duration = base::TimeTicks::Now() - startTime;
     if (offTheRecord) {
       UMA_HISTOGRAM_TIMES("Toolbar.Menu.NewIncognitoTabPresentationDuration",
-                          timeDelta);
+                          duration);
     } else {
-      UMA_HISTOGRAM_TIMES("Toolbar.Menu.NewTabPresentationDuration", timeDelta);
+      UMA_HISTOGRAM_TIMES("Toolbar.Menu.NewTabPresentationDuration", duration);
     }
     if (focusOmnibox) {
       [omniboxCommandHandler focusOmnibox];
@@ -960,16 +970,14 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     // Dismissed controllers will be so after a delay. Queue the completion
     // callback after that.
     if (completion) {
-      dispatch_after(
-          dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)),
-          dispatch_get_main_queue(), ^{
-            completion();
-          });
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE, base::BindOnce(completion), base::Milliseconds(400));
     }
   } else if (completion) {
     // If no view controllers are presented, we should be ok with dispatching
     // the completion block directly.
-    dispatch_async(dispatch_get_main_queue(), completion);
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(completion));
   }
 }
 
@@ -1380,7 +1388,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // change on rotation.
   [self updateToolbarState];
   // Resize horizontal viewport if Smooth Scrolling is on.
-  if (fullscreen::features::ShouldUseSmoothScrolling()) {
+  if (ios::provider::IsFullscreenSmoothScrollingSupported()) {
     self.fullscreenController->ResizeHorizontalViewport();
   }
 }
@@ -1552,7 +1560,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   _fakeStatusBarView = nil;
 
   if (self.thumbStripEnabled &&
-      !fullscreen::features::ShouldUseSmoothScrolling()) {
+      !ios::provider::IsFullscreenSmoothScrollingSupported()) {
     // A fake status bar on the browser view is not necessary when the thumb
     // strip feature is enabled because the view behind the browser view already
     // has a dark background. Adding a fake status bar would block the
@@ -1566,14 +1574,21 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   _fakeStatusBarView = [[UIView alloc] initWithFrame:statusBarFrame];
   [_fakeStatusBarView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+
+    if (IsVivaldiRunning()) {
+      _fakeStatusBarView.backgroundColor =
+        [UIColor colorNamed: vTabStripDefaultBackgroundColor];
+    } else {
     _fakeStatusBarView.backgroundColor = UIColor.blackColor;
+    } // End Vivaldi
+
     _fakeStatusBarView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     DCHECK(self.contentArea);
     [self.view insertSubview:_fakeStatusBarView aboveSubview:self.contentArea];
   } else {
     // Add a white bar when there is no tab strip so that the status bar on the
     // NTP is white.
-    _fakeStatusBarView.backgroundColor = ntp_home::kNTPBackgroundColor();
+    _fakeStatusBarView.backgroundColor = ntp_home::NTPBackgroundColor();
     [self.view insertSubview:_fakeStatusBarView atIndex:0];
   }
 }
@@ -1887,7 +1902,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       kTabSwitcherGuide,
       kNewTabButtonGuide,
       kSecondaryToolbarGuide,
-      kVoiceSearchButtonGuide,
       kDiscoverFeedHeaderMenuGuide,
       kPrimaryToolbarLocationViewGuide,
     ];
@@ -1978,7 +1992,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     // Make new content visible, resizing it first as the orientation may
     // have changed from the last time it was displayed.
     CGRect webStateViewFrame = self.contentArea.bounds;
-    if (fullscreen::features::ShouldUseSmoothScrolling()) {
+    if (ios::provider::IsFullscreenSmoothScrollingSupported()) {
       // If the view was translated for the thumb strip, make sure to re-apply
       // that translation here.
       if (self.viewTranslatedForSmoothScrolling) {
@@ -2019,7 +2033,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
           [self viewForWebState:webState];
     }
     // Resize horizontal viewport if Smooth Scrolling is on.
-    if (fullscreen::features::ShouldUseSmoothScrolling()) {
+    if (ios::provider::IsFullscreenSmoothScrollingSupported()) {
       self.fullscreenController->ResizeHorizontalViewport();
     }
   }
@@ -2231,8 +2245,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
     WebStateList* webStateList = self.browser->GetWebStateList();
     for (int index = 0; index < webStateList->count(); ++index) {
-      web::WebState* webState = webStateList->GetWebStateAt(index);
-      PagePlaceholderTabHelper::FromWebState(webState)
+      web::WebState* webStateAtIndex = webStateList->GetWebStateAt(index);
+      PagePlaceholderTabHelper::FromWebState(webStateAtIndex)
           ->CancelPlaceholderForNextNavigation();
     }
   }
@@ -2260,6 +2274,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
 // Adds the given urls to the reading list.
 - (void)addURLsToReadingList:(NSArray<URLWithTitle*>*)URLs {
+  DCHECK(URLs.count > 0) << "URLs are missing";
+
   for (URLWithTitle* urlWithTitle in URLs) {
     [self addURLToReadingList:urlWithTitle.URL withTitle:urlWithTitle.title];
   }
@@ -2454,7 +2470,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     // frame must be moved down and the content inset is decreased. To prevent
     // the actual web content from jumping, the content offset must be moved up
     // by a corresponding amount.
-    if (fullscreen::features::ShouldUseSmoothScrolling()) {
+    if (ios::provider::IsFullscreenSmoothScrollingSupported()) {
       self.viewTranslatedForSmoothScrolling = YES;
       CGFloat toolbarHeight = [self expandedTopToolbarHeight];
       if (self.currentWebState) {
@@ -2562,7 +2578,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
     // See the comments in `-willAnimateViewReveal:` for the explanation of why
     // this is necessary.
-    if (fullscreen::features::ShouldUseSmoothScrolling()) {
+    if (ios::provider::IsFullscreenSmoothScrollingSupported()) {
       self.viewTranslatedForSmoothScrolling = NO;
       self.fullscreenController->FreezeToolbarHeight(false);
       CGFloat toolbarHeight = [self expandedTopToolbarHeight];
@@ -2887,7 +2903,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
 - (CGFloat)initialContentOffsetForOverscrollActionsController:
     (OverscrollActionsController*)controller {
-  return (fullscreen::features::ShouldUseSmoothScrolling())
+  return ios::provider::IsFullscreenSmoothScrollingSupported()
              ? -[self headerInsetForOverscrollActionsController:controller]
              : 0;
 }
@@ -2902,7 +2918,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 - (void)updateForFullscreenProgress:(CGFloat)progress {
   [self updateHeadersForFullscreenProgress:progress];
   [self updateFootersForFullscreenProgress:progress];
-  if (!fullscreen::features::ShouldUseSmoothScrolling()) {
+  if (!ios::provider::IsFullscreenSmoothScrollingSupported()) {
     [self updateBrowserViewportForFullscreenProgress:progress];
   }
 }
@@ -3307,12 +3323,9 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     return;
   }
 
-  BOOL inBackground = !activating;
-  if (IsStartSurfaceSplashStartupEnabled()) {
-    inBackground =
-        inBackground ||
-        NewTabPageTabHelper::FromWebState(webState)->ShouldShowStartSurface();
-  }
+  BOOL inBackground =
+      !activating ||
+      NewTabPageTabHelper::FromWebState(webState)->ShouldShowStartSurface();
   [self initiateNewTabAnimationForWebState:webState
                       willOpenInBackground:inBackground];
 }
@@ -3330,21 +3343,11 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     if (self.foregroundTabWasAddedCompletionBlock) {
       // This callback is called before webState is activated. Dispatch the
       // callback asynchronously to be sure the activation is complete.
-      dispatch_async(dispatch_get_main_queue(), ^{
-        // Test existence again as the block may have been deleted.
-        if (self.foregroundTabWasAddedCompletionBlock) {
-          // Clear the property before executing the completion, in case the
-          // completion calls appendTabAddedCompletion:tabAddedCompletion.
-          // Clearing the property after running the completion would cause any
-          // newly appended completion to be immediately cleared without ever
-          // getting run. An example where this would happen is when opening
-          // multiple tabs via the "Open URLs in Chrome" Siri Shortcut.
-          ProceduralBlock completion =
-              self.foregroundTabWasAddedCompletionBlock;
-          self.foregroundTabWasAddedCompletionBlock = nil;
-          completion();
-        }
-      });
+      __weak BrowserViewController* weakSelf = self;
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(^{
+            [weakSelf executeAndClearForegroundTabWasAddedCompletionBlock];
+          }));
     }
     return;
   }
@@ -3364,6 +3367,24 @@ NSString* const kBrowserViewControllerSnackbarCategory =
           [weakSelf startVoiceSearchIfNecessary];
         }];
   }
+}
+
+// Helper which execute and then clears `foregroundTabWasAddedCompletionBlock`
+// if it is still set, or does nothing.
+- (void)executeAndClearForegroundTabWasAddedCompletionBlock {
+  // Test existence again as the block may have been deleted.
+  ProceduralBlock completion = self.foregroundTabWasAddedCompletionBlock;
+  if (!completion)
+    return;
+
+  // Clear the property before executing the completion, in case the
+  // completion calls appendTabAddedCompletion:tabAddedCompletion.
+  // Clearing the property after running the completion would cause any
+  // newly appended completion to be immediately cleared without ever
+  // getting run. An example where this would happen is when opening
+  // multiple tabs via the "Open URLs in Chrome" Siri Shortcut.
+  self.foregroundTabWasAddedCompletionBlock = nil;
+  completion();
 }
 
 // Helper which starts voice search at the end of new Tab animation if
@@ -3403,7 +3424,12 @@ NSString* const kBrowserViewControllerSnackbarCategory =
     newPage.frame = self.view.bounds;
     [newPage layoutIfNeeded];
   } else {
-    [self viewForWebState:webState].frame = self.contentArea.bounds;
+    if (self.isNTPActiveForCurrentWebState && self.webUsageEnabled) {
+      [self viewForWebState:webState].frame =
+          [self ntpFrameForWebState:self.currentWebState];
+    } else {
+      [self viewForWebState:webState].frame = self.contentArea.bounds;
+    }
     // Setting the frame here doesn't trigger a layout pass. Trigger it manually
     // if needed. Not triggering it can create problem if the previous frame
     // wasn't the right one, for example in https://crbug.com/852106.
@@ -3463,11 +3489,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   };
   [self.contentArea addSubview:animatedView];
   [animatedView animateFrom:origin withCompletion:completionBlock];
-  // Manually set the NTP frame here in case `-didLayoutSubviews` is not called
-  // to set the incognito NTP frame.
-  if (self.isNTPActiveForCurrentWebState && self.webUsageEnabled) {
-    newPage.frame = [self ntpFrameForWebState:self.currentWebState];
-  }
 }
 
 #pragma mark - IncognitoReauthConsumer
@@ -3665,6 +3686,22 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                    atOffset:[self currentHeaderOffset]];
 }
 
+#pragma mark - LensPresentationDelegate:
+
+- (CGRect)webContentAreaForLensCoordinator:(LensCoordinator*)lensCoordinator {
+  DCHECK(lensCoordinator);
+
+  // The LensCoordinator needs the content area of the webView with the
+  // header and footer toolbars visible.
+  UIEdgeInsets viewportInsets = self.rootSafeAreaInsets;
+  if (!IsRegularXRegularSizeClass(self)) {
+    viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
+  }
+
+  viewportInsets.top = [self expandedTopToolbarHeight];
+  return UIEdgeInsetsInsetRect(self.contentArea.bounds, viewportInsets);
+}
+
 #pragma mark - NewTabPageTabHelperDelegate
 
 - (void)newTabPageHelperDidChangeVisibility:(NewTabPageTabHelper*)NTPHelper
@@ -3677,7 +3714,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   if (NTPHelper->IsActive()) {
     [self.ntpCoordinator ntpDidChangeVisibility:YES];
     self.ntpCoordinator.webState = webState;
-    self.ntpCoordinator.selectedFeed = NTPHelper->GetNextNTPFeedType();
+    [self.ntpCoordinator selectFeedType:NTPHelper->GetNextNTPFeedType()];
     self.ntpCoordinator.shouldScrollIntoFeed =
         NTPHelper->GetNextNTPScrolledToFeed();
   } else {
@@ -3688,11 +3725,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   if (self.active && self.currentWebState == webState) {
     [self displayWebState:webState];
   }
-}
-
-// Vivaldi
-- (void)showNotesManager {
-  [self showNotesManager:_browser parentController:self];
 }
 
 - (ChromeBrowserState*)getBrowserState {

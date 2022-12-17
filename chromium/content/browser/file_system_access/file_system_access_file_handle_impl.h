@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,7 @@ class CONTENT_EXPORT FileSystemAccessFileHandleImpl
   void Transfer(
       mojo::PendingReceiver<blink::mojom::FileSystemAccessTransferToken> token)
       override;
+  void GetUniqueId(GetUniqueIdCallback callback) override;
 
   void set_max_swap_files_for_testing(int max) { max_swap_files_ = max; }
   storage::FileSystemURL get_swap_url_for_testing(

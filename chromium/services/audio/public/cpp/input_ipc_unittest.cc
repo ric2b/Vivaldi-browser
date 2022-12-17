@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -115,7 +115,7 @@ class InputIPCTest : public ::testing::Test {
   std::unique_ptr<audio::InputIPC> ipc;
   const media::AudioParameters audioParameters =
       media::AudioParameters(media::AudioParameters::AUDIO_PCM_LINEAR,
-                             media::CHANNEL_LAYOUT_STEREO,
+                             media::ChannelLayoutConfig::Stereo(),
                              16000,
                              1600);
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -134,6 +134,12 @@ class MESSAGE_CENTER_PUBLIC_EXPORT RichNotificationData {
   // TODO(tetsui): Remove the pointer, after fixing VectorIconSource not to
   // retain VectorIcon reference.  https://crbug.com/760866
   const gfx::VectorIcon* vector_small_image = &gfx::kNoneIcon;
+
+  // Vector image to display on the parent notification of this notification,
+  // illustrating the source of the group notification that this notification
+  // belongs to. Optional. Note that all notification belongs to the same group
+  // should have the same `parent_vector_small_image`.
+  const gfx::VectorIcon* parent_vector_small_image = &gfx::kNoneIcon;
 
   // Items to display on the notification. Only applicable for notifications
   // that have type NOTIFICATION_TYPE_MULTIPLE.
@@ -389,6 +395,13 @@ class MESSAGE_CENTER_PUBLIC_EXPORT Notification {
   // See detailed comment in RichNotificationData::vector_small_image.
   void set_vector_small_image(const gfx::VectorIcon& image) {
     optional_fields_.vector_small_image = &image;
+  }
+
+  const gfx::VectorIcon& parent_vector_small_image() const {
+    return *optional_fields_.parent_vector_small_image;
+  }
+  void set_parent_vector_small_image(const gfx::VectorIcon& image) {
+    optional_fields_.parent_vector_small_image = &image;
   }
 
   // Mask the color of |small_image| to the given |color|.

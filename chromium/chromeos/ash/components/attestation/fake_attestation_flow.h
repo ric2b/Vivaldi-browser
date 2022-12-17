@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,7 @@ class FakeAttestationFlow : public AttestationFlow {
                       const AccountId& account_id,
                       const std::string& request_origin,
                       bool force_new_key,
+                      ::attestation::KeyType key_crypto_type,
                       const std::string& key_name,
                       CertificateCallback callback) override;
 

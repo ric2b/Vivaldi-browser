@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,6 +92,9 @@ class EnrollmentScreen
   void OnDeviceAttributeProvided(const std::string& asset_id,
                                  const std::string& location) override;
   void OnIdentifierEntered(const std::string& email) override;
+
+  // Shows skip enrollment dialogue confiromation for license packaged devices.
+  void ShowSkipEnrollmentDialogue();
 
   // EnterpriseEnrollmentHelper::EnrollmentStatusConsumer implementation:
   void OnAuthError(const GoogleServiceAuthError& error) override;

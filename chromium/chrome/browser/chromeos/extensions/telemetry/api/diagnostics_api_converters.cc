@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,6 +66,12 @@ bool ConvertMojoRoutine(MojoRoutineType in, RoutineType* out) {
     case MojoRoutineType::kDiskRead:
       *out = RoutineType::ROUTINE_TYPE_DISK_READ;
       return true;
+    case MojoRoutineType::kDnsResolution:
+      *out = RoutineType::ROUTINE_TYPE_DNS_RESOLUTION;
+      return true;
+    case MojoRoutineType::kDnsResolverPresent:
+      *out = RoutineType::ROUTINE_TYPE_DNS_RESOLVER_PRESENT;
+      return true;
     case MojoRoutineType::kLanConnectivity:
       *out = RoutineType::ROUTINE_TYPE_LAN_CONNECTIVITY;
       return true;
@@ -74,6 +80,12 @@ bool ConvertMojoRoutine(MojoRoutineType in, RoutineType* out) {
       return true;
     case MojoRoutineType::kNvmeWearLevel:
       *out = RoutineType::ROUTINE_TYPE_NVME_WEAR_LEVEL;
+      return true;
+    case MojoRoutineType::kSignalStrength:
+      *out = RoutineType::ROUTINE_TYPE_SIGNAL_STRENGTH;
+      return true;
+    case MojoRoutineType::kGatewayCanBePinged:
+      *out = RoutineType::ROUTINE_TYPE_GATEWAY_CAN_BE_PINGED;
       return true;
     case MojoRoutineType::kSmartctlCheck:
       *out = RoutineType::ROUTINE_TYPE_SMARTCTL_CHECK;

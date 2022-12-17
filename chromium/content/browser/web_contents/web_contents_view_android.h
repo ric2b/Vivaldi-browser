@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,6 +83,7 @@ class WebContentsViewAndroid : public WebContentsView,
                              RenderViewHost* new_host) override;
   void SetOverscrollControllerEnabled(bool enabled) override;
   void OnCapturerCountChanged() override;
+  void FullscreenStateChanged(bool is_fullscreen) override;
 
   // Backend implementation of RenderViewHostDelegateView.
   void ShowContextMenu(RenderFrameHost& render_frame_host,
@@ -101,7 +102,8 @@ class WebContentsViewAndroid : public WebContentsView,
   void StartDragging(const DropData& drop_data,
                      blink::DragOperationsMask allowed_ops,
                      const gfx::ImageSkia& image,
-                     const gfx::Vector2d& image_offset,
+                     const gfx::Vector2d& cursor_offset,
+                     const gfx::Rect& drag_obj_rect,
                      const blink::mojom::DragEventSourceInfo& event_info,
                      RenderWidgetHostImpl* source_rwh) override;
   void UpdateDragCursor(ui::mojom::DragOperation operation) override;
@@ -171,7 +173,8 @@ class WebContentsViewAndroid : public WebContentsView,
   // Interface used to get notified of events from the synchronous compositor.
   raw_ptr<SynchronousCompositorClient> synchronous_compositor_client_;
 
-  raw_ptr<SelectionPopupController> selection_popup_controller_ = nullptr;
+  raw_ptr<SelectionPopupController, DanglingUntriaged>
+      selection_popup_controller_ = nullptr;
 
   int device_orientation_ = 0;
 

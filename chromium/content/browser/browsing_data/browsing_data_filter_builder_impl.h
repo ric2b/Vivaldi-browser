@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,12 @@ class CONTENT_EXPORT BrowsingDataFilterBuilderImpl
   void SetCookiePartitionKeyCollection(
       const net::CookiePartitionKeyCollection& cookie_partition_key_collection)
       override;
-  bool IsCrossSiteClearSiteData() const override;
+  bool IsCrossSiteClearSiteDataForCookies() const override;
+  void SetStorageKey(
+      const absl::optional<blink::StorageKey>& storage_key) override;
+  bool HasStorageKey() const override;
+  bool MatchesWithSavedStorageKey(
+      const blink::StorageKey& other_key) const override;
   bool MatchesAllOriginsAndDomains() override;
   base::RepeatingCallback<bool(const GURL&)> BuildUrlFilter() override;
   content::StoragePartition::StorageKeyMatcherFunction BuildStorageKeyFilter()
@@ -52,6 +57,7 @@ class CONTENT_EXPORT BrowsingDataFilterBuilderImpl
   std::set<std::string> domains_;
   net::CookiePartitionKeyCollection cookie_partition_key_collection_ =
       net::CookiePartitionKeyCollection::ContainsAll();
+  absl::optional<blink::StorageKey> storage_key_ = absl::nullopt;
 };
 
 }  // content

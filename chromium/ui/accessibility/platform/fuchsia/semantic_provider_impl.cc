@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -102,7 +102,7 @@ bool AXFuchsiaSemanticProviderImpl::Update(
 
     // Convert to fuchsia's transform type.
     std::array<float, 16> mat = {};
-    transform.matrix().getColMajor(mat.data());
+    transform.GetColMajorF(mat.data());
     fuchsia::ui::gfx::Matrix4Value fuchsia_transform =
         scenic::NewMatrix4Value(mat);
 

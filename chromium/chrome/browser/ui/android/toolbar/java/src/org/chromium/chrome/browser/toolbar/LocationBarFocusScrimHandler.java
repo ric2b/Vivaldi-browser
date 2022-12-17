@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,9 @@ import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.util.ColorUtils;
+
+// Vivaldi
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * Handles showing and hiding a scrim when url bar focus changes.
@@ -79,10 +82,16 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
                 useLightColor ? mLightScrimColor : ScrimProperties.INVALID_COLOR);
 
         if (hasFocus && !showScrimAfterAnimationCompletes()) {
-            // Note(david@vivaldi.com): Apply the correct top margin.
+            // Note(david@vivaldi.com): Apply the correct top margin and check if we can show scrim.
             mScrimModel.set(ScrimProperties.TOP_MARGIN, mTopMargin);
+            if (mLocationBarDataProvider.getTab() != null) {
+                // Keep the scrim view hidden when we focus the url bar on a new tab.
+                if (!VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                            VivaldiPreferences.FOCUS_ADDRESS_BAR_ON_NEW_TAB, false)) {
             mScrimCoordinator.showScrim(mScrimModel);
             mScrimShown = true;
+                }
+            }
         } else if (!hasFocus && mScrimShown) {
             mScrimCoordinator.hideScrim(true);
             mScrimShown = false;

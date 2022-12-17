@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -63,6 +63,9 @@ enum class PermissionType {
 BLINK_COMMON_EXPORT mojom::PermissionStatus ToPermissionStatus(
     const std::string& status);
 
+// Converts `PermissionType` into a string.
+BLINK_COMMON_EXPORT std::string GetPermissionString(PermissionType permission);
+
 // Get a list of all permission types.
 BLINK_COMMON_EXPORT const std::vector<PermissionType>& GetAllPermissionTypes();
 
@@ -79,11 +82,11 @@ PermissionDescriptorToPermissionType(
 // information for making the decision and the caller needs to extract it from
 // the descriptor and provide it.
 BLINK_COMMON_EXPORT absl::optional<PermissionType>
-PermissionDescriptorInfoToPermissionType(
-    mojom::PermissionName name,
-    bool midi_sysex,
-    bool camera_ptz,
-    bool clipboard_allow_without_sanitization);
+PermissionDescriptorInfoToPermissionType(mojom::PermissionName name,
+                                         bool midi_sysex,
+                                         bool camera_ptz,
+                                         bool clipboard_will_be_sanitized,
+                                         bool clipboard_has_user_gesture);
 
 }  // namespace blink
 

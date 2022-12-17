@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,6 +50,7 @@ class ResizingHostObserver : public ScreenControls {
   // ScreenControls interface.
   void SetScreenResolution(const ScreenResolution& resolution,
                            absl::optional<webrtc::ScreenId> screen_id) override;
+  void SetVideoLayout(const protocol::VideoLayout& video_layout) override;
 
   // Allows tests to provide display-info updates.
   void SetDisplayInfoForTesting(const DesktopDisplayInfo& display_info);

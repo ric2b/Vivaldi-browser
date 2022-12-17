@@ -1,0 +1,27 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+imageset("incognito_badge") {
+  sources = [
+    "incognito_badge.imageset/Contents.json",
+    "incognito_badge.imageset/incognito_badge.pdf",
+    "incognito_badge.imageset/incognito_badge_dark.pdf",
+  ]
+}
+
+imageset("incognito_badge_ios14") {
+  sources = [
+    "incognito_badge_ios14.imageset/Contents.json",
+    "incognito_badge_ios14.imageset/incognito_badge.pdf",
+    "incognito_badge_ios14.imageset/incognito_badge_dark.pdf",
+  ]
+}
+
+imageset("incognito_small_badge") {
+  sources = [
+    "incognito_small_badge.imageset/Contents.json",
+    "incognito_small_badge.imageset/incognito_badge.pdf",
+    "incognito_small_badge.imageset/incognito_badge_dark.pdf",
+  ]
+}

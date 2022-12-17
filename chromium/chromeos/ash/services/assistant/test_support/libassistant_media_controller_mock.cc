@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,7 @@ LibassistantMediaControllerMock::LibassistantMediaControllerMock() = default;
 LibassistantMediaControllerMock::~LibassistantMediaControllerMock() = default;
 
 void LibassistantMediaControllerMock::Bind(
-    mojo::PendingReceiver<chromeos::libassistant::mojom::MediaController>
+    mojo::PendingReceiver<libassistant::mojom::MediaController>
         pending_receiver) {
   receiver_.Bind(std::move(pending_receiver));
 }

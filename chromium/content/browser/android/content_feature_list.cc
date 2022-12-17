@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,9 +23,11 @@ namespace {
 // in other locations in the code base (e.g. content_features.h).
 const base::Feature* const kFeaturesExposedToJava[] = {
     &blink::features::kPrefetchAndroidFonts,
-    &features::kAutoDisableAccessibility,
     &features::kAccessibilityPageZoom,
+    &features::kAutoDisableAccessibility,
+    &features::kAutoDisableAccessibilityV2,
     &features::kBackgroundMediaRendererHasModerateBinding,
+    &features::kBindingManagerConnectionLimit,
     &features::kBindingManagerUseNotPerceptibleBinding,
     &features::kComputeAXMode,
     &features::kFedCm,

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,9 +48,8 @@ bool IsUserSessionBlocked() {
 // Context menu content with no supported groups.
 class NullContextMenuContentType : public ContextMenuContentType {
  public:
-  NullContextMenuContentType(content::WebContents* web_contents,
-                             const content::ContextMenuParams& params)
-      : ContextMenuContentType(web_contents, params, false) {}
+  explicit NullContextMenuContentType(const content::ContextMenuParams& params)
+      : ContextMenuContentType(params, false) {}
 
   NullContextMenuContentType(const NullContextMenuContentType&) = delete;
   NullContextMenuContentType& operator=(const NullContextMenuContentType&) =
@@ -71,35 +70,38 @@ ContextMenuContentTypeFactory::~ContextMenuContentTypeFactory() {
 
 // static.
 std::unique_ptr<ContextMenuContentType> ContextMenuContentTypeFactory::Create(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
   if (IsUserSessionBlocked())
-    return std::make_unique<NullContextMenuContentType>(web_contents, params);
+    return std::make_unique<NullContextMenuContentType>(params);
 
-  return CreateInternal(web_contents, params);
+  return CreateInternal(render_frame_host, params);
 }
 
 // static
 std::unique_ptr<ContextMenuContentType>
 ContextMenuContentTypeFactory::CreateInternal(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (chrome::IsRunningInForcedAppMode()) {
-    return base::WrapUnique(
-        new ContextMenuContentTypeAppMode(web_contents, params));
+    return base::WrapUnique(new ContextMenuContentTypeAppMode(params));
   }
 
-  if (extensions::WebViewGuest::FromWebContents(web_contents)) {
+  extensions::WebViewGuest* web_view_guest =
+      extensions::WebViewGuest::FromRenderFrameHost(render_frame_host);
+  if (web_view_guest) {
     if (vivaldi::IsVivaldiRunning()) {
       return base::WrapUnique(
-        new ContextMenuContentType(web_contents, params, true));
+        new ContextMenuContentType(params, true));
     }else{
-    return base::WrapUnique(
-        new ContextMenuContentTypeWebView(web_contents, params));
+    return base::WrapUnique(new ContextMenuContentTypeWebView(
+        web_view_guest->GetWeakPtr(), params));
     }
   }
 
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(render_frame_host);
   const extensions::mojom::ViewType view_type =
       extensions::GetViewType(web_contents);
 
@@ -109,11 +111,10 @@ ContextMenuContentTypeFactory::CreateInternal(
   }
 
   if (view_type == extensions::mojom::ViewType::kExtensionPopup) {
-    return base::WrapUnique(
-        new ContextMenuContentTypeExtensionPopup(web_contents, params));
+    return base::WrapUnique(new ContextMenuContentTypeExtensionPopup(params));
   }
 
 #endif
 
-  return std::make_unique<ContextMenuContentType>(web_contents, params, true);
+  return std::make_unique<ContextMenuContentType>(params, true);
 }

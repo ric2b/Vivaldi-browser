@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -186,7 +186,13 @@ enum class AppListSortOrder {
   // by the light vibrant color extracted from the icon.
   kColor,
 
-  kMaxValue = kColor,
+  // Ephemeral apps and folders are sorted first, in alphabetical order,
+  // followed by the non-ephemeral apps and folders in alphabetical order.
+  // Note that folders are also sorted by their name and not automatically added
+  // to the front.
+  kAlphabeticalEphemeralAppFirst,
+
+  kMaxValue = kAlphabeticalEphemeralAppFirst,
 };
 
 // All the events that affect the app list sort order (including the pref order
@@ -289,17 +295,10 @@ ASH_PUBLIC_EXPORT std::ostream& operator<<(std::ostream& os,
 enum class AppListViewState {
   // Closes |app_list_main_view_| and dismisses the delegate.
   kClosed,
-  // The initial state for the app list when neither maximize or side shelf
-  // modes are active. If set, the widget will peek over the shelf by
-  // kPeekingAppListHeight DIPs.
-  kPeeking,
-  // Entered when text is entered into the search box from peeking mode.
-  kHalf,
   // Default app list state in maximize and side shelf modes. Entered from an
   // upward swipe from |PEEKING| or from clicking the chevron.
   kFullscreenAllApps,
-  // Entered from an upward swipe from |HALF| or by entering text in the
-  // search box from |FULLSCREEN_ALL_APPS|.
+  // Entered by entering text in the search box from |FULLSCREEN_ALL_APPS|.
   kFullscreenSearch
 };
 
@@ -429,7 +428,7 @@ enum class AppListSearchResultCategory {
 //
 // TODO(https://crbug.com/1258415): kChip can be deprecated once
 // ProductivityLauncher is launched.
-enum SearchResultDisplayType {
+enum class SearchResultDisplayType {
   kNone = 0,
   kList = 1,  // Displays in search list
   kTile = 2,  // Displays in search tiles
@@ -591,17 +590,17 @@ class ASH_PUBLIC_EXPORT SearchResultTextItem {
   SearchResultTextItem& SetOverflowBehavior(OverflowBehavior overflow_behavior);
 
  private:
-  SearchResultTextItemType item_type;
+  SearchResultTextItemType item_type_;
   // used for type SearchResultTextItemType::kString.
-  absl::optional<std::u16string> raw_text;
-  absl::optional<SearchResultTags> text_tags;
+  absl::optional<std::u16string> raw_text_;
+  absl::optional<SearchResultTags> text_tags_;
   // used for type SearchResultTextItemType::kIconCode.
-  absl::optional<IconCode> icon_code;
+  absl::optional<IconCode> icon_code_;
   // used for type SearchResultTextItemType::kCustomIcon.
-  absl::optional<gfx::ImageSkia> raw_image;
+  absl::optional<gfx::ImageSkia> raw_image_;
   // Behavior of the text item when there is not enough space to show it in the
   // UI. only applicable to SearchResultTextItemType::kString.
-  OverflowBehavior overflow_behavior = kElide;
+  OverflowBehavior overflow_behavior_ = kElide;
 };
 
 // A structure holding the common information which is sent from chrome to ash,
@@ -638,6 +637,12 @@ struct ASH_PUBLIC_EXPORT SearchResultMetadata {
 
   // The details of the result, supports embedded icons.
   std::vector<SearchResultTextItem> details_vector;
+
+  // Whether or not the title field can be split over multiple lines. UI
+  // implementation does not support multiline if the title vector has more
+  // than one text item, so if multiline_title is set then title_vector
+  // cannot have more than one element.
+  bool multiline_title = false;
 
   // Whether or not the details field can be split over multiple lines. UI
   // implementation does not support multiline if the details vector has more

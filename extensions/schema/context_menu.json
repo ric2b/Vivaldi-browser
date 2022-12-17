@@ -295,7 +295,10 @@
             "type": "boolean"
           },
           "support": {"$ref": "DocumentSupport"},
-          "textfield": {"$ref": "TextfieldType"}
+          "textfield": {
+            "optional": true,
+            "$ref": "TextfieldType"
+          }
         }
       }
     ],

@@ -84,9 +84,10 @@ void CSSStyleRule::setSelectorText(const ExecutionContext* execution_context,
       ParserContext(execution_context->GetSecureContextMode()));
   StyleSheetContents* parent_contents =
       parentStyleSheet() ? parentStyleSheet()->Contents() : nullptr;
+  Arena arena;
   CSSSelectorVector selector_vector =
-      CSSParser::ParseSelector(context, parent_contents, selector_text);
-  if (selector_vector.IsEmpty())
+      CSSParser::ParseSelector(context, parent_contents, selector_text, arena);
+  if (selector_vector.empty())
     return;
 
   Member<StyleRule> new_style_rule =
@@ -109,7 +110,7 @@ String CSSStyleRule::cssText() const {
   result.Append(" { ");
   String decls = style_rule_->Properties().AsText();
   result.Append(decls);
-  if (!decls.IsEmpty())
+  if (!decls.empty())
     result.Append(' ');
   result.Append('}');
   return result.ReleaseString();

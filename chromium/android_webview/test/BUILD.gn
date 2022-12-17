@@ -1,4 +1,4 @@
-# Copyright 2015 The Chromium Authors. All rights reserved.
+# Copyright 2015 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -67,12 +67,12 @@ script_test("system_webview_finch_smoke_tests") {
   data_deps = [
     "//android_webview:system_webview_apk",
     "//android_webview/tools/system_webview_shell:system_webview_shell_apk",
-    "//testing:run_wpt_tests",
+    "//third_party/blink/tools:wpt_tests_android_isolate",
   ]
 }
 
 script_test("system_webview_wpt") {
-  script = "//testing/scripts/run_wpt_tests.py"
+  script = "//third_party/blink/tools/run_wpt_tests.py"
   args = [
     "--product",
     "android_webview",
@@ -80,8 +80,6 @@ script_test("system_webview_wpt") {
     "@WrappedPath(apks/SystemWebView.apk)",
     "--browser-apk",
     "@WrappedPath(apks/SystemWebViewShell.apk)",
-    "--webdriver-binary",
-    "@WrappedPath(clang_x64/chromedriver)",
     "-v",
   ]
   data_deps = [
@@ -229,7 +227,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
   apk_name = "WebViewInstrumentationTest"
   apk_under_test = ":webview_instrumentation_apk"
   android_manifest = "../javatests/AndroidManifest.xml"
-  min_sdk_version = default_min_sdk_version
+  min_sdk_version = 24
 
   deps = [
     ":webview_instrumentation_test_mock_services_java",
@@ -362,6 +360,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/CleanupReferenceTest.java",
     "../javatests/src/org/chromium/android_webview/test/ClearHistoryTest.java",
     "../javatests/src/org/chromium/android_webview/test/ClientAddMessageToConsoleTest.java",
+    "../javatests/src/org/chromium/android_webview/test/ClientHintsTest.java",
     "../javatests/src/org/chromium/android_webview/test/ClientOnPageFinishedTest.java",
     "../javatests/src/org/chromium/android_webview/test/ClientOnPageStartedTest.java",
     "../javatests/src/org/chromium/android_webview/test/ClientOnReceivedError2Test.java",
@@ -383,6 +382,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/KeySystemTest.java",
     "../javatests/src/org/chromium/android_webview/test/LoadDataWithBaseUrlTest.java",
     "../javatests/src/org/chromium/android_webview/test/LoadUrlTest.java",
+    "../javatests/src/org/chromium/android_webview/test/ManifestMetadataUtilTest.java",
     "../javatests/src/org/chromium/android_webview/test/MediaAccessPermissionRequestTest.java",
     "../javatests/src/org/chromium/android_webview/test/MemoryMetricsLoggerTest.java",
     "../javatests/src/org/chromium/android_webview/test/MetricsTestPlatformServiceBridge.java",
@@ -500,17 +500,20 @@ android_library("webview_instrumentation_test_utils_java") {
   testonly = true
   sources = [
     "../javatests/src/org/chromium/android_webview/test/util/EmbeddedComponentLoaderFactory.java",
+    "../javatests/src/org/chromium/android_webview/test/util/ManifestMetadataMockApplicationContext.java",
     "../javatests/src/org/chromium/android_webview/test/util/RendererProcessMetricsProviderUtils.java",
     "../javatests/src/org/chromium/android_webview/test/util/VariationsTestUtils.java",
     "shell/src/org/chromium/android_webview/test/util/MemoryMetricsLoggerUtils.java",
   ]
   deps = [
     "//android_webview:common_variations_java",
+    "//base:base_java_test_support",
     "//base:jni_java",
     "//build/android:build_java",
     "//components/component_updater/android:embedded_component_loader_java",
     "//components/variations/android:variations_java",
     "//third_party/junit",
+    "//third_party/mockito:mockito_java",
   ]
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
 }
@@ -595,6 +598,7 @@ test("android_webview_unittests") {
 
   sources = [
     "../browser/aw_browser_context_unittest.cc",
+    "../browser/aw_client_hints_controller_delegate_unittest.cc",
     "../browser/aw_content_browser_client_unittest.cc",
     "../browser/aw_contents_client_bridge_unittest.cc",
     "../browser/aw_feature_entries_unittest.cc",

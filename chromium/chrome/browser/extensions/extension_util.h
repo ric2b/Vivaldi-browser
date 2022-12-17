@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,6 +37,10 @@ namespace util {
 // the Chrome OS sign-in profile.
 bool HasIsolatedStorage(const std::string& extension_id,
                         content::BrowserContext* context);
+
+// Returns true if the extension associated with `extension_id` is a Chrome App.
+bool IsChromeApp(const std::string& extension_id,
+                 content::BrowserContext* context);
 
 // Sets whether |extension_id| can run in an incognito window. Reloads the
 // extension if it's enabled since this permission is applied at loading time

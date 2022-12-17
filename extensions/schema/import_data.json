@@ -8,7 +8,26 @@
       {
         "id": "import_types",
         "type": "string",
-        "enum": ["internet_explorer", "firefox", "safari", "bookmarks_file", "opera", "opera_bookmark", "chrome", "chromium", "vivaldi", "yandex", "opera_opium_beta", "opera_opium_dev", "brave", "edge", "edge_chromium", "thunderbird", "opera_opium", "unknown" ]
+        "enum": [
+          "internet_explorer",
+          "firefox",
+          "safari",
+          "bookmarks_file",
+          "opera",
+          "opera_bookmark",
+          "chrome",
+          "chromium",
+          "vivaldi",
+          "yandex",
+          "opera_opium_beta",
+          "opera_opium_dev",
+          "brave",
+          "edge",
+          "edge_chromium",
+          "thunderbird",
+          "opera_opium",
+          "unknown"
+        ]
       },
       {
         "id": "UserProfileItem",
@@ -58,10 +77,6 @@
             "type": "boolean",
             "description": "Does profile support a master password to decode passwords."
           },
-          "search": {
-            "type": "boolean",
-            "description": "Does profile support search."
-          },
           "speeddial": {
             "type": "boolean",
             "description": "Does profile support Speed Dial."
@@ -73,6 +88,10 @@
           "email": {
             "type": "boolean",
             "description": "Does profile support email."
+          },
+          "contacts": {
+            "type": "boolean",
+            "description": "Does profile support contacts."
           },
           "supportsStandaloneImport": {
             "type": "boolean",
@@ -116,7 +135,7 @@
             {
               "name": "results",
               "type": "array",
-              "items": {"$ref": "ProfileItem"}
+              "items": { "$ref": "ProfileItem" }
             }
           ]
         }
@@ -127,11 +146,39 @@
         "description": "Start import process.",
         "parameters": [
           {
-            "name": "itemsToImport",
-            "type": "array",
-            "items": {
-              "type": "string",
-              "serialized_type": "int64"
+            "name": "profileIndex",
+            "type": "integer",
+            "description": "Index of the profile we want to import. This is a null based index of results from getProfiles."
+          },
+          {
+            "name": "askUserForFileLocation",
+            "type": "boolean",
+            "description": "Show file dialog to user."
+          },
+          {
+            "name": "profileName",
+            "type": "string",
+            "description": "Name of profile."
+          },
+          {
+            "name": "typesToImport",
+            "type": "object",
+            "properties": {
+              "history": {
+                "type": "boolean"
+              },
+              "favorites": {
+                "type": "boolean"
+              },
+              "passwords": {
+                "type": "boolean"
+              },
+              "speeddial": {
+                "type": "boolean"
+              },
+              "notes": {
+                "type": "boolean"
+              }
             }
           },
           {
@@ -147,12 +194,7 @@
           {
             "type": "function",
             "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
+            "parameters": []
           }
         ]
       },
@@ -168,11 +210,29 @@
           },
           {
             "name": "seekPosition",
-            "type": "integer",
+            "type": "string",
             "optional": "true",
-            "description": "Seek to this position after opening"
+            "description": "Seek to this position after opening, serialized as a string because V8's integer type is too small for large mbox files."
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "description": "Callback function returning file size.",
+            "parameters": [
+              {
+                "name": "fileSize",
+                "type": "string",
+                "description": "Size of mailbox file in bytes. Suitable for using seekPosition/fileSize as a  status indicator ratio. Serialized as a string because V8's integer type is too small for large mbox files."
+              }
+            ]
           }
         ]
+      },
+      {
+        "name": "closeThunderbirdMailbox",
+        "type": "function",
+        "description": "Closes currently open thunderbird mailbox, if any",
+        "parameters": []
       },
       {
         "name": "readMessageFromThunderbirdMailbox",
@@ -191,8 +251,8 @@
               },
               {
                 "name": "seekPosition",
-                "type": "integer",
-                "description": "Seek position in file after reading. Returns -1 if all messages have been read."
+                "type": "string",
+                "description": "Seek position in file after reading. Returns -1 if all messages have been read. Serialized as a string because V8's integer type is too small for large mbox files."
               }
             ]
           }

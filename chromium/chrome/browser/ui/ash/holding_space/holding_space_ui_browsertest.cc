@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,13 +54,13 @@
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
-#include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_item_view.h"
@@ -707,8 +707,15 @@ IN_PROC_BROWSER_TEST_P(HoldingSpaceUiDragAndDropBrowserTest,
   ASSERT_FALSE(test_api().IsShowing());
 }
 
+// Disabled due to flakiness. http://crbug.com/1261364
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_DragAndDropToPin DISABLED_DragAndDropToPin
+#else
+#define MAYBE_DragAndDropToPin DragAndDropToPin
+#endif
 // Verifies that drag-and-drop to pin holding space items works.
-IN_PROC_BROWSER_TEST_P(HoldingSpaceUiDragAndDropBrowserTest, DragAndDropToPin) {
+IN_PROC_BROWSER_TEST_P(HoldingSpaceUiDragAndDropBrowserTest,
+                       MAYBE_DragAndDropToPin) {
   ui::ScopedAnimationDurationScaleMode scoped_animation_duration_scale_mode(
       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
 
@@ -1006,11 +1013,12 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, OpenItem) {
     // space item that we attempted to open was a screenshot.
     base::RunLoop run_loop;
     EXPECT_CALL(mock, OnWindowActivated)
-        .WillOnce([&](wm::ActivationChangeObserver::ActivationReason reason,
-                      aura::Window* gained_active, aura::Window* lost_active) {
-          EXPECT_EQ("Gallery", base::UTF16ToUTF8(gained_active->GetTitle()));
-          run_loop.Quit();
-        });
+        .WillRepeatedly(
+            [&](wm::ActivationChangeObserver::ActivationReason reason,
+                aura::Window* gained_active, aura::Window* lost_active) {
+              if (gained_active->GetTitle() == u"Gallery")
+                run_loop.Quit();
+            });
     run_loop.Run();
 
     // Reset.

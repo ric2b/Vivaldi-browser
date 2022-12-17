@@ -1,12 +1,12 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/print/print_controller.h"
 
-#include "base/logging.h"
-#include "base/metrics/user_metrics.h"
-#include "base/strings/sys_string_conversions.h"
+#import "base/logging.h"
+#import "base/metrics/user_metrics.h"
+#import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
 #import "ios/web/public/web_state.h"
 
@@ -114,9 +114,8 @@
 
   [printInteractionController
         presentAnimated:YES
-      completionHandler:^(
-          UIPrintInteractionController* printInteractionController,
-          BOOL completed, NSError* error) {
+      completionHandler:^(UIPrintInteractionController* controller,
+                          BOOL completed, NSError* error) {
         if (error)
           DLOG(ERROR) << "Air printing error: "
                       << base::SysNSStringToUTF8(error.description);

@@ -17,44 +17,39 @@ calendar::EventRow GetEventRow(
   calendar::EventRow row;
   row.title = base::UTF8ToUTF16(event.title);
 
-  if (event.description.get()) {
-    row.description = base::UTF8ToUTF16(*event.description);
+  if (event.description.has_value()) {
+    row.description = base::UTF8ToUTF16(event.description.value());
   }
 
-  if (event.start.get()) {
-    row.start = GetTime(*event.start.get());
+  if (event.start.has_value()) {
+    row.start = GetTime(event.start.value());
   }
 
-  if (event.end.get()) {
-    row.end = GetTime(*event.end.get());
+  if (event.end.has_value()) {
+    row.end = GetTime(event.end.value());
   }
 
-  if (event.all_day.get()) {
-    row.all_day = *event.all_day.get();
+  row.all_day = event.all_day.value_or(false);
+  row.is_recurring = event.is_recurring.value_or(false);
+
+  if (event.location.has_value()) {
+    row.location = base::UTF8ToUTF16(event.location.value());
   }
 
-  if (event.is_recurring.get()) {
-    row.is_recurring = *event.is_recurring.get();
+  if (event.url.has_value()) {
+    row.url = base::UTF8ToUTF16(event.url.value());
   }
 
-  if (event.location.get()) {
-    row.location = base::UTF8ToUTF16(*event.location);
+  if (event.etag.has_value()) {
+    row.etag = event.etag.value();
   }
 
-  if (event.url.get()) {
-    row.url = base::UTF8ToUTF16(*event.url);
+  if (event.href.has_value()) {
+    row.href = event.href.value();
   }
 
-  if (event.etag.get()) {
-    row.etag = *event.etag;
-  }
-
-  if (event.href.get()) {
-    row.href = *event.href;
-  }
-
-  if (event.uid.get()) {
-    row.uid = *event.uid;
+  if (event.uid.has_value()) {
+    row.uid = event.uid.value();
   }
 
   calendar::CalendarID calendar_id;
@@ -62,101 +57,101 @@ calendar::EventRow GetEventRow(
     row.calendar_id = calendar_id;
   }
 
-  if (event.task.get()) {
-    row.task = *event.task;
+  if (event.task.has_value()) {
+    row.task = event.task.value();
   }
 
-  if (event.complete.get()) {
-    row.complete = *event.complete;
+  if (event.complete.has_value()) {
+    row.complete = event.complete.value();
   }
 
-  if (event.sequence.get()) {
-    row.sequence = *event.sequence;
+  if (event.sequence.has_value()) {
+    row.sequence = event.sequence.value();
   }
 
-  if (event.ical.get()) {
-    row.ical = base::UTF8ToUTF16(*event.ical);
+  if (event.ical.has_value()) {
+    row.ical = base::UTF8ToUTF16(event.ical.value());
   }
 
-  if (event.rrule.get()) {
-    row.rrule = *event.rrule;
+  if (event.rrule.has_value()) {
+    row.rrule = event.rrule.value();
   }
 
-  if (event.organizer.get()) {
-    row.organizer = *event.organizer;
+  if (event.organizer.has_value()) {
+    row.organizer = event.organizer.value();
   }
 
-  if (event.event_type_id.get()) {
+  if (event.event_type_id.has_value()) {
     calendar::EventTypeID event_type_id;
-    if (GetStdStringAsInt64(*event.event_type_id, &event_type_id)) {
+    if (GetStdStringAsInt64(event.event_type_id.value(), &event_type_id)) {
       row.event_type_id = event_type_id;
     }
   }
 
-  if (event.event_exceptions.get()) {
-    std::vector<EventExceptionType> event_exceptions;
-    for (const auto& exception : *event.event_exceptions) {
+  if (event.recurrence_exceptions.has_value()) {
+    std::vector<RecurrenceExceptionRow> event_exceptions;
+    for (const auto& exception : event.recurrence_exceptions.value()) {
       event_exceptions.push_back(CreateEventException(exception));
     }
     row.event_exceptions = event_exceptions;
   }
 
-  if (event.notifications.get()) {
+  if (event.notifications.has_value()) {
     std::vector<NotificationToCreate> event_noficications;
-    for (const auto& notification : *event.notifications) {
+    for (const auto& notification : event.notifications.value()) {
       event_noficications.push_back(CreateNotificationRow(notification));
     }
     row.notifications_to_create = event_noficications;
   }
 
-  if (event.invites.get()) {
+  if (event.invites.has_value()) {
     std::vector<InviteToCreate> event_invites;
-    for (const auto& invite : *event.invites) {
+    for (const auto& invite : event.invites.value()) {
       event_invites.push_back(CreateInviteRow(invite));
     }
     row.invites_to_create = event_invites;
   }
 
-  if (event.timezone.get()) {
-    row.timezone = *event.timezone;
+  if (event.timezone.has_value()) {
+    row.timezone = event.timezone.value();
   }
 
   row.is_template = event.is_template;
 
-  if (event.priority.get()) {
-    row.priority = *event.priority;
+  if (event.priority.has_value()) {
+    row.priority = event.priority.value();
   }
 
-  if (event.status.get()) {
-    row.status = *event.status;
+  if (event.status.has_value()) {
+    row.status = event.status.value();
   }
 
-  if (event.percentage_complete.get()) {
-    row.percentage_complete = *event.percentage_complete;
+  if (event.percentage_complete.has_value()) {
+    row.percentage_complete = event.percentage_complete.value();
   }
 
-  if (event.categories.get()) {
-    row.categories = base::UTF8ToUTF16(*event.categories);
+  if (event.categories.has_value()) {
+    row.categories = base::UTF8ToUTF16(event.categories.value());
   }
 
-  if (event.component_class.get()) {
-    row.component_class = base::UTF8ToUTF16(*event.component_class);
+  if (event.component_class.has_value()) {
+    row.component_class = base::UTF8ToUTF16(event.component_class.value());
   }
 
-  if (event.attachment.get()) {
-    row.attachment = base::UTF8ToUTF16(*event.attachment);
+  if (event.attachment.has_value()) {
+    row.attachment = base::UTF8ToUTF16(event.attachment.value());
   }
 
-  if (event.completed.get()) {
-    row.completed = GetTime(*event.completed.get());
+  if (event.completed.has_value()) {
+    row.completed = GetTime(event.completed.value());
   }
 
-  if (event.sync_pending.get()) {
-    row.sync_pending = *event.sync_pending;
+  if (event.sync_pending.has_value()) {
+    row.sync_pending = event.sync_pending.value();
   }
 
-  if (event.delete_pending.get()) {
-    row.delete_pending = *event.delete_pending;
+  if (event.delete_pending.has_value()) {
+    row.delete_pending = event.delete_pending.value();
   }
 
   return row;
@@ -176,23 +171,32 @@ bool GetStdStringAsInt64(const std::string& id_string, int64_t* id) {
   return false;
 }
 
-EventExceptionType CreateEventException(
-    const extensions::vivaldi::calendar::CreateDetails::EventExceptionsType&
-        exception) {
-  EventExceptionType exception_event;
+RecurrenceExceptionRow CreateEventException(
+    const RecurrenceException& exception) {
+  RecurrenceExceptionRow exception_event;
 
-  if (exception.exception.exception_date.get()) {
-    exception_event.exception_date =
-        GetTime(*exception.exception.exception_date);
+  if (exception.date.has_value()) {
+    exception_event.exception_day = GetTime(exception.date.value());
   }
 
-  if (exception.exception.cancelled.get()) {
-    exception_event.cancelled = *exception.exception.cancelled;
+  if (exception.cancelled.has_value()) {
+    exception_event.cancelled = exception.cancelled.value();
   }
 
-  if (exception.exception_event.get()) {
-    exception_event.event.reset(
-        new EventRow(calendar::GetEventRow(*exception.exception_event.get())));
+  if (exception.parent_event_id.has_value()) {
+    calendar::EventID parent_event_id;
+    if (GetStdStringAsInt64(exception.parent_event_id.value(),
+                            &parent_event_id)) {
+      exception_event.parent_event_id = parent_event_id;
+    }
+  }
+
+  if (exception.exception_event_id.has_value()) {
+    calendar::EventID exception_event_id;
+    if (GetStdStringAsInt64(exception.exception_event_id.value(),
+                            &exception_event_id)) {
+      exception_event.exception_event_id = exception_event_id;
+    }
   }
 
   return exception_event;

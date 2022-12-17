@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,7 +80,7 @@ class NavigationPredictorPreconnectClientBrowserTest
 
   void OnPreresolveFinished(
       const GURL& url,
-      const net::NetworkIsolationKey& network_isolation_key,
+      const net::NetworkAnonymizationKey& network_isolation_key,
       bool success) override {
     // The tests do not care about preresolves to non-test server (e.g., hard
     // coded preconnects to google.com).
@@ -256,8 +256,9 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(2, preresolve_done_count_);
 }
 
-const base::Feature kPreconnectOnDidFinishNavigation{
-    "PreconnectOnDidFinishNavigation", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kPreconnectOnDidFinishNavigation,
+             "PreconnectOnDidFinishNavigation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 class
     NavigationPredictorPreconnectClientBrowserTestPreconnectOnDidFinishNavigationSecondDelay
@@ -361,8 +362,9 @@ IN_PROC_BROWSER_TEST_F(
 
 namespace {
 // Feature to control preconnect to search.
-const base::Feature kPreconnectToSearchTest{"PreconnectToSearch",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kPreconnectToSearchTest,
+             "PreconnectToSearch",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace
 
 class NavigationPredictorPreconnectClientBrowserTestWithSearch

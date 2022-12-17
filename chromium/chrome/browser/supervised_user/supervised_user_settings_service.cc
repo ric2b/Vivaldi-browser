@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -492,9 +492,8 @@ base::Value* SupervisedUserSettingsService::GetOrCreateDictionary(
     const std::string& key) const {
   base::Value* value = nullptr;
   if (!store_->GetMutableValue(key, &value)) {
-    store_->SetValue(
-        key, std::make_unique<base::Value>(base::Value::Type::DICTIONARY),
-        WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
+    store_->SetValue(key, base::Value(base::Value::Dict()),
+                     WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
     store_->GetMutableValue(key, &value);
   }
   DCHECK(value->is_dict());

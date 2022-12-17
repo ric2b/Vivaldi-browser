@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -188,7 +188,7 @@ void ArcInputOverlayManager::OnProtoDataAvailable(
     touch_injector->NotifyFirstTimeLaunch();
   }
 
-  auto* window = touch_injector->target_window();
+  auto* window = touch_injector->window();
   DCHECK(window);
   // Check if |window| is destroyed or destroying when calling this function.
   if (!loading_data_windows_.contains(window) || window->is_destroying()) {
@@ -445,7 +445,7 @@ void ArcInputOverlayManager::OnDisplayMetricsChanged(
 
 void ArcInputOverlayManager::ResetForPendingTouchInjector(
     std::unique_ptr<input_overlay::TouchInjector> touch_injector) {
-  loading_data_windows_.erase(touch_injector->target_window());
+  loading_data_windows_.erase(touch_injector->window());
   touch_injector.reset();
 }
 

@@ -200,6 +200,10 @@ if (!is_ios) {
     }
   }
 
+  update_target("//content/browser/aggregation_service:mojo_bindings") {
+    deps += [ "//components/services/storage" ]
+  }
+
 } else { # !is_ios
   import("//vivaldi/ios/deps_update_ios.gni")
 } # is_ios

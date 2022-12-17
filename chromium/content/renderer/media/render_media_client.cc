@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,8 +20,9 @@ namespace {
 // Some clients need this knowledge synchronously, so we try to populate
 // it asynchronously ahead of time, but can fallback to a blocking call
 // when it's needed synchronously.
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC) && \
-    (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX))
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC) &&                                     \
+    (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || \
+     BUILDFLAG(IS_MAC))
 #define NEEDS_PROFILE_UPDATER 1
 #else
 #define NEEDS_PROFILE_UPDATER 0

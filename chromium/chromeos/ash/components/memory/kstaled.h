@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@
 namespace ash {
 
 // The Kstaled experimental feature.
-extern const base::Feature kKstaled;
+BASE_DECLARE_FEATURE(kKstaled);
 
 // The ratio parameter used for kstaled.
 extern const base::FeatureParam<int> kKstaledRatio;

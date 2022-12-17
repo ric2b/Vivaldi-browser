@@ -1,18 +1,20 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'chrome://multidevice-setup/strings.m.js';
-import 'chrome://resources/cr_components/chromeos/multidevice_setup/multidevice_setup.m.js';
+import 'chrome://resources/ash/common/multidevice_setup/multidevice_setup.js';
 
-import {FakeMojoService} from 'chrome://resources/cr_components/chromeos/multidevice_setup/fake_mojo_service.m.js';
-import {BrowserProxyImpl} from 'chrome://resources/cr_components/chromeos/multidevice_setup/multidevice_setup_browser_proxy.m.js';
+import {FakeMojoService} from 'chrome://resources/ash/common/multidevice_setup/fake_mojo_service.js';
+import {BrowserProxyImpl} from 'chrome://resources/ash/common/multidevice_setup/multidevice_setup_browser_proxy.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {waitBeforeNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {FakeQuickUnlockPrivate} from '../../../settings/chromeos/fake_quick_unlock_private.js';
-import {eventToPromise, waitBeforeNextRender} from '../../../test_util.js';
+import {eventToPromise} from '../../../test_util.js';
 
 import {TestMultideviceSetupBrowserProxy} from './setup_succeeded_page_test.js';
+
 
 
 /** @fileoverview Suite of integration tests for MultiDevice setup WebUI. */

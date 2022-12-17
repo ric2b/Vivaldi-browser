@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -110,7 +110,7 @@ class ASH_EXPORT AppListNudgeController {
  private:
   // If the nudge is hidden and the showing duration is long enough, increments
   // the shown count in prefs.
-  void MaybeIncrementShownCountInPrefs(DictionaryPrefUpdate& update,
+  void MaybeIncrementShownCountInPrefs(ScopedDictPrefUpdate& update,
                                        base::TimeDelta duration);
 
   // The timestamp when the current nudge started showing.

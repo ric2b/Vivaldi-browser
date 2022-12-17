@@ -1,17 +1,17 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '//resources/polymer/v3_0/iron-media-query/iron-media-query.js';
-import './cr_fingerprint_icon.html.js';
-import '../cr_lottie/cr_lottie.m.js';
+import './cr_fingerprint_icons.html.js';
+import '../cr_lottie/cr_lottie.js';
 
 import {assert} from '//resources/js/assert_ts.js';
 import {IronIconElement} from '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {CrLottieElement} from '../cr_lottie/cr_lottie.m.js';
+import {CrLottieElement} from '../cr_lottie/cr_lottie.js';
 
 import {getTemplate} from './cr_fingerprint_progress_arc.html.js';
 

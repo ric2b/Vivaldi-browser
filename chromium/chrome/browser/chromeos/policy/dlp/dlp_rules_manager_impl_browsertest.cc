@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,8 +59,8 @@ IN_PROC_BROWSER_TEST_F(DlpRulesPolicyTest, ParsePolicyPref) {
   InitializeRulesManager();
 
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
 
     base::Value rules(base::Value::Type::LIST);
 

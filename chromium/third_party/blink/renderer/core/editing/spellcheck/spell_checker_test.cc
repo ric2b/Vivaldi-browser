@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -434,6 +434,32 @@ TEST_F(SpellCheckerTest, GetSpellCheckMarkerUnderSelection_MultiNodeMisspell) {
   ASSERT_NE(nullptr, third_marker);
   EXPECT_EQ(0u, third_marker->StartOffset());
   EXPECT_EQ(3u, third_marker->EndOffset());
+}
+
+TEST_F(SpellCheckerTest, PasswordFieldsAreIgnored) {
+  // Check that spellchecking is enabled for an input type="text".
+  SetBodyContent("<input type=\"text\">");
+  auto* input = To<HTMLInputElement>(GetDocument().QuerySelector("input"));
+  input->Focus();
+  input->SetValue("spllchck");
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+  EXPECT_TRUE(SpellChecker::IsSpellCheckingEnabledAt(
+      Position(input->InnerEditorElement()->firstChild(), 0)));
+
+  // But if this turns into a password field, this disables spellchecking.
+  // input->setType(input_type_names::kPassword);
+  input->setType("password");
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+  EXPECT_FALSE(SpellChecker::IsSpellCheckingEnabledAt(
+      Position(input->InnerEditorElement()->firstChild(), 0)));
+
+  // Some websites toggle between <input type="password"> and
+  // <input type="text"> via a reveal/hide button. In this case, spell
+  // checking should remain disabled.
+  input->setType("text");
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+  EXPECT_FALSE(SpellChecker::IsSpellCheckingEnabledAt(
+      Position(input->InnerEditorElement()->firstChild(), 0)));
 }
 
 }  // namespace blink

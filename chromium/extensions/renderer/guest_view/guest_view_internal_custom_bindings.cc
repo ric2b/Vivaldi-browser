@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -220,7 +220,7 @@ void GuestViewInternalCustomBindings::AttachIframeGuest(
   std::unique_ptr<guest_view::GuestViewAttachRequest> request =
       std::make_unique<guest_view::GuestViewAttachRequest>(
           guest_view_container, render_frame->GetRoutingID(), guest_instance_id,
-          std::move(params->GetDict()),
+          std::move(*params).TakeDict(),
           args.Length() == (num_required_params + 1)
               ? args[num_required_params].As<v8::Function>()
               : v8::Local<v8::Function>(),

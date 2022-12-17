@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,34 +35,39 @@ class LocalRouterLink : public RouterLink {
   // RouterLink:
   LinkType GetType() const override;
   RouterLinkState* GetLinkState() const override;
+  void WaitForLinkStateAsync(std::function<void()> callback) override;
   Ref<Router> GetLocalPeer() override;
   RemoteRouterLink* AsRemoteRouterLink() override;
   void AllocateParcelData(size_t num_bytes,
                           bool allow_partial,
                           Parcel& parcel) override;
-  void AcceptParcel(Parcel& parcel) override;
-  void AcceptRouteClosure(SequenceNumber sequence_length) override;
-  void AcceptRouteDisconnected() override;
-  size_t GetParcelCapacityInBytes(const IpczPutLimits& limits) override;
-  RouterLinkState::QueueState GetPeerQueueState() override;
-  bool UpdateInboundQueueState(size_t num_parcels, size_t num_bytes) override;
-  void NotifyDataConsumed() override;
-  bool EnablePeerMonitoring(bool enable) override;
+  void AcceptParcel(const OperationContext& context, Parcel& parcel) override;
+  void AcceptRouteClosure(const OperationContext& context,
+                          SequenceNumber sequence_length) override;
+  void AcceptRouteDisconnected(const OperationContext& context) override;
+  AtomicQueueState* GetPeerQueueState() override;
+  AtomicQueueState* GetLocalQueueState() override;
+  void SnapshotPeerQueueState(const OperationContext& context) override;
   void MarkSideStable() override;
   bool TryLockForBypass(const NodeName& bypass_request_source) override;
   bool TryLockForClosure() override;
   void Unlock() override;
-  bool FlushOtherSideIfWaiting() override;
+  bool FlushOtherSideIfWaiting(const OperationContext& context) override;
   bool CanNodeRequestBypass(const NodeName& bypass_request_source) override;
-  void BypassPeer(const NodeName& bypass_target_node,
+  void BypassPeer(const OperationContext& context,
+                  const NodeName& bypass_target_node,
                   SublinkId bypass_target_sublink) override;
-  void StopProxying(SequenceNumber inbound_sequence_length,
+  void StopProxying(const OperationContext& context,
+                    SequenceNumber inbound_sequence_length,
                     SequenceNumber outbound_sequence_length) override;
-  void ProxyWillStop(SequenceNumber inbound_sequence_length) override;
-  void BypassPeerWithLink(SublinkId new_sublink,
+  void ProxyWillStop(const OperationContext& context,
+                     SequenceNumber inbound_sequence_length) override;
+  void BypassPeerWithLink(const OperationContext& context,
+                          SublinkId new_sublink,
                           FragmentRef<RouterLinkState> new_link_state,
                           SequenceNumber inbound_sequence_length) override;
   void StopProxyingToLocalPeer(
+      const OperationContext& context,
       SequenceNumber outbound_sequence_length) override;
   void Deactivate() override;
   std::string Describe() const override;

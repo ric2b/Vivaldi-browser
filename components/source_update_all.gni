@@ -20,7 +20,6 @@ update_target("//components/history/core/browser:browser") {
   sources += [
     "//vivaldi/components/history/vivaldi_history_backend.cc",
     "//vivaldi/components/history/vivaldi_history_service.cc",
-    "//vivaldi/components/history/vivaldi_top_sites.cc",
     "//vivaldi/components/history/vivaldi_url_database.cc",
     "//vivaldi/components/history/vivaldi_visit_database.cc",
   ]

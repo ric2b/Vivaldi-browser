@@ -1,10 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "base/path_service.h"
 
 #include "base/base_paths.h"
+#include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -135,12 +136,9 @@ TEST_F(PathServiceTest, Get) {
   constexpr std::array<BasePathKey, 0> kUnsupportedKeys = {};
 #endif  // BUILDFLAG(IS_ANDROID)
   for (int key = PATH_START + 1; key < PATH_END; ++key) {
-    if (std::find(kUnsupportedKeys.begin(), kUnsupportedKeys.end(), key) ==
-        kUnsupportedKeys.end()) {
-      EXPECT_PRED1(ReturnsValidPath, key);
-    } else {
-      EXPECT_PRED1(ReturnsInvalidPath, key);
-    }
+    EXPECT_PRED1(Contains(kUnsupportedKeys, key) ? &ReturnsInvalidPath
+                                                 : &ReturnsValidPath,
+                 key);
   }
 #if BUILDFLAG(IS_WIN)
   for (int key = PATH_WIN_START + 1; key < PATH_WIN_END; ++key) {

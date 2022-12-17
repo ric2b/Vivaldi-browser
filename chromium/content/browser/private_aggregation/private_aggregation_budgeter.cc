@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -287,12 +287,8 @@ void PrivateAggregationBudgeter::ClearDataImpl(
   }
 
   // Ensure we round down to capture any time windows that partially overlap.
-  int64_t serialized_delete_begin =
-      delete_begin.is_min()
-          ? SerializeTimeForStorage(base::Time::Min())
-          : SerializeTimeForStorage(
-                PrivateAggregationBudgetKey::TimeWindow(delete_begin)
-                    .start_time());
+  int64_t serialized_delete_begin = SerializeTimeForStorage(
+      PrivateAggregationBudgetKey::TimeWindow(delete_begin).start_time());
 
   // No need to round up as we compare against the time window's start time.
   int64_t serialized_delete_end = SerializeTimeForStorage(delete_end);

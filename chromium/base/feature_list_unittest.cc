@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,14 +28,12 @@ namespace base {
 namespace {
 
 constexpr char kFeatureOnByDefaultName[] = "OnByDefault";
-struct Feature kFeatureOnByDefault {
-  kFeatureOnByDefaultName, FEATURE_ENABLED_BY_DEFAULT
-};
+CONSTINIT Feature kFeatureOnByDefault(kFeatureOnByDefaultName,
+                                      FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr char kFeatureOffByDefaultName[] = "OffByDefault";
-struct Feature kFeatureOffByDefault {
-  kFeatureOffByDefaultName, FEATURE_DISABLED_BY_DEFAULT
-};
+CONSTINIT Feature kFeatureOffByDefault(kFeatureOffByDefaultName,
+                                       FEATURE_DISABLED_BY_DEFAULT);
 
 std::string SortFeatureListString(const std::string& feature_list) {
   std::vector<base::StringPiece> features =
@@ -130,7 +128,7 @@ TEST_F(FeatureListTest, InitializeFromCommandLineWithFeatureParams) {
   // this.
   base::FieldTrialParamAssociator::GetInstance()->ClearAllParamsForTesting();
 
-  const Feature kFeature = {"Feature", FEATURE_DISABLED_BY_DEFAULT};
+  static BASE_FEATURE(kFeature, "Feature", FEATURE_DISABLED_BY_DEFAULT);
   for (const auto& test_case : test_cases) {
     SCOPED_TRACE(test_case.enable_features);
 

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,8 +58,7 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       bool is_grid_container,
       const NGConstraintSpace& container_space,
       NGBoxFragmentBuilder* container_builder,
-      absl::optional<LogicalSize> initial_containing_block_fixed_size =
-          absl::nullopt);
+      absl::optional<LogicalSize> initial_containing_block_fixed_size);
 
   // Normally this function lays out and positions all out-of-flow objects from
   // the container_builder and additional ones it discovers through laying out
@@ -76,11 +75,11 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
     ColumnBalancingInfo() = default;
 
     bool HasOutOfFlowFragmentainerDescendants() const {
-      return !out_of_flow_fragmentainer_descendants.IsEmpty();
+      return !out_of_flow_fragmentainer_descendants.empty();
     }
     void SwapOutOfFlowFragmentainerDescendants(
         HeapVector<NGLogicalOOFNodeForFragmentation>* descendants) {
-      DCHECK(descendants->IsEmpty());
+      DCHECK(descendants->empty());
       std::swap(out_of_flow_fragmentainer_descendants, *descendants);
     }
 
@@ -257,7 +256,12 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
     void Trace(Visitor* visitor) const;
   };
 
+  static absl::optional<LogicalSize> InitialContainingBlockFixedSize(
+      NGBlockNode container);
+
  private:
+  enum RepeatMode { kNotRepeated, kMayRepeatAgain, kRepeatedLast };
+
   bool SweepLegacyCandidates(
       HeapHashSet<Member<const LayoutObject>>* placed_objects);
 
@@ -314,7 +318,8 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
   const NGLayoutResult* LayoutOOFNode(
       NodeToLayout& oof_node_to_layout,
       const LayoutBox* only_layout,
-      const NGConstraintSpace* fragmentainer_constraint_space = nullptr);
+      const NGConstraintSpace* fragmentainer_constraint_space = nullptr,
+      bool is_known_to_be_last_fragmentainer = false);
 
   // TODO(almaher): We are calculating more than just the offset. Consider
   // changing this to a more accurate name.
@@ -333,7 +338,8 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
 
   const NGLayoutResult* Layout(
       const NodeToLayout& oof_node_to_layout,
-      const NGConstraintSpace* fragmentainer_constraint_space);
+      const NGConstraintSpace* fragmentainer_constraint_space,
+      bool is_known_to_be_last_fragmentainer);
 
   bool IsContainingBlockForCandidate(const NGLogicalOutOfFlowPositionedNode&);
 
@@ -346,7 +352,8 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       const NGBlockBreakToken* break_token,
       const NGConstraintSpace* fragmentainer_constraint_space,
       bool should_use_fixed_block_size,
-      bool requires_content_before_breaking);
+      bool requires_content_before_breaking,
+      RepeatMode repeat_mode);
 
   // Performs layout on the OOFs stored in |pending_descendants| and
   // |fragmented_descendants|, adding them as children in the fragmentainer
@@ -361,11 +368,13 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       HeapVector<NodeToLayout>& pending_descendants,
       wtf_size_t index,
       LogicalOffset fragmentainer_progression,
+      bool is_last_fragmentainer_with_oof_descendants,
       HeapVector<NodeToLayout>* fragmented_descendants);
   void AddOOFToFragmentainer(NodeToLayout& descendant,
                              const NGConstraintSpace* fragmentainer_space,
                              LogicalOffset fragmentainer_offset,
                              wtf_size_t index,
+                             bool is_known_to_be_last_fragmentainer,
                              NGSimplifiedOOFLayoutAlgorithm* algorithm,
                              HeapVector<NodeToLayout>* fragmented_descendants);
   void ReplaceFragmentainer(wtf_size_t index,
@@ -404,6 +413,9 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
   }
 
   NGBoxFragmentBuilder* container_builder_;
+  // The builder for the outer block fragmentation context when this is an inner
+  // layout of nested block fragmentation.
+  NGBoxFragmentBuilder* outer_container_builder_ = nullptr;
   ContainingBlockInfo default_containing_block_info_for_absolute_;
   ContainingBlockInfo default_containing_block_info_for_fixed_;
   HeapHashMap<Member<const LayoutObject>, ContainingBlockInfo>

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,11 +14,6 @@
 #include "services/device/compute_pressure/pressure_sample.h"
 
 namespace device {
-
-// googletest integration with PressureSample.
-bool operator==(const PressureSample& lhs, const PressureSample& rhs) noexcept;
-
-std::ostream& operator<<(std::ostream& os, const PressureSample& sample);
 
 // Test double for CpuProbe that always returns a predetermined value.
 class FakeCpuProbe : public CpuProbe {
@@ -37,7 +32,7 @@ class FakeCpuProbe : public CpuProbe {
   void SetLastSample(PressureSample sample);
 
  private:
-  // Bound to the sequence for Update() and LastSample().
+  // Bound to the sequence for State() and LastSample().
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::Lock lock_;

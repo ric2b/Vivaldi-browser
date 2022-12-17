@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -162,16 +162,12 @@ TEST_F(AssistantButtonTest, FocusAndHoverColor) {
                      /*is_opaque=*/true);
 
   const SkBitmap button_image_with_focus = CreateExpectedImageWithFocus(
-      /*icon_color=*/ash::features::IsProductivityLauncherEnabled()
-          ? gfx::kGoogleGrey200
-          : gfx::kGoogleGrey900,
+      /*icon_color=*/gfx::kGoogleGrey200,
       /*focus_color=*/ColorProvider::Get()->GetControlsLayerColor(
           ColorProvider::ControlsLayerType::kFocusRingColor));
 
   const SkBitmap button_image_without_focus = CreateExpectedImageWithoutFocus(
-      /*icon_color=*/ash::features::IsProductivityLauncherEnabled()
-          ? gfx::kGoogleGrey200
-          : gfx::kGoogleGrey900);
+      /*icon_color=*/gfx::kGoogleGrey200);
 
   button->RequestFocus();
   ASSERT_TRUE(button->HasFocus());

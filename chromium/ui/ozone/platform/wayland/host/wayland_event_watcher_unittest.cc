@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,7 +34,7 @@ class WaylandEventWatcherTest : public WaylandTest {
 TEST_P(WaylandEventWatcherTest, CrashKeyResourceError) {
   const std::string kTestErrorString = "This is a nice error.";
   auto* mock_surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->GetSurfaceId());
+      window_->root_surface()->get_surface_id());
   auto* xdg_surface = mock_surface->xdg_surface();
 
   // Prepare the expectation error string.
@@ -56,7 +56,7 @@ TEST_P(WaylandEventWatcherTest, CrashKeyResourceError) {
 
 TEST_P(WaylandEventWatcherTest, CrashKeyResourceNoMemory) {
   auto* mock_surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->GetSurfaceId());
+      window_->root_surface()->get_surface_id());
   auto* xdg_surface = mock_surface->xdg_surface();
 
   // Prepare the expectation error string.

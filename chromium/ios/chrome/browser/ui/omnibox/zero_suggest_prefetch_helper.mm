@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@
 #import "components/omnibox/browser/autocomplete_input.h"
 #import "components/omnibox/common/omnibox_features.h"
 #import "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
-#import "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/web_state_list/active_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/web/public/web_state.h"
@@ -88,7 +88,8 @@ using web::WebStateObserverBridge;
   AutocompleteInput autocomplete_input(
       u"", metrics::OmniboxEventProto::NTP_ZPS_PREFETCH,
       AutocompleteSchemeClassifierImpl());
-  autocomplete_input.set_focus_type(OmniboxFocusType::ON_FOCUS);
+  autocomplete_input.set_focus_type(
+      metrics::OmniboxFocusType::INTERACTION_FOCUS);
   self.autocompleteController->StartPrefetch(autocomplete_input);
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -121,7 +121,7 @@ void ThreadController::RunLevelTracker::OnWorkStarted(LazyNow& lazy_now) {
     }
 
     // Going from kIdle or kInBetweenWorkItems to kRunningWorkItem.
-    run_levels_.top().UpdateState(kRunningWorkItem, lazy_now);
+    run_levels_.top().UpdateState(kRunningWorkItem);
   }
 }
 
@@ -157,7 +157,7 @@ void ThreadController::RunLevelTracker::OnWorkEnded(LazyNow& lazy_now) {
   // Whether we exited a nested run-level or not: the current run-level is now
   // transitioning from kRunningWorkItem to kInBetweenWorkItems.
   DCHECK_EQ(run_levels_.top().state(), kRunningWorkItem);
-  run_levels_.top().UpdateState(kInBetweenWorkItems, lazy_now);
+  run_levels_.top().UpdateState(kInBetweenWorkItems);
 }
 
 void ThreadController::RunLevelTracker::OnIdle(LazyNow& lazy_now) {
@@ -167,7 +167,7 @@ void ThreadController::RunLevelTracker::OnIdle(LazyNow& lazy_now) {
 
   DCHECK_NE(run_levels_.top().state(), kRunningWorkItem);
   time_keeper_.RecordEndOfPhase(kIdleWork, lazy_now);
-  run_levels_.top().UpdateState(kIdle, lazy_now);
+  run_levels_.top().UpdateState(kIdle);
 }
 
 // static
@@ -194,13 +194,13 @@ ThreadController::RunLevelTracker::RunLevel::RunLevel(State initial_state,
     // phase ends.
     time_keeper_->RecordEndOfPhase(kWorkItemSuspendedOnNested, lazy_now);
   }
-  UpdateState(initial_state, lazy_now);
+  UpdateState(initial_state);
 }
 
 ThreadController::RunLevelTracker::RunLevel::~RunLevel() {
   if (!was_moved_) {
     DCHECK(exit_lazy_now_);
-    UpdateState(kIdle, *exit_lazy_now_);
+    UpdateState(kIdle);
     if (is_nested_) {
       // Attribute the entire time in this nested RunLevel to kNested phase. If
       // this wasn't the last nested RunLevel, this is ignored and will be
@@ -220,9 +220,7 @@ ThreadController::RunLevelTracker::RunLevel::~RunLevel() {
 ThreadController::RunLevelTracker::RunLevel::RunLevel(RunLevel&& other) =
     default;
 
-void ThreadController::RunLevelTracker::RunLevel::UpdateState(
-    State new_state,
-    LazyNow& lazy_now) {
+void ThreadController::RunLevelTracker::RunLevel::UpdateState(State new_state) {
   // The only state that can be redeclared is idle, anything else should be a
   // transition.
   DCHECK(state_ != new_state || new_state == kIdle)
@@ -237,14 +235,14 @@ void ThreadController::RunLevelTracker::RunLevel::UpdateState(
 
   // Change of state.
   if (is_active) {
-    TRACE_EVENT_BEGIN("base", "ThreadController active", lazy_now.Now());
+    TRACE_EVENT_BEGIN("base", "ThreadController active");
     // Overriding the annotation from the previous RunLevel is intentional. Only
     // the top RunLevel is ever updated, which holds the relevant state.
     thread_controller_sample_metadata_.Set(
         static_cast<int64_t>(++thread_controller_active_id_));
   } else {
     thread_controller_sample_metadata_.Remove();
-    TRACE_EVENT_END("base", lazy_now.Now());
+    TRACE_EVENT_END("base");
     // TODO(crbug.com/1021571): Remove this once fixed.
     PERFETTO_INTERNAL_ADD_EMPTY_EVENT();
   }

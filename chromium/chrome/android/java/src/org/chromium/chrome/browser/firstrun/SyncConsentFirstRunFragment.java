@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,21 +48,15 @@ public class SyncConsentFirstRunFragment
     }
 
     @Override
-    protected boolean showTangibleSyncConsentView() {
-        return false;
-    }
-
-    @Override
     protected void onSyncRefused() {
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS)
-                && mIsChild) {
+        if (mIsChild
+                && !ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS)) {
             // Somehow the child account disappeared while we were in the FRE.
             // The user would have to go through the FRE again.
             getPageDelegate().abortFirstRunExperience();
         } else {
             SigninPreferencesManager.getInstance().temporarilySuppressNewTabPagePromos();
-            FirstRunSignInProcessor.setFirstRunFlowSignInAccountName(null);
-            FirstRunSignInProcessor.setFirstRunFlowSignInSetup(false);
             getPageDelegate().recordFreProgressHistogram(MobileFreProgress.SYNC_CONSENT_DISMISSED);
             getPageDelegate().advanceToNextPage();
         }
@@ -78,20 +72,9 @@ public class SyncConsentFirstRunFragment
                     MobileFreProgress.SYNC_CONSENT_SETTINGS_LINK_CLICK);
         }
 
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.ENABLE_SYNC_IMMEDIATELY_IN_FRE)) {
-            // Enabling sync is deferred to FirstRunSignInProcessor.start().
-            FirstRunSignInProcessor.setFirstRunFlowSignInAccountName(accountName);
-            FirstRunSignInProcessor.setFirstRunFlowSignInSetup(settingsClicked);
-            getPageDelegate().advanceToNextPage();
-            callback.run();
-            return;
-        }
-
-        // Enable sync now. Leave the account pref empty in FirstRunSignInProcessor, so start()
-        // doesn't try to do it a second time. Only set the advanced setup pref later in
+        // Enable sync now. Only call FirstRunSignInProcessor.scheduleOpeningSettings() later in
         // closeAndMaybeOpenSyncSettings(), because settings shouldn't open if
         // signinAndEnableSync() fails.
-        FirstRunSignInProcessor.setFirstRunFlowSignInAccountName(null);
         if (!getPageDelegate().getProperties().getBoolean(IS_CHILD_ACCOUNT, false)) {
             signinAndEnableSync(accountName, settingsClicked, callback);
             return;
@@ -123,10 +106,11 @@ public class SyncConsentFirstRunFragment
 
     @Override
     protected void closeAndMaybeOpenSyncSettings(boolean settingsClicked) {
-        assert ChromeFeatureList.isEnabled(ChromeFeatureList.ENABLE_SYNC_IMMEDIATELY_IN_FRE);
-        // Now that signinAndEnableSync() succeeded, signal whether FirstRunSignInProcessor.start()
-        // should open settings.
-        FirstRunSignInProcessor.setFirstRunFlowSignInSetup(settingsClicked);
+        // Now that signinAndEnableSync() succeeded, signal whether FirstRunSignInProcessor should
+        // open settings.
+        if (settingsClicked) {
+            FirstRunSignInProcessor.scheduleOpeningSettings();
+        }
         getPageDelegate().advanceToNextPage();
     }
 

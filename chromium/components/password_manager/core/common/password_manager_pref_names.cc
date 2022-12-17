@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,8 @@ const char kCredentialProviderEnabledOnStartup[] =
 const char kAutoSignInEnabledGMS[] = "profile.auto_sign_in_enabled_gms";
 const char kOfferToSavePasswordsEnabledGMS[] =
     "profile.save_passwords_enabed_gms";
+const char kSavePasswordsSuspendedByError[] =
+    "profile.save_passwords_suspended_by_error";
 const char kSettingsMigratedToUPM[] = "profile.settings_migrated_to_upm";
 
 const char kCurrentMigrationVersionToGoogleMobileServices[] =
@@ -38,12 +40,24 @@ const char kUnenrolledFromGoogleMobileServicesDueToErrors[] =
     "unenrolled_from_google_mobile_services_due_to_errors";
 const char kUnenrolledFromGoogleMobileServicesAfterApiErrorCode[] =
     "unenrolled_from_google_mobile_services_after_api_error_code";
+const char kUnenrolledFromGoogleMobileServicesWithErrorListVersion[] =
+    "unenrolled_from_google_mobile_services_with_error_list_version";
+
+const char kUPMErrorUIShownTimestamp[] = "profile.upm_error_ui_shown_timestamp";
+
+const char kTimesReenrolledToGoogleMobileServices[] =
+    "times_reenrolled_to_google_mobile_services";
+
+const char kTimesAttemptedToReenrollToGoogleMobileServices[] =
+    "times_attempted_to_reenroll_to_google_mobile_services";
+const char kTimesUPMAuthErrorShown[] = "times_upm_auth_error_shown";
 #endif
 
 #if BUILDFLAG(IS_WIN)
 const char kOsPasswordBlank[] = "password_manager.os_password_blank";
 const char kOsPasswordLastChanged[] =
     "password_manager.os_password_last_changed";
+const char kIsBiometricAvailable[] = "password_manager.is_biometric_avaliable";
 #endif
 
 #if BUILDFLAG(IS_APPLE)
@@ -93,6 +107,17 @@ const char kPasswordChangeSuccessTrackerFlows[] =
     "password_manager.password_change_success_tracker.flows";
 const char kPasswordChangeSuccessTrackerVersion[] =
     "password_manager.password_change_success_tracker.version";
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+const char kBiometricAuthBeforeFillingPromoShownCounter[] =
+    "password_manager.biometric_authentication_filling_promo_counter";
+const char kHasUserInteractedWithBiometricAuthPromo[] =
+    "password_manager.has_user_interacted_with_biometric_authentication_promo";
+const char kBiometricAuthenticationBeforeFilling[] =
+    "password_manager.biometric_authentication_filling";
+const char kHadBiometricsAvailable[] =
+    "password_manager.had_biometrics_available";
+#endif
 
 }  // namespace prefs
 }  // namespace password_manager

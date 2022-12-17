@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,7 +27,10 @@ using content::WebContents;
 using net::test_server::BasicHttpResponse;
 using net::test_server::HttpRequest;
 using net::test_server::HttpResponse;
+using trace_analyzer::Query;
 using trace_analyzer::TraceAnalyzer;
+using trace_analyzer::TraceEvent;
+using trace_analyzer::TraceEventVector;
 using ukm::TestUkmRecorder;
 using ukm::builders::PageLoad;
 using ukm::mojom::UkmEntry;
@@ -179,6 +182,25 @@ void MetricIntegrationTest::ExpectUKMPageLoadMetricNear(StringPiece metric_name,
   EXPECT_NEAR(*recorded, expected_value, epsilon);
 }
 
+void MetricIntegrationTest::ExpectUniqueUMAWithinRange(StringPiece metric_name,
+                                                       double expected_value,
+                                                       double below,
+                                                       double above) {
+  EXPECT_EQ(histogram_tester_->GetAllSamples(metric_name).size(), 1u)
+      << "There should be one sample for " << metric_name.data();
+
+  auto bucket_min = histogram_tester().GetAllSamples(metric_name)[0].min;
+
+  EXPECT_GE(bucket_min, expected_value - below)
+      << "The sample for " << metric_name.data()
+      << " is smaller than the expected range of " << below << " from "
+      << expected_value;
+  EXPECT_LE(bucket_min, expected_value + above)
+      << "The sample for " << metric_name.data()
+      << " is larger than the expected range of " << above << " from "
+      << expected_value;
+}
+
 void MetricIntegrationTest::ExpectUniqueUMAPageLoadMetricNear(
     StringPiece metric_name,
     double expected_value) {
@@ -193,4 +215,29 @@ void MetricIntegrationTest::ExpectUniqueUMAPageLoadMetricNear(
       histogram_tester_->GetBucketCount(metric_name, expected_value - 1.0) == 1)
       << "The sample for " << metric_name.data()
       << " is not near the expected value!";
+}
+
+void MetricIntegrationTest::ExpectUniqueUMA(StringPiece metric_name) {
+  EXPECT_EQ(histogram_tester_->GetAllSamples(metric_name).size(), 1u)
+      << "There should be one sample for " << metric_name.data();
+}
+
+void MetricIntegrationTest::ExpectMetricInLastUKMUpdateTraceEventNear(
+    TraceAnalyzer& trace_analyzer,
+    base::StringPiece metric_name,
+    double expected_value,
+    double epsilon) {
+  TraceEventVector ukm_update_events;
+  trace_analyzer.FindEvents(Query::EventNameIs("UkmPageLoadTimingUpdate"),
+                            &ukm_update_events);
+  ASSERT_GT(ukm_update_events.size(), 0ul);
+
+  const TraceEvent* last_update_event = ukm_update_events.back();
+
+  base::Value::Dict arg_dict;
+  last_update_event->GetArgAsDict("ukm_page_load_timing_update", &arg_dict);
+  absl::optional<double> metric_value = arg_dict.FindDouble(metric_name);
+  ASSERT_TRUE(metric_value.has_value());
+
+  EXPECT_NEAR(expected_value, *metric_value, epsilon);
 }

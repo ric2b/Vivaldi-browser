@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -44,6 +44,9 @@ defaults.os.set(os.LINUX_DEFAULT)
 defaults.pool.set("luci.chromium.webrtc.fyi")
 defaults.service_account.set("chromium-ci-builder@chops-service-accounts.iam.gserviceaccount.com")
 defaults.triggered_by.set(["webrtc-gitiles-trigger"])
+
+# TODO(crbug.com/1362440): remove this.
+defaults.omit_python2.set(False)
 
 # Builders are defined in lexicographic order by name
 

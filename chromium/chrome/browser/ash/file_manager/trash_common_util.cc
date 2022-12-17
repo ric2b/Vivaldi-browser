@@ -1,13 +1,16 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/file_manager/trash_common_util.h"
 
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
+#include "components/prefs/pref_service.h"
 
 namespace file_manager::trash {
 
@@ -15,6 +18,11 @@ constexpr char kTrashFolderName[] = ".Trash";
 constexpr char kInfoFolderName[] = "info";
 constexpr char kFilesFolderName[] = "files";
 constexpr char kTrashInfoExtension[] = ".trashinfo";
+constexpr char kTrackedDirectoryName[] = "user.TrackedDirectoryName";
+constexpr char kDirectorySetupHistogramName[] =
+    "FileBrowser.Trash.DirectorySetupFailed";
+constexpr char kFailedTrashingHistogramName[] =
+    "FileBrowser.Trash.FailedTrashing";
 
 TrashLocation::TrashLocation(const base::FilePath supplied_relative_folder_path,
                              const base::FilePath supplied_mount_point_path,
@@ -31,6 +39,14 @@ TrashLocation::~TrashLocation() = default;
 
 TrashLocation::TrashLocation(TrashLocation&& other) = default;
 TrashLocation& TrashLocation::operator=(TrashLocation&& other) = default;
+
+bool IsTrashEnabledForProfile(Profile* profile) {
+  if (!profile || !profile->GetPrefs()) {
+    return false;
+  }
+  return base::FeatureList::IsEnabled(chromeos::features::kFilesTrash) &&
+         profile->GetPrefs()->GetBoolean(ash::prefs::kFilesAppTrashEnabled);
+}
 
 const base::FilePath GenerateTrashPath(const base::FilePath& trash_path,
                                        const std::string& subdir,
@@ -62,43 +78,6 @@ TrashPathsMap GenerateEnabledTrashLocationsForProfile(
           util::GetMyFilesFolderForProfile(profile),
           /*prefix_path=*/
           util::GetDownloadsFolderForProfile(profile).BaseName()));
-
-  auto* integration_service =
-      drive::DriveIntegrationServiceFactory::FindForProfile(profile);
-  if (integration_service) {
-    enabled_trash_locations.try_emplace(
-        integration_service->GetMountPointPath(),
-        TrashLocation(
-            /*supplied_relative_folder_path=*/base::FilePath(".Trash-1000"),
-            /*supplied_mount_point_path=*/integration_service
-                ->GetMountPointPath()));
-  }
-
-  // Ensure Crostini is running before adding it as an enabled path.
-  file_manager::VolumeManager* const volume_manager =
-      file_manager::VolumeManager::Get(profile);
-  if (crostini::CrostiniManager::GetForProfile(profile) &&
-      crostini::IsCrostiniRunning(profile) && volume_manager) {
-    // A `base_path` is supplied in tests to ensure files are only added to
-    // temporary directories. If `base_path` has been supplied, use the mocked
-    // volume mount path instead of the real mount path.
-    const base::FilePath crostini_mount_point =
-        (base_path.empty())
-            ? file_manager::util::GetCrostiniMountDirectory(profile)
-            : base_path.Append("crostini");
-    base::WeakPtr<file_manager::Volume> volume =
-        volume_manager->FindVolumeFromPath(crostini_mount_point);
-    if (volume) {
-      enabled_trash_locations.try_emplace(
-          crostini_mount_point,
-          TrashLocation(
-              /*supplied_relative_folder_path=*/base::FilePath(".local")
-                  .Append("share")
-                  .Append("Trash"),
-              /*supplied_mount_point_path=*/crostini_mount_point,
-              /*prefix_path=*/volume->remote_mount_path()));
-    }
-  }
 
   return enabled_trash_locations;
 }

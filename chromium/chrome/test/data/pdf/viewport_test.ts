@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -315,6 +315,25 @@ const tests = [
     viewport.setZoom(0.25);
     mockWindow.scrollTo(0, 0);
     chrome.test.assertEq(0, viewport.getMostVisiblePage());
+    chrome.test.succeed();
+  },
+
+  function testSetFittingType() {
+    const viewport = getZoomableViewport(
+        new MockElement(400, 500, null), new MockSizer(), 0, 1);
+
+    viewport.setFittingType(FittingType.FIT_TO_PAGE);
+    chrome.test.assertEq(FittingType.FIT_TO_PAGE, viewport.fittingType);
+
+    viewport.setFittingType(FittingType.FIT_TO_WIDTH);
+    chrome.test.assertEq(FittingType.FIT_TO_WIDTH, viewport.fittingType);
+
+    viewport.setFittingType(FittingType.FIT_TO_HEIGHT);
+    chrome.test.assertEq(FittingType.FIT_TO_HEIGHT, viewport.fittingType);
+
+    viewport.setFittingType(FittingType.NONE);
+    chrome.test.assertEq(FittingType.NONE, viewport.fittingType);
+
     chrome.test.succeed();
   },
 

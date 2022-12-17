@@ -50,7 +50,7 @@ class VivaldiSessionService {
                            content::WebContents* tab,
                            int index_in_window,
                            bool is_pinned);
-  void BuildCommandsForBrowser(Browser* browser, std::vector<int>* ids);
+  void BuildCommandsForBrowser(Browser* browser, std::vector<int>& ids);
   bool Save(const base::FilePath& file_name);
   bool Load(const base::FilePath& file_name,
             Browser* browser,

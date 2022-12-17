@@ -29,11 +29,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-import multiprocessing
 import optparse
 import sys
 import traceback
-import six
 
 from blinkpy.common import exit_codes
 from blinkpy.common.host import Host
@@ -60,7 +58,7 @@ def main(argv, stderr):
     else:
         host = Host()
 
-    if six.PY3 and stderr.isatty():
+    if stderr.isatty():
         stderr.reconfigure(write_through=True)
     printer = printing.Printer(host, options, stderr)
 
@@ -163,6 +161,9 @@ def parse_args(args):
                                    'to x64.')),
         optparse.make_option('--fuchsia-out-dir',
                              help=('Path to Fuchsia build output directory.')),
+        optparse.make_option('--custom-image',
+                             help=('Specify an image used for booting up the '
+                                   'emulator.')),
         optparse.make_option(
             '--fuchsia-ssh-config',
             help=('The path to the SSH configuration used for '
@@ -182,6 +183,8 @@ def parse_args(args):
             '--fuchsia-host-ip',
             help=('The IP address of the test host observed by the Fuchsia '
                   'device. Required if running on hardware devices.')),
+        optparse.make_option('--logs-dir',
+                             help='Location of diagnostics logs'),
     ]))
 
     option_group_definitions.append((
@@ -329,10 +332,10 @@ def parse_args(args):
                 dest='build',
                 action='store_false',
                 help="Don't check to see if the build is up to date."),
-            optparse.make_option('--no-virtual-tests',
+            optparse.make_option('--wpt-only',
                                  action='store_true',
                                  default=False,
-                                 help=('Do not run virtual tests.')),
+                                 help=('Run web platform tests only.')),
             optparse.make_option('--child-processes',
                                  '--jobs',
                                  '-j',
@@ -536,14 +539,17 @@ def parse_args(args):
                 help=
                 'Run the N% fastest tests as well as any tests listed on the command line'
             ),
+            optparse.make_option('--test-list',
+                                 action='append',
+                                 metavar='FILE',
+                                 help='read filters for tests to run'),
             optparse.make_option(
-                '--test-list',
                 '--isolated-script-test-filter-file',
                 '--test-launcher-filter-file',
                 action='append',
                 metavar='FILE',
                 help=
-                'read list of tests to run from file, as if they were specified on the command line'
+                'read filters for tests to not run as if they were specified on the command line'
             ),
             optparse.make_option(
                 '--isolated-script-test-filter',
@@ -723,7 +729,10 @@ def _set_up_derived_options(port, options, args):
                                   str(port.default_max_locked_shards())))
 
     if not options.configuration:
-        options.configuration = port.default_configuration()
+        options.configuration = port.get_option('configuration')
+
+    if not options.target:
+        options.target = port.get_option('target')
 
     if not options.timeout_ms:
         options.timeout_ms = str(port.timeout_ms())
@@ -776,9 +785,3 @@ def run(port, options, args, printer):
     _log.debug('Testing completed. Exit status: %d', run_details.exit_code)
     printer.flush()
     return run_details
-
-
-if __name__ == '__main__':
-    if not six.PY2:
-        multiprocessing.set_start_method('spawn')
-    sys.exit(main(sys.argv[1:], sys.stderr))

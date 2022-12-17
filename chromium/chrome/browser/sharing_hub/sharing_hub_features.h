@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,7 +35,7 @@ bool DesktopScreenshotsFeatureEnabled(content::BrowserContext* context);
 
 // Feature flag to enable the screenshots feature, currently accessed only
 // through the sharing hub.
-extern const base::Feature kDesktopScreenshots;
+BASE_DECLARE_FEATURE(kDesktopScreenshots);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 void RegisterProfilePrefs(PrefRegistrySimple* registry);

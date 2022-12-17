@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,6 +79,11 @@ struct StructTraits<wl::mojom::WaylandOverlayConfigDataView,
   static const absl::optional<SkColor4f>& background_color(
       const wl::WaylandOverlayConfig& input) {
     return input.background_color;
+  }
+
+  static const absl::optional<gfx::Rect>& clip_rect(
+      const wl::WaylandOverlayConfig& input) {
+    return input.clip_rect;
   }
 
   static bool Read(wl::mojom::WaylandOverlayConfigDataView data,

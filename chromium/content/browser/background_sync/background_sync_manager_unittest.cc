@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -134,8 +134,8 @@ class BackgroundSyncManagerTest
     ON_CALL(*mock_permission_manager,
             GetPermissionStatusForWorker(PermissionType::NOTIFICATIONS, _, _))
         .WillByDefault(Return(blink::mojom::PermissionStatus::DENIED));
-    helper_->browser_context()->SetPermissionControllerDelegate(
-        std::move(mock_permission_manager));
+    TestBrowserContext::FromBrowserContext(helper_->browser_context())
+        ->SetPermissionControllerDelegate(std::move(mock_permission_manager));
 
     // Create a StoragePartition with the correct BrowserContext so that the
     // BackgroundSyncManager can find the BrowserContext through it.
@@ -181,14 +181,16 @@ class BackgroundSyncManagerTest
         blink::mojom::FetchClientSettingsObject::New(),
         base::BindOnce(&RegisterServiceWorkerCallback, &called_1,
                        &sw_registration_id_1_),
-        /*requesting_frame_id=*/GlobalRenderFrameHostId());
+        /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+        PolicyContainerPolicies());
 
     helper_->context()->RegisterServiceWorker(
         GURL(kScript2), key2, options2,
         blink::mojom::FetchClientSettingsObject::New(),
         base::BindOnce(&RegisterServiceWorkerCallback, &called_2,
                        &sw_registration_id_2_),
-        /*requesting_frame_id=*/GlobalRenderFrameHostId());
+        /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+        PolicyContainerPolicies());
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(called_1);
     EXPECT_TRUE(called_2);

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,9 +39,8 @@ void SignInFatalErrorScreenHandler::DeclareLocalizedValues(
 }
 
 void SignInFatalErrorScreenHandler::Show(SignInFatalErrorScreen::Error error,
-                                         const base::Value* params) {
-  base::Value::Dict screen_data =
-      params ? params->GetDict().Clone() : base::Value::Dict();
+                                         const base::Value::Dict& params) {
+  base::Value::Dict screen_data = params.Clone();
   screen_data.Set("errorState", base::Value(static_cast<int>(error)));
 
   ShowInWebUI(std::move(screen_data));

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,7 @@ import java.io.File;
 public class PaintPreviewTabService implements NativePaintPreviewServiceProvider {
     public static final BooleanCachedFieldTrialParameter ALLOW_SRP =
             new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP, "allow_srp", true);
+                    ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP, "allow_srp", false);
 
     private static final long AUDIT_START_DELAY_MS = 2 * 60 * 1000; // Two minutes;
     private static boolean sIsAccessibilityEnabledForTesting;

@@ -1,17 +1,17 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/quick_pair/ui/fast_pair/fast_pair_notification_controller.h"
 
-#include "ash/services/quick_pair/fast_pair_data_parser.h"
-#include "ash/services/quick_pair/mock_quick_pair_process_manager.h"
-#include "ash/services/quick_pair/quick_pair_process.h"
-#include "ash/services/quick_pair/quick_pair_process_manager.h"
-#include "ash/services/quick_pair/quick_pair_process_manager_impl.h"
 #include "ash/test/ash_test_base.h"
 #include "base/memory/weak_ptr.h"
 #include "base/test/mock_callback.h"
+#include "chromeos/ash/services/quick_pair/fast_pair_data_parser.h"
+#include "chromeos/ash/services/quick_pair/mock_quick_pair_process_manager.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process_manager.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process_manager_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/image/image_skia.h"

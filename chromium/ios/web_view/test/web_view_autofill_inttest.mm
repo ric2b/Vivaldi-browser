@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -105,9 +105,9 @@ class WebViewAutofillTest : public WebViewInttestBase {
     NSString* submit_script =
         [NSString stringWithFormat:@"document.getElementById('%@').click();",
                                    kTestSubmitID];
-    bool success;
-    test::EvaluateJavaScript(web_view_, submit_script, &success);
-    return success;
+    NSError* error = nil;
+    test::EvaluateJavaScript(web_view_, submit_script, &error);
+    return !error;
   }
 
   [[nodiscard]] bool SetFormFieldValue(NSString* field_id,
@@ -115,9 +115,9 @@ class WebViewAutofillTest : public WebViewInttestBase {
     NSString* set_value_script = [NSString
         stringWithFormat:@"document.getElementById('%@').value = '%@';",
                          field_id, field_value];
-    bool success;
-    test::EvaluateJavaScript(web_view_, set_value_script, &success);
-    return success;
+    NSError* error = nil;
+    test::EvaluateJavaScript(web_view_, set_value_script, &error);
+    return !error;
   }
 
   NSArray<CWVAutofillSuggestion*>* FetchSuggestions() {
@@ -185,10 +185,10 @@ TEST_F(WebViewAutofillTest, TestDelegateCallbacks) {
   NSString* focus_script =
       [NSString stringWithFormat:@"document.getElementById('%@').focus();",
                                  kTestAddressFieldID];
-  bool focus_success;
-  test::EvaluateJavaScript(web_view_, focus_script, &focus_success);
-  ASSERT_TRUE(focus_success);
-  [delegate verifyWithDelay:kWaitForActionTimeout];
+  NSError* focus_error = nil;
+  test::EvaluateJavaScript(web_view_, focus_script, &focus_error);
+  ASSERT_FALSE(focus_error);
+  [delegate verifyWithDelay:kWaitForActionTimeout.InSecondsF()];
 
   [[delegate expect] autofillController:autofill_controller_
            didBlurOnFieldWithIdentifier:kTestAddressFieldID
@@ -202,10 +202,10 @@ TEST_F(WebViewAutofillTest, TestDelegateCallbacks) {
                     @"var event = new Event('blur', {bubbles:true});"
                      "document.getElementById('%@').dispatchEvent(event);",
                     kTestAddressFieldID];
-  bool blur_success;
-  test::EvaluateJavaScript(web_view_, blur_script, &blur_success);
-  ASSERT_TRUE(blur_success);
-  [delegate verifyWithDelay:kWaitForActionTimeout];
+  NSError* blur_error = nil;
+  test::EvaluateJavaScript(web_view_, blur_script, &blur_error);
+  ASSERT_FALSE(blur_error);
+  [delegate verifyWithDelay:kWaitForActionTimeout.InSecondsF()];
 
   [[delegate expect] autofillController:autofill_controller_
           didInputInFieldWithIdentifier:kTestAddressFieldID
@@ -221,10 +221,10 @@ TEST_F(WebViewAutofillTest, TestDelegateCallbacks) {
                     @"var event = new Event('input', {'bubbles': true});"
                      "document.getElementById('%@').dispatchEvent(event);",
                     kTestAddressFieldID];
-  bool input_success;
-  test::EvaluateJavaScript(web_view_, input_script, &input_success);
-  ASSERT_TRUE(input_success);
-  [delegate verifyWithDelay:kWaitForActionTimeout];
+  NSError* input_error = nil;
+  test::EvaluateJavaScript(web_view_, input_script, &input_error);
+  ASSERT_FALSE(input_error);
+  [delegate verifyWithDelay:kWaitForActionTimeout.InSecondsF()];
 
   [[delegate expect] autofillController:autofill_controller_
                   didSubmitFormWithName:kTestFormName
@@ -237,15 +237,17 @@ TEST_F(WebViewAutofillTest, TestDelegateCallbacks) {
                     @"var event = new Event('submit', {'bubbles': true});"
                      "document.getElementById('%@').dispatchEvent(event);",
                     kTestFormID];
-  bool submit_success;
-  test::EvaluateJavaScript(web_view_, submit_script, &submit_success);
-  ASSERT_TRUE(submit_success);
-  [delegate verifyWithDelay:kWaitForActionTimeout];
+  NSError* submit_error = nil;
+  test::EvaluateJavaScript(web_view_, submit_script, &submit_error);
+  ASSERT_FALSE(submit_error);
+  [delegate verifyWithDelay:kWaitForActionTimeout.InSecondsF()];
 }
 
 // Tests that CWVAutofillController can fetch, fill, and clear suggestions.
-// TODO(crbug.com/1259114): Figure out why this is test is flaky.
-TEST_F(WebViewAutofillTest, DISABLED_TestSuggestionFetchFillClear) {
+TEST_F(WebViewAutofillTest, TestSuggestionFetchFillClear) {
+  id delegate = OCMProtocolMock(@protocol(CWVAutofillControllerDelegate));
+  autofill_controller_.delegate = delegate;
+
   ASSERT_TRUE(test_server_->Start());
   ASSERT_TRUE(LoadTestPage());
   ASSERT_TRUE(SetFormFieldValue(kTestNameFieldID, kTestNameFieldValue));
@@ -253,10 +255,40 @@ TEST_F(WebViewAutofillTest, DISABLED_TestSuggestionFetchFillClear) {
   ASSERT_TRUE(SetFormFieldValue(kTestStateFieldID, kTestStateFieldValue));
   ASSERT_TRUE(SetFormFieldValue(kTestCityFieldID, kTestCityFieldValue));
   ASSERT_TRUE(SetFormFieldValue(kTestZipFieldID, kTestZipFieldValue));
+
+  // Stub the confirm save callback to save the new profile right away.
+  void (^invocation_handler)(NSInvocation*) = ^(NSInvocation* invocation) {
+    void (^decision_handler)(CWVAutofillProfileUserDecision);
+    [invocation getArgument:&decision_handler atIndex:5];
+    decision_handler(CWVAutofillProfileUserDecisionAccepted);
+  };
+  [[[delegate stub] andDo:invocation_handler]
+                    autofillController:autofill_controller_
+      confirmSaveForNewAutofillProfile:[OCMArg any]
+                            oldProfile:[OCMArg any]
+                       decisionHandler:[OCMArg any]];
   ASSERT_TRUE(SubmitForm());
+
   // Wait for about:blank to be loaded after <form> submitted.
   ASSERT_TRUE(WaitUntilPageLoaded());
+
   ASSERT_TRUE(LoadTestPage());
+
+  // The input element needs to be focused before suggestions can be fetched.
+  [[delegate expect] autofillController:autofill_controller_
+          didFocusOnFieldWithIdentifier:kTestAddressFieldID
+                              fieldType:kTestFieldType
+                               formName:kTestFormName
+                                frameID:[OCMArg any]
+                                  value:[OCMArg any]
+                          userInitiated:YES];
+  NSString* focus_script =
+      [NSString stringWithFormat:@"document.getElementById('%@').focus()",
+                                 kTestAddressFieldID];
+  NSError* focus_error = nil;
+  test::EvaluateJavaScript(web_view_, focus_script, &focus_error);
+  ASSERT_TRUE(!focus_error);
+  [delegate verifyWithDelay:kWaitForActionTimeout.InSecondsF()];
 
   NSArray<CWVAutofillSuggestion*>* fetched_suggestions = FetchSuggestions();
   ASSERT_EQ(1U, fetched_suggestions.count);
@@ -265,31 +297,23 @@ TEST_F(WebViewAutofillTest, DISABLED_TestSuggestionFetchFillClear) {
   EXPECT_NSEQ(kTestFormName, fetched_suggestion.formName);
   EXPECT_NSEQ(GetMainFrameId(), fetched_suggestion.frameID);
 
-  // The input element needs to be focused before it can be filled or cleared.
-  NSString* focus_script =
-      [NSString stringWithFormat:@"document.getElementById('%@').focus()",
-                                 kTestAddressFieldID];
-  bool focus_success;
-  test::EvaluateJavaScript(web_view_, focus_script, &focus_success);
-  ASSERT_TRUE(focus_success);
-
   [autofill_controller_ acceptSuggestion:fetched_suggestion
                        completionHandler:nil];
   NSString* filled_script =
       [NSString stringWithFormat:@"document.getElementById('%@').value",
                                  kTestAddressFieldID];
-  __block bool filled_success;
+  __block NSError* filled_error = nil;
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool {
     NSString* filled_value =
-        test::EvaluateJavaScript(web_view_, filled_script, &filled_success);
+        test::EvaluateJavaScript(web_view_, filled_script, &filled_error);
     // If there is an error, early return so the ASSERT catch the error.
     LOG(INFO) << base::SysNSStringToUTF8(filled_value);
     LOG(INFO) << base::SysNSStringToUTF8(fetched_suggestion.value);
-    if (!filled_success)
+    if (filled_error)
       return true;
     return [fetched_suggestion.value isEqualToString:filled_value];
   }));
-  ASSERT_TRUE(filled_success);
+  ASSERT_FALSE(filled_error);
   [autofill_controller_ clearFormWithName:kTestFormName
                           fieldIdentifier:kTestAddressFieldID
                                   frameID:GetMainFrameId()
@@ -297,16 +321,16 @@ TEST_F(WebViewAutofillTest, DISABLED_TestSuggestionFetchFillClear) {
   NSString* cleared_script =
       [NSString stringWithFormat:@"document.getElementById('%@').value",
                                  kTestAddressFieldID];
-  __block bool cleared_success;
+  __block NSError* cleared_error = nil;
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool {
     NSString* current_value =
-        test::EvaluateJavaScript(web_view_, cleared_script, &cleared_success);
+        test::EvaluateJavaScript(web_view_, cleared_script, &cleared_error);
     // If there is an error, early return so the ASSERT catch the error.
-    if (!cleared_success)
+    if (cleared_error)
       return true;
     return [current_value isEqualToString:@""];
   }));
-  EXPECT_TRUE(cleared_success);
+  EXPECT_FALSE(cleared_error);
 }
 
 }  // namespace ios_web_view

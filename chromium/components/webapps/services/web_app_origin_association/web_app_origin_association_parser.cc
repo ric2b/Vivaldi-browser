@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,7 +83,7 @@ WebAppOriginAssociationParser::ParseAssociatedWebApps(
     return result;
   }
 
-  for (const auto& app_item : apps_value->GetListDeprecated()) {
+  for (const auto& app_item : apps_value->GetList()) {
     if (!app_item.is_dict()) {
       AddErrorInfo("Associated app ignored, type object expected.");
       continue;
@@ -169,7 +169,7 @@ WebAppOriginAssociationParser::ParsePaths(const base::Value& app_details_dict,
   }
 
   std::vector<std::string> paths;
-  for (const auto& path_item : paths_value->GetListDeprecated()) {
+  for (const auto& path_item : paths_value->GetList()) {
     if (!path_item.is_string()) {
       AddErrorInfo(key + " entry ignored, type string expected.");
       continue;

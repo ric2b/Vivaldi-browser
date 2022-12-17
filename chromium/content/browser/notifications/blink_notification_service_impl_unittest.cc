@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -171,7 +171,8 @@ class BlinkNotificationServiceImplTest : public ::testing::Test {
               &BlinkNotificationServiceImplTest::DidRegisterServiceWorker,
               base::Unretained(this), &service_worker_registration_id,
               run_loop.QuitClosure()),
-          /*requesting_frame_id=*/GlobalRenderFrameHostId());
+          /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+          PolicyContainerPolicies());
       run_loop.Run();
     }
 

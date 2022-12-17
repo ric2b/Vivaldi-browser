@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,9 +27,9 @@ bool AreProgressMarkersEquivalent(const std::string& serialized1,
   sync_pb::DataTypeProgressMarker marker2;
   CHECK(marker1.ParseFromString(serialized1));
   CHECK(marker2.ParseFromString(serialized2));
-  marker1.clear_gc_directive();
-  marker2.clear_gc_directive();
   DCHECK(marker1.data_type_id() == marker2.data_type_id());
+  DCHECK(!marker1.has_gc_directive());
+  DCHECK(!marker2.has_gc_directive());
 
   if (syncer::GetModelTypeFromSpecificsFieldNumber(marker1.data_type_id()) ==
           syncer::AUTOFILL_WALLET_DATA ||

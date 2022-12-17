@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1246,7 +1246,8 @@ ReadableStream* ReadableStream::CreateWithCountQueueingStrategy(
   ExceptionState exception_state(isolate, ExceptionState::kConstructionContext,
                                  "ReadableStream");
   v8::MicrotasksScope microtasks_scope(
-      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+      isolate, ToMicrotaskQueue(script_state),
+      v8::MicrotasksScope::kDoNotRunMicrotasks);
 
   auto* stream = MakeGarbageCollected<ReadableStream>();
   stream->InitWithCountQueueingStrategy(
@@ -1759,6 +1760,41 @@ void ReadableStream::LockAndDisturb(ScriptState* script_state) {
   is_disturbed_ = true;
 }
 
+void ReadableStream::CloseStream(ScriptState* script_state,
+                                 ExceptionState& exception_state) {
+  // https://streams.spec.whatwg.org/#readablestream-close
+  // 1. If stream.[[controller]] implements ReadableByteStreamController,
+  if (auto* readable_byte_stream_controller =
+          DynamicTo<ReadableByteStreamController>(
+              readable_stream_controller_.Get())) {
+    // 1. Perform ! ReadableByteStreamControllerClose(stream.[[controller]]).
+    readable_byte_stream_controller->Close(
+        script_state, readable_byte_stream_controller, exception_state);
+    if (exception_state.HadException()) {
+      return;
+    }
+
+    // 2. If stream.[[controller]].[[pendingPullIntos]] is not empty, perform !
+    // ReadableByteStreamControllerRespond(stream.[[controller]], 0).
+    if (readable_byte_stream_controller->pending_pull_intos_.size() > 0) {
+      readable_byte_stream_controller->Respond(
+          script_state, readable_byte_stream_controller, 0, exception_state);
+    }
+    if (exception_state.HadException()) {
+      return;
+    }
+  }
+
+  // 2. Otherwise, perform !
+  // ReadableStreamDefaultControllerClose(stream.[[controller]]).
+  else {
+    auto* readable_stream_default_controller =
+        To<ReadableStreamDefaultController>(readable_stream_controller_.Get());
+    ReadableStreamDefaultController::Close(script_state,
+                                           readable_stream_default_controller);
+  }
+}
+
 void ReadableStream::Serialize(ScriptState* script_state,
                                MessagePort* port,
                                ExceptionState& exception_state) {
@@ -2127,7 +2163,7 @@ void ReadableStream::FulfillReadIntoRequest(ScriptState* script_state,
   ReadableStreamGenericReader* reader = stream->reader_;
   ReadableStreamBYOBReader* byob_reader = To<ReadableStreamBYOBReader>(reader);
   // 3. Assert: reader.[[readIntoRequests]] is not empty.
-  DCHECK(!byob_reader->read_into_requests_.IsEmpty());
+  DCHECK(!byob_reader->read_into_requests_.empty());
   // 4. Let readIntoRequest be reader.[[readIntoRequests]][0].
   ReadableStreamBYOBReader::ReadIntoRequest* read_into_request =
       byob_reader->read_into_requests_[0];

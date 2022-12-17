@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -135,7 +135,7 @@ TEST(InterceptionManagerTest, BufferLayout1) {
   auto target = TargetProcess::MakeTargetProcessForTesting(
       ::GetCurrentProcess(), ::GetModuleHandle(exe_name));
 
-  InterceptionManager interceptions(*target, true);
+  InterceptionManager interceptions(*target);
 
   // Any pointer will do for a function pointer.
   void* function = &interceptions;
@@ -213,7 +213,7 @@ TEST(InterceptionManagerTest, BufferLayout2) {
   auto target = TargetProcess::MakeTargetProcessForTesting(
       ::GetCurrentProcess(), ::GetModuleHandle(exe_name));
 
-  InterceptionManager interceptions(*target, true);
+  InterceptionManager interceptions(*target);
 
   // Any pointer will do for a function pointer.
   void* function = &interceptions;

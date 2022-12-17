@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,6 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 
 namespace gl {
-class GLImage;
 class GLSurface;
 }  // namespace gl
 
@@ -86,7 +85,8 @@ class SkiaOutputDeviceGL final : public SkiaOutputDevice {
                                 OutputSurfaceFrame frame,
                                 gfx::SwapCompletionResult result);
 
-  scoped_refptr<gl::GLImage> GetGLImageForMailbox(const gpu::Mailbox& mailbox);
+  gpu::OverlayImageRepresentation::ScopedReadAccess* BeginOverlayAccess(
+      const gpu::Mailbox& mailbox);
 
   void CreateSkSurface();
 

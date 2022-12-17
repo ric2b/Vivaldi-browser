@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -274,9 +274,9 @@ SkiaVkAndroidImageRepresentation::GetEndAccessState() {
   if (!vulkan_image_)
     return nullptr;
 
-  const uint32_t kSingleDeviceUsage = SHARED_IMAGE_USAGE_DISPLAY |
-                                      SHARED_IMAGE_USAGE_RASTER |
-                                      SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
+  const uint32_t kSingleDeviceUsage =
+      SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_DISPLAY_WRITE |
+      SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
 
   // If SharedImage is used outside of current VkDeviceQueue we need to transfer
   // image back to it's original queue. Note, that for multithreading we use

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -173,9 +173,9 @@ String HighlightPart::ToString() const {
   result.Append(",");
   result.AppendNumber(to);
   result.Append(")");
-  for (const HighlightLayer& layer : decorations) {
+  for (const HighlightLayer& current_layer : decorations) {
     result.Append("+");
-    result.Append(layer.ToString());
+    result.Append(current_layer.ToString());
   }
   return result.ToString();
 }
@@ -202,17 +202,17 @@ Vector<HighlightLayer> NGHighlightOverlay::ComputeLayers(
   result.emplace_back(HighlightLayerType::kOriginating);
 
   for (const auto& marker : custom) {
-    auto* custom = To<CustomHighlightMarker>(marker.Get());
+    auto* custom_marker = To<CustomHighlightMarker>(marker.Get());
     HighlightLayer layer{HighlightLayerType::kCustom,
-                         custom->GetHighlightName()};
+                         custom_marker->GetHighlightName()};
     if (!result.Contains(layer))
       result.push_back(layer);
   }
-  if (!grammar.IsEmpty())
+  if (!grammar.empty())
     result.emplace_back(HighlightLayerType::kGrammar);
-  if (!spelling.IsEmpty())
+  if (!spelling.empty())
     result.emplace_back(HighlightLayerType::kSpelling);
-  if (!target.IsEmpty())
+  if (!target.empty())
     result.emplace_back(HighlightLayerType::kTargetText);
   if (selection)
     result.emplace_back(HighlightLayerType::kSelection);
@@ -228,6 +228,7 @@ Vector<HighlightLayer> NGHighlightOverlay::ComputeLayers(
 Vector<HighlightEdge> NGHighlightOverlay::ComputeEdges(
     const Node* node,
     const HighlightRegistry* registry,
+    bool is_generated_text_fragment,
     const NGTextFragmentPaintInfo& originating,
     const LayoutSelectionStatus* selection,
     const DocumentMarkerVector& custom,
@@ -255,9 +256,17 @@ Vector<HighlightEdge> NGHighlightOverlay::ComputeEdges(
   // stored in terms of Text nodes anyway, so this check should never fail.
   const auto* text_node = DynamicTo<Text>(node);
   if (!text_node) {
-    DCHECK(custom.IsEmpty() && grammar.IsEmpty() && spelling.IsEmpty() &&
-           target.IsEmpty())
+    DCHECK(custom.empty() && grammar.empty() && spelling.empty() &&
+           target.empty())
         << "markers can not be painted without a valid Text node";
+  } else if (is_generated_text_fragment) {
+    // Custom highlights and marker-based highlights are defined in terms of
+    // DOM ranges in a Text node. Generated text either has no Text node or does
+    // not derive its content from the Text node (e.g. ellipsis, soft hyphens).
+    // TODO(crbug.com/17528) handle ::first-letter
+    DCHECK(custom.empty() && grammar.empty() && spelling.empty() &&
+           target.empty())
+        << "no marker can ever apply to fragment items with generated text";
   } else {
     // We can save time by skipping marker-based highlights that are outside the
     // originating fragment (e.g. on a different line), but we can only compare
@@ -275,7 +284,7 @@ Vector<HighlightEdge> NGHighlightOverlay::ComputeEdges(
     for (const auto& marker : custom) {
       if (marker->EndOffset() <= last_from || marker->StartOffset() >= first_to)
         continue;
-      auto* custom = To<CustomHighlightMarker>(marker.Get());
+      auto* custom_marker = To<CustomHighlightMarker>(marker.Get());
       unsigned content_start =
           GetTextContentOffset(*text_node, marker->StartOffset());
       unsigned content_end =
@@ -284,11 +293,11 @@ Vector<HighlightEdge> NGHighlightOverlay::ComputeEdges(
         continue;
       result.emplace_back(content_start,
                           HighlightLayer{HighlightLayerType::kCustom,
-                                         custom->GetHighlightName()},
+                                         custom_marker->GetHighlightName()},
                           HighlightEdgeType::kStart);
       result.emplace_back(content_end,
                           HighlightLayer{HighlightLayerType::kCustom,
-                                         custom->GetHighlightName()},
+                                         custom_marker->GetHighlightName()},
                           HighlightEdgeType::kEnd);
     }
 
@@ -361,7 +370,7 @@ Vector<HighlightPart> NGHighlightOverlay::ComputeParts(
   Vector<HighlightPart> result{};
   Vector<bool> active(layers.size());
   absl::optional<unsigned> prev_offset{};
-  if (edges.IsEmpty()) {
+  if (edges.empty()) {
     result.push_back(HighlightPart{originating_layer,
                                    originating.from,
                                    originating.to,

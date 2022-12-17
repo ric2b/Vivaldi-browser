@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,11 @@ namespace safe_browsing {
 enum class ExtensionSignalType {
   kTabsExecuteScript = 0,
   kRemoteHostContacted = 1,
-  kMaxValue = kRemoteHostContacted,
+  kCookiesGetAll = 2,
+  kPasswordReuse = 3,
+  kPotentialPasswordTheft = 4,
+  kCookiesGet = 5,
+  kMaxValue = kCookiesGet,
 };
 
 // An abstract signal. Subclasses provide type-specific functionality to

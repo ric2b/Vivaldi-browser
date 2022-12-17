@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,8 @@
 #include "base/check.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/scoped_observation.h"
+#include "base/time/time.h"
+#include "components/commerce/core/account_checker.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #include "components/session_proto_db/session_proto_storage.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -29,6 +31,32 @@ class SubscriptionsStorage;
 enum class SubscriptionType;
 struct CommerceSubscription;
 
+// Possible result status of a product (un)tracking request. This enum needs to
+// match the values in enums.xml.
+enum class SubscriptionsRequestStatus {
+  kSuccess = 0,
+  // Server failed to parse the request.
+  kServerParseError = 1,
+  // Server successfully parsed the request, but failed afterwards.
+  kServerInternalError = 2,
+  // Local storage failed to load, create, or delete subscriptions.
+  kStorageError = 3,
+  // If the last sync with server failed, we just drop this request.
+  kLastSyncFailed = 4,
+  // The passed in argument is invalid.
+  kInvalidArgument = 5,
+  // The request was lost somewhere unknown and never came back. This is used
+  // for monitoring purpose only and should never happen if the subscriptions
+  // work correctly.
+  kLost = 6,
+
+  // This enum must be last and is only used for histograms.
+  kMaxValue = kLost
+};
+
+using SubscriptionsRequestCallback =
+    base::OnceCallback<void(SubscriptionsRequestStatus)>;
+
 class SubscriptionsManager : public signin::IdentityManager::Observer {
  public:
   SubscriptionsManager(
@@ -36,12 +64,14 @@ class SubscriptionsManager : public signin::IdentityManager::Observer {
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       SessionProtoStorage<
           commerce_subscription_db::CommerceSubscriptionContentProto>*
-          subscription_proto_db);
+          subscription_proto_db,
+      AccountChecker* account_checker);
   // Used for tests. The passed in objects are ordinarily created with
   // parameters from the non-test constructor.
   SubscriptionsManager(signin::IdentityManager* identity_manager,
                        std::unique_ptr<SubscriptionsServerProxy> server_proxy,
-                       std::unique_ptr<SubscriptionsStorage> storage);
+                       std::unique_ptr<SubscriptionsStorage> storage,
+                       AccountChecker* account_checker);
   SubscriptionsManager(const SubscriptionsManager&) = delete;
   SubscriptionsManager& operator=(const SubscriptionsManager&) = delete;
   ~SubscriptionsManager() override;
@@ -54,6 +84,13 @@ class SubscriptionsManager : public signin::IdentityManager::Observer {
       std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
       base::OnceCallback<void(bool)> callback);
 
+  // If a |subscription| should exist but we cannot find it in local
+  // subscriptions, or vice versa, we should sync local subscriptions with the
+  // server. This is mainly used to keep local subscriptions up to date when
+  // users operate on multiple devices.
+  void VerifyIfSubscriptionExists(CommerceSubscription subscription,
+                                  bool should_exist);
+
   // For tests only, return init_succeeded_.
   bool GetInitSucceededForTesting();
 
@@ -62,6 +99,8 @@ class SubscriptionsManager : public signin::IdentityManager::Observer {
 
   // For tests only, return whether there are any pending requests.
   bool HasPendingRequestsForTesting();
+
+  void SetLastRequestStartedTimeForTesting(base::Time time);
 
  private:
   enum class AsyncOperation {
@@ -73,11 +112,11 @@ class SubscriptionsManager : public signin::IdentityManager::Observer {
   struct Request {
     Request(SubscriptionType type,
             AsyncOperation operation,
-            base::OnceCallback<void(bool)> callback);
+            SubscriptionsRequestCallback callback);
     Request(SubscriptionType type,
             AsyncOperation operation,
             std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
-            base::OnceCallback<void(bool)> callback);
+            SubscriptionsRequestCallback callback);
     Request(const Request&) = delete;
     Request& operator=(const Request&) = delete;
     Request(Request&&);
@@ -87,11 +126,12 @@ class SubscriptionsManager : public signin::IdentityManager::Observer {
     SubscriptionType type;
     AsyncOperation operation;
     std::unique_ptr<std::vector<CommerceSubscription>> subscriptions;
-    base::OnceCallback<void(bool)> callback;
+    SubscriptionsRequestCallback callback;
   };
 
   // Fetch all backend subscriptions and sync with local storage. This should
   // only be called on manager instantiation and user primary account changed.
+  // TODO(crbug.com/1364806): Rename to SyncSubscriptions.
   void InitSubscriptions();
 
   // Check if there is any request running. If not, process the next request in
@@ -110,15 +150,25 @@ class SubscriptionsManager : public signin::IdentityManager::Observer {
 
   void GetRemoteSubscriptionsAndUpdateStorage(
       SubscriptionType type,
-      base::OnceCallback<void(bool)> callback);
+      SubscriptionsRequestCallback callback);
 
-  void HandleManageSubscriptionsResponse(
+  void HandleGetSubscriptionsResponse(
       SubscriptionType type,
-      base::OnceCallback<void(bool)> callback,
-      bool succeeded);
+      SubscriptionsRequestCallback callback,
+      SubscriptionsRequestStatus status,
+      std::unique_ptr<std::vector<CommerceSubscription>> remote_subscriptions);
+
+  void HandleManageSubscriptionsResponse(SubscriptionType type,
+                                         SubscriptionsRequestCallback callback,
+                                         SubscriptionsRequestStatus status);
+
+  void HandleCheckLocalSubscriptionResponse(bool should_exisit,
+                                            bool is_subscribed);
 
   void OnPrimaryAccountChanged(
       const signin::PrimaryAccountChangeEvent& event_details) override;
+
+  bool HasRequestRunning();
 
   // Hold coming requests until previous ones have finished to avoid race
   // conditions.
@@ -131,6 +181,10 @@ class SubscriptionsManager : public signin::IdentityManager::Observer {
   // Whether there is any request running.
   bool has_request_running_ = false;
 
+  base::Time last_request_started_time_ = base::Time();
+
+  AsyncOperation last_request_operation_;
+
   base::ScopedObservation<signin::IdentityManager,
                           signin::IdentityManager::Observer>
       scoped_identity_manager_observation_{this};
@@ -138,6 +192,8 @@ class SubscriptionsManager : public signin::IdentityManager::Observer {
   std::unique_ptr<SubscriptionsServerProxy> server_proxy_;
 
   std::unique_ptr<SubscriptionsStorage> storage_;
+
+  raw_ptr<AccountChecker> account_checker_;
 
   base::WeakPtrFactory<SubscriptionsManager> weak_ptr_factory_;
 };

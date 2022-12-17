@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">인쇄... (&amp;P)</translation>
 <translation id="1181037720776840403">제거</translation>
 <translation id="1187722533808055681">유휴 상태 해제</translation>
-<translation id="119944043368869598">모두 삭제</translation>
 <translation id="1221825588892235038">선택 영역만</translation>
 <translation id="1234736487471201993">이 이미지의 QR코드 생성</translation>
 <translation id="1244303850296295656">확장 프로그램 오류</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">전체 선택(&amp;A)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">숫자로 인쇄 부수를 표시하세요(1부터 <ph name="MAX_COPIES" />까지).</translation>
-<translation id="1963227389609234879">모두 제거</translation>
 <translation id="1994173015038366702">사이트 URL</translation>
 <translation id="2019718679933488176">새 탭에서 오디오 열기(&amp;O)</translation>
 <translation id="2050339315714019657">세로 방향</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">일반 텍스트로 붙여넣기</translation>
 <translation id="2249605167705922988">예: 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">보호된 컨텐츠를 식별하는 것을 허용 (컴퓨터 재시작이 필요할 수도 있음)</translation>
-<translation id="2277255602909579701">모든 쿠키 및 사이트 데이터</translation>
 <translation id="2280486287150724112">오른쪽 여백</translation>
 <translation id="2282146716419988068">GPU 프로세스</translation>
 <translation id="2301382460326681002">확장 프로그램 루트 디렉토리가 잘못되었습니다.</translation>
@@ -122,7 +119,6 @@
 <translation id="3084548735795614657">여기에 놓으면 확장 프로그램이 설치됩니다</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">사용자 핸들</translation>
-<translation id="3127156390846601284">기기에 저장된 데이터 중 표시된 모든 사이트의 데이터가 삭제됩니다. 계속하시겠습니까?</translation>
 <translation id="3129173833825111527">왼쪽 여백</translation>
 <translation id="3144647712221361880">다음으로 링크 열기</translation>
 <translation id="3222066309010235055">사전 렌더링: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +141,6 @@
 <translation id="3387614642886316601">향상된 맞춤법 검사 기능 사용</translation>
 <translation id="3390013585654699824">앱 세부정보</translation>
 <translation id="3393582007140394275">화면을 전송할 수 없습니다.</translation>
-<translation id="3432227430032737297">표시된 항목 모두 제거</translation>
 <translation id="345693547134384690">새 탭에서 이미지 열기(&amp;I)</translation>
 <translation id="3494769164076977169">사이트에서 첫 파일 다운로드 후 자동으로 파일을 다운로드하려고 할 때 확인(권장)</translation>
 <translation id="3505030558724226696">기기 액세스 취소</translation>
@@ -204,7 +199,6 @@
 <translation id="4409697491990005945">여백</translation>
 <translation id="4423376891418188461">설정 복원</translation>
 <translation id="4478664379124702289">다른 이름으로 링크 저장(&amp;K)...</translation>
-<translation id="4579581181964204535"><ph name="HOST_NAME" />을(를) 전송할 수 없습니다.</translation>
 <translation id="4593021220803146968"><ph name="URL" />(으)로 이동(&amp;G)</translation>
 <translation id="4595560905247879544">앱 및 확장 프로그램은 관리자(<ph name="CUSTODIAN_NAME" />)만 수정할 수 있습니다.</translation>
 <translation id="4613271546271159013">새 탭을 열면 표시되는 페이지가 확장 프로그램에 의해 변경되었습니다.</translation>
@@ -277,7 +271,6 @@
 <translation id="5747809636523347288"><ph name="URL" /> 붙여넣기 및 이동(&amp;S)</translation>
 <translation id="5759728514498647443"><ph name="APP_NAME" />을(를) 통해 인쇄하려고 전송한 문서는 <ph name="APP_NAME" />에서 읽을 수 있습니다.</translation>
 <translation id="5764483294734785780">다른 이름으로 오디오 저장(&amp;V)...</translation>
-<translation id="577624874850706961">쿠키 검색</translation>
 <translation id="5780973441651030252">프로세스 우선순위</translation>
 <translation id="5804241973901381774">권한</translation>
 <translation id="5828633471261496623">인쇄 중...</translation>
@@ -290,7 +283,6 @@
 <translation id="5965661248935608907">또한 홈 버튼을 클릭하거나 검색주소창에서 검색할 때 표시되는 페이지를 설정합니다.</translation>
 <translation id="5978277834170881274">기본 맞춤법 검사 사용(&amp;U)</translation>
 <translation id="5979421442488174909"><ph name="LANGUAGE" />(으)로 번역 (&amp;T)</translation>
-<translation id="6011449291337289699">사이트 데이터 삭제</translation>
 <translation id="6042308850641462728">더보기</translation>
 <translation id="6086846494333236931">관리자가 설치함</translation>
 <translation id="6101226222197207147">새 앱이 추가됨(<ph name="EXTENSION_NAME" />)</translation>
@@ -404,7 +396,6 @@
         =1{다운로드 진행 중}other{다운로드 진행 중}}</translation>
 <translation id="8230134520748321204"><ph name="ORIGIN" /> 비밀번호를 저장하시겠습니까?</translation>
 <translation id="8261378640211443080">이 확장 프로그램은 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />에 표시되지 않으며 사용자 모르게 추가되었을 수 있습니다.</translation>
-<translation id="8339059274628563283"><ph name="SITE" />에 로컬 저장된 데이터</translation>
 <translation id="8351419472474436977">이 확장 프로그램이 프록시 설정을 제어할 수 있게 되었으며, 따라서 사용자가 온라인에서 수행하는 모든 작업을 변경 및 중단하고 엿볼 수 있게 되었음을 의미합니다. 이와 같이 변경된 이유가 확실하지 않다면 이 설정을 사용하지 않는 것이 좋습니다.</translation>
 <translation id="8382913212082956454">이메일 주소 복사 (&amp;E)</translation>
 <translation id="8413385045638830869">우선 확인(권장)</translation>

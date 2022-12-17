@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1100,7 +1100,7 @@ TimeWindowLimit::TimeWindowLimit(const base::Value& window_limit_dict) {
     return;
 
   for (const base::Value& entry_dict :
-       window_limit_dict.FindKey(kWindowLimitEntries)->GetListDeprecated()) {
+       window_limit_dict.FindKey(kWindowLimitEntries)->GetList()) {
     const base::Value* effective_day =
         entry_dict.FindKey(kWindowLimitEntryEffectiveDay);
     const base::Value* starts_at =

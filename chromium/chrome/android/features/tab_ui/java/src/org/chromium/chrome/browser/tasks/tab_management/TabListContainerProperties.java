@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,9 +59,8 @@ class TabListContainerProperties {
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_PRIVATE =
             new PropertyModel.WritableObjectPropertyKey<>(true);
 
-    public static final PropertyKey[] ALL_KEYS =
-            new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO, VISIBILITY_LISTENER, INITIAL_SCROLL_INDEX,
-                    ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN, BOTTOM_CONTROLS_HEIGHT,
-                    SHADOW_TOP_OFFSET, BOTTOM_PADDING, TAB_LIST_ITEM_ANIMATOR_ENABLED,
+    public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO,
+            VISIBILITY_LISTENER, INITIAL_SCROLL_INDEX, ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN,
+            BOTTOM_CONTROLS_HEIGHT, SHADOW_TOP_OFFSET, BOTTOM_PADDING,
             SCROLL_INDEX_NORMAL, SCROLL_INDEX_PRIVATE}; // Vivaldi
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -57,7 +57,6 @@ enum class PowerLineFrequency {
 
 enum class VideoCaptureBufferType {
   kSharedMemory,
-  kSharedMemoryViaRawFileDescriptor,
   kMailboxHolder,
   kGpuMemoryBuffer
 };
@@ -234,7 +233,8 @@ enum class VideoCaptureFrameDropReason {
   kResolutionAdapterHasNoCallbacks = 24,
   kVideoTrackFrameDelivererNotEnabledReplacingWithBlackFrame = 25,
   kRendererSinkFrameDelivererIsNotStarted = 26,
-  kMaxValue = 26
+  kCropVersionNotCurrent = 27,
+  kMaxValue = 27
 };
 
 // Assert that the int:frequency mapping is correct.
@@ -287,11 +287,17 @@ typedef std::vector<VideoCaptureFormat> VideoCaptureFormats;
 // format of frames in which the client would like to have captured frames
 // returned.
 struct CAPTURE_EXPORT VideoCaptureParams {
-  // Result struct for SuggestContraints() method.
+  // Result struct for SuggestConstraints() method.
   struct SuggestedConstraints {
     gfx::Size min_frame_size;
     gfx::Size max_frame_size;
     bool fixed_aspect_ratio;
+
+    bool operator==(const SuggestedConstraints& other) const {
+      return min_frame_size == other.min_frame_size &&
+             max_frame_size == other.max_frame_size &&
+             fixed_aspect_ratio == other.fixed_aspect_ratio;
+    }
   };
 
   VideoCaptureParams();

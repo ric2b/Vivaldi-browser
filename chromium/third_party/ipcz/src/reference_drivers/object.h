@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,11 +20,6 @@ class Object : public RefCounted {
     kTransport,
     kMemory,
     kMapping,
-
-    // A non-standard driver object type, used to exercise more complex, custom
-    // driver object de/serialization via boxing and unboxing in tests. See the
-    // Blob definition in src/reference_drivers/blob.h.
-    kBlob,
 
 #if defined(OS_LINUX)
     // A non-standard driver object type which wraps a FileDescriptor object.

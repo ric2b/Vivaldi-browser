@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -191,6 +191,12 @@ scoped_refptr<gfx::NativePixmap> X11SurfaceFactory::CreateNativePixmap(
   // CreateNativePixmap is non-blocking operation. Thus, it is safe to call it
   // and return the result with the provided callback.
   return pixmap;
+}
+
+bool X11SurfaceFactory::CanCreateNativePixmapForFormat(
+    gfx::BufferFormat format) {
+  return ui::GpuMemoryBufferSupportX11::GetInstance()
+      ->CanCreateNativePixmapForFormat(format);
 }
 
 void X11SurfaceFactory::CreateNativePixmapAsync(gfx::AcceleratedWidget widget,

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,8 @@
 #include "ash/public/cpp/login_accelerators.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/feature_list.h"
+#include "base/immediate_crash.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/syslog_logging.h"
@@ -18,8 +20,12 @@
 #include "chrome/browser/ash/app_mode/startup_app_launcher.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_launcher.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
+#include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_service_launcher.h"
+#include "chrome/browser/ash/crosapi/browser_data_migrator.h"
+#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
+#include "chrome/browser/ash/crosapi/force_installed_tracker_ash.h"
 #include "chrome/browser/ash/login/enterprise_user_session_metrics.h"
 #include "chrome/browser/ash/login/screens/encryption_migration_screen.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
@@ -273,6 +279,21 @@ bool KioskLaunchController::HandleAccelerator(LoginAcceleratorAction action) {
 
 void KioskLaunchController::OnProfileLoaded(Profile* profile) {
   SYSLOG(INFO) << "Profile loaded... Starting app launch.";
+
+  // Call `ClearMigrationStep()` once per signin so that the check for migration
+  // is run exactly once per signin. Check the comment for `kMigrationStep` in
+  // browser_data_migrator.h for details.
+  BrowserDataMigratorImpl::ClearMigrationStep(g_browser_process->local_state());
+
+  const user_manager::User* user =
+      ProfileHelper::Get()->GetUserByProfile(profile);
+  if (BrowserDataMigratorImpl::MaybeRestartToMigrate(
+          user->GetAccountId(), user->username_hash(),
+          crosapi::browser_util::PolicyInitState::kAfterInit)) {
+    LOG(WARNING) << "Restarting chrome to run profile migration.";
+    return;
+  }
+
   profile_ = profile;
 
   // This is needed to trigger input method extensions being loaded.
@@ -297,8 +318,16 @@ void KioskLaunchController::OnProfileLoaded(Profile* profile) {
       case KioskAppType::kWebApp:
         // Make keyboard config sync with the `VirtualKeyboardFeatures` policy.
         ChromeKeyboardControllerClient::Get()->SetKeyboardConfigFromPref(true);
-        app_launcher_ = std::make_unique<WebKioskAppLauncher>(
-            profile, this, *kiosk_app_id_.account_id);
+        // TODO(b/242023891): |WebKioskAppServiceLauncher| does not support
+        // Lacros until App Service installation API is available.
+        if (base::FeatureList::IsEnabled(features::kKioskEnableAppService) &&
+            !crosapi::browser_util::IsLacrosEnabled()) {
+          app_launcher_ = std::make_unique<WebKioskAppServiceLauncher>(
+              profile, this, *kiosk_app_id_.account_id);
+        } else {
+          app_launcher_ = std::make_unique<WebKioskAppLauncher>(
+              profile, this, *kiosk_app_id_.account_id);
+        }
         break;
     }
   }
@@ -452,13 +481,22 @@ void KioskLaunchController::OnAppPrepared() {
 
   // Launch lacros-chrome if the corresponding feature flags are enabled.
   if (crosapi::browser_util::IsLacrosEnabledInWebKioskSession()) {
-    // Start observing the installation status of extensions in Lacros.
-    force_installed_observation_for_lacros_.Observe(
-        GetForceInstalledTrackerAsh());
-    StartTimerToWaitForExtensions();
+    crosapi::ForceInstalledTrackerAsh* tracker_ash =
+        GetForceInstalledTrackerAsh();
+
+    if (tracker_ash && !tracker_ash->IsReady()) {
+      // Start observing the installation status of extensions in Lacros.
+      force_installed_observation_for_lacros_.Observe(
+          GetForceInstalledTrackerAsh());
+      StartTimerToWaitForExtensions();
+    } else {
+      FinishForcedExtensionsInstall(/*timeout=*/false);
+    }
 
     // Initialize and start Lacros for preparing force-installed extensions.
-    crosapi::BrowserManager::Get()->InitializeAndStart();
+    if (!crosapi::BrowserManager::Get()->IsRunningOrWillRun())
+      crosapi::BrowserManager::Get()->InitializeAndStartIfNeeded();
+
     return;
   }
 
@@ -547,7 +585,14 @@ void KioskLaunchController::OnLaunchFailed(KioskAppLaunchError::Error error) {
   DCHECK_NE(KioskAppLaunchError::Error::kNone, error);
   SYSLOG(ERROR) << "Kiosk launch failed, error=" << static_cast<int>(error);
 
-  if (kiosk_app_id_.type == KioskAppType::kWebApp) {
+  // App Service launcher requires the web app to be installed. Temporary issues
+  // like URL redirection should not stop the app from being installed as
+  // placeholder. Force launching the app is not possible in case installation
+  // fails.
+  if (kiosk_app_id_.type == KioskAppType::kWebApp &&
+      error == KioskAppLaunchError::Error::kUnableToInstall &&
+      (!base::FeatureList::IsEnabled(features::kKioskEnableAppService) ||
+       crosapi::browser_util::IsLacrosEnabled())) {
     HandleWebAppInstallFailed();
     return;
   }

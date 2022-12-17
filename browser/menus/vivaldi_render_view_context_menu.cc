@@ -238,7 +238,7 @@ void VivaldiRenderViewContextMenu::InitMenu() {
   extensions::WebViewGuest* web_view_guest =
       extensions::WebViewGuest::FromWebContents(embedder_web_contents_);
   std::unique_ptr<ContextMenuContentType> content_type =
-      ContextMenuContentTypeFactory::Create(embedder_web_contents_, params_);
+      ContextMenuContentTypeFactory::Create(GetRenderFrameHost(), params_);
 
   bool is_vivaldi_origin = params_.page_url.host() == vivaldi::kVivaldiAppId;
   bool is_chrome_extension = params_.page_url.SchemeIs("chrome-extension");

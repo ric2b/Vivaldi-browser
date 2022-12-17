@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,10 +28,6 @@ WebXrPermissionContext::WebXrPermissionContext(
 }
 
 WebXrPermissionContext::~WebXrPermissionContext() = default;
-
-bool WebXrPermissionContext::IsRestrictedToSecureOrigins() const {
-  return true;
-}
 
 #if BUILDFLAG(IS_ANDROID)
 // There are two other permissions that need to check corresponding OS-level

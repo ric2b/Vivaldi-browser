@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,12 +11,12 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 
@@ -31,7 +31,7 @@ import org.vivaldi.browser.speeddial.SpeedDialUtils;
  */
 public class TabBookmarker {
     private final Activity mActivity;
-    private final Supplier<BookmarkBridge> mBookmarkBridgeSupplier;
+    private final Supplier<BookmarkModel> mBookmarkModelSupplier;
     private final Supplier<BottomSheetController> mBottomSheetControllerSupplier;
     private final Supplier<SnackbarManager> mSnackbarManagerSupplier;
     private final boolean mIsCustomTab;
@@ -39,18 +39,18 @@ public class TabBookmarker {
     /**
      * Constructor.
      * @param activity The current activity.
-     * @param bookmarkBridgeSupplier Supplier of the bookmark bridge for the current profile.
+     * @param bookmarkModelSupplier Supplier of the bookmark bridge for the current profile.
      * @param bottomSheetControllerSupplier Supplier of the {@link BottomSheetController} for this
      *         activity.
      * @param snackbarManagerSupplier Supplier of the {@link SnackbarManager}.
      * @param isCustomTab Whether this is a custom tab activity.
      */
     public TabBookmarker(@NonNull Activity activity,
-            @NonNull ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
+            @NonNull ObservableSupplier<BookmarkModel> bookmarkModelSupplier,
             @NonNull Supplier<BottomSheetController> bottomSheetControllerSupplier,
             @NonNull Supplier<SnackbarManager> snackbarManagerSupplier, boolean isCustomTab) {
         mActivity = activity;
-        mBookmarkBridgeSupplier = bookmarkBridgeSupplier;
+        mBookmarkModelSupplier = bookmarkModelSupplier;
         mBottomSheetControllerSupplier = bottomSheetControllerSupplier;
         mSnackbarManagerSupplier = snackbarManagerSupplier;
         mIsCustomTab = isCustomTab;
@@ -82,7 +82,7 @@ public class TabBookmarker {
      * @param currentTab The tab being currently shown.
      */
     public void startOrModifyPriceTracking(Tab currentTab) {
-        BookmarkId bookmarkId = mBookmarkBridgeSupplier.get().getUserBookmarkIdForTab(currentTab);
+        BookmarkId bookmarkId = mBookmarkModelSupplier.get().getUserBookmarkIdForTab(currentTab);
         if (bookmarkId == null) {
             addOrEditBookmark(currentTab, BookmarkType.NORMAL, /* fromExplicitTrackUi=*/true);
         } else {
@@ -100,7 +100,7 @@ public class TabBookmarker {
         }
 
         // Defense in depth against the UI being erroneously enabled.
-        BookmarkBridge bridge = mBookmarkBridgeSupplier.get();
+        BookmarkModel bridge = mBookmarkModelSupplier.get();
         if (bridge == null || !bridge.isEditBookmarksEnabled()) {
             assert false;
             return;

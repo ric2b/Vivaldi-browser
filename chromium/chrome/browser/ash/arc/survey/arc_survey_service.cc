@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -123,7 +123,7 @@ bool ArcSurveyService::LoadSurveyData(std::string survey_data) {
     VLOG(1) << "List of package names not found in the survey data.";
     return false;
   }
-  const base::Value::ConstListView items = list->GetListDeprecated();
+  const base::Value::List& items = list->GetList();
   if (items.empty()) {
     VLOG(1) << "List of package names is empty in the survey data.";
     return false;

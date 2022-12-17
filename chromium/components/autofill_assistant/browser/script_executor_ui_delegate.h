@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,7 +87,18 @@ class ScriptExecutorUiDelegate : public WaitForDomObserver {
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)> end_action_callback,
       base::OnceCallback<void(const ClientStatus&)>
-          view_inflation_finished_callback) = 0;
+          view_inflation_finished_callback,
+      base::RepeatingCallback<void(const RequestBackendDataProto&)>
+          request_backend_data_callback,
+      base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+          show_account_screen_callback) = 0;
+
+  // Displays the user's |email_address| account page in a platform-appropriate
+  // way. On Android, for example, this is accomplished by firing an intent to
+  // the GMS core library. |proto| defines which part of the user's account page
+  // should be displayed.
+  virtual void ShowAccountScreen(const ShowAccountScreenProto& proto,
+                                 const std::string& email_address) = 0;
 
   // Sets the persistent generic UI to show to the user.
   virtual void SetPersistentGenericUi(
@@ -107,6 +118,7 @@ class ScriptExecutorUiDelegate : public WaitForDomObserver {
   // Executes the external action.
   virtual void ExecuteExternalAction(
       const external::Action& external_action,
+      bool is_interrupt,
       base::OnceCallback<void(ExternalActionDelegate::DomUpdateCallback)>
           start_dom_checks_callback,
       base::OnceCallback<void(const external::Result& result)>

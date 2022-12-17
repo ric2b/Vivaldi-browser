@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,9 +27,11 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/traced_value.h"
-#include "build/build_config.h"
 #include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/command_buffer/common/sync_token.h"
+#if BUILDFLAG(USE_DAWN)
+#include "gpu/command_buffer/service/dawn_caching_interface.h"
+#endif
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
@@ -37,7 +39,6 @@
 #include "gpu/command_buffer/service/memory_program_cache.h"
 #include "gpu/command_buffer/service/passthrough_program_cache.h"
 #include "gpu/command_buffer/service/scheduler.h"
-#include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/config/gpu_crash_keys.h"
 #include "gpu/config/gpu_finch_features.h"
@@ -368,6 +369,10 @@ GpuChannelManager::GpuChannelManager(
     gr_shader_cache_.emplace(gpu_preferences.gpu_program_cache_size, this);
     gr_shader_cache_->CacheClientIdOnDisk(gpu::kDisplayCompositorClientId);
   }
+#if BUILDFLAG(USE_DAWN)
+  dawn_caching_interface_factory_ =
+      std::make_unique<webgpu::DawnCachingInterfaceFactory>();
+#endif
 }
 
 GpuChannelManager::~GpuChannelManager() {
@@ -414,8 +419,7 @@ gles2::ProgramCache* GpuChannelManager::program_cache() {
         workarounds.disable_program_disk_cache;
 
     // Use the EGL blob cache extension for the passthrough decoder.
-    if (gpu_preferences_.use_passthrough_cmd_decoder &&
-        gles2::PassthroughCommandDecoderSupported()) {
+    if (use_passthrough_cmd_decoder()) {
       program_cache_ = std::make_unique<gles2::PassthroughProgramCache>(
           gpu_preferences_.gpu_program_cache_size, disable_disk_cache);
     } else {
@@ -528,7 +532,9 @@ void GpuChannelManager::OnDiskCacheHandleDestoyed(
       break;
     }
     case gpu::GpuDiskCacheType::kDawnWebGPU: {
-      // TODO(dawn:549) Implement cache destruction for Dawn.
+#if BUILDFLAG(USE_DAWN)
+      dawn_caching_interface_factory_->ReleaseHandle(handle);
+#endif
       break;
     }
   }
@@ -576,8 +582,16 @@ void GpuChannelManager::PopulateCache(const gpu::GpuDiskCacheHandle& handle,
       break;
     }
     case gpu::GpuDiskCacheType::kDawnWebGPU: {
-      // TODO(dawn:549) Implement populating cache for Dawn.
-      NOTREACHED();
+#if BUILDFLAG(USE_DAWN)
+      std::unique_ptr<gpu::webgpu::DawnCachingInterface>
+          dawn_caching_interface =
+              dawn_caching_interface_factory_->CreateInstance(handle);
+      if (!dawn_caching_interface) {
+        return;
+      }
+      dawn_caching_interface->StoreData(key.data(), key.size(), data.data(),
+                                        data.size());
+#endif
       break;
     }
   }
@@ -603,9 +617,10 @@ void GpuChannelManager::LoseAllContexts() {
 
 SharedContextState::ContextLostCallback
 GpuChannelManager::GetContextLostCallback() {
-  return base::BindPostTask(task_runner_,
-                            base::BindOnce(&GpuChannelManager::OnContextLost,
-                                           weak_factory_.GetWeakPtr()));
+  return base::BindPostTask(
+      task_runner_,
+      base::BindOnce(&GpuChannelManager::OnContextLost,
+                     weak_factory_.GetWeakPtr(), context_lost_count_ + 1));
 }
 
 GpuChannelManager::OnMemoryAllocatedChangeCallback
@@ -827,10 +842,8 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
   enable_angle_validation = true;
 #endif
 
-  const bool use_passthrough_decoder =
-      gles2::PassthroughCommandDecoderSupported() &&
-      gpu_preferences_.use_passthrough_cmd_decoder;
   scoped_refptr<gl::GLShareGroup> share_group;
+  bool use_passthrough_decoder = use_passthrough_cmd_decoder();
   if (use_passthrough_decoder) {
     share_group = new gl::GLShareGroup();
     // Virtualized contexts don't work with passthrough command decoder.
@@ -911,7 +924,8 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
   auto shared_context_state = base::MakeRefCounted<SharedContextState>(
       std::move(share_group), std::move(surface), std::move(context),
       use_virtualized_gl_contexts,
-      base::BindOnce(&GpuChannelManager::OnContextLost, base::Unretained(this)),
+      base::BindOnce(&GpuChannelManager::OnContextLost, base::Unretained(this),
+                     context_lost_count_ + 1),
       gpu_preferences_.gr_context_type, vulkan_context_provider_,
       metal_context_provider_, dawn_context_provider_,
       peak_memory_monitor_.GetWeakPtr());
@@ -951,8 +965,22 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
   return shared_context_state_;
 }
 
-void GpuChannelManager::OnContextLost(bool synthetic_loss) {
+void GpuChannelManager::OnContextLost(int context_lost_count,
+                                      bool synthetic_loss) {
+  if (context_lost_count < 0)
+    context_lost_count = context_lost_count_ + 1;
+  // Because of the DrDC, we may receive context loss from the GPU main and
+  // thee DrDC thread. If a context loss happens on the GPU main thread first,
+  // a task will be post to the DrDC thread to trigger the context loss on
+  // the DrDC thread, and then the DrDC will report context loss to the GPU main
+  // thread again. So we use the |context_lost_count| to help us to ignore
+  // context loss which has been handled.
+  if (context_lost_count <= context_lost_count_)
+    return;
+  DCHECK_EQ(context_lost_count, context_lost_count_ + 1);
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // ANGLE doesn't support recovering from context lost very well.
+  bool force_restart = use_passthrough_cmd_decoder();
 
   // Add crash keys for context lost count and time.
   static auto* const lost_count_crash_key = base::debug::AllocateCrashKeyString(
@@ -971,14 +999,21 @@ void GpuChannelManager::OnContextLost(bool synthetic_loss) {
   auto lost_time = base::TimeTicks::Now() - creation_time_;
   SetCrashKeyTimeDelta(lost_time_crash_key, lost_time);
 
+  // If context lost 5 times, restart the GPU process.
+  force_restart |= context_lost_count_ >= 5;
+
   if (!context_lost_time_.is_zero()) {
     auto interval = lost_time - context_lost_time_;
     SetCrashKeyTimeDelta(lost_interval_crash_key, interval);
+    // If context lost again in 5 seconds, restart the GPU process.
+    force_restart |= (interval <= base::Seconds(5));
   }
 
+  force_restart &=
+      base::FeatureList::IsEnabled(features::kForceRestartGpuKillSwitch);
   context_lost_time_ = lost_time;
   bool is_gl = gpu_preferences_.gr_context_type == GrContextType::kGL;
-  if (synthetic_loss && is_gl)
+  if (!force_restart && synthetic_loss && is_gl)
     return;
 
   // Lose all other contexts.
@@ -989,7 +1024,7 @@ void GpuChannelManager::OnContextLost(bool synthetic_loss) {
   }
 
   // Work around issues with recovery by allowing a new GPU process to launch.
-  if (gpu_driver_bug_workarounds_.exit_on_context_lost ||
+  if (force_restart || gpu_driver_bug_workarounds_.exit_on_context_lost ||
       (shared_context_state_ && !shared_context_state_->GrContextIsGL())) {
     delegate_->MaybeExitOnContextLost();
   }

@@ -42,7 +42,7 @@
     attribute EventHandler onchange;
     attribute EventHandler onclick;
     attribute EventHandler onclose;
-    [RuntimeEnabled=ContentVisibilityAutoStateChangedEvent] attribute EventHandler oncontentvisibilityautostatechanged;
+    [RuntimeEnabled=ContentVisibilityAutoStateChangeEvent] attribute EventHandler oncontentvisibilityautostatechange;
     attribute EventHandler oncontextlost;
     attribute EventHandler oncontextmenu;
     attribute EventHandler oncontextrestored;
@@ -83,6 +83,8 @@
     attribute EventHandler onpause;
     attribute EventHandler onplay;
     attribute EventHandler onplaying;
+    [RuntimeEnabled=HTMLPopupAttribute] attribute EventHandler onpopuphide;
+    [RuntimeEnabled=HTMLPopupAttribute] attribute EventHandler onpopupshow;
     attribute EventHandler onprogress;
     attribute EventHandler onratechange;
     attribute EventHandler onreset;

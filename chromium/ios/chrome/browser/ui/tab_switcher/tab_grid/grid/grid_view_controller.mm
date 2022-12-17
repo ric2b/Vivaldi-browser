@@ -1,21 +1,20 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_view_controller.h"
 
-#include "base/check_op.h"
-#include "base/cxx17_backports.h"
-#include "base/ios/block_types.h"
+#import "base/check_op.h"
+#import "base/cxx17_backports.h"
+#import "base/ios/block_types.h"
 #import "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "base/notreached.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "base/notreached.h"
 #import "base/numerics/safe_conversions.h"
-#include "base/strings/sys_string_conversions.h"
-#import "ios/chrome/browser/commerce/price_alert_util.h"
-#include "ios/chrome/browser/procedural_block_types.h"
+#import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/procedural_block_types.h"
 #import "ios/chrome/browser/ui/commands/thumb_strip_commands.h"
 #import "ios/chrome/browser/ui/commerce/price_card/price_card_data_source.h"
 #import "ios/chrome/browser/ui/commerce/price_card/price_card_item.h"
@@ -42,9 +41,20 @@
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ios/public/provider/chrome/browser/modals/modals_api.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/modals/modals_api.h"
+#import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
+#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
+#import "ui/base/device_form_factor.h"
+
+using ui::GetDeviceFormFactor;
+using ui::DEVICE_FORM_FACTOR_TABLET;
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -187,6 +197,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   UICollectionView* collectionView =
       [[UICollectionView alloc] initWithFrame:CGRectZero
                          collectionViewLayout:self.currentLayout];
+
+  if (IsVivaldiRunning()) {
+    UICollectionViewCompositionalLayout* layout = [self createLayout];
+    collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero
+                                        collectionViewLayout:layout];
+  } // End Vivaldi
+
   [collectionView registerClass:[GridCell class]
       forCellWithReuseIdentifier:kCellIdentifier];
   [collectionView registerClass:[PlusSignCell class]
@@ -754,8 +771,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   // Make sure that the long pressed cell is selected before initiating a drag
   // from it.
   NSUInteger index = base::checked_cast<NSUInteger>(indexPath.item);
-  NSString* itemID = self.items[index].identifier;
-  if (![self isItemWithIDSelectedForEditing:itemID]) {
+  NSString* pressedItemID = self.items[index].identifier;
+  if (![self isItemWithIDSelectedForEditing:pressedItemID]) {
     [self tappedItemAtIndexPath:indexPath];
   }
 
@@ -1410,15 +1427,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                        }
                                      }
                                    }];
-  if (IsPriceAlertsEnabled()) {
-    [self.priceCardDataSource
-        priceCardForIdentifier:itemIdentifier
-                    completion:^(PriceCardItem* priceCardItem) {
-                      if (priceCardItem && [cell hasIdentifier:itemIdentifier])
-                        [cell setPriceDrop:priceCardItem.price
-                             previousPrice:priceCardItem.previousPrice];
-                    }];
-  }
+  [self.priceCardDataSource
+      priceCardForIdentifier:itemIdentifier
+                  completion:^(PriceCardItem* priceCardItem) {
+                    if (priceCardItem && [cell hasIdentifier:itemIdentifier])
+                      [cell setPriceDrop:priceCardItem.price
+                           previousPrice:priceCardItem.previousPrice];
+                  }];
   if (self.thumbStripEnabled &&
       ![itemIdentifier isEqualToString:self.selectedItemID]) {
     cell.opacity = self.notSelectedTabCellOpacity;
@@ -1430,6 +1445,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   } else {
     [cell hideActivityIndicator];
   }
+
+  // Vivaldi
+  // Sets the cell selection style
+  [cell setSelected:[itemIdentifier isEqualToString:self.selectedItemID]];
+  // End Vivaldi
+
 }
 
 // Tells the delegate that the user tapped the item with identifier
@@ -1825,6 +1846,169 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     (UIGestureRecognizer*)recognizer {
   [self.thumbStripHandler
       closeThumbStripWithTrigger:ViewRevealTrigger::BackgroundSwipe];
+}
+
+#pragma mark - VIVALDI
+
+/// Create and return the comositional layout for the collection view
+- (UICollectionViewCompositionalLayout*)createLayout {
+  UICollectionViewCompositionalLayout *layout =
+    [[UICollectionViewCompositionalLayout alloc]
+      initWithSectionProvider:
+       ^NSCollectionLayoutSection*(NSInteger sectionIndex,
+       id<NSCollectionLayoutEnvironment> layoutEnvironment) {
+    return [self layoutSectionFor:sectionIndex environment:layoutEnvironment];
+  }];
+
+  return layout;
+}
+
+- (NSCollectionLayoutSection*)layoutSectionFor:(NSInteger)index
+     environment:(id<NSCollectionLayoutEnvironment>)environment {
+  if (index == kSuggestedActionsSectionIndex) {
+    return [self layoutSectionForSuggested:index environment:environment];
+  } else {
+    return [self layoutSectionForRegular:index environment:environment];
+  }
+}
+
+/// Returns the section for regular tab grid item
+- (NSCollectionLayoutSection*)layoutSectionForRegular:(NSInteger)index
+     environment:(id<NSCollectionLayoutEnvironment>)environment {
+
+  CGFloat gridItemWidth = [self getItemWidth];
+  CGFloat gridItemHeight = [self getItemHeight];
+  CGFloat sectionPadding =
+    self.isCurrentDeviceTablet ? self.getSectionPaddingForTablet
+                               : self.getSectionPaddingForPhone;
+  CGFloat itemPadding = [self getItemPadding];
+
+  NSCollectionLayoutSize *itemSize =
+    [NSCollectionLayoutSize
+      sizeWithWidthDimension:[NSCollectionLayoutDimension
+                                fractionalWidthDimension:gridItemWidth]
+             heightDimension:[NSCollectionLayoutDimension
+                              fractionalWidthDimension:gridItemHeight]];
+
+  NSCollectionLayoutItem *item =
+    [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
+  NSArray *items = [[NSArray alloc] initWithObjects:item, nil];
+
+  item.contentInsets = NSDirectionalEdgeInsetsMake(itemPadding,
+                                                   itemPadding,
+                                                   itemPadding,
+                                                   itemPadding);
+
+  NSCollectionLayoutSize *groupSize =
+    [NSCollectionLayoutSize
+      sizeWithWidthDimension:[NSCollectionLayoutDimension
+                                fractionalWidthDimension:1.0]
+             heightDimension:[NSCollectionLayoutDimension
+                              fractionalWidthDimension:gridItemHeight]];
+  NSCollectionLayoutGroup *group =
+    [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize
+                                                  subitems:items];
+
+  NSCollectionLayoutSection *section =
+    [NSCollectionLayoutSection sectionWithGroup:group];
+  section.contentInsets =
+    NSDirectionalEdgeInsetsMake(vTabGridCollectionTopPadding,
+                                sectionPadding,
+                                vTabGridCollectionBottomPadding,
+                                sectionPadding);
+  return section;
+}
+
+/// Returns the section for suggested action when search is performed in
+/// the tab switcher.
+- (NSCollectionLayoutSection*)layoutSectionForSuggested:(NSInteger)index
+     environment:(id<NSCollectionLayoutEnvironment>)environment {
+
+  CGFloat itemHeight = self.suggestedActionsViewController.contentHeight;
+  CGFloat sectionPadding =
+    self.isCurrentDeviceTablet ? self.getSectionPaddingForTablet
+                               : self.getSectionPaddingForPhone;
+  CGFloat itemPadding = [self getItemPadding];
+
+  NSCollectionLayoutSize *itemSize =
+    [NSCollectionLayoutSize
+      sizeWithWidthDimension:[NSCollectionLayoutDimension
+                                fractionalWidthDimension:1.0]
+             heightDimension:[NSCollectionLayoutDimension
+                                estimatedDimension:itemHeight]];
+
+  NSCollectionLayoutItem *item =
+    [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
+  NSArray *items = [[NSArray alloc] initWithObjects:item, nil];
+
+  item.contentInsets = NSDirectionalEdgeInsetsMake(itemPadding,
+                                                   itemPadding,
+                                                   itemPadding,
+                                                   itemPadding);
+
+  NSCollectionLayoutSize *groupSize =
+    [NSCollectionLayoutSize
+      sizeWithWidthDimension:[NSCollectionLayoutDimension
+                                fractionalWidthDimension:1.0]
+             heightDimension:[NSCollectionLayoutDimension
+                                estimatedDimension:itemHeight]];
+  NSCollectionLayoutGroup *group =
+    [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize
+                                                  subitems:items];
+
+  NSCollectionLayoutSection *section =
+    [NSCollectionLayoutSection sectionWithGroup:group];
+  section.contentInsets =
+    NSDirectionalEdgeInsetsMake(vTabGridCollectionTopPadding,
+                                sectionPadding,
+                                vTabGridCollectionBottomPadding,
+                                sectionPadding);
+  return section;
+}
+
+/// Returns whether current device is iPhone or iPad.
+- (BOOL)isCurrentDeviceTablet {
+  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET;
+}
+
+/// Returns the size for each tab grid item tile.
+- (CGFloat)getItemWidth {
+  if (self.isCurrentDeviceTablet) {
+    return vTabGridItemSizeMultiplieriPad;
+  } else {
+    if (!self.isDevicePortrait) {
+      return vTabGridItemSizeMultiplieriPhoneLandscape;
+    } else {
+      return vTabGridItemSizeMultiplieriPhonePortrait;
+    }
+  }
+}
+
+/// Returns the size for each tab grid item tile.
+- (CGFloat)getItemHeight {
+  CGFloat width = [self getItemWidth];
+  // Add 20% of the width to the actual width to return as height.
+  // This makes sure height of the item is always greated than the width.
+  return width + (width * 0.2);
+}
+
+/// Return the item padding for iPhone and iPad
+/// Same item padding is used for both portrait and landscape mode.
+- (CGFloat)getItemPadding {
+  return self.isCurrentDeviceTablet ?
+    vTabGridItemPaddingiPad : vTabGridItemPaddingiPhone;
+}
+
+/// Returns the section padding for tablet
+- (CGFloat)getSectionPaddingForTablet {
+  return !self.isDevicePortrait ?
+    vTabGridSectionPaddingiPadLandscape : vTabGridSectionPaddingiPadPortrait;
+}
+
+/// Returns the section padding for iPhone
+- (CGFloat)getSectionPaddingForPhone {
+  return !self.isDevicePortrait ?
+    vTabGridSectionPaddingiPhoneLandscape : vTabGridSectionPaddingiPhonePortrait;
 }
 
 @end

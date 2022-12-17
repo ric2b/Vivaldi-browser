@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,7 +56,8 @@ void XdgActivation::Instantiate(WaylandConnection* connection,
                                 uint32_t name,
                                 const std::string& interface,
                                 uint32_t version) {
-  DCHECK_EQ(interface, kInterfaceName);
+  CHECK_EQ(interface, kInterfaceName) << "Expected \"" << kInterfaceName
+                                      << "\" but got \"" << interface << "\"";
 
   if (connection->xdg_activation_)
     return;
@@ -87,9 +88,9 @@ void XdgActivation::Activate(wl_surface* surface) const {
   }
 
   if (token_.get() != nullptr) {
-    // TODO(crbug.com/1175327): chain the incoming request and try to serve it
-    // after the current one is done.
-    LOG(WARNING) << "Another activation request is in progress!";
+    // If the earlier activation request is still being served, store the
+    // incoming request and try to serve it after the current one is done.
+    activation_queue_.emplace(surface);
     return;
   }
 
@@ -107,13 +108,17 @@ void XdgActivation::Activate(wl_surface* surface) const {
       connection_->serial_tracker().GetSerial(
           {wl::SerialType::kTouchPress, wl::SerialType::kMousePress,
            wl::SerialType::kMouseEnter, wl::SerialType::kKeyPress}),
-      base::BindOnce(&XdgActivation::OnActivateDone, weak_factory_.GetWeakPtr(),
-                     surface));
+      base::BindOnce(&XdgActivation::OnActivateDone,
+                     weak_factory_.GetMutableWeakPtr(), surface));
 }
 
 void XdgActivation::OnActivateDone(wl_surface* surface, std::string token) {
   xdg_activation_v1_activate(xdg_activation_v1_.get(), token.c_str(), surface);
   token_.reset();
+  if (!activation_queue_.empty()) {
+    Activate(activation_queue_.front());
+    activation_queue_.pop();
+  }
 }
 
 XdgActivation::Token::Token(wl::Object<xdg_activation_token_v1> token,

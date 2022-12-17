@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,6 +96,8 @@ class ClientBase {
     std::unique_ptr<zcr_vsync_feedback_v1> vsync_feedback;
     std::unique_ptr<zcr_color_manager_v1> color_manager;
     std::unique_ptr<zcr_stylus_v2> stylus;
+    std::unique_ptr<zcr_remote_shell_v1> cr_remote_shell_v1;
+    std::unique_ptr<zcr_remote_shell_v2> cr_remote_shell_v2;
   };
 
   struct Buffer {

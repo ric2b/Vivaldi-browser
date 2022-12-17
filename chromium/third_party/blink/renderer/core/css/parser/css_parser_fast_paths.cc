@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -116,12 +116,10 @@ static inline bool ParseSimpleLength(const CharacterType* characters,
 static CSSValue* ParseSimpleLengthValue(CSSPropertyID property_id,
                                         const String& string,
                                         CSSParserMode css_parser_mode) {
-  DCHECK(!string.IsEmpty());
+  DCHECK(!string.empty());
   bool accepts_negative_numbers = false;
 
-  // In @viewport, width and height are shorthands, not simple length values.
-  if (IsCSSViewportParsingEnabledForMode(css_parser_mode) ||
-      !IsSimpleLengthPropertyID(property_id, accepts_negative_numbers))
+  if (!IsSimpleLengthPropertyID(property_id, accepts_negative_numbers))
     return nullptr;
 
   double number;
@@ -547,9 +545,10 @@ static inline bool ParseAlphaValue(const CharacterType*& string,
     return false;
 
   if (string[0] != '0' && string[0] != '1' && string[0] != '.') {
-    int length = FindLengthOfValidDouble(string, end);
-    if (length > 0 && ContainsCharAtPos(string, end, length, terminator,
-                                        /*also_accept_whitespace=*/false)) {
+    int double_length = FindLengthOfValidDouble(string, end);
+    if (double_length > 0 &&
+        ContainsCharAtPos(string, end, double_length, terminator,
+                          /*also_accept_whitespace=*/false)) {
       value = negative ? 0 : 255;
       string = end;
       return true;
@@ -793,7 +792,7 @@ static CSSValue* ParseColor(CSSPropertyID property_id,
   if (!IsColorPropertyID(property_id))
     return nullptr;
 
-  DCHECK(!string.IsEmpty());
+  DCHECK(!string.empty());
   CSSValueID value_id = CssValueKeywordID(string);
   if (StyleColor::IsColorKeyword(value_id)) {
     if (!isValueAllowedInMode(value_id, parser_mode))
@@ -1031,11 +1030,6 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
              value_id == CSSValueID::kDashed || value_id == CSSValueID::kWavy;
     case CSSPropertyID::kTextDecorationSkipInk:
       return value_id == CSSValueID::kAuto || value_id == CSSValueID::kNone;
-    case CSSPropertyID::kTextJustify:
-      DCHECK(RuntimeEnabledFeatures::CSS3TextEnabled());
-      return value_id == CSSValueID::kInterWord ||
-             value_id == CSSValueID::kDistribute ||
-             value_id == CSSValueID::kAuto || value_id == CSSValueID::kNone;
     case CSSPropertyID::kTextOrientation:
       return value_id == CSSValueID::kMixed ||
              value_id == CSSValueID::kUpright ||
@@ -1339,7 +1333,6 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kTextCombineUpright:
     case CSSPropertyID::kTextDecorationStyle:
     case CSSPropertyID::kTextDecorationSkipInk:
-    case CSSPropertyID::kTextJustify:
     case CSSPropertyID::kTextOrientation:
     case CSSPropertyID::kWebkitTextOrientation:
     case CSSPropertyID::kTextOverflow:
@@ -1401,7 +1394,7 @@ bool CSSParserFastPaths::IsValidSystemFont(CSSValueID value_id) {
 static CSSValue* ParseKeywordValue(CSSPropertyID property_id,
                                    const String& string,
                                    CSSParserMode parser_mode) {
-  DCHECK(!string.IsEmpty());
+  DCHECK(!string.empty());
 
   if (!CSSParserFastPaths::IsKeywordPropertyID(property_id)) {
     // All properties accept CSS-wide keywords.
@@ -1674,7 +1667,7 @@ static bool TransformCanLikelyUseFastPath(const CharType* chars,
 
 static CSSValue* ParseSimpleTransform(CSSPropertyID property_id,
                                       const String& string) {
-  DCHECK(!string.IsEmpty());
+  DCHECK(!string.empty());
 
   if (property_id != CSSPropertyID::kTransform)
     return nullptr;

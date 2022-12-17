@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -365,7 +365,7 @@ HighlightPaintingUtils::SelectionTextDecoration(
   const Vector<AppliedTextDecoration>& pseudo_style_decorations =
       pseudo_style.AppliedTextDecorations();
 
-  if (style_decorations.IsEmpty())
+  if (style_decorations.empty())
     return absl::nullopt;
 
   absl::optional<AppliedTextDecoration> highlight_text_decoration =
@@ -414,6 +414,8 @@ TextPaintStyle HighlightPaintingUtils::HighlightPaintingStyle(
     highlight_style.fill_color = ResolveColor(
         document, style, pseudo_style.get(), pseudo,
         GetCSSPropertyWebkitTextFillColor(), previous_layer_current_color);
+    // TODO(crbug.com/1147859) ignore highlight ‘text-emphasis-color’
+    // https://github.com/w3c/csswg-drafts/issues/7101
     highlight_style.emphasis_mark_color = ResolveColor(
         document, style, pseudo_style.get(), pseudo,
         GetCSSPropertyTextEmphasisColor(), previous_layer_current_color);

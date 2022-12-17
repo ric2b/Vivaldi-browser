@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -111,7 +111,7 @@ InsecureFormNavigationThrottle::GetThrottleResultForMixedForm(
 
   // Do not set special error page HTML for insecure forms in subframes; those
   // are already hard blocked.
-  if (handle->GetParentFrameOrOuterDocument())
+  if (!handle->IsInOutermostMainFrame())
     return content::NavigationThrottle::PROCEED;
 
   url::Origin form_originating_origin =

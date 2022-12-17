@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,6 @@
 #include <memory>
 #include <string>
 
-#include "base/compiler_specific.h"
-#include "base/memory/ref_counted.h"
 #include "remoting/host/desktop_environment.h"
 #include "remoting/protocol/desktop_capturer.h"
 
@@ -55,8 +53,6 @@ class BasicDesktopEnvironment : public DesktopEnvironment {
   std::string GetCapabilities() const override;
   void SetCapabilities(const std::string& capabilities) override;
   uint32_t GetDesktopSessionId() const override;
-  std::unique_ptr<DesktopAndCursorConditionalComposer>
-  CreateComposingVideoCapturer() override;
   std::unique_ptr<RemoteWebAuthnStateChangeNotifier>
   CreateRemoteWebAuthnStateChangeNotifier() override;
 

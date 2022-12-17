@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@ import org.chromium.ui.OverscrollRefreshHandler;
 import org.chromium.ui.base.EventForwarder;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.mojom.VirtualKeyboardMode;
 import org.chromium.url.GURL;
 
 import java.util.List;
@@ -201,6 +202,12 @@ public interface WebContents extends Parcelable {
      * @return The URL for the current visible page.
      */
     GURL getVisibleUrl();
+
+    /**
+     * @return The virtual keyboard mode of the WebContents' current primary page.
+     */
+    @VirtualKeyboardMode.EnumType
+    int getVirtualKeyboardMode();
 
     /**
      * @return The character encoding for the current visible page.

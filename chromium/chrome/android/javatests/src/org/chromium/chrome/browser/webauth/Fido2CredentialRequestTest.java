@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,6 +41,8 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.blink.mojom.AuthenticatorStatus;
+import org.chromium.blink.mojom.AuthenticatorAttachment;
+import org.chromium.blink.mojom.AuthenticatorTransport;
 import org.chromium.blink.mojom.GetAssertionAuthenticatorResponse;
 import org.chromium.blink.mojom.MakeCredentialAuthenticatorResponse;
 import org.chromium.blink.mojom.PaymentOptions;
@@ -190,18 +192,31 @@ public class Fido2CredentialRequestTest {
     }
 
     private static class MockFido2ApiCallHelper extends Fido2ApiCallHelper {
-        private WebAuthnCredentialDetails mReturnedCredentialDetails;
+        private List<WebAuthnCredentialDetails> mReturnedCredentialDetails;
+        private boolean mInvokeCallbackImmediately = true;
+        private OnSuccessListener<List<WebAuthnCredentialDetails>> mSuccessCallback;
 
         @Override
         public void invokeFido2GetCredentials(String relyingPartyId, int supportLevel,
                 OnSuccessListener<List<WebAuthnCredentialDetails>> successCallback,
                 OnFailureListener failureCallback) {
-            successCallback.onSuccess(
-                    Arrays.asList(new WebAuthnCredentialDetails[] {mReturnedCredentialDetails}));
+            if (mInvokeCallbackImmediately) {
+                successCallback.onSuccess(mReturnedCredentialDetails);
+                return;
+            }
+            mSuccessCallback = successCallback;
         }
 
-        public void setReturnedCredentialDetails(WebAuthnCredentialDetails details) {
+        public void setReturnedCredentialDetails(List<WebAuthnCredentialDetails> details) {
             mReturnedCredentialDetails = details;
+        }
+
+        public void setInvokeCallbackImmediately(boolean invokeImmediately) {
+            mInvokeCallbackImmediately = invokeImmediately;
+        }
+
+        public void invokeSuccessCallback() {
+            mSuccessCallback.onSuccess(mReturnedCredentialDetails);
         }
     }
 
@@ -209,6 +224,7 @@ public class Fido2CredentialRequestTest {
         private Integer mStatus;
         private MakeCredentialAuthenticatorResponse mMakeCredentialResponse;
         private GetAssertionAuthenticatorResponse mGetAssertionAuthenticatorResponse;
+        private List<byte[]> mGetMatchingCredentialIdsResponse;
 
         // Signals when request is complete.
         private final ConditionVariable mDone = new ConditionVariable();
@@ -230,6 +246,11 @@ public class Fido2CredentialRequestTest {
             unblock();
         }
 
+        public void onGetMatchingCredentialIds(List<byte[]> matchingCredentialIds) {
+            mGetMatchingCredentialIdsResponse = matchingCredentialIds;
+            unblock();
+        }
+
         public void onError(Integer status) {
             assert mStatus == null;
             mStatus = status;
@@ -246,6 +267,10 @@ public class Fido2CredentialRequestTest {
 
         public GetAssertionAuthenticatorResponse getGetAssertionResponse() {
             return mGetAssertionAuthenticatorResponse;
+        }
+
+        public List<byte[]> getGetMatchingCredentialIdsResponse() {
+            return mGetMatchingCredentialIdsResponse;
         }
 
         public void blockUntilCalled() {
@@ -284,6 +309,10 @@ public class Fido2CredentialRequestTest {
         @Override
         public void invokeIsUserVerifyingPlatformAuthenticatorAvailableResponse(
                 long nativeInternalAuthenticator, boolean isUVPAA) {}
+
+        @Override
+        public void invokeGetMatchingCredentialIdsResponse(
+                long nativeInternalAuthenticator, byte[][] matchingCredentials) {}
     }
 
     private static class MockOrigin extends Origin {
@@ -328,6 +357,8 @@ public class Fido2CredentialRequestTest {
     private static class MockBrowserBridge extends WebAuthnBrowserBridge {
         private byte[] mSelectedCredentialId;
         private List<WebAuthnCredentialDetails> mExpectedCredentialList;
+        private boolean mInvokeCallbackImmediately = true;
+        private Callback<byte[]> mCallback;
 
         @Override
         public void onCredentialsDetailsListReceived(RenderFrameHost frameHost,
@@ -344,23 +375,16 @@ public class Fido2CredentialRequestTest {
                         mExpectedCredentialList.get(0).mUserId, credentialList.get(0).mUserId);
             }
 
-            if (mSelectedCredentialId != null) {
-                callback.onResult(mSelectedCredentialId);
-                return;
-            }
+            mCallback = callback;
 
-            /* An empty credential list can occur if a device has no applicable credentials.
-             * In production this is passed to native code and the callback will never be
-             * invoked. For the sake of testing we invoke with an empty credential selection,
-             * which normally would imply an error response.
-             */
-            if (credentialList.isEmpty()) {
-                callback.onResult(new byte[0]);
-                return;
+            if (mInvokeCallbackImmediately) {
+                invokeCallback();
             }
+        }
 
-            /* Return the first ID in the list if one has not been explicitly set. */
-            callback.onResult(credentialList.get(0).mCredentialId);
+        @Override
+        public void cancelRequest(RenderFrameHost frameHost) {
+            invokeCallback();
         }
 
         public void setSelectedCredentialId(byte[] credentialId) {
@@ -370,6 +394,30 @@ public class Fido2CredentialRequestTest {
         public void setExpectedCredentialDetailsList(
                 List<WebAuthnCredentialDetails> credentialList) {
             mExpectedCredentialList = credentialList;
+        }
+
+        public void setInvokeCallbackImmediately(boolean invokeImmediately) {
+            mInvokeCallbackImmediately = invokeImmediately;
+        }
+
+        public void invokeCallback() {
+            if (mSelectedCredentialId != null) {
+                mCallback.onResult(mSelectedCredentialId);
+                return;
+            }
+
+            /* An empty credential list can occur if a device has no applicable credentials.
+             * In production this is passed to native code and the callback will never be
+             * invoked. For the sake of testing we invoke with an empty credential selection,
+             * which normally would imply an error response.
+             */
+            if (mExpectedCredentialList.isEmpty()) {
+                mCallback.onResult(new byte[0]);
+                return;
+            }
+
+            /* Return the first ID in the list if one has not been explicitly set. */
+            mCallback.onResult(mExpectedCredentialList.get(0).mCredentialId);
         }
     }
 
@@ -429,7 +477,8 @@ public class Fido2CredentialRequestTest {
         AuthenticatorImpl.overrideFido2CredentialRequestForTesting(mRequest);
 
         mFido2ApiCallHelper = new MockFido2ApiCallHelper();
-        mFido2ApiCallHelper.setReturnedCredentialDetails(Fido2ApiTestHelper.getCredentialDetails());
+        mFido2ApiCallHelper.setReturnedCredentialDetails(
+                Arrays.asList(Fido2ApiTestHelper.getCredentialDetails()));
         Fido2ApiCallHelper.overrideInstanceForTesting(mFido2ApiCallHelper);
 
         mMockBrowserBridge = new MockBrowserBridge();
@@ -473,6 +522,28 @@ public class Fido2CredentialRequestTest {
         Assert.assertEquals(mCallback.getStatus(), Integer.valueOf(AuthenticatorStatus.SUCCESS));
         Fido2ApiTestHelper.validateMakeCredentialResponse(mCallback.getMakeCredentialResponse());
         Fido2ApiTestHelper.verifyRespondedBeforeTimeout(mStartTimeMs);
+    }
+
+    @Test
+    @SmallTest
+    public void testPasskeyMakeCredential_success() {
+        mIntentSender.setNextResultIntent(
+                Fido2ApiTestHelper.createSuccessfulPasskeyMakeCredentialIntent());
+
+        mRequest.handleMakeCredentialRequest(mCreationOptions, mFrameHost, mOrigin,
+                (responseStatus, response)
+                        -> mCallback.onRegisterResponse(responseStatus, response),
+                errorStatus -> mCallback.onError(errorStatus));
+        mCallback.blockUntilCalled();
+        Assert.assertEquals(mCallback.getStatus(), Integer.valueOf(AuthenticatorStatus.SUCCESS));
+
+        MakeCredentialAuthenticatorResponse response = mCallback.getMakeCredentialResponse();
+        Assert.assertArrayEquals(response.transports,
+                new int[] {AuthenticatorTransport.BLE, AuthenticatorTransport.HYBRID,
+                        AuthenticatorTransport.INTERNAL, AuthenticatorTransport.NFC,
+                        AuthenticatorTransport.USB});
+        Assert.assertEquals(
+                response.authenticatorAttachment, AuthenticatorAttachment.PLATFORM);
     }
 
     @Test
@@ -548,42 +619,6 @@ public class Fido2CredentialRequestTest {
         mCallback.blockUntilCalled();
         Assert.assertEquals(
                 mCallback.getStatus(), Integer.valueOf(AuthenticatorStatus.UNKNOWN_ERROR));
-        Fido2ApiTestHelper.verifyRespondedBeforeTimeout(mStartTimeMs);
-    }
-
-    @Test
-    @SmallTest
-    public void testMakeCredential_nullRpIcon() {
-        PublicKeyCredentialCreationOptions customOptions = mCreationOptions;
-        customOptions.relyingParty.icon = null;
-        mIntentSender.setNextResultIntent(
-                Fido2ApiTestHelper.createSuccessfulMakeCredentialIntent());
-
-        mRequest.handleMakeCredentialRequest(customOptions, mFrameHost, mOrigin,
-                (responseStatus, response)
-                        -> mCallback.onRegisterResponse(responseStatus, response),
-                errorStatus -> mCallback.onError(errorStatus));
-        mCallback.blockUntilCalled();
-        Assert.assertEquals(mCallback.getStatus(), Integer.valueOf(AuthenticatorStatus.SUCCESS));
-        Fido2ApiTestHelper.validateMakeCredentialResponse(mCallback.getMakeCredentialResponse());
-        Fido2ApiTestHelper.verifyRespondedBeforeTimeout(mStartTimeMs);
-    }
-
-    @Test
-    @SmallTest
-    public void testMakeCredential_nullUserIcon() {
-        PublicKeyCredentialCreationOptions customOptions = mCreationOptions;
-        customOptions.user.icon = null;
-        mIntentSender.setNextResultIntent(
-                Fido2ApiTestHelper.createSuccessfulMakeCredentialIntent());
-
-        mRequest.handleMakeCredentialRequest(customOptions, mFrameHost, mOrigin,
-                (responseStatus, response)
-                        -> mCallback.onRegisterResponse(responseStatus, response),
-                errorStatus -> mCallback.onError(errorStatus));
-        mCallback.blockUntilCalled();
-        Assert.assertEquals(mCallback.getStatus(), Integer.valueOf(AuthenticatorStatus.SUCCESS));
-        Fido2ApiTestHelper.validateMakeCredentialResponse(mCallback.getMakeCredentialResponse());
         Fido2ApiTestHelper.verifyRespondedBeforeTimeout(mStartTimeMs);
     }
 
@@ -1322,7 +1357,7 @@ public class Fido2CredentialRequestTest {
         WebAuthnCredentialDetails nonDiscoverableCredDetails =
                 Fido2ApiTestHelper.getCredentialDetails();
         nonDiscoverableCredDetails.mIsDiscoverable = false;
-        mFido2ApiCallHelper.setReturnedCredentialDetails(nonDiscoverableCredDetails);
+        mFido2ApiCallHelper.setReturnedCredentialDetails(Arrays.asList(nonDiscoverableCredDetails));
         mMockBrowserBridge.setExpectedCredentialDetailsList(new ArrayList<>());
 
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
@@ -1337,6 +1372,126 @@ public class Fido2CredentialRequestTest {
                 Integer.valueOf(AuthenticatorStatus.UNKNOWN_ERROR), mCallback.getStatus());
         Assert.assertNull(mCallback.getGetAssertionResponse());
         Fido2ApiTestHelper.verifyRespondedBeforeTimeout(mStartTimeMs);
+    }
+
+    @Test
+    @SmallTest
+    public void testGetAssertion_conditionalUi_cancelWhileFetchingCredentials() {
+        mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
+        mRequestOptions.isConditional = true;
+
+        mFido2ApiCallHelper.setInvokeCallbackImmediately(false);
+
+        mRequest.handleGetAssertionRequest(mRequestOptions, mFrameHost, mOrigin, /*payment=*/null,
+                (responseStatus, response)
+                        -> mCallback.onSignResponse(responseStatus, response),
+                errorStatus -> mCallback.onError(errorStatus));
+        mRequest.cancelConditionalGetAssertion(mFrameHost);
+        Assert.assertEquals(
+                Integer.valueOf(AuthenticatorStatus.ABORT_ERROR), mCallback.getStatus());
+
+        // Also validate that when the FIDO getCredentials call is completed, nothing happens.
+        // The MockBrowserBridge will assert if onCredentialsDetailsListReceived is called.
+        mMockBrowserBridge.setExpectedCredentialDetailsList(new ArrayList<>());
+        mFido2ApiCallHelper.invokeSuccessCallback();
+    }
+
+    @Test
+    @SmallTest
+    public void testGetAssertion_conditionalUi_cancelWhileWaitingForSelection() {
+        mMockBrowserBridge.setExpectedCredentialDetailsList(Arrays.asList(
+                new WebAuthnCredentialDetails[] {Fido2ApiTestHelper.getCredentialDetails()}));
+        mMockBrowserBridge.setInvokeCallbackImmediately(false);
+        mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
+        mRequestOptions.isConditional = true;
+
+        mRequest.handleGetAssertionRequest(mRequestOptions, mFrameHost, mOrigin, /*payment=*/null,
+                (responseStatus, response)
+                        -> mCallback.onSignResponse(responseStatus, response),
+                errorStatus -> mCallback.onError(errorStatus));
+        mRequest.cancelConditionalGetAssertion(mFrameHost);
+        Assert.assertEquals(
+                Integer.valueOf(AuthenticatorStatus.ABORT_ERROR), mCallback.getStatus());
+    }
+
+    @Test
+    @SmallTest
+    public void testGetMatchingCredentialIds_success() {
+        String relyingPartyId = "subdomain.example.test";
+        byte[][] allowCredentialIds = new byte[][] {
+                {1, 2, 3},
+                {10, 11, 12},
+                {13, 14, 15},
+        };
+        boolean requireThirdPartyPayment = false;
+
+        WebAuthnCredentialDetails credential1 = Fido2ApiTestHelper.getCredentialDetails();
+        credential1.mCredentialId = new byte[] {1, 2, 3};
+        credential1.mIsPayment = true;
+
+        WebAuthnCredentialDetails credential2 = Fido2ApiTestHelper.getCredentialDetails();
+        credential2.mCredentialId = new byte[] {4, 5, 6};
+        credential2.mIsPayment = false;
+
+        WebAuthnCredentialDetails credential3 = Fido2ApiTestHelper.getCredentialDetails();
+        credential3.mCredentialId = new byte[] {7, 8, 9};
+        credential3.mIsPayment = true;
+
+        WebAuthnCredentialDetails credential4 = Fido2ApiTestHelper.getCredentialDetails();
+        credential4.mCredentialId = new byte[] {10, 11, 12};
+        credential4.mIsPayment = false;
+
+        mFido2ApiCallHelper.setReturnedCredentialDetails(
+                Arrays.asList(credential1, credential2, credential3, credential4));
+
+        mRequest.handleGetMatchingCredentialIdsRequest(mFrameHost, relyingPartyId,
+                allowCredentialIds, requireThirdPartyPayment,
+                (credentialIds)
+                        -> mCallback.onGetMatchingCredentialIds(credentialIds),
+                errorStatus -> mCallback.onError(errorStatus));
+        mCallback.blockUntilCalled();
+        Assert.assertArrayEquals(mCallback.getGetMatchingCredentialIdsResponse().toArray(),
+                new byte[][] {{1, 2, 3}, {10, 11, 12}});
+    }
+
+    @Test
+    @SmallTest
+    public void testGetMatchingCredentialIds_requireThirdPartyBit() {
+        String relyingPartyId = "subdomain.example.test";
+        byte[][] allowCredentialIds = new byte[][] {
+                {1, 2, 3},
+                {10, 11, 12},
+                {13, 14, 15},
+        };
+        boolean requireThirdPartyPayment = true;
+
+        WebAuthnCredentialDetails credential1 = Fido2ApiTestHelper.getCredentialDetails();
+        credential1.mCredentialId = new byte[] {1, 2, 3};
+        credential1.mIsPayment = true;
+
+        WebAuthnCredentialDetails credential2 = Fido2ApiTestHelper.getCredentialDetails();
+        credential2.mCredentialId = new byte[] {4, 5, 6};
+        credential2.mIsPayment = false;
+
+        WebAuthnCredentialDetails credential3 = Fido2ApiTestHelper.getCredentialDetails();
+        credential3.mCredentialId = new byte[] {7, 8, 9};
+        credential3.mIsPayment = true;
+
+        WebAuthnCredentialDetails credential4 = Fido2ApiTestHelper.getCredentialDetails();
+        credential4.mCredentialId = new byte[] {10, 11, 12};
+        credential4.mIsPayment = false;
+
+        mFido2ApiCallHelper.setReturnedCredentialDetails(
+                Arrays.asList(credential1, credential2, credential3, credential4));
+
+        mRequest.handleGetMatchingCredentialIdsRequest(mFrameHost, relyingPartyId,
+                allowCredentialIds, requireThirdPartyPayment,
+                (credentialIds)
+                        -> mCallback.onGetMatchingCredentialIds(credentialIds),
+                errorStatus -> mCallback.onError(errorStatus));
+        mCallback.blockUntilCalled();
+        Assert.assertArrayEquals(mCallback.getGetMatchingCredentialIdsResponse().toArray(),
+                new byte[][] {{1, 2, 3}});
     }
 
     private static class TestParcelable implements Parcelable {

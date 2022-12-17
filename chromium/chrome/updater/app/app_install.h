@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,6 @@
 #include "chrome/updater/splash_screen.h"
 
 namespace base {
-class FilePath;
 class Version;
 }
 
@@ -39,8 +38,6 @@ class AppInstallController
 
   virtual void InstallAppOffline(const std::string& app_id,
                                  const std::string& app_name,
-                                 const base::FilePath& offline_dir,
-                                 bool enterprise,
                                  base::OnceCallback<void(int)> callback) = 0;
 
  protected:
@@ -74,6 +71,8 @@ class AppInstall : public App {
 
   void WakeCandidateDone();
 
+  void FetchPolicies();
+
   void RegisterUpdater();
 
   // Handles the --tag and --app-id command line arguments, and triggers
@@ -105,7 +104,7 @@ class AppInstall : public App {
   scoped_refptr<UpdateService> update_service_;
 };
 
-scoped_refptr<App> MakeAppInstall();
+scoped_refptr<App> MakeAppInstall(bool is_silent_install);
 
 }  // namespace updater
 

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -170,7 +170,7 @@ PrefetchProxyCanaryChecker::~PrefetchProxyCanaryChecker() {
 }
 
 base::WeakPtr<PrefetchProxyCanaryChecker>
-PrefetchProxyCanaryChecker::AsWeakPtr() const {
+PrefetchProxyCanaryChecker::AsWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
@@ -367,9 +367,9 @@ std::string PrefetchProxyCanaryChecker::AppendNameToHistogram(
 }
 
 void PrefetchProxyCanaryChecker::StartDNSResolution(const GURL& url) {
-  net::NetworkIsolationKey nik =
+  net::NetworkAnonymizationKey nak =
       net::IsolationInfo::CreateForInternalRequest(url::Origin::Create(url))
-          .network_isolation_key();
+          .network_anonymization_key();
 
   network::mojom::ResolveHostParametersPtr resolve_host_parameters =
       network::mojom::ResolveHostParameters::New();
@@ -390,9 +390,12 @@ void PrefetchProxyCanaryChecker::StartDNSResolution(const GURL& url) {
                          weak_factory_.GetWeakPtr())),
       client_remote.InitWithNewPipeAndPassReceiver());
 
+  // TODO(crbug.com/1355169): Consider passing a SchemeHostPort to trigger HTTPS
+  // DNS resource record query.
   profile_->GetDefaultStoragePartition()->GetNetworkContext()->ResolveHost(
-      net::HostPortPair::FromURL(url), nik, std::move(resolve_host_parameters),
-      std::move(client_remote));
+      network::mojom::HostResolverHost::NewHostPortPair(
+          net::HostPortPair::FromURL(url)),
+      nak, std::move(resolve_host_parameters), std::move(client_remote));
 
   timeout_timer_ = std::make_unique<base::OneShotTimer>(tick_clock_);
   // base::Unretained is safe because |timeout_timer_| is owned by this.

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,18 @@ ElementsToAddToContextMenu* GetContextMenuElementsToAdd(
     web::ContextMenuParams params,
     UIViewController* presenting_view_controller) {
   return nil;
+}
+
+NSTextCheckingType GetHandledIntentTypes(web::WebState* web_state) {
+  return 0;
+}
+
+NSArray<CRWContextMenuItem*>* GetContextMenuElementsToAdd(
+    web::WebState* web_state,
+    NSTextCheckingResult* match,
+    NSString* text,
+    UIViewController* presenting_view_controller) {
+  return @[];
 }
 
 }  // namespace provider

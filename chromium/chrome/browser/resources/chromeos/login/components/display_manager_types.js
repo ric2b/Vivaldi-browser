@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,7 @@
   DEPRECATED_SUPERVISED_USER_CREATION_FLOW: 4,
   SAML_PASSWORD_CONFIRM: 5,
   PASSWORD_CHANGED: 6,
-  ENROLLMENT: 7,
+  ENROLLMENT_CANCEL_DISABLED: 7,
   ERROR: 8,
   ONBOARDING: 9,
   BLOCKING: 10,

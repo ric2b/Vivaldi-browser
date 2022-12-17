@@ -1,13 +1,13 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/secure_channel/public/cpp/client/presence_monitor_client_impl.h"
 
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/secure_channel/public/cpp/shared/presence_monitor.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 
 namespace ash::secure_channel {
 

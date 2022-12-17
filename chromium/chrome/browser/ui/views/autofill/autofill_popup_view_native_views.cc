@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,6 +75,11 @@ using autofill::PopupItemId;
 using views::BubbleBorder;
 
 namespace {
+
+// The duration for which clicks on the just-shown Autofill popup should be
+// ignored.
+constexpr base::TimeDelta kIgnoreEarlyClicksOnPopupDuration =
+    base::Milliseconds(500);
 
 // By spec, dropdowns should always have a width which is a multiple of 12.
 constexpr int kAutofillPopupWidthMultiple = 12;
@@ -215,7 +220,7 @@ std::unique_ptr<views::ImageView> GetIconImageViewByName(
   if (icon_str == "google") {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     return ImageViewFromImageSkia(gfx::CreateVectorIcon(
-        kGoogleGLogoIcon, kIconSize, gfx::kPlaceholderColor));
+        vector_icons::kGoogleGLogoIcon, kIconSize, gfx::kPlaceholderColor));
 #else
     return nullptr;
 #endif
@@ -428,10 +433,6 @@ class AutofillPopupItemView : public AutofillPopupRowView {
   // (crbug.com/1240472, crbug.com/1241585, crbug.com/1287364).
   bool mouse_observed_outside_item_bounds_ = false;
 
-  // TODO(crbug/1279268): Remove when AutofillIgnoreEarlyClicksOnPopup is
-  // launched.
-  bool clicked_too_early_ = false;
-
   const int frontend_id_;
 
   // All the labels inside this view.
@@ -625,7 +626,7 @@ void AutofillPopupItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   if (!controller)
     return;
 
-  node_data->SetName(GetVoiceOverString());
+  node_data->SetNameChecked(GetVoiceOverString());
 
   // Compute set size and position in set, by checking the frontend_id of each
   // row, summing the number of interactive rows, and subtracting the number
@@ -683,20 +684,10 @@ void AutofillPopupItemView::OnMouseReleased(const ui::MouseEvent& event) {
 
   // Ignore clicks immediately after the popup was shown. This is to prevent
   // users accidentally accepting suggestions (crbug.com/1279268).
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillIgnoreEarlyClicksOnPopup) &&
-      popup_view()->time_delta_since_popup_shown() <=
-          features::kAutofillIgnoreEarlyClicksOnPopupDuration.Get()) {
-    clicked_too_early_ = true;
-    AutofillMetrics::LogSuggestionClick(
-        AutofillMetrics::SuggestionClickResult::kIgnored);
+  if (popup_view()->time_delta_since_popup_shown() <=
+      kIgnoreEarlyClicksOnPopupDuration) {
     return;
   }
-
-  AutofillMetrics::LogSuggestionClick(
-      !clicked_too_early_
-          ? AutofillMetrics::SuggestionClickResult::kAccepted
-          : AutofillMetrics::SuggestionClickResult::kAcceptedAfterIgnored);
 
   base::WeakPtr<AutofillPopupController> controller =
       popup_view()->controller();
@@ -948,16 +939,14 @@ std::u16string AutofillPopupItemView::GetVoiceOverString() {
   if (!minor_text.empty())
     text.push_back(minor_text);
 
-  auto label_text = controller->GetSuggestionLabelAt(GetLineNumber());
-  if (!label_text.empty()) {
-    // |label| is not populated for footers or autocomplete entries.
-    text.push_back(label_text);
-  }
-
-  // TODO(siyua): GetSuggestionLabelAt should return a vector of strings.
-  if (!suggestion.offer_label.empty()) {
-    // |offer_label| is only populated for credit card suggestions.
-    text.push_back(suggestion.offer_label);
+  std::vector<std::vector<Suggestion::Text>> labels =
+      controller->GetSuggestionLabelsAt(GetLineNumber());
+  for (std::vector<Suggestion::Text>& row : labels) {
+    for (Suggestion::Text label : row) {
+      // |label_text| is not populated for footers or autocomplete entries.
+      if (!label.value.empty())
+        text.push_back(std::move(label.value));
+    }
   }
 
   if (!suggestion.additional_label.empty()) {
@@ -1015,30 +1004,33 @@ AutofillPopupSuggestionView::CreateMainTextView() {
 
 std::vector<std::unique_ptr<views::View>>
 AutofillPopupSuggestionView::CreateSubtextViews() {
-  const std::u16string& second_row_label =
-      popup_view()->controller()->GetSuggestionLabelAt(GetLineNumber());
-  const std::u16string& third_row_label =
-      popup_view()->controller()->GetSuggestionAt(GetLineNumber()).offer_label;
+  std::vector<std::unique_ptr<views::View>> subtext_view;
+  std::vector<std::vector<Suggestion::Text>> label_matrix =
+      popup_view()->controller()->GetSuggestionLabelsAt(GetLineNumber());
 
-  std::vector<std::unique_ptr<views::View>> labels;
-  for (const std::u16string& text : {second_row_label, third_row_label}) {
+  for (auto& label_row : label_matrix) {
+    // TODO(crbug.com/1313616): Allow displaying more than one entry for each
+    // row once the card name is populated.
+    DCHECK_EQ(label_row.size(), 1U);
+    const std::u16string& text = label_row[0].value;
     // If a row is missing, do not include any further rows.
     if (text.empty())
-      return labels;
+      return subtext_view;
 
-    auto label = CreateLabelWithStyleAndContext(
+    auto label_view = CreateLabelWithStyleAndContext(
         text, ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
         views::style::STYLE_SECONDARY);
-    KeepLabel(label.get());
+    KeepLabel(label_view.get());
     if (popup_type_ == PopupType::kAddresses &&
         base::FeatureList::IsEnabled(
             features::kAutofillTypeSpecificPopupWidth)) {
-      label->SetMaximumWidthSingleLine(kAutofillPopupAddressProfileMaxWidth);
+      label_view->SetMaximumWidthSingleLine(
+          kAutofillPopupAddressProfileMaxWidth);
     }
-    labels.emplace_back(std::move(label));
+    subtext_view.emplace_back(std::move(label_view));
   }
 
-  return labels;
+  return subtext_view;
 }
 
 /************** PasswordPopupSuggestionView **************/
@@ -1101,7 +1093,14 @@ PasswordPopupSuggestionView::PasswordPopupSuggestionView(
                                   line_number,
                                   frontend_id,
                                   PopupType::kPasswords) {
-  origin_ = popup_view->controller()->GetSuggestionLabelAt(line_number);
+  std::vector<std::vector<Suggestion::Text>> labels =
+      popup_view->controller()->GetSuggestionLabelsAt(line_number);
+  if (!labels.empty()) {
+    DCHECK_EQ(labels.size(), 1U);
+    DCHECK_EQ(labels[0].size(), 1U);
+    origin_ = std::move(labels[0][0].value);
+  }
+
   masked_password_ =
       popup_view->controller()->GetSuggestionAt(line_number).additional_label;
 }
@@ -1273,7 +1272,7 @@ void AutofillPopupWarningView::GetAccessibleNodeData(
     return;
 
   node_data->role = ax::mojom::Role::kStaticText;
-  node_data->SetName(
+  node_data->SetNameChecked(
       controller->GetSuggestionAt(GetLineNumber()).main_text.value);
 }
 
@@ -1401,7 +1400,7 @@ void AutofillPopupViewNativeViews::GetAccessibleNodeData(
     node_data->AddState(ax::mojom::State::kCollapsed);
     node_data->AddState(ax::mojom::State::kInvisible);
   }
-  node_data->SetName(
+  node_data->SetNameChecked(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_POPUP_ACCESSIBLE_NODE_DATA));
 }
 
@@ -1438,8 +1437,11 @@ void AutofillPopupViewNativeViews::OnSelectedRowChanged(
     rows_[*previous_row_selection]->SetSelected(false);
   }
 
-  if (current_row_selection)
-    rows_[*current_row_selection]->SetSelected(true);
+  if (current_row_selection) {
+    AutofillPopupRowView* current_row = rows_[*current_row_selection];
+    current_row->SetSelected(true);
+    current_row->ScrollViewToVisible();
+  }
 
   NotifyAccessibilityEvent(ax::mojom::Event::kSelectedChildrenChanged, true);
 }
@@ -1788,6 +1790,16 @@ bool AutofillPopupViewNativeViews::DoUpdateBoundsAndRedrawPopup() {
   if (BoundsOverlapWithOpenPermissionsPrompt(popup_bounds,
                                              controller_->GetWebContents())) {
     controller_->Hide(PopupHidingReason::kOverlappingWithAnotherPrompt);
+    return false;
+  }
+
+  // The pip surface is given the most preference while rendering. So, the
+  // autofill popup should not be shown when the picture in picture window
+  // hides the autofill form behind it.
+  // For more details on how this can happen, see crbug.com/1358647.
+  if (BoundsOverlapWithPictureInPictureWindow(popup_bounds)) {
+    controller_->Hide(
+        PopupHidingReason::kOverlappingWithPictureInPictureWindow);
     return false;
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,7 +53,7 @@ void TestWebAppUrlLoader::LoadUrl(const GURL& url,
                                   content::WebContents* web_contents,
                                   UrlComparison url_comparison,
                                   ResultCallback callback) {
-  last_load_url_call_ = {url, web_contents, url_comparison};
+  load_url_tracker_.Run(url, web_contents, url_comparison);
 
   if (should_save_requests_) {
     pending_requests_.emplace(url, std::move(callback));

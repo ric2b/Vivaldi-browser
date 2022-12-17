@@ -1,11 +1,9 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/secure_channel/connection.h"
 
-#include "ash/components/multidevice/remote_device_ref.h"
-#include "ash/components/multidevice/remote_device_test_util.h"
 #include "ash/services/secure_channel/connection_observer.h"
 #include "ash/services/secure_channel/file_transfer_update_callback.h"
 #include "ash/services/secure_channel/public/mojom/secure_channel_types.mojom.h"
@@ -14,6 +12,8 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/bind.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
+#include "chromeos/ash/components/multidevice/remote_device_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -36,7 +36,7 @@ class MockConnection : public Connection {
   MockConnection(const MockConnection&) = delete;
   MockConnection& operator=(const MockConnection&) = delete;
 
-  ~MockConnection() {}
+  ~MockConnection() override {}
 
   MOCK_METHOD1(SetPaused, void(bool paused));
   MOCK_METHOD0(Connect, void());
@@ -77,7 +77,7 @@ class MockConnectionObserver : public ConnectionObserver {
   MockConnectionObserver(const MockConnectionObserver&) = delete;
   MockConnectionObserver& operator=(const MockConnectionObserver&) = delete;
 
-  virtual ~MockConnectionObserver() {}
+  ~MockConnectionObserver() override {}
 
   MOCK_METHOD3(OnConnectionStatusChanged,
                void(Connection* connection,

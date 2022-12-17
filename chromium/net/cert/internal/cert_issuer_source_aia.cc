@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -177,7 +177,7 @@ void CertIssuerSourceAia::AsyncGetIssuersOf(const ParsedCertificate* cert,
 
   std::vector<GURL> urls;
   for (const auto& uri : cert->ca_issuers_uris()) {
-    GURL url(uri);
+    GURL url(base::StringPiece(uri.data(), uri.size()));
     if (url.is_valid()) {
       // TODO(mattm): do the kMaxFetchesPerCert check only on the number of
       // supported URL schemes, not all the URLs.

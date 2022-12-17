@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,7 +37,7 @@ using CompositingReasons = uint64_t;
   V(ActiveBackdropFilterAnimation)                                            \
   V(AffectedByOuterViewportBoundsDelta)                                       \
   V(FixedPosition)                                                            \
-  V(FixedToViewport)                                                          \
+  V(UndoOverscroll)                                                           \
   V(StickyPosition)                                                           \
   V(AnchorScroll)                                                             \
   V(OverflowScrolling)                                                        \
@@ -125,8 +125,8 @@ class PLATFORM_EXPORT CompositingReason {
     kPreventingSubpixelAccumulationReasons =
         kWillChangeTransform | kWillChangeScale | kWillChangeRotate,
     kDirectReasonsForPaintOffsetTranslationProperty =
-        kFixedPosition | kAffectedByOuterViewportBoundsDelta |
-        kFixedToViewport | kVideo | kCanvas | kPlugin | kIFrame,
+        kFixedPosition | kAffectedByOuterViewportBoundsDelta | kUndoOverscroll |
+        kVideo | kCanvas | kPlugin | kIFrame,
     // TODO(dbaron): kWillChangeOther probably shouldn't be in this list.
     kDirectReasonsForTransformProperty =
         k3DTransform | kTrivial3DTransform | kWillChangeTransform |

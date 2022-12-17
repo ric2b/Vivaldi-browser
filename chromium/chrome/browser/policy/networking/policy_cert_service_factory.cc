@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -104,8 +104,7 @@ bool PolicyCertServiceFactory::MigrateLocalStatePrefIntoProfilePref(
     Profile* profile) {
   base::Value user_email_value(user_email);
   const base::Value::List& list =
-      g_browser_process->local_state()->GetValueList(
-          prefs::kUsedPolicyCertificates);
+      g_browser_process->local_state()->GetList(prefs::kUsedPolicyCertificates);
 
   if (base::Contains(list, user_email_value)) {
     profile->GetPrefs()->SetBoolean(prefs::kUsedPolicyCertificates, true);
@@ -117,9 +116,9 @@ bool PolicyCertServiceFactory::MigrateLocalStatePrefIntoProfilePref(
 // static
 bool PolicyCertServiceFactory::ClearUsedPolicyCertificates(
     const std::string& user_email) {
-  ListPrefUpdate update(g_browser_process->local_state(),
-                        prefs::kUsedPolicyCertificates);
-  return (update->GetList().EraseValue(base::Value(user_email)) > 0);
+  ScopedListPrefUpdate update(g_browser_process->local_state(),
+                              prefs::kUsedPolicyCertificates);
+  return (update->EraseValue(base::Value(user_email)) > 0);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

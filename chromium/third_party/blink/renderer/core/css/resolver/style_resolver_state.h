@@ -200,6 +200,13 @@ class CORE_EXPORT StyleResolverState {
   }
   void SetRejectedLegacyOverlapping() { rejected_legacy_overlapping_ = true; }
 
+  // Update the Font object on the ComputedStyle and the CSSLengthResolver to
+  // reflect applied font properties.
+  void UpdateFont();
+
+  // Update computed line-height and font used for 'lh' unit resolution.
+  void UpdateLineHeight();
+
  private:
   void UpdateLengthConversionData();
   CSSToLengthConversionData UnzoomedLengthConversionData(

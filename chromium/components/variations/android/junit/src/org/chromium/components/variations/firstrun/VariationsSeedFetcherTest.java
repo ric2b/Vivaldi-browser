@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,9 +26,7 @@ import android.util.Base64;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.robolectric.annotation.Config;
 
@@ -67,9 +65,6 @@ public class VariationsSeedFetcherTest {
     private static final String sRestrict = "restricted";
     private static final String sMilestone = "64";
     private static final String sChannel = "dev";
-
-    @Rule
-    public TestRule mCommandLineFlagsRule = CommandLineFlags.getTestRule();
 
     @Before
     public void setUp() throws IOException {

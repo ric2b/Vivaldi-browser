@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -243,7 +243,7 @@ void BrowserThemePackTest::BuildFromUnpackedExtension(
   std::string error;
   JSONFileValueDeserializer deserializer(manifest_path);
   std::unique_ptr<base::DictionaryValue> valid_value =
-      base::DictionaryValue::From(deserializer.Deserialize(NULL, &error));
+      base::DictionaryValue::From(deserializer.Deserialize(nullptr, &error));
   EXPECT_EQ("", error);
   ASSERT_TRUE(valid_value.get());
   scoped_refptr<Extension> extension(Extension::Create(
@@ -719,19 +719,19 @@ TEST_F(BrowserThemePackTest, InvalidDisplayProperties) {
 // These three tests should just not cause a segmentation fault.
 TEST_F(BrowserThemePackTest, NullPaths) {
   TestFilePathMap out_file_paths;
-  ParseImageNamesDictionary(NULL, &out_file_paths);
+  ParseImageNamesDictionary(nullptr, &out_file_paths);
 }
 
 TEST_F(BrowserThemePackTest, NullTints) {
-  LoadTintDictionary(NULL);
+  LoadTintDictionary(nullptr);
 }
 
 TEST_F(BrowserThemePackTest, NullColors) {
-  LoadColorDictionary(NULL);
+  LoadColorDictionary(nullptr);
 }
 
 TEST_F(BrowserThemePackTest, NullDisplayProperties) {
-  LoadDisplayPropertiesDictionary(NULL);
+  LoadDisplayPropertiesDictionary(nullptr);
 }
 
 TEST_F(BrowserThemePackTest, TestHasCustomImage) {
@@ -1203,34 +1203,3 @@ TEST_F(BrowserThemePackTest, TestLogoAndShortcutColors) {
   EXPECT_FALSE(white_theme->GetColor(TP::COLOR_NTP_LOGO, &color));
   EXPECT_FALSE(white_theme->GetColor(TP::COLOR_NTP_SHORTCUT, &color));
 }
-
-namespace internal {
-
-// Defined in browser_theme_pack.cc
-SkColor GetContrastingColorForBackground(SkColor bg_color, float change);
-
-TEST(BrowserThemePackInternalTest, TestGetContrastingColor) {
-  const float change = 0.2f;
-
-  // White color for black background.
-  EXPECT_EQ(SK_ColorWHITE,
-            GetContrastingColorForBackground(SK_ColorBLACK, change));
-
-  // Lighter color for too dark colors.
-  SkColor dark_background = SkColorSetARGB(255, 50, 0, 50);
-  EXPECT_LT(color_utils::GetRelativeLuminance(dark_background),
-            color_utils::GetRelativeLuminance(
-                GetContrastingColorForBackground(dark_background, change)));
-
-  // Darker color for light backgrounds.
-  EXPECT_GT(color_utils::GetRelativeLuminance(SK_ColorWHITE),
-            color_utils::GetRelativeLuminance(
-                GetContrastingColorForBackground(SK_ColorWHITE, change)));
-
-  SkColor light_background = SkColorSetARGB(255, 100, 0, 100);
-  EXPECT_GT(color_utils::GetRelativeLuminance(light_background),
-            color_utils::GetRelativeLuminance(
-                GetContrastingColorForBackground(light_background, change)));
-}
-
-}  // namespace internal

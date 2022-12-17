@@ -1,41 +1,42 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/settings/privacy/privacy_table_view_controller.h"
 
 #import <LocalAuthentication/LAContext.h>
-#include <memory>
+#import <memory>
 
-#include "base/memory/ptr_util.h"
-#include "base/strings/sys_string_conversions.h"
+#import "base/memory/ptr_util.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/test/scoped_feature_list.h"
-#include "components/content_settings/core/common/features.h"
-#include "components/handoff/pref_names_ios.h"
-#include "components/prefs/pref_service.h"
+#import "components/content_settings/core/common/features.h"
+#import "components/handoff/pref_names_ios.h"
+#import "components/prefs/pref_service.h"
 #import "components/safe_browsing/core/common/features.h"
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "components/strings/grit/components_strings.h"
-#import "components/sync/driver/mock_sync_service.h"
-#include "components/sync_preferences/pref_service_mock_factory.h"
-#include "components/sync_preferences/pref_service_syncable.h"
+#import "components/strings/grit/components_strings.h"
+#import "components/sync/test/mock_sync_service.h"
+#import "components/sync_preferences/pref_service_mock_factory.h"
+#import "components/sync_preferences/pref_service_syncable.h"
 #import "components/sync_preferences/testing_pref_service_syncable.h"
-#include "ios/chrome/browser/application_context.h"
-#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/application_context/application_context.h"
+#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#include "ios/chrome/browser/pref_names.h"
-#include "ios/chrome/browser/prefs/browser_prefs.h"
-#include "ios/chrome/browser/sync/sync_service_factory.h"
-#include "ios/chrome/browser/system_flags.h"
+#import "ios/chrome/browser/prefs/browser_prefs.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/sync/mock_sync_service_utils.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller_test.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
-#include "ios/chrome/grit/ios_chromium_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
-#include "ios/web/public/test/web_task_environment.h"
-#include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
+#import "ios/web/public/test/web_task_environment.h"
+#import "testing/gtest/include/gtest/gtest.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -46,10 +47,6 @@ using ::testing::Return;
 namespace {
 
 NSString* const kSpdyProxyEnabled = @"SpdyProxyEnabled";
-
-std::unique_ptr<KeyedService> BuildMockSyncService(web::BrowserState* context) {
-  return std::make_unique<syncer::MockSyncService>();
-}
 
 // Checks if the device has Passcode, Face ID, or Touch ID set up.
 BOOL DeviceSupportsAuthentication() {
@@ -71,9 +68,9 @@ struct PrivacyTableViewControllerTestConfig {
 // proper initialization of the feature list before all of its own attributes.
 class WithScopedFeatureList {
  protected:
-  WithScopedFeatureList(
-      std::pair<std::vector<base::Feature>, std::vector<base::Feature>> const&
-          enabled_disabled_features) {
+  WithScopedFeatureList(std::pair<std::vector<base::test::FeatureRef>,
+                                  std::vector<base::test::FeatureRef>> const&
+                            enabled_disabled_features) {
     feature_list_.InitWithFeatures(enabled_disabled_features.first,
                                    enabled_disabled_features.second);
   }
@@ -89,9 +86,11 @@ class PrivacyTableViewControllerTest
   PrivacyTableViewControllerTest()
       : WithScopedFeatureList(EnabledDisabledFeatures()) {}
 
-  std::pair<std::vector<base::Feature>, std::vector<base::Feature>>
+  std::pair<std::vector<base::test::FeatureRef>,
+            std::vector<base::test::FeatureRef>>
   EnabledDisabledFeatures() const {
-    std::pair<std::vector<base::Feature>, std::vector<base::Feature>>
+    std::pair<std::vector<base::test::FeatureRef>,
+              std::vector<base::test::FeatureRef>>
         enabledDisabledFeatures;
 
     // Explicitly enable/disable Enhanced Protection flag.
@@ -119,7 +118,7 @@ class PrivacyTableViewControllerTest
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(
         SyncServiceFactory::GetInstance(),
-        base::BindRepeating(&BuildMockSyncService));
+        base::BindRepeating(&CreateMockSyncService));
     chrome_browser_state_ = test_cbs_builder.Build();
 
     browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get());

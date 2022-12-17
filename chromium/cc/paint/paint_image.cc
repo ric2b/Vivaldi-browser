@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -160,8 +160,8 @@ SkImageInfo PaintImage::GetSkImageInfo() const {
     return cached_sk_image_->imageInfo();
   } else if (paint_worklet_input_) {
     auto size = paint_worklet_input_->GetSize();
-    return SkImageInfo::MakeUnknown(static_cast<int>(size.width()),
-                                    static_cast<int>(size.height()));
+    return SkImageInfo::MakeUnknown(base::ClampCeil(size.width()),
+                                    base::ClampCeil(size.height()));
   } else {
     return SkImageInfo::MakeUnknown();
   }

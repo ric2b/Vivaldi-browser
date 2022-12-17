@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,6 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -129,7 +128,7 @@ public class JavascriptAppModalDialogTest {
      */
     @Test
     @MediumTest
-    @FlakyTest(message = "https://crbug.com/1237639")
+    @DisabledTest(message = "https://crbug.com/1237639")
     @Feature({"Browser", "Main"})
     public void testBeforeUnloadDialogWithNoHistory() throws TimeoutException, ExecutionException {
         ChromeTabbedActivity activity = sActivityTestRule.getActivity();

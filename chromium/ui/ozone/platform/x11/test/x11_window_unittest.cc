@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
@@ -200,9 +201,8 @@ bool ShapeRectContainsPoint(const std::vector<gfx::Rect>& shape_rects,
                             int x,
                             int y) {
   gfx::Point point(x, y);
-  return std::any_of(
-      shape_rects.cbegin(), shape_rects.cend(),
-      [&point](const auto& rect) { return rect.Contains(point); });
+  return base::ranges::any_of(
+      shape_rects, [&point](const auto& rect) { return rect.Contains(point); });
 }
 
 }  // namespace

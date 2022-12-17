@@ -27,6 +27,10 @@ exclude_cipd = [
   "tools/resultdb",
   ]
 
+excluded_modules = [
+  "third_party/cros_components",
+  ]
+
 def main():
   variables = vivdeps.get_chromium_variables()
   if variables.get("checkout_android", False):
@@ -52,7 +56,7 @@ def main():
 
     existing_submodules = [x.split()[1] for x in result.stdout.splitlines()]
 
-  deps.UpdateModules(pick_list, existing_submodules, only_cipd, exclude_cipd)
+  deps.UpdateModules(pick_list, existing_submodules + excluded_modules, only_cipd, exclude_cipd)
 
 if __name__ == '__main__':
   sys.exit(main())

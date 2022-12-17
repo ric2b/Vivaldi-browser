@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,9 +68,6 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 
   // True if the runner has been shut down.
   bool is_shutdown_ = false;
-
-  // True if basic startup was completed.
-  bool completed_basic_startup_ = false;
 
   // The delegate will outlive this object.
   raw_ptr<ContentMainDelegate> delegate_ = nullptr;

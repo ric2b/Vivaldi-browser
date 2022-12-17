@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -195,8 +195,11 @@ void VttCueLayoutAlgorithm::AdjustPositionWithSnapToLines() {
   if (step_ == LayoutUnit())
     return;
 
+  // Check parents just in case. See crbug.com/1377527.
+  if (!cue_box.Parent() || !cue_box.Parent()->Parent())
+    return;
   // Step 4-9
-  const gfx::Rect controls_rect = LayoutVTTCue::ComputeControlsRect(container);
+  const gfx::Rect controls_rect = LayoutVTTCue::ComputeControlsRect(*cue_box.Parent());
   LayoutUnit position =
       ComputeInitialPositionAdjustment(max_dimension, controls_rect);
 

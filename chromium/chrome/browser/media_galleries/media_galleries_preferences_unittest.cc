@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -189,11 +189,12 @@ class MediaGalleriesPreferencesTest : public testing::Test {
 
   void RemovePersistedDefaultGalleryValues() {
     PrefService* prefs = profile_->GetPrefs();
-    std::unique_ptr<ListPrefUpdate> update(
-        new ListPrefUpdate(prefs, prefs::kMediaGalleriesRememberedGalleries));
-    base::Value* list = update->Get();
+    std::unique_ptr<ScopedListPrefUpdate> update =
+        std::make_unique<ScopedListPrefUpdate>(
+            prefs, prefs::kMediaGalleriesRememberedGalleries);
+    base::Value::List& list = update->Get();
 
-    for (auto& entry : list->GetList()) {
+    for (auto& entry : list) {
       if (entry.is_dict()) {
         base::Value::Dict& dict = entry.GetDict();
         // Setting the prefs version to 2 which is the version before
@@ -467,13 +468,13 @@ TEST_F(MediaGalleriesPreferencesTest, GalleryManagement) {
 
   // Lookup some galleries.
   EXPECT_TRUE(gallery_prefs()->LookUpGalleryByPath(
-      MakeMediaGalleriesTestingPath("new_auto"), NULL));
+      MakeMediaGalleriesTestingPath("new_auto"), nullptr));
   EXPECT_TRUE(gallery_prefs()->LookUpGalleryByPath(
-      MakeMediaGalleriesTestingPath("new_user"), NULL));
+      MakeMediaGalleriesTestingPath("new_user"), nullptr));
   EXPECT_TRUE(gallery_prefs()->LookUpGalleryByPath(
-      MakeMediaGalleriesTestingPath("new_scan"), NULL));
+      MakeMediaGalleriesTestingPath("new_scan"), nullptr));
   EXPECT_FALSE(gallery_prefs()->LookUpGalleryByPath(
-      MakeMediaGalleriesTestingPath("other"), NULL));
+      MakeMediaGalleriesTestingPath("other"), nullptr));
 
   // Check that we always get the gallery info.
   MediaGalleryPrefInfo gallery_info;

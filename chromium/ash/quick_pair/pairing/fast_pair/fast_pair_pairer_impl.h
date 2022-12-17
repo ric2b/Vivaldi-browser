@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,13 +9,13 @@
 #include "ash/quick_pair/fast_pair_handshake/fast_pair_gatt_service_client.h"
 #include "ash/quick_pair/pairing/fast_pair/fast_pair_pairer.h"
 #include "ash/quick_pair/proto/fastpair.pb.h"
-#include "ash/services/quick_pair/public/cpp/decrypted_passkey.h"
-#include "ash/services/quick_pair/public/cpp/decrypted_response.h"
 #include "base/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
+#include "chromeos/ash/services/quick_pair/public/cpp/decrypted_passkey.h"
+#include "chromeos/ash/services/quick_pair/public/cpp/decrypted_response.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -111,7 +111,11 @@ class FastPairPairerImpl : public FastPairPairer,
 
   // device::BluetoothAdapter::ConnectDevice callbacks
   void OnConnectDevice(device::BluetoothDevice* device);
-  void OnConnectError();
+  void OnConnectError(const std::string& error_message);
+
+  //  FastPairHandshakeLookup::Create callback
+  void OnHandshakeComplete(scoped_refptr<Device> device,
+                           absl::optional<PairFailure> failure);
 
   // FastPairGattServiceClient::WritePasskey callback
   void OnPasskeyResponse(std::vector<uint8_t> response_bytes,

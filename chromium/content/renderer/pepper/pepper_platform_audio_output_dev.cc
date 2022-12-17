@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -267,7 +267,8 @@ bool PepperPlatformAudioOutputDev::Initialize(int sample_rate,
   CHECK(ipc_);
 
   params_.Reset(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                media::CHANNEL_LAYOUT_STEREO, sample_rate, frames_per_buffer);
+                media::ChannelLayoutConfig::Stereo(), sample_rate,
+                frames_per_buffer);
 
   io_task_runner_->PostTask(
       FROM_HERE,

@@ -13,7 +13,6 @@
 <translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="1181037720776840403">Eliminar</translation>
 <translation id="1187722533808055681">Wake Ups inactivos</translation>
-<translation id="119944043368869598">Borrar todo</translation>
 <translation id="1221825588892235038">Solo selección</translation>
 <translation id="1244303850296295656">Error de extensión</translation>
 <translation id="125220115284141797">Predeterminado</translation>
@@ -47,7 +46,6 @@
 <translation id="1886996562706621347">Permitir a los sitios web pedirle permiso para convertirse en los controladores predeterminados de protocolos (recomendado)</translation>
 <translation id="1901303067676059328">Seleccionar &amp;todo</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> ppp</translation>
-<translation id="1963227389609234879">Eliminar todo</translation>
 <translation id="1994173015038366702">URL del sitio</translation>
 <translation id="2019718679933488176">Abrir audi&amp;o en una nueva pestaña</translation>
 <translation id="2050339315714019657">Vertical</translation>
@@ -63,7 +61,6 @@
 <translation id="2218515861914035131">Pegar como texto sencillo</translation>
 <translation id="2249605167705922988">p. ej. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permitir los identificadores para contenido protegido (precisa reiniciar el ordenador)</translation>
-<translation id="2277255602909579701">Todas las cookies y todos los datos de sitios</translation>
 <translation id="2280486287150724112">Margen derecho</translation>
 <translation id="2282146716419988068">Proceso de GPU</translation>
 <translation id="2301382460326681002">El directorio de raíz de la extensión no es válido.</translation>
@@ -112,7 +109,6 @@
 <translation id="3084548735795614657">Soltar para instalar</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">A cargo del USUARIO</translation>
-<translation id="3127156390846601284">Esta acción eliminará de su dispositivo los datos almacenados de todos los sitios web que se muestran. ¿Quiere continuar?</translation>
 <translation id="3129173833825111527">Margen izquierdo</translation>
 <translation id="3144647712221361880">Abrir vínculo como</translation>
 <translation id="3222066309010235055">Renderizar previamente: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -131,7 +127,6 @@
 <translation id="3360297538363969800">Error de impresión. Por favor, comprueba tu impresora y prueba de nuevo.</translation>
 <translation id="3378572629723696641">Es posible que esta extensión esté dañada.</translation>
 <translation id="3387614642886316601">Usar el corrector ortográfico mejorado</translation>
-<translation id="3432227430032737297">Quitar todo lo que se muestra</translation>
 <translation id="345693547134384690">Abrir &amp;imagen en una nueva pestaña</translation>
 <translation id="3494769164076977169">Preguntarme cuando un sitio intente descargar archivos automáticamente después del primer archivo (recomendado)</translation>
 <translation id="3505030558724226696">Revocar el acceso al dispositivo</translation>
@@ -185,7 +180,6 @@
 <translation id="4409697491990005945">Márgenes</translation>
 <translation id="4423376891418188461">Restaurar configuración</translation>
 <translation id="4478664379124702289">Guardar vín&amp;culo como...</translation>
-<translation id="4579581181964204535">No se puede transmitir <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Ir a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Solo el administrador (<ph name="CUSTODIAN_NAME" />) puede modificar las apps y extensiones.</translation>
 <translation id="4613271546271159013">Una extensión cambió la página que se muestra al abrir una nueva pestaña.</translation>
@@ -252,7 +246,6 @@
 <translation id="5747809636523347288">Pe&amp;gar e ir a <ph name="URL" /></translation>
 <translation id="5759728514498647443">Los documentos que envíes a través de <ph name="APP_NAME" /> podrán ser leídos por <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Guardar audio como...</translation>
-<translation id="577624874850706961">Buscar cookies</translation>
 <translation id="5780973441651030252">Prioridad del proceso</translation>
 <translation id="5804241973901381774">Permisos</translation>
 <translation id="5828633471261496623">Imprimiendo...</translation>
@@ -265,7 +258,6 @@
 <translation id="5965661248935608907">También controla qué página se muestra al hacer clic en el botón de página principal o al realizar búsquedas desde el cuadro multifunción.</translation>
 <translation id="5978277834170881274">&amp;Usar el corrector ortográfico básico</translation>
 <translation id="5979421442488174909">&amp;Traducir a <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Borrar los datos del sitio</translation>
 <translation id="6042308850641462728">Más</translation>
 <translation id="6086846494333236931">Instalada por tu administrador</translation>
 <translation id="6101226222197207147">Nueva aplicación añadida (<ph name="EXTENSION_NAME" />)</translation>
@@ -374,7 +366,6 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
  ……=1 {Descarga en curso} other {Descargas en curso}}</translation>
 <translation id="8230134520748321204">¿Quieres guardar la contraseña para <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Esta extensión no figura en <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> y es posible que se haya agregado sin tu conocimiento.</translation>
-<translation id="8339059274628563283">Datos del sitio <ph name="SITE" />  almacenados de forma local</translation>
 <translation id="8351419472474436977">Esta extensión tomó control de tu configuración de proxy, lo que significa que puede cambiar, dañar o espiar cualquier actividad que realices en línea. Si sabes con certeza por qué se produjo este cambio, probablemente no lo desees.</translation>
 <translation id="8382913212082956454">Copiar la &amp;dirección de correo electrónico</translation>
 <translation id="8413385045638830869">Preguntar antes (recomendado)</translation>

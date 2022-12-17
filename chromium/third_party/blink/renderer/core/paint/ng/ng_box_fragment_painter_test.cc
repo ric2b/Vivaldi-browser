@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,13 +23,13 @@ namespace {
 void ExtractLinks(const cc::PaintOpBuffer* buffer, std::vector<GURL>* links) {
   for (cc::PaintOpBuffer::Iterator it(buffer); it; ++it) {
     if (it->GetType() == cc::PaintOpType::Annotate) {
-      auto* annotate_op = static_cast<cc::AnnotateOp*>(*it);
+      const auto& annotate_op = static_cast<const cc::AnnotateOp&>(*it);
       links->push_back(GURL(
-          std::string(reinterpret_cast<const char*>(annotate_op->data->data()),
-                      annotate_op->data->size())));
+          std::string(reinterpret_cast<const char*>(annotate_op.data->data()),
+                      annotate_op.data->size())));
     } else if (it->GetType() == cc::PaintOpType::DrawRecord) {
-      auto* record_op = static_cast<cc::DrawRecordOp*>(*it);
-      ExtractLinks(record_op->record.get(), links);
+      const auto& record_op = static_cast<const cc::DrawRecordOp&>(*it);
+      ExtractLinks(record_op.record.get(), links);
     }
   }
 }

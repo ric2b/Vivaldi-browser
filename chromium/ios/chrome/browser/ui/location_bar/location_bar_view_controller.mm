@@ -1,17 +1,17 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/location_bar/location_bar_view_controller.h"
 
-#include "base/bind.h"
-#include "base/ios/ios_util.h"
-#include "base/metrics/user_metrics.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/open_from_clipboard/clipboard_recent_content.h"
-#include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/infobars/infobar_metrics_recorder.h"
+#import "base/bind.h"
+#import "base/ios/ios_util.h"
+#import "base/metrics/user_metrics.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/omnibox/browser/omnibox_field_trial.h"
+#import "components/open_from_clipboard/clipboard_recent_content.h"
+#import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/infobars/infobar_metrics_recorder.h"
 #import "ios/chrome/browser/ui/badges/badge_item.h"
 #import "ios/chrome/browser/ui/commands/activity_service_commands.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
@@ -21,14 +21,22 @@
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants.h"
-#include "ios/chrome/browser/ui/location_bar/location_bar_steady_view.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_steady_view.h"
 #import "ios/chrome/browser/ui/orchestrator/location_bar_offset_provider.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/named_guide.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -89,7 +97,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 // `-updateCachedClipboardState` for more information.
 @property(nonatomic, assign) BOOL isUpdatingCachedClipboardState;
 
-// Starts voice search, updating the NamedGuide to be constrained to the
+// Starts voice search, updating the layout guide to be constrained to the
 // trailing button.
 - (void)startVoiceSearch;
 
@@ -293,6 +301,12 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
     // Display a fake "placeholder".
     NSString* placeholderString =
         l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT);
+
+    if (IsVivaldiRunning()) {
+      placeholderString =
+          l10n_util::GetNSString(IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS);
+    } // End Vivaldi
+
     [self.locationBarSteadyView
         setLocationLabelPlaceholderText:placeholderString];
   }
@@ -439,12 +453,12 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (void)updateTrailingButton {
   // Stop constraining the voice guide to the trailing button if transitioning
   // from kVoiceSearchButton.
-  NamedGuide* voiceGuide =
-      [NamedGuide guideWithName:kVoiceSearchButtonGuide
-                           view:self.locationBarSteadyView];
-  if (voiceGuide.constrainedView == self.locationBarSteadyView.trailingButton)
-    voiceGuide.constrainedView = nil;
-
+  UIView* referencedView =
+      [self.layoutGuideCenter referencedViewUnderName:kVoiceSearchButtonGuide];
+  if (referencedView == self.locationBarSteadyView.trailingButton) {
+    [self.layoutGuideCenter referenceView:nil
+                                underName:kVoiceSearchButtonGuide];
+  }
 
   // Cancel previous possible state.
   [self.locationBarSteadyView.trailingButton
@@ -500,10 +514,10 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                     action:@selector(startVoiceSearch)
           forControlEvents:UIControlEventTouchUpInside];
 
-      UIImage* micImage =
-          UseSymbols() ? DefaultSymbolWithPointSize(kMicrophoneFillSymbol,
-                                                    kSymbolImagePointSize)
-                       : [UIImage imageNamed:@"location_bar_voice"];
+      UIImage* micImage = UseSymbols()
+                              ? DefaultSymbolWithPointSize(
+                                    kMicrophoneSymbol, kSymbolImagePointSize)
+                              : [UIImage imageNamed:@"location_bar_voice"];
       [self.locationBarSteadyView.trailingButton
           setImage:[micImage imageWithRenderingMode:
                                  UIImageRenderingModeAlwaysTemplate]
@@ -527,8 +541,9 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 }
 
 - (void)startVoiceSearch {
-  [NamedGuide guideWithName:kVoiceSearchButtonGuide view:self.view]
-      .constrainedView = self.locationBarSteadyView.trailingButton;
+  [self.layoutGuideCenter
+      referenceView:self.locationBarSteadyView.trailingButton
+          underName:kVoiceSearchButtonGuide];
   [self.dispatcher startVoiceSearch];
 }
 

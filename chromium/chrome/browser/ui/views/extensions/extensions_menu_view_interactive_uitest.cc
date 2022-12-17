@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -210,10 +210,10 @@ class ExtensionsMenuViewInteractiveUITest : public ExtensionsToolbarUITest {
 
   void TriggerExtensionButton(const std::string& id) {
     auto menu_items = GetInstalledExtensionMenuItemViews();
-    auto iter = base::ranges::find_if(
-        menu_items, [id](InstalledExtensionMenuItemView* view) {
-          return view->view_controller()->GetId() == id;
-        });
+    auto iter = base::ranges::find(menu_items, id,
+                                   [](InstalledExtensionMenuItemView* view) {
+                                     return view->view_controller()->GetId();
+                                   });
     ASSERT_TRUE(iter != menu_items.end());
 
     ClickButton((*iter)->primary_action_button_for_testing());
@@ -707,16 +707,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest,
                        MenuGetsUpdatedAfterPermissionsChange) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
-  extensions::TestExtensionDir test_dir;
-  test_dir.WriteManifest(R"({
-           "name": "All Urls Extension",
-           "manifest_version": 3,
-           "version": "0.1",
-           "host_permissions": ["<all_urls>"]
-         })");
-  AppendExtension(
-      extensions::ChromeTestExtensionLoader(profile()).LoadExtension(
-          test_dir.UnpackedPath()));
+  InstallExtensionWithHostPermissions("All Urls Extension", "<all_urls>");
   ASSERT_EQ(1u, extensions().size());
 
   GURL url = embedded_test_server()->GetURL("example.com", "/title1.html");

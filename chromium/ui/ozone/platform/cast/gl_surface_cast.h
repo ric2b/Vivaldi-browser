@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,8 @@ class GLSurfaceCast : public gl::NativeViewGLSurfaceEGL {
   // gl::GLSurface:
   bool SupportsSwapBuffersWithBounds() override;
   gfx::SwapResult SwapBuffersWithBounds(const std::vector<gfx::Rect>& rects,
-                                        PresentationCallback callback) override;
+                                        PresentationCallback callback,
+                                        gl::FrameData data) override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
               const gfx::ColorSpace& color_space,

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <algorithm>
 #include <memory>
 #include <numeric>
 
@@ -17,6 +16,7 @@
 #include "base/i18n/char_iterator.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -187,10 +187,10 @@ DecoratedText::RangedAttribute CreateRangedAttribute(
     int font_index,
     Font::Weight weight,
     int style_mask) {
-  const auto iter = std::find_if(font_spans.cbegin(), font_spans.cend(),
-                                 [font_index](const FontSpan& span) {
-                                   return IndexInRange(span.second, font_index);
-                                 });
+  const auto iter =
+      base::ranges::find_if(font_spans, [font_index](const FontSpan& span) {
+        return IndexInRange(span.second, font_index);
+      });
   DCHECK(font_spans.end() != iter);
   const Font& font = iter->first;
 
@@ -223,11 +223,9 @@ void VerifyDecoratedWordsAreEqual(const DecoratedText& expected,
       return IndexInRange(attr.range, i);
     };
     const auto expected_attr =
-        std::find_if(expected.attributes.begin(), expected.attributes.end(),
-                     find_attribute_func);
+        base::ranges::find_if(expected.attributes, find_attribute_func);
     const auto actual_attr =
-        std::find_if(actual.attributes.begin(), actual.attributes.end(),
-                     find_attribute_func);
+        base::ranges::find_if(actual.attributes, find_attribute_func);
     ASSERT_NE(expected.attributes.end(), expected_attr);
     ASSERT_NE(actual.attributes.end(), actual_attr);
 
@@ -6286,6 +6284,16 @@ TEST_F(RenderTextTest, Multiline_ZeroWidthChars) {
         test_api()->lines()[j].segments[0].char_range.start(),
         test_api()->lines()[j].segments[segment_size - 1].char_range.end());
     EXPECT_EQ(char_ranges[j], line_range);
+  }
+
+  for (const std::u16string test_text : {u"\u200b", u"A\u200bB", u"A\u200b"}) {
+    for (int width = 1; width <= 5; width++) {
+      SCOPED_TRACE(testing::Message()
+                   << "String: '" << test_text << "' width: " << width);
+      render_text->SetText(test_text);
+      render_text->SetDisplayRect(Rect(0, 0, width, 0));
+      render_text->Draw(canvas());
+    }
   }
 }
 

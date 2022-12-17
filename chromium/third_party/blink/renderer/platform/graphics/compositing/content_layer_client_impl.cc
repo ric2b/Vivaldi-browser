@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,8 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/stl_util.h"
 #include "base/trace_event/traced_value.h"
+#include "base/types/optional_util.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_op_buffer.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -120,7 +120,7 @@ void ContentLayerClientImpl::UpdateCcPictureLayer(
   cc_display_item_list_ = PaintChunksToCcLayer::Convert(
       paint_chunks, layer_state, layer_offset,
       cc::DisplayItemList::kTopLevelDisplayItemList,
-      base::OptionalOrNullptr(raster_under_invalidation_params));
+      base::OptionalToPtr(raster_under_invalidation_params));
 
   cc_picture_layer_->SetBounds(layer_bounds);
   cc_picture_layer_->SetHitTestable(true);

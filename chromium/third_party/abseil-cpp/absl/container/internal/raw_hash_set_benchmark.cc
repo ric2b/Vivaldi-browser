@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "absl/container/internal/raw_hash_set.h"
-
+#include <array>
+#include <cmath>
 #include <numeric>
 #include <random>
+#include <utility>
+#include <vector>
 
 #include "absl/base/internal/raw_logging.h"
 #include "absl/container/internal/hash_function_defaults.h"
+#include "absl/container/internal/raw_hash_set.h"
 #include "absl/strings/str_format.h"
 #include "benchmark/benchmark.h"
 
@@ -202,40 +205,113 @@ void CacheInSteadyStateArgs(Benchmark* bm) {
 BENCHMARK(BM_CacheInSteadyState)->Apply(CacheInSteadyStateArgs);
 
 void BM_EndComparison(benchmark::State& state) {
+  StringTable t = {{"a", "a"}, {"b", "b"}};
+  auto it = t.begin();
+  for (auto i : state) {
+    benchmark::DoNotOptimize(t);
+    benchmark::DoNotOptimize(it);
+    benchmark::DoNotOptimize(it != t.end());
+  }
+}
+BENCHMARK(BM_EndComparison);
+
+void BM_Iteration(benchmark::State& state) {
   std::random_device rd;
   std::mt19937 rng(rd());
   string_generator gen{12};
   StringTable t;
-  while (t.size() < state.range(0)) {
+
+  size_t capacity = state.range(0);
+  size_t size = state.range(1);
+  t.reserve(capacity);
+
+  while (t.size() < size) {
     t.emplace(gen(rng), gen(rng));
   }
 
-  for (auto _ : state) {
+  for (auto i : state) {
+    benchmark::DoNotOptimize(t);
     for (auto it = t.begin(); it != t.end(); ++it) {
-      benchmark::DoNotOptimize(it);
-      benchmark::DoNotOptimize(t);
-      benchmark::DoNotOptimize(it != t.end());
+      benchmark::DoNotOptimize(*it);
     }
   }
 }
-BENCHMARK(BM_EndComparison)->Arg(400);
 
-void BM_CopyCtor(benchmark::State& state) {
+BENCHMARK(BM_Iteration)
+    ->ArgPair(1, 1)
+    ->ArgPair(2, 2)
+    ->ArgPair(4, 4)
+    ->ArgPair(7, 7)
+    ->ArgPair(10, 10)
+    ->ArgPair(15, 15)
+    ->ArgPair(16, 16)
+    ->ArgPair(54, 54)
+    ->ArgPair(100, 100)
+    ->ArgPair(400, 400)
+    // empty
+    ->ArgPair(0, 0)
+    ->ArgPair(10, 0)
+    ->ArgPair(100, 0)
+    ->ArgPair(1000, 0)
+    ->ArgPair(10000, 0)
+    // sparse
+    ->ArgPair(100, 1)
+    ->ArgPair(1000, 10);
+
+void BM_CopyCtorSparseInt(benchmark::State& state) {
   std::random_device rd;
   std::mt19937 rng(rd());
   IntTable t;
   std::uniform_int_distribution<uint64_t> dist(0, ~uint64_t{});
 
-  while (t.size() < state.range(0)) {
+  size_t size = state.range(0);
+  t.reserve(size * 10);
+  while (t.size() < size) {
     t.emplace(dist(rng));
   }
 
-  for (auto _ : state) {
+  for (auto i : state) {
     IntTable t2 = t;
     benchmark::DoNotOptimize(t2);
   }
 }
-BENCHMARK(BM_CopyCtor)->Range(128, 4096);
+BENCHMARK(BM_CopyCtorSparseInt)->Range(128, 4096);
+
+void BM_CopyCtorInt(benchmark::State& state) {
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  IntTable t;
+  std::uniform_int_distribution<uint64_t> dist(0, ~uint64_t{});
+
+  size_t size = state.range(0);
+  while (t.size() < size) {
+    t.emplace(dist(rng));
+  }
+
+  for (auto i : state) {
+    IntTable t2 = t;
+    benchmark::DoNotOptimize(t2);
+  }
+}
+BENCHMARK(BM_CopyCtorInt)->Range(128, 4096);
+
+void BM_CopyCtorString(benchmark::State& state) {
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  StringTable t;
+  std::uniform_int_distribution<uint64_t> dist(0, ~uint64_t{});
+
+  size_t size = state.range(0);
+  while (t.size() < size) {
+    t.emplace(std::to_string(dist(rng)), std::to_string(dist(rng)));
+  }
+
+  for (auto i : state) {
+    StringTable t2 = t;
+    benchmark::DoNotOptimize(t2);
+  }
+}
+BENCHMARK(BM_CopyCtorString)->Range(128, 4096);
 
 void BM_CopyAssign(benchmark::State& state) {
   std::random_device rd;
@@ -437,7 +513,6 @@ void CodegenAbslRawHashSetInt64Iterate(
 int odr =
     (::benchmark::DoNotOptimize(std::make_tuple(
          &CodegenAbslRawHashSetInt64Find, &CodegenAbslRawHashSetInt64FindNeEnd,
-         &CodegenAbslRawHashSetInt64Insert,
-         &CodegenAbslRawHashSetInt64Contains,
+         &CodegenAbslRawHashSetInt64Insert, &CodegenAbslRawHashSetInt64Contains,
          &CodegenAbslRawHashSetInt64Iterate)),
      1);

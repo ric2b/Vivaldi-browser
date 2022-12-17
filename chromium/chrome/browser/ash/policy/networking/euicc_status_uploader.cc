@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -128,7 +128,7 @@ EuiccStatusUploader::ConstructRequestFromStatus(const base::Value& status,
   auto* mutable_esim_profiles = upload_request->mutable_esim_profiles();
   for (const auto& esim_profile :
        status.FindListPath(kLastUploadedEuiccStatusESimProfilesKey)
-           ->GetListDeprecated()) {
+           ->GetList()) {
     enterprise_management::ESimProfileInfo esim_profile_info;
     esim_profile_info.set_iccid(*esim_profile.FindStringKey(
         kLastUploadedEuiccStatusESimProfilesIccidKey));

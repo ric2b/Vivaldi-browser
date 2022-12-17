@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@ import {FittingType} from 'chrome://print/pdf/constants.js';
 import {ViewerZoomButtonElement} from 'chrome://print/pdf/elements/viewer-zoom-button.js';
 import {ViewerZoomToolbarElement} from 'chrome://print/pdf/elements/viewer-zoom-toolbar.js';
 import {CrIconButtonElement} from 'chrome://print/print_preview.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
@@ -33,7 +33,8 @@ suite(pdf_zoom_toolbar_test.suiteName, function() {
   const fitPageIcon: string = 'fullscreen-exit';
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     zoomToolbar = document.createElement('viewer-zoom-toolbar');
     document.body.appendChild(zoomToolbar);

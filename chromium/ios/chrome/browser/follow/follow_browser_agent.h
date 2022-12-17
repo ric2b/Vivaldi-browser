@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,8 +95,12 @@ class FollowBrowserAgent final : public BrowserUserData<FollowBrowserAgent> {
                          FollowSource source,
                          FollowedWebSite* web_site);
 
-  raw_ptr<Browser> browser_;
-  raw_ptr<FollowService> service_;
+  // Helper method to lazy initiate variables.
+  raw_ptr<FollowService> GetFollowService();
+  FeedMetricsRecorder* GetMetricsRecorder();
+
+  raw_ptr<Browser> browser_ = nullptr;
+  raw_ptr<FollowService> service_ = nullptr;
 
   __weak id<NewTabPageCommands> new_tab_page_commands_;
   __weak id<SnackbarCommands> snack_bar_commands_;

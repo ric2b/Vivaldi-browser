@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -215,7 +215,7 @@ void SynchronousCompositorProxy::DoDemandDrawSw(
   }
   SkCanvas canvas(bitmap);
   canvas.clipRect(gfx::RectToSkRect(params->clip));
-  canvas.concat(params->transform.matrix().asM33());
+  canvas.concat(gfx::TransformToFlattenedSkMatrix(params->transform));
 
   layer_tree_frame_sink_->DemandDrawSw(&canvas);
 }

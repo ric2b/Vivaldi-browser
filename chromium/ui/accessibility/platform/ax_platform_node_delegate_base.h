@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -99,7 +99,7 @@ class AX_EXPORT AXPlatformNodeDelegateBase : public AXPlatformNodeDelegate {
   ax::mojom::DescriptionFrom GetDescriptionFrom() const override;
   std::u16string GetTextContentUTF16() const override;
   std::u16string GetValueForControl() const override;
-  const AXTree::Selection GetUnignoredSelection() const override;
+  const AXSelection GetUnignoredSelection() const override;
 
   AXNodePosition::AXPositionInstance CreatePositionAt(
       int offset,

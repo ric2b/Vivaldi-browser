@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,6 +97,14 @@ Weight GetFontWeightFromNSFont(NSFont* font) {
   // A missing weight attribute just means 0 -> NORMAL.
   if (!cf_weight)
     return Weight::NORMAL;
+
+  // macOS 13 bug: For non-system fonts with 0-valued traits, `kCFBooleanFalse`
+  // is used instead of a `CFNumberRef` of 0. See https://crbug.com/1372420.
+  // Filed as FB11673021. In this code path, the
+  // `base::mac::GetValueFromDictionary` call above will DLOG for this case and
+  // return a null `CFNumberRef`, which will cause this function to return
+  // `Weight::NORMAL`, which happens to be the correct thing to do for a trait
+  // with value 0.
 
   // The value of kCTFontWeightTrait empirically is a kCFNumberFloat64Type
   // (double) on all tested versions of macOS. However, that doesn't really

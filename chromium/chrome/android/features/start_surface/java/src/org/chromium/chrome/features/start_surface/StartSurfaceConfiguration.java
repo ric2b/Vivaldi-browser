@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,6 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -19,7 +18,6 @@ import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.browser.profiles.Profile;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -33,9 +31,6 @@ public class StartSurfaceConfiguration {
     public static final StringCachedFieldTrialParameter START_SURFACE_VARIATION =
             new StringCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, "start_surface_variation", "single");
-    public static final BooleanCachedFieldTrialParameter START_SURFACE_EXCLUDE_MV_TILES =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_ANDROID, "exclude_mv_tiles", false);
     public static final BooleanCachedFieldTrialParameter
             START_SURFACE_HIDE_INCOGNITO_SWITCH_NO_TAB =
                     new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
@@ -47,6 +42,10 @@ public class StartSurfaceConfiguration {
     public static final BooleanCachedFieldTrialParameter START_SURFACE_OPEN_NTP_INSTEAD_OF_START =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, "open_ntp_instead_of_start", true);
+
+    public static final BooleanCachedFieldTrialParameter START_SURFACE_OPEN_START_AS_HOMEPAGE =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.START_SURFACE_ANDROID, "open_start_as_homepage", false);
 
     private static final String TAB_COUNT_BUTTON_ON_START_SURFACE_PARAM =
             "tab_count_button_on_start_surface";
@@ -63,22 +62,6 @@ public class StartSurfaceConfiguration {
     public static final BooleanCachedFieldTrialParameter SUPPORT_ACCESSIBILITY =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, SUPPORT_ACCESSIBILITY_PARAM, true);
-
-    private static final String WARM_UP_RENDERER_PARAM = "warm_up_renderer";
-    public static final BooleanCachedFieldTrialParameter WARM_UP_RENDERER =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_ANDROID, WARM_UP_RENDERER_PARAM, false);
-
-    private static final String SPARE_RENDERER_DELAY_MS_PARAM = "spare_renderer_delay_ms";
-    public static final IntCachedFieldTrialParameter SPARE_RENDERER_DELAY_MS =
-            new IntCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_ANDROID, SPARE_RENDERER_DELAY_MS_PARAM, 1000);
-
-    private static final String CHECK_SYNC_BEFORE_SHOW_START_AT_STARTUP_PARAM =
-            "check_sync_before_show_start_at_startup";
-    public static final BooleanCachedFieldTrialParameter CHECK_SYNC_BEFORE_SHOW_START_AT_STARTUP =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                    CHECK_SYNC_BEFORE_SHOW_START_AT_STARTUP_PARAM, false);
 
     private static final String BEHAVIOURAL_TARGETING_PARAM = "behavioural_targeting";
     public static final StringCachedFieldTrialParameter BEHAVIOURAL_TARGETING =
@@ -125,11 +108,18 @@ public class StartSurfaceConfiguration {
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, IS_DOODLE_SUPPORTED_PARAM, false);
 
-    private static final String HIDE_START_WHEN_LAST_VISITED_TAB_IS_SRP_PARAM =
-            "hide_start_when_last_visited_tab_is_srp";
-    public static final BooleanCachedFieldTrialParameter HIDE_START_WHEN_LAST_VISITED_TAB_IS_SRP =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                    HIDE_START_WHEN_LAST_VISITED_TAB_IS_SRP_PARAM, false);
+    // Start return time experiment:
+    private static final String START_SURFACE_RETURN_TIME_SECONDS_PARAM =
+            "start_surface_return_time_seconds";
+    public static final IntCachedFieldTrialParameter START_SURFACE_RETURN_TIME_SECONDS =
+            new IntCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_RETURN_TIME,
+                    START_SURFACE_RETURN_TIME_SECONDS_PARAM, 28800); // 8 hours
+
+    private static final String START_SURFACE_RETURN_TIME_USE_MODEL_PARAM =
+            "start_surface_return_time_use_model";
+    public static final BooleanCachedFieldTrialParameter START_SURFACE_RETURN_TIME_USE_MODEL =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_RETURN_TIME,
+                    START_SURFACE_RETURN_TIME_USE_MODEL_PARAM, false);
 
     private static final String STARTUP_UMA_PREFIX = "Startup.Android.";
     private static final String INSTANT_START_SUBFIX = ".Instant";
@@ -179,11 +169,5 @@ public class StartSurfaceConfiguration {
     static void setFeedVisibilityForTesting(boolean isVisible) {
         SharedPreferencesManager.getInstance().writeBoolean(
                 ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE, isVisible);
-    }
-
-    @NativeMethods
-    interface Natives {
-        // Native methods
-        void warmupRenderer(Profile profile);
     }
 }

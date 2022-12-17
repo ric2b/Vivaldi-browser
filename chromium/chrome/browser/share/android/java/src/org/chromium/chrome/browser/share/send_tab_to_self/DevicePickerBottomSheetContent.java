@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.sync_device_info.FormFactor;
 import org.chromium.ui.widget.Toast;
 
 import java.util.List;
@@ -152,12 +153,9 @@ public class DevicePickerBottomSheetContent implements BottomSheetContent, OnIte
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.SEND_TAB_TO_SELF_V2)
                 || ChromeFeatureList.isEnabled(ChromeFeatureList.UPCOMING_SHARING_FEATURES)) {
             String deviceType = res.getString(R.string.send_tab_to_self_device_type_generic);
-            if (targetDeviceInfo.deviceType == TargetDeviceInfo.DeviceType.PHONE) {
+            if (targetDeviceInfo.formFactor == FormFactor.PHONE) {
                 deviceType = res.getString(R.string.send_tab_to_self_device_type_phone);
-            } else if (targetDeviceInfo.deviceType == TargetDeviceInfo.DeviceType.WIN
-                    || targetDeviceInfo.deviceType == TargetDeviceInfo.DeviceType.MACOSX
-                    || targetDeviceInfo.deviceType == TargetDeviceInfo.DeviceType.LINUX
-                    || targetDeviceInfo.deviceType == TargetDeviceInfo.DeviceType.CHROMEOS) {
+            } else if (targetDeviceInfo.formFactor == FormFactor.DESKTOP) {
                 deviceType = res.getString(R.string.send_tab_to_self_device_type_computer);
             }
 

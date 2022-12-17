@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,14 +33,14 @@
 #include "chromeos/ash/services/assistant/public/cpp/device_actions.h"
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/ash/services/assistant/service_context.h"
+#include "chromeos/ash/services/libassistant/public/cpp/libassistant_loader.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
-#include "chromeos/services/libassistant/public/cpp/libassistant_loader.h"
+#include "components/account_id/account_id.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/access_token_fetcher.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/scope_set.h"
-#include "components/user_manager/known_user.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -166,8 +166,8 @@ class Service::Context : public ServiceContext {
     return parent_->main_task_runner_;
   }
 
-  PowerManagerClient* power_manager_client() override {
-    return PowerManagerClient::Get();
+  chromeos::PowerManagerClient* power_manager_client() override {
+    return chromeos::PowerManagerClient::Get();
   }
 
   std::string primary_account_gaia_id() override {
@@ -536,7 +536,7 @@ void Service::AddAshSessionObserver() {
     // Note that this account can either be a regular account using real gaia,
     // or a fake gaia account.
     CoreAccountInfo account_info = RetrievePrimaryAccountInfo();
-    AccountId account_id = user_manager::known_user::GetAccountId(
+    AccountId account_id = AccountId::FromNonCanonicalEmail(
         account_info.email, account_info.gaia, AccountType::GOOGLE);
     scoped_ash_session_observer_ =
         std::make_unique<ScopedAshSessionObserver>(this, account_id);
@@ -581,7 +581,7 @@ bool Service::ShouldEnableHotword() {
 }
 
 void Service::LoadLibassistant() {
-  chromeos::libassistant::LibassistantLoader::Load(base::BindOnce(
+  libassistant::LibassistantLoader::Load(base::BindOnce(
       &Service::OnLibassistantLoaded, weak_ptr_factory_.GetWeakPtr()));
 }
 

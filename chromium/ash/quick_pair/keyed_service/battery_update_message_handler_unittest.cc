@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,14 +16,14 @@
 #include "ash/quick_pair/message_stream/message_stream_lookup.h"
 #include "ash/quick_pair/pairing/mock_pairer_broker.h"
 #include "ash/quick_pair/pairing/pairer_broker.h"
-#include "ash/services/quick_pair/fast_pair_data_parser.h"
-#include "ash/services/quick_pair/mock_quick_pair_process_manager.h"
-#include "ash/services/quick_pair/quick_pair_process.h"
-#include "ash/services/quick_pair/quick_pair_process_manager.h"
-#include "ash/services/quick_pair/quick_pair_process_manager_impl.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/services/quick_pair/fast_pair_data_parser.h"
+#include "chromeos/ash/services/quick_pair/mock_quick_pair_process_manager.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process_manager.h"
+#include "chromeos/ash/services/quick_pair/quick_pair_process_manager_impl.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "device/bluetooth/test/mock_bluetooth_device.h"

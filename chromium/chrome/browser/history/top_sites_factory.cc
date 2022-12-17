@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,7 +27,6 @@
 #include "components/grit/components_scaled_resources.h"
 #include "components/history/core/browser/history_constants.h"
 #include "components/history/core/browser/top_sites_impl.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/ntp_features.h"
@@ -39,7 +38,6 @@
 #include "url/gurl.h"
 
 #include "app/vivaldi_apptools.h"
-#include "browser/history/top_sites_convert.h"
 
 namespace {
 
@@ -120,21 +118,11 @@ scoped_refptr<history::TopSites> TopSitesFactory::BuildTopSites(
       profile->GetPrefs(), history_service, template_url_service,
       prepopulated_page_list, base::BindRepeating(CanAddURLToHistory)));
   top_sites->Init(context->GetPath().Append(history::kTopSitesFilename));
-
-#if !BUILDFLAG(IS_ANDROID)
-  if (vivaldi::IsVivaldiRunning()) {
-    top_sites->SetThumbnailConvertCallback(
-        base::BindRepeating(&vivaldi::ConvertThumbnailDataImpl));
-  }
-#endif
-
   return top_sites;
 }
 
 TopSitesFactory::TopSitesFactory()
-    : RefcountedBrowserContextKeyedServiceFactory(
-          "TopSites",
-          BrowserContextDependencyManager::GetInstance()) {
+    : RefcountedProfileKeyedServiceFactory("TopSites") {
   DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(TemplateURLServiceFactory::GetInstance());
   // This dependency is only used when the experimental

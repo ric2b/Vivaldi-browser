@@ -1,7 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/at_exit.h"
+#include "base/i18n/icu_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -14,7 +16,6 @@
 #include "ui/accessibility/ax_tree_fuzzer_util.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/ax_tree_update.h"
-#include "ui/accessibility/test_ax_tree_manager.h"
 
 // Max amount of fuzz data needed to create the next position
 const size_t kNextNodePositionMaxDataSize = 4;
@@ -30,7 +31,7 @@ const size_t kMinFuzzDataSize =
     kMinNodeCount * AXTreeFuzzerGenerator::kMinTextFuzzDataSize +
     2 * kNextNodePositionMaxDataSize;
 // Cap fuzz data to avoid slowness.
-const size_t kMaxFuzzDataSize = 20000;
+const size_t kMaxFuzzDataSize = 3500;
 
 using TestPositionType =
     std::unique_ptr<ui::AXPosition<ui::AXNodePosition, ui::AXNode>>;
@@ -111,8 +112,7 @@ TestPositionType AXNodePositionFuzzerGenerator::CreateNewPosition(
               ? child_index_or_text_offset % anchor->GetTextContentLengthUTF16()
               : 0;
       return ui::AXNodePosition::CreateTextPosition(
-          tree_->GetAXTreeID(), anchor_id, child_index_or_text_offset,
-          affinity);
+          *anchor, child_index_or_text_offset, affinity);
       case ui::AXPositionKind::NULL_POSITION:
         NOTREACHED();
         return ui::AXNodePosition::CreateNullPosition();
@@ -367,10 +367,16 @@ void AXNodePositionFuzzerGenerator::CallPositionAPIs(
   std::ignore = position->GetRole();
 }
 
+struct Environment {
+  Environment() { CHECK(base::i18n::InitializeICU()); }
+  base::AtExitManager at_exit_manager;
+};
+
 // Entry point for LibFuzzer.
 extern "C" int LLVMFuzzerTestOneInput(const unsigned char* data, size_t size) {
   if (size < kMinFuzzDataSize || size > kMaxFuzzDataSize)
     return 0;
+  static Environment env;
   AXTreeFuzzerGenerator generator;
   FuzzerData fuzz_data(data, size);
   const size_t node_count =

@@ -1,10 +1,9 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 
-#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -19,6 +18,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -212,21 +212,20 @@ void IndexedDBContextImpl::GetUsage(GetUsageCallback usage_callback) {
 }
 
 void IndexedDBContextImpl::GetUsageImpl(GetUsageCallback usage_callback) {
-  // TODO(https://crbug.com/1199077): Pass the real StorageKey when
-  // StorageUsageInfo is converted.
-  std::map<url::Origin, storage::mojom::StorageUsageInfoPtr> usage_map;
+  std::map<blink::StorageKey, storage::mojom::StorageUsageInfoPtr> usage_map;
   for (const auto& bucket_locator : GetAllBuckets()) {
-    const auto& origin = bucket_locator.storage_key.origin();
-    if (usage_map.find(origin) != usage_map.end()) {
-      usage_map[origin]->total_size_bytes += GetBucketDiskUsage(bucket_locator);
+    const auto& it = usage_map.find(bucket_locator.storage_key);
+    if (it != usage_map.end()) {
+      it->second->total_size_bytes += GetBucketDiskUsage(bucket_locator);
       const auto& last_modified = GetBucketLastModified(bucket_locator);
-      if (usage_map[origin]->last_modified < last_modified) {
-        usage_map[origin]->last_modified = last_modified;
+      if (it->second->last_modified < last_modified) {
+        it->second->last_modified = last_modified;
       }
     } else {
-      usage_map[origin] = storage::mojom::StorageUsageInfo::New(
-          origin, GetBucketDiskUsage(bucket_locator),
-          GetBucketLastModified(bucket_locator));
+      usage_map[bucket_locator.storage_key] =
+          storage::mojom::StorageUsageInfo::New(
+              bucket_locator.storage_key, GetBucketDiskUsage(bucket_locator),
+              GetBucketLastModified(bucket_locator));
     }
   }
   std::vector<storage::mojom::StorageUsageInfoPtr> result;
@@ -768,10 +767,7 @@ absl::optional<storage::BucketLocator> IndexedDBContextImpl::LookUpBucket(
     storage::BucketId bucket_id) {
   DCHECK(IDBTaskRunner()->RunsTasksInCurrentSequence());
   auto bucket_locator =
-      std::find_if(bucket_set_.begin(), bucket_set_.end(),
-                   [&bucket_id](const storage::BucketLocator& locator) {
-                     return locator.id == bucket_id;
-                   });
+      base::ranges::find(bucket_set_, bucket_id, &storage::BucketLocator::id);
   if (bucket_locator == bucket_set_.end())
     return absl::nullopt;
 

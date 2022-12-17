@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -323,8 +323,9 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCompletionStatusMetricsTest,
                JourneyLogger::EVENT_HAS_ENROLLED_INSTRUMENT_FALSE);
 }
 
+// TODO(crbug.com/1365631): Disabled for flakiness.
 IN_PROC_BROWSER_TEST_F(PaymentRequestCompletionStatusMetricsTest,
-                       UserAborted_CancelButton) {
+                       DISABLED_UserAborted_CancelButton) {
   // Installs two apps so that the Payment Request UI will be shown.
   std::string a_method_name;
   InstallPaymentApp("a.com", "payment_request_success_responder.js",
@@ -382,8 +383,9 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCompletionStatusMetricsTest,
                JourneyLogger::EVENT_HAS_ENROLLED_INSTRUMENT_FALSE);
 }
 
+// TODO(crbug.com/1365631): Disabled for flakiness.
 IN_PROC_BROWSER_TEST_F(PaymentRequestCompletionStatusMetricsTest,
-                       UserAborted_TabClosed) {
+                       DISABLED_UserAborted_TabClosed) {
   // Installs two apps so that the Payment Request UI will be shown.
   std::string a_method_name;
   InstallPaymentApp("a.com", "payment_request_success_responder.js",
@@ -507,12 +509,17 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCompletionStatusMetricsTest,
 using PaymentRequestInitiatedCompletionStatusMetricsTest =
     PaymentRequestBrowserTestBase;
 
-// Disabled due to flakiness: https://crbug.com/1003253.
-// TODO(https://crbug.com/1209835): Migrate away from basic-card or remove test.
 IN_PROC_BROWSER_TEST_F(PaymentRequestInitiatedCompletionStatusMetricsTest,
-                       DISABLED_Aborted_NotShown) {
+                       Aborted_NotShown) {
   base::HistogramTester histogram_tester;
   NavigateTo("/initiated_test.html");
+
+  // Ensure that the browser side PaymentRequest service has initialized.
+  EXPECT_EQ(false, content::EvalJs(
+                       GetActiveWebContents(),
+                       content::JsReplace(
+                           "canMakePayment($1)",
+                           https_server()->GetURL("example.test", "/webpay"))));
 
   // Navigate away.
   NavigateTo("/payment_request_email_test.html");
@@ -527,7 +534,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestInitiatedCompletionStatusMetricsTest,
       histogram_tester.GetAllSamples("PaymentRequest.Events");
   ASSERT_EQ(1U, buckets.size());
   EXPECT_EQ(JourneyLogger::EVENT_INITIATED | JourneyLogger::EVENT_USER_ABORTED |
-                JourneyLogger::EVENT_REQUEST_METHOD_BASIC_CARD |
+                JourneyLogger::EVENT_CAN_MAKE_PAYMENT_FALSE |
                 JourneyLogger::EVENT_REQUEST_METHOD_OTHER |
                 JourneyLogger::EVENT_NEEDS_COMPLETION_PAYMENT,
             buckets[0].min);

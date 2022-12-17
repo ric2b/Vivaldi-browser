@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -329,9 +329,11 @@ class TabStripModel : public TabGroupController {
   // Changes the blocked state of the tab at |index|.
   void SetTabBlocked(int index, bool blocked);
 
-  // Changes the pinned state of the tab at |index|. See description above
-  // class for details on this.
-  void SetTabPinned(int index, bool pinned);
+  // Changes the pinned state of the tab at `index`. See description above
+  // class for details on this. Returns the index the tab is now at (it may have
+  // been moved to maintain contiguity of pinned tabs at the beginning of the
+  // tabstrip).)
+  int SetTabPinned(int index, bool pinned);
 
   // Returns true if the tab at |index| is pinned.
   // See description above class for details on pinned tabs.
@@ -505,6 +507,7 @@ class TabStripModel : public TabGroupController {
     CommandMoveTabsToNewWindow,
     CommandFollowSite,
     CommandUnfollowSite,
+    CommandCopyURL,
     CommandLast
   };
 
@@ -761,10 +764,11 @@ class TabStripModel : public TabGroupController {
   // index would change.
   void GroupTab(int index, const tab_groups::TabGroupId& group);
 
-  // Changes the pinned state of the tab at |index|.
-  void SetTabPinnedImpl(int index, bool pinned);
+  // Changes the pinned state of the tab at `index`, moving it in the process if
+  // necessary. Returns the new index of the tab.
+  int SetTabPinnedImpl(int index, bool pinned);
 
-  // Ensures all tabs indicated by |indices| are pinned, moving them in the
+  // Changes the pinned state of all tabs at `indices`, moving them in the
   // process if necessary. Returns the new locations of all of those tabs.
   std::vector<int> SetTabsPinned(const std::vector<int>& indices, bool pinned);
 

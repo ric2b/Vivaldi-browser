@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -275,8 +275,8 @@ void VideoCaptureClient::OnBufferReady(
   }
 
   frame->set_metadata(buffer->info->metadata);
-  if (buffer->info->color_space.has_value())
-    frame->set_color_space(buffer->info->color_space.value());
+  if (buffer->info->color_space)
+    frame->set_color_space(*buffer->info->color_space);
 
   frame_deliver_callback_.Run(frame);
 }

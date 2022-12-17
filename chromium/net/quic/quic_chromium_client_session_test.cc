@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@
 #include "base/time/default_tick_clock.h"
 #include "build/build_config.h"
 #include "net/base/features.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/schemeful_site.h"
 #include "net/base/test_completion_callback.h"
 #include "net/cert/cert_verify_result.h"
@@ -60,6 +60,7 @@
 #include "net/third_party/quiche/src/quiche/quic/platform/api/quic_flags.h"
 #include "net/third_party/quiche/src/quiche/quic/platform/api/quic_test.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/crypto_test_utils.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/mock_connection_id_generator.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/qpack/qpack_test_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/quic_client_promised_info_peer.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/quic_connection_peer.h"
@@ -144,7 +145,7 @@ class QuicChromiumClientSessionTest
                      kServerPort,
                      PRIVACY_MODE_DISABLED,
                      SocketTag(),
-                     NetworkIsolationKey(),
+                     NetworkAnonymizationKey(),
                      SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false),
         destination_(url::kHttpsScheme, kServerHostname, kServerPort),
@@ -188,7 +189,7 @@ class QuicChromiumClientSessionTest
         quic::QuicUtils::CreateRandomConnectionId(&random_),
         quic::QuicSocketAddress(), ToQuicSocketAddress(kIpEndPoint), &helper_,
         &alarm_factory_, writer, true, quic::Perspective::IS_CLIENT,
-        quic::test::SupportedVersions(version_));
+        quic::test::SupportedVersions(version_), connection_id_generator_);
     session_ = std::make_unique<TestingQuicChromiumClientSession>(
         connection, std::move(socket),
         /*stream_factory=*/nullptr, &crypto_client_stream_factory_, &clock_,
@@ -198,7 +199,7 @@ class QuicChromiumClientSessionTest
         /*migrate_session_on_network_change_v2=*/false, default_network_,
         quic::QuicTime::Delta::FromMilliseconds(
             kDefaultRetransmittableOnWireTimeout.InMilliseconds()),
-        /*migrate_idle_session=*/false, /*allow_port_migration=*/false,
+        /*migrate_idle_session=*/false, allow_port_migration_,
         kDefaultIdleSessionMigrationPeriod, kMaxTimeOnNonDefaultNetwork,
         kMaxMigrationsToNonDefaultNetworkOnWriteError,
         kMaxMigrationsToNonDefaultNetworkOnPathDegrading,
@@ -312,6 +313,8 @@ class QuicChromiumClientSessionTest
   QuicTestPacketMaker server_maker_;
   ProofVerifyDetailsChromium verify_details_;
   bool migrate_session_early_v2_ = false;
+  bool allow_port_migration_ = false;
+  quic::test::MockConnectionIdGenerator connection_id_generator_;
   quic::test::NoopQpackStreamSenderDelegate noop_qpack_stream_sender_delegate_;
 };
 
@@ -1640,17 +1643,17 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
   EXPECT_TRUE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_FALSE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_ENABLED, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_FALSE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kDisable,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kDisable,
                      /*require_dns_https_alpn=*/false)));
 #if BUILDFLAG(IS_ANDROID)
   SocketTag tag1(SocketTag::UNSET_UID, 0x12345678);
@@ -1658,33 +1661,33 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
   EXPECT_FALSE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, tag1,
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_FALSE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, tag2,
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 #endif
   EXPECT_TRUE(session_->CanPool(
       "mail.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_TRUE(session_->CanPool(
       "mail.example.com",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_FALSE(session_->CanPool(
       "mail.google.com",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 
   const SchemefulSite kSiteFoo(GURL("http://foo.test/"));
 
-  // Check that NetworkIsolationKey is respected when feature is enabled.
+  // Check that NetworkAnonymizationKey is respected when feature is enabled.
   {
     base::test::ScopedFeatureList feature_list;
     feature_list.InitAndDisableFeature(
@@ -1692,7 +1695,7 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
     EXPECT_TRUE(session_->CanPool(
         "mail.example.com",
         QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                       NetworkIsolationKey(kSiteFoo, kSiteFoo),
+                       NetworkAnonymizationKey(kSiteFoo, kSiteFoo),
                        SecureDnsPolicy::kAllow,
                        /*require_dns_https_alpn=*/false)));
   }
@@ -1703,7 +1706,7 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
     EXPECT_FALSE(session_->CanPool(
         "mail.example.com",
         QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                       NetworkIsolationKey(kSiteFoo, kSiteFoo),
+                       NetworkAnonymizationKey(kSiteFoo, kSiteFoo),
                        SecureDnsPolicy::kAllow,
                        /*require_dns_https_alpn=*/false)));
   }
@@ -1713,20 +1716,20 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolExpectCT) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       /* enabled_features */
-      {TransportSecurityState::kDynamicExpectCTFeature,
+      {kDynamicExpectCTFeature,
        features::kPartitionExpectCTStateByNetworkIsolationKey,
        features::kPartitionConnectionsByNetworkIsolationKey},
       /* disabled_features */
       {});
 
-  NetworkIsolationKey network_isolation_key =
-      NetworkIsolationKey::CreateTransient();
+  NetworkAnonymizationKey network_anonymization_key =
+      NetworkAnonymizationKey::CreateTransient();
   // Need to create a session key after setting
   // kPartitionExpectCTStateByNetworkIsolationKey, otherwise, it will ignore the
-  // NetworkIsolationKey value.
+  // NetworkAnonymizationKey value.
   session_key_ =
       QuicSessionKey(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED,
-                     SocketTag(), network_isolation_key,
+                     SocketTag(), network_anonymization_key,
                      SecureDnsPolicy::kAllow, /*require_dns_https_alpn=*/false);
 
   // Need to create this after enabling
@@ -1762,50 +1765,50 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolExpectCT) {
   EXPECT_TRUE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     network_isolation_key, SecureDnsPolicy::kAllow,
+                     network_anonymization_key, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 
-  // Adding Expect-CT data for different NetworkIsolationKeys should have no
+  // Adding Expect-CT data for different NetworkAnonymizationKeys should have no
   // effect.
   base::Time expiry = base::Time::Now() + base::Days(1);
   transport_security_state_->AddExpectCT(
       "www.example.org", expiry, true /* enforce */, GURL() /* report_url */,
-      NetworkIsolationKey::CreateTransient());
+      NetworkAnonymizationKey::CreateTransient());
   transport_security_state_->AddExpectCT(
       "www.example.org", expiry, true /* enforce */, GURL() /* report_url */,
-      NetworkIsolationKey());
+      NetworkAnonymizationKey());
   EXPECT_TRUE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     network_isolation_key, SecureDnsPolicy::kAllow,
+                     network_anonymization_key, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 
-  // Adding Expect-CT data for the same NetworkIsolationKey should prevent
+  // Adding Expect-CT data for the same NetworkAnonymizationKey should prevent
   // pooling.
   transport_security_state_->AddExpectCT(
       "www.example.org", expiry, true /* enforce */, GURL() /* report_url */,
-      network_isolation_key);
+      network_anonymization_key);
   EXPECT_FALSE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     network_isolation_key, SecureDnsPolicy::kAllow,
+                     network_anonymization_key, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 }
 
-// Much as above, but uses a non-empty NetworkIsolationKey.
-TEST_P(QuicChromiumClientSessionTest, CanPoolWithNetworkIsolationKey) {
+// Much as above, but uses a non-empty NetworkAnonymizationKey.
+TEST_P(QuicChromiumClientSessionTest, CanPoolWithNetworkAnonymizationKey) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       features::kPartitionConnectionsByNetworkIsolationKey);
 
   const SchemefulSite kSiteFoo(GURL("http://foo.test/"));
   const SchemefulSite kSiteBar(GURL("http://bar.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey1(kSiteFoo, kSiteFoo);
-  const NetworkIsolationKey kNetworkIsolationKey2(kSiteBar, kSiteBar);
+  const NetworkAnonymizationKey kNetworkAnonymizationKey1(kSiteFoo, kSiteFoo);
+  const NetworkAnonymizationKey kNetworkAnonymizationKey2(kSiteBar, kSiteBar);
 
   session_key_ =
       QuicSessionKey(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED,
-                     SocketTag(), kNetworkIsolationKey1,
+                     SocketTag(), kNetworkAnonymizationKey1,
                      SecureDnsPolicy::kAllow, /*require_dns_https_alpn=*/false);
 
   MockQuicData quic_data(version_);
@@ -1831,12 +1834,12 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolWithNetworkIsolationKey) {
   EXPECT_TRUE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     kNetworkIsolationKey1, SecureDnsPolicy::kAllow,
+                     kNetworkAnonymizationKey1, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_FALSE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_ENABLED, SocketTag(),
-                     kNetworkIsolationKey1, SecureDnsPolicy::kAllow,
+                     kNetworkAnonymizationKey1, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 #if BUILDFLAG(IS_ANDROID)
   SocketTag tag1(SocketTag::UNSET_UID, 0x12345678);
@@ -1844,39 +1847,39 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolWithNetworkIsolationKey) {
   EXPECT_FALSE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, tag1,
-                     kNetworkIsolationKey1, SecureDnsPolicy::kAllow,
+                     kNetworkAnonymizationKey1, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_FALSE(session_->CanPool(
       "www.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, tag2,
-                     kNetworkIsolationKey1, SecureDnsPolicy::kAllow,
+                     kNetworkAnonymizationKey1, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 #endif
   EXPECT_TRUE(session_->CanPool(
       "mail.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     kNetworkIsolationKey1, SecureDnsPolicy::kAllow,
+                     kNetworkAnonymizationKey1, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_TRUE(session_->CanPool(
       "mail.example.com",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     kNetworkIsolationKey1, SecureDnsPolicy::kAllow,
+                     kNetworkAnonymizationKey1, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_FALSE(session_->CanPool(
       "mail.google.com",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     kNetworkIsolationKey1, SecureDnsPolicy::kAllow,
+                     kNetworkAnonymizationKey1, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 
   EXPECT_FALSE(session_->CanPool(
       "mail.example.com",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     kNetworkIsolationKey2, SecureDnsPolicy::kAllow,
+                     kNetworkAnonymizationKey2, SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
   EXPECT_FALSE(session_->CanPool(
       "mail.example.com",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 }
 
@@ -1924,7 +1927,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionNotPooledWithDifferentPin) {
   EXPECT_FALSE(session_->CanPool(
       kPreloadedPKPHost,
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 }
 
@@ -1959,7 +1962,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionPooledWithMatchingPin) {
   EXPECT_TRUE(session_->CanPool(
       "mail.example.org",
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                     NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+                     NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
                      /*require_dns_https_alpn=*/false)));
 }
 
@@ -2452,6 +2455,32 @@ TEST_P(QuicChromiumClientSessionTest,
   // monitor.
   session_.reset();
   EXPECT_EQ(0u, connectivity_monitor_->GetNumDegradingSessions());
+}
+
+// This test verifies that when multi-port and port migration is enabled, path
+// degrading won't trigger port migration.
+TEST_P(QuicChromiumClientSessionTest, DegradingWithMultiPortEnabled) {
+  if (!version_.UsesHttp3())
+    return;
+  // Default network is always set to handles::kInvalidNetworkHandle.
+  default_network_ = handles::kInvalidNetworkHandle;
+  connectivity_monitor_ =
+      std::make_unique<QuicConnectivityMonitor>(default_network_);
+  allow_port_migration_ = true;
+  SetIetfConnectionMigrationFlagsAndConnectionOptions();
+  auto options = config_.SendConnectionOptions();
+  options.push_back(quic::kMPQC);
+  config_.SetConnectionOptionsToSend(options);
+
+  Initialize();
+  EXPECT_TRUE(session_->connection()->multi_port_enabled());
+
+  session_->ReallyOnPathDegrading();
+  EXPECT_EQ(1u, connectivity_monitor_->GetNumDegradingSessions());
+
+  EXPECT_EQ(
+      UNKNOWN_CAUSE,
+      QuicChromiumClientSessionPeer::GetCurrentMigrationCause(session_.get()));
 }
 
 // This test verifies that when the handles::NetworkHandle is not supported, and

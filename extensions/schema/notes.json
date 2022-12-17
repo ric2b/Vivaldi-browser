@@ -6,20 +6,31 @@
     "description": "Use the <code>chrome.notes</code> API to manipulate notes.",
     "types": [
       {
-        "id": "NoteAttachment",
-        "type": "object",
-        "description": "Attachment to a node.",
-        "properties": {
-          "checksum": {
-            "type": "string",
-            "optional": true,
-            "description": "A checksum of the attachment content. This can be omitted when passing a new atttachment to the API."
-          },
-          "content": {
-            "type": "string",
-            "description": "Content data."
-          }
-        }
+        "id": "NodeType",
+        "description": "The kind of the node.",
+        "type": "string",
+        "enum": [ {
+          "name": "note",
+          "description": "A regular note. May have attachments as children."
+        }, {
+          "name": "separator",
+          "description": "A separator"
+        }, {
+          "name": "attachment",
+          "description": "An attachment. Content is the attachment checksum."
+        }, {
+          "name": "folder",
+          "description": "A folder. May have notes and separators as children."
+        }, {
+          "name": "main",
+          "description": "The main notes folder."
+        }, {
+          "name": "other",
+          "description": "The other notes folder."
+        }, {
+          "name": "trash",
+          "description": "The trash."
+        } ]
       },
       {
         "id": "NoteTreeNode",
@@ -35,59 +46,41 @@
             "type": "string",
             "minimum": 0,
             "optional": true,
-            "description": "The <code>id</code> of the parent folder.  Omitted for the root node."
+            "description": "The <code>id</code> of the parent folder. Omitted for the root node."
           },
           "index": {
             "type": "integer",
             "optional": true,
-            "description": "The 0-based position of this node within its parent folder."
+            "description": "The 0-based position of this node within its parent folder. Omitted for the root node."
           },
           "title": {
             "type": "string",
-            "optional": true,
             "description": "Title/subject of note."
           },
           "content": {
             "type": "string",
             "optional": true,
-            "description": "The note in the note."
+            "description": "The content of the note. Omitted for separators and folders. For attachments, this contains the attachment checksum."
           },
           "url": {
             "type": "string",
             "optional": true,
-            "description": ""
+            "description": "A URL associated with the note. Omitted for separators and folders."
           },
           "dateAdded": {
             "type": "number",
             "optional": true,
             "description": "When this node was created, in milliseconds since the epoch (<code>new Date(dateAdded)</code>)."
           },
-          "dateGroupModified": {
-              "type": "number",
-              "optional": true,
-              "description": "When the contents of this folder last changed, in milliseconds since the epoch."
-          },
           "children": {
             "type": "array",
             "optional": true,
             "items": { "$ref": "NoteTreeNode" },
-            "description": "An ordered list of children of this node."
+            "description": "An ordered list of children of this node. Only present for folders"
           },
-          "attachments": {
-            "type": "array",
-            "optional": true,
-            "items": { "$ref": "NoteAttachment" },
-            "description": "An ordered list of attachments to this note."
-          },
-          "trash": {
-            "type": "boolean",
-            "optional": true,
-            "description": "true if this is a trash folder, otherwise false."
-          },
-          "separator": {
-            "type": "boolean",
-            "optional": true,
-            "description": "true if this is a separator, otherwise false."
+          "type": {
+            "$ref": "NodeType",
+            "description": "Which kind of node this is."
           }
         }
       },
@@ -109,8 +102,7 @@
             "optional": true
           },
           "type": {
-            "type": "string",
-            "optional": true
+            "$ref": "NodeType"
           },
           "title": {
             "type": "string",
@@ -122,26 +114,7 @@
           },
           "content": {
             "type": "string",
-            "description": "",
-            "optional": true
-          },
-          "filename": {
-            "type": "string",
-            "optional": true
-          },
-          "icon": {
-            "type": "object",
-            "properties": {
-                "filename": { "type": "string", "description": "Filename of icon." },
-                "content_type": { "type": "string", "description": "Contenttype of file." },
-                "content": { "type": "string", "description": "Does not make sense for icon and is unused." }
-            },
-            "optional": true
-          },
-          "attachments": {
-            "type": "array",
-            "description": "",
-            "items": { "$ref": "NoteAttachment" },
+            "description": "The content of the node. For attachments, this is either a known attachment checksum copied from another attachment or a new base64-encoded attachment content",
             "optional": true
           }
         }
@@ -244,12 +217,6 @@
               },
               "url": {
                 "type": "string",
-                "optional": true
-              },
-              "attachments": {
-                "type": "array",
-                "description": "",
-                "items": { "$ref": "NoteAttachment" },
                 "optional": true
               }
             }
@@ -409,11 +376,10 @@
           },
           {
             "type": "object",
-            "name": "changeInfo",
+            "name": "noteAfterChange",
             "properties": {
               "title": {
-                "type": "string",
-                "optional": true
+                "type": "string"
               },
               "content": {
                 "type": "string",
@@ -422,11 +388,6 @@
               "url": {
                 "type": "string",
                 "optional": true
-              },
-              "attachments": {
-                "type": "array",
-                "optional": true,
-                "items": { "$ref": "NoteAttachment" }
               }
             }
           }

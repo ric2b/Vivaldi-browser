@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -115,8 +115,15 @@ NSImage* GetCreditCardTouchBarImage(int iconId) {
 - (NSButton*)createCreditCardButtonAtRow:(int)row {
   NSString* label =
       base::SysUTF16ToNSString(_controller->GetSuggestionMainTextAt(row));
-  NSString* subtext =
-      base::SysUTF16ToNSString(_controller->GetSuggestionLabelAt(row));
+  NSString* subtext = nil;
+  std::vector<std::vector<autofill::Suggestion::Text>> suggestion_labels =
+      _controller->GetSuggestionLabelsAt(row);
+  if (!suggestion_labels.empty()) {
+    DCHECK_EQ(suggestion_labels.size(), 1U);
+    DCHECK_EQ(suggestion_labels[0].size(), 1U);
+    subtext =
+        base::SysUTF16ToNSString(std::move(suggestion_labels[0][0].value));
+  }
 
   // Create the button title based on the text direction.
   NSString* buttonTitle =
@@ -170,7 +177,6 @@ NSImage* GetCreditCardTouchBarImage(int iconId) {
 }
 
 - (void)acceptCreditCard:(id)sender {
-  ui::LogTouchBarUMA(ui::TouchBarAction::CREDIT_CARD_AUTOFILL);
   _controller->AcceptSuggestion([sender tag]);
 }
 

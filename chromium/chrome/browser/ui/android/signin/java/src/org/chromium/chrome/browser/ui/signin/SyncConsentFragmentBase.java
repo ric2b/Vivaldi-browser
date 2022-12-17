@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,10 @@ import android.widget.TextView;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
 import androidx.fragment.app.Fragment;
 
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
 import org.chromium.chrome.browser.consent_auditor.ConsentAuditorFeature;
@@ -75,14 +77,9 @@ public abstract class SyncConsentFragmentBase
         extends Fragment implements AccountPickerCoordinator.Listener, AccountsChangeObserver,
                                     SigninManager.SignInStateObserver {
     private static final String ARGUMENT_ACCESS_POINT = "SyncConsentFragmentBase.AccessPoint";
-
-    private static final String SETTINGS_LINK_OPEN = "<LINK1>";
-    private static final String SETTINGS_LINK_CLOSE = "</LINK1>";
-
     private static final String ARGUMENT_ACCOUNT_NAME = "SyncConsentFragmentBase.AccountName";
-
-    /** Field trial group param for the tangible sync experiment. */
-    private static final String PARAM_TANGIBLE_SYNC_GROUP = "group_id";
+    private static final String ARGUMENT_SHOW_TANGIBLE_SYNC_CONSENT_VIEW =
+            "SyncConsentFragment.ShowTangibleSyncConsentView";
 
     // This bundle argument is optional; it is set only if the child status cannot be reliably
     // inferred by looking at the last used regular profile, because child sign auto sign in may
@@ -91,6 +88,12 @@ public abstract class SyncConsentFragmentBase
             "SyncConsentFragmentBase.ChildAccountStatus";
     private static final String ARGUMENT_SIGNIN_FLOW_TYPE =
             "SyncConsentFragmentBase.SigninFlowType";
+
+    private static final String SETTINGS_LINK_OPEN = "<LINK1>";
+    private static final String SETTINGS_LINK_CLOSE = "</LINK1>";
+
+    /** Field trial group param for the tangible sync experiment. */
+    private static final String PARAM_TANGIBLE_SYNC_GROUP = "group_id";
 
     private static final int ADD_ACCOUNT_REQUEST_CODE = 1;
 
@@ -111,6 +114,18 @@ public abstract class SyncConsentFragmentBase
         int GROUP_C = 3;
     }
 
+    /** Used for Signin.SyncConsentScreen.DataRowClicked histogram. Don't change existing values. */
+    @VisibleForTesting
+    @IntDef({SyncDataRowClicked.BOOKMARKS, SyncDataRowClicked.AUTOFILL, SyncDataRowClicked.HISTORY,
+            SyncDataRowClicked.COUNT})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SyncDataRowClicked {
+        int BOOKMARKS = 0;
+        int AUTOFILL = 1;
+        int HISTORY = 2;
+        int COUNT = 3;
+    }
+
     private final AccountManagerFacade mAccountManagerFacade;
     protected boolean mIsChild;
 
@@ -128,6 +143,7 @@ public abstract class SyncConsentFragmentBase
     // success. Instead, this member should be set to false to give the user a chance of clicking
     // "No, thanks".
     private boolean mIsSigninInProgress;
+    private boolean mShowTangibleSyncConsentView;
     // Set to true when the fragment is launched for add account flow. The value is only checked in
     // tangible sync flow where the activity would otherwise be terminated if selected account is
     // not provided.
@@ -198,14 +214,37 @@ public abstract class SyncConsentFragmentBase
         return result;
     }
 
+    /**
+     * Creates an argument bundle to start Tangible Sync flow.
+     * @param accessPoint The access point for starting sign-in flow.
+     * @param accountName The account to preselect or null to preselect the default account.
+     */
+    public static Bundle createArgumentsForTangibleSyncFlow(
+            @SigninAccessPoint int accessPoint, String accountName) {
+        assert ChromeFeatureList.isEnabled(ChromeFeatureList.TANGIBLE_SYNC);
+        Bundle result = SyncConsentFragmentBase.createArgumentsForChooseAccountFlow(
+                accessPoint, accountName);
+        result.putBoolean(ARGUMENT_SHOW_TANGIBLE_SYNC_CONSENT_VIEW, true);
+        return result;
+    }
+
+    /**
+     * Creates an argument bundle to start "New account" sign-in flow for Tangible Sync.
+     * @param accessPoint The access point for starting sign-in flow.
+     */
+    public static Bundle createArgumentsForTangibleSyncAddAccountFlow(
+            @SigninAccessPoint int accessPoint) {
+        assert ChromeFeatureList.isEnabled(ChromeFeatureList.TANGIBLE_SYNC);
+        Bundle result = SyncConsentFragmentBase.createArgumentsForAddAccountFlow(accessPoint);
+        result.putBoolean(ARGUMENT_SHOW_TANGIBLE_SYNC_CONSENT_VIEW, true);
+        return result;
+    }
+
     protected SyncConsentFragmentBase() {
         mAccountManagerFacade = AccountManagerFacadeProvider.getInstance();
         mProfileDataCacheObserver = this::updateProfileData;
         mCanUseGooglePlayServices = true;
     }
-
-    /** Returns whether tangible sync consent view should be shown. */
-    protected abstract boolean showTangibleSyncConsentView();
 
     /** The sync consent was refused. */
     protected abstract void onSyncRefused();
@@ -287,12 +326,14 @@ public abstract class SyncConsentFragmentBase
         @SigninFlowType
         int signinFlowType = arguments.getInt(ARGUMENT_SIGNIN_FLOW_TYPE, SigninFlowType.DEFAULT);
 
+        mShowTangibleSyncConsentView =
+                getArguments().getBoolean(ARGUMENT_SHOW_TANGIBLE_SYNC_CONSENT_VIEW, false);
         if (savedInstanceState == null) {
             // If this fragment is being recreated from a saved state there's no need to show
             // account picked or starting AddAccount flow.
             if (signinFlowType == SigninFlowType.CHOOSE_ACCOUNT) {
                 // Only show the account picker for the old signin view.
-                if (!showTangibleSyncConsentView()) {
+                if (!mShowTangibleSyncConsentView) {
                     mAccountPickerDialogCoordinator = new AccountPickerDialogCoordinator(
                             requireContext(), this, mModalDialogManager);
                 }
@@ -338,7 +379,7 @@ public abstract class SyncConsentFragmentBase
     @Override
     public View onCreateView(
             LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        if (showTangibleSyncConsentView()) {
+        if (mShowTangibleSyncConsentView) {
             createSyncConsentView(inflater, container);
         } else {
             createSigninView(inflater, container);
@@ -367,13 +408,17 @@ public abstract class SyncConsentFragmentBase
         mSyncConsentView =
                 (SyncConsentView) inflater.inflate(R.layout.sync_consent_view, container, false);
 
+        mSyncConsentView.getBookmarksRow().setOnClickListener(this::recordClickAndResetListener);
+        mSyncConsentView.getAutofillRow().setOnClickListener(this::recordClickAndResetListener);
+        mSyncConsentView.getHistoryRow().setOnClickListener(this::recordClickAndResetListener);
+
         mSyncConsentView.getRefuseButton().setOnClickListener(this::onRefuseButtonClicked);
         mSyncConsentView.getAcceptButton().setOnClickListener(this::onAcceptButtonClicked);
         mSyncConsentView.getAcceptButton().setVisibility(View.GONE);
         mSyncConsentView.getMoreButton().setVisibility(View.VISIBLE);
         mSyncConsentView.getMoreButton().setOnClickListener(view -> {
             mSyncConsentView.getScrollView().smoothScrollBy(
-                    0, mSigninView.getScrollView().getHeight());
+                    0, mSyncConsentView.getScrollView().getHeight());
             // TODO(https://crbug.com/821127): Revise this user action.
             RecordUserAction.record("Signin_MoreButton_Shown");
         });
@@ -537,6 +582,27 @@ public abstract class SyncConsentFragmentBase
             default:
                 throw new IllegalStateException("Invalid group id");
         }
+    }
+
+    /**
+     * Records histogram for the sync data row clicks only once. Resets listener after recording.
+     */
+    private void recordClickAndResetListener(View view) {
+        if (view == mSyncConsentView.getBookmarksRow()) {
+            recordSyncDataRowClicked(SyncDataRowClicked.BOOKMARKS);
+        } else if (view == mSyncConsentView.getAutofillRow()) {
+            recordSyncDataRowClicked(SyncDataRowClicked.AUTOFILL);
+        } else if (view == mSyncConsentView.getHistoryRow()) {
+            recordSyncDataRowClicked(SyncDataRowClicked.HISTORY);
+        } else {
+            throw new IllegalStateException("Sync data row view does not exist");
+        }
+        view.setOnClickListener(null);
+    }
+
+    private static void recordSyncDataRowClicked(@SyncDataRowClicked int syncRowClicked) {
+        RecordHistogram.recordEnumeratedHistogram("Signin.SyncConsentScreen.DataRowClicked",
+                syncRowClicked, SyncDataRowClicked.COUNT);
     }
 
     private void updateSyncConsentViewText(@StringRes int refuseButtonTextId) {
@@ -723,7 +789,7 @@ public abstract class SyncConsentFragmentBase
             SigninMetricsUtils.logAddAccountStateHistogram(State.FAILED);
             SigninUtils.openSettingsForAllAccounts(getActivity());
             mIsAccountAdditionInProgress = false;
-            if (showTangibleSyncConsentView()) {
+            if (mShowTangibleSyncConsentView) {
                 // For tangible sync flow this fragment should not be shown in the absence of a
                 // selected account when add account intent can't be created.
                 getActivity().finish();
@@ -750,7 +816,7 @@ public abstract class SyncConsentFragmentBase
             } else {
                 SigninMetricsUtils.logAddAccountStateHistogram(State.CANCELLED);
             }
-            if (showTangibleSyncConsentView()) {
+            if (mShowTangibleSyncConsentView) {
                 mIsAccountAdditionInProgress = false;
             }
             mAccountManagerFacade.getAccounts().then(this::updateAccounts);
@@ -826,8 +892,9 @@ public abstract class SyncConsentFragmentBase
         }
 
         // Account for forced sign-in flow disappeared before the sign-in was completed.
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS)
-                && mIsChild) {
+        if (mIsChild
+                && !ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.ALLOW_SYNC_OFF_FOR_CHILD_ACCOUNTS)) {
             onSyncRefused();
             return;
         }

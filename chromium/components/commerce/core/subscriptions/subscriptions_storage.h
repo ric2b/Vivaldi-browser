@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/check.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
+#include "components/commerce/core/subscriptions/subscriptions_manager.h"
 #include "components/session_proto_db/session_proto_storage.h"
 
 namespace commerce {
@@ -23,7 +24,8 @@ struct CommerceSubscription;
 using GetLocalSubscriptionsCallback = base::OnceCallback<void(
     std::unique_ptr<std::vector<CommerceSubscription>>)>;
 // Used to handle if storage-related operation succeeds.
-using StorageOperationCallback = base::OnceCallback<void(bool)>;
+using StorageOperationCallback =
+    base::OnceCallback<void(SubscriptionsRequestStatus)>;
 
 using CommerceSubscriptionProto =
     commerce_subscription_db::CommerceSubscriptionContentProto;
@@ -68,14 +70,18 @@ class SubscriptionsStorage {
   // Delete all local subscriptions.
   virtual void DeleteAll();
 
+  // Check if the given subscription is in local storage.
+  virtual void IsSubscribed(CommerceSubscription subscription,
+                            base::OnceCallback<void(bool)> callback);
+
  private:
   std::string GetSubscriptionKey(const CommerceSubscription& subscription);
 
   void SaveSubscription(CommerceSubscription subscription,
-                        StorageOperationCallback callback);
+                        base::OnceCallback<void(bool)> callback);
 
   void DeleteSubscription(CommerceSubscription subscription,
-                          StorageOperationCallback callback);
+                          base::OnceCallback<void(bool)> callback);
 
   void LoadAllSubscriptionsForType(SubscriptionType type,
                                    GetLocalSubscriptionsCallback callback);

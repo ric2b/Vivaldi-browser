@@ -1,8 +1,8 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
+#import <string>
 
 #import "base/bind.h"
 #import "base/strings/escape.h"
@@ -11,12 +11,13 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
+#import "components/omnibox/common/omnibox_features.h"
 #import "components/security_interstitials/core/https_only_mode_metrics.h"
 #import "components/security_interstitials/core/omnibox_https_upgrade_metrics.h"
 #import "ios/chrome/browser/https_upgrades/https_upgrade_app_interface.h"
 #import "ios/chrome/browser/https_upgrades/https_upgrade_test_helper.h"
 #import "ios/chrome/browser/metrics/metrics_app_interface.h"
-#import "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -60,6 +61,11 @@ const char kInterstitialText[] =
   config.relaunch_policy = NoForceRelaunchAndResetState;
   config.features_enabled.push_back(
       security_interstitials::features::kHttpsOnlyMode);
+  // Disable omnibox navigation upgrades.
+  // typed_navigation_upgrade_tab_helper_egtest.mm already has a
+  // test case with both features enabled.
+  // (test_TypeHTTPWithGoodHTTPS_HTTPSOnlyModeEnabled_ShouldUpgrade)
+  config.features_disabled.push_back(omnibox::kDefaultTypedNavigationsToHttps);
   return config;
 }
 
@@ -400,6 +406,96 @@ const char kInterstitialText[] =
   // elements. Not currently supported by MetricsAppInterface.
 }
 
+// Regression test for crbug.com/1379261. Checks that cancelling a prerendered
+// navigation doesn't cause a crash. Steps are:
+// 1. Disable HTTPS-Only Mode and visit an http:// URL. This puts the
+//    URL in browser history.
+// 2. Close tabs and reopen. Enable HTTPS-Only Mode.
+// 3. Type the first letter of the http:// URL in step 1. This will prerender
+//    the http URL.
+// 4. Check that the prerender was cancelled properly.
+- (void)test_Prerender_CancelShouldNotCrash {
+  // TODO(crbug.com/793306): Re-enable the test on iPad once the alternate
+  // letters problem is fixed.
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(
+        @"Disabled for iPad due to alternate letters educational screen.");
+  }
+
+  // TODO(crbug.com/1315304): Reenable.
+  if ([ChromeEarlGrey isNewOmniboxPopupEnabled]) {
+    EARL_GREY_TEST_DISABLED(@"Disabled for new popup");
+  }
+
+  // Step 1: Disable HTTPS-Only Mode and visit an http:// URL. This puts the
+  // URL in browser history.
+  [ChromeEarlGrey setBoolValue:NO forUserPref:prefs::kHttpsOnlyModeEnabled];
+  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.badHTTPSServer->port()
+                                      useFakeHTTPS:false];
+  [ChromeEarlGrey clearBrowsingHistory];
+
+  GURL testURL = self.testServer->GetURL("/");
+  NSString* testURLString = base::SysUTF8ToNSString(testURL.GetContent());
+  [ChromeEarlGrey loadURL:testURL];
+  GREYAssertEqual(1, _HTTPResponseCounter,
+                  @"The server should have responded once");
+  [ChromeEarlGrey goBack];
+
+  // Step 2: Close tabs and reopen. Enable HTTPS-Only Mode.
+  [[self class] closeAllTabs];
+  [ChromeEarlGrey openNewTab];
+  [ChromeEarlGrey setBoolValue:YES forUserPref:prefs::kHttpsOnlyModeEnabled];
+
+  // Step 3: Type the first letter of the http:// URL in step 1. This will
+  // prerender the http URL.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
+      performAction:grey_tap()];
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:chrome_test_util::Omnibox()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+      performAction:grey_typeText([testURLString substringToIndex:1])];
+
+  bool prerendered = WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
+    // The first response was for the http:// URL. The remaining responses are
+    // prerendered. When the whole test suite runs, we may get more than one
+    // prerendered navigation here.
+    return self->_HTTPResponseCounter > 1;
+  });
+  GREYAssertTrue(prerendered, @"Prerender did not happen");
+
+  // Step 4: Check that the prerender was cancelled properly.
+  // Check the histograms. All prerender attempts must be cancelled. Relying on
+  // the histogram here isn't great, but there doesn't seem to be a good
+  // way of testing that prerenders have been cancelled.
+  GREYAssertNil(
+      [MetricsAppInterface expectCount:0
+                             forBucket:/*PRERENDER_FINAL_STATUS_USED=*/0
+                          forHistogram:@"Prerender.FinalStatus"],
+      @"Prerender was used");
+  GREYAssert(![HttpsUpgradeAppInterface isHttpsOnlyModeTimerRunning],
+             @"Timer is still running");
+  GREYAssert(![HttpsUpgradeAppInterface isOmniboxUpgradeTimerRunning],
+             @"Omnibox upgrade timer is unexpectedly running");
+
+  // Check that the HTTPS-Only Mode tab helper recorded the prerender
+  // cancellation.
+  // First server response loaded normally, the rest should be prerenders.
+  int prerenderCount = self->_HTTPResponseCounter - 1;
+  GREYAssertNil([MetricsAppInterface
+                    expectTotalCount:prerenderCount
+                        forHistogram:@(security_interstitials::https_only_mode::
+                                           kEventHistogram)],
+                @"Failed to record event histogram");
+  GREYAssertNil([MetricsAppInterface
+                     expectCount:prerenderCount
+                       forBucket:static_cast<int>(
+                                     security_interstitials::https_only_mode::
+                                         Event::kPrerenderCancelled)
+                    forHistogram:@(security_interstitials::https_only_mode::
+                                       kEventHistogram)],
+                @"Failed to record prerender cancellation");
+}
+
 // Navigate to an HTTP URL and allowlist the URL. Then clear browsing data.
 // This should clear the HTTP allowlist.
 - (void)test_RemoveBrowsingData_ShouldClearAllowlist {
@@ -482,7 +578,7 @@ const char kInterstitialText[] =
 // The upgrade will fail and the HTTPS-Only mode interstitial will be shown.
 // Reloading the page should show the interstitial again.
 - (void)test_SlowHTTPS_ReloadInterstitial {
-  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.slowHTTPSServer->port()
+  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.slowServer->port()
                                       useFakeHTTPS:true];
   // Set the fallback delay to zero. This will immediately stop the HTTPS
   // upgrade attempt.
@@ -566,7 +662,7 @@ const char kInterstitialText[] =
 // interstitial will be shown. Click through the interstitial, then reload the
 // page. The HTTP page should be shown.
 - (void)test_SlowHTTPS_ProceedInterstitial_Allowlisted {
-  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.slowHTTPSServer->port()
+  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.slowServer->port()
                                       useFakeHTTPS:true];
   // Set the fallback delay to zero. This will immediately stop the HTTPS
   // upgrade attempt.
@@ -627,7 +723,7 @@ const char kInterstitialText[] =
 // loading HTTPS page. The upgrade will be cancelled and the HTTPS-Only mode
 // interstitial will be shown. Tap Go back on the interstitial.
 - (void)test_SlowHTTPS_GoBack {
-  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.slowHTTPSServer->port()
+  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.slowServer->port()
                                       useFakeHTTPS:true];
   // Set the fallback delay to zero. This will immediately stop the HTTPS
   // upgrade attempt.
@@ -690,7 +786,7 @@ const char kInterstitialText[] =
 // interstitial. Then, navigate to a new page and go back. This should load the
 // HTTP URL without showing the interstitial again.
 - (void)test_SlowHTTPS_GoBackToAllowlistedSite {
-  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.slowHTTPSServer->port()
+  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.slowServer->port()
                                       useFakeHTTPS:true];
   // Set the fallback delay to zero. This will immediately stop the HTTPS
   // upgrade attempt.

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,18 +7,20 @@
 #include <cstring>
 #include <memory>
 
-#include "ash/components/multidevice/beacon_seed.h"
-#include "ash/components/multidevice/logging/logging.h"
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/device_sync/proto/cryptauth_api.pb.h"
 #include "ash/services/secure_channel/data_with_timestamp.h"
 #include "ash/services/secure_channel/raw_eid_generator.h"
 #include "ash/services/secure_channel/raw_eid_generator_impl.h"
+#include "base/containers/contains.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/multidevice/beacon_seed.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 
 namespace ash::secure_channel {
 
@@ -106,17 +108,13 @@ std::string BackgroundEidGenerator::IdentifyRemoteDeviceByAdvertisement(
   std::string service_data_without_flags = advertisement_service_data;
   service_data_without_flags.resize(RawEidGenerator::kNumBytesInEidValue);
 
-  const auto remote_device_it = std::find_if(
-      remote_devices.begin(), remote_devices.end(),
+  const auto remote_device_it = base::ranges::find_if(
+      remote_devices,
       [this, &service_data_without_flags](const auto& remote_device) {
         std::vector<DataWithTimestamp> eids = GenerateNearestEids(
             multidevice::ToCryptAuthSeedList(remote_device.beacon_seeds()));
-        const auto eid_it = std::find_if(
-            eids.begin(), eids.end(), [&service_data_without_flags](auto eid) {
-              return eid.data == service_data_without_flags;
-            });
-
-        bool success = eid_it != eids.end();
+        bool success = base::Contains(eids, service_data_without_flags,
+                                      &DataWithTimestamp::data);
         std::stringstream ss;
         ss << "BackgroundEidGenerator::IdentifyRemoteDeviceByAdvertisement: "
            << (success ? "Identified " : "Failed to identify ")

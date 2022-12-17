@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 #include "dbus/exported_object.h"
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
+#include "device/bluetooth/bluez/bluez_features.h"
 #include "device/bluetooth/floss/floss_dbus_client.h"
 #include "device/bluetooth/floss/floss_features.h"
 
@@ -254,6 +255,12 @@ void FlossManagerClient::OnSetAdapterEnabled(
   }
 }
 
+void FlossManagerClient::SetLLPrivacy(ResponseCallback<Void> callback,
+                                      const bool enable) {
+  CallExperimentalMethod<Void>(std::move(callback), experimental::kSetLLPrivacy,
+                               enable);
+}
+
 // Register manager client against manager.
 void FlossManagerClient::RegisterWithManager() {
   DCHECK(!manager_available_);
@@ -306,11 +313,11 @@ void FlossManagerClient::RemoveManager() {
   }
 }
 
-// The manager can manage multiple adapters so ignore the adapter path given
+// The manager can manage multiple adapters so ignore the adapter index given
 // here. It is unused.
 void FlossManagerClient::Init(dbus::Bus* bus,
                               const std::string& service_name,
-                              const std::string& adapter_path) {
+                              const int adapter_index) {
   bus_ = bus;
   service_name_ = service_name;
 
@@ -361,6 +368,12 @@ void FlossManagerClient::Init(dbus::Bus* bus,
                   kSetFlossRetryDelayMs,
                   base::BindOnce(&FlossManagerClient::CompleteSetFlossEnabled,
                                  weak_ptr_factory_.GetWeakPtr()));
+  SetLLPrivacy(
+      base::BindOnce([](DBusResult<Void> ret) {
+        if (!ret.has_value())
+          LOG(ERROR) << "Fail to set LL privacy.\n";
+      }),
+      base::FeatureList::IsEnabled(bluez::features::kLinkLayerPrivacy));
 }
 
 void FlossManagerClient::HandleGetAvailableAdapters(
@@ -591,11 +604,6 @@ void FlossManagerClient::ObjectRemoved(const dbus::ObjectPath& object_path,
   DVLOG(0) << __func__ << ": " << object_path.value() << ", " << interface_name;
 
   RemoveManager();
-}
-
-// static
-dbus::ObjectPath FlossManagerClient::GenerateAdapterPath(int adapter) {
-  return dbus::ObjectPath(base::StringPrintf(kAdapterObjectFormat, adapter));
 }
 
 // static

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,6 @@ class TargetServicesBase : public TargetServices {
   ResultCode Init() override;
   void LowerToken() override;
   ProcessState* GetState() override;
-  SOCKET CreateBrokeredSocket(int af, int type, int protocol) override;
 
   // Factory method.
   static TargetServicesBase* GetInstance();

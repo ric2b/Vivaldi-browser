@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -142,9 +142,10 @@ scoped_refptr<DevToolsAgentHost> RenderFrameDevToolsAgentHost::GetOrCreateFor(
     FrameTreeNode* frame_tree_node) {
   frame_tree_node = GetFrameTreeNodeAncestor(frame_tree_node);
   RenderFrameDevToolsAgentHost* result = FindAgentHost(frame_tree_node);
-  if (!result)
+  if (!result) {
     result = new RenderFrameDevToolsAgentHost(
         frame_tree_node, frame_tree_node->current_frame_host());
+  }
   return result;
 }
 
@@ -199,17 +200,15 @@ void RenderFrameDevToolsAgentHost::AddAllAgentHosts(
     // ForEachRenderFrameHost.
     if (wc->GetOutermostWebContents() != wc)
       continue;
-    wc->GetPrimaryMainFrame()->ForEachRenderFrameHost(base::BindRepeating(
-        [](DevToolsAgentHost::List* result,
-           RenderFrameHost* render_frame_host) {
+    wc->GetPrimaryMainFrame()->ForEachRenderFrameHost(
+        [result](RenderFrameHostImpl* render_frame_host) {
           FrameTreeNode* node = FrameTreeNode::From(render_frame_host);
           if (!ShouldCreateDevToolsForNode(node))
             return;
           if (!render_frame_host->IsRenderFrameLive())
             return;
           result->push_back(RenderFrameDevToolsAgentHost::GetOrCreateFor(node));
-        },
-        result));
+        });
   }
 }
 
@@ -256,7 +255,8 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
   SetFrameTreeNode(frame_tree_node);
   ChangeFrameHostAndObservedProcess(frame_host);
   render_frame_alive_ = frame_host_ && frame_host_->IsRenderFrameLive();
-  if (frame_tree_node->GetFrameType() != FrameType::kPrimaryMainFrame) {
+  if (frame_tree_node->GetFrameType() != FrameType::kPrimaryMainFrame &&
+      frame_tree_node->GetFrameType() != FrameType::kPrerenderMainFrame) {
     render_frame_crashed_ = !render_frame_alive_;
   } else {
     WebContents* web_contents = WebContents::FromRenderFrameHost(frame_host);
@@ -347,12 +347,17 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
   const bool may_attach_to_brower = session->GetClient()->IsTrusted();
   session->CreateAndAddHandler<protocol::ServiceWorkerHandler>(
       /* allow_inspect_worker= */ may_attach_to_brower);
-  session->CreateAndAddHandler<protocol::StorageHandler>();
-  session->CreateAndAddHandler<protocol::TargetHandler>(
+  session->CreateAndAddHandler<protocol::StorageHandler>(
+      session->GetClient()->IsTrusted());
+  auto* target_handler = session->CreateAndAddHandler<protocol::TargetHandler>(
       may_attach_to_brower
           ? protocol::TargetHandler::AccessMode::kRegular
           : protocol::TargetHandler::AccessMode::kAutoAttachOnly,
-      GetId(), auto_attacher_.get(), session->GetRootSession());
+      GetId(), auto_attacher_.get(), session);
+  if (session->session_mode() !=
+      DevToolsSession::Mode::kDoesNotSupportTabTarget) {
+    target_handler->DisableAutoAttachOfPortals();
+  }
   session->CreateAndAddHandler<protocol::PageHandler>(
       emulation_handler, browser_handler,
       session->GetClient()->AllowUnsafeOperations(),
@@ -842,6 +847,35 @@ protocol::TargetAutoAttacher* RenderFrameDevToolsAgentHost::auto_attacher() {
   return auto_attacher_.get();
 }
 
+namespace {
+
+constexpr char kSubtypeDisconnected[] = "disconnected";
+constexpr char kSubtypePortal[] = "portal";
+constexpr char kSubtypePrerender[] = "prerender";
+constexpr char kSubtypeFenced[] = "fenced";
+
+}  // namespace
+std::string RenderFrameDevToolsAgentHost::GetSubtype() {
+  if (!frame_tree_node_)
+    return kSubtypeDisconnected;
+
+  switch (frame_tree_node_->GetFrameType()) {
+    case FrameType::kPrimaryMainFrame:
+      if (WebContentsImpl::FromFrameTreeNode(frame_tree_node_)->IsPortal()) {
+        return kSubtypePortal;
+      }
+      [[fallthrough]];
+    // TODO(caseq): figure out what's best to return for subframes in a tree
+    // other than primary.
+    case FrameType::kSubframe:
+      return "";
+    case FrameType::kPrerenderMainFrame:
+      return kSubtypePrerender;
+    case FrameType::kFencedFrameRoot:
+      return kSubtypeFenced;
+  }
+}
+
 bool RenderFrameDevToolsAgentHost::IsChildFrame() {
   return frame_tree_node_ && frame_tree_node_->parent();
 }
@@ -901,6 +935,15 @@ RenderFrameDevToolsAgentHost::cross_origin_opener_policy(
   }
   RenderFrameHostImpl* rfhi = frame_tree_node->current_frame_host();
   return rfhi->cross_origin_opener_policy();
+}
+
+bool RenderFrameDevToolsAgentHost::HasSessionsWithoutTabTargetSupport() const {
+  const std::vector<DevToolsSession*>& sessions =
+      DevToolsAgentHostImpl::sessions();
+
+  return std::any_of(sessions.begin(), sessions.end(), [](DevToolsSession* s) {
+    return s->session_mode() == DevToolsSession::Mode::kDoesNotSupportTabTarget;
+  });
 }
 
 }  // namespace content

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,8 @@
 #include "components/segmentation_platform/public/model_provider.h"
 
 namespace segmentation_platform {
+
+struct Config;
 
 // Segmentation shopping user model provider. Provides a default model and
 // metadata for the shopping user optimization target.
@@ -19,6 +21,8 @@ class ShoppingUserModel : public ModelProvider {
   // Disallow copy/assign.
   ShoppingUserModel(ShoppingUserModel&) = delete;
   ShoppingUserModel& operator=(ShoppingUserModel&) = delete;
+
+  static std::unique_ptr<Config> GetConfig();
 
   // ModelProvider implementation.
   void InitAndFetchModel(

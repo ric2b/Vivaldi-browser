@@ -1,11 +1,9 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/nearby/src/internal/platform/implementation/platform.h"
 
-#include "ash/services/nearby/public/mojom/firewall_hole.mojom.h"
-#include "ash/services/nearby/public/mojom/tcp_socket_factory.mojom.h"
 #include "base/guid.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool.h"
@@ -27,6 +25,8 @@
 #include "chrome/services/sharing/nearby/platform/submittable_executor.h"
 #include "chrome/services/sharing/nearby/platform/webrtc.h"
 #include "chrome/services/sharing/nearby/platform/wifi_lan_medium.h"
+#include "chromeos/ash/services/nearby/public/mojom/firewall_hole.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/tcp_socket_factory.mojom.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "device/bluetooth/public/mojom/adapter.mojom.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"
@@ -56,8 +56,9 @@ int GetCurrentTid() {
   return 0;
 }
 
-std::string ImplementationPlatform::GetDownloadPath(std::string& parent_folder,
-                                                    std::string& file_name) {
+std::string ImplementationPlatform::GetDownloadPath(
+    absl::string_view parent_folder,
+    absl::string_view file_name) {
   // This should return the <download_path>/parent_folder/file_name. For now we
   // will just return an empty string, since chrome doesn't call this yet.
   // TODO(b/223710122): Eventually chrome should implement this method.

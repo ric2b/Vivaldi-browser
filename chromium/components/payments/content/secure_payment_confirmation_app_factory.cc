@@ -1,11 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/payments/content/secure_payment_confirmation_app_factory.h"
 
 #include <stdint.h>
-#include <algorithm>
+
 #include <memory>
 #include <string>
 #include <utility>
@@ -14,11 +14,13 @@
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/secure_payment_confirmation_app.h"
+#include "components/payments/core/features.h"
 #include "components/payments/core/method_strings.h"
 #include "components/payments/core/native_error_strings.h"
 #include "components/payments/core/secure_payment_confirmation_credential.h"
@@ -32,6 +34,7 @@
 #include "services/data_decoder/public/cpp/decode_image.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
+#include "url/gurl.h"
 #include "url/origin.h"
 
 namespace payments {
@@ -40,6 +43,18 @@ namespace {
 // Arbitrarily chosen limit of 1 hour. Keep in sync with
 // secure_payment_confirmation_helper.cc.
 constexpr int64_t kMaxTimeoutInMilliseconds = 1000 * 60 * 60;
+
+// Determine whether an RP ID is a 'valid domain' as per the URL spec:
+// https://url.spec.whatwg.org/#valid-domain
+//
+// TODO(crbug.com/1354209): This is a workaround to a lack of support for 'valid
+// domain's in the //url code.
+bool IsValidDomain(const std::string& rp_id) {
+  // A valid domain, such as 'site.example', should be a URL host (and nothing
+  // more of the URL!) that is not an IP address.
+  GURL url("https://" + rp_id);
+  return url.is_valid() && url.host() == rp_id && !url.HostIsIPAddress();
+}
 
 bool IsValid(const mojom::SecurePaymentConfirmationRequestPtr& request,
              std::string* error_message) {
@@ -89,7 +104,7 @@ bool IsValid(const mojom::SecurePaymentConfirmationRequestPtr& request,
     return false;
   }
 
-  if (request->rp_id.empty()) {
+  if (!IsValidDomain(request->rp_id)) {
     *error_message = errors::kRpIdRequired;
     return false;
   }
@@ -108,6 +123,20 @@ bool IsValid(const mojom::SecurePaymentConfirmationRequestPtr& request,
   }
 
   return true;
+}
+
+// Determine if a given origin that is calling SPC with a given RP ID requires
+// the credentials to be third-party enabled (i.e., the calling party is not the
+// RP ID).
+//
+// TODO(crbug.com/1365347): Use OriginIsAllowedToClaimRelyingPartyId instead.
+bool RequiresThirdPartyPaymentBit(const url::Origin& caller_origin,
+                                  const std::string& relying_party_id) {
+  // An origin may utilize credentials (without the third-party payment bit) for
+  // either its own exact domain (e.g. 'www.site.example' on www.site.example),
+  // or if it is in the same domain (e.g., 'site.example' on www.site.example).
+  return caller_origin.host() != relying_party_id &&
+         !caller_origin.DomainIs(relying_party_id);
 }
 
 }  // namespace
@@ -155,28 +184,63 @@ void SecurePaymentConfirmationAppFactory::
 
   if (!request->authenticator ||
       (!is_available && !base::FeatureList::IsEnabled(
-                            features::kSecurePaymentConfirmationDebug))) {
+                            ::features::kSecurePaymentConfirmationDebug))) {
     request->delegate->OnDoneCreatingPaymentApps();
     return;
   }
 
-  // Regardless of whether `web_data_service` has any apps, canMakePayment() and
-  // hasEnrolledInstrument() should return true when a user-verifying platform
-  // authenticator device is available.
+  // If we are relying on underlying credential-store level support for SPC, but
+  // it isn't available, ensure that canMakePayment() will return false by
+  // returning early here.
+  //
+  // This helps websites avoid a failure scenario when SPC appears to be
+  // available, but in practice it is non-functional due to lack of platform
+  // support.
+  if (base::FeatureList::IsEnabled(
+          features::kSecurePaymentConfirmationUseCredentialStoreAPIs) &&
+      !request->authenticator->IsGetMatchingCredentialIdsSupported()) {
+    request->delegate->OnDoneCreatingPaymentApps();
+    return;
+  }
+
+  // Regardless of whether any credentials match, canMakePayment() and
+  // hasEnrolledInstrument() should return true for SPC when a user-verifying
+  // platform authenticator device is available.
   request->delegate->SetCanMakePaymentEvenWithoutApps();
 
-  WebDataServiceBase::Handle handle =
-      request->web_data_service->GetSecurePaymentConfirmationCredentials(
-          std::move(request->mojo_request->credential_ids),
-          std::move(request->mojo_request->rp_id), this);
-  requests_[handle] = std::move(request);
+  // If we have credential-store level support for SPC, we can query the store
+  // directly. Otherwise, we have to rely on the user profile database.
+  //
+  // Currently, credential store APIs are only available on Android.
+  if (base::FeatureList::IsEnabled(
+          features::kSecurePaymentConfirmationUseCredentialStoreAPIs)) {
+    std::string relying_party_id = request->mojo_request->rp_id;
+    const bool require_third_party_payment_bit = RequiresThirdPartyPaymentBit(
+        request->delegate->GetFrameSecurityOrigin(), relying_party_id);
+
+    auto* request_ptr = request.get();
+    request_ptr->authenticator->GetMatchingCredentialIds(
+        std::move(request_ptr->mojo_request->rp_id),
+        std::move(request_ptr->mojo_request->credential_ids),
+        require_third_party_payment_bit,
+        base::BindOnce(&SecurePaymentConfirmationAppFactory::
+                           OnGetMatchingCredentialIdsFromStore,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(request),
+                       std::move(relying_party_id)));
+  } else {
+    WebDataServiceBase::Handle handle =
+        request->web_data_service->GetSecurePaymentConfirmationCredentials(
+            std::move(request->mojo_request->credential_ids),
+            std::move(request->mojo_request->rp_id), this);
+    requests_[handle] = std::move(request);
+  }
 }
 
 SecurePaymentConfirmationAppFactory::SecurePaymentConfirmationAppFactory()
     : PaymentAppFactory(PaymentApp::Type::INTERNAL) {}
 
 SecurePaymentConfirmationAppFactory::~SecurePaymentConfirmationAppFactory() {
-  std::for_each(requests_.begin(), requests_.end(), [&](const auto& pair) {
+  base::ranges::for_each(requests_, [&](const auto& pair) {
     if (pair.second->web_data_service)
       pair.second->web_data_service->CancelRequest(pair.first);
   });
@@ -262,6 +326,27 @@ void SecurePaymentConfirmationAppFactory::OnWebDataServiceRequestDone(
                         result.get())
                         ->GetValue();
 
+  OnRetrievedCredentials(std::move(request), std::move(credentials));
+}
+
+void SecurePaymentConfirmationAppFactory::OnGetMatchingCredentialIdsFromStore(
+    std::unique_ptr<Request> request,
+    std::string relying_party_id,
+    std::vector<std::vector<uint8_t>> matching_credentials) {
+  std::vector<std::unique_ptr<SecurePaymentConfirmationCredential>> credentials;
+  for (std::vector<uint8_t>& credential_id : matching_credentials) {
+    credentials.emplace_back(
+        std::make_unique<SecurePaymentConfirmationCredential>(
+            std::move(credential_id), relying_party_id,
+            /*user_id=*/std::vector<uint8_t>()));
+  }
+  OnRetrievedCredentials(std::move(request), std::move(credentials));
+}
+
+void SecurePaymentConfirmationAppFactory::OnRetrievedCredentials(
+    std::unique_ptr<Request> request,
+    std::vector<std::unique_ptr<SecurePaymentConfirmationCredential>>
+        credentials) {
   std::unique_ptr<SecurePaymentConfirmationCredential> credential;
 
   // For the pilot phase, arbitrarily use the first matching credential.

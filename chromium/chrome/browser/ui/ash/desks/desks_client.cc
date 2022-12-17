@@ -1,17 +1,27 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/ash/desks/desks_client.h"
 
 #include <memory>
+#include <string>
 
+#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/desk_template.h"
 #include "ash/public/cpp/session/session_controller.h"
+#include "ash/shell.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/wm/desks/desk.h"
+#include "ash/wm/desks/desks_bar_view.h"
 #include "ash/wm/desks/desks_controller.h"
+#include "ash/wm/desks/desks_histogram_enums.h"
+#include "ash/wm/desks/desks_restore_util.h"
 #include "ash/wm/desks/templates/saved_desk_util.h"
+#include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/overview/overview_grid.h"
+#include "ash/wm/overview/overview_session.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/guid.h"
@@ -37,6 +47,7 @@
 #include "components/sessions/core/session_id.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -62,6 +73,7 @@ constexpr char kCantCloseDeskError[] = "The desk cannot be closed.";
 constexpr char kCantGetAllDesksError[] = "Unable to retrieve all desks.";
 constexpr char kNoSuchWindowError[] = "The window cannot be found.";
 constexpr char kInvalidWindowIdError[] = "The window identifier is not valid.";
+constexpr char kDeskBeingModified[] = "The desk is currently being modified";
 
 // Timeout time used in LaunchPerformanceTracker.
 constexpr base::TimeDelta kLaunchPerformanceTimeout = base::Minutes(3);
@@ -112,12 +124,11 @@ void RecordTimeToLoadTemplateHistogram(const base::Time time_started) {
 class DesksClient::LaunchPerformanceTracker
     : public app_restore::AppRestoreInfo::Observer {
  public:
-  LaunchPerformanceTracker(base::Time time_launch_started,
-                           const std::set<int>& window_ids,
+  LaunchPerformanceTracker(const std::set<int>& window_ids,
                            base::GUID template_id,
                            DesksClient* templates_client)
       : tracked_window_ids_(window_ids),
-        time_launch_started_(time_launch_started),
+        time_launch_started_(base::Time::Now()),
         template_id_(template_id),
         templates_client_(templates_client) {
     scoped_observation_.Observe(app_restore::AppRestoreInfo::GetInstance());
@@ -231,7 +242,8 @@ void DesksClient::OnActiveUserSessionChanged(const AccountId& account_id) {
 }
 
 void DesksClient::CaptureActiveDeskAndSaveTemplate(
-    CaptureActiveDeskAndSaveTemplateCallback callback) {
+    CaptureActiveDeskAndSaveTemplateCallback callback,
+    ash::DeskTemplateType template_type) {
   if (!active_profile_) {
     std::move(callback).Run(/*desk_template=*/nullptr, kNoCurrentUserError);
     return;
@@ -240,11 +252,11 @@ void DesksClient::CaptureActiveDeskAndSaveTemplate(
   desks_controller_->CaptureActiveDeskAsTemplate(
       base::BindOnce(&DesksClient::OnCapturedDeskTemplate,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
-      ash::DeskTemplateType::kTemplate,
+      template_type,
       /*root_window_to_show=*/nullptr);
 }
 
-void DesksClient::UpdateDeskTemplate(const std::string& template_uuid,
+void DesksClient::UpdateDeskTemplate(const base::GUID& template_uuid,
                                      const std::u16string& template_name,
                                      UpdateDeskTemplateCallback callback) {
   if (!active_profile_) {
@@ -252,13 +264,23 @@ void DesksClient::UpdateDeskTemplate(const std::string& template_uuid,
     return;
   }
 
-  GetDeskModel()->GetEntryByUUID(
-      template_uuid, base::BindOnce(&DesksClient::OnGetTemplateToBeUpdated,
-                                    weak_ptr_factory_.GetWeakPtr(),
-                                    template_name, std::move(callback)));
+  desks_storage::DeskModel::GetEntryByUuidResult result =
+      GetDeskModel()->GetEntryByUUID(template_uuid);
+
+  if (result.status != desks_storage::DeskModel::GetEntryByUuidStatus::kOk) {
+    std::move(callback).Run(kStorageError);
+    return;
+  }
+
+  result.entry->set_template_name(template_name);
+
+  GetDeskModel()->AddOrUpdateEntry(
+      std::move(result.entry),
+      base::BindOnce(&DesksClient::OnUpdateDeskTemplate,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void DesksClient::DeleteDeskTemplate(const std::string& template_uuid,
+void DesksClient::DeleteDeskTemplate(const base::GUID& template_uuid,
                                      DeleteDeskTemplateCallback callback) {
   if (!active_profile_) {
     std::move(callback).Run(std::string(kNoCurrentUserError));
@@ -288,7 +310,7 @@ void DesksClient::GetDeskTemplates(GetDeskTemplatesCallback callback) {
                       : ""));
 }
 
-void DesksClient::GetTemplateJson(const std::string uuid,
+void DesksClient::GetTemplateJson(const base::GUID& uuid,
                                   Profile* profile,
                                   GetTemplateJsonCallback callback) {
   if (!active_profile_ || active_profile_ != profile) {
@@ -307,11 +329,9 @@ void DesksClient::GetTemplateJson(const std::string uuid,
 }
 
 void DesksClient::LaunchDeskTemplate(
-    const std::string& template_uuid,
+    const base::GUID& template_uuid,
     LaunchDeskCallback callback,
     const std::u16string& customized_desk_name) {
-  base::Time launch_started = base::Time::Now();
-
   if (!active_profile_) {
     std::move(callback).Run(std::string(kNoCurrentUserError), {});
     return;
@@ -319,17 +339,17 @@ void DesksClient::LaunchDeskTemplate(
 
   if (launch_template_for_test_) {
     OnGetTemplateForDeskLaunch(
-        std::move(callback), customized_desk_name, base::Time(),
+        std::move(callback), customized_desk_name,
         desks_storage::DeskModel::GetEntryByUuidStatus::kOk,
         launch_template_for_test_->Clone());
     return;
   }
 
-  GetDeskModel()->GetEntryByUUID(
-      template_uuid,
-      base::BindOnce(&DesksClient::OnGetTemplateForDeskLaunch,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback),
-                     customized_desk_name, launch_started));
+  desks_storage::DeskModel::GetEntryByUuidResult result =
+      GetDeskModel()->GetEntryByUUID(template_uuid);
+
+  OnGetTemplateForDeskLaunch(std::move(callback), customized_desk_name,
+                             result.status, std::move(result.entry));
 }
 
 void DesksClient::LaunchEmptyDesk(LaunchDeskCallback callback,
@@ -339,8 +359,14 @@ void DesksClient::LaunchEmptyDesk(LaunchDeskCallback callback,
     return;
   }
 
-  const ash::Desk* new_desk = desks_controller_->CreateNewDeskForTemplate(
-      /*activate_desk=*/true, customized_desk_name);
+  // Don't launch desk if desk is being modified(activated/removed/switched) or
+  // desk animation is in progress.
+  if (desks_controller_->AreDesksBeingModified()) {
+    std::move(callback).Run(kDeskBeingModified, {});
+    return;
+  }
+
+  const ash::Desk* new_desk = CreateEmptyDeskAndActivate(customized_desk_name);
   std::move(callback).Run(/*error=*/"", new_desk->uuid());
 }
 
@@ -357,6 +383,13 @@ void DesksClient::RemoveDesk(const base::GUID& desk_uuid,
   // Can't clean up desk when desk identifier is incorrect.
   if (!desk) {
     std::move(callback).Run(kNoSuchDeskError);
+    return;
+  }
+
+  // Don't remove desk if desk is being modified(activated/removed/switched) or
+  // desk animation is in progress.
+  if (desks_controller_->AreDesksBeingModified()) {
+    std::move(callback).Run(kDeskBeingModified);
     return;
   }
 
@@ -382,9 +415,7 @@ void DesksClient::GetAllDesks(GetAllDesksCallback callback) {
 }
 
 void DesksClient::LaunchAppsFromTemplate(
-    std::unique_ptr<ash::DeskTemplate> desk_template,
-    base::Time time_launch_started,
-    base::TimeDelta delay) {
+    std::unique_ptr<ash::DeskTemplate> desk_template) {
   DCHECK(desk_template);
   DCHECK_EQ(desk_template->launch_id(), 0);
 
@@ -407,7 +438,7 @@ void DesksClient::LaunchAppsFromTemplate(
 
   template_ids_to_launch_performance_trackers_[desk_template->uuid()] =
       std::make_unique<LaunchPerformanceTracker>(
-          time_launch_started, GetWindowIDSetFromTemplate(desk_template.get()),
+          GetWindowIDSetFromTemplate(desk_template.get()),
           desk_template->uuid(), this);
 
   DCHECK(active_profile_);
@@ -419,7 +450,6 @@ void DesksClient::LaunchAppsFromTemplate(
   if (!handler)
     handler = std::make_unique<DesksTemplatesAppLaunchHandler>(active_profile_);
 
-  handler->set_delay(delay);
   handler->LaunchTemplate(*desk_template);
 
   // Install a timer that will clear the launch handler after a given duration.
@@ -515,10 +545,29 @@ void DesksClient::SetAllDeskPropertyByBrowserSessionId(
   std::move(callback).Run("");
 }
 
+base::GUID DesksClient::GetActiveDesk() {
+  return desks_controller_->GetTargetActiveDesk()->uuid();
+}
+
+std::string DesksClient::SwitchDesk(const base::GUID& desk_uuid) {
+  ash::Desk* desk = desks_controller_->GetDeskByUuid(desk_uuid);
+  if (!desk) {
+    return kNoSuchDeskError;
+  }
+
+  // Don't switch desk if desk is being modified(activated/removed/switched) or
+  // desk animation is in progress.
+  if (desks_controller_->AreDesksBeingModified()) {
+    return kDeskBeingModified;
+  }
+
+  desks_controller_->ActivateDesk(desk, ash::DesksSwitchSource::kApiSwitch);
+  return {};
+}
+
 void DesksClient::OnGetTemplateForDeskLaunch(
     LaunchDeskCallback callback,
     std::u16string customized_desk_name,
-    base::Time time_launch_started,
     desks_storage::DeskModel::GetEntryByUuidStatus status,
     std::unique_ptr<ash::DeskTemplate> saved_desk) {
   if (status != desks_storage::DeskModel::GetEntryByUuidStatus::kOk) {
@@ -536,10 +585,9 @@ void DesksClient::OnGetTemplateForDeskLaunch(
   const auto& template_name = customized_desk_name.empty()
                                   ? saved_desk->template_name()
                                   : customized_desk_name;
-  const bool activate_desk =
-      saved_desk->type() == ash::DeskTemplateType::kTemplate;
-  const ash::Desk* new_desk =
-      desks_controller_->CreateNewDeskForTemplate(activate_desk, template_name);
+
+  const ash::Desk* new_desk = desks_controller_->CreateNewDeskForTemplate(
+      saved_desk->type(), template_name);
 
   if (!saved_desk->desk_restore_data()) {
     std::move(callback).Run(kMissingTemplateDataError, {});
@@ -550,22 +598,71 @@ void DesksClient::OnGetTemplateForDeskLaunch(
   // that apps appear on the right desk even if the user switches to another.
   saved_desk->SetDeskIndex(desks_controller_->GetDeskIndex(new_desk));
 
+  const auto saved_desk_type = saved_desk->type();
+  const auto uuid = saved_desk->uuid();
+
   // Launch the windows as specified in the saved desk to a new desk.
-  LaunchAppsFromTemplate(std::move(saved_desk), time_launch_started,
-                         base::TimeDelta());
-  std::move(callback).Run("", new_desk->uuid());
+  LaunchAppsFromTemplate(std::move(saved_desk));
+  if (saved_desk_type == ash::DeskTemplateType::kSaveAndRecall) {
+    GetDeskModel()->DeleteEntry(
+        uuid, base::BindOnce(&DesksClient::OnRecallSavedDesk,
+                             weak_ptr_factory_.GetWeakPtr(),
+                             std::move(callback), new_desk->uuid()));
+  } else {
+    std::move(callback).Run("", new_desk->uuid());
+  }
 }
 
 void DesksClient::OnCaptureActiveDeskAndSaveTemplate(
     DesksClient::CaptureActiveDeskAndSaveTemplateCallback callback,
     std::unique_ptr<ash::DeskTemplate> desk_template,
     desks_storage::DeskModel::AddOrUpdateEntryStatus status) {
-  std::move(callback).Run(
-      std::move(desk_template),
-      std::string(status !=
-                          desks_storage::DeskModel::AddOrUpdateEntryStatus::kOk
-                      ? kNoSavedTemplatesError
-                      : ""));
+  if (status != desks_storage::DeskModel::AddOrUpdateEntryStatus::kOk) {
+    std::move(callback).Run(std::move(desk_template), kNoSavedTemplatesError);
+    return;
+  }
+  const auto saved_desk_type = desk_template->type();
+
+  if (saved_desk_type == ash::DeskTemplateType::kSaveAndRecall) {
+    // TODO(aprilzhou): Now it's the exact copy from ash/wm/desks/templates/
+    // saved_desk_presenter.cc:Showlibrary. Should be removed once we provide
+    // API to manage saved desk name.
+    auto* overview_controller = ash::Shell::Get()->overview_controller();
+    auto* overview_session = overview_controller->overview_session();
+    if (!overview_session) {
+      if (!overview_controller->StartOverview(
+              ash::OverviewStartAction::kDevTools,
+              ash::OverviewEnterExitType::kImmediateEnterWithoutFocus)) {
+        // If for whatever reason we didn't enter overview mode, bail.
+        std::move(callback).Run(std::move(desk_template), "");
+        return;
+      }
+      overview_session = overview_controller->overview_session();
+      DCHECK(overview_session);
+    }
+
+    overview_session->ShowDesksTemplatesGrids(
+        desk_template->uuid(), desk_template->template_name(),
+        ash::Shell::GetPrimaryRootWindow());
+
+    // We have successfully created a *new* desk template for Save & Recall,
+    // so we are now going to close all the windows on the active desk and
+    // also remove the desk.
+    auto* active_desk = desks_controller_->active_desk();
+
+    // If this is the only desk, we have to create a new desk before we can
+    // remove the current one.
+    if (!desks_controller_->CanRemoveDesks())
+      desks_controller_->NewDesk(
+          ash::DesksCreationRemovalSource::kEnsureDefaultDesk);
+
+    // Remove the current desk, this will be done without animation.
+    desks_controller_->RemoveDesk(
+        active_desk, ash::DesksCreationRemovalSource::kSaveAndRecall,
+        ash::DeskCloseType::kCloseAllWindows);
+  }
+
+  std::move(callback).Run(std::move(desk_template), "");
 }
 
 void DesksClient::OnDeleteDeskTemplate(
@@ -577,6 +674,17 @@ void DesksClient::OnDeleteDeskTemplate(
                       : ""));
 }
 
+void DesksClient::OnRecallSavedDesk(
+    DesksClient::LaunchDeskCallback callback,
+    const base::GUID& desk_id,
+    desks_storage::DeskModel::DeleteEntryStatus status) {
+  std::move(callback).Run(
+      std::string(status != desks_storage::DeskModel::DeleteEntryStatus::kOk
+                      ? kNoCurrentUserError
+                      : ""),
+      desk_id);
+}
+
 void DesksClient::OnUpdateDeskTemplate(
     DesksClient::UpdateDeskTemplateCallback callback,
     desks_storage::DeskModel::AddOrUpdateEntryStatus status) {
@@ -584,23 +692,6 @@ void DesksClient::OnUpdateDeskTemplate(
       status != desks_storage::DeskModel::AddOrUpdateEntryStatus::kOk
           ? kStorageError
           : ""));
-}
-
-void DesksClient::OnGetTemplateToBeUpdated(
-    const std::u16string& template_name,
-    DesksClient::UpdateDeskTemplateCallback callback,
-    desks_storage::DeskModel::GetEntryByUuidStatus status,
-    std::unique_ptr<ash::DeskTemplate> entry) {
-  if (status != desks_storage::DeskModel::GetEntryByUuidStatus::kOk) {
-    std::move(callback).Run(kStorageError);
-    return;
-  }
-
-  entry->set_template_name(template_name);
-  GetDeskModel()->AddOrUpdateEntry(
-      std::move(entry),
-      base::BindOnce(&DesksClient::OnUpdateDeskTemplate,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void DesksClient::OnCapturedDeskTemplate(
@@ -643,4 +734,38 @@ aura::Window* DesksClient::GetWindowByBrowserSessionId(
       return browser->window()->GetNativeWindow();
   }
   return nullptr;
+}
+
+const ash::Desk* DesksClient::CreateEmptyDeskAndActivate(
+    const std::u16string& customized_desk_name) {
+  DCHECK(desks_controller_->CanCreateDesks());
+
+  // If there is an ongoing animation, we should stop it before creating and
+  // activating the new desk, which triggers its own animation.
+  desks_controller_->ResetAnimation();
+
+  // Desk name was set to a default name upon creation. If
+  // `customized_desk_name` is provided, override desk name to be
+  // `customized_desk_name` or `customized_desk_name ({counter})` to resolve
+  // naming conflicts.
+  std::u16string desk_name =
+      desks_controller_->CreateUniqueDeskName(customized_desk_name);
+
+  desks_controller_->NewDesk(ash::DesksCreationRemovalSource::kApi);
+  ash::Desk* desk = desks_controller_->desks().back().get();
+
+  if (!desk_name.empty()) {
+    desk->SetName(desk_name, /*set_by_user=*/true);
+    ash::Shell::Get()
+        ->accessibility_controller()
+        ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringFUTF8(
+            IDS_ASH_VIRTUAL_DESKS_ALERT_NEW_DESK_CREATED, desk_name));
+  }
+
+  // Force update user prefs because `SetName()` does not trigger it.
+  ash::desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
+
+  desks_controller_->ActivateDesk(desk, ash::DesksSwitchSource::kApiLaunch);
+
+  return desk;
 }

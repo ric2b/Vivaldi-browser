@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,14 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "base/containers/flat_set.h"
+#include "base/feature_list.h"
 #include "components/bookmarks/browser/titled_url_node_sorter.h"
+#include "components/bookmarks/common/bookmark_features.h"
 #include "components/query_parser/query_parser.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -43,6 +46,10 @@ class TitledUrlIndex {
 
   ~TitledUrlIndex();
 
+  // Records to UMA histograms sizes of `index_` and `path_index_`; called once
+  // at startup.
+  void RecordMemoryUsage() const;
+
   void SetNodeSorter(std::unique_ptr<TitledUrlNodeSorter> sorter);
 
   // Invoked when a title/URL pair has been added to the model.
@@ -50,6 +57,12 @@ class TitledUrlIndex {
 
   // Invoked when a title/URL pair has been removed from the model.
   void Remove(const TitledUrlNode* node);
+
+  // Invoked when a folder has been added to the model.
+  void AddPath(const TitledUrlNode* node);
+
+  // Invoked when a folder has been removed from the model.
+  void RemovePath(const TitledUrlNode* node);
 
   // Returns up to |max_count| of matches containing each term from the text
   // |query| in either the title, URL, or, if |match_ancestor_titles| is true,
@@ -61,22 +74,9 @@ class TitledUrlIndex {
       query_parser::MatchingAlgorithm matching_algorithm,
       bool match_ancestor_titles);
 
-  // For testing only.
-  TitledUrlNodeSet RetrieveNodesMatchingAllTermsForTesting(
-      const std::vector<std::u16string>& terms,
-      query_parser::MatchingAlgorithm matching_algorithm) const {
-    return RetrieveNodesMatchingAllTerms(terms, matching_algorithm);
-  }
-
-  // For testing only.
-  TitledUrlNodeSet RetrieveNodesMatchingAnyTermsForTesting(
-      const std::vector<std::u16string>& terms,
-      query_parser::MatchingAlgorithm matching_algorithm,
-      size_t max_nodes) const {
-    return RetrieveNodesMatchingAnyTerms(terms, matching_algorithm, max_nodes);
-  }
-
  private:
+  friend class TitledUrlIndexFake;
+
   using TitledUrlNodes = std::vector<const TitledUrlNode*>;
   using Index = std::map<std::u16string, TitledUrlNodeSet>;
 
@@ -90,6 +90,7 @@ class TitledUrlIndex {
   std::vector<TitledUrlMatch> MatchTitledUrlNodesWithQuery(
       const TitledUrlNodes& nodes,
       const query_parser::QueryNodeVector& query_nodes,
+      const std::vector<std::u16string>& query_terms,
       size_t max_count,
       bool match_ancestor_titles);
 
@@ -98,6 +99,7 @@ class TitledUrlIndex {
   absl::optional<TitledUrlMatch> MatchTitledUrlNodeWithQuery(
       const TitledUrlNode* node,
       const query_parser::QueryNodeVector& query_nodes,
+      const std::vector<std::u16string>& query_terms,
       bool match_ancestor_titles);
 
   // Return matches for the specified |terms|. This is an intersection of each
@@ -122,6 +124,11 @@ class TitledUrlIndex {
       const std::u16string& term,
       query_parser::MatchingAlgorithm matching_algorithm) const;
 
+  // Return true if `term` matches any path. in `path_index_`.
+  bool DoesTermMatchPath(
+      const std::u16string& term,
+      query_parser::MatchingAlgorithm matching_algorithm) const;
+
   // Returns the set of query words from |query|.
   static std::vector<std::u16string> ExtractQueryWords(
       const std::u16string& query);
@@ -136,9 +143,30 @@ class TitledUrlIndex {
   // Removes |node| from |index_|.
   void UnregisterNode(const std::u16string& term, const TitledUrlNode* node);
 
+  // A map of terms and the nodes containing those terms in their titles or
+  // URLs. E.g., given 2 bookmarks titled 'x y x' and 'x z', `index` would
+  // contain: `{ x: set[node1, node2], y: set[node1], z: set[node2] }`.
   Index index_;
+  // A map of terms and the number of times it occurs in paths. E.g., given
+  // 2 paths 'bookmarks bar/x y x/x' and 'bookmarks bar/x z/x', `path_index_`
+  // would contain `{ bookmarks: 2, bar: 2, x: 4, y: 1, z: 1 }`. Note, 'x' has
+  // count 4, since it occurred twice in each path. Doesn't track actual
+  // bookmark nodes, as the latter would need large updates when moving,
+  // folders. Tracks counts so terms can be unindexed when the last containing
+  // folder is renamed or deleted. Updated on folder rename, creation, and
+  // deletion; not updated on bookmark or folder move. Used to short circuit
+  // unioning per-term matches when matching paths, as intersecting results in
+  // much fewer nodes.
+  std::map<std::u16string, size_t> path_index_;
 
   std::unique_ptr<TitledUrlNodeSorter> sorter_;
+
+  // Cached as a member variables as they're read up to 3000 times per omnibox
+  // keystroke and `IsEnabled()` is too expensive to call that frequently.
+  const bool approximate_node_match_ =
+      base::FeatureList::IsEnabled(kApproximateNodeMatch);
+  const bool index_paths_ =
+      base::FeatureList::IsEnabled(bookmarks::kIndexPaths);
 };
 
 }  // namespace bookmarks

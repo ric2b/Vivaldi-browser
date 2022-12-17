@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -331,7 +331,7 @@ TEST_F(AttributionStorageSqlTest, ClearDataRangeMultipleReports) {
       base::Time::Min(), base::Time::Max(),
       base::BindRepeating(
           std::equal_to<blink::StorageKey>(),
-          blink::StorageKey(source.common_info().impression_origin())));
+          blink::StorageKey(source.common_info().source_origin())));
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()), IsEmpty());
 
   CloseDatabase();
@@ -342,7 +342,9 @@ TEST_F(AttributionStorageSqlTest, ClearDataRangeMultipleReports) {
   histograms.ExpectUniqueSample(
       "Conversions.ImpressionsDeletedInDataClearOperation", 1, 1);
   histograms.ExpectUniqueSample(
-      "Conversions.ReportsDeletedInDataClearOperation", 3, 1);
+      "Conversions.ReportsDeletedInDataClearOperation.Event", 3, 1);
+  histograms.ExpectUniqueSample(
+      "Conversions.ReportsDeletedInDataClearOperation.Aggregatable", 3, 1);
 }
 
 //  Create a source with two triggers resulting in two event-level reports (C1
@@ -383,7 +385,7 @@ TEST_F(AttributionStorageSqlTest, ClearDataWithVestigialConversion) {
       base::Time::Now(), base::Time::Now(),
       base::BindRepeating(
           std::equal_to<blink::StorageKey>(),
-          blink::StorageKey(source.common_info().impression_origin())));
+          blink::StorageKey(source.common_info().source_origin())));
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()), IsEmpty());
 
   CloseDatabase();
@@ -394,7 +396,9 @@ TEST_F(AttributionStorageSqlTest, ClearDataWithVestigialConversion) {
   histograms.ExpectUniqueSample(
       "Conversions.ImpressionsDeletedInDataClearOperation", 1, 1);
   histograms.ExpectUniqueSample(
-      "Conversions.ReportsDeletedInDataClearOperation", 2, 1);
+      "Conversions.ReportsDeletedInDataClearOperation.Event", 2, 1);
+  histograms.ExpectUniqueSample(
+      "Conversions.ReportsDeletedInDataClearOperation.Aggregatable", 2, 1);
 }
 
 // Same as the above test, but with a null filter.
@@ -439,7 +443,9 @@ TEST_F(AttributionStorageSqlTest, ClearAllDataWithVestigialConversion) {
   histograms.ExpectUniqueSample(
       "Conversions.ImpressionsDeletedInDataClearOperation", 1, 1);
   histograms.ExpectUniqueSample(
-      "Conversions.ReportsDeletedInDataClearOperation", 2, 1);
+      "Conversions.ReportsDeletedInDataClearOperation.Event", 2, 1);
+  histograms.ExpectUniqueSample(
+      "Conversions.ReportsDeletedInDataClearOperation.Aggregatable", 2, 1);
 }
 
 // The max time range with a null filter should delete everything.
@@ -485,7 +491,9 @@ TEST_F(AttributionStorageSqlTest, DeleteEverything) {
   histograms.ExpectUniqueSample(
       "Conversions.ImpressionsDeletedInDataClearOperation", 1, 1);
   histograms.ExpectUniqueSample(
-      "Conversions.ReportsDeletedInDataClearOperation", 2, 1);
+      "Conversions.ReportsDeletedInDataClearOperation.Event", 2, 1);
+  histograms.ExpectUniqueSample(
+      "Conversions.ReportsDeletedInDataClearOperation.Aggregatable", 2, 1);
 }
 
 TEST_F(AttributionStorageSqlTest, ClearData_KeepRateLimitData) {
@@ -549,7 +557,7 @@ TEST_F(AttributionStorageSqlTest, MaxSourcesPerOrigin) {
 TEST_F(AttributionStorageSqlTest, MaxReportsPerDestination) {
   OpenDatabase();
   delegate()->set_max_reports_per_destination(
-      AttributionReport::ReportType::kEventLevel, 2);
+      AttributionReport::Type::kEventLevel, 2);
   storage()->StoreSource(SourceBuilder().Build());
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
@@ -581,24 +589,24 @@ TEST_F(AttributionStorageSqlTest,
       .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
       .max_attributions = std::numeric_limits<int64_t>::max(),
   });
-  const url::Origin impression_origin =
+  const url::Origin source_origin =
       url::Origin::Create(GURL("https://sub.impression.example/"));
   const url::Origin reporting_origin =
       url::Origin::Create(GURL("https://a.example/"));
-  const url::Origin conversion_origin =
+  const url::Origin destination_origin =
       url::Origin::Create(GURL("https://b.example/"));
   storage()->StoreSource(SourceBuilder()
                              .SetExpiry(base::Days(30))
-                             .SetImpressionOrigin(impression_origin)
+                             .SetSourceOrigin(source_origin)
                              .SetReportingOrigin(reporting_origin)
-                             .SetConversionOrigin(conversion_origin)
+                             .SetDestinationOrigin(destination_origin)
                              .Build());
 
   task_environment_.FastForwardBy(base::Days(1));
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(
                 TriggerBuilder()
-                    .SetDestinationOrigin(conversion_origin)
+                    .SetDestinationOrigin(destination_origin)
                     .SetReportingOrigin(reporting_origin)
                     .Build()));
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
@@ -606,10 +614,9 @@ TEST_F(AttributionStorageSqlTest,
   task_environment_.FastForwardBy(base::Days(1));
   EXPECT_TRUE(
       storage()->DeleteReport(AttributionReport::EventLevelData::Id(1)));
-  storage()->ClearData(
-      base::Time::Min(), base::Time::Max(),
-      base::BindRepeating(std::equal_to<blink::StorageKey>(),
-                          blink::StorageKey(impression_origin)));
+  storage()->ClearData(base::Time::Min(), base::Time::Max(),
+                       base::BindRepeating(std::equal_to<blink::StorageKey>(),
+                                           blink::StorageKey(source_origin)));
 
   CloseDatabase();
   sql::Database raw_db;
@@ -633,24 +640,24 @@ TEST_F(AttributionStorageSqlTest,
       .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
       .max_attributions = std::numeric_limits<int64_t>::max(),
   });
-  const url::Origin impression_origin =
+  const url::Origin source_origin =
       url::Origin::Create(GURL("https://b.example/"));
   const url::Origin reporting_origin =
       url::Origin::Create(GURL("https://a.example/"));
-  const url::Origin conversion_origin =
+  const url::Origin destination_origin =
       url::Origin::Create(GURL("https://sub.impression.example/"));
   storage()->StoreSource(SourceBuilder()
                              .SetExpiry(base::Days(30))
-                             .SetImpressionOrigin(impression_origin)
+                             .SetSourceOrigin(source_origin)
                              .SetReportingOrigin(reporting_origin)
-                             .SetConversionOrigin(conversion_origin)
+                             .SetDestinationOrigin(destination_origin)
                              .Build());
 
   task_environment_.FastForwardBy(base::Days(1));
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(
                 TriggerBuilder()
-                    .SetDestinationOrigin(conversion_origin)
+                    .SetDestinationOrigin(destination_origin)
                     .SetReportingOrigin(reporting_origin)
                     .Build()));
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
@@ -661,7 +668,7 @@ TEST_F(AttributionStorageSqlTest,
   storage()->ClearData(
       base::Time::Min(), base::Time::Max(),
       base::BindRepeating(std::equal_to<blink::StorageKey>(),
-                          blink::StorageKey(conversion_origin)));
+                          blink::StorageKey(destination_origin)));
 
   CloseDatabase();
   sql::Database raw_db;
@@ -737,7 +744,7 @@ TEST_F(AttributionStorageSqlTest, MaxUint64StorageSucceeds) {
           TriggerBuilder()
               .SetDebugKey(kMaxUint64)
               .SetDestinationOrigin(
-                  impression.common_info().conversion_origin())
+                  impression.common_info().destination_origin())
               .SetReportingOrigin(impression.common_info().reporting_origin())
               .Build()));
 
@@ -868,15 +875,13 @@ TEST_F(AttributionStorageSqlTest, DeleteAggregatableAttributionReport) {
   EXPECT_THAT(
       reports,
       ElementsAre(
-          ReportTypeIs(AttributionReport::ReportType::kEventLevel),
-          ReportTypeIs(
-              AttributionReport::ReportType::kAggregatableAttribution)));
+          ReportTypeIs(AttributionReport::Type::kEventLevel),
+          ReportTypeIs(AttributionReport::Type::kAggregatableAttribution)));
 
   EXPECT_TRUE(storage()->DeleteReport(
       AttributionReport::AggregatableAttributionData::Id(1)));
-  EXPECT_THAT(
-      storage()->GetAttributionReports(base::Time::Max()),
-      ElementsAre(ReportTypeIs(AttributionReport::ReportType::kEventLevel)));
+  EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()),
+              ElementsAre(ReportTypeIs(AttributionReport::Type::kEventLevel)));
 
   CloseDatabase();
 
@@ -905,9 +910,8 @@ TEST_F(AttributionStorageSqlTest,
   EXPECT_THAT(
       reports,
       ElementsAre(
-          ReportTypeIs(AttributionReport::ReportType::kEventLevel),
-          ReportTypeIs(
-              AttributionReport::ReportType::kAggregatableAttribution)));
+          ReportTypeIs(AttributionReport::Type::kEventLevel),
+          ReportTypeIs(AttributionReport::Type::kAggregatableAttribution)));
 
   EXPECT_TRUE(
       storage()->DeleteReport(AttributionReport::EventLevelData::Id(1)));
@@ -943,9 +947,8 @@ TEST_F(AttributionStorageSqlTest,
   EXPECT_THAT(
       reports,
       ElementsAre(
-          ReportTypeIs(AttributionReport::ReportType::kEventLevel),
-          ReportTypeIs(
-              AttributionReport::ReportType::kAggregatableAttribution)));
+          ReportTypeIs(AttributionReport::Type::kEventLevel),
+          ReportTypeIs(AttributionReport::Type::kAggregatableAttribution)));
 
   task_environment_.FastForwardBy(base::Milliseconds(3));
 
@@ -1042,6 +1045,34 @@ TEST_F(AttributionStorageSqlTest,
                          base::NullCallback());
     CloseDatabase();
   }
+}
+
+TEST_F(AttributionStorageSqlTest, CreateReport_DeletesUnattributedSources) {
+  OpenDatabase();
+  storage()->StoreSource(SourceBuilder().Build());
+  storage()->StoreSource(SourceBuilder().Build());
+  CloseDatabase();
+
+  ExpectImpressionRows(2);
+
+  OpenDatabase();
+  MaybeCreateAndStoreEventLevelReport(DefaultTrigger());
+  CloseDatabase();
+
+  ExpectImpressionRows(1);
+}
+
+TEST_F(AttributionStorageSqlTest, CreateReport_DeactivatesAttributedSources) {
+  OpenDatabase();
+  storage()->StoreSource(
+      SourceBuilder().SetSourceEventId(1).SetPriority(1).Build());
+  MaybeCreateAndStoreEventLevelReport(DefaultTrigger());
+  storage()->StoreSource(
+      SourceBuilder().SetSourceEventId(2).SetPriority(2).Build());
+  MaybeCreateAndStoreEventLevelReport(DefaultTrigger());
+  CloseDatabase();
+
+  ExpectImpressionRows(2);
 }
 
 }  // namespace content

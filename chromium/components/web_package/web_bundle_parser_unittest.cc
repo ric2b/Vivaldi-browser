@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,6 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/boringssl/src/include/openssl/curve25519.h"
 
 namespace web_package {
 
@@ -193,13 +192,6 @@ struct SignedWebBundleAndKeys {
   std::vector<WebBundleSigner::KeyPair> key_pairs;
 };
 
-WebBundleSigner::KeyPair CreateKeys() {
-  std::vector<uint8_t> public_key(ED25519_PUBLIC_KEY_LEN);
-  std::vector<uint8_t> private_key(ED25519_PRIVATE_KEY_LEN);
-  ED25519_keypair(public_key.data(), private_key.data());
-  return WebBundleSigner::KeyPair(public_key, private_key);
-}
-
 SignedWebBundleAndKeys SignBundle(
     const std::vector<uint8_t>& unsigned_bundle,
     WebBundleSigner::ErrorForTesting error_for_testing =
@@ -207,7 +199,7 @@ SignedWebBundleAndKeys SignBundle(
     size_t num_signatures = 1) {
   std::vector<WebBundleSigner::KeyPair> key_pairs;
   for (size_t i = 0; i < num_signatures; ++i) {
-    key_pairs.push_back(CreateKeys());
+    key_pairs.push_back(WebBundleSigner::KeyPair::CreateRandom());
   }
 
   return {
@@ -745,6 +737,7 @@ TEST_F(WebBundleParserTest, RelativeURL) {
   const GURL base_url("https://test.example.com/dir/test.wbn");
   mojom::BundleMetadataPtr metadata =
       ParseUnsignedBundle(&data_source, base_url).first;
+  ASSERT_TRUE(metadata);
   EXPECT_EQ(metadata->primary_url,
             "https://test.example.com/dir/path/to/primary_url");
   ASSERT_TRUE(metadata);
@@ -1019,7 +1012,6 @@ TEST_F(WebBundleParserTest, SignedBundleSignatureStackWithThreeEntries) {
 
 TEST_F(WebBundleParserTest, SignedBundleWrongSignatureLength) {
   auto unsigned_bundle = CreateSmallBundle();
-  auto [public_key, private_key] = CreateKeys();
   auto bundle_and_keys =
       SignBundle(unsigned_bundle,
                  WebBundleSigner::ErrorForTesting::kInvalidSignatureLength);
@@ -1035,7 +1027,6 @@ TEST_F(WebBundleParserTest, SignedBundleWrongSignatureLength) {
 
 TEST_F(WebBundleParserTest, SignedBundleWrongSignatureStackEntryLength) {
   auto unsigned_bundle = CreateSmallBundle();
-  auto [public_key, private_key] = CreateKeys();
   auto bundle_and_keys = SignBundle(
       unsigned_bundle,
       WebBundleSigner::ErrorForTesting::kAdditionalSignatureStackEntryElement);
@@ -1107,6 +1098,72 @@ TEST_F(WebBundleParserTest, SignedBundleWrongPublicKeyLength) {
   EXPECT_EQ(error->message,
             "The public key does not have the correct length, expected 32 "
             "bytes.");
+}
+
+TEST_F(WebBundleParserTest, DisconnectWhileParsingMetadata) {
+  base::test::TestFuture<mojom::BundleMetadataPtr,
+                         mojom::BundleMetadataParseErrorPtr>
+      future;
+  {
+    WebBundleBuilder builder;
+    builder.AddPrimaryURL(kPrimaryUrl);
+    builder.AddExchange("https://test.example.com/",
+                        {{":status", "200"}, {"content-type", "text/plain"}},
+                        "payload");
+    TestDataSource data_source(builder.CreateBundle());
+
+    mojo::PendingRemote<mojom::BundleDataSource> source_remote;
+    data_source.AddReceiver(source_remote.InitWithNewPipeAndPassReceiver());
+
+    mojo::PendingRemote<mojom::WebBundleParser> parser_remote;
+    WebBundleParser parser_impl(parser_remote.InitWithNewPipeAndPassReceiver(),
+                                std::move(source_remote), GURL());
+    mojom::WebBundleParser& parser = parser_impl;
+
+    parser.ParseMetadata(-1 /* offset */, future.GetCallback());
+    // |data_source| and |parser_impl| are deleted here.
+  }
+
+  auto error = std::get<1>(future.Take());
+  ASSERT_TRUE(error);
+  EXPECT_EQ(error->type, mojom::BundleParseErrorType::kParserInternalError);
+  EXPECT_EQ(error->message, "Data source disconnected.");
+}
+
+TEST_F(WebBundleParserTest, DisconnectWhileParsingResponse) {
+  base::test::TestFuture<mojom::BundleResponsePtr,
+                         mojom::BundleResponseParseErrorPtr>
+      future;
+  {
+    WebBundleBuilder builder;
+    builder.AddPrimaryURL(kPrimaryUrl);
+    builder.AddExchange("https://test.example.com/",
+                        {{":status", "200"}, {"content-type", "text/plain"}},
+                        "payload");
+    TestDataSource data_source(builder.CreateBundle());
+
+    mojom::BundleMetadataPtr metadata = ParseUnsignedBundle(&data_source).first;
+    ASSERT_TRUE(metadata);
+    auto location = FindResponse(metadata, GURL("https://test.example.com/"));
+    ASSERT_TRUE(location);
+
+    mojo::PendingRemote<mojom::BundleDataSource> source_remote;
+    data_source.AddReceiver(source_remote.InitWithNewPipeAndPassReceiver());
+
+    mojo::PendingRemote<mojom::WebBundleParser> parser_remote;
+    WebBundleParser parser_impl(parser_remote.InitWithNewPipeAndPassReceiver(),
+                                std::move(source_remote), GURL());
+    mojom::WebBundleParser& parser = parser_impl;
+
+    parser.ParseResponse(location->offset, location->length,
+                         future.GetCallback());
+    // |data_source| and |parser_impl| are deleted here.
+  }
+
+  auto error = std::get<1>(future.Take());
+  ASSERT_TRUE(error);
+  EXPECT_EQ(error->type, mojom::BundleParseErrorType::kParserInternalError);
+  EXPECT_EQ(error->message, "Data source disconnected.");
 }
 
 }  // namespace web_package

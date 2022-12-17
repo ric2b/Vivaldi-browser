@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,7 @@ struct PLATFORM_EXPORT LayerSelectionData {
   absl::optional<PaintedSelectionBound> start;
   absl::optional<PaintedSelectionBound> end;
   bool any_selection_was_painted = false;
+  USING_FAST_MALLOC(LayerSelectionData);
 };
 
 }  // namespace blink

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,28 +14,35 @@ namespace lens {
 namespace features {
 
 // Enables context menu search by image sending to the Lens homepage.
-extern const base::Feature kLensStandalone;
+BASE_DECLARE_FEATURE(kLensStandalone);
 
 // Feature that controls the compression of images before they are sent to Lens.
-extern const base::Feature kLensImageCompression;
+BASE_DECLARE_FEATURE(kLensImageCompression);
 
 // Enables a variety of changes aimed to improve user's engagement with current
 // Lens features.
-extern const base::Feature kLensSearchOptimizations;
+BASE_DECLARE_FEATURE(kLensSearchOptimizations);
 
 // Enables a fix to properly handle transparent images in Lens Image Search
-extern const base::Feature kLensTransparentImagesFix;
+BASE_DECLARE_FEATURE(kLensTransparentImagesFix);
 
 // Enables Lens integration into the Chrome screenshot sharing feature by adding
 // a "Search Image" button.
-extern const base::Feature kLensSearchImageInScreenshotSharing;
+BASE_DECLARE_FEATURE(kLensSearchImageInScreenshotSharing);
+
+// Enables Latency logging for the LensStandalone feature.
+BASE_DECLARE_FEATURE(kEnableLatencyLogging);
 
 // Enable the Lens Region Search feature on the PDF viewer.
-extern const base::Feature kEnableRegionSearchOnPdfViewer;
+BASE_DECLARE_FEATURE(kEnableRegionSearchOnPdfViewer);
 
 // Enables the modification of the instruction chip UI that is presented when
 // region search is opened.
-extern const base::Feature kLensInstructionChipImprovements;
+BASE_DECLARE_FEATURE(kLensInstructionChipImprovements);
+
+// Enables the image search side panel experience for third party default search
+// engines
+BASE_DECLARE_FEATURE(kEnableImageSearchSidePanelFor3PDse);
 
 // Enables using `Google` as the visual search provider instead of `Google
 // Lens`.
@@ -59,8 +66,14 @@ extern const base::FeatureParam<bool> kEnableUKMLoggingForImageSearch;
 // Enables the side panel for Lens features on Chrome where supported.
 extern const base::FeatureParam<bool> kEnableSidePanelForLens;
 
+// The base URL for Lens.
+extern const base::FeatureParam<std::string> kHomepageURLForLens;
+
+// Enable Lens HTML redirect fix.
+extern const base::FeatureParam<bool> kEnableLensHtmlRedirectFix;
+
 // Enables footer for the unified side panel
-extern const base::Feature kLensUnifiedSidePanelFooter;
+BASE_DECLARE_FEATURE(kLensUnifiedSidePanelFooter);
 
 // Enables Lens fullscreen search on Desktop platforms.
 extern const base::FeatureParam<bool> kEnableFullscreenSearch;
@@ -79,6 +92,13 @@ extern const base::FeatureParam<bool> kUseSelectionIconWithImage;
 
 // Enables the use of an alternative string for the instruction chip.
 extern const base::FeatureParam<bool> kUseAltChipString;
+
+// Enables Latency logging for the LensStandalone feature.
+extern bool GetEnableLatencyLogging();
+
+// Returns whether the image search side panel is supported for third party
+// default search engines
+extern bool GetEnableImageSearchUnifiedSidePanelFor3PDse();
 
 // Returns whether to enable UKM logging for Lens Region Search feature.
 extern bool GetEnableUKMLoggingForRegionSearch();
@@ -102,6 +122,9 @@ extern int GetMaxPixelsForImageSearch();
 // The URL for the Lens home page.
 extern std::string GetHomepageURLForLens();
 
+// Returns whether to apply fix for HTML redirects.
+extern bool GetEnableLensHtmlRedirectFix();
+
 // Returns whether Lens fullscreen search is enabled.
 extern bool IsLensFullscreenSearchEnabled();
 
@@ -121,8 +144,11 @@ extern bool UseRegionSearchMenuItemAltText3();
 // relevant Lens context menu strings.
 extern bool UseGoogleAsVisualSearchProvider();
 
-// Returns whether the Lens side panel is enabled.
+// Returns whether the Lens side panel is enabled for image search.
 extern bool IsLensSidePanelEnabled();
+
+// Returns whether the Lens side panel is enabled for region search.
+extern bool IsLensSidePanelEnabledForRegionSearch();
 
 // Returns whether to send images to Lens Standalone as PNG
 extern bool GetSendImagesAsPng();

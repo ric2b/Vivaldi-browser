@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -175,10 +175,10 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
                    .SetSourceType(AttributionSourceType::kNavigation)
                    .SetReportingOrigin(
                        url::Origin::Create(GURL("https://a.r.test")))
-                   .SetImpressionOrigin(
+                   .SetSourceOrigin(
                        url::Origin::Create(GURL("https://a.s.test")))
                    .SetSourceEventId(123)
-                   .SetConversionOrigin(
+                   .SetDestinationOrigin(
                        url::Origin::Create(GURL("https://a.d.test")))
                    .SetExpiry(base::Days(10))
                    .SetPriority(-5)
@@ -189,10 +189,10 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
                    .SetSourceType(AttributionSourceType::kEvent)
                    .SetReportingOrigin(
                        url::Origin::Create(GURL("https://b.r.test")))
-                   .SetImpressionOrigin(
+                   .SetSourceOrigin(
                        url::Origin::Create(GURL("https://b.s.test")))
                    .SetSourceEventId(0)  // default
-                   .SetConversionOrigin(
+                   .SetDestinationOrigin(
                        url::Origin::Create(GURL("https://b.d.test")))
                    .SetExpiry(base::Days(30))   // default
                    .SetPriority(0)              // default
@@ -204,10 +204,10 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
                   .SetSourceType(AttributionSourceType::kEvent)
                   .SetReportingOrigin(
                       url::Origin::Create(GURL("https://c.r.test")))
-                  .SetImpressionOrigin(
+                  .SetSourceOrigin(
                       url::Origin::Create(GURL("https://c.s.test")))
                   .SetSourceEventId(789)
-                  .SetConversionOrigin(
+                  .SetDestinationOrigin(
                       url::Origin::Create(GURL("https://c.d.test")))
                   .SetExpiry(base::Days(10))  // rounded to whole number of days
                   .SetPriority(0)             // default
@@ -224,10 +224,10 @@ TEST(AttributionSimulatorInputParserTest, ValidSourceParses) {
                   .SetSourceType(AttributionSourceType::kEvent)
                   .SetReportingOrigin(
                       url::Origin::Create(GURL("https://c.r.test")))
-                  .SetImpressionOrigin(
+                  .SetSourceOrigin(
                       url::Origin::Create(GURL("https://c.s.test")))
                   .SetSourceEventId(789)
-                  .SetConversionOrigin(
+                  .SetDestinationOrigin(
                       url::Origin::Create(GURL("https://c.d.test")))
                   .SetExpiry(base::Days(10))  // rounded to whole number of days
                   .SetPriority(0)             // default
@@ -329,7 +329,8 @@ TEST(AttributionSimulatorInputParserTest, ValidTriggerParses) {
           "source_keys": ["a"],
           "key_piece": "0x1"
         }],
-        "aggregatable_values": {"a": 1}
+        "aggregatable_values": {"a": 1},
+        "aggregatable_deduplication_key": "789"
       }
     }
   ]})json";
@@ -358,6 +359,7 @@ TEST(AttributionSimulatorInputParserTest, ValidTriggerParses) {
                           {"e", {"f"}},
                       }),
                       /*debug_key=*/14,
+                      /*aggregatable_dedup_key=*/absl::nullopt,
                       {
                           AttributionTrigger::EventTriggerData(
                               /*data=*/10,
@@ -393,6 +395,7 @@ TEST(AttributionSimulatorInputParserTest, ValidTriggerParses) {
                       /*filters=*/AttributionFilterData(),
                       /*not_filters=*/AttributionFilterData(),
                       /*debug_key=*/absl::nullopt,
+                      /*aggregatable_dedup_key=*/absl::nullopt,
                       /*event_triggers=*/{},
                       /*aggregatable_trigger_data=*/{},
                       /*aggregatable_values=*/AttributionAggregatableValues()),
@@ -409,6 +412,7 @@ TEST(AttributionSimulatorInputParserTest, ValidTriggerParses) {
                       /*filters=*/AttributionFilterData(),
                       /*not_filters=*/AttributionFilterData(),
                       /*debug_key=*/absl::nullopt,
+                      /*aggregatable_dedup_key=*/789,
                       /*event_triggers=*/{},
                       {AttributionAggregatableTriggerData::CreateForTesting(
                           absl::MakeUint128(/*high=*/0, /*low=*/1),
@@ -712,7 +716,7 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
         }]})json",
     },
     {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["destination"]: must be a valid, secure origin)",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]: kDestinationMissing)",
         R"json({"sources": [{
           "timestamp": "1643235574000",
           "source_type": "navigation",
@@ -733,48 +737,7 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
         }]})json",
     },
     {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["expiry"]: must be a positive number of)",
-        R"json({"sources": [{
-          "timestamp": "1643235574000",
-          "source_type": "navigation",
-          "reporting_origin": "https://a.r.test",
-          "source_origin": "https://a.s.test",
-          "Attribution-Reporting-Register-Source": {
-            "source_event_id": "123",
-            "destination": "https://a.d.test",
-            "expiry": "-5"
-          }
-        }]})json",
-    },
-    {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["priority"]: must be an int64)",
-        R"json({"sources": [{
-          "timestamp": "1643235574000",
-          "source_type": "navigation",
-          "reporting_origin": "https://a.r.test",
-          "source_origin": "https://a.s.test",
-          "Attribution-Reporting-Register-Source": {
-            "source_event_id": "123",
-            "destination": "https://a.d.test",
-            "priority": "x"
-          }
-        }]})json",
-    },
-    {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["source_event_id"]: must be a uint64 formatted)",
-        R"json({"sources": [{
-          "timestamp": "1643235574000",
-          "source_type": "navigation",
-          "reporting_origin": "https://a.r.test",
-          "source_origin": "https://a.s.test",
-          "Attribution-Reporting-Register-Source": {
-            "source_event_id": "x",
-            "destination": "https://a.d.test"
-          }
-        }]})json",
-    },
-    {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["filter_data"]: must be a dictionary)",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]: kFilterDataWrongType)",
         R"json({"sources": [{
           "timestamp": "1643235574000",
           "source_type": "navigation",
@@ -788,7 +751,7 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
         }]})json",
     },
     {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["filter_data"]["a"]: must be a list)",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]: kFilterDataListWrongType)",
         R"json({"sources": [{
           "timestamp": "1643235574000",
           "source_type": "navigation",
@@ -804,7 +767,7 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
         }]})json",
     },
     {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["filter_data"]["a"][0]: must be a string)",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]: kFilterDataValueWrongType)",
         R"json({"sources": [{
           "timestamp": "1643235574000",
           "source_type": "navigation",
@@ -820,7 +783,7 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
         }]})json",
     },
     {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["aggregation_keys"]: must be a dictionary)",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]: kAggregationKeysWrongType)",
         R"json({"sources": [{
           "timestamp": "1643235574000",
           "source_type": "event",
@@ -834,7 +797,7 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
         }]})json",
     },
     {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["aggregation_keys"]["a"]: must be a uint128 formatted as a base-16 string)",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]: kAggregationKeysValueWrongFormat)",
         R"json({"sources": [{
           "timestamp": "1643235574000",
           "source_type": "event",
@@ -850,7 +813,7 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
         }]})json",
     },
     {
-        R"(["sources"][0]["Attribution-Reporting-Register-Source"]["aggregation_keys"]["a"]: must be a uint128 formatted as a base-16 string)",
+        R"(["sources"][0]["Attribution-Reporting-Register-Source"]: kAggregationKeysValueWrongFormat)",
         R"json({"sources": [{
           "timestamp": "1643235574000",
           "source_type": "event",
@@ -1023,6 +986,14 @@ const ParseErrorTestCase kParseErrorTestCases[] = {
             "reporting_origin": "https://a.r.test",
             "destination_origin": " https://a.d1.test",
             "event_trigger_data":[true]
+          }
+        }]})json",
+    },
+    {
+        R"(["triggers"][0]["Attribution-Reporting-Register-Trigger"]["aggregatable_deduplication_key"]: must be a uint64 formatted)",
+        R"json({"triggers":[{
+          "Attribution-Reporting-Register-Trigger": {
+            "aggregatable_deduplication_key": 123
           }
         }]})json",
     },

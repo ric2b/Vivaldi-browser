@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -729,9 +729,9 @@ TEST(FilePolicyTest, TestCopyFile) {
   sandbox::TargetPolicy* policy = runner.GetPolicy();
 
   // Set proper mitigation.
-  EXPECT_EQ(
-      policy->SetDelayedProcessMitigations(MITIGATION_STRICT_HANDLE_CHECKS),
-      SBOX_ALL_OK);
+  EXPECT_EQ(policy->GetConfig()->SetDelayedProcessMitigations(
+                MITIGATION_STRICT_HANDLE_CHECKS),
+            SBOX_ALL_OK);
 
   ASSERT_EQ(SBOX_TEST_SUCCEEDED, runner.RunTest(L"File_CopyFile"));
 }

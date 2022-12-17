@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,17 +7,19 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "mojo/public/cpp/test_support/fake_message_dispatch_context.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "services/device/public/cpp/test/scoped_pressure_manager_overrider.h"
 #include "services/device/public/mojom/pressure_manager.mojom.h"
-#include "services/device/public/mojom/pressure_state.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/compute_pressure/pressure_service.mojom.h"
@@ -25,8 +27,9 @@
 
 namespace content {
 
-using blink::mojom::PressureQuantization;
+using device::mojom::PressureFactor;
 using device::mojom::PressureState;
+using device::mojom::PressureUpdate;
 
 namespace {
 
@@ -45,12 +48,10 @@ class PressureServiceImplSync {
   PressureServiceImplSync(const PressureServiceImplSync&) = delete;
   PressureServiceImplSync& operator=(const PressureServiceImplSync&) = delete;
 
-  blink::mojom::PressureStatus AddObserver(
-      const PressureQuantization& quantization,
+  blink::mojom::PressureStatus BindObserver(
       mojo::PendingRemote<blink::mojom::PressureObserver> observer) {
     base::test::TestFuture<blink::mojom::PressureStatus> future;
-    service_.AddObserver(std::move(observer), quantization.Clone(),
-                         future.GetCallback());
+    service_.BindObserver(std::move(observer), future.GetCallback());
     return future.Get();
   }
 
@@ -73,7 +74,7 @@ class FakePressureObserver : public blink::mojom::PressureObserver {
   FakePressureObserver& operator=(const FakePressureObserver&) = delete;
 
   // blink::mojom::PressureObserver implementation.
-  void OnUpdate(device::mojom::PressureStatePtr state) override {
+  void OnUpdate(device::mojom::PressureUpdatePtr state) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     updates_.push_back(*state);
@@ -83,7 +84,7 @@ class FakePressureObserver : public blink::mojom::PressureObserver {
     }
   }
 
-  std::vector<PressureState>& updates() {
+  std::vector<PressureUpdate>& updates() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return updates_;
   }
@@ -122,7 +123,7 @@ class FakePressureObserver : public blink::mojom::PressureObserver {
  private:
   SEQUENCE_CHECKER(sequence_checker_);
 
-  std::vector<PressureState> updates_ GUARDED_BY_CONTEXT(sequence_checker_);
+  std::vector<PressureUpdate> updates_ GUARDED_BY_CONTEXT(sequence_checker_);
 
   // Used to implement WaitForUpdate().
   base::OnceClosure update_callback_ GUARDED_BY_CONTEXT(sequence_checker_);
@@ -169,8 +170,6 @@ class PressureServiceImplTest : public RenderViewHostImplTestHarness {
  protected:
   const GURL kTestUrl{"https://example.com/compute_pressure.html"};
   const GURL kInsecureUrl{"http://example.com/compute_pressure.html"};
-  // Quantization scheme used in most tests.
-  const PressureQuantization kQuantization{{0.2, 0.5, 0.8}};
 
   base::test::ScopedFeatureList scoped_feature_list_;
 
@@ -180,161 +179,86 @@ class PressureServiceImplTest : public RenderViewHostImplTestHarness {
       pressure_manager_overrider_;
 };
 
-TEST_F(PressureServiceImplTest, OneObserver) {
+TEST_F(PressureServiceImplTest, BindObserver) {
   FakePressureObserver observer;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, observer.BindNewPipeAndPassRemote()),
+  ASSERT_EQ(pressure_service_impl_sync_->BindObserver(
+                observer.BindNewPipeAndPassRemote()),
             blink::mojom::PressureStatus::kOk);
 
   const base::Time time = base::Time::Now() + kRateLimit;
-  const PressureState state{0.42};
-  pressure_manager_overrider_->UpdateClients(state, time);
+  PressureUpdate update(PressureState::kNominal, {PressureFactor::kThermal},
+                        time);
+  pressure_manager_overrider_->UpdateClients(update);
   observer.WaitForUpdate();
   ASSERT_EQ(observer.updates().size(), 1u);
-  EXPECT_EQ(observer.updates()[0], PressureState{0.35});
+  EXPECT_EQ(observer.updates()[0], update);
 }
 
-TEST_F(PressureServiceImplTest, OneObserver_UpdateRateLimiting) {
+TEST_F(PressureServiceImplTest, UpdatePressureFactors) {
   FakePressureObserver observer;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, observer.BindNewPipeAndPassRemote()),
+  ASSERT_EQ(pressure_service_impl_sync_->BindObserver(
+                observer.BindNewPipeAndPassRemote()),
+            blink::mojom::PressureStatus::kOk);
+
+  const base::Time time = base::Time::Now() + kRateLimit;
+  PressureUpdate update1(PressureState::kNominal,
+                         {PressureFactor::kPowerSupply}, time);
+
+  pressure_manager_overrider_->UpdateClients(update1);
+  observer.WaitForUpdate();
+  ASSERT_EQ(observer.updates().size(), 1u);
+  EXPECT_EQ(observer.updates()[0], update1);
+  observer.updates().clear();
+
+  PressureUpdate update2(
+      PressureState::kCritical,
+      {PressureFactor::kThermal, PressureFactor::kPowerSupply},
+      time + kRateLimit * 2.5);
+  pressure_manager_overrider_->UpdateClients(update2);
+  observer.WaitForUpdate();
+  ASSERT_EQ(observer.updates().size(), 1u);
+  EXPECT_EQ(observer.updates()[0], update2);
+  observer.updates().clear();
+
+  PressureUpdate update3(PressureState::kCritical, {PressureFactor::kThermal},
+                         time + kRateLimit * 3.5);
+  pressure_manager_overrider_->UpdateClients(update3);
+  observer.WaitForUpdate();
+  ASSERT_EQ(observer.updates().size(), 1u);
+  EXPECT_EQ(observer.updates()[0], update3);
+  observer.updates().clear();
+}
+
+TEST_F(PressureServiceImplTest, UpdateRateLimiting) {
+  FakePressureObserver observer;
+  ASSERT_EQ(pressure_service_impl_sync_->BindObserver(
+                observer.BindNewPipeAndPassRemote()),
             blink::mojom::PressureStatus::kOk);
 
   const base::Time time = base::Time::Now();
-  const PressureState state1{0.42};
-  pressure_manager_overrider_->UpdateClients(state1, time + kRateLimit);
+  PressureUpdate update1(PressureState::kNominal, {PressureFactor::kThermal},
+                         time + kRateLimit);
+  pressure_manager_overrider_->UpdateClients(update1);
   observer.WaitForUpdate();
   observer.updates().clear();
 
   // The first update should be blocked due to rate-limiting.
-  const PressureState state2{1.0};
-  pressure_manager_overrider_->UpdateClients(state2, time + kRateLimit * 1.5);
-  const PressureState state3{0.0};
-  pressure_manager_overrider_->UpdateClients(state3, time + kRateLimit * 2);
+  PressureUpdate update2(PressureState::kCritical, {PressureFactor::kThermal},
+                         time + kRateLimit * 1.5);
+  pressure_manager_overrider_->UpdateClients(update2);
+  PressureUpdate update3(PressureState::kFair, {PressureFactor::kThermal},
+                         time + kRateLimit * 2);
+  pressure_manager_overrider_->UpdateClients(update3);
   observer.WaitForUpdate();
 
   ASSERT_EQ(observer.updates().size(), 1u);
-  EXPECT_EQ(observer.updates()[0], PressureState{0.1});
+  EXPECT_EQ(observer.updates()[0], update3);
 }
 
-TEST_F(PressureServiceImplTest, OneObserver_NoCallbackInvoked) {
+TEST_F(PressureServiceImplTest, NoVisibility) {
   FakePressureObserver observer;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, observer.BindNewPipeAndPassRemote()),
-            blink::mojom::PressureStatus::kOk);
-
-  const base::Time time = base::Time::Now() + kRateLimit;
-  const PressureState state1{0.42};
-  pressure_manager_overrider_->UpdateClients(state1, time);
-  observer.WaitForUpdate();
-  ASSERT_EQ(observer.updates().size(), 1u);
-  EXPECT_EQ(observer.updates()[0], PressureState{0.35});
-
-  // The first update should be discarded due to same bucket
-  const PressureState state2{0.37};
-  pressure_manager_overrider_->UpdateClients(state2, time + kRateLimit);
-  const PressureState state3{0.52};
-  pressure_manager_overrider_->UpdateClients(state3, time + kRateLimit * 2);
-  observer.WaitForUpdate();
-  ASSERT_EQ(observer.updates().size(), 2u);
-  EXPECT_EQ(observer.updates()[1], PressureState{0.65});
-}
-
-TEST_F(PressureServiceImplTest, OneObserver_AddRateLimiting) {
-  const base::Time before_add = base::Time::Now();
-
-  FakePressureObserver observer;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, observer.BindNewPipeAndPassRemote()),
-            blink::mojom::PressureStatus::kOk);
-
-  const base::Time after_add = base::Time::Now();
-
-  ASSERT_LE(after_add - before_add, base::Milliseconds(500))
-      << "test timings assume that AddObserver completes in at most 500ms";
-
-  // The first update should be blocked due to rate-limiting.
-  const PressureState state1{0.42};
-  const base::Time time1 = before_add + base::Milliseconds(700);
-  pressure_manager_overrider_->UpdateClients(state1, time1);
-  const PressureState state2{0.0};
-  const base::Time time2 = before_add + base::Milliseconds(1600);
-  pressure_manager_overrider_->UpdateClients(state2, time2);
-  observer.WaitForUpdate();
-
-  ASSERT_EQ(observer.updates().size(), 1u);
-  EXPECT_EQ(observer.updates()[0], PressureState{0.1});
-}
-
-TEST_F(PressureServiceImplTest, ThreeObservers) {
-  FakePressureObserver observer1;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, observer1.BindNewPipeAndPassRemote()),
-            blink::mojom::PressureStatus::kOk);
-  FakePressureObserver observer2;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, observer2.BindNewPipeAndPassRemote()),
-            blink::mojom::PressureStatus::kOk);
-  FakePressureObserver observer3;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, observer3.BindNewPipeAndPassRemote()),
-            blink::mojom::PressureStatus::kOk);
-
-  const base::Time time = base::Time::Now() + kRateLimit;
-  const PressureState state{0.42};
-  pressure_manager_overrider_->UpdateClients(state, time);
-  FakePressureObserver::WaitForUpdates({&observer1, &observer2, &observer3});
-
-  ASSERT_EQ(observer1.updates().size(), 1u);
-  EXPECT_THAT(observer1.updates(), testing::Contains(PressureState{0.35}));
-  ASSERT_EQ(observer2.updates().size(), 1u);
-  EXPECT_THAT(observer2.updates(), testing::Contains(PressureState{0.35}));
-  ASSERT_EQ(observer3.updates().size(), 1u);
-  EXPECT_THAT(observer3.updates(), testing::Contains(PressureState{0.35}));
-}
-
-TEST_F(PressureServiceImplTest, AddObserver_NewQuantization) {
-  // 0.42 would quantize as 0.4
-  PressureQuantization quantization1{{0.8}};
-  FakePressureObserver observer1;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                quantization1, observer1.BindNewPipeAndPassRemote()),
-            blink::mojom::PressureStatus::kOk);
-
-  // 0.42 would quantize as 0.6
-  PressureQuantization quantization2{{0.2}};
-  FakePressureObserver observer2;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                quantization2, observer2.BindNewPipeAndPassRemote()),
-            blink::mojom::PressureStatus::kOk);
-
-  // 0.42 will quantize as 0.25
-  PressureQuantization quantization3{{0.5}};
-  FakePressureObserver observer3;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                quantization3, observer3.BindNewPipeAndPassRemote()),
-            blink::mojom::PressureStatus::kOk);
-
-  const base::Time time = base::Time::Now() + kRateLimit;
-  const PressureState state1{0.42};
-  pressure_manager_overrider_->UpdateClients(state1, time);
-  observer3.WaitForUpdate();
-  const PressureState state2{0.84};
-  pressure_manager_overrider_->UpdateClients(state2, time + kRateLimit);
-  observer3.WaitForUpdate();
-
-  ASSERT_EQ(observer3.updates().size(), 2u);
-  EXPECT_THAT(observer3.updates(), testing::Contains(PressureState{0.25}));
-  EXPECT_THAT(observer3.updates(), testing::Contains(PressureState{0.75}));
-
-  ASSERT_EQ(observer1.updates().size(), 0u);
-  ASSERT_EQ(observer2.updates().size(), 0u);
-}
-
-TEST_F(PressureServiceImplTest, AddObserver_NoVisibility) {
-  FakePressureObserver observer;
-  EXPECT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, observer.BindNewPipeAndPassRemote()),
+  ASSERT_EQ(pressure_service_impl_sync_->BindObserver(
+                observer.BindNewPipeAndPassRemote()),
             blink::mojom::PressureStatus::kOk);
 
   const base::Time time = base::Time::Now();
@@ -342,10 +266,11 @@ TEST_F(PressureServiceImplTest, AddObserver_NoVisibility) {
   test_rvh()->SimulateWasHidden();
 
   // The first two updates should be blocked due to invisibility.
-  const PressureState state1{0.0};
-  pressure_manager_overrider_->UpdateClients(state1, time + kRateLimit);
-  const PressureState state2{1.0};
-  pressure_manager_overrider_->UpdateClients(state2, time + kRateLimit * 2);
+  PressureUpdate update1(PressureState::kNominal, {}, time + kRateLimit);
+  pressure_manager_overrider_->UpdateClients(update1);
+  PressureUpdate update2(PressureState::kCritical, {PressureFactor::kThermal},
+                         time + kRateLimit * 2);
+  pressure_manager_overrider_->UpdateClients(update2);
   task_environment()->RunUntilIdle();
 
   test_rvh()->SimulateWasShown();
@@ -353,54 +278,65 @@ TEST_F(PressureServiceImplTest, AddObserver_NoVisibility) {
   // The third update should be dispatched. It should not be rate-limited by the
   // time proximity to the second update, because the second update is not
   // dispatched.
-  const PressureState state3{1.0};
-  pressure_manager_overrider_->UpdateClients(state3, time + kRateLimit * 2.5);
+  PressureUpdate update3(PressureState::kFair, {PressureFactor::kThermal},
+                         time + kRateLimit * 2.5);
+  pressure_manager_overrider_->UpdateClients(update3);
   observer.WaitForUpdate();
 
   ASSERT_EQ(observer.updates().size(), 1u);
-  EXPECT_EQ(observer.updates()[0], PressureState{0.9});
+  EXPECT_EQ(observer.updates()[0], update3);
 }
 
-TEST_F(PressureServiceImplTest, AddObserver_InvalidQuantization) {
-  FakePressureObserver valid_observer;
-  ASSERT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, valid_observer.BindNewPipeAndPassRemote()),
-            blink::mojom::PressureStatus::kOk);
+class PressureServiceImplFencedFrameTest : public PressureServiceImplTest {
+ public:
+  PressureServiceImplFencedFrameTest() {
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        blink::features::kFencedFrames, {{"implementation_type", "mparch"}});
+  }
+  ~PressureServiceImplFencedFrameTest() override = default;
 
-  FakePressureObserver invalid_observer;
-  PressureQuantization invalid_quantization{{-1.0}};
-
-  {
-    mojo::test::BadMessageObserver bad_message_observer;
-    EXPECT_EQ(
-        pressure_service_impl_sync_->AddObserver(
-            invalid_quantization, invalid_observer.BindNewPipeAndPassRemote()),
-        blink::mojom::PressureStatus::kSecurityError);
-    EXPECT_EQ("Invalid quantization", bad_message_observer.WaitForBadMessage());
+ protected:
+  RenderFrameHost* CreateFencedFrame(RenderFrameHost* parent) {
+    RenderFrameHost* fenced_frame =
+        RenderFrameHostTester::For(parent)->AppendFencedFrame();
+    return fenced_frame;
   }
 
-  const base::Time time = base::Time::Now();
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
 
-  const PressureState state1{0.0};
-  pressure_manager_overrider_->UpdateClients(state1, time + kRateLimit);
-  valid_observer.WaitForUpdate();
-  const PressureState state2{1.0};
-  pressure_manager_overrider_->UpdateClients(state2, time + kRateLimit * 2);
-  valid_observer.WaitForUpdate();
+TEST_F(PressureServiceImplFencedFrameTest, BindObserverFromFencedFrame) {
+  auto* fenced_frame_rfh = CreateFencedFrame(contents()->GetPrimaryMainFrame());
+  // PressureServiceImpl::Create() will fail if the RenderFrameHost* passed to
+  // it has not navigated to a secure origin, so we need to create a navigation
+  // here.
+  auto navigation_simulator = NavigationSimulator::CreateRendererInitiated(
+      GURL("https://fencedframe.com"), fenced_frame_rfh);
+  navigation_simulator->Commit();
+  fenced_frame_rfh = static_cast<RenderFrameHostImpl*>(
+      navigation_simulator->GetFinalRenderFrameHost());
 
-  ASSERT_EQ(valid_observer.updates().size(), 2u);
-  EXPECT_THAT(valid_observer.updates(), testing::Contains(PressureState{0.1}));
-  EXPECT_THAT(valid_observer.updates(), testing::Contains(PressureState{0.9}));
+  mojo::Remote<blink::mojom::PressureService> fenced_frame_pressure_service;
+  PressureServiceImpl::Create(
+      fenced_frame_rfh,
+      fenced_frame_pressure_service.BindNewPipeAndPassReceiver());
+  ASSERT_TRUE(fenced_frame_pressure_service.is_bound());
 
-  ASSERT_EQ(invalid_observer.updates().size(), 0u);
+  auto fenced_frame_sync_service = std::make_unique<PressureServiceImplSync>(
+      fenced_frame_pressure_service.get());
+  FakePressureObserver observer;
+  EXPECT_EQ(fenced_frame_sync_service->BindObserver(
+                observer.BindNewPipeAndPassRemote()),
+            blink::mojom::PressureStatus::kSecurityError);
 }
 
-TEST_F(PressureServiceImplTest, AddObserver_NotSupported) {
+TEST_F(PressureServiceImplTest, BindObserver_NotSupported) {
   pressure_manager_overrider_->set_is_supported(false);
 
   FakePressureObserver observer;
-  EXPECT_EQ(pressure_service_impl_sync_->AddObserver(
-                kQuantization, observer.BindNewPipeAndPassRemote()),
+  EXPECT_EQ(pressure_service_impl_sync_->BindObserver(
+                observer.BindNewPipeAndPassRemote()),
             blink::mojom::PressureStatus::kNotSupported);
 }
 
@@ -412,6 +348,52 @@ TEST_F(PressureServiceImplTest, InsecureOrigin) {
   SetPressureServiceImpl();
   EXPECT_EQ("Compute Pressure access from an insecure origin",
             bad_message_observer.WaitForBadMessage());
+}
+
+// Allows callers to run a custom callback before running
+// FakePressureManager::AddClient().
+class InterceptingFakePressureManager : public device::FakePressureManager {
+ public:
+  explicit InterceptingFakePressureManager(
+      base::OnceClosure interception_callback)
+      : interception_callback_(std::move(interception_callback)) {}
+
+  void AddClient(mojo::PendingRemote<device::mojom::PressureClient> client,
+                 AddClientCallback callback) override {
+    std::move(interception_callback_).Run();
+    device::FakePressureManager::AddClient(std::move(client),
+                                           std::move(callback));
+  }
+
+ private:
+  base::OnceClosure interception_callback_;
+};
+
+// Test for https://crbug.com/1355662: destroying PressureServiceImplTest
+// between calling PressureServiceImpl::BindObserver() and its |remote_|
+// invoking the callback it receives does not crash.
+TEST_F(PressureServiceImplTest, DestructionOrderWithOngoingCallback) {
+  auto intercepting_fake_pressure_manager =
+      std::make_unique<InterceptingFakePressureManager>(
+          base::BindLambdaForTesting([&]() {
+            // Delete the current WebContents and consequently trigger
+            // PressureServiceImpl's destruction between calling
+            // PressureServiceImpl::BindObserver() and its |remote_|
+            // invoking the callback it receives.
+            DeleteContents();
+          }));
+  pressure_manager_overrider_->set_fake_pressure_manager(
+      std::move(intercepting_fake_pressure_manager));
+
+  base::RunLoop run_loop;
+  pressure_service_.set_disconnect_handler(run_loop.QuitClosure());
+  FakePressureObserver observer;
+  pressure_service_->BindObserver(
+      observer.BindNewPipeAndPassRemote(),
+      base::BindOnce([](blink::mojom::PressureStatus) {
+        ADD_FAILURE() << "Reached BindObserver callback unexpectedly";
+      }));
+  run_loop.Run();
 }
 
 }  // namespace content

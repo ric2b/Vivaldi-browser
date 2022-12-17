@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -177,12 +177,16 @@ wl_output_transform ToWaylandTransform(gfx::OverlayTransform transform) {
       return WL_OUTPUT_TRANSFORM_FLIPPED;
     case gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL:
       return WL_OUTPUT_TRANSFORM_FLIPPED_180;
+    // gfx::OverlayTransform and Wayland buffer transforms rotate in opposite
+    // directions relative to each other, so swap 90 and 270.
+    // TODO(rivr): Currently all wl_buffers are created without y inverted, so
+    // this may need to be revisited if that changes.
     case gfx::OVERLAY_TRANSFORM_ROTATE_90:
-      return WL_OUTPUT_TRANSFORM_90;
+      return WL_OUTPUT_TRANSFORM_270;
     case gfx::OVERLAY_TRANSFORM_ROTATE_180:
       return WL_OUTPUT_TRANSFORM_180;
     case gfx::OVERLAY_TRANSFORM_ROTATE_270:
-      return WL_OUTPUT_TRANSFORM_270;
+      return WL_OUTPUT_TRANSFORM_90;
     default:
       break;
   }
@@ -344,10 +348,8 @@ std::vector<gfx::Rect> CreateRectsFromSkPath(const SkPath& path) {
 
 SkPath ConvertPathToDIP(const SkPath& path_in_pixels, float scale) {
   SkScalar sk_scale = SkFloatToScalar(1.0f / scale);
-  gfx::Transform transform;
-  transform.Scale(sk_scale, sk_scale);
   SkPath path_in_dips;
-  path_in_pixels.transform(transform.matrix().asM33(), &path_in_dips);
+  path_in_pixels.transform(SkMatrix::Scale(sk_scale, sk_scale), &path_in_dips);
   return path_in_dips;
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -85,6 +85,15 @@ uint32_t PerformanceEventTiming::interactionId() const {
 
 void PerformanceEventTiming::SetInteractionId(uint32_t interaction_id) {
   interaction_id_ = interaction_id;
+}
+
+base::TimeTicks PerformanceEventTiming::unsafePresentationTimestamp() const {
+  return unsafe_presentation_timestamp_;
+}
+
+void PerformanceEventTiming::SetUnsafePresentationTimestamp(
+    base::TimeTicks presentation_timestamp) {
+  unsafe_presentation_timestamp_ = presentation_timestamp;
 }
 
 void PerformanceEventTiming::SetDuration(double duration) {

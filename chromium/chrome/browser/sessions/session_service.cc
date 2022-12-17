@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,7 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -61,6 +61,10 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/crostini/crostini_util.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/lacros/browser_launcher.h"
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -188,9 +192,14 @@ bool SessionService::ShouldRestore(Browser* browser) {
   }
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Restore should trigger for lacros-chrome if handling a restart.
+  // Restore should trigger for lacros-chrome if handling a restart or if
+  // currently processing a full restore.
+  auto* primary_user_profile =
+      g_browser_process->profile_manager()->GetProfileByPath(
+          ProfileManager::GetPrimaryUserProfilePath());
   if (StartupBrowserCreator::WasRestarted() ||
-      StartupBrowserCreator::IsLaunchingBrowserForLastProfiles()) {
+      BrowserLauncher::GetForProfile(primary_user_profile)
+          ->is_launching_for_full_restore()) {
     return true;
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)

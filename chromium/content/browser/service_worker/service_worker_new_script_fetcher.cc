@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -126,7 +126,8 @@ void ServiceWorkerNewScriptFetcher::OnReceiveEarlyHints(
 
 void ServiceWorkerNewScriptFetcher::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr response_head,
-    mojo::ScopedDataPipeConsumerHandle response_body) {
+    mojo::ScopedDataPipeConsumerHandle response_body,
+    absl::optional<mojo_base::BigBuffer> cached_metadata) {
   if (!response_body)
     return;
 
@@ -153,10 +154,6 @@ void ServiceWorkerNewScriptFetcher::OnReceiveRedirect(
 void ServiceWorkerNewScriptFetcher::OnUploadProgress(int64_t,
                                                      int64_t,
                                                      OnUploadProgressCallback) {
-  mojo::ReportBadMessage("SWNSF_BAD_MSG");
-}
-void ServiceWorkerNewScriptFetcher::OnReceiveCachedMetadata(
-    mojo_base::BigBuffer data) {
   mojo::ReportBadMessage("SWNSF_BAD_MSG");
 }
 void ServiceWorkerNewScriptFetcher::OnTransferSizeUpdated(int32_t) {

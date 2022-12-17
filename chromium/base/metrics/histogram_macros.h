@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -328,6 +328,11 @@ enum class ScopedHistogramTiming {
 #define UMA_HISTOGRAM_MEMORY_KB(name, sample)                                  \
     UMA_HISTOGRAM_CUSTOM_COUNTS(name, sample, 1000, 500000, 50)
 
+// Used to measure common MB-granularity memory stats. Range is up to 4000MiB -
+// approximately 4GiB.
+#define UMA_HISTOGRAM_MEMORY_MEDIUM_MB(name, sample) \
+  UMA_HISTOGRAM_CUSTOM_COUNTS(name, sample, 1, 4000, 100)
+
 // Used to measure common MB-granularity memory stats. Range is up to ~64G.
 #define UMA_HISTOGRAM_MEMORY_LARGE_MB(name, sample)                            \
     UMA_HISTOGRAM_CUSTOM_COUNTS(name, sample, 1, 64000, 100)
@@ -375,6 +380,25 @@ enum class ScopedHistogramTiming {
   INTERNAL_HISTOGRAM_EXACT_LINEAR_WITH_FLAG(                     \
       name, percent_as_int, 101,                                 \
       base::HistogramBase::kUmaStabilityHistogramFlag)
+
+//------------------------------------------------------------------------------
+// Sparse histograms.
+//
+// The |sample| can be a negative or non-negative number.
+//
+// Sparse histograms are well suited for recording counts of exact sample values
+// that are sparsely distributed over a relatively large range, in cases where
+// ultra-fast performance is not critical. For instance, Sqlite.Version.* are
+// sparse because for any given database, there's going to be exactly one
+// version logged.
+//
+// For important details on performance, data size, and usage, see the
+// documentation on the regular function equivalents (histogram_functions.h).
+#define UMA_HISTOGRAM_SPARSE(name, sample) \
+  STATIC_HISTOGRAM_POINTER_BLOCK(          \
+      name, Add(sample),                   \
+      base::SparseHistogram::FactoryGet(   \
+          name, base::HistogramBase::kUmaTargetedHistogramFlag))
 
 //------------------------------------------------------------------------------
 // Histogram instantiation helpers.

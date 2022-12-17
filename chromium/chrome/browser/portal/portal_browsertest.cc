@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -364,7 +364,10 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, ShowSubFrameErrorPage) {
                       "document.documentElement.hasAttribute('subframe');"));
 }
 
-IN_PROC_BROWSER_TEST_F(PortalBrowserTest, BrowserHistoryUpdatesOnActivation) {
+// TODO(crbug.com/1372129): This test is flaking on all platforms. The renderer
+// seems to be terinated occasionally preventing the ASSERT_EQ from succeeding.
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest,
+                       DISABLED_BrowserHistoryUpdatesOnActivation) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   Profile* profile = browser()->profile();

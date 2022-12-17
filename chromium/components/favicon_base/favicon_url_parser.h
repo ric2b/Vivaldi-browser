@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,10 @@ struct ParsedFaviconPath {
 
   // Whether we should show a fallback monogram in place of the default favicon.
   bool show_fallback_monogram = false;
+
+  // Whether we should ignore the theme when themeing the default favicon and
+  // just return the light mode version.
+  bool force_light_mode = false;
 };
 
 // Enum describing the two possible url formats: the legacy chrome://favicon

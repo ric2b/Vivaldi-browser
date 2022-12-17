@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,10 +78,8 @@ ArCoreDevice::ArCoreDevice(
   if (base::FeatureList::IsEnabled(features::kWebXrHitTest))
       device_features.emplace_back(mojom::XRSessionFeature::HIT_TEST);
 
-  // Only support camera access if the feature flag is enabled & the device
-  // supports shared buffers.
-  if (base::FeatureList::IsEnabled(features::kWebXrIncubations) &&
-      base::AndroidHardwareBufferCompat::IsSupportAvailable())
+  // Only support camera access if the device supports shared buffers.
+  if (base::AndroidHardwareBufferCompat::IsSupportAvailable())
     device_features.emplace_back(mojom::XRSessionFeature::CAMERA_ACCESS);
 
   SetSupportedFeatures(device_features);

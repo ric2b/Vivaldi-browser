@@ -132,6 +132,11 @@
     [self.coreDriver setCompletionHandler:completionBlock];
 }
 
+- (void)setUpdateWillInstallHandler:(void (^)(void))updateWillInstallHandler
+{
+    [self.coreDriver setUpdateWillInstallHandler:updateWillInstallHandler];
+}
+
 - (void)_clearSkippedUpdatesIfUserInitiated
 {
     if (self.userInitiated) {
@@ -199,6 +204,15 @@
                 validatedChoice = userChoice;
             }
             
+            if ([self.updaterDelegate respondsToSelector:@selector(updater:userDidMakeChoice:forUpdate:state:)]) {
+                [self.updaterDelegate updater:self.updater userDidMakeChoice:validatedChoice forUpdate:updateItem state:state];
+            } else if (validatedChoice == SPUUserUpdateChoiceSkip && [self.updaterDelegate respondsToSelector:@selector(updater:userDidSkipThisVersion:)]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                [self.updaterDelegate updater:self.updater userDidSkipThisVersion:updateItem];
+#pragma clang diagnostic pop
+            }
+            
             switch (validatedChoice) {
                 case SPUUserUpdateChoiceInstall: {
                     switch (stage) {
@@ -216,10 +230,6 @@
                 }
                 case SPUUserUpdateChoiceSkip: {
                     [SPUSkippedUpdate skipUpdate:updateItem host:self.host];
-                    
-                    if ([self.updaterDelegate respondsToSelector:@selector(updater:userDidSkipThisVersion:)]) {
-                        [self.updaterDelegate updater:self.updater userDidSkipThisVersion:updateItem];
-                    }
                     
                     switch (stage) {
                         case SPUUserUpdateStageDownloaded:
@@ -312,8 +322,20 @@
 
 - (void)installerDidStartInstallingWithApplicationTerminated:(BOOL)applicationTerminated
 {
-    if ([self.userDriver respondsToSelector:@selector(showInstallingUpdateWithApplicationTerminated:)]) {
+    if ([self.userDriver respondsToSelector:@selector(showInstallingUpdateWithApplicationTerminated:retryTerminatingApplication:)]) {
+        __weak __typeof__(self) weakSelf = self;
+        [self.userDriver showInstallingUpdateWithApplicationTerminated:applicationTerminated retryTerminatingApplication:^{
+            if (!applicationTerminated) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [weakSelf.coreDriver finishInstallationWithResponse:SPUUserUpdateChoiceInstall displayingUserInterface:YES];
+                });
+            }
+        }];
+    } else if ([self.userDriver respondsToSelector:@selector(showInstallingUpdateWithApplicationTerminated:)]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
         [self.userDriver showInstallingUpdateWithApplicationTerminated:applicationTerminated];
+#pragma clang diagnostic pop
     } else {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"

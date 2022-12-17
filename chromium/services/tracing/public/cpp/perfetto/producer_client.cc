@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/containers/adapters.h"
+#include "base/containers/contains.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/process/process.h"
@@ -271,8 +272,7 @@ void ProducerClient::Flush(uint64_t flush_request_id,
 
   // N^2, optimize once there's more than a couple of possible data sources.
   for (auto* data_source : PerfettoTracedProcess::Get()->data_sources()) {
-    if (std::find(data_source_ids.begin(), data_source_ids.end(),
-                  data_source->data_source_id()) != data_source_ids.end()) {
+    if (base::Contains(data_source_ids, data_source->data_source_id())) {
       data_source->Flush(base::BindRepeating(
           [](base::WeakPtr<ProducerClient> weak_ptr, uint64_t id) {
             if (weak_ptr) {

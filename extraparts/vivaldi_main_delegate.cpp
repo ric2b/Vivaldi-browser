@@ -45,7 +45,11 @@ absl::optional<int> VivaldiMainDelegate::BasicStartupComplete() {
     return 0;
   }
 
-  return ChromeMainDelegate::BasicStartupComplete();
+  #if BUILDFLAG(IS_ANDROID)
+    return ChromeMainDelegateAndroid::BasicStartupComplete();
+  #else
+    return ChromeMainDelegate::BasicStartupComplete();
+  #endif
 }
 
 #if BUILDFLAG(IS_WIN)

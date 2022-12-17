@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,7 @@ class DummyDevToolsClient : public StubDevToolsClient {
 
   // Overridden from DevToolsClient:
   Status SendCommand(const std::string& method,
-                     const base::DictionaryValue& params) override {
+                     const base::Value::Dict& params) override {
     if (!disabled_)
       disabled_ = method == "Debugger.disable";
     if (method == method_ && !error_after_events_)

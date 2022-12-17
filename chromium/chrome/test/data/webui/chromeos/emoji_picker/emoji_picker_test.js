@@ -8,7 +8,7 @@ import {EmojiPicker} from 'chrome://emoji-picker/emoji_picker.js';
 import {EmojiPickerApiProxyImpl} from 'chrome://emoji-picker/emoji_picker_api_proxy.js';
 import {EmojiVariants} from 'chrome://emoji-picker/emoji_variants.js';
 import {EMOJI_PICKER_READY, EMOJI_VARIANTS_SHOWN} from 'chrome://emoji-picker/events.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertEquals, assertFalse, assertGT, assertLT, assertTrue} from '../../chai_assert.js';
@@ -372,27 +372,28 @@ suite('<emoji-picker>', () => {
   });
 
   suite('<emoji-search>', () => {
-    test('works when there are no results', async () => {
+    test('works when there are no results', () => {
       // This test just ensures that no errors are thrown.
       const enterEvent = new KeyboardEvent(
           'keydown', {cancelable: true, key: 'Enter', keyCode: 13});
       const search = findInEmojiPicker('emoji-search');
-      search.onKeyDown(enterEvent);
+      search.onSearchKeyDown(enterEvent);
     });
     test('finds results in the second group', async () => {
       const search = findInEmojiPicker('emoji-search');
       // This particular emoji only appears in the third tab of the test
       // ordering
-      search.search = 'face with tears of joy';
+      search.setSearchQuery('face with tears of joy');
 
-      await waitForCondition(
-          () => search.getNumSearchResults() > 0, 'no search get any results',
-          1000);
+      await waitForCondition(() => search.searchResults);
       assertGT(search.getNumSearchResults(), 0);
     });
     test('finds no results for garbage search', async () => {
       const search = findInEmojiPicker('emoji-search');
-      search.search = 'THIS string should not match anything';
+      search.setSearchQuery('THIS string should not match anything');
+
+      await waitForCondition(
+          () => findInEmojiPicker('emoji-search', '.no-result'));
       assertEquals(search.getNumSearchResults(), 0);
     });
   });

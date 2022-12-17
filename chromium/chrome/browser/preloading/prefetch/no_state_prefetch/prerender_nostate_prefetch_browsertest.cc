@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -442,7 +442,8 @@ class NoStatePrefetchBrowserTestHttpCache
     if (split_cache_by_network_isolation_key) {
       feature_list_.InitWithFeatures(
           {net::features::kSplitCacheByNetworkIsolationKey},
-          {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame});
+          {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame,
+           net::features::kEnableDoubleKeyNetworkAnonymizationKey});
     } else {
       feature_list_.InitAndDisableFeature(
           net::features::kSplitCacheByNetworkIsolationKey);

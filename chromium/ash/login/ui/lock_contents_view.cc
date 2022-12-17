@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "ash/accelerators/accelerator_controller_impl.h"
-#include "ash/components/proximity_auth/public/mojom/auth_type.mojom.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/detachable_base/detachable_base_pairing_status.h"
@@ -61,6 +60,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chromeos/ash/components/proximity_auth/public/mojom/auth_type.mojom.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/user_manager/known_user.h"
@@ -974,12 +974,10 @@ void LockContentsView::OnUsersChanged(const std::vector<LoginUserInfo>& users) {
     // Create a UI that will be shown on camera usage timeout after the
     // third-party SAML dialog has been dismissed. For more info check
     // discussion under privacy review in FLB crbug.com/1221337.
-    if (features::IsRedirectToDefaultIdPEnabled()) {
-      login_camera_timeout_view_ =
-          main_view_->AddChildView(std::make_unique<LoginCameraTimeoutView>(
-              base::BindRepeating(&LockContentsView::OnBackToSigninButtonTapped,
-                                  weak_ptr_factory_.GetWeakPtr())));
-    }
+    login_camera_timeout_view_ =
+        main_view_->AddChildView(std::make_unique<LoginCameraTimeoutView>(
+            base::BindRepeating(&LockContentsView::OnBackToSigninButtonTapped,
+                                weak_ptr_factory_.GetWeakPtr())));
     Shell::Get()->login_screen_controller()->ShowGaiaSignin(
         /*prefilled_account=*/EmptyAccountId());
     return;
@@ -1501,8 +1499,7 @@ void LockContentsView::OnOobeDialogStateChanged(OobeDialogState state) {
 
   if (!oobe_dialog_visible_ && CurrentBigUserView()) {
     CurrentBigUserView()->RequestFocus();
-  } else if (features::IsRedirectToDefaultIdPEnabled() &&
-             !oobe_dialog_visible_ && login_camera_timeout_view_) {
+  } else if (!oobe_dialog_visible_ && login_camera_timeout_view_) {
     login_camera_timeout_view_->RequestFocus();
   }
   // If OOBE dialog visibility changes we need to force an update of the a11y
@@ -2460,7 +2457,7 @@ void LockContentsView::ForgotPasswordButtonPressed() {
   if (ash::features::IsCryptohomeRecoveryFlowEnabled()) {
     user_manager::KnownUser(Shell::Get()->local_state())
         .UpdateReauthReason(account_id,
-                            static_cast<int>(ReauthReason::FORGOT_PASSWORD));
+                            static_cast<int>(ReauthReason::kForgotPassword));
   }
   Shell::Get()->login_screen_controller()->ShowGaiaSignin(account_id);
   HideAuthErrorMessage();

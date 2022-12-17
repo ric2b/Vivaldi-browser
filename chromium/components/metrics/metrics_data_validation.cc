@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,9 @@ namespace internal {
 // Used to assess the reliability of field trial data by injecting different
 // levels of effects to pseudo metrics. These pseudo metrics are just mirrors of
 // some existing metrics.
-const base::Feature kPseudoMetricsEffectFeature{
-    "UMAPseudoMetricsEffect", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kPseudoMetricsEffectFeature,
+             "UMAPseudoMetricsEffect",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // The multiplicative factor to apply to all samples. Modified samples will be
 // recorded in a pseudo metric alongside with the real metric.
@@ -30,8 +31,9 @@ const base::FeatureParam<double> kAdditiveFactor{&kPseudoMetricsEffectFeature,
 
 }  // namespace internal
 
-const base::Feature kNonUniformityValidationFeature{
-    "UMANonUniformityLogNormal", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kNonUniformityValidationFeature,
+             "UMANonUniformityLogNormal",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 const base::FeatureParam<double> kLogNormalMean{
     &kNonUniformityValidationFeature, "mean", 4.605};

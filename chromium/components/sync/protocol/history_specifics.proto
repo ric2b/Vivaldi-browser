@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -45,6 +45,16 @@ message HistorySpecifics {
   // navigated to; the last one is where they ended up. If there were no
   // redirects, this has only one entry.
   repeated RedirectEntry redirect_entries = 3;
+
+  // Whether the redirect chain in this entity is the continuation of a prior
+  // chain, and whether a continuation of this chain exists, in other entities.
+  // These are effectively the inverse of the CHAIN_START/CHAIN_END page
+  // transition qualifiers in Chrome. They are typically both false, since the
+  // whole chain is included in `redirect_entries`, but in some cases (notably,
+  // client redirects) a redirect chain may be split up across multiple
+  // entities.
+  optional bool redirect_chain_start_incomplete = 19;
+  optional bool redirect_chain_end_incomplete = 20;
 
   message PageTransition {
     // The core transition type.
@@ -100,4 +110,11 @@ message HistorySpecifics {
 
   // Whether a password field was found on the page.
   optional SyncEnums.PasswordState password_state = 16;
+
+  // URL of the favicon for this page.
+  optional string favicon_url = 17;
+
+  // The URL of the referrer (indicated by `originator_referring_visit_id`), if
+  // any.
+  optional string referrer_url = 18;
 }

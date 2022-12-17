@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,7 +25,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
@@ -74,6 +73,16 @@ const int64_t kCurrentLocalStorageSchemaVersion = 1;
 // After this many consecutive commit errors we'll throw away the entire
 // database.
 const int kCommitErrorThreshold = 8;
+
+// Limits on the cache size and number of areas in memory, over which the areas
+// are purged.
+#if BUILDFLAG(IS_ANDROID)
+const unsigned kMaxLocalStorageAreaCount = 10;
+const size_t kMaxLocalStorageCacheSize = 2 * 1024 * 1024;
+#else
+const unsigned kMaxLocalStorageAreaCount = 50;
+const size_t kMaxLocalStorageCacheSize = 20 * 1024 * 1024;
+#endif
 
 DomStorageDatabase::Key CreateMetaDataKey(
     const blink::StorageKey& storage_key) {
@@ -420,6 +429,12 @@ void LocalStorageImpl::PurgeUnusedAreasIfNeeded() {
   if (!unused_area_count)
     return;
 
+  // No purge is needed.
+  if (total_cache_size <= kMaxLocalStorageCacheSize &&
+      areas_.size() <= kMaxLocalStorageAreaCount && !is_low_end_device_) {
+    return;
+  }
+
   for (auto it = areas_.begin(); it != areas_.end();) {
     if (it->second->has_bindings())
       ++it;
@@ -677,10 +692,7 @@ void LocalStorageImpl::RetrieveStorageUsage(GetUsageCallback callback) {
     std::vector<mojom::StorageUsageInfoPtr> result;
     base::Time now = base::Time::Now();
     for (const auto& it : areas_) {
-      result.emplace_back(mojom::StorageUsageInfo::New(
-          // TODO(https://crbug.com/1199077): Pass the real StorageKey when
-          // StorageUsageInfo is converted.
-          it.first.origin(), 0, now));
+      result.emplace_back(mojom::StorageUsageInfo::New(it.first, 0, now));
     }
     std::move(callback).Run(std::move(result));
   } else {
@@ -716,9 +728,7 @@ void LocalStorageImpl::OnGotMetaData(
     }
 
     result.emplace_back(mojom::StorageUsageInfo::New(
-        // TODO(https://crbug.com/1199077): Pass the real StorageKey when
-        // StorageUsageInfo is converted.
-        storage_key->origin(), row_data.size_bytes(),
+        storage_key.value(), row_data.size_bytes(),
         base::Time::FromInternalValue(row_data.last_modified())));
   }
   // Add any storage keys for which StorageAreas exist, but which haven't
@@ -732,10 +742,7 @@ void LocalStorageImpl::OnGotMetaData(
         it.second->storage_area()->empty()) {
       continue;
     }
-    result.emplace_back(mojom::StorageUsageInfo::New(
-        // TODO(https://crbug.com/1199077): Pass the real StorageKey when
-        // StorageUsageInfo is converted.
-        it.first.origin(), 0, now));
+    result.emplace_back(mojom::StorageUsageInfo::New(it.first, 0, now));
   }
   std::move(callback).Run(std::move(result));
 }
@@ -744,11 +751,8 @@ void LocalStorageImpl::OnGotStorageUsageForShutdown(
     std::vector<mojom::StorageUsageInfoPtr> usage) {
   std::vector<blink::StorageKey> storage_keys_to_delete;
   for (const auto& info : usage) {
-    // TODO(https://crbug.com/1199077): Pass the real StorageKey when
-    // StorageUsageInfo is converted.
-    blink::StorageKey storage_key(info->origin);
-    if (base::Contains(storage_keys_to_purge_on_shutdown_, storage_key))
-      storage_keys_to_delete.push_back(storage_key);
+    if (base::Contains(storage_keys_to_purge_on_shutdown_, info->storage_key))
+      storage_keys_to_delete.push_back(info->storage_key);
   }
 
   if (!storage_keys_to_delete.empty()) {

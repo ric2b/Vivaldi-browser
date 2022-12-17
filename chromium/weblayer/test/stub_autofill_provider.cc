@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,7 @@ void StubAutofillProvider::OnAskForValuesToFill(
     const gfx::RectF& bounding_box,
     int32_t query_id,
     bool /*unused_autoselect_first_suggestion*/,
-    autofill::TouchToFillEligible /*unused_touch_to_fill_eligible*/) {
+    autofill::FormElementWasClicked /*unused_form_element_was_clicked*/) {
   on_received_form_data_.Run(form);
 }
 

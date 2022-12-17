@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,6 +38,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/favicon_size.h"
+
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 using bookmarks::BookmarkCodec;
 using bookmarks::BookmarkNode;
@@ -304,6 +306,16 @@ class Writer : public base::RefCountedThreadSafe<Writer> {
     return Write(utf8_string);
   }
 
+  // Vivaldi
+  bool WriteAttr(const std::string& text) {
+    return Write(text, ATTRIBUTE_VALUE);
+  }
+
+  // Vivaldi
+  bool WriteString(const std::string& text) {
+    return Write(text);
+  }
+
   // Indents the current line.
   bool WriteIndent() {
     return Write(indent_);
@@ -357,6 +369,9 @@ class Writer : public base::RefCountedThreadSafe<Writer> {
       if (!WriteIndent() || !Write(kBookmarkStart) ||
           !Write(*url_string, ATTRIBUTE_VALUE) || !Write(kAddDate) ||
           !WriteTime(*date_added_string) ||
+          !vivaldi_bookmark_kit::WriteBookmarkData(
+              value, base::BindRepeating(&Writer::WriteString, this),
+              base::BindRepeating(&Writer::WriteAttr, this)) ||
           (!favicon_string.empty() &&
            (!Write(kIcon) || !Write(favicon_string, ATTRIBUTE_VALUE))) ||
           !Write(kBookmarkAttributeEnd) || !Write(title, CONTENT) ||
@@ -383,6 +398,11 @@ class Writer : public base::RefCountedThreadSafe<Writer> {
       if (!WriteIndent() || !Write(kFolderStart) ||
           !WriteTime(*date_added_string) || !Write(kLastModified) ||
           !WriteTime(*last_modified_date)) {
+        return false;
+      }
+      if (!vivaldi_bookmark_kit::WriteBookmarkData(
+              value, base::BindRepeating(&Writer::WriteString, this),
+              base::BindRepeating(&Writer::WriteAttr, this))) {
         return false;
       }
       if (folder_type == BookmarkNode::BOOKMARK_BAR) {

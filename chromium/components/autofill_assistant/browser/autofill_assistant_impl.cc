@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,27 +65,38 @@ void OnCapabilitiesResponse(
       info.script_parameters[param.name()] = param.value();
     }
 
-    if (match.has_bundle_capabilities_information() &&
-        match.bundle_capabilities_information().has_chrome_fast_checkout() &&
-        !match.bundle_capabilities_information()
-             .chrome_fast_checkout()
-             .trigger_form_signatures()
-             .empty()) {
-      // Source and the target vector are abbreviated due to their length.
-      auto& source = match.bundle_capabilities_information()
-                         .chrome_fast_checkout()
-                         .trigger_form_signatures();
-
+    if (match.has_bundle_capabilities_information()) {
       info.bundle_capabilities_information =
           AutofillAssistant::BundleCapabilitiesInformation();
-      std::vector<autofill::FormSignature>& target =
-          info.bundle_capabilities_information.value().trigger_form_signatures;
 
-      target.reserve(source.size());
-      base::ranges::transform(source, std::back_inserter(target),
-                              [](uint64_t signature) {
-                                return autofill::FormSignature(signature);
-                              });
+      if (match.bundle_capabilities_information().has_chrome_fast_checkout() &&
+          !match.bundle_capabilities_information()
+               .chrome_fast_checkout()
+               .trigger_form_signatures()
+               .empty()) {
+        // Source and the target vector are abbreviated due to their length.
+        auto& source = match.bundle_capabilities_information()
+                           .chrome_fast_checkout()
+                           .trigger_form_signatures();
+
+        std::vector<autofill::FormSignature>& target =
+            info.bundle_capabilities_information.value()
+                .trigger_form_signatures;
+
+        target.reserve(source.size());
+        base::ranges::transform(source, std::back_inserter(target),
+                                [](uint64_t signature) {
+                                  return autofill::FormSignature(signature);
+                                });
+      }
+
+      if (match.bundle_capabilities_information()
+              .has_supports_consentless_execution()) {
+        info.bundle_capabilities_information.value()
+            .supports_consentless_execution =
+            match.bundle_capabilities_information()
+                .supports_consentless_execution();
+      }
     }
 
     infos.push_back(info);
@@ -131,7 +142,7 @@ void AutofillAssistantImpl::GetCapabilitiesByHashPrefix(
     const std::string& intent,
     GetCapabilitiesResponseCallback callback) {
   // Always return an empty response for supervised users.
-  if (dependencies_->IsSupervisedUser(browser_context_)) {
+  if (dependencies_->IsSupervisedUser()) {
     std::move(callback).Run(net::HTTP_OK, {});
     return;
   }
@@ -141,7 +152,7 @@ void AutofillAssistantImpl::GetCapabilitiesByHashPrefix(
           {kIntentScriptParameterKey, intent}}};
 
   ClientContextProto client_context;
-  client_context.set_country(dependencies_->GetCountryCode());
+  client_context.set_country(dependencies_->GetLatestCountryCode());
   client_context.set_locale(dependencies_->GetLocale());
   client_context.mutable_chrome()->set_chrome_version(
       version_info::GetProductNameAndVersionForUserAgent());
@@ -178,8 +189,7 @@ AutofillAssistantImpl::CreateHeadlessScriptController(
       website_login_manager, base::DefaultTickClock::GetInstance(),
       RuntimeManager::GetForWebContents(web_contents)->GetWeakPtr(),
       ukm::UkmRecorder::Get(),
-      starter->GetCommonDependencies()->GetOrCreateAnnotateDomModelService(
-          web_contents->GetBrowserContext()));
+      starter->GetCommonDependencies()->GetOrCreateAnnotateDomModelService());
   return std::make_unique<HeadlessScriptControllerImpl>(web_contents, starter,
                                                         std::move(client));
 }

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,16 +12,19 @@
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/thread_annotations.h"
 #include "base/timer/elapsed_timer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "net/cookies/first_party_sets_context_config.h"
+#include "net/first_party_sets/first_party_sets_cache_filter.h"
 #include "services/network/first_party_sets/first_party_sets_manager.h"
+#include "services/network/public/mojom/first_party_sets_access_delegate.mojom-forward.h"
 #include "services/network/public/mojom/first_party_sets_access_delegate.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace net {
 class FirstPartySetMetadata;
+class FirstPartySetsContextConfig;
 class SchemefulSite;
 }  // namespace net
 
@@ -30,8 +33,7 @@ namespace network {
 class FirstPartySetsAccessDelegate
     : public mojom::FirstPartySetsAccessDelegate {
  public:
-  using OwnersResult = FirstPartySetsManager::OwnersResult;
-  using FlattenedSets = FirstPartySetsManager::FlattenedSets;
+  using EntriesResult = FirstPartySetsManager::EntriesResult;
 
   // Construct a FirstPartySetsAccessDelegate that provides customizations
   // and serves mojo requests for the underlying First-Party Sets info.
@@ -49,11 +51,7 @@ class FirstPartySetsAccessDelegate
 
   // mojom::FirstPartySetsAccessDelegate
   void NotifyReady(mojom::FirstPartySetsReadyEventPtr ready_event) override;
-
-  bool is_enabled() const {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return context_config_.is_enabled() && manager_->is_enabled();
-  }
+  void SetEnabled(bool enabled) override;
 
   // Computes the First-Party Set metadata related to the given context.
   //
@@ -67,21 +65,26 @@ class FirstPartySetsAccessDelegate
       const std::set<net::SchemefulSite>& party_context,
       base::OnceCallback<void(net::FirstPartySetMetadata)> callback);
 
-  // Batched version of `FindOwner`. Returns the mapping of sites to owners for
-  // the given input sites (if an owner exists).
-  //
-  // When FPS is disabled, returns an empty map.
-  // When FPS is enabled, this maps each input site to its owner (if one
-  // exists), and returns the resulting mapping. If a site isn't in a
-  // non-trivial First-Party Set, it is not added to the output map.
+  // Calls FirstPartySetsManager::FindEntries either asynchronously or
+  // synchronously, once initialization is complete.
   //
   // This may return a result synchronously, or asynchronously invoke `callback`
   // with the result. The callback will be invoked iff the return value is
   // nullopt; i.e. a result will be provided via return value or callback, but
   // not both, and not neither.
-  [[nodiscard]] absl::optional<OwnersResult> FindOwners(
+  [[nodiscard]] absl::optional<EntriesResult> FindEntries(
       const base::flat_set<net::SchemefulSite>& sites,
-      base::OnceCallback<void(OwnersResult)> callback);
+      base::OnceCallback<void(EntriesResult)> callback);
+
+  // This may return a result synchronously, or asynchronously invoke `callback`
+  // with the result. The callback will be invoked iff the return value is
+  // nullopt; i.e. a result will be provided via return value or callback, but
+  // not both, and not neither.
+  [[nodiscard]] absl::optional<net::FirstPartySetsCacheFilter::MatchInfo>
+  GetCacheFilterMatchInfo(
+      const net::SchemefulSite& site,
+      base::OnceCallback<void(net::FirstPartySetsCacheFilter::MatchInfo)>
+          callback);
 
  private:
   // Same as `ComputeMetadata`, but plumbs the result into the callback. Must
@@ -92,11 +95,18 @@ class FirstPartySetsAccessDelegate
       const std::set<net::SchemefulSite>& party_context,
       base::OnceCallback<void(net::FirstPartySetMetadata)> callback) const;
 
-  // Same as `FindOwners`, but plumbs the result into the callback. Must only be
-  // called once the instance is fully initialized.
-  void FindOwnersAndInvoke(
+  // Same as `FindEntries`, but plumbs the result into the callback. Must only
+  // be called once the instance is fully initialized.
+  void FindEntriesAndInvoke(
       const base::flat_set<net::SchemefulSite>& sites,
-      base::OnceCallback<void(OwnersResult)> callback) const;
+      base::OnceCallback<void(EntriesResult)> callback) const;
+
+  // Same as `GetCacheFilterMatchInfo`, but plumbs the result into the
+  // callback. Must only be called once the instance is fully initialized.
+  void GetCacheFilterMatchInfoAndInvoke(
+      const net::SchemefulSite& site,
+      base::OnceCallback<void(net::FirstPartySetsCacheFilter::MatchInfo)>
+          callback) const;
 
   // Runs all pending queries. Must not be called until the instance is fully
   // initialized.
@@ -105,18 +115,34 @@ class FirstPartySetsAccessDelegate
   // Enqueues a query to be answered once the instance is fully initialized.
   void EnqueuePendingQuery(base::OnceClosure run_query);
 
+  net::FirstPartySetsContextConfig* context_config() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return ready_event_.has_value() ? &(ready_event_.value()->config) : nullptr;
+  }
+
+  net::FirstPartySetsCacheFilter* cache_filter() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return ready_event_.has_value() ? &(ready_event_.value()->cache_filter)
+                                    : nullptr;
+  }
+
   // The underlying FirstPartySetsManager instance, which lives on the network
   // service.
   const raw_ptr<FirstPartySetsManager> manager_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
-  // First-Party Sets configuration for this network context.
-  net::FirstPartySetsContextConfig context_config_
+  // Whether First-Party Sets is enabled for this context in particular. Note
+  // that this is unrelated to `manager_.is_enabled`. This may be reassigned via
+  // `SetEnabled`.
+  bool enabled_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
+
+  // The first ReadyEvent received. This is set at most once, and is immutable
+  // thereafter.
+  absl::optional<mojom::FirstPartySetsReadyEventPtr> ready_event_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   // The queue of queries that are waiting for the instance to be initialized.
-  // This is only set if we haven't been notified that we're ready to answer
-  // queries.
+  // This is non-null exactly when `ready_event_` is nullopt.
   std::unique_ptr<base::circular_deque<base::OnceClosure>> pending_queries_
       GUARDED_BY_CONTEXT(sequence_checker_);
 

@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -73,7 +73,6 @@ source_set("browser_tests") {
     # The test uses data from the original location, not the copied one.
     "//chrome/browser/resources/chromeos/accessibility/common/",
     "//chrome/browser/resources/chromeos/accessibility/select_to_speak/",
-    "//ui/webui/resources/js/cr.js",
   ]
   data += js2gtest_js_libraries
 }
@@ -106,14 +105,12 @@ js2gtest("select_to_speak_extjs_tests") {
     "../common/testing/accessibility_test_base.js",
     "../common/testing/callback_helper.js",
     "../common/testing/e2e_test_base.js",
+    "../common/testing/fake_chrome_event.js",
+    "../common/testing/fake_settings_private.js",
     "../common/testing/mock_storage.js",
     "../common/testing/mock_tts.js",
     "select_to_speak_e2e_test_base.js",
     "pipe.jpg",
-  ]
-  extra_js_files = [
-    "fake_settings_private.js",
-    "fake_chrome_event.js",
   ]
 
   # The test base classes generate C++ code with these deps.

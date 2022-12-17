@@ -1,8 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "media/base/video_frame.h"
+
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 #include <algorithm>
 #include <climits>
@@ -76,8 +79,6 @@ std::string VideoFrame::StorageTypeToString(
     case VideoFrame::STORAGE_DMABUFS:
       return "DMABUFS";
 #endif
-    case VideoFrame::STORAGE_MOJO_SHARED_BUFFER:
-      return "MOJO_SHARED_BUFFER";
     case VideoFrame::STORAGE_GPU_MEMORY_BUFFER:
       return "GPU_MEMORY_BUFFER";
   }
@@ -100,8 +101,7 @@ bool VideoFrame::IsStorageTypeMappable(VideoFrame::StorageType storage_type) {
       // GetGpuMemoryBuffer() and call gfx::GpuMemoryBuffer::Map().
       (storage_type == VideoFrame::STORAGE_UNOWNED_MEMORY ||
        storage_type == VideoFrame::STORAGE_OWNED_MEMORY ||
-       storage_type == VideoFrame::STORAGE_SHMEM ||
-       storage_type == VideoFrame::STORAGE_MOJO_SHARED_BUFFER);
+       storage_type == VideoFrame::STORAGE_SHMEM);
 }
 
 // static
@@ -366,7 +366,8 @@ scoped_refptr<VideoFrame> VideoFrame::WrapNativeTextures(
       format != PIXEL_FORMAT_NV12 && format != PIXEL_FORMAT_I420 &&
       format != PIXEL_FORMAT_ABGR && format != PIXEL_FORMAT_XBGR &&
       format != PIXEL_FORMAT_XR30 && format != PIXEL_FORMAT_XB30 &&
-      format != PIXEL_FORMAT_P016LE && format != PIXEL_FORMAT_RGBAF16) {
+      format != PIXEL_FORMAT_P016LE && format != PIXEL_FORMAT_RGBAF16 &&
+      format != PIXEL_FORMAT_YV12) {
     DLOG(ERROR) << "Unsupported pixel format: "
                 << VideoPixelFormatToString(format);
     return nullptr;
@@ -836,13 +837,6 @@ scoped_refptr<VideoFrame> VideoFrame::WrapVideoFrame(
     const gfx::Size& natural_size) {
   DCHECK(frame->visible_rect().Contains(visible_rect));
 
-  // The following storage type should not be wrapped as the shared region
-  // cannot be owned by both the wrapped frame and the wrapping frame.
-  //
-  // TODO: We can support this now since we have a reference to the wrapped
-  // frame through |wrapped_frame_|.
-  DCHECK(frame->storage_type() != STORAGE_MOJO_SHARED_BUFFER);
-
   if (!AreValidPixelFormatsForWrap(frame->format(), format)) {
     DLOG(ERROR) << __func__ << " Invalid format conversion."
                 << VideoPixelFormatToString(frame->format()) << " to "
@@ -1144,12 +1138,12 @@ void VideoFrame::HashFrameForTesting(base::MD5Context* context,
 }
 
 void VideoFrame::BackWithSharedMemory(
-    const base::UnsafeSharedMemoryRegion* region) {
+    const base::ReadOnlySharedMemoryRegion* region) {
   DCHECK(!shm_region_);
   DCHECK(!owned_shm_region_.IsValid());
   // Either we should be backing a frame created with WrapExternal*, or we are
-  // wrapping an existing STORAGE_SHMEM, in which case the storage
-  // type has already been set to STORAGE_SHMEM.
+  // wrapping an existing STORAGE_SHMEM, in which case the storage type has
+  // already been set to STORAGE_SHMEM.
   DCHECK(storage_type_ == STORAGE_UNOWNED_MEMORY ||
          storage_type_ == STORAGE_SHMEM);
   DCHECK(region && region->IsValid());
@@ -1158,8 +1152,8 @@ void VideoFrame::BackWithSharedMemory(
 }
 
 void VideoFrame::BackWithOwnedSharedMemory(
-    base::UnsafeSharedMemoryRegion region,
-    base::WritableSharedMemoryMapping mapping) {
+    base::ReadOnlySharedMemoryRegion region,
+    base::ReadOnlySharedMemoryMapping mapping) {
   DCHECK(!shm_region_);
   DCHECK(!owned_shm_region_.IsValid());
   // We should be backing a frame created with WrapExternal*. We cannot be
@@ -1221,6 +1215,18 @@ gfx::ColorSpace VideoFrame::ColorSpace() const {
   return color_space_;
 }
 
+bool VideoFrame::RequiresExternalSampler() const {
+  const bool result =
+      (format() == PIXEL_FORMAT_NV12 || format() == PIXEL_FORMAT_YV12 ||
+       format() == PIXEL_FORMAT_P016LE) &&
+      NumTextures() == 1;
+  // The texture target can be 0 for Fuchsia.
+  DCHECK(!result ||
+         (mailbox_holder(0).texture_target == GL_TEXTURE_EXTERNAL_OES ||
+          mailbox_holder(0).texture_target == 0u));
+  return result;
+}
+
 int VideoFrame::row_bytes(size_t plane) const {
   return RowBytes(plane, format(), coded_size().width());
 }
@@ -1233,7 +1239,8 @@ int VideoFrame::columns(size_t plane) const {
   return Columns(plane, format(), coded_size().width());
 }
 
-const uint8_t* VideoFrame::visible_data(size_t plane) const {
+template <typename T>
+T VideoFrame::GetVisibleDataInternal(T data, size_t plane) const {
   DCHECK(IsValidPlane(format(), plane));
   DCHECK(IsMappable());
 
@@ -1246,15 +1253,18 @@ const uint8_t* VideoFrame::visible_data(size_t plane) const {
   const gfx::Size subsample = SampleSize(format(), plane);
   DCHECK(offset.x() % subsample.width() == 0);
   DCHECK(offset.y() % subsample.height() == 0);
-  return data(plane) +
+  return data +
          stride(plane) * (offset.y() / subsample.height()) +  // Row offset.
          BytesPerElement(format(), plane) *                   // Column offset.
              (offset.x() / subsample.width());
 }
 
-uint8_t* VideoFrame::visible_data(size_t plane) {
-  return const_cast<uint8_t*>(
-      static_cast<const VideoFrame*>(this)->visible_data(plane));
+const uint8_t* VideoFrame::visible_data(size_t plane) const {
+  return GetVisibleDataInternal<const uint8_t*>(data(plane), plane);
+}
+
+uint8_t* VideoFrame::GetWritableVisibleData(size_t plane) {
+  return GetVisibleDataInternal<uint8_t*>(writable_data(plane), plane);
 }
 
 const gpu::MailboxHolder& VideoFrame::mailbox_holder(

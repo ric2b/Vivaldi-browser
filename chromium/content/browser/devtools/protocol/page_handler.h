@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 #include "content/browser/devtools/protocol/page.h"
 #include "content/browser/preloading/prerender/prerender_host.h"
 #include "content/browser/renderer_host/back_forward_cache_impl.h"
+#include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/render_widget_host.h"
@@ -112,7 +113,7 @@ class PageHandler : public DevToolsDomainHandler,
   void DidCancelPrerender(const GURL& prerendering_url,
                           const std::string& initiating_frame_id,
                           PrerenderHost::FinalStatus status,
-                          const std::string& reason_details);
+                          const std::string& disallowed_api_method);
 
   Response Enable() override;
   Response Disable() override;
@@ -184,6 +185,11 @@ class PageHandler : public DevToolsDomainHandler,
  private:
   enum EncodingFormat { PNG, JPEG };
 
+  void CaptureFullPageScreenshot(
+      Maybe<std::string> format,
+      Maybe<int> quality,
+      std::unique_ptr<CaptureScreenshotCallback> callback,
+      const gfx::Size& full_page_size);
   bool ShouldCaptureNextScreencastFrame();
   void NotifyScreencastVisibility(bool visible);
   void OnFrameFromVideoConsumer(scoped_refptr<media::VideoFrame> frame);
@@ -223,6 +229,8 @@ class PageHandler : public DevToolsDomainHandler,
   using ResponseOrWebContents = absl::variant<Response, WebContentsImpl*>;
   ResponseOrWebContents GetWebContentsForTopLevelActiveFrame();
 
+  void RetrievePrerenderActivationFromWebContents();
+
   const bool allow_unsafe_operations_;
   const bool is_trusted_;
   const absl::optional<url::Origin> navigation_initiator_origin_;
@@ -240,6 +248,10 @@ class PageHandler : public DevToolsDomainHandler,
   int session_id_;
   int frame_counter_;
   int frames_in_flight_;
+
+  // Whether stored prerender activation has been dispatched to Devtools. Reset
+  // whenever a new prerender event received.
+  bool has_dispatched_stored_prerender_activation_ = false;
 
   // |video_consumer_| consumes video frames from FrameSinkVideoCapturerImpl,
   // and provides PageHandler with these frames via OnFrameFromVideoConsumer.

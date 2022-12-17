@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -168,7 +168,7 @@ class RenderFrameImplTest : public RenderViewTest {
         blink::mojom::TreeScopeType::kDocument,
         std::move(frame_replication_state), std::move(widget_params),
         blink::mojom::FrameOwnerProperties::New(),
-        /*has_committed_real_load=*/true,
+        /*has_committed_real_load=*/true, blink::DocumentToken(),
         blink::mojom::PolicyContainer::New(
             blink::mojom::PolicyContainerPolicies::New(),
             mock_policy_container_host

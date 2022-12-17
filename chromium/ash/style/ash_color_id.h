@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,14 @@ namespace ash {
   E_CPONLY(kColorAshShieldAndBase90) \
   E_CPONLY(kColorAshShieldAndBase95) \
   E_CPONLY(kColorAshShieldAndBaseOpaque) \
+  E_CPONLY(kColorAshShieldAndBase20Light) \
+  E_CPONLY(kColorAshShieldAndBase40Light) \
+  E_CPONLY(kColorAshShieldAndBase60Light) \
+  E_CPONLY(kColorAshShieldAndBase80Light) \
+  E_CPONLY(kColorAshInvertedShieldAndBase80Light) \
+  E_CPONLY(kColorAshShieldAndBase90Light) \
+  E_CPONLY(kColorAshShieldAndBase95Light) \
+  E_CPONLY(kColorAshShieldAndBaseOpaqueLight) \
   /* Controls Layer colors. */ \
   E_CPONLY(kColorAshHairlineBorderColor) \
   E_CPONLY(kColorAshControlBackgroundColorActive) \
@@ -52,13 +60,17 @@ namespace ash {
   E_CPONLY(kColorAshIconColorSecondaryBackground) \
   /* The default color for button labels. */ \
   E_CPONLY(kColorAshButtonLabelColor) \
+  E_CPONLY(kColorAshButtonLabelColorLight) \
   /* Inverted `kColorAshButtonLabelColor` on current color mode. */ \
   E_CPONLY(kColorAshInvertedButtonLabelColor) \
   E_CPONLY(kColorAshTextColorSuggestion) \
   E_CPONLY(kColorAshButtonLabelColorPrimary) \
+  E_CPONLY(kColorAshTextOnBackgroundColor) \
+  E_CPONLY(kColorAshIconOnBackgroundColor) \
   /* Color for blue button labels, e.g, 'Retry' button of the system toast. */ \
   E_CPONLY(kColorAshButtonLabelColorBlue) \
   E_CPONLY(kColorAshButtonIconColor) \
+  E_CPONLY(kColorAshButtonIconColorLight) \
   E_CPONLY(kColorAshButtonIconColorPrimary) \
   E_CPONLY(kColorAshAppStateIndicatorColor) \
   E_CPONLY(kColorAshAppStateIndicatorColorInactive) \
@@ -94,7 +106,15 @@ namespace ash {
   E_CPONLY(kColorAshInkDrop) \
   E_CPONLY(kColorAshInkDropOpaqueColor) \
   /* Colors for Google Assistant */ \
-  E_CPONLY(kColorAshAssistantGreetingEnabled)
+  E_CPONLY(kColorAshAssistantGreetingEnabled) \
+  E_CPONLY(kColorAshSuggestionChipViewTextView) \
+  E_CPONLY(kColorAshAssistantQueryHighConfidenceLabel) \
+  E_CPONLY(kColorAshAssistantQueryLowConfidenceLabel) \
+  E_CPONLY(kColorAshAssistantTextColorPrimary) \
+  /* Color for dialog background in arc */ \
+  E_CPONLY(kColorAshDialogBackgroundColor) \
+  /* Color for disabled button icon */ \
+  E_CPONLY(kColorAshButtonIconDisabledColor)
 
 #include "ui/color/color_id_macros.inc"
 

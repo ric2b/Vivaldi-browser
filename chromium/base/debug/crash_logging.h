@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,7 +48,7 @@ namespace debug {
 //
 //   static auto* const crash_key = base::debug::AllocateCrashKeyString(
 //       "name", base::debug::CrashKeySize::Size32);
-//   base::debug::SetCrashKeyString(crash_key);
+//   base::debug::SetCrashKeyString(crash_key, "value");
 //
 //   // Do other work before calling `base::debug::DumpWithoutCrashing()` later.
 //

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,15 +24,12 @@
 #include "base/task/task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "components/reporting/compression/compression_module.h"
 #include "components/reporting/encryption/encryption_module_interface.h"
 #include "components/reporting/encryption/primitives.h"
 #include "components/reporting/encryption/verification.h"
+#include "components/reporting/proto/synced/pipeline_id.pb.h"
 #include "components/reporting/proto/synced/record.pb.h"
-#include "components/reporting/resources/disk_resource_impl.h"
-#include "components/reporting/resources/memory_resource_impl.h"
 #include "components/reporting/resources/resource_interface.h"
 #include "components/reporting/storage/storage_configuration.h"
 #include "components/reporting/storage/storage_queue.h"
@@ -42,101 +39,18 @@
 #include "components/reporting/util/status_macros.h"
 #include "components/reporting/util/statusor.h"
 #include "components/reporting/util/task_runner_context.h"
+#include "crypto/sha2.h"
 #include "third_party/protobuf/src/google/protobuf/io/zero_copy_stream_impl.h"
 
 namespace reporting {
 
 namespace {
-
-// Parameters of individual queues.
-// TODO(b/159352842): Deliver space and upload parameters from outside.
-
-constexpr base::FilePath::CharType kSecurityQueueSubdir[] =
-    FILE_PATH_LITERAL("Security");
-constexpr base::FilePath::CharType kSecurityQueuePrefix[] =
-    FILE_PATH_LITERAL("P_Security");
-
-constexpr base::FilePath::CharType kImmediateQueueSubdir[] =
-    FILE_PATH_LITERAL("Immediate");
-constexpr base::FilePath::CharType kImmediateQueuePrefix[] =
-    FILE_PATH_LITERAL("P_Immediate");
-
-constexpr base::FilePath::CharType kFastBatchQueueSubdir[] =
-    FILE_PATH_LITERAL("FastBatch");
-constexpr base::FilePath::CharType kFastBatchQueuePrefix[] =
-    FILE_PATH_LITERAL("P_FastBatch");
-constexpr base::TimeDelta kFastBatchUploadPeriod = base::Seconds(1);
-
-constexpr base::FilePath::CharType kSlowBatchQueueSubdir[] =
-    FILE_PATH_LITERAL("SlowBatch");
-constexpr base::FilePath::CharType kSlowBatchQueuePrefix[] =
-    FILE_PATH_LITERAL("P_SlowBatch");
-constexpr base::TimeDelta kSlowBatchUploadPeriod = base::Seconds(20);
-
-constexpr base::FilePath::CharType kBackgroundQueueSubdir[] =
-    FILE_PATH_LITERAL("Background");
-constexpr base::FilePath::CharType kBackgroundQueuePrefix[] =
-    FILE_PATH_LITERAL("P_Background");
-constexpr base::TimeDelta kBackgroundQueueUploadPeriod = base::Minutes(1);
-
-constexpr base::FilePath::CharType kManualQueueSubdir[] =
-    FILE_PATH_LITERAL("Manual");
-constexpr base::FilePath::CharType kManualQueuePrefix[] =
-    FILE_PATH_LITERAL("P_Manual");
-constexpr base::TimeDelta kManualUploadPeriod = base::TimeDelta::Max();
-
 constexpr base::FilePath::CharType kEncryptionKeyFilePrefix[] =
     FILE_PATH_LITERAL("EncryptionKey.");
+constexpr base::FilePath::CharType kPipelineIdFileName[] =
+    FILE_PATH_LITERAL("PipelineId");
 constexpr int32_t kEncryptionKeyMaxFileSize = 256;
-constexpr uint64_t kQueueSize = 2UL * 1024UL * 1024UL;
-
-// Failed upload retry delay: if an upload fails and there are no more incoming
-// events, collected events will not get uploaded for an indefinite time (see
-// b/192666219).
-constexpr base::TimeDelta kFailedUploadRetryDelay = base::Seconds(1);
-
-// Returns vector of <priority, queue_options> for all expected queues in
-// Storage. Queues are all located under the given root directory.
-std::vector<std::pair<Priority, QueueOptions>> ExpectedQueues(
-    const StorageOptions& options) {
-  return {
-      std::make_pair(SECURITY,
-                     QueueOptions(options)
-                         .set_subdirectory(kSecurityQueueSubdir)
-                         .set_file_prefix(kSecurityQueuePrefix)
-                         .set_upload_retry_delay(kFailedUploadRetryDelay)
-                         .set_max_single_file_size(kQueueSize)),
-      std::make_pair(IMMEDIATE,
-                     QueueOptions(options)
-                         .set_subdirectory(kImmediateQueueSubdir)
-                         .set_file_prefix(kImmediateQueuePrefix)
-                         .set_upload_retry_delay(kFailedUploadRetryDelay)
-                         .set_max_single_file_size(kQueueSize)),
-      std::make_pair(FAST_BATCH, QueueOptions(options)
-                                     .set_subdirectory(kFastBatchQueueSubdir)
-                                     .set_file_prefix(kFastBatchQueuePrefix)
-                                     .set_upload_period(kFastBatchUploadPeriod)
-                                     .set_max_single_file_size(kQueueSize)),
-      std::make_pair(SLOW_BATCH, QueueOptions(options)
-                                     .set_subdirectory(kSlowBatchQueueSubdir)
-                                     .set_file_prefix(kSlowBatchQueuePrefix)
-                                     .set_upload_period(kSlowBatchUploadPeriod)
-                                     .set_max_single_file_size(kQueueSize)),
-      std::make_pair(BACKGROUND_BATCH,
-                     QueueOptions(options)
-                         .set_subdirectory(kBackgroundQueueSubdir)
-                         .set_file_prefix(kBackgroundQueuePrefix)
-                         .set_upload_period(kBackgroundQueueUploadPeriod)
-                         .set_max_single_file_size(kQueueSize)),
-      std::make_pair(MANUAL_BATCH,
-                     QueueOptions(options)
-                         .set_subdirectory(kManualQueueSubdir)
-                         .set_file_prefix(kManualQueuePrefix)
-                         .set_upload_period(kManualUploadPeriod)
-                         .set_upload_retry_delay(kFailedUploadRetryDelay)
-                         .set_max_single_file_size(kQueueSize)),
-  };
-}
+constexpr int32_t kPipelineIdMaxFileSize = 256;
 }  // namespace
 
 // Uploader interface adaptor for individual queue.
@@ -292,10 +206,151 @@ class Storage::KeyDelivery {
   SEQUENCE_CHECKER(sequence_checker_);
 };
 
+class Storage::PipelineIdInStorage {
+ public:
+  explicit PipelineIdInStorage(const base::FilePath& directory)
+      : directory_(directory) {}
+  ~PipelineIdInStorage() = default;
+  Status StorePipelineId(base::StringPiece pipeline_id) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    PipelineIdStorageInfo info;
+    std::string pipeline_id_str(pipeline_id);
+    info.set_pipeline_id(pipeline_id_str);
+    info.set_pipeline_id_signature(GetSignature(pipeline_id_str));
+    Status write_status = WriteToFile(info);
+    if (write_status.ok()) {
+      // Invalidate cached |pipeline_id_| value so that we read from the file
+      // next time.
+      pipeline_id_.reset();
+    }
+    return write_status;
+  }
+  StatusOr<std::string> GetPipelineId() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    // Read cached value instead of performing a file read.
+    if (pipeline_id_.has_value()) {
+      return pipeline_id_.value();
+    }
+    const auto pipeline_id_result = ReadFromFile();
+    if (!pipeline_id_result.ok()) {
+      return pipeline_id_result.status();
+    }
+    // Cache |pipeline_id_| for next read
+    pipeline_id_ = pipeline_id_result.ValueOrDie().pipeline_id();
+    DCHECK(pipeline_id_.has_value());
+    base::StringPiece signature =
+        pipeline_id_result.ValueOrDie().pipeline_id_signature();
+    if (!VerifySignature(pipeline_id_.value(), signature)) {
+      return Status(error::DATA_LOSS, "Pipeline id corrupted in storage.");
+    }
+    return pipeline_id_.value();
+  }
+
+ private:
+  static bool VerifySignature(base::StringPiece id,
+                              base::StringPiece signature) {
+    return signature == GetSignature(id);
+  }
+  static std::string GetSignature(base::StringPiece pipeline_id) {
+    return crypto::SHA256HashString(pipeline_id);
+  }
+  // Writes the pipeline ID and its signature to a file in a serialized
+  // PipelineIdStorageInfo format. Overwrites any data written during previous
+  // calls.
+  Status WriteToFile(const PipelineIdStorageInfo info) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    base::FilePath pipeline_id_file_path =
+        directory_.Append(kPipelineIdFileName);
+    // Create or overwrite the existing file and open for writing.
+    base::File pipeline_id_file(
+        pipeline_id_file_path,
+        base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+    if (!pipeline_id_file.IsValid()) {
+      return Status(
+          error::NOT_FOUND,
+          base::StrCat({"Cannot open pipeline id file='",
+                        pipeline_id_file_path.MaybeAsASCII(), "' for append"}));
+    }
+    std::string serialized_info;
+    if (!info.SerializeToString(&serialized_info)) {
+      return Status(error::DATA_LOSS,
+                    base::StrCat({"Failed to serialize pipeline id into file='",
+                                  pipeline_id_file_path.MaybeAsASCII(), "'"}));
+    }
+    const int32_t write_result = pipeline_id_file.Write(
+        /*offset=*/0, serialized_info.data(), serialized_info.size());
+    if (write_result < 0) {
+      return Status(
+          error::DATA_LOSS,
+          base::StrCat({"File write error=",
+                        pipeline_id_file.ErrorToString(
+                            pipeline_id_file.GetLastFileError()),
+                        " file=", pipeline_id_file_path.MaybeAsASCII()}));
+    }
+    if (static_cast<size_t>(write_result) != serialized_info.size()) {
+      return Status(error::DATA_LOSS,
+                    base::StrCat({"Failed to serialize pipeline id into file='",
+                                  pipeline_id_file_path.MaybeAsASCII(), "'"}));
+    }
+    return Status::StatusOK();
+  }
+  StatusOr<PipelineIdStorageInfo> ReadFromFile() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    // Make sure the assigned directory exists.
+    if (base::File::Error error;
+        !base::CreateDirectoryAndGetError(directory_, &error)) {
+      return Status(
+          error::UNAVAILABLE,
+          base::StrCat(
+              {"Storage directory '", directory_.MaybeAsASCII(),
+               "' does not exist, error=", base::File::ErrorToString(error)}));
+    }
+    base::FilePath pipeline_id_file_path =
+        directory_.Append(kPipelineIdFileName);
+    base::File pipeline_id_file(pipeline_id_file_path,
+                                base::File::FLAG_OPEN | base::File::FLAG_READ);
+    if (!pipeline_id_file.IsValid()) {
+      return Status(error::NOT_FOUND,
+                    base::StrCat({"Could not open pipeline file, full_name= ",
+                                  pipeline_id_file_path.MaybeAsASCII()}));
+    }
+    PipelineIdStorageInfo pipeline_id_storage_info;
+
+    char file_buffer[kPipelineIdMaxFileSize];
+    const int32_t read_result = pipeline_id_file.Read(
+        /*offset=*/0, file_buffer, kPipelineIdMaxFileSize);
+    if (read_result < 0) {
+      return Status(error::DATA_LOSS,
+                    base::StrCat({"File read error, full_name= ",
+                                  pipeline_id_file.ErrorToString(
+                                      pipeline_id_file.GetLastFileError()),
+                                  " ", pipeline_id_file_path.MaybeAsASCII()}));
+    }
+    if (read_result == 0 || read_result >= kPipelineIdMaxFileSize) {
+      return Status(
+          error::DATA_LOSS,
+          base::StrCat({"Unexpected pipeline id file size, full_name= ",
+                        pipeline_id_file_path.MaybeAsASCII()}));
+    }
+    google::protobuf::io::ArrayInputStream stream(  // Zero-copy stream.
+        file_buffer, read_result);
+    if (!pipeline_id_storage_info.ParseFromZeroCopyStream(&stream)) {
+      return Status(
+          error::DATA_LOSS,
+          base::StrCat({"Failed to parse pipeline ID file, full_name= ",
+                        pipeline_id_file_path.MaybeAsASCII()}));
+    }
+    return pipeline_id_storage_info;
+  }
+  absl::optional<std::string> pipeline_id_;
+  const base::FilePath directory_;
+  SEQUENCE_CHECKER(sequence_checker_);
+};
+
 class Storage::KeyInStorage {
  public:
-  explicit KeyInStorage(base::StringPiece signature_verification_public_key,
-                        const base::FilePath& directory)
+  KeyInStorage(base::StringPiece signature_verification_public_key,
+               const base::FilePath& directory)
       : verifier_(signature_verification_public_key), directory_(directory) {}
   ~KeyInStorage() = default;
 
@@ -500,10 +555,9 @@ class Storage::KeyInStorage {
 
       SignedEncryptionInfo signed_encryption_key;
       {
-        const auto key_file_buffer =
-            std::make_unique<char[]>(kEncryptionKeyMaxFileSize);
+        char key_file_buffer[kEncryptionKeyMaxFileSize];
         const int32_t read_result = key_file.Read(
-            /*offset=*/0, key_file_buffer.get(), kEncryptionKeyMaxFileSize);
+            /*offset=*/0, key_file_buffer, kEncryptionKeyMaxFileSize);
         if (read_result < 0) {
           LOG(WARNING) << "File read error="
                        << key_file.ErrorToString(key_file.GetLastFileError())
@@ -514,7 +568,7 @@ class Storage::KeyInStorage {
           continue;  // Unexpected file size.
         }
         google::protobuf::io::ArrayInputStream key_stream(  // Zero-copy stream.
-            key_file_buffer.get(), read_result);
+            key_file_buffer, read_result);
         if (!signed_encryption_key.ParseFromZeroCopyStream(&key_stream)) {
           LOG(WARNING) << "Failed to parse key file, full_name='"
                        << file_path.MaybeAsASCII() << "'";
@@ -563,7 +617,7 @@ void Storage::Create(
       : public TaskRunnerContext<StatusOr<scoped_refptr<Storage>>> {
    public:
     StorageInitContext(
-        const std::vector<std::pair<Priority, QueueOptions>>& queues_options,
+        const StorageOptions::QueuesOptionsList& queues_options,
         scoped_refptr<Storage> storage,
         base::OnceCallback<void(StatusOr<scoped_refptr<Storage>>)> callback)
         : TaskRunnerContext<StatusOr<scoped_refptr<Storage>>>(
@@ -677,8 +731,8 @@ void Storage::Create(
       Response(std::move(storage_));
     }
 
-    const std::vector<std::pair<Priority, QueueOptions>> queues_options_;
-    scoped_refptr<Storage> storage_;
+    const StorageOptions::QueuesOptionsList queues_options_;
+    const scoped_refptr<Storage> storage_;
     int32_t count_ = 0;
     Status final_status_;
   };
@@ -690,8 +744,8 @@ void Storage::Create(
                   std::move(async_start_upload_cb)));
 
   // Asynchronously run initialization.
-  Start<StorageInitContext>(ExpectedQueues(storage->options_),
-                            std::move(storage), std::move(completion_cb));
+  Start<StorageInitContext>(options.ProduceQueuesOptions(), std::move(storage),
+                            std::move(completion_cb));
 }
 
 Storage::Storage(const StorageOptions& options,
@@ -705,7 +759,9 @@ Storage::Storage(const StorageOptions& options,
       key_in_storage_(std::make_unique<KeyInStorage>(
           options.signature_verification_public_key(),
           options.directory())),
-      async_start_upload_cb_(async_start_upload_cb) {}
+      async_start_upload_cb_(async_start_upload_cb),
+      pipeline_id_in_storage_(
+          std::make_unique<PipelineIdInStorage>(options.directory())) {}
 
 Storage::~Storage() = default;
 
@@ -741,15 +797,16 @@ void Storage::Write(Priority priority,
   queue->Write(std::move(record), std::move(completion_cb));
 }
 
-void Storage::Confirm(Priority priority,
-                      absl::optional<int64_t> seq_number,
+void Storage::Confirm(SequenceInformation sequence_information,
                       bool force,
                       base::OnceCallback<void(Status)> completion_cb) {
   // Note: queues_ never change after initialization is finished, so there is
   // no need to protect or serialize access to it.
   ASSIGN_OR_ONCE_CALLBACK_AND_RETURN(scoped_refptr<StorageQueue> queue,
-                                     completion_cb, GetQueue(priority));
-  queue->Confirm(seq_number, force, std::move(completion_cb));
+                                     completion_cb,
+                                     GetQueue(sequence_information.priority()));
+  queue->Confirm(std::move(sequence_information), force,
+                 std::move(completion_cb));
 }
 
 Status Storage::Flush(Priority priority) {
@@ -802,7 +859,8 @@ void Storage::UpdateEncryptionKey(SignedEncryptionInfo signed_encryption_key) {
           std::move(signed_encryption_key), base::WrapRefCounted(this)));
 }
 
-StatusOr<scoped_refptr<StorageQueue>> Storage::GetQueue(Priority priority) {
+StatusOr<scoped_refptr<StorageQueue>> Storage::GetQueue(
+    Priority priority) const {
   auto it = queues_.find(priority);
   if (it == queues_.end()) {
     return Status(
@@ -812,4 +870,11 @@ StatusOr<scoped_refptr<StorageQueue>> Storage::GetQueue(Priority priority) {
   return it->second;
 }
 
+Status Storage::StorePipelineId(base::StringPiece pipeline_id) {
+  return pipeline_id_in_storage_->StorePipelineId(pipeline_id);
+}
+
+StatusOr<std::string> Storage::GetPipelineId() {
+  return pipeline_id_in_storage_->GetPipelineId();
+}
 }  // namespace reporting

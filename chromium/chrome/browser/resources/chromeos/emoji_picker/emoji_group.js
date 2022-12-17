@@ -1,11 +1,13 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import './emoji_button.js';
 
-import {beforeNextRender, html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {createCustomEvent, EMOJI_VARIANTS_SHOWN, EMOJI_BUTTON_CLICK, EMOJI_CLEAR_RECENTS_CLICK} from './events.js';
+import {beforeNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {getTemplate} from './emoji_group.html.js';
+import {createCustomEvent, EMOJI_BUTTON_CLICK, EMOJI_CLEAR_RECENTS_CLICK, EMOJI_VARIANTS_SHOWN} from './events.js';
 import {CategoryEnum, EmojiVariants} from './types.js';
 
 /**
@@ -27,7 +29,7 @@ export class EmojiGroupComponent extends PolymerElement {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {

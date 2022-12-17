@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@ import org.chromium.ui.OverscrollRefreshHandler;
 import org.chromium.ui.base.EventForwarder;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.mojom.VirtualKeyboardMode;
 import org.chromium.url.GURL;
 
 import java.util.Collections;
@@ -126,6 +127,12 @@ public class MockWebContents implements WebContents {
     @Override
     public GURL getVisibleUrl() {
         return GURL.emptyGURL();
+    }
+
+    @Override
+    @VirtualKeyboardMode.EnumType
+    public int getVirtualKeyboardMode() {
+        return VirtualKeyboardMode.UNSET;
     }
 
     @Override

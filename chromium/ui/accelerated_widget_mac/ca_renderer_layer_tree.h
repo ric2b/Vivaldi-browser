@@ -1,10 +1,11 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef UI_ACCELERATED_WIDGET_MAC_CA_RENDERER_LAYER_TREE_H_
 #define UI_ACCELERATED_WIDGET_MAC_CA_RENDERER_LAYER_TREE_H_
 
+#include <CoreVideo/CoreVideo.h>
 #include <IOSurface/IOSurface.h>
 #include <QuartzCore/QuartzCore.h>
 
@@ -60,6 +61,9 @@ class ACCELERATED_WIDGET_MAC_EXPORT CARendererLayerTree {
   // create any new CALayers until CommitScheduledCALayers is called. This
   // cannot be called anymore after CommitScheduledCALayers has been called.
   bool ScheduleCALayer(const CARendererLayerParams& params);
+
+  // Set the MTLDevice to use for any CAMetalLayers.
+  void SetMetalDevice(intptr_t metal_device) { metal_device_ = metal_device; }
 
   // Create a CALayer tree for the scheduled layers, and set |superlayer| to
   // have only this tree as its sublayers. If |old_tree| is non-null, then try
@@ -301,6 +305,7 @@ class ACCELERATED_WIDGET_MAC_EXPORT CARendererLayerTree {
   bool has_committed_ = false;
   const bool allow_av_sample_buffer_display_layer_ = true;
   const bool allow_solid_color_layers_ = true;
+  intptr_t metal_device_ = 0;
 
   // Used for uma.
   int changed_io_surfaces_during_commit_ = 0;

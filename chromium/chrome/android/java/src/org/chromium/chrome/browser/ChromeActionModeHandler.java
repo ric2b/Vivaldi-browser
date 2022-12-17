@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,8 +47,6 @@ import java.util.Set;
 import android.content.Intent;
 
 import org.chromium.ui.base.DeviceFormFactor;
-import org.vivaldi.browser.VivaldiNonSelectionActionModeCallback;
-import org.vivaldi.browser.common.VivaldiUrlConstants;
 import org.vivaldi.browser.notes.NoteAppendActivity;
 import org.vivaldi.browser.notes.NoteSelectionPopupController;
 import org.vivaldi.browser.notes.NotesModel;
@@ -82,11 +80,6 @@ public class ChromeActionModeHandler {
             SelectionPopupController.fromWebContents(webContents)
                     .setActionModeCallback(new ActionModeCallback(mActiveTab, webContents,
                             searchCallback, shareDelegateSupplier, canDrawOutsideScreen));
-
-            // Note(david@vivaldi.com): Set NonSelectionActionModeCallback for Vivaldi
-            SelectionPopupController.fromWebContents(webContents)
-                    .setNonSelectionActionModeCallback(
-                            new VivaldiNonSelectionActionModeCallback(webContents));
         };
 
         mActivityTabTabObserver =

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,16 @@ void SetupConnectingScrollListItem(HoverHighlightView* view) {
 
   view->SetSubText(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTING));
+}
+
+void SetWarningSubText(HoverHighlightView* view, std::u16string subtext) {
+  DCHECK(view->is_populated());
+
+  view->SetSubText(subtext);
+  view->sub_text_label()->SetAutoColorReadabilityEnabled(false);
+  view->sub_text_label()->SetEnabledColor(
+      AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kTextColorWarning));
 }
 
 SkColor TrayIconColor(session_manager::SessionState session_state) {

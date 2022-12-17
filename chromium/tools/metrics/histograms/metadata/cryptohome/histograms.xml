@@ -1,5 +1,5 @@
 <!--
-Copyright 2020 The Chromium Authors. All rights reserved.
+Copyright 2020 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -65,7 +65,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.DeletedUserProfiles" units="profiles"
-    expires_after="2023-02-05">
+    expires_after="2023-04-09">
   <owner>simmonsjosh@google.com</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -207,7 +207,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.DiskCleanupProgress"
-    enum="CryptohomeDiskCleanupProgress" expires_after="2023-02-01">
+    enum="CryptohomeDiskCleanupProgress" expires_after="2023-04-09">
   <owner>vsavu@google.com</owner>
   <owner>dlunev@chromium.org</owner>
   <owner>sarthakkukreti@chromium.org</owner>
@@ -220,7 +220,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.DiskCleanupResult"
-    enum="CryptohomeDiskCleanupResult" expires_after="2023-02-01">
+    enum="CryptohomeDiskCleanupResult" expires_after="2023-04-09">
   <owner>vsavu@google.com</owner>
   <owner>dlunev@chromium.org</owner>
   <summary>Records the result of triggering disk cleanup.</summary>
@@ -368,7 +368,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.Errors" enum="CryptohomeError"
-    expires_after="2023-01-29">
+    expires_after="2023-04-02">
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>Cryptohome errors.</summary>
@@ -387,7 +387,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Cryptohome.FreeDiskSpaceDuringLoginTotalFreedInMb" units="MiB"
     expires_after="2023-02-01">
-  <owner>vsavu@chromium.org</owner>
+  <owner>vsavu@google.com</owner>
   <owner>gwendal@chromium.org</owner>
   <owner>sarthakkukreti@chromium.org</owner>
   <summary>
@@ -402,8 +402,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.FreeDiskSpaceTotalFreedInMb" units="MiB"
-    expires_after="2023-02-01">
-  <owner>vsavu@chromium.org</owner>
+    expires_after="2023-04-09">
+  <owner>vsavu@google.com</owner>
   <owner>gwendal@chromium.org</owner>
   <owner>sarthakkukreti@chromium.org</owner>
   <summary>
@@ -417,8 +417,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.FreeDiskSpaceTotalTime2" units="ms"
-    expires_after="2023-02-01">
-  <owner>vsavu@chromium.org</owner>
+    expires_after="2023-04-02">
+  <owner>vsavu@google.com</owner>
   <owner>dlunev@chromium.org</owner>
   <owner>sarthakkukreti@chromium.org</owner>
   <summary>
@@ -430,7 +430,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.GCache.FreedDiskSpaceInMb" units="MB"
-    expires_after="2023-02-01">
+    expires_after="2023-04-09">
   <owner>dlunev@chromium.org</owner>
   <owner>sarthakkukreti@chromium.org</owner>
   <summary>
@@ -459,19 +459,74 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram base="true" name="Cryptohome.LECredential"
-    enum="CryptohomeLECredError" expires_after="2023-01-22">
-<!-- Name completed by histogram_suffixes name="LECredentialOps" -->
+<histogram name="Cryptohome.LECredential.LogReplayEntryCount" units="count"
+    expires_after="2023-08-19">
+  <owner>hcyang@google.com</owner>
+  <owner>cros-hwsec+uma@chromium.org</owner>
+  <summary>
+    How many log entries are used to reconstruct a stale hash tree, for Low
+    Entropy (LE) credential management. This reflects whether the log entries
+    stored at LE credential server side are sufficient for recovering situations
+    where the LE credential client and server are not synced. This is logged
+    every time the client loses sync with the server (might happen during
+    authentication and credential management operations), and attempts to use
+    the LogReplay command to sync server state again.
+  </summary>
+</histogram>
 
+<histogram name="Cryptohome.LECredential.Replay.{ReplayType}"
+    enum="CryptohomeLEReplayError" expires_after="2023-08-25">
+  <owner>hcyang@google.com</owner>
+  <owner>cros-hwsec+uma@chromium.org</owner>
+  <summary>
+    Results of LogReplay events, which happen every time the client loses sync
+    with the server (might happen during authentication and credential
+    management operations). Categorized into 2 replay types, depends on whether
+    all of the log entries were used for replay, as this will result in
+    different error distributions. These are logged every time the client loses
+    sync with the server (might happen during authentication and credential
+    management operations), and attempts to use the LogReplay command to sync
+    server state again.
+  </summary>
+  <token key="ReplayType">
+    <variant name="Full"/>
+    <variant name="Normal"/>
+  </token>
+</histogram>
+
+<histogram name="Cryptohome.LECredential.{Operation}{Action}"
+    enum="CryptohomeLECredError" expires_after="2023-01-22">
   <owner>pmalani@chromium.org</owner>
   <owner>apronin@chromium.org</owner>
   <owner>mnissler@chromium.org</owner>
   <owner>allenwebb@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
-    Events related to Low Entropy (LE) credential management. These are logged
-    every time an operation involving a LE credential is performed.
+    Events related to Low Entropy (LE) credential management. Specifically, the
+    result of the {Action} action when doing the {Operation} LE operation. These
+    are logged every time an operation involving a LE credential (during
+    authentication and credential managerment actions) is performed.
   </summary>
+  <token key="Operation">
+    <variant name="Check"/>
+    <variant name="GetDelayInSeconds"/>
+    <variant name="Insert"/>
+    <variant name="Remove"/>
+    <variant name="Reset"/>
+    <variant name="ResetTree"/>
+    <variant name="Sync"/>
+    <variant name="SyncOutcome"/>
+  </token>
+  <token key="Action">
+    <variant name=""/>
+    <variant name=".Backend"/>
+    <variant name=".BackendGetLog"/>
+    <variant name=".BackendRecoverInsert"/>
+    <variant name=".BackendReplayLog"/>
+    <variant name=".BackendReplayLogForFullReplay"/>
+    <variant name=".LoadFromDisk"/>
+    <variant name=".SaveToDisk"/>
+  </token>
 </histogram>
 
 <histogram name="Cryptohome.LegacyCodePathUsage.{Location}"
@@ -505,7 +560,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.LoginDiskCleanupResult"
-    enum="CryptohomeDiskCleanupResult" expires_after="2023-02-01">
+    enum="CryptohomeDiskCleanupResult" expires_after="2023-04-09">
   <owner>vsavu@google.com</owner>
   <owner>sarthakkukreti@chromium.org</owner>
   <summary>
@@ -655,7 +710,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.TimeBetweenFreeDiskSpace" units="s"
-    expires_after="2023-02-01">
+    expires_after="2023-04-09">
   <owner>vsavu@google.com</owner>
   <owner>dlunev@chromium.org</owner>
   <owner>sarthakkukreti@chromium.org</owner>
@@ -673,6 +728,30 @@ chromium-metrics-reviews@google.com.
   <summary>
     The amount of time (ms) for Chrome OS cryptohome daemon to verify the user's
     password during an unlock operation.
+  </summary>
+</histogram>
+
+<histogram name="Cryptohome.TimeToAuthSessionRemoveAuthFactorUSS" units="ms"
+    expires_after="2023-05-01">
+  <owner>thomascedeno@google.com</owner>
+  <owner>cros-hwsec+uma@chromium.org</owner>
+  <summary>
+    AuthSession is a DBus API for various operations dealing with credential
+    storage, processing, and authentication. This metrics record the time an
+    RemoveAuthFactor takes to complete for USS. The metric is emitted when the
+    respective RemoveAuthFactor is requested through the DBus API.
+  </summary>
+</histogram>
+
+<histogram name="Cryptohome.TimeToAuthSessionRemoveAuthFactorVK" units="ms"
+    expires_after="2023-05-01">
+  <owner>thomascedeno@google.com</owner>
+  <owner>cros-hwsec+uma@chromium.org</owner>
+  <summary>
+    AuthSession is a DBus API for various operations dealing with credential
+    storage, processing, and authentication. This metrics record the time an
+    RemoveAuthFactor takes to complete for VK. The metric is emitted when the
+    respective RemoveAuthFactor is requested through the DBus API.
   </summary>
 </histogram>
 
@@ -712,7 +791,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.TimeToGenerateEccAuthValue" units="ms"
-    expires_after="2023-02-05">
+    expires_after="2023-04-09">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
@@ -927,7 +1006,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.{Action}AuthBlockType"
-    enum="CryptohomeAuthBlockType" expires_after="2022-10-04">
+    enum="CryptohomeAuthBlockType" expires_after="2023-04-11">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
@@ -984,8 +1063,6 @@ chromium-metrics-reviews@google.com.
     <variant name="TimeToAuthSessionAuthenticate"/>
     <variant name="TimeToAuthSessionAuthenticateAuthFactorUSS"/>
     <variant name="TimeToAuthSessionAuthenticateAuthFactorVK"/>
-    <variant name="TimeToAuthSessionRemoveAuthFactorUSS"/>
-    <variant name="TimeToAuthSessionRemoveAuthFactorVK"/>
     <variant name="TimeToAuthSessionUpdateAuthFactorUSS"/>
     <variant name="TimeToAuthSessionUpdateAuthFactorVK"/>
     <variant name="TimeToAuthSessionUpdateCredentials"/>

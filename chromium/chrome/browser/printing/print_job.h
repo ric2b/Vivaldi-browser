@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,6 +54,7 @@ class PrintJob : public base::RefCountedThreadSafe<PrintJob> {
     virtual void OnDocDone(int job_id, PrintedDocument* document) {}
     virtual void OnJobDone() {}
     virtual void OnFailed() {}
+    virtual void OnDestruction() {}
   };
 
 #if BUILDFLAG(IS_CHROMEOS)

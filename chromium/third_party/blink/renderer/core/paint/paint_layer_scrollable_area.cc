@@ -206,9 +206,6 @@ void PaintLayerScrollableArea::DisposeImpl() {
 
   non_composited_main_thread_scrolling_reasons_ = 0;
 
-  if (ScrollingCoordinator* scrolling_coordinator = GetScrollingCoordinator())
-    scrolling_coordinator->WillDestroyScrollableArea(this);
-
   if (!GetLayoutBox()->DocumentBeingDestroyed()) {
     if (auto* element = DynamicTo<Element>(GetLayoutBox()->GetNode()))
       element->SetSavedLayerScrollOffset(scroll_offset_);
@@ -696,9 +693,9 @@ PhysicalRect PaintLayerScrollableArea::VisibleScrollSnapportRect(
 }
 
 gfx::Size PaintLayerScrollableArea::ContentsSize() const {
-  PhysicalOffset offset(
-      GetLayoutBox()->ClientLeft() + GetLayoutBox()->Location().X(),
-      GetLayoutBox()->ClientTop() + GetLayoutBox()->Location().Y());
+  LayoutPoint location = GetLayoutBox()->Location();
+  PhysicalOffset offset(GetLayoutBox()->ClientLeft() + location.X(),
+                        GetLayoutBox()->ClientTop() + location.Y());
   // TODO(crbug.com/962299): The pixel snapping is incorrect in some cases.
   return PixelSnappedContentsSize(offset);
 }
@@ -1086,7 +1083,7 @@ void PaintLayerScrollableArea::UpdateAfterLayout() {
     UpdateScrollbarProportions();
   }
 
-  ClampScrollOffsetAfterOverflowChange();
+  DelayableClampScrollOffsetAfterOverflowChange();
 
   if (!is_horizontal_scrollbar_frozen || !is_vertical_scrollbar_frozen)
     UpdateScrollableAreaSet();
@@ -1094,7 +1091,25 @@ void PaintLayerScrollableArea::UpdateAfterLayout() {
   PositionOverflowControls();
 }
 
+void PaintLayerScrollableArea::DelayableClampScrollOffsetAfterOverflowChange() {
+  if (HasBeenDisposed())
+    return;
+  if (DelayScrollOffsetClampScope::ClampingIsDelayed()) {
+    DelayScrollOffsetClampScope::SetNeedsClamp(this);
+    return;
+  }
+  ClampScrollOffsetAfterOverflowChangeInternal();
+}
+
 void PaintLayerScrollableArea::ClampScrollOffsetAfterOverflowChange() {
+  if (!RuntimeEnabledFeatures::LayoutNGDelayScrollOffsetClampingEnabled()) {
+    DelayableClampScrollOffsetAfterOverflowChange();
+    return;
+  }
+  ClampScrollOffsetAfterOverflowChangeInternal();
+}
+
+void PaintLayerScrollableArea::ClampScrollOffsetAfterOverflowChangeInternal() {
   if (HasBeenDisposed())
     return;
 
@@ -1102,11 +1117,6 @@ void PaintLayerScrollableArea::ClampScrollOffsetAfterOverflowChange() {
   // changed, so the scroll offsets needs to be clamped.  If the scroll offset
   // did not change, but the scroll origin *did* change, we still need to notify
   // the scrollbars to update their dimensions.
-
-  if (DelayScrollOffsetClampScope::ClampingIsDelayed()) {
-    DelayScrollOffsetClampScope::SetNeedsClamp(this);
-    return;
-  }
 
   const Document& document = GetLayoutBox()->GetDocument();
   if (document.IsPrintingOrPaintingPreview()) {
@@ -1497,6 +1507,7 @@ void PaintLayerScrollableArea::ComputeScrollbarExistence(
       !CanHaveOverflowScrollbars(*GetLayoutBox()) ||
       GetLayoutBox()->GetFrame()->GetSettings()->GetHideScrollbars() ||
       GetLayoutBox()->IsLayoutNGFieldset() ||
+      GetLayoutBox()->IsLayoutNGFrameSet() ||
       GetLayoutBox()->StyleRef().ScrollbarWidth() == EScrollbarWidth::kNone) {
     needs_horizontal_scrollbar = false;
     needs_vertical_scrollbar = false;
@@ -1864,9 +1875,8 @@ bool PaintLayerScrollableArea::ShouldOverflowControlsPaintAsOverlay() const {
 
   // The global root scrollbars and corner also paint as overlay so that they
   // appear on top of all content within the viewport. This is important since
-  // these scrollbar's transform parent is the 'overscroll elasticity'
-  // transform node of the visual viewport, i.e. they don't move during elastic
-  // overscroll or on pinch zoom.
+  // these scrollbar's transform state is
+  // VisualViewport::TransformNodeForViewportScrollbars().
   return GetLayoutBox() && GetLayoutBox()->IsGlobalRootScroller();
 }
 
@@ -2314,14 +2324,16 @@ void PaintLayerScrollableArea::UpdateScrollableAreaSet() {
   if (!frame_view)
     return;
 
+  const bool has_horizontal_overflow = HasHorizontalOverflow();
+  const bool has_vertical_overflow = HasVerticalOverflow();
   bool has_overflow =
       !GetLayoutBox()->Size().IsZero() &&
-      ((HasHorizontalOverflow() && GetLayoutBox()->ScrollsOverflowX()) ||
-       (HasVerticalOverflow() && GetLayoutBox()->ScrollsOverflowY()));
+      ((has_horizontal_overflow && GetLayoutBox()->ScrollsOverflowX()) ||
+       (has_vertical_overflow && GetLayoutBox()->ScrollsOverflowY()));
 
   bool overflows_in_block_direction = GetLayoutBox()->IsHorizontalWritingMode()
-                                          ? HasVerticalOverflow()
-                                          : HasHorizontalOverflow();
+                                          ? has_vertical_overflow
+                                          : has_horizontal_overflow;
 
   if (overflows_in_block_direction) {
     DCHECK(CanHaveOverflowScrollbars(*GetLayoutBox()));
@@ -2586,14 +2598,14 @@ PaintLayerScrollableArea::GetCompositorAnimationTimeline() const {
 }
 
 bool PaintLayerScrollableArea::HasTickmarks() const {
-  if (RareData() && !RareData()->tickmarks_override_.IsEmpty())
+  if (RareData() && !RareData()->tickmarks_override_.empty())
     return true;
   return layer_->IsRootLayer() &&
          To<LayoutView>(GetLayoutBox())->HasTickmarks();
 }
 
 Vector<gfx::Rect> PaintLayerScrollableArea::GetTickmarks() const {
-  if (RareData() && !RareData()->tickmarks_override_.IsEmpty())
+  if (RareData() && !RareData()->tickmarks_override_.empty())
     return RareData()->tickmarks_override_;
   if (layer_->IsRootLayer())
     return To<LayoutView>(GetLayoutBox())->GetTickmarks();
@@ -2709,7 +2721,7 @@ PaintLayerScrollableArea::PreventRelayoutScope::PreventRelayoutScope(
     SubtreeLayoutScope& layout_scope) {
   if (!count_) {
     DCHECK(!layout_scope_);
-    DCHECK(NeedsRelayoutList().IsEmpty());
+    DCHECK(NeedsRelayoutList().empty());
     layout_scope_ = &layout_scope;
   }
   count_++;
@@ -2763,7 +2775,7 @@ void PaintLayerScrollableArea::PreventRelayoutScope::SetBoxNeedsLayout(
 
 void PaintLayerScrollableArea::PreventRelayoutScope::ResetRelayoutNeeded() {
   DCHECK_EQ(count_, 0);
-  DCHECK(NeedsRelayoutList().IsEmpty());
+  DCHECK(NeedsRelayoutList().empty());
   relayout_needed_ = false;
 }
 
@@ -2801,7 +2813,7 @@ int PaintLayerScrollableArea::DelayScrollOffsetClampScope::count_ = 0;
 
 PaintLayerScrollableArea::DelayScrollOffsetClampScope::
     DelayScrollOffsetClampScope() {
-  DCHECK(count_ > 0 || NeedsClampList().IsEmpty());
+  DCHECK(count_ > 0 || NeedsClampList().empty());
   count_++;
 }
 

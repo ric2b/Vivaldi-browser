@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,8 +15,7 @@ class RepeatingTimer;
 class SingleThreadTaskRunner;
 }  // namespace base
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 // Audio module passed to WebRTC. It doesn't access actual audio devices, but it
 // provides all functionality we need to ensure that audio streaming works
@@ -124,7 +123,6 @@ class WebrtcAudioModule : public webrtc::AudioDeviceModule {
   std::unique_ptr<base::RepeatingTimer> poll_timer_;
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_WEBRTC_AUDIO_MODULE_H_

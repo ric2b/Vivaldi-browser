@@ -1,13 +1,10 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 module network.mojom;
 
 import "mojo/public/mojom/base/big_buffer.mojom";
-import "mojo/public/mojom/base/file_path.mojom";
-import "mojo/public/mojom/base/time.mojom";
-import "mojo/public/mojom/base/unguessable_token.mojom";
 import "services/network/public/mojom/url_loader_network_service_observer.mojom";
 import "services/network/public/mojom/client_security_state.mojom";
 import "services/network/public/mojom/cors.mojom";
@@ -26,7 +23,6 @@ import "services/network/public/mojom/url_loader_completion_status.mojom";
 import "services/network/public/mojom/url_request.mojom";
 import "services/network/public/mojom/url_response_head.mojom";
 import "services/network/public/mojom/web_bundle_handle.mojom";
-import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
 
 [Native]
@@ -99,8 +95,11 @@ interface URLLoaderClient {
   // Called when the response head is received.
   // The loader is expected to close its end of the pipe after finishing
   // writing the body, so that the client knows when it is done reading.
+  // Optionally, the response can contain cached metadata, such as a V8 code
+  // cache.
   OnReceiveResponse(URLResponseHead head,
-                    handle<data_pipe_consumer>? body);
+                    handle<data_pipe_consumer>? body,
+                    mojo_base.mojom.BigBuffer? cached_metadata);
 
   // Called when the request has been redirected. The receiver is expected to
   // call FollowRedirect or cancel the request.
@@ -111,9 +110,6 @@ interface URLLoaderClient {
   // The implementation should call the response closure when the client is
   // ready to receive the next upload progress.
   OnUploadProgress(int64 current_position, int64 total_size) => ();
-
-  // Called when cached metadata from a resource request is ready.
-  OnReceiveCachedMetadata(mojo_base.mojom.BigBuffer data);
 
   // Called when the transfer size is updated. This is only called if
   // |report_raw_headers| is set or the renderer has permission to read the

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -333,6 +333,9 @@ bool InputMethodAuraLinux::MaybeUpdateComposition(bool text_committed) {
 }
 
 void InputMethodAuraLinux::UpdateContextFocusState() {
+  surrounding_text_.reset();
+  selection_range_ = gfx::Range::InvalidRange();
+
   auto old_text_input_type = text_input_type_;
   text_input_type_ = GetTextInputType();
 
@@ -394,7 +397,11 @@ void InputMethodAuraLinux::OnCaretBoundsChanged(const TextInputClient* client) {
                                  client->GetAutocorrectCharacterBounds());
 #endif
 
-    context_->SetSurroundingText(text, selection_range);
+    if (surrounding_text_ != text || selection_range_ != selection_range) {
+      surrounding_text_ = text;
+      selection_range_ = selection_range;
+      context_->SetSurroundingText(text, selection_range);
+    }
   }
 }
 
@@ -561,6 +568,7 @@ void InputMethodAuraLinux::OnWillChangeFocusedClient(
     TextInputClient* focused_before,
     TextInputClient* focused) {
   ResetContext();
+  context_->WillUpdateFocus(focused_before, focused);
 }
 
 void InputMethodAuraLinux::OnDidChangeFocusedClient(

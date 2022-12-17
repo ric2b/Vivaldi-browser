@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -135,6 +135,13 @@ views::BubbleBorder::Arrow GetOptimalPopupPlacement(
 // bounds that overlap |screen_bounds|.
 bool BoundsOverlapWithOpenPermissionsPrompt(const gfx::Rect& screen_bounds,
                                             content::WebContents* web_contents);
+
+// Returns whether there is picture-in-picture window with bounds that overlap
+// `screen_bounds`. Assuming:
+// 1. the pip window is shown in the active tab.
+// 2. this function is called from the frame of the contents that show the
+// autofill popup.
+bool BoundsOverlapWithPictureInPictureWindow(const gfx::Rect& screen_bounds);
 
 // Returns whether a popup may vertically exceed the bounds of |web_contents|.
 // This is permitted for extension popups. Here we only enforce that the

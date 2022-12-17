@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,6 +60,7 @@ class TabContainerImpl : public TabContainer,
   void SetActiveTab(absl::optional<size_t> prev_active_index,
                     absl::optional<size_t> new_active_index) override;
 
+  std::unique_ptr<Tab> TransferTabOut(int model_index) override;
   void StoppedDraggingView(TabSlotView* view) override;
 
   void ScrollTabToVisible(int model_index) override;
@@ -69,6 +70,10 @@ class TabContainerImpl : public TabContainer,
   void OnGroupEditorOpened(const tab_groups::TabGroupId& group) override;
   void OnGroupMoved(const tab_groups::TabGroupId& group) override;
   void OnGroupContentsChanged(const tab_groups::TabGroupId& group) override;
+  void OnGroupVisualsChanged(
+      const tab_groups::TabGroupId& group,
+      const tab_groups::TabGroupVisualData* old_visuals,
+      const tab_groups::TabGroupVisualData* new_visuals) override;
   void OnGroupClosed(const tab_groups::TabGroupId& group) override;
   void UpdateTabGroupVisuals(tab_groups::TabGroupId group_id) override;
   void NotifyTabGroupEditorBubbleOpened() override;
@@ -85,13 +90,12 @@ class TabContainerImpl : public TabContainer,
 
   void HandleLongTap(ui::GestureEvent* event) override;
 
-  bool IsRectInWindowCaption(const gfx::Rect& rect) override;
+  bool IsRectInContentArea(const gfx::Rect& rect) override;
 
   void OnTabSlotAnimationProgressed(TabSlotView* view) override;
 
   void OnTabCloseAnimationCompleted(Tab* tab) override;
 
-  void StartBasicAnimation() override;
   void InvalidateIdealBounds() override;
   bool IsAnimating() const override;
   void CancelAnimation() override;
@@ -107,8 +111,9 @@ class TabContainerImpl : public TabContainer,
 
   bool InTabClose() override;
 
-  std::map<tab_groups::TabGroupId, std::unique_ptr<TabGroupViews>>&
-  GetGroupViews() override;
+  TabGroupViews* GetGroupViews(tab_groups::TabGroupId group_id) const override;
+  const std::map<tab_groups::TabGroupId, std::unique_ptr<TabGroupViews>>&
+  get_group_views_for_testing() const override;
 
   int GetActiveTabWidth() const override;
   int GetInactiveTabWidth() const override;
@@ -221,6 +226,12 @@ class TabContainerImpl : public TabContainer,
   // mode.
   int CalculateAvailableWidthForTabs() const;
 
+  // Animates tabs and group views from where they are to where they should be.
+  // Callers that want to do fancier things can manipulate starting bounds
+  // before calling this and/or replace the animation for some tabs or group
+  // views after calling this.
+  void StartBasicAnimation();
+
   // Invoked from |AddTab| after the newly created tab has been inserted.
   void StartInsertTabAnimation(int model_index);
 
@@ -249,6 +260,7 @@ class TabContainerImpl : public TabContainer,
   void StartResizeLayoutTabsFromTouchTimer();
 
   bool IsDragSessionActive() const;
+  bool IsDragSessionEnding() const;
 
   // Ensure that the message loop observer used for event spying is added and
   // removed appropriately so we can tell when to resize layout.

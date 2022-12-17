@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,7 +148,7 @@ bool GetEncryptionSchemes(
   }
 
   base::flat_set<media::EncryptionScheme> result;
-  for (const auto& item : value->GetListDeprecated()) {
+  for (const auto& item : value->GetList()) {
     if (!item.is_string()) {
       DLOG(ERROR) << "Unrecognized item type in CDM manifest entry "
                   << kCdmSupportedEncryptionSchemesName;

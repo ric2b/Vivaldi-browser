@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -89,7 +89,7 @@ class AudioDeviceFactoryTestingPlatformSupport : public blink::Platform {
             ? media::OUTPUT_DEVICE_STATUS_ERROR_INTERNAL
             : media::OUTPUT_DEVICE_STATUS_OK,
         media::AudioParameters(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                               media::CHANNEL_LAYOUT_STEREO,
+                               media::ChannelLayoutConfig::Stereo(),
                                kHardwareSampleRate, kHardwareBufferSize));
 
     if (params.device_id != kInvalidOutputDeviceId) {
@@ -126,10 +126,7 @@ class WebRtcAudioRendererTest : public testing::Test {
 
  protected:
   WebRtcAudioRendererTest()
-      : source_(new MockAudioRendererSource())
-// Tests crash on Android if these are defined. https://crbug.com/1119689
-#if !BUILDFLAG(IS_ANDROID)
-        ,
+      : source_(new MockAudioRendererSource()),
         agent_group_scheduler_(
             blink::scheduler::WebThreadScheduler::MainThreadScheduler()
                 ->CreateAgentGroupScheduler()),
@@ -146,15 +143,14 @@ class WebRtcAudioRendererTest : public testing::Test {
             *agent_group_scheduler_,
             /*session_storage_namespace_id=*/base::EmptyString(),
             /*page_base_background_color=*/absl::nullopt)),
-        web_local_frame_(
-            blink::WebLocalFrame::CreateMainFrame(web_view_,
-                                                  &web_local_frame_client_,
-                                                  nullptr,
-                                                  LocalFrameToken(),
-                                                  /*policy_container=*/nullptr))
-#endif
-  {
-    MediaStreamSourceVector dummy_components;
+        web_local_frame_(blink::WebLocalFrame::CreateMainFrame(
+            web_view_,
+            &web_local_frame_client_,
+            nullptr,
+            LocalFrameToken(),
+            DocumentToken(),
+            /*policy_container=*/nullptr)) {
+    MediaStreamComponentVector dummy_components;
     stream_descriptor_ = MakeGarbageCollected<MediaStreamDescriptor>(
         String::FromUTF8("new stream"), dummy_components, dummy_components);
   }
@@ -162,7 +158,7 @@ class WebRtcAudioRendererTest : public testing::Test {
   void SetupRenderer(const String& device_id) {
     renderer_ = new blink::WebRtcAudioRenderer(
         scheduler::GetSingleThreadTaskRunnerForTesting(), stream_descriptor_,
-        web_local_frame_, base::UnguessableToken::Create(), device_id,
+        *web_local_frame_, base::UnguessableToken::Create(), device_id,
         base::RepeatingCallback<void()>());
 
     media::AudioSinkParameters params;
@@ -213,9 +209,7 @@ class WebRtcAudioRendererTest : public testing::Test {
     stream_descriptor_ = nullptr;
     source_.reset();
     agent_group_scheduler_ = nullptr;
-#if !BUILDFLAG(IS_ANDROID)
     web_view_->Close();
-#endif
     blink::WebHeap::CollectAllGarbageForTesting();
   }
 
@@ -388,7 +382,7 @@ TEST_F(WebRtcAudioRendererTest, SwitchOutputDeviceInvalidDevice) {
 TEST_F(WebRtcAudioRendererTest, InitializeWithInvalidDevice) {
   renderer_ = new blink::WebRtcAudioRenderer(
       scheduler::GetSingleThreadTaskRunnerForTesting(), stream_descriptor_,
-      nullptr /*blink::WebLocalFrame*/, base::UnguessableToken::Create(),
+      *web_local_frame_, base::UnguessableToken::Create(),
       kInvalidOutputDeviceId, base::RepeatingCallback<void()>());
 
   media::AudioSinkParameters params;

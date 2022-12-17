@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,11 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #endif
 
+#if defined(WEBRTC_USE_PIPEWIRE)
+#include "base/environment.h"
+#include "base/nix/xdg_util.h"
+#endif
+
 namespace content::desktop_capture {
 
 webrtc::DesktopCaptureOptions CreateDesktopCaptureOptions() {
@@ -25,9 +30,8 @@ webrtc::DesktopCaptureOptions CreateDesktopCaptureOptions() {
   // Leave desktop effects enabled during WebRTC captures.
   options.set_disable_effects(false);
 #if BUILDFLAG(IS_WIN)
-  static constexpr base::Feature kDirectXCapturer{
-      "DirectXCapturer",
-      base::FEATURE_ENABLED_BY_DEFAULT};
+  static BASE_FEATURE(kDirectXCapturer, "DirectXCapturer",
+                      base::FEATURE_ENABLED_BY_DEFAULT);
   if (base::FeatureList::IsEnabled(kDirectXCapturer)) {
     options.set_allow_directx_capturer(true);
     options.set_allow_use_magnification_api(false);
@@ -86,7 +90,13 @@ void BindAuraWindowCapturer(
 
 bool CanUsePipeWire() {
 #if defined(WEBRTC_USE_PIPEWIRE)
-  return webrtc::DesktopCapturer::IsRunningUnderWayland() &&
+  static base::nix::SessionType session_type = base::nix::SessionType::kUnset;
+  if (session_type == base::nix::SessionType::kUnset) {
+    std::unique_ptr<base::Environment> env = base::Environment::Create();
+    session_type = base::nix::GetSessionType(*env);
+  }
+
+  return session_type == base::nix::SessionType::kWayland &&
          base::FeatureList::IsEnabled(features::kWebRtcPipeWireCapturer);
 #else
   return false;

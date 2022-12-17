@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,14 +41,19 @@ version_info::Channel AutofillClient::GetChannel() const {
   return version_info::Channel::UNKNOWN;
 }
 
+IBANManager* AutofillClient::GetIBANManager() {
+  return nullptr;
+}
+
 MerchantPromoCodeManager* AutofillClient::GetMerchantPromoCodeManager() {
   return nullptr;
 }
 
 std::unique_ptr<SingleFieldFormFillRouter>
-AutofillClient::GetSingleFieldFormFillRouter() {
+AutofillClient::CreateSingleFieldFormFillRouter() {
   return std::make_unique<SingleFieldFormFillRouter>(
-      GetAutocompleteHistoryManager(), GetMerchantPromoCodeManager());
+      GetAutocompleteHistoryManager(), GetIBANManager(),
+      GetMerchantPromoCodeManager());
 }
 
 CreditCardCVCAuthenticator* AutofillClient::GetCVCAuthenticator() {
@@ -150,7 +155,8 @@ void AutofillClient::OnVirtualCardDataAvailable(
   // ChromeAutofillClient (Chrome Desktop & Android) implements this.
 }
 
-void AutofillClient::ShowVirtualCardErrorDialog(bool is_permanent_error) {
+void AutofillClient::ShowVirtualCardErrorDialog(
+    const AutofillErrorDialogContext& context) {
   // This is overridden by platform subclasses. Currently only
   // ChromeAutofillClient (Chrome Desktop & Android) implements this.
 }

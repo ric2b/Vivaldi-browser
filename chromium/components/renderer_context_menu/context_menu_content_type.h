@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,10 +8,6 @@
 #include "base/memory/raw_ptr.h"
 #include "content/public/browser/context_menu_params.h"
 #include "ui/base/models/simple_menu_model.h"
-
-namespace content {
-class WebContents;
-}
 
 // ContextMenuContentType is a helper to decide which category/group of items
 // are relevant for a given WebContents and a context.
@@ -57,22 +53,16 @@ class ContextMenuContentType {
   // Returns if |group| is enabled.
   virtual bool SupportsGroup(int group);
 
-  ContextMenuContentType(content::WebContents* web_contents,
-                         const content::ContextMenuParams& params,
+  ContextMenuContentType(const content::ContextMenuParams& params,
                          bool supports_custom_items);
 
  protected:
   const content::ContextMenuParams& params() const { return params_; }
 
-  content::WebContents* source_web_contents() const {
-    return source_web_contents_;
-  }
-
  private:
   bool SupportsGroupInternal(int group);
 
   const content::ContextMenuParams params_;
-  const raw_ptr<content::WebContents> source_web_contents_;
   const bool supports_custom_items_;
 };
 

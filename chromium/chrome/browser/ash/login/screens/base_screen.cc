@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,6 +37,11 @@ bool BaseScreen::MaybeSkip(WizardContext& context) {
   return false;
 }
 
+bool BaseScreen::ShouldBeSkipped(const WizardContext& context) const {
+  NOTIMPLEMENTED();
+  return false;
+}
+
 void BaseScreen::HandleUserActionDeprecated(const std::string& action) {
   base::Value::List args;
   args.Append(action);
@@ -69,7 +74,7 @@ void BaseScreen::OnUserActionDeprecated(const std::string& action_id) {
 }
 
 void BaseScreen::OnUserAction(const base::Value::List& args) {
-  CHECK_EQ(args.size(), 1);
+  CHECK_EQ(args.size(), 1u);
   OnUserActionDeprecated(args[0].GetString());
 }
 

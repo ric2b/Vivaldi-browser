@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -153,7 +153,8 @@ RenderFrameProxyHost* Portal::CreateProxyAndAttachPortal(
           mojo::NullAssociatedReceiver(),
           blink::mojom::TreeScopeType::kDocument, "", "", true,
           blink::LocalFrameToken(), base::UnguessableToken::Create(),
-          blink::FramePolicy(), blink::mojom::FrameOwnerProperties(), false,
+          blink::DocumentToken(), blink::FramePolicy(),
+          blink::mojom::FrameOwnerProperties(), false,
           blink::FrameOwnerElementType::kPortal,
           /*is_dummy_frame_for_inner_tree=*/true);
   outer_node->AddObserver(this);
@@ -487,11 +488,11 @@ base::UnguessableToken Portal::GetDevToolsFrameToken() const {
   return portal_contents_->GetPrimaryMainFrame()->GetDevToolsFrameToken();
 }
 
-WebContentsImpl* Portal::GetPortalContents() {
+WebContentsImpl* Portal::GetPortalContents() const {
   return portal_contents_.get();
 }
 
-WebContentsImpl* Portal::GetPortalHostContents() {
+WebContentsImpl* Portal::GetPortalHostContents() const {
   return static_cast<WebContentsImpl*>(
       WebContents::FromRenderFrameHost(owner_render_frame_host_));
 }
@@ -592,7 +593,8 @@ void Portal::ActivateImpl(blink::TransferableMessage data,
   }
 
   FrameTreeNode* outer_root_node = owner_render_frame_host_->frame_tree_node();
-  outer_root_node->navigator().CancelNavigation(outer_root_node);
+  outer_root_node->navigator().CancelNavigation(
+      outer_root_node, NavigationDiscardReason::kCommittedNavigation);
 
   DCHECK(!is_closing_) << "Portal should not be shutting down when contents "
                           "ownership is yielded";
@@ -651,8 +653,6 @@ void Portal::ActivateImpl(blink::TransferableMessage data,
 
   TakeHistoryForActivation(successor_contents_raw, outer_contents);
 
-  devtools_instrumentation::PortalActivated(
-      outer_contents->GetPrimaryMainFrame());
   successor_contents_raw->set_portal(nullptr);
 
   // It's important we call this before destroying the outer contents'
@@ -664,6 +664,8 @@ void Portal::ActivateImpl(blink::TransferableMessage data,
       delegate->ActivatePortalWebContents(outer_contents,
                                           std::move(successor_contents));
   DCHECK_EQ(predecessor_web_contents.get(), outer_contents);
+
+  devtools_instrumentation::PortalActivated(*this);
 
   if (outer_contents_main_frame_view) {
     portal_contents_main_frame_view->TransferTouches(touch_events);

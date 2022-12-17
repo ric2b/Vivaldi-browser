@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -125,8 +125,8 @@ void DumpAccessibilityTestBase::SetUpOnMainThread() {
 }
 
 void DumpAccessibilityTestBase::SetUp() {
-  std::vector<base::Feature> enabled_features;
-  std::vector<base::Feature> disabled_features;
+  std::vector<base::test::FeatureRef> enabled_features;
+  std::vector<base::test::FeatureRef> disabled_features;
   ChooseFeatures(&enabled_features, &disabled_features);
 
   scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
@@ -145,8 +145,8 @@ void DumpAccessibilityTestBase::SignalRunTestOnMainThread(int) {
 }
 
 void DumpAccessibilityTestBase::ChooseFeatures(
-    std::vector<base::Feature>* enabled_features,
-    std::vector<base::Feature>* disabled_features) {
+    std::vector<base::test::FeatureRef>* enabled_features,
+    std::vector<base::test::FeatureRef>* disabled_features) {
   // For the best test coverage during development of this feature, enable the
   // code that expposes document markers on AXInlineTextBox objects and the
   // corresponding code in AXPosition on the browser that collects those
@@ -450,7 +450,8 @@ void DumpAccessibilityTestBase::WaitForAllFramesLoaded() {
     BrowserAccessibilityManager* manager =
         main_frame->browser_accessibility_manager();
     if (manager) {
-      BrowserAccessibility* accessibility_root = manager->GetRoot();
+      BrowserAccessibility* accessibility_root =
+          manager->GetBrowserAccessibilityRoot();
 
       // Check to see if all frames have loaded. If not, we invoke
       // WaitForEndOfTest to listen for a kEndOfTest signal which will be
@@ -491,7 +492,7 @@ BrowserAccessibility* DumpAccessibilityTestBase::FindNode(
     const std::string& name,
     BrowserAccessibility* search_root) const {
   if (!search_root)
-    search_root = GetManager()->GetRoot();
+    search_root = GetManager()->GetBrowserAccessibilityRoot();
 
   CHECK(search_root);
   BrowserAccessibility* node = FindNodeInSubtree(*search_root, name);
@@ -515,8 +516,8 @@ std::pair<base::Value, std::vector<std::string>>
 DumpAccessibilityTestBase::CaptureEvents(InvokeAction invoke_action) {
   // Create a new Event Recorder for the run.
   BrowserAccessibilityManager* manager = GetManager();
-  ui::AXTreeSelector selector(
-      manager->GetRoot()->GetTargetForNativeAccessibilityEvent());
+  ui::AXTreeSelector selector(manager->GetBrowserAccessibilityRoot()
+                                  ->GetTargetForNativeAccessibilityEvent());
   std::unique_ptr<ui::AXEventRecorder> event_recorder =
       AXInspectFactory::CreateRecorder(GetParam(), manager,
                                        base::GetCurrentProcId(), selector);
@@ -605,7 +606,7 @@ bool DumpAccessibilityTestBase::HasHtmlAttribute(
 BrowserAccessibility* DumpAccessibilityTestBase::FindNodeByHTMLAttribute(
     const char* attr,
     const std::string& value) const {
-  BrowserAccessibility* root = GetManager()->GetRoot();
+  BrowserAccessibility* root = GetManager()->GetBrowserAccessibilityRoot();
 
   CHECK(root);
   return FindNodeByHTMLAttributeInSubtree(*root, attr, value);

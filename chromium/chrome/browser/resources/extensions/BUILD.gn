@@ -1,4 +1,4 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -87,6 +87,7 @@ build_webui("build") {
     "//tools/typescript/definitions/metrics_private.d.ts",
     "//tools/typescript/definitions/pending.d.ts",
     "//tools/typescript/definitions/runtime.d.ts",
+    "//tools/typescript/definitions/tabs.d.ts",
   ]
   if (is_chromeos_ash) {
     ts_definitions += [ "//tools/typescript/definitions/chrome_send.d.ts" ]

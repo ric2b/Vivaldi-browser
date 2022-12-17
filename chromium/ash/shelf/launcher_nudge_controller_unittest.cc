@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,10 +94,7 @@ class TestNudgeAnimationObserver : public HomeButton::NudgeAnimationObserver {
 class LauncherNudgeControllerTest : public AshTestBase {
  public:
   LauncherNudgeControllerTest()
-      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kShelfLauncherNudge, features::kProductivityLauncher}, {});
-  }
+      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
   LauncherNudgeControllerTest(const LauncherNudgeControllerTest&) = delete;
   LauncherNudgeControllerTest& operator=(const LauncherNudgeControllerTest&) =
       delete;
@@ -148,9 +145,6 @@ class LauncherNudgeControllerTest : public AshTestBase {
   std::unique_ptr<TestNudgeAnimationObserver> observer_;
   ScrollableShelfView* scrollable_shelf_view_ = nullptr;
   std::unique_ptr<ShelfViewTestAPI> test_api_;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(LauncherNudgeControllerTest, DisableNudgeForGuestSession) {
@@ -223,14 +217,10 @@ TEST_F(LauncherNudgeControllerTest, StopShowingNudgeAfterLauncherIsOpened) {
   AdvanceClock(nudge_controller_->GetNudgeInterval(/*is_first_time=*/true));
   EXPECT_EQ(1, GetNudgeShownCount());
 
-  // Toggle the app list to show. Open fullscreen to avoid showing the expand
-  // arrow button, because the animation for that button causes an MSAN
-  // use-of-uninitialized-value. This workaround can be removed when
-  // ProductivityLauncher is the default, since it does not have an expand
-  // button. See https://crbug.com/926038.
+  // Toggle the app list to show.
   Shell::Get()->app_list_controller()->ToggleAppList(
       display::Screen::GetScreen()->GetPrimaryDisplay().id(),
-      AppListShowSource::kShelfButtonFullscreen, base::TimeTicks());
+      AppListShowSource::kShelfButton, base::TimeTicks());
   ASSERT_TRUE(Shell::Get()->app_list_controller()->IsVisible());
   AdvanceClock(nudge_controller_->GetNudgeInterval(/*is_first_time=*/false));
 

@@ -55,6 +55,9 @@ static_library("browser") {
       "viv_detect_opera.cc",
       "viv_detect_thunderbird.cc",
       "viv_importer.h",
+      "thunderbird_contacts.cc",
+      "imported_contact_row.cc",
+      "imported_contact_row.h",
     ]
     if (is_win) {
       sources += [

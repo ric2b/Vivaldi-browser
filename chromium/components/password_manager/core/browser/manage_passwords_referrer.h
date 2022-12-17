@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,7 +62,11 @@ enum class ManagePasswordsReferrer {
   // password manager" after a successful automated password change run.
   // Only used on Desktop.
   kAutomatedPasswordChangeSuccessLink = 14,
-  kMaxValue = kAutomatedPasswordChangeSuccessLink,
+  // On Mac and Win after enenabling Biometric authentication before filling
+  // a confirmation dialog is shown with an instructions on how to control the
+  // feature from settings.
+  kBiometricAuthenticationBeforeFillingDialog = 15,
+  kMaxValue = kBiometricAuthenticationBeforeFillingDialog,
 };
 
 }  // namespace password_manager

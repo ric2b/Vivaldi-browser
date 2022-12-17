@@ -1,16 +1,16 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/system/keyboard_brightness/keyboard_backlight_color_controller.h"
 #include "ash/constants/ash_features.h"
 #include "ash/rgb_keyboard/rgb_keyboard_util.h"
-#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/session_manager/session_manager_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -144,40 +144,6 @@ TEST_F(KeyboardBacklightColorControllerTest, SetBacklightColorAfterSignin) {
 }
 
 TEST_F(KeyboardBacklightColorControllerTest,
-       SetBacklightColorOnUserSessionUpdated) {
-  // Verify the user starts with wallpaper-extracted color.
-  SimulateUserLogin(account_id_1);
-  EXPECT_EQ(personalization_app::mojom::BacklightColor::kWallpaper,
-            controller_->GetBacklightColor(account_id_1));
-  // Expect the Wallpaper color to be set to the default as wallpaper color is
-  // not valid in this state.
-  histogram_tester().ExpectBucketCount(
-      "Ash.Personalization.KeyboardBacklight.WallpaperColor.Valid", false, 1);
-  EXPECT_EQ(kDefaultColor, displayed_color());
-
-  controller_->SetBacklightColor(
-      personalization_app::mojom::BacklightColor::kBlue, account_id_1);
-  ClearLogin();
-  clear_displayed_color();
-
-  // Simulate adding session for user1 and expect blue color to be set.
-  UserSession session;
-  session.session_id = 0;
-  session.user_info.account_id = account_id_1;
-  Shell::Get()->session_controller()->UpdateUserSession(session);
-  EXPECT_EQ(ConvertBacklightColorToSkColor(
-                personalization_app::mojom::BacklightColor::kBlue),
-            displayed_color());
-
-  // Simulate updating session for user1 and expect blue color to be set.
-  clear_displayed_color();
-  Shell::Get()->session_controller()->UpdateUserSession(session);
-  EXPECT_EQ(ConvertBacklightColorToSkColor(
-                personalization_app::mojom::BacklightColor::kBlue),
-            displayed_color());
-}
-
-TEST_F(KeyboardBacklightColorControllerTest,
        DisplaysDefaultColorForNearlyBlackColor) {
   TestWallpaperObserver observer;
   SimulateUserLogin(account_id_1);
@@ -189,6 +155,23 @@ TEST_F(KeyboardBacklightColorControllerTest,
   histogram_tester().ExpectBucketCount(
       "Ash.Personalization.KeyboardBacklight.WallpaperColor.Valid", true, 1);
   EXPECT_EQ(kDefaultColor, displayed_color());
+}
+
+TEST_F(KeyboardBacklightColorControllerTest, DisplayWhiteBacklightOnOobe) {
+  controller_->OnSessionStateChanged(session_manager::SessionState::ACTIVE);
+  EXPECT_NE(ConvertBacklightColorToSkColor(
+                personalization_app::mojom::BacklightColor::kWhite),
+            displayed_color());
+
+  controller_->OnSessionStateChanged(session_manager::SessionState::LOCKED);
+  EXPECT_NE(ConvertBacklightColorToSkColor(
+                personalization_app::mojom::BacklightColor::kWhite),
+            displayed_color());
+
+  controller_->OnSessionStateChanged(session_manager::SessionState::OOBE);
+  EXPECT_EQ(ConvertBacklightColorToSkColor(
+                personalization_app::mojom::BacklightColor::kWhite),
+            displayed_color());
 }
 
 }  // namespace ash

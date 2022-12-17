@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,9 +15,9 @@ namespace gcm {
 
 namespace features {
 
-extern const base::Feature kInvalidateTokenFeature;
-extern const base::Feature kGCMIncludeAccountTokensInCheckinRequest;
-extern const base::Feature kGCMReportAccountTokenChanges;
+BASE_DECLARE_FEATURE(kInvalidateTokenFeature);
+BASE_DECLARE_FEATURE(kGCMIncludeAccountTokensInCheckinRequest);
+BASE_DECLARE_FEATURE(kGCMReportAccountTokenChanges);
 extern const char kParamNameTokenInvalidationPeriodDays[];
 
 // The period after which the GCM token becomes stale.

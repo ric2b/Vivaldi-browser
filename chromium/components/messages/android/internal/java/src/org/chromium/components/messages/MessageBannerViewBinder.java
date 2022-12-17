@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,11 +8,13 @@ import static org.chromium.components.messages.MessageBannerProperties.ALPHA;
 import static org.chromium.components.messages.MessageBannerProperties.DESCRIPTION;
 import static org.chromium.components.messages.MessageBannerProperties.DESCRIPTION_ICON;
 import static org.chromium.components.messages.MessageBannerProperties.DESCRIPTION_MAX_LINES;
+import static org.chromium.components.messages.MessageBannerProperties.ELEVATION;
 import static org.chromium.components.messages.MessageBannerProperties.ICON;
 import static org.chromium.components.messages.MessageBannerProperties.ICON_RESOURCE_ID;
 import static org.chromium.components.messages.MessageBannerProperties.ICON_ROUNDED_CORNER_RADIUS_PX;
 import static org.chromium.components.messages.MessageBannerProperties.ICON_TINT_COLOR;
 import static org.chromium.components.messages.MessageBannerProperties.LARGE_ICON;
+import static org.chromium.components.messages.MessageBannerProperties.MARGIN_TOP;
 import static org.chromium.components.messages.MessageBannerProperties.ON_SECONDARY_BUTTON_CLICK;
 import static org.chromium.components.messages.MessageBannerProperties.ON_TOUCH_RUNNABLE;
 import static org.chromium.components.messages.MessageBannerProperties.PRIMARY_BUTTON_CLICK_LISTENER;
@@ -104,6 +106,10 @@ public class MessageBannerViewBinder {
             view.setTranslationX(model.get(TRANSLATION_X));
         } else if (propertyKey == TRANSLATION_Y) {
             view.setTranslationY(model.get(TRANSLATION_Y));
+        } else if (propertyKey == ELEVATION) {
+            view.setElevation(model.get(ELEVATION));
+        } else if (propertyKey == MARGIN_TOP) {
+            view.setMarginTop(model.get(MARGIN_TOP));
         }
     }
 }

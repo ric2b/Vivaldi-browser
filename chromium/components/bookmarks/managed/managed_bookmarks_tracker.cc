@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "base/values.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -43,8 +44,7 @@ ManagedBookmarksTracker::ManagedBookmarksTracker(
 ManagedBookmarksTracker::~ManagedBookmarksTracker() {}
 
 base::Value::List ManagedBookmarksTracker::GetInitialManagedBookmarks() {
-  const base::Value::List& list =
-      prefs_->GetValueList(prefs::kManagedBookmarks);
+  const base::Value::List& list = prefs_->GetList(prefs::kManagedBookmarks);
   return list.Clone();
 }
 
@@ -81,6 +81,11 @@ void ManagedBookmarksTracker::Init(BookmarkPermanentNode* managed_node) {
       prefs::kManagedBookmarks,
       base::BindRepeating(&ManagedBookmarksTracker::ReloadManagedBookmarks,
                           base::Unretained(this)));
+  registrar_.Add(
+      prefs::kManagedBookmarksFolderName,
+      base::BindRepeating(
+          &ManagedBookmarksTracker::ReloadManagedBookmarksFolderTitle,
+          base::Unretained(this)));
   // Reload now just in case something changed since the initial load started.
   // Note that  we must not load managed bookmarks until the cloud policy system
   // has been fully initialized (which will make our preference a managed
@@ -103,13 +108,16 @@ std::u16string ManagedBookmarksTracker::GetBookmarksFolderTitle() const {
                                     base::UTF8ToUTF16(domain));
 }
 
+void ManagedBookmarksTracker::ReloadManagedBookmarksFolderTitle() {
+  model_->SetTitle(managed_node_, GetBookmarksFolderTitle(),
+                   bookmarks::metrics::BookmarkEditSource::kOther);
+}
+
 void ManagedBookmarksTracker::ReloadManagedBookmarks() {
   // In case the user just signed into or out of the account.
-  model_->SetTitle(managed_node_, GetBookmarksFolderTitle());
-
+  ReloadManagedBookmarksFolderTitle();
   // Recursively update all the managed bookmarks and folders.
-  const base::Value::List& list =
-      prefs_->GetValueList(prefs::kManagedBookmarks);
+  const base::Value::List& list = prefs_->GetList(prefs::kManagedBookmarks);
   UpdateBookmarks(managed_node_, list);
 }
 
@@ -189,4 +197,4 @@ bool ManagedBookmarksTracker::LoadBookmark(const base::Value::List& list,
   return true;
 }
 
-}  // namespace policy
+}  // namespace bookmarks

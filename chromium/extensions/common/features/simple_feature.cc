@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -589,6 +589,17 @@ void SimpleFeature::set_feature_flag(base::StringPiece feature_flag) {
 void SimpleFeature::set_session_types(
     std::initializer_list<mojom::FeatureSessionType> types) {
   session_types_ = types;
+}
+
+void SimpleFeature::set_disallow_for_service_workers(bool disallow) {
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kExtensionsFSPInServiceWorkers) &&
+      disallow &&
+      (name() == "fileSystemProvider" ||
+       name() == "fileSystemProviderInternal")) {
+    return;
+  }
+  disallow_for_service_workers_ = disallow;
 }
 
 void SimpleFeature::set_matches(

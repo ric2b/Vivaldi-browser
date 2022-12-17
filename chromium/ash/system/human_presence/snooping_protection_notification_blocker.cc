@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -319,7 +319,7 @@ SnoopingProtectionNotificationBlocker::CreateInfoNotification() const {
                                  NotificationCatalogName::kHPSNotify),
       notification_data,
       base::MakeRefCounted<message_center::ThunkNotificationDelegate>(
-          weak_ptr_factory_.GetWeakPtr()),
+          weak_ptr_factory_.GetMutableWeakPtr()),
       kSystemTraySnoopingProtectionIcon,
       message_center::SystemNotificationWarningLevel::NORMAL);
 

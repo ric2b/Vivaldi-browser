@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,6 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/scoped_hardware_buffer_handle.h"
-#include "ui/gfx/geometry/size.h"
 #endif
 
 namespace gfx {
@@ -115,7 +114,8 @@ class COMPONENT_EXPORT(VULKAN) VulkanImplementation {
       VulkanDeviceQueue* device_queue,
       gfx::GpuMemoryBufferHandle gmb_handle,
       gfx::Size size,
-      VkFormat vk_format) = 0;
+      VkFormat vk_format,
+      const gfx::ColorSpace& color_space) = 0;
 
 #if BUILDFLAG(IS_ANDROID)
   // Get the sampler ycbcr conversion information from the AHB.

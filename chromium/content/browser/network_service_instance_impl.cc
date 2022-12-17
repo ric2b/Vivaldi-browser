@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,8 +36,8 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/buildflags.h"
 #include "content/browser/first_party_sets/first_party_sets_handler_impl.h"
-#include "content/browser/net/http_cache_backend_file_operations_factory.h"
-#include "content/browser/net/socket_broker_impl.h"
+#include "content/browser/network/http_cache_backend_file_operations_factory.h"
+#include "content/browser/network/socket_broker_impl.h"
 #include "content/browser/network_sandbox_grant_result.h"
 #include "content/browser/network_service_client.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -52,6 +52,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/features.h"
+#include "net/first_party_sets/global_first_party_sets.h"
 #include "net/log/net_log_util.h"
 #include "sandbox/policy/features.h"
 #include "services/cert_verifier/cert_verifier_service_factory.h"
@@ -68,6 +69,10 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "content/browser/network_sandbox.h"
+#endif
+
+#if BUILDFLAG(IS_WIN)
+#include "content/browser/network/network_service_process_tracker_win.h"
 #endif
 
 namespace content {
@@ -116,14 +121,14 @@ std::unique_ptr<network::NetworkService>& GetLocalNetworkService() {
 // On Chrome OS, the Network Service must run on the IO thread because
 // ProfileIOData and NetworkContext both try to set up NSS, which has to be
 // called from the IO thread.
-const base::Feature kNetworkServiceDedicatedThread {
-  "NetworkServiceDedicatedThread",
+BASE_FEATURE(kNetworkServiceDedicatedThread,
+             "NetworkServiceDedicatedThread",
 #if BUILDFLAG(IS_CHROMEOS)
-      base::FEATURE_DISABLED_BY_DEFAULT
+             base::FEATURE_DISABLED_BY_DEFAULT
 #else
-      base::FEATURE_ENABLED_BY_DEFAULT
+             base::FEATURE_ENABLED_BY_DEFAULT
 #endif
-};
+);
 
 base::Thread& GetNetworkServiceDedicatedThread() {
   static base::NoDestructor<base::Thread> thread{"NetworkService"};
@@ -292,8 +297,25 @@ void CreateNetworkContextInternal(
     }
   }
 
-  GetNetworkService()->CreateNetworkContext(std::move(context),
-                                            std::move(params));
+  // This might recreate g_client if the network service needed to be restarted.
+  auto* network_service = GetNetworkService();
+
+#if BUILDFLAG(USE_SOCKET_BROKER)
+  // If the browser has started shutting down, it is possible that either a)
+  // `g_client` was never created if shutdown started before the network service
+  // was created, or b) the network service might have crashed meaning
+  // `g_client` is the client for the already-crashed Network Service, and a new
+  // network service never started. It's not safe to bind the socket broker in
+  // either of these cases so skip the binding since the browser is shutting
+  // down anyway.
+  if (!GetContentClient()->browser()->IsShuttingDown() &&
+      GetContentClient()->browser()->ShouldSandboxNetworkService() &&
+      !params->socket_broker) {
+    params->socket_broker = g_client->BindSocketBroker();
+  }
+#endif  // BUILDFLAG(USE_SOCKET_BROKER)
+
+  network_service->CreateNetworkContext(std::move(context), std::move(params));
 }
 
 scoped_refptr<base::SequencedTaskRunner>& GetNetworkTaskRunnerStorage() {
@@ -608,13 +630,11 @@ network::mojom::NetworkService* GetNetworkService() {
       }
 
       if (FirstPartySetsHandlerImpl::GetInstance()->IsEnabled()) {
-        if (absl::optional<network::mojom::PublicFirstPartySetsPtr> sets =
+        if (absl::optional<net::GlobalFirstPartySets> sets =
                 FirstPartySetsHandlerImpl::GetInstance()->GetSets(
-                    base::BindOnce(
-                        [](network::mojom::PublicFirstPartySetsPtr sets) {
-                          GetNetworkService()->SetFirstPartySets(
-                              std::move(sets));
-                        }));
+                    base::BindOnce([](net::GlobalFirstPartySets sets) {
+                      GetNetworkService()->SetFirstPartySets(std::move(sets));
+                    }));
             sets.has_value()) {
           g_network_service_remote->get()->SetFirstPartySets(
               std::move(sets.value()));
@@ -756,6 +776,7 @@ GetNewCertVerifierServiceRemote(
 }
 
 void RunInProcessCertVerifierServiceFactory(
+    cert_verifier::mojom::CertVerifierServiceParamsPtr params,
     mojo::PendingReceiver<cert_verifier::mojom::CertVerifierServiceFactory>
         receiver) {
 #if BUILDFLAG(IS_CHROMEOS)
@@ -772,7 +793,7 @@ void RunInProcessCertVerifierServiceFactory(
       service_factory_slot;
   service_factory_slot.GetOrCreateValue() =
       std::make_unique<cert_verifier::CertVerifierServiceFactoryImpl>(
-          std::move(receiver));
+          std::move(params), std::move(receiver));
 }
 
 // Owns the CertVerifierServiceFactory used by the browser.
@@ -799,6 +820,8 @@ GetCertVerifierServiceFactory() {
       factory_remote_storage = GetCertVerifierServiceFactoryRemoteStorage();
   if (!factory_remote_storage.is_bound() ||
       !factory_remote_storage.is_connected()) {
+    cert_verifier::mojom::CertVerifierServiceParamsPtr service_params =
+        GetContentClient()->browser()->GetCertVerifierServiceParams();
     factory_remote_storage.reset();
 #if BUILDFLAG(IS_CHROMEOS)
     // In-process CertVerifierService in Ash and Lacros should run on the IO
@@ -808,9 +831,11 @@ GetCertVerifierServiceFactory() {
     GetIOThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(&RunInProcessCertVerifierServiceFactory,
+                       std::move(service_params),
                        factory_remote_storage.BindNewPipeAndPassReceiver()));
 #else
     RunInProcessCertVerifierServiceFactory(
+        std::move(service_params),
         factory_remote_storage.BindNewPipeAndPassReceiver());
 #endif
   }
@@ -868,13 +893,6 @@ void CreateNetworkContextInNetworkService(
         params->http_cache_file_operations_factory
             .InitWithNewPipeAndPassReceiver());
   }
-
-#if BUILDFLAG(USE_SOCKET_BROKER)
-  if (GetContentClient()->browser()->ShouldSandboxNetworkService() &&
-      !params->socket_broker) {
-    params->socket_broker = g_client->BindSocketBroker();
-  }
-#endif  // BUILDFLAG(USE_SOCKET_BROKER)
 
 #if BUILDFLAG(IS_ANDROID)
   // On Android, if a cookie_manager pending receiver was passed then migration

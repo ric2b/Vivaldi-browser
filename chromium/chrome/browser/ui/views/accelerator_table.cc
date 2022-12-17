@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -282,7 +282,15 @@ std::vector<AcceleratorMapping> GetAcceleratorList() {
   if (accelerators->empty()) {
     accelerators->insert(accelerators->begin(), std::begin(kAcceleratorMap),
                          std::end(kAcceleratorMap));
-
+    // See https://devblogs.microsoft.com/oldnewthing/20040329-00/?p=40003
+    // Doing this check here and not at the bottom since kUIDebugAcceleratorMap
+    // contains Ctrl+Alt keys but we don't enable those for the public.
+#if DCHECK_IS_ON()
+    constexpr int kCtrlAlt = ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN;
+    for (auto& mapping : *accelerators)
+      DCHECK((mapping.modifiers & kCtrlAlt) != kCtrlAlt)
+          << "Accelerators with Ctrl+Alt are reserved by Windows.";
+#endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     if (::features::IsNewShortcutMappingEnabled()) {
       accelerators->insert(accelerators->begin(),

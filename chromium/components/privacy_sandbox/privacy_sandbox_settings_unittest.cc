@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/privacy_sandbox/privacy_sandbox_test_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/origin.h"
@@ -123,10 +124,10 @@ TEST_P(PrivacySandboxSettingsTest, DefaultContentSettingBlockOverridePref) {
       GURL("https://embedded.com"),
       url::Origin::Create(GURL("https://test.com"))));
 
-  EXPECT_FALSE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_FALSE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_FALSE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -176,10 +177,10 @@ TEST_P(PrivacySandboxSettingsTest, DefaultContentSettingBlockOverridePref) {
       GURL("https://embedded.com"),
       url::Origin::Create(GURL("https://test.com"))));
 
-  EXPECT_FALSE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_FALSE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_FALSE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -223,10 +224,10 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
       GURL("https://embedded.com"),
       url::Origin::Create(GURL("https://test.com"))));
 
-  EXPECT_FALSE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_FALSE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_FALSE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -269,10 +270,10 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
   EXPECT_FALSE(privacy_sandbox_settings()->IsTopicsAllowedForContext(
       GURL("https://embedded.com"),
       url::Origin::Create(GURL("https://test.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_FALSE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_FALSE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -320,17 +321,17 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
       GURL("https://unrelated.com"),
       url::Origin::Create(GURL("https://unrelated.com"))));
 
-  EXPECT_FALSE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_FALSE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_FALSE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_TRUE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_TRUE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://unrelated-a.com")),
       url::Origin::Create(GURL("https://unrelated-b.com"))));
-  EXPECT_TRUE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_TRUE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://unrelated-c.com")),
       url::Origin::Create(GURL("https://unrelated-d.com")),
       url::Origin::Create(GURL("https://unrelated-e.com"))));
@@ -402,10 +403,10 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
   EXPECT_TRUE(privacy_sandbox_settings()->IsTopicsAllowedForContext(
       GURL("https://embedded.com"), absl::nullopt));
 
-  EXPECT_TRUE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_TRUE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_TRUE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_TRUE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://yet-another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -446,10 +447,10 @@ TEST_P(PrivacySandboxSettingsTest, CookieExceptionsApply) {
       GURL("https://embedded.com"),
       url::Origin::Create(GURL("https://test.com"))));
 
-  EXPECT_FALSE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_FALSE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_FALSE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -488,10 +489,10 @@ TEST_P(PrivacySandboxSettingsTest, ThirdPartyCookies) {
       GURL("https://embedded.com"),
       url::Origin::Create(GURL("https://test.com"))));
 
-  EXPECT_FALSE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_FALSE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_FALSE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -528,10 +529,10 @@ TEST_P(PrivacySandboxSettingsTest, ThirdPartyCookies) {
       GURL("https://embedded.com"),
       url::Origin::Create(GURL("https://test.com"))));
 
-  EXPECT_FALSE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_FALSE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_FALSE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -573,10 +574,10 @@ TEST_P(PrivacySandboxSettingsTest, ThirdPartyCookies) {
       GURL("https://embedded.com"),
       url::Origin::Create(GURL("https://test.com"))));
 
-  EXPECT_FALSE(privacy_sandbox_settings()->IsConversionMeasurementAllowed(
+  EXPECT_FALSE(privacy_sandbox_settings()->IsAttributionReportingAllowed(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
-  EXPECT_FALSE(privacy_sandbox_settings()->ShouldSendConversionReport(
+  EXPECT_FALSE(privacy_sandbox_settings()->MaySendAttributionReport(
       url::Origin::Create(GURL("https://test.com")),
       url::Origin::Create(GURL("https://another-test.com")),
       url::Origin::Create(GURL("https://embedded.com"))));
@@ -804,6 +805,30 @@ TEST_P(PrivacySandboxSettingsTest, TrustTokensAllowed) {
 
   privacy_sandbox_settings()->SetPrivacySandboxEnabled(true);
   EXPECT_TRUE(privacy_sandbox_settings()->IsTrustTokensAllowed());
+}
+
+TEST_P(PrivacySandboxSettingsTest, OnFirstPartySetsEnabledChanged) {
+  // OnFirstPartySetsEnabledChanged() should only call observers when the
+  // base::Feature is enabled and the pref changes.
+  base::test::ScopedFeatureList feature_list_;
+  feature_list_.InitWithFeatures({features::kFirstPartySets}, {});
+  privacy_sandbox_test_util::MockPrivacySandboxObserver observer;
+  privacy_sandbox_settings()->AddObserver(&observer);
+  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(/*enabled=*/true));
+
+  prefs()->SetBoolean(prefs::kPrivacySandboxFirstPartySetsEnabled, true);
+  testing::Mock::VerifyAndClearExpectations(&observer);
+
+  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(/*enabled=*/false));
+  prefs()->SetBoolean(prefs::kPrivacySandboxFirstPartySetsEnabled, false);
+  testing::Mock::VerifyAndClearExpectations(&observer);
+
+  feature_list_.Reset();
+  feature_list_.InitAndDisableFeature(features::kFirstPartySets);
+  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(testing::_)).Times(0);
+
+  prefs()->SetBoolean(prefs::kPrivacySandboxFirstPartySetsEnabled, true);
+  prefs()->SetBoolean(prefs::kPrivacySandboxFirstPartySetsEnabled, false);
 }
 
 TEST_P(PrivacySandboxSettingsTest, IsTopicAllowed) {

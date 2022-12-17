@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,12 @@
 #define UI_QT_QT_INTERFACE_H_
 
 // This file shouldn't include any standard C++ headers (directly or indirectly)
+
+#if defined(__has_attribute) && __has_attribute(no_sanitize)
+#define DISABLE_CFI_VCALL __attribute__((no_sanitize("cfi-vcall")))
+#else
+#define DISABLE_CFI_VCALL
+#endif
 
 #include <stdint.h>
 #include <stdlib.h>

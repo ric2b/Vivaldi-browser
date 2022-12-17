@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,5 +83,13 @@ const char kAccessibilityCaptionsTextShadow[] =
 // Integer indicating the opacity of the captions text background from 0 - 100.
 const char kAccessibilityCaptionsBackgroundOpacity[] =
     "accessibility.captions.background_opacity";
+
+// Whether the Live Translate feature is enabled.
+const char kLiveTranslateEnabled[] =
+    "accessibility.captions.live_translate_enabled";
+
+// The target language to translate the captions to.
+const char kLiveTranslateTargetLanguageCode[] =
+    "accessibility.captions.live_translate_target_language";
 
 }  // namespace prefs

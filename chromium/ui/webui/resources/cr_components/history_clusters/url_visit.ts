@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@ import '../../cr_elements/cr_action_menu/cr_action_menu.js';
 import '../../cr_elements/cr_icon_button/cr_icon_button.js';
 import '../../cr_elements/cr_lazy_render/cr_lazy_render.js';
 
-import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {CrActionMenuElement} from '../../cr_elements/cr_action_menu/cr_action_menu.js';
@@ -40,7 +40,7 @@ declare global {
   }
 }
 
-const MenuContainerElementBase = I18nMixin(PolymerElement);
+const ClusterMenuElementBase = I18nMixin(PolymerElement);
 
 interface VisitRowElement {
   $: {
@@ -51,7 +51,7 @@ interface VisitRowElement {
   };
 }
 
-class VisitRowElement extends MenuContainerElementBase {
+class VisitRowElement extends ClusterMenuElementBase {
   static get is() {
     return 'url-visit';
   }
@@ -98,6 +98,15 @@ class VisitRowElement extends MenuContainerElementBase {
       },
 
       /**
+       * Whether the cluster is in the side panel.
+       */
+      inSidePanel_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('inSidePanel'),
+        reflectToAttribute: true,
+      },
+
+      /**
        * Page title for the visit. This property is actually unused. The side
        * effect of the compute function is used to insert the HTML elements for
        * highlighting into this.$.title element.
@@ -128,6 +137,7 @@ class VisitRowElement extends MenuContainerElementBase {
   private annotations_: string[];
   private allowDeletingHistory_: boolean;
   private debugInfo_: string;
+  private inSidePanel_: boolean;
   private unusedTitle_: string;
   private unusedVisibleUrl_: string;
 
@@ -203,6 +213,11 @@ class VisitRowElement extends MenuContainerElementBase {
   //============================================================================
 
   private computeAnnotations_(): string[] {
+    // Disabling annotations until more appropriate design for annotations in
+    // the side panel is complete.
+    if (this.inSidePanel_) {
+      return [];
+    }
     return this.visit.annotations
         .map((annotation: number) => annotationToStringId.get(annotation))
         .filter(

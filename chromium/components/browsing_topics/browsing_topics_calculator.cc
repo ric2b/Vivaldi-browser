@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -151,22 +151,22 @@ std::set<HashedDomain> GetTopicObservationDomains(
 
   // If `topic` was padded, it may not exist in `topic_hosts_map`. In this
   // case, return an empty set.
-  auto it = topic_hosts_map.find(topic);
-  if (it == topic_hosts_map.end())
+  auto topic_it = topic_hosts_map.find(topic);
+  if (topic_it == topic_hosts_map.end())
     return std::set<HashedDomain>();
 
-  const std::set<HashedHost>& hosts = it->second;
+  const std::set<HashedHost>& hosts = topic_it->second;
 
   for (const HashedHost& host : hosts) {
     // `host` came from the history database, and it may not exist in the
     // `host_context_domains_map` which came from the usage contexts
     // database, due to e.g. per-context data deletion, database errors, etc.
     // In this case, continue checking other hosts.
-    auto it = host_context_domains_map.find(host);
-    if (it == host_context_domains_map.end())
+    auto host_it = host_context_domains_map.find(host);
+    if (host_it == host_context_domains_map.end())
       continue;
 
-    const std::vector<HashedDomain>& context_domains = it->second;
+    const std::vector<HashedDomain>& context_domains = host_it->second;
 
     for (const HashedDomain& context_domain : context_domains) {
       topic_observation_domains.insert(context_domain);
@@ -228,9 +228,11 @@ void BrowsingTopicsCalculator::DeriveTopTopics(
     const std::map<HashedHost, std::set<Topic>>& host_topics_map,
     size_t taxonomy_size,
     std::vector<Topic>& top_topics,
-    size_t& padded_top_topics_start_index) {
+    size_t& padded_top_topics_start_index,
+    size_t& history_topics_count) {
   DCHECK(top_topics.empty());
   DCHECK_EQ(padded_top_topics_start_index, 0u);
+  DCHECK_EQ(history_topics_count, 0u);
 
   // Derive the frequency of each topic, by summing up the frequencies of the
   // associated hosts. TODO(yaoxia): consider applying inverse frequency of
@@ -247,6 +249,8 @@ void BrowsingTopicsCalculator::DeriveTopTopics(
       topics_count[topic] += host_count;
     }
   }
+
+  history_topics_count = topics_count.size();
 
   DCHECK_LE(
       static_cast<size_t>(
@@ -425,8 +429,14 @@ void BrowsingTopicsCalculator::OnGetTopicsForHostsCompleted(
 
   std::vector<Topic> top_topics;
   size_t padded_top_topics_start_index = 0u;
+  size_t history_topics_count = 0u;
   DeriveTopTopics(history_hosts_count_, host_topics_map, *taxonomy_size,
-                  top_topics, padded_top_topics_start_index);
+                  top_topics, padded_top_topics_start_index,
+                  history_topics_count);
+
+  base::UmaHistogramCounts1000(
+      "BrowsingTopics.EpochTopicsCalculation.HistoryTopicsCount",
+      history_topics_count);
 
   base::UmaHistogramCounts100(
       "BrowsingTopics.EpochTopicsCalculation.TopTopicsCountBeforePadding",

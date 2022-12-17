@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -159,8 +159,7 @@ bool TestURLLoaderFactory::CreateLoaderAndStartInternal(
 
   Redirects redirects;
   for (auto& redirect : it->second.redirects) {
-    redirects.push_back(
-        std::make_pair(redirect.first, redirect.second.Clone()));
+    redirects.emplace_back(redirect.first, redirect.second.Clone());
   }
   SimulateResponse(client, std::move(redirects), it->second.head.Clone(),
                    it->second.content, it->second.status, it->second.flags);
@@ -278,7 +277,7 @@ void TestURLLoaderFactory::SimulateResponse(
 
   if ((response_flags & kSendHeadersOnNetworkError) ||
       status.error_code == net::OK) {
-    client->OnReceiveResponse(std::move(head), std::move(body));
+    client->OnReceiveResponse(std::move(head), std::move(body), absl::nullopt);
   }
 
   client->OnComplete(status);

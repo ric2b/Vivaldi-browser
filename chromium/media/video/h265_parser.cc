@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -199,6 +199,10 @@ H265PredWeightTable::H265PredWeightTable() {
 }
 
 H265SliceHeader::H265SliceHeader() {
+  memset(reinterpret_cast<void*>(this), 0, sizeof(*this));
+}
+
+H265SEIMessage::H265SEIMessage() {
   memset(reinterpret_cast<void*>(this), 0, sizeof(*this));
 }
 
@@ -1012,7 +1016,7 @@ H265Parser::Result H265Parser::ParseSliceHeader(const H265NALU& nalu,
         off_t bits_left_prior = br_.NumBitsLeft();
         size_t num_epb_prior = br_.NumEmulationPreventionBytesRead();
         res = ParseStRefPicSet(sps->num_short_term_ref_pic_sets, *sps,
-                               &shdr->st_ref_pic_set);
+                               &shdr->st_ref_pic_set, true);
         if (res != kOk)
           return res;
         shdr->st_rps_bits =
@@ -1459,10 +1463,10 @@ H265Parser::Result H265Parser::ParseScalingListData(
   return kOk;
 }
 
-H265Parser::Result H265Parser::ParseStRefPicSet(
-    int st_rps_idx,
-    const H265SPS& sps,
-    H265StRefPicSet* st_ref_pic_set) {
+H265Parser::Result H265Parser::ParseStRefPicSet(int st_rps_idx,
+                                                const H265SPS& sps,
+                                                H265StRefPicSet* st_ref_pic_set,
+                                                bool is_slice_hdr) {
   // 7.4.8
   bool inter_ref_pic_set_prediction_flag = false;
   if (st_rps_idx != 0) {
@@ -1482,6 +1486,9 @@ H265Parser::Result H265Parser::ParseStRefPicSet(
     IN_RANGE_OR_RETURN(abs_delta_rps_minus1, 0, 0x7FFF);
     int delta_rps = (1 - 2 * delta_rps_sign) * (abs_delta_rps_minus1 + 1);
     const H265StRefPicSet& ref_set = sps.st_ref_pic_set[ref_rps_idx];
+    if (is_slice_hdr) {
+      st_ref_pic_set->rps_idx_num_delta_pocs = ref_set.num_delta_pocs;
+    }
     bool used_by_curr_pic_flag[kMaxShortTermRefPicSets];
     bool use_delta_flag[kMaxShortTermRefPicSets];
     // 7.4.8 - use_delta_flag defaults to 1 if not present.
@@ -1870,6 +1877,86 @@ H265Parser::Result H265Parser::ParsePredWeightTable(
       }
     }
     TRUE_OR_RETURN(sum_weight_l0_flags + sum_weight_l1_flags <= 24);
+  }
+
+  return kOk;
+}
+
+H265Parser::Result H265Parser::ParseSEI(H265SEIMessage* sei_msg) {
+  int byte;
+
+  memset(sei_msg, 0, sizeof(*sei_msg));
+
+  READ_BITS_OR_RETURN(8, &byte);
+  while (byte == 0xff) {
+    sei_msg->type += 255;
+    READ_BITS_OR_RETURN(8, &byte);
+  }
+  sei_msg->type += byte;
+
+  READ_BITS_OR_RETURN(8, &byte);
+  while (byte == 0xff) {
+    sei_msg->payload_size += 255;
+    READ_BITS_OR_RETURN(8, &byte);
+  }
+  sei_msg->payload_size += byte;
+
+  DVLOG(4) << "Found SEI message type: " << sei_msg->type
+           << " payload size: " << sei_msg->payload_size;
+
+  switch (sei_msg->type) {
+    case H265SEIMessage::kSEIAlphaChannelInfo:
+      READ_BOOL_OR_RETURN(
+          &sei_msg->alpha_channel_info.alpha_channel_cancel_flag);
+      if (!sei_msg->alpha_channel_info.alpha_channel_cancel_flag) {
+        READ_BITS_OR_RETURN(3,
+                            &sei_msg->alpha_channel_info.alpha_channel_use_idc);
+        READ_BITS_OR_RETURN(
+            3, &sei_msg->alpha_channel_info.alpha_channel_bit_depth_minus8);
+        READ_BITS_OR_RETURN(
+            sei_msg->alpha_channel_info.alpha_channel_bit_depth_minus8 + 9,
+            &sei_msg->alpha_channel_info.alpha_transparent_value);
+        READ_BITS_OR_RETURN(
+            sei_msg->alpha_channel_info.alpha_channel_bit_depth_minus8 + 9,
+            &sei_msg->alpha_channel_info.alpha_opaque_value);
+        READ_BOOL_OR_RETURN(
+            &sei_msg->alpha_channel_info.alpha_channel_incr_flag);
+        READ_BOOL_OR_RETURN(
+            &sei_msg->alpha_channel_info.alpha_channel_clip_flag);
+        if (sei_msg->alpha_channel_info.alpha_channel_clip_flag) {
+          READ_BOOL_OR_RETURN(
+              &sei_msg->alpha_channel_info.alpha_channel_clip_type_flag);
+        }
+      }
+      break;
+    case H265SEIMessage::kSEIContentLightLevelInfo:
+      READ_BITS_OR_RETURN(
+          16, &sei_msg->content_light_level_info.max_content_light_level);
+      READ_BITS_OR_RETURN(
+          16,
+          &sei_msg->content_light_level_info.max_picture_average_light_level);
+      break;
+    case H265SEIMessage::kSEIMasteringDisplayInfo:
+      for (auto& primary : sei_msg->mastering_display_info.display_primaries) {
+        for (auto& component : primary) {
+          READ_BITS_OR_RETURN(16, &component);
+        }
+      }
+      READ_BITS_OR_RETURN(16, &sei_msg->mastering_display_info.white_points[0]);
+      READ_BITS_OR_RETURN(16, &sei_msg->mastering_display_info.white_points[1]);
+      uint32_t luminace_high_31bits, luminance_low_1bit;
+      READ_BITS_OR_RETURN(31, &luminace_high_31bits);
+      READ_BITS_OR_RETURN(1, &luminance_low_1bit);
+      sei_msg->mastering_display_info.max_luminance =
+          (luminace_high_31bits << 1) + (luminance_low_1bit & 0x1);
+      READ_BITS_OR_RETURN(31, &luminace_high_31bits);
+      READ_BITS_OR_RETURN(1, &luminance_low_1bit);
+      sei_msg->mastering_display_info.min_luminance =
+          (luminace_high_31bits << 1) + (luminance_low_1bit & 0x1);
+      break;
+    default:
+      DVLOG(4) << "Unsupported SEI message";
+      break;
   }
 
   return kOk;

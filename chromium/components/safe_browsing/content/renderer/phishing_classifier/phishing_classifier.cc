@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -234,17 +234,13 @@ void PhishingClassifier::ExtractVisualFeatures() {
 void PhishingClassifier::OnPlaybackDone(std::unique_ptr<SkBitmap> bitmap) {
   if (bitmap) {
     bitmap_ = std::move(bitmap);
-    if (base::FeatureList::IsEnabled(kVisualFeaturesInCsppPings)) {
-      base::ThreadPool::PostTaskAndReplyWithResult(
-          FROM_HERE,
-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-          base::BindOnce(&visual_utils::ExtractVisualFeatures, *bitmap_),
-          base::BindOnce(&PhishingClassifier::OnVisualFeaturesExtracted,
-                         weak_factory_.GetWeakPtr()));
-    } else {
-      VisualExtractionFinished(/*success=*/true);
-    }
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE,
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+        base::BindOnce(&visual_utils::ExtractVisualFeatures, *bitmap_),
+        base::BindOnce(&PhishingClassifier::OnVisualFeaturesExtracted,
+                       weak_factory_.GetWeakPtr()));
   } else {
     VisualExtractionFinished(/*success=*/false);
   }

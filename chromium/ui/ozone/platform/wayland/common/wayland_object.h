@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,12 @@
 
 #include "base/check.h"
 #include "ui/ozone/platform/wayland/common/wayland.h"
+
+#define CHROME_WAYLAND_CHECK_VERSION(x, y, z)                   \
+  (WAYLAND_VERSION_MAJOR > x ||                                 \
+   (WAYLAND_VERSION_MAJOR == x && WAYLAND_VERSION_MINOR > y) || \
+   (WAYLAND_VERSION_MAJOR == x && WAYLAND_VERSION_MINOR == y && \
+    WAYLAND_VERSION_MICRO >= z))
 
 struct wl_proxy;
 
@@ -143,6 +149,8 @@ DECLARE_WAYLAND_OBJECT_TRAITS(wp_presentation)
 DECLARE_WAYLAND_OBJECT_TRAITS(wp_presentation_feedback)
 DECLARE_WAYLAND_OBJECT_TRAITS(wp_viewport)
 DECLARE_WAYLAND_OBJECT_TRAITS(wp_viewporter)
+DECLARE_WAYLAND_OBJECT_TRAITS(wp_content_type_manager_v1)
+DECLARE_WAYLAND_OBJECT_TRAITS(wp_content_type_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(xdg_activation_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(xdg_activation_token_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(xdg_popup)

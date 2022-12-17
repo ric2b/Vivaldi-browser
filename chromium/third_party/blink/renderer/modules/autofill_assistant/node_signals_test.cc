@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -533,6 +533,52 @@ TEST_F(NodeSignalsTest, GetFormTypeAfterLabel) {
   ASSERT_EQ(results.size(), 1u);
 
   EXPECT_EQ(results[0].context_features.form_type, "AFTRLBL BILLING");
+}
+
+TEST_F(NodeSignalsTest, IsSupportedByClient) {
+  SetBodyContent(R"(<input type="text">)");
+  EXPECT_EQ(GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).size(),
+            1u);
+
+  SetBodyContent(R"(<input>)");
+  EXPECT_EQ(GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).size(),
+            1u);
+
+  SetBodyContent(R"(<input type="checkbox">)");
+  EXPECT_TRUE(
+      GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).empty());
+
+  SetBodyContent(R"(<input type="Radio">)");
+  EXPECT_TRUE(
+      GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).empty());
+
+  SetBodyContent(R"(<input type="radio">)");
+  EXPECT_TRUE(
+      GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).empty());
+
+  SetBodyContent(R"(<input type="submit">)");
+  EXPECT_TRUE(
+      GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).empty());
+
+  SetBodyContent(R"(<input type="button">)");
+  EXPECT_TRUE(
+      GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).empty());
+
+  SetBodyContent(R"(<input type="hidden">)");
+  EXPECT_TRUE(
+      GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).empty());
+
+  SetBodyContent(R"(<select>)");
+  EXPECT_EQ(GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).size(),
+            1u);
+
+  SetBodyContent(R"(<textarea>)");
+  EXPECT_EQ(GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).size(),
+            1u);
+
+  SetBodyContent(R"(<div>)");
+  EXPECT_TRUE(
+      GetAutofillAssistantNodeSignals(WebDocument(&GetDocument())).empty());
 }
 
 }  // namespace blink

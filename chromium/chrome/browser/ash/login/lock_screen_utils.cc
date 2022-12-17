@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,29 +92,15 @@ std::string GetUserLastInputMethodId(const AccountId& account_id) {
       return input_method_id;
   }
 
-  // Try to use old values.
-  PrefService* const local_state = g_browser_process->local_state();
-  const base::Value::Dict& users_last_input_methods =
-      local_state->GetValueDict(::prefs::kUsersLastInputMethod);
-
-  const std::string* input_method_str =
-      users_last_input_methods.FindString(account_id.GetUserEmail());
-  if (!input_method_str) {
-    DVLOG(0) << "GetUserLastInputMethodId: no input method for this user";
-    return std::string();
-  }
-  // Migrate into the known_user system.
-  known_user.SetUserLastLoginInputMethodId(account_id, *input_method_str);
-
-  return *input_method_str;
+  return std::string();
 }
 
 void EnforceDevicePolicyInputMethods(std::string user_input_method_id) {
   auto* cros_settings = CrosSettings::Get();
-  const base::ListValue* login_screen_input_methods = nullptr;
+  const base::Value::List* login_screen_input_methods = nullptr;
   if (!cros_settings->GetList(kDeviceLoginScreenInputMethods,
                               &login_screen_input_methods) ||
-      login_screen_input_methods->GetListDeprecated().empty()) {
+      login_screen_input_methods->empty()) {
     StopEnforcingPolicyInputMethods();
     return;
   }
@@ -126,8 +112,7 @@ void EnforceDevicePolicyInputMethods(std::string user_input_method_id) {
     allowed_input_method_ids.push_back(user_input_method_id);
   }
 
-  for (const auto& input_method_entry :
-       login_screen_input_methods->GetListDeprecated()) {
+  for (const auto& input_method_entry : *login_screen_input_methods) {
     if (input_method_entry.is_string())
       allowed_input_method_ids.push_back(input_method_entry.GetString());
   }
@@ -181,25 +166,24 @@ void SetKeyboardSettings(const AccountId& account_id) {
       rate);
 }
 
-std::vector<LocaleItem> FromListValueToLocaleItem(
-    std::unique_ptr<base::ListValue> locales) {
+std::vector<LocaleItem> FromListValueToLocaleItem(base::Value::List locales) {
   std::vector<LocaleItem> result;
-  for (const auto& locale : locales->GetListDeprecated()) {
-    const base::DictionaryValue* dictionary;
-    if (!locale.GetAsDictionary(&dictionary))
+  for (const auto& locale : locales) {
+    if (!locale.is_dict())
       continue;
-
+    const auto& dictionary = locale.GetDict();
     LocaleItem locale_item;
-    const std::string* language_code = dictionary->FindStringKey("value");
-    if (language_code)
+    if (const std::string* language_code = dictionary.FindString("value")) {
       locale_item.language_code = *language_code;
-    const std::string* title = dictionary->FindStringKey("title");
-    if (title)
+    }
+    if (const std::string* title = dictionary.FindString("title")) {
       locale_item.title = *title;
-    const std::string* group_name =
-        dictionary->FindStringKey("optionGroupName");
-    if (group_name && !group_name->empty())
-      locale_item.group_name = *group_name;
+    }
+    if (const std::string* group_name =
+            dictionary.FindString("optionGroupName")) {
+      if (!group_name->empty())
+        locale_item.group_name = *group_name;
+    }
     result.push_back(std::move(locale_item));
   }
   return result;

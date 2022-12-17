@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,8 +20,7 @@ namespace content {
 class WebUI;
 }  // namespace content
 
-namespace ash {
-namespace personalization_app {
+namespace ash::personalization_app {
 
 class FakePersonalizationAppUserProvider
     : public PersonalizationAppUserProvider {
@@ -57,7 +56,6 @@ class FakePersonalizationAppUserProvider
       this};
 };
 
-}  // namespace personalization_app
-}  // namespace ash
+}  // namespace ash::personalization_app
 
 #endif  // ASH_WEBUI_PERSONALIZATION_APP_TEST_FAKE_PERSONALIZATION_APP_USER_PROVIDER_H_

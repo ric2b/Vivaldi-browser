@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -205,7 +205,7 @@ NGInlineBoxState* NGInlineLayoutStateStack::OnBeginPlaceItems(
     NGLogicalLineItems* line_box) {
   has_block_in_inline_ = false;
   is_svg_text_ = node.IsSvgText();
-  if (stack_.IsEmpty()) {
+  if (stack_.empty()) {
     // For the first line, push a box state for the line itself.
     stack_.resize(1);
     NGInlineBoxState* box = &stack_.back();
@@ -229,11 +229,11 @@ NGInlineBoxState* NGInlineLayoutStateStack::OnBeginPlaceItems(
             box.needs_box_fragment &&
             box.style->BoxDecorationBreak() == EBoxDecorationBreak::kClone;
       }
-      DCHECK(box.pending_descendants.IsEmpty());
+      DCHECK(box.pending_descendants.empty());
     }
   }
 
-  DCHECK(box_data_list_.IsEmpty());
+  DCHECK(box_data_list_.empty());
 
   // Initialize the box state for the line box.
   NGInlineBoxState& line_box_state = LineBoxState();
@@ -254,12 +254,13 @@ NGInlineBoxState* NGInlineLayoutStateStack::OnBeginPlaceItems(
 }
 
 NGInlineBoxState* NGInlineLayoutStateStack::OnOpenTag(
+    const NGConstraintSpace& space,
     const NGInlineItem& item,
     const NGInlineItemResult& item_result,
     FontBaseline baseline_type,
     NGLogicalLineItems* line_box) {
   NGInlineBoxState* box =
-      OnOpenTag(item, item_result, baseline_type, *line_box);
+      OnOpenTag(space, item, item_result, baseline_type, *line_box);
   box->needs_box_fragment = item.ShouldCreateBoxFragment();
   if (box->needs_box_fragment)
     AddBoxFragmentPlaceholder(box, line_box, baseline_type);
@@ -267,6 +268,7 @@ NGInlineBoxState* NGInlineLayoutStateStack::OnOpenTag(
 }
 
 NGInlineBoxState* NGInlineLayoutStateStack::OnOpenTag(
+    const NGConstraintSpace& space,
     const NGInlineItem& item,
     const NGInlineItemResult& item_result,
     FontBaseline baseline_type,
@@ -283,6 +285,13 @@ NGInlineBoxState* NGInlineLayoutStateStack::OnOpenTag(
   box->margin_inline_end = item_result.margins.inline_end;
   box->borders = item_result.borders;
   box->padding = item_result.padding;
+  if (space.IsInsideRepeatableContent()) {
+    // Avoid culled inlines when inside repeatable content (fixed-positioned
+    // elements when printing and fragmented tables with headers and footers).
+    // We cannot represent them correctly as culled.
+    if (auto* layout_inline = DynamicTo<LayoutInline>(item.GetLayoutObject()))
+      layout_inline->SetShouldCreateBoxFragment();
+  }
   return box;
 }
 
@@ -463,7 +472,7 @@ void NGInlineLayoutStateStack::ChildInserted(unsigned index) {
   for (NGInlineBoxState& state : stack_) {
     if (state.fragment_start >= index)
       ++state.fragment_start;
-    DCHECK(state.pending_descendants.IsEmpty());
+    DCHECK(state.pending_descendants.empty());
   }
   for (BoxData& box_data : box_data_list_) {
     if (box_data.fragment_start >= index)
@@ -475,7 +484,7 @@ void NGInlineLayoutStateStack::ChildInserted(unsigned index) {
 
 void NGInlineLayoutStateStack::PrepareForReorder(NGLogicalLineItems* line_box) {
   // There's nothing to do if no boxes.
-  if (box_data_list_.IsEmpty())
+  if (box_data_list_.empty())
     return;
 
   // Set indexes of BoxData to the children of the line box.
@@ -508,7 +517,7 @@ void NGInlineLayoutStateStack::PrepareForReorder(NGLogicalLineItems* line_box) {
 void NGInlineLayoutStateStack::UpdateAfterReorder(
     NGLogicalLineItems* line_box) {
   // There's nothing to do if no boxes.
-  if (box_data_list_.IsEmpty())
+  if (box_data_list_.empty())
     return;
 
   // Compute start/end of boxes from the children of the line box.
@@ -523,7 +532,7 @@ void NGInlineLayoutStateStack::UpdateAfterReorder(
 
   // If any inline fragmentation occurred due to BiDi reorder, append them and
   // adjust box edges.
-  if (UNLIKELY(!fragmented_boxes.IsEmpty()))
+  if (UNLIKELY(!fragmented_boxes.empty()))
     UpdateFragmentedBoxDataEdges(&fragmented_boxes);
 
 #if DCHECK_IS_ON()
@@ -599,7 +608,7 @@ unsigned NGInlineLayoutStateStack::UpdateBoxDataFragmentRange(
 
 void NGInlineLayoutStateStack::UpdateFragmentedBoxDataEdges(
     Vector<BoxData>* fragmented_boxes) {
-  DCHECK(!fragmented_boxes->IsEmpty());
+  DCHECK(!fragmented_boxes->empty());
   // Append in the descending order of |fragmented_box_data_index| because the
   // indices will change as boxes are inserted into |box_data_list_|.
   std::sort(fragmented_boxes->begin(), fragmented_boxes->end(),
@@ -674,7 +683,7 @@ LayoutUnit NGInlineLayoutStateStack::ComputeInlinePositions(
     position += child.inline_size;
   }
 
-  if (box_data_list_.IsEmpty())
+  if (box_data_list_.empty())
     return position;
 
   if (!ignore_box_margin_border_padding) {
@@ -745,7 +754,7 @@ LayoutUnit NGInlineLayoutStateStack::ComputeInlinePositions(
 void NGInlineLayoutStateStack::ApplyRelativePositioning(
     const NGConstraintSpace& space,
     NGLogicalLineItems* line_box) {
-  if (box_data_list_.IsEmpty())
+  if (box_data_list_.empty())
     return;
 
   // The final position of any inline boxes, (<span>, etc) are stored on
@@ -777,7 +786,7 @@ void NGInlineLayoutStateStack::CreateBoxFragments(
     const NGConstraintSpace& space,
     NGLogicalLineItems* line_box,
     bool is_opaque) {
-  DCHECK(!box_data_list_.IsEmpty());
+  DCHECK(!box_data_list_.empty());
 
   for (BoxData& box_data : box_data_list_) {
     unsigned start = box_data.fragment_start;
@@ -893,7 +902,7 @@ NGInlineLayoutStateStack::ApplyBaselineShift(NGInlineBoxState* box,
   // The `vertical-align` property should not apply to the line wrapper for
   // block-in-inline.
   if (UNLIKELY(has_block_in_inline_)) {
-    DCHECK(box->pending_descendants.IsEmpty());
+    DCHECK(box->pending_descendants.empty());
     return kPositionNotPending;
   }
 
@@ -901,7 +910,7 @@ NGInlineLayoutStateStack::ApplyBaselineShift(NGInlineBoxState* box,
   // such descendant boxes that require the size of this box; they are queued in
   // |pending_descendants|.
   LayoutUnit baseline_shift;
-  if (!box->pending_descendants.IsEmpty()) {
+  if (!box->pending_descendants.empty()) {
     bool has_top_or_bottom = false;
     for (NGPendingPositions& child : box->pending_descendants) {
       // In quirks mode, metrics is empty if no content.
@@ -1111,7 +1120,7 @@ LayoutUnit NGInlineLayoutStateStack::ComputeAlignmentBaselineShift(
 FontHeight NGInlineLayoutStateStack::MetricsForTopAndBottomAlign(
     const NGInlineBoxState& box,
     const NGLogicalLineItems& line_box) const {
-  DCHECK(!box.pending_descendants.IsEmpty());
+  DCHECK(!box.pending_descendants.empty());
 
   // |metrics| is the bounds of "aligned subtree", that is, bounds of
   // descendants that are not 'vertical-align: top' nor 'bottom'.

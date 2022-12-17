@@ -11,6 +11,8 @@
 #include "base/timer/timer.h"
 #include "base/values.h"
 
+class Profile;
+
 namespace content {
 class BrowserContext;
 }
@@ -44,7 +46,7 @@ using VivaldiTranslateTextCallback =
 
 class VivaldiTranslateServerRequest {
  public:
-  VivaldiTranslateServerRequest(base::WeakPtr<content::BrowserContext> context,
+  VivaldiTranslateServerRequest(base::WeakPtr<Profile> profile,
                                 VivaldiTranslateTextCallback callback);
   VivaldiTranslateServerRequest();
 
@@ -81,7 +83,7 @@ class VivaldiTranslateServerRequest {
     callback_ = std::move(callback);
   }
 
-  base::WeakPtr<content::BrowserContext> context_;
+  base::WeakPtr<Profile> profile_;
 
   VivaldiTranslateTextCallback callback_;
 

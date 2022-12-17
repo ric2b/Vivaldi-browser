@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +43,7 @@ OfferNotificationHandler::~OfferNotificationHandler() = default;
 
 void OfferNotificationHandler::UpdateOfferNotificationVisibility(
     AutofillClient* client) {
-  GURL url = client->GetLastCommittedURL();
+  GURL url = client->GetLastCommittedPrimaryMainFrameURL();
   if (!offer_manager_->IsUrlEligible(url)) {
     client->DismissOfferNotification();
     return;

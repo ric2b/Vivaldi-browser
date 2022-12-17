@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -9,6 +9,7 @@ import("//device/vr/buildflags/buildflags.gni")
 import("//media/gpu/args.gni")
 import("//media/media_options.gni")
 import("//printing/buildflags/buildflags.gni")
+import("//services/accessibility/buildflags.gni")
 
 source_set("utility") {
   # Only the public target should depend on this. All other targets (even
@@ -56,6 +57,7 @@ source_set("utility") {
     "//net",
     "//printing/buildflags",
     "//sandbox",
+    "//services/accessibility:buildflags",
     "//services/audio",
     "//services/data_decoder:lib",
     "//services/data_decoder/public/cpp",
@@ -113,8 +115,11 @@ source_set("utility") {
     ]
   }
 
-  if (enable_cros_libassistant) {
-    deps += [ "//chromeos/services/libassistant:sandbox_hook" ]
+  if (is_chromeos_ash && enable_cros_libassistant) {
+    deps += [
+      "//chromeos/ash/services/libassistant:sandbox_hook",
+      "//chromeos/assistant/internal:libassistant",
+    ]
   }
 
   # PAC execution is done in process on Android.
@@ -134,6 +139,10 @@ source_set("utility") {
 
   if (is_linux || is_chromeos) {
     deps += [ "//components/services/screen_ai:screen_ai_sandbox_hook" ]
+  }
+
+  if (enable_accessibility_service) {
+    deps += [ "//services/accessibility:lib" ]
   }
 
   if (enable_vr && !is_android) {

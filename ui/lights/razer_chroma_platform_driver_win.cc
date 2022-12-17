@@ -173,24 +173,21 @@ bool RazerChromaPlatformDriverWin::IsReady() {
 
 void RazerChromaPlatformDriverWin::GenerateDeviceListFromPrefs(
     std::vector<RazerChromaDevice>& device_list) {
-  const base::Value* devices =
+  auto& devices =
       pref_service_->GetList(vivaldiprefs::kRazerChromaDevices);
-  std::string device;
-  if (devices) {
-    for (auto& it: devices->GetList()) {
-      const std::string *device = it.GetIfString();
-      if (device) {
-        if (*device == "keyboard") {
-          device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_KEYBOARD);
-        } else if (*device == "chromalink") {
-          device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_LINK);
-        } else if (*device == "mouse") {
-          device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_MOUSE);
-        } else if (*device == "mousemat") {
-          device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_MOUSEMAT);
-        } else if (*device == "headset") {
-          device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_HEADSET);
-        }
+  for (auto& it: devices) {
+    const std::string *device = it.GetIfString();
+    if (device) {
+      if (*device == "keyboard") {
+        device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_KEYBOARD);
+      } else if (*device == "chromalink") {
+        device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_LINK);
+      } else if (*device == "mouse") {
+        device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_MOUSE);
+      } else if (*device == "mousemat") {
+        device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_MOUSEMAT);
+      } else if (*device == "headset") {
+        device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_HEADSET);
       }
     }
   }

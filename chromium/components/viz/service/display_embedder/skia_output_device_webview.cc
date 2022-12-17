@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,9 +77,10 @@ void SkiaOutputDeviceWebView::SwapBuffers(BufferPresentedCallback feedback,
   gfx::Size surface_size =
       gfx::Size(sk_surface_->width(), sk_surface_->height());
 
-  FinishSwapBuffers(
-      gfx::SwapCompletionResult(gl_surface_->SwapBuffers(std::move(feedback))),
-      surface_size, std::move(frame));
+  auto data = std::move(frame.data);
+  FinishSwapBuffers(gfx::SwapCompletionResult(gl_surface_->SwapBuffers(
+                        std::move(feedback), std::move(data))),
+                    surface_size, std::move(frame));
 }
 
 SkSurface* SkiaOutputDeviceWebView::BeginPaint(

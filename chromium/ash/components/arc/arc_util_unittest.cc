@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,8 +61,8 @@ class ScopedArcFeature {
 class ScopedRtVcpuFeature {
  public:
   ScopedRtVcpuFeature(bool dual_core_enabled, bool quad_core_enabled) {
-    std::vector<base::Feature> enabled_features;
-    std::vector<base::Feature> disabled_features;
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
 
     if (dual_core_enabled)
       enabled_features.push_back(kRtVcpuDualCore);

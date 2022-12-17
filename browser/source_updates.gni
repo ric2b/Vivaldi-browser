@@ -1,4 +1,5 @@
 import ("//vivaldi/testing/testing.gni")
+import ("//vivaldi/gn/config/features.gni")
 
 update_target("//chrome/browser:browser") {
   sources += [
@@ -30,10 +31,14 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/browser/shell_integration/vivaldi_shell_integration_linux.cc",
     ]
   }
-  if (is_mac) {
+  if (is_mac && !vivaldi_disable_sparkle) {
     sources += [
       "//vivaldi/autoupdate/mac/sparkle_updater_delegate.h",
       "//vivaldi/autoupdate/mac/sparkle_updater_delegate.mm",
+    ]
+  }
+  if (is_mac) {
+    sources += [
       "//vivaldi/browser/mac/vivaldi_main_menu_builder.h",
       "//vivaldi/browser/mac/vivaldi_main_menu_builder.mm",
       "//vivaldi/browser/shell_integration/vivaldi_shell_integration_mac.mm",
@@ -41,7 +46,6 @@ update_target("//chrome/browser:browser") {
   }
   if (!is_android) {
     sources += [
-      "//vivaldi/browser/history/top_sites_convert.cc",
       "//vivaldi/browser/menus/bookmark_sorter.cc",
       "//vivaldi/browser/menus/bookmark_sorter.h",
       "//vivaldi/browser/menus/bookmark_support.cc",
@@ -150,12 +154,6 @@ update_target("//content/public/browser:browser_sources") {
 }
 
 if (!is_android) {
-  update_target("//components/history/core/browser:browser") {
-    sources += [
-      "//vivaldi/browser/history/top_sites_convert.h",
-    ]
-  }
-
   if (vivaldi_build_tests) {
     update_target("//chrome/test:unit_tests") {
       sources += [

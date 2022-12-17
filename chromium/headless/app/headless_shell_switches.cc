@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,12 +88,6 @@ const char kRepl[] = "repl";
 
 // Save a screenshot of the loaded page.
 const char kScreenshot[] = "screenshot";
-
-// Causes SSL key material to be logged to the specified file for debugging
-// purposes. See
-// https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format
-// for the format.
-const char kSSLKeyLogFile[] = "ssl-key-log-file";
 
 // Issues a stop after the specified number of milliseconds.  This cancels all
 // navigation and causes the DOMContentLoaded event to fire.

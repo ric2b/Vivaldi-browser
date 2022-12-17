@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/crostini/fake_crostini_features.h"
 #include "chrome/browser/ash/policy/core/user_policy_test_helper.h"
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
 #include "chrome/browser/ash/policy/login/login_policy_test_base.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/dlp/data_transfer_dlp_controller.h"
@@ -146,24 +147,8 @@ class MockDlpRulesManager : public DlpRulesManagerImpl {
   ~MockDlpRulesManager() override = default;
 
   MOCK_CONST_METHOD0(GetReportingManager, DlpReportingManager*());
+  MOCK_CONST_METHOD0(GetDlpFilesController, DlpFilesController*());
 };
-
-void SetClipboardText(std::u16string text,
-                      std::unique_ptr<ui::DataTransferEndpoint> source) {
-  ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste,
-                                   source ? std::move(source) : nullptr);
-  writer.WriteText(text);
-}
-
-// On Widget Closing, a task for NativeWidgetAura::CloseNow() gets posted. This
-// task runs after the widget is destroyed which leads to a crash, that's why
-// we need to flush the message loop.
-void FlushMessageLoop() {
-  base::RunLoop run_loop;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                   run_loop.QuitClosure());
-  run_loop.Run();
-}
 
 }  // namespace
 
@@ -186,6 +171,10 @@ class DataTransferDlpAshBrowserTest : public InProcessBrowserTest {
     ON_CALL(*rules_manager_, GetReportingManager)
         .WillByDefault(::testing::Return(reporting_manager_.get()));
 
+    files_controller_ = std::make_unique<DlpFilesController>(*rules_manager_);
+    ON_CALL(*rules_manager_, GetDlpFilesController)
+        .WillByDefault(::testing::Return(files_controller_.get()));
+
     dlp_controller_ =
         std::make_unique<FakeDlpController>(*rules_manager_, &helper_);
   }
@@ -202,6 +191,7 @@ class DataTransferDlpAshBrowserTest : public InProcessBrowserTest {
   void TearDownOnMainThread() override {
     dlp_controller_.reset();
     reporting_manager_.reset();
+    files_controller_.reset();
   }
 
   void SetupCrostini() {
@@ -226,6 +216,7 @@ class DataTransferDlpAshBrowserTest : public InProcessBrowserTest {
   std::vector<DlpPolicyEvent> events;
   FakeClipboardNotifier helper_;
   std::unique_ptr<FakeDlpController> dlp_controller_;
+  std::unique_ptr<DlpFilesController> files_controller_;
 };
 
 // Flaky on MSan bots: http://crbug.com/1178328
@@ -237,8 +228,8 @@ class DataTransferDlpAshBrowserTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(DataTransferDlpAshBrowserTest, MAYBE_BlockComponent) {
   SetupCrostini();
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
 
     base::Value src_urls(base::Value::Type::LIST);
     src_urls.Append(kMailUrl);
@@ -299,8 +290,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpAshBrowserTest, MAYBE_WarnComponent) {
   SetupCrostini();
 
   {
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          policy_prefs::kDlpRulesList);
+    ScopedListPrefUpdate update(g_browser_process->local_state(),
+                                policy_prefs::kDlpRulesList);
     base::Value rule(base::Value::Type::DICTIONARY);
     base::Value src_urls(base::Value::Type::DICTIONARY);
     base::Value src_urls_list(base::Value::Type::LIST);

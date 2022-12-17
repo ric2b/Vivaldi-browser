@@ -1,13 +1,13 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/settings/stats_reporting_controller.h"
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/metrics/structured/neutrino_logging.h"
 #include "components/metrics/structured/neutrino_logging_util.h"
 #include "components/prefs/pref_registry_simple.h"

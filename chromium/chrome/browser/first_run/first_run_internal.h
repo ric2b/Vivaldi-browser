@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,6 @@
 
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-
-class Profile;
 
 namespace base {
 class FilePath;
@@ -37,7 +35,7 @@ void SetupInitialPrefsFromInstallPrefs(
 
 // -- Platform-specific functions --
 
-void DoPostImportPlatformSpecificTasks(Profile* profile);
+void DoPostImportPlatformSpecificTasks();
 
 // This function has a common implementationin for all non-linux platforms, and
 // a linux specific implementation.

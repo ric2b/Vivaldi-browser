@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
  * @fileoverview ChromeVox braille commands.
  */
 import {AutomationPredicate} from '../../../common/automation_predicate.js';
+import {AutomationUtil} from '../../../common/automation_util.js';
 import {EventGenerator} from '../../../common/event_generator.js';
 import {KeyCode} from '../../../common/key_code.js';
 import {BrailleCommandData} from '../../common/braille/braille_command_data.js';
@@ -13,6 +14,7 @@ import {BrailleKeyCommand, BrailleKeyEvent} from '../../common/braille/braille_k
 import {NavBraille} from '../../common/braille/nav_braille.js';
 import {BridgeConstants} from '../../common/bridge_constants.js';
 import {BridgeHelper} from '../../common/bridge_helper.js';
+import {Command} from '../../common/command_store.js';
 import {EventSourceType} from '../../common/event_source_type.js';
 import {Spannable} from '../../common/spannable.js';
 import {QueueMode} from '../../common/tts_interface.js';
@@ -69,24 +71,32 @@ export class BrailleCommandHandler {
     Output.forceModeForNextSpeechUtterance(QueueMode.FLUSH);
     switch (evt.command) {
       case BrailleKeyCommand.PAN_LEFT:
-        CommandHandlerInterface.instance.onCommand('previousObject');
+        CommandHandlerInterface.instance.onCommand(Command.PREVIOUS_OBJECT);
         break;
       case BrailleKeyCommand.PAN_RIGHT:
-        CommandHandlerInterface.instance.onCommand('nextObject');
+        CommandHandlerInterface.instance.onCommand(Command.NEXT_OBJECT);
         break;
       case BrailleKeyCommand.LINE_UP:
-        CommandHandlerInterface.instance.onCommand('previousLine');
+        CommandHandlerInterface.instance.onCommand(Command.PREVIOUS_LINE);
         break;
       case BrailleKeyCommand.LINE_DOWN:
-        CommandHandlerInterface.instance.onCommand('nextLine');
+        CommandHandlerInterface.instance.onCommand(Command.NEXT_LINE);
         break;
       case BrailleKeyCommand.TOP:
-        CommandHandlerInterface.instance.onCommand('jumpToTop');
+        CommandHandlerInterface.instance.onCommand(Command.JUMP_TO_TOP);
         break;
       case BrailleKeyCommand.BOTTOM:
-        CommandHandlerInterface.instance.onCommand('jumpToBottom');
+        CommandHandlerInterface.instance.onCommand(Command.JUMP_TO_BOTTOM);
         break;
       case BrailleKeyCommand.ROUTING:
+        const textEditHandler =
+            DesktopAutomationInterface.instance.textEditHandler;
+        if (textEditHandler) {
+          textEditHandler.injectInferredIntents([{
+            command: chrome.automation.IntentCommandType.MOVE_SELECTION,
+            textBoundary: chrome.automation.IntentTextBoundaryType.CHARACTER,
+          }]);
+        }
         BrailleCommandHandler.onRoutingCommand_(
             content.text,
             // Cast ok since displayPosition is always defined in this case.
@@ -192,11 +202,12 @@ export class BrailleCommandHandler {
     }
 
     const textEditHandler = DesktopAutomationInterface.instance.textEditHandler;
-    if (!textEditHandler || current.start.node !== textEditHandler.node) {
+    const editable = AutomationUtil.getEditableRoot(current.start.node);
+    if (!editable || !textEditHandler || editable !== textEditHandler.node) {
       return true;
     }
 
-    const isMultiline = AutomationPredicate.multiline(current.start.node);
+    const isMultiline = AutomationPredicate.multiline(editable);
     switch (command) {
       case 'forceClickOnCurrentItem':
         EventGenerator.sendKeyPress(KeyCode.RETURN);

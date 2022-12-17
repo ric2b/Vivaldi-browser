@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,9 +45,10 @@ struct DropContext {
               int modifier_flags,
               base::WeakPtr<content::RenderWidgetHostImpl> target_rwh);
   DropContext(const DropContext& other);
+  DropContext(DropContext&& other);
   ~DropContext();
 
-  const content::DropData drop_data;
+  content::DropData drop_data;
   const gfx::PointF client_pt;
   const gfx::PointF screen_pt;
   const int modifier_flags;
@@ -130,7 +131,7 @@ CONTENT_EXPORT
 - (BOOL)performDragOperation:(const remote_cocoa::mojom::DraggingInfo*)info
     withWebContentsViewDelegate:
         (content::WebContentsViewDelegate*)webContentsViewDelegate;
-- (void)completeDropAsync:(BOOL)success
+- (void)completeDropAsync:(absl::optional<content::DropData>)dropData
               withContext:(const content::DropContext)context;
 
 // Helper to call WebWidgetHostInputEventRouter::GetRenderWidgetHostAtPoint().

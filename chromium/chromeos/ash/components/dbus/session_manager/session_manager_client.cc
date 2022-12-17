@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,8 +28,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/unguessable_token.h"
+#include "chromeos/ash/components/dbus/arc/arc.pb.h"
 #include "chromeos/ash/components/dbus/cryptohome/rpc.pb.h"
-#include "chromeos/ash/components/dbus/login_manager/arc.pb.h"
 #include "chromeos/ash/components/dbus/login_manager/login_screen_storage.pb.h"
 #include "chromeos/ash/components/dbus/login_manager/policy_descriptor.pb.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
@@ -195,7 +195,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
   }
 
   void WaitForServiceToBeAvailable(
-      WaitForServiceToBeAvailableCallback callback) override {
+      chromeos::WaitForServiceToBeAvailableCallback callback) override {
     session_manager_proxy_->WaitForServiceToBeAvailable(std::move(callback));
   }
 
@@ -216,7 +216,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
   void RestartJob(int socket_fd,
                   const std::vector<std::string>& argv,
                   RestartJobReason reason,
-                  VoidDBusMethodCallback callback) override {
+                  chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
                                  login_manager::kSessionManagerRestartJob);
     dbus::MessageWriter writer(&method_call);
@@ -367,7 +367,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
                                        base::DoNothing());
   }
 
-  void ClearForcedReEnrollmentVpd(VoidDBusMethodCallback callback) override {
+  void ClearForcedReEnrollmentVpd(
+      chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
         login_manager::kSessionManagerClearForcedReEnrollmentVpd);
@@ -378,7 +379,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  void UnblockDevModeForEnrollment(VoidDBusMethodCallback callback) override {
+  void UnblockDevModeForEnrollment(
+      chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
         login_manager::kSessionManagerUnblockDevModeForEnrollment);
@@ -389,7 +391,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  void UnblockDevModeForCarrierLock(VoidDBusMethodCallback callback) override {
+  void UnblockDevModeForCarrierLock(
+      chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
         login_manager::kSessionManagerUnblockDevModeForCarrierLock);
@@ -401,7 +404,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
   }
 
   void UnblockDevModeForInitialStateDetermination(
-      VoidDBusMethodCallback callback) override {
+      chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
         login_manager::
@@ -438,21 +441,44 @@ class SessionManagerClientImpl : public SessionManagerClient {
         login_manager::kSessionManagerHandleLockScreenDismissed);
   }
 
-  bool RequestBrowserDataMigration(
+  bool BlockingRequestBrowserDataMigration(
       const cryptohome::AccountIdentifier& cryptohome_id,
-      const bool is_move) override {
+      const std::string& mode) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
         login_manager::kSessionManagerStartBrowserDataMigration);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(cryptohome_id.account_id());
-    writer.AppendBool(is_move);
+    writer.AppendString(mode);
     dbus::ScopedDBusError error;
     std::unique_ptr<dbus::Response> response =
         blocking_method_caller_->CallMethodAndBlockWithError(&method_call,
                                                              &error);
     if (!response) {
-      LOG(ERROR) << "RequestBrowserDataMigration failed"
+      LOG(ERROR) << "BlockingRequestBrowserDataMigration failed"
+                 << (error.is_set()
+                         ? base::StringPrintf(" :%s:%s", error.name(),
+                                              error.message())
+                         : ".");
+      return false;
+    }
+
+    return true;
+  }
+
+  bool BlockingRequestBrowserDataBackwardMigration(
+      const cryptohome::AccountIdentifier& cryptohome_id) override {
+    dbus::MethodCall method_call(
+        login_manager::kSessionManagerInterface,
+        login_manager::kSessionManagerStartBrowserDataBackwardMigration);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(cryptohome_id.account_id());
+    dbus::ScopedDBusError error;
+    std::unique_ptr<dbus::Response> response =
+        blocking_method_caller_->CallMethodAndBlockWithError(&method_call,
+                                                             &error);
+    if (!response) {
+      LOG(ERROR) << "BlockingRequestBrowserDataBackwardMigration failed"
                  << (error.is_set()
                          ? base::StringPrintf(" :%s:%s", error.name(),
                                               error.message())
@@ -532,7 +558,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
   }
 
   void StoreDevicePolicy(const std::string& policy_blob,
-                         VoidDBusMethodCallback callback) override {
+                         chromeos::VoidDBusMethodCallback callback) override {
     login_manager::PolicyDescriptor descriptor = MakeChromePolicyDescriptor(
         login_manager::ACCOUNT_TYPE_DEVICE, kEmptyAccountId);
     CallStorePolicy(descriptor, policy_blob, std::move(callback));
@@ -540,15 +566,16 @@ class SessionManagerClientImpl : public SessionManagerClient {
 
   void StorePolicyForUser(const cryptohome::AccountIdentifier& cryptohome_id,
                           const std::string& policy_blob,
-                          VoidDBusMethodCallback callback) override {
+                          chromeos::VoidDBusMethodCallback callback) override {
     login_manager::PolicyDescriptor descriptor = MakeChromePolicyDescriptor(
         login_manager::ACCOUNT_TYPE_USER, cryptohome_id.account_id());
     CallStorePolicy(descriptor, policy_blob, std::move(callback));
   }
 
-  void StoreDeviceLocalAccountPolicy(const std::string& account_name,
-                                     const std::string& policy_blob,
-                                     VoidDBusMethodCallback callback) override {
+  void StoreDeviceLocalAccountPolicy(
+      const std::string& account_name,
+      const std::string& policy_blob,
+      chromeos::VoidDBusMethodCallback callback) override {
     login_manager::PolicyDescriptor descriptor = MakeChromePolicyDescriptor(
         login_manager::ACCOUNT_TYPE_DEVICE_LOCAL_ACCOUNT, account_name);
     CallStorePolicy(descriptor, policy_blob, std::move(callback));
@@ -556,7 +583,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
 
   void StorePolicy(const login_manager::PolicyDescriptor& descriptor,
                    const std::string& policy_blob,
-                   VoidDBusMethodCallback callback) override {
+                   chromeos::VoidDBusMethodCallback callback) override {
     CallStorePolicy(descriptor, policy_blob, std::move(callback));
   }
 
@@ -631,8 +658,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
   }
 
   void StartArcMiniContainer(
-      const login_manager::StartArcMiniContainerRequest& request,
-      VoidDBusMethodCallback callback) override {
+      const arc::StartArcMiniInstanceRequest& request,
+      chromeos::VoidDBusMethodCallback callback) override {
     DCHECK(!callback.is_null());
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
@@ -647,9 +674,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  void UpgradeArcContainer(
-      const login_manager::UpgradeArcContainerRequest& request,
-      VoidDBusMethodCallback callback) override {
+  void UpgradeArcContainer(const arc::UpgradeArcContainerRequest& request,
+                           chromeos::VoidDBusMethodCallback callback) override {
     DCHECK(!callback.is_null());
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
@@ -666,7 +692,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
 
   void StopArcInstance(const std::string& account_id,
                        bool should_backup_log,
-                       VoidDBusMethodCallback callback) override {
+                       chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
                                  login_manager::kSessionManagerStopArcInstance);
 
@@ -682,7 +708,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
 
   void SetArcCpuRestriction(
       login_manager::ContainerCpuRestrictionState restriction_state,
-      VoidDBusMethodCallback callback) override {
+      chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
         login_manager::kSessionManagerSetArcCpuRestriction);
@@ -695,7 +721,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
   }
 
   void EmitArcBooted(const cryptohome::AccountIdentifier& cryptohome_id,
-                     VoidDBusMethodCallback callback) override {
+                     chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
                                  login_manager::kSessionManagerEmitArcBooted);
     dbus::MessageWriter writer(&method_call);
@@ -799,7 +825,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
   }
 
   // Called when the method call without result is completed.
-  void OnVoidMethod(VoidDBusMethodCallback callback, dbus::Response* response) {
+  void OnVoidMethod(chromeos::VoidDBusMethodCallback callback,
+                    dbus::Response* response) {
     std::move(callback).Run(response);
   }
 
@@ -854,7 +881,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
 
   void CallStorePolicy(const login_manager::PolicyDescriptor& descriptor,
                        const std::string& policy_blob,
-                       VoidDBusMethodCallback callback) {
+                       chromeos::VoidDBusMethodCallback callback) {
     dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
                                  login_manager::kSessionManagerStorePolicyEx);
     dbus::MessageWriter writer(&method_call);

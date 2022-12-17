@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -357,7 +357,7 @@ public class ProcessInitializationHandler {
                         BluetoothNotificationService.class);
                 UsbNotificationManager.clearUsbNotifications(UsbNotificationService.class);
 
-                startModerateBindingManagementIfNeeded();
+                startBindingManagementIfNeeded();
 
                 recordKeyboardLocaleUma();
             }
@@ -453,10 +453,10 @@ public class ProcessInitializationHandler {
                 ()
                         -> AssistantVoiceSearchService.reportStartupUserEligibility(
                                 ContextUtils.getApplicationContext()));
-        deferredStartupHandler.addDeferredTask(
-                () -> GlobalAppLocaleController.getInstance().recordOverrideLanguageMetrics());
-        deferredStartupHandler.addDeferredTask(
-                () -> GlobalAppLocaleController.getInstance().maybeSetupLocaleManager());
+        deferredStartupHandler.addDeferredTask(() -> {
+            GlobalAppLocaleController.getInstance().maybeSetupLocaleManager();
+            GlobalAppLocaleController.getInstance().recordOverrideLanguageMetrics();
+        });
         deferredStartupHandler.addDeferredTask(() -> {
             // OptimizationTypes which we give a guarantee will be registered when we pass the
             // onDeferredStartup() signal to OptimizationGuide.
@@ -685,11 +685,10 @@ public class ProcessInitializationHandler {
         }
     }
 
-    private void startModerateBindingManagementIfNeeded() {
+    private void startBindingManagementIfNeeded() {
         // Moderate binding doesn't apply to low end devices.
         if (SysUtils.isLowEndDevice()) return;
-        ChildProcessLauncherHelper.startModerateBindingManagement(
-                ContextUtils.getApplicationContext());
+        ChildProcessLauncherHelper.startBindingManagement(ContextUtils.getApplicationContext());
     }
 
     @SuppressWarnings("deprecation") // InputMethodSubtype.getLocale() deprecated in API 24

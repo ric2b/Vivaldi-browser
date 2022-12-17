@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,7 +55,7 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) RemotingSender final
   // |Sender| instance is destroyed when renegotiation is complete, |this|
   // is also invalid and should be immediately torn down.
   RemotingSender(scoped_refptr<media::cast::CastEnvironment> cast_environment,
-                 openscreen::cast::Sender* sender,
+                 std::unique_ptr<openscreen::cast::Sender> sender,
                  const media::cast::FrameSenderConfig& config,
                  mojo::ScopedDataPipeConsumerHandle pipe,
                  mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>

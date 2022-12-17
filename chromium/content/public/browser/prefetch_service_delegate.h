@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 namespace content {
 
 class BrowserContext;
+class WebContents;
 
 // Allows embedders to control certain aspects of |PrefetchService|.
 class CONTENT_EXPORT PrefetchServiceDelegate {
@@ -64,6 +65,8 @@ class CONTENT_EXPORT PrefetchServiceDelegate {
 
   // Checks if the referring page is in the allow list to make prefetches.
   virtual bool IsDomainInPrefetchAllowList(const GURL& referring_url) = 0;
+
+  virtual void OnPrefetchLikely(WebContents* web_contents) = 0;
 };
 
 }  // namespace content

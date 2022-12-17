@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,16 +30,16 @@
   cell.detailTextLabel.text = self.detailText;
   cell.switchView.enabled = self.enabled;
   cell.switchView.on = self.on;
+  cell.switchView.accessibilityIdentifier =
+      [NSString stringWithFormat:@"%@, %@", self.text, @"switch"];
   cell.textLabel.textColor =
       [TableViewSwitchCell defaultTextColorForState:cell.switchView.state];
   cell.selectionStyle = UITableViewCellSelectionStyleNone;
 
-  // Update the icon image, if one is present.
-  UIImage* iconImage = nil;
-  if ([self.iconImageName length]) {
-    iconImage = [UIImage imageNamed:self.iconImageName];
-  }
-  [cell setIconImage:iconImage];
+  [cell setIconImage:self.iconImage
+            tintColor:self.iconTintColor
+      backgroundColor:self.iconBackgroundColor
+         cornerRadius:self.iconCornerRadius];
 }
 
 @end

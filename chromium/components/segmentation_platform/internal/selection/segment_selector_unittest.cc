@@ -1,7 +1,8 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/segmentation_platform/internal/execution/model_execution_status.h"
 #include "components/segmentation_platform/internal/selection/segment_selector_impl.h"
 
 #include "base/run_loop.h"
@@ -128,8 +129,10 @@ class SegmentSelectorTest : public testing::Test {
         ->set_result_time_to_live(7);
     segment_database_->SetBucketDuration(segment_id, 1, proto::TimeUnit::DAY);
 
-    segment_database_->AddDiscreteMapping(
-        segment_id, mapping, num_mapping_pairs, config_->segmentation_key);
+    if (mapping) {
+      segment_database_->AddDiscreteMapping(
+          segment_id, mapping, num_mapping_pairs, config_->segmentation_key);
+    }
   }
 
   void CompleteModelExecution(SegmentId segment_id, float score) {
@@ -201,7 +204,9 @@ TEST_F(SegmentSelectorTest, RunSelectionOnDemand) {
             auto result =
                 std::make_unique<SegmentResultProvider::SegmentResult>(
                     SegmentResultProvider::ResultState::kTfliteModelScoreUsed,
-                    rank);
+                    rank,
+                    std::make_unique<ModelExecutionResult>(
+                        ModelExecutionStatus::kSuccess));
             std::move(options->callback).Run(std::move(result));
           }));
   segment_selector_->set_segment_result_provider_for_testing(
@@ -400,7 +405,7 @@ TEST_F(SegmentSelectorTest,
   InitializeMetadataForSegment(segment_id1, mapping1, 3);
 
   // Set up a selected segment in prefs.
-  SelectedSegment from_history(segment_id0);
+  SelectedSegment from_history(segment_id0, 3);
   auto prefs_moved = std::make_unique<TestSegmentationResultPrefs>();
   prefs_ = prefs_moved.get();
   prefs_->selection = from_history;
@@ -457,9 +462,40 @@ TEST_F(SegmentSelectorTest, UpdateSelectedSegment) {
   ASSERT_EQ(segment_id2, prefs_->selection->segment_id);
 
   // Update the selected segment to |segment_id|.
-  segment_selector_->UpdateSelectedSegment(segment_id);
+  segment_selector_->UpdateSelectedSegment(segment_id, 3);
   ASSERT_TRUE(prefs_->selection.has_value());
   ASSERT_EQ(segment_id, prefs_->selection->segment_id);
+  EXPECT_EQ(3, *prefs_->selection->rank);
+}
+
+TEST_F(SegmentSelectorTest, UpdateSelectedSegmentWithoutMapping) {
+  SetUpWithConfig(CreateTestConfig());
+  EXPECT_CALL(signal_storage_config_, MeetsSignalCollectionRequirement(_, _))
+      .WillRepeatedly(Return(true));
+
+  SegmentId segment_id = SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB;
+  InitializeMetadataForSegment(segment_id, nullptr, 3);
+
+  SegmentId segment_id2 = SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_SHARE;
+  InitializeMetadataForSegment(segment_id2, nullptr, 2);
+
+  // Set model scores to float values and these should be used as ranks when
+  // mapping is not provided.
+  segment_database_->AddPredictionResult(segment_id, 4.56, clock_.Now());
+  segment_database_->AddPredictionResult(segment_id2, 0, clock_.Now());
+
+  clock_.Advance(base::Days(1));
+  segment_selector_->OnModelExecutionCompleted(segment_id);
+  task_environment_.RunUntilIdle();
+  ASSERT_TRUE(prefs_->selection.has_value());
+  ASSERT_EQ(segment_id, prefs_->selection->segment_id);
+  EXPECT_NEAR(4.56, *prefs_->selection->rank, 0.01);
+
+  // Update the selected segment to |segment_id|.
+  segment_selector_->UpdateSelectedSegment(segment_id2, 8.3);
+  ASSERT_TRUE(prefs_->selection.has_value());
+  ASSERT_EQ(segment_id2, prefs_->selection->segment_id);
+  EXPECT_NEAR(8.3, *prefs_->selection->rank, 0.01);
 }
 
 TEST_F(SegmentSelectorTest, SubsegmentRecording) {
@@ -500,7 +536,7 @@ TEST_F(SegmentSelectorTest, SubsegmentRecording) {
       config_->segmentation_key + kSubsegmentDiscreteMappingSuffix);
 
   // Set up a selected segment in prefs.
-  SelectedSegment from_history(segment_id0);
+  SelectedSegment from_history(segment_id0, 0);
   auto prefs_moved = std::make_unique<TestSegmentationResultPrefs>();
   prefs_ = prefs_moved.get();
   prefs_->selection = from_history;

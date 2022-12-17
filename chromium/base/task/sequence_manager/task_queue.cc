@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -128,7 +128,7 @@ TaskQueue::TaskQueue(std::unique_ptr<internal::TaskQueueImpl> impl,
                              : MakeRefCounted<internal::AssociatedThreadId>()),
       default_task_runner_(impl_ ? impl_->CreateTaskRunner(kTaskTypeNone)
                                  : CreateNullTaskRunner()),
-      name_(impl_ ? impl_->GetName() : "") {}
+      name_(impl_ ? impl_->GetProtoName() : QueueName::UNKNOWN_TQ) {}
 
 TaskQueue::~TaskQueue() {
   ShutdownTaskQueueGracefully();
@@ -304,7 +304,7 @@ bool TaskQueue::BlockedByFence() const {
 }
 
 const char* TaskQueue::GetName() const {
-  return name_;
+  return perfetto::protos::pbzero::SequenceManagerTask::QueueName_Name(name_);
 }
 
 void TaskQueue::WriteIntoTrace(perfetto::TracedValue context) const {

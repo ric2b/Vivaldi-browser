@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,7 +51,8 @@ suite('OnStartupPage', function() {
 
   async function initPage(): Promise<void> {
     onStartupBrowserProxy.reset();
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     testElement = document.createElement('settings-on-startup-page');
     testElement.prefs = {
       session: {

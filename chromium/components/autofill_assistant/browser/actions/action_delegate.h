@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -447,7 +447,11 @@ class ActionDelegate {
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)> end_action_callback,
       base::OnceCallback<void(const ClientStatus&)>
-          view_inflation_finished_callback) = 0;
+          view_inflation_finished_callback,
+      base::RepeatingCallback<void(const RequestBackendDataProto&)>
+          request_backend_data_callback,
+      base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+          show_account_screen_callback) = 0;
 
   // Show |generic_ui| to the user.
   // |view_inflation_finished_callback| will be called immediately after
@@ -488,10 +492,19 @@ class ActionDelegate {
   // the result through the |callback|. Enters the |RUNNING| state while doing
   // so.
   virtual void RequestUserData(
-      UserDataEventField event_field,
       const CollectUserDataOptions& options,
       base::OnceCallback<void(bool, const GetUserDataResponseProto&)>
           callback) = 0;
+
+  // Displays the user's |email_address| account page in a platform-appropriate
+  // way. On Android, for example, this is accomplished by firing an intent to
+  // the GMS core library. |proto| defines which part of the user's account page
+  // should be displayed.
+  virtual void ShowAccountScreen(const ShowAccountScreenProto& proto,
+                                 const std::string& email_address) = 0;
+
+  virtual void SetCollectUserDataUiState(bool loading,
+                                         UserDataEventField event_field) = 0;
 
   // Whether the current flow supports external actions.
   virtual bool SupportsExternalActions() = 0;
@@ -529,7 +542,7 @@ class ActionDelegate {
       const std::string& xml_string,
       const std::vector<std::string>& keys) const = 0;
 
-  virtual base::WeakPtr<ActionDelegate> GetWeakPtr() const = 0;
+  virtual base::WeakPtr<ActionDelegate> GetWeakPtr() = 0;
 
   // Make a fire-and-forget call to report progress.
   virtual void ReportProgress(const std::string& payload,

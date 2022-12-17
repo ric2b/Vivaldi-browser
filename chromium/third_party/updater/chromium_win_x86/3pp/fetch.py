@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -14,7 +14,7 @@ import urllib.request
 # MIN_VERSION is the earliest working version of the updater for self-update
 # testing. If a backwards-incompatible change to the updater is made, it may be
 # necessary to increase the version.
-MIN_VERSION = 1017712
+MIN_VERSION = 1037709
 
 def get_platform():
     return 'Win'

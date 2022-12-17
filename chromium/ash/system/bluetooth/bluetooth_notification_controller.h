@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,10 +72,6 @@ class ASH_EXPORT BluetoothNotificationController
   // and means we "update" one notification if not handled rather than
   // continually bugging the user.
   static const char kBluetoothDevicePairingNotificationId[];
-
-  // Adds a prefix to the device's address to obtain an unique notification ID.
-  static std::string GetPairedNotificationId(
-      const device::BluetoothDevice* device);
 
   // Internal method called by BluetoothAdapterFactory to provide the adapter
   // object.

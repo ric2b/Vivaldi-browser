@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -203,6 +203,7 @@ void RunOnOsLoginCommand::UpdateRunOnOsLoginModeWithOsIntegration() {
   } else {
     web_app::InstallOsHooksOptions install_options;
     install_options.os_hooks[web_app::OsHookType::kRunOnOsLogin] = true;
+    install_options.reason = SHORTCUT_CREATION_AUTOMATED;
     os_integration_manager_->InstallOsHooks(
         app_id_,
         base::BindOnce(&RunOnOsLoginCommand::OnOsHooksSet,

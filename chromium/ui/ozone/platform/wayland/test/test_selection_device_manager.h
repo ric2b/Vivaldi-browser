@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -117,6 +117,7 @@ class TestSelectionSource : public ServerObject {
                           base::ScopedFD write_fd) = 0;
     virtual void SendFinished() = 0;
     virtual void SendCancelled() = 0;
+    virtual void SendDndAction(uint32_t action) = 0;
     virtual void OnDestroying() = 0;
 
    protected:
@@ -131,6 +132,7 @@ class TestSelectionSource : public ServerObject {
 
   void OnFinished();
   void OnCancelled();
+  void OnDndAction(uint32_t action);
 
   const std::vector<std::string>& mime_types() const { return mime_types_; }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,7 +92,7 @@ bool LocationIconView::OnMousePressed(const ui::MouseEvent& event) {
 void LocationIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   if (delegate_->IsEditingOrEmpty()) {
     node_data->role = ax::mojom::Role::kImage;
-    node_data->SetName(l10n_util::GetStringUTF8(IDS_ACC_SEARCH_ICON));
+    node_data->SetNameChecked(l10n_util::GetStringUTF8(IDS_ACC_SEARCH_ICON));
     return;
   }
 

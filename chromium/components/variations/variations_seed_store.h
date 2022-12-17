@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,15 +78,18 @@ class COMPONENT_EXPORT(VARIATIONS) VariationsSeedStore {
   // The actual seed data will be base64 encoded for storage. If the string
   // is invalid, the existing prefs are untouched and false is returned.
   // Additionally, stores the |country_code| that was received with the seed in
-  // a separate pref. On success and if |parsed_seed| is not NULL, |parsed_seed|
-  // will be filled with the de-serialized decoded protobuf.
-  [[nodiscard]] bool StoreSeedData(const std::string& data,
-                                   const std::string& base64_seed_signature,
-                                   const std::string& country_code,
-                                   const base::Time& date_fetched,
-                                   bool is_delta_compressed,
-                                   bool is_gzip_compressed,
-                                   VariationsSeed* parsed_seed);
+  // a separate pref. |done_callback| will be called with the result of the
+  // operation, with a non-empty de-serialized, decoded protobuf VariationsSeed
+  // on success.
+  // Note: Strings are passed by value to support std::move() semantics.
+  void StoreSeedData(
+      std::string data,
+      std::string base64_seed_signature,
+      std::string country_code,
+      base::Time date_fetched,
+      bool is_delta_compressed,
+      bool is_gzip_compressed,
+      base::OnceCallback<void(bool, VariationsSeed)> done_callback);
 
   // Loads the safe variations seed data from local state into |seed| and
   // updates any relevant fields in |client_state|. Returns true iff the safe
@@ -165,14 +168,14 @@ class COMPONENT_EXPORT(VARIATIONS) VariationsSeedStore {
   // type.
   void ClearPrefs(SeedType seed_type);
 
-#if BUILDFLAG(IS_ANDROID)
-  // Imports the variations seed from the Java side. Logs UMA on failure.
-  // Android Chrome uses this on first run; WebView uses this on every startup.
-  // In Chrome's case, it's important to set the first run seed as soon as
-  // possible, because some clients query the seed store prefs directly rather
-  // than accessing them via the seed store API: https://crbug.com/829527
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  // Imports the variations seed from the Java/iOS side. Logs UMA on failure.
+  // Android and iOS Chrome uses this on first run; WebView uses this on every
+  // startup. In Chrome's case, it's important to set the first run seed as soon
+  // as possible, because some clients query the seed store prefs directly
+  // rather than accessing them via the seed store API: https://crbug.com/829527
   void ImportInitialSeed(std::unique_ptr<SeedResponse> initial_seed);
-#endif  // BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 
   // Loads the variations seed data from local state into |seed|, as well as the
   // raw pref values into |seed_data| and |base64_signature|. Loads either the

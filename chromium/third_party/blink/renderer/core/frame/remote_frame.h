@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -210,8 +210,8 @@ class CORE_EXPORT RemoteFrame final : public Frame,
       override;
 
   // Called only when this frame has a local frame owner.
-  gfx::Size GetMainFrameViewportSize() const override;
-  gfx::Point GetMainFrameScrollPosition() const override;
+  gfx::Size GetOutermostMainFrameSize() const override;
+  gfx::Point GetOutermostMainFrameScrollPosition() const override;
 
   void SetOpener(Frame* opener) override;
 

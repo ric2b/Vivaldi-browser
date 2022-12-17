@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -144,6 +144,20 @@ public class StripLayoutTab implements VirtualView {
                 @Override
                 public Float get(StripLayoutTab object) {
                     return object.getTrailingMargin();
+                }
+            };
+
+    /** A property for animations to use for changing the trailingMargin of the tab. */
+    public static final FloatProperty<StripLayoutTab> BRIGHTNESS =
+            new FloatProperty<StripLayoutTab>("brightness") {
+                @Override
+                public void setValue(StripLayoutTab object, float value) {
+                    object.setBrightness(value);
+                }
+
+                @Override
+                public Float get(StripLayoutTab object) {
+                    return object.getBrightness();
                 }
             };
 
@@ -537,10 +551,11 @@ public class StripLayoutTab implements VirtualView {
 
     /**
      * @param show Whether or not the close button is allowed to be shown.
+     * @param animate Whether or not to animate the close button showing/hiding.
      */
-    public void setCanShowCloseButton(boolean show) {
+    public void setCanShowCloseButton(boolean show, boolean animate) {
         mCanShowCloseButton = show;
-        checkCloseButtonVisibility(true);
+        checkCloseButtonVisibility(animate);
     }
 
     /**

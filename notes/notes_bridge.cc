@@ -667,7 +667,7 @@ void NotesBridge::ExtractNoteNodeInformation(
 const NoteNode* NotesBridge::GetNodeByID(long node_id, int type) {
   const NoteNode* node;
 
-  node = vivaldi::GetNotesNodeByID(notes_model_, static_cast<int64_t>(node_id));
+  node = notes_model_->GetNoteNodeByID(static_cast<int64_t>(node_id));
 
   return node;
 }

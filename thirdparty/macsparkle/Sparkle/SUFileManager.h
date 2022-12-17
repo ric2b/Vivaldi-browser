@@ -69,7 +69,7 @@ NS_ASSUME_NONNULL_BEGIN
  * Otherwise on failure you may need to re-try using move operations. This operation will fail on non-apfs volumes or volumes that don't support rename swapping.
  * Both originalItemURL and newItemURL must exist.
  */
-- (BOOL)swapItemAtURL:(NSURL *)originalItemURL withItemAtURL:(NSURL *)newItemURL error:(NSError **)error __OSX_AVAILABLE(10.13);
+- (BOOL)swapItemAtURL:(NSURL *)originalItemURL withItemAtURL:(NSURL *)newItemURL error:(NSError **)error;
 
 /**
  * Copies an item from a source to a destination
@@ -107,6 +107,18 @@ NS_ASSUME_NONNULL_BEGIN
  * This is not an atomic operation.
  */
 - (BOOL)changeOwnerAndGroupOfItemAtRootURL:(NSURL *)targetURL toMatchURL:(NSURL *)matchURL error:(NSError **)error;
+
+/**
+ Changes the owner and group ID of an item at a specified target URL
+ @param targetURL A URL pointing to the target item whose owner and group IDs to alter. The item at this URL must exist.
+ @param ownerID The new owner ID to set on the item.
+ @param groupID The new group ID to set on the item.
+ @param error If an error occurs, upon returns contains an NSError object that describes the problem. If you are not interested in possible errors, you may pass in NULL.
+ @return YES if the target item's owner and group IDs have changed, otherwise NO along with a populated error object.
+ 
+ Unlike -changeOwnerAndGroupOfItemAtRootURL:toMatchURL:error: this method does not recursively try to change the owner and group IDs if the target item is a directory.
+ */
+- (BOOL)changeOwnerAndGroupOfItemAtURL:(NSURL *)targetURL ownerID:(uid_t)ownerID groupID:(gid_t)groupID error:(NSError * __autoreleasing *)error;
 
 /**
  * Updates the modification and access time of an item at a specified target URL to the current time

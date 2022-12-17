@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -360,12 +360,6 @@ struct URLRequest {
   // that later intercepts the request, e.g., in a service worker fetch event
   // handler.
   string? devtools_stack_id;
-
-  // True for prefetch requests when SignedExchangePrefetchCacheForNavigations
-  // feature is enabled by flags or SignedExchangeSubresourcePrefetch feature is
-  // enabled by flags, or OriginTrial. TODO(horo): Remove this when these
-  // features are enabled by default.
-  bool is_signed_exchange_prefetch_cache_enabled;
 
   // True for XHR, Fetch, and EventSource.
   bool is_fetch_like_api;

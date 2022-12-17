@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,13 +65,6 @@ public class InstalledWebappBridge {
     @CalledByNative
     private static Permission[] getPermissions(@ContentSettingsType int type) {
         return InstalledWebappPermissionManager.get().getPermissions(type);
-    }
-
-    @CalledByNative
-    @ContentSettingValues
-    private static int getPermission(@ContentSettingsType int type, String origin) {
-        return InstalledWebappPermissionManager.get().getPermission(
-                type, Origin.create(Uri.parse(origin)));
     }
 
     @CalledByNative

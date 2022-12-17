@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -109,7 +109,7 @@ class ProxyResolvingSocketTestBase {
     options->use_tls = use_tls_;
     options->fake_tls_handshake = fake_tls_handshake_;
     factory_remote_->CreateProxyResolvingSocket(
-        url, net::NetworkIsolationKey(), std::move(options),
+        url, net::NetworkAnonymizationKey(), std::move(options),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
         std::move(receiver), std::move(socket_observer),
         base::BindLambdaForTesting(
@@ -275,15 +275,13 @@ TEST_P(ProxyResolvingSocketTest, BasicReadWrite) {
   int sequence_number = 0;
   for (int j = 0; j < kNumIterations; ++j) {
     for (size_t i = 0; i < kMsgSize; ++i) {
-      reads.push_back(
-          net::MockRead(net::ASYNC, &kTestMsg[i], 1, sequence_number++));
+      reads.emplace_back(net::ASYNC, &kTestMsg[i], 1, sequence_number++);
     }
     if (j == kNumIterations - 1) {
-      reads.push_back(net::MockRead(net::ASYNC, net::OK, sequence_number++));
+      reads.emplace_back(net::ASYNC, net::OK, sequence_number++);
     }
     for (size_t i = 0; i < kMsgSize; ++i) {
-      writes.push_back(
-          net::MockWrite(net::ASYNC, &kTestMsg[i], 1, sequence_number++));
+      writes.emplace_back(net::ASYNC, &kTestMsg[i], 1, sequence_number++);
     }
   }
   net::StaticSocketDataProvider data_provider(reads, writes);
@@ -387,7 +385,7 @@ TEST_F(ProxyResolvingSocketMojoTest, SocketDestroyedBeforeConnectCompletes) {
   base::RunLoop run_loop;
   int net_error = net::OK;
   factory()->CreateProxyResolvingSocket(
-      kDestination, net::NetworkIsolationKey(), nullptr,
+      kDestination, net::NetworkAnonymizationKey(), nullptr,
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
       socket.InitWithNewPipeAndPassReceiver(),
       mojo::NullRemote() /* observer */,

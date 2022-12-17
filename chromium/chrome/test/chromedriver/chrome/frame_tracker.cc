@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,16 +77,15 @@ Status FrameTracker::OnConnected(DevToolsClient* client) {
   frame_to_target_map_.clear();
   attached_frames_.clear();
   // Enable target events to allow tracking iframe targets creation.
-  base::DictionaryValue params;
-  base::Value::Dict& dict = params.GetDict();
-  dict.Set("autoAttach", true);
-  dict.Set("flatten", true);
-  dict.Set("waitForDebuggerOnStart", false);
+  base::Value::Dict params;
+  params.Set("autoAttach", true);
+  params.Set("flatten", true);
+  params.Set("waitForDebuggerOnStart", false);
   Status status = client->SendCommand("Target.setAutoAttach", params);
   if (status.IsError())
     return status;
   // Enable runtime events to allow tracking execution context creation.
-  params.DictClear();
+  params.clear();
   status = client->SendCommand("Runtime.enable", params);
   if (status.IsError())
     return status;

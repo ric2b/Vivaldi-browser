@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -128,7 +128,7 @@ void DownloadsDOMHandler::GetDownloads(
 }
 
 void DownloadsDOMHandler::OpenFileRequiringGesture(const std::string& id) {
-  if (!GetWebUIWebContents()->HasRecentInteractiveInputEvent()) {
+  if (!GetWebUIWebContents()->HasRecentInteraction()) {
     LOG(ERROR) << "OpenFileRequiringGesture received without recent "
                   "user interaction";
     return;
@@ -166,7 +166,7 @@ void DownloadsDOMHandler::Drag(const std::string& id) {
 }
 
 void DownloadsDOMHandler::SaveDangerousRequiringGesture(const std::string& id) {
-  if (!GetWebUIWebContents()->HasRecentInteractiveInputEvent()) {
+  if (!GetWebUIWebContents()->HasRecentInteraction()) {
     LOG(ERROR) << "SaveDangerousRequiringGesture received without recent "
                   "user interaction";
     return;
@@ -344,7 +344,7 @@ void DownloadsDOMHandler::RemoveDownloads(const DownloadVector& to_remove) {
 }
 
 void DownloadsDOMHandler::OpenDownloadsFolderRequiringGesture() {
-  if (!GetWebUIWebContents()->HasRecentInteractiveInputEvent()) {
+  if (!GetWebUIWebContents()->HasRecentInteraction()) {
     LOG(ERROR) << "OpenDownloadsFolderRequiringGesture received without recent "
                   "user interaction";
     return;
@@ -362,7 +362,7 @@ void DownloadsDOMHandler::OpenDownloadsFolderRequiringGesture() {
 
 void DownloadsDOMHandler::OpenDuringScanningRequiringGesture(
     const std::string& id) {
-  if (!GetWebUIWebContents()->HasRecentInteractiveInputEvent()) {
+  if (!GetWebUIWebContents()->HasRecentInteraction()) {
     LOG(ERROR) << "OpenDownloadsFolderRequiringGesture received without recent "
                   "user interaction";
     return;
@@ -381,7 +381,7 @@ void DownloadsDOMHandler::OpenDuringScanningRequiringGesture(
 
 void DownloadsDOMHandler::ReviewDangerousRequiringGesture(
     const std::string& id) {
-  if (!GetWebUIWebContents()->HasRecentInteractiveInputEvent()) {
+  if (!GetWebUIWebContents()->HasRecentInteraction()) {
     LOG(ERROR) << __func__ << " received without recent user interaction";
     return;
   }
@@ -433,7 +433,7 @@ void DownloadsDOMHandler::DangerPromptDone(
     DownloadDangerPrompt::Action action) {
   if (action != DownloadDangerPrompt::ACCEPT)
     return;
-  download::DownloadItem* item = NULL;
+  download::DownloadItem* item = nullptr;
   if (GetMainNotifierManager())
     item = GetMainNotifierManager()->GetDownload(download_id);
   if (!item && GetOriginalNotifierManager())
@@ -475,7 +475,7 @@ download::DownloadItem* DownloadsDOMHandler::GetDownloadByStringId(
 }
 
 download::DownloadItem* DownloadsDOMHandler::GetDownloadById(uint32_t id) {
-  download::DownloadItem* item = NULL;
+  download::DownloadItem* item = nullptr;
   if (GetMainNotifierManager())
     item = GetMainNotifierManager()->GetDownload(id);
   if (!item && GetOriginalNotifierManager())

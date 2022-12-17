@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -89,6 +89,7 @@ class AdaptiveChargingController;
 class AmbientController;
 class AppListControllerImpl;
 class AppListFeatureUsageMetrics;
+class AshAcceleratorConfiguration;
 class AshColorProvider;
 class AshDBusServices;
 class AshFocusRules;
@@ -100,7 +101,6 @@ class BackGestureEventHandler;
 class BacklightsForcedOffSetter;
 class BluetoothDeviceStatusUiHandler;
 class BluetoothNotificationController;
-class BluetoothPowerController;
 class BrightnessControlDelegate;
 class CalendarController;
 class CaptureModeController;
@@ -133,7 +133,7 @@ class FrameThrottlingController;
 class FullscreenMagnifierController;
 class GeolocationController;
 class GlanceablesController;
-class HighContrastController;
+class ColorEnhancementController;
 class HighlighterController;
 class HoldingSpaceController;
 class HumanPresenceOrientationController;
@@ -214,7 +214,6 @@ class ToplevelWindowEventHandler;
 class ClipboardHistoryControllerImpl;
 class TouchDevicesController;
 class TrayAction;
-class TrayBluetoothHelper;
 class UserMetricsRecorder;
 class VideoActivityNotifier;
 class VideoDetector;
@@ -222,6 +221,7 @@ class WallpaperControllerImpl;
 class WindowCycleController;
 class WindowPositioner;
 class WindowTreeHostManager;
+class WmModeController;
 class ArcInputMethodBoundsTracker;
 class MultiCaptureServiceClient;
 
@@ -234,6 +234,10 @@ class DiagnosticsLogController;
 namespace quick_pair {
 class Mediator;
 }  // namespace quick_pair
+
+namespace curtain {
+class SecurityCurtainController;
+}  // namespace curtain
 
 // Shell is a singleton object that presents the Shell API and implements the
 // RootWindow's delegate interface.
@@ -363,6 +367,9 @@ class ASH_EXPORT Shell : public SessionObserver,
     return adaptive_charging_controller_.get();
   }
   AmbientController* ambient_controller() { return ambient_controller_.get(); }
+  AshAcceleratorConfiguration* ash_accelerator_configuration() {
+    return ash_accelerator_configuration_.get();
+  }
   AssistantControllerImpl* assistant_controller() {
     return assistant_controller_.get();
   }
@@ -375,10 +382,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   BacklightsForcedOffSetter* backlights_forced_off_setter() {
     return backlights_forced_off_setter_.get();
   }
-  BluetoothPowerController* bluetooth_power_controller() {
-    DCHECK(!ash::features::IsBluetoothRevampEnabled());
-    return bluetooth_power_controller_.get();
-  }
   BrightnessControlDelegate* brightness_control_delegate() {
     return brightness_control_delegate_.get();
   }
@@ -389,6 +392,9 @@ class ASH_EXPORT Shell : public SessionObserver,
     return cros_display_config_.get();
   }
   ::wm::CursorManager* cursor_manager() { return cursor_manager_.get(); }
+  curtain::SecurityCurtainController& security_curtain_controller() {
+    return *security_curtain_controller_;
+  }
   DarkLightModeControllerImpl* dark_light_mode_controller() {
     return dark_light_mode_controller_.get();
   }
@@ -467,8 +473,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   HighlighterController* highlighter_controller() {
     return highlighter_controller_.get();
   }
-  HighContrastController* high_contrast_controller() {
-    return high_contrast_controller_.get();
+  ColorEnhancementController* color_enhancement_controller() {
+    return color_enhancement_controller_.get();
   }
   HumanPresenceOrientationController* human_presence_orientation_controller() {
     return human_presence_orientation_controller_.get();
@@ -634,10 +640,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
   TrayAction* tray_action() { return tray_action_.get(); }
 
-  // Will return |nullptr| when the |kBluetoothRevamp| feature flag is enabled.
-  TrayBluetoothHelper* tray_bluetooth_helper() {
-    return tray_bluetooth_helper_.get();
-  }
   UserMetricsRecorder* metrics() { return user_metrics_recorder_.get(); }
   VideoDetector* video_detector() { return video_detector_.get(); }
   WallpaperControllerImpl* wallpaper_controller() {
@@ -793,6 +795,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<UserMetricsRecorder> user_metrics_recorder_;
   std::unique_ptr<WindowPositioner> window_positioner_;
 
+  std::unique_ptr<AshAcceleratorConfiguration> ash_accelerator_configuration_;
   std::unique_ptr<AcceleratorControllerImpl> accelerator_controller_;
   std::unique_ptr<AccessibilityControllerImpl> accessibility_controller_;
   std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;
@@ -811,6 +814,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<CalendarController> calendar_controller_;
   std::unique_ptr<CrosDisplayConfig> cros_display_config_;
+  std::unique_ptr<curtain::SecurityCurtainController>
+      security_curtain_controller_;
   std::unique_ptr<DarkLightModeControllerImpl> dark_light_mode_controller_;
   std::unique_ptr<DesksController> desks_controller_;
   std::unique_ptr<DesksTemplatesDelegate> desks_templates_delegate_;
@@ -906,7 +911,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<VideoDetector> video_detector_;
   std::unique_ptr<WindowTreeHostManager> window_tree_host_manager_;
   std::unique_ptr<PersistentWindowController> persistent_window_controller_;
-  std::unique_ptr<HighContrastController> high_contrast_controller_;
+  std::unique_ptr<ColorEnhancementController> color_enhancement_controller_;
   std::unique_ptr<FullscreenMagnifierController>
       fullscreen_magnifier_controller_;
   std::unique_ptr<AutoclickController> autoclick_controller_;
@@ -960,10 +965,6 @@ class ASH_EXPORT Shell : public SessionObserver,
       bluetooth_notification_controller_;
   std::unique_ptr<BluetoothDeviceStatusUiHandler>
       bluetooth_device_status_ui_handler_;
-  std::unique_ptr<BluetoothPowerController> bluetooth_power_controller_;
-
-  // Will be |nullptr| when the |kBluetoothRevamp| feature flag is enabled.
-  std::unique_ptr<TrayBluetoothHelper> tray_bluetooth_helper_;
   std::unique_ptr<KeyboardControllerImpl> keyboard_controller_;
   std::unique_ptr<DisplayAlignmentController> display_alignment_controller_;
   std::unique_ptr<DisplayColorManager> display_color_manager_;
@@ -994,6 +995,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<DockedMagnifierController> docked_magnifier_controller_;
 
   std::unique_ptr<chromeos::SnapController> snap_controller_;
+
+  std::unique_ptr<WmModeController> wm_mode_controller_;
 
   // |native_cursor_manager_| is owned by |cursor_manager_|, but we keep a
   // pointer to vend to test code.

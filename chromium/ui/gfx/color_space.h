@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -337,7 +337,7 @@ class COLOR_SPACE_EXPORT ColorSpace {
 
   // Return the RGB and whitepoint coordinates of the ColorSpace's
   // chromaticity. Assumes D65 whitepoint in the case of a custom PrimaryID.
-  SkColorSpacePrimaries GetColorSpacePrimaries() const;
+  SkColorSpacePrimaries GetPrimaries() const;
   void GetPrimaryMatrix(skcms_Matrix3x3* to_XYZD50) const;
   SkM44 GetPrimaryMatrix() const;
 

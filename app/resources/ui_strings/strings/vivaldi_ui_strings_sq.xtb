@@ -14,11 +14,13 @@
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
 <translation id="3291688615589870984">{DAYS, plural, =1 {1 ditë} other {# ditë}}</translation>
+<translation id="335581015389089642">Ligjëroj</translation>
 <translation id="3600566671520689681">{DAYS, plural, =1 {do edhe 1 ditë} other {do edhe # ditë}}</translation>
 <translation id="3618849550573277856">Konsultoj “<ph name="LOOKUP_STRING" />”</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
 <translation id="3889424535448813030">Shigjeta djathtas</translation>
+<translation id="4289300219472526559">Nis fjalën</translation>
 <translation id="4968171027979920686">{SECONDS, plural, =1 {1 sekondë} other {# sekonda}}</translation>
 <translation id="5076340679995252485">&amp;Ngjit</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
@@ -28,6 +30,7 @@
 <translation id="5906667377645263094">{SECONDS, plural, =1 {do edhe 1 sekondë} other {do edhe # sekonda}}</translation>
 <translation id="5943826764092288734">{HOURS, plural, =1 {1 orë} other {# orë}}</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
+<translation id="6397363302884558537">Ndërpres fjalën</translation>
 <translation id="6404817160109697034">{SECONDS, plural, =1 {1 sek më parë} other {# sek më parë}}</translation>
 <translation id="6483402905448010557">{SECONDS, plural, =1 {1 sekondë më parë} other {# sekonda më parë}}</translation>
 <translation id="6863590663815976734">{HOURS, plural, =1 {do edhe 1 orë} other {do edhe # orë}}</translation>

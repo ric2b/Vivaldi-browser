@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,6 +48,7 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/form_data_importer.h"
+#include "components/autofill/core/browser/metrics/payments/credit_card_save_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/manage_cards_prompt_metrics.h"
 #include "components/autofill/core/browser/payments/credit_card_save_manager.h"
 #include "components/autofill/core/browser/payments/credit_card_save_strike_database.h"
@@ -202,6 +203,9 @@ class SaveCardBubbleViewsFullFormBrowserTest
     // HTML pages in tests. Since ContentAutofillDriver is per RFH, the driver
     // that this method starts observing will also be the one to notify later.
     AddBlankTabAndShow(GetBrowser(0));
+    autofill_manager_injector_ =
+        std::make_unique<TestAutofillManagerInjector<TestAutofillManager>>(
+            GetActiveWebContents());
 
     // Set up the URL loader factory for the payments client so we can intercept
     // those network requests too.
@@ -229,10 +233,6 @@ class SaveCardBubbleViewsFullFormBrowserTest
             ->credit_card_save_manager_.get();
     credit_card_save_manager_->SetEventObserverForTesting(this);
     AddEventObserverToController();
-
-    autofill_manager_injector_ =
-        std::make_unique<TestAutofillManagerInjector<TestAutofillManager>>(
-            GetActiveWebContents());
 
     // Set up the fake geolocation data.
     geolocation_overrider_ =
@@ -336,13 +336,14 @@ class SaveCardBubbleViewsFullFormBrowserTest
     ASSERT_TRUE(SetupSync());
   }
 
-  void NavigateTo(const std::string& file_path) {
+  void NavigateToAndWaitForForm(const std::string& file_path) {
     if (file_path.find("data:") == 0U) {
       ASSERT_TRUE(ui_test_utils::NavigateToURL(GetBrowser(0), GURL(file_path)));
     } else {
       ASSERT_TRUE(ui_test_utils::NavigateToURL(
           GetBrowser(0), embedded_test_server()->GetURL(file_path)));
     }
+    ASSERT_TRUE(GetAutofillManager()->WaitForFormsSeen(1));
   }
 
   void SetAccountFullName(const std::string& full_name) {
@@ -397,7 +398,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_address_and_cc.html.
   void FillForm() {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -406,7 +407,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_cc.html.
   void FillAndChangeForm() {
-    NavigateTo(kCreditCardUploadForm);
+    NavigateToAndWaitForForm(kCreditCardUploadForm);
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
     const std::string click_add_fields_button_js =
@@ -418,7 +419,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
   }
 
   void FillFormWithCardDetailsOnly() {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_card_button_js =
         "(function() { document.getElementById('fill_card_only').click(); "
@@ -429,7 +430,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_address_and_cc.html.
   void FillFormWithoutCvc() {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -443,7 +444,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_address_and_cc.html.
   void FillFormWithInvalidCvc() {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -458,7 +459,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_address_and_cc.html.
   void FillFormWithoutName() {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -472,7 +473,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_shipping_address.html.
   void FillFormWithConflictingName() {
-    NavigateTo(kCreditCardAndShippingUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndShippingUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -487,7 +488,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_address_and_cc.html.
   void FillFormWithoutExpirationDate() {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -503,7 +504,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_address_and_cc.html.
   void FillFormWithExpirationMonthOnly(const std::string& month) {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -524,7 +525,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_address_and_cc.html.
   void FillFormWithExpirationYearOnly(const std::string& year) {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -546,7 +547,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
   // Should be called for credit_card_upload_form_address_and_cc.html.
   void FillFormWithSpecificExpirationDate(const std::string& month,
                                           const std::string& year) {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -565,7 +566,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_address_and_cc.html.
   void FillFormWithoutAddress() {
-    NavigateTo(kCreditCardAndAddressUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -579,7 +580,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
 
   // Should be called for credit_card_upload_form_shipping_address.html.
   void FillFormWithConflictingPostalCode() {
-    NavigateTo(kCreditCardAndShippingUploadForm);
+    NavigateToAndWaitForForm(kCreditCardAndShippingUploadForm);
     content::WebContents* web_contents = GetActiveWebContents();
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
@@ -774,7 +775,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
   // UMA should have recorded bubble rejection.
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptResult.Local.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_CANCELLED, 1);
+      autofill_metrics::SaveCardPromptResult::kCancelled, 1);
 }
 
 class SaveCardBubbleViewsFullFormBrowserTestWithAutofillUpstream
@@ -863,8 +864,17 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestSettings,
 // dismissed and then immediately torn down (e.g. by closing browser window)
 // before the asynchronous close completes. Regression test for
 // https://crbug.com/842577 .
+//
+// TODO(crbug.com/1360234): Flaky on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_Local_SynchronousCloseAfterAsynchronousClose \
+  DISABLED_Local_SynchronousCloseAfterAsynchronousClose
+#else
+#define MAYBE_Local_SynchronousCloseAfterAsynchronousClose \
+  Local_SynchronousCloseAfterAsynchronousClose
+#endif
 IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
-                       Local_SynchronousCloseAfterAsynchronousClose) {
+                       MAYBE_Local_SynchronousCloseAfterAsynchronousClose) {
   FillForm();
   SubmitFormAndWaitForCardLocalSaveBubble();
 
@@ -908,7 +918,7 @@ IN_PROC_BROWSER_TEST_F(
   // UMA should have recorded bubble acceptance.
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
+      autofill_metrics::SaveCardPromptResult::kAccepted, 1);
 }
 
 // On Chrome OS, the test profile starts with a primary account already set, so
@@ -979,7 +989,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsSyncTransportFullFormBrowserTest,
   // UMA should have recorded bubble acceptance.
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
+      autofill_metrics::SaveCardPromptResult::kAccepted, 1);
 }
 
 // Tests the implicit sync state. Ensures that the (i) info icon appears for
@@ -1087,7 +1097,7 @@ IN_PROC_BROWSER_TEST_F(
   // UMA should have recorded bubble rejection.
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_CANCELLED, 1);
+      autofill_metrics::SaveCardPromptResult::kCancelled, 1);
 }
 
 // Tests the upload save bubble. Ensures that clicking the top-right [X] close
@@ -1220,11 +1230,11 @@ IN_PROC_BROWSER_TEST_F(
   // the ".RequestingCardholderName" subhistogram.
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
+      autofill_metrics::SaveCardPromptResult::kAccepted, 1);
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptResult.Upload.FirstShow."
       "RequestingCardholderName",
-      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
+      autofill_metrics::SaveCardPromptResult::kAccepted, 1);
 }
 
 // Tests the upload save bubble. Ensures that if cardholder name is explicitly
@@ -1364,7 +1374,7 @@ IN_PROC_BROWSER_TEST_F(
       {DialogEvent::REQUESTED_UPLOAD_SAVE,
        DialogEvent::RECEIVED_GET_UPLOAD_DETAILS_RESPONSE,
        DialogEvent::OFFERED_LOCAL_SAVE, DialogEvent::BUBBLE_SHOWN});
-  NavigateTo(kCreditCardAndAddressUploadForm);
+  NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
   FillForm();
   SubmitForm();
   WaitForObservedEvent();
@@ -1390,7 +1400,7 @@ IN_PROC_BROWSER_TEST_F(
       {DialogEvent::REQUESTED_UPLOAD_SAVE,
        DialogEvent::RECEIVED_GET_UPLOAD_DETAILS_RESPONSE,
        DialogEvent::OFFERED_LOCAL_SAVE, DialogEvent::BUBBLE_SHOWN});
-  NavigateTo(kCreditCardAndAddressUploadForm);
+  NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
   FillForm();
   SubmitForm();
   WaitForObservedEvent();
@@ -1428,7 +1438,6 @@ IN_PROC_BROWSER_TEST_F(
   // Submitting the the dynamic change form, offer to save bubble should be
   // shown.
   FillAndChangeForm();
-  ASSERT_TRUE(GetAutofillManager()->WaitForFormsSeen(1));
   ResetEventWaiterForSequence(
       {DialogEvent::REQUESTED_UPLOAD_SAVE,
        DialogEvent::RECEIVED_GET_UPLOAD_DETAILS_RESPONSE,
@@ -1894,7 +1903,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
   // UMA should have recorded bubble rejection.
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptOffer.Local.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_NOT_SHOWN_MAX_STRIKES_REACHED, 1);
+      autofill_metrics::SaveCardPromptOffer::kNotShownMaxStrikesReached, 1);
 }
 
 // Tests overall StrikeDatabase interaction with the upload save bubble. Runs an
@@ -1936,7 +1945,7 @@ IN_PROC_BROWSER_TEST_F(
       {DialogEvent::REQUESTED_UPLOAD_SAVE,
        DialogEvent::RECEIVED_GET_UPLOAD_DETAILS_RESPONSE,
        DialogEvent::OFFERED_UPLOAD_SAVE, DialogEvent::ICON_SHOWN});
-  NavigateTo(kCreditCardAndAddressUploadForm);
+  NavigateToAndWaitForForm(kCreditCardAndAddressUploadForm);
   FillForm();
   SubmitForm();
   WaitForObservedEvent();
@@ -1965,7 +1974,7 @@ IN_PROC_BROWSER_TEST_F(
   // UMA should have recorded bubble rejection.
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptOffer.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_NOT_SHOWN_MAX_STRIKES_REACHED, 1);
+      autofill_metrics::SaveCardPromptOffer::kNotShownMaxStrikesReached, 1);
 }
 
 // Tests to ensure the card nickname is shown correctly in the Upstream bubble.
@@ -2022,7 +2031,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
   // UMA should have recorded bubble acceptance.
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptResult.Local.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
+      autofill_metrics::SaveCardPromptResult::kAccepted, 1);
 
   // The local save bubble should not be visible, but the card icon should
   // remain visible for the clickable [Manage cards] option.

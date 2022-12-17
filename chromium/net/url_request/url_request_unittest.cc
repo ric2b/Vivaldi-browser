@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,8 +97,8 @@
 #include "net/cookies/cookie_store_test_helpers.h"
 #include "net/cookies/test_cookie_access_delegate.h"
 #include "net/disk_cache/disk_cache.h"
-#include "net/dns/host_resolver_results.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_byte_range.h"
 #include "net/http/http_cache.h"
@@ -602,26 +602,26 @@ class MockCertificateReportSender
       const GURL& report_uri,
       base::StringPiece content_type,
       base::StringPiece report,
-      const NetworkIsolationKey& network_isolation_key,
+      const NetworkAnonymizationKey& network_anonymization_key,
       base::OnceCallback<void()> success_callback,
       base::OnceCallback<void(const GURL&, int, int)> error_callback) override {
     latest_report_uri_ = report_uri;
     latest_report_.assign(report.data(), report.size());
     latest_content_type_.assign(content_type.data(), content_type.size());
-    latest_network_isolation_key_ = network_isolation_key;
+    latest_network_anonymization_key_ = network_anonymization_key;
   }
   const GURL& latest_report_uri() { return latest_report_uri_; }
   const std::string& latest_report() { return latest_report_; }
   const std::string& latest_content_type() { return latest_content_type_; }
-  const NetworkIsolationKey& latest_network_isolation_key() {
-    return latest_network_isolation_key_;
+  const NetworkAnonymizationKey& latest_network_anonymization_key() {
+    return latest_network_anonymization_key_;
   }
 
  private:
   GURL latest_report_uri_;
   std::string latest_report_;
   std::string latest_content_type_;
-  NetworkIsolationKey latest_network_isolation_key_;
+  NetworkAnonymizationKey latest_network_anonymization_key_;
 };
 
 // OCSPErrorTestDelegate caches the SSLInfo passed to OnSSLCertificateError.
@@ -1081,8 +1081,8 @@ LoadTimingInfo NormalLoadTimingInfo(base::TimeTicks now,
 
   LoadTimingInfo::ConnectTiming& connect_timing = load_timing.connect_timing;
   if (connect_time_flags & CONNECT_TIMING_HAS_DNS_TIMES) {
-    connect_timing.dns_start = now + base::Days(3);
-    connect_timing.dns_end = now + base::Days(4);
+    connect_timing.domain_lookup_start = now + base::Days(3);
+    connect_timing.domain_lookup_end = now + base::Days(4);
   }
   connect_timing.connect_start = now + base::Days(5);
   if (connect_time_flags & CONNECT_TIMING_HAS_SSL_TIMES) {
@@ -1161,10 +1161,10 @@ TEST_F(URLRequestLoadTimingTest, InterceptLoadTiming) {
             load_timing_result.proxy_resolve_start);
   EXPECT_EQ(job_load_timing.proxy_resolve_end,
             load_timing_result.proxy_resolve_end);
-  EXPECT_EQ(job_load_timing.connect_timing.dns_start,
-            load_timing_result.connect_timing.dns_start);
-  EXPECT_EQ(job_load_timing.connect_timing.dns_end,
-            load_timing_result.connect_timing.dns_end);
+  EXPECT_EQ(job_load_timing.connect_timing.domain_lookup_start,
+            load_timing_result.connect_timing.domain_lookup_start);
+  EXPECT_EQ(job_load_timing.connect_timing.domain_lookup_end,
+            load_timing_result.connect_timing.domain_lookup_end);
   EXPECT_EQ(job_load_timing.connect_timing.connect_start,
             load_timing_result.connect_timing.connect_start);
   EXPECT_EQ(job_load_timing.connect_timing.connect_end,
@@ -1192,10 +1192,10 @@ TEST_F(URLRequestLoadTimingTest, InterceptLoadTimingProxy) {
             load_timing_result.proxy_resolve_start);
   EXPECT_EQ(job_load_timing.proxy_resolve_end,
             load_timing_result.proxy_resolve_end);
-  EXPECT_EQ(job_load_timing.connect_timing.dns_start,
-            load_timing_result.connect_timing.dns_start);
-  EXPECT_EQ(job_load_timing.connect_timing.dns_end,
-            load_timing_result.connect_timing.dns_end);
+  EXPECT_EQ(job_load_timing.connect_timing.domain_lookup_start,
+            load_timing_result.connect_timing.domain_lookup_start);
+  EXPECT_EQ(job_load_timing.connect_timing.domain_lookup_end,
+            load_timing_result.connect_timing.domain_lookup_end);
   EXPECT_EQ(job_load_timing.connect_timing.connect_start,
             load_timing_result.connect_timing.connect_start);
   EXPECT_EQ(job_load_timing.connect_timing.connect_end,
@@ -1222,8 +1222,8 @@ TEST_F(URLRequestLoadTimingTest, InterceptLoadTimingEarlyProxyResolution) {
       NormalLoadTimingInfo(now, CONNECT_TIMING_HAS_DNS_TIMES, true);
   job_load_timing.proxy_resolve_start = now - base::Days(6);
   job_load_timing.proxy_resolve_end = now - base::Days(5);
-  job_load_timing.connect_timing.dns_start = now - base::Days(4);
-  job_load_timing.connect_timing.dns_end = now - base::Days(3);
+  job_load_timing.connect_timing.domain_lookup_start = now - base::Days(4);
+  job_load_timing.connect_timing.domain_lookup_end = now - base::Days(3);
   job_load_timing.connect_timing.connect_start = now - base::Days(2);
   job_load_timing.connect_timing.connect_end = now - base::Days(1);
 
@@ -1237,9 +1237,9 @@ TEST_F(URLRequestLoadTimingTest, InterceptLoadTimingEarlyProxyResolution) {
   EXPECT_EQ(load_timing_result.request_start,
             load_timing_result.proxy_resolve_end);
   EXPECT_EQ(load_timing_result.request_start,
-            load_timing_result.connect_timing.dns_start);
+            load_timing_result.connect_timing.domain_lookup_start);
   EXPECT_EQ(load_timing_result.request_start,
-            load_timing_result.connect_timing.dns_end);
+            load_timing_result.connect_timing.domain_lookup_end);
   EXPECT_EQ(load_timing_result.request_start,
             load_timing_result.connect_timing.connect_start);
   EXPECT_EQ(load_timing_result.request_start,
@@ -1366,10 +1366,6 @@ TEST_F(URLRequestTest, NetworkDelegateProxyError) {
 // Test that when host resolution fails with `ERR_DNS_NAME_HTTPS_ONLY` for
 // "http://" requests, scheme is upgraded to "https://".
 TEST_F(URLRequestTest, DnsNameHttpsOnlyErrorCausesSchemeUpgrade) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      features::kUseDnsHttpsSvcb, {{"UseDnsHttpsSvcbHttpUpgrade", "true"}});
-
   EmbeddedTestServer https_server(EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(EmbeddedTestServer::CERT_TEST_NAMES);
   RegisterDefaultHandlers(&https_server);
@@ -1426,10 +1422,6 @@ TEST_F(URLRequestTest, DnsNameHttpsOnlyErrorCausesSchemeUpgrade) {
 
 // Test that DNS-based scheme upgrade supports deferred redirect.
 TEST_F(URLRequestTest, DnsNameHttpsOnlyErrorCausesSchemeUpgradeDeferred) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      features::kUseDnsHttpsSvcb, {{"UseDnsHttpsSvcbHttpUpgrade", "true"}});
-
   EmbeddedTestServer https_server(EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(EmbeddedTestServer::CERT_TEST_NAMES);
   RegisterDefaultHandlers(&https_server);
@@ -1492,10 +1484,6 @@ TEST_F(URLRequestTest, DnsNameHttpsOnlyErrorCausesSchemeUpgradeDeferred) {
 // Test that requests with "ws" scheme are upgraded to "wss" when DNS
 // indicates that the name is HTTPS-only.
 TEST_F(URLRequestTest, DnsHttpsRecordPresentCausesWsSchemeUpgrade) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      features::kUseDnsHttpsSvcb, {{"UseDnsHttpsSvcbHttpUpgrade", "true"}});
-
   EmbeddedTestServer https_server(EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(EmbeddedTestServer::CERT_TEST_NAMES);
   RegisterDefaultHandlers(&https_server);
@@ -1558,10 +1546,6 @@ TEST_F(URLRequestTest, DnsHttpsRecordPresentCausesWsSchemeUpgrade) {
 #endif  // BUILDFLAG(ENABLE_WEBSOCKETS)
 
 TEST_F(URLRequestTest, DnsHttpsRecordAbsentNoSchemeUpgrade) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      features::kUseDnsHttpsSvcb, {{"UseDnsHttpsSvcbHttpUpgrade", "true"}});
-
   EmbeddedTestServer http_server(EmbeddedTestServer::TYPE_HTTP);
   RegisterDefaultHandlers(&http_server);
   ASSERT_TRUE(http_server.Start());
@@ -1984,8 +1968,7 @@ TEST_F(URLRequestTest, DelayedCookieCallbackAsync) {
       url, "AlreadySetCookie=1;Secure", base::Time::Now(),
       absl::nullopt /* server_time */,
       absl::nullopt /* cookie_partition_key */);
-  auto cm = std::make_unique<CookieMonster>(nullptr, nullptr,
-                                            /*first_party_sets_enabled=*/false);
+  auto cm = std::make_unique<CookieMonster>(nullptr, nullptr);
   cm->SetCanonicalCookieAsync(std::move(cookie2), url,
                               net::CookieOptions::MakeAllInclusive(),
                               CookieStore::SetCookiesCallback());
@@ -3191,8 +3174,7 @@ TEST_P(URLRequestSameSiteCookiesTest, SameSiteCookiesSpecialScheme) {
   // Set up special schemes
   auto cad = std::make_unique<TestCookieAccessDelegate>();
   cad->SetIgnoreSameSiteRestrictionsScheme("chrome", true);
-  auto cm = std::make_unique<CookieMonster>(nullptr, nullptr,
-                                            /*first_party_sets_enabled=*/false);
+  auto cm = std::make_unique<CookieMonster>(nullptr, nullptr);
   cm->SetCookieAccessDelegate(std::move(cad));
 
   auto context_builder = CreateTestURLRequestContextBuilder();
@@ -3856,8 +3838,8 @@ class URLRequestTestHTTP : public URLRequestTest {
         isolation_info1_(IsolationInfo::CreateForInternalRequest(origin1_)),
         isolation_info2_(IsolationInfo::CreateForInternalRequest(origin2_)),
         test_server_(base::FilePath(kTestFilePath)) {
-    // Needed for NetworkIsolationKey to make it down to the socket layer, for
-    // the PKP violation report test.
+    // Needed for NetworkAnonymizationKey to make it down to the socket layer,
+    // for the PKP violation report test.
     feature_list_.InitAndEnableFeature(
         net::features::kPartitionConnectionsByNetworkIsolationKey);
   }
@@ -6228,8 +6210,8 @@ TEST_F(URLRequestTestHTTP, ProcessPKPAndSendReport) {
   std::string* report_hostname = report_dict->FindString("hostname");
   ASSERT_TRUE(report_hostname);
   EXPECT_EQ(test_server_hostname, *report_hostname);
-  EXPECT_EQ(isolation_info.network_isolation_key(),
-            mock_report_sender.latest_network_isolation_key());
+  EXPECT_EQ(isolation_info.network_anonymization_key(),
+            mock_report_sender.latest_network_anonymization_key());
 }
 
 // Tests that reports do not get sent on requests to static pkp hosts that
@@ -6285,8 +6267,8 @@ TEST_F(URLRequestTestHTTP, ProcessPKPWithNoViolation) {
   EXPECT_EQ(OK, d.request_status());
   EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
-  EXPECT_EQ(NetworkIsolationKey(),
-            mock_report_sender.latest_network_isolation_key());
+  EXPECT_EQ(NetworkAnonymizationKey(),
+            mock_report_sender.latest_network_anonymization_key());
   TransportSecurityState::PKPState pkp_state;
   EXPECT_TRUE(context->transport_security_state()->GetStaticPKPState(
       test_server_hostname, &pkp_state));
@@ -6345,8 +6327,8 @@ TEST_F(URLRequestTestHTTP, PKPBypassRecorded) {
   EXPECT_EQ(OK, d.request_status());
   EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
-  EXPECT_EQ(NetworkIsolationKey(),
-            mock_report_sender.latest_network_isolation_key());
+  EXPECT_EQ(NetworkAnonymizationKey(),
+            mock_report_sender.latest_network_anonymization_key());
   TransportSecurityState::PKPState pkp_state;
   EXPECT_TRUE(context->transport_security_state()->GetStaticPKPState(
       test_server_hostname, &pkp_state));
@@ -6398,7 +6380,7 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
       const X509Certificate* served_certificate_chain,
       const SignedCertificateTimestampAndStatusList&
           signed_certificate_timestamps,
-      const NetworkIsolationKey& network_isolation_key) override {
+      const NetworkAnonymizationKey& network_anonymization_key) override {
     num_failures_++;
   }
 
@@ -6490,8 +6472,7 @@ TEST_F(URLRequestTestHTTP, PreloadExpectCTHeader) {
 // Tests that Expect CT HTTP headers are processed correctly.
 TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      TransportSecurityState::kDynamicExpectCTFeature);
+  feature_list.InitAndEnableFeature(kDynamicExpectCTFeature);
 
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
@@ -6531,7 +6512,7 @@ TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
 
   TransportSecurityState::ExpectCTState state;
   ASSERT_TRUE(context->transport_security_state()->GetDynamicExpectCTState(
-      url.host(), NetworkIsolationKey(), &state));
+      url.host(), NetworkAnonymizationKey(), &state));
   EXPECT_TRUE(state.enforce);
   EXPECT_EQ(GURL("https://example.test"), state.report_uri);
 }
@@ -6540,8 +6521,7 @@ TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
 // processed.
 TEST_F(URLRequestTestHTTP, MultipleExpectCTHeaders) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      TransportSecurityState::kDynamicExpectCTFeature);
+  feature_list.InitAndEnableFeature(kDynamicExpectCTFeature);
 
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
@@ -6582,7 +6562,7 @@ TEST_F(URLRequestTestHTTP, MultipleExpectCTHeaders) {
 
   TransportSecurityState::ExpectCTState state;
   ASSERT_TRUE(context->transport_security_state()->GetDynamicExpectCTState(
-      url.host(), NetworkIsolationKey(), &state));
+      url.host(), NetworkAnonymizationKey(), &state));
   EXPECT_TRUE(state.enforce);
   EXPECT_EQ(GURL("https://example.test"), state.report_uri);
 }
@@ -7740,20 +7720,20 @@ TEST_F(URLRequestTestHTTP, IsolationInfoUpdatedOnRedirect) {
   }
 }
 
-// Tests that |key_auth_cache_by_network_isolation_key| is respected.
-TEST_F(URLRequestTestHTTP, AuthWithNetworkIsolationKey) {
+// Tests that |key_auth_cache_by_network_anonymization_key| is respected.
+TEST_F(URLRequestTestHTTP, AuthWithNetworkAnonymizationKey) {
   ASSERT_TRUE(http_test_server()->Start());
 
-  for (bool key_auth_cache_by_network_isolation_key : {false, true}) {
+  for (bool key_auth_cache_by_network_anonymization_key : {false, true}) {
     auto context_builder = CreateTestURLRequestContextBuilder();
     HttpNetworkSessionParams network_session_params;
     network_session_params
-        .key_auth_cache_server_entries_by_network_isolation_key =
-        key_auth_cache_by_network_isolation_key;
+        .key_auth_cache_server_entries_by_network_anonymization_key =
+        key_auth_cache_by_network_anonymization_key;
     context_builder->set_http_network_session_params(network_session_params);
     auto context = context_builder->Build();
 
-    // Populate the auth cache using one NetworkIsolationKey.
+    // Populate the auth cache using one NetworkAnonymizationKey.
     {
       TestDelegate d;
       GURL url(base::StringPrintf(
@@ -7774,9 +7754,9 @@ TEST_F(URLRequestTestHTTP, AuthWithNetworkIsolationKey) {
       EXPECT_TRUE(d.data_received().find("user/secret") != std::string::npos);
     }
 
-    // Make a request with another NetworkIsolationKey. This may or may not use
-    // the cached auth credentials, depending on whether or not the
-    // HttpAuthCache is configured to respect the NetworkIsolationKey.
+    // Make a request with another NetworkAnonymizationKey. This may or may not
+    // use the cached auth credentials, depending on whether or not the
+    // HttpAuthCache is configured to respect the NetworkAnonymizationKey.
     {
       TestDelegate d;
 
@@ -7791,13 +7771,13 @@ TEST_F(URLRequestTestHTTP, AuthWithNetworkIsolationKey) {
 
       EXPECT_THAT(d.request_status(), IsOk());
       ASSERT_TRUE(r->response_headers());
-      if (key_auth_cache_by_network_isolation_key) {
+      if (key_auth_cache_by_network_anonymization_key) {
         EXPECT_EQ(401, r->response_headers()->response_code());
       } else {
         EXPECT_EQ(200, r->response_headers()->response_code());
       }
 
-      EXPECT_EQ(!key_auth_cache_by_network_isolation_key,
+      EXPECT_EQ(!key_auth_cache_by_network_anonymization_key,
                 d.data_received().find("user/secret") != std::string::npos);
     }
   }
@@ -7978,8 +7958,8 @@ TEST_F(URLRequestTest, NoCookieInclusionStatusWarningIfWouldBeExcludedAnyway) {
   auto& network_delegate = *context_builder->set_network_delegate(
       std::make_unique<FilteringTestNetworkDelegate>());
   network_delegate.SetCookieFilter("blockeduserpreference");
-  context_builder->SetCookieStore(std::make_unique<CookieMonster>(
-      nullptr, nullptr, /*first_party_sets_enabled=*/false));
+  context_builder->SetCookieStore(
+      std::make_unique<CookieMonster>(nullptr, nullptr));
   auto context = context_builder->Build();
   auto& cm = *static_cast<CookieMonster*>(context->cookie_store());
 
@@ -8228,8 +8208,8 @@ TEST_F(URLRequestTestHTTP, AuthChallengeWithFilteredCookies) {
     auto& filtering_network_delegate = *context_builder->set_network_delegate(
         std::make_unique<FilteringTestNetworkDelegate>());
     filtering_network_delegate.set_block_annotate_cookies();
-    context_builder->SetCookieStore(std::make_unique<CookieMonster>(
-        nullptr, nullptr, /*first_party_sets_enabled=*/false));
+    context_builder->SetCookieStore(
+        std::make_unique<CookieMonster>(nullptr, nullptr));
     auto context = context_builder->Build();
 
     auto* cm = static_cast<CookieMonster*>(context->cookie_store());
@@ -8652,8 +8632,8 @@ TEST_F(URLRequestTestHTTP, RedirectWithFilteredCookies) {
     auto& filtering_network_delegate = *context_builder->set_network_delegate(
         std::make_unique<FilteringTestNetworkDelegate>());
     filtering_network_delegate.set_block_annotate_cookies();
-    context_builder->SetCookieStore(std::make_unique<CookieMonster>(
-        nullptr, nullptr, /*first_party_sets_enabled=*/false));
+    context_builder->SetCookieStore(
+        std::make_unique<CookieMonster>(nullptr, nullptr));
     auto context = context_builder->Build();
 
     auto* cm = static_cast<CookieMonster*>(context->cookie_store());
@@ -10765,10 +10745,6 @@ static bool UsingBuiltinCertVerifier() {
 #if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   return true;
 #else
-#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
-  if (base::FeatureList::IsEnabled(features::kCertVerifierBuiltinFeature))
-    return true;
-#endif
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
   if (base::FeatureList::IsEnabled(features::kChromeRootStoreUsed))
     return true;
@@ -13111,6 +13087,246 @@ TEST_F(URLRequestTest, SetURLChain) {
   }
 }
 
+TEST_F(URLRequestTest, SetIsolationInfoFromNakTripleNikTripleNak) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  std::vector<base::test::FeatureRef> enabled_features = {};
+  std::vector<base::test::FeatureRef> disabled_features = {
+      net::features::kEnableDoubleKeyNetworkAnonymizationKey,
+      net::features::kForceIsolationInfoFrameOriginToTopLevelFrame,
+      net::features::kEnableCrossSiteFlagNetworkAnonymizationKey};
+  scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+
+  TestDelegate d;
+  SchemefulSite site_a = SchemefulSite(GURL("https://a.com/"));
+  SchemefulSite site_b = SchemefulSite(GURL("https://b.com/"));
+  base::UnguessableToken nak_nonce = base::UnguessableToken::Create();
+  NetworkAnonymizationKey populated_cross_site_nak(site_a, site_b, true,
+                                                   nak_nonce);
+  IsolationInfo expected_isolation_info_populated_cross_site_nak =
+      IsolationInfo::Create(IsolationInfo::RequestType::kOther,
+                            url::Origin::Create(GURL("https://a.com/")),
+                            url::Origin::Create(GURL("https://b.com/")),
+                            SiteForCookies(),
+                            /*party_context=*/absl::nullopt, &nak_nonce);
+
+  NetworkAnonymizationKey populated_same_site_nak(site_a, site_a, false,
+                                                  nak_nonce);
+  IsolationInfo expected_isolation_info_populated_same_site_nak =
+      IsolationInfo::Create(IsolationInfo::RequestType::kOther,
+                            url::Origin::Create(GURL("https://a.com/")),
+                            url::Origin::Create(GURL("https://a.com/")),
+                            SiteForCookies(),
+                            /*party_context=*/absl::nullopt, &nak_nonce);
+
+  NetworkAnonymizationKey empty_nak;
+  GURL original_url("http://localhost");
+  std::unique_ptr<URLRequest> r(default_context().CreateRequest(
+      original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+
+  r->set_isolation_info_from_network_anonymization_key(
+      populated_cross_site_nak);
+  r->SetLoadFlags(LOAD_DISABLE_CACHE);
+  r->set_allow_credentials(false);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(),
+            populated_cross_site_nak);
+  EXPECT_TRUE(r->isolation_info().IsEqualForTesting(
+      expected_isolation_info_populated_cross_site_nak));
+
+  r->set_isolation_info_from_network_anonymization_key(populated_same_site_nak);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(),
+            populated_same_site_nak);
+  EXPECT_TRUE(r->isolation_info().IsEqualForTesting(
+      expected_isolation_info_populated_same_site_nak));
+
+  r->set_isolation_info_from_network_anonymization_key(empty_nak);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(), empty_nak);
+  EXPECT_TRUE(r->isolation_info().IsEqualForTesting(net::IsolationInfo()));
+  r->Start();
+  d.RunUntilComplete();
+}
+
+TEST_F(URLRequestTest, SetIsolationInfoFromNakDoubleNikDoubleNak) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  std::vector<base::test::FeatureRef> enabled_features = {
+      net::features::kEnableDoubleKeyNetworkAnonymizationKey,
+      net::features::kForceIsolationInfoFrameOriginToTopLevelFrame};
+  std::vector<base::test::FeatureRef> disabled_features = {
+      net::features::kEnableCrossSiteFlagNetworkAnonymizationKey};
+  scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+
+  TestDelegate d;
+  SchemefulSite site_a = SchemefulSite(GURL("https://a.com/"));
+  SchemefulSite site_b = SchemefulSite(GURL("https://b.com/"));
+  base::UnguessableToken nak_nonce = base::UnguessableToken::Create();
+  NetworkAnonymizationKey populated_cross_site_nak(site_a, site_b, true,
+                                                   nak_nonce);
+  NetworkAnonymizationKey populated_same_site_nak(site_a, site_a, false,
+                                                  nak_nonce);
+  // Frame site should be set to the top level sites value even though NAK is
+  // double keyed.
+  IsolationInfo expected_isolation_info_populated_same_site_nak =
+      IsolationInfo::Create(IsolationInfo::RequestType::kOther,
+                            url::Origin::Create(GURL("https://a.com/")),
+                            url::Origin::Create(GURL("https://a.com/")),
+                            SiteForCookies(),
+                            /*party_context=*/absl::nullopt, &nak_nonce);
+  NetworkAnonymizationKey empty_nak;
+
+  GURL original_url("http://localhost");
+  std::unique_ptr<URLRequest> r(default_context().CreateRequest(
+      original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+
+  r->set_isolation_info_from_network_anonymization_key(
+      populated_cross_site_nak);
+  r->SetLoadFlags(LOAD_DISABLE_CACHE);
+  r->set_allow_credentials(false);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(),
+            populated_cross_site_nak);
+  // We do not know the frame_site other than that it will be cross site.
+  EXPECT_EQ(r->isolation_info().top_frame_origin(),
+            url::Origin::Create(GURL("https://a.com/")));
+
+  r->set_isolation_info_from_network_anonymization_key(populated_same_site_nak);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(),
+            populated_same_site_nak);
+  EXPECT_TRUE(r->isolation_info().IsEqualForTesting(
+      expected_isolation_info_populated_same_site_nak));
+
+  r->set_isolation_info_from_network_anonymization_key(empty_nak);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(), empty_nak);
+  EXPECT_TRUE(r->isolation_info().IsEqualForTesting(net::IsolationInfo()));
+  r->Start();
+  d.RunUntilComplete();
+}
+
+TEST_F(URLRequestTest, SetIsolationInfoFromNakTripleNikDoubleNak) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  std::vector<base::test::FeatureRef> enabled_features = {
+      net::features::kEnableDoubleKeyNetworkAnonymizationKey};
+  std::vector<base::test::FeatureRef> disabled_features = {
+      net::features::kForceIsolationInfoFrameOriginToTopLevelFrame,
+      net::features::kEnableCrossSiteFlagNetworkAnonymizationKey};
+  scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+
+  TestDelegate d;
+  SchemefulSite site_a = SchemefulSite(GURL("https://a.com/"));
+  SchemefulSite site_b = SchemefulSite(GURL("https://b.com/"));
+  base::UnguessableToken nak_nonce = base::UnguessableToken::Create();
+  NetworkAnonymizationKey populated_cross_site_nak(site_a, site_b, true,
+                                                   nak_nonce);
+  NetworkAnonymizationKey populated_same_site_nak(site_a, site_a, false,
+                                                  nak_nonce);
+  IsolationInfo expected_isolation_info_populated_same_site_nak =
+      IsolationInfo::Create(IsolationInfo::RequestType::kOther,
+                            url::Origin::Create(GURL("https://a.com/")),
+                            url::Origin::Create(GURL("https://a.com/")),
+                            SiteForCookies(),
+                            /*party_context=*/absl::nullopt, &nak_nonce);
+  NetworkAnonymizationKey empty_nak;
+
+  GURL original_url("http://localhost");
+  std::unique_ptr<URLRequest> r(default_context().CreateRequest(
+      original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+
+  r->set_isolation_info_from_network_anonymization_key(
+      populated_cross_site_nak);
+  r->SetLoadFlags(LOAD_DISABLE_CACHE);
+  r->set_allow_credentials(false);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(),
+            populated_cross_site_nak);
+  EXPECT_EQ(r->isolation_info().top_frame_origin(),
+            url::Origin::Create(GURL("https://a.com/")));
+  // When double key is enabled for NAK but not for NIK, the frame site of the
+  // IsolationInfo will be set to the top level site.
+  EXPECT_EQ(r->isolation_info().frame_origin(),
+            url::Origin::Create(GURL("https://a.com/")));
+
+  r->set_isolation_info_from_network_anonymization_key(populated_same_site_nak);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(),
+            populated_same_site_nak);
+  EXPECT_TRUE(r->isolation_info().IsEqualForTesting(
+      expected_isolation_info_populated_same_site_nak));
+
+  r->set_isolation_info_from_network_anonymization_key(empty_nak);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(), empty_nak);
+  EXPECT_FALSE(r->isolation_info().top_frame_origin());
+  EXPECT_FALSE(r->isolation_info().frame_origin());
+  r->Start();
+  d.RunUntilComplete();
+}
+
+TEST_F(URLRequestTest,
+       SetIsolationInfoFromNakTripleNikDoubleWithCrossSiteFlagNak) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  std::vector<base::test::FeatureRef> enabled_features = {
+      net::features::kEnableDoubleKeyNetworkAnonymizationKey,
+      net::features::kEnableCrossSiteFlagNetworkAnonymizationKey};
+  std::vector<base::test::FeatureRef> disabled_features = {
+      net::features::kForceIsolationInfoFrameOriginToTopLevelFrame};
+  scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+
+  TestDelegate d;
+  SchemefulSite site_a = SchemefulSite(GURL("https://a.com/"));
+  SchemefulSite site_b = SchemefulSite(GURL("https://b.com/"));
+  base::UnguessableToken nak_nonce = base::UnguessableToken::Create();
+  NetworkAnonymizationKey populated_cross_site_nak(
+      site_a, site_b, /*is_cross_site=*/true, nak_nonce);
+  NetworkAnonymizationKey populated_same_site_nak(
+      site_a, site_a, /*is_cross_site=*/false, nak_nonce);
+
+  NetworkAnonymizationKey empty_nak;
+  GURL original_url("http://localhost");
+  std::unique_ptr<URLRequest> r(default_context().CreateRequest(
+      original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+
+  r->set_isolation_info_from_network_anonymization_key(
+      populated_cross_site_nak);
+  r->SetLoadFlags(LOAD_DISABLE_CACHE);
+  r->set_allow_credentials(false);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
+  EXPECT_EQ(r->isolation_info().network_anonymization_key().ToDebugString(),
+            populated_cross_site_nak.ToDebugString());
+  EXPECT_EQ(r->isolation_info().top_frame_origin(),
+            url::Origin::Create(GURL("https://a.com/")));
+  // When double key is enabled for NAK but not for NIK, the frame site of the
+  // IsolationInfo will be set to the top level site.
+  EXPECT_TRUE(r->isolation_info().frame_origin());
+
+  r->set_isolation_info_from_network_anonymization_key(populated_same_site_nak);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
+  EXPECT_EQ(r->isolation_info().network_anonymization_key().ToDebugString(),
+            populated_same_site_nak.ToDebugString());
+  EXPECT_EQ(r->isolation_info().top_frame_origin(),
+            url::Origin::Create(GURL("https://a.com/")));
+  // Cross site double keyed NAKs should set a cross site dummy origin on the
+  // IsolationInfo.
+  EXPECT_TRUE(r->isolation_info().frame_origin());
+
+  r->set_isolation_info_from_network_anonymization_key(empty_nak);
+  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
+  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
+  EXPECT_EQ(r->isolation_info().network_anonymization_key(), empty_nak);
+  EXPECT_FALSE(r->isolation_info().top_frame_origin());
+  EXPECT_FALSE(r->isolation_info().frame_origin());
+
+  r->Start();
+  d.RunUntilComplete();
+}
+
 class URLRequestMaybeAsyncFirstPartySetsTest
     : public URLRequestTest,
       public testing::WithParamInterface<bool> {
@@ -13118,10 +13334,8 @@ class URLRequestMaybeAsyncFirstPartySetsTest
   URLRequestMaybeAsyncFirstPartySetsTest() { CHECK(test_server_.Start()); }
 
   std::unique_ptr<CookieStore> CreateCookieStore() {
-    auto cookie_monster =
-        std::make_unique<CookieMonster>(/*store=*/nullptr,
-                                        /*net_log=*/nullptr,
-                                        /*first_party_sets_enabled=*/true);
+    auto cookie_monster = std::make_unique<CookieMonster>(/*store=*/nullptr,
+                                                          /*net_log=*/nullptr);
     auto cookie_access_delegate = std::make_unique<TestCookieAccessDelegate>();
     cookie_access_delegate->set_invoke_callbacks_asynchronously(
         invoke_callbacks_asynchronously());

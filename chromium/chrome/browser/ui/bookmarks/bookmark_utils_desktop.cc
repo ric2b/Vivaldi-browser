@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -356,17 +356,17 @@ void OpenSavedTabGroupHelper(Browser* browser,
   if (!saved_group)
     return;
 
-  if (saved_group->tab_group_id().has_value()) {
+  if (saved_group->local_group_id().has_value()) {
     TabStripModel* model_for_activation =
         service->listener()->GetTabStripModelWithTabGroupId(
-            saved_group->tab_group_id().value());
+            saved_group->local_group_id().value());
 
     // Only activate the tab group's first tab if it exists in any browser's
     // tabstrip model.
     if (model_for_activation) {
       absl::optional<int> first_tab =
           model_for_activation->group_model()
-              ->GetTabGroup(saved_group->tab_group_id().value())
+              ->GetTabGroup(saved_group->local_group_id().value())
               ->GetFirstTab();
       DCHECK(first_tab.has_value());
       model_for_activation->ActivateTabAt(first_tab.value());
@@ -421,7 +421,7 @@ void OpenSavedTabGroupHelper(Browser* browser,
 
   absl::optional<int> first_tab =
       model_for_creation->group_model()
-          ->GetTabGroup(saved_group->tab_group_id().value())
+          ->GetTabGroup(saved_group->local_group_id().value())
           ->GetFirstTab();
   DCHECK(first_tab.has_value());
   model_for_creation->ActivateTabAt(first_tab.value());

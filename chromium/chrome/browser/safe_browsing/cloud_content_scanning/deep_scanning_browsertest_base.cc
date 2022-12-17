@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,12 +39,15 @@ class UnresponsiveFilesRequestHandler
       Profile* profile,
       const enterprise_connectors::AnalysisSettings& analysis_settings,
       GURL url,
+      const std::string& source,
+      const std::string& destination,
+      const std::string& user_action_id,
       safe_browsing::DeepScanAccessPoint access_point,
       const std::vector<base::FilePath>& paths,
       enterprise_connectors::FilesRequestHandler::CompletionCallback callback) {
     return base::WrapUnique(new UnresponsiveFilesRequestHandler(
-        upload_service, profile, analysis_settings, url, access_point, paths,
-        std::move(callback)));
+        upload_service, profile, analysis_settings, url, source, destination,
+        user_action_id, access_point, paths, std::move(callback)));
   }
 
  private:

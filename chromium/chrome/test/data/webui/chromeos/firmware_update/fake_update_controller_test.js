@@ -1,13 +1,13 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {fakeInstallationProgress} from 'chrome://accessory-update/fake_data.js';
 import {FakeUpdateController} from 'chrome://accessory-update/fake_update_controller.js';
 import {UpdateProgressObserverRemote} from 'chrome://accessory-update/firmware_update_types.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {flushTasks} from '../../test_util.js';
 
 export function fakeUpdateControllerTest() {
   /** @type {?FakeUpdateController} */

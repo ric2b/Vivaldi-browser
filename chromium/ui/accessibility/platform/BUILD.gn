@@ -1,10 +1,11 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
 import("//build/config/linux/pkg_config.gni")
 import("//build/config/ui.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
@@ -31,14 +32,19 @@ source_set("platform") {
   visibility = [ "//ui/accessibility" ]
 
   sources = [
-    # Used by by browser_accessibility_state_impl.cc.
+    # Used by web_ax_platform_tree_manager_delegate.cc.
+    "ax_platform_tree_manager_delegate.h",
+
+    # Used by browser_accessibility_state_impl.cc.
     "ax_platform_node.cc",
     "ax_platform_node.h",
     "ax_platform_node_delegate.cc",
     "ax_platform_node_delegate.h",
 
-    # Used by browser_accessibility.cc.
+    # Used by browser_accessibility_manager.cc.
     "ax_platform_tree_manager.h",
+
+    # Used by browser_accessibility.cc.
     "ax_unique_id.cc",
     "ax_unique_id.h",
 
@@ -90,6 +96,30 @@ source_set("platform") {
     "//ui/base:buildflags",
     "//ui/display",
   ]
+
+  if (enable_extensions) {
+    sources += [
+      # Use by the Automation API.
+      # TODO(crbug.com/1357889): Rename to atp/ or javascript/?
+      "automation/automation_api_util.cc",
+      "automation/automation_api_util.h",
+      "automation/automation_ax_tree_wrapper.cc",
+      "automation/automation_ax_tree_wrapper.h",
+      "automation/automation_position.cc",
+      "automation/automation_position.h",
+      "automation/automation_tree_manager_owner.cc",
+      "automation/automation_tree_manager_owner.h",
+      "automation/automation_v8_bindings.cc",
+      "automation/automation_v8_bindings.h",
+      "automation/automation_v8_router.h",
+    ]
+
+    deps = [
+      "//base:i18n",
+      "//components/crash/core/common:crash_key",
+      "//gin",
+    ]
+  }
 
   if (is_fuchsia) {
     sources += [

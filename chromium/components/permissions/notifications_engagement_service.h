@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,6 +38,7 @@ class NotificationsEngagementService : public KeyedService {
   void Shutdown() override;
 
   void RecordNotificationDisplayed(const GURL& url);
+  void RecordNotificationDisplayed(const GURL& url, int display_count);
   void RecordNotificationInteraction(const GURL& url);
 
   // ISO8601 defines Monday as the first day of the week. Additionally, in most

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,5 +20,8 @@ const char kSegmentationLastCollectionTimePref[] =
 // Used for testing the model execution locally.
 const char kSegmentationPlatformRefreshResultsSwitch[] =
     "segmentation-platform-refresh-results";
+
+const char kSegmentationLastDBCompactionTimePref[] =
+    "segmentation_platform.last_db_compaction_time";
 
 }  // namespace segmentation_platform

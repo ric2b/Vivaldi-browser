@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "content/browser/preloading/prefetch/prefetch_type.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/document_user_data.h"
+#include "content/public/browser/prefetch_metrics.h"
 #include "content/public/browser/speculation_host_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "third_party/blink/public/mojom/speculation_rules/speculation_rules.mojom.h"
@@ -50,6 +51,7 @@ class CONTENT_EXPORT PrefetchDocumentManager
   void PrefetchUrl(
       const GURL& url,
       const PrefetchType& prefetch_type,
+      const blink::mojom::Referrer& referrer,
       base::WeakPtr<SpeculationHostDevToolsObserver> devtools_observer);
 
   // Releases ownership of the |PrefetchContainer| associated with |url|. The
@@ -62,6 +64,26 @@ class CONTENT_EXPORT PrefetchDocumentManager
   // make on the page.
   bool HaveCanaryChecksStarted() const { return have_canary_checks_started_; }
   void OnCanaryChecksStarted() { have_canary_checks_started_ = true; }
+
+  // A page can only start |PrefetchServiceMaximumNumberOfPrefetchesPerPage|
+  // number of prefetch requests.
+  int GetNumberOfPrefetchRequestAttempted() const {
+    return number_prefetch_request_attempted_;
+  }
+  void OnPrefetchRequestAttempted() { number_prefetch_request_attempted_++; }
+
+  // Returns metrics for prefetches requested by the associated page load.
+  PrefetchReferringPageMetrics& GetReferringPageMetrics() {
+    return referring_page_metrics_;
+  }
+
+  // Updates metrics when the eligibility check for a prefetch requested by this
+  // page load is completed.
+  void OnEligibilityCheckComplete(bool is_eligible);
+
+  // Updates metrics when the response for a prefetch requested by this page
+  // load is received.
+  void OnPrefetchSuccessful();
 
   static void SetPrefetchServiceForTesting(PrefetchService* prefetch_service);
 
@@ -84,6 +106,13 @@ class CONTENT_EXPORT PrefetchDocumentManager
 
   // Stores whether or not canary checks have been started for this page.
   bool have_canary_checks_started_{false};
+
+  // The number of prefetch requests that have been attempted for prefetches
+  // requested by this page.
+  int number_prefetch_request_attempted_{0};
+
+  // Metrics related to the prefetches requested by this page load.
+  PrefetchReferringPageMetrics referring_page_metrics_;
 
   base::WeakPtrFactory<PrefetchDocumentManager> weak_method_factory_{this};
 

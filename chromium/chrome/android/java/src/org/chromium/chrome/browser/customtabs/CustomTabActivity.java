@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,7 @@ import androidx.browser.customtabs.CustomTabsSessionToken;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.BackupSigninProcessor;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.autofill_assistant.AutofillAssistantFacade;
@@ -150,7 +151,10 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
     @Override
     public void finishNativeInitialization() {
-        if (!mIntentDataProvider.isInfoPage()) FirstRunSignInProcessor.start(this);
+        if (!mIntentDataProvider.isInfoPage()) {
+            FirstRunSignInProcessor.openSyncSettingsIfScheduled(this);
+            BackupSigninProcessor.start(this);
+        }
 
         mConnection.showSignInToastIfNecessary(mSession, getIntent());
 

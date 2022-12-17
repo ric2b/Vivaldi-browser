@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,7 +62,7 @@ const int kObserver2 = 2;
 std::vector<media::VideoCodec> VideoCodecMapToList(
     const media::CdmCapability::VideoCodecMap& map) {
   std::vector<media::VideoCodec> list;
-  for (const auto& [video_codec, _] : map) {
+  for (const auto& [video_codec, ignore] : map) {
     list.push_back(video_codec);
   }
   return list;

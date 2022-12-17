@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/platform_window/platform_window_init_properties.h"
@@ -109,11 +110,9 @@ class XdgForeignWrapperImpl
   void ExportSurfaceInternal(wl_surface* surface, OnHandleExported cb);
 
   void OnWindowRemoved(WaylandWindow* window) override {
-    auto it = std::find_if(exported_surfaces_.begin(), exported_surfaces_.end(),
-                           [window](const auto& surface) {
-                             return window->root_surface()->surface() ==
-                                    surface.surface_for_export;
-                           });
+    auto it = base::ranges::find(
+        exported_surfaces_, window->root_surface()->surface(),
+        &ExportedSurface<ExportedType>::surface_for_export);
     if (it != exported_surfaces_.end())
       exported_surfaces_.erase(it);
   }
@@ -135,11 +134,9 @@ class XdgForeignWrapperImpl
         static_cast<XdgForeignWrapperImpl<ExporterType, ExportedType>*>(data);
     DCHECK(self);
 
-    auto exported_surface_it = std::find_if(
-        self->exported_surfaces_.begin(), self->exported_surfaces_.end(),
-        [exported](const auto& item) {
-          return item.exported.get() == exported;
-        });
+    auto exported_surface_it = base::ranges::find(
+        self->exported_surfaces_, exported,
+        [](const auto& item) { return item.exported.get(); });
     DCHECK(exported_surface_it != self->exported_surfaces_.end());
     exported_surface_it->exported_handle = handle;
 
@@ -165,7 +162,7 @@ void XdgForeignWrapperImpl<zxdg_exporter_v1, zxdg_exported_v1>::
   zxdg_exported_v1_add_listener(exported_surface.exported.get(),
                                 &kExportedListener, this);
   exported_surfaces_.emplace_back(std::move(exported_surface));
-  connection_->ScheduleFlush();
+  connection_->Flush();
 }
 
 template <>
@@ -179,7 +176,7 @@ void XdgForeignWrapperImpl<zxdg_exporter_v2, zxdg_exported_v2>::
   zxdg_exported_v2_add_listener(exported_surface.exported.get(),
                                 &kExportedListener, this);
   exported_surfaces_.emplace_back(std::move(exported_surface));
-  connection_->ScheduleFlush();
+  connection_->Flush();
 }
 
 // static

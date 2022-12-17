@@ -10,7 +10,6 @@
 <translation id="1165039591588034296">Pogreška</translation>
 <translation id="1175364870820465910">&amp;Ispis...</translation>
 <translation id="1187722533808055681">Buđenja iz stanja mirovanja</translation>
-<translation id="119944043368869598">Očisti sve</translation>
 <translation id="1244303850296295656">Pogreška proširenja</translation>
 <translation id="125220115284141797">Zadano</translation>
 <translation id="1297175357211070620">Odredište</translation>
@@ -39,7 +38,6 @@
 <translation id="2177950615300672361">Anonimna kartica: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="225240747099314620">Dozvoli generiranje identifikatora trenutnog uređaja za pristup zaštićenom sadržaju (možda je potrebno ponovno pokretanje računala)</translation>
-<translation id="2277255602909579701">Svi kolačići i podaci web-lokacije</translation>
 <translation id="2282146716419988068">GPU proces</translation>
 <translation id="2301382460326681002">Korijenski direktorij proširenja nije važeći.</translation>
 <translation id="2322193970951063277">Zaglavlja i podnožja</translation>
@@ -119,7 +117,6 @@
 <translation id="4363771538994847871">Nije pronađeno nijedno odredište za emitiranje. Trebate li pomoć?</translation>
 <translation id="4384652540891215547">Aktiviranje proširenja</translation>
 <translation id="4394049700291259645">Onemogući</translation>
-<translation id="4579581181964204535">Ne može se emitirati <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Idi na <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacije i proširenja može mijenjati samo voditelj (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Proširenje je promijenilo stranicu koja se prikazuje kada otvorite novu karticu.</translation>
@@ -161,7 +158,6 @@
 <translation id="5965661248935608907">Upravlja i time koja se stranica prikazuje kada se klikne gumb Početna ili prilikom pretraživanja putem višenamjenskog okvira.</translation>
 <translation id="5978277834170881274">&amp;Koristi osnovnu provjeru pravopisa</translation>
 <translation id="5979421442488174909">&amp;Prevedi na <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Brisanje podataka web-lokacija</translation>
 <translation id="6042308850641462728">Više</translation>
 <translation id="6101226222197207147">Dodana je nova aplikacija (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internetskom vezom upravlja proširenje</translation>
@@ -230,7 +226,6 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="8032244173881942855">Emitiranje kartice nije moguće.</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
 <translation id="8261378640211443080">To proširenje nije navedeno u trgovini <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i možda je dodano bez vašeg znanja.</translation>
-<translation id="8339059274628563283">Lokalno pohranjeni podaci web-lokacije <ph name="SITE" /></translation>
 <translation id="8351419472474436977">To proširenje preuzelo je kontrolu nad vašim postavkama proxyja, a to znači da može promijeniti, prekinuti ili prisluškivati sve što radite na mreži. Ako niste sigurni kako je došlo do te promjene, vjerojatno je ne želite.</translation>
 <translation id="8382913212082956454">Kopiraj &amp;adresu e-pošte</translation>
 <translation id="8413385045638830869">Prvo pitaj (preporučeno)</translation>

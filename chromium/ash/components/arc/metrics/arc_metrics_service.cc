@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -132,6 +133,34 @@ std::string AndroidDataSubdirectoryToString(
   return "";
 }
 
+const char* WaylandTimingEventToString(mojom::WaylandTimingEvent event) {
+  switch (event) {
+    case mojom::WaylandTimingEvent::kOther:
+      return ".Other";
+    case mojom::WaylandTimingEvent::kBinderReleaseClipboardData:
+      return ".BinderReleaseClipboardData";
+    case mojom::WaylandTimingEvent::kWlBufferRelease:
+      return ".WlBufferRelease";
+    case mojom::WaylandTimingEvent::kWlKeyboardLeave:
+      return ".WlKeyboardLeave";
+    case mojom::WaylandTimingEvent::kWlPointerMotion:
+      return ".WlPointerMotion";
+    case mojom::WaylandTimingEvent::kWlPointerLeave:
+      return ".WlPointerLeave";
+    case mojom::WaylandTimingEvent::kZauraShellActivated:
+      return ".ZauraShellActivated";
+    case mojom::WaylandTimingEvent::kZauraSurfaceOcclusionChanged:
+      return ".ZauraSurfaceOcclusionChanged";
+    case mojom::WaylandTimingEvent::kZcrRemoteSurfaceWindowGeometryChanged:
+      return ".ZcrRemoteSurfaceWindowGeometryChanged";
+    case mojom::WaylandTimingEvent::kZcrRemoteSurfaceBoundsChangedInOutput:
+      return ".ZcrRemoteSurfaceBoundsChangedInOutput";
+    case mojom::WaylandTimingEvent::kZcrVsyncTimingUpdate:
+      return ".ZcrVsyncTimingUpdate";
+  }
+  NOTREACHED();
+  return "";
+}
 struct LoadAverageHistogram {
   const char* name;
   base::TimeDelta duration;
@@ -239,8 +268,9 @@ void ArcMetricsService::RecordArcUserInteraction(UserInteractionType type) {
     obs.OnUserInteraction(type);
 }
 
-void ArcMetricsService::SetHistogramNamer(HistogramNamer histogram_namer) {
-  histogram_namer_ = histogram_namer;
+void ArcMetricsService::SetHistogramNamerCallback(
+    HistogramNamerCallback histogram_namer_cb) {
+  histogram_namer_cb_ = histogram_namer_cb;
 }
 
 void ArcMetricsService::OnProcessConnectionReady() {
@@ -464,6 +494,10 @@ void ArcMetricsService::ReportBootProgress(
     return;
   }
   boot_type_ = boot_type;
+  for (auto& obs : boot_type_observers_)
+    obs.OnBootTypeRetrieved(boot_type);
+  if (metrics_anr_)
+    metrics_anr_->set_uma_suffix(BootTypeToString(boot_type));
 
   if (IsArcVmEnabled()) {
     // For VM builds, do not call into session_manager since we don't use it
@@ -744,10 +778,14 @@ void ArcMetricsService::ReportProvisioningPreSignIn() {
   }
 }
 
-void ArcMetricsService::ReportWaylandLateTimingDuration(
+void ArcMetricsService::ReportWaylandLateTimingEvent(
+    mojom::WaylandTimingEvent event,
     base::TimeDelta duration) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  base::UmaHistogramLongTimes("Arc.Wayland.LateTiming.Duration", duration);
+  const std::string suffix = WaylandTimingEventToString(event);
+  base::UmaHistogramLongTimes("Arc.Wayland.LateTiming.Duration" + suffix,
+                              duration);
+  base::UmaHistogramEnumeration("Arc.Wayland.LateTiming.Event", event);
 }
 
 void ArcMetricsService::ReportNonAndroidPlayFilesCount(
@@ -862,7 +900,7 @@ void ArcMetricsService::OnTaskCreated(int32_t task_id,
 }
 
 void ArcMetricsService::OnTaskDestroyed(int32_t task_id) {
-  auto it = std::find(task_ids_.begin(), task_ids_.end(), task_id);
+  auto it = base::ranges::find(task_ids_, task_id);
   if (it == task_ids_.end()) {
     LOG(WARNING) << "unknown task_id, background time might be undermeasured";
     return;
@@ -911,6 +949,16 @@ void ArcMetricsService::RemoveUserInteractionObserver(
     UserInteractionObserver* obs) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   user_interaction_observers_.RemoveObserver(obs);
+}
+
+void ArcMetricsService::AddBootTypeObserver(BootTypeObserver* obs) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  boot_type_observers_.AddObserver(obs);
+}
+
+void ArcMetricsService::RemoveBootTypeObserver(BootTypeObserver* obs) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  boot_type_observers_.RemoveObserver(obs);
 }
 
 absl::optional<base::TimeTicks> ArcMetricsService::GetArcStartTimeFromEvents(
@@ -1019,7 +1067,8 @@ ArcMetricsService::IntentHelperObserver::~IntentHelperObserver() = default;
 void ArcMetricsService::IntentHelperObserver::OnConnectionClosed() {
   // Ignore closed connections due to the container shutting down.
   if (!arc_bridge_service_observer_->arc_bridge_closing_) {
-    LogStabilityUmaEnum(arc_metrics_service_->histogram_namer_.Run(
+    DCHECK(arc_metrics_service_->histogram_namer_cb_);
+    LogStabilityUmaEnum(arc_metrics_service_->histogram_namer_cb_.Run(
                             "Arc.Session.MojoDisconnection"),
                         MojoConnectionType::INTENT_HELPER);
   }
@@ -1036,7 +1085,8 @@ ArcMetricsService::AppLauncherObserver::~AppLauncherObserver() = default;
 void ArcMetricsService::AppLauncherObserver::OnConnectionClosed() {
   // Ignore closed connections due to the container shutting down.
   if (!arc_bridge_service_observer_->arc_bridge_closing_) {
-    LogStabilityUmaEnum(arc_metrics_service_->histogram_namer_.Run(
+    DCHECK(arc_metrics_service_->histogram_namer_cb_);
+    LogStabilityUmaEnum(arc_metrics_service_->histogram_namer_cb_.Run(
                             "Arc.Session.MojoDisconnection"),
                         MojoConnectionType::APP_LAUNCHER);
   }

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -259,6 +259,12 @@ class BASE_EXPORT SequenceManager {
   // SequenceManager task and a yielding to the underlying sequence (e.g., the
   // message pump).
   virtual void PrioritizeYieldingToNative(base::TimeTicks prioritize_until) = 0;
+
+  // Enable periodically yielding to the system message loop every |interval|.
+  // If |interval.is_inf()|, then SequenceManager won't yield to the system
+  // message pump unless it is out of immediate work.
+  // Currently only takes effect on Android.
+  virtual void EnablePeriodicYieldingToNative(base::TimeDelta interval) = 0;
 
   // Adds an observer which reports task execution. Can only be called on the
   // same thread that `this` is running on.

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,9 @@
 namespace {
 // Experiment with not deleting the Skia event tracer at process exit
 // to measure the improvement in performance. See crbug.com/1329594
-const base::Feature kLeakSkiaEventTracerAtExit{
-    "LeakSkiaEventTracerAtExit", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kLeakSkiaEventTracerAtExit,
+             "LeakSkiaEventTracerAtExit",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace
 
 namespace skia {

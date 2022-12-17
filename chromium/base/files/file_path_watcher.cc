@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,7 @@
 namespace base {
 
 FilePathWatcher::~FilePathWatcher() {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   impl_->Cancel();
 }
 
@@ -38,7 +38,7 @@ FilePathWatcher::PlatformDelegate::~PlatformDelegate() {
 bool FilePathWatcher::Watch(const FilePath& path,
                             Type type,
                             const Callback& callback) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(path.IsAbsolute());
   return impl_->Watch(path, type, callback);
 }

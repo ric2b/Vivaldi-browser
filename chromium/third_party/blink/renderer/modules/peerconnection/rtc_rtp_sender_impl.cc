@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -515,8 +515,8 @@ Vector<String> RTCRtpSenderImpl::StreamIds() const {
 
 void RTCRtpSenderImpl::ReplaceTrack(MediaStreamComponent* with_track,
                                     RTCVoidRequest* request) {
-  internal_->ReplaceTrack(
-      with_track, WTF::Bind(&OnReplaceTrackCompleted, WrapPersistent(request)));
+  internal_->ReplaceTrack(with_track, WTF::BindOnce(&OnReplaceTrackCompleted,
+                                                    WrapPersistent(request)));
 }
 
 std::unique_ptr<blink::RtcDtmfSenderHandler> RTCRtpSenderImpl::GetDtmfSender()
@@ -534,7 +534,7 @@ void RTCRtpSenderImpl::SetParameters(
     blink::RTCVoidRequest* request) {
   internal_->SetParameters(
       std::move(encodings), degradation_preference,
-      WTF::Bind(&OnSetParametersCompleted, WrapPersistent(request)));
+      WTF::BindOnce(&OnSetParametersCompleted, WrapPersistent(request)));
 }
 
 void RTCRtpSenderImpl::GetStats(
@@ -565,69 +565,6 @@ RTCRtpSenderImpl::GetEncodedAudioStreamTransformer() const {
 RTCEncodedVideoStreamTransformer*
 RTCRtpSenderImpl::GetEncodedVideoStreamTransformer() const {
   return internal_->GetEncodedVideoStreamTransformer();
-}
-
-RTCRtpSenderOnlyTransceiver::RTCRtpSenderOnlyTransceiver(
-    std::unique_ptr<blink::RTCRtpSenderPlatform> sender)
-    : sender_(std::move(sender)) {
-  DCHECK(sender_);
-}
-
-RTCRtpSenderOnlyTransceiver::~RTCRtpSenderOnlyTransceiver() {}
-
-RTCRtpTransceiverPlatformImplementationType
-RTCRtpSenderOnlyTransceiver::ImplementationType() const {
-  return RTCRtpTransceiverPlatformImplementationType::kPlanBSenderOnly;
-}
-
-uintptr_t RTCRtpSenderOnlyTransceiver::Id() const {
-  NOTIMPLEMENTED();
-  return 0u;
-}
-
-String RTCRtpSenderOnlyTransceiver::Mid() const {
-  NOTIMPLEMENTED();
-  return String();
-}
-
-std::unique_ptr<blink::RTCRtpSenderPlatform>
-RTCRtpSenderOnlyTransceiver::Sender() const {
-  return sender_->ShallowCopy();
-}
-
-std::unique_ptr<RTCRtpReceiverPlatform> RTCRtpSenderOnlyTransceiver::Receiver()
-    const {
-  NOTIMPLEMENTED();
-  return nullptr;
-}
-
-webrtc::RtpTransceiverDirection RTCRtpSenderOnlyTransceiver::Direction() const {
-  NOTIMPLEMENTED();
-  return webrtc::RtpTransceiverDirection::kSendOnly;
-}
-
-webrtc::RTCError RTCRtpSenderOnlyTransceiver::SetDirection(
-    webrtc::RtpTransceiverDirection direction) {
-  NOTIMPLEMENTED();
-  return webrtc::RTCError::OK();
-}
-
-absl::optional<webrtc::RtpTransceiverDirection>
-RTCRtpSenderOnlyTransceiver::CurrentDirection() const {
-  NOTIMPLEMENTED();
-  return webrtc::RtpTransceiverDirection::kSendOnly;
-}
-
-absl::optional<webrtc::RtpTransceiverDirection>
-RTCRtpSenderOnlyTransceiver::FiredDirection() const {
-  NOTIMPLEMENTED();
-  return webrtc::RtpTransceiverDirection::kSendOnly;
-}
-
-webrtc::RTCError RTCRtpSenderOnlyTransceiver::SetCodecPreferences(
-    Vector<webrtc::RtpCodecCapability>) {
-  NOTIMPLEMENTED();
-  return {};
 }
 
 }  // namespace blink

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/password_entry_edit/android/credential_edit_bridge.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
+#include "chrome/browser/password_manager/affiliation_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -156,9 +157,12 @@ class PasswordUIViewAndroid
 
   // Manages the list of saved passwords, including updates.
   password_manager::SavedPasswordsPresenter saved_passwords_presenter_{
-      profile_store_, AccountPasswordStoreFactory::GetForProfile(
-                          ProfileManager::GetLastUsedProfile(),
-                          ServiceAccessType::EXPLICIT_ACCESS)};
+      AffiliationServiceFactory::GetForProfile(
+          ProfileManager::GetLastUsedProfile()),
+      profile_store_,
+      AccountPasswordStoreFactory::GetForProfile(
+          ProfileManager::GetLastUsedProfile(),
+          ServiceAccessType::EXPLICIT_ACCESS)};
 
   // Cached passwords and blocked sites.
   std::vector<password_manager::CredentialUIEntry> passwords_;

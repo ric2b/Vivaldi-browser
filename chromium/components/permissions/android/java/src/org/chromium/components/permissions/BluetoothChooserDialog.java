@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -208,7 +208,7 @@ public class BluetoothChooserDialog
                 mDelegate.createAutocompleteSchemeClassifier();
 
         OmniboxUrlEmphasizer.emphasizeUrl(origin, mContext, autocompleteSchemeClassifier,
-                mSecurityLevel, false, useDarkColors, true);
+                mSecurityLevel, useDarkColors, true);
         autocompleteSchemeClassifier.destroy();
         // Construct a full string and replace the origin text with emphasized version.
         SpannableString title =

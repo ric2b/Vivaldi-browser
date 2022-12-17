@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,6 +59,12 @@ std::string LogsToString(const FeedbackCommon::SystemLogsMap& sys_info) {
         key == feedback::FeedbackReport::kAllCrashReportIdsKey) {
       // Avoid adding the crash IDs to the system_logs.txt file for privacy
       // reasons. They should just be part of the product specific data.
+      continue;
+    }
+
+    if (key == feedback::FeedbackReport::kFeedbackUserCtlConsentKey) {
+      // Avoid adding user consent to the system_logs.txt file. It just needs to
+      // be in the product specific data.
       continue;
     }
 

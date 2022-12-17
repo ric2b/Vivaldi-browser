@@ -1,10 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -183,8 +184,8 @@ void AutofillPopupControllerImpl::UpdateDataListValues(
   // Add a separator if there are any other values.
   if (!suggestions_.empty() &&
       suggestions_[0].frontend_id != POPUP_ITEM_ID_SEPARATOR) {
-    suggestions_.insert(suggestions_.begin(), Suggestion());
-    suggestions_[0].frontend_id = POPUP_ITEM_ID_SEPARATOR;
+    suggestions_.insert(suggestions_.begin(),
+                        Suggestion(POPUP_ITEM_ID_SEPARATOR));
   }
 
   // Prepend the parameters to the suggestions we already have.
@@ -192,7 +193,7 @@ void AutofillPopupControllerImpl::UpdateDataListValues(
   for (size_t i = 0; i < values.size(); i++) {
     suggestions_[i].main_text =
         Suggestion::Text(values[i], Suggestion::Text::IsPrimary(true));
-    suggestions_[i].label = labels[i];
+    suggestions_[i].labels = {{Suggestion::Text(labels[i])}};
     suggestions_[i].frontend_id = POPUP_ITEM_ID_DATALIST_ENTRY;
   }
 
@@ -327,9 +328,7 @@ void AutofillPopupControllerImpl::AcceptSuggestion(int index) {
         ->NotifyEvent("autofill_virtual_card_suggestion_accepted");
   }
 
-  delegate_->DidAcceptSuggestion(suggestion.main_text.value,
-                                 suggestion.frontend_id, suggestion.payload,
-                                 index);
+  delegate_->DidAcceptSuggestion(suggestion, index);
 }
 
 gfx::NativeView AutofillPopupControllerImpl::container_view() const {
@@ -375,9 +374,9 @@ std::u16string AutofillPopupControllerImpl::GetSuggestionMinorTextAt(
   return suggestions_[row].minor_text.value;
 }
 
-const std::u16string& AutofillPopupControllerImpl::GetSuggestionLabelAt(
-    int row) const {
-  return suggestions_[row].label;
+std::vector<std::vector<Suggestion::Text>>
+AutofillPopupControllerImpl::GetSuggestionLabelsAt(int row) const {
+  return suggestions_[row].labels;
 }
 
 bool AutofillPopupControllerImpl::GetRemovalConfirmationText(
@@ -438,6 +437,13 @@ void AutofillPopupControllerImpl::SetSelectedLine(
   if (selected_line_ == selected_line)
     return;
 
+  // Prevent the race condition, when the view is supposed to be hidden but the
+  // line is selected via the popup and thus there is a call to
+  // `SetSelectedLine`. See crbug.com/1358647 for details on how this can
+  // happen.
+  if (!view_)
+    return;
+
   if (selected_line) {
     DCHECK_LT(*selected_line, GetLineCount());
     if (!CanAccept(suggestions_[*selected_line].frontend_id))
@@ -451,9 +457,9 @@ void AutofillPopupControllerImpl::SetSelectedLine(
 
   if (selected_line_) {
     const Suggestion& suggestion = suggestions_[*selected_line_];
-    delegate_->DidSelectSuggestion(suggestion.main_text.value,
-                                   suggestion.frontend_id,
-                                   suggestion.GetPayload<std::string>());
+    delegate_->DidSelectSuggestion(
+        suggestion.main_text.value, suggestion.frontend_id,
+        suggestion.GetPayload<Suggestion::BackendId>());
   } else {
     delegate_->ClearPreviewedForm();
   }

@@ -1,11 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 
 #include "base/check_op.h"
-#include "base/stl_util.h"
+#include "base/types/optional_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -45,7 +45,7 @@ bool DataTransferEndpoint::operator==(const DataTransferEndpoint& other) const {
 DataTransferEndpoint::~DataTransferEndpoint() = default;
 
 const GURL* DataTransferEndpoint::GetURL() const {
-  return base::OptionalOrNullptr(url_);
+  return base::OptionalToPtr(url_);
 }
 
 bool DataTransferEndpoint::IsSameURLWith(

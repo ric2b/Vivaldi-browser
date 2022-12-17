@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,8 +16,7 @@
 #include "net/base/url_util.h"
 #include "remoting/proto/remoting/v1/network_traversal_messages.pb.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 namespace {
 
@@ -262,5 +261,4 @@ IceConfig IceConfig::Parse(const apis::v1::GetIceConfigResponse& config) {
   return ice_config;
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

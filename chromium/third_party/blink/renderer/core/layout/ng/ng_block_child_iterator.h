@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -57,6 +57,8 @@ class CORE_EXPORT NGBlockChildIterator {
   wtf_size_t child_token_idx_;
 
   absl::optional<wtf_size_t> child_idx_;
+
+  bool did_handle_first_child_ = false;
 };
 
 struct NGBlockChildIterator::Entry {

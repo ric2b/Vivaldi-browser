@@ -1,17 +1,26 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_folder_item.h"
 
-#include "base/i18n/rtl.h"
-#include "base/mac/foundation_util.h"
+#import "base/i18n/rtl.h"
+#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_table_cell_title_edit_delegate.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+using vivaldi_bookmark_kit::GetSpeeddial;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -37,6 +46,11 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
 @synthesize style = _style;
 @synthesize title = _title;
 
+// Vivaldi
+@synthesize isSpeedDial = _isSpeedDial;
+@synthesize bookmarkNode = _bookmarkNode;
+// End Vivaldi
+
 - (instancetype)initWithType:(NSInteger)type style:(BookmarkFolderStyle)style {
   if ((self = [super initWithType:type])) {
     self.cellClass = [TableViewBookmarkFolderCell class];
@@ -54,8 +68,15 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
     case BookmarkFolderStyleNewFolder: {
       folderCell.folderTitleTextField.text =
           l10n_util::GetNSString(IDS_IOS_BOOKMARK_CREATE_GROUP);
+
+      if (IsVivaldiRunning()) {
+        folderCell.folderImageView.image =
+            [UIImage imageNamed:vBookmarkAddFolder];
+      } else {
       folderCell.folderImageView.image =
           [UIImage imageNamed:@"bookmark_blue_new_folder"];
+      } // End Vivaldi
+
       folderCell.accessibilityIdentifier =
           kBookmarkCreateNewFolderCellIdentifier;
       folderCell.accessibilityTraits |= UIAccessibilityTraitButton;
@@ -73,8 +94,16 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
       folderCell.indentationConstraint.constant =
           folderCell.indentationConstraint.constant +
           kFolderCellIndentationWidth * self.indentationLevel;
+
+      if (IsVivaldiRunning()) {
+        folderCell.folderImageView.image = self.isSpeedDial ?
+          [UIImage imageNamed: vSpeedDialFolderIcon] :
+          [UIImage imageNamed: vBookmarksFolderIcon];
+      } else {
       folderCell.folderImageView.image =
           [UIImage imageNamed:@"bookmark_blue_folder"];
+      } // End Vivaldi
+
       break;
     }
   }
@@ -163,8 +192,15 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
   _bookmarkAccessoryType = bookmarkAccessoryType;
   switch (_bookmarkAccessoryType) {
     case TableViewBookmarkFolderAccessoryTypeCheckmark:
+
+      if (IsVivaldiRunning()) {
+        self.accessoryView = [[UIImageView alloc]
+            initWithImage:[UIImage imageNamed:vBookmarkFolderSelectionCheckmark]];
+      } else {
       self.accessoryView = [[UIImageView alloc]
           initWithImage:[UIImage imageNamed:@"bookmark_blue_check"]];
+      } // End Vivaldi
+
       break;
     case TableViewBookmarkFolderAccessoryTypeDisclosureIndicator: {
       self.accessoryView = [[UIImageView alloc]

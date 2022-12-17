@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 
 #include "base/component_export.h"
 #include "base/i18n/rtl.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -38,7 +39,8 @@ enum class TextEditCommand;
 // An interface implemented by a View that needs text input support.
 // All strings related to IME operations should be UTF-16 encoded and all
 // indices/ranges relative to those strings should be UTF-16 code units.
-class COMPONENT_EXPORT(UI_BASE_IME) TextInputClient {
+class COMPONENT_EXPORT(UI_BASE_IME) TextInputClient
+    : public base::SupportsWeakPtr<TextInputClient> {
  public:
   // The reason the control was focused, used by the virtual keyboard to detect
   // pen input.

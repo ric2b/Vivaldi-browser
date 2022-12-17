@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -267,12 +267,13 @@ void TestRenderFrame::Navigate(
       std::move(pending_factory_bundle), absl::nullopt,
       blink::mojom::ControllerServiceWorkerInfoPtr(),
       blink::mojom::ServiceWorkerContainerInfoForClientPtr(),
-      mojo::NullRemote() /* prefetch_loader_factory */,
+      mojo::NullRemote() /* prefetch_loader_factory */, blink::DocumentToken(),
       base::UnguessableToken::Create(), blink::ParsedPermissionsPolicy(),
       blink::mojom::PolicyContainer::New(
           blink::mojom::PolicyContainerPolicies::New(),
           mock_policy_container_host.BindNewEndpointAndPassDedicatedRemote()),
       mojo::NullRemote() /* code_cache_host */, nullptr, nullptr,
+      /* not_restored_reasons */ nullptr,
       base::BindOnce(&MockFrameHost::DidCommitProvisionalLoad,
                      base::Unretained(mock_frame_host_.get())));
 }
@@ -300,7 +301,8 @@ void TestRenderFrame::NavigateWithError(
       std::move(common_params), std::move(commit_params),
       /*has_stale_copy_in_cache=*/false, error_code,
       /*extended_error_code=*/0, resolve_error_info, error_page_content,
-      std::move(pending_factory_bundle), CreateStubPolicyContainer(),
+      std::move(pending_factory_bundle), blink::DocumentToken(),
+      CreateStubPolicyContainer(),
       /*alternative_error_page_info=*/nullptr,
       base::BindOnce(&MockFrameHost::DidCommitProvisionalLoad,
                      base::Unretained(mock_frame_host_.get())));
@@ -321,6 +323,7 @@ void TestRenderFrame::BeginNavigation(
             blink::WebPolicyContainerPolicies(),
             mock_policy_container_host.BindNewEndpointAndPassDedicatedRemote());
     next_navigation_html_override_ = absl::nullopt;
+    DCHECK(!static_cast<GURL>(info->url_request.Url()).IsAboutSrcdoc());
     frame_->CommitNavigation(std::move(navigation_params),
                              nullptr /* extra_data */);
     return;
@@ -352,6 +355,13 @@ void TestRenderFrame::BeginNavigation(
       blink::WebNavigationParams::FillStaticResponse(
           navigation_params.get(), blink::WebString::FromUTF8(mime_type),
           blink::WebString::FromUTF8(charset), data);
+    }
+    if (url.IsAboutSrcdoc()) {
+      // If we are loading an about:srcdoc frame in a TestRenderFrame browser
+      // test, then we are guaranteed we have a local parent.
+      blink::WebLocalFrame* parent = GetWebFrame()->Parent()->ToWebLocalFrame();
+      navigation_params->fallback_srcdoc_base_url =
+          parent->GetDocument().BaseURL();
     }
 
     navigation_params->policy_container->policies.sandbox_flags =

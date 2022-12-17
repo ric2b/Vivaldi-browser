@@ -14,6 +14,7 @@ config("wxwidgets_common_config") {
     "-Wno-c++98-compat-extra-semi",
     "-Wno-unused-local-typedef",
     "-Wno-shadow",
+    "-Wno-deprecated-copy",
   ]
 
   # TODO(igor@vivaldi.com): Chromium uses -fcomplete-member-pointers to prevent
@@ -56,6 +57,7 @@ static_library("wxwidgets") {
     "-Wno-undefined-bool-conversion",
     "-Wno-shadow",
     "-Wno-deprecated-declarations",
+    "-Wno-deprecated-copy",
   ]
 
   defines = [

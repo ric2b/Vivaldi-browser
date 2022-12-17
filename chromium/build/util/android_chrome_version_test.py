@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -324,6 +324,26 @@ class _VersionTest(unittest.TestCase):
     webview_dev_version_code = output['WEBVIEW_DEV_VERSION_CODE']
 
     self.assertGreater(webview_dev_version_code, webview_beta_version_code)
+
+  def testGenerateVersionCodesTrichromeChannelOrderBeta(self):
+    """Assert Trichrome beta channel is higher than stable.
+
+    When Trichrome channels are compiled to use the stable channel's package
+    name, their version codes need to follow the order stable < beta.
+
+    This allows that if a user opts into beta track, they will always have the
+    beta apk, including any finch experiments targeted at beta users, even when
+    beta and stable channels are otherwise on the same version.
+    """
+    output = GenerateVersionCodes(EXAMPLE_VERSION_VALUES,
+                                  arch='arm',
+                                  is_next_build=False)
+
+    trichrome_stable_version_code = output['TRICHROME_VERSION_CODE']
+    trichrome_beta_version_code = output['TRICHROME_BETA_VERSION_CODE']
+
+    self.assertGreater(trichrome_beta_version_code,
+                       trichrome_stable_version_code)
 
 
 class _VersionCodeTest(unittest.TestCase):

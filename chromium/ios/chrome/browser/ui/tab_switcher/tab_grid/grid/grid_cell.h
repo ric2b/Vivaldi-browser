@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,6 +60,12 @@ typedef NS_ENUM(NSUInteger, GridCellState) {
 - (void)showActivityIndicator;
 // Stops the activity indicator animation.
 - (void)hideActivityIndicator;
+
+// Vivaldi
+// Set the selected and not selected for the cell.
+- (void)setSelected:(BOOL)selected;
+// End Vivaldi
+
 @end
 
 // A GridCell for use in animated transitions that only shows selection state

@@ -61,11 +61,12 @@ std::string GetUniqueNotesTagFromUpdate(const sync_pb::SyncEntity& update) {
 const char* ProtoEnumToString(
     sync_pb::NotesSpecifics::VivaldiSpecialNotesType special_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::NotesSpecifics, VivaldiSpecialNotesType, NORMAL,
-                     FOLDER);
+                     ATTACHMENT);
   switch (special_type) {
     ENUM_CASE(sync_pb::NotesSpecifics, NORMAL);
     ENUM_CASE(sync_pb::NotesSpecifics, SEPARATOR);
     ENUM_CASE(sync_pb::NotesSpecifics, FOLDER);
+    ENUM_CASE(sync_pb::NotesSpecifics, ATTACHMENT);
   }
   NOTREACHED();
   return "";

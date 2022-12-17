@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,9 +7,9 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/ash/printing/bulk_printers_calculator.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "components/policy/core/common/mock_policy_service.h"
 #include "components/policy/core/common/policy_namespace.h"

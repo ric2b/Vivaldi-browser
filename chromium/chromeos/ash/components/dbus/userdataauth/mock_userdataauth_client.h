@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) MockUserDataAuthClient
   ~MockUserDataAuthClient() override;
 
   void WaitForServiceToBeAvailable(
-      WaitForServiceToBeAvailableCallback callback) override;
+      chromeos::WaitForServiceToBeAvailableCallback callback) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
 
@@ -176,9 +176,19 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) MockUserDataAuthClient
                UpdateAuthFactorCallback callback),
               (override));
   MOCK_METHOD(void,
+              ListAuthFactors,
+              (const ::user_data_auth::ListAuthFactorsRequest& request,
+               ListAuthFactorsCallback callback),
+              (override));
+  MOCK_METHOD(void,
               RemoveAuthFactor,
               (const ::user_data_auth::RemoveAuthFactorRequest& request,
                RemoveAuthFactorCallback callback),
+              (override));
+  MOCK_METHOD(void,
+              GetRecoveryRequest,
+              (const ::user_data_auth::GetRecoveryRequestRequest& request,
+               GetRecoveryRequestCallback callback),
               (override));
   MOCK_METHOD(void,
               GetAuthSessionStatus,

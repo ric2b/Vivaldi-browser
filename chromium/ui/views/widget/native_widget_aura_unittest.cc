@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -252,6 +252,32 @@ TEST_F(NativeWidgetAuraTest, RestoreBounds) {
   EXPECT_EQ(gfx::Rect(400, 400), widget->GetRestoredBounds());
 }
 
+TEST_F(NativeWidgetAuraTest, GetWorkspace) {
+  Widget::InitParams params(Widget::InitParams::TYPE_WINDOW);
+  params.parent = nullptr;
+  params.context = root_window();
+  params.show_state = ui::SHOW_STATE_MINIMIZED;
+  params.bounds.SetRect(0, 0, 1024, 800);
+  UniqueWidgetPtr widget = std::make_unique<Widget>();
+  widget->Init(std::move(params));
+  widget->Show();
+
+  widget->GetNativeWindow()->SetProperty(
+      aura::client::kWindowWorkspaceKey,
+      aura::client::kWindowWorkspaceUnassignedWorkspace);
+  EXPECT_EQ("", widget->GetWorkspace());
+
+  widget->GetNativeWindow()->SetProperty(
+      aura::client::kWindowWorkspaceKey,
+      aura::client::kWindowWorkspaceVisibleOnAllWorkspaces);
+  EXPECT_EQ("", widget->GetWorkspace());
+
+  const int desk_index = 1;
+  widget->GetNativeWindow()->SetProperty(aura::client::kWindowWorkspaceKey,
+                                         desk_index);
+  EXPECT_EQ(base::NumberToString(desk_index), widget->GetWorkspace());
+}
+
 // A WindowObserver that counts kShowStateKey property changes.
 class TestWindowObserver : public aura::WindowObserver {
  public:
@@ -388,7 +414,7 @@ class TestWidget : public Widget {
 // leads to noticable flashes.
 TEST_F(NativeWidgetAuraTest, ShowMaximizedDoesntBounceAround) {
   root_window()->SetBounds(gfx::Rect(0, 0, 640, 480));
-  root_window()->SetLayoutManager(new MaximizeLayoutManager);
+  root_window()->SetLayoutManager(std::make_unique<MaximizeLayoutManager>());
   UniqueWidgetPtr widget = std::make_unique<TestWidget>();
   Widget::InitParams params(Widget::InitParams::TYPE_WINDOW);
   params.parent = nullptr;
@@ -428,8 +454,8 @@ class PropertyTestLayoutManager : public TestLayoutManagerBase {
 // Verifies the resize behavior when added to the layout manager.
 TEST_F(NativeWidgetAuraTest, TestPropertiesWhenAddedToLayout) {
   root_window()->SetBounds(gfx::Rect(0, 0, 640, 480));
-  PropertyTestLayoutManager* layout_manager = new PropertyTestLayoutManager();
-  root_window()->SetLayoutManager(layout_manager);
+  PropertyTestLayoutManager* layout_manager = root_window()->SetLayoutManager(
+      std::make_unique<PropertyTestLayoutManager>());
   UniqueWidgetPtr widget = std::make_unique<TestWidget>();
   Widget::InitParams params(Widget::InitParams::TYPE_WINDOW);
   params.delegate = new WidgetDelegate();

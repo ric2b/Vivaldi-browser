@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,6 +96,10 @@ class MenuScrollButton : public View {
   void OnDragExited() override {
     DCHECK(host_->GetMenuItem()->GetMenuController());
     host_->GetMenuItem()->GetMenuController()->OnDragExitedScrollButton(host_);
+  }
+
+  void OnMouseEntered(const ui::MouseEvent& event) override {
+    host_->GetMenuItem()->GetMenuController()->SetEnabledScrollButtons(true);
   }
 
   DropCallback GetDropCallback(const ui::DropTargetEvent& event) override {
@@ -354,10 +358,12 @@ void MenuScrollViewContainer::OnBoundsChanged(
 
 void MenuScrollViewContainer::DidScrollToTop() {
   scroll_up_button_->SetVisible(false);
+  content_view_->GetMenuItem()->GetMenuController()->OnMenuEdgeReached();
 }
 
 void MenuScrollViewContainer::DidScrollToBottom() {
   scroll_down_button_->SetVisible(false);
+  content_view_->GetMenuItem()->GetMenuController()->OnMenuEdgeReached();
 }
 
 void MenuScrollViewContainer::DidScrollAwayFromTop() {

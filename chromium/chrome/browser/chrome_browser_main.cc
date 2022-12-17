@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,7 +148,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_value_store.h"
-#include "components/prefs/scoped_user_pref_update.h"
 #include "components/site_isolation/site_isolation_policy.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
@@ -221,6 +220,7 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "base/process/process.h"
 #include "base/task/task_traits.h"
+#include "components/crash/core/app/breakpad_linux.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -229,12 +229,12 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/components/arc/metrics/stability_metrics_manager.h"
-#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_switches.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/hardware_data_usage_controller.h"
 #include "chrome/browser/ash/settings/stats_reporting_controller.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
@@ -244,22 +244,21 @@
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-#include "components/crash/core/app/breakpad_linux.h"
 #include "components/crash/core/app/crashpad.h"
 #endif
 
 #if BUILDFLAG(IS_MAC)
 #include <Security/Security.h>
 
+#if defined(ARCH_CPU_X86_64)
+#include "base/mac/mac_util.h"
+#include "base/threading/platform_thread.h"
+#endif  // defined(ARCH_CPU_X86_64)
+
 #include "chrome/browser/app_controller_mac.h"
 #include "chrome/browser/mac/keystone_glue.h"
 #include "chrome/browser/ui/ui_features.h"
 #endif  // BUILDFLAG(IS_MAC)
-
-// TODO(port): several win-only methods have been pulled out of this, but
-// BrowserMain() as a whole needs to be broken apart so that it's usable by
-// other platforms. For now, it's just a stub. This is a serious work in
-// progress and should not be taken as an indication of a real refactoring.
 
 #if BUILDFLAG(IS_WIN)
 #include "base/trace_event/trace_event_etw_export_win.h"
@@ -287,6 +286,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
+#include "chrome/browser/chrome_process_singleton.h"
 #include "chrome/browser/process_singleton.h"
 #endif  // BUILDFLAG(ENABLE_PROCESS_SINGLETON)
 
@@ -312,13 +312,12 @@
 #include "chrome/browser/plugins/plugin_prefs.h"
 #endif
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
-#include "printing/printed_document.h"
+#if BUILDFLAG(ENABLE_PRINTING)
+#include "chrome/common/printing/printing_init.h"
 #endif
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && BUILDFLAG(IS_WIN)
-#include "chrome/common/printing/printer_capabilities.h"
-#include "printing/backend/win_helper.h"
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
+#include "printing/printed_document.h"
 #endif
 
 #if BUILDFLAG(ENABLE_RLZ)
@@ -404,10 +403,8 @@ StartupProfileInfo CreateInitialProfile(
     // Clear kProfilesLastActive since the user only wants to launch a specific
     // profile. Don't clear it if the user launched a web app, in order to not
     // break any subsequent multi-profile session restore.
-    ListPrefUpdate update(g_browser_process->local_state(),
-                          prefs::kProfilesLastActive);
-    base::Value* profile_list = update.Get();
-    profile_list->ClearList();
+    g_browser_process->local_state()->SetList(prefs::kProfilesLastActive,
+                                              base::Value::List());
   }
 
   StartupProfileInfo profile_info;
@@ -508,10 +505,14 @@ bool ShouldInstallSodaDuringPostProfileInit(
 
 // ChromeBrowserMainParts::ProfileInitManager ----------------------------------
 
+// Runs `CallPostProfileInit()` on all existing and future profiles, the
+// initial profile is processed first. The initial profile is nullptr when the
+// profile picker is shown.
 class ChromeBrowserMainParts::ProfileInitManager
     : public ProfileManagerObserver {
  public:
-  explicit ProfileInitManager(ChromeBrowserMainParts* browser_main);
+  ProfileInitManager(ChromeBrowserMainParts* browser_main,
+                     Profile* initial_profile);
   ~ProfileInitManager() override;
 
   ProfileInitManager(const ProfileInitManager&) = delete;
@@ -529,19 +530,36 @@ class ChromeBrowserMainParts::ProfileInitManager
 };
 
 ChromeBrowserMainParts::ProfileInitManager::ProfileInitManager(
-    ChromeBrowserMainParts* browser_main)
+    ChromeBrowserMainParts* browser_main,
+    Profile* initial_profile)
     : browser_main_(browser_main) {
-  profile_manager_observer_.Observe(g_browser_process->profile_manager());
+  // `initial_profile` is null when the profile picker is shown.
+  if (initial_profile)
+    browser_main_->CallPostProfileInit(initial_profile);
+
+  if (base::FeatureList::IsEnabled(features::kObserverBasedPostProfileInit)) {
+    // Run `CallPostProfileInit()` on the other existing and future profiles.
+    ProfileManager* profile_manager = g_browser_process->profile_manager();
+    // Register the observer first, in case `OnProfileAdded()` causes a
+    // creation.
+    profile_manager_observer_.Observe(profile_manager);
+    for (auto* profile : profile_manager->GetLoadedProfiles()) {
+      DCHECK(profile);
+      if (profile == initial_profile)
+        continue;
+      OnProfileAdded(profile);
+    }
+  }
 }
 
 ChromeBrowserMainParts::ProfileInitManager::~ProfileInitManager() = default;
 
 void ChromeBrowserMainParts::ProfileInitManager::OnProfileAdded(
     Profile* profile) {
-  if (profile->IsSystemProfile()) {
-    // Ignore the system profile that is used for displaying the profile picker.
-    // `CallPostProfileInit()` should be called only for profiles that are used
-    // for browsing.
+  if (profile->IsSystemProfile() || profile->IsGuestSession()) {
+    // Ignore the system profile that is used for displaying the profile picker,
+    // and the "parent" guest profile. `CallPostProfileInit()` should be called
+    // only for profiles that are used for browsing.
     return;
   }
 
@@ -623,6 +641,10 @@ void ChromeBrowserMainParts::StartMetricsRecording() {
 #endif
 
   g_browser_process->GetMetricsServicesManager()->UpdateUploadPermissions(true);
+
+#if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
+  ChromeProcessSingleton::RegisterEarlySingletonFeature();
+#endif
 }
 
 void ChromeBrowserMainParts::RecordBrowserStartupTime() {
@@ -672,7 +694,7 @@ void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
   if (!command_line->HasSwitch(
           embedder_support::kOriginTrialDisabledFeatures)) {
     const base::Value::List& override_disabled_feature_list =
-        local_state->GetValueList(
+        local_state->GetList(
             embedder_support::prefs::kOriginTrialDisabledFeatures);
     std::vector<base::StringPiece> disabled_features;
     for (const auto& item : override_disabled_feature_list) {
@@ -689,7 +711,7 @@ void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
     }
   }
   if (!command_line->HasSwitch(embedder_support::kOriginTrialDisabledTokens)) {
-    const base::Value::List& disabled_token_list = local_state->GetValueList(
+    const base::Value::List& disabled_token_list = local_state->GetList(
         embedder_support::prefs::kOriginTrialDisabledTokens);
     std::vector<base::StringPiece> disabled_tokens;
     for (const auto& item : disabled_token_list) {
@@ -972,7 +994,8 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   MediaCaptureDevicesDispatcher::GetInstance();
 
 #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
-  process_singleton_ = std::make_unique<ChromeProcessSingleton>(user_data_dir_);
+  if (!ChromeProcessSingleton::IsEarlySingletonFeatureEnabled())
+    ChromeProcessSingleton::CreateInstance(user_data_dir_);
 #endif  // BUILDFLAG(ENABLE_PROCESS_SINGLETON)
 
   // Android's first run is done in Java instead of native.
@@ -1040,16 +1063,29 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OPENBSD)
+#if BUILDFLAG(IS_CHROMEOS)
   // Set the product channel for crash reports.
   if (!crash_reporter::IsCrashpadEnabled()) {
     breakpad::SetChannelCrashKey(
         chrome::GetChannelName(chrome::WithExtendedStable(true)));
   }
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
-        // BUILDFLAG(IS_OPENBSD)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_MAC)
+#if defined(ARCH_CPU_X86_64)
+  // The use of Rosetta to run the x64 version of Chromium on Arm is neither
+  // tested nor maintained, and there are reports of it crashing in weird ways
+  // (e.g. https://crbug.com/1305353). Warn the user if this is the case, as
+  // it's almost certainly accidental on their part.
+  if (base::mac::GetCPUType() == base::mac::CPUType::kTranslatedIntel) {
+    LOG(ERROR) << "The use of Rosetta to run the x64 version of Chromium on "
+                  "Arm is neither tested nor maintained, and unexpected "
+                  "behavior will likely result. Please check that all tools "
+                  "that spawn Chromium are Arm-native.";
+    base::PlatformThread::Sleep(base::Seconds(3));
+  }
+#endif  // defined(ARCH_CPU_X86_64)
+
   // Get the Keychain API to register for distributed notifications on the main
   // thread, which has a proper CFRunloop, instead of later on the I/O thread,
   // which doesn't. This ensures those notifications will get delivered
@@ -1094,28 +1130,6 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   }
 #endif
 
-  if (command_line->HasSwitch(switches::kProfileEmail) &&
-      !command_line->HasSwitch(switches::kProfileDirectory)) {
-    // Use GetSwitchValueNative() rather than GetSwitchValueASCII() to support
-    // non-ASCII email addresses.
-    base::CommandLine::StringType email_native =
-        command_line->GetSwitchValueNative(switches::kProfileEmail);
-    if (!email_native.empty()) {
-      std::string email;
-#if BUILDFLAG(IS_WIN)
-      email = base::WideToUTF8(email_native);
-#else
-      email = std::move(email_native);
-#endif
-      base::FilePath profile_dir =
-          browser_process_->profile_manager()->GetProfileDirForEmail(email);
-      if (!profile_dir.empty()) {
-        command_line->AppendSwitchPath(switches::kProfileDirectory,
-                                       profile_dir.BaseName());
-      }
-    }
-  }
-
   // ChromeOS needs ui::ResourceBundle::InitSharedInstance to be called before
   // this.
   browser_process_->PreCreateThreads();
@@ -1150,6 +1164,11 @@ void ChromeBrowserMainParts::PostCreateThreads() {
       base::BindOnce(&tracing::TracingSamplerProfiler::
                          CreateOnChildThreadWithCustomUnwinders,
                      base::BindRepeating(&CreateCoreUnwindersFactory)));
+#endif
+
+#if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
+  if (ChromeProcessSingleton::IsEarlySingletonFeatureEnabled())
+    ChromeProcessSingleton::GetInstance()->StartWatching();
 #endif
 
   tracing::SetupBackgroundTracingFieldTrial();
@@ -1212,6 +1231,7 @@ void ChromeBrowserMainParts::PreProfileInit() {
 }
 
 void ChromeBrowserMainParts::CallPostProfileInit(Profile* profile) {
+  DCHECK(profile);
   bool is_initial_profile = !initialized_initial_profile_;
   initialized_initial_profile_ = true;
 
@@ -1320,7 +1340,7 @@ void ChromeBrowserMainParts::PostBrowserStart() {
   // Allow ProcessSingleton to process messages.
   // This is done here instead of just relying on the main message loop's start
   // to avoid rendezvous in RunLoops that may precede MainMessageLoopRun.
-  process_singleton_->Unlock(base::BindRepeating(
+  ChromeProcessSingleton::GetInstance()->Unlock(base::BindRepeating(
       &ChromeBrowserMainParts::ProcessSingletonNotificationCallback));
 #endif  // BUILDFLAG(ENABLE_PROCESS_SINGLETON)
 
@@ -1412,39 +1432,43 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 #endif  // defined(USE_AURA)
 
 #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
-  // When another process is running, use that process instead of starting a
-  // new one. NotifyOtherProcess will currently give the other process up to
-  // 20 seconds to respond. Note that this needs to be done before we attempt
-  // to read the profile.
-  notify_result_ = process_singleton_->NotifyOtherProcessOrCreate();
-  UMA_HISTOGRAM_ENUMERATION("Chrome.ProcessSingleton.NotifyResult",
-                            notify_result_,
-                            ProcessSingleton::kNumNotifyResults);
-  switch (notify_result_) {
-    case ProcessSingleton::PROCESS_NONE:
-      // No process already running, fall through to starting a new one.
-      process_singleton_->StartWatching();
-      g_browser_process->platform_part()->PlatformSpecificCommandLineProcessing(
-          *base::CommandLine::ForCurrentProcess());
-      break;
+  if (!ChromeProcessSingleton::IsEarlySingletonFeatureEnabled()) {
+    // When another process is running, use that process instead of starting a
+    // new one. NotifyOtherProcess will currently give the other process up to
+    // 20 seconds to respond. Note that this needs to be done before we attempt
+    // to read the profile.
+    notify_result_ =
+        ChromeProcessSingleton::GetInstance()->NotifyOtherProcessOrCreate();
+    UMA_HISTOGRAM_ENUMERATION("Chrome.ProcessSingleton.NotifyResult",
+                              notify_result_,
+                              ProcessSingleton::kNumNotifyResults);
+    switch (notify_result_) {
+      case ProcessSingleton::PROCESS_NONE:
+        // No process already running, fall through to starting a new one.
+        ChromeProcessSingleton::GetInstance()->StartWatching();
+        g_browser_process->platform_part()
+            ->PlatformSpecificCommandLineProcessing(
+                *base::CommandLine::ForCurrentProcess());
+        break;
 
-    case ProcessSingleton::PROCESS_NOTIFIED:
-      printf("%s\n", base::SysWideToNativeMB(
-                         base::UTF16ToWide(l10n_util::GetStringUTF16(
-                             IDS_USED_EXISTING_BROWSER)))
-                         .c_str());
-      return chrome::RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED;
+      case ProcessSingleton::PROCESS_NOTIFIED:
+        printf("%s\n", base::SysWideToNativeMB(
+                           base::UTF16ToWide(l10n_util::GetStringUTF16(
+                               IDS_USED_EXISTING_BROWSER)))
+                           .c_str());
+        return chrome::RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED;
 
-    case ProcessSingleton::PROFILE_IN_USE:
-      return chrome::RESULT_CODE_PROFILE_IN_USE;
+      case ProcessSingleton::PROFILE_IN_USE:
+        return chrome::RESULT_CODE_PROFILE_IN_USE;
 
-    case ProcessSingleton::LOCK_ERROR:
-      LOG(ERROR) << "Failed to create a ProcessSingleton for your profile "
-                    "directory. This means that running multiple instances "
-                    "would start multiple browser processes rather than "
-                    "opening a new window in the existing process. Aborting "
-                    "now to avoid profile corruption.";
-      return chrome::RESULT_CODE_PROFILE_IN_USE;
+      case ProcessSingleton::LOCK_ERROR:
+        LOG(ERROR) << "Failed to create a ProcessSingleton for your profile "
+                      "directory. This means that running multiple instances "
+                      "would start multiple browser processes rather than "
+                      "opening a new window in the existing process. Aborting "
+                      "now to avoid profile corruption.";
+        return chrome::RESULT_CODE_PROFILE_IN_USE;
+    }
   }
 #endif  // BUILDFLAG(ENABLE_PROCESS_SINGLETON)
 
@@ -1521,7 +1545,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
         try_chrome_int,
         base::BindRepeating(
             &ChromeProcessSingleton::SetModalDialogNotificationHandler,
-            base::Unretained(process_singleton_.get())));
+            base::Unretained(ChromeProcessSingleton::GetInstance())));
     switch (answer) {
       case TryChromeDialog::NOT_NOW:
         return chrome::RESULT_CODE_NORMAL_EXIT_CANCEL;
@@ -1571,7 +1595,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   StartupProfileInfo profile_info = CreateInitialProfile(
       /*cur_dir=*/base::FilePath(), *base::CommandLine::ForCurrentProcess());
 
-  Profile* profile = profile_info.profile;
   if (profile_info.mode == StartupProfileMode::kError)
     return content::RESULT_CODE_NORMAL_EXIT;
 
@@ -1624,13 +1647,10 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   }
 #endif  // !BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
 
-  // TODO(stevenjb): Move WIN and MACOSX specific code to appropriate Parts.
-  // (requires supporting early exit).
-  CallPostProfileInit(profile);
-  if (base::FeatureList::IsEnabled(features::kObserverBasedPostProfileInit)) {
-    // Set up PostProfileInit triggering for profiles created later.
-    profile_init_manager_ = std::make_unique<ProfileInitManager>(this);
-  }
+  // `profile` may be nullptr if the profile picker is shown.
+  Profile* profile = profile_info.profile;
+  // Call `PostProfileInit()`and set it up for profiles created later.
+  profile_init_manager_ = std::make_unique<ProfileInitManager>(this, profile);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   // Execute first run specific code after the PrefService has been initialized
@@ -1641,11 +1661,14 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
       first_run::SetShouldShowWelcomePage();
     } else {
       // clang-format off
-    first_run::AutoImport(profile, master_prefs_->import_bookmarks_path);
+    // `profile` may be nullptr even on first run, for example when the
+    // "BrowserSignin" policy is set to "Force". If so, skip the auto import.
+    if (profile) {
+      first_run::AutoImport(profile, master_prefs_->import_bookmarks_path);
+    }
 
     // Note: This can pop-up the first run consent dialog on Linux & Mac.
-    first_run::DoPostImportTasks(profile,
-                                 master_prefs_->make_chrome_default_for_user);
+    first_run::DoPostImportTasks(master_prefs_->make_chrome_default_for_user);
 
     // The first run dialog is modal, and spins a RunLoop, which could receive
     // a SIGTERM, and call chrome::AttemptExit(). Exit cleanly in that case.
@@ -1705,8 +1728,8 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && BUILDFLAG(IS_WIN)
-  printing::SetGetDisplayNameFunction(&printing::GetUserFriendlyName);
+#if BUILDFLAG(ENABLE_PRINTING)
+  printing::InitializeProcessForPrinting();
 #endif
 
   HandleTestParameters(*base::CommandLine::ForCurrentProcess());
@@ -1736,10 +1759,12 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
     variations_service->PerformPreMainMessageLoopStartup();
 
 #if BUILDFLAG(IS_ANDROID)
+  // The profile picker is never shown on Android.
+  DCHECK_EQ(profile_info.mode, StartupProfileMode::kBrowserWindow);
+  DCHECK(profile);
   // Just initialize the policy prefs service here. Variations seed fetching
   // will be initialized when the app enters foreground mode.
   variations_service->set_policy_pref_service(profile->GetPrefs());
-
 #else
   // We are in regular browser boot sequence. Open initial tabs and enter the
   // main message loop.
@@ -1909,7 +1934,7 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
 
 #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
   if (notify_result_ == ProcessSingleton::PROCESS_NONE)
-    process_singleton_->Cleanup();
+    ChromeProcessSingleton::GetInstance()->Cleanup();
 #endif  // BUILDFLAG(ENABLE_PROCESS_SINGLETON)
 
   browser_process_->metrics_service()->Stop();
@@ -1951,6 +1976,8 @@ void ChromeBrowserMainParts::PostDestroyThreads() {
   metrics::CleanExitBeacon::EnsureCleanShutdown(
       browser_process_->local_state());
 
+  profile_init_manager_.reset();
+
   // The below call to browser_shutdown::ShutdownPostThreadsStop() deletes
   // |browser_process_|. We release it so that we don't keep holding onto an
   // invalid reference.
@@ -1975,7 +2002,8 @@ void ChromeBrowserMainParts::PostDestroyThreads() {
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
-  process_singleton_.reset();
+  if (!ChromeProcessSingleton::IsEarlySingletonFeatureEnabled())
+    ChromeProcessSingleton::DeleteInstance();
 #endif  // BUILDFLAG(ENABLE_PROCESS_SINGLETON)
 
   device_event_log::Shutdown();

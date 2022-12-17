@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -244,6 +244,9 @@ struct COMPONENT_EXPORT(SQL) DatabaseDiagnostics {
   // Sanity checks used for all errors.
   bool has_valid_header = false;
   bool has_valid_schema = false;
+
+  // Corresponds to `Database::GetErrorMessage()`.
+  std::string error_message;
 };
 
 // Handle to an open SQLite database.
@@ -278,6 +281,8 @@ class COMPONENT_EXPORT(SQL) Database {
 
   Database(const Database&) = delete;
   Database& operator=(const Database&) = delete;
+  Database(Database&&) = delete;
+  Database& operator=(Database&&) = delete;
   ~Database();
 
   // Allows mmapping to be disabled globally by default in the calling process.
@@ -788,6 +793,8 @@ class COMPONENT_EXPORT(SQL) Database {
 
     StatementRef(const StatementRef&) = delete;
     StatementRef& operator=(const StatementRef&) = delete;
+    StatementRef(StatementRef&&) = delete;
+    StatementRef& operator=(StatementRef&&) = delete;
 
     // When true, the statement can be used.
     bool is_valid() const { return !!stmt_; }

@@ -1,14 +1,14 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_CHECK_PASSWORDS_AGAINST_CRYPTOHOME_HELPER_H_
 #define CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_CHECK_PASSWORDS_AGAINST_CRYPTOHOME_HELPER_H_
 
-#include "ash/components/login/auth/auth_status_consumer.h"
-#include "ash/components/login/auth/cryptohome_authenticator.h"
-#include "ash/components/login/auth/public/user_context.h"
 #include "base/values.h"
+#include "chromeos/ash/components/login/auth/auth_status_consumer.h"
+#include "chromeos/ash/components/login/auth/cryptohome_authenticator.h"
+#include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "components/login/base_screen_handler_utils.h"
 
 namespace ash {
@@ -43,7 +43,7 @@ class CheckPasswordsAgainstCryptohomeHelper : public AuthStatusConsumer {
  private:
   UserContext user_context_;
   const ::login::StringList scraped_passwords_;
-  int current_password_index_ = 0;
+  size_t current_password_index_ = 0u;
 
   // Used to authenticate the user.
   scoped_refptr<ExtendedAuthenticator> extended_authenticator_;

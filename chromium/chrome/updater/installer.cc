@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,7 @@ AppInfo::~AppInfo() = default;
 
 Installer::Installer(
     const std::string& app_id,
+    const std::string& client_install_data,
     const std::string& install_data_index,
     const std::string& target_channel,
     const std::string& target_version_prefix,
@@ -74,6 +75,7 @@ Installer::Installer(
     crx_file::VerifierFormat crx_verifier_format)
     : updater_scope_(GetUpdaterScope()),
       app_id_(app_id),
+      client_install_data_(client_install_data),
       install_data_index_(install_data_index),
       rollback_allowed_(rollback_allowed),
       target_channel_(target_channel),
@@ -110,7 +112,11 @@ update_client::CrxComponent Installer::MakeCrxComponent() {
   component.requires_network_encryption = false;
   component.crx_format_requirement = crx_verifier_format_;
   component.app_id = app_id_;
-  component.install_data_index = install_data_index_;
+
+  // Query server for install data only when the client does not specify one.
+  if (client_install_data_.empty())
+    component.install_data_index = install_data_index_;
+
   component.ap = ap_;
   component.brand = persisted_data_->GetBrandCode(app_id_);
   component.name = app_id_;
@@ -179,13 +185,14 @@ Installer::Result Installer::InstallHelper(
       AppInfo(updater_scope_, app_id_, ap_, pv_, checker_path_),
       application_installer, install_params->arguments,
       WriteInstallerDataToTempFile(unpack_path,
-                                   install_params->server_install_data),
+                                   client_install_data_.empty()
+                                       ? install_params->server_install_data
+                                       : client_install_data_),
       kWaitForAppInstaller, std::move(progress_callback));
 }
 
 void Installer::InstallWithSyncPrimitives(
     const base::FilePath& unpack_path,
-    const std::string& public_key,
     std::unique_ptr<InstallParams> install_params,
     ProgressCallback progress_callback,
     Callback callback) {
@@ -203,15 +210,15 @@ void Installer::OnUpdateError(int error) {
 }
 
 void Installer::Install(const base::FilePath& unpack_path,
-                        const std::string& public_key,
+                        const std::string& /*public_key*/,
                         std::unique_ptr<InstallParams> install_params,
                         ProgressCallback progress_callback,
                         Callback callback) {
   base::ThreadPool::PostTask(
       FROM_HERE, kTaskTraitsBlockWithSyncPrimitives,
       base::BindOnce(&Installer::InstallWithSyncPrimitives, this, unpack_path,
-                     public_key, std::move(install_params),
-                     std::move(progress_callback), std::move(callback)));
+                     std::move(install_params), std::move(progress_callback),
+                     std::move(callback)));
 }
 
 bool Installer::GetInstalledFile(const std::string& file,

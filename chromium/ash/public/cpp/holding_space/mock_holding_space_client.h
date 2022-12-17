@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,7 @@ class MockHoldingSpaceClient : public HoldingSpaceClient {
               CrackFileSystemUrl,
               (const GURL& file_system_url),
               (const, override));
+  MOCK_METHOD(bool, IsDriveDisabled, (), (const, override));
   MOCK_METHOD(void, OpenDownloads, (SuccessCallback callback), (override));
   MOCK_METHOD(void, OpenMyFiles, (SuccessCallback callback), (override));
   MOCK_METHOD(void,
@@ -53,6 +54,10 @@ class MockHoldingSpaceClient : public HoldingSpaceClient {
   MOCK_METHOD(void,
               PinFiles,
               (const std::vector<base::FilePath>& file_paths),
+              (override));
+  MOCK_METHOD(void,
+              RemoveFileSuggestions,
+              (const std::vector<base::FilePath>& absolute_file_paths),
               (override));
   MOCK_METHOD(void,
               PinItems,

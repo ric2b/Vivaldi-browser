@@ -90,9 +90,8 @@ static void ClearPartnerId(BookmarkModel* model,
   GetPartnerIds(node, include_children, partners);
   if (!partners.empty()) {
     Profile* profile = Profile::FromBrowserContext(browser_context);
-    const base::Value* list_value =
+    const auto& list =
         profile->GetPrefs()->GetList(vivaldiprefs::kBookmarksDeletedPartners);
-    const base::Value::List& list = list_value->GetList();
     base::Value::List updated(list.Clone());
     for (const base::GUID& partner_id : partners) {
       base::Value v(partner_id.AsLowercaseString());
@@ -142,16 +141,19 @@ bool MetaInfoChangeFilter::HasChanged(const BookmarkNode* node) {
 }
 
 VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
-    : browser_context_(context), bookmark_model_(nullptr) {
+    : browser_context_(context) {
   bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(context);
-  DCHECK(bookmark_model_);
-  bookmark_model_->AddObserver(this);
+  if (bookmark_model_) {
+    bookmark_model_->AddObserver(this);
+  }
 }
 
 VivaldiBookmarksAPI::~VivaldiBookmarksAPI() {}
 
 void VivaldiBookmarksAPI::Shutdown() {
-  bookmark_model_->RemoveObserver(this);
+  if (bookmark_model_) {
+    bookmark_model_->RemoveObserver(this);
+  }
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>>::
@@ -205,16 +207,11 @@ void VivaldiBookmarksAPI::OnWillChangeBookmarkMetaInfo(
 void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
                                                   const BookmarkNode* node) {
   bookmarks_private::OnMetaInfoChanged::ChangeInfo change_info;
-  change_info.speeddial =
-      std::make_unique<bool>(vivaldi_bookmark_kit::GetSpeeddial(node));
-  change_info.bookmarkbar =
-      std::make_unique<bool>(vivaldi_bookmark_kit::GetBookmarkbar(node));
-  change_info.description =
-      std::make_unique<std::string>(vivaldi_bookmark_kit::GetDescription(node));
-  change_info.thumbnail =
-      std::make_unique<std::string>(vivaldi_bookmark_kit::GetThumbnail(node));
-  change_info.nickname =
-      std::make_unique<std::string>(vivaldi_bookmark_kit::GetNickname(node));
+  change_info.speeddial = vivaldi_bookmark_kit::GetSpeeddial(node);
+  change_info.bookmarkbar = vivaldi_bookmark_kit::GetBookmarkbar(node);
+  change_info.description = vivaldi_bookmark_kit::GetDescription(node);
+  change_info.thumbnail = vivaldi_bookmark_kit::GetThumbnail(node);
+  change_info.nickname = vivaldi_bookmark_kit::GetNickname(node);
 
   if (change_filter_ && change_filter_->HasChanged(node)) {
     ClearPartnerId(model, node, browser_context_, true, false);

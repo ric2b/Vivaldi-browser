@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -200,7 +200,8 @@ suite('CaTrustEditDialogTests', function() {
     browserProxy.setCaCertificateTrust(caTrustInfo);
 
     CertificatesBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     dialog = document.createElement('ca-trust-edit-dialog');
   });
 
@@ -286,7 +287,8 @@ suite('CertificateDeleteConfirmationDialogTests', function() {
   setup(function() {
     browserProxy = new TestCertificatesBrowserProxy();
     CertificatesBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     dialog = document.createElement('certificate-delete-confirmation-dialog');
     dialog.model = model;
     dialog.certificateType = CertificateType.PERSONAL;
@@ -335,7 +337,8 @@ suite('CertificatePasswordEncryptionDialogTests', function() {
   setup(function() {
     browserProxy = new TestCertificatesBrowserProxy();
     CertificatesBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     dialog = document.createElement('certificate-password-encryption-dialog');
     document.body.appendChild(dialog);
   });
@@ -407,7 +410,8 @@ suite('CertificatePasswordDecryptionDialogTests', function() {
   setup(function() {
     browserProxy = new TestCertificatesBrowserProxy();
     CertificatesBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     dialog = document.createElement('certificate-password-decryption-dialog');
     document.body.appendChild(dialog);
   });
@@ -468,7 +472,8 @@ suite('CertificateSubentryTests', function() {
   setup(function() {
     browserProxy = new TestCertificatesBrowserProxy();
     CertificatesBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     subentry = document.createElement('certificate-subentry');
     subentry.model = createSampleCertificateSubnode();
     subentry.certificateType = CertificateType.PERSONAL;
@@ -600,7 +605,8 @@ suite('CertificateManagerTests', function() {
   setup(function() {
     browserProxy = new TestCertificatesBrowserProxy();
     CertificatesBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     page = document.createElement('certificate-manager');
     document.body.appendChild(page);
   });
@@ -863,7 +869,8 @@ suite('CertificateListTests', function() {
   setup(function() {
     browserProxy = new TestCertificatesBrowserProxy();
     CertificatesBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     element = document.createElement('certificate-list');
     document.body.appendChild(element);
   });

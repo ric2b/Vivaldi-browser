@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,8 @@ class CORE_EXPORT InterpolableGridLength final : public InterpolableValue {
   InterpolableGridLength(std::unique_ptr<InterpolableValue> value,
                          InterpolableGridLengthType type);
   static std::unique_ptr<InterpolableGridLength> Create(
-      const GridLength& grid_length);
+      const GridLength& grid_length,
+      float zoom);
 
   GridLength CreateGridLength(
       const CSSToLengthConversionData& conversion_data) const;

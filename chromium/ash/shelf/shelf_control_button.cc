@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,8 +67,8 @@ ShelfControlButton::ShelfControlButton(
 
 ShelfControlButton::~ShelfControlButton() = default;
 
-gfx::Point ShelfControlButton::GetCenterPoint() const {
-  return GetLocalBounds().CenterPoint();
+gfx::PointF ShelfControlButton::GetCenterPoint() const {
+  return gfx::RectF(GetLocalBounds()).CenterPoint();
 }
 
 const char* ShelfControlButton::GetClassName() const {
@@ -82,7 +82,7 @@ gfx::Size ShelfControlButton::CalculatePreferredSize() const {
 
 void ShelfControlButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ShelfButton::GetAccessibleNodeData(node_data);
-  node_data->SetName(GetAccessibleName());
+  node_data->SetNameChecked(GetAccessibleName());
 }
 
 void ShelfControlButton::PaintButtonContents(gfx::Canvas* canvas) {
@@ -93,7 +93,7 @@ void ShelfControlButton::PaintBackground(gfx::Canvas* canvas,
                                          const gfx::Rect& bounds) {
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  flags.setColor(ShelfConfig::Get()->GetShelfControlButtonColor());
+  flags.setColor(ShelfConfig::Get()->GetShelfControlButtonColor(GetWidget()));
   canvas->DrawRoundRect(bounds, ShelfConfig::Get()->control_border_radius(),
                         flags);
 }

@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Izmeni fajl}one{Izmeni fajlove}few{Izmeni fajlove}other{Izmeni fajlove}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Smer ključa</translation>
+<translation id="3294437725009624529">Gost</translation>
 <translation id="3310640316857623290">Kašnjenje DNS-a znatno premašuje dozvoljenu graničnu vrednost</translation>
 <translation id="3328783797891415197">Test je u toku</translation>
 <translation id="3340011300870565703">Uređaj ima <ph name="BATTERY_PERCENTAGE" />% baterije desne slušalice.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Ne isključujte spoljni uređaj ni računar dok se firmver ažurira. Možete da umanjite ovaj prozor. Ovo ažuriranje može da potraje nekoliko minuta, a spoljni uređaj možda neće raditi tokom tog perioda.</translation>
 <translation id="3486220673238053218">definicija</translation>
 <translation id="3488065109653206955">Delimično aktivirano</translation>
+<translation id="3510890413042482857">Šalji <ph name="BEGIN_LINK1" />podatke o praćenju učinka<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Ažuriranje Chrome OS-a</translation>
 <translation id="3527036260304016759">Nije uspelo – nepoznata greška</translation>
 <translation id="3532980081107202182">Preostalo je još oko <ph name="MIN_REMAINING" /> minuta</translation>
@@ -468,6 +470,7 @@ Probajte da dodirnete mikrofon da biste me pitali nešto.</translation>
 <translation id="5502931783115429516">Android nije pokrenut</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Automatski prelazite na tamnu temu u vreme zalaska sunca</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Skeniraj ponovo</translation>
 <translation id="5583640892426849032">Backspace</translation>

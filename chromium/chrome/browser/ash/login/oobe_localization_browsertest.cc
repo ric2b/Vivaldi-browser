@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,7 +72,7 @@ class LanguageListWaiter : public WelcomeScreen::Observer {
 
  private:
   bool LanguageListReady() const {
-    return !welcome_screen_->language_list().GetListDeprecated().empty();
+    return !welcome_screen_->language_list().empty();
   }
 
   void CheckLanguageList() {

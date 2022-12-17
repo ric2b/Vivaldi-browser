@@ -201,27 +201,21 @@ bool ServiceImpl::DoSetScriptOverrideForTab(content::WebContents* tab_contents,
           tab_contents, tab_contents->GetPrimaryMainFrame(),
                                     script_path, true);
     } else {
-      tab_contents->ForEachRenderFrameHost(base::BindRepeating(
-          [](content::WebContents* tab_contents,
-             const base::FilePath& script_path, content::RenderFrameHost* rfh) {
+      tab_contents->ForEachRenderFrameHost(
+          [tab_contents, script_path](content::RenderFrameHost* rfh) {
             ChangeStaticInjectionForFrame(tab_contents, rfh, script_path, true);
-            return content::RenderFrameHost::FrameIterationAction::kContinue;
-          },
-          tab_contents, script_path));
+          });
     }
   } else if (was_enabled && script_override != Service::kEnabledOverride) {
     if (script_path.MatchesExtension(kJSExtension)) {
       // Can't unload injected Javascript.
       tab_contents->GetController().Reload(content::ReloadType::NORMAL, true);
     } else {
-      tab_contents->ForEachRenderFrameHost(base::BindRepeating(
-          [](content::WebContents* tab_contents,
-             const base::FilePath& script_path, content::RenderFrameHost* rfh) {
+      tab_contents->ForEachRenderFrameHost(
+          [tab_contents, script_path](content::RenderFrameHost* rfh) {
             ChangeStaticInjectionForFrame(tab_contents, rfh, script_path,
                                           false);
-            return content::RenderFrameHost::FrameIterationAction::kContinue;
-          },
-          tab_contents, script_path));
+          });
     }
   }
 

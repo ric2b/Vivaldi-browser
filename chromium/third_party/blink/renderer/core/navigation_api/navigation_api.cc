@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "base/check_op.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
+#include "third_party/blink/renderer/bindings/core/v8/capture_source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
@@ -48,7 +49,7 @@ namespace blink {
 class NavigateReaction final : public ScriptFunction::Callable {
  public:
   enum class ResolveType { kFulfill, kReject };
-  enum class ReactType { kImmediate, kTransitionWhile };
+  enum class ReactType { kImmediate, kIntercept };
   static void React(ScriptState* script_state,
                     ScriptPromise promise,
                     NavigationApiNavigation* navigation,
@@ -96,7 +97,7 @@ class NavigateReaction final : public ScriptFunction::Callable {
     navigation_api->ongoing_navigate_event_ = nullptr;
 
     if (resolve_type_ == ResolveType::kFulfill) {
-      if (react_type_ == ReactType::kTransitionWhile)
+      if (react_type_ == ReactType::kIntercept)
         navigate_event_->PotentiallyProcessScrollBehavior();
       navigation_api->ResolvePromisesAndFireNavigateSuccessEvent(navigation_);
     } else {
@@ -106,7 +107,7 @@ class NavigateReaction final : public ScriptFunction::Callable {
 
     navigate_event_->ResetFocusIfNeeded();
 
-    if (react_type_ == ReactType::kTransitionWhile && window->GetFrame()) {
+    if (react_type_ == ReactType::kIntercept && window->GetFrame()) {
       window->GetFrame()->Loader().DidFinishNavigation(
           resolve_type_ == ResolveType::kFulfill
               ? FrameLoader::NavigationFinishState::kSuccess
@@ -114,7 +115,7 @@ class NavigateReaction final : public ScriptFunction::Callable {
     }
 
     if (navigate_event_->ShouldSendAxEvents()) {
-      auto* window = LocalDOMWindow::From(script_state);
+      window = LocalDOMWindow::From(script_state);
       DCHECK(window);
       if (AXObjectCache* cache = window->document()->ExistingAXObjectCache())
         cache->HandleLoadComplete(window->document());
@@ -207,7 +208,7 @@ void NavigationApi::setOnnavigate(EventListener* listener) {
 }
 
 void NavigationApi::PopulateKeySet() {
-  DCHECK(keys_to_indices_.IsEmpty());
+  DCHECK(keys_to_indices_.empty());
   for (wtf_size_t i = 0; i < entries_.size(); i++)
     keys_to_indices_.insert(entries_[i]->key(), i);
 }
@@ -219,7 +220,7 @@ void NavigationApi::InitializeForNewWindow(
     NavigationApi* previous,
     const WebVector<WebHistoryItem>& back_entries,
     const WebVector<WebHistoryItem>& forward_entries) {
-  DCHECK(entries_.IsEmpty());
+  DCHECK(entries_.empty());
 
   // This can happen even when commit_reason is not kInitialization, e.g. when
   // navigating from about:blank#1 to about:blank#2 where both are initial
@@ -237,9 +238,11 @@ void NavigationApi::InitializeForNewWindow(
   if (commit_reason != CommitReason::kRegular ||
       (current.Url() == BlankURL() && !IsBackForwardLoadType(load_type)) ||
       (current.Url().IsAboutSrcdocURL() && !IsBackForwardLoadType(load_type))) {
-    if (previous && !previous->entries_.IsEmpty()) {
-      DCHECK(entries_.IsEmpty());
-      entries_.ReserveCapacity(previous->entries_.size());
+    if (previous && !previous->entries_.empty() &&
+        GetSupplementable()->GetSecurityOrigin()->IsSameOriginWith(
+            previous->GetSupplementable()->GetSecurityOrigin())) {
+      DCHECK(entries_.empty());
+      entries_.reserve(previous->entries_.size());
       for (wtf_size_t i = 0; i < previous->entries_.size(); i++) {
         entries_.emplace_back(
             previous->entries_[i]->Clone(GetSupplementable()));
@@ -253,8 +256,8 @@ void NavigationApi::InitializeForNewWindow(
 
   // Construct |entries_|. Any back entries are inserted, then the current
   // entry, then any forward entries.
-  entries_.ReserveCapacity(base::checked_cast<wtf_size_t>(
-      back_entries.size() + forward_entries.size() + 1));
+  entries_.reserve(base::checked_cast<wtf_size_t>(back_entries.size() +
+                                                  forward_entries.size() + 1));
   for (const auto& entry : back_entries)
     entries_.emplace_back(MakeEntryFromItem(*entry));
 
@@ -334,6 +337,7 @@ void NavigationApi::UpdateForNavigation(HistoryItem& item,
   // inverts when committing a browser-initiated same-document navigation and
   // an event listener is present for either currententrychange or dispose.
   v8::MicrotasksScope scope(GetSupplementable()->GetIsolate(),
+                            ToMicrotaskQueue(GetSupplementable()),
                             v8::MicrotasksScope::kRunMicrotasks);
 
   auto* init = NavigationCurrentEntryChangeEventInit::Create();
@@ -380,7 +384,7 @@ void NavigationApi::SetEntriesForRestore(
     return;
 
   HeapVector<Member<NavigationHistoryEntry>> new_entries;
-  new_entries.ReserveCapacity(
+  new_entries.reserve(
       base::checked_cast<wtf_size_t>(entry_arrays->back_entries.size() +
                                      entry_arrays->forward_entries.size() + 1));
   for (const auto& item : entry_arrays->back_entries)
@@ -406,8 +410,43 @@ void NavigationApi::SetEntriesForRestore(
   }
   GetSupplementable()
       ->GetTaskRunner(TaskType::kInternalDefault)
-      ->PostTask(FROM_HERE, WTF::Bind(&FireDisposeEventsAsync,
-                                      WrapPersistent(disposed_entries)));
+      ->PostTask(FROM_HERE, WTF::BindOnce(&FireDisposeEventsAsync,
+                                          WrapPersistent(disposed_entries)));
+}
+
+void NavigationApi::DisposeEntriesForSessionHistoryRemoval(
+    const Vector<String>& keys) {
+  if (HasEntriesAndEventsDisabled())
+    return;
+
+  HeapHashSet<Member<NavigationHistoryEntry>> disposed_entries;
+  for (const String& key : keys) {
+    auto it = keys_to_indices_.find(key);
+    // |key| may have already been disposed in UpdateForNavigation() if the
+    // entry was removed due to a navigation in this frame.
+    // The browser process may give us the key for currentEntry() in certain
+    // situations (e.g., if this is an iframe that was added after a push, and
+    // we navigate back past the creation of the iframe, currentEntry()'s key
+    // will no longer be present in the session history). Don't ever dispose the
+    // currentEntry().
+    if (it != keys_to_indices_.end() && entries_[it->value] != currentEntry())
+      disposed_entries.insert(entries_[it->value]);
+  }
+
+  HeapVector<Member<NavigationHistoryEntry>> entries_after_dispose;
+  for (auto& entry : entries_) {
+    if (!disposed_entries.Contains(entry))
+      entries_after_dispose.push_back(entry);
+  }
+
+  String current_entry_key = currentEntry()->key();
+  entries_.swap(entries_after_dispose);
+  keys_to_indices_.clear();
+  PopulateKeySet();
+  current_entry_index_ = keys_to_indices_.at(current_entry_key);
+
+  for (const auto& disposed_entry : disposed_entries)
+    disposed_entry->DispatchEvent(*Event::Create(event_type_names::kDispose));
 }
 
 NavigationHistoryEntry* NavigationApi::currentEntry() const {
@@ -718,7 +757,7 @@ NavigationHistoryEntry* NavigationApi::MakeEntryFromItem(HistoryItem& item) {
 }
 
 NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
-    const DispatchParams& params) {
+    NavigateEventDispatchParams* params) {
   // TODO(japhet): The draft spec says to cancel any ongoing navigate event
   // before invoking DispatchNavigateEvent(), because not all navigations will
   // fire a navigate event, but all should abort an ongoing navigate event.
@@ -727,8 +766,8 @@ NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
   InformAboutCanceledNavigation();
 
   const KURL& current_url = GetSupplementable()->Url();
-  const String& key = params.destination_item
-                          ? params.destination_item->GetNavigationApiKey()
+  const String& key = params->destination_item
+                          ? params->destination_item->GetNavigationApiKey()
                           : String();
   PromoteUpcomingNavigationToOngoing(key);
 
@@ -746,8 +785,8 @@ NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
       ToScriptStateForMainWorld(GetSupplementable()->GetFrame());
   ScriptState::Scope scope(script_state);
 
-  if (params.frame_load_type == WebFrameLoadType::kBackForward &&
-      params.event_type == NavigateEventType::kFragment &&
+  if (params->frame_load_type == WebFrameLoadType::kBackForward &&
+      params->event_type == NavigateEventType::kFragment &&
       !keys_to_indices_.Contains(key)) {
     // This same document history traversal was preempted by another navigation
     // that removed this entry from the back/forward list. Proceeding will leave
@@ -758,49 +797,51 @@ NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
 
   auto* init = NavigateEventInit::Create();
   const String& navigation_type =
-      DetermineNavigationType(params.frame_load_type);
+      DetermineNavigationType(params->frame_load_type);
   init->setNavigationType(navigation_type);
 
   SerializedScriptValue* destination_state = nullptr;
-  if (params.destination_item)
-    destination_state = params.destination_item->GetNavigationApiState();
+  if (params->destination_item)
+    destination_state = params->destination_item->GetNavigationApiState();
   else if (ongoing_navigation_)
     destination_state = ongoing_navigation_->GetSerializedState();
   NavigationDestination* destination =
       MakeGarbageCollected<NavigationDestination>(
-          params.url, params.event_type != NavigateEventType::kCrossDocument,
+          params->url, params->event_type != NavigateEventType::kCrossDocument,
           destination_state);
-  if (params.frame_load_type == WebFrameLoadType::kBackForward) {
+  if (params->frame_load_type == WebFrameLoadType::kBackForward) {
     auto iter = keys_to_indices_.find(key);
     int index = iter == keys_to_indices_.end() ? 0 : iter->value;
     destination->SetTraverseProperties(
-        key, params.destination_item->GetNavigationApiId(), index);
+        key, params->destination_item->GetNavigationApiId(), index);
   }
   init->setDestination(destination);
 
-  init->setCancelable(params.frame_load_type != WebFrameLoadType::kBackForward);
+  init->setCancelable(params->frame_load_type !=
+                      WebFrameLoadType::kBackForward);
   init->setCanIntercept(
       CanChangeToUrlForHistoryApi(
-          params.url, GetSupplementable()->GetSecurityOrigin(), current_url) &&
-      (params.event_type != NavigateEventType::kCrossDocument ||
-       params.frame_load_type != WebFrameLoadType::kBackForward));
-  init->setHashChange(params.event_type == NavigateEventType::kFragment &&
-                      params.url != current_url &&
-                      EqualIgnoringFragmentIdentifier(params.url, current_url));
+          params->url, GetSupplementable()->GetSecurityOrigin(), current_url) &&
+      (params->event_type != NavigateEventType::kCrossDocument ||
+       params->frame_load_type != WebFrameLoadType::kBackForward));
+  init->setHashChange(
+      params->event_type == NavigateEventType::kFragment &&
+      params->url != current_url &&
+      EqualIgnoringFragmentIdentifier(params->url, current_url));
 
-  init->setUserInitiated(params.involvement !=
+  init->setUserInitiated(params->involvement !=
                          UserNavigationInvolvement::kNone);
-  if (params.form && params.form->Method() == FormSubmission::kPostMethod) {
-    init->setFormData(FormData::Create(params.form, ASSERT_NO_EXCEPTION));
+  if (params->form && params->form->Method() == FormSubmission::kPostMethod) {
+    init->setFormData(FormData::Create(params->form, ASSERT_NO_EXCEPTION));
   }
   if (ongoing_navigation_)
     init->setInfo(ongoing_navigation_->GetInfo());
   init->setSignal(MakeGarbageCollected<AbortSignal>(GetSupplementable()));
-  init->setDownloadRequest(params.download_filename);
+  init->setDownloadRequest(params->download_filename);
   auto* navigate_event = NavigateEvent::Create(
       GetSupplementable(), event_type_names::kNavigate, init);
-  navigate_event->SetUrl(params.url);
-  navigate_event->SaveStateFromDestinationItem(params.destination_item);
+  navigate_event->SetUrl(params->url);
+  navigate_event->SaveStateFromDestinationItem(params->destination_item);
 
   DCHECK(!ongoing_navigate_event_);
   ongoing_navigate_event_ = navigate_event;
@@ -817,27 +858,27 @@ NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
     transition_ = MakeGarbageCollected<NavigationTransition>(
         script_state, navigation_type, currentEntry());
 
-    DCHECK(!params.destination_item || !params.state_object);
-    auto* state_object = params.destination_item
-                             ? params.destination_item->StateObject()
-                             : params.state_object;
+    DCHECK(!params->destination_item || !params->state_object);
+    auto* state_object = params->destination_item
+                             ? params->destination_item->StateObject()
+                             : params->state_object.get();
 
     // In the spec, the URL and history update steps are not called for reloads.
     // In our implementation, we call the corresponding function anyway, but
     // |type| being a reload type makes it do none of the spec-relevant
     // steps. Instead it does stuff like the loading spinner and use counters.
     GetSupplementable()->document()->Loader()->RunURLAndHistoryUpdateSteps(
-        params.url, params.destination_item,
-        mojom::blink::SameDocumentNavigationType::kNavigationApiTransitionWhile,
-        state_object, params.frame_load_type, params.is_browser_initiated,
-        params.is_synchronously_committed_same_document);
+        params->url, params->destination_item,
+        mojom::blink::SameDocumentNavigationType::kNavigationApiIntercept,
+        state_object, params->frame_load_type, params->is_browser_initiated,
+        params->is_synchronously_committed_same_document);
   }
 
   if (navigate_event->HasNavigationActions() ||
-      params.event_type != NavigateEventType::kCrossDocument) {
+      params->event_type != NavigateEventType::kCrossDocument) {
     NavigateReaction::ReactType react_type =
         navigate_event->HasNavigationActions()
-            ? NavigateReaction::ReactType::kTransitionWhile
+            ? NavigateReaction::ReactType::kIntercept
             : NavigateReaction::ReactType::kImmediate;
 
     // There is a subtle timing difference between the fast-path for zero
@@ -850,10 +891,9 @@ NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
     // down the 1+ promises path.
     auto promise_list = navigate_event->GetNavigationActionPromisesList();
     const HeapVector<ScriptPromise>& tweaked_promise_list =
-        promise_list.IsEmpty()
-            ? HeapVector<ScriptPromise>(
-                  {ScriptPromise::CastUndefined(script_state)})
-            : promise_list;
+        promise_list.empty() ? HeapVector<ScriptPromise>(
+                                   {ScriptPromise::CastUndefined(script_state)})
+                             : promise_list;
 
     NavigateReaction::React(
         script_state, ScriptPromise::All(script_state, tweaked_promise_list),
@@ -864,9 +904,8 @@ NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
   // navigations, because they might later get interrupted by another
   // navigation, in which case we need to reject the promises and so on.
 
-  return navigate_event->HasNavigationActions()
-             ? DispatchResult::kTransitionWhile
-             : DispatchResult::kContinue;
+  return navigate_event->HasNavigationActions() ? DispatchResult::kIntercept
+                                                : DispatchResult::kContinue;
 }
 
 void NavigationApi::InformAboutCanceledNavigation(
@@ -891,7 +930,7 @@ void NavigationApi::InformAboutCanceledNavigation(
   // This function may be called when a v8 context hasn't been initialized.
   // upcoming_traversals_ being non-empty requires a v8 context, so check that
   // so that we don't unnecessarily try to initialize one below.
-  if (!upcoming_traversals_.IsEmpty() && GetSupplementable()->GetFrame() &&
+  if (!upcoming_traversals_.empty() && GetSupplementable()->GetFrame() &&
       !GetSupplementable()->GetFrame()->IsAttached()) {
     auto* script_state =
         ToScriptStateForMainWorld(GetSupplementable()->GetFrame());
@@ -901,8 +940,36 @@ void NavigationApi::InformAboutCanceledNavigation(
     CopyValuesToVector(upcoming_traversals_, traversals);
     for (auto& traversal : traversals)
       FinalizeWithAbortedNavigationError(script_state, traversal);
-    DCHECK(upcoming_traversals_.IsEmpty());
+    DCHECK(upcoming_traversals_.empty());
   }
+}
+
+void NavigationApi::TraverseCancelled(
+    const String& key,
+    mojom::blink::TraverseCancelledReason reason) {
+  auto traversal = upcoming_traversals_.find(key);
+  if (traversal == upcoming_traversals_.end())
+    return;
+
+  auto* script_state =
+      ToScriptStateForMainWorld(GetSupplementable()->GetFrame());
+  ScriptState::Scope scope(script_state);
+  DOMException* exception = nullptr;
+  if (reason == mojom::blink::TraverseCancelledReason::kNotFound) {
+    exception = MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kInvalidStateError, "Invalid key");
+  } else if (reason ==
+             mojom::blink::TraverseCancelledReason::kSandboxViolation) {
+    exception = MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kSecurityError,
+        "Navigating to key " + key +
+            " would require a navigation that "
+            "violates this frame's sandbox policy");
+  }
+  DCHECK(exception);
+
+  RejectPromisesAndFireNavigateErrorEvent(
+      traversal->value, ScriptValue::From(script_state, exception));
 }
 
 void NavigationApi::ContextDestroyed() {
@@ -911,10 +978,9 @@ void NavigationApi::ContextDestroyed() {
 }
 
 bool NavigationApi::HasNonDroppedOngoingNavigation() const {
-  bool has_ongoing_transition_while =
-      ongoing_navigate_event_ &&
-      ongoing_navigate_event_->HasNavigationActions();
-  return has_ongoing_transition_while && !has_dropped_navigation_;
+  bool has_ongoing_intercept = ongoing_navigate_event_ &&
+                               ongoing_navigate_event_->HasNavigationActions();
+  return has_ongoing_intercept && !has_dropped_navigation_;
 }
 
 void NavigationApi::RejectPromisesAndFireNavigateErrorEvent(
@@ -924,7 +990,7 @@ void NavigationApi::RejectPromisesAndFireNavigateErrorEvent(
   v8::Local<v8::Message> message =
       v8::Exception::CreateMessage(isolate, value.V8Value());
   std::unique_ptr<SourceLocation> location =
-      SourceLocation::FromMessage(isolate, message, GetSupplementable());
+      blink::CaptureSourceLocation(isolate, message, GetSupplementable());
   ErrorEvent* event = ErrorEvent::Create(
       ToCoreStringWithNullCheck(message->Get()), std::move(location), value,
       &DOMWrapperWorld::MainWorld());

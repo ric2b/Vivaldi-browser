@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,6 +39,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.compat.ApiHelperForN;
 import org.chromium.base.compat.ApiHelperForO;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
@@ -51,9 +52,11 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.layouts.components.VirtualView;
+import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabObscuringHandler;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabUtils.LoadIfNeededCaller;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -62,14 +65,14 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
-import org.chromium.chrome.browser.ui.TabObscuringHandler;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.features.start_surface.StartSurfaceUserData;
 import org.chromium.components.browser_ui.widget.InsetObserverView;
 import org.chromium.components.browser_ui.widget.TouchEventObserver;
 import org.chromium.components.content_capture.OnscreenContentProvider;
 import org.chromium.components.embedder_support.view.ContentView;
-import org.chromium.content_public.browser.ImeAdapter;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.UiUtils;
@@ -77,6 +80,7 @@ import org.chromium.ui.base.ApplicationViewportInsetSupplier;
 import org.chromium.ui.base.EventForwarder;
 import org.chromium.ui.base.EventOffsetHandler;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.mojom.VirtualKeyboardMode;
 import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
@@ -90,7 +94,9 @@ import android.view.GestureDetector;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * This class holds a {@link CompositorView}. This level of indirection is needed to benefit from
@@ -132,6 +138,10 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     private final ObserverList<TouchEventObserver> mTouchEventObservers = new ObserverList<>();
+    // Tracks current aggregated state of if the compositor is in motion. This could be an ongoing
+    // touch by the user, or a scroll that's in progress.
+    private final ObservableSupplierImpl<Boolean> mInMotionSupplier =
+            new ObservableSupplierImpl<>();
 
     private EventOffsetHandler mEventOffsetHandler;
     private boolean mIsKeyboardShowing;
@@ -203,6 +213,12 @@ public class CompositorViewHolder extends FrameLayout
      */
     private boolean mHasKeyboardGeometryChangeFired;
 
+    @VirtualKeyboardMode.EnumType
+    private int mVirtualKeyboardMode =
+            ChromeFeatureList.sOSKResizesVisualViewportByDefault.isEnabled()
+            ? VirtualKeyboardMode.RESIZES_VISUAL
+            : VirtualKeyboardMode.RESIZES_CONTENT;
+
     private OnscreenContentProvider mOnscreenContentProvider;
 
     private final Set<Runnable> mOnCompositorLayoutCallbacks = new HashSet<>();
@@ -260,6 +276,13 @@ public class CompositorViewHolder extends FrameLayout
     private DebugOverlay mDebugOverlay;
 
     private View mUrlBar;
+
+    private ApplicationViewportInsetSupplier mApplicationViewportInsetSupplier;
+
+    private PrefService mPrefService;
+
+    // Vivaldi
+    private boolean mRequestAutoFocus;
 
     /**
      * Creates a {@link CompositorView}.
@@ -321,6 +344,7 @@ public class CompositorViewHolder extends FrameLayout
             @Override
             public void onContentViewScrollingStateChanged(boolean scrolling) {
                 mContentViewScrolling = scrolling;
+                updateInMotion();
                 if (!scrolling) updateContentViewChildrenDimension();
             }
 
@@ -354,6 +378,27 @@ public class CompositorViewHolder extends FrameLayout
                         }
                     }
                 });
+            }
+
+            @Override
+            public void onVirtualKeyboardModeChanged(
+                    Tab tab, @VirtualKeyboardMode.EnumType int mode) {
+                updateVirtualKeyboardMode(mode);
+            }
+
+            @Override
+            public void onDidFinishNavigationInPrimaryMainFrame(
+                    Tab tab, NavigationHandle navigation) {
+                if (!navigation.isSameDocument() && navigation.hasCommitted()) {
+                    assert getWebContents() == tab.getWebContents();
+                    assert getWebContents() != null;
+                    updateVirtualKeyboardMode(getWebContents().getVirtualKeyboardMode());
+                }
+            }
+
+            @Override
+            public void onDidFinishNavigationNoop(Tab tab, NavigationHandle navigation) {
+                if (!navigation.isInPrimaryMainFrame()) return;
             }
         };
 
@@ -418,7 +463,8 @@ public class CompositorViewHolder extends FrameLayout
         // contents.
         //
         // [1] - https://developer.android.com/reference/android/view/WindowManager.LayoutParams.html#FLAG_FULLSCREEN
-        if (mShowingFullscreen && (!ChromeFeatureList.sOSKResizesVisualViewport.isEnabled())
+        if (mShowingFullscreen
+                && (!ChromeFeatureList.sOSKResizesVisualViewportByDefault.isEnabled())
                 && KeyboardVisibilityDelegate.getInstance().isKeyboardShowing(getContext(), this)) {
             getWindowVisibleDisplayFrame(mCacheRect);
 
@@ -536,6 +582,7 @@ public class CompositorViewHolder extends FrameLayout
             mInsetObserverView.addObserver(this);
             handleWindowInsetChanged();
         }
+        updateApplicationViewportInsetSuppliers();
     }
 
     /**
@@ -547,6 +594,47 @@ public class CompositorViewHolder extends FrameLayout
             ObservableSupplier<Integer> autofillUiBottomInsetSupplier) {
         mAutofillUiBottomInsetSupplier = autofillUiBottomInsetSupplier;
         mAutofillUiBottomInsetSupplier.addObserver(mBottomInsetObserver);
+        updateApplicationViewportInsetSuppliers();
+    }
+
+    /**
+     * Sets the ApplicationViewportInsetSupplier.
+     * This object manages inset suppliers that should inset the visual viewport
+     * of the current page (i.e. allow scrolling but don't affect layout). This
+     * class manages adding and removing observers from this object as needed.
+     */
+    public void setApplicationViewportInsetSupplier(ApplicationViewportInsetSupplier supplier) {
+        assert mApplicationViewportInsetSupplier == null;
+        mApplicationViewportInsetSupplier = supplier;
+        updateApplicationViewportInsetSuppliers();
+    }
+
+    // Ensures the keyboard-related inset suppliers are either registered or unregistered with the
+    // ApplicationViewportInsetSupplier. The ApplicationViewportInsetSupplier is responsible for
+    // insetting the visual viewport so the keyboard insets should only be applied to it if the
+    // keyboard resizes only the visual viewport (otherwise the visual viewport and web contents
+    // size are resized together).
+    private void updateApplicationViewportInsetSuppliers() {
+        if (mApplicationViewportInsetSupplier == null) return;
+
+        if (oskResizesVisualViewport()) {
+            if (mAutofillUiBottomInsetSupplier != null) {
+                mApplicationViewportInsetSupplier.addStackingSupplier(
+                        mAutofillUiBottomInsetSupplier);
+            }
+            if (mInsetObserverView != null) {
+                mApplicationViewportInsetSupplier.addStackingSupplier(
+                        mInsetObserverView.getSupplierForBottomInset());
+            }
+        } else {
+            if (mAutofillUiBottomInsetSupplier != null) {
+                mApplicationViewportInsetSupplier.removeSupplier(mAutofillUiBottomInsetSupplier);
+            }
+            if (mInsetObserverView != null) {
+                mApplicationViewportInsetSupplier.removeSupplier(
+                        mInsetObserverView.getSupplierForBottomInset());
+            }
+        }
     }
 
     @Override
@@ -558,7 +646,7 @@ public class CompositorViewHolder extends FrameLayout
         // The InsetObserverView is used to monitor keyboard resizes while
         // fullscreened to simulate a view resize. This is unneeded when the
         // OSK resizes only the visual viewport.
-        if (ChromeFeatureList.sOSKResizesVisualViewport.isEnabled()) {
+        if (oskResizesVisualViewport()) {
             return;
         }
 
@@ -603,8 +691,8 @@ public class CompositorViewHolder extends FrameLayout
     /**
      * This is called when the native library are ready.
      */
-    public void onNativeLibraryReady(
-            WindowAndroid windowAndroid, TabContentManager tabContentManager) {
+    public void onNativeLibraryReady(WindowAndroid windowAndroid,
+            TabContentManager tabContentManager, PrefService prefService) {
         mCompositorView.initNativeCompositor(
                 SysUtils.isLowEndDevice(), windowAndroid, tabContentManager);
 
@@ -615,6 +703,7 @@ public class CompositorViewHolder extends FrameLayout
 
         mApplicationBottomInsetSupplier = windowAndroid.getApplicationBottomInsetProvider();
         mApplicationBottomInsetSupplier.addObserver(mBottomInsetObserver);
+        mPrefService = prefService;
     }
 
     /**
@@ -708,6 +797,23 @@ public class CompositorViewHolder extends FrameLayout
             mInGesture = false;
             updateViewportSize();
         }
+        updateInMotion();
+    }
+
+    private void updateInMotion() {
+        // TODO(skym): Track fling as well.
+        boolean inMotion = mInGesture || mContentViewScrolling;
+        mInMotionSupplier.set(inMotion);
+    }
+
+    /**
+     * Aggregated supplier for whether the compositor's content is moving. Currently tracking in
+     * touch event and in scroll event. Performance is critical while this supplier returns true,
+     * and clients that have expensive operations may consider defering until after the motion is
+     * over.
+     */
+    public ObservableSupplier<Boolean> getInMotionSupplier() {
+        return mInMotionSupplier;
     }
 
     @Override
@@ -854,14 +960,14 @@ public class CompositorViewHolder extends FrameLayout
             // isn't a change in size after the keyboard is raised or hidden.
             // Also the geometrychange event should only fire to the foreground tab.
             int keyboardHeight = 0;
-            boolean overlayContentForegroundTab = shouldVirtualKeyboardOverlayContent(webContents);
 
-            // In fullscreen, the keyboard doesn't resize the view so there's
-            // no need to adjust the layout height by the keyboard height to
-            // keep it from changing in response.
-            if (!mShowingFullscreen
-                    && (overlayContentForegroundTab
-                            || ChromeFeatureList.sOSKResizesVisualViewport.isEnabled())) {
+            boolean vkModePreservesWebContentsHeight =
+                    mVirtualKeyboardMode == VirtualKeyboardMode.OVERLAYS_CONTENT
+                    || oskResizesVisualViewport();
+
+            // In fullscreen, the keyboard doesn't resize the view so there's no need to adjust the
+            // layout height by the keyboard height to keep it from changing in response.
+            if (!mShowingFullscreen && vkModePreservesWebContentsHeight) {
                 // During orientation changes, width of the |WebContents| changes to match the width
                 // of the screen and so does the keyboard. We fire geometrychange with the updated
                 // keyboard size as well as resize the viewport so the height resize doesn't affect
@@ -871,7 +977,7 @@ public class CompositorViewHolder extends FrameLayout
                 h += keyboardHeight;
             }
             webContents.setSize(w, h - controlsHeight);
-            if (overlayContentForegroundTab) {
+            if (mVirtualKeyboardMode == VirtualKeyboardMode.OVERLAYS_CONTENT) {
                 notifyVirtualKeyboardOverlayGeometryChangeEvent(w, keyboardHeight, webContents);
             }
         } else {
@@ -884,19 +990,22 @@ public class CompositorViewHolder extends FrameLayout
         return view != null && view.getWindowToken() != null;
     }
 
-    /**
-     * Returns true if the overlaycontent flag is set in the JS, else false.
-     * This determines whether to fire geometrychange event to JS for the current visible tab
-     * and also not resize the visual/layout viewports in response to keyboard visibility changes.
-     *
-     * @return Whether overlaycontent flag is set or not.
-     */
-    @VisibleForTesting
-    boolean shouldVirtualKeyboardOverlayContent(WebContents webContents) {
-        return webContents != null && mTabVisible != null
-                && mTabVisible.getWebContents() == webContents
-                && ImeAdapter.fromWebContents(webContents) != null
-                && ImeAdapter.fromWebContents(webContents).shouldVirtualKeyboardOverlayContent();
+    @VirtualKeyboardMode.EnumType
+    private int defaultVirtualKeyboardMode() {
+        if (mPrefService.getBoolean(Pref.VIRTUAL_KEYBOARD_RESIZES_LAYOUT_BY_DEFAULT)) {
+            return VirtualKeyboardMode.RESIZES_CONTENT;
+        }
+        if (ChromeFeatureList.sOSKResizesVisualViewportByDefault.isEnabled()) {
+            return VirtualKeyboardMode.RESIZES_VISUAL;
+        }
+        return VirtualKeyboardMode.RESIZES_CONTENT;
+    }
+
+    private boolean oskResizesVisualViewport() {
+        // UNSET means the author hasn't explicitly set a preference but the mode should have been
+        // set to the default in that case.
+        assert mVirtualKeyboardMode != VirtualKeyboardMode.UNSET;
+        return mVirtualKeyboardMode == VirtualKeyboardMode.RESIZES_VISUAL;
     }
 
     /**
@@ -907,7 +1016,7 @@ public class CompositorViewHolder extends FrameLayout
      */
     private void notifyVirtualKeyboardOverlayGeometryChangeEvent(
             int w, int keyboardHeight, WebContents webContents) {
-        assert shouldVirtualKeyboardOverlayContent(webContents);
+        assert mVirtualKeyboardMode == VirtualKeyboardMode.OVERLAYS_CONTENT;
 
         boolean keyboardVisible = keyboardHeight > 0;
         if (!keyboardVisible && !mHasKeyboardGeometryChangeFired) {
@@ -1056,7 +1165,7 @@ public class CompositorViewHolder extends FrameLayout
         // visual viewport which is communicated to the renderer by observing
         // the inset provider in TabViewAndroidDelegate. This is a no-op in
         // CompositorViewHolder.
-        if (ChromeFeatureList.sOSKResizesVisualViewport.isEnabled()) {
+        if (oskResizesVisualViewport()) {
             return;
         }
 
@@ -1328,10 +1437,8 @@ public class CompositorViewHolder extends FrameLayout
      * @return The inset height in pixels.
      */
     public int getKeyboardBottomInsetForControlsPixels() { // Vivaldi
-        // If osk-resizes-visual-viewport is enabled, the OSK and its
-        // accessories don't resize the view/page so the autofill inset
-        // supplier must not have been set.
-        if (ChromeFeatureList.sOSKResizesVisualViewport.isEnabled()) {
+        // If the OSK mode resizes only the visual viewport avoid insetting the the container.
+        if (oskResizesVisualViewport()) {
             return 0;
         }
 
@@ -1424,11 +1531,26 @@ public class CompositorViewHolder extends FrameLayout
             @Override
             public void onNewTabCreated(Tab tab, @TabCreationState int creationState) {
                 initializeTab(tab);
+                // Note(david@vivaldi.com): This will trigger to focus the url bar when new tab was
+                // created by a user.
+                String homepageUrl = tab.isIncognito() ? HomepageManager.getDefaultHomepageUri()
+                                                       : HomepageManager.getHomepageUri();
+                if (!HomepageManager.isHomepageEnabled()) homepageUrl = tab.getUrl().getSpec();
+                if (creationState == TabCreationState.LIVE_IN_FOREGROUND
+                        && tab.getUrl().getSpec().equalsIgnoreCase(homepageUrl))
+                    VivaldiPreferences.getSharedPreferencesManager().writeBoolean(
+                            VivaldiPreferences.FOCUS_ADDRESS_BAR_ON_NEW_TAB,
+                            VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                                    VivaldiPreferences.FOCUS_ADDRESS_BAR_SWITCH, false));
+                mRequestAutoFocus = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                        VivaldiPreferences.FOCUS_ADDRESS_BAR_ON_NEW_TAB, false);
             }
         });
 
         onContentChanged();
         mNativeInitialized = true;
+        // Vivaldi
+        mRequestAutoFocus = false;
     }
 
     private void updateContentOverlayVisibility(boolean show) {
@@ -1453,7 +1575,14 @@ public class CompositorViewHolder extends FrameLayout
 
             setFocusable(false);
             setFocusableInTouchMode(false);
-
+            // Note(david@vivaldi.com): Check if we can focus the url bar.
+            if (VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                        VivaldiPreferences.FOCUS_ADDRESS_BAR_ON_NEW_TAB, false)
+                    && mRequestAutoFocus) {
+                mUrlBar.clearFocus();
+                mUrlBar.requestFocus();
+                mRequestAutoFocus = false;
+            }
             // Claim focus for the new view unless the user is currently using the URL bar.
             if (mUrlBar == null || !mUrlBar.hasFocus()) mView.requestFocus();
         } else {
@@ -1532,6 +1661,27 @@ public class CompositorViewHolder extends FrameLayout
         mContentView = newContentView;
     }
 
+    @VisibleForTesting
+    void updateVirtualKeyboardMode(@VirtualKeyboardMode.EnumType int newMode) {
+        if (newMode == VirtualKeyboardMode.UNSET) {
+            newMode = defaultVirtualKeyboardMode();
+        }
+
+        if (mVirtualKeyboardMode == newMode) return;
+
+        @VirtualKeyboardMode.EnumType
+        int oldMode = mVirtualKeyboardMode;
+        mVirtualKeyboardMode = newMode;
+
+        // If we're going into or out of the default OSK resizes visual viewport mode
+        // we're changing whether the ApplicationViewportInsetSupplier needs to listen to
+        // the keyboard since its responsible for insetting the visual viewport.
+        if (oldMode == VirtualKeyboardMode.RESIZES_VISUAL
+                || newMode == VirtualKeyboardMode.RESIZES_VISUAL) {
+            updateApplicationViewportInsetSuppliers();
+        }
+    }
+
     /**
      * Sets the correct size for {@link View} on {@code tab} and sets the correct rendering
      * parameters on {@link WebContents} on {@code tab}.
@@ -1543,7 +1693,12 @@ public class CompositorViewHolder extends FrameLayout
             onPhysicalBackingSizeChanged(
                     webContents, mCompositorView.getWidth(), mCompositorView.getHeight());
             onControlsResizeViewChanged(webContents, mControlsResizeView);
+
+            updateVirtualKeyboardMode(webContents.getVirtualKeyboardMode());
+        } else if (tab.getView() != null) {
+            updateVirtualKeyboardMode(VirtualKeyboardMode.UNSET);
         }
+
         if (tab.getView() == null) return;
 
         // TextView with compound drawables in the NTP gets a wrong width when measure/layout is
@@ -1668,8 +1823,8 @@ public class CompositorViewHolder extends FrameLayout
     // TabObscuringHandler.Observer
 
     @Override
-    public void updateObscured(boolean isObscured) {
-        setFocusable(!isObscured);
+    public void updateObscured(boolean obscureTabContent, boolean obscureToolbar) {
+        setFocusable(!obscureTabContent);
     }
 
     /**
@@ -1789,5 +1944,10 @@ public class CompositorViewHolder extends FrameLayout
 
     void setCompositorViewForTesting(CompositorView compositorView) {
         mCompositorView = compositorView;
+    }
+
+    @VirtualKeyboardMode.EnumType
+    public int getVirtualKeyboardModeForTesting() {
+        return mVirtualKeyboardMode;
     }
 }

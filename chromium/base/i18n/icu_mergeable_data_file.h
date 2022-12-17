@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,7 @@
 namespace base::i18n {
 
 // Enable merging of icudtl.dat in Lacros.
-BASE_I18N_EXPORT extern const base::Feature kLacrosMergeIcuDataFile;
+BASE_I18N_EXPORT BASE_DECLARE_FEATURE(kLacrosMergeIcuDataFile);
 
 // Class wrapping the memory-mapped instance of Ash's icudtl.dat.
 // Needed to keep track of its file descriptor.

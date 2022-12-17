@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,25 +94,6 @@ TEST_P(LongpressDiacriticsSuggesterTest, SuggestsOnTrySuggest) {
   EXPECT_EQ(suggestion_handler.GetSuggestionText(),
             Join(GetParam().candidates));
   EXPECT_EQ(suggestion_handler.GetContextId(), kContextId);
-}
-
-TEST_P(LongpressDiacriticsSuggesterTest,
-       ShouldOnlyReturnTrueForFirstTextChangeEvent) {
-  FakeSuggestionHandler suggestion_handler;
-  LongpressDiacriticsSuggester suggester =
-      LongpressDiacriticsSuggester(&suggestion_handler);
-  suggester.OnFocus(kContextId);
-
-  suggester.TrySuggestOnLongpress(GetParam().longpress_char);
-
-  EXPECT_TRUE(suggester.TrySuggestWithSurroundingText(
-      GetParam().surrounding_text, GetParam().surrounding_text.size(),
-      GetParam().surrounding_text.size()));
-  // This cursor position hasn't changed, so the text is still valid. However
-  // it should return false because it is the second on change event.
-  EXPECT_FALSE(suggester.TrySuggestWithSurroundingText(
-      GetParam().surrounding_text + u"somechanges",
-      GetParam().surrounding_text.size(), GetParam().surrounding_text.size()));
 }
 
 TEST_P(LongpressDiacriticsSuggesterTest,
@@ -387,7 +368,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, AcceptsOnEnterKeyPress) {
   EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
   EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
             GetParam().candidates[0]);
-  EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1);
+  EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
 }
 
 TEST_P(LongpressDiacriticsSuggesterTest, NotHandledOnDigit0KeyPress) {
@@ -416,7 +397,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit1KeyPress) {
   EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
   EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
             GetParam().candidates[0]);
-  EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1);
+  EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
 }
 
 TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit2KeyPress) {
@@ -436,7 +417,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit2KeyPress) {
     EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
     EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
               GetParam().candidates[1]);
-    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1);
+    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
   }
 }
 
@@ -457,7 +438,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit3KeyPress) {
     EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
     EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
               GetParam().candidates[2]);
-    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1);
+    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
   }
 }
 
@@ -478,7 +459,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit4KeyPress) {
     EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
     EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
               GetParam().candidates[3]);
-    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1);
+    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
   }
 }
 
@@ -499,7 +480,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit5KeyPress) {
     EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
     EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
               GetParam().candidates[4]);
-    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1);
+    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
   }
 }
 
@@ -520,7 +501,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit6KeyPress) {
     EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
     EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
               GetParam().candidates[5]);
-    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1);
+    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
   }
 }
 
@@ -541,7 +522,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit7KeyPress) {
     EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
     EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
               GetParam().candidates[6]);
-    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1);
+    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
   }
 }
 
@@ -562,7 +543,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, HandlesDigit8KeyPress) {
     EXPECT_FALSE(suggestion_handler.GetShowingSuggestion());
     EXPECT_EQ(suggestion_handler.GetAcceptedSuggestionText(),
               GetParam().candidates[7]);
-    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1);
+    EXPECT_EQ(suggestion_handler.GetDeletePreviousUtf16Len(), 1u);
   }
 }
 
@@ -646,7 +627,7 @@ TEST_P(LongpressDiacriticsSuggesterTest, RecordsAcceptanceCharCodeMetric) {
   suggester.OnFocus(kContextId);
 
   int histogram_accept_count = 0;
-  for (int i = 0; i < 9 && i < GetParam().candidates.size(); i++) {
+  for (size_t i = 0; i < 9 && i < GetParam().candidates.size(); i++) {
     // Insert using dom code for index + 1 (i.e. DIGIT1 inserts 0th index
     // candidate)
     ui::DomCode dom_code = kDigitToDomCode.find(i + 1)->second;

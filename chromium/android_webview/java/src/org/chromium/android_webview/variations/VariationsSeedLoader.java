@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -371,6 +371,8 @@ public class VariationsSeedLoader {
                 long seedDate = mRunnable.getLoadedSeedDate();
                 if (gotSeed && seedDate > 0) {
                     long seedAge = TimeUnit.MILLISECONDS.toSeconds(new Date().getTime() - seedDate);
+                    // Changes to the log message below must be accompanied with changes to WebView
+                    // finch smoke tests since they look for this message in the logcat.
                     VariationsUtils.debugLog("Loaded seed with age " + seedAge + "s");
                 }
                 return gotSeed;

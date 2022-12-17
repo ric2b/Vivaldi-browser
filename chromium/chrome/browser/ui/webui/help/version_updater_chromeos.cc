@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include <optional>
 #include <string>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
@@ -25,6 +24,7 @@
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_type_pattern.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "content/public/browser/web_contents.h"
@@ -156,7 +156,8 @@ void VersionUpdaterCros::ApplyDeferredUpdate() {
   DCHECK(update_engine_client->GetLastStatus().current_operation() ==
          update_engine::Operation::UPDATED_BUT_DEFERRED);
 
-  update_engine_client->ApplyDeferredUpdate(base::DoNothing());
+  update_engine_client->ApplyDeferredUpdate(/*shutdown_after_update=*/false,
+                                            base::DoNothing());
 }
 
 void VersionUpdaterCros::CheckForUpdate(StatusCallback callback,
@@ -360,6 +361,16 @@ void VersionUpdaterCros::UpdateStatusChanged(
       break;
     default:
       NOTREACHED();
+  }
+
+  // If the current auto update is non-interactive and will be deferred, ignore
+  // update status change and show UPDATED instead. The NEARLY_UPDATED or
+  // DEFERRED status will still be shown, because user may need to interact with
+  // UI to apply the update and reboot the device.
+  if (my_status != NEARLY_UPDATED && my_status != DEFERRED &&
+      !status.is_interactive() && status.will_defer_update()) {
+    my_status = UPDATED;
+    progress = 0;
   }
 
   callback_.Run(my_status, progress, status.is_enterprise_rollback(),

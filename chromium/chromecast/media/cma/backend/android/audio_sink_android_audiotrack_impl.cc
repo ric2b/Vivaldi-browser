@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,6 +60,7 @@ AudioSinkAndroidAudioTrackImpl::AudioSinkAndroidAudioTrackImpl(
     int input_samples_per_second,
     int audio_track_session_id,
     bool primary,
+    bool is_apk_audio,
     bool use_hw_av_sync,
     const std::string& device_id,
     AudioContentType content_type)
@@ -82,6 +83,7 @@ AudioSinkAndroidAudioTrackImpl::AudioSinkAndroidAudioTrackImpl(
           input_samples_per_second_,
           kDirectBufferSize,
           audio_track_session_id,
+          is_apk_audio,
           use_hw_av_sync_)),
       feeder_thread_("AudioTrack feeder thread"),
       feeder_task_runner_(nullptr),
@@ -149,7 +151,13 @@ AudioSinkAndroidAudioTrackImpl::GetAudioTrackTimestamp() {
       base::android::AttachCurrentThread(), j_audio_sink_audiotrack_impl_);
   return MediaPipelineBackendAndroid::AudioTrackTimestamp(
       direct_audio_track_timestamp_address_[0],
-      direct_audio_track_timestamp_address_[1]);
+      direct_audio_track_timestamp_address_[1],
+      direct_audio_track_timestamp_address_[2]);
+}
+
+int AudioSinkAndroidAudioTrackImpl::GetStartThresholdInFrames() {
+  return Java_AudioSinkAudioTrackImpl_getStartThresholdInFrames(
+      base::android::AttachCurrentThread(), j_audio_sink_audiotrack_impl_);
 }
 
 void AudioSinkAndroidAudioTrackImpl::FinalizeOnFeederThread() {

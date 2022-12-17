@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
+#include "ios/chrome/browser/webdata_services/web_data_service_factory.h"
 #include "ios/web/public/test/web_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -38,12 +39,11 @@ class SyncServiceFactoryTest : public PlatformTest {
     browser_state_builder.AddTestingFactory(
         ios::HistoryServiceFactory::GetInstance(),
         ios::HistoryServiceFactory::GetDefaultFactory());
-    chrome_browser_state_ = browser_state_builder.Build();
-  }
-
-  void SetUp() override {
     // Some services will only be created if there is a WebDataService.
-    chrome_browser_state_->CreateWebDataService();
+    browser_state_builder.AddTestingFactory(
+        ios::WebDataServiceFactory::GetInstance(),
+        ios::WebDataServiceFactory::GetDefaultFactory());
+    chrome_browser_state_ = browser_state_builder.Build();
   }
 
   void TearDown() override {
@@ -53,7 +53,7 @@ class SyncServiceFactoryTest : public PlatformTest {
  protected:
   // Returns the collection of default datatypes.
   syncer::ModelTypeSet DefaultDatatypes() {
-    static_assert(40 == syncer::GetNumModelTypes(),
+    static_assert(42 == syncer::GetNumModelTypes(),
                   "When adding a new type, you probably want to add it here as "
                   "well (assuming it is already enabled).");
 
@@ -67,6 +67,9 @@ class SyncServiceFactoryTest : public PlatformTest {
     datatypes.Put(syncer::AUTOFILL_WALLET_METADATA);
     datatypes.Put(syncer::AUTOFILL_WALLET_OFFER);
     datatypes.Put(syncer::BOOKMARKS);
+    if (base::FeatureList::IsEnabled(syncer::kSyncEnableContactInfoDataType)) {
+      datatypes.Put(syncer::CONTACT_INFO);
+    }
     datatypes.Put(syncer::DEVICE_INFO);
     if (base::FeatureList::IsEnabled(syncer::kSyncEnableHistoryDataType)) {
       datatypes.Put(syncer::HISTORY);

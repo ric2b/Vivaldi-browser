@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@ CrosWindowEvent* CrosWindowEvent::Create(
 
 CrosWindowEvent::CrosWindowEvent(const AtomicString& type,
                                  const CrosWindowEventInit* event_init)
-    : Event(type, Bubbles::kYes, Cancelable::kNo),
+    : Event(type, Bubbles::kNo, Cancelable::kNo),
       window_(event_init->window()) {}
 
 CrosWindowEvent::~CrosWindowEvent() = default;
@@ -26,6 +26,10 @@ CrosWindowEvent::~CrosWindowEvent() = default;
 void CrosWindowEvent::Trace(Visitor* visitor) const {
   visitor->Trace(window_);
   Event::Trace(visitor);
+}
+
+const AtomicString& CrosWindowEvent::InterfaceName() const {
+  return event_interface_names::kCrosWindowEvent;
 }
 
 }  // namespace blink

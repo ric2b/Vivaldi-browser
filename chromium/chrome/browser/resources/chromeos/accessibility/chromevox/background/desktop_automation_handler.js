@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@ import {AutomationUtil} from '../../common/automation_util.js';
 import {constants} from '../../common/constants.js';
 import {WrappingCursor} from '../../common/cursors/cursor.js';
 import {CursorRange} from '../../common/cursors/range.js';
+import {Command} from '../common/command_store.js';
 import {ChromeVoxEvent, CustomAutomationEvent} from '../common/custom_automation_event.js';
 import {EventSourceType} from '../common/event_source_type.js';
 import {Msgs} from '../common/msgs.js';
@@ -433,7 +434,7 @@ export class DesktopAutomationHandler extends DesktopAutomationInterface {
         ChromeVoxState.instance.setCurrentRange(
             CursorRange.fromNode(evt.target));
         ChromeVox.tts.stop();
-        CommandHandlerInterface.instance.onCommand('readFromHere');
+        CommandHandlerInterface.instance.onCommand(Command.READ_FROM_HERE);
         return;
       }
 
@@ -448,6 +449,28 @@ export class DesktopAutomationHandler extends DesktopAutomationInterface {
    */
   ignoreDocumentSelectionFromAction(val) {
     this.shouldIgnoreDocumentSelectionFromAction_ = val;
+  }
+
+  /** @override */
+  onNativeNextOrPreviousCharacter() {
+    if (this.textEditHandler) {
+      this.textEditHandler.injectInferredIntents([{
+        command: chrome.automation.IntentCommandType.MOVE_SELECTION,
+        textBoundary: chrome.automation.IntentTextBoundaryType.CHARACTER,
+      }]);
+    }
+  }
+
+  /** @override */
+  onNativeNextOrPreviousWord(isNext) {
+    if (this.textEditHandler) {
+      this.textEditHandler.injectInferredIntents([{
+        command: chrome.automation.IntentCommandType.MOVE_SELECTION,
+        textBoundary: isNext ?
+            chrome.automation.IntentTextBoundaryType.WORD_END :
+            chrome.automation.IntentTextBoundaryType.WORD_START,
+      }]);
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,13 @@
 // (See below.)
 #include <sys/random.h>
 #endif
+
+#if !BUILDFLAG(IS_NACL)
+#include "third_party/boringssl/src/include/openssl/crypto.h"
+#include "third_party/boringssl/src/include/openssl/rand.h"
+#endif
+
+namespace base {
 
 namespace {
 
@@ -115,8 +122,11 @@ bool GetRandomSyscall(void* output, size_t output_length) {
 #if BUILDFLAG(IS_ANDROID)
 std::atomic<bool> g_use_getrandom;
 
-const base::Feature kUseGetrandomForRandBytes{
-    "UseGetrandomForRandBytes", base::FEATURE_DISABLED_BY_DEFAULT};
+// Note: the BoringSSL feature takes precedence over the getrandom() trial if
+// both are enabled.
+BASE_FEATURE(kUseGetrandomForRandBytes,
+             "UseGetrandomForRandBytes",
+             FEATURE_DISABLED_BY_DEFAULT);
 
 bool UseGetrandom() {
   return g_use_getrandom.load(std::memory_order_relaxed);
@@ -129,7 +139,7 @@ bool UseGetrandom() {
 
 }  // namespace
 
-namespace base {
+namespace internal {
 
 #if BUILDFLAG(IS_ANDROID)
 void ConfigureRandBytesFieldTrial() {
@@ -138,16 +148,48 @@ void ConfigureRandBytesFieldTrial() {
 }
 #endif
 
-// NOTE: In an ideal future, all implementations of this function will just
-// wrap BoringSSL's `RAND_bytes`. TODO(crbug.com/995996): Figure out the
-// build/test/performance issues with dcheng's CL
-// (https://chromium-review.googlesource.com/c/chromium/src/+/1545096) and land
-// it or some form of it.
-void RandBytes(void* output, size_t output_length) {
+namespace {
+
+#if !BUILDFLAG(IS_NACL)
+// The BoringSSl helpers are duplicated in rand_util_fuchsia.cc and
+// rand_util_win.cc.
+std::atomic<bool> g_use_boringssl;
+
+BASE_FEATURE(kUseBoringSSLForRandBytes,
+             "UseBoringSSLForRandBytes",
+             FEATURE_DISABLED_BY_DEFAULT);
+
+}  // namespace
+
+void ConfigureBoringSSLBackedRandBytesFieldTrial() {
+  g_use_boringssl.store(FeatureList::IsEnabled(kUseBoringSSLForRandBytes),
+                        std::memory_order_relaxed);
+}
+
+bool UseBoringSSLForRandBytes() {
+  return g_use_boringssl.load(std::memory_order_relaxed);
+}
+#endif
+
+}  // namespace internal
+
+namespace {
+
+void RandBytes(void* output, size_t output_length, bool avoid_allocation) {
+#if !BUILDFLAG(IS_NACL)
+  // The BoringSSL experiment takes priority over everything else.
+  if (!avoid_allocation && internal::UseBoringSSLForRandBytes()) {
+    // Ensure BoringSSL is initialized so it can use things like RDRAND.
+    CRYPTO_library_init();
+    // BoringSSL's RAND_bytes always returns 1. Any error aborts the program.
+    (void)RAND_bytes(static_cast<uint8_t*>(output), output_length);
+    return;
+  }
+#endif
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
      BUILDFLAG(IS_ANDROID)) &&                        \
     !BUILDFLAG(IS_NACL)
-  if (UseGetrandom()) {
+  if (avoid_allocation || UseGetrandom()) {
     // On Android it is mandatory to check that the kernel _version_ has the
     // support for a syscall before calling. The same check is made on Linux and
     // ChromeOS to avoid making a syscall that predictably returns ENOSYS.
@@ -172,6 +214,23 @@ void RandBytes(void* output, size_t output_length) {
   const bool success =
       ReadFromFD(urandom_fd, static_cast<char*>(output), output_length);
   CHECK(success);
+}
+
+}  // namespace
+
+namespace internal {
+
+double RandDoubleAvoidAllocation() {
+  uint64_t number;
+  RandBytes(&number, sizeof(number), /*avoid_allocation=*/true);
+  // This transformation is explained in rand_util.cc.
+  return (number >> 11) * 0x1.0p-53;
+}
+
+}  // namespace internal
+
+void RandBytes(void* output, size_t output_length) {
+  RandBytes(output, output_length, /*avoid_allocation=*/false);
 }
 
 int GetUrandomFD() {

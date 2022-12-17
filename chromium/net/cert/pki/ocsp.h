@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
 #include "net/base/net_export.h"
 #include "net/cert/ocsp_revocation_status.h"
@@ -287,9 +286,9 @@ NET_EXPORT_PRIVATE bool ParseOCSPResponse(const der::Input& raw_tlv,
 //        |max_age| will be considered invalid.
 //  * |response_details|: Additional details about failures.
 [[nodiscard]] NET_EXPORT OCSPRevocationStatus
-CheckOCSP(base::StringPiece raw_response,
-          base::StringPiece certificate_der,
-          base::StringPiece issuer_certificate_der,
+CheckOCSP(std::string_view raw_response,
+          std::string_view certificate_der,
+          std::string_view issuer_certificate_der,
           const base::Time& verify_time,
           const base::TimeDelta& max_age,
           OCSPVerifyResult::ResponseStatus* response_details);
@@ -300,7 +299,7 @@ CheckOCSP(base::StringPiece raw_response,
 // Arguments are the same as above, except that it takes already parsed
 // instances of the certificate and issuer certificate.
 [[nodiscard]] NET_EXPORT OCSPRevocationStatus
-CheckOCSP(base::StringPiece raw_response,
+CheckOCSP(std::string_view raw_response,
           const ParsedCertificate* certificate,
           const ParsedCertificate* issuer_certificate,
           const base::Time& verify_time,
@@ -321,7 +320,7 @@ NET_EXPORT bool CreateOCSPRequest(const ParsedCertificate* cert,
 // Creates a URL to issue a GET request for OCSP information for |cert|.
 NET_EXPORT GURL CreateOCSPGetURL(const ParsedCertificate* cert,
                                  const ParsedCertificate* issuer,
-                                 base::StringPiece ocsp_responder_url);
+                                 std::string_view ocsp_responder_url);
 
 }  // namespace net
 

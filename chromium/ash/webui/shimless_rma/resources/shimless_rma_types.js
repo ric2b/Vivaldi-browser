@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@ import 'chrome://resources/mojo/mojo/public/mojom/base/string16.mojom-lite.js';
 import './file_path.mojom-lite.js';
 import './mojom/shimless_rma.mojom-lite.js';
 
-import {OncMojo} from 'chrome://resources/cr_components/chromeos/network/onc_mojo.m.js';
+import {CrosNetworkConfigInterface, CrosNetworkConfigRemote, NetworkStateProperties} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 
 /**
  * @typedef {ash.shimlessRma.mojom.StateResult}
@@ -263,6 +263,27 @@ export const PowerCableStateObserverInterface =
     ash.shimlessRma.mojom.PowerCableStateObserverInterface;
 
 /**
+ * Type alias for ExternalDiskStateObserverRemote.
+ * @typedef {ash.shimlessRma.mojom.ExternalDiskStateObserverRemote}
+ */
+export const ExternalDiskStateObserverRemote =
+    ash.shimlessRma.mojom.ExternalDiskStateObserverRemote;
+
+/**
+ * Type alias for ExternalDiskStateObserverReceiver.
+ * @typedef {ash.shimlessRma.mojom.ExternalDiskStateObserverReceiver}
+ */
+export const ExternalDiskStateObserverReceiver =
+    ash.shimlessRma.mojom.ExternalDiskStateObserverReceiver;
+
+/**
+ * Type alias for ExternalDiskStateObserverInterface.
+ * @typedef {ash.shimlessRma.mojom.ExternalDiskStateObserverInterface}
+ */
+export const ExternalDiskStateObserverInterface =
+    ash.shimlessRma.mojom.ExternalDiskStateObserverInterface;
+
+/**
  * Type alias for HardwareVerificationStatusObserverRemote.
  * @typedef {ash.shimlessRma.mojom.HardwareVerificationStatusObserverRemote}
  */
@@ -323,23 +344,21 @@ export const ShimlessRmaServiceInterface =
 
 /**
  * Type alias for NetworkConfigServiceInterface.
- * @typedef {chromeos.networkConfig.mojom.CrosNetworkConfigInterface}
+ * @typedef {CrosNetworkConfigInterface}
  */
-export const NetworkConfigServiceInterface =
-    chromeos.networkConfig.mojom.CrosNetworkConfigInterface;
+export const NetworkConfigServiceInterface = CrosNetworkConfigInterface;
 
 /**
  * Type alias for NetworkConfigServiceRemote.
- * @typedef {chromeos.networkConfig.mojom.CrosNetworkConfigRemote}
+ * @typedef {CrosNetworkConfigRemote}
  */
-export const NetworkConfigServiceRemote =
-    chromeos.networkConfig.mojom.CrosNetworkConfigRemote;
+export const NetworkConfigServiceRemote = CrosNetworkConfigRemote;
 
 /**
  * Type alias for Network
- * @typedef {chromeos.networkConfig.mojom.NetworkStateProperties}
+ * @typedef {NetworkStateProperties}
  */
-export const Network = chromeos.networkConfig.mojom.NetworkStateProperties;
+export const Network = NetworkStateProperties;
 
 /**
  * Type alias for the ShutdownMethod.

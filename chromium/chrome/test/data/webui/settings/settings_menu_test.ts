@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,10 +15,12 @@ suite('SettingsMenu', function() {
   let settingsMenu: SettingsMenuElement;
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     settingsMenu = document.createElement('settings-menu');
     settingsMenu.pageVisibility = pageVisibility;
     document.body.appendChild(settingsMenu);
+    flush();
   });
 
   teardown(function() {
@@ -42,13 +44,20 @@ suite('SettingsMenu', function() {
     settingsMenu.$.people.click();
     assertEquals('', Router.getInstance().getQueryParameters().toString());
   });
+
+  test('performanceFeatureNotAvailableTest', function() {
+    assertFalse(
+        !!settingsMenu.shadowRoot!.querySelector<HTMLElement>('#performance'),
+        'performance menu item should not exist when features are unavailable');
+  });
 });
 
 suite('SettingsMenuReset', function() {
   let settingsMenu: SettingsMenuElement;
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     Router.getInstance().navigateTo(routes.RESET, undefined);
     settingsMenu = document.createElement('settings-menu');
     document.body.appendChild(settingsMenu);

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,10 +32,12 @@ import org.chromium.components.browser_ui.settings.ChromeImageViewPreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferencesUtils;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.settings.TextMessagePreference;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.content_public.browser.BrowserContextHandle;
+import org.chromium.content_public.browser.ContentFeatureList;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -82,6 +84,8 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     public static final String PREF_SITE_HEADING = "site_heading";
     public static final String PREF_SITE_TITLE = "site_title";
     public static final String PREF_USAGE = "site_usage";
+    public static final String PREF_RELATED_SITES_HEADER = "related_sites_header";
+    public static final String PREF_RELATED_SITES = "related_sites";
     public static final String PREF_PERMISSIONS_HEADER = "site_permissions";
     public static final String PREF_OS_PERMISSIONS_WARNING = "os_permissions_warning";
     public static final String PREF_OS_PERMISSIONS_WARNING_EXTRA = "os_permissions_warning_extra";
@@ -169,6 +173,8 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             PREF_SITE_HEADING,
             PREF_SITE_TITLE,
             PREF_USAGE,
+            PREF_RELATED_SITES_HEADER,
+            PREF_RELATED_SITES,
             PREF_PERMISSIONS_HEADER,
             PREF_CLEAR_DATA,
     };
@@ -382,6 +388,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             WebsiteAddress address, Collection<Website> websites) {
         String origin = address.getOrigin();
         String host = Uri.parse(origin).getHost();
+        String domainAndRegistry = address.getDomainAndRegistry();
         Website merged = new Website(address, null);
         // This loop looks expensive, but the amount of data is likely to be relatively small
         // because most sites have very few permissions.
@@ -406,6 +413,10 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                 if (host.equals(storageInfo.getHost())) {
                     merged.addStorageInfo(storageInfo);
                 }
+            }
+            if (merged.getFPSCookieInfo() == null && other.getFPSCookieInfo() != null
+                    && domainAndRegistry.equals(other.getAddress().getDomainAndRegistry())) {
+                merged.setFPSCookieInfo(other.getFPSCookieInfo());
             }
             for (ChosenObjectInfo objectInfo : other.getChosenObjectInfo()) {
                 if (origin.equals(objectInfo.getOrigin())) {
@@ -461,6 +472,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         setupResetSitePreference();
         setUpClearDataPreference();
         setUpOsWarningPreferences();
+        setupRelatedSitesPreferences();
 
         setUpAdsInformationalBanner();
 
@@ -498,6 +510,8 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                 setUpLocationPreference(preference);
             } else if (type == ContentSettingsType.NOTIFICATIONS) {
                 setUpNotificationsPreference(preference, mSite.isEmbargoed(type));
+            } else if (type == ContentSettingsType.REQUEST_DESKTOP_SITE) {
+                setUpDesktopSitePreference(preference);
             } else {
                 setupContentSettingsPreference(preference,
                         mSite.getContentSetting(
@@ -812,6 +826,32 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         }
     }
 
+    private void setupRelatedSitesPreferences() {
+        var relatedSitesHeader = findPreference(PREF_RELATED_SITES_HEADER);
+        TextMessagePreference relatedSitesText = findPreference(PREF_RELATED_SITES);
+        boolean shouldRelatedSitesPrefBeVisible =
+                getSiteSettingsDelegate().isPrivacySandboxFirstPartySetsUIFeatureEnabled()
+                && getSiteSettingsDelegate().isFirstPartySetsDataAccessEnabled()
+                && mSite.getFPSCookieInfo() != null;
+        relatedSitesHeader.setVisible(shouldRelatedSitesPrefBeVisible);
+        relatedSitesText.setVisible(shouldRelatedSitesPrefBeVisible);
+
+        if (shouldRelatedSitesPrefBeVisible) {
+            var fpsInfo = mSite.getFPSCookieInfo();
+            relatedSitesText.setTitle(getContext().getResources().getQuantityString(
+                    R.plurals.allsites_fps_summary, fpsInfo.getMembersCount(),
+                    Integer.toString(fpsInfo.getMembersCount()), fpsInfo.getOwner()));
+            relatedSitesText.setManagedPreferenceDelegate(new ForwardingManagedPreferenceDelegate(
+                    getSiteSettingsDelegate().getManagedPreferenceDelegate()) {
+                @Override
+                public boolean isPreferenceControlledByPolicy(Preference preference) {
+                    return getSiteSettingsDelegate().isPartOfManagedFirstPartySet(
+                            mSite.getAddress().getOrigin());
+                }
+            });
+        }
+    }
+
     private void setUpAdsInformationalBanner() {
         // Add the informational banner which shows at the top of the UI if ad blocking is
         // activated on this site.
@@ -1035,6 +1075,19 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         }
         // Not possible to embargo ADS.
         setupContentSettingsPreference(preference, permission, false /* isEmbargoed */);
+    }
+
+    private void setUpDesktopSitePreference(Preference preference) {
+        // Skip adding the desktop site preference if RDS exceptions support is removed.
+        if (!ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)
+                && SiteSettingsFeatureList.isEnabled(
+                        SiteSettingsFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS_DOWNGRADE)) {
+            return;
+        }
+        setupContentSettingsPreference(preference,
+                mSite.getContentSetting(getSiteSettingsDelegate().getBrowserContextHandle(),
+                        ContentSettingsType.REQUEST_DESKTOP_SITE),
+                mSite.isEmbargoed(ContentSettingsType.REQUEST_DESKTOP_SITE));
     }
 
     private String getDSECategorySummary(@ContentSettingValues int value) {

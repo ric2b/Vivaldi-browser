@@ -47,7 +47,6 @@
 
 #import "ios/notes/note_folder_view_controller.h"
 
-// Vivaldi
 #include "app/vivaldi_apptools.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -95,12 +94,6 @@ enum class PresentedState {
 
 // The type of view controller that is being presented.
 @property(nonatomic, assign) PresentedState currentPresentedState;
-
-// The navigation controller that is being presented, if any.
-// |self.noteBrowser|, |self.noteEditor|, and |self.folderEditor| are
-// children of this navigation controller.
-@property(nonatomic, strong)
-    UINavigationController* noteNavigationController;
 
 // The delegate provided to |self.noteNavigationController|.
 @property(nonatomic, strong)
@@ -206,17 +199,17 @@ enum class PresentedState {
   _noteEditor.delegate = nil;
   [_noteEditor shutdown];
   _noteEditor = nil;
+
+  _panelDelegate = nil;
+  _noteNavigationController = nil;
 }
 
-- (void)presentNotes {
+- (void)showNotes {
   DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
   DCHECK(!self.noteNavigationController);
-
-
   self.noteBrowser =
       [[NoteHomeViewController alloc] initWithBrowser:_browser];
   self.noteBrowser.homeDelegate = self;
-
   NSArray<NoteHomeViewController*>* replacementViewControllers = nil;
   if (self.noteModel->loaded()) {
     // Set the root node if the model has been loaded. If the model has not been
@@ -224,12 +217,12 @@ enum class PresentedState {
     // the model is finished loading.
     [self.noteBrowser setRootNode:self.noteModel->root_node()];
     replacementViewControllers =
-        [self.noteBrowser cachedViewControllerStack];
+       [self.noteBrowser cachedViewControllerStack];
   }
 
-  [self presentTableViewController:self.noteBrowser
-      withReplacementViewControllers:replacementViewControllers];
   self.currentPresentedState = PresentedState::NOTE_BROWSER;
+  [self showHomeViewController:self.noteBrowser
+      withReplacementViewControllers:replacementViewControllers];
 }
 
 - (void)presentFolderPickerWithCompletion:
@@ -301,11 +294,17 @@ enum class PresentedState {
                             urlsToOpen:(const std::vector<GURL>&)urlsToOpen
                            inIncognito:(BOOL)inIncognito
                                 newTab:(BOOL)newTab {
-  if (self.currentPresentedState != PresentedState::NOTE_BROWSER)
+  if (self.currentPresentedState != PresentedState::NOTE_BROWSER) {
     return;
-  DCHECK(self.noteNavigationController);
+  }
+  ProceduralBlock completion = ^{
+    [self noteBrowserDismissed];
+    [self.panelDelegate panelDismissed];
+  };
+  [self.noteBrowser dismissViewControllerAnimated:animated completion:completion];
 
-  if (_parentController.presentedViewController) {
+  DCHECK(self.noteNavigationController);
+  if (_parentController) {
     [_parentController dismissViewControllerAnimated:animated
                                           completion:nil];
   }
@@ -475,16 +474,7 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
 
 - (BOOL)presentationControllerShouldDismissOnTouchOutside:
     (TableViewPresentationController*)controller {
-  BOOL shouldDismissOnTouchOutside = YES;
-
-  ChromeTableViewController* tableViewController =
-      base::mac::ObjCCast<ChromeTableViewController>(
-          self.noteNavigationController.topViewController);
-  if (tableViewController) {
-    shouldDismissOnTouchOutside =
-        [tableViewController shouldBeDismissedOnTouchOutside];
-  }
-  return shouldDismissOnTouchOutside;
+  return NO;
 }
 
 - (void)presentationControllerWillDismiss:
@@ -502,6 +492,8 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
 // transition requires those objects.  If |replacementViewControllers| is not
 // nil, those controllers are swapped in to the UINavigationController instead
 // of |viewController|.
+// Presents the diff controllers from note browser.
+// Note browser is not presented but shown in page view controller
 - (void)presentTableViewController:
             (ChromeTableViewController<
                 UIAdaptivePresentationControllerDelegate>*)viewController
@@ -518,33 +510,29 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
   self.noteNavigationControllerDelegate =
       [[NoteNavigationControllerDelegate alloc] init];
   navController.delegate = self.noteNavigationControllerDelegate;
-
-  BOOL useCustomPresentation = YES;
-      [navController setModalPresentationStyle:UIModalPresentationFormSheet];
-      useCustomPresentation = NO;
-
-  if (useCustomPresentation) {
-    self.noteTransitioningDelegate =
-        [[NoteTransitioningDelegate alloc] init];
-    self.noteTransitioningDelegate.presentationControllerModalDelegate =
-        self;
-    navController.transitioningDelegate = self.noteTransitioningDelegate;
-    navController.modalPresentationStyle = UIModalPresentationCustom;
-    TableViewPresentationController* presentationController =
-        base::mac::ObjCCastStrict<TableViewPresentationController>(
-            navController.presentationController);
-    self.noteNavigationControllerDelegate.modalController =
-        presentationController;
-  }
-
-  if (vivaldi::IsVivaldiRunning()) {
-    [self.noteNavigationController
-      setModalPresentationStyle:UIModalPresentationFullScreen];
-  }
-  [_parentController presentViewController:navController
+  if (self.currentPresentedState != PresentedState::NOTE_BROWSER) {
+    [_parentController presentViewController:navController
                                   animated:YES
                                 completion:nil];
+  }
 }
 
+- (void)showHomeViewController:
+            (ChromeTableViewController<
+                UIAdaptivePresentationControllerDelegate>*)viewController
+    withReplacementViewControllers:
+        (NSArray<ChromeTableViewController*>*)replacementViewControllers {
+  TableViewNavigationController* navController =
+      [[TableViewNavigationController alloc] initWithTable:viewController];
+  self.noteNavigationController = navController;
+  if (replacementViewControllers) {
+    [navController setViewControllers:replacementViewControllers];
+  }
+
+  navController.toolbarHidden = YES;
+  self.noteNavigationControllerDelegate =
+      [[NoteNavigationControllerDelegate alloc] init];
+  navController.delegate = self.noteNavigationControllerDelegate;
+}
 
 @end

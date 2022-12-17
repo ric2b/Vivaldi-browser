@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,7 +62,7 @@ bool StructTraits<device_signals::mojom::ExecutableMetadataDataView,
          device_signals::ExecutableMetadata* output) {
   output->is_running = data.is_running();
 
-  if (!data.ReadPublicKeySha256(&output->public_key_sha256) ||
+  if (!data.ReadPublicKeysHashes(&output->public_keys_hashes) ||
       !data.ReadProductName(&output->product_name) ||
       !data.ReadVersion(&output->version)) {
     return false;

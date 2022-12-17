@@ -1,10 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_ZCR_COLOR_MANAGEMENT_OUTPUT_H_
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_ZCR_COLOR_MANAGEMENT_OUTPUT_H_
 
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/gfx/color_space.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_space.h"
@@ -38,7 +39,7 @@ class WaylandZcrColorManagementOutput {
 
   wl::Object<zcr_color_management_output_v1> zcr_color_management_output_;
   std::unique_ptr<gfx::ColorSpace> gfx_color_space_;
-  std::unique_ptr<WaylandZcrColorSpace> color_space_;
+  scoped_refptr<WaylandZcrColorSpace> color_space_;
   base::WeakPtrFactory<WaylandZcrColorManagementOutput> weak_factory_{this};
 };
 

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,7 +91,7 @@ void AuthErrorObserver::HandleAuthError(
 
     user_manager::UserManager::Get()->SaveUserOAuthStatus(
         account_id, user_manager::User::OAUTH2_TOKEN_STATUS_INVALID);
-    RecordReauthReason(account_id, ReauthReason::SYNC_FAILED);
+    RecordReauthReason(account_id, ReauthReason::kSyncFailed);
   } else if (auth_error.state() == GoogleServiceAuthError::NONE) {
     if (user->oauth_token_status() ==
         user_manager::User::OAUTH2_TOKEN_STATUS_INVALID) {

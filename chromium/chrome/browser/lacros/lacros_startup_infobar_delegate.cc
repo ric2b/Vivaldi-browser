@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,8 +34,7 @@ constexpr base::StringPiece kLearnMoreURLGoogleInternal(
 // Returns the single main profile, or nullptr if none is found.
 Profile* GetMainProfile() {
   auto profiles = g_browser_process->profile_manager()->GetLoadedProfiles();
-  const auto main_it = base::ranges::find_if(
-      profiles, [](Profile* profile) { return profile->IsMainProfile(); });
+  const auto main_it = base::ranges::find_if(profiles, &Profile::IsMainProfile);
   if (main_it == profiles.end())
     return nullptr;
   return *main_it;

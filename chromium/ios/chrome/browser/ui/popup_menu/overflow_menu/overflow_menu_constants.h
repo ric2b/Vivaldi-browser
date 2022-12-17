@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@ enum class Destination {
   RecentTabs = 5,
   SiteInfo = 6,
   Settings = 7,
+  WhatsNew = 8,
   Notes = 1001, // Vivaldi
 };
 

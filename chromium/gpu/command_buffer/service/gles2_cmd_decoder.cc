@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <list>
@@ -34,6 +33,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
@@ -98,8 +98,6 @@
 #include "ui/gfx/overlay_plane_data.h"
 #include "ui/gfx/overlay_priority_hint.h"
 #include "ui/gfx/video_types.h"
-#include "ui/gl/ca_renderer_layer_params.h"
-#include "ui/gl/dc_renderer_layer_params.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_enums.h"
@@ -274,8 +272,7 @@ static bool CharacterIsValidForGLES(unsigned char c) {
 
 static bool StringIsValidForGLES(const std::string& str) {
   return str.length() == 0 ||
-         std::find_if_not(str.begin(), str.end(), CharacterIsValidForGLES) ==
-             str.end();
+         base::ranges::all_of(str, CharacterIsValidForGLES);
 }
 
 DisallowedFeatures::DisallowedFeatures() = default;
@@ -1216,7 +1213,6 @@ class GLES2DecoderImpl : public GLES2Decoder,
                                          const volatile GLbyte* key);
   void DoCreateAndTexStorage2DSharedImageINTERNAL(
       GLuint client_id,
-      GLenum internal_format,
       const volatile GLbyte* mailbox);
   void DoBeginSharedImageAccessDirectCHROMIUM(GLuint client_id, GLenum mode);
   void DoEndSharedImageAccessDirectCHROMIUM(GLuint client_id);
@@ -2672,7 +2668,7 @@ class GLES2DecoderImpl : public GLES2Decoder,
   scoped_refptr<ShaderTranslatorInterface> fragment_translator_;
 
   // Cached from ContextGroup
-  raw_ptr<const Validators> validators_;
+  raw_ptr<const Validators, DanglingUntriaged> validators_;
   scoped_refptr<FeatureInfo> feature_info_;
 
   int frame_number_;
@@ -8594,10 +8590,18 @@ void GLES2DecoderImpl::DoFramebufferTexture2DCommon(
     service_id = texture_ref->service_id();
   }
 
+  bool valid_target = false;
+  if (texture_ref) {
+    valid_target = texture_manager()->ValidForTextureTarget(
+        texture_ref->texture(), level, 0, 0, 1);
+  } else {
+    valid_target = texture_manager()->ValidForTarget(textarget, level, 0, 0, 1);
+  }
+
   if ((level > 0 && !feature_info_->IsWebGL2OrES3Context() &&
        !(fbo_render_mipmap_explicitly_enabled_ &&
          feature_info_->feature_flags().oes_fbo_render_mipmap)) ||
-      !texture_manager()->ValidForTarget(textarget, level, 0, 0, 1)) {
+      !valid_target) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE,
         name, "level out of range");
@@ -8669,8 +8673,8 @@ void GLES2DecoderImpl::DoFramebufferTextureLayer(
             "texture is neither TEXTURE_3D nor TEXTURE_2D_ARRAY");
         return;
     }
-    if (!texture_manager()->ValidForTarget(texture_target, level,
-                                           0, 0, layer)) {
+    if (!texture_manager()->ValidForTextureTarget(texture_ref->texture(), level,
+                                                  0, 0, layer)) {
       LOCAL_SET_GL_ERROR(
           GL_INVALID_VALUE, function_name, "invalid level or layer");
       return;
@@ -14722,11 +14726,6 @@ error::Error GLES2DecoderImpl::DoCompressedTexImage(
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, func_name, "imageSize < 0");
     return error::kNoError;
   }
-  if (!texture_manager()->ValidForTarget(target, level, width, height, depth) ||
-      border != 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, func_name, "dimensions out of range");
-    return error::kNoError;
-  }
   TextureRef* texture_ref = texture_manager()->GetTextureInfoForTarget(
       &state_, target);
   if (!texture_ref) {
@@ -14735,6 +14734,12 @@ error::Error GLES2DecoderImpl::DoCompressedTexImage(
     return error::kNoError;
   }
   Texture* texture = texture_ref->texture();
+  if (!texture_manager()->ValidForTextureTarget(texture, level, width, height,
+                                                depth) ||
+      border != 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, func_name, "dimensions out of range");
+    return error::kNoError;
+  }
   if (texture->IsImmutable()) {
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, func_name, "texture is immutable");
     return error::kNoError;
@@ -15104,10 +15109,6 @@ error::Error GLES2DecoderImpl::DoCompressedTexSubImage(
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, func_name, "imageSize < 0");
     return error::kNoError;
   }
-  if (!texture_manager()->ValidForTarget(target, level, width, height, depth)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, func_name, "dimensions out of range");
-    return error::kNoError;
-  }
   TextureRef* texture_ref = texture_manager()->GetTextureInfoForTarget(
       &state_, target);
   if (!texture_ref) {
@@ -15115,7 +15116,14 @@ error::Error GLES2DecoderImpl::DoCompressedTexSubImage(
         GL_INVALID_OPERATION, func_name, "no texture bound at target");
     return error::kNoError;
   }
+
   Texture* texture = texture_ref->texture();
+  if (!texture_manager()->ValidForTextureTarget(texture, level, width, height,
+                                                depth)) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, func_name, "dimensions out of range");
+    return error::kNoError;
+  }
+
   GLenum type = 0;
   GLenum internal_format = 0;
   if (!texture->GetLevelType(target, level, &type, &internal_format)) {
@@ -15240,7 +15248,8 @@ void GLES2DecoderImpl::DoCopyTexImage2D(
         GL_INVALID_OPERATION, func_name, "texture is immutable");
     return;
   }
-  if (!texture_manager()->ValidForTarget(target, level, width, height, 1) ||
+  if (!texture_manager()->ValidForTextureTarget(texture, level, width, height,
+                                                1) ||
       border != 0) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE, func_name, "dimensions out of range");
@@ -16682,10 +16691,11 @@ void GLES2DecoderImpl::DoSwapBuffers(uint64_t swap_id, GLbitfield flags) {
     surface_->SwapBuffersAsync(
         base::BindOnce(&GLES2DecoderImpl::FinishAsyncSwapBuffers,
                        weak_ptr_factory_.GetWeakPtr(), swap_id),
-        base::DoNothing());
+        base::DoNothing(), gl::FrameData());
   } else {
     client()->OnSwapBuffers(swap_id, flags);
-    FinishSwapBuffers(surface_->SwapBuffers(base::DoNothing()));
+    FinishSwapBuffers(
+        surface_->SwapBuffers(base::DoNothing(), gl::FrameData()));
   }
 
   // This may be a slow command.  Exit command processing to allow for
@@ -17813,8 +17823,8 @@ void GLES2DecoderImpl::DoCopyTextureCHROMIUM(
     }
 
     // Check that this type of texture is allowed.
-    if (!texture_manager()->ValidForTarget(source_target, source_level,
-                                           source_width, source_height, 1)) {
+    if (!texture_manager()->ValidForTextureTarget(
+            source_texture, source_level, source_width, source_height, 1)) {
       LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, kFunctionName, "Bad dimensions");
       return;
     }
@@ -17981,8 +17991,8 @@ void GLES2DecoderImpl::CopySubTextureHelper(const char* function_name,
     }
 
     // Check that this type of texture is allowed.
-    if (!texture_manager()->ValidForTarget(source_target, source_level,
-                                           source_width, source_height, 1)) {
+    if (!texture_manager()->ValidForTextureTarget(
+            source_texture, source_level, source_width, source_height, 1)) {
       LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, function_name,
                          "source texture bad dimensions");
       return;
@@ -18222,11 +18232,20 @@ void GLES2DecoderImpl::TexStorageImpl(GLenum target,
       return;
     }
   }
+  TextureRef* texture_ref =
+      texture_manager()->GetTextureInfoForTarget(&state_, target);
+  if (!texture_ref) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
+                       "unknown texture for target");
+    return;
+  }
+  Texture* texture = texture_ref->texture();
   // The glTexStorage entry points require width, height, and depth to be
   // at least 1, but the other texture entry points (those which use
-  // ValidForTarget) do not. So we have to add an extra check here.
+  // ValidForTextureTarget) do not. So we have to add an extra check here.
   bool is_invalid_texstorage_size = width < 1 || height < 1 || depth < 1;
-  if (!texture_manager()->ValidForTarget(target, 0, width, height, depth) ||
+  if (!texture_manager()->ValidForTextureTarget(texture, 0, width, height,
+                                                depth) ||
       is_invalid_texstorage_size) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE, function_name, "dimensions out of range");
@@ -18239,14 +18258,6 @@ void GLES2DecoderImpl::TexStorageImpl(GLenum target,
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name, "too many levels");
     return;
   }
-  TextureRef* texture_ref = texture_manager()->GetTextureInfoForTarget(
-      &state_, target);
-  if (!texture_ref) {
-    LOCAL_SET_GL_ERROR(
-        GL_INVALID_OPERATION, function_name, "unknown texture for target");
-    return;
-  }
-  Texture* texture = texture_ref->texture();
   if (texture->IsAttachedToFramebuffer()) {
     framebuffer_state_.clear_state_dirty = true;
   }
@@ -18458,7 +18469,6 @@ void GLES2DecoderImpl::DoCreateAndConsumeTextureINTERNAL(
 
 void GLES2DecoderImpl::DoCreateAndTexStorage2DSharedImageINTERNAL(
     GLuint client_id,
-    GLenum internal_format,
     const volatile GLbyte* mailbox_data) {
   TRACE_EVENT2("gpu",
                "GLES2DecoderImpl::DoCreateAndTexStorage2DSharedImageCHROMIUM",
@@ -18484,20 +18494,8 @@ void GLES2DecoderImpl::DoCreateAndTexStorage2DSharedImageINTERNAL(
     return;
   }
 
-  std::unique_ptr<GLTextureImageRepresentation> shared_image;
-  if (internal_format == GL_RGB) {
-    shared_image = group_->shared_image_representation_factory()
-                       ->ProduceRGBEmulationGLTexture(mailbox);
-  } else if (internal_format == GL_NONE) {
-    shared_image =
-        group_->shared_image_representation_factory()->ProduceGLTexture(
-            mailbox);
-  } else {
-    LOCAL_SET_GL_ERROR(GL_INVALID_ENUM,
-                       "DoCreateAndTexStorage2DSharedImageINTERNAL",
-                       "invalid internal format");
-    return;
-  }
+  std::unique_ptr<GLTextureImageRepresentation> shared_image =
+      group_->shared_image_representation_factory()->ProduceGLTexture(mailbox);
 
   if (!shared_image) {
     // Mailbox missing, generate a texture.

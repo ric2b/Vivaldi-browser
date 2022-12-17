@@ -27,6 +27,9 @@ class VivaldiDataClassHandler {
   virtual void GetData(Profile* profile,
                        const std::string& data_id,
                        content::URLDataSource::GotDataCallback callback) = 0;
+
+  virtual std::string GetMimetype(Profile* profile,
+                                  const std::string& data_id) = 0;
 };
 
 class VivaldiDataSource : public content::URLDataSource {

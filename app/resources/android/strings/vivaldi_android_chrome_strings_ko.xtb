@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ko">
 <translation id="1397811292916898096"><ph name="PRODUCT_NAME" /> 으로 검색</translation>
+<translation id="1456207338570705181">Touch to Search는 Google이 Vivaldi의 기본 검색 엔진으로 설정된 경우에만 사용할 수 있는 기능입니다. 단어와 주변 컨텍스트를 Google 검색으로 전송하여 정의, 사진, 검색 결과 및 기타 세부정보를 반환합니다. <ph name="BEGIN_LINK" />설정<ph name="END_LINK" />에서 끌 수 있습니다.</translation>
 <translation id="1598449788754183301">일반/비밀 탭 간 전환</translation>
 <translation id="1644574205037202324">방문 기록</translation>
 <translation id="17513872634828108">열린 탭</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">새 시크릿 탭</translation>
 <translation id="4243710787042215766">사생활 보호 탭으로 열기</translation>
 <translation id="4526803704855831732">사생활 보호 탭</translation>
+<translation id="4719086422742491124">페이지를 떠나지 않고 웹사이트의 주제에 대해서 알아보세요. 페이지에서 하나 이상의 단어를 선택하여 검색합니다.
+
+Touch to Search는 Google이 Vivaldi의 기본 검색 엔진으로 설정된 경우에만 사용할 수 있는 기능입니다.</translation>
 <translation id="4759238208242260848">다운로드</translation>
 <translation id="4883379392681899581">사생활 보호 모드 나가기</translation>
 <translation id="4943872375798546930">검색결과 없음</translation>
@@ -39,6 +43,9 @@
 <translation id="5118676864324397542">Vivaldi <ph name="APP_NAME" /> 저장공간</translation>
 <translation id="5186185447130319458">비공개</translation>
 <translation id="5233638681132016545">새 탭</translation>
+<translation id="5375131951310889874">페이지를 떠나지 않고 웹사이트의 주제에 대해서 알아보세요. Touch to Search는 Google이 Vivaldi의 기본 검색 엔진으로 설정된 경우에만 사용할 수 있는 기능입니다. 단어와 주변 컨텍스트를 Google 검색으로 전송하여 정의, 사진, 검색 결과 및 기타 세부정보를 반환합니다.
+
+검색어를 조정하려면 길게 눌러 선택하세요. 검색 범위를 좁히려면 패널을 위로 밀고 검색 상자를 탭하면 됩니다.</translation>
 <translation id="572328651809341494">최근 탭</translation>
 <translation id="6150320133806434356">북마크 저장됨</translation>
 <translation id="6336451774241870485">새 사생활 보호 탭</translation>

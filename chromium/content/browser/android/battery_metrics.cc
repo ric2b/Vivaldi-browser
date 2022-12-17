@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,6 @@
 #include "base/no_destructor.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/trace_event/application_state_proto_android.h"
@@ -30,15 +29,17 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom.h"
 
-const base::Feature kForegroundRadioStateCountWakeups{
-    "ForegroundRadioStateCountWakeups", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kForegroundRadioStateCountWakeups,
+             "ForegroundRadioStateCountWakeups",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Keeps reporting of the battery metrics on the UI thread, where it may cause
 // jank. This is used for a holdback experiment to estimate the jank reduction
 // won by moving reporting to the thread pool.
 // TODO(eseckler): Remove once holdback experiment is complete.
-const base::Feature kAndroidBatteryMetricsReportOnUIThread{
-    "AndroidBatteryMetricsReportOnUIThread", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kAndroidBatteryMetricsReportOnUIThread,
+             "AndroidBatteryMetricsReportOnUIThread",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace content {
 namespace {

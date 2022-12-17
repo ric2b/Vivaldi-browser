@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,8 @@ class OverscrollBehaviorTest : public SimTest {
 
 void OverscrollBehaviorTest::SetUp() {
   SimTest::SetUp();
-  v8::HandleScope HandleScope(v8::Isolate::GetCurrent());
+  v8::HandleScope HandleScope(
+      WebView().GetPage()->GetAgentGroupScheduler().Isolate());
   ResizeView(gfx::Size(400, 400));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");

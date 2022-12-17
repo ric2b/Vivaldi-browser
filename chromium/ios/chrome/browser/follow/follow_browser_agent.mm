@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,22 +7,24 @@
 #import "base/bind.h"
 #import "base/callback.h"
 #import "base/check.h"
+#import "base/metrics/histogram_functions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/feed/core/shared_prefs/pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
+#import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/follow/follow_service.h"
 #import "ios/chrome/browser/follow/follow_service_factory.h"
 #import "ios/chrome/browser/follow/web_page_urls.h"
 #import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/pref_names.h"
-#import "ios/chrome/browser/system_flags.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/ui/commands/feed_commands.h"
 #import "ios/chrome/browser/ui/commands/new_tab_page_commands.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
-#import "ios/chrome/browser/ui/ntp/feed_metrics_recorder.h"
+#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_constants.h"
+#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
@@ -90,41 +92,42 @@ BROWSER_USER_DATA_KEY_IMPL(FollowBrowserAgent)
 FollowBrowserAgent::~FollowBrowserAgent() = default;
 
 bool FollowBrowserAgent::IsWebSiteFollowed(WebPageURLs* web_page_urls) {
-  return service_->IsWebSiteFollowed(web_page_urls);
+  return GetFollowService()->IsWebSiteFollowed(web_page_urls);
 }
 
 NSURL* FollowBrowserAgent::GetRecommendedSiteURL(WebPageURLs* web_page_urls) {
-  return service_->GetRecommendedSiteURL(web_page_urls);
+  return GetFollowService()->GetRecommendedSiteURL(web_page_urls);
 }
 
 NSArray<FollowedWebSite*>* FollowBrowserAgent::GetFollowedWebSites() {
-  return service_->GetFollowedWebSites();
+  return GetFollowService()->GetFollowedWebSites();
 }
 
 void FollowBrowserAgent::FollowWebSite(WebPageURLs* web_page_urls,
                                        FollowSource source) {
   // Record if the source is from a menu.
   if (IsFollowSourceFromMenu(source)) {
-    [metrics_recorder_ recordFollowFromMenu];
-    [metrics_recorder_
+    [GetMetricsRecorder() recordFollowFromMenu];
+    [GetMetricsRecorder()
         recordFollowRequestedWithType:FollowRequestType::kFollowRequestFollow];
   }
 
-  service_->FollowWebSite(web_page_urls, source,
-                          base::BindOnce(&FollowBrowserAgent::OnFollowResponse,
-                                         AsWeakPtr(), web_page_urls, source));
+  GetFollowService()->FollowWebSite(
+      web_page_urls, source,
+      base::BindOnce(&FollowBrowserAgent::OnFollowResponse, AsWeakPtr(),
+                     web_page_urls, source));
 }
 
 void FollowBrowserAgent::UnfollowWebSite(WebPageURLs* web_page_urls,
                                          FollowSource source) {
   // Record if the source is from a menu.
   if (IsFollowSourceFromMenu(source)) {
-    [metrics_recorder_ recordUnfollowFromMenu];
-    [metrics_recorder_ recordFollowRequestedWithType:
-                           FollowRequestType::kFollowRequestUnfollow];
+    [GetMetricsRecorder() recordUnfollowFromMenu];
+    [GetMetricsRecorder() recordFollowRequestedWithType:
+                              FollowRequestType::kFollowRequestUnfollow];
   }
 
-  service_->UnfollowWebSite(
+  GetFollowService()->UnfollowWebSite(
       web_page_urls, source,
       base::BindOnce(&FollowBrowserAgent::OnUnfollowResponse, AsWeakPtr(),
                      web_page_urls, source));
@@ -146,26 +149,18 @@ void FollowBrowserAgent::ClearUIProviders() {
 }
 
 void FollowBrowserAgent::AddObserver(Observer* observer) {
-  service_->AddObserver(observer);
+  GetFollowService()->AddObserver(observer);
 }
 
 void FollowBrowserAgent::RemoveObserver(Observer* observer) {
-  service_->RemoveObserver(observer);
+  GetFollowService()->RemoveObserver(observer);
 }
 
 base::WeakPtr<FollowBrowserAgent> FollowBrowserAgent::AsWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-FollowBrowserAgent::FollowBrowserAgent(Browser* browser) : browser_(browser) {
-  ChromeBrowserState* browser_state = browser_->GetBrowserState();
-  service_ = FollowServiceFactory::GetForBrowserState(browser_state);
-  DCHECK(service_);
-
-  metrics_recorder_ =
-      DiscoverFeedServiceFactory::GetForBrowserState(browser_state)
-          ->GetFeedMetricsRecorder();
-}
+FollowBrowserAgent::FollowBrowserAgent(Browser* browser) : browser_(browser) {}
 
 void FollowBrowserAgent::OnFollowResponse(WebPageURLs* web_page_urls,
                                           FollowSource source,
@@ -202,10 +197,14 @@ void FollowBrowserAgent::OnFollowSuccess(WebPageURLs* web_page_urls,
                                          FollowedWebSite* web_site) {
   // Record if the source is from a menu.
   if (IsFollowSourceFromMenu(source)) {
-    const NSUInteger count = service_->GetFollowedWebSites().count;
-    [metrics_recorder_ recordFollowCount:count
-                            forLogReason:FollowCountLogReasonAfterFollow];
+    const NSUInteger count = GetFollowService()->GetFollowedWebSites().count;
+    [GetMetricsRecorder() recordFollowCount:count
+                               forLogReason:FollowCountLogReasonAfterFollow];
   }
+
+  base::UmaHistogramBoolean(
+      "ContentSuggestions.Feed.WebFeed.NewFollow.IsRecommended",
+      GetFollowService()->GetRecommendedSiteURL(web_page_urls) ? 1 : 0);
 
   // Enable the feed prefs to show the feed and to expand it if they
   // are disabled.
@@ -234,7 +233,7 @@ void FollowBrowserAgent::OnFollowSuccess(WebPageURLs* web_page_urls,
   NSString* button_text =
       l10n_util::GetNSString(IDS_IOS_SNACKBAR_ACTION_GO_TO_FEED);
 
-  __weak FeedMetricsRecorder* metrics_recorder = metrics_recorder_;
+  __weak FeedMetricsRecorder* metrics_recorder = GetMetricsRecorder();
   __weak id<NewTabPageCommands> new_tab_page_command = new_tab_page_commands_;
 
   auto message_action = ^{
@@ -266,7 +265,7 @@ void FollowBrowserAgent::OnFollowFailure(WebPageURLs* web_page_urls,
   NSString* button_text =
       l10n_util::GetNSString(IDS_IOS_SNACKBAR_ACTION_TRY_AGAIN);
 
-  __weak FeedMetricsRecorder* metrics_recorder = metrics_recorder_;
+  __weak FeedMetricsRecorder* metrics_recorder = GetMetricsRecorder();
   base::WeakPtr<FollowBrowserAgent> weak_ptr = AsWeakPtr();
 
   auto message_action = ^{
@@ -296,9 +295,9 @@ void FollowBrowserAgent::OnUnfollowSuccess(WebPageURLs* web_page_urls,
                                            FollowedWebSite* web_site) {
   // Record if the source is from a menu.
   if (IsFollowSourceFromMenu(source)) {
-    const NSUInteger count = service_->GetFollowedWebSites().count;
-    [metrics_recorder_ recordFollowCount:count
-                            forLogReason:FollowCountLogReasonAfterUnfollow];
+    const NSUInteger count = GetFollowService()->GetFollowedWebSites().count;
+    [GetMetricsRecorder() recordFollowCount:count
+                               forLogReason:FollowCountLogReasonAfterUnfollow];
   }
 
   NSString* message =
@@ -307,7 +306,7 @@ void FollowBrowserAgent::OnUnfollowSuccess(WebPageURLs* web_page_urls,
 
   NSString* button_text = l10n_util::GetNSString(IDS_IOS_SNACKBAR_ACTION_UNDO);
 
-  __weak FeedMetricsRecorder* metrics_recorder = metrics_recorder_;
+  __weak FeedMetricsRecorder* metrics_recorder = GetMetricsRecorder();
   base::WeakPtr<FollowBrowserAgent> weak_ptr = AsWeakPtr();
 
   auto message_action = ^{
@@ -342,7 +341,7 @@ void FollowBrowserAgent::OnUnfollowFailure(WebPageURLs* web_page_urls,
   NSString* button_text =
       l10n_util::GetNSString(IDS_IOS_SNACKBAR_ACTION_TRY_AGAIN);
 
-  __weak FeedMetricsRecorder* metrics_recorder = metrics_recorder_;
+  __weak FeedMetricsRecorder* metrics_recorder = GetMetricsRecorder();
   base::WeakPtr<FollowBrowserAgent> weak_ptr = AsWeakPtr();
 
   auto message_action = ^{
@@ -367,4 +366,23 @@ void FollowBrowserAgent::OnUnfollowFailure(WebPageURLs* web_page_urls,
                                     buttonText:button_text
                                  messageAction:message_action
                               completionAction:completion_action];
+}
+
+raw_ptr<FollowService> FollowBrowserAgent::GetFollowService() {
+  if (!service_) {
+    ChromeBrowserState* browser_state = browser_->GetBrowserState();
+    service_ = FollowServiceFactory::GetForBrowserState(browser_state);
+    DCHECK(service_);
+  }
+  return service_;
+}
+
+FeedMetricsRecorder* FollowBrowserAgent::GetMetricsRecorder() {
+  if (!metrics_recorder_) {
+    ChromeBrowserState* browser_state = browser_->GetBrowserState();
+    metrics_recorder_ =
+        DiscoverFeedServiceFactory::GetForBrowserState(browser_state)
+            ->GetFeedMetricsRecorder();
+  }
+  return metrics_recorder_;
 }

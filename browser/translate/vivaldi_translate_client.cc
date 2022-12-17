@@ -247,7 +247,7 @@ TranslateStep ToVivaldiTranslateStep(translate::TranslateStep step) {
   }
 }
 
-TranslateError ToVivaldiTranslateError(translate::TranslateErrors::Type error) {
+TranslateError ToVivaldiTranslateError(translate::TranslateErrors error) {
   switch (error) {
     case translate::TranslateErrors::NONE:
       return TranslateError::TRANSLATE_ERROR_NO_ERROR;
@@ -282,7 +282,7 @@ bool VivaldiTranslateClient::ShowTranslateUI(
     translate::TranslateStep step,
     const std::string& source_language,
     const std::string& target_language,
-    translate::TranslateErrors::Type error_type,
+    translate::TranslateErrors error_type,
     bool triggered_from_menu /* only set on android */) {
   DCHECK(web_contents());
   DCHECK(translate_manager_);
@@ -423,7 +423,7 @@ ShowTranslateBubbleResult VivaldiTranslateClient::ShowBubble(
     translate::TranslateStep step,
     const std::string& source_language,
     const std::string& target_language,
-    translate::TranslateErrors::Type error_type) {
+    translate::TranslateErrors error_type) {
   DCHECK(translate_manager_);
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
 

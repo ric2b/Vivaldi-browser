@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,6 +91,12 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaSessionItemProducer
   RegisterIsAudioOutputDeviceSwitchingSupportedCallback(
       const std::string& id,
       base::RepeatingCallback<void(bool)> callback);
+
+  // Called when a media session item is associated with a presentation request
+  // as to show the origin associated with the request rather than that for the
+  // top frame.
+  void UpdateMediaItemSourceOrigin(const std::string& id,
+                                   const url::Origin& origin);
 
  private:
   friend class MediaSessionItemProducerTest;

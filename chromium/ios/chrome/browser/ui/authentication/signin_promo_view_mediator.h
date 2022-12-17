@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,11 +12,11 @@
 
 class AuthenticationService;
 class ChromeAccountManagerService;
-@class ChromeIdentity;
 class PrefService;
 @protocol SigninPresenter;
 @class SigninPromoViewConfigurator;
 @protocol SigninPromoViewConsumer;
+@protocol SystemIdentity;
 
 namespace signin_metrics {
 enum class AccessPoint;
@@ -58,7 +58,7 @@ class PrefRegistrySyncable;
 //  - SigninPromoViewModeSigninWithAccount
 //  - SigninPromoViewModeSyncWithPrimaryAccount
 // Otherwise contains nil.
-@property(nonatomic, strong, readonly) ChromeIdentity* identity;
+@property(nonatomic, strong, readonly) id<SystemIdentity> identity;
 
 // Sign-in promo view state.
 @property(nonatomic, assign) ios::SigninPromoViewState signinPromoViewState;
@@ -78,6 +78,8 @@ class PrefRegistrySyncable;
 // of times it has been displayed and if the user closed the sign-in promo view.
 + (BOOL)shouldDisplaySigninPromoViewWithAccessPoint:
             (signin_metrics::AccessPoint)accessPoint
+                              authenticationService:
+                                  (AuthenticationService*)authenticationService
                                         prefService:(PrefService*)prefService;
 
 // See -[SigninPromoViewMediator initWithBrowserState:].

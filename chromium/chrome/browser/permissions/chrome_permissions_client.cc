@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/metrics/ukm_background_recorder_service.h"
 #include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
 #include "chrome/browser/permissions/contextual_notification_permission_ui_selector.h"
+#include "chrome/browser/permissions/origin_keyed_permission_action_service_factory.h"
 #include "chrome/browser/permissions/permission_actions_history_factory.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/permissions/permission_revocation_request.h"
@@ -53,18 +55,18 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/android/resource_mapper.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
-#include "chrome/browser/permissions/grouped_permission_infobar_delegate_android.h"
 #include "chrome/browser/permissions/notification_blocked_message_delegate_android.h"
+#include "chrome/browser/permissions/permission_infobar_delegate_android.h"
 #include "chrome/browser/permissions/permission_update_infobar_delegate_android.h"
 #include "chrome/browser/permissions/permission_update_message_controller_android.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/messages/android/messages_feature.h"
 #include "components/permissions/permission_request_manager.h"
 #else
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
 #include "chrome/browser/ui/permission_bubble/permission_prompt.h"
+#include "components/vector_icons/vector_icons.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -193,6 +195,13 @@ ChromePermissionsClient::GetChooserContext(
   }
 }
 
+permissions::OriginKeyedPermissionActionService*
+ChromePermissionsClient::GetOriginKeyedPermissionActionService(
+    content::BrowserContext* browser_context) {
+  return OriginKeyedPermissionActionServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context));
+}
+
 permissions::PermissionActionsHistory*
 ChromePermissionsClient::GetPermissionActionsHistory(
     content::BrowserContext* browser_context) {
@@ -237,15 +246,9 @@ void ChromePermissionsClient::AreSitesImportant(
             net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
     if (registerable_domain.empty())
       registerable_domain = host;  // IP address or internal hostname.
-    auto important_domain_search =
-        [&registerable_domain](
-            const site_engagement::ImportantSitesUtil::ImportantDomainInfo&
-                item) {
-          return item.registerable_domain == registerable_domain;
-        };
-    entry.second =
-        std::find_if(important_domains.begin(), important_domains.end(),
-                     important_domain_search) != important_domains.end();
+    entry.second = base::Contains(important_domains, registerable_domain,
+                                  &site_engagement::ImportantSitesUtil::
+                                      ImportantDomainInfo::registerable_domain);
   }
 }
 
@@ -287,7 +290,7 @@ permissions::IconId ChromePermissionsClient::GetOverrideIconId(
 #if BUILDFLAG(IS_CHROMEOS)
   // TODO(xhwang): fix this icon, see crbug.com/446263.
   if (request_type == permissions::RequestType::kProtectedMediaIdentifier)
-    return kProductIcon;
+    return vector_icons::kProductIcon;
 #endif
   return PermissionsClient::GetOverrideIconId(request_type);
 }
@@ -465,8 +468,8 @@ infobars::InfoBar* ChromePermissionsClient::MaybeCreateInfoBar(
   infobars::ContentInfoBarManager* infobar_manager =
       infobars::ContentInfoBarManager::FromWebContents(web_contents);
   if (infobar_manager && ShouldUseQuietUI(web_contents, type)) {
-    return GroupedPermissionInfoBarDelegate::Create(std::move(prompt),
-                                                    infobar_manager);
+    return PermissionInfoBarDelegate::Create(std::move(prompt),
+                                             infobar_manager);
   }
   return nullptr;
 }

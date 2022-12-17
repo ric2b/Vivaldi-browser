@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,10 +95,10 @@ void PutWallpaperInfoInPrefs(AccountId account_id,
                              PrefService* pref_service,
                              const std::string& pref_name) {
   DCHECK(pref_service);
-  DictionaryPrefUpdate wallpaper_update(pref_service, pref_name);
+  ScopedDictPrefUpdate wallpaper_update(pref_service, pref_name);
   base::Value wallpaper_info_dict = CreateWallpaperInfoDict(info);
-  wallpaper_update->SetKey(account_id.GetUserEmail(),
-                           std::move(wallpaper_info_dict));
+  wallpaper_update->Set(account_id.GetUserEmail(),
+                        std::move(wallpaper_info_dict));
 }
 
 void AssertWallpaperInfoInPrefs(const PrefService* pref_service,
@@ -106,7 +106,7 @@ void AssertWallpaperInfoInPrefs(const PrefService* pref_service,
                                 AccountId account_id,
                                 const WallpaperInfo& info) {
   const base::Value::Dict* stored_info_dict =
-      pref_service->GetValueDict(pref_name).FindDict(account_id.GetUserEmail());
+      pref_service->GetDict(pref_name).FindDict(account_id.GetUserEmail());
   DCHECK(stored_info_dict);
   base::Value expected_info_dict = CreateWallpaperInfoDict(info);
   EXPECT_EQ(expected_info_dict, *stored_info_dict);

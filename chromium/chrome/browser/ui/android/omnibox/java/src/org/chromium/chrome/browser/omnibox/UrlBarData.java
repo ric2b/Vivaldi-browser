@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@ import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.common.ContentUrlConstants;
+import org.chromium.url.GURL;
 
 import java.util.HashSet;
 
@@ -62,8 +63,8 @@ public class UrlBarData {
     }
 
     /** Returns whether supplied URL should be shown in the Omnibox/Suggestions list. */
-    public static boolean shouldShowUrl(String url, boolean isIncognito) {
-        return !(NativePage.isNativePageUrl(url, isIncognito) || UrlUtilities.isNTPUrl(url));
+    public static boolean shouldShowUrl(GURL gurl, boolean isIncognito) {
+        return !(NativePage.isNativePageUrl(gurl, isIncognito) || UrlUtilities.isNTPUrl(gurl));
     }
 
     public static UrlBarData forUrlAndText(

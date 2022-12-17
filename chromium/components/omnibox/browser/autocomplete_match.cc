@@ -1,10 +1,8 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/omnibox/browser/autocomplete_match.h"
-
-#include <algorithm>
 
 #include "base/check_op.h"
 #include "base/debug/crash_logging.h"
@@ -117,7 +115,29 @@ int GetDeduplicationProviderPreferenceScore(AutocompleteProvider::Type type) {
   return it->second;
 }
 
+// Implementation of boost::hash_combine
+// http://www.boost.org/doc/libs/1_43_0/doc/html/hash/reference.html#boost.hash_combine
+template <typename T>
+inline void hash_combine(std::size_t& seed, const T& value) {
+  std::hash<T> hasher;
+  seed ^= hasher(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+
 }  // namespace
+
+template <typename S, typename T>
+size_t ACMatchKeyHash<S, T>::operator()(const ACMatchKey<S, T>& key) const {
+  size_t seed = 0;
+  hash_combine(seed, key.first);
+  hash_combine(seed, key.second);
+  return seed;
+}
+
+// This trick allows implementing ACMatchKeyHash in the implementation file.
+template struct ACMatchKeyHash<std::u16string, std::string>;
+template struct ACMatchKeyHash<std::string, bool>;
+
+// RichAutocompletionParams ---------------------------------------------------
 
 RichAutocompletionParams::RichAutocompletionParams()
     : enabled(OmniboxFieldTrial::IsRichAutocompletionEnabled()),
@@ -229,6 +249,7 @@ AutocompleteMatch::AutocompleteMatch(const AutocompleteMatch& match)
       stripped_destination_url(match.stripped_destination_url),
       image_dominant_color(match.image_dominant_color),
       image_url(match.image_url),
+      entity_id(match.entity_id),
       document_type(match.document_type),
       tail_suggest_common_prefix(match.tail_suggest_common_prefix),
       contents(match.contents),
@@ -284,6 +305,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
   stripped_destination_url = std::move(match.stripped_destination_url);
   image_dominant_color = std::move(match.image_dominant_color);
   image_url = std::move(match.image_url);
+  entity_id = std::move(match.entity_id);
   document_type = std::move(match.document_type);
   tail_suggest_common_prefix = std::move(match.tail_suggest_common_prefix);
   contents = std::move(match.contents);
@@ -346,6 +368,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
   stripped_destination_url = match.stripped_destination_url;
   image_dominant_color = match.image_dominant_color;
   image_url = match.image_url;
+  entity_id = match.entity_id;
   document_type = match.document_type;
   tail_suggest_common_prefix = match.tail_suggest_common_prefix;
   contents = match.contents;
@@ -1212,9 +1235,7 @@ AutocompleteMatch::AsOmniboxEventResultType() const {
     case AutocompleteMatchType::HISTORY_CLUSTER:
       return OmniboxEventProto::Suggestion::HISTORY_CLUSTER;
     case AutocompleteMatchType::STARTER_PACK:
-      // TODO(yoangela): Update this when STARTER_PACK is added to
-      //   OmniboxEventProto.
-      return OmniboxEventProto::Suggestion::NAVSUGGEST;
+      return OmniboxEventProto::Suggestion::STARTER_PACK;
     case AutocompleteMatchType::VOICE_SUGGEST:
       // VOICE_SUGGEST matches are only used in Java and are not logged,
       // so we should never reach this case.
@@ -1264,8 +1285,8 @@ bool AutocompleteMatch::IsTrivialAutocompletion() const {
 
 bool AutocompleteMatch::SupportsDeletion() const {
   return deletable ||
-         std::any_of(duplicate_matches.begin(), duplicate_matches.end(),
-                     [](const auto& m) { return m.deletable; });
+         base::ranges::any_of(duplicate_matches,
+                              [](const auto& m) { return m.deletable; });
 }
 
 AutocompleteMatch
@@ -1352,6 +1373,7 @@ size_t AutocompleteMatch::EstimateMemoryUsage() const {
   res += base::trace_event::EstimateMemoryUsage(stripped_destination_url);
   res += base::trace_event::EstimateMemoryUsage(image_dominant_color);
   res += base::trace_event::EstimateMemoryUsage(image_url);
+  res += base::trace_event::EstimateMemoryUsage(entity_id);
   res += base::trace_event::EstimateMemoryUsage(tail_suggest_common_prefix);
   res += base::trace_event::EstimateMemoryUsage(contents);
   res += base::trace_event::EstimateMemoryUsage(contents_class);
@@ -1402,6 +1424,8 @@ void AutocompleteMatch::UpgradeMatchWithPropertiesFrom(
     RecordAdditionalInfo(kACMatchPropertyScoreBoostedFrom, relevance);
     relevance = duplicate_match.relevance;
   }
+
+  from_previous = from_previous && duplicate_match.from_previous;
 
   // Take the |action|, if any, so that it will be presented instead of buried.
   if (!action && duplicate_match.action &&

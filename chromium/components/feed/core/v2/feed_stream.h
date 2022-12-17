@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/time/time.h"
 #include "base/version.h"
 #include "components/feed/core/proto/v2/ui.pb.h"
@@ -179,6 +178,8 @@ class FeedStream : public FeedApi,
                                          int info_card_type) override;
   void ResetInfoCardStates(const StreamType& stream_type,
                            int info_card_type) override;
+  void ReportContentSliceVisibleTimeForGoodVisits(
+      base::TimeDelta elapsed) override;
   base::Time GetLastFetchTime(const StreamType& stream_type) override;
   void SetContentOrder(const StreamType& stream_type,
                        ContentOrder content_order) override;
@@ -332,6 +333,10 @@ class FeedStream : public FeedApi,
 
   base::WeakPtr<FeedStream> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
+  }
+
+  bool GetStreamPresentForTest(StreamType stream_type) {
+    return FindStream(stream_type) != nullptr;
   }
 
  private:

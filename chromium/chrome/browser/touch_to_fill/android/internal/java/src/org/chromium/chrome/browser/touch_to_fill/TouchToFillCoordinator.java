@@ -1,10 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.touch_to_fill;
 
-import static org.chromium.chrome.browser.password_manager.PasswordManagerHelper.usesUnifiedPasswordManagerUI;
+import static org.chromium.chrome.browser.password_manager.PasswordManagerHelper.usesUnifiedPasswordManagerBranding;
 
 import android.content.Context;
 
@@ -33,9 +33,9 @@ public class TouchToFillCoordinator implements TouchToFillComponent {
     @Override
     public void initialize(Context context, BottomSheetController sheetController,
             TouchToFillComponent.Delegate delegate) {
-        mMediator.initialize(delegate, mModel,
+        mMediator.initialize(context, delegate, mModel,
                 new LargeIconBridge(Profile.getLastUsedRegularProfile()),
-                context.getResources().getDimensionPixelSize(usesUnifiedPasswordManagerUI()
+                context.getResources().getDimensionPixelSize(usesUnifiedPasswordManagerBranding()
                                 ? R.dimen.touch_to_fill_favicon_size_modern
                                 : R.dimen.touch_to_fill_favicon_size));
         setUpModelChangeProcessors(mModel, new TouchToFillView(context, sheetController));

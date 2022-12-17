@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -642,7 +642,7 @@ TEST_P(MAYBE_BidirectionalStreamTest, ReadFailsBeforeRequestStarted) {
   bidirectional_stream_destroy(test.stream);
 }
 
-// TODO(https://crbug.com/880474): This test is flaky on fuchsia_x64 builder.
+// TODO(https://crbug.com/880474): This test is flaky on fuchsia-x64 builder.
 #if BUILDFLAG(IS_FUCHSIA)
 #define MAYBE_StreamFailBeforeReadIsExecutedOnNetworkThread \
   DISABLED_StreamFailBeforeReadIsExecutedOnNetworkThread

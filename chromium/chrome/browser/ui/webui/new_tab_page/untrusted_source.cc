@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -255,6 +255,12 @@ void UntrustedSource::OnOneGoogleBarDataUpdated() {
     replacements["afterBarScript"] = data->after_bar_script;
     replacements["endOfBodyHtml"] = data->end_of_body_html;
     replacements["endOfBodyScript"] = data->end_of_body_script;
+
+    replacements["ogbUnprotectedTextSelector"] =
+        ntp_features::kNtpOgbUnprotectedTextSelectorParam.Get();
+    replacements["ogbButtonSelector"] =
+        ntp_features::kNtpOgbButtonSelectorParam.Get();
+
     html = FormatTemplate(IDR_NEW_TAB_PAGE_UNTRUSTED_ONE_GOOGLE_BAR_HTML,
                           replacements);
   }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,6 +67,7 @@ const AcceleratorData kDebugAcceleratorData[] = {
     {true, ui::VKEY_X, kDebugModifier, DEBUG_KEYBOARD_BACKLIGHT_TOGGLE},
     {true, ui::VKEY_M, kDebugModifier, DEBUG_MICROPHONE_MUTE_TOGGLE},
     {true, ui::VKEY_O, kDebugModifier, DEBUG_SHOW_TOAST},
+    {true, ui::VKEY_Z, kDebugModifier, DEBUG_SYSTEM_UI_STYLE_VIEWER},
     {true, ui::VKEY_P, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
      DEBUG_TOGGLE_TOUCH_PAD},
     {true, ui::VKEY_T, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
@@ -77,11 +78,16 @@ const AcceleratorData kDebugAcceleratorData[] = {
     {true, ui::VKEY_L, kDebugModifier, DEBUG_PRINT_LAYER_HIERARCHY},
     {true, ui::VKEY_V, kDebugModifier, DEBUG_PRINT_VIEW_HIERARCHY},
     {true, ui::VKEY_W, kDebugModifier, DEBUG_PRINT_WINDOW_HIERARCHY},
+    {true, ui::VKEY_9, kDebugModifier, DEBUG_TOGGLE_GLANCEABLES},
     {true, ui::VKEY_B, kDebugModifier, DEBUG_TOGGLE_SHOW_DEBUG_BORDERS},
     {true, ui::VKEY_F, kDebugModifier, DEBUG_TOGGLE_SHOW_FPS_COUNTER},
     {true, ui::VKEY_P, kDebugModifier, DEBUG_TOGGLE_SHOW_PAINT_RECTS},
     {true, ui::VKEY_K, kDebugModifier, DEBUG_TRIGGER_CRASH},
     {true, ui::VKEY_G, kDebugModifier, DEBUG_TOGGLE_HUD_DISPLAY},
+    {true, ui::VKEY_D, kDebugModifier, DEBUG_TOGGLE_DARK_MODE},
+    {true, ui::VKEY_OEM_4, kDebugModifier, DEBUG_TUCK_FLOATED_WINDOW_LEFT},
+    {true, ui::VKEY_OEM_6, kDebugModifier, DEBUG_TUCK_FLOATED_WINDOW_RIGHT},
+    {true, ui::VKEY_Y, kDebugModifier, DEBUG_TOGGLE_DYNAMIC_COLOR},
 };
 
 const size_t kDebugAcceleratorDataLength = std::size(kDebugAcceleratorData);
@@ -424,7 +430,6 @@ const AcceleratorAction kActionsKeepingMenuOpen[] = {
     TAKE_SCREENSHOT,
     TAKE_WINDOW_SCREENSHOT,
     TOGGLE_APP_LIST,
-    TOGGLE_APP_LIST_FULLSCREEN,
     TOGGLE_CAPS_LOCK,
     TOGGLE_CLIPBOARD_HISTORY,
     TOGGLE_DICTATION,

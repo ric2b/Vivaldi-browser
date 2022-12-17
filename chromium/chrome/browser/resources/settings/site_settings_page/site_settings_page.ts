@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,13 +10,13 @@
 
 import 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import '../settings_shared.css.js';
 import './recent_site_permissions.js';
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
+import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {FocusConfig} from '../focus_config.js';
@@ -300,12 +300,12 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
       disabledLabel: 'siteSettingsVrBlocked',
     },
     {
-      route: routes.SITE_SETTINGS_WINDOW_PLACEMENT,
-      id: Id.WINDOW_PLACEMENT,
-      label: 'siteSettingsWindowPlacement',
-      icon: 'settings:window-placement',
-      enabledLabel: 'siteSettingsWindowPlacementAsk',
-      disabledLabel: 'siteSettingsWindowPlacementBlocked',
+      route: routes.SITE_SETTINGS_WINDOW_MANAGEMENT,
+      id: Id.WINDOW_MANAGEMENT,
+      label: 'siteSettingsWindowManagement',
+      icon: 'settings:window-management',
+      enabledLabel: 'siteSettingsWindowManagementAsk',
+      disabledLabel: 'siteSettingsWindowManagementBlocked',
     },
     {
       route: routes.SITE_SETTINGS_ZOOM_LEVELS,
@@ -388,7 +388,7 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
               Id.AR,
               Id.VR,
               Id.IDLE_DETECTION,
-              Id.WINDOW_PLACEMENT,
+              Id.WINDOW_MANAGEMENT,
               Id.LOCAL_FONTS,
             ]),
             contentBasic: buildItemListFromIds([
@@ -440,7 +440,7 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
     // only fire once.
     assert(!oldConfig);
     this.focusConfig.set(routes.SITE_SETTINGS_ALL.path, () => {
-      const allSites = this.shadowRoot!.querySelector('#allSites');
+      const allSites = this.shadowRoot!.querySelector<HTMLElement>('#allSites');
       assert(!!allSites);
       focusWithoutInk(allSites);
     });

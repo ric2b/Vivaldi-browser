@@ -1,12 +1,14 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/bookmarks/browser/titled_url_index.h"
+#include "base/strings/utf_string_conversions.h"
 
 #include <stdint.h>
 
 #include <algorithm>
+#include <iterator>
 #include <unordered_set>
 #include <utility>
 
@@ -19,6 +21,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_offset_string_conversions.h"
+#include "base/trace_event/memory_usage_estimator.h"
 #include "build/build_config.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/browser/titled_url_match.h"
@@ -31,11 +34,6 @@ namespace bookmarks {
 
 namespace {
 
-// The maximum number of nodes to fetch when looking for nodes that match any
-// term (i.e. when invoking `RetrieveNodesMatchingAnyTerms()`). Parameterized
-// for testing.
-constexpr size_t kMatchingAnyTermsMaxNodes = 3000;
-
 // Returns a normalized version of the UTF16 string |text|.  If it fails to
 // normalize the string, returns |text| itself as a best-effort.
 std::u16string Normalize(const std::u16string& text) {
@@ -46,8 +44,8 @@ std::u16string Normalize(const std::u16string& text) {
     // Log and crash right away to capture the error code in the crash report.
     LOG(FATAL) << "failed to create a normalizer: " << u_errorName(status);
   }
-  icu::UnicodeString unicode_text(
-      text.data(), static_cast<int32_t>(text.length()));
+  icu::UnicodeString unicode_text(text.data(),
+                                  static_cast<int32_t>(text.length()));
   icu::UnicodeString unicode_normalized_text;
   normalizer2->normalize(unicode_text, unicode_normalized_text, status);
   if (U_FAILURE(status)) {
@@ -58,13 +56,30 @@ std::u16string Normalize(const std::u16string& text) {
   return base::i18n::UnicodeStringToString16(unicode_normalized_text);
 }
 
+// Return true if `prefix` is a prefix of `string`.
+bool IsPrefix(const std::u16string& prefix, const std::u16string& string) {
+  return prefix.size() <= string.size() &&
+         prefix.compare(0, prefix.size(), string, 0, prefix.size()) == 0;
+}
+
 }  // namespace
 
 TitledUrlIndex::TitledUrlIndex(std::unique_ptr<TitledUrlNodeSorter> sorter)
-    : sorter_(std::move(sorter)) {
-}
+    : sorter_(std::move(sorter)) {}
 
-TitledUrlIndex::~TitledUrlIndex() {
+TitledUrlIndex::~TitledUrlIndex() = default;
+
+void TitledUrlIndex::RecordMemoryUsage() const {
+  const auto index_size = base::trace_event::EstimateMemoryUsage(index_);
+  const auto path_index_size =
+      base::trace_event::EstimateMemoryUsage(path_index_);
+
+  base::UmaHistogramMemoryKB("Bookmarks.Memory.TitledUrlIndex",
+                             index_size + path_index_size);
+  base::UmaHistogramMemoryKB("Bookmarks.Memory.TitledUrlIndex.TitleAndUrlIndex",
+                             index_size);
+  base::UmaHistogramMemoryKB("Bookmarks.Memory.TitledUrlIndex.PathIndex",
+                             path_index_size);
 }
 
 void TitledUrlIndex::SetNodeSorter(
@@ -73,13 +88,40 @@ void TitledUrlIndex::SetNodeSorter(
 }
 
 void TitledUrlIndex::Add(const TitledUrlNode* node) {
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS("Bookmarks.UpdateTitledUrlIndex.Add");
   for (const std::u16string& term : ExtractIndexTerms(node))
     RegisterNode(term, node);
 }
 
 void TitledUrlIndex::Remove(const TitledUrlNode* node) {
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS("Bookmarks.UpdateTitledUrlIndex.Remove");
   for (const std::u16string& term : ExtractIndexTerms(node))
     UnregisterNode(term, node);
+}
+
+void TitledUrlIndex::AddPath(const TitledUrlNode* node) {
+  if (!index_paths_)
+    return;
+
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS("Bookmarks.UpdateTitledUrlIndex.AddPath");
+  for (const std::u16string& term :
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()))) {
+    path_index_[term]++;
+  }
+}
+
+void TitledUrlIndex::RemovePath(const TitledUrlNode* node) {
+  if (!index_paths_)
+    return;
+
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
+      "Bookmarks.UpdateTitledUrlIndex.RemovePath");
+  for (const std::u16string& term :
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()))) {
+    DCHECK_GT(path_index_[term], 0u);
+    if (!--path_index_[term])
+      path_index_.erase(term);
+  }
 }
 
 std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsMatching(
@@ -107,9 +149,10 @@ std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsMatching(
   {
     SCOPED_UMA_HISTOGRAM_TIMER(
         "Bookmarks.GetResultsMatching.Timing.RetrievingNodes");
+    static const size_t kMaxNodes = kLimitNumNodesForBookmarkSearchCount.Get();
     matches = match_ancestor_titles
                   ? RetrieveNodesMatchingAnyTerms(terms, matching_algorithm,
-                                                  kMatchingAnyTermsMaxNodes)
+                                                  kMaxNodes)
                   : RetrieveNodesMatchingAllTerms(terms, matching_algorithm);
   }
   base::UmaHistogramBoolean("Bookmarks.GetResultsMatching.AnyTermApproach.Used",
@@ -144,7 +187,7 @@ std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsMatching(
                                              &query_nodes);
 
   std::vector<TitledUrlMatch> results = MatchTitledUrlNodesWithQuery(
-      sorted_nodes, query_nodes, max_count, match_ancestor_titles);
+      sorted_nodes, query_nodes, terms, max_count, match_ancestor_titles);
 
   // In practice, `max_count`, is always 50 (`kMaxBookmarkMatches`), so
   // `results.size()` is at most 50.
@@ -167,6 +210,7 @@ void TitledUrlIndex::SortMatches(const TitledUrlNodeSet& matches,
 std::vector<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodesWithQuery(
     const TitledUrlNodes& nodes,
     const query_parser::QueryNodeVector& query_nodes,
+    const std::vector<std::u16string>& query_terms,
     size_t max_count,
     bool match_ancestor_titles) {
   SCOPED_UMA_HISTOGRAM_TIMER(
@@ -180,8 +224,8 @@ std::vector<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodesWithQuery(
   int nodes_considered = 0;
   for (TitledUrlNodes::const_iterator i = nodes.begin();
        i != nodes.end() && matches.size() < max_count; ++i) {
-    absl::optional<TitledUrlMatch> match =
-        MatchTitledUrlNodeWithQuery(*i, query_nodes, match_ancestor_titles);
+    absl::optional<TitledUrlMatch> match = MatchTitledUrlNodeWithQuery(
+        *i, query_nodes, query_terms, match_ancestor_titles);
     if (match)
       matches.emplace_back(std::move(match).value());
     ++nodes_considered;
@@ -194,6 +238,7 @@ std::vector<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodesWithQuery(
 absl::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
     const TitledUrlNode* node,
     const query_parser::QueryNodeVector& query_nodes,
+    const std::vector<std::u16string>& query_terms,
     bool match_ancestor_titles) {
   if (!node) {
     return absl::nullopt;
@@ -203,26 +248,61 @@ absl::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
   // of QueryParser may filter it out.  For example, the query
   // ["thi"] will match the title [Thinking], but since
   // ["thi"] is quoted we don't want to do a prefix match.
-  query_parser::QueryWordVector title_words, url_words, ancestor_words;
-#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
-  query_parser::QueryWordVector description_words, nickname_words;
-#endif
+
+  // Clean up the title, URL, and ancestor titles in preparation for string
+  // comparisons.
   const std::u16string lower_title =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeTitle()));
-  query_parser::QueryParser::ExtractQueryWords(lower_title, &title_words);
   base::OffsetAdjuster::Adjustments adjustments;
-  query_parser::QueryParser::ExtractQueryWords(
-      CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), &adjustments),
-      &url_words);
+  const std::u16string clean_url =
+      CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), &adjustments);
+  std::vector<std::u16string> lower_ancestor_titles;
   if (match_ancestor_titles) {
-    for (auto ancestor : node->GetTitledUrlNodeAncestorTitles()) {
-      query_parser::QueryParser::ExtractQueryWords(
-          base::i18n::ToLower(Normalize(std::u16string(ancestor))),
-          &ancestor_words);
+    base::ranges::transform(
+        node->GetTitledUrlNodeAncestorTitles(),
+        std::back_inserter(lower_ancestor_titles),
+        [](const auto& ancestor_title) {
+          return base::i18n::ToLower(Normalize(std::u16string(ancestor_title)));
+        });
+  }
+
+  // Check if the input approximately matches the node. This is less strict than
+  // the following check; it will return false positives. But it's also much
+  // faster, so if it returns false, early exit and avoid the expensive
+  // `ExtractQueryWords()` calls. This is only necessary if
+  // `match_ancestor_titles` is true; otherwise, the previous search done before
+  // calling `MatchTitledUrlNodeWithQuery()` would have already done this.
+  if (match_ancestor_titles && approximate_node_match_) {
+    bool approximate_match =
+        base::ranges::all_of(query_terms, [&](const auto& word) {
+          if (lower_title.find(word) != std::u16string::npos)
+            return true;
+          if (clean_url.find(word) != std::u16string::npos)
+            return true;
+          for (const auto& ancestor_title : lower_ancestor_titles) {
+            if (ancestor_title.find(word) != std::u16string::npos)
+              return true;
+          }
+
+          return false;
+        });
+    if (!approximate_match)
+      return absl::nullopt;
+  }
+
+  // If `node` passed the approximate check above, to the more accurate check.
+  query_parser::QueryWordVector title_words, url_words, ancestor_words;
+  query_parser::QueryParser::ExtractQueryWords(clean_url, &url_words);
+  query_parser::QueryParser::ExtractQueryWords(lower_title, &title_words);
+  if (match_ancestor_titles) {
+    for (const auto& ancestor_title : lower_ancestor_titles) {
+      query_parser::QueryParser::ExtractQueryWords(ancestor_title,
+                                                   &ancestor_words);
     }
   }
 
 #if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
+  query_parser::QueryWordVector description_words, nickname_words;
   const std::u16string lower_description =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeDescription()));
   query_parser::QueryParser::ExtractQueryWords(lower_description,
@@ -307,6 +387,24 @@ TitledUrlIndex::TitledUrlNodeSet TitledUrlIndex::RetrieveNodesMatchingAnyTerms(
     query_parser::MatchingAlgorithm matching_algorithm,
     size_t max_nodes) const {
   DCHECK(!terms.empty());
+
+  if (terms.size() == 1)
+    return RetrieveNodesMatchingAllTerms(terms, matching_algorithm);
+
+  if (index_paths_) {
+    // If any term does not match a path, short circuit the expensive union
+    // and simply resort to the `RetrieveNodesMatchingAllTerms()` intersection
+    // of the terms not matching any path. The results are guaranteed to be the
+    // same, since all terms must either title, URL, or path match; but there'll
+    // be much fewer nodes returned.
+    std::vector<std::u16string> terms_not_path;
+    base::ranges::copy_if(terms, std::back_inserter(terms_not_path),
+                          [&](const std::u16string& term) {
+                            return !DoesTermMatchPath(term, matching_algorithm);
+                          });
+    if (!terms_not_path.empty())
+      return RetrieveNodesMatchingAllTerms(terms_not_path, matching_algorithm);
+  }
 
   std::vector<TitledUrlNodes> matches_per_term;
   bool some_term_had_empty_matches = false;
@@ -400,13 +498,25 @@ TitledUrlIndex::TitledUrlNodes TitledUrlIndex::RetrieveNodesMatchingTerm(
   // Loop through index adding all entries that start with term to
   // |prefix_matches|.
   TitledUrlNodes prefix_matches;
-  while (i != index_.end() && i->first.size() >= term.size() &&
-         term.compare(0, term.size(), i->first, 0, term.size()) == 0) {
+  while (i != index_.end() && IsPrefix(term, i->first)) {
     prefix_matches.insert(prefix_matches.end(), i->second.begin(),
                           i->second.end());
     ++i;
   }
   return prefix_matches;
+}
+
+bool TitledUrlIndex::DoesTermMatchPath(
+    const std::u16string& term,
+    query_parser::MatchingAlgorithm matching_algorithm) const {
+  // Term is too short for prefix match, compare using exact match.
+  if (!query_parser::QueryParser::IsWordLongEnoughForPrefixSearch(
+          term, matching_algorithm)) {
+    return path_index_.count(term) > 0;
+  }
+  // Otherwise, see if any path is prefixed by `term`.
+  const auto i = path_index_.lower_bound(term);
+  return i != path_index_.end() && IsPrefix(term, i->first);
 }
 
 // static

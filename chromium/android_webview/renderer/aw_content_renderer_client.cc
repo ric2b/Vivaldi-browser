@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -168,8 +168,10 @@ void AwContentRendererClient::RenderFrameCreated(
   new page_load_metrics::MetricsRenderFrameObserver(render_frame);
 }
 
-void AwContentRendererClient::WebViewCreated(blink::WebView* web_view,
-                                             bool was_created_by_renderer) {
+void AwContentRendererClient::WebViewCreated(
+    blink::WebView* web_view,
+    bool was_created_by_renderer,
+    const url::Origin* outermost_origin) {
   AwRenderViewExt::WebViewCreated(web_view, was_created_by_renderer);
 }
 
@@ -204,7 +206,7 @@ void AwContentRendererClient::RunScriptsAtDocumentStart(
 
 void AwContentRendererClient::GetSupportedKeySystems(
     media::GetSupportedKeySystemsCB cb) {
-  media::KeySystemPropertiesVector key_systems;
+  media::KeySystemInfoVector key_systems;
   AwAddKeySystems(&key_systems);
   std::move(cb).Run(std::move(key_systems));
 }

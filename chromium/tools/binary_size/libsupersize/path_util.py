@@ -1,4 +1,4 @@
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -182,9 +182,8 @@ def GetStripPath():
 
 
 def GetApkAnalyzerPath():
-  default_path = FromToolsSrcRoot('third_party', 'android_sdk', 'public',
-                                  'cmdline-tools', 'latest', 'bin',
-                                  'apkanalyzer')
+  default_path = FromToolsSrcRoot('third_party', 'android_build_tools',
+                                  'apkanalyzer', 'apkanalyzer')
   return os.environ.get('SUPERSIZE_APK_ANALYZER', default_path)
 
 

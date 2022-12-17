@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,9 +10,8 @@
  * Helper for create_js_source_maps_test.py.
  */
 
+import {ArgumentParser} from '../../../../third_party/js_code_coverage/node_modules/argparse/argparse.js';
 import {SourceMapConsumer} from '../../../../third_party/js_code_coverage/node_modules/source-map/source-map.js';
-// TODO(crbug.com/1307980): Move argparse to the js_code_coverage library.
-import {ArgumentParser} from '../../../../third_party/node/node_modules/argparse/index.js';
 
 const parser = new ArgumentParser({
   description: 'Applies a JavaScript sourcemap to a line and column number',

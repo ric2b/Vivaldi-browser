@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "ash/capture_mode/capture_mode_camera_preview_view.h"
 #include "ash/capture_mode/capture_mode_constants.h"
 #include "ash/capture_mode/capture_mode_controller.h"
+#include "ash/capture_mode/capture_mode_demo_tools_controller.h"
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/capture_mode/recording_overlay_controller.h"
 #include "ash/constants/ash_features.h"
@@ -25,21 +26,24 @@
 #include "base/check_op.h"
 #include "base/notreached.h"
 #include "base/time/time.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/aura/client/cursor_shape_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/wm/core/coordinate_conversion.h"
-#include "ui/wm/core/cursor_lookup.h"
 #include "ui/wm/public/activation_client.h"
 
 namespace ash {
@@ -240,6 +244,10 @@ VideoRecordingWatcher::VideoRecordingWatcher(
         std::make_unique<RecordingOverlayController>(window_being_recorded_,
                                                      GetOverlayWidgetBounds());
   }
+
+  if (features::AreCaptureModeDemoToolsEnabled())
+    demo_tools_controller_ = std::make_unique<CaptureModeDemoToolsController>();
+
   if (features::IsProjectorEnabled()) {
     ProjectorControllerImpl::Get()->OnRecordingStarted(current_root_,
                                                        is_in_projector_mode_);
@@ -267,6 +275,7 @@ void VideoRecordingWatcher::ShutDown() {
   cursor_capture_overlay_remote_.reset();
   root_observer_.reset();
   recording_overlay_controller_.reset();
+  demo_tools_controller_.reset();
   dimmers_.clear();
 
   if (features::IsProjectorEnabled())
@@ -290,7 +299,8 @@ void VideoRecordingWatcher::ShutDown() {
   controller_->camera_controller()->OnRecordingEnded();
 }
 
-aura::Window* VideoRecordingWatcher::GetCameraPreviewParentWindow() const {
+aura::Window* VideoRecordingWatcher::GetOnCaptureSurfaceWidgetParentWindow()
+    const {
   DCHECK(window_being_recorded_);
   return window_being_recorded_->IsRootWindow()
              ? window_being_recorded_->GetChildById(
@@ -298,7 +308,7 @@ aura::Window* VideoRecordingWatcher::GetCameraPreviewParentWindow() const {
              : window_being_recorded_;
 }
 
-gfx::Rect VideoRecordingWatcher::GetCameraPreviewConfineBounds() const {
+gfx::Rect VideoRecordingWatcher::GetCaptureSurfaceConfineBounds() const {
   DCHECK(window_being_recorded_);
   switch (recording_source_) {
     case CaptureModeSource::kFullscreen:
@@ -499,6 +509,9 @@ void VideoRecordingWatcher::OnDimmedWindowParentChanged(
 }
 
 void VideoRecordingWatcher::OnKeyEvent(ui::KeyEvent* event) {
+  if (demo_tools_controller_)
+    demo_tools_controller_->OnKeyEvent(event);
+
   if (event->type() != ui::ET_KEY_PRESSED)
     return;
 
@@ -767,19 +780,23 @@ void VideoRecordingWatcher::UpdateCursorOverlayNow(
   const gfx::NativeCursor cursor = GetCurrentCursor();
   DCHECK_NE(cursor.type(), ui::mojom::CursorType::kNull);
 
-  const float cursor_image_scale_factor = cursor.image_scale_factor();
-  const SkBitmap cursor_image = wm::GetCursorBitmap(cursor);
+  absl::optional<ui::CursorData> cursor_data =
+      aura::client::GetCursorShapeClient()->GetCursorData(cursor);
+  if (!cursor_data)
+    return;
+
+  const SkBitmap& cursor_image = cursor_data->bitmaps[0];
+  if (cursor_image.drawsNothing()) {
+    last_cursor_ = gfx::NativeCursor();
+    HideCursorOverlay();
+    return;
+  }
+
   const gfx::RectF cursor_overlay_bounds = GetCursorOverlayBounds(
-      window_being_recorded_, location, wm::GetCursorHotspot(cursor),
-      cursor_image_scale_factor, cursor_image);
+      window_being_recorded_, location, cursor_data->hotspot,
+      cursor.image_scale_factor(), cursor_image);
 
   if (cursor != last_cursor_) {
-    if (cursor_image.drawsNothing()) {
-      last_cursor_ = gfx::NativeCursor();
-      HideCursorOverlay();
-      return;
-    }
-
     last_cursor_ = cursor;
     last_cursor_overlay_bounds_ = cursor_overlay_bounds;
     cursor_capture_overlay_remote_->SetImageAndBounds(

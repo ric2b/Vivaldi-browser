@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -128,11 +128,10 @@ TEST_F(ApplyStyleCommandTest, JustifyRightWithSVGForeignObject) {
       ->Apply();
   EXPECT_EQ(
       "<svg>"
-      "<foreignObject>"
-      "<div style=\"text-align: right;\">|1</div>"
+      "<foreignObject>|1"
       "</foreignObject>"
       "<foreignObject>"
-      "<div style=\"text-align: right;\">2</div><b></b>"
+      " 2<b></b>"
       "</foreignObject>"
       "</svg>",
       GetSelectionTextFromBody());

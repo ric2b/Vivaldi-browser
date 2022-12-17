@@ -1,9 +1,10 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
@@ -43,10 +44,10 @@
 #undef ENABLED_VLOG_LEVEL
 #define ENABLED_VLOG_LEVEL 1
 
-namespace ash {
-namespace full_restore {
+namespace ash::full_restore {
 
 namespace {
+
 // If the reboot occurred due to DeviceScheduledRebootPolicy, change the title
 // to notify the user that the device was rebooted by the administrator.
 int GetRestoreNotificationTitleId(Profile* profile) {
@@ -56,6 +57,13 @@ int GetRestoreNotificationTitleId(Profile* profile) {
   }
   return IDS_RESTORE_NOTIFICATION_TITLE;
 }
+
+// Returns true if `profile` is the primary user profile.
+bool IsPrimaryUser(Profile* profile) {
+  return ProfileHelper::Get()->GetUserByProfile(profile) ==
+         user_manager::UserManager::Get()->GetPrimaryUser();
+}
+
 }  // namespace
 
 bool g_restore_for_testing = true;
@@ -134,8 +142,7 @@ FullRestoreService::FullRestoreService(Profile* profile)
 
   // Set profile path before init the restore process to create
   // FullRestoreSaveHandler to observe restore windows.
-  if (ProfileHelper::Get()->GetUserByProfile(profile_) ==
-      user_manager::UserManager::Get()->GetPrimaryUser()) {
+  if (IsPrimaryUser(profile_)) {
     ::full_restore::FullRestoreSaveHandler::GetInstance()
         ->SetPrimaryProfilePath(profile_->GetPath());
 
@@ -255,6 +262,11 @@ void FullRestoreService::MaybeCloseNotification(bool allow_save) {
     // timer.
     ::full_restore::FullRestoreSaveHandler::GetInstance()->AllowSave();
   }
+}
+
+void FullRestoreService::Restore() {
+  if (app_launch_handler_)
+    app_launch_handler_->SetShouldRestore();
 }
 
 void FullRestoreService::Close(bool by_user) {
@@ -402,6 +414,15 @@ void FullRestoreService::MaybeShowRestoreNotification(const std::string& id,
   if (!ShouldShowNotification())
     return;
 
+  // TODO(crbug.com/1353119): Update this logic once PM/UX have decided on how
+  // glanceables interact with full restore. For now, suppress the non-crash
+  // full restore notification for the primary user, because glanceables are
+  // only shown for the primary user.
+  if (features::AreGlanceablesEnabled() && id == kRestoreNotificationId &&
+      IsPrimaryUser(profile_)) {
+    return;
+  }
+
   // If the system is restored from crash, create the crash lock for the browser
   // session restore to help set the browser saving flag.
   ExitTypeService* exit_type_service =
@@ -471,11 +492,6 @@ void FullRestoreService::MaybeShowRestoreNotification(const std::string& id,
   show_notification = true;
 }
 
-void FullRestoreService::Restore() {
-  if (app_launch_handler_)
-    app_launch_handler_->SetShouldRestore();
-}
-
 void FullRestoreService::RecordRestoreAction(const std::string& notification_id,
                                              RestoreAction restore_action) {
   base::UmaHistogramEnumeration(notification_id == kRestoreNotificationId
@@ -512,5 +528,4 @@ ScopedRestoreForTesting::~ScopedRestoreForTesting() {
   g_restore_for_testing = true;
 }
 
-}  // namespace full_restore
-}  // namespace ash
+}  // namespace ash::full_restore

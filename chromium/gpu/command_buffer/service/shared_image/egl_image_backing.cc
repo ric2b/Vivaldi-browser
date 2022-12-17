@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,7 +44,7 @@ class EGLImageBacking::TextureHolder : public base::RefCounted<TextureHolder> {
       texture_->RemoveLightweightRef(!context_lost_);
   }
 
-  const raw_ptr<gles2::Texture> texture_ = nullptr;
+  const raw_ptr<gles2::Texture, DanglingUntriaged> texture_ = nullptr;
   const scoped_refptr<gles2::TexturePassthrough> texture_passthrough_;
   bool context_lost_ = false;
 };
@@ -130,7 +130,8 @@ class EGLImageBacking::GLTextureEGLImageRepresentation
 
   void EndAccess() override { shared_.EndAccess(); }
 
-  gles2::Texture* GetTexture() override {
+  gles2::Texture* GetTexture(int plane_index) override {
+    DCHECK_EQ(plane_index, 0);
     return shared_.texture_holder()->texture();
   }
 
@@ -162,8 +163,9 @@ class EGLImageBacking::GLTexturePassthroughEGLImageRepresentation
 
   void EndAccess() override { shared_.EndAccess(); }
 
-  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough()
-      override {
+  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough(
+      int plane_index) override {
+    DCHECK_EQ(plane_index, 0);
     // TODO(https://crbug.com/1172769): Remove this CHECK.
     CHECK(shared_.texture_holder()->texture_passthrough());
     return shared_.texture_holder()->texture_passthrough();
@@ -177,14 +179,14 @@ class EGLImageBacking::GLTexturePassthroughEGLImageRepresentation
 
 EGLImageBacking::EGLImageBacking(
     const Mailbox& mailbox,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
     size_t estimated_size,
-    const GLCommonImageBackingFactory::FormatInfo format_info,
+    const GLCommonImageBackingFactory::FormatInfo& format_info,
     const GpuDriverBugWorkarounds& workarounds,
     bool use_passthrough,
     base::span<const uint8_t> pixel_data)
@@ -222,11 +224,6 @@ SharedImageBackingType EGLImageBacking::GetType() const {
 
 void EGLImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {
   NOTREACHED();
-}
-
-bool EGLImageBacking::ProduceLegacyMailbox(MailboxManager* mailbox_manager) {
-  // This backing doe not support legacy mailbox system.
-  return false;
 }
 
 template <class T>
@@ -402,21 +399,19 @@ EGLImageBacking::GenEGLImageSibling(base::span<const uint8_t> pixel_data) {
                                  size().width(), size().height());
 
         if (!pixel_data.empty()) {
-          GLTextureImageBackingHelper::ScopedResetAndRestoreUnpackState
-              scoped_unpack_state(/*uploading_data=*/true);
+          ScopedUnpackState scoped_unpack_state(
+              /*uploading_data=*/true);
           api->glTexSubImage2DFn(target, 0, 0, 0, size().width(),
                                  size().height(), format_info_.adjusted_format,
                                  format_info_.gl_type, pixel_data.data());
         }
       } else if (format_info_.is_compressed) {
-        GLTextureImageBackingHelper::ScopedResetAndRestoreUnpackState
-            scoped_unpack_state(!pixel_data.empty());
+        ScopedUnpackState scoped_unpack_state(!pixel_data.empty());
         api->glCompressedTexImage2DFn(
             target, 0, format_info_.image_internal_format, size().width(),
             size().height(), 0, pixel_data.size(), pixel_data.data());
       } else {
-        GLTextureImageBackingHelper::ScopedResetAndRestoreUnpackState
-            scoped_unpack_state(!pixel_data.empty());
+        ScopedUnpackState scoped_unpack_state(!pixel_data.empty());
 
         api->glTexImage2DFn(target, 0, format_info_.image_internal_format,
                             size().width(), size().height(), 0,
@@ -433,6 +428,16 @@ EGLImageBacking::GenEGLImageSibling(base::span<const uint8_t> pixel_data) {
       bind_egl_image = false;
     }
     buffer = egl_image_buffer_;
+
+    if (!pixel_data.empty()) {
+      // If pixel data is being uploaded to the texture, that means we are
+      // sending commands to the gpu. Hence consider it as a write and add a
+      // fence to synchronize it with corresponding reads. This case happens
+      // when tab windows are composited by viz for tablet ui. Initial pixel
+      // data gets uploaded on the gpu main thread and being read on DrDc
+      // thread.
+      write_fence_ = gl::GLFenceEGL::Create();
+    }
   }
 
   // Mark the backing as cleared if pixel data has been uploaded. Note that

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,8 @@
 #include "components/autofill_assistant/browser/public/password_change/website_login_manager_impl.h"
 #include "components/autofill_assistant/browser/public/ui_state.h"
 #include "components/autofill_assistant/browser/service/access_token_fetcher.h"
+#include "components/autofill_assistant/browser/service/local_script_store.h"
+#include "components/autofill_assistant/browser/service/no_round_trip_service.h"
 #include "components/autofill_assistant/browser/switches.h"
 #include "components/password_manager/content/browser/password_change_success_tracker_factory.h"
 #include "components/password_manager/core/browser/password_change_success_tracker.h"
@@ -93,24 +95,13 @@ JNI_AutofillAssistantClient_FromWebContents(
   return client_android->GetJavaObject();
 }
 
-static void JNI_AutofillAssistantClient_OnOnboardingUiChange(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jweb_contents,
-    jboolean shown) {
-  RuntimeManager* runtime_manager = RuntimeManager::GetForWebContents(
-      content::WebContents::FromJavaWebContents(jweb_contents));
-  if (runtime_manager)
-    runtime_manager->SetUIState(shown ? UIState::kShown : UIState::kNotShown);
-}
-
 ClientAndroid::ClientAndroid(content::WebContents* web_contents,
                              const ScopedJavaGlobalRef<jobject>& jdependencies)
     : content::WebContentsUserData<ClientAndroid>(*web_contents),
       dependencies_(
           DependenciesAndroid::CreateFromJavaDependencies(jdependencies)),
       annotate_dom_model_service_(dependencies_->GetCommonDependencies()
-                                      ->GetOrCreateAnnotateDomModelService(
-                                          web_contents->GetBrowserContext())),
+                                      ->GetOrCreateAnnotateDomModelService()),
       jdependencies_(jdependencies),
       java_object_(Java_AutofillAssistantClient_Constructor(
           AttachCurrentThread(),
@@ -145,7 +136,7 @@ bool ClientAndroid::IsVisible() const {
 void ClientAndroid::Start(
     const GURL& url,
     std::unique_ptr<TriggerContext> trigger_context,
-    std::unique_ptr<Service> test_service_to_inject,
+    std::unique_ptr<Service> service,
     const base::android::JavaRef<jobject>& joverlay_coordinator,
     const absl::optional<TriggerScriptProto>& trigger_script) {
   // When Start() is called, AA_START should have been measured. From now on,
@@ -162,7 +153,13 @@ void ClientAndroid::Start(
   Java_AutofillAssistantClient_chooseAccountAsyncIfNecessary(
       base::android::AttachCurrentThread(), java_object_, jaccount_name);
 
-  CreateController(std::move(test_service_to_inject), trigger_script);
+  if (trigger_context->GetScriptParameters().GetIsNoRoundtrip().value_or(
+          false)) {
+    service =
+        NoRoundTripService::Create(GetWebContents()->GetBrowserContext(), this);
+  }
+
+  CreateController(std::move(service), trigger_script);
 
   // If an overlay is already shown, then show the rest of the UI.
   if (joverlay_coordinator) {
@@ -170,8 +167,7 @@ void ClientAndroid::Start(
   }
 
   // Register TTS Synthetic Field Trial.
-  const bool enable_tts =
-      trigger_context->GetScriptParameters().GetEnableTts().value_or(false);
+  const bool enable_tts = trigger_context->GetScriptParameters().GetEnableTts();
   dependencies_->GetCommonDependencies()
       ->CreateFieldTrialUtil()
       ->RegisterSyntheticFieldTrial(
@@ -392,8 +388,7 @@ void ClientAndroid::ShowFatalError(
 bool ClientAndroid::IsSupervisedUser(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jcaller) {
-  return dependencies_->GetCommonDependencies()->IsSupervisedUser(
-      GetWebContents()->GetBrowserContext());
+  return dependencies_->GetCommonDependencies()->IsSupervisedUser();
 }
 
 void ClientAndroid::OnSpokenFeedbackAccessibilityServiceChanged(
@@ -494,8 +489,7 @@ std::string ClientAndroid::GetEmailAddressForAccessTokenAccount() const {
 }
 
 std::string ClientAndroid::GetSignedInEmail() const {
-  return dependencies_->GetCommonDependencies()->GetSignedInEmail(
-      GetWebContents()->GetBrowserContext());
+  return dependencies_->GetCommonDependencies()->GetSignedInEmail();
 }
 
 absl::optional<std::pair<int, int>> ClientAndroid::GetWindowSize() const {
@@ -540,8 +534,7 @@ AccessTokenFetcher* ClientAndroid::GetAccessTokenFetcher() {
 }
 
 autofill::PersonalDataManager* ClientAndroid::GetPersonalDataManager() const {
-  return dependencies_->GetCommonDependencies()->GetPersonalDataManager(
-      GetWebContents()->GetBrowserContext());
+  return dependencies_->GetCommonDependencies()->GetPersonalDataManager();
 }
 
 WebsiteLoginManager* ClientAndroid::GetWebsiteLoginManager() const {
@@ -566,12 +559,17 @@ ClientAndroid::GetPasswordChangeSuccessTracker() const {
 }
 
 std::string ClientAndroid::GetLocale() const {
-  // TODO(b/201964911): use dependencies instead.
+  // TODO(b/249978747): use dependencies instead.
   return base::android::GetDefaultLocaleString();
 }
 
-std::string ClientAndroid::GetCountryCode() const {
-  return dependencies_->GetCommonDependencies()->GetCountryCode();
+std::string ClientAndroid::GetLatestCountryCode() const {
+  return dependencies_->GetCommonDependencies()->GetLatestCountryCode();
+}
+
+std::string ClientAndroid::GetStoredPermanentCountryCode() const {
+  return dependencies_->GetCommonDependencies()
+      ->GetStoredPermanentCountryCode();
 }
 
 DeviceContext ClientAndroid::GetDeviceContext() const {
@@ -643,9 +641,9 @@ void ClientAndroid::GetAnnotateDomModelVersion(
     return;
   }
 
-  annotate_dom_model_service_->NotifyOnModelFileAvailable(
-      base::BindOnce(&ClientAndroid::OnAnnotateDomModelFileAvailable,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  annotate_dom_model_service_->NotifyOnModelFileAvailable(base::BindOnce(
+      &ClientAndroid::OnAnnotateDomModelFileAvailable,
+      weak_ptr_factory_.GetMutableWeakPtr(), std::move(callback)));
 }
 
 bool ClientAndroid::IsXmlSigned(const std::string& xml_string) const {
@@ -778,13 +776,11 @@ bool ClientAndroid::NeedsUI() {
 
 bool ClientAndroid::GetMakeSearchesAndBrowsingBetterEnabled() const {
   return dependencies_->GetCommonDependencies()
-      ->GetMakeSearchesAndBrowsingBetterEnabled(
-          GetWebContents()->GetBrowserContext());
+      ->GetMakeSearchesAndBrowsingBetterEnabled();
 }
 
 bool ClientAndroid::GetMetricsReportingEnabled() const {
-  return dependencies_->GetCommonDependencies()->GetMetricsReportingEnabled(
-      GetWebContents()->GetBrowserContext());
+  return dependencies_->GetCommonDependencies()->GetMetricsReportingEnabled();
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(ClientAndroid);

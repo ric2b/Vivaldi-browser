@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1187722533808055681">Oppvåkninger fra inaktiv</translation>
-<translation id="119944043368869598">Tøm alle</translation>
 <translation id="1221825588892235038">Bare markering</translation>
 <translation id="1234736487471201993">Opprett en QR-kode for dette bildet</translation>
 <translation id="1244303850296295656">Utvidelsesfeil</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Marker &amp;alt</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Bruk et tall for å angi hvor mange eksemplarer som skal skrives ut (1 til <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Fjern alle</translation>
 <translation id="1994173015038366702">Nettadresse</translation>
 <translation id="2019718679933488176">&amp;Åpne lyd i ny fane</translation>
 <translation id="2050339315714019657">Stående</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Lim inn som ren tekst</translation>
 <translation id="2249605167705922988">f.eks 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Tillat indentifisering for visning av beskyttet innhold (systemoppstart kan være nødvendig)</translation>
-<translation id="2277255602909579701">Alle infokapsler og sidedata</translation>
 <translation id="2280486287150724112">Høyremarg</translation>
 <translation id="2282146716419988068">GPU-prosess</translation>
 <translation id="2301382460326681002">Rotkatalogen til utvidelsen er ugyldig.</translation>
@@ -122,7 +119,6 @@
 <translation id="3084548735795614657">Slipp for å installere</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">USER-håndtak</translation>
-<translation id="3127156390846601284">Dette sletter all data lagret på din enhet for alle viste nettsider. Ønsker du å fortsette?</translation>
 <translation id="3129173833825111527">Venstremarg</translation>
 <translation id="3144647712221361880">Åpne lenken som</translation>
 <translation id="3222066309010235055">Forhåndsrendring: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +141,6 @@
 <translation id="3387614642886316601">Bruk forbedret stavekontroll</translation>
 <translation id="3390013585654699824">Appdetaljer</translation>
 <translation id="3393582007140394275">Kunne ikke caste skjermen.</translation>
-<translation id="3432227430032737297">Fjern alle viste</translation>
 <translation id="345693547134384690">Åpne b&amp;ilde i ny fane</translation>
 <translation id="3494769164076977169">Spør når et nettsted prøver å laste ned filer automatisk etter første fil (anbefales)</translation>
 <translation id="3505030558724226696">Fjern enhetstilgang</translation>
@@ -204,7 +199,6 @@
 <translation id="4409697491990005945">Marger</translation>
 <translation id="4423376891418188461">Gjenopprett innstillingene</translation>
 <translation id="4478664379124702289">Lagre len&amp;ken som...</translation>
-<translation id="4579581181964204535">Kunne ikke caste til <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Gå til <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apper og utvidelser kan bare bli endret av administratoren (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">En utvidelse har endret hvilken side som vises når du åpner en ny fane.</translation>
@@ -277,7 +271,6 @@
 <translation id="5747809636523347288">Lim inn og gå til <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokumenter du skriver ut via <ph name="APP_NAME" /> kan leses av <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">La&amp;gre lyd som...</translation>
-<translation id="577624874850706961">Søk i infokapsler</translation>
 <translation id="5780973441651030252">Prosessprioritet</translation>
 <translation id="5804241973901381774">Tilganger</translation>
 <translation id="5828633471261496623">Skriver ut...</translation>
@@ -290,7 +283,6 @@
 <translation id="5965661248935608907">Den kontrollerer også hvilken side som vises når du klikker Hjem-knappen eller søker fra adressefeltet.</translation>
 <translation id="5978277834170881274">&amp;Bruk enkel stavekontroll</translation>
 <translation id="5979421442488174909">&amp;Oversett til <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Fjern sidedata</translation>
 <translation id="6042308850641462728">Mer</translation>
 <translation id="6086846494333236931">Installert av administratoren din</translation>
 <translation id="6101226222197207147">Ntt program lagt til (<ph name="EXTENSION_NAME" />)</translation>
@@ -404,7 +396,6 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
         =1 {Nedlasting pågår} other {Nedlastinger pågår}}</translation>
 <translation id="8230134520748321204">Lagre passord for <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Denne utvidelsen finnes ikke i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />, og kan ha blitt lagt til uten at du fikk vite om det.</translation>
-<translation id="8339059274628563283">Lokalt lagret data for <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Denne utvidelsen har tatt kontroll over proxy-innstillingene dine, noe som betyr at den kan endre, sabotere eller tjuvlytte på alt du gjør på nettet. Hvis du ikke vet hvorfor endringen skjedde, er endringen trolig uønsket.</translation>
 <translation id="8382913212082956454">Kopier &amp;e-postadresse</translation>
 <translation id="8413385045638830869">Spør først (anbefales)</translation>

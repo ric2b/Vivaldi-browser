@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,7 +51,7 @@ TrayBubbleWrapper::~TrayBubbleWrapper() {
     bubble_widget_->RemoveObserver(this);
     bubble_widget_->Close();
   }
-  CHECK(!IsInObserverList());
+  CHECK(!TrayBubbleBase::IsInObserverList());
 }
 
 TrayBackgroundView* TrayBubbleWrapper::GetTray() const {

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,6 +40,7 @@ class GPUAdapter final : public ScriptWrappable, public DawnObjectBase {
   GPUSupportedFeatures* features() const;
   GPUSupportedLimits* limits() const { return limits_; }
   bool isFallbackAdapter() const;
+  void invalidate() { is_invalid_ = true; }
 
   ScriptPromise requestDevice(ScriptState* script_state,
                               GPUDeviceDescriptor* descriptor);
@@ -66,6 +67,7 @@ class GPUAdapter final : public ScriptWrappable, public DawnObjectBase {
   WGPUAdapter handle_;
   Member<GPU> gpu_;
   bool is_fallback_adapter_;
+  bool is_invalid_ = false;
   Member<GPUSupportedLimits> limits_;
   Member<GPUSupportedFeatures> features_;
 

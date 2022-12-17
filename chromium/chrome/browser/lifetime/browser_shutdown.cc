@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,6 +39,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/tracing/common/tracing_switches.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/tracing_controller.h"
 #include "content/public/common/content_switches.h"
@@ -104,8 +105,63 @@ const char* ToShutdownTypeString(ShutdownType type) {
       return "end";
     case ShutdownType::kSilentExit:
       return "silent_exit";
+    case ShutdownType::kOtherExit:
+      return "other_exit";
   }
   return "";
+}
+
+#if !BUILDFLAG(IS_ANDROID)
+void LogShutdownMetrics() {
+  base::UmaHistogramEnumeration("Shutdown.ShutdownType2", g_shutdown_type);
+
+  const char* time_metric_name = nullptr;
+  switch (g_shutdown_type) {
+    case ShutdownType::kNotValid:
+      time_metric_name = "Shutdown.NotValid.Time2";
+      break;
+
+    case ShutdownType::kSilentExit:
+      time_metric_name = "Shutdown.SilentExit.Time2";
+      break;
+
+    case ShutdownType::kWindowClose:
+      time_metric_name = "Shutdown.WindowClose.Time2";
+      break;
+
+    case ShutdownType::kBrowserExit:
+      time_metric_name = "Shutdown.BrowserExit.Time2";
+      break;
+
+    case ShutdownType::kEndSession:
+      time_metric_name = "Shutdown.EndSession.Time2";
+      break;
+
+    case ShutdownType::kOtherExit:
+      time_metric_name = "Shutdown.OtherExit.Time2";
+      break;
+  }
+  DCHECK(time_metric_name);
+
+  if (g_shutdown_started) {
+    base::TimeDelta shutdown_delta = base::Time::Now() - *g_shutdown_started;
+    base::UmaHistogramMediumTimes(time_metric_name, shutdown_delta);
+  }
+
+  base::UmaHistogramCounts100("Shutdown.Renderers.Total2",
+                              g_shutdown_num_processes);
+  base::UmaHistogramCounts100("Shutdown.Renderers.Slow2",
+                              g_shutdown_num_processes_slow);
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
+
+// Utility function to verify that globals are accessed on the UI/Main thread.
+void CheckAccessedOnCorrectThread() {
+  // Some APIs below are accessed after UI thread has been torn down, so cater
+  // for both situations here.
+  DCHECK(
+      content::BrowserThread::CurrentlyOn(content::BrowserThread::UI) ||
+      !content::BrowserThread::IsThreadInitialized(content::BrowserThread::UI));
 }
 
 }  // namespace
@@ -119,10 +175,11 @@ void RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 void OnShutdownStarting(ShutdownType type) {
+  CheckAccessedOnCorrectThread();
   if (g_shutdown_type != ShutdownType::kNotValid)
     return;
 
-  static crash_reporter::CrashKeyString<8> shutdown_type_key("shutdown-type");
+  static crash_reporter::CrashKeyString<11> shutdown_type_key("shutdown-type");
   shutdown_type_key.Set(ToShutdownTypeString(type));
 
   g_shutdown_type = type;
@@ -146,27 +203,32 @@ void OnShutdownStarting(ShutdownType type) {
   // Call FastShutdown on all of the RenderProcessHosts.  This will be
   // a no-op in some cases, so we still need to go through the normal
   // shutdown path for the ones that didn't exit here.
-  g_shutdown_num_processes = 0;
-  g_shutdown_num_processes_slow = 0;
-  for (content::RenderProcessHost::iterator i(
-           content::RenderProcessHost::AllHostsIterator());
-       !i.IsAtEnd(); i.Advance()) {
-    ++g_shutdown_num_processes;
-    if (!i.GetCurrentValue()->FastShutdownIfPossible())
-      ++g_shutdown_num_processes_slow;
+  if (g_browser_process) {
+    g_shutdown_num_processes = 0;
+    g_shutdown_num_processes_slow = 0;
+    for (content::RenderProcessHost::iterator i(
+             content::RenderProcessHost::AllHostsIterator());
+         !i.IsAtEnd(); i.Advance()) {
+      ++g_shutdown_num_processes;
+      if (!i.GetCurrentValue()->FastShutdownIfPossible())
+        ++g_shutdown_num_processes_slow;
+    }
   }
 }
 
 bool HasShutdownStarted() {
+  CheckAccessedOnCorrectThread();
   return g_shutdown_type != ShutdownType::kNotValid;
 }
 
 bool ShouldIgnoreUnloadHandlers() {
+  CheckAccessedOnCorrectThread();
   return g_shutdown_type == ShutdownType::kEndSession ||
          g_shutdown_type == ShutdownType::kSilentExit;
 }
 
 ShutdownType GetShutdownType() {
+  CheckAccessedOnCorrectThread();
   return g_shutdown_type;
 }
 
@@ -200,6 +262,7 @@ bool ShutdownPreThreadsStop() {
 }
 
 bool RecordShutdownInfoPrefs() {
+  CheckAccessedOnCorrectThread();
   PrefService* prefs = g_browser_process->local_state();
   if (g_shutdown_type != ShutdownType::kNotValid &&
       g_shutdown_num_processes > 0) {
@@ -222,6 +285,7 @@ bool RecordShutdownInfoPrefs() {
 }
 
 void ShutdownPostThreadsStop(RestartMode restart_mode) {
+  CheckAccessedOnCorrectThread();
   delete g_browser_process;
   g_browser_process = nullptr;
 
@@ -277,6 +341,10 @@ void ShutdownPostThreadsStop(RestartMode restart_mode) {
     for (const auto& it : switches)
       new_cl.AppendSwitchNative(it.first, it.second);
 
+    if (restart_mode == RestartMode::kRestartLastSession ||
+        restart_mode == RestartMode::kRestartThisSession) {
+      new_cl.AppendSwitch(switches::kRestart);
+    }
     upgrade_util::RelaunchChromeBrowser(new_cl);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
@@ -297,6 +365,9 @@ void ShutdownPostThreadsStop(RestartMode restart_mode) {
     // complete).
     base::WriteFile(shutdown_ms_file, shutdown_ms.c_str(), len);
   }
+
+  // Log shutdown timing metrics.
+  LogShutdownMetrics();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   NotifyAndTerminate(false /* fast_path */);
@@ -327,7 +398,7 @@ void ReadLastShutdownFile(ShutdownType type,
       break;
 
     case ShutdownType::kSilentExit:
-      time_metric_name = "Shutdown.SilentExit.time";
+      time_metric_name = "Shutdown.SilentExit.Time";
       break;
 
     case ShutdownType::kWindowClose:
@@ -340,6 +411,10 @@ void ReadLastShutdownFile(ShutdownType type,
 
     case ShutdownType::kEndSession:
       time_metric_name = "Shutdown.EndSession.Time";
+      break;
+
+    case ShutdownType::kOtherExit:
+      time_metric_name = "Shutdown.OtherExit.Time";
       break;
   }
   DCHECK(time_metric_name);
@@ -372,6 +447,7 @@ void ReadLastShutdownInfo() {
 }
 
 void SetTryingToQuit(bool quitting) {
+  CheckAccessedOnCorrectThread();
   g_trying_to_quit = quitting;
 
   if (quitting)
@@ -394,12 +470,25 @@ void SetTryingToQuit(bool quitting) {
 }
 
 bool IsTryingToQuit() {
+  CheckAccessedOnCorrectThread();
   return g_trying_to_quit;
 }
 
 base::AutoReset<ShutdownType> SetShutdownTypeForTesting(
     ShutdownType shutdown_type) {
+  CheckAccessedOnCorrectThread();
   return base::AutoReset<ShutdownType>(&g_shutdown_type, shutdown_type);
+}
+
+void ResetShutdownGlobalsForTesting() {
+  CheckAccessedOnCorrectThread();
+  if (g_shutdown_started) {
+    delete g_shutdown_started;
+    g_shutdown_started = nullptr;
+  }
+
+  g_trying_to_quit = false;
+  g_shutdown_type = ShutdownType::kNotValid;
 }
 
 }  // namespace browser_shutdown

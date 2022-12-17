@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,11 @@ class InputMappingView : public views::View {
   ~InputMappingView() override;
 
   void SetDisplayMode(const DisplayMode mode);
+
+  // Add action view for |action|.
+  void OnActionAdded(Action* action);
+  // Remove action view for |action|.
+  void OnActionRemoved(Action* action);
 
  private:
   void ProcessPressedEvent(const ui::LocatedEvent& event);

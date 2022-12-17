@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -138,6 +138,8 @@ std::string GetDataCollectorName(
       return "Chrome OS Network Routes";
     case support_tool::CHROMEOS_SHILL:
       return "Chrome OS Shill (Connection Manager) Logs";
+    case support_tool::POLICIES:
+      return "Policies";
     default:
       return "Error: Undefined";
   }

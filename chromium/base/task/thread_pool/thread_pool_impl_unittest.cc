@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -331,7 +331,7 @@ class ThreadPoolImplTestBase : public testing::Test {
 
  private:
   void SetupFeatures() {
-    std::vector<base::Feature> features;
+    std::vector<base::test::FeatureRef> features;
 
 #if HAS_NATIVE_THREAD_POOL()
     if (GetGroupTypes().foreground_type == test::GroupType::NATIVE)

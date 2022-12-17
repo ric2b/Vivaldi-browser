@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/dns/host_resolver.h"
 #include "net/log/net_log_with_source.h"
 #include "net/proxy_resolution/proxy_info.h"
@@ -20,9 +20,11 @@
 #include "net/socket/client_socket_factory.h"
 #include "net/third_party/quiche/src/quiche/quic/core/crypto/quic_crypto_client_config.h"
 #include "net/third_party/quiche/src/quiche/quic/core/crypto/web_transport_fingerprint_proof_verifier.h"
+#include "net/third_party/quiche/src/quiche/quic/core/deterministic_connection_id_generator.h"
 #include "net/third_party/quiche/src/quiche/quic/core/http/quic_client_push_promise_index.h"
 #include "net/third_party/quiche/src/quiche/quic/core/http/quic_spdy_client_session.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_config.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_connection_id.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_versions.h"
 #include "net/third_party/quiche/src/quiche/quic/core/web_transport_interface.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -43,12 +45,13 @@ class NET_EXPORT DedicatedWebTransportHttp3Client
       public QuicChromiumPacketWriter::Delegate {
  public:
   // |visitor| and |context| must outlive this object.
-  DedicatedWebTransportHttp3Client(const GURL& url,
-                                   const url::Origin& origin,
-                                   WebTransportClientVisitor* visitor,
-                                   const NetworkIsolationKey& isolation_key,
-                                   URLRequestContext* context,
-                                   const WebTransportParameters& parameters);
+  DedicatedWebTransportHttp3Client(
+      const GURL& url,
+      const url::Origin& origin,
+      WebTransportClientVisitor* visitor,
+      const NetworkAnonymizationKey& anonymization_key,
+      URLRequestContext* context,
+      const WebTransportParameters& parameters);
   ~DedicatedWebTransportHttp3Client() override;
 
   WebTransportState state() const { return state_; }
@@ -104,6 +107,7 @@ class NET_EXPORT DedicatedWebTransportHttp3Client
     CONNECT_STATE_RESOLVE_HOST,
     CONNECT_STATE_RESOLVE_HOST_COMPLETE,
     CONNECT_STATE_CONNECT,
+    CONNECT_STATE_CONNECT_CONFIGURE,
     CONNECT_STATE_CONNECT_COMPLETE,
     CONNECT_STATE_SEND_REQUEST,
     CONNECT_STATE_CONFIRM_CONNECTION,
@@ -123,6 +127,7 @@ class NET_EXPORT DedicatedWebTransportHttp3Client
   int DoResolveHostComplete(int rv);
   // Establishes the QUIC connection.
   int DoConnect();
+  int DoConnectConfigure(int rv);
   int DoConnectComplete();
   void CreateConnection();
   // Sends the CONNECT request to establish a WebTransport session.
@@ -139,7 +144,7 @@ class NET_EXPORT DedicatedWebTransportHttp3Client
 
   const GURL url_;
   const url::Origin origin_;
-  const NetworkIsolationKey isolation_key_;
+  const NetworkAnonymizationKey anonymization_key_;
   const raw_ptr<URLRequestContext> context_;          // Unowned.
   const raw_ptr<WebTransportClientVisitor> visitor_;  // Unowned.
 
@@ -170,13 +175,15 @@ class NET_EXPORT DedicatedWebTransportHttp3Client
   std::unique_ptr<HostResolver::ResolveHostRequest> resolve_host_request_;
 
   std::unique_ptr<DatagramClientSocket> socket_;
-  raw_ptr<quic::QuicConnection> connection_;  // owned by |session_|
   std::unique_ptr<quic::QuicSpdyClientSession> session_;
+  raw_ptr<quic::QuicConnection> connection_;  // owned by |session_|
   raw_ptr<quic::QuicSpdyStream> connect_stream_ = nullptr;
   raw_ptr<quic::WebTransportSession> web_transport_session_ = nullptr;
   std::unique_ptr<QuicChromiumPacketReader> packet_reader_;
   std::unique_ptr<QuicEventLogger> event_logger_;
   quic::QuicClientPushPromiseIndex push_promise_index_;
+  quic::DeterministicConnectionIdGenerator connection_id_generator_{
+      quic::kQuicDefaultConnectionIdLength};
 
   absl::optional<WebTransportCloseInfo> close_info_;
 

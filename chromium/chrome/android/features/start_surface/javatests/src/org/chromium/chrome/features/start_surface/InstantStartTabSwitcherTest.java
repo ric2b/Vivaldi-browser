@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,11 +41,17 @@ import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.MathUtils;
+import org.chromium.base.jank_tracker.JankMetricUMARecorder;
+import org.chromium.base.jank_tracker.JankMetricUMARecorderJni;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterAnnotations.UseMethodParameter;
@@ -59,6 +65,7 @@ import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -119,6 +126,14 @@ public class InstantStartTabSwitcherTest {
                     .setRevision(1)
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_START)
                     .build();
+    @Rule
+    public JniMocker mJniMocker = new JniMocker();
+
+    @Rule
+    public MockitoRule mMockitoRule = MockitoJUnit.rule();
+
+    @Mock
+    JankMetricUMARecorder.Natives mJankRecorderNativeMock;
 
     /**
      * {@link ParameterProvider} used for parameterized test that provides whether it's single tab
@@ -135,6 +150,11 @@ public class InstantStartTabSwitcherTest {
         public List<ParameterSet> getParameters() {
             return sLVTIsSRPTestParams;
         }
+    }
+
+    @Before
+    public void setUp() {
+        mJniMocker.mock(JankMetricUMARecorderJni.TEST_HOOKS, mJankRecorderNativeMock);
     }
 
     @After
@@ -384,8 +404,8 @@ public class InstantStartTabSwitcherTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add({ChromeSwitches.DISABLE_NATIVE_INITIALIZATION,
-            INSTANT_START_TEST_BASE_PARAMS
-                    + "/show_last_active_tab_only/false/open_ntp_instead_of_start/false"})
+            INSTANT_START_TEST_BASE_PARAMS + "/show_last_active_tab_only/false"
+                    + "/open_ntp_instead_of_start/false/open_start_as_homepage/true"})
     // clang-format off
     public void testSingleAsHomepage_Landscape_TabSize() {
         // clang-format on
@@ -459,8 +479,8 @@ public class InstantStartTabSwitcherTest {
         StartSurfaceCoordinator startSurfaceCoordinator =
                 StartSurfaceTestUtils.getStartSurfaceFromUIThread(cta);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertEquals(
-                    startSurfaceCoordinator.getStartSurfaceState(), StartSurfaceState.NOT_SHOWN);
+            Assert.assertEquals(startSurfaceCoordinator.getStartSurfaceState(),
+                    StartSurfaceState.SHOWN_TABSWITCHER);
         });
     }
 

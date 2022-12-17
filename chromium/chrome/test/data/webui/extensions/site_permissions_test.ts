@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,8 @@ suite('SitePermissions', function() {
     delegate.userSiteSettings = userSiteSettings;
     Service.setInstance(delegate);
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     element = document.createElement('extensions-site-permissions');
     element.delegate = delegate;
     element.enableEnhancedSiteControls = true;

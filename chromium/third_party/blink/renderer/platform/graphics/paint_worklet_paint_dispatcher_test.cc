@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,7 +54,7 @@ class MockPaintWorkletPainter
   MockPaintWorkletPainter(int worklet_id) {
     ON_CALL(*this, GetWorkletId).WillByDefault(Return(worklet_id));
   }
-  ~MockPaintWorkletPainter() = default;
+  ~MockPaintWorkletPainter() override = default;
 
   MOCK_CONST_METHOD0(GetWorkletId, int());
   MOCK_METHOD2(
@@ -68,7 +68,7 @@ class MockPaintWorkletInput : public cc::PaintWorkletInput {
   explicit MockPaintWorkletInput(int worklet_id) {
     ON_CALL(*this, WorkletId).WillByDefault(Return(worklet_id));
   }
-  ~MockPaintWorkletInput() = default;
+  ~MockPaintWorkletInput() override = default;
 
   MOCK_CONST_METHOD0(GetSize, gfx::SizeF());
   MOCK_CONST_METHOD0(WorkletId, int());

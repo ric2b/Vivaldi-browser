@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,14 +78,13 @@ import org.chromium.components.external_intents.ExternalNavigationHandler.Overri
 import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingResultType;
 import org.chromium.components.external_intents.InterceptNavigationDelegateImpl;
 import org.chromium.components.external_intents.RedirectHandler;
+import org.chromium.components.external_intents.TestChildFrameNavigationObserver;
 import org.chromium.components.messages.MessageBannerProperties;
 import org.chromium.components.messages.MessageDispatcher;
 import org.chromium.components.messages.MessageDispatcherProvider;
 import org.chromium.components.messages.MessageIdentifier;
 import org.chromium.components.messages.MessageStateHandler;
 import org.chromium.components.messages.MessagesTestHelper;
-import org.chromium.content_public.browser.GlobalRenderFrameHostId;
-import org.chromium.content_public.browser.LifecycleState;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContentsObserver;
@@ -188,12 +187,6 @@ public class UrlOverridingTest {
             mFinishCallback = finishCallback;
             mFailCallback = failCallback;
             mDestroyedCallback = destroyedCallback;
-        }
-
-        @Override
-        public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
-            if (navigation.errorCode() == 0) return;
-            mFailCallback.notifyCalled();
         }
 
         @Override
@@ -402,18 +395,21 @@ public class UrlOverridingTest {
                     latestDelegateHolder[0].setResultCallbackForTesting(null);
                     latestDelegateHolder[0] = getInterceptNavigationDelegate(newTab);
                     latestDelegateHolder[0].setResultCallbackForTesting(resultCallback);
+
+                    TestChildFrameNavigationObserver.createAndAttachToNativeWebContents(
+                            newTab.getWebContents(), failCallback);
                 }
             };
             mActivityTestRule.getActivity().getTabModelSelector().addObserver(selectorObserver);
+
+            TestChildFrameNavigationObserver.createAndAttachToNativeWebContents(
+                    tab.getWebContents(), failCallback);
         });
 
         LoadUrlParams params = new LoadUrlParams(url, transition);
         if (transition == PageTransition.LINK || transition == PageTransition.FORM_SUBMIT) {
             params.setIsRendererInitiated(true);
             params.setInitiatorOrigin(createExampleOrigin());
-        }
-        if (!RedirectHandler.isRefactoringEnabled()) {
-            mActivityTestRule.getActivity().onUserInteraction();
         }
         TestThreadUtils.runOnUiThreadBlocking(() -> { tab.loadUrl(params); });
 
@@ -607,24 +603,14 @@ public class UrlOverridingTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> RedirectHandlerTabHelper.swapHandlerFor(tab, mSpyRedirectHandler));
         // This is a little fragile to code changes, but better than waiting 15 real seconds.
-        if (RedirectHandler.isRefactoringEnabled()) {
-            Mockito.doReturn(SystemClock.elapsedRealtime()) // Initial Navigation create
-                    .doReturn(SystemClock.elapsedRealtime()) // Initial Navigation shouldOverride
-                    .doReturn(SystemClock.elapsedRealtime()) // XHR Navigation create
-                    .doReturn(SystemClock.elapsedRealtime()) // XHR callback navigation create
-                    .doReturn(SystemClock.elapsedRealtime()
-                            + RedirectHandler.NAVIGATION_CHAIN_TIMEOUT_MILLIS + 1) // xhr callback
-                    .when(mSpyRedirectHandler)
-                    .currentRealtime();
-        } else {
-            Mockito.doReturn(SystemClock.elapsedRealtime()) // Initial Navigation create
-                    .doReturn(SystemClock.elapsedRealtime()) // Initial Navigation shouldOverride
-                    .doReturn(SystemClock.elapsedRealtime()) // XHR Navigation create
-                    .doReturn(SystemClock.elapsedRealtime()
-                            + RedirectHandler.NAVIGATION_CHAIN_TIMEOUT_MILLIS + 1) // xhr callback
-                    .when(mSpyRedirectHandler)
-                    .currentRealtime();
-        }
+        Mockito.doReturn(SystemClock.elapsedRealtime()) // Initial Navigation create
+                .doReturn(SystemClock.elapsedRealtime()) // Initial Navigation shouldOverride
+                .doReturn(SystemClock.elapsedRealtime()) // XHR Navigation create
+                .doReturn(SystemClock.elapsedRealtime()) // XHR callback navigation create
+                .doReturn(SystemClock.elapsedRealtime()
+                        + RedirectHandler.NAVIGATION_CHAIN_TIMEOUT_MILLIS + 1) // xhr callback
+                .when(mSpyRedirectHandler)
+                .currentRealtime();
 
         @OverrideUrlLoadingResultType
         int result = loadUrlAndWaitForIntentUrl(
@@ -946,17 +932,16 @@ public class UrlOverridingTest {
     @LargeTest
     @Features.EnableFeatures({"BackForwardCache<Study"})
     @Features.DisableFeatures({"BackForwardCacheMemoryControls"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:enable_same_site/true"})
+    @CommandLineFlags.Add({"force-fieldtrials=Study/Group"})
     @Restriction(Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    public void
-    testNoRedirectWithBFCache() throws Exception {
+    public void testNoRedirectWithBFCache() throws Exception {
         final CallbackHelper finishCallback = new CallbackHelper();
         final CallbackHelper syncHelper = new CallbackHelper();
         AtomicReference<NavigationHandle> mLastNavigationHandle = new AtomicReference<>(null);
         EmptyTabObserver observer = new EmptyTabObserver() {
             @Override
-            public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
+            public void onDidFinishNavigationInPrimaryMainFrame(
+                    Tab tab, NavigationHandle navigation) {
                 int callCount = syncHelper.getCallCount();
                 mLastNavigationHandle.set(navigation);
                 finishCallback.notifyCalled();
@@ -1026,20 +1011,23 @@ public class UrlOverridingTest {
         final Tab tab = mActivityTestRule.getActivity().getActivityTab();
 
         final CallbackHelper prerenderFinishCallback = new CallbackHelper();
-        EmptyTabObserver observer = new EmptyTabObserver() {
+        WebContentsObserver observer = new WebContentsObserver() {
             @Override
-            public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
-                if (!navigation.isInPrimaryMainFrame()) prerenderFinishCallback.notifyCalled();
+            public void didStopLoading(GURL url, boolean isKnownValid) {
+                prerenderFinishCallback.notifyCalled();
             }
         };
-        TestThreadUtils.runOnUiThreadBlocking(() -> { tab.addObserver(observer); });
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { tab.getWebContents().addObserver(observer); });
 
         mActivityTestRule.loadUrl(mTestServer.getURL(NAVIGATION_FROM_PRERENDER));
 
         prerenderFinishCallback.waitForCallback(0);
 
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> RedirectHandlerTabHelper.swapHandlerFor(tab, mRedirectHandler));
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            RedirectHandlerTabHelper.swapHandlerFor(tab, mRedirectHandler);
+            tab.getWebContents().removeObserver(observer);
+        });
 
         // Click page to load prerender.
         TouchCommon.singleClickView(tab.getView());
@@ -1087,9 +1075,8 @@ public class UrlOverridingTest {
         final CallbackHelper frameFinishCallback = new CallbackHelper();
         WebContentsObserver observer = new WebContentsObserver() {
             @Override
-            public void didFinishLoad(GlobalRenderFrameHostId rfhId, GURL url, boolean isKnownValid,
-                    boolean isInPrimaryMainFrame, @LifecycleState int rfhLifecycleState) {
-                if (!isInPrimaryMainFrame) frameFinishCallback.notifyCalled();
+            public void didStopLoading(GURL url, boolean isKnownValid) {
+                frameFinishCallback.notifyCalled();
             }
         };
         TestThreadUtils.runOnUiThreadBlocking(
@@ -1171,31 +1158,25 @@ public class UrlOverridingTest {
         mActivityTestRule.startMainActivityOnBlankPage();
 
         String url = mTestServer.getURL(NAVIGATION_FROM_TIMEOUT_PAGE);
-        if (RedirectHandler.isRefactoringEnabled()) {
-            @OverrideUrlLoadingResultType
-            int result = loadUrlAndWaitForIntentUrl(url, false, null, PageTransition.AUTO_BOOKMARK);
-            Assert.assertEquals(OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION, result);
-            assertMessagePresent();
-            TestThreadUtils.runOnUiThreadBlocking(() -> {
-                TextView button = mActivityTestRule.getActivity().findViewById(
-                        org.chromium.components.messages.R.id.message_primary_button);
-                button.performClick();
-            });
-            CriteriaHelper.pollUiThread(() -> {
-                Criteria.checkThat(mActivityMonitor.getHits(), Matchers.is(1));
-                Criteria.checkThat(
-                        mActivityTestRule.getActivity().getActivityTab().getUrl().getSpec(),
-                        Matchers.is("about:blank"));
-            });
-        } else {
-            loadUrlAndWaitForIntentUrl(url, true, null, PageTransition.AUTO_BOOKMARK);
-        }
+        @OverrideUrlLoadingResultType
+        int result = loadUrlAndWaitForIntentUrl(url, false, null, PageTransition.AUTO_BOOKMARK);
+        Assert.assertEquals(OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION, result);
+        assertMessagePresent();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            TextView button = mActivityTestRule.getActivity().findViewById(
+                    org.chromium.components.messages.R.id.message_primary_button);
+            button.performClick();
+        });
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(mActivityMonitor.getHits(), Matchers.is(1));
+            Criteria.checkThat(mActivityTestRule.getActivity().getActivityTab().getUrl().getSpec(),
+                    Matchers.is("about:blank"));
+        });
     }
 
     @Test
     @LargeTest
     public void testRedirectFromBookmarkWithFallback() throws Exception {
-        if (!RedirectHandler.isRefactoringEnabled()) return;
         mActivityTestRule.startMainActivityOnBlankPage();
 
         String fallbackUrl = mTestServer.getURL(FALLBACK_LANDING_PATH);

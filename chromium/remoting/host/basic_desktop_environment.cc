@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,9 @@
 #include "remoting/host/audio_capturer.h"
 #include "remoting/host/base/screen_controls.h"
 #include "remoting/host/client_session_control.h"
+#include "remoting/host/desktop_and_cursor_conditional_composer.h"
 #include "remoting/host/desktop_capturer_proxy.h"
+#include "remoting/host/desktop_capturer_wrapper.h"
 #include "remoting/host/desktop_display_info_monitor.h"
 #include "remoting/host/file_transfer/local_file_operations.h"
 #include "remoting/host/input_injector.h"
@@ -36,6 +38,9 @@
 #include "base/threading/watchdog.h"
 #include "remoting/host/linux/x11_util.h"
 #endif
+
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 
 namespace remoting {
 
@@ -152,14 +157,7 @@ BasicDesktopEnvironment::CreateUrlForwarderConfigurator() {
 }
 
 std::string BasicDesktopEnvironment::GetCapabilities() const {
-  // This capability is added here because it is not supported by
-  // multi-process hosts, so it should not be returned by the
-  // overridden method IpcDesktopEnvironment::GetCapabilities().
-  //
-  // TODO(lambroslambrou): When this feature is working for
-  // multi-process hosts, move this capability from here to
-  // ClientSession::OnConnectionAuthenticated().
-  return protocol::kMultiStreamCapability;
+  return std::string();
 }
 
 void BasicDesktopEnvironment::SetCapabilities(const std::string& capabilities) {
@@ -167,17 +165,6 @@ void BasicDesktopEnvironment::SetCapabilities(const std::string& capabilities) {
 
 uint32_t BasicDesktopEnvironment::GetDesktopSessionId() const {
   return UINT32_MAX;
-}
-
-std::unique_ptr<DesktopAndCursorConditionalComposer>
-BasicDesktopEnvironment::CreateComposingVideoCapturer() {
-#if BUILDFLAG(IS_APPLE)
-  // Mac includes the mouse cursor in the captured image in curtain mode.
-  if (options_.enable_curtaining())
-    return nullptr;
-#endif
-  return std::make_unique<DesktopAndCursorConditionalComposer>(
-      CreateVideoCapturer());
 }
 
 std::unique_ptr<RemoteWebAuthnStateChangeNotifier>
@@ -189,11 +176,43 @@ std::unique_ptr<DesktopCapturer>
 BasicDesktopEnvironment::CreateVideoCapturer() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  auto result = std::make_unique<DesktopCapturerProxy>(
-      video_capture_task_runner_, ui_task_runner_);
-  result->set_desktop_display_info_monitor(GetDisplayInfoMonitor());
-  result->CreateCapturer(desktop_capture_options());
-  return std::move(result);
+  scoped_refptr<base::SingleThreadTaskRunner> capture_task_runner;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  capture_task_runner = ui_task_runner_;
+#elif BUILDFLAG(IS_LINUX) && defined(REMOTING_USE_WAYLAND)
+  // Each capturer instance should get its own thread so the capturers don't
+  // compete with each other in multistream mode.
+  capture_task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
+      {base::TaskPriority::HIGHEST},
+      base::SingleThreadTaskRunnerThreadMode::DEDICATED);
+#else
+  // The mouse cursor monitor runs on the |video_capture_task_runner_| so the
+  // desktop capturer also needs to run on that task_runner for certain
+  // platforms. For example, if we run the desktop capturer on a different
+  // thread on Windows, the cursor shape won't be captured when in GDI mode.
+  capture_task_runner = video_capture_task_runner_;
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_LINUX)
+  auto desktop_capturer =
+      std::make_unique<DesktopCapturerProxy>(std::move(capture_task_runner));
+
+#if defined(REMOTING_USE_X11)
+  // Workaround for http://crbug.com/1361502: Run each capturer (and
+  // mouse-cursor-monitor) on a separate X11 Display.
+  auto new_options = webrtc::DesktopCaptureOptions::CreateDefault();
+  mutable_desktop_capture_options()->set_x_display(
+      std::move(new_options.x_display()));
+  desktop_capture_options().x_display()->IgnoreXServerGrabs();
+#endif  // REMOTING_USE_X11
+
+  desktop_capturer->CreateCapturer(desktop_capture_options());
+
+#if BUILDFLAG(IS_APPLE)
+  // Mac includes the mouse cursor in the captured image in curtain mode.
+  if (options_.enable_curtaining())
+    return std::move(desktop_capturer);
+#endif
+  return std::make_unique<DesktopAndCursorConditionalComposer>(
+      std::move(desktop_capturer));
 }
 
 BasicDesktopEnvironment::BasicDesktopEnvironment(

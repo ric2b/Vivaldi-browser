@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 #define GPU_COMMAND_BUFFER_SERVICE_SHARED_IMAGE_GL_IMAGE_BACKING_H_
 
 #include "base/memory/raw_ptr.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/service/shared_image/gl_texture_image_backing_helper.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
 #include "gpu/gpu_gles2_export.h"
@@ -36,7 +37,7 @@ class GLTextureGLCommonRepresentation : public GLTextureImageRepresentation {
 
  private:
   // GLTextureImageRepresentation:
-  gles2::Texture* GetTexture() override;
+  gles2::Texture* GetTexture(int plane_index) override;
   bool BeginAccess(GLenum mode) override;
   void EndAccess() override;
 
@@ -64,8 +65,8 @@ class GLTexturePassthroughGLCommonRepresentation
 
  private:
   // GLTexturePassthroughImageRepresentation:
-  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough()
-      override;
+  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough(
+      int plane_index) override;
   bool BeginAccess(GLenum mode) override;
   void EndAccess() override;
 
@@ -99,7 +100,8 @@ class SkiaGLCommonRepresentation : public SkiaImageRepresentation {
       int final_msaa_count,
       const SkSurfaceProps& surface_props,
       std::vector<GrBackendSemaphore>* begin_semaphores,
-      std::vector<GrBackendSemaphore>* end_semaphores) override;
+      std::vector<GrBackendSemaphore>* end_semaphores,
+      std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override;
   sk_sp<SkPromiseImageTexture> BeginWriteAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphore,
@@ -107,7 +109,8 @@ class SkiaGLCommonRepresentation : public SkiaImageRepresentation {
   void EndWriteAccess(sk_sp<SkSurface> surface) override;
   sk_sp<SkPromiseImageTexture> BeginReadAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
-      std::vector<GrBackendSemaphore>* end_semaphores) override;
+      std::vector<GrBackendSemaphore>* end_semaphores,
+      std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override;
   void EndReadAccess() override;
   bool SupportsMultipleConcurrentReadAccess() override;
 
@@ -180,7 +183,7 @@ class GPU_GLES2_EXPORT GLImageBacking
   GLImageBacking(
       scoped_refptr<gl::GLImage> image,
       const Mailbox& mailbox,
-      viz::ResourceFormat format,
+      viz::SharedImageFormat format,
       const gfx::Size& size,
       const gfx::ColorSpace& color_space,
       GrSurfaceOrigin surface_origin,
@@ -203,13 +206,12 @@ class GPU_GLES2_EXPORT GLImageBacking
   // SharedImageBacking:
   scoped_refptr<gfx::NativePixmap> GetNativePixmap() override;
   void OnMemoryDump(const std::string& dump_name,
-                    base::trace_event::MemoryAllocatorDump* dump,
+                    base::trace_event::MemoryAllocatorDumpGuid client_guid,
                     base::trace_event::ProcessMemoryDump* pmd,
                     uint64_t client_tracing_id) override;
   SharedImageBackingType GetType() const override;
   gfx::Rect ClearedRect() const final;
   void SetClearedRect(const gfx::Rect& cleared_rect) final;
-  bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) final;
   std::unique_ptr<GLTextureImageRepresentation> ProduceGLTexture(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker) final;
@@ -231,9 +233,6 @@ class GPU_GLES2_EXPORT GLImageBacking
   std::unique_ptr<MemoryImageRepresentation> ProduceMemory(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker) override;
-  std::unique_ptr<GLTextureImageRepresentation> ProduceRGBEmulationGLTexture(
-      SharedImageManager* manager,
-      MemoryTypeTracker* tracker) override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
 
   // GLTextureImageRepresentationClient:
@@ -250,6 +249,17 @@ class GPU_GLES2_EXPORT GLImageBacking
   bool BindOrCopyImageIfNeeded();
   bool image_bind_or_copy_needed_ = true;
 
+  // TODO(blundell): Eliminate all usage of BUILDFLAG(IS_MAC) in this file (as
+  // well as the .cc file) once GLImageBacking is used only on Mac.
+#if BUILDFLAG(IS_MAC)
+  // Used to determine whether to release the texture in EndAccess() in use
+  // cases that need to ensure IOSurface synchronization.
+  uint num_ongoing_read_accesses_ = 0;
+  // Used with the above variable to catch cases where clients are performing
+  // disallowed concurrent read/write accesses.
+  bool ongoing_write_access_ = false;
+#endif
+
   void RetainGLTexture();
   void ReleaseGLTexture(bool have_context);
   size_t gl_texture_retain_count_ = 0;
@@ -262,7 +272,6 @@ class GPU_GLES2_EXPORT GLImageBacking
   // |texture_| is nullptr.
   gfx::Rect cleared_rect_;
 
-  gles2::Texture* rgb_emulation_texture_ = nullptr;
   gles2::Texture* texture_ = nullptr;
   scoped_refptr<gles2::TexturePassthrough> passthrough_texture_;
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "base/observer_list_types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/color/color_id.h"
 #include "ui/display/display_observer.h"
 #include "ui/gfx/animation/tween.h"
 
@@ -201,20 +202,17 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   bool in_overview_mode() const { return overview_mode_; }
 
   // Gets the current color for the shelf control buttons.
-  SkColor GetShelfControlButtonColor() const;
-
-  // Gets the shelf color when the app list is open, used in clamshell mode.
-  SkColor GetShelfWithAppListColor() const;
+  SkColor GetShelfControlButtonColor(const views::Widget* widget) const;
 
   // Gets the shelf color when a window is maximized.
-  SkColor GetMaximizedShelfColor() const;
+  SkColor GetMaximizedShelfColor(const views::Widget* widget) const;
 
-  // Gets the base layer type for shelf color.
-  AshColorProvider::BaseLayerType GetShelfBaseLayerType() const;
+  // Gets the ColorId for shelf color.
+  ui::ColorId GetShelfBaseLayerColorId() const;
 
   // Gets the default shelf color, calculated using the wallpaper color if
   // available.
-  SkColor GetDefaultShelfColor() const;
+  SkColor GetDefaultShelfColor(const views::Widget* widget) const;
 
   // Returns the current blur radius to use for the control buttons.
   int GetShelfControlButtonBlurRadius() const;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,15 +12,19 @@
 
 namespace share {
 
-extern const base::Feature kPersistShareHubOnAppSwitch;
-extern const base::Feature kScreenshotsForAndroidV2;
-extern const base::Feature kSharingDesktopScreenshotsEdit;
-extern const base::Feature kUpcomingSharingFeatures;
-extern const base::Feature kShareToGoogleCollections;
-extern const base::Feature kCormorant;
+BASE_DECLARE_FEATURE(kPersistShareHubOnAppSwitch);
+BASE_DECLARE_FEATURE(kScreenshotsForAndroidV2);
+BASE_DECLARE_FEATURE(kSharingDesktopScreenshotsEdit);
+BASE_DECLARE_FEATURE(kUpcomingSharingFeatures);
+BASE_DECLARE_FEATURE(kShareToGoogleCollections);
+BASE_DECLARE_FEATURE(kCormorant);
+
+#if BUILDFLAG(IS_ANDROID)
+BASE_DECLARE_FEATURE(kCrowLaunchTab);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
-extern const base::Feature kDesktopSharePreview;
+BASE_DECLARE_FEATURE(kDesktopSharePreview);
 
 extern const char kDesktopSharePreviewVariant16[];
 extern const char kDesktopSharePreviewVariant40[];

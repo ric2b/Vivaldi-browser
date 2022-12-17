@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -174,34 +174,11 @@ void WebViewFindHelper::FindReply(int request_id,
     find_update_event_ =
         std::make_unique<FindUpdateEvent>(find_info->search_text());
   }
-
-
-  double scale = 1.0f;
-  display::Screen* screen = display::Screen::GetScreen();
-  if (screen) {
-    // Make sure we use the display of the toplevel window.
-    gfx::NativeWindow window = webview_guest_->
-      web_contents()->GetTopLevelNativeWindow();
-
-    display::Display display =
-      screen->GetDisplayNearestWindow(window);
-
-    scale = display.device_scale_factor();
-    gfx::Rect scaled_selection_rect = gfx::ToNearestRect(
-        gfx::ConvertRectToDips(selection_rect, scale));
-
-    find_info->AggregateResults(number_of_matches, scaled_selection_rect,
-      active_match_ordinal, final_update);
-    find_update_event_->AggregateResults(number_of_matches,
-      scaled_selection_rect, active_match_ordinal, final_update);
-
-  } else {
   // Aggregate the find results.
   find_info->AggregateResults(number_of_matches, selection_rect,
                               active_match_ordinal, final_update);
   find_update_event_->AggregateResults(number_of_matches, selection_rect,
                                       active_match_ordinal, final_update);
-  }
 
   // Propagate incremental results to the |findupdate| event.
   DispatchFindUpdateEvent(false /* canceled */, final_update);

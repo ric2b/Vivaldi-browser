@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,32 +88,6 @@ TEST_F(AssistantMainStageTest, DarkAndLightTheme) {
   // false. See a comment in TearDown about details.
   Shell::Get()->session_controller()->GetActivePrefService()->SetBoolean(
       prefs::kDarkModeEnabled, false);
-}
-
-TEST_F(AssistantMainStageTest, DarkAndLightModeFlagOff) {
-  ASSERT_FALSE(features::IsDarkLightModeEnabled());
-
-  // ProductivityLauncher uses DarkLightMode colors.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kProductivityLauncher);
-
-  ShowAssistantUi();
-
-  views::View* main_stage = page_view()->GetViewByID(kMainStage);
-  views::Separator* separator = static_cast<views::Separator*>(
-      main_stage->GetViewByID(kHorizontalSeparator));
-
-  ASSERT_FALSE(page_view()->GetNativeTheme()->ShouldUseDarkColors());
-
-  // We use default color of views::Separator. Expects that
-  // Separator::GetColorId returns ui::kColorSeparator as we have not specified
-  // a ColorId.
-  EXPECT_EQ(separator->GetColorId(), ui::kColorSeparator);
-  EXPECT_EQ(GetCenterColor(separator),
-            separator->GetColorProvider()->GetColor(ui::kColorSeparator));
-
-  // Avoid test teardown issues by explicitly closing the launcher.
-  CloseAssistantUi();
 }
 
 }  // namespace ash

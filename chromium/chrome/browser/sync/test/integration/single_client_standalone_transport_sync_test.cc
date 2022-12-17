@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,7 @@
 namespace {
 
 syncer::ModelTypeSet AllowedTypesInStandaloneTransportMode() {
-  static_assert(40 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(42 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "Add new types below if they run in transport mode");
   // Only some special allowlisted types (and control types) are allowed in
   // standalone transport mode.
@@ -39,15 +39,12 @@ syncer::ModelTypeSet AllowedTypesInStandaloneTransportMode() {
   allowed_types.Put(syncer::SEND_TAB_TO_SELF);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // OS sync types run in transport mode.
-  if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
-    allowed_types.PutAll(
-        {syncer::APPS, syncer::APP_SETTINGS, syncer::APP_LIST,
-         syncer::APP_SETTINGS, syncer::ARC_PACKAGE, syncer::PRINTERS,
-         syncer::PRINTERS_AUTHORIZATION_SERVERS, syncer::OS_PREFERENCES,
-         syncer::OS_PRIORITY_PREFERENCES, syncer::WEB_APPS,
-         syncer::WORKSPACE_DESK});
-  }
-  allowed_types.Put(syncer::WIFI_CONFIGURATIONS);
+  allowed_types.PutAll(
+      {syncer::APPS, syncer::APP_SETTINGS, syncer::APP_LIST,
+       syncer::APP_SETTINGS, syncer::ARC_PACKAGE, syncer::PRINTERS,
+       syncer::PRINTERS_AUTHORIZATION_SERVERS, syncer::OS_PREFERENCES,
+       syncer::OS_PRIORITY_PREFERENCES, syncer::WEB_APPS,
+       syncer::WORKSPACE_DESK, syncer::WIFI_CONFIGURATIONS});
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return allowed_types;
 }

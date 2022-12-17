@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -18,6 +18,8 @@ non_preprocessed_files = [
                            "customize_shortcuts_test.ts",
                            "doodle_share_dialog_focus_test.ts",
                            "doodle_share_dialog_test.ts",
+                           "lens_form_test.ts",
+                           "lens_upload_dialog_test.ts",
                            "logo_test.ts",
                            "metrics_test_support.ts",
                            "metrics_utils_test.ts",
@@ -46,8 +48,10 @@ ts_library("build_ts") {
     "//tools/typescript/definitions/pending.d.ts",
   ]
 
-  deps = [ "//chrome/browser/resources/new_tab_page:build_ts" ]
-  extra_deps = [ "..:generate_definitions" ]
+  deps = [
+    "..:build_ts",
+    "//chrome/browser/resources/new_tab_page:build_ts",
+  ]
 }
 
 generate_grd("build_grdp") {

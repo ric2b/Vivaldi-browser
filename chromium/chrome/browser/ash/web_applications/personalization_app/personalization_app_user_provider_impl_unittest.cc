@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/default_user_image.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom.h"
 #include "base/bind.h"
@@ -48,8 +47,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
 
-namespace ash {
-namespace personalization_app {
+namespace ash::personalization_app {
 
 namespace {
 
@@ -158,10 +156,7 @@ class PersonalizationAppUserProviderImplTest : public testing::Test {
  public:
   PersonalizationAppUserProviderImplTest()
       : scoped_user_manager_(std::make_unique<ash::FakeChromeUserManager>()),
-        profile_manager_(TestingBrowserProcess::GetGlobal()) {
-    scoped_feature_list_.InitAndEnableFeature(
-        ash::features::kPersonalizationHub);
-  }
+        profile_manager_(TestingBrowserProcess::GetGlobal()) {}
   PersonalizationAppUserProviderImplTest(
       const PersonalizationAppUserProviderImplTest&) = delete;
   PersonalizationAppUserProviderImplTest& operator=(
@@ -360,11 +355,8 @@ TEST_F(PersonalizationAppUserProviderImplTest, EncodesUserImageToPngBuffer) {
 
   // The BigBuffer data received from the observer should be equal to the test
   // image encoded to png.
-  ASSERT_EQ(expected_data.size(), encoded_png->size());
-  ASSERT_GT(expected_data.size(), 0);
-  for (auto i = 0; i < expected_data.size(); i++) {
-    EXPECT_EQ(expected_data.at(i), encoded_png->data().at(i));
-  }
+  ASSERT_GT(expected_data.size(), 0u);
+  EXPECT_EQ(expected_data, encoded_png->data());
 }
 
 TEST_F(PersonalizationAppUserProviderImplTest,
@@ -587,5 +579,4 @@ TEST_F(PersonalizationAppUserProviderImplWithMockTest,
       ash::default_user_image::kHistogramImageExternal, 2);
 }
 
-}  // namespace personalization_app
-}  // namespace ash
+}  // namespace ash::personalization_app

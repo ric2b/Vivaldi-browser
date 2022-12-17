@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -7,8 +7,12 @@ import("//third_party/closure_compiler/compile_js.gni")
 js_type_check("closure_compile") {
   is_polymer3 = true
   closure_flags = default_closure_args + [
-                    "browser_resolver_prefix_replacements=\"chrome://os-feedback/=../../ash/webui/os_feedback_ui/resources/\"",
-                    "js_module_root=../../chrome/test/data/webui/",
+                    "browser_resolver_prefix_replacements=\"chrome://os-feedback/=" + rebase_path(
+                            "//ash/webui/os_feedback_ui/resources/",
+                            root_build_dir) + "\"",
+                    "browser_resolver_prefix_replacements=\"chrome://webui-test/=./gen/chrome/test/data/webui/tsc\"",
+                    "js_module_root=" + rebase_path("//chrome/test/data/webui/",
+                                                    root_build_dir),
                     "js_module_root=./gen/chrome/test/data/webui/",
                   ]
   deps = [
@@ -94,7 +98,9 @@ js_library("search_page_test") {
   deps = [
     "../..:chai_assert",
     "../..:test_util",
+    "//ash/webui/os_feedback_ui/resources:fake_data",
     "//ash/webui/os_feedback_ui/resources:feedback_flow",
+    "//ash/webui/os_feedback_ui/resources:feedback_types",
     "//ash/webui/os_feedback_ui/resources:help_content",
     "//ash/webui/os_feedback_ui/resources:search_page",
   ]

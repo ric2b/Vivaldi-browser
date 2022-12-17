@@ -11,13 +11,8 @@
   </outputs>
   <release seq="1">
     <includes>
-      <include name="IDR_FILEMANAGER_MANIFEST" file="file_manager/manifest.json" type="BINDATA" />
-      <!-- The Files app pages and scripts. -->
-      <include name="IDR_FILE_MANAGER_BACKGROUND_HTML" file="file_manager/background.html" type="BINDATA" />
       <!-- Polymer elements -->
       <include name="IDR_FILE_MANAGER_ELEMENTS_FILES_QUICK_PREVIEW_CSS" file="file_manager/foreground/elements/files_quick_view.css" type="BINDATA" />
-
-      <!-- Scripts required by the metadata parser worker. -->
 
       <!-- Images referenced from the manifest or the code -->
       <include name="IDR_FILE_MANAGER_ICON_16" file="file_manager/common/images/icon16.png" type="BINDATA" />
@@ -38,6 +33,7 @@
         <if expr="optimize_webui">
           <!-- When optimize_webui=false these are included via generate_grd() rule -->
           <include name="IDR_IMAGE_LOADER_IMAGE_LOADER_CLIENT_JS" file="image_loader/image_loader_client.js" type="BINDATA" />
+          <include name="IDR_IMAGE_LOADER_IMAGE_ORIENTATION_JS" file="image_loader/image_orientation.js" type="BINDATA" />
           <include name="IDR_IMAGE_LOADER_LOAD_IMAGE_REQUEST_JS" file="image_loader/load_image_request.js" type="BINDATA" />
         </if>
       </if>

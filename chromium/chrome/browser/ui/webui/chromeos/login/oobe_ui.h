@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,12 +10,12 @@
 #include <string>
 #include <vector>
 
-#include "ash/services/cellular_setup/public/mojom/esim_manager.mojom-forward.h"
 #include "ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom-forward.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
+#include "chromeos/ash/services/cellular_setup/public/mojom/esim_manager.mojom-forward.h"
 // TODO(https://crbug.com/1164001): move to forward declaration.
 #include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
@@ -111,8 +111,6 @@ class OobeUI : public ui::MojoWebUIController {
   // Re-evaluate OOBE display placement.
   void OnDisplayConfigurationChanged();
 
-  void OnSystemTrayBubbleShown();
-
   // Find a *View instance provided by a given *Handler type.
   //
   // This is the same as GetHandler() except the return type is limited to the
@@ -168,6 +166,10 @@ class OobeUI : public ui::MojoWebUIController {
   // display type.
   void ConfigureOobeDisplay();
 
+  // Updates default scaling for CfM devices.
+  void UpScaleOobe();
+  bool ShouldUpScaleOobe();
+
   // Type of UI.
   std::string display_type_;
 
@@ -193,6 +195,9 @@ class OobeUI : public ui::MojoWebUIController {
 
   // Id of the previous oobe/login screen.
   OobeScreenId previous_screen_ = ash::OOBE_SCREEN_UNKNOWN;
+
+  // Id of display that was already scaled for CfM devices.
+  int64_t upscaled_display_id_ = -1;
 
   // Flag that indicates whether JS part is fully loaded and ready to accept
   // calls.

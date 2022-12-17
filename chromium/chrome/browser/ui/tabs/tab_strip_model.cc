@@ -1,16 +1,17 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 
-#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/containers/adapters.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/cxx17_backports.h"
 #include "base/memory/raw_ptr.h"
@@ -519,9 +520,8 @@ void TabStripModel::SendDetachWebContentsNotifications(
   selection.old_model = notifications->selection_model;
   selection.new_model = selection_model_;
   selection.reason = TabStripModelObserver::CHANGE_REASON_NONE;
-  selection.selected_tabs_were_removed = std::any_of(
-      notifications->detached_web_contents.begin(),
-      notifications->detached_web_contents.end(), [&notifications](auto& dwc) {
+  selection.selected_tabs_were_removed = base::ranges::any_of(
+      notifications->detached_web_contents, [&notifications](auto& dwc) {
         return notifications->selection_model.IsSelected(
             dwc->index_before_any_removals);
       });
@@ -793,10 +793,10 @@ void TabStripModel::SetTabBlocked(int index, bool blocked) {
                                     index);
 }
 
-void TabStripModel::SetTabPinned(int index, bool pinned) {
+int TabStripModel::SetTabPinned(int index, bool pinned) {
   ReentrancyCheck reentrancy_check(&reentrancy_guard_);
 
-  SetTabPinnedImpl(index, pinned);
+  return SetTabPinnedImpl(index, pinned);
 }
 
 bool TabStripModel::IsTabPinned(int index) const {
@@ -1174,7 +1174,7 @@ void TabStripModel::RemoveFromGroup(const std::vector<int>& indices) {
 
 bool TabStripModel::IsReadLaterSupportedForAny(
     const std::vector<int>& indices) {
-  if (profile_->IsGuestSession())
+  if (!delegate_->SupportsReadLater())
     return false;
 
   ReadingListModel* model =
@@ -1351,6 +1351,10 @@ bool TabStripModel::IsContextMenuCommandEnabled(
       return !profile->IsIncognitoProfile();
     }
 
+    case CommandCopyURL:
+      DCHECK(delegate()->IsForWebApp());
+      return true;
+
     default:
       NOTREACHED();
   }
@@ -1443,15 +1447,7 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
       base::RecordAction(UserMetricsAction("TabContextMenu_TogglePinned"));
       std::vector<int> indices = GetIndicesForCommand(context_index);
       bool pin = WillContextMenuPin(context_index);
-      if (pin) {
-        for (size_t i = 0; i < indices.size(); ++i)
-          SetTabPinnedImpl(indices[i], true);
-      } else {
-        // Unpin from the back so that the order is maintained (unpinning can
-        // trigger moving a tab).
-        for (size_t i = indices.size(); i > 0; --i)
-          SetTabPinnedImpl(indices[i - 1], false);
-      }
+      SetTabsPinned(indices, pin);
       break;
     }
 
@@ -1542,6 +1538,12 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
     case CommandUnfollowSite: {
       base::RecordAction(UserMetricsAction("DesktopFeed.UnfollowSite"));
       UnfollowSites(GetIndicesForCommand(context_index));
+      break;
+    }
+
+    case CommandCopyURL: {
+      base::RecordAction(UserMetricsAction("TabContextMenu_CopyURL"));
+      delegate()->CopyURL(GetWebContentsAt(context_index));
       break;
     }
 
@@ -2168,9 +2170,7 @@ void TabStripModel::AddToNewGroupImpl(const std::vector<int>& indices,
   if (!group_model_)
     return;
 
-  DCHECK(!std::any_of(
-      contents_data_.cbegin(), contents_data_.cend(),
-      [new_group](const auto& datum) { return datum->group() == new_group; }));
+  DCHECK(!base::Contains(contents_data_, new_group, &Tab::group));
   group_model_->AddTabGroup(new_group, absl::nullopt);
 
   // Find a destination for the first tab that's not pinned or inside another
@@ -2291,14 +2291,10 @@ void TabStripModel::MoveAndSetGroup(
 
   if (new_group.has_value()) {
     // Unpin tabs when grouping -- the states should be mutually exclusive.
-    // Here we manually unpin the tab to avoid moving the tab twice, which can
-    // potentially cause race conditions.
+    // Here we move the tab twice to ensure the tabstrip is always in a valid
+    // state when observers are notified of changes.
     if (IsTabPinned(index)) {
-      contents_data_[index]->set_pinned(false);
-      for (auto& observer : observers_) {
-        observer.TabPinnedStateChanged(
-            this, contents_data_[index]->web_contents(), index);
-      }
+      index = SetTabPinnedImpl(index, false);
     }
 
     absl::optional<tab_groups::TabGroupId> old_group = GetTabGroupForTab(index);
@@ -2378,10 +2374,10 @@ void TabStripModel::GroupTab(int index, const tab_groups::TabGroupId& group) {
   group_model_->GetTabGroup(group)->AddTab();
 }
 
-void TabStripModel::SetTabPinnedImpl(int index, bool pinned) {
+int TabStripModel::SetTabPinnedImpl(int index, bool pinned) {
   CHECK(ContainsIndex(index));
   if (contents_data_[index]->pinned() == pinned)
-    return;
+    return index;
 
   // Upgroup tabs if pinning -- the states should be mutually exclusive.
   if (pinned && group_model_)
@@ -2402,27 +2398,27 @@ void TabStripModel::SetTabPinnedImpl(int index, bool pinned) {
     observer.TabPinnedStateChanged(this, contents_data_[index]->web_contents(),
                                    index);
   }
+
+  return index;
 }
 
 std::vector<int> TabStripModel::SetTabsPinned(const std::vector<int>& indices,
                                               bool pinned) {
   std::vector<int> new_indices;
   if (pinned) {
-    for (size_t i = 0; i < indices.size(); i++) {
-      if (IsTabPinned(indices[i])) {
-        new_indices.push_back(indices[i]);
+    for (int index : indices) {
+      if (IsTabPinned(index)) {
+        new_indices.push_back(index);
       } else {
-        SetTabPinnedImpl(indices[i], true);
-        new_indices.push_back(IndexOfFirstNonPinnedTab() - 1);
+        new_indices.push_back(SetTabPinnedImpl(index, true));
       }
     }
   } else {
-    for (size_t i = indices.size() - 1; i < indices.size(); i--) {
-      if (!IsTabPinned(indices[i])) {
-        new_indices.push_back(indices[i]);
+    for (int index : base::Reversed(indices)) {
+      if (!IsTabPinned(index)) {
+        new_indices.push_back(index);
       } else {
-        SetTabPinnedImpl(indices[i], false);
-        new_indices.push_back(IndexOfFirstNonPinnedTab());
+        new_indices.push_back(SetTabPinnedImpl(index, false));
       }
     }
     std::reverse(new_indices.begin(), new_indices.end());
@@ -2466,11 +2462,11 @@ void TabStripModel::SetSitesMuted(const std::vector<int>& indices,
                                            CONTENT_SETTING_DEFAULT);
 
         // If the current setting matches the desired setting after clearing the
-        // site URL from the exception list we can simply return otherwise we
+        // site URL from the exception list we can simply skip otherwise we
         // will add the site URL to the exception list.
         if (setting ==
             map->GetContentSetting(url, url, ContentSettingsType::SOUND)) {
-          return;
+          continue;
         }
       }
       // Adds the site URL to the exception list for the setting.
@@ -2494,11 +2490,11 @@ void TabStripModel::FixOpeners(int index) {
 
   // Sanity check that none of the tabs' openers refer |old_contents| or
   // themselves.
-  DCHECK(!std::any_of(contents_data_.begin(), contents_data_.end(),
-                      [old_contents](const std::unique_ptr<Tab>& data) {
-                        return data->opener() == old_contents ||
-                               data->opener() == data->web_contents();
-                      }));
+  DCHECK(!base::ranges::any_of(
+      contents_data_, [old_contents](const std::unique_ptr<Tab>& data) {
+        return data->opener() == old_contents ||
+               data->opener() == data->web_contents();
+      }));
 }
 
 void TabStripModel::EnsureGroupContiguity(int index) {

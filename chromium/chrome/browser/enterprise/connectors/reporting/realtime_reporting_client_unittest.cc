@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #include "chrome/browser/enterprise/connectors/reporting/realtime_reporting_client.h"
@@ -112,13 +112,11 @@ class RealtimeReportingClientIsRealtimeReportingEnabledTest
     if (is_feature_flag_enabled_) {
       scoped_feature_list_.InitWithFeatures(
           {enterprise_connectors::kEnterpriseConnectorsEnabled},
-          {enterprise_connectors::RealtimeReportingClient::
-               kRealtimeReportingFeature});
+          {enterprise_connectors::kSafeBrowsingRealtimeReporting});
     } else {
       scoped_feature_list_.InitWithFeatures(
           {}, {enterprise_connectors::kEnterpriseConnectorsEnabled,
-               enterprise_connectors::RealtimeReportingClient::
-                   kRealtimeReportingFeature});
+               enterprise_connectors::kSafeBrowsingRealtimeReporting});
     }
 
     // In chrome branded desktop builds, the browser is always manageable.

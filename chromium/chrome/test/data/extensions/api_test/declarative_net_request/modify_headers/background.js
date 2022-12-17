@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -278,6 +278,15 @@ var setCustomRequestHeaderRule = {
     requestHeaders: [{header: 'header1', operation: 'set', value: 'value-1'}]
   }
 };
+var appendRequestHeadersRule = {
+  id: 100,
+  priority: 1,
+  condition: {urlFilter: host, resourceTypes: ['main_frame']},
+  action: {
+    type: 'modifyHeaders',
+    requestHeaders: [{header: 'cookie', operation: 'append', value: 'dnr=val'}]
+  }
+};
 
 var tests = [
   function testCookieWithoutRules() {
@@ -286,10 +295,21 @@ var tests = [
     });
   },
 
+  function testAppendRequestHeaderRule() {
+    var rules = [appendRequestHeadersRule];
+    chrome.declarativeNetRequest.updateDynamicRules(
+        {addRules: rules}, function() {
+          chrome.test.assertNoLastError();
+          checkCustomRequestHeaderValue(
+              'cookie', 'foo1=bar1; foo2=bar2; dnr=val');
+        });
+  },
+
   function addRulesAndTestCookieRemoval() {
     var rules = [removeCookieRule];
     chrome.declarativeNetRequest.updateDynamicRules(
-        {addRules: rules}, function() {
+        {removeRuleIds: [appendRequestHeadersRule.id], addRules: rules},
+        function() {
           chrome.test.assertNoLastError();
           checkCookieHeaderRemoved(true);
         });

@@ -1,15 +1,15 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.bookmarks;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ObserverList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
 
 import java.util.ArrayList;
@@ -49,7 +49,6 @@ public class BookmarkModel extends BookmarkBridge {
         this(Profile.getLastUsedRegularProfile());
     }
 
-    @VisibleForTesting
     public BookmarkModel(Profile profile) {
         super(profile);
     }
@@ -135,7 +134,7 @@ public class BookmarkModel extends BookmarkBridge {
     }
 
     /**
-     * @see org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem#getTitle()
+     * @see org.chromium.chrome.browser.bookmarks.BookmarkItem#getTitle()
      */
     public String getBookmarkTitle(BookmarkId bookmarkId) {
         BookmarkItem bookmarkItem = getBookmarkById(bookmarkId);

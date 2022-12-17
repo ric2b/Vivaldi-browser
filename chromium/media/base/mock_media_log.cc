@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,9 +23,9 @@ std::string MockMediaLog::MediaEventToLogString(const MediaLogRecord& event) {
   // event for figuring out media pipeline failures, and just reporting
   // pipeline status as numeric code is not very helpful/user-friendly.
   if (event.type == MediaLogRecord::Type::kMediaStatus) {
-    const std::string* group = event.params.FindStringKey("group");
+    const std::string* group = event.params.FindString("group");
     if (group && *group == "PipelineStatus") {
-      auto code = event.params.FindIntKey("code").value_or(0);
+      auto code = event.params.FindInt("code").value_or(0);
       return PipelineStatusToString(static_cast<PipelineStatusCodes>(code));
     }
   }

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,19 +38,9 @@ using ::testing::Return;
 namespace media {
 namespace {
 
-// TODO(crbug.com/1334991): Clarify WebRTC audio processing support for 96 kHz
-// input.
-static const int kSupportedSampleRates[] = {8000,
-                                            16000,
-                                            22050,
-                                            32000,
-                                            44100,
-                                            48000
-#if BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
-                                            ,
-                                            96000
-#endif
-};
+// Test all sample rates observed in UMA metric WebRTC.AudioInputSampleRate.
+static const int kSupportedSampleRates[] = {8000,  11025, 16000, 22050, 24000,
+                                            32000, 44100, 48000, 96000, 192000};
 
 using MockProcessedCaptureCallback =
     base::MockRepeatingCallback<void(const media::AudioBus& audio_bus,
@@ -97,7 +87,7 @@ class AudioProcessorTest : public ::testing::Test {
  public:
   AudioProcessorTest()
       : params_(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                media::CHANNEL_LAYOUT_STEREO,
+                ChannelLayoutConfig::Stereo(),
                 48000,
                 480) {}
 
@@ -269,7 +259,7 @@ TEST_P(AudioProcessorTestMultichannelAndFormat, MAYBE_TestAllSampleRates) {
     SCOPED_TRACE(testing::Message() << "sample_rate=" << sample_rate);
     int buffer_size = sample_rate / 100;
     media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                  media::CHANNEL_LAYOUT_STEREO, sample_rate,
+                                  ChannelLayoutConfig::Stereo(), sample_rate,
                                   buffer_size);
     std::unique_ptr<AudioProcessor> audio_processor = AudioProcessor::Create(
         mock_capture_callback_.Get(), LogCallbackForTesting(), settings, params,
@@ -462,7 +452,7 @@ TEST_P(AudioProcessorDefaultOutputFormatTest, GetDefaultOutputFormat) {
 
   media::AudioParameters input_params(
       media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-      media::CHANNEL_LAYOUT_STEREO, sample_rate, sample_rate / 100);
+      ChannelLayoutConfig::Stereo(), sample_rate, sample_rate / 100);
   AudioParameters output_params =
       AudioProcessor::GetDefaultOutputFormat(input_params, settings);
 
@@ -488,11 +478,11 @@ TEST_P(AudioProcessorDefaultOutputFormatTest, GetDefaultOutputFormat) {
 TEST_F(AudioProcessorTest, DiscreteChannelLayout) {
   AudioProcessingSettings settings;
 
-  media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                media::CHANNEL_LAYOUT_DISCRETE, 48000, 480);
   // Test both 1 and 2 discrete channels.
   for (int channels = 1; channels <= 2; ++channels) {
-    params.set_channels_for_discrete(channels);
+    media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                                  {media::CHANNEL_LAYOUT_DISCRETE, channels},
+                                  48000, 480);
     std::unique_ptr<AudioProcessor> audio_processor = AudioProcessor::Create(
         mock_capture_callback_.Get(), LogCallbackForTesting(), settings, params,
         AudioProcessor::GetDefaultOutputFormat(params, settings));
@@ -585,7 +575,7 @@ TEST(AudioProcessorCallbackTest,
   AudioProcessingSettings settings;
   // Set buffer size to 4 ms.
   media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                media::CHANNEL_LAYOUT_STEREO, 48000,
+                                ChannelLayoutConfig::Stereo(), 48000,
                                 48000 * 4 / 1000);
   std::unique_ptr<AudioProcessor> audio_processor = AudioProcessor::Create(
       mock_capture_callback.Get(), LogCallbackForTesting(), settings, params,
@@ -635,7 +625,7 @@ TEST(AudioProcessorCallbackTest,
   AudioProcessingSettings settings;
   // Set buffer size to 35 ms.
   media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                media::CHANNEL_LAYOUT_STEREO, 48000,
+                                ChannelLayoutConfig::Stereo(), 48000,
                                 48000 * 35 / 1000);
   std::unique_ptr<AudioProcessor> audio_processor = AudioProcessor::Create(
       mock_capture_callback.Get(), LogCallbackForTesting(), settings, params,
@@ -675,7 +665,7 @@ TEST(AudioProcessorCallbackTest,
   DisableDefaultSettings(settings);
   // Set buffer size to 4 ms.
   media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                media::CHANNEL_LAYOUT_STEREO, 48000,
+                                ChannelLayoutConfig::Stereo(), 48000,
                                 48000 * 4 / 1000);
   std::unique_ptr<AudioProcessor> audio_processor = AudioProcessor::Create(
       mock_capture_callback.Get(), LogCallbackForTesting(), settings, params,
@@ -712,7 +702,7 @@ TEST(AudioProcessorCallbackTest,
   DisableDefaultSettings(settings);
   // Set buffer size to 35 ms.
   media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                                media::CHANNEL_LAYOUT_STEREO, 48000,
+                                ChannelLayoutConfig::Stereo(), 48000,
                                 48000 * 35 / 1000);
   std::unique_ptr<AudioProcessor> audio_processor = AudioProcessor::Create(
       mock_capture_callback.Get(), LogCallbackForTesting(), settings, params,

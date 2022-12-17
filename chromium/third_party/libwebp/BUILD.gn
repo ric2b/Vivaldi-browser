@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -16,8 +16,10 @@ config("libwebp_config_internal") {
   defines = [
     "WEBP_NEAR_LOSSLESS=0",
     "WEBP_DISABLE_STATS",
-    "WEBP_REDUCE_SIZE",
   ]
+  if (!is_chromeos) {
+    defines += [ "WEBP_REDUCE_SIZE" ]
+  }
   if (!is_ios) {
     defines += [ "WEBP_REDUCE_CSP" ]
   }

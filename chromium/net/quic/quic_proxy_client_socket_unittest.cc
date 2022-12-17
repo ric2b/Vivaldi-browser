@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,6 +53,7 @@
 #include "net/third_party/quiche/src/quiche/quic/core/quic_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/crypto_test_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/mock_clock.h"
+#include "net/third_party/quiche/src/quiche/quic/test_tools/mock_connection_id_generator.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/mock_random.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/qpack/qpack_test_utils.h"
 #include "net/third_party/quiche/src/quiche/quic/test_tools/quic_connection_peer.h"
@@ -187,7 +188,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         proxy_endpoint_(url::kHttpsScheme, kProxyHost, kProxyPort),
         destination_endpoint_(url::kHttpsScheme, kOriginHost, kOriginPort),
         http_auth_cache_(
-            false /* key_server_entries_by_network_isolation_key */),
+            false /* key_server_entries_by_network_anonymization_key */),
         host_resolver_(std::make_unique<MockCachingHostResolver>()),
         http_auth_handler_factory_(HttpAuthHandlerFactory::CreateDefault()) {
     FLAGS_quic_enable_http3_grease_randomness = false;
@@ -241,7 +242,8 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         connection_id_, quic::QuicSocketAddress(),
         net::ToQuicSocketAddress(peer_addr_), helper_.get(),
         alarm_factory_.get(), writer, true /* owns_writer */,
-        quic::Perspective::IS_CLIENT, quic::test::SupportedVersions(version_));
+        quic::Perspective::IS_CLIENT, quic::test::SupportedVersions(version_),
+        connection_id_generator_);
     connection->set_visitor(&visitor_);
     quic::test::QuicConnectionPeer::SetSendAlgorithm(connection,
                                                      send_algorithm_);
@@ -264,7 +266,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         &transport_security_state_, /*ssl_config_service=*/nullptr,
         base::WrapUnique(static_cast<QuicServerInfo*>(nullptr)),
         QuicSessionKey("mail.example.org", 80, PRIVACY_MODE_DISABLED,
-                       SocketTag(), NetworkIsolationKey(),
+                       SocketTag(), NetworkAnonymizationKey(),
                        SecureDnsPolicy::kAllow,
                        /*require_dns_https_alpn=*/false),
         /*require_confirmation=*/false,
@@ -325,7 +327,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         NetLogWithSource::Make(NetLogSourceType::NONE),
         base::MakeRefCounted<HttpAuthController>(
             HttpAuth::AUTH_PROXY, proxy_endpoint_.GetURL(),
-            NetworkIsolationKey(), &http_auth_cache_,
+            NetworkAnonymizationKey(), &http_auth_cache_,
             http_auth_handler_factory_.get(), host_resolver_.get()),
         proxy_delegate_.get());
 
@@ -638,6 +640,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
   quic::test::MockRandom random_generator_{0};
   ProofVerifyDetailsChromium verify_details_;
   MockCryptoClientStreamFactory crypto_client_stream_factory_;
+  quic::test::MockConnectionIdGenerator connection_id_generator_;
 
   std::string user_agent_;
   url::SchemeHostPort proxy_endpoint_;
@@ -774,7 +777,7 @@ TEST_P(QuicProxyClientSocketTest, ConnectWithAuthCredentials) {
   const std::u16string kBar(u"bar");
   http_auth_cache_.Add(
       url::SchemeHostPort(GURL(kProxyUrl)), HttpAuth::AUTH_PROXY, "MyRealm1",
-      HttpAuth::AUTH_SCHEME_BASIC, NetworkIsolationKey(),
+      HttpAuth::AUTH_SCHEME_BASIC, NetworkAnonymizationKey(),
       "Basic realm=MyRealm1", AuthCredentials(kFoo, kBar), "/");
 
   AssertConnectSucceeds();

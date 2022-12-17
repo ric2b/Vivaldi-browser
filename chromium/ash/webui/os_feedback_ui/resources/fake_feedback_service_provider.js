@@ -1,10 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {FakeMethodResolver} from 'chrome://resources/ash/common/fake_method_resolver.js';
+import {assert} from 'chrome://resources/js/assert.js';
 
-import {FeedbackAppExitPath, FeedbackAppPostSubmitAction, FeedbackAppPreSubmitAction, FeedbackContext, FeedbackServiceProviderInterface, Report, SendReportStatus} from './feedback_types.js';
+import {FeedbackAppExitPath, FeedbackAppHelpContentOutcome, FeedbackAppPostSubmitAction, FeedbackAppPreSubmitAction, FeedbackContext, FeedbackServiceProviderInterface, Report, SendReportStatus} from './feedback_types.js';
 
 /**
  * @fileoverview
@@ -45,7 +46,7 @@ export class FakeFeedbackServiceProvider {
       /** @type {number} */
       openSystemInfoDialog: 0,
       /** @type {number} */
-      openBluetoothLogsInfoDialog: 0,
+      recordHelpContentSearchResultCount: 0,
     };
 
     /** @type {?FeedbackAppPostSubmitAction} */
@@ -53,6 +54,9 @@ export class FakeFeedbackServiceProvider {
 
     /** @type {?FeedbackAppExitPath} */
     this.exitPath_ = null;
+
+    /** @type {?FeedbackAppHelpContentOutcome} */
+    this.helpContentOutcome_ = null;
 
     /** @type {Map<FeedbackAppPreSubmitAction, number>} */
     this.preSubmitActionMap_ = new Map();
@@ -142,9 +146,6 @@ export class FakeFeedbackServiceProvider {
     return this.callCounts_.openDiagnosticsApp;
   }
 
-  /**
-   * @return {void}
-   */
   openDiagnosticsApp() {
     this.callCounts_.openDiagnosticsApp++;
   }
@@ -156,9 +157,6 @@ export class FakeFeedbackServiceProvider {
     return this.callCounts_.openExploreApp;
   }
 
-  /**
-   * @return {void}
-   */
   openExploreApp() {
     this.callCounts_.openExploreApp++;
   }
@@ -170,9 +168,6 @@ export class FakeFeedbackServiceProvider {
     return this.callCounts_.openMetricsDialog;
   }
 
-  /**
-   * @return {void}
-   */
   openMetricsDialog() {
     this.callCounts_.openMetricsDialog++;
   }
@@ -184,9 +179,6 @@ export class FakeFeedbackServiceProvider {
     return this.callCounts_.openSystemInfoDialog;
   }
 
-  /**
-   * @return {void}
-   */
   openSystemInfoDialog() {
     this.callCounts_.openSystemInfoDialog++;
   }
@@ -194,12 +186,12 @@ export class FakeFeedbackServiceProvider {
   /**
    * @return {number}
    */
-  getOpenBluetoothLogsInfoDialogCallCount() {
-    return this.callCounts_.openBluetoothLogsInfoDialog;
+  getRecordHelpContentSearchResultCount() {
+    return this.callCounts_.recordHelpContentSearchResultCount;
   }
 
-  openBluetoothLogsInfoDialog() {
-    this.callCounts_.openBluetoothLogsInfoDialog++;
+  recordHelpContentSearchResultCount() {
+    this.callCounts_.recordHelpContentSearchResultCount++;
   }
 
   /**
@@ -212,7 +204,6 @@ export class FakeFeedbackServiceProvider {
 
   /**
    * @param {!FeedbackAppPostSubmitAction} action
-   * @return {void}
    */
   recordPostSubmitAction(action) {
     if (this.postSubmitAction_ === null) {
@@ -247,10 +238,25 @@ export class FakeFeedbackServiceProvider {
 
   /**
    * @param {!FeedbackAppPreSubmitAction} action
-   * @return {void}
    */
   recordPreSubmitAction(action) {
     this.preSubmitActionMap_.set(
         action, this.preSubmitActionMap_.get(action) + 1 || 1);
+  }
+
+  /**
+   * @param {?FeedbackAppHelpContentOutcome} outcome
+   * @return {boolean}
+   */
+  isHelpContentOutcomeMetricEmitted(outcome) {
+    return this.helpContentOutcome_ === outcome;
+  }
+
+  /**
+   * @param {?FeedbackAppHelpContentOutcome} outcome
+   */
+  recordHelpContentOutcome(outcome) {
+    assert(this.helpContentOutcome_ === null);
+    this.helpContentOutcome_ = outcome;
   }
 }

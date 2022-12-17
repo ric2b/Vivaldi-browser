@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,6 @@ class PrerenderPageHolder : public FrameTree::Delegate,
   void DidStartLoading(FrameTreeNode* frame_tree_node,
                        bool should_show_loading_ui) override {}
   void DidStopLoading() override;
-  void DidChangeLoadProgress() override {}
   bool IsHidden() override;
   FrameTree* LoadingTree() override;
   void NotifyPageChanged(PageImpl& page) override {}

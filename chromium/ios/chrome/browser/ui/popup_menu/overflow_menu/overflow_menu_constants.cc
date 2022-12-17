@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,8 @@ Destination DestinationForStringName(std::string destination) {
     return overflow_menu::Destination::SiteInfo;
   } else if (destination == "overflow_menu::Destination::Settings") {
     return overflow_menu::Destination::Settings;
+  } else if (destination == "overflow_menu::Destination::WhatsNew") {
+    return overflow_menu::Destination::WhatsNew;
   // Vivaldi
   } else if (destination == "overflow_menu::Destination::Notes") {
       return overflow_menu::Destination::Bookmarks;
@@ -58,6 +60,8 @@ std::string StringNameForDestination(Destination destination) {
       return "overflow_menu::Destination::SiteInfo";
     case overflow_menu::Destination::Settings:
       return "overflow_menu::Destination::Settings";
+    case overflow_menu::Destination::WhatsNew:
+      return "overflow_menu::Destination::WhatsNew";
     // Vivaldi
     case overflow_menu::Destination::Notes:
       return "overflow_menu::Destination::Notes";
@@ -91,6 +95,9 @@ void RecordUmaActionForDestination(Destination destination) {
       break;
     case Destination::Settings:
       base::RecordAction(base::UserMetricsAction("MobileMenuSettings"));
+      break;
+    case Destination::WhatsNew:
+      base::RecordAction(base::UserMetricsAction("MobileMenuWhatsNew"));
       break;
     // Vivaldi
     case Destination::Notes:

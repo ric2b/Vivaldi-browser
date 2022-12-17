@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,45 +14,42 @@ namespace page_info {
 
 #if BUILDFLAG(IS_ANDROID)
 // Enables the history sub page for Page Info.
-extern const base::Feature kPageInfoHistory;
+BASE_DECLARE_FEATURE(kPageInfoHistory);
 // Enables the store info row for Page Info.
-extern const base::Feature kPageInfoStoreInfo;
-
-// Used to experiment with different permission timeouts. The underlying feature
-// itself is already launched.
-extern const base::Feature kPageInfoDiscoverability;
+BASE_DECLARE_FEATURE(kPageInfoStoreInfo);
 #endif
 
 // Enables the "About this site" section in Page Info.
 extern bool IsAboutThisSiteFeatureEnabled(const std::string& locale);
-extern const base::Feature kPageInfoAboutThisSiteEn;
-extern const base::Feature kPageInfoAboutThisSiteNonEn;
+BASE_DECLARE_FEATURE(kPageInfoAboutThisSiteEn);
+BASE_DECLARE_FEATURE(kPageInfoAboutThisSiteNonEn);
 
 // Whether we show hard-coded content for some sites like https://example.com.
 extern const base::FeatureParam<bool> kShowSampleContent;
 
 // Shows a link with more info about a site in PageInfo.
-extern const base::Feature kPageInfoAboutThisSiteMoreInfo;
+// Use page_info::IsAboutThisSiteFeatureEnabled() instead of checking this flag
+// directly.
+BASE_DECLARE_FEATURE(kPageInfoAboutThisSiteMoreInfo);
 
 // Shows a placeholder when a description is missing. Only enable in combination
 // with kPageInfoAboutThisSiteMoreInfo.
-extern const base::Feature kPageInfoAboutThisSiteDescriptionPlaceholder;
-
-// Enables the "About this site" banner.
-extern const base::Feature kAboutThisSiteBanner;
+// Use page_info::IsDescriptionPlaceholderEnabled() instead of checking this
+// flag directly.
+BASE_DECLARE_FEATURE(kPageInfoAboutThisSiteDescriptionPlaceholder);
 
 #if !BUILDFLAG(IS_ANDROID)
 // Enables the history section for Page Info on desktop.
-extern const base::Feature kPageInfoHistoryDesktop;
+BASE_DECLARE_FEATURE(kPageInfoHistoryDesktop);
 
 // Hides site settings row.
-extern const base::Feature kPageInfoHideSiteSettings;
+BASE_DECLARE_FEATURE(kPageInfoHideSiteSettings);
 
 // Enables Cookies Subpage. For implementation phase.
-extern const base::Feature kPageInfoCookiesSubpage;
+BASE_DECLARE_FEATURE(kPageInfoCookiesSubpage);
 
 // Enables the new page specific site data dialog.
-extern const base::Feature kPageSpecificSiteDataDialog;
+BASE_DECLARE_FEATURE(kPageSpecificSiteDataDialog);
 #endif
 
 }  // namespace page_info

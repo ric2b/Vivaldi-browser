@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,6 +65,8 @@ class FileSearchProvider : public SearchProvider {
   Profile* const profile_;
   ash::ThumbnailLoader thumbnail_loader_;
   base::FilePath root_path_;
+
+  std::vector<base::FilePath> trash_paths_;
 
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<FileSearchProvider> weak_factory_{this};

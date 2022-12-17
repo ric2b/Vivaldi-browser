@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/browser/tailored_security_service/tailored_security_notification_result.h"
+#include "components/safe_browsing/core/browser/tailored_security_service/tailored_security_service_util.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/safe_browsing_policy_handler.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -24,7 +25,7 @@
 #else
 #include "chrome/browser/safe_browsing/tailored_security/notification_handler_desktop.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/views/safe_browsing/tailored_security_desktop_dialog.h"
+#include "chrome/browser/ui/views/safe_browsing/tailored_security_desktop_dialog_manager.h"
 #endif
 
 namespace safe_browsing {
@@ -50,62 +51,19 @@ content::WebContents* GetWebContentsForProfile(Profile* profile) {
 
 }  // namespace
 
-// Records an UMA Histogram value to count the result of trying to notify a sync
-// user about enhanced protection for the enable case.
-void RecordEnabledNotificationResult(
-    TailoredSecurityNotificationResult result) {
-  base::UmaHistogramEnumeration(
-      "SafeBrowsing.TailoredSecurity.SyncPromptEnabledNotificationResult2",
-      result);
-}
-
 ChromeTailoredSecurityService::ChromeTailoredSecurityService(Profile* profile)
     : TailoredSecurityService(IdentityManagerFactory::GetForProfile(profile),
                               profile->GetPrefs()),
-      profile_(profile) {}
-
-ChromeTailoredSecurityService::~ChromeTailoredSecurityService() = default;
-
-void ChromeTailoredSecurityService::MaybeNotifySyncUser(
-    bool is_enabled,
-    base::Time previous_update) {
-  if (!base::FeatureList::IsEnabled(kTailoredSecurityIntegration))
-    return;
-
-  if (!identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
-    if (is_enabled) {
-      RecordEnabledNotificationResult(
-          TailoredSecurityNotificationResult::kAccountNotConsented);
-    }
-    return;
-  }
-
-  if (SafeBrowsingPolicyHandler::IsSafeBrowsingProtectionLevelSetByPolicy(
-          profile_->GetPrefs())) {
-    if (is_enabled) {
-      RecordEnabledNotificationResult(
-          TailoredSecurityNotificationResult::kSafeBrowsingControlledByPolicy);
-    }
-    return;
-  }
-
-  if (is_enabled && IsEnhancedProtectionEnabled(*prefs())) {
-    RecordEnabledNotificationResult(
-        TailoredSecurityNotificationResult::kEnhancedProtectionAlreadyEnabled);
-  }
-
-  if (is_enabled && !IsEnhancedProtectionEnabled(*prefs())) {
-    ShowSyncNotification(true);
-  }
-
-  if (!is_enabled && IsEnhancedProtectionEnabled(*prefs()) &&
-      prefs()->GetBoolean(
-          prefs::kEnhancedProtectionEnabledViaTailoredSecurity)) {
-    ShowSyncNotification(false);
-  }
+      profile_(profile) {
+  AddObserver(this);
 }
 
-void ChromeTailoredSecurityService::ShowSyncNotification(bool is_enabled) {
+ChromeTailoredSecurityService::~ChromeTailoredSecurityService() {
+  RemoveObserver(this);
+}
+
+void ChromeTailoredSecurityService::OnSyncNotificationMessageRequest(
+    bool is_enabled) {
 #if BUILDFLAG(IS_ANDROID)
   content::WebContents* web_contents = GetWebContentsForProfile(profile_);
   if (!web_contents) {
@@ -137,20 +95,17 @@ void ChromeTailoredSecurityService::ShowSyncNotification(bool is_enabled) {
       }
       return;
     }
-    content::WebContents* web_contents =
-        browser->tab_strip_model()->GetActiveWebContents();
-    if (!web_contents) {
+    if (!browser->window()) {
       if (is_enabled) {
         RecordEnabledNotificationResult(
-            TailoredSecurityNotificationResult::kNoWebContentsAvailable);
+            TailoredSecurityNotificationResult::kNoBrowserWindowAvailable);
       }
-      return;
     }
     SetSafeBrowsingState(profile_->GetPrefs(),
                          is_enabled ? SafeBrowsingState::ENHANCED_PROTECTION
                                     : SafeBrowsingState::STANDARD_PROTECTION,
                          /*is_esb_enabled_in_sync=*/is_enabled);
-    DisplayDesktopDialog(browser, web_contents, is_enabled);
+    DisplayDesktopDialog(browser, is_enabled);
   } else {
     DisplayTailoredSecurityConsentedModalDesktop(profile_, is_enabled);
   }
@@ -163,12 +118,11 @@ void ChromeTailoredSecurityService::ShowSyncNotification(bool is_enabled) {
 #if !BUILDFLAG(IS_ANDROID)
 void ChromeTailoredSecurityService::DisplayDesktopDialog(
     Browser* browser,
-    content::WebContents* web_contents,
     bool show_enable_modal) {
   if (show_enable_modal) {
-    ShowEnabledDialogForWebContents(browser, web_contents);
+    dialog_manager_.ShowEnabledDialogForBrowser(browser);
   } else {
-    ShowDisabledDialogForWebContents(browser, web_contents);
+    dialog_manager_.ShowDisabledDialogForBrowser(browser);
   }
 }
 #endif

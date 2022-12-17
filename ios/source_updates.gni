@@ -8,6 +8,21 @@ update_target("//ios/chrome/browser/ui/bookmarks:bookmarks_ui") {
   sources += [
     "//vivaldi/ios/chrome/browser/ui/bookmarks/bookmark_edit_view_controller+vivaldi.h",
     "//vivaldi/ios/chrome/browser/ui/bookmarks/bookmark_edit_view_controller+vivaldi.mm",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.mm",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_folder_view_controller.h",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_folder_view_controller.mm",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_url_view_controller.h",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_url_view_controller.mm",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_text_field_view.h",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_text_field_view.mm",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_parent_folder_view.h",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_parent_folder_view.mm",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_folder_selection_header_view.h",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_folder_selection_header_view.mm",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_controller_delegate.h",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_prefs.h",
+    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_prefs.mm",
   ]
 }
 
@@ -42,5 +57,23 @@ update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension
     "//vivaldi/ios/chrome/widget_kit_extension/main.swift",
     "//vivaldi/ios/chrome/widget_kit_extension/search_widget.swift",
     "//vivaldi/ios/chrome/widget_kit_extension/quick_actions_widget.swift",
+  ]
+}
+
+update_target("//ios/chrome/common/ui/util:util") {
+  sources += [
+    "//vivaldi/ios/ui/helpers/vivaldi_uiview_layout_helper.h",
+    "//vivaldi/ios/ui/helpers/vivaldi_uiview_layout_helper.mm",
+    "//vivaldi/ios/ui/helpers/vivaldi_uiview_style_helper.h",
+    "//vivaldi/ios/ui/helpers/vivaldi_uiview_style_helper.mm",
+    "//vivaldi/ios/ui/helpers/vivaldi_uiviewcontroller_helper.h",
+    "//vivaldi/ios/ui/helpers/vivaldi_uiviewcontroller_helper.mm",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/tabs:tabs") {
+  sources += [
+    "//vivaldi/ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h",
+    "//vivaldi/ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.mm",
   ]
 }

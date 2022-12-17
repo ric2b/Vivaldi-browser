@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -160,14 +160,9 @@ IN_PROC_BROWSER_TEST_F(CookieControlsBubbleViewTest, DISABLED_InvokeUi_CookiesBl
 }
 
 // Test opening cookie controls bubble and clicking on "not working" link.
-// TODO(https://crbug.com/1332525): Failing on Mac Arm64.
-#if BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)
-#define MAYBE_InvokeUi_NotWorkingClicked DISABLED_InvokeUi_NotWorkingClicked
-#else
-#define MAYBE_InvokeUi_NotWorkingClicked InvokeUi_NotWorkingClicked
-#endif
+// TODO(https://crbug.com/1332525): Flaky on all platforms.
 IN_PROC_BROWSER_TEST_F(CookieControlsBubbleViewTest,
-                       MAYBE_InvokeUi_NotWorkingClicked) {
+                       DISABLED_InvokeUi_NotWorkingClicked) {
   // Block 3p cookies.
   SetThirdPartyCookieBlocking(true);
 

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -127,23 +127,6 @@ class ASH_EXPORT AppListPresenterImpl
   // Returns target visibility. This may differ from IsVisible() if a visibility
   // transition is in progress.
   bool GetTargetVisibility() const;
-
-  // Updates y position and opacity of app list.
-  void UpdateYPositionAndOpacity(float y_position_in_screen,
-                                 float background_opacity);
-
-  // Ends the drag of app list from shelf.
-  void EndDragFromShelf(AppListViewState app_list_state);
-
-  // Passes data from a Scroll event from the shelf to the
-  // AppListView.
-  void ProcessScrollOffset(const gfx::Point& location,
-                           const gfx::Vector2d& scroll_offset_vector);
-
-  // Passes data from a MouseWheelEvent event from the shelf to the
-  // AppListView.
-  void ProcessMouseWheelOffset(const gfx::Point& location,
-                               const gfx::Vector2d& scroll_offset_vector);
 
   // Scales the home launcher view maintaining the view center point, and
   // updates its opacity. If |callback| is non-null, the update should be

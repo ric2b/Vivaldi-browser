@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)
+#if (BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)) || BUILDFLAG(IS_FUCHSIA)
 #include "base/files/file_descriptor_watcher_posix.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #endif
@@ -60,7 +60,8 @@ class SequenceManagerThreadDelegate : public Thread::Delegate {
                     .SetMessagePumpType(message_pump_type)
                     .Build())),
         default_task_queue_(sequence_manager_->CreateTaskQueue(
-            sequence_manager::TaskQueue::Spec("default_tq"))),
+            sequence_manager::TaskQueue::Spec(
+                sequence_manager::QueueName::DEFAULT_TQ))),
         message_pump_factory_(std::move(message_pump_factory)) {
     sequence_manager_->SetDefaultTaskRunner(default_task_queue_->task_runner());
   }
@@ -373,15 +374,14 @@ void Thread::ThreadMain() {
   delegate_->BindToCurrentThread(timer_slack_);
   DCHECK(CurrentThread::Get());
   DCHECK(ThreadTaskRunnerHandle::IsSet());
-
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)
+#if (BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)) || BUILDFLAG(IS_FUCHSIA)
   // Allow threads running a MessageLoopForIO to use FileDescriptorWatcher API.
   std::unique_ptr<FileDescriptorWatcher> file_descriptor_watcher;
   if (CurrentIOThread::IsSet()) {
     file_descriptor_watcher = std::make_unique<FileDescriptorWatcher>(
         delegate_->GetDefaultTaskRunner());
   }
-#endif
+#endif  // (BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)) || BUILDFLAG(IS_FUCHSIA)
 
 #if BUILDFLAG(IS_WIN)
   std::unique_ptr<win::ScopedCOMInitializer> com_initializer;

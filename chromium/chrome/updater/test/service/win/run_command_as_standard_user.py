@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 
 All arguments provided to this program will be used to reconstruct the command
 line for the child process. For example,
-    vpython run_command_as_standard_user.py --command notepad "hello world.txt"
+    vpython3 run_command_as_standard_user.py --command notepad "hello world.txt"
 will launch a process with command line:
     notepad "hello world.txt"
 

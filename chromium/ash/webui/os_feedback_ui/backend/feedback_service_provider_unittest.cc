@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,8 +25,15 @@ namespace {
 
 constexpr char kPageUrl[] = "https://www.google.com/";
 constexpr char kSignedInUserEmail[] = "test_user_email@test.com";
+constexpr char kSignedInInternalUserEmail[] = "test_user_email@google.com";
 constexpr char kFeedbackAppPostSubmitAction[] =
     "Feedback.ChromeOSApp.PostSubmitAction";
+// Set this flag true to use kSignedInInternalUserEmail as signed in email,
+// set false to use kSignedInUserEmail as signed in email.
+bool kUseInternalUserEmail = false;
+constexpr bool kIsInternalEmail = true;
+constexpr bool kIsNotInternalEmail = false;
+constexpr int kPerformanceTraceId = 1;
 const std::vector<uint8_t> kFakePngData = {42, 22, 26, 13, 7, 16, 8, 2};
 
 using FeedbackAppPostSubmitAction =
@@ -53,8 +60,11 @@ class TestOsFeedbackDelegate : public OsFeedbackDelegate {
   }
 
   absl::optional<std::string> GetSignedInUserEmail() const override {
-    return kSignedInUserEmail;
+    return kUseInternalUserEmail ? kSignedInInternalUserEmail
+                                 : kSignedInUserEmail;
   }
+
+  int GetPerformanceTraceId() override { return kPerformanceTraceId; }
 
   void GetScreenshotPng(GetScreenshotPngCallback callback) override {
     std::move(callback).Run(kFakePngData);
@@ -72,8 +82,6 @@ class TestOsFeedbackDelegate : public OsFeedbackDelegate {
   void OpenMetricsDialog() override {}
 
   void OpenSystemInfoDialog() override {}
-
-  void OpenBluetoothLogsInfoDialog() override {}
 };
 
 class FeedbackServiceProviderTest : public testing::Test {
@@ -124,10 +132,22 @@ class FeedbackServiceProviderTest : public testing::Test {
 // Test that GetFeedbackContext returns a response with correct feedback
 // context.
 TEST_F(FeedbackServiceProviderTest, GetFeedbackContext) {
+  kUseInternalUserEmail = true;
+  auto internal_feedback_context = GetFeedbackContextAndWait();
+
+  EXPECT_EQ(kSignedInInternalUserEmail,
+            internal_feedback_context->email.value());
+  EXPECT_EQ(kPageUrl, internal_feedback_context->page_url.value().spec());
+  EXPECT_EQ(kIsInternalEmail, internal_feedback_context->is_internal_account);
+  EXPECT_EQ(kPerformanceTraceId, internal_feedback_context->trace_id);
+
+  kUseInternalUserEmail = false;
   auto feedback_context = GetFeedbackContextAndWait();
 
   EXPECT_EQ(kSignedInUserEmail, feedback_context->email.value());
   EXPECT_EQ(kPageUrl, feedback_context->page_url.value().spec());
+  EXPECT_EQ(kIsNotInternalEmail, feedback_context->is_internal_account);
+  EXPECT_EQ(kPerformanceTraceId, feedback_context->trace_id);
 }
 
 // Test that GetScreenshotPng returns a response with correct status.

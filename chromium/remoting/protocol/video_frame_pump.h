@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,23 +18,21 @@
 #include "remoting/codec/video_encoder.h"
 #include "remoting/proto/video.pb.h"
 #include "remoting/protocol/capture_scheduler.h"
+#include "remoting/protocol/desktop_capturer.h"
 #include "remoting/protocol/video_stream.h"
-#include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 
 namespace base {
 class SingleThreadTaskRunner;
 }  // namespace base
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class VideoFeedbackStub;
 class VideoStub;
 
-// Class responsible for scheduling frame captures from a screen capturer.,
-// delivering them to a VideoEncoder to encode, and
-// finally passing the encoded video packets to the specified VideoStub to send
-// on the network.
+// Class responsible for scheduling frame captures from a screen capturer,
+// delivering them to a VideoEncoder to encode, and finally passing the encoded
+// video packets to the specified VideoStub to send on the network.
 //
 // THREADING
 //
@@ -74,7 +72,7 @@ class VideoFramePump : public VideoStream,
   // supplied TaskRunners. Video will be pumped to |video_stub|, which must
   // outlive the pump..
   VideoFramePump(scoped_refptr<base::SingleThreadTaskRunner> encode_task_runner,
-                 std::unique_ptr<webrtc::DesktopCapturer> capturer,
+                 std::unique_ptr<DesktopCapturer> capturer,
                  std::unique_ptr<VideoEncoder> encoder,
                  protocol::VideoStub* video_stub);
 
@@ -91,6 +89,10 @@ class VideoFramePump : public VideoStream,
   void SetLosslessColor(bool want_lossless) override;
   void SetObserver(Observer* observer) override;
   void SelectSource(webrtc::ScreenId id) override;
+  void SetComposeEnabled(bool enabled) override;
+  void SetMouseCursor(
+      std::unique_ptr<webrtc::MouseCursor> mouse_cursor) override;
+  void SetMouseCursorPosition(const webrtc::DesktopVector& position) override;
 
   protocol::VideoFeedbackStub* video_feedback_stub() {
     return &capture_scheduler_;
@@ -157,7 +159,7 @@ class VideoFramePump : public VideoStream,
   scoped_refptr<base::SingleThreadTaskRunner> encode_task_runner_;
 
   // Capturer used to capture the screen.
-  std::unique_ptr<webrtc::DesktopCapturer> capturer_;
+  std::unique_ptr<DesktopCapturer> capturer_;
 
   // Used to encode captured frames. Always accessed on the encode thread.
   std::unique_ptr<VideoEncoder> encoder_;
@@ -186,12 +188,11 @@ class VideoFramePump : public VideoStream,
 
   std::vector<std::unique_ptr<PacketWithTimestamps>> pending_packets_;
 
-  base::ThreadChecker thread_checker_;
+  THREAD_CHECKER(thread_checker_);
 
   base::WeakPtrFactory<VideoFramePump> weak_factory_{this};
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_VIDEO_FRAME_PUMP_H_

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,10 +83,9 @@ bool ChromeUnwinderAndroidV2::CanUnwindFrom(const Frame& current_frame) const {
          current_frame.module->GetBaseAddress() == chrome_module_base_address_;
 }
 
-UnwindResult ChromeUnwinderAndroidV2::TryUnwind(
-    RegisterContext* thread_context,
-    uintptr_t stack_top,
-    std::vector<Frame>* stack) const {
+UnwindResult ChromeUnwinderAndroidV2::TryUnwind(RegisterContext* thread_context,
+                                                uintptr_t stack_top,
+                                                std::vector<Frame>* stack) {
   DCHECK(CanUnwindFrom(stack->back()));
   uintptr_t frame_initial_sp = RegisterContextStackPointer(thread_context);
   const uintptr_t unwind_initial_pc =

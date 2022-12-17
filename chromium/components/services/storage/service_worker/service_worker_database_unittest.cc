@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,8 +19,12 @@
 #include "base/unguessable_token.h"
 #include "components/services/storage/service_worker/service_worker_database.pb.h"
 #include "net/base/features.h"
+#include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/referrer_policy.mojom-shared.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/frame/policy_container.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "third_party/leveldatabase/src/include/leveldb/write_batch.h"
@@ -88,6 +92,15 @@ void VerifyRegistrationData(const RegistrationData& expected,
   EXPECT_EQ(expected.cross_origin_embedder_policy,
             actual.cross_origin_embedder_policy);
   EXPECT_EQ(expected.ancestor_frame_type, actual.ancestor_frame_type);
+  if (expected.policy_container_policies) {
+    EXPECT_EQ(expected.policy_container_policies,
+              actual.policy_container_policies);
+  } else {
+    // Null policy container policies will be read as default policies because
+    // there's always going to be a default Cross Origin Embedder Policy
+    EXPECT_EQ(blink::mojom::PolicyContainerPolicies::New(),
+              actual.policy_container_policies);
+  }
 }
 
 void VerifyResourceRecords(const std::vector<ResourceRecordPtr>& expected,
@@ -442,7 +455,8 @@ TEST(ServiceWorkerDatabaseTest, GetStorageKeysWithRegistrations) {
 
   GURL origin5 = GURL("https://example.org");
   net::SchemefulSite top_level_site1(GURL("https://toplevel.com"));
-  blink::StorageKey key5(url::Origin::Create(origin5), top_level_site1);
+  blink::StorageKey key5 = blink::StorageKey::CreateForTesting(
+      url::Origin::Create(origin5), top_level_site1);
   RegistrationData data5;
   data5.registration_id = 567;
   data5.scope = URL(origin5, "/hoge");
@@ -457,7 +471,8 @@ TEST(ServiceWorkerDatabaseTest, GetStorageKeysWithRegistrations) {
 
   GURL origin6 = GURL("https://example.org");
   net::SchemefulSite top_level_site2(GURL("https://toplevel2.com"));
-  blink::StorageKey key6(url::Origin::Create(origin6), top_level_site2);
+  blink::StorageKey key6 = blink::StorageKey::CreateForTesting(
+      url::Origin::Create(origin6), top_level_site2);
   RegistrationData data6;
   data6.registration_id = 678;
   data6.scope = URL(origin6, "/hoge");
@@ -577,6 +592,10 @@ TEST(ServiceWorkerDatabaseTest, GetRegistrationsForStorageKey) {
   data1.script_response_time = base::Time::FromJsTime(0);
   data1.cross_origin_embedder_policy = CrossOriginEmbedderPolicyNone();
   data1.ancestor_frame_type = blink::mojom::AncestorFrameType::kNormalFrame;
+  data1.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data1.policy_container_policies->cross_origin_embedder_policy =
+      data1.cross_origin_embedder_policy.value;
   std::vector<ResourceRecordPtr> resources1;
   resources1.push_back(CreateResource(1, data1.script, 100));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
@@ -602,6 +621,10 @@ TEST(ServiceWorkerDatabaseTest, GetRegistrationsForStorageKey) {
   data2.script_response_time = base::Time::FromJsTime(42);
   data2.cross_origin_embedder_policy = CrossOriginEmbedderPolicyRequireCorp();
   data2.ancestor_frame_type = blink::mojom::AncestorFrameType::kFencedFrame;
+  data2.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data2.policy_container_policies->cross_origin_embedder_policy =
+      data2.cross_origin_embedder_policy.value;
   std::vector<ResourceRecordPtr> resources2;
   resources2.push_back(CreateResource(2, data2.script, 200));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
@@ -626,6 +649,10 @@ TEST(ServiceWorkerDatabaseTest, GetRegistrationsForStorageKey) {
   data3.resources_total_size_bytes = 300;
   data3.script_response_time = base::Time::FromJsTime(420);
   data3.cross_origin_embedder_policy = CrossOriginEmbedderPolicyNone();
+  data3.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data3.policy_container_policies->cross_origin_embedder_policy =
+      data3.cross_origin_embedder_policy.value;
   std::vector<ResourceRecordPtr> resources3;
   resources3.push_back(CreateResource(3, data3.script, 300));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
@@ -642,6 +669,10 @@ TEST(ServiceWorkerDatabaseTest, GetRegistrationsForStorageKey) {
   data4.script_response_time = base::Time::FromJsTime(4200);
   data4.cross_origin_embedder_policy =
       CrossOriginEmbedderPolicyCredentialless();
+  data4.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data4.policy_container_policies->cross_origin_embedder_policy =
+      data4.cross_origin_embedder_policy.value;
   std::vector<ResourceRecordPtr> resources4;
   resources4.push_back(CreateResource(4, data4.script, 400));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
@@ -689,6 +720,10 @@ TEST(ServiceWorkerDatabaseTest, GetAllRegistrations) {
   data1.resources_total_size_bytes = 100;
   data1.cross_origin_embedder_policy = CrossOriginEmbedderPolicyNone();
   data1.ancestor_frame_type = blink::mojom::AncestorFrameType::kNormalFrame;
+  data1.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data1.policy_container_policies->cross_origin_embedder_policy =
+      data1.cross_origin_embedder_policy.value;
   std::vector<ResourceRecordPtr> resources1;
   resources1.push_back(CreateResource(1, data1.script, 100));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
@@ -705,6 +740,10 @@ TEST(ServiceWorkerDatabaseTest, GetAllRegistrations) {
   data2.update_via_cache = blink::mojom::ServiceWorkerUpdateViaCache::kNone;
   data2.cross_origin_embedder_policy = CrossOriginEmbedderPolicyRequireCorp();
   data2.ancestor_frame_type = blink::mojom::AncestorFrameType::kFencedFrame;
+  data2.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data2.policy_container_policies->cross_origin_embedder_policy =
+      data2.cross_origin_embedder_policy.value;
   std::vector<ResourceRecordPtr> resources2;
   resources2.push_back(CreateResource(2, data2.script, 200));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
@@ -720,6 +759,10 @@ TEST(ServiceWorkerDatabaseTest, GetAllRegistrations) {
   data3.resources_total_size_bytes = 300;
   data3.cross_origin_embedder_policy =
       CrossOriginEmbedderPolicyCredentialless();
+  data3.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data3.policy_container_policies->cross_origin_embedder_policy =
+      data3.cross_origin_embedder_policy.value;
   std::vector<ResourceRecordPtr> resources3;
   resources3.push_back(CreateResource(3, data3.script, 300));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
@@ -750,14 +793,18 @@ TEST(ServiceWorkerDatabaseTest, GetAllRegistrations) {
   RegistrationData data5;
   data5.registration_id = 500;
   data5.scope = URL(origin5, "/hoge");
-  data5.key =
-      blink::StorageKey(url::Origin::Create(data5.scope), top_level_site1);
+  data5.key = blink::StorageKey::CreateForTesting(
+      url::Origin::Create(data5.scope), top_level_site1);
   data5.script = URL(origin5, "/script5.js");
   data5.version_id = 5000;
   data5.resources_total_size_bytes = 500;
   data5.cross_origin_embedder_policy =
       CrossOriginEmbedderPolicyCredentialless();
   std::vector<ResourceRecordPtr> resources5;
+  data5.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data5.policy_container_policies->cross_origin_embedder_policy =
+      data5.cross_origin_embedder_policy.value;
   resources5.push_back(CreateResource(5, data5.script, 500));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
             database->WriteRegistration(data5, resources5, &deleted_version));
@@ -767,13 +814,17 @@ TEST(ServiceWorkerDatabaseTest, GetAllRegistrations) {
   RegistrationData data6;
   data6.registration_id = 600;
   data6.scope = URL(origin6, "/hoge");
-  data6.key =
-      blink::StorageKey(url::Origin::Create(data6.scope), top_level_site2);
+  data6.key = blink::StorageKey::CreateForTesting(
+      url::Origin::Create(data6.scope), top_level_site2);
   data6.script = URL(origin6, "/script6.js");
   data6.version_id = 6000;
   data6.resources_total_size_bytes = 600;
   data6.cross_origin_embedder_policy =
       CrossOriginEmbedderPolicyCredentialless();
+  data6.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data6.policy_container_policies->cross_origin_embedder_policy =
+      data6.cross_origin_embedder_policy.value;
   std::vector<ResourceRecordPtr> resources6;
   resources6.push_back(CreateResource(6, data6.script, 600));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
@@ -795,6 +846,10 @@ TEST(ServiceWorkerDatabaseTest, GetAllRegistrations) {
   data7.resources_total_size_bytes = 700;
   data7.cross_origin_embedder_policy =
       CrossOriginEmbedderPolicyCredentialless();
+  data7.policy_container_policies =
+      blink::mojom::PolicyContainerPolicies::New();
+  data7.policy_container_policies->cross_origin_embedder_policy =
+      data7.cross_origin_embedder_policy.value;
   std::vector<ResourceRecordPtr> resources7;
   resources7.push_back(CreateResource(7, data7.script, 700));
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
@@ -2141,6 +2196,71 @@ TEST(ServiceWorkerDatabaseTest, UpdateLastCheckTime) {
                                           base::Time::Now()));
 }
 
+TEST(ServiceWorkerDatabaseTest, UpdateFetchHandlerType) {
+  std::unique_ptr<ServiceWorkerDatabase> database(CreateDatabaseInMemory());
+  GURL origin("https://example.com");
+  blink::StorageKey key(url::Origin::Create(origin));
+  ServiceWorkerDatabase::DeletedVersion deleted_version;
+
+  // Should be false because a registration does not exist.
+  EXPECT_EQ(ServiceWorkerDatabase::Status::kErrorNotFound,
+            database->UpdateLastCheckTime(0, key, base::Time::Now()));
+
+  // Add a registration.
+  RegistrationData data;
+  data.registration_id = 100;
+  data.scope = URL(origin, "/foo");
+  data.key = key;
+  data.script = URL(origin, "/script.js");
+  data.version_id = 200;
+  data.last_update_check = base::Time::Now();
+  data.fetch_handler_type =
+      blink::mojom::ServiceWorkerFetchHandlerType::kNotSkippable;
+  data.resources_total_size_bytes = 100;
+  std::vector<ResourceRecordPtr> resources;
+  resources.push_back(CreateResource(1, data.script, 100));
+  EXPECT_EQ(ServiceWorkerDatabase::Status::kOk,
+            database->WriteRegistration(data, resources, &deleted_version));
+
+  // Make sure that the registration is stored.
+  RegistrationDataPtr data_out;
+  std::vector<ResourceRecordPtr> resources_out;
+  EXPECT_EQ(ServiceWorkerDatabase::Status::kOk,
+            database->ReadRegistration(data.registration_id, key, &data_out,
+                                       &resources_out));
+  VerifyRegistrationData(data, *data_out);
+  EXPECT_EQ(1u, resources_out.size());
+
+  // Update the fetch handler type.
+  EXPECT_EQ(ServiceWorkerDatabase::Status::kOk,
+            database->UpdateFetchHandlerType(
+                data.registration_id, key,
+                blink::mojom::ServiceWorkerFetchHandlerType::kNoHandler));
+
+  // Make sure that the registration is updated.
+  resources_out.clear();
+  EXPECT_EQ(ServiceWorkerDatabase::Status::kOk,
+            database->ReadRegistration(data.registration_id, key, &data_out,
+                                       &resources_out));
+  mojom::ServiceWorkerRegistrationDataPtr expected_data = data.Clone();
+  expected_data->fetch_handler_type =
+      blink::mojom::ServiceWorkerFetchHandlerType::kNoHandler;
+  VerifyRegistrationData(*expected_data, *data_out);
+  EXPECT_EQ(1u, resources_out.size());
+
+  // Delete the registration.
+  EXPECT_EQ(ServiceWorkerDatabase::Status::kOk,
+            database->DeleteRegistration(data.registration_id, key,
+                                         &deleted_version));
+  EXPECT_EQ(data.registration_id, deleted_version.registration_id);
+
+  // Should be false because the registration is gone.
+  EXPECT_EQ(ServiceWorkerDatabase::Status::kErrorNotFound,
+            database->UpdateFetchHandlerType(
+                data.registration_id, key,
+                blink::mojom::ServiceWorkerFetchHandlerType::kNotSkippable));
+}
+
 TEST(ServiceWorkerDatabaseTest, UncommittedAndPurgeableResourceIds) {
   std::unique_ptr<ServiceWorkerDatabase> database(CreateDatabaseInMemory());
 
@@ -2516,6 +2636,9 @@ TEST(ServiceWorkerDatabaseTest, CrossOriginEmbedderPolicyStoreRestore) {
     data.version_id = 456;
     data.resources_total_size_bytes = 100;
     data.cross_origin_embedder_policy = policy;
+    data.policy_container_policies =
+        blink::mojom::PolicyContainerPolicies::New();
+    data.policy_container_policies->cross_origin_embedder_policy = policy.value;
     std::vector<ResourceRecordPtr> resources;
     resources.push_back(CreateResource(1, data.script, 100));
 
@@ -2607,6 +2730,137 @@ TEST(ServiceWorkerDatabaseTest, NoCrossOriginEmbedderPolicyValue) {
             database->ParseRegistrationData(value, key, &registration));
   EXPECT_EQ(network::mojom::CrossOriginEmbedderPolicyValue::kNone,
             registration->cross_origin_embedder_policy.value);
+}
+
+const network::mojom::WebSandboxFlags kWebSandboxFlags[] = {
+    network::mojom::WebSandboxFlags::kNone,
+    network::mojom::WebSandboxFlags::kNavigation,
+    network::mojom::WebSandboxFlags::kPlugins,
+    network::mojom::WebSandboxFlags::kOrigin,
+    network::mojom::WebSandboxFlags::kForms,
+    network::mojom::WebSandboxFlags::kScripts,
+    network::mojom::WebSandboxFlags::kTopNavigation,
+    network::mojom::WebSandboxFlags::kPopups,
+    network::mojom::WebSandboxFlags::kAutomaticFeatures,
+    network::mojom::WebSandboxFlags::kPointerLock,
+    network::mojom::WebSandboxFlags::kDocumentDomain,
+    network::mojom::WebSandboxFlags::kOrientationLock,
+    network::mojom::WebSandboxFlags::kPropagatesToAuxiliaryBrowsingContexts,
+    network::mojom::WebSandboxFlags::kModals,
+    network::mojom::WebSandboxFlags::kPresentationController,
+    network::mojom::WebSandboxFlags::kTopNavigationByUserActivation,
+    network::mojom::WebSandboxFlags::kDownloads,
+    network::mojom::WebSandboxFlags::kStorageAccessByUserActivation,
+    network::mojom::WebSandboxFlags::kTopNavigationToCustomProtocols,
+    network::mojom::WebSandboxFlags::kAll,
+};
+
+static_assert(
+    network::mojom::WebSandboxFlags::kTopNavigationToCustomProtocols ==
+        network::mojom::WebSandboxFlags::kMaxValue,
+    "The array should contain all the flags");
+
+// Check that every field of PolicyContainerPolicies can be properly
+// serialized and deserialized.
+TEST(ServiceWorkerDatabaseTest, PolicyContainerPoliciesStoreRestore) {
+  auto store_and_restore =
+      [](blink::mojom::PolicyContainerPoliciesPtr policies) {
+        // Build the minimal RegistrationData with the given |policy|.
+        GURL origin("https://example.com");
+        RegistrationData data;
+        data.registration_id = 123;
+        data.scope = URL(origin, "/foo");
+        data.key = blink::StorageKey(url::Origin::Create(data.scope));
+        data.script = URL(origin, "/script.js");
+        data.version_id = 456;
+        data.resources_total_size_bytes = 100;
+        data.policy_container_policies = std::move(policies);
+        data.cross_origin_embedder_policy.value =
+            data.policy_container_policies->cross_origin_embedder_policy;
+        std::vector<ResourceRecordPtr> resources;
+        resources.push_back(CreateResource(1, data.script, 100));
+
+        // Store.
+        std::unique_ptr<ServiceWorkerDatabase> database(
+            CreateDatabaseInMemory());
+        ServiceWorkerDatabase::DeletedVersion deleted_version;
+        ASSERT_EQ(
+            ServiceWorkerDatabase::Status::kOk,
+            database->WriteRegistration(data, resources, &deleted_version));
+
+        // Restore.
+        std::vector<mojom::ServiceWorkerRegistrationDataPtr> registrations;
+        std::vector<std::vector<ResourceRecordPtr>> resources_list;
+        EXPECT_EQ(ServiceWorkerDatabase::Status::kOk,
+                  database->GetRegistrationsForStorageKey(
+                      blink::StorageKey(url::Origin::Create(origin)),
+                      &registrations, &resources_list));
+
+        // The data must not have been altered.
+        VerifyRegistrationData(data, *registrations[0]);
+      };
+
+  {
+    auto policies = blink::mojom::PolicyContainerPolicies::New();
+    store_and_restore(policies->Clone());
+
+    for (auto value : {
+             network::mojom::CrossOriginEmbedderPolicyValue::kNone,
+             network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp,
+             network::mojom::CrossOriginEmbedderPolicyValue::kCredentialless,
+         }) {
+      policies->cross_origin_embedder_policy = value;
+      store_and_restore(policies->Clone());
+    }
+  }
+
+  {
+    auto policies = blink::mojom::PolicyContainerPolicies::New();
+
+    for (auto referrer_policy : {
+             network::mojom::ReferrerPolicy::kAlways,
+             network::mojom::ReferrerPolicy::kDefault,
+             network::mojom::ReferrerPolicy::kNoReferrerWhenDowngrade,
+             network::mojom::ReferrerPolicy::kNever,
+             network::mojom::ReferrerPolicy::kOrigin,
+             network::mojom::ReferrerPolicy::kOriginWhenCrossOrigin,
+             network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin,
+             network::mojom::ReferrerPolicy::kSameOrigin,
+             network::mojom::ReferrerPolicy::kStrictOrigin,
+         }) {
+      policies->referrer_policy = referrer_policy;
+      store_and_restore(policies->Clone());
+    }
+  }
+
+  {
+    auto policies = blink::mojom::PolicyContainerPolicies::New();
+
+    for (auto sandbox_flags : kWebSandboxFlags) {
+      policies->sandbox_flags = sandbox_flags;
+      store_and_restore(policies->Clone());
+      for (auto sandbox_flags_2 : kWebSandboxFlags) {
+        if (sandbox_flags_2 >= sandbox_flags)
+          break;
+        policies->sandbox_flags = sandbox_flags | sandbox_flags_2;
+        store_and_restore(policies->Clone());
+      }
+    }
+  }
+
+  {
+    auto policies = blink::mojom::PolicyContainerPolicies::New();
+
+    for (auto ip_address_space : {
+             network::mojom::IPAddressSpace::kLocal,
+             network::mojom::IPAddressSpace::kPrivate,
+             network::mojom::IPAddressSpace::kPublic,
+             network::mojom::IPAddressSpace::kUnknown,
+         }) {
+      policies->ip_address_space = ip_address_space;
+      store_and_restore(policies->Clone());
+    }
+  }
 }
 
 // As part of crbug.com/1199077 ServiceWorkerDataBase was refactored to use

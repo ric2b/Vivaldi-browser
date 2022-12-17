@@ -117,12 +117,12 @@ int getIdByAction(const menubar::MenuItem& item) {
   return tag_map[item.action].id;
 }
 
-bool SetIds(std::vector<menubar::MenuItem>* items, bool addFixedActions) {
+bool SetIds(std::vector<menubar::MenuItem>& items, bool addFixedActions) {
   size_t map_size = tag_map.size();
-  for (menubar::MenuItem& item : *items) {
+  for (menubar::MenuItem& item : items) {
     item.id = getIdByAction(item);
-    if (item.items) {
-      SetIds(item.items.get(), false);
+    if (item.items.has_value()) {
+      SetIds(item.items.value(), false);
     }
   }
   if (addFixedActions) {
@@ -220,7 +220,7 @@ ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   // Set up map based on the incoming actions and update id to match this map.
-  if (SetIds(&params->items, true)) {
+  if (SetIds(params->items, true)) {
     for (auto* browser : *BrowserList::GetInstance()) {
       chrome::BrowserCommandController* command_controller =
           browser->command_controller();

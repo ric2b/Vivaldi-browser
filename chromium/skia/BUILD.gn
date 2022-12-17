@@ -1,4 +1,4 @@
-# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Copyright 2013 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -10,7 +10,6 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//gpu/vulkan/features.gni")
 import("//printing/buildflags/buildflags.gni")
 import("//testing/test.gni")
-import("//third_party/libgifcodec/libgifcodec.gni")
 import("//third_party/skia/gn/shared_sources.gni")
 import("//third_party/skia/modules/skcms/skcms.gni")
 import("//tools/grit/grit_rule.gni")
@@ -25,10 +24,6 @@ if (current_cpu == "mipsel" || current_cpu == "mips64el") {
 
 skia_support_gpu = !is_ios
 skia_support_pdf = !is_ios && enable_basic_printing
-
-declare_args() {
-  enable_skia_wuffs_gif = true
-}
 
 buildflag_header("buildflags") {
   header = "buildflags.h"
@@ -54,11 +49,7 @@ config("skia_config") {
   include_dirs = [ "//third_party/skia" ]
 
   if (!is_ios) {
-    if (enable_skia_wuffs_gif) {
-      include_dirs += [ "//third_party/wuffs/src/release/c" ]
-    } else {
-      include_dirs += [ "//third_party/libgifcodec" ]
-    }
+    include_dirs += [ "//third_party/wuffs/src/release/c" ]
   }
   if (enable_vulkan) {
     include_dirs += [ "//third_party/vulkan/include" ]
@@ -74,12 +65,8 @@ config("skia_config") {
     defines += [
       "SK_CODEC_DECODES_JPEG",
       "SK_ENCODE_JPEG",
+      "SK_HAS_WUFFS_LIBRARY",
     ]
-    if (enable_skia_wuffs_gif) {
-      defines += [ "SK_HAS_WUFFS_LIBRARY" ]
-    } else {
-      defines += [ "SK_USE_LIBGIFCODEC" ]
-    }
   }
   if (enable_vulkan) {
     defines += [ "SK_VULKAN=1" ]
@@ -212,8 +199,7 @@ source_set("skcms") {
 
   public = [ "//third_party/skia/modules/skcms/skcms.h" ]
   include_dirs = [ "//third_party/skia/modules/skcms" ]
-  sources =
-      rebase_path(skcms_sources, ".", "//third_party/skia/modules/skcms")
+  sources = rebase_path(skcms_sources, ".", "//third_party/skia/modules/skcms")
 }
 
 component("skia") {
@@ -228,6 +214,8 @@ component("skia") {
     "ext/SkMemory_new_handler.cpp",
     "ext/benchmarking_canvas.cc",
     "ext/benchmarking_canvas.h",
+    "ext/cicp.cc",
+    "ext/cicp.h",
     "ext/convolver.cc",
     "ext/convolver.h",
     "ext/event_tracer_impl.cc",
@@ -243,6 +231,9 @@ component("skia") {
     "ext/recursive_gaussian_convolution.h",
     "ext/rgba_to_yuva.cc",
     "ext/rgba_to_yuva.h",
+    "ext/skcolorspace_primaries.cc",
+    "ext/skcolorspace_primaries.h",
+    "ext/skcolorspace_trfn.h",
     "ext/skia_histogram.cc",
     "ext/skia_histogram.h",
     "ext/skia_memory_dump_provider.cc",
@@ -363,23 +354,15 @@ component("skia") {
       "//third_party/skia/src/codec/SkParseEncodedOrigin.cpp",
       "//third_party/skia/src/codec/SkPngCodec.cpp",
       "//third_party/skia/src/codec/SkSampler.cpp",
-      "//third_party/skia/src/codec/SkStreamBuffer.cpp",
       "//third_party/skia/src/codec/SkSwizzler.cpp",
       "//third_party/skia/src/codec/SkWbmpCodec.cpp",
       "//third_party/skia/src/codec/SkWebpCodec.cpp",
+      "//third_party/skia/src/codec/SkWuffsCodec.cpp",
       "//third_party/skia/src/images/SkJPEGWriteUtility.cpp",
       "//third_party/skia/src/images/SkJpegEncoder.cpp",
       "//third_party/skia/src/ports/SkImageGenerator_skia.cpp",
     ]
-
-    if (enable_skia_wuffs_gif) {
-      deps += [ "//third_party/wuffs" ]
-      sources += [ "//third_party/skia/src/codec/SkWuffsCodec.cpp" ]
-    } else {
-      sources += rebase_path(libgifcodec_sources + libgifcodec_public,
-                             ".",
-                             "//third_party/libgifcodec")
-    }
+    deps += [ "//third_party/wuffs" ]
   }
 
   if (current_cpu == "arm") {
@@ -390,16 +373,7 @@ component("skia") {
   sources -= [ "//third_party/skia/src/utils/SkParsePath.cpp" ]
 
   if (is_win) {
-    sources -= [
-      # Keeping _win.cpp
-      "//third_party/skia/src/utils/SkThreadUtils_pthread.cpp",
-    ]
     libs = [ "fontsub.lib" ]
-  } else {
-    sources -= [
-      # Keeping _pthread.cpp
-      "//third_party/skia/src/utils/SkThreadUtils_win.cpp",
-    ]
   }
 
   # need separate win section to handle chromes auto gn filter
@@ -429,14 +403,10 @@ component("skia") {
       "//third_party/skia/src/ports/SkOSFile_win.cpp",
       "//third_party/skia/src/ports/SkRemotableFontMgr_win_dw.cpp",
       "//third_party/skia/src/ports/SkScalerContext_win_dw.cpp",
-      "//third_party/skia/src/ports/SkTLS_win.cpp",
       "//third_party/skia/src/ports/SkTypeface_win_dw.cpp",
     ]
   } else {
-    sources += [
-      "//third_party/skia/src/ports/SkOSFile_posix.cpp",
-      "//third_party/skia/src/ports/SkTLS_pthread.cpp",
-    ]
+    sources += [ "//third_party/skia/src/ports/SkOSFile_posix.cpp" ]
   }
 
   if (is_apple) {
@@ -591,6 +561,7 @@ component("skia") {
     }
     if (enable_vulkan) {
       sources += skia_vk_sources
+      sources += skia_shared_vk_sources
     }
     deps += [ "//gpu/config:workaround_list" ]
   }
@@ -695,16 +666,6 @@ if (current_cpu == "x86" || current_cpu == "x64") {
     }
     visibility = [ ":skia_opts" ]
   }
-  skia_source_set("skia_opts_sse41") {
-    sources = skia_opts.sse41_sources
-    if (!is_win || is_clang) {
-      cflags = [ "-msse4.1" ]
-    }
-    if (is_win) {
-      defines = [ "SK_CPU_SSE_LEVEL=41" ]
-    }
-    visibility = [ ":skia_opts" ]
-  }
   skia_source_set("skia_opts_sse42") {
     sources = skia_opts.sse42_sources
     if (!is_win || is_clang) {
@@ -760,13 +721,11 @@ skia_source_set("skia_opts") {
   deps = [ "//base" ]
 
   if (current_cpu == "x86" || current_cpu == "x64") {
-    sources = skia_opts.sse2_sources
     deps += [
       ":skia_opts_avx",
       ":skia_opts_hsw",
       ":skia_opts_skx",
       ":skia_opts_sse3",
-      ":skia_opts_sse41",
       ":skia_opts_sse42",
     ]
   } else if (current_cpu == "arm") {
@@ -777,10 +736,7 @@ skia_source_set("skia_opts") {
     }
 
     if (arm_version >= 7) {
-      sources = skia_opts.armv7_sources
       if (arm_use_neon || arm_optionally_use_neon) {
-        sources += skia_opts.neon_sources
-
         # Root build config sets -mfpu=$arm_fpu, which we expect to be neon
         # when running this.
         if (!arm_use_neon) {
@@ -788,29 +744,21 @@ skia_source_set("skia_opts") {
           cflags += [ "-mfpu=neon" ]
         }
       }
-    } else {
-      sources = skia_opts.none_sources
     }
   } else if (current_cpu == "arm64") {
-    sources = skia_opts.arm64_sources
     deps += [ ":skia_opts_crc32" ]
   } else if (current_cpu == "mipsel") {
     cflags += [ "-fomit-frame-pointer" ]
-
-    if (mips_dsp_rev >= 1) {
-      sources = skia_opts.mips_dsp_sources
-    } else {
-      sources = skia_opts.none_sources
-    }
   } else if (current_cpu == "mips64el") {
     cflags += [ "-fomit-frame-pointer" ]
-    sources = skia_opts.none_sources
   } else if (current_cpu == "ppc64") {
-    sources = skia_opts.none_sources
+    # Conditional and empty body needed to avoid assert() below.
   } else if (current_cpu == "s390x") {
-    sources = skia_opts.none_sources
+    # Conditional and empty body needed to avoid assert() below.
+  } else if (current_cpu == "riscv64") {
+    # Conditional and empty body needed to avoid assert() below.
   } else {
-    assert(false, "Need to port cpu specific stuff from skia_library_opts.gyp")
+    assert(false, "Unknown cpu target")
   }
 
   visibility = [ ":skia" ]
@@ -938,6 +886,7 @@ test("skia_unittests") {
     "ext/image_operations_unittest.cc",
     "ext/platform_canvas_unittest.cc",
     "ext/recursive_gaussian_convolution_unittest.cc",
+    "ext/skcolorspace_primaries_unittest.cc",
     "ext/skia_memory_dump_provider_unittest.cc",
     "ext/skia_utils_base_unittest.cc",
   ]
@@ -974,7 +923,6 @@ test("skia_unittests") {
   }
 
   if (is_fuchsia) {
-    use_cfv1 = false
     sources += [ "ext/fontmgr_fuchsia_unittest.cc" ]
     deps += [
       ":test_fonts_cfv2",

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/device_sync/attestation_certificates_syncer_impl.h"
 #include "ash/services/device_sync/cryptauth_client.h"
 #include "ash/services/device_sync/cryptauth_device_syncer_impl.h"
@@ -15,6 +14,7 @@
 #include "ash/services/device_sync/synced_bluetooth_address_tracker_impl.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 
 namespace ash {
 

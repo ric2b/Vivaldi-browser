@@ -1,13 +1,12 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'chrome://webui-test/mojo_webui_test_support.js';
 
 import {RecentlyClosedTab, Tab, TabAlertState, TabData, TabGroup, TabGroupColor, TabItemType, TabSearchItem} from 'chrome://tab-search.top-chrome/tab_search.js';
-
 import {assertDeepEquals, assertEquals, assertNotEquals} from 'chrome://webui-test/chai_assert.js';
-import {flushTasks} from 'chrome://webui-test/test_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {createTab, sampleToken} from './tab_search_test_data.js';
 
@@ -17,7 +16,8 @@ suite('TabSearchItemTest', () => {
   async function setupTest(data: TabData) {
     tabSearchItem = document.createElement('tab-search-item');
     tabSearchItem.data = data;
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     document.body.appendChild(tabSearchItem);
     await flushTasks();
   }

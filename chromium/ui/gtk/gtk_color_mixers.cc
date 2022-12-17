@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@ namespace gtk {
 
 void AddGtkNativeColorMixer(ui::ColorProvider* provider,
                             const ui::ColorProviderManager::Key& key) {
-  if (key.system_theme == ui::ColorProviderManager::SystemTheme::kDefault)
+  if (key.system_theme != ui::SystemTheme::kGtk)
     return;
 
   ui::ColorMixer& mixer = provider->AddMixer();

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -357,7 +357,7 @@ void SetUpWebUIDataSource(content::WebUIDataSource* source,
                           base::span<const webui::ResourcePath> resources,
                           int default_resource) {
   source->AddResourcePaths(resources);
-  source->SetDefaultResource(default_resource);
+  source->AddResourcePath("", default_resource);
   source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER_HTML);
   source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER_JS);
   source->AddResourcePath("test_loader_util.js",
@@ -396,12 +396,14 @@ DiagnosticsDialogUI::DiagnosticsDialogUI(
           kChromeUIDiagnosticsAppHost);
   html_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
-      "script-src chrome://resources chrome://test 'self';");
+      "script-src chrome://resources chrome://test chrome://webui-test "
+      "'self';");
   html_source->DisableTrustedTypesCSP();
 
   const auto resources = base::make_span(kAshDiagnosticsAppResources,
                                          kAshDiagnosticsAppResourcesSize);
-  SetUpWebUIDataSource(html_source, resources, IDR_DIAGNOSTICS_APP_INDEX_HTML);
+  SetUpWebUIDataSource(html_source, resources,
+                       IDR_ASH_DIAGNOSTICS_APP_INDEX_HTML);
 
   SetUpPluralStringHandler(web_ui);
 
@@ -442,11 +444,12 @@ DiagnosticsDialogUI::~DiagnosticsDialogUI() {
 
 void DiagnosticsDialogUI::BindInterface(
     mojo::PendingReceiver<diagnostics::mojom::NetworkHealthProvider> receiver) {
-  DCHECK(features::IsNetworkingInDiagnosticsAppEnabled());
-  diagnostics::NetworkHealthProvider* network_health_provider =
-      diagnostics_manager_->GetNetworkHealthProvider();
-  if (network_health_provider) {
-    network_health_provider->BindInterface(std::move(receiver));
+  if (features::IsNetworkingInDiagnosticsAppEnabled()) {
+    diagnostics::NetworkHealthProvider* network_health_provider =
+        diagnostics_manager_->GetNetworkHealthProvider();
+    if (network_health_provider) {
+      network_health_provider->BindInterface(std::move(receiver));
+    }
   }
 }
 

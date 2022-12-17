@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.SurfaceControlViewHost;
 import android.view.View;
-import android.webkit.ValueCallback;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -30,7 +29,6 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.weblayer_private.interfaces.APICallException;
-import org.chromium.weblayer_private.interfaces.BrowserEmbeddabilityMode;
 import org.chromium.weblayer_private.interfaces.DarkModeStrategy;
 import org.chromium.weblayer_private.interfaces.IBrowser;
 import org.chromium.weblayer_private.interfaces.IBrowserClient;
@@ -279,22 +277,6 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
         // this.
         addTab(tab, /* alwaysAdd */ true);
         return tab;
-    }
-
-    @Override
-    public void setSupportsEmbedding(boolean enable, IObjectWrapper valueCallback) {
-        StrictModeWorkaround.apply();
-        getViewController().setEmbeddabilityMode(
-                enable ? BrowserEmbeddabilityMode.SUPPORTED : BrowserEmbeddabilityMode.UNSUPPORTED,
-                (ValueCallback<Boolean>) ObjectWrapper.unwrap(valueCallback, ValueCallback.class));
-    }
-
-    @Override
-    public void setEmbeddabilityMode(
-            @BrowserEmbeddabilityMode int mode, IObjectWrapper valueCallback) {
-        StrictModeWorkaround.apply();
-        getViewController().setEmbeddabilityMode(mode,
-                (ValueCallback<Boolean>) ObjectWrapper.unwrap(valueCallback, ValueCallback.class));
     }
 
     @Override
@@ -749,6 +731,11 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
         SurfaceControlViewHost host =
                 ObjectWrapper.unwrap(wrappedHost, SurfaceControlViewHost.class);
         host.setView(mViewController.getView(), 0, 0);
+    }
+
+    @Override
+    public IObjectWrapper getContentViewRenderView() {
+        return ObjectWrapper.wrap(mViewController.getView());
     }
 
     @NativeMethods

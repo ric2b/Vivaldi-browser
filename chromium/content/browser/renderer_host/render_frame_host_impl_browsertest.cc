@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -615,14 +616,17 @@ class RenderFrameHostFactoryForBeforeUnloadInterceptor
       int32_t routing_id,
       mojo::PendingAssociatedRemote<mojom::Frame> frame_remote,
       const blink::LocalFrameToken& frame_token,
+      const blink::DocumentToken& document_token,
       bool renderer_initiated_creation,
       RenderFrameHostImpl::LifecycleStateImpl lifecycle_state,
       scoped_refptr<BrowsingContextState> browsing_context_state) override {
     return base::WrapUnique(new RenderFrameHostImplForBeforeUnloadInterceptor(
         site_instance, std::move(render_view_host), delegate, frame_tree,
         frame_tree_node, routing_id, std::move(frame_remote), frame_token,
-        renderer_initiated_creation, lifecycle_state,
-        std::move(browsing_context_state)));
+        document_token, renderer_initiated_creation, lifecycle_state,
+        std::move(browsing_context_state),
+        frame_tree_node->frame_owner_element_type(), frame_tree_node->parent(),
+        frame_tree_node->fenced_frame_status()));
   }
 };
 
@@ -653,10 +657,10 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
   // JavaScript onbeforeunload dialogs require a user gesture.
   web_contents()->GetPrimaryMainFrame()->ForEachRenderFrameHost(
-      base::BindRepeating([](content::RenderFrameHost* render_frame_host) {
+      [](content::RenderFrameHostImpl* render_frame_host) {
         render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
             std::u16string(), base::NullCallback());
-      }));
+      });
 
   // Force a process switch by going to a privileged page. The beforeunload
   // timer will be started on the top-level frame but will be paused while the
@@ -3111,11 +3115,11 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   ASSERT_TRUE(NavigateToURL(shell(), main_url));
 
   RenderFrameHostImpl* main_frame = web_contents()->GetPrimaryMainFrame();
-  EXPECT_TRUE(main_frame->AccessibilityIsMainFrame());
+  EXPECT_TRUE(main_frame->AccessibilityIsRootFrame());
 
   ASSERT_EQ(1u, main_frame->child_count());
   RenderFrameHostImpl* iframe = main_frame->child_at(0)->current_frame_host();
-  EXPECT_FALSE(iframe->AccessibilityIsMainFrame());
+  EXPECT_FALSE(iframe->AccessibilityIsRootFrame());
 }
 
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
@@ -5028,10 +5032,7 @@ ObjectData kInnerObject{10, {"getInnerId"}};
 class MockInnerObject : public blink::mojom::RemoteObject {
  public:
   void HasMethod(const std::string& name, HasMethodCallback callback) override {
-    bool has_method =
-        std::find(kInnerObject.methods.begin(), kInnerObject.methods.end(),
-                  name) != kInnerObject.methods.end();
-    std::move(callback).Run(has_method);
+    std::move(callback).Run(base::Contains(kInnerObject.methods, name));
   }
   void GetMethods(GetMethodsCallback callback) override {
     std::move(callback).Run(kInnerObject.methods);
@@ -5057,10 +5058,7 @@ class MockObject : public blink::mojom::RemoteObject {
       mojo::PendingReceiver<blink::mojom::RemoteObject> receiver)
       : receiver_(this, std::move(receiver)) {}
   void HasMethod(const std::string& name, HasMethodCallback callback) override {
-    bool has_method =
-        std::find(kMainObject.methods.begin(), kMainObject.methods.end(),
-                  name) != kMainObject.methods.end();
-    std::move(callback).Run(has_method);
+    std::move(callback).Run(base::Contains(kMainObject.methods, name));
   }
 
   void GetMethods(GetMethodsCallback callback) override {
@@ -5204,8 +5202,9 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   EXPECT_FALSE(EvalJs(web_contents(), kScript).error.empty());
 }
 
+// TODO(crbug.com/1357783): This test is flaky.
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
-                       RemoteObjectInvokeMethodReturningNumber) {
+                       DISABLED_RemoteObjectInvokeMethodReturningNumber) {
   GURL url(embedded_test_server()->GetURL("/empty.html"));
 
   RemoteObjectInjector injector(web_contents());
@@ -5215,8 +5214,9 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   EXPECT_EQ(kMainObject.id, EvalJs(web_contents(), kScript));
 }
 
+// TODO(crbug.com/1358215): This test is flaky.
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
-                       RemoteObjectInvokeMethodTakingArray) {
+                       DISABLED_RemoteObjectInvokeMethodTakingArray) {
   GURL url(embedded_test_server()->GetURL("/empty.html"));
 
   RemoteObjectInjector injector(web_contents());
@@ -5661,20 +5661,18 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, ForEachRenderFrameHost) {
   // Test that iteration stops when requested.
   {
     std::vector<RenderFrameHostImpl*> visited_frames;
-    rfh_a->ForEachRenderFrameHost(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
-          visited_frames.push_back(rfh);
-          return RenderFrameHost::FrameIterationAction::kStop;
-        }));
+    rfh_a->ForEachRenderFrameHostWithAction([&](RenderFrameHostImpl* rfh) {
+      visited_frames.push_back(rfh);
+      return RenderFrameHost::FrameIterationAction::kStop;
+    });
     EXPECT_THAT(visited_frames, testing::ElementsAre(rfh_a));
   }
   {
     std::vector<RenderFrameHostImpl*> visited_frames;
-    rfh_a->ForEachRenderFrameHost(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
-          visited_frames.push_back(rfh);
-          return RenderFrameHost::FrameIterationAction::kSkipChildren;
-        }));
+    rfh_a->ForEachRenderFrameHostWithAction([&](RenderFrameHostImpl* rfh) {
+      visited_frames.push_back(rfh);
+      return RenderFrameHost::FrameIterationAction::kSkipChildren;
+    });
     EXPECT_THAT(visited_frames, testing::ElementsAre(rfh_a));
   }
 
@@ -5683,24 +5681,20 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, ForEachRenderFrameHost) {
   // |rfh_c| and |rfh_d|.
   {
     std::vector<RenderFrameHostImpl*> visited_frames;
-    rfh_a->ForEachRenderFrameHost(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
-          visited_frames.push_back(rfh);
-          return rfh == rfh_b
-                     ? RenderFrameHost::FrameIterationAction::kStop
-                     : RenderFrameHost::FrameIterationAction::kContinue;
-        }));
+    rfh_a->ForEachRenderFrameHostWithAction([&](RenderFrameHostImpl* rfh) {
+      visited_frames.push_back(rfh);
+      return rfh == rfh_b ? RenderFrameHost::FrameIterationAction::kStop
+                          : RenderFrameHost::FrameIterationAction::kContinue;
+    });
     EXPECT_THAT(visited_frames, testing::ElementsAre(rfh_a, rfh_b));
   }
   {
     std::vector<RenderFrameHostImpl*> visited_frames;
-    rfh_a->ForEachRenderFrameHost(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
-          visited_frames.push_back(rfh);
-          return rfh == rfh_b
-                     ? RenderFrameHost::FrameIterationAction::kSkipChildren
-                     : RenderFrameHost::FrameIterationAction::kContinue;
-        }));
+    rfh_a->ForEachRenderFrameHostWithAction([&](RenderFrameHostImpl* rfh) {
+      visited_frames.push_back(rfh);
+      return rfh == rfh_b ? RenderFrameHost::FrameIterationAction::kSkipChildren
+                          : RenderFrameHost::FrameIterationAction::kContinue;
+    });
     EXPECT_THAT(visited_frames, testing::ElementsAre(rfh_a, rfh_b, rfh_d));
   }
 
@@ -5753,11 +5747,10 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
 
         // If ForEachRenderFrameHost is called on a speculative RFH directly, do
         // nothing.
-        rfh_b->ForEachRenderFrameHost(
-            base::BindRepeating([](RenderFrameHostImpl* rfh) {
-              ADD_FAILURE() << "Visited speculative RFH";
-              return RenderFrameHost::FrameIterationAction::kStop;
-            }));
+        rfh_b->ForEachRenderFrameHostWithAction([](RenderFrameHostImpl* rfh) {
+          ADD_FAILURE() << "Visited speculative RFH";
+          return RenderFrameHost::FrameIterationAction::kStop;
+        });
 
         // If we request speculative RFHs and directly call this on a
         // speculative RFH, just visit the given speculative RFH.
@@ -5838,11 +5831,10 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
 
   // If ForEachRenderFrameHost is called on a speculative RFH directly, do
   // nothing.
-  rfh_d->ForEachRenderFrameHost(
-      base::BindRepeating([](RenderFrameHostImpl* rfh) {
-        ADD_FAILURE() << "Visited speculative RFH";
-        return RenderFrameHost::FrameIterationAction::kStop;
-      }));
+  rfh_d->ForEachRenderFrameHostWithAction([](RenderFrameHostImpl* rfh) {
+    ADD_FAILURE() << "Visited speculative RFH";
+    return RenderFrameHost::FrameIterationAction::kStop;
+  });
 
   // If we request speculative RFHs and directly call this on a speculative RFH,
   // just visit the given speculative RFH.
@@ -5854,54 +5846,54 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
     // We don't check the RFHs visited in the interest of not overtesting the
     // ordering of speculative RFHs.
     bool stopped = false;
-    rfh_a->ForEachRenderFrameHostIncludingSpeculative(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
+    rfh_a->ForEachRenderFrameHostIncludingSpeculativeWithAction(
+        [&](RenderFrameHostImpl* rfh) {
           EXPECT_FALSE(stopped);
           if (rfh->lifecycle_state() == LifecycleStateImpl::kSpeculative) {
             stopped = true;
             return RenderFrameHost::FrameIterationAction::kStop;
           }
           return RenderFrameHost::FrameIterationAction::kContinue;
-        }));
+        });
   }
 
   {
     bool stopped = false;
-    rfh_b->ForEachRenderFrameHostIncludingSpeculative(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
+    rfh_b->ForEachRenderFrameHostIncludingSpeculativeWithAction(
+        [&](RenderFrameHostImpl* rfh) {
           EXPECT_FALSE(stopped);
           if (rfh->lifecycle_state() == LifecycleStateImpl::kSpeculative) {
             stopped = true;
             return RenderFrameHost::FrameIterationAction::kStop;
           }
           return RenderFrameHost::FrameIterationAction::kContinue;
-        }));
+        });
   }
 
   // Skipping the children of a current RFH whose FrameTreeNode has a
   // speculative RFH skips the children but still includes the speculative RFH.
   {
     std::vector<RenderFrameHostImpl*> visited_frames;
-    rfh_a->ForEachRenderFrameHostIncludingSpeculative(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
+    rfh_a->ForEachRenderFrameHostIncludingSpeculativeWithAction(
+        [&](RenderFrameHostImpl* rfh) {
           visited_frames.push_back(rfh);
           return (rfh == rfh_b)
                      ? RenderFrameHost::FrameIterationAction::kSkipChildren
                      : RenderFrameHost::FrameIterationAction::kContinue;
-        }));
+        });
     EXPECT_THAT(visited_frames,
                 testing::UnorderedElementsAre(rfh_a, rfh_b, rfh_d));
   }
 
   {
     std::vector<RenderFrameHostImpl*> visited_frames;
-    rfh_b->ForEachRenderFrameHostIncludingSpeculative(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
+    rfh_b->ForEachRenderFrameHostIncludingSpeculativeWithAction(
+        [&](RenderFrameHostImpl* rfh) {
           visited_frames.push_back(rfh);
           return (rfh == rfh_b)
                      ? RenderFrameHost::FrameIterationAction::kSkipChildren
                      : RenderFrameHost::FrameIterationAction::kContinue;
-        }));
+        });
     EXPECT_THAT(visited_frames, testing::UnorderedElementsAre(rfh_b, rfh_d));
   }
 
@@ -5909,26 +5901,26 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   // here for completeness of testing.
   {
     std::vector<RenderFrameHostImpl*> visited_frames;
-    rfh_a->ForEachRenderFrameHostIncludingSpeculative(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
+    rfh_a->ForEachRenderFrameHostIncludingSpeculativeWithAction(
+        [&](RenderFrameHostImpl* rfh) {
           visited_frames.push_back(rfh);
           return (rfh->lifecycle_state() == LifecycleStateImpl::kSpeculative)
                      ? RenderFrameHost::FrameIterationAction::kSkipChildren
                      : RenderFrameHost::FrameIterationAction::kContinue;
-        }));
+        });
     EXPECT_THAT(visited_frames,
                 testing::UnorderedElementsAre(rfh_a, rfh_b, rfh_d, rfh_c));
   }
 
   {
     std::vector<RenderFrameHostImpl*> visited_frames;
-    rfh_b->ForEachRenderFrameHostIncludingSpeculative(
-        base::BindLambdaForTesting([&](RenderFrameHostImpl* rfh) {
+    rfh_b->ForEachRenderFrameHostIncludingSpeculativeWithAction(
+        [&](RenderFrameHostImpl* rfh) {
           visited_frames.push_back(rfh);
           return (rfh->lifecycle_state() == LifecycleStateImpl::kSpeculative)
                      ? RenderFrameHost::FrameIterationAction::kSkipChildren
                      : RenderFrameHost::FrameIterationAction::kContinue;
-        }));
+        });
     EXPECT_THAT(visited_frames,
                 testing::UnorderedElementsAre(rfh_b, rfh_d, rfh_c));
   }
@@ -6095,11 +6087,9 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   // visits each and only each immediate local root in a BFS traversal order.
   for (auto* ftn : web_contents()->GetPrimaryFrameTree().Nodes()) {
     RenderFrameHostImpl* current_frame_host = ftn->current_frame_host();
-    std::list<RenderFrameHostImpl*> frame_list;
-    current_frame_host->ForEachImmediateLocalRoot(base::BindRepeating(
-        [](std::list<RenderFrameHostImpl*>* ilr_list,
-           RenderFrameHostImpl* rfh) { ilr_list->push_back(rfh); },
-        &frame_list));
+    std::vector<RenderFrameHostImpl*> frame_list;
+    current_frame_host->ForEachImmediateLocalRoot(
+        [&frame_list](RenderFrameHostImpl* rfh) { frame_list.push_back(rfh); });
 
     std::string result = frame_to_label_map[current_frame_host];
     result.append(":");
@@ -6566,7 +6556,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplAnonymousIframeNikBrowserTest,
         ->GetDefaultStoragePartition()
         ->GetNetworkContext()
         ->PreconnectSockets(1, fetch_url.DeprecatedGetOriginAsURL(), true,
-                            main_rfh->GetNetworkIsolationKey());
+                            main_rfh->GetIsolationInfoForSubresources()
+                                .network_anonymization_key());
 
     connection_tracker_->WaitForAcceptedConnections(1);
     EXPECT_EQ(1u, connection_tracker_->GetAcceptedSocketCount());

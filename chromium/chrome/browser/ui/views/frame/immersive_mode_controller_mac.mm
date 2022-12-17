@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,11 +15,15 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/web_applications/app_registrar_observer.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/remote_cocoa/app_shim/bridged_content_view.h"
+#include "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/views/cocoa/immersive_mode_delegate_mac.h"
 #include "ui/views/cocoa/native_widget_mac_ns_window_host.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/layout_manager.h"
@@ -27,96 +31,12 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_utils_mac.h"
 
-// A stub NSWindowDelegate class that will be used to map the AppKit controlled
-// NSWindow to the overlay view widget's NSWindow. The delegate will be used to
-// help with input routing.
-@interface ImmersiveModeMapper : NSObject <ImmersiveModeDelegate>
-@property(assign) NSWindow* originalHostingWindow;
-@end
-
-@implementation ImmersiveModeMapper
-@synthesize originalHostingWindow = _originalHostingWindow;
-@end
-
-// Host of the overlay view.
-@interface ImmersiveModeTitlebarViewController
-    : NSTitlebarAccessoryViewController {
-  base::mac::ScopedBlock<void (^)()> _view_will_appear_handler;
-  base::mac::ScopedBlock<void (^)()> _view_did_appear_handler;
-}
-@end
-
-@implementation ImmersiveModeTitlebarViewController
-
-- (instancetype)initWithHandlers:(void (^)())viewWillAppearHandle
-             viewDidAppearHandle:(void (^)())viewDidAppearHandle {
-  if ((self = [super init])) {
-    _view_will_appear_handler.reset([viewWillAppearHandle copy]);
-    _view_did_appear_handler.reset([viewDidAppearHandle copy]);
-  }
-  return self;
-}
-
-- (void)viewWillAppear {
-  [super viewWillAppear];
-  _view_will_appear_handler.get()();
-
-  // TODO(bur): Get the updated width from OnViewBoundsChanged
-  NSView* tab_view = self.view;
-  NSRect f = tab_view.frame;
-  f.size.width = 2400;
-  tab_view.frame = f;
-  for (NSView* view in tab_view.subviews) {
-    if ([view isKindOfClass:[BridgedContentView class]]) {
-      view.frame = tab_view.frame;
-    }
-  }
-}
-
-- (void)viewDidAppear {
-  [super viewDidAppear];
-  _view_did_appear_handler.get()();
-}
-
-@end
-
-// An NSView that will set the ImmersiveModeDelegate on the AppKit created
-// window that ends up hosting this view via the
-// NSTitlebarAccessoryViewController API.
-@interface ImmersiveModeView : NSView
-- (instancetype)initWithImmersiveModeDelegate:
-    (id<ImmersiveModeDelegate>)delegate;
-@end
-
-@implementation ImmersiveModeView {
-  ImmersiveModeMapper* _fullscreenDelegate;
-}
-
-- (instancetype)initWithImmersiveModeDelegate:
-    (id<ImmersiveModeDelegate>)delegate {
-  self = [super init];
-  if (self) {
-    _fullscreenDelegate = delegate;
-  }
-  return self;
-}
-
-- (void)viewWillMoveToWindow:(NSWindow*)window {
-  if (views::IsNSToolbarFullScreenWindow(window)) {
-    // This window is created by AppKit. Make sure it doesn't have a delegate so
-    // we can use it for out own purposes.
-    DCHECK(!window.delegate);
-    window.delegate = _fullscreenDelegate;
-  }
-}
-
-@end
-
 namespace {
 class ImmersiveModeControllerMac : public ImmersiveModeController,
                                    public views::FocusChangeListener,
                                    public views::ViewObserver,
-                                   public views::WidgetObserver {
+                                   public views::WidgetObserver,
+                                   public web_app::AppRegistrarObserver {
  public:
   class RevealedLock : public ImmersiveRevealedLock {
    public:
@@ -154,6 +74,9 @@ class ImmersiveModeControllerMac : public ImmersiveModeController,
   bool ShouldStayImmersiveAfterExitingFullscreen() override;
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
 
+  // Immersive fullscreen has started.
+  void FullScreenOverlayViewWillAppear();
+
   // views::FocusChangeListener implementation.
   void OnWillChangeFocus(views::View* focused_before,
                          views::View* focused_now) override;
@@ -166,6 +89,10 @@ class ImmersiveModeControllerMac : public ImmersiveModeController,
   // views::WidgetObserver implementation
   void OnWidgetDestroying(views::Widget* widget) override;
 
+  // web_app::AppRegistrarObserver
+  void OnAlwaysShowToolbarInFullscreenChanged(const web_app::AppId& app_id,
+                                              bool show) override;
+
  private:
   friend class RevealedLock;
 
@@ -174,16 +101,13 @@ class ImmersiveModeControllerMac : public ImmersiveModeController,
   void SetMenuRevealed(bool revealed);
 
   // Handler of show_fullscreen_toolbar_ changes.
-  void ShowFullscreenToolbar();
+  void UpdateToolbarVisibility();
 
   raw_ptr<BrowserView> browser_view_ = nullptr;  // weak
   std::unique_ptr<ImmersiveRevealedLock> focus_lock_;
   std::unique_ptr<ImmersiveRevealedLock> menu_lock_;
   bool enabled_ = false;
   int revealed_lock_count_ = 0;
-  base::scoped_nsobject<ImmersiveModeTitlebarViewController>
-      immersive_mode_titlebar_view_controller_;
-  base::scoped_nsobject<ImmersiveModeMapper> immersive_mode_mapper_;
   base::ScopedObservation<views::View, views::ViewObserver>
       top_container_observation_{this};
   base::ScopedObservation<views::Widget, views::WidgetObserver>
@@ -193,6 +117,14 @@ class ImmersiveModeControllerMac : public ImmersiveModeController,
 
   // Used to keep track of the update of kShowFullscreenToolbar preference.
   BooleanPrefMember show_fullscreen_toolbar_;
+  base::ScopedObservation<web_app::WebAppRegistrar,
+                          web_app::AppRegistrarObserver>
+      always_show_toolbar_in_fullscreen_observation_{this};
+
+  // Used as a convenience to access
+  // NativeWidgetMacNSWindowHost::GetNSWindowMojo().
+  raw_ptr<remote_cocoa::mojom::NativeWidgetNSWindow> ns_window_mojo_ =
+      nullptr;  // weak
 
   base::WeakPtrFactory<ImmersiveModeControllerMac> weak_ptr_factory_;
 };
@@ -217,27 +149,34 @@ ImmersiveModeControllerMac::~ImmersiveModeControllerMac() {
 
 void ImmersiveModeControllerMac::Init(BrowserView* browser_view) {
   browser_view_ = browser_view;
-  show_fullscreen_toolbar_.Init(
-      prefs::kShowFullscreenToolbar, browser_view->GetProfile()->GetPrefs(),
-      base::BindRepeating(&ImmersiveModeControllerMac::ShowFullscreenToolbar,
-                          base::Unretained(this)));
+  ns_window_mojo_ = views::NativeWidgetMacNSWindowHost::GetFromNativeWindow(
+                        browser_view_->GetWidget()->GetNativeWindow())
+                        ->GetNSWindowMojo();
+
+  if (web_app::AppBrowserController::IsWebApp(browser_view->browser())) {
+    auto* provider =
+        web_app::WebAppProvider::GetForWebApps(browser_view->GetProfile());
+    always_show_toolbar_in_fullscreen_observation_.Observe(
+        &provider->registrar());
+  } else {
+    show_fullscreen_toolbar_.Init(
+        prefs::kShowFullscreenToolbar, browser_view->GetProfile()->GetPrefs(),
+        base::BindRepeating(
+            &ImmersiveModeControllerMac::UpdateToolbarVisibility,
+            base::Unretained(this)));
+  }
 }
 
-void ImmersiveModeControllerMac::ShowFullscreenToolbar() {
-  if (*show_fullscreen_toolbar_) {
-    immersive_mode_titlebar_view_controller_.get().fullScreenMinHeight =
-        immersive_mode_titlebar_view_controller_.get().view.frame.size.height;
-    browser_view_->GetWidget()
-        ->GetNativeWindow()
-        .GetNativeNSWindow()
-        .styleMask &= ~NSWindowStyleMaskFullSizeContentView;
+void ImmersiveModeControllerMac::UpdateToolbarVisibility() {
+  bool always_show_toolbar;
+  if (web_app::AppBrowserController::IsWebApp(browser_view_->browser())) {
+    web_app::AppBrowserController* controller =
+        browser_view_->browser()->app_controller();
+    always_show_toolbar = controller->AlwaysShowToolbarInFullscreen();
   } else {
-    immersive_mode_titlebar_view_controller_.get().fullScreenMinHeight = 0;
-    browser_view_->GetWidget()
-        ->GetNativeWindow()
-        .GetNativeNSWindow()
-        .styleMask |= NSWindowStyleMaskFullSizeContentView;
+    always_show_toolbar = *show_fullscreen_toolbar_;
   }
+  ns_window_mojo_->UpdateToolbarVisibility(always_show_toolbar);
 
   // TODO(bur): Re-layout so that "no show" -> "always show" will work
   // properly.
@@ -264,49 +203,24 @@ void ImmersiveModeControllerMac::SetEnabled(bool enabled) {
     browser_frame_observation_.Observe(browser_view_->GetWidget());
     overlay_widget_observation_.Observe(browser_view_->overlay_widget());
 
-    // Create a new NSTitlebarAccessoryViewController that will host the
-    // overlay_view_.
-    NSView* contentView = browser_view_->overlay_widget()
-                              ->GetNativeWindow()
-                              .GetNativeNSWindow()
-                              .contentView;
-    immersive_mode_titlebar_view_controller_.reset(
-        [[ImmersiveModeTitlebarViewController alloc]
-            initWithHandlers:^() {
-              SetMenuRevealed(true);
-            }
-            viewDidAppearHandle:^() {
-              browser_view_->overlay_widget()->SetNativeWindowProperty(
-                  views::NativeWidgetMacNSWindowHost::kImmersiveContentNSView,
-                  contentView);
-            }]);
+    // Capture the overlay content view before enablement. Once enabled the view
+    // is moved to an AppKit window leaving us otherwise without a reference.
+    NSView* content_view = browser_view_->overlay_widget()
+                               ->GetNativeWindow()
+                               .GetNativeNSWindow()
+                               .contentView;
+    browser_view_->overlay_widget()->SetNativeWindowProperty(
+        views::NativeWidgetMacNSWindowHost::kImmersiveContentNSView,
+        content_view);
 
-    // Create a NSWindow delegate that will be used to map the AppKit created
-    // NSWindow to the overlay view widget's NSWindow.
-    immersive_mode_mapper_.reset([[ImmersiveModeMapper alloc] init]);
-    immersive_mode_mapper_.get().originalHostingWindow =
-        browser_view_->overlay_widget()->GetNativeWindow().GetNativeNSWindow();
-    immersive_mode_titlebar_view_controller_.get().view =
-        [[ImmersiveModeView alloc]
-            initWithImmersiveModeDelegate:immersive_mode_mapper_.get()];
-
-    // Remove the content view from the overlay view widget's NSWindow. This
-    // view will be re-parented into the AppKit created NSWindow.
-    NSView* overlay_content_view = browser_view_->overlay_widget()
-                                       ->GetNativeWindow()
-                                       .GetNativeNSWindow()
-                                       .contentView;
-    [overlay_content_view removeFromSuperview];
-
-    // Add the overlay view to the accessory view controller and hand everything
-    // over to AppKit.
-    [immersive_mode_titlebar_view_controller_.get().view
-        addSubview:overlay_content_view];
-    immersive_mode_titlebar_view_controller_.get().layoutAttribute =
-        NSLayoutAttributeBottom;
-    [browser_view_->GetWidget()->GetNativeWindow().GetNativeNSWindow()
-        addTitlebarAccessoryViewController:
-            immersive_mode_titlebar_view_controller_];
+    views::NativeWidgetMacNSWindowHost* overlay_host =
+        views::NativeWidgetMacNSWindowHost::GetFromNativeWindow(
+            browser_view_->overlay_widget()->GetNativeWindow());
+    ns_window_mojo_->EnableImmersiveFullscreen(
+        overlay_host->bridged_native_widget_id(),
+        base::BindOnce(
+            &ImmersiveModeControllerMac::FullScreenOverlayViewWillAppear,
+            base::Unretained(this)));
 
     // TODO(bur): Figure out why this Show() is needed.
     // Overlay content view will not be displayed unless we call Show() on the
@@ -332,21 +246,9 @@ void ImmersiveModeControllerMac::SetEnabled(bool enabled) {
 
     // Rollback the view shuffling from enablement.
     browser_view_->overlay_widget()->Hide();
-    NSView* overlay_content_view =
-        immersive_mode_titlebar_view_controller_.get()
-            .view.subviews.firstObject;
-    [overlay_content_view removeFromSuperview];
-    browser_view_->overlay_widget()
-        ->GetNativeWindow()
-        .GetNativeNSWindow()
-        .contentView = overlay_content_view;
-    [immersive_mode_titlebar_view_controller_ removeFromParentViewController];
-    [immersive_mode_titlebar_view_controller_.get().view release];
-    immersive_mode_titlebar_view_controller_.reset();
-    browser_view_->GetWidget()
-        ->GetNativeWindow()
-        .GetNativeNSWindow()
-        .styleMask |= NSWindowStyleMaskFullSizeContentView;
+    ns_window_mojo_->DisableImmersiveFullscreen();
+    browser_view_->overlay_widget()->SetNativeWindowProperty(
+        views::NativeWidgetMacNSWindowHost::kImmersiveContentNSView, nullptr);
 
     menu_lock_.reset();
     focus_lock_.reset();
@@ -362,12 +264,12 @@ bool ImmersiveModeControllerMac::ShouldHideTopViews() const {
 }
 
 bool ImmersiveModeControllerMac::IsRevealed() const {
-  return enabled_ && revealed_lock_count_ > 0;
+  return enabled_;
 }
 
 int ImmersiveModeControllerMac::GetTopContainerVerticalOffset(
     const gfx::Size& top_container_size) const {
-  return (enabled_ && !IsRevealed()) ? -top_container_size.height() : 0;
+  return 0;
 }
 
 std::unique_ptr<ImmersiveRevealedLock>
@@ -389,6 +291,10 @@ void ImmersiveModeControllerMac::OnWidgetActivationChanged(
     views::Widget* widget,
     bool active) {}
 
+void ImmersiveModeControllerMac::FullScreenOverlayViewWillAppear() {
+  SetMenuRevealed(true);
+}
+
 void ImmersiveModeControllerMac::OnWillChangeFocus(views::View* focused_before,
                                                    views::View* focused_now) {}
 
@@ -404,14 +310,24 @@ void ImmersiveModeControllerMac::OnDidChangeFocus(views::View* focused_before,
 
 void ImmersiveModeControllerMac::OnViewBoundsChanged(
     views::View* observed_view) {
-  browser_view_->overlay_widget()->SetBounds(observed_view->bounds());
-  NSRect frame_rect = observed_view->bounds().ToCGRect();
-  immersive_mode_titlebar_view_controller_.get().view.frame = frame_rect;
-  ShowFullscreenToolbar();
+  if (!observed_view->bounds().IsEmpty()) {
+    browser_view_->overlay_widget()->SetBounds(observed_view->bounds());
+    ns_window_mojo_->OnTopContainerViewBoundsChanged(observed_view->bounds());
+    UpdateToolbarVisibility();
+  }
 }
 
 void ImmersiveModeControllerMac::OnWidgetDestroying(views::Widget* widget) {
   SetEnabled(false);
+}
+
+void ImmersiveModeControllerMac::OnAlwaysShowToolbarInFullscreenChanged(
+    const web_app::AppId& app_id,
+    bool show) {
+  if (web_app::AppBrowserController::IsForWebApp(browser_view_->browser(),
+                                                 app_id)) {
+    UpdateToolbarVisibility();
+  }
 }
 
 void ImmersiveModeControllerMac::LockDestroyed() {

@@ -1,15 +1,15 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/device_sync/cryptauth_key_creator_impl.h"
 
-#include "ash/components/multidevice/secure_message_delegate_impl.h"
 #include "ash/services/device_sync/cryptauth_enrollment_constants.h"
 #include "ash/services/device_sync/proto/cryptauth_common.pb.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
+#include "chromeos/ash/components/multidevice/secure_message_delegate_impl.h"
 #include "crypto/hkdf.h"
 
 namespace ash {

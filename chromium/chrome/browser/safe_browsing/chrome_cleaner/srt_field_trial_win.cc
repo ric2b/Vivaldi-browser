@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,8 +30,9 @@ namespace safe_browsing {
 // Do not remove this feature, even though it's enabled by default. It's used
 // in testing to override `kReporterDistributionTagParam` and
 // `kCleanerDownloadGroupParam` to fetch pre-release versions of the tool.
-const base::Feature kChromeCleanupDistributionFeature{
-    "ChromeCleanupDistribution", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kChromeCleanupDistributionFeature,
+             "ChromeCleanupDistribution",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<std::string> kReporterDistributionTagParam{
     &kChromeCleanupDistributionFeature, "reporter_omaha_tag", ""};

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -245,6 +245,10 @@ InstallReason EnumTraits<InstallReason, apps::InstallReason>::ToMojom(
       return InstallReason::kUser;
     case apps::InstallReason::kSubApp:
       return InstallReason::kSubApp;
+    case apps::InstallReason::kKiosk:
+      return InstallReason::kKiosk;
+    case apps::InstallReason::kCommandLine:
+      return InstallReason::kCommandLine;
   }
 }
 
@@ -275,6 +279,12 @@ bool EnumTraits<InstallReason, apps::InstallReason>::FromMojom(
       return true;
     case InstallReason::kSubApp:
       *output = apps::InstallReason::kSubApp;
+      return true;
+    case InstallReason::kKiosk:
+      *output = apps::InstallReason::kKiosk;
+      return true;
+    case InstallReason::kCommandLine:
+      *output = apps::InstallReason::kCommandLine;
       return true;
   }
 }

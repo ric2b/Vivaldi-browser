@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -316,9 +316,7 @@ void InputMethodSyncer::OnIsSyncingChanged() {
   if (!prefs_->GetBoolean(prefs::kLanguageShouldMergeInputMethods))
     return;
   // Wait for the correct type of prefs to sync before merging.
-  bool is_syncing = features::IsSyncSettingsCategorizationEnabled()
-                        ? prefs_->AreOsPrefsSyncing()
-                        : prefs_->IsSyncing();
+  bool is_syncing = prefs_->AreOsPrefsSyncing();
   if (is_syncing)
     MergeSyncedPrefs();
 }

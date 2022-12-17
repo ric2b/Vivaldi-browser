@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,8 +47,6 @@ class AppLaunchHandler : public apps::AppRegistryCache::Observer {
 
   ::app_restore::RestoreData* restore_data() { return restore_data_.get(); }
 
-  void set_delay(base::TimeDelta delay) { delay_ = delay; }
-
  protected:
   // Note: LaunchApps does not launch browser windows, this is handled
   // separately.
@@ -83,10 +81,6 @@ class AppLaunchHandler : public apps::AppRegistryCache::Observer {
 
   Profile* const profile_;
   std::unique_ptr<::app_restore::RestoreData> restore_data_;
-
-  // A delay between apps launch time. This should only be set in non official
-  // builds.
-  base::TimeDelta delay_;
 };
 
 }  // namespace ash

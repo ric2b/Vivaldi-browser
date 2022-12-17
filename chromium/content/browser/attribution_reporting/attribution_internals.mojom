@@ -1,17 +1,12 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 module attribution_internals.mojom;
 
+import "content/browser/attribution_reporting/attribution_reporting.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
-
-// Represents AttributionSourceType.
-enum SourceType {
-  kNavigation,
-  kEvent,
-};
 
 // Represents `AttributionReport::EventLevelData::Id`.
 // Will be used to issue commands for individual reports.
@@ -94,21 +89,21 @@ struct WebUISource {
   url.mojom.Origin reporting_origin;
   double source_time;
   double expiry_time;
-  SourceType source_type;
+  attribution_reporting.mojom.SourceType source_type;
   int64 priority;
   DebugKey? debug_key;
   array<uint64> dedup_keys;
   map<string, array<string>> filter_data;
   // The value is a hex-encoded unsigned 128-bit integer.
   map<string, string> aggregation_keys;
+  uint64 aggregatable_budget_consumed;
+  array<uint64> aggregatable_dedup_keys;
 
-  // Union of `StorableSource::Result` and `StoredSource::AttributionLogic`,
-  // and `AttributionStorage::DeactivatedSource::Reason`.
+  // Union of `StorableSource::Result` and `StoredSource::AttributionLogic`.
   enum Attributability {
     kAttributable,
     // The source was dropped due to `CommonSourceInfo::AttributionLogic::kNever`.
     kNoised,
-    kReplacedByNewerSource,
     kReachedEventLevelAttributionLimit,
     kInternalError,
     kInsufficientSourceCapacity,
@@ -149,6 +144,7 @@ struct WebUITrigger {
   array<WebUIEventTriggerData> event_triggers;
   array<WebUIAggregatableTriggerData> aggregatable_triggers;
   map<string, uint32> aggregatable_values;
+  DedupKey? aggregatable_dedup_key;
 
   enum Status {
     // Shared statuses:
@@ -160,9 +156,9 @@ struct WebUITrigger {
     kExcessiveAttributions,
     kExcessiveReportingOrigins,
     kProhibitedByBrowserPolicy,
+    kDeduplicated,
 
     // Event-level statuses:
-    kDeduplicated,
     kLowPriority,
     kNoised,
     kNoMatchingConfigurations,
@@ -177,10 +173,13 @@ struct WebUITrigger {
   Status aggregatable_status;
 };
 
-// Represents `AttributionReport::ReportType`.
-enum ReportType {
-  kEventLevel,
-  kAggregatableAttribution,
+// Struct containing reason for a source registration failure to be displayed
+// as a log by WebUI
+struct FailedSourceRegistration {
+  double time;
+  string header_value;
+  url.mojom.Origin reporting_origin;
+  attribution_reporting.mojom.SourceRegistrationError error;
 };
 
 // Observer for events relevant to the attribution internals WebUI.
@@ -191,11 +190,10 @@ interface Observer {
 
   // Called when the reports in storage changed, indicating that the observer
   // should call `Handler::GetReports()`.
-  OnReportsChanged(ReportType report_type);
+  OnReportsChanged(attribution_reporting.mojom.ReportType report_type);
 
-  // Called when a source-registration attempt fails or a stored source is
-  // deactivated.
-  OnSourceRejectedOrDeactivated(WebUISource source);
+  // Called when a source-registration attempt fails.
+  OnSourceRejected(WebUISource source);
 
   // Called when a report is sent, regardless of success.
   OnReportSent(WebUIReport report);
@@ -206,6 +204,9 @@ interface Observer {
 
   // Called when a trigger is registered, regardless of success or failure.
   OnTriggerHandled(WebUITrigger trigger);
+
+  // Called when the source header registration JSON parser fails.
+  OnFailedSourceRegistration(FailedSourceRegistration failure);
 };
 
 // Mojo interface for the attribution internals WebUI to communicate with the
@@ -222,7 +223,7 @@ interface Handler {
 
   // Returns all reports of the specified type contained in storage, including
   // those that are actively being sent.
-  GetReports(ReportType report_type) => (array<WebUIReport> reports);
+  GetReports(attribution_reporting.mojom.ReportType report_type) => (array<WebUIReport> reports);
 
   // Sends the given reports, ignoring delay, returning when the operation has
   // been completed and the reports have been cleared from storage.

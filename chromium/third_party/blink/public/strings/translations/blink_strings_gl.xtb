@@ -7,7 +7,6 @@
 <translation id="1178581264944972037">Pausar</translation>
 <translation id="1306460908038601864">Desactivado</translation>
 <translation id="1311894908970423688">O valor debe ser <ph name="VALUE_DATE_OR_TIME" />.</translation>
-<translation id="145015347812617860"><ph name="COUNT" /> elementos</translation>
 <translation id="1480676835519562650">selección múltiple, <ph name="SELECTED" /> de <ph name="COUNT" /> seleccionados.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1591562245178063882">Este mes</translation>
@@ -31,7 +30,6 @@
 <translation id="2246498165605549352">Ficheiro local</translation>
 <translation id="2247351761944213033">Semana <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Pista <ph name="NUMBER" /></translation>
-<translation id="2307576640803031502">na lista, elemento <ph name="INDEX" /> de <ph name="COUNT" /></translation>
 <translation id="2393030564806080191">Valor hexadecimal da cor</translation>
 <translation id="2398813069815436052">cadro de diálogo aberto.</translation>
 <translation id="245932805758469625">número de segundos restantes do vídeo</translation>
@@ -78,7 +76,7 @@
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> seleccionados</translation>
 <translation id="4992066212339426712">Activar o son</translation>
 <translation id="49969490063480558">Introduce texto despois de "<ph name="ATSIGN" />". O enderezo electrónico "<ph name="INVALIDADDRESS" />" está incompleto.</translation>
-<translation id="5090250355906949916">barra de progresión do vídeo</translation>
+<translation id="5090250355906949916">barra de reprodución do vídeo</translation>
 <translation id="509897012892853729">Canle azul</translation>
 <translation id="5117590920725113268">Mostrar mes seguinte</translation>
 <translation id="5164977714490026579">O valor debe ser maior ou igual a <ph name="MINIMUM" />.</translation>
@@ -114,7 +112,7 @@
 <translation id="6281588256137006900">Luminosidade</translation>
 <translation id="6310801910862476708">Saír do modo de pantalla superposta</translation>
 <translation id="6398862346408813489">Mostra o panel de selección do mes</translation>
-<translation id="6404546809543547843">barra de progresión do audio</translation>
+<translation id="6404546809543547843">barra de reprodución do audio</translation>
 <translation id="6443871981718447451">mostra o menú de subtítulos</translation>
 <translation id="6550675742724504774">Opcións</translation>
 <translation id="6572309429103589720">A gramática non é válida</translation>

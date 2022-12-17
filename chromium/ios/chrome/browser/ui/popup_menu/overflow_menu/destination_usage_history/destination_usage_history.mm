@@ -1,15 +1,16 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/destination_usage_history/destination_usage_history.h"
 
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/sys_string_conversions.h"
-#include "base/time/time.h"
-#include "components/prefs/pref_service.h"
-#include "components/prefs/scoped_user_pref_update.h"
-#import "ios/chrome/browser/pref_names.h"
+#import "base/ranges/algorithm.h"
+#import "base/strings/string_number_conversions.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/time/time.h"
+#import "components/prefs/pref_service.h"
+#import "components/prefs/scoped_user_pref_update.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_constants.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -35,11 +36,11 @@ constexpr double kDampening = 1.1;
 constexpr int kInitialBufferNumClicks = 3;  // clicks
 
 // The dictionary key used for storing rankings.
-const std::string kRankingKey = "ranking";
+const char kRankingKey[] = "ranking";
 
 // The default destinations ranking, based on statistical usage of the old
 // overflow menu.
-std::vector<overflow_menu::Destination> kDefaultRanking = {
+const overflow_menu::Destination kDefaultRanking[] = {
     overflow_menu::Destination::Bookmarks,
     overflow_menu::Destination::Notes, // Vivaldi
     overflow_menu::Destination::History,
@@ -125,8 +126,8 @@ overflow_menu::Destination HighestUnshown(
 void Swap(std::vector<overflow_menu::Destination>& ranking,
           overflow_menu::Destination from,
           overflow_menu::Destination to) {
-  auto from_loc = std::find(ranking.begin(), ranking.end(), from);
-  auto to_loc = std::find(ranking.begin(), ranking.end(), to);
+  auto from_loc = base::ranges::find(ranking, from);
+  auto to_loc = base::ranges::find(ranking, to);
   *from_loc = to;
   *to_loc = from;
 }
@@ -150,9 +151,10 @@ std::vector<overflow_menu::Destination> Vector(
   return vec;
 }
 
-// Converts std::vector<overflow_menu::Destination> ranking into
+// Converts iterable of overflow_menu::Destination `ranking` into
 // base::Value::List ranking.
-base::Value::List List(std::vector<overflow_menu::Destination>& ranking) {
+template <typename Range>
+base::Value::List List(Range&& ranking) {
   base::Value::List list;
 
   for (overflow_menu::Destination destination : ranking) {
@@ -182,11 +184,23 @@ base::Value::List List(std::vector<overflow_menu::Destination>& ranking) {
 // B's numClicks exceeds A's.
 @implementation DestinationUsageHistory
 
+#pragma mark - Initializers
+
 - (instancetype)initWithPrefService:(PrefService*)prefService {
   if (self = [super init])
     _prefService = prefService;
 
   return self;
+}
+
+- (void)dealloc {
+  DCHECK(!self.prefService) << "-disconnect needs to be called before -dealloc";
+}
+
+#pragma mark - Disconnect
+
+- (void)disconnect {
+  self.prefService = nullptr;
 }
 
 #pragma mark - Public
@@ -233,36 +247,34 @@ base::Value::List List(std::vector<overflow_menu::Destination>& ranking) {
 // Track click for `destination` and associate it with TodaysDay().
 - (void)trackDestinationClick:(overflow_menu::Destination)destination
      numAboveFoldDestinations:(int)numAboveFoldDestinations {
-  DCHECK(self.prefService);
-  // Exit early if there's no pref service; this is not expected to happen.
+  // Exit early if there's no pref service. May happen during the application
+  // shutdown.
   if (!self.prefService)
     return;
 
-  const base::Value::Dict* history =
-      self.prefService
-          ->GetDictionary(prefs::kOverflowMenuDestinationUsageHistory)
-          ->GetIfDict();
+  const base::Value::Dict& history =
+      self.prefService->GetDict(prefs::kOverflowMenuDestinationUsageHistory);
   const std::string path = base::NumberToString(TodaysDay()) + "." +
                            overflow_menu::StringNameForDestination(destination);
 
-  int numClicks = history->FindIntByDottedPath(path).value_or(0) + 1;
+  int numClicks = history.FindIntByDottedPath(path).value_or(0) + 1;
 
-  DictionaryPrefUpdate update(self.prefService,
+  ScopedDictPrefUpdate update(self.prefService,
                               prefs::kOverflowMenuDestinationUsageHistory);
-  update->SetIntPath(path, numClicks);
+  update->SetByDottedPath(path, numClicks);
 
   // User's very first time using Smart Sorting.
-  if (history->size() == 0)
+  if (history.size() == 0)
     [self injectDefaultNumClicksForAllDestinations];
 
   // Calculate new ranking and store to prefs; Calculate the new ranking
   // ahead of time so overflow menu presentation needn't run ranking algorithm
   // each time it presents.
   const base::Value::List* currentRanking = [self fetchCurrentRanking];
-  const base::Value::List newRanking =
+  base::Value::List newRanking =
       [self calculateNewRanking:currentRanking
           numAboveFoldDestinations:numAboveFoldDestinations];
-  update->SetKey(kRankingKey, base::Value(newRanking.Clone()));
+  update->Set(kRankingKey, std::move(newRanking));
 }
 
 #pragma mark - Private
@@ -270,24 +282,27 @@ base::Value::List List(std::vector<overflow_menu::Destination>& ranking) {
 // Injects a default number of clicks for all destinations in the history
 // dictonary.
 - (void)injectDefaultNumClicksForAllDestinations {
+  // Exit early if there's no pref service. May happen during the application
+  // shutdown.
+  if (!self.prefService)
+    return;
+
   DCHECK_GT(kDampening, 1.0);
   DCHECK_GT(kInitialBufferNumClicks, 1);
 
   int defaultNumClicks =
       (kInitialBufferNumClicks - 1) * (kDampening - 1.0) * 100.0;
   std::string today = base::NumberToString(TodaysDay());
-  DictionaryPrefUpdate update(self.prefService,
+  ScopedDictPrefUpdate update(self.prefService,
                               prefs::kOverflowMenuDestinationUsageHistory);
-  const base::Value::Dict* history =
-      self.prefService
-          ->GetDictionary(prefs::kOverflowMenuDestinationUsageHistory)
-          ->GetIfDict();
+  const base::Value::Dict& history =
+      self.prefService->GetDict(prefs::kOverflowMenuDestinationUsageHistory);
 
   for (overflow_menu::Destination destination : kDefaultRanking) {
     const std::string path =
         today + "." + overflow_menu::StringNameForDestination(destination);
-    update->SetIntPath(path, history->FindIntByDottedPath(path).value_or(0) +
-                                 defaultNumClicks);
+    update->SetByDottedPath(
+        path, history.FindIntByDottedPath(path).value_or(0) + defaultNumClicks);
   }
 }
 
@@ -295,16 +310,17 @@ base::Value::List List(std::vector<overflow_menu::Destination>& ranking) {
 // saves back to prefs. Returns true if expired usage data was found/removed,
 // false otherwise.
 - (void)deleteExpiredData {
-  const base::Value* pref = self.prefService->GetDictionary(
-      prefs::kOverflowMenuDestinationUsageHistory);
-  const base::Value::Dict* history = pref->GetIfDict();
-
-  if (!history)
+  // Exit early if there's no pref service. May happen during the application
+  // shutdown.
+  if (!self.prefService)
     return;
 
-  base::Value::Dict prunedHistory = history->Clone();
+  const base::Value::Dict& history =
+      self.prefService->GetDict(prefs::kOverflowMenuDestinationUsageHistory);
 
-  for (auto&& [day, dayHistory] : *history) {
+  base::Value::Dict prunedHistory = history.Clone();
+
+  for (auto&& [day, dayHistory] : history) {
     // Skip over entry corresponding to previous ranking.
     if (day == kRankingKey)
       continue;
@@ -319,14 +335,15 @@ base::Value::List List(std::vector<overflow_menu::Destination>& ranking) {
 
 // Fetches the current ranking saved in prefs and returns it.
 - (const base::Value::List*)fetchCurrentRanking {
-  const base::Value* pref = self.prefService->GetDictionary(
-      prefs::kOverflowMenuDestinationUsageHistory);
-  const base::Value::Dict* history = pref->GetIfDict();
-
-  if (!history)
+  // Exit early if there's no pref service. May happen during the application
+  // shutdown.
+  if (!self.prefService)
     return nullptr;
 
-  return history->FindList(kRankingKey);
+  const base::Value::Dict& history =
+      self.prefService->GetDict(prefs::kOverflowMenuDestinationUsageHistory);
+
+  return history.FindList(kRankingKey);
 }
 
 // Fetches the current ranking stored in Chrome Prefs and returns a sorted list
@@ -343,14 +360,14 @@ base::Value::List List(std::vector<overflow_menu::Destination>& ranking) {
 - (const base::Value::List)calculateNewRanking:
                                (const base::Value::List*)previousRanking
                       numAboveFoldDestinations:(int)numAboveFoldDestinations {
-  if (!previousRanking)
+  if (!previousRanking) {
     return List(kDefaultRanking);
+  }
 
   if (numAboveFoldDestinations >= static_cast<int>(previousRanking->size()))
     return previousRanking->Clone();
 
-  std::vector<overflow_menu::Destination> prevRanking =
-      previousRanking ? Vector(previousRanking) : kDefaultRanking;
+  std::vector<overflow_menu::Destination> prevRanking = Vector(previousRanking);
   std::vector<overflow_menu::Destination> newRanking =
       [self updatedRankWithCurrentRanking:prevRanking
                  numAboveFoldDestinations:numAboveFoldDestinations];
@@ -363,16 +380,17 @@ base::Value::List List(std::vector<overflow_menu::Destination>& ranking) {
 // (int). Only usage data within previous `window` days will be included in the
 // returned result.
 - (base::Value::Dict)flattenedHistoryWithinWindow:(int)window {
-  const base::Value* pref = self.prefService->GetDictionary(
-      prefs::kOverflowMenuDestinationUsageHistory);
-  const base::Value::Dict* history = pref->GetIfDict();
-
   base::Value::Dict flatHistory;
 
-  if (!history)
+  // Exit early if there's no pref service. May happen during the application
+  // shutdown.
+  if (!self.prefService)
     return flatHistory;
 
-  for (auto&& [day, dayHistory] : *history) {
+  const base::Value::Dict& history =
+      self.prefService->GetDict(prefs::kOverflowMenuDestinationUsageHistory);
+
+  for (auto&& [day, dayHistory] : history) {
     // Skip over entry corresponding to previous ranking.
     if (day == kRankingKey) {
       continue;

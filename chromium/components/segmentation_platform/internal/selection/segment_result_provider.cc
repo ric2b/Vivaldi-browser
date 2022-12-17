@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,10 +22,10 @@
 namespace segmentation_platform {
 namespace {
 
-int ComputeDiscreteMapping(const std::string& segmentation_key,
-                           const proto::SegmentInfo& segment_info) {
-  int rank = metadata_utils::ConvertToDiscreteScore(
-      segmentation_key, segment_info.prediction_result().result(),
+float ComputeDiscreteMapping(const std::string& discrete_mapping_key,
+                             const proto::SegmentInfo& segment_info) {
+  float rank = metadata_utils::ConvertToDiscreteScore(
+      discrete_mapping_key, segment_info.prediction_result().result(),
       segment_info.model_metadata());
   VLOG(1) << __func__
           << ": segment=" << SegmentId_Name(segment_info.segment_id())
@@ -102,7 +102,7 @@ class SegmentResultProviderImpl : public SegmentResultProvider {
   void OnModelExecuted(std::unique_ptr<RequestState> request_state,
                        DefaultModelManager::SegmentSource source,
                        ResultCallbackWithState callback,
-                       const std::pair<float, ModelExecutionStatus>& result);
+                       std::unique_ptr<ModelExecutionResult> result);
 
   void PostResultCallback(std::unique_ptr<RequestState> request_state,
                           std::unique_ptr<SegmentResult> result);
@@ -225,11 +225,15 @@ void SegmentResultProviderImpl::GetCachedModelScore(
     return;
   }
 
-  int rank = ComputeDiscreteMapping(request_state->options->segmentation_key,
-                                    *db_segment_info);
+  float rank = ComputeDiscreteMapping(
+      request_state->options->discrete_mapping_key, *db_segment_info);
+  auto execution_result = std::make_unique<ModelExecutionResult>(
+      ModelExecutionResult::Tensor(),
+      db_segment_info->prediction_result().result());
   std::move(callback).Run(
       std::move(request_state),
-      std::make_unique<SegmentResult>(ResultState::kSuccessFromDatabase, rank));
+      std::make_unique<SegmentResult>(ResultState::kSuccessFromDatabase, rank,
+                                      std::move(execution_result)));
 }
 
 void SegmentResultProviderImpl::ExecuteModelAndGetScore(
@@ -270,13 +274,30 @@ void SegmentResultProviderImpl::ExecuteModelAndGetScore(
   auto request = std::make_unique<ExecutionRequest>();
   // The pointer is kept alive by the `request_state`.
   request->segment_info = segment_info;
-  request->record_metrics_for_default = true;
+  request->record_metrics_for_default =
+      source == DefaultModelManager::SegmentSource::DEFAULT_MODEL;
   request->input_context = request_state->options->input_context;
-  request->callback =
-      base::BindOnce(&SegmentResultProviderImpl::OnModelExecuted,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(request_state),
-                     source, std::move(callback));
-  request->model_provider = provider;
+
+  if (source == DefaultModelManager::SegmentSource::DATABASE &&
+      request_state->options->save_results_to_db) {
+    // If the request needs to save result to database, ensure that the model is
+    // from database. This will drop the callback and not run.
+    if (!request->callback.is_null()) {
+      DLOG(WARNING)
+          << "Callback will not be run when save_results_to_db is set";
+    }
+    request->save_result_to_db = true;
+    request->callback.Reset();
+    // Provider will be fetched by scheduler.
+    request->model_provider = nullptr;
+  } else {
+    request->callback =
+        base::BindOnce(&SegmentResultProviderImpl::OnModelExecuted,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(request_state),
+                       source, std::move(callback));
+    request->model_provider = provider;
+  }
+
   execution_service_->RequestModelExecution(std::move(request));
 }
 
@@ -284,19 +305,20 @@ void SegmentResultProviderImpl::OnModelExecuted(
     std::unique_ptr<RequestState> request_state,
     DefaultModelManager::SegmentSource source,
     ResultCallbackWithState callback,
-    const std::pair<float, ModelExecutionStatus>& result) {
+    std::unique_ptr<ModelExecutionResult> result) {
   auto* segment_info =
       FilterSegmentInfoBySource(request_state->available_segments, source);
-  if (result.second == ModelExecutionStatus::kSuccess) {
-    segment_info->mutable_prediction_result()->set_result(result.first);
-    int rank = ComputeDiscreteMapping(request_state->options->segmentation_key,
-                                      *segment_info);
+  if (result->status == ModelExecutionStatus::kSuccess) {
+    segment_info->mutable_prediction_result()->set_result(result->score);
+    float rank = ComputeDiscreteMapping(
+        request_state->options->discrete_mapping_key, *segment_info);
     ResultState state =
         source == DefaultModelManager::SegmentSource::DEFAULT_MODEL
             ? ResultState::kDefaultModelScoreUsed
             : ResultState::kTfliteModelScoreUsed;
-    std::move(callback).Run(std::move(request_state),
-                            std::make_unique<SegmentResult>(state, rank));
+    std::move(callback).Run(
+        std::move(request_state),
+        std::make_unique<SegmentResult>(state, rank, std::move(result)));
   } else {
     ResultState state =
         source == DefaultModelManager::SegmentSource::DEFAULT_MODEL
@@ -319,8 +341,11 @@ void SegmentResultProviderImpl::PostResultCallback(
 
 SegmentResultProvider::SegmentResult::SegmentResult(ResultState state)
     : state(state) {}
-SegmentResultProvider::SegmentResult::SegmentResult(ResultState state, int rank)
-    : state(state), rank(rank) {}
+SegmentResultProvider::SegmentResult::SegmentResult(
+    ResultState state,
+    float rank,
+    std::unique_ptr<ModelExecutionResult> execution_result)
+    : state(state), rank(rank), execution_result(std::move(execution_result)) {}
 SegmentResultProvider::SegmentResult::~SegmentResult() = default;
 
 SegmentResultProvider::GetResultOptions::GetResultOptions() = default;

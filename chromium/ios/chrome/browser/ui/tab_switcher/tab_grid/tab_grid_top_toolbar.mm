@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,8 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_control.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
@@ -36,14 +36,16 @@ const CGFloat kSymbolSearchImagePointSize = 22;
 // Kill switch guarding a workaround for broken UI around the dynamic island,
 // see crbug.com/1364629. This workaround makes the UIToolbar background
 // transparent and correctly frames a UIVisualEffectView.
-const base::Feature kDynamicIslandToolbarBlurFix{
-    "DynamicIslandToolbarBlurFix", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kDynamicIslandToolbarBlurFix,
+             "DynamicIslandToolbarBlurFix",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Kill switch guarding a workaround for broken UI around the dynamic island,
 // see crbug.com/1364629. This workaround manually resizes the incorrectly
 // framed UIVisualEffectView.
-const base::Feature kDynamicIslandToolbarManualOffsetFix{
-    "DynamicIslandToolbarManualOffsetFix", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kDynamicIslandToolbarManualOffsetFix,
+             "DynamicIslandToolbarManualOffsetFix",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 }  // namespace
 
 bool ShouldUseToolbarBlurFix() {

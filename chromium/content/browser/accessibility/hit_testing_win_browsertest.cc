@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +43,7 @@ class AccessibilityHitTestingWinBrowserTest
   ComPtr<IAccessible> GetWebContentRootIAccessible() {
     ComPtr<IAccessible> content_root;
     GetRootBrowserAccessibilityManager()
-        ->GetRoot()
+        ->GetBrowserAccessibilityRoot()
         ->GetNativeViewAccessible()
         ->QueryInterface(IID_PPV_ARGS(&content_root));
     return content_root;

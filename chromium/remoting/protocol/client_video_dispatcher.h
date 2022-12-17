@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,7 @@
 #include "remoting/protocol/channel_dispatcher_base.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class ClientStub;
 class VideoStub;
@@ -50,7 +49,6 @@ class ClientVideoDispatcher : public ChannelDispatcherBase {
   base::WeakPtrFactory<ClientVideoDispatcher> weak_factory_{this};
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_CLIENT_VIDEO_DISPATCHER_H_

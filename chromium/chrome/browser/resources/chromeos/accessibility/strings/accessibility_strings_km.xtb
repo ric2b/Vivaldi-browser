@@ -138,9 +138,9 @@
 <translation id="1812527064848182527">ផ្ដេក</translation>
 <translation id="1829244130665387512">ស្វែងរកក្នុងទំព័រ</translation>
 <translation id="1834891354138622109">ជួរឈរ</translation>
-<translation id="1845944666972354496">ចុច​ពីរ​ដង ដើម្បី​បើក​ដំណើរការ</translation>
 <translation id="1846771122725914429">អក្សរប្រៃយ៍​ប៊្លូធូស</translation>
 <translation id="1852018405765032699">ការចុចលើអេក្រង់​ដោយប្រើ​ម្រាមដៃបួន​នឹងបើក ហើយបិទម៉ឺនុយ ChromeVox។ ម៉ឺនុយ​ទាំងនេះ​មានព័ត៌មាន​ដែលមានប្រយោជន៍​អំពីការបញ្ជា និងផ្លូវកាត់។ បន្ទាប់ពី​ម៉ឺនុយ​ត្រូវបានបើក អ្នកអាចអូស​ដោយប្រើ​ម្រាមដៃមួយ ដើម្បី​រុករកក្នុង​ធាតុ និង​ចុចពីរដង ដើម្បី​បើកដំណើរការ​ធាតុ។ ដើម្បីបន្ត សូមចុចលើ​អេក្រង់​ដោយប្រើ​ម្រាមដៃបួន។</translation>
+<translation id="1864430479908918647">ចុចគ្រាប់​ចុច​ស្វែងរក+ដកឃ្លា</translation>
 <translation id="1865601187525349519">ផ្នែកបញ្ចប់នៃអត្ថបទ</translation>
 <translation id="1876229593313240038">ឯកសារ</translation>
 <translation id="1902396333223336119">ក្រឡា</translation>
@@ -238,6 +238,7 @@
 <translation id="2619344480613750862">អ្នកក៏អាច​ទៅកាន់​ចន្លោះផ្នែកនៃ​អេក្រង់បានផងដែរ។ ឧទាហរណ៍ អ្នកអាច​ទៅកាន់ចន្លោះ​កម្មវិធី​ចាប់ផ្ដើម ធ្នើរ និងផ្ទាំង Chrome របស់អ្នក។ ដើម្បីទៅកាន់​ផ្នែកបន្ទាប់ សូមអូស​ពីឆ្វេងទៅស្ដាំ​ដោយប្រើ​ម្រាមដៃបួន។ សាកល្បង​ឥឡូវនេះ ដើម្បី​បន្ត​។</translation>
 <translation id="2624431853467395961">បើកមុខងារស្វែងយល់</translation>
 <translation id="2626530649491650971">អាចចុចបាន</translation>
+<translation id="263637551280112393">ចុចគ្រាប់​ចុច​ស្វែងរក+Shift+ដកឃ្លា</translation>
 <translation id="2637227747952042642">គណិតវិទ្យា</translation>
 <translation id="2638785836053527382">បាន​បន្ត​ការទាញ​យក <ph name="FILE_NAME" /></translation>
 <translation id="2639750663247012216">ឧបករណ៍កែសម្រួល ChromeVox</translation>
@@ -529,6 +530,7 @@
 <translation id="4479068155583208887">ឈាមជ្រូក</translation>
 <translation id="4482330759234983253">តារាងពីមុន</translation>
 <translation id="4491109536499578614">រូបភាព</translation>
+<translation id="4507332368061453500">ចុច​ឱ្យ​យូរលើ​ធាតុ​បច្ចុប្បន្ន</translation>
 <translation id="4511186779140817916">លឿងស្រគាំ</translation>
 <translation id="451510441928265982">គ្មានផ្នែកក្បាលកម្រិតទី 2 មុនទេ</translation>
 <translation id="4515799157838123044">ដាក់ពណ៌ខ្មៅផ្ទៃខាងក្រោយ</translation>
@@ -597,7 +599,6 @@
 <translation id="4993152509206108683">អត្រា <ph name="PERCENT" /> ភាគរយ</translation>
 <translation id="4994420463726586413">ប្រកាស​ស្ថានភាព​ថ្ម​បច្ចុប្បន្ន</translation>
 <translation id="4997282455736854877"><ph name="NAME" /> ប៊ូតុងវិទ្យុត្រូវបានជ្រើសរើស</translation>
-<translation id="5011664330025416377">ចុច Search+Space ដើម្បី​បើកដំណើរ​ការ</translation>
 <translation id="5012724933919010465"><ph name="NAME" />, បានជ្រើសរើសប៊ូតុង​មូលរបស់ធាតុម៉ឺនុយ</translation>
 <translation id="5020651427400641814">បើក​ការធ្វើ​កំណត់ហេតុ​ការនិយាយ</translation>
 <translation id="5041394372352067729">ផ្លាស់ទីអេក្រង់ប្រែលទៅខាងលើទំព័រ</translation>
@@ -650,6 +651,7 @@
 <translation id="5355014376930441909">គ្មានផ្នែកបន្ទាប់ទេ</translation>
 <translation id="5368000168321181111">បិទសម្លេងណែនាំ</translation>
 <translation id="5368505757342402527">ការទាញយក <ph name="FILE_NAME" /> បានបញ្ចប់ <ph name="PROGRESS" />% ហើយ។ នៅសល់ប្រហែល <ph name="TIME" /> <ph name="UNITS" /> ទៀត។</translation>
+<translation id="5381388086899614489">ចុចឱ្យយូរ</translation>
 <translation id="5400836586163650660">ប្រផេះ</translation>
 <translation id="5402367795255837559">ប្រែល</translation>
 <translation id="5402791055281059602">ការរំលឹកជាប្រអប់បញ្ជាក់</translation>
@@ -762,6 +764,7 @@
 <translation id="6100239002225743044">ផ្លាស់ទី​ឡើងលើ​មួយជួរ</translation>
 <translation id="6118126368611144850">កម្មវិធី Android សម្រាប់ Chrome ។ ប្រសិនបើអ្នកមាន Play Store នៅលើឧបករណ៍របស់អ្នក សូម​សាកល្បង​ប្រើ​ ChromeVox ជាមួយកម្មវិធី Android មុនការប្រកាសឱ្យប្រើជាផ្លូវការ។ សូមសាកល្បងប្រើជំនួយសាកល្បងដោយទាញយក Google Chrome Canary ពី Play Store ។</translation>
 <translation id="611827076493383239">vtd</translation>
+<translation id="6119846243427417423">ធ្វើសកម្មភាព</translation>
 <translation id="6122013438240733403">btn</translation>
 <translation id="6132506484792346370">ប្រអប់បញ្ជី ឬប្រអប់បន្សំ</translation>
 <translation id="613344593214611552">លុបប្រយោគមុន</translation>
@@ -778,6 +781,7 @@
 <translation id="6236061028292614533">ផ្នែកក្បាលបន្ទាប់</translation>
 <translation id="6254901459154107917">តំបន់ដែលអាចកែប្រែអត្ថបទបានបន្ទាប់</translation>
 <translation id="6259464875943891919">បានចាកចេញ <ph name="TYPE" />។</translation>
+<translation id="6280088282605782512">ចុចពីរដង</translation>
 <translation id="6282062888058716985">nav</translation>
 <translation id="6295699829709583154">គ្រាប់ចុច​ចាំបាច់៖ ស្វែងរក</translation>
 <translation id="6305702903308659374">ចាក់​ក្នុង​កម្រិត​សំឡេង​ធម្មតា​ បើ​ទោះបីជា ChromeVox កំពុង​និយាយក៏ដោយ</translation>
@@ -981,6 +985,7 @@
 <translation id="7731785449856576010">គ្មានធាតុ​ក្រាហ្វិកមេឌៀបន្ទាប់ទេ</translation>
 <translation id="7735498529470878067">ការរកមើល​ដោយប៉ះ​អាចជួយឱ្យអ្នក​ដឹងអំពីអ្វីដែល​មាននៅលើ​អេក្រង់បានយ៉ាង​ឆាប់រហ័ស។</translation>
 <translation id="773906353055481349">ចុច Search+Ctrl+Alt ជាមួយសញ្ញា​ព្រួញ​ ដើម្បី​រុករក​តាម​ក្រឡា</translation>
+<translation id="7746976083433980639"><ph name="ACTION" /> ដើម្បី​<ph name="LABEL" /></translation>
 <translation id="7763537600611320912">បាន​ចាប់ផ្ដើម​ការទាញយក <ph name="FILE_NAME" /></translation>
 <translation id="7768784765476638775">ជ្រើសរើសដើម្បីអាន</translation>
 <translation id="7776293189010177726">បើក​ម៉ឺនុយ ChromeVox</translation>

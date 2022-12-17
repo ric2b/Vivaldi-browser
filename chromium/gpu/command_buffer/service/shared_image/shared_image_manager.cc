@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,12 +12,13 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
-#include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "ui/gl/trace_util.h"
@@ -84,6 +85,13 @@ SharedImageManager::SharedImageManager(bool thread_safe,
   }
 #endif
   CALLED_ON_VALID_THREAD();
+
+  // In tests there might not be a SingleThreadTaskRunner for this thread.
+  if (base::ThreadTaskRunnerHandle::IsSet()) {
+    is_registered_as_memory_dump_provider_ = true;
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        this, "SharedImageManager", base::ThreadTaskRunnerHandle::Get());
+  }
 }
 
 SharedImageManager::~SharedImageManager() {
@@ -92,6 +100,11 @@ SharedImageManager::~SharedImageManager() {
   AutoLock auto_lock(this);
 #endif
   DCHECK(images_.empty());
+
+  if (is_registered_as_memory_dump_provider_) {
+    base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+        this);
+  }
 }
 
 std::unique_ptr<SharedImageRepresentationFactoryRef>
@@ -148,29 +161,6 @@ SharedImageManager::ProduceGLTexture(const Mailbox& mailbox,
   if (!representation) {
     LOG(ERROR) << "SharedImageManager::ProduceGLTexture: Trying to produce a "
                   "representation from an incompatible mailbox.";
-    return nullptr;
-  }
-
-  return representation;
-}
-
-std::unique_ptr<GLTextureImageRepresentation>
-SharedImageManager::ProduceRGBEmulationGLTexture(const Mailbox& mailbox,
-                                                 MemoryTypeTracker* tracker) {
-  CALLED_ON_VALID_THREAD();
-
-  AutoLock autolock(this);
-  auto found = images_.find(mailbox);
-  if (found == images_.end()) {
-    LOG(ERROR) << "SharedImageManager::ProduceRGBEmulationGLTexture: Trying to "
-                  "produce a representation from a non-existent mailbox.";
-    return nullptr;
-  }
-
-  auto representation = (*found)->ProduceRGBEmulationGLTexture(this, tracker);
-  if (!representation) {
-    LOG(ERROR) << "SharedImageManager::ProduceRGBEmulationGLTexture: Trying to "
-                  "produce a representation from an incompatible mailbox.";
     return nullptr;
   }
 
@@ -394,51 +384,52 @@ void SharedImageManager::OnRepresentationDestroyed(
   }
 }
 
-void SharedImageManager::OnMemoryDump(const Mailbox& mailbox,
-                                      base::trace_event::ProcessMemoryDump* pmd,
-                                      int client_id,
-                                      uint64_t client_tracing_id) {
+bool SharedImageManager::OnMemoryDump(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* pmd) {
   CALLED_ON_VALID_THREAD();
-
   AutoLock autolock(this);
-  auto found = images_.find(mailbox);
-  if (found == images_.end()) {
-    LOG(ERROR) << "SharedImageManager::OnMemoryDump: Trying to dump memory for "
-                  "a non existent mailbox.";
-    return;
+
+  const char* base_dump_name = "gpu/shared_images";
+
+  if (args.level_of_detail ==
+      base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
+    size_t total_size = 0;
+    for (auto& backing : images_)
+      total_size += backing->EstimatedSizeForMemTracking();
+
+    base::trace_event::MemoryAllocatorDump* dump =
+        pmd->CreateAllocatorDump(base_dump_name);
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                    base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                    total_size);
+
+    // Early out, no need for more detail in a BACKGROUND dump.
+    return true;
   }
 
-  auto* backing = found->get();
-  size_t estimated_size = backing->EstimatedSizeForMemTracking();
-  if (estimated_size == 0)
-    return;
+  for (auto& backing : images_) {
+    auto* memory_tracker = backing->GetMemoryTracker();
 
-  // Unique name in the process.
-  std::string dump_name =
-      base::StringPrintf("gpu/shared_images/client_0x%" PRIX32 "/mailbox_%s",
-                         client_id, mailbox.ToDebugString().c_str());
+    // All the backings registered here should have a memory tracker.
+    DCHECK(memory_tracker);
 
-  base::trace_event::MemoryAllocatorDump* dump =
-      pmd->CreateAllocatorDump(dump_name);
-  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                  estimated_size);
-  // Usage is optional, but |CreateLabelForSharedImageUsage()| expects one to be
-  // set.
-  if (backing->usage()) {
-    dump->AddString("usage", "",
-                    CreateLabelForSharedImageUsage(backing->usage()));
+    // Unique name in the process.
+    std::string dump_name = base::StringPrintf(
+        "%s/client_0x%" PRIX32 "/mailbox_%s", base_dump_name,
+        memory_tracker->ClientId(), backing->mailbox().ToDebugString().c_str());
+
+    // GUID which expresses shared ownership with the client process. This must
+    // match the client-side GUID for mailbox.
+    auto client_guid = GetSharedImageGUIDForTracing(backing->mailbox());
+
+    // Backing will produce dump with relevant information along with ownership
+    // edge to `client_guid`.
+    backing->OnMemoryDump(dump_name, client_guid, pmd,
+                          memory_tracker->ClientTracingId());
   }
-  // Add a mailbox guid which expresses shared ownership with the client
-  // process.
-  // This must match the client-side.
-  auto client_guid = GetSharedImageGUIDForTracing(mailbox);
-  pmd->CreateSharedGlobalAllocatorDump(client_guid);
-  pmd->AddOwnershipEdge(dump->guid(), client_guid);
 
-  // Allow the SharedImageBacking to attach additional data to the dump
-  // or dump additional sub-paths.
-  backing->OnMemoryDump(dump_name, dump, pmd, client_tracing_id);
+  return true;
 }
 
 scoped_refptr<gfx::NativePixmap> SharedImageManager::GetNativePixmap(

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,11 +46,12 @@ void CSSParser::ParseDeclarationListForInspector(
 CSSSelectorVector CSSParser::ParseSelector(
     const CSSParserContext* context,
     StyleSheetContents* style_sheet_contents,
-    const String& selector) {
+    const String& selector,
+    Arena& arena) {
   CSSTokenizer tokenizer(selector);
   const auto tokens = tokenizer.TokenizeToEOF();
   return CSSSelectorParser::ParseSelector(CSSParserTokenRange(tokens), context,
-                                          style_sheet_contents);
+                                          style_sheet_contents, arena);
 }
 
 CSSSelectorList CSSParser::ParsePageSelector(
@@ -112,7 +113,7 @@ MutableCSSPropertyValueSet::SetResult CSSParser::ParseValue(
     StyleSheetContents* style_sheet,
     const ExecutionContext* execution_context) {
   DCHECK(ThreadState::Current()->IsAllocationAllowed());
-  if (string.IsEmpty()) {
+  if (string.empty()) {
     return MutableCSSPropertyValueSet::kParseError;
   }
 
@@ -153,7 +154,7 @@ MutableCSSPropertyValueSet::SetResult CSSParser::ParseValueForCustomProperty(
     bool is_animation_tainted) {
   DCHECK(ThreadState::Current()->IsAllocationAllowed());
   DCHECK(CSSVariableParser::IsValidVariableName(property_name));
-  if (value.IsEmpty()) {
+  if (value.empty()) {
     return MutableCSSPropertyValueSet::kParseError;
   }
   CSSParserMode parser_mode = declaration->CssParserMode();
@@ -186,7 +187,7 @@ const CSSValue* CSSParser::ParseSingleValue(CSSPropertyID property_id,
                                             const String& string,
                                             const CSSParserContext* context) {
   DCHECK(ThreadState::Current()->IsAllocationAllowed());
-  if (string.IsEmpty())
+  if (string.empty())
     return nullptr;
   if (CSSValue* value = CSSParserFastPaths::MaybeParseValue(property_id, string,
                                                             context->Mode()))
@@ -250,7 +251,7 @@ bool CSSParser::ParseSupportsCondition(
 
 bool CSSParser::ParseColor(Color& color, const String& string, bool strict) {
   DCHECK(ThreadState::Current()->IsAllocationAllowed());
-  if (string.IsEmpty())
+  if (string.empty())
     return false;
 
   // The regular color parsers don't resolve named colors, so explicitly
@@ -307,7 +308,7 @@ const CSSValue* CSSParser::ParseFontFaceDescriptor(
 CSSPrimitiveValue* CSSParser::ParseLengthPercentage(
     const String& string,
     const CSSParserContext* context) {
-  if (string.IsEmpty() || !context)
+  if (string.empty() || !context)
     return nullptr;
   CSSTokenizer tokenizer(string);
   const auto tokens = tokenizer.TokenizeToEOF();

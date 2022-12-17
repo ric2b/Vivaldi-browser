@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,7 @@
  */
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {Action} from 'chrome://resources/js/cr/ui/store_ts.js';
+import {Action} from 'chrome://resources/js/store_ts.js';
 
 import {ChangeFolderOpenAction, CreateBookmarkAction, EditBookmarkAction, FinishSearchAction, MoveBookmarkAction, RefreshNodesAction, RemoveBookmarkAction, ReorderChildrenAction, SelectFolderAction, SelectItemsAction, SetPrefAction, StartSearchAction, UpdateAnchorAction} from './actions.js';
 import {BookmarkNode, BookmarksPageState, FolderOpenState, NodeMap, PreferencesState, SearchState, SelectionState} from './types.js';

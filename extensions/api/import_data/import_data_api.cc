@@ -11,9 +11,9 @@
 
 #include "base/lazy_instance.h"
 #include "base/stl_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -74,6 +74,7 @@ namespace extensions {
 
 namespace GetProfiles = vivaldi::import_data::GetProfiles;
 using content::WebContents;
+using vivaldi::import_data::ImportTypes;
 
 // ProfileSingletonFactory
 bool ProfileSingletonFactory::instanceFlag = false;
@@ -129,24 +130,24 @@ std::istream& safeGetline(std::istream& is, std::string& line, bool& crlf) {
   std::streambuf* sb = is.rdbuf();
 
   crlf = false;
-  for(;;) {
+  for (;;) {
     int c = sb->sbumpc();
     switch (c) {
-    case '\n':
-      return is;
-    case '\r':
-      if(sb->sgetc() == '\n') {
-        crlf = true;
-        sb->sbumpc();
-      }
-      return is;
-    case std::streambuf::traits_type::eof():
-      // Also handle the case when the last line has no line ending
-      if (line.empty())
-        is.setstate(std::ios::eofbit);
-      return is;
-    default:
-      line += (char)c;
+      case '\n':
+        return is;
+      case '\r':
+        if (sb->sgetc() == '\n') {
+          crlf = true;
+          sb->sbumpc();
+        }
+        return is;
+      case std::streambuf::traits_type::eof():
+        // Also handle the case when the last line has no line ending
+        if (line.empty())
+          is.setstate(std::ios::eofbit);
+        return is;
+      default:
+        line += (char)c;
     }
   }
 }
@@ -156,14 +157,16 @@ static struct ImportItemToStringMapping {
   importer::ImportItem item;
   const char* name;
 } import_item_string_mapping[]{
+    //  NOTE(julien): We explicitly do not support importing searches ( see
+    //  VB-20905 )
     // clang-format off
     {importer::FAVORITES, "favorites"},
     {importer::PASSWORDS, "passwords"},
     {importer::HISTORY, "history"},
     {importer::COOKIES, "cookies"},
-    {importer::SEARCH_ENGINES, "search"},
     {importer::NOTES, "notes"},
     {importer::SPEED_DIAL, "speeddial"},
+    {importer::CONTACTS, "contacts"},
     // clang-format on
 };
 
@@ -261,14 +264,17 @@ void ImportDataAPI::ImportEnded() {
       browser_context_);
 }
 
-bool ImportDataAPI::OpenThunderbirdMailbox(std::string path, int seek_pos) {
+bool ImportDataAPI::OpenThunderbirdMailbox(std::string path,
+                                           std::streampos seek_pos,
+                                           std::streampos& fsize) {
+  // NOTE: If mailbox is already open, we leave fsize unthouched.
   if (!thunderbird_mailbox_path_.empty()) {
     if (thunderbird_mailbox_path_ == path) {
       // This mailbox already open. Only seek.
       thunderbird_mailbox_.seekg(seek_pos);
       return true;
     } else {
-      //New path. close the old one.
+      // New path. close the old one.
       thunderbird_mailbox_.close();
       if (path.empty()) {
         return true;
@@ -280,10 +286,12 @@ bool ImportDataAPI::OpenThunderbirdMailbox(std::string path, int seek_pos) {
 #if BUILDFLAG(IS_WIN)
   std::wstring wpath;
   base::UTF8ToWide(path.c_str(), path.size(), &wpath);
-  thunderbird_mailbox_.open(wpath.c_str(), std::ios::binary);
+  thunderbird_mailbox_.open(wpath.c_str(), std::ios::binary | std::ios::ate);
 #else
-  thunderbird_mailbox_.open(path, std::ios::binary);
+  thunderbird_mailbox_.open(path, std::ios::binary | std::ios::ate);
 #endif  // BUILDFLAG(IS_WIN)
+
+  fsize = thunderbird_mailbox_.tellg();
 
   thunderbird_mailbox_.seekg(seek_pos);
   if (thunderbird_mailbox_.fail()) {
@@ -292,8 +300,13 @@ bool ImportDataAPI::OpenThunderbirdMailbox(std::string path, int seek_pos) {
   return true;
 }
 
+void ImportDataAPI::CloseThunderbirdMailbox() {
+  thunderbird_mailbox_path_ = "";
+  thunderbird_mailbox_.close();
+}
+
 bool ImportDataAPI::ReadThunderbirdMessage(std::string& content,
-                                           int& seek_pos) {
+                                           std::streampos& seek_pos) {
   if (thunderbird_mailbox_path_.empty()) {
     return false;
   }
@@ -309,10 +322,8 @@ bool ImportDataAPI::ReadThunderbirdMessage(std::string& content,
 
     // Saves a little bit of time.
     if (line.length() > 0 && line[0] == 'F') {
-
       // Test whether line begin with "From " and is a potential header.
       if (line.rfind("From ", 0) == 0 && !first_pass) {
-
         // Keep this line in case of false positive.
         std::string from_buffer = line;
 
@@ -325,7 +336,7 @@ bool ImportDataAPI::ReadThunderbirdMessage(std::string& content,
             seek += line.length() + (crlf_ending ? 2 : 1);
             thunderbird_mailbox_.seekg(-seek, std::ios::cur);
             break;
-          // False positive. Innocent 'From ' spotted in message.
+            // False positive. Innocent 'From ' spotted in message.
           } else {
             content += from_buffer;
             content += '\n';
@@ -354,9 +365,8 @@ ImportDataAPI::GetFactoryInstance() {
   return g_factory_import.Pointer();
 }
 
-vivaldi::import_data::ImportTypes MapImportType(
-    const importer::ImporterType& importer_type) {
-  vivaldi::import_data::ImportTypes type;
+ImportTypes MapImportType(const importer::ImporterType& importer_type) {
+  ImportTypes type;
   switch (importer_type) {
 #if BUILDFLAG(IS_WIN)
     case importer::TYPE_IE:
@@ -462,10 +472,10 @@ void ImportDataGetProfilesFunction::Finished() {
     profile->passwords = ((browser_services & importer::PASSWORDS) != 0);
     profile->supports_master_password =
         ((browser_services & importer::MASTER_PASSWORD) != 0);
-    profile->search = ((browser_services & importer::SEARCH_ENGINES) != 0);
     profile->notes = ((browser_services & importer::NOTES) != 0);
     profile->speeddial = ((browser_services & importer::SPEED_DIAL) != 0);
     profile->email = ((browser_services & importer::EMAIL) != 0);
+    profile->contacts = ((browser_services & importer::CONTACTS) != 0);
 
     profile->supports_standalone_import =
         (source_profile.importer_type == importer::TYPE_OPERA ||
@@ -501,14 +511,14 @@ void ImportDataGetProfilesFunction::Finished() {
 
     std::vector<vivaldi::import_data::UserProfileItem> profileItems;
 
-    for (size_t i = 0; i < source_profile.user_profile_names.size(); ++i) {
+    for (size_t j = 0; j < source_profile.user_profile_names.size(); ++j) {
       profileItems.emplace_back();
       vivaldi::import_data::UserProfileItem* profItem = &profileItems.back();
 
       profItem->profile_display_name = base::UTF16ToUTF8(
-          source_profile.user_profile_names.at(i).profileDisplayName);
+          source_profile.user_profile_names.at(j).profileDisplayName);
       profItem->profile_name =
-          source_profile.user_profile_names.at(i).profileName;
+          source_profile.user_profile_names.at(j).profileName;
     }
 
     profile->user_profiles = std::move(profileItems);
@@ -546,16 +556,7 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  std::vector<std::string>& ids = params->items_to_import;
-  size_t count = ids.size();
-  if (count < 9) {
-    return RespondNow(Error("items_to_import must have at least 9 elements"));
-  }
-
-  int browser_index;
-  if (!base::StringToInt(ids[0], &browser_index)) {
-    return RespondNow(Error("items_to_import is not an integer"));
-  }
+  int browser_index = params->profile_index;
 
   ImporterList* api_importer_list =
       ProfileSingletonFactory::getInstance()->getInstance()->getImporterList();
@@ -566,30 +567,29 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   int selected_items = importer::NONE;
   importer_type_ = source_profile.importer_type;
 
-  if (ids[1] == "true") {
+  if (params->types_to_import.history) {
     selected_items |= importer::HISTORY;
   }
-  if (ids[2] == "true") {
+  if (params->types_to_import.favorites) {
     selected_items |= importer::FAVORITES;
   }
-  if (ids[3] == "true") {
+  if (params->types_to_import.passwords) {
     selected_items |= importer::PASSWORDS;
   }
-  if (ids[4] == "true") {
-    selected_items |= importer::SEARCH_ENGINES;
-  }
-  if (ids[5] == "true") {
+  if (params->types_to_import.notes) {
     selected_items |= importer::NOTES;
   }
-  source_profile.selected_profile_name = ids[7];
-  if (params->master_password.get()) {
-    source_profile.master_password = *params->master_password;
-  }
-  if (ids[8] == "true") {
+  if (params->types_to_import.speeddial) {
     selected_items |= importer::SPEED_DIAL;
   }
 
   imported_items_ = (selected_items & supported_items);
+
+  source_profile.selected_profile_name = params->profile_name;
+
+  if (params->master_password.has_value()) {
+    source_profile.master_password = params->master_password.value();
+  }
 
   std::u16string dialog_title;
   if (importer_type_ == importer::TYPE_BOOKMARKS_FILE ||
@@ -598,7 +598,7 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
         importer_type_ == importer::TYPE_EDGE_CHROMIUM ||
         importer_type_ == importer::TYPE_BRAVE ||
         importer_type_ == importer::TYPE_VIVALDI) &&
-       ids[6] == "false")) {
+       !params->ask_user_for_file_location)) {
     base::FilePath import_path =
         base::FilePath::FromUTF8Unsafe(params->import_path->c_str());
     source_profile.source_path = import_path;
@@ -626,40 +626,60 @@ void ImportDataStartImportFunction::StartImport(
 
 ExtensionFunction::ResponseAction
 ImportDataOpenThunderbirdMailboxFunction::Run() {
+  namespace Results = vivaldi::import_data::OpenThunderbirdMailbox::Results;
   using vivaldi::import_data::OpenThunderbirdMailbox::Params;
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::streampos fsize;
+  std::string seekpos_str = *params->seek_position;
+
+  int64_t seekpos;
+  base::StringToInt64(seekpos_str, &seekpos);
+
   bool success = ImportDataAPI::GetFactoryInstance()
-      ->Get(browser_context())
-      ->OpenThunderbirdMailbox(params->path, *params->seek_position.get());
+                     ->Get(browser_context())
+                     ->OpenThunderbirdMailbox(params->path, seekpos, fsize);
 
   if (!success) {
-    return RespondNow(Error(base::StringPrintf("Couldn't open file %s",
-        params->path.c_str())));
+    return RespondNow(Error(
+        base::StringPrintf("Couldn't open file %s", params->path.c_str())));
   }
+  std::string fsize_serialized = base::NumberToString(fsize);
+  return RespondNow(ArgumentList(Results::Create(fsize_serialized)));
+}
+
+ExtensionFunction::ResponseAction
+ImportDataCloseThunderbirdMailboxFunction::Run() {
+  ImportDataAPI::GetFactoryInstance()
+      ->Get(browser_context())
+      ->CloseThunderbirdMailbox();
   return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
 ImportDataReadMessageFromThunderbirdMailboxFunction::Run() {
   namespace Results =
-    vivaldi::import_data::ReadMessageFromThunderbirdMailbox::Results;
+      vivaldi::import_data::ReadMessageFromThunderbirdMailbox::Results;
   std::string content;
-  int seek_pos;
+  std::streampos seek_pos;
   bool success = ImportDataAPI::GetFactoryInstance()
-      ->Get(browser_context())
-      ->ReadThunderbirdMessage(content, seek_pos);
+                     ->Get(browser_context())
+                     ->ReadThunderbirdMessage(content, seek_pos);
   if (!success) {
     std::string path = ImportDataAPI::GetFactoryInstance()
-      ->Get(browser_context())->GetThunderbirdPath();
+                           ->Get(browser_context())
+                           ->GetThunderbirdPath();
     if (path.empty()) {
       return RespondNow(Error(base::StringPrintf("Mailbox not open.")));
     } else {
-      return RespondNow(Error(base::StringPrintf("Couldn't read file %s",
-          path.c_str())));
+      return RespondNow(
+          Error(base::StringPrintf("Couldn't read file %s", path.c_str())));
     }
   }
-  return RespondNow(ArgumentList(Results::Create(content, seek_pos)));
+  std::string seek_pos_serialized = base::NumberToString(seek_pos);
+  return RespondNow(
+      ArgumentList(Results::Create(content, seek_pos_serialized)));
 }
 
 }  // namespace extensions

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -147,10 +147,10 @@ bool PageAllocator::DecommitPages(void* address, size_t size) {
   return true;
 }
 
-partition_alloc::PageAccessibilityConfiguration
-PageAllocator::GetPageConfigForTesting(
+partition_alloc::PageAccessibilityConfiguration::Permissions
+PageAllocator::GetPageConfigPermissionsForTesting(
     v8::PageAllocator::Permission permission) {
-  return GetPageConfig(permission);
+  return GetPageConfig(permission).permissions;
 }
 
 }  // namespace gin

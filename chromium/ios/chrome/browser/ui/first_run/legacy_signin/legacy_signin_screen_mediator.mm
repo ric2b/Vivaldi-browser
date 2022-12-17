@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -130,7 +130,7 @@
   }
 }
 
-- (void)identityChanged:(ChromeIdentity*)identity {
+- (void)identityChanged:(id<SystemIdentity>)identity {
   if ([self.selectedIdentity isEqual:identity]) {
     [self updateConsumer];
   }
@@ -143,7 +143,7 @@
     [self.consumer noIdentityAvailable];
   } else {
     UIImage* avatar = self.accountManagerService->GetIdentityAvatarWithIdentity(
-        self.selectedIdentity, IdentityAvatarSize::DefaultLarge);
+        self.selectedIdentity, IdentityAvatarSize::Regular);
     [self.consumer
         setSelectedIdentityUserName:self.selectedIdentity.userFullName
                               email:self.selectedIdentity.userEmail

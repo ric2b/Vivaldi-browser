@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "cc/animation/animation.h"
@@ -258,6 +259,13 @@ void AnimationHost::UnregisterAnimationForElement(ElementId element_id,
   RemoveFromTicking(animation);
 }
 
+void AnimationHost::UpdateClientAnimationStateForElementAnimations(
+    ElementId element_id) {
+  auto* element_animations = GetElementAnimationsForElementId(element_id).get();
+  if (element_animations)
+    element_animations->UpdateClientAnimationState();
+}
+
 void AnimationHost::SetMutatorHostClient(MutatorHostClient* client) {
   if (mutator_host_client() == client)
     return;
@@ -413,13 +421,14 @@ void AnimationHost::PushPropertiesToImplThread(AnimationHost* host_impl) {
       TakePendingThroughputTrackerInfos();
 }
 
-scoped_refptr<const ElementAnimations>
-AnimationHost::GetElementAnimationsForElementId(ElementId element_id) const {
+const ElementAnimations* AnimationHost::GetElementAnimationsForElementId(
+    ElementId element_id) const {
   if (!element_id)
     return nullptr;
   auto iter = element_to_animations_map_.Read(*this).find(element_id);
-  return iter == element_to_animations_map_.Read(*this).end() ? nullptr
-                                                              : iter->second;
+  return iter == element_to_animations_map_.Read(*this).end()
+             ? nullptr
+             : iter->second.get();
 }
 
 scoped_refptr<ElementAnimations>
@@ -429,6 +438,12 @@ AnimationHost::GetElementAnimationsForElementId(ElementId element_id) {
   auto iter = element_to_animations_map_.Write(*this).find(element_id);
   return iter == element_to_animations_map_.Write(*this).end() ? nullptr
                                                                : iter->second;
+}
+
+scoped_refptr<const ElementAnimations>
+AnimationHost::GetElementAnimationsForElementIdForTesting(
+    ElementId element_id) const {
+  return GetElementAnimationsForElementId(element_id);
 }
 
 gfx::PointF AnimationHost::GetScrollOffsetForAnimation(
@@ -634,7 +649,7 @@ void AnimationHost::SetAnimationEvents(
 
 bool AnimationHost::ScrollOffsetAnimationWasInterrupted(
     ElementId element_id) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
+  const auto* element_animations = GetElementAnimationsForElementId(element_id);
   return element_animations
              ? element_animations->ScrollOffsetAnimationWasInterrupted()
              : false;
@@ -643,7 +658,7 @@ bool AnimationHost::ScrollOffsetAnimationWasInterrupted(
 bool AnimationHost::IsAnimatingProperty(ElementId element_id,
                                         ElementListType list_type,
                                         TargetProperty::Type property) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
+  const auto* element_animations = GetElementAnimationsForElementId(element_id);
   return element_animations ? element_animations->IsCurrentlyAnimatingProperty(
                                   property, list_type)
                             : false;
@@ -653,7 +668,7 @@ bool AnimationHost::HasPotentiallyRunningAnimationForProperty(
     ElementId element_id,
     ElementListType list_type,
     TargetProperty::Type property) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
+  const auto* element_animations = GetElementAnimationsForElementId(element_id);
   return element_animations
              ? element_animations->IsPotentiallyAnimatingProperty(property,
                                                                   list_type)
@@ -663,7 +678,7 @@ bool AnimationHost::HasPotentiallyRunningAnimationForProperty(
 bool AnimationHost::HasAnyAnimationTargetingProperty(
     ElementId element_id,
     TargetProperty::Type property) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
+  const auto* element_animations = GetElementAnimationsForElementId(element_id);
   if (!element_animations)
     return false;
 
@@ -673,7 +688,7 @@ bool AnimationHost::HasAnyAnimationTargetingProperty(
 
 bool AnimationHost::AnimationsPreserveAxisAlignment(
     ElementId element_id) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
+  const auto* element_animations = GetElementAnimationsForElementId(element_id);
   return element_animations
              ? element_animations->AnimationsPreserveAxisAlignment()
              : true;
@@ -681,19 +696,21 @@ bool AnimationHost::AnimationsPreserveAxisAlignment(
 
 float AnimationHost::MaximumScale(ElementId element_id,
                                   ElementListType list_type) const {
-  if (auto element_animations = GetElementAnimationsForElementId(element_id))
+  if (const auto* element_animations =
+          GetElementAnimationsForElementId(element_id)) {
     return element_animations->MaximumScale(element_id, list_type);
+  }
   return kInvalidScale;
 }
 
 bool AnimationHost::IsElementAnimating(ElementId element_id) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
+  const auto* element_animations = GetElementAnimationsForElementId(element_id);
   return element_animations ? element_animations->HasAnyKeyframeModel() : false;
 }
 
 bool AnimationHost::HasTickingKeyframeModelForTesting(
     ElementId element_id) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
+  const auto* element_animations = GetElementAnimationsForElementId(element_id);
   return element_animations ? element_animations->HasTickingKeyframeEffect()
                             : false;
 }
@@ -763,8 +780,8 @@ void AnimationHost::AddToTicking(scoped_refptr<Animation> animation) {
 }
 
 void AnimationHost::RemoveFromTicking(scoped_refptr<Animation> animation) {
-  auto to_erase = std::find(ticking_animations_.Write(*this).begin(),
-                            ticking_animations_.Write(*this).end(), animation);
+  auto to_erase =
+      base::ranges::find(ticking_animations_.Write(*this), animation);
   if (to_erase != ticking_animations_.Write(*this).end())
     ticking_animations_.Write(*this).erase(to_erase);
 }
@@ -787,9 +804,8 @@ void AnimationHost::SetLayerTreeMutator(
 
 WorkletAnimation* AnimationHost::FindWorkletAnimation(WorkletAnimationId id) {
   // TODO(majidvp): Use a map to make lookup O(1)
-  auto animation = std::find_if(
-      ticking_animations_.Read(*this).begin(),
-      ticking_animations_.Read(*this).end(), [id](auto& it) {
+  auto animation =
+      base::ranges::find_if(ticking_animations_.Read(*this), [id](auto& it) {
         return it->IsWorkletAnimation() &&
                ToWorkletAnimation(it.get())->worklet_animation_id() == id;
       });

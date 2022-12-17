@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,20 +10,15 @@
 #include "base/memory/raw_ptr.h"
 #include "base/types/strong_alias.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "content/public/browser/context_menu_params.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "ui/base/models/simple_menu_model.h"
 
 class Browser;
-
-namespace content {
-class RenderFrameHost;
-}  // namespace content
 
 namespace autofill {
 
 class AutofillProfile;
-class ContentAutofillDriver;
 class CreditCard;
 class PersonalDataManager;
 
@@ -74,10 +69,9 @@ class AutofillContextMenuManager {
   static bool IsAutofillCustomCommandId(CommandId command_id);
 
   AutofillContextMenuManager(PersonalDataManager* personal_data_manager,
-                             ui::SimpleMenuModel::Delegate* delegate,
+                             RenderViewContextMenuBase* delegate,
                              ui::SimpleMenuModel* menu_model,
-                             Browser* browser,
-                             content::RenderFrameHost* render_frame_host);
+                             Browser* browser);
   ~AutofillContextMenuManager();
   AutofillContextMenuManager(const AutofillContextMenuManager&) = delete;
   AutofillContextMenuManager& operator=(const AutofillContextMenuManager&) =
@@ -91,22 +85,19 @@ class AutofillContextMenuManager {
   bool IsCommandIdChecked(CommandId command_id) const;
   bool IsCommandIdVisible(CommandId command_id) const;
   bool IsCommandIdEnabled(CommandId command_id) const;
-  // TODO(crbug.com/1325811): Add tests for the method.
-  void ExecuteCommand(CommandId command_id,
-                      const content::ContextMenuParams& params);
-  void ExecuteCommand(CommandId command_id,
-                      ContentAutofillDriver* driver,
-                      const content::ContextMenuParams& params,
-                      const blink::LocalFrameToken local_frame_token);
+  void ExecuteCommand(CommandId command_id);
 
-#if defined(UNIT_TEST)
   // Getter for `command_id_to_menu_item_value_mapper_` used for testing
   // purposes.
   const base::flat_map<CommandId, ContextMenuItem>&
   command_id_to_menu_item_value_mapper_for_testing() const {
     return command_id_to_menu_item_value_mapper_;
   }
-#endif
+
+  // Setter for `params_` used for testing purposes.
+  void set_params_for_testing(content::ContextMenuParams params) {
+    params_ = params;
+  }
 
  private:
   // Adds address items to the context menu.
@@ -137,9 +128,9 @@ class AutofillContextMenuManager {
 
   raw_ptr<PersonalDataManager> personal_data_manager_;
   raw_ptr<ui::SimpleMenuModel> menu_model_;
-  raw_ptr<ui::SimpleMenuModel::Delegate> delegate_;
+  raw_ptr<RenderViewContextMenuBase> delegate_;
   raw_ptr<Browser> browser_;
-  raw_ptr<content::RenderFrameHost> render_frame_host_;
+  content::ContextMenuParams params_;
 
   // Stores the count of items added to the context menu from Autofill.
   int count_of_items_added_to_menu_model_ = 0;

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_SUPERVISED_USER_ANDROID_WEBSITE_PARENT_APPROVAL_H_
 
 #include "base/callback_forward.h"
+#include "chrome/browser/supervised_user/web_approvals_manager.h"
 
 class GURL;
 
@@ -25,11 +26,10 @@ class WebsiteParentApproval {
   // longer active (whether that's because the parent explicitly completed the
   // flow and approved or denied, or for example because the parent exited
   // before completing the auth flow).
-  //
-  // TODO(crbug.com/1272462): favicon.
-  static void RequestLocalApproval(content::WebContents* web_contents,
-                                   const GURL& url,
-                                   base::OnceCallback<void(bool)> callback);
+  static void RequestLocalApproval(
+      content::WebContents* web_contents,
+      const GURL& url,
+      base::OnceCallback<void(AndroidLocalWebApprovalFlowOutcome)> callback);
 
   WebsiteParentApproval() = delete;
 };

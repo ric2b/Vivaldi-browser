@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -142,6 +142,10 @@ void RecordDefaultAppLaunch(apps::DefaultAppName default_app_name,
       base::UmaHistogramEnumeration("Apps.DefaultAppLaunch.FromUrlHandler",
                                     default_app_name);
       break;
+    case apps::LaunchSource::kFromLockScreen:
+      base::UmaHistogramEnumeration("Apps.DefaultAppLaunch.FromLockScreen",
+                                    default_app_name);
+      break;
     case apps::LaunchSource::kFromCommandLine:
     case apps::LaunchSource::kFromBackgroundMode:
       NOTREACHED();
@@ -192,6 +196,7 @@ void RecordBuiltInAppLaunch(apps::BuiltInAppName built_in_app_name,
     case apps::LaunchSource::kFromOsLogin:
     case apps::LaunchSource::kFromProtocolHandler:
     case apps::LaunchSource::kFromUrlHandler:
+    case apps::LaunchSource::kFromLockScreen:
       break;
   }
 }
@@ -288,6 +293,8 @@ void RecordAppLaunch(const std::string& app_id,
     RecordDefaultAppLaunch(DefaultAppName::kProjector, launch_source);
   } else if (app_id == web_app::kFirmwareUpdateAppId) {
     RecordDefaultAppLaunch(DefaultAppName::kFirmwareUpdateApp, launch_source);
+  } else if (app_id == arc::kGoogleTVAppId) {
+    RecordDefaultAppLaunch(DefaultAppName::kGoogleTv, launch_source);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,7 +64,7 @@ TEST_F(PairingRegistryDelegateLinuxTest, SaveAndLoad) {
   base::Value::List pairings = delegate->LoadAll();
   ASSERT_TRUE(pairings[0].is_dict());
   EXPECT_EQ(PairingRegistry::Pairing::CreateFromValue(
-                std::move(pairings[0].GetDict())),
+                std::move(pairings[0]).TakeDict()),
             pairing2);
 
   // Delete the rest and verify.

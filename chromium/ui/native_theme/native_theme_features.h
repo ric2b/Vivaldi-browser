@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,8 @@
 
 namespace features {
 
-NATIVE_THEME_EXPORT extern const base::Feature kOverlayScrollbar;
-NATIVE_THEME_EXPORT extern const base::Feature kFluentScrollbar;
+NATIVE_THEME_EXPORT BASE_DECLARE_FEATURE(kOverlayScrollbar);
+NATIVE_THEME_EXPORT BASE_DECLARE_FEATURE(kFluentScrollbar);
 
 }  // namespace features
 

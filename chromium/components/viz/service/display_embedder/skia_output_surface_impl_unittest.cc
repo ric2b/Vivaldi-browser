@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,8 +98,8 @@ gpu::SyncToken SkiaOutputSurfaceImplTest::PaintRootRenderPass(
   SkCanvas* root_canvas = output_surface_->BeginPaintCurrentFrame();
   root_canvas->drawRect(
       SkRect::MakeXYWH(rect.x(), rect.y(), rect.height(), rect.width()), paint);
-  output_surface_->EndPaint(std::move(closure),
-                            std::move(return_release_fence));
+  output_surface_->EndPaint(std::move(closure), std::move(return_release_fence),
+                            /*is_overlay=*/false);
   return output_surface_->Flush();
 }
 
@@ -166,15 +166,15 @@ TEST_F(SkiaOutputSurfaceImplTest, EndPaint) {
       base::BindOnce(&SkiaOutputSurfaceImplTest::CopyRequestCallbackOnGpuThread,
                      base::Unretained(this), output_rect, color_space));
   request->set_result_task_runner(
-      TestGpuServiceHolder::GetInstance()->gpu_thread_task_runner());
+      TestGpuServiceHolder::GetInstance()->gpu_main_thread_task_runner());
   copy_output::RenderPassGeometry geometry;
   geometry.result_bounds = output_rect;
   geometry.result_selection = output_rect;
   geometry.sampling_bounds = output_rect;
   geometry.readback_offset = gfx::Vector2d(0, 0);
 
-  output_surface_->CopyOutput(AggregatedRenderPassId{0}, geometry, color_space,
-                              std::move(request), gpu::Mailbox());
+  output_surface_->CopyOutput(geometry, color_space, std::move(request),
+                              gpu::Mailbox());
   output_surface_->SwapBuffersSkipped(kSurfaceRect);
   output_surface_->Flush();
   BlockMainThread();
@@ -186,10 +186,11 @@ TEST_F(SkiaOutputSurfaceImplTest, EndPaint) {
 
   output_surface_->ScheduleGpuTaskForTesting(std::move(closure), {sync_token});
   BlockMainThread();
-  EXPECT_TRUE(on_finished_called);
 
   // Let the cb to come back.
   base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(on_finished_called);
   EXPECT_TRUE(on_return_release_fence_called);
 }
 
@@ -240,7 +241,7 @@ TEST_F(SkiaOutputSurfaceImplTest, CopyOutputBitmapSupportedColorSpace) {
           },
           &result, run_loop.QuitClosure()));
   request->set_result_task_runner(
-      TestGpuServiceHolder::GetInstance()->gpu_thread_task_runner());
+      TestGpuServiceHolder::GetInstance()->gpu_main_thread_task_runner());
   copy_output::RenderPassGeometry geometry;
   geometry.result_bounds = output_rect;
   geometry.result_selection = output_rect;
@@ -248,8 +249,8 @@ TEST_F(SkiaOutputSurfaceImplTest, CopyOutputBitmapSupportedColorSpace) {
   geometry.readback_offset = gfx::Vector2d(0, 0);
 
   PaintRootRenderPass(kSurfaceRect, base::DoNothing(), base::DoNothing());
-  output_surface_->CopyOutput(AggregatedRenderPassId{0}, geometry, color_space,
-                              std::move(request), gpu::Mailbox());
+  output_surface_->CopyOutput(geometry, color_space, std::move(request),
+                              gpu::Mailbox());
   output_surface_->SwapBuffersSkipped(kSurfaceRect);
   output_surface_->Flush();
   run_loop.Run();
@@ -281,7 +282,7 @@ TEST_F(SkiaOutputSurfaceImplTest, CopyOutputBitmapUnsupportedColorSpace) {
           },
           &result, run_loop.QuitClosure()));
   request->set_result_task_runner(
-      TestGpuServiceHolder::GetInstance()->gpu_thread_task_runner());
+      TestGpuServiceHolder::GetInstance()->gpu_main_thread_task_runner());
   copy_output::RenderPassGeometry geometry;
   geometry.result_bounds = output_rect;
   geometry.result_selection = output_rect;
@@ -289,8 +290,8 @@ TEST_F(SkiaOutputSurfaceImplTest, CopyOutputBitmapUnsupportedColorSpace) {
   geometry.readback_offset = gfx::Vector2d(0, 0);
 
   PaintRootRenderPass(kSurfaceRect, base::DoNothing(), base::DoNothing());
-  output_surface_->CopyOutput(AggregatedRenderPassId{0}, geometry, color_space,
-                              std::move(request), gpu::Mailbox());
+  output_surface_->CopyOutput(geometry, color_space, std::move(request),
+                              gpu::Mailbox());
   output_surface_->SwapBuffersSkipped(kSurfaceRect);
   output_surface_->Flush();
   run_loop.Run();

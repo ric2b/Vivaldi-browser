@@ -1,17 +1,17 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/device_sync/cryptauth_v2_device_sync_test_devices.h"
 
-#include "ash/components/multidevice/software_feature.h"
-#include "ash/components/multidevice/software_feature_state.h"
 #include "ash/services/device_sync/cryptauth_device.h"
 #include "ash/services/device_sync/fake_ecies_encryption.h"
 #include "ash/services/device_sync/proto/cryptauth_devicesync.pb.h"
 #include "ash/services/device_sync/proto/cryptauth_v2_test_util.h"
 #include "base/check_op.h"
 #include "base/no_destructor.h"
+#include "chromeos/ash/components/multidevice/software_feature.h"
+#include "chromeos/ash/components/multidevice/software_feature_state.h"
 
 namespace ash {
 

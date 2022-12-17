@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -252,22 +252,10 @@ class SignedExchangeRequestHandlerBrowserTestBase
 };
 
 class SignedExchangeRequestHandlerBrowserTest
-    : public testing::WithParamInterface<
-          std::tuple<bool /* use_prefetch */,
-                     bool /* sxg_subresource_prefetch_enabled */>>,
+    : public testing::WithParamInterface<bool>,
       public SignedExchangeRequestHandlerBrowserTestBase {
  public:
-  SignedExchangeRequestHandlerBrowserTest() {
-    std::tie(use_prefetch_, sxg_subresource_prefetch_enabled_) = GetParam();
-    std::vector<base::Feature> enable_features;
-    std::vector<base::Feature> disabled_features;
-    if (sxg_subresource_prefetch_enabled_) {
-      enable_features.push_back(features::kSignedExchangeSubresourcePrefetch);
-    } else {
-      disabled_features.push_back(features::kSignedExchangeSubresourcePrefetch);
-    }
-    feature_list_.InitWithFeatures(enable_features, disabled_features);
-  }
+  SignedExchangeRequestHandlerBrowserTest() { use_prefetch_ = GetParam(); }
 
   SignedExchangeRequestHandlerBrowserTest(
       const SignedExchangeRequestHandlerBrowserTest&) = delete;
@@ -278,9 +266,6 @@ class SignedExchangeRequestHandlerBrowserTest
 
  protected:
   bool UsePrefetch() const { return use_prefetch_; }
-  bool SXGPrefetchCacheIsEnabled() const {
-    return sxg_subresource_prefetch_enabled_;
-  }
 
   void MaybeTriggerPrefetchSXG(const GURL& url, bool expect_success) {
     if (!UsePrefetch())
@@ -293,7 +278,7 @@ class SignedExchangeRequestHandlerBrowserTest
     EXPECT_TRUE(NavigateToURL(shell(), prefetch_html_url));
     EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
 
-    if (SXGPrefetchCacheIsEnabled() && expect_success)
+    if (expect_success)
       WaitUntilSXGIsCached(url);
   }
 
@@ -337,8 +322,6 @@ class SignedExchangeRequestHandlerBrowserTest
   }
 
   bool use_prefetch_ = false;
-  bool sxg_subresource_prefetch_enabled_ = false;
-  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest, Simple) {
@@ -395,24 +378,15 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest, Simple) {
   // Wait for the previous page's RFH to be deleted (if it changed) so that the
   // histograms will get updated.
   inactive_rfh_deletion_observer_->Wait();
-  histogram_tester_.ExpectUniqueSample(
-      kLoadResultHistogram, SignedExchangeLoadResult::kSuccess,
-      (UsePrefetch() && !SXGPrefetchCacheIsEnabled()) ? 2 : 1);
+  histogram_tester_.ExpectUniqueSample(kLoadResultHistogram,
+                                       SignedExchangeLoadResult::kSuccess, 1);
   histogram_tester_.ExpectTotalCount(
-      "SignedExchange.Time.CertificateFetch.Success",
-      (UsePrefetch() && !SXGPrefetchCacheIsEnabled()) ? 2 : 1);
+      "SignedExchange.Time.CertificateFetch.Success", 1);
   if (UsePrefetch()) {
     histogram_tester_.ExpectUniqueSample(kPrefetchResultHistogram,
                                          SignedExchangeLoadResult::kSuccess, 1);
-    if (SXGPrefetchCacheIsEnabled()) {
-      histogram_tester_.ExpectTotalCount("PrefetchedSignedExchangeCache.Count",
-                                         1);
-    } else {
-      histogram_tester_.ExpectUniqueSample(
-          "SignedExchange.Prefetch.Recall.30Seconds", true, 1);
-      histogram_tester_.ExpectUniqueSample(
-          "SignedExchange.Prefetch.Precision.30Seconds", true, 1);
-    }
+    histogram_tester_.ExpectTotalCount("PrefetchedSignedExchangeCache.Count",
+                                       1);
   } else {
     histogram_tester_.ExpectUniqueSample(
         "SignedExchange.Prefetch.Recall.30Seconds", false, 1);
@@ -452,10 +426,9 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest, VariantMatch) {
   // Wait for the previous page's RFH to be deleted (if it changed) so that the
   // histograms will get updated.
   inactive_rfh_deletion_observer_->Wait();
-  histogram_tester_.ExpectUniqueSample(
-      kLoadResultHistogram, SignedExchangeLoadResult::kSuccess,
-      (UsePrefetch() && !SXGPrefetchCacheIsEnabled()) ? 2 : 1);
-  if ((UsePrefetch() && SXGPrefetchCacheIsEnabled())) {
+  histogram_tester_.ExpectUniqueSample(kLoadResultHistogram,
+                                       SignedExchangeLoadResult::kSuccess, 1);
+  if (UsePrefetch()) {
     histogram_tester_.ExpectTotalCount("PrefetchedSignedExchangeCache.Count",
                                        1);
   }
@@ -720,9 +693,8 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest,
              base::StringPrintf("location.href = '%s';", url.spec().c_str())));
   EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
 
-  histogram_tester_.ExpectUniqueSample(
-      kLoadResultHistogram, SignedExchangeLoadResult::kSuccess,
-      (UsePrefetch() && !SXGPrefetchCacheIsEnabled()) ? 2 : 1);
+  histogram_tester_.ExpectUniqueSample(kLoadResultHistogram,
+                                       SignedExchangeLoadResult::kSuccess, 1);
 }
 
 IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest,
@@ -779,8 +751,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          SignedExchangeRequestHandlerBrowserTest,
-                         ::testing::Combine(::testing::Bool(),
-                                            ::testing::Bool()));
+                         ::testing::Bool());
 
 class SignedExchangeRequestHandlerDownloadBrowserTest
     : public SignedExchangeRequestHandlerBrowserTestBase {
@@ -1455,7 +1426,7 @@ class SignedExchangeExpectCTReportBrowserTest
   SignedExchangeExpectCTReportBrowserTest() {
     feature_list_.InitWithFeatures(
         // enabled_features
-        {net::TransportSecurityState::kDynamicExpectCTFeature,
+        {net::kDynamicExpectCTFeature,
          net::features::kPartitionExpectCTStateByNetworkIsolationKey,
          // These last two are not strictly necessary, but make this test more
          // robust against enabling NetworkIsolationKeys everywhere.
@@ -1511,31 +1482,33 @@ class SignedExchangeExpectCTReportBrowserTest
     ASSERT_TRUE(embedded_test_server()->Start());
 
     // All tests fetch or prefetch the signed exchange for use in a main frame
-    // load. This being the case, The NetworkIsolationKey used to load top-level
-    // signed exchanges (and thus used to check for Expect-CT information) is
-    // the NetworkIsolationKey of the site that serves the signed exchange, not
-    // the origin of the resource the signed exchange contains. Set up reports
-    // for both NetworkIsolationKeys, so can catch the wrong one being used for
-    // the report or the case NIKs are being ignored.
+    // load. This being the case, The NetworkAnonymizationKey used to load
+    // top-level signed exchanges (and thus used to check for Expect-CT
+    // information) is the NetworkAnonymizationKey of the site that serves the
+    // signed exchange, not the origin of the resource the signed exchange
+    // contains. Set up reports for both NetworkAnonymizationKeys, so can catch
+    // the wrong one being used for the report or the case NIKs are being
+    // ignored.
 
-    url::Origin correct_report_origin =
-        url::Origin::Create(embedded_test_server()->base_url());
-    net::NetworkIsolationKey correct_network_isolation_key(
-        correct_report_origin, correct_report_origin);
+    net::SchemefulSite correct_report_site =
+        net::SchemefulSite(embedded_test_server()->base_url());
+    net::NetworkAnonymizationKey correct_network_anonymization_key(
+        correct_report_site, correct_report_site);
     SetExpectCtUrl("test.example.org", correct_report_uri(),
-                   correct_network_isolation_key);
+                   correct_network_anonymization_key);
 
-    url::Origin incorrect_report_origin =
-        url::Origin::Create(sxg_validity_url());
-    net::NetworkIsolationKey incorrect_network_isolation_key(
-        incorrect_report_origin, incorrect_report_origin);
+    net::SchemefulSite incorrect_report_site =
+        net::SchemefulSite(sxg_validity_url());
+    net::NetworkAnonymizationKey incorrect_network_anonymization_key(
+        incorrect_report_site, incorrect_report_site);
     SetExpectCtUrl("test.example.org", incorrect_sxg_validity_report_uri(),
-                   incorrect_network_isolation_key);
+                   incorrect_network_anonymization_key);
   }
 
-  void SetExpectCtUrl(const std::string& domain,
-                      const GURL& report_uri,
-                      const net::NetworkIsolationKey& network_isolation_key) {
+  void SetExpectCtUrl(
+      const std::string& domain,
+      const GURL& report_uri,
+      const net::NetworkAnonymizationKey& network_anonymization_key) {
     base::RunLoop run_loop;
     network::mojom::NetworkContext* network_context =
         shell()
@@ -1545,7 +1518,7 @@ class SignedExchangeExpectCTReportBrowserTest
             ->GetNetworkContext();
     network_context->AddExpectCT(
         domain, base::Time::Now() + base::Days(1) /* expiry */,
-        true /* enforce */, report_uri, network_isolation_key,
+        true /* enforce */, report_uri, network_anonymization_key,
         base::BindLambdaForTesting([&](bool success) {
           EXPECT_TRUE(success);
           run_loop.Quit();
@@ -1596,17 +1569,17 @@ class SignedExchangeExpectCTReportBrowserTest
  private:
   // Prefix used for all reports.
   const char* kReportPathPrefix = "/report/";
-  // Prefix used for reports made using correct NetworkIsolationKey.
+  // Prefix used for reports made using correct NetworkAnonymizationKey.
   const char* kCorrectReportPath = "/report/correct-nik";
   // Prefix used for reports made using sxg_url_validity_url()'s
-  // NetworkIsolationKey, which is not correct.
+  // NetworkAnonymizationKey, which is not correct.
   const char* kIncorrectSxgValidityReportPath =
       "/report/incorrect-sxg-validity-nik";
-  // Prefix used for reports made using another incorrect NetworkIsolationKey,
-  // set by the test.
+  // Prefix used for reports made using another incorrect
+  // NetworkAnonymizationKey, set by the test.
   const char* kOtherIncorrectReportPath = "/report/other-incorrect-nik";
 
-  // URI used for reports that use the correct NetworkIsolationKey for the
+  // URI used for reports that use the correct NetworkAnonymizationKey for the
   // report.
   GURL correct_report_uri() const {
     return report_server_.GetURL(kCorrectReportPath);
@@ -1662,16 +1635,16 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeExpectCTReportBrowserTest,
   // fetched from 127.0.0.1.
   const char kPrefetcherHost[] = "prefetch-origin.test";
 
-  // Set up reports for the kPrefetcherHost's NetworkIsolationKey. This NIK
+  // Set up reports for the kPrefetcherHost's NetworkAnonymizationKey. This NIK
   // should not be used by the request for the signed exchange, so use an
   // incorrect reporting URL. This will make the test give a more useful error
   // on failure, instead of just hanging.
-  url::Origin other_incorrect_report_origin =
-      url::Origin::Create(embedded_test_server()->GetURL(kPrefetcherHost, "/"));
-  net::NetworkIsolationKey other_incorrect_network_isolation_key(
-      other_incorrect_report_origin, other_incorrect_report_origin);
+  net::SchemefulSite other_incorrect_report_site =
+      net::SchemefulSite(embedded_test_server()->GetURL(kPrefetcherHost, "/"));
+  net::NetworkAnonymizationKey other_incorrect_network_anonymization_key(
+      other_incorrect_report_site, other_incorrect_report_site);
   SetExpectCtUrl("test.example.org", other_incorrect_report_uri(),
-                 other_incorrect_network_isolation_key);
+                 other_incorrect_network_anonymization_key);
 
   const GURL prefetch_html_url = embedded_test_server()->GetURL(
       kPrefetcherHost,
@@ -1686,8 +1659,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeExpectCTReportBrowserTest,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          SignedExchangeExpectCTReportBrowserTest,
-                         ::testing::Combine(::testing::Bool(),
-                                            ::testing::Bool()));
+                         ::testing::Bool());
 
 #if BUILDFLAG(ENABLE_REPORTING)
 
@@ -1782,7 +1754,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeReportingBrowserTest,
   GURL report_url = ssl_server_.GetURL(kReportPath);
 
   // Get Report-To and NEL information for the server that serves the signed
-  // exchange. The same site is also used for the NetworkIsolationKey. This
+  // exchange. The same site is also used for the NetworkAnonymizationKey. This
   // should result in sending a report to that server a request for that signed
   // exchange fails with a certificate error.
   {
@@ -1835,8 +1807,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeReportingBrowserTest,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          SignedExchangeReportingBrowserTest,
-                         ::testing::Combine(::testing::Bool(),
-                                            ::testing::Bool()));
+                         ::testing::Bool());
 
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
@@ -1946,9 +1917,6 @@ IN_PROC_BROWSER_TEST_P(SignedExchangePKPBrowserTest, PKPViolation) {
       UsePrefetch() ? 2 : 1);
 }
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         SignedExchangePKPBrowserTest,
-                         ::testing::Combine(::testing::Bool(),
-                                            ::testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(All, SignedExchangePKPBrowserTest, ::testing::Bool());
 
 }  // namespace content

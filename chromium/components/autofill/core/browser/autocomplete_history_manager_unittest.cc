@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,7 +53,7 @@ class MockAutofillClient : public TestAutofillClient {
 
   ~MockAutofillClient() override = default;
   PrefService* GetPrefs() override {
-    return const_cast<PrefService*>(base::as_const(*this).GetPrefs());
+    return const_cast<PrefService*>(std::as_const(*this).GetPrefs());
   }
   const PrefService* GetPrefs() const override { return prefs_.get(); }
 
@@ -87,7 +87,7 @@ class MockSuggestionsHandler
 
 class AutocompleteHistoryManagerTest : public testing::Test {
  protected:
-  AutocompleteHistoryManagerTest() {}
+  AutocompleteHistoryManagerTest() = default;
 
   void SetUp() override {
     prefs_ = test::PrefServiceForTesting();
@@ -143,6 +143,7 @@ class AutocompleteHistoryManagerTest : public testing::Test {
   }
 
   base::test::SingleThreadTaskEnvironment task_environment_;
+  test::AutofillEnvironment autofill_environment_;
   scoped_refptr<MockAutofillWebDataService> web_data_service_;
   std::unique_ptr<AutocompleteHistoryManager> autocomplete_manager_;
   std::unique_ptr<PrefService> prefs_;
@@ -1048,8 +1049,8 @@ TEST_F(AutocompleteHistoryManagerTest,
       mocked_db_query_id_one, std::move(mocked_results_one));
 }
 
-// // Verify that no autocomplete suggestion is returned for textarea and UMA is
-// // logged correctly.
+// Verify that no autocomplete suggestion is returned for textarea and UMA is
+// logged correctly.
 TEST_F(AutocompleteHistoryManagerTest, NoAutocompleteSuggestionsForTextarea) {
   FormData form;
   form.name = u"MyForm";
@@ -1075,8 +1076,8 @@ TEST_F(AutocompleteHistoryManagerTest, NoAutocompleteSuggestionsForTextarea) {
   histogram_tester.ExpectBucketCount("Autofill.AutocompleteQuery", 1, 0);
 }
 
-// // Verify that autocomplete suggestion is returned and suggestions is logged
-// // correctly.
+// Verify that autocomplete suggestion is returned and suggestions is logged
+// correctly.
 TEST_F(AutocompleteHistoryManagerTest, AutocompleteUMAQueryCreated) {
   auto suggestions_handler = std::make_unique<MockSuggestionsHandler>();
   FormFieldData field;
@@ -1088,7 +1089,8 @@ TEST_F(AutocompleteHistoryManagerTest, AutocompleteUMAQueryCreated) {
   EXPECT_CALL(*web_data_service_,
               GetFormValuesForElementName(field.name, field.value, _,
                                           autocomplete_manager_.get()))
-      .WillOnce(Return(mock_handle));
+      .Times(2)
+      .WillRepeatedly(Return(mock_handle));
 
   // Verify that the query has been created.
   base::HistogramTester histogram_tester;
@@ -1108,12 +1110,20 @@ TEST_F(AutocompleteHistoryManagerTest, AutocompleteUMAQueryCreated) {
           AUTOFILL_VALUE_RESULT, std::vector<AutofillEntry>());
   autocomplete_manager_->OnWebDataServiceRequestDone(mock_handle,
                                                      std::move(result));
-
   histogram_tester.ExpectBucketCount("Autofill.AutocompleteSuggestions", 0, 1);
   histogram_tester.ExpectBucketCount("Autofill.AutocompleteSuggestions", 1, 0);
 
+  // Verify that querying autocomplete suggestions twice for the same field does
+  // not log the corresponding metrics twice.
+  EXPECT_TRUE(autocomplete_manager_->OnGetSingleFieldSuggestions(
+      0, /*is_autocomplete_enabled=*/true,
+      /*autoselect_first_suggestion=*/false, field,
+      suggestions_handler->GetWeakPtr(), SuggestionsContext()));
+  histogram_tester.ExpectBucketCount("Autofill.AutocompleteQuery", 1, 1);
+  histogram_tester.ExpectBucketCount("Autofill.AutocompleteQuery", 0, 0);
+
   // Changed the returned handle
-  // Changed field's name to trigger UMA again.
+  // Created a new field, which will have a new global id to trigger UMA again.
   mock_handle = 2;
   test::CreateTestFormField("Address", "address1", "", "text", &field);
 

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,6 +47,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/page_type.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -127,6 +128,7 @@ class ProjectorClientTest : public InProcessBrowserTest {
 
   // InProcessBrowserTest:
   void SetUpInProcessBrowserTestFixture() override {
+    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
     create_drive_integration_service_ =
         base::BindRepeating(&ProjectorClientTest::CreateDriveIntegrationService,
                             base::Unretained(this));
@@ -177,10 +179,10 @@ class ProjectorClientTest : public InProcessBrowserTest {
 // This test verifies that the (un)trusted Projector app and annotator WebUI
 // URLs are valid.
 IN_PROC_BROWSER_TEST_F(ProjectorClientTest, AppUrlsValid) {
-  VerifyUrlValid(kChromeUITrustedProjectorAppUrl);
-  VerifyUrlValid(kChromeUIUntrustedProjectorAppUrl);
-  VerifyUrlValid(kChromeUITrustedAnnotatorAppUrl);
-  VerifyUrlValid(kChromeUIUntrustedAnnotatorAppUrl);
+  VerifyUrlValid(kChromeUITrustedProjectorUrl);
+  VerifyUrlValid(kChromeUIUntrustedProjectorUrl);
+  VerifyUrlValid(kChromeUITrustedAnnotatorUrl);
+  VerifyUrlValid(kChromeUIUntrustedAnnotatorUrl);
 }
 
 IN_PROC_BROWSER_TEST_F(ProjectorClientTest, OpenProjectorApp) {
@@ -188,27 +190,6 @@ IN_PROC_BROWSER_TEST_F(ProjectorClientTest, OpenProjectorApp) {
   SystemWebAppManager::GetForTest(profile)->InstallSystemAppsForTesting();
 
   client()->OpenProjectorApp();
-  FlushSystemWebAppLaunchesForTesting(profile);
-
-  // Verify that Projector App is opened.
-  Browser* app_browser =
-      FindSystemWebAppBrowser(profile, SystemWebAppType::PROJECTOR);
-  ASSERT_TRUE(app_browser);
-  content::WebContents* tab =
-      app_browser->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(tab);
-  EXPECT_EQ(tab->GetController().GetVisibleEntry()->GetPageType(),
-            content::PAGE_TYPE_NORMAL);
-}
-
-// This test covers launching the Projector app with files for the first time.
-IN_PROC_BROWSER_TEST_F(ProjectorClientTest, LaunchProjectorAppWithFiles) {
-  auto* profile = browser()->profile();
-  SystemWebAppManager::GetForTest(profile)->InstallSystemAppsForTesting();
-
-  base::FilePath file1("test1"), file2("test2");
-  LaunchProjectorAppWithFiles({file1, file2});
-  FlushSystemWebAppLaunchesForTesting(profile);
 
   // Verify that Projector App is opened.
   Browser* app_browser =
@@ -224,8 +205,7 @@ IN_PROC_BROWSER_TEST_F(ProjectorClientTest, LaunchProjectorAppWithFiles) {
 // This test covers launching the Projector app with files when the app is
 // already open. The launch event should recycle the existing window and should
 // not open a new window.
-IN_PROC_BROWSER_TEST_F(ProjectorClientTest,
-                       LaunchProjectorAppWithFilesWhenAppAlreadyOpen) {
+IN_PROC_BROWSER_TEST_F(ProjectorClientTest, SendFilesToProjectorApp) {
   const size_t starting_browser_count = chrome::GetTotalBrowserCount();
 
   auto* profile = browser()->profile();
@@ -233,7 +213,6 @@ IN_PROC_BROWSER_TEST_F(ProjectorClientTest,
 
   // Launch the app for the first time.
   client()->OpenProjectorApp();
-  FlushSystemWebAppLaunchesForTesting(profile);
 
   // Verify that Projector App is opened.
   Browser* app_browser1 =
@@ -241,11 +220,15 @@ IN_PROC_BROWSER_TEST_F(ProjectorClientTest,
   ASSERT_TRUE(app_browser1);
   EXPECT_EQ(chrome::GetTotalBrowserCount(), starting_browser_count + 1);
 
+  content::WebContents* tab =
+      app_browser1->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(tab);
+  EXPECT_TRUE(WaitForLoadStop(tab));
+
   base::FilePath file1("test1"), file2("test2");
   // Launch the app again with files. This operation should recycle the same
   // window.
-  LaunchProjectorAppWithFiles({file1, file2});
-  FlushSystemWebAppLaunchesForTesting(profile);
+  SendFilesToProjectorApp({file1, file2});
 
   // Verify that the Projector App is still open.
   Browser* app_browser2 =
@@ -254,8 +237,7 @@ IN_PROC_BROWSER_TEST_F(ProjectorClientTest,
   EXPECT_EQ(app_browser1, app_browser2);
   EXPECT_EQ(chrome::GetTotalBrowserCount(), starting_browser_count + 1);
 
-  content::WebContents* tab =
-      app_browser2->tab_strip_model()->GetActiveWebContents();
+  tab = app_browser2->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(tab);
   EXPECT_EQ(tab->GetController().GetVisibleEntry()->GetPageType(),
             content::PAGE_TYPE_NORMAL);
@@ -266,7 +248,6 @@ IN_PROC_BROWSER_TEST_F(ProjectorClientTest, MinimizeProjectorApp) {
   SystemWebAppManager::GetForTest(profile)->InstallSystemAppsForTesting();
 
   client()->OpenProjectorApp();
-  FlushSystemWebAppLaunchesForTesting(profile);
 
   // Verify that Projector App is opened.
   Browser* app_browser =
@@ -288,7 +269,6 @@ IN_PROC_BROWSER_TEST_F(ProjectorClientTest, CloseProjectorApp) {
   SystemWebAppManager::GetForTest(profile)->InstallSystemAppsForTesting();
 
   client()->OpenProjectorApp();
-  FlushSystemWebAppLaunchesForTesting(profile);
 
   // Verify that Projector App is opened.
   Browser* app_browser =
@@ -400,7 +380,6 @@ IN_PROC_BROWSER_TEST_P(ProjectorClientManagedTest,
   SystemWebAppManager::GetForTest(profile)->InstallSystemAppsForTesting();
 
   client()->OpenProjectorApp();
-  FlushSystemWebAppLaunchesForTesting(profile);
 
   // Verify that Projector App is opened.
   Browser* app_browser =
@@ -430,7 +409,6 @@ IN_PROC_BROWSER_TEST_P(ProjectorClientManagedTest, DisableThenEnablePolicy) {
   SystemWebAppManager::GetForTest(profile)->InstallSystemAppsForTesting();
 
   client()->OpenProjectorApp();
-  FlushSystemWebAppLaunchesForTesting(profile);
 
   // Verify the user can open the Projector App when the policy is enabled.
   Browser* app_browser =

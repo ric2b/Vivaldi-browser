@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -86,22 +86,22 @@ bool KSInstallApp::ParseCommandLineOptions() {
 }
 
 void KSInstallApp::FirstTaskRun() {
-  if (!ParseCommandLineOptions())
+  if (!ParseCommandLineOptions()) {
+    LOG(ERROR) << "Expected --uninstall switch.";
     Shutdown(1);
+    return;
+  }
 
   if ((geteuid() == 0) && (getuid() != 0)) {
     if (setuid(0) || setgid(0)) {
       LOG(ERROR) << "Can't setuid()/setgid() appropriately.";
       Shutdown(1);
+      return;
     }
   }
 
-  if (uninstall_) {
-    Uninstall(base::BindOnce(&KSInstallApp::Shutdown, this));
-  } else {
-    LOG(ERROR) << "Expected --uninstall switch.";
-    Shutdown(1);
-  }
+  CHECK(uninstall_);
+  Uninstall(base::BindOnce(&KSInstallApp::Shutdown, this));
 }
 
 scoped_refptr<App> MakeKSInstallApp(int argc, char* argv[]) {

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,8 +97,9 @@ const int kTrackingIdForUnusedSlot = -1;
 
 namespace ui {
 
-const base::Feature kEnableSingleCancelTouch{"EnableSingleTouchCancel",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kEnableSingleCancelTouch,
+             "EnableSingleTouchCancel",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 TouchEventConverterEvdev::TouchEventConverterEvdev(
     base::ScopedFD fd,

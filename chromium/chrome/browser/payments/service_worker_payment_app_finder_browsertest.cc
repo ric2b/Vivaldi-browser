@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
+#include "components/payments/core/const_csp_checker.h"
 #include "components/payments/core/features.h"
 #include "components/payments/core/test_payment_manifest_downloader.h"
 #include "components/permissions/permission_request_manager.h"
@@ -45,6 +46,7 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
   ServiceWorkerPaymentAppFinderBrowserTest()
       : alicepay_(net::EmbeddedTestServer::TYPE_HTTPS),
         bobpay_(net::EmbeddedTestServer::TYPE_HTTPS),
+        charliepay_(net::EmbeddedTestServer::TYPE_HTTPS),
         frankpay_(net::EmbeddedTestServer::TYPE_HTTPS),
         georgepay_(net::EmbeddedTestServer::TYPE_HTTPS),
         kylepay_(net::EmbeddedTestServer::TYPE_HTTPS),
@@ -87,6 +89,7 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
   void SetUpOnMainThread() override {
     ASSERT_TRUE(StartTestServer("alicepay.com", &alicepay_));
     ASSERT_TRUE(StartTestServer("bobpay.com", &bobpay_));
+    ASSERT_TRUE(StartTestServer("charliepay.com", &charliepay_));
     ASSERT_TRUE(StartTestServer("frankpay.com", &frankpay_));
     ASSERT_TRUE(StartTestServer("georgepay.com", &georgepay_));
     ASSERT_TRUE(StartTestServer("kylepay.com", &kylepay_));
@@ -141,12 +144,14 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
         browser()->tab_strip_model()->GetActiveWebContents();
     content::BrowserContext* context = web_contents->GetBrowserContext();
     auto downloader = std::make_unique<TestDownloader>(
-        context->GetDefaultStoragePartition()
-            ->GetURLLoaderFactoryForBrowserProcess());
+        GetCSPChecker(), context->GetDefaultStoragePartition()
+                             ->GetURLLoaderFactoryForBrowserProcess());
     downloader->AddTestServerURL("https://alicepay.com/",
                                  alicepay_.GetURL("alicepay.com", "/"));
     downloader->AddTestServerURL("https://bobpay.com/",
                                  bobpay_.GetURL("bobpay.com", "/"));
+    downloader->AddTestServerURL("https://charliepay.com/",
+                                 charliepay_.GetURL("charliepay.com", "/"));
     downloader->AddTestServerURL("https://frankpay.com/",
                                  frankpay_.GetURL("frankpay.com", "/"));
     downloader->AddTestServerURL("https://georgepay.com/",
@@ -203,7 +208,7 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
         webdata_services::WebDataServiceWrapperFactory::
             GetPaymentManifestWebDataServiceForBrowserContext(
                 context, ServiceAccessType::EXPLICIT_ACCESS),
-        std::move(method_data),
+        std::move(method_data), GetCSPChecker(),
         base::BindOnce(
             &ServiceWorkerPaymentAppFinderBrowserTest::OnGotAllPaymentApps,
             base::Unretained(this)),
@@ -271,6 +276,10 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
     ASSERT_NE(nullptr, app) << "No installable app found in scope " << scope;
   }
 
+  virtual base::WeakPtr<CSPChecker> GetCSPChecker() {
+    return const_csp_checker_.GetWeakPtr();
+  }
+
  private:
   // Called by the factory upon completed app lookup. These |apps| have only
   // valid payment methods.
@@ -301,6 +310,11 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
   // https://bobpay.com/webpay does not permit any other origin to use this
   // payment method.
   net::EmbeddedTestServer bobpay_;
+
+  // https://charliepay.com/webpay has a payment method manifest file that
+  // specifies multiple web app manifests (i.e., multiple payment handlers for
+  // the method).
+  net::EmbeddedTestServer charliepay_;
 
   // https://frankpay.com/webpay supports payment apps from any origin.
   net::EmbeddedTestServer frankpay_;
@@ -363,6 +377,8 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
 
   // The error message returned by the service worker factory.
   std::string error_message_;
+
+  ConstCSPChecker const_csp_checker_{/*allow=*/true};
 
   base::test::ScopedFeatureList scoped_feature_list_;
 };
@@ -832,5 +848,109 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerPaymentAppFinderBrowserTest,
     EXPECT_EQ(expected_error_message, error_message());
   }
 }
+
+// The parameterized test fixture that resets the CSP checker after N=GetParam()
+// calls to AllowConnectToSource().
+class ServiceWorkerPaymentAppFinderCSPCheckerBrowserTest
+    : public ServiceWorkerPaymentAppFinderBrowserTest,
+      public ConstCSPChecker,
+      public testing::WithParamInterface<int> {
+ public:
+  ServiceWorkerPaymentAppFinderCSPCheckerBrowserTest()
+      : ConstCSPChecker(/*allow=*/true) {
+    MaybeInvalidateCSPCheckerWeakPtrs();
+  }
+
+  ~ServiceWorkerPaymentAppFinderCSPCheckerBrowserTest() override = default;
+
+  int GetNumberOfLookupsBeforeCSPCheckerReset() { return GetParam(); }
+
+  void reset_number_of_lookups() { number_of_lookups_ = 0; }
+
+ private:
+  // ConstCSPChecker:
+  void AllowConnectToSource(
+      const GURL& url,
+      const GURL& url_before_redirects,
+      bool did_follow_redirect,
+      base::OnceCallback<void(bool)> result_callback) override {
+    ConstCSPChecker::AllowConnectToSource(url, url_before_redirects,
+                                          did_follow_redirect,
+                                          std::move(result_callback));
+    number_of_lookups_++;
+    MaybeInvalidateCSPCheckerWeakPtrs();
+  }
+
+  // ServiceWorkerPaymentAppFinderBrowserTest:
+  base::WeakPtr<CSPChecker> GetCSPChecker() override {
+    return number_of_lookups_ >= GetNumberOfLookupsBeforeCSPCheckerReset()
+               ? base::WeakPtr<ConstCSPChecker>()
+               : ConstCSPChecker::GetWeakPtr();
+  }
+
+  void MaybeInvalidateCSPCheckerWeakPtrs() {
+    if (number_of_lookups_ >= GetNumberOfLookupsBeforeCSPCheckerReset())
+      ConstCSPChecker::InvalidateWeakPtrsForTesting();
+  }
+
+  int number_of_lookups_ = 0;
+};
+
+// A CSP checker reset during the download flow should not cause a crash.
+IN_PROC_BROWSER_TEST_P(ServiceWorkerPaymentAppFinderCSPCheckerBrowserTest,
+                       CSPCheckerResetDoesNotCrash) {
+  // The lookups for finding the app are:
+  // 1) Payment method identifier.
+  // 2) Payment method manifest.
+  // 3) Web app manifest.
+  constexpr int kNumLookupsToFindTheApp = 3;
+
+  // Repeat lookups should have identical results, regardless of manifest cache
+  // state. To ensure that the cache has no effect, we repeat the test twice.
+  for (int i = 0; i < 2; ++i) {
+    reset_number_of_lookups();
+
+    GetAllPaymentAppsForMethods({"https://kylepay.com/webpay"});
+
+    EXPECT_TRUE(apps().empty());
+    if (GetNumberOfLookupsBeforeCSPCheckerReset() >= kNumLookupsToFindTheApp) {
+      EXPECT_EQ(1U, installable_apps().size());
+    } else {
+      EXPECT_TRUE(installable_apps().empty());
+    }
+  }
+}
+
+// Variant of CSPCheckerResetDoesNotCrash, but with a payment method manifest
+// that has multiple web applications specified (i.e., |default_applications|
+// will have multiple entries).
+IN_PROC_BROWSER_TEST_P(ServiceWorkerPaymentAppFinderCSPCheckerBrowserTest,
+                       CSPCheckerResetDoesNotCrashWithTwoWebAppManifests) {
+  // Repeat lookups should have identical results, regardless of manifest cache
+  // state. To ensure that the cache has no effect, we repeat the test twice.
+  for (int i = 0; i < 2; ++i) {
+    reset_number_of_lookups();
+
+    GetAllPaymentAppsForMethods({"https://charliepay.com/webpay"});
+
+    EXPECT_TRUE(apps().empty());
+    EXPECT_TRUE(installable_apps().empty());
+  }
+}
+
+// A range from 0 (inclusive) to 6 (exclusive) will test CSP checker reset:
+// 0: Before any CSP lookups.
+// 1: After CSP lookup for payment method URL (e.g.,
+//    https://kylepay.com/webpay).
+// 2: After CSP lookup for payment method manifest (e.g.,
+//    https://kylepay.com/payment-method.json).
+// 3: After CSP lookup for first web app manifest (e.g.,
+//    https://kylepay.com/app.json).
+// 4: After CSP lookup for second web app manifest, if it exists (e.g.,
+//    https://charliepay.com/prod.json).
+// 5: No CSP checker reset at all, tested just in case.
+INSTANTIATE_TEST_SUITE_P(Test,
+                         ServiceWorkerPaymentAppFinderCSPCheckerBrowserTest,
+                         testing::Range(0, 6));
 
 }  // namespace payments

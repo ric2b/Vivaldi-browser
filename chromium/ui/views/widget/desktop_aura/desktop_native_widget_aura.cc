@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/owned_window_anchor.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/compositor.h"
@@ -112,8 +113,8 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
 
     Widget::InitParams init_params;
     init_params.type = full_screen ? Widget::InitParams::TYPE_WINDOW
-                                   : is_menu ? Widget::InitParams::TYPE_MENU
-                                             : Widget::InitParams::TYPE_POPUP;
+                       : is_menu   ? Widget::InitParams::TYPE_MENU
+                                   : Widget::InitParams::TYPE_POPUP;
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     // Evaluate if the window needs shadow.
@@ -312,23 +313,25 @@ DesktopNativeWidgetAura::DesktopNativeWidgetAura(
 }
 
 DesktopNativeWidgetAura::~DesktopNativeWidgetAura() {
-  if (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)
-    delete native_widget_delegate_;
-  else
+  if (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET) {
+    // `drop_helper_` and `window_reorderer_` hold a pointer to
+    // `native_widget_delegate_`'s root view. Reset them before deleting
+    // `native_widget_delegate_` to avoid holding a briefly dangling ptr.
+    drop_helper_.reset();
+    window_reorderer_.reset();
+    //  Use `ClearAndDelete` here to stop referencing the underlying pointer and
+    //  free its memory. Compared to raw delete calls, this avoids the raw_ptr
+    //  to be temporarily dangling.
+    native_widget_delegate_.ClearAndDelete();
+  } else {
     CloseNow();
+  }
 }
 
 // static
 DesktopNativeWidgetAura* DesktopNativeWidgetAura::ForWindow(
     aura::Window* window) {
   return window->GetProperty(kDesktopNativeWidgetAuraKey);
-}
-
-void DesktopNativeWidgetAura::SetDesktopWindowTreeHost(
-    std::unique_ptr<DesktopWindowTreeHost> desktop_window_tree_host) {
-  DCHECK(!desktop_window_tree_host_);
-  desktop_window_tree_host_ = desktop_window_tree_host.get();
-  host_.reset(desktop_window_tree_host.release()->AsWindowTreeHost());
 }
 
 void DesktopNativeWidgetAura::OnHostClosed() {
@@ -376,6 +379,9 @@ void DesktopNativeWidgetAura::OnHostClosed() {
   host_->window()->RemovePreTargetHandler(root_window_event_filter_.get());
 
   host_->RemoveObserver(this);
+  // |drag_drop_client_| holds a raw_ptr on |desktop_window_tree_host_|, so we
+  // need to destroy it first.
+  drag_drop_client_.reset();
 
   if (vivaldi::IsVivaldiRunning() && content_window_ &&
       (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)) {
@@ -882,6 +888,11 @@ void DesktopNativeWidgetAura::StackAtTop() {
     desktop_window_tree_host_->StackAtTop();
 }
 
+bool DesktopNativeWidgetAura::IsStackedAbove(gfx::NativeView native_view) {
+  return desktop_window_tree_host_ &&
+         desktop_window_tree_host_->IsStackedAbove(native_view);
+}
+
 void DesktopNativeWidgetAura::SetShape(
     std::unique_ptr<Widget::ShapeRects> shape) {
   if (desktop_window_tree_host_)
@@ -1000,10 +1011,8 @@ void DesktopNativeWidgetAura::Restore() {
 
 void DesktopNativeWidgetAura::SetFullscreen(bool fullscreen,
                                             int64_t target_display_id) {
-  // The `target_display_id` argument is unsupported in Aura.
-  DCHECK_EQ(target_display_id, display::kInvalidDisplayId);
   if (desktop_window_tree_host_)
-    desktop_window_tree_host_->SetFullscreen(fullscreen);
+    desktop_window_tree_host_->SetFullscreen(fullscreen, target_display_id);
 }
 
 bool DesktopNativeWidgetAura::IsFullscreen() const {

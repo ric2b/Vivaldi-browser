@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -119,10 +119,10 @@ void AnchorElementPreloader::OnPointerDown(const GURL& target) {
       content::PreloadingTriggeringOutcome::kTriggeredButOutcomeUnknown);
 
   net::SchemefulSite schemeful_site(target);
-  net::NetworkIsolationKey network_isolation_key(schemeful_site,
-                                                 schemeful_site);
+  net::NetworkAnonymizationKey network_anonymization_key(schemeful_site,
+                                                         schemeful_site);
   loading_predictor->PreconnectURLIfAllowed(target, /*allow_credentials=*/true,
-                                            network_isolation_key);
+                                            network_anonymization_key);
 }
 
 void AnchorElementPreloader::RecordUmaPreloadedTriggered(

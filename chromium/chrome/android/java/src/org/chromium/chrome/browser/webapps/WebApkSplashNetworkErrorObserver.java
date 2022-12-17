@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,9 +41,8 @@ public class WebApkSplashNetworkErrorObserver extends EmptyTabObserver {
     }
 
     @Override
-    public void onDidFinishNavigation(final Tab tab, NavigationHandle navigation) {
-        if (!navigation.isInPrimaryMainFrame()) return;
-
+    public void onDidFinishNavigationInPrimaryMainFrame(
+            final Tab tab, NavigationHandle navigation) {
         switch (navigation.errorCode()) {
             case NetError.OK:
                 if (mOfflineDialog != null) {
@@ -63,6 +62,11 @@ public class WebApkSplashNetworkErrorObserver extends EmptyTabObserver {
                 break;
         }
         WebApkUmaRecorder.recordNetworkErrorWhenLaunch(-navigation.errorCode());
+    }
+
+    @Override
+    public void onDidFinishNavigationNoop(final Tab tab, NavigationHandle navigation) {
+        if (!navigation.isInPrimaryMainFrame()) return;
     }
 
     private void onNetworkChanged(Tab tab) {

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,7 @@ void ShowExtensionsRequestAccessDialogView(
       dialog_builder.AddMenuItem(
           GetIcon(action, web_contents), action->GetActionName(),
           base::DoNothing(),
-          ui::DialogModelMenuItem::Params().set_is_enabled(false));
+          ui::DialogModelMenuItem::Params().SetIsEnabled(false));
     }
   }
 

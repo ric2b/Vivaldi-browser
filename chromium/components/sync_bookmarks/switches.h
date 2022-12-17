@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,13 +9,11 @@
 
 namespace switches {
 
-inline constexpr base::Feature kSyncOmitLargeBookmarkFaviconUrl{
-    "SyncOmitLargeBookmarkFaviconUrl", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_DECLARE_FEATURE(kSyncOmitLargeBookmarkFaviconUrl);
 
 // TODO(crbug.com/1232951): remove the feature toggle once most of bookmarks
 // have been reuploaded.
-inline constexpr base::Feature kSyncReuploadBookmarks{
-    "SyncReuploadBookmarks", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_DECLARE_FEATURE(kSyncReuploadBookmarks);
 
 }  // namespace switches
 

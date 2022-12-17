@@ -1,13 +1,13 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {CustomMarginsOrientation, Margins, MarginsSetting, MarginsType, MeasurementSystem, MeasurementSystemUnitType, PrintPreviewMarginControlContainerElement, PrintPreviewMarginControlElement, PrintPreviewModelElement, Size, State} from 'chrome://print/print_preview.js';
-import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {eventToPromise, fakeDataBind} from 'chrome://webui-test/test_util.js';
+import {fakeDataBind} from 'chrome://webui-test/polymer_test_util.js';
+import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
 const custom_margins_test = {
   suiteName: 'CustomMarginsTest',
@@ -49,7 +49,8 @@ suite(custom_margins_test.suiteName, function() {
       ['marginTop', 'marginRight', 'marginBottom', 'marginLeft'];
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     measurementSystem =
         new MeasurementSystem(',', '.', MeasurementSystemUnitType.IMPERIAL);
     model = document.createElement('print-preview-model');

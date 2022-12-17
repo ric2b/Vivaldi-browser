@@ -1,10 +1,9 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/public/cpp/login_screen_test_api.h"
@@ -39,6 +38,7 @@
 #include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -72,19 +72,15 @@ IN_PROC_BROWSER_TEST_F(SystemTrayClientEnterpriseTest, TrayEnterprise) {
   auto test_api = ash::SystemTrayTestApi::Create();
 
   // Managed devices show an item in the menu.
-  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_TRAY_ENTERPRISE,
+  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_QS_MANAGED_BUTTON,
                                             true /* open_tray */));
   std::u16string expected_text =
-      ash::features::IsManagedDeviceUIRedesignEnabled()
-          ? l10n_util::GetStringFUTF16(IDS_ASH_SHORT_MANAGED_BY, u"example.com")
-          : l10n_util::GetStringFUTF16(IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY,
-                                       ui::GetChromeOSDeviceName(),
-                                       u"example.com");
+      l10n_util::GetStringFUTF16(IDS_ASH_SHORT_MANAGED_BY, u"example.com");
   EXPECT_EQ(expected_text,
-            test_api->GetBubbleViewTooltip(ash::VIEW_ID_TRAY_ENTERPRISE));
+            test_api->GetBubbleViewTooltip(ash::VIEW_ID_QS_MANAGED_BUTTON));
 
   // Clicking the item opens the management page.
-  test_api->ClickBubbleView(ash::VIEW_ID_TRAY_ENTERPRISE);
+  test_api->ClickBubbleView(ash::VIEW_ID_QS_MANAGED_BUTTON);
   EXPECT_EQ(
       GURL(chrome::kChromeUIManagementURL),
       browser()->tab_strip_model()->GetActiveWebContents()->GetVisibleURL());
@@ -311,9 +307,6 @@ IN_PROC_BROWSER_TEST_F(SystemTrayClientClockUnknownPrefTest, SwitchToDefault) {
 class SystemTrayClientEnterpriseAccountTest : public ash::LoginManagerTest {
  protected:
   SystemTrayClientEnterpriseAccountTest() : LoginManagerTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        ash::features::kManagedDeviceUIRedesign);
-
     std::unique_ptr<ash::ScopedUserPolicyUpdate> scoped_user_policy_update =
         user_policy_mixin_.RequestPolicyUpdate();
     scoped_user_policy_update->policy_data()->set_managed_by(kManager);
@@ -332,9 +325,6 @@ class SystemTrayClientEnterpriseAccountTest : public ash::LoginManagerTest {
                                           managed_user_.account_id};
   ash::LoginManagerMixin login_mixin_{&mixin_host_,
                                       {managed_user_, unmanaged_user_}};
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(SystemTrayClientEnterpriseAccountTest,
@@ -342,46 +332,46 @@ IN_PROC_BROWSER_TEST_F(SystemTrayClientEnterpriseAccountTest,
   auto test_api = ash::SystemTrayTestApi::Create();
 
   // User hasn't signed in yet, user management should not be shown in tray.
-  EXPECT_FALSE(test_api->IsBubbleViewVisible(ash::VIEW_ID_TRAY_ENTERPRISE,
+  EXPECT_FALSE(test_api->IsBubbleViewVisible(ash::VIEW_ID_QS_MANAGED_BUTTON,
                                              true /* open_tray */));
 
   // After login, the tray should show user management information.
   LoginUser(managed_user_.account_id);
-  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_TRAY_ENTERPRISE,
+  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_QS_MANAGED_BUTTON,
                                             true /* open_tray */));
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_SHORT_MANAGED_BY, kManager16),
-            test_api->GetBubbleViewTooltip(ash::VIEW_ID_TRAY_ENTERPRISE));
+            test_api->GetBubbleViewTooltip(ash::VIEW_ID_QS_MANAGED_BUTTON));
 
   // Switch to unmanaged account should still show the managed string (since the
   // primary user is managed user). However, the string should not contain the
   // account manager of the primary user.
   ash::UserAddingScreen::Get()->Start();
   AddUser(unmanaged_user_.account_id);
-  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_TRAY_ENTERPRISE,
+  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_QS_MANAGED_BUTTON,
                                             true /* open_tray */));
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_ENTERPRISE_DEVICE_MANAGED,
                                        ui::GetChromeOSDeviceName()),
-            test_api->GetBubbleViewTooltip(ash::VIEW_ID_TRAY_ENTERPRISE));
+            test_api->GetBubbleViewTooltip(ash::VIEW_ID_QS_MANAGED_BUTTON));
 
   // Switch back to managed account.
   UserManager::Get()->SwitchActiveUser(managed_user_.account_id);
-  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_TRAY_ENTERPRISE,
+  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_QS_MANAGED_BUTTON,
                                             true /* open_tray */));
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_SHORT_MANAGED_BY, kManager16),
-            test_api->GetBubbleViewTooltip(ash::VIEW_ID_TRAY_ENTERPRISE));
+            test_api->GetBubbleViewTooltip(ash::VIEW_ID_QS_MANAGED_BUTTON));
 }
 
 IN_PROC_BROWSER_TEST_F(SystemTrayClientEnterpriseAccountTest,
                        TrayEnterpriseUnmanagedAccount) {
   auto test_api = ash::SystemTrayTestApi::Create();
 
-  EXPECT_FALSE(test_api->IsBubbleViewVisible(ash::VIEW_ID_TRAY_ENTERPRISE,
+  EXPECT_FALSE(test_api->IsBubbleViewVisible(ash::VIEW_ID_QS_MANAGED_BUTTON,
                                              true /* open_tray */));
 
   // After login with unmanaged user, the tray should not show user management
   // information.
   LoginUser(unmanaged_user_.account_id);
-  EXPECT_FALSE(test_api->IsBubbleViewVisible(ash::VIEW_ID_TRAY_ENTERPRISE,
+  EXPECT_FALSE(test_api->IsBubbleViewVisible(ash::VIEW_ID_QS_MANAGED_BUTTON,
                                              true /* open_tray */));
 }
 
@@ -408,10 +398,10 @@ IN_PROC_BROWSER_TEST_F(SystemTrayClientEnterpriseSessionRestoreTest,
   auto test_api = ash::SystemTrayTestApi::Create();
 
   // Verify that tray is showing info on chrome restart.
-  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_TRAY_ENTERPRISE,
+  EXPECT_TRUE(test_api->IsBubbleViewVisible(ash::VIEW_ID_QS_MANAGED_BUTTON,
                                             true /* open_tray */));
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_SHORT_MANAGED_BY, kManager16),
-            test_api->GetBubbleViewTooltip(ash::VIEW_ID_TRAY_ENTERPRISE));
+            test_api->GetBubbleViewTooltip(ash::VIEW_ID_QS_MANAGED_BUTTON));
 }
 
 class SystemTrayClientShowCalendarTest : public ash::LoginManagerTest {

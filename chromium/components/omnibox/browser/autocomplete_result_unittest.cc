@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,6 +41,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/omnibox_proto/types.pb.h"
 
 using metrics::OmniboxEventProto;
 
@@ -106,7 +107,7 @@ class AutocompleteResultTest : public testing::Test {
     AutocompleteMatchType::Type type{AutocompleteMatchType::SEARCH_SUGGEST};
 
     // Suggestion Group ID for this suggestion
-    absl::optional<SuggestionGroupId> suggestion_group_id;
+    absl::optional<omnibox::GroupId> suggestion_group_id;
 
     // Inline autocompletion.
     std::string inline_autocompletion;
@@ -463,8 +464,7 @@ TEST_F(AutocompleteResultTest, TransferOldMatchesAllowedToBeDefault) {
 // |inline_autocompletion|, or false |allowed_to_be_default|. Tests all 12
 // combinations of 1) last match has a lower or higher relevance than current
 // match, 2) last match was allowed to be default, 3) last match had
-// autocompletion (only possible if its allowed to be default), and 4) current
-// match is allowed to be default.
+// autocompletion, and 4) current match is allowed to be default.
 TEST_F(AutocompleteResultTest,
        TransferOldMatchesAllowedToBeDefaultWithPreventInlineAutocompletion) {
   AutocompleteInput input(u"a", metrics::OmniboxEventProto::OTHER,
@@ -474,10 +474,12 @@ TEST_F(AutocompleteResultTest,
   {
     SCOPED_TRACE(
         "Current matches not allowed to be default and scored higher.");
-    // 1) |allowed_to_be_default| should be true only for |last| matches without
-    // autocompletion.
-    // 2) When |allowed_to_be_default| is false, |current| matches should be
-    // preferred as they're scored higher.
+    // 1) `allowed_to_be_default` should be true only for `last` matches without
+    //    autocompletion.
+    // 2) `allowed_to_be_default` should not be set true for previously not
+    //     allowed matches, even if they don't have inline autocompletion.
+    // 3) When `allowed_to_be_default` is false, `current` matches should be
+    //    preferred as they're scored higher.
     // clang-format off
     TestData last[] = {
         {0, 1, 1020, true, {}, AutocompleteMatchType::SEARCH_SUGGEST, {}, "autocompletion"},
@@ -492,7 +494,7 @@ TEST_F(AutocompleteResultTest,
     TestData result[] = {
         {1, 1, 1510, true},
         {0, 2, 1520, false},
-        {2, 1, 1500, true},
+        {2, 2, 1500, false},
     };
     // clang-format on
 
@@ -503,7 +505,7 @@ TEST_F(AutocompleteResultTest,
 
   {
     SCOPED_TRACE("Current matches not allowed to be default and scored lower.");
-    // Similar to above, except |last| matches should be preferred in deduping
+    // Similar to above, except `last` matches should be preferred in deduping
     // as they're scored higher.
     // clang-format off
     TestData last[] = {
@@ -522,7 +524,7 @@ TEST_F(AutocompleteResultTest,
         {1, 1, 1010, true},
         {3, 2, 1500, false},
         {0, 1, 1020, false, {}, AutocompleteMatchType::SEARCH_SUGGEST, {}, "autocompletion"},
-        {2, 1, 1000, true},
+        {2, 1, 1000, false},
     };
     // clang-format on
 
@@ -533,7 +535,7 @@ TEST_F(AutocompleteResultTest,
 
   {
     SCOPED_TRACE("Current matches allowed to be default and scored higher.");
-    // Deduping should prefer the |current| matches as they're both allowed to
+    // Deduping should prefer the `current` matches as they're both allowed to
     // be default and scored higher.
     // clang-format off
     TestData last[] = {
@@ -560,10 +562,9 @@ TEST_F(AutocompleteResultTest,
 
   {
     SCOPED_TRACE("Current matches allowed to be default and scored lower.");
-    // |last| matches with empty autocompletion should be made allowed to be
-    // default and preferred in deduping as they're scored higher. Otherwise,
-    // |current| matches should be preferred in deduping as they're allowed to
-    // be default.
+    // `last` matches still allowed to be default after transferring should be
+    // preferred in deduping as they're scored higher. Otherwise, `current`
+    // matches should be preferred in deduping as they're allowed to be default.
     // clang-format off
     TestData last[] = {
         {0, 1, 1020, true, {}, AutocompleteMatchType::SEARCH_SUGGEST, {}, "autocompletion"},
@@ -581,7 +582,7 @@ TEST_F(AutocompleteResultTest,
         {3, 2, 1500, true},
         {0, 2, 1020, true},
         {1, 1, 1010, true},
-        {2, 1, 1000, true},
+        {2, 2, 1000, true},
     };
     // clang-format on
 
@@ -671,66 +672,63 @@ TEST_F(AutocompleteResultTest, TransferOldMatchesSkipsSpecializedSuggestions) {
 
 // Tests that transferred matches do not include the specialized match types.
 TEST_F(AutocompleteResultTest, TransferOldMatchesSkipDoneProviders) {
-  {
-    SCOPED_TRACE("kAutocompleteStabilityDontCopyDoneProviders enabled.");
-    base::test::ScopedFeatureList feature_list;
-    feature_list.InitAndEnableFeatureWithParameters(
-        omnibox::kAutocompleteStability,
-        {{OmniboxFieldTrial::kAutocompleteStabilityDontCopyDoneProviders.name,
-          "true"}});
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      omnibox::kAutocompleteStability,
+      {{OmniboxFieldTrial::kAutocompleteStabilityDontCopyDoneProviders.name,
+        "true"}});
 
-    TestData last[] = {
-        {0, 1, 500},  // Suggestion from done provider
-        {1, 2, 400},  // Suggestion for not-done provider
-    };
-    TestData current[] = {
-        {2, 3, 700},  // Suggestion from done provider
-        {3, 4, 600},  // Suggestion for not-done provider
-    };
-    TestData result[] = {
-        {2, 3, 700},
-        {3, 4, 600},
-        {1, 2, 400},
-    };
+  TestData last[] = {
+      {0, 1, 500},  // Suggestion from done provider
+      {1, 2, 400},  // Suggestion for not-done provider
+  };
+  TestData current[] = {
+      {2, 3, 700},  // Suggestion from done provider
+      {3, 4, 600},  // Suggestion for not-done provider
+  };
+  TestData result[] = {
+      {2, 3, 700},
+      {3, 4, 600},
+      {1, 2, 400},
+  };
 
-    GetProvider(1)->done_ = true;
-    GetProvider(3)->done_ = true;
+  GetProvider(1)->done_ = true;
+  GetProvider(3)->done_ = true;
 
-    ASSERT_NO_FATAL_FAILURE(RunTransferOldMatchesTest(
-        last, std::size(last), current, std::size(current), result,
-        std::size(result)));
-  }
+  ASSERT_NO_FATAL_FAILURE(RunTransferOldMatchesTest(last, std::size(last),
+                                                    current, std::size(current),
+                                                    result, std::size(result)));
+}
 
-  {
-    SCOPED_TRACE("kAutocompleteStabilityDontCopyDoneProviders disabled.");
-    base::test::ScopedFeatureList feature_list;
-    feature_list.InitAndEnableFeatureWithParameters(
-        omnibox::kAutocompleteStability,
-        {{OmniboxFieldTrial::kAutocompleteStabilityDontCopyDoneProviders.name,
-          "false"}});
+TEST_F(AutocompleteResultTest,
+       TransferOldMatchesSkipDoneProviders_DontCopyDoneProviders) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      omnibox::kAutocompleteStability,
+      {{OmniboxFieldTrial::kAutocompleteStabilityDontCopyDoneProviders.name,
+        "false"}});
 
-    TestData last[] = {
-        {0, 1, 500},  // Suggestion from done provider
-        {1, 2, 400},  // Suggestion for not-done provider
-    };
-    TestData current[] = {
-        {2, 3, 700},  // Suggestion from done provider
-        {3, 4, 600},  // Suggestion for not-done provider
-    };
-    TestData result[] = {
-        {2, 3, 700},
-        {3, 4, 600},
-        {0, 1, 500},  // Suggestion from done provider
-        {1, 2, 400},
-    };
+  TestData last[] = {
+      {0, 1, 500},  // Suggestion from done provider
+      {1, 2, 400},  // Suggestion for not-done provider
+  };
+  TestData current[] = {
+      {2, 3, 700},  // Suggestion from done provider
+      {3, 4, 600},  // Suggestion for not-done provider
+  };
+  TestData result[] = {
+      {2, 3, 700},
+      {3, 4, 600},
+      {0, 1, 500},  // Suggestion from done provider
+      {1, 2, 400},
+  };
 
-    GetProvider(1)->done_ = true;
-    GetProvider(3)->done_ = true;
+  GetProvider(1)->done_ = true;
+  GetProvider(3)->done_ = true;
 
-    ASSERT_NO_FATAL_FAILURE(RunTransferOldMatchesTest(
-        last, std::size(last), current, std::size(current), result,
-        std::size(result)));
-  }
+  ASSERT_NO_FATAL_FAILURE(RunTransferOldMatchesTest(last, std::size(last),
+                                                    current, std::size(current),
+                                                    result, std::size(result)));
 }
 
 // Tests that matches with empty destination URLs aren't treated as duplicates
@@ -1200,7 +1198,7 @@ TEST_F(AutocompleteResultTest, SortAndCullAllowsNonMatchingZeroSuggestions) {
   AutocompleteInput input(u"https://secure-prefix",
                           metrics::OmniboxEventProto::OTHER,
                           TestSchemeClassifier());
-  input.set_focus_type(OmniboxFocusType::ON_FOCUS);
+  input.set_focus_type(metrics::OmniboxFocusType::INTERACTION_FOCUS);
 
   AutocompleteResult result;
   result.AppendMatches(matches);
@@ -1231,8 +1229,10 @@ TEST_F(AutocompleteResultTest, DemoteOnDeviceSearchSuggestions) {
   matches[4].type = AutocompleteMatchType::SEARCH_SUGGEST;
 
   // match1, match2 are set as on device head suggestion.
-  matches[1].subtypes = {64, 271, 123};
-  matches[2].subtypes = {64, 124, 271};
+  matches[1].subtypes = {omnibox::SUBTYPE_OMNIBOX_OTHER,
+                         omnibox::SUBTYPE_SUGGEST_2G_LITE};
+  matches[2].subtypes = {omnibox::SUBTYPE_OMNIBOX_OTHER,
+                         omnibox::SUBTYPE_SUGGEST_2G_LITE};
   matches[0].provider->type_ = AutocompleteProvider::TYPE_SEARCH;
   matches[1].provider->type_ = AutocompleteProvider::TYPE_ON_DEVICE_HEAD;
 
@@ -1856,11 +1856,11 @@ TEST_F(AutocompleteResultTest, SortAndCull_DemoteSuggestionGroups_ExceedLimit) {
         {{OmniboxFieldTrial::kUIMaxAutocompleteMatchesParam, "6"}}},
        {omnibox::kMaxZeroSuggestMatches,
         {{OmniboxFieldTrial::kMaxZeroSuggestMatchesParam, "5"}}}},
-      {{omnibox::kDynamicMaxAutocomplete,
-        omnibox::kRetainSuggestionsWithHeaders}});
+      {omnibox::kDynamicMaxAutocomplete,
+       omnibox::kRetainSuggestionsWithHeaders});
 
-  const auto group_1 = SuggestionGroupId::kNonPersonalizedZeroSuggest1;
-  const auto group_2 = SuggestionGroupId::kNonPersonalizedZeroSuggest2;
+  const auto group_1 = omnibox::GROUP_PREVIOUS_SEARCH_RELATED;
+  const auto group_2 = omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS;
   TestData data[] = {
       {0, 4, 500, false, {}, AutocompleteMatchType::SEARCH_SUGGEST, group_1},
       {1, 2, 600, false, {}, AutocompleteMatchType::HISTORY_URL},
@@ -1873,11 +1873,10 @@ TEST_F(AutocompleteResultTest, SortAndCull_DemoteSuggestionGroups_ExceedLimit) {
   ACMatches matches;
   PopulateAutocompleteMatches(data, std::size(data), &matches);
 
-  // Suggestion groups have SuggestionGroupPriority::kDefault priority by
-  // default.
-  SuggestionGroupsMap suggestion_groups_map;
-  suggestion_groups_map[group_1].header = u"1";
-  suggestion_groups_map[group_2].header = u"2";
+  // Suggestion groups have the omnibox::SECTION_DEFAULT by default.
+  omnibox::GroupConfigMap suggestion_groups_map;
+  suggestion_groups_map[group_1].set_header_text("1");
+  suggestion_groups_map[group_2].set_header_text("2");
 
   {
     AutocompleteInput typed_input(u"a", metrics::OmniboxEventProto::OTHER,
@@ -1905,7 +1904,8 @@ TEST_F(AutocompleteResultTest, SortAndCull_DemoteSuggestionGroups_ExceedLimit) {
   {
     AutocompleteInput zero_prefix_input(u"", metrics::OmniboxEventProto::NTP,
                                         TestSchemeClassifier());
-    zero_prefix_input.set_focus_type(OmniboxFocusType::ON_FOCUS);
+    zero_prefix_input.set_focus_type(
+        metrics::OmniboxFocusType::INTERACTION_FOCUS);
     AutocompleteResult result;
     result.MergeSuggestionGroupsMap(suggestion_groups_map);
     result.AppendMatches(matches);
@@ -1918,18 +1918,16 @@ TEST_F(AutocompleteResultTest, SortAndCull_DemoteSuggestionGroups_ExceedLimit) {
         // other types
         {6, 3, 1100, false, {}, AutocompleteMatchType::BOOKMARK_TITLE},
         {1, 2, 600, false, {}, AutocompleteMatchType::HISTORY_URL},
-        // Group two is scored higher
+        // omnibox::SECTION_REMOTE_ZPS_1 comes first.
         {5, 2, 1000, false, {}, AutocompleteMatchType::SEARCH_SUGGEST},
         {4, 1, 900, false, {}, AutocompleteMatchType::SEARCH_SUGGEST},
     }};
     AssertResultMatches(result, expected_data.begin(), expected_data.size());
   }
 
-  // Set priorities that contradict the scores of the matches in groups.
-  suggestion_groups_map[group_1].priority =
-      SuggestionGroupPriority::kRemoteZeroSuggest1;
-  suggestion_groups_map[group_2].priority =
-      SuggestionGroupPriority::kRemoteZeroSuggest2;
+  // Set sections that contradict the scores of the matches in groups.
+  suggestion_groups_map[group_1].set_section(omnibox::SECTION_REMOTE_ZPS_1);
+  suggestion_groups_map[group_2].set_section(omnibox::SECTION_REMOTE_ZPS_2);
 
   {
     AutocompleteInput typed_input(u"a", metrics::OmniboxEventProto::OTHER,
@@ -1940,7 +1938,7 @@ TEST_F(AutocompleteResultTest, SortAndCull_DemoteSuggestionGroups_ExceedLimit) {
     result.SortAndCull(typed_input, template_url_service_.get());
 
     // typed matches are first culled, then grouped based on group IDs, and
-    // then ordered based on group priorities.
+    // then ordered based on group sections.
     ASSERT_EQ(6U, AutocompleteResult::GetMaxMatches(/*is_zero_suggest=*/false));
     const std::array<TestData, 6> expected_data{{
         // default match unmoved
@@ -1948,9 +1946,9 @@ TEST_F(AutocompleteResultTest, SortAndCull_DemoteSuggestionGroups_ExceedLimit) {
         // other types
         {6, 3, 1100, false, {}, AutocompleteMatchType::BOOKMARK_TITLE},
         {1, 2, 600, false, {}, AutocompleteMatchType::HISTORY_URL},
-        // Group one has a higher priority
+        // omnibox::SECTION_REMOTE_ZPS_1 comes first.
         {2, 1, 700, false, {}, AutocompleteMatchType::SEARCH_SUGGEST},
-        // Group two has a lower priority
+        // omnibox::SECTION_REMOTE_ZPS_1 comes second.
         {5, 2, 1000, false, {}, AutocompleteMatchType::SEARCH_SUGGEST},
         {4, 1, 900, false, {}, AutocompleteMatchType::SEARCH_SUGGEST},
     }};
@@ -1959,14 +1957,15 @@ TEST_F(AutocompleteResultTest, SortAndCull_DemoteSuggestionGroups_ExceedLimit) {
   {
     AutocompleteInput zero_prefix_input(u"", metrics::OmniboxEventProto::NTP,
                                         TestSchemeClassifier());
-    zero_prefix_input.set_focus_type(OmniboxFocusType::ON_FOCUS);
+    zero_prefix_input.set_focus_type(
+        metrics::OmniboxFocusType::INTERACTION_FOCUS);
     AutocompleteResult result;
     result.MergeSuggestionGroupsMap(suggestion_groups_map);
     result.AppendMatches(matches);
     result.SortAndCull(zero_prefix_input, template_url_service_.get());
 
     // zero-prefix matches are first grouped basd on group IDs, then ordered
-    // based on group priorities, then culled.
+    // based on group sections, then culled.
     ASSERT_EQ(5U, AutocompleteResult::GetMaxMatches(/*is_zero_suggest=*/true));
     const std::array<TestData, 5> expected_data{{
         // default match unmoved
@@ -1974,7 +1973,7 @@ TEST_F(AutocompleteResultTest, SortAndCull_DemoteSuggestionGroups_ExceedLimit) {
         // other types
         {6, 3, 1100, false, {}, AutocompleteMatchType::BOOKMARK_TITLE},
         {1, 2, 600, false, {}, AutocompleteMatchType::HISTORY_URL},
-        // Group <1> has a higher priority
+        // omnibox::SECTION_REMOTE_ZPS_1 comes first.
         {2, 1, 700, false, {}, AutocompleteMatchType::SEARCH_SUGGEST},
         {0, 4, 500, false, {}, AutocompleteMatchType::SEARCH_SUGGEST},
     }};
@@ -1993,8 +1992,8 @@ TEST_F(AutocompleteResultTest,
        {omnibox::kRetainSuggestionsWithHeaders, {}}},
       {{omnibox::kDynamicMaxAutocomplete}});
 
-  const auto group_1 = SuggestionGroupId::kNonPersonalizedZeroSuggest1;
-  const auto group_2 = SuggestionGroupId::kNonPersonalizedZeroSuggest2;
+  const auto group_1 = omnibox::GROUP_PREVIOUS_SEARCH_RELATED;
+  const auto group_2 = omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS;
   TestData data[] = {
       {1, 1, 1100, true, {}, AutocompleteMatchType::SEARCH_SUGGEST},
       {2, 1, 1099, true, {}, AutocompleteMatchType::SEARCH_SUGGEST},
@@ -2010,11 +2009,10 @@ TEST_F(AutocompleteResultTest,
   ACMatches matches;
   PopulateAutocompleteMatches(data, std::size(data), &matches);
 
-  // Suggestion groups have SuggestionGroupPriority::kDefault priority by
-  // default.
-  SuggestionGroupsMap suggestion_groups_map;
-  suggestion_groups_map[group_1].header = u"1";
-  suggestion_groups_map[group_2].header = u"2";
+  // Suggestion groups have the omnibox::SECTION_DEFAULT by default.
+  omnibox::GroupConfigMap suggestion_groups_map;
+  suggestion_groups_map[group_1].set_header_text("1");
+  suggestion_groups_map[group_2].set_header_text("2");
 
   {
     AutocompleteInput typed_input(u"a", metrics::OmniboxEventProto::OTHER,
@@ -2035,7 +2033,8 @@ TEST_F(AutocompleteResultTest,
   {
     AutocompleteInput zero_prefix_input(u"", metrics::OmniboxEventProto::NTP,
                                         TestSchemeClassifier());
-    zero_prefix_input.set_focus_type(OmniboxFocusType::ON_FOCUS);
+    zero_prefix_input.set_focus_type(
+        metrics::OmniboxFocusType::INTERACTION_FOCUS);
     AutocompleteResult result;
 
     result.MergeSuggestionGroupsMap(suggestion_groups_map);
@@ -2070,8 +2069,8 @@ TEST_F(AutocompleteResultTest,
        {omnibox::kRetainSuggestionsWithHeaders, {}}},
       {});
 
-  const auto group_1 = SuggestionGroupId::kNonPersonalizedZeroSuggest1;
-  const auto group_2 = SuggestionGroupId::kNonPersonalizedZeroSuggest2;
+  const auto group_1 = omnibox::GROUP_PREVIOUS_SEARCH_RELATED;
+  const auto group_2 = omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS;
   TestData data[] = {
       {1, 1, 1100, true, {}, AutocompleteMatchType::SEARCH_SUGGEST},
       {2, 1, 1099, true, {}, AutocompleteMatchType::SEARCH_SUGGEST},
@@ -2087,14 +2086,12 @@ TEST_F(AutocompleteResultTest,
   ACMatches matches;
   PopulateAutocompleteMatches(data, std::size(data), &matches);
 
-  // Set priorities that contradict the scores of the matches in groups.
-  SuggestionGroupsMap suggestion_groups_map;
-  suggestion_groups_map[group_1].header = u"1";
-  suggestion_groups_map[group_1].priority =
-      SuggestionGroupPriority::kRemoteZeroSuggest2;
-  suggestion_groups_map[group_2].header = u"2";
-  suggestion_groups_map[group_2].priority =
-      SuggestionGroupPriority::kRemoteZeroSuggest1;
+  // Set sections that contradict the scores of the matches in groups.
+  omnibox::GroupConfigMap suggestion_groups_map;
+  suggestion_groups_map[group_1].set_header_text("1");
+  suggestion_groups_map[group_1].set_section(omnibox::SECTION_REMOTE_ZPS_2);
+  suggestion_groups_map[group_2].set_header_text("2");
+  suggestion_groups_map[group_2].set_section(omnibox::SECTION_REMOTE_ZPS_1);
 
   {
     AutocompleteInput typed_input(u"a", metrics::OmniboxEventProto::OTHER,
@@ -2116,7 +2113,8 @@ TEST_F(AutocompleteResultTest,
   {
     AutocompleteInput zero_prefix_input(u"", metrics::OmniboxEventProto::NTP,
                                         TestSchemeClassifier());
-    zero_prefix_input.set_focus_type(OmniboxFocusType::ON_FOCUS);
+    zero_prefix_input.set_focus_type(
+        metrics::OmniboxFocusType::INTERACTION_FOCUS);
     AutocompleteResult result;
 
     result.MergeSuggestionGroupsMap(suggestion_groups_map);
@@ -2129,11 +2127,11 @@ TEST_F(AutocompleteResultTest,
     const std::array<TestData, 6> expected_data{{
         {1, 1, 1100, true, {}, AutocompleteMatchType::SEARCH_SUGGEST},
         {2, 1, 1099, true, {}, AutocompleteMatchType::SEARCH_SUGGEST},
-        // Group two has a higher priority
+        // omnibox::SECTION_REMOTE_ZPS_1 comes first.
         {7, 1, 1094, true, {}, AutocompleteMatchType::SEARCH_SUGGEST, group_2},
         {8, 1, 1093, true, {}, AutocompleteMatchType::SEARCH_SUGGEST, group_2},
         {9, 1, 1092, true, {}, AutocompleteMatchType::SEARCH_SUGGEST, group_2},
-        // Group one has a lower priority
+        // omnibox::SECTION_REMOTE_ZPS_2 comes second.
         {6, 1, 1095, true, {}, AutocompleteMatchType::SEARCH_SUGGEST, group_1},
     }};
     AssertResultMatches(result, expected_data.begin(), expected_data.size());
@@ -2178,6 +2176,28 @@ TEST_F(AutocompleteResultTest,
 
   AssertResultMatches(result, expected_data,
                       AutocompleteResult::GetMaxMatches());
+}
+
+TEST_F(AutocompleteResultTest, SortAndCullMaxHistoryClusterSuggestions) {
+  // Should limit history cluster suggestions to 1, even if there are no
+  // alternative suggestions to display.
+
+  ACMatches matches;
+  const AutocompleteMatchTestData data[] = {
+      {"url_1", AutocompleteMatchType::HISTORY_CLUSTER},
+      {"url_2", AutocompleteMatchType::HISTORY_CLUSTER},
+      {"url_3", AutocompleteMatchType::HISTORY_CLUSTER},
+  };
+  PopulateAutocompleteMatchesFromTestData(data, std::size(data), &matches);
+
+  AutocompleteInput input(u"a", metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  AutocompleteResult result;
+  result.AppendMatches(matches);
+  result.SortAndCull(input, template_url_service_.get());
+
+  ASSERT_EQ(result.size(), 1u);
+  EXPECT_EQ(result.match_at(0)->type, AutocompleteMatchType::HISTORY_CLUSTER);
 }
 
 TEST_F(AutocompleteResultTest, SortAndCullMaxURLMatches) {

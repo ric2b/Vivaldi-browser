@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,9 +23,8 @@ class ASH_EXPORT ChannelIndicatorQuickSettingsView : public views::View {
       const ChannelIndicatorQuickSettingsView&) = delete;
   ~ChannelIndicatorQuickSettingsView() override = default;
 
-  // Introspection methods for unit tests.
-  bool IsVersionButtonVisibleForTesting();
-  bool IsSubmitFeedbackButtonVisibleForTesting();
+  views::View* version_button_for_test() { return version_button_; }
+  views::View* feedback_button_for_test() { return feedback_button_; }
 
  private:
   // Refs maintained for unit test introspection methods.

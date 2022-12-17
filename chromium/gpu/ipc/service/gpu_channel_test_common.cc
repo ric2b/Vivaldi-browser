@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,6 +55,9 @@ class TestGpuChannelManagerDelegate : public GpuChannelManagerDelegate {
   void StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
                        const std::string& key,
                        const std::string& shader) override {}
+  void GetIsolationKey(int client_id,
+                       const blink::WebGPUExecutionContextToken& token,
+                       GetIsolationKeyCallback cb) override {}
   void MaybeExitOnContextLost() override { is_exiting_ = true; }
   bool IsExiting() const override { return is_exiting_; }
 #if BUILDFLAG(IS_WIN)

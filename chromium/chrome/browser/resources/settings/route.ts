@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,9 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
 
   r.SAFETY_CHECK = r.PRIVACY.createSection('/safetyCheck', 'safetyCheck');
 
-  r.PRIVACY_GUIDE = r.PRIVACY.createChild('guide');
+  if (loadTimeData.getBoolean('showPrivacyGuide')) {
+    r.PRIVACY_GUIDE = r.PRIVACY.createChild('guide');
+  }
   r.SITE_SETTINGS = r.PRIVACY.createChild('/content');
   r.COOKIES = r.PRIVACY.createChild('/cookies');
   r.SECURITY = r.PRIVACY.createChild('/security');
@@ -55,11 +57,6 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
       r.SITE_SETTINGS.createChild('backgroundSync');
   r.SITE_SETTINGS_CAMERA = r.SITE_SETTINGS.createChild('camera');
   r.SITE_SETTINGS_CLIPBOARD = r.SITE_SETTINGS.createChild('clipboard');
-  if (!loadTimeData.getBoolean('consolidatedSiteStorageControlsEnabled')) {
-    r.SITE_SETTINGS_SITE_DATA = r.COOKIES.createChild('/siteData');
-    r.SITE_SETTINGS_DATA_DETAILS =
-        r.SITE_SETTINGS_SITE_DATA.createChild('/cookies/detail');
-  }
   r.SITE_SETTINGS_IDLE_DETECTION = r.SITE_SETTINGS.createChild('idleDetection');
   r.SITE_SETTINGS_IMAGES = r.SITE_SETTINGS.createChild('images');
   r.SITE_SETTINGS_MIXEDSCRIPT = r.SITE_SETTINGS.createChild('insecureContent');
@@ -95,8 +92,9 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
     r.SITE_SETTINGS_BLUETOOTH_SCANNING =
         r.SITE_SETTINGS.createChild('bluetoothScanning');
   }
-  r.SITE_SETTINGS_WINDOW_PLACEMENT =
-      r.SITE_SETTINGS.createChild('windowPlacement');
+
+  r.SITE_SETTINGS_WINDOW_MANAGEMENT =
+      r.SITE_SETTINGS.createChild('windowManagement');
   r.SITE_SETTINGS_FILE_SYSTEM_WRITE = r.SITE_SETTINGS.createChild('filesystem');
   r.SITE_SETTINGS_LOCAL_FONTS = r.SITE_SETTINGS.createChild('localFonts');
 
@@ -160,7 +158,7 @@ function createBrowserSettingsRoutes(): Partial<SettingsRoutes> {
     r.PAYMENTS = r.AUTOFILL.createChild('/payments');
     r.ADDRESSES = r.AUTOFILL.createChild('/addresses');
 
-    // <if expr="is_win">
+    // <if expr="is_win or is_macosx">
     r.PASSKEYS = r.AUTOFILL.createChild('/passkeys');
     // </if>
   }
@@ -237,6 +235,14 @@ function createBrowserSettingsRoutes(): Partial<SettingsRoutes> {
             r.RESET.createChild('/incompatibleApplications');
       }
       // </if>
+    }
+
+    if (visibility.performance !== false &&
+        ((loadTimeData.getBoolean('highEfficiencyModeAvailable')) ||
+         (loadTimeData.getBoolean('batterySaverModeAvailable')))) {
+      r.PERFORMANCE = r.ADVANCED!.createSection(
+          '/performance', 'performance',
+          loadTimeData.getString('performancePageTitle'));
     }
   }
   return r;

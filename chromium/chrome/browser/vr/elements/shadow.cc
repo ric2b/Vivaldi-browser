@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -141,8 +141,7 @@ void Shadow::LayOutContributingChildren() {
   DCHECK(shadow_caster_ || !children().empty());
   UiElement* shadow_caster =
       shadow_caster_ ? shadow_caster_.get() : children().back().get();
-  gfx::Point3F p;
-  shadow_caster->LocalTransform().TransformPoint(&p);
+  gfx::Point3F p = shadow_caster->LocalTransform().MapPoint(gfx::Point3F());
   DCHECK_GE(kMaximumChildDepth, p.z());
   depth_ = base::clamp(p.z() / kMaximumChildDepth, 0.0f, 1.0f);
   // This is an arbitrary function that quickly accelerates from 0 toward 1.

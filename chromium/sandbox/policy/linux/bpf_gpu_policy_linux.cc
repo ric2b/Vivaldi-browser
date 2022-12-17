@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -93,7 +93,6 @@ ResultExpr GpuProcessPolicy::EvaluateSyscall(int sysno) const {
     case __NR_sysinfo:
     case __NR_uname:  // https://crbug.com/1075934
       return Allow();
-    case __NR_sched_getaffinity:
     case __NR_sched_setaffinity:
       return RestrictSchedTarget(GetPolicyPid(), sysno);
     case __NR_prlimit64:

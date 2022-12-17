@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,24 +9,24 @@
 
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
-import 'chrome://resources/cr_elements/policy/cr_policy_indicator.m.js';
-import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.m.js';
+import 'chrome://resources/cr_elements/policy/cr_policy_indicator.js';
+import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.js';
 import '../../prefs/prefs.js';
 import '../../settings_shared.css.js';
 import './channel_switcher_dialog.js';
 import './consumer_auto_update_toggle_dialog.js';
 import './edit_hostname_dialog.js';
 
-import {CrPolicyIndicatorType} from 'chrome://resources/cr_elements/policy/cr_policy_indicator_behavior.m.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
-import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {CrPolicyIndicatorType} from 'chrome://resources/cr_elements/policy/cr_policy_indicator_mixin.js';
+import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
 import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Route} from '../../router.js';
+import {castExists} from '../assert_extras.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../deep_linking_behavior.js';
 import {routes} from '../os_route.js';
 import {PrefsBehavior, PrefsBehaviorInterface} from '../prefs_behavior.js';
@@ -150,8 +150,20 @@ class SettingsDetailedBuildInfoElement extends SettingsDetailedBuildInfoBase {
       showConsumerAutoUpdateToggle_: {
         type: Boolean,
         value() {
-          return loadTimeData.getBoolean('showConsumerAutoUpdateToggle') &&
+          return loadTimeData.getBoolean('showAutoUpdateToggle') &&
               !loadTimeData.getBoolean('isManaged');
+        },
+        readOnly: true,
+      },
+
+      /**
+       * Whether or not to show the managed auto update toggle.
+       */
+      showManagedAutoUpdateToggle_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('showAutoUpdateToggle') &&
+              loadTimeData.getBoolean('isManaged');
         },
         readOnly: true,
       },
@@ -174,6 +186,7 @@ class SettingsDetailedBuildInfoElement extends SettingsDetailedBuildInfoBase {
   private isManaged_: boolean;
   private isConsumerAutoUpdateTogglingAllowed_: boolean;
   private showConsumerAutoUpdateToggle_: boolean;
+  private showManagedAutoUpdateToggle_: boolean;
 
   private aboutPageBrowserProxy_: AboutPageBrowserProxy;
   private deviceNameBrowserProxy_: DeviceNameBrowserProxy;
@@ -296,10 +309,6 @@ class SettingsDetailedBuildInfoElement extends SettingsDetailedBuildInfoBase {
     return this.getDeviceNameIndicatorType_() !== CrPolicyIndicatorType.NONE;
   }
 
-  private shouldShowConsumerAutoUpdateToggle_(): boolean {
-    return !this.isManaged_;
-  }
-
   private getDeviceNameIndicatorType_(): string {
     if (!this.deviceNameMetadata_) {
       return CrPolicyIndicatorType.NONE;
@@ -414,13 +423,15 @@ class SettingsDetailedBuildInfoElement extends SettingsDetailedBuildInfoBase {
 
   private onChannelSwitcherDialogClosed_() {
     this.showChannelSwitcherDialog_ = false;
-    focusWithoutInk(assert(this.shadowRoot!.querySelector('cr-button'))!);
+    const button = castExists(this.shadowRoot!.querySelector('cr-button'));
+    focusWithoutInk(button);
     this.updateChannelInfo_();
   }
 
   private onEditHostnameDialogClosed_() {
     this.showEditHostnameDialog_ = false;
-    focusWithoutInk(assert(this.shadowRoot!.querySelector('cr-button'))!);
+    const button = castExists(this.shadowRoot!.querySelector('cr-button'));
+    focusWithoutInk(button);
   }
 }
 

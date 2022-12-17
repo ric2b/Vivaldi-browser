@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,7 +120,7 @@ class LoadingPredictor : public KeyedService,
   void PreconnectURLIfAllowed(
       const GURL& url,
       bool allow_credentials,
-      const net::NetworkIsolationKey& network_isolation_key);
+      const net::NetworkAnonymizationKey& network_anonymization_key);
 
  private:
   // Stores the information necessary to keep track of the active navigations.

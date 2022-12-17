@@ -1,10 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/segmentation_platform/internal/selection/experimental_group_recorder.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "components/segmentation_platform/internal/metadata/metadata_utils.h"
 #include "components/segmentation_platform/internal/selection/segment_result_provider.h"
@@ -24,7 +24,7 @@ ExperimentalGroupRecorder::ExperimentalGroupRecorder(
                         config.GetSegmentUmaName(segment_id)})),
       segment_id_(segment_id) {
   auto options = std::make_unique<SegmentResultProvider::GetResultOptions>();
-  options->segmentation_key =
+  options->discrete_mapping_key =
       base::StrCat({config.segmentation_key, kSubsegmentDiscreteMappingSuffix});
   options->segment_id = segment_id;
   options->callback = base::BindOnce(&ExperimentalGroupRecorder::OnGetSegment,

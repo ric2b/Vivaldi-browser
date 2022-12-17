@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,6 +52,10 @@ class WebrtcVideoEncoderAV1 : public WebrtcVideoEncoder {
 
   using scoped_aom_image = std::unique_ptr<aom_image_t, void (*)(aom_image_t*)>;
   scoped_aom_image image_;
+
+  // Indicates whether the frames provided to the encoder will use I420 (lossy)
+  // or I444 (lossless) format.
+  bool lossless_color_ = false;
 
   // Active map used to optimize out processing of unchanged macroblocks.
   VideoEncoderActiveMap active_map_;

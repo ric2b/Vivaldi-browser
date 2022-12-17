@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,7 +71,7 @@ class TestAXNodeWrapper : public AXPlatformNodeDelegateBase {
   // AXPlatformNodeDelegate.
   const AXNodeData& GetData() const override;
   const AXTreeData& GetTreeData() const override;
-  const AXTree::Selection GetUnignoredSelection() const override;
+  const AXSelection GetUnignoredSelection() const override;
   AXNodePosition::AXPositionInstance CreatePositionAt(
       int offset,
       ax::mojom::TextAffinity affinity =

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include "ui/gl/gl_context_glx.h"
 #include "ui/gl/gl_gl_api_implementation.h"
 #include "ui/gl/gl_glx_api_implementation.h"
-#include "ui/gl/gl_image_glx_native_pixmap.h"
 #include "ui/gl/gl_surface_glx_x11.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/ozone/platform/x11/native_pixmap_glx_binding.h"

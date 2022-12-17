@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,13 +18,13 @@ constexpr SkColor kEditModeBgColor = SkColorSetA(SK_ColorBLACK, 0x99);
 InputMappingView::InputMappingView(
     DisplayOverlayController* display_overlay_controller)
     : display_overlay_controller_(display_overlay_controller) {
-  auto content_bounds = input_overlay::CalculateWindowContentBounds(
-      display_overlay_controller_->touch_injector()->target_window());
+  auto content_bounds =
+      display_overlay_controller_->touch_injector()->content_bounds();
   auto& actions = display_overlay_controller_->touch_injector()->actions();
   SetBounds(content_bounds.x(), content_bounds.y(), content_bounds.width(),
             content_bounds.height());
   for (auto& action : actions) {
-    auto view = action->CreateView(display_overlay_controller_, content_bounds);
+    auto view = action->CreateView(display_overlay_controller_);
     if (view)
       AddChildView(std::move(view));
   }
@@ -54,6 +54,25 @@ void InputMappingView::SetDisplayMode(const DisplayMode mode) {
     action_view->SetDisplayMode(mode);
   }
   current_display_mode_ = mode;
+}
+
+void InputMappingView::OnActionAdded(Action* action) {
+  auto view = action->CreateView(display_overlay_controller_);
+  if (view) {
+    view->SetDisplayMode(current_display_mode_);
+    AddChildView(std::move(view));
+  }
+}
+
+void InputMappingView::OnActionRemoved(Action* action) {
+  for (auto* view : children()) {
+    auto* action_view = static_cast<ActionView*>(view);
+    if (action != action_view->action())
+      continue;
+
+    RemoveChildViewT(action_view);
+    break;
+  }
 }
 
 void InputMappingView::ProcessPressedEvent(const ui::LocatedEvent& event) {

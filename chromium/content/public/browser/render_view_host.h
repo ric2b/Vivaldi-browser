@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include "content/public/common/drop_data.h"
 #include "content/public/common/page_zoom.h"
 #include "ipc/ipc_sender.h"
-#include "mojo/public/cpp/system/core.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-forward.h"
 

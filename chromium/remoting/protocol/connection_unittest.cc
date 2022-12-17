@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "remoting/protocol/audio_source.h"
 #include "remoting/protocol/audio_stream.h"
 #include "remoting/protocol/audio_stub.h"
+#include "remoting/protocol/desktop_capturer.h"
 #include "remoting/protocol/fake_session.h"
 #include "remoting/protocol/fake_video_renderer.h"
 #include "remoting/protocol/ice_connection_to_client.h"
@@ -32,7 +33,6 @@
 #include "remoting/protocol/webrtc_connection_to_host.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 
 using ::testing::_;
@@ -40,8 +40,7 @@ using ::testing::InvokeWithoutArgs;
 using ::testing::NotNull;
 using ::testing::StrictMock;
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 namespace {
 
@@ -72,7 +71,7 @@ class MockConnectionToHostEventCallback
                     const TransportRoute& route));
 };
 
-class TestScreenCapturer : public webrtc::DesktopCapturer {
+class TestScreenCapturer : public DesktopCapturer {
  public:
   TestScreenCapturer() = default;
   ~TestScreenCapturer() override = default;
@@ -715,5 +714,4 @@ TEST_P(ConnectionTest, DISABLED_SecondCaptureFailed) {
   WaitNextVideoFrame();
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

@@ -1,12 +1,12 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/ntp/incognito_view_controller.h"
 
-#include <string>
+#import <string>
 
-#include "components/content_settings/core/common/features.h"
+#import "components/content_settings/core/common/features.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/ntp/incognito_view.h"
@@ -18,6 +18,14 @@
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_private_mode_view.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -49,6 +57,11 @@
 - (void)viewDidLoad {
   self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
 
+  if (IsVivaldiRunning()) {
+    VivaldiPrivateModeView* privateView = [VivaldiPrivateModeView new];
+    [self.view addSubview:privateView];
+    [privateView fillSuperview];
+  } else {
   if (base::FeatureList::IsEnabled(kIncognitoNtpRevamp)) {
     RevampedIncognitoView* view =
         [[RevampedIncognitoView alloc] initWithFrame:self.view.bounds];
@@ -66,6 +79,8 @@
                                           UIViewAutoresizingFlexibleWidth];
   self.incognitoView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
   [self.view addSubview:self.incognitoView];
+  } // End Vivaldi
+
 }
 
 - (void)dealloc {

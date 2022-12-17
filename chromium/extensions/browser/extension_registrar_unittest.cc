@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -569,7 +569,8 @@ TEST_F(ExtensionRegistrarTest,
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(chromeos::features::kLacrosOnly);
 
-  crosapi::browser_util::SetLacrosPrimaryBrowserForTest(true);
+  auto set_lacros_primary =
+      crosapi::browser_util::SetLacrosPrimaryBrowserForTest(true);
   static_cast<TestingPrefServiceSimple*>(pref_service())
       ->registry()
       ->RegisterIntegerPref(
@@ -590,7 +591,8 @@ TEST_F(ExtensionRegistrarTest,
 // disabled if ash is still enabled.
 TEST_F(ExtensionRegistrarTest,
        NotDisableNotAshKeeplistedForceInstalledExtensionIfAshEnabled) {
-  crosapi::browser_util::SetLacrosPrimaryBrowserForTest(true);
+  auto set_lacros_primary =
+      crosapi::browser_util::SetLacrosPrimaryBrowserForTest(true);
   static_cast<TestingPrefServiceSimple*>(pref_service())
       ->registry()
       ->RegisterIntegerPref(

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -146,6 +146,8 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       // RSU code page
       {"rsuCodePageTitleText", IDS_SHIMLESS_RMA_RSU_CODE_PAGE_TITLE},
       {"rsuCodeInstructionsText", IDS_SHIMLESS_RMA_RSU_CODE_INSTRUCTIONS},
+      {"rsuCodeInstructionsAriaText",
+       IDS_SHIMLESS_RMA_RSU_CODE_INSTRUCTIONS_ARIA},
       {"rsuChallengeDialogTitleText",
        IDS_SHIMLESS_RMA_RSU_CHALLENGE_DIALOG_TITLE},
       {"rsuCodeLabelText", IDS_SHIMLESS_RMA_RSU_CODE_LABEL},
@@ -216,6 +218,8 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"rmaLogsTitleText", IDS_SHIMLESS_RMA_LOGS_TITLE},
       {"rmaLogsCancelButtonText", IDS_SHIMLESS_RMA_LOGS_CANCEL_BUTTON},
       {"rmaLogsSaveToUsbButtonText", IDS_SHIMLESS_RMA_LOGS_SAVE_BUTTON},
+      {"rmaLogsMissingUsbMessageText",
+       IDS_SHIMLESS_RMA_LOGS_MISSING_USB_MESSAGE_TEXT},
       {"repairCompletedPowerwashTitle",
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_POWERWASH_TITLE},
       {"repairCompletedPowerwashShutdownDescription",
@@ -314,6 +318,7 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"hardwareErrorMessage", IDS_SHIMLESS_RMA_HARDWARE_ERROR_MESSAGE},
       {"hardwareErrorShutDownButton",
        IDS_SHIMLESS_RMA_HARDWARE_SHUTDOWN_BUTTON},
+      {"hardwareErrorCode", IDS_SHIMLESS_RMA_HARDWARE_ERROR_CODE_MESSAGE},
       // Reboot page
       {"rebootPageTitle", IDS_SHIMLESS_RMA_REBOOT_PAGE_TITLE},
       {"rebootPageMessage", IDS_SHIMLESS_RMA_REBOOT_PAGE_MESSAGE},
@@ -412,7 +417,8 @@ ShimlessRMADialogUI::ShimlessRMADialogUI(
           kChromeUIShimlessRMAHost);
   html_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
-      "script-src chrome://resources chrome://test 'self';");
+      "script-src chrome://resources chrome://test chrome://webui-test "
+      "'self';");
   html_source->DisableTrustedTypesCSP();
 
   const auto resources =

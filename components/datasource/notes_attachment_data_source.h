@@ -12,6 +12,8 @@ class NotesAttachmentDataClassHandler : public VivaldiDataClassHandler {
   void GetData(Profile* profile,
                const std::string& data_id,
                content::URLDataSource::GotDataCallback callback) override;
+  std::string GetMimetype(Profile* profile,
+                          const std::string& data_id) override;
 };
 
 #endif  // COMPONENTS_DATASOURCE_NOTES_ATTACHMENT_DATA_SOURCE_H_

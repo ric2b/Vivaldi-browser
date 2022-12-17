@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -941,9 +941,11 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
     }
     if (!skip_click_dispatch && mouse_target &&
         event_type == WebInputEvent::Type::kPointerUp) {
+      Element* captured_click_target = GetEffectiveTargetForPointerEvent(
+          nullptr, pointer_event->pointerId());
       mouse_event_manager_->DispatchMouseClickIfNeeded(
-          mouse_target, mouse_event, pointer_event->pointerId(),
-          pointer_event->pointerType());
+          mouse_target, captured_click_target, mouse_event,
+          pointer_event->pointerId(), pointer_event->pointerType());
     }
   }
 
@@ -1106,11 +1108,6 @@ bool PointerEventManager::SetPointerCapture(PointerId pointer_id,
   if (explicit_capture) {
     UseCounter::Count(frame_->GetDocument(),
                       WebFeature::kPointerEventSetCapture);
-    if (pointer_id == PointerEventFactory::kMouseId &&
-        target != mouse_event_manager_->MouseDownElement()) {
-      UseCounter::Count(frame_->GetDocument(),
-                        WebFeature::kExplicitPointerCaptureClickTargetDiff);
-    }
   }
   if (pointer_event_factory_.IsActiveButtonsState(pointer_id)) {
     if (pointer_id != dispatching_pointer_id_) {
@@ -1186,7 +1183,7 @@ bool PointerEventManager::PrimaryPointerdownCanceled(
   // It's safe to assume that uniqueTouchEventIds won't wrap back to 0 from
   // 2^32-1 (>4.2 billion): even with a generous 100 unique ids per touch
   // sequence & one sequence per 10 second, it takes 13+ years to wrap back.
-  while (!touch_ids_for_canceled_pointerdowns_.IsEmpty()) {
+  while (!touch_ids_for_canceled_pointerdowns_.empty()) {
     uint32_t first_id = touch_ids_for_canceled_pointerdowns_.front();
     if (first_id > unique_touch_event_id)
       return false;

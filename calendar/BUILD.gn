@@ -28,8 +28,6 @@ static_library("calendar") {
     "calendar_type.h",
     "event_database.cc",
     "event_database.h",
-    "event_exception_type.cc",
-    "event_exception_type.h",
     "event_type.cc",
     "event_type.h",
     "event_type_database.cc",
@@ -44,6 +42,7 @@ static_library("calendar") {
     "notification_type.h",
     "recurrence_exception_table.cc",
     "recurrence_exception_table.h",
+    "recurrence_exception_type.cc",
     "recurrence_exception_type.h",
   ]
 

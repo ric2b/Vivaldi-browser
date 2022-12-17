@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,10 @@ std::string CreateSortKey(const PasswordForm& form, IgnoreStore ignore_store);
 // Same as |CreateSortKey| for |PasswordForm| but it always ignores store.
 // TODO(vsemeniuk): find a better name for this function.
 std::string CreateSortKey(const CredentialUIEntry& credential);
+
+// Creates a key to map passwords within an affiliated group with the same
+// username and password.
+std::string CreateUsernamePasswordSortKey(const PasswordForm& form);
 
 // Sort entries of |list| based on sort key. The key is the concatenation of
 // origin, entry type (non-Android credential, Android w/ affiliated web realm

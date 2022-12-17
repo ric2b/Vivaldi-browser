@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -49,11 +49,12 @@ class FakeIntentHelperHost : public mojom::IntentHelperHost {
   void IsChromeAppEnabled(arc::mojom::ChromeApp app,
                           IsChromeAppEnabledCallback callback) override;
   void OnSupportedLinksChanged(
-      std::vector<arc::mojom::SupportedLinksPtr> added_packages,
-      std::vector<arc::mojom::SupportedLinksPtr> removed_packages,
+      std::vector<arc::mojom::SupportedLinksPackagePtr> added_packages,
+      std::vector<arc::mojom::SupportedLinksPackagePtr> removed_packages,
       arc::mojom::SupportedLinkChangeSource source) override;
-  void OnDownloadAdded(const std::string& relative_path,
-                       const std::string& owner_package_name) override;
+  void OnDownloadAddedDeprecated(
+      const std::string& relative_path,
+      const std::string& owner_package_name) override;
   void OnOpenAppWithIntent(const GURL& start_url,
                            arc::mojom::LaunchIntentPtr intent) override;
   void OnOpenGlobalActions() override;

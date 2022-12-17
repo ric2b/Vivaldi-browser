@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -207,11 +207,12 @@ void DlpDataTransferNotifier::ResizeAndShowWidget(const gfx::Size& bubble_size,
 
   widget_closing_timer_.Start(
       FROM_HERE, base::Milliseconds(timeout_duration_ms),
-      base::BindOnce(&DlpDataTransferNotifier::CloseWidget,
-                     base::Unretained(this),
-                     widget_.get(),  // Safe as DlpClipboardNotificationHelper
-                                     // owns `widget_` and outlives it.
-                     views::Widget::ClosedReason::kUnspecified));
+      base::BindOnce(
+          &DlpDataTransferNotifier::CloseWidget, base::Unretained(this),
+          base::UnsafeDanglingUntriaged(
+              widget_.get()),  // Safe as DlpClipboardNotificationHelper
+                               // owns `widget_` and outlives it.
+          views::Widget::ClosedReason::kUnspecified));
 }
 
 }  // namespace policy

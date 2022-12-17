@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{עריכת הקובץ}two{עריכת הקבצים}many{עריכת הקבצים}other{עריכת הקבצים}}</translation>
 <translation id="3286515922899063534">GHz <ph name="CURRENT" /></translation>
 <translation id="3291996639387199448">כיוון המפתח</translation>
+<translation id="3294437725009624529">אורח</translation>
 <translation id="3310640316857623290">‏זמן האחזור של ה-DNS גבוה במידה משמעותית מהסף המותר</translation>
 <translation id="3328783797891415197">הבדיקה מתבצעת</translation>
 <translation id="3340011300870565703">רמת הטעינה של האוזנייה הימנית במכשיר: %<ph name="BATTERY_PERCENTAGE" />.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">במהלך עדכון הקושחה אין לנתק את המכשיר החיצוני הזה או לכבות את המחשב. אפשר למזער את החלון הזה. העדכון הזה עשוי לקחת כמה דקות ויכול להיות שהמכשיר החיצוני לא יפעל במהלכו.</translation>
 <translation id="3486220673238053218">הגדרה</translation>
 <translation id="3488065109653206955">מופעל חלקית</translation>
+<translation id="3510890413042482857">שליחת <ph name="BEGIN_LINK1" />נתוני מעקב אחר ביצועים<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">‏עדכון של ChromeOS</translation>
 <translation id="3527036260304016759">נכשלה – שגיאה לא ידועה</translation>
 <translation id="3532980081107202182">נותרו <ph name="MIN_REMAINING" /> דקות בערך</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">‏מערכת Android לא פועלת</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">מעבר אוטומטי לעיצוב כהה בשקיעה</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">סריקה מחדש</translation>
 <translation id="5583640892426849032">Backspace</translation>

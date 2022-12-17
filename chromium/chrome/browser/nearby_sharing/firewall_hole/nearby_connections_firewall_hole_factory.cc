@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,11 +7,11 @@
 
 #include "chrome/browser/nearby_sharing/firewall_hole/nearby_connections_firewall_hole_factory.h"
 
-#include "ash/services/nearby/public/cpp/tcp_server_socket_port.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "chrome/browser/nearby_sharing/firewall_hole/nearby_connections_firewall_hole.h"
 #include "chromeos/ash/components/network/firewall_hole.h"
+#include "chromeos/ash/services/nearby/public/cpp/tcp_server_socket_port.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 
 NearbyConnectionsFirewallHoleFactory::NearbyConnectionsFirewallHoleFactory() =

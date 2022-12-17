@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -794,7 +794,7 @@ async function checkRecentsContextMenu(
   await remoteCall.waitForFiles(appId, expectedRows);
 
   if (opt_selectMultiple) {
-    // Select all the files and check that the delete button isn't visible.
+    // Select all the files.
     const ctrlA = ['#file-list', 'a', true, false, false];
     await remoteCall.callRemoteTestUtil('fakeKeyDown', appId, ctrlA);
 

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ios/chrome/grit/ios_strings.h"
-#include "ui/base/device_form_factor.h"
+#import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -446,10 +446,10 @@ enum AuthenticationButtonType {
       [self.embeddedViewController.view.widthAnchor
           constraintEqualToConstant:kUserConsentMaxSize],
     ];
-    for (NSLayoutConstraint* constraints in lowerPriorityConstraints) {
+    for (NSLayoutConstraint* layout_constraints in lowerPriorityConstraints) {
       // We do not use `UILayoutPriorityDefaultHigh` because it makes some
       // multiline labels on one line and truncated on iPad.
-      constraints.priority = UILayoutPriorityRequired - 1;
+      layout_constraints.priority = UILayoutPriorityRequired - 1;
     }
     [constraints addObjectsFromArray:lowerPriorityConstraints];
     _regularSizeClassConstraints = constraints;

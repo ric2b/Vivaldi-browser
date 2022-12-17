@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,8 @@ class ComputedStyle;
 // Represents a [decorating box].
 // [decorating box]: https://drafts.csswg.org/css-text-decor-3/#decorating-box
 class CORE_EXPORT NGDecoratingBox {
+  DISALLOW_NEW();
+
  public:
   NGDecoratingBox(const PhysicalOffset& content_offset_in_container,
                   const ComputedStyle& style,

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 
 #include "base/fuchsia/fuchsia_logging.h"
 #include "content/browser/accessibility/browser_accessibility_fuchsia.h"
+#include "content/browser/accessibility/web_ax_platform_tree_manager_delegate.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/accessibility/platform/fuchsia/accessibility_bridge_fuchsia_registry.h"
 
@@ -16,20 +17,20 @@ namespace content {
 // static
 BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
     const ui::AXTreeUpdate& initial_tree,
-    BrowserAccessibilityDelegate* delegate) {
+    WebAXPlatformTreeManagerDelegate* delegate) {
   return new BrowserAccessibilityManagerFuchsia(initial_tree, delegate);
 }
 
 // static
 BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
-    content::BrowserAccessibilityDelegate* delegate) {
+    WebAXPlatformTreeManagerDelegate* delegate) {
   return new BrowserAccessibilityManagerFuchsia(
       BrowserAccessibilityManagerFuchsia::GetEmptyDocument(), delegate);
 }
 
 BrowserAccessibilityManagerFuchsia::BrowserAccessibilityManagerFuchsia(
     const ui::AXTreeUpdate& initial_tree,
-    BrowserAccessibilityDelegate* delegate)
+    WebAXPlatformTreeManagerDelegate* delegate)
     : BrowserAccessibilityManager(delegate) {
   Initialize(initial_tree);
 
@@ -86,18 +87,17 @@ BrowserAccessibilityManagerFuchsia::GetAccessibilityBridge() const {
   return accessibility_bridge_registry->GetAccessibilityBridge(root_window);
 }
 
-void BrowserAccessibilityManagerFuchsia::FireFocusEvent(
-    BrowserAccessibility* node) {
-  BrowserAccessibilityManager::FireFocusEvent(node);
+void BrowserAccessibilityManagerFuchsia::FireFocusEvent(ui::AXNode* node) {
+  ui::AXTreeManager::FireFocusEvent(node);
 
   if (!GetAccessibilityBridge())
     return;
 
   BrowserAccessibilityFuchsia* new_focus_fuchsia =
-      ToBrowserAccessibilityFuchsia(node);
+      ToBrowserAccessibilityFuchsia(GetFromAXNode(node));
 
   BrowserAccessibilityFuchsia* old_focus_fuchsia =
-      ToBrowserAccessibilityFuchsia(GetLastFocusedNode());
+      ToBrowserAccessibilityFuchsia(GetFromAXNode(GetLastFocusedNode()));
 
   if (old_focus_fuchsia)
     old_focus_fuchsia->OnDataChanged();

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 
 #include "base/base64.h"
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
@@ -21,6 +22,11 @@
 #include "components/variations/variations_features.h"
 
 #include "app/vivaldi_apptools.h"
+
+// TODO: remove this feature flag after milestone 110.
+BASE_FEATURE(kSendLowEntropySourceVariationIDInAnyContext,
+             "SendLowEntropySourceVariationIDInAnyContext",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace variations {
 namespace {
@@ -420,10 +426,10 @@ std::string VariationsIdsProvider::GenerateBase64EncodedProto(
   // This is the bottleneck for the creation of the header, so validate the size
   // here. Force a hard maximum on the ID count in case the Variations server
   // returns too many IDs and DOSs receiving servers with large requests.
-  DCHECK_LE(total_id_count, 50U);
+  DCHECK_LE(total_id_count, 75U);
   UMA_HISTOGRAM_COUNTS_100("Variations.Headers.ExperimentCount",
                            total_id_count);
-  if (total_id_count > 75)
+  if (total_id_count > 100)
     return std::string();
 
   std::string serialized;
@@ -527,8 +533,11 @@ VariationsIdsProvider::GetAllVariationIds() {
                        kLowEntropySourceVariationIdRangeMin;
     DCHECK_GE(source_value, kLowEntropySourceVariationIdRangeMin);
     DCHECK_LE(source_value, kLowEntropySourceVariationIdRangeMax);
-    all_variation_ids_set.insert(
-        VariationIDEntry(source_value, GOOGLE_WEB_PROPERTIES_FIRST_PARTY));
+    auto context = base::FeatureList::IsEnabled(
+                       kSendLowEntropySourceVariationIDInAnyContext)
+                       ? GOOGLE_WEB_PROPERTIES_ANY_CONTEXT
+                       : GOOGLE_WEB_PROPERTIES_FIRST_PARTY;
+    all_variation_ids_set.insert(VariationIDEntry(source_value, context));
   }
 
   return all_variation_ids_set;

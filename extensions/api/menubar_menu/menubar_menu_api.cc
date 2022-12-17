@@ -296,11 +296,11 @@ std::string MenubarMenuShowFunction::PopulateModel(
           }
           break;
         case menubar_menu::ITEM_TYPE_RADIO:
-          if (!item.radiogroup.get()) {
+          if (!item.radiogroup.has_value()) {
             return "Radio button added without group";
           }
-          menu_model->AddRadioItem(id, label, *item.radiogroup.get());
-          id_to_checked_map_[id] = item.checked && *item.checked;
+          menu_model->AddRadioItem(id, label, item.radiogroup.value());
+          id_to_checked_map_[id] = item.checked.value_or(false);
           if (item.enabled && !*item.enabled) {
             id_to_disabled_map_[id] = true;
           }
@@ -309,7 +309,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
           // We create the SimpleMenuModel sub menu but do not populate it. That
           // will be done in PopulateSubmodel() by the calling menu code when
           // and if this sub menu will be shown to the user.
-          if (item.selected && *item.selected) {
+          if (item.selected.value_or(false)) {
             if (selected_menu_id_ != -1) {
               return "Only one menu item can be selected";
             }
@@ -319,7 +319,8 @@ std::string MenubarMenuShowFunction::PopulateModel(
               new ui::SimpleMenuModel(nullptr);
           models_.push_back(base::WrapUnique(child_menu_model));
           menu_model->AddSubMenu(id, label, child_menu_model);
-          id_to_elementvector_map_[id] = child.children.get();
+          if (child.children.has_value())
+            id_to_elementvector_map_[id] = &child.children.value();
           break;
         }
         case menubar_menu::ITEM_TYPE_NONE:

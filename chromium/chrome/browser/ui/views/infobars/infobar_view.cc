@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/theme_provider.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -165,7 +166,7 @@ void InfoBarView::Layout() {
 
 void InfoBarView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kAlertDialog;
-  node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_INFOBAR));
+  node_data->SetNameChecked(l10n_util::GetStringUTF8(IDS_ACCNAME_INFOBAR));
   node_data->AddStringAttribute(ax::mojom::StringAttribute::kKeyShortcuts,
                                 "Alt+Shift+A");
 }

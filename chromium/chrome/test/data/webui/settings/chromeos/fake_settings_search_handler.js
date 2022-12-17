@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,19 +8,19 @@
 /**
  * Fake implementation of chromeos.settings.mojom.SettingsSearchHandlerRemote.
  *
- * @implements {chromeos.settings.mojom.SearchHandlerInterface}
+ * @implements {ash.settings.mojom.SearchHandlerInterface}
  */
 export class FakeSettingsSearchHandler {
   constructor() {
-    /** @private {!Array<chromeos.settings.mojom.SearchResult>} */
+    /** @private {!Array<ash.settings.mojom.SearchResult>} */
     this.fakeResults_ = [];
 
-    /** @private {!chromeos.settings.mojom.SearchResultsObserverInterface} */
+    /** @private {!ash.settings.mojom.SearchResultsObserverInterface} */
     this.observer_;
   }
 
   /**
-   * @param {!Array<chromeos.settings.mojom.SearchResult>} results Fake
+   * @param {!Array<ash.settings.mojom.SearchResult>} results Fake
    *     results that will be returned when Search() is called.
    */
   setFakeResults(results) {

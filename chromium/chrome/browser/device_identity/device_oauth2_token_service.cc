@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -142,9 +142,9 @@ void DeviceOAuth2TokenService::OnRefreshTokenResponse(
 }
 
 void DeviceOAuth2TokenService::OnGetTokenInfoResponse(
-    std::unique_ptr<base::DictionaryValue> token_info) {
+    const base::Value::Dict& token_info) {
   // For robot accounts email id is the account id.
-  const std::string* robot_email = token_info->GetDict().FindString("email");
+  const std::string* robot_email = token_info.FindString("email");
   gaia_oauth_client_.reset();
 
   store_->PrepareTrustedAccountId(base::BindRepeating(

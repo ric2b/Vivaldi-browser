@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -160,7 +160,8 @@ TEST_P(AppMenuIconControllerTest, UpgradeNotification) {
   // Forcibly enable Lacros Profile migration.
   base::test::ScopedFeatureList feature_list(
       ash::features::kLacrosProfileMigrationForAnyUser);
-  crosapi::browser_util::SetLacrosEnabledForTest(true);
+  auto set_lacros_enabled =
+      crosapi::browser_util::SetLacrosEnabledForTest(true);
 #endif
 
   ::testing::StrictMock<MockAppMenuIconControllerDelegate> mock_delegate;

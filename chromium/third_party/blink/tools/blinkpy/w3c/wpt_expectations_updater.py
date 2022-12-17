@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Updates expectations and baselines when updating web-platform-tests.
@@ -9,14 +9,10 @@ Specifically, this class fetches results from try bots for the current CL, then
 """
 
 import argparse
-import contextlib
 import copy
 import logging
-import os
 import re
-import shutil
 import sys
-import tempfile
 from collections import defaultdict, namedtuple
 
 from blinkpy.common.memoized import memoized
@@ -24,12 +20,9 @@ from blinkpy.common.net.git_cl import GitCL
 from blinkpy.common.path_finder import PathFinder
 from blinkpy.common.system.executive import ScriptError
 from blinkpy.common.system.log_utils import configure_logging
-from blinkpy.w3c.wpt_manifest import WPTManifest, BASE_MANIFEST_NAME
 from blinkpy.web_tests.models.test_expectations import (
     ParseError, SystemConfigurationRemover, TestExpectations)
 from blinkpy.web_tests.models.typ_types import ResultType
-from blinkpy.web_tests.port.android import (
-    PRODUCTS, PRODUCTS_TO_EXPECTATION_FILE_PATHS, WPT_SMOKE_TESTS_FILE)
 
 _log = logging.getLogger(__name__)
 
@@ -85,8 +78,7 @@ class WPTExpectationsUpdater(object):
         for tests that were renamed. Also the files may have their expectations
         updated using builder results.
         """
-        return (list(self.port.all_expectations_dict().keys()) +
-                list(PRODUCTS_TO_EXPECTATION_FILE_PATHS.values()))
+        return list(self.port.all_expectations_dict().keys())
 
     def run(self):
         """Does required setup before calling update_expectations().
@@ -142,10 +134,10 @@ class WPTExpectationsUpdater(object):
                  'as flaky.')
 
     def update_expectations_for_flag_specific(self, flag_specific):
-        """Downloads new baselines and adds test expectations lines.
+        """Adds test expectations lines for flag specific builders.
 
         Returns:
-            A pair: A set of tests that are rebaselined, and a dictionary
+            A pair: A set of tests that should be rebaselined, and a dictionary
             mapping tests that couldn't be rebaselined to lists of expectation
             lines written to flag specific test expectations.
         """
@@ -184,23 +176,19 @@ class WPTExpectationsUpdater(object):
 
         generic_expectations = TestExpectations(self.port)
 
-        # do not create baseline for flag-specific builders yet
-        # rebaselined_tests, test_expectations = self.download_text_baselines(
-        #    test_expectations, flag_specific)
-
         # Do not create expectations for tests which should have baseline
-        _, test_expectations = self.get_tests_to_rebaseline(
+        tests_to_rebaseline, test_expectations = self.get_tests_to_rebaseline(
             test_expectations)
         exp_lines_dict = self.write_to_test_expectations(test_expectations,
                                                          flag_specific,
                                                          generic_expectations)
-        return [], exp_lines_dict
+        return tests_to_rebaseline, exp_lines_dict
 
     def update_expectations(self):
-        """Downloads new baselines and adds test expectations lines.
+        """Adds test expectations lines.
 
         Returns:
-            A pair: A set of tests that are rebaselined, and a dictionary
+            A pair: A set of tests that should be rebaselined, and a dictionary
             mapping tests that couldn't be rebaselined to lists of expectation
             lines written to TestExpectations.
         """
@@ -257,10 +245,11 @@ class WPTExpectationsUpdater(object):
         #     }
         # }
 
-        rebaselined_tests, test_expectations = self.download_text_baselines(
+        # Do not create expectations for tests which should have baseline
+        tests_to_rebaseline, test_expectations = self.get_tests_to_rebaseline(
             test_expectations)
         exp_lines_dict = self.write_to_test_expectations(test_expectations)
-        return rebaselined_tests, exp_lines_dict
+        return tests_to_rebaseline, exp_lines_dict
 
     def add_results_for_configs_without_results(self, test_expectations,
                                                 configs_with_no_results):
@@ -348,7 +337,8 @@ class WPTExpectationsUpdater(object):
         func = lambda x: (x["variant"]["def"]["test_suite"] == test_suite)
         test_results_list = []
         predicate = {"expectancy": "VARIANTS_WITH_ONLY_UNEXPECTED_RESULTS"}
-        rv = self.host.results_fetcher.fetch_results_from_resultdb(self.host, [build], predicate)
+        rv = self.host.results_fetcher.fetch_results_from_resultdb([build],
+                                                                   predicate)
         rv = list(filter(func, rv))
         if not self.options.include_unexpected_pass:
             # if a test first fail then passed unexpectedly
@@ -1044,16 +1034,8 @@ class WPTExpectationsUpdater(object):
         for path in self._test_expectations.expectations_dict:
             _log.info('Updating %s for any removed or renamed tests.',
                       self.host.filesystem.basename(path))
-            if path in PRODUCTS_TO_EXPECTATION_FILE_PATHS.values():
-                # Also delete any expectations for modified test cases at
-                # android side to avoid any conflict
-                # TODO: consider keep the triaged expectations when results do
-                # not change
-                self._clean_single_test_expectations_file(
-                    path, deleted_files + modified_files, renamed_files)
-            else:
-                self._clean_single_test_expectations_file(
-                    path, deleted_files, renamed_files)
+            self._clean_single_test_expectations_file(path, deleted_files,
+                                                      renamed_files)
         self._test_expectations.commit_changes()
 
     def _list_files(self, diff_filter):
@@ -1188,28 +1170,22 @@ class WPTExpectationsUpdater(object):
             abs_path, self.finder.web_tests_dir())
 
     # TODO(robertma): Unit test this method.
-    def download_text_baselines(self, test_results, flag_specific=None):
+    def download_text_baselines(self, tests_to_rebaseline):
         """Fetches new baseline files for tests that should be rebaselined.
 
         Invokes `blink_tool.py rebaseline-cl` in order to download new baselines
         (-expected.txt files) for testharness.js tests that did not crash or
-        time out. Then, the platform-specific test is removed from the overall
-        failure test dictionary and the resulting dictionary is returned.
+        time out.
 
         Args:
-            test_results: A dictionary of failing test results, mapping test
-                names to lists of platforms to SimpleTestResult.
+            tests_to_rebaseline: A list of tests that should be rebaselined.
 
-        Returns:
-            A pair: A set of tests that are rebaselined, and a modified copy of
-            the test_results dictionary containing only tests that couldn't be
-            rebaselined.
+        Returns: None
         """
-        tests_to_rebaseline, test_results = self.get_tests_to_rebaseline(
-            test_results)
         if not tests_to_rebaseline:
             _log.info('No tests to rebaseline.')
-            return tests_to_rebaseline, test_results
+            return
+
         _log.info('Tests to rebaseline:')
         for test in tests_to_rebaseline:
             _log.info('  %s', test)
@@ -1222,8 +1198,6 @@ class WPTExpectationsUpdater(object):
             '--no-trigger-jobs',
             '--fill-missing',
         ]
-        if flag_specific:
-            command.append('--flag-specific=' + flag_specific)
         if self.options.verbose:
             command.append('--verbose')
         if self.patchset:
@@ -1233,7 +1207,6 @@ class WPTExpectationsUpdater(object):
         _log.info(
             "Output of rebaseline-cl:\n%s\n--end of rebaseline-cl output --" %
             rebaseline_output)
-        return tests_to_rebaseline, test_results
 
     def get_tests_to_rebaseline(self, test_results):
         """Filters failing tests that can be rebaselined.

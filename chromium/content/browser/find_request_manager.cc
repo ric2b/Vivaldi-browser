@@ -1,10 +1,9 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/find_request_manager.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
@@ -12,6 +11,7 @@
 #include "base/containers/queue.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/find_in_page_client.h"
@@ -99,7 +99,7 @@ RenderFrameHostImpl* GetPreviousSibling(RenderFrameHostImpl* rfh) {
   // The previous sibling may be in another WebContents.
   if (RenderFrameHostImpl* parent = GetAncestor(rfh)) {
     auto children = GetChildren(parent);
-    auto it = std::find(children.begin(), children.end(), rfh);
+    auto it = base::ranges::find(children, rfh);
     // It is odd that this rfh may not be a child of its parent, but this is
     // actually possible during teardown, hence the need for the check for
     // "it != children.end()".
@@ -119,7 +119,7 @@ RenderFrameHostImpl* GetNextSibling(RenderFrameHostImpl* rfh) {
   // The next sibling may be in another WebContents.
   if (RenderFrameHostImpl* parent = GetAncestor(rfh)) {
     auto children = GetChildren(parent);
-    auto it = std::find(children.begin(), children.end(), rfh);
+    auto it = base::ranges::find(children, rfh);
     // It is odd that this RenderFrameHost may not be a child of its parent, but
     // this is actually possible during teardown, hence the need for the check
     // for "it != children.end()".
@@ -174,6 +174,15 @@ RenderFrameHostImpl* TraverseFrame(RenderFrameHostImpl* rfh,
 bool IsFindInPageDisabled(RenderFrameHost* rfh) {
   return rfh && GetContentClient()->browser()->IsFindInPageDisabledForOrigin(
                     rfh->GetLastCommittedOrigin());
+}
+
+bool IsUnattachedGuestView(RenderFrameHost* rfh) {
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(rfh));
+  if (!web_contents->IsGuest())
+    return false;
+
+  return !web_contents->GetOuterWebContents();
 }
 
 // kMinKeystrokesWithoutDelay should be high enough that script in the page
@@ -377,32 +386,29 @@ void FindRequestManager::EmitFindRequest(int request_id,
 }
 
 void FindRequestManager::ForEachAddedFindInPageRenderFrameHost(
-    FrameIterationCallback callback) {
-  contents_->GetPrimaryMainFrame()->ForEachRenderFrameHost(base::BindRepeating(
-      [](FindRequestManager* manager, FrameIterationCallback callback,
-         RenderFrameHostImpl* rfh) {
-        if (!manager->CheckFrame(rfh))
+    base::FunctionRef<void(RenderFrameHostImpl*)> func_ref) {
+  contents_->GetPrimaryMainFrame()->ForEachRenderFrameHost(
+      [this, func_ref](RenderFrameHostImpl* rfh) {
+        if (!CheckFrame(rfh))
           return;
         // A Portal's RenderFrameHost can't reach here because we don't observe
         // Portals WebContents (see FindRequestManager::FindInternal()).
         DCHECK(!WebContents::FromRenderFrameHost(rfh)->IsPortal());
         DCHECK(rfh->IsRenderFrameLive());
         DCHECK(rfh->IsActive());
-        callback.Run(rfh);
-      },
-      this, std::move(callback)));
+        func_ref(rfh);
+      });
 }
 
 void FindRequestManager::StopFinding(StopFindAction action) {
   // Cancel any delayed find-in-page requests
   delayed_find_task_.Cancel();
 
-  ForEachAddedFindInPageRenderFrameHost(base::BindRepeating(
-      [](StopFindAction action, RenderFrameHostImpl* rfh) {
-        rfh->GetFindInPage()->StopFinding(
-            static_cast<blink::mojom::StopFindAction>(action));
-      },
-      action));
+  ForEachAddedFindInPageRenderFrameHost([action](RenderFrameHostImpl* rfh) {
+    rfh->GetFindInPage()->StopFinding(
+        // TODO(dcheng): Use typemapping or use the Mojo enum directly.
+        static_cast<blink::mojom::StopFindAction>(action));
+  });
 
   current_session_id_ = kInvalidId;
 #if BUILDFLAG(IS_ANDROID)
@@ -587,18 +593,16 @@ void FindRequestManager::ActivateNearestFindResult(float x, float y) {
 
   // Request from each frame the distance to the nearest find result (in that
   // frame) from the point (x, y), defined in find-in-page coordinates.
-  ForEachAddedFindInPageRenderFrameHost(base::BindRepeating(
-      [](FindRequestManager* manager, RenderFrameHostImpl* rfh) {
-        manager->activate_.pending_replies.insert(rfh);
-        // Lifetime of FindRequestManager > RenderFrameHost > Mojo
-        // connection, so it's safe to bind |this| and |rfh|.
-        rfh->GetFindInPage()->GetNearestFindResult(
-            manager->activate_.point,
-            base::BindOnce(&FindRequestManager::OnGetNearestFindResultReply,
-                           base::Unretained(manager), rfh,
-                           manager->activate_.current_request_id));
-      },
-      this));
+  ForEachAddedFindInPageRenderFrameHost([this](RenderFrameHostImpl* rfh) {
+    activate_.pending_replies.insert(rfh);
+    // Lifetime of FindRequestManager > RenderFrameHost > Mojo
+    // connection, so it's safe to bind |this| and |rfh|.
+    rfh->GetFindInPage()->GetNearestFindResult(
+        activate_.point,
+        base::BindOnce(&FindRequestManager::OnGetNearestFindResultReply,
+                       base::Unretained(this), rfh,
+                       activate_.current_request_id));
+  });
 }
 
 void FindRequestManager::OnGetNearestFindResultReply(RenderFrameHostImpl* rfh,
@@ -624,18 +628,17 @@ void FindRequestManager::RequestFindMatchRects(int current_version) {
   match_rects_.active_rect = gfx::RectF();
 
   // Request the latest find match rects from each frame.
-  ForEachAddedFindInPageRenderFrameHost(base::BindRepeating(
-      [](FindRequestManager* manager, RenderFrameHostImpl* rfh) {
-        manager->match_rects_.pending_replies.insert(rfh);
-        auto it = manager->match_rects_.frame_rects.find(rfh);
-        int version = (it != manager->match_rects_.frame_rects.end())
-                          ? it->second.version
-                          : kInvalidId;
-        rfh->GetFindInPage()->FindMatchRects(
-            version, base::BindOnce(&FindRequestManager::OnFindMatchRectsReply,
-                                    base::Unretained(manager), rfh));
-      },
-      this));
+  ForEachAddedFindInPageRenderFrameHost([this](RenderFrameHostImpl* rfh) {
+    match_rects_.pending_replies.insert(rfh);
+    auto it = match_rects_.frame_rects.find(rfh);
+    int version = (it != match_rects_.frame_rects.end()) ? it->second.version
+                                                         : kInvalidId;
+    // Lifetime of FindRequestManager > RenderFrameHost > Mojo
+    // connection, so it's safe to bind |this| and |rfh|.
+    rfh->GetFindInPage()->FindMatchRects(
+        version, base::BindOnce(&FindRequestManager::OnFindMatchRectsReply,
+                                base::Unretained(this), rfh));
+  });
 }
 
 void FindRequestManager::OnFindMatchRectsReply(
@@ -707,9 +710,8 @@ void FindRequestManager::FindInternal(const FindRequest& request) {
   // ForEachRenderFrameHost instead of ForEachAddedFindInPageRenderFrameHost
   // because that calls CheckFrame() which will only be true if we've called
   // AddFrame() for the frame.
-  contents_->GetPrimaryMainFrame()->ForEachRenderFrameHost(base::BindRepeating(
-      [](FindRequestManager* manager, WebContents* web_contents,
-         RenderFrameHostImpl* rfh) {
+  contents_->GetPrimaryMainFrame()->ForEachRenderFrameHost(
+      [this](RenderFrameHostImpl* rfh) {
         // Portals can't receive keyboard events or be focused, so we don't
         // return find results inside a portal.
         auto* wc = WebContents::FromRenderFrameHost(rfh);
@@ -717,14 +719,12 @@ void FindRequestManager::FindInternal(const FindRequest& request) {
           return;
         // Make sure each WebContents is only added once.
         if (rfh->IsInPrimaryMainFrame()) {
-          manager->frame_observers_.push_back(
-              std::make_unique<FrameObserver>(wc, manager));
+          frame_observers_.push_back(std::make_unique<FrameObserver>(wc, this));
         }
         if (IsFindInPageDisabled(rfh))
           return;
-        manager->AddFrame(rfh, false /* force */);
-      },
-      this, contents_));
+        AddFrame(rfh, false /* force */);
+      });
 }
 
 void FindRequestManager::AdvanceQueue(int request_id) {
@@ -825,8 +825,10 @@ RenderFrameHost* FindRequestManager::Traverse(RenderFrameHost* from_rfh,
 }
 
 void FindRequestManager::AddFrame(RenderFrameHost* rfh, bool force) {
-  if (!rfh || !rfh->IsRenderFrameLive() || !rfh->IsActive())
+  if (!rfh || !rfh->IsRenderFrameLive() || !rfh->IsActive() ||
+      IsUnattachedGuestView(rfh)) {
     return;
+  }
 
   // A frame that is already being searched should not normally be added again.
   DCHECK(force || !CheckFrame(rfh));

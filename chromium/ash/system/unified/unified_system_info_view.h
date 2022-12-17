@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,9 +33,7 @@ class ASH_EXPORT UnifiedSystemInfoView : public views::View {
   void ChildVisibilityChanged(views::View* child) override;
 
   // Introspection methods needed for unit tests.
-  bool IsEnterpriseManagedVisibleForTesting();
   bool IsSupervisedVisibleForTesting();
-  bool IsChannelIndicatorQuickSettingsVisibleForTesting();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(UnifiedSystemInfoViewTest, EnterpriseManagedVisible);

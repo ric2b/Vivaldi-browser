@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,7 +34,9 @@ class CORE_EXPORT CustomElementRegistry final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  CustomElementRegistry(const LocalDOMWindow*);
+  static CustomElementRegistry* Create(ScriptState*);
+
+  explicit CustomElementRegistry(const LocalDOMWindow*);
   CustomElementRegistry(const CustomElementRegistry&) = delete;
   CustomElementRegistry& operator=(const CustomElementRegistry&) = delete;
   ~CustomElementRegistry() override = default;

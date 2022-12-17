@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -138,6 +138,7 @@ void AnswerRanker::PromoteChosenAnswer() {
     return;
 
   chosen_answer_->SetDisplayType(DisplayType::kAnswerCard);
+  chosen_answer_->SetMultilineTitle(true);
   chosen_answer_->SetIconDimension(GetAnswerCardIconDimension());
   chosen_answer_->scoring().filter = false;
 }

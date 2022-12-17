@@ -13,7 +13,6 @@
 #import "SUApplicationInfo.h"
 #import "SULocalizations.h"
 #import "SUOperatingSystem.h"
-#import "SUTouchBarForwardDeclarations.h"
 #import "SUTouchBarButtonGroup.h"
 
 static NSString *const SUStatusControllerTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDENTIFIER ".SUStatusController";
@@ -22,9 +21,15 @@ static NSString *const SUStatusControllerTouchBarIndentifier = @"" SPARKLE_BUNDL
 @property (copy) NSString *title, *buttonTitle;
 @property (strong) SUHost *host;
 @property NSButton *touchBarButton;
+@property (nonatomic, readonly) BOOL minimizable;
 @end
 
 @implementation SUStatusController
+{
+    NSValue *_centerPointValue;
+    BOOL _closable;
+}
+
 @synthesize progressValue;
 @synthesize maxProgressValue;
 @synthesize statusText;
@@ -35,13 +40,17 @@ static NSString *const SUStatusControllerTouchBarIndentifier = @"" SPARKLE_BUNDL
 @synthesize progressBar;
 @synthesize statusTextField;
 @synthesize touchBarButton;
+@synthesize minimizable = _minimizable;
 
-- (instancetype)initWithHost:(SUHost *)aHost
+- (instancetype)initWithHost:(SUHost *)aHost centerPointValue:(NSValue *)centerPointValue minimizable:(BOOL)minimizable closable:(BOOL)closable
 {
     self = [super initWithWindowNibName:@"SUStatus" owner:self];
 	if (self)
 	{
         self.host = aHost;
+        _centerPointValue = centerPointValue;
+        _minimizable = minimizable;
+        _closable = closable;
         [self setShouldCascadeWindows:NO];
     }
     return self;
@@ -51,20 +60,23 @@ static NSString *const SUStatusControllerTouchBarIndentifier = @"" SPARKLE_BUNDL
 
 - (void)windowDidLoad
 {
-    if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]]) {
-        [[self window] setLevel:NSFloatingWindowLevel];
+    NSRect windowFrame = self.window.frame;
+    
+    if (_centerPointValue != nil) {
+        NSPoint centerPoint = _centerPointValue.pointValue;
+        [self.window setFrameOrigin:NSMakePoint(centerPoint.x - windowFrame.size.width / 2.0, centerPoint.y - windowFrame.size.height / 2.0)];
+    } else {
+        [self.window center];
     }
-
-    [[self window] center];
-    [[self window] setFrameAutosaveName:@"SUStatusFrame"];
+    
+    if (self.minimizable) {
+        self.window.styleMask |= NSWindowStyleMaskMiniaturizable;
+    }
+    if (_closable) {
+        self.window.styleMask |= NSWindowStyleMaskClosable;
+    }
     [self.progressBar setUsesThreadedAnimation:YES];
-
-    if ([SUOperatingSystem isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){10, 11, 0}]) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpartial-availability"
-        [self.statusTextField setFont:[NSFont monospacedDigitSystemFontOfSize:0 weight:NSFontWeightRegular]];
-#pragma clang diagnostic pop
-    }
+    [self.statusTextField setFont:[NSFont monospacedDigitSystemFontOfSize:0 weight:NSFontWeightRegular]];
 }
 
 - (NSString *)windowTitle
@@ -138,17 +150,17 @@ static NSString *const SUStatusControllerTouchBarIndentifier = @"" SPARKLE_BUNDL
 
 - (NSTouchBar *)makeTouchBar
 {
-    NSTouchBar *touchBar = [(NSTouchBar *)[NSClassFromString(@"NSTouchBar") alloc] init];
+    NSTouchBar *touchBar = [[NSTouchBar alloc] init];
     touchBar.defaultItemIdentifiers = @[ SUStatusControllerTouchBarIndentifier,];
     touchBar.principalItemIdentifier = SUStatusControllerTouchBarIndentifier;
     touchBar.delegate = self;
     return touchBar;
 }
 
-- (NSTouchBarItem *)touchBar:(NSTouchBar * __unused)touchBar makeItemForIdentifier:(NSTouchBarItemIdentifier)identifier API_AVAILABLE(macos(10.12.2))
+- (NSTouchBarItem *)touchBar:(NSTouchBar * __unused)touchBar makeItemForIdentifier:(NSTouchBarItemIdentifier)identifier
 {
     if ([identifier isEqualToString:SUStatusControllerTouchBarIndentifier]) {
-        NSCustomTouchBarItem *item = [(NSCustomTouchBarItem *)[NSClassFromString(@"NSCustomTouchBarItem") alloc] initWithIdentifier:identifier];
+        NSCustomTouchBarItem *item = [[NSCustomTouchBarItem alloc] initWithIdentifier:identifier];
         SUTouchBarButtonGroup *group = [[SUTouchBarButtonGroup alloc] initByReferencingButtons:@[self.actionButton,]];
         item.viewController = group;
         self.touchBarButton = group.buttons.firstObject;

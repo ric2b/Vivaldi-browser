@@ -1,8 +1,10 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "extensions/renderer/bindings/argument_spec.h"
+
+#include <cmath>
 
 #include "base/check.h"
 #include "base/strings/string_piece.h"
@@ -153,9 +155,8 @@ void ArgumentSpec::InitializeType(const base::DictionaryValue* dict) {
   if (type_ == ArgumentType::OBJECT) {
     const base::DictionaryValue* properties_value = nullptr;
     if (dict->GetDictionary("properties", &properties_value)) {
-      for (base::DictionaryValue::Iterator iter(*properties_value);
-           !iter.IsAtEnd(); iter.Advance()) {
-        properties_[iter.key()] = std::make_unique<ArgumentSpec>(iter.value());
+      for (const auto item : properties_value->GetDict()) {
+        properties_[item.first] = std::make_unique<ArgumentSpec>(item.second);
       }
     }
     const base::DictionaryValue* additional_properties_value = nullptr;

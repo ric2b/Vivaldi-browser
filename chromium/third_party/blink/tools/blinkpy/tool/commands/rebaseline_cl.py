@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """A command to fetch new baselines from try jobs for the current CL."""
@@ -146,12 +146,21 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         builders_with_results = {b.builder_name for b in jobs_to_results}
         builders_without_results = (
             set(self.selected_try_bots) - builders_with_results)
+        interrupted_builders = self._remove_interrupted_builders(
+            jobs_to_results)
         if builders_without_results:
-            _log.info('There are some builders with no results:')
+            _log.warning('There are some builders with no results:')
             for builder in sorted(builders_without_results):
-                _log.info('  %s', builder)
+                _log.warning('  %s', builder)
+        if interrupted_builders:
+            _log.warning('There are some builders that were interrupted.')
+            _log.warning('Some shards may have timed out or exited early '
+                         'due to excessive unexpected failures:')
+            for builder in sorted(interrupted_builders):
+                _log.warning('  %s', builder)
 
-        if options.fill_missing is None and builders_without_results:
+        incomplete_builders = builders_without_results | interrupted_builders
+        if options.fill_missing is None and incomplete_builders:
             should_continue = self._tool.user.confirm(
                 'Would you like to continue?',
                 default=self._tool.user.DEFAULT_NO)
@@ -159,15 +168,14 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
                 _log.info('Aborting.')
                 return 1
             options.fill_missing = self._tool.user.confirm(
-                'Would you like to try to fill in missing results with'
-                ' available results?\n'
-                'Note: This is generally not suggested unless the results'
-                ' are platform agnostic.',
+                'Would you like to try to fill in missing results with '
+                'available results?\n'
+                'Note: This is generally not suggested unless the results '
+                'are platform agnostic.',
                 default=self._tool.user.DEFAULT_NO)
             if not options.fill_missing:
-                _log.info(
-                    'Please rebaseline again for builders with no results later.'
-                )
+                _log.info('Please rebaseline again for builders '
+                          'with incomplete results later.')
 
         if options.test_name_file:
             test_baseline_set = self._make_test_baseline_set_from_file(
@@ -184,6 +192,16 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
 
         self.rebaseline(options, test_baseline_set)
         return 0
+
+    def _remove_interrupted_builders(self, jobs_to_results):
+        interrupted_builders = set()
+        # Iterate over a shallow copy of `items()`, which is a view of a
+        # dictionary being mutated.
+        for build, step_results in list(jobs_to_results.items()):
+            if any(step_result.interrupted for step_result in step_results):
+                interrupted_builders.add(build.builder_name)
+                del jobs_to_results[build]
+        return interrupted_builders
 
     def check_ok_to_run(self):
         unstaged_baselines = self.unstaged_baselines()
@@ -220,7 +238,10 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
                     to_remove.add(try_builder)
             try_builders = try_builders - to_remove
 
-        return try_builders
+        return set([
+            builder for builder in try_builders
+            if not self._tool.builders.is_wpt_builder(builder)
+        ])
 
     @property
     def cq_try_bots(self):
@@ -266,7 +287,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             unavailable_step_names = []
             if self._resultdb_fetcher:
                 maybe_results = results_fetcher.fetch_results_from_resultdb_layout_tests(
-                    self._tool, build, True)
+                    build, True)
                 if maybe_results:
                     builds_to_results[build].append(maybe_results)
                 else:
@@ -400,15 +421,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             for r in failed_tests
         ]
 
-        # we do not create baselines for reftests.
-        port_name = self._tool.builders.port_name_for_builder_name(
-            build.builder_name)
-        port = self._tool.port_factory.get(port_name, None)
-        tests_to_rebaseline = []
-        for test_name in failed_test_names:
-            if not port.reference_files(test_name):
-                tests_to_rebaseline.append(test_name)
-        return tests_to_rebaseline
+        return failed_test_names
 
     def _tests_to_rebaseline(self, build, web_test_results):
         """Fetches a list of tests that should be rebaselined for some build.

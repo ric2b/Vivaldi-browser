@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -310,8 +310,10 @@ bool DestroyRenderWidgetHost(int32_t process_id,
   while (!rfh->is_local_root())
     rfh = rfh->GetParent();
 
+  DCHECK(rfh->GetPage().IsPrimary())
+      << "Only implemented for frames in a primary page";
   FrameTreeNode* ftn = rfh->frame_tree_node();
-  if (rfh->is_main_frame()) {
+  if (rfh->IsOutermostMainFrame()) {
     WebContents::FromRenderFrameHost(rfh)->Close();
   } else {
     ftn->frame_tree()->RemoveFrame(ftn);

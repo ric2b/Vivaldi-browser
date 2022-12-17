@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,9 @@
 #include "net/dns/mock_host_resolver.h"
 #include "ui/accessibility/ax_clipping_behavior.h"
 #include "ui/accessibility/ax_coordinate_system.h"
+#include "ui/accessibility/ax_node_id_forward.h"
 #include "ui/accessibility/platform/ax_platform_node_base.h"
+#include "ui/accessibility/platform/ax_platform_tree_manager.h"
 #include "ui/display/display_switches.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
@@ -165,10 +167,11 @@ AccessibilityHitTestingBrowserTest::AsyncHitTestAndWaitForCallback(
 
   gfx::Point target_point = CSSToFramePoint(point);
   base::RunLoop run_loop;
-  BrowserAccessibilityManager* hit_manager = nullptr;
-  int hit_node_id = 0;
+  ui::AXPlatformTreeManager* hit_manager = nullptr;
+  ui::AXNodeID hit_node_id = ui::kInvalidAXNodeID;
 
-  auto callback = [&](BrowserAccessibilityManager* manager, int node_id) {
+  auto callback = [&](ui::AXPlatformTreeManager* manager,
+                      ui::AXNodeID node_id) {
     hit_manager = manager;
     hit_node_id = node_id;
     run_loop.QuitClosure().Run();
@@ -178,7 +181,9 @@ AccessibilityHitTestingBrowserTest::AsyncHitTestAndWaitForCallback(
       base::BindLambdaForTesting(callback));
   run_loop.Run();
 
-  BrowserAccessibility* hit_node = hit_manager->GetFromID(hit_node_id);
+  BrowserAccessibility* hit_node =
+      static_cast<BrowserAccessibilityManager*>(hit_manager)
+          ->GetFromID(hit_node_id);
   return hit_node;
 }
 
@@ -213,10 +218,11 @@ BrowserAccessibility* AccessibilityHitTestingBrowserTest::CallNearestLeafNode(
   AccessibilityNotificationWaiter hover_waiter(
       shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kHover);
   ui::AXPlatformNodeBase* platform_node = nullptr;
-  if (manager->GetRoot()->GetAXPlatformNode()) {
-    platform_node = static_cast<ui::AXPlatformNodeBase*>(
-                        manager->GetRoot()->GetAXPlatformNode())
-                        ->NearestLeafToPoint(screen_point);
+  if (manager->GetBrowserAccessibilityRoot()->GetAXPlatformNode()) {
+    platform_node =
+        static_cast<ui::AXPlatformNodeBase*>(
+            manager->GetBrowserAccessibilityRoot()->GetAXPlatformNode())
+            ->NearestLeafToPoint(screen_point);
   }
   EXPECT_TRUE(hover_waiter.WaitForNotification());
   if (platform_node) {
@@ -633,17 +639,10 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
 }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC)
-// Fails flakily with compared ID differences. TODO(crbug.com/1121099): Re-nable
+// Fails flakily with compared ID differences. TODO(crbug.com/1121099): Re-enable
 // this test.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_CachingAsyncHitTest_WithPinchZoom \
-  DISABLED_CachingAsyncHitTest_WithPinchZoom
-#else
-#define MAYBE_CachingAsyncHitTest_WithPinchZoom \
-  CachingAsyncHitTest_WithPinchZoom
-#endif
 IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
-                       MAYBE_CachingAsyncHitTest_WithPinchZoom) {
+                       DISABLED_CachingAsyncHitTest_WithPinchZoom) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -174,7 +174,7 @@ void CrostiniSshfs::OnMountEvent(
                << ", source_path=" << mount_info.source_path
                << ", mount_path=" << mount_info.mount_path
                << ", mount_type=" << mount_info.mount_type
-               << ", mount_condition=" << mount_info.mount_condition;
+               << ", mount_error=" << mount_info.mount_error;
     switch (error_code) {
       case ash::MountError::kInternal:
         Finish(CrostiniSshfsResult::kMountErrorInternal);

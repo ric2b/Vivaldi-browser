@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,7 @@
 #include "content/public/test/content_mock_cert_verifier.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/public/mojom/back_forward_cache_not_restored_reasons.mojom-blink.h"
 
 namespace content {
 
@@ -44,24 +45,6 @@ MATCHER(Deleted, "") {
 // indeed the identity function.
 std::initializer_list<RenderFrameHostImpl*> Elements(
     std::initializer_list<RenderFrameHostImpl*> t);
-
-namespace {
-
-// hash for std::unordered_map.
-struct FeatureHash {
-  size_t operator()(base::Feature feature) const {
-    return base::FastHash(feature.name);
-  }
-};
-
-// compare operator for std::unordered_map.
-struct FeatureEqualOperator {
-  bool operator()(base::Feature feature1, base::Feature feature2) const {
-    return std::strcmp(feature1.name, feature2.name) == 0;
-  }
-};
-
-}  // namespace
 
 // Test about the BackForwardCache.
 class BackForwardCacheBrowserTest
@@ -86,11 +69,11 @@ class BackForwardCacheBrowserTest
 
   void SetupFeaturesAndParameters();
 
-  void EnableFeatureAndSetParams(base::Feature feature,
+  void EnableFeatureAndSetParams(const base::Feature& feature,
                                  std::string param_name,
                                  std::string param_value);
 
-  void DisableFeature(base::Feature feature);
+  void DisableFeature(const base::Feature& feature);
 
   void SetUpOnMainThread() override;
 
@@ -142,6 +125,21 @@ class BackForwardCacheBrowserTest
   MatchesDocumentResult(testing::Matcher<NotRestoredReasons> not_stored,
                         BlockListedFeatures block_listed);
 
+  using ReasonsMatcher = testing::Matcher<
+      const blink::mojom::BackForwardCacheNotRestoredReasonsPtr&>;
+  using SameOriginMatcher = testing::Matcher<
+      const blink::mojom::SameOriginBfcacheNotRestoredDetailsPtr&>;
+  ReasonsMatcher MatchesNotRestoredReasons(
+      const testing::Matcher<bool>& blocked,
+      const SameOriginMatcher* same_origin_details);
+  SameOriginMatcher MatchesSameOriginDetails(
+      const testing::Matcher<std::string>& id,
+      const testing::Matcher<std::string>& name,
+      const testing::Matcher<std::string>& src,
+      const testing::Matcher<std::string>& url,
+      const std::vector<testing::Matcher<std::string>>& reasons,
+      const std::vector<ReasonsMatcher>& children);
+
   // Access the tree result of NotRestoredReason for the last main frame
   // navigation.
   BackForwardCacheCanStoreTreeResult* GetTreeResult() {
@@ -168,9 +166,6 @@ class BackForwardCacheBrowserTest
   const ukm::TestAutoSetUkmRecorder& ukm_recorder() override;
   const base::HistogramTester& histogram_tester() override;
 
-  bool same_site_back_forward_cache_enabled_ = true;
-  bool skip_same_site_if_unload_exists_ = false;
-
   const int kMaxBufferedBytesPerProcess = 10000;
   const base::TimeDelta kGracePeriodToFinishLoading = base::Seconds(5);
 
@@ -182,12 +177,9 @@ class BackForwardCacheBrowserTest
 
   FrameTreeVisualizer visualizer_;
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
-  std::unordered_map<base::Feature,
-                     std::map<std::string, std::string>,
-                     FeatureHash,
-                     FeatureEqualOperator>
+  std::map<base::test::FeatureRef, std::map<std::string, std::string>>
       features_with_params_;
-  std::vector<base::Feature> disabled_features_;
+  std::vector<base::test::FeatureRef> disabled_features_;
 
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;

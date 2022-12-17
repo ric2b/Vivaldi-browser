@@ -27,6 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import json
+from typing import Optional
 
 from blinkpy.common.memoized import memoized
 from blinkpy.web_tests.layout_package import json_results_generator
@@ -115,7 +116,20 @@ class WebTestResult(object):
 # FIXME: This should be unified with ResultsSummary or other NRWT web tests code
 # in the web_tests package.
 # This doesn't belong in common.net, but we don't have a better place for it yet.
-class WebTestResults(object):
+#
+# TODO(crbug.com/1213998): It's strange that this container holds two different
+# shapes of data (results JSON and ResultDB results list) and relies on callers
+# to not call an incompatible method. Hence, there is a lot of code of the form:
+#
+#   if options.resultDB:
+#       do_something_resultdb()
+#   else:
+#       do_something()
+#
+# The `WebTestResults.results_from*` factory methods need to be refactored to
+# normalize the raw data into an ordered dict of `WebTestResult` objects (sorted
+# by test name).
+class WebTestResults:
     @classmethod
     def results_from_string(cls, string, step_name=None):
         """Creates a WebTestResults object from a test result JSON string.
@@ -123,16 +137,16 @@ class WebTestResults(object):
         Args:
             string: JSON string containing web test result.
         """
-
         if not string:
             return None
-
         content_string = json_results_generator.strip_json_wrapper(string)
         json_dict = json.loads(content_string)
         if not json_dict:
             return None
-
-        return cls(json_dict, step_name=step_name)
+        return cls(json_dict,
+                   step_name=step_name,
+                   interrupted=json_dict.get('interrupted', False),
+                   builder_name=json_dict.get('builder_name'))
 
     @classmethod
     def results_from_resultdb(cls, rv, step_name=None):
@@ -143,22 +157,22 @@ class WebTestResults(object):
         """
         if not rv:
             return None
-
         return cls(rv, step_name=step_name)
 
-    def __init__(self, parsed_json, chromium_revision=None, step_name=None):
+    def __init__(self,
+                 parsed_json,
+                 chromium_revision: Optional[str] = None,
+                 step_name: Optional[str] = None,
+                 interrupted: bool = False,
+                 builder_name: Optional[str] = None):
         self._results = parsed_json
         self._chromium_revision = chromium_revision
         self._step_name = step_name
+        self.interrupted = interrupted
+        self.builder_name = builder_name
 
     def step_name(self):
         return self._step_name
-
-    def run_was_interrupted(self):
-        return self._results['interrupted']
-
-    def builder_name(self):
-        return self._results['builder_name']
 
     @memoized
     def chromium_revision(self, git=None):
@@ -207,27 +221,18 @@ class WebTestResults(object):
     def didnt_run_as_expected_results(self):
         return self._filter_tests(lambda r: not r.did_run_as_expected())
 
-    # Returns non flaky failing results
     def failed_unexpected_resultdb(self):
-        results = []
-        prev = None
-        flaky = False
+        result_dict = {}
+        passed_test_id = set()
         for result in self._results:
-            if not prev:
-                prev = result
-            elif result[u'testId'] != prev[u'testId']:
-                if not flaky:
-                    results.append(prev)
-                prev = result
-                flaky = False
-            elif result[u'status'] != prev[u'status']:
-                flaky = True
-        if not flaky:
-            results.append(prev)
-        failed_results = []
-        for result in results:
-            if result[u'status'] == u"FAIL":
-                failed_results.append(result)
+            if result['status'] == 'FAIL':
+                result_dict[result['testId']] = result
+            elif result['status'] == 'PASS':
+                passed_test_id.add(result['testId'])
+        failed_results = [
+            result for result in result_dict.values()
+            if result['testId'] not in passed_test_id
+        ]
         return failed_results
 
     def fail_result_exists_resultdb(self, test):

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,8 @@ class AccessibilityModeTest : public ContentBrowserTest {
  protected:
   const BrowserAccessibility* FindNode(ax::mojom::Role role,
                                        const std::string& name) {
-    const BrowserAccessibility* root = GetManager()->GetRoot();
+    const BrowserAccessibility* root =
+        GetManager()->GetBrowserAccessibilityRoot();
     CHECK(root);
     return FindNodeInSubtree(*root, role, name);
   }

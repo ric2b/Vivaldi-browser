@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@
 #include "services/device/compute_pressure/pressure_test_support.h"
 #include "services/device/device_service_test_base.h"
 #include "services/device/public/mojom/pressure_manager.mojom.h"
-#include "services/device/public/mojom/pressure_state.mojom.h"
+#include "services/device/public/mojom/pressure_update.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -59,19 +59,15 @@ class FakePressureClient : public mojom::PressureClient {
   FakePressureClient& operator=(const FakePressureClient&) = delete;
 
   // device::mojom::PressureClient implementation.
-  void PressureStateChanged(device::mojom::PressureStatePtr state,
-                            base::Time timestamp) override {
-    updates_.emplace_back(*state, timestamp);
+  void PressureStateChanged(device::mojom::PressureUpdatePtr update) override {
+    updates_.emplace_back(*update);
     if (update_callback_) {
       std::move(update_callback_).Run();
       update_callback_.Reset();
     }
   }
 
-  const std::vector<std::pair<mojom::PressureState, base::Time>>& updates()
-      const {
-    return updates_;
-  }
+  const std::vector<mojom::PressureUpdate>& updates() const { return updates_; }
 
   void SetNextUpdateCallback(base::OnceClosure callback) {
     DCHECK(!update_callback_) << " already called before update received";
@@ -99,8 +95,8 @@ class FakePressureClient : public mojom::PressureClient {
   }
 
  private:
-  // Used to save pairs of PressureState and its timestamp.
-  std::vector<std::pair<mojom::PressureState, base::Time>> updates_;
+  // Used to save PressureState.
+  std::vector<mojom::PressureUpdate> updates_;
 
   // Used to implement WaitForUpdate().
   base::OnceClosure update_callback_;
@@ -140,32 +136,16 @@ class PressureManagerImplTest : public DeviceServiceTestBase {
   std::unique_ptr<PressureManagerImplSync> manager_impl_sync_;
 };
 
-// Disabled on Fuchsia arm64 debug builds: https://crbug.com/1250654
-#if BUILDFLAG(IS_FUCHSIA) && defined(_DEBUG) && defined(ARCH_CPU_ARM64)
-#define MAYBE_OneClient DISABLED_OneClient
-#elif BUILDFLAG(IS_LINUX) && defined(USE_OZONE)  // https://crbug.com/1226086
-#define MAYBE_OneClient DISABLED_OneClient
-#else
-#define MAYBE_OneClient OneClient
-#endif
-TEST_F(PressureManagerImplTest, MAYBE_OneClient) {
+TEST_F(PressureManagerImplTest, OneClient) {
   FakePressureClient client;
   ASSERT_TRUE(manager_impl_sync_->AddClient(client.BindNewPipeAndPassRemote()));
 
   client.WaitForUpdate();
   ASSERT_EQ(client.updates().size(), 1u);
-  EXPECT_EQ(client.updates()[0].first, mojom::PressureState{0.42});
+  EXPECT_EQ(client.updates()[0].state, mojom::PressureState::kFair);
 }
 
-// Disabled on Fuchsia arm64 debug builds: https://crbug.com/1250654
-#if BUILDFLAG(IS_FUCHSIA) && defined(_DEBUG) && defined(ARCH_CPU_ARM64)
-#define MAYBE_ThreeClients DISABLED_ThreeClients
-#elif BUILDFLAG(IS_LINUX) && defined(USE_OZONE)  // https://crbug.com/1226086
-#define MAYBE_ThreeClients DISABLED_ThreeClients
-#else
-#define MAYBE_ThreeClients ThreeClients
-#endif
-TEST_F(PressureManagerImplTest, MAYBE_ThreeClients) {
+TEST_F(PressureManagerImplTest, ThreeClients) {
   FakePressureClient client1;
   ASSERT_TRUE(
       manager_impl_sync_->AddClient(client1.BindNewPipeAndPassRemote()));
@@ -178,11 +158,11 @@ TEST_F(PressureManagerImplTest, MAYBE_ThreeClients) {
 
   FakePressureClient::WaitForUpdates({&client1, &client2, &client3});
   ASSERT_EQ(client1.updates().size(), 1u);
-  EXPECT_EQ(client1.updates()[0].first, mojom::PressureState{0.42});
+  EXPECT_EQ(client1.updates()[0].state, mojom::PressureState::kFair);
   ASSERT_EQ(client2.updates().size(), 1u);
-  EXPECT_EQ(client2.updates()[0].first, mojom::PressureState{0.42});
+  EXPECT_EQ(client2.updates()[0].state, mojom::PressureState::kFair);
   ASSERT_EQ(client3.updates().size(), 1u);
-  EXPECT_EQ(client3.updates()[0].first, mojom::PressureState{0.42});
+  EXPECT_EQ(client3.updates()[0].state, mojom::PressureState::kFair);
 }
 
 TEST_F(PressureManagerImplTest, AddClient_NoProbe) {

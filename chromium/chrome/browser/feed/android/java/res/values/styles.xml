@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2021 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2021 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="MenuFooterChip" parent="Chip">
@@ -23,11 +25,6 @@
         <item name="chipColor">@android:color/transparent</item>
         <item name="chipStrokeColor">@color/chip_hairline_color_list</item>
         <item name="solidColorChip">false</item>
-    </style>
-
-    <style name="FeedHorizontalDivider" parent="HorizontalDivider">
-        <item name="android:layout_height">@dimen/feed_divider_height</item>
-        <item name="android:background">@drawable/rectangle_surface_1</item>
     </style>
 
     <style name="NtpHeaderTabLayoutStyle" parent="TabLayoutStyle">

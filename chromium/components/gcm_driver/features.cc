@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,15 +15,17 @@ namespace gcm {
 
 namespace features {
 
-const base::Feature kInvalidateTokenFeature{"GCMTokenInvalidAfterDays",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kInvalidateTokenFeature,
+             "GCMTokenInvalidAfterDays",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kGCMIncludeAccountTokensInCheckinRequest{
-    "GCMIncludeAccountTokensInCheckinRequest",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kGCMIncludeAccountTokensInCheckinRequest,
+             "GCMIncludeAccountTokensInCheckinRequest",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kGCMReportAccountTokenChanges{
-    "GCMReportAccountTokenChanges", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kGCMReportAccountTokenChanges,
+             "GCMReportAccountTokenChanges",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kParamNameTokenInvalidationPeriodDays[] =
     "token_invalidation_period";

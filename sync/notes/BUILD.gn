@@ -34,5 +34,6 @@ static_library("sync_notes") {
     "//components/keyed_service/core:core",
     "//components/sync",
     "//ui/base",
+    "//vivaldi/sync/file_sync",
   ]
 }

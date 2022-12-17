@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -111,6 +111,8 @@ class CONTENT_EXPORT MediaStreamDispatcherHost
       blink::mojom::MediaStreamType type,
       bool is_secure) override;
   void OnStreamStarted(const std::string& label) override;
+  using KeepDeviceAliveForTransferCallback =
+      base::OnceCallback<void(bool device_found)>;
   void KeepDeviceAliveForTransfer(
       const base::UnguessableToken& session_id,
       const base::UnguessableToken& transfer_id,

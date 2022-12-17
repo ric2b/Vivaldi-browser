@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
@@ -27,6 +28,7 @@
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -143,12 +145,33 @@ int GetDPI(const mojom::PrintParams& print_params) {
 #endif  // BUILDFLAG(IS_APPLE)
 }
 
-bool PrintMsg_Print_Params_IsValid(const mojom::PrintParams& params) {
+bool PrintMsgPrintParamsIsValid(const mojom::PrintParams& params) {
   return !params.content_size.IsEmpty() && !params.page_size.IsEmpty() &&
          !params.printable_area.IsEmpty() && params.document_cookie &&
          params.dpi.width() > kMinDpi && params.dpi.height() > kMinDpi &&
          params.margin_top >= 0 && params.margin_left >= 0;
 }
+
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+std::string PrintMsgPrintParamsErrorDetails(const mojom::PrintParams& params) {
+  std::vector<base::StringPiece> details;
+
+  if (params.content_size.IsEmpty())
+    details.push_back("content size is empty");
+  if (params.page_size.IsEmpty())
+    details.push_back("page size is empty");
+  if (params.printable_area.IsEmpty())
+    details.push_back("printable area is empty");
+  if (!params.document_cookie)
+    details.push_back("invalid document cookie");
+  if (params.dpi.width() <= kMinDpi || params.dpi.height() <= kMinDpi)
+    details.push_back("invalid DPI dimensions");
+  if (params.margin_top < 0 || params.margin_left < 0)
+    details.push_back("invalid margins");
+
+  return base::JoinString(details, "; ");
+}
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 // Helper function to check for fit to page
 bool IsPrintScalingOptionFitToPage(const mojom::PrintParams& params) {
@@ -750,7 +773,8 @@ void PrintRenderFrameHelper::PrintHeaderAndFooter(
 
   HeaderAndFooterClient frame_client;
   blink::WebLocalFrame* frame = blink::WebLocalFrame::CreateMainFrame(
-      web_view, &frame_client, nullptr, blink::LocalFrameToken(), nullptr);
+      web_view, &frame_client, nullptr, blink::LocalFrameToken(),
+      blink::DocumentToken(), nullptr);
 
   mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
   mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
@@ -875,8 +899,8 @@ class PrepareFrameAndViewForPrint : public blink::WebViewClient,
       const blink::FramePolicy& frame_policy,
       const blink::WebFrameOwnerProperties& frame_owner_properties,
       blink::FrameOwnerElementType owner_type,
-      blink::WebPolicyContainerBindParams policy_container_bind_params)
-      override;
+      blink::WebPolicyContainerBindParams policy_container_bind_params,
+      FinishChildFrameCreationFn finish_creation) override;
   void FrameDetached() override;
   std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
 
@@ -1025,7 +1049,8 @@ void PrepareFrameAndViewForPrint::CopySelection(
       /*page_base_background_color=*/absl::nullopt);
   blink::WebView::ApplyWebPreferences(prefs, web_view);
   blink::WebLocalFrame* main_frame = blink::WebLocalFrame::CreateMainFrame(
-      web_view, this, nullptr, blink::LocalFrameToken(), nullptr);
+      web_view, this, nullptr, blink::LocalFrameToken(), blink::DocumentToken(),
+      nullptr);
   frame_.Reset(main_frame);
   mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
   mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
@@ -1109,7 +1134,8 @@ blink::WebLocalFrame* PrepareFrameAndViewForPrint::CreateChildFrame(
     const blink::FramePolicy& frame_policy,
     const blink::WebFrameOwnerProperties& frame_owner_properties,
     blink::FrameOwnerElementType frame_owner_type,
-    blink::WebPolicyContainerBindParams policy_container_bind_params) {
+    blink::WebPolicyContainerBindParams policy_container_bind_params,
+    FinishChildFrameCreationFn finish_creation) {
   // This is called when printing a selection and when this selection contains
   // an iframe. This is not supported yet. An empty rectangle will be displayed
   // instead.
@@ -1350,6 +1376,12 @@ void PrintRenderFrameHelper::PrintWithParams(
     return;
   }
 
+  if (print_with_params_callback_) {
+    std::move(callback).Run(mojom::PrintWithParamsResult::NewFailureReason(
+        mojom::PrintFailureReason::kPrintingInProgress));
+    return;
+  }
+
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   frame->DispatchBeforePrintEvent(/*print_client=*/nullptr);
   // Don't print if the RenderFrame is gone.
@@ -1358,6 +1390,8 @@ void PrintRenderFrameHelper::PrintWithParams(
         mojom::PrintFailureReason::kGeneralFailure));
     return;
   }
+
+  print_with_params_callback_ = std::move(callback);
 
   // If we are printing a frame with an internal PDF plugin element, find the
   // plugin node and print that instead.
@@ -1372,9 +1406,6 @@ void PrintRenderFrameHelper::PrintWithParams(
   SetPrintPagesParams(*settings);
   prep_frame_view_ = std::make_unique<PrepareFrameAndViewForPrint>(
       *settings->params, frame, plugin_node, /* ignore_css_margins=*/false);
-
-  CHECK(!print_with_params_callback_);
-  print_with_params_callback_ = std::move(callback);
 
   PrintPages();
   FinishFramePrinting();
@@ -1629,6 +1660,9 @@ void PrintRenderFrameHelper::SnapshotForContentAnalysis(
     std::move(callback).Run(nullptr);
     return;
   }
+
+  GetPrintManagerHost()->DidGetPrintedPagesCount(
+      print_pages_params.params->document_cookie, page_count);
 
   for (size_t page_index = 0; page_index < page_count; ++page_index) {
     PrintPageInternal(
@@ -2026,10 +2060,6 @@ int PrintRenderFrameHelper::GetFitToPageScaleFactor(
 }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
-bool PrintRenderFrameHelper::IsPrintingEnabled() const {
-  return is_printing_enabled_;
-}
-
 void PrintRenderFrameHelper::PrintNode(const blink::WebNode& node) {
   if (node.IsNull() || !node.GetDocument().GetFrame()) {
     // This can occur when the context menu refers to an invalid WebNode.
@@ -2195,7 +2225,8 @@ void PrintRenderFrameHelper::DidFinishPrinting(PrintingResult result) {
       break;
     case INVALID_SETTINGS:
       if (preview_ui_)
-        preview_ui_->PrinterSettingsInvalid(cookie, request_id);
+        preview_ui_->PrinterSettingsInvalid(
+            cookie, request_id, print_preview_context_.last_error_details());
       print_preview_context_.Failed(false);
       break;
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -2384,7 +2415,7 @@ bool PrintRenderFrameHelper::InitPrintSettings(bool fit_to_paper_size) {
   // can safely assume there are no printer drivers configured. So we safely
   // terminate.
   bool result = true;
-  if (!PrintMsg_Print_Params_IsValid(*settings.params))
+  if (!PrintMsgPrintParamsIsValid(*settings.params))
     result = false;
 
   // Reset to default values.
@@ -2491,10 +2522,12 @@ bool PrintRenderFrameHelper::UpdatePrintSettings(
 
   SetPrintPagesParams(*settings);
 
-  if (PrintMsg_Print_Params_IsValid(*settings->params))
+  if (PrintMsgPrintParamsIsValid(*settings->params))
     return true;
 
   print_preview_context_.set_error(PREVIEW_ERROR_INVALID_PRINTER_SETTINGS);
+  print_preview_context_.set_error_details(
+      PrintMsgPrintParamsErrorDetails(*settings->params));
   return false;
 }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -3046,6 +3079,11 @@ void PrintRenderFrameHelper::PrintPreviewContext::set_error(
   error_ = error;
 }
 
+void PrintRenderFrameHelper::PrintPreviewContext::set_error_details(
+    const std::string& details) {
+  error_details_ = details;
+}
+
 blink::WebLocalFrame*
 PrintRenderFrameHelper::PrintPreviewContext::source_frame() {
   DCHECK(state_ != UNINITIALIZED);
@@ -3102,12 +3140,18 @@ int PrintRenderFrameHelper::PrintPreviewContext::last_error() const {
   return error_;
 }
 
+const std::string&
+PrintRenderFrameHelper::PrintPreviewContext::last_error_details() const {
+  return error_details_;
+}
+
 void PrintRenderFrameHelper::PrintPreviewContext::ClearContext() {
   prep_frame_view_.reset();
   metafile_.reset();
   typeface_content_info_.clear();
   pages_to_render_.clear();
   error_ = PREVIEW_ERROR_NONE;
+  error_details_ = std::string();
 }
 
 void PrintRenderFrameHelper::PrintPreviewContext::CalculatePluginAttributes() {

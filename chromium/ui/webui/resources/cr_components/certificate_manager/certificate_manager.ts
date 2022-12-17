@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@
  * @fileoverview The 'certificate-manager' component manages SSL certificates.
  */
 import '../../cr_elements/cr_tabs/cr_tabs.js';
-import '../../cr_elements/hidden_style_css.m.js';
+import '../../cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
 import './ca_trust_edit_dialog.js';
 import './certificate_delete_confirmation_dialog.js';
@@ -16,14 +16,15 @@ import './certificate_password_encryption_dialog.js';
 import './certificates_error_dialog.js';
 // <if expr="is_chromeos">
 import './certificate_provisioning_list.js';
+
 // </if>
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {focusWithoutInk} from '../../js/cr/ui/focus_without_ink.m.js';
-import {I18nMixin} from '../../js/i18n_mixin.js';
+import {focusWithoutInk} from '../../js/focus_without_ink.js';
+import {I18nMixin} from '../../cr_elements/i18n_mixin.js';
 import {loadTimeData} from '../../js/load_time_data.m.js';
-import {WebUIListenerMixin} from '../../js/web_ui_listener_mixin.js';
+import {WebUIListenerMixin} from '../../cr_elements/web_ui_listener_mixin.js';
 
 import {getTemplate} from './certificate_manager.html.js';
 import {CertificateAction, CertificateActionEvent} from './certificate_manager_types.js';

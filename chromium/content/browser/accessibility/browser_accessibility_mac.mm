@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,8 +29,8 @@ BrowserAccessibilityMac::BrowserAccessibilityMac(
 
 BrowserAccessibilityMac::~BrowserAccessibilityMac() {
   if (platform_node_) {
-    platform_node_->Destroy();  // `Destroy()` also deletes the object.
-    platform_node_ = nullptr;
+    // `Destroy()` also deletes the object.
+    platform_node_.ExtractAsDangling()->Destroy();
   }
 }
 

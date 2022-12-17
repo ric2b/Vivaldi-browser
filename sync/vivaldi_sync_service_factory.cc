@@ -107,8 +107,6 @@ KeyedService* VivaldiSyncServiceFactory::BuildServiceInstanceFor(
       content::GetNetworkConnectionTracker();
   init_params.channel = chrome::GetChannel();
   init_params.debug_identifier = profile->GetDebugName();
-  init_params.policy_service =
-      profile->GetProfilePolicyConnector()->policy_service();
   init_params.identity_manager = IdentityManagerFactory::GetForProfile(profile);
   init_params.start_behavior = syncer::SyncServiceImpl::MANUAL_START;
 

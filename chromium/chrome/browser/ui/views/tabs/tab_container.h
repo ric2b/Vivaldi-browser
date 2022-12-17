@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,6 +46,14 @@ class TabContainer : public views::View, public BrowserRootView::DropTarget {
   virtual void SetActiveTab(absl::optional<size_t> prev_active_index,
                             absl::optional<size_t> new_active_index) = 0;
 
+  // Transfer the tab at `model_index` our of this container so it can be
+  // parented elsewhere. Unlike RemoveTab, this method does not close the tab,
+  // but it does remove it from the layout viewmodel.
+  // TODO(crbug.com/1346023): Find a better name for this once the full suite of
+  // ownership-transferring methods is in place.
+  [[nodiscard]] virtual std::unique_ptr<Tab> TransferTabOut(
+      int model_index) = 0;
+
   // `view` is no longer being dragged. This TabContainer takes ownership of it
   // in the view hierarchy.
   virtual void StoppedDraggingView(TabSlotView* view) = 0;
@@ -63,6 +71,10 @@ class TabContainer : public views::View, public BrowserRootView::DropTarget {
   virtual void OnGroupEditorOpened(const tab_groups::TabGroupId& group) = 0;
   virtual void OnGroupMoved(const tab_groups::TabGroupId& group) = 0;
   virtual void OnGroupContentsChanged(const tab_groups::TabGroupId& group) = 0;
+  virtual void OnGroupVisualsChanged(
+      const tab_groups::TabGroupId& group,
+      const tab_groups::TabGroupVisualData* old_visuals,
+      const tab_groups::TabGroupVisualData* new_visuals) = 0;
   virtual void OnGroupClosed(const tab_groups::TabGroupId& group) = 0;
   virtual void UpdateTabGroupVisuals(tab_groups::TabGroupId group_id) = 0;
   virtual void NotifyTabGroupEditorBubbleOpened() = 0;
@@ -82,7 +94,7 @@ class TabContainer : public views::View, public BrowserRootView::DropTarget {
 
   virtual void HandleLongTap(ui::GestureEvent* event) = 0;
 
-  virtual bool IsRectInWindowCaption(const gfx::Rect& rect) = 0;
+  virtual bool IsRectInContentArea(const gfx::Rect& rect) = 0;
 
   // Animation stuff. Will be public until fully moved down into TabContainer.
 
@@ -91,12 +103,6 @@ class TabContainer : public views::View, public BrowserRootView::DropTarget {
 
   // Called whenever a tab close animation has completed. This kills the `tab`.
   virtual void OnTabCloseAnimationCompleted(Tab* tab) = 0;
-
-  // Animates tabs and group views from where they are to where they should be.
-  // Callers that want to do fancier things can manipulate starting bounds
-  // before calling this and/or replace the animation for some tabs or group
-  // views after calling this.
-  virtual void StartBasicAnimation() = 0;
 
   // Force recalculation of ideal bounds at the next layout. Used to cause tabs
   // to animate to their ideal bounds after somebody other than TabContainer
@@ -129,8 +135,12 @@ class TabContainer : public views::View, public BrowserRootView::DropTarget {
 
   virtual bool InTabClose() = 0;
 
-  virtual std::map<tab_groups::TabGroupId, std::unique_ptr<TabGroupViews>>&
-  GetGroupViews() = 0;
+  // Returns the TabGroupViews associated with the group `group_id`.
+  virtual TabGroupViews* GetGroupViews(
+      tab_groups::TabGroupId group_id) const = 0;
+  virtual const std::map<tab_groups::TabGroupId,
+                         std::unique_ptr<TabGroupViews>>&
+  get_group_views_for_testing() const = 0;
 
   // Returns the current width of the active tab.
   virtual int GetActiveTabWidth() const = 0;
@@ -145,10 +155,6 @@ class TabContainer : public views::View, public BrowserRootView::DropTarget {
   // Returns ideal bounds for the group header associated with `group` in this
   // TabContainer's coordinate space.
   virtual gfx::Rect GetIdealBounds(tab_groups::TabGroupId group) const = 0;
-
-  // Views::View:
-  // We're changing visibility of this to public for TabContainer.
-  gfx::Size CalculatePreferredSize() const override = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_CONTAINER_H_

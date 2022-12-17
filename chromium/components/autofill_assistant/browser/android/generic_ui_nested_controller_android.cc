@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -244,8 +244,9 @@ base::android::ScopedJavaGlobalRef<jobject> CreateJavaView(
         VLOG(1) << "Failed to create image for " << proto.identifier();
         return nullptr;
       }
-      jview = Java_AssistantViewFactory_createImageView(env, jcontext,
-                                                        jidentifier, jimage);
+      jview = Java_AssistantViewFactory_createImageView(
+          env, jcontext, jidentifier, jimage,
+          proto.image_view().use_icon_semantic_tinting());
       break;
     }
     case ViewProto::kVerticalExpanderView: {

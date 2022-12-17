@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,10 @@
 #include <grp.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <string>
 
+#include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -99,8 +101,7 @@ bool TokenManager::GenerateTestClientToken() {
 base::UnguessableToken TokenManager::GetTokenForTrustedClient(
     cros::mojom::CameraClientType type) {
   base::AutoLock l(client_token_map_lock_);
-  if (std::find(kTrustedClientTypes.begin(), kTrustedClientTypes.end(), type) ==
-      kTrustedClientTypes.end()) {
+  if (!base::Contains(kTrustedClientTypes, type)) {
     return base::UnguessableToken();
   }
   auto& token_set = client_token_map_[type];

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -192,7 +192,7 @@ CrossOriginOpenerPolicyStatus::SanitizeResponse(
 void CrossOriginOpenerPolicyStatus::EnforceCOOP(
     const network::CrossOriginOpenerPolicy& response_coop,
     const url::Origin& response_origin,
-    const net::NetworkIsolationKey& network_isolation_key) {
+    const net::NetworkAnonymizationKey& network_anonymization_key) {
   // COOP only applies to top level browsing contexts.
   if (!frame_tree_node_->IsMainFrame())
     return;
@@ -211,7 +211,8 @@ void CrossOriginOpenerPolicyStatus::EnforceCOOP(
   net::IsolationInfo isolation_info_for_subresources =
       frame_tree_node_->current_frame_host()
           ->ComputeIsolationInfoForSubresourcesForPendingCommit(
-              response_origin, navigation_request_->is_anonymous());
+              response_origin, navigation_request_->is_anonymous(),
+              navigation_request_->ComputeFencedFrameNonce());
   DCHECK(!isolation_info_for_subresources.IsEmpty());
 
   // Set up endpoint if response contains Reporting-Endpoints header.
@@ -221,7 +222,7 @@ void CrossOriginOpenerPolicyStatus::EnforceCOOP(
 
   auto response_reporter = std::make_unique<CrossOriginOpenerPolicyReporter>(
       storage_partition, response_url, response_referrer_url, response_coop,
-      navigation_request_reporting_source, network_isolation_key);
+      navigation_request_reporting_source, network_anonymization_key);
   CrossOriginOpenerPolicyReporter* previous_reporter =
       use_current_document_coop_reporter_
           ? frame_tree_node_->current_frame_host()

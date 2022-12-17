@@ -1,10 +1,9 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/system/bluetooth/bluetooth_device_list_controller_impl.h"
 
-#include "ash/constants/ash_features.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/bluetooth/bluetooth_detailed_view.h"
 #include "ash/system/bluetooth/bluetooth_device_list_item_view.h"
@@ -16,9 +15,10 @@
 #include "ui/views/view.h"
 
 namespace ash {
+
 namespace {
 
-using chromeos::bluetooth_config::mojom::PairedBluetoothDevicePropertiesPtr;
+using bluetooth_config::mojom::PairedBluetoothDevicePropertiesPtr;
 
 // Helper function to remove |*view| from its view hierarchy, delete the view,
 // and reset the value of |*view| to be |nullptr|.
@@ -41,9 +41,7 @@ void RemoveAndResetViewIfExists(T** view) {
 
 BluetoothDeviceListControllerImpl::BluetoothDeviceListControllerImpl(
     BluetoothDetailedView* bluetooth_detailed_view)
-    : bluetooth_detailed_view_(bluetooth_detailed_view) {
-  DCHECK(ash::features::IsBluetoothRevampEnabled());
-}
+    : bluetooth_detailed_view_(bluetooth_detailed_view) {}
 
 BluetoothDeviceListControllerImpl::~BluetoothDeviceListControllerImpl() =
     default;

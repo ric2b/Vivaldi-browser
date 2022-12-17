@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,8 +11,9 @@
 namespace language {
 class LanguageBridge {
  public:
-  // Makes a blocking call to get ULP languages for |account_name|
-  static std::vector<std::string> GetULPLanguages(std::string account_name);
+  // Makes a blocking call to get ULP languages for |account_name| from device.
+  static std::vector<std::string> GetULPLanguagesFromDevice(
+      std::string account_name);
 };
 
 }  // namespace language

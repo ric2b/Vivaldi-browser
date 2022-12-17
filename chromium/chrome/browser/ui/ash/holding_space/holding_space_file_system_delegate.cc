@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/session/arc_service_manager.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/holding_space/holding_space_constants.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_model.h"
@@ -16,6 +17,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -24,6 +26,7 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
+#include "chrome/browser/ash/file_manager/trash_common_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/fileapi/file_change_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -166,8 +169,10 @@ void HoldingSpaceFileSystemDelegate::OnConnectionReady() {
       continue;
 
     holding_space_util::ValidityRequirement requirements;
-    if (item->type() != HoldingSpaceItem::Type::kPinnedFile)
-      requirements.must_be_newer_than = kMaxFileAge;
+    if (!features::IsHoldingSpacePredictabilityEnabled()) {
+      if (item->type() != HoldingSpaceItem::Type::kPinnedFile)
+        requirements.must_be_newer_than = kMaxFileAge;
+    }
     ScheduleFilePathValidityCheck({item->file_path(), requirements});
   }
 }
@@ -234,11 +239,11 @@ void HoldingSpaceFileSystemDelegate::OnFilesChanged(
   model()->RemoveIf(base::BindRepeating(
       [](const std::set<base::FilePath>& deleted_paths,
          const HoldingSpaceItem* item) {
-        return std::any_of(deleted_paths.begin(), deleted_paths.end(),
-                           [&](const base::FilePath& deleted_path) {
-                             return item->file_path() == deleted_path ||
-                                    deleted_path.IsParent(item->file_path());
-                           });
+        return base::ranges::any_of(
+            deleted_paths, [&](const base::FilePath& deleted_path) {
+              return item->file_path() == deleted_path ||
+                     deleted_path.IsParent(item->file_path());
+            });
       },
       std::cref(deleted_paths)));
 }
@@ -323,9 +328,10 @@ void HoldingSpaceFileSystemDelegate::OnHoldingSpaceItemsAdded(
       continue;
 
     holding_space_util::ValidityRequirement requirements;
-    if (item->type() != HoldingSpaceItem::Type::kPinnedFile)
-      requirements.must_be_newer_than = kMaxFileAge;
-
+    if (!features::IsHoldingSpacePredictabilityEnabled()) {
+      if (item->type() != HoldingSpaceItem::Type::kPinnedFile)
+        requirements.must_be_newer_than = kMaxFileAge;
+    }
     ScheduleFilePathValidityCheck({item->file_path(), requirements});
   }
 }
@@ -368,8 +374,10 @@ void HoldingSpaceFileSystemDelegate::OnVolumeMounted(
       continue;
 
     holding_space_util::ValidityRequirement requirements;
-    if (item->type() != HoldingSpaceItem::Type::kPinnedFile)
-      requirements.must_be_newer_than = kMaxFileAge;
+    if (!features::IsHoldingSpacePredictabilityEnabled()) {
+      if (item->type() != HoldingSpaceItem::Type::kPinnedFile)
+        requirements.must_be_newer_than = kMaxFileAge;
+    }
     ScheduleFilePathValidityCheck({item->file_path(), requirements});
   }
 }
@@ -485,25 +493,43 @@ void HoldingSpaceFileSystemDelegate::OnFilePathMoved(
     return;
   }
 
-  // Resolve conflicts with existing items that arise from the move.
+  // Get a list of the enabled Trash locations. Trash can be enabled and
+  // disabled via policy, so ensure the latest list is retrieved.
+  file_manager::trash::TrashPathsMap enabled_trash_locations;
+  if (base::FeatureList::IsEnabled(chromeos::features::kFilesTrash)) {
+    enabled_trash_locations =
+        file_manager::trash::GenerateEnabledTrashLocationsForProfile(
+            profile(), /*base_path=*/base::FilePath());
+  }
+
+  // Mark items that were moved to an enabled Trash location for removal.
   std::set<std::string> item_ids_to_remove;
-  for (auto& item : model()->items()) {
-    if (dst == item->file_path() || dst.IsParent(item->file_path())) {
-      item_ids_to_remove.insert(item->id());
+  for (const auto& it : enabled_trash_locations) {
+    const base::FilePath& trash_location =
+        it.first.Append(it.second.relative_folder_path);
+    for (const auto& [id, file_path] : items_to_move) {
+      if (trash_location.IsParent(file_path))
+        item_ids_to_remove.insert(id);
     }
   }
+
+  // Mark conflicts with existing items that arise from the move for removal.
+  for (auto& item : model()->items()) {
+    if (dst == item->file_path() || dst.IsParent(item->file_path()))
+      item_ids_to_remove.insert(item->id());
+  }
+
+  // Remove items which have been marked for removal.
   model()->RemoveItems(item_ids_to_remove);
 
   // Finally, update the files that have been moved.
-  for (const auto& to_move : items_to_move) {
-    if (item_ids_to_remove.count(to_move.first))
+  for (const auto& [id, file_path] : items_to_move) {
+    if (item_ids_to_remove.count(id))
       continue;
 
-    model()
-        ->UpdateItem(/*id=*/to_move.first)
-        ->SetBackingFile(/*file_path=*/to_move.second,
-                         holding_space_util::ResolveFileSystemUrl(
-                             profile(), /*file_path=*/to_move.second));
+    model()->UpdateItem(id)->SetBackingFile(
+        file_path,
+        holding_space_util::ResolveFileSystemUrl(profile(), file_path));
   }
 
   // If a backing file update occurred, it's possible that there are no longer
@@ -605,11 +631,10 @@ void HoldingSpaceFileSystemDelegate::MaybeRemoveWatch(
   // The watch for `file_path` should only be removed if no holding space items
   // exist in the model which are backed by files it directly parents.
   const bool remove_watch =
-      std::none_of(model()->items().begin(), model()->items().end(),
-                   [&file_path](const auto& item) {
-                     return item->IsInitialized() &&
-                            item->file_path().DirName() == file_path;
-                   });
+      base::ranges::none_of(model()->items(), [&file_path](const auto& item) {
+        return item->IsInitialized() &&
+               item->file_path().DirName() == file_path;
+      });
 
   if (!remove_watch)
     return;

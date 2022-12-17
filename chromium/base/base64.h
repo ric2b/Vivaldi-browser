@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,10 @@ namespace base {
 
 // Encodes the input binary data in base64.
 BASE_EXPORT std::string Base64Encode(span<const uint8_t> input);
+
+// Encodes the input binary data in base64 and appends it to the output.
+BASE_EXPORT void Base64EncodeAppend(span<const uint8_t> input,
+                                    std::string* output);
 
 // Encodes the input string in base64.
 BASE_EXPORT void Base64Encode(StringPiece input, std::string* output);

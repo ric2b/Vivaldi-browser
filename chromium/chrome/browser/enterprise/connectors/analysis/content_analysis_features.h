@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@ namespace enterprise_connectors {
 
 // Controls whether the local content analysis feature can be used for any
 // service provider and/or policy configuration.
-extern const base::Feature kLocalContentAnalysisEnabled;
+BASE_DECLARE_FEATURE(kLocalContentAnalysisEnabled);
 
 }  // namespace enterprise_connectors
 

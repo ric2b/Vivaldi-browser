@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,6 +69,7 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   struct Data {
     Data();
     Data(Data&& other);
+    Data& operator=(Data&&);
     ~Data();
 
     // URL of the page that is to receive sensitive data.
@@ -292,6 +293,9 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   // The title corresponding to the WebContents triggering the scan.
   std::string title_;
 
+  // The unique ID for keeping track of each user action.
+  std::string user_action_id_;
+
   // Description of the data being scanned and the results of the scan.
   Data data_;
   Result result_;
@@ -348,9 +352,10 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase {
   // Always nullptr for non-file content scanning.
   std::unique_ptr<FilesRequestHandler> files_request_handler_;
 
-  // The request tokens of all the requests that make up the user action
-  // represented by this ContentAnalysisDelegate instance.
-  std::vector<std::string> request_tokens_;
+  // A mapping of request tokens to ack final actions for all requests that make
+  // up the user action represented by this ContentAnalysisDelegate.
+  std::map<std::string, ContentAnalysisAcknowledgement::FinalAction>
+      final_actions_;
 
   base::TimeTicks upload_start_time_;
 

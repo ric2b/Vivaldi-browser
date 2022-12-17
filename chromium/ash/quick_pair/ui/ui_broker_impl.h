@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,11 @@ class UIBrokerImpl final : public UIBroker {
   void ShowPairingFailed(scoped_refptr<Device> device) override;
   void ShowAssociateAccount(scoped_refptr<Device> device) override;
   void ShowCompanionApp(scoped_refptr<Device> device) override;
-  void RemoveNotifications() override;
+  void RemoveNotifications(
+      bool clear_already_shown_discovery_notification_cache) override;
+  void RemoveDeviceFromAlreadyShownDiscoveryNotificationCache(
+      scoped_refptr<Device> device) override;
+  void StartDeviceLostTimer(scoped_refptr<Device> device) override;
 
  private:
   void NotifyDiscoveryAction(scoped_refptr<Device> device,

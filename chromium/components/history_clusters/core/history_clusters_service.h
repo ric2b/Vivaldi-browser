@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -168,7 +168,8 @@ class HistoryClustersService : public base::SupportsUserData,
                 base::Time begin_time,
                 QueryClustersContinuationParams continuation_params,
                 bool recluster,
-                QueryClustersCallback callback);
+                QueryClustersCallback callback,
+                HistoryClustersServiceTaskGetMostRecentClusters::Source source);
 
   // Invokes `UpdateClusters()` after a short delay, then again periodically.
   // E.g., might invoke `UpdateClusters()` initially 5 minutes after startup,
@@ -196,6 +197,10 @@ class HistoryClustersService : public base::SupportsUserData,
 
   // Clears `all_keywords_cache_` and cancels any pending tasks to populate it.
   void ClearKeywordCache();
+
+  // Prints the keyword bag state to the log messages. For example, a button on
+  // chrome://history-clusters-internals triggers this.
+  void PrintKeywordBagStateToLogMessage() const;
 
  private:
   friend class HistoryClustersServiceTestApi;
@@ -228,7 +233,7 @@ class HistoryClustersService : public base::SupportsUserData,
   // database once completed (if persistence is enabled).
   IncompleteVisitMap incomplete_visit_context_annotations_;
 
-  // The backend used for clustering. This can be nullptr.
+  // The backend used for clustering. Never nullptr.
   std::unique_ptr<ClusteringBackend> backend_;
 
   // In-memory cache of keywords match clusters, so we can query this

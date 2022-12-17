@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -627,10 +627,10 @@ TEST_F(FieldTrialUtilTest,
 }
 
 TEST_F(FieldTrialUtilTest, AssociateFeaturesFromFieldTrialConfig) {
-  const base::Feature kFeatureA{"A", base::FEATURE_DISABLED_BY_DEFAULT};
-  const base::Feature kFeatureB{"B", base::FEATURE_ENABLED_BY_DEFAULT};
-  const base::Feature kFeatureC{"C", base::FEATURE_DISABLED_BY_DEFAULT};
-  const base::Feature kFeatureD{"D", base::FEATURE_ENABLED_BY_DEFAULT};
+  static BASE_FEATURE(kFeatureA, "A", base::FEATURE_DISABLED_BY_DEFAULT);
+  static BASE_FEATURE(kFeatureB, "B", base::FEATURE_ENABLED_BY_DEFAULT);
+  static BASE_FEATURE(kFeatureC, "C", base::FEATURE_DISABLED_BY_DEFAULT);
+  static BASE_FEATURE(kFeatureD, "D", base::FEATURE_ENABLED_BY_DEFAULT);
 
   const char* enable_features[] = {"A", "B"};
   const char* disable_features[] = {"C", "D"};

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,14 +8,14 @@
  */
 import '../../cr_elements/cr_button/cr_button.js';
 import '../../cr_elements/cr_dialog/cr_dialog.js';
-import '../../cr_elements/icons.m.js';
-import '../../cr_elements/shared_vars_css.m.js';
+import '../../cr_elements/icons.html.js';
+import '../../cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {CrDialogElement} from '../../cr_elements/cr_dialog/cr_dialog.js';
-import {I18nMixin} from '../../js/i18n_mixin.js';
+import {I18nMixin} from '../../cr_elements/i18n_mixin.js';
 
 import {getTemplate} from './managed_dialog.html.js';
 

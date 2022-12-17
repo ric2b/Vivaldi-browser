@@ -455,10 +455,10 @@ std::string GetImagePathFromProfilePath(const std::string& preferences_path,
                                         const std::string& profile_path) {
   std::string path;
   PrefService* prefs = g_browser_process->local_state();
-  const base::Value* list = prefs->Get(preferences_path);
+  const base::Value& list = prefs->GetValue(preferences_path);
 
-  if (list && list->is_list()) {
-    for (auto& item : list->GetList()) {
+  if (list.is_list()) {
+    for (auto& item : list.GetList()) {
       if (item.is_dict()) {
         const std::string* value = item.FindStringKey(kProfilePathKey);
         if (value && *value == profile_path) {
@@ -479,26 +479,24 @@ void SetImagePathForProfilePath(const std::string& preferences_path,
   std::string path;
   bool updated = false;
   PrefService* prefs = g_browser_process->local_state();
-  ListPrefUpdate update(prefs, preferences_path);
-  base::Value* update_pref_data = update.Get();
+  ScopedListPrefUpdate update(prefs, preferences_path);
+  auto& update_pref_data = update.Get();
 
-  if (update_pref_data && update_pref_data->is_list()) {
-    std::string image_path;
-    for (auto& item : update_pref_data->GetList()) {
-      if (item.is_dict()) {
-        const std::string* value = item.FindStringKey(kProfilePathKey);
+  std::string image_path;
+  for (auto& item : update_pref_data) {
+    if (item.is_dict()) {
+      const std::string* value = item.FindStringKey(kProfilePathKey);
 
-        // If it exists already, update it
-        if (value && *value == profile_path) {
-          if (avatar_path.size()) {
-            item.SetStringKey(kImagePathKey, avatar_path);
-          } else {
-            // empty path means remove the dictionary.
-            item.RemoveKey(kImagePathKey);
-          }
-          updated = true;
-          break;
+      // If it exists already, update it
+      if (value && *value == profile_path) {
+        if (avatar_path.size()) {
+          item.SetStringKey(kImagePathKey, avatar_path);
+        } else {
+          // empty path means remove the dictionary.
+          item.RemoveKey(kImagePathKey);
         }
+        updated = true;
+        break;
       }
     }
   }
@@ -506,7 +504,7 @@ void SetImagePathForProfilePath(const std::string& preferences_path,
     base::Value dict(base::Value::Type::DICTIONARY);
     dict.SetKey(kProfilePathKey, base::Value(profile_path));
     dict.SetKey(kImagePathKey, base::Value(avatar_path));
-    update_pref_data->Append(std::move(dict));
+    update_pref_data.Append(std::move(dict));
   }
 }
 

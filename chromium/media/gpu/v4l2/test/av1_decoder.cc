@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,49 @@ inline void conditionally_set_u32_flags(__u32* flags,
                                         const bool condition,
                                         const __u32 mask) {
   *flags |= (condition ? mask : 0);
+}
+
+// The resolution encoded in the bitstream is required for queue creation. Note
+// that parsing ivf file and parsing the first frame using libgav1 parser happen
+// again later in the code. This is intentionally duplicated.
+const gfx::Size GetResolutionFromBitstream(
+    const base::MemoryMappedFile& stream) {
+  media::IvfParser ivf_parser{};
+  media::IvfFileHeader ivf_file_header{};
+
+  if (!ivf_parser.Initialize(stream.data(), stream.length(), &ivf_file_header))
+    LOG(FATAL) << "Couldn't initialize IVF parser.";
+
+  IvfFrameHeader ivf_frame_header{};
+  const uint8_t* ivf_frame_data = nullptr;
+
+  if (!ivf_parser.ParseNextFrame(&ivf_frame_header, &ivf_frame_data))
+    LOG(FATAL) << "Failed to parse the first frame with IVF parser.";
+
+  VLOG(2) << "Ivf file header: " << ivf_file_header.width << " x "
+          << ivf_file_header.height;
+
+  libgav1::InternalFrameBufferList buffer_list;
+  libgav1::BufferPool buffer_pool(libgav1::OnInternalFrameBufferSizeChanged,
+                                  libgav1::GetInternalFrameBuffer,
+                                  libgav1::ReleaseInternalFrameBuffer,
+                                  &buffer_list);
+  libgav1::DecoderState decoder_state;
+  libgav1::ObuParser av1_parser(ivf_frame_data, ivf_frame_header.frame_size, 0,
+                                &buffer_pool, &decoder_state);
+  libgav1::RefCountedBufferPtr first_frame;
+
+  if (!av1_parser.HasData())
+    LOG(FATAL) << "Libgav1 parser doesn't have any data to parse.";
+
+  if (av1_parser.ParseOneFrame(&first_frame) != libgav1::kStatusOk)
+    LOG(FATAL) << "Failed to parse the first frame using libgav1 parser.";
+
+  LOG(INFO) << "Frame header: " << av1_parser.frame_header().width << " x "
+            << av1_parser.frame_header().height;
+
+  return gfx::Size(av1_parser.frame_header().width,
+                   av1_parser.frame_header().height);
 }
 
 // Section 5.5. Sequence header OBU syntax in the AV1 spec.
@@ -154,9 +197,10 @@ void FillLoopFilterDeltaParams(struct v4l2_av1_loop_filter* v4l2_lf,
                                const libgav1::Delta& delta_lf) {
   conditionally_set_flags(&v4l2_lf->flags, delta_lf.present,
                           V4L2_AV1_LOOP_FILTER_FLAG_DELTA_LF_PRESENT);
+  conditionally_set_flags(&v4l2_lf->flags, delta_lf.multi,
+                          V4L2_AV1_LOOP_FILTER_FLAG_DELTA_LF_MULTI);
 
   v4l2_lf->delta_lf_res = delta_lf.scale;
-  v4l2_lf->delta_lf_multi = delta_lf.multi;
 }
 
 // Section 5.9.12. Quantization params syntax
@@ -214,9 +258,9 @@ void FillSegmentationParams(struct v4l2_av1_segmentation* v4l2_seg,
                           V4L2_AV1_SEGMENTATION_FLAG_ENABLED);
   conditionally_set_flags(&v4l2_seg->flags, seg.update_map,
                           V4L2_AV1_SEGMENTATION_FLAG_UPDATE_MAP);
-  conditionally_set_flags(&v4l2_seg->flags, seg.update_data,
-                          V4L2_AV1_SEGMENTATION_FLAG_TEMPORAL_UPDATE);
   conditionally_set_flags(&v4l2_seg->flags, seg.temporal_update,
+                          V4L2_AV1_SEGMENTATION_FLAG_TEMPORAL_UPDATE);
+  conditionally_set_flags(&v4l2_seg->flags, seg.update_data,
                           V4L2_AV1_SEGMENTATION_FLAG_UPDATE_DATA);
   conditionally_set_flags(&v4l2_seg->flags, seg.segment_id_pre_skip,
                           V4L2_AV1_SEGMENTATION_FLAG_SEG_ID_PRE_SKIP);
@@ -365,9 +409,10 @@ void FillTileInfo(v4l2_av1_tile_info* v4l2_ti, const libgav1::TileInfo& ti) {
         "Size of |width_in_sbs_minus_1| array in |v4l2_av1_tile_info| struct "
         "does not match libgav1 expectation");
     for (size_t i = 0; i < libgav1::kMaxTileColumns; i++) {
-      CHECK_GE(ti.tile_column_width_in_superblocks[i], 1);
-      v4l2_ti->width_in_sbs_minus_1[i] = base::checked_cast<uint32_t>(
-          ti.tile_column_width_in_superblocks[i] - 1);
+      if (ti.tile_column_width_in_superblocks[i] >= 1) {
+        v4l2_ti->width_in_sbs_minus_1[i] = base::checked_cast<uint32_t>(
+            ti.tile_column_width_in_superblocks[i] - 1);
+      }
     }
 
     static_assert(
@@ -376,9 +421,10 @@ void FillTileInfo(v4l2_av1_tile_info* v4l2_ti, const libgav1::TileInfo& ti) {
         "Size of |height_in_sbs_minus_1| array in |v4l2_av1_tile_info| struct "
         "does not match libgav1 expectation");
     for (size_t i = 0; i < libgav1::kMaxTileRows; i++) {
-      CHECK_GE(ti.tile_row_height_in_superblocks[i], 1);
-      v4l2_ti->height_in_sbs_minus_1[i] = base::checked_cast<uint32_t>(
-          ti.tile_row_height_in_superblocks[i] - 1);
+      if (ti.tile_row_height_in_superblocks[i] >= 1) {
+        v4l2_ti->height_in_sbs_minus_1[i] = base::checked_cast<uint32_t>(
+            ti.tile_row_height_in_superblocks[i] - 1);
+      }
     }
   }
 
@@ -396,8 +442,6 @@ void FillGlobalMotionParams(
   // gm_array[0] (for kReferenceFrameIntra) is not used because global motion is
   // not relevant for intra frames
   for (size_t i = 1; i < libgav1::kNumReferenceFrameTypes; ++i) {
-    // Copy |gm_array| to |gm| because SetupShear() updates the affine variables
-    // of the |gm_array|.
     auto gm = gm_array[i];
     switch (gm.type) {
       case libgav1::kGlobalMotionTransformationTypeIdentity:
@@ -430,16 +474,24 @@ void FillGlobalMotionParams(
 
     constexpr auto kNumGlobalMotionParams = std::size(decltype(gm.params){});
 
-    for (size_t j = 0; j < kNumGlobalMotionParams; ++j)
-      v4l2_gm->params[i][j] = base::checked_cast<uint32_t>(gm.params[j]);
+    for (size_t j = 0; j < kNumGlobalMotionParams; ++j) {
+      // TODO(b/247611513): Remove separate handling when gm.params[j] < 0 if
+      // V4L2 AV1 uAPI decides to make an update to make this param consistent
+      // with definition in libgav1 parser
+      if (gm.params[j] < 0) {
+        v4l2_gm->params[i][j] =
+            base::checked_cast<uint32_t>(UINT32_MAX + gm.params[j] + 1);
+      } else
+        v4l2_gm->params[i][j] = base::checked_cast<uint32_t>(gm.params[j]);
+    }
 
-    v4l2_gm[i].invalid = !libgav1::SetupShear(&gm);
+    conditionally_set_flags(&v4l2_gm->invalid, !libgav1::SetupShear(&gm),
+                            V4L2_AV1_GLOBAL_MOTION_IS_INVALID(i));
   }
 }
 
 // Section 5.11. Tile Group OBU syntax
 void FillTileGroupParams(
-    v4l2_ctrl_av1_tile_group* tile_group_params,
     std::vector<struct v4l2_ctrl_av1_tile_group_entry>*
         tile_group_entry_vectors,
     const base::span<const uint8_t> frame_obu_data,
@@ -453,14 +505,6 @@ void FillTileGroupParams(
 
   CHECK_GT(tile_columns, 0u);
   const uint16_t num_tiles = base::checked_cast<uint16_t>(tile_buffers.size());
-
-  conditionally_set_flags(&tile_group_params->flags, num_tiles > 1,
-                          V4L2_AV1_TILE_GROUP_FLAG_START_AND_END_PRESENT);
-
-  if (num_tiles >= 1) {
-    tile_group_params->tg_start = 0;
-    tile_group_params->tg_end = num_tiles - 1;
-  }
 
   for (uint16_t tile_index = 0; tile_index < num_tiles; ++tile_index) {
     struct v4l2_ctrl_av1_tile_group_entry tile_group_entry_params = {};
@@ -547,24 +591,24 @@ std::unique_ptr<Av1Decoder> Av1Decoder::Create(
     return nullptr;
   }
 
-  LOG(INFO) << "Ivf file header: " << file_header.width << " x "
-            << file_header.height;
+  const gfx::Size bitstream_coded_size = GetResolutionFromBitstream(stream);
 
   // TODO(stevecho): might need to consider using more than 1 file descriptor
   // (fd) & buffer with the output queue for 4K60 requirement.
   // https://buganizer.corp.google.com/issues/202214561#comment31
   auto OUTPUT_queue = std::make_unique<V4L2Queue>(
       V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, kDriverCodecFourcc,
-      gfx::Size(file_header.width, file_header.height), /*num_planes=*/1,
-      V4L2_MEMORY_MMAP, /*num_buffers=*/1);
+      bitstream_coded_size,
+      /*num_planes=*/1, V4L2_MEMORY_MMAP, /*num_buffers=*/1);
 
   // TODO(stevecho): enable V4L2_MEMORY_DMABUF memory for CAPTURE queue.
   // |num_planes| represents separate memory buffers, not planes for Y, U, V.
   // https://www.kernel.org/doc/html/v5.16/userspace-api/media/v4l/pixfmt-v4l2-mplane.html#c.V4L.v4l2_plane_pix_format
   auto CAPTURE_queue = std::make_unique<V4L2Queue>(
       V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, kUncompressedFourcc,
-      gfx::Size(file_header.width, file_header.height), /*num_planes=*/2,
-      V4L2_MEMORY_MMAP, /*num_buffers=*/kNumberOfBuffersInCaptureQueue);
+      bitstream_coded_size,
+      /*num_planes=*/2, V4L2_MEMORY_MMAP,
+      /*num_buffers=*/kNumberOfBuffersInCaptureQueue);
 
   return base::WrapUnique(
       new Av1Decoder(std::move(ivf_parser), std::move(v4l2_ioctl),
@@ -613,7 +657,7 @@ void Av1Decoder::CopyFrameData(const libgav1::ObuFrameHeader& frame_hdr,
 
 // 5.9.2. Uncompressed header syntax
 void Av1Decoder::SetupFrameParams(
-    struct v4l2_ctrl_av1_frame_header* v4l2_frame_params,
+    struct v4l2_ctrl_av1_frame* v4l2_frame_params,
     const absl::optional<libgav1::ObuSequenceHeader>& seq_header,
     const libgav1::ObuFrameHeader& frm_header) {
   FillLoopFilterParams(&v4l2_frame_params->loop_filter, frm_header.loop_filter);
@@ -643,70 +687,70 @@ void Av1Decoder::SetupFrameParams(
                          frm_header.global_motion);
 
   conditionally_set_u32_flags(&v4l2_frame_params->flags, frm_header.show_frame,
-                              V4L2_AV1_FRAME_HEADER_FLAG_SHOW_FRAME);
+                              V4L2_AV1_FRAME_FLAG_SHOW_FRAME);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.showable_frame,
-                              V4L2_AV1_FRAME_HEADER_FLAG_SHOWABLE_FRAME);
+                              V4L2_AV1_FRAME_FLAG_SHOWABLE_FRAME);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.error_resilient_mode,
-                              V4L2_AV1_FRAME_HEADER_FLAG_ERROR_RESILIENT_MODE);
+                              V4L2_AV1_FRAME_FLAG_ERROR_RESILIENT_MODE);
   // libgav1 header has |enable_cdf_update| instead of |disable_cdf_update|.
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               !frm_header.enable_cdf_update,
-                              V4L2_AV1_FRAME_HEADER_FLAG_DISABLE_CDF_UPDATE);
-  conditionally_set_u32_flags(
-      &v4l2_frame_params->flags, frm_header.allow_screen_content_tools,
-      V4L2_AV1_FRAME_HEADER_FLAG_ALLOW_SCREEN_CONTENT_TOOLS);
+                              V4L2_AV1_FRAME_FLAG_DISABLE_CDF_UPDATE);
+  conditionally_set_u32_flags(&v4l2_frame_params->flags,
+                              frm_header.allow_screen_content_tools,
+                              V4L2_AV1_FRAME_FLAG_ALLOW_SCREEN_CONTENT_TOOLS);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.force_integer_mv,
-                              V4L2_AV1_FRAME_HEADER_FLAG_FORCE_INTEGER_MV);
+                              V4L2_AV1_FRAME_FLAG_FORCE_INTEGER_MV);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.allow_intrabc,
-                              V4L2_AV1_FRAME_HEADER_FLAG_ALLOW_INTRABC);
+                              V4L2_AV1_FRAME_FLAG_ALLOW_INTRABC);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.use_superres,
-                              V4L2_AV1_FRAME_HEADER_FLAG_USE_SUPERRES);
-  conditionally_set_u32_flags(
-      &v4l2_frame_params->flags, frm_header.allow_high_precision_mv,
-      V4L2_AV1_FRAME_HEADER_FLAG_ALLOW_HIGH_PRECISION_MV);
-  conditionally_set_u32_flags(
-      &v4l2_frame_params->flags, frm_header.is_motion_mode_switchable,
-      V4L2_AV1_FRAME_HEADER_FLAG_IS_MOTION_MODE_SWITCHABLE);
+                              V4L2_AV1_FRAME_FLAG_USE_SUPERRES);
+  conditionally_set_u32_flags(&v4l2_frame_params->flags,
+                              frm_header.allow_high_precision_mv,
+                              V4L2_AV1_FRAME_FLAG_ALLOW_HIGH_PRECISION_MV);
+  conditionally_set_u32_flags(&v4l2_frame_params->flags,
+                              frm_header.is_motion_mode_switchable,
+                              V4L2_AV1_FRAME_FLAG_IS_MOTION_MODE_SWITCHABLE);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.use_ref_frame_mvs,
-                              V4L2_AV1_FRAME_HEADER_FLAG_USE_REF_FRAME_MVS);
+                              V4L2_AV1_FRAME_FLAG_USE_REF_FRAME_MVS);
   // libgav1 header has |enable_frame_end_update_cdf| instead.
-  conditionally_set_u32_flags(
-      &v4l2_frame_params->flags, !frm_header.enable_frame_end_update_cdf,
-      V4L2_AV1_FRAME_HEADER_FLAG_DISABLE_FRAME_END_UPDATE_CDF);
+  conditionally_set_u32_flags(&v4l2_frame_params->flags,
+                              !frm_header.enable_frame_end_update_cdf,
+                              V4L2_AV1_FRAME_FLAG_DISABLE_FRAME_END_UPDATE_CDF);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.tile_info.uniform_spacing,
-                              V4L2_AV1_FRAME_HEADER_FLAG_UNIFORM_TILE_SPACING);
+                              V4L2_AV1_FRAME_FLAG_UNIFORM_TILE_SPACING);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.allow_warped_motion,
-                              V4L2_AV1_FRAME_HEADER_FLAG_ALLOW_WARPED_MOTION);
+                              V4L2_AV1_FRAME_FLAG_ALLOW_WARPED_MOTION);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.reference_mode_select,
-                              V4L2_AV1_FRAME_HEADER_FLAG_REFERENCE_SELECT);
+                              V4L2_AV1_FRAME_FLAG_REFERENCE_SELECT);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.reduced_tx_set,
-                              V4L2_AV1_FRAME_HEADER_FLAG_REDUCED_TX_SET);
+                              V4L2_AV1_FRAME_FLAG_REDUCED_TX_SET);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.skip_mode_frame[0] > 0,
-                              V4L2_AV1_FRAME_HEADER_FLAG_SKIP_MODE_ALLOWED);
+                              V4L2_AV1_FRAME_FLAG_SKIP_MODE_ALLOWED);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.skip_mode_present,
-                              V4L2_AV1_FRAME_HEADER_FLAG_SKIP_MODE_PRESENT);
+                              V4L2_AV1_FRAME_FLAG_SKIP_MODE_PRESENT);
   conditionally_set_u32_flags(&v4l2_frame_params->flags,
                               frm_header.frame_size_override_flag,
-                              V4L2_AV1_FRAME_HEADER_FLAG_FRAME_SIZE_OVERRIDE);
+                              V4L2_AV1_FRAME_FLAG_FRAME_SIZE_OVERRIDE);
   // libgav1 header doesn't have |buffer_removal_time_present_flag|.
-  conditionally_set_u32_flags(
-      &v4l2_frame_params->flags, frm_header.buffer_removal_time[0] > 0,
-      V4L2_AV1_FRAME_HEADER_FLAG_BUFFER_REMOVAL_TIME_PRESENT);
-  conditionally_set_u32_flags(
-      &v4l2_frame_params->flags, frm_header.frame_refs_short_signaling,
-      V4L2_AV1_FRAME_HEADER_FLAG_FRAME_REFS_SHORT_SIGNALING);
+  conditionally_set_u32_flags(&v4l2_frame_params->flags,
+                              frm_header.buffer_removal_time[0] > 0,
+                              V4L2_AV1_FRAME_FLAG_BUFFER_REMOVAL_TIME_PRESENT);
+  conditionally_set_u32_flags(&v4l2_frame_params->flags,
+                              frm_header.frame_refs_short_signaling,
+                              V4L2_AV1_FRAME_FLAG_FRAME_REFS_SHORT_SIGNALING);
 
   switch (frm_header.frame_type) {
     case libgav1::kFrameKey:
@@ -782,18 +826,13 @@ void Av1Decoder::SetupFrameParams(
 
   // The first slot in |order_hints| is reserved for intra frame, so it is not
   // used and will always be 0.
-  // Please reference more details in the below comment for this algorithm to
-  // compute |order_hints|. In summary, we are trying to get frame number here
-  // given a specific reference frame type (L0, L1, L2, G, B, A1, A2) in
-  // the reference frames list.
-  // https://b.corp.google.com/issues/242337166#comment24
   static_assert(std::size(decltype(v4l2_frame_params->order_hints){}) ==
                     libgav1::kNumReferenceFrameTypes,
                 "Invalid size of |order_hints| array");
   if (frm_header.frame_type != libgav1::kFrameKey) {
     for (size_t i = 0; i < libgav1::kNumInterReferenceFrameTypes; i++) {
       v4l2_frame_params->order_hints[i + 1] =
-          ref_frames_[frm_header.reference_frame_index[i]]->frame_number();
+          ref_order_hint_[frm_header.reference_frame_index[i]];
     }
   }
 
@@ -808,9 +847,7 @@ void Av1Decoder::SetupFrameParams(
   // TODO(b/230891887): use uint64_t when v4l2_timeval_to_ns() function is used.
   constexpr uint32_t kInvalidSurface = std::numeric_limits<uint32_t>::max();
 
-  // Note that only 7 slots in the reference frames list are used
-  // although 8 slots are available.
-  for (size_t i = 0; i < libgav1::kNumInterReferenceFrameTypes; ++i) {
+  for (size_t i = 0; i < libgav1::kNumReferenceFrameTypes; ++i) {
     constexpr size_t kTimestampToNanoSecs = 1000;
 
     // |reference_frame_ts| is needed to use previously decoded frames
@@ -836,10 +873,11 @@ void Av1Decoder::SetupFrameParams(
 }
 
 std::set<int> Av1Decoder::RefreshReferenceSlots(
-    uint8_t refresh_frame_flags,
-    libgav1::RefCountedBufferPtr current_frame,
-    scoped_refptr<MmapedBuffer> buffer,
-    uint32_t last_queued_buffer_index) {
+    const uint8_t refresh_frame_flags,
+    const libgav1::RefCountedBufferPtr current_frame,
+    const scoped_refptr<MmapedBuffer> buffer,
+    const uint32_t last_queued_buffer_index,
+    const uint8_t order_hint) {
   state_->UpdateReferenceFrames(current_frame,
                                 base::strict_cast<int>(refresh_frame_flags));
 
@@ -876,6 +914,9 @@ std::set<int> Av1Decoder::RefreshReferenceSlots(
     // reference frame slots in the reference frames list.
     ref_frames_.fill(buffer);
 
+    // TODO(b/249104479): Update |ref_order_hint_| as needed for all reference
+    // frame slots after finding relevant test vector
+
     return reusable_buffer_ids;
   }
 
@@ -906,6 +947,7 @@ std::set<int> Av1Decoder::RefreshReferenceSlots(
       }
     }
     ref_frames_[i] = buffer;
+    ref_order_hint_[i] = order_hint;
   }
 
   return reusable_buffer_ids;
@@ -933,6 +975,37 @@ VideoDecoder::Result Av1Decoder::DecodeNextFrame(std::vector<char>& y_plane,
   LOG_ASSERT(current_sequence_header_)
       << "Sequence header missing for decoding.";
 
+  if (current_frame_header.show_existing_frame) {
+    last_decoded_frame_visible_ = true;
+  } else {
+    last_decoded_frame_visible_ = current_frame_header.show_frame;
+  }
+  VLOG_IF(2, !last_decoded_frame_visible_) << "not displayed frame";
+
+  for (size_t i = 0; i < kAv1NumRefFrames; ++i) {
+    if (state_->reference_frame[i] != nullptr && ref_frames_[i] == nullptr) {
+      LOG_ASSERT(false) << "The state of the reference frames are different "
+                           "between |ref_frames_| and |state_|";
+    }
+    if (state_->reference_frame[i] == nullptr && ref_frames_[i] != nullptr)
+      ref_frames_[i].reset();
+  }
+
+  if (current_frame_header.show_existing_frame) {
+    scoped_refptr<MmapedBuffer> repeated_frame_buffer =
+        ref_frames_[current_frame_header.frame_to_show];
+
+    size = CAPTURE_queue_->display_size();
+    ConvertMM21ToYUV(y_plane, u_plane, v_plane, size,
+                     static_cast<char*>(
+                         repeated_frame_buffer->mmaped_planes()[0].start_addr),
+                     static_cast<char*>(
+                         repeated_frame_buffer->mmaped_planes()[1].start_addr),
+                     CAPTURE_queue_->coded_size());
+
+    return VideoDecoder::kOk;
+  }
+
   CopyFrameData(current_frame_header, OUTPUT_queue_);
 
   LOG_ASSERT(OUTPUT_queue_->num_buffers() == 1)
@@ -954,34 +1027,21 @@ VideoDecoder::Result Av1Decoder::DecodeNextFrame(std::vector<char>& y_plane,
                               .size = sizeof(v4l2_seq_params),
                               .ptr = &v4l2_seq_params});
 
-  struct v4l2_ctrl_av1_frame_header v4l2_frame_params = {};
+  struct v4l2_ctrl_av1_frame v4l2_frame_params = {};
 
   SetupFrameParams(&v4l2_frame_params, current_sequence_header_,
                    current_frame_header);
 
-  // TODO(stevecho): V4L2_CID_STATELESS_AV1_FRAME_HEADER is trending to be
-  // changed to V4L2_CID_STATELESS_AV1_FRAME
-  ext_ctrl_vectors.push_back({.id = V4L2_CID_STATELESS_AV1_FRAME_HEADER,
+  ext_ctrl_vectors.push_back({.id = V4L2_CID_STATELESS_AV1_FRAME,
                               .size = sizeof(v4l2_frame_params),
                               .ptr = &v4l2_frame_params});
 
-  struct v4l2_ctrl_av1_tile_group tile_group_params = {};
   std::vector<struct v4l2_ctrl_av1_tile_group_entry> tile_group_entry_vectors;
 
   FillTileGroupParams(
-      &tile_group_params, &tile_group_entry_vectors,
+      &tile_group_entry_vectors,
       base::make_span(ivf_frame_data_, ivf_frame_header_.frame_size),
       current_frame_header.tile_info, obu_parser_->tile_buffers());
-
-  // TODO(b/240736764): We are discussing to remove tile group control.
-  // But current MTK driver expects this control with error check, so we need
-  // this setup for the time being. Also, current libgav1 parser doesn't have
-  // information about start & end index of each tile group. Thus, we are
-  // setting up this control only for the 1st tile group. In fact, current tests
-  // don't have cases when 2+ tile groups exist within a frame.
-  ext_ctrl_vectors.push_back({.id = V4L2_CID_STATELESS_AV1_TILE_GROUP,
-                              .size = sizeof(tile_group_params),
-                              .ptr = &tile_group_params});
 
   ext_ctrl_vectors.push_back({.id = V4L2_CID_STATELESS_AV1_TILE_GROUP_ENTRY,
                               .size = base::checked_cast<__u32>(
@@ -1017,7 +1077,8 @@ VideoDecoder::Result Av1Decoder::DecodeNextFrame(std::vector<char>& y_plane,
   const std::set<int> reusable_buffer_ids =
       RefreshReferenceSlots(current_frame_header.refresh_frame_flags,
                             current_frame, CAPTURE_queue_->GetBuffer(index),
-                            CAPTURE_queue_->last_queued_buffer_index());
+                            CAPTURE_queue_->last_queued_buffer_index(),
+                            current_frame_header.order_hint);
 
   for (const auto reusable_buffer_id : reusable_buffer_ids) {
     if (!v4l2_ioctl_->QBuf(CAPTURE_queue_, reusable_buffer_id))

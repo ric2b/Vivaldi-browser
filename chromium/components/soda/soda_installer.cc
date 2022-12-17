@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,8 +96,7 @@ void SodaInstaller::Init(PrefService* profile_prefs,
     global_prefs->SetTime(prefs::kSodaScheduledDeletionTime, base::Time());
     SodaInstaller::GetInstance()->InstallSoda(global_prefs);
 
-    if (global_prefs->GetValueList(prefs::kSodaRegisteredLanguagePacks)
-            .empty()) {
+    if (global_prefs->GetList(prefs::kSodaRegisteredLanguagePacks).empty()) {
       // TODO(crbug.com/1200667): Register the default language used by
       // Dictation on ChromeOS.
 
@@ -110,7 +109,7 @@ void SodaInstaller::Init(PrefService* profile_prefs,
     }
 
     for (const auto& language :
-         global_prefs->GetValueList(prefs::kSodaRegisteredLanguagePacks)) {
+         global_prefs->GetList(prefs::kSodaRegisteredLanguagePacks)) {
       SodaInstaller::GetInstance()->InstallLanguage(language.GetString(),
                                                     global_prefs);
     }
@@ -251,15 +250,17 @@ void SodaInstaller::NotifyOnSodaProgress(LanguageCode language_code,
 
 void SodaInstaller::RegisterLanguage(const std::string& language,
                                      PrefService* global_prefs) {
-  ListPrefUpdate update(global_prefs, prefs::kSodaRegisteredLanguagePacks);
-  if (!base::Contains(update->GetList(), base::Value(language))) {
-    update->GetList().Append(language);
+  ScopedListPrefUpdate update(global_prefs,
+                              prefs::kSodaRegisteredLanguagePacks);
+  if (!base::Contains(*update, base::Value(language))) {
+    update->Append(language);
   }
 }
 
 void SodaInstaller::UnregisterLanguages(PrefService* global_prefs) {
-  ListPrefUpdate update(global_prefs, prefs::kSodaRegisteredLanguagePacks);
-  update->GetList().clear();
+  ScopedListPrefUpdate update(global_prefs,
+                              prefs::kSodaRegisteredLanguagePacks);
+  update->clear();
 }
 
 bool SodaInstaller::IsSodaDownloading(LanguageCode language_code) const {

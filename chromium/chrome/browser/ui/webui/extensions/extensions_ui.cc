@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -113,6 +113,8 @@ content::WebUIDataSource* CreateExtensionsSource(Profile* profile,
     {"dropToInstall", IDS_EXTENSIONS_INSTALL_DROP_TARGET},
     {"editSitePermissionsAllowAllExtensions",
      IDS_EXTENSIONS_EDIT_SITE_PERMISSIONS_ALLOW_ALL_EXTENSIONS},
+    {"editSitePermissionsCustomizePerExtension",
+     IDS_EXTENSIONS_EDIT_SITE_PERMISSIONS_CUSTOMIZE_PER_EXTENSION},
     {"editSitePermissionsRestrictExtensions",
      IDS_EXTENSIONS_EDIT_SITE_PERMISSIONS_RESTRICT_EXTENSIONS},
     {"errorsPageHeading", IDS_EXTENSIONS_ERROR_PAGE_HEADING},
@@ -203,6 +205,8 @@ content::WebUIDataSource* CreateExtensionsSource(Profile* profile,
     {"itemPermissionsAndSiteAccessEmpty",
      IDS_EXTENSIONS_ITEM_PERMISSIONS_AND_SITE_ACCESS_EMPTY},
     {"itemRemoveExtension", IDS_EXTENSIONS_ITEM_REMOVE_EXTENSION},
+    {"itemShowAccessRequestsInToolbar",
+     IDS_EXTENSIONS_ITEM_SHOW_ACCESS_REQUESTS_IN_TOOLBAR},
     {"itemSiteAccess", IDS_EXTENSIONS_ITEM_SITE_ACCESS},
     {"itemSiteAccessAddHost", IDS_EXTENSIONS_ITEM_SITE_ACCESS_ADD_HOST},
     {"itemSiteAccessEmpty", IDS_EXTENSIONS_ITEM_SITE_ACCESS_EMPTY},
@@ -264,6 +268,10 @@ content::WebUIDataSource* CreateExtensionsSource(Profile* profile,
      IDS_EXTENSIONS_SITE_PERMISSIONS_ALL_SITES_PAGE_TITLE},
     {"sitePermissionsAllSitesExtensionCount",
      IDS_EXTENSIONS_SITE_PERMISSIONS_ALL_SITES_EXTENSION_COUNT},
+    {"sitePermissionsAlwaysOnAllSites",
+     IDS_EXTENSIONS_SITE_PERMISSIONS_ALWAYS_ON_ALL_SITES},
+    {"sitePermissionsAlwaysOnThisSite",
+     IDS_EXTENSIONS_SITE_PERMISSIONS_ALWAYS_ON_THIS_SITE},
     {"sitePermissionsPageTitle", IDS_EXTENSIONS_SITE_PERMISSIONS_PAGE_TITLE},
     {"sitePermissionsAddSiteDialogTitle",
      IDS_EXTENSIONS_SITE_PERMISSIONS_ADD_SITE_DIALOG_TITLE},
@@ -278,6 +286,7 @@ content::WebUIDataSource* CreateExtensionsSource(Profile* profile,
     {"sitePermissionsEditPermissionsDialogTitle",
      IDS_EXTENSIONS_SITE_PERMISSIONS_EDIT_PERMISSIONS_DIALOG_TITLE},
     {"sitePermissionsEditUrl", IDS_EXTENSIONS_SITE_PERMISSIONS_EDIT_URL},
+    {"sitePermissionsOnClick", IDS_EXTENSIONS_SITE_PERMISSIONS_ON_CLICK},
     {"sitePermissionsViewAllSites",
      IDS_EXTENSIONS_SITE_PERMISSIONS_VIEW_ALL_SITES},
     {"permittedSites", IDS_EXTENSIONS_PERMITTED_SITES},
@@ -373,6 +382,9 @@ content::WebUIDataSource* CreateExtensionsSource(Profile* profile,
   source->AddBoolean(kEnableEnhancedSiteControls,
                      base::FeatureList::IsEnabled(
                          extensions_features::kExtensionsMenuAccessControl));
+  source->AddString(
+      "showAccessRequestsInToolbarLearnMoreLink",
+      chrome_extension_constants::kShowAccessRequestsInToolbarHelpURL);
 
   return source;
 }

@@ -6,6 +6,7 @@
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -31,6 +32,7 @@ class VivaldiSubresourceFilterTest : public AdverseAdFilterTestHarness {
  public:
   void SetUp() override {
     vivaldi::ForceVivaldiRunning(true);
+    SystemNetworkContextManager::RegisterPrefs(local_state_.registry());
     ChromeContentBrowserClient::RegisterLocalStatePrefs(
         local_state_.registry());
     safe_browsing::RegisterLocalStatePrefs(local_state_.registry());

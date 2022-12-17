@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -382,6 +382,12 @@ void UseCounterCallback(v8::Isolate* isolate,
       break;
     case v8::Isolate::kFunctionPrototypeCaller:
       blink_feature = WebFeature::kV8FunctionPrototypeCaller;
+      break;
+    case v8::Isolate::kTurboFanOsrCompileStarted:
+      blink_feature = WebFeature::kV8TurboFanOsrCompileStarted;
+      break;
+    case v8::Isolate::kAsyncStackTaggingCreateTaskCall:
+      blink_feature = WebFeature::kV8AsyncStackTaggingCreateTaskCall;
       break;
 
     default:

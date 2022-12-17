@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,9 +43,7 @@ using ::testing::UnorderedElementsAre;
 
 class AttributionSourceDisabledBrowserTest : public ContentBrowserTest {
  public:
-  AttributionSourceDisabledBrowserTest() {
-    AttributionManagerImpl::RunInMemoryForTesting();
-  }
+  AttributionSourceDisabledBrowserTest() = default;
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -69,6 +67,8 @@ class AttributionSourceDisabledBrowserTest : public ContentBrowserTest {
   net::EmbeddedTestServer* https_server() { return https_server_.get(); }
 
  private:
+  AttributionManagerImpl::ScopedUseInMemoryStorageForTesting
+      attribution_manager_in_memory_setting_;
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
 };
 
@@ -596,7 +596,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSourceDeclarationBrowserTest,
                                                register_url)));
 
   // Wait for the impression to be seen by the observer.
-  blink::Impression last_impression = source_observer.Wait();
+  source_observer.Wait();
 }
 
 IN_PROC_BROWSER_TEST_F(AttributionSourceDeclarationBrowserTest,

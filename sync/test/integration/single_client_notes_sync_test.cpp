@@ -68,7 +68,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   const NoteNode* tier1_b_url1 =
       AddNote(0, tier1_b, 0, "tier1_b_url1", GURL("http://www.vg.no"));
 
-  NoteNode* trash_node = GetNotesModel(0)->trash_node();
+  const NoteNode* trash_node = GetNotesModel(0)->trash_node();
   const NoteNode* trash_1_url0 = AddNote(0, trash_node, 0, "trash_1_url0",
                                          GURL("http://www.microsoft.com"));
 

@@ -1,13 +1,14 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 
 import {NearbyPageTemplateElement} from 'chrome://nearby/shared/nearby_page_template.js';
+import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {isChildVisible, waitAfterNextRender} from '../../test_util.js';
+import {isChildVisible} from '../../test_util.js';
 
 suite('nearby-page-template', function() {
   /** @type {!NearbyPageTemplateElement} */

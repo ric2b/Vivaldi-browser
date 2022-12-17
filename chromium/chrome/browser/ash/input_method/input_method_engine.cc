@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -113,7 +113,7 @@ void InputMethodEngine::Initialize(
     profile_observation_.Observe(profile);
     input_method_settings_snapshot_ =
         profile->GetPrefs()
-            ->GetValueDict(prefs::kLanguageInputMethodSpecificSettings)
+            ->GetDict(prefs::kLanguageInputMethodSpecificSettings)
             .Clone();
 
     pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
@@ -166,7 +166,7 @@ bool InputMethodEngine::CommitText(int context_id,
 
 void InputMethodEngine::ConfirmCompositionText(bool reset_engine,
                                                bool keep_selection) {
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (input_context)
     input_context->ConfirmCompositionText(reset_engine, keep_selection);
@@ -189,7 +189,7 @@ bool InputMethodEngine::DeleteSurroundingText(int context_id,
 
   // TODO(nona): Return false if there is ongoing composition.
 
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (input_context) {
     input_context->DeleteSurroundingText(offset, number_of_chars);
@@ -237,7 +237,7 @@ bool InputMethodEngine::SendKeyEvents(int context_id,
         (uint8_t)is_mirroring_;
     event_copy.SetProperties(properties);
 
-    ui::IMEInputContextHandlerInterface* input_context =
+    ui::TextInputTarget* input_context =
         ui::IMEBridge::Get()->GetInputContextHandler();
     if (input_context) {
       input_context->SendKeyEvent(&event_copy);
@@ -281,7 +281,7 @@ bool InputMethodEngine::SetComposition(int context_id,
   ui::CompositionText composition_text;
   composition_text.text = base::UTF8ToUTF16(text);
   // Check the length of the text.
-  uint32_t utf16_length = GetUtf16Size(composition_text.text);
+  int utf16_length = GetUtf16Size(composition_text.text);
   if (selection_start > utf16_length || selection_end > utf16_length) {
     *error = base::StringPrintf(
         "%s request selection start = %d, selection end = %d, cursor  =  %d",
@@ -374,7 +374,7 @@ bool InputMethodEngine::SetCompositionRange(
     return false;
   }
 
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (!input_context) {
     return false;
@@ -436,7 +436,7 @@ bool InputMethodEngine::SetComposingRange(
     return false;
   }
 
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (!input_context) {
     return false;
@@ -474,7 +474,7 @@ gfx::Rect InputMethodEngine::GetAutocorrectCharacterBounds(int context_id,
     return gfx::Rect();
   }
 
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (!input_context) {
     return gfx::Rect();
@@ -496,7 +496,7 @@ gfx::Rect InputMethodEngine::GetTextFieldBounds(int context_id,
     return gfx::Rect();
   }
 
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (!input_context) {
     return gfx::Rect();
@@ -544,7 +544,7 @@ bool InputMethodEngine::SetSelectionRange(int context_id,
     return false;
   }
 
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (!input_context) {
     return false;
@@ -577,13 +577,15 @@ void InputMethodEngine::KeyEventHandled(const std::string& extension_id,
     return;
   }
 
-  std::move(it->second.callback).Run(handled);
+  std::move(it->second.callback)
+      .Run(handled ? ui::ime::KeyEventHandledState::kHandledByIME
+                   : ui::ime::KeyEventHandledState::kNotHandled);
   pending_key_events_.erase(it);
 }
 
 std::string InputMethodEngine::AddPendingKeyEvent(
     const std::string& component_id,
-    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback) {
+    ui::TextInputMethod::KeyEventDoneCallback callback) {
   std::string request_id = base::NumberToString(next_request_id_);
   ++next_request_id_;
 
@@ -595,13 +597,14 @@ std::string InputMethodEngine::AddPendingKeyEvent(
 
 void InputMethodEngine::CancelPendingKeyEvents() {
   for (auto& event : pending_key_events_) {
-    std::move(event.second.callback).Run(false);
+    std::move(event.second.callback)
+        .Run(ui::ime::KeyEventHandledState::kNotHandled);
   }
   pending_key_events_.clear();
 }
 
 void InputMethodEngine::FocusIn(
-    const ui::IMEEngineHandlerInterface::InputContext& input_context) {
+    const ui::TextInputMethod::InputContext& input_context) {
   current_input_type_ = input_context.type;
 
   if (!IsActive() || current_input_type_ == ui::TEXT_INPUT_TYPE_NONE)
@@ -634,7 +637,7 @@ void InputMethodEngine::FocusOut() {
 void InputMethodEngine::Enable(const std::string& component_id) {
   active_component_id_ = component_id;
   observer_->OnActivate(component_id);
-  const ui::IMEEngineHandlerInterface::InputContext& input_context =
+  const ui::TextInputMethod::InputContext& input_context =
       ui::IMEBridge::Get()->GetCurrentInputContext();
   current_input_type_ = input_context.type;
   FocusIn(input_context);
@@ -649,6 +652,8 @@ void InputMethodEngine::Enable(const std::string& component_id) {
   // engine_id) is enabled.
   candidate_window_property_ = {component_id,
                                 InputMethodEngine::CandidateWindowProperty()};
+
+  is_ready_for_testing_ = false;
 }
 
 bool InputMethodEngine::IsActive() const {
@@ -669,7 +674,7 @@ void InputMethodEngine::Reset() {
 void InputMethodEngine::ProcessKeyEvent(const ui::KeyEvent& key_event,
                                         KeyEventDoneCallback callback) {
   if (key_event.IsCommandDown()) {
-    std::move(callback).Run(false);
+    std::move(callback).Run(ui::ime::KeyEventHandledState::kNotHandled);
     return;
   }
 
@@ -681,11 +686,12 @@ void InputMethodEngine::ProcessKeyEvent(const ui::KeyEvent& key_event,
         active_component_id_, key_event,
         base::BindOnce(
             [](base::Time start, int context_id, int* context_id_ptr,
-               KeyEventDoneCallback callback, bool handled) {
+               KeyEventDoneCallback callback,
+               ui::ime::KeyEventHandledState handled_state) {
               // If the input_context has changed, assume the key event is
               // invalid as a precaution.
               if (context_id == *context_id_ptr) {
-                std::move(callback).Run(handled);
+                std::move(callback).Run(handled_state);
               }
               UMA_HISTOGRAM_TIMES("InputMethod.KeyEventLatency",
                                   base::Time::Now() - start);
@@ -709,8 +715,7 @@ void InputMethodEngine::SetCompositionBounds(
   observer_->OnCompositionBoundsChanged(bounds);
 }
 
-void InputMethodEngine::SetCaretBounds(const gfx::Rect& caret_bounds)
-{
+void InputMethodEngine::SetCaretBounds(const gfx::Rect& caret_bounds) {
   observer_->OnCaretBoundsChanged(caret_bounds);
 }
 
@@ -759,9 +764,7 @@ ui::VirtualKeyboardController* InputMethodEngine::GetVirtualKeyboardController()
 }
 
 bool InputMethodEngine::IsReadyForTesting() {
-  // For extension-based IMEs, we cannot tell if they are ready or not, so just
-  // return false.
-  return false;
+  return is_ready_for_testing_;
 }
 
 void InputMethodEngine::OnSuggestionsChanged(
@@ -1097,7 +1100,7 @@ void InputMethodEngine::HideInputView() {
 }
 
 void InputMethodEngine::OnInputMethodOptionsChanged() {
-  const base::Value::Dict& new_settings = profile_->GetPrefs()->GetValueDict(
+  const base::Value::Dict& new_settings = profile_->GetPrefs()->GetDict(
       prefs::kLanguageInputMethodSpecificSettings);
   const base::Value::Dict& old_settings = input_method_settings_snapshot_;
   for (const auto&& [path, value] : new_settings) {
@@ -1116,7 +1119,7 @@ void InputMethodEngine::UpdateComposition(
     const ui::CompositionText& composition_text,
     uint32_t cursor_pos,
     bool is_visible) {
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (input_context) {
     input_context->UpdateCompositionText(composition_text, cursor_pos,
@@ -1125,7 +1128,7 @@ void InputMethodEngine::UpdateComposition(
 }
 
 gfx::Range InputMethodEngine::GetAutocorrectRange() {
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (!input_context)
     return gfx::Range();
@@ -1133,16 +1136,22 @@ gfx::Range InputMethodEngine::GetAutocorrectRange() {
 }
 
 bool InputMethodEngine::SetAutocorrectRange(const gfx::Range& range) {
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (!input_context)
     return false;
-  return input_context->SetAutocorrectRange(range);
+
+  // TODO(b/161490813): Remove SetAutocorrectRange from |InputMethodEngine|.
+  //    The only way to set autocorrect range must be through
+  //    |AutocorrectManager|, otherwise it can conflict with
+  //    |AutocorrectManager| functionalities.
+  input_context->SetAutocorrectRange(range, base::DoNothing());
+  return true;
 }
 
 void InputMethodEngine::CommitTextToInputContext(int context_id,
                                                  const std::u16string& text) {
-  ui::IMEInputContextHandlerInterface* input_context =
+  ui::TextInputTarget* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (!input_context)
     return;
@@ -1175,9 +1184,13 @@ void InputMethodEngine::MenuItemToProperty(
   // TODO(nona): Support item.children.
 }
 
+void InputMethodEngine::NotifyInputMethodExtensionReadyForTesting() {
+  is_ready_for_testing_ = true;
+}
+
 InputMethodEngine::PendingKeyEvent::PendingKeyEvent(
     const std::string& component_id,
-    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback)
+    ui::TextInputMethod::KeyEventDoneCallback callback)
     : component_id(component_id), callback(std::move(callback)) {}
 
 InputMethodEngine::PendingKeyEvent::PendingKeyEvent(PendingKeyEvent&& other) =

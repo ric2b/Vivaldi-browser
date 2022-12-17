@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -117,6 +117,12 @@ void TrustTokenRequestRedemptionHelper::Begin(
                                                      top_level_origin_)) {
     LogOutcome(net_log_, kBegin, "Redemption record cache hit");
     std::move(done).Run(mojom::TrustTokenOperationStatus::kAlreadyExists);
+    return;
+  }
+
+  if (token_store_->IsRedemptionLimitHit(*issuer_, top_level_origin_)) {
+    LogOutcome(net_log_, kBegin, "Redemption limit hit.");
+    std::move(done).Run(mojom::TrustTokenOperationStatus::kResourceExhausted);
     return;
   }
 

@@ -8,14 +8,14 @@
 <translation id="1049795001945932310">&amp;Spracheinstellungen</translation>
 <translation id="1054153489933238809">Original &amp;Bild in neuem Tab öffnen</translation>
 <translation id="1056898198331236512">Warnung</translation>
-<translation id="1084824384139382525">Adr&amp;esse des Links kopieren</translation>
+<translation id="1084824384139382525">Link A&amp;dresse kopieren</translation>
 <translation id="1163931534039071049">&amp;Frame-Quelltext anzeigen</translation>
 <translation id="1165039591588034296">Fehler</translation>
 <translation id="1175364870820465910">&amp;Drucken...</translation>
 <translation id="1181037720776840403">Entfernen</translation>
 <translation id="1187722533808055681">Aktivierungen im Leerlauf</translation>
-<translation id="119944043368869598">Alle löschen</translation>
 <translation id="1221825588892235038">Nur Auswahl</translation>
+<translation id="1234736487471201993">QR-Code für dieses Bild erstellen</translation>
 <translation id="1244303850296295656">Erweiterungsfehler</translation>
 <translation id="125220115284141797">Standardeinstellung</translation>
 <translation id="1297175357211070620">Ziel</translation>
@@ -50,7 +50,6 @@
 <translation id="1901303067676059328">&amp;Alles auswählen</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Geben Sie eine Zahl ein, um die Anzahl der zu druckenden Exemplare festzulegen (1 bis <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Alle entfernen</translation>
 <translation id="1994173015038366702">Website-URL</translation>
 <translation id="2019718679933488176">&amp;Audio in neuem Tab öffnen</translation>
 <translation id="2050339315714019657">Hochformat</translation>
@@ -61,12 +60,12 @@
 <translation id="2148892889047469596">Tab streamen</translation>
 <translation id="2150139952286079145">Ziele suchen</translation>
 <translation id="215753907730220065">Vollbildmodus aus</translation>
+<translation id="2158475082070321257">Link zum markierten Text kopieren</translation>
 <translation id="2177950615300672361">Privater Tab: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Natives Client-Modul: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Als unformatierten Text einfügen</translation>
 <translation id="2249605167705922988">z. B. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Identifikatoren für geschützten Inhalt zulassen (eventuell Neustart des Computers erforderlich)</translation>
-<translation id="2277255602909579701">Alle Cookies und Websitedaten</translation>
 <translation id="2280486287150724112">Rechter Rand</translation>
 <translation id="2282146716419988068">GPU-Verarbeitung</translation>
 <translation id="2301382460326681002">Stammverzeichnis der Erweiterung ist ungültig.</translation>
@@ -84,14 +83,17 @@
 <translation id="2443487764245141020">Websites müssen Ihr Gerät möglicherweise auch anhand einer eindeutigen Kennung erkennen</translation>
 <translation id="2445081178310039857">Stammverzeichnis der Erweiterung ist erforderlich.</translation>
 <translation id="2470702053775288986">Nicht unterstützte Erweiterungen deaktiviert</translation>
+<translation id="2485422356828889247">Deinstallieren</translation>
 <translation id="2498539833203011245">Im Dock ablegen</translation>
 <translation id="2509495747794740764">Der Wert für die Skalierung muss zwischen 10 und 200 liegen.</translation>
 <translation id="253557089021624350">Keepalive-Zahl</translation>
 <translation id="2550212893339833758">Swap-Speicher</translation>
 <translation id="2553440850688409052">Dieses Plug-in ausblenden</translation>
 <translation id="26224892172169984">Verarbeitung von Protokollen für keine Website zulassen</translation>
+<translation id="2653275834716714682">Text ersetzen</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Wieder aktivieren</translation>
+<translation id="2678100101831051676">Streamen nicht möglich.</translation>
 <translation id="2721037002783622288">Mit <ph name="SEARCH_ENGINE" /> nach Bild &amp;suchen</translation>
 <translation id="2783321960289401138">Verknüpfung erstellen...</translation>
 <translation id="2785873697295365461">Dateideskriptoren</translation>
@@ -107,6 +109,7 @@
 <translation id="2932883381142163287">Missbrauch melden</translation>
 <translation id="2941112035454246133">Niedrig</translation>
 <translation id="2972581237482394796">&amp;Wiederholen</translation>
+<translation id="2993517869960930405">App-Informationen</translation>
 <translation id="3003623123441819449">CSS-Cache</translation>
 <translation id="3008272652534848354">Berechtigungen zurücksetzen</translation>
 <translation id="3012631534724231212">(Iframe)</translation>
@@ -118,11 +121,11 @@
 <translation id="3084548735795614657">Zum Installieren ablegen</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">BENUTZER-Objekte</translation>
-<translation id="3127156390846601284">Dadurch werden alle auf Ihrem Gerät gespeicherten Daten für alle angezeigten Websites gelöscht. Möchten Sie fortfahren?</translation>
 <translation id="3129173833825111527">Linker Rand</translation>
 <translation id="3144647712221361880">Link öffnen als</translation>
 <translation id="3222066309010235055">Vorrendern: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Wählen Sie das Stammverzeichnis der Erweiterung, die gepackt werden soll. Zur Aktualisierung einer Erweiterung wählen Sie eine private Schlüsseldatei zur Wiederverwendung.</translation>
+<translation id="3275778913554317645">In neuem Fenster öffnen</translation>
 <translation id="3280237271814976245">Speichern &amp;unter...</translation>
 <translation id="3285322247471302225">Neuer &amp;Tab</translation>
 <translation id="3288047731229977326">Erweiterungen im Entwicklermodus können auf Ihrem Computer Schaden anrichten. Wenn Sie kein Entwickler sind, sollten Sie diese Erweiterungen im Entwicklermodus deaktivieren, um sicher zu sein.</translation>
@@ -132,13 +135,14 @@
 <translation id="3305661444342691068">Im eingebauten PDF-Betrachter öffnen</translation>
 <translation id="3308134619352333507">Schaltfläche ausblenden</translation>
 <translation id="3317459757438853210">Beidseitig</translation>
+<translation id="3331974543021145906">App–Informationen</translation>
 <translation id="3341703758641437857">Zugriff auf Datei-URLs zulassen</translation>
 <translation id="3347086966102161372">Bildadresse kopieren</translation>
 <translation id="3360297538363969800">Fehler beim Drucken. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="3378572629723696641">Diese Erweiterung ist möglicherweise beschädigt.</translation>
 <translation id="3387614642886316601">Vorschläge von Google</translation>
+<translation id="3390013585654699824">App–Details</translation>
 <translation id="3393582007140394275">Bildschirm kann nicht gestreamt werden.</translation>
-<translation id="3432227430032737297">Alle angezeigten Cookies entfernen</translation>
 <translation id="345693547134384690">Bil&amp;d in neuem Tab öffnen</translation>
 <translation id="3494769164076977169">Nachfragen, wenn eine Website versucht, Dateien nach der ersten Datei automatisch herunterzuladen (empfohlen)</translation>
 <translation id="3505030558724226696">Gerätezugriff aufheben</translation>
@@ -170,6 +174,7 @@
 <translation id="3948116654032448504">Mit <ph name="SEARCH_ENGINE" /> nach Bild &amp;suchen</translation>
 <translation id="3955193568934677022">Wiedergabe geschützter Inhalte auf Websites zulassen (empfohlen)</translation>
 <translation id="3979395879372752341">Neue Erweiterung hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Link zum markierten Text kopieren</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Zum Wörterbuch hinzufügen</translation>
 <translation id="407520071244661467">Skalieren</translation>
@@ -182,6 +187,7 @@
 <translation id="4109898769411476438">Browser vor dem Import schließen</translation>
 <translation id="4130207949184424187">Diese Erweiterung hat eine Änderung der Seite vorgenommen, die bei der Suche über die Adressleiste angezeigt wird.</translation>
 <translation id="4131410914670010031">Schwarz-Weiß</translation>
+<translation id="4165986682804962316">Website–Einstellungen</translation>
 <translation id="4176463684765177261">Deaktiviert</translation>
 <translation id="4200983522494130825">&amp;Neuer Tab</translation>
 <translation id="4225397296022057997">Auf allen Websites</translation>
@@ -195,16 +201,17 @@
 <translation id="4409697491990005945">Ränder</translation>
 <translation id="4423376891418188461">Einstellungen wiederherstellen</translation>
 <translation id="4478664379124702289">Lin&amp;k speichern unter...</translation>
-<translation id="4579581181964204535"><ph name="HOST_NAME" /> kann nicht gestreamt werden.</translation>
 <translation id="4593021220803146968"><ph name="URL" /> öffnen</translation>
 <translation id="4595560905247879544">Apps und Erweiterungen können nur vom Administrator, <ph name="CUSTODIAN_NAME" />, geändert werden.</translation>
 <translation id="4613271546271159013">Die Seite, die beim Öffnen eines neuen Tabs angezeigt wird, wurde durch eine Erweiterung geändert.</translation>
+<translation id="4616405296204756919">Sie können gespeicherte Passwörter auf jedem Gerät verwenden. Sie werden im <ph name="VIVALDI_PASSWORD_MANAGER" /> gespeichert.</translation>
 <translation id="4643612240819915418">&amp;Video in neuem Tab öffnen</translation>
 <translation id="4677772697204437347">GPU-Speicher</translation>
 <translation id="4681930562518940301">Bild in neuem Tab öffnen</translation>
 <translation id="4711638718396952945">Einstellungen wiederherstellen</translation>
 <translation id="4726710629007580002">Es gab Warnungen beim Versuch, diese Erweiterung zu installieren:</translation>
 <translation id="479536056609751218">Webseite, nur HTML</translation>
+<translation id="4827904420700932487">QR-Code für dieses Bild erstellen</translation>
 <translation id="4839303808932127586">Video &amp;speichern unter...</translation>
 <translation id="4840096453115567876">Privater Modus trotzdem verlassen?</translation>
 <translation id="488785315393301722">Details anzeigen</translation>
@@ -231,10 +238,12 @@
 <translation id="5233231016133573565">Prozess-ID</translation>
 <translation id="5233736638227740678">&amp;Einfügen</translation>
 <translation id="5256861893479663409">Auf allen Websites</translation>
+<translation id="5260334392110301220">Intelligente Anführungszeichen</translation>
 <translation id="5269977353971873915">Fehler beim Drucken</translation>
 <translation id="5284445933715251131">Download fortsetzen</translation>
 <translation id="52912272896845572">Private Schlüsseldatei ist ungültig.</translation>
 <translation id="5301954838959518834">OK</translation>
+<translation id="5302932258331363306">Ersetzungen einblenden</translation>
 <translation id="5317780077021120954">Speichern</translation>
 <translation id="5334142896108694079">Skript-Cache</translation>
 <translation id="5355926466126177564">Die Erweiterung <ph name="EXTENSION_NAME" /> hat die Seite geändert, die bei der Suche über die Adressleiste angezeigt wird.</translation>
@@ -261,12 +270,12 @@
 <translation id="563535393368633106">Vor dem Zugriff nachfragen (empfohlen)</translation>
 <translation id="5677928146339483299">Blockiert</translation>
 <translation id="5707185214361380026">Fehler beim Laden der Erweiterung aus:</translation>
+<translation id="5713171467967533494">Im Vivaldi-Browser öffnen</translation>
 <translation id="5715711091495208045">Plug-in-Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Als PDF speichern</translation>
 <translation id="5747809636523347288">Einfügen und <ph name="URL" /> aufrufen</translation>
 <translation id="5759728514498647443">Dokumente, die Sie über <ph name="APP_NAME" /> zum Druck senden, können von <ph name="APP_NAME" /> gelesen werden.</translation>
 <translation id="5764483294734785780">Audio &amp;speichern unter...</translation>
-<translation id="577624874850706961">Cookies suchen</translation>
 <translation id="5780973441651030252">Prozesspriorität</translation>
 <translation id="5804241973901381774">Berechtigungen</translation>
 <translation id="5828633471261496623">Wird gedruckt…</translation>
@@ -279,7 +288,6 @@
 <translation id="5965661248935608907">Die Erweiterung legt auch fest, welche Seite bei der Suche über die Adressleiste angezeigt wird oder wenn Sie auf die Schaltfläche "Startseite" klicken.</translation>
 <translation id="5978277834170881274">&amp;Rechtschreibprüfung verwenden</translation>
 <translation id="5979421442488174909">Übersetzen nach <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Websitedaten löschen</translation>
 <translation id="6042308850641462728">Mehr</translation>
 <translation id="6086846494333236931">Von Ihrem Administrator installiert</translation>
 <translation id="6101226222197207147">Neue App hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
@@ -314,6 +322,7 @@
 <translation id="6550675742724504774">Optionen</translation>
 <translation id="6579369886355986318">Alle &amp;Steuerelemente anzeigen</translation>
 <translation id="6639554308659482635">SQLite-Speicher</translation>
+<translation id="666731172850799929">In <ph name="APP_NAME" /> öffnen</translation>
 <translation id="6686817083349815241">Passwort speichern</translation>
 <translation id="6691936601825168937">&amp;Vorwärts</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
@@ -334,6 +343,7 @@
 <translation id="7053983685419859001">Blockieren</translation>
 <translation id="7070484045139057854">Kann Websitedaten lesen und ändern</translation>
 <translation id="708060913198414444">Audioadresse kopieren</translation>
+<translation id="7121728544325372695">„Intelligente“ Bindestriche</translation>
 <translation id="7175353351958621980">Geladen von:</translation>
 <translation id="7186088072322679094">In der Symbolleiste behalten</translation>
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
@@ -391,7 +401,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1 {Download wird ausgeführt} other {Downloads werden ausgeführt}}</translation>
 <translation id="8230134520748321204">Passwort für <ph name="ORIGIN" /> speichern?</translation>
 <translation id="8261378640211443080">Diese Erweiterung ist nicht im <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> aufgeführt und wurde möglicherweise ohne Ihr Wissen hinzugefügt.</translation>
-<translation id="8339059274628563283">Für <ph name="SITE" /> lokal gespeicherte Daten</translation>
 <translation id="8351419472474436977">Diese Erweiterung hat die Kontrolle über Ihre Proxyeinstellungen übernommen. Das bedeutet, dass sie sämtliche Online-Aktivitäten ändern, stören oder überwachen kann. Wenn Sie nicht sicher sind, wie es zu dieser Änderung gekommen ist, war sie wahrscheinlich nicht gewollt.</translation>
 <translation id="8382913212082956454">E-Mail-Adr&amp;esse kopieren</translation>
 <translation id="8413385045638830869">Erst achfragen (empfohlen)</translation>
@@ -415,8 +424,9 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8774934320277480003">Oberer Rand</translation>
 <translation id="8798099450830957504">Standardeinstellung</translation>
 <translation id="8808478386290700967">Chrome Web Store</translation>
-<translation id="8823514049557262177">Linkte&amp;xt kopieren</translation>
+<translation id="8823514049557262177">Link–&amp;Text kopieren</translation>
 <translation id="8823704566850948458">Passwort vorschlagen…</translation>
+<translation id="883062543841130884">Ersetzungen</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Link in neuem &amp;Fenster öffnen</translation>
 <translation id="8915370057835397490">Vorschläge werden geladen</translation>
@@ -429,6 +439,7 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="9003647077635673607">Auf allen Webseiten zulassen</translation>
 <translation id="9027459031423301635">Link in neuem Tab öffnen</translation>
 <translation id="9056810968620647706">Keine Übereinstimmungen gefunden.</translation>
+<translation id="9084064520949870008">In Fenster öffnen</translation>
 <translation id="9137916601698928395">Link als <ph name="USER" /> öffnen</translation>
 <translation id="91568222606626347">Verknüpfung erstellen...</translation>
 <translation id="916607977885256133">Bild-in-Bild</translation>

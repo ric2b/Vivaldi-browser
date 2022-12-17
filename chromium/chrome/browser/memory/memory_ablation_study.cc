@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,8 +40,9 @@ enum class UXStudy1Arm {
 };
 
 // The name of the Finch study that turns on the experiment.
-const base::Feature kMemoryAblationStudy{"MemoryAblationStudy",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMemoryAblationStudy,
+             "MemoryAblationStudy",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // The total amount of memory to ablate in MB.
 const char kAblationSizeMb[] = "ablation-size-mb";

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/renderer/modules/media/audio/mojo_audio_input_ipc.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 namespace blink {
@@ -83,28 +83,17 @@ void AssociateInputAndOutputForAec(
 }
 }  // namespace
 
-AudioInputIPCFactory& AudioInputIPCFactory::GetInstance() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      AudioInputIPCFactory, instance,
-      (Thread::MainThread()->GetDeprecatedTaskRunner()));
-  return instance;
-}
-
-AudioInputIPCFactory::AudioInputIPCFactory(
-    scoped_refptr<base::SequencedTaskRunner> main_task_runner)
-    : main_task_runner_(std::move(main_task_runner)) {}
-
-AudioInputIPCFactory::~AudioInputIPCFactory() = default;
-
+// static
 std::unique_ptr<media::AudioInputIPC> AudioInputIPCFactory::CreateAudioInputIPC(
     const blink::LocalFrameToken& frame_token,
-    const media::AudioSourceParameters& source_params) const {
+    scoped_refptr<base::SequencedTaskRunner> main_task_runner,
+    const media::AudioSourceParameters& source_params) {
   CHECK(!source_params.session_id.is_empty());
   return std::make_unique<MojoAudioInputIPC>(
       source_params,
-      base::BindRepeating(&CreateMojoAudioInputStream, main_task_runner_,
+      base::BindRepeating(&CreateMojoAudioInputStream, main_task_runner,
                           frame_token),
-      base::BindRepeating(&AssociateInputAndOutputForAec, main_task_runner_,
+      base::BindRepeating(&AssociateInputAndOutputForAec, main_task_runner,
                           frame_token));
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,7 +27,9 @@ class AuthenticationServiceFake : public AuthenticationService {
 
   ~AuthenticationServiceFake() override;
 
-  void GrantSyncConsent(ChromeIdentity* identity) override;
+  void SignIn(id<SystemIdentity> identity) override;
+
+  void GrantSyncConsent(id<SystemIdentity> identity) override;
 
   void SignOut(signin_metrics::ProfileSignout signout_source,
                bool force_clear_browsing_data,
@@ -47,13 +49,10 @@ class AuthenticationServiceFake : public AuthenticationService {
       signin::IdentityManager* identity_manager,
       syncer::SyncService* sync_service);
 
-  // Internal method signing the user in.
-  void SignInInternal(ChromeIdentity* identity) override;
-
   // Internal method effectively signing out the user.
   void SignOutInternal(ProceduralBlock completion);
 
-  __strong ChromeIdentity* primary_identity_;
+  __strong id<SystemIdentity> primary_identity_;
   signin::ConsentLevel consent_level_ = signin::ConsentLevel::kSignin;
 
   // WeakPtrFactory should be last.

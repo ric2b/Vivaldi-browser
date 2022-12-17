@@ -1,14 +1,13 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {ImageLoaderClient} from 'chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/image_loader_client.js';
+import {ImageTransformParam} from 'chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/image_orientation.js';
 import {LoadImageRequest, LoadImageResponse, LoadImageResponseStatus} from 'chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/load_image_request.js';
-import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 
 import {FileType} from '../../common/js/file_type.js';
-
-import {ImageTransformParam} from './metadata/image_orientation.js';
 
 /**
  * Loads a thumbnail using provided url. In CANVAS mode, loaded images

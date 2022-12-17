@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,7 +65,6 @@ import java.util.List;
  */
 @RunWith(BaseJUnit4ClassRunner.class)
 @Batch(Batch.UNIT_TESTS)
-@DisabledTest(message = "https://crbug.com/1330627")
 public class TileGroupUnitTest {
     private static final int MAX_TILES_TO_FETCH = 4;
     private static final int TILE_TITLE_LINES = 1;
@@ -155,7 +154,7 @@ public class TileGroupUnitTest {
     @Test
     @UiThreadTest
     @SmallTest
-    @DisabledTest(message = "https://crbug.com/1336867")
+    // If this flakes again, refer to https://crbug.com/1336867.
     public void testReceiveNewTilesWithoutChanges() {
         TileGroup tileGroup = initialiseTileGroup(URLS);
 
@@ -204,7 +203,7 @@ public class TileGroupUnitTest {
     @Test
     @UiThreadTest
     @SmallTest
-    @DisabledTest(message = "https://crbug.com/1330627, https://crbug.com/1293208")
+    // If this flakes again, refer to https://crbug.com/1330627, https://crbug.com/1293208.
     public void testReceiveNewTilesWithDataChanges_TrackLoad() {
         TileGroup tileGroup = initialiseTileGroup(/* deferLoad: */ true, URLS);
 
@@ -298,7 +297,7 @@ public class TileGroupUnitTest {
     @Test
     @UiThreadTest
     @SmallTest
-    @DisabledTest(message = "https://crbug.com/1330627, https://crbug.com/1293208")
+    // If this flakes again, refer to https://crbug.com/1330627, https://crbug.com/1293208.
     public void testRenderTileView() {
         SuggestionsUiDelegate uiDelegate = mSuggestionsUiDelegate;
         when(uiDelegate.getImageFetcher()).thenReturn(mImageFetcher);
@@ -340,7 +339,7 @@ public class TileGroupUnitTest {
     @Test
     @UiThreadTest
     @SmallTest
-    @DisabledTest(message = "Test is flaky, see crbug.com/1286755")
+    // If this flakes again, refer to https://crbug.com/1286755.
     public void testRenderTileViewReplacing() {
         SuggestionsUiDelegate uiDelegate = mSuggestionsUiDelegate;
         when(uiDelegate.getImageFetcher()).thenReturn(mMockImageFetcher);

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -220,7 +220,8 @@ suite('ChromeCleanupHandler', function() {
     chromeCleanupProxy = new TestChromeCleanupProxy();
     ChromeCleanupProxyImpl.setInstance(chromeCleanupProxy);
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     chromeCleanupPage = document.createElement('settings-chrome-cleanup-page');
     chromeCleanupPage.prefs = {

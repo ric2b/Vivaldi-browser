@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -221,105 +221,6 @@ v8::MaybeLocal<v8::Value> CallMethodOnFrame(LocalFrame* local_frame,
       ->GetScriptController()
       .EvaluateMethodInMainWorld(v8::Local<v8::Function>::Cast(method), object,
                                  static_cast<int>(args.size()), args.data());
-}
-
-// A wrapper class used as the callback for JavaScript executed
-// in an isolated world.
-class JavaScriptIsolatedWorldRequest : public PausableScriptExecutor::Executor {
-  using JavaScriptExecuteRequestInIsolatedWorldCallback =
-      mojom::blink::LocalFrame::JavaScriptExecuteRequestInIsolatedWorldCallback;
-
- public:
-  JavaScriptIsolatedWorldRequest(
-      LocalFrame* local_frame,
-      int32_t world_id,
-      const String& script,
-      bool wants_result,
-      mojom::blink::LocalFrame::JavaScriptExecuteRequestInIsolatedWorldCallback
-          callback);
-  JavaScriptIsolatedWorldRequest(const JavaScriptIsolatedWorldRequest&) =
-      delete;
-  JavaScriptIsolatedWorldRequest& operator=(
-      const JavaScriptIsolatedWorldRequest&) = delete;
-  ~JavaScriptIsolatedWorldRequest() override;
-
-  // PausableScriptExecutor::Executor overrides.
-  Vector<v8::Local<v8::Value>> Execute(LocalDOMWindow*) override;
-
-  void Trace(Visitor* visitor) const override;
-
-  WebScriptExecutionCallback Callback();
-
- private:
-  void Completed(const WebVector<v8::Local<v8::Value>>& result,
-                 base::TimeTicks);
-
-  Member<LocalFrame> local_frame_;
-  int32_t world_id_;
-  String script_;
-  bool wants_result_;
-  JavaScriptExecuteRequestInIsolatedWorldCallback callback_;
-};
-
-JavaScriptIsolatedWorldRequest::JavaScriptIsolatedWorldRequest(
-    LocalFrame* local_frame,
-    int32_t world_id,
-    const String& script,
-    bool wants_result,
-    JavaScriptExecuteRequestInIsolatedWorldCallback callback)
-    : local_frame_(local_frame),
-      world_id_(world_id),
-      script_(script),
-      wants_result_(wants_result),
-      callback_(std::move(callback)) {
-  DCHECK_GT(world_id, DOMWrapperWorld::kMainWorldId);
-}
-
-JavaScriptIsolatedWorldRequest::~JavaScriptIsolatedWorldRequest() = default;
-
-void JavaScriptIsolatedWorldRequest::Trace(Visitor* visitor) const {
-  PausableScriptExecutor::Executor::Trace(visitor);
-  visitor->Trace(local_frame_);
-}
-
-Vector<v8::Local<v8::Value>> JavaScriptIsolatedWorldRequest::Execute(
-    LocalDOMWindow* window) {
-  // Note: An error event in an isolated world will never be dispatched to
-  // a foreign world.
-  ClassicScript* classic_script = ClassicScript::CreateUnspecifiedScript(
-      script_, ScriptSourceLocationType::kInternal,
-      SanitizeScriptErrors::kDoNotSanitize);
-  return {
-      classic_script->RunScriptInIsolatedWorldAndReturnValue(window, world_id_)
-          .GetSuccessValueOrEmpty()};
-}
-
-void JavaScriptIsolatedWorldRequest::Completed(
-    const WebVector<v8::Local<v8::Value>>& result,
-    base::TimeTicks start_time) {
-  base::Value value;
-  if (!result.empty() && !result.begin()->IsEmpty() && wants_result_) {
-    // It's safe to always use the main world context when converting
-    // here. V8ValueConverter shouldn't actually care about the context
-    // scope, and it switches to v8::Object's creation context when
-    // encountered. (from extensions/renderer/script_injection.cc)
-    v8::Local<v8::Context> context = MainWorldScriptContext(local_frame_);
-    v8::Context::Scope context_scope(context);
-    std::unique_ptr<WebV8ValueConverter> converter =
-        Platform::Current()->CreateWebV8ValueConverter();
-    converter->SetDateAllowed(true);
-    converter->SetRegExpAllowed(true);
-    std::unique_ptr<base::Value> new_value =
-        converter->FromV8Value(*result.begin(), context);
-    if (new_value)
-      value = base::Value::FromUniquePtrValue(std::move(new_value));
-  }
-  std::move(callback_).Run(std::move(value));
-}
-
-WebScriptExecutionCallback JavaScriptIsolatedWorldRequest::Callback() {
-  return WTF::Bind(&JavaScriptIsolatedWorldRequest::Completed,
-                   WrapWeakPersistent(this));
 }
 
 HitTestResult HitTestResultForRootFramePos(
@@ -594,8 +495,8 @@ LocalFrameMojoHandler::GetDevicePosture() {
 
   device_posture_provider_service_->AddListenerAndGetCurrentPosture(
       device_posture_receiver_.BindNewPipeAndPassRemote(task_runner),
-      WTF::Bind(&LocalFrameMojoHandler::OnPostureChanged,
-                WrapPersistent(this)));
+      WTF::BindOnce(&LocalFrameMojoHandler::OnPostureChanged,
+                    WrapPersistent(this)));
   return current_device_posture_;
 }
 
@@ -706,9 +607,9 @@ void LocalFrameMojoHandler::NotifyVirtualKeyboardOverlayRect(
   // The rect passed to us from content is in DIP, relative to the main frame.
   // This doesn't take the page's zoom factor into account so we must scale by
   // the inverse of the page zoom in order to get correct client coordinates.
-  // Note that when use-zoom-for-dsf is enabled, WindowToViewportScalar will
-  // be the true device scale factor, and PageZoomFactor will be the combination
-  // of the device scale factor and the zoom percent of the page.
+  // WindowToViewportScalar is the device scale factor while PageZoomFactor is
+  // the combination of the device scale factor and the zoom factor of the
+  // page.
   blink::LocalFrame& local_frame_root = frame_->LocalFrameRoot();
   const float window_to_viewport_factor =
       page->GetChromeClient().WindowToViewportScalar(&local_frame_root, 1.0f);
@@ -832,7 +733,7 @@ void LocalFrameMojoHandler::SaveImageAt(const gfx::Point& window_point) {
 
 void LocalFrameMojoHandler::ReportBlinkFeatureUsage(
     const Vector<mojom::blink::WebFeature>& features) {
-  DCHECK(!features.IsEmpty());
+  DCHECK(!features.empty());
 
   // Assimilate all features used/performed by the browser into UseCounter.
   auto* document = GetDocument();
@@ -983,7 +884,7 @@ void LocalFrameMojoHandler::JavaScriptMethodExecuteRequest(
   converter->SetDateAllowed(true);
   converter->SetRegExpAllowed(true);
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::HandleScope handle_scope(ToIsolate(frame_));
   v8::Local<v8::Value> result;
   script_execution_power_mode_voter_->VoteFor(
       power_scheduler::PowerMode::kScriptExecution);
@@ -1013,7 +914,7 @@ void LocalFrameMojoHandler::JavaScriptExecuteRequest(
   script_execution_power_mode_voter_->VoteFor(
       power_scheduler::PowerMode::kScriptExecution);
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::HandleScope handle_scope(ToIsolate(frame_));
   v8::Local<v8::Value> result =
       ClassicScript::CreateUnspecifiedScript(javascript)
           ->RunScriptAndReturnValue(DomWindow())
@@ -1121,20 +1022,23 @@ void LocalFrameMojoHandler::JavaScriptExecuteRequestInIsolatedWorld(
   script_execution_power_mode_voter_->VoteFor(
       power_scheduler::PowerMode::kScriptExecution);
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  scoped_refptr<DOMWrapperWorld> isolated_world =
-      DOMWrapperWorld::EnsureIsolatedWorld(ToIsolate(frame_), world_id);
-
-  // This member will be traced as the |executor| on the PausableScriptExector.
-  auto* execution_request =
-      MakeGarbageCollected<JavaScriptIsolatedWorldRequest>(
-          frame_, world_id, javascript, wants_result, std::move(callback));
-
-  auto* executor = MakeGarbageCollected<PausableScriptExecutor>(
-      DomWindow(), ToScriptState(frame_, *isolated_world),
-      execution_request->Callback(),
-      /*executor=*/execution_request);
-  executor->Run();
+  WebScriptSource web_script_source(javascript);
+  frame_->RequestExecuteScript(
+      world_id, {&web_script_source, 1},
+      mojom::blink::UserActivationOption::kDoNotActivate,
+      mojom::blink::EvaluationTiming::kSynchronous,
+      mojom::blink::LoadEventBlockingOption::kDoNotBlock,
+      WTF::BindOnce(
+          [](JavaScriptExecuteRequestInIsolatedWorldCallback callback,
+             absl::optional<base::Value> value, base::TimeTicks start_time) {
+            std::move(callback).Run(value ? std::move(*value) : base::Value());
+          },
+          std::move(callback)),
+      BackForwardCacheAware::kAllow,
+      wants_result
+          ? mojom::blink::WantResultOption::kWantResultDateAndRegExpAllowed
+          : mojom::blink::WantResultOption::kNoResult,
+      mojom::blink::PromiseResultOption::kDoNotWait);
 
   script_execution_power_mode_voter_->ResetVoteAfterTimeout(
       power_scheduler::PowerModeVoter::kScriptExecutionTimeout);
@@ -1331,6 +1235,23 @@ void LocalFrameMojoHandler::SetNavigationApiHistoryEntriesForRestore(
     navigation_api->SetEntriesForRestore(entry_arrays);
 }
 
+void LocalFrameMojoHandler::NotifyNavigationApiOfDisposedEntries(
+    const WTF::Vector<WTF::String>& keys) {
+  if (NavigationApi* navigation_api =
+          NavigationApi::navigation(*frame_->DomWindow())) {
+    navigation_api->DisposeEntriesForSessionHistoryRemoval(keys);
+  }
+}
+
+void LocalFrameMojoHandler::TraverseCancelled(
+    const String& navigation_api_key,
+    mojom::blink::TraverseCancelledReason reason) {
+  if (NavigationApi* navigation_api =
+          NavigationApi::navigation(*frame_->DomWindow())) {
+    navigation_api->TraverseCancelled(navigation_api_key, reason);
+  }
+}
+
 void LocalFrameMojoHandler::AnimateDoubleTapZoom(const gfx::Point& point,
                                                  const gfx::Rect& rect) {
   frame_->GetPage()->GetChromeClient().AnimateDoubleTapZoom(point, rect);
@@ -1365,6 +1286,26 @@ void LocalFrameMojoHandler::ClosePage(
       false /* need_unload_info_for_new_document */);
 
   std::move(completion_callback).Run();
+}
+
+void LocalFrameMojoHandler::GetFullPageSize(
+    mojom::blink::LocalMainFrame::GetFullPageSizeCallback callback) {
+  // PageZoomFactor takes CSS pixels to device/physical pixels. It includes
+  // both browser ctrl+/- zoom as well as the device scale factor for screen
+  // density. Note: we don't account for pinch-zoom, even though it scales a
+  // CSS pixel, since "device pixels" coming from Blink are also unscaled by
+  // pinch-zoom.
+  float css_to_physical = frame_->PageZoomFactor();
+  float physical_to_css = 1.f / css_to_physical;
+  gfx::Size full_page_size =
+      frame_->View()->GetScrollableArea()->ContentsSize();
+
+  // `content_size` is in physical pixels. Normlisation is needed to convert it
+  // to CSS pixels. Details: https://crbug.com/1181313
+  gfx::Size css_full_page_size =
+      gfx::ScaleToFlooredSize(full_page_size, physical_to_css);
+  std::move(callback).Run(
+      gfx::Size(css_full_page_size.width(), css_full_page_size.height()));
 }
 
 void LocalFrameMojoHandler::PluginActionAt(
@@ -1440,7 +1381,7 @@ void LocalFrameMojoHandler::OnPortalActivated(
   DOMWindowPortalHost::portalHost(*dom_window)->OnPortalActivated();
   frame_->GetPage()->SetInsidePortal(false);
 
-  DCHECK(!data.locked_agent_cluster_id)
+  DCHECK(!data.locked_to_sender_agent_cluster)
       << "portal activation is always cross-agent-cluster and should be "
          "diagnosed early";
   MessagePortArray* ports =

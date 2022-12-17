@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -150,9 +150,10 @@ void FakeShillDeviceClient::SetPropertyInternal(
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(callback));
 }
 
-void FakeShillDeviceClient::ClearProperty(const dbus::ObjectPath& device_path,
-                                          const std::string& name,
-                                          VoidDBusMethodCallback callback) {
+void FakeShillDeviceClient::ClearProperty(
+    const dbus::ObjectPath& device_path,
+    const std::string& name,
+    chromeos::VoidDBusMethodCallback callback) {
   base::Value* device_properties =
       stub_devices_.FindDictKey(device_path.value());
   if (!device_properties) {
@@ -277,7 +278,7 @@ void FakeShillDeviceClient::Register(const dbus::ObjectPath& device_path,
     PostError("No Cellular scan results", std::move(error_callback));
     return;
   }
-  for (auto& network : scan_results->GetListDeprecated()) {
+  for (auto& network : scan_results->GetList()) {
     std::string id = network.FindKey(shill::kNetworkIdProperty)->GetString();
     std::string status = id == network_id ? "current" : "available";
     network.SetKey(shill::kStatusProperty, base::Value(status));
@@ -411,7 +412,7 @@ void FakeShillDeviceClient::AddCellularFoundNetwork(
                                              base::ListValue());
   }
   base::Value new_result(base::Value::Type::DICTIONARY);
-  int idx = static_cast<int>(scan_results->GetListDeprecated().size());
+  int idx = static_cast<int>(scan_results->GetList().size());
   new_result.SetKey(shill::kNetworkIdProperty,
                     base::Value(base::StringPrintf("network%d", idx)));
   new_result.SetKey(shill::kLongNameProperty,
@@ -560,8 +561,9 @@ void FakeShillDeviceClient::PassStubDeviceProperties(
 }
 
 // Posts a task to run a void callback with status code |status|.
-void FakeShillDeviceClient::PostVoidCallback(VoidDBusMethodCallback callback,
-                                             bool result) {
+void FakeShillDeviceClient::PostVoidCallback(
+    chromeos::VoidDBusMethodCallback callback,
+    bool result) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), result));
 }

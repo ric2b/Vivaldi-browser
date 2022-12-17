@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -221,7 +221,7 @@ bool ImageContextImpl::BeginAccessIfNecessaryForSharedImage(
       return false;
     }
 
-    if (!(representation->usage() & gpu::SHARED_IMAGE_USAGE_DISPLAY)) {
+    if (!(representation->usage() & gpu::SHARED_IMAGE_USAGE_DISPLAY_READ)) {
       DLOG(ERROR) << "Failed to fulfill the promise texture - SharedImage "
                      "was not created with display usage.";
       return false;

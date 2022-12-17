@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,16 +12,17 @@
 #include "third_party/blink/renderer/modules/webcodecs/codec_pressure_manager.h"
 #include "third_party/blink/renderer/modules/webcodecs/codec_pressure_manager_provider.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
-const base::Feature kReclaimInactiveWebCodecs{"ReclaimInactiveWebCodecs",
-                                              base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kReclaimInactiveWebCodecs,
+             "ReclaimInactiveWebCodecs",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kOnlyReclaimBackgroundWebCodecs{
-    "OnlyReclaimBackgroundWebCodecs", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kOnlyReclaimBackgroundWebCodecs,
+             "OnlyReclaimBackgroundWebCodecs",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr base::TimeDelta ReclaimableCodec::kInactivityReclamationThreshold;
 
@@ -31,7 +32,7 @@ ReclaimableCodec::ReclaimableCodec(CodecType type, ExecutionContext* context)
       tick_clock_(base::DefaultTickClock::GetInstance()),
       inactivity_threshold_(kInactivityReclamationThreshold),
       last_activity_(tick_clock_->NowTicks()),
-      activity_timer_(Thread::Current()->GetDeprecatedTaskRunner(),
+      activity_timer_(context->GetTaskRunner(TaskType::kInternalMedia),
                       this,
                       &ReclaimableCodec::OnActivityTimerFired) {
   DCHECK(context);

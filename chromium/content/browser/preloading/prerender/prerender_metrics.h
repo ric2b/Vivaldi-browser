@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,8 @@
 
 #include "base/time/time.h"
 #include "content/browser/preloading/prerender/prerender_host.h"
+#include "content/browser/preloading/prerender/prerender_host_registry.h"
+#include "content/browser/renderer_host/render_frame_host_delegate.h"
 #include "content/public/browser/prerender_trigger_type.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 
@@ -28,10 +30,50 @@ enum class PrerenderCancelledInterface {
   kMaxValue = kSyncEncryptionKeysExtension
 };
 
+// Used by PrerenderNavigationThrottle, to track the cross-origin cancellation
+// reason, and break it down into more cases.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PrerenderCrossOriginRedirectionMismatch {
+  kShouldNotBeReported = 0,
+  kPortMismatch = 1,
+  kHostMismatch = 2,
+  kHostPortMismatch = 3,
+  kSchemeMismatch = 4,
+  kSchemePortMismatch = 5,
+  kSchemeHostMismatch = 6,
+  kSchemeHostPortMismatch = 7,
+  kMaxValue = kSchemeHostPortMismatch
+};
+
+// Used by PrerenderNavigationThrottle. This is a breakdown enum for
+// PrerenderCrossOriginRedirectionMismatch.kSchemePortMismatch.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PrerenderCrossOriginRedirectionProtocolChange {
+  kHttpProtocolUpgrade = 0,
+  kHttpProtocolDowngrade = 1,
+  kMaxValue = kHttpProtocolDowngrade
+};
+
+// Used by PrerenderNavigationThrottle. This is a breakdown enum for
+// PrerenderCrossOriginRedirectionMismatch.kHostMismatch.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PrerenderCrossOriginRedirectionDomain {
+  kRedirectToSubDomain = 0,
+  kRedirectFromSubDomain = 1,
+  kCrossDomain = 2,
+  kMaxValue = kCrossDomain
+};
+
 void RecordPrerenderCancelledInterface(
     const std::string& interface_name,
     PrerenderTriggerType trigger_type,
     const std::string& embedder_histogram_suffix);
+
+void RecordPrerenderReasonForInactivePageRestriction(uint16_t reason,
+                                                     RenderFrameHostImpl& rfh);
 
 void RecordPrerenderTriggered(ukm::SourceId ukm_id);
 
@@ -54,6 +96,26 @@ void RecordPrerenderActivationNavigationParamsMatch(
     PrerenderHost::ActivationNavigationParamsMatch result,
     PrerenderTriggerType trigger_type,
     const std::string& embedder_suffix);
+
+// Records the detailed types of the cross-origin redirection, e.g., changes to
+// scheme, host name etc.
+void RecordPrerenderRedirectionMismatchType(
+    PrerenderCrossOriginRedirectionMismatch case_type,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix);
+
+// Records whether the redirection was caused by HTTP protocol upgrade.
+void RecordPrerenderRedirectionProtocolChange(
+    PrerenderCrossOriginRedirectionProtocolChange change_type,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix);
+
+// Records whether the prerendering navigation was redirected to a subdomain
+// page.
+void RecordPrerenderRedirectionDomain(
+    PrerenderCrossOriginRedirectionDomain domain_type,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix);
 
 }  // namespace content
 

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,8 @@
 #include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 
+#include "app/vivaldi_apptools.h"
+
 using guest_view::GuestViewEvent;
 
 namespace extensions {
@@ -34,8 +36,12 @@ ChromeWebViewGuestDelegate::~ChromeWebViewGuestDelegate() {
 bool ChromeWebViewGuestDelegate::HandleContextMenu(
     content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
+  // NOTE(andre@vivaldi.com) : This can hit if vivaldi and using the devtools in
+  // device mode where the webcontents is swapped out.
+  if(!vivaldi::IsVivaldiRunning()) {
   DCHECK_EQ(guest_web_contents(),
             content::WebContents::FromRenderFrameHost(&render_frame_host));
+  }
 
   if ((params.source_type == ui::MENU_SOURCE_LONG_PRESS ||
        params.source_type == ui::MENU_SOURCE_LONG_TAP ||

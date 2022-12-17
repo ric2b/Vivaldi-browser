@@ -1,4 +1,4 @@
-# Copyright 2015 The Chromium Authors. All rights reserved.
+# Copyright 2015 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -10,6 +10,7 @@ import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
 import("//chrome/android/trichrome.gni")
 import("//chrome/version.gni")
+import("//components/crash/android/silent_java_assert_reporting.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 import("//weblayer/variables.gni")
@@ -101,7 +102,13 @@ template("system_webview_apk_or_module_tmpl") {
       alternative_android_sdk_dep = webview_framework_dep
     }
 
-    if (webview_devui_show_icon) {
+    # We can't include an icon for anything with the Stable channel package name
+    # because it confuses work profiles. We check
+    # use_stable_package_name_for_trichrome here instead of where
+    # webview_devui_show_icon is assigned to avoid a circular dependency
+    # between //android_webview/variables.gni and
+    # //chrome/android/trichrome.gni.
+    if (webview_devui_show_icon && !use_stable_package_name_for_trichrome) {
       deps += [ "//android_webview/nonembedded:devui_launcher_icon_resources" ]
     }
 
@@ -272,32 +279,55 @@ template("system_webview_apk_or_module_tmpl") {
       if (!defined(proguard_configs)) {
         proguard_configs = []
       }
-      proguard_configs += [
-        "//android_webview/nonembedded/java/proguard.flags",
-        "//base/android/proguard/chromium_apk.flags",
-        "//base/android/proguard/chromium_code.flags",
-      ]
+      proguard_configs +=
+          [ "//android_webview/nonembedded/java/proguard.flags" ]
       png_to_webp = true
+    }
+
+    if (enable_silent_java_assert_reporting && !_omit_dex) {
+      custom_assertion_handler = crash_reporting_assertion_handler
     }
 
     if (!defined(version_code)) {
       if (_use_trichrome_library) {
+        _use_stable_package_name_for_trichrome =
+            use_stable_package_name_for_trichrome && android_channel == "beta"
         if (android_64bit_target_cpu) {
           if (invoker.is_64_bit_browser) {
             if (_include_32_bit_webview) {
-              version_code = trichrome_64_32_version_code
+              if (_use_stable_package_name_for_trichrome) {
+                version_code = trichrome_64_32_beta_version_code
+              } else {
+                version_code = trichrome_64_32_version_code
+              }
             } else {
-              version_code = trichrome_64_version_code
+              if (_use_stable_package_name_for_trichrome) {
+                version_code = trichrome_64_beta_version_code
+              } else {
+                version_code = trichrome_64_version_code
+              }
             }
           } else {
             if (_include_64_bit_webview) {
-              version_code = trichrome_32_64_version_code
+              if (_use_stable_package_name_for_trichrome) {
+                version_code = trichrome_32_64_beta_version_code
+              } else {
+                version_code = trichrome_32_64_version_code
+              }
             } else {
-              version_code = trichrome_32_version_code
+              if (_use_stable_package_name_for_trichrome) {
+                version_code = trichrome_32_beta_version_code
+              } else {
+                version_code = trichrome_32_version_code
+              }
             }
           }
         } else {
-          version_code = trichrome_version_code
+          if (_use_stable_package_name_for_trichrome) {
+            version_code = trichrome_beta_version_code
+          } else {
+            version_code = trichrome_version_code
+          }
         }
       } else {
         if (android_channel == "dev") {

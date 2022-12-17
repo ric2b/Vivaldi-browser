@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller.h"
 #import "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
@@ -75,8 +74,9 @@ class MockAutofillPopupController : public autofill::AutofillPopupController {
     return std::u16string();
   }
 
-  const std::u16string& GetSuggestionLabelAt(int row) const override {
-    return suggestions_.at(row).label;
+  std::vector<std::vector<autofill::Suggestion::Text>> GetSuggestionLabelsAt(
+      int row) const override {
+    return suggestions_[row].labels;
   }
 
   MOCK_METHOD3(GetRemovalConfirmationText,
@@ -161,17 +161,6 @@ TEST_F(CreditCardAutofillTouchBarControllerUnitTest, CreditCardButtonCheck) {
   EXPECT_TRUE(button);
   EXPECT_EQ(0, [button tag]);
   EXPECT_EQ("bufflehead canvasback", base::SysNSStringToUTF8([button title]));
-}
-
-// Tests that the touch bar histogram is logged correctly.
-TEST_F(CreditCardAutofillTouchBarControllerUnitTest, TouchBarMetric) {
-  {
-    base::HistogramTester histogram_tester;
-    [touch_bar_controller_ acceptCreditCard:nil];
-    histogram_tester.ExpectBucketCount("TouchBar.Default.Metrics",
-                                       ui::TouchBarAction::CREDIT_CARD_AUTOFILL,
-                                       1);
-  }
 }
 
 }  // namespace

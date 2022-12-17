@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
+#include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -117,29 +118,12 @@ bool* UIEnabledStorage() {
   return &enabled;
 }
 
-ContentAnalysisAcknowledgement::FinalAction GetFinalAction(
-    FinalContentAnalysisResult final_result) {
-  auto final_action = ContentAnalysisAcknowledgement::ALLOW;
-  switch (final_result) {
-    case FinalContentAnalysisResult::FAILURE:
-    case FinalContentAnalysisResult::LARGE_FILES:
-    case FinalContentAnalysisResult::ENCRYPTED_FILES:
-      final_action = ContentAnalysisAcknowledgement::BLOCK;
-      break;
-    case FinalContentAnalysisResult::WARNING:
-      final_action = ContentAnalysisAcknowledgement::WARN;
-      break;
-    case FinalContentAnalysisResult::SUCCESS:
-      break;
-  }
-
-  return final_action;
-}
-
 }  // namespace
 
 ContentAnalysisDelegate::Data::Data() = default;
 ContentAnalysisDelegate::Data::Data(Data&& other) = default;
+ContentAnalysisDelegate::Data& ContentAnalysisDelegate::Data::operator=(
+    ContentAnalysisDelegate::Data&& other) = default;
 ContentAnalysisDelegate::Data::~Data() = default;
 
 ContentAnalysisDelegate::Result::Result() = default;
@@ -162,7 +146,7 @@ void ContentAnalysisDelegate::BypassWarnings(
       content_size += entry.size();
 
     ReportAnalysisConnectorWarningBypass(
-        profile_, url_, "Text data", std::string(), "text/plain",
+        profile_, url_, "", "", "Text data", std::string(), "text/plain",
         extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
         access_point_, content_size, text_response_, user_justification);
   }
@@ -180,7 +164,7 @@ void ContentAnalysisDelegate::BypassWarnings(
     result_.page_result = true;
 
     ReportAnalysisConnectorWarningBypass(
-        profile_, url_, title_, /*sha256*/ std::string(),
+        profile_, url_, "", "", title_, /*sha256*/ std::string(),
         /*mime_type*/ std::string(),
         extensions::SafeBrowsingPrivateEventRouter::kTriggerPagePrint,
         access_point_, /*content_size*/ -1, page_response_, user_justification);
@@ -352,6 +336,9 @@ ContentAnalysisDelegate::ContentAnalysisDelegate(
   profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
   url_ = web_contents->GetLastCommittedURL();
   title_ = base::UTF16ToUTF8(web_contents->GetTitle());
+  std::string user_action_token = base::RandBytesAsString(128);
+  user_action_id_ =
+      base::HexEncode(user_action_token.data(), user_action_token.size());
   result_.text_results.resize(data_.text.size(), false);
   result_.paths_results.resize(data_.paths.size(), false);
   result_.page_result = false;
@@ -362,7 +349,7 @@ void ContentAnalysisDelegate::StringRequestCallback(
     enterprise_connectors::ContentAnalysisResponse response) {
   // Remember to send an ack for this response.
   if (result == safe_browsing::BinaryUploadService::Result::SUCCESS)
-    request_tokens_.push_back(response.request_token());
+    final_actions_[response.request_token()] = GetAckFinalAction(response);
 
   int64_t content_size = 0;
   for (const std::string& entry : data_.text)
@@ -384,7 +371,7 @@ void ContentAnalysisDelegate::StringRequestCallback(
             text_complies);
 
   MaybeReportDeepScanningVerdict(
-      profile_, url_, "Text data", std::string(), "text/plain",
+      profile_, url_, "", "", "Text data", std::string(), "text/plain",
       extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
       access_point_, content_size, result, response,
       CalculateEventResult(data_.settings, text_complies, should_warn));
@@ -403,7 +390,7 @@ void ContentAnalysisDelegate::StringRequestCallback(
 void ContentAnalysisDelegate::FilesRequestCallback(
     std::vector<RequestHandlerResult> results) {
   // Remember to send acks for any responses.
-  files_request_handler_->AppendRequestTokensTo(&request_tokens_);
+  files_request_handler_->AppendFinalActionsTo(&final_actions_);
 
   // No reporting here, because the MultiFileRequestHandler does that.
   DCHECK_EQ(results.size(), result_.paths_results.size());
@@ -446,7 +433,7 @@ void ContentAnalysisDelegate::PageRequestCallback(
     enterprise_connectors::ContentAnalysisResponse response) {
   // Remember to send an ack for this response.
   if (result == safe_browsing::BinaryUploadService::Result::SUCCESS)
-    request_tokens_.push_back(response.request_token());
+    final_actions_[response.request_token()] = GetAckFinalAction(response);
 
   RecordDeepScanMetrics(access_point_,
                         base::TimeTicks::Now() - upload_start_time_,
@@ -462,7 +449,7 @@ void ContentAnalysisDelegate::PageRequestCallback(
                      FinalContentAnalysisResult::WARNING;
 
   MaybeReportDeepScanningVerdict(
-      profile_, url_, title_, /*sha256*/ std::string(),
+      profile_, url_, "", "", title_, /*sha256*/ std::string(),
       /*mime_type*/ std::string(),
       extensions::SafeBrowsingPrivateEventRouter::kTriggerPagePrint,
       access_point_, /*content_size*/ -1, result, response,
@@ -490,8 +477,8 @@ bool ContentAnalysisDelegate::UploadData() {
     // Passing the settings using a reference is safe here, because
     // MultiFileRequestHandler is owned by this class.
     files_request_handler_ = FilesRequestHandler::Create(
-        GetBinaryUploadService(), profile_, data_.settings, url_, access_point_,
-        data_.paths,
+        GetBinaryUploadService(), profile_, data_.settings, url_, "", "",
+        user_action_id_, access_point_, data_.paths,
         base::BindOnce(&ContentAnalysisDelegate::FilesRequestCallback,
                        GetWeakPtr()));
     files_request_complete_ = !files_request_handler_->UploadData();
@@ -556,6 +543,9 @@ void ContentAnalysisDelegate::PreparePageRequest() {
   }
 }
 
+// This method only prepares requests for print and paste events. File events
+// are handled by
+// chrome/browser/enterprise/connectors/analysis/files_request_handler.h
 void ContentAnalysisDelegate::PrepareRequest(
     enterprise_connectors::AnalysisConnector connector,
     BinaryUploadService::Request* request) {
@@ -563,6 +553,18 @@ void ContentAnalysisDelegate::PrepareRequest(
     request->set_device_token(
         data_.settings.cloud_or_local_settings.dm_token());
   }
+
+  // Include tab page title, user action id, and count of requests per user
+  // action in local content analysis requests.
+  if (data_.settings.cloud_or_local_settings.is_local_analysis()) {
+    request->set_tab_title(title_);
+    request->set_user_action_id(user_action_id_);
+    // Set request count to 1 for print/paste event. Request count for file
+    // events are set in
+    // chrome/browser/enterprise/connectors/analysis/request_handler_base.cc
+    request->set_user_action_requests_count(1);
+  }
+
   request->set_analysis_connector(connector);
   request->set_email(safe_browsing::GetProfileEmail(profile_));
   request->set_url(data_.url.spec());
@@ -646,15 +648,12 @@ void ContentAnalysisDelegate::AckAllRequests() {
   if (!upload_service)
     return;
 
-  // Calculate final action applied to all requests.
-  auto final_action = GetFinalAction(final_result_);
-
-  for (auto& token : request_tokens_) {
+  for (const auto& token_and_action : final_actions_) {
     auto ack = std::make_unique<safe_browsing::BinaryUploadService::Ack>(
         data_.settings.cloud_or_local_settings);
-    ack->set_request_token(token);
+    ack->set_request_token(token_and_action.first);
     ack->set_status(ContentAnalysisAcknowledgement::SUCCESS);
-    ack->set_final_action(final_action);
+    ack->set_final_action(token_and_action.second);
     upload_service->MaybeAcknowledge(std::move(ack));
   }
 }

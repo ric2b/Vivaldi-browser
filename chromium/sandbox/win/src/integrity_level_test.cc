@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,8 +46,11 @@ std::unique_ptr<TestRunner> LowILRealRunner() {
   auto runner = std::make_unique<TestRunner>(
       JobLevel::kLockdown, USER_INTERACTIVE, USER_INTERACTIVE);
   runner->SetTimeout(INFINITE);
-  runner->GetPolicy()->SetAlternateDesktop(true);
-  runner->GetPolicy()->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  EXPECT_EQ(SBOX_ALL_OK, runner->broker()->CreateAlternateDesktop(
+                             Desktop::kAlternateWinstation));
+  runner->GetPolicy()->GetConfig()->SetDesktop(Desktop::kAlternateWinstation);
+  EXPECT_EQ(SBOX_ALL_OK, runner->GetPolicy()->GetConfig()->SetIntegrityLevel(
+                             INTEGRITY_LEVEL_LOW));
   return runner;
 }
 
@@ -64,7 +67,8 @@ std::unique_ptr<TestRunner> LowILDelayedRunner() {
   auto runner = std::make_unique<TestRunner>(
       JobLevel::kLockdown, USER_INTERACTIVE, USER_INTERACTIVE);
   runner->SetTimeout(INFINITE);
-  runner->GetPolicy()->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  runner->GetPolicy()->GetConfig()->SetDelayedIntegrityLevel(
+      INTEGRITY_LEVEL_LOW);
   return runner;
 }
 
@@ -88,9 +92,10 @@ TEST(IntegrityLevelTest, TestNoILChange) {
 TEST(IntegrityLevelTest, TestUntrustedIL) {
   TestRunner runner(JobLevel::kLockdown, USER_RESTRICTED_SAME_ACCESS,
                     USER_LOCKDOWN);
-  runner.GetPolicy()->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
-  runner.GetPolicy()->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_UNTRUSTED);
-  runner.GetPolicy()->SetLockdownDefaultDacl();
+  auto* config = runner.GetPolicy()->GetConfig();
+  EXPECT_EQ(SBOX_ALL_OK, config->SetIntegrityLevel(INTEGRITY_LEVEL_LOW));
+  config->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_UNTRUSTED);
+  config->SetLockdownDefaultDacl();
 
   runner.SetTimeout(INFINITE);
 
@@ -101,9 +106,10 @@ TEST(IntegrityLevelTest, TestUntrustedIL) {
 TEST(IntegrityLevelTest, TestLowIL) {
   TestRunner runner(JobLevel::kLockdown, USER_RESTRICTED_SAME_ACCESS,
                     USER_LOCKDOWN);
-  runner.GetPolicy()->SetIntegrityLevel(INTEGRITY_LEVEL_LOW);
-  runner.GetPolicy()->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
-  runner.GetPolicy()->SetLockdownDefaultDacl();
+  auto* config = runner.GetPolicy()->GetConfig();
+  EXPECT_EQ(SBOX_ALL_OK, config->SetIntegrityLevel(INTEGRITY_LEVEL_LOW));
+  config->SetDelayedIntegrityLevel(INTEGRITY_LEVEL_LOW);
+  config->SetLockdownDefaultDacl();
 
   runner.SetTimeout(INFINITE);
 

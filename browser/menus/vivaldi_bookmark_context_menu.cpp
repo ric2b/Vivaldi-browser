@@ -309,8 +309,8 @@ unsigned int GetStartIndexForBookmarks(views::MenuItemView* menu, int64_t id) {
   return menu_index;
 }
 
-const gfx::ImageSkia* GetBookmarkDefaultIcon() {
-  return Container->support.icons[BookmarkSupport::kUrl].ToImageSkia();
+const gfx::Image GetBookmarkDefaultIcon() {
+  return Container->support.icons[BookmarkSupport::kUrl];
 }
 
 const gfx::ImageSkia* GetBookmarkletIcon(views::MenuItemView* menu,

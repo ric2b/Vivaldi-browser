@@ -1,16 +1,16 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/destination_usage_history/destination_usage_history.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/time/time.h"
-#include "base/values.h"
-#include "components/prefs/pref_registry_simple.h"
-#include "components/prefs/testing_pref_service.h"
-#import "ios/chrome/browser/pref_names.h"
+#import "base/strings/string_number_conversions.h"
+#import "base/time/time.h"
+#import "base/values.h"
+#import "components/prefs/pref_registry_simple.h"
+#import "components/prefs/testing_pref_service.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_constants.h"
-#include "testing/platform_test.h"
+#import "testing/platform_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -31,6 +31,11 @@ class DestinationUsageHistoryTest : public PlatformTest {
   DestinationUsageHistoryTest() {}
 
  protected:
+  void TearDown() override {
+    [destination_usage_history_ disconnect];
+    PlatformTest::TearDown();
+  }
+
   // Creates CreateDestinationUsageHistory with empty pref data.
   DestinationUsageHistory* CreateDestinationUsageHistory() {
     CreatePrefs();
@@ -163,6 +168,17 @@ TEST_F(DestinationUsageHistoryTest, InitWithPrefServiceForDirtyPrefs) {
       pref_service->HasPrefPath(prefs::kOverflowMenuDestinationUsageHistory));
 }
 
+// Tests DestinationUsageHistory::disconnect correctly nullifies the
+// prefService.
+TEST_F(DestinationUsageHistoryTest, DestroysPrefServiceOnDisconnect) {
+  DestinationUsageHistory* destination_usage_history =
+      CreateDestinationUsageHistory();
+
+  [destination_usage_history disconnect];
+
+  EXPECT_EQ(destination_usage_history.prefService, nullptr);
+}
+
 // Tests that a new destination click is incremented and written to Chrome
 // Prefs.
 TEST_F(DestinationUsageHistoryTest, HandlesNewDestinationClickAndAddToPrefs) {
@@ -175,17 +191,12 @@ TEST_F(DestinationUsageHistoryTest, HandlesNewDestinationClickAndAddToPrefs) {
       numAboveFoldDestinations:numAboveFoldDestinations];
 
   // Fetch saved destination usage history.
-  const base::Value* history =
-      destination_usage_history.prefService->GetDictionary(
+  const base::Value::Dict& history =
+      destination_usage_history.prefService->GetDict(
           prefs::kOverflowMenuDestinationUsageHistory);
-  ASSERT_NE(history, nullptr);
-  ASSERT_TRUE(history->is_dict());
-
-  const base::Value::Dict* history_dict = history->GetIfDict();
-  ASSERT_NE(history, nullptr);
 
   // Query saved usage history for Bookmarks entry for today.
-  const base::Value* target = history_dict->FindByDottedPath(
+  const base::Value* target = history.FindByDottedPath(
       DottedPath(TodaysDay(), overflow_menu::Destination::Bookmarks));
 
   // Verify bookmarks entry exists and has been clicked once.
@@ -207,14 +218,9 @@ TEST_F(DestinationUsageHistoryTest, InjectsDefaultNumClicksForAllDestinations) {
       numAboveFoldDestinations:numAboveFoldDestinations];
 
   // Fetch saved destination usage history.
-  const base::Value* history =
-      destination_usage_history.prefService->GetDictionary(
+  const base::Value::Dict& history =
+      destination_usage_history.prefService->GetDict(
           prefs::kOverflowMenuDestinationUsageHistory);
-  ASSERT_NE(history, nullptr);
-  ASSERT_TRUE(history->is_dict());
-
-  const base::Value::Dict* history_dict = history->GetIfDict();
-  ASSERT_NE(history, nullptr);
 
   EXPECT_TRUE(destination_usage_history.prefService->HasPrefPath(
       prefs::kOverflowMenuDestinationUsageHistory));
@@ -233,7 +239,7 @@ TEST_F(DestinationUsageHistoryTest, InjectsDefaultNumClicksForAllDestinations) {
   int today = TodaysDay();
   for (overflow_menu::Destination destination : destinations) {
     const base::Value* target =
-        history_dict->FindByDottedPath(DottedPath(today, destination));
+        history.FindByDottedPath(DottedPath(today, destination));
     int expected_count =
         destination == overflow_menu::Destination::Bookmarks ? 21 : 20;
 
@@ -274,17 +280,12 @@ TEST_F(DestinationUsageHistoryTest,
       numAboveFoldDestinations:numAboveFoldDestinations];
 
   // Fetch saved destination usage history.
-  const base::Value* history =
-      destination_usage_history.prefService->GetDictionary(
+  const base::Value::Dict& history =
+      destination_usage_history.prefService->GetDict(
           prefs::kOverflowMenuDestinationUsageHistory);
-  ASSERT_NE(history, nullptr);
-  ASSERT_TRUE(history->is_dict());
-
-  const base::Value::Dict* history_dict = history->GetIfDict();
-  ASSERT_NE(history, nullptr);
 
   // Query saved usage history for Bookmarks entry for `TodaysDay`.
-  const base::Value* target = history_dict->FindByDottedPath(
+  const base::Value* target = history.FindByDottedPath(
       DottedPath(TodaysDay(), overflow_menu::Destination::Bookmarks));
 
   // Verify bookmarks entry exists and has been clicked once.
@@ -439,17 +440,12 @@ TEST_F(DestinationUsageHistoryTest, DeletesExpiredUsageData) {
       numAboveFoldDestinations:numAboveFoldDestinations];
 
   // Fetch saved destination usage history.
-  const base::Value* saved_history =
-      destination_usage_history.prefService->GetDictionary(
+  const base::Value::Dict& saved_history =
+      destination_usage_history.prefService->GetDict(
           prefs::kOverflowMenuDestinationUsageHistory);
-  ASSERT_NE(saved_history, nullptr);
-  ASSERT_TRUE(saved_history->is_dict());
-
-  const base::Value::Dict* history_dict = saved_history->GetIfDict();
-  ASSERT_NE(history_dict, nullptr);
 
   std::set<std::string> seen_keys;
-  for (auto&& [day, day_history] : *history_dict)
+  for (auto&& [day, day_history] : saved_history)
     seen_keys.insert(day);
 
   std::set<std::string> expected_keys = {"ranking",

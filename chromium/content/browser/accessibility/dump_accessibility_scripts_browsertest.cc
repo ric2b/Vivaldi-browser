@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,7 +80,7 @@ class DumpAccessibilityScriptTest : public DumpAccessibilityTestBase {
   std::vector<std::string> Dump() override {
     std::vector<std::string> dump;
     std::unique_ptr<AXTreeFormatter> formatter(CreateFormatter());
-    BrowserAccessibility* root = GetManager()->GetRoot();
+    BrowserAccessibility* root = GetManager()->GetBrowserAccessibilityRoot();
 
     size_t start_index = 0;
     size_t length = scenario_.script_instructions.size();
@@ -286,6 +286,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXGrabbed) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXHasPopup) {
   RunTypedTest<kMacAttributes>("ax-has-popup.html");
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXHelp) {
+  RunTypedTest<kMacAttributes>("ax-help.html");
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityScriptTest, AXHighestEditableAncestor) {

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -131,7 +131,6 @@ class SupervisedUserSettingsServiceTest : public ::testing::Test {
     // Check that we are uploading sync data.
     ASSERT_EQ(1u, sync_processor_->changes().size());
     syncer::SyncChange sync_change = sync_processor_->changes()[0];
-    ASSERT_TRUE(sync_change.IsValid());
     EXPECT_EQ(expected_sync_change_type, sync_change.change_type());
     EXPECT_EQ(
         sync_change.sync_data().GetSpecifics().managed_user_setting().name(),
@@ -225,12 +224,12 @@ TEST_F(SupervisedUserSettingsServiceTest, ProcessSplitSetting) {
 
   settings_.reset();
   syncer::SyncChangeList change_list;
-  for (base::DictionaryValue::Iterator it(dict); !it.IsAtEnd(); it.Advance()) {
+  for (const auto item : dict.GetDict()) {
     syncer::SyncData data =
         SupervisedUserSettingsService::CreateSyncDataForSetting(
             SupervisedUserSettingsService::MakeSplitSettingKey(kSettingsName,
-                                                               it.key()),
-            it.value());
+                                                               item.first),
+            item.second);
     change_list.push_back(
         syncer::SyncChange(FROM_HERE, syncer::SyncChange::ACTION_ADD, data));
   }
@@ -240,9 +239,7 @@ TEST_F(SupervisedUserSettingsServiceTest, ProcessSplitSetting) {
   ASSERT_TRUE(settings_);
   value = settings_->FindKey(kSettingsName);
   ASSERT_TRUE(value);
-  const base::DictionaryValue* dict_value = nullptr;
-  ASSERT_TRUE(value->GetAsDictionary(&dict_value));
-  EXPECT_EQ(*dict_value, dict);
+  EXPECT_EQ(value->GetDict(), dict);
 }
 
 TEST_F(SupervisedUserSettingsServiceTest, NotifyForWebsiteApprovals) {
@@ -309,13 +306,12 @@ TEST_F(SupervisedUserSettingsServiceTest, Merge) {
     base::DictionaryValue dict;
     dict.SetStringKey("foo", "bar");
     dict.SetIntKey("eaudecologne", 4711);
-    for (base::DictionaryValue::Iterator it(dict); !it.IsAtEnd();
-         it.Advance()) {
+    for (const auto item : dict.GetDict()) {
       sync_data.push_back(
           SupervisedUserSettingsService::CreateSyncDataForSetting(
               SupervisedUserSettingsService::MakeSplitSettingKey(kSplitItemName,
-                                                                 it.key()),
-              it.value()));
+                                                                 item.first),
+              item.second));
     }
     StartSyncing(sync_data);
     EXPECT_EQ(3u,
@@ -338,13 +334,12 @@ TEST_F(SupervisedUserSettingsServiceTest, Merge) {
     dict.SetStringKey("foo", "burp");
     dict.SetStringKey("item", "first");
     // Adding 2 SplitSettings from dictionary.
-    for (base::DictionaryValue::Iterator it(dict); !it.IsAtEnd();
-         it.Advance()) {
+    for (const auto item : dict.GetDict()) {
       sync_data.push_back(
           SupervisedUserSettingsService::CreateSyncDataForSetting(
               SupervisedUserSettingsService::MakeSplitSettingKey(kSplitItemName,
-                                                                 it.key()),
-              it.value()));
+                                                                 item.first),
+              item.second));
     }
     StartSyncing(sync_data);
     EXPECT_EQ(4u,
@@ -381,7 +376,6 @@ TEST_F(SupervisedUserSettingsServiceTest, UploadItem) {
   StartSyncing(syncer::SyncDataList());
   ASSERT_EQ(3u, sync_processor_->changes().size());
   for (const syncer::SyncChange& sync_change : sync_processor_->changes()) {
-    ASSERT_TRUE(sync_change.IsValid());
     EXPECT_EQ(syncer::SyncChange::ACTION_ADD, sync_change.change_type());
     VerifySyncDataItem(sync_change.sync_data());
   }
@@ -398,7 +392,6 @@ TEST_F(SupervisedUserSettingsServiceTest, UploadItem) {
   UploadSplitItem("froodle", "narf");
   ASSERT_EQ(1u, sync_processor_->changes().size());
   syncer::SyncChange change = sync_processor_->changes()[0];
-  ASSERT_TRUE(change.IsValid());
   EXPECT_EQ(syncer::SyncChange::ACTION_ADD, change.change_type());
   VerifySyncDataItem(change.sync_data());
 
@@ -414,7 +407,6 @@ TEST_F(SupervisedUserSettingsServiceTest, UploadItem) {
   UploadSplitItem("blurp", "snarl");
   ASSERT_EQ(1u, sync_processor_->changes().size());
   change = sync_processor_->changes()[0];
-  ASSERT_TRUE(change.IsValid());
   EXPECT_EQ(syncer::SyncChange::ACTION_UPDATE, change.change_type());
   VerifySyncDataItem(change.sync_data());
 
@@ -428,7 +420,6 @@ TEST_F(SupervisedUserSettingsServiceTest, UploadItem) {
   UploadAtomicItem("fjord");
   ASSERT_EQ(1u, sync_processor_->changes().size());
   change = sync_processor_->changes()[0];
-  ASSERT_TRUE(change.IsValid());
   EXPECT_EQ(syncer::SyncChange::ACTION_UPDATE, change.change_type());
   VerifySyncDataItem(change.sync_data());
 

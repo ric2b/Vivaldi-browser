@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,13 @@
 #include "ui/gfx/gfx_export.h"
 
 namespace gfx {
+
+// Maximum number of points that can be drawn. This is used to limit the total
+// number of ink trail tokens that we will store, and the total number of points
+// that we will store to provide to the Direct Composition APIs. It should match
+// the exact number of points that the OS Compositor will store to draw as part
+// of a trail.
+inline constexpr int kMaximumNumberOfDelegatedInkPoints = 128;
 
 // This class stores all the metadata that is gathered when the WebAPI
 // updateInkTrailStartPoint is called. This metadata flows from blink,

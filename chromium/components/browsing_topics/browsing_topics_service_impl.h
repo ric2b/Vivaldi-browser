@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,7 +46,8 @@ class BrowsingTopicsServiceImpl
 
   std::vector<blink::mojom::EpochTopicPtr> GetBrowsingTopicsForJsApi(
       const url::Origin& context_origin,
-      content::RenderFrameHost* main_frame) override;
+      content::RenderFrameHost* main_frame,
+      bool observe) override;
 
   void GetBrowsingTopicsStateForWebUi(
       bool calculate_now,

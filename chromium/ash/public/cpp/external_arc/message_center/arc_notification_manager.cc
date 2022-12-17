@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -275,9 +275,9 @@ void ArcNotificationManager::OnNotificationUpdated(
              (previously_focused_notification_key_ == key)) {
     // The case that the previously-focused notification gets unfocused. Notify
     // the previously-focused notification if the notification still exists.
-    auto it = items_.find(previously_focused_notification_key_);
-    if (it != items_.end())
-      it->second->OnRemoteInputActivationChanged(false);
+    auto previous_it = items_.find(previously_focused_notification_key_);
+    if (previous_it != items_.end())
+      previous_it->second->OnRemoteInputActivationChanged(false);
 
     previously_focused_notification_key_.clear();
   }
@@ -419,7 +419,7 @@ void ArcNotificationManager::SendNotificationRemovedFromChrome(
 
 void ArcNotificationManager::SendNotificationClickedOnChrome(
     const std::string& key) {
-  if (items_.find(key) == items_.end()) {
+  if (!base::Contains(items_, key)) {
     VLOG(3) << "Chrome requests to fire a click event on notification (key: "
             << key << "), but it is gone.";
     return;
@@ -442,7 +442,7 @@ void ArcNotificationManager::SendNotificationClickedOnChrome(
 void ArcNotificationManager::SendNotificationActivatedInChrome(
     const std::string& key,
     bool activated) {
-  if (items_.find(key) == items_.end()) {
+  if (!base::Contains(items_, key)) {
     VLOG(3)
         << "Chrome requests to fire an activation event on notification (key: "
         << key << "), but it is gone.";
@@ -465,7 +465,7 @@ void ArcNotificationManager::SendNotificationActivatedInChrome(
 }
 
 void ArcNotificationManager::CreateNotificationWindow(const std::string& key) {
-  if (items_.find(key) == items_.end()) {
+  if (!base::Contains(items_, key)) {
     VLOG(3) << "Chrome requests to create window on notification (key: " << key
             << "), but it is gone.";
     return;
@@ -480,7 +480,7 @@ void ArcNotificationManager::CreateNotificationWindow(const std::string& key) {
 }
 
 void ArcNotificationManager::CloseNotificationWindow(const std::string& key) {
-  if (items_.find(key) == items_.end()) {
+  if (!base::Contains(items_, key)) {
     VLOG(3) << "Chrome requests to close window on notification (key: " << key
             << "), but it is gone.";
     return;
@@ -495,7 +495,7 @@ void ArcNotificationManager::CloseNotificationWindow(const std::string& key) {
 }
 
 void ArcNotificationManager::OpenNotificationSettings(const std::string& key) {
-  if (items_.find(key) == items_.end()) {
+  if (!base::Contains(items_, key)) {
     DVLOG(3) << "Chrome requests to fire a click event on the notification "
              << "settings button (key: " << key << "), but it is gone.";
     return;
@@ -537,7 +537,7 @@ bool ArcNotificationManager::IsOpeningSettingsSupported() const {
 
 void ArcNotificationManager::SendNotificationToggleExpansionOnChrome(
     const std::string& key) {
-  if (items_.find(key) == items_.end()) {
+  if (!base::Contains(items_, key)) {
     VLOG(3) << "Chrome requests to fire a click event on notification (key: "
             << key << "), but it is gone.";
     return;

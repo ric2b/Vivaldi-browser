@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,7 @@ EntityData::~EntityData() = default;
 
 EntityData& EntityData::operator=(EntityData&& other) = default;
 
-base::Value::Dict EntityData::ToDictionaryValue() {
+base::Value::Dict EntityData::ToDictionaryValue() const {
   // This is used when debugging at sync-internals page. The code in
   // sync_node_browser.js is expecting certain fields names. e.g. CTIME, MTIME,
   // and IS_DIR.

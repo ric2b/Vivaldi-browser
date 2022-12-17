@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,8 +44,9 @@ class NodeLinkMemoryTest : public testing::Test {
         node_b_, LinkSide::kB, kTestNonBrokerName, kTestBrokerName,
         Node::Type::kBroker, 0, transports.second,
         NodeLinkMemory::Create(node_b_, buffer.memory.Map()));
-    node_a_->AddLink(kTestNonBrokerName, link_a_);
-    node_b_->AddLink(kTestBrokerName, link_b_);
+    node_a_->AddConnection(kTestNonBrokerName, {.link = link_a_});
+    node_b_->AddConnection(kTestBrokerName,
+                           {.link = link_b_, .broker = link_a_});
     link_a_->Activate();
     link_b_->Activate();
   }
@@ -201,15 +202,15 @@ TEST_F(NodeLinkMemoryTest, OversizedAllocation) {
 
 TEST_F(NodeLinkMemoryTest, NewBlockSizes) {
   // NodeLinkMemory begins life with a fixed set of block allocators available
-  // for certain common block sizes. These are capped out at 2 kB blocks, but
+  // for certain common block sizes. These are capped out at 64 kB blocks, but
   // NodeLinkMemory still supports block allocation of larger blocks as well --
-  // at least up to 16 kB in size. Verify that we can trigger new capacity for
+  // at least up to 1 MB in size. Verify that we can trigger new capacity for
   // such sizes by attempting to allocate them.
 
-  constexpr size_t kPrettyBig = 16 * 1024;
+  constexpr size_t kPrettyBig = 512 * 1024;
   Fragment fragment = memory_a().AllocateFragment(kPrettyBig);
 
-  // No initial capacity for 16 kB fragments.
+  // No initial capacity for 256 kB fragments.
   EXPECT_TRUE(fragment.is_null());
 
   // But the failure above should have triggered expansion of capacity for that

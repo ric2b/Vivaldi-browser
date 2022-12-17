@@ -18,11 +18,12 @@
 #include "components/sync/base/sync_util.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_service_impl.h"
-#include "ios/chrome/browser/application_context.h"
+#include "ios/chrome/browser/application_context/application_context.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmark_sync_service_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
@@ -30,7 +31,6 @@
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/sync/consent_auditor_factory.h"
 #include "ios/chrome/browser/sync/device_info_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
 #include "ios/chrome/browser/sync/model_type_store_service_factory.h"
@@ -104,9 +104,6 @@ VivaldiSyncServiceFactory::BuildServiceInstanceFor(
       GetApplicationContext()->GetNetworkConnectionTracker();
   init_params.channel = ::GetChannel();
   init_params.debug_identifier = browser_state->GetDebugName();
-  auto* policy_connector = browser_state->GetPolicyConnector();
-  init_params.policy_service =
-      policy_connector ? policy_connector->GetPolicyService() : nullptr;
 
   PrefService* local_state = GetApplicationContext()->GetLocalState();
   if (local_state)

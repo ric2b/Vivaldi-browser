@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
       public BluetoothDiscoveryManagerMac::Observer,
       public BluetoothLowEnergyDiscoveryManagerMac::Observer {
  public:
+  using DevicesInfo = std::map<std::string, std::string>;
+
   static scoped_refptr<BluetoothAdapterMac> CreateAdapter();
   static scoped_refptr<BluetoothAdapterMac> CreateAdapterForTest(
       std::string name,
@@ -124,8 +126,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
   void RemovePairingDelegateInternal(
       device::BluetoothDevice::PairingDelegate* pairing_delegate) override;
 
-  void UpdateKnownLowEnergyDevices(
-      std::map<std::string, std::string> updated_low_energy_device_info);
+  void UpdateKnownLowEnergyDevices(DevicesInfo updated_low_energy_device_info);
 
  private:
   // Struct bundling information about the state of the HostController.
@@ -312,7 +313,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
 
   // Map of UUID formatted device identifiers of paired Bluetooth devices and
   // corresponding device address.
-  std::map<std::string, std::string> low_energy_devices_info_;
+  DevicesInfo low_energy_devices_info_;
 
   base::WeakPtrFactory<BluetoothAdapterMac> weak_ptr_factory_{this};
 };

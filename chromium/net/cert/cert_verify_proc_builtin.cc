@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -493,7 +493,7 @@ void MapPathBuilderErrorsToCertStatus(const CertPathErrors& errors,
   // IMPORTANT: If the path was invalid for a reason that was not
   // explicity checked above, set a general error. This is important as
   // |cert_status| is what ultimately indicates whether verification was
-  // successful or not (absense of errors implies success).
+  // successful or not (absence of errors implies success).
   if (!IsCertStatusError(*cert_status))
     *cert_status |= CERT_STATUS_INVALID;
 }
@@ -742,7 +742,7 @@ int CertVerifyProcBuiltin::VerifyInternal(
     net_log.AddEvent(NetLogEventType::CERT_VERIFY_PROC_TARGET_CERT, [&] {
       return NetLogCertParams(input_cert->cert_buffer(), parsing_errors);
     });
-    if (!target) {
+    if (!target || !target->signature_algorithm()) {
       verify_result->cert_status |= CERT_STATUS_INVALID;
       return ERR_CERT_INVALID;
     }

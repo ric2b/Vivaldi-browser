@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -145,6 +145,13 @@ bool RealTimeUrlLookupService::CanCheckSubresourceURL() const {
 bool RealTimeUrlLookupService::CanCheckSafeBrowsingDb() const {
   // Always return true, because consumer real time URL check only works when
   // safe browsing is enabled.
+  return true;
+}
+
+bool RealTimeUrlLookupService::CanCheckSafeBrowsingHighConfidenceAllowlist()
+    const {
+  // Always return true, because consumer real time URL check always checks
+  // high confidence allowlist.
   return true;
 }
 

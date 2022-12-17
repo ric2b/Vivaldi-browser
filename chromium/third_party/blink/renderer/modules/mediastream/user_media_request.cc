@@ -33,6 +33,7 @@
 
 #include <type_traits>
 
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
@@ -63,7 +64,33 @@
 
 namespace blink {
 
+using mojom::blink::MediaStreamType;
+
 namespace {
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class GetDisplayMediaIncludeExcludeConstraint {
+  kNotSpecified = 0,
+  kInclude = 1,
+  kExclude = 2,
+  kMaxValue = kExclude
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class GetDisplayMediaConstraintsDisplaySurface {
+  kNotSpecified = 0,
+  kTab = 1,
+  kWindow = 2,
+  kMonitor = 3,
+  kMaxValue = kMonitor
+};
+
+void RecordUma(GetDisplayMediaConstraintsDisplaySurface value) {
+  base::UmaHistogramEnumeration(
+      "Media.GetDisplayMedia.Constraints.DisplaySurface", value);
+}
 
 template <typename NumericConstraint>
 bool SetUsesNumericConstraint(
@@ -281,6 +308,63 @@ void CountVideoConstraintUses(ExecutionContext* context,
   }
 }
 
+void RecordSystemAudioConstraintUma(const MediaStreamConstraints* options) {
+  const GetDisplayMediaIncludeExcludeConstraint value =
+      (!options->hasSystemAudio()
+           ? GetDisplayMediaIncludeExcludeConstraint::kNotSpecified
+       : options->systemAudio().AsEnum() ==
+               V8SystemAudioPreferenceEnum::Enum::kInclude
+           ? GetDisplayMediaIncludeExcludeConstraint::kInclude
+           : GetDisplayMediaIncludeExcludeConstraint::kExclude);
+  base::UmaHistogramEnumeration("Media.GetDisplayMedia.Constraints.SystemAudio",
+                                value);
+}
+
+void RecordSelfBrowserSurfaceConstraintUma(
+    const MediaStreamConstraints* options) {
+  const GetDisplayMediaIncludeExcludeConstraint value =
+      (!options->hasSelfBrowserSurface()
+           ? GetDisplayMediaIncludeExcludeConstraint::kNotSpecified
+       : options->selfBrowserSurface().AsEnum() ==
+               V8SelfCapturePreferenceEnum::Enum::kInclude
+           ? GetDisplayMediaIncludeExcludeConstraint::kInclude
+           : GetDisplayMediaIncludeExcludeConstraint::kExclude);
+  base::UmaHistogramEnumeration(
+      "Media.GetDisplayMedia.Constraints.SelfBrowserSurface", value);
+}
+
+void RecordPreferredDisplaySurfaceConstraintUma(
+    const mojom::blink::PreferredDisplaySurface preferred_display_surface) {
+  switch (preferred_display_surface) {
+    case mojom::blink::PreferredDisplaySurface::NO_PREFERENCE:
+      RecordUma(GetDisplayMediaConstraintsDisplaySurface::kNotSpecified);
+      return;
+    case mojom::blink::PreferredDisplaySurface::MONITOR:
+      RecordUma(GetDisplayMediaConstraintsDisplaySurface::kMonitor);
+      return;
+    case mojom::blink::PreferredDisplaySurface::WINDOW:
+      RecordUma(GetDisplayMediaConstraintsDisplaySurface::kWindow);
+      return;
+    case mojom::blink::PreferredDisplaySurface::BROWSER:
+      RecordUma(GetDisplayMediaConstraintsDisplaySurface::kTab);
+      return;
+  }
+  NOTREACHED();
+}
+
+void RecordSurfaceSwitchingConstraintUma(
+    const MediaStreamConstraints* options) {
+  const GetDisplayMediaIncludeExcludeConstraint value =
+      (!options->hasSurfaceSwitching()
+           ? GetDisplayMediaIncludeExcludeConstraint::kNotSpecified
+       : options->surfaceSwitching().AsEnum() ==
+               V8SurfaceSwitchingPreferenceEnum::Enum::kInclude
+           ? GetDisplayMediaIncludeExcludeConstraint::kInclude
+           : GetDisplayMediaIncludeExcludeConstraint::kExclude);
+  base::UmaHistogramEnumeration(
+      "Media.GetDisplayMedia.Constraints.SurfaceSwitching", value);
+}
+
 MediaConstraints ParseOptions(
     ExecutionContext* execution_context,
     const V8UnionBooleanOrMediaTrackConstraints* options,
@@ -321,18 +405,21 @@ UserMediaRequest* UserMediaRequest::Create(
   if (error_state.HadException())
     return nullptr;
 
-  if (media_type == UserMediaRequestType::kUserMedia && !video.IsNull()) {
-    if (video.Basic().pan.HasMandatory()) {
-      error_state.ThrowTypeError("Mandatory pan constraint is not supported");
+  std::string display_surface_constraint;
+
+  if (media_type == UserMediaRequestType::kUserMedia) {
+    if (audio.IsNull() && video.IsNull()) {
+      error_state.ThrowTypeError(
+          "At least one of audio and video must be requested");
       return nullptr;
-    }
-    if (video.Basic().tilt.HasMandatory()) {
-      error_state.ThrowTypeError("Mandatory tilt constraint is not supported");
-      return nullptr;
-    }
-    if (video.Basic().zoom.HasMandatory()) {
-      error_state.ThrowTypeError("Mandatory zoom constraint is not supported");
-      return nullptr;
+    } else if (!video.IsNull()) {
+      if (video.Basic().pan.HasMandatory() ||
+          video.Basic().tilt.HasMandatory() ||
+          video.Basic().zoom.HasMandatory()) {
+        error_state.ThrowTypeError(
+            "Mandatory pan-tilt-zoom constraints are not supported");
+        return nullptr;
+      }
     }
   } else if (media_type == UserMediaRequestType::kDisplayMedia ||
              media_type == UserMediaRequestType::kDisplayMediaSet) {
@@ -349,8 +436,6 @@ UserMediaRequest* UserMediaRequest::Create(
     //   newly created TypeError.
     // 3. Let requestedMediaTypes be the set of media types in constraints with
     // either a dictionary value or a value of true.
-    // 4. If requestedMediaTypes is the empty set, set requestedMediaTypes to a
-    // set containing "video".
     if (media_type == UserMediaRequestType::kDisplayMediaSet) {
       if (!audio.IsNull()) {
         error_state.ThrowTypeError("Audio requests are not supported");
@@ -361,39 +446,33 @@ UserMediaRequest* UserMediaRequest::Create(
       }
     }
 
-    if ((!audio.IsNull() && !audio.Advanced().IsEmpty()) ||
-        (!video.IsNull() && !video.Advanced().IsEmpty())) {
+    if (video.IsNull()) {
+      error_state.ThrowTypeError("video must be requested");
+      return nullptr;
+    }
+
+    if ((!audio.IsNull() && !audio.Advanced().empty()) ||
+        !video.Advanced().empty()) {
       error_state.ThrowTypeError("Advanced constraints are not supported");
       return nullptr;
     }
-    if ((!audio.IsNull() && audio.Basic().HasMin()) ||
-        (!video.IsNull() && video.Basic().HasMin())) {
+
+    if ((!audio.IsNull() && audio.Basic().HasMin()) || video.Basic().HasMin()) {
       error_state.ThrowTypeError("min constraints are not supported");
       return nullptr;
     }
+
     if ((!audio.IsNull() && audio.Basic().HasExact()) ||
-        (!video.IsNull() && video.Basic().HasExact())) {
+        video.Basic().HasExact()) {
       error_state.ThrowTypeError("exact constraints are not supported");
       return nullptr;
     }
-    if (!audio.IsNull() && video.IsNull()) {
-      error_state.ThrowTypeError("Audio only requests are not supported");
-      return nullptr;
-    }
-    if (audio.IsNull() && video.IsNull()) {
-      video = ParseOptions(
-          context,
-          MakeGarbageCollected<V8UnionBooleanOrMediaTrackConstraints>(true),
-          error_state);
-      if (error_state.HadException())
-        return nullptr;
-    }
-  }
 
-  if (audio.IsNull() && video.IsNull()) {
-    error_state.ThrowTypeError(
-        "At least one of audio and video must be requested");
-    return nullptr;
+    if (video.Basic().display_surface.HasIdeal() &&
+        video.Basic().display_surface.Ideal().size() > 0) {
+      display_surface_constraint =
+          video.Basic().display_surface.Ideal()[0].Utf8();
+    }
   }
 
   if (!audio.IsNull())
@@ -411,6 +490,44 @@ UserMediaRequest* UserMediaRequest::Create(
       options->hasSystemAudio() &&
       options->systemAudio().AsEnum() ==
           V8SystemAudioPreferenceEnum::Enum::kExclude);
+  if (media_type == UserMediaRequestType::kDisplayMedia)
+    RecordSystemAudioConstraintUma(options);
+
+  // The default is to include.
+  const bool exclude_self_browser_surface =
+      options->hasSelfBrowserSurface() &&
+      options->selfBrowserSurface().AsEnum() ==
+          V8SelfCapturePreferenceEnum::Enum::kExclude;
+  if (exclude_self_browser_surface && options->preferCurrentTab()) {
+    error_state.ThrowTypeError(
+        "Self-contradictory configuration (preferCurrentTab and "
+        "selfBrowserSurface=exclude).");
+    return nullptr;
+  }
+  result->set_exclude_self_browser_surface(exclude_self_browser_surface);
+  if (media_type == UserMediaRequestType::kDisplayMedia)
+    RecordSelfBrowserSurfaceConstraintUma(options);
+
+  mojom::blink::PreferredDisplaySurface preferred_display_surface =
+      mojom::blink::PreferredDisplaySurface::NO_PREFERENCE;
+  if (display_surface_constraint == "monitor") {
+    preferred_display_surface = mojom::blink::PreferredDisplaySurface::MONITOR;
+  } else if (display_surface_constraint == "window") {
+    preferred_display_surface = mojom::blink::PreferredDisplaySurface::WINDOW;
+  } else if (display_surface_constraint == "browser") {
+    preferred_display_surface = mojom::blink::PreferredDisplaySurface::BROWSER;
+  }
+  result->set_preferred_display_surface(preferred_display_surface);
+  if (media_type == UserMediaRequestType::kDisplayMedia)
+    RecordPreferredDisplaySurfaceConstraintUma(preferred_display_surface);
+
+  // The default is to request dynamic surface switching.
+  result->set_dynamic_surface_switching_requested(
+      !options->hasSurfaceSwitching() ||
+      options->surfaceSwitching().AsEnum() ==
+          V8SurfaceSwitchingPreferenceEnum::Enum::kInclude);
+  if (media_type == UserMediaRequestType::kDisplayMedia)
+    RecordSurfaceSwitchingConstraintUma(options);
 
   return result;
 }
@@ -473,6 +590,73 @@ MediaConstraints UserMediaRequest::VideoConstraints() const {
   return video_;
 }
 
+MediaStreamType UserMediaRequest::AudioMediaStreamType() const {
+  if (!Audio()) {
+    return MediaStreamType::NO_SERVICE;
+  }
+  if (MediaRequestType() == UserMediaRequestType::kDisplayMedia) {
+    return MediaStreamType::DISPLAY_AUDIO_CAPTURE;
+  }
+  if (MediaRequestType() == UserMediaRequestType::kDisplayMediaSet) {
+    return MediaStreamType::NO_SERVICE;
+  }
+  DCHECK_EQ(UserMediaRequestType::kUserMedia, MediaRequestType());
+
+  // Check if this is a getUserMedia display capture.
+  const MediaConstraints& constraints = AudioConstraints();
+  String source_constraint =
+      constraints.Basic().media_stream_source.Exact().empty()
+          ? String()
+          : String(constraints.Basic().media_stream_source.Exact()[0]);
+  if (!source_constraint.empty()) {
+    // This is a getUserMedia display capture call.
+    if (source_constraint == blink::kMediaStreamSourceTab) {
+      return MediaStreamType::GUM_TAB_AUDIO_CAPTURE;
+    } else if (source_constraint == blink::kMediaStreamSourceDesktop ||
+               source_constraint == blink::kMediaStreamSourceSystem) {
+      return MediaStreamType::GUM_DESKTOP_AUDIO_CAPTURE;
+    }
+    return MediaStreamType::NO_SERVICE;
+  }
+
+  return MediaStreamType::DEVICE_AUDIO_CAPTURE;
+}
+
+MediaStreamType UserMediaRequest::VideoMediaStreamType() const {
+  if (!Video()) {
+    return MediaStreamType::NO_SERVICE;
+  }
+  if (MediaRequestType() == UserMediaRequestType::kDisplayMedia) {
+    return should_prefer_current_tab()
+               ? MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB
+               : MediaStreamType::DISPLAY_VIDEO_CAPTURE;
+  }
+  if (MediaRequestType() == UserMediaRequestType::kDisplayMediaSet) {
+    DCHECK(!should_prefer_current_tab());
+    return MediaStreamType::DISPLAY_VIDEO_CAPTURE_SET;
+  }
+  DCHECK_EQ(UserMediaRequestType::kUserMedia, MediaRequestType());
+
+  // Check if this is a getUserMedia display capture.
+  const MediaConstraints& constraints = VideoConstraints();
+  String source_constraint =
+      constraints.Basic().media_stream_source.Exact().empty()
+          ? String()
+          : String(constraints.Basic().media_stream_source.Exact()[0]);
+  if (!source_constraint.empty()) {
+    // This is a getUserMedia display capture call.
+    if (source_constraint == blink::kMediaStreamSourceTab) {
+      return MediaStreamType::GUM_TAB_VIDEO_CAPTURE;
+    } else if (source_constraint == blink::kMediaStreamSourceDesktop ||
+               source_constraint == blink::kMediaStreamSourceScreen) {
+      return MediaStreamType::GUM_DESKTOP_VIDEO_CAPTURE;
+    }
+    return MediaStreamType::NO_SERVICE;
+  }
+
+  return MediaStreamType::DEVICE_VIDEO_CAPTURE;
+}
+
 bool UserMediaRequest::ShouldDisableHardwareNoiseSuppression() const {
   return should_disable_hardware_noise_suppression_;
 }
@@ -527,21 +711,14 @@ void UserMediaRequest::Start() {
 void UserMediaRequest::Succeed(
     const MediaStreamDescriptorVector& streams_descriptors) {
   DCHECK(!is_resolved_);
-  DCHECK(transferred_track_ == nullptr || streams_descriptors.size() == 1u);
+  DCHECK(transferred_track_ == nullptr);
   if (!GetExecutionContext())
     return;
 
-  if (transferred_track_) {
-    MediaStream::Create(GetExecutionContext(), streams_descriptors[0],
-                        transferred_track_,
-                        WTF::Bind(&UserMediaRequest::OnMediaStreamInitialized,
-                                  WrapPersistent(this)));
-  } else {
-    MediaStreamSet::Create(
-        GetExecutionContext(), streams_descriptors,
-        WTF::Bind(&UserMediaRequest::OnMediaStreamsInitialized,
-                  WrapPersistent(this)));
-  }
+  MediaStreamSet::Create(
+      GetExecutionContext(), streams_descriptors, media_type_,
+      WTF::BindOnce(&UserMediaRequest::OnMediaStreamsInitialized,
+                    WrapPersistent(this)));
 }
 
 void UserMediaRequest::OnMediaStreamInitialized(MediaStream* stream) {
@@ -575,7 +752,7 @@ void UserMediaRequest::OnMediaStreamsInitialized(MediaStreamVector streams) {
 
 void UserMediaRequest::FailConstraint(const String& constraint_name,
                                       const String& message) {
-  DCHECK(!constraint_name.IsEmpty());
+  DCHECK(!constraint_name.empty());
   DCHECK(!is_resolved_);
   if (!GetExecutionContext())
     return;
@@ -666,6 +843,19 @@ void UserMediaRequest::ContextDestroyed() {
 void UserMediaRequest::SetTransferredTrackComponent(
     MediaStreamComponent* component) {
   transferred_track_->SetComponentImplementation(component);
+}
+
+void UserMediaRequest::FinalizeTransferredTrackInitialization(
+    const MediaStreamDescriptorVector& streams_descriptors) {
+  DCHECK(transferred_track_);
+  DCHECK_EQ(streams_descriptors.size(), 1u);
+  if (!GetExecutionContext())
+    return;
+
+  MediaStream::Create(GetExecutionContext(), streams_descriptors[0],
+                      transferred_track_,
+                      WTF::BindOnce(&UserMediaRequest::OnMediaStreamInitialized,
+                                    WrapPersistent(this)));
 }
 
 void UserMediaRequest::Trace(Visitor* visitor) const {

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,6 +50,11 @@ enum class ResetReason {
   kClonedInstall = 2,
   kMaxValue = kClonedInstall,
 };
+
+// Enables adding the synced user's noised birth year and gender to the UKM
+// report. For more details, see doc of metrics::DemographicMetricsProvider in
+// components/metrics/demographics/demographic_metrics_provider.h.
+BASE_DECLARE_FEATURE(kReportUserNoisedUserBirthYearAndGender);
 
 // The URL-Keyed Metrics (UKM) service is responsible for gathering and
 // uploading reports that contain fine grained performance metrics including
@@ -118,11 +123,6 @@ class UkmService : public UkmRecorderImpl {
   int32_t report_count() const { return report_count_; }
 
   uint64_t client_id() const { return client_id_; }
-
-  // Enables adding the synced user's noised birth year and gender to the UKM
-  // report. For more details, see doc of metrics::DemographicMetricsProvider in
-  // components/metrics/demographics/demographic_metrics_provider.h.
-  static const base::Feature kReportUserNoisedUserBirthYearAndGender;
 
   // Makes sure that the serialized UKM report can be parsed.
   static bool LogCanBeParsed(const std::string& serialized_data);

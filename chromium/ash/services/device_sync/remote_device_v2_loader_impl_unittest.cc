@@ -1,24 +1,22 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
 
-#include "ash/components/multidevice/fake_secure_message_delegate.h"
-#include "ash/components/multidevice/remote_device.h"
 #include "ash/services/device_sync/cryptauth_device.h"
 #include "ash/services/device_sync/proto/cryptauth_devicesync.pb.h"
 #include "ash/services/device_sync/proto/cryptauth_v2_test_util.h"
 #include "ash/services/device_sync/remote_device_v2_loader_impl.h"
 #include "base/bind.h"
+#include "base/ranges/algorithm.h"
+#include "chromeos/ash/components/multidevice/fake_secure_message_delegate.h"
+#include "chromeos/ash/components/multidevice/remote_device.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace ash {
-
-namespace device_sync {
+namespace ash::device_sync {
 
 namespace {
 
@@ -165,11 +163,8 @@ class DeviceSyncRemoteDeviceV2LoaderImplTest : public testing::Test {
 
     for (const auto& expected_device : expected_remote_devices) {
       std::string expected_instance_id = expected_device.instance_id;
-      auto it = std::find_if(
-          remote_devices_->begin(), remote_devices_->end(),
-          [&expected_instance_id](const multidevice::RemoteDevice& device) {
-            return device.instance_id == expected_instance_id;
-          });
+      auto it = base::ranges::find(*remote_devices_, expected_instance_id,
+                                   &multidevice::RemoteDevice::instance_id);
 
       ASSERT_FALSE(it == remote_devices_->end());
       multidevice::RemoteDevice remote_device = *it;
@@ -227,6 +222,4 @@ TEST_F(DeviceSyncRemoteDeviceV2LoaderImplTest, Success) {
            false /* has_beacon_seeds */, false /* has_bluetooth_address */)});
 }
 
-}  // namespace device_sync
-
-}  // namespace ash
+}  // namespace ash::device_sync

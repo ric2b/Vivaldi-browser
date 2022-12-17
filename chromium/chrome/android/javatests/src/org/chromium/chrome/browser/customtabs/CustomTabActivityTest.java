@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 import static org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.createTestBitmap;
@@ -68,7 +70,11 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
@@ -87,7 +93,6 @@ import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
@@ -100,7 +105,7 @@ import org.chromium.chrome.browser.TabsOpenedFromExternalAppTest;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.browserservices.SessionDataHolder;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
-import org.chromium.chrome.browser.browserservices.verification.OriginVerifier;
+import org.chromium.chrome.browser.browserservices.verification.ChromeOriginVerifier;
 import org.chromium.chrome.browser.contextmenu.ContextMenuCoordinator;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityLifecycleUmaTracker.ClientIdentifierType;
 import org.chromium.chrome.browser.customtabs.CustomTabsIntentTestUtils.OnFinishedForTest;
@@ -196,12 +201,18 @@ public class CustomTabActivityTest {
     @Rule
     public CustomTabActivityTestRule mCustomTabActivityTestRule = new CustomTabActivityTestRule();
 
+    @Rule
+    public MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     private static int sIdToIncrement = 1;
 
     private String mTestPage;
     private String mTestPage2;
     private EmbeddedTestServer mTestServer;
     private CustomTabsConnection mConnectionToCleanup;
+
+    @Captor
+    ArgumentCaptor<Intent> mIntentCaptor;
 
     private class CustomTabsExtraCallbackHelper<T> extends CallbackHelper {
         private T mValue;
@@ -290,7 +301,7 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    public void testWhitelistedHeadersReceivedWhenConnectionVerified() throws Exception {
+    public void testAllowedHeadersReceivedWhenConnectionVerified() throws Exception {
         final Context context = InstrumentationRegistry.getInstrumentation()
                                         .getTargetContext()
                                         .getApplicationContext();
@@ -307,8 +318,7 @@ public class CustomTabActivityTest {
         connection.newSession(token);
         connection.overridePackageNameForSessionForTesting(token, "app1");
         TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> OriginVerifier.addVerificationOverride("app1",
+                () -> ChromeOriginVerifier.addVerificationOverride("app1",
                                 Origin.create(intent.getData()),
                                 CustomTabsService.RELATION_USE_AS_ORIGIN));
 
@@ -726,8 +736,10 @@ public class CustomTabActivityTest {
 
         assertLastLaunchedClientAppRecorded(
                 ClientIdentifierType.REFERRER, "", mTestPage, cctActivity.getTaskId(), false);
-        TestThreadUtils.runOnUiThreadBlocking(() -> getActivity().finish());
-        CriteriaHelper.pollUiThread(() -> getActivity().isDestroyed());
+
+        Activity activity = getActivity();
+        activity.finish();
+        ApplicationTestUtils.waitForActivityState(activity, Stage.DESTROYED);
 
         // Write shared prefs as it the last CCT session has saw tab interactions.
         SharedPreferencesManager pref = SharedPreferencesManager.getInstance();
@@ -868,8 +880,8 @@ public class CustomTabActivityTest {
         connection.newSession(token);
         connection.overridePackageNameForSessionForTesting(token, "app1");
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> OriginVerifier.addVerificationOverride("app1", Origin.create(referrer),
-                        CustomTabsService.RELATION_USE_AS_ORIGIN));
+                () -> ChromeOriginVerifier.addVerificationOverride("app1",
+                                Origin.create(referrer), CustomTabsService.RELATION_USE_AS_ORIGIN));
 
         final CustomTabsSessionToken session = warmUpAndLaunchUrlWithSession(intent);
         assertEquals(getActivity().getIntentDataProvider().getSession(), session);
@@ -1167,7 +1179,7 @@ public class CustomTabActivityTest {
     /** Same as above, but the hidden tab matching should not ignore the fragment. */
     @Test
     @SmallTest
-    @FlakyTest(message = "https://crbug.com/1237331")
+    @DisabledTest(message = "https://crbug.com/1237331")
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
     public void testHiddenTabAndChangingFragmentDontIgnoreFragments() throws Exception {
         startHiddenTabAndChangeFragment(false, true);
@@ -1207,7 +1219,7 @@ public class CustomTabActivityTest {
         Assert.assertTrue(connection.newSession(token));
         connection.mClientManager.setAllowParallelRequestForSession(token, true);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            OriginVerifier.addVerificationOverride(
+            ChromeOriginVerifier.addVerificationOverride(
                     context.getPackageName(), origin, CustomTabsService.RELATION_USE_AS_ORIGIN);
         });
 
@@ -1527,6 +1539,7 @@ public class CustomTabActivityTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "see crbug.com/1361534")
     public void testLaunchIncognitoURL() throws Exception {
         Intent intent = createMinimalCustomTabIntent();
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
@@ -1792,17 +1805,43 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Features.EnableFeatures({ChromeFeatureList.CCT_RESIZABLE_FOR_THIRD_PARTIES})
-    public void testLaunchPartialCustomTabActivity() throws Exception {
+    @Features.DisableFeatures({ChromeFeatureList.CCT_RESIZABLE_WINDOW_ABOVE_NAVBAR})
+    public void testLaunchPartialCustomTabActivity_fixedWindow() throws Exception {
+        testLaunchPartialCustomTabActivity();
+        assertOverlayPanelCanHideAndroidBrowserControls(false);
+    }
+
+    @Test
+    @SmallTest
+    public void testCanHideBrowserControls_notPartial() throws Exception {
+        CustomTabsSessionToken session = warmUpAndLaunchUrlWithSession();
+        assertEquals(getActivity().getIntentDataProvider().getSession(), session);
+        assertOverlayPanelCanHideAndroidBrowserControls(true);
+    }
+
+    @Test
+    @SmallTest
+    @Features.EnableFeatures({ChromeFeatureList.CCT_RESIZABLE_FOR_THIRD_PARTIES})
+    public void testLaunchPartialCustomTabActivity_dynamicWindow() throws Exception {
+        testLaunchPartialCustomTabActivity();
+    }
+
+    private void testLaunchPartialCustomTabActivity() throws Exception {
         Intent intent = createMinimalCustomTabIntent();
         CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
         CustomTabsConnection connection = CustomTabsConnection.getInstance();
         connection.newSession(token);
         connection.overridePackageNameForSessionForTesting(token, "org.chromium.testapp");
-        intent.putExtra(CustomTabIntentDataProvider.EXTRA_INITIAL_ACTIVITY_HEIGHT_IN_PIXEL, 50);
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_INITIAL_ACTIVITY_HEIGHT_PX, 50);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
 
-        WindowManager.LayoutParams attributes = getActivity().getWindow().getAttributes();
-        assertNotEquals("The window should have non-zero y offset", 0, attributes.y);
+        if (ChromeFeatureList.sCctResizableWindowAboveNavbar.isEnabled()) {
+            // A Normal CCT height is set to MATCH_PARENT while Partial CCT has non-zero value.
+            int fullHeight = ViewGroup.LayoutParams.MATCH_PARENT;
+            WindowManager.LayoutParams attrs = getActivity().getWindow().getAttributes();
+            assertNotEquals("The window should have non-full height", fullHeight, attrs.height);
+            return;
+        }
 
         // Verify the hierarchy of the enclosing layouts that PCCT relies on for its operation.
         CallbackHelper eventHelper = new CallbackHelper();
@@ -1814,10 +1853,29 @@ public class CustomTabActivityTest {
                         cvh.getParent() instanceof CoordinatorLayoutForPointer);
                 assertTrue("ContentFrameLayout should be the parent of CoodinatorLayoutForPointer",
                         cvh.getParent().getParent() instanceof ContentFrameLayout);
+                WindowManager.LayoutParams attrs = getActivity().getWindow().getAttributes();
+                assertNotEquals("The window should have non-zero y", 0, attrs.y);
                 eventHelper.notifyCalled();
             });
         });
         eventHelper.waitForCallback(0);
+    }
+
+    /** Asserts that the Overlay Panel is set to allow or not allow ever hiding the Toolbar. */
+    private void assertOverlayPanelCanHideAndroidBrowserControls(boolean canEverHide) {
+        // Wait for CS to get initialized.
+        CriteriaHelper.pollUiThread(
+                ()
+                        -> getActivity().getContextualSearchManagerSupplier() != null
+                        && getActivity().getContextualSearchManagerSupplier().get() != null);
+
+        // The toolbar cannot go away for Partial Height Custom Tabs, but can for full height ones.
+        CriteriaHelper.pollUiThread(()
+                                            -> getActivity()
+                                                       .getContextualSearchManagerSupplier()
+                                                       .get()
+                                                       .getCanHideAndroidBrowserControls()
+                        == canEverHide);
     }
 
     private void verifyHistoryAfterHiddenTab(boolean speculationWasAHit) throws Exception {
@@ -2102,6 +2160,43 @@ public class CustomTabActivityTest {
             int result = LaunchIntentDispatcher.dispatch(activity, intent);
             assertEquals(LaunchIntentDispatcher.Action.FINISH_ACTIVITY, result);
             verify(activity, never()).startActivity(any(), any());
+        });
+    }
+
+    @Test
+    @SmallTest
+    public void testCallingActivityExtra() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Intent intent = createMinimalCustomTabIntent();
+            intent.putExtra(IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, "spoofed");
+            Activity activity = Mockito.mock(Activity.class);
+
+            ComponentName component = new ComponentName("com.foo.bar", "className");
+            when(activity.getCallingActivity()).thenReturn(component);
+
+            LaunchIntentDispatcher.dispatch(activity, intent);
+            verify(activity, times(1)).startActivity(mIntentCaptor.capture(), any());
+
+            Assert.assertEquals("Calling activity package incorrect.", "com.foo.bar",
+                    mIntentCaptor.getValue().getStringExtra(
+                            IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE));
+        });
+    }
+
+    @Test
+    @SmallTest
+    public void testCallingActivityExtra_NotSet() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Intent intent = createMinimalCustomTabIntent();
+            intent.putExtra(IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, "spoofed");
+            Activity activity = Mockito.mock(Activity.class);
+
+            LaunchIntentDispatcher.dispatch(activity, intent);
+            verify(activity, times(1)).startActivity(mIntentCaptor.capture(), any());
+
+            Assert.assertNull("Calling activity package shouldn't be set.",
+                    mIntentCaptor.getValue().getStringExtra(
+                            IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE));
         });
     }
 }

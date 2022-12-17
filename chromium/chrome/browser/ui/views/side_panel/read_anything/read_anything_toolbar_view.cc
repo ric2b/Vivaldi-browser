@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,9 @@
 #include <memory>
 #include <utility>
 
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/vector_icons/cc_macros.h"
-#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
@@ -52,7 +51,7 @@ ReadAnythingToolbarView::ReadAnythingToolbarView(
   auto decrease_size_button = std::make_unique<ReadAnythingButtonView>(
       base::BindRepeating(&ReadAnythingToolbarView::DecreaseFontSizeCallback,
                           weak_pointer_factory_.GetWeakPtr()),
-      gfx::CreateVectorIcon(vector_icons::kTextDecreaseIcon, kSmallIconSize,
+      gfx::CreateVectorIcon(kTextDecreaseIcon, kSmallIconSize,
                             gfx::kPlaceholderColor),
       l10n_util::GetStringUTF16(
           IDS_READ_ANYTHING_DECREASE_FONT_SIZE_BUTTON_LABEL));
@@ -60,7 +59,7 @@ ReadAnythingToolbarView::ReadAnythingToolbarView(
   auto increase_size_button = std::make_unique<ReadAnythingButtonView>(
       base::BindRepeating(&ReadAnythingToolbarView::IncreaseFontSizeCallback,
                           weak_pointer_factory_.GetWeakPtr()),
-      gfx::CreateVectorIcon(vector_icons::kTextIncreaseIcon, kLargeIconSize,
+      gfx::CreateVectorIcon(kTextIncreaseIcon, kLargeIconSize,
                             gfx::kPlaceholderColor),
       l10n_util::GetStringUTF16(
           IDS_READ_ANYTHING_INCREASE_FONT_SIZE_BUTTON_LABEL));
@@ -70,12 +69,37 @@ ReadAnythingToolbarView::ReadAnythingToolbarView(
   colors_combobox->SetModel(delegate_->GetColorsModel());
   colors_combobox->SetTooltipTextAndAccessibleName(
       l10n_util::GetStringUTF16(IDS_READ_ANYTHING_COLORS_COMBOBOX_LABEL));
-  colors_combobox->SetSizeToLargestLabel(true);
+  colors_combobox->SetSizeToLargestLabel(false);
   colors_combobox->SetCallback(
       base::BindRepeating(&ReadAnythingToolbarView::ChangeColorsCallback,
                           weak_pointer_factory_.GetWeakPtr()));
   colors_combobox->SetShouldShowArrow(false);
   colors_combobox->SetBorderColorId(ui::kColorSidePanelComboboxBorder);
+
+  // Create line spacing combobox
+  auto lines_combobox = std::make_unique<views::Combobox>();
+  lines_combobox->SetModel(delegate_->GetLineSpacingModel());
+  lines_combobox->SetTooltipTextAndAccessibleName(
+      l10n_util::GetStringUTF16(IDS_READ_ANYTHING_LINE_SPACING_COMBOBOX_LABEL));
+  lines_combobox->SetSizeToLargestLabel(false);
+  lines_combobox->SetCallback(
+      base::BindRepeating(&ReadAnythingToolbarView::ChangeLineSpacingCallback,
+                          weak_pointer_factory_.GetWeakPtr()));
+  lines_combobox->SetShouldShowArrow(false);
+  lines_combobox->SetBorderColorId(ui::kColorSidePanelComboboxBorder);
+
+  // Create letter spacing selection combobox.
+  auto letter_spacing_combobox = std::make_unique<views::Combobox>();
+  letter_spacing_combobox->SetModel(delegate_->GetLetterSpacingModel());
+  letter_spacing_combobox->SetTooltipTextAndAccessibleName(
+      l10n_util::GetStringUTF16(
+          IDS_READ_ANYTHING_LETTER_SPACING_COMBOBOX_LABEL));
+  letter_spacing_combobox->SetSizeToLargestLabel(false);
+  letter_spacing_combobox->SetCallback(
+      base::BindRepeating(&ReadAnythingToolbarView::ChangeLetterSpacingCallback,
+                          weak_pointer_factory_.GetWeakPtr()));
+  letter_spacing_combobox->SetShouldShowArrow(false);
+  letter_spacing_combobox->SetBorderColorId(ui::kColorSidePanelComboboxBorder);
 
   // Add all views as children.
   font_combobox_ = AddChildView(std::move(combobox));
@@ -84,6 +108,8 @@ ReadAnythingToolbarView::ReadAnythingToolbarView(
   increase_text_size_button_ = AddChildView(std::move(increase_size_button));
   AddChildView(Separator());
   colors_combobox_ = AddChildView(std::move(colors_combobox));
+  lines_combobox_ = AddChildView(std::move(lines_combobox));
+  letter_spacing_combobox_ = AddChildView(std::move(letter_spacing_combobox));
 
   // Start observing model after views creation so initial theme is applied.
   coordinator_->AddModelObserver(this);
@@ -105,6 +131,18 @@ void ReadAnythingToolbarView::ChangeColorsCallback() {
         colors_combobox_->GetSelectedIndex().value_or(0));
 }
 
+void ReadAnythingToolbarView::ChangeLineSpacingCallback() {
+  if (delegate_)
+    delegate_->OnLineSpacingChanged(
+        lines_combobox_->GetSelectedIndex().value_or(1));
+}
+
+void ReadAnythingToolbarView::ChangeLetterSpacingCallback() {
+  if (delegate_)
+    delegate_->OnLetterSpacingChanged(
+        letter_spacing_combobox_->GetSelectedIndex().value_or(1));
+}
+
 void ReadAnythingToolbarView::OnCoordinatorDestroyed() {
   // When the coordinator that created |this| is destroyed, clean up pointers.
   coordinator_ = nullptr;
@@ -119,14 +157,20 @@ void ReadAnythingToolbarView::OnReadAnythingThemeChanged(
       views::CreateSolidBackground(new_theme->background_color));
   colors_combobox_->SetBackground(
       views::CreateSolidBackground(new_theme->background_color));
+  lines_combobox_->SetBackground(
+      views::CreateSolidBackground(new_theme->background_color));
+  letter_spacing_combobox_->SetBackground(
+      views::CreateSolidBackground(new_theme->background_color));
 
-  decrease_text_size_button_->UpdateIcon(
-      gfx::CreateVectorIcon(vector_icons::kTextDecreaseIcon, kSmallIconSize,
-                            new_theme->foreground_color));
+  decrease_text_size_button_->UpdateIcon(gfx::CreateVectorIcon(
+      kTextDecreaseIcon, kSmallIconSize, new_theme->foreground_color));
 
-  increase_text_size_button_->UpdateIcon(
-      gfx::CreateVectorIcon(vector_icons::kTextIncreaseIcon, kLargeIconSize,
-                            new_theme->foreground_color));
+  increase_text_size_button_->UpdateIcon(gfx::CreateVectorIcon(
+      kTextIncreaseIcon, kLargeIconSize, new_theme->foreground_color));
+
+  for (views::Separator* separator : separators_) {
+    separator->SetColorId(delegate_->GetForegroundColorId());
+  }
 }
 
 std::unique_ptr<views::View> ReadAnythingToolbarView::Separator() {
@@ -143,9 +187,9 @@ std::unique_ptr<views::View> ReadAnythingToolbarView::Separator() {
   separator_container->SetLayoutManager(std::move(separator_layout_manager));
 
   auto separator = std::make_unique<views::Separator>();
-  separator->SetColorId(ui::kColorMenuSeparator);
-
-  separator_container->AddChildView(std::move(separator));
+  separator->SetColorId(delegate_->GetForegroundColorId());
+  separators_.push_back(
+      separator_container->AddChildView(std::move(separator)));
 
   return separator_container;
 }

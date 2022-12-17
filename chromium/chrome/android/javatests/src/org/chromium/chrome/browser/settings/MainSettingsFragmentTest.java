@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -399,7 +399,7 @@ public class MainSettingsFragmentTest {
         final SyncService syncService =
                 TestThreadUtils.runOnUiThreadBlockingNoException(SyncService::get);
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> { syncService.setChosenDataTypes(false, new HashSet<>()); });
+                () -> { syncService.setSelectedTypes(false, new HashSet<>()); });
         CoreAccountInfo account = mSyncTestRule.addTestAccount();
         SigninTestUtil.signinAndEnableSync(account, syncService);
 
@@ -556,7 +556,7 @@ public class MainSettingsFragmentTest {
                 new HistogramDelta("Signin.SyncPromo.Dismissed.Count.Settings", 1);
         launchSettingsActivity();
         onViewWaiting(allOf(withId(R.id.signin_promo_view_container), isDisplayed()));
-        onView(withId(R.id.signin_promo_close_button)).perform(click());
+        onView(withId(R.id.sync_promo_close_button)).perform(click());
         onView(withId(R.id.signin_promo_view_container)).check(doesNotExist());
 
         // Close settings activity.

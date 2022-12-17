@@ -1,14 +1,14 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/omnibox/browser/actions/omnibox_pedal.h"
 
-#include <algorithm>
 #include <cctype>
 #include <numeric>
 
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "build/build_config.h"
@@ -16,6 +16,8 @@
 #include "components/omnibox/browser/omnibox_client.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/resources/grit/omnibox_pedal_synonyms.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(SUPPORT_PEDALS_VECTOR_ICONS)
@@ -220,8 +222,8 @@ void OmniboxPedal::SynonymGroup::EraseIgnoreGroup(
 }
 
 bool OmniboxPedal::SynonymGroup::IsValid() const {
-  return std::all_of(synonyms_.begin(), synonyms_.end(),
-                     [](const auto& synonym) { return synonym.Size() > 0; });
+  return base::ranges::all_of(
+      synonyms_, [](const auto& synonym) { return synonym.Size() > 0; });
 }
 
 // =============================================================================
@@ -237,23 +239,8 @@ OmniboxPedal::OmniboxPedal(OmniboxPedalId id, LabelStrings strings, GURL url)
 
 OmniboxPedal::~OmniboxPedal() = default;
 
-void OmniboxPedal::SetLabelStrings(const base::Value& ui_strings) {
-  DCHECK(ui_strings.is_dict());
-  // The pedal_processor tool ensures that this dictionary is either omitted,
-  //  or else included with all these keys populated.
-  if (const std::string* string = ui_strings.FindStringKey("button_text"))
-    strings_.hint = base::UTF8ToUTF16(*string);
-  if (const std::string* string = ui_strings.FindStringKey("description_text"))
-    strings_.suggestion_contents = base::UTF8ToUTF16(*string);
-  if (const std::string* string =
-          ui_strings.FindStringKey("spoken_button_focus_announcement"))
-    strings_.accessibility_hint = base::UTF8ToUTF16(*string);
-  if (const std::string* string =
-          ui_strings.FindStringKey("spoken_suggestion_description_suffix"))
-    strings_.accessibility_suffix = base::UTF8ToUTF16(*string);
-#if BUILDFLAG(IS_ANDROID)
-  CreateOrUpdateJavaObject();
-#endif
+void OmniboxPedal::OnLoaded() {
+  // Default implementation makes no change so the pedal works as declared.
 }
 
 void OmniboxPedal::SetNavigationUrl(const GURL& url) {
@@ -339,3 +326,45 @@ void OmniboxPedal::CreateOrUpdateJavaObject() {
       strings_.accessibility_suffix, strings_.accessibility_hint, url_));
 }
 #endif
+
+TestOmniboxPedalClearBrowsingData::TestOmniboxPedalClearBrowsingData()
+    : OmniboxPedal(
+          OmniboxPedalId::CLEAR_BROWSING_DATA,
+          LabelStrings(
+              IDS_OMNIBOX_PEDAL_CLEAR_BROWSING_DATA_HINT,
+              IDS_OMNIBOX_PEDAL_CLEAR_BROWSING_DATA_SUGGESTION_CONTENTS,
+              IDS_ACC_OMNIBOX_PEDAL_CLEAR_BROWSING_DATA_SUFFIX,
+              IDS_ACC_OMNIBOX_PEDAL_CLEAR_BROWSING_DATA),
+          GURL("chrome://settings/clearBrowserData")) {}
+
+std::vector<OmniboxPedal::SynonymGroupSpec>
+TestOmniboxPedalClearBrowsingData::SpecifySynonymGroups(
+    bool locale_is_english) const {
+  if (locale_is_english) {
+    return {
+        {
+            false,
+            true,
+            IDS_OMNIBOX_PEDAL_SYNONYMS_CLEAR_BROWSING_DATA_ONE_OPTIONAL_GOOGLE_CHROME,
+        },
+        {
+            true,
+            true,
+            IDS_OMNIBOX_PEDAL_SYNONYMS_CLEAR_BROWSING_DATA_ONE_REQUIRED_DELETE,
+        },
+        {
+            true,
+            true,
+            IDS_OMNIBOX_PEDAL_SYNONYMS_CLEAR_BROWSING_DATA_ONE_REQUIRED_INFORMATION,
+        },
+    };
+  } else {
+    return {
+        {
+            true,
+            true,
+            IDS_OMNIBOX_PEDAL_SYNONYMS_CLEAR_BROWSING_DATA_ONE_REQUIRED_CLEAR_BROWSER_CACHE,
+        },
+    };
+  }
+}

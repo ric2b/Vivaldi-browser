@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -109,6 +109,13 @@ class DummyTextInputClient : public TextInputClient {
     return grammar_fragments_;
   }
 
+  void set_autocorrect_enabled(bool enabled) {
+    autocorrect_enabled_ = enabled;
+    if (!enabled) {
+      autocorrect_range_ = gfx::Range();
+    }
+  }
+
   TextInputType text_input_type_;
   TextInputMode text_input_mode_;
 
@@ -121,6 +128,7 @@ class DummyTextInputClient : public TextInputClient {
   gfx::Range autocorrect_range_;
   std::vector<GrammarFragment> grammar_fragments_;
   gfx::Range cursor_range_ = gfx::Range::InvalidRange();
+  bool autocorrect_enabled_;
 };
 
 }  // namespace ui

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/location.h"
+#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/task_runner_util.h"
@@ -204,8 +205,7 @@ std::string GuessVideoGroupID(const blink::WebMediaDeviceInfoArray& audio_infos,
           return IsRealAudioDeviceID(audio_info.device_id) &&
                  (*callback).Run(audio_info);
         };
-    auto it_first = std::find_if(audio_infos.begin(), audio_infos.end(),
-                                 real_device_matches);
+    auto it_first = base::ranges::find_if(audio_infos, real_device_matches);
     if (it_first == audio_infos.end())
       continue;
 
@@ -1128,15 +1128,10 @@ void MediaDevicesManager::MaybeStopRemovedInputDevices(
   std::vector<blink::WebMediaDeviceInfo> removed_audio_devices;
   for (const auto& old_device_info :
        current_snapshot_[static_cast<size_t>(type)]) {
-    auto it =
-        std::find_if(new_snapshot.begin(), new_snapshot.end(),
-                     [&old_device_info](const blink::WebMediaDeviceInfo& info) {
-                       return info.device_id == old_device_info.device_id;
-                     });
-
     // If a device was removed, notify the MediaStreamManager to stop all
     // streams using that device.
-    if (it == new_snapshot.end()) {
+    if (!base::Contains(new_snapshot, old_device_info.device_id,
+                        &blink::WebMediaDeviceInfo::device_id)) {
       stop_removed_input_device_cb_.Run(type, old_device_info);
 
       if (type == MediaDeviceType::MEDIA_AUDIO_INPUT)

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,20 +94,18 @@ api::tabs::Tab CreateTabModelHelper(
   const GURL& url = current_navigation.virtual_url();
   std::string title = base::UTF16ToUTF8(current_navigation.title());
 
-  tab_struct.session_id = std::make_unique<std::string>(session_id);
-  tab_struct.url = std::make_unique<std::string>(url.spec());
-  tab_struct.fav_icon_url =
-      std::make_unique<std::string>(current_navigation.favicon_url().spec());
+  tab_struct.session_id = session_id;
+  tab_struct.url = url.spec();
+  tab_struct.fav_icon_url = current_navigation.favicon_url().spec();
   if (!title.empty()) {
-    tab_struct.title = std::make_unique<std::string>(title);
+    tab_struct.title = title;
   } else {
-    tab_struct.title = std::make_unique<std::string>(
-        base::UTF16ToUTF8(url_formatter::FormatUrl(url)));
+    tab_struct.title = base::UTF16ToUTF8(url_formatter::FormatUrl(url));
   }
   tab_struct.index = index;
   tab_struct.pinned = pinned;
   tab_struct.active = active;
-  tab_struct.viv_ext_data.reset(new std::string(viv_ext_data));
+  tab_struct.viv_ext_data = viv_ext_data;
 
   ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
       ExtensionTabUtil::GetScrubTabBehavior(extension, context, url);
@@ -116,40 +114,40 @@ api::tabs::Tab CreateTabModelHelper(
   return tab_struct;
 }
 
-std::unique_ptr<api::windows::Window> CreateWindowModelHelper(
-    std::unique_ptr<std::vector<api::tabs::Tab>> tabs,
+api::windows::Window CreateWindowModelHelper(
+    std::vector<api::tabs::Tab> tabs,
     const std::string& session_id,
     const api::windows::WindowType& type,
     const api::windows::WindowState& state,
     const std::string& viv_ext_data) {
-  std::unique_ptr<api::windows::Window> window_struct(new api::windows::Window);
-  window_struct->tabs = std::move(tabs);
-  window_struct->session_id = std::make_unique<std::string>(session_id);
-  window_struct->incognito = false;
-  window_struct->always_on_top = false;
-  window_struct->focused = false;
-  window_struct->type = type;
-  window_struct->state = state;
-  window_struct->viv_ext_data.reset(new std::string(viv_ext_data));
+  api::windows::Window window_struct;
+  window_struct.tabs = std::move(tabs);
+  window_struct.session_id = session_id;
+  window_struct.incognito = false;
+  window_struct.always_on_top = false;
+  window_struct.focused = false;
+  window_struct.type = type;
+  window_struct.state = state;
+  window_struct.viv_ext_data = viv_ext_data;
   return window_struct;
 }
 
-std::unique_ptr<api::sessions::Session> CreateSessionModelHelper(
+api::sessions::Session CreateSessionModelHelper(
     int last_modified,
-    std::unique_ptr<api::tabs::Tab> tab,
-    std::unique_ptr<api::windows::Window> window,
-    std::unique_ptr<api::tab_groups::TabGroup> group) {
-  std::unique_ptr<api::sessions::Session> session_struct(
-      new api::sessions::Session());
-  session_struct->last_modified = last_modified;
-  if (tab)
-    session_struct->tab = std::move(tab);
-  else if (window)
-    session_struct->window = std::move(window);
-  else if (group)
+    absl::optional<api::tabs::Tab> tab,
+    absl::optional<api::windows::Window> window,
+    absl::optional<api::tab_groups::TabGroup> group) {
+  api::sessions::Session session_struct;
+  session_struct.last_modified = last_modified;
+  if (tab) {
+    session_struct.tab = std::move(*tab);
+  } else if (window) {
+    session_struct.window = std::move(*window);
+  } else if (group) {
     NOTREACHED();  // TODO(crbug.com/1192309): Implement group support.
-  else
+  } else {
     NOTREACHED();
+  }
   return session_struct;
 }
 
@@ -169,15 +167,15 @@ api::tabs::Tab SessionsGetRecentlyClosedFunction::CreateTabModel(
                               extension(), source_context_type());
 }
 
-std::unique_ptr<api::windows::Window>
-SessionsGetRecentlyClosedFunction::CreateWindowModel(
+api::windows::Window SessionsGetRecentlyClosedFunction::CreateWindowModel(
     const sessions::TabRestoreService::Window& window) {
   DCHECK(!window.tabs.empty());
 
-  auto tabs = std::make_unique<std::vector<api::tabs::Tab>>();
-  for (const auto& tab : window.tabs)
-    tabs->push_back(
+  std::vector<api::tabs::Tab> tabs;
+  for (const auto& tab : window.tabs) {
+    tabs.push_back(
         CreateTabModel(*tab, tab->tabstrip_index == window.selected_tab_index));
+  }
 
   return CreateWindowModelHelper(
       std::move(tabs), base::NumberToString(window.id.id()),
@@ -185,8 +183,7 @@ SessionsGetRecentlyClosedFunction::CreateWindowModel(
       window.viv_ext_data);
 }
 
-std::unique_ptr<api::tab_groups::TabGroup>
-SessionsGetRecentlyClosedFunction::CreateGroupModel(
+api::tab_groups::TabGroup SessionsGetRecentlyClosedFunction::CreateGroupModel(
     const sessions::TabRestoreService::Group& group) {
   DCHECK(!group.tabs.empty());
 
@@ -194,16 +191,15 @@ SessionsGetRecentlyClosedFunction::CreateGroupModel(
                                                group.visual_data);
 }
 
-std::unique_ptr<api::sessions::Session>
-SessionsGetRecentlyClosedFunction::CreateSessionModel(
+api::sessions::Session SessionsGetRecentlyClosedFunction::CreateSessionModel(
     const sessions::TabRestoreService::Entry& entry) {
-  std::unique_ptr<api::tabs::Tab> tab;
-  std::unique_ptr<api::windows::Window> window;
-  std::unique_ptr<api::tab_groups::TabGroup> group;
+  absl::optional<api::tabs::Tab> tab;
+  absl::optional<api::windows::Window> window;
+  absl::optional<api::tab_groups::TabGroup> group;
   switch (entry.type) {
     case sessions::TabRestoreService::TAB:
-      tab = std::make_unique<api::tabs::Tab>(CreateTabModel(
-          static_cast<const sessions::TabRestoreService::Tab&>(entry), false));
+      tab = CreateTabModel(
+          static_cast<const sessions::TabRestoreService::Tab&>(entry), false);
       break;
     case sessions::TabRestoreService::WINDOW:
       window = CreateWindowModel(
@@ -252,12 +248,12 @@ ExtensionFunction::ResponseAction SessionsGetRecentlyClosedFunction::Run() {
           static_cast<const sessions::TabRestoreService::Group&>(*entry);
       for (const auto& tab : group.tabs)
         if (counter++ < max_results)
-          result.push_back(std::move(*CreateSessionModel(*tab)));
+          result.push_back(CreateSessionModel(*tab));
         else
           break;
     } else {
       if (counter++ < max_results)
-        result.push_back(std::move(*CreateSessionModel(*entry)));
+        result.push_back(CreateSessionModel(*entry));
       else
         break;
     }
@@ -277,7 +273,7 @@ api::tabs::Tab SessionsGetDevicesFunction::CreateTabModel(
       tab.pinned, active, tab.viv_ext_data, extension(), source_context_type());
 }
 
-std::unique_ptr<api::windows::Window>
+absl::optional<api::windows::Window>
 SessionsGetDevicesFunction::CreateWindowModel(
     const sessions::SessionWindow& window,
     const std::string& session_tag) {
@@ -286,7 +282,7 @@ SessionsGetDevicesFunction::CreateWindowModel(
   // Ignore app popup window for now because we do not have a corresponding
   // api::windows::WindowType value.
   if (window.type == sessions::SessionWindow::TYPE_APP_POPUP)
-    return nullptr;
+    return absl::nullopt;
 
   // Prune tabs that are not syncable or are NewTabPage. Then, sort the tabs
   // from most recent to least recent.
@@ -305,14 +301,13 @@ SessionsGetDevicesFunction::CreateWindowModel(
     tabs_in_window.push_back(tab);
   }
   if (tabs_in_window.empty())
-    return nullptr;
+    return absl::nullopt;
   std::sort(tabs_in_window.begin(), tabs_in_window.end(), SortTabsByRecency);
 
-  std::unique_ptr<std::vector<api::tabs::Tab>> tabs(
-      new std::vector<api::tabs::Tab>());
+  std::vector<api::tabs::Tab> tabs;
   for (size_t i = 0; i < tabs_in_window.size(); ++i) {
-    tabs->push_back(CreateTabModel(session_tag, *tabs_in_window[i], i,
-                                   window.selected_tab_index == (int)i));
+    tabs.push_back(CreateTabModel(session_tag, *tabs_in_window[i], i,
+                                  window.selected_tab_index == (int)i));
   }
 
   std::string session_id =
@@ -361,32 +356,31 @@ SessionsGetDevicesFunction::CreateWindowModel(
 
   std::string viv_ext_data = window.viv_ext_data;
 
-  std::unique_ptr<api::windows::Window> window_struct(CreateWindowModelHelper(
-      std::move(tabs), session_id, type, state, viv_ext_data));
+  api::windows::Window window_struct =
+      CreateWindowModelHelper(std::move(tabs), session_id, type, state, viv_ext_data);
   // TODO(dwankri): Dig deeper to resolve bounds not being optional, so closed
   // windows in GetRecentlyClosed can have set values in Window helper.
-  window_struct->left = std::make_unique<int>(window.bounds.x());
-  window_struct->top = std::make_unique<int>(window.bounds.y());
-  window_struct->width = std::make_unique<int>(window.bounds.width());
-  window_struct->height = std::make_unique<int>(window.bounds.height());
+  window_struct.left = window.bounds.x();
+  window_struct.top = window.bounds.y();
+  window_struct.width = window.bounds.width();
+  window_struct.height = window.bounds.height();
 
   return window_struct;
 }
 
-std::unique_ptr<api::sessions::Session>
+absl::optional<api::sessions::Session>
 SessionsGetDevicesFunction::CreateSessionModel(
     const sessions::SessionWindow& window,
     const std::string& session_tag) {
-  std::unique_ptr<api::windows::Window> window_model(
-      CreateWindowModel(window, session_tag));
+  absl::optional<api::windows::Window> window_model =
+      CreateWindowModel(window, session_tag);
   // There is a chance that after pruning uninteresting tabs the window will be
   // empty.
-  return !window_model
-             ? nullptr
-             : CreateSessionModelHelper(
-                   window.timestamp.ToTimeT(),
-                   std::unique_ptr<api::tabs::Tab>(), std::move(window_model),
-                   std::unique_ptr<api::tab_groups::TabGroup>());
+  if (!window_model)
+    return absl::nullopt;
+
+  return CreateSessionModelHelper(window.timestamp.ToTimeT(), absl::nullopt,
+                                  std::move(window_model), absl::nullopt);
 }
 
 api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
@@ -406,8 +400,8 @@ api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
        it != session->windows.end() &&
        static_cast<int>(device_struct.sessions.size()) < max_results;
        ++it) {
-    std::unique_ptr<api::sessions::Session> session_model(
-        CreateSessionModel(it->second->wrapped_window, session->session_tag));
+    absl::optional<api::sessions::Session> session_model =
+        CreateSessionModel(it->second->wrapped_window, session->session_tag);
     if (session_model)
       device_struct.sessions.push_back(std::move(*session_model));
   }
@@ -451,13 +445,12 @@ ExtensionFunction::ResponseValue SessionsRestoreFunction::GetRestoredTabResult(
   ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
       ExtensionTabUtil::GetScrubTabBehavior(extension(), source_context_type(),
                                             contents);
-  std::unique_ptr<api::tabs::Tab> tab(ExtensionTabUtil::CreateTabObject(
-      contents, scrub_tab_behavior, extension()));
-  std::unique_ptr<api::sessions::Session> restored_session(
+  api::tabs::Tab tab = ExtensionTabUtil::CreateTabObject(
+      contents, scrub_tab_behavior, extension());
+  api::sessions::Session restored_session =
       CreateSessionModelHelper(base::Time::Now().ToTimeT(), std::move(tab),
-                               std::unique_ptr<api::windows::Window>(),
-                               std::unique_ptr<api::tab_groups::TabGroup>()));
-  return ArgumentList(Restore::Results::Create(*restored_session));
+                               absl::nullopt, absl::nullopt);
+  return ArgumentList(Restore::Results::Create(restored_session));
 }
 
 ExtensionFunction::ResponseValue
@@ -468,15 +461,16 @@ SessionsRestoreFunction::GetRestoredWindowResult(int window_id) {
                                             &error)) {
     return Error(error);
   }
-  std::unique_ptr<base::DictionaryValue> window_value(
+  base::Value::Dict window_value =
       ExtensionTabUtil::CreateWindowValueForExtension(
           *browser, extension(), ExtensionTabUtil::kPopulateTabs,
-          source_context_type()));
-  std::unique_ptr<api::windows::Window> window(
-      api::windows::Window::FromValue(*window_value));
-  return ArgumentList(Restore::Results::Create(*CreateSessionModelHelper(
-      base::Time::Now().ToTimeT(), std::unique_ptr<api::tabs::Tab>(),
-      std::move(window), std::unique_ptr<api::tab_groups::TabGroup>())));
+          source_context_type());
+  std::unique_ptr<api::windows::Window> window =
+      api::windows::Window::FromValue(base::Value(std::move(window_value)));
+  DCHECK(window);
+  return ArgumentList(Restore::Results::Create(
+      CreateSessionModelHelper(base::Time::Now().ToTimeT(), absl::nullopt,
+                               std::move(*window), absl::nullopt)));
 }
 
 ExtensionFunction::ResponseValue

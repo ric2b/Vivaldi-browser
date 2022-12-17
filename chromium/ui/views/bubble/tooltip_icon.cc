@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -86,7 +86,7 @@ void TooltipIcon::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // static text for screenreader users, since that's the role it serves here
   // anyway.
   node_data->role = ax::mojom::Role::kStaticText;
-  node_data->SetName(tooltip_);
+  node_data->SetNameChecked(tooltip_);
 }
 
 void TooltipIcon::OnThemeChanged() {

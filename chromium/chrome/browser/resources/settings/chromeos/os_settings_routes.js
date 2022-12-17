@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -74,6 +74,7 @@ import {Route} from '../router.js';
  *   OS_ACCESSIBILITY: !Route,
  *   OS_LANGUAGES: !Route,
  *   OS_LANGUAGES_EDIT_DICTIONARY: !Route,
+ *   OS_LANGUAGES_JAPANESE_MANAGE_USER_DICTIONARY: !Route,
  *   OS_LANGUAGES_INPUT: !Route,
  *   OS_LANGUAGES_INPUT_METHOD_OPTIONS: !Route,
  *   OS_LANGUAGES_LANGUAGES: !Route,

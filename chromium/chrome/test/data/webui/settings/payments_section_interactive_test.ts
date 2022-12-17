@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,12 +18,14 @@ import {createCreditCardEntry, TestPaymentsManager} from './passwords_and_autofi
  */
 function typeInNickname(nicknameInput: CrInputElement, nickname: string) {
   nicknameInput.value = nickname;
-  nicknameInput.fire('input');
+  nicknameInput.dispatchEvent(
+      new CustomEvent('input', {bubbles: true, composed: true}));
 }
 
 suite('PaymentsSectionCreditCardEditDialogTest', function() {
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
   });
 
   /**

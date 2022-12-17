@@ -1,10 +1,10 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/inspector/inspector_task_runner.h"
 
-#include "third_party/blink/renderer/core/inspector/thread_debugger.h"
+#include "third_party/blink/renderer/platform/bindings/thread_debugger.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
@@ -57,7 +57,7 @@ bool InspectorTaskRunner::AppendTaskDontInterrupt(Task task) {
 InspectorTaskRunner::Task InspectorTaskRunner::TakeNextInterruptingTask() {
   base::AutoLock locker(lock_);
 
-  if (disposed_ || interrupting_task_queue_.IsEmpty())
+  if (disposed_ || interrupting_task_queue_.empty())
     return Task();
 
   return interrupting_task_queue_.TakeFirst();

@@ -18,6 +18,11 @@
 
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+namespace {
+const char kCSSModsData[] = "css";
+const char kCSSModsExtension[] = ".css";
+}  // namespace
+
 void CSSModsDataClassHandler::GetData(
     Profile* profile,
     const std::string& data_id,
@@ -85,4 +90,11 @@ CSSModsDataClassHandler::GetDataForIdOnBlockingThread(base::FilePath dir_path,
     base::FilePath file_path = dir_path.AppendASCII(data_id);
     return vivaldi_data_url_utils::ReadFileOnBlockingThread(file_path);
   }
+}
+
+std::string CSSModsDataClassHandler::GetMimetype(Profile* profile,
+                                                 const std::string& data_id) {
+  if (data_id == kCSSModsData || base::EndsWith(data_id, kCSSModsExtension))
+    return "text/css";
+  return vivaldi_data_url_utils::kMimeTypePNG;
 }

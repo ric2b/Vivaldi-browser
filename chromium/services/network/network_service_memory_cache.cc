@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -458,6 +458,14 @@ absl::optional<std::string> NetworkServiceMemoryCache::CanServe(
   if (resource_request.load_flags & net::LOAD_BYPASS_CACHE ||
       resource_request.load_flags & net::LOAD_DISABLE_CACHE ||
       resource_request.load_flags & net::LOAD_VALIDATE_CACHE) {
+    return absl::nullopt;
+  }
+
+  // We hit a DCHECK failure without this early return. Let's have this
+  // workaround for now.
+  // TODO(crbug.com/1360815): Remove this, and handle this request correctly.
+  if (resource_request.trusted_params &&
+      !resource_request.trusted_params->isolation_info.IsEmpty()) {
     return absl::nullopt;
   }
 

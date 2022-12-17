@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,15 +6,17 @@
 
 #include <stdint.h>
 #include <wayland-cursor.h>
-#include <algorithm>
+
 #include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/chromeos_buildflags.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom.h"
 #include "ui/base/cursor/platform_cursor.h"
@@ -37,6 +39,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
 #include "ui/ozone/platform/wayland/host/wayland_frame_manager.h"
+#include "ui/ozone/platform/wayland/host/wayland_output.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_screen.h"
 #include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
@@ -107,21 +110,19 @@ void WaylandWindow::OnWindowLostCapture() {
 void WaylandWindow::UpdateWindowScale(bool update_bounds) {
   DCHECK(connection_->wayland_output_manager());
 
+  const auto* output_manager = connection_->wayland_output_manager();
   auto preferred_outputs_id = GetPreferredEnteredOutputId();
-  if (preferred_outputs_id == 0) {
-    // If non of the output are entered, use primary output. This is what
-    // WaylandScreen returns back to ScreenOzone.
-    auto* primary_output =
-        connection_->wayland_output_manager()->GetPrimaryOutput();
-    // We don't know our primary output - WaylandScreen hasn't been created
-    // yet.
+  if (!preferred_outputs_id.has_value()) {
+    // If no output was entered yet, use primary output. This is similar to what
+    // PlatformScreen implementation is expected to return to higher layer.
+    auto* primary_output = output_manager->GetPrimaryOutput();
+    // Primary output is unknown. i.e: WaylandScreen was not created yet.
     if (!primary_output)
       return;
     preferred_outputs_id = primary_output->output_id();
   }
 
-  auto* output =
-      connection_->wayland_output_manager()->GetOutput(preferred_outputs_id);
+  auto* output = output_manager->GetOutput(preferred_outputs_id.value());
   // There can be a race between sending leave output event and destroying
   // wl_outputs. Thus, explicitly check if the output exist.
   if (!output)
@@ -150,7 +151,7 @@ bool WaylandWindow::SetWindowScale(float new_scale) {
   return changed;
 }
 
-uint32_t WaylandWindow::GetPreferredEnteredOutputId() {
+absl::optional<WaylandOutput::Id> WaylandWindow::GetPreferredEnteredOutputId() {
   // Child windows don't store entered outputs. Instead, take the window's
   // root parent window and use its preferred output.
   if (parent_window_)
@@ -160,38 +161,38 @@ uint32_t WaylandWindow::GetPreferredEnteredOutputId() {
   // still a non toplevel window that doesn't have a parent (for example, a
   // wl_surface that is being dragged).
   if (root_surface_->entered_outputs().empty())
-    return 0;
+    return absl::nullopt;
 
   // PlatformWindowType::kPopup are created as toplevel windows as well.
   DCHECK(type() == PlatformWindowType::kWindow ||
          type() == PlatformWindowType::kPopup);
 
+  WaylandOutput::Id preferred_id = root_surface_->entered_outputs().front();
+  const auto* output_manager = connection_->wayland_output_manager();
+
   // A window can be located on two or more displays. Thus, return the id of the
   // output that has the biggest scale factor. Otherwise, use the very first one
   // that was entered. This way, we can be sure that the contents of the Window
   // are rendered at correct dpi when a user moves the window between displays.
-  uint32_t preferred_output_id = *root_surface_->entered_outputs().begin();
-  for (uint32_t output_id : root_surface_->entered_outputs()) {
-    auto* output_manager = connection_->wayland_output_manager();
+  for (WaylandOutput::Id output_id : root_surface_->entered_outputs()) {
     auto* output = output_manager->GetOutput(output_id);
-    auto* preferred_output = output_manager->GetOutput(preferred_output_id);
+    auto* preferred_output = output_manager->GetOutput(preferred_id);
     // The compositor may have told the surface to enter the output that the
     // client is not aware of.  In such an event, we cannot evaluate scales, and
     // can only return the default, which means falling back to the primary
-    // display in the code that calls this.
-    // DCHECKS below are kept for trying to catch the situation in developer's
-    // builds and find the way to reproduce the issue.
-    // See crbug.com/1323635
+    // display in the code that calls this. DCHECKS below are kept for trying to
+    // catch the situation in developer's builds and find the way to reproduce
+    // the issue. See crbug.com/1323635.
     DCHECK(output) << " output " << output_id << " not found!";
-    DCHECK(preferred_output)
-        << " output " << preferred_output_id << " not found!";
+    DCHECK(preferred_output) << " output " << preferred_id << " not found!";
     if (!output || !preferred_output)
-      return 0;
+      return absl::nullopt;
+
     if (output->scale_factor() > preferred_output->scale_factor())
-      preferred_output_id = output_id;
+      preferred_id = output_id;
   }
 
-  return preferred_output_id;
+  return preferred_id;
 }
 
 void WaylandWindow::OnPointerFocusChanged(bool focused) {
@@ -298,14 +299,14 @@ void WaylandWindow::PrepareForShutdown() {
 }
 
 void WaylandWindow::SetBoundsInPixels(const gfx::Rect& bounds_px) {
-  // TODO(crbug.com/): This is currently used only by unit tests.
+  // TODO(crbug.com/1306688): This is currently used only by unit tests.
   // Figure out how to migrate to test only methods.
   auto bounds_dip = delegate_->ConvertRectToDIP(bounds_px);
   SetBoundsInDIP(bounds_dip);
 }
 
 gfx::Rect WaylandWindow::GetBoundsInPixels() const {
-  // TODO(crbug.com/): This is currently used only by unit tests.
+  // TODO(crbug.com/1306688): This is currently used only by unit tests.
   // Figure out how to migrate to test only methods.
   return delegate_->ConvertRectToPixels(bounds_dip_);
 }
@@ -429,7 +430,7 @@ void WaylandWindow::SetDecorationInsets(const gfx::Insets* insets_px) {
   else
     frame_insets_px_ = absl::nullopt;
   UpdateDecorations();
-  connection_->ScheduleFlush();
+  connection_->Flush();
 }
 
 void WaylandWindow::SetWindowIcons(const gfx::ImageSkia& window_icon,
@@ -523,20 +524,17 @@ void WaylandWindow::HandleSurfaceConfigure(uint32_t serial) {
 
 void WaylandWindow::HandleToplevelConfigure(int32_t widht,
                                             int32_t height,
-                                            bool is_maximized,
-                                            bool is_fullscreen,
-                                            bool is_activated) {
+                                            const WindowStates& window_states) {
   NOTREACHED()
       << "Only shell toplevels must receive HandleToplevelConfigure calls.";
 }
 
-void WaylandWindow::HandleAuraToplevelConfigure(int32_t x,
-                                                int32_t y,
-                                                int32_t width,
-                                                int32_t height,
-                                                bool is_maximized,
-                                                bool is_fullscreen,
-                                                bool is_activated) {
+void WaylandWindow::HandleAuraToplevelConfigure(
+    int32_t x,
+    int32_t y,
+    int32_t width,
+    int32_t height,
+    const WindowStates& window_states) {
   NOTREACHED()
       << "Only shell toplevels must receive HandleAuraToplevelConfigure calls.";
 }
@@ -553,7 +551,7 @@ void WaylandWindow::UpdateVisualSize(const gfx::Size& size_px) {
 
   if (apply_pending_state_on_update_visual_size_for_testing_) {
     root_surface_->ApplyPendingState();
-    connection_->ScheduleFlush();
+    connection_->Flush();
   }
 }
 
@@ -661,9 +659,9 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
   delegate_->OnAcceleratedWidgetAvailable(GetWidget());
 
   std::vector<gfx::Rect> region{gfx::Rect{size_px_}};
-  root_surface_->SetOpaqueRegion(&region);
+  root_surface_->set_opaque_region(&region);
   root_surface_->ApplyPendingState();
-  connection_->ScheduleFlush();
+  connection_->Flush();
 
   return true;
 }
@@ -679,6 +677,12 @@ gfx::Vector2d WaylandWindow::GetWindowGeometryOffsetInDIP() const {
 }
 
 void WaylandWindow::UpdateDecorations() {}
+
+gfx::Insets WaylandWindow::GetDecorationInsetsInDIP() const {
+  return frame_insets_px_.has_value()
+             ? gfx::ScaleToRoundedInsets(*frame_insets_px_, 1.f / window_scale_)
+             : gfx::Insets{};
+}
 
 WaylandWindow* WaylandWindow::GetRootParentWindow() {
   return parent_window_ ? parent_window_->GetRootParentWindow() : this;
@@ -953,7 +957,7 @@ void WaylandWindow::ProcessPendingBoundsDip(uint32_t serial) {
     // window has been applied.
     SetWindowGeometry(pending_bounds_dip_);
     AckConfigure(serial);
-    connection()->ScheduleFlush();
+    connection()->Flush();
   } else if (!pending_configures_.empty() &&
              pending_bounds_dip_.size() ==
                  pending_configures_.back().bounds_dip.size()) {
@@ -1038,17 +1042,16 @@ bool WaylandWindow::ProcessVisualSizeUpdate(const gfx::Size& size_px) {
   // of elements in it for several frames under some conditions.
   // The `pending_configures_` should store px size instead of dip.
   auto result =
-      std::find_if(pending_configures_.begin(), pending_configures_.end(),
-                   [&size_px](auto& configure) {
-                     // Should we adjust?
-                     return configure.size_px == size_px && configure.set;
-                   });
+      base::ranges::find_if(pending_configures_, [&size_px](auto& configure) {
+        // Should we adjust?
+        return configure.size_px == size_px && configure.set;
+      });
 
   if (result != pending_configures_.end()) {
     auto serial = result->serial;
     SetWindowGeometry(result->bounds_dip);
     AckConfigure(serial);
-    connection()->ScheduleFlush();
+    connection()->Flush();
     pending_configures_.erase(pending_configures_.begin(), ++result);
     return true;
   }

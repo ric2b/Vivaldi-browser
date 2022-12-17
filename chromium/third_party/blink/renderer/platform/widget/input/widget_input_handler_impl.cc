@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -195,6 +195,14 @@ void WidgetInputHandlerImpl::GetFrameWidgetInputHandler(
       std::make_unique<FrameWidgetInputHandlerImpl>(
           widget_, frame_widget_input_handler_, input_event_queue_),
       std::move(frame_receiver));
+}
+
+void WidgetInputHandlerImpl::UpdateBrowserControlsState(
+    cc::BrowserControlsState constraints,
+    cc::BrowserControlsState current,
+    bool animate) {
+  input_handler_manager_->UpdateBrowserControlsState(constraints, current,
+                                                     animate);
 }
 
 void WidgetInputHandlerImpl::RunOnMainThread(base::OnceClosure closure) {

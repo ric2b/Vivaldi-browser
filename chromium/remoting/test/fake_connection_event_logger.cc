@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -250,6 +250,7 @@ class FakeConnectionEventLogger::CounterHostStub
   void SetCapabilities(const protocol::Capabilities& capabilities) override {}
   void SelectDesktopDisplay(
       const protocol::SelectDesktopDisplayRequest& select_display) override {}
+  void SetVideoLayout(const protocol::VideoLayout& video_layout) override {}
 };
 
 FakeConnectionEventLogger::CounterHostStub::CounterHostStub()

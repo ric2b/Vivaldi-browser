@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -172,8 +172,10 @@ void ContentRendererClientImpl::RenderFrameCreated(
   }
 }
 
-void ContentRendererClientImpl::WebViewCreated(blink::WebView* web_view,
-                                               bool was_created_by_renderer) {
+void ContentRendererClientImpl::WebViewCreated(
+    blink::WebView* web_view,
+    bool was_created_by_renderer,
+    const url::Origin* outermost_origin) {
   new prerender::NoStatePrefetchClient(web_view);
 }
 
@@ -216,7 +218,7 @@ ContentRendererClientImpl::CreateURLLoaderThrottleProvider(
 
 void ContentRendererClientImpl::GetSupportedKeySystems(
     media::GetSupportedKeySystemsCB cb) {
-  media::KeySystemPropertiesVector key_systems;
+  media::KeySystemInfoVector key_systems;
 #if BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(ENABLE_WIDEVINE)
   cdm::AddAndroidWidevine(&key_systems);

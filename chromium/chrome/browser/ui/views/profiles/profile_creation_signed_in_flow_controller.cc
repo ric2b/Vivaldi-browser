@@ -1,29 +1,23 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/profiles/profile_creation_signed_in_flow_controller.h"
 
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_attributes_entry.h"
-#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
 #include "chrome/browser/ui/views/profiles/profile_customization_bubble_sync_controller.h"
 #include "chrome/browser/ui/views/profiles/profile_customization_bubble_view.h"
-#include "chrome/common/pref_names.h"
-#include "components/signin/public/identity_manager/account_info.h"
 
 namespace {
 
@@ -80,13 +74,11 @@ ProfileCreationSignedInFlowController::ProfileCreationSignedInFlowController(
     Profile* profile,
     std::unique_ptr<content::WebContents> contents,
     absl::optional<SkColor> profile_color,
-    base::TimeDelta extended_account_info_timeout,
     bool is_saml)
     : ProfilePickerSignedInFlowController(host,
                                           profile,
                                           std::move(contents),
                                           profile_color),
-      extended_account_info_timeout_(extended_account_info_timeout),
       is_saml_(is_saml) {}
 
 ProfileCreationSignedInFlowController::
@@ -123,18 +115,8 @@ void ProfileCreationSignedInFlowController::Init() {
   // Listen for extended account info getting fetched.
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(profile());
-  identity_manager_observation_.Observe(identity_manager);
-
-  // Set up a timeout for extended account info (which cancels any existing
-  // timeout closure).
-  const CoreAccountInfo& account_info =
-      identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
-  extended_account_info_timeout_closure_.Reset(base::BindOnce(
-      &ProfileCreationSignedInFlowController::OnExtendedAccountInfoTimeout,
-      weak_ptr_factory_.GetWeakPtr(), account_info));
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, extended_account_info_timeout_closure_.callback(),
-      extended_account_info_timeout_);
+  profile_name_resolver_ =
+      std::make_unique<ProfileNameResolver>(identity_manager);
 }
 
 void ProfileCreationSignedInFlowController::Cancel() {
@@ -158,42 +140,16 @@ void ProfileCreationSignedInFlowController::FinishAndOpenBrowser(
     return;
   is_finished_ = true;
 
-  if (name_for_signed_in_profile_.empty()) {
-    on_profile_name_available_ = base::BindOnce(
-        &ProfileCreationSignedInFlowController::FinishAndOpenBrowserImpl,
-        weak_ptr_factory_.GetWeakPtr(), std::move(callback));
-    return;
+  if (profile_name_resolver_->resolved_profile_name().empty()) {
+    // Delay finishing the flow until we have obtained a profile name.
+    profile_name_resolver_->set_on_profile_name_resolved_callback(
+        base::BindOnce(
+            &ProfileCreationSignedInFlowController::FinishAndOpenBrowserImpl,
+            // Unretained ok: `this` outlives `profile_name_resolver_`.
+            base::Unretained(this), std::move(callback)));
+  } else {
+    FinishAndOpenBrowserImpl(std::move(callback));
   }
-
-  FinishAndOpenBrowserImpl(std::move(callback));
-}
-
-void ProfileCreationSignedInFlowController::OnExtendedAccountInfoUpdated(
-    const AccountInfo& account_info) {
-  if (!account_info.IsValid())
-    return;
-  name_for_signed_in_profile_ =
-      profiles::GetDefaultNameForNewSignedInProfile(account_info);
-  OnProfileNameAvailable();
-  // Extended info arrived on time, no need for the timeout callback any more.
-  extended_account_info_timeout_closure_.Cancel();
-}
-
-void ProfileCreationSignedInFlowController::OnExtendedAccountInfoTimeout(
-    const CoreAccountInfo& account) {
-  name_for_signed_in_profile_ =
-      profiles::GetDefaultNameForNewSignedInProfileWithIncompleteInfo(account);
-  OnProfileNameAvailable();
-}
-
-void ProfileCreationSignedInFlowController::OnProfileNameAvailable() {
-  // Stop listening to further changes.
-  DCHECK(identity_manager_observation_.IsObservingSource(
-      IdentityManagerFactory::GetForProfile(profile())));
-  identity_manager_observation_.Reset();
-
-  if (on_profile_name_available_)
-    std::move(on_profile_name_available_).Run();
 }
 
 void ProfileCreationSignedInFlowController::FinishAndOpenBrowserImpl(
@@ -202,26 +158,13 @@ void ProfileCreationSignedInFlowController::FinishAndOpenBrowserImpl(
       "browser",
       "ProfileCreationSignedInFlowController::FinishAndOpenBrowserImpl",
       "profile_path", profile()->GetPath().AsUTF8Unsafe());
-  DCHECK(!name_for_signed_in_profile_.empty());
+  std::u16string name_for_signed_in_profile =
+      profile_name_resolver_->resolved_profile_name();
+  profile_name_resolver_.reset();
+  DCHECK(!name_for_signed_in_profile.empty());
 
-  ProfileAttributesEntry* entry =
-      g_browser_process->profile_manager()
-          ->GetProfileAttributesStorage()
-          .GetProfileAttributesWithPath(profile()->GetPath());
-  if (!entry) {
-    NOTREACHED();
-    return;
-  }
+  FinalizeNewProfileSetup(profile(), name_for_signed_in_profile);
 
-  entry->SetIsOmitted(false);
-  if (!profile()->GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles)) {
-    // Unmark this profile ephemeral so that it isn't deleted upon next startup.
-    // Profiles should never be made non-ephemeral if ephemeral mode is forced
-    // by policy.
-    entry->SetIsEphemeral(false);
-  }
-  entry->SetLocalProfileName(name_for_signed_in_profile_,
-                             /*is_default_name=*/false);
   ProfileMetrics::LogProfileAddNewUser(
       ProfileMetrics::ADD_NEW_PROFILE_PICKER_SIGNED_IN);
 
@@ -248,9 +191,11 @@ void ProfileCreationSignedInFlowController::FinishAndOpenBrowserImpl(
     }
   }
 
-  // Skip the FRE for this profile as it's replaced by profile creation flow.
-  profile()->GetPrefs()->SetBoolean(prefs::kHasSeenWelcomePage, true);
+  ExitPickerAndRunInNewBrowser(std::move(callback));
+}
 
+void ProfileCreationSignedInFlowController::ExitPickerAndRunInNewBrowser(
+    ProfilePicker::BrowserOpenedCallback callback) {
   profiles::OpenBrowserWindowForProfile(
       base::BindOnce(&ProfileCreationSignedInFlowController::OnBrowserOpened,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
@@ -279,11 +224,15 @@ void ProfileCreationSignedInFlowController::OnSignInContentsFreedUp() {
   DCHECK(!is_finished_);
   is_finished_ = true;
 
-  DCHECK(name_for_signed_in_profile_.empty());
-  name_for_signed_in_profile_ =
-      profiles::GetDefaultNameForNewEnterpriseProfile();
+  DCHECK(!profile_name_resolver_);
   contents()->SetDelegate(nullptr);
-  FinishAndOpenBrowserImpl(
+
+  FinalizeNewProfileSetup(profile(),
+                          profiles::GetDefaultNameForNewEnterpriseProfile());
+  ProfileMetrics::LogProfileAddNewUser(
+      ProfileMetrics::ADD_NEW_PROFILE_PICKER_SIGNED_IN);
+
+  ExitPickerAndRunInNewBrowser(
       base::BindOnce(&ContinueSAMLSignin, ReleaseContents()));
 }
 

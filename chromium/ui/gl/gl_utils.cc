@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -127,28 +127,6 @@ unsigned int DirectCompositionRootSurfaceBufferCount() {
   return base::FeatureList::IsEnabled(features::kDCompTripleBufferRootSwapChain)
              ? 3u
              : 2u;
-}
-
-bool ShouldForceDirectCompositionRootSurfaceFullDamage() {
-  static bool should_force = []() {
-    const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-    if (cmd_line->HasSwitch(
-            switches::kDirectCompositionForceFullDamageForTesting)) {
-      return true;
-    }
-    UINT brga_flags =
-        GetDirectCompositionOverlaySupportFlags(DXGI_FORMAT_B8G8R8A8_UNORM);
-    constexpr UINT kSupportBits =
-        DXGI_OVERLAY_SUPPORT_FLAG_DIRECT | DXGI_OVERLAY_SUPPORT_FLAG_SCALING;
-    if ((brga_flags & kSupportBits) == 0)
-      return false;
-    if (!base::FeatureList::IsEnabled(
-            features::kDirectCompositionForceFullDamage)) {
-      return false;
-    }
-    return true;
-  }();
-  return should_force;
 }
 
 // Labels swapchain buffers with the string name_prefix + _Buffer_ +

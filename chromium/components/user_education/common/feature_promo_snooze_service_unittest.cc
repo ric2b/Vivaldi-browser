@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,16 +12,17 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "components/feature_engagement/public/feature_constants.h"
-#include "components/user_education/common/feature_promo_snooze_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace user_education {
 
 namespace {
-base::Feature kTestIPHFeature{"TestIPHFeature",
-                              base::FEATURE_ENABLED_BY_DEFAULT};
-base::Feature kTestIPHFeature2{"TestIPHFeature2",
-                               base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kTestIPHFeature,
+             "TestIPHFeature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kTestIPHFeature2,
+             "TestIPHFeature2",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 class TestFeaturePromoSnoozeService : public FeaturePromoSnoozeService {
  public:

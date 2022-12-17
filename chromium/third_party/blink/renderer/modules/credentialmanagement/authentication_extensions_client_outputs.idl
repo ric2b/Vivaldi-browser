@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,4 +23,8 @@ dictionary AuthenticationExtensionsClientOutputs {
   // https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#sctn-credBlob-extension
   boolean credBlob;
   ArrayBuffer getCredBlob;
+
+  // Device-bound public-key support.
+  // https://github.com/w3c/webauthn/pull/1663
+  [RuntimeEnabled=WebAuthenticationDevicePublicKey] AuthenticationExtensionsDevicePublicKeyOutputs devicePubKey;
 };

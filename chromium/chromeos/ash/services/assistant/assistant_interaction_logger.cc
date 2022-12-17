@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,7 +73,7 @@ void AssistantInteractionLogger::OnHtmlResponse(const std::string& response,
 }
 
 void AssistantInteractionLogger::OnSuggestionsResponse(
-    const std::vector<chromeos::assistant::AssistantSuggestion>& response) {
+    const std::vector<assistant::AssistantSuggestion>& response) {
   std::stringstream suggestions;
   for (const auto& suggestion : response)
     suggestions << "'" << suggestion.text << "', ";

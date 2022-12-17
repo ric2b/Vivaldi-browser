@@ -1,11 +1,15 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_UPDATER_WIN_UI_L10N_UTIL_H_
 #define CHROME_UPDATER_WIN_UI_L10N_UTIL_H_
 
+#include <windows.h>
+
 #include <string>
+
+#include "chrome/updater/win/installer/exit_code.h"
 
 using UINT = unsigned int;
 
@@ -24,6 +28,10 @@ std::wstring GetLocalizedStringF(UINT base_message_id,
 // arguments.
 std::wstring GetLocalizedStringF(UINT base_message_id,
                                  std::vector<std::wstring> replacements);
+
+// Returns a localized version of the error message associated with an exit
+// code.
+std::wstring GetLocalizedErrorString(DWORD exit_code);
 
 }  // namespace updater
 

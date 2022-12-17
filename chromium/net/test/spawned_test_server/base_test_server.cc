@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -225,12 +225,10 @@ bool BaseTestServer::GetFilePathWithReplacements(
 }
 
 ScopedTestRoot BaseTestServer::RegisterTestCerts() {
-  auto root1 =
-      ImportCertFromFile(GetTestCertsDirectory(), "ocsp-test-root.pem");
-  auto root2 = ImportCertFromFile(GetTestCertsDirectory(), "root_ca_cert.pem");
-  if (!root1 || !root2)
+  auto root = ImportCertFromFile(GetTestCertsDirectory(), "root_ca_cert.pem");
+  if (!root)
     return ScopedTestRoot();
-  return ScopedTestRoot(CertificateList{root1, root2});
+  return ScopedTestRoot(CertificateList{root});
 }
 
 bool BaseTestServer::LoadTestRootCert() {

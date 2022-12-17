@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "base/containers/adapters.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
@@ -45,6 +46,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/navigation_handle_observer.h"
 #include "content/public/test/preloading_test_util.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -65,8 +67,8 @@ content::PreloadingFailureReason ToPreloadingFailureReason(
     PrerenderPredictionStatus status) {
   return static_cast<content::PreloadingFailureReason>(
       static_cast<int>(status) +
-      static_cast<int>(
-          content::PreloadingFailureReason::kPreloadingFailureReasonCommonEnd));
+      static_cast<int>(content::PreloadingFailureReason::
+                           kPreloadingFailureReasonContentEnd));
 }
 
 class AutocompleteActionPredictorObserverImpl
@@ -315,6 +317,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxUIBrowserTest,
       kNewUrl, *GetActiveWebContents(), gfx::Size(50, 50));
 
   old_prerender_observer.WaitForDestroyed();
+  content::NavigationHandleObserver activation_observer(GetActiveWebContents(),
+                                                        kNewUrl);
   StartOmniboxNavigationAndWaitForActivation(kNewUrl);
 
   EXPECT_TRUE(IsPrerenderingNavigation());
@@ -322,8 +326,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxUIBrowserTest,
 
   {
     // Check that we store two entries for both new and old entry.
-    ukm::SourceId ukm_source_id =
-        GetActiveWebContents()->GetPrimaryMainFrame()->GetPageUkmSourceId();
+    ukm::SourceId ukm_source_id = activation_observer.next_page_ukm_source_id();
     auto ukm_entries = test_ukm_recorder()->GetEntries(
         Preloading_Attempt::kEntryName,
         content::test::kPreloadingAttemptUkmMetrics);
@@ -387,15 +390,15 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxUIBrowserTest,
   histogram_tester.ExpectUniqueSample(
       "Prerender.Experimental.PrerenderHostFinalStatus.Embedder_DirectURLInput",
       /*PrerenderHost::FinalStatus::kTriggerDestroyed*/ 16, 0);
-
+  content::NavigationHandleObserver activation_observer(GetActiveWebContents(),
+                                                        kPrerenderingUrl);
   StartOmniboxNavigationAndWaitForActivation(kPrerenderingUrl);
 
   EXPECT_TRUE(IsPrerenderingNavigation());
   EXPECT_EQ(GetActiveWebContents()->GetLastCommittedURL(), kPrerenderingUrl);
 
   {
-    ukm::SourceId ukm_source_id =
-        GetActiveWebContents()->GetPrimaryMainFrame()->GetPageUkmSourceId();
+    ukm::SourceId ukm_source_id = activation_observer.next_page_ukm_source_id();
     auto ukm_entries = test_ukm_recorder()->GetEntries(
         Preloading_Attempt::kEntryName,
         content::test::kPreloadingAttemptUkmMetrics);
@@ -892,15 +895,13 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxSearchSuggestionUIBrowserTest,
       true, 1);
 
   // Ensure there is a search hint.
-  auto is_prerender_match = [](const AutocompleteMatch& match) {
-    return BaseSearchProvider::ShouldPrerender(match);
-  };
   AutocompleteController* autocomplete_controller = GetAutocompleteController();
-  auto prerender_match = std::find_if(
-      std::begin(autocomplete_controller->result()),
-      std::end(autocomplete_controller->result()), is_prerender_match);
+  auto prerender_match = base::ranges::find_if(
+      autocomplete_controller->result(), &BaseSearchProvider::ShouldPrerender);
   ASSERT_NE(prerender_match, std::end(autocomplete_controller->result()));
 
+  content::NavigationHandleObserver activation_observer(
+      GetActiveWebContents(), prerender_match->destination_url);
   SelectAutocompleteMatchAndWaitForActivation(*prerender_match, host_id);
   EXPECT_TRUE(IsPrerenderingNavigation());
 
@@ -918,8 +919,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxSearchSuggestionUIBrowserTest,
   {
     // Check that we store one entry corresponding to the prerender prediction
     // and attempt.
-    ukm::SourceId ukm_source_id =
-        GetActiveWebContents()->GetPrimaryMainFrame()->GetPageUkmSourceId();
+    ukm::SourceId ukm_source_id = activation_observer.next_page_ukm_source_id();
     auto attempt_ukm_entries = test_ukm_recorder()->GetEntries(
         Preloading_Attempt::kEntryName,
         content::test::kPreloadingAttemptUkmMetrics);
@@ -995,13 +995,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxSearchSuggestionUIBrowserTest,
 
   AutocompleteController* autocomplete_controller = GetAutocompleteController();
   // Ensure there is a search hint.
-  auto is_prerender_match = [](const AutocompleteMatch& match) {
-    return BaseSearchProvider::ShouldPrerender(match);
-  };
-  auto prerender_match = std::find_if(
-      std::begin(autocomplete_controller->result()),
-      std::end(autocomplete_controller->result()), is_prerender_match);
+  auto prerender_match = base::ranges::find_if(
+      autocomplete_controller->result(), &BaseSearchProvider::ShouldPrerender);
   ASSERT_NE(prerender_match, std::end(autocomplete_controller->result()));
+  content::NavigationHandleObserver activation_observer(
+      GetActiveWebContents(), prerender_match->destination_url);
   SelectAutocompleteMatchAndWaitForActivation(*prerender_match, host_id);
   EXPECT_TRUE(IsPrerenderingNavigation());
   base::RunLoop().RunUntilIdle();
@@ -1009,8 +1007,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxSearchSuggestionUIBrowserTest,
   {
     // Check that we store two entries corresponding to both the prererendering
     // attempts.
-    ukm::SourceId ukm_source_id =
-        GetActiveWebContents()->GetPrimaryMainFrame()->GetPageUkmSourceId();
+    ukm::SourceId ukm_source_id = activation_observer.next_page_ukm_source_id();
     auto ukm_entries = test_ukm_recorder()->GetEntries(
         Preloading_Attempt::kEntryName,
         content::test::kPreloadingAttemptUkmMetrics);
@@ -1086,21 +1083,19 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxSearchSuggestionUIBrowserTest,
 
   AutocompleteController* autocomplete_controller = GetAutocompleteController();
   // Ensure there is a search hint.
-  auto is_prerender_match = [](const AutocompleteMatch& match) {
-    return BaseSearchProvider::ShouldPrerender(match);
-  };
-  auto prerender_match = std::find_if(
-      std::begin(autocomplete_controller->result()),
-      std::end(autocomplete_controller->result()), is_prerender_match);
+  auto prerender_match = base::ranges::find_if(
+      autocomplete_controller->result(), &BaseSearchProvider::ShouldPrerender);
   ASSERT_NE(prerender_match, std::end(autocomplete_controller->result()));
+
+  content::NavigationHandleObserver activation_observer(
+      GetActiveWebContents(), prerender_match->destination_url);
   SelectAutocompleteMatchAndWaitForActivation(*prerender_match, host_id2);
   EXPECT_TRUE(IsPrerenderingNavigation());
 
   {
     // Check that we store two entries corresponding to both the prererendering
     // attempts.
-    ukm::SourceId ukm_source_id =
-        GetActiveWebContents()->GetPrimaryMainFrame()->GetPageUkmSourceId();
+    ukm::SourceId ukm_source_id = activation_observer.next_page_ukm_source_id();
     auto ukm_entries = test_ukm_recorder()->GetEntries(
         Preloading_Attempt::kEntryName,
         content::test::kPreloadingAttemptUkmMetrics);

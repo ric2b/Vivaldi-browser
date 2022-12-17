@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -192,7 +192,10 @@ struct Capabilities {
   bool webSocketUrl = false;
 };
 
-bool GetChromeOptionsDictionary(const base::DictionaryValue& params,
-                                const base::DictionaryValue** out);
+bool GetChromeOptionsDictionaryDeprecated(const base::DictionaryValue& params,
+                                          const base::DictionaryValue** out);
+
+bool GetChromeOptionsDictionary(const base::Value::Dict& params,
+                                const base::Value::Dict** out);
 
 #endif  // CHROME_TEST_CHROMEDRIVER_CAPABILITIES_H_

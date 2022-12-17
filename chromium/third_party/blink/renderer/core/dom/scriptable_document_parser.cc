@@ -28,7 +28,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_streamer.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
-#include "third_party/blink/renderer/platform/loader/fetch/source_keyed_cached_metadata_handler.h"
 
 namespace blink {
 
@@ -41,11 +40,6 @@ ScriptableDocumentParser::ScriptableDocumentParser(
 
 bool ScriptableDocumentParser::IsParsingAtLineNumber() const {
   return IsParsing() && !IsWaitingForScripts() && !IsExecutingScript();
-}
-
-void ScriptableDocumentParser::Trace(Visitor* visitor) const {
-  visitor->Trace(inline_script_cache_handler_);
-  DecodedDataDocumentParser::Trace(visitor);
 }
 
 void ScriptableDocumentParser::AddInlineScriptStreamer(
@@ -71,6 +65,12 @@ InlineScriptStreamer* ScriptableDocumentParser::TakeInlineScriptStreamer(
   if (streamer)
     return InlineScriptStreamer::From(std::move(streamer));
   return nullptr;
+}
+
+bool ScriptableDocumentParser::HasInlineScriptStreamerForTesting(
+    const String& source) {
+  base::AutoLock lock(streamers_lock_);
+  return inline_script_streamers_.Contains(source);
 }
 
 void ScriptableDocumentParser::AddCSSTokenizer(

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -913,8 +913,11 @@ TEST_F(ServiceWorkerVersionTest, RequestTimeout) {
       ReceiveServiceWorkerStatus(&error_status, run_loop.QuitClosure()));
 
   // Dispatch a dummy event.
+  auto message_event = blink::mojom::ExtendableMessageEvent::New();
+  message_event->message.sender_agent_cluster_id =
+      base::UnguessableToken::Create();
   version_->endpoint()->DispatchExtendableMessageEvent(
-      blink::mojom::ExtendableMessageEvent::New(),
+      std::move(message_event),
       version_->CreateSimpleEventCallback(request_id));
   worker->RunUntilDispatchMessageEvent();
 
@@ -1413,7 +1416,7 @@ TEST_F(ServiceWorkerVersionTest,
   container_host->OnBeginNavigationCommit(
       GlobalRenderFrameHostId(version_->embedded_worker()->process_id(),
                               /*frame_routing_id=*/1),
-      network::CrossOriginEmbedderPolicy(), std::move(reporter),
+      PolicyContainerPolicies(), std::move(reporter),
       ukm::UkmRecorder::GetNewSourceID());
 
   // RenderProcessHost should be notified of foreground worker.

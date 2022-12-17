@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,6 +26,8 @@ import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
+import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
@@ -53,7 +55,7 @@ import org.vivaldi.browser.themes.VivaldiAccentColor;
  */
 public class StatusBarColorController
         implements DestroyObserver, TopToolbarCoordinator.UrlExpansionObserver,
-                   StatusIndicatorCoordinator.StatusIndicatorObserver {
+                   StatusIndicatorCoordinator.StatusIndicatorObserver, UrlFocusChangeListener {
     public static final @ColorInt int UNDEFINED_STATUS_BAR_COLOR = Color.TRANSPARENT;
     public static final @ColorInt int DEFAULT_STATUS_BAR_COLOR = Color.argb(0x01, 0, 0, 0);
 
@@ -87,6 +89,7 @@ public class StatusBarColorController
     private final @ColorInt int mIncognitoPrimaryBgColor;
     private final @ColorInt int mStandardDefaultThemeColor;
     private final @ColorInt int mIncognitoDefaultThemeColor;
+    private final @ColorInt int mActiveOmniboxDefaultColor;
 
     private @Nullable TabModelSelector mTabModelSelector;
     private CallbackController mCallbackController = new CallbackController();
@@ -94,6 +97,7 @@ public class StatusBarColorController
     private @Nullable Tab mCurrentTab;
     private boolean mIsInOverviewMode;
     private boolean mIsIncognito;
+    private boolean mIsOmniboxFocused;
 
     private @ColorInt int mScrimColor;
     private float mStatusBarScrimFraction;
@@ -128,8 +132,14 @@ public class StatusBarColorController
         mIncognitoPrimaryBgColor = ChromeColors.getPrimaryBackgroundColor(context, true);
         mStandardDefaultThemeColor = ChromeColors.getDefaultThemeColor(context, false);
         mIncognitoDefaultThemeColor = ChromeColors.getDefaultThemeColor(context, true);
-
         mStatusIndicatorColor = UNDEFINED_STATUS_BAR_COLOR;
+        if (OmniboxFeatures.shouldShowModernizeVisualUpdate(context)
+                && OmniboxFeatures.shouldShowActiveColorOnOmnibox()) {
+            mActiveOmniboxDefaultColor = ChromeColors.getSurfaceColor(
+                    context, R.dimen.omnibox_suggestion_dropdown_bg_elevation);
+        } else {
+            mActiveOmniboxDefaultColor = mStandardDefaultThemeColor;
+        }
 
         mStatusBarColorTabObserver = new ActivityTabProvider.ActivityTabTabObserver(tabProvider) {
             @Override
@@ -257,6 +267,14 @@ public class StatusBarColorController
         updateStatusBarColor();
     }
 
+    @Override
+    public void onUrlFocusChange(boolean hasFocus) {
+        mIsOmniboxFocused = hasFocus;
+        // Note (david@vivaldi.com): We don't update the status bar color when focus changes.
+        if (!ChromeApplicationImpl.isVivaldi())
+        updateStatusBarColor();
+    }
+
     /**
      * Update the scrim amount on the status bar.
      * @param fraction The scrim fraction in range [0, 1].
@@ -316,6 +334,11 @@ public class StatusBarColorController
         // StatusBarColorProvider.
         if (mIsTablet) return Color.BLACK;
 
+        // When Omnibox gains focus, we want to clear the status bar theme color.
+        // The theme should be restored when Omnibox focus clears.
+        if (!ChromeApplicationImpl.isVivaldi())
+        if (mIsOmniboxFocused) return calculateDefaultStatusBarColor();
+
         // Return status bar color in overview mode.
         if (mIsInOverviewMode) {
             if (shouldDarkenStatusBarColor()) return Color.BLACK;
@@ -358,6 +381,9 @@ public class StatusBarColorController
     private @ColorInt int calculateDefaultStatusBarColor() {
         if (shouldDarkenStatusBarColor()) {
             return Color.BLACK;
+        }
+        if (mIsOmniboxFocused) {
+            return mIsIncognito ? mIncognitoPrimaryBgColor : mActiveOmniboxDefaultColor;
         }
         return mIsIncognito ? mIncognitoDefaultThemeColor : mStandardDefaultThemeColor;
     }

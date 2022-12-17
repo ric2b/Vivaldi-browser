@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,8 +39,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
-namespace ash {
-namespace personalization_app {
+namespace ash::personalization_app {
 
 namespace {
 
@@ -335,7 +334,9 @@ void PersonalizationAppUserProviderImpl::OnUserProfileImageUpdated(
     return;
 
   user_image_observer_remote_->OnUserProfileImageUpdated(
-      GURL(webui::GetBitmapDataUrl(*profile_image.bitmap())));
+      profile_image.isNull()
+          ? GURL()
+          : GURL(webui::GetBitmapDataUrl(*profile_image.bitmap())));
 }
 
 void PersonalizationAppUserProviderImpl::OnCameraPresenceCheckDone(
@@ -394,5 +395,4 @@ void PersonalizationAppUserProviderImpl::SetUserImageFileSelectorForTesting(
   user_image_file_selector_ = std::move(file_selector);
 }
 
-}  // namespace personalization_app
-}  // namespace ash
+}  // namespace ash::personalization_app

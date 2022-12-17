@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Fájl szerkesztése}other{Fájlok szerkesztése}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Kulcs iránya</translation>
+<translation id="3294437725009624529">Vendég</translation>
 <translation id="3310640316857623290">A DNS várakozási ideje jelentősen az engedélyezhető határérték felett van</translation>
 <translation id="3328783797891415197">A teszt fut</translation>
 <translation id="3340011300870565703">Jobb fülhallgató akkumulátorszintje: <ph name="BATTERY_PERCENTAGE" />%.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">A firmware frissítése közben ne húzza ki a külső eszközt, és ne kapcsolja ki számítógépét. Ezt az ablakot kis méretre állíthatja. A frissítés eltarthat néhány percig, és előfordulhat, hogy közben nem működik a külső eszköz.</translation>
 <translation id="3486220673238053218">definíció</translation>
 <translation id="3488065109653206955">Részben aktiválva</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />Teljesítménykövetési adatok<ph name="END_LINK1" /> elküldése</translation>
 <translation id="3517001332549868749">ChromeOS-frissítés</translation>
 <translation id="3527036260304016759">Sikertelen – Ismeretlen hiba</translation>
 <translation id="3532980081107202182">Körülbelül <ph name="MIN_REMAINING" /> perc van hátra</translation>
@@ -468,6 +470,7 @@ Koppintson a mikrofonra, és kérdezzen tőlem.</translation>
 <translation id="5502931783115429516">Az Android nem fut</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Automatikus váltás sötét témára napnyugtakor</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Újbóli beolvasás</translation>
 <translation id="5583640892426849032">Backspace</translation>

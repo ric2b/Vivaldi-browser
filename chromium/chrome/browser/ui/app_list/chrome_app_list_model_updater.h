@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,8 @@ namespace reorder {
 class AppListReorderDelegate;
 struct ReorderParam;
 }  // namespace reorder
+
+class TemporaryAppListSortTest;
 }  // namespace app_list
 
 class ChromeAppListItem;
@@ -144,7 +146,7 @@ class ChromeAppListModelUpdater : public AppListModelUpdater,
   ash::AppListModel* model_for_test() { return &model_; }
 
  private:
-  friend class TemporaryAppListSortTest;
+  friend class app_list::TemporaryAppListSortTest;
 
   class TemporarySortManager;
 

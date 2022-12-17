@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,9 +33,9 @@ class MerchantTrustSignalsMediator {
             MerchantTrustSignalsCallback delegate, MerchantTrustMetrics metrics) {
         mCurrentTabObserver = new CurrentTabObserver(tabSupplier, new EmptyTabObserver() {
             @Override
-            public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
+            public void onDidFinishNavigationInPrimaryMainFrame(
+                    Tab tab, NavigationHandle navigation) {
                 if ((tab.isIncognito()) || (!navigation.hasCommitted())
-                        || (!navigation.isInPrimaryMainFrame())
                         || (navigation.isPrimaryMainFrameFragmentNavigation())
                         || (navigation.isErrorPage()) || (navigation.getUrl() == null)
                         || (TextUtils.isEmpty(navigation.getUrl().getHost()))) {
@@ -45,6 +45,11 @@ class MerchantTrustSignalsMediator {
                 metrics.updateRecordingMessageImpact(navigation.getUrl().getHost());
                 delegate.onFinishEligibleNavigation(
                         new MerchantTrustMessageContext(navigation, tab.getWebContents()));
+            }
+
+            @Override
+            public void onDidFinishNavigationNoop(Tab tab, NavigationHandle navigation) {
+                if (!navigation.isInPrimaryMainFrame()) return;
             }
 
             @Override

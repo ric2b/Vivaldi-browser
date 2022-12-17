@@ -1,8 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/ranges/algorithm.h"
+#include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/time/time.h"
 #include "chrome/browser/permissions/quiet_notification_permission_ui_config.h"
 #include "chrome/browser/permissions/quiet_notification_permission_ui_state.h"
 #include "chrome/browser/profiles/profile.h"
@@ -14,26 +17,49 @@
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/omnibox_chip_theme.h"
-#include "chrome/browser/ui/views/permissions/permission_chip.h"
-#include "chrome/browser/ui/views/permissions/permission_request_chip.h"
+#include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
+#include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
+#include "chrome/browser/ui/views/permissions/chip_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/permissions/permission_request_manager_test_api.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/permissions/features.h"
+#include "components/permissions/origin_keyed_permission_action_service.h"
 #include "components/permissions/permission_ui_selector.h"
+#include "components/permissions/permission_uma_util.h"
+#include "components/permissions/permission_util.h"
+#include "components/permissions/permissions_client.h"
 #include "components/permissions/request_type.h"
 #include "components/permissions/test/mock_permission_request.h"
+#include "components/permissions/test/permission_request_observer.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/test/accessibility_notification_waiter.h"
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
+#include "permission_prompt_chip.h"
+#include "ui/accessibility/ax_action_data.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/test/test_event.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/test/ax_event_counter.h"
 #include "ui/views/test/button_test_api.h"
 
 namespace {
+
+enum ChipFeatureConfig {
+  REQUEST_CHIP,
+  REQUEST_CHIP_LOCATION_BAR_ICON_OVERRIDE,
+  REQUEST_AND_CONFIRMATION_CHIP,
+  REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE
+};
+
 // Test implementation of PermissionUiSelector that always returns a canned
 // decision.
 class TestQuietNotificationPermissionUiSelector
@@ -94,19 +120,42 @@ class PermissionChipInteractiveTest : public InProcessBrowserTest {
     base::RunLoop().RunUntilIdle();
   }
 
-  PermissionChip* GetChip() {
+  LocationBarView* GetLocationBarView() {
+    BrowserView* browser_view =
+        BrowserView::GetBrowserViewForBrowser(browser());
+    return browser_view->toolbar()->location_bar();
+  }
+
+  OmniboxChipButton* GetChip() {
+    return GetLocationBarView()->chip_controller()->chip();
+  }
+
+  ChipController* GetChipController() {
     BrowserView* browser_view =
         BrowserView::GetBrowserViewForBrowser(browser());
     LocationBarView* lbv = browser_view->toolbar()->location_bar();
 
-    return lbv->chip();
+    return lbv->chip_controller();
   }
 
-  void ClickOnChip(PermissionChip* chip) {
+  PermissionPromptChip* GetPermissionPromptChip() {
+    return static_cast<PermissionPromptChip*>(
+        test_api_->manager()->view_for_testing());
+  }
+
+  void ClickOnChip(OmniboxChipButton* chip) {
     ASSERT_TRUE(chip != nullptr);
-    ASSERT_TRUE(chip->IsActive());
-    ASSERT_TRUE(!chip->IsBubbleShowing());
-    views::test::ButtonTestApi(chip->button())
+    ASSERT_TRUE(chip->GetVisible());
+    ASSERT_FALSE(GetChipController()->GetBubbleWidget());
+
+    views::test::ButtonTestApi(chip).NotifyClick(
+        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void ClickOnLock() {
+    views::test::ButtonTestApi(GetLocationBarView()->location_icon_view())
         .NotifyClick(ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(),
                                     gfx::Point(), ui::EventTimeForNow(),
                                     ui::EF_LEFT_MOUSE_BUTTON, 0));
@@ -116,14 +165,16 @@ class PermissionChipInteractiveTest : public InProcessBrowserTest {
   void ExpectQuietAbusiveChip() {
     // PermissionChip lifetime is bound to a permission prompt view.
     ASSERT_TRUE(test_api_->manager()->view_for_testing());
-    // The quiet chip will be shown even if the chip experiment is disabled.
-    PermissionChip* chip = GetChip();
-    ASSERT_TRUE(chip);
 
-    EXPECT_FALSE(chip->should_expand_for_testing());
-    EXPECT_FALSE(chip->get_chip_button_for_testing()->is_animating());
-    EXPECT_EQ(OmniboxChipTheme::kLowVisibility,
-              chip->get_chip_button_for_testing()->get_theme_for_testing());
+    // The quiet chip will be shown even if the chip experiment is disabled.
+    OmniboxChipButton* chip_ = GetChip();
+    ASSERT_TRUE(chip_);
+
+    EXPECT_FALSE(GetPermissionPromptChip()
+                     ->get_chip_controller_for_testing()
+                     ->should_expand_for_testing());
+    EXPECT_FALSE(chip_->is_animating());
+    EXPECT_EQ(OmniboxChipTheme::kLowVisibility, chip_->get_theme_for_testing());
   }
 
   void ExpectQuietChip() {
@@ -131,75 +182,579 @@ class PermissionChipInteractiveTest : public InProcessBrowserTest {
     ASSERT_TRUE(test_api_->manager()->view_for_testing());
 
     // The quiet chip will be shown even if the chip experiment is disabled.
-    PermissionChip* chip = GetChip();
-    ASSERT_TRUE(chip);
+    OmniboxChipButton* chip_ = GetChip();
+    ASSERT_TRUE(chip_);
 
-    EXPECT_TRUE(chip->should_expand_for_testing());
-    EXPECT_TRUE(chip->get_chip_button_for_testing()->is_animating());
-    EXPECT_EQ(OmniboxChipTheme::kLowVisibility,
-              chip->get_chip_button_for_testing()->get_theme_for_testing());
+    EXPECT_TRUE(GetPermissionPromptChip()
+                    ->get_chip_controller_for_testing()
+                    ->should_expand_for_testing());
+    EXPECT_TRUE(chip_->is_animating());
+    EXPECT_EQ(OmniboxChipTheme::kLowVisibility, chip_->get_theme_for_testing());
   }
 
   void ExpectNormalChip() {
     // PermissionChip lifetime is bound to a permission prompt view.
     ASSERT_TRUE(test_api_->manager()->view_for_testing());
-    PermissionChip* chip = GetChip();
-    ASSERT_TRUE(chip);
+    OmniboxChipButton* chip_ = GetChip();
+    ASSERT_TRUE(chip_);
 
-    EXPECT_TRUE(chip->should_expand_for_testing());
-    EXPECT_TRUE(chip->get_chip_button_for_testing()->is_animating());
+    EXPECT_TRUE(GetPermissionPromptChip()
+                    ->get_chip_controller_for_testing()
+                    ->should_expand_for_testing());
+    EXPECT_TRUE(chip_->is_animating());
     // TODO(crbug.com/1232460): Verify that OmniboxChipButton::is_animating is
     // true. Right now the value is flaky.
     EXPECT_EQ(OmniboxChipTheme::kNormalVisibility,
-              chip->get_chip_button_for_testing()->get_theme_for_testing());
+              chip_->get_theme_for_testing());
   }
 
   ContentSettingImageView& GetContentSettingImageView(
       ContentSettingImageModel::ImageType image_type) {
     LocationBarView* location_bar_view =
         BrowserView::GetBrowserViewForBrowser(browser())->GetLocationBarView();
-    return **std::find_if(
-        location_bar_view->GetContentSettingViewsForTest().begin(),
-        location_bar_view->GetContentSettingViewsForTest().end(),
-        [image_type](ContentSettingImageView* view) {
-          return view->GetTypeForTesting() == image_type;
-        });
+    return **base::ranges::find(
+        location_bar_view->GetContentSettingViewsForTest(), image_type,
+        &ContentSettingImageView::GetTypeForTesting);
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<test::PermissionRequestManagerTestApi> test_api_;
 };
 
-IN_PROC_BROWSER_TEST_F(PermissionChipInteractiveTest,
-                       ChipAutoPopupBubbleDisabled) {
-  ASSERT_FALSE(base::FeatureList::IsEnabled(
-      permissions::features::kPermissionChipGestureSensitive));
-  ASSERT_FALSE(base::FeatureList::IsEnabled(
-      permissions::features::kPermissionChipRequestTypeSensitive));
+class LocationBarIconOverrideTest
+    : public PermissionChipInteractiveTest,
+      public ::testing::WithParamInterface<ChipFeatureConfig> {
+ public:
+  LocationBarIconOverrideTest() {
+    std::vector<base::test::FeatureRef> disabled_features = {
+        permissions::features::kPermissionChipGestureSensitive,
+        permissions::features::kPermissionChipRequestTypeSensitive};
+
+    switch (GetParam()) {
+      case REQUEST_CHIP:
+        scoped_feature_list_.InitWithFeatures(
+            {permissions::features::kPermissionChip}, disabled_features);
+        break;
+      case REQUEST_CHIP_LOCATION_BAR_ICON_OVERRIDE:
+        scoped_feature_list_.InitWithFeatures(
+            {permissions::features::kPermissionChip,
+             permissions::features::kChipLocationBarIconOverride},
+            disabled_features);
+        break;
+      case REQUEST_AND_CONFIRMATION_CHIP:
+        scoped_feature_list_.InitWithFeatures(
+            {permissions::features::kPermissionChip,
+             permissions::features::kConfirmationChip},
+            disabled_features);
+        break;
+      case REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE:
+        scoped_feature_list_.InitWithFeatures(
+            {permissions::features::kPermissionChip,
+             permissions::features::kConfirmationChip,
+             permissions::features::kChipLocationBarIconOverride},
+            disabled_features);
+        break;
+    }
+  }
+
+  bool IsLocationIconVisible() {
+    return BrowserView::GetBrowserViewForBrowser(browser())
+        ->GetLocationBarView()
+        ->location_icon_view()
+        ->GetVisible();
+  }
+
+  bool IsTestWithOverridenLocationBarIcon() {
+    return base::FeatureList::IsEnabled(
+        permissions::features::kChipLocationBarIconOverride);
+  }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(LocationBarIconOverrideTest,
+                       OverrideLocationBarIconDuringChipOnlyForOverrideFlags) {
+  // Initially the location bar icon should be visible for any feature flag
+  // configuration
+  EXPECT_TRUE(IsLocationIconVisible());
 
   RequestPermission(permissions::RequestType::kGeolocation);
 
+  // After a request, a chip is shown, which should override the lock icon for
+  // feature flags featuring this.
+  if (IsTestWithOverridenLocationBarIcon()) {
+    EXPECT_FALSE(IsLocationIconVisible());
+  } else {
+    EXPECT_TRUE(IsLocationIconVisible());
+  }
+
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_EQ(
       test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+      permissions::PermissionPromptDisposition::
+          LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
 
   test_api_->manager()->Accept();
+
   base::RunLoop().RunUntilIdle();
+
+  // Force synchronous update of layout values. In the actual code,
+  // InvalidateLayout() is sufficient, but leaves stale visibility values for
+  // testing.
+  BrowserView::GetBrowserViewForBrowser(browser())
+      ->GetLocationBarView()
+      ->Layout();
+
+  if (base::FeatureList::IsEnabled(permissions::features::kConfirmationChip)) {
+    // Test with confirmation chip.
+    // Verify chip is still visible and has the confirmation text
+    EXPECT_TRUE(GetChip()->GetVisible());
+    EXPECT_TRUE(GetChip()->GetText() ==
+                l10n_util::GetStringUTF16(
+                    IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION));
+
+    if (IsTestWithOverridenLocationBarIcon()) {
+      EXPECT_FALSE(IsLocationIconVisible());
+    } else {
+      EXPECT_TRUE(IsLocationIconVisible());
+    }
+
+    // Check collapse timer is running and fast forward fire callback. Then,
+    // fast forward animation to trigger callback and wait until it completes.
+    EXPECT_TRUE(GetChipController()->is_collapse_timer_running_for_testing());
+    GetChipController()->fire_collapse_timer_for_testing();
+    GetChip()->animation_for_testing()->End();
+    base::RunLoop().RunUntilIdle();
+
+    // Force synchronous update of layout values. In the actual code,
+    // InvalidateLayout() is sufficient, but leaves stale visibility values for
+    // testing.
+    BrowserView::GetBrowserViewForBrowser(browser())
+        ->GetLocationBarView()
+        ->Layout();
+  }
+
+  // With any feature flag configuration, we have to ensure that the location
+  // bar icon is visible after the chip collapsed.
+  EXPECT_FALSE(GetChip()->GetVisible());
+  EXPECT_TRUE(IsLocationIconVisible());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    LocationBarIconOverrideTest,
+    ::testing::Values(
+        REQUEST_CHIP,
+        REQUEST_CHIP_LOCATION_BAR_ICON_OVERRIDE,
+        REQUEST_AND_CONFIRMATION_CHIP,
+        REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE));
+
+class ConfirmationChipEnabledInteractiveTest
+    : public PermissionChipInteractiveTest,
+      public ::testing::WithParamInterface<ChipFeatureConfig> {
+ public:
+  ConfirmationChipEnabledInteractiveTest() {
+    std::vector<base::test::FeatureRef> disabled_features = {
+        permissions::features::kPermissionChipGestureSensitive,
+        permissions::features::kPermissionChipRequestTypeSensitive};
+    switch (GetParam()) {
+      case REQUEST_AND_CONFIRMATION_CHIP:
+        scoped_feature_list_.InitWithFeatures(
+            {permissions::features::kPermissionChip,
+             permissions::features::kConfirmationChip},
+            disabled_features);
+        break;
+      case REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE:
+        scoped_feature_list_.InitWithFeatures(
+            {permissions::features::kPermissionChip,
+             permissions::features::kConfirmationChip,
+             permissions::features::kChipLocationBarIconOverride},
+            disabled_features);
+        break;
+      default:
+        NOTREACHED();
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(ConfirmationChipEnabledInteractiveTest,
+                       ShouldDisplayAllowAndDenyConfirmationCorrectly) {
+  RequestPermission(permissions::RequestType::kGeolocation);
+  base::RunLoop().RunUntilIdle();
+
+  // Chip should be visible and show geolocation request
+  EXPECT_TRUE(GetChip()->GetVisible());
+  EXPECT_TRUE(GetChip()->GetText() ==
+              l10n_util::GetStringUTF16(IDS_GEOLOCATION_PERMISSION_CHIP));
+
+  test_api_->manager()->Accept();
+
+  // Confirmation chip should be visible
+  EXPECT_TRUE(GetChip()->GetVisible());
+  EXPECT_TRUE(GetChip()->GetText() ==
+              l10n_util::GetStringUTF16(
+                  IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION));
+  EXPECT_EQ(GetChip()->get_theme_for_testing(),
+            OmniboxChipTheme::kNormalVisibility);
+
+  // Check collapse timer is running and fast forward fire callback. Then,
+  // fast forward animation to trigger callback and wait until it completes.
+  EXPECT_TRUE(GetChipController()->is_collapse_timer_running_for_testing());
+  GetChipController()->fire_collapse_timer_for_testing();
+  GetChip()->animation_for_testing()->End();
+  base::RunLoop().RunUntilIdle();
+
+  // Chip should no longer be visible.
+  EXPECT_FALSE(GetChip()->GetVisible());
+
+  // Request second permission
+  RequestPermission(permissions::RequestType::kNotifications);
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(GetChip()->GetVisible());
+  EXPECT_EQ(GetChip()->GetText(),
+            l10n_util::GetStringUTF16(IDS_NOTIFICATION_PERMISSIONS_CHIP));
+
+  test_api_->manager()->Deny();
+
+  // After deny, the deny confirmation should be displayed
+  EXPECT_TRUE(GetChip()->GetVisible());
+  EXPECT_EQ(GetChip()->GetText(),
+            l10n_util::GetStringUTF16(
+                IDS_PERMISSIONS_PERMISSION_NOT_ALLOWED_CONFIRMATION));
+  EXPECT_EQ(GetChip()->get_theme_for_testing(),
+            OmniboxChipTheme::kLowVisibility);
+}
+
+IN_PROC_BROWSER_TEST_P(ConfirmationChipEnabledInteractiveTest,
+                       IncomingRequestShouldOverrideConfirmation) {
+  RequestPermission(permissions::RequestType::kGeolocation);
+  base::RunLoop().RunUntilIdle();
+
+  test_api_->manager()->Accept();
 
   RequestPermission(permissions::RequestType::kNotifications);
-
-  EXPECT_EQ(
-      test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
-
-  test_api_->manager()->Accept();
   base::RunLoop().RunUntilIdle();
 
-  RequestPermission(permissions::RequestType::kMidiSysex);
+  // Since a new request came in, the new request should be displayed
+  EXPECT_TRUE(GetChip()->GetVisible());
+  EXPECT_EQ(GetChip()->GetText(),
+            l10n_util::GetStringUTF16(IDS_NOTIFICATION_PERMISSIONS_CHIP));
 
-  EXPECT_EQ(
-      test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+  test_api_->manager()->Deny();
+
+  // After the deny, the deny confirmation should be displayed
+  EXPECT_TRUE(GetChip()->GetVisible());
+  EXPECT_EQ(GetChip()->GetText(),
+            l10n_util::GetStringUTF16(
+                IDS_PERMISSIONS_PERMISSION_NOT_ALLOWED_CONFIRMATION));
+}
+
+IN_PROC_BROWSER_TEST_P(ConfirmationChipEnabledInteractiveTest,
+                       ClickOnConfirmationChipShouldOpenPageInfoDialog) {
+  RequestPermission(permissions::RequestType::kGeolocation);
+  base::RunLoop().RunUntilIdle();
+
+  test_api_->manager()->Accept();
+
+  ClickOnChip(GetChip());
+
+  base::RunLoop().RunUntilIdle();
+  views::View* bubble_view =
+      GetChipController()->get_prompt_bubble_view_for_testing();
+  PageInfoBubbleView* page_info_bubble =
+      static_cast<PageInfoBubbleView*>(bubble_view);
+  ASSERT_NE(page_info_bubble, nullptr);
+
+  // Ensure closing the bubble works, and that this will start the collapse
+  // animation of the chip.
+  page_info_bubble->CloseBubble();
+
+  // Fast forward animation to trigger callback and wait until it completes.
+  GetChip()->animation_for_testing()->End();
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_FALSE(GetChip()->GetVisible());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ConfirmationChipEnabledInteractiveTest,
+    ::testing::Values(
+        REQUEST_AND_CONFIRMATION_CHIP,
+        REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE));
+
+class ConfirmationChipUmaInteractiveTest
+    : public PermissionChipInteractiveTest {
+ public:
+  ConfirmationChipUmaInteractiveTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {permissions::features::kConfirmationChip},
+        {permissions::features::kPermissionChipGestureSensitive,
+         permissions::features::kPermissionChipRequestTypeSensitive});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(ConfirmationChipUmaInteractiveTest, VerifyUmaMetrics) {
+  base::HistogramTester histograms;
+
+  ClickOnLock();
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount(
+      "Permissions.ConfirmationChip.PageInfoDialogAccessType",
+      static_cast<int>(permissions::PageInfoDialogAccessType::LOCK_CLICK), 1);
+
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE, false,
+                                              false, false, false));
+  base::RunLoop().RunUntilIdle();
+
+  RequestPermission(permissions::RequestType::kGeolocation);
+  test_api_->manager()->Accept();
+
+  ClickOnChip(GetChip());
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount(
+      "Permissions.ConfirmationChip.PageInfoDialogAccessType",
+      static_cast<int>(
+          permissions::PageInfoDialogAccessType::CONFIRMATION_CHIP_CLICK),
+      1);
+
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE, false,
+                                              false, false, false));
+
+  base::RunLoop().RunUntilIdle();
+
+  GetLocationBarView()->SetConfirmationChipShownTimeForTesting(
+      base::TimeTicks::Now() - base::Seconds(10));
+
+  ClickOnLock();
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount(
+      "Permissions.ConfirmationChip.PageInfoDialogAccessType",
+      static_cast<int>(permissions::PageInfoDialogAccessType::
+                           LOCK_CLICK_SHORTLY_AFTER_CONFIRMATION_CHIP),
+      1);
+
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE, false,
+                                              false, false, false));
+
+  base::RunLoop().RunUntilIdle();
+
+  GetLocationBarView()->SetConfirmationChipShownTimeForTesting(
+      base::TimeTicks::Now() - base::Seconds(21));
+
+  ClickOnLock();
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount(
+      "Permissions.ConfirmationChip.PageInfoDialogAccessType",
+      static_cast<int>(permissions::PageInfoDialogAccessType::LOCK_CLICK), 2);
+}
+
+class PageInfoChangedWithin1mUmaTest : public PermissionChipInteractiveTest {
+ public:
+  PageInfoChangedWithin1mUmaTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {permissions::features::kConfirmationChip,
+         permissions::features::kPermissionChipGestureSensitive},
+        {permissions::features::kPermissionChipRequestTypeSensitive});
+  }
+
+  void InitAndRequestNotification() {
+    ASSERT_TRUE(embedded_test_server()->Start());
+    url_ = (embedded_test_server()->GetURL("/empty.html"));
+    content::RenderFrameHost* main_rfh =
+        ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(browser(),
+                                                                  url_, 1);
+    content::WebContents::FromRenderFrameHost(main_rfh)->Focus();
+    content::WebContents* embedder_contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    ASSERT_TRUE(embedder_contents);
+
+    constexpr char kRequestNotifications[] = R"(
+      new Promise(resolve => {
+        Notification.requestPermission().then(function (permission) {
+          resolve(permission)
+        });
+      })
+      )";
+
+    permissions::PermissionRequestObserver observer(embedder_contents);
+
+    EXPECT_TRUE(content::ExecJs(
+        main_rfh, kRequestNotifications,
+        content::EvalJsOptions::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
+
+    observer.Wait();
+  }
+
+  PageInfoBubbleView* OpenAndGetPageInfoBubbleView() {
+    base::RunLoop run_loop;
+    GetPageInfoDialogCreatedCallbackForTesting() = run_loop.QuitClosure();
+    OpenPageInfoBubble(browser());
+    run_loop.Run();
+    auto* bubble_view = static_cast<PageInfoBubbleView*>(
+        PageInfoBubbleView::GetPageInfoBubbleForTesting());
+    EXPECT_TRUE(bubble_view);
+
+    return bubble_view;
+  }
+
+  void OpenPageInfoAndTogglePermission() {
+    PageInfoBubbleView* page_info = OpenAndGetPageInfoBubbleView();
+    views::View* permisison_toggle =
+        GetViewWithinPageInfo(
+            page_info, PageInfoViewFactory::VIEW_ID_PAGE_INFO_PERMISSION_VIEW)
+            ->GetViewByID(PageInfoViewFactory::
+                              VIEW_ID_PERMISSION_TOGGLE_ROW_TOGGLE_BUTTON);
+
+    ASSERT_TRUE(permisison_toggle);
+
+    PerformMouseClickOnView(
+        static_cast<views::ToggleButton*>(permisison_toggle));
+  }
+
+  void OpenPageInfoAndClickReset() {
+    PageInfoBubbleView* page_info = OpenAndGetPageInfoBubbleView();
+    views::View* reset_permissions_view = GetViewWithinPageInfo(
+        page_info,
+        PageInfoViewFactory::VIEW_ID_PAGE_INFO_RESET_PERMISSIONS_BUTTON);
+
+    PerformMouseClickOnView(
+        static_cast<views::MdTextButton*>(reset_permissions_view));
+  }
+
+ private:
+  void OpenPageInfoBubble(Browser* browser) {
+    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+    LocationIconView* location_icon_view =
+        browser_view->toolbar()->location_bar()->location_icon_view();
+    ASSERT_TRUE(location_icon_view);
+    ui::test::TestEvent event;
+    location_icon_view->ShowBubble(event);
+    views::BubbleDialogDelegateView* page_info =
+        PageInfoBubbleView::GetPageInfoBubbleForTesting();
+    EXPECT_NE(nullptr, page_info);
+    page_info->set_close_on_deactivate(false);
+  }
+
+  views::View* GetViewWithinPageInfo(PageInfoBubbleView* page_info_bubble,
+                                     int view_id) {
+    views::View* view = page_info_bubble->GetViewByID(view_id);
+    EXPECT_TRUE(view);
+    return view;
+  }
+
+  void PerformMouseClickOnView(views::Button* button) {
+    views::test::ButtonTestApi(button).NotifyClick(
+        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+  }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+  GURL url_;
+};
+
+IN_PROC_BROWSER_TEST_F(PageInfoChangedWithin1mUmaTest,
+                       VerifyResetFromAllowedUmaMetric) {
+  InitAndRequestNotification();
+  base::HistogramTester histograms;
+
+  test_api_->manager()->Accept();
+
+  OpenPageInfoAndClickReset();
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount(
+      "Permissions.PageInfo.ChangedWithin1m.Notifications",
+      static_cast<int>(permissions::PermissionChangeAction::RESET_FROM_ALLOWED),
+      1);
+}
+
+IN_PROC_BROWSER_TEST_F(PageInfoChangedWithin1mUmaTest,
+                       VerifyResetFromDeniedUmaMetric) {
+  InitAndRequestNotification();
+  base::HistogramTester histograms;
+
+  test_api_->manager()->Deny();
+
+  OpenPageInfoAndClickReset();
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount(
+      "Permissions.PageInfo.ChangedWithin1m.Notifications",
+      static_cast<int>(permissions::PermissionChangeAction::RESET_FROM_DENIED),
+      1);
+}
+
+IN_PROC_BROWSER_TEST_F(PageInfoChangedWithin1mUmaTest, VerifyRevokedUmaMetric) {
+  InitAndRequestNotification();
+  base::HistogramTester histograms;
+
+  test_api_->manager()->Accept();
+
+  OpenPageInfoAndTogglePermission();
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount(
+      "Permissions.PageInfo.ChangedWithin1m.Notifications",
+      static_cast<int>(permissions::PermissionChangeAction::REVOKED), 1);
+}
+
+IN_PROC_BROWSER_TEST_F(PageInfoChangedWithin1mUmaTest, VerifyReallowUmaMetric) {
+  InitAndRequestNotification();
+  base::HistogramTester histograms;
+
+  test_api_->manager()->Deny();
+
+  OpenPageInfoAndTogglePermission();
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount(
+      "Permissions.PageInfo.ChangedWithin1m.Notifications",
+      static_cast<int>(permissions::PermissionChangeAction::REALLOWED), 1);
+}
+
+IN_PROC_BROWSER_TEST_F(PageInfoChangedWithin1mUmaTest,
+                       VerifyNoReallowFromDenyRecordedAfter2mUmaMetric) {
+  InitAndRequestNotification();
+  base::HistogramTester histograms;
+
+  test_api_->manager()->Deny();
+
+  content::WebContents* web_contents = GetLocationBarView()->GetWebContents();
+  const GURL& origin = permissions::PermissionUtil::GetLastCommittedOriginAsURL(
+      web_contents->GetPrimaryMainFrame());
+  permissions::OriginKeyedPermissionActionService* permission_action_service =
+      permissions::PermissionsClient::Get()
+          ->GetOriginKeyedPermissionActionService(
+              GetLocationBarView()->GetWebContents()->GetBrowserContext());
+
+  // Get recorded entry and manually change its time to 2 minutes ago.
+  absl::optional<permissions::PermissionActionTime> record =
+      permission_action_service->GetLastActionEntry(
+          origin, ContentSettingsType::NOTIFICATIONS);
+  EXPECT_TRUE(record.has_value());
+  permission_action_service->RecordActionWithTimeForTesting(
+      origin, ContentSettingsType::NOTIFICATIONS, record->first,
+      record->second - base::Minutes(2));
+
+  OpenPageInfoAndTogglePermission();
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount(
+      "Permissions.PageInfo.ChangedWithin1m.Notifications",
+      static_cast<int>(permissions::PermissionChangeAction::REALLOWED), 0);
 }
 
 class ChipGestureSensitiveEnabledInteractiveTest
@@ -213,7 +768,6 @@ class ChipGestureSensitiveEnabledInteractiveTest
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
-
 IN_PROC_BROWSER_TEST_F(ChipGestureSensitiveEnabledInteractiveTest,
                        ChipAutoPopupBubbleEnabled) {
   ASSERT_TRUE(base::FeatureList::IsEnabled(
@@ -260,41 +814,6 @@ class ChipRequestTypeSensitiveEnabledInteractiveTest
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
-
-// `kGeolocation` and `kNotifications` are excluded from the sensitive request
-// type experiment.
-IN_PROC_BROWSER_TEST_F(ChipRequestTypeSensitiveEnabledInteractiveTest,
-                       ChipAutoPopupBubbleEnabled) {
-  ASSERT_FALSE(base::FeatureList::IsEnabled(
-      permissions::features::kPermissionChipGestureSensitive));
-  ASSERT_TRUE(base::FeatureList::IsEnabled(
-      permissions::features::kPermissionChipRequestTypeSensitive));
-
-  RequestPermission(permissions::RequestType::kGeolocation);
-
-  EXPECT_EQ(
-      test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
-
-  test_api_->manager()->Accept();
-  base::RunLoop().RunUntilIdle();
-
-  RequestPermission(permissions::RequestType::kNotifications);
-
-  EXPECT_EQ(
-      test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
-
-  test_api_->manager()->Accept();
-  base::RunLoop().RunUntilIdle();
-
-  RequestPermission(permissions::RequestType::kMidiSysex);
-
-  EXPECT_EQ(
-      test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::
-          LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
-}
 
 class ChipDisabledInteractiveTest : public PermissionChipInteractiveTest {
  public:
@@ -505,7 +1024,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
 
     ClickOnChip(GetChip());
 
-    views::View* bubble_view = GetChip()->get_prompt_bubble_view_for_testing();
+    views::View* bubble_view =
+        GetChipController()->get_prompt_bubble_view_for_testing();
     ContentSettingBubbleContents* permission_prompt_bubble =
         static_cast<ContentSettingBubbleContents*>(bubble_view);
 
@@ -698,7 +1218,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
 
     ClickOnChip(GetChip());
 
-    views::View* bubble_view = GetChip()->get_prompt_bubble_view_for_testing();
+    views::View* bubble_view =
+        GetChipController()->get_prompt_bubble_view_for_testing();
     ContentSettingBubbleContents* permission_prompt_bubble =
         static_cast<ContentSettingBubbleContents*>(bubble_view);
 
@@ -908,7 +1429,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
 
   EXPECT_EQ(
       test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+      permissions::PermissionPromptDisposition::
+          LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
 
   test_api_->manager()->Accept();
   base::RunLoop().RunUntilIdle();
@@ -917,7 +1439,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
 
   EXPECT_EQ(
       test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+      permissions::PermissionPromptDisposition::
+          LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
 }
 
 IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
@@ -931,7 +1454,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
 
     EXPECT_EQ(
         test_api_->manager()->current_request_prompt_disposition_for_testing(),
-        permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+        permissions::PermissionPromptDisposition::
+            LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
 
     test_api_->manager()->Accept();
     base::RunLoop().RunUntilIdle();
@@ -956,7 +1480,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
   ContentSettingImageView& quiet_ui_icon = GetContentSettingImageView(
       ContentSettingImageModel::ImageType::NOTIFICATIONS_QUIET_PROMPT);
   EXPECT_FALSE(quiet_ui_icon.GetVisible());
-  EXPECT_FALSE(GetChip()->IsActive());
+  EXPECT_FALSE(GetChip()->GetVisible() &&
+               GetChipController()->IsPermissionPromptChipVisible());
 
   RequestPermission(permissions::RequestType::kGeolocation);
 
@@ -985,7 +1510,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
     ContentSettingImageView& quiet_ui_icon = GetContentSettingImageView(
         ContentSettingImageModel::ImageType::NOTIFICATIONS_QUIET_PROMPT);
     EXPECT_FALSE(quiet_ui_icon.GetVisible());
-    EXPECT_FALSE(GetChip()->IsActive());
+    EXPECT_FALSE(GetChip()->GetVisible() &&
+                 GetChipController()->IsPermissionPromptChipVisible());
 
     RequestPermission(permissions::RequestType::kGeolocation);
 
@@ -1015,7 +1541,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
     ContentSettingImageView& quiet_ui_icon = GetContentSettingImageView(
         ContentSettingImageModel::ImageType::NOTIFICATIONS_QUIET_PROMPT);
     EXPECT_FALSE(quiet_ui_icon.GetVisible());
-    EXPECT_FALSE(GetChip()->IsActive());
+    EXPECT_FALSE(GetChip()->GetVisible() &&
+                 GetChipController()->IsPermissionPromptChipVisible());
 
     RequestPermission(permissions::RequestType::kGeolocation);
 
@@ -1047,7 +1574,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
 
   EXPECT_EQ(
       test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+      permissions::PermissionPromptDisposition::
+          LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
 
   test_api_->manager()->Accept();
   base::RunLoop().RunUntilIdle();
@@ -1068,7 +1596,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
 
   EXPECT_EQ(
       test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+      permissions::PermissionPromptDisposition::
+          LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
 
   test_api_->manager()->Accept();
   base::RunLoop().RunUntilIdle();
@@ -1089,7 +1618,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
 
   EXPECT_EQ(
       test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+      permissions::PermissionPromptDisposition::
+          LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
 
   test_api_->manager()->Accept();
   base::RunLoop().RunUntilIdle();
@@ -1110,7 +1640,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
 
   EXPECT_EQ(
       test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+      permissions::PermissionPromptDisposition::
+          LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
 
   test_api_->manager()->Accept();
   base::RunLoop().RunUntilIdle();
@@ -1131,7 +1662,8 @@ IN_PROC_BROWSER_TEST_F(QuietChipPermissionPromptBubbleViewInteractiveTest,
 
   EXPECT_EQ(
       test_api_->manager()->current_request_prompt_disposition_for_testing(),
-      permissions::PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP);
+      permissions::PermissionPromptDisposition::
+          LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE);
 
   test_api_->manager()->Accept();
   base::RunLoop().RunUntilIdle();

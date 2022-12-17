@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -417,11 +417,11 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest,
     const auto* v_memory = reinterpret_cast<uint8_t*>(
         mock_gpu_factories_->created_memory_buffers()[2]->memory(0));
 
-    const uint16_t* y_plane_data = reinterpret_cast<uint16_t*>(
+    const uint16_t* y_plane_data = reinterpret_cast<const uint16_t*>(
         software_frame->visible_data(VideoFrame::kYPlane));
-    const uint16_t* u_plane_data = reinterpret_cast<uint16_t*>(
+    const uint16_t* u_plane_data = reinterpret_cast<const uint16_t*>(
         software_frame->visible_data(VideoFrame::kUPlane));
-    const uint16_t* v_plane_data = reinterpret_cast<uint16_t*>(
+    const uint16_t* v_plane_data = reinterpret_cast<const uint16_t*>(
         software_frame->visible_data(VideoFrame::kVPlane));
 
     // Y plane = 17x17 = 289, U and V plan = 9x9.
@@ -771,13 +771,14 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareP010Frame) {
   RunUntilIdle();
 
   EXPECT_NE(software_frame.get(), frame.get());
-#if BUILDFLAG(IS_MAC)
-  EXPECT_EQ(PIXEL_FORMAT_RGBAF16, frame->format());
-#else
   EXPECT_EQ(PIXEL_FORMAT_P016LE, frame->format());
-#endif
+#if BUILDFLAG(IS_MAC)
+  EXPECT_EQ(2u, frame->NumTextures());
+  EXPECT_EQ(2u, sii_->shared_image_count());
+#else
   EXPECT_EQ(1u, frame->NumTextures());
   EXPECT_EQ(1u, sii_->shared_image_count());
+#endif
   EXPECT_TRUE(frame->metadata().read_lock_fences_enabled);
 
   EXPECT_EQ(1u, mock_gpu_factories_->created_memory_buffers().size());
@@ -810,13 +811,14 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest,
   if (gfx::IsOddWidthMultiPlanarBuffersAllowed() &&
       gfx::IsOddHeightMultiPlanarBuffersAllowed()) {
     EXPECT_NE(software_frame.get(), frame.get());
-#if BUILDFLAG(IS_MAC)
-    EXPECT_EQ(PIXEL_FORMAT_RGBAF16, frame->format());
-#else
     EXPECT_EQ(PIXEL_FORMAT_P016LE, frame->format());
-#endif
+#if BUILDFLAG(IS_MAC)
+    EXPECT_EQ(2u, frame->NumTextures());
+    EXPECT_EQ(2u, sii_->shared_image_count());
+#else
     EXPECT_EQ(1u, frame->NumTextures());
     EXPECT_EQ(1u, sii_->shared_image_count());
+#endif
     EXPECT_TRUE(frame->metadata().read_lock_fences_enabled);
 
     EXPECT_EQ(1u, mock_gpu_factories_->created_memory_buffers().size());
@@ -828,11 +830,11 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest,
     const uint16_t* uv_memory = reinterpret_cast<uint16_t*>(
         mock_gpu_factories_->created_memory_buffers()[0]->memory(1));
 
-    const uint16_t* y_plane_data = reinterpret_cast<uint16_t*>(
+    const uint16_t* y_plane_data = reinterpret_cast<const uint16_t*>(
         software_frame->visible_data(VideoFrame::kYPlane));
-    const uint16_t* u_plane_data = reinterpret_cast<uint16_t*>(
+    const uint16_t* u_plane_data = reinterpret_cast<const uint16_t*>(
         software_frame->visible_data(VideoFrame::kUPlane));
-    const uint16_t* v_plane_data = reinterpret_cast<uint16_t*>(
+    const uint16_t* v_plane_data = reinterpret_cast<const uint16_t*>(
         software_frame->visible_data(VideoFrame::kVPlane));
 
     // Y plane = 7x7 = 49, U and V plan = 4x4 = 16.

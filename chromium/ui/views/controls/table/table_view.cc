@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,10 +14,12 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/contains.h"
 #include "base/cxx17_backports.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -335,9 +337,9 @@ void TableView::SetColumnVisibility(int id, bool is_visible) {
     visible_column.column = FindColumnByID(id);
     visible_columns_.push_back(visible_column);
   } else {
-    const auto i = std::find_if(
-        visible_columns_.begin(), visible_columns_.end(),
-        [id](const auto& column) { return column.column.id == id; });
+    const auto i =
+        base::ranges::find(visible_columns_, id,
+                           [](const auto& column) { return column.column.id; });
     if (i != visible_columns_.end()) {
       visible_columns_.erase(i);
       if (active_visible_column_index_.has_value() &&
@@ -404,16 +406,13 @@ void TableView::SetSortDescriptors(const SortDescriptors& sort_descriptors) {
 }
 
 bool TableView::IsColumnVisible(int id) const {
-  const auto ids_match = [id](const auto& column) {
-    return column.column.id == id;
-  };
-  return std::any_of(visible_columns_.cbegin(), visible_columns_.cend(),
-                     ids_match);
+  return base::Contains(visible_columns_, id, [](const VisibleColumn& column) {
+    return column.column.id;
+  });
 }
 
 bool TableView::HasColumn(int id) const {
-  const auto ids_match = [id](const auto& column) { return column.id == id; };
-  return std::any_of(columns_.cbegin(), columns_.cend(), ids_match);
+  return base::Contains(columns_, id, &ui::TableColumn::id);
 }
 
 bool TableView::GetHasFocusIndicator() const {
@@ -1258,8 +1257,7 @@ void TableView::SchedulePaintForSelection() {
 }
 
 ui::TableColumn TableView::FindColumnByID(int id) const {
-  const auto ids_match = [id](const auto& column) { return column.id == id; };
-  const auto i = std::find_if(columns_.cbegin(), columns_.cend(), ids_match);
+  const auto i = base::ranges::find(columns_, id, &ui::TableColumn::id);
   DCHECK(i != columns_.cend());
   return *i;
 }
@@ -1360,17 +1358,21 @@ void TableView::AdvanceSelection(AdvanceDirection direction) {
     ScheduleUpdateAccessibilityFocusIfNeeded();
     return;
   }
-  size_t view_index = ModelToView(selection_model_.active().value());
+  size_t active_index = selection_model_.active().value();
+  size_t view_index = ModelToView(active_index);
+  const GroupRange range(GetGroupRange(active_index));
+  size_t view_range_start = ModelToView(range.start);
   if (direction == AdvanceDirection::kDecrement) {
     bool make_header_active = header_ && view_index == 0;
     header_row_is_active_ = make_header_active;
     SelectByViewIndex(
         make_header_active
             ? absl::nullopt
-            : absl::make_optional(std::max(size_t{1}, view_index) - 1));
+            : absl::make_optional(std::max(size_t{1}, view_range_start) - 1));
   } else {
     header_row_is_active_ = false;
-    SelectByViewIndex(std::min(GetRowCount() - 1, view_index + 1));
+    SelectByViewIndex(
+        std::min(GetRowCount() - 1, view_range_start + range.length));
   }
 }
 
@@ -1887,8 +1889,7 @@ AXVirtualView* TableView::GetVirtualAccessibilityCellImpl(
                ax::mojom::IntAttribute::kTableCellColumnIndex)) ==
            visible_column_index;
   };
-  const auto i = std::find_if(ax_row->children().cbegin(),
-                              ax_row->children().cend(), matches_index);
+  const auto i = base::ranges::find_if(ax_row->children(), matches_index);
   DCHECK(i != ax_row->children().cend())
       << "|visible_column_index| not found. Did you forget to call "
       << "RebuildVirtualAccessibilityChildren()?";

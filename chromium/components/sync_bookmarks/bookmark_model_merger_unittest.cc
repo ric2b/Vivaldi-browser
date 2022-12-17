@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -2189,6 +2189,35 @@ TEST(BookmarkModelMergerTest, ShouldRemoveDifferentTypeDuplicatesByGUID) {
   EXPECT_THAT(tracker->GetEntityForSyncId("Id1"), NotNull());
   EXPECT_THAT(tracker->GetEntityForSyncId("Id2"), IsNull());
   EXPECT_EQ(bookmark_bar_node->children().front()->children().size(), 1u);
+}
+
+TEST(BookmarkModelMergerTest, ShouldReportTimeMetrics) {
+  const std::string kTitle = "Title";
+  std::unique_ptr<bookmarks::BookmarkModel> bookmark_model =
+      bookmarks::TestBookmarkClient::CreateModel();
+
+  syncer::UpdateResponseDataList updates;
+  updates.push_back(CreateBookmarkBarNodeUpdateData());
+
+  // Create 10k+ bookmarks to verify reported metrics.
+  for (size_t i = 0; i < 10001; ++i) {
+    updates.push_back(CreateUpdateResponseData(
+        /*guid=*/base::GUID::GenerateRandomV4(),
+        /*parent_guid=*/BookmarkBarGuid(), kTitle,
+        /*url=*/"",
+        /*is_folder=*/true, MakeRandomPosition()));
+  }
+
+  base::HistogramTester histogram_tester;
+  std::unique_ptr<SyncedBookmarkTracker> tracker =
+      Merge(std::move(updates), bookmark_model.get());
+  histogram_tester.ExpectTotalCount("Sync.BookmarkModelMergerTime", 1);
+  histogram_tester.ExpectTotalCount("Sync.BookmarkModelMergerTime.10kUpdates",
+                                    1);
+  histogram_tester.ExpectTotalCount("Sync.BookmarkModelMergerTime.50kUpdates",
+                                    0);
+  histogram_tester.ExpectTotalCount("Sync.BookmarkModelMergerTime.100kUpdates",
+                                    0);
 }
 
 }  // namespace sync_bookmarks

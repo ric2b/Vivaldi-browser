@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "base/types/expected.h"
 #include "components/password_manager/core/browser/import/csv_password.h"
 #include "components/password_manager/core/browser/import/csv_password_sequence.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "components/password_manager/services/csv_password/csv_password_parser_service.h"
 #include "components/sync/base/bind_to_task_runner.h"
@@ -54,12 +55,12 @@ base::expected<std::string, ImportResults::Status> ReadFileToString(
 ImportEntry::Status ToImportEntryStatus(
     SavedPasswordsPresenter::AddResult add_result) {
   switch (add_result) {
-    case SavedPasswordsPresenter::AddResult::kExistsInProfileStore:
+    case SavedPasswordsPresenter::AddResult::kConflictInProfileStore:
       return ImportEntry::Status::CONFLICT_PROFILE;
 
-    case SavedPasswordsPresenter::AddResult::kExistsInAccountStore:
+    case SavedPasswordsPresenter::AddResult::kConflictInAccountStore:
     // We report a double collision for now as a collision in account store.
-    case SavedPasswordsPresenter::AddResult::kExistsInProfileAndAccountStore:
+    case SavedPasswordsPresenter::AddResult::kConflictInProfileAndAccountStore:
       return ImportEntry::Status::CONFLICT_ACCOUNT;
 
     case SavedPasswordsPresenter::AddResult::kInvalid:
@@ -72,12 +73,17 @@ ImportEntry::Status ToImportEntryStatus(
   return ImportEntry::Status::UNKNOWN_ERROR;
 }
 
+bool IsSuccessOrExactMatch(const SavedPasswordsPresenter::AddResult& status) {
+  return status == SavedPasswordsPresenter::AddResult::kSuccess ||
+         status == SavedPasswordsPresenter::AddResult::kExactMatch;
+}
+
 ImportEntry CreateFailedImportEntry(
     SavedPasswordsPresenter::AddResult add_result,
     const CredentialUIEntry& credential) {
-  DCHECK_NE(add_result, SavedPasswordsPresenter::AddResult::kSuccess);
+  DCHECK(!IsSuccessOrExactMatch(add_result));
   ImportEntry result;
-  result.url = credential.url.possibly_invalid_spec();
+  result.url = credential.GetURL().possibly_invalid_spec();
   result.username = base::UTF16ToUTF8(credential.username);
   result.status = ToImportEntryStatus(add_result);
   return result;
@@ -101,6 +107,9 @@ CSVPasswordToCredentialUIEntry(const CSVPassword& csv_password,
 
   base::expected<GURL, std::string> url = csv_password.GetURL();
 
+  if (csv_password.GetParseStatus() != CSVPassword::Status::kOK)
+    return MakeError(ImportEntry::Status::UNKNOWN_ERROR);
+
   if (csv_password.GetPassword().empty())
     return MakeError(ImportEntry::Status::MISSING_PASSWORD);
 
@@ -113,7 +122,9 @@ CSVPasswordToCredentialUIEntry(const CSVPassword& csv_password,
   if (!url.has_value() && !base::IsStringASCII(url.error()))
     return MakeError(ImportEntry::Status::NON_ASCII_URL);
 
-  if (!url.has_value())
+  if (!url.has_value() ||
+      (url.has_value() &&
+       !password_manager_util::IsValidPasswordURL(url.value())))
     return MakeError(ImportEntry::Status::INVALID_URL);
 
   if (csv_password.GetPassword().length() > 1000)
@@ -121,9 +132,6 @@ CSVPasswordToCredentialUIEntry(const CSVPassword& csv_password,
 
   if (csv_password.GetUsername().length() > 1000)
     return MakeError(ImportEntry::Status::LONG_USERNAME);
-
-  if (csv_password.GetParseStatus() != CSVPassword::Status::kOK)
-    return MakeError(ImportEntry::Status::UNKNOWN_ERROR);
 
   DCHECK(url.has_value());
   return password_manager::CredentialUIEntry(csv_password, store);
@@ -140,9 +148,9 @@ void AddCredentialsCallback(
     const std::vector<SavedPasswordsPresenter::AddResult>& add_results) {
   import_results.number_imported = 0;
   for (size_t i = 0; i < add_results.size(); i++) {
-    if (add_results[i] == SavedPasswordsPresenter::AddResult::kSuccess)
+    if (IsSuccessOrExactMatch(add_results[i])) {
       import_results.number_imported++;
-    else {
+    } else {
       import_results.failed_imports.emplace_back(
           CreateFailedImportEntry(add_results[i], credentials[i]));
     }

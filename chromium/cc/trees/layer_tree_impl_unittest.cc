@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -232,10 +232,10 @@ TEST_F(LayerTreeImplTest, HitTestingForSingleLayerAndHud) {
 
 TEST_F(LayerTreeImplTest, HitTestingForUninvertibleTransform) {
   gfx::Transform uninvertible_transform;
-  uninvertible_transform.matrix().setRC(0, 0, 0.0);
-  uninvertible_transform.matrix().setRC(1, 1, 0.0);
-  uninvertible_transform.matrix().setRC(2, 2, 0.0);
-  uninvertible_transform.matrix().setRC(3, 3, 0.0);
+  uninvertible_transform.set_rc(0, 0, 0.0);
+  uninvertible_transform.set_rc(1, 1, 0.0);
+  uninvertible_transform.set_rc(2, 2, 0.0);
+  uninvertible_transform.set_rc(3, 3, 0.0);
   ASSERT_FALSE(uninvertible_transform.IsInvertible());
 
   LayerImpl* root = root_layer();
@@ -1186,10 +1186,10 @@ TEST_F(LayerTreeImplTest,
   LayerImpl* root = root_layer();
 
   gfx::Transform uninvertible_transform;
-  uninvertible_transform.matrix().setRC(0, 0, 0.0);
-  uninvertible_transform.matrix().setRC(1, 1, 0.0);
-  uninvertible_transform.matrix().setRC(2, 2, 0.0);
-  uninvertible_transform.matrix().setRC(3, 3, 0.0);
+  uninvertible_transform.set_rc(0, 0, 0.0);
+  uninvertible_transform.set_rc(1, 1, 0.0);
+  uninvertible_transform.set_rc(2, 2, 0.0);
+  uninvertible_transform.set_rc(3, 3, 0.0);
   ASSERT_FALSE(uninvertible_transform.IsInvertible());
 
   TouchActionRegion touch_action_region;
@@ -2168,10 +2168,18 @@ TEST_F(LayerTreeImplTest, SelectionBoundsWithLargeTransforms) {
   viz::Selection<gfx::SelectionBound> output;
   host_impl().active_tree()->GetViewportSelection(&output);
 
-  // edge_end and edge_start aren't allowed to have NaNs, so the selection
-  // should be empty.
-  EXPECT_EQ(gfx::SelectionBound(), output.start);
-  EXPECT_EQ(gfx::SelectionBound(), output.end);
+  auto point_is_valid = [](const gfx::PointF& p) {
+    return std::isfinite(p.x()) && std::isfinite(p.y());
+  };
+  auto selection_bound_is_valid = [&](const gfx::SelectionBound& b) {
+    return point_is_valid(b.edge_start()) &&
+           point_is_valid(b.visible_edge_start()) &&
+           point_is_valid(b.edge_end()) && point_is_valid(b.visible_edge_end());
+  };
+  // No NaNs or infinities in SelectounBound.
+  EXPECT_TRUE(selection_bound_is_valid(output.start))
+      << output.start.ToString();
+  EXPECT_TRUE(selection_bound_is_valid(output.end)) << output.end.ToString();
 }
 
 TEST_F(LayerTreeImplTest, SelectionBoundsForCaretLayer) {

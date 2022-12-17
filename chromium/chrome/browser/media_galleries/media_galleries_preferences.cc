@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -582,7 +582,7 @@ void MediaGalleriesPreferences::InitFromPrefs() {
 
   PrefService* prefs = profile_->GetPrefs();
   const base::Value::List& list =
-      prefs->GetValueList(prefs::kMediaGalleriesRememberedGalleries);
+      prefs->GetList(prefs::kMediaGalleriesRememberedGalleries);
 
   for (const auto& gallery_value : list) {
     if (!gallery_value.is_dict())
@@ -802,9 +802,9 @@ MediaGalleryPrefId MediaGalleriesPreferences::AddOrUpdateGalleryInternal(
       return *pref_id_it;
 
     PrefService* prefs = profile_->GetPrefs();
-    auto update = std::make_unique<ListPrefUpdate>(
+    auto update = std::make_unique<ScopedListPrefUpdate>(
         prefs, prefs::kMediaGalleriesRememberedGalleries);
-    base::Value::List& list = update->Get()->GetList();
+    base::Value::List& list = update->Get();
 
     for (auto& gallery_value : list) {
       base::Value::Dict* gallery_dict = gallery_value.GetIfDict();
@@ -872,9 +872,9 @@ MediaGalleryPrefId MediaGalleriesPreferences::AddOrUpdateGalleryInternal(
   gallery_info.default_gallery_type = default_gallery_type;
 
   {
-    ListPrefUpdate update(prefs, prefs::kMediaGalleriesRememberedGalleries);
-    base::Value::List& list = update->GetList();
-    list.Append(CreateGalleryPrefInfoDictionary(gallery_info));
+    ScopedListPrefUpdate update(prefs,
+                                prefs::kMediaGalleriesRememberedGalleries);
+    update->Append(CreateGalleryPrefInfoDictionary(gallery_info));
   }
   InitFromPrefs();
   for (auto& observer : gallery_change_observers_)
@@ -895,9 +895,9 @@ void MediaGalleriesPreferences::UpdateDefaultGalleriesPaths() {
       base::PathService::Get(chrome::DIR_USER_VIDEOS, &videos_path);
 
   PrefService* prefs = profile_->GetPrefs();
-  auto update = std::make_unique<ListPrefUpdate>(
+  auto update = std::make_unique<ScopedListPrefUpdate>(
       prefs, prefs::kMediaGalleriesRememberedGalleries);
-  base::Value::List& list = update->Get()->GetList();
+  base::Value::List& list = update->Get();
 
   std::vector<MediaGalleryPrefId> pref_ids;
 
@@ -989,9 +989,9 @@ void MediaGalleriesPreferences::EraseOrBlocklistGalleryById(
     bool erase) {
   DCHECK(IsInitialized());
   PrefService* prefs = profile_->GetPrefs();
-  auto update = std::make_unique<ListPrefUpdate>(
+  auto update = std::make_unique<ScopedListPrefUpdate>(
       prefs, prefs::kMediaGalleriesRememberedGalleries);
-  base::Value::List& list = update->Get()->GetList();
+  base::Value::List& list = update->Get();
 
   if (!base::Contains(known_galleries_, id))
     return;
@@ -1036,7 +1036,7 @@ bool MediaGalleriesPreferences::NonAutoGalleryHasPermission(
              MediaGalleryPrefInfo::kAutoDetected);
   ExtensionPrefs* prefs = GetExtensionPrefs();
   const base::Value::Dict& extensions =
-      prefs->pref_service()->GetValueDict(extensions::pref_names::kExtensions);
+      prefs->pref_service()->GetDict(extensions::pref_names::kExtensions);
 
   for (const auto iter : extensions) {
     if (!crx_file::id_util::IdIsValid(iter.first)) {
@@ -1246,7 +1246,7 @@ void MediaGalleriesPreferences::RemoveGalleryPermissionsFromPrefs(
   DCHECK(IsInitialized());
   ExtensionPrefs* prefs = GetExtensionPrefs();
   const base::Value::Dict& extensions =
-      prefs->pref_service()->GetValueDict(extensions::pref_names::kExtensions);
+      prefs->pref_service()->GetDict(extensions::pref_names::kExtensions);
 
   for (const auto iter : extensions) {
     if (!crx_file::id_util::IdIsValid(iter.first)) {

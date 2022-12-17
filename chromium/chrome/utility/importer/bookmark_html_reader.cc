@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,8 @@
 #include "net/base/data_url.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
+
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 namespace {
 
@@ -166,12 +168,19 @@ void ImportBookmarksFile(
     base::Time add_date;
     std::u16string post_data;
     bool is_bookmark;
+
+    // Vivaldi
+    std::u16string nickname;
+    std::u16string description;
+
     // TODO(jcampan): http://b/issue?id=1196285 we do not support POST based
     //                keywords yet.
     is_bookmark =
         internal::ParseBookmarkFromLine(line, charset, &title,
                                         &url, &favicon, &shortcut,
-                                        &add_date, &post_data) ||
+                                        &add_date, &post_data,
+                                        // Vivaldi
+                                        &nickname, &description) ||
         internal::ParseMinimumBookmarkFromLine(line, charset, &title, &url);
 
     // If bookmark contains a valid replaceable url and a keyword then import
@@ -203,7 +212,11 @@ void ImportBookmarksFile(
       entry.creation_time = add_date;
       entry.url = url;
       entry.title = title;
+
+      // vivaldi
       entry.speeddial = last_folder_speeddial;
+      entry.nickname = base::UTF16ToUTF8(nickname);
+      entry.description = base::UTF16ToUTF8(description);
 
       if (toolbar_folder_index) {
         // The toolbar folder should be at the top level.
@@ -335,7 +348,6 @@ bool ParseFolderNameFromLine(const std::string& lineDt,
   const char kFolderClose[] = "</H3>";
   const char kToolbarFolderAttribute[] = "PERSONAL_TOOLBAR_FOLDER";
   const char kAddDateAttribute[] = "ADD_DATE";
-  const char kSpeedDialAttribute[] = "SPEEDDIAL";
 
   std::string line = stripDt(lineDt);
 
@@ -371,13 +383,13 @@ bool ParseFolderNameFromLine(const std::string& lineDt,
   else
     *is_toolbar_folder = false;
 
-  if (is_speeddial_folder) {
-    if (GetAttribute(attribute_list, kSpeedDialAttribute, &value) &&
-        base::EqualsCaseInsensitiveASCII(value, "true"))
-      *is_speeddial_folder = true;
-    else
-      *is_speeddial_folder = false;
-  }
+  vivaldi_bookmark_kit::ReadBookmarkAttributes(
+      base::BindRepeating(&GetAttribute, attribute_list),
+          [charset](const std::string& value, std::u16string* target) {
+            base::CodepageToUTF16(value, charset.c_str(),
+                                  base::OnStringConversionError::SKIP, target);
+          },
+      nullptr, nullptr, is_speeddial_folder);
 
   return true;
 }
@@ -389,7 +401,10 @@ bool ParseBookmarkFromLine(const std::string& lineDt,
                            GURL* favicon,
                            std::u16string* shortcut,
                            base::Time* add_date,
-                           std::u16string* post_data) {
+                           std::u16string* post_data,
+                           // Vivaldi
+                           std::u16string* nickname,
+                           std::u16string* description) {
   const char kItemOpen[] = "<A";
   const char kItemClose[] = "</A>";
   const char kFeedURLAttribute[] = "FEEDURL";
@@ -406,6 +421,12 @@ bool ParseBookmarkFromLine(const std::string& lineDt,
   shortcut->clear();
   post_data->clear();
   *add_date = base::Time();
+
+  // vivaldi
+  if (nickname)
+    nickname->clear();
+  if (description)
+    description->clear();
 
   if (!base::StartsWith(line, kItemOpen, base::CompareCase::SENSITIVE))
     return false;
@@ -466,6 +487,14 @@ bool ParseBookmarkFromLine(const std::string& lineDt,
                           base::OnStringConversionError::SKIP, post_data);
     *post_data = base::UnescapeForHTML(*post_data);
   }
+
+  vivaldi_bookmark_kit::ReadBookmarkAttributes(
+      base::BindRepeating(&GetAttribute, attribute_list),
+          [charset](const std::string& value, std::u16string* target) {
+            base::CodepageToUTF16(value, charset.c_str(),
+                                  base::OnStringConversionError::SKIP, target);
+          },
+      nickname, description, nullptr);
 
   return true;
 }

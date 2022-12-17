@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -293,12 +293,10 @@ void RTCIceTransport::gather(RTCIceGatherOptions* options,
   }
   cricket::ServerAddresses stun_servers;
   std::vector<cricket::RelayServerConfig> turn_servers;
-  webrtc::RTCErrorType error_type = webrtc::ParseIceServers(
+  webrtc::RTCError error = webrtc::ParseIceServersOrError(
       ice_servers.ReleaseVector(), &stun_servers, &turn_servers);
-  if (error_type != webrtc::RTCErrorType::NONE) {
-    ThrowExceptionFromRTCError(
-        webrtc::RTCError(error_type, "Invalid ICE server URL(s)."),
-        exception_state);
+  if (!error.ok()) {
+    ThrowExceptionFromRTCError(error, exception_state);
     return;
   }
   gathering_state_ = cricket::kIceGatheringGathering;

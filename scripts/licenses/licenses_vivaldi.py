@@ -13,9 +13,15 @@ except:
 
 modules = {}
 
-for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+[/\\])?[^@][^/\\\n]+))\n", maindeps):
-  moduledir = m[0]
-  modulename = m[1]
+module_regexp = re.compile(r"(.*node_modules[/\\]((?:@[^/\\]+[/\\])?[^@/\\][^/\\]+))")
+
+for mline in maindeps.splitlines():
+  m = module_regexp.search(mline)
+  if not m:
+    continue
+  moduledir = m[1]
+  modulename = m[2]
+
   if (moduledir in modules
      or (modulename == "chrome") # ours
      or (modulename == "wo-stringencoding") # ours
@@ -117,17 +123,6 @@ for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+[/\\])?[^@][^/\\\n]+))\n", m
       pass
   modules[moduledir] = entry
 
-
-ADDITIONAL_PATHS = (
-    join('..', 'third_party', '_winsparkle_lib'),
-    join('..', 'third_party', 'sparkle_lib'),
-    join('..', 'platform_media'),
-    join('..', 'scripts', 'licenses'),
-    join('..', 'vivapp', 'src', 'browserjs'),
-    join('..', 'vivapp', 'src', 'components', 'image-inspector'),
-    join('..', 'vivapp', 'src', 'util'),
-)
-
 SPECIAL_CASES = {
     join('..', 'platform_media'): {
         "Name": "Opera",
@@ -183,7 +178,15 @@ SPECIAL_CASES = {
         "License": "BSD",
         "License File": "/../vivapp/fork_licenses/flux/LICENSE",
     },
+    join('..', 'vivapp', 'src', 'forked_modules', 'react-motion'): {
+        "Name": "react-motion",
+        "URL": "https://github.com/chenglou/react-motion",
+        "License": "MIT",
+        "License File": "/../vivapp/src/forked_modules/react-motion/LICENSE",
+    },
 }
+
+ADDITIONAL_PATHS = tuple(SPECIAL_CASES.keys())
 
 def GetEntries(entry_template, EvaluateTemplate):
   entries = []

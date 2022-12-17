@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -265,11 +265,9 @@ class SharedMemoryDeviceExerciser : public VirtualDeviceExerciser,
       mojo::Remote<video_capture::mojom::DeviceFactory>* factory,
       const media::VideoCaptureDeviceInfo& info) override {
     mojo::PendingRemote<video_capture::mojom::Producer> producer;
-    static const bool kSendBufferHandlesToProducerAsRawFileDescriptors = false;
     producer_receiver_.Bind(producer.InitWithNewPipeAndPassReceiver());
     (*factory)->AddSharedMemoryVirtualDevice(
         info, std::move(producer),
-        kSendBufferHandlesToProducerAsRawFileDescriptors,
         virtual_device_.BindNewPipeAndPassReceiver());
   }
   gfx::Size GetVideoSize() override {

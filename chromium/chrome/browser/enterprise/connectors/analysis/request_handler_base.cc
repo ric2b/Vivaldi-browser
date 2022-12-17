@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,11 +12,19 @@ RequestHandlerBase::RequestHandlerBase(
     Profile* profile,
     const enterprise_connectors::AnalysisSettings& analysis_settings,
     GURL url,
+    const std::string& source,
+    const std::string& destination,
+    const std::string& user_action_id,
+    uint64_t user_action_requests_count,
     safe_browsing::DeepScanAccessPoint access_point)
     : upload_service_(upload_service),
       profile_(profile),
       analysis_settings_(analysis_settings),
       url_(url),
+      source_(source),
+      destination_(destination),
+      user_action_id_(user_action_id),
+      user_action_requests_count_(user_action_requests_count),
       access_point_(access_point) {}
 
 RequestHandlerBase::~RequestHandlerBase() = default;
@@ -26,12 +34,15 @@ bool RequestHandlerBase::UploadData() {
   return UploadDataImpl();
 }
 
-void RequestHandlerBase::AppendRequestTokensTo(
-    std::vector<std::string>* request_tokens) {
-  request_tokens->reserve(request_tokens->size() + request_tokens_.size());
-  std::move(std::begin(request_tokens_), std::end(request_tokens_),
-            std::back_inserter(*request_tokens));
-  request_tokens_.clear();
+void RequestHandlerBase::AppendFinalActionsTo(
+    std::map<std::string, ContentAnalysisAcknowledgement::FinalAction>*
+        final_actions) {
+  DCHECK(final_actions);
+  final_actions->insert(
+      std::make_move_iterator(request_tokens_to_ack_final_actions_.begin()),
+      std::make_move_iterator(request_tokens_to_ack_final_actions_.end()));
+
+  request_tokens_to_ack_final_actions_.clear();
 }
 
 void RequestHandlerBase::PrepareRequest(
@@ -41,9 +52,16 @@ void RequestHandlerBase::PrepareRequest(
     request->set_device_token(
         analysis_settings_.cloud_or_local_settings.dm_token());
   }
+  if (analysis_settings_.cloud_or_local_settings.is_local_analysis()) {
+    request->set_user_action_id(user_action_id_);
+    request->set_user_action_requests_count(user_action_requests_count_);
+  }
+
   request->set_analysis_connector(connector);
   request->set_email(safe_browsing::GetProfileEmail(profile_));
   request->set_url(url_.spec());
+  request->set_source(source_);
+  request->set_destination(destination_);
   request->set_tab_url(url_);
   request->set_per_profile_request(analysis_settings_.per_profile);
   for (const auto& tag : analysis_settings_.tags)

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -131,12 +131,10 @@ void DeviceCommandScreenshotJob::OnFailure(UploadJob::ErrorCode error_code) {
 bool DeviceCommandScreenshotJob::ParseCommandPayload(
     const std::string& command_payload) {
   absl::optional<base::Value> root(base::JSONReader::Read(command_payload));
-  if (!root)
+  if (!root || !root->is_dict())
     return false;
-  base::DictionaryValue* payload = nullptr;
-  if (!root->GetAsDictionary(&payload))
-    return false;
-  const std::string* upload_url = payload->FindStringKey(kUploadUrlFieldName);
+  const std::string* upload_url =
+      root->GetDict().FindString(kUploadUrlFieldName);
   if (!upload_url)
     return false;
   upload_url_ = GURL(*upload_url);

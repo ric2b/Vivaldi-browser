@@ -258,6 +258,7 @@ void FrameHandler::InjectJS(const std::string& content, int world_id) {
       blink::mojom::EvaluationTiming::kSynchronous,
       blink::mojom::LoadEventBlockingOption::kBlock, {},
       blink::BackForwardCacheAware::kPossiblyDisallow,
+      blink::mojom::WantResultOption::kNoResult,
       blink::mojom::PromiseResultOption::kDoNotWait);
 }
 

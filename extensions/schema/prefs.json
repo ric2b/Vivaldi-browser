@@ -16,6 +16,7 @@
           },
           "value": {
             "type": "any",
+            "optional": true, // Omit to indicate a return to the default value.
             "description": "Preference value. None indicate to use the default."
           }
         }
@@ -80,17 +81,6 @@
           {
             "name": "newValue",
             "$ref": "PreferenceValue"
-          }
-        ]
-      },
-      {
-        "name": "reset",
-        "description": "Reset a preference to its default value.",
-        "parameters": [
-          {
-            "name": "path",
-            "type": "string",
-            "description": "The preference path"
           }
         ]
       },

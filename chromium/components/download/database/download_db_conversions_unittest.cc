@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -74,22 +74,7 @@ DownloadInfo CreateDownloadInfo() {
 }  // namespace
 
 class DownloadDBConversionsTest : public testing::Test,
-                                  public DownloadDBConversions {
- public:
-  ~DownloadDBConversionsTest() override = default;
-
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(features::kDownloadLater);
-  }
-
- protected:
-  base::test::ScopedFeatureList* scoped_feature_list() {
-    return &scoped_feature_list_;
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
+                                  public DownloadDBConversions {};
 
 TEST_F(DownloadDBConversionsTest, DownloadEntry) {
   // Entry with no fields.

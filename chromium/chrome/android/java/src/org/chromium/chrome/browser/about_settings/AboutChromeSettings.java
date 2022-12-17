@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,10 +20,8 @@ import org.chromium.components.version_info.VersionInfo;
 import org.chromium.ui.widget.Toast;
 
 import java.util.Calendar;
-
 // Vivaldi
 import org.chromium.build.BuildConfig;
-import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * Settings fragment that displays information about Chrome.
@@ -57,9 +55,8 @@ public class AboutChromeSettings
         Preference p = findPreference(PREF_APPLICATION_VERSION);
         p.setSummary(
                 getApplicationVersion(getActivity(), AboutSettingsBridge.getApplicationVersion()));
-        // Vivaldi (ref. VAB-693)
-        if (!BuildConfig.IS_VIVALDI)
-        p.setOnPreferenceClickListener(this);
+        // Vivaldi (ref. VB-59279)
+        // p.setOnPreferenceClickListener(this);
         p = findPreference(PREF_OS_VERSION);
         p.setSummary(AboutSettingsBridge.getOSVersion());
         p = findPreference(PREF_LEGAL_INFORMATION);
@@ -80,12 +77,10 @@ public class AboutChromeSettings
             version = version.concat("(PS)");
         } else if (BuildConfig.IS_OEM_RENAULT_BUILD) {
             version = version.concat("(RNO)");
-        }
-        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
-            version = version.concat(
-                    "\n[" + VivaldiUtils.getCarInfoMake() + " "
-                          + VivaldiUtils.getCarInfoModel() + " "
-                          + VivaldiUtils.getCarInfoModelYear() + "]");
+        } else if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
+            version = version.concat("(LYNK)");
+        } else if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+            version = version.concat("(MB)");
         }
         if (VersionInfo.isOfficialBuild()) {
             return version;

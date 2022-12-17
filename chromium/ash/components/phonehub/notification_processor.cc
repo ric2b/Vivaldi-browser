@@ -1,10 +1,9 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/components/phonehub/notification_processor.h"
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/components/phonehub/notification.h"
 #include "ash/components/phonehub/notification_manager.h"
 #include "ash/constants/ash_features.h"
@@ -12,6 +11,7 @@
 #include "base/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "services/data_decoder/public/cpp/decode_image.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"

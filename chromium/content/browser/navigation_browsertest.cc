@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -174,14 +174,17 @@ class RenderFrameHostFactoryForHistoryBackInterceptor
       int32_t routing_id,
       mojo::PendingAssociatedRemote<mojom::Frame> frame_remote,
       const blink::LocalFrameToken& frame_token,
+      const blink::DocumentToken& document_token,
       bool renderer_initiated_creation,
       RenderFrameHostImpl::LifecycleStateImpl lifecycle_state,
       scoped_refptr<BrowsingContextState> browsing_context_state) override {
     return base::WrapUnique(new RenderFrameHostImplForHistoryBackInterceptor(
         site_instance, std::move(render_view_host), delegate, frame_tree,
         frame_tree_node, routing_id, std::move(frame_remote), frame_token,
-        renderer_initiated_creation, lifecycle_state,
-        std::move(browsing_context_state)));
+        document_token, renderer_initiated_creation, lifecycle_state,
+        std::move(browsing_context_state),
+        frame_tree_node->frame_owner_element_type(), frame_tree_node->parent(),
+        frame_tree_node->fenced_frame_status()));
   }
 };
 
@@ -346,8 +349,10 @@ class NetworkDoubleKeyIsolationNavigationBrowserTest
     : public ContentBrowserTest {
  public:
   NetworkDoubleKeyIsolationNavigationBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        net::features::kForceIsolationInfoFrameOriginToTopLevelFrame);
+    scoped_feature_list_.InitWithFeatures(
+        {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame,
+         net::features::kEnableDoubleKeyNetworkAnonymizationKey},
+        {});
   }
 
  protected:
@@ -4501,7 +4506,8 @@ class NetworkIsolationSplitCacheAppendIframeOrigin
   NetworkIsolationSplitCacheAppendIframeOrigin() {
     feature_list_.InitWithFeatures(
         {net::features::kSplitCacheByNetworkIsolationKey},
-        {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame});
+        {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame,
+         net::features::kEnableDoubleKeyNetworkAnonymizationKey});
   }
 
  private:
@@ -4668,11 +4674,11 @@ class SubresourceLoadingTest : public NavigationBrowserTest {
 
       // Flush all the frames in the `current_contents's active page.
       current_contents->GetPrimaryMainFrame()->ForEachRenderFrameHost(
-          base::BindRepeating([](RenderFrameHost* frame_to_flush) {
+          [](RenderFrameHost* frame_to_flush) {
             constexpr bool kDoNothingIfNoNetworkServiceConnection = true;
             frame_to_flush->FlushNetworkAndNavigationInterfacesForTesting(
                 kDoNothingIfNoNetworkServiceConnection);
-          }));
+          });
 
       // Traverse the `current_frame`'s opener chain.
       if (FrameTreeNode* opener_node =
@@ -5258,6 +5264,13 @@ IN_PROC_BROWSER_TEST_F(SubresourceLoadingTest,
       shell()->web_contents()->GetPrimaryMainFrame());
 }
 
+// The test below verifies that error pages have a functional URLLoaderFactory.
+IN_PROC_BROWSER_TEST_F(SubresourceLoadingTest, URLLoaderFactoryInErrorPage) {
+  GURL error_url(embedded_test_server()->GetURL("/close-socket"));
+  EXPECT_FALSE(NavigateToURL(shell(), error_url));
+  VerifyImageSubresourceLoads(shell()->web_contents()->GetPrimaryMainFrame());
+}
+
 // The test below verifies that an initial empty document has a functional
 // URLLoaderFactory.
 IN_PROC_BROWSER_TEST_F(
@@ -5621,8 +5634,9 @@ IN_PROC_BROWSER_TEST_F(
   BeginNewNavigationAfterCommitNavigationInSubFrame
 #endif
 
-IN_PROC_BROWSER_TEST_F(NavigationBrowserTestWithPerformanceManager,
-                       MAYBE_BeginNewNavigationAfterCommitNavigationInSubFrame) {
+IN_PROC_BROWSER_TEST_F(
+    NavigationBrowserTestWithPerformanceManager,
+    MAYBE_BeginNewNavigationAfterCommitNavigationInSubFrame) {
   if (!AreAllSitesIsolatedForTesting())
     return;
 
@@ -6097,7 +6111,7 @@ class CacheTransparencyNavigationBrowserTest : public ContentBrowserTest {
     pervasive_payload_url_ = embedded_test_server()->GetURL(kPervasivePayload);
     std::string pervasive_payloads_params = base::StrCat(
         {"1,", pervasive_payload_url_.spec(),
-         ",87F6EE26BD9CFC440B4C805AAE79E0A5671F61C00B5E0AF54B8199EAF64AAAC3"});
+         ",2478392C652868C0AAF0316A28284610DBDACF02D66A00B39F3BA75D887F4829"});
 
     feature_list_.InitWithFeaturesAndParameters(
         {{features::kNetworkServiceInProcess, {}},

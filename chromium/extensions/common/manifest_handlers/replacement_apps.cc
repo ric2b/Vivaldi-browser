@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -107,7 +107,7 @@ bool ReplacementAppsInfo::LoadAndroidApp(const Extension* extension,
     return false;
   }
 
-  replacement_android_app = std::move(app_value->GetString());
+  replacement_android_app = app_value->GetString();
   return true;
 }
 

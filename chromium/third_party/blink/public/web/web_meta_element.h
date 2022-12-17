@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ namespace blink {
 
 class HTMLMetaElement;
 
-class WebMetaElement final : public WebElement {
+class BLINK_EXPORT WebMetaElement final : public WebElement {
  public:
   WebMetaElement() : WebElement() {}
   WebMetaElement(const WebMetaElement& element) = default;
@@ -23,7 +23,7 @@ class WebMetaElement final : public WebElement {
   }
   void Assign(const WebMetaElement& element) { WebElement::Assign(element); }
 
-  BLINK_EXPORT WebString ComputeEncoding() const;
+  WebString ComputeEncoding() const;
 
 #if INSIDE_BLINK
   WebMetaElement(HTMLMetaElement*);

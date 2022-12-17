@@ -1,17 +1,22 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/public/cpp/holding_space/holding_space_model.h"
 
-#include <algorithm>
+#include <numeric>
 
+#include "ash/constants/ash_features.h"
+#include "ash/public/cpp/holding_space/holding_space_constants.h"
+#include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_model_observer.h"
+#include "ash/public/cpp/holding_space/holding_space_section.h"
 #include "ash/public/cpp/holding_space/holding_space_util.h"
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
+#include "base/ranges/algorithm.h"
 
 namespace ash {
 
@@ -108,8 +113,8 @@ HoldingSpaceModel::ScopedItemUpdate::SetBackingFile(
 HoldingSpaceModel::ScopedItemUpdate&
 HoldingSpaceModel::ScopedItemUpdate::SetInProgressCommands(
     std::vector<HoldingSpaceItem::InProgressCommand> in_progress_commands) {
-  DCHECK(std::all_of(
-      in_progress_commands.begin(), in_progress_commands.end(),
+  DCHECK(base::ranges::all_of(
+      in_progress_commands,
       [](const HoldingSpaceItem::InProgressCommand& in_progress_command) {
         return holding_space_util::IsInProgressCommand(
             in_progress_command.command_id);
@@ -184,8 +189,25 @@ void HoldingSpaceModel::AddItems(
     item_ptrs.push_back(item.get());
     items_.push_back(std::move(item));
   }
+
   for (auto& observer : observers_)
     observer.OnHoldingSpaceItemsAdded(item_ptrs);
+
+  if (!features::IsHoldingSpacePredictabilityEnabled())
+    return;
+
+  // When the predictability feature flag is enabled, holding space items do
+  // not automatically expire. Instead, a maximum item count for each section
+  // is enforced such that adding new items may result in removing the oldest
+  // items from the same section.
+  RemoveIf(base::BindRepeating(
+      [](std::map<HoldingSpaceSectionId, size_t>& item_counts_per_section_id,
+         const HoldingSpaceItem* item) {
+        const auto* section = GetHoldingSpaceSection(item->type());
+        const auto item_count = ++item_counts_per_section_id[section->id];
+        return section->max_item_count && item_count > *section->max_item_count;
+      },
+      base::OwnedRef(std::map<HoldingSpaceSectionId, size_t>())));
 }
 
 void HoldingSpaceModel::RemoveItem(const std::string& id) {
@@ -207,11 +229,7 @@ void HoldingSpaceModel::InitializeOrRemoveItem(const std::string& id,
     return;
   }
 
-  auto item_it = std::find_if(
-      items_.begin(), items_.end(),
-      [&id](const std::unique_ptr<HoldingSpaceItem>& item) -> bool {
-        return id == item->id();
-      });
+  auto item_it = base::ranges::find(items_, id, &HoldingSpaceItem::id);
   DCHECK(item_it != items_.end());
 
   HoldingSpaceItem* item = item_it->get();
@@ -226,11 +244,7 @@ void HoldingSpaceModel::InitializeOrRemoveItem(const std::string& id,
 
 std::unique_ptr<HoldingSpaceModel::ScopedItemUpdate>
 HoldingSpaceModel::UpdateItem(const std::string& id) {
-  auto item_it =
-      std::find_if(items_.begin(), items_.end(),
-                   [&id](const std::unique_ptr<HoldingSpaceItem>& item) {
-                     return item->id() == id;
-                   });
+  auto item_it = base::ranges::find(items_, id, &HoldingSpaceItem::id);
   DCHECK(item_it != items_.end());
   return base::WrapUnique(new ScopedItemUpdate(this, item_it->get()));
 }
@@ -285,11 +299,7 @@ void HoldingSpaceModel::RemoveAll() {
 
 const HoldingSpaceItem* HoldingSpaceModel::GetItem(
     const std::string& id) const {
-  auto item_it = std::find_if(
-      items_.begin(), items_.end(),
-      [&id](const std::unique_ptr<HoldingSpaceItem>& item) -> bool {
-        return item->id() == id;
-      });
+  auto item_it = base::ranges::find(items_, id, &HoldingSpaceItem::id);
 
   if (item_it == items_.end())
     return nullptr;
@@ -299,8 +309,8 @@ const HoldingSpaceItem* HoldingSpaceModel::GetItem(
 const HoldingSpaceItem* HoldingSpaceModel::GetItem(
     HoldingSpaceItem::Type type,
     const base::FilePath& file_path) const {
-  auto item_it = std::find_if(
-      items_.begin(), items_.end(),
+  auto item_it = base::ranges::find_if(
+      items_,
       [&type, &file_path](const std::unique_ptr<HoldingSpaceItem>& item) {
         return item->type() == type && item->file_path() == file_path;
       });

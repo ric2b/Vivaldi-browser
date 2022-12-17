@@ -1,9 +1,9 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {KerberosConfigErrorCode, KerberosErrorType} from 'chrome://os-settings/chromeos/os_settings.js';
-import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.js';
+import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
 // List of fake accounts.
 export const TEST_KERBEROS_ACCOUNTS = [

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,7 +148,7 @@ class AssistantAshTestBase : public AshTestBase {
 
   // Return the current interaction. Returns |absl::nullopt| if no interaction
   // is in progress.
-  absl::optional<chromeos::assistant::AssistantInteractionMetadata>
+  absl::optional<ash::assistant::AssistantInteractionMetadata>
   current_interaction();
 
   // Create a new App window, and activate it.

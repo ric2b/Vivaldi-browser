@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 class BrowserProcessImpl;
 class ChromeMetricsServiceClient;
 class ChromePasswordManagerClient;
+class ChromeProcessSingleton;
 class HttpsFirstModeService;
 class NavigationMetricsRecorder;
 class PrefService;
@@ -27,7 +28,6 @@ class Profile;
 
 namespace {
 class CrashesDOMHandler;
-class FlashDOMHandler;
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -45,7 +45,6 @@ class DomainReliabilityServiceFactory;
 namespace extensions {
 class ChromeGuestViewManagerDelegate;
 class ChromeMetricsPrivateDelegate;
-class FileManagerPrivateIsUMAEnabledFunction;
 }
 
 namespace first_run {
@@ -57,10 +56,6 @@ class ChromeOSPerUserMetricsBrowserTestBase;
 class UkmConsentParamBrowserTest;
 }
 
-namespace heap_profiling {
-class BackgroundProfilingTriggers;
-}
-
 namespace welcome {
 void JoinOnboardingGroup(Profile* profile);
 }
@@ -70,7 +65,6 @@ class ChromeCleanerControllerDelegate;
 class ChromeSafeBrowsingUIManagerDelegate;
 class DownloadUrlSBClient;
 class IncidentReportingService;
-class SafeBrowsingService;
 
 namespace internal {
 class ReporterRunner;
@@ -100,6 +94,10 @@ class IsMetricsAndCrashReportingEnabled;
 }
 }  // namespace webauthn
 
+namespace autofill_assistant {
+class CommonDependenciesChrome;
+}  // namespace autofill_assistant
+
 // This class limits and documents access to metrics service helper methods.
 // Since these methods are private, each user has to be explicitly declared
 // as a 'friend' below.
@@ -120,7 +118,6 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
  private:
   friend class autofill_assistant::AssistantFieldTrialUtilChrome;
   friend class ::CrashesDOMHandler;
-  friend class ::FlashDOMHandler;
   friend class ChromeBrowserFieldTrials;
   // For ClangPGO.
   friend class ChromeBrowserMainExtraPartsMetrics;
@@ -128,17 +125,14 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ChromeBrowserMainParts;
   friend class ChromeContentBrowserClient;
   friend class ChromeMetricsServicesManagerClient;
-  friend class DataReductionProxyChromeSettings;
   friend class domain_reliability::DomainReliabilityServiceFactory;
   friend class extensions::ChromeGuestViewManagerDelegate;
   friend class extensions::ChromeMetricsPrivateDelegate;
-  friend class extensions::FileManagerPrivateIsUMAEnabledFunction;
   friend void ChangeMetricsReportingStateWithReply(
       bool,
       OnMetricsReportingCallbackType,
       ChangeMetricsReportingStateCalledFrom);
   friend void ApplyMetricsReportingPolicy();
-  friend class heap_profiling::BackgroundProfilingTriggers;
   friend class settings::MetricsReportingHandler;
   friend class UmaSessionStats;
   friend class safe_browsing::ChromeCleanerControllerDelegate;
@@ -146,10 +140,10 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class safe_browsing::DownloadUrlSBClient;
   friend class safe_browsing::IncidentReportingService;
   friend class safe_browsing::internal::ReporterRunner;
-  friend class safe_browsing::SafeBrowsingService;
   friend class segmentation_platform::FieldTrialRegisterImpl;
   friend class ChromeMetricsServiceClient;
   friend class ChromePasswordManagerClient;
+  friend class ChromeProcessSingleton;
   friend void welcome::JoinOnboardingGroup(Profile* profile);
   friend class NavigationMetricsRecorder;
   friend class ChromeBrowserMainExtraPartsGpu;
@@ -159,6 +153,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class WebUITabStripFieldTrial;
   friend class feed::FeedServiceDelegateImpl;
   friend class browser_sync::DeviceInfoSyncClientImpl;
+  friend class autofill_assistant::CommonDependenciesChrome;
   friend class feed::WebFeedSubscriptionCoordinator;
   friend class HttpsFirstModeService;
   friend class webauthn::authenticator::IsMetricsAndCrashReportingEnabled;

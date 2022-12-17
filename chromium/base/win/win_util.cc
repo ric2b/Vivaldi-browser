@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -644,6 +644,11 @@ bool IsEnrolledToDomain() {
 }
 
 bool IsDeviceRegisteredWithManagement() {
+  // GetRegisteredWithManagementStateStorage() can be true for devices running
+  // the Home sku, however the Home sku does not allow for management of the web
+  // browser. As such, we automatically exclude devices running the Home sku.
+  if (OSInfo::GetInstance()->version_type() == SUITE_HOME)
+    return false;
   return *GetRegisteredWithManagementStateStorage();
 }
 

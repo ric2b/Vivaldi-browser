@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,7 +96,10 @@ bool AppServerMac::SwapInNewVersion() {
 bool AppServerMac::MigrateLegacyUpdaters(
     base::RepeatingCallback<void(const RegistrationRequest&)>
         register_callback) {
-  return ConvertKeystone(updater_scope(), register_callback);
+  // TODO(crbug.com/1250524): This must not run concurrently with Keystone.
+  MigrateKeystoneTickets(updater_scope(), register_callback);
+
+  return true;
 }
 
 void AppServerMac::TaskStarted() {

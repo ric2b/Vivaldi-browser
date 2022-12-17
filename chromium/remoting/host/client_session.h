@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -144,6 +144,7 @@ class ClientSession : public protocol::HostStub,
       const protocol::SelectDesktopDisplayRequest& select_display) override;
   void ControlPeerConnection(
       const protocol::PeerConnectionParameters& parameters) override;
+  void SetVideoLayout(const protocol::VideoLayout& video_layout) override;
 
   // protocol::ConnectionToClient::EventHandler interface.
   void OnConnectionAuthenticating() override;
@@ -215,18 +216,6 @@ class ClientSession : public protocol::HostStub,
   void UpdateMouseClampingFilterOffset();
 
  private:
-  // Struct for associating an optional DesktopAndCursorConditionalComposer
-  // with each VideoStream.
-  struct VideoStreamWithComposer {
-    VideoStreamWithComposer();
-    VideoStreamWithComposer(VideoStreamWithComposer&&);
-    VideoStreamWithComposer& operator=(VideoStreamWithComposer&&);
-    ~VideoStreamWithComposer();
-
-    std::unique_ptr<protocol::VideoStream> stream;
-    base::WeakPtr<DesktopAndCursorConditionalComposer> composer;
-  };
-
   // Creates a proxy for sending clipboard events to the client.
   std::unique_ptr<protocol::ClipboardStub> CreateClipboardProxy();
 
@@ -267,11 +256,6 @@ class ClientSession : public protocol::HostStub,
   // True if |index| corresponds with an existing display (or the combined
   // display).
   bool IsValidDisplayIndex(webrtc::ScreenId index) const;
-
-#if defined(WEBRTC_USE_GIO)
-  void ExtractAndSetInputInjectorMetadata(
-      webrtc::DesktopCaptureMetadata capture_metadata);
-#endif
 
   raw_ptr<EventHandler> event_handler_;
 
@@ -327,7 +311,8 @@ class ClientSession : public protocol::HostStub,
   base::OneShotTimer max_duration_timer_;
 
   // Objects responsible for sending video, audio.
-  std::map<webrtc::ScreenId, VideoStreamWithComposer> video_streams_;
+  std::map<webrtc::ScreenId, std::unique_ptr<protocol::VideoStream>>
+      video_streams_;
   std::unique_ptr<protocol::AudioStream> audio_stream_;
 
   // The set of all capabilities supported by the client.

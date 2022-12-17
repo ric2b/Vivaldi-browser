@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,8 @@ enum DCLayerResult {
   DC_LAYER_FAILED_OUTPUT_HDR = 14,
   DC_LAYER_FAILED_NOT_DAMAGED = 15,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_MOVED = 16,
-  kMaxValue = DC_LAYER_FAILED_YUV_VIDEO_QUAD_MOVED,
+  DC_LAYER_FAILED_HDR_TONE_MAPPING = 17,
+  kMaxValue = DC_LAYER_FAILED_HDR_TONE_MAPPING,
 };
 
 enum : size_t {
@@ -136,13 +137,13 @@ void FromYUVQuad(const YUVVideoDrawQuad* quad,
   dc_layer->resources[kUVPlaneResourceIndex] = quad->u_plane_resource_id();
 
   dc_layer->z_order = 1;
-  dc_layer->content_rect = gfx::ToNearestRect(quad->ya_tex_coord_rect);
+  dc_layer->content_rect = gfx::ToNearestRect(quad->ya_tex_coord_rect());
   dc_layer->quad_rect = quad->rect;
   // Quad rect is in quad content space so both quad to target, and target to
   // root transforms must be applied to it.
   gfx::Transform quad_to_root_transform(
       quad->shared_quad_state->quad_to_target_transform);
-  quad_to_root_transform.ConcatTransform(transform_to_root_target);
+  quad_to_root_transform.PostConcat(transform_to_root_target);
   // Flatten transform to 2D since DirectComposition doesn't support 3D
   // transforms.  This only applies when non axis aligned overlays are enabled.
   quad_to_root_transform.FlattenTo2d();
@@ -151,9 +152,8 @@ void FromYUVQuad(const YUVVideoDrawQuad* quad,
   if (quad->shared_quad_state->clip_rect) {
     // Clip rect is in quad target space, and must be transformed to root target
     // space.
-    gfx::RectF clip_rect = gfx::RectF(*quad->shared_quad_state->clip_rect);
-    transform_to_root_target.TransformRect(&clip_rect);
-    dc_layer->clip_rect = gfx::ToEnclosingRect(clip_rect);
+    dc_layer->clip_rect =
+        transform_to_root_target.MapRect(*quad->shared_quad_state->clip_rect);
   }
   dc_layer->color_space = quad->video_color_space;
   dc_layer->protected_video_type = quad->protected_video_type;
@@ -202,9 +202,9 @@ void FromTextureQuad(const TextureDrawQuad* quad,
     quad_to_root_transform.Scale(1.0, -1.0);
     quad_to_root_transform.PostTranslate(0.0, dc_layer->content_rect.height());
   }
-  quad_to_root_transform.ConcatTransform(
+  quad_to_root_transform.PostConcat(
       quad->shared_quad_state->quad_to_target_transform);
-  quad_to_root_transform.ConcatTransform(transform_to_root_target);
+  quad_to_root_transform.PostConcat(transform_to_root_target);
   // Flatten transform to 2D since DirectComposition doesn't support 3D
   // transforms.  This only applies when non axis aligned overlays are enabled.
   quad_to_root_transform.FlattenTo2d();
@@ -213,10 +213,8 @@ void FromTextureQuad(const TextureDrawQuad* quad,
   if (quad->shared_quad_state->clip_rect) {
     // Clip rect is in quad target space, and must be transformed to root target
     // space.
-    gfx::RectF clip_rect =
-        gfx::RectF(quad->shared_quad_state->clip_rect.value_or(gfx::Rect()));
-    transform_to_root_target.TransformRect(&clip_rect);
-    dc_layer->clip_rect = gfx::ToEnclosingRect(clip_rect);
+    dc_layer->clip_rect = transform_to_root_target.MapRect(
+        quad->shared_quad_state->clip_rect.value_or(gfx::Rect()));
   }
 
   dc_layer->color_space = gfx::ColorSpace::CreateSRGB();
@@ -331,6 +329,42 @@ gfx::Rect CalculateOccludingDamageRect(
   return occluding_damage_rect;
 }
 
+bool IsFullScreenLetterboxing(const QuadList::Iterator& it,
+                              QuadList::ConstIterator quad_list_end,
+                              const gfx::RectF& display_rect) {
+  bool is_fullscreen = false;
+
+  // Two cases are considered as fullscreen letterboxing:
+  // 1. If the quad beneath the overlay quad is DrawQuad::Material::kSolidColor
+  // with black, and it covers the display size.
+  // 2. If the quad beneath the overlay quad is
+  // DrawQuad::Material::kTiledContent, and it touches two sides of the screen,
+  // while starting at display origin (0, 0).
+  // For YouTube with F11 page fullscreen mode, the kTiledContent beneath the
+  // overlay does not touch the right edge due to the existing of a scrolling
+  // bar.
+  auto beneath_overlay_it = it;
+  beneath_overlay_it++;
+
+  if (beneath_overlay_it != quad_list_end) {
+    if (beneath_overlay_it->material == DrawQuad::Material::kSolidColor &&
+        SolidColorDrawQuad::MaterialCast(*beneath_overlay_it)->color ==
+            SkColors::kBlack) {
+      gfx::RectF black_background_rect =
+          ClippedQuadRectangleF(*beneath_overlay_it);
+      is_fullscreen = (black_background_rect == display_rect);
+    } else if (beneath_overlay_it->material ==
+               DrawQuad::Material::kTiledContent) {
+      gfx::RectF tiled_rect = ClippedQuadRectangleF(*beneath_overlay_it);
+      is_fullscreen = (tiled_rect.origin() == display_rect.origin() &&
+                       (tiled_rect.width() == display_rect.width() ||
+                        tiled_rect.height() == display_rect.height()));
+    }
+  }
+
+  return is_fullscreen;
+}
+
 void RecordVideoDCLayerResult(DCLayerResult result,
                               gfx::ProtectedVideoType protected_video_type) {
   switch (protected_video_type) {
@@ -442,6 +476,7 @@ DCLayerOverlayProcessor::DCLayerOverlayProcessor(
       debug_settings_(debug_settings) {
   if (!skip_initialization_for_testing) {
     UpdateHasHwOverlaySupport();
+    UpdateSystemHDRStatus();
     gl::DirectCompositionOverlayCapsMonitor::GetInstance()->AddObserver(this);
   }
   allow_promotion_hinting_ = media::SupportMediaFoundationClearPlayback();
@@ -455,10 +490,19 @@ void DCLayerOverlayProcessor::UpdateHasHwOverlaySupport() {
   has_overlay_support_ = gl::DirectCompositionOverlaysSupported();
 }
 
+void DCLayerOverlayProcessor::UpdateSystemHDRStatus() {
+  bool hdr_enabled = false;
+  auto dxgi_info = gl::GetDirectCompositionHDRMonitorDXGIInfo();
+  for (const auto& output_desc : dxgi_info->output_descs)
+    hdr_enabled |= output_desc->hdr_enabled;
+  system_hdr_enabled_ = hdr_enabled;
+}
+
 // Called on the Viz Compositor thread.
 void DCLayerOverlayProcessor::OnOverlayCapsChanged() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   UpdateHasHwOverlaySupport();
+  UpdateSystemHDRStatus();
 }
 
 void DCLayerOverlayProcessor::ClearOverlayState() {
@@ -580,10 +624,9 @@ void DCLayerOverlayProcessor::InsertDebugBorderDrawQuad(
 
   // Add debug borders for overlays/underlays
   for (const auto& dc_layer : *dc_layer_overlays) {
-    gfx::RectF overlay_rect(dc_layer.quad_rect);
-    dc_layer.transform.TransformRect(&overlay_rect);
+    gfx::Rect overlay_rect = dc_layer.transform.MapRect(dc_layer.quad_rect);
     if (dc_layer.clip_rect)
-      overlay_rect.Intersect(gfx::RectF(*dc_layer.clip_rect));
+      overlay_rect.Intersect(*dc_layer.clip_rect);
 
     // Overlay:red, Underlay:blue.
     SkColor4f border_color =
@@ -593,10 +636,9 @@ void DCLayerOverlayProcessor::InsertDebugBorderDrawQuad(
             quad_list.begin(), 1u);
     auto* debug_quad = static_cast<DebugBorderDrawQuad*>(*it);
 
-    gfx::Rect rect = gfx::ToEnclosingRect(overlay_rect);
-    rect.Inset(kDCLayerDebugBorderInsets);
-    debug_quad->SetNew(shared_quad_state, rect, rect, border_color,
-                       kDCLayerDebugBorderWidth);
+    overlay_rect.Inset(kDCLayerDebugBorderInsets);
+    debug_quad->SetNew(shared_quad_state, overlay_rect, overlay_rect,
+                       border_color, kDCLayerDebugBorderWidth);
   }
 
   // Mark the entire output as damaged because the border quads might not be
@@ -679,7 +721,7 @@ void DCLayerOverlayProcessor::Process(
     SurfaceDamageRectList surface_damage_rect_list,
     DCLayerOverlayList* dc_layer_overlays,
     bool is_video_capture_enabled,
-    bool is_video_fullscreen_mode) {
+    bool is_page_fullscreen_mode) {
   bool this_frame_has_occluding_damage_rect = false;
   processed_yuv_overlay_count_ = 0;
   surface_damage_rect_list_ = std::move(surface_damage_rect_list);
@@ -895,7 +937,7 @@ void DCLayerOverlayProcessor::Process(
     UpdateDCLayerOverlays(display_rect, render_pass, it,
                           quad_rectangle_in_target_space, occluding_damage_rect,
                           is_overlay, &prev_it, &prev_index, damage_rect,
-                          dc_layer_overlays, is_video_fullscreen_mode);
+                          dc_layer_overlays, is_page_fullscreen_mode);
   }
 
   // Update previous frame state after processing root pass. If there is no
@@ -945,22 +987,32 @@ bool DCLayerOverlayProcessor::ShouldSkipOverlay(
     return true;
   }
 
-  // Skip overlay processing if output colorspace is HDR.
-  // Since most of overlay only supports NV12 and YUY2 now, HDR content (usually
-  // P010 format) cannot output through overlay without format degrading. In
-  // some Intel's platforms (Icelake or above), Overlay can play HDR content by
-  // supporting RGB10 format. Let overlay deal with HDR content in this
-  // situation.
-  bool supports_rgb10a2_overlay = gl::GetDirectCompositionOverlaySupportFlags(
-                                      DXGI_FORMAT_R10G10B10A2_UNORM) != 0;
-  if (render_pass->content_color_usage == gfx::ContentColorUsage::kHDR &&
-      !supports_rgb10a2_overlay) {
+  if (render_pass->content_color_usage == gfx::ContentColorUsage::kHDR) {
     // Media Foundation always uses overlays to render video, so do not skip.
     QuadList::Iterator it =
         FindAnOverlayCandidateExcludingMediaFoundationVideoContent(*quad_list);
     if (it != quad_list->end()) {
-      RecordDCLayerResult(DC_LAYER_FAILED_OUTPUT_HDR, it);
-      return true;
+      // Skip overlay processing if output colorspace is HDR and rgb10a2 overlay
+      // is not supported. Since most of overlay only supports NV12 and YUY2
+      // now, HDR content (usually P010 format) cannot output through overlay
+      // without format degrading. In some Intel's platforms (Icelake or above),
+      // Overlay can play HDR content by supporting RGB10 format. Let overlay
+      // deal with HDR content in this situation.
+      bool supports_rgb10a2_overlay =
+          gl::GetDirectCompositionOverlaySupportFlags(
+              DXGI_FORMAT_R10G10B10A2_UNORM) != 0;
+      if (!supports_rgb10a2_overlay) {
+        RecordDCLayerResult(DC_LAYER_FAILED_OUTPUT_HDR, it);
+        return true;
+      }
+      // Skip overlay processing if output colorspace is HDR and system HDR is
+      // not enabled. Since we always want to use Viz do HDR tone mapping, to
+      // avoid a visual difference between Viz and video processor, do not allow
+      // overlay.
+      if (!system_hdr_enabled_) {
+        RecordDCLayerResult(DC_LAYER_FAILED_HDR_TONE_MAPPING, it);
+        return true;
+      }
     }
   }
 
@@ -978,12 +1030,16 @@ void DCLayerOverlayProcessor::UpdateDCLayerOverlays(
     size_t* new_index,
     gfx::Rect* damage_rect,
     DCLayerOverlayList* dc_layer_overlays,
-    bool is_video_fullscreen_mode) {
+    bool is_page_fullscreen_mode) {
   // Record the result first before ProcessForOverlay().
   RecordDCLayerResult(DC_LAYER_SUCCESS, it);
 
   DCLayerOverlay dc_layer;
-  dc_layer.is_video_fullscreen_mode = is_video_fullscreen_mode;
+  dc_layer.is_video_fullscreen_letterboxing =
+      is_page_fullscreen_mode
+          ? IsFullScreenLetterboxing(it, render_pass->quad_list.end(),
+                                     display_rect)
+          : false;
   switch (it->material) {
     case DrawQuad::Material::kYuvVideoContent:
       FromYUVQuad(YUVVideoDrawQuad::MaterialCast(*it),

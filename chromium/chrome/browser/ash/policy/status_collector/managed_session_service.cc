@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -102,6 +102,14 @@ void ManagedSessionService::OnUserProfileLoaded(const AccountId& account_id) {
   SetLoginStatus();
   for (auto& observer : observers_) {
     observer.OnLogin(profile);
+  }
+}
+
+void ManagedSessionService::OnUnlockScreenAttempt(
+    const bool success,
+    const session_manager::UnlockType unlock_type) {
+  for (auto& observer : observers_) {
+    observer.OnUnlockAttempt(success, unlock_type);
   }
 }
 

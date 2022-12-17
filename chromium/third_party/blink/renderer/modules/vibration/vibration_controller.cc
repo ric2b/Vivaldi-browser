@@ -29,7 +29,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 
 // Maximum number of entries in a vibration pattern.
 const unsigned kVibrationPatternLengthMax = 99;
@@ -234,7 +233,7 @@ bool VibrationController::Vibrate(const VibrationPattern& pattern) {
 void VibrationController::DoVibrate(TimerBase* timer) {
   DCHECK(timer == &timer_do_vibrate_);
 
-  if (pattern_.IsEmpty())
+  if (pattern_.empty())
     is_running_ = false;
 
   if (!is_running_ || is_calling_cancel_ || is_calling_vibrate_ ||
@@ -245,7 +244,7 @@ void VibrationController::DoVibrate(TimerBase* timer) {
     is_calling_vibrate_ = true;
     vibration_manager_->Vibrate(
         pattern_[0],
-        WTF::Bind(&VibrationController::DidVibrate, WrapPersistent(this)));
+        WTF::BindOnce(&VibrationController::DidVibrate, WrapPersistent(this)));
   }
 }
 
@@ -254,7 +253,7 @@ void VibrationController::DidVibrate() {
 
   // If the pattern is empty here, it was probably cleared by a fresh call to
   // |vibrate| while the mojo call was in flight.
-  if (pattern_.IsEmpty())
+  if (pattern_.empty())
     return;
 
   // Use the current vibration entry of the pattern as the initial interval.
@@ -262,7 +261,7 @@ void VibrationController::DidVibrate() {
   pattern_.EraseAt(0);
 
   // If there is another entry it is for a pause.
-  if (!pattern_.IsEmpty()) {
+  if (!pattern_.empty()) {
     interval += pattern_[0];
     pattern_.EraseAt(0);
   }
@@ -277,7 +276,7 @@ void VibrationController::Cancel() {
   if (is_running_ && !is_calling_cancel_ && vibration_manager_.is_bound()) {
     is_calling_cancel_ = true;
     vibration_manager_->Cancel(
-        WTF::Bind(&VibrationController::DidCancel, WrapPersistent(this)));
+        WTF::BindOnce(&VibrationController::DidCancel, WrapPersistent(this)));
   }
 
   is_running_ = false;

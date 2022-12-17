@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,7 @@
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
-#include "chromeos/services/libassistant/public/cpp/assistant_feedback.h"
+#include "chromeos/ash/services/libassistant/public/cpp/assistant_feedback.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
@@ -93,7 +93,7 @@ void AssistantControllerImpl::SendAssistantFeedback(
     bool assistant_debug_info_allowed,
     const std::string& feedback_description,
     const std::string& screenshot_png) {
-  chromeos::assistant::AssistantFeedback assistant_feedback;
+  assistant::AssistantFeedback assistant_feedback;
   assistant_feedback.assistant_debug_info_allowed =
       assistant_debug_info_allowed;
   assistant_feedback.description = feedback_description;

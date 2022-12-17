@@ -16,6 +16,8 @@ class LocalImageDataClassHandler : public VivaldiDataClassHandler {
   void GetData(Profile* profile,
                const std::string& data_id,
                content::URLDataSource::GotDataCallback callback) override;
+  std::string GetMimetype(Profile* profile,
+                          const std::string& data_id) override;
 
  private:
   const VivaldiImageStore::UrlKind url_kind_;

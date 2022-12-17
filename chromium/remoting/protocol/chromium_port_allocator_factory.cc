@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,7 @@
 #include "remoting/protocol/port_allocator.h"
 #include "remoting/protocol/transport_context.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 ChromiumPortAllocatorFactory::ChromiumPortAllocatorFactory() = default;
 ChromiumPortAllocatorFactory::~ChromiumPortAllocatorFactory() = default;
@@ -28,5 +27,4 @@ ChromiumPortAllocatorFactory::CreatePortAllocator(
       transport_context);
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

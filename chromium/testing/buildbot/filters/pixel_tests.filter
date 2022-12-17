@@ -17,6 +17,7 @@ AskGoogleForSuggestionsDialogTest.*
 AssistantOnboardingViewBrowserTest.InvokeUi_*
 BookmarkBubbleViewBrowserTest.*
 BookmarkEditorViewBrowserTest.*
+BubbleFrameViewBrowserTest.*
 ChromeLabsUiTest.*
 ConfirmBubbleTest.*
 ContentAnalysysDialogUiTest.*
@@ -51,6 +52,8 @@ PageInfoBubbleViewAboutThisSiteDialogBrowserTest.*
 PageInfoBubbleViewDialogBrowserTest.*
 PageInfoBubbleViewPrivacySandboxDialogBrowserTest.*
 PageInfoBubbleViewHistoryDialogBrowserTest.*
+PageInfoBubbleViewCookiesSubpageBrowserTest.*
+PageInfoBubbleViewIsolatedWebAppBrowserTest.*
 *PasswordBubbleBrowserTest.*
 PasswordReuseModalWarningTest.*
 PermissionRequestChipDialogBrowserTest.*
@@ -68,7 +71,7 @@ SecurePaymentConfirmationDialogViewTest.InvokeUi_*
 *SendTabToSelfBubbleTest.*
 SessionCrashedBubbleViewTest.*
 TabGroupEditorBubbleViewDialogBrowserTest.*
-TabHoverCardBubbleViewBrowserTest.*
+TabHoverCardBubbleViewDialogBrowserTest.*
 *TailoredSecurityDesktopModalTest.InvokeUi_*
 TranslateBubbleVisualTest.InvokeUi_*
 UpdateRecommendedDialogTest.*

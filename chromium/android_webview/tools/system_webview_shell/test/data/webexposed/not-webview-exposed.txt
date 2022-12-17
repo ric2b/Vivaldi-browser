@@ -206,11 +206,13 @@ interface XRAnchorSet
 interface XRLightEstimate
 interface XRLightProbe : EventTarget
 interface XRWebGLBinding
+    method getCameraImage
     method getDepthInformation
     method getReflectionCubeMap
 interface XRDepthInformation
 interface XRCPUDepthInformation : XRDepthInformation
 interface XRWebGLDepthInformation : XRDepthInformation
+interface XRCamera
 
 # Web Serial API is not implemented on Android. If Bluetooth Classic support
 # were added this could change. https://crbug.com/1164036
@@ -272,20 +274,13 @@ interface Event
 interface Element : Node
 	  getter popUp
 	  method hidePopUp
-	  getter popUpHideTarget
-	  setter popUpShowTarget
-	  getter popUpShowTarget
 	  setter defaultOpen
-	  setter popUpToggleTarget
-	  getter popUpToggleTarget
 	  method showPopUp
 	  setter popUp
 	  getter defaultOpen
-	  setter popUpHideTarget
 
 # FedCM API is not implemented on WebView. crbug.com/1340252
 interface IdentityCredential : Credential
-    getter token
 
 [GLOBAL OBJECT]
     method openDatabase

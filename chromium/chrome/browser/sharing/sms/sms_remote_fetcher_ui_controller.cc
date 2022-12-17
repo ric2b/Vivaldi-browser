@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,6 +76,14 @@ bool SmsRemoteFetcherUiController::ShouldShowLoadingIcon() const {
 std::u16string
 SmsRemoteFetcherUiController::GetTextForTooltipAndAccessibleName() const {
   return std::u16string();
+}
+
+bool SmsRemoteFetcherUiController::HasAccessibleUi() const {
+  // crrev.com/c/2964059 stopped all UI from being shown and removed the
+  // accessible name. That did not remove the icon from the accessibility
+  // tree. To stop this UI from being shown to assistive technologies, we
+  // return false here.
+  return false;
 }
 
 SharingFeatureName SmsRemoteFetcherUiController::GetFeatureMetricsPrefix()

@@ -107,7 +107,7 @@ void NotesSubMenuObserver::RootMenuWillOpen() {
 }
 
 void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
-  vivaldi::NoteNode* parent = menumodel_to_note_map_[menu_model];
+  const vivaldi::NoteNode* parent = menumodel_to_note_map_[menu_model];
 #if BUILDFLAG(IS_MAC)
   bool underline_letter = false;
 #else
@@ -116,7 +116,7 @@ void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
       vivaldiprefs::kBookmarksUnderlineMenuLetter);
 #endif
 
-  for (auto& node : parent->children()) {
+  for (const auto& node : parent->children()) {
     if (node->is_separator()) {
       menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
     } else {
@@ -180,27 +180,13 @@ bool NotesSubMenuObserver::IsCommandIdEnabled(int command_id) {
   return true;
 }
 
-vivaldi::NoteNode* GetNodeFromId(vivaldi::NoteNode* node, int id) {
-  if (node->id() == id) {
-    return node;
-  }
-  for (auto& it : node->children()) {
-    vivaldi::NoteNode* childnode = GetNodeFromId(it.get(), id);
-    if (childnode) {
-      return childnode;
-    }
-  }
-  return nullptr;
-}
-
 void NotesSubMenuObserver::ExecuteCommand(int command_id) {
   DCHECK(IsCommandIdSupported(command_id));
 
   vivaldi::NotesModel* model =
       NotesModelFactory::GetForBrowserContext(proxy_->GetBrowserContext());
-  vivaldi::NoteNode* root = model->root_node();
 
-  vivaldi::NoteNode* node = GetNodeFromId(root, command_id);
+  const vivaldi::NoteNode* node = model->GetNoteNodeByID(command_id);
   if (node) {
     auto* focused_frame = static_cast<content::RenderFrameHostImpl*>(
         proxy_->GetWebContents()->GetFocusedFrame());

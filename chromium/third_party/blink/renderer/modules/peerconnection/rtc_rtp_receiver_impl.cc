@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -356,69 +356,5 @@ RTCRtpReceiverImpl::GetEncodedAudioStreamTransformer() const {
 RTCEncodedVideoStreamTransformer*
 RTCRtpReceiverImpl::GetEncodedVideoStreamTransformer() const {
   return internal_->GetEncodedVideoStreamTransformer();
-}
-
-RTCRtpReceiverOnlyTransceiver::RTCRtpReceiverOnlyTransceiver(
-    std::unique_ptr<RTCRtpReceiverPlatform> receiver)
-    : receiver_(std::move(receiver)) {
-  DCHECK(receiver_);
-}
-
-RTCRtpReceiverOnlyTransceiver::~RTCRtpReceiverOnlyTransceiver() {}
-
-RTCRtpTransceiverPlatformImplementationType
-RTCRtpReceiverOnlyTransceiver::ImplementationType() const {
-  return RTCRtpTransceiverPlatformImplementationType::kPlanBReceiverOnly;
-}
-
-uintptr_t RTCRtpReceiverOnlyTransceiver::Id() const {
-  NOTIMPLEMENTED();
-  return 0u;
-}
-
-String RTCRtpReceiverOnlyTransceiver::Mid() const {
-  NOTIMPLEMENTED();
-  return String();
-}
-
-std::unique_ptr<blink::RTCRtpSenderPlatform>
-RTCRtpReceiverOnlyTransceiver::Sender() const {
-  NOTIMPLEMENTED();
-  return nullptr;
-}
-
-std::unique_ptr<RTCRtpReceiverPlatform>
-RTCRtpReceiverOnlyTransceiver::Receiver() const {
-  return receiver_->ShallowCopy();
-}
-
-webrtc::RtpTransceiverDirection RTCRtpReceiverOnlyTransceiver::Direction()
-    const {
-  NOTIMPLEMENTED();
-  return webrtc::RtpTransceiverDirection::kSendOnly;
-}
-
-webrtc::RTCError RTCRtpReceiverOnlyTransceiver::SetDirection(
-    webrtc::RtpTransceiverDirection direction) {
-  NOTIMPLEMENTED();
-  return webrtc::RTCError::OK();
-}
-
-absl::optional<webrtc::RtpTransceiverDirection>
-RTCRtpReceiverOnlyTransceiver::CurrentDirection() const {
-  NOTIMPLEMENTED();
-  return webrtc::RtpTransceiverDirection::kSendOnly;
-}
-
-absl::optional<webrtc::RtpTransceiverDirection>
-RTCRtpReceiverOnlyTransceiver::FiredDirection() const {
-  NOTIMPLEMENTED();
-  return webrtc::RtpTransceiverDirection::kSendOnly;
-}
-
-webrtc::RTCError RTCRtpReceiverOnlyTransceiver::SetCodecPreferences(
-    Vector<webrtc::RtpCodecCapability>) {
-  NOTIMPLEMENTED();
-  return {};
 }
 }  // namespace blink

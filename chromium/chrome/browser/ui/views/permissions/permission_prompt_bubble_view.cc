@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -17,12 +18,15 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/bubble_anchor_util_views.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_widget_sublevel.h"
 #include "chrome/browser/ui/views/title_origin_label.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_uma_util.h"
+#include "components/permissions/permission_util.h"
 #include "components/permissions/request_type.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
@@ -45,6 +49,7 @@
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -68,6 +73,12 @@ std::u16string GetDisplayName(
   // File URLs should be displayed as "This file".
   if (origin_url.SchemeIsFile())
     return l10n_util::GetStringUTF16(IDS_PERMISSIONS_BUBBLE_PROMPT_THIS_FILE);
+
+  // Isolated Web Apps should show the app's name instead of the origin.
+  if (browser && browser->app_controller() &&
+      browser->app_controller()->IsIsolatedWebApp()) {
+    return browser->app_controller()->GetAppShortName();
+  }
 
   // Web URLs should be displayed as the origin in the URL.
   return url_formatter::FormatUrlForSecurityDisplay(
@@ -137,11 +148,9 @@ bool ShouldShowRequest(permissions::PermissionPrompt::Delegate& delegate,
                        permissions::RequestType type) {
   if (type == permissions::RequestType::kCameraStream) {
     // Hide camera request if camera PTZ request is present as well.
-    auto requests = delegate.Requests();
-    return std::find_if(requests.begin(), requests.end(), [](auto* request) {
-             return request->request_type() ==
-                    permissions::RequestType::kCameraPanTiltZoom;
-           }) == requests.end();
+    return !base::Contains(delegate.Requests(),
+                           permissions::RequestType::kCameraPanTiltZoom,
+                           &permissions::PermissionRequest::request_type);
   }
   return true;
 }
@@ -161,11 +170,21 @@ bool GetDisplayNameIsOrigin(Browser* browser,
                             permissions::PermissionPrompt::Delegate& delegate) {
   DCHECK(!delegate.Requests().empty());
   GURL origin_url = delegate.GetRequestingOrigin();
-  return (!origin_url.SchemeIs(extensions::kExtensionScheme) ||
-          extensions::ui_util::GetEnabledExtensionNameForUrl(origin_url,
-                                                             browser->profile())
-              .empty()) &&
-         !origin_url.SchemeIsFile();
+
+  if (origin_url.SchemeIsFile()) {
+    return false;
+  }
+  if (origin_url.SchemeIs(extensions::kExtensionScheme) &&
+      !extensions::ui_util::GetEnabledExtensionNameForUrl(origin_url,
+                                                          browser->profile())
+           .empty()) {
+    return false;
+  }
+  if (browser && browser->app_controller() &&
+      browser->app_controller()->IsIsolatedWebApp()) {
+    return false;
+  }
+  return true;
 }
 
 // Get extra information to display for the permission, if any.
@@ -316,6 +335,10 @@ void PermissionPromptBubbleView::Show() {
   UpdateAnchorPosition();
 
   views::Widget* widget = views::BubbleDialogDelegateView::CreateBubble(this);
+
+  if (base::FeatureList::IsEnabled(views::features::kWidgetLayering))
+    widget->SetZOrderSublevel(ChromeWidgetSublevel::kSublevelSecurity);
+
   // If a browser window (or popup) other than the bubble parent has focus,
   // don't take focus.
   if (browser_->window()->IsActive())

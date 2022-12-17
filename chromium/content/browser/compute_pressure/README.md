@@ -17,7 +17,8 @@ between the browser and the services sides of the API implementation.
 implementation. The class is responsible for handling the communication
 between the browser process and services.
 
-`device::PressureSample` represents the device's compute pressure state.
+`device::mojom::PressureUpdate` represents the device's compute pressure update,
+composed of the `device::mojom::PressureState` and the timestamp.
 This information is collected by `device::CpuProbe` and bubbled up by
 `device::PlatformCollector` to `device::PressureManagerImpl`, which broadcasts
 the information to the `content::PressureServiceImpl` instances.
@@ -32,17 +33,15 @@ the platform-specific code's requirements.
 compute pressure state from the operating system. This interface is also
 a dependency injection point for tests.
 
-`content::PressureServiceImpl` serves all the mojo connections for a frame.
+`content::PressureServiceImpl` serves the mojo connection for a frame.
 Each instance is owned by a `content::RenderFrameHostImpl`. The class receives
-`device::mojom::PressureState` from `device::PressureManagerImpl` and
-broadcasts the information to the `blink::PressureObserver` instances.
-
-`content::PressureQuantizer` implements the quantization logic that converts
-a high-entropy `device::mojom::PressureState` into a low-entropy one, which
-minimizes the amount of information exposed to a Web page that uses the
-Compute Pressure API. Each `content::PressureServiceImpl` uses a
-`content::PressureQuantizer` instance, which stores the frame's
-quantization schema and produces quantized data suitable for frame.
+`device::mojom::PressureUpdate` from `device::PressureManagerImpl` and
+broadcasts the information to the `blink::PressureObserverManager` instance.
 
 `blink::PressureObserver` implements bindings for the PressureObserver
 interface. There can be more than one PressureObserver per frame.
+
+`blink::PressureObserverManager` maintains the list of active observers.
+The class receives `device::mojom::PressureUpdate` from
+`content::PressureServiceImpl` and broadcasts the information to active
+observers.

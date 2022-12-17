@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,10 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
 
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_table_cell_title_editing.h"
+
+// Vivaldi
+#import "components/bookmarks/browser/bookmark_model.h"
+// End Vivaldi
 
 typedef NS_ENUM(NSInteger, BookmarkFolderStyle) {
   BookmarkFolderStyleFolderEntry,
@@ -38,6 +42,11 @@ typedef NS_ENUM(NSInteger, TableViewBookmarkFolderAccessoryType) {
 @property(nonatomic, assign, getter=isCurrentFolder) BOOL currentFolder;
 // The item's left indentation level.
 @property(nonatomic, assign) NSInteger indentationLevel;
+
+// Vivaldi
+@property(nonatomic, assign, getter=isSpeedDial) BOOL isSpeedDial;
+@property(nonatomic, assign) const bookmarks::BookmarkNode* bookmarkNode;
+// End Vivaldi
 
 @end
 

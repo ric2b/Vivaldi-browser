@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "ash/wm/desks/templates/saved_desk_feedback_button.h"
 #include "base/guid.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -48,24 +47,22 @@ class SavedDeskLibraryView : public views::View, public aura::WindowObserver {
 
   const std::vector<SavedDeskGridView*>& grid_views() { return grid_views_; }
 
-  FeedbackButton* feedback_button() { return feedback_button_; }
-
-  // Retrieve the item view for a given saved desk, or nullptr.
+  // Retrieves the item view for a given saved desk, or nullptr.
   SavedDeskItemView* GetItemForUUID(const base::GUID& uuid);
 
-  // TODO(dandersson): Look into unifying this and `AddOrUpdateTemplates`.
-  void PopulateGridUI(const std::vector<const DeskTemplate*>& entries,
-                      const gfx::Rect& grid_bounds,
-                      const base::GUID& last_saved_desk_uuid);
+  // Updates existing saved desks and adds new saved desks to the grid. Also
+  // sorts entries in alphabetical order. If `order_first_uuid` is valid, the
+  // corresponding entry will be placed first. This will animate the entries to
+  // their final positions if `animate` is true. Currently only allows a maximum
+  // of 6 saved desks to be shown in the grid.
+  void AddOrUpdateEntries(const std::vector<const DeskTemplate*>& entries,
+                          const base::GUID& order_first_uuid,
+                          bool animate);
 
-  void AddOrUpdateTemplates(const std::vector<const DeskTemplate*>& entries,
-                            bool initializing_grid_view,
-                            const base::GUID& last_saved_desk_uuid);
-
-  // Delete all templates identified by `uuids`. If `delete_animation` is false,
+  // Deletes all entries identified by `uuids`. If `delete_animation` is false,
   // then the respective item views will just disappear instead of fading out.
-  void DeleteTemplates(const std::vector<std::string>& uuids,
-                       bool delete_animation);
+  void DeleteEntries(const std::vector<base::GUID>& uuids,
+                     bool delete_animation);
 
   // This performs the launch animation for Save & Recall. The `DeskItemView`
   // identified by `uuid` is animated up into the position of the desk preview
@@ -78,15 +75,10 @@ class SavedDeskLibraryView : public views::View, public aura::WindowObserver {
   friend class SavedDeskLibraryViewTestApi;
   friend class SavedDeskLibraryWindowTargeter;
 
-  // Called when the feedback button is pressed. Shows the feedback dialog with
-  // desks templates information.
-  void OnFeedbackButtonPressed();
-
   bool IsAnimating();
 
   // Called from `SavedDeskLibraryWindowTargeter`. Returns true if
   // `screen_location` intersects with an interactive part of the library UI.
-  // This includes saved desk items and the feedback button.
   bool IntersectsWithUi(const gfx::Point& screen_location);
 
   // If this view is attached to a widget, returns its window (or nullptr).
@@ -129,10 +121,6 @@ class SavedDeskLibraryView : public views::View, public aura::WindowObserver {
   // Owned by views hierarchy. Section headers above grids. Will match size and
   // order of items in `grid_views_`.
   std::vector<views::Label*> grid_labels_;
-
-  // Owned by views hierarchy. Temporary button to help users give feedback.
-  // TODO(crbug.com/1289880): Remove this button when it is no longer needed.
-  FeedbackButton* feedback_button_ = nullptr;
 
   // Label that shows up when the library has no items.
   views::Label* no_items_label_ = nullptr;

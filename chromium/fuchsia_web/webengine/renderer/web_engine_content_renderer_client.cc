@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 #include "base/feature_list.h"
 #include "components/cast_streaming/renderer/public/resource_provider.h"
 #include "components/cast_streaming/renderer/public/resource_provider_factory.h"
-#include "components/cdm/renderer/widevine_key_system_properties.h"
+#include "components/cdm/renderer/widevine_key_system_info.h"
 #include "components/media_control/renderer/media_playback_options.h"
 #include "components/memory_pressure/multi_source_memory_pressure_monitor.h"
 #include "components/on_load_script_injector/renderer/on_load_script_injector.h"
@@ -54,10 +54,10 @@ bool IsSupportedHardwareVideoCodec(const media::VideoType& type) {
   return false;
 }
 
-class PlayreadyKeySystemProperties : public ::media::KeySystemProperties {
+class PlayreadyKeySystemInfo : public ::media::KeySystemInfo {
  public:
-  PlayreadyKeySystemProperties(const std::string& key_system_name,
-                               media::SupportedCodecs supported_codecs)
+  PlayreadyKeySystemInfo(const std::string& key_system_name,
+                         media::SupportedCodecs supported_codecs)
       : key_system_name_(key_system_name),
         supported_codecs_(supported_codecs) {}
 
@@ -82,6 +82,7 @@ class PlayreadyKeySystemProperties : public ::media::KeySystemProperties {
       const std::string& requested_robustness,
       const bool* /*hw_secure_requirement*/) const override {
     // Only empty robustness string is currently supported.
+    // TODO(crbug.com/1205716): Add support for robustness strings.
     if (requested_robustness.empty()) {
       return media::EmeConfig{.hw_secure_codecs =
                                   media::EmeConfigRuleState::kRequired};
@@ -179,7 +180,7 @@ WebEngineContentRendererClient::CreateURLLoaderThrottleProvider(
 
 void WebEngineContentRendererClient::GetSupportedKeySystems(
     media::GetSupportedKeySystemsCB cb) {
-  media::KeySystemPropertiesVector key_systems;
+  media::KeySystemInfoVector key_systems;
   media::SupportedCodecs supported_video_codecs = 0;
   constexpr uint8_t kUnknownCodecLevel = 0;
   if (IsSupportedHardwareVideoCodec(media::VideoType{
@@ -220,17 +221,17 @@ void WebEngineContentRendererClient::GetSupportedKeySystems(
     // video codecs.
     // TODO(crbug.com/1013412): Replace these hardcoded values with a query to
     // the fuchsia.mediacodec FIDL service.
-    key_systems.emplace_back(new cdm::WidevineKeySystemProperties(
+    key_systems.push_back(std::make_unique<cdm::WidevineKeySystemInfo>(
         supported_codecs,             // codecs
         kSupportedEncryptionSchemes,  // encryption schemes
         kSupportedSessionTypes,       // session types
         supported_codecs,             // hw secure codecs
         kSupportedEncryptionSchemes,  // hw secure encryption schemes
         kSupportedSessionTypes,       // hw secure session types
-        cdm::WidevineKeySystemProperties::Robustness::
-            HW_SECURE_CRYPTO,  // max audio robustness
-        cdm::WidevineKeySystemProperties::Robustness::
-            HW_SECURE_ALL,                           // max video robustness
+        cdm::WidevineKeySystemInfo::Robustness::HW_SECURE_CRYPTO,  // max audio
+                                                                   // robustness
+        cdm::WidevineKeySystemInfo::Robustness::HW_SECURE_ALL,     // max video
+                                                                   // robustness
         media::EmeFeatureSupport::ALWAYS_ENABLED,    // persistent state
         media::EmeFeatureSupport::ALWAYS_ENABLED));  // distinctive identifier
   }
@@ -239,8 +240,8 @@ void WebEngineContentRendererClient::GetSupportedKeySystems(
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kPlayreadyKeySystem);
   if (!playready_key_system.empty()) {
-    key_systems.emplace_back(new PlayreadyKeySystemProperties(
-        playready_key_system, supported_codecs));
+    key_systems.push_back(
+        std::make_unique<PlayreadyKeySystemInfo>(playready_key_system, supported_codecs));
   }
 
   std::move(cb).Run(std::move(key_systems));

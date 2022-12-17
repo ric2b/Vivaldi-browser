@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,12 +34,6 @@ bool IsOpenInIncognito(web::WebState* web_state,
 }
 
 }  // namespace
-
-// static
-void CrossOtrTabHelper::CreateForWebState(web::WebState* web_state) {
-  DCHECK(web_state);
-  WebStateUserData<CrossOtrTabHelper>::CreateForWebState(web_state);
-}
 
 CrossOtrTabHelper::CrossOtrTabHelper(web::WebState* web_state)
     : CrossOtrObserver(ObserverType::kIos) {

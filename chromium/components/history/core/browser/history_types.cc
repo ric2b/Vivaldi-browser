@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,8 @@
 #include "base/check.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "components/history/core/browser/page_usage_data.h"
 
 namespace history {
@@ -494,6 +496,16 @@ bool ClusterKeywordData::operator==(const ClusterKeywordData& data) const {
          entity_collections == data.entity_collections;
 }
 
+std::string ClusterKeywordData::ToString() const {
+  return base::StringPrintf("ClusterKeywordData{%d, %f, {%s}}", type, score,
+                            base::JoinString(entity_collections, ",").c_str());
+}
+
+std::ostream& operator<<(std::ostream& out, const ClusterKeywordData& data) {
+  out << data.ToString();
+  return out;
+}
+
 void ClusterKeywordData::MaybeUpdateKeywordType(
     ClusterKeywordData::ClusterKeywordType other_type) {
   if (type < other_type) {
@@ -544,7 +556,7 @@ Cluster& Cluster::operator=(Cluster&&) = default;
 Cluster::~Cluster() = default;
 
 const ClusterVisit& Cluster::GetMostRecentVisit() const {
-  return *base::ranges::min_element(
+  return *base::ranges::max_element(
       visits, [](auto time1, auto time2) { return time1 < time2; },
       [](const auto& cluster_visit) {
         return cluster_visit.annotated_visit.visit_row.visit_time;

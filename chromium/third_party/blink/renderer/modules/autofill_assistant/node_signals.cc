@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,7 +69,7 @@ WebString GetAttributes(const Element& element,
   WebVector<WebString> values;
   for (const QualifiedName& attribute : attributes) {
     const auto& attribute_value = element.getAttribute(attribute);
-    if (!attribute_value.IsNull() && !attribute_value.IsEmpty()) {
+    if (!attribute_value.IsNull() && !attribute_value.empty()) {
       values.push_back(attribute_value);
     }
   }
@@ -78,7 +78,7 @@ WebString GetAttributes(const Element& element,
 
 bool AddAtomicIfNotNullOrEmpty(const AtomicString& atomic,
                                WebVector<WebString>* text) {
-  if (atomic.IsNull() || atomic.IsEmpty()) {
+  if (atomic.IsNull() || atomic.empty()) {
     return false;
   }
 
@@ -119,6 +119,17 @@ WebString GetType(const Element& element) {
     return WebString();
   }
   return WebString(element.getAttribute(html_names::kTypeAttr));
+}
+
+bool IsSupportedByClient(const Element& element) {
+  if (element.HasTagName(html_names::kInputTag)) {
+    const String input_type = String{GetType(element)}.LowerASCII();
+    return input_type != "checkbox" && input_type != "radio" &&
+           input_type != "submit" && input_type != "button" &&
+           input_type != "hidden";
+  }
+  return element.HasTagName(html_names::kTextareaTag) ||
+         element.HasTagName(html_names::kSelectTag);
 }
 
 WebString GetAria(const Element& element) {
@@ -192,7 +203,7 @@ WebString GetLabelRelatedAttribute(
     const Element& element,
     const HashMap<AtomicString, Member<Element>>& labels) {
   AtomicString id = element.getAttribute(html_names::kIdAttr);
-  if (id.IsNull() || id.IsEmpty()) {
+  if (id.IsNull() || id.empty()) {
     return WebString();
   }
 
@@ -210,7 +221,7 @@ bool AddLabelRelatedAriaLabelledby(const Element& element,
   // TODO(b/204839535): Find out if we need html_names::kAriaLabeledbyAttr.
   AtomicString labelledby =
       element.getAttribute(html_names::kAriaLabelledbyAttr);
-  if (labelledby.IsNull() || labelledby.IsEmpty()) {
+  if (labelledby.IsNull() || labelledby.empty()) {
     return false;
   }
 
@@ -283,7 +294,9 @@ WebString GetLabelFromGeometry(const Element& element) {
     }
 
     WebString text(DynamicTo<Text>(node)->wholeText());
-    if (!text.IsNull() && !text.IsEmpty()) {
+    // Skip source formatting text nodes like "\n    " and empty strings.
+    if (!text.IsNull() && !text.IsEmpty() &&
+        !String(text).ContainsOnlyWhitespaceOrEmpty()) {
       distance_and_text.push_back({distance, text});
       if (distance < closest_distance) {
         closest_distance = distance;
@@ -523,14 +536,10 @@ void CollectSignalsForNode(
       CollectSignalsForNode(*shadow_root, node_signals);
     }
 
-    if (!element.HasTagName(html_names::kInputTag) &&
-        !element.HasTagName(html_names::kTextareaTag) &&
-        !element.HasTagName(html_names::kSelectTag)) {
+    if (!IsSupportedByClient(element) || !IsVisible(element)) {
       continue;
     }
-    if (!IsVisible(element)) {
-      continue;
-    }
+
     AutofillAssistantNodeSignals signals;
     signals.backend_node_id = static_cast<int>(DOMNodeIds::IdForNode(&element));
     CollectNodeFeatures(element, &signals.node_features);

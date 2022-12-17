@@ -1,10 +1,10 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
-import {decorate} from 'chrome://resources/js/cr/ui.m.js';
-import {Command} from 'chrome://resources/js/cr/ui/command.js';
+import {assert} from 'chrome://resources/js/assert.js';
+import {decorate} from 'chrome://resources/js/cr/ui.js';
+import {Command} from './ui/command.js';
 import {assertNotReached} from 'chrome://webui-test/chai_assert.js';
 
 import {createCrostiniForTest} from '../../background/js/mock_crostini.js';
@@ -160,7 +160,7 @@ function setupFileManagerPrivate() {
           isDefault: true,
         }),
       ]);
-      setTimeout(callback.bind(null, fileTasks), 0);
+      setTimeout(callback.bind(null, {tasks: fileTasks}), 0);
     },
     onAppsUpdated: {
       addListener: function() {},

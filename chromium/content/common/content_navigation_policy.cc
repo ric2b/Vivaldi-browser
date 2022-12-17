@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,9 @@
 #include "content/public/common/content_switches.h"
 
 namespace features {
-const base::Feature kBackForwardCache_NoMemoryLimit_Trial{
-    "BackForwardCache_NoMemoryLimit_Trial", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kBackForwardCache_NoMemoryLimit_Trial,
+             "BackForwardCache_NoMemoryLimit_Trial",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 }
 
 namespace content {
@@ -96,25 +97,6 @@ bool IsBackForwardCacheEnabled() {
     return true;
   }
   return false;
-}
-
-bool IsSameSiteBackForwardCacheEnabled() {
-  if (!IsBackForwardCacheEnabled())
-    return false;
-
-  // Same-site back-forward cache is enabled by default, but can be disabled
-  // through kBackForwardCache's "enable_same_site" param.
-  static constexpr base::FeatureParam<bool> enable_same_site_back_forward_cache(
-      &features::kBackForwardCache, "enable_same_site", true);
-  return enable_same_site_back_forward_cache.Get();
-}
-
-bool ShouldSkipSameSiteBackForwardCacheForPageWithUnload() {
-  if (!IsSameSiteBackForwardCacheEnabled())
-    return true;
-  static constexpr base::FeatureParam<bool> skip_same_site_if_unload_exists(
-      &features::kBackForwardCache, "skip_same_site_if_unload_exists", false);
-  return skip_same_site_if_unload_exists.Get();
 }
 
 bool CanCrossSiteNavigationsProactivelySwapBrowsingInstances() {

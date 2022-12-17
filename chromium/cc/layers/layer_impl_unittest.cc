@@ -1,4 +1,4 @@
-// Copyright 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -286,10 +286,11 @@ TEST_F(LayerImplTest, PerspectiveTransformHasReasonableScale) {
   }
   // Test case from crbug.com/766021.
   {
-    gfx::Transform transform(-0.9397f, -0.7019f, 0.2796f, 2383.4521f,   // row 1
-                             -0.0038f, 0.0785f, 1.0613f, 1876.4553f,    // row 2
-                             -0.0835f, 0.9081f, -0.4105f, -2208.3035f,  // row 3
-                             0.0001f, -0.0008f, 0.0003f, 2.8435f);      // row 4
+    auto transform = gfx::Transform::RowMajor(
+        -0.9397f, -0.7019f, 0.2796f, 2383.4521f,   // row 1
+        -0.0038f, 0.0785f, 1.0613f, 1876.4553f,    // row 2
+        -0.0835f, 0.9081f, -0.4105f, -2208.3035f,  // row 3
+        0.0001f, -0.0008f, 0.0003f, 2.8435f);      // row 4
     layer->draw_properties().screen_space_transform = transform;
 
     ASSERT_TRUE(layer->ScreenSpaceTransform().HasPerspective());
@@ -418,7 +419,7 @@ TEST_F(LayerImplScrollTest, ApplySentScrollsNoListener) {
                        layer()->element_id()));
 
   scroll_tree(layer())->ApplySentScrollDeltasFromAbortedCommit(
-      /*main_frame_applied_deltas=*/true);
+      /* next_bmf */ false, /* main_frame_applied_deltas */ true);
 
   EXPECT_POINTF_EQ(scroll_offset + scroll_delta, CurrentScrollOffset(layer()));
   EXPECT_VECTOR2DF_EQ(scroll_delta - sent_scroll_delta, ScrollDelta(layer()));

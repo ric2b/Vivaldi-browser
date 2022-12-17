@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Tlačiť...</translation>
 <translation id="1181037720776840403">Odstrániť</translation>
 <translation id="1187722533808055681">Prebudenia z nečinnosti</translation>
-<translation id="119944043368869598">Odstrániť všetko</translation>
 <translation id="1221825588892235038">Len výber</translation>
 <translation id="1244303850296295656">Chyba rozšírenia</translation>
 <translation id="125220115284141797">Predvolené</translation>
@@ -50,7 +49,6 @@
 <translation id="1901303067676059328">Vybrať &amp;všetko</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Zadajte číslo označujúce počet kópií, ktoré chcete vytlačiť (od 1 do <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Odstrániť všetko</translation>
 <translation id="1994173015038366702">URL adresa stránky</translation>
 <translation id="2019718679933488176">&amp;Otvoriť zvuk na novom liste</translation>
 <translation id="2050339315714019657">Na výšku</translation>
@@ -66,7 +64,6 @@
 <translation id="2218515861914035131">Prilepiť ako obyčajný text</translation>
 <translation id="2249605167705922988">napr. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Povoliť identifikátory chráneného obsahu (môže byť vyžadované opätovné spustenie počítača)</translation>
-<translation id="2277255602909579701">Všetky súbory cookie a údaje stránok</translation>
 <translation id="2280486287150724112">Pravý okraj</translation>
 <translation id="2282146716419988068">Úloha GPU</translation>
 <translation id="2301382460326681002">Koreňový adresár rozšírenia je neplatný.</translation>
@@ -118,7 +115,6 @@
 <translation id="3084548735795614657">Pustite myš k inštalácii</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">POUŽÍVATEĽ – popisovače</translation>
-<translation id="3127156390846601284">Táto akcia odstráni všetky uložené údaje v zariadení pre všetky zobrazené stránky. Chcete pokračovať?</translation>
 <translation id="3129173833825111527">Ľavý okraj</translation>
 <translation id="3144647712221361880">Otvoriť odkaz ako</translation>
 <translation id="3222066309010235055">Predbežne vykresliť: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -138,7 +134,6 @@
 <translation id="3378572629723696641">Toto rozšírenie mohlo byť poškodené.</translation>
 <translation id="3387614642886316601">Použiť rozšírenú kontrolu pravopisu</translation>
 <translation id="3393582007140394275">Obrazovka sa nedá prenášať.</translation>
-<translation id="3432227430032737297">Odstrániť všetky zobrazené</translation>
 <translation id="345693547134384690">Otvoriť &amp;obrázok v novom liste</translation>
 <translation id="3494769164076977169">Opýtať sa, keď sa stránky pokúsia sťahovať súbory automaticky po stiahnutí prvého súboru (odporúčané)</translation>
 <translation id="3505030558724226696">Odvolať prístup k zariadeniam</translation>
@@ -195,7 +190,6 @@
 <translation id="4409697491990005945">Okraje</translation>
 <translation id="4423376891418188461">Obnoviť nastavenia</translation>
 <translation id="4478664379124702289">Uložiť &amp;odkaz ako...</translation>
-<translation id="4579581181964204535">Nie je možné prenášať hostiteľskú službu <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Prejsť na adresu <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikácie a rozšírenia môže upraviť iba správca (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Rozšírenie zmenilo stránku, ktorá sa vám zobrazí po otvorení nového listu.</translation>
@@ -266,7 +260,6 @@
 <translation id="5747809636523347288">Prilepiť a prejsť na <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokumenty odoslané na tlač prostredníctvom aplikácie <ph name="APP_NAME" /> môžete čítať pomocou aplikácie <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Uložiť &amp;zvuk ako...</translation>
-<translation id="577624874850706961">Hľadať súbory cookie</translation>
 <translation id="5780973441651030252">Priorita úlohy</translation>
 <translation id="5804241973901381774">Povolenia</translation>
 <translation id="5828633471261496623">Prebieha tlač...</translation>
@@ -279,7 +272,6 @@
 <translation id="5965661248935608907">Tiež určuje, ktorá stránka sa zobrazí po kliknutí na tlačidlo Domovská stránka alebo pri vyhľadávaní pomocou všeobecného poľa.</translation>
 <translation id="5978277834170881274">&amp;Použiť základnú kontrolu pravopisu</translation>
 <translation id="5979421442488174909">&amp;Preložiť do jazyka <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Vymazanie údajov stránky</translation>
 <translation id="6042308850641462728">Viac</translation>
 <translation id="6086846494333236931">Nainštalované správcom</translation>
 <translation id="6101226222197207147">Bola pridaná nová aplikácia (<ph name="EXTENSION_NAME" />)</translation>
@@ -391,7 +383,6 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Prebieha sťahovanie}few{Prebiehajú sťahovania}many{Prebiehajúcich sťahovaní}other{Prebiehajúcich sťahovaní}}</translation>
 <translation id="8230134520748321204">Uložiť heslo pre adresu <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Toto rozšírenie nie je uvedené na webe <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo byť pridané bez vášho vedomia.</translation>
-<translation id="8339059274628563283">Miestne uložené údaje stránky <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Vaše nastavenia servera proxy začalo ovládať toto rozšírenie, čo znamená, že dané rozšírenie môže zmeniť, prerušiť alebo zachytiť všetku vašu činnosť online. Ak neviete, prečo k tomu došlo, pravdepodobne si to neželáte.</translation>
 <translation id="8382913212082956454">Kopírovať &amp;e-mailovú adresu</translation>
 <translation id="8413385045638830869">Najprv sa opýtať (odporúčané)</translation>

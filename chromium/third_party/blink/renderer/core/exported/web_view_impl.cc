@@ -46,17 +46,16 @@
 #include "media/base/media_switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/common/frame/event_page_show_persisted.h"
 #include "third_party/blink/public/common/history/session_history_constants.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
-#include "third_party/blink/public/common/page/page_lifecycle_state_updater.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/window_features/window_features.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
@@ -74,6 +73,7 @@
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_meaningful_layout.h"
+#include "third_party/blink/public/web/web_navigation_type.h"
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_range.h"
@@ -344,13 +344,17 @@ void ApplyCommandLineToSettings(WebSettings* settings) {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
-  WebSettings::SelectionStrategyType selection_strategy;
-  if (command_line.GetSwitchValueASCII(switches::kTouchTextSelectionStrategy) ==
-      "direction")
-    selection_strategy = WebSettings::SelectionStrategyType::kDirection;
-  else
-    selection_strategy = WebSettings::SelectionStrategyType::kCharacter;
-  settings->SetSelectionStrategy(selection_strategy);
+  std::string touch_text_selection_strategy =
+      command_line.GetSwitchValueASCII(switches::kTouchTextSelectionStrategy);
+  if (touch_text_selection_strategy ==
+      switches::kTouchTextSelectionStrategy_Character) {
+    settings->SetSelectionStrategy(
+        WebSettings::SelectionStrategyType::kCharacter);
+  } else if (touch_text_selection_strategy ==
+             switches::kTouchTextSelectionStrategy_Direction) {
+    settings->SetSelectionStrategy(
+        WebSettings::SelectionStrategyType::kDirection);
+  }
 
   WebString network_quiet_timeout = WebString::FromUTF8(
       command_line.GetSwitchValueASCII(switches::kNetworkQuietTimeout));
@@ -523,8 +527,9 @@ void WebViewImpl::CloseWindowSoon() {
       ->GetPageScheduler()
       ->GetAgentGroupScheduler()
       .DefaultTaskRunner()
-      ->PostTask(FROM_HERE, WTF::Bind(&WebViewImpl::DoDeferredCloseWindowSoon,
-                                      weak_ptr_factory_.GetWeakPtr()));
+      ->PostTask(FROM_HERE,
+                 WTF::BindOnce(&WebViewImpl::DoDeferredCloseWindowSoon,
+                               weak_ptr_factory_.GetWeakPtr()));
 }
 
 void WebViewImpl::DoDeferredCloseWindowSoon() {
@@ -574,7 +579,7 @@ WebViewImpl::WebViewImpl(
     // corresponding browser-side `RenderViewHostImpl` (e.g. tests or
     // printing), call `Close()` directly instead to delete `this`.
     receiver_.set_disconnect_handler(
-        WTF::Bind(&WebViewImpl::MojoDisconnected, WTF::Unretained(this)));
+        WTF::BindOnce(&WebViewImpl::MojoDisconnected, WTF::Unretained(this)));
   }
   if (!web_view_client_)
     DCHECK(!does_composite_);
@@ -1483,7 +1488,6 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetDownloadableBinaryFontsEnabled(prefs.remote_fonts_enabled);
   settings->SetJavaScriptCanAccessClipboard(
       prefs.javascript_can_access_clipboard);
-  RuntimeEnabledFeatures::SetXSLTEnabled(prefs.xslt_enabled);
   settings->SetDNSPrefetchingEnabled(prefs.dns_prefetching_enabled);
   blink::WebNetworkStateNotifier::SetSaveDataEnabled(prefs.data_saver_enabled);
   settings->SetLocalStorageEnabled(prefs.local_storage_enabled);
@@ -1839,6 +1843,17 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
     }
   }
 #endif
+
+  // Disabling the StrictMimetypeCheckForWorkerScriptsEnabled enterprise policy
+  // overrides the corresponding RuntimeEnabledFeature (via its Pref).
+  if (!prefs.strict_mime_type_check_for_worker_scripts_enabled) {
+    RuntimeEnabledFeatures::SetStrictMimeTypesForWorkersEnabled(false);
+  }
+
+  if (features::OSKResizesVisualViewportByDefault()) {
+    RuntimeEnabledFeatures::SetViewportMetaInteractiveWidgetPropertyEnabled(
+        true);
+  }
 }
 
 void WebViewImpl::ThemeChanged() {
@@ -1982,6 +1997,7 @@ std::string WebViewImpl::GetNullFrameReasonForBug1139104() const {
 
 void WebViewImpl::DidAttachLocalMainFrame() {
   DCHECK(MainFrameImpl());
+  DCHECK(!remote_main_frame_host_remote_);
 
   LocalFrame* local_frame = MainFrameImpl()->GetFrame();
   local_frame->WasAttachedAsLocalMainFrame();
@@ -2030,6 +2046,7 @@ void WebViewImpl::DidAttachRemoteMainFrame(
   DCHECK(main_frame_host);
   DCHECK(main_frame);
   DCHECK(!MainFrameImpl());
+  DCHECK(!local_main_frame_host_remote_);
 
   RemoteFrame* remote_frame = DynamicTo<RemoteFrame>(GetPage()->MainFrame());
   remote_frame->WasAttachedAsRemoteMainFrame(std::move(main_frame));
@@ -2382,15 +2399,26 @@ void WebViewImpl::SetPageLifecycleState(
     mojom::blink::PageRestoreParamsPtr page_restore_params,
     SetPageLifecycleStateCallback callback) {
   TRACE_EVENT0("navigation", "WebViewImpl::SetPageLifecycleState");
-  // TODO(https://crbug.com/1234634): Remove this.
-  if (state->should_dispatch_pageshow_for_debugging) {
-    blink::RecordUMAEventPageShowPersisted(
-        blink::EventPageShowPersisted::kBrowserYesInRenderer);
-  }
   SetPageLifecycleStateInternal(std::move(state),
                                 std::move(page_restore_params));
   // Tell the browser that the lifecycle update was successful.
   std::move(callback).Run();
+}
+
+// Returns true if this state update is for the page being restored from
+// back-forward cache, causing the pageshow event to fire with persisted=true.
+bool IsRestoredFromBackForwardCache(
+    const mojom::blink::PageLifecycleStatePtr& old_state,
+    const mojom::blink::PageLifecycleStatePtr& new_state) {
+  if (!old_state)
+    return false;
+  bool old_state_hidden = old_state->pagehide_dispatch !=
+                          mojom::blink::PagehideDispatch::kNotDispatched;
+  bool new_state_shown = new_state->pagehide_dispatch ==
+                         mojom::blink::PagehideDispatch::kNotDispatched;
+  // It's a pageshow but it can't be the initial pageshow since it was already
+  // hidden. So it must be a back-forward cache restore.
+  return old_state_hidden && new_state_shown;
 }
 
 void WebViewImpl::SetPageLifecycleStateInternal(
@@ -2402,10 +2430,6 @@ void WebViewImpl::SetPageLifecycleStateInternal(
   auto& old_state = page->GetPageLifecycleState();
   TRACE_EVENT2("navigation", "WebViewImpl::SetPageLifecycleStateInternal",
                "old_state", old_state, "new_state", new_state);
-  if (new_state->should_dispatch_pageshow_for_debugging) {
-    blink::RecordUMAEventPageShowPersisted(
-        blink::EventPageShowPersisted::kBrowserYesInRendererWithPage);
-  }
 
   bool storing_in_bfcache = new_state->is_in_back_forward_cache &&
                             !old_state->is_in_back_forward_cache;
@@ -2427,20 +2451,6 @@ void WebViewImpl::SetPageLifecycleStateInternal(
       IsRestoredFromBackForwardCache(old_state, new_state);
   bool eviction_changed =
       new_state->eviction_enabled != old_state->eviction_enabled;
-
-  if (new_state->should_dispatch_pageshow_for_debugging) {
-    if (!dispatching_pageshow) {
-      SCOPED_CRASH_KEY_NUMBER("Bug1234634", "old-pagehide-dispatch",
-                              static_cast<int>(old_state->pagehide_dispatch));
-      SCOPED_CRASH_KEY_NUMBER("Bug1234634", "new-pagehide-dispatch",
-                              static_cast<int>(new_state->pagehide_dispatch));
-      base::debug::DumpWithoutCrashing();
-      NOTREACHED();
-    }
-  }
-  // Reset to false as this object can be reused in same-site main frame
-  // navigations.
-  new_state->should_dispatch_pageshow_for_debugging = false;
 
   if (dispatching_pagehide) {
     RemoveFocusAndTextInputState();
@@ -2498,11 +2508,12 @@ void WebViewImpl::SetPageLifecycleStateInternal(
          frame = frame->Tree().TraverseNext()) {
       auto* local_frame = DynamicTo<LocalFrame>(frame);
       if (local_frame && local_frame->View()) {
-        local_frame->IncrementNavigationId();
+        DCHECK(local_frame->DomWindow());
+        local_frame->DomWindow()->IncrementNavigationId();
       }
     }
 
-    DispatchPageshow(page_restore_params->navigation_start);
+    DispatchPersistedPageshow(page_restore_params->navigation_start);
 
     Scheduler()->SetPageBackForwardCached(new_state->is_in_back_forward_cache);
     if (MainFrame()->IsWebLocalFrame()) {
@@ -2583,7 +2594,7 @@ void WebViewImpl::DispatchPagehide(
   }
 }
 
-void WebViewImpl::DispatchPageshow(base::TimeTicks navigation_start) {
+void WebViewImpl::DispatchPersistedPageshow(base::TimeTicks navigation_start) {
   for (Frame* frame = GetPage()->MainFrame(); frame;
        frame = frame->Tree().TraverseNext()) {
     auto* local_frame = DynamicTo<LocalFrame>(frame);
@@ -2772,6 +2783,16 @@ void WebViewImpl::UpdatePageDefinedViewportConstraints(
   if (!GetPage()->MainFrame()->IsLocalFrame())
     return;
 
+  if (virtual_keyboard_mode_ != description.virtual_keyboard_mode) {
+    // TODO(bokan): This should handle portals.
+    DCHECK(MainFrameImpl()->IsOutermostMainFrame());
+    virtual_keyboard_mode_ = description.virtual_keyboard_mode;
+    mojom::blink::LocalFrameHost& frame_host =
+        MainFrameImpl()->GetFrame()->GetLocalFrameHostRemote();
+
+    frame_host.SetVirtualKeyboardMode(virtual_keyboard_mode_);
+  }
+
   if (!GetSettings()->ViewportEnabled()) {
     GetPageScaleConstraintsSet().ClearPageDefinedConstraints();
     UpdateMainFrameLayoutSize();
@@ -2944,10 +2965,13 @@ void WebViewImpl::Show(const LocalFrameToken& opener_frame_token,
   DCHECK(local_main_frame_host_remote_);
   DCHECK(web_widget_);
   web_widget_->SetPendingWindowRect(adjusted_rect);
+  mojom::blink::WindowFeaturesPtr window_features =
+      mojom::blink::WindowFeatures::New();
+  window_features->bounds = requested_rect;
   local_main_frame_host_remote_->ShowCreatedWindow(
-      opener_frame_token, NavigationPolicyToDisposition(policy), requested_rect,
-      opened_by_user_gesture,
-      WTF::Bind(&WebViewImpl::DidShowCreatedWindow, WTF::Unretained(this)));
+      opener_frame_token, NavigationPolicyToDisposition(policy),
+      std::move(window_features), opened_by_user_gesture,
+      WTF::BindOnce(&WebViewImpl::DidShowCreatedWindow, WTF::Unretained(this)));
 
   MainFrameDevToolsAgentImpl()->DidShowNewWindow();
 }
@@ -2999,13 +3023,13 @@ void WebViewImpl::SendUpdatedTargetURLToBrowser(const KURL& target_url) {
   if (GetPage()->MainFrame()->IsLocalFrame()) {
     DCHECK(local_main_frame_host_remote_);
     local_main_frame_host_remote_->UpdateTargetURL(
-        target_url, WTF::Bind(&WebViewImpl::TargetURLUpdatedInBrowser,
-                              WTF::Unretained(this)));
+        target_url, WTF::BindOnce(&WebViewImpl::TargetURLUpdatedInBrowser,
+                                  WTF::Unretained(this)));
   } else {
     DCHECK(remote_main_frame_host_remote_);
     remote_main_frame_host_remote_->UpdateTargetURL(
-        target_url, WTF::Bind(&WebViewImpl::TargetURLUpdatedInBrowser,
-                              WTF::Unretained(this)));
+        target_url, WTF::BindOnce(&WebViewImpl::TargetURLUpdatedInBrowser,
+                                  WTF::Unretained(this)));
   }
 }
 
@@ -3794,14 +3818,14 @@ void WebViewImpl::SetVisibilityState(
     mojom::blink::PageVisibilityState visibility_state,
     bool is_initial_state) {
   DCHECK(GetPage());
-  if (!is_initial_state) {
-    // Preserve the side effects of visibility change.
-    for (auto& observer : observers_)
-      observer.OnPageVisibilityChanged(visibility_state);
-  }
   GetPage()->SetVisibilityState(visibility_state, is_initial_state);
   GetPage()->GetPageScheduler()->SetPageVisible(
       visibility_state == mojom::blink::PageVisibilityState::kVisible);
+  // Notify observers of the change.
+  if (!is_initial_state) {
+    for (auto& observer : observers_)
+      observer.OnPageVisibilityChanged(visibility_state);
+  }
 }
 
 mojom::blink::PageVisibilityState WebViewImpl::GetVisibilityState() {
@@ -3868,7 +3892,7 @@ void WebViewImpl::MojoDisconnected() {
   // process, and is used to release ownership of the corresponding
   // RenderViewImpl instance. https://crbug.com/1000035.
   GetPage()->GetAgentGroupScheduler().DefaultTaskRunner()->PostNonNestableTask(
-      FROM_HERE, WTF::Bind(&WebViewImpl::Close, WTF::Unretained(this)));
+      FROM_HERE, WTF::BindOnce(&WebViewImpl::Close, WTF::Unretained(this)));
 }
 
 void WebViewImpl::CreateRemoteMainFrame(

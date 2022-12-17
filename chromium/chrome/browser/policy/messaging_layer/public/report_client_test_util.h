@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,6 @@ class ReportingClient::TestEnvironment {
 
  private:
   ReportingClient::StorageModuleCreateCallback saved_storage_create_cb_;
-  std::unique_ptr<EncryptedReportingUploadProvider> saved_upload_provider_;
 };
 }  // namespace reporting
 

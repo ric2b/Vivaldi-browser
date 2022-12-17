@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,9 +30,6 @@
 #include "content/public/test/browser_test_base.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/prerender_test_util.h"
-
-// TODO(crbug.com/1215089): Enable this test suite on Lacros.
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 using content::WebContents;
 
@@ -416,7 +413,8 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // TODO(crbug.com/1217873): Test disabled on Mac due to multiple failing bots.
-#if BUILDFLAG(IS_MAC)
+// TODO(crbug.com/1287616, crbug.com/1362946): Flaky on Chrome OS and Windows.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN)
 #define MAYBE_HandleExposedIfCallingFrameAllowlistedEvenIfTopLevelNotAllowlisted \
   DISABLED_HandleExposedIfCallingFrameAllowlistedEvenIfTopLevelNotAllowlisted
 #else
@@ -833,5 +831,3 @@ IN_PROC_BROWSER_TEST_F(CaptureHandleBrowserTestPrerender,
   EXPECT_EQ(script_result, "capture-handle-set");
   EXPECT_EQ(capturing_tab.ReadCaptureHandle(), captured_tab.capture_handle);
 }
-
-#endif  //  !BUILDFLAG(IS_CHROMEOS_LACROS)

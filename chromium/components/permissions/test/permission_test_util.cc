@@ -1,11 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/permissions/test/permission_test_util.h"
 
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/permissions/contexts/window_placement_permission_context.h"
+#include "components/permissions/contexts/window_management_permission_context.h"
 #include "components/permissions/permission_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom.h"
@@ -22,9 +22,6 @@ class FakePermissionContext : public PermissionContextBase {
       : PermissionContextBase(browser_context,
                               content_settings_type,
                               permissions_policy_feature) {}
-
-  // PermissionContextBase:
-  bool IsRestrictedToSecureOrigins() const override { return true; }
 };
 
 class FakePermissionContextAlwaysAllow : public FakePermissionContext {
@@ -75,8 +72,8 @@ PermissionManager::PermissionContextMap CreatePermissionContexts(
           browser_context, ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
           blink::mojom::PermissionsPolicyFeature::kEncryptedMedia);
 #endif
-  permission_contexts[ContentSettingsType::WINDOW_PLACEMENT] =
-      std::make_unique<WindowPlacementPermissionContext>(browser_context);
+  permission_contexts[ContentSettingsType::WINDOW_MANAGEMENT] =
+      std::make_unique<WindowManagementPermissionContext>(browser_context);
   return permission_contexts;
 }
 

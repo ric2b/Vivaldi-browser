@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/navigation_predictor/search_engine_preconnector.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
@@ -44,6 +45,7 @@
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -173,17 +175,6 @@ FakeDeviceSyncImplFactory* GetFakeDeviceSyncImplFactory() {
   return factory.get();
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
-// An observer that returns back to test code after a new profile is
-// initialized.
-void UnblockOnProfileCreation(base::RunLoop* run_loop,
-                              Profile* profile,
-                              Profile::CreateStatus status) {
-  if (status == Profile::CREATE_STATUS_INITIALIZED)
-    run_loop->Quit();
-}
-#endif
 
 #if BUILDFLAG(IS_MAC)
 class ChromeBrowserMainExtraPartsBrowserProcessInjection
@@ -316,7 +307,7 @@ void InProcessBrowserTest::Initialize() {
   bundle_swizzler_ = std::make_unique<ScopedBundleSwizzlerMac>();
 #endif
 
-  std::vector<base::Feature> disabled_features;
+  std::vector<base::test::FeatureRef> disabled_features;
 
   // Preconnecting can cause non-deterministic test behavior especially with
   // various test fixtures that mock servers.
@@ -469,10 +460,10 @@ void InProcessBrowserTest::SetUp() {
   // What's New for tests that simulate first run, is unexpected by most tests.
   whats_new::DisableRemoteContentForTests();
 
-  // The Privacy Sandbox service may attempt to show a modal dialog to the
+  // The Privacy Sandbox service may attempt to show a modal prompt to the
   // profile on browser start, which is unexpected by mosts tests. Tests which
-  // expect this can allow the dialog as desired.
-  PrivacySandboxService::SetDialogDisabledForTests(true);
+  // expect this can allow the prompt as desired.
+  PrivacySandboxService::SetPromptDisabledForTests(true);
 
   BrowserTestBase::SetUp();
 }
@@ -678,16 +669,14 @@ Browser* InProcessBrowserTest::CreateGuestBrowser() {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   base::FilePath guest_path = profile_manager->GetGuestProfilePath();
 
-  base::RunLoop run_loop;
-  profile_manager->CreateProfileAsync(
-      guest_path, base::BindRepeating(&UnblockOnProfileCreation, &run_loop));
-  run_loop.Run();
-
-  Profile* profile = profile_manager->GetProfileByPath(guest_path)
-                         ->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  Profile* guest_profile =
+      profiles::testing::CreateProfileSync(profile_manager, guest_path);
+  Profile* guest_profile_otr =
+      guest_profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
 
   // Create browser and add tab.
-  Browser* browser = Browser::Create(Browser::CreateParams(profile, true));
+  Browser* browser =
+      Browser::Create(Browser::CreateParams(guest_profile_otr, true));
   AddBlankTabAndShow(browser);
   return browser;
 }

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "remoting/protocol/message_pipe.h"
 
 namespace google {
@@ -16,8 +17,7 @@ class MessageLite;
 }  // namespace protobuf
 }  // namespace google
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class FakeMessagePipe;
 
@@ -37,11 +37,13 @@ class FakeMessagePipeWrapper final : public MessagePipe {
   void OpenPipe();
   void ClosePipe();
 
+  base::WeakPtr<FakeMessagePipeWrapper> GetWeakPtr();
+
  private:
   const raw_ptr<FakeMessagePipe> pipe_;
+  base::WeakPtrFactory<FakeMessagePipeWrapper> weak_factory_{this};
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_FAKE_MESSAGE_PIPE_WRAPPER_H_

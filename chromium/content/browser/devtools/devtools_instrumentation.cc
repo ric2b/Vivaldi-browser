@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,8 +27,10 @@
 #include "content/browser/devtools/protocol/tracing_handler.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
+#include "content/browser/devtools/web_contents_devtools_agent_host.h"
 #include "content/browser/devtools/worker_devtools_agent_host.h"
 #include "content/browser/devtools/worker_devtools_manager.h"
+#include "content/browser/portal/portal.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -58,15 +60,22 @@ namespace devtools_instrumentation {
 namespace {
 
 template <typename Handler, typename... MethodArgs, typename... Args>
+void DispatchToAgents(DevToolsAgentHostImpl* host,
+                      void (Handler::*method)(MethodArgs...),
+                      Args&&... args) {
+  if (!host)
+    return;
+  for (auto* h : Handler::ForAgentHost(host))
+    (h->*method)(std::forward<Args>(args)...);
+}
+
+template <typename Handler, typename... MethodArgs, typename... Args>
 void DispatchToAgents(FrameTreeNode* frame_tree_node,
                       void (Handler::*method)(MethodArgs...),
                       Args&&... args) {
   DevToolsAgentHostImpl* agent_host =
       RenderFrameDevToolsAgentHost::GetFor(frame_tree_node);
-  if (!agent_host)
-    return;
-  for (auto* h : Handler::ForAgentHost(agent_host))
-    (h->*method)(std::forward<Args>(args)...);
+  DispatchToAgents(agent_host, method, std::forward<Args>(args)...);
 }
 
 template <typename Handler, typename... MethodArgs, typename... Args>
@@ -166,8 +175,8 @@ std::string FederatedAuthRequestResultToProtocol(
   namespace FederatedAuthRequestIssueReasonEnum =
       protocol::Audits::FederatedAuthRequestIssueReasonEnum;
   switch (result) {
-    case FederatedAuthRequestResult::kApprovalDeclined: {
-      return FederatedAuthRequestIssueReasonEnum::ApprovalDeclined;
+    case FederatedAuthRequestResult::kShouldEmbargo: {
+      return FederatedAuthRequestIssueReasonEnum::ShouldEmbargo;
     }
     case FederatedAuthRequestResult::kErrorDisabledInSettings: {
       return FederatedAuthRequestIssueReasonEnum::DisabledInSettings;
@@ -231,6 +240,8 @@ std::string FederatedAuthRequestResultToProtocol(
     case FederatedAuthRequestResult::kErrorCanceled: {
       return FederatedAuthRequestIssueReasonEnum::Canceled;
     }
+    case FederatedAuthRequestResult::kErrorRpPageNotVisible:
+      return FederatedAuthRequestIssueReasonEnum::RpPageNotVisible;
     case FederatedAuthRequestResult::kError: {
       return FederatedAuthRequestIssueReasonEnum::ErrorIdToken;
     }
@@ -264,6 +275,13 @@ BuildFederatedAuthRequestIssue(
                    .SetDetails(std::move(protocol_issue_details))
                    .Build();
   return issue;
+}
+
+void UpdateChildFrameTrees(FrameTreeNode* ftn, bool update_target_info) {
+  if (auto* agent_host = WebContentsDevToolsAgentHost::GetFor(
+          WebContentsImpl::FromFrameTreeNode(ftn))) {
+    agent_host->UpdateChildFrameTrees(update_target_info);
+  }
 }
 
 }  // namespace
@@ -307,20 +325,49 @@ void BackForwardCacheNotUsed(
                    nav_request, result, tree_result);
 }
 
+void WillSwapFrameTreeNode(FrameTreeNode& old_node, FrameTreeNode& new_node) {
+  auto* host = static_cast<RenderFrameDevToolsAgentHost*>(
+      RenderFrameDevToolsAgentHost::GetFor(&old_node));
+  if (!host || host->HasSessionsWithoutTabTargetSupport())
+    return;
+  // The new node may have a previous host associated, disconnect it first.
+  scoped_refptr<RenderFrameDevToolsAgentHost> previous_host =
+      static_cast<RenderFrameDevToolsAgentHost*>(
+          RenderFrameDevToolsAgentHost::GetFor(&new_node));
+  previous_host->SetFrameTreeNode(nullptr);
+  // TODO(dsv, caseq): revise this! We may rather have frame token per RFDTAH,
+  // which will remove the need for this hack.
+  new_node.set_devtools_frame_token(old_node.devtools_frame_token());
+  host->SetFrameTreeNode(&new_node);
+}
+
+void WillInitiatePrerender(FrameTree& frame_tree) {
+  DCHECK_EQ(FrameTree::Type::kPrerender, frame_tree.type());
+  auto* wc = WebContentsImpl::FromFrameTreeNode(frame_tree.root());
+  if (auto* host = WebContentsDevToolsAgentHost::GetFor(wc))
+    host->WillInitiatePrerender(frame_tree.root());
+}
+
 void DidActivatePrerender(const NavigationRequest& nav_request) {
   FrameTreeNode* ftn = nav_request.frame_tree_node();
+  WebContentsImpl* web_contents = WebContentsImpl::FromFrameTreeNode(ftn);
+  // Record prerender activation here because users don't necessarily open
+  // DevTools when the activation is triggered. If the DevTools is not opened at
+  // the moment, recording the activation here will still preserve the signal.
+  web_contents->set_last_navigation_was_prerender_activation_for_devtools();
   DispatchToAgents(ftn, &protocol::PageHandler::DidActivatePrerender,
                    nav_request);
+  UpdateChildFrameTrees(ftn, /* update_target_info= */ true);
 }
 
 void DidCancelPrerender(const GURL& prerendering_url,
                         FrameTreeNode* ftn,
                         PrerenderHost::FinalStatus status,
-                        const std::string& reason_details) {
+                        const std::string& disallowed_api_method) {
   std::string initiating_frame_id = ftn->devtools_frame_token().ToString();
   DispatchToAgents(ftn, &protocol::PageHandler::DidCancelPrerender,
                    prerendering_url, initiating_frame_id, status,
-                   reason_details);
+                   disallowed_api_method);
 }
 
 namespace {
@@ -544,20 +591,31 @@ std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
   FrameTreeNode* frame_tree_node =
       NavigationRequest::From(navigation_handle)->frame_tree_node();
   FrameTreeNode* parent = FrameTreeNode::From(frame_tree_node->parent());
+
+  std::vector<std::unique_ptr<NavigationThrottle>> result;
+
   if (!parent) {
     FrameTreeNode* outer_delegate_node =
         frame_tree_node->render_manager()->GetOuterDelegateNode();
     if (outer_delegate_node &&
         (WebContentsImpl::FromFrameTreeNode(frame_tree_node)->IsPortal() ||
          frame_tree_node->IsFencedFrameRoot())) {
-      parent = frame_tree_node->render_manager()
-                   ->GetOuterDelegateNode()
-                   ->parent()
-                   ->frame_tree_node();
+      parent = outer_delegate_node->parent()->frame_tree_node();
+    } else if (frame_tree_node->GetFrameType() ==
+                   FrameType::kPrerenderMainFrame &&
+               !frame_tree_node->current_frame_host()
+                    ->has_committed_any_navigation()) {
+      if (auto* agent_host = WebContentsDevToolsAgentHost::GetFor(
+              WebContentsImpl::FromFrameTreeNode(frame_tree_node))) {
+        // For prerender, perform auto-attach to tab target at the point of
+        // initial navigation.
+        agent_host->auto_attacher()->AppendNavigationThrottles(
+            navigation_handle, &result);
+        return result;
+      }
     }
   }
 
-  std::vector<std::unique_ptr<NavigationThrottle>> result;
   if (parent) {
     if (auto* agent_host = RenderFrameDevToolsAgentHost::GetFor(parent)) {
       agent_host->auto_attacher()->AppendNavigationThrottles(navigation_handle,
@@ -653,18 +711,16 @@ void ApplyNetworkRequestOverrides(
   bool disable_cache = false;
   DevToolsAgentHostImpl* agent_host =
       RenderFrameDevToolsAgentHost::GetFor(frame_tree_node);
-  // Prerendered pages do not have DevTools attached but it's important for
-  // developers that they get the UA override of the visible DevTools for
-  // testing mobile sites. Use the DevTools agent of the primary main frame of
-  // the WebContents.
-  // TODO(https://crbug.com/1221419): The real fix may be to make a separate
-  // target for the prerendered page.
+  // Prerendered pages will only have have DevTools attached if the client opted
+  // into supporting the tab target. For legacy clients, we will apply relevant
+  // network override from the associated main frame target.
   if (frame_tree_node->frame_tree()->is_prerendering()) {
-    DCHECK(!agent_host);
-    agent_host = RenderFrameDevToolsAgentHost::GetFor(
-        WebContentsImpl::FromFrameTreeNode(frame_tree_node)
-            ->GetPrimaryMainFrame()
-            ->frame_tree_node());
+    if (!agent_host) {
+      agent_host = RenderFrameDevToolsAgentHost::GetFor(
+          WebContentsImpl::FromFrameTreeNode(frame_tree_node)
+              ->GetPrimaryMainFrame()
+              ->frame_tree_node());
+    }
   }
   if (!agent_host)
     return;
@@ -1043,11 +1099,13 @@ bool HandleCertificateError(WebContents* web_contents,
 
 namespace {
 void UpdatePortals(RenderFrameHostImpl* render_frame_host_impl) {
-  auto* agent_host = static_cast<RenderFrameDevToolsAgentHost*>(
-      RenderFrameDevToolsAgentHost::GetFor(
-          render_frame_host_impl->frame_tree_node()));
-  if (agent_host)
+  if (auto* agent_host = static_cast<RenderFrameDevToolsAgentHost*>(
+          RenderFrameDevToolsAgentHost::GetFor(
+              render_frame_host_impl->frame_tree_node()))) {
     agent_host->UpdatePortals();
+  }
+  UpdateChildFrameTrees(render_frame_host_impl->frame_tree_node(),
+                        /* update_target_info= */ false);
 }
 }  // namespace
 
@@ -1059,8 +1117,12 @@ void PortalDetached(RenderFrameHostImpl* render_frame_host_impl) {
   UpdatePortals(render_frame_host_impl);
 }
 
-void PortalActivated(RenderFrameHostImpl* render_frame_host_impl) {
-  UpdatePortals(render_frame_host_impl);
+void PortalActivated(Portal& portal) {
+  WebContents* host_contents = portal.GetPortalHostContents();
+  UpdatePortals(reinterpret_cast<RenderFrameHostImpl*>(
+      host_contents->GetPrimaryMainFrame()));
+  if (auto* host = WebContentsDevToolsAgentHost::GetFor(host_contents))
+    host->PortalActivated(portal);
 }
 
 void FencedFrameCreated(
@@ -1412,6 +1474,30 @@ void OnServiceWorkerMainScriptFetchingFailed(
   }
 }
 
+namespace {
+
+// Only assign request id if there's an enabled agent host.
+void MaybeAssignResourceRequestId(DevToolsAgentHostImpl* host,
+                                  const std::string& id,
+                                  network::ResourceRequest& request) {
+  DCHECK(!request.devtools_request_id.has_value());
+  for (auto* network_handler : protocol::NetworkHandler::ForAgentHost(host)) {
+    if (network_handler->enabled()) {
+      request.devtools_request_id = id;
+      return;
+    }
+  }
+}
+
+}  // namespace
+
+void MaybeAssignResourceRequestId(FrameTreeNode* ftn,
+                                  const std::string& id,
+                                  network::ResourceRequest& request) {
+  if (auto* host = RenderFrameDevToolsAgentHost::GetFor(ftn))
+    MaybeAssignResourceRequestId(host, id, request);
+}
+
 void OnServiceWorkerMainScriptRequestWillBeSent(
     const GlobalRenderFrameHostId& requesting_frame_id,
     const ServiceWorkerContextWrapper* context_wrapper,
@@ -1437,11 +1523,12 @@ void OnServiceWorkerMainScriptRequestWillBeSent(
           ->GetDevToolsAgentHostForNewInstallingWorker(context_wrapper,
                                                        version_id);
   DCHECK(agent_host);
-  request.devtools_request_id = agent_host->devtools_worker_token().ToString();
+  const std::string request_id = agent_host->devtools_worker_token().ToString();
+  MaybeAssignResourceRequestId(agent_host, request_id, request);
   for (auto* network_handler :
        protocol::NetworkHandler::ForAgentHost(agent_host)) {
     network_handler->RequestSent(
-        request.devtools_request_id.value(),
+        request_id,
         /*loader_id=*/"", request.headers, *request_info,
         protocol::Network::Initiator::TypeEnum::Other,
         requesting_frame->GetLastCommittedURL(),
@@ -1479,12 +1566,17 @@ void OnWorkerMainScriptLoadingFinished(
 void OnWorkerMainScriptRequestWillBeSent(
     FrameTreeNode* ftn,
     const base::UnguessableToken& worker_token,
-    const network::ResourceRequest& request) {
+    network::ResourceRequest& request) {
   DCHECK(ftn);
 
   auto timestamp = base::TimeTicks::Now();
   network::mojom::URLRequestDevToolsInfoPtr request_info =
       network::ExtractDevToolsInfo(request);
+
+  auto* owner_host = RenderFrameDevToolsAgentHost::GetFor(ftn);
+  if (!owner_host)
+    return;
+  MaybeAssignResourceRequestId(owner_host, worker_token.ToString(), request);
   DispatchToAgents(
       ftn, &protocol::NetworkHandler::RequestSent, worker_token.ToString(),
       /*loader_id=*/"", request.headers, *request_info,

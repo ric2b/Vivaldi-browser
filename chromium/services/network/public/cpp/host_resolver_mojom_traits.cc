@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -205,10 +205,6 @@ DnsQueryType EnumTraits<DnsQueryType, net::DnsQueryType>::ToMojom(
       return DnsQueryType::SRV;
     case net::DnsQueryType::HTTPS:
       return DnsQueryType::HTTPS;
-    case net::DnsQueryType::INTEGRITY:
-    case net::DnsQueryType::HTTPS_EXPERIMENTAL:
-      NOTIMPLEMENTED();
-      return DnsQueryType::UNSPECIFIED;
   }
 }
 

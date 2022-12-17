@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,10 +6,10 @@ import 'chrome://os-settings/chromeos/os_settings.js';
 
 import {AndroidAppsBrowserProxyImpl, createBoolPermission, Router, routes, routesMojomWebui, setAppNotificationProviderForTesting} from 'chrome://os-settings/chromeos/os_settings.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {flushTasks, waitAfterNextRender} from 'chrome://test/test_util.js';
+import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {TestAndroidAppsBrowserProxy} from './test_android_apps_browser_proxy.js';
 
@@ -64,13 +64,13 @@ class FakeAppNotificationHandler {
 
     /**
      * @private
-     *     {?chromeos.settings.appNotification.mojom.
+     *     {?ash.settings.appNotification.mojom.
      *      AppNotificationObserverRemote}
      */
     this.appNotificationObserverRemote_;
 
     /**
-     * @private {!Array<!chromeos.settings.appNotification.mojom.App>}
+     * @private {!Array<!ash.settings.appNotification.mojom.App>}
      */
     this.apps_ = [];
 
@@ -124,7 +124,7 @@ class FakeAppNotificationHandler {
 
   /**
    * @return
-   *      {chromeos.settings.appNotification.mojom.
+   *      {ash.settings.appNotification.mojom.
    *        AppNotificationObserverRemote}
    */
   getObserverRemote() {
@@ -134,7 +134,7 @@ class FakeAppNotificationHandler {
   // appNotificationHandler methods
 
   /**
-   * @param {!chromeos.settings.appNotification.mojom.
+   * @param {!ash.settings.appNotification.mojom.
    *        AppNotificationObserverRemote}
    *      remote
    * @return {!Promise}
@@ -175,7 +175,7 @@ class FakeAppNotificationHandler {
   }
 
   /**
-   * @return {!Promise<!Array<!chromeos.settings.appNotification.mojom.App>>}
+   * @return {!Promise<!Array<!ash.settings.appNotification.mojom.App>>}
    */
   getApps() {
     return new Promise(resolve => {
@@ -188,7 +188,7 @@ class FakeAppNotificationHandler {
 suite('AppsPageTests', function() {
   /**
    * @type {
-   *    ?chromeos.settings.appNotification.mojom.AppNotificationHandlerRemote
+   *    ?ash.settings.appNotification.mojom.AppNotificationHandlerRemote
    *  }
    */
   let mojoApi_;
@@ -197,12 +197,12 @@ suite('AppsPageTests', function() {
    * @param {string} id
    * @param {string} title
    * @param {!appManagement.mojom.Permission} permission
-   * @param {?chromeos.settings.appNotification.mojom.Readiness} readiness
-   * @return {!chromeos.settings.appNotification.mojom.App}
+   * @param {?ash.settings.appNotification.mojom.Readiness} readiness
+   * @return {!ash.settings.appNotification.mojom.App}
    */
   function createApp(
       id, title, permission,
-      readiness = chromeos.settings.appNotification.mojom.Readiness.kReady) {
+      readiness = ash.settings.appNotification.mojom.Readiness.kReady) {
     return {
       id: id,
       title: title,
@@ -218,7 +218,7 @@ suite('AppsPageTests', function() {
     return mojoApi_.whenCalled('addObserver');
   }
 
-  /** @param {!Array<!chromeos.settings.appNotification.mojom.App>} */
+  /** @param {!Array<!ash.settings.appNotification.mojom.App>} */
   function simulateNotificationAppChanged(app) {
     mojoApi_.getObserverRemote().onNotificationAppChanged(app);
   }
@@ -315,7 +315,7 @@ suite('AppsPageTests', function() {
       // Simulate an uninstalled app.
       const app3 = createApp(
           '2', 'App2', permission2,
-          chromeos.settings.appNotification.mojom.Readiness.kUninstalledByUser);
+          ash.settings.appNotification.mojom.Readiness.kUninstalledByUser);
       simulateNotificationAppChanged(app3);
       await flushTasks();
       assertEquals('1 apps', rowLink.subLabel);

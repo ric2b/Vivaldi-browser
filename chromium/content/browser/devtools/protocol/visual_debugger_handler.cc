@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,7 +72,7 @@ void VisualDebuggerHandler::OnFrameResponse(base::Value json) {
   // above and thus should be in the correct thread.
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   frontend_->FrameResponse(
-      std::make_unique<base::Value::Dict>(std::move(json.GetDict())));
+      std::make_unique<base::Value::Dict>(std::move(json).TakeDict()));
 }
 
 DispatchResponse VisualDebuggerHandler::StopStream() {

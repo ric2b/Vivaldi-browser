@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,7 @@ class DeviceEventDispatcherEvdev;
 class FalseTouchFinder;
 struct InProgressTouchEvdev;
 
-COMPONENT_EXPORT(EVDEV) extern const base::Feature kEnableSingleCancelTouch;
+COMPONENT_EXPORT(EVDEV) BASE_DECLARE_FEATURE(kEnableSingleCancelTouch);
 
 class COMPONENT_EXPORT(EVDEV) TouchEventConverterEvdev
     : public EventConverterEvdev {

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,11 +6,13 @@
 
 #include <memory>
 #include <string>
+
 #include "base/base64url.h"
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/lru_cache.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -18,6 +20,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/tick_clock.h"
+#include "components/autofill_assistant/browser/fake_common_dependencies.h"
 #include "components/autofill_assistant/browser/fake_starter_platform_delegate.h"
 #include "components/autofill_assistant/browser/features.h"
 #include "components/autofill_assistant/browser/mock_assistant_field_trial_util.h"
@@ -31,6 +34,8 @@
 #include "components/autofill_assistant/browser/trigger_scripts/mock_trigger_script_ui_delegate.h"
 #include "components/autofill_assistant/browser/trigger_scripts/trigger_script_coordinator.h"
 #include "components/autofill_assistant/browser/ukm_test_util.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_task_environment.h"
@@ -67,22 +72,9 @@ const char kExampleDeeplink[] = "https://www.example.com";
 class StarterTest : public testing::Test {
  public:
   StarterTest() {
-    // Must be initialized before |starter_| is instantiated to take effect.
-    enable_fake_heuristic_ = std::make_unique<base::test::ScopedFeatureList>();
-    enable_fake_heuristic_->InitAndEnableFeatureWithParameters(
-        features::kAutofillAssistantUrlHeuristics, {{"json_parameters",
-                                                     R"(
-          {
-            "heuristics":[
-              {
-                "intent":"FAKE_INTENT_CART",
-                "conditionSet":{
-                  "urlContains":"cart"
-                }
-              }
-            ]
-          }
-          )"}});
+    // Needs to be set to enable launched configs that are geo-gated by country.
+    fake_platform_delegate_.fake_common_dependencies_->permanent_country_code_ =
+        "us";
   }
 
   void SetUp() override {
@@ -256,7 +248,14 @@ class StarterTest : public testing::Test {
   NiceMock<MockWebsiteLoginManager> mock_website_login_manager_;
   // Only set while a trigger script is running.
   raw_ptr<TriggerScriptCoordinator> trigger_script_coordinator_ = nullptr;
-  FakeStarterPlatformDelegate fake_platform_delegate_;
+
+  signin::IdentityTestEnvironment identity_test_environment;
+  signin::IdentityManager* identity_manager_ =
+      identity_test_environment.identity_manager();
+  FakeStarterPlatformDelegate fake_platform_delegate_ =
+      FakeStarterPlatformDelegate(
+          std::make_unique<FakeCommonDependencies>(identity_manager_));
+
   ukm::TestAutoSetUkmRecorder ukm_recorder_;
   MockRuntimeManager mock_runtime_manager_;
   std::unique_ptr<Starter> starter_;
@@ -266,7 +265,6 @@ class StarterTest : public testing::Test {
       std::unique_ptr<TriggerContext> trigger_context,
       const absl::optional<TriggerScriptProto>& trigger_script)>>
       mock_start_regular_script_callback_;
-  std::unique_ptr<base::test::ScopedFeatureList> enable_fake_heuristic_;
   std::vector<ukm::SourceId> navigation_ids_;
 };
 
@@ -590,7 +588,7 @@ TEST_F(StarterTest, RegularStartupFailsIfOnboardingRejected) {
 
 TEST_F(StarterTest, RpcTriggerScriptFailsIfMsbbIsDisabled) {
   SetupPlatformDelegateForReturningUser();
-  fake_platform_delegate_.fake_common_dependencies_.msbb_enabled_ = false;
+  fake_platform_delegate_.fake_common_dependencies_->msbb_enabled_ = false;
   base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
@@ -967,10 +965,7 @@ TEST_F(StarterTest, RegularStartupIgnoresLastCommittedUrl) {
 
 TEST_F(StarterTest, ImplicitStartupOnSupportedDomainWithoutLogin) {
   SetupPlatformDelegateForReturningUser();
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
-  fake_platform_delegate_.fake_common_dependencies_.msbb_enabled_ = true;
+  fake_platform_delegate_.fake_common_dependencies_->msbb_enabled_ = true;
   fake_platform_delegate_.proactive_help_enabled_ = true;
   fake_platform_delegate_.is_logged_in_ = false;
   fake_platform_delegate_.is_web_layer_ = false;
@@ -1045,9 +1040,6 @@ TEST_F(StarterTest, ImplicitStartupOnSupportedDomainWithoutLogin) {
 
 TEST_F(StarterTest, DoNotStartImplicitlyIfSettingDisabled) {
   SetupPlatformDelegateForReturningUser();
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   fake_platform_delegate_.proactive_help_enabled_ = false;
   starter_->Init();
 
@@ -1061,9 +1053,6 @@ TEST_F(StarterTest, DoNotStartImplicitlyIfSettingDisabled) {
 TEST_F(StarterTest, DoNotStartImplicitlyForNonAgaCct) {
   SetupPlatformDelegateForReturningUser();
   fake_platform_delegate_.is_tab_created_by_gsa_ = false;
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
 
   EXPECT_CALL(*mock_trigger_script_service_request_sender_, OnSendRequest)
@@ -1073,14 +1062,9 @@ TEST_F(StarterTest, DoNotStartImplicitlyForNonAgaCct) {
   EXPECT_THAT(GetUkmInChromeTriggering(ukm_recorder_), IsEmpty());
 }
 
-TEST_F(StarterTest, DoNotStartImplicitlyIfNotLoggedInForWebLayer) {
+TEST_F(StarterTest, DoNotStartImplicitlyForWebLayer) {
   SetupPlatformDelegateForReturningUser();
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
-  fake_platform_delegate_.fake_common_dependencies_.msbb_enabled_ = true;
-  fake_platform_delegate_.proactive_help_enabled_ = true;
-  fake_platform_delegate_.is_logged_in_ = false;
+  fake_platform_delegate_.is_custom_tab_ = false;
   fake_platform_delegate_.is_web_layer_ = true;
   starter_->Init();
 
@@ -1089,48 +1073,11 @@ TEST_F(StarterTest, DoNotStartImplicitlyIfNotLoggedInForWebLayer) {
   SimulateNavigateToUrl(GURL("https://www.some-website.com/cart"));
   task_environment()->RunUntilIdle();
   EXPECT_THAT(GetUkmInChromeTriggering(ukm_recorder_), IsEmpty());
-}
-
-TEST_F(StarterTest, ImplicitStartupOnSupportedDomainWithLoginForWebLayer) {
-  SetupPlatformDelegateForReturningUser();
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
-  fake_platform_delegate_.fake_common_dependencies_.msbb_enabled_ = true;
-  fake_platform_delegate_.proactive_help_enabled_ = true;
-  fake_platform_delegate_.is_logged_in_ = true;
-  fake_platform_delegate_.is_web_layer_ = true;
-  starter_->Init();
-
-  EXPECT_CALL(
-      *mock_trigger_script_service_request_sender_,
-      OnSendRequest(GURL("https://automate-pa.googleapis.com/v1/triggers"), _,
-                    _, RpcType::GET_TRIGGER_SCRIPTS))
-      .WillOnce(RunOnceCallback<2>(
-          net::HTTP_OK,
-          CreateTriggerScriptResponseForTest(
-              TriggerScriptProto::SHOPPING_CART_RETURNING_USER),
-          ServiceRequestSender::ResponseInfo{}));
-  EXPECT_CALL(*mock_trigger_script_ui_delegate_, ShowTriggerScript)
-      .WillOnce([&]() {
-        ASSERT_TRUE(trigger_script_coordinator_ != nullptr);
-        trigger_script_coordinator_->PerformTriggerScriptAction(
-            TriggerScriptProto::ACCEPT);
-      });
-  EXPECT_CALL(mock_start_regular_script_callback_,
-              Run(GURL("https://www.some-website.com/cart"), _, _));
-
-  // Implicit startup by navigating to an autofill-assistant-enabled site.
-  SimulateNavigateToUrl(GURL("https://www.some-website.com/cart"));
-  task_environment()->RunUntilIdle();
 }
 
 TEST_F(StarterTest, ImplicitStartupOnCurrentUrlAfterSettingEnabled) {
   SetupPlatformDelegateForReturningUser();
   fake_platform_delegate_.proactive_help_enabled_ = false;
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
 
   EXPECT_CALL(*mock_trigger_script_service_request_sender_, OnSendRequest)
@@ -1171,7 +1118,6 @@ TEST_F(StarterTest, ImplicitStartupOnCurrentUrlAfterSettingEnabled) {
 
 TEST_F(StarterTest, StartTriggerScriptBeforeRedirectRecordsUkmForTargetUrl) {
   SetupPlatformDelegateForReturningUser();
-  fake_platform_delegate_.feature_module_installed_ = true;
 
   base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
@@ -1304,7 +1250,6 @@ TEST_F(StarterTest, StartTriggerScriptDuringRedirectRecordsUkmForTargetUrl) {
 
 TEST_F(StarterTest, RegularStartupDoesNotWaitForNavigationToFinish) {
   SetupPlatformDelegateForReturningUser();
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
   base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
@@ -1344,9 +1289,6 @@ TEST_F(StarterTest, RegularStartupDoesNotWaitForNavigationToFinish) {
 TEST_F(StarterTest, DoNotStartImplicitlyIfAlreadyRunning) {
   SetupPlatformDelegateForReturningUser();
   fake_platform_delegate_.is_regular_script_running_ = true;
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
   base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
@@ -1371,9 +1313,6 @@ TEST_F(StarterTest, DoNotStartImplicitlyIfAlreadyRunning) {
 
 TEST_F(StarterTest, FailedTriggerScriptFetchesForImplicitStartupAreCached) {
   SetupPlatformDelegateForReturningUser();
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
 
   EXPECT_CALL(
@@ -1430,9 +1369,6 @@ TEST_F(StarterTest, FailedTriggerScriptFetchesForImplicitStartupAreCached) {
 TEST_F(StarterTest,
        CancelingTriggerScriptsDenylistsTheDomainForImplicitStartup) {
   SetupPlatformDelegateForReturningUser();
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
 
   EXPECT_CALL(
@@ -1493,9 +1429,6 @@ TEST_F(StarterTest,
 
 TEST_F(StarterTest, EmptyTriggerScriptFetchesForImplicitStartupAreCached) {
   SetupPlatformDelegateForReturningUser();
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
 
   EXPECT_CALL(
@@ -1587,9 +1520,6 @@ TEST_F(StarterTest, FailedExplicitTriggerFetchesAreCached) {
 }
 
 TEST_F(StarterTest, FailedImplicitTriggerFetchesAreCached) {
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
 
   std::vector<std::string> implicit_unsupported_sites = {
@@ -1624,9 +1554,6 @@ TEST_F(StarterTest, FailedImplicitTriggerFetchesAreCached) {
 }
 
 TEST_F(StarterTest, FailedTriggerFetchesCacheEntriesExpire) {
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
 
   GetFailedTriggerFetchesCacheForTest()->Put(
@@ -1652,9 +1579,6 @@ TEST_F(StarterTest, FailedTriggerFetchesCacheEntriesExpire) {
 }
 
 TEST_F(StarterTest, UserDenylistedCacheUpdateAndExpire) {
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
 
   EXPECT_CALL(*mock_trigger_script_service_request_sender_, OnSendRequest)
@@ -1702,9 +1626,6 @@ TEST_F(StarterTest, UserDenylistedCacheUpdateAndExpire) {
 }
 
 TEST_F(StarterTest, RemoveEntryFromCacheOnSuccessForExplicitRequest) {
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
   GetFailedTriggerFetchesCacheForTest()->Put(
       "example.com", task_environment()->GetMockTickClock()->NowTicks());
@@ -1737,22 +1658,6 @@ TEST_F(StarterTest, RemoveEntryFromCacheOnSuccessForExplicitRequest) {
 TEST_F(StarterTest, ImplicitInCctTriggeringSmokeTest) {
   SetupPlatformDelegateForReturningUser();
   fake_platform_delegate_.is_custom_tab_ = true;
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
-  starter_->Init();
-
-  EXPECT_CALL(*mock_trigger_script_service_request_sender_, OnSendRequest);
-  SimulateNavigateToUrl(GURL("https://www.example.com/cart"));
-  task_environment()->RunUntilIdle();
-}
-
-TEST_F(StarterTest, ImplicitInTabTriggeringSmokeTest) {
-  SetupPlatformDelegateForReturningUser();
-  fake_platform_delegate_.is_custom_tab_ = false;
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInTabTriggering);
   starter_->Init();
 
   EXPECT_CALL(*mock_trigger_script_service_request_sender_, OnSendRequest);
@@ -1763,23 +1668,6 @@ TEST_F(StarterTest, ImplicitInTabTriggeringSmokeTest) {
 TEST_F(StarterTest, ImplicitInCctTriggeringDoesNotTriggerInTab) {
   SetupPlatformDelegateForReturningUser();
   fake_platform_delegate_.is_custom_tab_ = false;
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
-  starter_->Init();
-
-  EXPECT_CALL(*mock_trigger_script_service_request_sender_, OnSendRequest)
-      .Times(0);
-  SimulateNavigateToUrl(GURL("https://www.example.com/cart"));
-  task_environment()->RunUntilIdle();
-}
-
-TEST_F(StarterTest, ImplicitInTabTriggeringDoesNotTriggerInCct) {
-  SetupPlatformDelegateForReturningUser();
-  fake_platform_delegate_.is_custom_tab_ = true;
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInTabTriggering);
   starter_->Init();
 
   EXPECT_CALL(*mock_trigger_script_service_request_sender_, OnSendRequest)
@@ -1830,8 +1718,12 @@ TEST(MultipleStarterTest, HeuristicUsedByMultipleInstances) {
   content::RenderViewHostTestEnabler rvh_test_enabler;
   content::TestBrowserContext browser_context;
   ukm::TestAutoSetUkmRecorder ukm_recorder;
-  FakeStarterPlatformDelegate fake_platform_delegate_01;
-  FakeStarterPlatformDelegate fake_platform_delegate_02;
+  FakeStarterPlatformDelegate fake_platform_delegate_01 =
+      FakeStarterPlatformDelegate(std::make_unique<FakeCommonDependencies>(
+          /*identity_manager=*/nullptr));
+  FakeStarterPlatformDelegate fake_platform_delegate_02 =
+      FakeStarterPlatformDelegate(std::make_unique<FakeCommonDependencies>(
+          /*identity_manager=*/nullptr));
   MockRuntimeManager mock_runtime_manager;
 
   auto web_contents_01 = content::WebContentsTester::CreateTestWebContents(
@@ -1841,25 +1733,11 @@ TEST(MultipleStarterTest, HeuristicUsedByMultipleInstances) {
       &browser_context, nullptr);
   ukm::InitializeSourceUrlRecorderForWebContents(web_contents_02.get());
 
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
-  auto enable_fake_heuristic =
-      std::make_unique<base::test::ScopedFeatureList>();
-  enable_fake_heuristic->InitAndEnableFeatureWithParameters(
-      features::kAutofillAssistantUrlHeuristics, {{"json_parameters",
-                                                   R"(
-          {
-            "heuristics":[
-              {
-                "intent":"FAKE_INTENT_CART",
-                "conditionSet":{
-                  "urlContains":"cart"
-                }
-              }
-            ]
-          }
-          )"}});
+  fake_platform_delegate_01.fake_common_dependencies_->permanent_country_code_ =
+      "us";
+  fake_platform_delegate_02.fake_common_dependencies_->permanent_country_code_ =
+      "us";
+
   Starter starter_01(web_contents_01.get(),
                      fake_platform_delegate_01.GetWeakPtr(), &ukm_recorder,
                      mock_runtime_manager.GetWeakPtr(),
@@ -1892,9 +1770,6 @@ TEST(MultipleStarterTest, HeuristicUsedByMultipleInstances) {
 }
 
 TEST_F(StarterTest, StaleCacheEntriesAreRemovedOnInsertingNewEntries) {
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   starter_->Init();
   base::TimeTicks t0 = task_environment()->GetMockTickClock()->NowTicks();
   GetFailedTriggerFetchesCacheForTest()->Put("failed-t0.com", t0);
@@ -1953,9 +1828,6 @@ TEST_F(StarterTest, StaleCacheEntriesAreRemovedOnInsertingNewEntries) {
 }
 
 TEST_F(StarterTest, CommandLineScriptParametersAreAddedToImplicitTriggers) {
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
   ImplicitTriggeringDebugParametersProto proto;
   auto* param = proto.add_additional_script_parameters();
   param->set_name("DEBUG_SOCKET_ID");
@@ -2013,44 +1885,23 @@ TEST_F(StarterTest, CommandLineScriptParametersAreAddedToImplicitTriggers) {
   task_environment()->RunUntilIdle();
 }
 
-TEST(MultipleIntentStarterTest, ImplicitTriggeringSendsFirstLegacyIntent) {
+TEST(MultipleIntentStarterTest, ImplicitTriggeringForShoppingAndCoupons) {
   content::BrowserTaskEnvironment task_environment(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
   content::RenderViewHostTestEnabler rvh_test_enabler;
   content::TestBrowserContext browser_context;
   ukm::TestAutoSetUkmRecorder ukm_recorder;
-  FakeStarterPlatformDelegate fake_platform_delegate;
+  FakeStarterPlatformDelegate fake_platform_delegate =
+      FakeStarterPlatformDelegate(std::make_unique<FakeCommonDependencies>(
+          /*identity_manager=*/nullptr));
+  fake_platform_delegate.fake_common_dependencies_->permanent_country_code_ =
+      "us";
   MockRuntimeManager mock_runtime_manager;
 
   auto web_contents = content::WebContentsTester::CreateTestWebContents(
       &browser_context, nullptr);
   ukm::InitializeSourceUrlRecorderForWebContents(web_contents.get());
 
-  auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  scoped_feature_list->InitAndEnableFeature(
-      features::kAutofillAssistantInCCTTriggering);
-  auto enable_fake_heuristic =
-      std::make_unique<base::test::ScopedFeatureList>();
-  enable_fake_heuristic->InitAndEnableFeatureWithParameters(
-      features::kAutofillAssistantUrlHeuristics, {{"json_parameters",
-                                                   R"(
-          {
-            "heuristics":[
-              {
-                "intent":"FAKE_INTENT_A",
-                "conditionSet":{
-                  "urlContains":"intent_a"
-                }
-              },
-              {
-                "intent":"FAKE_INTENT_B",
-                "conditionSet":{
-                  "urlContains":"intent_b"
-                }
-              }
-            ]
-          }
-          )"}});
   Starter starter(web_contents.get(), fake_platform_delegate.GetWeakPtr(),
                   &ukm_recorder, mock_runtime_manager.GetWeakPtr(),
                   task_environment.GetMockTickClock());
@@ -2068,22 +1919,21 @@ TEST(MultipleIntentStarterTest, ImplicitTriggeringSendsFirstLegacyIntent) {
       .WillOnce(WithArg<1>([&](const std::string& request_body) {
         GetTriggerScriptsRequestProto request;
         ASSERT_TRUE(request.ParseFromString(request_body));
-        EXPECT_THAT(request.url(),
-                    Eq(GURL("https://example.com/intent_a/intent_b")));
+        EXPECT_THAT(request.url(), Eq(GURL("https://example.com/cart")));
         EXPECT_TRUE(request.client_context().is_in_chrome_triggered());
-        const auto& actual_intent_param = std::find_if(
-            request.script_parameters().begin(),
-            request.script_parameters().end(),
-            [&](const auto& param) { return param.name() == "INTENT"; });
+        const auto actual_intent_param = base::ranges::find(
+            request.script_parameters(), "INTENT", &ScriptParameterProto::name);
         ASSERT_THAT(actual_intent_param, Ne(request.script_parameters().end()));
         auto actual_intents =
             base::SplitString(actual_intent_param->value(), ",",
                               base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
-        EXPECT_THAT(actual_intents, UnorderedElementsAre("FAKE_INTENT_A"));
+        EXPECT_THAT(
+            actual_intents,
+            UnorderedElementsAre("SHOPPING_ASSISTED_CHECKOUT", "FIND_COUPONS"));
       }));
 
   content::WebContentsTester::For(web_contents.get())
-      ->NavigateAndCommit(GURL("https://example.com/intent_a/intent_b"));
+      ->NavigateAndCommit(GURL("https://example.com/cart"));
   task_environment.RunUntilIdle();
 }
 
@@ -2250,12 +2100,17 @@ TEST_F(StarterTest, CanStartSucceeds) {
       {"ORIGINAL_DEEPLINK", kExampleDeeplink}};
   TriggerContext::Options options;
   options.initial_url = "https://redirect.com/to/www/example/com";
-  base::MockCallback<
-      base::OnceCallback<void(bool success, absl::optional<GURL> url,
-                              std::unique_ptr<TriggerContext> trigger_context)>>
+  base::MockCallback<base::OnceCallback<void(
+      bool success, const OnboardingState& onboarding_state,
+      absl::optional<GURL> url,
+      std::unique_ptr<TriggerContext> trigger_context)>>
       mock_preconditions_checked_callback;
   EXPECT_CALL(mock_preconditions_checked_callback,
-              Run(true, Optional(GURL(kExampleDeeplink)), _));
+              Run(/*success=*/true,
+                  OnboardingState{
+                      /*onboarding_shown=*/false, /*onboarding_skipped=*/false,
+                      /*onboarding_result=*/OnboardingResult::ACCEPTED},
+                  Optional(GURL(kExampleDeeplink)), _));
 
   starter_->CanStart(
       std::make_unique<TriggerContext>(
@@ -2295,12 +2150,17 @@ TEST_F(StarterTest, FirstTimeUserNotShowOnboardingIfHandledExternally) {
   options.initial_url = "https://redirect.com/to/www/example/com";
   options.is_externally_triggered = true;
   options.skip_autofill_assistant_onboarding = true;
-  base::MockCallback<
-      base::OnceCallback<void(bool success, absl::optional<GURL> url,
-                              std::unique_ptr<TriggerContext> trigger_context)>>
+  base::MockCallback<base::OnceCallback<void(
+      bool success, const OnboardingState& onboarding_state,
+      absl::optional<GURL> url,
+      std::unique_ptr<TriggerContext> trigger_context)>>
       mock_preconditions_checked_callback;
   EXPECT_CALL(mock_preconditions_checked_callback,
-              Run(true, Optional(GURL(kExampleDeeplink)), _));
+              Run(/*success=*/true,
+                  OnboardingState{/*onboarding_shown=*/false,
+                                  /*onboarding_skipped=*/true,
+                                  /*onboarding_result=*/absl::nullopt},
+                  Optional(GURL(kExampleDeeplink)), _));
 
   starter_->CanStart(
       std::make_unique<TriggerContext>(
@@ -2335,12 +2195,17 @@ TEST_F(StarterTest,
   options.initial_url = "https://redirect.com/to/www/example/com";
   options.is_externally_triggered = true;
   options.skip_autofill_assistant_onboarding = false;
-  base::MockCallback<
-      base::OnceCallback<void(bool success, absl::optional<GURL> url,
-                              std::unique_ptr<TriggerContext> trigger_context)>>
+  base::MockCallback<base::OnceCallback<void(
+      bool success, const OnboardingState& onboarding_state,
+      absl::optional<GURL> url,
+      std::unique_ptr<TriggerContext> trigger_context)>>
       mock_preconditions_checked_callback;
   EXPECT_CALL(mock_preconditions_checked_callback,
-              Run(true, Optional(GURL(kExampleDeeplink)), _));
+              Run(/*success=*/true,
+                  OnboardingState{
+                      /*onboarding_shown=*/true, /*onboarding_skipped=*/false,
+                      /*onboarding_result=*/OnboardingResult::ACCEPTED},
+                  Optional(GURL(kExampleDeeplink)), _));
 
   starter_->CanStart(
       std::make_unique<TriggerContext>(

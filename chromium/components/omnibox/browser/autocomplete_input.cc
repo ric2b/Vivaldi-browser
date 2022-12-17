@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -303,7 +303,9 @@ metrics::OmniboxInputType AutocompleteInput::Parse(
 
   // Treat javascript: scheme queries followed by things that are unlikely to
   // be code as UNKNOWN, rather than script to execute (URL).
-  if (RE2::FullMatch(base::UTF16ToUTF8(text), "(?i)javascript:([^;=().\"]*)")) {
+  if (base::EqualsCaseInsensitiveASCII(parsed_scheme_utf8,
+                                       url::kJavaScriptScheme) &&
+      RE2::FullMatch(base::UTF16ToUTF8(text), "(?i)javascript:([^;=().\"]*)")) {
     return metrics::OmniboxInputType::UNKNOWN;
   }
 
@@ -753,7 +755,7 @@ void AutocompleteInput::Clear() {
   prefer_keyword_ = false;
   allow_exact_keyword_match_ = false;
   omit_asynchronous_matches_ = false;
-  focus_type_ = OmniboxFocusType::DEFAULT;
+  focus_type_ = metrics::OmniboxFocusType::INTERACTION_DEFAULT;
   terms_prefixed_by_http_or_https_.clear();
   query_tile_id_.reset();
   https_port_for_testing_ = 0;

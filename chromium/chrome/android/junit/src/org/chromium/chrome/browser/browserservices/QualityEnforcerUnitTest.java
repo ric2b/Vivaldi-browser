@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -269,7 +269,7 @@ public class QualityEnforcerUnitTest {
                 false /* isValidSearchFormUrl */, 0 /* pageTransition */, errorCode, httpStatusCode,
                 false /* isExternalProtocol */);
         for (CustomTabTabObserver tabObserver : mTabObserverCaptor.getAllValues()) {
-            tabObserver.onDidFinishNavigation(mTab, navigation);
+            tabObserver.onDidFinishNavigationInPrimaryMainFrame(mTab, navigation);
         }
     }
 

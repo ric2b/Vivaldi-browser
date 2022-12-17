@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,9 @@ export class ChromeVoxState {
       ChromeVoxState.observers.splice(index, 1);
     }
   }
+
+  /** Can be overridden to initialize values and state when first created. */
+  init() {}
 
   /** @return {CursorRange} */
   get currentRange() {
@@ -87,11 +90,6 @@ export class ChromeVoxState {
    * @param {boolean=} opt_fromEditing
    */
   setCurrentRange(newRange, opt_fromEditing) {}
-
-  /**
-   * @param {TtsBackground} newBackgroundTts
-   */
-  set backgroundTts(newBackgroundTts) {}
 
   /**
    * @param {boolean} newValue

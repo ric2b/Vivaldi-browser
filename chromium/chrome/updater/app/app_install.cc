@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -66,8 +67,6 @@ class AppInstallControllerImpl : public AppInstallController {
 
   void InstallAppOffline(const std::string& app_id,
                          const std::string& app_name,
-                         const base::FilePath& offline_dir,
-                         bool enterprise,
                          base::OnceCallback<void(int)> callback) override {
     base::SequencedTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), 0));
@@ -79,7 +78,7 @@ class AppInstallControllerImpl : public AppInstallController {
 
 }  // namespace
 
-scoped_refptr<App> MakeAppInstall() {
+scoped_refptr<App> MakeAppInstall(bool /*is_silent_install*/) {
   return base::MakeRefCounted<AppInstall>(
       base::BindRepeating(
           [](const std::string& /*app_name*/) -> std::unique_ptr<SplashScreen> {
@@ -115,7 +114,8 @@ void AppInstall::FirstTaskRun() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(base::ThreadTaskRunnerHandle::IsSet());
 
-  const TagParsingResult tag_parsing_result = GetTagArgs();
+  const TagParsingResult tag_parsing_result =
+      GetTagArgsForCommandLine(GetCommandLineLegacyCompatible());
 
   // A tag parsing error is handled as an fatal error.
   if (tag_parsing_result.error != tagging::ErrorCode::kSuccess) {
@@ -222,7 +222,7 @@ void AppInstall::WakeCandidateDone() {
 }
 #endif  // BUILDFLAG(IS_LINUX)
 
-void AppInstall::RegisterUpdater() {
+void AppInstall::FetchPolicies() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
 #if BUILDFLAG(IS_MAC)
@@ -232,25 +232,37 @@ void AppInstall::RegisterUpdater() {
       updater_scope(), external_constants_->OverinstallTimeout());
 #endif
 
+  update_service_->FetchPolicies(base::BindOnce(
+      [](scoped_refptr<AppInstall> app_install, int result) {
+        if (result != kErrorOk) {
+          LOG(ERROR) << "FetchPolicies failed: " << result;
+          app_install->Shutdown(result);
+          return;
+        }
+
+        app_install->RegisterUpdater();
+      },
+      base::WrapRefCounted(this)));
+}
+
+void AppInstall::RegisterUpdater() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   RegistrationRequest request;
   request.app_id = kUpdaterAppId;
   request.version = base::Version(kUpdaterVersion);
   update_service_->RegisterApp(
-      request,
-      base::BindOnce(
-          [](scoped_refptr<AppInstall> app_install,
-             const RegistrationResponse& registration_response) {
-            if (registration_response.status_code != kRegistrationSuccess &&
-                registration_response.status_code !=
-                    kRegistrationAlreadyRegistered) {
-              VLOG(2) << "Updater registration failed: "
-                      << registration_response.status_code;
-              app_install->Shutdown(kErrorRegistrationFailed);
-              return;
-            }
-            app_install->MaybeInstallApp();
-          },
-          base::WrapRefCounted(this)));
+      request, base::BindOnce(
+                   [](scoped_refptr<AppInstall> app_install, int result) {
+                     if (result != kRegistrationSuccess &&
+                         result != kRegistrationAlreadyRegistered) {
+                       VLOG(2) << "Updater registration failed: " << result;
+                       app_install->Shutdown(kErrorRegistrationFailed);
+                       return;
+                     }
+                     app_install->MaybeInstallApp();
+                   },
+                   base::WrapRefCounted(this)));
 }
 
 void AppInstall::MaybeInstallApp() {
@@ -264,11 +276,11 @@ void AppInstall::MaybeInstallApp() {
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   if (cmd_line->HasSwitch(kOfflineDirSwitch)) {
     // Presence of "offlinedir" in command line indicates this is an offline
-    // install.
+    // install. Note the check here is compatible with legacy command line
+    // because `base::CommandLine::HasSwitch()` recognizes switches that
+    // begin with '/' on Windows.
     app_install_controller_->InstallAppOffline(
-        app_id_, app_name_, cmd_line->GetSwitchValuePath(kOfflineDirSwitch),
-        cmd_line->HasSwitch(kEnterpriseSwitch),
-        base::BindOnce(&AppInstall::Shutdown, this));
+        app_id_, app_name_, base::BindOnce(&AppInstall::Shutdown, this));
 
   } else {
     app_install_controller_->InstallApp(

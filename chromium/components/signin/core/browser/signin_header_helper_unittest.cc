@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -239,6 +239,16 @@ TEST_F(SigninHeaderHelperTest, TestNoMirrorRequestNoAccountId) {
   CheckMirrorCookieRequest(GURL("https://docs.google.com"), /*gaia_id=*/"", "");
 }
 #endif
+
+// Tests that no Mirror request is returned for youtubekids.com.
+//
+// Regression test for b/247647476
+TEST_F(SigninHeaderHelperTest, TestNoMirrorHeaderForYoutubekids) {
+  account_consistency_ = AccountConsistencyMethod::kMirror;
+  CheckMirrorHeaderRequest(GURL("https://youtubekids.com"), "0123456789",
+                           /*is_child_account=*/Tribool::kUnknown, "");
+  CheckMirrorCookieRequest(GURL("https://youtubekids.com"), "0123456789", "");
+}
 
 // Tests that no Mirror request is returned when the cookies aren't allowed to
 // be set.

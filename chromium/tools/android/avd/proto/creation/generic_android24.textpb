@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -28,6 +28,11 @@ avd_settings {
     density: 480
     height: 1920
     width: 1080
+  }
+  # crbug.com/1110997: Disable GLDMA for android-24
+  advanced_features {
+    key: "GLDMA"
+    value: "off"
   }
   advanced_features {
     key: "GLESDynamicVersion"

@@ -1,16 +1,16 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "pdf/file_extension.h"
 
-#include <algorithm>
 #include <array>
 #include <iterator>
 #include <string>
 
 #include "base/check_op.h"
 #include "base/files/file_path.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -74,8 +74,7 @@ enum ExtensionIndex FileNameToExtensionIndex(const std::u16string& file_name) {
   const std::string& extension = extension_str_lower;
 #endif
 
-  auto* const* it =
-      std::find(kFileExtensions.begin(), kFileExtensions.end(), extension);
+  auto* const* it = base::ranges::find(kFileExtensions, extension);
   if (it == kFileExtensions.end())
     return ExtensionIndex::kOtherExt;
 

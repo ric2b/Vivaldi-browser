@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -119,7 +119,7 @@ CookiesTreeModelUtil::GetCookieTreeNodeDictionary(const CookieTreeNode& node) {
       const content::StorageUsageInfo& usage_info =
           *node.GetDetailedInfo().usage_info;
 
-      dict.Set(kKeyOrigin, usage_info.origin.Serialize());
+      dict.Set(kKeyOrigin, usage_info.storage_key.origin().Serialize());
       dict.Set(kKeySize, ui::FormatBytes(usage_info.total_size_bytes));
       dict.Set(kKeyModified,
                base::TimeFormatFriendlyDateAndTime(usage_info.last_modified));
@@ -131,7 +131,7 @@ CookiesTreeModelUtil::GetCookieTreeNodeDictionary(const CookieTreeNode& node) {
       const content::StorageUsageInfo& local_storage_info =
           *node.GetDetailedInfo().usage_info;
 
-      dict.Set(kKeyOrigin, local_storage_info.origin.Serialize());
+      dict.Set(kKeyOrigin, local_storage_info.storage_key.origin().Serialize());
       dict.Set(kKeySize, ui::FormatBytes(local_storage_info.total_size_bytes));
       dict.Set(kKeyModified, base::TimeFormatFriendlyDateAndTime(
                                  local_storage_info.last_modified));
@@ -144,7 +144,7 @@ CookiesTreeModelUtil::GetCookieTreeNodeDictionary(const CookieTreeNode& node) {
       const content::StorageUsageInfo& usage_info =
           *node.GetDetailedInfo().usage_info;
 
-      dict.Set(kKeyOrigin, usage_info.origin.Serialize());
+      dict.Set(kKeyOrigin, usage_info.storage_key.origin().Serialize());
       dict.Set(kKeySize, ui::FormatBytes(usage_info.total_size_bytes));
       dict.Set(kKeyModified,
                base::TimeFormatFriendlyDateAndTime(usage_info.last_modified));
@@ -194,7 +194,7 @@ CookiesTreeModelUtil::GetCookieTreeNodeDictionary(const CookieTreeNode& node) {
       const content::StorageUsageInfo& usage_info =
           *node.GetDetailedInfo().usage_info;
 
-      dict.Set(kKeyOrigin, usage_info.origin.Serialize());
+      dict.Set(kKeyOrigin, usage_info.storage_key.origin().Serialize());
       dict.Set(kKeySize, ui::FormatBytes(usage_info.total_size_bytes));
       // TODO(jsbell): Include kKeyModified like other storage types.
       break;
@@ -215,7 +215,7 @@ CookiesTreeModelUtil::GetCookieTreeNodeDictionary(const CookieTreeNode& node) {
       const content::StorageUsageInfo& usage_info =
           *node.GetDetailedInfo().usage_info;
 
-      dict.Set(kKeyOrigin, usage_info.origin.Serialize());
+      dict.Set(kKeyOrigin, usage_info.storage_key.origin().Serialize());
       dict.Set(kKeySize, ui::FormatBytes(usage_info.total_size_bytes));
       dict.Set(kKeyModified,
                base::TimeFormatFriendlyDateAndTime(usage_info.last_modified));
@@ -287,7 +287,7 @@ base::Value::List CookiesTreeModelUtil::GetChildNodeDetailsDeprecated(
 const CookieTreeNode* CookiesTreeModelUtil::GetTreeNodeFromPath(
     const CookieTreeNode* root,
     const std::string& path) {
-  const CookieTreeNode* child = NULL;
+  const CookieTreeNode* child = nullptr;
   const CookieTreeNode* parent = root;
   absl::optional<size_t> child_index;
 
@@ -314,8 +314,7 @@ const CookieTreeNode* CookiesTreeModelUtil::GetTreeNodeFromTitle(
     const std::u16string& title) {
   // TODO(dschuyler): This is an O(n) lookup for O(1) space, but it could be
   // improved to O(1) lookup if desired (by using O(n) space).
-  const auto i = std::find_if(
-      root->children().cbegin(), root->children().cend(),
-      [&title](const auto& child) { return title == child->GetTitle(); });
+  const auto i =
+      base::ranges::find(root->children(), title, &CookieTreeNode::GetTitle);
   return (i == root->children().cend()) ? nullptr : i->get();
 }

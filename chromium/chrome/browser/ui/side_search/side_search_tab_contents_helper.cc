@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,6 +75,32 @@ content::WebContents* SideSearchTabContentsHelper::OpenURLFromTab(
   return delegate_ ? delegate_->OpenURLFromTab(source, params) : nullptr;
 }
 
+void SideSearchTabContentsHelper::DidOpenRequestedURL(
+    content::WebContents* new_contents,
+    content::RenderFrameHost* source_render_frame_host,
+    const GURL& url,
+    const content::Referrer& referrer,
+    WindowOpenDisposition disposition,
+    ui::PageTransition transition,
+    bool started_from_context_menu,
+    bool renderer_initiated) {
+  DCHECK(new_contents);
+  DCHECK_NE(new_contents, GetTabWebContents());
+  const GURL& current_url = GetTabWebContents()->GetLastCommittedURL();
+
+  // Ensure current_url is a search URL.
+  if (GetConfig()->ShouldNavigateInSidePanel(current_url)) {
+    auto* new_helper =
+        SideSearchTabContentsHelper::FromWebContents(new_contents);
+
+    // "Open link in incognito window" yields a null new_helper.
+    if (new_helper) {
+      new_helper->last_search_url_ = current_url;
+      new_helper->GetConfig()->set_is_side_panel_srp_available(true);
+    }
+  }
+}
+
 void SideSearchTabContentsHelper::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInPrimaryMainFrame() ||
@@ -125,10 +151,6 @@ void SideSearchTabContentsHelper::DidFinishNavigation(
     // Capture the URL here in case the side contents is closed before the
     // navigation completes.
     last_search_url_ = url;
-
-    // Allow the page action label to be shown next time the entrypoint is
-    // revealed.
-    can_show_page_action_label_ = true;
 
     // If the navigation to a search results page succeeds we should update the
     // side panel availability bit accordingly.
@@ -210,16 +232,6 @@ void SideSearchTabContentsHelper::SetDelegate(
   delegate_ = std::move(delegate);
 }
 
-void SideSearchTabContentsHelper::DidShowPageActionLabel() {
-  ++page_action_label_shown_count_;
-}
-
-bool SideSearchTabContentsHelper::GetAndResetCanShowPageActionLabel() {
-  const bool initial_can_show_page_action_label = can_show_page_action_label_;
-  can_show_page_action_label_ = false;
-  return initial_can_show_page_action_label;
-}
-
 void SideSearchTabContentsHelper::SetSidePanelContentsForTesting(
     std::unique_ptr<content::WebContents> side_panel_contents) {
   side_panel_contents_ = std::move(side_panel_contents);
@@ -233,9 +245,8 @@ SideSearchTabContentsHelper::SideSearchTabContentsHelper(
     : content::WebContentsObserver(web_contents),
       content::WebContentsUserData<SideSearchTabContentsHelper>(*web_contents) {
   config_observation_.Observe(GetConfig());
-  if (base::FeatureList::IsEnabled(features::kUnifiedSidePanel)) {
+  if (side_search::ShouldUseUnifiedSidePanel())
     CreateUnifiedSideSearchController(this, web_contents);
-  }
 }
 
 SideSearchSideContentsHelper*
@@ -243,6 +254,37 @@ SideSearchTabContentsHelper::GetSideContentsHelper() {
   DCHECK(side_panel_contents_);
   return SideSearchSideContentsHelper::FromWebContents(
       side_panel_contents_.get());
+}
+
+void SideSearchTabContentsHelper::OpenSidePanelFromContextMenuSearch(
+    const GURL& url) {
+  DCHECK(url.is_valid());
+  last_search_url_ = url;
+  if (!side_panel_contents_) {
+    CreateSidePanelContents();
+    auto* SideContentsHelper = GetSideContentsHelper();
+    DCHECK(SideContentsHelper);
+    SideContentsHelper->set_is_created_from_menu_option(true);
+  } else {
+    DCHECK(side_panel_contents_);
+    UpdateSideContentsNavigation();
+  }
+  delegate_->OpenSidePanel();
+}
+
+bool SideSearchTabContentsHelper::CanShowSidePanelFromContextMenuSearch() {
+  if (!delegate_)
+    return false;
+
+  SideSearchConfig* config =
+      SideSearchConfig::Get(web_contents()->GetBrowserContext());
+  // Make sure the menu option appears on tabs that have no logged SRP.
+  // TODO(pengchaocai): Revise the use of this availability bit.
+  config->set_is_side_panel_srp_available(true);
+
+  //  Show the context menu option under only if side search can be shown
+  //  for the current page (ignore SRP / NTP pages etc).
+  return config->CanShowSidePanelForURL(web_contents()->GetLastCommittedURL());
 }
 
 void SideSearchTabContentsHelper::CreateSidePanelContents() {

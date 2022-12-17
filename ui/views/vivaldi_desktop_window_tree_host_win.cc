@@ -15,10 +15,11 @@
 #include "base/win/windows_version.h"
 #include "chrome/browser/ui/views/frame/system_menu_insertion_delegate_win.h"
 #include "content/public/browser/browser_thread.h"
-#include "ui/base/theme_provider.h"
-#include "ui/views/controls/menu/native_menu_win.h"
 
 #include "app/vivaldi_apptools.h"
+#include "ui/base/win/hwnd_metrics.h"
+#include "ui/base/win/shell.h"
+#include "ui/views/controls/menu/native_menu_win.h"
 #include "ui/views/vivaldi_system_menu_model_builder.h"
 #include "ui/vivaldi_browser_window.h"
 
@@ -301,6 +302,12 @@ void VivaldiDesktopWindowTreeHostWin::PostHandleMSG(UINT message,
   return DesktopWindowTreeHostWin::PostHandleMSG(message, w_param, l_param);
 }
 
+void VivaldiDesktopWindowTreeHostWin::Restore() {
+  // Enable window shade and rounding
+  SetRoundedWindowCorners(true);
+  views::DesktopWindowTreeHostWin::Restore();
+}
+
 void VivaldiDesktopWindowTreeHostWin::Maximize() {
   // Maximizing on Windows causes the window to be shown. Call Show() first to
   // ensure the content view is also made visible. See http://crbug.com/436867.
@@ -309,6 +316,9 @@ void VivaldiDesktopWindowTreeHostWin::Maximize() {
   if (IsVisible()) {
     Show(ui::SHOW_STATE_NORMAL, gfx::Rect());
   }
+
+  // Disable shadow and rounding to prevent bleeding cross screens.
+  SetRoundedWindowCorners(false);
   views::DesktopWindowTreeHostWin::Maximize();
 }
 
@@ -335,41 +345,68 @@ void VivaldiDesktopWindowTreeHostWin::UpdateWorkspace() {
 }
 
 bool VivaldiDesktopWindowTreeHostWin::ShouldUseNativeFrame() const {
-  // NOTE(igor@vivaldi.com): It is unclear what exactly this function is
-  // supposed to return as it is still possible to have the native
-  // Windows frame with the function returning false and have emulated look of
-  // Windows 7, not the native frame, when returning true. This depends on the
-  // interaction with GetFrameMode() result and
-  // views::Widget::InitParams::remove_standard_frame value in
-  // VivaldiBrowserWindow::InitWidget.
-  return window_->with_native_frame();
+  return ui::win::IsAeroGlassEnabled();
 }
 
 views::FrameMode VivaldiDesktopWindowTreeHostWin::GetFrameMode() const {
-  if (window_->with_native_frame())
-    return views::FrameMode::SYSTEM_DRAWN;
+  // "glass" frame is assumed in |GetClientAreaInsets|.
+  return views::FrameMode::SYSTEM_DRAWN;
+}
 
-  // TODO(igor@vivaldi.com): Use FrameMode::CUSTOM_DRAWN here. Presently it is
-  // not used as for some reason it prevents autohide Taskbar to appear in a
-  // maximized window despite the workaround in Chromium's
-  // HWNDMessageHandler::OnNCCalcSize().
-  return views::FrameMode::SYSTEM_DRAWN_NO_CONTROLS;
+bool VivaldiDesktopWindowTreeHostWin::HasFrame() const {
+  return window_->with_native_frame();
 }
 
 void VivaldiDesktopWindowTreeHostWin::HandleCreate() {
   views::DesktopWindowTreeHostWin::HandleCreate();
+  SetRoundedWindowCorners(true);
+}
+
+void VivaldiDesktopWindowTreeHostWin::SetFullscreen(bool fullscreen,
+                                                    int64_t target_display_id) {
+  // Disable rounded corners in fullscreen.
+  SetRoundedWindowCorners(!fullscreen);
+  views::DesktopWindowTreeHostWin::SetFullscreen(fullscreen, target_display_id);
+}
+
+bool VivaldiDesktopWindowTreeHostWin::GetDwmFrameInsetsInPixels(
+    gfx::Insets* insets) const {
+  // System window decorations.
+  if (window_->with_native_frame()) {
+    return false;
+  }
+  *insets = gfx::Insets();
+  return true;
+}
+
+bool VivaldiDesktopWindowTreeHostWin::GetClientAreaInsets(
+    gfx::Insets* insets,
+    HMONITOR monitor) const {
+  // System window decorations.
+  if (window_->with_native_frame()) {
+    return false;
+  }
+
+  if (GetWidget()->IsFullscreen()) {
+    // In fullscreen mode there is no frame.
+    *insets = gfx::Insets();
+  } else {
+    // Maximized windows gets a frame drawn regardless. Work around this.
+    if (GetWidget()->IsMaximized()) {
+      const int frame_thickness = ui::GetFrameThickness(monitor);
+      *insets = gfx::Insets::TLBR(frame_thickness, frame_thickness,
+                                  frame_thickness, frame_thickness);
+    }
+  }
+  return true;
+}
+
+void VivaldiDesktopWindowTreeHostWin::SetRoundedWindowCorners(
+    bool enable_round_corners) {
   if (base::win::GetVersion() >= base::win::Version::WIN11) {
-    // NOTE(igor@vivaldi.com) - Tell Windows 11 that we really want rounded
-    // corners around a Vivaldi window. Chromium does not need to do that as
-    // heuristics in Windows to guess if the window wants rounded corners work
-    // for them. But they fail for a Vivaldi window.
-    //
-    // SDK in Chromium does not yet support the necessary constants, so use
-    // explicit numeric values.
-    //
-    // DWM_WINDOW_CORNER_PREFERENCE corner_preference = DWMWCP_ROUND;
-    DWORD corner_preference = 2;
-    DwmSetWindowAttribute(GetHWND(), 33 /*DWMWA_WINDOW_CORNER_PREFERENC*/,
+    DWORD corner_preference = enable_round_corners ? 2   // DWMWCP_ROUND
+                                                   : 0;  // DWMWCP_DEFAULT
+    DwmSetWindowAttribute(GetHWND(), 33,  // DWM_WINDOW_CORNER_PREFERENCE
                           &corner_preference, sizeof(corner_preference));
   }
 }

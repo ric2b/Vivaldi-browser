@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,14 +39,12 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
  public:
   explicit AttributionDataHostManagerImpl(
       AttributionManager* attribution_manager);
-  AttributionDataHostManagerImpl(const AttributionDataHostManager& other) =
-      delete;
+  AttributionDataHostManagerImpl(const AttributionDataHostManager&) = delete;
   AttributionDataHostManagerImpl& operator=(
-      const AttributionDataHostManagerImpl& other) = delete;
-  AttributionDataHostManagerImpl(AttributionDataHostManagerImpl&& other) =
+      const AttributionDataHostManagerImpl&) = delete;
+  AttributionDataHostManagerImpl(AttributionDataHostManagerImpl&&) = delete;
+  AttributionDataHostManagerImpl& operator=(AttributionDataHostManagerImpl&&) =
       delete;
-  AttributionDataHostManagerImpl& operator=(
-      AttributionDataHostManagerImpl&& other) = delete;
   ~AttributionDataHostManagerImpl() override;
 
   // AttributionDataHostManager:
@@ -56,9 +54,9 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
   bool RegisterNavigationDataHost(
       mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host,
       const blink::AttributionSrcToken& attribution_src_token) override;
-  void NotifyNavigationRedirectRegistation(
+  void NotifyNavigationRedirectRegistration(
       const blink::AttributionSrcToken& attribution_src_token,
-      const std::string& header_value,
+      std::string header_value,
       url::Origin reporting_origin,
       const url::Origin& source_origin) override;
   void NotifyNavigationForDataHost(
@@ -91,6 +89,7 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
   void OnRedirectSourceParsed(
       const blink::AttributionSrcToken& attribution_src_token,
       url::Origin reporting_origin,
+      std::string header_value,
       data_decoder::DataDecoder::ValueOrError result);
 
   void SetTriggerTimer(base::TimeDelta delay);

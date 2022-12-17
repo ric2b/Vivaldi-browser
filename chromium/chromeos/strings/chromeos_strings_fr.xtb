@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Modifier le fichier}one{Modifier le fichier}other{Modifier les fichiers}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Direction de la clé</translation>
+<translation id="3294437725009624529">Invité</translation>
 <translation id="3310640316857623290">Seuil de latence autorisé largement dépassé par le DNS</translation>
 <translation id="3328783797891415197">Test en cours</translation>
 <translation id="3340011300870565703">L'écouteur droit de l'appareil a <ph name="BATTERY_PERCENTAGE" /> % de batterie.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Vous ne devez pas débrancher cet appareil externe ni éteindre votre ordinateur pendant la mise à jour du micrologiciel. Vous pouvez réduire cette fenêtre. Cette mise à jour peut prendre quelques minutes, durant lesquelles le fonctionnement de l'appareil externe est compromis.</translation>
 <translation id="3486220673238053218">définition</translation>
 <translation id="3488065109653206955">Partiellement activé</translation>
+<translation id="3510890413042482857">Envoyer des <ph name="BEGIN_LINK1" />données sur la trace des performances<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Mise à jour Chrome OS</translation>
 <translation id="3527036260304016759">Échec – Erreur inconnue</translation>
 <translation id="3532980081107202182">Environ <ph name="MIN_REMAINING" /> minutes restantes</translation>
@@ -468,6 +470,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="5502931783115429516">Android n'est pas exécuté</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Basculer automatiquement sur le thème sombre au coucher du soleil</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Rescanner</translation>
 <translation id="5583640892426849032">Retour</translation>

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,7 @@ namespace media {
 
 class PinBase : public IPin,
                 public IMemInputPin,
-                public base::RefCounted<PinBase> {
+                public base::RefCountedThreadSafe<PinBase> {
  public:
   explicit PinBase(IBaseFilter* owner);
 
@@ -98,7 +98,7 @@ class PinBase : public IPin,
   IFACEMETHODIMP_(ULONG) Release() override;
 
  protected:
-  friend class base::RefCounted<PinBase>;
+  friend class base::RefCountedThreadSafe<PinBase>;
   virtual ~PinBase();
 
  private:

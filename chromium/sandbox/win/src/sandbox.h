@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,6 +40,7 @@ class PolicyDiagnosticsReceiver;
 class ProcessState;
 class TargetPolicy;
 class TargetServices;
+enum class Desktop;
 
 // BrokerServices exposes all the broker API.
 // The basic use is to start the target(s) and wait for them to end.
@@ -64,6 +65,16 @@ class [[clang::lto_visibility_public]] BrokerServices {
   // If the return is ERROR_GENERIC, you can call ::GetLastError() to get
   // more information.
   virtual ResultCode Init() = 0;
+
+  // Pre-creates an alternate desktop. May be retried if the return value
+  // is SBOX_ERROR_CANNOT_QUERY_WINSTATION_SECURITY.
+  virtual ResultCode CreateAlternateDesktop(Desktop desktop) = 0;
+  // Destroys all desktops created for this Broker.
+  virtual void DestroyDesktops() = 0;
+  // Returns the name of the alternate desktop used. If an alternate window
+  // station is specified, the name is prepended by the window station name,
+  // followed by a backslash.
+  virtual std::wstring GetDesktopName(Desktop desktop) = 0;
 
   // Returns the interface pointer to a new, empty policy object. Use this
   // interface to specify the sandbox policy for new processes created by
@@ -135,6 +146,19 @@ class [[clang::lto_visibility_public]] BrokerServices {
   virtual ResultCode GetPolicyDiagnostics(
       std::unique_ptr<PolicyDiagnosticsReceiver> receiver) = 0;
 
+  // For the broker, we have some mitigations set early in startup. In
+  // order to properly track those settings, SetStartingMitigations should be
+  // called before other mitigations are set by RatchetDownSecurityMitigations
+  virtual void SetStartingMitigations(MitigationFlags starting_mitigations) = 0;
+
+  // RatchetDownSecurityMitigations is then called by the broker process to
+  // gradually increase our security as startup continues. It's designed to
+  // be called multiple times. If you don't call SetStartingMitigations first
+  // and there were mitigations applied early in startup, the new mitigations
+  // may not be applied.
+  virtual bool RatchetDownSecurityMitigations(
+      MitigationFlags additional_flags) = 0;
+
  protected:
   ~BrokerServices() {}
 };
@@ -180,17 +204,11 @@ class [[clang::lto_visibility_public]] TargetServices {
   // LowerToken has been called or not.
   virtual ProcessState* GetState() = 0;
 
-  // Attempts to create a socket in the broker process, and duplicates it back
-  // to the target. The socket will be created with default flags and no group.
-  // Only TCP/UDP and IPV4/IPV6 sockets are supported by the broker.
-  // The socket will be created with WSA_FLAG_OVERLAPPED flags.
-  virtual SOCKET CreateBrokeredSocket(int af, int family, int protocol) = 0;
-
  protected:
   ~TargetServices() {}
 };
 
-class PolicyInfo {
+class [[clang::lto_visibility_public]] PolicyInfo {
  public:
   // Returns a JSON representation of the policy snapshot.
   // This pointer has the same lifetime as this PolicyInfo object.
@@ -200,7 +218,7 @@ class PolicyInfo {
 
 // This is returned by BrokerServices::GetPolicyDiagnostics().
 // PolicyInfo entries need not be ordered.
-class PolicyList {
+class [[clang::lto_visibility_public]] PolicyList {
  public:
   virtual std::vector<std::unique_ptr<PolicyInfo>>::iterator begin() = 0;
   virtual std::vector<std::unique_ptr<PolicyInfo>>::iterator end() = 0;
@@ -209,7 +227,7 @@ class PolicyList {
 };
 
 // This class mediates calls to BrokerServices::GetPolicyDiagnostics().
-class PolicyDiagnosticsReceiver {
+class [[clang::lto_visibility_public]] PolicyDiagnosticsReceiver {
  public:
   // ReceiveDiagnostics() should return quickly and should not block the
   // thread on which it is called.

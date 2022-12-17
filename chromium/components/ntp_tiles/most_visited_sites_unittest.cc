@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -372,9 +372,9 @@ class MostVisitedSitesTest : public ::testing::TestWithParam<bool> {
   MostVisitedSitesTest() {
     MostVisitedSites::RegisterProfilePrefs(pref_service_.registry());
 
-    std::vector<base::Feature> enabled_features;
+    std::vector<base::test::FeatureRef> enabled_features;
     // Disable FaviconServer in most tests and override in specific tests.
-    std::vector<base::Feature> disabled_features = {
+    std::vector<base::test::FeatureRef> disabled_features = {
         kNtpMostLikelyFaviconsFromServerFeature};
     if (IsPopularSitesFeatureEnabled()) {
       enabled_features.push_back(kUsePopularSitesSuggestions);

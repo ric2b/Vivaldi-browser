@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,7 @@ api::passwords_private::UrlCollection CreateUrlCollectionFromCredential(
   api::passwords_private::UrlCollection urls;
   urls.shown = GetShownOrigin(credential);
   urls.link = GetShownUrl(credential).spec();
-  urls.signon_realm = credential.signon_realm;
+  urls.signon_realm = credential.GetFirstSignonRealm();
   return urls;
 }
 

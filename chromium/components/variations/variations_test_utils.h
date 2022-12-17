@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,12 +11,17 @@
 #include "base/containers/span.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/field_trial.h"
+#include "base/test/mock_entropy_provider.h"
+#include "components/variations/client_filterable_state.h"
+#include "components/variations/entropy_provider.h"
 #include "components/variations/field_trial_config/fieldtrial_testing_config.h"
 #include "components/variations/variations_associated_data.h"
 
 class PrefService;
 
 namespace variations {
+
+struct ClientFilterableState;
 
 // Packages signed variations seed data into a tuple for use with
 // WriteSeedData(). This allows for encapsulated seed information to be created
@@ -103,6 +108,38 @@ bool FieldTrialListHasAllStudiesFrom(const SignedSeedData& seed_data);
 // Resets variations. Ensures that maps can be cleared between tests since they
 // are stored as process singleton.
 void ResetVariations();
+
+// A no-op UIStringOverrideCallback implementation.
+inline void NoopUIStringOverrideCallback(uint32_t hash,
+                                         const std::u16string& string) {}
+
+// Create a ClientFilterableState with valid, but unimportant values.
+// Tests that actually expect specific values should set them on the result.
+std::unique_ptr<ClientFilterableState> CreateDummyClientFilterableState();
+
+// An mock entropy result that will always pick the first non-zero weight group.
+constexpr double kAlwaysUseFirstGroup = 0;
+// An mock entropy result that will always pick the last non-zero weight group.
+constexpr double kAlwaysUseLastGroup = 1.0 - 1e-8;
+
+// EntropyProviders that return known values.
+class MockEntropyProviders : public EntropyProviders {
+ public:
+  struct Results {
+    double low_entropy = kAlwaysUseLastGroup;
+    absl::optional<double> high_entropy = absl::nullopt;
+  };
+  explicit MockEntropyProviders(Results results,
+                                size_t low_entropy_domain = 8000);
+  ~MockEntropyProviders() override;
+
+  const base::FieldTrial::EntropyProvider& low_entropy() const override;
+  const base::FieldTrial::EntropyProvider& default_entropy() const override;
+
+ private:
+  base::MockEntropyProvider low_provider_;
+  base::MockEntropyProvider high_provider_;
+};
 
 }  // namespace variations
 

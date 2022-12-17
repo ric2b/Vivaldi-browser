@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/stl_util.h"
+#include "base/types/optional_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
@@ -145,7 +145,7 @@ void SVGInlineTextBoxPainter::Paint(const PaintInfo& paint_info,
         markers_to_paint, paint_info, paint_offset, style,
         text_layout_object.ScaledFont(), DocumentMarkerPaintPhase::kBackground);
 
-    if (!svg_inline_text_box_.TextFragments().IsEmpty())
+    if (!svg_inline_text_box_.TextFragments().empty())
       PaintTextFragments(paint_info, parent_layout_object);
 
     text_painter.PaintDocumentMarkers(
@@ -210,14 +210,14 @@ void SVGInlineTextBoxPainter::PaintTextFragments(
           if (has_fill) {
             PaintText(paint_info, style, *selection_style, fragment,
                       kApplyToFillMode, should_paint_selection,
-                      base::OptionalOrNullptr(shader_transform));
+                      base::OptionalToPtr(shader_transform));
           }
           break;
         case PT_STROKE:
           if (has_visible_stroke) {
             PaintText(paint_info, style, *selection_style, fragment,
                       kApplyToStrokeMode, should_paint_selection,
-                      base::OptionalOrNullptr(shader_transform));
+                      base::OptionalToPtr(shader_transform));
           }
           break;
         case PT_MARKERS:
@@ -453,14 +453,14 @@ bool SVGInlineTextBoxPainter::SetupTextPaint(
     paint_server_transform->Scale(scaling_factor);
 
     if (shader_transform)
-      paint_server_transform->Multiply(*shader_transform);
+      paint_server_transform->PreConcat(*shader_transform);
   }
 
   if (!SVGObjectPainter(ParentInlineLayoutObject())
            .PreparePaint(paint_info.context,
                          paint_info.IsRenderingClipPathAsMaskImage(), style,
                          resource_mode, flags,
-                         base::OptionalOrNullptr(paint_server_transform))) {
+                         base::OptionalToPtr(paint_server_transform))) {
     return false;
   }
 
@@ -562,15 +562,13 @@ SelectionStyleScope::SelectionStyleScope(LayoutObject& layout_object,
     return;
   DCHECK(IsA<SVGElement>(layout_object.GetNode()) &&
          !layout_object.IsSVGInlineText());
-  auto& element = To<SVGElement>(*layout_object_.GetNode());
-  SVGResources::UpdatePaints(element, nullptr, selection_style_);
+  SVGResources::UpdatePaints(layout_object_, nullptr, selection_style_);
 }
 
 SelectionStyleScope::~SelectionStyleScope() {
   if (styles_are_equal_)
     return;
-  auto& element = To<SVGElement>(*layout_object_.GetNode());
-  SVGResources::ClearPaints(element, &selection_style_);
+  SVGResources::ClearPaints(layout_object_, &selection_style_);
 }
 
 }  // namespace
@@ -694,7 +692,7 @@ void SVGInlineTextBoxPainter::PaintTextMarkerForeground(
     const Font& font) {
   const Vector<SVGTextFragmentWithRange> text_match_info_list =
       CollectTextMatches(marker);
-  if (text_match_info_list.IsEmpty())
+  if (text_match_info_list.empty())
     return;
 
   Color text_color = LayoutTheme::GetTheme().PlatformTextSearchColor(
@@ -740,7 +738,7 @@ void SVGInlineTextBoxPainter::PaintTextMarkerBackground(
     const Font& font) {
   const Vector<SVGTextFragmentWithRange> text_match_info_list =
       CollectTextMatches(marker);
-  if (text_match_info_list.IsEmpty())
+  if (text_match_info_list.empty())
     return;
 
   Color color = LayoutTheme::GetTheme().PlatformTextSearchHighlightColor(

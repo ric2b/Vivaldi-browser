@@ -13,10 +13,11 @@ class EventRow;
 using extensions::vivaldi::calendar::CreateDetails;
 using extensions::vivaldi::calendar::CreateInviteRow;
 using extensions::vivaldi::calendar::CreateNotificationRow;
+using extensions::vivaldi::calendar::RecurrenceException;
 
 EventRow GetEventRow(const CreateDetails& event);
-EventExceptionType CreateEventException(
-    const CreateDetails::EventExceptionsType& exception);
+RecurrenceExceptionRow CreateEventException(
+    const RecurrenceException& exception);
 bool GetIdAsInt64(const std::u16string& id_string, int64_t* id);
 bool GetStdStringAsInt64(const std::string& id_string, int64_t* id);
 

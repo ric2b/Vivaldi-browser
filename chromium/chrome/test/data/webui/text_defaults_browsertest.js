@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ var TextDefaultsTest = class extends testing.Test {
    * @override
    */
   get browsePreload() {
-    return 'chrome://test/test_loader.html?module=text_defaults_test.js';
+    return 'chrome://webui-test/test_loader.html?module=text_defaults_test.js';
   }
 
   /** @override */

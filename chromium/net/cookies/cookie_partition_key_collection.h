@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,8 +11,6 @@
 #include "net/cookies/cookie_partition_key.h"
 
 namespace net {
-
-class CookieAccessDelegate;
 
 // A data structure used to represent a collection of cookie partition keys.
 //
@@ -47,20 +45,6 @@ class NET_EXPORT CookiePartitionKeyCollection {
     return opt_key ? CookiePartitionKeyCollection(opt_key.value())
                    : CookiePartitionKeyCollection();
   }
-
-  // Takes a CookiePartitionKeyCollection which was created in a context that
-  // does not have access to sites' First-Party Set owners and converts it to
-  // the correct First-Party-Sets-aware CookiePartitionKeyCollection, replacing
-  // any CookiePartitionKeys whose sites which are members of a set with a new
-  // partition key containing the set's owner site.
-  //
-  // This may return a result synchronously, or asynchronously invoke `callback`
-  // with the result. The callback will be invoked iff the return value is
-  // nullopt; i.e. a result will be provided via return value or callback, but
-  // not both, and not neither.
-  [[nodiscard]] absl::optional<CookiePartitionKeyCollection> FirstPartySetify(
-      const CookieAccessDelegate* cookie_access_delegate,
-      base::OnceCallback<void(CookiePartitionKeyCollection)> callback) const;
 
   // Temporary method used to record where we need to decide how to build the
   // CookiePartitionKeyCollection.

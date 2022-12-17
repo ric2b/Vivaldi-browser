@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,10 +88,11 @@ class FakePrefetchManagerDelegate
   base::flat_map<GURL, base::OnceClosure> done_callbacks_;
 };
 
-// Creates a NetworkIsolationKey for a main frame navigation to URL.
-net::NetworkIsolationKey CreateNetworkIsolationKey(const GURL& main_frame_url) {
-  url::Origin origin = url::Origin::Create(main_frame_url);
-  return net::NetworkIsolationKey(origin, origin);
+// Creates a NetworkAnonymizationKey for a main frame navigation to URL.
+net::NetworkAnonymizationKey CreateNetworkIsolationKey(
+    const GURL& main_frame_url) {
+  net::SchemefulSite site = net::SchemefulSite(main_frame_url);
+  return net::NetworkAnonymizationKey(site, site);
 }
 
 PrefetchRequest CreateScriptRequest(const GURL& url,

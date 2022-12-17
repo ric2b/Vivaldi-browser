@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -134,7 +134,7 @@ AutofillType AutofillField::ComputedType() const {
 
   // If the explicit type is cc-exp and either the server or heuristics agree
   // on a 2 vs 4 digit specialization of cc-exp, use that specialization.
-  if (html_type_ == HTML_TYPE_CREDIT_CARD_EXP) {
+  if (html_type_ == HtmlFieldType::kCreditCardExp) {
     if (server_type() == CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR ||
         server_type() == CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR) {
       return AutofillType(server_type());
@@ -149,7 +149,7 @@ AutofillType AutofillField::ComputedType() const {
   // return an UNKNOWN_TYPE predition, unless either the heuristic or server
   // prediction suggest that the field is credit-card related, or if the
   // |kAutofillFillAndImportFromMoreFields| feature is enabled.
-  if (html_type_ == HTML_TYPE_UNRECOGNIZED && !IsCreditCardPrediction() &&
+  if (html_type_ == HtmlFieldType::kUnrecognized && !IsCreditCardPrediction() &&
       !base::FeatureList::IsEnabled(
           features::kAutofillFillAndImportFromMoreFields)) {
     return AutofillType(html_type_, html_mode_);
@@ -157,8 +157,8 @@ AutofillType AutofillField::ComputedType() const {
 
   // If the autocomplete attribute is neither empty or unrecognized, use it
   // unconditionally.
-  if (html_type_ != HTML_TYPE_UNSPECIFIED &&
-      html_type_ != HTML_TYPE_UNRECOGNIZED) {
+  if (html_type_ != HtmlFieldType::kUnspecified &&
+      html_type_ != HtmlFieldType::kUnrecognized) {
     return AutofillType(html_type_, html_mode_);
   }
 
@@ -184,25 +184,16 @@ AutofillType AutofillField::ComputedType() const {
                                 FieldTypeGroup::kPasswordField &&
                             heuristic_type() == CREDIT_CARD_VERIFICATION_CODE);
 
-    // For new name tokens the heuristic predictions get precedence over the
-    // server predictions.
-    // TODO(crbug.com/1098943): Remove feature check once launched.
-    believe_server =
-        believe_server &&
-        !(base::FeatureList::IsEnabled(
-              features::kAutofillEnableSupportForMoreStructureInNames) &&
-          (heuristic_type() == NAME_LAST_SECOND ||
-           heuristic_type() == NAME_LAST_FIRST));
+    // For structured last name tokens the heuristic predictions get precedence
+    // over the server predictions.
+    believe_server = believe_server && heuristic_type() != NAME_LAST_SECOND &&
+                     heuristic_type() != NAME_LAST_FIRST;
 
-    // For new address tokens the heuristic predictions get precedence over
-    // the server predictions.
-    // TODO(crbug.com/1098943): Remove feature check once launched.
-    believe_server =
-        believe_server &&
-        !(base::FeatureList::IsEnabled(
-              features::kAutofillEnableSupportForMoreStructureInAddresses) &&
-          (heuristic_type() == ADDRESS_HOME_STREET_NAME ||
-           heuristic_type() == ADDRESS_HOME_HOUSE_NUMBER));
+    // For structured address tokens the heuristic predictions get precedence
+    // over the server predictions.
+    believe_server = believe_server &&
+                     heuristic_type() != ADDRESS_HOME_STREET_NAME &&
+                     heuristic_type() != ADDRESS_HOME_HOUSE_NUMBER;
 
     // For merchant promo code fields the heuristic predictions get precedence
     // over the server predictions.
@@ -221,17 +212,12 @@ AutofillType AutofillField::ComputedType() const {
 }
 
 AutofillType AutofillField::Type() const {
-  // If the corresponding feature is enabled, server predictions that are an
-  // override are granted precedence unconditionally.
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillServerTypeTakesPrecedence) &&
-      server_type_prediction_is_override() && server_type() != NO_SERVER_DATA) {
+  // Server Overrides are granted precedence unconditionally.
+  if (server_type_prediction_is_override() && server_type() != NO_SERVER_DATA)
     return AutofillType(server_type());
-  }
 
-  if (overall_type_.GetStorableType() != NO_SERVER_DATA) {
+  if (overall_type_.GetStorableType() != NO_SERVER_DATA)
     return overall_type_;
-  }
   return ComputedType();
 }
 
@@ -256,7 +242,8 @@ bool AutofillField::IsFieldFillable() const {
 
 bool AutofillField::ShouldSuppressPromptDueToUnrecognizedAutocompleteAttribute()
     const {
-  return html_type_ == HTML_TYPE_UNRECOGNIZED && !IsCreditCardPrediction() &&
+  return html_type_ == HtmlFieldType::kUnrecognized &&
+         !IsCreditCardPrediction() &&
          base::FeatureList::IsEnabled(
              features::kAutofillFillAndImportFromMoreFields);
 }

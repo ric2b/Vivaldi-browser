@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -60,17 +60,28 @@ generate_grd("build_grd") {
   out_grd = "$target_gen_dir/resources.grd"
 
   input_files = [
-    "demos/demo.css",
-    "demos/cr_a11y_announcer_demo.html",
-    "demos/cr_action_menu_demo.html",
-    "demos/cr_button_demo.html",
+    "demos/buttons_demo.html",
+    "demos/card/index.html",
+    "demos/cr_a11y_announcer/index.html",
+    "demos/cr_action_menu/index.html",
     "demos/cr_checkbox_demo.html",
-    "demos/cr_dialog_demo.html",
-    "demos/cr_input/cr_input_demo.html",
+    "demos/cr_dialog/index.html",
+    "demos/cr_icons/index.html",
+    "demos/cr_input/index.html",
     "demos/cr_radio_demo.html",
-    "demos/cr_slider/cr_slider_demo.html",
-    "demos/cr_tab_box/cr_tab_box_demo.html",
+    "demos/cr_slider/index.html",
+    "demos/cr_tab_box/index.html",
+    "demos/cr_tabs/index.html",
+    "demos/cr_toast/index.html",
     "demos/cr_toggle_demo.html",
+    "demos/cr_toolbar/index.html",
+    "demos/cr_tree/index.html",
+    "demos/demo.css",
+    "demos/md_select/index.html",
+    "demos/nav_menu/index.html",
+    "demos/progress_indicator_nonpolymer_demo.html",
+    "demos/progress_indicator_polymer_demo.html",
+    "demos/scroll_view/index.html",
     "webui_gallery.html",
   ]
 

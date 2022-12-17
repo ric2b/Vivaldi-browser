@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,7 +52,11 @@ enum {
 
   // Not a real zygote command, but a subcommand used during the zygote fork
   // protocol.  Sends the child's PID as seen from the browser process.
-  kZygoteCommandForkRealPID = 4
+  kZygoteCommandForkRealPID = 4,
+
+  // Reinitialize logging. Needed on ChromeOS, which switches to a log file
+  // in the user's home directory once they log in.
+  kZygoteCommandReinitializeLogging = 5
 };
 
 }  // namespace content

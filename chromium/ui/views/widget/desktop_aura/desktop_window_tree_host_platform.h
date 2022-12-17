@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,6 +80,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   void SetSize(const gfx::Size& size) override;
   void StackAbove(aura::Window* window) override;
   void StackAtTop() override;
+  bool IsStackedAbove(aura::Window* window) override;
   void CenterWindow(const gfx::Size& size) override;
   void GetWindowPlacement(gfx::Rect* bounds,
                           ui::WindowShowState* show_state) const override;
@@ -115,7 +116,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
   void FrameTypeChanged() override;
-  void SetFullscreen(bool fullscreen) override;
+  void SetFullscreen(bool fullscreen, int64_t display_id) override;
   bool IsFullscreen() const override;
   void SetOpacity(float opacity) override;
   void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;

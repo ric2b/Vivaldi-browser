@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,8 @@ namespace base::features {
 // Alphabetical:
 
 // Optimizes parsing and loading of data: URLs.
-const base::Feature kOptimizeDataUrls{"OptimizeDataUrls",
-                                      FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kOptimizeDataUrls,
+             "OptimizeDataUrls",
+             FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace base::features

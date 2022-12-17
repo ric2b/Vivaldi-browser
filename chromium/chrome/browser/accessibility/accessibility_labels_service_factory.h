@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,9 +20,6 @@ class AccessibilityLabelsServiceFactory : public ProfileKeyedServiceFactory {
   static AccessibilityLabelsService* GetForProfileIfExists(Profile* profile);
 
   static AccessibilityLabelsServiceFactory* GetInstance();
-
-  // Used to create instances for testing.
-  static KeyedService* BuildInstanceFor(Profile* profile);
 
  private:
   friend struct base::DefaultSingletonTraits<AccessibilityLabelsServiceFactory>;

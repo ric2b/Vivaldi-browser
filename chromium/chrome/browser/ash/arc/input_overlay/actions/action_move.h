@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,24 +19,24 @@ constexpr int kActionMoveMinRadius = 99;
 // move involved.
 class ActionMove : public Action {
  public:
-  explicit ActionMove(aura::Window* window);
+  explicit ActionMove(TouchInjector* touch_injector);
   ActionMove(const ActionMove&) = delete;
   ActionMove& operator=(const ActionMove&) = delete;
   ~ActionMove() override;
 
   // Override from Action.
   bool ParseFromJson(const base::Value& value) override;
+  bool InitFromEditor() override;
   bool RewriteEvent(const ui::Event& origin,
-                    const gfx::RectF& content_bounds,
                     const bool is_mouse_locked,
                     const gfx::Transform* rotation_transform,
                     std::list<ui::TouchEvent>& touch_events,
                     bool& keep_original_event) override;
-  gfx::PointF GetUICenterPosition(const gfx::RectF& content_bounds) override;
+  gfx::PointF GetUICenterPosition() override;
   std::unique_ptr<ActionView> CreateView(
-      DisplayOverlayController* display_overlay_controller,
-      const gfx::RectF& content_bounds) override;
-  void Unbind(const InputElement& input_element) override;
+      DisplayOverlayController* display_overlay_controller) override;
+  void UnbindInput(const InputElement& input_element) override;
+  std::unique_ptr<ActionProto> ConvertToProtoIfCustomized() const override;
 
   void set_move_distance(int move_distance) { move_distance_ = move_distance; }
   int move_distance() { return move_distance_; }
@@ -97,7 +97,7 @@ class ActionMove : public Action {
 
   // For key-bound move.
   void CalculateMoveVector(gfx::PointF& touch_press_pos,
-                           int direction_index,
+                           size_t direction_index,
                            bool key_press,
                            const gfx::RectF& content_bounds,
                            const gfx::Transform* rotation_transform);

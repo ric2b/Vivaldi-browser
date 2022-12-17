@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,6 +114,9 @@ class CookiesGetFunction : public ExtensionFunction {
       const net::CookieAccessResultList& cookie_list,
       const net::CookieAccessResultList& excluded_cookies);
 
+  // Notify the extension telemetry service when API is called.
+  void NotifyExtensionTelemetry();
+
   GURL url_;
   mojo::Remote<network::mojom::CookieManager> store_browser_cookie_manager_;
   std::unique_ptr<api::cookies::Get::Params> parsed_args_;
@@ -139,6 +142,9 @@ class CookiesGetAllFunction : public ExtensionFunction {
   void GetCookieListCallback(
       const net::CookieAccessResultList& cookie_list,
       const net::CookieAccessResultList& excluded_cookies);
+
+  // Notify the extension telemetry service when API is called.
+  void NotifyExtensionTelemetry();
 
   GURL url_;
   mojo::Remote<network::mojom::CookieManager> store_browser_cookie_manager_;

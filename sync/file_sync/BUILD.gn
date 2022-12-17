@@ -1,0 +1,20 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+source_set("file_sync") {
+  sources = [
+    "file_data.cc",
+    "file_data.h",
+    "file_store_impl.cc",
+    "file_store_impl.h",
+    "file_store_storage.h",
+    "file_store_storage.cc",
+    "file_store.cc",
+    "file_store.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/sync/base",
+    "//net"
+  ]
+}

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,8 +61,9 @@ struct RasterUnderInvalidation {
 };
 
 class PLATFORM_EXPORT RasterInvalidationTracking {
- public:
+  USING_FAST_MALLOC(RasterInvalidationTracking);
 
+ public:
   // When RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() and
   // SimulateRasterUnderInvalidation(true) is called, all changed pixels will
   // be reported as raster under-invalidations. Used to visually test raster
@@ -80,7 +81,7 @@ class PLATFORM_EXPORT RasterInvalidationTracking {
                        const String& debug_name,
                        const gfx::Rect&,
                        PaintInvalidationReason);
-  bool HasInvalidations() const { return !invalidations_.IsEmpty(); }
+  bool HasInvalidations() const { return !invalidations_.empty(); }
   const Vector<RasterInvalidationInfo>& Invalidations() const {
     return invalidations_;
   }

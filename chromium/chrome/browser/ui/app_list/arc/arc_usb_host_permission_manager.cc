@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -177,7 +177,7 @@ void ArcUsbHostPermissionManager::RestorePermissionFromChromePrefs() {
     }
 
     for (const auto& access_permision :
-         access_permision_list_value->GetListDeprecated()) {
+         access_permision_list_value->GetList()) {
       const base::Value* serial_number_value = access_permision.FindKeyOfType(
           kUsbSerialNumber, base::Value::Type::STRING);
       if (!serial_number_value) {

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,11 +6,11 @@
 
 #include <memory>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/memory/scoped_refptr.h"
 #include "chrome/browser/ash/policy/reporting/user_event_reporter_helper.h"
 #include "chrome/browser/policy/messaging_layer/proto/synced/crd_event.pb.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/reporting/proto/synced/record_constants.pb.h"
 #include "remoting/host/chromeos/host_event_reporter_impl.h"
 

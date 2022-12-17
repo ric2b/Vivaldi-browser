@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,6 +55,16 @@ struct Session {
 // around a large number of users. This also helps on memory-constrained
 // devices. See b/64593342 for some additional context.
 constexpr int kMaximumNumberOfUserSessions = 5;
+
+// Type of unlock method used.
+enum class UnlockType {
+  PASSWORD,
+  PIN,
+  FINGERPRINT,
+  CHALLENGE_RESPONSE,
+  EASY_UNLOCK,
+  UNKNOWN
+};
 
 }  // namespace session_manager
 

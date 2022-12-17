@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -479,23 +479,26 @@ static const struct collapse_case_ascii {
   const bool trim;
   const char* output;
 } collapse_cases_ascii[] = {
-  {" Google Video ", false, "Google Video"},
-  {"Google Video", false, "Google Video"},
-  {"", false, ""},
-  {"  ", false, ""},
-  {"\t\rTest String\n", false, "Test String"},
-  {"    Test     \n  \t String    ", false, "Test String"},
-  {"   Test String", false, "Test String"},
-  {"Test String    ", false, "Test String"},
-  {"Test String", false, "Test String"},
-  {"", true, ""},
-  {"\n", true, ""},
-  {"  \r  ", true, ""},
-  {"\nFoo", true, "Foo"},
-  {"\r  Foo  ", true, "Foo"},
-  {" Foo bar ", true, "Foo bar"},
-  {"  \tFoo  bar  \n", true, "Foo bar"},
-  {" a \r b\n c \r\n d \t\re \t f \n ", true, "abcde f"},
+    {" Google Video ", false, "Google Video"},
+    {"Google Video", false, "Google Video"},
+    {"", false, ""},
+    {"  ", false, ""},
+    {"\t\rTest String\n", false, "Test String"},
+    {"    Test     \n  \t String    ", false, "Test String"},
+    {"   Test String", false, "Test String"},
+    {"Test String    ", false, "Test String"},
+    {"Test String", false, "Test String"},
+    {"", true, ""},
+    {"\n", true, ""},
+    {"  \r  ", true, ""},
+    {"\nFoo", true, "Foo"},
+    {"\r  Foo  ", true, "Foo"},
+    {" Foo bar ", true, "Foo bar"},
+    // \u00A0 is whitespace, but not _ASCII_ whitespace, so it should not be
+    // collapsed by CollapseWhitespaceASCII().
+    {"Foo\u00A0bar", true, "Foo\u00A0bar"},
+    {"  \tFoo  bar  \n", true, "Foo bar"},
+    {" a \r b\n c \r\n d \t\re \t f \n ", true, "abcde f"},
 };
 
 TEST(StringUtilTest, CollapseWhitespaceASCII) {
@@ -1322,6 +1325,28 @@ TEST(StringUtilTest, MakeBasicStringPieceTest) {
   EXPECT_EQ(MakeWStringPiece(baz.begin(), baz.end()).data(), baz.data());
   EXPECT_EQ(MakeWStringPiece(baz.begin(), baz.end()).size(), baz.size());
   EXPECT_TRUE(MakeWStringPiece(baz.end(), baz.end()).empty());
+}
+
+enum class StreamableTestEnum { kGreeting, kLocation };
+
+std::ostream& operator<<(std::ostream& os, const StreamableTestEnum& value) {
+  switch (value) {
+    case StreamableTestEnum::kGreeting:
+      return os << "hello";
+    case StreamableTestEnum::kLocation:
+      return os << "world";
+  }
+}
+
+TEST(StringUtilTest, StreamableToString) {
+  EXPECT_EQ(StreamableToString("foo"), "foo");
+  EXPECT_EQ(StreamableToString(123), "123");
+  EXPECT_EQ(StreamableToString(StreamableTestEnum::kGreeting), "hello");
+  EXPECT_EQ(StreamableToString(StreamableTestEnum::kGreeting, " ",
+                               StreamableTestEnum::kLocation),
+            "hello world");
+  EXPECT_EQ(StreamableToString("42 in hex is ", std::hex, 42),
+            "42 in hex is 2a");
 }
 
 TEST(StringUtilTest, RemoveChars) {

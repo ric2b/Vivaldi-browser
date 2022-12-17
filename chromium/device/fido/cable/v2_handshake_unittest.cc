@@ -1,9 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "device/fido/cable/v2_handshake.h"
+
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "components/cbor/reader.h"
 #include "components/cbor/values.h"
 #include "components/cbor/writer.h"
@@ -79,7 +81,7 @@ TEST(CableV2Encoding, EIDEncrypt) {
 TEST(CableV2Encoding, QRs) {
   std::array<uint8_t, kQRKeySize> qr_key;
   crypto::RandBytes(qr_key);
-  std::string url = qr::Encode(qr_key, FidoRequestType::kMakeCredential);
+  std::string url = qr::Encode(qr_key, CableRequestType::kMakeCredential);
   const absl::optional<qr::Components> decoded = qr::Parse(url);
   ASSERT_TRUE(decoded.has_value()) << url;
   static_assert(EXTENT(qr_key) >= EXTENT(decoded->secret), "");
@@ -94,7 +96,7 @@ TEST(CableV2Encoding, QRs) {
   // Chromium always sets this flag.
   EXPECT_TRUE(decoded->supports_linking.value_or(false));
 
-  EXPECT_EQ(decoded->request_type, FidoRequestType::kMakeCredential);
+  EXPECT_EQ(decoded->request_type, CableRequestType::kMakeCredential);
 
   url[0] ^= 4;
   EXPECT_FALSE(qr::Parse(url));
@@ -114,7 +116,7 @@ TEST(CableV2Encoding, KnownQRs) {
     bool is_valid;
     int64_t num_known_domains;
     absl::optional<bool> supports_linking;
-    FidoRequestType request_type;
+    CableRequestType request_type;
   } kTests[] = {
       {
           // Basic, but valid, QR.
@@ -125,7 +127,7 @@ TEST(CableV2Encoding, KnownQRs) {
           /* is_valid= */ true,
           /* num_known_domains= */ 0,
           /* supports_linking= */ absl::nullopt,
-          /* request_type= */ FidoRequestType::kGetAssertion,
+          /* request_type= */ CableRequestType::kGetAssertion,
       },
       {
           // QR with an invalid compressed point.
@@ -156,7 +158,7 @@ TEST(CableV2Encoding, KnownQRs) {
           /* is_valid= */ true,
           /* num_known_domains= */ 4567,
           /* supports_linking= */ absl::nullopt,
-          /* request_type= */ FidoRequestType::kGetAssertion,
+          /* request_type= */ CableRequestType::kGetAssertion,
       },
       {
           // Incorrect structure.
@@ -177,7 +179,7 @@ TEST(CableV2Encoding, KnownQRs) {
           /* is_valid= */ true,
           /* num_known_domains= */ 0,
           /* supports_linking= */ true,
-          /* request_type= */ FidoRequestType::kGetAssertion,
+          /* request_type= */ CableRequestType::kGetAssertion,
       },
       {
           // Explicitly does not support linking.
@@ -189,7 +191,7 @@ TEST(CableV2Encoding, KnownQRs) {
           /* is_valid= */ true,
           /* num_known_domains= */ 0,
           /* supports_linking= */ false,
-          /* request_type= */ FidoRequestType::kGetAssertion,
+          /* request_type= */ CableRequestType::kGetAssertion,
       },
       {
           // Incorrect structure.
@@ -210,7 +212,7 @@ TEST(CableV2Encoding, KnownQRs) {
           /* is_valid= */ true,
           /* num_known_domains= */ 0,
           /* supports_linking= */ absl::nullopt,
-          /* request_type= */ FidoRequestType::kGetAssertion,
+          /* request_type= */ CableRequestType::kGetAssertion,
       },
       {
           // Other request type.
@@ -222,7 +224,7 @@ TEST(CableV2Encoding, KnownQRs) {
           /* is_valid= */ true,
           /* num_known_domains= */ 0,
           /* supports_linking= */ absl::nullopt,
-          /* request_type= */ FidoRequestType::kMakeCredential,
+          /* request_type= */ CableRequestType::kMakeCredential,
       },
       {
           // Unknown request type.
@@ -234,7 +236,7 @@ TEST(CableV2Encoding, KnownQRs) {
           /* is_valid= */ true,
           /* num_known_domains= */ 0,
           /* supports_linking= */ absl::nullopt,
-          /* request_type= */ FidoRequestType::kGetAssertion,
+          /* request_type= */ CableRequestType::kGetAssertion,
       },
       {
           // Incorrect structure.
@@ -255,7 +257,7 @@ TEST(CableV2Encoding, KnownQRs) {
           /* is_valid= */ true,
           /* num_known_domains= */ 0,
           /* supports_linking= */ absl::nullopt,
-          /* request_type= */ FidoRequestType::kGetAssertion,
+          /* request_type= */ CableRequestType::kGetAssertion,
       },
   };
 
@@ -284,12 +286,17 @@ TEST(CableV2Encoding, KnownQRs) {
 
 TEST(CableV2Encoding, RequestTypeToString) {
   for (const auto type :
-       {FidoRequestType::kMakeCredential, FidoRequestType::kGetAssertion}) {
+       {CableRequestType::kMakeCredential, CableRequestType::kGetAssertion}) {
     EXPECT_EQ(type, RequestTypeFromString(RequestTypeToString(type)));
   }
 
-  EXPECT_EQ(FidoRequestType::kGetAssertion, RequestTypeFromString("nonsense"));
-  EXPECT_EQ(FidoRequestType::kGetAssertion, RequestTypeFromString(""));
+  // kDiscoverableMakeCredential doesn't get encoded in the string format so
+  // will look the same as kMakeCredential.
+  EXPECT_EQ(RequestTypeToString(CableRequestType::kMakeCredential),
+            RequestTypeToString(CableRequestType::kDiscoverableMakeCredential));
+
+  EXPECT_EQ(CableRequestType::kGetAssertion, RequestTypeFromString("nonsense"));
+  EXPECT_EQ(CableRequestType::kGetAssertion, RequestTypeFromString(""));
 }
 
 TEST(CableV2Encoding, PaddedCBOR) {
@@ -404,8 +411,7 @@ TEST(CableV2Encoding, Digits) {
     if (!bytes.has_value()) {
       continue;
     }
-    EXPECT_TRUE(std::all_of(bytes->begin(), bytes->end(),
-                            [](uint8_t v) -> bool { return v == 0; }));
+    EXPECT_TRUE(base::ranges::all_of(*bytes, [](uint8_t v) { return v == 0; }));
   }
 
   // The encoding is used as part of an external protocol and so should not

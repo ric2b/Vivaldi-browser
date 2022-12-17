@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,14 +8,19 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/feature_list.h"
-#include "remoting/host/chromeos/ash_display_util.h"
-#include "remoting/host/chromeos/features.h"
+#include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
+#include "remoting/host/chromeos/ash_proxy.h"
 #include "remoting/host/chromeos/skia_bitmap_desktop_frame.h"
 
 namespace remoting {
 
 namespace {
+
+const char kUmaKeyForCapturerCreated[] =
+    "Enterprise.DeviceRemoteCommand.Crd.Capturer.Aura.Created";
+const char kUmaKeyForCapturerDestroyed[] =
+    "Enterprise.DeviceRemoteCommand.Crd.Capturer.Aura.Destroyed";
 
 std::unique_ptr<webrtc::DesktopFrame>
 ToDesktopFrame(int dpi, gfx::Point origin, absl::optional<SkBitmap> bitmap) {
@@ -36,21 +41,31 @@ ToDesktopFrame(int dpi, gfx::Point origin, absl::optional<SkBitmap> bitmap) {
   return frame;
 }
 
+void SendEventToUma(const char* event_name) {
+  base::UmaHistogramBoolean(event_name, true);
+}
+
 }  // namespace
 
 AuraDesktopCapturer::AuraDesktopCapturer()
-    : AuraDesktopCapturer(AshDisplayUtil::Get()) {}
+    : AuraDesktopCapturer(AshProxy::Get()) {}
 
-AuraDesktopCapturer::AuraDesktopCapturer(AshDisplayUtil& util) : util_(util) {}
+AuraDesktopCapturer::AuraDesktopCapturer(AshProxy& ash_proxy)
+    : ash_(ash_proxy) {
+  LOG(INFO) << "CRD: Starting aura desktop capturer";
+  SendEventToUma(kUmaKeyForCapturerCreated);
+}
 
-AuraDesktopCapturer::~AuraDesktopCapturer() = default;
+AuraDesktopCapturer::~AuraDesktopCapturer() {
+  SendEventToUma(kUmaKeyForCapturerDestroyed);
+}
 
 void AuraDesktopCapturer::Start(webrtc::DesktopCapturer::Callback* callback) {
   DCHECK(!callback_) << "Start() can only be called once";
   callback_ = callback;
   DCHECK(callback_);
 
-  source_display_id_ = util_.GetPrimaryDisplayId();
+  source_display_id_ = ash_.GetPrimaryDisplayId();
 }
 
 void AuraDesktopCapturer::CaptureFrame() {
@@ -63,9 +78,9 @@ void AuraDesktopCapturer::CaptureFrame() {
     return;
   }
 
-  util_.TakeScreenshotOfDisplay(
+  ash_.TakeScreenshotOfDisplay(
       source_display_id_,
-      base::BindOnce(ToDesktopFrame, util_.GetDpi(*source),
+      base::BindOnce(ToDesktopFrame, ash_.GetDpi(*source),
                      source->bounds().origin())
           .Then(base::BindOnce(&AuraDesktopCapturer::OnFrameCaptured,
                                weak_factory_.GetWeakPtr())));
@@ -74,6 +89,7 @@ void AuraDesktopCapturer::CaptureFrame() {
 void AuraDesktopCapturer::OnFrameCaptured(
     std::unique_ptr<webrtc::DesktopFrame> frame) {
   if (!frame) {
+    VLOG(3) << "Failed to capture a desktop frame";
     callback_->OnCaptureResult(DesktopCapturer::Result::ERROR_TEMPORARY,
                                nullptr);
     return;
@@ -90,10 +106,7 @@ bool AuraDesktopCapturer::GetSourceList(SourceList* sources) {
 }
 
 bool AuraDesktopCapturer::SelectSource(SourceId id) {
-  if (!base::FeatureList::IsEnabled(features::kEnableMultiMonitorsInCrd))
-    return false;
-
-  if (!util_.GetDisplayForId(id))
+  if (!ash_.GetDisplayForId(id))
     return false;
 
   source_display_id_ = id;
@@ -101,7 +114,7 @@ bool AuraDesktopCapturer::SelectSource(SourceId id) {
 }
 
 const display::Display* AuraDesktopCapturer::GetSourceDisplay() const {
-  return util_.GetDisplayForId(source_display_id_);
+  return ash_.GetDisplayForId(source_display_id_);
 }
 
 }  // namespace remoting

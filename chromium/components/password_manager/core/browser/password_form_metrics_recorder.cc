@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -668,6 +668,9 @@ void PasswordFormMetricsRecorder::RecordPasswordBubbleShown(
     case metrics_util::AUTOMATIC_SIGNIN_TOAST:
     case metrics_util::AUTOMATIC_COMPROMISED_CREDENTIALS_REMINDER:
     case metrics_util::AUTOMATIC_MOVE_TO_ACCOUNT_STORE:
+    case metrics_util::AUTOMATIC_BIOMETRIC_AUTHENTICATION_FOR_FILLING:
+    case metrics_util::MANUAL_BIOMETRIC_AUTHENTICATION_FOR_FILLING:
+    case metrics_util::AUTOMATIC_BIOMETRIC_AUTHENTICATION_CONFIRMATION:
       // Do nothing.
       return;
 

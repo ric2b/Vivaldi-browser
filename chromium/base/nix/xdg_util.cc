@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -94,6 +95,8 @@ DesktopEnvironment GetDesktopEnvironment(Environment* env) {
         return DESKTOP_ENVIRONMENT_XFCE;
       if (value == "UKUI")
         return DESKTOP_ENVIRONMENT_UKUI;
+      if (value == "LXQt")
+        return DESKTOP_ENVIRONMENT_LXQT;
     }
   }
 
@@ -157,12 +160,41 @@ const char* GetDesktopEnvironmentName(DesktopEnvironment env) {
       return "XFCE";
     case DESKTOP_ENVIRONMENT_UKUI:
       return "UKUI";
+    case DESKTOP_ENVIRONMENT_LXQT:
+      return "LXQT";
   }
   return nullptr;
 }
 
 const char* GetDesktopEnvironmentName(Environment* env) {
   return GetDesktopEnvironmentName(GetDesktopEnvironment(env));
+}
+
+SessionType GetSessionType(Environment& env) {
+  std::string xdg_session_type;
+  if (!env.GetVar(kXdgSessionTypeEnvVar, &xdg_session_type))
+    return SessionType::kUnset;
+
+  TrimWhitespaceASCII(ToLowerASCII(xdg_session_type), TrimPositions::TRIM_ALL,
+                      &xdg_session_type);
+
+  if (xdg_session_type == "wayland")
+    return SessionType::kWayland;
+
+  if (xdg_session_type == "x11")
+    return SessionType::kX11;
+
+  if (xdg_session_type == "tty")
+    return SessionType::kTty;
+
+  if (xdg_session_type == "mir")
+    return SessionType::kMir;
+
+  if (xdg_session_type == "unspecified")
+    return SessionType::kUnspecified;
+
+  LOG(ERROR) << "Unknown XDG_SESSION_TYPE: " << xdg_session_type;
+  return SessionType::kOther;
 }
 
 }  // namespace nix

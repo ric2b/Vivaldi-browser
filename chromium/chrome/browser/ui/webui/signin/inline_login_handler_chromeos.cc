@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,6 @@
 #include "base/base64.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability_factory.h"
@@ -23,7 +22,6 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/webui/chromeos/edu_coexistence/edu_coexistence_state_tracker.h"
-#include "chrome/browser/ui/webui/signin/inline_login_dialog_chromeos.h"
 #include "chrome/browser/ui/webui/signin/inline_login_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_helper_chromeos.h"
 #include "chrome/common/pref_names.h"
@@ -105,20 +103,19 @@ const SkBitmap& GetDefaultAccountIcon() {
   return default_icon.GetRepresentation(1.0f).GetBitmap();
 }
 
-base::Value GaiaAccountToValue(const ::account_manager::Account& account,
-                               const AccountInfo& account_info) {
+base::Value::Dict GaiaAccountToValue(const ::account_manager::Account& account,
+                                     const AccountInfo& account_info) {
   DCHECK_EQ(account.key.account_type(), account_manager::AccountType::kGaia);
   DCHECK(!account_info.IsEmpty());
 
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetKey(kAccountKeyId, base::Value(account.key.id()));
-  dict.SetKey(kAccountKeyEmail, base::Value(account.raw_email));
-  dict.SetKey(kAccountKeyFullName, base::Value(account_info.full_name));
-  dict.SetKey(kAccountKeyImage,
-              base::Value(webui::GetBitmapDataUrl(
-                  account_info.account_image.IsEmpty()
-                      ? GetDefaultAccountIcon()
-                      : account_info.account_image.AsBitmap())));
+  base::Value::Dict dict;
+  dict.Set(kAccountKeyId, account.key.id());
+  dict.Set(kAccountKeyEmail, account.raw_email);
+  dict.Set(kAccountKeyFullName, account_info.full_name);
+  dict.Set(kAccountKeyImage, webui::GetBitmapDataUrl(
+                                 account_info.account_image.IsEmpty()
+                                     ? GetDefaultAccountIcon()
+                                     : account_info.account_image.AsBitmap()));
 
   return dict;
 }
@@ -270,18 +267,17 @@ void InlineLoginHandlerChromeOS::RegisterMessages() {
 
 void InlineLoginHandlerChromeOS::SetExtraInitParams(base::Value::Dict& params) {
   const GaiaUrls* const gaia_urls = GaiaUrls::GetInstance();
-  params.Set("clientId", base::Value(gaia_urls->oauth2_chrome_client_id()));
+  params.Set("clientId", gaia_urls->oauth2_chrome_client_id());
 
   const GURL& url = gaia_urls->embedded_setup_chromeos_url(2U);
-  params.Set("gaiaPath", base::Value(url.path().substr(1)));
+  params.Set("gaiaPath", url.path().substr(1));
 
-  params.Set(
-      "platformVersion",
-      base::Value(version_loader::GetVersion(version_loader::VERSION_SHORT)));
-  params.Set("constrained", base::Value("1"));
-  params.Set("flow",
-             base::Value(GetInlineLoginFlowName(Profile::FromWebUI(web_ui()),
-                                                params.FindString("email"))));
+  absl::optional<std::string> version =
+      version_loader::GetVersion(version_loader::VERSION_SHORT);
+  params.Set("platformVersion", version.value_or("0.0.0.0"));
+  params.Set("constrained", "1");
+  params.Set("flow", GetInlineLoginFlowName(Profile::FromWebUI(web_ui()),
+                                            params.FindString("email")));
   params.Set("dontResizeNonEmbeddedPages", true);
   params.Set("enableGaiaActionButtons", true);
 
@@ -385,7 +381,7 @@ void InlineLoginHandlerChromeOS::ShowSigninErrorPage(
   params.Set("deviceType", ui::GetChromeOSDeviceName());
   params.Set("signinBlockedByPolicy", !hosted_domain.empty() ? true : false);
 
-  FireWebUIListener("show-signin-error-page", base::Value(std::move(params)));
+  FireWebUIListener("show-signin-error-page", params);
 }
 
 void InlineLoginHandlerChromeOS::ShowIncognitoAndCloseDialog(
@@ -406,7 +402,7 @@ void InlineLoginHandlerChromeOS::GetAccountsInSession(
 void InlineLoginHandlerChromeOS::OnGetAccounts(
     const std::string& callback_id,
     const std::vector<::account_manager::Account>& accounts) {
-  base::ListValue account_emails;
+  base::Value::List account_emails;
   for (const auto& account : accounts) {
     if (account.key.account_type() ==
         ::account_manager::AccountType::kActiveDirectory) {
@@ -417,8 +413,7 @@ void InlineLoginHandlerChromeOS::OnGetAccounts(
     }
   }
 
-  ResolveJavascriptCallback(base::Value(callback_id),
-                            std::move(account_emails));
+  ResolveJavascriptCallback(base::Value(callback_id), account_emails);
 }
 
 void InlineLoginHandlerChromeOS::GetAccountsNotAvailableInArc(
@@ -446,7 +441,7 @@ void InlineLoginHandlerChromeOS::FinishGetAccountsNotAvailableInArc(
     const std::string& callback_id,
     const std::vector<::account_manager::Account>& accounts,
     const base::flat_set<account_manager::Account>& arc_accounts) {
-  base::Value result(base::Value::Type::LIST);
+  base::Value::List result;
   auto* identity_manager =
       IdentityManagerFactory::GetForProfile(Profile::FromWebUI(web_ui()));
   for (const auto& account : accounts) {
@@ -462,7 +457,7 @@ void InlineLoginHandlerChromeOS::FinishGetAccountsNotAvailableInArc(
       result.Append(GaiaAccountToValue(account, maybe_account_info));
     }
   }
-  ResolveJavascriptCallback(base::Value(callback_id), std::move(result));
+  ResolveJavascriptCallback(base::Value(callback_id), result);
 }
 
 void InlineLoginHandlerChromeOS::MakeAvailableInArcAndCloseDialog(

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,11 +11,12 @@
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/permission_result.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/data_element.h"
 #include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 
 namespace content {
@@ -55,6 +56,8 @@ PendingBeaconHost::PendingBeaconHost(
       service_(service) {
   DCHECK(shared_url_factory_);
   DCHECK(service_);
+
+  render_frame_host().GetProcess()->AddObserver(this);
 }
 
 void PendingBeaconHost::CreateBeacon(
@@ -68,6 +71,11 @@ void PendingBeaconHost::CreateBeacon(
 
 PendingBeaconHost::~PendingBeaconHost() {
   // The blink::Document is about to destroy.
+  if (IsInObserverList()) {
+    render_frame_host().GetProcess()->RemoveObserver(this);
+  }
+  CHECK(!IsInObserverList());
+
   // Checks if it has Background Sync granted before sending out the rest of
   // beacons.
   // https://github.com/WICG/unload-beacon#privacy
@@ -104,12 +112,46 @@ void PendingBeaconHost::Send(
   if (beacons.empty()) {
     return;
   }
+
   service_->SendBeacons(beacons, shared_url_factory_.get());
 }
 
 void PendingBeaconHost::SetReceiver(
     mojo::PendingReceiver<blink::mojom::PendingBeaconHost> receiver) {
   receiver_.Bind(std::move(receiver));
+}
+
+void PendingBeaconHost::SendAllOnNavigation() {
+  if (!blink::features::kPendingBeaconAPIForcesSendingOnNavigation.Get()) {
+    return;
+  }
+
+  // Sends out all `beacons_` ASAP to avoid network change happens.
+  // This is to mitigate potential privacy issue that when network changes
+  // after users think they have left a page, beacons queued in that page
+  // still exist and get sent through the new network, which leaks navigation
+  // history to the new network.
+  // See https://github.com/WICG/unload-beacon/issues/30.
+
+  // Swaps out from private field first to make any potential subsequent send
+  // requests from renderer no-ops.
+  std::vector<std::unique_ptr<Beacon>> to_send;
+  to_send.swap(beacons_);
+  Send(to_send);
+
+  // Now all beacons are gone.
+  // The renderer-side beacons should update their pending states by themselves.
+}
+
+void PendingBeaconHost::RenderProcessExited(
+    RenderProcessHost*,
+    const ChildProcessTerminationInfo&) {
+  std::vector<std::unique_ptr<Beacon>> to_send;
+  to_send.swap(beacons_);
+  Send(to_send);
+}
+void PendingBeaconHost::RenderProcessHostDestroyed(RenderProcessHost*) {
+  render_frame_host().GetProcess()->RemoveObserver(this);
 }
 
 DOCUMENT_USER_DATA_KEY_IMPL(PendingBeaconHost);
@@ -212,6 +254,6 @@ Beacon::GenerateResourceRequest() const {
   }
 
   return request;
-};
+}
 
 }  // namespace content

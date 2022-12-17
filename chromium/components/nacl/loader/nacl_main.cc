@@ -1,10 +1,11 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_device_source.h"
@@ -26,6 +27,7 @@ int NaClMain(content::MainFunctionParams parameters) {
   const base::CommandLine& parsed_command_line = *parameters.command_line;
 
   // The Mojo EDK must be initialized before using IPC.
+  mojo::core::InitFeatures();
   mojo::core::Init();
 
   // The main thread of the plugin services IO.

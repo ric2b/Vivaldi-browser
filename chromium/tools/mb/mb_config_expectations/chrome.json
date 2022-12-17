@@ -85,6 +85,7 @@
   "chromeos-eve-chrome": {
     "args_file": "//build/args/chromeos/eve.gni",
     "gn_args": {
+      "also_build_lacros_chrome_for_architecture": "amd64",
       "dcheck_always_on": true,
       "exclude_unwind_tables": false,
       "is_chrome_branded": true,
@@ -138,6 +139,19 @@
       "is_chrome_branded": true,
       "is_chromeos_device": true,
       "is_official_build": true,
+      "ozone_platform_headless": true,
+      "use_goma": true
+    }
+  },
+  "chromeos-trogdor64-chrome-skylab": {
+    "args_file": "//build/args/chromeos/trogdor64.gni",
+    "gn_args": {
+      "dcheck_always_on": true,
+      "exclude_unwind_tables": false,
+      "is_chrome_branded": true,
+      "is_chromeos_device": true,
+      "is_official_build": true,
+      "is_skylab": true,
       "ozone_platform_headless": true,
       "use_goma": true
     }

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
@@ -19,7 +20,9 @@
 #include "ash/wm/overview/delayed_animation_observer_impl.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
+#include "ash/wm/overview/overview_highlight_controller.h"
 #include "ash/wm/overview/overview_item.h"
+#include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
@@ -165,10 +168,10 @@ void SetTransform(aura::Window* window, const gfx::Transform& transform) {
     aura::Window* parent_window = window_iter->parent();
     gfx::RectF original_bounds(window_iter->GetTargetBounds());
     ::wm::TranslateRectToScreen(parent_window, &original_bounds);
-    gfx::Transform new_transform =
-        TransformAboutPivot(gfx::Point(target_origin.x() - original_bounds.x(),
-                                       target_origin.y() - original_bounds.y()),
-                            transform);
+    const gfx::Transform new_transform = TransformAboutPivot(
+        gfx::PointF(target_origin.x() - original_bounds.x(),
+                    target_origin.y() - original_bounds.y()),
+        transform);
     window_iter->SetTransform(new_transform);
   }
 }
@@ -202,11 +205,11 @@ gfx::Rect GetGridBoundsInScreen(
   // convert |window_dragging_state| to a split view state.
   if (!split_view_controller->InSplitViewMode() && window_dragging_state) {
     switch (*window_dragging_state) {
-      case SplitViewDragIndicators::WindowDraggingState::kToSnapLeft:
-        state = SplitViewController::State::kLeftSnapped;
+      case SplitViewDragIndicators::WindowDraggingState::kToSnapPrimary:
+        state = SplitViewController::State::kPrimarySnapped;
         break;
-      case SplitViewDragIndicators::WindowDraggingState::kToSnapRight:
-        state = SplitViewController::State::kRightSnapped;
+      case SplitViewDragIndicators::WindowDraggingState::kToSnapSecondary:
+        state = SplitViewController::State::kSecondarySnapped;
         break;
       default:
         break;
@@ -216,18 +219,19 @@ gfx::Rect GetGridBoundsInScreen(
   gfx::Rect bounds;
   gfx::Rect work_area =
       WorkAreaInsets::ForWindow(target_root)->ComputeStableWorkArea();
-  absl::optional<SplitViewController::SnapPosition> opposite_position =
-      absl::nullopt;
+  absl::optional<SplitViewController::SnapPosition> opposite_position;
   switch (state) {
-    case SplitViewController::State::kLeftSnapped:
+    case SplitViewController::State::kPrimarySnapped:
       bounds = split_view_controller->GetSnappedWindowBoundsInScreen(
-          SplitViewController::RIGHT, /*window_for_minimum_size=*/nullptr);
-      opposite_position = absl::make_optional(SplitViewController::RIGHT);
+          SplitViewController::SnapPosition::kSecondary,
+          /*window_for_minimum_size=*/nullptr);
+      opposite_position = SplitViewController::SnapPosition::kSecondary;
       break;
-    case SplitViewController::State::kRightSnapped:
+    case SplitViewController::State::kSecondarySnapped:
       bounds = split_view_controller->GetSnappedWindowBoundsInScreen(
-          SplitViewController::LEFT, /*window_for_minimum_size=*/nullptr);
-      opposite_position = absl::make_optional(SplitViewController::LEFT);
+          SplitViewController::SnapPosition::kPrimary,
+          /*window_for_minimum_size=*/nullptr);
+      opposite_position = SplitViewController::SnapPosition::kPrimary;
       break;
     case SplitViewController::State::kNoSnap:
       bounds = work_area;
@@ -318,15 +322,15 @@ absl::optional<gfx::RectF> GetSplitviewBoundsMaintainingAspectRatio() {
           ->current_window_dragging_state();
   if (!SplitViewController::Get(root_window)->InSplitViewMode() &&
       SplitViewDragIndicators::GetSnapPosition(window_dragging_state) ==
-          SplitViewController::NONE) {
+          SplitViewController::SnapPosition::kNone) {
     return absl::nullopt;
   }
 
   // The hotseat bounds do not affect splitview after a window is snapped, so
   // the aspect ratio should reflect it and not worry about the hotseat.
-  return absl::make_optional(gfx::RectF(GetGridBoundsInScreen(
-      root_window, absl::make_optional(window_dragging_state),
-      /*divider_changed=*/false, /*account_for_hotseat=*/false)));
+  return gfx::RectF(GetGridBoundsInScreen(root_window, window_dragging_state,
+                                          /*divider_changed=*/false,
+                                          /*account_for_hotseat=*/false));
 }
 
 bool ShouldUseTabletModeGridLayout() {
@@ -336,6 +340,34 @@ bool ShouldUseTabletModeGridLayout() {
 gfx::Rect ToStableSizeRoundedRect(const gfx::RectF& rect) {
   return gfx::Rect(gfx::ToRoundedPoint(rect.origin()),
                    gfx::ToRoundedSize(rect.size()));
+}
+
+void UpdateOverviewHighlightForFocus(OverviewHighlightableView* target_view) {
+  auto* highlight_controller = Shell::Get()
+                                   ->overview_controller()
+                                   ->overview_session()
+                                   ->highlight_controller();
+  DCHECK(highlight_controller);
+
+  if (highlight_controller->IsFocusHighlightVisible())
+    highlight_controller->MoveHighlightToView(target_view);
+}
+
+void UpdateOverviewHighlightForFocusAndSpokenFeedback(
+    OverviewHighlightableView* target_view) {
+  AccessibilityControllerImpl* a11y_controller =
+      Shell::Get()->accessibility_controller();
+  DCHECK(a11y_controller);
+  auto* highlight_controller = Shell::Get()
+                                   ->overview_controller()
+                                   ->overview_session()
+                                   ->highlight_controller();
+  DCHECK(highlight_controller);
+
+  if (highlight_controller->IsFocusHighlightVisible() ||
+      a11y_controller->spoken_feedback().enabled()) {
+    highlight_controller->MoveHighlightToView(target_view);
+  }
 }
 
 }  // namespace ash

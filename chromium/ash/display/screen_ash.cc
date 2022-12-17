@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -203,6 +203,10 @@ void ScreenAsh::AddObserver(display::DisplayObserver* observer) {
 
 void ScreenAsh::RemoveObserver(display::DisplayObserver* observer) {
   GetDisplayManager()->RemoveObserver(observer);
+}
+
+display::TabletState ScreenAsh::GetTabletState() const {
+  return GetDisplayManager()->GetTabletState();
 }
 
 // static

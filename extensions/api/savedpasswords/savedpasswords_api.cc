@@ -133,7 +133,7 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  if (!params->password_form.password.get()) {
+  if (!params->password_form.password.has_value()) {
     return RespondNow(Error("No password"));
   }
 
@@ -150,7 +150,7 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
   password_form.username_value =
       base::UTF8ToUTF16(params->password_form.username);
   password_form.password_value =
-      base::UTF8ToUTF16(*params->password_form.password.get());
+      base::UTF8ToUTF16(params->password_form.password.value());
   password_form.date_created = base::Time::Now();
 
   Profile* profile = Profile::FromBrowserContext(browser_context());

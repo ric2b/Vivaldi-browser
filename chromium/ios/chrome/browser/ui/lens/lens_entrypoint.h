@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,11 @@ enum class LensEntrypoint {
   HomeScreenWidget = 1,
   NewTabPage = 2,
   Keyboard = 3,
-  kMaxValue = Keyboard,
+  Spotlight = 4,
+  OmniboxPostCapture = 5,
+  ImageShareMenu = 6,
+  AppIconLongPress = 7,
+  kMaxValue = AppIconLongPress,
 };
 
 extern const char kIOSLensEntrypoint[];

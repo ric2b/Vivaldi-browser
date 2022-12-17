@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2022 The Chromium Authors. All rights reserved.
-     Use of this source code is governed by a BSD-style license that can be
-     found in the LICENSE file. -->
+<!--
+Copyright 2022 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 
 <org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonView
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -33,6 +35,8 @@
         android:layout_marginStart="40dp"
         android:gravity="center"
         android:visibility="gone"
+        android:maxLines="1"
+        android:ellipsize="end"
         android:textAppearance="@style/TextAppearance.TextLarge.Primary"/>
     <org.chromium.ui.widget.ChromeImageView
         android:layout_width="40dp"

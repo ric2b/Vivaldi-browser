@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -195,6 +195,17 @@ GuestViewImpl.prototype.attachImpl = function(
 
   attachParams['instanceId'] = viewInstanceId;
   var contentWindow = getIframeContentWindow(viewInstanceId);
+
+  // The internal iframe element may have a null contentWindow at this point.
+  // For example, we may be trying to attach a guest whose element is in
+  // another iframe which has already shutdown.
+  if (!contentWindow) {
+    this.state = GuestViewImpl.GuestState.GUEST_STATE_CREATED;
+    this.internalInstanceId = 0;
+    this.handleCallback(callback);
+    return;
+  }
+
   // |contentWindow| is used to retrieve the RenderFrame in cpp.
   GuestViewInternalNatives.AttachIframeGuest(
       internalInstanceId, this.id, attachParams, contentWindow,

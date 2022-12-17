@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,6 +41,9 @@ class AutofillAssistant {
 
     // The form signatures that the script may be started on.
     std::vector<autofill::FormSignature> trigger_form_signatures;
+
+    // Indicates whether the script supports consentless execution.
+    bool supports_consentless_execution = false;
   };
 
   struct CapabilitiesInfo {
@@ -77,8 +80,6 @@ class AutofillAssistant {
   // number of leading bits of the domain url hashes. CityHash64 should be used
   // to calculate the hashes and only the leading |hash_prefix_length| bits
   // should be sent.
-  // |intent| should contain the string representation of the enum:
-  // https://source.corp.google.com/piper///depot/google3/quality/genie/autobot/dev/proto/script/intent.proto
   virtual void GetCapabilitiesByHashPrefix(
       uint32_t hash_prefix_length,
       const std::vector<uint64_t>& hash_prefix,

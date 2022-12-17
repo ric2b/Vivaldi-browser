@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -101,8 +101,20 @@ void UIBrokerImpl::ShowCompanionApp(scoped_refptr<Device> device) {
   }
 }
 
-void UIBrokerImpl::RemoveNotifications() {
-  fast_pair_presenter_->RemoveNotifications();
+void UIBrokerImpl::RemoveNotifications(
+    bool clear_already_shown_discovery_notification_cache) {
+  fast_pair_presenter_->RemoveNotifications(
+      clear_already_shown_discovery_notification_cache);
+}
+
+void UIBrokerImpl::RemoveDeviceFromAlreadyShownDiscoveryNotificationCache(
+    scoped_refptr<Device> device) {
+  fast_pair_presenter_->RemoveDeviceFromAlreadyShownDiscoveryNotificationCache(
+      device);
+}
+
+void UIBrokerImpl::StartDeviceLostTimer(scoped_refptr<Device> device) {
+  fast_pair_presenter_->StartDeviceLostTimer(device);
 }
 
 void UIBrokerImpl::NotifyDiscoveryAction(scoped_refptr<Device> device,

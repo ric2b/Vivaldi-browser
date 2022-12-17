@@ -1,11 +1,11 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /** @fileoverview Test implementation of PasswordManagerProxy. */
 
 // clang-format off
-import {AccountStorageOptInStateChangedListener, CredentialsChangedListener, PasswordCheckInteraction, PasswordCheckReferrer, PasswordCheckStatusChangedListener, PasswordExceptionListChangedListener, PasswordManagerProxy, PasswordsFileExportProgressListener, SavedPasswordListChangedListener} from 'chrome://settings/settings.js';
+import {AccountStorageOptInStateChangedListener, CredentialsChangedListener, PasswordCheckInteraction, PasswordCheckReferrer, PasswordCheckStatusChangedListener, PasswordExceptionListChangedListener, PasswordManagerProxy, PasswordsFileExportProgressListener, PasswordManagerAuthTimeoutListener, SavedPasswordListChangedListener} from 'chrome://settings/settings.js';
 import {assertEquals} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
@@ -63,8 +63,7 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
   data: {
     passwords: chrome.passwordsPrivate.PasswordUiEntry[],
     exceptions: chrome.passwordsPrivate.ExceptionEntry[],
-    leakedCredentials: chrome.passwordsPrivate.PasswordUiEntry[],
-    weakCredentials: chrome.passwordsPrivate.PasswordUiEntry[],
+    insecureCredentials: chrome.passwordsPrivate.PasswordUiEntry[],
     checkStatus: chrome.passwordsPrivate.PasswordCheckStatus,
   };
 
@@ -72,11 +71,12 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     addPasswordCheckStatusListener: PasswordCheckStatusChangedListener|null,
     addSavedPasswordListChangedListener: SavedPasswordListChangedListener|null,
     addExceptionListChangedListener: PasswordExceptionListChangedListener|null,
-    addCompromisedCredentialsListener: CredentialsChangedListener|null,
-    addWeakCredentialsListener: CredentialsChangedListener|null,
+    addInsecureCredentialsListener: CredentialsChangedListener|null,
     addAccountStorageOptInStateListener:
         AccountStorageOptInStateChangedListener|null,
     addPasswordsFileExportProgressListener: PasswordsFileExportProgressListener|
+    null,
+    addPasswordManagerAuthTimeoutListener: PasswordManagerAuthTimeoutListener|
     null,
   };
 
@@ -101,10 +101,10 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
       'cancelExportPasswords',
       'changeSavedPassword',
       'exportPasswords',
-      'getCompromisedCredentials',
+      'extendAuthValidity',
+      'getInsecureCredentials',
       'getPasswordCheckStatus',
       'getUrlCollection',
-      'getWeakCredentials',
       'importPasswords',
       'isAccountStoreDefault',
       'isOptedInForAccountStorage',
@@ -122,6 +122,7 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
       'startAutomatedPasswordChange',
       'startBulkPasswordCheck',
       'stopBulkPasswordCheck',
+      'switchBiometricAuthBeforeFillingState',
       'unmuteInsecureCredential',
     ]);
 
@@ -132,8 +133,7 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     this.data = {
       passwords: [],
       exceptions: [],
-      leakedCredentials: [],
-      weakCredentials: [],
+      insecureCredentials: [],
       checkStatus: makePasswordCheckStatus(),
     };
 
@@ -142,10 +142,10 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
       addPasswordCheckStatusListener: null,
       addSavedPasswordListChangedListener: null,
       addExceptionListChangedListener: null,
-      addCompromisedCredentialsListener: null,
-      addWeakCredentialsListener: null,
+      addInsecureCredentialsListener: null,
       addAccountStorageOptInStateListener: null,
       addPasswordsFileExportProgressListener: null,
+      addPasswordManagerAuthTimeoutListener: null,
     };
   }
 
@@ -294,14 +294,9 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     this.methodCalled('stopBulkPasswordCheck');
   }
 
-  getCompromisedCredentials() {
-    this.methodCalled('getCompromisedCredentials');
-    return Promise.resolve(this.data.leakedCredentials);
-  }
-
-  getWeakCredentials() {
-    this.methodCalled('getWeakCredentials');
-    return Promise.resolve(this.data.weakCredentials);
+  getInsecureCredentials() {
+    this.methodCalled('getInsecureCredentials');
+    return Promise.resolve(this.data.insecureCredentials.slice());
   }
 
   getPasswordCheckStatus() {
@@ -316,17 +311,11 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     return Promise.resolve(!!credential.changePasswordUrl);
   }
 
-  addCompromisedCredentialsListener(listener: CredentialsChangedListener) {
-    this.lastCallback.addCompromisedCredentialsListener = listener;
+  addInsecureCredentialsListener(listener: CredentialsChangedListener) {
+    this.lastCallback.addInsecureCredentialsListener = listener;
   }
 
-  removeCompromisedCredentialsListener(_listener: CredentialsChangedListener) {}
-
-  addWeakCredentialsListener(listener: CredentialsChangedListener) {
-    this.lastCallback.addWeakCredentialsListener = listener;
-  }
-
-  removeWeakCredentialsListener(_listener: CredentialsChangedListener) {}
+  removeInsecureCredentialsListener(_listener: CredentialsChangedListener) {}
 
   addPasswordCheckStatusListener(listener: PasswordCheckStatusChangedListener) {
     this.lastCallback.addPasswordCheckStatusListener = listener;
@@ -334,6 +323,14 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
 
   removePasswordCheckStatusListener(_listener:
                                         PasswordCheckStatusChangedListener) {}
+
+  addPasswordManagerAuthTimeoutListener(
+      listener: PasswordManagerAuthTimeoutListener) {
+    this.lastCallback.addPasswordManagerAuthTimeoutListener = listener;
+  }
+
+  removePasswordManagerAuthTimeoutListener(
+      _listener: PasswordManagerAuthTimeoutListener) {}
 
   recordPasswordCheckInteraction(interaction: PasswordCheckInteraction) {
     this.methodCalled('recordPasswordCheckInteraction', interaction);
@@ -409,6 +406,10 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
         'recordChangePasswordFlowStarted', insecureCredential, isManualFlow);
   }
 
+  extendAuthValidity() {
+    this.methodCalled('extendAuthValidity');
+  }
+
   importPasswords(toStore: chrome.passwordsPrivate.PasswordStoreSet) {
     this.methodCalled('importPasswords', toStore);
     return Promise.resolve(this.importResults_);
@@ -437,6 +438,10 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     this.methodCalled('requestExportProgressStatus');
     return Promise.resolve(
         chrome.passwordsPrivate.ExportProgressStatus.NOT_STARTED);
+  }
+
+  switchBiometricAuthBeforeFillingState() {
+    this.methodCalled('switchBiometricAuthBeforeFillingState');
   }
 
   undoRemoveSavedPasswordOrException() {}

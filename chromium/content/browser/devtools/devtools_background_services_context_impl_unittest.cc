@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -230,7 +230,8 @@ class DevToolsBackgroundServicesContextTest
           base::BindOnce(&DidRegisterServiceWorker,
                          &service_worker_registration_id,
                          run_loop.QuitClosure()),
-          /*requesting_frame_id=*/GlobalRenderFrameHostId());
+          /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+          PolicyContainerPolicies());
 
       run_loop.Run();
     }

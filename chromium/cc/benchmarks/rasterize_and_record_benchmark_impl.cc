@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -74,7 +74,9 @@ void RunBenchmark(RasterSource* raster_source,
 
       raster_source->PlaybackToCanvas(
           &canvas, raster_source->GetContentSize(contents_scale), content_rect,
-          content_rect, gfx::AxisTransform2d(contents_scale, gfx::Vector2dF()),
+          content_rect,
+          gfx::AxisTransform2d::FromScaleAndTranslation(contents_scale,
+                                                        gfx::Vector2dF()),
           settings);
 
       timer.NextLap();
@@ -223,7 +225,8 @@ void RasterizeAndRecordBenchmarkImpl::RunOnLayer(PictureLayerImpl* layer) {
           settings.max_preraster_distance_in_screen_pixels);
 
   PictureLayerTiling* tiling = tiling_set->AddTiling(
-      gfx::AxisTransform2d(layer->raster_contents_scale_, {}),
+      gfx::AxisTransform2d::FromScaleAndTranslation(
+          layer->raster_contents_scale_, gfx::Vector2dF()),
       layer->GetRasterSource());
   tiling->set_resolution(HIGH_RESOLUTION);
   tiling->CreateAllTilesForTesting();

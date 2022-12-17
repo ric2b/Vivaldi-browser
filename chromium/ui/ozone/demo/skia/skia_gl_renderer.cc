@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,11 +114,13 @@ void SkiaGlRenderer::RenderFrame() {
         base::BindOnce(&SkiaGlRenderer::PostRenderFrameTask,
                        weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SkiaGlRenderer::OnPresentation,
-                       weak_ptr_factory_.GetWeakPtr()));
+                       weak_ptr_factory_.GetWeakPtr()),
+        gl::FrameData());
   } else {
-    PostRenderFrameTask(
-        gfx::SwapCompletionResult(gl_surface_->SwapBuffers(base::BindOnce(
-            &SkiaGlRenderer::OnPresentation, weak_ptr_factory_.GetWeakPtr()))));
+    PostRenderFrameTask(gfx::SwapCompletionResult(
+        gl_surface_->SwapBuffers(base::BindOnce(&SkiaGlRenderer::OnPresentation,
+                                                weak_ptr_factory_.GetWeakPtr()),
+                                 gl::FrameData())));
   }
 }
 

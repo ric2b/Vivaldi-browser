@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,11 +17,10 @@ AttributionInfo::~AttributionInfo() = default;
 
 AttributionInfo::AttributionInfo(const AttributionInfo&) = default;
 
-AttributionInfo::AttributionInfo(AttributionInfo&& other) = default;
+AttributionInfo::AttributionInfo(AttributionInfo&&) = default;
 
-AttributionInfo& AttributionInfo::operator=(const AttributionInfo& other) =
-    default;
+AttributionInfo& AttributionInfo::operator=(const AttributionInfo&) = default;
 
-AttributionInfo& AttributionInfo::operator=(AttributionInfo&& other) = default;
+AttributionInfo& AttributionInfo::operator=(AttributionInfo&&) = default;
 
 }  // namespace content

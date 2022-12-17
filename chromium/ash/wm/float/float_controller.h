@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,12 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
+#include "ash/shell.h"
+#include "ash/shell_observer.h"
+#include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/scoped_observation.h"
+#include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/multitask_menu/float_controller_base.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
@@ -18,12 +22,16 @@
 
 namespace ash {
 
+class WorkspaceEventHandler;
+
 // This controller allows windows to be on top of all app windows, but below
 // pips. When a window is 'floated', it remains always on top for the user so
 // that they can complete secondary tasks. Floated window stays in the
 // `kShellWindowId_FloatContainer`.
 class ASH_EXPORT FloatController : public TabletModeObserver,
                                    public display::DisplayObserver,
+                                   public ShellObserver,
+                                   public DesksController::Observer,
                                    public chromeos::FloatControllerBase {
  public:
   // The possible corners that a floated window can be placed in tablet mode.
@@ -40,18 +48,8 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
   FloatController& operator=(const FloatController&) = delete;
   ~FloatController() override;
 
-  // The distance from the edge of the floated window to the edge of the work
-  // area when it is floated.
-  static constexpr int kFloatWindowPaddingDp = 8;
-
   // Returns float window bounds in clamshell mode.
   static gfx::Rect GetPreferredFloatWindowClamshellBounds(aura::Window* window);
-
-  // Determines if a window can be floated in clamshell mode.
-  static bool CanFloatWindowInClamshell(aura::Window* window);
-
-  // Determines if a window can be floated in tablet mode.
-  static bool CanFloatWindowInTablet(aura::Window* window);
 
   // Gets the ideal float bounds of `floated_window` in tablet mode if it were
   // to be floated.
@@ -63,6 +61,9 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
 
   // Checks if `floated_window` is tucked.
   bool IsFloatedWindowTuckedForTablet(const aura::Window* floated_window) const;
+
+  // Gets the tuck handle for a floated and tucked window.
+  views::Widget* GetTuckHandleWidget(const aura::Window* floated_window) const;
 
   // Called by the resizer when a drag is completed. Updates the bounds
   // and magnetism of the `floated_window`.
@@ -79,31 +80,78 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
                                bool left,
                                bool up);
 
+  // Returns the desk where floated window belongs to if window is floated and
+  // registered under `floated_window_info_map_`, otherwise returns nullptr.
+  const Desk* FindDeskOfFloatedWindow(const aura::Window* window) const;
+  // Returns the floated window that belongs to `desk`. If `desk` doesn't have a
+  // floated window, returns nullptr.
+  aura::Window* FindFloatedWindowOfDesk(const Desk* desk) const;
+
+  // Called when moving all `original_desk`'s windows out to `target_desk` due
+  // to the removal of `original_desk`. This function takes care of floated
+  // window (if any) since it doesn't belong to the desk container. Note: during
+  // desk removal/combination, `floated_window` will be unfloated if
+  // `target_desk` has a floated window.
+  void OnMovingAllWindowsOutToDesk(Desk* original_desk, Desk* target_desk);
+
+  // Called when moving the `floated_window` to `target_desk`. This function
+  // takes care of floated window since it doesn't belong to the desk container.
+  // Note: Unlike `OnMovingAllWindowsOutToDesk` above, if `target_desk` has a
+  // floated window, it will be unfloated, while `floated_window` remains
+  // floated.
+  // Note: When dragging `floated_window` to a different display, we need to map
+  // `floated_window` to the desk container with same ID on target display's
+  // root.
+  void OnMovingFloatedWindowToDesk(aura::Window* floated_window,
+                                   Desk* target_desk,
+                                   aura::Window* target_root);
+
   // TabletModeObserver:
   void OnTabletModeStarting() override;
   void OnTabletModeEnding() override;
   void OnTabletControllerDestroyed() override;
 
+  // DesksController::Observer:
+  void OnDeskAdded(const Desk* desk) override {}
+  void OnDeskRemoved(const Desk* desk) override {}
+  void OnDeskReordered(int old_index, int new_index) override {}
+  void OnDeskActivationChanged(const Desk* activated,
+                               const Desk* deactivated) override;
+  void OnDeskSwitchAnimationLaunching() override {}
+  void OnDeskSwitchAnimationFinished() override {}
+  void OnDeskNameChanged(const Desk* desk,
+                         const std::u16string& new_name) override {}
+
   // display::DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t metrics) override;
+
+  // ShellObserver:
+  void OnRootWindowAdded(aura::Window* root_window) override;
+  void OnRootWindowWillShutdown(aura::Window* root_window) override;
+  void OnShellDestroying() override;
 
   // chromeos::FloatControllerBase:
   void ToggleFloat(aura::Window* window) override;
 
  private:
-  class ScopedWindowTucker;
   class FloatedWindowInfo;
+  class ScopedWindowTucker;
+  class TuckHandle;
   friend class DefaultState;
   friend class TabletModeWindowState;
   friend class WindowFloatTest;
 
-  // Floats/Unfloats `window`.
-  // Only one floating window is allowed per desk, floating a new window on the
-  // same desk or moving a floated window to that desk will unfloat the other
-  // floated window (if any).
-  void Float(aura::Window* window);
-  void Unfloat(aura::Window* window);
+  // Calls `FloatImpl()` and additionally updates the magnetism if needed.
+  void FloatForTablet(aura::Window* window,
+                      chromeos::WindowStateType old_state_type);
+
+  // Floats/Unfloats `window`. Only one floating window is allowed per desk,
+  // floating a new window on the same desk or moving a floated window to that
+  // desk will unfloat the other floated window (if any).
+  // Note: currently window can only be floated from an active desk.
+  void FloatImpl(aura::Window* window);
+  void UnfloatImpl(aura::Window* window);
 
   // Unfloats `floated_window` from the desk it belongs to.
   void ResetFloatedWindow(aura::Window* floated_window);
@@ -123,9 +171,24 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
   base::flat_map<aura::Window*, std::unique_ptr<FloatedWindowInfo>>
       floated_window_info_map_;
 
+  // Workspace event handler which handles double click events to change to
+  // maximized state as well as horizontally and vertically maximize. We create
+  // one per root window.
+  base::flat_map<aura::Window*, std::unique_ptr<WorkspaceEventHandler>>
+      workspace_event_handlers_;
+
   base::ScopedObservation<TabletModeController, TabletModeObserver>
       tablet_mode_observation_{this};
+
+  base::ScopedObservation<DesksController, DesksController::Observer>
+      desks_controller_observation_{this};
+
   absl::optional<display::ScopedOptionalDisplayObserver> display_observer_;
+  base::ScopedObservation<Shell,
+                          ShellObserver,
+                          &Shell::AddShellObserver,
+                          &Shell::RemoveShellObserver>
+      shell_observation_{this};
 };
 
 }  // namespace ash

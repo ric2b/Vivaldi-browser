@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@ InvalidationsWebUITest.prototype = {
    * Browse to the Invalidations page.
    */
   browsePreload:
-      'chrome://invalidations/invalidations.html?module=invalidations/invalidations_test.js&host=test',
+      'chrome://invalidations/invalidations.html?module=invalidations/invalidations_test.js',
 
   extraLibraries: [
     '//third_party/mocha/mocha.js',

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabUtils;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.messages.DismissReason;
 import org.chromium.components.messages.MessageBannerProperties;
@@ -434,11 +435,10 @@ public class ReaderModeManager extends EmptyTabObserver implements UserData {
             }
 
             @Override
-            public void didFinishNavigation(NavigationHandle navigation) {
+            public void didFinishNavigationInPrimaryMainFrame(NavigationHandle navigation) {
                 // TODO(cjhopman): This should possibly ignore navigations that replace the entry
                 // (like those from history.replaceState()).
-                if (!navigation.hasCommitted() || !navigation.isInPrimaryMainFrame()
-                        || navigation.isSameDocument()) {
+                if (!navigation.hasCommitted() || navigation.isSameDocument()) {
                     return;
                 }
 
@@ -463,6 +463,11 @@ public class ReaderModeManager extends EmptyTabObserver implements UserData {
                 mReaderModePageUrl = null;
 
                 if (mDistillationStatus == DistillationStatus.POSSIBLE) tryShowingPrompt();
+            }
+
+            @Override
+            public void didFinishNavigationNoop(NavigationHandle navigation) {
+                if (!navigation.isInPrimaryMainFrame()) return;
             }
 
             @Override
@@ -500,6 +505,9 @@ public class ReaderModeManager extends EmptyTabObserver implements UserData {
     @VisibleForTesting
     void tryShowingPrompt() {
         if (mTab == null || mTab.getWebContents() == null) return;
+
+        // If a reader mode button will be shown on the toolbar then don't show a message.
+        if (AdaptiveToolbarFeatures.isReaderModePageActionEnabled()) return;
 
         // Test if the user is requesting the desktop site. Ignore this if distiller is set to
         // ALWAYS_TRUE.
@@ -571,16 +579,29 @@ public class ReaderModeManager extends EmptyTabObserver implements UserData {
         recordDismissalConditions(dismissReason);
 
         if (dismissReason != DismissReason.PRIMARY_ACTION) {
-            sMutedSites.add(urlToHash(url));
-            while (sMutedSites.size() > MAX_SIZE_OF_DECLINED_SITES) {
-                int v = sMutedSites.iterator().next();
-                sMutedSites.remove(v);
-            }
+            addUrlToMutedSites(url);
         }
+    }
+
+    private void addUrlToMutedSites(GURL url) {
+        sMutedSites.add(urlToHash(url));
+        while (sMutedSites.size() > MAX_SIZE_OF_DECLINED_SITES) {
+            int v = sMutedSites.iterator().next();
+            sMutedSites.remove(v);
+        }
+    }
+
+    private void removeUrlFromMutedSites(GURL url) {
+        sMutedSites.remove(urlToHash(url));
     }
 
     public void activateReaderMode() {
         RecordHistogram.recordBooleanHistogram("DomDistiller.InfoBarUsage", true);
+        // Contextual page action buttons can't be dismissed, instead we consider a shown but unused
+        // button as "dismissed" and mute the site on setReaderModeUiShown(). When the button gets
+        // clicked we un-mute the site to prevent the rate limiting logic from showing the CPA
+        // button for this site on other tabs.
+        removeUrlFromMutedSites(mDistillerUrl);
 
         if (DomDistillerTabUtils.isCctMode() && !SysUtils.isLowEndDevice()) {
             distillInCustomTab();
@@ -735,5 +756,25 @@ public class ReaderModeManager extends EmptyTabObserver implements UserData {
         int readerParentId = IntentUtils.safeGetInt(
                 intent.getExtras(), ReaderModeManager.EXTRA_READER_MODE_PARENT, Tab.INVALID_TAB_ID);
         return readerParentId != Tab.INVALID_TAB_ID;
+    }
+
+    /**
+     * Determine if a reader mode UI should be shown for the current tab and URL. Used when the
+     * contextual page action UI is enabled to replicate the rate limiting of the messages UI.
+     * @return True if the CPA UI should be suppressed.
+     */
+    public boolean isReaderModeUiRateLimited() {
+        return mMessageShown || sMutedSites.contains(urlToHash(mDistillerUrl));
+    }
+
+    /**
+     * Notify that a reader mode UI was shown for the current tab and URL. Used when the contextual
+     * page action UI is enabled to update the rate limiting logic.
+     */
+    public void setReaderModeUiShown() {
+        // Contextual page actions can't be dismissed, so we consider an unused button as
+        // "dismissed". Interacting with the button will undo this "mute" logic.
+        addUrlToMutedSites(mDistillerUrl);
+        mMessageShown = true;
     }
 }

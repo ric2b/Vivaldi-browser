@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -239,8 +239,7 @@ std::unique_ptr<CookieMonster> CreateMonsterFromStoreForGC(
     store->AddCookie(*cc);
   }
 
-  return std::make_unique<CookieMonster>(store.get(), /*net_log=*/nullptr,
-                                         /*first_party_sets_enabled=*/false);
+  return std::make_unique<CookieMonster>(store.get(), /*net_log=*/nullptr);
 }
 
 MockSimplePersistentCookieStore::~MockSimplePersistentCookieStore() = default;

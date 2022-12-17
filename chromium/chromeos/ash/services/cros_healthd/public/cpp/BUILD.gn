@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -21,8 +21,10 @@ source_set("cpp") {
     "service_connection.h",
   ]
   deps = [
+    "//ash/constants",
     "//base",
     "//chromeos/ash/components/dbus/cros_healthd",
+    "//chromeos/ash/components/mojo_service_manager",
     "//chromeos/ash/services/cros_healthd/public/mojom",
     "//ui/events/ozone/evdev:event_device_info",
   ]

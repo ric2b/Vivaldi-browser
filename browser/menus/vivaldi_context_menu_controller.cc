@@ -182,11 +182,11 @@ void ContextMenuController::PopulateModel(const Element& child,
         break;
       case context_menu::ITEM_TYPE_CHECKBOX:
         menu_model->AddCheckItem(id, label);
-        id_to_checked_map_[id] = item.checked && *item.checked;
+        id_to_checked_map_[id] = item.checked.value_or(false);
         break;
       case context_menu::ITEM_TYPE_RADIO:
-        menu_model->AddRadioItem(id, label, *item.radiogroup.get());
-        id_to_checked_map_[id] = item.checked && *item.checked;
+        menu_model->AddRadioItem(id, label, item.radiogroup.value_or(0));
+        id_to_checked_map_[id] = item.checked.value_or(false);
         break;
       case context_menu::ITEM_TYPE_FOLDER: {
         ui::SimpleMenuModel* child_menu_model;
@@ -217,18 +217,18 @@ void ContextMenuController::PopulateModel(const Element& child,
     if (item.showshortcut && *item.showshortcut == false) {
       show_shortcuts_ = false;
     }
-    if (item.action) {
-      id_to_action_map_[id] = item.action.get();
+    if (item.action.has_value()) {
+      id_to_action_map_[id] = item.action.value();
     }
-    if (item.enabled) {
-      id_to_enabled_map_[id] = *item.enabled;
+    if (item.enabled.has_value()) {
+      id_to_enabled_map_[id] = item.enabled.value();
     }
     if (item.url && !item.url->empty()) {
       // Set default document icon
       SetIcon(id, params_->properties.icons.at(0), menu_model);
       // Attempt loading a favicon that will replace the default.
-      id_to_url_map_[id] = item.url.get();
-      LoadFavicon(id, *item.url, true);
+      id_to_url_map_[id] = item.url.has_value();
+      LoadFavicon(id, item.url.value(), true);
     } else if (item.icons && item.icons->size() == 2) {
       const std::string icon = item.icons->at(dark_text_color ? 0 : 1);
       if (GURL(icon).SchemeIsHTTPOrHTTPS()) {
@@ -459,7 +459,7 @@ void ContextMenuController::VivaldiCommandIdHighlighted(int command_id) {
   auto it = id_to_url_map_.find(command_id);
   extensions::MenubarMenuAPI::SendHover(GetProfile(),
       params_->properties.window_id,
-      it != id_to_url_map_.end() ? *it->second : "");
+      it != id_to_url_map_.end() ? it->second : "");
 }
 
 void ContextMenuController::ExecuteCommand(int command_id, int event_flags) {

@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Tisk…</translation>
 <translation id="1181037720776840403">Odebrat</translation>
 <translation id="1187722533808055681">Probuzení z nečinnosti</translation>
-<translation id="119944043368869598">Vymazat vše</translation>
 <translation id="1221825588892235038">Pouze výběr</translation>
 <translation id="1234736487471201993">Vytvořit QR kód pro tento obrázek</translation>
 <translation id="1244303850296295656">Chyba rozšíření</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Vybr&amp;at vše</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Počet kopií k tisku zadejte jako číslo (od 1 do <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Odstranit vše</translation>
 <translation id="1994173015038366702">URL adresa webu</translation>
 <translation id="2019718679933488176">&amp;Otevřít zvuk v novém listu</translation>
 <translation id="2050339315714019657">Na výšku</translation>
@@ -67,7 +65,6 @@
 <translation id="2218515861914035131">Vložit jako prostý text</translation>
 <translation id="2249605167705922988">např. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Povolit identifikátory chráněného obsahu (může být potřeba restart počítače)</translation>
-<translation id="2277255602909579701">Všechny položky cookies a údaje stránek</translation>
 <translation id="2280486287150724112">Pravý okraj</translation>
 <translation id="2282146716419988068">Úloha GPU</translation>
 <translation id="2301382460326681002">Kořenový adresář rozšíření je neplatný.</translation>
@@ -92,8 +89,10 @@
 <translation id="2550212893339833758">Stránkovaná paměť</translation>
 <translation id="2553440850688409052">Skrýt tento plugin</translation>
 <translation id="26224892172169984">Nepovolovat žádným stránkám zpracovávat protokoly</translation>
+<translation id="2653275834716714682">Nahrazení textu</translation>
 <translation id="2662876636500006917">Internetový obchod Chrome</translation>
 <translation id="2678063897982469759">Znovu aktivovat</translation>
+<translation id="2678100101831051676">Odeslání nelze provést.</translation>
 <translation id="2721037002783622288">&amp;Vyhledat obrázek pomocí vyhledávače <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Vytvořit zástupce…</translation>
 <translation id="2785873697295365461">Popisovače souborů</translation>
@@ -121,7 +120,6 @@
 <translation id="3084548735795614657">Pusťte myš k instalaci</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Popisovače – UŽIVATEL</translation>
-<translation id="3127156390846601284">Touto akcí vymažete všechny údaje uložená v zařízení pro všechny zobrazené stránky. Chcete pokračovat?</translation>
 <translation id="3129173833825111527">Levý okraj</translation>
 <translation id="3144647712221361880">Otevřít odkaz jako</translation>
 <translation id="3222066309010235055">Předběžně vykreslit: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -144,7 +142,6 @@
 <translation id="3387614642886316601">Použít vylepšenou kontrolu pravopisu</translation>
 <translation id="3390013585654699824">Podrobnosti aplikace</translation>
 <translation id="3393582007140394275">Obrazovku nelze sdílet.</translation>
-<translation id="3432227430032737297">Odstranit všechny zobrazené</translation>
 <translation id="345693547134384690">Otevřít obrázek v novém l&amp;istu</translation>
 <translation id="3494769164076977169">Zeptat se po stažení prvního souboru, když se web pokouší stahovat soubory automaticky (doporučeno)</translation>
 <translation id="3505030558724226696">Zrušit přístup k zařízení</translation>
@@ -202,10 +199,10 @@
 <translation id="4409697491990005945">Okraje</translation>
 <translation id="4423376891418188461">Obnovit nastavení</translation>
 <translation id="4478664379124702289">Uložit cíl od&amp;kazu jako…</translation>
-<translation id="4579581181964204535">Nelze odeslat do <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Přejít na adresu <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikace a rozšíření může upravit pouze správce (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Rozšíření změnilo stránku, která se zobrazí při otevření nového listu.</translation>
+<translation id="4616405296204756919">Uložená hesla můžete používat na libovolném zařízení. Uložena jsou v <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Otevřít video v novém listu</translation>
 <translation id="4677772697204437347">Paměť GPU</translation>
 <translation id="4681930562518940301">Otevřít původní &amp;obrázek v novém listu</translation>
@@ -239,10 +236,12 @@
 <translation id="5233231016133573565">ID úlohy</translation>
 <translation id="5233736638227740678">&amp;Vložit</translation>
 <translation id="5256861893479663409">Na všech webech</translation>
+<translation id="5260334392110301220">Chytré uvozovky</translation>
 <translation id="5269977353971873915">Tisk se nezdařil</translation>
 <translation id="5284445933715251131">Pokračovat ve stahování</translation>
 <translation id="52912272896845572">Soubor soukromého klíče je neplatný.</translation>
 <translation id="5301954838959518834">Ano, chápu</translation>
+<translation id="5302932258331363306">Zobrazit náhrady</translation>
 <translation id="5317780077021120954">Uložit</translation>
 <translation id="5334142896108694079">Mezipaměť skriptů</translation>
 <translation id="5355926466126177564">Rozšíření <ph name="EXTENSION_NAME" /> změnilo stránku, která se zobrazí při vyhledávání z omniboxu.</translation>
@@ -275,7 +274,6 @@
 <translation id="5747809636523347288">Vložit a &amp;přejít na adresu <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokumenty odeslané k tisku prostřednictvím aplikace <ph name="APP_NAME" /> lze číst v aplikaci <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Uložit z&amp;vuk jako…</translation>
-<translation id="577624874850706961">Vyhledat cookie</translation>
 <translation id="5780973441651030252">Priorita procesu</translation>
 <translation id="5804241973901381774">Oprávnění</translation>
 <translation id="5828633471261496623">Tiskne se…</translation>
@@ -288,7 +286,6 @@
 <translation id="5965661248935608907">Také řídí, která stránka se zobrazí, když kliknete na tlačítko Domovská stránka nebo budete vyhledávat v omniboxu.</translation>
 <translation id="5978277834170881274">&amp;Používat základní kontrolu pravopisu</translation>
 <translation id="5979421442488174909">&amp;Přeložit do jazyka <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Vymazání údajů stránek</translation>
 <translation id="6042308850641462728">Více</translation>
 <translation id="6086846494333236931">Nainstalováno vaším administrátorem</translation>
 <translation id="6101226222197207147">Byla přidána nová aplikace (<ph name="EXTENSION_NAME" />)</translation>
@@ -344,6 +341,7 @@
 <translation id="7053983685419859001">Blokovat</translation>
 <translation id="7070484045139057854">Rozšíření může číst a měnit data webů</translation>
 <translation id="708060913198414444">K&amp;opírovat adresu zvukového souboru</translation>
+<translation id="7121728544325372695">Chytré pomlčky</translation>
 <translation id="7175353351958621980">Načteno z:</translation>
 <translation id="7186088072322679094">Zachovat v panelu nástrojů</translation>
 <translation id="7287143125007575591">Přístup byl odepřen.</translation>
@@ -401,7 +399,6 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Probíhá stahování}few{Probíhají stahování}many{Probíhají stahování}other{Probíhají stahování}}</translation>
 <translation id="8230134520748321204">Uložit heslo pro <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Toto rozšíření není uvedeno na webu <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo být přidáno bez vašeho vědomí.</translation>
-<translation id="8339059274628563283">Údaje stránky <ph name="SITE" /> v místním úložišti</translation>
 <translation id="8351419472474436977">Toto rozšíření převzalo kontrolu nad nastavením vašeho proxy serveru, což znamená, že může změnit, narušit nebo sledovat vše, co děláte na internetu. Pokud si nejste jisti, proč k tomu došlo, zřejmě se jedná o nežádoucí změnu.</translation>
 <translation id="8382913212082956454">Kopírovat &amp;e-mailovou adresu</translation>
 <translation id="8413385045638830869">Nejprve se dotázat (doporučeno)</translation>
@@ -427,6 +424,7 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8808478386290700967">Obchod Chrome</translation>
 <translation id="8823514049557262177">Kopírovat te&amp;xt odkazu</translation>
 <translation id="8823704566850948458">Navrhnout heslo…</translation>
+<translation id="883062543841130884">Náhrady</translation>
 <translation id="8859174528519900719">Podrámec: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Otevřít o&amp;dkaz v novém okně</translation>
 <translation id="8915370057835397490">Načítání návrhu</translation>

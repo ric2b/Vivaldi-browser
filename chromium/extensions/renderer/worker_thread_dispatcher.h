@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "content/public/renderer/worker_thread.h"
 #include "extensions/common/activation_sequence.h"
 #include "extensions/common/extension_id.h"
+#include "extensions/common/extension_messages.h"
 #include "extensions/common/mojom/event_dispatcher.mojom.h"
 #include "extensions/common/mojom/event_router.mojom.h"
 #include "ipc/ipc_sync_message_filter.h"
@@ -170,7 +171,7 @@ class WorkerThreadDispatcher : public content::RenderThreadObserver,
   void OnResponseWorker(int worker_thread_id,
                         int request_id,
                         bool succeeded,
-                        const base::Value::List& response,
+                        ExtensionMsg_ResponseWorkerData response,
                         const std::string& error);
   void OnValidateMessagePort(int worker_thread_id, const PortId& id);
   void OnDispatchOnConnect(int worker_thread_id,

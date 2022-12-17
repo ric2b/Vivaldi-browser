@@ -1,12 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/webui/personalization_app/test/fake_personalization_app_keyboard_backlight_provider.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom.h"
 
-namespace ash {
-namespace personalization_app {
+namespace ash::personalization_app {
 
 FakePersonalizationAppKeyboardBacklightProvider::
     FakePersonalizationAppKeyboardBacklightProvider(content::WebUI* web_ui) {}
@@ -21,5 +20,4 @@ void FakePersonalizationAppKeyboardBacklightProvider::BindInterface(
   ambient_receiver_.Bind(std::move(receiver));
 }
 
-}  // namespace personalization_app
-}  // namespace ash
+}  // namespace ash::personalization_app

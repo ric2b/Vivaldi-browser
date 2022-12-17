@@ -209,12 +209,10 @@ class WebTestResultsTest(unittest.TestCase):
     def test_was_interrupted(self):
         self.assertTrue(
             WebTestResults.results_from_string(
-                b'ADD_RESULTS({"tests":{},"interrupted":true});').
-            run_was_interrupted())
+                b'ADD_RESULTS({"tests":{},"interrupted":true});').interrupted)
         self.assertFalse(
             WebTestResults.results_from_string(
-                b'ADD_RESULTS({"tests":{},"interrupted":false});').
-            run_was_interrupted())
+                b'ADD_RESULTS({"tests":{},"interrupted":false});').interrupted)
 
     def test_chromium_revision(self):
         self.assertEqual(
@@ -312,8 +310,8 @@ class WebTestResultsTest(unittest.TestCase):
                         'os': 'Ubuntu-18.04'
                     }
                 },
-                'resultId': '3',
-                'name': 'tests/example/flaky.html/results/3',
+                'resultId': '4',
+                'name': 'tests/example/flaky.html/results/4',
                 'testId':
                 'ninja://:blink_web_tests/example/unexpected_fail.html'
             }, failed_results[0])

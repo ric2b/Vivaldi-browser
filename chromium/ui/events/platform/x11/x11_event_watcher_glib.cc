@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,7 +112,11 @@ void X11EventWatcherGlib::StopWatching() {
     return;
 
   g_source_destroy(x_source_);
-  g_source_unref(x_source_);
+  // `g_source_unref` decreases the reference count on `x_source_`. The
+  // underlying memory is freed if the reference count goes to zero. We use
+  // ExtractAsDangling() here to avoid holding a briefly dangling ptr in case
+  // the memory is freed.
+  g_source_unref(x_source_.ExtractAsDangling());
   started_ = false;
 }
 

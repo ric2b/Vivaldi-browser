@@ -1,0 +1,65 @@
+import("//build/config/ios/swift_source_set.gni")
+
+source_set("vivaldi_ntp") {
+  sources = [
+    "vivaldi_new_tab_page_view_controller.h",
+    "vivaldi_new_tab_page_view_controller.mm",
+    "vivaldi_ntp_constants.h",
+    "vivaldi_ntp_constants.mm",
+    "vivaldi_speed_dial_item.h",
+    "vivaldi_speed_dial_item.mm",
+    "vivaldi_speed_dial_container_view.h",
+    "vivaldi_speed_dial_container_view.mm",
+    "vivaldi_speed_dial_base_controller.h",
+    "vivaldi_speed_dial_base_controller.mm",
+    "vivaldi_speed_dial_view_controller.h",
+    "vivaldi_speed_dial_view_controller.mm",
+    "vivaldi_speed_dial_container_delegate.h",
+    "vivaldi_speed_dial_shared_state.h",
+    "vivaldi_speed_dial_shared_state.mm",
+    "vivaldi_speed_dial_home_mediator.h",
+    "vivaldi_speed_dial_home_mediator.mm",
+    "vivaldi_speed_dial_home_consumer.h",
+    "vivaldi_speed_dial_sorting_mode.h",
+    "vivaldi_speed_dial_prefs.h",
+    "vivaldi_speed_dial_prefs.mm",
+    "vivaldi_private_mode_view.h",
+    "vivaldi_private_mode_view.mm",
+  ]
+
+  deps = [
+    "//ui/base",
+    "//base",
+    "//base:i18n",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/common/ui/util",
+    "//ios/public/provider/chrome/browser",
+    "//ios/third_party/material_components_ios",
+    "//vivaldi/ios/chrome/browser/ui/ntp/cells",
+    "//vivaldi/ios/chrome/browser/ui/ntp/top_menu",
+    "resources:vivaldi_ntp_background_color",
+    "resources:vivaldi_ntp_searchbar_background_color",
+    "resources:vivaldi_ntp_searchbar_text_color",
+    "resources:vivaldi_ntp_speed_dial_container_background_color",
+    "resources:vivaldi_ntp_speed_dial_cell_background_color",
+    "resources:vivaldi_ntp_speed_dial_cell_shadow_color",
+    "resources:vivaldi_ntp_speed_dial_domain_text_color",
+    "resources:vivaldi_ntp_toolbar_selectionline_color",
+    "resources:vivaldi_ntp_toolbar_text_color",
+    "resources:vivaldi_ntp_toolbar_text_highlighted_color",
+    "resources:vivaldi_ntp_search",
+    "resources:vivaldi_ntp_toolbar_sort",
+    "resources:vivaldi_ntp_add_new_speed_dial",
+    "resources:vivaldi_ntp_add_new_speed_dial_folder",
+    "resources:vivaldi_private_tab_bg",
+    "resources:vivaldi_private_tab_ghost",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

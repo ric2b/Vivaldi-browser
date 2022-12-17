@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -141,7 +141,7 @@ class AuraLinuxApplication : public ui::AXPlatformNodeDelegateBase,
     // retrieved.
     if (data_.GetStringAttribute(ax::mojom::StringAttribute::kName).empty() &&
         ViewsDelegate::GetInstance()) {
-      data_.SetName(ViewsDelegate::GetInstance()->GetApplicationName());
+      data_.SetNameChecked(ViewsDelegate::GetInstance()->GetApplicationName());
     }
 
     return data_;

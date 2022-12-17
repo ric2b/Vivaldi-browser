@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
+#include "chrome/grit/generated_resources.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/color/color_id.h"
 #include "ui/views/background.h"
 #include "ui/views/layout/box_layout.h"
@@ -21,7 +23,8 @@ constexpr int kAssistantIconSize = 16;
 std::unique_ptr<AssistantSidePanelCoordinator>
 AssistantSidePanelCoordinator::Create(content::WebContents* web_contents) {
   if (SidePanelRegistry::Get(web_contents)
-          ->GetEntryForId(SidePanelEntry::Id::kAssistant)) {
+          ->GetEntryForKey(
+              SidePanelEntry::Key(SidePanelEntry::Id::kAssistant))) {
     return nullptr;
   }
   return std::make_unique<AssistantSidePanelCoordinatorImpl>(web_contents);
@@ -30,12 +33,10 @@ AssistantSidePanelCoordinator::Create(content::WebContents* web_contents) {
 AssistantSidePanelCoordinatorImpl::AssistantSidePanelCoordinatorImpl(
     content::WebContents* web_contents)
     : web_contents_(web_contents) {
-  // TODO(cr/1322419): Check with designers if this string should be "Google
-  // Assistant" as it is in other places. Also make make sure whether it should
-  // be translated.
   SidePanelRegistry::Get(web_contents)
       ->Register(std::make_unique<SidePanelEntry>(
-          SidePanelEntry::Id::kAssistant, u"Assistant",
+          SidePanelEntry::Id::kAssistant,
+          l10n_util::GetStringUTF16(IDS_AUTOFILL_ASSISTANT),
           ui::ImageModel::FromVectorIcon(GetAssistantIconOrFallback(),
                                          ui::kColorIcon, kAssistantIconSize),
           base::BindRepeating(
@@ -44,14 +45,15 @@ AssistantSidePanelCoordinatorImpl::AssistantSidePanelCoordinatorImpl(
 
   // Listen to `OnEntryHidden` events to be able to propagate them outside.
   GetSidePanelRegistry()
-      ->GetEntryForId(SidePanelEntry::Id::kAssistant)
+      ->GetEntryForKey(SidePanelEntry::Key(SidePanelEntry::Id::kAssistant))
       ->AddObserver(this);
 
   GetSidePanelCoordinator()->Show(SidePanelEntry::Id::kAssistant);
 }
 
 AssistantSidePanelCoordinatorImpl::~AssistantSidePanelCoordinatorImpl() {
-  GetSidePanelRegistry()->Deregister(SidePanelEntry::Id::kAssistant);
+  GetSidePanelRegistry()->Deregister(
+      SidePanelEntry::Key(SidePanelEntry::Id::kAssistant));
 }
 
 bool AssistantSidePanelCoordinatorImpl::Shown() {

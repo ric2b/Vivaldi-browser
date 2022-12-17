@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,7 @@ class MockGpuVideoAcceleratorFactories : public GpuVideoAcceleratorFactories {
 
   MOCK_METHOD0(GetTaskRunner, scoped_refptr<base::SequencedTaskRunner>());
   MOCK_METHOD0(GetMediaContextProvider, viz::RasterContextProvider*());
+  MOCK_METHOD0(ContextCapabilities, gpu::Capabilities*());
   MOCK_METHOD1(SetRenderingColorSpace, void(const gfx::ColorSpace&));
   MOCK_CONST_METHOD0(GetRenderingColorSpace, const gfx::ColorSpace&());
 

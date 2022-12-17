@@ -1,14 +1,14 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/hidden_style_css.m.js';
+import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
-import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
+import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
@@ -257,7 +257,8 @@ export class ModulesElement extends PolymerElement {
     const modules = await ModuleRegistry.getInstance().initializeModules(
         loadTimeData.getInteger('modulesLoadTimeout'));
     if (modules) {
-      NewTabPageProxy.getInstance().handler.onModulesLoadedWithData();
+      NewTabPageProxy.getInstance().handler.onModulesLoadedWithData(
+          modules.map(module => module.descriptor.id));
       const moduleContainers = modules.map(module => {
         const moduleWrapper = new ModuleWrapperElement();
         moduleWrapper.module = module;

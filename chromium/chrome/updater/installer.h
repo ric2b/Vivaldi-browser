@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,6 +76,7 @@ AppInstallerResult RunApplicationInstaller(
 class Installer final : public update_client::CrxInstaller {
  public:
   Installer(const std::string& app_id,
+            const std::string& client_install_data,
             const std::string& install_data_index,
             const std::string& target_channel,
             const std::string& target_version_prefix,
@@ -120,7 +121,6 @@ class Installer final : public update_client::CrxInstaller {
   // Runs the installer code with sync primitives to allow the code to
   // create processes and wait for them to exit.
   void InstallWithSyncPrimitives(const base::FilePath& unpack_path,
-                                 const std::string& public_key,
                                  std::unique_ptr<InstallParams> install_params,
                                  ProgressCallback progress_callback,
                                  Callback callback);
@@ -136,6 +136,7 @@ class Installer final : public update_client::CrxInstaller {
   UpdaterScope updater_scope_;
 
   const std::string app_id_;
+  const std::string client_install_data_;
   const std::string install_data_index_;
   const bool rollback_allowed_;
   const std::string target_channel_;

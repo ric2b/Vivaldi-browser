@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,7 @@
 #include "components/viz/common/resources/transferable_resource.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info_mojom_traits.h"
-#include "services/viz/public/cpp/compositing/resource_format_mojom_traits.h"
-#include "services/viz/public/mojom/compositing/resource_format.mojom-shared.h"
+#include "services/viz/public/cpp/compositing/shared_image_format_mojom_traits.h"
 #include "services/viz/public/mojom/compositing/transferable_resource.mojom-shared.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/ipc/color/gfx_param_traits.h"
@@ -35,7 +34,8 @@ struct StructTraits<viz::mojom::TransferableResourceDataView,
     return resource.id;
   }
 
-  static viz::ResourceFormat format(const viz::TransferableResource& resource) {
+  static viz::SharedImageFormat format(
+      const viz::TransferableResource& resource) {
     return resource.format;
   }
 
@@ -89,6 +89,11 @@ struct StructTraits<viz::mojom::TransferableResourceDataView,
   static const gfx::ColorSpace& color_space(
       const viz::TransferableResource& resource) {
     return resource.color_space;
+  }
+
+  static const absl::optional<gfx::ColorSpace>& color_space_when_sampled(
+      const viz::TransferableResource& resource) {
+    return resource.color_space_when_sampled;
   }
 
   static const absl::optional<gfx::HDRMetadata>& hdr_metadata(

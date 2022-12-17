@@ -493,6 +493,12 @@ locale.  The strings in this file are specific to iOS.
         <message name="IDS_VIVALDI_HISTORY_OPEN_CLEAR_BROWSING_DATA_DIALOG" desc="The iOS context menu item for adding a new folder. ">
           Clear Browsing Data ...
         </message>
+        <message name="IDS_IOS_NOTE_CONTEXT_BAR_EDIT" desc="The iOS context bar item for edit note. ">
+          Edit
+        </message>
+        <message name="IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER" desc="The iOS context bar item for adding new note folder. ">
+          New Folder
+        </message>
     </messages>
   </release>
 </grit>

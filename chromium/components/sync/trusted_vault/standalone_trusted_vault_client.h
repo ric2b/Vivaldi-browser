@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,6 +41,7 @@ class StandaloneTrustedVaultClient : public TrustedVaultClient {
   // |url_loader_factory| must not be null.
   StandaloneTrustedVaultClient(
       const base::FilePath& file_path,
+      const base::FilePath& deprecated_file_path,
       signin::IdentityManager* identity_manager,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 

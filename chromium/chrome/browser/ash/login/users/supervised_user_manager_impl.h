@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,10 +30,9 @@ class SupervisedUserManagerImpl : public SupervisedUserManager {
   std::string GetManagerUserId(const std::string& user_id) const override;
   std::string GetManagerDisplayEmail(const std::string& user_id) const override;
   void GetPasswordInformation(const std::string& user_id,
-                              base::DictionaryValue* result) override;
-  void SetPasswordInformation(
-      const std::string& user_id,
-      const base::DictionaryValue* password_info) override;
+                              base::Value::Dict* result) override;
+  void SetPasswordInformation(const std::string& user_id,
+                              const base::Value::Dict* password_info) override;
 
  private:
   friend class ChromeUserManagerImpl;

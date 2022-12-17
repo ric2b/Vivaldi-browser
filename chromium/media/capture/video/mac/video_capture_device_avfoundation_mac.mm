@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,12 +71,14 @@ constexpr size_t kPixelBufferPoolSize = 10;
 
 namespace media {
 
-const base::Feature kInCapturerScaling{"InCapturerScaling",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kInCapturerScaling,
+             "InCapturerScaling",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Uses the most recent advice from Apple for configuring and starting.
-const base::Feature kConfigureCaptureBeforeStart{
-    "ConfigureCaptureBeforeStart", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kConfigureCaptureBeforeStart,
+             "ConfigureCaptureBeforeStart",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 AVCaptureDeviceFormat* FindBestCaptureFormat(
     NSArray<AVCaptureDeviceFormat*>* formats,

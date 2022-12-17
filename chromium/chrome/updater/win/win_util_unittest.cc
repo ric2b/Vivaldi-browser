@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,38 +14,28 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
+#include "base/win/atl.h"
+#include "base/win/scoped_handle.h"
 #include "chrome/updater/test_scope.h"
 #include "chrome/updater/unittest_util_win.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_version.h"
 #include "chrome/updater/win/test/test_executables.h"
+#include "chrome/updater/win/test/test_strings.h"
 #include "chrome/updater/win/win_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
-namespace {
-
-// Converts an unsigned long integral to an HRESULT to avoid the
-// warning about a narrowing conversion.
-HRESULT MakeHRESULT(unsigned long x) {
-  return static_cast<HRESULT>(x);
-}
-
-}  // namespace
-
-TEST(WinUtil, HRESULTFromUpdaterError) {
-  EXPECT_EQ(HRESULTFromUpdaterError(0), MakeHRESULT(0xa0430000L));
-  EXPECT_EQ(HRESULTFromUpdaterError(ERROR_ACCESS_DENIED),
-            MakeHRESULT(0xa0430005));
-  EXPECT_EQ(HRESULTFromUpdaterError(-1), -1);
-  EXPECT_EQ(HRESULTFromUpdaterError(-10), -10);
-}
 
 TEST(WinUtil, GetDownloadProgress) {
   EXPECT_EQ(GetDownloadProgress(0, 50), 0);
@@ -118,16 +108,15 @@ TEST(WinUtil, BuildExeCommandLine) {
 }
 
 TEST(WinUtil, ShellExecuteAndWait) {
-  DWORD exit_code = 0;
+  HResultOr<DWORD> result =
+      ShellExecuteAndWait(base::FilePath(L"NonExistent.Exe"), {}, {});
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
 
-  EXPECT_EQ(ShellExecuteAndWait(base::FilePath(L"NonExistent.Exe"), {}, {},
-                                &exit_code),
-            HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
-
-  EXPECT_HRESULT_SUCCEEDED(ShellExecuteAndWait(
-      GetTestProcessCommandLine(GetTestScope()).GetProgram(), {}, {},
-      &exit_code));
-  EXPECT_EQ(exit_code, 0UL);
+  result = ShellExecuteAndWait(
+      GetTestProcessCommandLine(GetTestScope()).GetProgram(), {}, {});
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value(), DWORD{0});
 }
 
 TEST(WinUtil, RunElevated) {
@@ -136,13 +125,57 @@ TEST(WinUtil, RunElevated) {
   if (!::IsUserAnAdmin())
     return;
 
-  DWORD exit_code = 0;
   const base::CommandLine test_process_cmd_line =
       GetTestProcessCommandLine(GetTestScope());
-  EXPECT_HRESULT_SUCCEEDED(
+  HResultOr<DWORD> result =
       RunElevated(test_process_cmd_line.GetProgram(),
-                  test_process_cmd_line.GetArgumentsString(), &exit_code));
-  EXPECT_EQ(exit_code, 0UL);
+                  test_process_cmd_line.GetArgumentsString());
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value(), DWORD{0});
+}
+
+namespace {
+
+// Allows access to all authenticated users on the machine.
+CSecurityDesc GetEveryoneDaclSecurityDescriptor(ACCESS_MASK accessmask) {
+  CSecurityDesc sd;
+  CDacl dacl;
+  dacl.AddAllowedAce(Sids::System(), accessmask);
+  dacl.AddAllowedAce(Sids::Admins(), accessmask);
+  dacl.AddAllowedAce(Sids::Interactive(), accessmask);
+
+  sd.SetDacl(dacl);
+  sd.MakeAbsolute();
+  return sd;
+}
+
+}  // namespace
+
+TEST(WinUtil, RunDeElevated_Exe) {
+  if (!::IsUserAnAdmin() || !IsUACOn())
+    return;
+
+  // Create a shared event to be waited for in this process and signaled in the
+  // test process to confirm that the test process is running at medium
+  // integrity.
+  // The event is created with a security descriptor that allows the medium
+  // integrity process to signal it.
+  const std::wstring event_name =
+      base::StrCat({L"WinUtil.RunDeElevated-",
+                    base::NumberToWString(::GetCurrentProcessId())});
+  CSecurityAttributes sa(GetEveryoneDaclSecurityDescriptor(GENERIC_ALL));
+  base::WaitableEvent event(base::win::ScopedHandle(
+      ::CreateEvent(&sa, FALSE, FALSE, event_name.c_str())));
+  ASSERT_NE(event.handle(), nullptr);
+
+  base::CommandLine test_process_cmd_line =
+      GetTestProcessCommandLine(GetTestScope());
+  test_process_cmd_line.AppendSwitchNative(kTestEventToSignalIfMediumIntegrity,
+                                           event_name);
+  EXPECT_HRESULT_SUCCEEDED(
+      RunDeElevated(test_process_cmd_line.GetProgram().value(),
+                    test_process_cmd_line.GetArgumentsString()));
+  EXPECT_TRUE(event.TimedWait(TestTimeouts::action_max_timeout()));
 }
 
 TEST(WinUtil, GetOSVersion) {
@@ -263,9 +296,9 @@ TEST(WinUtil, CompareOSVersions_OldMajorWithHigherMinor) {
 }
 
 TEST(WinUtil, IsCOMCallerAdmin) {
-  bool is_com_caller_admin = false;
-  EXPECT_HRESULT_SUCCEEDED(IsCOMCallerAdmin(is_com_caller_admin));
-  EXPECT_EQ(is_com_caller_admin, ::IsUserAnAdmin());
+  HResultOr<bool> is_com_caller_admin = IsCOMCallerAdmin();
+  ASSERT_TRUE(is_com_caller_admin.has_value());
+  EXPECT_EQ(is_com_caller_admin.value(), ::IsUserAnAdmin());
 }
 
 TEST(WinUtil, EnableSecureDllLoading) {
@@ -274,6 +307,39 @@ TEST(WinUtil, EnableSecureDllLoading) {
 
 TEST(WinUtil, EnableProcessHeapMetadataProtection) {
   EXPECT_TRUE(EnableProcessHeapMetadataProtection());
+}
+
+TEST(WinUtil, CreateSecureTempDir) {
+  absl::optional<base::ScopedTempDir> temp_dir = CreateSecureTempDir();
+  EXPECT_TRUE(temp_dir);
+  EXPECT_TRUE(temp_dir->IsValid());
+
+  base::FilePath program_files_dir;
+  EXPECT_TRUE(
+      base::PathService::Get(base::DIR_PROGRAM_FILES, &program_files_dir));
+  EXPECT_EQ(program_files_dir.IsParent(temp_dir->GetPath()),
+            !!::IsUserAnAdmin());
+}
+
+TEST(WinUtil, SignalShutdownEvent) {
+  {
+    const base::ScopedClosureRunner reset_shutdown_event(
+        SignalShutdownEvent(GetTestScope()));
+
+    // Expect that the legacy GoogleUpdate shutdown event is signaled.
+    EXPECT_TRUE(IsShutdownEventSignaled(GetTestScope()))
+        << "Unexpected shutdown event not signaled";
+  }
+
+  // Expect that the legacy GoogleUpdate shutdown event is invalid now.
+  EXPECT_FALSE(IsShutdownEventSignaled(GetTestScope()))
+      << "Unexpected shutdown event signaled";
+}
+
+TEST(WinUtil, StopGoogleUpdateProcesses) {
+  // TODO(crbug.com/1290496) perhaps some comprehensive tests for
+  // `StopGoogleUpdateProcesses`?
+  EXPECT_TRUE(StopGoogleUpdateProcesses(GetTestScope()));
 }
 
 }  // namespace updater

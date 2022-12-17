@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -146,6 +146,7 @@ TEST_F(ArcWallpaperServiceTest, SetAndGetWallpaper) {
   service_->SetWallpaper(bytes, 10 /*wallpaper_id=*/);
   ASSERT_EQ(1u, wallpaper_instance_->changed_ids().size());
   EXPECT_EQ(10, wallpaper_instance_->changed_ids()[0]);
+  ASSERT_EQ(1, test_wallpaper_controller_.get_third_party_wallpaper_count());
 
   service_->GetWallpaper(
       base::BindOnce([](std::vector<uint8_t>* out,
@@ -167,6 +168,7 @@ TEST_F(ArcWallpaperServiceTest, SetWallpaperFailure) {
   ASSERT_EQ(2u, wallpaper_instance_->changed_ids().size());
   EXPECT_EQ(10, wallpaper_instance_->changed_ids()[0]);
   EXPECT_EQ(-1, wallpaper_instance_->changed_ids()[1]);
+  ASSERT_EQ(0, test_wallpaper_controller_.get_third_party_wallpaper_count());
 }
 
 // For crbug.com/1325863

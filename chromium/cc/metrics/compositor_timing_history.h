@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -86,7 +86,6 @@ class CC_EXPORT CompositorTimingHistory {
   void DidDraw(bool used_new_active_tree,
                bool has_custom_property_animations);
   void WillInvalidateOnImplSide();
-  void SetTreePriority(TreePriority priority);
 
   // Record the scheduler's deadline mode and send to UMA.
   using DeadlineMode = SchedulerStateMachine::BeginImplFrameDeadlineMode;
@@ -152,9 +151,11 @@ class CC_EXPORT CompositorTimingHistory {
   base::TimeDelta bmf_start_to_ready_to_activate_duration_;
 
   bool begin_main_frame_on_critical_path_ = false;
+  bool pending_commit_on_critical_path_ = false;
   bool pending_tree_on_critical_path_ = false;
   base::TimeTicks begin_main_frame_sent_time_;
   base::TimeTicks begin_main_frame_start_time_;
+  base::TimeTicks ready_to_commit_time_;
   base::TimeTicks commit_start_time_;
   base::TimeTicks pending_tree_creation_time_;
   base::TimeTicks pending_tree_ready_to_activate_time_;
@@ -171,8 +172,6 @@ class CC_EXPORT CompositorTimingHistory {
 
   // Used only for reporting animation targeted UMA.
   bool previous_frame_had_custom_property_animations_ = false;
-
-  TreePriority tree_priority_ = SAME_PRIORITY_FOR_BOTH_TREES;
 };
 
 }  // namespace cc

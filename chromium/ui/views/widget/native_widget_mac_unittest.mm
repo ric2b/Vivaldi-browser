@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -383,6 +383,37 @@ TEST_F(NativeWidgetMacTest, HideAndShowExternally) {
   widget->CloseNow();
   EXPECT_EQ(5, observer.lost_visible_count());
   EXPECT_EQ(6, observer.gained_visible_count());
+}
+
+// Check methods that should not be implemented by NativeWidgetMac.
+TEST_F(NativeWidgetMacTest, NotImplemented) {
+  NSWindow* native_parent = MakeBorderlessNativeParent();
+  NativeWidgetMacNSWindowHost* window_host =
+      NativeWidgetMacNSWindowHost::GetFromNativeWindow(native_parent);
+
+  EXPECT_FALSE(window_host->native_widget_mac()->WillExecuteCommand(
+                   5001, WindowOpenDisposition::CURRENT_TAB, true));
+  EXPECT_FALSE(window_host->native_widget_mac()->ExecuteCommand(
+                   5001, WindowOpenDisposition::CURRENT_TAB, true));
+
+  [native_parent close];
+}
+
+// Tests the WindowFrameTitlebarHeight method.
+TEST_F(NativeWidgetMacTest, WindowFrameTitlebarHeight) {
+  NSWindow* native_parent = MakeBorderlessNativeParent();
+  NativeWidgetMacNSWindowHost* window_host =
+      NativeWidgetMacNSWindowHost::GetFromNativeWindow(native_parent);
+
+  bool override_titlebar_height = true;
+  float titlebar_height = 100.0;
+  window_host->native_widget_mac()->GetWindowFrameTitlebarHeight(
+      &override_titlebar_height, &titlebar_height);
+
+  EXPECT_EQ(false, override_titlebar_height);
+  EXPECT_EQ(0.0, titlebar_height);
+
+  [native_parent close];
 }
 
 // A view that counts calls to OnPaint().

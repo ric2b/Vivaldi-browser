@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,7 @@ class VersionHandlerChromeOS : public VersionHandler {
   void RegisterMessages() override;
 
   // Callbacks from chromeos::VersionLoader.
-  void OnVersion(const std::string& version);
+  void OnVersion(const absl::optional<std::string>& version);
   void OnOSFirmware(const std::string& version);
   void OnArcAndArcAndroidSdkVersions(const std::string& version);
 

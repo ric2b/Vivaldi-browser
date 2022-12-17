@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,9 @@ public class ApplicationTestUtils {
 
     /** Waits until the given activity transitions to the given state. */
     public static void waitForActivityState(Activity activity, Stage stage) {
-        waitForActivityState(null, activity, stage);
+        waitForActivityState("Activity " + activity.getLocalClassName()
+                        + " did not reach stage: " + stage + ". Is the device screen turned on?",
+                activity, stage);
     }
 
     /** Waits until the given activity transitions to the given state. */

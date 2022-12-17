@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,7 +96,7 @@ function createRemoveAddressDialog(autofillManager: TestAutofillManager):
   autofillManager.data.addresses = [address];
   AutofillManagerImpl.setInstance(autofillManager);
 
-  document.body.innerHTML = '';
+  document.body.innerHTML = window.trustedTypes!.emptyHTML as unknown as string;
   const section = document.createElement('settings-autofill-section');
   document.body.appendChild(section);
   flush();
@@ -143,7 +143,8 @@ suite('AutofillSectionAddressTests', function() {
   });
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
   });
 
   test('verifyNoAddresses', function() {
@@ -504,7 +505,8 @@ suite('AutofillSectionAddressLocaleTests', function() {
   });
 
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
   });
 
   // US address has 3 fields on the same line.

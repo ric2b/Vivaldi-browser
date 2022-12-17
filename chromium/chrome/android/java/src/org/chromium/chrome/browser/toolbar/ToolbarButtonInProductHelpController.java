@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.CurrentTabObserver;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.chrome.browser.translate.TranslateUtils;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
@@ -154,7 +155,8 @@ public class ToolbarButtonInProductHelpController
      */
     private void showPriceTrackingIPH(Tab tab) {
         if (!ShoppingFeatures.isShoppingListEnabled()
-                || !PowerBookmarkUtils.isPriceTrackingEligible(tab)) {
+                || !PowerBookmarkUtils.isPriceTrackingEligible(tab)
+                || AdaptiveToolbarFeatures.isContextualPageActionUiEnabled()) {
             return;
         }
 

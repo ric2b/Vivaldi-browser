@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ import {BackgroundBridge} from '../common/background_bridge.js';
 import {BrailleCommandData} from '../common/braille/braille_command_data.js';
 import {BridgeConstants} from '../common/bridge_constants.js';
 import {BridgeHelper} from '../common/bridge_helper.js';
-import {CommandStore} from '../common/command_store.js';
+import {Command, CommandCategory, CommandStore} from '../common/command_store.js';
 import {EventSourceType} from '../common/event_source_type.js';
 import {GestureCommandData} from '../common/gesture_command_data.js';
 import {KeyMap} from '../common/key_map.js';
@@ -34,7 +34,7 @@ import {PanelMode, PanelModeInfo} from './panel_mode.js';
 export class Panel extends PanelInterface {
   /** @override */
   setPendingCallback(callback) {
-    /** @type {?Function} @private */
+    /** @private {?function() : !Promise} */
     Panel.pendingCallback_ = callback;
   }
 
@@ -346,7 +346,7 @@ export class Panel extends PanelInterface {
       }
       chromevoxMenu.addMenuItem(
           Msgs.getMsg('open_keyboard_shortcuts_menu'),
-          `Ctrl+Alt+${localizedSlash}`, '', '', function() {
+          `Ctrl+Alt+${localizedSlash}`, '', '', async function() {
             EventGenerator.sendKeyPress(
                 KeyCode.OEM_2 /* forward slash */, {'ctrl': true, 'alt': true});
           });
@@ -354,18 +354,18 @@ export class Panel extends PanelInterface {
       // Create a mapping between categories from CommandStore, and our
       // top-level menus. Some categories aren't mapped to any menu.
       const categoryToMenu = {
-        'navigation': jumpMenu,
-        'jump_commands': jumpMenu,
-        'overview': jumpMenu,
-        'tables': jumpMenu,
-        'controlling_speech': speechMenu,
-        'information': speechMenu,
-        'modifier_keys': chromevoxMenu,
-        'help_commands': chromevoxMenu,
-        'actions': actionsMenu,
+        [CommandCategory.NAVIGATION]: jumpMenu,
+        [CommandCategory.JUMP_COMMANDS]: jumpMenu,
+        [CommandCategory.OVERVIEW]: jumpMenu,
+        [CommandCategory.TABLES]: jumpMenu,
+        [CommandCategory.CONTROLLING_SPEECH]: speechMenu,
+        [CommandCategory.INFORMATION]: speechMenu,
+        [CommandCategory.MODIFIER_KEYS]: chromevoxMenu,
+        [CommandCategory.HELP_COMMANDS]: chromevoxMenu,
+        [CommandCategory.ACTIONS]: actionsMenu,
 
-        'braille': null,
-        'developer': null,
+        [CommandCategory.BRAILLE]: null,
+        [CommandCategory.DEVELOPER]: null,
       };
 
       // TODO(accessibility): Commands should be based off of CommandStore and
@@ -401,9 +401,11 @@ export class Panel extends PanelInterface {
 
       // Insert items from the bindings into the menus.
       const sawBindingSet = {};
+      const bindingMap = new Map();
       const gestures = Object.keys(GestureCommandData.GESTURE_COMMAND_MAP);
       sortedBindings.forEach(binding => {
         const command = binding.command;
+        bindingMap.set(binding.command, binding);
         if (sawBindingSet[command]) {
           return;
         }
@@ -470,7 +472,7 @@ export class Panel extends PanelInterface {
       // Add all open tabs to the Tabs menu.
       const data = await BackgroundBridge.PanelBackground.getTabMenuData();
       for (const menuInfo of data) {
-        tabsMenu.addMenuItem(menuInfo.title, '', '', '', () => {
+        tabsMenu.addMenuItem(menuInfo.title, '', '', '', async function() {
           BackgroundBridge.PanelBackground.focusTab(
               menuInfo.windowId, menuInfo.tabId);
         });
@@ -483,7 +485,8 @@ export class Panel extends PanelInterface {
           const menu = Panel.menus_[i];
           for (let j = 0; j < menu.items.length; ++j) {
             const item = menu.items[j];
-            if (CommandStore.denySignedOut(item.element.id)) {
+            if (CommandStore.denySignedOut(
+                    /** @type {!Command} */ (item.element.id))) {
               item.disable();
             }
           }
@@ -492,7 +495,8 @@ export class Panel extends PanelInterface {
 
       // Add a menu item that disables / closes ChromeVox.
       chromevoxMenu.addMenuItem(
-          Msgs.getMsg('disable_chromevox'), 'Ctrl+Alt+Z', '', '', function() {
+          Msgs.getMsg('disable_chromevox'), 'Ctrl+Alt+Z', '', '',
+          async function() {
             Panel.onClose();
           });
 
@@ -509,10 +513,12 @@ export class Panel extends PanelInterface {
         if (!actionMsg) {
           continue;
         }
-
+        const commandName = CommandStore.commandForMessage(actionMsg);
+        const command = bindingMap.get(commandName);
+        const shortcutName = command ? command.keySeq : '';
         const actionDesc = Msgs.getMsg(actionMsg);
         actionsMenu.addMenuItem(
-            actionDesc, '' /* menuItemShortcut */, '' /* menuItemBraille */,
+            actionDesc, shortcutName, '' /* menuItemBraille */,
             '' /* gesture */,
             () => BackgroundBridge.PanelBackground
                       .performStandardActionOnCurrentNode(standardAction));
@@ -1043,9 +1049,12 @@ export class Panel extends PanelInterface {
     const pendingCallback = Panel.pendingCallback_;
     Panel.pendingCallback_ = null;
 
+    // Prepare the watcher before close the panel so that the watcher won't miss
+    // panel collapse signal.
+    await BackgroundBridge.PanelBackground.setPanelCollapseWatcher;
+
     // Make sure all menus are cleared to avoid bogus output when we re-open.
     Panel.clearMenus();
-    BackgroundBridge.PanelBackground.clearSavedNode();
 
     // Make sure we're not in full-screen mode.
     Panel.setMode(PanelMode.COLLAPSED);
@@ -1055,8 +1064,9 @@ export class Panel extends PanelInterface {
     await BackgroundBridge.PanelBackground.waitForPanelCollapse();
 
     if (pendingCallback) {
-      pendingCallback();
+      await pendingCallback();
     }
+    BackgroundBridge.PanelBackground.clearSavedNode();
   }
 
   /** Open the tutorial. */
@@ -1153,7 +1163,7 @@ export class Panel extends PanelInterface {
           await BackgroundBridge.UserActionMonitor.destroy();
         });
     $('chromevox-tutorial').addEventListener('requestfullydescribe', evt => {
-      BackgroundBridge.CommandHandler.onCommand('fullyDescribe');
+      BackgroundBridge.CommandHandler.onCommand(Command.FULLY_DESCRIBE);
     });
     $('chromevox-tutorial').addEventListener('requestearcon', evt => {
       const earconId = evt.detail.earconId;
@@ -1244,6 +1254,7 @@ Panel.ACTION_TO_MSG_ID = {
   scrollBackward: 'action_scroll_backward_description',
   scrollForward: 'action_scroll_forward_description',
   showContextMenu: 'show_context_menu',
+  longClick: 'force_long_click_on_current_item',
 };
 
 
@@ -1278,7 +1289,7 @@ window.addEventListener('hashchange', function() {
   // it in in every case. (fullscreen/focus turns the state off, collapse
   // turns it back on).
   if (Panel.originalStickyState_) {
-    BackgroundBridge.CommandHandler.onCommand('toggleStickyMode');
+    BackgroundBridge.CommandHandler.onCommand(Command.TOGGLE_STICKY_MODE);
   }
 }, false);
 

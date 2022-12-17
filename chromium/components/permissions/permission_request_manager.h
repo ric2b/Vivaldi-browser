@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check_is_test.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -16,6 +17,7 @@
 #include "components/permissions/permission_request_queue.h"
 #include "components/permissions/permission_ui_selector.h"
 #include "components/permissions/permission_uma_util.h"
+#include "components/permissions/request_type.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -70,15 +72,20 @@ class PermissionRequestManager
  public:
   class Observer {
    public:
-    virtual void OnBubbleAdded() {}
-    virtual void OnBubbleRemoved() {}
+    virtual void OnPromptAdded() {}
+    virtual void OnPromptRemoved() {}
     // Called when the current batch of requests have been handled and the
-    // bubble is no longer visible. Note that there might be some queued
+    // prompt is no longer visible. Note that there might be some queued
     // permission requests that will get shown after this. This differs from
-    // OnBubbleRemoved() in that the bubble may disappear while there are still
-    // in-flight requests (e.g. when switching tabs while the bubble is still
-    // visible).
+    // OnPromptRemoved() in that the prompt may disappear while there are
+    // still in-flight requests (e.g. when switching tabs while the prompt is
+    // still visible).
     virtual void OnRequestsFinalized() {}
+
+    virtual void OnPermissionRequestManagerDestructed() {}
+    virtual void OnNavigation(content::NavigationHandle* navigation_handle) {}
+
+    virtual void OnRequestDecided(permissions::PermissionAction action) {}
 
    protected:
     virtual ~Observer() = default;
@@ -144,7 +151,7 @@ class PermissionRequestManager
   absl::optional<PermissionUiSelector::QuietUiReason> ReasonForUsingQuietUi()
       const override;
   void SetDismissOnTabClose() override;
-  void SetBubbleShown() override;
+  void SetPromptShown() override;
   void SetDecisionTime() override;
   void SetManageClicked() override;
   void SetLearnMoreClicked() override;
@@ -184,19 +191,19 @@ class PermissionRequestManager
     view_factory_ = std::move(view_factory);
   }
 
-  PermissionPrompt* view_for_testing() { return view_.get(); }
+  PermissionPrompt* view_for_testing() const { return view_.get(); }
 
   void set_current_request_first_display_time_for_testing(base::Time time) {
     current_request_first_display_time_ = time;
   }
 
   absl::optional<PermissionUmaUtil::PredictionGrantLikelihood>
-  prediction_grant_likelihood_for_testing() {
+  prediction_grant_likelihood_for_testing() const {
     return prediction_grant_likelihood_;
   }
 
   absl::optional<permissions::PermissionPromptDisposition>
-  current_request_prompt_disposition_for_testing() {
+  current_request_prompt_disposition_for_testing() const {
     return current_request_prompt_disposition_;
   }
 
@@ -208,18 +215,48 @@ class PermissionRequestManager
     enabled_app_level_notification_permission_for_testing_ = enabled;
   }
 
+  base::ObserverList<Observer>::Unchecked* get_observer_list_for_testing() {
+    CHECK_IS_TEST();
+    return &observer_list_;
+  }
+
+  bool has_pending_requests() {
+    return !pending_permission_requests_.IsEmpty();
+  }
+
  private:
   friend class test::PermissionRequestManagerTestApi;
   friend class content::WebContentsUserData<PermissionRequestManager>;
 
   explicit PermissionRequestManager(content::WebContents* web_contents);
 
-  enum class CurrentRequestFate { KeepCurrent, Preempt, Finalize };
+  // Defines how to handle the current request, when new requests arrive
+  enum class CurrentRequestFate {
+    // Keep showing the current request. The incoming requests should not take
+    // priority over the current request and will be pushed to pending requests
+    // queue.
+    kKeepCurrent,
 
-  // Returns `CurrentRequestFate` based on what type of UI has been shown for
-  // `requests_`.
-  CurrentRequestFate GetCurrentRequestFateInFaceOfNewRequest(
-      PermissionRequest* request);
+    // Put the current request back to the pending requests queue for displaying
+    // later when it returns to the front of the queue.
+    kPreempt,
+
+    // Finalize/ignore the current request and show the new request.
+    kFinalize
+  };
+
+  // Reprioritize the current requests (preempting, finalizing) based on what
+  // type of UI has been shown for `requests_` and current pending requests
+  // queue.
+  // Determine the next request candidate would be prompted later and push the
+  // candidate to front of the pending queue.
+  // Return true if we keep showing the current request, otherwise return false
+  bool ReprioritizeCurrentRequestIfNeeded();
+
+  // Validate the input request. If the request is invalid, cancel and remove it
+  // from *_map_ and *_set_.
+  // Return true if the request is valid, otherwise false.
+  bool ValidateRequest(PermissionRequest* request);
 
   // Adds `request` into `pending_permission_requests_`, and request's
   // `source_frame` into `request_sources_map_`.
@@ -231,26 +268,20 @@ class PermissionRequestManager
   // process them after the new requests.
   void PreemptAndRequeueCurrentRequest();
 
-  // Posts a task which will allow the bubble to become visible.
-  void ScheduleShowBubble();
-
-  // If a request isn't already in progress, deque and schedule showing the
-  // request.
+  // If a request isn't already in progress, dequeue and show the request
+  // prompt.
   void DequeueRequestIfNeeded();
 
-  // Schedule a call to dequeue request. Is needed to ensure requests that can
-  // be grouped together have time to all be added to the queue.
+  // Schedule a call to |DequeueRequestIfNeeded|. Is needed to ensure requests
+  // that can be grouped together have time to all be added to the queue.
   void ScheduleDequeueRequestIfNeeded();
 
-  // Will determine if it's possible and necessary to dequeue a new request.
-  bool ShouldDequeueNewRequest();
-
-  // Shows the bubble for a request that has just been dequeued, or re-show a
-  // bubble after switching tabs away and back.
-  void ShowBubble();
+  // Shows the prompt for a request that has just been dequeued, or re-show a
+  // prompt after switching tabs away and back.
+  void ShowPrompt();
 
   // Delete the view object
-  void DeleteBubble();
+  void DeletePrompt();
 
   // Finalize request.
   void ResetViewStateForCurrentRequest();
@@ -268,7 +299,7 @@ class PermissionRequestManager
   // |duplicate_requests_| - for a request matching |request|, and returns the
   // matching request, or |nullptr| if no match. Note that the matching request
   // may or may not be the same object as |request|.
-  PermissionRequest* GetExistingRequest(PermissionRequest* request);
+  PermissionRequest* GetExistingRequest(PermissionRequest* request) const;
 
   // Calls PermissionGranted on a request and all its duplicates.
   void PermissionGrantedIncludingDuplicates(PermissionRequest* request,
@@ -280,8 +311,13 @@ class PermissionRequestManager
   // Calls RequestFinished on a request and all its duplicates.
   void RequestFinishedIncludingDuplicates(PermissionRequest* request);
 
-  void NotifyBubbleAdded();
-  void NotifyBubbleRemoved();
+  void NotifyPromptAdded();
+  void NotifyPromptRemoved();
+  void NotifyRequestDecided(permissions::PermissionAction permission_action);
+
+  void StorePermissionActionForUMA(const GURL& origin,
+                                   RequestType request_type,
+                                   PermissionAction permission_action);
 
   void OnPermissionUiSelectorDone(size_t selector_index,
                                   const UiDecision& decision);
@@ -336,6 +372,12 @@ class PermissionRequestManager
   // Note that no date is stored for |duplicate_requests_|.
   std::map<PermissionRequest*, PermissionRequestSource> request_sources_map_;
 
+  // Sequence of requests from pending queue will be marked as validated, when
+  // we are extracting a group of requests from the queue to show to user. This
+  // is an immature solution to avoid an infinitive loop of preempting, we would
+  // not prempt a request if the incoming request is already validated.
+  std::set<PermissionRequest*> validated_requests_set_;
+
   base::ObserverList<Observer>::Unchecked observer_list_;
   AutoResponseType auto_response_for_test_;
 
@@ -389,8 +431,8 @@ class PermissionRequestManager
   // closed.
   bool should_dismiss_current_request_ = false;
 
-  // Whether the permission prompt bubble was shown for the current request.
-  bool did_show_bubble_ = false;
+  // Whether the permission prompt was shown for the current request.
+  bool did_show_prompt_ = false;
 
   // When the user made any decision for the current |requests_|, or zero if not
   // at all.

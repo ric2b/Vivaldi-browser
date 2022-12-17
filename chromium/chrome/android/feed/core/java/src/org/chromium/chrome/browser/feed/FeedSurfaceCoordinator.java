@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.annotation.VisibleForTesting;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.CommandLine;
@@ -371,7 +370,7 @@ public class FeedSurfaceCoordinator
     }
 
     public void maybeShowWebFeedAwarenessIph() {
-        if (mWebFeedHasContent && mSectionHeaderView.shouldUseWebFeedAwarenessIPH()) {
+        if (mWebFeedHasContent && FeedFeatures.shouldUseWebFeedAwarenessIPH()) {
             UserEducationHelper helper = new UserEducationHelper(mActivity, mHandler);
             mSectionHeaderView.showWebFeedAwarenessIph(
                     helper, StreamTabId.FOLLOWING, new Scroller());
@@ -608,7 +607,9 @@ public class FeedSurfaceCoordinator
         RecyclerView view;
         if (mHybridListRenderer != null) {
             // XSurface returns a View, but it should be a RecyclerView.
-            view = (RecyclerView) mHybridListRenderer.bind(mContentManager, mViewportView);
+            boolean useStaggeredLayout = FeedFeatures.isMultiColumnFeedEnabled(mActivity);
+            view = (RecyclerView) mHybridListRenderer.bind(
+                    mContentManager, mViewportView, useStaggeredLayout);
             view.setId(R.id.feed_stream_recycler_view);
             view.setClipToPadding(false);
             view.setBackgroundColor(SemanticColorUtils.getDefaultBgColor(mActivity));
@@ -618,7 +619,6 @@ public class FeedSurfaceCoordinator
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 view.setDefaultFocusHighlightEnabled(false);
             }
-
             if (mOverScrollDisabled) {
                 view.setOverScrollMode(View.OVER_SCROLL_NEVER);
             }
@@ -696,10 +696,11 @@ public class FeedSurfaceCoordinator
      * @param kind Kind of stream being created.
      * @return The FeedStream created.
      */
-    FeedStream createFeedStream(@StreamKind int kind) {
+    FeedStream createFeedStream(@StreamKind int kind, Stream.StreamsMediator streamsMediator) {
         return new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 mIsPlaceholderShownInitially, mWindowAndroid, mShareSupplier, kind, this,
-                mActionDelegate, mHelpAndFeedbackLauncher, this /* FeedContentFirstLoadWatcher */);
+                mActionDelegate, mHelpAndFeedbackLauncher, this /* FeedContentFirstLoadWatcher */,
+                streamsMediator);
     }
 
     private void setHeaders(List<View> headerViews) {
@@ -736,8 +737,7 @@ public class FeedSurfaceCoordinator
         if (mSigninPromoView == null) {
             LayoutInflater inflater = LayoutInflater.from(mRootView.getContext());
             mSigninPromoView = inflater.inflate(
-                    R.layout.personalized_signin_promo_view_modern_content_suggestions, mRootView,
-                    false);
+                    R.layout.sync_promo_view_content_suggestions, mRootView, false);
         }
         return mSigninPromoView;
     }
@@ -917,19 +917,17 @@ public class FeedSurfaceCoordinator
 
     @Override
     public int getItemCount() {
-        return ((LinearLayoutManager) mRecyclerView.getLayoutManager()).getItemCount();
+        return mRecyclerView.getLayoutManager().getItemCount();
     }
 
     @Override
     public int getFirstVisiblePosition() {
-        return ((LinearLayoutManager) mRecyclerView.getLayoutManager())
-                .findFirstVisibleItemPosition();
+        return mHybridListRenderer.getListLayoutHelper().findFirstVisibleItemPosition();
     }
 
     @Override
     public int getLastVisiblePosition() {
-        return ((LinearLayoutManager) mRecyclerView.getLayoutManager())
-                .findLastVisibleItemPosition();
+        return mHybridListRenderer.getListLayoutHelper().findLastVisibleItemPosition();
     }
 
     @Override

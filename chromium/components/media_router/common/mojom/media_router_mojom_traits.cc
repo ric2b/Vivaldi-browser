@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,7 +40,6 @@ bool StructTraits<media_router::mojom::IssueDataView, media_router::IssueInfo>::
   if (!data.ReadSinkId(&out->sink_id))
     return false;
 
-  out->is_blocking = data.is_blocking();
   out->help_page_id = data.help_page_id();
 
   return true;

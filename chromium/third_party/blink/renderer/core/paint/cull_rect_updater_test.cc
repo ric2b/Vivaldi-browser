@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,11 @@ class CullRectUpdaterTest : public PaintControllerPaintTest {
   }
 };
 
-INSTANTIATE_PAINT_TEST_SUITE_P(CullRectUpdaterTest);
+INSTANTIATE_TEST_SUITE_P(All,
+                         CullRectUpdaterTest,
+                         ::testing::Values(kScrollUpdateOptimizations |
+                                               kScrollUnification,
+                                           kScrollUpdateOptimizations));
 
 TEST_P(CullRectUpdaterTest, SimpleCullRect) {
   SetBodyInnerHTML(R"HTML(
@@ -217,8 +221,6 @@ TEST_P(CullRectUpdaterTest, FixedPositionInNonScrollableViewCullRect) {
     </div>
   )HTML");
 
-  // The cull rect is inflated when scrolling, because fixed elements don't
-  // participate in overscroll.
   EXPECT_EQ(gfx::Rect(-200, -100, 800, 600), GetCullRect("target").Rect());
 }
 
@@ -497,16 +499,9 @@ TEST_P(CullRectUpdaterTest, ContentsCullRectCoveringWholeContentsRect) {
 
   scroller->scrollTo(0, 2800);
   UpdateAllLifecyclePhasesForTest();
-  if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled()) {
-    // Cull rects are not updated with a small scroll delta.
-    EXPECT_EQ(gfx::Rect(0, 0, 600, 6900),
-              GetContentsCullRect("scroller").Rect());
-    EXPECT_EQ(gfx::Rect(-4000, -7000, 8600, 6900), GetCullRect("child").Rect());
-  } else {
-    EXPECT_EQ(gfx::Rect(0, 0, 600, 7020),
-              GetContentsCullRect("scroller").Rect());
-    EXPECT_EQ(gfx::Rect(-4000, -7000, 8600, 7020), GetCullRect("child").Rect());
-  }
+  // Cull rects are not updated with a small scroll delta.
+  EXPECT_EQ(gfx::Rect(0, 0, 600, 6900), GetContentsCullRect("scroller").Rect());
+  EXPECT_EQ(gfx::Rect(-4000, -7000, 8600, 6900), GetCullRect("child").Rect());
 
   scroller->scrollTo(0, 3100);
   UpdateAllLifecyclePhasesForTest();
@@ -592,6 +587,87 @@ TEST_P(CullRectUpdaterTest, PerspectiveDescendants) {
   EXPECT_TRUE(GetCullRect("target").IsInfinite());
 }
 
+// Test case for crbug.com/1382842.
+TEST_P(CullRectUpdaterTest, UpdateOnCompositedScrollingStatusChange) {
+  GetDocument().GetSettings()->SetPreferCompositingToLCDTextEnabled(false);
+  SetBodyInnerHTML(R"HTML(
+    <style>body {position: absolute}</style>
+    <div id="scroller" style="width: 100px; height: 100px;
+                              overflow: auto; position: relative">
+      <div style="height: 1000px">TEXT</div>
+    <div>
+  )HTML");
+
+  EXPECT_EQ(gfx::Rect(100, 100), GetContentsCullRect("scroller").Rect());
+
+  auto* scroller = GetDocument().getElementById("scroller");
+  scroller->SetInlineStyleProperty(CSSPropertyID::kBackgroundColor, "yellow");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(gfx::Rect(100, 1000), GetContentsCullRect("scroller").Rect());
+
+  scroller->RemoveInlineStyleProperty(CSSPropertyID::kBackgroundColor);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(gfx::Rect(100, 100), GetContentsCullRect("scroller").Rect());
+}
+
+TEST_P(CullRectUpdaterTest, NestedOverriddenCullRectScopes) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="div1" style="contain: paint; height: 100px"></div>
+    <div id="div2" style="contain: paint; height: 100px"></div>
+  )HTML");
+
+  auto& layer1 = *GetPaintLayerByElementId("div1");
+  auto& layer2 = *GetPaintLayerByElementId("div2");
+  CullRect cull_rect1 = GetCullRect(layer1);
+  CullRect cull_rect2 = GetCullRect(layer2);
+  CullRect special_cull_rect1(gfx::Rect(12, 34, 56, 78));
+  CullRect special_cull_rect2(gfx::Rect(87, 65, 43, 21));
+
+  {
+    OverriddenCullRectScope scope1(layer1, cull_rect1);
+    {
+      OverriddenCullRectScope scope2(layer2, cull_rect2);
+      EXPECT_EQ(cull_rect2, GetCullRect(layer2));
+    }
+    EXPECT_EQ(cull_rect1, GetCullRect(layer1));
+  }
+  EXPECT_EQ(cull_rect1, GetCullRect(layer1));
+  EXPECT_EQ(cull_rect2, GetCullRect(layer2));
+
+  {
+    OverriddenCullRectScope scope1(layer1, special_cull_rect1);
+    {
+      OverriddenCullRectScope scope2(layer2, cull_rect2);
+      EXPECT_EQ(cull_rect2, GetCullRect(layer2));
+    }
+    EXPECT_EQ(special_cull_rect1, GetCullRect(layer1));
+  }
+  EXPECT_EQ(cull_rect1, GetCullRect(layer1));
+  EXPECT_EQ(cull_rect2, GetCullRect(layer2));
+
+  {
+    OverriddenCullRectScope scope1(layer1, cull_rect1);
+    {
+      OverriddenCullRectScope scope2(layer2, special_cull_rect2);
+      EXPECT_EQ(special_cull_rect2, GetCullRect(layer2));
+    }
+    EXPECT_EQ(cull_rect1, GetCullRect(layer1));
+  }
+  EXPECT_EQ(cull_rect1, GetCullRect(layer1));
+  EXPECT_EQ(cull_rect2, GetCullRect(layer2));
+
+  {
+    OverriddenCullRectScope scope1(layer1, special_cull_rect1);
+    {
+      OverriddenCullRectScope scope2(layer2, special_cull_rect2);
+      EXPECT_EQ(special_cull_rect2, GetCullRect(layer2));
+    }
+    EXPECT_EQ(special_cull_rect1, GetCullRect(layer1));
+  }
+  EXPECT_EQ(cull_rect1, GetCullRect(layer1));
+  EXPECT_EQ(cull_rect2, GetCullRect(layer2));
+}
+
 class CullRectUpdateOnPaintPropertyChangeTest : public CullRectUpdaterTest {
  protected:
   void Check(const String& old_style,
@@ -675,7 +751,11 @@ class CullRectUpdateOnPaintPropertyChangeTest : public CullRectUpdaterTest {
   )HTML";
 };
 
-INSTANTIATE_PAINT_TEST_SUITE_P(CullRectUpdateOnPaintPropertyChangeTest);
+INSTANTIATE_TEST_SUITE_P(All,
+                         CullRectUpdateOnPaintPropertyChangeTest,
+                         ::testing::Values(kScrollUpdateOptimizations |
+                                               kScrollUnification,
+                                           kScrollUpdateOptimizations));
 
 TEST_P(CullRectUpdateOnPaintPropertyChangeTest, Opacity) {
   TestTargetChange("opacity: 0.2", "opacity: 0.8", false, false, false);
@@ -711,10 +791,16 @@ TEST_P(CullRectUpdateOnPaintPropertyChangeTest, PixelMovingFilter) {
 }
 
 TEST_P(CullRectUpdateOnPaintPropertyChangeTest, Transform) {
+  // We use infinite cull rect for small layers with non-composited transforms,
+  // so don't need to update cull rect on non-composited transform change.
   TestTargetChange("transform: translateX(10px)", "transform: translateX(20px)",
-                   false, true, false);
+                   false, false, false);
   TestTargetChange("transform: translateX(10px)", "", true, true, true);
   TestTargetChange("", "transform: translateX(10px)", true, true, true);
+  // We don't use infinite cull rect for layers with composited transforms.
+  TestTargetChange("will-change: transform; transform: translateX(10px)",
+                   "will-change: transform; transform: translateX(20px)", false,
+                   true, false);
   TestTargetChange("will-change: transform; transform: translateX(10px)",
                    "will-change: transform", false, true, false);
   TestTargetChange("will-change: transform",
@@ -746,8 +832,7 @@ TEST_P(CullRectUpdateOnPaintPropertyChangeTest, ScrollContentsSizeChange) {
 
 TEST_P(CullRectUpdateOnPaintPropertyChangeTest, SmallContentsScroll) {
   // TODO(wangxianzhu): Optimize for scrollers with small contents.
-  bool needs_cull_rect_update =
-      !RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled();
+  bool needs_cull_rect_update = false;
   TestTargetScroll(ScrollOffset(), ScrollOffset(100, 200), false,
                    needs_cull_rect_update, false);
   TestTargetScroll(ScrollOffset(100, 200), ScrollOffset(1000, 1000), false,
@@ -761,8 +846,7 @@ TEST_P(CullRectUpdateOnPaintPropertyChangeTest,
   html_ = html_ + "<style>#child { width: 10000px; height: 10000px; }</style>";
   // Scroll offset changes that are small or won't expose new contents don't
   // need cull rect update when ScrollUpdateOptimizationsEnabled.
-  bool needs_cull_rect_update =
-      !RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled();
+  bool needs_cull_rect_update = false;
   TestTargetScroll(ScrollOffset(), ScrollOffset(200, 200), false,
                    needs_cull_rect_update, false);
   TestTargetScroll(ScrollOffset(200, 200), ScrollOffset(), false,

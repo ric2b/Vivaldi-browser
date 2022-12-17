@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,7 @@ std::vector<PatternProviderFeatureState> PatternProviderFeatureState::All() {
 FormFieldTestBase::FormFieldTestBase(
     PatternProviderFeatureState pattern_provider_feature_state) {
   std::vector<base::test::ScopedFeatureList::FeatureAndParams> enabled;
-  std::vector<base::Feature> disabled;
+  std::vector<base::test::FeatureRef> disabled;
   if (pattern_provider_feature_state.enable) {
     enabled.emplace_back(
         features::kAutofillParsingPatternProvider,

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/settings/cros_settings_names.h"
-#include "ash/components/settings/timezone_settings.h"
 #include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -23,6 +21,8 @@
 #include "base/values.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/scheduled_task_util.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/scoped_wake_lock.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/settings/timezone_settings.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/user_manager/user_manager.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -236,7 +236,7 @@ const base::TimeDelta DeviceScheduledRebootHandler::GetExternalDelay() const {
 
 void DeviceScheduledRebootHandler::RebootDevice(
     const std::string& reboot_description) const {
-  ash::PowerManagerClient::Get()->RequestRestart(
+  chromeos::PowerManagerClient::Get()->RequestRestart(
       power_manager::REQUEST_RESTART_OTHER, reboot_description);
 }
 

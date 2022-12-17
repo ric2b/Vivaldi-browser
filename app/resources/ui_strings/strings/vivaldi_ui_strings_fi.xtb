@@ -14,11 +14,13 @@
 <translation id="2297836609126180313"><ph name="QUANTITY" /> Tt/s</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> Mt</translation>
 <translation id="3291688615589870984">{DAYS,plural, =1 {1 päivä} other {# päivää}}</translation>
+<translation id="335581015389089642">Puhe</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1 {1 päivä jäljellä} other {# päivää jäljellä}}</translation>
 <translation id="3618849550573277856">Etsi ”<ph name="LOOKUP_STRING" /></translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> Gt/s</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> Gt</translation>
 <translation id="3889424535448813030">Nuoli oikealle</translation>
+<translation id="4289300219472526559">Aloita puhuminen</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 sekunti}other{# sekuntia}}</translation>
 <translation id="5076340679995252485">&amp;Liitä</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> Pt</translation>
@@ -28,6 +30,7 @@
 <translation id="5906667377645263094">{SECONDS,plural, =1 {1 sekunti jäljellä} other {# sekuntia jäljellä}}</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 tunti}other{# tuntia}}</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> t/s</translation>
+<translation id="6397363302884558537">Lopeta puhuminen</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1 {1 s sitten} other {# s sitten}}</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1 {1 sekunti sitten} other {# sekuntia sitten}}</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1 {1 tunti jäljellä} other {# tuntia jäljellä}}</translation>

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,12 +54,11 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
   void OnPopupShown() override;
   void OnPopupHidden() override;
   void OnPopupSuppressed() override;
-  void DidSelectSuggestion(const std::u16string& value,
-                           int frontend_id,
-                           const std::string& backend_id) override;
-  void DidAcceptSuggestion(const std::u16string& value,
-                           int frontend_id,
-                           const autofill::Suggestion::Payload& payload,
+  void DidSelectSuggestion(
+      const std::u16string& value,
+      int frontend_id,
+      const autofill::Suggestion::BackendId& backend_id) override;
+  void DidAcceptSuggestion(const autofill::Suggestion& suggestion,
                            int position) override;
   bool GetDeletionConfirmationText(const std::u16string& value,
                                    int frontend_id,
@@ -226,7 +225,7 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
 
   // Used to trigger a reauthentication prompt based on biometrics that needs
   // to be cleared before the password is filled. Currently only used
-  // on Android.
+  // on Android, Mac and Windows.
   scoped_refptr<device_reauth::BiometricAuthenticator> authenticator_;
 
   base::WeakPtrFactory<PasswordAutofillManager> weak_ptr_factory_{this};

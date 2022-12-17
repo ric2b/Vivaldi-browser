@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,8 @@
 
 namespace blink {
 
+enum class UserMediaRequestType;
+
 using MediaStreamSetInitializedCallback =
     base::OnceCallback<void(MediaStreamVector)>;
 
@@ -22,17 +24,23 @@ class MODULES_EXPORT MediaStreamSet final
   static MediaStreamSet* Create(
       ExecutionContext* context,
       const MediaStreamDescriptorVector& stream_descriptors,
+      UserMediaRequestType request_type,
       MediaStreamSetInitializedCallback callback);
 
   MediaStreamSet(ExecutionContext* context,
                  const MediaStreamDescriptorVector& stream_descriptors,
+                 UserMediaRequestType request_type,
                  MediaStreamSetInitializedCallback callback);
   virtual ~MediaStreamSet() = default;
 
   void Trace(Visitor*) const override;
 
  private:
+  void InitializeGetDisplayMediaSetStreams(
+      ExecutionContext* context,
+      const MediaStreamDescriptorVector& stream_descriptors);
   void OnMediaStreamInitialized(MediaStream*);
+  void OnMediaStreamSetInitialized();
 
   const size_t media_streams_to_initialize_count_;
   MediaStreamVector initialized_media_streams_;

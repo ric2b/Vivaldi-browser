@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -718,7 +718,7 @@ TEST_F(SurfaceSynchronizationTest, ResourcesOnlyReturnedOnce) {
   // resources in its resource list.
   TransferableResource resource;
   resource.id = ResourceId(1337);
-  resource.format = ALPHA_8;
+  resource.format = SharedImageFormat::SinglePlane(ALPHA_8);
   resource.filter = 1234;
   resource.size = gfx::Size(1234, 5678);
   std::vector<TransferableResource> resource_list = {resource};

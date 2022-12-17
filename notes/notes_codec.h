@@ -80,6 +80,12 @@ class NotesCodec {
   // false after encoding.
   bool guids_reassigned() const { return guids_reassigned_; }
 
+  // Returns whether attachments using the old, deprecated format were found
+  // during decoding.
+  bool has_deprecated_attachments() const {
+    return has_deprecated_attachments_;
+  }
+
   // Names of the various keys written to the Value.
   static const char kVersionKey[];
   static const char kChecksumKey[];
@@ -96,6 +102,7 @@ class NotesCodec {
   static const char kTypeNote[];
   static const char kTypeFolder[];
   static const char kTypeSeparator[];
+  static const char kTypeAttachment[];
   static const char kTypeOther[];
   static const char kTypeTrash[];
 
@@ -146,6 +153,9 @@ class NotesCodec {
   // Whether or not IDs are valid. This is initially true, but set to false
   // if an id is missing or not unique.
   bool ids_valid_;
+
+  // Whether the loaded notes have attachments using the old, deprecated format.
+  bool has_deprecated_attachments_ = false;
 
   // Contains the id of each of the nodes found in the file. Used to determine
   // if we have duplicates.

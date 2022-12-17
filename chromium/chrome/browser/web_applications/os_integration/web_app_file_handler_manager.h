@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,8 @@ class WebAppFileHandlerManager {
   // Enables and registers OS specific file handlers for OSs that need them.
   // Currently on Chrome OS, file handlers are enabled and registered as long as
   // the app is installed.
-  void EnableAndRegisterOsFileHandlers(const AppId& app_id);
+  void EnableAndRegisterOsFileHandlers(const AppId& app_id,
+                                       ResultCallback callback);
 
   // Disables file handlers for all OSs and unregisters OS specific file
   // handlers for OSs that need them. On Chrome OS file handlers are registered

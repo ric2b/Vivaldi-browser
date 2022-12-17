@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,11 +60,13 @@ namespace network_time {
 // Network time queries are enabled on all desktop platforms except ChromeOS,
 // which uses tlsdated to set the system time.
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_IOS)
-const base::Feature kNetworkTimeServiceQuerying{
-    "NetworkTimeServiceQuerying", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kNetworkTimeServiceQuerying,
+             "NetworkTimeServiceQuerying",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #else
-const base::Feature kNetworkTimeServiceQuerying{
-    "NetworkTimeServiceQuerying", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kNetworkTimeServiceQuerying,
+             "NetworkTimeServiceQuerying",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 namespace {
@@ -207,7 +209,7 @@ NetworkTimeTracker::NetworkTimeTracker(
       pref_service_(pref_service),
       time_query_completed_(false) {
   const base::Value::Dict& time_mapping =
-      pref_service_->GetValueDict(prefs::kNetworkTimeMapping);
+      pref_service_->GetDict(prefs::kNetworkTimeMapping);
   absl::optional<double> time_js = time_mapping.FindDouble(kPrefTime);
   absl::optional<double> ticks_js = time_mapping.FindDouble(kPrefTicks);
   absl::optional<double> uncertainty_js =

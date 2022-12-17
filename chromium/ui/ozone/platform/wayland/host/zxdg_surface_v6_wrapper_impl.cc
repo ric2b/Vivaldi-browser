@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +43,7 @@ bool ZXDGSurfaceV6WrapperImpl::Initialize() {
 
   zxdg_surface_v6_add_listener(zxdg_surface_v6_.get(),
                                &zxdg_surface_v6_listener, this);
-  connection_->ScheduleFlush();
+  connection_->Flush();
   return true;
 }
 

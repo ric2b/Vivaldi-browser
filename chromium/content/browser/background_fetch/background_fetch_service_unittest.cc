@@ -1,14 +1,14 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <algorithm>
 #include <map>
 #include <memory>
 #include <utility>
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -66,12 +66,9 @@ blink::Manifest::ImageResource CreateIcon(const std::string& src,
 
 bool ContainsHeader(const base::flat_map<std::string, std::string>& headers,
                     const std::string& target) {
-  return headers.cend() !=
-         std::find_if(headers.cbegin(), headers.cend(),
-                      [target](const auto& pair) -> bool {
-                        return base::EqualsCaseInsensitiveASCII(pair.first,
-                                                                target);
-                      });
+  return base::ranges::any_of(headers, [target](const auto& pair) {
+    return base::EqualsCaseInsensitiveASCII(pair.first, target);
+  });
 }
 
 std::vector<blink::mojom::FetchAPIRequestPtr> CloneRequestVector(

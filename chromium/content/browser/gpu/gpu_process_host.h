@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -171,6 +171,9 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   void DidUpdateOverlayInfo(const gpu::OverlayInfo& overlay_info) override;
   void DidUpdateDXGIInfo(gfx::mojom::DXGIInfoPtr dxgi_info) override;
 #endif
+  std::string GetIsolationKey(
+      int32_t process_id,
+      const blink::WebGPUExecutionContextToken& token) override;
   void BlockDomainsFrom3DAPIs(const std::set<GURL>& urls,
                               gpu::DomainGuilt guilt) override;
   void DisableGpuCompositing() override;

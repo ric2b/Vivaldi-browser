@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -261,8 +261,9 @@ public class AndroidPaymentApp
                 /*packageName=*/mPackageName, /*serviceName=*/mIsReadyToPayServiceName,
                 removeUrlScheme(origin), removeUrlScheme(iframeOrigin), certificateChain,
                 WebPaymentIntentHelperTypeConverter.fromMojoPaymentMethodDataMap(methodDataMap),
+                /*clearIdFields=*/
                 PaymentFeatureList.isEnabled(
-                        PaymentFeatureList.IDENTITY_IN_CAN_MAKE_PAYMENT_EVENT_FEATURE));
+                        PaymentFeatureList.CLEAR_IDENTITY_IN_CAN_MAKE_PAYMENT_EVENT));
         if (mBypassIsReadyToPayServiceInTest) {
             respondToIsReadyToPayQuery(true);
             return;

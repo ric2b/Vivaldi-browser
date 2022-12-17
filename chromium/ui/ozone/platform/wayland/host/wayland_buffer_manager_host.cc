@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,6 +69,12 @@ void WaylandBufferManagerHost::OnChannelDestroyed() {
 
   buffer_manager_gpu_associated_.reset();
   receiver_.reset();
+}
+
+void WaylandBufferManagerHost::OnCommitOverlayError(
+    const std::string& message) {
+  error_message_ = message;
+  TerminateGpuProcess();
 }
 
 wl::BufferFormatsWithModifiersMap
@@ -279,13 +285,6 @@ void WaylandBufferManagerHost::CommitOverlays(
   if (!window)
     return;
 
-  for (auto& overlay : overlays) {
-    if (!ValidateOverlayData(overlay)) {
-      TerminateGpuProcess();
-      return;
-    }
-  }
-
   window->CommitOverlays(frame_id, overlays);
 }
 
@@ -405,23 +404,6 @@ bool WaylandBufferManagerHost::ValidateBufferExistence(uint32_t buffer_id) {
   }
 
   return error_message_.empty();
-}
-
-bool WaylandBufferManagerHost::ValidateOverlayData(
-    const wl::WaylandOverlayConfig& overlay_data) {
-  if (std::isnan(overlay_data.bounds_rect.x()) ||
-      std::isnan(overlay_data.bounds_rect.y()) ||
-      std::isnan(overlay_data.bounds_rect.width()) ||
-      std::isnan(overlay_data.bounds_rect.height()) ||
-      std::isinf(overlay_data.bounds_rect.x()) ||
-      std::isinf(overlay_data.bounds_rect.y()) ||
-      std::isinf(overlay_data.bounds_rect.width()) ||
-      std::isinf(overlay_data.bounds_rect.height())) {
-    error_message_ = "Overlay bounds_rect is invalid (NaN or infinity).";
-    return false;
-  }
-
-  return true;
 }
 
 void WaylandBufferManagerHost::OnSubmission(gfx::AcceleratedWidget widget,

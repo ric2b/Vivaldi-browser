@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,13 +7,15 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "components/autofill/core/browser/autofill_form_test_utils.h"
+#include "components/autofill/core/browser/autofill_suggestion_generator.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/payments/test_credit_card_save_manager.h"
 #include "components/autofill/core/browser/payments/test_payments_client.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/browser/test_browser_autofill_manager.h"
-#include "components/sync/driver/test_sync_service.h"
+#include "components/sync/test/test_sync_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -86,9 +88,37 @@ class AutofillMetricsBaseTest : public testing::Test {
 
   void ResetDriverToCommitMetrics() { autofill_driver_.reset(); }
 
-  void ChangeTextField(const FormData& form,
-                       const FormFieldData& field,
-                       base::TimeTicks timestamp = {}) {
+  // Convenience wrapper for `EmulateUserChangedTextFieldTo` that appends
+  // '_changed' to the fields value.
+  void SimulateUserChangedTextField(const FormData& form,
+                                    FormFieldData& field,
+                                    base::TimeTicks timestamp = {}) {
+    SimulateUserChangedTextFieldTo(form, field, field.value + u"_changed",
+                                   timestamp);
+  }
+
+  // Emulates that the user manually changed a field by resetting the
+  // `is_autofilled` field attribute, settings the field's value to `new_value`
+  // and notifying the `AutofillManager` of the change that is emulated to have
+  // happened at `timestamp`.
+  void SimulateUserChangedTextFieldTo(const FormData& form,
+                                      FormFieldData& field,
+                                      const std::u16string& new_value,
+                                      base::TimeTicks timestamp = {}) {
+    // Assert that the field is actually set to a different value.
+    ASSERT_NE(field.value, new_value);
+    field.is_autofilled = false;
+    field.value = new_value;
+    autofill_manager().OnTextFieldDidChange(form, field, gfx::RectF(),
+                                            timestamp);
+  }
+
+  // TODO(crbug.com/1368096): Remove this method once the metrics are fixed.
+  void SimulateUserChangedTextFieldWithoutActuallyChangingTheValue(
+      const FormData& form,
+      FormFieldData& field,
+      base::TimeTicks timestamp = {}) {
+    field.is_autofilled = false;
     autofill_manager().OnTextFieldDidChange(form, field, gfx::RectF(),
                                             timestamp);
   }
@@ -116,6 +146,22 @@ class AutofillMetricsBaseTest : public testing::Test {
                                       bool is_virtual_card = false);
   void OnCreditCardFetchingFailed();
 
+  FormData GetAndAddSeenForm(const test::FormDescription& form_description) {
+    FormData form = test::GetFormData(form_description);
+    autofill_manager().AddSeenForm(form,
+                                   test::GetHeuristicTypes(form_description),
+                                   test::GetServerTypes(form_description));
+    return form;
+  }
+
+  void FillTestProfile(const FormData& form) {
+    autofill_manager().FillOrPreviewForm(
+        mojom::RendererFormDataAction::kFill, 0, form, form.fields.front(),
+        autofill_manager().suggestion_generator()->MakeFrontendId(
+            Suggestion::BackendId(),
+            Suggestion::BackendId(std::string(kTestGuid))));
+  }
+
   TestBrowserAutofillManager& autofill_manager() {
     return static_cast<TestBrowserAutofillManager&>(
         *autofill_driver_->autofill_manager());
@@ -127,16 +173,17 @@ class AutofillMetricsBaseTest : public testing::Test {
 
   const bool is_in_any_main_frame_ = true;
   base::test::TaskEnvironment task_environment_;
+  test::AutofillEnvironment autofill_environment_;
   std::unique_ptr<MockAutofillClient> autofill_client_;
   raw_ptr<ukm::TestUkmRecorder> test_ukm_recorder_;
   syncer::TestSyncService sync_service_;
   std::unique_ptr<TestAutofillDriver> autofill_driver_;
   raw_ptr<AutofillExternalDelegate> external_delegate_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 
  private:
   void CreateTestAutofillProfiles();
 
+  base::test::ScopedFeatureList scoped_feature_list_async_parse_form_;
   CreditCard credit_card_ = test::GetMaskedServerCard();
 };
 

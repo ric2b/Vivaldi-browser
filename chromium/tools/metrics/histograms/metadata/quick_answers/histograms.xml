@@ -1,5 +1,5 @@
 <!--
-Copyright 2022 The Chromium Authors. All rights reserved.
+Copyright 2022 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -37,7 +37,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="QuickAnswers.ActiveImpression" enum="QuickAnswersResultType"
-    expires_after="2023-03-21">
+    expires_after="2023-04-09">
   <owner>updowndota@chromium.org</owner>
   <owner>llin@google.com</owner>
   <owner>croissant-eng@chromium.org</owner>
@@ -64,7 +64,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="QuickAnswers.Click" enum="QuickAnswersResultType"
-    expires_after="2023-01-22">
+    expires_after="2023-03-26">
   <owner>updowndota@chromium.org</owner>
   <owner>llin@google.com</owner>
   <owner>croissant-eng@chromium.org</owner>
@@ -146,6 +146,16 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="QuickAnswers.FeatureEnabled" enum="BooleanEnabled"
+    expires_after="2023-08-15">
+  <owner>updowndota@chromium.org</owner>
+  <owner>croissant-eng@chromium.org</owner>
+  <summary>
+    Record the Quick Answers feature enabled status when the first user session
+    starts. ChromeOS only.
+  </summary>
+</histogram>
+
 <histogram name="QuickAnswers.Intent" enum="QuickAnswersIntentType"
     expires_after="2023-03-01">
   <owner>updowndota@chromium.org</owner>
@@ -169,7 +179,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="QuickAnswers.Loading.Status" enum="QuickAnswersLoadStatus"
-    expires_after="2022-12-31">
+    expires_after="2023-03-05">
   <owner>updowndota@chromium.org</owner>
   <owner>llin@google.com</owner>
   <owner>croissant-eng@chromium.org</owner>

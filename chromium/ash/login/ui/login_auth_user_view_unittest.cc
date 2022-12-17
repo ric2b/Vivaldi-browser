@@ -1,10 +1,9 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/login/ui/login_auth_user_view.h"
 
-#include "ash/constants/ash_features.h"
 #include "ash/login/login_screen_controller.h"
 #include "ash/login/mock_login_screen_client.h"
 #include "ash/login/ui/auth_factor_model.h"
@@ -35,6 +34,7 @@
 #include "ui/views/controls/textfield/textfield_test_api.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/test/button_test_api.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/widget/widget.h"
 
 using testing::_;
@@ -201,7 +201,7 @@ TEST_P(LoginAuthUserViewUnittest, ShowingPinExpandsView) {
   gfx::Size start_size = view_->size();
   SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD |
                  LoginAuthUserView::AUTH_PIN);
-  container_->Layout();
+  views::test::RunScheduledLayout(container_);
   gfx::Size expanded_size = view_->size();
   EXPECT_GT(expanded_size.height(), start_size.height());
 }
@@ -568,24 +568,15 @@ TEST_F(LoginAuthUserViewAutosumbitUnittest, PwdWithToggleFieldModeCorrectness) {
   base::RunLoop().RunUntilIdle();
 }
 
-// The LoginAuthFactorsView is part of the Smart Lock UI Revamp, and should not
-// be shown unless the feature flag is enabled.
-TEST_P(LoginAuthUserViewUnittest,
-       AuthFactorsViewNotSetWithSmartLockFeatureDisabled) {
-  LoginAuthUserView::TestApi auth_test(view_);
-  auto* auth_factors_view = auth_test.auth_factors_view();
-  EXPECT_FALSE(auth_factors_view);
-}
-
 INSTANTIATE_TEST_SUITE_P(LoginAuthUserViewTests,
                          LoginAuthUserViewUnittest,
                          testing::Bool(),  // PIN autosubmit feature
                          LoginAuthUserViewUnittest::ParamInfoToString);
 
 /**
- * This subclass is a test fixture for tests validating logic with auth factors
- * with the kSmartLockUIRevamp feature flag enabled. The test requires passing
- * a custom user object per test to initialize the view to test.
+ * This subclass is a test fixture for tests validating logic with auth factors.
+ * The test requires passing a custom user object per test to initialize the
+ * view to test.
  */
 class LoginAuthUserViewAuthFactorsUnittest : public LoginAuthUserViewUnittest {
  public:
@@ -600,8 +591,6 @@ class LoginAuthUserViewAuthFactorsUnittest : public LoginAuthUserViewUnittest {
 
   void SetUp() override {
     LoginTestBase::SetUp();
-    feature_list_.InitWithFeatures({chromeos::features::kSmartLockUIRevamp},
-                                   {});
     fake_smart_lock_auth_factor_model_factory_ =
         std::make_unique<FakeSmartLockAuthFactorModelFactory>();
     SmartLockAuthFactorModel::Factory::SetFactoryForTesting(
@@ -683,7 +672,7 @@ TEST_F(LoginAuthUserViewAuthFactorsUnittest,
 
   SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD |
                  LoginAuthUserView::AUTH_AUTH_FACTOR_IS_HIDING_PASSWORD);
-  container_->Layout();
+  views::test::RunScheduledLayout(container_);
 
   int auth_factors_y_offset_1 =
       auth_factors_view
@@ -692,7 +681,7 @@ TEST_F(LoginAuthUserViewAuthFactorsUnittest,
 
   SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD |
                  LoginAuthUserView::AUTH_AUTH_FACTOR_IS_HIDING_PASSWORD);
-  container_->Layout();
+  views::test::RunScheduledLayout(container_);
 
   int auth_factors_y_offset_2 =
       auth_factors_view

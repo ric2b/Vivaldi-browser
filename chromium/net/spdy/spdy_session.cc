@@ -1,10 +1,9 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/spdy/spdy_session.h"
 
-#include <algorithm>
 #include <limits>
 #include <map>
 #include <string>
@@ -19,6 +18,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/abseil_string_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -474,21 +474,6 @@ size_t GetTotalSize(const T (&arr)[N]) {
   return total_size;
 }
 
-// Helper class for std:find_if on STL container containing
-// SpdyStreamRequest weak pointers.
-class RequestEquals {
- public:
-  explicit RequestEquals(const base::WeakPtr<SpdyStreamRequest>& request)
-      : request_(request) {}
-
-  bool operator()(const base::WeakPtr<SpdyStreamRequest>& request) const {
-    return request_.get() == request.get();
-  }
-
- private:
-  const base::WeakPtr<SpdyStreamRequest> request_;
-};
-
 // The maximum number of concurrent streams we will ever create.  Even if
 // the server permits more, we will never exceed this limit.
 const size_t kMaxConcurrentStreamLimit = 256;
@@ -506,11 +491,11 @@ class SpdyServerPushHelper : public ServerPushDelegate::ServerPushHelper {
 
   const GURL& GetURL() const override { return request_url_; }
 
-  NetworkIsolationKey GetNetworkIsolationKey() const override {
+  NetworkAnonymizationKey GetNetworkAnonymizationKey() const override {
     if (session_) {
-      return session_->spdy_session_key().network_isolation_key();
+      return session_->spdy_session_key().network_anonymization_key();
     }
-    return NetworkIsolationKey();
+    return NetworkAnonymizationKey();
   }
 
  private:
@@ -865,7 +850,7 @@ bool SpdySession::CanPool(
     const SSLConfigService& ssl_config_service,
     const std::string& old_hostname,
     const std::string& new_hostname,
-    const net::NetworkIsolationKey& network_isolation_key) {
+    const net::NetworkAnonymizationKey& network_anonymization_key) {
   // Pooling is prohibited if the server cert is not valid for the new domain,
   // and for connections on which client certs were sent. It is also prohibited
   // when channel ID was sent if the hosts are from different eTLDs+1.
@@ -889,7 +874,7 @@ bool SpdySession::CanPool(
           HostPortPair(new_hostname, 0), ssl_info.is_issued_by_known_root,
           ssl_info.public_key_hashes, ssl_info.unverified_cert.get(),
           ssl_info.cert.get(), TransportSecurityState::DISABLE_PIN_REPORTS,
-          network_isolation_key, &pinning_failure_log) ==
+          network_anonymization_key, &pinning_failure_log) ==
       TransportSecurityState::PKPStatus::VIOLATED) {
     return false;
   }
@@ -900,7 +885,7 @@ bool SpdySession::CanPool(
       ssl_info.public_key_hashes, ssl_info.cert.get(),
       ssl_info.unverified_cert.get(), ssl_info.signed_certificate_timestamps,
       TransportSecurityState::DISABLE_EXPECT_CT_REPORTS,
-      ssl_info.ct_policy_compliance, network_isolation_key)) {
+      ssl_info.ct_policy_compliance, network_anonymization_key)) {
     case TransportSecurityState::CT_REQUIREMENTS_NOT_MET:
       return false;
     case TransportSecurityState::CT_REQUIREMENTS_MET:
@@ -1171,7 +1156,7 @@ bool SpdySession::VerifyDomainAuthentication(const std::string& domain) const {
 
   return CanPool(transport_security_state_, ssl_info, *ssl_config_service_,
                  host_port_pair().host(), domain,
-                 spdy_session_key_.network_isolation_key());
+                 spdy_session_key_.network_anonymization_key());
 }
 
 void SpdySession::EnqueueStreamWrite(
@@ -1589,8 +1574,8 @@ base::Value SpdySession::GetInfoAsValue() const {
     dict.Set("aliases", std::move(alias_list));
   }
   dict.Set("proxy", ProxyServerToProxyUri(host_port_proxy_pair().second));
-  dict.Set("network_isolation_key",
-           spdy_session_key_.network_isolation_key().ToDebugString());
+  dict.Set("network_anonymization_key",
+           spdy_session_key_.network_anonymization_key().ToDebugString());
 
   dict.Set("active_streams", static_cast<int>(active_streams_.size()));
 
@@ -1767,7 +1752,7 @@ bool SpdySession::ChangeSocketTag(const SocketTag& new_tag) {
   SpdySessionKey new_key(
       spdy_session_key_.host_port_pair(), spdy_session_key_.proxy_server(),
       spdy_session_key_.privacy_mode(), spdy_session_key_.is_proxy_session(),
-      new_tag, spdy_session_key_.network_isolation_key(),
+      new_tag, spdy_session_key_.network_anonymization_key(),
       spdy_session_key_.secure_dns_policy());
   spdy_session_key_ = new_key;
 
@@ -1913,24 +1898,24 @@ bool SpdySession::CancelStreamRequest(
   for (int i = MINIMUM_PRIORITY; i <= MAXIMUM_PRIORITY; ++i) {
     if (priority == i)
       continue;
-    PendingStreamRequestQueue* queue = &pending_create_stream_queues_[i];
-    DCHECK(std::find_if(queue->begin(), queue->end(), RequestEquals(request)) ==
-           queue->end());
+    DCHECK(!base::Contains(pending_create_stream_queues_[i], request.get(),
+                           &base::WeakPtr<SpdyStreamRequest>::get));
   }
 #endif
 
   PendingStreamRequestQueue* queue = &pending_create_stream_queues_[priority];
   // Remove |request| from |queue| while preserving the order of the
   // other elements.
-  PendingStreamRequestQueue::iterator it =
-      std::find_if(queue->begin(), queue->end(), RequestEquals(request));
+  PendingStreamRequestQueue::iterator it = base::ranges::find(
+      *queue, request.get(), &base::WeakPtr<SpdyStreamRequest>::get);
   // The request may already be removed if there's a
   // CompleteStreamRequest() in flight.
   if (it != queue->end()) {
     it = queue->erase(it);
     // |request| should be in the queue at most once, and if it is
     // present, should not be pending completion.
-    DCHECK(std::find_if(it, queue->end(), RequestEquals(request)) ==
+    DCHECK(base::ranges::find(it, queue->end(), request.get(),
+                              &base::WeakPtr<SpdyStreamRequest>::get) ==
            queue->end());
     return true;
   }
@@ -2102,7 +2087,7 @@ void SpdySession::TryCreatePushStream(spdy::SpdyStreamId stream_id,
     CHECK(GetSSLInfo(&ssl_info));
     if (!CanPool(transport_security_state_, ssl_info, *ssl_config_service_,
                  associated_url.host(), gurl.host(),
-                 spdy_session_key_.network_isolation_key())) {
+                 spdy_session_key_.network_anonymization_key())) {
       RecordSpdyPushedStreamFateHistogram(
           SpdyPushedStreamFate::kCertificateMismatch);
       EnqueueResetStreamFrame(stream_id, request_priority,
@@ -3065,7 +3050,7 @@ void SpdySession::DoDrainSession(Error err, const std::string& description) {
     http_server_properties_->SetHTTP11Required(
         url::SchemeHostPort(url::kHttpsScheme, host_port_pair().host(),
                             host_port_pair().port()),
-        spdy_session_key_.network_isolation_key());
+        spdy_session_key_.network_anonymization_key());
   }
 
   // If |err| indicates an error occurred, inform the peer that we're closing
@@ -3550,7 +3535,7 @@ void SpdySession::OnAltSvc(
       return;
     if (!CanPool(transport_security_state_, ssl_info, *ssl_config_service_,
                  host_port_pair().host(), gurl.host(),
-                 spdy_session_key_.network_isolation_key())) {
+                 spdy_session_key_.network_anonymization_key())) {
       return;
     }
     scheme_host_port = url::SchemeHostPort(gurl);
@@ -3567,7 +3552,7 @@ void SpdySession::OnAltSvc(
   }
 
   http_server_properties_->SetAlternativeServices(
-      scheme_host_port, spdy_session_key_.network_isolation_key(),
+      scheme_host_port, spdy_session_key_.network_anonymization_key(),
       ProcessAlternativeServices(altsvc_vector, is_http2_enabled_,
                                  is_quic_enabled_, quic_supported_versions_));
 }

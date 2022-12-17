@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -340,7 +340,6 @@ public class ToolbarTablet
         mSaveOfflineButton.setOnLongClickListener(this);
 
         // Vivaldi
-        mShieldButton.initWithNative();
         mShieldButton.setToolbarDataProvider(getToolbarDataProvider());
     }
 
@@ -448,7 +447,7 @@ public class ToolbarTablet
     }
 
     @Override
-    CaptureReadinessResult isReadyForTextureCapture() {
+    public CaptureReadinessResult isReadyForTextureCapture() {
         // Don't track tablet metrics yet for capturing, just return unknown for now.
         return CaptureReadinessResult.unknown(!urlHasFocus());
     }
@@ -649,7 +648,7 @@ public class ToolbarTablet
     }
 
     @Override
-    protected void initialize(ToolbarDataProvider toolbarDataProvider,
+    public void initialize(ToolbarDataProvider toolbarDataProvider,
             ToolbarTabController tabController, MenuButtonCoordinator menuButtonCoordinator,
             ObservableSupplier<Boolean> isProgressBarVisibleSupplier,
             HistoryDelegate historyDelegate, BooleanSupplier partnerHomepageEnabledSupplier,
@@ -663,7 +662,7 @@ public class ToolbarTablet
     }
 
     @Override
-    void destroy() {
+    public void destroy() {
         super.destroy();
         if (mButtonVisibilityAnimators != null) {
             mButtonVisibilityAnimators.removeAllListeners();
@@ -954,5 +953,18 @@ public class ToolbarTablet
     public boolean areNavigationButtonsVisible() {
         // always visible for tablets
         return true;
+    }
+
+    @Override
+    public void updateShieldButtonState(String url) {
+        mShieldButton.updateState(url);
+    }
+
+    // Vivaldi
+    @Override
+    public void onBottomToolbarVisibilityChanged(boolean isVisible, int orientation) {
+        int visible = VISIBLE;
+        if (!SharedPreferencesManager.getInstance().readBoolean("homepage", true)) visible = GONE;
+        mHomeButton.setVisibility(visible);
     }
 }

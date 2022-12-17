@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/raw_ptr.h"
@@ -140,9 +141,7 @@ class FakeBinaryUploadService : public BinaryUploadService {
   void MaybeAcknowledge(std::unique_ptr<Ack> ack) override {
     EXPECT_EQ(final_action_, ack->ack().final_action());
     ++num_acks_;
-    ASSERT_NE(requests_tokens_.end(),
-              std::find(requests_tokens_.begin(), requests_tokens_.end(),
-                        ack->ack().request_token()));
+    ASSERT_TRUE(base::Contains(requests_tokens_, ack->ack().request_token()));
   }
 
   void SetResponse(const base::FilePath& path,
@@ -281,26 +280,23 @@ class DeepScanningRequestTest : public testing::Test {
   }
 
   void AddUrlToProfilePrefList(const char* pref_name, const GURL& url) {
-    ListPrefUpdate(profile_->GetPrefs(), pref_name)->Append(url.host());
+    ScopedListPrefUpdate(profile_->GetPrefs(), pref_name)->Append(url.host());
   }
 
-  void SetFeatures(const std::vector<base::Feature>& enabled,
-                   const std::vector<base::Feature>& disabled) {
+  void SetFeatures(const std::vector<base::test::FeatureRef>& enabled,
+                   const std::vector<base::test::FeatureRef>& disabled) {
     scoped_feature_list_.Reset();
     scoped_feature_list_.InitWithFeatures(enabled, disabled);
   }
 
   void EnableAllFeatures() {
     SetFeatures({enterprise_connectors::kEnterpriseConnectorsEnabled},
-                {extensions::SafeBrowsingPrivateEventRouter::
-                     kRealtimeReportingFeature});
+                {enterprise_connectors::kSafeBrowsingRealtimeReporting});
   }
 
   void DisableAllFeatures() {
-    SetFeatures(
-        {},
-        {extensions::SafeBrowsingPrivateEventRouter::kRealtimeReportingFeature,
-         enterprise_connectors::kEnterpriseConnectorsEnabled});
+    SetFeatures({}, {enterprise_connectors::kSafeBrowsingRealtimeReporting,
+                     enterprise_connectors::kEnterpriseConnectorsEnabled});
   }
 
   void ValidateDefaultSettings(
@@ -437,9 +433,7 @@ TEST_P(DeepScanningRequestFeaturesEnabledTest, ChecksFeatureFlags) {
 class DeepScanningRequestAllFeaturesEnabledTest
     : public DeepScanningRequestTest {
  public:
-  DeepScanningRequestAllFeaturesEnabledTest() {
-    EnableAllFeatures();
-  }
+  DeepScanningRequestAllFeaturesEnabledTest() { EnableAllFeatures(); }
 };
 
 TEST_F(DeepScanningRequestAllFeaturesEnabledTest,
@@ -601,9 +595,7 @@ TEST_P(DeepScanningAPPRequestTest, GeneratesCorrectRequestForAPP) {
 
 class DeepScanningReportingTest : public DeepScanningRequestTest {
  public:
-  DeepScanningReportingTest() {
-    EnableAllFeatures();
-  }
+  DeepScanningReportingTest() { EnableAllFeatures(); }
 
   void SetUp() override {
     DeepScanningRequestTest::SetUp();
@@ -829,6 +821,8 @@ TEST_F(DeepScanningReportingTest, ProcessesResponseCorrectly) {
     EventReportValidator validator(client_.get());
     validator.ExpectSensitiveDataEvent(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         /*filename*/ "download.exe",
         // printf "download contents" | sha256sum |  tr '[:lower:]' '[:upper:]'
         /*sha256*/
@@ -887,6 +881,8 @@ TEST_F(DeepScanningReportingTest, ProcessesResponseCorrectly) {
     EventReportValidator validator(client_.get());
     validator.ExpectSensitiveDataEvent(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         /*filename*/ "download.exe",
         // printf "download contents" | sha256sum |  tr '[:lower:]' '[:upper:]'
         /*sha256*/
@@ -949,6 +945,8 @@ TEST_F(DeepScanningReportingTest, ProcessesResponseCorrectly) {
     EventReportValidator validator(client_.get());
     validator.ExpectSensitiveDataEvent(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         /*filename*/ "download.exe",
         // printf "download contents" | sha256sum |  tr '[:lower:]' '[:upper:]'
         /*sha256*/
@@ -1001,6 +999,8 @@ TEST_F(DeepScanningReportingTest, ProcessesResponseCorrectly) {
     EventReportValidator validator(client_.get());
     validator.ExpectUnscannedFileEvent(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         /*filename*/ "download.exe",
         // printf "download contents" | sha256sum |  tr '[:lower:]' '[:upper:]'
         /*sha256*/
@@ -1054,6 +1054,8 @@ TEST_F(DeepScanningReportingTest, ProcessesResponseCorrectly) {
     EventReportValidator validator(client_.get());
     validator.ExpectUnscannedFileEvent(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         /*filename*/ "download.exe",
         // printf "download contents" | sha256sum |  tr '[:lower:]' '[:upper:]'
         /*sha256*/
@@ -1112,6 +1114,8 @@ TEST_F(DeepScanningReportingTest, ProcessesResponseCorrectly) {
     EventReportValidator validator(client_.get());
     validator.ExpectUnscannedFileEvent(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         /*filename*/ "download.exe",
         // printf "download contents" | sha256sum |  tr '[:lower:]' '[:upper:]'
         /*sha256*/
@@ -1255,6 +1259,8 @@ TEST_F(DeepScanningReportingTest, MultipleFiles) {
     EventReportValidator validator(client_.get());
     validator.ExpectUnscannedFileEvent(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         /*filename*/ secondary_files_targets_[0].BaseName().AsUTF8Unsafe(),
         // printf "foo.txt" | sha256sum |  tr '[:lower:]' '[:upper:]'
         /*sha256*/
@@ -1346,6 +1352,8 @@ TEST_F(DeepScanningReportingTest, MultipleFiles) {
     EventReportValidator validator(client_.get());
     validator.ExpectSensitiveDataEvents(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         {
             secondary_files_targets_[0].BaseName().AsUTF8Unsafe(),
             secondary_files_targets_[1].BaseName().AsUTF8Unsafe(),
@@ -1409,6 +1417,8 @@ TEST_F(DeepScanningReportingTest, Timeout) {
   EventReportValidator validator(client_.get());
   validator.ExpectUnscannedFileEvent(
       /*url*/ "https://example.com/download.exe",
+      /*source*/ absl::nullopt,
+      /*destination*/ absl::nullopt,
       /*filename*/ "download.exe",
       // printf "download contents" | sha256sum |  tr '[:lower:]' '[:upper:]'
       /*sha256*/
@@ -1637,6 +1647,8 @@ TEST_P(DeepScanningDownloadRestrictionsTest, GeneratesCorrectReport) {
     EventReportValidator validator(client_.get());
     validator.ExpectUnscannedFileEvent(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         /*filename*/ "download.exe",
         // printf "download contents" | sha256sum |  tr '[:lower:]' '[:upper:]'
         /*sha256*/
@@ -1692,6 +1704,8 @@ TEST_P(DeepScanningDownloadRestrictionsTest, GeneratesCorrectReport) {
     EventReportValidator validator(client_.get());
     validator.ExpectUnscannedFileEvent(
         /*url*/ "https://example.com/download.exe",
+        /*source*/ absl::nullopt,
+        /*destination*/ absl::nullopt,
         /*filename*/ "download.exe",
         // printf "download contents" | sha256sum |  tr '[:lower:]' '[:upper:]'
         /*sha256*/

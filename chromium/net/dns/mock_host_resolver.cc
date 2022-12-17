@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -32,6 +31,7 @@
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "base/types/optional_util.h"
 #include "build/build_config.h"
 #include "net/base/address_family.h"
 #include "net/base/address_list.h"
@@ -40,16 +40,17 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/test_completion_callback.h"
 #include "net/dns/dns_alias_utility.h"
 #include "net/dns/dns_util.h"
 #include "net/dns/host_cache.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_manager.h"
-#include "net/dns/host_resolver_results.h"
+#include "net/dns/host_resolver_system_task.h"
 #include "net/dns/https_record_rdata.h"
 #include "net/dns/public/dns_query_type.h"
+#include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/host_resolver_source.h"
 #include "net/dns/public/mdns_listener_update_type.h"
 #include "net/dns/public/resolve_error_info.h"
@@ -73,43 +74,13 @@ const unsigned kMaxCacheEntries = 100;
 // TTL for the successful resolutions. Failures are not cached.
 const unsigned kCacheEntryTTLSeconds = 60;
 
-base::StringPiece GetScheme(const HostResolver::Host& endpoint) {
-  DCHECK(absl::holds_alternative<url::SchemeHostPort>(endpoint));
-  return absl::get<url::SchemeHostPort>(endpoint).scheme();
-}
-
-// In HostPortPair format (no brackets around IPv6 literals) purely for
-// compatibility with IPAddress::AssignFromIPLiteral().
-base::StringPiece GetHostname(const HostResolver::Host& endpoint) {
-  if (absl::holds_alternative<url::SchemeHostPort>(endpoint)) {
-    base::StringPiece hostname =
-        absl::get<url::SchemeHostPort>(endpoint).host();
-    if (hostname.size() >= 2 && hostname.front() == '[' &&
-        hostname.back() == ']') {
-      return hostname.substr(1, hostname.size() - 2);
-    }
-    return hostname;
-  }
-
-  DCHECK(absl::holds_alternative<HostPortPair>(endpoint));
-  return absl::get<HostPortPair>(endpoint).host();
-}
-
-uint16_t GetPort(const HostResolver::Host& endpoint) {
-  if (absl::holds_alternative<url::SchemeHostPort>(endpoint))
-    return absl::get<url::SchemeHostPort>(endpoint).port();
-
-  DCHECK(absl::holds_alternative<HostPortPair>(endpoint));
-  return absl::get<HostPortPair>(endpoint).port();
-}
-
 absl::variant<url::SchemeHostPort, std::string> GetCacheHost(
     const HostResolver::Host& endpoint) {
-  if (absl::holds_alternative<url::SchemeHostPort>(endpoint))
-    return absl::get<url::SchemeHostPort>(endpoint);
+  if (endpoint.HasScheme()) {
+    return endpoint.AsSchemeHostPort();
+  }
 
-  DCHECK(absl::holds_alternative<HostPortPair>(endpoint));
-  return absl::get<HostPortPair>(endpoint).host();
+  return endpoint.GetHostname();
 }
 
 absl::optional<HostCache::Entry> CreateCacheEntry(
@@ -165,11 +136,11 @@ class MockHostResolverBase::RequestImpl
     : public HostResolver::ResolveHostRequest {
  public:
   RequestImpl(Host request_endpoint,
-              const NetworkIsolationKey& network_isolation_key,
+              const NetworkAnonymizationKey& network_anonymization_key,
               const absl::optional<ResolveHostParameters>& optional_parameters,
               base::WeakPtr<MockHostResolverBase> resolver)
       : request_endpoint_(std::move(request_endpoint)),
-        network_isolation_key_(network_isolation_key),
+        network_anonymization_key_(network_anonymization_key),
         parameters_(optional_parameters ? optional_parameters.value()
                                         : ResolveHostParameters()),
         priority_(parameters_.initial_priority),
@@ -218,13 +189,13 @@ class MockHostResolverBase::RequestImpl
 
   const AddressList* GetAddressResults() const override {
     DCHECK(complete_);
-    return base::OptionalOrNullptr(address_results_);
+    return base::OptionalToPtr(address_results_);
   }
 
   const std::vector<HostResolverEndpointResult>* GetEndpointResults()
       const override {
     DCHECK(complete_);
-    return base::OptionalOrNullptr(endpoint_results_);
+    return base::OptionalToPtr(endpoint_results_);
   }
 
   const absl::optional<std::vector<std::string>>& GetTextResults()
@@ -245,7 +216,7 @@ class MockHostResolverBase::RequestImpl
 
   const std::set<std::string>* GetDnsAliasResults() const override {
     DCHECK(complete_);
-    return base::OptionalOrNullptr(fixed_up_dns_alias_results_);
+    return base::OptionalToPtr(fixed_up_dns_alias_results_);
   }
 
   net::ResolveErrorInfo GetResolveErrorInfo() const override {
@@ -316,8 +287,8 @@ class MockHostResolverBase::RequestImpl
 
   const Host& request_endpoint() const { return request_endpoint_; }
 
-  const NetworkIsolationKey& network_isolation_key() const {
-    return network_isolation_key_;
+  const NetworkAnonymizationKey& network_anonymization_key() const {
+    return network_anonymization_key_;
   }
 
   const ResolveHostParameters& parameters() const { return parameters_; }
@@ -356,7 +327,7 @@ class MockHostResolverBase::RequestImpl
               AddressFamilyToDnsQueryType(endpoint.GetFamily())) {
         if (endpoint.port() == 0) {
           corrected.emplace_back(endpoint.address(),
-                                 GetPort(request_endpoint_));
+                                 request_endpoint_.GetPort());
         } else {
           corrected.push_back(endpoint);
         }
@@ -366,12 +337,13 @@ class MockHostResolverBase::RequestImpl
   }
   std::set<std::string> FixupAliases(const std::set<std::string> aliases) {
     if (aliases.empty())
-      return std::set<std::string>{std::string(GetHostname(request_endpoint_))};
+      return std::set<std::string>{
+          std::string(request_endpoint_.GetHostnameWithoutBrackets())};
     return aliases;
   }
 
   const Host request_endpoint_;
-  const NetworkIsolationKey network_isolation_key_;
+  const NetworkAnonymizationKey network_anonymization_key_;
   const ResolveHostParameters parameters_;
   RequestPriority priority_;
   int host_resolver_flags_;
@@ -542,11 +514,12 @@ MockHostResolverBase::RuleResolver::Resolve(
     const RuleResultOrError& result = rule.second;
 
     if (absl::holds_alternative<RuleKey::NoScheme>(key.scheme) &&
-        absl::holds_alternative<url::SchemeHostPort>(request_endpoint)) {
+        request_endpoint.HasScheme()) {
       continue;
     }
 
-    if (key.port.has_value() && key.port.value() != GetPort(request_endpoint)) {
+    if (key.port.has_value() &&
+        key.port.value() != request_endpoint.GetPort()) {
       continue;
     }
 
@@ -563,13 +536,13 @@ MockHostResolverBase::RuleResolver::Resolve(
     }
 
     if (absl::holds_alternative<RuleKey::Scheme>(key.scheme) &&
-        (!absl::holds_alternative<url::SchemeHostPort>(request_endpoint) ||
-         GetScheme(request_endpoint) !=
+        (!request_endpoint.HasScheme() ||
+         request_endpoint.GetScheme() !=
              absl::get<RuleKey::Scheme>(key.scheme))) {
       continue;
     }
 
-    if (!base::MatchPattern(GetHostname(request_endpoint),
+    if (!base::MatchPattern(request_endpoint.GetHostnameWithoutBrackets(),
                             key.hostname_pattern)) {
       continue;
     }
@@ -580,7 +553,7 @@ MockHostResolverBase::RuleResolver::Resolve(
   if (default_result_)
     return default_result_.value();
 
-  NOTREACHED() << "Request " << GetHostname(request_endpoint)
+  NOTREACHED() << "Request " << request_endpoint.GetHostname()
                << " did not match any MockHostResolver rules.";
   static const RuleResultOrError kUnexpected = ERR_UNEXPECTED;
   return kUnexpected;
@@ -736,20 +709,21 @@ void MockHostResolverBase::OnShutdown() {
 std::unique_ptr<HostResolver::ResolveHostRequest>
 MockHostResolverBase::CreateRequest(
     url::SchemeHostPort host,
-    NetworkIsolationKey network_isolation_key,
+    NetworkAnonymizationKey network_anonymization_key,
     NetLogWithSource net_log,
     absl::optional<ResolveHostParameters> optional_parameters) {
-  return std::make_unique<RequestImpl>(std::move(host), network_isolation_key,
+  return std::make_unique<RequestImpl>(Host(std::move(host)),
+                                       network_anonymization_key,
                                        optional_parameters, AsWeakPtr());
 }
 
 std::unique_ptr<HostResolver::ResolveHostRequest>
 MockHostResolverBase::CreateRequest(
     const HostPortPair& host,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     const NetLogWithSource& source_net_log,
     const absl::optional<ResolveHostParameters>& optional_parameters) {
-  return std::make_unique<RequestImpl>(host, network_isolation_key,
+  return std::make_unique<RequestImpl>(Host(host), network_anonymization_key,
                                        optional_parameters, AsWeakPtr());
 }
 
@@ -769,8 +743,16 @@ HostCache* MockHostResolverBase::GetHostCache() {
 }
 
 int MockHostResolverBase::LoadIntoCache(
+    absl::variant<url::SchemeHostPort, HostPortPair> endpoint,
+    const NetworkAnonymizationKey& network_anonymization_key,
+    const absl::optional<ResolveHostParameters>& optional_parameters) {
+  return LoadIntoCache(Host(std::move(endpoint)), network_anonymization_key,
+                       optional_parameters);
+}
+
+int MockHostResolverBase::LoadIntoCache(
     const Host& endpoint,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     const absl::optional<ResolveHostParameters>& optional_parameters) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(cache_);
@@ -782,7 +764,7 @@ int MockHostResolverBase::LoadIntoCache(
   std::set<std::string> aliases;
   absl::optional<HostCache::EntryStaleness> stale_info;
   int rv = ResolveFromIPLiteralOrCache(
-      endpoint, network_isolation_key, parameters.dns_query_type,
+      endpoint, network_anonymization_key, parameters.dns_query_type,
       ParametersToHostResolverFlags(parameters), parameters.source,
       parameters.cache_usage, &endpoints, &aliases, &stale_info);
   if (rv != ERR_DNS_CACHE_MISS) {
@@ -792,10 +774,10 @@ int MockHostResolverBase::LoadIntoCache(
 
   // Just like the real resolver, refuse to do anything with invalid
   // hostnames.
-  if (!IsValidDNSDomain(GetHostname(endpoint)))
+  if (!IsValidDNSDomain(endpoint.GetHostnameWithoutBrackets()))
     return ERR_NAME_NOT_RESOLVED;
 
-  RequestImpl request(endpoint, network_isolation_key, optional_parameters,
+  RequestImpl request(endpoint, network_anonymization_key, optional_parameters,
                       AsWeakPtr());
   return DoSynchronousResolution(request);
 }
@@ -836,7 +818,7 @@ void MockHostResolverBase::DetachRequest(size_t id) {
 
 base::StringPiece MockHostResolverBase::request_host(size_t id) {
   DCHECK(request(id));
-  return GetHostname(request(id)->request_endpoint());
+  return request(id)->request_endpoint().GetHostnameWithoutBrackets();
 }
 
 RequestPriority MockHostResolverBase::request_priority(size_t id) {
@@ -844,10 +826,10 @@ RequestPriority MockHostResolverBase::request_priority(size_t id) {
   return request(id)->priority();
 }
 
-const NetworkIsolationKey& MockHostResolverBase::request_network_isolation_key(
-    size_t id) {
+const NetworkAnonymizationKey&
+MockHostResolverBase::request_network_anonymization_key(size_t id) {
   DCHECK(request(id));
-  return request(id)->network_isolation_key();
+  return request(id)->network_anonymization_key();
 }
 
 void MockHostResolverBase::ResolveOnlyRequestNow() {
@@ -923,7 +905,8 @@ int MockHostResolverBase::Resolve(RequestImpl* request) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   last_request_priority_ = request->parameters().initial_priority;
-  last_request_network_isolation_key_ = request->network_isolation_key();
+  last_request_network_anonymization_key_ =
+      request->network_anonymization_key();
   last_secure_dns_policy_ = request->parameters().secure_dns_policy;
   state_->IncrementNumResolve();
   std::vector<HostResolverEndpointResult> endpoints;
@@ -931,7 +914,7 @@ int MockHostResolverBase::Resolve(RequestImpl* request) {
   absl::optional<HostCache::EntryStaleness> stale_info;
   // TODO(crbug.com/1264933): Allow caching `ConnectionEndpoint` results.
   int rv = ResolveFromIPLiteralOrCache(
-      request->request_endpoint(), request->network_isolation_key(),
+      request->request_endpoint(), request->network_anonymization_key(),
       request->parameters().dns_query_type, request->host_resolver_flags(),
       request->parameters().source, request->parameters().cache_usage,
       &endpoints, &aliases, &stale_info);
@@ -950,7 +933,8 @@ int MockHostResolverBase::Resolve(RequestImpl* request) {
 
   // Just like the real resolver, refuse to do anything with invalid
   // hostnames.
-  if (!IsValidDNSDomain(GetHostname(request->request_endpoint()))) {
+  if (!IsValidDNSDomain(
+          request->request_endpoint().GetHostnameWithoutBrackets())) {
     request->SetError(ERR_NAME_NOT_RESOLVED);
     return ERR_NAME_NOT_RESOLVED;
   }
@@ -974,7 +958,7 @@ int MockHostResolverBase::Resolve(RequestImpl* request) {
 
 int MockHostResolverBase::ResolveFromIPLiteralOrCache(
     const Host& endpoint,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     DnsQueryType dns_query_type,
     HostResolverFlags flags,
     HostResolverSource source,
@@ -990,7 +974,7 @@ int MockHostResolverBase::ResolveFromIPLiteralOrCache(
   *out_stale_info = absl::nullopt;
 
   IPAddress ip_address;
-  if (ip_address.AssignFromIPLiteral(GetHostname(endpoint))) {
+  if (ip_address.AssignFromIPLiteral(endpoint.GetHostnameWithoutBrackets())) {
     const DnsQueryType desired_address_query =
         AddressFamilyToDnsQueryType(GetAddressFamily(ip_address));
     DCHECK_NE(desired_address_query, DnsQueryType::UNSPECIFIED);
@@ -1003,7 +987,7 @@ int MockHostResolverBase::ResolveFromIPLiteralOrCache(
 
     *out_endpoints = std::vector<HostResolverEndpointResult>(1);
     (*out_endpoints)[0].ip_endpoints.emplace_back(ip_address,
-                                                  GetPort(endpoint));
+                                                  endpoint.GetPort());
     if (flags & HOST_RESOLVER_CANONNAME)
       *out_aliases = {ip_address.ToString()};
     return OK;
@@ -1012,7 +996,8 @@ int MockHostResolverBase::ResolveFromIPLiteralOrCache(
   std::vector<IPEndPoint> localhost_endpoints;
   // Immediately resolve any "localhost" or recognized similar names.
   if (IsAddressType(dns_query_type) &&
-      ResolveLocalHostname(GetHostname(endpoint), &localhost_endpoints)) {
+      ResolveLocalHostname(endpoint.GetHostnameWithoutBrackets(),
+                           &localhost_endpoints)) {
     *out_endpoints = std::vector<HostResolverEndpointResult>(1);
     (*out_endpoints)[0].ip_endpoints = localhost_endpoints;
     return OK;
@@ -1028,7 +1013,7 @@ int MockHostResolverBase::ResolveFromIPLiteralOrCache(
         source == HostResolverSource::LOCAL_ONLY ? HostResolverSource::ANY
                                                  : source;
     HostCache::Key key(GetCacheHost(endpoint), dns_query_type, flags,
-                       effective_source, network_isolation_key);
+                       effective_source, network_anonymization_key);
     const std::pair<const HostCache::Key, HostCache::Entry>* cache_result;
     HostCache::EntryStaleness stale_info = HostCache::kNotStale;
     if (cache_usage ==
@@ -1101,7 +1086,7 @@ int MockHostResolverBase::DoSynchronousResolution(RequestImpl& request) {
     HostCache::Key key(
         GetCacheHost(request.request_endpoint()),
         request.parameters().dns_query_type, request.host_resolver_flags(),
-        request.parameters().source, request.network_isolation_key());
+        request.parameters().source, request.network_anonymization_key());
     // Storing a failure with TTL 0 so that it overwrites previous value.
     base::TimeDelta ttl;
     if (error == OK) {
@@ -1340,9 +1325,7 @@ int RuleBasedHostResolverProc::Resolve(const std::string& host,
         case Rule::kResolverTypeFailTimeout:
           return ERR_DNS_TIMED_OUT;
         case Rule::kResolverTypeSystem:
-#if BUILDFLAG(IS_WIN)
-          EnsureWinsockInit();
-#endif
+          EnsureSystemHostResolverCallReady();
           return SystemHostResolverCall(effective_host, address_family,
                                         host_resolver_flags, addrlist,
                                         os_error);
@@ -1498,22 +1481,22 @@ void HangingHostResolver::OnShutdown() {
 std::unique_ptr<HostResolver::ResolveHostRequest>
 HangingHostResolver::CreateRequest(
     url::SchemeHostPort host,
-    NetworkIsolationKey network_isolation_key,
+    NetworkAnonymizationKey network_anonymization_key,
     NetLogWithSource net_log,
     absl::optional<ResolveHostParameters> optional_parameters) {
   // TODO(crbug.com/1206799): Propagate scheme and make affect behavior.
   return CreateRequest(HostPortPair::FromSchemeHostPort(host),
-                       network_isolation_key, net_log, optional_parameters);
+                       network_anonymization_key, net_log, optional_parameters);
 }
 
 std::unique_ptr<HostResolver::ResolveHostRequest>
 HangingHostResolver::CreateRequest(
     const HostPortPair& host,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     const NetLogWithSource& source_net_log,
     const absl::optional<ResolveHostParameters>& optional_parameters) {
   last_host_ = host;
-  last_network_isolation_key_ = network_isolation_key;
+  last_network_anonymization_key_ = network_anonymization_key;
 
   if (shutting_down_)
     return CreateFailingRequest(ERR_CONTEXT_SHUT_DOWN);

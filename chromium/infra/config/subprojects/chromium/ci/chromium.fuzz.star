@@ -1,9 +1,9 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Definitions of builders in the chromium.fuzz builder group."""
 
-load("//lib/builders.star", "goma", "os", "reclient", "xcode")
+load("//lib/builders.star", "goma", "os", "reclient", "sheriff_rotations", "xcode")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 
@@ -18,6 +18,10 @@ ci.defaults.set(
     os = os.LINUX_DEFAULT,
     pool = ci.DEFAULT_POOL,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
+    sheriff_rotations = sheriff_rotations.CHROMIUM_FUZZ,
+
+    # TODO(crbug.com/1362440): remove this.
+    omit_python2 = False,
 )
 
 consoles.console_view(
@@ -180,8 +184,6 @@ ci.builder(
     triggering_policy = scheduler.greedy_batching(
         max_concurrent_invocations = 2,
     ),
-    goma_backend = goma.backend.RBE_PROD,
-    reclient_instance = None,
 )
 
 ci.builder(
@@ -196,8 +198,6 @@ ci.builder(
     triggering_policy = scheduler.greedy_batching(
         max_concurrent_invocations = 2,
     ),
-    goma_backend = goma.backend.RBE_PROD,
-    reclient_instance = None,
 )
 
 ci.builder(
@@ -283,6 +283,7 @@ ci.builder(
         short_name = "chromeos-asan",
     ),
     executable = "recipe:chromium_libfuzzer",
+    execution_timeout = 4 * time.hour,
     triggering_policy = scheduler.greedy_batching(
         max_concurrent_invocations = 3,
     ),
@@ -404,6 +405,7 @@ ci.builder(
         short_name = "linux32-dbg",
     ),
     executable = "recipe:chromium_libfuzzer",
+    execution_timeout = 4 * time.hour,
     triggering_policy = scheduler.greedy_batching(
         max_concurrent_invocations = 3,
     ),
@@ -456,7 +458,8 @@ ci.builder(
         short_name = "win-asan",
     ),
     # crbug.com/1175182: Temporarily increase timeout
-    execution_timeout = 4 * time.hour,
+    # crbug.com/1372531: Increase timeout again
+    execution_timeout = 6 * time.hour,
     executable = "recipe:chromium_libfuzzer",
     os = os.WINDOWS_DEFAULT,
     triggering_policy = scheduler.greedy_batching(

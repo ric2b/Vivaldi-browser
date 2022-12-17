@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
+#include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/views/test/scoped_views_test_helper.h"
 #include "ui/views/test/test_views_delegate.h"
@@ -76,11 +77,6 @@ class ViewsTestBase : public PlatformTest {
   void SetUpForInteractiveTests();
 
   void RunPendingMessages();
-
-  // Ensure the given view is properly laid out. If the view is in a Widget view
-  // tree, invoke Widget::LayoutRootViewIfNecessary(). Otherwise lay out the
-  // root parent view.
-  void RunScheduledLayout(View* view);
 
   // Returns CreateParams for a widget of type |type|.  This is used by
   // CreateParamsForTestWidget() and thus by CreateTestWidget(), and may also be
@@ -211,6 +207,14 @@ class ViewsTestWithDesktopNativeWidget : public ViewsTestBase {
 
   // ViewsTestBase:
   void SetUp() override;
+};
+
+class ScopedAXModeSetter {
+ public:
+  explicit ScopedAXModeSetter(ui::AXMode new_mode) {
+    ui::AXPlatformNode::SetAXMode(new_mode);
+  }
+  ~ScopedAXModeSetter() { ui::AXPlatformNode::SetAXMode(ui::AXMode::kNone); }
 };
 
 }  // namespace views

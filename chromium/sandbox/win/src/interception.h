@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,10 +67,10 @@ class InterceptionManager {
 
  public:
   // An interception manager performs interceptions on a given child process.
-  // If we are allowed to intercept functions that have been patched by somebody
-  // else, relaxed should be set to true.
+  // We are allowed to intercept functions that have been patched by somebody
+  // else.
   // |child_process| should outlive the manager.
-  InterceptionManager(TargetProcess& child_process, bool relaxed);
+  InterceptionManager(TargetProcess& child_process);
 
   InterceptionManager(const InterceptionManager&) = delete;
   InterceptionManager& operator=(const InterceptionManager&) = delete;
@@ -219,9 +219,6 @@ class InterceptionManager {
 
   // Keep track of patches added by name.
   bool names_used_;
-
-  // true if we are allowed to patch already-patched functions.
-  bool relaxed_;
 };
 
 // This macro simply calls interception_manager.AddToPatchedFunctions with

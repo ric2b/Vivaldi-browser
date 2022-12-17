@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,6 +36,10 @@
 #include "sandbox/policy/linux/bpf_cros_arm_gpu_policy_linux.h"
 #include "sandbox/policy/linux/bpf_gpu_policy_linux.h"
 #include "sandbox/policy/linux/sandbox_linux.h"
+
+#if BUILDFLAG(USE_V4L2_CODEC)
+#include "media/gpu/v4l2/v4l2_device.h"
+#endif
 
 using sandbox::bpf_dsl::Policy;
 using sandbox::syscall_broker::BrokerFilePermission;
@@ -80,9 +84,8 @@ inline bool UseV4L2Codec() {
 }
 
 inline bool UseLibV4L2() {
-  // TODO(b/240881905): for LaCrOS, this will need to be determined at runtime.
-#if BUILDFLAG(USE_LIBV4L2)
-  return true;
+#if BUILDFLAG(USE_V4L2_CODEC)
+  return media::V4L2Device::UseLibV4L2();
 #else
   return false;
 #endif
@@ -110,8 +113,13 @@ constexpr int dlopen_flag = RTLD_NOW | RTLD_GLOBAL | RTLD_NODELETE;
 
 void AddStandardChromeOsPermissions(
     std::vector<BrokerFilePermission>* permissions) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  static const char kAngleEglPath[] = "/usr/local/lacros-chrome/libEGL.so";
+  static const char kAngleGlesPath[] = "/usr/local/lacros-chrome/libGLESv2.so";
+#else
   static const char kAngleEglPath[] = "/opt/google/chrome/libEGL.so";
   static const char kAngleGlesPath[] = "/opt/google/chrome/libGLESv2.so";
+#endif
 
   // For the ANGLE passthrough command decoder.
   permissions->push_back(BrokerFilePermission::ReadOnly(kAngleEglPath));
@@ -279,7 +287,10 @@ void AddIntelGpuPermissions(std::vector<BrokerFilePermission>* permissions) {
       // Allow libglvnd files and libs.
       "/usr/share/glvnd/egl_vendor.d",
       "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
-      "/usr/lib64/libEGL_mesa.so.0", "/usr/lib64/libGLdispatch.so.0"};
+      "/usr/lib64/libEGL_mesa.so.0", "/usr/lib64/libGLdispatch.so.0",
+      // Case of when the only libc++abi.so.1 is preloaded.
+      // See: crbug.com/1366646
+      "/usr/lib64/libc++.so.1"};
   for (const char* item : kReadOnlyList)
     permissions->push_back(BrokerFilePermission::ReadOnly(item));
 
@@ -531,6 +542,8 @@ bool IsAcceleratedVideoEnabled(
 
 void LoadV4L2Libraries(
     const sandbox::policy::SandboxSeccompBPF::Options& options) {
+  DCHECK(UseV4L2Codec());
+
   if (IsAcceleratedVideoEnabled(options) && UseLibV4L2()) {
     dlopen(kLibV4l2Path, dlopen_flag);
 

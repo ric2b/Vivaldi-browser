@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,11 +56,11 @@ extern const char kPrivacySandboxNoConfirmationManuallyControlled[] =
 extern const char kPrivacySandboxDisabledInsufficientConfirmation[] =
     "privacy_sandbox.disabled_insufficient_confirmation";
 
-extern const char kPrivacySandboxFirstPartySetsDataAccessAllowed[] =
-    "privacy_sandbox.first_party_sets_data_access_allowed";
-
 extern const char kPrivacySandboxFirstPartySetsDataAccessAllowedInitialized[] =
     "privacy_sandbox.first_party_sets_data_access_allowed_initialized";
+
+extern const char kPrivacySandboxFirstPartySetsEnabled[] =
+    "privacy_sandbox.first_party_sets_enabled";
 
 }  // namespace prefs
 
@@ -104,10 +104,10 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
       prefs::kPrivacySandboxDisabledInsufficientConfirmation, false);
   registry->RegisterBooleanPref(
-      prefs::kPrivacySandboxFirstPartySetsDataAccessAllowed, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(
       prefs::kPrivacySandboxFirstPartySetsDataAccessAllowedInitialized, false);
+  registry->RegisterBooleanPref(
+      prefs::kPrivacySandboxFirstPartySetsEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 
 }  // namespace privacy_sandbox

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/logging.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -43,7 +44,7 @@ void FakeAudioCapturer::SendData(base::TimeTicks timestamp, void* data) {
   EXPECT_TRUE(is_active_);
 
   // Find unused packet.
-  auto it = std::find(packets_usage_.begin(), packets_usage_.end(), false);
+  auto it = base::ranges::find(packets_usage_, false);
 
   // Currently tests don't try to send more than 2 packets and the buffer
   // always will have space for at least 2 packets.

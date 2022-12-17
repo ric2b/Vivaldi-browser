@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -34,6 +33,7 @@
 #include "chrome/browser/ash/tpm_firmware_update.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/policy/core/common/chrome_schema.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/schema.h"
@@ -109,7 +109,6 @@ const char* const kKnownSettings[] = {
     kDeviceWiFiAllowed,
     kDeviceWilcoDtcAllowed,
     kDisplayRotationDefault,
-    kEnableDeviceGranularReporting,
     kExtensionCacheSize,
     kFeatureFlags,
     kHeartbeatEnabled,
@@ -133,18 +132,17 @@ const char* const kKnownSettings[] = {
     kReportDeviceCrashReportInfo,
     kReportDeviceCpuInfo,
     kReportDeviceFanInfo,
-    kReportDeviceHardwareStatus,
     kReportDeviceLocation,
     kReportDevicePeripherals,
     kReportDevicePowerStatus,
     kReportDeviceStorageStatus,
     kReportDeviceNetworkConfiguration,
-    kReportDeviceNetworkInterfaces,
     kReportDeviceNetworkStatus,
     kReportDeviceNetworkTelemetryCollectionRateMs,
     kReportDeviceNetworkTelemetryEventCheckingRateMs,
     kReportDeviceSessionStatus,
     kReportDeviceSecurityStatus,
+    kReportDeviceSignalStrengthEventDrivenTelemetry,
     kReportDeviceTimezoneInfo,
     kReportDeviceGraphicsStatus,
     kReportDeviceMemoryInfo,
@@ -175,6 +173,7 @@ const char* const kKnownSettings[] = {
     kUsbDetachableAllowlist,
     kVariationsRestrictParameter,
     kVirtualMachinesAllowed,
+    kDeviceReportXDREvents,
 };
 
 constexpr char InvalidCombinationsOfAllowedUsersPoliciesHistogram[] =
@@ -360,32 +359,33 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
           policy.ephemeral_users_enabled().has_ephemeral_users_enabled() &&
           policy.ephemeral_users_enabled().ephemeral_users_enabled());
 
-  base::Value::List list;
-  const em::UserAllowlistProto& allowlist_proto = policy.user_allowlist();
-  if (policy.user_allowlist().user_allowlist_size() > 0) {
-    const RepeatedPtrField<std::string>& allowlist =
-        allowlist_proto.user_allowlist();
-    for (const std::string& value : allowlist) {
-      list.Append(value);
+  {
+    base::Value::List list;
+    const em::UserAllowlistProto& allowlist_proto = policy.user_allowlist();
+    if (policy.user_allowlist().user_allowlist_size() > 0) {
+      const RepeatedPtrField<std::string>& allowlist =
+          allowlist_proto.user_allowlist();
+      for (const std::string& value : allowlist) {
+        list.Append(value);
+      }
+    } else {
+      const em::UserWhitelistProto& whitelist_proto =   // nocheck
+          policy.user_whitelist();                      // nocheck
+      const RepeatedPtrField<std::string>& whitelist =  // nocheck
+          whitelist_proto.user_whitelist();             // nocheck
+      for (const std::string& value : whitelist) {      // nocheck
+        list.Append(value);
+      }
     }
-  } else {
-    const em::UserWhitelistProto& whitelist_proto =   // nocheck
-        policy.user_whitelist();                      // nocheck
-    const RepeatedPtrField<std::string>& whitelist =  // nocheck
-        whitelist_proto.user_whitelist();             // nocheck
-    for (const std::string& value : whitelist) {      // nocheck
-      list.Append(value);
-    }
+    new_values_cache->SetValue(kAccountsPrefUsers,
+                               base::Value(std::move(list)));
   }
-
-  new_values_cache->SetValue(kAccountsPrefUsers, base::Value(std::move(list)));
 
   base::Value::List account_list;
   const em::DeviceLocalAccountsProto device_local_accounts_proto =
       policy.device_local_accounts();
   const RepeatedPtrField<em::DeviceLocalAccountInfoProto>& accounts =
       device_local_accounts_proto.account();
-  RepeatedPtrField<em::DeviceLocalAccountInfoProto>::const_iterator entry;
   for (const em::DeviceLocalAccountInfoProto& entry : accounts) {
     base::Value entry_dict(base::Value::Type::DICTIONARY);
     if (entry.has_type()) {
@@ -656,11 +656,6 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
   if (policy.has_device_reporting()) {
     const em::DeviceReportingProto& reporting_policy =
         policy.device_reporting();
-    if (reporting_policy.has_enable_granular_reporting()) {
-      new_values_cache->SetBoolean(
-          kEnableDeviceGranularReporting,
-          reporting_policy.enable_granular_reporting());
-    }
     if (reporting_policy.has_report_version_info()) {
       new_values_cache->SetBoolean(kReportDeviceVersionInfo,
                                    reporting_policy.report_version_info());
@@ -686,11 +681,6 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
           kReportDeviceNetworkConfiguration,
           reporting_policy.report_network_configuration());
     }
-    if (reporting_policy.has_report_network_interfaces()) {
-      new_values_cache->SetBoolean(
-          kReportDeviceNetworkInterfaces,
-          reporting_policy.report_network_interfaces());
-    }
     if (reporting_policy.has_report_network_status()) {
       new_values_cache->SetBoolean(kReportDeviceNetworkStatus,
                                    reporting_policy.report_network_status());
@@ -698,10 +688,6 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
     if (reporting_policy.has_report_users()) {
       new_values_cache->SetBoolean(kReportDeviceUsers,
                                    reporting_policy.report_users());
-    }
-    if (reporting_policy.has_report_hardware_status()) {
-      new_values_cache->SetBoolean(kReportDeviceHardwareStatus,
-                                   reporting_policy.report_hardware_status());
     }
     if (reporting_policy.has_report_session_status()) {
       new_values_cache->SetBoolean(kReportDeviceSessionStatus,
@@ -806,6 +792,17 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
       new_values_cache->SetInteger(
           kReportDeviceAudioStatusCheckingRateMs,
           reporting_policy.report_device_audio_status_checking_rate_ms());
+    }
+    if (reporting_policy.has_report_signal_strength_event_driven_telemetry()) {
+      base::Value::List signal_strength_telemetry_list;
+      for (const std::string& telemetry_entry :
+           reporting_policy.report_signal_strength_event_driven_telemetry()
+               .entries()) {
+        signal_strength_telemetry_list.Append(telemetry_entry);
+      }
+      new_values_cache->SetValue(
+          kReportDeviceSignalStrengthEventDrivenTelemetry,
+          base::Value(std::move(signal_strength_telemetry_list)));
     }
   }
 }
@@ -1242,6 +1239,15 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
         policy.device_encrypted_reporting_pipeline_enabled());
     if (container.has_enabled()) {
       new_values_cache->SetValue(kDeviceEncryptedReportingPipelineEnabled,
+                                 base::Value(container.enabled()));
+    }
+  }
+
+  if (policy.has_device_report_xdr_events()) {
+    const em::DeviceReportXDREventsProto& container(
+        policy.device_report_xdr_events());
+    if (container.has_enabled()) {
+      new_values_cache->SetValue(kDeviceReportXDREvents,
                                  base::Value(container.enabled()));
     }
   }

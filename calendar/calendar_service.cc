@@ -187,6 +187,26 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteCalendarEvent(
       base::BindOnce(std::move(callback), delete_results));
 }
 
+base::CancelableTaskTracker::TaskId CalendarService::UpdateRecurrenceException(
+    RecurrenceExceptionID recurrence_id,
+    RecurrenceExceptionRow recurrence,
+    EventResultCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  std::shared_ptr<EventResultCB> update_results =
+      std::shared_ptr<EventResultCB>(new EventResultCB());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&CalendarBackend::UpdateRecurrenceException,
+                     calendar_backend_, recurrence_id, recurrence,
+                     update_results),
+      base::BindOnce(std::move(callback), update_results));
+}
+
 base::CancelableTaskTracker::TaskId
 CalendarService::DeleteEventRecurrenceException(
     RecurrenceExceptionID exception_id,

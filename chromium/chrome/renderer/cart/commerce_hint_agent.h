@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,10 @@
 #include "content/public/renderer/render_frame_observer_tracker.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "url/gurl.h"
+
+namespace base {
+class Value;
+}
 
 namespace ukm {
 class MojoUkmRecorder;
@@ -62,7 +66,7 @@ class CommerceHintAgent
       mojo::Remote<mojom::CommerceHintObserver> observer,
       const std::string& product_id_json,
       const std::string& cart_extraction_script);
-  void OnProductsExtracted(const blink::WebVector<v8::Local<v8::Value>>& result,
+  void OnProductsExtracted(absl::optional<base::Value> results,
                            base::TimeTicks start_time);
 
   GURL starting_url_;
@@ -70,7 +74,7 @@ class CommerceHintAgent
   int extraction_count_{0};
   bool is_extraction_pending_{false};
   bool is_extraction_running_{false};
-  bool should_skip_{false};
+  absl::optional<bool> should_skip_;
   bool extraction_script_initialized_{false};
   std::unique_ptr<ukm::MojoUkmRecorder> ukm_recorder_;
   base::WeakPtrFactory<CommerceHintAgent> weak_factory_{this};
@@ -93,6 +97,11 @@ class CommerceHintAgent
   // hint signals should be collected on current URL or not. (2) `heuristics`
   // carrying commerce heuristics that are applicable in current domain.
   void DidStartNavigationCallback(
+      const GURL& url,
+      mojo::Remote<mojom::CommerceHintObserver> observer,
+      bool should_skip,
+      mojom::HeuristicsPtr heuristics);
+  void DidCommitProvisionalLoadCallback(
       const GURL& url,
       mojo::Remote<mojom::CommerceHintObserver> observer,
       bool should_skip,

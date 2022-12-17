@@ -1,4 +1,4 @@
-// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,13 +83,13 @@ void ParsePolicy(const RegistryDict* gpo_dict,
     return;
 
   std::unique_ptr<base::Value> policy_value(gpo_dict->ConvertToJSON(schema));
-  const base::DictionaryValue* policy_dict = nullptr;
-  if (!policy_value->GetAsDictionary(&policy_dict) || !policy_dict) {
+  const base::Value::Dict* policy_dict = policy_value->GetIfDict();
+  if (!policy_dict) {
     SYSLOG(WARNING) << "Root policy object is not a dictionary!";
     return;
   }
 
-  policy->LoadFrom(policy_dict, level, scope, POLICY_SOURCE_PLATFORM);
+  policy->LoadFrom(*policy_dict, level, scope, POLICY_SOURCE_PLATFORM);
 }
 
 // Returns a name, using the |get_name| callback, which may refuse the call if
@@ -170,11 +170,6 @@ bool IsDomainJoined() {
 // Collects stats about the enterprise environment that can be used to decide
 // how to parse the existing policy information.
 void CollectEnterpriseUMAs() {
-  // Collect statistics about the windows suite.
-  UMA_HISTOGRAM_ENUMERATION("EnterpriseCheck.OSType",
-                            base::win::OSInfo::GetInstance()->version_type(),
-                            base::win::SUITE_LAST);
-
   base::UmaHistogramBoolean("EnterpriseCheck.IsManagedOrEnterpriseDevice",
                             base::IsManagedOrEnterpriseDevice());
   base::UmaHistogramBoolean("EnterpriseCheck.IsDomainJoined", IsDomainJoined());

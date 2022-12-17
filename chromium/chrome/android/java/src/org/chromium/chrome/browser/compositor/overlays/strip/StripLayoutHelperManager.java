@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -711,13 +711,6 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             public void willCloseAllTabs(boolean incognito) {
                 getStripLayoutHelper(incognito).willCloseAllTabs();
                 updateModelSwitcherButton();
-            }
-
-            @Override
-            public void allTabsClosureCommitted(boolean incognito) {
-                if (mLayerTitleCacheSupplier.hasValue()) {
-                    mLayerTitleCacheSupplier.get().clearExcept(Tab.INVALID_TAB_ID);
-                }
             }
 
             @Override

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -205,10 +205,19 @@ SkColor Label::GetEnabledColor() const {
 void Label::SetEnabledColor(SkColor color) {
   if (enabled_color_set_ && requested_enabled_color_ == color)
     return;
-  requested_enabled_color_ = color;
+
   enabled_color_set_ = true;
+  requested_enabled_color_ = color;
   RecalculateColors();
   OnPropertyChanged(&requested_enabled_color_, kPropertyEffectsPaint);
+}
+
+void Label::SetEnabledColorId(absl::optional<ui::ColorId> enabled_color_id) {
+  if (enabled_color_id_ == enabled_color_id)
+    return;
+
+  enabled_color_id_ = enabled_color_id;
+  OnPropertyChanged(&enabled_color_id_, kPropertyEffectsPaint);
 }
 
 SkColor Label::GetBackgroundColor() const {
@@ -222,6 +231,15 @@ void Label::SetBackgroundColor(SkColor color) {
   background_color_set_ = true;
   RecalculateColors();
   OnPropertyChanged(&background_color_, kPropertyEffectsPaint);
+}
+
+void Label::SetBackgroundColorId(
+    absl::optional<ui::ColorId> background_color_id) {
+  if (background_color_id_ == background_color_id)
+    return;
+
+  background_color_id_ = background_color_id;
+  OnPropertyChanged(&background_color_id_, kPropertyEffectsPaint);
 }
 
 SkColor Label::GetSelectionTextColor() const {
@@ -345,6 +363,8 @@ void Label::SetMultiLine(bool multi_line) {
   if (this->GetMultiLine() == multi_line)
     return;
   multi_line_ = multi_line;
+  // `max_width_` and `max_width_single_line_` are mutually exclusive.
+  max_width_single_line_ = 0;
   full_text_->SetMultiline(multi_line);
   ClearDisplayText();
   OnPropertyChanged(&multi_line_, kPropertyEffectsPreferredSizeChanged);
@@ -1210,15 +1230,20 @@ void Label::ApplyTextColors() const {
 
 void Label::UpdateColorsFromTheme() {
   ui::ColorProvider* color_provider = GetColorProvider();
-  if (!enabled_color_set_) {
+  if (enabled_color_id_.has_value()) {
+    requested_enabled_color_ = color_provider->GetColor(*enabled_color_id_);
+  } else if (!enabled_color_set_) {
     const absl::optional<SkColor> cascading_color =
         GetCascadingProperty(this, kCascadingLabelEnabledColor);
     requested_enabled_color_ = cascading_color.value_or(
         style::GetColor(*this, text_context_, text_style_));
   }
-  if (!background_color_set_) {
+
+  if (background_color_id_.has_value())
+    background_color_ = color_provider->GetColor(*background_color_id_);
+  else if (!background_color_set_)
     background_color_ = color_provider->GetColor(ui::kColorDialogBackground);
-  }
+
   if (!selection_text_color_set_) {
     requested_selection_text_color_ =
         color_provider->GetColor(ui::kColorLabelSelectionForeground);

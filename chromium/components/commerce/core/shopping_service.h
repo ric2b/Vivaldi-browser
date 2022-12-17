@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "base/scoped_observation.h"
 #include "base/sequence_checker.h"
 #include "base/supports_user_data.h"
+#include "components/commerce/core/account_checker.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
@@ -25,8 +26,6 @@
 
 class GURL;
 class PrefService;
-
-class PrefRegistrySimple;
 
 template <typename T>
 class SessionProtoStorage;
@@ -51,6 +50,10 @@ class OptimizationMetadata;
 namespace signin {
 class IdentityManager;
 }  // namespace signin
+
+namespace power_bookmarks {
+class PowerBookmarkService;
+}  // namespace power_bookmarks
 
 namespace commerce {
 
@@ -84,6 +87,12 @@ enum class ProductInfoFallback {
   kMaxValue = kPrice,
 };
 
+namespace metrics {
+class ScheduledMetricsManager;
+}  // namespace metrics
+
+class BookmarkUpdateManager;
+class ShoppingPowerBookmarkDataProvider;
 class ShoppingBookmarkModelObserver;
 class SubscriptionsManager;
 class WebWrapper;
@@ -155,13 +164,12 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       SessionProtoStorage<
           commerce_subscription_db::CommerceSubscriptionContentProto>*
-          subscription_proto_db);
+          subscription_proto_db,
+      power_bookmarks::PowerBookmarkService* power_bookmark_service);
   ~ShoppingService() override;
 
   ShoppingService(const ShoppingService&) = delete;
   ShoppingService& operator=(const ShoppingService&) = delete;
-
-  static void RegisterPrefs(PrefRegistrySimple* registry);
 
   // This API retrieves the product information for the provided |url| and
   // passes the payload back to the caller via |callback|. At minimum, this
@@ -203,6 +211,18 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
       std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
       base::OnceCallback<void(bool)> callback);
 
+  // Fetch users' pref from server on whether to receive price tracking emails.
+  void FetchPriceEmailPref();
+
+  // Schedule an update for saved product bookmarks using
+  // |bookmark_update_manager_|.
+  virtual void ScheduleSavedProductUpdate();
+
+  // This is a feature check for the "shopping list". This will only return true
+  // if the user has the feature flag enabled, is signed-in, has MSBB enabled,
+  // has webapp activity enabled, and is allowed by enterprise policy.
+  virtual bool IsShoppingListEligible();
+
   // Get a weak pointer for this service instance.
   base::WeakPtr<ShoppingService> AsWeakPtr();
 
@@ -213,6 +233,7 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   friend class CommerceTabHelper;
   // Test classes are also friends.
   friend class ShoppingServiceTestBase;
+  friend class ShoppingServiceTest;
 
   // A notification that a WebWrapper has been created. This typically
   // corresponds to a user creating a tab.
@@ -278,7 +299,8 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
 
   // Produce a ProductInfo object given OptimizationGuideMeta. The returned
   // unique_ptr is owned by the caller and will be empty if conversion failed
-  // or there was no info.
+  // or there was no info. The value returned here can change during runtime so
+  // it should not be used when deciding to build infrastructure.
   std::unique_ptr<ProductInfo> OptGuideResultToProductInfo(
       const optimization_guide::OptimizationMetadata& metadata);
 
@@ -296,6 +318,13 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // |on_page_data_map|. The merged data is written to |info|.
   static void MergeProductInfoData(ProductInfo* info,
                                    const base::Value::Dict& on_page_data_map);
+
+  // Check if the shopping list is eligible for use. This not only checks the
+  // feature flag, but whether the feature is allowed by enterprise policy and
+  // whether the user is signed in. The value returned here can change during
+  // runtime so it should not be used when deciding to build infrastructure.
+  static bool IsShoppingListEligible(AccountChecker* account_checker,
+                                     PrefService* prefs);
 
   void HandleOptGuideMerchantInfoResponse(
       const GURL& url,
@@ -326,10 +355,20 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
 
   raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
 
+  std::unique_ptr<AccountChecker> account_checker_;
+
+  std::unique_ptr<SubscriptionsManager> subscriptions_manager_;
+
+  raw_ptr<power_bookmarks::PowerBookmarkService> power_bookmark_service_;
+
   // The service's means of observing the bookmark model which is automatically
   // removed from the model when destroyed. This will be null if no
   // BookmarkModel is provided to the service.
   std::unique_ptr<ShoppingBookmarkModelObserver> shopping_bookmark_observer_;
+
+  // The service's means of providing data to power bookmarks.
+  std::unique_ptr<ShoppingPowerBookmarkDataProvider>
+      shopping_power_bookmark_data_provider_;
 
   // This is a cache that maps URL to a tuple of number of web wrappers the URL
   // is open in, whether the javascript fallback needs to run, and the product
@@ -338,7 +377,11 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
                      std::tuple<uint32_t, bool, std::unique_ptr<ProductInfo>>>
       product_info_cache_;
 
-  std::unique_ptr<SubscriptionsManager> subscriptions_manager_;
+  std::unique_ptr<BookmarkUpdateManager> bookmark_update_manager_;
+
+  // The object tracking metrics that are recorded at specific intervals.
+  std::unique_ptr<commerce::metrics::ScheduledMetricsManager>
+      scheduled_metrics_manager_;
 
   // Ensure certain functions are being executed on the same thread.
   SEQUENCE_CHECKER(sequence_checker_);

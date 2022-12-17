@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,6 +56,11 @@ class MockUiControllerObserver : public UiControllerObserver {
   MOCK_METHOD1(OnTtsButtonVisibilityChanged, void(bool visible));
   MOCK_METHOD1(OnTtsButtonStateChanged, void(TtsButtonState state));
   MOCK_METHOD0(OnFeedbackFormRequested, void());
+  MOCK_METHOD(void,
+              OnShowAccountScreen,
+              (const ShowAccountScreenProto& proto,
+               const std::string& email_address),
+              (override));
 };
 
 }  // namespace autofill_assistant

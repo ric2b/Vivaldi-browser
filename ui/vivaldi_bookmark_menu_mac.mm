@@ -12,7 +12,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/window_open_disposition.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/events/cocoa/cocoa_event_utils.h"
 
 #include "app/vivaldi_commands.h"
@@ -48,30 +48,27 @@ void SortFlags::InitFromPrefs() {
   Profile* profile = appController.lastProfile;
   if (profile) {
     PrefService* pref_service = profile->GetPrefs();
-    const base::Value* dict_value = pref_service->GetDictionary(
+    auto& dict = pref_service->GetDict(
         vivaldiprefs::kBookmarksManagerSorting);
-    if (dict_value) {
-      const base::Value::Dict& dict = dict_value->GetDict();
-      if (const std::string* sortField = dict.FindString("sortField")) {
-        if (*sortField == "manually")
-          field_ = ::vivaldi::BookmarkSorter::FIELD_NONE;
-        else if (*sortField == "title")
-          field_ = ::vivaldi::BookmarkSorter::FIELD_TITLE;
-        else if (*sortField == "url")
-          field_ = ::vivaldi::BookmarkSorter::FIELD_URL;
-        else if (*sortField == "nickname")
-          field_ = ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
-        else if (*sortField == "description")
-          field_ = ::vivaldi::BookmarkSorter::FIELD_DESCRIPTION;
-      }
-      if (absl::optional<int> sortOrder = dict.FindInt("sortOrder")) {
-        if (*sortOrder == 1)
-          order_ = ::vivaldi::BookmarkSorter::ORDER_NONE;
-        else if (*sortOrder == 2)
-          order_ = ::vivaldi::BookmarkSorter::ORDER_ASCENDING;
-        else if (*sortOrder == 3)
-          order_ = ::vivaldi::BookmarkSorter::ORDER_DESCENDING;
-      }
+    if (const std::string* sortField = dict.FindString("sortField")) {
+      if (*sortField == "manually")
+        field_ = ::vivaldi::BookmarkSorter::FIELD_NONE;
+      else if (*sortField == "title")
+        field_ = ::vivaldi::BookmarkSorter::FIELD_TITLE;
+      else if (*sortField == "url")
+        field_ = ::vivaldi::BookmarkSorter::FIELD_URL;
+      else if (*sortField == "nickname")
+        field_ = ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
+      else if (*sortField == "description")
+        field_ = ::vivaldi::BookmarkSorter::FIELD_DESCRIPTION;
+    }
+    if (absl::optional<int> sortOrder = dict.FindInt("sortOrder")) {
+      if (*sortOrder == 1)
+        order_ = ::vivaldi::BookmarkSorter::ORDER_NONE;
+      else if (*sortOrder == 2)
+        order_ = ::vivaldi::BookmarkSorter::ORDER_ASCENDING;
+      else if (*sortOrder == 3)
+        order_ = ::vivaldi::BookmarkSorter::ORDER_DESCENDING;
     }
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,22 +39,12 @@ class AutofillPopupDelegate {
   // the guid of the backend data model.
   virtual void DidSelectSuggestion(const std::u16string& value,
                                    int frontend_id,
-                                   const std::string& backend_id) = 0;
+                                   const Suggestion::BackendId& backend_id) = 0;
 
-  // Inform the delegate that a row in the popup has been chosen. |value| is the
-  // suggestion's value, and is usually the main text to be shown. |frontend_id|
-  // is the frontend id of the suggestion. Some of the frontend ids have
-  // negative values (see popup_item_ids.h) which have special built-in meanings
-  // while others have positive values which represents the backend data model
-  // this suggestion relates to. See 'MakeFrontendID' in BrowserAutofillManager.
-  // |payload| is the payload of the suggestion, and it represents the GUID of
-  // the backend data model. |position| refers to the index of the suggestion in
-  // the suggestion list.
-  // TODO(crbug.com/1335128): Refactor parameters to take in a Suggestion
-  // struct.
-  virtual void DidAcceptSuggestion(const std::u16string& value,
-                                   int frontend_id,
-                                   const Suggestion::Payload& payload,
+  // Informs the delegate that a row in the popup has been chosen. |suggestion|
+  // is the suggestion that was chosen in the popup. |position| refers to the
+  // index of the suggestion in the suggestion list.
+  virtual void DidAcceptSuggestion(const Suggestion& suggestion,
                                    int position) = 0;
 
   // Returns whether the given value can be deleted, and if true,

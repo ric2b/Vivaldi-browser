@@ -1,12 +1,12 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/components/phonehub/feature_setup_response_processor.h"
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/components/phonehub/message_receiver.h"
 #include "ash/components/phonehub/multidevice_feature_access_manager.h"
 #include "ash/components/phonehub/proto/phonehub_api.pb.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 
 namespace ash {
 namespace phonehub {
@@ -28,6 +28,11 @@ FeatureSetupResponseProcessor::~FeatureSetupResponseProcessor() {
 
 void FeatureSetupResponseProcessor::OnFeatureSetupResponseReceived(
     proto::FeatureSetupResponse response) {
+  if (!multidevice_feature_access_manager_
+           ->IsCombinedSetupOperationInProgress()) {
+    return;
+  }
+
   if (response.camera_roll_setup_result() ==
           proto::FeatureSetupResult::RESULT_ERROR_ACTION_CANCELED ||
       response.notification_setup_result() ==

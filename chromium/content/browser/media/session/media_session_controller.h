@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "media/audio/audio_device_description.h"
 #include "media/base/media_content_type.h"
 #include "services/media_session/public/cpp/media_position.h"
+#include "services/media_session/public/mojom/media_session.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
@@ -99,6 +100,10 @@ class CONTENT_EXPORT MediaSessionController
 
   // Called when the ability to switch audio output devices has been disabled.
   void OnAudioOutputSinkChangingDisabled();
+
+  // Called when the RemotePlayback metadata has changed.
+  void OnRemotePlaybackMetadataChanged(
+      media_session::mojom::RemotePlaybackMetadataPtr metadata);
 
  private:
   bool IsMediaSessionNeeded() const;

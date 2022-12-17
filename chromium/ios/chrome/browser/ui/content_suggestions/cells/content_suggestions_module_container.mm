@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,8 @@
 #import "ios/chrome/browser/ui/image_util/image_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -48,6 +48,9 @@ const float kShadowRadius = 5;
 // The shadow opacity of this container.
 const float kShadowOpacity = 0.06;
 
+// The vertical offset of the shadow.
+const float kShadowOffsetY = 3.0f;
+
 // Vertical space allocated to the Trending Queries module content.
 const float kTrendingQueriesContentHeight = 103;
 
@@ -80,6 +83,7 @@ const float kTrendingQueriesContentHeight = 103;
     self.layer.shadowColor = [UIColor blackColor].CGColor;
     self.layer.shadowRadius = kShadowRadius;
     self.layer.shadowOpacity = kShadowOpacity;
+    self.layer.shadowOffset = CGSizeMake(0, kShadowOffsetY);
     // Render shadow as bitmap to improve snapshot render layout performance.
     self.layer.shouldRasterize = YES;
     self.layer.rasterizationScale = UIScreen.mainScreen.scale;
@@ -95,6 +99,7 @@ const float kTrendingQueriesContentHeight = 103;
           [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
       self.title.textColor = [UIColor colorNamed:kTextSecondaryColor];
       self.title.accessibilityTraits |= UIAccessibilityTraitHeader;
+      self.title.accessibilityIdentifier = [self titleString];
       self.title.translatesAutoresizingMaskIntoConstraints = NO;
       [self addSubview:self.title];
       [NSLayoutConstraint activateConstraints:@[
@@ -136,8 +141,12 @@ const float kTrendingQueriesContentHeight = 103;
                                               constant:[self titleTopInset]],
       ]];
     }
+    // Height constraint must be flexible since on launch before the Feed
+    // CollectionView is used a native UICollectionView is the parent, and it
+    // can attempt to apply a large height constraint to the
+    // ContentSuggestionsViewController.
     self.heightConstraint = [self.heightAnchor
-        constraintEqualToConstant:[self calculateIntrinsicHeight]];
+        constraintGreaterThanOrEqualToConstant:[self calculateIntrinsicHeight]];
     self.heightConstraint.active = YES;
   }
   return self;
@@ -211,7 +220,8 @@ const float kTrendingQueriesContentHeight = 103;
     case ContentSuggestionsModuleTypeTrendingQueries:
       contentHeight += kTrendingQueriesContentHeight;
   }
-  if (!ShouldRemoveHeadersForModuleRefresh()) {
+  if (!ShouldRemoveHeadersForModuleRefresh() ||
+      self.type == ContentSuggestionsModuleTypeTrendingQueries) {
     contentHeight += ceilf(self.title.font.lineHeight);
   }
   return [self titleSpacing] + [self titleTopInset] + contentHeight;

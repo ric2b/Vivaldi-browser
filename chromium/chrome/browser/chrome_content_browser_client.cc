@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,12 +28,14 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/types/expected.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/accessibility/accessibility_labels_service.h"
 #include "chrome/browser/accessibility/accessibility_labels_service_factory.h"
 #include "chrome/browser/after_startup_task_utils.h"
+#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/bluetooth/chrome_bluetooth_delegate_impl_client.h"
 #include "chrome/browser/browser_about_handler.h"
 #include "chrome/browser/browser_features.h"
@@ -58,6 +60,7 @@
 #include "chrome/browser/extensions/chrome_extension_cookies.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/favicon/favicon_utils.h"
+#include "chrome/browser/first_party_sets/first_party_sets_navigation_throttle.h"
 #include "chrome/browser/font_family_cache.h"
 #include "chrome/browser/gpu/chrome_browser_main_extra_parts_gpu.h"
 #include "chrome/browser/hid/chrome_hid_delegate.h"
@@ -74,13 +77,14 @@
 #include "chrome/browser/memory/chrome_browser_main_extra_parts_memory.h"
 #include "chrome/browser/metrics/chrome_browser_main_extra_parts_metrics.h"
 #include "chrome/browser/metrics/chrome_feature_list_creator.h"
+#include "chrome/browser/net/cert_verifier_configuration.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/profile_network_context_service.h"
 #include "chrome/browser/net/profile_network_context_service_factory.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/payments/payment_request_display_manager_factory.h"
-#include "chrome/browser/performance_manager/chrome_browser_main_extra_parts_performance_manager.h"
-#include "chrome/browser/performance_manager/chrome_content_browser_client_performance_manager_part.h"
+#include "chrome/browser/performance_manager/public/chrome_browser_main_extra_parts_performance_manager.h"
+#include "chrome/browser/performance_manager/public/chrome_content_browser_client_performance_manager_part.h"
 #include "chrome/browser/performance_monitor/chrome_browser_main_extra_parts_performance_monitor.h"
 #include "chrome/browser/plugins/pdf_iframe_navigation_throttle.h"
 #include "chrome/browser/plugins/plugin_utils.h"
@@ -153,6 +157,7 @@
 #include "chrome/browser/universal_web_contents_observers.h"
 #include "chrome/browser/usb/chrome_usb_delegate.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/webapps/web_app_offline.h"
 #include "chrome/browser/webauthn/webauthn_pref_names.h"
 #include "chrome/common/buildflags.h"
@@ -228,6 +233,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/privacy_sandbox/privacy_sandbox_settings.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/browser/browser_url_loader_throttle.h"
@@ -251,6 +257,7 @@
 #include "components/url_param_filter/content/url_param_filter_throttle.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/variations/variations_switches.h"
+#include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_main_parts.h"
@@ -337,7 +344,7 @@
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/chrome_browser_main_win.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/services/util_win/public/mojom/util_win.mojom.h"
 #include "sandbox/win/src/sandbox_policy.h"
@@ -390,7 +397,6 @@
 #include "chrome/browser/chrome_browser_main_linux.h"
 #elif BUILDFLAG(IS_ANDROID)
 #include "base/android/application_status_listener.h"
-#include "base/android/build_info.h"
 #include "base/feature_list.h"
 #include "chrome/android/features/dev_ui/buildflags.h"
 #include "chrome/browser/android/customtabs/client_data_header_web_contents_observer.h"
@@ -432,17 +438,20 @@
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS)
+#include "base/debug/leak_annotations.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_scoped_file_access_delegate.h"
 #include "chrome/browser/chromeos/tablet_mode/chrome_content_browser_client_tablet_mode_part.h"
 #include "chrome/browser/policy/networking/policy_cert_service.h"
 #include "chrome/browser/policy/networking/policy_cert_service_factory.h"
 #include "chrome/common/chromeos/extensions/chromeos_system_extension_info.h"
+#include "components/crash/core/app/breakpad_linux.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/direct_sockets/chrome_direct_sockets_delegate.h"
 #include "chrome/browser/media/unified_autoplay_config.h"
 #include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/page_info/about_this_site_side_panel_throttle.h"
@@ -454,6 +463,8 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/search/new_tab_page_navigation_throttle.h"
+#include "chrome/browser/ui/web_applications/tabbed_web_app_navigation_throttle.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_loader_factory.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -477,15 +488,12 @@
 #include "components/crash/core/app/crashpad.h"
 #endif
 
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
-#if !BUILDFLAG(IS_ANDROID)
-#include "base/debug/leak_annotations.h"
-#include "components/crash/core/app/breakpad_linux.h"
-#endif  // !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
 #include "components/crash/content/browser/crash_handler_host_linux.h"
 #endif
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#include "chrome/browser/enterprise/chrome_browser_main_extra_parts_enterprise.h"
 #include "chrome/browser/ui/webui/app_settings/web_app_settings_navigation_throttle.h"
 #endif
 
@@ -510,6 +518,11 @@
 #include "chrome/browser/ui/side_search/side_search_side_contents_helper.h"
 #include "chrome/browser/ui/side_search/side_search_utils.h"
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h"
+#endif
+
+#if defined(TOOLKIT_VIEWS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#include "chrome/browser/ui/lens/lens_side_panel_navigation_helper.h"
+#include "components/lens/lens_features.h"
 #endif
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
@@ -690,14 +703,16 @@ namespace {
 // Enables pre-launch Code Integrity Guard (CIG) for Chrome renderers, when
 // running on Windows 10 1511 and above. See
 // https://blogs.windows.com/blog/tag/code-integrity-guard/.
-const base::Feature kRendererCodeIntegrity{"RendererCodeIntegrity",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kRendererCodeIntegrity,
+             "RendererCodeIntegrity",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 // Enables pre-launch Code Integrity Guard (CIG) for Chrome network service
 // process, when running on Windows 10 1511 and above. This has no effect if
 // NetworkServiceSandbox feature is disabled. See
 // https://blogs.windows.com/blog/tag/code-integrity-guard/.
-const base::Feature kNetworkServiceCodeIntegrity{
-    "NetworkServiceCodeIntegrity", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kNetworkServiceCodeIntegrity,
+             "NetworkServiceCodeIntegrity",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #endif  // BUILDFLAG(IS_WIN) && !defined(COMPONENT_BUILD) &&
         // !defined(ADDRESS_SANITIZER)
@@ -705,8 +720,9 @@ const base::Feature kNetworkServiceCodeIntegrity{
 #if BUILDFLAG(IS_ANDROID)
 // Kill switch that allows falling back to the legacy behavior on Android when
 // it comes to site isolation for Gaia's origin (|GaiaUrls::gaia_origin()|).
-const base::Feature kAllowGaiaOriginIsolationOnAndroid{
-    "AllowGaiaOriginIsolationOnAndroid", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kAllowGaiaOriginIsolationOnAndroid,
+             "AllowGaiaOriginIsolationOnAndroid",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 // A small ChromeBrowserMainExtraParts that invokes a callback when threads are
@@ -734,7 +750,7 @@ bool IsSSLErrorOverrideAllowedForOrigin(const GURL& request_url,
     return true;
 
   const base::Value::List& allow_list_urls =
-      prefs->GetValueList(prefs::kSSLErrorOverrideAllowedForOrigins);
+      prefs->GetList(prefs::kSSLErrorOverrideAllowedForOrigins);
   if (allow_list_urls.empty())
     return false;
 
@@ -881,7 +897,7 @@ bool IsAutoplayAllowedByPolicy(content::WebContents* contents,
 
   // Check if the current URL matches a URL pattern on the allowlist.
   const base::Value::List& autoplay_allowlist =
-      prefs->GetValueList(prefs::kAutoplayAllowlist);
+      prefs->GetList(prefs::kAutoplayAllowlist);
   return prefs->IsManagedPreference(prefs::kAutoplayAllowlist) &&
          IsURLAllowlisted(contents->GetURL(), autoplay_allowlist);
 }
@@ -938,7 +954,7 @@ blink::mojom::AutoplayPolicy GetAutoplayPolicyForWebContents(
 int GetCrashSignalFD(const base::CommandLine& command_line) {
   return crashpad::CrashHandlerHost::Get()->GetDeathSignalSocket();
 }
-#elif BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
+#elif BUILDFLAG(IS_CHROMEOS)
 breakpad::CrashHandlerHostLinux* CreateCrashHandlerHost(
     const std::string& process_type) {
   base::FilePath dumps_path;
@@ -1000,6 +1016,11 @@ int GetCrashSignalFD(const base::CommandLine& command_line) {
   }
 
   return -1;
+}
+#elif BUILDFLAG(IS_LINUX)
+int GetCrashSignalFD(const base::CommandLine& command_line) {
+  int fd;
+  return crash_reporter::GetHandlerSocket(&fd, nullptr) ? fd : -1;
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -1331,6 +1352,46 @@ bool IsTopChromeWebUIURL(const GURL& url) {
          base::EndsWith(url.host_piece(), chrome::kChromeUITopChromeDomain);
 }
 
+// Checks whether a render process hosting a top chrome page exists.
+bool IsTopChromeRendererPresent(Profile* profile) {
+  for (auto rph_iterator = content::RenderProcessHost::AllHostsIterator();
+       !rph_iterator.IsAtEnd(); rph_iterator.Advance()) {
+    content::RenderProcessHost* rph = rph_iterator.GetCurrentValue();
+
+    // Consider only valid RenderProcessHosts that belong to the current
+    // profile.
+    if (rph->IsInitializedAndNotDead() &&
+        profile->IsSameOrParent(
+            Profile::FromBrowserContext(rph->GetBrowserContext()))) {
+      bool is_top_chrome_renderer_present = false;
+      rph->ForEachRenderFrameHost(base::BindRepeating(
+          [](bool* is_top_chrome_renderer_present,
+             content::RenderFrameHost* rfh) {
+            *is_top_chrome_renderer_present |=
+                IsTopChromeWebUIURL(rfh->GetSiteInstance()->GetSiteURL());
+          },
+          &is_top_chrome_renderer_present));
+
+      // Return true if a rph hosting a top chrome WebUI has been found.
+      if (is_top_chrome_renderer_present)
+        return true;
+    }
+  }
+  return false;
+}
+
+// Return false if a top chrome renderer exists. This is done to ensure the
+// spare renderer is not taken and the existing top chrome renderer is
+// considered instead.
+// TODO(crbug.com/1291351, tluk): This is needed since spare renderers are
+// considered before existing processes for reuse. This can be simplified by
+// migrating to SiteInstanceGroups once the project has landed.
+bool ShouldUseSpareRenderProcessHostForTopChromePage(Profile* profile) {
+  return base::FeatureList::IsEnabled(
+             features::kTopChromeWebUIUsesSpareRenderer) &&
+         !IsTopChromeRendererPresent(profile);
+}
+
 bool DoesGaiaOriginRequireDedicatedProcess() {
 #if !BUILDFLAG(IS_ANDROID)
   return true;
@@ -1422,8 +1483,6 @@ void ChromeContentBrowserClient::RegisterProfilePrefs(
       prefs::kSharedArrayBufferUnrestrictedAccessAllowed, false);
 #endif
   registry->RegisterBooleanPref(prefs::kSandboxExternalProtocolBlocked, true);
-  registry->RegisterBooleanPref(prefs::kDisplayCapturePermissionsPolicyEnabled,
-                                true);
   registry->RegisterBooleanPref(prefs::kSSLErrorOverrideAllowed, true);
   registry->RegisterListPref(prefs::kSSLErrorOverrideAllowedForOrigins);
   registry->RegisterBooleanPref(
@@ -1455,6 +1514,9 @@ void ChromeContentBrowserClient::RegisterProfilePrefs(
 
   // TODO(crbug.com/1277431): Disable it by default in M109.
   registry->RegisterBooleanPref(policy::policy_prefs::kEventPathEnabled, true);
+
+  registry->RegisterBooleanPref(
+      prefs::kStrictMimetypeCheckForWorkerScriptsEnabled, true);
 }
 
 // static
@@ -1571,6 +1633,12 @@ ChromeContentBrowserClient::CreateBrowserMainParts(bool is_integration_test) {
 
   chrome::AddMetricsExtraParts(main_parts.get());
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  main_parts->AddParts(
+      std::make_unique<
+          chrome::enterprise_util::ChromeBrowserMainExtraPartsEnterprise>());
+#endif
+
   // Always add ChromeBrowserMainExtraPartsGpu last to make sure
   // GpuDataManager initialization could pick up about:flags settings.
   main_parts->AddParts(std::make_unique<ChromeBrowserMainExtraPartsGpu>());
@@ -1606,15 +1674,30 @@ ChromeContentBrowserClient::GetStoragePartitionConfigForSite(
     const GURL& site) {
   // Default to the browser-wide storage partition and override based on |site|
   // below.
-  content::StoragePartitionConfig storage_partition_config =
+  content::StoragePartitionConfig default_storage_partition_config =
       content::StoragePartitionConfig::CreateDefault(browser_context);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  // TODO(crbug.com/1212263): Isolated PWAs are tracked by origin, but this
-  // function takes a site, so it will only work correctly when the site equals
-  // the full origin.
+  if (site.SchemeIs(extensions::kExtensionScheme)) {
+    // The host in an extension site URL is the extension_id.
+    CHECK(site.has_host());
+    return extensions::util::GetStoragePartitionConfigForExtensionId(
+        site.host(), browser_context);
+  }
+
   if (content::SiteIsolationPolicy::ShouldUrlUseApplicationIsolationLevel(
           browser_context, site)) {
+    if (site.SchemeIs(chrome::kIsolatedAppScheme)) {
+      const base::expected<web_app::IsolatedWebAppUrlInfo, std::string>
+          iwa_url_info = web_app::IsolatedWebAppUrlInfo::Create(site);
+      if (!iwa_url_info.has_value()) {
+        LOG(ERROR) << "Invalid isolated-app URL: " << site;
+        return default_storage_partition_config;
+      }
+      return iwa_url_info->storage_partition_config(browser_context);
+    }
+
+    // TODO(crbug.com/1363756): Remove this path once IWAs are off HTTPS.
     Profile* profile = Profile::FromBrowserContext(browser_context);
     const std::string* isolation_key = web_app::GetStorageIsolationKey(
         profile->GetPrefs(), url::Origin::Create(site));
@@ -1626,16 +1709,9 @@ ChromeContentBrowserClient::GetStoragePartitionConfigForSite(
         /*partition_name=*/std::string(),
         /*in_memory=*/false);
   }
-
-  if (site.SchemeIs(extensions::kExtensionScheme)) {
-    // The host in an extension site URL is the extension_id.
-    CHECK(site.has_host());
-    return extensions::util::GetStoragePartitionConfigForExtensionId(
-        site.host(), browser_context);
-  }
 #endif
 
-  return storage_partition_config;
+  return default_storage_partition_config;
 }
 
 std::unique_ptr<content::WebContentsViewDelegate>
@@ -1726,7 +1802,7 @@ bool ChromeContentBrowserClient::
     ShouldCompareEffectiveURLsForSiteInstanceSelection(
         content::BrowserContext* browser_context,
         content::SiteInstance* candidate_site_instance,
-        bool is_main_frame,
+        bool is_outermost_main_frame,
         const GURL& candidate_url,
         const GURL& destination_url) {
   DCHECK(browser_context);
@@ -1734,7 +1810,7 @@ bool ChromeContentBrowserClient::
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   return ChromeContentBrowserClientExtensionsPart::
       ShouldCompareEffectiveURLsForSiteInstanceSelection(
-          browser_context, candidate_site_instance, is_main_frame,
+          browser_context, candidate_site_instance, is_outermost_main_frame,
           candidate_url, destination_url);
 #else
   return true;
@@ -1788,10 +1864,12 @@ bool ChromeContentBrowserClient::ShouldUseSpareRenderProcessHost(
   if (!profile)
     return false;
 
-  // Top Chrome WebUI should share a RendererProcessHost. Return false here to
-  // ensure the Spare Renderer is not assigned.
-  if (IsTopChromeWebUIURL(site_url))
+  // Returning false here will ensure existing Top chrome WebUI renderers are
+  // considered for process reuse over the spare renderer.
+  if (IsTopChromeWebUIURL(site_url) &&
+      !ShouldUseSpareRenderProcessHostForTopChromePage(profile)) {
     return false;
+  }
 
 #if !BUILDFLAG(IS_ANDROID)
   // Instant renderers should not use a spare process, because they require
@@ -2062,11 +2140,17 @@ size_t ChromeContentBrowserClient::GetProcessCountToIgnoreForLimit() {
 #endif
 }
 
-blink::ParsedPermissionsPolicy
+absl::optional<blink::ParsedPermissionsPolicy>
 ChromeContentBrowserClient::GetPermissionsPolicyForIsolatedApp(
     content::BrowserContext* browser_context,
     const url::Origin& app_origin) {
 #if !BUILDFLAG(IS_ANDROID)
+  // Extensions are exempt from manifest policy enforcement and retain the
+  // default frame permissions policy.
+  if (app_origin.scheme() == extensions::kExtensionScheme) {
+    return absl::nullopt;
+  }
+
   Profile* profile = Profile::FromBrowserContext(browser_context);
   auto& registrar =
       web_app::WebAppProvider::GetForWebApps(profile)->registrar();
@@ -2220,10 +2304,17 @@ bool ChromeContentBrowserClient::ShouldUrlUseApplicationIsolationLevel(
     content::BrowserContext* browser_context,
     const GURL& url) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+  if (url.SchemeIs(extensions::kExtensionScheme)) {
+    return !!extensions::ExtensionRegistry::Get(browser_context)
+                 ->enabled_extensions()
+                 .GetExtensionOrAppByURL(url);
+  }
   if (content::SiteIsolationPolicy::IsApplicationIsolationLevelEnabled()) {
+    // TODO(crbug.com/1363756): Remove the GetStorageIsolationKey call.
     Profile* profile = Profile::FromBrowserContext(browser_context);
-    return web_app::GetStorageIsolationKey(profile->GetPrefs(),
-                                           url::Origin::Create(url));
+    return url.SchemeIs(chrome::kIsolatedAppScheme) ||
+           !!web_app::GetStorageIsolationKey(profile->GetPrefs(),
+                                             url::Origin::Create(url));
   }
 #endif
   return false;
@@ -2321,7 +2412,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #elif BUILDFLAG(IS_POSIX)
 #if BUILDFLAG(IS_ANDROID)
   bool enable_crash_reporter = true;
-#else
+#elif BUILDFLAG(IS_CHROMEOS)
   bool enable_crash_reporter = false;
   if (crash_reporter::IsCrashpadEnabled()) {
     command_line->AppendSwitch(switches::kEnableCrashpad);
@@ -2336,6 +2427,14 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
     }
   } else {
     enable_crash_reporter = breakpad::IsCrashReporterEnabled();
+  }
+#else
+  bool enable_crash_reporter = true;
+  pid_t pid;
+  if (crash_reporter::GetHandlerSocket(nullptr, &pid)) {
+    command_line->AppendSwitchASCII(
+        crash_reporter::switches::kCrashpadHandlerPid,
+        base::NumberToString(pid));
   }
 #endif
   if (enable_crash_reporter) {
@@ -2399,6 +2498,10 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
     if (!login_profile.empty())
       command_line->AppendSwitchASCII(ash::switches::kLoginProfile,
                                       login_profile);
+
+    if (!crosapi::browser_util::IsAshWebBrowserEnabled()) {
+      command_line->AppendSwitch(switches::kAshWebBrowserDisabled);
+    }
 #endif
 
     MaybeCopyDisableWebRtcEncryptionSwitch(command_line, browser_command_line,
@@ -2437,6 +2540,14 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
             blink::switches::kPrefixedStorageInfoEnabled);
       }
 
+      // Enabled async interface for FileSystemSyncAccessHandle if enabled by
+      // enterprise policy.
+      if (prefs->GetBoolean(
+              storage::kFileSystemSyncAccessHandleAsyncInterfaceEnabled)) {
+        command_line->AppendSwitch(
+            switches::kFileSystemSyncAccessHandleAsyncInterfaceEnabled);
+      }
+
 #if !BUILDFLAG(IS_ANDROID)
       InstantService* instant_service =
           InstantServiceFactory::GetForProfile(profile);
@@ -2455,11 +2566,6 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #endif
       if (!prefs->GetBoolean(prefs::kSandboxExternalProtocolBlocked))
         command_line->AppendSwitch(kDisableSandboxExternalProtocolSwitch);
-
-      if (prefs->GetBoolean(prefs::kDisplayCapturePermissionsPolicyEnabled)) {
-        command_line->AppendSwitch(
-            switches::kDisplayCapturePermissionsPolicyAllowed);
-      }
 
       if (prefs->HasPrefPath(prefs::kAllowDinosaurEasterEgg) &&
           !prefs->GetBoolean(prefs::kAllowDinosaurEasterEgg)) {
@@ -2682,8 +2788,10 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #if BUILDFLAG(IS_ANDROID)
   if (browser_command_line.HasSwitch(
           autofill_assistant::switches::kAutofillAssistantDebugAnnotateDom)) {
-    command_line->AppendSwitch(
-        autofill_assistant::switches::kAutofillAssistantDebugAnnotateDom);
+    command_line->AppendSwitchASCII(
+        autofill_assistant::switches::kAutofillAssistantDebugAnnotateDom,
+        browser_command_line.GetSwitchValueASCII(
+            autofill_assistant::switches::kAutofillAssistantDebugAnnotateDom));
   }
 #endif  // BUILDFLAG(IS_ANDROID)
 }
@@ -2885,7 +2993,8 @@ void ChromeContentBrowserClient::GuestPermissionRequestHelper(
   std::map<int, int>::const_iterator it = process_map.begin();
 
   extensions::WebViewPermissionHelper* web_view_permission_helper =
-      extensions::WebViewPermissionHelper::FromFrameID(it->first, it->second);
+      extensions::WebViewPermissionHelper::FromRenderFrameHostId(
+          content::GlobalRenderFrameHostId(it->first, it->second));
   web_view_permission_helper->RequestFileSystemPermission(
       url, allow,
       base::BindOnce(&ChromeContentBrowserClient::FileSystemAccessed,
@@ -3003,11 +3112,11 @@ bool ChromeContentBrowserClient::IsInterestGroupAPIAllowed(
   return allowed;
 }
 
-bool ChromeContentBrowserClient::IsConversionMeasurementOperationAllowed(
+bool ChromeContentBrowserClient::IsAttributionReportingOperationAllowed(
     content::BrowserContext* browser_context,
-    ConversionMeasurementOperation operation,
-    const url::Origin* impression_origin,
-    const url::Origin* conversion_origin,
+    AttributionReportingOperation operation,
+    const url::Origin* source_origin,
+    const url::Origin* destination_origin,
     const url::Origin* reporting_origin) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
 
@@ -3017,23 +3126,23 @@ bool ChromeContentBrowserClient::IsConversionMeasurementOperationAllowed(
     return false;
 
   switch (operation) {
-    case ConversionMeasurementOperation::kImpression:
-      DCHECK(impression_origin);
+    case AttributionReportingOperation::kSource:
+      DCHECK(source_origin);
       DCHECK(reporting_origin);
-      return privacy_sandbox_settings->IsConversionMeasurementAllowed(
-          *impression_origin, *reporting_origin);
-    case ConversionMeasurementOperation::kConversion:
-      DCHECK(conversion_origin);
+      return privacy_sandbox_settings->IsAttributionReportingAllowed(
+          *source_origin, *reporting_origin);
+    case AttributionReportingOperation::kTrigger:
+      DCHECK(destination_origin);
       DCHECK(reporting_origin);
-      return privacy_sandbox_settings->IsConversionMeasurementAllowed(
-          *conversion_origin, *reporting_origin);
-    case ConversionMeasurementOperation::kReport:
-      DCHECK(impression_origin);
-      DCHECK(conversion_origin);
+      return privacy_sandbox_settings->IsAttributionReportingAllowed(
+          *destination_origin, *reporting_origin);
+    case AttributionReportingOperation::kReport:
+      DCHECK(source_origin);
+      DCHECK(destination_origin);
       DCHECK(reporting_origin);
-      return privacy_sandbox_settings->ShouldSendConversionReport(
-          *impression_origin, *conversion_origin, *reporting_origin);
-    case ConversionMeasurementOperation::kAny:
+      return privacy_sandbox_settings->MaySendAttributionReport(
+          *source_origin, *destination_origin, *reporting_origin);
+    case AttributionReportingOperation::kAny:
       return privacy_sandbox_settings->IsPrivacySandboxEnabled();
   }
 }
@@ -3151,6 +3260,11 @@ ChromeContentBrowserClient::GetGeneratedCodeCacheSettings(
       cache_path = disk_cache_dir.Append(cache_path.BaseName());
   }
   return content::GeneratedCodeCacheSettings(true, size_in_bytes, cache_path);
+}
+
+cert_verifier::mojom::CertVerifierServiceParamsPtr
+ChromeContentBrowserClient::GetCertVerifierServiceParams() {
+  return GetChromeCertVerifierServiceParams();
 }
 
 void ChromeContentBrowserClient::AllowCertificateError(
@@ -3496,8 +3610,8 @@ bool ChromeContentBrowserClient::CanCreateWindow(
       frame_name, disposition, features, user_gesture, opener_suppressed);
   NavigateParams nav_params =
       blocked_params.CreateNavigateParams(opener->GetProcess(), web_contents);
-
-  bool can_open_window = blocked_content::MaybeBlockPopup(
+  bool can_open_window = !blocked_content::ConsiderForPopupBlocking(disposition) ||
+         blocked_content::MaybeBlockPopup(
              web_contents, &opener_top_level_frame_url,
              std::make_unique<ChromePopupNavigationDelegate>(
                  std::move(nav_params)),
@@ -3882,11 +3996,6 @@ void ChromeContentBrowserClient::OverrideWebkitPrefs(
   // If the pref is not set, the default value (true) will be used:
   web_prefs->webxr_immersive_ar_allowed =
       prefs->GetBoolean(prefs::kWebXRImmersiveArEnabled);
-
-  // APIs for Web Authentication are not available prior to N.
-  web_prefs->disable_webauthn =
-      base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_NOUGAT;
 #endif
 
   for (ChromeContentBrowserClientParts* parts : extra_parts_)
@@ -4162,10 +4271,14 @@ void ChromeContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
   base::PathService::Get(base::DIR_ANDROID_APP_DATA, &app_data_path);
   DCHECK(!app_data_path.empty());
 #endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   int crash_signal_fd = GetCrashSignalFD(command_line);
   if (crash_signal_fd >= 0) {
     mappings->Share(kCrashDumpSignal, crash_signal_fd);
   }
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 }
 #endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
 
@@ -4183,7 +4296,7 @@ std::wstring ChromeContentBrowserClient::GetAppContainerSidForSandboxType(
       return std::wstring();
     case sandbox::mojom::Sandbox::kGpu:
       return std::wstring();
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
     case sandbox::mojom::Sandbox::kPpapi:
 #endif
     case sandbox::mojom::Sandbox::kNoSandbox:
@@ -4270,7 +4383,7 @@ bool ChromeContentBrowserClient::PreSpawnChild(
       break;
     case sandbox::mojom::Sandbox::kUtility:
     case sandbox::mojom::Sandbox::kGpu:
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
     case sandbox::mojom::Sandbox::kPpapi:
 #endif
     case sandbox::mojom::Sandbox::kNoSandbox:
@@ -4308,20 +4421,21 @@ bool ChromeContentBrowserClient::PreSpawnChild(
   if (chrome::kBrowserProcessExecutableName != exe_path.BaseName().value())
     return true;
 
-  sandbox::MitigationFlags mitigations = policy->GetProcessMitigations();
+  sandbox::TargetConfig* config = policy->GetConfig();
+  if (config->IsConfigured())
+    return true;
+
+  sandbox::MitigationFlags mitigations = config->GetProcessMitigations();
   mitigations |= sandbox::MITIGATION_FORCE_MS_SIGNED_BINS;
-  sandbox::ResultCode result = policy->SetProcessMitigations(mitigations);
+  sandbox::ResultCode result = config->SetProcessMitigations(mitigations);
   if (result != sandbox::SBOX_ALL_OK)
     return false;
 
-  if (policy->GetConfig()->IsConfigured())
-    return true;
-
   // Allow loading Chrome's DLLs.
   for (const auto* dll : {chrome::kBrowserResourcesDll, chrome::kElfDll}) {
-    result = policy->GetConfig()->AddRule(sandbox::SubSystem::kSignedBinary,
-                                          sandbox::Semantics::kSignedAllowLoad,
-                                          GetModulePath(dll).value().c_str());
+    result = config->AddRule(sandbox::SubSystem::kSignedBinary,
+                             sandbox::Semantics::kSignedAllowLoad,
+                             GetModulePath(dll).value().c_str());
     if (result != sandbox::SBOX_ALL_OK)
       return false;
   }
@@ -4600,6 +4714,10 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
 
   MaybeAddThrottle(NewTabPageNavigationThrottle::MaybeCreateThrottleFor(handle),
                    &throttles);
+
+  MaybeAddThrottle(
+      web_app::TabbedWebAppNavigationThrottle::MaybeCreateThrottleFor(handle),
+      &throttles);
 #endif
 
   // g_browser_process->safe_browsing_service() may be null in unittests.
@@ -4618,10 +4736,7 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
             handle));
   }
 
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
-// of lacros-chrome is complete.
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   MaybeAddThrottle(browser_switcher::BrowserSwitcherNavigationThrottle::
                        MaybeCreateThrottleFor(handle),
                    &throttles);
@@ -4683,6 +4798,17 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
   }
 #endif
 
+// Only include Lens on Chrome branded Desktop clients. TOOLKIT_VIEWS is used
+// for rendering UI on Windows, Mac, Linux, and ChromeOS. Therefore, if
+// TOOLKIT_VIEWS is defined, we are on one of those platforms.
+#if defined(TOOLKIT_VIEWS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  if (lens::features::IsLensSidePanelEnabled()) {
+    MaybeAddThrottle(
+        lens::LensSidePanelNavigationHelper::MaybeCreateThrottleFor(handle),
+        &throttles);
+  }
+#endif
+
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   MaybeAddThrottle(
       offline_pages::OfflinePageNavigationThrottle::MaybeCreateThrottleFor(
@@ -4703,6 +4829,15 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
 #if !BUILDFLAG(IS_ANDROID)
   MaybeAddThrottle(MaybeCreateAboutThisSiteThrottleFor(handle), &throttles);
 #endif
+
+  if (profile && profile->GetPrefs() &&
+      profile->GetPrefs()->GetBoolean(
+          prefs::kPrivacySandboxFirstPartySetsEnabled) &&
+      base::FeatureList::IsEnabled(features::kFirstPartySets)) {
+    MaybeAddThrottle(first_party_sets::FirstPartySetsNavigationThrottle::
+                         MaybeCreateNavigationThrottle(handle),
+                     &throttles);
+  }
   return throttles;
 }
 
@@ -4772,8 +4907,8 @@ ChromeContentBrowserClient::GetDevToolsBackgroundServiceExpirations(
   auto* pref_service = profile->GetPrefs();
   DCHECK(pref_service);
 
-  const auto& expiration_dict = pref_service->GetValueDict(
-      prefs::kDevToolsBackgroundServicesExpirationDict);
+  const auto& expiration_dict =
+      pref_service->GetDict(prefs::kDevToolsBackgroundServicesExpirationDict);
 
   base::flat_map<int, base::Time> expiration_times;
   for (auto it : expiration_dict) {
@@ -5049,24 +5184,37 @@ void ChromeContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
     int frame_tree_node_id,
     ukm::SourceIdObj ukm_source_id,
     NonNetworkURLLoaderFactoryMap* factories) {
-#if BUILDFLAG(ENABLE_EXTENSIONS) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(ENABLE_EXTENSIONS) || BUILDFLAG(IS_CHROMEOS_ASH) || \
+    !BUILDFLAG(IS_ANDROID)
   content::WebContents* web_contents =
       content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
+  content::BrowserContext* browser_context = web_contents->GetBrowserContext();
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   factories->emplace(
       extensions::kExtensionScheme,
       extensions::CreateExtensionNavigationURLLoaderFactory(
-          web_contents->GetBrowserContext(), ukm_source_id,
+          browser_context, ukm_source_id,
           !!extensions::WebViewGuest::FromWebContents(web_contents)));
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  Profile* profile = Profile::FromBrowserContext(browser_context);
   factories->emplace(content::kExternalFileScheme,
                      chromeos::ExternalFileURLLoaderFactory::Create(
                          profile, content::ChildProcessHost::kInvalidUniqueID));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kIsolatedWebApps) &&
+      !browser_context->ShutdownStarted()) {
+    // TODO(crbug.com/1365848): Only register the factory if we are already in
+    // an isolated storage partition.
+    factories->emplace(chrome::kIsolatedAppScheme,
+                       web_app::IsolatedWebAppURLLoaderFactory::Create(
+                           frame_tree_node_id, browser_context));
+  }
+#endif  // !BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS) || BUILDFLAG(IS_CHROMEOS_ASH) ||
+        // !BUILDFLAG(IS_ANDROID)
 }
 
 void ChromeContentBrowserClient::
@@ -5316,11 +5464,13 @@ void ChromeContentBrowserClient::
         int render_frame_id,
         const absl::optional<url::Origin>& request_initiator_origin,
         NonNetworkURLLoaderFactoryMap* factories) {
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(ENABLE_EXTENSIONS) || \
+    !BUILDFLAG(IS_ANDROID)
   content::RenderFrameHost* frame_host =
       RenderFrameHost::FromID(render_process_id, render_frame_id);
   WebContents* web_contents = WebContents::FromRenderFrameHost(frame_host);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(ENABLE_EXTENSIONS) || \
+        // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (web_contents) {
@@ -5331,6 +5481,21 @@ void ChromeContentBrowserClient::
                            profile, render_process_id));
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if !BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kIsolatedWebApps) &&
+      web_contents) {
+    if (auto* browser_context = web_contents->GetBrowserContext();
+        !browser_context->ShutdownStarted()) {
+      // TODO(crbug.com/1365848): Only register the factory if we are already in
+      // an isolated storage partition.
+      factories->emplace(
+          chrome::kIsolatedAppScheme,
+          web_app::IsolatedWebAppURLLoaderFactory::Create(
+              frame_host->GetFrameTreeNodeId(), browser_context));
+    }
+  }
+#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   factories->emplace(extensions::kExtensionScheme,
@@ -5457,9 +5622,7 @@ bool ChromeContentBrowserClient::WillCreateURLLoaderFactory(
 std::vector<std::unique_ptr<content::URLLoaderRequestInterceptor>>
 ChromeContentBrowserClient::WillCreateURLLoaderRequestInterceptors(
     content::NavigationUIData* navigation_ui_data,
-    int frame_tree_node_id,
-    const scoped_refptr<network::SharedURLLoaderFactory>&
-        network_loader_factory) {
+    int frame_tree_node_id) {
   std::vector<std::unique_ptr<content::URLLoaderRequestInterceptor>>
       interceptors;
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -5817,6 +5980,12 @@ content::BluetoothDelegate* ChromeContentBrowserClient::GetBluetoothDelegate() {
   return bluetooth_delegate_.get();
 }
 
+content::UsbDelegate* ChromeContentBrowserClient::GetUsbDelegate() {
+  if (!usb_delegate_)
+    usb_delegate_ = std::make_unique<ChromeUsbDelegate>();
+  return usb_delegate_.get();
+}
+
 #if !BUILDFLAG(IS_ANDROID)
 void ChromeContentBrowserClient::CreateDeviceInfoService(
     content::RenderFrameHost* render_frame_host,
@@ -5845,10 +6014,12 @@ content::HidDelegate* ChromeContentBrowserClient::GetHidDelegate() {
   return hid_delegate_.get();
 }
 
-content::UsbDelegate* ChromeContentBrowserClient::GetUsbDelegate() {
-  if (!usb_delegate_)
-    usb_delegate_ = std::make_unique<ChromeUsbDelegate>();
-  return usb_delegate_.get();
+content::DirectSocketsDelegate*
+ChromeContentBrowserClient::GetDirectSocketsDelegate() {
+  if (!direct_sockets_delegate_) {
+    direct_sockets_delegate_ = std::make_unique<ChromeDirectSocketsDelegate>();
+  }
+  return direct_sockets_delegate_.get();
 }
 
 content::WebAuthenticationDelegate*
@@ -6005,24 +6176,6 @@ bool ChromeContentBrowserClient::HandleWebUI(
       url->host() == chrome::kChromeUIHelpHost) {
     *url = ReplaceURLHostAndPath(*url, chrome::kChromeUISettingsHost,
                                  chrome::kChromeUIHelpHost);
-  }
-
-  if (base::FeatureList::IsEnabled(
-          features::kConsolidatedSiteStorageControls)) {
-    // Replace deprecated Site Data page URL with the All Sites page, which
-    // contains storage controls for sites.
-    if (url->SchemeIs(content::kChromeUIScheme) &&
-        url->host() == chrome::kChromeUISettingsHost) {
-      if (url->path() == chrome::kChromeUISiteDataDeprecatedPath) {
-        *url = ReplaceURLHostAndPath(*url, chrome::kChromeUISettingsHost,
-                                     chrome::kChromeUIAllSitesPath);
-        UMA_HISTOGRAM_BOOLEAN("Settings.AllSites.DeprecatedRedirect", true);
-      } else if (url->path() == chrome::kChromeUIAllSitesPath) {
-        // Log un-redirected navigations to the page as well to provide context
-        // for the raw number of redirects.
-        UMA_HISTOGRAM_BOOLEAN("Settings.AllSites.DeprecatedRedirect", false);
-      }
-    }
   }
 
 #if BUILDFLAG(IS_WIN)
@@ -6286,7 +6439,15 @@ bool ChromeContentBrowserClient::ShouldBlockRendererDebugURL(
 ui::AXMode ChromeContentBrowserClient::GetAXModeForBrowserContext(
     content::BrowserContext* browser_context) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
-  return AccessibilityLabelsServiceFactory::GetForProfile(profile)->GetAXMode();
+  auto* service = AccessibilityLabelsServiceFactory::GetForProfile(profile);
+  if (service)
+    return service->GetAXMode();
+  // No AccessibilityLabelsService.  Return the current accessibility mode.
+  ui::AXMode ax_mode =
+      content::BrowserAccessibilityState::GetInstance()->GetAccessibilityMode();
+  // kLabelImages should only be set if there's an AccessibilityLabelsService.
+  DCHECK(!ax_mode.has_mode(ui::AXMode::kLabelImages));
+  return ax_mode;
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -6349,7 +6510,8 @@ void ChromeContentBrowserClient::AugmentNavigationDownloadPolicy(
 std::vector<blink::mojom::EpochTopicPtr>
 ChromeContentBrowserClient::GetBrowsingTopicsForJsApi(
     const url::Origin& context_origin,
-    content::RenderFrameHost* main_frame) {
+    content::RenderFrameHost* main_frame,
+    bool observe) {
   browsing_topics::BrowsingTopicsService* browsing_topics_service =
       browsing_topics::BrowsingTopicsServiceFactory::GetForProfile(
           Profile::FromBrowserContext(
@@ -6360,7 +6522,7 @@ ChromeContentBrowserClient::GetBrowsingTopicsForJsApi(
     return {};
 
   auto topics = browsing_topics_service->GetBrowsingTopicsForJsApi(
-      context_origin, main_frame);
+      context_origin, main_frame, observe);
 
   // Compare the provided topics to the real (i.e. non random) topics available
   // for the site, this allows filtering out of the randomly generated topics
@@ -6447,8 +6609,10 @@ bool ChromeContentBrowserClient::IsClipboardPasteAllowed(
   DCHECK(render_frame_host);
 
   // Paste requires either (1) user activation, ...
-  if (render_frame_host->HasTransientUserActivation())
+  if (WebContents::FromRenderFrameHost(render_frame_host)
+          ->HasRecentInteraction()) {
     return true;
+  }
 
   // (2) granted web permission, ...
   content::BrowserContext* browser_context =
@@ -6574,6 +6738,18 @@ bool ChromeContentBrowserClient::
 #endif
 }
 
+bool ChromeContentBrowserClient::
+    ShouldServiceWorkerInheritPolicyContainerFromCreator(const GURL& url) {
+  if (url.SchemeIsLocal()) {
+    return true;
+  }
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  return url.SchemeIs(extensions::kExtensionScheme);
+#else
+  return false;
+#endif
+}
+
 bool ChromeContentBrowserClient::ShouldAllowInsecurePrivateNetworkRequests(
     content::BrowserContext* browser_context,
     const url::Origin& origin) {
@@ -6681,6 +6857,9 @@ bool ChromeContentBrowserClient::SetupEmbedderSandboxParameters(
 
     CHECK(client->SetParameter(sandbox::policy::kParamScreenAiComponentPath,
                                screen_ai_component_dir.value()));
+    CHECK(client->SetBooleanParameter(sandbox::policy::kParamScreenAiDebugMode,
+                                      features::IsScreenAIDebugModeEnabled()));
+
     return true;
 #endif
   }
@@ -6833,15 +7012,15 @@ ChromeContentBrowserClient::GetAlternativeErrorPageOverrideInfo(
   if (error_code != net::ERR_INTERNET_DISCONNECTED)
     return nullptr;
 
-#if BUILDFLAG(IS_ANDROID)
-  if (!base::FeatureList::IsEnabled(features::kAndroidPWAsDefaultOfflinePage)) {
-#else
-  if (!base::FeatureList::IsEnabled(features::kDesktopPWAsDefaultOfflinePage)) {
-#endif  //  BUILDFLAG(IS_ANDROID)
+  if (!base::FeatureList::IsEnabled(features::kPWAsDefaultOfflinePage))
     return nullptr;
-  }
 
-  return web_app::GetOfflinePageInfo(url, render_frame_host, browser_context);
+  content::mojom::AlternativeErrorPageOverrideInfoPtr error_page =
+      web_app::GetOfflinePageInfo(url, render_frame_host, browser_context);
+  if (error_page)
+    web_app::TrackOfflinePageVisibility(render_frame_host);
+
+  return error_page;
 }
 
 bool ChromeContentBrowserClient::OpenExternally(
@@ -6877,5 +7056,49 @@ bool ChromeContentBrowserClient::OpenExternally(
     return true;
   }
 #endif
+  return false;
+}
+
+void ChromeContentBrowserClient::OnSharedStorageWorkletHostCreated(
+    content::RenderFrameHost* rfh) {
+  if (auto* observer =
+          page_load_metrics::MetricsWebContentsObserver::FromWebContents(
+              WebContents::FromRenderFrameHost(rfh))) {
+    observer->OnSharedStorageWorkletHostCreated(rfh);
+  }
+}
+
+bool ChromeContentBrowserClient::ShouldSendOutermostOriginToRenderer(
+    const url::Origin& outermost_origin) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // We only want to send the outermost origin if it is an extension scheme.
+  // We do not send the outermost origin to every renderer to avoid leaking
+  // additional information into the renderer about the embedder. For
+  // extensions though this is required for the way content injection API
+  // works. We do not want one extension injecting content into the context
+  // of another extension.
+  return outermost_origin.scheme() == extensions::kExtensionScheme;
+#else
+  return false;
+#endif
+}
+
+bool ChromeContentBrowserClient::IsFileSystemURLNavigationAllowed(
+    content::BrowserContext* browser_context,
+    const GURL& url) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // filesystem: URLs for Chrome Apps are in the following format:
+  // `filesystem:chrome-extension://<extension-id>/...`
+  if (!url.SchemeIsFileSystem())
+    return false;
+  // Once converted into an origin, we expect the following:
+  // scheme() is chrome-extension: (filesystem: is automatically discarded)
+  // host() is the extension-id
+  const url::Origin origin = url::Origin::Create(url);
+  if (origin.scheme() == extensions::kExtensionScheme) {
+    const std::string& extension_id = origin.host();
+    return extensions::util::IsChromeApp(extension_id, browser_context);
+  }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   return false;
 }

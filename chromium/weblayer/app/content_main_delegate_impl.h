@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,7 @@ class ContentMainDelegateImpl : public content::ContentMainDelegate {
   // ContentMainDelegate implementation:
   absl::optional<int> BasicStartupComplete() override;
   bool ShouldCreateFeatureList(InvokedIn invoked_in) override;
+  bool ShouldInitializeMojo(InvokedIn invoked_in) override;
   variations::VariationsIdsProvider* CreateVariationsIdsProvider() override;
   void PreSandboxStartup() override;
   absl::optional<int> PostEarlyInitialization(InvokedIn invoked_in) override;

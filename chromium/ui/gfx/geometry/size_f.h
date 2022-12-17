@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,6 +79,14 @@ class GEOMETRY_EXPORT SizeF {
 
   void Scale(float x_scale, float y_scale) {
     SetSize(width() * x_scale, height() * y_scale);
+  }
+
+  // Scales the size by the inverse of the given scale (by dividing).
+  void InvScale(float inv_scale) { InvScale(inv_scale, inv_scale); }
+
+  void InvScale(float inv_x_scale, float inv_y_scale) {
+    width_ /= inv_x_scale;
+    height_ /= inv_y_scale;
   }
 
   void Transpose() {

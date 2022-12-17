@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@ import 'chrome://new-tab-page/lazy_load.js';
 
 import {CustomizeDialogElement} from 'chrome://new-tab-page/lazy_load.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {flushTasks} from 'chrome://webui-test/test_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {keydown} from './test_support.js';
 
@@ -15,7 +15,8 @@ suite('NewTabPageCustomizeDialogFocusTest', () => {
   let customizeDialog: CustomizeDialogElement;
 
   setup(() => {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     customizeDialog = document.createElement('ntp-customize-dialog');
     document.body.appendChild(customizeDialog);

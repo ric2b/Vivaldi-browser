@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,8 +35,10 @@
 #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
 #include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
 #include "chrome/browser/heavy_ad_intervention/heavy_ad_service_factory.h"
+#include "chrome/browser/k_anonymity_service/k_anonymity_service_factory.h"
 #include "chrome/browser/notifications/platform_notification_service_factory.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
+#include "chrome/browser/origin_trials/origin_trials_factory.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
@@ -491,7 +493,7 @@ OffTheRecordProfileImpl::GetPlatformNotificationService() {
 content::PushMessagingService*
 OffTheRecordProfileImpl::GetPushMessagingService() {
   // TODO(johnme): Support push messaging in incognito if possible.
-  return NULL;
+  return nullptr;
 }
 
 content::StorageNotificationService*
@@ -714,4 +716,9 @@ OffTheRecordProfileImpl::GetFederatedIdentitySharingPermissionContext() {
 content::FederatedIdentityApiPermissionContextDelegate*
 OffTheRecordProfileImpl::GetFederatedIdentityApiPermissionContext() {
   return FederatedIdentityApiPermissionContextFactory::GetForProfile(this);
+}
+
+content::KAnonymityServiceDelegate*
+OffTheRecordProfileImpl::GetKAnonymityServiceDelegate() {
+  return KAnonymityServiceFactory::GetForProfile(this);
 }

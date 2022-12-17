@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,8 @@ suite('NewTabPageModulesModuleWrapperTest', () => {
   let windowProxy: TestBrowserProxy;
 
   setup(() => {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     loadTimeData.overrideValues({
       navigationStartTime: 0.0,
     });

@@ -27,7 +27,7 @@
 #endif
 
 #if BUILDFLAG(IS_IOS)
-#include "ios/chrome/browser/chrome_paths.h"
+#include "ios/chrome/browser/paths/paths.h"
 #endif
 
 namespace {

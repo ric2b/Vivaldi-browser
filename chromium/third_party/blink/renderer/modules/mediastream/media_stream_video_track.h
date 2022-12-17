@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,7 +98,7 @@ class MODULES_EXPORT MediaStreamVideoTrack : public MediaStreamTrackPlatform {
   void AddSink(WebMediaStreamSink* sink,
                const VideoCaptureDeliverFrameCB& callback,
                MediaStreamVideoSink::IsSecure is_secure,
-               MediaStreamVideoSink::UsesAlpha uses_alpha);
+               MediaStreamVideoSink::UsesAlpha uses_alpha) override;
   // Sets |sink|'s dropped frame notification callback which will receive calls
   // on the IO thread. |callback| will be reset on the render thread.
   // Note: the method needs to be called after a sink has been added.
@@ -194,7 +194,7 @@ class MODULES_EXPORT MediaStreamVideoTrack : public MediaStreamTrackPlatform {
 
   MediaStreamTrackPlatform::StreamType Type() const override {
     return MediaStreamTrackPlatform::StreamType::kVideo;
-  };
+  }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(MediaStreamRemoteVideoSourceTest, StartTrack);
@@ -240,7 +240,6 @@ class MODULES_EXPORT MediaStreamVideoTrack : public MediaStreamTrackPlatform {
 
   // This is used for tracking if no connected video use alpha.
   HashSet<WebMediaStreamSink*> alpha_using_sinks_;
-  HashSet<WebMediaStreamSink*> alpha_discarding_sinks_;
 
   // Remembering our desired video size and frame rate.
   int width_ = 0;

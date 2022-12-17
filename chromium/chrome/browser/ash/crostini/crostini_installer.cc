@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,13 +25,15 @@
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
-#include "chrome/browser/ui/webui/chromeos/crostini_installer/crostini_installer_dialog.h"
+#include "chrome/browser/ui/webui/ash/crostini_installer/crostini_installer_dialog.h"
+#include "chromeos/ash/components/dbus/spaced/spaced_client.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
+#include "crostini_util.h"
 #include "ui/display/types/display_constants.h"
 
 using crostini::mojom::InstallerError;
@@ -61,7 +63,6 @@ class CrostiniInstallerFactory : public ProfileKeyedServiceFactory {
   CrostiniInstallerFactory()
       : ProfileKeyedServiceFactory("CrostiniInstallerService") {
     DependsOn(crostini::CrostiniManagerFactory::GetInstance());
-    DependsOn(crostini::AnsibleManagementServiceFactory::GetInstance());
   }
 
   // BrowserContextKeyedServiceFactory:
@@ -193,7 +194,7 @@ void CrostiniInstaller::ShowDialog(CrostiniUISurface ui_surface) {
 
   // TODO(lxj): We should pass the dialog |this| here instead of letting the
   // webui to call |GetForProfile()| later.
-  chromeos::CrostiniInstallerDialog::Show(profile_);
+  ash::CrostiniInstallerDialog::Show(profile_);
 }
 
 void CrostiniInstaller::Install(CrostiniManager::RestartOptions options,
@@ -213,18 +214,28 @@ void CrostiniInstaller::Install(CrostiniManager::RestartOptions options,
   progress_callback_ = std::move(progress_callback);
   result_callback_ = std::move(result_callback);
 
+  // Check if there's additional setup required in the case of enterprise
+  // specifying an Ansible playbook to be run for a pre-determined configuration
+  // on the container.
+  if (ShouldConfigureDefaultContainer(profile_)) {
+    restart_options_.ansible_playbook = profile_->GetPrefs()->GetFilePath(
+        prefs::kCrostiniAnsiblePlaybookFilePath);
+  }
+
   install_start_time_ = base::TimeTicks::Now();
   require_cleanup_ = true;
   free_disk_space_ = kUninitializedDiskSpace;
   container_download_percent_ = 0;
   UpdateState(State::INSTALLING);
 
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(&base::SysInfo::AmountOfFreeDiskSpace,
-                     base::FilePath(crostini::kHomeDirectory)),
-      base::BindOnce(&CrostiniInstaller::OnAvailableDiskSpace,
-                     weak_ptr_factory_.GetWeakPtr()));
+  // The spaced D-Bus client needs to be called from the ui thread
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&ash::SpacedClient::GetFreeDiskSpace,
+                     base::Unretained(ash::SpacedClient::Get()),
+                     crostini::kHomeDirectory,
+                     base::BindOnce(&CrostiniInstaller::OnAvailableDiskSpace,
+                                    weak_ptr_factory_.GetWeakPtr())));
 
   // Reset mic permissions, we don't want it to persist across
   // re-installation.
@@ -325,7 +336,10 @@ void CrostiniInstaller::OnDiskImageCreated(bool success,
     return;
   }
   if (result == CrostiniResult::CREATE_DISK_IMAGE_ALREADY_EXISTS) {
-    require_cleanup_ = false;
+    // TODO(b/245235783): Remove guard after the intent storing and starting off
+    // intents CL is in.
+    if (!ShouldConfigureDefaultContainer(profile_))
+      require_cleanup_ = false;
   }
   UpdateInstallingState(InstallerState::kStartTerminaVm);
 }
@@ -381,49 +395,6 @@ void CrostiniInstaller::OnContainerSetup(bool success) {
     return;
   }
   UpdateInstallingState(InstallerState::kStartContainer);
-  if (ShouldConfigureDefaultContainer(profile_)) {
-    ansible_management_service_observation_.Observe(
-        AnsibleManagementService::GetForProfile(profile_));
-  }
-}
-
-// TODO(justinhuang): Address the case where Default Container is being booted +
-// getting configured and a new VM is being created. Since Enterprise-based
-// configurations currently work as configure on every startup, we'll have a
-// potential overlap which will cause this to signal too many times.
-void CrostiniInstaller::OnAnsibleSoftwareConfigurationStarted(
-    const guest_os::GuestId& container_id) {
-  DCHECK_EQ(installing_state_, InstallerState::kStartContainer);
-  UpdateInstallingState(InstallerState::kConfigureContainer);
-}
-
-// TODO(justinhuang): Similar to the above.
-void CrostiniInstaller::OnAnsibleSoftwareConfigurationFinished(
-    const guest_os::GuestId& container_id,
-    bool success) {
-  DCHECK_EQ(installing_state_, InstallerState::kConfigureContainer);
-  DCHECK(ansible_management_service_observation_.IsObservingSource(
-      AnsibleManagementService::GetForProfile(profile_)));
-  ansible_management_service_observation_.Reset();
-
-  if (!success) {
-    CrostiniManager::GetForProfile(profile_)->RemoveCrostini(
-        kCrostiniDefaultVmName,
-        base::BindOnce(
-            &CrostiniInstaller::OnCrostiniRemovedAfterConfigurationFailed,
-            weak_ptr_factory_.GetWeakPtr()));
-    return;
-  }
-}
-
-void CrostiniInstaller::OnCrostiniRemovedAfterConfigurationFailed(
-    CrostiniResult result) {
-  if (content::GetNetworkConnectionTracker()->IsOffline()) {
-    LOG(ERROR) << "Network connection dropped while configuring container";
-    HandleError(InstallerError::kErrorOffline);
-  } else {
-    HandleError(InstallerError::kErrorConfiguringContainer);
-  }
 }
 
 void CrostiniInstaller::OnContainerStarted(CrostiniResult result) {
@@ -590,7 +561,14 @@ void CrostiniInstaller::OnCrostiniRestartFinished(CrostiniResult result) {
     if (state_ != State::ERROR && result != CrostiniResult::RESTART_ABORTED &&
         result != CrostiniResult::RESTART_REQUEST_CANCELLED) {
       DCHECK_EQ(state_, State::INSTALLING);
-      HandleError(InstallerError::kErrorUnknown);
+      // TODO(b/227552325): Currently just adding mapping for
+      // CONTAINER_CONFIGURATION_FAILED -> kErrorConfiguringContainer. Consider
+      // making a better mapping for more descriptive errors than kErrorUnknown.
+      if (result == CrostiniResult::CONTAINER_CONFIGURATION_FAILED) {
+        HandleError(InstallerError::kErrorConfiguringContainer);
+      } else {
+        HandleError(InstallerError::kErrorUnknown);
+      }
     }
     return;
   }
@@ -620,7 +598,7 @@ void CrostiniInstaller::OnCrostiniRestartFinished(CrostiniResult result) {
   }
 }
 
-void CrostiniInstaller::OnAvailableDiskSpace(int64_t bytes) {
+void CrostiniInstaller::OnAvailableDiskSpace(absl::optional<int64_t> bytes) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // |Cancel()| might be called immediately after |Install()|.
@@ -633,7 +611,8 @@ void CrostiniInstaller::OnAvailableDiskSpace(int64_t bytes) {
 
   DCHECK_EQ(installing_state_, InstallerState::kStart);
 
-  free_disk_space_ = bytes;
+  if (bytes.has_value())
+    free_disk_space_ = bytes.value();
   // Don't enforce minimum disk size on dev box or trybots because
   // base::SysInfo::AmountOfFreeDiskSpace returns zero in testing.
   if (base::SysInfo::IsRunningOnChromeOS() &&

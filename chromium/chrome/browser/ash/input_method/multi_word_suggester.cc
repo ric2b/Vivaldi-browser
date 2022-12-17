@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -105,20 +105,19 @@ void RecordCouldPossiblyShowSuggestion(
 }
 
 absl::optional<int> GetTimeFirstAcceptedSuggestion(Profile* profile) {
-  DictionaryPrefUpdate update(profile->GetPrefs(),
+  ScopedDictPrefUpdate update(profile->GetPrefs(),
                               prefs::kAssistiveInputFeatureSettings);
-  auto value = update->FindIntKey(kMultiWordFirstAcceptTimeDays);
+  auto value = update->FindInt(kMultiWordFirstAcceptTimeDays);
   if (value.has_value())
     return value.value();
   return absl::nullopt;
 }
 
 void SetTimeFirstAcceptedSuggestion(Profile* profile) {
-  DictionaryPrefUpdate update(profile->GetPrefs(),
+  ScopedDictPrefUpdate update(profile->GetPrefs(),
                               prefs::kAssistiveInputFeatureSettings);
   auto time_since_epoch = base::Time::Now() - base::Time::UnixEpoch();
-  update->SetIntKey(kMultiWordFirstAcceptTimeDays,
-                    time_since_epoch.InDaysFloored());
+  update->Set(kMultiWordFirstAcceptTimeDays, time_since_epoch.InDaysFloored());
 }
 
 bool ShouldShowTabGuide(Profile* profile) {

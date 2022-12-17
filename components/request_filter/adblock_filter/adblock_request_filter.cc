@@ -72,6 +72,7 @@ flat::ResourceType ResourceTypeFromRequest(
     case network::mojom::RequestDestination::kManifest:
     case network::mojom::RequestDestination::kPaintWorklet:
     case network::mojom::RequestDestination::kWebBundle:
+    case network::mojom::RequestDestination::kWebIdentity:
       return flat::ResourceType_OTHER;
     case network::mojom::RequestDestination::kEmpty:
       if (request.request.keepalive)

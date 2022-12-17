@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,6 @@
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
-#include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/gl_ozone_image_representation.h"
@@ -138,11 +137,6 @@ void OzoneImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {
   }
 }
 
-bool OzoneImageBacking::ProduceLegacyMailbox(MailboxManager* mailbox_manager) {
-  NOTREACHED();
-  return false;
-}
-
 scoped_refptr<gfx::NativePixmap> OzoneImageBacking::GetNativePixmap() {
   return pixmap_;
 }
@@ -194,7 +188,12 @@ std::unique_ptr<SkiaImageRepresentation> OzoneImageBacking::ProduceSkia(
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {
   if (context_state->GrContextIsGL()) {
-    auto gl_representation = ProduceGLTexture(manager, tracker);
+    std::unique_ptr<GLTextureImageRepresentationBase> gl_representation;
+    if (use_passthrough_) {
+      gl_representation = ProduceGLTexturePassthrough(manager, tracker);
+    } else {
+      gl_representation = ProduceGLTexture(manager, tracker);
+    }
     if (!gl_representation) {
       LOG(ERROR) << "OzoneImageBacking::ProduceSkia failed to create GL "
                     "representation";
@@ -218,7 +217,8 @@ std::unique_ptr<SkiaImageRepresentation> OzoneImageBacking::ProduceSkia(
     auto* vulkan_implementation =
         context_state->vk_context_provider()->GetVulkanImplementation();
     auto vulkan_image = vulkan_implementation->CreateImageFromGpuMemoryHandle(
-        device_queue, std::move(gmb_handle), size(), ToVkFormat(format()));
+        device_queue, std::move(gmb_handle), size(), ToVkFormat(format()),
+        gfx::ColorSpace());
 
     if (!vulkan_image)
       return nullptr;
@@ -240,7 +240,7 @@ std::unique_ptr<OverlayImageRepresentation> OzoneImageBacking::ProduceOverlay(
 
 OzoneImageBacking::OzoneImageBacking(
     const Mailbox& mailbox,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     gfx::BufferPlane plane,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
@@ -250,7 +250,8 @@ OzoneImageBacking::OzoneImageBacking(
     scoped_refptr<SharedContextState> context_state,
     scoped_refptr<gfx::NativePixmap> pixmap,
     scoped_refptr<base::RefCountedData<DawnProcTable>> dawn_procs,
-    const GpuDriverBugWorkarounds& workarounds)
+    const GpuDriverBugWorkarounds& workarounds,
+    bool use_passthrough)
     : ClearTrackingSharedImageBacking(mailbox,
                                       format,
                                       size,
@@ -264,9 +265,10 @@ OzoneImageBacking::OzoneImageBacking(
       pixmap_(std::move(pixmap)),
       dawn_procs_(std::move(dawn_procs)),
       context_state_(std::move(context_state)),
-      workarounds_(workarounds) {
+      workarounds_(workarounds),
+      use_passthrough_(use_passthrough) {
   bool used_by_skia = (usage & SHARED_IMAGE_USAGE_RASTER) ||
-                      (usage & SHARED_IMAGE_USAGE_DISPLAY);
+                      (usage & SHARED_IMAGE_USAGE_DISPLAY_READ);
   bool used_by_gl =
       (usage & SHARED_IMAGE_USAGE_GLES2) ||
       (used_by_skia && context_state_->gr_context_type() == GrContextType::kGL);
@@ -425,9 +427,8 @@ bool OzoneImageBacking::BeginAccess(bool readonly,
   }
 
   // If current stream is different than `last_write_stream_` then wait on that
-  // stream's `write_fence_` (except on ARM Mali boards for ChromeOS).
-  if (!write_fence_.is_null() && (workarounds_.add_fence_for_same_gl_context ||
-                                  last_write_stream_ != access_stream)) {
+  // stream's `write_fence_`.
+  if (!write_fence_.is_null() && last_write_stream_ != access_stream) {
     DCHECK(external_write_fence_
                .is_null());  // `external_write_fence_` should be null.
     // For write access we expect new `write_fence_` so we can move the old

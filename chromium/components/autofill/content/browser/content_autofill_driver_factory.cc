@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,6 +68,7 @@ void ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
     content::WebContents* contents,
     AutofillClient* client,
     DriverInitCallback driver_init_hook) {
+
 // Vivaldi
 #if !BUILDFLAG(IS_ANDROID)
   if (FromWebContents(contents))
@@ -189,7 +190,7 @@ void ContentAutofillDriverFactory::RenderFrameDeleted(
   if (is_iframe && router_.last_queried_source() == driver) {
     DCHECK(!render_frame_host->IsInLifecycleState(
         content::RenderFrameHost::LifecycleState::kPrerendering));
-    router_.HidePopup(driver);
+    driver->renderer_events().HidePopup();
   }
 
   driver_map_.erase(it);
@@ -209,7 +210,7 @@ void ContentAutofillDriverFactory::DidStartNavigation(
         content::RenderFrameHost::FromID(id);
     if (render_frame_host) {
       if (auto* driver = DriverForFrame(render_frame_host))
-        driver->ProbablyFormSubmitted();
+        driver->ProbablyFormSubmitted({});
     }
   }
 }

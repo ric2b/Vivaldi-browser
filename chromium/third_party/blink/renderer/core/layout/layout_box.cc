@@ -272,7 +272,8 @@ LayoutUnit FileUploadControlIntrinsicInlineSize(const HTMLInputElement& input,
     if (LayoutObject* button_layout_object = button->GetLayoutObject()) {
       default_label_width +=
           button_layout_object->PreferredLogicalWidths().max_size +
-          LayoutFileUploadControl::kAfterButtonSpacing;
+          (LayoutFileUploadControl::kAfterButtonSpacing *
+           box.StyleRef().EffectiveZoom());
     }
   }
   return LayoutUnit(
@@ -309,7 +310,7 @@ LayoutUnit ListBoxDefaultItemHeight(const LayoutBox& box) {
 LayoutUnit ListBoxItemHeight(const HTMLSelectElement& select,
                              const LayoutBox& box) {
   const auto& items = select.GetListItems();
-  if (items.IsEmpty() || box.ShouldApplySizeContainment())
+  if (items.empty() || box.ShouldApplySizeContainment())
     return ListBoxDefaultItemHeight(box);
 
   LayoutUnit max_height;
@@ -489,7 +490,10 @@ PaintLayerType LayoutBox::LayerTypeRequired() const {
       (StyleRef().SpecifiesColumns() && !IsLayoutNGObject()))
     return kNormalPaintLayer;
 
-  if (HasNonVisibleOverflow())
+  const bool is_replaced_element_respecting_overflow =
+      RuntimeEnabledFeatures::CSSOverflowForReplacedElementsEnabled() &&
+      IsLayoutReplaced();
+  if (HasNonVisibleOverflow() && !is_replaced_element_respecting_overflow)
     return kOverflowClipPaintLayer;
 
   return kNoPaintLayer;
@@ -1012,7 +1016,7 @@ void LayoutBox::UpdateFromStyle() {
 void LayoutBox::LayoutSubtreeRoot() {
   NOT_DESTROYED();
   if (RuntimeEnabledFeatures::LayoutNGEnabled() && !IsLayoutNGObject() &&
-      GetCachedLayoutResult()) {
+      GetSingleCachedLayoutResult()) {
     // If this object is laid out by the legacy engine, while its containing
     // block is laid out by NG, it means that we normally (when laying out
     // starting at the real root, i.e. LayoutView) enter layout of this object
@@ -1026,7 +1030,7 @@ void LayoutBox::LayoutSubtreeRoot() {
     // Make a copy of the cached constraint space, since we'll overwrite the
     // layout result object as part of performing layout.
     auto constraint_space =
-        GetCachedLayoutResult()->GetConstraintSpaceForCaching();
+        GetSingleCachedLayoutResult()->GetConstraintSpaceForCaching();
 
     NGBlockNode(this).Layout(constraint_space);
 
@@ -1099,6 +1103,28 @@ LayoutUnit LayoutBox::ClientHeight() const {
         .ClampNegativeToZero();
   } else {
     return (frame_rect_.Height() - BorderTop() - BorderBottom() -
+            ComputeScrollbarsInternal(kClampToContentBox).VerticalSum())
+        .ClampNegativeToZero();
+  }
+}
+
+LayoutUnit LayoutBox::ClientWidthFrom(LayoutUnit width) const {
+  NOT_DESTROYED();
+  if (CanSkipComputeScrollbars()) {
+    return (width - BorderLeft() - BorderRight()).ClampNegativeToZero();
+  } else {
+    return (width - BorderLeft() - BorderRight() -
+            ComputeScrollbarsInternal(kClampToContentBox).HorizontalSum())
+        .ClampNegativeToZero();
+  }
+}
+
+LayoutUnit LayoutBox::ClientHeightFrom(LayoutUnit height) const {
+  NOT_DESTROYED();
+  if (CanSkipComputeScrollbars()) {
+    return (height - BorderTop() - BorderBottom()).ClampNegativeToZero();
+  } else {
+    return (height - BorderTop() - BorderBottom() -
             ComputeScrollbarsInternal(kClampToContentBox).VerticalSum())
         .ClampNegativeToZero();
   }
@@ -1269,7 +1295,9 @@ void LayoutBox::UpdateAfterLayout() {
 
   Document& document = GetDocument();
   document.IncLayoutCallsCounter();
-  document.GetFrame()->GetInputMethodController().DidUpdateLayout(*this);
+  GetFrame()->GetInputMethodController().DidUpdateLayout(*this);
+  if (IsPositioned())
+    GetFrame()->GetInputMethodController().DidLayoutSubtree(*this);
   if (IsLayoutNGObject())
     document.IncLayoutCallsCounterNG();
 }
@@ -1558,7 +1586,7 @@ void LayoutBox::SetLocationAndUpdateOverflowControlsIfNeeded(
   // will cause inconsistent layout. Also we should be careful not to set
   // this LayoutBox NeedsLayout. This will be unnecessary when we support
   // subpixel layout of scrollable area and overflow controls.
-  if (PixelSnappedBorderBoxRect().size() !=
+  if (PixelSnappedBorderBoxSize(PhysicalOffset(location)) !=
       old_pixel_snapped_border_rect_size) {
     bool needed_layout = NeedsLayout();
     PaintLayerScrollableArea::FreezeScrollbarsScope freeze_scrollbar;
@@ -2040,7 +2068,7 @@ bool LayoutBox::MapVisualRectToContainer(
   // a) Transform.
   TransformationMatrix transform;
   if (Layer() && Layer()->Transform())
-    transform.Multiply(Layer()->CurrentTransform());
+    transform.PreConcat(Layer()->CurrentTransform());
 
   // b) Container offset.
   transform.PostTranslate(container_offset.left.ToFloat(),
@@ -2059,8 +2087,7 @@ bool LayoutBox::MapVisualRectToContainer(
   if (has_perspective && container_object != NearestAncestorForElement()) {
     has_perspective = false;
 
-    if (StyleRef().Preserves3D() || transform.M13() != 0.0 ||
-        transform.M23() != 0.0 || transform.M43() != 0.0) {
+    if (StyleRef().Preserves3D() || transform.Creates3D()) {
       UseCounter::Count(GetDocument(),
                         WebFeature::kDifferentPerspectiveCBOrParent);
     }
@@ -2075,7 +2102,7 @@ bool LayoutBox::MapVisualRectToContainer(
       perspective_origin = container_box->PerspectiveOrigin();
 
     TransformationMatrix perspective_matrix;
-    perspective_matrix.ApplyPerspective(
+    perspective_matrix.ApplyPerspectiveDepth(
         container_object->StyleRef().UsedPerspective());
     perspective_matrix.ApplyTransformOrigin(perspective_origin.x(),
                                             perspective_origin.y(), 0);
@@ -2155,8 +2182,8 @@ MinMaxSizes LayoutBox::PreferredLogicalWidths() const {
 
 MinMaxSizes LayoutBox::IntrinsicLogicalWidths(MinMaxSizesType type) const {
   NOT_DESTROYED();
-  if (!ShouldComputeSizeAsReplaced() && type == MinMaxSizesType::kContent &&
-      !StyleRef().AspectRatio().IsAuto()) {
+  if (!IsManagedByLayoutNG(*this) && !ShouldComputeSizeAsReplaced() &&
+      type == MinMaxSizesType::kContent && !StyleRef().AspectRatio().IsAuto()) {
     MinMaxSizes sizes;
     if (ComputeLogicalWidthFromAspectRatio(&sizes.min_size)) {
       sizes.max_size = sizes.min_size;
@@ -2644,6 +2671,9 @@ bool LayoutBox::TextIsKnownToBeOnOpaqueBackground() const {
   return PhysicalBackgroundRect(kBackgroundKnownOpaqueRect).Contains(rect);
 }
 
+// Note that callers are responsible for checking
+// ChildPaintBlockedByDisplayLock(), since that is a property of the parent
+// rather than of the child.
 static bool IsCandidateForOpaquenessTest(const LayoutBox& child_box) {
   // Skip all layers to simplify ForegroundIsKnownToBeOpaqueInRect(). This
   // covers cases of clipped, transformed, translucent, composited, etc.
@@ -2666,6 +2696,8 @@ bool LayoutBox::ForegroundIsKnownToBeOpaqueInRect(
     unsigned max_depth_to_test) const {
   NOT_DESTROYED();
   if (!max_depth_to_test)
+    return false;
+  if (ChildPaintBlockedByDisplayLock())
     return false;
   for (LayoutObject* child = SlowFirstChild(); child;
        child = child->NextSibling()) {
@@ -3262,13 +3294,15 @@ bool LayoutBox::NGPhysicalFragmentList::Contains(
   return IndexOf(fragment) != kNotFound;
 }
 
-void LayoutBox::SetCachedLayoutResult(const NGLayoutResult* result) {
+void LayoutBox::SetCachedLayoutResult(const NGLayoutResult* result,
+                                      wtf_size_t index) {
   NOT_DESTROYED();
-  DCHECK(!result->PhysicalFragment().BreakToken());
-  DCHECK(To<NGPhysicalBoxFragment>(result->PhysicalFragment()).IsOnlyForNode());
-
   if (result->GetConstraintSpaceForCaching().CacheSlot() ==
       NGCacheSlot::kMeasure) {
+    DCHECK(!result->PhysicalFragment().BreakToken());
+    DCHECK(
+        To<NGPhysicalBoxFragment>(result->PhysicalFragment()).IsOnlyForNode());
+    DCHECK_EQ(index, 0u);
     // We don't early return here, when setting the "measure" result we also
     // set the "layout" result.
     if (measure_result_)
@@ -3295,7 +3329,7 @@ void LayoutBox::SetCachedLayoutResult(const NGLayoutResult* result) {
         .SetFragmentChildrenInvalid();
   }
 
-  SetLayoutResult(std::move(result), 0);
+  SetLayoutResult(result, index);
 }
 
 void LayoutBox::SetLayoutResult(const NGLayoutResult* result,
@@ -3399,11 +3433,11 @@ void LayoutBox::RestoreLegacyLayoutResults(
   if (layout_result)
     SetLayoutResult(layout_result, 0);
   else
-    DCHECK(layout_results_.IsEmpty());
+    DCHECK(layout_results_.empty());
 }
 
 void LayoutBox::FinalizeLayoutResults() {
-  DCHECK(!layout_results_.IsEmpty());
+  DCHECK(!layout_results_.empty());
   DCHECK(!layout_results_.back()->PhysicalFragment().BreakToken());
   // If we've added all the results we were going to, and the node establishes
   // an inline formatting context, we have some finalization to do.
@@ -3453,17 +3487,15 @@ void LayoutBox::InvalidateItems(const NGLayoutResult& result) {
   ObjectPaintInvalidator(*this).SlowSetPaintingLayerNeedsRepaint();
 }
 
-const NGLayoutResult* LayoutBox::GetCachedLayoutResult() const {
+const NGLayoutResult* LayoutBox::GetCachedLayoutResult(
+    const NGBlockBreakToken* break_token) const {
   NOT_DESTROYED();
-  if (layout_results_.IsEmpty())
+  wtf_size_t index = FragmentIndex(break_token);
+  if (index >= layout_results_.size())
     return nullptr;
-  // Only return re-usable results.
-  const NGLayoutResult* result = layout_results_[0];
-  if (!To<NGPhysicalBoxFragment>(result->PhysicalFragment()).IsOnlyForNode())
-    return nullptr;
+  const NGLayoutResult* result = layout_results_[index];
   DCHECK(!result->PhysicalFragment().IsLayoutObjectDestroyedOrMoved() ||
          BeingDestroyed());
-  DCHECK_EQ(layout_results_.size(), 1u);
   return result;
 }
 
@@ -3472,11 +3504,31 @@ const NGLayoutResult* LayoutBox::GetCachedMeasureResult() const {
   if (!measure_result_)
     return nullptr;
 
+  // If we've already had an actual layout pass, and the node fragmented, we
+  // cannot reliably re-use the measure result. What we want to avoid here is
+  // simplified layout inside a measure-result, as that would descend into a
+  // fragment subtree generated by actual (fragmented) layout, which is
+  // invalid. But it seems safer to stop such attempts here, so that we don't
+  // hand out results that may cause problems if we end up with simplified
+  // layout inside.
+  if (!layout_results_.empty()) {
+    const NGPhysicalBoxFragment* first_fragment = GetPhysicalFragment(0);
+    if (first_fragment->BreakToken())
+      return nullptr;
+  }
+
+  // TODO(mstensho): Measure-results can never fragment, can they? This check
+  // could probably be removed.
   if (!To<NGPhysicalBoxFragment>(measure_result_->PhysicalFragment())
            .IsOnlyForNode())
     return nullptr;
 
   return measure_result_;
+}
+
+const NGLayoutResult* LayoutBox::GetSingleCachedLayoutResult() const {
+  DCHECK_LE(layout_results_.size(), 1u);
+  return GetCachedLayoutResult(nullptr);
 }
 
 const NGLayoutResult* LayoutBox::GetLayoutResult(wtf_size_t i) const {
@@ -5299,14 +5351,6 @@ LayoutUnit LayoutBox::AvailableLogicalHeightUsing(
     } else if (HasOverrideLogicalHeight() &&
                IsOverrideLogicalHeightDefinite()) {
       return OverrideContentLogicalHeight();
-    } else if (!GetBoxLayoutExtraInput()) {
-      // TODO(ikilpatrick): Remove this post M86.
-      if (const auto* previous_result = GetCachedLayoutResult()) {
-        const NGConstraintSpace& space =
-            previous_result->GetConstraintSpaceForCaching();
-        if (space.IsFixedBlockSize() && !space.IsInitialBlockSizeIndefinite())
-          return space.AvailableSize().block_size;
-      }
     }
   }
   if (ShouldComputeLogicalHeightFromAspectRatio()) {
@@ -7275,7 +7319,8 @@ LayoutBox::PaginationBreakability LayoutBox::GetPaginationBreakability(
       (Parent() && IsWritingModeRoot()) ||
       (IsFixedPositioned() && GetDocument().Printing() &&
        IsA<LayoutView>(Container())) ||
-      ShouldApplySizeContainment() || IsFrameSetIncludingNG())
+      ShouldApplySizeContainment() || IsFrameSetIncludingNG() ||
+      StyleRef().HasLineClamp())
     return kForbidBreaks;
 
   if (engine != kUnknownFragmentationEngine) {
@@ -8080,8 +8125,17 @@ BackgroundPaintLocation LayoutBox::ComputeBackgroundPaintLocationIfComposited()
   return paint_location;
 }
 
-bool LayoutBox::IsFixedToView() const {
-  return IsFixedPositioned() && Container() == View();
+bool LayoutBox::IsFixedToView(
+    const LayoutObject* container_for_fixed_position) const {
+  if (!IsFixedPositioned())
+    return false;
+
+  const auto* container = container_for_fixed_position;
+  if (!container)
+    container = Container();
+  else
+    DCHECK_EQ(container, Container());
+  return container->IsLayoutView();
 }
 
 PhysicalRect LayoutBox::ComputeStickyConstrainingRect() const {

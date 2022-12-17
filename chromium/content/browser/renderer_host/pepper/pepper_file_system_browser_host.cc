@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/renderer_host/pepper/pepper_file_io_host.h"
@@ -16,7 +17,7 @@
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/common/pepper_plugin_info.h"
+#include "content/public/common/content_plugin_info.h"
 #include "net/base/mime_util.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/host/dispatch_host_message.h"
@@ -568,8 +569,8 @@ void PepperFileSystemBrowserHost::GotReservedQuota(
 
 std::string PepperFileSystemBrowserHost::GetPluginMimeType() const {
   base::FilePath plugin_path = browser_ppapi_host_->GetPluginPath();
-  const PepperPluginInfo* info =
-      PluginService::GetInstance()->GetRegisteredPpapiPluginInfo(plugin_path);
+  const ContentPluginInfo* info =
+      PluginService::GetInstance()->GetRegisteredPluginInfo(plugin_path);
   if (!info || info->mime_types.empty())
     return std::string();
   // Use the first element in |info->mime_types| even if several elements exist.

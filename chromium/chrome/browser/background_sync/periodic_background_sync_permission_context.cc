@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,9 +27,9 @@ namespace features {
 // If enabled, the installability criteria for granting PBS permission is
 // dropped and the content setting is checked. This only applies if the
 // requesting origin matches that of the browser's default search engine.
-const base::Feature kPeriodicSyncPermissionForDefaultSearchEngine{
-    "PeriodicSyncPermissionForDefaultSearchEngine",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kPeriodicSyncPermissionForDefaultSearchEngine,
+             "PeriodicSyncPermissionForDefaultSearchEngine",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features
 
@@ -63,11 +63,6 @@ bool PeriodicBackgroundSyncPermissionContext::IsTwaInstalled(
       origin);
 }
 #endif
-
-bool PeriodicBackgroundSyncPermissionContext::IsRestrictedToSecureOrigins()
-    const {
-  return true;
-}
 
 GURL PeriodicBackgroundSyncPermissionContext::GetDefaultSearchEngineUrl()
     const {

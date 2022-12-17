@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,7 +62,7 @@ absl::optional<DnsOverHttpsConfig> FromJson(base::StringPiece json) {
   absl::optional<base::Value> value = base::JSONReader::Read(json);
   if (!value || !value->is_dict())
     return absl::nullopt;
-  return FromValue(std::move(value->GetDict()));
+  return FromValue(std::move(*value).TakeDict());
 }
 
 }  // namespace

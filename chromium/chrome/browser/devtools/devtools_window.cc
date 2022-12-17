@@ -1,10 +1,9 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/devtools/devtools_window.h"
 
-#include <algorithm>
 #include <memory>
 #include <set>
 #include <utility>
@@ -16,6 +15,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/escape.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -140,11 +140,11 @@ void SetPreferencesFromJson(Profile* profile, const std::string& json) {
   absl::optional<base::Value> parsed = base::JSONReader::Read(json);
   if (!parsed || !parsed->is_dict())
     return;
-  DictionaryPrefUpdate update(profile->GetPrefs(), prefs::kDevToolsPreferences);
-  for (auto dict_value : parsed->DictItems()) {
+  ScopedDictPrefUpdate update(profile->GetPrefs(), prefs::kDevToolsPreferences);
+  for (auto dict_value : parsed->GetDict()) {
     if (!dict_value.second.is_string())
       continue;
-    update.Get()->SetKey(dict_value.first, std::move(dict_value.second));
+    update->Set(dict_value.first, std::move(dict_value.second));
   }
 }
 
@@ -462,7 +462,7 @@ DevToolsWindow::~DevToolsWindow() {
   owned_toolbox_web_contents_.reset();
 
   DevToolsWindows* instances = g_devtools_window_instances.Pointer();
-  auto it(std::find(instances->begin(), instances->end(), this));
+  auto it = base::ranges::find(*instances, this);
   DCHECK(it != instances->end());
   instances->erase(it);
 
@@ -886,6 +886,23 @@ void DevToolsWindow::UpdateInspectedWebContents(
   reattach_complete_callback_ = std::move(callback);
 
   inspected_web_contents_ = new_web_contents->GetWeakPtr();
+
+  if (vivaldi::IsVivaldiRunning()) {
+    int tab_id =
+        sessions::SessionTabHelper::IdForTab(inspected_web_contents_.get()).id();
+    extensions::DevtoolsConnectorAPI* api =
+        extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(profile_);
+    DCHECK(api);
+
+    // This can re-enter, do not update if already created.
+    extensions::DevtoolsConnectorItem* previous_connector_item  = connector_item_;
+    connector_item_ = api->GetOrCreateDevtoolsConnectorItem(tab_id);
+    if (connector_item_ != previous_connector_item) {
+      connector_item_->set_ui_bindings_delegate(this);
+      bindings_->SetDelegate(connector_item_->ui_bindings_delegate());
+    }
+  }
+
   bindings_->AttachTo(
       content::DevToolsAgentHost::GetOrCreateFor(new_web_contents));
   bindings_->CallClientMethod(
@@ -936,16 +953,13 @@ void DevToolsWindow::Show(const DevToolsToggleAction& action) {
           extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(profile_);
       DCHECK(api);
 
-      if (!connector_item_) {
-        connector_item_ =
-          base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
-            api->GetOrCreateDevtoolsConnectorItem(
-                    sessions::SessionTabHelper::IdForTab(
-                        GetInspectedWebContents())
-                        .id()));
-      }
+      connector_item_ = api->GetOrCreateDevtoolsConnectorItem(
+                  sessions::SessionTabHelper::IdForTab(
+                      GetInspectedWebContents())
+                      .id());
+
       connector_item_->set_devtools_delegate(this);
-      main_web_contents_->SetDelegate(connector_item_.get());
+      main_web_contents_->SetDelegate(connector_item_);
 
     } else {
     main_web_contents_->SetDelegate(this);
@@ -1001,15 +1015,11 @@ void DevToolsWindow::Show(const DevToolsToggleAction& action) {
     if (toolbox_web_contents_) {
       UpdateBrowserWindow();
     }
-    if (!connector_item_) {
-      connector_item_ = base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
-          api->GetOrCreateDevtoolsConnectorItem(
-              sessions::SessionTabHelper::IdForTab(
-                  inspected_web_contents_.get())
-                  .id()));
-    }
+
+    connector_item_ = api->GetOrCreateDevtoolsConnectorItem(tab_id);
+
     connector_item_->set_devtools_delegate(this);
-    main_web_contents_->SetDelegate(connector_item_.get());
+    main_web_contents_->SetDelegate(connector_item_);
 
   } else {
   if (!browser_)
@@ -1135,9 +1145,11 @@ DevToolsWindow::DevToolsWindow(FrontendType frontend_type,
       extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(profile_);
     DCHECK(api);
 
-    connector_item_ = base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
-        api->GetOrCreateDevtoolsConnectorItem(
-            sessions::SessionTabHelper::IdForTab(inspected_web_contents).id()));
+    int tab_id =
+        sessions::SessionTabHelper::IdForTab(inspected_web_contents).id();
+
+    connector_item_ = api->GetOrCreateDevtoolsConnectorItem(tab_id);
+
     connector_item_->set_ui_bindings_delegate(this);
     bindings_->SetDelegate(connector_item_->ui_bindings_delegate());
   } else {
@@ -1388,16 +1400,25 @@ void DevToolsWindow::ActivateContents(WebContents* contents) {
   }
 }
 
-void DevToolsWindow::AddNewContents(WebContents* source,
-                                    std::unique_ptr<WebContents> new_contents,
-                                    const GURL& target_url,
-                                    WindowOpenDisposition disposition,
-                                    const gfx::Rect& initial_rect,
-                                    bool user_gesture,
-                                    bool* was_blocked) {
+void DevToolsWindow::AddNewContents(
+    WebContents* source,
+    std::unique_ptr<WebContents> new_contents,
+    const GURL& target_url,
+    WindowOpenDisposition disposition,
+    const blink::mojom::WindowFeatures& window_features,
+    bool user_gesture,
+    bool* was_blocked) {
+
   if (new_contents.get() == toolbox_web_contents_) {
+
     owned_toolbox_web_contents_ = std::move(new_contents);
-    VivaldiTabCheck::MarkAsDevToolContents(toolbox_web_contents_);
+
+   if (guest_delegate_) {
+      // Set up the webview and let it own |owned_toolbox_web_contents_|
+      guest_delegate_->AddNewContents(
+        source, std::move(owned_toolbox_web_contents_), target_url, disposition,
+        window_features, user_gesture, was_blocked);
+    }
 
     toolbox_web_contents_->SetDelegate(new DevToolsToolboxDelegate(
         toolbox_web_contents_, inspected_web_contents_));
@@ -1408,14 +1429,15 @@ void DevToolsWindow::AddNewContents(WebContents* source,
       toolbox_web_contents_->GetRenderWidgetHostView()->SetSize(size);
     }
     UpdateBrowserWindow();
+
     return;
   }
 
   WebContents* inspected_web_contents = GetInspectedWebContents();
   if (inspected_web_contents) {
     inspected_web_contents->GetDelegate()->AddNewContents(
-        source, std::move(new_contents), target_url, disposition, initial_rect,
-        user_gesture, was_blocked);
+        source, std::move(new_contents), target_url, disposition,
+        window_features, user_gesture, was_blocked);
   }
 }
 
@@ -1451,6 +1473,20 @@ void DevToolsWindow::WebContentsCreated(WebContents* source_contents,
                                                       /*stay_hidden=*/false,
                                                       /*stay_awake=*/false);
   }
+  if (guest_delegate_) {
+    guest_delegate_->WebContentsCreated(
+        source_contents, opener_render_process_id, opener_render_frame_id,
+        frame_name, target_url, new_contents);
+  }
+}
+
+bool DevToolsWindow::HandleContextMenu(
+    content::RenderFrameHost& render_frame_host,
+    const content::ContextMenuParams& params) {
+  if (guest_delegate_) {
+    return guest_delegate_->HandleContextMenu(render_frame_host, params);
+  }
+  return false;
 }
 
 void DevToolsWindow::CloseContents(WebContents* source) {
@@ -1793,19 +1829,19 @@ void DevToolsWindow::SetOpenNewWindowForPopups(bool value) {
 
 void DevToolsWindow::CreateDevToolsBrowser() {
   PrefService* prefs = profile_->GetPrefs();
-  if (!prefs->GetValueDict(prefs::kAppWindowPlacement).Find(kDevToolsApp)) {
+  if (!prefs->GetDict(prefs::kAppWindowPlacement).Find(kDevToolsApp)) {
     // Ensure there is always a default size so that
     // BrowserFrame::InitBrowserFrame can retrieve it later.
-    DictionaryPrefUpdate update(prefs, prefs::kAppWindowPlacement);
-    base::Value* wp_prefs = update.Get();
-    base::Value dev_tools_defaults(base::Value::Type::DICTIONARY);
-    dev_tools_defaults.SetIntKey("left", 100);
-    dev_tools_defaults.SetIntKey("top", 100);
-    dev_tools_defaults.SetIntKey("right", 740);
-    dev_tools_defaults.SetIntKey("bottom", 740);
-    dev_tools_defaults.SetBoolKey("maximized", false);
-    dev_tools_defaults.SetBoolKey("always_on_top", false);
-    wp_prefs->SetKey(kDevToolsApp, std::move(dev_tools_defaults));
+    ScopedDictPrefUpdate update(prefs, prefs::kAppWindowPlacement);
+    base::Value::Dict& wp_prefs = update.Get();
+    base::Value::Dict dev_tools_defaults;
+    dev_tools_defaults.Set("left", 100);
+    dev_tools_defaults.Set("top", 100);
+    dev_tools_defaults.Set("right", 740);
+    dev_tools_defaults.Set("bottom", 740);
+    dev_tools_defaults.Set("maximized", false);
+    dev_tools_defaults.Set("always_on_top", false);
+    wp_prefs.Set(kDevToolsApp, std::move(dev_tools_defaults));
   }
 
   if (Browser::GetCreationStatusForProfile(profile_) !=

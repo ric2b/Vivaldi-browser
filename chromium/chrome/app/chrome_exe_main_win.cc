@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -379,10 +379,6 @@ int main() {
 
   // The exit manager is in charge of calling the dtors of singletons.
   base::AtExitManager exit_manager;
-
-  // Only enable High DPI support for browser and GPU process.
-  if (process_type.empty() || process_type == switches::kGpuProcess)
-    base::win::EnableHighDPISupport();
 
   if (AttemptFastNotify(*command_line))
     return 0;

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,11 +20,6 @@ AppListA11yAnnouncer::~AppListA11yAnnouncer() = default;
 
 void AppListA11yAnnouncer::Shutdown() {
   announcement_view_ = nullptr;
-}
-
-void AppListA11yAnnouncer::AnnouncePeekingState() {
-  Announce(l10n_util::GetStringUTF16(
-      IDS_APP_LIST_SUGGESTED_APPS_ACCESSIBILITY_ANNOUNCEMENT));
 }
 
 void AppListA11yAnnouncer::AnnounceFullscreenState() {
@@ -85,8 +80,7 @@ void AppListA11yAnnouncer::Announce(const std::u16string& announcement) {
   if (!announcement_view_)
     return;
 
-  announcement_view_->GetViewAccessibility().OverrideName(announcement);
-  announcement_view_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+  announcement_view_->GetViewAccessibility().AnnounceText(announcement);
 }
 
 }  // namespace ash

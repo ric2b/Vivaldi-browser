@@ -1338,6 +1338,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   void PopulateAXRelativeBounds(ui::AXRelativeBounds& bounds,
                                 bool* clips_children) const;
 
+  void MarkAllImageAXObjectsDirty();
+
  protected:
   AXID id_;
   // Any parent, regardless of whether it's ignored or not included in the tree.
@@ -1354,8 +1356,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   virtual void AddChildren() = 0;
 
-  // Used only inside textAlternative():
-  static String CollapseWhitespace(const String&);
+  // Collapses multiple whitespace characters into one. Used by GetName().
+  String SimplifyName(const String&) const;
   static String RecursiveTextAlternative(
       const AXObject&,
       const AXObject* aria_label_or_description_root,

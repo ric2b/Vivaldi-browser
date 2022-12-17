@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -231,6 +231,18 @@ void CursorManager::RemoveObserver(
 bool CursorManager::ShouldHideCursorOnKeyEvent(
     const ui::KeyEvent& event) const {
   return false;
+}
+
+bool CursorManager::ShouldHideCursorOnTouchEvent(
+    const ui::TouchEvent& event) const {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
+  return true;
+#else
+  // Linux Aura does not hide the cursor on touch by default.
+  // TODO(tdanderson): Change this if having consistency across
+  // all platforms which use Aura is desired.
+  return false;
+#endif
 }
 
 void CursorManager::CommitCursor(gfx::NativeCursor cursor) {

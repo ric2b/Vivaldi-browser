@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -236,6 +236,9 @@ class BrowserChildProcessHostImpl
   // Indicates if the BrowserChildProcessLaunchedAndConnected notification was
   // sent for this instance.
   bool launched_and_connected_ = false;
+
+  // Whether the child process exited abnormally (killed or crashed).
+  bool exited_abnormally_ = false;
 
 #if BUILDFLAG(IS_ANDROID)
   // whether the child process can use pre-warmed up connection for better

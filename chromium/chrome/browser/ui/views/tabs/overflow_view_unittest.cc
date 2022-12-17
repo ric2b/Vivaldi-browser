@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "ui/views/layout/flex_layout_types.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/test/test_views.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/view_class_properties.h"
 
 class OverflowViewTest : public testing::Test {
@@ -166,7 +167,7 @@ class OverflowViewLayoutTest : public OverflowViewTest {
 
   void Resize(gfx::Size size) {
     parent_view_->SetSize(size);
-    parent_view_->Layout();
+    views::test::RunScheduledLayout(parent_view_.get());
   }
 
   void SizeToPreferredSize() { parent_view_->SizeToPreferredSize(); }
@@ -263,19 +264,19 @@ TEST_F(OverflowViewLayoutTest, Alignment) {
   Resize(size);
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kStart);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(0, 0), kPrimaryPreferredSize),
             primary_bounds());
   EXPECT_FALSE(indicator_visible());
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(0, 5), kPrimaryPreferredSize),
             primary_bounds());
   EXPECT_FALSE(indicator_visible());
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kEnd);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(0, 10), kPrimaryPreferredSize),
             primary_bounds());
   EXPECT_FALSE(indicator_visible());
@@ -285,18 +286,18 @@ TEST_F(OverflowViewLayoutTest, Alignment) {
   Resize(size);
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kStart);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(0, 0), kPrimaryMinimumSize), primary_bounds());
   EXPECT_FALSE(indicator_visible());
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(0, -5), kPrimaryMinimumSize),
             primary_bounds());
   EXPECT_FALSE(indicator_visible());
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kEnd);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(0, -10), kPrimaryMinimumSize),
             primary_bounds());
   EXPECT_FALSE(indicator_visible());
@@ -340,18 +341,18 @@ TEST_F(OverflowViewLayoutTest, AlignmentVertical) {
   Resize(size);
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kStart);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(), kPrimaryPreferredSize), primary_bounds());
   EXPECT_FALSE(indicator_visible());
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(5, 0), kPrimaryPreferredSize),
             primary_bounds());
   EXPECT_FALSE(indicator_visible());
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kEnd);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(10, 0), kPrimaryPreferredSize),
             primary_bounds());
   EXPECT_FALSE(indicator_visible());
@@ -361,18 +362,18 @@ TEST_F(OverflowViewLayoutTest, AlignmentVertical) {
   Resize(size);
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kStart);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(0, 0), kPrimaryMinimumSize), primary_bounds());
   EXPECT_FALSE(indicator_visible());
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(-5, 0), kPrimaryMinimumSize),
             primary_bounds());
   EXPECT_FALSE(indicator_visible());
 
   overflow_view_->SetCrossAxisAlignment(views::LayoutAlignment::kEnd);
-  parent_view_->Layout();
+  views::test::RunScheduledLayout(parent_view_.get());
   EXPECT_EQ(gfx::Rect(gfx::Point(-10, 0), kPrimaryMinimumSize),
             primary_bounds());
   EXPECT_FALSE(indicator_visible());

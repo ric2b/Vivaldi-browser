@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ template <typename T>
 struct CloneTraits<WTF::Vector<T>> {
   static WTF::Vector<T> Clone(const WTF::Vector<T>& input) {
     WTF::Vector<T> result;
-    result.ReserveCapacity(input.size());
+    result.reserve(input.size());
     for (const auto& element : input)
       result.push_back(mojo::Clone(element));
 

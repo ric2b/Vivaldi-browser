@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Editar ficheiro}other{Editar ficheiros}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Direção da chave</translation>
+<translation id="3294437725009624529">Convidado</translation>
 <translation id="3310640316857623290">Latência de DNS significativamente acima do limite permitido.</translation>
 <translation id="3328783797891415197">A executar teste…</translation>
 <translation id="3340011300870565703">O dispositivo tem <ph name="BATTERY_PERCENTAGE" />% de bateria no auricular direito.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Enquanto o firmware está a ser atualizado, não desligue este dispositivo externo nem encerre o computador. Pode minimizar esta janela. Esta atualização pode demorar alguns minutos e o seu dispositivo externo pode não funcionar durante este período.</translation>
 <translation id="3486220673238053218">definição</translation>
 <translation id="3488065109653206955">Parcialmente activado</translation>
+<translation id="3510890413042482857">Enviar <ph name="BEGIN_LINK1" />dados de rastreio do desempenho<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Atualiz. Chrome OS</translation>
 <translation id="3527036260304016759">Falha – Erro desconhecido</translation>
 <translation id="3532980081107202182">Faltam cerca de <ph name="MIN_REMAINING" /> minutos.</translation>
@@ -468,6 +470,7 @@ Experimente tocar no microfone para me perguntar o que quiser.</translation>
 <translation id="5502931783115429516">O Android não está a funcionar</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Mude automaticamente para o tema escuro ao pôr do sol</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Ler novamente</translation>
 <translation id="5583640892426849032">Retrocesso</translation>
@@ -639,7 +642,7 @@ Experimente tocar no microfone para me perguntar o que quiser.</translation>
 <translation id="7212734716605298123">Atualizações de firmware para dispositivos externos</translation>
 <translation id="7216409898977639127">Operador de telemóvel</translation>
 <translation id="725133483556299729">Selecionar email</translation>
-<translation id="7271040990581020067">O leitor está a ser utilizado atualmente. Tente novamente mais tarde.</translation>
+<translation id="7271040990581020067">O leitor está a ser utilizado atualmente. Tente mais tarde.</translation>
 <translation id="7274587244503383581"><ph name="PRINTED_PAGES_NUMBER" />/<ph name="TOTAL_PAGES_NUMBER" /></translation>
 <translation id="7281657306185710294">Sentir a brisa</translation>
 <translation id="7287310195820267359">Coleções de imagens de fundo</translation>

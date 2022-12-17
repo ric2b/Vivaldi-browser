@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -135,8 +135,9 @@ void BackgroundSyncServiceImplTestHarness::CreateTestHelper() {
   ON_CALL(*mock_permission_manager,
           GetPermissionStatus(blink::PermissionType::BACKGROUND_SYNC, _, _))
       .WillByDefault(testing::Return(blink::mojom::PermissionStatus::GRANTED));
-  embedded_worker_helper_->browser_context()->SetPermissionControllerDelegate(
-      std::move(mock_permission_manager));
+  TestBrowserContext::FromBrowserContext(
+      embedded_worker_helper_->browser_context())
+      ->SetPermissionControllerDelegate(std::move(mock_permission_manager));
 }
 
 void BackgroundSyncServiceImplTestHarness::CreateStoragePartition() {
@@ -185,7 +186,8 @@ void BackgroundSyncServiceImplTestHarness::CreateServiceWorkerRegistration() {
       blink::mojom::FetchClientSettingsObject::New(),
       base::BindOnce(&RegisterServiceWorkerCallback, &called,
                      &sw_registration_id_),
-      /*requesting_frame_id=*/GlobalRenderFrameHostId());
+      /*requesting_frame_id=*/GlobalRenderFrameHostId(),
+      PolicyContainerPolicies());
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(called);
 

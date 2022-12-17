@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,8 +45,7 @@
 class TabUnderBlockerBrowserTest : public extensions::ExtensionBrowserTest {
  public:
   TabUnderBlockerBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        TabUnderNavigationThrottle::kBlockTabUnders);
+    scoped_feature_list_.InitAndEnableFeature(kBlockTabUnders);
 
     provider_.SetDefaultReturns(
         /*is_initialization_complete_return=*/true,

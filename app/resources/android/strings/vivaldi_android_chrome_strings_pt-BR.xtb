@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
 <translation id="1397811292916898096">Pesquisar com o <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mecanismo de busca padrão no Vivaldi. Ele envia a palavra selecionada e a página atual como contexto para o Google Search. Você pode desabilitá-lo nas <ph name="BEGIN_LINK" />Configurações<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Alternar entre guias normais/privadas</translation>
 <translation id="1644574205037202324">Histórico</translation>
 <translation id="17513872634828108">Abas abertas</translation>
@@ -31,6 +32,9 @@
 <translation id="4167670741834902166">Nova Aba Privada</translation>
 <translation id="4243710787042215766">Abrir numa guia privada</translation>
 <translation id="4526803704855831732">Abas Privadas</translation>
+<translation id="4719086422742491124">Saiba mais sobre tópicos em sites sem deixar a página. Selecione uma ou mais palavras para pesquisar.
+
+Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mecanismo de busca padrão no Vivaldi.</translation>
 <translation id="4759238208242260848">Downloads</translation>
 <translation id="4883379392681899581">Sair do modo privado</translation>
 <translation id="4943872375798546930">Nenhum resultado</translation>
@@ -39,6 +43,9 @@
 <translation id="5118676864324397542">Armazenamento do <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privado</translation>
 <translation id="5233638681132016545">Nova guia</translation>
+<translation id="5375131951310889874">Saiba mais sobre tópicos em sites sem deixar a página. Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mecanismo de busca padrão no Vivaldi. Ele envia a palavra e o conteúdo relacionado ao redor dela para o Google Search, retornando definições, imagens, resultados de busca, etc...
+
+Para ajustar o termo pesquisado, pressione por mais tempo para selecionar. Para refinar sua pesquisa, deslize o painel até em cima e toque na caixa de pesquisa.</translation>
 <translation id="572328651809341494">Abas recentes</translation>
 <translation id="6150320133806434356">Favorito salvo</translation>
 <translation id="6336451774241870485">Nova guia privada</translation>

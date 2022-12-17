@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,10 +75,6 @@ class RecentlyClosedTabsBridge : public sessions::TabRestoreServiceObserver {
 
   void Destroy(JNIEnv* env);
 
-  jboolean GetRecentlyClosedTabs(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& jtabs,
-      jint max_tab_count);
   jboolean GetRecentlyClosedEntries(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jentries,

@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -61,6 +61,7 @@ import(
 import("//third_party/blink/renderer/core/script/build.gni")
 import("//third_party/blink/renderer/core/scroll/build.gni")
 import("//third_party/blink/renderer/core/speculation_rules/build.gni")
+import("//third_party/blink/renderer/core/speech/build.gni")
 import("//third_party/blink/renderer/core/streams/build.gni")
 import("//third_party/blink/renderer/core/style/build.gni")
 import("//third_party/blink/renderer/core/svg/build.gni")
@@ -273,6 +274,7 @@ component("core") {
   sources += rebase_path(blink_core_sources_xml, "", "xml")
   sources +=
       rebase_path(blink_core_sources_xmlhttprequest, "", "xmlhttprequest")
+  sources += rebase_path(blink_core_sources_speech, "", "speech")
 
   configs -= core_config_remove
   configs += core_config_add
@@ -465,8 +467,14 @@ source_set("testing") {
     "testing/internal_settings.h",
     "testing/internals.cc",
     "testing/internals.h",
+    "testing/internals_cookies.cc",
+    "testing/internals_cookies.h",
     "testing/internals_delete_all_cookies.cc",
     "testing/internals_delete_all_cookies.h",
+    "testing/internals_get_all_cookies.cc",
+    "testing/internals_get_all_cookies.h",
+    "testing/internals_get_named_cookie.cc",
+    "testing/internals_get_named_cookie.h",
     "testing/intersection_observer_test_helper.h",
     "testing/mock_clipboard_host.cc",
     "testing/mock_clipboard_host.h",
@@ -511,7 +519,7 @@ generate_event_interfaces("core_event_interfaces") {
   sources = [
     "css/font_face_set_load_event.idl",
     "css/media_query_list_event.idl",
-    "display_lock/content_visibility_auto_state_changed_event.idl",
+    "display_lock/content_visibility_auto_state_change_event.idl",
     "dom/events/custom_event.idl",
     "dom/events/event.idl",
     "editing/ime/character_bounds_update_event.idl",
@@ -769,6 +777,13 @@ css_properties("make_core_generated_cssom_types") {
   ]
 }
 
+css_properties("make_core_generated_known_exposed_properties") {
+  script =
+      "../build/scripts/core/css/properties/make_known_exposed_properties.py"
+  other_inputs = [ "../build/scripts/core/css/properties/templates/known_exposed_properties.cc.tmpl" ]
+  outputs = [ "$blink_core_output_dir/known_exposed_properties.cc" ]
+}
+
 code_generator("make_core_generated_css_value_keywords") {
   script = "../build/scripts/core/css/make_css_value_keywords.py"
   json_inputs = [ "css/css_value_keywords.json5" ]
@@ -931,6 +946,11 @@ make_names("make_core_generated_keywords") {
 
 make_names("make_core_generated_performance_entry_names") {
   in_files = [ "timing/performance_entry_names.json5" ]
+  output_dir = blink_core_output_dir
+}
+
+make_names("make_core_generated_delivery_type_names") {
+  in_files = [ "timing/delivery_type_names.json5" ]
   output_dir = blink_core_output_dir
 }
 
@@ -1137,6 +1157,7 @@ targets_generating_sources = [
   ":make_core_generated_css_value_id_mappings",
   ":make_core_generated_css_value_keywords",
   ":make_core_generated_cssom_types",
+  ":make_core_generated_delivery_type_names",
   ":make_core_generated_event_factory",
   ":make_core_generated_event_names",
   ":make_core_generated_event_target_names",
@@ -1148,6 +1169,7 @@ targets_generating_sources = [
   ":make_core_generated_html_tokenizer_names",
   ":make_core_generated_input_type_names",
   ":make_core_generated_keywords",
+  ":make_core_generated_known_exposed_properties",
   ":make_core_generated_mathml_element_type_helpers",
   ":make_core_generated_mathml_names",
   ":make_core_generated_media_feature_names",
@@ -1350,10 +1372,7 @@ source_set("unit_tests") {
   sources += rebase_path(blink_core_tests_url, "", "url")
   sources += rebase_path(blink_core_tests_workers, "", "workers")
   sources += rebase_path(blink_core_tests_xml, "", "xml")
-
-  if (is_debug || dcheck_always_on) {
-    sources += [ "exported/web_disallow_transition_scope_test.cc" ]
-  }
+  sources += rebase_path(blink_core_tests_xmlhttprequest, "", "xmlhttprequest")
 
   configs += [
     ":blink_core_pch",
@@ -1669,7 +1688,8 @@ fuzzer_test("attribution_source_registration_fuzzer") {
     "//third_party/blink/renderer/platform:blink_fuzzer_test_support",
     "//third_party/libprotobuf-mutator",
   ]
-  seed_corpus = "//third_party/blink/renderer/core/frame/attribution_src/attribution_source_registration_corpus"
+  seed_corpus =
+      "//testing/libfuzzer/fuzzers/attribution_source_registration_corpus"
 }
 
 fuzzer_test("attribution_trigger_registration_fuzzer") {

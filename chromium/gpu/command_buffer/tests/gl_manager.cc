@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -359,8 +359,8 @@ void GLManager::InitializeWithWorkaroundsImpl(
 
   command_buffer_->set_handler(decoder_.get());
 
-  surface_ =
-      gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplay(), gfx::Size());
+  surface_ = gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplayEGL(),
+                                                gfx::Size());
   ASSERT_TRUE(surface_.get() != nullptr)
       << "could not create offscreen surface";
 

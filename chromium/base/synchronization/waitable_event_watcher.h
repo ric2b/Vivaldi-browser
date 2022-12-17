@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -156,7 +156,7 @@ class BASE_EXPORT WaitableEventWatcher
 
   // Ensures that StartWatching() and StopWatching() are called on the same
   // sequence.
-  SequenceChecker sequence_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 #endif
 };
 

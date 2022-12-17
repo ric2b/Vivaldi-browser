@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -667,7 +667,7 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
           base::StrCat({"log-", severity}));
       last_sent_event_id_ = log[i].id;
     }
-    if (!list.GetListDeprecated().empty()) {
+    if (!list.GetList().empty()) {
       MaybeCallJavascript("updateEventLog", std::move(list));
     }
   }
@@ -705,8 +705,8 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
       service_log_file_inode_ = response.first;
       last_sent_line_number_ = 0;
     }
-    if (!response.second.GetListDeprecated().empty()) {
-      last_sent_line_number_ += response.second.GetListDeprecated().size();
+    if (!response.second.GetList().empty()) {
+      last_sent_line_number_ += response.second.GetList().size();
       MaybeCallJavascript("updateServiceLog", std::move(response.second));
     }
     service_log_file_is_processing_ = false;
@@ -904,7 +904,7 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
     drive::DriveIntegrationService* service =
         drive::DriveIntegrationServiceFactory::FindForProfile(profile());
     if (!service || !service->is_enabled())
-      return NULL;
+      return nullptr;
     return service;
   }
 

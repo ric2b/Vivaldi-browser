@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,20 +8,23 @@
  * shared networks'.
  */
 
-import 'chrome://resources/cr_components/chromeos/network/cr_policy_network_indicator_mojo.m.js';
-import 'chrome://resources/cr_components/chromeos/network/network_proxy.m.js';
+import 'chrome://resources/ash/common/network/cr_policy_network_indicator_mojo.js';
+import 'chrome://resources/ash/common/network/network_proxy.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
-import 'chrome://resources/cr_elements/hidden_style_css.m.js';
+import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '../../controls/extension_controlled_indicator.js';
 import '../../settings_vars.css.js';
 import './internet_shared_css.js';
 import '../../controls/settings_toggle_button.js';
+import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 
-import {CrPolicyNetworkBehaviorMojo, CrPolicyNetworkBehaviorMojoInterface} from 'chrome://resources/cr_components/chromeos/network/cr_policy_network_behavior_mojo.m.js';
-import {CrToggleElement} from 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
-import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {CrPolicyNetworkBehaviorMojo, CrPolicyNetworkBehaviorMojoInterface} from 'chrome://resources/ash/common/network/cr_policy_network_behavior_mojo.js';
+import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
+import {ManagedProperties, ManagedString} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import {OncSource} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {routes} from '../os_route.js';
@@ -69,7 +72,7 @@ class NetworkProxySectionElement extends NetworkProxySectionElementBase {
         value: false,
       },
 
-      /** @type {!chromeos.networkConfig.mojom.ManagedProperties|undefined} */
+      /** @type {!ManagedProperties|undefined} */
       managedProperties: Object,
 
       /**
@@ -176,13 +179,12 @@ class NetworkProxySectionElement extends NetworkProxySectionElementBase {
    * @private
    */
   isShared_() {
-    const mojom = chromeos.networkConfig.mojom;
-    return this.managedProperties.source === mojom.OncSource.kDevice ||
-        this.managedProperties.source === mojom.OncSource.kDevicePolicy;
+    return this.managedProperties.source === OncSource.kDevice ||
+        this.managedProperties.source === OncSource.kDevicePolicy;
   }
 
   /**
-   * @return {!chromeos.networkConfig.mojom.ManagedString|undefined}
+   * @return {!ManagedString|undefined}
    * @private
    */
   getProxySettingsTypeProperty_() {

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
 #include "chrome/browser/ui/view_ids.h"
@@ -167,7 +168,9 @@ PageInfoViewFactory::CreateAdPersonalizationPageView() {
 // TODO(crbug.com/1346305): Use translatable strings instead of hardcoded one.
 std::unique_ptr<views::View> PageInfoViewFactory::CreateCookiesPageView() {
   return std::make_unique<PageInfoSubpageView>(
-      CreateSubpageHeader(u"Cookies", presenter_->GetSimpleSiteName()),
+      CreateSubpageHeader(
+          l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES_HEADER),
+          presenter_->GetSimpleSiteName()),
       std::make_unique<PageInfoCookiesContentView>(presenter_));
 }
 
@@ -317,7 +320,7 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
     case ContentSettingsType::AR:
       icon = &vector_icons::kVrHeadsetIcon;
       break;
-    case ContentSettingsType::WINDOW_PLACEMENT:
+    case ContentSettingsType::WINDOW_MANAGEMENT:
       icon = &vector_icons::kSelectWindowIcon;
       break;
     case ContentSettingsType::LOCAL_FONTS:
@@ -470,4 +473,50 @@ const ui::ImageModel PageInfoViewFactory::GetManagedPermissionIcon(
           : vector_icons::kBusinessIcon;
   return ui::ImageModel::FromVectorIcon(managed_vector_icon, ui::kColorIcon,
                                         GetIconSize());
+}
+
+// static
+const ui::ImageModel PageInfoViewFactory::GetBlockingThirdPartyCookiesIcon() {
+  return ui::ImageModel::FromVectorIcon(kEyeCrossedIcon, ui::kColorIcon,
+                                        GetIconSize());
+}
+
+// static
+const ui::ImageModel PageInfoViewFactory::GetFpsIcon() {
+  return ui::ImageModel::FromVectorIcon(vector_icons::kTenancyIcon,
+                                        ui::kColorIcon, GetIconSize());
+}
+
+// static
+const ui::ImageModel PageInfoViewFactory::GetEnforcedCookieControlsIcon(
+    CookieControlsEnforcement enforcement) {
+  switch (enforcement) {
+    case CookieControlsEnforcement::kEnforcedByExtension:
+      return GetEnforcedByExtensionIcon();
+    case CookieControlsEnforcement::kEnforcedByPolicy:
+      return GetEnforcedByPolicyIcon();
+    case CookieControlsEnforcement::kEnforcedByCookieSetting:
+      return GetEnforcedBySettingsIcon();
+    case CookieControlsEnforcement::kNoEnforcement:
+      NOTREACHED();
+      return ui::ImageModel();
+  }
+}
+
+// static
+const ui::ImageModel PageInfoViewFactory::GetEnforcedByPolicyIcon() {
+  return ui::ImageModel::FromVectorIcon(vector_icons::kBusinessIcon,
+                                        ui::kColorIcon, GetIconSize());
+}
+
+// static
+const ui::ImageModel PageInfoViewFactory::GetEnforcedByExtensionIcon() {
+  return ui::ImageModel::FromVectorIcon(vector_icons::kExtensionIcon,
+                                        ui::kColorIcon, GetIconSize());
+}
+
+// static
+const ui::ImageModel PageInfoViewFactory::GetEnforcedBySettingsIcon() {
+  return ui::ImageModel::FromVectorIcon(vector_icons::kSettingsIcon,
+                                        ui::kColorIcon, GetIconSize());
 }

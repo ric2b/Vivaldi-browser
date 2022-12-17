@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -8,7 +8,6 @@
 
 #include <memory.h>
 
-#include "ash/components/settings/timezone_settings.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/ash/child_accounts/time_limit_consistency_test/consistency_golden_converter.h"
@@ -16,6 +15,7 @@
 #include "chrome/browser/ash/child_accounts/time_limit_consistency_test/goldens/consistency_golden.pb.h"
 #include "chrome/browser/ash/child_accounts/time_limit_consistency_test/proto_matcher.h"
 #include "chrome/browser/ash/child_accounts/usage_time_limit_processor.h"
+#include "chromeos/ash/components/settings/timezone_settings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {

@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -86,11 +86,11 @@ source_set("onc") {
 
   if (is_chromeos_ash) {
     deps += [
-      "//ash/components/settings:settings",
       "//ash/constants:constants",
       "//base",
       "//chromeos/ash/components/install_attributes",
       "//chromeos/ash/components/network",
+      "//chromeos/ash/components/settings",
       "//chromeos/system:system",
       "//components/policy/core/common:common_constants",
       "//components/user_manager:user_manager",

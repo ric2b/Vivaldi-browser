@@ -1,4 +1,4 @@
-# Copyright 2015 The Chromium Authors. All rights reserved.
+# Copyright 2015 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -10,6 +10,7 @@ import("//build/config/features.gni")
 import("//components/feed/features.gni")
 import("//components/nacl/features.gni")
 import("//components/safe_browsing/buildflags.gni")
+import("//components/signin/features.gni")
 import("//crypto/features.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//extensions/buildflags/buildflags.gni")
@@ -25,13 +26,9 @@ assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
 # Please keep features in alphabetical order.
 declare_args() {
-  # Platforms where the BuiltinCertificateVerifierEnabled enterprise policy is
-  # supported. This must must match the supported_on list of the policy in
-  # policy_templates.json and be a subset of the
-  # builtin_cert_verifier_feature_supported platforms.
-  # See crbug.com/410574.  This can be removed when the builtin verifier is
-  # unconditionally enabled on all platforms.
-  builtin_cert_verifier_policy_supported = is_mac
+  # Enables the build to have logging enabled by default.
+  # This is intended for use only in developer builds.
+  chrome_enable_logging_by_default = is_debug
 
   # Platforms where the ChromeRootStoreEnabled enterprise policy is
   # supported. This must must match the supported_on/future_on list of the
@@ -78,6 +75,12 @@ declare_args() {
   # optimize_webui was moved to ui/base/ui_features.gni
 }
 
+# Logging must be disabled by default in all official builds (including special
+# DCHECK-enabled builds). Logging is enabled by default for debug builds, and
+# may be selectively enabled by default for release builds.
+assert(!chrome_enable_logging_by_default || !is_official_build,
+       "Logging must be disabled by default in Official builds")
+
 # Enables supervision for Family Link users.
 # Supervision is only supported on Chrome OS and Android.
 enable_supervised_users = is_chromeos || is_android
@@ -97,6 +100,7 @@ chrome_grit_defines = [
   "enable_hangout_services_extension=$enable_hangout_services_extension",
   "enable_nacl=$enable_nacl",
   "enable_plugins=$enable_plugins",
+  "enable_dice_support=$enable_dice_support",
   "enable_pdf=$enable_pdf",
   "enable_print_preview=$enable_print_preview",
   "enable_service_discovery=$enable_service_discovery",

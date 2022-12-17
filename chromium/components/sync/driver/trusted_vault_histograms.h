@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,6 +55,18 @@ enum class TrustedVaultDownloadKeysStatusForUMA {
   kMaxValue = kAborted
 };
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class TrustedVaultFileReadStatusForUMA {
+  kSuccess = 0,
+  kNotFound = 1,
+  kFileReadFailed = 2,
+  kMD5DigestMismatch = 3,
+  kFileProtoDeserializationFailed = 4,
+  kDataProtoDeserializationFailed = 5,
+  kMaxValue = kDataProtoDeserializationFailed
+};
+
 void RecordTrustedVaultDeviceRegistrationState(
     TrustedVaultDeviceRegistrationStateForUMA registration_state);
 
@@ -67,13 +79,20 @@ void RecordTrustedVaultURLFetchResponse(
     TrustedVaultURLFetchReasonForUMA reason =
         TrustedVaultURLFetchReasonForUMA::kUnspecified);
 
+// Records the outcome of trying to download keys from the server.
+// |also_log_with_v1_suffx| allows the caller to determine whether the local
+// device's registration is a V1 registration (that is, more reliable), which
+// causes a second histogram to be logged as well.
 void RecordTrustedVaultDownloadKeysStatus(
-    TrustedVaultDownloadKeysStatusForUMA status);
+    TrustedVaultDownloadKeysStatusForUMA status,
+    bool also_log_with_v1_suffx = false);
 
 void RecordTrustedVaultHistogramBooleanWithMigrationSuffix(
     const std::string& histogram_name,
     bool sample,
     const SyncStatus& sync_status);
+
+void RecordTrustedVaultFileReadStatus(TrustedVaultFileReadStatusForUMA status);
 
 }  // namespace syncer
 

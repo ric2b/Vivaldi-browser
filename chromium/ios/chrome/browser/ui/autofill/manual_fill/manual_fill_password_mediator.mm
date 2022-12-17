@@ -1,19 +1,19 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_mediator.h"
 
-#include <vector>
+#import <vector>
 
-#include "base/metrics/user_metrics.h"
-#include "base/strings/sys_string_conversions.h"
+#import "base/metrics/user_metrics.h"
+#import "base/strings/sys_string_conversions.h"
 #import "components/autofill/ios/browser/autofill_util.h"
 #import "components/autofill/ios/form_util/form_activity_observer_bridge.h"
-#include "components/autofill/ios/form_util/form_activity_params.h"
-#include "components/password_manager/core/browser/password_manager_client.h"
-#include "components/password_manager/core/browser/password_store_interface.h"
-#include "components/password_manager/core/common/password_manager_features.h"
+#import "components/autofill/ios/form_util/form_activity_params.h"
+#import "components/password_manager/core/browser/password_manager_client.h"
+#import "components/password_manager/core/browser/password_store_interface.h"
+#import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/autofill/manual_fill/passwords_fetcher.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/net/crurl.h"
@@ -29,11 +29,11 @@
 #import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/web_state_observer_bridge.h"
-#include "ui/base/l10n/l10n_util_mac.h"
-#include "ui/gfx/favicon_size.h"
-#include "url/gurl.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "ui/gfx/favicon_size.h"
+#import "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -238,6 +238,9 @@ BOOL AreCredentialsAtIndexesConnected(
         [[NSMutableArray alloc] init];
     __weak __typeof(self) weakSelf = self;
 
+    bool useUpdatedStrings = base::FeatureList::IsEnabled(
+        password_manager::features::kIOSPasswordUISplit);
+
     password_manager::PasswordManagerClient* passwordManagerClient =
         _webState ? PasswordTabHelper::FromWebState(_webState)
                         ->GetPasswordManagerClient()
@@ -247,7 +250,9 @@ BOOL AreCredentialsAtIndexesConnected(
         passwordManagerClient->IsSavingAndFillingEnabled(_URL) &&
         _activeFieldIsPassword) {
       NSString* suggestPasswordTitleString = l10n_util::GetNSString(
-          IDS_IOS_MANUAL_FALLBACK_SUGGEST_PASSWORD_WITH_DOTS);
+          useUpdatedStrings
+              ? IDS_IOS_MANUAL_FALLBACK_SUGGEST_STRONG_PASSWORD_WITH_DOTS
+              : IDS_IOS_MANUAL_FALLBACK_SUGGEST_PASSWORD_WITH_DOTS);
       auto suggestPasswordItem = [[ManualFillActionItem alloc]
           initWithTitle:suggestPasswordTitleString
                  action:^{
@@ -261,7 +266,9 @@ BOOL AreCredentialsAtIndexesConnected(
     }
 
     NSString* otherPasswordsTitleString = l10n_util::GetNSString(
-        IDS_IOS_MANUAL_FALLBACK_USE_OTHER_PASSWORD_WITH_DOTS);
+        useUpdatedStrings
+            ? IDS_IOS_MANUAL_FALLBACK_SELECT_PASSWORD_WITH_DOTS
+            : IDS_IOS_MANUAL_FALLBACK_USE_OTHER_PASSWORD_WITH_DOTS);
     auto otherPasswordsItem = [[ManualFillActionItem alloc]
         initWithTitle:otherPasswordsTitleString
                action:^{
@@ -273,8 +280,11 @@ BOOL AreCredentialsAtIndexesConnected(
         manual_fill::OtherPasswordsAccessibilityIdentifier;
     [actions addObject:otherPasswordsItem];
 
-    NSString* managePasswordsTitle =
-        l10n_util::GetNSString(IDS_IOS_MANUAL_FALLBACK_MANAGE_PASSWORDS);
+    // TODO(crbug.com/1361357) Remove IDS_IOS_MANUAL_FALLBACK_MANAGE_PASSWORDS
+    // after kIOSPasswordUISplit is on by default.
+    NSString* managePasswordsTitle = l10n_util::GetNSString(
+        useUpdatedStrings ? IDS_IOS_MANUAL_FALLBACK_MANAGE_SETTINGS
+                          : IDS_IOS_MANUAL_FALLBACK_MANAGE_PASSWORDS);
     auto managePasswordsItem = [[ManualFillActionItem alloc]
         initWithTitle:managePasswordsTitle
                action:^{

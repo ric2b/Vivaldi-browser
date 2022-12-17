@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -117,11 +117,25 @@ void PictureInPictureWindowManager::ExitPictureInPicture() {
     CloseWindowInternal();
 }
 
-content::WebContents* PictureInPictureWindowManager::GetWebContents() {
+content::WebContents* PictureInPictureWindowManager::GetWebContents() const {
   if (!pip_window_controller_)
     return nullptr;
 
   return pip_window_controller_->GetWebContents();
+}
+
+content::WebContents* PictureInPictureWindowManager::GetChildWebContents()
+    const {
+  if (!pip_window_controller_)
+    return nullptr;
+
+  return pip_window_controller_->GetChildWebContents();
+}
+
+absl::optional<gfx::Rect>
+PictureInPictureWindowManager::GetPictureInPictureWindowBounds() const {
+  return pip_window_controller_ ? pip_window_controller_->GetWindowBounds()
+                                : absl::nullopt;
 }
 
 void PictureInPictureWindowManager::CreateWindowInternal(

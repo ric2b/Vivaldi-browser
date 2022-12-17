@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,6 +35,7 @@
 #include "ui/views/test/combobox_test_api.h"
 #include "ui/views/test/view_metadata_test_utils.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/widget/unique_widget_ptr.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_utils.h"
@@ -542,7 +543,7 @@ TEST_F(ComboboxTest, Click) {
   TestComboboxListener listener(combobox_);
   combobox_->SetCallback(base::BindRepeating(
       &TestComboboxListener::OnPerformAction, base::Unretained(&listener)));
-  RunScheduledLayout(combobox_);
+  views::test::RunScheduledLayout(combobox_);
 
   // Click the left side. The menu is shown.
   EXPECT_EQ(0, menu_show_count_);
@@ -559,7 +560,7 @@ TEST_F(ComboboxTest, ClickButDisabled) {
   combobox_->SetCallback(base::BindRepeating(
       &TestComboboxListener::OnPerformAction, base::Unretained(&listener)));
 
-  RunScheduledLayout(combobox_);
+  views::test::RunScheduledLayout(combobox_);
   combobox_->SetEnabled(false);
 
   // Click the left side, but nothing happens since the combobox is disabled.
@@ -637,7 +638,7 @@ TEST_F(ComboboxTest, NotifyOnClickWithMouse) {
   combobox_->SetCallback(base::BindRepeating(
       &TestComboboxListener::OnPerformAction, base::Unretained(&listener)));
 
-  RunScheduledLayout(combobox_);
+  views::test::RunScheduledLayout(combobox_);
 
   // Click the right side (arrow button). The menu is shown.
   const gfx::Point right_point(combobox_->x() + combobox_->width() - 1,

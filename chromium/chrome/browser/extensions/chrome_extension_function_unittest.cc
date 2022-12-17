@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,8 @@ namespace {
 void SuccessCallback(bool* did_respond,
                      ExtensionFunction::ResponseType type,
                      base::Value::List results,
-                     const std::string& error) {
+                     const std::string& error,
+                     mojom::ExtraResponseDataPtr) {
   EXPECT_EQ(ExtensionFunction::ResponseType::SUCCEEDED, type);
   *did_respond = true;
 }
@@ -32,7 +33,8 @@ void SuccessCallback(bool* did_respond,
 void FailCallback(bool* did_respond,
                   ExtensionFunction::ResponseType type,
                   base::Value::List results,
-                  const std::string& error) {
+                  const std::string& error,
+                  mojom::ExtraResponseDataPtr) {
   EXPECT_EQ(ExtensionFunction::ResponseType::FAILED, type);
   *did_respond = true;
 }

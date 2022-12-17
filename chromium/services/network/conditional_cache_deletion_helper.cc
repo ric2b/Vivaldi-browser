@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -74,7 +74,7 @@ void ConditionalCacheDeletionHelper::IterateOverEntries(
       if (condition_.Run(previous_entry_.get())) {
         previous_entry_->Doom();
       }
-      previous_entry_->Close();
+      previous_entry_.ExtractAsDangling()->Close();
     }
 
     if (result.net_error() == net::ERR_FAILED) {

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -142,6 +142,8 @@ class BinaryUploadService : public KeyedService {
     void set_analysis_connector(
         enterprise_connectors::AnalysisConnector connector);
     void set_url(const std::string& url);
+    void set_source(const std::string& source);
+    void set_destination(const std::string& destination);
     void set_csd(ClientDownloadRequest csd);
     void add_tag(const std::string& tag);
     void set_email(const std::string& email);
@@ -152,6 +154,9 @@ class BinaryUploadService : public KeyedService {
     void clear_dlp_scan_request();
     void set_client_metadata(enterprise_connectors::ClientMetadata metadata);
     void set_content_type(const std::string& type);
+    void set_tab_title(const std::string& tab_title);
+    void set_user_action_id(const std::string& user_action_id);
+    void set_user_action_requests_count(uint64_t user_action_requests_count);
 
     std::string SetRandomRequestToken();
 
@@ -163,6 +168,8 @@ class BinaryUploadService : public KeyedService {
     const std::string& filename() const;
     const std::string& digest() const;
     const std::string& content_type() const;
+    const std::string& user_action_id() const;
+    uint64_t user_action_requests_count() const;
 
     // Finish the request, with the given `result` and `response` from the
     // server.

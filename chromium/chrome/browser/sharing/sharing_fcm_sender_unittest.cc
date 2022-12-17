@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,8 +21,8 @@
 #include "chrome/browser/sharing/web_push/web_push_sender.h"
 #include "components/gcm_driver/crypto/gcm_encryption_result.h"
 #include "components/gcm_driver/fake_gcm_driver.h"
-#include "components/sync/driver/test_sync_service.h"
 #include "components/sync/model/model_type_controller_delegate.h"
+#include "components/sync/test/test_sync_service.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/fake_device_info_sync_service.h"
 #include "components/sync_device_info/fake_local_device_info_provider.h"
@@ -155,7 +155,7 @@ class MockVapidKeyManager : public VapidKeyManager {
   MockVapidKeyManager()
       : VapidKeyManager(/*sharing_sync_preference=*/nullptr,
                         /*sync_service=*/nullptr) {}
-  ~MockVapidKeyManager() {}
+  ~MockVapidKeyManager() override {}
 
   MOCK_METHOD0(GetOrCreateKey, crypto::ECPrivateKey*());
 };
@@ -274,7 +274,6 @@ TEST_F(SharingFCMSenderTest, NoVapidKey) {
 }
 
 TEST_F(SharingFCMSenderTest, NoChannelsSpecified) {
-  test_sync_service_.SetActiveDataTypes({syncer::SHARING_MESSAGE});
   sync_prefs_.SetFCMRegistration(SharingSyncPreference::FCMRegistration(
       kAuthorizedEntity, base::Time::Now()));
 
@@ -304,7 +303,7 @@ TEST_F(SharingFCMSenderTest, NoChannelsSpecified) {
 
 TEST_F(SharingFCMSenderTest, SendViaSyncDisabled) {
   scoped_feature_list_.InitAndDisableFeature(kSharingSendViaSync);
-  test_sync_service_.SetActiveDataTypes({});
+  test_sync_service_.SetFailedDataTypes(syncer::SHARING_MESSAGE);
   sync_prefs_.SetFCMRegistration(SharingSyncPreference::FCMRegistration(
       kAuthorizedEntity, base::Time::Now()));
 
@@ -337,7 +336,6 @@ TEST_F(SharingFCMSenderTest, SendViaSyncDisabled) {
 
 TEST_F(SharingFCMSenderTest, PreferVapid) {
   scoped_feature_list_.InitAndEnableFeature(kSharingPreferVapid);
-  test_sync_service_.SetActiveDataTypes({syncer::SHARING_MESSAGE});
   sync_prefs_.SetFCMRegistration(SharingSyncPreference::FCMRegistration(
       kAuthorizedEntity, base::Time::Now()));
 
@@ -382,7 +380,6 @@ TEST_F(SharingFCMSenderTest, PreferVapid) {
 
 TEST_F(SharingFCMSenderTest, PreferSync) {
   scoped_feature_list_.InitAndDisableFeature(kSharingPreferVapid);
-  test_sync_service_.SetActiveDataTypes({syncer::SHARING_MESSAGE});
   sync_prefs_.SetFCMRegistration(SharingSyncPreference::FCMRegistration(
       kAuthorizedEntity, base::Time::Now()));
 
@@ -539,8 +536,6 @@ class SharingFCMSenderCommitErrorCodeTest
       public testing::WithParamInterface<CommitErrorCodeTestData> {};
 
 TEST_P(SharingFCMSenderCommitErrorCodeTest, ErrorCodeTest) {
-  test_sync_service_.SetActiveDataTypes({syncer::SHARING_MESSAGE});
-
   fake_sharing_message_bridge_.set_error_code(GetParam().commit_error_code);
 
   chrome_browser_sharing::FCMChannelConfiguration fcm_channel;
@@ -588,8 +583,6 @@ INSTANTIATE_TEST_SUITE_P(All,
                          testing::ValuesIn(kCommitErrorCodeTestData));
 
 TEST_F(SharingFCMSenderTest, ServerTarget) {
-  test_sync_service_.SetActiveDataTypes({syncer::SHARING_MESSAGE});
-
   fake_sharing_message_bridge_.set_error_code(
       sync_pb::SharingMessageCommitError::NONE);
 

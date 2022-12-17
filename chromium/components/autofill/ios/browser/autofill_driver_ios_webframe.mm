@@ -1,26 +1,10 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/autofill/ios/browser/autofill_driver_ios_webframe.h"
 
 namespace autofill {
-
-// static
-void AutofillDriverIOSWebFrameFactory::CreateForWebStateAndDelegate(
-    web::WebState* web_state,
-    AutofillClient* client,
-    id<AutofillDriverIOSBridge> bridge,
-    const std::string& app_locale,
-    AutofillManager::EnableDownloadManager enable_download_manager) {
-  if (FromWebState(web_state))
-    return;
-
-  web_state->SetUserData(
-      UserDataKey(),
-      std::make_unique<AutofillDriverIOSWebFrameFactory>(
-          web_state, client, bridge, app_locale, enable_download_manager));
-}
 
 AutofillDriverIOSWebFrameFactory::AutofillDriverIOSWebFrameFactory(
     web::WebState* web_state,

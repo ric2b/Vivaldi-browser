@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,9 @@ class ZXDGToplevelV6WrapperImpl : public ShellToplevelWrapper {
   void SetFloat() override;
   void UnSetFloat() override;
   void SetZOrder(ZOrderLevel z_order) override;
+  bool SupportsActivation() override;
+  void Activate() override;
+  void Deactivate() override;
 
   ZXDGSurfaceV6WrapperImpl* zxdg_surface_v6_wrapper() const;
 

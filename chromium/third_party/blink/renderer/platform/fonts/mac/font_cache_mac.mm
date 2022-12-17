@@ -47,7 +47,7 @@
 #include "third_party/blink/renderer/platform/fonts/mac/font_platform_data_mac.h"
 #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
@@ -74,10 +74,13 @@ const AtomicString& FontCache::LegacySystemFontFamily() {
   return font_family_names::kBlinkMacSystemFont;
 }
 
-static void InvalidateFontCache() {
+// static
+void FontCache::InvalidateFromAnyThread() {
   if (!IsMainThread()) {
-    Thread::MainThread()->GetDeprecatedTaskRunner()->PostTask(
-        FROM_HERE, WTF::Bind(&InvalidateFontCache));
+    Thread::MainThread()
+        ->GetTaskRunner(MainThreadTaskRunnerRestricted())
+        ->PostTask(FROM_HERE,
+                   WTF::BindOnce(&FontCache::InvalidateFromAnyThread));
     return;
   }
   FontCache::Get().Invalidate();
@@ -91,7 +94,7 @@ static void FontCacheRegisteredFontsChangedNotificationCallback(
     CFDictionaryRef) {
   DCHECK_EQ(observer, &FontCache::Get());
   DCHECK(CFEqual(name, kCTFontManagerRegisteredFontsChangedNotification));
-  InvalidateFontCache();
+  FontCache::InvalidateFromAnyThread();
 }
 
 static bool UseHinting() {

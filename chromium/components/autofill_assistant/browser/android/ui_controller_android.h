@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -143,6 +143,8 @@ class UiControllerAndroid : public EmptyControllerObserver,
       const PromptQrCodeScanProto* qr_code_scan) override;
   void OnGenericUserInterfaceChanged(
       const GenericUserInterfaceProto* generic_ui) override;
+  void OnShowAccountScreen(const ShowAccountScreenProto& proto,
+                           const std::string& email_address) override;
   void OnPersistentGenericUserInterfaceChanged(
       const GenericUserInterfaceProto* generic_ui) override;
   void OnTtsButtonVisibilityChanged(bool visible) override;

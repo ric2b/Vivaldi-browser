@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,8 +20,6 @@ import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.bookmarks.BookmarkListEntry.ViewType;
 import org.chromium.chrome.browser.bookmarks.BookmarkRow.Location;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
@@ -35,6 +33,7 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.ui.signin.SyncPromoController.SyncPromoState;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.util.GlobalDiscardableReferencePool;
 import org.chromium.components.browser_ui.widget.dragreorder.DragReorderableListAdapter;
@@ -46,7 +45,6 @@ import org.chromium.components.image_fetcher.ImageFetcher;
 import org.chromium.components.image_fetcher.ImageFetcherConfig;
 import org.chromium.components.image_fetcher.ImageFetcherFactory;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
-import org.chromium.components.power_bookmarks.PowerBookmarkType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -177,7 +175,7 @@ public class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkLis
     private void filterForPriceTrackingCategory(List<BookmarkId> bookmarks) {
         for (int i = bookmarks.size() - 1; i >= 0; i--) {
             PowerBookmarkMeta meta = mDelegate.getModel().getPowerBookmarkMeta(bookmarks.get(i));
-            if (meta == null || meta.getType() != PowerBookmarkType.SHOPPING
+            if (meta == null || !meta.hasShoppingSpecifics()
                     || !meta.getShoppingSpecifics().getIsPriceTracked()) {
                 bookmarks.remove(i);
                 continue;
@@ -612,7 +610,7 @@ public class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkLis
     private int getBookmarkItemEndIndex() {
         int endIndex = mElements.size() - 1;
         BookmarkItem bookmarkItem = mElements.get(endIndex).getBookmarkItem();
-        if (bookmarkItem == null || !bookmarkItem.isMovable()) {
+        if (bookmarkItem == null || !BookmarkUtils.isMovable(bookmarkItem)) {
             endIndex--;
         }
         return endIndex;

@@ -1,9 +1,11 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef UI_LINUX_WINDOW_FRAME_PROVIDER_H_
 #define UI_LINUX_WINDOW_FRAME_PROVIDER_H_
+
+#include "ui/base/ui_base_types.h"
 
 namespace gfx {
 class Canvas;
@@ -30,7 +32,8 @@ class WindowFrameProvider {
   virtual void PaintWindowFrame(gfx::Canvas* canvas,
                                 const gfx::Rect& rect,
                                 int top_area_height,
-                                bool focused) = 0;
+                                bool focused,
+                                ui::WindowTiledEdges tiled_edges) = 0;
 };
 
 }  // namespace ui

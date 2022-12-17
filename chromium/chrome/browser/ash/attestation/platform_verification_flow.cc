@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -100,9 +100,9 @@ PlatformVerificationFlow::ChallengeContext::ChallengeContext(
 PlatformVerificationFlow::ChallengeContext::~ChallengeContext() = default;
 
 PlatformVerificationFlow::PlatformVerificationFlow()
-    : attestation_flow_(NULL),
+    : attestation_flow_(nullptr),
       attestation_client_(AttestationClient::Get()),
-      delegate_(NULL),
+      delegate_(nullptr),
       timeout_delay_(base::Seconds(kTimeoutInSeconds)) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   std::unique_ptr<ServerProxy> attestation_ca_client(new AttestationCAClient());
@@ -240,8 +240,8 @@ void PlatformVerificationFlow::GetCertificate(
                      context, context->data.account_id, std::move(timer));
   attestation_flow_->GetCertificate(
       PROFILE_CONTENT_PROTECTION_CERTIFICATE, context->data.account_id,
-      context->data.service_id, force_new_key, std::string() /*key_name*/,
-      std::move(certificate_callback));
+      context->data.service_id, force_new_key, ::attestation::KEY_TYPE_RSA,
+      std::string() /*key_name*/, std::move(certificate_callback));
 }
 
 void PlatformVerificationFlow::OnCertificateReady(
@@ -326,7 +326,8 @@ void PlatformVerificationFlow::OnChallengeReady(
     attestation_flow_->GetCertificate(
         PROFILE_CONTENT_PROTECTION_CERTIFICATE, context.account_id,
         context.service_id,
-        true,           // force_new_key
+        true,  // force_new_key
+        ::attestation::KEY_TYPE_RSA,
         std::string(),  // key_name, empty means a default one will be
                         // generated.
         std::move(renew_callback));

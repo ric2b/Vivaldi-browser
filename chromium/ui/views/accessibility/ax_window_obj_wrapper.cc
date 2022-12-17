@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,6 @@
 #include "ui/aura/window_tree_host_platform.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/compositor/layer.h"
-#include "ui/platform_window/platform_window.h"
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/widget/widget.h"
 
@@ -95,25 +94,19 @@ std::string GetPlatformWindowId(aura::Window* window) {
   if (!window_tree_host)
     return std::string();
 
-  // Lacros is based on Ozone/Wayland, which uses PlatformWindow and
-  // aura::WindowTreeHostPlatform.
-  aura::WindowTreeHostPlatform* window_tree_host_platform =
-      static_cast<aura::WindowTreeHostPlatform*>(window_tree_host);
-
   // Prefer the DesktopWindowTreeHostPlatform if it exists.
   DesktopWindowTreeHostPlatform* desktop_window_tree_host_platform =
       DesktopWindowTreeHostPlatform::GetHostForWidget(
           window_tree_host->GetAcceleratedWidget());
   if (!desktop_window_tree_host_platform)
-    return window_tree_host_platform->platform_window()->GetWindowUniqueId();
+    return window_tree_host->GetUniqueId();
 
   while (desktop_window_tree_host_platform->window_parent()) {
     desktop_window_tree_host_platform =
         desktop_window_tree_host_platform->window_parent();
   }
 
-  return desktop_window_tree_host_platform->platform_window()
-      ->GetWindowUniqueId();
+  return desktop_window_tree_host_platform->GetUniqueId();
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
@@ -281,19 +274,15 @@ void AXWindowObjWrapper::OnCaretBoundsChanged(
 }
 
 void AXWindowObjWrapper::OnWindowDestroyed(aura::Window* window) {
+  if (is_root_window_)
+    aura_obj_cache_->OnRootWindowObjDestroyed(window_);
+
   aura_obj_cache_->Remove(window, nullptr);
 }
 
 void AXWindowObjWrapper::OnWindowDestroying(aura::Window* window) {
-  if (window == window_)
-    window_destroying_ = true;
-
-  Widget* widget = GetWidgetForWindow(window);
-  if (widget)
-    aura_obj_cache_->Remove(widget);
-
-  if (is_root_window_)
-    aura_obj_cache_->OnRootWindowObjDestroyed(window_);
+  DCHECK_EQ(window, window_);
+  window_destroying_ = true;
 }
 
 void AXWindowObjWrapper::OnWindowHierarchyChanged(

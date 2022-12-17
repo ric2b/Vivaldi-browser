@@ -46,7 +46,6 @@ interface VivaldiFrameService {
   GetAccessKeysForPage() => (array<AccessKey> access_keys);
   AccessKeyAction(string access_key);
 
-  UpdateSpatnavRects();
   ScrollPage(ScrollType scroll_type, int32 scroll_amount);
 
   GetCurrentSpatnavRect() => (SpatnavRect rect);
@@ -60,6 +59,12 @@ interface VivaldiFrameService {
   DetermineTextLanguage(string text) => (string langCode);
 
   ActivateSpatnavElement(int32 modifiers);
+
+  // Triggered on 'esc' by default. Un-hovers current element and checks for
+  // layout change. Meaning we closed a menu or something similar originally
+  // triggered by spatnav hover.
+  CloseSpatnavOrCurrentOpenMenu() => (bool layout_changed,
+                                      bool current_element_valid);
 
   // Inserts text into input fields.
   InsertText(string text);

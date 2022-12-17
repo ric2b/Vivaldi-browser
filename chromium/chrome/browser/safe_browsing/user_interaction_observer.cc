@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -245,7 +245,7 @@ void SafeBrowsingUserInteractionObserver::OnPaste() {
   // DO NOT add code past this point. |this| is destroyed.
 }
 
-void SafeBrowsingUserInteractionObserver::OnBubbleAdded() {
+void SafeBrowsingUserInteractionObserver::OnPromptAdded() {
   // The page requested a permission that triggered a permission prompt. Deny
   // and show the interstitial.
   permissions::PermissionRequestManager* permission_request_manager =

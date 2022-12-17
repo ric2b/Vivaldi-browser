@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,6 +26,7 @@ class IpcScreenControls : public ScreenControls {
   // ScreenControls interface.
   void SetScreenResolution(const ScreenResolution& resolution,
                            absl::optional<webrtc::ScreenId> screen_id) override;
+  void SetVideoLayout(const protocol::VideoLayout& video_layout) override;
 
  private:
   // Wraps the IPC channel to the desktop session agent.

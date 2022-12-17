@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,7 +41,7 @@ namespace disk_cache {
 class BackendFileOperations;
 class UnboundBackendFileOperations;
 
-NET_EXPORT_PRIVATE extern const base::Feature kSimpleCachePrefetchExperiment;
+NET_EXPORT_PRIVATE BASE_DECLARE_FEATURE(kSimpleCachePrefetchExperiment);
 NET_EXPORT_PRIVATE extern const char kSimpleCacheFullPrefetchBytesParam[];
 NET_EXPORT_PRIVATE extern const char
     kSimpleCacheTrailerPrefetchSpeculativeBytesParam[];

@@ -1,10 +1,10 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_coordinator.h"
 
-#include "base/check_op.h"
+#import "base/check_op.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
@@ -43,10 +43,12 @@
 @implementation UnifiedConsentCoordinator
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                                   browser:(Browser*)browser {
+                                   browser:(Browser*)browser
+                    postRestoreSigninPromo:(BOOL)postRestoreSigninPromo {
   self = [super initWithBaseViewController:nil browser:browser];
   if (self) {
-    _unifiedConsentViewController = [[UnifiedConsentViewController alloc] init];
+    _unifiedConsentViewController = [[UnifiedConsentViewController alloc]
+        initWithPostRestoreSigninPromo:postRestoreSigninPromo];
     _unifiedConsentViewController.delegate = self;
 
     _authenticationService = AuthenticationServiceFactory::GetForBrowserState(
@@ -82,20 +84,16 @@
 
 #pragma mark - Properties
 
-- (ChromeIdentity*)selectedIdentity {
+- (id<SystemIdentity>)selectedIdentity {
   return self.unifiedConsentMediator.selectedIdentity;
 }
 
-- (void)setSelectedIdentity:(ChromeIdentity*)selectedIdentity {
+- (void)setSelectedIdentity:(id<SystemIdentity>)selectedIdentity {
   self.unifiedConsentMediator.selectedIdentity = selectedIdentity;
 }
 
 - (UIViewController*)viewController {
   return self.unifiedConsentViewController;
-}
-
-- (int)openSettingsStringId {
-  return self.unifiedConsentViewController.openSettingsStringId;
 }
 
 - (const std::vector<int>&)consentStringIds {
@@ -210,7 +208,7 @@
 }
 
 - (void)identityChooserCoordinator:(IdentityChooserCoordinator*)coordinator
-                 didSelectIdentity:(ChromeIdentity*)identity {
+                 didSelectIdentity:(id<SystemIdentity>)identity {
   CHECK_EQ(self.identityChooserCoordinator, coordinator);
   self.selectedIdentity = identity;
 }

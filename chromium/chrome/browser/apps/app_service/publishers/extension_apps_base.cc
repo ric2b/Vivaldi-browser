@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,6 +55,7 @@
 #include "extensions/common/switches.h"
 #include "net/base/url_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "url/url_constants.h"
 
 // TODO(crbug.com/826982): life cycle events. Extensions can be installed and
@@ -120,6 +121,7 @@ ash::ShelfLaunchSource ConvertLaunchSource(apps::LaunchSource launch_source) {
     case apps::LaunchSource::kFromOsLogin:
     case apps::LaunchSource::kFromProtocolHandler:
     case apps::LaunchSource::kFromUrlHandler:
+    case apps::LaunchSource::kFromLockScreen:
       return ash::LAUNCH_FROM_UNKNOWN;
   }
 }
@@ -229,6 +231,7 @@ AppPtr ExtensionAppsBase::CreateAppImpl(const extensions::Extension* extension,
   app->short_name = extension->short_name();
   app->description = extension->description();
   app->version = extension->GetVersionForDisplay();
+  app->policy_ids = {extension->id()};
 
   if (profile_) {
     auto* prefs = extensions::ExtensionPrefs::Get(profile_);
@@ -263,6 +266,7 @@ apps::mojom::AppPtr ExtensionAppsBase::ConvertImpl(
   app->short_name = extension->short_name();
   app->description = extension->description();
   app->version = extension->GetVersionForDisplay();
+  app->policy_ids = {extension->id()};
 
   if (profile_) {
     auto* prefs = extensions::ExtensionPrefs::Get(profile_);
@@ -389,8 +393,6 @@ void ExtensionAppsBase::Initialize() {
   extensions::ExtensionSystem::Get(profile_)->ready().Post(
       FROM_HERE, base::BindOnce(&ExtensionAppsBase::OnExtensionsReady,
                                 weak_factory_.GetWeakPtr()));
-
-  app_service_ = proxy()->AppService().get();
 }
 
 void ExtensionAppsBase::OnExtensionsReady() {
@@ -478,6 +480,7 @@ void ExtensionAppsBase::Launch(const std::string& app_id,
     case apps::LaunchSource::kFromOsLogin:
     case apps::LaunchSource::kFromProtocolHandler:
     case apps::LaunchSource::kFromUrlHandler:
+    case apps::LaunchSource::kFromLockScreen:
       break;
   }
 
@@ -517,15 +520,20 @@ void ExtensionAppsBase::LaunchAppWithFiles(
   LaunchImpl(std::move(params));
 }
 
-void ExtensionAppsBase::LaunchAppWithIntent(
-    const std::string& app_id,
-    int32_t event_flags,
-    IntentPtr intent,
-    LaunchSource launch_source,
-    WindowInfoPtr window_info,
-    base::OnceCallback<void(bool)> callback) {
-  LaunchAppWithIntentImpl(app_id, event_flags, std::move(intent), launch_source,
-                          std::move(window_info), std::move(callback));
+void ExtensionAppsBase::LaunchAppWithIntent(const std::string& app_id,
+                                            int32_t event_flags,
+                                            IntentPtr intent,
+                                            LaunchSource launch_source,
+                                            WindowInfoPtr window_info,
+                                            LaunchCallback callback) {
+  LaunchAppWithIntentImpl(
+      app_id, event_flags, std::move(intent), launch_source,
+      std::move(window_info),
+      base::BindOnce(
+          [](LaunchCallback callback, bool success) {
+            std::move(callback).Run(ConvertBoolToLaunchResult(success));
+          },
+          std::move(callback)));
 }
 
 void ExtensionAppsBase::LaunchAppWithParams(AppLaunchParams&& params,
@@ -671,6 +679,7 @@ void ExtensionAppsBase::Launch(const std::string& app_id,
     case apps::mojom::LaunchSource::kFromOsLogin:
     case apps::mojom::LaunchSource::kFromProtocolHandler:
     case apps::mojom::LaunchSource::kFromUrlHandler:
+    case apps::mojom::LaunchSource::kFromLockScreen:
       break;
   }
 
@@ -959,9 +968,14 @@ void ExtensionAppsBase::LaunchAppWithIntentWhenEnabled(
     LaunchSource launch_source,
     WindowInfoPtr window_info,
     CallbackWrapper wrapper) {
-  LaunchAppWithIntent(app_id, event_flags, std::move(intent),
-                      std::move(launch_source), std::move(window_info),
-                      std::move(wrapper.callback));
+  LaunchAppWithIntent(
+      app_id, event_flags, std::move(intent), std::move(launch_source),
+      std::move(window_info),
+      base::BindOnce(
+          [](LaunchAppWithIntentCallback callback, LaunchResult&& result) {
+            std::move(callback).Run(ConvertLaunchResultToBool(result));
+          },
+          std::move(wrapper.callback)));
 }
 
 void ExtensionAppsBase::LaunchMojom(const std::string& app_id,

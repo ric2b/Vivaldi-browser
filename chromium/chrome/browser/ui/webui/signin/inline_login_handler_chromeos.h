@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,9 +12,6 @@
 #include "chrome/browser/ui/webui/signin/inline_login_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_helper_chromeos.h"
 #include "components/account_manager_core/account.h"
-#include "components/account_manager_core/chromeos/account_manager.h"
-#include "google_apis/gaia/gaia_auth_consumer.h"
-#include "google_apis/gaia/gaia_auth_fetcher.h"
 
 class PrefRegistrySimple;
 

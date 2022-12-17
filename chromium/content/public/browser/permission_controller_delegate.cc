@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@
 
 namespace content {
 
-bool PermissionControllerDelegate::IsPermissionOverridableByDevTools(
+bool PermissionControllerDelegate::IsPermissionOverridable(
     blink::PermissionType permission,
     const absl::optional<url::Origin>& origin) {
   return true;

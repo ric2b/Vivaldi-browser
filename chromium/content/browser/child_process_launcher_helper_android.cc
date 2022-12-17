@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -248,6 +248,15 @@ void ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread(
 base::File OpenFileToShare(const base::FilePath& path,
                            base::MemoryMappedFile::Region* region) {
   return base::File(base::android::OpenApkAsset(path.value(), region));
+}
+
+base::android::ChildBindingState
+ChildProcessLauncherHelper::GetEffectiveChildBindingState() {
+  JNIEnv* env = AttachCurrentThread();
+  DCHECK(env);
+  return static_cast<base::android::ChildBindingState>(
+      Java_ChildProcessLauncherHelperImpl_getEffectiveChildBindingState(
+          env, java_peer_));
 }
 
 void ChildProcessLauncherHelper::DumpProcessStack(

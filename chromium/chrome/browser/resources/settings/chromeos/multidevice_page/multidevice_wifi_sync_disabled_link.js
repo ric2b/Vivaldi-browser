@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,7 @@
 
 import '../../settings_shared.css.js';
 
-import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -89,13 +89,7 @@ class SettingsMultideviceWifiSyncDisabledLinkElement extends
    */
   onChromeSyncLinkClick_(event) {
     event.preventDefault();
-    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled')) {
-      // If syncSettingsCategorization is enabled, then WiFi sync is controlled
-      // by the OS sync settings, not the browser sync settings.
-      Router.getInstance().navigateTo(routes.OS_SYNC);
-    } else {
-      Router.getInstance().navigateTo(routes.SYNC_ADVANCED);
-    }
+    Router.getInstance().navigateTo(routes.OS_SYNC);
   }
 }
 

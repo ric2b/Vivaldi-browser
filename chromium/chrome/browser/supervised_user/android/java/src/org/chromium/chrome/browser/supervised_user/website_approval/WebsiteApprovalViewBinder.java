@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,14 +23,16 @@ class WebsiteApprovalViewBinder {
         if (propertyKey == WebsiteApprovalProperties.CHILD_NAME) {
             view.setTitle(model.get(WebsiteApprovalProperties.CHILD_NAME));
         } else if (propertyKey == WebsiteApprovalProperties.URL) {
-            view.setDomainText(model.get(WebsiteApprovalProperties.URL).getHost());
-            view.setFullUrlText(model.get(WebsiteApprovalProperties.URL).getSpec());
+            view.setDomainText(model.get(WebsiteApprovalProperties.URL));
+            view.setFullUrlText(model.get(WebsiteApprovalProperties.URL));
         } else if (propertyKey == WebsiteApprovalProperties.ON_CLICK_APPROVE) {
             view.getApproveButton().setOnClickListener(
                     model.get(WebsiteApprovalProperties.ON_CLICK_APPROVE));
         } else if (propertyKey == WebsiteApprovalProperties.ON_CLICK_DENY) {
             view.getDenyButton().setOnClickListener(
                     model.get(WebsiteApprovalProperties.ON_CLICK_DENY));
+        } else if (propertyKey == WebsiteApprovalProperties.FAVICON) {
+            view.setFaviconBitmap(model.get(WebsiteApprovalProperties.FAVICON));
         } else {
             assert false : "Unhandled update to property: " + propertyKey;
         }

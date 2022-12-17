@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,12 @@ class ReadAnythingControllerTest : public TestWithBrowserView {
     browser()->profile()->GetPrefs()->SetInteger(
         prefs::kAccessibilityReadAnythingColorInfo,
         (int)read_anything::mojom::Colors::kDefaultValue);
+    browser()->profile()->GetPrefs()->SetInteger(
+        prefs::kAccessibilityReadAnythingLineSpacing,
+        (int)read_anything::mojom::Spacing::kDefault);
+    browser()->profile()->GetPrefs()->SetInteger(
+        prefs::kAccessibilityReadAnythingLetterSpacing,
+        (int)read_anything::mojom::Spacing::kDefault);
   }
 
   void MockOnFontChoiceChanged(int index) {
@@ -42,10 +48,20 @@ class ReadAnythingControllerTest : public TestWithBrowserView {
 
   void MockOnColorsChanged(int index) { controller_->OnColorsChanged(index); }
 
+  void MockOnLineSpacingChanged(int index) {
+    controller_->OnLineSpacingChanged(index);
+  }
+
+  void MockOnLetterSpacingChanged(int index) {
+    controller_->OnLetterSpacingChanged(index);
+  }
+
   void MockModelInit(std::string font_name,
                      double font_scale,
-                     read_anything::mojom::Colors colors) {
-    model_->Init(font_name, font_scale, colors);
+                     read_anything::mojom::Colors colors,
+                     read_anything::mojom::Spacing line_spacing,
+                     read_anything::mojom::Spacing letter_spacing) {
+    model_->Init(font_name, font_scale, colors, line_spacing, letter_spacing);
   }
 
   std::string GetPrefFontName() {
@@ -61,6 +77,16 @@ class ReadAnythingControllerTest : public TestWithBrowserView {
   int GetPrefsColors() {
     return browser()->profile()->GetPrefs()->GetInteger(
         prefs::kAccessibilityReadAnythingColorInfo);
+  }
+
+  int GetPrefsLineSpacing() {
+    return browser()->profile()->GetPrefs()->GetInteger(
+        prefs::kAccessibilityReadAnythingLineSpacing);
+  }
+
+  int GetPrefsLetterSpacing() {
+    return browser()->profile()->GetPrefs()->GetInteger(
+        prefs::kAccessibilityReadAnythingLetterSpacing);
   }
 
  protected:
@@ -81,7 +107,7 @@ TEST_F(ReadAnythingControllerTest, OnFontSizeChangedIncreaseUpdatesPref) {
 
   MockOnFontSizeChanged(true);
 
-  EXPECT_NEAR(GetPrefFontScale(), 1.2, 0.01);
+  EXPECT_NEAR(GetPrefFontScale(), 1.25, 0.01);
 }
 
 TEST_F(ReadAnythingControllerTest, OnFontSizeChangedDecreasePref) {
@@ -89,29 +115,33 @@ TEST_F(ReadAnythingControllerTest, OnFontSizeChangedDecreasePref) {
 
   MockOnFontSizeChanged(false);
 
-  EXPECT_NEAR(GetPrefFontScale(), 0.8, 0.01);
+  EXPECT_NEAR(GetPrefFontScale(), 0.75, 0.01);
 }
 
 TEST_F(ReadAnythingControllerTest, OnFontSizeChangedHonorsMax) {
   EXPECT_NEAR(GetPrefFontScale(), 1.0, 0.01);
 
   std::string font_name;
-  MockModelInit(font_name, 4.9, read_anything::mojom::Colors::kDefaultValue);
+  MockModelInit(font_name, 4.5, read_anything::mojom::Colors::kDefaultValue,
+                read_anything::mojom::Spacing::kDefault,
+                read_anything::mojom::Spacing::kDefault);
 
   MockOnFontSizeChanged(true);
 
-  EXPECT_NEAR(GetPrefFontScale(), 5.0, 0.01);
+  EXPECT_NEAR(GetPrefFontScale(), 4.5, 0.01);
 }
 
 TEST_F(ReadAnythingControllerTest, OnFontSizeChangedHonorsMin) {
   EXPECT_NEAR(GetPrefFontScale(), 1.0, 0.01);
 
   std::string font_name;
-  MockModelInit(font_name, 0.3, read_anything::mojom::Colors::kDefaultValue);
+  MockModelInit(font_name, 0.5, read_anything::mojom::Colors::kDefaultValue,
+                read_anything::mojom::Spacing::kDefault,
+                read_anything::mojom::Spacing::kDefault);
 
   MockOnFontSizeChanged(false);
 
-  EXPECT_NEAR(GetPrefFontScale(), 0.2, 0.01);
+  EXPECT_NEAR(GetPrefFontScale(), 0.5, 0.01);
 }
 
 TEST_F(ReadAnythingControllerTest, OnColorsChangedUpdatesPref) {
@@ -120,4 +150,36 @@ TEST_F(ReadAnythingControllerTest, OnColorsChangedUpdatesPref) {
   MockOnColorsChanged((int)read_anything::mojom::Colors::kYellow);
 
   EXPECT_EQ(GetPrefsColors(), 3);
+}
+
+TEST_F(ReadAnythingControllerTest, OnLineSpacingChangedUpdatesPref) {
+  EXPECT_EQ(GetPrefsLineSpacing(), 1);
+
+  MockOnLineSpacingChanged((int)read_anything::mojom::Spacing::kLoose);
+
+  EXPECT_EQ(GetPrefsLineSpacing(), 2);
+}
+
+TEST_F(ReadAnythingControllerTest, OnLineSpacingChangedInvalidInput) {
+  EXPECT_EQ(GetPrefsLineSpacing(), 1);
+
+  MockOnLineSpacingChanged(10);
+
+  EXPECT_EQ(GetPrefsLineSpacing(), 1);
+}
+
+TEST_F(ReadAnythingControllerTest, OnLetterSpacingChangedUpdatesPref) {
+  EXPECT_EQ(GetPrefsLetterSpacing(), 1);
+
+  MockOnLetterSpacingChanged((int)read_anything::mojom::Spacing::kLoose);
+
+  EXPECT_EQ(GetPrefsLetterSpacing(), 2);
+}
+
+TEST_F(ReadAnythingControllerTest, OnLetterSpacingChangedInvalidInput) {
+  EXPECT_EQ(GetPrefsLetterSpacing(), 1);
+
+  MockOnLetterSpacingChanged(10);
+
+  EXPECT_EQ(GetPrefsLetterSpacing(), 1);
 }

@@ -1,5 +1,5 @@
 <!--
-Copyright 2020 The Chromium Authors. All rights reserved.
+Copyright 2020 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -149,7 +149,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Accessibility.ActiveTime" units="ms"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>aleventhal@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <summary>
@@ -301,11 +301,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.AndroidServiceInfo"
-    enum="AccessibilityAndroidServiceInfoEnum" expires_after="2022-11-18">
+    enum="AccessibilityAndroidServiceInfoEnum" expires_after="M109">
   <owner>aleventhal@chromium.org</owner>
   <owner>mschillaci@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
+    Deprecated as of 10/2022, M109. Now using the per-variant enum (below).
     Tracks flags and capabilities of enabled accessibility services. Recorded
     every time an Android web content view first creates a virtual view
     hierarchy, indicating that some accessibility service is running. The number
@@ -314,6 +315,32 @@ chromium-metrics-reviews@google.com.
     capabilities of accessibility services are widespread and which ones are
     relatively rare.
   </summary>
+</histogram>
+
+<histogram name="Accessibility.AndroidServiceInfo.{RunningApps}"
+    enum="AccessibilityAndroidServiceInfoEnum" expires_after="2023-07-01">
+  <owner>mschillaci@google.com</owner>
+  <owner>aldietz@google.com</owner>
+  <owner>dtseng@chromium.org</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Tracks events, flags, feedback and capabilities of enabled accessibility
+    services separated into variants based on the types of running accessibility
+    services. This information would be a subset of the (now deprecated)
+    Accessibility.AndroidServiceInfo histogram. It will allow us to look at the
+    same histograms but only for a subset of users (e.g. what are the requested
+    flags etc of enabled accessibility services for clients running only a
+    password manager).
+  </summary>
+  <token key="RunningApps">
+    <variant name="ALL_VARIANTS"/>
+    <variant name="ASSISTIVE_TECH"/>
+    <variant name="ASSISTIVE_TECH_WITH_PASSWORD_MANAGER"/>
+    <variant name="ASSISTIVE_TECH_WITH_UNKNOWN"/>
+    <variant name="PASSWORD_MANAGER"/>
+    <variant name="PASSWORD_MANAGER_WITH_UNKNOWN"/>
+    <variant name="UNKNOWN"/>
+  </token>
 </histogram>
 
 <histogram name="Accessibility.ATK-APIs" enum="AccessibilityATKAPIEnum"
@@ -328,7 +355,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.AutoDisabled.DisabledTime" units="ms"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>abigailbklein@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -338,7 +365,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.AutoDisabled.EnabledTime" units="ms"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>abigailbklein@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -348,7 +375,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.AutoDisabled.EventCount" units="count"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>abigailbklein@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -359,9 +386,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.CaptionSettingsLoadedFromPrefs"
-    enum="BooleanEnabled" expires_after="2022-10-18">
+    enum="BooleanEnabled" expires_after="2023-09-06">
   <owner>evliu@google.com</owner>
-  <owner>media-dev@chromium.org</owner>
+  <owner>chrome-media-ux@google.com</owner>
   <summary>
     Whether custom caption settings were loaded from the user preferences.
     Recorded when WebKit preferences are overridden.
@@ -369,9 +396,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.CaptionSettingsLoadedFromSystemSettings"
-    enum="BooleanEnabled" expires_after="2022-10-18">
+    enum="BooleanEnabled" expires_after="2023-09-06">
   <owner>evliu@google.com</owner>
-  <owner>media-dev@chromium.org</owner>
+  <owner>chrome-media-ux@google.com</owner>
   <summary>
     Whether custom caption settings were loaded from the system preferences.
     Recorded when WebKit preferences are overridden.
@@ -379,7 +406,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.ChromeVox.PerformGestureType"
-    enum="ChromeVoxGestureType" expires_after="2023-02-06">
+    enum="ChromeVoxGestureType" expires_after="2023-04-09">
   <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -390,7 +417,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.CrosAlwaysShowA11yMenu" enum="BooleanEnabled"
-    expires_after="2022-11-18">
+    expires_after="2023-02-19">
   <owner>dtseng@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -455,7 +482,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.CrosDictation" enum="BooleanEnabled"
-    expires_after="2022-12-25">
+    expires_after="2023-04-09">
   <owner>anastasi@google.com</owner>
   <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -466,7 +493,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.CrosDictation.Language" enum="LocaleCodeISO639"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>katie@chromium.org</owner>
   <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -481,7 +508,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Accessibility.CrosDictation.ListeningDuration.NetworkRecognition"
-    units="ms" expires_after="2022-12-25">
+    units="ms" expires_after="2023-02-26">
   <owner>katie@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -493,7 +520,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Accessibility.CrosDictation.ListeningDuration.OnDeviceRecognition"
-    units="ms" expires_after="2022-12-25">
+    units="ms" expires_after="2023-03-05">
   <owner>katie@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -511,21 +538,21 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.CrosDictation.MacroRecognized"
-    enum="CrosDictationMacroName" expires_after="2023-01-30">
+    enum="CrosDictationMacroName" expires_after="2023-04-09">
   <owner>akihiroota@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>Recorded whenever Dictation recognizes a macro.</summary>
 </histogram>
 
 <histogram name="Accessibility.CrosDictation.MacroSucceeded"
-    enum="CrosDictationMacroName" expires_after="2023-01-30">
+    enum="CrosDictationMacroName" expires_after="2023-04-09">
   <owner>akihiroota@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>Recorded whenever Dictation successfully performs a macro.</summary>
 </histogram>
 
 <histogram name="Accessibility.CrosDictation.ToggleDictationMethod"
-    enum="CrosDictationToggleDictationMethod" expires_after="2023-01-15">
+    enum="CrosDictationToggleDictationMethod" expires_after="2023-03-19">
   <owner>anastasi@google.com</owner>
   <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -533,7 +560,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.CrosDictation.UsedOnDeviceSpeech"
-    enum="BooleanUsage" expires_after="2022-12-25">
+    enum="BooleanUsage" expires_after="2023-02-26">
   <owner>katie@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -575,7 +602,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.CrosLargeCursor" enum="BooleanEnabled"
-    expires_after="2023-01-22">
+    expires_after="2023-03-26">
   <owner>dtseng@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -597,7 +624,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.CrosScreenMagnifier" enum="BooleanEnabled"
-    expires_after="2023-01-22">
+    expires_after="2023-03-26">
   <owner>dtseng@chromium.org</owner>
   <owner>josiahk@google.com</owner>
   <owner>kenjibaheux@google.com</owner>
@@ -904,11 +931,17 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Accessibility.ImageLabels" enum="BooleanEnabled"
     expires_after="2023-07-01">
+  <obsolete>
+    Logged on profile open, including for profiles that do not show web content.
+    (For those profiles, this logged the value of disabled.) Replaced in M-107
+    with Accessibility.ImageLabels2, which is similar but not logged for
+    unnecessary profiles.
+  </obsolete>
   <owner>katie@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
-    Whether the Chrome accessibility image label setting is on (logged once 45
-    secs after startup).
+    Whether the Chrome accessibility image label setting is on. Logged once 45
+    secs after profile open.
   </summary>
 </histogram>
 
@@ -918,8 +951,9 @@ chromium-metrics-reviews@google.com.
   <owner>mschillaci@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
-    Whether the Chrome accessibility image label setting is on for Android
-    (logged once 45 secs after startup).
+    Whether the Chrome accessibility image label setting is on for Android.
+    Logged once 45 secs after profile open, which always happens when the
+    browser starts.
   </summary>
 </histogram>
 
@@ -941,7 +975,8 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Whether the Chrome accessibility image label setting for Android is set to
-    only be enabled on a Wi-Fi connection (logged once 45 secs after startup).
+    only be enabled on a Wi-Fi connection. Logged once 45 secs after profile
+    open, which always happens when the browser starts.
   </summary>
 </histogram>
 
@@ -1023,8 +1058,20 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="Accessibility.ImageLabels2" enum="BooleanEnabled"
+    expires_after="2023-07-01">
+  <owner>katie@chromium.org</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Whether the Chrome accessibility image label setting is on. Logged once 45
+    secs after profile open. Only logged for regular profiles, Incognito
+    profiles, and guest off-the-record profiles, as these are the only profiles
+    that can display web content.
+  </summary>
+</histogram>
+
 <histogram name="Accessibility.InactiveTime" units="ms"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>aleventhal@chromium.org</owner>
   <owner>abigailbklein@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
@@ -1036,7 +1083,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.iOS.NewLargerTextCategory" enum="BooleanHit"
-    expires_after="2022-10-16">
+    expires_after="2023-10-16">
   <owner>gambard@chromium.org</owner>
   <owner>rkgibson@google.com</owner>
   <summary>
@@ -1149,6 +1196,30 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.LiveCaption.Duration.CaptionBubble{Visibility}2"
+    units="ms" expires_after="2022-09-30">
+  <obsolete>
+    Deprecated as of 09/2022. Now using
+    Accessibility.LiveCaption.Duration.CaptionBubble{Visibility}3 This metric
+    measured the total speech recognition time not only for Live Caption but
+    also for other applications that use SODA.
+  </obsolete>
+  <owner>abigailbklein@google.com</owner>
+  <owner>evliu@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Measures how long SODA was running while the Live Caption UI was
+    {Visibility}. Logged once on the destruction of the
+    SpeechRecognitionRecognizerImpl.
+  </summary>
+  <token key="Visibility">
+    <variant name="Hidden"
+        summary="hidden. This might be because it was closed by user or
+                 because there was an error passing transcriptions to the UI"/>
+    <variant name="Visible" summary="visible and showing transcriptions"/>
+  </token>
+</histogram>
+
+<histogram name="Accessibility.LiveCaption.Duration.CaptionBubble{Visibility}3"
     units="ms" expires_after="2023-06-13">
   <owner>abigailbklein@google.com</owner>
   <owner>evliu@google.com</owner>
@@ -1296,7 +1367,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.ManuallyEnabled" enum="BooleanEnabled"
-    expires_after="2023-01-01">
+    expires_after="2023-03-05">
   <owner>aleventhal@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1308,7 +1379,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.ModeFlag" enum="AccessibilityModeFlagEnum"
-    expires_after="2022-12-18">
+    expires_after="2023-02-19">
   <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1336,7 +1407,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.PDF.HasAccessibleText" enum="BooleanExists"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>dtseng@chromium.org</owner>
   <owner>nektar@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1350,7 +1421,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Accessibility.Performance.BrowserAccessibilityManager::OnAccessibilityEvents"
-    units="ms" expires_after="2023-01-22">
+    units="ms" expires_after="2023-03-26">
   <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1367,7 +1438,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.Performance.HandleAXEvents" units="ms"
-    expires_after="2023-01-22">
+    expires_after="2023-03-26">
   <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1378,7 +1449,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.Performance.ProcessDeferredAccessibilityEvents"
-    units="ms" expires_after="2023-01-01">
+    units="ms" expires_after="2023-03-05">
   <owner>aleventhal@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1390,7 +1461,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.Performance.SendPendingAccessibilityEvents"
-    units="ms" expires_after="2023-01-01">
+    units="ms" expires_after="2023-03-05">
   <owner>aleventhal@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1401,7 +1472,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.Performance.Tree.Unserialize" units="ms"
-    expires_after="2022-12-18">
+    expires_after="2023-02-19">
   <owner>aleventhal@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1525,9 +1596,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.VTTContainsStyleBlock" enum="BooleanEnabled"
-    expires_after="2022-10-18">
+    expires_after="2023-09-06">
   <owner>evliu@google.com</owner>
-  <owner>media-dev@chromium.org</owner>
+  <owner>chrome-media-ux@google.com</owner>
   <summary>
     Whether a VTT file contains an embedded style block. Recorded when a VTT
     file is parsed.
@@ -1553,7 +1624,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.WinAPIs.GetPropertyValue"
-    enum="AccessibilityWinAPIGetPropertyValueEnum" expires_after="2022-09-19">
+    enum="AccessibilityWinAPIGetPropertyValueEnum" expires_after="2023-02-12">
   <owner>aleventhal@chromium.org</owner>
   <owner>nektar@chromium.org</owner>
   <owner>dlibby@microsoft.com</owner>
@@ -1703,7 +1774,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="DomDistiller.InfoBarUsage" enum="BooleanUsage"
-    expires_after="2022-12-18">
+    expires_after="2023-02-19">
   <owner>mdjones@chromium.org</owner>
   <summary>
     &quot;Used&quot; is recorded when the user clicks the infobar to enter
@@ -1731,7 +1802,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="DomDistiller.MessageDismissalCondition"
-    enum="ReaderModeMessageDismissalCondition" expires_after="2022-12-31">
+    enum="ReaderModeMessageDismissalCondition" expires_after="2023-03-05">
   <owner>twellington@chromium.org</owner>
   <owner>aishwaryarj@google.com</owner>
   <summary>
@@ -1787,7 +1858,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="DomDistiller.ReaderModeAccessibilitySettingSelected"
-    enum="Boolean" expires_after="2022-12-31">
+    enum="Boolean" expires_after="2023-03-05">
   <owner>twellington@chromium.org</owner>
   <owner>aishwaryarj@google.com</owner>
   <summary>
@@ -1797,7 +1868,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="DomDistiller.ReaderShownForPageLoad" enum="Boolean"
-    expires_after="2023-01-01">
+    expires_after="2023-03-05">
   <owner>mdjones@chromium.org</owner>
   <summary>
     Records if the panel became visible at any point after a page was navigated.
@@ -1915,7 +1986,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="DomDistiller.Time.ViewingReaderModePage" units="ms"
-    expires_after="2022-12-25">
+    expires_after="2023-02-26">
   <owner>mdjones@chromium.org</owner>
   <summary>
     Records the amount of time a user spent on a Reader Mode Page.

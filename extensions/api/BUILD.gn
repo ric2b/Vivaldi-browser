@@ -42,6 +42,18 @@ if (vivaldi_yahoo_oauth_client_secret != "") {
   ]
 }
 
+if (vivaldi_net_oauth_client_secret != "") {
+  defines += [
+    "VIVALDI_NET_OAUTH_CLIENT_SECRET=\"$vivaldi_net_oauth_client_secret\""
+  ]
+}
+
+if (vivaldi_net_oauth_client_id != "") {
+  defines += [
+    "VIVALDI_NET_OAUTH_CLIENT_ID=\"$vivaldi_net_oauth_client_id\""
+  ]
+}
+
 static_library("apis") {
   public_deps = [
     "//chrome/common:mojo_bindings",

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/common/gpu_disk_cache_type.h"
 #include "gpu/ipc/common/surface_handle.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 
 class GURL;
 
@@ -52,6 +53,14 @@ class GpuChannelManagerDelegate {
   virtual void StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
                                const std::string& key,
                                const std::string& shader) = 0;
+
+  // Tells the delegate to ask for a unique isolation key given a client id and
+  // identifying token on the client.
+  using GetIsolationKeyCallback =
+      base::OnceCallback<void(const std::string& isolation_key)>;
+  virtual void GetIsolationKey(int client_id,
+                               const blink::WebGPUExecutionContextToken& token,
+                               GetIsolationKeyCallback cb) = 0;
 
   // Cleanly exits the GPU process in response to an error. This will not exit
   // with in-process GPU as that would also exit the browser. This can only be

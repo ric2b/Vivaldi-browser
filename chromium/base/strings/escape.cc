@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -49,7 +49,7 @@ std::string Escape(StringPiece text,
                    bool keep_escaped = false) {
   std::string escaped;
   escaped.reserve(text.length() * 3);
-  for (unsigned int i = 0; i < text.length(); ++i) {
+  for (size_t i = 0; i < text.length(); ++i) {
     unsigned char c = static_cast<unsigned char>(text[i]);
     if (use_plus && ' ' == c) {
       escaped.push_back('+');

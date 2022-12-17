@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,10 +25,6 @@ class ContextMenuHeaderProperties {
     public static final WritableIntPropertyKey URL_MAX_LINES = new WritableIntPropertyKey();
     public static final WritableObjectPropertyKey<Bitmap> IMAGE = new WritableObjectPropertyKey<>();
     public static final PropertyModel.WritableBooleanPropertyKey CIRCLE_BG_VISIBLE =
-            new PropertyModel.WritableBooleanPropertyKey();
-    public static final WritableIntPropertyKey URL_PERFORMANCE_CLASS = new WritableIntPropertyKey();
-
-    public static final PropertyModel.WritableBooleanPropertyKey HIDE_HEADER_IMAGE =
             new PropertyModel.WritableBooleanPropertyKey();
 
     /** Size in pixel of monogram / favicon on link context menu header . */
@@ -58,7 +54,6 @@ class ContextMenuHeaderProperties {
 
     public static final PropertyKey[] ALL_KEYS = {TITLE, TITLE_MAX_LINES, URL,
             TITLE_AND_URL_CLICK_LISTENER, URL_MAX_LINES, IMAGE, CIRCLE_BG_VISIBLE,
-            URL_PERFORMANCE_CLASS, HIDE_HEADER_IMAGE, MONOGRAM_SIZE_PIXEL,
-            OVERRIDE_HEADER_IMAGE_MAX_SIZE_PIXEL, OVERRIDE_HEADER_CIRCLE_BG_SIZE_PIXEL,
-            OVERRIDE_HEADER_CIRCLE_BG_MARGIN_PIXEL};
+            MONOGRAM_SIZE_PIXEL, OVERRIDE_HEADER_IMAGE_MAX_SIZE_PIXEL,
+            OVERRIDE_HEADER_CIRCLE_BG_SIZE_PIXEL, OVERRIDE_HEADER_CIRCLE_BG_MARGIN_PIXEL};
 }

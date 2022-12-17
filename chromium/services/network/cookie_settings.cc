@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
-#include "base/stl_util.h"
+#include "base/types/optional_util.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/cookie_settings_base.h"
 #include "net/base/features.h"
@@ -124,7 +124,7 @@ bool CookieSettings::IsCookieAccessible(
       GetCookieSettingWithMetadata(
           url,
           GetFirstPartyURL(site_for_cookies,
-                           base::OptionalOrNullptr(top_frame_origin)),
+                           base::OptionalToPtr(top_frame_origin)),
           IsThirdPartyRequest(url, site_for_cookies), QueryReason::kCookies),
       cookie.IsSameParty(), cookie.IsPartitioned(), /*record_metrics=*/true);
 }
@@ -164,7 +164,7 @@ net::NetworkDelegate::PrivacySetting CookieSettings::IsPrivacyModeEnabled(
   //
   // We don't record metrics here, since this isn't actually accessing a cookie.
   CookieSettingWithMetadata metadata = GetCookieSettingWithMetadata(
-      url, site_for_cookies, base::OptionalOrNullptr(top_frame_origin),
+      url, site_for_cookies, base::OptionalToPtr(top_frame_origin),
       QueryReason::kCookies);
   if (IsHypotheticalCookieAllowed(metadata,
                                   same_party_cookie_context_type ==
@@ -306,6 +306,7 @@ bool CookieSettings::AnnotateAndMoveUserBlockedCookies(
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
     const url::Origin* top_frame_origin,
+    const net::FirstPartySetMetadata& first_party_set_metadata,
     net::CookieAccessResultList& maybe_included_cookies,
     net::CookieAccessResultList& excluded_cookies) const {
   const CookieSettingWithMetadata setting_with_metadata =
@@ -324,6 +325,13 @@ bool CookieSettings::AnnotateAndMoveUserBlockedCookies(
     } else {
       cookie.access_result.status.AddExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+      if (IsThirdPartyCookieBlockedInSamePartySites(
+              setting_with_metadata.third_party_blocking_outcome,
+              first_party_set_metadata)) {
+        cookie.access_result.status.AddExclusionReason(
+            net::CookieInclusionStatus::
+                EXCLUDE_THIRD_PARTY_BLOCKED_WITHIN_FIRST_PARTY_SET);
+      }
     }
   }
   for (net::CookieWithAccessResult& cookie : excluded_cookies) {
@@ -384,6 +392,18 @@ bool CookieSettings::IsAllowedPartitionedCookie(
   return is_partitioned &&
          third_party_blocking_outcome ==
              ThirdPartyBlockingOutcome::kPartitionedStateAllowed;
+}
+
+// static
+bool CookieSettings::IsThirdPartyCookieBlockedInSamePartySites(
+    ThirdPartyBlockingOutcome third_party_blocking_outcome,
+    const net::FirstPartySetMetadata& first_party_set_metadata) {
+  // If partitioned state is allowed only, it means the cookie was excluded due
+  // to the third-party cookie blocking setting.
+  if (third_party_blocking_outcome !=
+      ThirdPartyBlockingOutcome::kPartitionedStateAllowed)
+    return false;
+  return first_party_set_metadata.AreSitesInSameFirstPartySet();
 }
 
 bool CookieSettings::IsHypotheticalCookieAllowed(

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,12 @@ class WaylandToplevelWindow : public WaylandWindow,
   void Restore() override;
   PlatformWindowState GetPlatformWindowState() const override;
   void Activate() override;
+  void Deactivate() override;
   void SizeConstraintsChanged() override;
+  // `SetZOrderLevel()` must be called on `z_order_` in
+  // `SetUpShellIntegration()`.
+  void SetZOrderLevel(ZOrderLevel order) override;
+  ZOrderLevel GetZOrderLevel() const override;
   std::string GetWindowUniqueId() const override;
   // SetUseNativeFrame and ShouldUseNativeFrame decide on
   // xdg-decoration mode for a window.
@@ -95,16 +100,12 @@ class WaylandToplevelWindow : public WaylandWindow,
   void UpdateWindowScale(bool update_bounds) override;
   void HandleToplevelConfigure(int32_t width,
                                int32_t height,
-                               bool is_maximized,
-                               bool is_fullscreen,
-                               bool is_activated) override;
+                               const WindowStates& window_states) override;
   void HandleAuraToplevelConfigure(int32_t x,
                                    int32_t y,
                                    int32_t width,
                                    int32_t height,
-                                   bool is_maximized,
-                                   bool is_fullscreen,
-                                   bool is_activated) override;
+                                   const WindowStates& window_states) override;
   void HandleSurfaceConfigure(uint32_t serial) override;
   void UpdateVisualSize(const gfx::Size& size_px) override;
   bool OnInitialize(PlatformWindowInitProperties properties) override;
@@ -216,17 +217,16 @@ class WaylandToplevelWindow : public WaylandWindow,
   // This must be called in SetUpShellIntegration().
   void SetInitialWorkspace();
 
-  // Sets `z_order_` in the `shell_toplevel_`.
-  // Must be called in SetUpShellIntegration().
-  void SetInitialZOrder();
-
   // Wrappers around shell surface.
   std::unique_ptr<ShellToplevelWrapper> shell_toplevel_;
 
   // Contains the current state of the window.
-  PlatformWindowState state_;
+  PlatformWindowState state_ = PlatformWindowState::kUnknown;
   // Contains the previous state of the window.
-  PlatformWindowState previous_state_;
+  PlatformWindowState previous_state_ = PlatformWindowState::kUnknown;
+
+  // Contains the current state of the tiled edges.
+  WindowTiledEdges tiled_state_;
 
   bool is_active_ = false;
 

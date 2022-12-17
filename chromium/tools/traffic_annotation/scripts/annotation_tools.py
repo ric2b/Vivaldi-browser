@@ -1,4 +1,4 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -135,7 +135,7 @@ class NetworkTrafficAnnotationTools():
 
     if stderr_text:
       print("Could not run '%s' to get the list of changed files "
-            "beacuse: %s" % (" ".join(args), stderr_text))
+            "because: %s" % (" ".join(args), stderr_text))
       os.chdir(original_path)
       return None
 

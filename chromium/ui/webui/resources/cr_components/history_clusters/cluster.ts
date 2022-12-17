@@ -1,16 +1,16 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './menu_container.js';
+import './cluster_menu.js';
 import './search_query.js';
 import './history_clusters_shared_style.css.js';
 import './shared_vars.css.js';
 import './url_visit.js';
-import '../../cr_elements/cr_icons_css.m.js';
+import '../../cr_elements/cr_icons.css.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 
-import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assert} from '../../js/assert_ts.js';
@@ -37,7 +37,6 @@ const HistoryClusterElementBase = I18nMixin(PolymerElement);
 interface HistoryClusterElement {
   $: {
     label: HTMLElement,
-    labelSidePanel: HTMLElement,
     container: HTMLElement,
   };
 }
@@ -69,7 +68,7 @@ class HistoryClusterElement extends HistoryClusterElementBase {
       /**
        * Whether the cluster is in the side panel.
        */
-      inSidePanel: {
+      inSidePanel_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('inSidePanel'),
         reflectToAttribute: true,
@@ -123,11 +122,11 @@ class HistoryClusterElement extends HistoryClusterElementBase {
 
   cluster: Cluster;
   index: number;
-  inSidePanel: boolean;
   query: string;
   private callbackRouter_: PageCallbackRouter;
   private expanded_: boolean;
   private hiddenVisits_: URLVisit[];
+  private inSidePanel_: boolean;
   private onVisitsRemovedListenerId_: number|null = null;
   private unusedLabel_: string;
   private visibleVisits_: URLVisit[];
@@ -311,9 +310,8 @@ class HistoryClusterElement extends HistoryClusterElementBase {
       return 'no_label';
     }
 
-    const label = this.inSidePanel ? this.$.labelSidePanel : this.$.label;
     insertHighlightedTextWithMatchesIntoElement(
-        label, this.cluster.label!, this.cluster.labelMatchPositions);
+        this.$.label, this.cluster.label!, this.cluster.labelMatchPositions);
     return this.cluster.label!;
   }
 

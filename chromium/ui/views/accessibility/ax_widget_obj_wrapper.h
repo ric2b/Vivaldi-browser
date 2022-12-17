@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,15 +16,12 @@
 #include "ui/views/accessibility/ax_aura_obj_wrapper.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
-#include "ui/views/widget/widget_removals_observer.h"
 
 namespace views {
 class AXAuraObjCache;
 
 // Describes a |Widget| for use with other AX classes.
-class AXWidgetObjWrapper : public AXAuraObjWrapper,
-                           public WidgetObserver,
-                           public WidgetRemovalsObserver {
+class AXWidgetObjWrapper : public AXAuraObjWrapper, public WidgetObserver {
  public:
   // |aura_obj_cache| must outlive this object.
   AXWidgetObjWrapper(AXAuraObjCache* aura_obj_cache, Widget* widget);
@@ -42,10 +39,6 @@ class AXWidgetObjWrapper : public AXAuraObjWrapper,
   // WidgetObserver overrides.
   void OnWidgetDestroying(Widget* widget) override;
   void OnWidgetDestroyed(Widget* widget) override;
-  void OnWidgetVisibilityChanged(Widget*, bool) override;
-
-  // WidgetRemovalsObserver overrides.
-  void OnWillRemoveView(Widget* widget, View* view) override;
 
  private:
   raw_ptr<Widget> widget_;
@@ -53,11 +46,6 @@ class AXWidgetObjWrapper : public AXAuraObjWrapper,
   const ui::AXUniqueId unique_id_;
 
   base::ScopedObservation<Widget, WidgetObserver> widget_observation_{this};
-  base::ScopedObservation<Widget,
-                          WidgetRemovalsObserver,
-                          &Widget::AddRemovalsObserver,
-                          &Widget::RemoveRemovalsObserver>
-      widget_removals_observation_{this};
 };
 
 }  // namespace views

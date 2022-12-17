@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,12 +19,26 @@ export class ParseStrategy {
   constructor(inputController) {
     /** @private {!InputController} */
     this.inputController_ = inputController;
+    /** @protected {boolean} */
+    this.enabled = false;
   }
 
   /** @return {!InputController} */
   getInputController() {
     return this.inputController_;
   }
+
+  /** @return {boolean} */
+  isEnabled() {
+    return this.enabled;
+  }
+
+  /**
+   * Refreshes this strategy when the locale changes.
+   * TODO(https://crbug.com/1258190): Implement this in PumpkinParseStrategy
+   * once we land SandboxedPumpkinTagger.
+   */
+  refresh() {}
 
   /**
    * Accepts text, parses it, and returns a Macro.

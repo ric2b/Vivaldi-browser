@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,6 +73,20 @@
 // Implementations of methods in Longhand subclasses that aren't generated.
 
 namespace blink {
+
+namespace {
+
+void AppendIntegerOrAutoIfZero(unsigned value, CSSValueList* list) {
+  if (!value) {
+    list->Append(*CSSIdentifierValue::Create(CSSValueID::kAuto));
+    return;
+  }
+  list->Append(*CSSNumericLiteralValue::Create(
+      value, CSSPrimitiveValue::UnitType::kInteger));
+}
+
+}  // namespace
+
 namespace css_longhand {
 
 const CSSValue* AlignContent::ParseSingleValue(
@@ -147,7 +161,7 @@ const CSSValue* AnchorName::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const LayoutObject*,
     bool allow_visited_style) const {
-  if (style.AnchorName().IsEmpty())
+  if (style.AnchorName().empty())
     return CSSIdentifierValue::Create(CSSValueID::kNone);
   return MakeGarbageCollected<CSSCustomIdentValue>(style.AnchorName());
 }
@@ -166,7 +180,7 @@ const CSSValue* AnchorScroll::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const LayoutObject*,
     bool allow_visited_style) const {
-  if (style.AnchorScroll().IsEmpty())
+  if (style.AnchorScroll().empty())
     return CSSIdentifierValue::Create(CSSValueID::kNone);
   return MakeGarbageCollected<CSSCustomIdentValue>(style.AnchorScroll());
 }
@@ -401,7 +415,7 @@ const CSSValue* AnimationTimeline::CSSValueFromComputedStyleInternal(
   const CSSAnimationData* animation_data = style.Animations();
   if (animation_data) {
     for (const auto& timeline : animation_data->TimelineList())
-      list->Append(*ComputedStyleUtils::ValueForStyleNameOrKeyword(timeline));
+      list->Append(*ComputedStyleUtils::ValueForAnimationTimeline(timeline));
   } else {
     list->Append(*InitialValue());
   }
@@ -1693,7 +1707,7 @@ const CSSValue* ColorScheme::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const LayoutObject*,
     bool allow_visited_style) const {
-  if (style.ColorScheme().IsEmpty())
+  if (style.ColorScheme().empty())
     return CSSIdentifierValue::Create(CSSValueID::kNormal);
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   for (auto ident : style.ColorScheme()) {
@@ -1724,10 +1738,9 @@ void ApplyColorSchemeValue(StyleResolverState& state,
 
   state.StyleRef().SetColorScheme(std::move(color_schemes));
 
-  Settings* settings = document.GetSettings();
-  bool force_dark = settings ? settings->GetForceDarkModeEnabled() : false;
   state.StyleRef().SetUsedColorScheme(
-      flags, document.GetStyleEngine().GetPreferredColorScheme(), force_dark);
+      flags, document.GetStyleEngine().GetPreferredColorScheme(),
+      document.GetStyleEngine().GetForceDarkModeEnabled());
 
   if (flags & static_cast<ColorSchemeFlags>(ColorSchemeFlag::kDark)) {
     // Record kColorSchemeDarkSupportedOnRoot if dark is present (though dark
@@ -2017,7 +2030,7 @@ const CSSValue* ContainerName::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const LayoutObject* layout_object,
     bool allow_visited_style) const {
-  if (style.ContainerName().IsEmpty())
+  if (style.ContainerName().empty())
     return CSSIdentifierValue::Create(CSSValueID::kNone);
 
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
@@ -3645,36 +3658,30 @@ const CSSValue* Height::CSSValueFromComputedStyleInternal(
                                                              style);
 }
 
-const CSSValue* PopUpShowDelay::ParseSingleValue(
+const CSSValue* HyphenateLimitChars::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  const StyleHyphenateLimitChars& value = style.HyphenateLimitChars();
+  if (value.IsAuto())
+    return CSSIdentifierValue::Create(CSSValueID::kAuto);
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  AppendIntegerOrAutoIfZero(value.MinWordChars(), list);
+  if (value.MinBeforeChars() || value.MinAfterChars()) {
+    AppendIntegerOrAutoIfZero(value.MinBeforeChars(), list);
+    if (value.MinAfterChars()) {
+      list->Append(*CSSNumericLiteralValue::Create(
+          value.MinAfterChars(), CSSPrimitiveValue::UnitType::kInteger));
+    }
+  }
+  return list;
+}
+
+const CSSValue* HyphenateLimitChars::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext& local_context) const {
-  return css_parsing_utils::ConsumeTime(
-      range, context, CSSPrimitiveValue::ValueRange::kNonNegative);
-}
-
-const CSSValue* PopUpShowDelay::CSSValueFromComputedStyleInternal(
-    const ComputedStyle& style,
-    const LayoutObject* layout_object,
-    bool allow_visited_style) const {
-  return CSSNumericLiteralValue::Create(style.PopUpShowDelay(),
-                                        CSSPrimitiveValue::UnitType::kSeconds);
-}
-
-const CSSValue* PopUpHideDelay::ParseSingleValue(
-    CSSParserTokenRange& range,
-    const CSSParserContext& context,
-    const CSSParserLocalContext& local_context) const {
-  return css_parsing_utils::ConsumeTime(
-      range, context, CSSPrimitiveValue::ValueRange::kNonNegative);
-}
-
-const CSSValue* PopUpHideDelay::CSSValueFromComputedStyleInternal(
-    const ComputedStyle& style,
-    const LayoutObject* layout_object,
-    bool allow_visited_style) const {
-  return CSSNumericLiteralValue::Create(style.PopUpHideDelay(),
-                                        CSSPrimitiveValue::UnitType::kSeconds);
+    const CSSParserLocalContext&) const {
+  return css_parsing_utils::ConsumeHyphenateLimitChars(range, context);
 }
 
 const CSSValue* Hyphens::CSSValueFromComputedStyleInternal(
@@ -3710,6 +3717,34 @@ const CSSValue* ImageRendering::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   return CSSIdentifierValue::Create(style.ImageRendering());
+}
+
+const CSSValue* InitialLetter::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  const StyleInitialLetter initial_letter = style.InitialLetter();
+  if (initial_letter.IsNormal())
+    return CSSIdentifierValue::Create(CSSValueID::kNormal);
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  list->Append(*CSSNumericLiteralValue::Create(
+      initial_letter.Size(), CSSPrimitiveValue::UnitType::kNumber));
+  if (initial_letter.IsIntegerSink()) {
+    list->Append(*CSSNumericLiteralValue::Create(
+        initial_letter.Sink(), CSSPrimitiveValue::UnitType::kInteger));
+  } else if (initial_letter.IsDrop()) {
+    list->Append(*CSSIdentifierValue::Create(CSSValueID::kDrop));
+  } else if (initial_letter.IsRaise()) {
+    list->Append(*CSSIdentifierValue::Create(CSSValueID::kRaise));
+  }
+  return list;
+}
+
+const CSSValue* InitialLetter::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  return css_parsing_utils::ConsumeInitialLetter(range, context);
 }
 
 const CSSValue* InlineSize::ParseSingleValue(
@@ -5919,7 +5954,7 @@ const CSSValue* PositionFallback::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const LayoutObject*,
     bool allow_visited_style) const {
-  if (style.PositionFallback().IsEmpty())
+  if (style.PositionFallback().empty())
     return CSSIdentifierValue::Create(CSSValueID::kNone);
   return MakeGarbageCollected<CSSCustomIdentValue>(style.PositionFallback());
 }
@@ -6562,6 +6597,45 @@ const CSSValue* ScrollSnapType::CSSValueFromComputedStyleInternal(
                                                     style);
 }
 
+const CSSValue* ScrollTimelineAxis::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  return css_parsing_utils::ConsumeSingleTimelineAxis(range);
+}
+
+const CSSValue* ScrollTimelineAxis::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  return CSSIdentifierValue::Create(style.ScrollTimelineAxis());
+}
+
+const CSSValue* ScrollTimelineAxis::InitialValue() const {
+  return CSSIdentifierValue::Create(CSSValueID::kBlock);
+}
+
+const CSSValue* ScrollTimelineName::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  return css_parsing_utils::ConsumeSingleTimelineName(range, context);
+}
+
+const CSSValue* ScrollTimelineName::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style) const {
+  const AtomicString& ident = style.ScrollTimelineName();
+  if (ident.empty())
+    return CSSIdentifierValue::Create(CSSValueID::kNone);
+  return MakeGarbageCollected<CSSCustomIdentValue>(ident);
+}
+
+const CSSValue* ScrollTimelineName::InitialValue() const {
+  return CSSIdentifierValue::Create(CSSValueID::kNone);
+}
+
 const CSSValue* ShapeImageThreshold::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
@@ -7147,29 +7221,14 @@ const CSSValue* TextIndent::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
     const CSSParserLocalContext&) const {
-  // [ <length> | <percentage> ] && hanging? && each-line?
-  // Keywords only allowed when css3Text is enabled.
+  // [ <length> | <percentage> ]
   CSSValue* length_percentage = nullptr;
-  CSSValue* hanging = nullptr;
-  CSSValue* each_line = nullptr;
   do {
     if (!length_percentage) {
       length_percentage = css_parsing_utils::ConsumeLengthOrPercent(
           range, context, CSSPrimitiveValue::ValueRange::kAll,
           css_parsing_utils::UnitlessQuirk::kAllow);
       if (length_percentage) {
-        continue;
-      }
-    }
-
-    if (RuntimeEnabledFeatures::CSS3TextEnabled()) {
-      CSSValueID id = range.Peek().Id();
-      if (!hanging && id == CSSValueID::kHanging) {
-        hanging = css_parsing_utils::ConsumeIdent(range);
-        continue;
-      }
-      if (!each_line && id == CSSValueID::kEachLine) {
-        each_line = css_parsing_utils::ConsumeIdent(range);
         continue;
       }
     }
@@ -7181,12 +7240,6 @@ const CSSValue* TextIndent::ParseSingleValue(
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   list->Append(*length_percentage);
 
-  if (hanging)
-    list->Append(*hanging);
-
-  if (each_line)
-    list->Append(*each_line);
-
   return list;
 }
 
@@ -7197,63 +7250,32 @@ const CSSValue* TextIndent::CSSValueFromComputedStyleInternal(
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   list->Append(*ComputedStyleUtils::ZoomAdjustedPixelValueForLength(
       style.TextIndent(), style));
-  if (RuntimeEnabledFeatures::CSS3TextEnabled()) {
-    if (style.GetTextIndentType() == TextIndentType::kHanging)
-      list->Append(*CSSIdentifierValue::Create(CSSValueID::kHanging));
-    if (style.GetTextIndentLine() == TextIndentLine::kEachLine)
-      list->Append(*CSSIdentifierValue::Create(CSSValueID::kEachLine));
-  }
   return list;
 }
 
 void TextIndent::ApplyInitial(StyleResolverState& state) const {
   state.Style()->SetTextIndent(ComputedStyleInitialValues::InitialTextIndent());
-  state.Style()->SetTextIndentLine(
-      ComputedStyleInitialValues::InitialTextIndentLine());
-  state.Style()->SetTextIndentType(
-      ComputedStyleInitialValues::InitialTextIndentType());
 }
 
 void TextIndent::ApplyInherit(StyleResolverState& state) const {
   state.Style()->SetTextIndent(state.ParentStyle()->TextIndent());
-  state.Style()->SetTextIndentLine(state.ParentStyle()->GetTextIndentLine());
-  state.Style()->SetTextIndentType(state.ParentStyle()->GetTextIndentType());
 }
 
 void TextIndent::ApplyValue(StyleResolverState& state,
                             const CSSValue& value) const {
   Length length_or_percentage_value;
-  TextIndentLine text_indent_line_value =
-      ComputedStyleInitialValues::InitialTextIndentLine();
-  TextIndentType text_indent_type_value =
-      ComputedStyleInitialValues::InitialTextIndentType();
 
   for (auto& list_value : To<CSSValueList>(value)) {
     if (auto* list_primitive_value =
             DynamicTo<CSSPrimitiveValue>(*list_value)) {
       length_or_percentage_value = list_primitive_value->ConvertToLength(
           state.CssToLengthConversionData());
-    } else if (To<CSSIdentifierValue>(*list_value).GetValueID() ==
-               CSSValueID::kEachLine) {
-      text_indent_line_value = TextIndentLine::kEachLine;
-    } else if (To<CSSIdentifierValue>(*list_value).GetValueID() ==
-               CSSValueID::kHanging) {
-      text_indent_type_value = TextIndentType::kHanging;
     } else {
       NOTREACHED();
     }
   }
 
   state.Style()->SetTextIndent(length_or_percentage_value);
-  state.Style()->SetTextIndentLine(text_indent_line_value);
-  state.Style()->SetTextIndentType(text_indent_type_value);
-}
-
-const CSSValue* TextJustify::CSSValueFromComputedStyleInternal(
-    const ComputedStyle& style,
-    const LayoutObject*,
-    bool allow_visited_style) const {
-  return CSSIdentifierValue::Create(style.GetTextJustify());
 }
 
 const CSSValue* TextOrientation::CSSValueFromComputedStyleInternal(
@@ -7829,6 +7851,99 @@ void VerticalAlign::ApplyValue(StyleResolverState& state,
         To<CSSPrimitiveValue>(value).ConvertToLength(
             state.CssToLengthConversionData()));
   }
+}
+
+const CSSValue* ViewTimelineAxis::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  using css_parsing_utils::ConsumeCommaSeparatedList;
+  using css_parsing_utils::ConsumeSingleTimelineAxis;
+  return ConsumeCommaSeparatedList(ConsumeSingleTimelineAxis, range);
+}
+
+const CSSValue* ViewTimelineAxis::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style) const {
+  const Vector<TimelineAxis>& vector = style.ViewTimelineAxis();
+  if (vector.empty())
+    return InitialValue();
+  CSSValueList* list = CSSValueList::CreateCommaSeparated();
+  for (TimelineAxis axis : vector) {
+    list->Append(*CSSIdentifierValue::Create(axis));
+  }
+  return list;
+}
+
+const CSSValue* ViewTimelineAxis::InitialValue() const {
+  CSSValueList* list = CSSValueList::CreateCommaSeparated();
+  list->Append(*CSSIdentifierValue::Create(CSSValueID::kBlock));
+  return list;
+}
+
+const CSSValue* ViewTimelineInset::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  using css_parsing_utils::ConsumeCommaSeparatedList;
+  using css_parsing_utils::ConsumeSingleTimelineInset;
+  return ConsumeCommaSeparatedList(ConsumeSingleTimelineInset, range, context);
+}
+
+const CSSValue* ViewTimelineInset::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style) const {
+  const Vector<TimelineInset>& vector = style.ViewTimelineInset();
+  if (vector.empty())
+    return InitialValue();
+  CSSValueList* list = CSSValueList::CreateCommaSeparated();
+  for (const TimelineInset& inset : vector) {
+    list->Append(*MakeGarbageCollected<CSSValuePair>(
+        ComputedStyleUtils::ZoomAdjustedPixelValueForLength(inset.GetStart(),
+                                                            style),
+        ComputedStyleUtils::ZoomAdjustedPixelValueForLength(inset.GetEnd(),
+                                                            style),
+        CSSValuePair::kDropIdenticalValues));
+  }
+  return list;
+}
+
+const CSSValue* ViewTimelineInset::InitialValue() const {
+  CSSValueList* list = CSSValueList::CreateCommaSeparated();
+  list->Append(
+      *CSSNumericLiteralValue::Create(0, CSSPrimitiveValue::UnitType::kPixels));
+  return list;
+}
+
+const CSSValue* ViewTimelineName::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  using css_parsing_utils::ConsumeCommaSeparatedList;
+  using css_parsing_utils::ConsumeSingleTimelineName;
+  return ConsumeCommaSeparatedList(ConsumeSingleTimelineName, range, context);
+}
+
+const CSSValue* ViewTimelineName::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style) const {
+  const Vector<AtomicString>& vector = style.ViewTimelineName();
+  if (vector.empty())
+    return InitialValue();
+  CSSValueList* list = CSSValueList::CreateCommaSeparated();
+  for (const AtomicString& name : vector) {
+    list->Append(*ComputedStyleUtils::ValueForCustomIdentOrNone(name));
+  }
+  return list;
+}
+
+const CSSValue* ViewTimelineName::InitialValue() const {
+  CSSValueList* list = CSSValueList::CreateCommaSeparated();
+  list->Append(*CSSIdentifierValue::Create(CSSValueID::kNone));
+  return list;
 }
 
 const CSSValue* Visibility::CSSValueFromComputedStyleInternal(
@@ -9010,6 +9125,40 @@ const CSSValue* WebkitTransformOriginX::ParseSingleValue(
   return css_parsing_utils::ConsumePositionLonghand<CSSValueID::kLeft,
                                                     CSSValueID::kRight>(
       range, context);
+}
+
+const CSSValue* ToggleVisibility::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  CSSIdentifierValue* ident =
+      css_parsing_utils::ConsumeIdent<CSSValueID::kNormal, CSSValueID::kToggle>(
+          range);
+  if (!ident || ident->GetValueID() == CSSValueID::kNormal)
+    return ident;
+
+  CSSValueList* result_list = CSSValueList::CreateSpaceSeparated();
+  result_list->Append(*ident);
+  CSSValue* name = css_parsing_utils::ConsumeCustomIdent(range, context);
+  if (!name)
+    return nullptr;
+  result_list->Append(*name);
+  return result_list;
+}
+
+const CSSValue* ToggleVisibility::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  const AtomicString& toggle_visibility = style.ToggleVisibility();
+  if (toggle_visibility.IsNull())
+    return CSSIdentifierValue::Create(CSSValueID::kNormal);
+
+  CSSValueList* result_list = CSSValueList::CreateSpaceSeparated();
+  result_list->Append(*CSSIdentifierValue::Create(CSSValueID::kToggle));
+  result_list->Append(
+      *MakeGarbageCollected<CSSCustomIdentValue>(toggle_visibility));
+  return result_list;
 }
 
 const CSSValue* WebkitTransformOriginY::ParseSingleValue(

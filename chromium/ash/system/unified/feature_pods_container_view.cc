@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -179,6 +179,12 @@ void FeaturePodsContainerView::EnsurePageWithButton(views::View* button) {
 
     pagination_model_->SelectPage(page, true /*animate*/);
   }
+}
+
+void FeaturePodsContainerView::SelectedPageChanged(int old_selected,
+                                                   int new_selected) {
+  InvalidateLayout();
+  PaginationModelObserver::SelectedPageChanged(old_selected, new_selected);
 }
 
 gfx::Point FeaturePodsContainerView::GetButtonPosition(

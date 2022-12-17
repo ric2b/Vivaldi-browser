@@ -1,18 +1,17 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertInstanceof} from 'chrome://resources/js/assert.m.js';
-import {decorate, define as crUiDefine} from 'chrome://resources/js/cr/ui.m.js';
-import {contextMenuHandler} from 'chrome://resources/js/cr/ui/context_menu_handler.js';
-import {Menu} from 'chrome://resources/js/cr/ui/menu.js';
-import {MenuItem} from 'chrome://resources/js/cr/ui/menu_item.js';
+import {assertInstanceof} from 'chrome://resources/js/assert.js';
+import {decorate, define as crUiDefine} from 'chrome://resources/js/cr/ui.js';
 
 import {DialogType} from '../../../common/js/dialog_type.js';
 import {str, strf, util} from '../../../common/js/util.js';
 import {AllowedPaths} from '../../../common/js/volume_manager_types.js';
 import {BreadcrumbContainer} from '../../../containers/breadcrumb_container.js';
+import {NudgeContainer} from '../../../containers/nudge_container.js';
 import {VolumeManager} from '../../../externs/volume_manager.js';
+import {XfDlpRestrictionDetailsDialog} from '../../../widgets/xf_dlp_restriction_details_dialog.js';
 import {FilesPasswordDialog} from '../../elements/files_password_dialog.js';
 import {FilesToast} from '../../elements/files_toast.js';
 import {FilesTooltip} from '../../elements/files_tooltip.js';
@@ -24,6 +23,7 @@ import {A11yAnnounce} from './a11y_announce.js';
 import {ActionModelUI} from './action_model_ui.js';
 import {ActionsSubmenu} from './actions_submenu.js';
 import {ComboButton} from './combobutton.js';
+import {contextMenuHandler} from './context_menu_handler.js';
 import {DefaultTaskDialog} from './default_task_dialog.js';
 import {DialogFooter} from './dialog_footer.js';
 import {BaseDialog} from './dialogs.js';
@@ -37,6 +37,8 @@ import {GearMenu} from './gear_menu.js';
 import {ImportCrostiniImageDialog} from './import_crostini_image_dialog.js';
 import {InstallLinuxPackageDialog} from './install_linux_package_dialog.js';
 import {ListContainer} from './list_container.js';
+import {Menu} from './menu.js';
+import {MenuItem} from './menu_item.js';
 import {MultiMenu} from './multi_menu.js';
 import {MultiMenuButton} from './multi_menu_button.js';
 import {ProgressCenterPanel} from './progress_center_panel.js';
@@ -99,6 +101,22 @@ export class FileManagerUI {
     this.deleteConfirmDialog.focusCancelButton = true;
 
     /**
+     * Confirm dialog for emptying the trash.
+     * @type {!FilesConfirmDialog}
+     * @const
+     */
+    this.emptyTrashConfirmDialog = new FilesConfirmDialog(this.element);
+    this.emptyTrashConfirmDialog.setOkLabel(str('EMPTY_TRASH_DELETE_FOREVER'));
+
+    /**
+     * Restore dialog when trying to open files that are in the trash
+     * @type {!FilesConfirmDialog}
+     * @const
+     */
+    this.restoreConfirmDialog = new FilesConfirmDialog(this.element);
+    this.restoreConfirmDialog.setOkLabel(str('RESTORE_ACTION_LABEL'));
+
+    /**
      * Confirm dialog for file move operation.
      * @type {!FilesConfirmDialog}
      * @const
@@ -148,6 +166,12 @@ export class FileManagerUI {
      * @type {?FilesPasswordDialog}
      */
     this.passwordDialog_ = null;
+
+    /**
+     * Dialog for DLP (Data Leak Prevention) restriction details.
+     * @type {?XfDlpRestrictionDetailsDialog}
+     */
+    this.dlpRestrictionDetailsDialog_ = null;
 
     /**
      * The container element of the dialog.
@@ -360,6 +384,13 @@ export class FileManagerUI {
     this.actionsSubmenu = new ActionsSubmenu(this.fileContextMenu);
 
     /**
+     * The container that maintains the lifetime of nudges.
+     * @public {!NudgeContainer}
+     * @const
+     */
+    this.nudgeContainer = new NudgeContainer();
+
+    /**
      * @type {!FilesToast}
      * @const
      */
@@ -434,6 +465,24 @@ export class FileManagerUI {
         document.createElement('files-password-dialog'));
     this.element.appendChild(this.passwordDialog_);
     return this.passwordDialog_;
+  }
+
+  /**
+   * Gets the DlpRestrictionDetails dialog.
+   * @return {?XfDlpRestrictionDetailsDialog}
+   */
+  get dlpRestrictionDetailsDialog() {
+    if (!util.isDlpEnabled()) {
+      return null;
+    }
+    if (this.dlpRestrictionDetailsDialog_) {
+      return this.dlpRestrictionDetailsDialog_;
+    }
+    this.dlpRestrictionDetailsDialog_ =
+        /** @type {!XfDlpRestrictionDetailsDialog} */ (
+            document.createElement('xf-dlp-restriction-details-dialog'));
+    this.element.appendChild(this.dlpRestrictionDetailsDialog_);
+    return this.dlpRestrictionDetailsDialog_;
   }
 
   /**

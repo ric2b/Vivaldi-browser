@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -194,6 +194,7 @@ class CONTENT_EXPORT WebContentsViewAura
                              RenderViewHost* new_host) override;
   void SetOverscrollControllerEnabled(bool enabled) override;
   void OnCapturerCountChanged() override;
+  void FullscreenStateChanged(bool is_fullscreen) override;
 
   // Overridden from RenderViewHostDelegateView:
   void ShowContextMenu(RenderFrameHost& render_frame_host,
@@ -201,7 +202,8 @@ class CONTENT_EXPORT WebContentsViewAura
   void StartDragging(const DropData& drop_data,
                      blink::DragOperationsMask operations,
                      const gfx::ImageSkia& image,
-                     const gfx::Vector2d& image_offset,
+                     const gfx::Vector2d& cursor_offset,
+                     const gfx::Rect& drag_obj_rect,
                      const blink::mojom::DragEventSourceInfo& event_info,
                      RenderWidgetHostImpl* source_rwh) override;
   void UpdateDragCursor(ui::mojom::DragOperation operation) override;
@@ -276,9 +278,11 @@ class CONTENT_EXPORT WebContentsViewAura
   void CompleteDragExit();
 
   // Called from PerformDropCallback() to finish processing the drop.
-  void FinishOnPerformDropCallback(
-      OnPerformDropContext context,
-      WebContentsViewDelegate::DropCompletionResult result);
+  // The override with `drop_data` updates `current_drop_data_` before
+  // completing the drop.
+  void FinishOnPerformDrop(OnPerformDropContext context);
+  void FinishOnPerformDropCallback(OnPerformDropContext context,
+                                   absl::optional<DropData> drop_data);
 
   // Completes a drop operation by communicating the drop data to the renderer
   // process.

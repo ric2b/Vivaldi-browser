@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <map>
 
+#include "base/containers/contains.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "ui/gfx/geometry/mojom/geometry.mojom-shared.h"
@@ -273,12 +274,8 @@ bool StructTraits<printing::mojom::PrinterSemanticCapsAndDefaultsDataView,
     // If non-null `default_quality`, there should be a matching element in
     // `qualities` array.
     if (default_quality) {
-      auto contains_default =
-          [&default_quality](printing::PageOutputQualityAttribute& attribute) {
-            return attribute.name == *default_quality;
-          };
-      if (std::find_if(qualities.begin(), qualities.end(), contains_default) ==
-          qualities.end()) {
+      if (!base::Contains(qualities, *default_quality,
+                          &printing::PageOutputQualityAttribute::name)) {
         DLOG(ERROR) << "Non-null default quality, but page output qualities "
                        "does not contain default quality";
         return false;

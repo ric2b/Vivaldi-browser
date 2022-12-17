@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
@@ -89,7 +90,7 @@ class ShillToONCTranslator {
  public:
   ShillToONCTranslator(const base::Value& shill_dictionary,
                        ::onc::ONCSource onc_source,
-                       const OncValueSignature& onc_signature,
+                       const chromeos::onc::OncValueSignature& onc_signature,
                        const NetworkState* network_state)
       : shill_dictionary_(&shill_dictionary),
         onc_source_(onc_source),
@@ -100,7 +101,7 @@ class ShillToONCTranslator {
 
   ShillToONCTranslator(const base::Value& shill_dictionary,
                        ::onc::ONCSource onc_source,
-                       const OncValueSignature& onc_signature,
+                       const chromeos::onc::OncValueSignature& onc_signature,
                        const FieldTranslationEntry* field_translation_table,
                        const NetworkState* network_state)
       : shill_dictionary_(&shill_dictionary),
@@ -126,6 +127,7 @@ class ShillToONCTranslator {
   void TranslateWiFiWithState();
   void TranslateCellularWithState();
   void TranslateCellularDevice();
+  void TranslateApnProperties();
   void TranslateNetworkWithState();
   void TranslateIPConfig();
   void TranslateSavedOrStaticIPConfig();
@@ -168,7 +170,7 @@ class ShillToONCTranslator {
   // Applies function CopyProperty to each field of |value_signature| and its
   // base signatures.
   void CopyPropertiesAccordingToSignature(
-      const OncValueSignature* value_signature);
+      const chromeos::onc::OncValueSignature* value_signature);
 
   // Applies function CopyProperty to each field of |onc_signature_| and its
   // base signatures.
@@ -176,14 +178,14 @@ class ShillToONCTranslator {
 
   // If |shill_property_name| is defined in |field_signature|, copies this
   // entry from |shill_dictionary_| to |onc_object_| if it exists.
-  void CopyProperty(const OncFieldSignature* field_signature);
+  void CopyProperty(const chromeos::onc::OncFieldSignature* field_signature);
 
   // Applies defaults to fields according to |onc_signature_|.
   void SetDefaultsAccordingToSignature();
 
   // Applies defaults to fields according to |value_signature|.
   void SetDefaultsAccordingToSignature(
-      const OncValueSignature* value_signature);
+      const chromeos::onc::OncValueSignature* value_signature);
 
   // If existent, translates the entry at |shill_property_name| in
   // |shill_dictionary_| using |table|. It is an error if no matching table
@@ -199,7 +201,7 @@ class ShillToONCTranslator {
 
   const base::Value* shill_dictionary_;
   ::onc::ONCSource onc_source_;
-  const OncValueSignature* onc_signature_;
+  const chromeos::onc::OncValueSignature* onc_signature_;
   const FieldTranslationEntry* field_translation_table_;
   base::Value onc_object_;
   const NetworkState* network_state_;
@@ -207,35 +209,38 @@ class ShillToONCTranslator {
 
 base::Value ShillToONCTranslator::CreateTranslatedONCObject() {
   onc_object_ = base::Value(base::Value::Type::DICTIONARY);
-  if (onc_signature_ == &kNetworkWithStateSignature) {
+  if (onc_signature_ == &chromeos::onc::kNetworkWithStateSignature) {
     TranslateNetworkWithState();
-  } else if (onc_signature_ == &kEthernetSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kEthernetSignature) {
     TranslateEthernet();
-  } else if (onc_signature_ == &kVPNSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kVPNSignature) {
     TranslateVPN();
-  } else if (onc_signature_ == &kOpenVPNSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kOpenVPNSignature) {
     TranslateOpenVPN();
-  } else if (onc_signature_ == &kIPsecSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kIPsecSignature) {
     TranslateIPsec();
-  } else if (onc_signature_ == &kL2TPSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kL2TPSignature) {
     TranslateL2TP();
-  } else if (onc_signature_ == &kThirdPartyVPNSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kThirdPartyVPNSignature) {
     TranslateThirdPartyVPN();
-  } else if (onc_signature_ == &kWiFiWithStateSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kWiFiWithStateSignature) {
     TranslateWiFiWithState();
-  } else if (onc_signature_ == &kCellularWithStateSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kCellularWithStateSignature) {
     if (field_translation_table_ == kCellularDeviceTable)
       TranslateCellularDevice();
     else
       TranslateCellularWithState();
-  } else if (onc_signature_ == &kIPConfigSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kIPConfigSignature) {
     TranslateIPConfig();
-  } else if (onc_signature_ == &kSavedIPConfigSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kSavedIPConfigSignature) {
     TranslateSavedIPConfig();
-  } else if (onc_signature_ == &kStaticIPConfigSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kStaticIPConfigSignature) {
     TranslateStaticIPConfig();
-  } else if (onc_signature_ == &kEAPSignature) {
+  } else if (onc_signature_ == &chromeos::onc::kEAPSignature) {
     TranslateEap();
+  } else if (ash::features::IsApnRevampEnabled() &&
+             onc_signature_ == &chromeos::onc::kCellularApnSignature) {
+    TranslateApnProperties();
   } else {
     CopyPropertiesAccordingToSignature();
   }
@@ -278,7 +283,8 @@ void ShillToONCTranslator::TranslateOpenVPN() {
                            kOpenVpnCompressionAlgorithmTable,
                            ::onc::openvpn::kCompressionAlgorithm);
 
-  for (const OncFieldSignature* field_signature = onc_signature_->fields;
+  for (const chromeos::onc::OncFieldSignature* field_signature =
+           onc_signature_->fields;
        field_signature->onc_field_name != NULL; ++field_signature) {
     const std::string& onc_field_name = field_signature->onc_field_name;
     if (onc_field_name == ::onc::openvpn::kRemoteCertKU ||
@@ -431,7 +437,8 @@ void ShillToONCTranslator::TranslateVPN() {
         {::onc::vpn::kIPsec, ::onc::ipsec::kAuthenticationType}, "."));
     if (auth_type && *auth_type == ::onc::ipsec::kEAP) {
       ShillToONCTranslator eap_translator(*shill_dictionary_, onc_source_,
-                                          kEAPSignature, network_state_);
+                                          chromeos::onc::kEAPSignature,
+                                          network_state_);
       base::Value eap_object = eap_translator.CreateTranslatedONCObject();
       if (!eap_object.DictEmpty()) {
         onc_object_.SetPath(
@@ -519,8 +526,9 @@ void ShillToONCTranslator::TranslateCellularWithState() {
     // Merge the Device dictionary with this one (Cellular) using the
     // CellularDevice signature.
     ShillToONCTranslator nested_translator(
-        *device_dictionary, onc_source_, kCellularWithStateSignature,
-        kCellularDeviceTable, network_state_);
+        *device_dictionary, onc_source_,
+        chromeos::onc::kCellularWithStateSignature, kCellularDeviceTable,
+        network_state_);
     base::Value nested_object = nested_translator.CreateTranslatedONCObject();
     onc_object_.MergeDictionary(&nested_object);
 
@@ -577,6 +585,27 @@ void ShillToONCTranslator::TranslateCellularDevice() {
     TranslateAndAddListOfObjects(::onc::cellular::kFoundNetworks,
                                  *shill_found_networks);
   }
+}
+
+// TODO(b/162365553) Add translation for the other APN properties when they are
+// added to Shill
+void ShillToONCTranslator::TranslateApnProperties() {
+  DCHECK(ash::features::IsApnRevampEnabled());
+  CopyPropertiesAccordingToSignature();
+  std::string shill_apn_ip_type =
+      FindStringKeyOrEmpty(shill_dictionary_, shill::kApnIpTypeProperty);
+  std::string ip_type;
+  if (shill_apn_ip_type == shill::kApnIpTypeV4) {
+    ip_type = ::onc::cellular_apn::kIpTypeIpv4;
+  } else if (shill_apn_ip_type == shill::kApnIpTypeV6) {
+    ip_type = ::onc::cellular_apn::kIpTypeIpv6;
+  } else if (shill_apn_ip_type == shill::kApnIpTypeV4V6) {
+    ip_type = ::onc::cellular_apn::kIpTypeIpv4Ipv6;
+  } else {
+    return;  // Ignore unhandled ApnIpType types
+  }
+
+  onc_object_.SetKey(::onc::cellular_apn::kIpType, base::Value(ip_type));
 }
 
 void ShillToONCTranslator::TranslateNetworkWithState() {
@@ -691,13 +720,13 @@ void ShillToONCTranslator::TranslateNetworkWithState() {
     }
     const base::Value* name_servers =
         static_ipconfig->FindListKey(shill::kNameServersProperty);
-    if (name_servers && !name_servers->GetListDeprecated().empty()) {
+    if (name_servers && !name_servers->GetList().empty()) {
       onc_object_.SetKey(
           ::onc::network_config::kNameServersConfigType,
           base::Value(::onc::network_config::kIPConfigTypeStatic));
     }
     if ((ip_address && !ip_address->empty()) ||
-        (name_servers && !name_servers->GetListDeprecated().empty())) {
+        (name_servers && !name_servers->GetList().empty())) {
       TranslateAndAddNestedObject(::onc::network_config::kStaticIPConfig,
                                   *static_ipconfig);
     }
@@ -821,8 +850,7 @@ void ShillToONCTranslator::TranslateEap() {
   if (subject_alternative_name_match) {
     base::Value deserialized_dicts(base::Value::Type::LIST);
     std::string error_msg;
-    for (const base::Value& san :
-         subject_alternative_name_match->GetListDeprecated()) {
+    for (const base::Value& san : subject_alternative_name_match->GetList()) {
       JSONStringValueDeserializer deserializer(san.GetString());
       auto deserialized_dict =
           deserializer.Deserialize(/*error_code=*/nullptr, &error_msg);
@@ -846,8 +874,8 @@ void ShillToONCTranslator::TranslateAndAddNestedObject(
 void ShillToONCTranslator::TranslateAndAddNestedObject(
     const std::string& onc_field_name,
     const base::Value& dictionary) {
-  const OncFieldSignature* field_signature =
-      GetFieldSignature(*onc_signature_, onc_field_name);
+  const chromeos::onc::OncFieldSignature* field_signature =
+      chromeos::onc::GetFieldSignature(*onc_signature_, onc_field_name);
   if (!field_signature) {
     NET_LOG(ERROR) << "Unable to find signature for field: " << onc_field_name;
     return;
@@ -861,8 +889,8 @@ void ShillToONCTranslator::TranslateAndAddNestedObject(
     const std::string& onc_field_name,
     const base::Value& dictionary,
     const FieldTranslationEntry* field_translation_table) {
-  const OncFieldSignature* field_signature =
-      GetFieldSignature(*onc_signature_, onc_field_name);
+  const chromeos::onc::OncFieldSignature* field_signature =
+      chromeos::onc::GetFieldSignature(*onc_signature_, onc_field_name);
   if (!field_signature) {
     NET_LOG(ERROR) << "Unable to find signature for field: " << onc_field_name;
     return;
@@ -886,8 +914,8 @@ void ShillToONCTranslator::SetNestedOncValue(
 void ShillToONCTranslator::TranslateAndAddListOfObjects(
     const std::string& onc_field_name,
     const base::Value& list) {
-  const OncFieldSignature* field_signature =
-      GetFieldSignature(*onc_signature_, onc_field_name);
+  const chromeos::onc::OncFieldSignature* field_signature =
+      chromeos::onc::GetFieldSignature(*onc_signature_, onc_field_name);
   if (field_signature->value_signature->onc_type != base::Value::Type::LIST) {
     NET_LOG(ERROR) << "ONC Field name: '" << onc_field_name << "' has type '"
                    << field_signature->value_signature->onc_type
@@ -896,7 +924,7 @@ void ShillToONCTranslator::TranslateAndAddListOfObjects(
   }
   DCHECK(field_signature->value_signature->onc_array_entry_signature);
   base::Value result(base::Value::Type::LIST);
-  for (const auto& it : list.GetListDeprecated()) {
+  for (const auto& it : list.GetList()) {
     if (!it.is_dict())
       continue;
     ShillToONCTranslator nested_translator(
@@ -911,7 +939,7 @@ void ShillToONCTranslator::TranslateAndAddListOfObjects(
   }
   // If there are no entries in the list, there is no need to expose this
   // field.
-  if (result.GetListDeprecated().empty())
+  if (result.GetList().empty())
     return;
   onc_object_.SetKey(onc_field_name, std::move(result));
 }
@@ -921,19 +949,20 @@ void ShillToONCTranslator::CopyPropertiesAccordingToSignature() {
 }
 
 void ShillToONCTranslator::CopyPropertiesAccordingToSignature(
-    const OncValueSignature* value_signature) {
+    const chromeos::onc::OncValueSignature* value_signature) {
   if (value_signature->base_signature)
     CopyPropertiesAccordingToSignature(value_signature->base_signature);
   if (!value_signature->fields)
     return;
-  for (const OncFieldSignature* field_signature = value_signature->fields;
+  for (const chromeos::onc::OncFieldSignature* field_signature =
+           value_signature->fields;
        field_signature->onc_field_name != NULL; ++field_signature) {
     CopyProperty(field_signature);
   }
 }
 
 void ShillToONCTranslator::CopyProperty(
-    const OncFieldSignature* field_signature) {
+    const chromeos::onc::OncFieldSignature* field_signature) {
   std::string shill_property_name;
   if (!field_translation_table_ ||
       !GetShillPropertyName(field_signature->onc_field_name,
@@ -965,12 +994,13 @@ void ShillToONCTranslator::SetDefaultsAccordingToSignature() {
 }
 
 void ShillToONCTranslator::SetDefaultsAccordingToSignature(
-    const OncValueSignature* value_signature) {
+    const chromeos::onc::OncValueSignature* value_signature) {
   if (value_signature->base_signature)
     SetDefaultsAccordingToSignature(value_signature->base_signature);
   if (!value_signature->fields)
     return;
-  for (const OncFieldSignature* field_signature = value_signature->fields;
+  for (const chromeos::onc::OncFieldSignature* field_signature =
+           value_signature->fields;
        field_signature->onc_field_name != nullptr; ++field_signature) {
     if (!field_signature->default_value_setter)
       continue;
@@ -1012,7 +1042,7 @@ std::string ShillToONCTranslator::GetName() {
 base::Value TranslateShillServiceToONCPart(
     const base::Value& shill_dictionary,
     ::onc::ONCSource onc_source,
-    const OncValueSignature* onc_signature,
+    const chromeos::onc::OncValueSignature* onc_signature,
     const NetworkState* network_state) {
   CHECK(onc_signature != NULL);
 

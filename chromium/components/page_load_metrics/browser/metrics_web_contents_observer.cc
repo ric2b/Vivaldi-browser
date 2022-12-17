@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -133,6 +133,9 @@ void MetricsWebContentsObserver::BindPageLoadMetrics(
 MetricsWebContentsObserver::~MetricsWebContentsObserver() {}
 
 void MetricsWebContentsObserver::WebContentsWillSoonBeDestroyed() {
+  // TODO(https://crbug.com/1363952): Should not rely on this call.
+  // This method is called only in a certain situation, and most embedders
+  // doesn't support to call this method before WebContentsDestroyed().
   web_contents_will_soon_be_destroyed_ = true;
 }
 
@@ -765,13 +768,13 @@ void MetricsWebContentsObserver::MaybeStorePageLoadTrackerForBackForwardCache(
   if (!is_back_forward_cache)
     return;
 
-  // Currently, back-forward cache doesn't support a page having inner pages.
-  // So, we don't handle such case here, and have a DCHECK.
-  DCHECK(active_pages_.empty());
-
   previously_committed_load->OnEnterBackForwardCache();
-
   inactive_pages_.emplace(previous_frame, std::move(previously_committed_load));
+  for (auto& kv : active_pages_) {
+    kv.second->OnEnterBackForwardCache();
+    inactive_pages_.emplace(kv.first, std::move(kv.second));
+  }
+  active_pages_.clear();
 }
 
 bool MetricsWebContentsObserver::MaybeActivatePageLoadTracker(
@@ -790,17 +793,38 @@ bool MetricsWebContentsObserver::MaybeActivatePageLoadTracker(
   if (it == inactive_pages_.end())
     return false;
 
-  primary_page_ = std::move(it->second);
-  inactive_pages_.erase(it);
   active_pages_.clear();
 
-  if (navigation_handle->IsServedFromBackForwardCache()) {
-    primary_page_->OnRestoreFromBackForwardCache(navigation_handle);
-  } else if (navigation_handle->IsPrerenderedPageActivation()) {
-    primary_page_->DidActivatePrerenderedPage(navigation_handle);
-  } else {
-    NOTREACHED();
-  }
+  // This should be a back/forward cache or prerender navigation if we find
+  // an inactive_page.
+  DCHECK(navigation_handle->IsServedFromBackForwardCache() ||
+         navigation_handle->IsPrerenderedPageActivation());
+
+  auto* primary_main_frame = navigation_handle->GetRenderFrameHost();
+  primary_main_frame->ForEachRenderFrameHost(
+      [&](content::RenderFrameHost* rfh) {
+        // Skip RenderFrameHosts that aren't main frames.
+        if (rfh != rfh->GetMainFrame())
+          return;
+        auto it = inactive_pages_.find(rfh);
+        if (it == inactive_pages_.end())
+          return;
+        PageLoadTracker* tracker;
+        if (rfh == primary_main_frame) {
+          primary_page_ = std::move(it->second);
+          tracker = primary_page_.get();
+        } else {
+          tracker = active_pages_.emplace(it->first, std::move(it->second))
+                        .first->second.get();
+        }
+        inactive_pages_.erase(it);
+        if (navigation_handle->IsServedFromBackForwardCache()) {
+          tracker->OnRestoreFromBackForwardCache(navigation_handle);
+        } else if (navigation_handle->IsPrerenderedPageActivation()) {
+          tracker->DidActivatePrerenderedPage(navigation_handle);
+        }
+      });
+
   for (auto& observer : lifecycle_observers_)
     observer.OnActivate(primary_page_.get());
 
@@ -1098,9 +1122,12 @@ void MetricsWebContentsObserver::SetUpSharedMemoryForSmoothness(
     base::ReadOnlySharedMemoryRegion shared_memory) {
   content::RenderFrameHost* render_frame_host =
       page_load_metrics_receivers_.GetCurrentTargetFrame();
-  const bool is_main_frame = render_frame_host->GetParent() == nullptr;
-  if (!is_main_frame) {
-    // TODO(1115136): Merge smoothness metrics from OOPIFs with the main-frame.
+  const bool is_outermost_main_frame =
+      render_frame_host->GetParentOrOuterDocument() == nullptr;
+  if (!is_outermost_main_frame) {
+    // TODO(https://crbug.com/1115136): Merge smoothness metrics from OOPIFs and
+    // FencedFrames with the main-frame. Also need to check if FencedFrames
+    // send this request correctly.
     return;
   }
 
@@ -1204,6 +1231,15 @@ void MetricsWebContentsObserver::OnV8MemoryChanged(
 
   for (const auto& map_pair : per_tracker_updates)
     map_pair.first->OnV8MemoryChanged(map_pair.second);
+}
+
+void MetricsWebContentsObserver::OnSharedStorageWorkletHostCreated(
+    content::RenderFrameHost* rfh) {
+  if (!rfh)
+    return;
+
+  if (PageLoadTracker* tracker = GetPageLoadTracker(rfh))
+    tracker->OnSharedStorageWorkletHostCreated();
 }
 
 // This contains some bugs. RenderFrameHost::IsActive is not relevant to

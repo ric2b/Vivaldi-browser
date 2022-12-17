@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/tracing.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/cast_channel/cast_message_handler.h"
+#include "components/media_router/common/providers/cast/channel/cast_message_handler.h"
 #include "components/mirroring/mojom/cast_message_channel.mojom.h"
 #include "components/mirroring/mojom/mirroring_service_host.mojom.h"
 #include "components/mirroring/mojom/session_observer.mojom.h"
@@ -883,7 +883,8 @@ class TestTabMirroringSession : public mirroring::mojom::SessionObserver,
     const std::string receiver_model_name{};
     auto session_params = mirroring::mojom::SessionParameters::New(
         mirroring::mojom::SessionType::AUDIO_AND_VIDEO, endpoint.address(),
-        receiver_model_name, base::Milliseconds(kTargetPlayoutDelayMs));
+        receiver_model_name, "sender-123", "receiver-456",
+        base::Milliseconds(kTargetPlayoutDelayMs));
 
     host_->Start(std::move(session_params), std::move(observer_remote),
                  std::move(channel_remote),
@@ -900,8 +901,8 @@ class TestTabMirroringSession : public mirroring::mojom::SessionObserver,
   void LogInfoMessage(const std::string& message) override {}
   void LogErrorMessage(const std::string& message) override {}
 
-  // CastMessageChannel implementation
-  void Send(mirroring::mojom::CastMessagePtr message) override {
+  // CastMessageChannel implementation (inbound).
+  void OnMessage(mirroring::mojom::CastMessagePtr message) override {
     Json::CharReaderBuilder rb;
     auto reader = std::unique_ptr<Json::CharReader>(rb.newCharReader());
     Json::Value root;
@@ -986,7 +987,7 @@ class TestTabMirroringSession : public mirroring::mojom::SessionObserver,
 
     VLOG(1) << "Sending ANSWER";
     offer_message->json_format_data = ssb.str();
-    channel_to_service_->Send(std::move(offer_message));
+    channel_to_service_->OnMessage(std::move(offer_message));
   }
 
   mojo::Remote<mirroring::mojom::MirroringServiceHost> host_;

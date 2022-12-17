@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,6 +59,7 @@
 #include "net/base/url_util.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -78,8 +79,6 @@ constexpr auto kOSSettingsMap = base::MakeFixedFlatMap<ChromePage,
      chromeos::settings::mojom::kBluetoothDevicesSubpagePath},
     {ChromePage::BLUETOOTHDEVICES,
      chromeos::settings::mojom::kBluetoothDevicesSubpagePath},
-    {ChromePage::CHANGEPICTURE,
-     chromeos::settings::mojom::kChangePictureSubpagePath},
     {ChromePage::CUPSPRINTERS,
      chromeos::settings::mojom::kPrintingDetailsSubpagePath},
     {ChromePage::DATETIME, chromeos::settings::mojom::kDateAndTimeSectionPath},
@@ -145,12 +144,12 @@ GURL ConvertArcUrlToExternalFileUrlIfNeeded(const GURL& url) {
   return url;
 }
 
-// Converts an externalfile:// ARC URL to a file:// URL managed by the FuseBox
-// Moniker system. This Moniker file is readable on the Linux filesystem like
-// any other file. Returns the input URL if a Moniker could not be created.
-GURL ConvertToMonikerFileUrl(Profile* profile, GURL external_file_url) {
-  const base::FilePath virtual_path =
-      chromeos::ExternalFileURLToVirtualPath(external_file_url);
+// Converts a content:// ARC URL to a file:// URL managed by the FuseBox Moniker
+// system. This Moniker file is readable on the Linux filesystem like any other
+// file. Returns an empty URL if a Moniker could not be created.
+GURL ConvertToMonikerFileUrl(Profile* profile, GURL content_url) {
+  const base::FilePath virtual_path = chromeos::ExternalFileURLToVirtualPath(
+      arc::ArcUrlToExternalFileUrl(content_url));
 
   const storage::FileSystemURL fs_url =
       file_manager::util::GetFileManagerFileSystemContext(profile)
@@ -158,15 +157,16 @@ GURL ConvertToMonikerFileUrl(Profile* profile, GURL external_file_url) {
               blink::StorageKey(file_manager::util::GetFilesAppOrigin()),
               storage::kFileSystemTypeExternal, virtual_path);
   if (!fs_url.is_valid()) {
-    return external_file_url;
+    return GURL();
   }
 
   fusebox::Server* fusebox_server = fusebox::Server::GetInstance();
   if (!fusebox_server) {
-    return external_file_url;
+    return GURL();
   }
 
-  fusebox::Moniker moniker = fusebox_server->CreateMoniker(fs_url);
+  constexpr bool kReadOnly = true;
+  fusebox::Moniker moniker = fusebox_server->CreateMoniker(fs_url, kReadOnly);
 
   // Keep the Moniker alive for the same time as a file shared through the Web
   // Share API. We could be cleverer about scheduling the clean up, but "destroy
@@ -203,11 +203,16 @@ apps::IntentPtr ConvertLaunchIntent(
   if (launch_intent->files.has_value() && launch_intent->files->size() > 0) {
     std::vector<std::string> mime_types;
     for (const auto& file_info : *launch_intent->files) {
-      GURL url = arc::ArcUrlToExternalFileUrl(file_info->content_uri);
-      if (ash::features::IsArcFuseBoxFileSharingEnabled()) {
-        url = ConvertToMonikerFileUrl(profile, url);
+      GURL moniker_url =
+          ConvertToMonikerFileUrl(profile, file_info->content_uri);
+      if (moniker_url.is_empty()) {
+        // Continue launching the web app, but without any invalid attached
+        // files.
+        continue;
       }
-      apps::IntentFilePtr file = std::make_unique<apps::IntentFile>(url);
+
+      apps::IntentFilePtr file =
+          std::make_unique<apps::IntentFile>(moniker_url);
 
       file->mime_type = file_info->type;
       file->file_name = file_info->name;
@@ -368,8 +373,8 @@ void ArcOpenUrlDelegateImpl::OpenWebAppFromArc(const GURL& url) {
   if (!arc_tracker)
     return;
 
-  for (const auto& app_id : prefs->GetAppsForPackage(package_name.value()))
-    arc_tracker->CloseWindows(app_id);
+  for (const auto& id : prefs->GetAppsForPackage(package_name.value()))
+    arc_tracker->CloseWindows(id);
 }
 
 void ArcOpenUrlDelegateImpl::OpenArcCustomTab(
@@ -410,8 +415,13 @@ void ArcOpenUrlDelegateImpl::OpenArcCustomTab(
 void ArcOpenUrlDelegateImpl::OpenChromePageFromArc(ChromePage page) {
   if (auto* it = kOSSettingsMap.find(page); it != kOSSettingsMap.end()) {
     Profile* profile = ProfileManager::GetActiveUserProfile();
+    std::string sub_page = it->second;
+    if (features::IsAccessibilityOSSettingsVisibilityEnabled() &&
+        it->first == ChromePage::MANAGEACCESSIBILITY) {
+      sub_page = chromeos::settings::mojom::kAccessibilitySectionPath;
+    }
     chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(profile,
-                                                                 it->second);
+                                                                 sub_page);
     return;
   }
 
@@ -478,10 +488,11 @@ void ArcOpenUrlDelegateImpl::OpenAppWithIntent(
 
   if (base::FeatureList::IsEnabled(apps::kAppServiceLaunchWithoutMojom)) {
     proxy->LaunchAppWithIntent(app_id, event_flags, std::move(intent),
-                               apps::LaunchSource::kFromArc);
+                               apps::LaunchSource::kFromArc, nullptr,
+                               base::DoNothing());
   } else {
-    proxy->LaunchAppWithIntent(app_id, event_flags,
-                               apps::ConvertIntentToMojomIntent(intent),
-                               apps::mojom::LaunchSource::kFromArc);
+    proxy->LaunchAppWithIntent(
+        app_id, event_flags, apps::ConvertIntentToMojomIntent(intent),
+        apps::mojom::LaunchSource::kFromArc, nullptr, {});
   }
 }

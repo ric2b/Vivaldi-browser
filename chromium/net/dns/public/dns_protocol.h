@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -169,13 +169,6 @@ static const uint16_t kTypeOPT = 41;
 static const uint16_t kTypeNSEC = 47;
 static const uint16_t kTypeHttps = 65;
 static const uint16_t kTypeANY = 255;
-
-// Experimental DNS record types pending IANA assignment.
-//
-// The INTEGRITY RR type exists purely for measuring how the DNS ecosystem
-// handles new RR types.
-// https://docs.google.com/document/d/14eCqVyT_3MSj7ydqNFl1Yl0yg1fs6g24qmYUUdi5V-k/edit?usp=sharing
-static const uint16_t kExperimentalTypeIntegrity = 65521;
 
 // DNS reply codes (RCODEs).
 //

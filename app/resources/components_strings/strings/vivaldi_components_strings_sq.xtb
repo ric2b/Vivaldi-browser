@@ -178,7 +178,7 @@
 <translation id="7445762425076701745">Identiteti i këtij serveri nuk mund të vërtetohet plotësisht. Serveri përdor një emër të vlefshëm vetëm brenda rrjetit tuaj kompjuterik dhe autoritetet e jashtme certifikuese nuk e vërtetojnë dot se kujt i përket. Autoritetet certifikuese ndonjëherë lëshojnë dëshmi edhe për emra të tillë, prandaj nuk ka garanci që jeni lidhur me uebsajtin e kërkuar apo me një pirat interneti.</translation>
 <translation id="7455133967321480974">Përdor standardin e përgjithshëm (Bllokoj)</translation>
 <translation id="7518003948725431193">Nuk ka faqe me adresën: <ph name="URL" /></translation>
-<translation id="7549584377607005141">Faqja e internetit kërkon të dhënat e plotësuara më parë që të paraqitet në rregull. Të dhënat mund t'i dërgoni prapë, por në këtë mënyrë do ju duhet të kryeni të njëjtat veprime të mëparshme.</translation>
+<translation id="7549584377607005141">Faqja e internetit kërkon të dhënat e plotësuara më parë që të paraqitet në rregull. Të dhënat mund t'i dërgoni prapë, por pastaj do ju duhet të përsëritni veprimet e mëparshme.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> nuk e shqyrton dot kërkesën për momentin.</translation>
 <translation id="7662298039739062396">Parametri kontrollohet nga një shtesë</translation>
 <translation id="7663736086183791259">Certifikata <ph name="CERTIFICATE_VALIDITY" /></translation>

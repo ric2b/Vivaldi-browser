@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,9 +47,9 @@ StreamConsumer::StreamConsumer(StreamConsumer&& other,
   }
 }
 
-StreamConsumer::~StreamConsumer() {
-  receiver_->SetConsumer(nullptr);
-}
+// NOTE: Do NOT call into |receiver_| methods here, as the object may no longer
+// be valid at time of this object's destruction.
+StreamConsumer::~StreamConsumer() = default;
 
 void StreamConsumer::ReadFrame(base::OnceClosure no_frames_available_cb) {
   DCHECK(!is_read_pending_);
@@ -61,7 +61,6 @@ void StreamConsumer::ReadFrame(base::OnceClosure no_frames_available_cb) {
 
 void StreamConsumer::CloseDataPipeOnError() {
   DLOG(WARNING) << "[ssrc:" << receiver_->ssrc() << "] Data pipe closed.";
-  receiver_->SetConsumer(nullptr);
   pipe_watcher_.Cancel();
   data_pipe_.reset();
 }
@@ -168,7 +167,7 @@ void StreamConsumer::MaybeSendNextFrame() {
 
   const bool is_key_frame =
       encoded_frame.dependency ==
-      openscreen::cast::EncodedFrame::Dependency::KEY_FRAME;
+      openscreen::cast::EncodedFrame::Dependency::kKeyFrame;
 
   base::TimeDelta playout_time =
       base::Microseconds(std::chrono::duration_cast<std::chrono::microseconds>(

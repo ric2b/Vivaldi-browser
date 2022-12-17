@@ -1,6 +1,10 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+import {Channel} from './channel.js';
+import {PostMessageChannel} from './post_message_channel.js';
+import {WebviewScrollShadowsHelper, WebviewScrollShadowsHelperConstructor} from './scroll_helper_injected.js';
 
 /**
  * @fileoverview
@@ -29,7 +33,7 @@ APICallForwarder.prototype = {
 
   /**
    * Initialize the API call forwarder.
-   * @param {!Object} channel Channel to which API calls should be forwarded.
+   * @param {!Channel} channel Channel to which API calls should be forwarded.
    */
   init(channel) {
     this.channel_ = channel;

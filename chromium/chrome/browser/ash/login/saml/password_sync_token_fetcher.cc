@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -343,8 +343,7 @@ void PasswordSyncTokenFetcher::ProcessValidTokenResponse(
         consumer_->OnApiCallFailed(ErrorType::kGetNoList);
         return;
       }
-      base::Value::ConstListView list_of_tokens =
-          token_list_entry->GetListDeprecated();
+      const base::Value::List& list_of_tokens = token_list_entry->GetList();
       if (list_of_tokens.size() > 0) {
         const auto* sync_token_value =
             list_of_tokens[0].FindKeyOfType(kToken, base::Value::Type::STRING);

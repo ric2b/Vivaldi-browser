@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_selector_client.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_filter.h"
-#include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
+#include "third_party/blink/renderer/platform/transforms/affine_transform.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -83,10 +83,9 @@ class CanvasRenderingContext2DState final
   void SetLineDashOffset(double);
   double LineDashOffset() const { return line_dash_offset_; }
 
-  void SetTransform(const TransformationMatrix&);
+  void SetTransform(const AffineTransform&);
   void ResetTransform();
-  TransformationMatrix GetTransform() const { return transform_; }
-  AffineTransform GetAffineTransform() const;
+  AffineTransform GetTransform() const { return transform_; }
   bool IsTransformInvertible() const { return is_transform_invertible_; }
 
   void ClipPath(const SkPath&, AntiAliasingMode);
@@ -280,8 +279,7 @@ class CanvasRenderingContext2DState final
   mutable sk_sp<PaintFilter> shadow_and_foreground_image_filter_;
 
   double global_alpha_;
-  sk_sp<PaintFilter> global_alpha_filter_;
-  TransformationMatrix transform_;
+  AffineTransform transform_;
   Vector<double> line_dash_;
   double line_dash_offset_;
 

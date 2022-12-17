@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@
 #include "components/services/filesystem/public/mojom/types.mojom.h"
 #include "content/browser/file_system_access/file_system_access_file_handle_impl.h"
 #include "content/browser/file_system_access/file_system_access_handle_base.h"
-#include "content/browser/file_system_access/safe_move_helper.h"
+#include "content/browser/file_system_access/file_system_access_safe_move_helper.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -58,7 +58,7 @@ class CONTENT_EXPORT FileSystemAccessFileWriterImpl
   ~FileSystemAccessFileWriterImpl() override;
 
   const storage::FileSystemURL& swap_url() const { return swap_url_; }
-  const base::WeakPtr<FileSystemAccessFileWriterImpl> weak_ptr() const {
+  base::WeakPtr<FileSystemAccessFileWriterImpl> weak_ptr() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return weak_factory_.GetWeakPtr();
   }
@@ -100,7 +100,8 @@ class CONTENT_EXPORT FileSystemAccessFileWriterImpl
   void CloseImpl(CloseCallback callback);
   void AbortImpl(AbortCallback callback);
   void DidReplaceSwapFile(
-      std::unique_ptr<content::SafeMoveHelper> safe_move_helper,
+      std::unique_ptr<content::FileSystemAccessSafeMoveHelper>
+          file_system_access_safe_move_helper,
       blink::mojom::FileSystemAccessErrorPtr result);
 
   bool is_close_pending() const {

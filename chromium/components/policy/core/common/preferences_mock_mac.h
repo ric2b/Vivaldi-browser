@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,8 +22,6 @@ class POLICY_EXPORT MockPreferences : public MacPreferences {
   Boolean AppValueIsForced(CFStringRef key,
                            CFStringRef application_id) override;
   Boolean IsManagedPolicyAvailableForMachineScope(CFStringRef key) override;
-
-  void LoadPolicyScopeDetectionPolicy(CFStringRef application_id) override;
 
   // Adds a preference item with the given info to the test set.
   void AddTestItem(CFStringRef key,

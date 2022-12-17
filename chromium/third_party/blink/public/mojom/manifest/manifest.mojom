@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -176,7 +176,7 @@ struct ManifestImageResource {
 // https://www.w3.org/TR/manifest-app-info/#screenshots-member. This includes
 // a ImageResource with some additional members.
 struct ManifestScreenshot {
-  enum Platform {
+  enum FormFactor {
     kUnknown = 0,
     kWide,
     kNarrow,
@@ -184,8 +184,11 @@ struct ManifestScreenshot {
 
   ManifestImageResource image;
 
-  // The distribution platform for which a given screenshot applies.
-  Platform platform;
+  // The form factor for which a given screenshot applies.
+  FormFactor form_factor;
+
+  // This serves as the accessible name of the screenshot.
+  mojo_base.mojom.String16? label;
 };
 
 // Structure representing a share target file.

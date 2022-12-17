@@ -121,8 +121,7 @@ static inline bool FeatureWithValidIdent(const String& media_feature,
 
   if (RuntimeEnabledFeatures::DevicePostureEnabled()) {
     if (media_feature == media_feature_names::kDevicePostureMediaFeature) {
-      return ident == CSSValueID::kContinuous || ident == CSSValueID::kFolded ||
-             ident == CSSValueID::kFoldedOver;
+      return ident == CSSValueID::kContinuous || ident == CSSValueID::kFolded;
     }
   }
 
@@ -324,11 +323,10 @@ absl::optional<MediaQueryExpValue> MediaQueryExpValue::Consume(
 
   if (CSSVariableParser::IsValidVariableName(media_feature)) {
     CSSTokenizedValue tokenized_value{range};
-    if (CSSParserImpl::RemoveImportantAnnotationIfPresent(tokenized_value)) {
-      return absl::nullopt;
-    }
-    if (const CSSValue* value = CSSVariableParser::ParseDeclarationValue(
-            tokenized_value, false, context)) {
+    CSSParserImpl::RemoveImportantAnnotationIfPresent(tokenized_value);
+    if (const CSSValue* value =
+            CSSVariableParser::ParseDeclarationIncludingCSSWide(
+                tokenized_value, false, context)) {
       while (!range.AtEnd())
         range.Consume();
       return MediaQueryExpValue(*value);
@@ -541,7 +539,8 @@ unsigned MediaQueryExpValue::GetUnitFlags() const {
       length_type_flags.test(CSSPrimitiveValue::kUnitTypeFontXSize) ||
       length_type_flags.test(CSSPrimitiveValue::kUnitTypeZeroCharacterWidth) ||
       length_type_flags.test(
-          CSSPrimitiveValue::kUnitTypeIdeographicFullWidth)) {
+          CSSPrimitiveValue::kUnitTypeIdeographicFullWidth) ||
+      length_type_flags.test(CSSPrimitiveValue::kUnitTypeLineHeight)) {
     unit_flags |= UnitFlags::kFontRelative;
   }
 

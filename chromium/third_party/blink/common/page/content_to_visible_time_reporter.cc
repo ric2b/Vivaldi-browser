@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,10 +8,8 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -84,7 +82,7 @@ ContentToVisibleTimeReporter::TabWasShown(
                                    gfx::PresentationFeedback::Failure());
   }
   DCHECK(!tab_switch_start_state_);
-  ResetTabSwitchStartState(std::move(start_state), has_saved_frames);
+  OverwriteTabSwitchStartState(std::move(start_state), has_saved_frames);
 
   // |tab_switch_start_state_| is only reset by RecordHistogramsAndTraceEvents
   // once the metrics have been emitted.
@@ -144,6 +142,12 @@ void ContentToVisibleTimeReporter::RecordHistogramsAndTraceEvents(
   // failure.
   DCHECK_NE(tab_switch_result, TabSwitchResult::kPresentationFailure);
 
+  // Reset tab switch information on exit. Unretained is safe because the
+  // closure is invoked synchronously.
+  base::ScopedClosureRunner reset_state(
+      base::BindOnce(&ContentToVisibleTimeReporter::ResetTabSwitchStartState,
+                     base::Unretained(this)));
+
   if (show_reason_bfcache_restore) {
     RecordBackForwardCacheRestoreMetric(
         tab_switch_start_state_->event_start_time, feedback);
@@ -191,25 +195,24 @@ void ContentToVisibleTimeReporter::RecordHistogramsAndTraceEvents(
         break;
       case TabSwitchResult::kMissedTabHide:
       case TabSwitchResult::kIncomplete:
-      case TabSwitchResult::kUnhandled:
         base::UmaHistogramMediumTimes(
             base::StrCat(
                 {"Browser.Tabs.TotalIncompleteSwitchDuration2.", suffix}),
             tab_switch_duration);
         break;
       case TabSwitchResult::kPresentationFailure:
+        // Do nothing.
+        break;
+      case TabSwitchResult::DEPRECATED_kUnhandled:
+        NOTREACHED();
         break;
     }
   }
 
-  // TODO(crbug.com/1164477): Remove these once the TabSwitchMetric2 feature
-  // is enabled by default. During the validation experiment, the experiment
-  // group will log TabSwitchResult2 and TabSwitchResult with the same values,
-  // so that it's easy to compare the same TabSwitchResult metrics for the
-  // control group and experiment group. If TabSwitchResult in the experiment
-  // group is ok, so is TabSwitchResult2, and we can then deprecate
-  // TabSwitchResult since the historical data outside the experiment group is
-  // unreliable.
+  // TODO(crbug.com/1164477): Remove these deprecated metrics in M108 after
+  // automated test suites have been updated to use the new metrics. Until then
+  // log them in parallel. (Google-internal details at
+  // http://shortn/_hpallg5Q7H.)
 
   // Record result histogram.
   base::UmaHistogramEnumeration(
@@ -224,7 +227,6 @@ void ContentToVisibleTimeReporter::RecordHistogramsAndTraceEvents(
           tab_switch_duration);
       break;
     case TabSwitchResult::kMissedTabHide:
-    case TabSwitchResult::kUnhandled:
       // This was not included in the v1 histograms.
       DCHECK(IsTabSwitchMetric2FeatureEnabled());
       [[fallthrough]];
@@ -234,14 +236,15 @@ void ContentToVisibleTimeReporter::RecordHistogramsAndTraceEvents(
           tab_switch_duration);
       break;
     case TabSwitchResult::kPresentationFailure:
+      // Do nothing.
+      break;
+    case TabSwitchResult::DEPRECATED_kUnhandled:
+      NOTREACHED();
       break;
   }
-
-  // Reset tab switch information.
-  ResetTabSwitchStartState();
 }
 
-void ContentToVisibleTimeReporter::ResetTabSwitchStartState(
+void ContentToVisibleTimeReporter::OverwriteTabSwitchStartState(
     mojom::RecordContentToVisibleTimeRequestPtr state,
     bool has_saved_frames) {
   if (tab_switch_start_state_) {

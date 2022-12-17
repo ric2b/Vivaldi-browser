@@ -51,12 +51,18 @@ class VivaldiDesktopWindowTreeHostWin
                     LRESULT* result) override;
   int GetInitialShowState() const override;
   bool ShouldUseNativeFrame() const override;
+  bool HasFrame() const override;
   views::FrameMode GetFrameMode() const override;
   void HandleCreate() override;
+  void Restore() override;
   void Maximize() override;
   void Minimize() override;
+  void SetFullscreen(bool fullscreen, int64_t target_display_id) override;
+  bool GetDwmFrameInsetsInPixels(gfx::Insets* insets) const override;
+  bool GetClientAreaInsets(gfx::Insets* insets,
+                           HMONITOR monitor) const override;
 
-  void UpdateSystemColorsInPrefs();
+  void SetRoundedWindowCorners(bool enable);
   void UpdateWorkspace();
 
   views::NativeMenuWin* GetSystemMenu();

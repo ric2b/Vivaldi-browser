@@ -1,9 +1,10 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ui/ozone/platform/wayland/host/proxy/wayland_proxy_impl.h"
 
+#include "base/ranges/algorithm.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_shm_buffer.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
@@ -26,7 +27,7 @@ void WaylandProxyImpl::SetDelegate(WaylandProxy::Delegate* delegate) {
   delegate_ = delegate;
   if (delegate_)
     connection_->wayland_window_manager()->AddObserver(this);
-  else if (!delegate_)
+  else
     connection_->wayland_window_manager()->RemoveObserver(this);
 }
 
@@ -68,14 +69,9 @@ wl_buffer* WaylandProxyImpl::CreateShmBasedWlBuffer(
 
 void WaylandProxyImpl::DestroyShmForWlBuffer(wl_buffer* buffer) {
   auto it =
-      std::find_if(shm_buffers_.begin(), shm_buffers_.end(),
-                   [buffer](const auto& buf) { return buf.get() == buffer; });
+      base::ranges::find(shm_buffers_, buffer, &ui::WaylandShmBuffer::get);
   DCHECK(it != shm_buffers_.end());
   shm_buffers_.erase(it);
-}
-
-void WaylandProxyImpl::ScheduleDisplayFlush() {
-  connection_->ScheduleFlush();
 }
 
 void WaylandProxyImpl::FlushForTesting() {

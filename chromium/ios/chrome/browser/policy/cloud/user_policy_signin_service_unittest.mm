@@ -1,50 +1,51 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <memory>
-#include <utility>
+#import <memory>
+#import <utility>
 
-#include "base/bind.h"
-#include "base/files/file_path.h"
-#include "base/memory/raw_ptr.h"
-#include "base/run_loop.h"
-#include "base/test/bind.h"
-#include "base/test/scoped_command_line.h"
-#include "base/threading/thread_task_runner_handle.h"
-#include "base/time/time.h"
-#include "components/policy/core/browser/browser_policy_connector.h"
-#include "components/policy/core/browser/cloud/user_policy_signin_service_util.h"
-#include "components/policy/core/common/cloud/cloud_external_data_manager.h"
-#include "components/policy/core/common/cloud/cloud_policy_constants.h"
-#include "components/policy/core/common/cloud/mock_device_management_service.h"
-#include "components/policy/core/common/cloud/mock_user_cloud_policy_store.h"
-#include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
-#include "components/policy/core/common/policy_pref_names.h"
-#include "components/policy/core/common/schema_registry.h"
-#include "components/prefs/pref_service.h"
-#include "components/signin/public/identity_manager/identity_test_environment.h"
-#include "components/sync_preferences/testing_pref_service_syncable.h"
-#include "google_apis/gaia/gaia_constants.h"
-#include "google_apis/gaia/gaia_urls.h"
-#include "google_apis/gaia/google_service_auth_error.h"
-#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#include "ios/chrome/browser/policy/browser_policy_connector_ios.h"
-#include "ios/chrome/browser/policy/cloud/user_policy_signin_service.h"
-#include "ios/chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
+#import "base/bind.h"
+#import "base/files/file_path.h"
+#import "base/memory/raw_ptr.h"
+#import "base/run_loop.h"
+#import "base/test/bind.h"
+#import "base/test/scoped_feature_list.h"
+#import "base/threading/thread_task_runner_handle.h"
+#import "base/time/time.h"
+#import "components/policy/core/browser/browser_policy_connector.h"
+#import "components/policy/core/browser/cloud/user_policy_signin_service_util.h"
+#import "components/policy/core/common/cloud/cloud_external_data_manager.h"
+#import "components/policy/core/common/cloud/cloud_policy_constants.h"
+#import "components/policy/core/common/cloud/mock_device_management_service.h"
+#import "components/policy/core/common/cloud/mock_user_cloud_policy_store.h"
+#import "components/policy/core/common/cloud/user_cloud_policy_manager.h"
+#import "components/policy/core/common/policy_pref_names.h"
+#import "components/policy/core/common/schema_registry.h"
+#import "components/prefs/pref_service.h"
+#import "components/signin/public/identity_manager/identity_test_environment.h"
+#import "components/sync_preferences/testing_pref_service_syncable.h"
+#import "google_apis/gaia/gaia_constants.h"
+#import "google_apis/gaia/gaia_urls.h"
+#import "google_apis/gaia/google_service_auth_error.h"
+#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/policy/browser_policy_connector_ios.h"
+#import "ios/chrome/browser/policy/cloud/user_policy_constants.h"
+#import "ios/chrome/browser/policy/cloud/user_policy_signin_service.h"
+#import "ios/chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
 #import "ios/chrome/browser/policy/cloud/user_policy_switch.h"
-#include "ios/chrome/browser/policy/device_management_service_configuration_ios.h"
-#include "ios/chrome/browser/prefs/browser_prefs.h"
-#include "ios/chrome/test/testing_application_context.h"
-#include "ios/web/public/test/web_task_environment.h"
-#include "net/base/net_errors.h"
-#include "net/http/http_status_code.h"
-#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
-#include "services/network/test/test_network_connection_tracker.h"
-#include "services/network/test/test_url_loader_factory.h"
-#include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gtest/include/gtest/gtest.h"
-#include "testing/platform_test.h"
+#import "ios/chrome/browser/policy/device_management_service_configuration_ios.h"
+#import "ios/chrome/browser/prefs/browser_prefs.h"
+#import "ios/chrome/test/testing_application_context.h"
+#import "ios/web/public/test/web_task_environment.h"
+#import "net/base/net_errors.h"
+#import "net/http/http_status_code.h"
+#import "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#import "services/network/test/test_network_connection_tracker.h"
+#import "services/network/test/test_url_loader_factory.h"
+#import "testing/gmock/include/gmock/gmock.h"
+#import "testing/gtest/include/gtest/gtest.h"
+#import "testing/platform_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -111,8 +112,8 @@ class UserPolicySigninServiceTest : public PlatformTest {
   }
 
   void SetUp() override {
-    command_line_ = std::make_unique<base::test::ScopedCommandLine>();
-    policy::EnableUserPolicy();
+    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
+    scoped_feature_list_->InitWithFeatures({policy::kUserPolicy}, {});
 
     device_management_service_.ScheduleInitialization(0);
     base::RunLoop().RunUntilIdle();
@@ -289,7 +290,7 @@ class UserPolicySigninServiceTest : public PlatformTest {
       web::WebTaskEnvironment::Options::DEFAULT,
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 
-  std::unique_ptr<base::test::ScopedCommandLine> command_line_;
+  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
 
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   raw_ptr<MockUserCloudPolicyStore> mock_store_ = nullptr;  // Not owned.
@@ -383,8 +384,8 @@ TEST_F(UserPolicySigninServiceTest,
 // feature is disabled despite the account being eligible for user policy.
 TEST_F(UserPolicySigninServiceTest,
        DontRegisterDuringInitializationBecauseFeatureDisabled) {
-  // Disable the user policy feature by clearing the commandline arguments.
-  command_line_.reset();
+  // Disable the user policy features by clearing the scoped feature list.
+  scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
 
   // Set the user as syncing with a managed account.
   AccountInfo account_info =

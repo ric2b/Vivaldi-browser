@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,14 +30,13 @@ struct FramePolicy;
 struct FrameVisualProperties;
 struct WebFrameOwnerProperties;
 
-class WebRemoteFrame : public WebFrame {
+class BLINK_EXPORT WebRemoteFrame : public WebFrame {
  public:
   // Factory methods for creating a WebRemoteFrame.
-  BLINK_EXPORT static WebRemoteFrame* Create(
-      mojom::TreeScopeType,
-      const RemoteFrameToken& frame_token);
+  static WebRemoteFrame* Create(mojom::TreeScopeType,
+                                const RemoteFrameToken& frame_token);
 
-  BLINK_EXPORT static WebRemoteFrame* CreateMainFrame(
+  static WebRemoteFrame* CreateMainFrame(
       WebView*,
       const RemoteFrameToken& frame_token,
       const base::UnguessableToken& devtools_frame_token,
@@ -65,11 +64,11 @@ class WebRemoteFrame : public WebFrame {
       const WebFrameOwnerProperties&,
       const LocalFrameToken& frame_token,
       WebFrame* opener,
+      const DocumentToken& document_token,
       std::unique_ptr<WebPolicyContainer> policy_container) = 0;
 
   // Returns the frame associated with the |frame_token|.
-  BLINK_EXPORT static WebRemoteFrame* FromFrameToken(
-      const RemoteFrameToken& frame_token);
+  static WebRemoteFrame* FromFrameToken(const RemoteFrameToken& frame_token);
 
   // Set security origin replicated from another process.
   virtual void SetReplicatedOrigin(

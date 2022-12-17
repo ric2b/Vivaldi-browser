@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,10 +6,6 @@
 #define MEDIA_GPU_V4L2_TEST_AV1_DECODER_H_
 
 #include "media/gpu/v4l2/test/video_decoder.h"
-
-// TODO(b/234019411): Move this include to v4l2_stateless_decoder.cc
-// once the bug is fixed.
-#include <linux/media/av1-ctrls.h>
 
 #include <set>
 
@@ -30,6 +26,8 @@
 #ifndef V4L2_AV1_RESTORATION_TILESIZE_MAX
 #define V4L2_AV1_RESTORATION_TILESIZE_MAX 256
 #endif
+
+struct v4l2_ctrl_av1_frame;
 
 namespace media {
 namespace v4l2_test {
@@ -86,21 +84,29 @@ class Av1Decoder : public VideoDecoder {
   // Sets up per frame parameters |v4l2_frame_params| needed for AV1 decoding
   // with VIDIOC_S_EXT_CTRLS ioctl call.
   void SetupFrameParams(
-      struct v4l2_ctrl_av1_frame_header* v4l2_frame_params,
+      struct v4l2_ctrl_av1_frame* v4l2_frame_params,
       const absl::optional<libgav1::ObuSequenceHeader>& seq_header,
       const libgav1::ObuFrameHeader& frm_header);
 
   // Refreshes |ref_frames_| slots with the current |buffer| and refreshes
-  // |state_| with |current_frame|. Returns |reusable_buffer_slots| to indicate
-  // which CAPTURE buffers can be reused for VIDIOC_QBUF ioctl call.
+  // |state_| with |current_frame|. Updates |ref_order_hint_| using |order_hint|
+  // of current frame header, which is needed for the next frame decoding.
+  // Returns |reusable_buffer_slots| to indicate which CAPTURE buffers can be
+  // reused for VIDIOC_QBUF ioctl call.
   std::set<int> RefreshReferenceSlots(
-      uint8_t refresh_frame_flags,
-      libgav1::RefCountedBufferPtr current_frame,
-      scoped_refptr<MmapedBuffer> buffer,
-      uint32_t last_queued_buffer_index);
+      const uint8_t refresh_frame_flags,
+      const libgav1::RefCountedBufferPtr current_frame,
+      const scoped_refptr<MmapedBuffer> buffer,
+      const uint32_t last_queued_buffer_index,
+      const uint8_t order_hint);
 
   // Reference frames currently in use.
   std::array<scoped_refptr<MmapedBuffer>, kAv1NumRefFrames> ref_frames_;
+
+  // Represents the least significant bits of the expected output order of the
+  // frames. Corresponds to |RefOrderHint| in the AV1 spec.
+  // https://aomediacodec.github.io/av1-spec/#set-frame-refs-process
+  std::array<uint8_t, kAv1NumRefFrames> ref_order_hint_{0};
 
   // Parser for the IVF stream to decode.
   const std::unique_ptr<IvfParser> ivf_parser_;

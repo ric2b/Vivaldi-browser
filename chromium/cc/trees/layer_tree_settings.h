@@ -1,4 +1,4 @@
-// Copyright 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "cc/cc_export.h"
 #include "cc/debug/layer_tree_debug_state.h"
 #include "cc/scheduler/scheduler_settings.h"
+#include "cc/tiles/image_decode_cache_utils.h"
 #include "cc/tiles/tile_manager_settings.h"
 #include "cc/trees/managed_memory_policy.h"
 #include "components/viz/common/display/renderer_settings.h"
@@ -88,7 +89,9 @@ class CC_EXPORT LayerTreeSettings {
   bool use_layer_lists = false;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
   ManagedMemoryPolicy memory_policy;
-  size_t decoded_image_working_set_budget_bytes = 128 * 1024 * 1024;
+  size_t decoded_image_working_set_budget_bytes =
+      ImageDecodeCacheUtils::GetWorkingSetBytesForImageDecode(
+          /*for_renderer=*/false);
   int max_preraster_distance_in_screen_pixels = 1000;
   bool use_rgba_4444 = false;
   bool unpremultiply_and_dither_low_bit_depth_tiles = false;
@@ -215,6 +218,14 @@ class CC_EXPORT LayerTreeSettings {
 
   // This corresponds to the ScrollUpdateOptimizations feature.
   bool enable_scroll_update_optimizations = false;
+
+  // Whether to disable the frame rate limit in the scheduler.
+  bool disable_frame_rate_limit = false;
+
+  // When enabled commits are aborted if scroll and viewport state from CC could
+  // not be synchronized at the beginning of the frame because main frames were
+  // being deferred.
+  bool skip_commits_if_not_synchronizing_compositor_state = true;
 };
 
 class CC_EXPORT LayerListSettings : public LayerTreeSettings {

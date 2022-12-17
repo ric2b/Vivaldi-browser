@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -190,7 +190,7 @@ PaintResult PaintLayerPainter::Paint(GraphicsContext& context,
     }
 
     if (!cull_rect_intersects_self && !cull_rect_intersects_contents) {
-      if (paint_layer_.KnownToClipSubtree()) {
+      if (paint_layer_.KnownToClipSubtreeToPaddingBox()) {
         paint_layer_.SetPreviousPaintResult(kMayBeClippedByCullRect);
         return kMayBeClippedByCullRect;
       }

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -168,8 +168,6 @@ class MODULES_EXPORT RTCRtpTransceiverImpl : public RTCRtpTransceiverPlatform {
   blink::RTCRtpSenderImpl* content_sender();
   blink::RTCRtpReceiverImpl* content_receiver();
 
-  RTCRtpTransceiverPlatformImplementationType ImplementationType()
-      const override;
   uintptr_t Id() const override;
   String Mid() const override;
   void SetMid(absl::optional<String>) override;

@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,11 +26,11 @@
 #include "net/base/completion_once_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_proc.h"
-#include "net/dns/host_resolver_results.h"
 #include "net/dns/public/dns_query_type.h"
+#include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/host_resolver_source.h"
 #include "net/dns/public/mdns_listener_update_type.h"
 #include "net/dns/public/secure_dns_policy.h"
@@ -278,12 +278,12 @@ class MockHostResolverBase
   void OnShutdown() override;
   std::unique_ptr<ResolveHostRequest> CreateRequest(
       url::SchemeHostPort host,
-      NetworkIsolationKey network_isolation_key,
+      NetworkAnonymizationKey network_anonymization_key,
       NetLogWithSource net_log,
       absl::optional<ResolveHostParameters> optional_parameters) override;
   std::unique_ptr<ResolveHostRequest> CreateRequest(
       const HostPortPair& host,
-      const NetworkIsolationKey& network_isolation_key,
+      const NetworkAnonymizationKey& network_anonymization_key,
       const NetLogWithSource& net_log,
       const absl::optional<ResolveHostParameters>& optional_parameters)
       override;
@@ -297,8 +297,12 @@ class MockHostResolverBase
   // Preloads the cache with what would currently be the result of a request
   // with the given parameters. Returns the net error of the cached result.
   int LoadIntoCache(
+      absl::variant<url::SchemeHostPort, HostPortPair> endpoint,
+      const NetworkAnonymizationKey& network_anonymization_key,
+      const absl::optional<ResolveHostParameters>& optional_parameters);
+  int LoadIntoCache(
       const Host& endpoint,
-      const NetworkIsolationKey& network_isolation_key,
+      const NetworkAnonymizationKey& network_anonymization_key,
       const absl::optional<ResolveHostParameters>& optional_parameters);
 
   // Returns true if there are pending requests that can be resolved by invoking
@@ -330,8 +334,8 @@ class MockHostResolverBase
   // Returns the priority of the request with the given id.
   RequestPriority request_priority(size_t id);
 
-  // Returns NetworkIsolationKey of the request with the given id.
-  const NetworkIsolationKey& request_network_isolation_key(size_t id);
+  // Returns NetworkAnonymizationKey of the request with the given id.
+  const NetworkAnonymizationKey& request_network_anonymization_key(size_t id);
 
   // Like ResolveNow, but doesn't take an ID. DCHECKs if there's more than one
   // pending request.
@@ -356,11 +360,11 @@ class MockHostResolverBase
     return last_request_priority_;
   }
 
-  // Returns the NetworkIsolationKey passed in to the last call to Resolve() (or
-  // absl::nullopt if Resolve() hasn't been called yet).
-  const absl::optional<NetworkIsolationKey>&
-  last_request_network_isolation_key() {
-    return last_request_network_isolation_key_;
+  // Returns the NetworkAnonymizationKey passed in to the last call to Resolve()
+  // (or absl::nullopt if Resolve() hasn't been called yet).
+  const absl::optional<NetworkAnonymizationKey>&
+  last_request_network_anonymization_key() {
+    return last_request_network_anonymization_key_;
   }
 
   // Returns the SecureDnsPolicy of the last call to Resolve() (or
@@ -414,7 +418,7 @@ class MockHostResolverBase
   // DNS_CACHE_MISS if failed.
   int ResolveFromIPLiteralOrCache(
       const Host& endpoint,
-      const NetworkIsolationKey& network_isolation_key,
+      const NetworkAnonymizationKey& network_anonymization_key,
       DnsQueryType dns_query_type,
       HostResolverFlags flags,
       HostResolverSource source,
@@ -428,7 +432,8 @@ class MockHostResolverBase
   void RemoveCancelledListener(MdnsListenerImpl* listener);
 
   RequestPriority last_request_priority_ = DEFAULT_PRIORITY;
-  absl::optional<NetworkIsolationKey> last_request_network_isolation_key_;
+  absl::optional<NetworkAnonymizationKey>
+      last_request_network_anonymization_key_;
   SecureDnsPolicy last_secure_dns_policy_ = SecureDnsPolicy::kAllow;
   bool synchronous_mode_ = false;
   bool ondemand_mode_ = false;
@@ -675,12 +680,12 @@ class HangingHostResolver : public HostResolver {
   void OnShutdown() override;
   std::unique_ptr<ResolveHostRequest> CreateRequest(
       url::SchemeHostPort host,
-      NetworkIsolationKey network_isolation_key,
+      NetworkAnonymizationKey network_anonymization_key,
       NetLogWithSource net_log,
       absl::optional<ResolveHostParameters> optional_parameters) override;
   std::unique_ptr<ResolveHostRequest> CreateRequest(
       const HostPortPair& host,
-      const NetworkIsolationKey& network_isolation_key,
+      const NetworkAnonymizationKey& network_anonymization_key,
       const NetLogWithSource& net_log,
       const absl::optional<ResolveHostParameters>& optional_parameters)
       override;
@@ -696,8 +701,8 @@ class HangingHostResolver : public HostResolver {
   // Return the corresponding values passed to the most recent call to
   // CreateRequest()
   const HostPortPair& last_host() const { return last_host_; }
-  const NetworkIsolationKey& last_network_isolation_key() const {
-    return last_network_isolation_key_;
+  const NetworkAnonymizationKey& last_network_anonymization_key() const {
+    return last_network_anonymization_key_;
   }
 
   const scoped_refptr<const State> state() const { return state_; }
@@ -707,7 +712,7 @@ class HangingHostResolver : public HostResolver {
   class ProbeRequestImpl;
 
   HostPortPair last_host_;
-  NetworkIsolationKey last_network_isolation_key_;
+  NetworkAnonymizationKey last_network_anonymization_key_;
 
   scoped_refptr<State> state_;
   bool shutting_down_ = false;

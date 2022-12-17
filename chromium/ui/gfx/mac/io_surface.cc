@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,8 +25,9 @@ namespace gfx {
 
 namespace {
 
-const base::Feature kIOSurfaceUseNamedSRGBForREC709{
-    "IOSurfaceUseNamedSRGBForREC709", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kIOSurfaceUseNamedSRGBForREC709,
+             "IOSurfaceUseNamedSRGBForREC709",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 void AddIntegerValue(CFMutableDictionaryRef dictionary,
                      const CFStringRef key,

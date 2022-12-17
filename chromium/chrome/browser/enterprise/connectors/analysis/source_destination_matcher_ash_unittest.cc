@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/disks/disk_mount_manager.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -23,6 +22,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/ash/components/disks/disk_mount_manager.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "content/public/test/browser_task_environment.h"
 #include "storage/browser/file_system/file_system_url.h"
@@ -180,7 +180,7 @@ TEST_F(SourceDestinationMatcherAshTest, NullptrSettingsNoCrash) {
   size_t id = 0;
   base::Value::List* settings = nullptr;
   matcher.AddFilters(&id, settings);
-  EXPECT_EQ(id, 0);
+  EXPECT_EQ(id, 0u);
 }
 
 class SourceDestinationMatcherAshAddFilters
@@ -284,7 +284,7 @@ TEST_P(SourceDestinationMatcherAshParamTest, FromOneToAny) {
   ASSERT_TRUE(settings_list);
   matcher.AddFilters(&id, settings_list);
   // One rule should be added!
-  EXPECT_EQ(id, 1);
+  EXPECT_EQ(id, 1u);
 
   for (auto src_test_info : kVolumeInfos) {
     bool should_match = std::string(src_test_info.fs_config_string) ==
@@ -294,7 +294,7 @@ TEST_P(SourceDestinationMatcherAshParamTest, FromOneToAny) {
           matcher.Match(profile(), GetBaseFileSystemURLForVolume(src_test_info),
                         GetBaseFileSystemURLForVolume(dest_test_info));
       if (should_match) {
-        ASSERT_EQ(matches.size(), 1)
+        ASSERT_EQ(matches.size(), 1u)
             << "matches: " << matches.size()
             << ", source: " << src_test_info.fs_config_string
             << ", destination: " << dest_test_info.fs_config_string;
@@ -331,7 +331,7 @@ TEST_P(SourceDestinationMatcherAshParamTest, FromAnyToOne) {
   ASSERT_TRUE(settings_list);
   matcher.AddFilters(&id, settings_list);
   // One rule should be added!
-  EXPECT_EQ(id, 1);
+  EXPECT_EQ(id, 1u);
 
   for (auto src_test_info : kVolumeInfos) {
     for (auto dest_test_info : kVolumeInfos) {
@@ -341,7 +341,7 @@ TEST_P(SourceDestinationMatcherAshParamTest, FromAnyToOne) {
           matcher.Match(profile(), GetBaseFileSystemURLForVolume(src_test_info),
                         GetBaseFileSystemURLForVolume(dest_test_info));
       if (should_match) {
-        ASSERT_EQ(matches.size(), 1)
+        ASSERT_EQ(matches.size(), 1u)
             << "matches: " << matches.size()
             << ", source: " << src_test_info.fs_config_string
             << ", destination: " << dest_test_info.fs_config_string;

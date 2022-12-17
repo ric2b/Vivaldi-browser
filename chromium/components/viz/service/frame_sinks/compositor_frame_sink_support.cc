@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -19,6 +20,7 @@
 #include "components/power_scheduler/power_mode.h"
 #include "components/power_scheduler/power_mode_arbiter.h"
 #include "components/power_scheduler/power_mode_voter.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/compositor_render_pass.h"
@@ -223,37 +225,14 @@ void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
   const auto& transition_directives =
       surface->GetActiveFrameMetadata().transition_directives;
   if (!transition_directives.empty()) {
-    bool started_animation =
-        surface_animation_manager_.ProcessTransitionDirectives(
-            transition_directives, surface);
-
-    // If we started an animation, then we must need a begin frame for the code
-    // below to work properly.
-    DCHECK(!started_animation || surface_animation_manager_.NeedsBeginFrame());
-
-    // The above call can cause us to start an animation, meaning we need begin
-    // frames. If that's the case, make sure to update the begin frame
-    // observation.
-    if (surface_animation_manager_.NeedsBeginFrame())
-      UpdateNeedsBeginFramesInternal();
+    surface_animation_manager_.ProcessTransitionDirectives(
+        transition_directives, surface);
   }
 
   // The directives above generate TransferableResources which are required to
   // replaced shared elements with the corresponding cached snapshots. This step
   // must be done after processing directives above.
   surface_animation_manager_.ReplaceSharedElementResources(surface);
-
-  // If surface animation manager needs a frame, then we should interpolate
-  // here. Note that we also interpolate in OnBeginFrame. The reason for two
-  // calls is that we might not receive and active a frame from the client in
-  // time to draw, which is why OnBeginFrame interpolates and damages the
-  // surface. Here, we only interpolate in case we did receive a new frame. We
-  // always use the latest frame, because it may have new resources that need to
-  // be reffed by SurfaceAggregator. If we don't do this, then they will be
-  // unreffed and cleaned up causing a DCHECK in subsequent frames that do use
-  // the frame.
-  if (surface_animation_manager_.NeedsBeginFrame())
-    surface_animation_manager_.InterpolateFrame(surface);
 
   if (surface->surface_id() == last_activated_surface_id_)
     return;
@@ -765,6 +744,14 @@ void CompositorFrameSinkSupport::DidPresentCompositorFrame(
   details.presentation_feedback = feedback;
   AdjustPresentationFeedback(&details.presentation_feedback,
                              swap_timings.swap_start);
+  // Override with the throttled interval if one has been set. Otherwise,
+  // consumers will assume that the default vsync interval was the target and
+  // that the frames are presented too late when in fact, this is intentional.
+  if (begin_frame_interval_.is_positive() &&
+      details.presentation_feedback.interval.is_positive() &&
+      features::ShouldOverrideThrottledFrameRateParams()) {
+    details.presentation_feedback.interval = begin_frame_interval_;
+  }
   pending_received_frame_times_.erase(received_frame_timestamp);
 
   // We should only ever get one PresentationFeedback per frame_token.
@@ -818,79 +805,45 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
 
   CheckPendingSurfaces();
 
-  bool send_begin_frame_to_client =
-      client_ && ShouldSendBeginFrame(args.frame_time);
-  if (send_begin_frame_to_client) {
-    if (last_activated_surface_id_.is_valid())
-      surface_manager_->SurfaceDamageExpected(last_activated_surface_id_, args);
-    last_begin_frame_args_ = args;
-
-    BeginFrameArgs copy_args = args;
-    // Force full frame if surface not yet activated to ensure surface creation.
-    if (!last_activated_surface_id_.is_valid())
-      copy_args.animate_only = false;
-
-    copy_args.trace_id = ComputeTraceId();
-    TRACE_EVENT_WITH_FLOW1("viz,benchmark", "Graphics.Pipeline",
-                           TRACE_ID_GLOBAL(copy_args.trace_id),
-                           TRACE_EVENT_FLAG_FLOW_OUT, "step",
-                           "IssueBeginFrame");
-    copy_args.frames_throttled_since_last = frames_throttled_since_last_;
-    frames_throttled_since_last_ = 0;
-
-    last_frame_time_ = args.frame_time;
-    client_->OnBeginFrame(copy_args, std::move(frame_timing_details_));
-    begin_frame_tracker_.SentBeginFrame(args);
-    frame_sink_manager_->DidBeginFrame(frame_sink_id_, args);
-    frame_timing_details_.clear();
-    UpdateNeedsBeginFramesInternal();
+  BeginFrameArgs adjusted_args = args;
+  if (begin_frame_interval_.is_positive() &&
+      features::ShouldOverrideThrottledFrameRateParams()) {
+    adjusted_args.interval = begin_frame_interval_;
+    // Deadline is not necessarily frame_time + interval. For example, it may
+    // incorporate an estimate for the frame's draw/swap time, so it's
+    // desirable to preserve any offset from the next scheduled frame.
+    base::TimeDelta offset_from_next_scheduled_frame =
+        args.deadline - (args.frame_time + args.interval);
+    adjusted_args.deadline = args.frame_time + begin_frame_interval_ +
+                             offset_from_next_scheduled_frame;
   }
 
-  // Notify surface animation manager of the latest time and advance a frame if
-  // it needs a begin frame.
-  surface_animation_manager_.UpdateFrameTime(args.frame_time);
-  if (surface_animation_manager_.NeedsBeginFrame()) {
-    surface_animation_manager_.NotifyFrameAdvanced();
+  bool send_begin_frame_to_client =
+      client_ && ShouldSendBeginFrame(adjusted_args.frame_time);
+  if (send_begin_frame_to_client) {
+    if (last_activated_surface_id_.is_valid())
+      surface_manager_->SurfaceDamageExpected(last_activated_surface_id_,
+                                              adjusted_args);
+    last_begin_frame_args_ = adjusted_args;
 
-    // Interpolate the frame here, since it is a reliable spot during the
-    // animation.
-    if (surface_animation_manager_.NeedsBeginFrame()) {
-      if (last_activated_surface_id_.is_valid()) {
-        if (!send_begin_frame_to_client)
-          frame_sink_manager_->DidBeginFrame(frame_sink_id_, args);
+    // Force full frame if surface not yet activated to ensure surface creation.
+    if (!last_activated_surface_id_.is_valid())
+      adjusted_args.animate_only = false;
 
-        auto* surface =
-            surface_manager_->GetSurfaceForId(last_activated_surface_id_);
-        surface_animation_manager_.InterpolateFrame(surface);
+    adjusted_args.trace_id = ComputeTraceId();
+    TRACE_EVENT_WITH_FLOW1("viz,benchmark", "Graphics.Pipeline",
+                           TRACE_ID_GLOBAL(adjusted_args.trace_id),
+                           TRACE_EVENT_FLAG_FLOW_OUT, "step",
+                           "IssueBeginFrame");
+    adjusted_args.frames_throttled_since_last = frames_throttled_since_last_;
+    frames_throttled_since_last_ = 0;
 
-        BeginFrameAck ack =
-            surface->GetActiveOrInterpolatedFrame().metadata.begin_frame_ack;
-        // Ensure to mark this as having damage, even if the above call gives us
-        // the non-interpolated active frame with no damage. We need this to
-        // ensure we do a DrawAndSwap.
-        ack.has_damage = true;
-
-        // TODO(crbug.com/1182882): If a client frame is expected, we would not
-        // wait for it as a result of the SurfaceModified() call. This means
-        // that the client may end up delaying every other frame (essentially
-        // dropping any frame rate by half).
-        surface_manager_->SurfaceModified(last_activated_surface_id_, ack);
-
-        // If we didn't send a begin frame to the client, we should still finish
-        // the frame. Since we already finished interpolating, we should do that
-        // now. In cases where we did send a begin frame to client, this will be
-        // called from either `MaybeSubmitCompositorFrame()` or
-        // `DidNotProduceFrame()`.
-        if (!send_begin_frame_to_client && begin_frame_source_) {
-          begin_frame_source_->DidFinishFrame(this);
-          frame_sink_manager_->DidFinishFrame(frame_sink_id_, args);
-        }
-      }
-    } else {
-      // If notifying causes us to stop needing frames, then update needs begin
-      // frames, in case we no longer are interested in receiving begin frames.
-      UpdateNeedsBeginFramesInternal();
-    }
+    last_frame_time_ = adjusted_args.frame_time;
+    client_->OnBeginFrame(adjusted_args, std::move(frame_timing_details_));
+    begin_frame_tracker_.SentBeginFrame(adjusted_args);
+    frame_sink_manager_->DidBeginFrame(frame_sink_id_, adjusted_args);
+    frame_timing_details_.clear();
+    UpdateNeedsBeginFramesInternal();
   }
 }
 
@@ -913,8 +866,7 @@ void CompositorFrameSinkSupport::UpdateNeedsBeginFramesInternal() {
   needs_begin_frame_ =
       (client_needs_begin_frame_ || !frame_timing_details_.empty() ||
        !pending_surfaces_.empty() ||
-       (compositor_frame_callback_ && !callback_received_begin_frame_) ||
-       surface_animation_manager_.NeedsBeginFrame());
+       (compositor_frame_callback_ && !callback_received_begin_frame_));
 
   if (bundle_id_.has_value()) {
     // When bundled with other sinks, observation of BeginFrame notifications is
@@ -977,8 +929,7 @@ void CompositorFrameSinkSupport::AttachCaptureClient(
 
 void CompositorFrameSinkSupport::DetachCaptureClient(
     CapturableFrameSink::Client* client) {
-  const auto it =
-      std::find(capture_clients_.begin(), capture_clients_.end(), client);
+  const auto it = base::ranges::find(capture_clients_, client);
   if (it != capture_clients_.end())
     capture_clients_.erase(it);
   if (client->IsVideoCaptureStarted())

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,6 +54,7 @@ namespace extensions {
 namespace util {
 
 namespace {
+
 // Returns |extension_id|. See note below.
 std::string ReloadExtensionIfEnabled(const std::string& extension_id,
                                      content::BrowserContext* context) {
@@ -93,6 +94,14 @@ bool HasIsolatedStorage(const std::string& extension_id,
 #endif
 
   return extension && AppIsolationInfo::HasIsolatedStorage(extension);
+}
+
+bool IsChromeApp(const std::string& extension_id,
+                 content::BrowserContext* context) {
+  const Extension* extension =
+      ExtensionRegistry::Get(context)->enabled_extensions().GetByID(
+          extension_id);
+  return extension->is_platform_app();
 }
 
 void SetIsIncognitoEnabled(const std::string& extension_id,
@@ -188,7 +197,7 @@ bool IsAppLaunchable(const std::string& extension_id,
 bool IsAppLaunchableWithoutEnabling(const std::string& extension_id,
                                     content::BrowserContext* context) {
   return ExtensionRegistry::Get(context)->GetExtensionById(
-      extension_id, ExtensionRegistry::ENABLED) != NULL;
+             extension_id, ExtensionRegistry::ENABLED) != nullptr;
 }
 
 bool ShouldSync(const Extension* extension,

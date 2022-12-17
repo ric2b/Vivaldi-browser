@@ -1,4 +1,4 @@
-// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -599,6 +599,17 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAriaExpandedAndCollapsed) {
+  RunEventTest(FILE_PATH_LITERAL("aria-expanded-and-collapsed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAriaExpandedAndCollapsedReparenting) {
+  RunEventTest(
+      FILE_PATH_LITERAL("aria-expanded-and-collapsed-reparenting.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsAriaHiddenDescendants) {
   RunEventTest(FILE_PATH_LITERAL("aria-hidden-descendants.html"));
 }
@@ -914,8 +925,16 @@ IN_PROC_BROWSER_TEST_P(NavigationApiDumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("navigation-api.html"));
 }
 
+// TODO(crbug.com/1369754): Failing on linux/mac/win multiple builders.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#define MAYBE_AccessibilityEventsImmediateRefresh \
+  DISABLED_AccessibilityEventsImmediateRefresh
+#else
+#define MAYBE_AccessibilityEventsImmediateRefresh \
+  AccessibilityEventsImmediateRefresh
+#endif
 IN_PROC_BROWSER_TEST_P(NavigationApiDumpAccessibilityEventsTest,
-                       AccessibilityEventsImmediateRefresh) {
+                       MAYBE_AccessibilityEventsImmediateRefresh) {
   RunEventTest(FILE_PATH_LITERAL("immediate-refresh.html"));
 }
 

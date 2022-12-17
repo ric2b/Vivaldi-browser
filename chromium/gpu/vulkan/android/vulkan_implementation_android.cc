@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -139,7 +139,8 @@ VulkanImplementationAndroid::CreateImageFromGpuMemoryHandle(
     VulkanDeviceQueue* device_queue,
     gfx::GpuMemoryBufferHandle gmb_handle,
     gfx::Size size,
-    VkFormat vk_format) {
+    VkFormat vk_format,
+    const gfx::ColorSpace& color_space) {
   // TODO(sergeyu): Move code from CreateVkImageAndImportAHB() here and remove
   // CreateVkImageAndImportAHB().
   NOTIMPLEMENTED();

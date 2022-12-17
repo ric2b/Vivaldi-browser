@@ -13,11 +13,6 @@
 <translation id="112387589102719461">영어(미국, 프로그래머 드보락 키보드)</translation>
 <translation id="1134697384939541955">영어(미국, 확장 키보드)</translation>
 <translation id="1138691154716715755">이달 초</translation>
-<translation id="1148097584170732637"><ph name="FILE_COUNT" />개가 있습니다.
-    <ph name="LINE_BREAK1" />
-    로컬 저장소에 공간이 부족합니다. <ph name="FILE_SIZE" />가 더 필요합니다.
-    <ph name="LINE_BREAK2" />
-    사진을 더 적게 선택해 보세요.</translation>
 <translation id="1150565364351027703">선글라스</translation>
 <translation id="115443833402798225">한글 안마태 키보드</translation>
 <translation id="1155759005174418845">카탈로니아어</translation>
@@ -28,6 +23,7 @@
 <translation id="117624967391683467"><ph name="FILE_NAME" /> 복사 중...</translation>
 <translation id="1178581264944972037">일시중지</translation>
 <translation id="1190144681599273207">이 파일을 가져오는 데 약 <ph name="FILE_SIZE" />의 모바일 데이터가 사용됩니다.</translation>
+<translation id="1194390763418645112"><ph name="RESTRICTED_DESTINATIONS" />에서 파일 액세스</translation>
 <translation id="1201402288615127009">다음</translation>
 <translation id="1209796539517632982">자동 네임서버</translation>
 <translation id="1210831758834677569">라오어</translation>
@@ -41,7 +37,6 @@
 <translation id="1297922636971898492">현재 Google Drive를 사용할 수 없습니다. Google Drive를 다시 사용할 수 있게 되면 자동으로 업로드가 다시 시작됩니다.</translation>
 <translation id="1307931752636661898">Linux 파일을 볼 수 없음</translation>
 <translation id="1313405956111467313">자동 프록시 설정</translation>
-<translation id="1351692861129622852">파일 <ph name="FILE_COUNT" />개를 가져오는 중...</translation>
 <translation id="1353686479385938207"><ph name="PROVIDER_NAME" />: <ph name="NETWORK_NAME" /></translation>
 <translation id="1358735829858566124">파일 또는 디렉터리를 사용할 수 없습니다.</translation>
 <translation id="1363028406613469049">트랙</translation>
@@ -67,6 +62,7 @@
 <translation id="1561842594491319104">Chrome 기기</translation>
 <translation id="1572585716423026576">배경화면으로 설정</translation>
 <translation id="1576937952766665062">벵골어(음역)</translation>
+<translation id="1577977504532381335">관리자 정책 검토</translation>
 <translation id="158849752021629804">홈 네크워크가 필요합니다.</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" />PB</translation>
 <translation id="1620510694547887537">카메라</translation>
@@ -117,6 +113,7 @@
 <translation id="1942765061641586207">이미지 해상도</translation>
 <translation id="1972984168337863910">파일 의견 패널 펼치기</translation>
 <translation id="1995337122023280937">파일 위치로 이동</translation>
+<translation id="1999709132469742660">모든 URL에서 파일 액세스</translation>
 <translation id="2001796770603320721">드라이브에서 관리</translation>
 <translation id="2009067268969781306">드라이브를 포맷하면 드라이브에 저장된 데이터가 모두 삭제됩니다. 이 작업은 취소할 수 없습니다.</translation>
 <translation id="2025955442973426285">티그리냐어</translation>
@@ -147,6 +144,7 @@
 <translation id="2239068707900391003">커피를 마시는 사람</translation>
 <translation id="2251368349685848079">휴지통에서 복원</translation>
 <translation id="2282155092769082568">자동설정 URL:</translation>
+<translation id="2284767815536050991">이동식 저장소</translation>
 <translation id="2288278176040912387">레코드 플레이어</translation>
 <translation id="2291538123825441971">파일 <ph name="NUMBER_OF_FILES" />개를 열고 있습니다.</translation>
 <translation id="2303301624314357662"><ph name="FILE_NAME" /> 파일을 엽니다.</translation>
@@ -155,16 +153,16 @@
 <translation id="2307462900900812319">네트워크 설정</translation>
 <translation id="2325650632570794183">이 파일 형식은 지원되지 않습니다. Chrome 웹 스토어에서 이 파일 형식을 열 수 있는 앱을 검색하세요.</translation>
 <translation id="2326539130272988168">불가리아어</translation>
-<translation id="2352947182261340447">로컬 저장소에 공간이 부족합니다.</translation>
 <translation id="23721837607121582">모바일 프로필 다운로드, 네트워크 <ph name="NETWORK_COUNT" />개 중 <ph name="NETWORK_INDEX" />번째, <ph name="NETWORK_NAME" /></translation>
 <translation id="2377319039870049694">목록 보기로 전환</translation>
 <translation id="2377590462528165447">폴더 <ph name="NUMBER_OF_ITEMS" />개가 Linux와 공유되었습니다.</translation>
 <translation id="2378075407703503998"><ph name="SELCTED_FILE_COUNT" />개의 파일이 선택됨</translation>
-<translation id="2387120140441437063">삭제된 파일은 열 수 없습니다. 파일을 열기 전에 복원하세요.</translation>
+<translation id="2383454254762599978">휴지통으로 이동</translation>
 <translation id="2387458720915042159">프록시 연결 유형</translation>
 <translation id="2389832672041313158">버마어/미얀마어</translation>
 <translation id="2392369802118427583">활성화</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> 사용 가능</translation>
+<translation id="2417486498593892439">네트워크에 로그인</translation>
 <translation id="2425665904502185219">전체 파일 크기</translation>
 <translation id="2428749644083375155">항목 <ph name="NUMBER_OF_ITEMS" />개를 <ph name="FOLDER_NAME" /> 폴더에 복사 중</translation>
 <translation id="2448312741937722512">유형</translation>
@@ -177,7 +175,7 @@
 <translation id="2500392669976258912">구자라트어(표음)</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2517472476991765520">검색</translation>
-<translation id="2534155362429831547"><ph name="NUMBER_OF_ITEMS" />개 항목 삭제함</translation>
+<translation id="252641322760726369">실행기에서 파일에 빠르게 액세스하려면 파일을 길게 터치하고 <ph name="ICON" /> 아이콘을 탭한 다음 "<ph name="PIN_COMMAND" />"을 선택합니다.</translation>
 <translation id="2534460670861217804">보안 HTTP 프록시</translation>
 <translation id="2541377937973966830">이 폴더의 콘텐츠는 읽기 전용입니다. 일부 활동이 지원되지 않습니다.</translation>
 <translation id="2542049655219295786">Google 표</translation>
@@ -204,11 +202,11 @@
 <translation id="2771816809568414714">치즈</translation>
 <translation id="2781645665747935084">벨기에어</translation>
 <translation id="2782104745158847185">Linux 애플리케이션 설치 중 오류 발생</translation>
+<translation id="2802583107108007218">제한사항에 관해 자세히 알아보기</translation>
 <translation id="2803375539583399270">PIN 입력</translation>
 <translation id="2820957248982571256">검색 중...</translation>
 <translation id="2830077785865012357">중국어(주음부호)</translation>
 <translation id="2843806747483486897">기본값 변경...</translation>
-<translation id="2850124913210091882">백업</translation>
 <translation id="2873951654529031587">휴지통</translation>
 <translation id="288024221176729610">체코어</translation>
 <translation id="2887525882758501333">PDF 문서</translation>
@@ -224,16 +222,14 @@
 <translation id="2958458230122209142">저장용량 부족. 개인별 저장용량 <ph name="TOTAL_SPACE" /> 중 <ph name="REMAINING_PERCENTAGE" />% 남았습니다.</translation>
 <translation id="2977940621473452797">이 파일은 Macintosh 소프트웨어를 사용하는 컴퓨터용으로 설계되었으며 ChromeOS를 실행하는 기기와 호환될 수 없습니다. 적합한 대체 앱을 찾으려면 Chrome 웹 스토어를 검색해 보세요.</translation>
 <translation id="2984337792991268709">오늘 <ph name="TODAY_DAYTIME" /></translation>
-<translation id="2994320653639462337"><ph name="COUNT" />개 항목 복원 중...</translation>
-<translation id="2994669386200004489"><ph name="FILE_NAME" />을(를) 백업할 수 없음</translation>
 <translation id="299638574917407533">프랑스어(캐나다)</translation>
 <translation id="3003189754374775221">네트워크 <ph name="NETWORK_COUNT" />개 중 <ph name="NETWORK_INDEX" />번째, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, 신호 강도 <ph name="SIGNAL_STRENGTH" />%, 연결</translation>
 <translation id="3003633581067744647">썸네일 이미지 보기로 전환</translation>
 <translation id="3016566519832145558">주의: 이 파일은 임시 파일이며 디스크 여유 공간을 확보하기 위해 자동으로 삭제될 수 있습니다.</translation>
 <translation id="3029114385395636667">Docs, Sheets, Slides를 오프라인에서 사용할 수 있도록 Google Docs 오프라인을 사용 설정하세요.</translation>
 <translation id="303198083543495566">위치</translation>
+<translation id="3044404008258011032">항목을 복원하려면 휴지통 외부의 새 폴더로 드래그하세요. 이 항목의 원래 폴더인 "<ph name="PARENT_FOLDER_NAME" />"이(가) 삭제되었습니다</translation>
 <translation id="3047197340186497470">중국어(대이수입법)</translation>
-<translation id="3057861065630527966">사진 및 동영상을 백업합니다.</translation>
 <translation id="3067790092342515856">Windows 파일</translation>
 <translation id="3083975830683400843">Chromebit</translation>
 <translation id="3085752524577180175">SOCKS 호스트</translation>
@@ -243,6 +239,7 @@
 <translation id="3124404833828281817">공상에 빠진 사람</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3138624403379688522">잘못된 PIN입니다. 기회가 <ph name="RETRIES" />번 남았습니다.</translation>
+<translation id="3157931365184549694">복구</translation>
 <translation id="3160842278951476457"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />](하드웨어에 백업됨)</translation>
 <translation id="3188257591659621405">내 파일</translation>
 <translation id="3194553149358267393">최근 오디오 파일 없음</translation>
@@ -263,6 +260,7 @@
 <translation id="3280987981688031357">레코드판</translation>
 <translation id="3290356915286466215">비보안</translation>
 <translation id="3291218047831493686">SIM 잠금 설정을 변경하려면 이 네트워크에 연결하세요.</translation>
+<translation id="3293023191599135697">WEP 네트워크는 지원되지 않습니다.</translation>
 <translation id="3295357220137379386">기기 사용량이 많습니다.</translation>
 <translation id="3296763833017966289">그루지야어</translation>
 <translation id="3307875152560779385">우크라이나어</translation>
@@ -280,13 +278,10 @@
 <translation id="3437801641691368414">만든 시간</translation>
 <translation id="343907260260897561">즉석 카메라</translation>
 <translation id="3455931012307786678">에스토니아어</translation>
-<translation id="3466147780910026086">미디어 기기 스캔 중...</translation>
-<translation id="3468522857997926824">사진 <ph name="FILE_COUNT" />장을 <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" />에 백업</translation>
 <translation id="3475447146579922140">Google Sheets</translation>
 <translation id="3479552764303398839">나중에</translation>
 <translation id="3486821258960016770">몽골어</translation>
 <translation id="3495304270784461826">오류가 <ph name="COUNT" />개 있습니다.</translation>
-<translation id="3495810061346586977">이 파일은 기밀이며 관리자 정책의 제한사항이 적용됩니다. <ph name="BEGIN_LINK_HELP" />자세히 알아보기<ph name="END_LINK_HELP" /></translation>
 <translation id="3509680540198371098">네트워크 <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, 신호 강도 <ph name="SIGNAL_STRENGTH" />%, 세부정보</translation>
 <translation id="3522708245912499433">포르투갈어</translation>
 <translation id="3524311639100184459">주의: 이 파일은 임시 파일이며 디스크 여유 공간을 확보하기 위해 자동으로 삭제될 수 있습니다.  <ph name="BEGIN_LINK" />자세히 알아보기<ph name="END_LINK" /></translation>
@@ -295,6 +290,7 @@
 <translation id="3549797760399244642">drive.google.com 사이트로 이동...</translation>
 <translation id="3553048479571901246"><ph name="APP_NAME" /> 앱으로 파일을 열려면 먼저 파일을 Windows 파일 폴더에 복사하세요.</translation>
 <translation id="3556731189587832921">영어(미국, 국제 PC 키보드)</translation>
+<translation id="3557414470514932909"><ph name="FILE_NAME" /> 파일을 휴지통으로 이동하는 중</translation>
 <translation id="3567221313191587603">파일을 선택하고 <ph name="OFFLINE_CHECKBOX_NAME" />으로 전환하여 파일에 오프라인으로 액세스하세요.</translation>
 <translation id="357479282490346887">리투아니아어</translation>
 <translation id="3587482841069643663">전체</translation>
@@ -305,17 +301,16 @@
 <translation id="3616113530831147358">오디오</translation>
 <translation id="3619115746895587757">카푸치노</translation>
 <translation id="3619593063686672873">최근 동영상 없음</translation>
-<translation id="3620292326130836921">백업되지 않은 파일이 없습니다.</translation>
 <translation id="3634507049637220048">네트워크 <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, 관리자가 관리함, 세부정보</translation>
 <translation id="3645233063072417428">항목 <ph name="NUMBER_OF_ITEMS" />개를 이동했습니다.</translation>
 <translation id="3685122418104378273">모바일 데이터를 사용할 때는 Google Drive 동기화가 기본적으로 사용 중지됩니다.</translation>
 <translation id="3689865792480713551"><ph name="ACTIVITY_DESCRIPTION" /> 작업을 취소합니다.</translation>
 <translation id="3690128548376345212"><ph name="NETWORK_COUNT" />개 중 <ph name="NETWORK_INDEX" />번째 네트워크, <ph name="NETWORK_NAME" />, 비활성화됨, <ph name="CONNECTION_STATUS" />, 신호 강도 <ph name="SIGNAL_STRENGTH" />%, 세부정보</translation>
 <translation id="3691184985318546178">싱할라어</translation>
+<translation id="3722341589402358578">오류가 발생했습니다. 일부 항목이 휴지통으로 이동되지 않았을 수도 있습니다.</translation>
 <translation id="3726463242007121105">파일 시스템이 지원되지 않아 이 기기를 열 수 없습니다.</translation>
 <translation id="3727148787322499904">이 설정을 변경하면 모든 공유 네트워크에 영향을 줍니다.</translation>
 <translation id="3737576078404241332">사이드바에서 삭제</translation>
-<translation id="3741243925913727067">Google Drive에 미디어 기기의 사진과 동영상을 백업합니다.</translation>
 <translation id="3749289110408117711">파일 이름</translation>
 <translation id="3780536599611287598">파일을 '<ph name="FOLDER_NAME" />'(으)로 이동할 권한이 없습니다.</translation>
 <translation id="3786301125658655746">오프라인 상태입니다.</translation>
@@ -332,6 +327,7 @@
 <translation id="3830674330436234648">재생을 사용할 수 없음</translation>
 <translation id="383652340667548381">세르비아어</translation>
 <translation id="385051799172605136">뒤로</translation>
+<translation id="3851491607336266896">연결됨, 제한된 연결</translation>
 <translation id="3855472144336161447">독일어 Neo 2</translation>
 <translation id="3858860766373142691">이름</translation>
 <translation id="3866249974567520381">설명</translation>
@@ -347,11 +343,17 @@
 <translation id="3975895378829046965">벵골어(표음)</translation>
 <translation id="4002066346123236978">제목</translation>
 <translation id="4017788180641807848">영어(미국, 워크맨 키보드)</translation>
+<translation id="4019998208269143058">빠른 파일에 고정</translation>
 <translation id="4040753847560036377">잘못된 PUK</translation>
 <translation id="4057991113334098539">활성화 중...</translation>
 <translation id="4092890906744441904">아일랜드어</translation>
 <translation id="4124935795427217608">유니콘</translation>
+<translation id="4131235941541910880">필요하지 않은 항목은 휴지통으로 옮기세요.</translation>
+<translation id="4153015322587141338">파일을 마우스 오른쪽 버튼으로 클릭하고 실행기에서 파일에 빠르게 액세스할 수 있도록 "<ph name="PIN_COMMAND" />"을 선택합니다.</translation>
+<translation id="4157569377477607576">관리자 정책에서 권장되지 않는 사항:</translation>
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> 항목을 이동했습니다.</translation>
+<translation id="4176286497474237543">지금 휴지통 비우기</translation>
+<translation id="4179621117429069925">항목이 휴지통에 있습니다</translation>
 <translation id="4186579485882418952">오프라인 사용 설정</translation>
 <translation id="4193154014135846272">Google Docs</translation>
 <translation id="4197674956721858839">선택항목 압축하기</translation>
@@ -359,13 +361,13 @@
 <translation id="4202977638116331303">조지아어</translation>
 <translation id="421017592316736757">이 파일에 액세스하려면 온라인 상태여야 합니다.</translation>
 <translation id="4212740939091998969">이름이 '<ph name="FOLDER_NAME" />'인 폴더가 이미 존재합니다. 다른 이름을 선택하세요.</translation>
-<translation id="4215448920900139318">파일 <ph name="FILE_COUNT" />개 백업 중</translation>
 <translation id="4218274196133425560"><ph name="HOST_NAME" /> 예외 삭제</translation>
 <translation id="4261901459838235729">Google 프레젠테이션</translation>
 <translation id="4277536868133419688"><ph name="FILTER_NAME" /> 필터가 설정되었습니다.</translation>
 <translation id="4290535918735525311">폴더 1개가 Linux와 공유됨</translation>
 <translation id="4299729908419173967">브라질어</translation>
 <translation id="4302605047395093221">이 모바일 네트워크에 연결하려면 설정 중인 기기를 사용하는 모든 사용자는 PIN을 입력해야 합니다.</translation>
+<translation id="4303531889494116116">네트워크 사용량이 많습니다. 나중에 다시 시도해 주세요.</translation>
 <translation id="4309915981827077375">일반 정보</translation>
 <translation id="432252891123397018">루마니아어(표준 키보드)</translation>
 <translation id="4325128273762811722">슬로베니아어</translation>
@@ -382,6 +384,7 @@
 <translation id="4387004326333427325">인증서가 원격으로 거부됨</translation>
 <translation id="4394214039309501350">외부 링크</translation>
 <translation id="4394980935660306080">이번 주 초</translation>
+<translation id="4398096759193130964">항목을 복원하거나 휴지통 외부의 새 폴더로 드래그하세요.</translation>
 <translation id="4401287888955153199">모두 추출</translation>
 <translation id="4410695710508688828">추출 작업에 실패했습니다. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4418686080762064601">파일의 바로가기 만들기</translation>
@@ -399,7 +402,6 @@
 <translation id="4527800702232535228">Parallels Desktop과 공유된 폴더</translation>
 <translation id="4552678318981539154">추가 저장용량 구입</translation>
 <translation id="4552759165874948005"><ph name="NETWORK_TYPE" /> 네트워크, 신호 강도 <ph name="SIGNAL_STRENGTH" />%</translation>
-<translation id="4559318885353833501"><ph name="FILE_NAME" /> 파일이 삭제됨</translation>
 <translation id="4559767610552730302">흐리게 처리</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> 파일</translation>
 <translation id="457386861538956877">더보기...</translation>
@@ -425,7 +427,6 @@
 <translation id="4711094779914110278">터키어</translation>
 <translation id="4712283082407695269">‘<ph name="PATH" />’ 여는 중</translation>
 <translation id="4720185134442950733">모바일 데이터 네트워크</translation>
-<translation id="4724850507808590449">사진 <ph name="FILE_COUNT" />장을 백업했습니다.</translation>
 <translation id="4725096204469550614">올해 초</translation>
 <translation id="4725511304875193254">웰시 코기</translation>
 <translation id="4737050008115666127">착륙</translation>
@@ -436,8 +437,10 @@
 <translation id="4784330909746505604">PowerPoint 프레젠테이션</translation>
 <translation id="4788401404269709922"><ph name="NUMBER_OF_KB" />KB</translation>
 <translation id="4789067489790477934">Parallels Desktop이 Google Drive의 파일에 액세스하도록 허용합니다. 변경사항은 다른 기기에 동기화됩니다.</translation>
+<translation id="4790766916287588578">힌디어(인스크립트 키보드)</translation>
 <translation id="4801956050125744859">모두 보관</translation>
 <translation id="4804827417948292437">아보카도</translation>
+<translation id="4805966553127040832">항목 <ph name="COUNT" />개 복원 중</translation>
 <translation id="4823651846660089135">읽기 전용 기기</translation>
 <translation id="4826849268470072925">타밀어(ITRANS)</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" />개의 항목이 선택됨</translation>
@@ -446,15 +449,18 @@
 <translation id="485316830061041779">독일어</translation>
 <translation id="4867079195717347957">열을 내림차순으로 정렬하려면 클릭하세요.</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" />바이트</translation>
+<translation id="4874569719830985133">완전삭제</translation>
 <translation id="4880214202172289027">볼륨 슬라이더</translation>
 <translation id="4881695831933465202">열기</translation>
+<translation id="4891091358278567964">항목을 복원하려면 휴지통 외부의 새 폴더로 드래그하세요. 이 항목의 원래 폴더가 삭제되었습니다.</translation>
 <translation id="4900532980794411603">Parallels Desktop과 공유</translation>
 <translation id="4902546322522096650">네트워크 <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, 신호 강도 <ph name="SIGNAL_STRENGTH" />%, 연결</translation>
-<translation id="4905417359854579806">파일 <ph name="FILE_COUNT" />개 백업 준비 완료</translation>
 <translation id="4906580650526544301">네트워크 <ph name="NETWORK_COUNT" />개 중 <ph name="NETWORK_INDEX" />번째, <ph name="PHONE_NAME" />, <ph name="PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, 신호 강도 <ph name="SIGNAL_STRENGTH" />%, 휴대전화 배터리 <ph name="BATTERY_STATUS" />%, 세부정보</translation>
+<translation id="4929673617759421391">관리자 정책에 의해 이 파일의 붙여넣기가 차단되었습니다.</translation>
 <translation id="4935975195727477204">꽃</translation>
 <translation id="4943368462779413526">풋볼</translation>
 <translation id="4961158930123534723">폴더 1개가 Parallels Desktop과 공유되었습니다.</translation>
+<translation id="496656650103537022"><ph name="FILE_NAME" /> 복원됨</translation>
 <translation id="4969785127455456148">앨범</translation>
 <translation id="4973523518332075481">이름은 <ph name="MAX_LENGTH" />자 이하여야 합니다</translation>
 <translation id="4973970068702235170">압축에 실패했습니다. 예상치 못한 오류: <ph name="ERROR_MESSAGE" /></translation>
@@ -462,7 +468,6 @@
 <translation id="4988205478593450158">'<ph name="FILE_NAME" />'을(를) 삭제하시겠습니까?</translation>
 <translation id="498902553138568924">붉은 나비</translation>
 <translation id="4992066212339426712">음소거 해제</translation>
-<translation id="5004584466530475658">새로운 사진 <ph name="FILE_COUNT" />장</translation>
 <translation id="5010406651457630570">컴퓨터</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">작업 시간이 예상보다 지연되고 있습니다. 중단하시겠습니까?</translation>
@@ -488,10 +493,8 @@
 <translation id="5159383109919732130"><ph name="BEGIN_BOLD" />아직 기기를 분리하지 마세요!<ph name="END_BOLD" />
    <ph name="LINE_BREAKS" />
    사용 중인 기기를 분리하면 데이터가 삭제될 수 있습니다. 작업이 끝날 때까지 기다린 다음 파일 앱을 사용하여 기기를 꺼내세요.</translation>
-<translation id="5159560892333415631">휴지통 비우기</translation>
 <translation id="5163869187418756376">공유하지 못했습니다. 인터넷 연결을 확인하고 나중에 다시 시도해 주세요.</translation>
 <translation id="516592729076796170">미국 프로그래머 드보락</translation>
-<translation id="5172749059808361023">제한사항 세부정보</translation>
 <translation id="5177526793333269655">미리보기 이미지 보기</translation>
 <translation id="5181896909298187506">최근 파일 없음</translation>
 <translation id="5194713942430106590">열을 오름차순으로 정렬하려면 클릭하세요.</translation>
@@ -507,19 +510,22 @@
     <ph name="MARKUP_7" />다른 사용자와 한 곳에서 파일을<ph name="MARKUP_8" />
     공유하고 만들고 공동작업하세요.<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">Google Drive에서 복구된 파일</translation>
+<translation id="5278111733643988471">항목을 복원하려면 휴지통 외부의 새 폴더로 드래그하세요. 이 항목의 원래 폴더인 "<ph name="PARENT_FOLDER_NAME" />"이(가) 삭제되었습니다</translation>
+<translation id="5286194356314741248">검색 중</translation>
 <translation id="5288441970121584418">햄버거</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
-<translation id="5299998344490869684">휴지통을 비우시겠습니까?</translation>
+<translation id="5293615890992542006">관리자 정책에 의해 이 파일의 이동이 차단되었습니다.</translation>
 <translation id="5305688511332277257">설치된 인증서 없음</translation>
 <translation id="5317780077021120954">저장</translation>
 <translation id="5318819489018851358">Linux로 공유</translation>
 <translation id="5323213332664049067">남미 언어</translation>
 <translation id="5330145655348521461">파일이 다른 데스크톱에서 열려 있습니다. 파일을 보려면 <ph name="USER_NAME" />(<ph name="MAIL_ADDRESS" />)(으)로 이동하세요.</translation>
 <translation id="5330512191124428349">정보 보기</translation>
-<translation id="5335458522276292100"><ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" />에 파일 <ph name="FILE_COUNT" />개 백업 중</translation>
+<translation id="5337538975554986899"><ph name="NON_RESTRICTED_DESTINATIONS" />을(를) 제외한 모든 URL에서 파일 액세스</translation>
 <translation id="535792325654997756">고양이들과 함께 있는 사람</translation>
 <translation id="5358764674931277">프레임 속도</translation>
 <translation id="5363339716524495120">중국어를 입력 언어로 설정</translation>
+<translation id="5364067326287025678">휴지통이 비어 있음</translation>
 <translation id="5368191757080475556">Linux와 폴더 공유</translation>
 <translation id="5402367795255837559">점자</translation>
 <translation id="5411472733320185105">다음 호스트와 도메인에서 프록시 설정을 사용 안함:</translation>
@@ -541,6 +547,7 @@
 <translation id="5533102081734025921"><ph name="IMAGE_TYPE" /> 이미지</translation>
 <translation id="5534520101572674276">크기를 계산하는 중</translation>
 <translation id="554153475311314364">그리스어(음역)</translation>
+<translation id="5580591966435005537">가상 머신</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5583664733673201137">구두점 폭을 최대로 설정</translation>
 <translation id="5602622065581044566">불가리아어(표음 키보드)</translation>
@@ -557,9 +564,8 @@
 <translation id="5691596662111998220"><ph name="FILE_NAME" />이(가) 더 이상 존재하지 않습니다.</translation>
 <translation id="5698411045597658393"><ph name="NETWORK_NAME" />, 잠금 해제</translation>
 <translation id="5700087501958648444">오디오 정보</translation>
+<translation id="5720028165859493293"><ph name="FILE_NAME" /> 파일을 휴지통으로 이동함</translation>
 <translation id="5724172041621205163">태국어(파타초테 키보드)</translation>
-<translation id="5731409020711461763">새로운 사진 1장</translation>
-<translation id="5752453871435543420">Chrome OS 클라우드 백업</translation>
 <translation id="5756666464756035725">헝가리어 QWERTY</translation>
 <translation id="5763377084591234761">독일어(스위스)</translation>
 <translation id="5769519078756170258">제외할 호스트 또는 도메인</translation>
@@ -593,7 +599,6 @@
 <translation id="6011074160056912900">이더넷 네트워크</translation>
 <translation id="60357267506638014">체코어 QWERTY</translation>
 <translation id="603895874132768835">새 PIN을 설정할 때까지 이 네트워크를 사용할 수 없습니다.</translation>
-<translation id="604001903249547235">클라우드 백업</translation>
 <translation id="6040143037577758943">닫기</translation>
 <translation id="6055907707645252013"><ph name="NETWORK_TYPE" /> 네트워크, 연결되지 않음</translation>
 <translation id="6074825444536523002">Google 양식</translation>
@@ -603,6 +608,7 @@
 <translation id="61118516107968648">CSV 텍스트</translation>
 <translation id="6129953537138746214">Space</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> 이동 중...</translation>
+<translation id="6133877453787250710">관리자 모니터링 대상:</translation>
 <translation id="613750717151263950">일본어(미국 키보드)</translation>
 <translation id="6138894911715675297"><ph name="NETWORK_TYPE" />, 네트워크 없음</translation>
 <translation id="6146563240635539929">동영상</translation>
@@ -623,11 +629,13 @@
 <translation id="6287852322318138013">이 파일을 열 때 사용할 앱 선택</translation>
 <translation id="6295542640242147836">SIM 잠금</translation>
 <translation id="6296410173147755564">무효한 PUK</translation>
+<translation id="6308243004861726558">이 파일은 기밀이며 관리자 정책이 적용됩니다. 해당하는 파일 액세스 및 전송 작업은 다음과 같습니다.</translation>
 <translation id="6312403991423642364">알려지지 않은 네트워크 오류</translation>
 <translation id="6317608858038767920">맞춤 네임서버 <ph name="INPUT_INDEX" /></translation>
 <translation id="6320212353742551423"><ph name="ARCHIVE_TYPE" /> 보관 파일</translation>
 <translation id="6321303798550928047">손 흔들기</translation>
 <translation id="6327785803543103246">웹 프록시 자동검색</translation>
+<translation id="6337014272874260727">빠른 파일에서 고정 해제</translation>
 <translation id="6339145975392024142">미국 국제(PC)</translation>
 <translation id="6346310558342052870">액세스 제한됨</translation>
 <translation id="6356685157277930264">파일 의견 창</translation>
@@ -641,6 +649,7 @@
 <translation id="642282551015776456">폴더 이름의 파일으로 사용할 수 없는 이름입니다.</translation>
 <translation id="6423031066725912715">베트남어(TCVN 키보드)</translation>
 <translation id="6430271654280079150">기회가 1번 남았습니다.</translation>
+<translation id="643243556292470964">삭제된 파일이 휴지통으로 이동됨</translation>
 <translation id="6485131920355264772">남은 용량을 알 수 없습니다.</translation>
 <translation id="6495925982925244349">네트워크 <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, 신호 강도 <ph name="SIGNAL_STRENGTH" />%, 관리자가 관리함, 세부정보</translation>
 <translation id="649877868557234318"><ph name="FOLDER_NAME" /> 폴더로 <ph name="FILE_NAME" /> 추출 중</translation>
@@ -656,10 +665,10 @@
 <translation id="6607272825297743757">파일 정보</translation>
 <translation id="6609332149380188670">폴더 <ph name="NUMBER_OF_ITEMS" />개가 Parallels Desktop과 공유됨</translation>
 <translation id="6629518321609546825">4개 이상의 숫자를 입력하세요.</translation>
-<translation id="6629841649550503054">모두 <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" />에 백업했습니다.</translation>
 <translation id="6643016212128521049">삭제</translation>
 <translation id="6650726141019353908">분홍 나비</translation>
 <translation id="6657585470893396449">비밀번호</translation>
+<translation id="6658865850469097484">휴지통에 있는 파일은 30일이 지나면 자동으로 삭제됩니다.</translation>
 <translation id="6673674183150363784">프랑스어(프랑스, 베포 키보드)</translation>
 <translation id="6710022688720561421">로봇</translation>
 <translation id="6710213216561001401">이전</translation>
@@ -668,6 +677,7 @@
 <translation id="6751256176799620176">폴더 1개 선택됨</translation>
 <translation id="6755827872271341378">ChromeOS Flex 기기</translation>
 <translation id="6790428901817661496">재생</translation>
+<translation id="6794539005637808366">항목을 복원하거나 휴지통 외부의 새 폴더로 드래그하세요.</translation>
 <translation id="6795884519221689054">판다</translation>
 <translation id="6806699711453372963">Linux 공유 관리</translation>
 <translation id="6806796368146926706">영숫자(일본어 키보드)</translation>
@@ -683,19 +693,16 @@
 <translation id="6874758081814639712">태극권을 하는 사람</translation>
 <translation id="6876155724392614295">자전거</translation>
 <translation id="6878261347041253038">데바나가리 키보드(음역)</translation>
+<translation id="6881853403185175088">Office</translation>
 <translation id="6885780034956018177">달팽이</translation>
 <translation id="6896758677409633944">복사</translation>
 <translation id="6898028766943174120">하위 폴더 더보기...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">미국 워크맨</translation>
 <translation id="6930242544192836755">기간</translation>
-<translation id="6934241953272494177">미디어 기기 스캔 중...
-    <ph name="LINE_BREAK1" />
-    파일 <ph name="FILE_COUNT" />개 있음</translation>
 <translation id="6935521024859866267">180도 회전</translation>
 <translation id="6943836128787782965">HTTP 실패</translation>
 <translation id="6949408524333579394">세르비아어(음역)</translation>
-<translation id="6954309393500027528">관리자가 이 파일의 붙여넣기를 차단했습니다.</translation>
 <translation id="6960565108681981554">활성화되지 않았습니다. 이동통신사에 문의하세요.</translation>
 <translation id="696203921837389374">모바일 데이터를 이용한 동기화 사용 설정</translation>
 <translation id="6965382102122355670">확인</translation>
@@ -706,8 +713,10 @@
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6989942356279143254">스웨덴어</translation>
 <translation id="6990081529015358884">저장 공간이 부족합니다.</translation>
+<translation id="6993826899923627728">항목이 휴지통에 있습니다</translation>
 <translation id="6998711733709403587"><ph name="SELCTED_FOLDERS_COUNT" />개의 폴더가 선택됨</translation>
 <translation id="7008426324576352165">업로드를 완료하려면 조직에 추가 저장용량이 필요합니다.</translation>
+<translation id="7009985720488544166">관리자 정책에 의해 파일 <ph name="COUNT" />개의 이동이 차단되었습니다.</translation>
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" />(<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">설치에 실패했습니다.</translation>
 <translation id="7031639531908619281">터키어</translation>
@@ -737,7 +746,7 @@
 <translation id="7248671827512403053">애플리케이션</translation>
 <translation id="7256405249507348194">알 수 없는 오류(<ph name="DESC" />)입니다.</translation>
 <translation id="7268659760406822741">사용 가능한 서비스</translation>
-<translation id="7283041136720745563">Google Drive 용량이 부족합니다.</translation>
+<translation id="7292816689782057017">관리자 정책에 따라 일부 위치에만 저장할 수 있습니다.</translation>
 <translation id="7294063083760278948">텔루구어(음역)</translation>
 <translation id="7295662345261934369">다른 사용자와 공유</translation>
 <translation id="7297443947353982503">사용자 이름 또는 비밀번호가 잘못되었거나 EAP 인증에 실패했습니다.</translation>
@@ -751,13 +760,11 @@
 <translation id="7408870451288633753">체코어</translation>
 <translation id="7417453074306512035">에티오피아어 키보드</translation>
 <translation id="7417705661718309329">Google 지도</translation>
+<translation id="7419668828140929293">"<ph name="FILENAME" />" 복원 중</translation>
 <translation id="7458955835361612701">최근 이미지 없음</translation>
 <translation id="7460898608667578234">우크라이나어</translation>
 <translation id="7469894403370665791">네트워크에 자동 연결</translation>
 <translation id="7486315294984620427">Parallels Desktop에 파일을 드롭하려면 파일을 Windows 파일 폴더로 복사해야 합니다.</translation>
-<translation id="7489215562877293245">파일 <ph name="FILE_COUNT" />개 있음
-    <ph name="LINE_BREAK1" />
-    <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" /> 백업 준비 완료</translation>
 <translation id="749452993132003881">히라가나</translation>
 <translation id="7495372004724182530">말라얄람어(표음)</translation>
 <translation id="7505167922889582512">숨긴 파일 표시</translation>
@@ -771,7 +778,6 @@
 <translation id="7547811415869834682">네덜란드어</translation>
 <translation id="7551643184018910560">실행기에 고정</translation>
 <translation id="7553492409867692754">Linux 앱이 <ph name="FOLDER_NAME" /> 폴더의 파일에 액세스하도록 허용합니다.</translation>
-<translation id="7575645593344061397">'<ph name="FILENAME" />' 복원 중...</translation>
 <translation id="7589661784326793847">잠시만 기다려 주세요.</translation>
 <translation id="7592775719802218421"><ph name="FILE_NAME" /> 파일을 오프라인에서 사용하도록 설정 중</translation>
 <translation id="7600126690270271294">세르비아어</translation>
@@ -783,6 +789,7 @@
 <translation id="7655441028674523381">Google 포토에 쉽게 액세스하세요</translation>
 <translation id="7658239707568436148">취소</translation>
 <translation id="7663224033570512922">힌디어</translation>
+<translation id="7689532716264131859">항목 <ph name="NUMBER_OF_ITEMS" />개를 휴지통으로 이동함</translation>
 <translation id="7693909743393669729">드라이브를 포맷하면 저장된 모든 데이터가 삭제되고 숨김 상태에 있는 파티션을 포함 기존 파티션이 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</translation>
 <translation id="7695430100978772476"><ph name="DRIVE_NAME" />을(를) 포맷할 수 없습니다.</translation>
 <translation id="76959938259365003">휴지통을 비울 수 없습니다.</translation>
@@ -791,12 +798,13 @@
 <translation id="7708271999969613024">이 네트워크를 사용하려면 이동통신사에서 제공하는 8자리 PUK(Personal Unblocking Key)를 입력해야 합니다.</translation>
 <translation id="7711920809702896782">이미지 정보</translation>
 <translation id="7724603315864178912">잘라내기</translation>
-<translation id="7730494089396812859">클라우드 백업 상세정보를 표시합니다.</translation>
 <translation id="7732111077498238432">네트워크는 정책을 통해 제어됩니다</translation>
+<translation id="7736003208887389532">파일을 완전히 삭제하시겠습니까?</translation>
 <translation id="7748626145866214022">작업 표시줄에서 더 많은 옵션을 사용할 수 있습니다. 작업 표시줄에 초점을 맞추려면 Alt + A를 누르세요.</translation>
 <translation id="7760449188139285140">중국어(오필화수입법)</translation>
 <translation id="7765158879357617694">이동</translation>
 <translation id="7774365994322694683">새</translation>
+<translation id="7780322752056734036">항목 <ph name="NUMBER_OF_ITEMS" />개 복원됨</translation>
 <translation id="7781829728241885113">어제</translation>
 <translation id="7788080748068240085">'<ph name="FILE_NAME" />'을(를) 오프라인에 저장하려면 다음 방법을 통해 <ph name="TOTAL_FILE_SIZE" />의 추가 여유 공간을 확보해야 합니다.<ph name="MARKUP_1" />
     <ph name="MARKUP_2" />더 이상 오프라인 액세스가 필요하지 않은 파일을 고정 해제합니다.<ph name="MARKUP_3" />
@@ -807,11 +815,6 @@
 <translation id="7805768142964895445">상태</translation>
 <translation id="7806708061868529807">히브리어</translation>
 <translation id="78104721049218340">태국어(케드마니 키보드)</translation>
-<translation id="7821462174190887129">파일 <ph name="FILE_COUNT" />개가 있습니다.
-    <ph name="LINE_BREAK1" />
-    Google Drive 용량이 부족합니다. <ph name="FILE_SIZE" />가 더 필요합니다.
-    <ph name="LINE_BREAK2" />
-    사진을 더 적게 선택해 보세요.</translation>
 <translation id="7827012282502221009"><ph name="NUMBER_OF_TB" />TB</translation>
 <translation id="7831491651892296503">네트워크를 설정하는 중에 오류가 발생했습니다</translation>
 <translation id="7839804798877833423">이 파일을 가져오는 데 약 <ph name="FILE_SIZE" />의 모바일 데이터가 사용됩니다.</translation>
@@ -823,6 +826,7 @@
 <translation id="78946041517601018">공유 드라이브</translation>
 <translation id="7903984238293908205">가타카나</translation>
 <translation id="7908793776359722643">파티션을 포맷하면 파티션에 저장된 모든 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</translation>
+<translation id="7911118814695487383">Linux</translation>
 <translation id="7925247922861151263">AAA 확인 실패</translation>
 <translation id="7925686952655276919">모바일 데이터를 동기화에 사용하지 않습니다.</translation>
 <translation id="7928710562641958568">기기 꺼내기</translation>
@@ -858,8 +862,11 @@
 <translation id="8249296373107784235">중단</translation>
 <translation id="8250690786522693009">라틴어</translation>
 <translation id="8250920743982581267">문서</translation>
+<translation id="8255595130163158297">휴지통에 있는 모든 항목이 삭제되며 복원할 수 없습니다.</translation>
 <translation id="8261506727792406068">삭제</translation>
 <translation id="8261561378965667560">중국어(행렬수입법)</translation>
+<translation id="8262872909443689080">관리자 정책</translation>
+<translation id="8264024885325823677">관리자가 관리하는 설정입니다.</translation>
 <translation id="8269755669432358899">파일 의견 패널 접기</translation>
 <translation id="8280151743281770066">알마니아어 표음</translation>
 <translation id="8294431847097064396">출처</translation>
@@ -885,7 +892,6 @@
 <translation id="8456681095658380701">잘못된 이름입니다.</translation>
 <translation id="8457767749626250697">SIM이 잠김</translation>
 <translation id="8459404855768962328">이 항목을 복사하면 '<ph name="DESTINATION_NAME" />' 공유 폴더를 볼 수 있는 모든 사용자와 항목이 공유됩니다.</translation>
-<translation id="8461467696380332069">파일을 마우스 오른쪽 버튼으로 클릭하고 실행기에서 파일에 빠르게 액세스할 수 있도록 '실행기에 고정'을 선택합니다.</translation>
 <translation id="8461914792118322307">프록시</translation>
 <translation id="8463494891489624050">베트남어(VIQR)</translation>
 <translation id="8475647382427415476">Google Drive에서 '<ph name="FILENAME" />'을(를) 동기화하지 못했습니다. Google Drive에서 나중에 다시 시도합니다.</translation>
@@ -916,29 +922,31 @@
 <translation id="8656768832129462377">확인 안함</translation>
 <translation id="8688591111840995413">비밀번호가 잘못됨</translation>
 <translation id="8698464937041809063">Google 드로잉</translation>
+<translation id="8698877009525468705">이 파일은 기밀이며 관리자 정책의 제한사항이 적용됩니다.</translation>
 <translation id="8712637175834984815">확인</translation>
 <translation id="8713112442029511308">몰타어</translation>
 <translation id="8714406895390098252">자전거</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> 항목이 선택되었습니다.</translation>
 <translation id="872537912056138402">크로아티아어</translation>
 <translation id="8743164338060742337">네트워크 <ph name="NETWORK_COUNT" />개 중 <ph name="NETWORK_INDEX" />번째, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, 신호 강도 <ph name="SIGNAL_STRENGTH" />%, 관리자가 관리함, 연결</translation>
-<translation id="8750438273876807512">실행기에서 파일에 빠르게 액세스하려면 파일을 길게 터치한 다음 <ph name="ICON" /> 아이콘을 탭하고 '실행기에 고정'을 선택하세요.</translation>
 <translation id="8787254343425541995">공유 네트워크에서 프록시 허용</translation>
 <translation id="8790981080411996443">식물에 물을 주는 사람</translation>
 <translation id="8798099450830957504">기본값</translation>
-<translation id="8802459921616481935">휴지통으로 이동</translation>
 <translation id="8808686172382650546">고양이</translation>
 <translation id="8810671769985673465">압축에 실패했습니다. 남은 항목: '<ph name="FILE_NAME" />'</translation>
 <translation id="8813284582615685103">스페인어(스페인)</translation>
 <translation id="8834164572807951958">'<ph name="DESTINATION_NAME" />' 멤버에게 이 항목의 사본에 액세스할 수 있는 권한이 부여됩니다.</translation>
+<translation id="8849389110234859568">관리자 정책은 일부 파일에 대한 액세스를 제한합니다.</translation>
 <translation id="8857149712089373752">네팔어(표음 키보드)</translation>
 <translation id="8860454412039442620">Excel 스프레드시트</translation>
 <translation id="8866284467018526531">아랍어(음역)</translation>
+<translation id="8873014196523807561">항목을 복원하려면 새 폴더로 드래그하세요. 일부 항목의 원래 폴더가 삭제되었습니다</translation>
 <translation id="8874184842967597500">연결되지 않음</translation>
 <translation id="8900820606136623064">헝가리어</translation>
 <translation id="8903931173357132290">졸업생</translation>
 <translation id="8912078710089354287">꼬리를 흔드는 개</translation>
 <translation id="8919081441417203123">덴마크어</translation>
+<translation id="8949925099261528566">연결됨, 인터넷 사용 불가</translation>
 <translation id="8965697826696209160">저장 공간이 부족합니다.</translation>
 <translation id="8997962250644902079">중국어(번체, 병음)</translation>
 <translation id="8998871447376656508">Google Drive에 여유 공간이 부족하여 업로드를 완료할 수 없습니다.</translation>
@@ -955,6 +963,7 @@
 <translation id="9100610230175265781">암호를 입력해야 합니다.</translation>
 <translation id="9110990317705400362">Google은 더 안전한 인터넷 사용 방법을 끊임없이 모색하고 있습니다. 이전에는 브라우저에 확장 프로그램을 추가하라는 메시지가 어느 웹사이트에서나 표시되었습니다. 하지만 Chrome의 최신 버전에서는 확장 프로그램 페이지를 통해 확장 프로그램을 추가함으로써 설치를 원한다는 사실을 Chrome에 명시적으로 알려야 합니다. <ph name="BEGIN_LINK" />자세히 알아보기<ph name="END_LINK" /></translation>
 <translation id="9111102763498581341">잠금 해제</translation>
+<translation id="9116909380156770361">파일 전송 대상: <ph name="RESTRICTED_COMPONENTS" /></translation>
 <translation id="912419004897138677">코덱</translation>
 <translation id="9130775360844693113">'<ph name="DESTINATION_NAME" />' 멤버에게 이 항목에 액세스할 수 있는 권한이 부여됩니다.</translation>
 <translation id="9131598836763251128">파일을 한 개 이상 선택하세요.</translation>
@@ -965,10 +974,10 @@
 <translation id="9171921933192916600">책벌레</translation>
 <translation id="9172592259078059678">구자라트어(음역)</translation>
 <translation id="9173120999827300720">영어(미국, 국제 키보드)</translation>
-<translation id="9174050671906956834">30일 후 휴지통에 있는 항목이 완전히 삭제됩니다.</translation>
 <translation id="9183302530794969518">Google Docs</translation>
 <translation id="9189836632794948435">카자흐어</translation>
 <translation id="9200427192836333033">항목 <ph name="NUMBER_OF_ITEMS" />개가 추출되었습니다.</translation>
+<translation id="9210751050717126865">관리자 정책에 의해 파일 <ph name="COUNT" />개의 붙여넣기가 차단되었습니다.</translation>
 <translation id="9213073329713032541">설치가 시작되었습니다.</translation>
 <translation id="9219103736887031265">이미지</translation>
 <translation id="9219908252191632183">달</translation>
@@ -977,7 +986,9 @@
 <translation id="943972244133411984">수정한 사용자</translation>
 <translation id="945522503751344254">의견 보내기</translation>
 <translation id="947144732524271678"><ph name="FROM_ENTRY_NAME" />부터 <ph name="TO_ENTRY_NAME" />까지 <ph name="ENTRY_COUNT" />개를 선택했습니다.</translation>
+<translation id="954194396377670556">관리자 정책으로 인해 다음을 수행할 수 없습니다.</translation>
 <translation id="965477715979482472">영어(남아프리카공화국)</translation>
+<translation id="976666271385981812">항목 <ph name="NUMBER_OF_ITEMS" />개를 휴지통으로 이동하는 중</translation>
 <translation id="981121421437150478">오프라인</translation>
 <translation id="988685240266037636">이름이 '<ph name="FILE_NAME" />'인 파일이 이미 존재합니다. 덮어쓰시겠습니까?</translation>
 <translation id="992401651319295351">기회가 <ph name="RETRIES" />번 남았습니다. 새 PIN을 설정할 때까지 이 네트워크를 사용할 수 없습니다.</translation>

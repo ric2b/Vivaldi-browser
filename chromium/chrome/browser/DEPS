@@ -85,7 +85,6 @@ include_rules = [
   "+components/browsing_topics",
   "+components/custom_handlers",
   "+components/captive_portal",
-  "+components/cast_certificate",
   "+components/cast_channel",
   "+components/cbor",
   "+components/cdm/browser",
@@ -234,6 +233,7 @@ include_rules = [
   "+components/optimization_guide/content",
   "+components/optimization_guide",
   "+components/optimization_guide/optimization_guide_internals",
+  "+components/origin_trials",
   "+components/os_crypt",
   "+components/ownership",
   "+components/page_info",
@@ -491,6 +491,8 @@ include_rules = [
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux_x11.h",
   "+chrome/browser/ui/views/extensions/request_file_system_dialog_view.h",
+  "+chrome/browser/ui/views/frame/browser_view.h",
+  "+chrome/browser/ui/views/frame/picture_in_picture_browser_frame_view.h",
   "+chrome/browser/ui/views/notifications/request_pin_view_chromeos.h",
   "+chrome/browser/ui/views/try_chrome_dialog_win/try_chrome_dialog.h",
 
@@ -498,9 +500,6 @@ include_rules = [
   "-chrome/browser/performance_manager",
   "+chrome/browser/performance_manager/public",
   "+chrome/browser/performance_manager/test_support",
-  "+chrome/browser/performance_manager/chrome_browser_main_extra_parts_performance_manager.h",
-  "+chrome/browser/performance_manager/chrome_content_browser_client_performance_manager_part.h",
-  "+chrome/browser/performance_manager/metrics/metrics_provider.h",
 
   # Explicitly disallow using SyncMessageFilter to prevent browser from
   # sending synchronous IPC messages on non-UI threads.

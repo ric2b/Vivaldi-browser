@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,8 @@ export type CredentialsChangedListener = (credentials: InsecureCredentials) =>
     void;
 export type PasswordCheckStatusChangedListener =
     (status: chrome.passwordsPrivate.PasswordCheckStatus) => void;
+
+export type PasswordManagerAuthTimeoutListener = () => void;
 
 /**
  * Interface for all callbacks to the password API.
@@ -223,14 +225,9 @@ export interface PasswordManagerProxy {
   stopBulkPasswordCheck(): void;
 
   /**
-   * Requests the latest information about compromised credentials.
+   * Requests the latest information about insecure credentials.
    */
-  getCompromisedCredentials(): Promise<InsecureCredentials>;
-
-  /**
-   * Requests the latest information about weak credentials.
-   */
-  getWeakCredentials(): Promise<InsecureCredentials>;
+  getInsecureCredentials(): Promise<InsecureCredentials>;
 
   /**
    * Requests the current status of the check.
@@ -266,25 +263,19 @@ export interface PasswordManagerProxy {
       isManualFlow: boolean): void;
 
   /**
-   * Add an observer to the compromised passwords change.
+   * Requests extension of authentication validity.
    */
-  addCompromisedCredentialsListener(listener: CredentialsChangedListener): void;
+  extendAuthValidity(): void;
 
   /**
-   * Remove an observer to the compromised passwords change.
+   * Add an observer to the insecure passwords change.
    */
-  removeCompromisedCredentialsListener(listener: CredentialsChangedListener):
-      void;
+  addInsecureCredentialsListener(listener: CredentialsChangedListener): void;
 
   /**
-   * Add an observer to the weak passwords change.
+   * Remove an observer to the insecure passwords change.
    */
-  addWeakCredentialsListener(listener: CredentialsChangedListener): void;
-
-  /**
-   * Remove an observer to the weak passwords change.
-   */
-  removeWeakCredentialsListener(listener: CredentialsChangedListener): void;
+  removeInsecureCredentialsListener(listener: CredentialsChangedListener): void;
 
   /**
    * Add an observer to the passwords check status change.
@@ -299,6 +290,18 @@ export interface PasswordManagerProxy {
       listener: PasswordCheckStatusChangedListener): void;
 
   /**
+   * Add an observer for authentication timeout.
+   */
+  addPasswordManagerAuthTimeoutListener(
+      listener: PasswordManagerAuthTimeoutListener): void;
+
+  /**
+   * Remove the specified observer for authentication timeout.
+   */
+  removePasswordManagerAuthTimeoutListener(
+      listener: PasswordManagerAuthTimeoutListener): void;
+
+  /**
    * Records a given interaction on the Password Check page.
    */
   recordPasswordCheckInteraction(interaction: PasswordCheckInteraction): void;
@@ -307,6 +310,12 @@ export interface PasswordManagerProxy {
    * Records the referrer of a given navigation to the Password Check page.
    */
   recordPasswordCheckReferrer(referrer: PasswordCheckReferrer): void;
+
+  /**
+   * Switches Biometric authentication before filling state after
+   * successful authentication.
+   */
+  switchBiometricAuthBeforeFillingState(): void;
 }
 
 /**
@@ -566,16 +575,8 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
     chrome.passwordsPrivate.stopPasswordCheck();
   }
 
-  getCompromisedCredentials() {
-    return new Promise<InsecureCredentials>(resolve => {
-      chrome.passwordsPrivate.getCompromisedCredentials(resolve);
-    });
-  }
-
-  getWeakCredentials() {
-    return new Promise<InsecureCredentials>(resolve => {
-      chrome.passwordsPrivate.getWeakCredentials(resolve);
-    });
+  getInsecureCredentials() {
+    return chrome.passwordsPrivate.getInsecureCredentials();
   }
 
   muteInsecureCredential(insecureCredential:
@@ -595,22 +596,17 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
         insecureCredential, isManualFlow);
   }
 
-  addCompromisedCredentialsListener(listener: CredentialsChangedListener) {
-    chrome.passwordsPrivate.onCompromisedCredentialsChanged.addListener(
+  extendAuthValidity() {
+    chrome.passwordsPrivate.extendAuthValidity();
+  }
+
+  addInsecureCredentialsListener(listener: CredentialsChangedListener) {
+    chrome.passwordsPrivate.onInsecureCredentialsChanged.addListener(listener);
+  }
+
+  removeInsecureCredentialsListener(listener: CredentialsChangedListener) {
+    chrome.passwordsPrivate.onInsecureCredentialsChanged.removeListener(
         listener);
-  }
-
-  removeCompromisedCredentialsListener(listener: CredentialsChangedListener) {
-    chrome.passwordsPrivate.onCompromisedCredentialsChanged.removeListener(
-        listener);
-  }
-
-  addWeakCredentialsListener(listener: CredentialsChangedListener) {
-    chrome.passwordsPrivate.onWeakCredentialsChanged.addListener(listener);
-  }
-
-  removeWeakCredentialsListener(listener: CredentialsChangedListener) {
-    chrome.passwordsPrivate.onWeakCredentialsChanged.removeListener(listener);
   }
 
   addPasswordCheckStatusListener(listener: PasswordCheckStatusChangedListener) {
@@ -623,11 +619,26 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
         listener);
   }
 
+  addPasswordManagerAuthTimeoutListener(
+      listener: PasswordManagerAuthTimeoutListener) {
+    chrome.passwordsPrivate.onPasswordManagerAuthTimeout.addListener(listener);
+  }
+
+  removePasswordManagerAuthTimeoutListener(
+      listener: PasswordManagerAuthTimeoutListener) {
+    chrome.passwordsPrivate.onPasswordManagerAuthTimeout.removeListener(
+        listener);
+  }
+
   /** override */
   recordPasswordCheckInteraction(interaction: PasswordCheckInteraction) {
     chrome.metricsPrivate.recordEnumerationValue(
         'PasswordManager.BulkCheck.UserAction', interaction,
         PasswordCheckInteraction.COUNT);
+  }
+
+  switchBiometricAuthBeforeFillingState() {
+    chrome.passwordsPrivate.switchBiometricAuthBeforeFillingState();
   }
 
   /** override */

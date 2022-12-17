@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -170,21 +170,6 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
   shared_images_.insert(mailbox);
   most_recent_size_ = gpu_memory_buffer->GetSize();
   return mailbox;
-}
-
-std::vector<gpu::Mailbox>
-TestSharedImageInterface::CreateSharedImageVideoPlanes(
-    gfx::GpuMemoryBuffer* gpu_memory_buffer,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    uint32_t usage) {
-  base::AutoLock locked(lock_);
-  auto mailboxes =
-      std::vector<gpu::Mailbox>{gpu::Mailbox::GenerateForSharedImage(),
-                                gpu::Mailbox::GenerateForSharedImage()};
-  shared_images_.insert(mailboxes[0]);
-  shared_images_.insert(mailboxes[1]);
-  most_recent_size_ = gpu_memory_buffer->GetSize();
-  return mailboxes;
 }
 
 void TestSharedImageInterface::UpdateSharedImage(

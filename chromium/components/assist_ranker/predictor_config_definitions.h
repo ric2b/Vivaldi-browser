@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@
 namespace assist_ranker {
 
 #if BUILDFLAG(IS_ANDROID)
-extern const base::Feature kContextualSearchRankerQuery;
+BASE_DECLARE_FEATURE(kContextualSearchRankerQuery);
 const PredictorConfig GetContextualSearchPredictorConfig();
 #endif  // BUILDFLAG(IS_ANDROID)
 

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -145,7 +145,8 @@ suite('ExtensionsActivityLogHistoryTest', function() {
   let boundTestVisible: (selector: string, expectedVisible: boolean) => void;
 
   function setupActivityLogHistory() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     activityLogHistory = document.createElement('activity-log-history');
     boundTestVisible = testVisible.bind(null, activityLogHistory);

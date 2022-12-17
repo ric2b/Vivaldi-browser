@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@ namespace feedback::features {
 // alongside the definition of their values in the .cc file.
 
 // Alphabetical:
-extern const base::Feature kOsFeedbackSaveReportToLocalForE2ETesting;
+BASE_DECLARE_FEATURE(kOsFeedbackSaveReportToLocalForE2ETesting);
 
 extern bool IsOsFeedbackSaveReportToLocalForE2ETestingEnabled();
 

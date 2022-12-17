@@ -31,6 +31,10 @@ class NotesModel;
 class NoteNode;
 }  // namespace vivaldi
 
+namespace file_sync {
+class SyncedFileStore;
+}
+
 namespace sync_notes {
 
 class SyncedNoteTrackerEntity;
@@ -46,7 +50,8 @@ class SyncedNoteTracker {
 
   // Creates an empty instance with no entities. Never returns null.
   static std::unique_ptr<SyncedNoteTracker> CreateEmpty(
-      sync_pb::ModelTypeState model_type_state);
+      sync_pb::ModelTypeState model_type_state,
+      file_sync::SyncedFileStore* synced_file_store);
 
   // Loads a tracker from a proto (usually from disk) after enforcing the
   // consistency of the metadata against the NotesModel. Returns null if the
@@ -54,7 +59,8 @@ class SyncedNoteTracker {
   // null.
   static std::unique_ptr<SyncedNoteTracker> CreateFromNotesModelAndMetadata(
       const vivaldi::NotesModel* model,
-      sync_pb::NotesModelMetadata model_metadata);
+      sync_pb::NotesModelMetadata model_metadata,
+      file_sync::SyncedFileStore* synced_file_store);
 
   SyncedNoteTracker(const SyncedNoteTracker&) = delete;
   SyncedNoteTracker& operator=(const SyncedNoteTracker&) = delete;
@@ -208,7 +214,8 @@ class SyncedNoteTracker {
       bool notes_reuploaded,
       absl::optional<int64_t> num_ignored_updates_due_to_missing_parent,
       absl::optional<int64_t>
-          max_version_among_ignored_updates_due_to_missing_parent);
+          max_version_among_ignored_updates_due_to_missing_parent,
+      file_sync::SyncedFileStore* synced_file_store);
 
   // Add entities to |this| tracker based on the content of |*model| and
   // |model_metadata|. Validates the integrity of |*model| and |model_metadata|
@@ -234,6 +241,8 @@ class SyncedNoteTracker {
   void TraverseAndAppend(
       const vivaldi::NoteNode* node,
       std::vector<const SyncedNoteTrackerEntity*>* ordered_entities) const;
+
+  file_sync::SyncedFileStore* synced_file_store_;
 
   // A map of sync server ids to sync entities. This should contain entries and
   // metadata for almost everything.

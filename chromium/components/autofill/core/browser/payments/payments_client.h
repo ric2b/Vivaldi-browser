@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #include "components/autofill/core/browser/payments/card_unmask_delegate.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_flow.h"
@@ -109,9 +110,12 @@ class PaymentsClient {
     std::u16string otp;
     // An opaque token used to chain consecutive payments requests together.
     std::string context_token;
-    // The url origin of the website where the unmasking happened. Should be
-    // populated when the unmasking is for a virtual-card.
-    absl::optional<GURL> last_committed_url_origin;
+    // The origin of the primary main frame where the unmasking happened.
+    // Should be populated when the unmasking is for a virtual-card.
+    absl::optional<GURL> last_committed_primary_main_frame_origin;
+    // The selected challenge option. Should be populated when we are doing CVC
+    // unmasking for a virtual card.
+    absl::optional<CardUnmaskChallengeOption> selected_challenge_option;
   };
 
   // Information retrieved from an UnmaskRequest.
@@ -141,9 +145,6 @@ class PaymentsClient {
     // card is a virtual-card which does not necessarily have the same
     // expiration date as its related actual card.
     std::string expiration_year;
-    // Challenge required for enrolling user into FIDO authentication for future
-    // card unmasking.
-    absl::optional<base::Value> fido_creation_options;
     // Challenge required for authorizing user for FIDO authentication for
     // future card unmasking.
     absl::optional<base::Value> fido_request_options;
@@ -161,6 +162,12 @@ class PaymentsClient {
     // The type of the returned credit card.
     AutofillClient::PaymentsRpcCardType card_type =
         AutofillClient::PaymentsRpcCardType::kUnknown;
+
+    // Context for the error dialog that is returned from the Payments server.
+    // If present, that means this response was an error, and these fields
+    // should be used for the autofill error dialog as they will provide detail
+    // into the specific error that occurred.
+    absl::optional<AutofillErrorDialogContext> autofill_error_dialog_context;
   };
 
   // Information required to either opt-in or opt-out a user for FIDO
@@ -358,14 +365,11 @@ class PaymentsClient {
     LOCAL_CARD_MIGRATION_SETTINGS_PAGE,
   };
 
-  // TODO(crbug.com/1285086): Remove the |server_id| field from
-  //  UploadCardResponseDetails since it is never used.
   // A collection of information received in the response for an
   // UploadCardRequest.
   struct UploadCardResponseDetails {
     UploadCardResponseDetails();
     ~UploadCardResponseDetails();
-    std::string server_id;
     // |instrument_id| is used by the server as an identifier for the card that
     // was uploaded. Currently, we have it in the UploadCardResponseDetails so
     // that we can send it in the GetDetailsForEnrollRequest in the virtual card

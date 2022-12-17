@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@
 
 #include "base/no_destructor.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/ash/system_extensions/system_extensions_persistence_manager.h"
+#include "chrome/browser/ash/system_extensions/system_extensions_persistent_storage.h"
 #include "chrome/browser/ash/system_extensions/system_extensions_profile_utils.h"
 #include "chrome/browser/ash/system_extensions/system_extensions_provider.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
@@ -50,7 +50,7 @@ bool SystemExtensionsProviderFactory::ServiceIsCreatedWithBrowserContext()
 
 void SystemExtensionsProviderFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  SystemExtensionsPersistenceManager::RegisterProfilePrefs(registry);
+  SystemExtensionsPersistentStorage::RegisterProfilePrefs(registry);
 }
 
 content::BrowserContext*

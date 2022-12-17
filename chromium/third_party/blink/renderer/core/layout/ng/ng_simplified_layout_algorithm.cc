@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -156,10 +156,12 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
   if (physical_fragment.IsHiddenForPaint())
     container_builder_.SetIsHiddenForPaint(true);
 
-  if (auto baseline = physical_fragment.Baseline())
-    container_builder_.SetBaseline(*baseline);
+  if (auto first_baseline = physical_fragment.FirstBaseline())
+    container_builder_.SetFirstBaseline(*first_baseline);
   if (auto last_baseline = physical_fragment.LastBaseline())
     container_builder_.SetLastBaseline(*last_baseline);
+  if (physical_fragment.UseLastBaselineForInlineBaseline())
+    container_builder_.SetUseLastBaselineForInlineBaseline();
   if (physical_fragment.IsTableNGPart())
     container_builder_.SetIsTableNGPart();
 
@@ -309,13 +311,6 @@ const NGLayoutResult* NGSimplifiedLayoutAlgorithm::Layout() {
   container_builder_.SetPreviousBreakAfter(previous_result_.FinalBreakAfter());
 
   NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
-
-  // The block size may have been changed. This may affect the inline block
-  // baseline if it is from the logical bottom margin edge.
-  DCHECK_EQ(previous_fragment.LastBaseline().has_value(),
-            container_builder_.LastBaseline().has_value());
-  if (container_builder_.LastBaseline())
-    container_builder_.SetLastBaselineToBlockEndMarginEdgeIfNeeded();
 
   return container_builder_.ToBoxFragment();
 }

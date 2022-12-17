@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -274,12 +274,10 @@ v8::Local<v8::Object> AccessibilityController::RootElement() {
 
 v8::Local<v8::Object> AccessibilityController::AccessibleElementById(
     const std::string& id) {
-  blink::WebAXObject::UpdateLayout(
-      web_view()->MainFrame()->ToWebLocalFrame()->GetDocument());
+  const blink::WebDocument& web_document =
+      web_view()->MainFrame()->ToWebLocalFrame()->GetDocument();
+  blink::WebAXObject::UpdateLayout(web_document);
   blink::WebAXObject root_element = GetAccessibilityObjectForMainFrame();
-
-  if (!root_element.MaybeUpdateLayoutAndCheckValidity())
-    return v8::Local<v8::Object>();
 
   return FindAccessibleElementByIdRecursive(
       root_element, blink::WebString::FromUTF8(id.c_str()));

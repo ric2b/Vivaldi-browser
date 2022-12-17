@@ -25,8 +25,8 @@ class VivaldiDesktopNativeWidgetWin : public views::DesktopNativeWidgetAura {
   // views::DesktopNativeWidgetAura overrides
 
   void InitNativeWidget(views::Widget::InitParams params) override {
-    SetDesktopWindowTreeHost(
-        std::make_unique<VivaldiDesktopWindowTreeHostWin>(window_, this));
+    tree_host_ = new VivaldiDesktopWindowTreeHostWin(window_, this);
+    params.desktop_window_tree_host = tree_host_;
     DesktopNativeWidgetAura::InitNativeWidget(std::move(params));
   }
 
@@ -41,6 +41,9 @@ class VivaldiDesktopNativeWidgetWin : public views::DesktopNativeWidgetAura {
  private:
   // The indirect owner
   raw_ptr<VivaldiBrowserWindow> window_;
+  // Owned by superclass DesktopNativeWidgetAura.
+  raw_ptr<views::DesktopWindowTreeHost> tree_host_;
+
 };
 
 }  // namespace

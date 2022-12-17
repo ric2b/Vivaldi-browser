@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@ import '../../cr_elements/cr_toast/cr_toast.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import 'chrome://resources/polymer/v3_0/iron-scroll-threshold/iron-scroll-threshold.js';
 
-import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {Time} from 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
 import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import {IronScrollThresholdElement} from 'chrome://resources/polymer/v3_0/iron-scroll-threshold/iron-scroll-threshold.js';
@@ -21,7 +21,7 @@ import {CrDialogElement} from '../../cr_elements/cr_dialog/cr_dialog.js';
 import {CrLazyRenderElement} from '../../cr_elements/cr_lazy_render/cr_lazy_render.js';
 import {CrToastElement} from '../../cr_elements/cr_toast/cr_toast.js';
 import {assert} from '../../js/assert_ts.js';
-import {FocusOutlineManager} from '../../js/cr/ui/focus_outline_manager.m.js';
+import {FocusOutlineManager} from '../../js/focus_outline_manager.js';
 import {loadTimeData} from '../../js/load_time_data.m.js';
 
 import {BrowserProxyImpl} from './browser_proxy.js';
@@ -70,7 +70,7 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
       /**
        * Whether the clusters are in the side panel.
        */
-      inSidePanel: {
+      inSidePanel_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('inSidePanel'),
         reflectToAttribute: true,
@@ -122,13 +122,14 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
   // Properties
   //============================================================================
 
-  inSidePanel: boolean;
   query: string;
   private callbackRouter_: PageCallbackRouter;
   private headerText_: string;
+  private inSidePanel_: boolean;
   private onClustersQueryResultListenerId_: number|null = null;
   private onVisitsRemovedListenerId_: number|null = null;
   private onHistoryDeletedListenerId_: number|null = null;
+  private onQueryChangedByUserListenerId_: number|null = null;
   private pageHandler_: PageHandlerRemote;
   private placeholderText_: string;
   private result_: QueryResult;
@@ -165,6 +166,13 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
     this.onHistoryDeletedListenerId_ =
         this.callbackRouter_.onHistoryDeleted.addListener(
             this.onHistoryDeleted_.bind(this));
+    this.onQueryChangedByUserListenerId_ =
+        this.callbackRouter_.onQueryChangedByUser.addListener(
+            this.onQueryChangedByUser_.bind(this));
+
+    if (this.inSidePanel_) {
+      this.pageHandler_.showSidePanelUI();
+    }
   }
 
   override disconnectedCallback() {
@@ -175,6 +183,12 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
     assert(this.onVisitsRemovedListenerId_);
     this.callbackRouter_.removeListener(this.onVisitsRemovedListenerId_);
     this.onVisitsRemovedListenerId_ = null;
+    assert(this.onHistoryDeletedListenerId_);
+    this.callbackRouter_.removeListener(this.onHistoryDeletedListenerId_);
+    this.onHistoryDeletedListenerId_ = null;
+    assert(this.onQueryChangedByUserListenerId_);
+    this.callbackRouter_.removeListener(this.onQueryChangedByUserListenerId_);
+    this.onQueryChangedByUserListenerId_ = null;
   }
 
   //============================================================================
@@ -267,7 +281,8 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
     return this.result_.clusters.length ?
         '' :
         loadTimeData.getString(
-            this.result_.query ? 'noSearchResults' : 'noResults');
+            this.result_.query ? 'noSearchResults' :
+                                 'historyClustersNoResults');
   }
 
   /**
@@ -281,6 +296,13 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
       _resultCanLoadMore: Time): boolean {
     return !this.result_ || this.result_.clusters.length === 0 ||
         !this.result_.canLoadMore;
+  }
+
+  /**
+   * Returns whether the given index corresponds to the last cluster.
+   */
+  private isLastCluster_(index: number): boolean {
+    return index === this.result_.clusters.length - 1;
   }
 
   /**
@@ -321,15 +343,11 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
     // Do this on browser idle to avoid jank and to give the DOM a chance to be
     // updated with the results we just got.
     this.onBrowserIdle_().then(() => {
-      if (this.scrollHeight <= this.clientHeight) {
+      if (this.scrollHeight <= this.clientHeight && this.result_.canLoadMore) {
         this.onLoadMoreButtonClick_();
       }
     });
     this.showSpinner_ = false;
-
-    if (loadTimeData.getBoolean('inSidePanel')) {
-      this.pageHandler_.showSidePanelUI();
-    }
   }
 
   /**
@@ -368,6 +386,20 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
     // the externally deleted History. It would be nice if we could save the
     // user's scroll position, but History doesn't do that either.
     this.onQueryChanged_();
+  }
+
+  /**
+   * Called when the query is changed by the user externally.
+   */
+  private onQueryChangedByUser_(query: string) {
+    // Don't directly change the query, but instead let the containing element
+    // update the searchbox UI. That in turn will cause this object to issue
+    // a new query to the backend.
+    this.dispatchEvent(new CustomEvent('query-changed-by-user', {
+      bubbles: true,
+      composed: true,
+      detail: query,
+    }));
   }
 }
 

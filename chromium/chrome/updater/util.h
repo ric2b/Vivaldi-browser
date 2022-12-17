@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,11 +6,14 @@
 #define CHROME_UPDATER_UTIL_H_
 
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "base/task/bind_post_task.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/updater/tag.h"
 #include "chrome/updater/updater_scope.h"
@@ -70,6 +73,12 @@ absl::optional<base::FilePath> GetVersionedInstallDirectory(UpdaterScope scope);
 // Does not create the directory if it does not exist.
 absl::optional<base::FilePath> GetBaseInstallDirectory(UpdaterScope scope);
 
+#if BUILDFLAG(IS_WIN)
+// Returns the program files directory for system scope or the local application
+// data directory for user scope.
+absl::optional<base::FilePath> GetApplicationDataDirectory(UpdaterScope scope);
+#endif
+
 #if BUILDFLAG(IS_MAC)
 // For example: ~/Library/Google/GoogleUpdater/88.0.4293.0/GoogleUpdater.app
 absl::optional<base::FilePath> GetUpdaterAppBundlePath(UpdaterScope scope);
@@ -109,13 +118,25 @@ struct TagParsingResult {
   absl::optional<tagging::TagArgs> tag_args;
   tagging::ErrorCode error = tagging::ErrorCode::kSuccess;
 };
+
 TagParsingResult GetTagArgsForCommandLine(
     const base::CommandLine& command_line);
 TagParsingResult GetTagArgs();
 
 // Returns the arguments corresponding to `app_id` from the command line tag.
+absl::optional<tagging::AppArgs> GetAppArgsForCommandLine(
+    const base::CommandLine& command_line,
+    const std::string& app_id);
 absl::optional<tagging::AppArgs> GetAppArgs(const std::string& app_id);
 
+std::string GetDecodedInstallDataFromAppArgsForCommandLine(
+    const base::CommandLine& command_line,
+    const std::string& app_id);
+std::string GetDecodedInstallDataFromAppArgs(const std::string& app_id);
+
+std::string GetInstallDataIndexFromAppArgsForCommandLine(
+    const base::CommandLine& command_line,
+    const std::string& app_id);
 std::string GetInstallDataIndexFromAppArgs(const std::string& app_id);
 
 // Returns true if the user running the updater also owns the `path`.
@@ -181,15 +202,18 @@ std::wstring GetTaskNamePrefix(UpdaterScope scope);
 // For instance: "ChromiumUpdater Task System 92.0.0.1".
 std::wstring GetTaskDisplayName(UpdaterScope scope);
 
-// Returns the value associated with the given switch when they are specified in
-// the legacy updater command line format. Example:
+// Parses the command line string in legacy format into `base::CommandLine`.
+// The string must be in format like:
 //   program.exe /switch1 value1 /switch2 /switch3 value3
-// The equivalent Chromium format is:
-//   program.exe --switch1=value1 --switch2 --switch3=value3
-std::string GetSwitchValueInLegacyFormat(const std::wstring& command_line,
-                                         const std::wstring& switch_name);
+// Returns empty if a Chromium style switch is found.
+absl::optional<base::CommandLine> CommandLineForLegacyFormat(
+    const std::wstring& cmd_string);
 
 #endif  // BUILDFLAG(IS_WIN)
+
+// Returns the command line for current process, either in legacy style, or
+// in Chromium style.
+base::CommandLine GetCommandLineLegacyCompatible();
 
 // Writes the provided string prefixed with the UTF8 byte order mark to a
 // temporary file. The temporary file is created in the specified `directory`.
@@ -199,6 +223,13 @@ absl::optional<base::FilePath> WriteInstallerDataToTempFile(
 
 // Creates and starts a thread pool for this process.
 void InitializeThreadPool(const char* name);
+
+// Adapts `callback` so that the callback is posted on the current sequence.
+template <typename CallbackT>
+CallbackT OnCurrentSequence(CallbackT callback) {
+  return base::BindPostTask(base::SequencedTaskRunnerHandle::Get(),
+                            std::move(callback));
+}
 
 }  // namespace updater
 

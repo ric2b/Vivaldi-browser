@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -53,12 +53,15 @@ static_library("app") {
   ]
 
   if (is_linux || is_chromeos) {
+    sources += [ "crashpad_linux.cc" ]
+  }
+
+  if (is_chromeos || is_castos) {
     sources += [
       "breakpad_linux.cc",
       "breakpad_linux.h",
       "breakpad_linux_impl.cc",
       "breakpad_linux_impl.h",
-      "crashpad_linux.cc",
     ]
   }
 
@@ -101,7 +104,7 @@ static_library("app") {
     ]
   }
 
-  if (is_linux || is_chromeos) {
+  if (is_chromeos || is_castos) {
     deps += [ "//third_party/breakpad:client" ]
   }
 

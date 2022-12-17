@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@ namespace password_manager {
 class PasswordFeatureManagerImpl : public PasswordFeatureManager {
  public:
   PasswordFeatureManagerImpl(PrefService* pref_service,
+                             PrefService* local_state,
                              const syncer::SyncService* sync_service);
 
   PasswordFeatureManagerImpl(const PasswordFeatureManagerImpl&) = delete;
@@ -51,8 +52,11 @@ class PasswordFeatureManagerImpl : public PasswordFeatureManager {
   void RecordMoveOfferedToNonOptedInUser() override;
   int GetMoveOfferedToNonOptedInUserCount() const override;
 
+  bool IsBiometricAuthenticationBeforeFillingEnabled() const override;
+
  private:
   const raw_ptr<PrefService> pref_service_;
+  const raw_ptr<PrefService> local_state_;
   const raw_ptr<const syncer::SyncService> sync_service_;
 };
 

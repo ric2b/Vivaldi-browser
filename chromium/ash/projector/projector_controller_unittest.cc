@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 #include "ash/public/cpp/test/mock_projector_client.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/webui/projector_app/public/cpp/projector_app_constants.h"
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/files/file.h"
@@ -197,12 +198,13 @@ TEST_F(ProjectorControllerTest, OnAudioNodesChanged) {
 
   const AudioNodeInfo kInternalMic[] = {
       {true, 55555, "Fake Mic", "INTERNAL_MIC", "Internal Mic"}};
-  const AudioNode audio_node = AudioNode(
-      kInternalMic->is_input, kInternalMic->id,
-      /*has_v2_stable_device_id=*/false, kInternalMic->id,
-      /*stable_device_id_v2=*/0, kInternalMic->device_name, kInternalMic->type,
-      kInternalMic->name, /*active=*/false,
-      /*plugged_time=*/0, /*max_supported_channels=*/1, /*audio_effect=*/1);
+  const AudioNode audio_node =
+      AudioNode(kInternalMic->is_input, kInternalMic->id,
+                /*has_v2_stable_device_id=*/false, kInternalMic->id,
+                /*stable_device_id_v2=*/0, kInternalMic->device_name,
+                kInternalMic->type, kInternalMic->name, /*active=*/false,
+                /*plugged_time=*/0, /*max_supported_channels=*/1,
+                /*audio_effect=*/1, /*number_of_volume_steps=*/25);
   FakeCrasAudioClient::Get()->SetAudioNodesForTesting({audio_node});
 
   CrasAudioHandler::Get()->SetActiveInputNodes({kInternalMic->id});
@@ -284,6 +286,9 @@ TEST_F(ProjectorControllerTest, RecordingEnded) {
   base::RunLoop runLoop;
   controller_->CreateScreencastContainerFolder(base::BindLambdaForTesting(
       [&](const base::FilePath& screencast_file_path_no_extension) {
+        // Expects screencast files name equals to it's parent folder name:
+        EXPECT_EQ(screencast_file_path_no_extension.BaseName(),
+                  screencast_file_path_no_extension.DirName().BaseName());
         EXPECT_CALL(
             mock_client_,
             OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
@@ -359,20 +364,22 @@ TEST_P(ProjectorOnDlpRestrictionCheckedAtVideoEndTest, WrapUpRecordingOnce) {
             OnNewScreencastPreconditionChanged(NewScreencastPrecondition(
                 NewScreencastPreconditionState::kEnabled, {})));
 
+        const std::string expected_screencast_name =
+            "Screencast 2021-01-02 20.02.10";
+        const base::FilePath expected_path =
+            screencast_container_path.Append("root")
+                .Append("projector_data")
+                // Screencast container folder.
+                .Append(expected_screencast_name)
+                // Screencast file name without extension.
+                .Append(expected_screencast_name);
         if (!user_deleted_video_file) {
           // Verify that |SaveMetadata| in |ProjectorMetadataController| is
           // called with the expected path.
-          const std::string expected_screencast_name =
-              "Screencast 2021-01-02 20.02.10";
-          const base::FilePath expected_path =
-              screencast_container_path.Append("root")
-                  .Append("projector_data")
-                  // Screencast container folder.
-                  .Append(expected_screencast_name)
-                  // Screencast file name without extension.
-                  .Append(expected_screencast_name);
           EXPECT_EQ(screencast_file_path_no_extension, expected_path);
-          // Verify that save metadata only triggered once.
+          // Verify that save metadata only triggered once. The path will not
+          // change as the clock advances.
+          task_environment()->AdvanceClock(base::Minutes(1));
           EXPECT_CALL(*mock_metadata_controller_, SaveMetadata(expected_path))
               .Times(1);
           // Verify that thumbnail file is saved.
@@ -384,6 +391,14 @@ TEST_P(ProjectorOnDlpRestrictionCheckedAtVideoEndTest, WrapUpRecordingOnce) {
         } else {
           // Verify that save metadata is not triggered.
           EXPECT_CALL(*mock_metadata_controller_, SaveMetadata(_)).Times(0);
+          // Expects notification gets resumed if recording deleted.
+          const std::vector<base::FilePath> screencast_files = {
+              expected_path.AddExtension(kProjectorMetadataFileExtension),
+              expected_path.AddExtension(kProjectorMediaFileExtension),
+              expected_path.DirName().Append(
+                  kScreencastDefaultThumbnailFileName)};
+          EXPECT_CALL(mock_client_, ToggleFileSyncingNotificationForPaths(
+                                        screencast_files, /*suppress=*/false));
           // Verify that Projector Folder is cleaned up.
           controller_->SetOnPathDeletedCallbackForTest(
               base::BindLambdaForTesting(
@@ -484,6 +499,52 @@ TEST_F(ProjectorControllerTest, OnDriveMountFailed) {
                 NewScreencastPreconditionState::kDisabled,
                 {NewScreencastPreconditionReason::kDriveFsMountFailed}),
             controller_->GetNewScreencastPrecondition());
+}
+
+TEST_F(ProjectorControllerTest, SuppressDriveNotification) {
+  ON_CALL(mock_client_, IsDriveFsMounted())
+      .WillByDefault(testing::Return(true));
+
+  base::FilePath mounted_path;
+  ASSERT_TRUE(mock_client_.GetBaseStoragePath(&mounted_path));
+
+  // The screencast name, which is used to form the screencast folder/files
+  // paths, is generated on projector session starts
+  auto* projector_session = controller_->projector_session();
+  projector_session->Start("projector_data");
+  const base::FilePath expect_container_path =
+      mounted_path.Append("root")
+          .Append(projector_session->storage_dir())
+          .Append(projector_session->screencast_name());
+
+  const base::FilePath expected_path_with_no_extension =
+      expect_container_path.Append(projector_session->screencast_name());
+
+  const std::vector<base::FilePath> screencast_files = {
+      expected_path_with_no_extension.AddExtension(
+          kProjectorMetadataFileExtension),
+      expected_path_with_no_extension.AddExtension(
+          kProjectorMediaFileExtension),
+      expect_container_path.Append(kScreencastDefaultThumbnailFileName)};
+
+  // Expects notification gets suppressed when creating screencast folder.
+  EXPECT_CALL(mock_client_, ToggleFileSyncingNotificationForPaths(
+                                screencast_files, /*suppress=*/true))
+      .Times(1);
+  base::RunLoop run_loop;
+  controller_->CreateScreencastContainerFolder(base::BindLambdaForTesting(
+      [&](const base::FilePath& screencast_file_path_no_extension) {
+        EXPECT_EQ(expected_path_with_no_extension,
+                  screencast_file_path_no_extension);
+        // Expects notification gets resumed if recording is aborted.
+        EXPECT_CALL(mock_client_, ToggleFileSyncingNotificationForPaths(
+                                      screencast_files, /*suppress=*/false))
+            .Times(1);
+        // Simulates starting abort called by capture mode.
+        controller_->OnRecordingStartAborted();
+        run_loop.Quit();
+      }));
+  run_loop.Run();
 }
 
 }  // namespace ash

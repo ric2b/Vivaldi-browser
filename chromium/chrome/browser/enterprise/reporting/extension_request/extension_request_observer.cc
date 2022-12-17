@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,7 +97,7 @@ void ExtensionRequestObserver::ShowAllNotifications() {
 void ExtensionRequestObserver::ShowNotification(
     ExtensionRequestNotification::NotifyType type) {
   const base::Value::Dict& pending_requests =
-      profile_->GetPrefs()->GetValueDict(prefs::kCloudExtensionRequestIds);
+      profile_->GetPrefs()->GetDict(prefs::kCloudExtensionRequestIds);
 
   ExtensionRequestNotification::ExtensionIds filtered_extension_ids;
   extensions::ExtensionManagement* extension_management =
@@ -158,11 +158,11 @@ void ExtensionRequestObserver::OnNotificationClosed(
 
 void ExtensionRequestObserver::RemoveExtensionsFromPendingList(
     const std::vector<std::string>& extension_ids) {
-  DictionaryPrefUpdate pending_requests_update(
+  ScopedDictPrefUpdate pending_requests_update(
       Profile::FromBrowserContext(profile_)->GetPrefs(),
       prefs::kCloudExtensionRequestIds);
   for (auto& id : extension_ids)
-    pending_requests_update->RemoveKey(id);
+    pending_requests_update->Remove(id);
 
   closing_notification_and_deleting_requests_ = true;
 }

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,13 +34,14 @@
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
 
 namespace {
 
-using chromeos::assistant::AssistantSuggestion;
+using assistant::AssistantSuggestion;
 
 constexpr gfx::Size kSuggestionChipViewSize = gfx::Size(120, 32);
 
@@ -145,8 +146,7 @@ TEST_F(SuggestionChipViewTest, DarkAndLightTheme) {
   views::Label* label = static_cast<views::Label*>(
       suggestion_chip_view->GetViewByID(kSuggestionChipViewLabel));
 
-  suggestion_chip_view->SetSize(kSuggestionChipViewSize);
-  views::FocusRing::Get(suggestion_chip_view)->Layout();
+  widget->SetSize(kSuggestionChipViewSize);
 
   // No background if dark and light theme is on.
   EXPECT_EQ(suggestion_chip_view->GetBackground(), nullptr);
@@ -164,6 +164,7 @@ TEST_F(SuggestionChipViewTest, DarkAndLightTheme) {
 
   // Focus the chip view and confirm that focus ring is rendered.
   suggestion_chip_view->RequestFocus();
+  views::test::RunScheduledLayout(views::FocusRing::Get(suggestion_chip_view));
   EXPECT_TRUE(
       cc::ExactPixelComparator(/*discard_alpha=*/false)
           .Compare(
@@ -201,41 +202,6 @@ TEST_F(SuggestionChipViewTest, DarkAndLightTheme) {
                   kSuggestionChipViewSize, /*stroke_width=*/2,
                   ColorProvider::Get()->GetControlsLayerColor(
                       ColorProvider::ControlsLayerType::kFocusRingColor))));
-}
-
-TEST_F(SuggestionChipViewTest, DarkAndLightModeFlagOff) {
-  // ProductivityLauncher uses DarkLightMode colors.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      /*enabled_features=*/{}, /*disabled_features=*/{
-          chromeos::features::kDarkLightMode, features::kNotificationsRefresh,
-          features::kProductivityLauncher});
-
-  auto widget = CreateFramelessTestWidget();
-  auto* suggestion_chip_view =
-      widget->SetContentsView(std::make_unique<SuggestionChipView>(
-          /*delegate=*/nullptr,
-          CreateSuggestionWithIconUrl(
-              "googleassistant://resource?type=icon&name=assistant")));
-
-  views::Label* label = static_cast<views::Label*>(
-      suggestion_chip_view->GetViewByID(kSuggestionChipViewLabel));
-  EXPECT_EQ(label->GetEnabledColor(), kTextColorSecondary);
-
-  suggestion_chip_view->SetSize(kSuggestionChipViewSize);
-
-  EXPECT_EQ(suggestion_chip_view->GetBackground()->get_color(),
-            SK_ColorTRANSPARENT);
-  EXPECT_TRUE(cc::ExactPixelComparator(/*discard_alpha=*/false)
-                  .Compare(GetSuggestionChipViewBitmap(suggestion_chip_view),
-                           GetBitmapWithInnerRoundedRect(
-                               kSuggestionChipViewSize, /*stroke_width=*/1,
-                               SkColorSetA(gfx::kGoogleGrey900, 0x24))));
-
-  // Background color will change when it's get focused.
-  suggestion_chip_view->RequestFocus();
-  EXPECT_EQ(suggestion_chip_view->GetBackground()->get_color(),
-            SkColorSetA(gfx::kGoogleGrey900, 0x14));
 }
 
 TEST_F(SuggestionChipViewTest, FontWeight) {

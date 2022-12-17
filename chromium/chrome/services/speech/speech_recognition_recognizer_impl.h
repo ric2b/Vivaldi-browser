@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,6 @@ class SodaClient;
 }  // namespace soda
 
 namespace speech {
-class SpeechRecognitionServiceImpl;
 
 class SpeechRecognitionRecognizerImpl
     : public media::mojom::SpeechRecognitionRecognizer {
@@ -37,8 +36,6 @@ class SpeechRecognitionRecognizerImpl
   SpeechRecognitionRecognizerImpl(
       mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient>
           remote,
-      base::WeakPtr<SpeechRecognitionServiceImpl>
-          speech_recognition_service_impl,
       media::mojom::SpeechRecognitionOptionsPtr options,
       const base::FilePath& binary_path,
       const base::FilePath& config_path);
@@ -57,8 +54,6 @@ class SpeechRecognitionRecognizerImpl
       mojo::PendingReceiver<media::mojom::SpeechRecognitionRecognizer> receiver,
       mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient>
           remote,
-      base::WeakPtr<SpeechRecognitionServiceImpl>
-          speech_recognition_service_impl,
       media::mojom::SpeechRecognitionOptionsPtr options,
       const base::FilePath& binary_path,
       const base::FilePath& config_path);
@@ -107,8 +102,9 @@ class SpeechRecognitionRecognizerImpl
  private:
   void OnLanguageChanged(const std::string& language) final;
 
-  void ChangeLanguage(const std::string& language,
-                      scoped_refptr<base::SequencedTaskRunner> main_sequence);
+  void ResetSodaWithNewLanguage(base::FilePath config_path,
+                                speech::LanguageCode language_code,
+                                bool config_exists);
   void RecordDuration();
 
   // Called as a response to sending a SpeechRecognitionEvent to the client

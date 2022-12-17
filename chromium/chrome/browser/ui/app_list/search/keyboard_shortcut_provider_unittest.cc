@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,10 @@
 #include "ui/events/devices/device_data_manager_test_api.h"
 
 namespace app_list {
+
+namespace {
+constexpr double kResultRelevanceThreshold = 0.89;
+}
 
 // Parameterized by feature ProductivityLauncher.
 class KeyboardShortcutProviderTest
@@ -78,7 +82,7 @@ TEST_P(KeyboardShortcutProviderTest, Search) {
 
   ASSERT_FALSE(results().empty());
   EXPECT_EQ(results()[0]->title(), u"Overview mode");
-  EXPECT_GT(results()[0]->relevance(), 0.8);
+  EXPECT_GT(results()[0]->relevance(), kResultRelevanceThreshold);
   EXPECT_EQ(results()[0]->accessible_name(),
             u"Overview mode, Shortcuts, Overview mode key");
 
@@ -88,7 +92,7 @@ TEST_P(KeyboardShortcutProviderTest, Search) {
 
   ASSERT_FALSE(results().empty());
   EXPECT_EQ(results()[0]->title(), u"Lock screen");
-  EXPECT_GT(results()[0]->relevance(), 0.8);
+  EXPECT_GT(results()[0]->relevance(), kResultRelevanceThreshold);
   EXPECT_EQ(results()[0]->accessible_name(),
             u"Lock screen, Shortcuts, Search+ l");
 
@@ -98,7 +102,7 @@ TEST_P(KeyboardShortcutProviderTest, Search) {
 
   ASSERT_FALSE(results().empty());
   EXPECT_EQ(results()[0]->title(), u"Go to previous tab");
-  EXPECT_GT(results()[0]->relevance(), 0.8);
+  EXPECT_GT(results()[0]->relevance(), kResultRelevanceThreshold);
   EXPECT_EQ(results()[0]->accessible_name(),
             u"Go to previous tab, Shortcuts, Ctrl+ Shift+ Tab");
 
@@ -108,7 +112,7 @@ TEST_P(KeyboardShortcutProviderTest, Search) {
 
   ASSERT_FALSE(results().empty());
   EXPECT_EQ(results()[0]->title(), u"Focus address bar");
-  EXPECT_GT(results()[0]->relevance(), 0.8);
+  EXPECT_GT(results()[0]->relevance(), kResultRelevanceThreshold);
   EXPECT_EQ(results()[0]->accessible_name(),
             u"Focus address bar, Shortcuts, Ctrl+ l or Alt+ d");
 
@@ -118,7 +122,7 @@ TEST_P(KeyboardShortcutProviderTest, Search) {
 
   ASSERT_FALSE(results().empty());
   EXPECT_EQ(results()[0]->title(), u"Switch quickly between windows");
-  EXPECT_GT(results()[0]->relevance(), 0.8);
+  EXPECT_GT(results()[0]->relevance(), kResultRelevanceThreshold);
   EXPECT_EQ(
       results()[0]->accessible_name(),
       u"Switch quickly between windows, Shortcuts, Press and hold Alt, tap Tab "
@@ -130,10 +134,32 @@ TEST_P(KeyboardShortcutProviderTest, Search) {
 
   ASSERT_FALSE(results().empty());
   EXPECT_EQ(results()[0]->title(), u"Take screenshot/recording");
-  EXPECT_GT(results()[0]->relevance(), 0.8);
+  EXPECT_GT(results()[0]->relevance(), kResultRelevanceThreshold);
   EXPECT_EQ(results()[0]->accessible_name(),
             u"Take screenshot/recording, Shortcuts, Capture mode key or Ctrl+ "
             u"Shift+ Overview mode key");
+
+  // Result format: Order variation result for Dim keyboard.
+  StartSearch(u"keyboard dim");
+  Wait();
+
+  ASSERT_FALSE(results().empty());
+  EXPECT_EQ(results()[0]->title(),
+            u"Dim keyboard (for backlit keyboards only)");
+  EXPECT_GT(results()[0]->relevance(), kResultRelevanceThreshold);
+  EXPECT_EQ(results()[0]->accessible_name(),
+            u"Dim keyboard (for backlit keyboards only), Shortcuts, Alt+ "
+            u"BrightnessDown");
+
+  // Result format: special case result for Open emoji picker.
+  StartSearch(u"emoji");
+  Wait();
+
+  ASSERT_FALSE(results().empty());
+  EXPECT_EQ(results()[0]->title(), u"Open Emoji Picker");
+  EXPECT_GT(results()[0]->relevance(), kResultRelevanceThreshold);
+  EXPECT_EQ(results()[0]->accessible_name(),
+            u"Open Emoji Picker, Shortcuts, Shift+ Search+ Space");
 }
 
 }  // namespace app_list

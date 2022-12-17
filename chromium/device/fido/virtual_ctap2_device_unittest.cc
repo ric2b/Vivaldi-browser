@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,6 +46,21 @@ absl::optional<cbor::Value> DecodeCBOR(base::span<const uint8_t> in) {
   return cbor::Reader::Read(in.subspan(1));
 }
 
+std::vector<uint8_t> ToCTAP2Command(
+    const std::pair<device::CtapRequestCommand, absl::optional<cbor::Value>>&
+        parts) {
+  std::vector<uint8_t> ret;
+
+  if (parts.second.has_value()) {
+    absl::optional<std::vector<uint8_t>> cbor_bytes =
+        cbor::Writer::Write(std::move(*parts.second));
+    ret.swap(*cbor_bytes);
+  }
+
+  ret.insert(ret.begin(), static_cast<uint8_t>(parts.first));
+  return ret;
+}
+
 }  // namespace
 
 class VirtualCtap2DeviceTest : public ::testing::Test {
@@ -84,9 +99,6 @@ TEST_F(VirtualCtap2DeviceTest, ParseMakeCredentialRequestForVirtualCtapKey) {
   EXPECT_EQ("johnpsmith@example.com", *request->user.name);
   ASSERT_TRUE(request->user.display_name);
   EXPECT_EQ("John P. Smith", *request->user.display_name);
-  ASSERT_TRUE(request->user.icon_url);
-  EXPECT_EQ("https://pics.acme.com/00/p/aBjjjpqPb.png",
-            request->user.icon_url->spec());
   ASSERT_EQ(2u,
             request->public_key_credential_params.public_key_credential_params()
                 .size());
@@ -168,7 +180,7 @@ TEST_F(VirtualCtap2DeviceTest, AttestationCertificateIsValid) {
   ASSERT_TRUE(response);
 
   const AttestationStatement& attestation =
-      response->attestation_object().attestation_statement();
+      response->attestation_object.attestation_statement();
 
   EXPECT_FALSE(attestation.IsSelfAttestation());
   EXPECT_FALSE(
@@ -246,6 +258,73 @@ TEST_F(VirtualCtap2DeviceTest, RejectsCredentialsWithExtraKeys) {
                       ? CtapDeviceResponseCode::kCtap2ErrInvalidCBOR
                       : CtapDeviceResponseCode::kCtap2ErrNoCredentials));
   }
+}
+
+TEST_F(VirtualCtap2DeviceTest, OnGetAssertionBogusSignature) {
+  MakeDevice();
+  device_->mutable_state()->ctap2_invalid_signature = true;
+
+  constexpr uint8_t bogus_sig[] = {0x00};
+  static constexpr uint8_t kCredentialId[] = {1, 2, 3, 4};
+  CtapGetAssertionRequest request_param(test_data::kRelyingPartyId,
+                                        test_data::kClientDataJson);
+
+  auto allowed_credential = PublicKeyCredentialDescriptor(
+      CredentialType::kPublicKey,
+      fido_parsing_utils::Materialize(kCredentialId));
+  request_param.allow_list.push_back(std::move(allowed_credential));
+
+  device_->mutable_state()->InjectRegistration(kCredentialId,
+                                               test_data::kRelyingPartyId);
+
+  TestCallbackReceiver callback_receiver;
+  device::CtapGetAssertionRequest request = CtapGetAssertionRequest(
+      test_data::kRelyingPartyId, test_data::kClientDataJson);
+  std::vector<uint8_t> credential_id =
+      fido_parsing_utils::Materialize(kCredentialId);
+  PublicKeyCredentialDescriptor descriptor(
+      CredentialType::kPublicKey, std::move(credential_id),
+      {FidoTransportProtocol::kUsbHumanInterfaceDevice});
+
+  request.allow_list.push_back(std::move(descriptor));
+  std::pair<device::CtapRequestCommand, absl::optional<cbor::Value>>
+      request_cbor = AsCTAPRequestValuePair(request);
+
+  device_->DeviceTransact(ToCTAP2Command(std::move(request_cbor)),
+                          base::BindOnce(callback_receiver.callback()));
+  callback_receiver.WaitForCallback();
+
+  absl::optional<cbor::Value> cbor = DecodeCBOR(*callback_receiver.value());
+  ASSERT_TRUE(cbor);
+
+  absl::optional<AuthenticatorGetAssertionResponse> response =
+      ReadCTAPGetAssertionResponse(
+          FidoTransportProtocol::kUsbHumanInterfaceDevice, std::move(cbor));
+  ASSERT_TRUE(response);
+  EXPECT_THAT(response->signature, testing::ElementsAreArray(bogus_sig));
+}
+
+TEST_F(VirtualCtap2DeviceTest, OnMakeCredentialBogusSignature) {
+  MakeDevice();
+  device_->mutable_state()->ctap2_invalid_signature = true;
+
+  constexpr uint8_t bogus_sig[] = {0x00};
+  TestCallbackReceiver callback_receiver;
+  SendCommand(device_.get(), test_data::kCtapSimpleMakeCredentialRequest,
+              callback_receiver.callback());
+  callback_receiver.WaitForCallback();
+  absl::optional<cbor::Value> cbor = DecodeCBOR(*callback_receiver.value());
+  ASSERT_TRUE(cbor);
+  absl::optional<AuthenticatorMakeCredentialResponse> response =
+      ReadCTAPMakeCredentialResponse(
+          FidoTransportProtocol::kUsbHumanInterfaceDevice, std::move(cbor));
+  const AttestationStatement& attestation =
+      response->attestation_object.attestation_statement();
+  auto attestation_cbor = attestation.AsCBOR();
+  const cbor::Value::MapValue& map = attestation_cbor.GetMap();
+  const auto type_it = map.find(cbor::Value("sig"));
+  EXPECT_THAT(type_it->second.GetBytestring(),
+              testing::ElementsAreArray(bogus_sig));
 }
 
 }  // namespace device

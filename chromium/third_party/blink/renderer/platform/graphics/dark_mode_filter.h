@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,14 +31,25 @@ class PLATFORM_EXPORT DarkModeFilter {
   explicit DarkModeFilter(const DarkModeSettings& settings);
   ~DarkModeFilter();
 
-  enum class ElementRole { kForeground, kListSymbol, kBackground, kSVG };
+  enum class ElementRole {
+    kForeground,
+    kListSymbol,
+    kBackground,
+    kSVG,
+    kBorder,
+    kSelection
+  };
   enum class ImageType { kNone, kIcon, kSeparator, kPhoto };
 
   SkColor InvertColorIfNeeded(SkColor color, ElementRole element_role);
+  SkColor InvertColorIfNeeded(SkColor color,
+                              ElementRole role,
+                              SkColor contrast_background);
 
   absl::optional<cc::PaintFlags> ApplyToFlagsIfNeeded(
       const cc::PaintFlags& flags,
-      ElementRole element_role);
+      ElementRole role,
+      SkColor contrast_background);
 
   size_t GetInvertedColorCacheSizeForTesting();
 
@@ -68,6 +79,10 @@ class PLATFORM_EXPORT DarkModeFilter {
     std::unique_ptr<DarkModeColorFilter> color_filter;
     sk_sp<SkColorFilter> image_filter;
   };
+
+  SkColor AdjustDarkenColor(SkColor color,
+                            DarkModeFilter::ElementRole role,
+                            SkColor contrast_background);
 
   bool ShouldApplyToColor(SkColor color, ElementRole role);
 

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,68 @@
 
 #include "base/memory/values_equivalent.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/transforms/affine_transform.h"
 
 namespace blink {
+
+TransformPaintPropertyNode::TransformAndOrigin::TransformAndOrigin(
+    const AffineTransform& transform) {
+  if (transform.IsIdentityOrTranslation()) {
+    translation_2d_ = gfx::Vector2dF(transform.E(), transform.F());
+  } else {
+    matrix_and_origin_ = std::make_unique<MatrixAndOrigin>(
+        TransformationMatrix(transform), gfx::Point3F());
+  }
+}
+
+TransformationMatrix
+TransformPaintPropertyNode::TransformAndOrigin::SlowMatrix() const {
+  return matrix_and_origin_ ? matrix_and_origin_->matrix
+                            : TransformationMatrix::MakeTranslation(
+                                  translation_2d_.x(), translation_2d_.y());
+}
+
+PaintPropertyChangeType
+TransformPaintPropertyNode::State::ComputeTransformChange(
+    const TransformAndOrigin& other,
+    const AnimationState& animation_state) const {
+  bool matrix_changed = !transform_and_origin.TransformEquals(other);
+  bool origin_changed = transform_and_origin.Origin() != other.Origin();
+  bool transform_changed = matrix_changed || origin_changed;
+
+  if (!transform_changed)
+    return PaintPropertyChangeType::kUnchanged;
+
+  if (animation_state.is_running_animation_on_compositor) {
+    // The compositor handles transform change automatically during composited
+    // transform animation, but it doesn't handle origin changes (which can
+    // still be treated as simple, and can skip the 2d-axis-alignment check
+    // because PropertyTreeManager knows if the whole animation is 2d-axis
+    // aligned when the animation starts).
+    return origin_changed
+               ? PaintPropertyChangeType::kChangedOnlySimpleValues
+               : PaintPropertyChangeType::kChangedOnlyCompositedValues;
+  }
+
+  if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled() &&
+      direct_compositing_reasons & CompositingReason::kStickyPosition) {
+    // The compositor handles sticky offset changes automatically.
+    DCHECK(transform_and_origin.ChangePreserves2dAxisAlignment(other));
+    return PaintPropertyChangeType::kChangedOnlyCompositedValues;
+  }
+
+  if (matrix_changed &&
+      !transform_and_origin.ChangePreserves2dAxisAlignment(other)) {
+    // An additional cc::EffectNode may be required if
+    // blink::TransformPaintPropertyNode is not axis-aligned (see:
+    // PropertyTreeManager::SyntheticEffectType). Changes to axis alignment
+    // are therefore treated as non-simple. We do not need to check origin
+    // because axis alignment is not affected by transform origin.
+    return PaintPropertyChangeType::kChangedOnlyValues;
+  }
+
+  return PaintPropertyChangeType::kChangedOnlySimpleValues;
+}
 
 PaintPropertyChangeType TransformPaintPropertyNode::State::ComputeChange(
     const State& other,
@@ -30,6 +90,10 @@ PaintPropertyChangeType TransformPaintPropertyNode::State::ComputeChange(
       backface_visibility != other.backface_visibility ||
       rendering_context_id != other.rendering_context_id ||
       compositor_element_id != other.compositor_element_id ||
+      // This change affects cull rect expansion for scrolling contents.
+      UsesCompositedScrolling() != other.UsesCompositedScrolling() ||
+      // This change affects cull rect expansion for the element itself.
+      RequiresCullRectExpansion() != other.RequiresCullRectExpansion() ||
       scroll != other.scroll ||
       scroll_translation_for_fixed != other.scroll_translation_for_fixed ||
       !base::ValuesEquivalent(sticky_constraint, other.sticky_constraint) ||
@@ -39,11 +103,8 @@ PaintPropertyChangeType TransformPaintPropertyNode::State::ComputeChange(
     return PaintPropertyChangeType::kChangedOnlyValues;
   }
 
-  bool matrix_changed =
-      !transform_and_origin.TransformEquals(other.transform_and_origin);
-  bool origin_changed =
-      transform_and_origin.Origin() != other.transform_and_origin.Origin();
-  bool transform_changed = matrix_changed || origin_changed;
+  auto change =
+      ComputeTransformChange(other.transform_and_origin, animation_state);
 
   bool non_reraster_values_changed =
       direct_compositing_reasons != other.direct_compositing_reasons;
@@ -52,45 +113,24 @@ PaintPropertyChangeType TransformPaintPropertyNode::State::ComputeChange(
     // change to avoid loss of non-reraster change when PaintPropertyTreeBuilder
     // downgrades kChangedOnlySimpleValues to kChangedOnlyCompositedValues
     // after a successful direct update.
-    return transform_changed
+    return change != PaintPropertyChangeType::kUnchanged
                ? PaintPropertyChangeType::kChangedOnlyValues
                : PaintPropertyChangeType::kChangedOnlyNonRerasterValues;
   }
 
-  if (!transform_changed)
-    return PaintPropertyChangeType::kUnchanged;
+  return change;
+}
 
-  // Now we have transform change only.
-  if (animation_state.is_running_animation_on_compositor) {
-    // The compositor handles transform change automatically during composited
-    // transform animation, but it doesn't handle origin changes (which can
-    // still be treated as simple, and can skip the 2d-axis-alignment check
-    // because PropertyTreeManager knows if the whole animation is 2d-axis
-    // aligned when the animation starts).
-    return origin_changed
-               ? PaintPropertyChangeType::kChangedOnlySimpleValues
-               : PaintPropertyChangeType::kChangedOnlyCompositedValues;
-  }
-
-  if (RuntimeEnabledFeatures::ScrollUpdateOptimizationsEnabled() &&
-      direct_compositing_reasons & CompositingReason::kStickyPosition) {
-    // The compositor handles sticky offset changes automatically.
-    DCHECK(transform_and_origin.ChangePreserves2dAxisAlignment(
-        other.transform_and_origin));
-    return PaintPropertyChangeType::kChangedOnlyCompositedValues;
-  }
-
-  if (matrix_changed && !transform_and_origin.ChangePreserves2dAxisAlignment(
-                            other.transform_and_origin)) {
-    // An additional cc::EffectNode may be required if
-    // blink::TransformPaintPropertyNode is not axis-aligned (see:
-    // PropertyTreeManager::SyntheticEffectType). Changes to axis alignment
-    // are therefore treated as non-simple. We do not need to check origin
-    // because axis alignment is not affected by transform origin.
-    return PaintPropertyChangeType::kChangedOnlyValues;
-  }
-
-  return PaintPropertyChangeType::kChangedOnlySimpleValues;
+PaintPropertyChangeType
+TransformPaintPropertyNode::DirectlyUpdateTransformAndOrigin(
+    TransformAndOrigin&& transform_and_origin,
+    const AnimationState& animation_state) {
+  auto change =
+      state_.ComputeTransformChange(transform_and_origin, animation_state);
+  state_.transform_and_origin = std::move(transform_and_origin);
+  if (change != PaintPropertyChangeType::kUnchanged)
+    AddChanged(change);
+  return change;
 }
 
 // The root of the transform tree. The root transform node references the root

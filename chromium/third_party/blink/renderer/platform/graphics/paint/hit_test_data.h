@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,9 @@
 namespace blink {
 
 struct PLATFORM_EXPORT HitTestData {
+  USING_FAST_MALLOC(HitTestData);
+
+ public:
   Vector<TouchActionRect> touch_action_rects;
   Vector<gfx::Rect> wheel_event_rects;
 

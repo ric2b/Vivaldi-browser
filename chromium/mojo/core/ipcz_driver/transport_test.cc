@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
 #include "mojo/core/ipcz_driver/driver.h"
+#include "mojo/core/ipcz_driver/shared_buffer.h"
 #include "mojo/core/ipcz_driver/transmissible_platform_handle.h"
 #include "mojo/core/ipcz_driver/wrapped_platform_handle.h"
 #include "mojo/core/test/mojo_test_base.h"
@@ -68,9 +69,9 @@ class MojoIpczTransportTest : public test::MojoTestBase {
             .release()
             .value();
     WriteMessageWithHandles(pipe, "", &transport_for_client, 1);
-    return base::MakeRefCounted<Transport>(Transport::kToNonBroker,
-                                           channel.TakeLocalEndpoint(),
-                                           process.Duplicate());
+    return Transport::Create(
+        {.source = Transport::kBroker, .destination = Transport::kNonBroker},
+        channel.TakeLocalEndpoint(), process.Duplicate());
   }
 
   // Retrieves a PlatformChannel endpoint from `pipe` and returns a newly
@@ -80,8 +81,9 @@ class MojoIpczTransportTest : public test::MojoTestBase {
     ReadMessageWithHandles(pipe, &transport_for_client, 1);
     PlatformHandle handle =
         UnwrapPlatformHandle(ScopedHandle(Handle(transport_for_client)));
-    return base::MakeRefCounted<Transport>(
-        Transport::kToBroker, PlatformChannelEndpoint(std::move(handle)));
+    return Transport::Create(
+        {.source = Transport::kNonBroker, .destination = Transport::kBroker},
+        PlatformChannelEndpoint(std::move(handle)));
   }
 
   static TestMessage SerializeObjectFor(Transport& transmitter,
@@ -129,6 +131,20 @@ class MojoIpczTransportTest : public test::MojoTestBase {
 #elif BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
     return base::File(wrapper->TakeHandle().TakeFD());
 #endif
+  }
+
+  static TestMessage SerializeRegionFor(Transport& transmitter,
+                                        base::UnsafeSharedMemoryRegion region) {
+    auto handle = base::UnsafeSharedMemoryRegion::TakeHandleForSerialization(
+        std::move(region));
+    return SerializeObjectFor(
+        transmitter, base::MakeRefCounted<SharedBuffer>(std::move(handle)));
+  }
+
+  base::UnsafeSharedMemoryRegion BufferObjectToRegion(
+      scoped_refptr<SharedBuffer> buffer) {
+    return base::UnsafeSharedMemoryRegion::Deserialize(
+        std::move(buffer->region()));
   }
 };
 
@@ -222,6 +238,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(BasicTransmitClient,
   TestMessage(kMessage4).Transmit(*transport);
   EXPECT_EQ(kMessage1, listener.WaitForNextMessage().as_string());
   EXPECT_EQ(kMessage2, listener.WaitForNextMessage().as_string());
+  EXPECT_EQ(MOJO_RESULT_OK, MojoClose(h));
 }
 
 TEST_F(MojoIpczTransportTest, BasicTransmit) {
@@ -252,8 +269,9 @@ scoped_refptr<Transport> MakeTransportFromMessage(const TestMessage& message) {
   CHECK_EQ(message.handles.size(), 1u);
   auto handle = TransmissiblePlatformHandle::TakeFromHandle(message.handles[0]);
   CHECK(handle);
-  return base::MakeRefCounted<Transport>(
-      Transport::kToBroker, PlatformChannelEndpoint(handle->TakeHandle()));
+  return Transport::Create(
+      {.source = Transport::kNonBroker, .destination = Transport::kBroker},
+      PlatformChannelEndpoint(handle->TakeHandle()));
 }
 
 DEFINE_TEST_CLIENT_TEST_WITH_PIPE(TransmitHandleClient,
@@ -274,6 +292,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(TransmitHandleClient,
   TestMessage(kMessage4).Transmit(*new_transport2);
   EXPECT_EQ(kMessage1, listener1.WaitForNextMessage().as_string());
   EXPECT_EQ(kMessage2, listener2.WaitForNextMessage().as_string());
+  EXPECT_EQ(MOJO_RESULT_OK, MojoClose(h));
 }
 
 TEST_F(MojoIpczTransportTest, TransmitHandle) {
@@ -285,14 +304,14 @@ TEST_F(MojoIpczTransportTest, TransmitHandle) {
     // transmissible on all applicable platforms, so we can conveniently test
     // handle transmission without depending on driver object serialization.
     PlatformChannel channel1;
-    auto new_transport1 = base::MakeRefCounted<Transport>(
-        Transport::kToNonBroker, channel1.TakeLocalEndpoint(),
-        c.process().Duplicate());
+    auto new_transport1 = Transport::Create(
+        {.source = Transport::kBroker, .destination = Transport::kNonBroker},
+        channel1.TakeLocalEndpoint(), c.process().Duplicate());
 
     PlatformChannel channel2;
-    auto new_transport2 = base::MakeRefCounted<Transport>(
-        Transport::kToNonBroker, channel2.TakeLocalEndpoint(),
-        c.process().Duplicate());
+    auto new_transport2 = Transport::Create(
+        {.source = Transport::kBroker, .destination = Transport::kNonBroker},
+        channel2.TakeLocalEndpoint(), c.process().Duplicate());
 
     IpczDriverHandle handle1 =
         MakeHandleFromEndpoint(channel1.TakeRemoteEndpoint());
@@ -332,6 +351,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(TransmitSerializedTransportClient,
   TestMessage(kMessage4).Transmit(*new_transport);
   EXPECT_EQ(kMessage1, listener.WaitForNextMessage().as_string());
   EXPECT_EQ(kMessage2, listener.WaitForNextMessage().as_string());
+  EXPECT_EQ(MOJO_RESULT_OK, MojoClose(h));
 }
 
 TEST_F(MojoIpczTransportTest, TransmitSerializedTransport) {
@@ -340,8 +360,8 @@ TEST_F(MojoIpczTransportTest, TransmitSerializedTransport) {
         scoped_refptr<Transport> transport =
             CreateAndSendTransport(c.pipe(), c.process());
 
-        auto [our_new_transport, their_new_transport] = Transport::CreatePair(
-            Transport::kToNonBroker, Transport::kToBroker);
+        auto [our_new_transport, their_new_transport] =
+            Transport::CreatePair(Transport::kBroker, Transport::kNonBroker);
         {
           TransportListener listener(*transport);
           SerializeObjectFor(*transport, std::move(their_new_transport))
@@ -370,6 +390,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(TransmitFileClient,
   std::vector<char> data(file.GetLength());
   file.Read(0, data.data(), data.size());
   EXPECT_EQ(kMessage1, std::string(data.begin(), data.end()));
+  EXPECT_EQ(MOJO_RESULT_OK, MojoClose(h));
 }
 
 TEST_F(MojoIpczTransportTest, TransmitFile) {
@@ -386,6 +407,40 @@ TEST_F(MojoIpczTransportTest, TransmitFile) {
 
     TransportListener listener(*transport);
     SerializeFileFor(*transport, std::move(new_file)).Transmit(*transport);
+    listener.WaitForDisconnect();
+  });
+}
+
+constexpr std::string_view kMemoryMessage = "mojo wuz here";
+
+DEFINE_TEST_CLIENT_TEST_WITH_PIPE(TransmitMemoryClient,
+                                  MojoIpczTransportTest,
+                                  h) {
+  scoped_refptr<Transport> transport = ReceiveTransport(h);
+  TransportListener listener(*transport);
+  const TestMessage message = listener.WaitForNextMessage();
+  auto region = base::UnsafeSharedMemoryRegion::Deserialize(std::move(
+      DeserializeObjectFrom<SharedBuffer>(*transport, message)->region()));
+  EXPECT_EQ(kMemoryMessage.size(), region.GetSize());
+  auto mapping = region.Map();
+  auto contents = std::string_view(static_cast<const char*>(mapping.memory()),
+                                   kMemoryMessage.size());
+  EXPECT_EQ(kMemoryMessage, contents);
+  EXPECT_EQ(MOJO_RESULT_OK, MojoClose(h));
+}
+
+TEST_F(MojoIpczTransportTest, TransmitMemory) {
+  RunTestClientWithController("TransmitMemoryClient", [&](ClientController& c) {
+    scoped_refptr<Transport> transport =
+        CreateAndSendTransport(c.pipe(), c.process());
+
+    auto region = base::UnsafeSharedMemoryRegion::Create(kMemoryMessage.size());
+    auto mapping = region.Map();
+    memcpy(mapping.memory(), kMemoryMessage.data(), kMemoryMessage.size());
+    auto buffer = SharedBuffer::MakeForRegion(std::move(region));
+
+    TransportListener listener(*transport);
+    SerializeObjectFor(*transport, std::move(buffer)).Transmit(*transport);
     listener.WaitForDisconnect();
   });
 }

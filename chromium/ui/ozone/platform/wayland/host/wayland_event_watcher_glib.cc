@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,11 @@
 namespace ui {
 
 namespace {
+
+// The priorities of the event sources are important to be set correctly so that
+// GTK event source is able to process the events it requires. This uses
+// the same priority as MessagePumpGlib for fd watching.
+constexpr int kPriorityFdWatch = G_PRIORITY_DEFAULT_IDLE - 10;
 
 struct GLibWaylandSource : public GSource {
   // Note: The GLibWaylandSource is created and destroyed by GLib. So its
@@ -82,6 +87,7 @@ bool WaylandEventWatcherGlib::StartWatchingFD(int fd) {
   if (!context)
     context = g_main_context_default();
   g_source_attach(wayland_source_, context);
+  g_source_set_priority(wayland_source_, kPriorityFdWatch);
 
   started_ = true;
   return true;

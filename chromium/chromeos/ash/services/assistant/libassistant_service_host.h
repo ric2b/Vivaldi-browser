@@ -1,11 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROMEOS_ASH_SERVICES_ASSISTANT_LIBASSISTANT_SERVICE_HOST_H_
 #define CHROMEOS_ASH_SERVICES_ASSISTANT_LIBASSISTANT_SERVICE_HOST_H_
 
-#include "chromeos/services/libassistant/public/mojom/service.mojom-forward.h"
+#include "chromeos/ash/services/libassistant/public/mojom/service.mojom-forward.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace ash::assistant {
@@ -22,7 +22,7 @@ class LibassistantServiceHost {
   // as long as both the receiver and this host class remain alive, or until
   // |Stop| is called.
   virtual void Launch(
-      mojo::PendingReceiver<chromeos::libassistant::mojom::LibassistantService>
+      mojo::PendingReceiver<libassistant::mojom::LibassistantService>
           receiver) = 0;
 
   // Stop the mojom service.

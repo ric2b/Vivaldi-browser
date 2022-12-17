@@ -1,9 +1,11 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/editing/ime/edit_context.h"
 
+#include "base/containers/contains.h"
+#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
@@ -136,8 +138,7 @@ void EditContext::DispatchTextFormatEvent(
   // fire textformateupdate event.
   DCHECK(has_composition_);
   HeapVector<Member<TextFormat>> text_formats;
-  text_formats.ReserveCapacity(
-      static_cast<WTF::wtf_size_t>(ime_text_spans.size()));
+  text_formats.reserve(base::checked_cast<wtf_size_t>(ime_text_spans.size()));
 
   for (const auto& ime_text_span : ime_text_spans) {
     const auto range_start = base::checked_cast<wtf_size_t>(
@@ -257,13 +258,12 @@ void EditContext::updateCharacterBounds(
                    std::to_string(character_bounds.size()));
 
   character_bounds_.Clear();
-  std::for_each(character_bounds.begin(), character_bounds.end(),
-                [this](const auto& bounds) {
-                  auto result_bounds = bounds->ToEnclosingRect();
-                  TRACE_EVENT1("ime", "EditContext::updateCharacterBounds",
-                               "charBounds", result_bounds.ToString());
-                  character_bounds_.push_back(result_bounds);
-                });
+  base::ranges::for_each(character_bounds, [this](const auto& bounds) {
+    auto result_bounds = bounds->ToEnclosingRect();
+    TRACE_EVENT1("ime", "EditContext::updateCharacterBounds", "charBounds",
+                 result_bounds.ToString());
+    character_bounds_.push_back(result_bounds);
+  });
 }
 
 void EditContext::updateControlBounds(DOMRect* control_bounds) {
@@ -351,13 +351,11 @@ const HeapVector<Member<Element>>& EditContext::attachedElements() {
 
 const HeapVector<Member<DOMRect>> EditContext::characterBounds() {
   HeapVector<Member<DOMRect>> dom_rects;
-
-  std::for_each(character_bounds_.begin(), character_bounds_.end(),
-                [&dom_rects](const auto& bound) {
-                  dom_rects.push_back(DOMRect::Create(
-                      bound.x(), bound.y(), bound.width(), bound.height()));
-                });
-
+  base::ranges::transform(
+      character_bounds_, std::back_inserter(dom_rects), [](const auto& bound) {
+        return DOMRect::Create(bound.x(), bound.y(), bound.width(),
+                               bound.height());
+      });
   return dom_rects;
 }
 
@@ -751,20 +749,16 @@ void EditContext::ExtendSelectionAndDelete(int before, int after) {
 }
 
 void EditContext::AttachElement(Element* element_to_attach) {
-  if (std::any_of(attached_elements_.begin(), attached_elements_.end(),
-                  [element_to_attach](const auto& element) {
-                    return element.Get() == element_to_attach;
-                  }))
+  if (base::Contains(attached_elements_, element_to_attach,
+                     &Member<Element>::Get))
     return;
 
   attached_elements_.push_back(element_to_attach);
 }
 
 void EditContext::DetachElement(Element* element_to_detach) {
-  auto* it = std::find_if(attached_elements_.begin(), attached_elements_.end(),
-                          [element_to_detach](const auto& element) {
-                            return element.Get() == element_to_detach;
-                          });
+  auto* it = base::ranges::find(attached_elements_, element_to_detach,
+                                &Member<Element>::Get);
 
   if (it != attached_elements_.end())
     attached_elements_.erase(it);
@@ -854,9 +848,8 @@ bool EditContext::GetCompositionCharacterBounds(WebVector<gfx::Rect>& bounds) {
                std::to_string(character_bounds_.size()));
 
   bounds.Clear();
-  std::for_each(
-      character_bounds_.begin(), character_bounds_.end(),
-      [&bounds, this](auto& bound_in_css_pixels) {
+  base::ranges::for_each(
+      character_bounds_, [&bounds, this](auto& bound_in_css_pixels) {
         // EditContext's coordinates are in CSS pixels, which need to be
         // converted to physical pixels before return.
         auto result_bounds = gfx::ScaleToEnclosingRect(

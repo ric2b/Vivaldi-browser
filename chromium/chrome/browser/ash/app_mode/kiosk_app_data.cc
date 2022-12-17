@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -374,7 +374,7 @@ network::mojom::URLLoaderFactory* KioskAppData::GetURLLoaderFactory() {
 
 bool KioskAppData::LoadFromCache() {
   PrefService* local_state = g_browser_process->local_state();
-  const base::Value::Dict& dict = local_state->GetValueDict(dictionary_name());
+  const base::Value::Dict& dict = local_state->GetDict(dictionary_name());
 
   if (!LoadFromDictionary(dict))
     return false;
@@ -407,15 +407,15 @@ void KioskAppData::SetCache(const std::string& name,
   SaveIcon(icon, cache_dir);
 
   PrefService* local_state = g_browser_process->local_state();
-  DictionaryPrefUpdate dict_update(local_state, dictionary_name());
+  ScopedDictPrefUpdate dict_update(local_state, dictionary_name());
   SaveToDictionary(dict_update);
 
   const std::string app_key = std::string(kKeyApps) + '.' + app_id();
   const std::string required_platform_version_key =
       app_key + '.' + kKeyRequiredPlatformVersion;
 
-  dict_update->SetStringPath(required_platform_version_key,
-                             required_platform_version);
+  dict_update->SetByDottedPath(required_platform_version_key,
+                               required_platform_version);
 }
 
 void KioskAppData::OnExtensionIconLoaded(const gfx::Image& icon) {

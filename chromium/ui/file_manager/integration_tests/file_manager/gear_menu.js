@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -220,8 +220,7 @@ testcase.hideCurrentDirectoryByTogglingHiddenAndroidFolders = async () => {
       {ignoreFileSize: true, ignoreLastModifiedTime: true});
 
   // Navigate to "/My files/Play files/A".
-  await remoteCall.navigateWithDirectoryTree(
-      appId, '/A', 'My files/Play files', 'android_files');
+  await navigateWithDirectoryTree(appId, '/My files/Play files/A');
 
   // Wait until current directory is changed to "/My files/Play files/A".
   await remoteCall.waitUntilCurrentDirectoryIsChanged(

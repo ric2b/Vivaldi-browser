@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,15 +83,6 @@ LinkToTextTabHelper::LinkToTextTabHelper(web::WebState* web_state)
 }
 
 LinkToTextTabHelper::~LinkToTextTabHelper() {}
-
-// static
-void LinkToTextTabHelper::CreateForWebState(web::WebState* web_state) {
-  DCHECK(web_state);
-  if (!FromWebState(web_state)) {
-    web_state->SetUserData(
-        UserDataKey(), base::WrapUnique(new LinkToTextTabHelper(web_state)));
-  }
-}
 
 bool LinkToTextTabHelper::ShouldOffer() {
   if (!shared_highlighting::ShouldOfferLinkToText(

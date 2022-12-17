@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -70,6 +70,7 @@
   "enable-webgpu-developer-features",
   "enable-zero-copy",
   "extensions-on-chrome-urls",
+  "external-navigation-debug-logs",
   "force-color-profile",
   "force-effective-connection-type",
   "force-show-update-menu-badge",
@@ -77,6 +78,7 @@
   "force-text-direction",
   "force-ui-direction",
   "force-update-menu-type",
+  "fullscreen-promos-manager-skip-internal-limits",
   "fullscreen-viewport-adjustment-experiment",
   "gesture-properties-dbus-service",
   "ignore-gpu-blocklist",
@@ -94,6 +96,7 @@
   "omaha-min-sdk-version-android",
   "overlay-strategies",
   "password-import",
+  "prefer-dcheck",
   "reader-mode-heuristics",
   "record-web-app-debug-info",
   "release-notes-notification-all-channels",
@@ -119,7 +122,6 @@
   "use-angle",
   "use-custom-messages-domain",
   "use-fake-device-for-media-stream",
-  "use-first-party-set",
   "use_messages_staging_url",
   "use-stork-smds-server-address",
   "use-sync-sandbox",

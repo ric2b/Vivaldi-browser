@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,13 @@
 @optional
 // The node favicon changed.
 - (void)bookmarkNodeFaviconChanged:(const bookmarks::BookmarkNode*)bookmarkNode;
+
+// Vivaldi
+// Bookmark metadata is changed, i.e. Vivaldi specific Description, Nickname &
+// Speed dial status
+- (void)bookmarkMetaInfoChanged:(const bookmarks::BookmarkNode*)bookmarkNode;
+// End Vivaldi
+
 @end
 
 namespace bookmarks {
@@ -54,7 +61,8 @@ class BookmarkModelBridge : public BookmarkModelObserver {
                          size_t new_index) override;
   void BookmarkNodeAdded(BookmarkModel* model,
                          const BookmarkNode* parent,
-                         size_t index) override;
+                         size_t index,
+                         bool added_by_user) override;
   void BookmarkNodeRemoved(BookmarkModel* model,
                            const BookmarkNode* parent,
                            size_t old_index,
@@ -68,6 +76,11 @@ class BookmarkModelBridge : public BookmarkModelObserver {
                                      const BookmarkNode* node) override;
   void BookmarkAllUserNodesRemoved(BookmarkModel* model,
                                    const std::set<GURL>& removed_urls) override;
+
+  // Vivaldi
+  void BookmarkMetaInfoChanged(BookmarkModel* model,
+                               const BookmarkNode* node) override;
+  // End Vivaldi
 
   __weak id<BookmarkModelBridgeObserver> observer_;
   BookmarkModel* model_;  // weak

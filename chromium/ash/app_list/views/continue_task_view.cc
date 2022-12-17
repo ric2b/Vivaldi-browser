@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -283,8 +283,7 @@ ui::SimpleMenuModel* ContinueTaskView::BuildMenuModel() {
           IDS_ASH_LAUNCHER_CONTINUE_SECTION_CONTEXT_MENU_REMOVE),
       ui::ImageModel::FromVectorIcon(kRemoveOutlineIcon,
                                      ui::kColorAshSystemUIMenuIcon));
-  if (features::IsLauncherHideContinueSectionEnabled() &&
-      Shell::Get()->IsInTabletMode()) {
+  if (Shell::Get()->IsInTabletMode()) {
     context_menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
     context_menu_model_->AddItemWithIcon(
         ContinueTaskCommandId::kHideContinueSection,

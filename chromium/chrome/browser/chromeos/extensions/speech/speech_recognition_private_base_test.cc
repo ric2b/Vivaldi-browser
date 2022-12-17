@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,9 +19,9 @@ SpeechRecognitionPrivateBaseTest::~SpeechRecognitionPrivateBaseTest() = default;
 
 void SpeechRecognitionPrivateBaseTest::SetUpCommandLine(
     base::CommandLine* command_line) {
-  std::vector<base::Feature> enabled_features =
+  std::vector<base::test::FeatureRef> enabled_features =
       test_helper_.GetEnabledFeatures();
-  std::vector<base::Feature> disabled_features =
+  std::vector<base::test::FeatureRef> disabled_features =
       test_helper_.GetDisabledFeatures();
   scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
 

@@ -14,7 +14,6 @@
 <translation id="1175364870820465910">&amp;Печать...</translation>
 <translation id="1181037720776840403">Удалить</translation>
 <translation id="1187722533808055681">Переходы в активный режим</translation>
-<translation id="119944043368869598">Удалить всё</translation>
 <translation id="1221825588892235038">Только выбранные</translation>
 <translation id="1234736487471201993">Создать QR-код для этого изображения</translation>
 <translation id="1244303850296295656">Ошибка расширения</translation>
@@ -51,7 +50,6 @@
 <translation id="1901303067676059328">Выделить &amp;всё</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Укажите количество копий для печати, используя цифры (от 1 до <ph name="MAX_COPIES" />).</translation>
-<translation id="1963227389609234879">Удалить все</translation>
 <translation id="1994173015038366702">Адрес сайта</translation>
 <translation id="2019718679933488176">&amp;Открыть аудио в новой вкладке</translation>
 <translation id="2050339315714019657">Книжная</translation>
@@ -68,7 +66,6 @@
 <translation id="2218515861914035131">Вставить как обычный текст</translation>
 <translation id="2249605167705922988">Например: 1–5, 8, 11–13</translation>
 <translation id="225240747099314620">Разрешить идентификаторы для защищённого содержимого (может понадобиться перезагрузка)</translation>
-<translation id="2277255602909579701">Все файлы cookie и данные сайта</translation>
 <translation id="2280486287150724112">Правое поле</translation>
 <translation id="2282146716419988068">Процесс GPU</translation>
 <translation id="2301382460326681002">Неверный корневой каталог расширения.</translation>
@@ -93,8 +90,10 @@
 <translation id="2550212893339833758">Память подкачки</translation>
 <translation id="2553440850688409052">Скрыть этот плагин</translation>
 <translation id="26224892172169984">Запретить обработку протоколов на всех сайтах</translation>
+<translation id="2653275834716714682">Замена текста</translation>
 <translation id="2662876636500006917">Интернет-магазин</translation>
 <translation id="2678063897982469759">Включить снова</translation>
+<translation id="2678100101831051676">Трансляция недоступна.</translation>
 <translation id="2721037002783622288">&amp;Найти картинку в <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Создать ярлык...</translation>
 <translation id="2785873697295365461">Дескрипторы файлов</translation>
@@ -122,7 +121,6 @@
 <translation id="3084548735795614657">Перетащить сюда</translation>
 <translation id="3122464029669770682">ЦП</translation>
 <translation id="3124111068741548686">USER-дескрипторы</translation>
-<translation id="3127156390846601284">Все данные указанных сайтов будут удалены с устройства. Продолжить?</translation>
 <translation id="3129173833825111527">Левое поле</translation>
 <translation id="3144647712221361880">Открыть ссылку как</translation>
 <translation id="3222066309010235055">Предварительная обработка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -145,7 +143,6 @@
 <translation id="3387614642886316601">Расширенная проверка правописания</translation>
 <translation id="3390013585654699824">Сведения о приложении</translation>
 <translation id="3393582007140394275">Не удается транслировать экран.</translation>
-<translation id="3432227430032737297">Удалить все видимые</translation>
 <translation id="345693547134384690">Открыть &amp;картинку в новой вкладке</translation>
 <translation id="3494769164076977169">Предупреждать о попытках автоматической загрузки файлов (рекомендуется)</translation>
 <translation id="3505030558724226696">Запретить доступ к устройствам</translation>
@@ -204,10 +201,10 @@
 <translation id="4409697491990005945">Поля</translation>
 <translation id="4423376891418188461">Восстановить настройки</translation>
 <translation id="4478664379124702289">Сохранить &amp;ссылку как...</translation>
-<translation id="4579581181964204535">Трансляция с сайта <ph name="HOST_NAME" /> невозможна.</translation>
 <translation id="4593021220803146968">&amp;Перейти к <ph name="URL" /></translation>
 <translation id="4595560905247879544">Изменять приложения и расширения может только менеджер (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Расширение изменило новую вкладку по умолчанию.</translation>
+<translation id="4616405296204756919">Вы можете использовать сохранённые пароли на любых устройствах. Они сохранены в <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Открыть видео в новой вкладке</translation>
 <translation id="4677772697204437347">Память GPU</translation>
 <translation id="4681930562518940301">Открыть оригинал &amp;картинки в новой вкладке</translation>
@@ -241,10 +238,12 @@
 <translation id="5233231016133573565">ID процесса</translation>
 <translation id="5233736638227740678">&amp;Вставить</translation>
 <translation id="5256861893479663409">На всех сайтах</translation>
+<translation id="5260334392110301220">Умные кавычки</translation>
 <translation id="5269977353971873915">Печать не удалась</translation>
 <translation id="5284445933715251131">Продолжить загрузку</translation>
 <translation id="52912272896845572">Неверный файл закрытого ключа.</translation>
 <translation id="5301954838959518834">ОК, готово</translation>
+<translation id="5302932258331363306">Показать замены</translation>
 <translation id="5317780077021120954">Сохранить</translation>
 <translation id="5334142896108694079">Кэш скрипта</translation>
 <translation id="5355926466126177564">Расширение "<ph name="EXTENSION_NAME" />" изменило поисковую систему по умолчанию в поле поиска.</translation>
@@ -277,7 +276,6 @@
 <translation id="5747809636523347288">Вс&amp;тавить и перейти на <ph name="URL" /></translation>
 <translation id="5759728514498647443"><ph name="APP_NAME" />" может читать документы, отправленные на печать через приложение "<ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">&amp;Сохранить аудио как...</translation>
-<translation id="577624874850706961">Поиск файлов cookie</translation>
 <translation id="5780973441651030252">Приоритет процессов</translation>
 <translation id="5804241973901381774">Разрешения</translation>
 <translation id="5828633471261496623">Печать...</translation>
@@ -290,7 +288,6 @@
 <translation id="5965661248935608907">Также расширение изменило домашнюю страницу и поисковую систему по умолчанию в поле поиска.</translation>
 <translation id="5978277834170881274">&amp;Базовая проверка правописания</translation>
 <translation id="5979421442488174909">&amp;Перевести на <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Удаление данных сайтов</translation>
 <translation id="6042308850641462728">Подробнее</translation>
 <translation id="6086846494333236931">Установлено администратором</translation>
 <translation id="6101226222197207147">Добавлено новое приложение (<ph name="EXTENSION_NAME" />)</translation>
@@ -346,6 +343,7 @@
 <translation id="7053983685419859001">Блокировать</translation>
 <translation id="7070484045139057854">Возможно получение доступа к данным сайта и их изменение</translation>
 <translation id="708060913198414444">&amp;Копировать адрес аудио</translation>
+<translation id="7121728544325372695">Умные переносы</translation>
 <translation id="7175353351958621980">Загружено с:</translation>
 <translation id="7186088072322679094">Держать на панели</translation>
 <translation id="7287143125007575591">Доступ запрещён.</translation>
@@ -403,7 +401,6 @@
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Выполняется скачивание}one{Выполняется скачивание}few{Выполняется скачивание}many{Выполняется скачивание}other{Выполняется скачивание}}</translation>
 <translation id="8230134520748321204">Сохранить пароль для <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">В <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> нет сведений об этом расширении, оно могло быть установлено без вашего ведома.</translation>
-<translation id="8339059274628563283"><ph name="SITE" /> сохраняет данные локально</translation>
 <translation id="8351419472474436977">Расширение изменило настройки прокси. Теперь оно может отследить или изменить передаваемые вами данные, а также прервать интернет-соединение. Если вы не знали об этом, вам следует отключить расширение.</translation>
 <translation id="8382913212082956454">&amp;Копировать адрес электронной почты</translation>
 <translation id="8413385045638830869">Всегда спрашивать (рекомендуется)</translation>
@@ -429,6 +426,7 @@
 <translation id="8808478386290700967">Интернет-магазин</translation>
 <translation id="8823514049557262177">Копировать &amp;текст ссылки</translation>
 <translation id="8823704566850948458">Предложить пароль...</translation>
+<translation id="883062543841130884">Замены</translation>
 <translation id="8859174528519900719">Субфрейм: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Открыть ссылку в новом &amp;окне</translation>
 <translation id="8915370057835397490">Загрузка подсказки</translation>

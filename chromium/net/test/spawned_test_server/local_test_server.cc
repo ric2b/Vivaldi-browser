@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -194,9 +194,9 @@ bool LocalTestServer::AddCommandLineArguments(
 
     // Add arguments from a list.
     if (value.is_list()) {
-      if (value.GetListDeprecated().empty())
+      if (value.GetList().empty())
         return false;
-      for (const auto& entry : value.GetListDeprecated()) {
+      for (const auto& entry : value.GetList()) {
         if (!AppendArgumentFromJSONValue(key, entry, command_line))
           return false;
       }

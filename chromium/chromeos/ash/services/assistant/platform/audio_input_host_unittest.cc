@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,8 @@
 #include "base/test/task_environment.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
+#include "chromeos/ash/services/libassistant/public/mojom/audio_input_controller.mojom.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
-#include "chromeos/services/libassistant/public/mojom/audio_input_controller.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -21,9 +21,8 @@ namespace ash::assistant {
 namespace {
 
 using LidState = chromeos::PowerManagerClient::LidState;
-using MojomLidState = chromeos::libassistant::mojom::LidState;
-using MojomAudioInputController =
-    chromeos::libassistant::mojom::AudioInputController;
+using MojomLidState = libassistant::mojom::LidState;
+using MojomAudioInputController = libassistant::mojom::AudioInputController;
 using ::testing::_;
 using ::testing::NiceMock;
 
@@ -66,7 +65,9 @@ class ScopedCrasAudioHandler {
 
 class AssistantAudioInputHostTest : public testing::Test {
  public:
-  AssistantAudioInputHostTest() { PowerManagerClient::InitializeFake(); }
+  AssistantAudioInputHostTest() {
+    chromeos::PowerManagerClient::InitializeFake();
+  }
 
   AssistantAudioInputHostTest(const AssistantAudioInputHostTest&) = delete;
   AssistantAudioInputHostTest& operator=(const AssistantAudioInputHostTest&) =
@@ -97,7 +98,7 @@ class AssistantAudioInputHostTest : public testing::Test {
   void CreateNewAudioInputHost() {
     audio_input_host_ = std::make_unique<AudioInputHostImpl>(
         audio_input_controller_.BindNewPipeAndPassRemote(),
-        cras_audio_handler_.Get(), FakePowerManagerClient::Get(),
+        cras_audio_handler_.Get(), chromeos::FakePowerManagerClient::Get(),
         "default-locale");
 
     FlushPendingMojomCalls();
@@ -106,8 +107,8 @@ class AssistantAudioInputHostTest : public testing::Test {
   void DestroyAudioInputHost() { audio_input_host_ = nullptr; }
 
   void ReportLidEvent(LidState state) {
-    FakePowerManagerClient::Get()->SetLidState(state,
-                                               base::TimeTicks::UnixEpoch());
+    chromeos::FakePowerManagerClient::Get()->SetLidState(
+        state, base::TimeTicks::UnixEpoch());
     FlushPendingMojomCalls();
   }
 

@@ -61,7 +61,7 @@ ExtensionFunction::ResponseAction ThemePrivateExportFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  theme_object_ = std::move(*params->theme.ToValue());
+  theme_object_ = base::Value(params->theme.ToValue());
   std::string error;
   vivaldi_theme_io::VerifyAndNormalizeJson(
       {.for_export = true, .allow_named_id = true}, theme_object_, error);
@@ -122,8 +122,7 @@ void ThemePrivateExportFunction::SendResult(std::vector<uint8_t> dataBlob,
   ExportResult result;
   result.success = success;
   if (!dataBlob.empty()) {
-    result.data_blob =
-        std::make_unique<std::vector<uint8_t>>(std::move(dataBlob));
+    result.data_blob = std::move(dataBlob);
   }
   Respond(ArgumentList(Results::Create(result)));
 }
@@ -162,7 +161,8 @@ void ThemePrivateImportFunction::StartImport(
     base::FilePath archive_path,
     std::vector<uint8_t> archive_data) {
   vivaldi_theme_io::Import(
-      browser_context()->GetWeakPtr(), std::move(archive_path),
+      Profile::FromBrowserContext(browser_context())->GetWeakPtr(),
+      std::move(archive_path),
       std::move(archive_data),
       base::BindOnce(&ThemePrivateImportFunction::SendResult, this));
 }
@@ -191,7 +191,7 @@ ImportResult CreateImportResult(
   ImportResult result;
   result.theme_id = std::move(theme_id);
   if (error) {
-    result.error = std::make_unique<ImportError>();
+    result.error = ImportError();
 
     switch (error->kind) {
       case vivaldi_theme_io::ImportError::kIO:
@@ -263,7 +263,7 @@ ExtensionFunction::ResponseAction ThemePrivateDownloadFunction::Run() {
   download_helper_ = std::make_unique<::vivaldi::VivaldiThemeDownloadHelper>(
       std::move(params->theme_id), url,
       base::BindOnce(&ThemePrivateDownloadFunction::SendResult, this),
-      browser_context()->GetWeakPtr());
+      Profile::FromBrowserContext(browser_context())->GetWeakPtr());
   download_helper_->set_delegate(this);
   download_helper_->DownloadAndInstall();
 

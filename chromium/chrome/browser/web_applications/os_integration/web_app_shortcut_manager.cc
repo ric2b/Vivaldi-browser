@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -128,6 +128,7 @@ void WebAppShortcutManager::SuppressShortcutsForTesting() {
 
 void WebAppShortcutManager::CreateShortcuts(const AppId& app_id,
                                             bool add_to_desktop,
+                                            ShortcutCreationReason reason,
                                             CreateShortcutsCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(CanCreateShortcuts());
@@ -136,7 +137,7 @@ void WebAppShortcutManager::CreateShortcuts(const AppId& app_id,
       app_id,
       base::BindOnce(
           &WebAppShortcutManager::OnShortcutInfoRetrievedCreateShortcuts,
-          weak_ptr_factory_.GetWeakPtr(), add_to_desktop,
+          weak_ptr_factory_.GetWeakPtr(), add_to_desktop, reason,
           base::BindOnce(&WebAppShortcutManager::OnShortcutsCreated,
                          weak_ptr_factory_.GetWeakPtr(), app_id,
                          std::move(callback))));
@@ -159,7 +160,7 @@ void WebAppShortcutManager::DeleteShortcuts(
 
 void WebAppShortcutManager::ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
     const AppId& app_id,
-    RegisterShortcutsMenuCallback callback) {
+    ResultCallback callback) {
   icon_manager_->ReadAllShortcutsMenuIcons(
       app_id,
       base::BindOnce(
@@ -170,16 +171,20 @@ void WebAppShortcutManager::ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
 void WebAppShortcutManager::RegisterShortcutsMenuWithOs(
     const AppId& app_id,
     const std::vector<WebAppShortcutsMenuItemInfo>& shortcuts_menu_item_infos,
-    const ShortcutsMenuIconBitmaps& shortcuts_menu_icon_bitmaps) {
+    const ShortcutsMenuIconBitmaps& shortcuts_menu_icon_bitmaps,
+    ResultCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!web_app::ShouldRegisterShortcutsMenuWithOs() ||
       suppress_shortcuts_for_testing_) {
+    std::move(callback).Run(Result::kOk);
     return;
   }
 
   std::unique_ptr<ShortcutInfo> shortcut_info = BuildShortcutInfo(app_id);
-  if (!shortcut_info)
+  if (!shortcut_info) {
+    std::move(callback).Run(Result::kError);
     return;
+  }
 
   // |shortcut_data_dir| is located in per-app OS integration resources
   // directory. See GetOsIntegrationResourcesDirectoryForApp function for more
@@ -188,16 +193,21 @@ void WebAppShortcutManager::RegisterShortcutsMenuWithOs(
       internals::GetShortcutDataDir(*shortcut_info);
   web_app::RegisterShortcutsMenuWithOs(
       shortcut_info->extension_id, shortcut_info->profile_path,
-      shortcut_data_dir, shortcuts_menu_item_infos,
-      shortcuts_menu_icon_bitmaps);
+      shortcut_data_dir, shortcuts_menu_item_infos, shortcuts_menu_icon_bitmaps,
+      std::move(callback));
 }
 
-void WebAppShortcutManager::UnregisterShortcutsMenuWithOs(const AppId& app_id) {
+void WebAppShortcutManager::UnregisterShortcutsMenuWithOs(
+    const AppId& app_id,
+    ResultCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (!web_app::ShouldRegisterShortcutsMenuWithOs())
+  if (!web_app::ShouldRegisterShortcutsMenuWithOs()) {
+    std::move(callback).Run(Result::kOk);
     return;
+  }
 
-  web_app::UnregisterShortcutsMenuWithOs(app_id, profile_->GetPath());
+  web_app::UnregisterShortcutsMenuWithOs(app_id, profile_->GetPath(),
+                                         std::move(callback));
 }
 
 void WebAppShortcutManager::OnShortcutsCreated(const AppId& app_id,
@@ -220,6 +230,7 @@ void WebAppShortcutManager::OnShortcutsDeleted(const AppId& app_id,
 
 void WebAppShortcutManager::OnShortcutInfoRetrievedCreateShortcuts(
     bool add_to_desktop,
+    ShortcutCreationReason reason,
     CreateShortcutsCallback callback,
     std::unique_ptr<ShortcutInfo> info) {
   if (suppress_shortcuts_for_testing_) {
@@ -238,23 +249,24 @@ void WebAppShortcutManager::OnShortcutInfoRetrievedCreateShortcuts(
   locations.on_desktop = add_to_desktop;
   locations.applications_menu_location = APP_MENU_LOCATION_SUBDIR_CHROMEAPPS;
 
-  internals::ScheduleCreatePlatformShortcuts(
-      shortcut_data_dir, locations, SHORTCUT_CREATION_BY_USER, std::move(info),
-      std::move(callback));
+  internals::ScheduleCreatePlatformShortcuts(shortcut_data_dir, locations,
+                                             reason, std::move(info),
+                                             std::move(callback));
 }
 
 void WebAppShortcutManager::OnShortcutsMenuIconsReadRegisterShortcutsMenu(
     const AppId& app_id,
-    RegisterShortcutsMenuCallback callback,
+    ResultCallback callback,
     ShortcutsMenuIconBitmaps shortcuts_menu_icon_bitmaps) {
   std::vector<WebAppShortcutsMenuItemInfo> shortcuts_menu_item_infos =
       registrar_->GetAppShortcutsMenuItemInfos(app_id);
   if (!shortcuts_menu_item_infos.empty()) {
     RegisterShortcutsMenuWithOs(app_id, shortcuts_menu_item_infos,
-                                shortcuts_menu_icon_bitmaps);
+                                shortcuts_menu_icon_bitmaps,
+                                std::move(callback));
+  } else {
+    std::move(callback).Run(Result::kError);
   }
-
-  std::move(callback).Run(Result::kOk);
 }
 
 void WebAppShortcutManager::OnShortcutInfoRetrievedUpdateShortcuts(

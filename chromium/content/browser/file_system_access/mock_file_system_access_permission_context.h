@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,7 +41,7 @@ class MockFileSystemAccessPermissionContext
       PathType path_type,
       const base::FilePath& path,
       HandleType handle_type,
-      ui::SelectFileDialog::Type dialog_type,
+      UserAction user_action,
       GlobalRenderFrameHostId frame_id,
       base::OnceCallback<void(SensitiveEntryResult)> callback) override;
   MOCK_METHOD(void,
@@ -50,7 +50,7 @@ class MockFileSystemAccessPermissionContext
                PathType path_type,
                const base::FilePath& path,
                HandleType handle_type,
-               ui::SelectFileDialog::Type dialog_type,
+               UserAction user_action,
                GlobalRenderFrameHostId frame_id,
                base::OnceCallback<void(SensitiveEntryResult)>& callback));
 
@@ -87,7 +87,8 @@ class MockFileSystemAccessPermissionContext
 
   MOCK_METHOD(base::FilePath,
               GetWellKnownDirectoryPath,
-              (blink::mojom::WellKnownDirectory directory),
+              (blink::mojom::WellKnownDirectory directory,
+               const url::Origin& origin),
               (override));
 
   MOCK_METHOD(std::u16string,

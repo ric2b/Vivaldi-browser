@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -419,7 +419,7 @@ class RenderFrameHostWrapper {
   // See RenderFrameDeletedObserver for notes on the difference between
   // RenderFrame being deleted and RenderFrameHost being destroyed.
   // Returns true if the frame was deleted before the timeout.
-  [[nodiscard]] bool WaitUntilRenderFrameDeleted();
+  [[nodiscard]] bool WaitUntilRenderFrameDeleted() const;
   bool IsRenderFrameDeleted() const;
 
   // Pointerish operators. Feel free to add more if you need them.

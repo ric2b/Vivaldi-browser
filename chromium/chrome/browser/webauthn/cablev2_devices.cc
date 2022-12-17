@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -214,7 +215,7 @@ std::vector<std::unique_ptr<Pairing>> GetSyncedDevices(Profile* const profile) {
 std::vector<std::unique_ptr<Pairing>> GetLinkedDevices(Profile* const profile) {
   PrefService* const prefs = profile->GetPrefs();
   const base::Value::List& pref_pairings =
-      prefs->GetValueList(kWebAuthnCablePairingsPrefName);
+      prefs->GetList(kWebAuthnCablePairingsPrefName);
 
   std::vector<std::unique_ptr<Pairing>> ret;
   for (const auto& pairing : pref_pairings) {
@@ -252,10 +253,7 @@ std::string FindUniqueName(const std::string& orig_name,
   std::string name = orig_name;
   std::string name_for_display = NameForDisplay(name);
   for (int i = 1;; i++) {
-    if (std::none_of(existing_names.begin(), existing_names.end(),
-                     [&name_for_display](base::StringPiece s) -> bool {
-                       return NameForDisplay(s) == name_for_display;
-                     })) {
+    if (!base::Contains(existing_names, name_for_display, &NameForDisplay)) {
       // The new name is unique.
       break;
     }
@@ -353,14 +351,15 @@ void AddPairing(Profile* profile, std::unique_ptr<Pairing> pairing) {
   // This is called when doing a QR-code pairing with a phone and the phone
   // sends long-term pairing information during the handshake. The pairing
   // information is saved in preferences for future operations.
-  ListPrefUpdate update(profile->GetPrefs(), kWebAuthnCablePairingsPrefName);
+  ScopedListPrefUpdate update(profile->GetPrefs(),
+                              kWebAuthnCablePairingsPrefName);
 
   // Find any existing entries with the same public key and replace them. The
   // handshake protocol requires the phone to prove possession of the public
   // key so it's not possible for an evil phone to displace another's pairing.
   std::string public_key_base64 =
       base::Base64Encode(pairing->peer_public_key_x962);
-  DeletePairingByPublicKey(update->GetList(), public_key_base64);
+  DeletePairingByPublicKey(*update, public_key_base64);
 
   base::Value::Dict dict;
   dict.Set(kPairingPrefPublicKey, std::move(public_key_base64));
@@ -383,7 +382,7 @@ void AddPairing(Profile* profile, std::unique_ptr<Pairing> pairing) {
       base::StringPrintf("%04d-%02d-%02dT%02d:%02d:%02dZ", now.year, now.month,
                          now.day_of_month, now.hour, now.minute, now.second));
 
-  update->GetList().Append(std::move(dict));
+  update->Append(std::move(dict));
 }
 
 // DeletePairingByPublicKey erases any pairing with the given public key
@@ -391,8 +390,8 @@ void AddPairing(Profile* profile, std::unique_ptr<Pairing> pairing) {
 void DeletePairingByPublicKey(
     PrefService* pref_service,
     std::array<uint8_t, device::kP256X962Length> public_key) {
-  ListPrefUpdate update(pref_service, kWebAuthnCablePairingsPrefName);
-  DeletePairingByPublicKey(update->GetList(), base::Base64Encode(public_key));
+  ScopedListPrefUpdate update(pref_service, kWebAuthnCablePairingsPrefName);
+  DeletePairingByPublicKey(*update, base::Base64Encode(public_key));
 }
 
 bool RenamePairing(
@@ -403,9 +402,9 @@ bool RenamePairing(
   const std::string name = FindUniqueName(new_name, existing_names);
   const std::string public_key_base64 = base::Base64Encode(public_key);
 
-  ListPrefUpdate update(pref_service, kWebAuthnCablePairingsPrefName);
+  ScopedListPrefUpdate update(pref_service, kWebAuthnCablePairingsPrefName);
 
-  for (base::Value& value : update->GetList()) {
+  for (base::Value& value : *update) {
     if (!value.is_dict()) {
       continue;
     }

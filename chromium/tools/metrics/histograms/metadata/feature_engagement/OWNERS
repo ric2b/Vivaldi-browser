@@ -5,5 +5,5 @@ per-file OWNERS=file://tools/metrics/histograms/metadata/METRIC_REVIEWER_OWNERS
 nyquist@chromium.org
 shaktisahu@chromium.org
 
-# For User Education/Feature Engagement on desktop platforms:
+# Desktop User Education:
 dfried@chromium.org

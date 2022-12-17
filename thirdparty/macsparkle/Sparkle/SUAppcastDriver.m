@@ -111,7 +111,108 @@
 {
     SUAppcastItem *deltaItem = (regularItem != nil) ? [[self class] deltaUpdateFromAppcastItem:regularItem hostVersion:self.host.version] : nil;
     
-    if (deltaItem != nil) {
+    BOOL supportsDeltaItem;
+    if (deltaItem == nil) {
+        supportsDeltaItem = NO;
+    } else {
+        // Delta updates are not supported when bundles are transferred over to some file systems like fat32 and exfat systems
+        // This is because they do not preserve permissions completely, which we require for diff'ing.
+        // We shouldn't download delta updates in cases where we can detect they aren't supported
+        // More accurately we will detect if the host bundle's permission bits have been 'tainted'
+        // which is more reliable than checking the underlying file system.
+        // To do this, we will check the Sparkle executable's permission bits, which is produced from us
+        // We will also check if the executable file or the localization files have been stripped from Sparkle.framework
+        
+        NSFileManager *fileManager = NSFileManager.defaultManager;
+        
+        NSBundle *hostBundle = self.host.bundle;
+        NSString *sparkleExecutablePath;
+        NSString *sparkleResourcesPath;
+        if ([hostBundle isEqual:NSBundle.mainBundle]) {
+            NSBundle *sparkleBundle = [NSBundle bundleForClass:[self class]];
+            sparkleExecutablePath = sparkleBundle.executableURL.URLByResolvingSymlinksInPath.path;
+            sparkleResourcesPath = sparkleBundle.resourcePath;
+        } else {
+            // If we are not updating ourselves, make a good guess to the Sparkle executable location
+            NSURL *frameworksURL = hostBundle.privateFrameworksURL;
+            NSURL *sparkleSymlinkURL = [frameworksURL URLByAppendingPathComponent:@"Sparkle.framework/Sparkle"];
+            NSString *candidateExecutablePath = sparkleSymlinkURL.URLByResolvingSymlinksInPath.path;
+            
+            if ([fileManager fileExistsAtPath:candidateExecutablePath]) {
+                sparkleExecutablePath = candidateExecutablePath;
+                sparkleResourcesPath = [candidateExecutablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"Resources"];
+            } else {
+                sparkleExecutablePath = nil;
+                sparkleResourcesPath = nil;
+            }
+        }
+        
+        if (sparkleExecutablePath != nil) {
+            NSError *attributesError = nil;
+            NSDictionary<NSFileAttributeKey, id> *attributes = [fileManager attributesOfItemAtPath:sparkleExecutablePath error:&attributesError];
+            
+            BOOL sparkleExecutableIsOK;
+            if (attributes != nil) {
+                // Skip delta updates if permissions are not 0755
+                NSNumber *posixPermissions = attributes[NSFilePosixPermissions];
+                if (posixPermissions != nil && posixPermissions.shortValue != 0755) {
+                    sparkleExecutableIsOK = NO;
+                    
+                    // Irregular permissions on the Sparkle executable could mean the app was transferred on a file system we don't support
+                    // (which doesn't track all permissions)
+                    SULog(SULogLevelDefault, @"Encountered irregular POSIX permissions 0%o for Sparkle executable, which is not 0755. Skipping delta updates..", posixPermissions.shortValue);
+                } else {
+                    // Test if Sparkle's executable file on disk has expected file size for applying this delta update
+                    // If the file size has been reduced, the user could have stripped an architecture out
+                    if (deltaItem.deltaFromSparkleExecutableSize != nil) {
+                        NSNumber *fileSize = attributes[NSFileSize];
+                        if (fileSize != nil && ![deltaItem.deltaFromSparkleExecutableSize isEqualToNumber:fileSize]) {
+                            sparkleExecutableIsOK = NO;
+                            
+                            SULog(SULogLevelDefault, @"Expected file size (%lld) of Sparkle's executable does not match actual file size (%lld). Skipping delta update.", deltaItem.deltaFromSparkleExecutableSize.unsignedLongLongValue, fileSize.unsignedLongLongValue);
+                        } else {
+                            sparkleExecutableIsOK = YES;
+                        }
+                    } else {
+                        sparkleExecutableIsOK = YES;
+                    }
+                }
+            } else {
+                sparkleExecutableIsOK = YES;
+                
+                SULog(SULogLevelError, @"Error: Failed to retrieve attributes from Sparkle executable: %@", attributesError.localizedDescription);
+            }
+            
+            // Test if Sparkle's expected localization files on disk are still present for applying this delta update
+            // If there are missing localization files, the user could have stripped them out
+            // No need to test this though if !sparkleExecutableIsOK
+            BOOL sparkleResourcesAreOK;
+            if (sparkleExecutableIsOK && sparkleResourcesPath != nil && deltaItem.deltaFromSparkleLocales != nil) {
+                BOOL foundAllExpectedLocales = YES;
+                for (NSString *locale in deltaItem.deltaFromSparkleLocales) {
+                    NSString *localeProjectPath = [[sparkleResourcesPath stringByAppendingPathComponent:locale] stringByAppendingPathExtension:@"lproj"];
+                    if (![fileManager fileExistsAtPath:localeProjectPath]) {
+                        foundAllExpectedLocales = NO;
+                        
+                        SULog(SULogLevelDefault, @"Expected project locale (%@) is missing in Sparkle.framework. Skipping delta update.", locale);
+                        break;
+                    }
+                }
+                
+                sparkleResourcesAreOK = foundAllExpectedLocales;
+            } else {
+                sparkleResourcesAreOK = YES;
+            }
+            
+            supportsDeltaItem = sparkleExecutableIsOK && sparkleResourcesAreOK;
+        } else {
+            supportsDeltaItem = YES;
+            
+            SULog(SULogLevelError, @"Error: Failed to unexpectably retrieve Sparkle executable URL from %@", hostBundle.bundlePath);
+        }
+    }
+    
+    if (supportsDeltaItem) {
         if (secondaryUpdate != NULL) {
             *secondaryUpdate = regularItem;
         }
@@ -140,7 +241,6 @@
             regularItemFromDelegate = nil;
             delegateOptedOutOfSelection = NO;
         } else {
-            assert(!candidateItem.deltaUpdate);
             if (candidateItem.deltaUpdate) {
                 // Client would have to go out of their way to examine the .deltaUpdates to return one
                 // We need them to give us a regular update item back instead..
@@ -250,6 +350,12 @@
         // We will never care about other OS's
         BOOL macOSUpdate = [item isMacOsUpdate];
         if (!macOSUpdate) {
+            return NO;
+        }
+        
+        // Delta updates cannot be top-level entries
+        BOOL isDeltaUpdate = [item isDeltaUpdate];
+        if (isDeltaUpdate) {
             return NO;
         }
         

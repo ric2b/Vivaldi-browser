@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
-# Copyright (c) 2012 The Chromium Authors. All rights reserved.
+# Copyright 2012 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -100,10 +100,10 @@ KNOWN_COMPUTED_USERS = (
     'user_metrics.cc',  # method definition
     'external_metrics.cc',  # see AddChromeOSActions()
     'render_thread_impl.cc',  # impl of RenderThread::RecordComputedAction()
-    'render_process_host_impl.cc',  # browser side impl for
-    # RenderThread::RecordComputedAction()
+    # browser side impl for RenderThread::RecordComputedAction()
+    'render_process_host_impl.cc',
     'mock_render_thread.cc',  # mock of RenderThread::RecordComputedAction()
-    'pdf_view_plugin_base.cc',  # see AddPDFPluginActions()
+    'pdf_view_web_plugin_client.cc',  # see AddPDFPluginActions()
     'blink_platform_impl.cc',  # see WebKit/public/platform/Platform.h
     'devtools_ui_bindings.cc',  # see AddDevToolsActions()
     'sharing_hub_bubble_controller.cc',  # share targets

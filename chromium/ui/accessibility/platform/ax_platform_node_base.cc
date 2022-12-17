@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,8 +10,8 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
-#include "base/containers/flat_map.h"
 #include "base/no_destructor.h"
 #include "base/numerics/checked_math.h"
 #include "base/strings/string_number_conversions.h"
@@ -23,6 +23,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_role_properties.h"
+#include "ui/accessibility/ax_selection.h"
 #include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/accessibility/platform/compute_attributes.h"
@@ -32,9 +33,16 @@ namespace ui {
 
 namespace {
 
-// A function to call when focus changes, for testing only.
-base::LazyInstance<std::map<ax::mojom::Event, base::RepeatingClosure>>::
-    DestructorAtExit g_on_notify_event_for_testing;
+using OnNotifyEventCallbackMap =
+    std::map<ax::mojom::Event,
+             // A function to call when focus changes, for testing only.
+             base::RepeatingClosure>;
+
+OnNotifyEventCallbackMap& GetOnNotifyEventCallbackMap() {
+  static base::NoDestructor<OnNotifyEventCallbackMap>
+      on_notify_event_for_testing;
+  return *on_notify_event_for_testing;
+}
 
 // Check for descendant comment, using limited depth first search.
 bool FindDescendantRoleWithMaxDepth(const AXPlatformNodeBase* node,
@@ -66,7 +74,7 @@ bool FindDescendantRoleWithMaxDepth(const AXPlatformNodeBase* node,
 const char16_t AXPlatformNodeBase::kEmbeddedCharacter = u'\xfffc';
 
 // Map from each AXPlatformNode's unique id to its instance.
-using UniqueIdMap = base::flat_map<int32_t, AXPlatformNode*>;
+using UniqueIdMap = std::unordered_map<int32_t, AXPlatformNode*>;
 base::LazyInstance<UniqueIdMap>::Leaky g_unique_id_map =
     LAZY_INSTANCE_INITIALIZER;
 
@@ -100,7 +108,8 @@ size_t AXPlatformNodeBase::GetInstanceCountForTesting() {
 void AXPlatformNodeBase::SetOnNotifyEventCallbackForTesting(
     ax::mojom::Event event_type,
     base::RepeatingClosure callback) {
-  g_on_notify_event_for_testing.Get()[event_type] = std::move(callback);
+  OnNotifyEventCallbackMap& callback_map = GetOnNotifyEventCallbackMap();
+  callback_map[event_type] = std::move(callback);
 }
 
 AXPlatformNodeBase::AXPlatformNodeBase() = default;
@@ -354,7 +363,7 @@ AXPlatformNodeBase* AXPlatformNodeBase::GetActiveDescendant() const {
         delegate_->GetFromNodeID(active_descendant_id));
   }
 
-  if (GetRole() == ax::mojom::Role::kPopUpButton) {
+  if (GetRole() == ax::mojom::Role::kComboBoxSelect) {
     AXPlatformNodeBase* child = GetFirstChild();
     if (child && child->GetRole() == ax::mojom::Role::kMenuListPopup &&
         !child->IsInvisibleOrIgnored()) {
@@ -398,10 +407,10 @@ gfx::NativeViewAccessible AXPlatformNodeBase::GetNativeViewAccessible() {
 }
 
 void AXPlatformNodeBase::NotifyAccessibilityEvent(ax::mojom::Event event_type) {
-  if (g_on_notify_event_for_testing.Get().find(event_type) !=
-          g_on_notify_event_for_testing.Get().end() &&
-      g_on_notify_event_for_testing.Get()[event_type]) {
-    g_on_notify_event_for_testing.Get()[event_type].Run();
+  OnNotifyEventCallbackMap& callback_map = GetOnNotifyEventCallbackMap();
+  if (callback_map.find(event_type) != callback_map.end() &&
+      callback_map[event_type]) {
+    callback_map[event_type].Run();
   }
 }
 
@@ -1254,9 +1263,13 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
     AddAttributeToList("description-from", from, attributes);
   }
 
+  AddAttributeToList(ax::mojom::StringAttribute::kAriaBrailleLabel,
+                     "braillelabel", attributes);
+  AddAttributeToList(ax::mojom::StringAttribute::kAriaBrailleRoleDescription,
+                     "brailleroledescription", attributes);
+
   AddAttributeToList(ax::mojom::StringAttribute::kKeyShortcuts, "keyshortcuts",
                      attributes);
-
   AddAttributeToList(ax::mojom::IntAttribute::kHierarchicalLevel, "level",
                      attributes);
   AddAttributeToList(ax::mojom::IntAttribute::kSetSize, "setsize", attributes);
@@ -1841,9 +1854,14 @@ int AXPlatformNodeBase::GetHypertextOffsetFromEndpoint(
 
     // If the endpoint is after this node, then return the node's
     // hypertext length, otherwise 0 as the endpoint points before the node.
-    if (endpoint_offset >
-        static_cast<int>(*closest_ancestor->GetIndexInParent()))
+    absl::optional<size_t> index_in_parent =
+        closest_ancestor->GetIndexInParent();
+    DCHECK(index_in_parent)
+        << "No index in parent for ancestor: " << *closest_ancestor;
+    if (index_in_parent &&
+        endpoint_offset > static_cast<int>(*index_in_parent)) {
       return static_cast<int>(GetHypertext().size());
+    }
     return 0;
   }
 
@@ -1929,7 +1947,7 @@ AXPlatformNodeBase::AXPosition AXPlatformNodeBase::HypertextOffsetToEndpoint(
   return AXNodePosition::CreateNullPosition();
 }
 
-int AXPlatformNodeBase::GetSelectionAnchor(const AXTree::Selection* selection) {
+int AXPlatformNodeBase::GetSelectionAnchor(const AXSelection* selection) {
   DCHECK(selection);
   AXNodeID anchor_id = selection->anchor_object_id;
   AXPlatformNodeBase* anchor_object =
@@ -1941,7 +1959,7 @@ int AXPlatformNodeBase::GetSelectionAnchor(const AXTree::Selection* selection) {
                                         selection->anchor_offset);
 }
 
-int AXPlatformNodeBase::GetSelectionFocus(const AXTree::Selection* selection) {
+int AXPlatformNodeBase::GetSelectionFocus(const AXSelection* selection) {
   DCHECK(selection);
   AXNodeID focus_id = selection->focus_object_id;
   AXPlatformNodeBase* focus_object =
@@ -1957,7 +1975,7 @@ void AXPlatformNodeBase::GetSelectionOffsets(int* selection_start,
   GetSelectionOffsets(nullptr, selection_start, selection_end);
 }
 
-void AXPlatformNodeBase::GetSelectionOffsets(const AXTree::Selection* selection,
+void AXPlatformNodeBase::GetSelectionOffsets(const AXSelection* selection,
                                              int* selection_start,
                                              int* selection_end) {
   DCHECK(selection_start && selection_end);
@@ -1970,7 +1988,7 @@ void AXPlatformNodeBase::GetSelectionOffsets(const AXTree::Selection* selection,
   }
 
   // If the unignored selection has not been computed yet, compute it now.
-  AXTree::Selection unignored_selection;
+  AXSelection unignored_selection;
   if (!selection) {
     unignored_selection = delegate_->GetUnignoredSelection();
     selection = &unignored_selection;
@@ -1980,7 +1998,7 @@ void AXPlatformNodeBase::GetSelectionOffsets(const AXTree::Selection* selection,
 }
 
 void AXPlatformNodeBase::GetSelectionOffsetsFromTree(
-    const AXTree::Selection* selection,
+    const AXSelection* selection,
     int* selection_start,
     int* selection_end) {
   DCHECK(selection_start && selection_end);

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <inttypes.h>
 #include <memory>
 
-#include "base/metrics/histogram_macros.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
@@ -18,7 +17,6 @@
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/image_factory.h"
-#include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/compound_image_backing.h"
@@ -35,46 +33,37 @@
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gl_implementation.h"
-#include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/trace_util.h"
 
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "gpu/command_buffer/service/shared_image/angle_vulkan_image_backing_factory.h"
+#include "gpu/command_buffer/service/shared_image/external_vk_image_backing_factory.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
 #endif
 
 #if defined(USE_OZONE)
-#include "ui/ozone/buildflags.h"
+#include "gpu/command_buffer/service/shared_image/ozone_image_backing_factory.h"
 #include "ui/ozone/public/gl_ozone.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
 #endif
 
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_WIN)) && \
-    BUILDFLAG(ENABLE_VULKAN)
-#include "gpu/command_buffer/service/shared_image/external_vk_image_backing_factory.h"
-#include "gpu/command_buffer/service/shared_image/ozone_image_backing_factory.h"
-#elif BUILDFLAG(IS_ANDROID) && BUILDFLAG(ENABLE_VULKAN)
+#if BUILDFLAG(IS_ANDROID) && BUILDFLAG(ENABLE_VULKAN)
 #include "gpu/command_buffer/service/shared_image/ahardwarebuffer_image_backing_factory.h"
-#include "gpu/command_buffer/service/shared_image/external_vk_image_backing_factory.h"
 #elif BUILDFLAG(IS_MAC)
 #include "gpu/command_buffer/service/shared_image/iosurface_image_backing_factory.h"
-#elif BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "gpu/command_buffer/service/shared_image/ozone_image_backing_factory.h"
 #endif
 
 #if BUILDFLAG(IS_WIN)
 #include "gpu/command_buffer/service/dxgi_shared_handle_manager.h"
 #include "gpu/command_buffer/service/shared_image/d3d_image_backing_factory.h"
-#include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/gl_angle_util_win.h"
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_FUCHSIA)
 #include <lib/zx/channel.h>
-#include "gpu/command_buffer/service/shared_image/ozone_image_backing_factory.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #endif  // BUILDFLAG(IS_FUCHSIA)
@@ -87,30 +76,6 @@
 namespace gpu {
 
 namespace {
-
-#if defined(USE_OZONE) && BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS)
-
-bool ShouldUseExternalVulkanImageFactory() {
-#if BUILDFLAG(ENABLE_VULKAN)
-  return ui::OzonePlatform::GetInstance()
-      ->GetPlatformProperties()
-      .uses_external_vulkan_image_factory;
-#else
-  return false;
-#endif
-}
-
-#endif  // defined(USE_OZONE) && BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS)
-
-bool ShouldUseOzoneImageBackingFactory() {
-#if defined(USE_OZONE)
-  return ui::OzonePlatform::GetInstance()
-      ->GetPlatformRuntimeProperties()
-      .supports_native_pixmaps;
-#else
-  return false;
-#endif
-}
 
 const char* GmbTypeToString(gfx::GpuMemoryBufferType type) {
   switch (type) {
@@ -125,80 +90,6 @@ const char* GmbTypeToString(gfx::GpuMemoryBufferType type) {
       return "platform";
   }
   NOTREACHED();
-}
-
-enum DmaBufSupportedType {
-  // These values are persisted to logs. Entries should not be renumbered and
-  // numeric values should never be reused.
-  kNoPixmapNoVulkanExtNoGlExt = 0,
-  kNoPixmapNoVulkanExtYesGlExt = 1,
-  kNoPixmapYesVulkanExtNoGlExt = 2,
-  kNoPixmapYesVulkanExtYesGlExt = 3,
-  kYesPixmapNoVulkanExtNoGlExt = 4,
-  kYesPixmapNoVulkanExtYesGlExt = 5,
-  kYesPixmapYesVulkanExtNoGlExt = 6,
-  kYesPixmapYesVulkanExtYesGlExt = 7,
-  kNoPixmapNoVulkanExtYesGlxExt = 8,
-  kNoPixmapYesVulkanExtYesGlxExt = 9,
-  kYesPixmapNoVulkanExtYesGlxExt = 10,
-  kYesPixmapYesVulkanExtYesGlxExt = 11,
-  kMaxValue = kYesPixmapYesVulkanExtYesGlxExt
-};
-
-enum class GLExtType { kNone, kEGL, kGLX };
-
-DmaBufSupportedType GetDmaBufSupportedType(bool pixmap_supported,
-                                           bool vulkan_ext_supported,
-                                           GLExtType gl_ext_supported) {
-  if (pixmap_supported) {
-    if (vulkan_ext_supported) {
-      switch (gl_ext_supported) {
-        case GLExtType::kNone:
-          return kYesPixmapYesVulkanExtNoGlExt;
-        case GLExtType::kEGL:
-          return kYesPixmapYesVulkanExtYesGlExt;
-        case GLExtType::kGLX:
-          return kYesPixmapYesVulkanExtYesGlxExt;
-      }
-    } else {
-      switch (gl_ext_supported) {
-        case GLExtType::kNone:
-          return kYesPixmapNoVulkanExtNoGlExt;
-        case GLExtType::kEGL:
-          return kYesPixmapNoVulkanExtYesGlExt;
-        case GLExtType::kGLX:
-          return kYesPixmapNoVulkanExtYesGlxExt;
-      }
-    }
-  } else {
-    if (vulkan_ext_supported) {
-      switch (gl_ext_supported) {
-        case GLExtType::kNone:
-          return kNoPixmapYesVulkanExtNoGlExt;
-        case GLExtType::kEGL:
-          return kNoPixmapYesVulkanExtYesGlExt;
-        case GLExtType::kGLX:
-          return kNoPixmapYesVulkanExtYesGlxExt;
-      }
-    } else {
-      switch (gl_ext_supported) {
-        case GLExtType::kNone:
-          return kNoPixmapNoVulkanExtNoGlExt;
-        case GLExtType::kEGL:
-          return kNoPixmapNoVulkanExtYesGlExt;
-        case GLExtType::kGLX:
-          return kNoPixmapNoVulkanExtYesGlxExt;
-      }
-    }
-  }
-}
-
-void ReportDmaBufSupportMetric(bool pixmap_supported,
-                               bool vulkan_ext_supported,
-                               GLExtType gl_ext_supported) {
-  DmaBufSupportedType type = GetDmaBufSupportedType(
-      pixmap_supported, vulkan_ext_supported, gl_ext_supported);
-  UMA_HISTOGRAM_ENUMERATION("GPU.SharedImage.DmaBufSupportedType", type);
 }
 
 }  // namespace
@@ -221,20 +112,16 @@ bool operator<(const std::unique_ptr<SharedImageRepresentationFactoryRef>& lhs,
   return lhs->mailbox() < rhs;
 }
 
-bool SharedImageFactory::set_dmabuf_supported_metric_ = false;
-
 SharedImageFactory::SharedImageFactory(
     const GpuPreferences& gpu_preferences,
     const GpuDriverBugWorkarounds& workarounds,
     const GpuFeatureInfo& gpu_feature_info,
     SharedContextState* context_state,
-    MailboxManager* mailbox_manager,
     SharedImageManager* shared_image_manager,
     ImageFactory* image_factory,
     MemoryTracker* memory_tracker,
     bool is_for_display_compositor)
-    : mailbox_manager_(mailbox_manager),
-      shared_image_manager_(shared_image_manager),
+    : shared_image_manager_(shared_image_manager),
       shared_context_state_(context_state),
       memory_tracker_(std::make_unique<MemoryTypeTracker>(memory_tracker)),
       is_for_display_compositor_(is_for_display_compositor),
@@ -261,47 +148,6 @@ SharedImageFactory::SharedImageFactory(
                              use_passthrough, gles2::DisallowedFeatures());
   }
 
-  if (!set_dmabuf_supported_metric_) {
-    bool pixmap_supported = ShouldUseOzoneImageBackingFactory();
-    bool vulkan_ext_supported = false;
-    GLExtType gl_ext_type = GLExtType::kNone;
-
-#if BUILDFLAG(ENABLE_VULKAN)
-    if (gr_context_type_ == GrContextType::kVulkan && context_state) {
-      const auto& enabled_extensions = context_state->vk_context_provider()
-                                           ->GetDeviceQueue()
-                                           ->enabled_extensions();
-      vulkan_ext_supported =
-          gfx::HasExtension(enabled_extensions,
-                            VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME) &&
-          gfx::HasExtension(enabled_extensions,
-                            VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
-    }
-#endif  // BUILDFLAG(ENABLE_VULKAN)
-
-    bool egl_ext_supported =
-        gl::GLSurfaceEGL::GetGLDisplayEGL()->ext->b_EGL_KHR_image;
-    bool glx_ext_supported = false;
-#if defined(USE_OZONE)
-#if BUILDFLAG(OZONE_PLATFORM_X11)
-    ui::GLOzone* gl_ozone = ui::OzonePlatform::GetInstance()
-                                ->GetSurfaceFactoryOzone()
-                                ->GetCurrentGLOzone();
-    // This checks for extension support on both GLOzoneEGLX11 and GLOzoneGLX.
-    glx_ext_supported = gl_ozone && gl_ozone->CanImportNativePixmap();
-#endif  // BUILDFLAG(OZONE_PLATFORM_X11)
-#endif  // defined(USE_OZONE)
-    if (egl_ext_supported) {
-      gl_ext_type = GLExtType::kEGL;
-    } else if (glx_ext_supported) {
-      gl_ext_type = GLExtType::kGLX;
-    }
-
-    ReportDmaBufSupportMetric(pixmap_supported, vulkan_ext_supported,
-                              gl_ext_type);
-    set_dmabuf_supported_metric_ = true;
-  }
-
   auto shared_memory_backing_factory =
       std::make_unique<SharedMemoryImageBackingFactory>();
   factories_.push_back(std::move(shared_memory_backing_factory));
@@ -325,7 +171,8 @@ SharedImageFactory::SharedImageFactory(
         std::make_unique<GLTextureImageBackingFactory>(
             gpu_preferences, workarounds, feature_info.get(),
             shared_context_state_ ? shared_context_state_->progress_reporter()
-                                  : nullptr);
+                                  : nullptr,
+            /*for_cpu_upload_usage=*/false);
     factories_.push_back(std::move(gl_texture_backing_factory));
   }
 
@@ -342,12 +189,13 @@ SharedImageFactory::SharedImageFactory(
 
 #if !BUILDFLAG(IS_ANDROID)
   if (use_gl) {
-    auto gl_image_backing_factory = std::make_unique<GLImageBackingFactory>(
-        gpu_preferences, workarounds, feature_info.get(), image_factory,
-        shared_context_state_ ? shared_context_state_->progress_reporter()
-                              : nullptr,
-        /*for_shared_memory_gmbs=*/true);
-    factories_.push_back(std::move(gl_image_backing_factory));
+    auto gl_texture_backing_factory =
+        std::make_unique<GLTextureImageBackingFactory>(
+            gpu_preferences, workarounds, feature_info.get(),
+            shared_context_state_ ? shared_context_state_->progress_reporter()
+                                  : nullptr,
+            /*for_cpu_upload_usage=*/true);
+    factories_.push_back(std::move(gl_texture_backing_factory));
   }
 #endif
 
@@ -362,7 +210,7 @@ SharedImageFactory::SharedImageFactory(
   }
 #endif
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(ENABLE_VULKAN)
   if (gr_context_type_ == GrContextType::kVulkan) {
     auto external_vk_image_factory =
         std::make_unique<ExternalVkImageBackingFactory>(context_state);
@@ -391,42 +239,33 @@ SharedImageFactory::SharedImageFactory(
         feature_info.get());
     factories_.push_back(std::move(ahb_factory));
   }
+#if BUILDFLAG(ENABLE_VULKAN)
   if (gr_context_type_ == GrContextType::kVulkan &&
       !base::FeatureList::IsEnabled(features::kVulkanFromANGLE)) {
     auto external_vk_image_factory =
         std::make_unique<ExternalVkImageBackingFactory>(context_state);
     factories_.push_back(std::move(external_vk_image_factory));
   }
+#endif  // BUILDFLAG(ENABLE_VULKAN)
 #elif defined(USE_OZONE)
-#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS)
-  // Desktop Linux, not ChromeOS.
-  if (ShouldUseOzoneImageBackingFactory()) {
-    auto ozone_factory =
-        std::make_unique<OzoneImageBackingFactory>(context_state, workarounds);
+  // For all Ozone platforms - Desktop Linux, ChromeOS, Fuchsia, CastOS.
+  if (ui::OzonePlatform::GetInstance()
+          ->GetPlatformRuntimeProperties()
+          .supports_native_pixmaps) {
+    auto ozone_factory = std::make_unique<OzoneImageBackingFactory>(
+        context_state, workarounds, gpu_preferences);
     factories_.push_back(std::move(ozone_factory));
   }
-  if (gr_context_type_ == GrContextType::kVulkan &&
-      (!ShouldUseOzoneImageBackingFactory() ||
-       ShouldUseExternalVulkanImageFactory())) {
-    auto external_vk_image_factory =
-        std::make_unique<ExternalVkImageBackingFactory>(context_state);
-    factories_.push_back(std::move(external_vk_image_factory));
-  }
-#elif BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(ENABLE_VULKAN)
   if (gr_context_type_ == GrContextType::kVulkan) {
-    auto ozone_factory =
-        std::make_unique<OzoneImageBackingFactory>(context_state, workarounds);
-    factories_.push_back(std::move(ozone_factory));
     auto external_vk_image_factory =
         std::make_unique<ExternalVkImageBackingFactory>(context_state);
     factories_.push_back(std::move(external_vk_image_factory));
+#if BUILDFLAG(IS_FUCHSIA)
+    vulkan_context_provider_ = context_state->vk_context_provider();
+#endif  // BUILDFLAG(IS_FUCHSIA)
   }
-  vulkan_context_provider_ = context_state->vk_context_provider();
-#elif BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-  auto ozone_factory =
-      std::make_unique<OzoneImageBackingFactory>(context_state, workarounds);
-  factories_.push_back(std::move(ozone_factory));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(ENABLE_VULKAN)
 #endif  // defined(USE_OZONE)
 
 #if BUILDFLAG(IS_MAC)
@@ -436,8 +275,7 @@ SharedImageFactory::SharedImageFactory(
     auto gl_image_backing_factory = std::make_unique<GLImageBackingFactory>(
         gpu_preferences, workarounds, feature_info.get(), image_factory,
         shared_context_state_ ? shared_context_state_->progress_reporter()
-                              : nullptr,
-        /*for_shared_memory_gmbs=*/false);
+                              : nullptr);
     factories_.push_back(std::move(gl_image_backing_factory));
   }
 #endif
@@ -448,16 +286,16 @@ SharedImageFactory::~SharedImageFactory() {
 }
 
 bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
-                                           viz::ResourceFormat format,
+                                           viz::SharedImageFormat format,
                                            const gfx::Size& size,
                                            const gfx::ColorSpace& color_space,
                                            GrSurfaceOrigin surface_origin,
                                            SkAlphaType alpha_type,
                                            gpu::SurfaceHandle surface_handle,
                                            uint32_t usage) {
-  bool allow_legacy_mailbox = false;
-  auto* factory = GetFactoryByUsage(usage, format, &allow_legacy_mailbox,
-                                    /*is_pixel_used=*/false, gfx::EMPTY_BUFFER);
+  DCHECK(format.is_single_plane());
+  auto* factory = GetFactoryByUsage(usage, format, size,
+                                    /*pixel_data=*/{}, gfx::EMPTY_BUFFER);
   if (!factory)
     return false;
 
@@ -467,36 +305,24 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
   DVLOG(1) << "CreateSharedImage[" << backing->GetName()
            << "] size=" << size.ToString()
            << " usage=" << CreateLabelForSharedImageUsage(usage)
-           << " resource_format=" << viz::ResourceFormatToString(format);
-  return RegisterBacking(std::move(backing), allow_legacy_mailbox);
+           << " resource_format=" << format.ToString();
+  return RegisterBacking(std::move(backing));
 }
 
 bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
-                                           viz::ResourceFormat format,
+                                           viz::SharedImageFormat format,
                                            const gfx::Size& size,
                                            const gfx::ColorSpace& color_space,
                                            GrSurfaceOrigin surface_origin,
                                            SkAlphaType alpha_type,
                                            uint32_t usage,
                                            base::span<const uint8_t> data) {
-  // For now, restrict this to SHARED_IMAGE_USAGE_DISPLAY with optional
-  // SHARED_IMAGE_USAGE_SCANOUT.
-  // TODO(ericrk): SCANOUT support for Vulkan by ensuring all interop factories
-  // support this, and allowing them to be chosen here.
-  constexpr uint32_t allowed_usage =
-      SHARED_IMAGE_USAGE_DISPLAY | SHARED_IMAGE_USAGE_SCANOUT;
-  if (usage & ~allowed_usage) {
-    LOG(ERROR) << "Unsupported usage for SharedImage with initial data upload.";
-    return false;
-  }
-
-  bool allow_legacy_mailbox = false;
+  DCHECK(format.is_single_plane());
   SharedImageBackingFactory* factory = nullptr;
   if (backing_factory_for_testing_) {
     factory = backing_factory_for_testing_;
   } else {
-    factory = GetFactoryByUsage(usage, format, &allow_legacy_mailbox,
-                                /*is_pixel_used=*/true, gfx::EMPTY_BUFFER);
+    factory = GetFactoryByUsage(usage, format, size, data, gfx::EMPTY_BUFFER);
   }
   if (!factory)
     return false;
@@ -508,11 +334,11 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
     DVLOG(1) << "CreateSharedImagePixels[" << backing->GetName()
              << "] with pixels size=" << size.ToString()
              << " usage=" << CreateLabelForSharedImageUsage(usage)
-             << " resource_format=" << viz::ResourceFormatToString(format);
+             << " resource_format=" << format.ToString();
 
     backing->OnWriteSucceeded();
   }
-  return RegisterBacking(std::move(backing), allow_legacy_mailbox);
+  return RegisterBacking(std::move(backing));
 }
 
 bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
@@ -526,22 +352,36 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
                                            GrSurfaceOrigin surface_origin,
                                            SkAlphaType alpha_type,
                                            uint32_t usage) {
-  bool allow_legacy_mailbox = false;
-  auto resource_format = viz::GetResourceFormat(format);
+  auto si_format =
+      viz::SharedImageFormat::SinglePlane(viz::GetResourceFormat(format));
   gfx::GpuMemoryBufferType gmb_type = handle.type;
 
   bool use_compound = false;
-  auto* factory =
-      GetFactoryByUsage(usage, resource_format, &allow_legacy_mailbox,
-                        /*is_pixel_used=*/false, gmb_type, &use_compound);
+  auto* factory = GetFactoryByUsage(usage, si_format, size,
+                                    /*pixel_data=*/{}, gmb_type);
+
+  if (!factory && gmb_type == gfx::SHARED_MEMORY_BUFFER) {
+    // Check if CompoundImageBacking can hold shared memory buffer plus
+    // another GPU backing type to satisfy requirements.
+    use_compound = true;
+    factory = GetFactoryByUsage(usage | SHARED_IMAGE_USAGE_CPU_UPLOAD,
+                                si_format, size,
+                                /*pixel_data=*/{}, gfx::EMPTY_BUFFER);
+  }
+
   if (!factory)
     return false;
 
   std::unique_ptr<SharedImageBacking> backing;
   if (use_compound) {
+#if BUILDFLAG(IS_WIN)
+    constexpr bool allow_shm_overlays = true;
+#else
+    constexpr bool allow_shm_overlays = false;
+#endif
     backing = CompoundImageBacking::CreateSharedMemory(
-        factory, mailbox, std::move(handle), format, plane, surface_handle,
-        size, color_space, surface_origin, alpha_type, usage);
+        factory, allow_shm_overlays, mailbox, std::move(handle), format, plane,
+        surface_handle, size, color_space, surface_origin, alpha_type, usage);
   } else {
     backing = factory->CreateSharedImage(
         mailbox, client_id, std::move(handle), format, plane, surface_handle,
@@ -557,7 +397,7 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
 
     backing->OnWriteSucceeded();
   }
-  return RegisterBacking(std::move(backing), allow_legacy_mailbox);
+  return RegisterBacking(std::move(backing));
 }
 
 bool SharedImageFactory::UpdateSharedImage(const Mailbox& mailbox) {
@@ -606,13 +446,11 @@ bool SharedImageFactory::CreateSwapChain(const Mailbox& front_buffer_mailbox,
   if (!D3DImageBackingFactory::IsSwapChainSupported())
     return false;
 
-  bool allow_legacy_mailbox = true;
   auto backings = d3d_backing_factory_->CreateSwapChain(
       front_buffer_mailbox, back_buffer_mailbox, format, size, color_space,
       surface_origin, alpha_type, usage);
-  return RegisterBacking(std::move(backings.front_buffer),
-                         allow_legacy_mailbox) &&
-         RegisterBacking(std::move(backings.back_buffer), allow_legacy_mailbox);
+  return RegisterBacking(std::move(backings.front_buffer)) &&
+         RegisterBacking(std::move(backings.back_buffer));
 }
 
 bool SharedImageFactory::PresentSwapChain(const Mailbox& mailbox) {
@@ -670,43 +508,7 @@ bool SharedImageFactory::ReleaseSysmemBufferCollection(
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
-// TODO(ericrk): Move this entirely to SharedImageManager.
-bool SharedImageFactory::OnMemoryDump(
-    const base::trace_event::MemoryDumpArgs& args,
-    base::trace_event::ProcessMemoryDump* pmd,
-    int client_id,
-    uint64_t client_tracing_id) {
-  for (const auto& shared_image : shared_images_) {
-    shared_image_manager_->OnMemoryDump(shared_image->mailbox(), pmd, client_id,
-                                        client_tracing_id);
-  }
-
-  return true;
-}
-
 #if BUILDFLAG(IS_WIN)
-bool SharedImageFactory::CreateSharedImageVideoPlanes(
-    base::span<const Mailbox> mailboxes,
-    gfx::GpuMemoryBufferHandle handle,
-    gfx::BufferFormat format,
-    const gfx::Size& size,
-    uint32_t usage) {
-  if (!d3d_backing_factory_)
-    return false;
-
-  auto backings = d3d_backing_factory_->CreateSharedImageVideoPlanes(
-      mailboxes, std::move(handle), format, size, usage);
-
-  if (backings.size() != gfx::NumberOfPlanesForLinearBufferFormat(format))
-    return false;
-
-  for (auto& backing : backings) {
-    if (!RegisterBacking(std::move(backing), /*allow_legacy_mailbox=*/false))
-      return false;
-  }
-  return true;
-}
-
 bool SharedImageFactory::CopyToGpuMemoryBuffer(const Mailbox& mailbox) {
   auto it = shared_images_.find(mailbox);
   if (it == shared_images_.end()) {
@@ -734,8 +536,9 @@ bool SharedImageFactory::IsSharedBetweenThreads(uint32_t usage) {
     return true;
 
   // DISPLAY is for gpu composition and SCANOUT for overlays.
-  constexpr int kDisplayCompositorUsage =
-      SHARED_IMAGE_USAGE_DISPLAY | SHARED_IMAGE_USAGE_SCANOUT;
+  constexpr int kDisplayCompositorUsage = SHARED_IMAGE_USAGE_DISPLAY_READ |
+                                          SHARED_IMAGE_USAGE_DISPLAY_WRITE |
+                                          SHARED_IMAGE_USAGE_SCANOUT;
 
   // Image is used on display compositor gpu thread if it's used by display
   // compositor and if display compositor runs on a separate thread. Image is
@@ -754,43 +557,31 @@ bool SharedImageFactory::IsSharedBetweenThreads(uint32_t usage) {
 
 SharedImageBackingFactory* SharedImageFactory::GetFactoryByUsage(
     uint32_t usage,
-    viz::ResourceFormat format,
-    bool* allow_legacy_mailbox,
-    bool is_pixel_used,
-    gfx::GpuMemoryBufferType gmb_type,
-    bool* use_compound_backing) {
+    viz::SharedImageFormat format,
+    const gfx::Size& size,
+    base::span<const uint8_t> pixel_data,
+    gfx::GpuMemoryBufferType gmb_type) {
   if (backing_factory_for_testing_)
     return backing_factory_for_testing_;
 
   bool share_between_threads = IsSharedBetweenThreads(usage);
   for (auto& factory : factories_) {
-    if (factory->IsSupported(usage, format, share_between_threads, gmb_type,
-                             gr_context_type_, allow_legacy_mailbox,
-                             is_pixel_used)) {
+    if (factory->IsSupported(usage, format, size, share_between_threads,
+                             gmb_type, gr_context_type_, pixel_data)) {
       return factory.get();
-    } else if (use_compound_backing && gmb_type == gfx::SHARED_MEMORY_BUFFER) {
-      // Check if backing type supports CPU upload with no buffer handle so it
-      // can be used with a compound backing instead.
-      if (factory->IsSupported(usage | SHARED_IMAGE_USAGE_CPU_UPLOAD, format,
-                               share_between_threads, gfx::EMPTY_BUFFER,
-                               gr_context_type_, allow_legacy_mailbox,
-                               is_pixel_used)) {
-        *use_compound_backing = true;
-        return factory.get();
-      }
     }
   }
 
   LOG(ERROR) << "Could not find SharedImageBackingFactory with params: usage: "
-             << CreateLabelForSharedImageUsage(usage) << ", format: " << format
+             << CreateLabelForSharedImageUsage(usage)
+             << ", format: " << format.ToString()
              << ", share_between_threads: " << share_between_threads
              << ", gmb_type: " << GmbTypeToString(gmb_type);
   return nullptr;
 }
 
 bool SharedImageFactory::RegisterBacking(
-    std::unique_ptr<SharedImageBacking> backing,
-    bool allow_legacy_mailbox) {
+    std::unique_ptr<SharedImageBacking> backing) {
   if (!backing) {
     LOG(ERROR) << "CreateSharedImage: could not create backing.";
     return false;
@@ -806,14 +597,6 @@ bool SharedImageFactory::RegisterBacking(
   }
 
   shared_image->RegisterImageFactory(this);
-
-  // TODO(ericrk): Remove this once no legacy cases remain.
-  if (allow_legacy_mailbox &&
-      !shared_image->ProduceLegacyMailbox(mailbox_manager_)) {
-    LOG(ERROR) << "CreateSharedImage: could not convert shared_image to legacy "
-                  "mailbox.";
-    return false;
-  }
 
   shared_images_.emplace(std::move(shared_image));
   return true;
@@ -832,12 +615,6 @@ SharedImageRepresentationFactory::~SharedImageRepresentationFactory() {
 std::unique_ptr<GLTextureImageRepresentation>
 SharedImageRepresentationFactory::ProduceGLTexture(const Mailbox& mailbox) {
   return manager_->ProduceGLTexture(mailbox, tracker_.get());
-}
-
-std::unique_ptr<GLTextureImageRepresentation>
-SharedImageRepresentationFactory::ProduceRGBEmulationGLTexture(
-    const Mailbox& mailbox) {
-  return manager_->ProduceRGBEmulationGLTexture(mailbox, tracker_.get());
 }
 
 std::unique_ptr<GLTexturePassthroughImageRepresentation>

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <set>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/check_op.h"
@@ -16,6 +17,7 @@
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_util.h"
 #include "base/task/task_traits.h"
@@ -528,6 +530,9 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
     case Textfield::kPaste:
       ExecuteTextEditCommand(ui::TextEditCommand::PASTE);
       return;
+    case Textfield::kSelectAll:
+      ExecuteTextEditCommand(ui::TextEditCommand::SELECT_ALL);
+      return;
     default:
       if (Textfield::IsCommandIdEnabled(command_id)) {
         // The Textfield code will invoke OnBefore/AfterPossibleChange() itself
@@ -678,8 +683,7 @@ void OmniboxViewViews::OnOmniboxPaste() {
       // fakebox is hidden and there's only whitespace in the omnibox, it's
       // difficult for the user to see that the focus moved to the omnibox.
       (model()->focus_state() == OMNIBOX_FOCUS_INVISIBLE &&
-       std::all_of(text.begin(), text.end(),
-                   base::IsUnicodeWhitespace<char16_t>))) {
+       base::ranges::all_of(text, base::IsUnicodeWhitespace<char16_t>))) {
     return;
   }
 
@@ -1236,7 +1240,7 @@ bool OmniboxViewViews::SkipDefaultKeyEventProcessing(
 
 void OmniboxViewViews::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kTextField;
-  node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_LOCATION));
+  node_data->SetNameChecked(l10n_util::GetStringUTF8(IDS_ACCNAME_LOCATION));
   node_data->AddStringAttribute(ax::mojom::StringAttribute::kAutoComplete,
                                 "both");
 // Expose keyboard shortcut where it makes sense.
@@ -1447,6 +1451,12 @@ void OmniboxViewViews::OnBlur() {
 }
 
 bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (command_id == Textfield::kSelectAll) {
+    return base::FeatureList::IsEnabled(
+        chromeos::features::kTouchTextEditingRedesign);
+  }
+#endif
   if (command_id == Textfield::kPaste)
     return !GetReadOnly() &&
            !GetClipboardText(/*notify_if_restricted=*/false).empty();

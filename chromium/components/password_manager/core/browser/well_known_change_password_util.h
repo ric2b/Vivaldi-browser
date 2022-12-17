@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,13 +9,15 @@ class GURL;
 
 namespace password_manager {
 
-// Used to report UKMs about the support for .well-known/change-password.
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
+// Used to report UMAs and UKMs about the support for
+// .well-known/change-password. These values are persisted to logs. Entries
+// should not be renumbered and numeric values should never be reused.
 enum class WellKnownChangePasswordResult {
   kFallbackToOriginUrl = 0,
   kFallbackToOverrideUrl = 1,
   kUsedWellKnownChangePassword = 2,
+
+  kMaxValue = kUsedWellKnownChangePassword,
 };
 
 // Path for Well-Known change password url

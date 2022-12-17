@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,6 +24,7 @@
 #include "chrome/browser/chromeos/extensions/users_private/users_private_delegate_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/users_private.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -139,9 +139,9 @@ base::Value::List GetUsersList(content::BrowserContext* browser_context) {
     std::string email = maybe_email ? *maybe_email : std::string();
     AccountId account_id = AccountId::FromUserEmail(email);
     const user_manager::User* user = user_manager->FindUser(account_id);
-    user_list.Append(base::Value::FromUniquePtrValue(
+    user_list.Append(
         (user ? CreateApiUser(email, *user) : CreateUnknownApiUser(email))
-            .ToValue()));
+            .ToValue());
   }
 
   if (ash::OwnerSettingsServiceAsh* service =
@@ -273,9 +273,9 @@ UsersPrivateGetCurrentUserFunction::~UsersPrivateGetCurrentUserFunction() =
 ExtensionFunction::ResponseAction UsersPrivateGetCurrentUserFunction::Run() {
   const user_manager::User* user = ash::ProfileHelper::Get()->GetUserByProfile(
       Profile::FromBrowserContext(browser_context()));
-  return user ? RespondNow(WithArguments(base::Value::FromUniquePtrValue(
+  return user ? RespondNow(WithArguments(
                     CreateApiUser(user->GetAccountId().GetUserEmail(), *user)
-                        .ToValue())))
+                        .ToValue()))
               : RespondNow(Error("No Current User"));
 }
 

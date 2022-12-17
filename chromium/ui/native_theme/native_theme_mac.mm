@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -507,7 +507,7 @@ NativeThemeMac::NativeThemeMac(bool configure_web_instance,
     InitializeDarkModeStateAndObserver();
 
   if (!IsForcedHighContrast()) {
-    set_preferred_contrast(CalculatePreferredContrast());
+    SetPreferredContrast(CalculatePreferredContrast());
     __block auto theme = this;
     high_contrast_notification_token_ =
         [[[NSWorkspace sharedWorkspace] notificationCenter]
@@ -516,8 +516,7 @@ NativeThemeMac::NativeThemeMac(bool configure_web_instance,
                         object:nil
                          queue:nil
                     usingBlock:^(NSNotification* notification) {
-                      theme->set_preferred_contrast(
-                          CalculatePreferredContrast());
+                      theme->SetPreferredContrast(CalculatePreferredContrast());
                       theme->NotifyOnNativeThemeUpdated();
                     }];
   }
@@ -558,7 +557,7 @@ void NativeThemeMac::ConfigureWebInstance() {
   NativeTheme* web_instance = NativeTheme::GetInstanceForWeb();
   web_instance->set_use_dark_colors(IsDarkMode());
   web_instance->set_preferred_color_scheme(CalculatePreferredColorScheme());
-  web_instance->set_preferred_contrast(CalculatePreferredContrast());
+  web_instance->SetPreferredContrast(CalculatePreferredContrast());
 
   // Add the web native theme as an observer to stay in sync with color scheme
   // changes.

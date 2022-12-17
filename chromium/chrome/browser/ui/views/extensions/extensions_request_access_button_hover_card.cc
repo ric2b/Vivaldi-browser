@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,14 +6,16 @@
 
 #include "base/bind.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
+#include "chrome/browser/ui/views/chrome_widget_sublevel.h"
 #include "chrome/browser/ui/views/extensions/extensions_dialogs_utils.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_contents.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/dialog_model.h"
+#include "ui/base/models/dialog_model_field.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/bubble/bubble_dialog_model_host.h"
 #include "ui/views/view.h"
+#include "ui/views/views_features.h"
 
 namespace {
 
@@ -42,18 +44,19 @@ void ExtensionsRequestAccessButtonHoverCard::ShowBubble(
   const std::u16string url = GetCurrentHost(web_contents);
   if (actions.size() == 1) {
     dialog_builder.SetIcon(GetIcon(actions[0], web_contents))
-        .AddBodyText(ui::DialogModelLabel(l10n_util::GetStringFUTF16(
+        .AddParagraph(ui::DialogModelLabel::CreateWithReplacements(
             IDS_EXTENSIONS_REQUEST_ACCESS_BUTTON_TOOLTIP_SINGLE_EXTENSION,
-            actions[0]->GetActionName(), url)));
+            {ui::DialogModelLabel::CreatePlainText(actions[0]->GetActionName()),
+             ui::DialogModelLabel::CreateEmphasizedText(url)}));
   } else {
-    dialog_builder.AddBodyText(ui::DialogModelLabel(l10n_util::GetStringFUTF16(
+    dialog_builder.AddParagraph(ui::DialogModelLabel::CreateWithReplacement(
         IDS_EXTENSIONS_REQUEST_ACCESS_BUTTON_TOOLTIP_MULTIPLE_EXTENSIONS,
-        url)));
+        ui::DialogModelLabel::CreateEmphasizedText(url)));
     for (auto* action : actions) {
       dialog_builder.AddMenuItem(
           GetIcon(action, web_contents), action->GetActionName(),
           base::DoNothing(),
-          ui::DialogModelMenuItem::Params().set_is_enabled(false));
+          ui::DialogModelMenuItem::Params().SetIsEnabled(false));
     }
   }
 
@@ -68,7 +71,12 @@ void ExtensionsRequestAccessButtonHoverCard::ShowBubble(
   auto* widget = views::BubbleDialogDelegate::CreateBubble(std::move(bubble));
   // Ensure the hover card Widget assumes the highest z-order to avoid occlusion
   // by other secondary UI Widgets
-  widget->StackAtTop();
+  if (base::FeatureList::IsEnabled(views::features::kWidgetLayering)) {
+    widget->SetZOrderSublevel(ChromeWidgetSublevel::kSublevelHoverable);
+  } else {
+    widget->StackAtTop();
+  }
+
   widget->Show();
 }
 

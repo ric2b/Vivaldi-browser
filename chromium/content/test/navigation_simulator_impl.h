@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -227,6 +227,8 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   void set_supports_loading_mode_header(std::string value) {
     supports_loading_mode_header_ = value;
   }
+
+  void set_post_id(int64_t post_id) { post_id_ = post_id; }
 
  private:
   NavigationSimulatorImpl(const GURL& original_url,

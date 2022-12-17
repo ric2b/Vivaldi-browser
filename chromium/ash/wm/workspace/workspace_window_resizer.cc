@@ -1,10 +1,9 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/wm/workspace/workspace_window_resizer.h"
 
-#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -39,6 +38,7 @@
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/ranges/algorithm.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/wm/features.h"
 #include "ui/aura/client/aura_constants.h"
@@ -971,8 +971,11 @@ void WorkspaceWindowResizer::CompleteDrag() {
     return;
   }
 
-  // Drag/Resize a floated window won't change window restore bounds.
+  // Update the restore bounds of a floated window in case it has changed
+  // displays.
   if (window_state()->IsFloated()) {
+    window_state()->SetRestoreBoundsInParent(
+        details().restore_bounds_in_parent);
     return;
   }
 
@@ -1616,13 +1619,11 @@ void WorkspaceWindowResizer::RestackWindows() {
   IndexToWindowMap map;
   aura::Window* parent = GetTarget()->parent();
   const std::vector<aura::Window*>& windows(parent->children());
-  map[std::find(windows.begin(), windows.end(), GetTarget()) -
-      windows.begin()] = GetTarget();
+  map[base::ranges::find(windows, GetTarget()) - windows.begin()] = GetTarget();
   for (auto i = attached_windows_.begin(); i != attached_windows_.end(); ++i) {
     if ((*i)->parent() != parent)
       return;
-    size_t index =
-        std::find(windows.begin(), windows.end(), *i) - windows.begin();
+    size_t index = base::ranges::find(windows, *i) - windows.begin();
     map[index] = *i;
   }
 

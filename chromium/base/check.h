@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,7 +88,7 @@ class BASE_EXPORT CheckError {
   // Stream for adding optional details to the error message.
   std::ostream& stream();
 
-  NOMERGE ~CheckError();
+  NOMERGE NOT_TAIL_CALLED ~CheckError();
 
   CheckError(const CheckError&) = delete;
   CheckError& operator=(const CheckError&) = delete;
@@ -98,6 +98,10 @@ class BASE_EXPORT CheckError {
 
   LogMessage* const log_message_;
 };
+
+#define CHECK_FUNCTION_IMPL(check_function, condition)                       \
+  LAZY_CHECK_STREAM(check_function(__FILE__, __LINE__, #condition).stream(), \
+                    !ANALYZER_ASSUME_TRUE(condition))
 
 #if defined(OFFICIAL_BUILD) && defined(NDEBUG) && \
     !BUILDFLAG(DCHECK_IS_CONFIGURABLE)
@@ -119,31 +123,22 @@ class BASE_EXPORT CheckError {
 
 #else
 
-#define CHECK(condition)                                                     \
-  LAZY_CHECK_STREAM(                                                         \
-      ::logging::CheckError::Check(__FILE__, __LINE__, #condition).stream(), \
-      !ANALYZER_ASSUME_TRUE(condition))
-
 #define CHECK_WILL_STREAM() true
 
-#define PCHECK(condition)                                                     \
-  LAZY_CHECK_STREAM(                                                          \
-      ::logging::CheckError::PCheck(__FILE__, __LINE__, #condition).stream(), \
-      !ANALYZER_ASSUME_TRUE(condition))
+#define CHECK(condition) \
+  CHECK_FUNCTION_IMPL(::logging::CheckError::Check, condition)
+
+#define PCHECK(condition) \
+  CHECK_FUNCTION_IMPL(::logging::CheckError::PCheck, condition)
 
 #endif
 
 #if DCHECK_IS_ON()
 
-#define DCHECK(condition)                                                     \
-  LAZY_CHECK_STREAM(                                                          \
-      ::logging::CheckError::DCheck(__FILE__, __LINE__, #condition).stream(), \
-      !ANALYZER_ASSUME_TRUE(condition))
-
-#define DPCHECK(condition)                                                     \
-  LAZY_CHECK_STREAM(                                                           \
-      ::logging::CheckError::DPCheck(__FILE__, __LINE__, #condition).stream(), \
-      !ANALYZER_ASSUME_TRUE(condition))
+#define DCHECK(condition) \
+  CHECK_FUNCTION_IMPL(::logging::CheckError::DCheck, condition)
+#define DPCHECK(condition) \
+  CHECK_FUNCTION_IMPL(::logging::CheckError::DPCheck, condition)
 
 #else
 

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_serializable_tree.h"
@@ -231,7 +232,7 @@ TEST(AXEventGeneratorTest, ExpandedAndRowCount) {
   initial_state.nodes[2].id = 3;
   initial_state.nodes[2].role = ax::mojom::Role::kRow;
   initial_state.nodes[3].id = 4;
-  initial_state.nodes[3].role = ax::mojom::Role::kPopUpButton;
+  initial_state.nodes[3].role = ax::mojom::Role::kComboBoxSelect;
   initial_state.nodes[3].AddState(ax::mojom::State::kExpanded);
   AXTree tree(initial_state);
 
@@ -312,7 +313,7 @@ TEST(AXEventGeneratorTest, SelectedAndSelectedValueChanged) {
   // </select>
   //
   // kRootWebArea
-  // ++kPopUpButton value="Item 1"
+  // ++kComboBoxSelect value="Item 1"
   // ++++kMenuListPopup invisible
   // ++++++kMenuListOption name="Item 1" selected=true
   // ++++++kMenuListOption name="Item 2" selected=false
@@ -326,7 +327,7 @@ TEST(AXEventGeneratorTest, SelectedAndSelectedValueChanged) {
 
   AXNodeData popup_button;
   popup_button.id = 2;
-  popup_button.role = ax::mojom::Role::kPopUpButton;
+  popup_button.role = ax::mojom::Role::kComboBoxSelect;
   popup_button.SetValue("Item 1");
 
   AXNodeData menu_list_popup;
@@ -3300,6 +3301,26 @@ TEST(AXEventGeneratorTest, InsertUnderIgnoredTest) {
               UnorderedElementsAre(
                   HasEventAtNode(AXEventGenerator::Event::CHILDREN_CHANGED, 1),
                   HasEventAtNode(AXEventGenerator::Event::SUBTREE_CREATED, 5)));
+}
+
+TEST(AXEventGeneratorTest, ParseGeneratedEvent) {
+  AXEventGenerator::Event event = AXEventGenerator::Event::NONE;
+  for (int i = 0; i < static_cast<int>(AXEventGenerator::Event::MAX_VALUE);
+       i++) {
+    const char* val = ToString(static_cast<AXEventGenerator::Event>(i));
+    EXPECT_TRUE(MaybeParseGeneratedEvent(val, &event));
+    EXPECT_EQ(i, static_cast<int>(event));
+  }
+}
+
+TEST(AXEventGenerator, ParsingUnknownEvent) {
+  AXEventGenerator::Event event = AXEventGenerator::Event::CARET_BOUNDS_CHANGED;
+
+  // No crash.
+  EXPECT_FALSE(MaybeParseGeneratedEvent("kittens", &event));
+
+  // Event should not be changed
+  EXPECT_EQ(event, AXEventGenerator::Event::CARET_BOUNDS_CHANGED);
 }
 
 }  // namespace ui

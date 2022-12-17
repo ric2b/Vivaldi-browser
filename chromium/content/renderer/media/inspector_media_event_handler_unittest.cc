@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,8 +80,7 @@ class InspectorMediaEventHandlerTest : public testing::Test {
     event.id = 0;
     event.type = media::MediaLogRecord::Type::kMediaEventTriggered;
     event.time = base::TimeTicks();
-    event.params.SetString("event",
-                           media::MediaLogEventTypeSupport<T>::TypeName());
+    event.params.Set("event", media::MediaLogEventTypeSupport<T>::TypeName());
     return event;
   }
 
@@ -92,7 +91,7 @@ class InspectorMediaEventHandlerTest : public testing::Test {
     event.type = media::MediaLogRecord::Type::kMediaPropertyChange;
     event.time = base::TimeTicks();
     for (auto p : props) {
-      event.params.SetString(std::get<0>(p), std::get<1>(p));
+      event.params.Set(std::get<0>(p), std::get<1>(p));
     }
     return event;
   }
@@ -102,7 +101,7 @@ class InspectorMediaEventHandlerTest : public testing::Test {
     event.id = 0;
     event.type = media::MediaLogRecord::Type::kMessage;
     event.time = base::TimeTicks();
-    event.params.SetString("warning", msg);
+    event.params.Set("warning", msg);
     return event;
   }
 
@@ -111,9 +110,9 @@ class InspectorMediaEventHandlerTest : public testing::Test {
     error.id = 0;
     error.type = media::MediaLogRecord::Type::kMediaStatus;
     error.time = base::TimeTicks();
-    error.params.SetIntPath(media::StatusConstants::kCodeKey, errorcode);
-    error.params.SetStringPath(media::StatusConstants::kGroupKey,
-                               media::PipelineStatus::Traits::Group());
+    error.params.Set(media::StatusConstants::kCodeKey, errorcode);
+    error.params.Set(media::StatusConstants::kGroupKey,
+                     media::PipelineStatus::Traits::Group());
     return error;
   }
 };

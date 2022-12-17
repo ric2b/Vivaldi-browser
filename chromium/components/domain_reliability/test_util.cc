@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,10 +95,10 @@ void MockUploader::UploadReport(
     const std::string& report_json,
     int max_upload_depth,
     const GURL& upload_url,
-    const net::NetworkIsolationKey& network_isolation_key,
+    const net::NetworkAnonymizationKey& network_anonymization_key,
     UploadCallback callback) {
   callback_.Run(report_json, max_upload_depth, upload_url,
-                network_isolation_key, std::move(callback));
+                network_anonymization_key, std::move(callback));
 }
 
 void MockUploader::Shutdown() {}

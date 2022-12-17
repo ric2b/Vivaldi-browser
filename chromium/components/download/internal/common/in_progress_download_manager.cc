@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -236,7 +236,8 @@ void InProgressDownloadManager::OnUrlDownloadStarted(
   StartDownload(std::move(download_create_info), std::move(input_stream),
                 std::move(url_loader_factory_provider),
                 base::BindOnce(&InProgressDownloadManager::CancelUrlDownload,
-                               weak_factory_.GetWeakPtr(), downloader),
+                               weak_factory_.GetWeakPtr(),
+                               base::UnsafeDanglingUntriaged(downloader)),
                 std::move(callback));
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -697,7 +697,7 @@ class TrayAccessibilitySodaTest
     // SodaInstallerImplChromeOS is never created (it's normally created when
     // `ChromeBrowserMainPartsAsh` initializes). Create it here so that
     // calling speech::SodaInstaller::GetInstance() returns a valid instance.
-    std::vector<base::Feature> enabled_features(
+    std::vector<base::test::FeatureRef> enabled_features(
         {ash::features::kOnDeviceSpeechRecognition});
     if (GetParam() == SodaFeature::kLiveCaption)
       enabled_features.push_back(media::kLiveCaptionMultiLanguage);

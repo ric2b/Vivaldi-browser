@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -294,11 +294,10 @@ TEST_F(ManualFillingControllerTest,
       .Times(AnyNumber());
   EXPECT_CALL(*view(), ShowWhenKeyboardIsVisible());
 
-  FocusFieldAndClearExpectations(FocusedFieldType::kFillableUsernameField);
   NotifyPasswordSourceObserver(IsFillingSourceAvailable(true));
+  FocusFieldAndClearExpectations(FocusedFieldType::kFillableUsernameField);
 
-  // TODO(crbug/1242839): Hide the accessory if no fallback is available.
-  EXPECT_CALL(*view(), Hide()).Times(0);
+  EXPECT_CALL(*view(), Hide());
   NotifyPasswordSourceObserver(IsFillingSourceAvailable(false));
 }
 
@@ -315,11 +314,10 @@ TEST_F(ManualFillingControllerTest,
   EXPECT_CALL(*view(), OnItemsAvailable(kTestAddressSheet)).Times(AnyNumber());
   EXPECT_CALL(*view(), ShowWhenKeyboardIsVisible());
 
-  FocusFieldAndClearExpectations(FocusedFieldType::kFillableNonSearchField);
   NotifyAddressSourceObserver(IsFillingSourceAvailable(true));
+  FocusFieldAndClearExpectations(FocusedFieldType::kFillableNonSearchField);
 
-  // TODO(crbug/1242839): Hide the accessory if no fallback is available.
-  EXPECT_CALL(*view(), Hide()).Times(0);
+  EXPECT_CALL(*view(), Hide());
   NotifyAddressSourceObserver(IsFillingSourceAvailable(false));
 }
 
@@ -337,10 +335,10 @@ TEST_F(ManualFillingControllerTest,
       .Times(AnyNumber());
   EXPECT_CALL(*view(), ShowWhenKeyboardIsVisible());
 
-  FocusFieldAndClearExpectations(FocusedFieldType::kFillableNonSearchField);
   NotifyCreditCardSourceObserver(IsFillingSourceAvailable(true));
+  FocusFieldAndClearExpectations(FocusedFieldType::kFillableNonSearchField);
 
-  EXPECT_CALL(*view(), Hide()).Times(0);
+  EXPECT_CALL(*view(), Hide());
   NotifyCreditCardSourceObserver(IsFillingSourceAvailable(false));
 }
 
@@ -366,10 +364,10 @@ TEST_F(ManualFillingControllerTest,
       .Times(AnyNumber());
   EXPECT_CALL(*view(), ShowWhenKeyboardIsVisible());
 
-  FocusFieldAndClearExpectations(FocusedFieldType::kFillableNonSearchField);
   NotifyCreditCardSourceObserver(IsFillingSourceAvailable(true));
+  FocusFieldAndClearExpectations(FocusedFieldType::kFillableNonSearchField);
 
-  EXPECT_CALL(*view(), Hide()).Times(0);
+  EXPECT_CALL(*view(), Hide());
   NotifyCreditCardSourceObserver(IsFillingSourceAvailable(false));
 }
 
@@ -399,8 +397,7 @@ TEST_F(ManualFillingControllerTest, HidesAccessoryWithoutAvailableSources) {
                                          /*has_suggestions=*/false);
   testing::Mock::VerifyAndClearExpectations(view());
 
-  // TODO(crbug/1242839): Hide the accessory if no fallback is available.
-  EXPECT_CALL(*view(), Hide()).Times(0);
+  EXPECT_CALL(*view(), Hide());
   controller()->UpdateSourceAvailability(FillingSource::AUTOFILL,
                                          /*has_suggestions=*/false);
 }
@@ -417,8 +414,10 @@ TEST_F(ManualFillingControllerLegacyTest,
        OnFillingTriggeredFillsAndClosesSheet) {
   const char16_t kTextToFill[] = u"TextToFill";
   const std::u16string text_to_fill(kTextToFill);
-  const autofill::AccessorySheetField field(text_to_fill, text_to_fill, false,
-                                            true);
+  const autofill::AccessorySheetField field(
+      /*display_text=*/text_to_fill, /*text_to_fill=*/text_to_fill,
+      /*a11y_description=*/text_to_fill, /*id=*/"", /*is_obfuscated=*/false,
+      /*selectable=*/true);
 
   EXPECT_CALL(mock_pwd_controller_,
               OnFillingTriggered(autofill::FieldGlobalId(), field));

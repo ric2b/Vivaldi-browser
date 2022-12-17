@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,6 +66,11 @@ class GPU_GLES2_EXPORT GLCommonImageBackingFactory
                               const gles2::FeatureInfo* feature_info,
                               gl::ProgressReporter* progress_reporter);
   ~GLCommonImageBackingFactory() override;
+
+  // WARNING: Format must be single plane.
+  const FormatInfo& GetFormatInfo(viz::SharedImageFormat format) {
+    return format_info_[format.resource_format()];
+  }
 
   bool CanCreateSharedImage(const gfx::Size& size,
                             base::span<const uint8_t> pixel_data,

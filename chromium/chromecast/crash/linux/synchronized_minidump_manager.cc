@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -312,7 +312,7 @@ bool SynchronizedMinidumpManager::ParseFiles() {
   RCHECK(metadata_ptr, false);
   RCHECK(metadata_ptr->is_dict(), false);
   absl::optional<base::Value::Dict> metadata =
-      std::move(metadata_ptr->GetDict());
+      std::move(*metadata_ptr).TakeDict();
   RCHECK(ValidateMetadata(metadata), false);
 
   dumps_ = std::move(dumps);

@@ -306,7 +306,7 @@ String GetTitle(blink::Element* element) {
     // Unfortunately, this must duplicate some logic from SVGElement::title().
     if (svg_element->InUseShadowTree()) {
       String title = GetTitle(svg_element->OwnerShadowHost());
-      if (!title.IsEmpty())
+      if (!title.empty())
         return title;
     }
     // If we aren't an instance in a <use> or the <use> title was not found,
@@ -354,49 +354,63 @@ void AXNodeObject::AlterSliderOrSpinButtonValue(bool increase) {
   if (!ValueForRange(&value))
     return;
 
-  // If no step was provided on the element, use a default value.
-  float step;
-  if (!StepValueForRange(&step)) {
-    if (IsNativeSlider() || IsNativeSpinButton()) {
-      step = StepRange().Step().ToString().ToFloat();
-    } else {
+  if (!RuntimeEnabledFeatures::
+          SynthesizedKeyboardEventsForAccessibilityActionsEnabled()) {
+    // If synthesized keyboard events are disabled, we need to set the value
+    // directly here.
+
+    // If no step was provided on the element, use a default value.
+    float step;
+    if (!StepValueForRange(&step)) {
+      if (IsNativeSlider() || IsNativeSpinButton()) {
+        step = StepRange().Step().ToString().ToFloat();
+      } else {
+        return;
+      }
+    }
+
+    value += increase ? step : -step;
+
+    if (native_role_ == ax::mojom::blink::Role::kSlider ||
+        native_role_ == ax::mojom::blink::Role::kSpinButton) {
+      OnNativeSetValueAction(String::Number(value));
+      // Dispatching an event could result in changes to the document, like
+      // this AXObject becoming detached.
+      if (IsDetached())
+        return;
+
+      AXObjectCache().HandleValueChanged(GetNode());
       return;
     }
   }
 
-  value += increase ? step : -step;
+  // If we have synthesized keyboard events enabled, we generate a keydown
+  // event:
+  // * For a native slider, the dispatch of the event will reach
+  // RangeInputType::HandleKeydownEvent(), where the value will be set and the
+  // AXObjectCache notified. The corresponding keydown/up JS events will be
+  // fired so the website doesn't know it was produced by an AT action.
+  // * For an ARIA slider, the corresponding keydown/up JS events will be
+  // fired. It is expected that the handlers for those events manage the
+  // update of the slider value.
 
-  // If this is a native element, set the value directly.
-  if (native_role_ == ax::mojom::blink::Role::kSlider ||
-      native_role_ == ax::mojom::blink::Role::kSpinButton) {
-    OnNativeSetValueAction(String::Number(value));
-    // Dispatching an event could result in changes to the document, like
-    // this AXObject becoming detached.
-    if (IsDetached())
-      return;
-
-    AXObjectCache().HandleValueChanged(GetNode());
-    return;
-  }
-
-  if (!RuntimeEnabledFeatures::
-          SynthesizedKeyboardEventsForAccessibilityActionsEnabled())
-    return;
-
-  // Otherwise, fire a keyboard event instead.
   AXAction action =
       increase ? AXAction::kActionIncrement : AXAction::kActionDecrement;
   LocalDOMWindow* local_dom_window = GetDocument()->domWindow();
   AccessibilityOrientation orientation = Orientation();
   ax::mojom::blink::WritingDirection text_direction = GetTextDirection();
 
+  // A kKeyDown event is kRawKeyDown + kChar events. We cannot synthesize it
+  // because the KeyboardEvent constructor will prevent it, to force us to
+  // decide if we must produce both events. In our case, we don't have to
+  // produce a kChar event because we are synthesizing arrow key presses, and
+  // only keys that output characters are expected to produce kChar events.
   KeyboardEvent* keydown =
       CreateKeyboardEvent(local_dom_window, WebInputEvent::Type::kRawKeyDown,
                           action, orientation, text_direction);
   GetNode()->DispatchEvent(*keydown);
 
   // TODO(crbug.com/1099069): add a brief pause between keydown and keyup?
-  // TODO(crbug.com/1099069): fire a "char" event depending on platform?
 
   // The keydown handler may have caused the node to be removed.
   if (!GetNode())
@@ -533,7 +547,7 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
   // Note: this is duplicated from AXLayoutObject because CSS alt text may apply
   // to both Elements and pseudo-elements.
   absl::optional<String> alt_text = GetCSSAltText(GetNode());
-  if (alt_text && !alt_text->IsEmpty())
+  if (alt_text && !alt_text->empty())
     return kIncludeObject;
 
   // Don't ignored legends, because JAWS uses them to determine redundant text.
@@ -637,7 +651,7 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
   // check if there's some kind of accessible name for the element)
   // to decide an element's visibility is not as definitive as
   // previous checks, so this should remain as one of the last.
-  if (HasAriaAttribute() || !GetAttribute(kTitleAttr).IsEmpty())
+  if (HasAriaAttribute() || !GetAttribute(kTitleAttr).empty())
     return kIncludeObject;
 
   if (IsImage() && !IsA<SVGElement>(node)) {
@@ -645,7 +659,7 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
     // A null alt attribute means the attribute is not present. We assume this
     // is a mistake, and expose the image so that it can be repaired.
     // In contrast, alt="" is treated as intentional markup to ignore the image.
-    if (!alt.IsEmpty() || alt.IsNull())
+    if (!alt.empty() || alt.IsNull())
       return kIncludeObject;
     if (ignored_reasons)
       ignored_reasons->push_back(IgnoredReason(kAXEmptyAlt));
@@ -780,7 +794,7 @@ bool AXNodeObject::ComputeAccessibilityIsIgnored(
 // page's banner/contentInfo.
 static HashSet<QualifiedName>& GetLandmarkRolesNotAllowed() {
   DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, landmark_roles_not_allowed, ());
-  if (landmark_roles_not_allowed.IsEmpty()) {
+  if (landmark_roles_not_allowed.empty()) {
     landmark_roles_not_allowed.insert(html_names::kArticleTag);
     landmark_roles_not_allowed.insert(html_names::kAsideTag);
     landmark_roles_not_allowed.insert(html_names::kNavTag);
@@ -1057,7 +1071,7 @@ ax::mojom::blink::Role AXNodeObject::NativeRoleIgnoringAria() const {
     if (select_element->IsMultiple())
       return ax::mojom::blink::Role::kListBox;
     else
-      return ax::mojom::blink::Role::kPopUpButton;
+      return ax::mojom::blink::Role::kComboBoxSelect;
   }
 
   if (auto* option = DynamicTo<HTMLOptionElement>(*GetNode())) {
@@ -1843,7 +1857,7 @@ AccessibilityExpanded AXNodeObject::IsExpanded() const {
     }
   }
 
-  if (RoleValue() == ax::mojom::blink::Role::kPopUpButton &&
+  if (RoleValue() == ax::mojom::blink::Role::kComboBoxSelect &&
       IsA<HTMLSelectElement>(*element)) {
     return To<HTMLSelectElement>(element)->PopupIsVisible()
                ? kExpandedExpanded
@@ -2614,7 +2628,7 @@ ax::mojom::blink::AriaCurrentState AXNodeObject::GetAriaCurrentState() const {
       GetAOMPropertyOrARIAAttribute(AOMStringProperty::kCurrent);
   if (attribute_value.IsNull())
     return ax::mojom::blink::AriaCurrentState::kNone;
-  if (attribute_value.IsEmpty() ||
+  if (attribute_value.empty() ||
       EqualIgnoringASCIICase(attribute_value, "false"))
     return ax::mojom::blink::AriaCurrentState::kFalse;
   if (EqualIgnoringASCIICase(attribute_value, "true"))
@@ -2630,7 +2644,7 @@ ax::mojom::blink::AriaCurrentState AXNodeObject::GetAriaCurrentState() const {
   if (EqualIgnoringASCIICase(attribute_value, "time"))
     return ax::mojom::blink::AriaCurrentState::kTime;
   // An unknown value should return true.
-  if (!attribute_value.IsEmpty())
+  if (!attribute_value.empty())
     return ax::mojom::blink::AriaCurrentState::kTrue;
 
   return AXObject::GetAriaCurrentState();
@@ -2656,7 +2670,7 @@ ax::mojom::blink::InvalidState AXNodeObject::GetInvalidState() const {
                : ax::mojom::blink::InvalidState::kNone;
   }
   // Any other non-empty value is considered true.
-  if (!attribute_value.IsEmpty()) {
+  if (!attribute_value.empty()) {
     return ax::mojom::blink::InvalidState::kTrue;
   }
 
@@ -2694,7 +2708,7 @@ bool AXNodeObject::IsValidFormControl(ListedElement* form_control) const {
 }
 
 int AXNodeObject::PosInSet() const {
-  if (RoleValue() == ax::mojom::blink::Role::kPopUpButton && GetNode() &&
+  if (RoleValue() == ax::mojom::blink::Role::kComboBoxSelect && GetNode() &&
       !AXObjectCache().UseAXMenuList()) {
     if (auto* select_element = DynamicTo<HTMLSelectElement>(*GetNode()))
       return 1 + select_element->selectedIndex();
@@ -2709,7 +2723,7 @@ int AXNodeObject::PosInSet() const {
 }
 
 int AXNodeObject::SetSize() const {
-  if (RoleValue() == ax::mojom::blink::Role::kPopUpButton && GetNode() &&
+  if (RoleValue() == ax::mojom::blink::Role::kComboBoxSelect && GetNode() &&
       !AXObjectCache().UseAXMenuList()) {
     if (auto* select_element = DynamicTo<HTMLSelectElement>(*GetNode()))
       return static_cast<int>(select_element->length());
@@ -2882,7 +2896,7 @@ KURL AXNodeObject::Url() const {
     String source_url = html_image_element->ImageSourceURL();
     String stripped_image_source_url =
         StripLeadingAndTrailingHTMLSpaces(source_url);
-    if (!stripped_image_source_url.IsEmpty())
+    if (!stripped_image_source_url.empty())
       return GetDocument()->CompleteURL(stripped_image_source_url);
   }
 
@@ -3079,7 +3093,7 @@ void AXNodeObject::Dropeffects(
   TokenVectorFromAttribute(GetElement(), str_dropeffects,
                            html_names::kAriaDropeffectAttr);
 
-  if (str_dropeffects.IsEmpty()) {
+  if (str_dropeffects.empty()) {
     dropeffects.push_back(ax::mojom::blink::Dropeffect::kNone);
     return;
   }
@@ -3230,14 +3244,7 @@ bool AXNodeObject::OnNativeSetValueAction(const String& string) {
   }
 
   if (HasContentEditableAttributeSet()) {
-    ExceptionState exception_state(v8::Isolate::GetCurrent(),
-                                   ExceptionState::kUnknownContext, nullptr,
-                                   nullptr);
-    To<HTMLElement>(GetNode())->setInnerText(string, exception_state);
-    if (exception_state.HadException()) {
-      exception_state.ClearException();
-      return false;
-    }
+    To<HTMLElement>(GetNode())->setInnerText(string);
     return true;
   }
 
@@ -3257,7 +3264,7 @@ String AXNodeObject::GetName(ax::mojom::blink::NameFrom& name_from,
     // the name of the <input> element.
     name_objects->clear();
     String input_name = DatetimeAncestor()->GetName(name_from, name_objects);
-    if (!input_name.IsEmpty())
+    if (!input_name.empty())
       return name + " " + input_name;
   }
 
@@ -3321,7 +3328,7 @@ String AXNodeObject::TextAlternative(
       NativeTextAlternative(visited, name_from, related_objects, name_sources,
                             &found_text_alternative);
   const bool has_text_alternative =
-      !text_alternative.IsEmpty() ||
+      !text_alternative.empty() ||
       name_from == ax::mojom::blink::NameFrom::kAttributeExplicitlyEmpty;
   if (has_text_alternative && !name_sources)
     return text_alternative;
@@ -3345,7 +3352,7 @@ String AXNodeObject::TextAlternative(
             TextFromDescendants(visited, aria_label_or_description_root, false);
       }
 
-      if (!text_alternative.IsEmpty()) {
+      if (!text_alternative.empty()) {
         if (name_sources) {
           found_text_alternative = true;
           name_sources->back().text = text_alternative;
@@ -3363,7 +3370,7 @@ String AXNodeObject::TextAlternative(
     name_sources->back().type = name_from;
   }
   const AtomicString& title = GetAttribute(kTitleAttr);
-  if (!title.IsEmpty()) {
+  if (!title.empty()) {
     text_alternative = title;
     name_from = ax::mojom::blink::NameFrom::kTitle;
     if (name_sources) {
@@ -3380,7 +3387,7 @@ String AXNodeObject::TextAlternative(
     for (NameSource& name_source : *name_sources) {
       if (!name_source.text.IsNull() && !name_source.superseded) {
         name_from = name_source.type;
-        if (!name_source.related_objects.IsEmpty())
+        if (!name_source.related_objects.empty())
           *related_objects = name_source.related_objects;
         return name_source.text;
       }
@@ -3516,7 +3523,7 @@ String AXNodeObject::TextFromDescendants(
                                         visited, child_name_from);
     }
 
-    if (!result.IsEmpty() && previous && accumulated_text.length() &&
+    if (!result.empty() && previous && accumulated_text.length() &&
         !IsHTMLSpace(accumulated_text[accumulated_text.length() - 1]) &&
         !IsHTMLSpace(result[0])) {
       if (ShouldInsertSpaceBetweenObjectsIfNeeded(
@@ -3538,7 +3545,7 @@ String AXNodeObject::TextFromDescendants(
     // Example: Three spans, the first with an aria-label, the second with no
     // content, and the third whose name comes from content. There should be a
     // space between the first and third because of the aria-label in the first.
-    if (!result.IsEmpty())
+    if (!result.empty())
       last_used_name_from = child_name_from;
   }
 
@@ -3804,7 +3811,7 @@ int AXNodeObject::TextOffsetInFormattingContext(int offset) const {
   // compute offset mappings for empty LayoutText objects. Other text objects
   // (such as some list markers) are not affected.
   if (const LayoutText* layout_text = DynamicTo<LayoutText>(layout_obj)) {
-    if (layout_text->GetText().IsEmpty())
+    if (layout_text->GetText().empty())
       return AXObject::TextOffsetInFormattingContext(offset);
   }
 
@@ -3842,7 +3849,7 @@ void AXNodeObject::LoadInlineTextBoxes() {
       continue;
 
     if (ui::CanHaveInlineTextBoxChildren(work_obj->RoleValue())) {
-      if (work_obj->CachedChildrenIncludingIgnored().IsEmpty()) {
+      if (work_obj->CachedChildrenIncludingIgnored().empty()) {
         // We only need to add inline textbox children if they aren't present.
         // Although some platforms (e.g. Android), load inline text boxes
         // on subtrees that may later be stale, once they are stale, the old
@@ -3923,7 +3930,7 @@ void AXNodeObject::AddImageMapChildren() {
   DCHECK(curr_image_element);
   DCHECK(curr_image_element->IsLink());
   String usemap = curr_image_element->FastGetAttribute(html_names::kUsemapAttr);
-  DCHECK(!usemap.IsEmpty());
+  DCHECK(!usemap.empty());
 
   // Even though several images can point to the same map via usemap, only
   // use one reported via HTMLImageMapElement::ImageElement(), which is always
@@ -4178,7 +4185,7 @@ void AXNodeObject::AddChildren() {
   // childrenChanged should have been called, which leads to children_dirty_
   // being true, then UpdateChildrenIfNecessary() clears the children before
   // calling AddChildren().
-  DCHECK(children_.IsEmpty())
+  DCHECK(children_.empty())
       << "\nParent still has " << children_.size() << " children before adding:"
       << "\nParent is " << ToString(true, true) << "\nFirst child is "
       << children_[0]->ToString(true, true);
@@ -4416,6 +4423,7 @@ bool AXNodeObject::CanHaveChildren() const {
     case ax::mojom::blink::Role::kSwitch:
     case ax::mojom::blink::Role::kTab:
       return false;
+    case ax::mojom::blink::Role::kComboBoxSelect:
     case ax::mojom::blink::Role::kPopUpButton:
     case ax::mojom::blink::Role::kLineBreak:
     case ax::mojom::blink::Role::kStaticText:
@@ -4538,7 +4546,7 @@ AtomicString AXNodeObject::Language() const {
     AtomicString lang = document_element->ComputeInheritedLanguage();
     Vector<String> languages;
     String(lang).Split(',', languages);
-    if (!languages.IsEmpty())
+    if (!languages.empty())
       return AtomicString(languages[0].StripWhiteSpace());
   }
 
@@ -4898,7 +4906,7 @@ String AXNodeObject::NativeTextAlternative(
            ++label_index) {
         Element* label = labels->item(label_index);
         if (name_sources) {
-          if (!label->FastGetAttribute(html_names::kForAttr).IsEmpty() &&
+          if (!label->FastGetAttribute(html_names::kForAttr).empty() &&
               label->FastGetAttribute(html_names::kForAttr) ==
                   html_element->GetIdAttribute()) {
             name_sources->back().native_source = kAXTextFromNativeHTMLLabelFor;
@@ -4977,7 +4985,7 @@ String AXNodeObject::NativeTextAlternative(
       input_element->getAttribute(kTypeAttr) == input_type_names::kImage) {
     // alt attr
     const AtomicString& alt = input_element->getAttribute(kAltAttr);
-    const bool is_empty = alt.IsEmpty() && !alt.IsNull();
+    const bool is_empty = alt.empty() && !alt.IsNull();
     name_from = is_empty ? ax::mojom::blink::NameFrom::kAttributeExplicitlyEmpty
                          : ax::mojom::blink::NameFrom::kAttribute;
     if (name_sources) {
@@ -5060,7 +5068,7 @@ String AXNodeObject::NativeTextAlternative(
       source.type = name_from;
     }
     const String placeholder = PlaceholderFromNativeAttribute();
-    if (!placeholder.IsEmpty()) {
+    if (!placeholder.empty()) {
       text_alternative = placeholder;
       if (name_sources) {
         NameSource& source = name_sources->back();
@@ -5083,7 +5091,7 @@ String AXNodeObject::NativeTextAlternative(
 
     String displayed_file_path = GetValueForControl();
     String upload_button_text = input_element->UploadButton()->Value();
-    if (!displayed_file_path.IsEmpty()) {
+    if (!displayed_file_path.empty()) {
       text_alternative = displayed_file_path + ", " + upload_button_text;
     } else {
       text_alternative = upload_button_text;
@@ -5110,7 +5118,7 @@ String AXNodeObject::NativeTextAlternative(
     }
     const AtomicString& aria_placeholder =
         GetAOMPropertyOrARIAAttribute(AOMStringProperty::kPlaceholder);
-    if (!aria_placeholder.IsEmpty()) {
+    if (!aria_placeholder.empty()) {
       text_alternative = aria_placeholder;
       if (name_sources) {
         NameSource& source = name_sources->back();
@@ -5130,7 +5138,7 @@ String AXNodeObject::NativeTextAlternative(
       (GetLayoutObject() && GetLayoutObject()->IsSVGImage())) {
     // alt
     const AtomicString& alt = GetAttribute(kAltAttr);
-    const bool is_empty = alt.IsEmpty() && !alt.IsNull();
+    const bool is_empty = alt.empty() && !alt.IsNull();
     name_from = is_empty ? ax::mojom::blink::NameFrom::kAttributeExplicitlyEmpty
                          : ax::mojom::blink::NameFrom::kAttribute;
     if (name_sources) {
@@ -5231,7 +5239,7 @@ String AXNodeObject::NativeTextAlternative(
       // agents must expose their values. Therefore until we hear otherwise,
       // just use the inner text. See https://github.com/w3c/svgwg/issues/867
       text_alternative = title->GetInnerTextWithoutUpdate();
-      if (!text_alternative.IsEmpty()) {
+      if (!text_alternative.empty()) {
         if (name_sources) {
           NameSource& source = name_sources->back();
           source.text = text_alternative;
@@ -5255,7 +5263,7 @@ String AXNodeObject::NativeTextAlternative(
       const AtomicString& title_attr =
           DynamicTo<Element>(GetNode())->FastGetAttribute(
               xlink_names::kTitleAttr);
-      if (!title_attr.IsEmpty()) {
+      if (!title_attr.empty()) {
         text_alternative = title_attr;
         if (name_sources) {
           NameSource& source = name_sources->back();
@@ -5320,7 +5328,7 @@ String AXNodeObject::NativeTextAlternative(
         const AtomicString& aria_label =
             AccessibleNode::GetPropertyOrARIAAttribute(
                 document_element, AOMStringProperty::kLabel);
-        if (!aria_label.IsEmpty()) {
+        if (!aria_label.empty()) {
           text_alternative = aria_label;
 
           if (name_sources) {
@@ -5336,7 +5344,7 @@ String AXNodeObject::NativeTextAlternative(
 
       text_alternative = document->title();
       bool is_empty_title_element =
-          text_alternative.IsEmpty() && document->TitleElement();
+          text_alternative.empty() && document->TitleElement();
       if (is_empty_title_element)
         name_from = ax::mojom::blink::NameFrom::kAttributeExplicitlyEmpty;
       else
@@ -5371,7 +5379,7 @@ String AXNodeObject::Description(
       description_objects->push_back(related_object->object);
   }
 
-  result = CollapseWhitespace(result);
+  result = result.SimplifyWhiteSpace(IsHTMLSpace<UChar>);
 
   if (RoleValue() == ax::mojom::blink::Role::kSpinButton &&
       DatetimeAncestor()) {
@@ -5384,9 +5392,9 @@ String AXNodeObject::Description(
       description_objects->clear();
     String ancestor_description = DatetimeAncestor()->Description(
         datetime_ancestor_name_from, description_from, description_objects);
-    if (!result.IsEmpty() && !ancestor_description.IsEmpty())
+    if (!result.empty() && !ancestor_description.empty())
       return result + " " + ancestor_description;
-    if (!ancestor_description.IsEmpty())
+    if (!ancestor_description.empty())
       return ancestor_description;
   }
 
@@ -5600,7 +5608,7 @@ String AXNodeObject::Description(
     AXObjectSet visited;
     description = TextFromDescendants(visited, nullptr, false);
 
-    if (!description.IsEmpty()) {
+    if (!description.empty()) {
       if (description_sources) {
         found_description = true;
         description_sources->back().text = description;
@@ -5619,7 +5627,7 @@ String AXNodeObject::Description(
       description_sources->back().type = description_from;
     }
     const AtomicString& title = GetAttribute(kTitleAttr);
-    if (!title.IsEmpty()) {
+    if (!title.empty()) {
       description = title;
       if (description_sources) {
         found_description = true;
@@ -5674,7 +5682,7 @@ String AXNodeObject::Description(
     for (DescriptionSource& description_source : *description_sources) {
       if (!description_source.text.IsNull() && !description_source.superseded) {
         description_from = description_source.type;
-        if (!description_source.related_objects.IsEmpty())
+        if (!description_source.related_objects.empty())
           *related_objects = description_source.related_objects;
         return description_source.text;
       }
@@ -5712,7 +5720,7 @@ String AXNodeObject::SVGDescription(
     // agents must expose their values. Therefore until we hear otherwise, just
     // use the inner text. See https://github.com/w3c/svgwg/issues/867
     description = desc->GetInnerTextWithoutUpdate();
-    if (!description.IsEmpty()) {
+    if (!description.empty()) {
       if (description_sources) {
         DescriptionSource& source = description_sources->back();
         source.related_objects = *related_objects;
@@ -5746,7 +5754,7 @@ String AXNodeObject::SVGDescription(
       // agents must expose their values. Therefore until we hear otherwise,
       // just use the inner text. See https://github.com/w3c/svgwg/issues/867
       description = title->GetInnerTextWithoutUpdate();
-      if (!description.IsEmpty()) {
+      if (!description.empty()) {
         if (description_sources) {
           DescriptionSource& source = description_sources->back();
           source.related_objects = *related_objects;
@@ -5767,7 +5775,7 @@ String AXNodeObject::SVGDescription(
     const AtomicString& title_attr =
         DynamicTo<Element>(GetNode())->FastGetAttribute(
             xlink_names::kTitleAttr);
-    if (!title_attr.IsEmpty()) {
+    if (!title_attr.empty()) {
       description = title_attr;
       if (description_sources) {
         found_description = true;
@@ -5789,12 +5797,12 @@ String AXNodeObject::Placeholder(ax::mojom::blink::NameFrom name_from) const {
     return String();
 
   String native_placeholder = PlaceholderFromNativeAttribute();
-  if (!native_placeholder.IsEmpty())
+  if (!native_placeholder.empty())
     return native_placeholder;
 
   const AtomicString& aria_placeholder =
       GetAOMPropertyOrARIAAttribute(AOMStringProperty::kPlaceholder);
-  if (!aria_placeholder.IsEmpty())
+  if (!aria_placeholder.empty())
     return aria_placeholder;
 
   return String();
@@ -5853,12 +5861,9 @@ bool AXNodeObject::UseNameFromSelectedOption() const {
     // Step 2E from: http://www.w3.org/TR/accname-aam-1.1
     case ax::mojom::blink::Role::kComboBoxGrouping:
     case ax::mojom::blink::Role::kComboBoxMenuButton:
+    case ax::mojom::blink::Role::kComboBoxSelect:
     case ax::mojom::blink::Role::kListBox:
       return true;
-    // This can be either a button widget with a non-false value of
-    // aria-haspopup or a select element with size of 1.
-    case ax::mojom::blink::Role::kPopUpButton:
-      return DynamicTo<HTMLSelectElement>(*GetNode());
     default:
       return false;
   }

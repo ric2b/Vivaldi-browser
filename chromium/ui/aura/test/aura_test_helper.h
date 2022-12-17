@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,6 +26,7 @@ class WindowTreeHost;
 
 namespace client {
 class CaptureClient;
+class CursorShapeClient;
 class DefaultCaptureClient;
 class FocusClient;
 class ScreenPositionClient;
@@ -90,6 +91,7 @@ class AuraTestHelper {
   std::unique_ptr<client::DefaultCaptureClient> capture_client_;
   std::unique_ptr<TestWindowParentingClient> parenting_client_;
   std::unique_ptr<client::ScreenPositionClient> screen_position_client_;
+  std::unique_ptr<client::CursorShapeClient> cursor_shape_client_;
 };
 
 }  // namespace test

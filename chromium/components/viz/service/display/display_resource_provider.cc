@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,7 +66,7 @@ bool DisplayResourceProvider::OnMemoryDump(
     if (resource.transferable.is_software)
       backing_memory_allocated = !!resource.shared_bitmap;
     else
-      backing_memory_allocated = resource.gl_id != 0 || resource.image_context;
+      backing_memory_allocated = !!resource.image_context;
 
     if (!backing_memory_allocated) {
       // Don't log unallocated resources - they have no backing memory.
@@ -84,8 +84,11 @@ bool DisplayResourceProvider::OnMemoryDump(
     // Texture resources may not come with a size, in which case don't report
     // one.
     if (!resource.transferable.size.IsEmpty()) {
+      // TODO (hitawala): Update size check to use multiplanar
+      // SharedImageFormat.
       uint64_t total_bytes = ResourceSizes::UncheckedSizeInBytesAligned<size_t>(
-          resource.transferable.size, resource.transferable.format);
+          resource.transferable.size,
+          resource.transferable.format.resource_format());
       dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                       base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                       static_cast<uint64_t>(total_bytes));
@@ -114,6 +117,10 @@ bool DisplayResourceProvider::OnMemoryDump(
   }
 
   return true;
+}
+
+base::WeakPtr<DisplayResourceProvider> DisplayResourceProvider::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -165,12 +172,19 @@ gfx::BufferFormat DisplayResourceProvider::GetBufferFormat(ResourceId id) {
 
 ResourceFormat DisplayResourceProvider::GetResourceFormat(ResourceId id) {
   ChildResource* resource = GetResource(id);
-  return resource->transferable.format;
+  return resource->transferable.format.resource_format();
 }
 
-const gfx::ColorSpace& DisplayResourceProvider::GetColorSpace(ResourceId id) {
+const gfx::ColorSpace& DisplayResourceProvider::GetOverlayColorSpace(
+    ResourceId id) {
   ChildResource* resource = GetResource(id);
   return resource->transferable.color_space;
+}
+
+gfx::ColorSpace DisplayResourceProvider::GetSamplerColorSpace(ResourceId id) {
+  ChildResource* resource = GetResource(id);
+  return resource->transferable.color_space_when_sampled.value_or(
+      resource->transferable.color_space);
 }
 
 const absl::optional<gfx::HDRMetadata>& DisplayResourceProvider::GetHDRMetadata(
@@ -230,7 +244,7 @@ void DisplayResourceProvider::ReceiveFromChild(
 
     ResourceId local_id = resource_id_generator_.GenerateNextId();
     DCHECK(!transferable_resource.is_software ||
-           IsBitmapFormatSupported(transferable_resource.format));
+           transferable_resource.format.IsBitmapFormatSupported());
     resources_.emplace(local_id,
                        ChildResource(child_id, transferable_resource));
     child_info.child_to_parent_map[transferable_resource.id] = local_id;
@@ -297,6 +311,19 @@ DisplayResourceProvider::ChildResource* DisplayResourceProvider::TryGetResource(
   if (it == resources_.end())
     return nullptr;
   return &it->second;
+}
+
+void DisplayResourceProvider::OnResourceFencePassed(
+    ResourceFence* resource_fence,
+    base::flat_set<ResourceId> resources) {
+  for (auto local_id : resources) {
+    auto it = resources_.find(local_id);
+    if (it == resources_.end() ||
+        resource_fence != it->second.resource_fence.get()) {
+      continue;
+    }
+    TryReleaseResource(local_id, &it->second);
+  }
 }
 
 void DisplayResourceProvider::TryReleaseResource(ResourceId id,
@@ -483,10 +510,10 @@ void DisplayResourceProvider::ScopedReadLockSharedImage::Reset() {
     return;
   DCHECK(resource_->lock_for_overlay_count);
   resource_->lock_for_overlay_count--;
-  resource_provider_->TryReleaseResource(resource_id_, resource_);
+  resource_provider_->TryReleaseResource(resource_id_,
+                                         resource_.ExtractAsDangling());
   resource_provider_ = nullptr;
   resource_id_ = kInvalidResourceId;
-  resource_ = nullptr;
 }
 
 DisplayResourceProvider::ScopedBatchReturnResources::ScopedBatchReturnResources(
@@ -516,33 +543,19 @@ DisplayResourceProvider::Child::~Child() = default;
 DisplayResourceProvider::ChildResource::ChildResource(
     int child_id,
     const TransferableResource& transferable)
-    : child_id(child_id), transferable(transferable), filter(GL_NONE) {
+    : child_id(child_id), transferable(transferable) {
   if (is_gpu_resource_type())
     UpdateSyncToken(transferable.mailbox_holder.sync_token);
-  else
-    SetSynchronized();
 }
 
 DisplayResourceProvider::ChildResource::ChildResource(ChildResource&& other) =
     default;
 DisplayResourceProvider::ChildResource::~ChildResource() = default;
 
-void DisplayResourceProvider::ChildResource::SetLocallyUsed() {
-  synchronization_state_ = LOCALLY_USED;
-  sync_token_.Clear();
-}
-
-void DisplayResourceProvider::ChildResource::SetSynchronized() {
-  synchronization_state_ = SYNCHRONIZED;
-}
-
 void DisplayResourceProvider::ChildResource::UpdateSyncToken(
     const gpu::SyncToken& sync_token) {
   DCHECK(is_gpu_resource_type());
-  // An empty sync token may be used if commands are guaranteed to have run on
-  // the gpu process or in case of context loss.
   sync_token_ = sync_token;
-  synchronization_state_ = sync_token.HasData() ? NEEDS_WAIT : SYNCHRONIZED;
 }
 
 }  // namespace viz

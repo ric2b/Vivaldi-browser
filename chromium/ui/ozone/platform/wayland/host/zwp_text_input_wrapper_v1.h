@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include <text-input-unstable-v1-client-protocol.h>
 
 #include "base/memory/raw_ptr.h"
+#include "base/timer/timer.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
 #include "ui/ozone/platform/wayland/host/zwp_text_input_wrapper.h"
 
@@ -57,6 +58,9 @@ class ZWPTextInputWrapperV1 : public ZWPTextInputWrapper {
 
  private:
   void ResetInputEventState();
+  void TryScheduleFinalizeVirtualKeyboardChanges();
+  void FinalizeVirtualKeyboardChanges();
+  bool SupportsFinalizeVirtualKeyboardChanges();
 
   // zwp_text_input_v1_listener
   static void OnEnter(void* data,
@@ -147,6 +151,9 @@ class ZWPTextInputWrapperV1 : public ZWPTextInputWrapper {
 
   std::vector<ZWPTextInputWrapperClient::SpanStyle> spans_;
   int32_t preedit_cursor_ = -1;
+
+  // Timer for sending the finalize_virtual_keyboard_changes request.
+  base::OneShotTimer send_vk_finalize_timer_;
 };
 
 }  // namespace ui

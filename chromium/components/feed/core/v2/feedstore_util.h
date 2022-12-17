@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,11 +20,11 @@ class ConsistencyToken;
 namespace feedstore {
 class Metadata;
 
-constexpr base::StringPiece kForYouStreamId{"i"};
-constexpr base::StringPiece kFollowStreamId{"w"};
+const char kForYouStreamKey[] = "i";
+const char kFollowStreamKey[] = "w";
 
-base::StringPiece StreamId(const feed::StreamType& stream_type);
-feed::StreamType StreamTypeFromId(base::StringPiece id);
+std::string StreamKey(const feed::StreamType& stream_type);
+feed::StreamType StreamTypeFromKey(std::string key);
 
 ///////////////////////////////////////////////////
 // Functions that operate on feedstore proto types.

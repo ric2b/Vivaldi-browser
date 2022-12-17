@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,8 +53,8 @@ TEST(JsonSchemaCompilerFunctionsOnTypesTest, StorageAreaGetParamsCreate) {
 
 TEST(JsonSchemaCompilerFunctionsOnTypesTest, StorageAreaGetResultCreate) {
   functions_on_types::StorageArea::Get::Results::Items items;
-  items.additional_properties.GetDict().Set("asdf", 0.1);
-  items.additional_properties.SetString("sdfg", "zxcv");
+  items.additional_properties.Set("asdf", 0.1);
+  items.additional_properties.Set("sdfg", "zxcv");
   base::Value results(
       functions_on_types::StorageArea::Get::Results::Create(items));
   ASSERT_TRUE(results.is_list());

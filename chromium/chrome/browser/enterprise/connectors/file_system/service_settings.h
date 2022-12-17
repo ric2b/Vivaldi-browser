@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,12 +19,12 @@
 namespace enterprise_connectors {
 
 // Experimental flag to enable or disable the file system connector.
-extern const base::Feature kFileSystemConnectorEnabled;
+BASE_DECLARE_FEATURE(kFileSystemConnectorEnabled);
 
 // The settings for a report service obtained from a connector policy.
 class FileSystemServiceSettings {
  public:
-  explicit FileSystemServiceSettings(
+  FileSystemServiceSettings(
       const base::Value& settings_value,
       const ServiceProviderConfig& service_provider_config);
   FileSystemServiceSettings(FileSystemServiceSettings&&);

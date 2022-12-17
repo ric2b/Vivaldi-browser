@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/history/core/browser/history_context.h"
+#include "components/history/core/browser/keyword_search_term.h"
 #include "components/history/core/browser/url_row.h"
 #include "components/query_parser/query_parser.h"
 #include "components/query_parser/snippet.h"
@@ -150,6 +151,11 @@ class VisitRow {
   // "originator_from_visit" column in the visit DB.
   VisitID originator_referring_visit = kInvalidVisitID;
   VisitID originator_opener_visit = kInvalidVisitID;
+
+  // Set to true for visits known to Chrome Sync, which can be:
+  //  1. Remote visits that have been synced to the local machine.
+  //  2. Local visits that have been sent to Sync.
+  bool is_known_to_sync = false;
 
   // We allow the implicit copy constructor and operator=.
 };
@@ -426,8 +432,10 @@ struct Opener {
 
 // TopSites -------------------------------------------------------------------
 
-typedef std::vector<MostVisitedURL> MostVisitedURLList;
-typedef std::vector<FilteredURL> FilteredURLList;
+using MostVisitedURLList = std::vector<MostVisitedURL>;
+using KeywordSearchTermVisitList =
+    std::vector<std::unique_ptr<KeywordSearchTermVisit>>;
+using FilteredURLList = std::vector<FilteredURL>;
 
 struct MostVisitedURLWithRank {
   MostVisitedURL url;
@@ -817,6 +825,19 @@ struct AnnotatedVisit {
   VisitSource source;
 };
 
+// `ClusterVisit` tracks duplicate visits to propagate deletes. Only the
+// duplicate's URL and visit time are needed to delete it, hence doesn't contain
+// all the information contained in e.g. `ClusterVisit`.
+struct DuplicateClusterVisit {
+  VisitID visit_id = 0;
+
+  // Not persisted; derived from visit_id.
+  GURL url = {};
+
+  // Not persisted; derived from visit_id.
+  base::Time visit_time = {};
+};
+
 // An `AnnotatedVisit` associated with some other metadata from clustering.
 struct ClusterVisit {
   ClusterVisit();
@@ -839,9 +860,9 @@ struct ClusterVisit {
 
   // A list of visits that have been de-duplicated into this visit. The parent
   // visit is considered the best visit among all the duplicates, and the worse
-  // visits are now contained here.
-  // TODO(manukh): Persist to db.
-  std::vector<ClusterVisit> duplicate_visits;
+  // visits are now contained here. Used for deletions; when the parent visit is
+  // deleted, the duplicate visits are deleted as well.
+  std::vector<DuplicateClusterVisit> duplicate_visits;
 
   // The site engagement score of the URL associated with this visit. This
   // should not be used by the UI.
@@ -907,6 +928,7 @@ struct ClusterKeywordData {
   ClusterKeywordData& operator=(ClusterKeywordData&&);
   ~ClusterKeywordData();
   bool operator==(const ClusterKeywordData& data) const;
+  std::string ToString() const;
 
   // Updates cluster keyword type if a new type is preferred over the existing
   // type.
@@ -927,6 +949,9 @@ struct ClusterKeywordData {
 
   // Entity collections associated with the keyword this is attached to.
   std::vector<std::string> entity_collections;
+
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const ClusterKeywordData& data);
 };
 
 // A cluster of `ClusterVisit`s with associated metadata (i.e. `keywords` and

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -232,7 +232,7 @@ void HostedAppBrowserController::LoadAppIcon(
                  apps::IconType::kStandard,
                  extension_misc::EXTENSION_ICON_SMALL, allow_placeholder_icon,
                  base::BindOnce(&HostedAppBrowserController::OnLoadIcon,
-                                weak_ptr_factory_.GetWeakPtr()));
+                                weak_ptr_factory_.GetMutableWeakPtr()));
 }
 
 void HostedAppBrowserController::OnLoadIcon(apps::IconValuePtr icon_value) {

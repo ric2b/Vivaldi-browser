@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,12 +59,18 @@ class FrameSender {
       CastTransport* const transport_sender,
       Client& client);
 
+  // NOTE: currently only used by the VideoSender.
+  // TODO(https://crbug.com/1316434): cleanup bitrate calculations when libcast
+  // has successfully launched.
+  using GetSuggestedVideoBitrateCB = base::RepeatingCallback<int()>;
+
   // Method of creating a frame sender using an openscreen::cast::Sender.
   static std::unique_ptr<FrameSender> Create(
       scoped_refptr<CastEnvironment> cast_environment,
       const FrameSenderConfig& config,
-      openscreen::cast::Sender* sender,
-      Client& client);
+      std::unique_ptr<openscreen::cast::Sender> sender,
+      Client& client,
+      GetSuggestedVideoBitrateCB get_bitrate_cb = GetSuggestedVideoBitrateCB());
 
   FrameSender();
   FrameSender(FrameSender&&) = delete;
@@ -85,8 +91,9 @@ class FrameSender {
   // indication event.
   virtual bool NeedsKeyFrame() const = 0;
 
-  // Called by the encoder with the next encoded frame to send.
-  virtual void EnqueueFrame(
+  // Called by the encoder with the next encoded frame to send. Returns true
+  // if successfully enqueued.
+  virtual bool EnqueueFrame(
       std::unique_ptr<SenderEncodedFrame> encoded_frame) = 0;
 
   // Returns true if too many frames would be in-flight by encoding and sending

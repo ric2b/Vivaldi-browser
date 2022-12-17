@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,10 +44,10 @@
                            target:self.infobarModalDelegate
                            action:@selector(dismissInfobarModal:)];
   cancelButton.accessibilityIdentifier = kInfobarModalCancelButton;
-  UIImage* gearImage =
-      UseSymbols()
-          ? DefaultSymbolWithPointSize(kGearShapeSymbol, kSymbolImagePointSize)
-          : [UIImage imageNamed:@"infobar_settings_icon"];
+  UIImage* gearImage = UseSymbols()
+                           ? DefaultSymbolWithPointSize(kSettingsFilledSymbol,
+                                                        kSymbolImagePointSize)
+                           : [UIImage imageNamed:@"infobar_settings_icon"];
   gearImage =
       [gearImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   UIBarButtonItem* settingsButton =

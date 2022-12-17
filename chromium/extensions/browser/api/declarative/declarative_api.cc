@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/values.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -222,7 +221,7 @@ EventsEventAddRulesFunction::RunAsyncOnCorrectThread() {
   base::Value::List rules_value;
   rules_value.reserve(rules_out.size());
   for (const auto* rule : rules_out)
-    rules_value.Append(base::Value::FromUniquePtrValue(rule->ToValue()));
+    rules_value.Append(rule->ToValue());
   return OneArgument(base::Value(std::move(rules_value)));
 }
 
@@ -258,7 +257,7 @@ bool EventsEventRemoveRulesFunction::CreateParams() {
 ExtensionFunction::ResponseValue
 EventsEventRemoveRulesFunction::RunAsyncOnCorrectThread() {
   std::string error;
-  if (params_->rule_identifiers.get()) {
+  if (params_->rule_identifiers) {
     error = rules_registry_->RemoveRules(extension_id(),
                                          *params_->rule_identifiers);
   } else {
@@ -300,7 +299,7 @@ bool EventsEventGetRulesFunction::CreateParams() {
 ExtensionFunction::ResponseValue
 EventsEventGetRulesFunction::RunAsyncOnCorrectThread() {
   std::vector<const Rule*> rules;
-  if (params_->rule_identifiers.get()) {
+  if (params_->rule_identifiers) {
     rules_registry_->GetRules(extension_id(), *params_->rule_identifiers,
                               &rules);
   } else {
@@ -310,7 +309,7 @@ EventsEventGetRulesFunction::RunAsyncOnCorrectThread() {
   base::Value::List rules_value;
   rules_value.reserve(rules.size());
   for (const auto* rule : rules)
-    rules_value.Append(base::Value::FromUniquePtrValue(rule->ToValue()));
+    rules_value.Append(rule->ToValue());
   return OneArgument(base::Value(std::move(rules_value)));
 }
 

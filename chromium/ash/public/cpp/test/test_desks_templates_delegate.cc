@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,17 +50,12 @@ void TestDesksTemplatesDelegate::GetIconForAppId(
     base::OnceCallback<void(const gfx::ImageSkia&)> callback) const {}
 
 void TestDesksTemplatesDelegate::LaunchAppsFromTemplate(
-    std::unique_ptr<DeskTemplate> desk_template,
-    base::Time time_launch_started,
-    base::TimeDelta delay) {}
+    std::unique_ptr<DeskTemplate> desk_template) {}
 
 bool TestDesksTemplatesDelegate::IsWindowSupportedForDeskTemplate(
     aura::Window* window) const {
   return DeskTemplate::IsAppTypeSupported(window);
 }
-
-void TestDesksTemplatesDelegate::OpenFeedbackDialog(
-    const std::string& extra_diagnostics) {}
 
 std::string TestDesksTemplatesDelegate::GetAppShortName(
     const std::string& app_id) {

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,6 +66,14 @@ class CORE_EXPORT CSSSupportsParser {
   Result ConsumeSupportsSelectorFn(const CSSParserToken&,
                                    CSSParserTokenStream&);
 
+  // <supports-font-tech-fn> = font-tech( <font-tech> )
+  Result ConsumeFontTechFn(const CSSParserToken& first_token,
+                           CSSParserTokenStream& stream);
+
+  // <supports-font-format-fn> = font-format( <font-format> )
+  Result ConsumeFontFormatFn(const CSSParserToken& first_token,
+                             CSSParserTokenStream& stream);
+
   // <supports-decl> = ( <declaration> )
   Result ConsumeSupportsDecl(const CSSParserToken&, CSSParserTokenStream&);
 
@@ -78,6 +86,8 @@ class CORE_EXPORT CSSSupportsParser {
                                           const CSSParserToken&);
   static bool IsSupportsSelectorFn(const CSSParserToken&,
                                    const CSSParserToken&);
+  static bool IsFontTechFn(const CSSParserToken&, const CSSParserToken&);
+  static bool IsFontFormatFn(const CSSParserToken&, const CSSParserToken&);
   static bool IsSupportsDecl(const CSSParserToken&, const CSSParserToken&);
   static bool IsSupportsFeature(const CSSParserToken&, const CSSParserToken&);
   static bool IsGeneralEnclosed(const CSSParserToken&);

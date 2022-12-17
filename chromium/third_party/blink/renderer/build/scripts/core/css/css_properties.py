@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -59,10 +59,10 @@ def validate_property(prop, longhands):
                 ][0]
                 assert subprop['supports_incremental_style'], \
                     '%s must be incrementally applicable when its shorthand %s is' % (subprop_name, name)
-    assert not prop['valid_for_canvas_formatted_text'] or prop['is_longhand'], \
-        'Only longhands can be valid_for_canvas_formatted_text [%s]' % name
-    assert not prop['valid_for_canvas_formatted_text_run'] or prop['is_longhand'], \
-        'Only longhands can be valid_for_canvas_formatted_text_run [%s]' % name
+    assert not prop['valid_for_formatted_text'] or prop['is_longhand'], \
+        'Only longhands can be valid_for_formatted_text [%s]' % name
+    assert not prop['valid_for_formatted_text_run'] or prop['is_longhand'], \
+        'Only longhands can be valid_for_formatted_text_run [%s]' % name
 
 
 def validate_alias(alias):

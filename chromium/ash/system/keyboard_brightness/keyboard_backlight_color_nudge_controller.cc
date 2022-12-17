@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,8 +78,6 @@ void KeyboardBacklightColorNudgeController::MaybeShowEducationNudge(
           IDS_ASH_KEYBOARD_BACKLIGHT_COLOR_EDUCATION_NUDGE_TEXT,
           l10n_util::GetStringUTF16(
               IDS_PERSONALIZATION_APP_PERSONALIZATION_HUB_TITLE)),
-      AshColorProvider::Get()->GetContentLayerColor(
-          AshColorProvider::ContentLayerType::kTextColorPrimary),
       base::BindRepeating(
           &KeyboardBacklightColorNudgeController::CloseEducationNudge,
           weak_factory_.GetWeakPtr()));
@@ -91,7 +89,8 @@ void KeyboardBacklightColorNudgeController::MaybeShowEducationNudge(
   education_nudge_->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
 
   ui::Layer* layer = education_nudge_->layer();
-  layer->SetColor(ShelfConfig::Get()->GetDefaultShelfColor());
+  layer->SetColor(
+      ShelfConfig::Get()->GetDefaultShelfColor(education_nudge_->GetWidget()));
   layer->SetRoundedCornerRadius(
       gfx::RoundedCornersF{static_cast<float>(kBubbleCornerRadius)});
   layer->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);

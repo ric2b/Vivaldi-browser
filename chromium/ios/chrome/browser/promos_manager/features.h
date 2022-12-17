@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,11 +8,17 @@
 #import "base/feature_list.h"
 
 // Feature flag to enable the Fullscreen Promos Manager.
-// For more information, please see here:
-// go/bling-fullscreen-promos-manager-design-doc.
-extern const base::Feature kFullscreenPromosManager;
+BASE_DECLARE_FEATURE(kFullscreenPromosManager);
+
+// Feature flag to enable skipping evaluation of the Fullscreen Promos Manager's
+// internal Impression Limits.
+BASE_DECLARE_FEATURE(kFullscreenPromosManagerSkipInternalLimits);
 
 // Returns true if the Fullscreen Promos Manager is enabled.
 bool IsFullscreenPromosManagerEnabled();
+
+// Returns true if the Fullscreen Promos Manager should skip evaluation of its
+// internal Impression Limits when deciding whether or not to display a promo.
+bool IsSkippingInternalImpressionLimitsEnabled();
 
 #endif  // IOS_CHROME_BROWSER_PROMOS_MANAGER_FEATURES_H_

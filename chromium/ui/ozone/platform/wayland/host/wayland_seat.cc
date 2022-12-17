@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,8 @@ void WaylandSeat::Instantiate(WaylandConnection* connection,
                               uint32_t name,
                               const std::string& interface,
                               uint32_t version) {
-  DCHECK_EQ(interface, kInterfaceName);
+  CHECK_EQ(interface, kInterfaceName) << "Expected \"" << kInterfaceName
+                                      << "\" but got \"" << interface << "\"";
 
   if (connection->seat_ ||
       !wl::CanBind(interface, version, kMinVersion, kMaxVersion)) {
@@ -132,7 +133,7 @@ void WaylandSeat::OnCapabilities(void* data,
   }
 
   connection_->UpdateInputDevices();
-  connection_->ScheduleFlush();
+  connection_->Flush();
 }
 
 }  // namespace ui

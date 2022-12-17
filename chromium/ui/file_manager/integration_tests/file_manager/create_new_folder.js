@@ -1,11 +1,11 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {RootPath, TestEntryInfo} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
-import {recursiveExpand, remoteCall, setupAndWaitUntilReady} from './background.js';
+import {navigateWithDirectoryTree, recursiveExpand, remoteCall, setupAndWaitUntilReady} from './background.js';
 import {BASIC_DRIVE_ENTRY_SET, BASIC_LOCAL_ENTRY_SET} from './test_data.js';
 
 /**
@@ -144,8 +144,7 @@ testcase.createFolderNestedDownloads = async () => {
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, BASIC_LOCAL_ENTRY_SET, []);
   await recursiveExpand(appId, '/My files/Downloads');
-  await remoteCall.navigateWithDirectoryTree(
-      appId, '/Downloads/photos', 'My files/Downloads');
+  await navigateWithDirectoryTree(appId, '/My files/Downloads/photos');
   await createNewFolder(appId, [], TREEITEM_DOWNLOADS);
 };
 

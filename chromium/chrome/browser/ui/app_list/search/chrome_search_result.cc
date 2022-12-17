@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -77,6 +77,11 @@ void ChromeSearchResult::MaybeUpdateDetailsVector() {
 void ChromeSearchResult::SetTitleTextVector(const TextVector& text_vector) {
   metadata_->title_vector = text_vector;
   explicit_title_vector_ = true;
+  SetSearchResultMetadata();
+}
+
+void ChromeSearchResult::SetMultilineTitle(bool multiline_title) {
+  metadata_->multiline_title = multiline_title;
   SetSearchResultMetadata();
 }
 

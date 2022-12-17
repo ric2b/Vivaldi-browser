@@ -1,10 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
 
 #include <stddef.h>
+
 #include <memory>
 #include <string>
 #include <tuple>
@@ -12,10 +13,13 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/ranges/algorithm.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -39,6 +43,7 @@
 #include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/shared_module_service.h"
+#include "chrome/browser/extensions/site_permissions_helper.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/extensions/webstore_reinstaller.h"
@@ -99,6 +104,8 @@
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "extensions/common/url_pattern.h"
+#include "extensions/common/url_pattern_set.h"
 #include "net/base/filename_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "storage/browser/blob/shareable_file_reference.h"
@@ -156,6 +163,11 @@ base::FilePath* g_drop_path_for_testing = nullptr;
 
 ExtensionService* GetExtensionService(content::BrowserContext* context) {
   return ExtensionSystem::Get(context)->extension_service();
+}
+
+GURL ConvertHostToUrl(const std::string& host) {
+  return GURL(base::StrCat(
+      {url::kHttpScheme, url::kStandardSchemeSeparator, host, "/"}));
 }
 
 std::string ReadFileToString(const base::FilePath& path) {
@@ -234,7 +246,7 @@ developer::LoadError CreateLoadError(
   response.path = base::UTF16ToUTF8(prettified_path.LossyDisplayName());
   response.retry_guid = retry_guid;
 
-  response.source = std::make_unique<developer::ErrorFileSource>();
+  response.source.emplace();
   response.source->before_highlight = highlighter.GetBeforeFeature();
   response.source->highlight = highlighter.GetFeature();
   response.source->after_highlight = highlighter.GetAfterFeature();
@@ -280,99 +292,112 @@ std::string GetETldPlusOne(const GURL& site) {
   std::string etld_plus_one =
       net::registry_controlled_domains::GetDomainAndRegistry(
           site, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-  return etld_plus_one.empty() ? site.spec() : etld_plus_one;
+  return etld_plus_one.empty() ? site.host() : etld_plus_one;
 }
 
-developer::SiteInfo CreateSiteInfo(
-    const std::string& site,
-    absl::optional<developer::UserSiteSet> site_set) {
+developer::SiteInfo CreateSiteInfo(const std::string& site,
+                                   developer::SiteSet site_set,
+                                   size_t num_extensions = 0u) {
   developer::SiteInfo site_info;
   site_info.site = site;
-  if (site_set.has_value())
-    site_info.site_list = *site_set;
-  else
-    site_info.num_extensions = 1;
+  site_info.site_set = site_set;
+  site_info.num_extensions = num_extensions;
   return site_info;
 }
 
-// Adds `site` grouped under `etld_plus_one` into `site_groups`.
+// Adds `site` grouped under `etld_plus_one` into `site_groups`. This function
+// is a no-op if `site` already exists inside the SiteGroup for `etld_plus_one`.
 void AddSiteToSiteGroups(
     std::map<std::string, developer::SiteGroup>* site_groups,
     const std::string& site,
     const std::string& etld_plus_one,
-    absl::optional<developer::UserSiteSet> site_set) {
+    developer::SiteSet site_set) {
   auto [it, inserted] = site_groups->try_emplace(etld_plus_one);
   if (inserted) {
     it->second.etld_plus_one = etld_plus_one;
     it->second.sites.push_back(CreateSiteInfo(site, site_set));
-  } else {
-    auto site_info = std::find_if(
-        it->second.sites.begin(), it->second.sites.end(),
-        [site](const developer::SiteInfo& info) { return info.site == site; });
-
-    if (site_info == it->second.sites.end())
-      it->second.sites.push_back(CreateSiteInfo(site, site_set));
-    else
-      site_info->num_extensions++;
+  } else if (!base::Contains(it->second.sites, site,
+                             &developer::SiteInfo::site)) {
+    it->second.sites.push_back(CreateSiteInfo(site, site_set));
   }
 }
 
-// Adds an extension's granted host permissions to `site_groups`,
+// Adds an extension's granted host permissions in `distinct_hosts` to
+// `site_groups`,
 void ProcessSitesForRuntimeHostPermissions(
     std::map<std::string, developer::SiteGroup>* site_groups,
-    const URLPatternSet& user_specified_sites,
-    const developer::RuntimeHostPermissions& permissions) {
-  // Track the set of eTLD+1s covered by the extension's granted host
-  // permissions.
-  std::set<std::string> etld_plus_ones;
-  for (const auto& host : permissions.hosts) {
-    // Convert the host permission pattern back to a URLPattern so it can
-    // be easily modified for comparing against user specified sites and for
-    // fetching the eTLD+1.
-    URLPattern pattern(Extension::kValidHostPermissionSchemes, host.host);
-    pattern.SetPath("");
-
-    // Ignore patterns that are empty, are not granted, or match with user
-    // specified sites.
-    if (pattern.host().empty() || !host.granted ||
-        user_specified_sites.ContainsPattern(pattern)) {
+    const std::vector<URLPattern>& distinct_hosts) {
+  for (const auto& pattern : distinct_hosts) {
+    // Do not add the pattern if it matches an overly broad set of urls (all
+    // urls under one or all top level domains).
+    if (pattern.match_all_urls() || pattern.host().empty() ||
+        pattern.MatchesEffectiveTld()) {
       continue;
     }
 
-    pattern.SetMatchSubdomains(false);
-    pattern.SetScheme("http");
-
-    std::string etld_plus_one = GetETldPlusOne(GURL(pattern.GetAsString()));
-    etld_plus_ones.insert(etld_plus_one);
-    AddSiteToSiteGroups(site_groups, host.host, etld_plus_one, absl::nullopt);
+    std::string etld_plus_one =
+        GetETldPlusOne(ConvertHostToUrl(pattern.host()));
+    // Process the site if:
+    // 1) It does not match any subdomains, or:
+    // 2) It matches subdomains but the host portion does not equal
+    //    `etld_plus_one`. This treats patterns such as "*.sub.etldplusone.com"
+    //    as just "sub.etldplusone.com" and prevents "*.etldplusone.com" from
+    //    being processed as "etldplusone.com", since such patterns will be
+    //    processed separately.
+    if (!pattern.match_subdomains() || pattern.host() != etld_plus_one) {
+      AddSiteToSiteGroups(site_groups, pattern.host(), etld_plus_one,
+                          developer::SITE_SET_EXTENSION_SPECIFIED);
+    }
   }
-
-  // Increment the extension count for each eTLD+1 covered by this extension's
-  // host permissions.
-  for (const auto& etld_plus_one : etld_plus_ones)
-    (*site_groups)[etld_plus_one].num_extensions++;
 }
 
-// Updates numExtensions counts in `site_groups` for `extension`. Note that this
-// should only be called for extensions with effective all hosts access.
-void UpdateSiteGroupCountsForExtension(
+// Returns the current set of granted host permissions for the extension. Note
+// that permissions that are specified but withheld will not be returned.
+std::unique_ptr<const PermissionSet> GetExtensionGrantedPermissions(
+    content::BrowserContext* context,
+    const scoped_refptr<const Extension>& extension) {
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(context);
+  ScriptingPermissionsModifier permissions_modifier(context, extension);
+  return permissions_modifier.HasWithheldHostPermissions()
+             ? prefs->GetRuntimeGrantedPermissions(extension->id())
+             : prefs->GetGrantedPermissions(extension->id());
+}
+
+// Updates num_extensions counts in `site_groups` for `granted_hosts` from one
+// extension.
+void UpdateSiteGroupCountsForExtensionHosts(
     std::map<std::string, developer::SiteGroup>* site_groups,
-    const Extension* extension) {
-  const URLPatternSet extension_patterns =
-      extension->permissions_data()->GetEffectiveHostPermissions();
+    std::map<std::string, size_t>* match_subdomains_count,
+    const URLPatternSet& granted_hosts) {
   for (auto& entry : *site_groups) {
     bool can_run_on_site_group = false;
+    // For each site under the eTLD+1, increment num_extensions if the extension
+    // can access the site.
     for (developer::SiteInfo& site_info : entry.second.sites) {
-      if (site_info.site_list)
+      // When updating num_extensions counts, only look at extension specified
+      // hosts as num_extensions is not useful for user specified hosts. (i.e.
+      // user permitted sites can be accessed to any extensions that specify the
+      // site in their host permissions, user restricted sites cannot be
+      // accessed by any extensions.)
+      if (site_info.site_set != developer::SITE_SET_EXTENSION_SPECIFIED)
         continue;
 
-      URLPattern pattern(Extension::kValidHostPermissionSchemes,
-                         site_info.site);
-      if (extension_patterns.ContainsPattern(pattern)) {
+      if (granted_hosts.MatchesHost(ConvertHostToUrl(site_info.site),
+                                    /*require_match_subdomains=*/false)) {
         can_run_on_site_group = true;
         site_info.num_extensions++;
       }
     }
+
+    // Check if the extension can run on all sites under this eTLD+1 and
+    // update `match_subdomains_count` for this eTLD+1. The SiteInfo entry will
+    // be created later if at least one extension can run on all subdomains.
+    if (granted_hosts.MatchesHost(ConvertHostToUrl(entry.first),
+                                  /*require_match_subdomains=*/true)) {
+      (*match_subdomains_count)[entry.first]++;
+      can_run_on_site_group = true;
+    }
+
     if (can_run_on_site_group)
       entry.second.num_extensions++;
   }
@@ -627,8 +652,7 @@ void DeveloperPrivateEventRouter::OnExtensionAllowlistWarningStateChanged(
 
 void DeveloperPrivateEventRouter::OnExtensionManagementSettingsChanged() {
   base::Value::List args;
-  args.Append(base::Value::FromUniquePtrValue(
-      DeveloperPrivateAPI::CreateProfileInfo(profile_)->ToValue()));
+  args.Append(DeveloperPrivateAPI::CreateProfileInfo(profile_)->ToValue());
 
   auto event = std::make_unique<Event>(
       events::DEVELOPER_PRIVATE_ON_PROFILE_STATE_CHANGED,
@@ -647,7 +671,7 @@ void DeveloperPrivateEventRouter::OnUserPermissionsSettingsChanged(
   developer::UserSiteSettings user_site_settings =
       ConvertToUserSiteSettings(settings);
   base::Value::List args;
-  args.Append(base::Value::FromUniquePtrValue(user_site_settings.ToValue()));
+  args.Append(user_site_settings.ToValue());
 
   auto event = std::make_unique<Event>(
       events::DEVELOPER_PRIVATE_ON_USER_SITE_SETTINGS_CHANGED,
@@ -665,8 +689,7 @@ void DeveloperPrivateEventRouter::OnExtensionPermissionsUpdated(
 
 void DeveloperPrivateEventRouter::OnProfilePrefChanged() {
   base::Value::List args;
-  args.Append(base::Value::FromUniquePtrValue(
-      DeveloperPrivateAPI::CreateProfileInfo(profile_)->ToValue()));
+  args.Append(DeveloperPrivateAPI::CreateProfileInfo(profile_)->ToValue());
   auto event = std::make_unique<Event>(
       events::DEVELOPER_PRIVATE_ON_PROFILE_STATE_CHANGED,
       developer::OnProfileStateChanged::kEventName, std::move(args));
@@ -715,12 +738,11 @@ void DeveloperPrivateEventRouter::BroadcastItemStateChangedHelper(
   event_data.event_type = event_type;
   event_data.item_id = extension_id;
   if (!infos.empty()) {
-    event_data.extension_info =
-        std::make_unique<developer::ExtensionInfo>(std::move(infos[0]));
+    event_data.extension_info = std::move(infos[0]);
   }
 
   base::Value::List args;
-  args.Append(base::Value::FromUniquePtrValue(event_data.ToValue()));
+  args.Append(event_data.ToValue());
   std::unique_ptr<Event> event(
       new Event(events::DEVELOPER_PRIVATE_ON_ITEM_STATE_CHANGED,
                 developer::OnItemStateChanged::kEventName, std::move(args)));
@@ -735,10 +757,7 @@ DeveloperPrivateAPI::UnpackedRetryId DeveloperPrivateAPI::AddUnpackedPath(
   WebContentsData* data = GetOrCreateWebContentsData(web_contents);
   IdToPathMap& paths = data->allowed_unpacked_paths;
   auto existing =
-      std::find_if(paths.begin(), paths.end(),
-                   [path](const std::pair<std::string, base::FilePath>& entry) {
-                     return entry.second == path;
-                   });
+      base::ranges::find(paths, path, &IdToPathMap::value_type::second);
   if (existing != paths.end())
     return existing->first;
 
@@ -930,8 +949,7 @@ void DeveloperPrivateGetExtensionInfoFunction::OnInfosGenerated(
     ExtensionInfoGenerator::ExtensionInfoList list) {
   DCHECK_LE(1u, list.size());
   Respond(list.empty() ? Error(kNoSuchExtensionError)
-                       : OneArgument(base::Value::FromUniquePtrValue(
-                             list[0].ToValue())));
+                       : WithArguments(list[0].ToValue()));
 }
 
 DeveloperPrivateGetExtensionSizeFunction::
@@ -961,7 +979,7 @@ DeveloperPrivateGetExtensionSizeFunction::Run() {
 
 void DeveloperPrivateGetExtensionSizeFunction::OnSizeCalculated(
     const std::u16string& size) {
-  Respond(OneArgument(base::Value(size)));
+  Respond(WithArguments(size));
 }
 
 DeveloperPrivateGetItemsInfoFunction::DeveloperPrivateGetItemsInfoFunction() {}
@@ -1007,8 +1025,7 @@ DeveloperPrivateGetProfileConfigurationFunction::Run() {
   if (source_context_type() == Feature::WEBUI_CONTEXT)
     PerformVerificationCheck(browser_context());
 
-  return RespondNow(
-      OneArgument(base::Value::FromUniquePtrValue(info->ToValue())));
+  return RespondNow(WithArguments(info->ToValue()));
 }
 
 DeveloperPrivateUpdateProfileConfigurationFunction::
@@ -1096,6 +1113,11 @@ DeveloperPrivateUpdateExtensionConfigurationFunction::Run() {
       case developer::HOST_ACCESS_NONE:
         NOTREACHED();
     }
+  }
+  if (update.show_access_requests_in_toolbar) {
+    SitePermissionsHelper(Profile::FromBrowserContext(browser_context()))
+        .SetShowAccessRequestsInToolbar(
+            extension->id(), *update.show_access_requests_in_toolbar);
   }
 
   return RespondNow(NoArguments());
@@ -1188,9 +1210,9 @@ void DeveloperPrivateReloadFunction::OnGotManifestError(
   // ExtensionService::ReloadExtension doesn't behave well with an extension
   // that failed to reload, and untangling that mess is quite significant.
   // See https://crbug.com/792277.
-  Respond(OneArgument(base::Value::FromUniquePtrValue(
+  Respond(WithArguments(
       CreateLoadError(file_path, error, line_number, manifest, retry_guid)
-          .ToValue())));
+          .ToValue()));
 }
 
 void DeveloperPrivateReloadFunction::ClearObservers() {
@@ -1340,9 +1362,9 @@ void DeveloperPrivateLoadUnpackedFunction::OnGotManifestError(
     size_t line_number,
     const std::string& manifest) {
   DCHECK(!retry_guid_.empty());
-  Respond(OneArgument(base::Value::FromUniquePtrValue(
+  Respond(WithArguments(
       CreateLoadError(file_path, error, line_number, manifest, retry_guid_)
-          .ToValue())));
+          .ToValue()));
 }
 
 DeveloperPrivateInstallDroppedFileFunction::
@@ -1460,7 +1482,7 @@ void DeveloperPrivatePackDirectoryFunction::OnPackSuccess(
   response.message = base::UTF16ToUTF8(
       PackExtensionJob::StandardSuccessMessage(crx_file, pem_file));
   response.status = developer::PACK_STATUS_SUCCESS;
-  Respond(OneArgument(base::Value::FromUniquePtrValue(response.ToValue())));
+  Respond(WithArguments(response.ToValue()));
   pack_job_.reset();
   Release();  // Balanced in Run().
 }
@@ -1478,7 +1500,7 @@ void DeveloperPrivatePackDirectoryFunction::OnPackFailure(
   } else {
     response.status = developer::PACK_STATUS_ERROR;
   }
-  Respond(OneArgument(base::Value::FromUniquePtrValue(response.ToValue())));
+  Respond(WithArguments(response.ToValue()));
   pack_job_.reset();
   Release();  // Balanced in Run().
 }
@@ -1507,16 +1529,14 @@ ExtensionFunction::ResponseAction DeveloperPrivatePackDirectoryFunction::Run() {
           IDS_EXTENSION_PACK_DIALOG_ERROR_ROOT_INVALID);
 
     response.status = developer::PACK_STATUS_ERROR;
-    return RespondNow(
-        OneArgument(base::Value::FromUniquePtrValue(response.ToValue())));
+    return RespondNow(WithArguments(response.ToValue()));
   }
 
   if (!key_path_str_.empty() && key_file.empty()) {
     response.message = l10n_util::GetStringUTF8(
         IDS_EXTENSION_PACK_DIALOG_ERROR_KEY_INVALID);
     response.status = developer::PACK_STATUS_ERROR;
-    return RespondNow(
-        OneArgument(base::Value::FromUniquePtrValue(response.ToValue())));
+    return RespondNow(WithArguments(response.ToValue()));
   }
 
   AddRef();  // Balanced in OnPackSuccess / OnPackFailure.
@@ -1636,7 +1656,7 @@ void DeveloperPrivateLoadDirectoryFunction::Load() {
 
   // TODO(grv) : The unpacked installer should fire an event when complete
   // and return the extension_id.
-  Respond(OneArgument(base::Value("-1")));
+  Respond(WithArguments("-1"));
 }
 
 void DeveloperPrivateLoadDirectoryFunction::ClearExistingDirectoryContent(
@@ -1814,7 +1834,7 @@ ExtensionFunction::ResponseAction DeveloperPrivateChoosePathFunction::Run() {
 
 void DeveloperPrivateChoosePathFunction::FileSelected(
     const base::FilePath& path) {
-  Respond(OneArgument(base::Value(path.LossyDisplayName())));
+  Respond(WithArguments(path.LossyDisplayName()));
   Release();
 }
 
@@ -1829,8 +1849,8 @@ DeveloperPrivateChoosePathFunction::~DeveloperPrivateChoosePathFunction() {}
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateIsProfileManagedFunction::Run() {
-  return RespondNow(OneArgument(
-      base::Value(Profile::FromBrowserContext(browser_context())->IsChild())));
+  return RespondNow(
+      WithArguments(Profile::FromBrowserContext(browser_context())->IsChild()));
 }
 
 DeveloperPrivateIsProfileManagedFunction::
@@ -1906,7 +1926,7 @@ void DeveloperPrivateRequestFileSourceFunction::Finish(
   response.highlight = highlighter->GetFeature();
   response.after_highlight = highlighter->GetAfterFeature();
 
-  Respond(OneArgument(base::Value::FromUniquePtrValue(response.ToValue())));
+  Respond(WithArguments(response.ToValue()));
 }
 
 DeveloperPrivateOpenDevToolsFunction::DeveloperPrivateOpenDevToolsFunction() {}
@@ -2256,8 +2276,7 @@ DeveloperPrivateGetUserSiteSettingsFunction::Run() {
   developer::UserSiteSettings user_site_settings = ConvertToUserSiteSettings(
       PermissionsManager::Get(browser_context())->GetUserPermissionsSettings());
 
-  return RespondNow(OneArgument(
-      base::Value::FromUniquePtrValue(user_site_settings.ToValue())));
+  return RespondNow(WithArguments(user_site_settings.ToValue()));
 }
 
 DeveloperPrivateAddUserSpecifiedSitesFunction::
@@ -2280,16 +2299,19 @@ DeveloperPrivateAddUserSpecifiedSitesFunction::Run() {
   }
 
   PermissionsManager* manager = PermissionsManager::Get(browser_context());
-  switch (params->options.site_list) {
-    case developer::USER_SITE_SET_PERMITTED:
+  switch (params->options.site_set) {
+    case developer::SITE_SET_USER_PERMITTED:
       for (const auto& origin : origins)
         manager->AddUserPermittedSite(origin);
       break;
-    case developer::USER_SITE_SET_RESTRICTED:
+    case developer::SITE_SET_USER_RESTRICTED:
       for (const auto& origin : origins)
         manager->AddUserRestrictedSite(origin);
       break;
-    case developer::USER_SITE_SET_NONE:
+    case developer::SITE_SET_EXTENSION_SPECIFIED:
+      return RespondNow(
+          Error("Site set must be USER_PERMITTED or USER_RESTRICTED"));
+    case developer::SITE_SET_NONE:
       NOTREACHED();
   }
 
@@ -2316,16 +2338,19 @@ DeveloperPrivateRemoveUserSpecifiedSitesFunction::Run() {
   }
 
   PermissionsManager* manager = PermissionsManager::Get(browser_context());
-  switch (params->options.site_list) {
-    case developer::USER_SITE_SET_PERMITTED:
+  switch (params->options.site_set) {
+    case developer::SITE_SET_USER_PERMITTED:
       for (const auto& origin : origins)
         manager->RemoveUserPermittedSite(origin);
       break;
-    case developer::USER_SITE_SET_RESTRICTED:
+    case developer::SITE_SET_USER_RESTRICTED:
       for (const auto& origin : origins)
         manager->RemoveUserRestrictedSite(origin);
       break;
-    case developer::USER_SITE_SET_NONE:
+    case developer::SITE_SET_EXTENSION_SPECIFIED:
+      return RespondNow(
+          Error("Site set must be USER_PERMITTED or USER_RESTRICTED"));
+    case developer::SITE_SET_NONE:
       NOTREACHED();
   }
 
@@ -2342,24 +2367,19 @@ DeveloperPrivateGetUserAndExtensionSitesByEtldFunction::Run() {
   std::map<std::string, developer::SiteGroup> site_groups;
   const PermissionsManager::UserPermissionsSettings& settings =
       PermissionsManager::Get(browser_context())->GetUserPermissionsSettings();
-  URLPatternSet user_specified_sites;
   for (const url::Origin& site : settings.permitted_sites) {
-    user_specified_sites.AddOrigin(Extension::kValidHostPermissionSchemes,
-                                   site.GetURL());
-    AddSiteToSiteGroups(&site_groups, site.Serialize(),
+    AddSiteToSiteGroups(&site_groups, site.host(),
                         GetETldPlusOne(site.GetURL()),
-                        developer::USER_SITE_SET_PERMITTED);
+                        developer::SITE_SET_USER_PERMITTED);
   }
 
   for (const url::Origin& site : settings.restricted_sites) {
-    user_specified_sites.AddOrigin(Extension::kValidHostPermissionSchemes,
-                                   site.GetURL());
-    AddSiteToSiteGroups(&site_groups, site.Serialize(),
+    AddSiteToSiteGroups(&site_groups, site.host(),
                         GetETldPlusOne(site.GetURL()),
-                        developer::USER_SITE_SET_RESTRICTED);
+                        developer::SITE_SET_USER_RESTRICTED);
   }
 
-  std::vector<const Extension*> extensions_with_all_hosts;
+  std::vector<scoped_refptr<const Extension>> extensions_to_check;
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context());
 
   // Note: we are only counting enabled extensions as the returned extension
@@ -2370,37 +2390,38 @@ DeveloperPrivateGetUserAndExtensionSitesByEtldFunction::Run() {
     // the user cannot modify their permissions. These also need to be added to
     // another list so the frontend knows that their site access cannot be
     // modified.
+    ScriptingPermissionsModifier permissions_modifier(browser_context(),
+                                                      extension);
     if (!ui_util::ShouldDisplayInExtensionSettings(*extension) ||
-        !ScriptingPermissionsModifier(browser_context(), extension)
-             .CanAffectExtension()) {
+        !permissions_modifier.CanAffectExtension()) {
       continue;
     }
 
-    developer::RuntimeHostPermissions permissions =
-        ExtensionInfoGenerator::CreateRuntimeHostPermissionsInfo(
-            browser_context(), *extension);
+    std::unique_ptr<const PermissionSet> granted_permissions =
+        GetExtensionGrantedPermissions(browser_context(), extension);
+    std::vector<URLPattern> distinct_hosts =
+        ExtensionInfoGenerator::GetDistinctHosts(
+            granted_permissions->effective_hosts());
 
-    bool has_specific_hosts =
-        (!permissions.has_all_hosts &&
-         permissions.host_access == developer::HOST_ACCESS_ON_ALL_SITES) ||
-        permissions.host_access == developer::HOST_ACCESS_ON_SPECIFIC_SITES;
-
-    if (permissions.host_access == developer::HOST_ACCESS_ON_ALL_SITES &&
-        permissions.has_all_hosts) {
-      extensions_with_all_hosts.push_back(extension.get());
-    } else if (has_specific_hosts) {
-      ProcessSitesForRuntimeHostPermissions(&site_groups, user_specified_sites,
-                                            permissions);
-    }
+    ProcessSitesForRuntimeHostPermissions(&site_groups, distinct_hosts);
+    extensions_to_check.push_back(extension);
   }
 
-  // Specifying a "broad enough" host permission like "*://*.com/*" makes an
-  // extension "match all hosts". However, the extension does not truly have
-  // access to all sites, hence we iterate over all populated sites in
-  // `site_groups` and update the count for the extension for each site that it
-  // has access to.
-  for (const Extension* extension : extensions_with_all_hosts)
-    UpdateSiteGroupCountsForExtension(&site_groups, extension);
+  // Maps an eTLD+1 to the number of extensions that can run on all subdomains
+  // of that eTLD+1.
+  std::map<std::string, size_t> match_subdomains_count;
+
+  // Iterate over `site_groups` again and count the number of extensions that
+  // can run on each site. This is in a separate loop as `site_groups` needs to
+  // be fully populated before these checks can be made, so the num_extensions
+  // counts are accurate.
+  for (const auto& extension : extensions_to_check) {
+    std::unique_ptr<const PermissionSet> granted_permissions =
+        GetExtensionGrantedPermissions(browser_context(), extension);
+    UpdateSiteGroupCountsForExtensionHosts(
+        &site_groups, &match_subdomains_count,
+        granted_permissions->effective_hosts());
+  }
 
   std::vector<developer::SiteGroup> site_group_list;
   site_group_list.reserve(site_groups.size());
@@ -2410,6 +2431,16 @@ DeveloperPrivateGetUserAndExtensionSitesByEtldFunction::Run() {
               [](const developer::SiteInfo& a, const developer::SiteInfo& b) {
                 return b.site > a.site;
               });
+
+    size_t subdomains_count_for_site = match_subdomains_count[entry.first];
+    if (subdomains_count_for_site > 0u) {
+      // Append the all subdomains info to the end of the list.
+      developer::SiteInfo all_subdomains_info = CreateSiteInfo(
+          base::StrCat({"*.", entry.first}),
+          developer::SITE_SET_EXTENSION_SPECIFIED, subdomains_count_for_site);
+
+      entry.second.sites.push_back(std::move(all_subdomains_info));
+    }
     site_group_list.push_back(std::move(entry.second));
   }
 
@@ -2437,7 +2468,9 @@ DeveloperPrivateGetMatchingExtensionsForSiteFunction::Run() {
   URLPatternSet site_pattern({parsed_site});
   std::unique_ptr<ExtensionSet> all_extensions =
       ExtensionRegistry::Get(browser_context())
-          ->GenerateInstalledExtensionsSet();
+          ->GenerateInstalledExtensionsSet(
+              ExtensionRegistry::ENABLED | ExtensionRegistry::DISABLED |
+              ExtensionRegistry::TERMINATED | ExtensionRegistry::BLOCKLISTED);
   for (const auto& extension : *all_extensions) {
     const URLPatternSet& extension_withheld_sites =
         extension->permissions_data()->withheld_permissions().effective_hosts();

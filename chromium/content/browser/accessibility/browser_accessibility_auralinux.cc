@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,13 +18,7 @@ BrowserAccessibilityAuraLinux* ToBrowserAccessibilityAuraLinux(
 std::unique_ptr<BrowserAccessibility> BrowserAccessibility::Create(
     BrowserAccessibilityManager* manager,
     ui::AXNode* node) {
-  BrowserAccessibility* wrapper = manager->GetFromAXNode(node);
-  bool is_focused_node = wrapper && wrapper == manager->GetLastFocusedNode();
-  auto platform_node =
-      std::make_unique<BrowserAccessibilityAuraLinux>(manager, node);
-  if (is_focused_node)
-    platform_node->GetNode()->SetAsCurrentlyFocusedNode();
-  return platform_node;
+  return std::make_unique<BrowserAccessibilityAuraLinux>(manager, node);
 }
 
 BrowserAccessibilityAuraLinux::BrowserAccessibilityAuraLinux(

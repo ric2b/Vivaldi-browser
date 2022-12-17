@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,10 +8,10 @@
 
 #include <memory>
 
-#include "ash/components/proximity_auth/screenlock_bridge.h"
 #include "base/command_line.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_key_manager.h"
+#include "chromeos/ash/components/proximity_auth/screenlock_bridge.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
@@ -183,7 +183,7 @@ class EasyUnlockAuthAttemptUnlockTest : public testing::Test {
   }
 
   void TearDown() override {
-    proximity_auth::ScreenlockBridge::Get()->SetLockHandler(NULL);
+    proximity_auth::ScreenlockBridge::Get()->SetLockHandler(nullptr);
     auth_attempt_.reset();
   }
 
@@ -318,7 +318,7 @@ class EasyUnlockAuthAttemptSigninTest : public testing::Test {
   }
 
   void TearDown() override {
-    proximity_auth::ScreenlockBridge::Get()->SetLockHandler(NULL);
+    proximity_auth::ScreenlockBridge::Get()->SetLockHandler(nullptr);
     auth_attempt_.reset();
   }
 

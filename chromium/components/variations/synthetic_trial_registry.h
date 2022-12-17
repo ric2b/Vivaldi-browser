@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,8 +26,7 @@ class FieldTrialsProviderTest;
 class SyntheticTrialRegistryTest;
 
 namespace internal {
-COMPONENT_EXPORT(VARIATIONS)
-extern const base::Feature kExternalExperimentAllowlist;
+COMPONENT_EXPORT(VARIATIONS) BASE_DECLARE_FEATURE(kExternalExperimentAllowlist);
 }  // namespace internal
 
 class COMPONENT_EXPORT(VARIATIONS) SyntheticTrialRegistry {

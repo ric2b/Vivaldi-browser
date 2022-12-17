@@ -1,4 +1,4 @@
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -10,11 +10,7 @@ import("//testing/test.gni")
 
 source_set("audio") {
   sources = [
-    "aecdump_recording_manager.cc",
-    "aecdump_recording_manager.h",
     "audio_manager_power_user.h",
-    "concurrent_stream_metric_reporter.cc",
-    "concurrent_stream_metric_reporter.h",
     "debug_recording.cc",
     "debug_recording.h",
     "delay_buffer.cc",
@@ -30,6 +26,8 @@ source_set("audio") {
     "in_process_audio_manager_accessor.h",
     "input_controller.cc",
     "input_controller.h",
+    "input_glitch_counter.cc",
+    "input_glitch_counter.h",
     "input_stream.cc",
     "input_stream.h",
     "input_sync_writer.cc",
@@ -156,13 +154,13 @@ source_set("tests") {
   testonly = true
 
   sources = [
-    "aecdump_recording_manager_unittest.cc",
     "debug_recording_unittest.cc",
     "delay_buffer_unittest.cc",
     "device_listener_output_stream_unittest.cc",
     "device_notifier_unittest.cc",
     "group_coordinator_unittest.cc",
     "input_controller_unittest.cc",
+    "input_glitch_counter_unittest.cc",
     "input_stream_unittest.cc",
     "input_sync_writer_unittest.cc",
     "local_muter_unittest.cc",

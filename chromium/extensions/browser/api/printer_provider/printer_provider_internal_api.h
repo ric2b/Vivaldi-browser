@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -163,9 +163,7 @@ class PrinterProviderInternalGetPrintDataFunction : public ExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 
  private:
-  void OnBlob(const std::string& type,
-              int size,
-              const scoped_refptr<base::RefCountedMemory>& data,
+  void OnBlob(const scoped_refptr<base::RefCountedMemory>& data,
               std::unique_ptr<content::BlobHandle> blob);
   DECLARE_EXTENSION_FUNCTION("printerProviderInternal.getPrintData",
                              PRINTERPROVIDERINTERNAL_GETPRINTDATA)

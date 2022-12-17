@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,18 +88,12 @@ class ASH_PUBLIC_EXPORT DesksTemplatesDelegate {
       base::OnceCallback<void(const gfx::ImageSkia&)> callback) const = 0;
 
   // Launches apps into the active desk. Ran immediately after a desk is created
-  // for a template. `delay` is the time between each app launch, used for
-  // debugging.
+  // for a template.
   virtual void LaunchAppsFromTemplate(
-      std::unique_ptr<DeskTemplate> desk_template,
-      base::Time time_launch_started,
-      base::TimeDelta delay) = 0;
+      std::unique_ptr<DeskTemplate> desk_template) = 0;
 
   // Checks whether `window` is supported in the desks templates feature.
   virtual bool IsWindowSupportedForDeskTemplate(aura::Window* window) const = 0;
-
-  // Called when the feedback button is pressed.
-  virtual void OpenFeedbackDialog(const std::string& extra_diagnostics) = 0;
 
   // Return the readable app name for this app id (i.e. "madfksjfasdfkjasdkf" ->
   // "Chrome").

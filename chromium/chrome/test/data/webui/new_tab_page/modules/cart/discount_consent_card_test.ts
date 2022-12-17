@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,7 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 import {DiscountConsentCard} from 'chrome://new-tab-page/lazy_load.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {flushTasks} from 'chrome://webui-test/test_util.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {fakeMetricsPrivate} from '../../metrics_test_support.js';
 import {assertStyle} from '../../test_support.js';
@@ -28,7 +28,8 @@ suite('NewTabPageDiscountConsentCartTest', () => {
 
   let discountConsentCard: DiscountConsentCard;
   setup(() => {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     discountConsentCard = document.createElement('discount-consent-card');
     document.body.appendChild(discountConsentCard);
 
@@ -50,7 +51,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
     discountConsentCard.merchants = cart;
     await flushTasks();
 
-    var contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
+    const contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
         '#contentSteps .step-container');
     assertEquals(contentSteps.length, 2);
     assertEquals(
@@ -68,7 +69,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
   });
 
   test('Verify clicking continue button shows step 2 inline', () => {
-    var contentSelectedPage = discountConsentCard.shadowRoot!.querySelectorAll(
+    let contentSelectedPage = discountConsentCard.shadowRoot!.querySelectorAll(
         '#contentSteps .iron-selected');
     assertEquals(contentSelectedPage.length, 1);
     assertEquals(
@@ -102,7 +103,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
 
   test(
       'Verify "Continue" button emits discount-consent-continued event', () => {
-        var capturedEvent = false;
+        let capturedEvent = false;
         discountConsentCard.addEventListener(
             'discount-consent-continued', () => capturedEvent = true);
 
@@ -120,7 +121,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
       () => {
         discountConsentCard.currentStep = 1;
 
-        var capturedEvent = false;
+        let capturedEvent = false;
         discountConsentCard.addEventListener(
             'discount-consent-accepted', () => capturedEvent = true);
 
@@ -144,7 +145,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
         discountConsentCard.currentStep = 1;
         await flushTasks();
 
-        var capturedEvent = false;
+        let capturedEvent = false;
         discountConsentCard.addEventListener(
             'discount-consent-rejected', () => capturedEvent = true);
 
@@ -266,7 +267,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
           discountConsentCard.currentStep = 0;
           await flushTasks();
 
-          var capturedEvent = false;
+          let capturedEvent = false;
           discountConsentCard.addEventListener(
               'discount-consent-dismissed', () => capturedEvent = true);
 
@@ -283,7 +284,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
           discountConsentCard.currentStep = 1;
           await flushTasks();
 
-          var capturedEvent = false;
+          let capturedEvent = false;
           discountConsentCard.addEventListener(
               'discount-consent-rejected', () => capturedEvent = true);
 
@@ -339,7 +340,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
       discountConsentCard.merchants = cart;
       await flushTasks();
 
-      var contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
+      const contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
           '#contentSteps .step-container');
 
       assertEquals(
@@ -374,7 +375,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
       discountConsentCard.merchants = carts;
       await flushTasks();
 
-      var contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
+      const contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
           '#contentSteps .step-container');
 
       assertEquals(
@@ -417,7 +418,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
           discountConsentCard.merchants = carts;
           await flushTasks();
 
-          var contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
+          const contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
               '#contentSteps .step-container');
 
           assertEquals(
@@ -431,7 +432,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
     test(
         'Verify step one content updated when merchant cart changed',
         async () => {
-          var carts = [{
+          const carts = [{
             merchant: 'Amazon',
             cartUrl: {url: 'https://amazon.com'},
             productImageUrls: [
@@ -445,7 +446,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
           discountConsentCard.merchants = carts;
           await flushTasks();
 
-          var contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
+          let contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
               '#contentSteps .step-container');
 
           assertEquals(
@@ -512,7 +513,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
       discountConsentCard.merchants = cart;
       await flushTasks();
 
-      var contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
+      const contentSteps = discountConsentCard.shadowRoot!.querySelectorAll(
           '#contentSteps .step-container');
       assertEquals(contentSteps.length, 1);
 
@@ -530,7 +531,7 @@ suite('NewTabPageDiscountConsentCartTest', () => {
                   .querySelectorAll('#discountConsentDialog')
                   .length);
 
-          var contentSelectedPage =
+          const contentSelectedPage =
               discountConsentCard.shadowRoot!.querySelectorAll(
                   '#contentSteps .iron-selected');
           assertEquals(contentSelectedPage.length, 1);

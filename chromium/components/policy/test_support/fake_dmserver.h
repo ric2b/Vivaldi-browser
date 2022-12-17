@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,8 @@ account id used for public account policies, "value" is the seralized proto
 message of the policies value encoded in base64.
 The root dictionary also contains a "policy_user" key which indicates the
 current user.
+All the fields are described in the device_management_backend.proto
+(https://source.chromium.org/chromium/chromium/src/+/main:components/policy/proto/device_management_backend.proto;l=516?q=PolicyData)
 
 Example:
 {
@@ -29,20 +31,46 @@ Example:
       "policy_type" : "google/chromeos/user",
       "value" : "base64 encoded proto message",
     },
-        {
+    {
       "policy_type" : "google/chromeos/device",
       "value" : "base64 encoded proto message",
     },
-        {
+    {
       "policy_type" : "google/chromeos/publicaccount",
       "entity_id" : "accountid@managedchrome.com",
       "value" : "base64 encoded proto message",
+    }
+  ],
+  "external_policies" : [
+    {
+      "policy_type" : "google/chrome/extension",
+      "entity_id" : "extension_id",
+      "value" : "base64 encoded raw json value",
     }
   ],
   "managed_users" : [
     "secret123456"
   ],
   "policy_user" : "tast-user@managedchrome.com",
+  "current_key_index": 0,
+  "robot_api_auth_code": "code",
+  "directory_api_id": "id",
+  "request_errors": {
+    "register": 500,
+  }
+  "device_affiliation_ids" : [
+    "device_id"
+  ],
+  "user_affiliation_ids" : [
+    "user_id"
+  ],
+  "allow_set_device_attributes" : false,
+  "initial_enrollment_state": {
+    "TEST_serial": {
+      "initial_enrollment_mode": 2,
+      "management_domain": "test-domain.com"
+    }
+  }
 }
 */
 
@@ -90,6 +118,11 @@ class FakeDMServer : public policy::EmbeddedPolicyTestServer {
   bool SetPolicyPayload(const std::string* policy_type,
                         const std::string* entity_id,
                         const std::string* serialized_proto);
+  // Sets the external policy payload in the policy storage, it will return true
+  // if it's able to set the policy and false otherwise.
+  bool SetExternalPolicyPayload(const std::string* policy_type,
+                                const std::string* entity_id,
+                                const std::string* serialized_raw_policy);
   // Reads and sets the values in the policy blob file, it will return true if
   // the policy blob file doesn't exist yet or all the values are read
   // correctly, and false otherwise.

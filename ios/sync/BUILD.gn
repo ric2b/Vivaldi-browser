@@ -8,6 +8,7 @@ source_set("sync_notes") {
 
   deps = [
     "//ios/chrome/browser/browser_state",
+    "//vivaldi/ios/sync:file_sync",
     "//vivaldi/sync/notes:sync_notes",
   ]
 }
@@ -22,6 +23,19 @@ source_set("invalidation") {
   deps = [
     "//ios/chrome/browser/browser_state",
     "//vivaldi/sync:invalidation",
+  ]
+}
+
+source_set("file_sync") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "file_store_factory.h",
+    "file_store_factory.mm",
+  ]
+
+  deps = [
+    "//ios/chrome/browser/browser_state",
+    "//vivaldi/sync/file_sync",
   ]
 }
 

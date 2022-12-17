@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,11 +8,13 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_command_line.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/display_switches.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
@@ -65,16 +67,26 @@ class TestDisplayObserver : public display::DisplayObserver {
     removed_display_ = old_display;
   }
 
+  void OnDidRemoveDisplays() override {
+    if (did_remove_display_closure_)
+      did_remove_display_closure_.Run();
+  }
+
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override {
     changed_metrics_ = changed_metrics;
     display_ = display;
   }
 
+  void set_did_remove_display_closure(base::RepeatingClosure closure) {
+    did_remove_display_closure_ = std::move(closure);
+  }
+
  private:
   uint32_t changed_metrics_ = 0;
   display::Display display_;
   display::Display removed_display_;
+  base::RepeatingClosure did_remove_display_closure_{};
 };
 
 }  // namespace
@@ -175,7 +187,7 @@ TEST_P(WaylandScreenTest, EnteredOutputListAfterDisplayRemoval) {
   EXPECT_EQ(3u, platform_screen_->GetAllDisplays().size());
 
   wl::MockSurface* surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->GetSurfaceId());
+      window_->root_surface()->get_surface_id());
   ASSERT_TRUE(surface);
 
   wl_surface_send_enter(surface->resource(), output1->resource());
@@ -372,7 +384,7 @@ TEST_P(WaylandScreenTest, OutputPropertyChangesPrimaryDisplayChanged) {
 TEST_P(WaylandScreenTest, GetAcceleratedWidgetAtScreenPoint) {
   // Now, send enter event for the surface, which was created before.
   wl::MockSurface* surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->GetSurfaceId());
+      window_->root_surface()->get_surface_id());
   ASSERT_TRUE(surface);
   wl_surface_send_enter(surface->resource(), output_->resource());
 
@@ -541,6 +553,30 @@ TEST_P(WaylandScreenTest, GetDisplayMatching) {
   Sync();
 }
 
+// Regression test for https://crbug.com/1362872.
+TEST_P(WaylandScreenTest, GetPrimaryDisplayAfterRemoval) {
+  TestDisplayObserver observer;
+  platform_screen_->AddObserver(&observer);
+
+  const display::Display primary_display =
+      platform_screen_->GetPrimaryDisplay();
+
+  ASSERT_NE(primary_display.id(), display::kInvalidDisplayId);
+  ASSERT_EQ(1u, platform_screen_->GetAllDisplays().size());
+
+  // This results in an ASAN error unless GetPrimaryDisplay() is correctly
+  // implemented for empty display list. More details in the crbug above.
+  observer.set_did_remove_display_closure(base::BindLambdaForTesting([&]() {
+    ASSERT_EQ(0u, platform_screen_->GetAllDisplays().size());
+    auto display = platform_screen_->GetPrimaryDisplay();
+    EXPECT_EQ(display::kDefaultDisplayId, display.id());
+  }));
+  output_->DestroyGlobal();
+  Sync();
+
+  platform_screen_->RemoveObserver(&observer);
+}
+
 TEST_P(WaylandScreenTest, GetDisplayForAcceleratedWidget) {
   TestDisplayObserver observer;
   platform_screen_->AddObserver(&observer);
@@ -572,7 +608,7 @@ TEST_P(WaylandScreenTest, GetDisplayForAcceleratedWidget) {
 
   // Now, send enter event for the surface, which was created before.
   wl::MockSurface* surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->GetSurfaceId());
+      window_->root_surface()->get_surface_id());
   ASSERT_TRUE(surface);
   wl_surface_send_enter(surface->resource(), output_->resource());
 
@@ -621,7 +657,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
                                         gfx::kNullAcceleratedWidget, &delegate);
 
   auto* surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->GetSurfaceId());
+      window_->root_surface()->get_surface_id());
   ASSERT_TRUE(surface);
 
   // Announce pointer capability so that WaylandPointer is created on the client
@@ -641,6 +677,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
   wl_pointer_send_frame(pointer->resource());
   wl_pointer_send_motion(pointer->resource(), ++time, wl_fixed_from_int(10),
                          wl_fixed_from_int(20));
+  wl_pointer_send_frame(pointer->resource());
 
   Sync();
 
@@ -648,7 +685,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
   EXPECT_EQ(gfx::Point(10, 20), platform_screen_->GetCursorScreenPoint());
 
   auto* second_surface = server_.GetObject<wl::MockSurface>(
-      second_window->root_surface()->GetSurfaceId());
+      second_window->root_surface()->get_surface_id());
   ASSERT_TRUE(second_surface);
   // Now, leave the first surface and enter second one.
   wl_pointer_send_leave(pointer->resource(), ++serial, surface->resource());
@@ -658,6 +695,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
   wl_pointer_send_frame(pointer->resource());
   wl_pointer_send_motion(pointer->resource(), ++time, wl_fixed_from_int(20),
                          wl_fixed_from_int(10));
+  wl_pointer_send_frame(pointer->resource());
 
   Sync();
 
@@ -693,7 +731,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
   Sync();
 
   auto* menu_surface = server_.GetObject<wl::MockSurface>(
-      menu_window->root_surface()->GetSurfaceId());
+      menu_window->root_surface()->get_surface_id());
   ASSERT_TRUE(menu_surface);
 
   wl_pointer_send_enter(pointer->resource(), ++serial, menu_surface->resource(),
@@ -701,6 +739,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
   wl_pointer_send_frame(pointer->resource());
   wl_pointer_send_motion(pointer->resource(), ++time, wl_fixed_from_int(2),
                          wl_fixed_from_int(1));
+  wl_pointer_send_frame(pointer->resource());
 
   Sync();
 
@@ -720,6 +759,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
   wl_pointer_send_frame(pointer->resource());
   wl_pointer_send_motion(pointer->resource(), ++time, wl_fixed_from_int(1912),
                          wl_fixed_from_int(1071));
+  wl_pointer_send_frame(pointer->resource());
 
   Sync();
 
@@ -744,7 +784,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
   Sync();
 
   auto* nested_menu_surface = server_.GetObject<wl::MockSurface>(
-      nested_menu_window->root_surface()->GetSurfaceId());
+      nested_menu_window->root_surface()->get_surface_id());
   ASSERT_TRUE(nested_menu_surface);
 
   wl_pointer_send_enter(pointer->resource(), ++serial,
@@ -752,6 +792,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
   wl_pointer_send_frame(pointer->resource());
   wl_pointer_send_motion(pointer->resource(), ++time, wl_fixed_from_int(2),
                          wl_fixed_from_int(3));
+  wl_pointer_send_frame(pointer->resource());
 
   Sync();
 
@@ -767,6 +808,7 @@ TEST_P(WaylandScreenTest, GetCursorScreenPoint) {
   wl_pointer_send_frame(pointer->resource());
   wl_pointer_send_motion(pointer->resource(), ++time, wl_fixed_from_int(2),
                          wl_fixed_from_int(1));
+  wl_pointer_send_frame(pointer->resource());
 
   Sync();
 
@@ -833,7 +875,7 @@ TEST_P(WaylandScreenTest, SetWindowScaleWithoutEnteredOutput) {
   // been already initialized with |output_|'s scale.
   wl_surface_send_leave(surface_->resource(), output_->resource());
   Sync();
-  ASSERT_EQ(0u, window_->GetPreferredEnteredOutputId());
+  EXPECT_FALSE(window_->GetPreferredEnteredOutputId());
 
   // Change |output_|'s scale and make sure |window_|'s scale is update
   // accordingly.

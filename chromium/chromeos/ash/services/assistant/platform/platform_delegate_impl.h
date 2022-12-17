@@ -1,18 +1,17 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROMEOS_ASH_SERVICES_ASSISTANT_PLATFORM_PLATFORM_DELEGATE_IMPL_H_
 #define CHROMEOS_ASH_SERVICES_ASSISTANT_PLATFORM_PLATFORM_DELEGATE_IMPL_H_
 
-#include "chromeos/services/libassistant/public/mojom/platform_delegate.mojom.h"
+#include "chromeos/ash/services/libassistant/public/mojom/platform_delegate.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
 namespace ash::assistant {
 
 // Delegate that will fetch all instances from the |AssistantBrowserDelegate|.
-class PlatformDelegateImpl
-    : public chromeos::libassistant::mojom::PlatformDelegate {
+class PlatformDelegateImpl : public libassistant::mojom::PlatformDelegate {
  public:
   PlatformDelegateImpl();
   PlatformDelegateImpl(const PlatformDelegateImpl&) = delete;
@@ -21,7 +20,7 @@ class PlatformDelegateImpl
 
   void Bind(mojo::PendingReceiver<PlatformDelegate> pending_receiver);
 
-  // chromeos::libassistant::mojom::PlatformDelegate implementation:
+  // libassistant::mojom::PlatformDelegate implementation:
   void BindAudioStreamFactory(
       mojo::PendingReceiver<media::mojom::AudioStreamFactory> receiver)
       override;

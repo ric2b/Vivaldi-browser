@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,7 +92,8 @@ suite('ManageProfileTests', function() {
   setup(function() {
     browserProxy = new TestManageProfileBrowserProxy();
     ManageProfileBrowserProxyImpl.setInstance(browserProxy);
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     loadTimeData.overrideValues({profileShortcutsEnabled: false});
     manageProfile = createManageProfileElement();
     Router.getInstance().navigateTo(routes.MANAGE_PROFILE);
@@ -149,7 +150,8 @@ suite('ManageProfileTests', function() {
     assertEquals('Initial Fake Name', nameField.value);
 
     nameField.value = 'New Name';
-    nameField.fire('change');
+    nameField.dispatchEvent(
+        new CustomEvent('change', {bubbles: true, composed: true}));
 
     const args = await browserProxy.whenCalled('setProfileName');
     assertEquals('New Name', args[0]);
@@ -198,7 +200,8 @@ suite('ManageProfileTests', function() {
   // Tests profile shortcut toggle is visible and toggling it removes and
   // creates the profile shortcut respectively.
   test('ManageProfileShortcutToggle', async function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     loadTimeData.overrideValues({profileShortcutsEnabled: true});
     manageProfile = createManageProfileElement();
     flush();
@@ -237,7 +240,8 @@ suite('ManageProfileTests', function() {
     browserProxy.setProfileShortcutStatus(
         ProfileShortcutStatus.PROFILE_SHORTCUT_NOT_FOUND);
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     loadTimeData.overrideValues({profileShortcutsEnabled: true});
     manageProfile = createManageProfileElement();
     flush();
@@ -262,7 +266,8 @@ suite('ManageProfileTests', function() {
     browserProxy.setProfileShortcutStatus(
         ProfileShortcutStatus.PROFILE_SHORTCUT_SETTING_HIDDEN);
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     loadTimeData.overrideValues({profileShortcutsEnabled: true});
     manageProfile = createManageProfileElement();
     flush();

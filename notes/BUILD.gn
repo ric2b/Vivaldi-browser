@@ -8,8 +8,8 @@ if (is_android) {
 
 static_library("notes") {
   sources = [
-    "note_attachment.cc",
-    "note_attachment.h",
+    "deprecated_note_attachment.cc",
+    "deprecated_note_attachment.h",
     "note_constants.cc",
     "note_constants.h",
     "note_load_details.cc",
@@ -47,6 +47,7 @@ static_library("notes") {
     "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_unscaled_native_resources",
     "//vivaldi/sync/notes:sync_notes",
+    "//vivaldi/sync/file_sync",
   ]
   public_deps = [
     #"//chrome/browser",

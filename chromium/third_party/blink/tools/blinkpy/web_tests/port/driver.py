@@ -99,10 +99,11 @@ def coalesce_repeated_switches(cmd):
 
 
 class DriverInput(object):
-    def __init__(self, test_name, timeout, image_hash, args):
+    def __init__(self, test_name, timeout, image_hash, wpt_print_mode, args):
         self.test_name = test_name
         self.timeout = timeout  # in ms
         self.image_hash = image_hash
+        self.wpt_print_mode = wpt_print_mode
         self.args = args
 
 
@@ -258,8 +259,9 @@ class Driver(object):
             sanitizer = self._port.output_contains_sanitizer_messages(
                 self.error_from_test)
             if sanitizer:
-                self.error_from_test = 'OUTPUT CONTAINS "sanitizer",' + \
-                    ' so we are treating this test as if it crashed, even though it did not.\n\n' + self.error_from_test
+                self.error_from_test = b'OUTPUT CONTAINS "sanitizer",' + \
+                    b' so we are treating this test as if it crashed, even though it did not.\n\n' + \
+                    self.error_from_test
                 crashed = True
                 self._crashed_process_name = 'unknown process name'
                 self._crashed_pid = 0
@@ -508,6 +510,7 @@ class Driver(object):
             "wpt_internal/webgpu/000_run_me_first.https.html",
             timeout=init_timeout,
             image_hash=None,
+            wpt_print_mode=None,
             args=per_test_args)
         output = self._run_one_input(startup_input, start_time=time.time())
         if output.text and b'PASS 000_run_me_first' in output.text:
@@ -633,6 +636,10 @@ class Driver(object):
             command += "'--timeout'%s" % driver_input.timeout
         if driver_input.image_hash:
             command += "'" + driver_input.image_hash
+        if driver_input.wpt_print_mode:
+            if not driver_input.image_hash:
+                command += "'"
+            command += "'print"
         return command + '\n'
 
     def _read_first_block(self, deadline):

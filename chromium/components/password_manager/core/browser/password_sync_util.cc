@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -104,6 +104,11 @@ bool IsPasswordSyncEnabled(const syncer::SyncService* sync_service) {
   return sync_service && sync_service->IsSyncFeatureEnabled() &&
          sync_service->GetUserSettings()->GetSelectedTypes().Has(
              syncer::UserSelectableType::kPasswords);
+}
+
+bool IsPasswordSyncActive(const syncer::SyncService* sync_service) {
+  return IsPasswordSyncEnabled(sync_service) &&
+         sync_service->GetActiveDataTypes().Has(syncer::PASSWORDS);
 }
 
 absl::optional<std::string> GetSyncingAccount(

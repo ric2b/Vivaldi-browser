@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -322,14 +322,38 @@ class TemplateURLService : public WebDataServiceConsumer,
   // provider.
   bool IsSearchResultsPageFromDefaultSearchProvider(const GURL& url) const;
 
+  // Generates a search results page URL for the default search provider with
+  // the given search terms. Returns an empty GURL if the default search
+  // provider is not available.
+  GURL GenerateSearchURLForDefaultSearchProvider(
+      const std::u16string& search_terms) const;
+
   // Returns true if the default search provider supports the side search
   // feature.
   bool IsSideSearchSupportedForDefaultSearchProvider() const;
+
+  // Returns true if the default search provider supports the opening
+  // image search requests in the side panel.
+  bool IsSideImageSearchSupportedForDefaultSearchProvider() const;
 
   // Generates a side search URL for the default search provider's search url.
   GURL GenerateSideSearchURLForDefaultSearchProvider(
       const GURL& search_url,
       const std::string& version) const;
+
+  // Takes a search URL that belongs to this side search in the side panel and
+  // removes the side search param from the URL.
+  GURL RemoveSideSearchParamFromURL(const GURL& side_search_url) const;
+
+  // Generates a side image search URL for the default search provider's image
+  // search url.
+  GURL GenerateSideImageSearchURLForDefaultSearchProvider(
+      const GURL& image_search_url,
+      const std::string& version) const;
+
+  // Takes a search URL that belongs to this image search in the side panel and
+  // removes the side image search param from the URL.
+  GURL RemoveSideImageSearchParamFromURL(const GURL& image_search_url) const;
 
   // Returns true if the default search is managed through group policy.
   bool is_default_search_managed() const {

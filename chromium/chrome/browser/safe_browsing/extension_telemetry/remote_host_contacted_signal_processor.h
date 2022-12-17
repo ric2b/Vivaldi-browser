@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 
 #include "base/containers/flat_map.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_signal_processor.h"
+#include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "url/gurl.h"
 
 namespace safe_browsing {
@@ -36,12 +37,18 @@ class RemoteHostContactedSignalProcessor : public ExtensionSignalProcessor {
   bool HasDataToReportForTest() const override;
 
  protected:
+  using RemoteHostInfo = ExtensionTelemetryReportRequest::SignalInfo::
+      RemoteHostContactedInfo::RemoteHostInfo;
   // Maps remote hosts url to contact count.
   using RemoteHostURLs = base::flat_map<std::string, uint32_t>;
-  // Maps extension id to (remote host url, contact count).
-  using RemoteHostURLsPerExtension =
-      base::flat_map<extensions::ExtensionId, RemoteHostURLs>;
-  RemoteHostURLsPerExtension remote_host_url_store_;
+  // Maps connection protocols to remote hosts contacted.
+  using RemoteHostURLsByConnectionProtocol =
+      base::flat_map<RemoteHostInfo::ProtocolType, RemoteHostURLs>;
+  // Maps extension id to remote hosts contacted.
+  using RemoteHostInfoPerExtension =
+      base::flat_map<extensions::ExtensionId,
+                     RemoteHostURLsByConnectionProtocol>;
+  RemoteHostInfoPerExtension remote_host_info_store_;
 };
 
 }  // namespace safe_browsing

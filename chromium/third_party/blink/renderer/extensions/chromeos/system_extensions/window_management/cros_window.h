@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,10 +18,14 @@ class CrosWindow : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  CrosWindow(CrosWindowManagement* manager, base::UnguessableToken id);
   CrosWindow(CrosWindowManagement* manager,
              mojom::blink::CrosWindowInfoPtr window);
 
   void Trace(Visitor*) const override;
+
+  // Sets the CrosWindowInfoPtr to `window_info_ptr`.
+  void Update(mojom::blink::CrosWindowInfoPtr window_info_ptr);
 
   String id();
 
@@ -48,6 +52,7 @@ class CrosWindow : public ScriptWrappable {
   ScriptPromise setFullscreen(ScriptState* script_state, bool fullscreen);
   ScriptPromise maximize(ScriptState* script_state);
   ScriptPromise minimize(ScriptState* script_state);
+  ScriptPromise restore(ScriptState* script_state);
   ScriptPromise focus(ScriptState* script_state);
   ScriptPromise close(ScriptState* script_state);
 

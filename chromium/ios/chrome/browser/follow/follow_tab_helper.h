@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,10 +36,6 @@ class FollowTabHelper : public web::WebStateObserver,
 
   ~FollowTabHelper() override;
 
-  // Creates the TabHelper and attaches to `web_state`. `web_state` must not be
-  // null.
-  static void CreateForWebState(web::WebState* web_state);
-
   // Sets the presenter for follow in-product help (IPH). `presenter` is not
   // retained by this tab helper.
   void set_follow_iph_presenter(id<FollowIPHPresenter> presenter) {
@@ -57,6 +53,9 @@ class FollowTabHelper : public web::WebStateObserver,
 
   // Removes the follow menu updater.
   void RemoveFollowMenuUpdater();
+
+  // Updates the follow menu item.
+  void UpdateFollowMenuItem();
 
  private:
   friend class web::WebStateUserData<FollowTabHelper>;
@@ -92,7 +91,7 @@ class FollowTabHelper : public web::WebStateObserver,
 
   // Updates follow menu item. `web_page_urls` is the page url object used to
   // check follow status.
-  void UpdateFollowMenuItem(WebPageURLs* web_page_urls);
+  void UpdateFollowMenuItemWithURL(WebPageURLs* web_page_urls);
 
   // Presents the Follow in-product help (IPH) for `recommended_url`.
   void PresentFollowIPH(NSURL* recommended_url);

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,8 @@ class NavigationHandle;
 
 namespace navigation_interception {
 
+BASE_DECLARE_FEATURE(kAsyncCheck);
+
 enum class SynchronyMode {
   // Support async interception in some cases (See ShouldCheckAsynchronously).
   kAsync,
@@ -32,8 +34,6 @@ class InterceptNavigationThrottle : public content::NavigationThrottle {
   typedef base::RepeatingCallback<bool(
       content::NavigationHandle* /* navigation_handle */)>
       CheckCallback;
-
-  static const base::Feature kAsyncCheck;
 
   InterceptNavigationThrottle(content::NavigationHandle* navigation_handle,
                               CheckCallback should_ignore_callback,

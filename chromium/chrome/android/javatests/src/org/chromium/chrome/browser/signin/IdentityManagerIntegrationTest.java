@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,6 @@ import org.mockito.quality.Strictness;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
@@ -212,7 +211,6 @@ public class IdentityManagerIntegrationTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1294295")
     public void testUpdateAccountListTwoAccountsThenRemoveAll() {
         // Add accounts.
         mSigninTestRule.addAccountAndWaitForSeeding(TEST_ACCOUNT1);
@@ -241,7 +239,6 @@ public class IdentityManagerIntegrationTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1295158")
     public void testUpdateAccountListTwoAccountsThenRemoveAllSignOut() {
         // Add accounts.
         mSigninTestRule.addAccountAndWaitForSeeding(TEST_ACCOUNT1);

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,25 @@
 
 namespace app_list {
 namespace {
+
+TEST(AppListStringUtilTest, NormalizeId) {
+  std::string id1 = NormalizeId("docs.google.com/spreadsheets/d");
+  EXPECT_EQ(id1, "docs.google.com/spreadsheets/d");
+
+  std::string id2 = NormalizeId("other.website.com/spreadsheets/d/");
+  EXPECT_EQ(id2, "other.website.com/spreadsheets/d");
+
+  std::string id3 = NormalizeId("https://other.website.com/spreadsheets/d");
+  EXPECT_EQ(id3, "other.website.com/spreadsheets/d");
+
+  std::string id4 = NormalizeId("https://docs.google.com/presentation/d/");
+  EXPECT_EQ(id4, "docs.google.com/presentation/d");
+}
+
+TEST(AppListStringUtilTest, RemoveAppShortcutLabel) {
+  std::string id1 = RemoveAppShortcutLabel("docs.google.com/spreadsheets/d");
+  EXPECT_EQ(id1, "docs.google.com/spreadsheets");
+}
 
 TEST(AppListStringUtilTest, GetDriveId) {
   const auto id1 = GetDriveId(

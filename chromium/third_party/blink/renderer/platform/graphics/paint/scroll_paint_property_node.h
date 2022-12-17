@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,6 +45,9 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
   // To make it less verbose and more readable to construct and update a node,
   // a struct with default values is used to represent the state.
   struct PLATFORM_EXPORT State {
+    DISALLOW_NEW();
+
+   public:
     gfx::Rect container_rect;
     gfx::Size contents_size;
     scoped_refptr<const ClipPaintPropertyNode> overflow_clip_node;
@@ -90,7 +93,9 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
 
   // The empty AnimationState struct is to meet the requirement of
   // ObjectPaintProperties.
-  struct AnimationState {};
+  struct AnimationState {
+    STACK_ALLOCATED();
+  };
   PaintPropertyChangeType Update(const ScrollPaintPropertyNode& parent,
                                  State&& state,
                                  const AnimationState& = AnimationState()) {

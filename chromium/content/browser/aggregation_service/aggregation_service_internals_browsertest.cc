@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,7 +95,7 @@ class AggregationServiceInternalsWebUiBrowserTest : public ContentBrowserTest {
   }
 
  protected:
-  raw_ptr<MockAggregationService> aggregation_service_;
+  raw_ptr<MockAggregationService, DanglingUntriaged> aggregation_service_;
 };
 
 IN_PROC_BROWSER_TEST_F(AggregationServiceInternalsWebUiBrowserTest,
@@ -145,18 +145,14 @@ IN_PROC_BROWSER_TEST_F(AggregationServiceInternalsWebUiBrowserTest,
           request_1, {hpke_key.public_key});
 
   aggregation_service_->NotifyReportHandled(
-      AggregationServiceStorage::RequestAndId{
-          .request = std::move(request_1),
-          .id = AggregationServiceStorage::RequestId(1)},
+      std::move(request_1), AggregationServiceStorage::RequestId(1),
       std::move(report_1), /*report_handled_time=*/now + base::Hours(1),
       AggregationServiceObserver::ReportStatus::kSent);
 
   AggregatableReportRequest request_2 =
       aggregation_service::CreateExampleRequest();
   aggregation_service_->NotifyReportHandled(
-      AggregationServiceStorage::RequestAndId{
-          .request = std::move(request_2),
-          .id = AggregationServiceStorage::RequestId(2)},
+      std::move(request_2), AggregationServiceStorage::RequestId(2),
       /*report=*/absl::nullopt,
       /*report_handled_time=*/now + base::Hours(2),
       AggregationServiceObserver::ReportStatus::kFailedToAssemble);
@@ -168,9 +164,7 @@ IN_PROC_BROWSER_TEST_F(AggregationServiceInternalsWebUiBrowserTest,
           request_3, {hpke_key.public_key});
 
   aggregation_service_->NotifyReportHandled(
-      AggregationServiceStorage::RequestAndId{
-          .request = std::move(request_3),
-          .id = AggregationServiceStorage::RequestId(3)},
+      std::move(request_3), AggregationServiceStorage::RequestId(3),
       std::move(report_3),
       /*report_handled_time=*/now + base::Hours(3),
       AggregationServiceObserver::ReportStatus::kFailedToSend);
@@ -345,9 +339,7 @@ IN_PROC_BROWSER_TEST_F(AggregationServiceInternalsWebUiBrowserTest,
           request, {hpke_key.public_key});
 
   aggregation_service_->NotifyReportHandled(
-      AggregationServiceStorage::RequestAndId{
-          .request = std::move(request),
-          .id = AggregationServiceStorage::RequestId(10)},
+      std::move(request), AggregationServiceStorage::RequestId(10),
       std::move(report),
       /*report_handled_time=*/base::Time::Now() + base::Hours(1),
       AggregationServiceObserver::ReportStatus::kSent);

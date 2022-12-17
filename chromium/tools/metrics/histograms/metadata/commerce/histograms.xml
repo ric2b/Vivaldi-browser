@@ -1,5 +1,5 @@
 <!--
-Copyright 2021 The Chromium Authors. All rights reserved.
+Copyright 2021 The Chromium Authors
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -42,7 +42,7 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
 </variants>
 
 <histogram name="Commerce.Carts.ExtractionElapsedTime" units="ms"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -55,7 +55,7 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
 </histogram>
 
 <histogram name="Commerce.Carts.ExtractionExecutionTime" units="ms"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -68,7 +68,7 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
 </histogram>
 
 <histogram name="Commerce.Carts.ExtractionLongestTaskTime" units="ms"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -80,7 +80,7 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
 </histogram>
 
 <histogram name="Commerce.Carts.ExtractionTimedOut" enum="BooleanTimedOut"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -91,7 +91,7 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
 </histogram>
 
 <histogram name="Commerce.Carts.ExtractionTotalTasksTime" units="ms"
-    expires_after="2023-01-15">
+    expires_after="2023-03-19">
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -124,7 +124,7 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
 </histogram>
 
 <histogram name="Commerce.Heuristics.CartExtractionScriptSource"
-    enum="CommerceHeuristicsDataSource" expires_after="2022-12-18">
+    enum="CommerceHeuristicsDataSource" expires_after="2023-02-19">
   <owner>yuezhanggg@chromium.org</owner>
   <owner>wychen@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -137,7 +137,7 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
 </histogram>
 
 <histogram name="Commerce.Heuristics.CheckoutURLGeneralPatternSource"
-    enum="CommerceHeuristicsDataSource" expires_after="2022-12-18">
+    enum="CommerceHeuristicsDataSource" expires_after="2023-02-19">
   <owner>yuezhanggg@chromium.org</owner>
   <owner>wychen@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -165,7 +165,7 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
 </histogram>
 
 <histogram name="Commerce.Heuristics.PartnerMerchantPatternSource"
-    enum="CommerceHeuristicsDataSource" expires_after="2022-12-04">
+    enum="CommerceHeuristicsDataSource" expires_after="2023-02-19">
   <owner>yuezhanggg@chromium.org</owner>
   <owner>wychen@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -179,8 +179,23 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
   </summary>
 </histogram>
 
+<histogram name="Commerce.Heuristics.ProductIDExtractionPatternSource"
+    enum="CommerceHeuristicsDataSource" expires_after="2023-02-19">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>wychen@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <summary>
+    Product ID extraction pattern heuristics could come from Finch feature
+    parameter or component updater. This histogram is logged when we try to get
+    product ID extraction pattern to record from which source we are getting the
+    pattern. The action of getting product ID extraction is triggered every time
+    we try to load the cart extraction script for ChromeCart, which happens
+    after the user navigates to a cart page or updates the cart page.
+  </summary>
+</histogram>
+
 <histogram name="Commerce.Heuristics.SkipProductPatternSource"
-    enum="CommerceHeuristicsDataSource" expires_after="2022-12-04">
+    enum="CommerceHeuristicsDataSource" expires_after="2023-02-19">
   <owner>yuezhanggg@chromium.org</owner>
   <owner>wychen@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -247,7 +262,7 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
 </histogram>
 
 <histogram name="Commerce.PowerBookmarks.SubscriptionValidationResult"
-    enum="CommerceSubscriptionValidationResult" expires_after="2023-02-01">
+    enum="CommerceSubscriptionValidationResult" expires_after="2023-04-09">
   <owner>ayman@chromium.org</owner>
   <owner>mdjones@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -387,6 +402,46 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
   <token key="TabUsageStatus" variants="TabUsageStatuses"/>
 </histogram>
 
+<histogram name="Commerce.PriceTracking.EmailNotificationsEnabled"
+    enum="PriceNotificationEmailState" expires_after="2023-10-01">
+  <owner>ayman@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <owner>chrome-shopping@google.org</owner>
+  <summary>
+    Records whether the user has price notification emails enabled. This count
+    is recorded daily (once every 24 hours) or the next time the browser starts
+    if more than 24 hours have passed since last recorded. If a user has not
+    tracked a product &quot;not responded&quot; will be recorded instead to help
+    differentiate users interacting with the feature. This metric is implemented
+    for all platforms.
+  </summary>
+</histogram>
+
+<histogram name="Commerce.PriceTracking.PriceTrackedProductCount"
+    units="subscriptions" expires_after="2023-10-01">
+  <owner>ayman@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <owner>chrome-shopping@google.org</owner>
+  <summary>
+    Records the number of price tracked products for the user. This count is
+    recorded daily (once every 24 hours) or the next time the browser starts if
+    more than 24 hours have passed since last recorded. This metric is
+    implemented for all platforms.
+  </summary>
+</histogram>
+
+<histogram name="Commerce.PriceTracking.SidePanelImageLoad"
+    enum="BooleanSuccess" expires_after="2023-10-01">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <owner>chrome-shopping@google.org</owner>
+  <summary>
+    Records every time we try to load an image in the price tracking side panel
+    UI. This histogram logs 'Success' when loading was successful and 'Failure'
+    when there was an error.
+  </summary>
+</histogram>
+
 <histogram name="Commerce.ShoppingService.ProductInfo.FallbackDataContent"
     enum="ShoppingDataProviderFallback" expires_after="2023-06-01">
   <owner>ayman@chromium.org</owner>
@@ -448,6 +503,28 @@ https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histogra
     Recorded when we initialize commerce subscriptions (For eligible users, we
     initialize subscriptions when Chrome becomes foreground app but at most once
     in a one-day moving window). Implemented for Android.
+  </summary>
+</histogram>
+
+<histogram name="Commerce.Subscriptions.TrackResult"
+    enum="ShoppingSubscriptionsRequestStatus" expires_after="2023-04-25">
+  <owner>zhiyuancai@chromium.org</owner>
+  <owner>ayman@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <summary>
+    Records the result of a product tracking request in the subscriptions
+    manager. Recorded when the request finishes.
+  </summary>
+</histogram>
+
+<histogram name="Commerce.Subscriptions.UntrackResult"
+    enum="ShoppingSubscriptionsRequestStatus" expires_after="2023-04-25">
+  <owner>zhiyuancai@chromium.org</owner>
+  <owner>ayman@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <summary>
+    Records the result of a product untracking request in the subscriptions
+    manager. Recorded when the request finishes.
   </summary>
 </histogram>
 

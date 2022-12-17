@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -173,9 +173,11 @@ class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
   // Get the current referrer chain for a given URL.
   void GetReferrerChain(const base::Value::List& args);
 
+#if BUILDFLAG(IS_ANDROID)
   // Get the referring app info that launches Chrome on Android. Always set to
   // null if it's called from platforms other than Android.
   void GetReferringAppInfo(const base::Value::List& args);
+#endif
 
   // Get the list of log messages that have been received since the oldest
   // currently open chrome://safe-browsing tab was opened.

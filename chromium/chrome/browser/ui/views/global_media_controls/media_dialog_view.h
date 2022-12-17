@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -132,6 +132,8 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
                           speech::SodaInstaller::ErrorCode error_code) override;
   void OnSodaProgress(speech::LanguageCode language_code,
                       int progress) override;
+
+  void SetLiveCaptionTitle(const std::u16string& new_text);
 
   std::unique_ptr<global_media_controls::MediaItemUIView> BuildMediaItemUIView(
       const std::string& id,

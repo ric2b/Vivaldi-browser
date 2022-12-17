@@ -1,11 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/cocoa/tab_menu_bridge.h"
 
 #import <Cocoa/Cocoa.h>
-#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 
 #include "base/callback.h"
 #include "base/mac/scoped_nsobject.h"

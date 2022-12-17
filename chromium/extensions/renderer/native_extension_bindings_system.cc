@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -188,8 +188,8 @@ void AddConsoleError(v8::Local<v8::Context> context, const std::string& error) {
 }
 
 // Returns the API schema indicated by |api_name|.
-const base::DictionaryValue& GetAPISchema(const std::string& api_name) {
-  const base::DictionaryValue* schema =
+const base::Value::Dict& GetAPISchema(const std::string& api_name) {
+  const base::Value::Dict* schema =
       ExtensionAPI::GetSharedInstance()->GetSchema(api_name);
   CHECK(schema) << api_name;
   return *schema;
@@ -647,13 +647,15 @@ void NativeExtensionBindingsSystem::HandleResponse(
     int request_id,
     bool success,
     const base::Value::List& response,
-    const std::string& error) {
+    const std::string& error,
+    mojom::ExtraResponseDataPtr extra_data) {
   // Some API calls result in failure, but don't set an error. Use a generic and
   // unhelpful error string.
   // TODO(devlin): Track these down and fix them. See crbug.com/648275.
   api_system_.CompleteRequest(
       request_id, response,
-      !success && error.empty() ? "Unknown error." : error);
+      !success && error.empty() ? "Unknown error." : error,
+      std::move(extra_data));
   ipc_message_sender_->SendOnRequestResponseReceivedIPC(request_id);
 }
 
@@ -862,7 +864,7 @@ void NativeExtensionBindingsSystem::SendRequest(
 
   auto params = mojom::RequestParams::New();
   params->name = request->method_name;
-  base::Value::List args = std::move(request->arguments_list->GetList());
+  base::Value::List args = std::move(*request->arguments_list).TakeList();
   params->arguments = std::move(args);
   params->extension_id = script_context->GetExtensionID();
   params->source_url = url;

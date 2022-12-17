@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,12 +20,14 @@
 #include "base/i18n/rtl.h"
 #include "base/immediate_crash.h"
 #include "base/lazy_instance.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/process/memory.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_util.h"
+#include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequence_manager/sequence_manager_impl.h"
 #include "base/task/sequence_manager/thread_controller_power_monitor.h"
@@ -41,6 +43,7 @@
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chrome_resource_bundle_helper.h"
 #include "chrome/browser/defaults.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/metrics/chrome_feature_list_creator.h"
 #include "chrome/browser/startup_data.h"
 #include "chrome/common/buildflags.h"
@@ -57,6 +60,7 @@
 #include "chrome/common/profiler/unwind_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/gpu/chrome_content_gpu_client.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/renderer/chrome_content_renderer_client.h"
 #include "chrome/utility/chrome_content_utility_client.h"
 #include "components/component_updater/component_updater_paths.h"
@@ -69,7 +73,9 @@
 #include "components/nacl/common/buildflags.h"
 #include "components/services/heap_profiling/public/cpp/profiling_client.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
+#include "components/version_info/channel.h"
 #include "components/version_info/version_info.h"
+#include "content/public/app/initialize_mojo_core.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_paths.h"
@@ -86,7 +92,9 @@
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/resource/scoped_startup_resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -104,6 +112,7 @@
 #include "chrome/install_static/install_util.h"
 #include "components/browser_watcher/extended_crash_reporting.h"
 #include "sandbox/win/src/sandbox.h"
+#include "sandbox/win/src/sandbox_factory.h"
 #include "ui/base/resource/resource_bundle_win.h"
 #endif
 
@@ -133,6 +142,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/dbus/constants/dbus_paths.h"
+#include "components/crash/core/app/breakpad_linux.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -153,6 +163,7 @@
 #include "base/android/java_exception_reporter.h"
 #include "base/android/library_loader/library_loader_hooks.h"
 #include "chrome/browser/android/metrics/uma_session_stats.h"
+#include "chrome/browser/flags/android/cached_feature_flags.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/common/chrome_descriptors.h"
 #include "components/crash/android/pure_java_exception_handler.h"
@@ -164,7 +175,6 @@
 #endif
 
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_ANDROID)
-#include "components/crash/core/app/breakpad_linux.h"
 #include "v8/include/v8-wasm-trap-handler-posix.h"
 #include "v8/include/v8.h"
 #endif
@@ -196,6 +206,11 @@
 #if BUILDFLAG(ENABLE_PDF)
 #include "chrome/child/pdf_child_init.h"
 #endif
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/chrome_process_singleton.h"
+#include "chrome/browser/process_singleton.h"
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(ENABLE_GWP_ASAN)
 #include "components/gwp_asan/client/gwp_asan.h"  // nogncheck
@@ -363,11 +378,10 @@ bool HandleCreditsSwitch(const base::CommandLine& command_line) {
   bool result = base::PathService::Get(base::DIR_ASSETS, &resource_dir);
   DCHECK(result);
 
-  const std::string locale =
-      command_line.GetSwitchValueASCII(::switches::kLang);
-  ui::ResourceBundle::InitSharedInstanceWithLocale(
-      locale, /**parameter_name=*/nullptr,
-      ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+  // Ensure there is an instance of ResourceBundle that is initialized for
+  // localized string resource accesses.
+  ui::ScopedStartupResourceBundle ensure_startup_resource_bundle;
+
   base::FilePath resources_pak =
       resource_dir.Append(FILE_PATH_LITERAL("resources.pak"));
 
@@ -447,7 +461,7 @@ void SIGTERMProfilingShutdown(int signal) {
   struct sigaction sigact;
   memset(&sigact, 0, sizeof(sigact));
   sigact.sa_handler = SIG_DFL;
-  CHECK_EQ(sigaction(SIGTERM, &sigact, NULL), 0);
+  CHECK_EQ(sigaction(SIGTERM, &sigact, nullptr), 0);
   raise(signal);
 }
 
@@ -456,7 +470,7 @@ void SetUpProfilingShutdownHandler() {
   sigact.sa_handler = SIGTERMProfilingShutdown;
   sigact.sa_flags = SA_RESETHAND;
   sigemptyset(&sigact.sa_mask);
-  CHECK_EQ(sigaction(SIGTERM, &sigact, NULL), 0);
+  CHECK_EQ(sigaction(SIGTERM, &sigact, nullptr), 0);
 }
 #endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_ANDROID)
 
@@ -470,11 +484,9 @@ absl::optional<int> HandlePackExtensionSwitches(
   if (!command_line.HasSwitch(switches::kPackExtension))
     return absl::nullopt;
 
-  const std::string locale =
-      command_line.GetSwitchValueASCII(::switches::kLang);
-  ui::ResourceBundle::InitSharedInstanceWithLocale(
-      locale, /*delegate=*/nullptr,
-      ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+  // Ensure there is an instance of ResourceBundle that is initialized for
+  // localized string resource accesses.
+  ui::ScopedStartupResourceBundle ensure_startup_resource_bundle;
 
   extensions::StartupHelper extension_startup_helper;
   std::string error_message;
@@ -652,6 +664,59 @@ absl::optional<int> ChromeMainDelegate::PostEarlyInitialization(
     return absl::nullopt;
   }
 
+#if !BUILDFLAG(IS_ANDROID)
+  // Configure the early process singleton experiment.
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  ChromeProcessSingleton::SetupEarlySingletonFeature(command_line);
+
+  if (ChromeProcessSingleton::IsEarlySingletonFeatureEnabled()) {
+    // Take the Chrome process singleton lock. The process can become the
+    // Browser process if it succeed to take the lock. Otherwise, the
+    // command-line is sent to the actual Browser process and the current
+    // process can be exited.
+    base::FilePath user_data_dir;
+    if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
+      return chrome::RESULT_CODE_MISSING_DATA;
+    }
+
+    ChromeProcessSingleton::CreateInstance(user_data_dir);
+
+    ProcessSingleton::NotifyResult notify_result =
+        ChromeProcessSingleton::GetInstance()->NotifyOtherProcessOrCreate();
+    UMA_HISTOGRAM_ENUMERATION("Chrome.ProcessSingleton.NotifyResult",
+                              notify_result,
+                              ProcessSingleton::kNumNotifyResults);
+    switch (notify_result) {
+      case ProcessSingleton::PROCESS_NONE:
+        // No process already running, continue on to starting a new one.
+        break;
+
+      case ProcessSingleton::PROCESS_NOTIFIED: {
+        // Ensure there is an instance of ResourceBundle that is initialized for
+        // localized string resource accesses.
+        ui::ScopedStartupResourceBundle startup_resource_bundle;
+        printf("%s\n", base::SysWideToNativeMB(
+                           base::UTF16ToWide(l10n_util::GetStringUTF16(
+                               IDS_USED_EXISTING_BROWSER)))
+                           .c_str());
+        return chrome::RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED;
+      }
+
+      case ProcessSingleton::PROFILE_IN_USE:
+        return chrome::RESULT_CODE_PROFILE_IN_USE;
+
+      case ProcessSingleton::LOCK_ERROR:
+        LOG(ERROR) << "Failed to create a ProcessSingleton for your profile "
+                      "directory. This means that running multiple instances "
+                      "would start multiple browser processes rather than "
+                      "opening a new window in the existing process. Aborting "
+                      "now to avoid profile corruption.";
+        return chrome::RESULT_CODE_PROFILE_IN_USE;
+    }
+  }
+#endif
+
 #if BUILDFLAG(IS_WIN)
   // Initialize the cleaner of left-behind tmp files now that the main thread
   // has its SequencedTaskRunner; see https://crbug.com/1075917.
@@ -679,7 +744,19 @@ absl::optional<int> ChromeMainDelegate::PostEarlyInitialization(
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   // Initialize D-Bus for Lacros.
   chromeos::LacrosInitializeDBus();
+#endif
 
+  // The DBus initialization above is needed for FeatureList creation here;
+  // features are needed for Mojo initialization; and Mojo initialization is
+  // needed for LacrosService initialization below.
+  ChromeFeatureListCreator* chrome_feature_list_creator =
+      chrome_content_browser_client_->startup_data()
+          ->chrome_feature_list_creator();
+  chrome_feature_list_creator->CreateFeatureList();
+
+  content::InitializeMojoCore();
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   // LacrosService instance needs the sequence of the main thread,
   // and needs to be created earlier than incoming Mojo invitation handling.
   // This also needs ThreadPool sequences to post some tasks internally.
@@ -716,12 +793,8 @@ absl::optional<int> ChromeMainDelegate::PostEarlyInitialization(
       }
     }
   }
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
-  ChromeFeatureListCreator* chrome_feature_list_creator =
-      chrome_content_browser_client_->startup_data()
-          ->chrome_feature_list_creator();
-  chrome_feature_list_creator->CreateFeatureList();
   CommonEarlyInitialization();
 
   // Initializes the resource bundle and determines the locale.
@@ -762,6 +835,10 @@ absl::optional<int> ChromeMainDelegate::PostEarlyInitialization(
   chrome::CacheChannelInfo();
 #endif
 
+  // TODO(https://crbug.com/1360376): Consider deferring this to run after
+  // startup.
+  RequestUnwindPrerequisitesInstallation(chrome::GetChannel());
+
   return absl::nullopt;
 }
 
@@ -769,6 +846,10 @@ bool ChromeMainDelegate::ShouldCreateFeatureList(InvokedIn invoked_in) {
   // In the browser process Chrome creates the FeatureList, so content should
   // not.
   return absl::holds_alternative<InvokedInChildProcess>(invoked_in);
+}
+
+bool ChromeMainDelegate::ShouldInitializeMojo(InvokedIn invoked_in) {
+  return ShouldCreateFeatureList(invoked_in);
 }
 
 void ChromeMainDelegate::CommonEarlyInitialization() {
@@ -784,7 +865,7 @@ void ChromeMainDelegate::CommonEarlyInitialization() {
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Threading features.
-  base::PlatformThread::InitThreadPostFieldTrial();
+  base::PlatformThread::InitFeaturesPostFieldTrial();
 #endif
 
   version_info::Channel channel = chrome::GetChannel();
@@ -792,8 +873,8 @@ void ChromeMainDelegate::CommonEarlyInitialization() {
       (channel == version_info::Channel::CANARY ||
        channel == version_info::Channel::DEV);
   // GWP-ASAN requires crashpad to gather alloc/dealloc stack traces, which is
-  // not always enabled on Linux/ChromeOS.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  // not always enabled on ChromeOS.
+#if BUILDFLAG(IS_CHROMEOS)
   bool enable_gwp_asan = crash_reporter::IsCrashpadEnabled();
 #else
   bool enable_gwp_asan = true;
@@ -812,9 +893,10 @@ void ChromeMainDelegate::CommonEarlyInitialization() {
 
   // Start heap profiling as early as possible so it can start recording
   // memory allocations.
-  heap_profiler_controller_ = std::make_unique<HeapProfilerController>(
-      channel,
-      GetProfileParamsProcess(*base::CommandLine::ForCurrentProcess()));
+  heap_profiler_controller_ =
+      std::make_unique<heap_profiling::HeapProfilerController>(
+          channel,
+          GetProfileParamsProcess(*base::CommandLine::ForCurrentProcess()));
   heap_profiler_controller_->StartIfEnabled();
 
   if (is_browser_process) {
@@ -857,7 +939,7 @@ void ChromeMainDelegate::CommonEarlyInitialization() {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
   base::MessagePumpLibevent::InitializeFeatures();
 #elif BUILDFLAG(IS_MAC)
-  base::PlatformThread::InitializeOptimizedRealtimeThreadingFeature();
+  base::PlatformThread::InitFeaturesPostFieldTrial();
   base::MessagePumpCFRunLoopBase::InitializeFeatures();
 #endif
 }
@@ -920,15 +1002,34 @@ absl::optional<int> ChromeMainDelegate::BasicStartupComplete() {
   // Setup tracing sampler profiler as early as possible at startup if needed.
   // We pass in CreateCoreUnwindersFactory here since it lives in the chrome/
   // layer while TracingSamplerProfiler is outside of chrome/.
+  //
+  // When we're the browser on android use libunwindstack completely for tracing
+  // sampler profiler because it can support java frames which is essential for
+  // the main thread.
+  base::RepeatingCallback tracing_factory =
+      base::BindRepeating(&CreateCoreUnwindersFactory);
+  tracing::TracingSamplerProfiler::UnwinderType unwinder_type =
+      tracing::TracingSamplerProfiler::UnwinderType::kCustomAndroid;
+#if BUILDFLAG(IS_ANDROID)
+  // If we are the browser process (missing process type), then use the
+  // experimental libunwindstack unwinder.
+  if (!command_line.HasSwitch(switches::kProcessType) &&
+      chrome::android::IsJavaDrivenFeatureEnabled(
+          chrome::android::kUseLibunwindstackNativeUnwinderAndroid)) {
+    tracing_factory = base::BindRepeating(&CreateLibunwindstackUnwinderFactory);
+    unwinder_type = tracing::TracingSamplerProfiler::UnwinderType::
+        kLibunwindstackUnwinderAndroid;
+  }
+#endif
   tracing_sampler_profiler_ =
       tracing::TracingSamplerProfiler::CreateOnMainThread(
-          base::BindRepeating(&CreateCoreUnwindersFactory));
+          std::move(tracing_factory), unwinder_type);
 
 #if BUILDFLAG(IS_WIN)
   v8_crashpad_support::SetUp();
 #endif
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
   if (!crash_reporter::IsCrashpadEnabled()) {
     breakpad::SetFirstChanceExceptionHandler(v8::TryHandleWebAssemblyTrapPosix);
   }
@@ -1334,7 +1435,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
 #else
     const std::string loaded_locale =
         ui::ResourceBundle::InitSharedInstanceWithLocale(
-            locale, NULL, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
+            locale, nullptr, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
 
     base::FilePath resources_pack_path;
     base::PathService::Get(chrome::FILE_RESOURCES_PACK, &resources_pack_path);
@@ -1382,7 +1483,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
     } else {
       base::android::InitJavaExceptionReporterForChildProcess();
     }
-#else   // !BUILDFLAG(IS_ANDROID)
+#elif BUILDFLAG(IS_CHROMEOS)
     if (crash_reporter::IsCrashpadEnabled()) {
       crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
       crash_reporter::SetFirstChanceExceptionHandler(
@@ -1390,6 +1491,10 @@ void ChromeMainDelegate::PreSandboxStartup() {
     } else {
       breakpad::InitCrashReporter(process_type);
     }
+#else
+    crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
+    crash_reporter::SetFirstChanceExceptionHandler(
+        v8::TryHandleWebAssemblyTrapPosix);
 #endif  // BUILDFLAG(IS_ANDROID)
   }
 #endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
@@ -1458,6 +1563,20 @@ absl::variant<int, content::MainFunctionParams> ChromeMainDelegate::RunProcess(
 }
 
 void ChromeMainDelegate::ProcessExiting(const std::string& process_type) {
+  // If not already set, set the shutdown type to be a clean process exit
+  // |kProcessExit|. These browser process shutdowns are clean shutdowns and
+  // their shutdown type must differ from |kNotValid|. If the shutdown type was
+  // already set (a.k.a closing window, end-session), this statement is a no-op.
+  if (process_type.empty()) {
+    browser_shutdown::OnShutdownStarting(
+        browser_shutdown::ShutdownType::kOtherExit);
+  }
+
+#if !BUILDFLAG(IS_ANDROID)
+  if (ChromeProcessSingleton::IsEarlySingletonFeatureEnabled())
+    ChromeProcessSingleton::DeleteInstance();
+#endif  // !BUILDFLAG(IS_ANDROID)
+
   if (SubprocessNeedsResourceBundle(process_type))
     ui::ResourceBundle::CleanupSharedInstance();
 #if !BUILDFLAG(IS_ANDROID)
@@ -1493,6 +1612,7 @@ void ChromeMainDelegate::ZygoteForked() {
       base::CommandLine::ForCurrentProcess();
   std::string process_type =
       command_line->GetSwitchValueASCII(switches::kProcessType);
+#if BUILDFLAG(IS_CHROMEOS)
   if (crash_reporter::IsCrashpadEnabled()) {
     crash_reporter::InitializeCrashpad(false, process_type);
     crash_reporter::SetFirstChanceExceptionHandler(
@@ -1500,6 +1620,11 @@ void ChromeMainDelegate::ZygoteForked() {
   } else {
     breakpad::InitCrashReporter(process_type);
   }
+#else
+  crash_reporter::InitializeCrashpad(false, process_type);
+  crash_reporter::SetFirstChanceExceptionHandler(
+      v8::TryHandleWebAssemblyTrapPosix);
+#endif
 
   // Reset the command line for the newly spawned process.
   crash_keys::SetCrashKeysFromCommandLine(*command_line);
@@ -1569,6 +1694,13 @@ absl::optional<int> ChromeMainDelegate::PreBrowserMain() {
     // Don't do this if the locale is already set, which is done by integration
     // tests to ensure tests always run with the same locale.
     l10n_util::OverrideLocaleWithCocoaLocale();
+  }
+#endif
+
+#if BUILDFLAG(IS_WIN)
+  if (IsExtensionPointDisableSet()) {
+    sandbox::SandboxFactory::GetBrokerServices()->SetStartingMitigations(
+        sandbox::MITIGATION_EXTENSION_POINT_DISABLE);
   }
 #endif
 

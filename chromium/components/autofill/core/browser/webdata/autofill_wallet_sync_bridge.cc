@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,14 +6,10 @@
 
 #include <utility>
 
-#include "base/base64.h"
+#include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
-#include "components/autofill/core/browser/autofill_profile_sync_util.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "base/ranges/algorithm.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
@@ -22,8 +18,6 @@
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_backend.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
-#include "components/autofill/core/common/autofill_util.h"
-#include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/model/client_tag_based_model_type_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
@@ -177,7 +171,9 @@ std::unique_ptr<syncer::MetadataChangeList>
 AutofillWalletSyncBridge::CreateMetadataChangeList() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return std::make_unique<syncer::SyncMetadataStoreChangeList>(
-      GetAutofillTable(), syncer::AUTOFILL_WALLET_DATA);
+      GetAutofillTable(), syncer::AUTOFILL_WALLET_DATA,
+      base::BindRepeating(&syncer::ModelTypeChangeProcessor::ReportError,
+                          change_processor()->GetWeakPtr()));
 }
 
 absl::optional<syncer::ModelError> AutofillWalletSyncBridge::MergeSyncData(
@@ -546,11 +542,8 @@ void AutofillWalletSyncBridge::LogVirtualCardMetadataChanges(
     const std::vector<CreditCard>& new_data) {
   for (const CreditCard& new_card : new_data) {
     // Try to find the old card with same server id.
-    auto old_data_iterator =
-        std::find_if(old_data.begin(), old_data.end(),
-                     [&new_card](const std::unique_ptr<CreditCard>& old_card) {
-                       return new_card.server_id() == old_card->server_id();
-                     });
+    auto old_data_iterator = base::ranges::find(old_data, new_card.server_id(),
+                                                &CreditCard::server_id);
 
     // No existing card with the same ID found.
     if (old_data_iterator == old_data.end()) {

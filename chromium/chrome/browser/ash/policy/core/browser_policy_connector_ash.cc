@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,9 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/components/settings/cros_settings_names.h"
-#include "ash/components/settings/cros_settings_provider.h"
-#include "ash/components/settings/timezone_settings.h"
 #include "ash/constants/ash_paths.h"
 #include "base/bind.h"
 #include "base/check.h"
@@ -78,6 +75,9 @@
 #include "chromeos/ash/components/network/network_cert_loader.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/onc/onc_certificate_importer_impl.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/settings/cros_settings_provider.h"
+#include "chromeos/ash/components/settings/timezone_settings.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
@@ -137,7 +137,7 @@ BrowserPolicyConnectorAsh::BrowserPolicyConnectorAsh()
 
   // DBusThreadManager or DeviceSettingsService may be
   // uninitialized on unit tests.
-  if (chromeos::DBusThreadManager::IsInitialized() &&
+  if (ash::DBusThreadManager::IsInitialized() &&
       ash::DeviceSettingsService::IsInitialized()) {
     std::unique_ptr<DeviceCloudPolicyStoreAsh> device_cloud_policy_store =
         std::make_unique<DeviceCloudPolicyStoreAsh>(

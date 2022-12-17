@@ -1,9 +1,10 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/fusebox/fusebox_moniker.h"
 
+#include "base/strings/strcat.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -55,11 +56,12 @@ std::string MonikerMap::GetFilename(const Moniker& moniker) {
 MonikerMap::MonikerMap() = default;
 MonikerMap::~MonikerMap() = default;
 
-Moniker MonikerMap::CreateMoniker(storage::FileSystemURL target) {
+Moniker MonikerMap::CreateMoniker(storage::FileSystemURL target,
+                                  bool read_only) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   Moniker moniker = base::Token::CreateRandom();
-  map_.insert({moniker, std::move(target)});
+  map_.insert({moniker, std::make_pair(std::move(target), read_only)});
   return moniker;
 }
 
@@ -72,14 +74,25 @@ void MonikerMap::DestroyMoniker(const Moniker& moniker) {
   }
 }
 
-storage::FileSystemURL MonikerMap::Resolve(const Moniker& moniker) {
+MonikerMap::FSURLAndReadOnlyState MonikerMap::Resolve(const Moniker& moniker) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   auto iter = map_.find(moniker);
   if (iter != map_.end()) {
     return iter->second;
   }
-  return storage::FileSystemURL();
+  return std::make_pair(storage::FileSystemURL(), false);
+}
+
+base::Value MonikerMap::GetDebugJSON() {
+  base::Value::Dict dict;
+  for (const auto& i : map_) {
+    dict.Set(i.first.ToString(),
+             base::Value(base::StrCat(
+                 {i.second.first.ToGURL().spec(),
+                  i.second.second ? " (read-only)" : " (read-write)"})));
+  }
+  return base::Value(std::move(dict));
 }
 
 }  // namespace fusebox

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,6 +54,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/welcome/helpers.h"
 #include "chrome/browser/ui/webui/whats_new/whats_new_util.h"
+#include "chrome/browser/web_applications/isolated_web_apps/install_isolated_app_from_command_line.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
 #include "chrome/common/chrome_switches.h"
@@ -91,6 +92,8 @@
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"
+#include "chrome/browser/lacros/browser_launcher.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/startup/browser_params_proxy.h"
 #endif
@@ -110,9 +113,11 @@ namespace {
 
 // Utility functions ----------------------------------------------------------
 
-// In ChromeOS, if the full restore feature is disabled, always restores apps
-// unconditionally. If the full restore feature is enabled, check the previous
-// apps launching history info to decide whether restore apps.
+// On ChromeOS Ash check the previous apps launching history info to decide
+// whether restore apps.
+//
+// On ChromeOS Lacros restore if the browser has automatically restarted or if
+// performing a full restore.
 //
 // In other platforms, restore apps only when the browser is automatically
 // restarted.
@@ -120,6 +125,15 @@ bool ShouldRestoreApps(bool is_post_restart, Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // In ChromeOS, restore apps only when there are apps launched before reboot.
   return full_restore::HasAppTypeBrowser(profile->GetPath());
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  auto* primary_user_profile =
+      g_browser_process->profile_manager()->GetProfileByPath(
+          ProfileManager::GetPrimaryUserProfilePath());
+
+  return is_post_restart ||
+         (primary_user_profile &&
+          BrowserLauncher::GetForProfile(primary_user_profile)
+              ->is_launching_for_full_restore());
 #else
   return is_post_restart;
 #endif
@@ -199,6 +213,8 @@ void StartupBrowserCreatorImpl::Launch(
         command_line_.GetSwitchValueASCII(switches::kInstallChromeApp));
   }
 
+  web_app::MaybeInstallAppFromCommandLine(command_line_, *profile);
+
 #if BUILDFLAG(IS_MAC)
   if (process_startup == chrome::startup::IsProcessStartup::kYes) {
     // Check whether the auto-update system needs to be promoted from user
@@ -269,15 +285,15 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
   bool first_tab = true;
   custom_handlers::ProtocolHandlerRegistry* registry =
       profile_ ? ProtocolHandlerRegistryFactory::GetForBrowserContext(profile_)
-               : NULL;
-  for (size_t i = 0; i < tabs.size(); ++i) {
+               : nullptr;
+  for (auto& tab : tabs) {
     // We skip URLs that we'd have to launch an external protocol handler for.
     // This avoids us getting into an infinite loop asking ourselves to open
     // a URL, should the handler be (incorrectly) configured to be us. Anyone
     // asking us to open such a URL should really ask the handler directly.
     bool handled_by_chrome =
-        ProfileIOData::IsHandledURL(tabs[i].url) ||
-        (registry && registry->IsHandledProtocol(tabs[i].url.scheme()));
+        ProfileIOData::IsHandledURL(tab.url) ||
+        (registry && registry->IsHandledProtocol(tab.url.scheme()));
     if (process_startup == chrome::startup::IsProcessStartup::kNo &&
         !handled_by_chrome) {
       continue;
@@ -287,19 +303,19 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
     // will open as the foreground tab only if the remote content can be
     // retrieved successfully. This prevents needing to automatically close the
     // tab after opening it in the case where What's New does not load.
-    if (tabs[i].url == whats_new::GetWebUIStartupURL()) {
+    if (tab.url == whats_new::GetWebUIStartupURL()) {
       whats_new::StartWhatsNewFetch(browser);
       continue;
     }
 
     int add_types = first_tab ? AddTabTypes::ADD_ACTIVE : AddTabTypes::ADD_NONE;
-    if (tabs[i].type == StartupTab::Type::kPinned)
+    if (tab.type == StartupTab::Type::kPinned)
       add_types |= AddTabTypes::ADD_PINNED;
 
     // NOTE (andre@vivaldi.com) : We need to create the tabs here _without_
     // navigation to make sure they behave correctly inside our webviews.
     if (browser->is_vivaldi()) {
-      GURL restore_url = tabs[i].url;
+      GURL restore_url = tab.url;
       content::WebContents::CreateParams create_params(
         browser->profile(),
         tab_util::GetSiteInstanceForNewTab(browser->profile(), restore_url));
@@ -336,15 +352,14 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
 
     add_types |= AddTabTypes::ADD_FORCE_INDEX;
 
-    NavigateParams params(browser, tabs[i].url,
-                          ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+    NavigateParams params(browser, tab.url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
     params.disposition = first_tab ? WindowOpenDisposition::NEW_FOREGROUND_TAB
                                    : WindowOpenDisposition::NEW_BACKGROUND_TAB;
     params.tabstrip_add_types = add_types;
 
 #if BUILDFLAG(ENABLE_RLZ)
     if (process_startup == chrome::startup::IsProcessStartup::kYes &&
-        google_util::IsGoogleHomePageUrl(tabs[i].url)) {
+        google_util::IsGoogleHomePageUrl(tab.url)) {
       params.extra_headers = rlz::RLZTracker::GetAccessPointHttpHeader(
           rlz::RLZTracker::ChromeHomePage());
     }
@@ -356,11 +371,12 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     if (from_arc) {
-      auto* tab = params.navigated_or_inserted_contents;
-      if (tab) {
+      auto* contents = params.navigated_or_inserted_contents;
+      if (contents) {
         // Add a flag to remember this tab originated in the ARC context.
-        tab->SetUserData(&arc::ArcWebContentsData::kArcTransitionFlag,
-                         std::make_unique<arc::ArcWebContentsData>(tab));
+        contents->SetUserData(
+            &arc::ArcWebContentsData::kArcTransitionFlag,
+            std::make_unique<arc::ArcWebContentsData>(contents));
       }
     }
 #endif
@@ -445,18 +461,10 @@ StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
 
   auto* privacy_sandbox_serivce =
       PrivacySandboxServiceFactory::GetForProfile(profile_);
-  const bool will_use_new_notice_ui =
-      privacy_sandbox::kPrivacySandboxSettings3NewNotice.Get() &&
-      (privacy_sandbox_serivce &&
-       privacy_sandbox_serivce->GetRequiredPromptType() ==
-           PrivacySandboxService::PromptType::kNotice);
-  // Don't add any tabs for the new notice UI. It is a bubble instead of the
-  // modal dialog and it will stay up even while the user is navigating.
   const bool privacy_sandbox_dialog_required =
       privacy_sandbox_serivce &&
-      privacy_sandbox_serivce->GetRequiredPromptType() !=
-          PrivacySandboxService::PromptType::kNone &&
-      !will_use_new_notice_ui;
+      privacy_sandbox_serivce->GetRequiredPromptType() ==
+          PrivacySandboxService::PromptType::kConsent;
 
   if (vivaldi::IsVivaldiRunning()) {
     // Vivaldi always open the same sets of tabs even if the prev. session

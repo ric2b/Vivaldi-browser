@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,10 @@
   },
   "action.openPopup": {
     // TODO(https://crbug.com/1245093): Upgrade to stable channel.
+    "channel": "dev"
+  },
+  "action.isEnabled": {
+    // TODO(https://crbug.com/1189295): Upgrade to stable channel.
     "channel": "dev"
   },
   "activityLogPrivate": [{
@@ -411,6 +415,9 @@
   "enterprise.reportingPrivate.getFileSystemInfo": {
     "platforms": ["win", "mac", "linux"]
   },
+  "enterprise.reportingPrivate.getSettings": {
+    "platforms": ["win", "mac"]
+  },
   "enterprise.reportingPrivate.getAvInfo": {
     "platforms": ["win"]
   },
@@ -674,7 +681,8 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://settings/*"
+      "chrome://settings/*",
+      "chrome://password-manager/*"
     ]
   }, {
     "channel": "stable",
@@ -793,7 +801,8 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://os-settings/*",
-      "chrome://settings/*"
+      "chrome://settings/*",
+      "chrome://password-manager/*"
     ]
   }],
   "sidePanel": {

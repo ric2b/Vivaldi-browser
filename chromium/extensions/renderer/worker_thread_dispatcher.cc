@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -178,9 +178,14 @@ void WorkerThreadDispatcher::UpdateBindingsOnWorkerThread(
     const ExtensionId& extension_id) {
   DCHECK(worker_thread_util::IsWorkerThread());
   DCHECK(!extension_id.empty());
-  GetBindingsSystem()->UpdateBindings(extension_id,
-                                      true /* permissions_changed */,
-                                      Dispatcher::GetWorkerScriptContextSet());
+
+  ServiceWorkerData* data = WorkerThreadDispatcher::GetServiceWorkerData();
+  // Bail out if the worker was destroyed.
+  if (!data)
+    return;
+  data->bindings_system()->UpdateBindings(
+      extension_id, true /* permissions_changed */,
+      Dispatcher::GetWorkerScriptContextSet());
 }
 
 // static
@@ -347,14 +352,16 @@ mojom::EventRouter* WorkerThreadDispatcher::GetEventRouterOnIO() {
   return event_router_remote_.get();
 }
 
-void WorkerThreadDispatcher::OnResponseWorker(int worker_thread_id,
-                                              int request_id,
-                                              bool succeeded,
-                                              const base::Value::List& response,
-                                              const std::string& error) {
+void WorkerThreadDispatcher::OnResponseWorker(
+    int worker_thread_id,
+    int request_id,
+    bool succeeded,
+    ExtensionMsg_ResponseWorkerData response,
+    const std::string& error) {
   ServiceWorkerData* data = g_data_tls.Pointer()->Get();
-  data->bindings_system()->HandleResponse(request_id, succeeded, response,
-                                          error);
+  data->bindings_system()->HandleResponse(request_id, succeeded,
+                                          response.results, error,
+                                          std::move(response.extra_data));
 }
 
 void WorkerThreadDispatcher::DispatchEventHelper(

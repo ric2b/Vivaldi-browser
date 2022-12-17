@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -180,24 +180,18 @@ void PerformEntropyUniformityTest(
 }  // namespace
 
 TEST(EntropyProviderTest, UseOneTimeRandomizationSHA1) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithNullFeatureAndFieldTrialLists();
-
   // Simply asserts that two trials using one-time randomization
   // that have different names, normally generate different results.
   //
   // Note that depending on the one-time random initialization, they
   // _might_ actually give the same result, but we know that given the
   // particular client_id we use for unit tests they won't.
-  base::FieldTrialList field_trial_list(
-      std::make_unique<SHA1EntropyProvider>("client_id"));
+  SHA1EntropyProvider entropy_provider("client_id");
   scoped_refptr<base::FieldTrial> trials[] = {
-      base::FieldTrialList::FactoryGetFieldTrial(
-          "one", 100, "default", base::FieldTrial::ONE_TIME_RANDOMIZED,
-          nullptr),
-      base::FieldTrialList::FactoryGetFieldTrial(
-          "two", 100, "default", base::FieldTrial::ONE_TIME_RANDOMIZED,
-          nullptr),
+      base::FieldTrialList::FactoryGetFieldTrial("one", 100, "default",
+                                                 entropy_provider),
+      base::FieldTrialList::FactoryGetFieldTrial("two", 100, "default",
+                                                 entropy_provider),
   };
 
   for (size_t i = 0; i < std::size(trials); ++i) {
@@ -207,30 +201,23 @@ TEST(EntropyProviderTest, UseOneTimeRandomizationSHA1) {
 
   // The trials are most likely to give different results since they have
   // different names.
-  EXPECT_NE(trials[0]->group(), trials[1]->group());
   EXPECT_NE(trials[0]->group_name(), trials[1]->group_name());
 }
 
 TEST(EntropyProviderTest, UseOneTimeRandomizationNormalizedMurmurHash) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithNullFeatureAndFieldTrialLists();
-
   // Simply asserts that two trials using one-time randomization
   // that have different names, normally generate different results.
   //
   // Note that depending on the one-time random initialization, they
   // _might_ actually give the same result, but we know that given
   // the particular low_entropy_source we use for unit tests they won't.
-  base::FieldTrialList field_trial_list(
-      std::make_unique<NormalizedMurmurHashEntropyProvider>(
-          1234, kMaxLowEntropySize));
+  NormalizedMurmurHashEntropyProvider entropy_provider(1234,
+                                                       kMaxLowEntropySize);
   scoped_refptr<base::FieldTrial> trials[] = {
-      base::FieldTrialList::FactoryGetFieldTrial(
-          "one", 100, "default", base::FieldTrial::ONE_TIME_RANDOMIZED,
-          nullptr),
-      base::FieldTrialList::FactoryGetFieldTrial(
-          "two", 100, "default", base::FieldTrial::ONE_TIME_RANDOMIZED,
-          nullptr),
+      base::FieldTrialList::FactoryGetFieldTrial("one", 100, "default",
+                                                 entropy_provider),
+      base::FieldTrialList::FactoryGetFieldTrial("two", 100, "default",
+                                                 entropy_provider),
   };
 
   for (size_t i = 0; i < std::size(trials); ++i) {
@@ -240,26 +227,19 @@ TEST(EntropyProviderTest, UseOneTimeRandomizationNormalizedMurmurHash) {
 
   // The trials are most likely to give different results since they have
   // different names.
-  EXPECT_NE(trials[0]->group(), trials[1]->group());
   EXPECT_NE(trials[0]->group_name(), trials[1]->group_name());
 }
 
 TEST(EntropyProviderTest, UseOneTimeRandomizationWithCustomSeedSHA1) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithNullFeatureAndFieldTrialLists();
-
   // Ensures that two trials with different names but the same custom seed used
   // for one time randomization produce the same group assignments.
-  base::FieldTrialList field_trial_list(
-      std::make_unique<SHA1EntropyProvider>("client_id"));
+  SHA1EntropyProvider entropy_provider("client_id");
   const uint32_t kCustomSeed = 9001;
   scoped_refptr<base::FieldTrial> trials[] = {
-      base::FieldTrialList::FactoryGetFieldTrialWithRandomizationSeed(
-          "one", 100, "default", base::FieldTrial::ONE_TIME_RANDOMIZED,
-          kCustomSeed, nullptr, nullptr),
-      base::FieldTrialList::FactoryGetFieldTrialWithRandomizationSeed(
-          "two", 100, "default", base::FieldTrial::ONE_TIME_RANDOMIZED,
-          kCustomSeed, nullptr, nullptr),
+      base::FieldTrialList::FactoryGetFieldTrial("one", 100, "default",
+                                                 entropy_provider, kCustomSeed),
+      base::FieldTrialList::FactoryGetFieldTrial("two", 100, "default",
+                                                 entropy_provider, kCustomSeed),
   };
 
   for (size_t i = 0; i < std::size(trials); ++i) {
@@ -269,28 +249,21 @@ TEST(EntropyProviderTest, UseOneTimeRandomizationWithCustomSeedSHA1) {
 
   // Normally, these trials should produce different groups, but if the same
   // custom seed is used, they should produce the same group assignment.
-  EXPECT_EQ(trials[0]->group(), trials[1]->group());
   EXPECT_EQ(trials[0]->group_name(), trials[1]->group_name());
 }
 
 TEST(EntropyProviderTest,
      UseOneTimeRandomizationWithCustomSeedNormalizedMurmurHash) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithNullFeatureAndFieldTrialLists();
-
   // Ensures that two trials with different names but the same custom seed used
   // for one time randomization produce the same group assignments.
-  base::FieldTrialList field_trial_list(
-      std::make_unique<NormalizedMurmurHashEntropyProvider>(
-          1234, kMaxLowEntropySize));
+  NormalizedMurmurHashEntropyProvider entropy_provider(1234,
+                                                       kMaxLowEntropySize);
   const uint32_t kCustomSeed = 9001;
   scoped_refptr<base::FieldTrial> trials[] = {
-      base::FieldTrialList::FactoryGetFieldTrialWithRandomizationSeed(
-          "one", 100, "default", base::FieldTrial::ONE_TIME_RANDOMIZED,
-          kCustomSeed, nullptr, nullptr),
-      base::FieldTrialList::FactoryGetFieldTrialWithRandomizationSeed(
-          "two", 100, "default", base::FieldTrial::ONE_TIME_RANDOMIZED,
-          kCustomSeed, nullptr, nullptr),
+      base::FieldTrialList::FactoryGetFieldTrial("one", 100, "default",
+                                                 entropy_provider, kCustomSeed),
+      base::FieldTrialList::FactoryGetFieldTrial("two", 100, "default",
+                                                 entropy_provider, kCustomSeed),
   };
 
   for (size_t i = 0; i < std::size(trials); ++i) {
@@ -300,7 +273,6 @@ TEST(EntropyProviderTest,
 
   // Normally, these trials should produce different groups, but if the same
   // custom seed is used, they should produce the same group assignment.
-  EXPECT_EQ(trials[0]->group(), trials[1]->group());
   EXPECT_EQ(trials[0]->group_name(), trials[1]->group_name());
 }
 

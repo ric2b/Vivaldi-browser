@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,8 +45,6 @@ class GPU_GLES2_EXPORT GLContextVirtual : public gl::GLContext {
   void SetSafeToForceGpuSwitch() override;
   unsigned int CheckStickyGraphicsResetStatusImpl() override;
   void SetUnbindFboOnMakeCurrent() override;
-  gl::YUVToRGBConverter* GetYUVToRGBConverter(
-      const gfx::ColorSpace& color_space) override;
   void ForceReleaseVirtuallyCurrent() override;
 #if BUILDFLAG(IS_MAC)
   uint64_t BackpressureFenceCreate() override;

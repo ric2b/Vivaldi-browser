@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,10 @@ extern const char kAccessibilityCaptionsTextOpacity[];
 extern const char kAccessibilityCaptionsBackgroundColor[];
 extern const char kAccessibilityCaptionsTextShadow[];
 extern const char kAccessibilityCaptionsBackgroundOpacity[];
+
+// Live Translate prefs.
+extern const char kLiveTranslateEnabled[];
+extern const char kLiveTranslateTargetLanguageCode[];
 
 }  // namespace prefs
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,11 @@
 
 namespace apps::features {
 
-extern const base::Feature kLinkCapturingUiUpdate;
-extern const base::Feature kLinkCapturingInfoBar;
-extern const base::Feature kIntentChipSkipsPicker;
-extern const base::Feature kIntentChipAppIcon;
-extern const base::Feature kLinkCapturingAutoDisplayIntentPicker;
+BASE_DECLARE_FEATURE(kLinkCapturingUiUpdate);
+BASE_DECLARE_FEATURE(kLinkCapturingInfoBar);
+BASE_DECLARE_FEATURE(kIntentChipSkipsPicker);
+BASE_DECLARE_FEATURE(kIntentChipAppIcon);
+BASE_DECLARE_FEATURE(kLinkCapturingAutoDisplayIntentPicker);
 
 // Returns true if the overall link capturing UI update feature is enabled.
 bool LinkCapturingUiUpdateEnabled();

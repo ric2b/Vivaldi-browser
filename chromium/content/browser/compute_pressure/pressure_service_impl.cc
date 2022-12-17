@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,13 +44,6 @@ PressureServiceImpl::PressureServiceImpl(
     : DocumentUserData<PressureServiceImpl>(render_frame_host),
       visible_observer_rate_limit_(visible_observer_rate_limit) {
   DCHECK(render_frame_host);
-
-  // base::Unretained use is safe because mojo guarantees the callback will not
-  // be called after `observers_` is deallocated, and `observers_` is owned by
-  // PressureServiceImpl.
-  observers_.set_disconnect_handler(
-      base::BindRepeating(&PressureServiceImpl::OnObserverRemoteDisconnected,
-                          base::Unretained(this)));
 }
 
 PressureServiceImpl::~PressureServiceImpl() {
@@ -61,20 +54,17 @@ void PressureServiceImpl::BindReceiver(
     mojo::PendingReceiver<blink::mojom::PressureService> receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  receivers_.Add(this, std::move(receiver));
-}
-
-void PressureServiceImpl::AddObserver(
-    mojo::PendingRemote<blink::mojom::PressureObserver> observer,
-    blink::mojom::PressureQuantizationPtr quantization,
-    AddObserverCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (!PressureQuantizer::IsValid(*quantization)) {
-    mojo::ReportBadMessage("Invalid quantization");
-    std::move(callback).Run(blink::mojom::PressureStatus::kSecurityError);
+  if (receiver_.is_bound()) {
+    mojo::ReportBadMessage("PressureService is already connected");
     return;
   }
+  receiver_.Bind(std::move(receiver));
+}
+
+void PressureServiceImpl::BindObserver(
+    mojo::PendingRemote<blink::mojom::PressureObserver> observer,
+    BindObserverCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!render_frame_host().IsActive() ||
       render_frame_host().IsNestedWithinFencedFrame()) {
@@ -84,54 +74,49 @@ void PressureServiceImpl::AddObserver(
 
   if (!remote_.is_bound()) {
     auto receiver = remote_.BindNewPipeAndPassReceiver();
-    // base::Unretained use is safe because mojo guarantees the callback will
-    // not be called after `remote_` is deallocated, and `remote_` is owned by
-    // PressureServiceImpl.
+    // base::Unretained is safe because Mojo guarantees the callback will not
+    // be called after `remote_` is deallocated, and `remote_` is owned by
+    // this class.
     remote_.set_disconnect_handler(
         base::BindRepeating(&PressureServiceImpl::OnManagerRemoteDisconnected,
                             base::Unretained(this)));
     GetDeviceService().BindPressureManager(std::move(receiver));
   }
 
-  if (observers_.empty() || !quantizer_.IsSame(*quantization)) {
-    ResetObserverState();
-    quantizer_.Assign(std::move(quantization));
-  }
+  ResetObserverState();
 
-  if (!client_.is_bound()) {
-    remote_->AddClient(
-        client_.BindNewPipeAndPassRemote(),
-        base::BindOnce(&PressureServiceImpl::DidAddObserver,
-                       base::Unretained(this), std::move(observer),
-                       std::move(callback)));
+  observer_.Bind(std::move(observer));
+  // base::Unretained is safe because Mojo guarantees the callback will not
+  // be called after `observers_` is deallocated, and `observers_` is owned by
+  // this class.
+  observer_.set_disconnect_handler(
+      base::BindRepeating(&PressureServiceImpl::OnObserverRemoteDisconnected,
+                          base::Unretained(this)));
 
-    // base::Unretained use is safe because mojo guarantees the callback will
-    // not be called after `client_` is deallocated, and `client_` is owned by
-    // PressureServiceImpl.
-    client_.set_disconnect_handler(base::BindOnce(
-        &PressureServiceImpl::ResetObserverState, base::Unretained(this)));
-    return;
-  }
+  client_.reset();
+  remote_->AddClient(
+      client_.BindNewPipeAndPassRemote(),
+      base::BindOnce(&PressureServiceImpl::DidBindObserver,
+                     base::Unretained(this), std::move(callback)));
 
-  DidAddObserver(std::move(observer), std::move(callback), true);
+  // base::Unretained is safe because Mojo guarantees the callback will not
+  // be called after `client_` is deallocated, and `client_` is owned by
+  // this class.
+  client_.set_disconnect_handler(base::BindOnce(
+      &PressureServiceImpl::ResetObserverState, base::Unretained(this)));
 }
 
 void PressureServiceImpl::PressureStateChanged(
-    device::mojom::PressureStatePtr state,
-    base::Time timestamp) {
+    device::mojom::PressureUpdatePtr update) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  device::mojom::PressureState quantized_state =
-      quantizer_.Quantize(std::move(state));
 
   // TODO(jsbell): Rate-limit observers in non-visible frames instead of
   //               cutting off their updates completely.
-  if (timestamp - last_reported_timestamp_ < visible_observer_rate_limit_)
+  if (last_reported_update_ &&
+      update->timestamp - last_reported_update_->timestamp <
+          visible_observer_rate_limit_) {
     return;
-
-  // No need to send an update if previous value is similar.
-  if (last_reported_state_ == quantized_state)
-    return;
+  }
 
   if (!render_frame_host().IsActive()) {
     // TODO(jsbell): Is it safe to disconnect observers in this state?
@@ -145,57 +130,45 @@ void PressureServiceImpl::PressureStateChanged(
     return;
   }
 
-  last_reported_timestamp_ = timestamp;
-  last_reported_state_ = quantized_state;
-
-  for (const auto& observer : observers_)
-    observer->OnUpdate(quantized_state.Clone());
+  last_reported_update_ = update.Clone();
+  observer_->OnUpdate(update.Clone());
 }
 
-void PressureServiceImpl::OnObserverRemoteDisconnected(
-    mojo::RemoteSetElementId /*id*/) {
+void PressureServiceImpl::OnObserverRemoteDisconnected() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (observers_.empty()) {
-    client_.reset();
-    ResetObserverState();
-  }
+  client_.reset();
+  ResetObserverState();
 }
 
 void PressureServiceImpl::OnManagerRemoteDisconnected() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  observers_.Clear();
+  observer_.reset();
   client_.reset();
   remote_.reset();
 }
 
-void PressureServiceImpl::DidAddObserver(
-    mojo::PendingRemote<blink::mojom::PressureObserver> observer,
-    AddObserverCallback callback,
-    bool success) {
+void PressureServiceImpl::DidBindObserver(BindObserverCallback callback,
+                                          bool success) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!success) {
     std::move(callback).Run(blink::mojom::PressureStatus::kNotSupported);
+    ResetObserverState();
     return;
   }
 
-  observers_.Add(std::move(observer));
   std::move(callback).Run(blink::mojom::PressureStatus::kOk);
 }
 
 void PressureServiceImpl::ResetObserverState() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  observers_.Clear();
-
-  // Makes sure that rate-limiting can't be bypassed by changing the
-  // quantization scheme often.
-  last_reported_timestamp_ = base::Time::Now();
+  observer_.reset();
 
   // Setting to an invalid value, so any state is considered an update.
-  last_reported_state_ = device::mojom::PressureState(-1);
+  last_reported_update_ = nullptr;
 }
 
 DOCUMENT_USER_DATA_KEY_IMPL(PressureServiceImpl);

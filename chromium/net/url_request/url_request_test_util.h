@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,8 +30,10 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cookies/cookie_monster.h"
-#include "net/cookies/same_party_context.h"
 #include "net/disk_cache/disk_cache.h"
+#include "net/first_party_sets/first_party_set_metadata.h"
+#include "net/first_party_sets/first_party_sets_cache_filter.h"
+#include "net/first_party_sets/same_party_context.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_layer.h"
@@ -45,7 +47,6 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "net/url_request/url_request_context_storage.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/url_util.h"
@@ -288,6 +289,10 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
     before_start_transaction_fails_ = true;
   }
 
+  void set_fps_cache_filter(FirstPartySetsCacheFilter cache_filter) {
+    fps_cache_filter_ = std::move(cache_filter);
+  }
+
  protected:
   // NetworkDelegate:
   int OnBeforeURLRequest(URLRequest* request,
@@ -310,6 +315,7 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   void OnURLRequestDestroyed(URLRequest* request) override;
   bool OnAnnotateAndMoveUserBlockedCookies(
       const URLRequest& request,
+      const net::FirstPartySetMetadata& first_party_set_metadata,
       net::CookieAccessResultList& maybe_included_cookies,
       net::CookieAccessResultList& excluded_cookies) override;
   NetworkDelegate::PrivacySetting OnForcePrivacyMode(
@@ -324,6 +330,11 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
       const URLRequest& request,
       const GURL& target_url,
       const GURL& referrer_url) const override;
+  absl::optional<FirstPartySetsCacheFilter::MatchInfo>
+  OnGetFirstPartySetsCacheFilterMatchInfoMaybeAsync(
+      const SchemefulSite& request_site,
+      base::OnceCallback<void(FirstPartySetsCacheFilter::MatchInfo)> callback)
+      const override;
 
   void InitRequestStatesIfNew(int request_id);
 
@@ -367,6 +378,8 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   bool before_start_transaction_fails_ = false;
   bool add_header_to_first_response_ = false;
   int next_request_id_ = 0;
+
+  FirstPartySetsCacheFilter fps_cache_filter_;
 };
 
 // ----------------------------------------------------------------------------
@@ -394,6 +407,7 @@ class FilteringTestNetworkDelegate : public TestNetworkDelegate {
 
   bool OnAnnotateAndMoveUserBlockedCookies(
       const URLRequest& request,
+      const net::FirstPartySetMetadata& first_party_set_metadata,
       net::CookieAccessResultList& maybe_included_cookies,
       net::CookieAccessResultList& excluded_cookies) override;
 

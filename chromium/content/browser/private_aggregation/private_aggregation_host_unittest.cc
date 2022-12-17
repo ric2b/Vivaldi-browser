@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/guid.h"
 #include "base/test/gmock_move_support.h"
 #include "base/test/mock_callback.h"
@@ -21,6 +22,7 @@
 #include "content/browser/private_aggregation/private_aggregation_test_utils.h"
 #include "content/common/aggregatable_report.mojom.h"
 #include "content/common/private_aggregation_host.mojom.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_utils.h"
@@ -63,8 +65,6 @@ class PrivateAggregationHostTest : public testing::Test {
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   TestBrowserContext test_browser_context_;
 };
-
-}  // namespace
 
 TEST_F(PrivateAggregationHostTest,
        SendHistogramReport_ReportRequestHasCorrectMembers) {
@@ -120,7 +120,7 @@ TEST_F(PrivateAggregationHostTest,
               AggregatableReportSharedInfo::DebugMode::kDisabled,
               /*additional_fields=*/base::Value::Dict(),
               /*api_version=*/"0.1",
-              /*api_identifier=*/"private-aggregation"),
+              /*api_identifier=*/"fledge"),
           /*reporting_path=*/"/.well-known/private-aggregation/report-fledge");
   ASSERT_TRUE(expected_request);
 
@@ -128,7 +128,7 @@ TEST_F(PrivateAggregationHostTest,
       validated_request.value(), expected_request.value()));
 }
 
-TEST_F(PrivateAggregationHostTest, ReportingPath) {
+TEST_F(PrivateAggregationHostTest, ApiDiffers_RequestUpdatesCorrectly) {
   const url::Origin kExampleOrigin =
       url::Origin::Create(GURL("https://example.com"));
   const url::Origin kMainFrameOrigin =
@@ -168,6 +168,10 @@ TEST_F(PrivateAggregationHostTest, ReportingPath) {
             "/.well-known/private-aggregation/report-fledge");
   EXPECT_EQ(validated_requests[1]->reporting_path(),
             "/.well-known/private-aggregation/report-shared-storage");
+
+  EXPECT_EQ(validated_requests[0]->shared_info().api_identifier, "fledge");
+  EXPECT_EQ(validated_requests[1]->shared_info().api_identifier,
+            "shared-storage");
 }
 
 TEST_F(PrivateAggregationHostTest, DebugModeDetails_ReflectedInReport) {
@@ -447,5 +451,51 @@ TEST_F(PrivateAggregationHostTest, PrivateAggregationDisallowed_RequestFails) {
   remote.FlushForTesting();
   EXPECT_TRUE(remote.is_connected());
 }
+
+class PrivateAggregationHostDeveloperModeTest
+    : public PrivateAggregationHostTest {
+ public:
+  PrivateAggregationHostDeveloperModeTest() {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kPrivateAggregationDeveloperMode);
+  }
+};
+
+TEST_F(PrivateAggregationHostDeveloperModeTest,
+       SendHistogramReport_ScheduledReportTimeIsNotDelayed) {
+  const url::Origin kExampleOrigin =
+      url::Origin::Create(GURL("https://example.com"));
+  const url::Origin kMainFrameOrigin =
+      url::Origin::Create(GURL("https://main_frame.com"));
+
+  mojo::Remote<mojom::PrivateAggregationHost> remote;
+  EXPECT_TRUE(host_->BindNewReceiver(kExampleOrigin, kMainFrameOrigin,
+                                     PrivateAggregationBudgetKey::Api::kFledge,
+                                     remote.BindNewPipeAndPassReceiver()));
+
+  absl::optional<AggregatableReportRequest> validated_request;
+  EXPECT_CALL(mock_callback_,
+              Run(_, Property(&PrivateAggregationBudgetKey::api,
+                              PrivateAggregationBudgetKey::Api::kFledge)))
+      .WillOnce(MoveArg<0>(&validated_request));
+
+  std::vector<mojom::AggregatableReportHistogramContributionPtr> contributions;
+  contributions.push_back(mojom::AggregatableReportHistogramContribution::New(
+      /*bucket=*/123, /*value=*/456));
+  remote->SendHistogramReport(std::move(contributions),
+                              mojom::AggregationServiceMode::kDefault,
+                              mojom::DebugModeDetails::New());
+
+  remote.FlushForTesting();
+  EXPECT_TRUE(remote.is_connected());
+
+  ASSERT_TRUE(validated_request);
+
+  // We're using `MOCK_TIME` so we can be sure no time has advanced.
+  EXPECT_EQ(validated_request->shared_info().scheduled_report_time,
+            base::Time::Now());
+}
+
+}  // namespace
 
 }  // namespace content

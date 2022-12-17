@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -82,9 +82,6 @@ public class AssistantVoiceSearchServiceUnitTest {
     @Rule
     public final AccountManagerTestRule mAccountManagerTestRule =
             new AccountManagerTestRule(mFakeAccountManagerFacade);
-
-    @Rule
-    public TestRule mCommandLineFlagsRule = CommandLineFlags.getTestRule();
 
     @Mock
     GSAState mGsaState;

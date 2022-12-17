@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -131,7 +131,7 @@ std::set<std::string> RealtimeReportingJobConfiguration::GetFailedUploadIds(
   base::Value response_value = response ? std::move(*response) : base::Value();
   base::Value* failedUploads = response_value.FindListKey(kFailedUploadsKey);
   if (failedUploads) {
-    for (const auto& failedUpload : failedUploads->GetListDeprecated()) {
+    for (const auto& failedUpload : failedUploads->GetList()) {
       auto* id = failedUpload.FindStringKey(kEventIdKey);
       if (id) {
         failedIds.insert(*id);

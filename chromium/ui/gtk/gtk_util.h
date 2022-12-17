@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,7 +71,7 @@ class CairoSurface {
   SkColor GetAveragePixelValue(bool frame);
 
  private:
-  raw_ptr<cairo_surface_t, DanglingUntriaged> surface_;
+  raw_ptr<cairo_surface_t> surface_;
   raw_ptr<cairo_t> cairo_;
 };
 

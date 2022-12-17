@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +43,7 @@ enum ProfileSignout : int {
   // Signed out because credentials are invalid and force-sign-in is enabled.
   AUTHENTICATION_FAILED_WITH_FORCE_SIGNIN = 7,
   // The user disables sync from the DICE UI.
-  USER_TUNED_OFF_SYNC_FROM_DICE_UI = 8,
+  // Deprecated: USER_TUNED_OFF_SYNC_FROM_DICE_UI = 8,
   // Signout forced because the account was removed from the device.
   ACCOUNT_REMOVED_FROM_DEVICE = 9,
   // Signin is no longer allowed when the profile is initialized.
@@ -189,6 +189,8 @@ enum class AccessPoint : int {
   ACCESS_POINT_SEND_TAB_TO_SELF_PROMO = 36,
   ACCESS_POINT_NTP_FEED_TOP_PROMO = 37,
   ACCESS_POINT_SETTINGS_SYNC_OFF_ROW = 38,
+  ACCESS_POINT_POST_DEVICE_RESTORE_SIGNIN_PROMO = 39,
+  ACCESS_POINT_POST_DEVICE_RESTORE_BACKGROUND_SIGNIN = 40,
   // Add values above this line with a corresponding label to the
   // "SigninAccessPoint" enum in tools/metrics/histograms/enums.xml
   ACCESS_POINT_MAX,  // This must be last.
@@ -289,7 +291,9 @@ enum class AccountConsistencyPromoAction : int {
   TIMEOUT_ERROR_SHOWN = 17,
   // The web sign-in is not shown because the user is already signed in.
   SUPPRESSED_ALREADY_SIGNED_IN = 18,
-  MAX = 18,
+  // AuthenticationFlow failed to sign-in.
+  SIGN_IN_FAILED = 19,
+  kMaxValue = SIGN_IN_FAILED,
 };
 #endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 
@@ -447,6 +451,23 @@ enum class FetchAccountCapabilitiesFromSystemLibraryResult {
   kErrorUnexpectedValue = 21,
 
   kMaxValue = kErrorUnexpectedValue
+};
+
+// Enum values used for "Signin.SyncConsentScreen.DataRowClicked"
+// histogram, which records that a user tapped on an entry in TangibleSync
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// TODO(crbug.com/1373063): use this enum in java
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.signin.metrics
+enum class SigninSyncConsentDataRow {
+  // The bookmark row is tapped.
+  kBookmarksRowTapped = 0,
+  // The Autofill row is tapped.
+  kAutofillRowTapped = 1,
+  // The "History and more" row is tapped.
+  kHistoryRowTapped = 2,
+  // Always the last enumerated type.
+  kMaxValue = kHistoryRowTapped,
 };
 
 // -----------------------------------------------------------------------------

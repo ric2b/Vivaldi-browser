@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,6 +31,15 @@ struct AppLaunchParams {
   AppLaunchParams(const std::string& app_id,
                   LaunchContainer container,
                   WindowOpenDisposition disposition,
+                  apps::LaunchSource launch_source,
+                  int64_t display_id,
+                  const std::vector<base::FilePath>& files,
+                  const IntentPtr& intentPtr);
+
+  AppLaunchParams(const std::string& app_id,
+                  LaunchContainer container,
+                  WindowOpenDisposition disposition,
+                  const GURL& override_url,
                   apps::LaunchSource launch_source,
                   int64_t display_id,
                   const std::vector<base::FilePath>& files,

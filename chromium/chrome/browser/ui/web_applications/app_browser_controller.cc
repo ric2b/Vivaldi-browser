@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -251,6 +251,10 @@ bool AppBrowserController::AppUsesBorderlessMode() const {
   return false;
 }
 
+bool AppBrowserController::IsIsolatedWebApp() const {
+  return false;
+}
+
 bool AppBrowserController::IsWindowControlsOverlayEnabled() const {
   return false;
 }
@@ -427,14 +431,6 @@ CustomThemeSupplier* AppBrowserController::GetThemeSupplier() const {
   return theme_pack_.get();
 }
 
-bool AppBrowserController::ShouldUseSystemTheme() const {
-#if BUILDFLAG(IS_LINUX)
-  return browser_->profile()->GetPrefs()->GetBoolean(prefs::kUsesSystemTheme);
-#else
-  return false;
-#endif
-}
-
 bool AppBrowserController::ShouldUseCustomFrame() const {
   return true;
 }
@@ -442,7 +438,7 @@ bool AppBrowserController::ShouldUseCustomFrame() const {
 void AppBrowserController::AddColorMixers(
     ui::ColorProvider* provider,
     const ui::ColorProviderManager::Key& key) const {
-  constexpr float kSeparatorOpacity = 0.15f;
+  constexpr SkAlpha kSeparatorOpacity = 0.15f * 255.0f;
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   // This color is the same as the default active frame color.
   const absl::optional<SkColor> theme_color = GetThemeColor();

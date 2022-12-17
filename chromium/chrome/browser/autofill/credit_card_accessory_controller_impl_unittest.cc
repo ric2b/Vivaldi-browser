@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -123,8 +123,8 @@ class CreditCardAccessoryControllerTest
     form.action = origin;
     form.main_frame_origin = url::Origin::Create(origin);
     client_.set_form_origin(origin);
-    // Promo codes are filtered by AutofillClient's |last_committed_url_|.
-    client_.set_last_committed_url(GURL(kExampleSite));
+    // Promo codes are filtered by the last_committed_primary_main_frame_url.
+    client_.set_last_committed_primary_main_frame_url(GURL(kExampleSite));
   }
 
  protected:

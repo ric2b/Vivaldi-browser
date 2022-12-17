@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -128,7 +128,9 @@ void PaintPropertyTreeBuilderTest::SetUp() {
 
 INSTANTIATE_TEST_SUITE_P(All,
                          PaintPropertyTreeBuilderTest,
-                         ::testing::Values(0, kUnderInvalidationChecking));
+                         ::testing::Values(0,
+                                           kUnderInvalidationChecking,
+                                           kScrollUpdateOptimizations));
 
 TEST_P(PaintPropertyTreeBuilderTest, FixedPosition) {
   LoadTestData("fixed-position.html");
@@ -572,8 +574,9 @@ TEST_P(PaintPropertyTreeBuilderTest, Perspective) {
   Element* perspective = GetDocument().getElementById("perspective");
   const ObjectPaintProperties* perspective_properties =
       perspective->GetLayoutObject()->FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().ApplyPerspective(100),
-            perspective_properties->Perspective()->Matrix());
+  TransformationMatrix matrix;
+  matrix.ApplyPerspectiveDepth(100);
+  EXPECT_EQ(matrix, perspective_properties->Perspective()->Matrix());
   // The perspective origin is the center of the border box plus accumulated
   // paint offset.
   EXPECT_EQ(gfx::Point3F(250, 250, 0),
@@ -596,8 +599,9 @@ TEST_P(PaintPropertyTreeBuilderTest, Perspective) {
 
   perspective->setAttribute(html_names::kStyleAttr, "perspective: 200px");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(TransformationMatrix().ApplyPerspective(200),
-            perspective_properties->Perspective()->Matrix());
+  TransformationMatrix matrix1;
+  matrix1.ApplyPerspectiveDepth(200);
+  EXPECT_EQ(matrix1, perspective_properties->Perspective()->Matrix());
   EXPECT_EQ(gfx::Point3F(250, 250, 0),
             perspective_properties->Perspective()->Origin());
   EXPECT_EQ(DocScrollTranslation(),
@@ -606,8 +610,7 @@ TEST_P(PaintPropertyTreeBuilderTest, Perspective) {
   perspective->setAttribute(html_names::kStyleAttr,
                             "perspective-origin: 5% 20%");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(TransformationMatrix().ApplyPerspective(100),
-            perspective_properties->Perspective()->Matrix());
+  EXPECT_EQ(matrix, perspective_properties->Perspective()->Matrix());
   EXPECT_EQ(gfx::Point3F(70, 160, 0),
             perspective_properties->Perspective()->Origin());
   EXPECT_EQ(DocScrollTranslation(),
@@ -627,7 +630,7 @@ TEST_P(PaintPropertyTreeBuilderTest, Transform) {
   const ObjectPaintProperties* transform_properties =
       transform->GetLayoutObject()->FirstFragment().PaintProperties();
 
-  EXPECT_EQ(TransformationMatrix().Translate3d(123, 456, 789),
+  EXPECT_EQ(MakeTranslationMatrix(123, 456, 789),
             transform_properties->Transform()->Matrix());
   EXPECT_EQ(gfx::Point3F(200, 150, 0),
             transform_properties->Transform()->Origin());
@@ -655,12 +658,11 @@ TEST_P(PaintPropertyTreeBuilderTest, Transform) {
       "margin-left: 50px; margin-top: 100px; width: 400px; height: 300px; "
       "transform: translate3d(123px, 456px, 789px)");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(TransformationMatrix().Translate3d(123, 456, 789),
-            transform->GetLayoutObject()
-                ->FirstFragment()
-                .PaintProperties()
-                ->Transform()
-                ->Matrix());
+  EXPECT_EQ(MakeTranslationMatrix(123, 456, 789), transform->GetLayoutObject()
+                                                      ->FirstFragment()
+                                                      .PaintProperties()
+                                                      ->Transform()
+                                                      ->Matrix());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, Preserve3D3DTransformedDescendant) {
@@ -1175,7 +1177,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesInSVG) {
            ->GetLayoutObject();
   const ObjectPaintProperties* svg_root_with3d_transform_properties =
       svg_root_with3d_transform.FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Translate3d(1, 2, 3),
+  EXPECT_EQ(MakeTranslationMatrix(1, 2, 3),
             svg_root_with3d_transform_properties->Transform()->Matrix());
   EXPECT_EQ(gfx::Point3F(50, 50, 0),
             svg_root_with3d_transform_properties->Transform()->Origin());
@@ -1232,7 +1234,7 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGViewBoxTransform) {
       *GetLayoutObjectByElementId("svgWithViewBox");
   const ObjectPaintProperties* svg_with_view_box_properties =
       svg_with_view_box.FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Translate3d(1, 2, 3),
+  EXPECT_EQ(MakeTranslationMatrix(1, 2, 3),
             svg_with_view_box_properties->Transform()->Matrix());
   EXPECT_EQ(gfx::Vector2dF(-50, -50),
             svg_with_view_box_properties->ReplacedContentTransform()
@@ -1296,8 +1298,9 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGRootLocalToBorderBoxTransformNode) {
   EXPECT_EQ(gfx::Vector2dF(2, 3),
             svg_properties->PaintOffsetTranslation()->Translation2D());
   EXPECT_EQ(gfx::Vector2dF(5, 7), svg_properties->Transform()->Translation2D());
-  EXPECT_EQ(TransformationMatrix().Translate(11, 11).Scale(100.0 / 13.0),
-            svg_properties->ReplacedContentTransform()->Matrix());
+  auto matrix = MakeTranslationMatrix(11, 11);
+  matrix.Scale(100.0 / 13.0);
+  EXPECT_EQ(matrix, svg_properties->ReplacedContentTransform()->Matrix());
   EXPECT_EQ(svg_properties->PaintOffsetTranslation(),
             svg_properties->Transform()->Parent());
   EXPECT_EQ(svg_properties->Transform(),
@@ -1330,14 +1333,13 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGNestedViewboxTransforms) {
       svg.FirstFragment().PaintProperties();
   EXPECT_EQ(gfx::Vector2dF(11, 11),
             svg_properties->Transform()->Translation2D());
-  EXPECT_EQ(TransformationMatrix().Scale(2),
+  EXPECT_EQ(MakeScaleMatrix(2),
             svg_properties->ReplacedContentTransform()->Matrix());
 
   LayoutObject& nested_svg = *GetLayoutObjectByElementId("nestedSvg");
   const ObjectPaintProperties* nested_svg_properties =
       nested_svg.FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Scale(10),
-            nested_svg_properties->Transform()->Matrix());
+  EXPECT_EQ(MakeScaleMatrix(10), nested_svg_properties->Transform()->Matrix());
   EXPECT_EQ(nullptr, nested_svg_properties->ReplacedContentTransform());
   EXPECT_EQ(svg_properties->ReplacedContentTransform(),
             nested_svg_properties->Transform()->Parent());
@@ -1369,14 +1371,14 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesAcrossSVGHTMLBoundary) {
       *GetLayoutObjectByElementId("svgWithTransform");
   const ObjectPaintProperties* svg_with_transform_properties =
       svg_with_transform.FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Translate3d(1, 2, 3),
+  EXPECT_EQ(MakeTranslationMatrix(1, 2, 3),
             svg_with_transform_properties->Transform()->Matrix());
 
   LayoutObject& div_with_transform =
       *GetLayoutObjectByElementId("divWithTransform");
   const ObjectPaintProperties* div_with_transform_properties =
       div_with_transform.FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Translate3d(3, 4, 5),
+  EXPECT_EQ(MakeTranslationMatrix(3, 4, 5),
             div_with_transform_properties->Transform()->Matrix());
   // Ensure the div's transform node is a child of the svg's transform node.
   EXPECT_EQ(svg_with_transform_properties->Transform(),
@@ -1397,7 +1399,7 @@ TEST_P(PaintPropertyTreeBuilderTest, ForeignObjectWithTransformAndOffset) {
   LayoutObject& foreign_object = *GetLayoutObjectByElementId("foreignObject");
   const ObjectPaintProperties* foreign_object_properties =
       foreign_object.FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Scale(5),
+  EXPECT_EQ(MakeScaleMatrix(5),
             foreign_object_properties->Transform()->Matrix());
   EXPECT_EQ(PhysicalOffset(10, 10),
             foreign_object.FirstFragment().PaintOffset());
@@ -1452,7 +1454,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PaintOffsetTranslationSVGHTMLBoundary) {
       *GetLayoutObjectByElementId("divWithTransform");
   const ObjectPaintProperties* div_with_transform_properties =
       div_with_transform.FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Translate3d(3, 4, 5),
+  EXPECT_EQ(MakeTranslationMatrix(3, 4, 5),
             div_with_transform_properties->Transform()->Matrix());
   EXPECT_EQ(
       gfx::Vector2dF(8, 158),
@@ -1502,8 +1504,9 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGViewportContainer) {
   EXPECT_EQ(parent_clip, clip->Parent());
   EXPECT_CLIP_RECT(gfx::RectF(0, 0, 60, 60), clip);
   EXPECT_EQ(transform, &clip->LocalTransformSpace());
-  EXPECT_EQ(TransformationMatrix().Translate(40, 50).Scale(0.5),
-            transform->Matrix());
+  auto matrix = MakeTranslationMatrix(40, 50);
+  matrix.Scale(0.5);
+  EXPECT_EQ(matrix, transform->Matrix());
   EXPECT_EQ(parent_transform, transform->Parent());
 
   // overflow: visible and zero offset: no paint properties.
@@ -1613,7 +1616,7 @@ TEST_P(PaintPropertyTreeBuilderTest,
   LayoutObject& svg = *GetLayoutObjectByElementId("svg");
   const ObjectPaintProperties* svg_properties =
       svg.FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Translate3d(1, 2, 3),
+  EXPECT_EQ(MakeTranslationMatrix(1, 2, 3),
             svg_properties->Transform()->Matrix());
 
   LayoutObject& container = *GetLayoutObjectByElementId("container");
@@ -1815,7 +1818,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesAcrossSubframes) {
       GetLayoutObjectByElementId("divWithTransform");
   const ObjectPaintProperties* div_with_transform_properties =
       div_with_transform->FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Translate3d(1, 2, 3),
+  EXPECT_EQ(MakeTranslationMatrix(1, 2, 3),
             div_with_transform_properties->Transform()->Matrix());
   CHECK_EXACT_VISUAL_RECT(PhysicalRect(1, 2, 800, 164), div_with_transform,
                           frame_view->GetLayoutView());
@@ -1827,8 +1830,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesAcrossSubframes) {
   const ObjectPaintProperties* inner_div_with_transform_properties =
       inner_div_with_transform->FirstFragment().PaintProperties();
   auto* inner_div_transform = inner_div_with_transform_properties->Transform();
-  EXPECT_EQ(TransformationMatrix().Translate3d(4, 5, 6),
-            inner_div_transform->Matrix());
+  EXPECT_EQ(MakeTranslationMatrix(4, 5, 6), inner_div_transform->Matrix());
   CHECK_EXACT_VISUAL_RECT(PhysicalRect(12, 14, 100, 145),
                           inner_div_with_transform,
                           frame_view->GetLayoutView());
@@ -1998,8 +2000,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesInTransformedSubframes) {
       ChildDocument().getElementById("transform")->GetLayoutObject();
   auto* inner_div_transform =
       inner_div_with_transform->FirstFragment().PaintProperties()->Transform();
-  EXPECT_EQ(TransformationMatrix().Translate3d(7, 8, 9),
-            inner_div_transform->Matrix());
+  EXPECT_EQ(MakeTranslationMatrix(7, 8, 9), inner_div_transform->Matrix());
   CHECK_EXACT_VISUAL_RECT(PhysicalRect(92, 95, 100, 111),
                           inner_div_with_transform,
                           frame_view->GetLayoutView());
@@ -2015,14 +2016,13 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesInTransformedSubframes) {
       inner_document_scroll_translation->UnaliasedParent();
   EXPECT_EQ(gfx::Vector2dF(42, 42), iframe_pre_translation->Translation2D());
   auto* iframe_transform = iframe_pre_translation->UnaliasedParent();
-  EXPECT_EQ(TransformationMatrix().Translate3d(4, 5, 6),
-            iframe_transform->Matrix());
+  EXPECT_EQ(MakeTranslationMatrix(4, 5, 6), iframe_transform->Matrix());
   auto* iframe_paint_offset_translation = iframe_transform->UnaliasedParent();
   EXPECT_EQ(gfx::Vector2dF(7, 7),
             iframe_paint_offset_translation->Translation2D());
   auto* div_with_transform_transform =
       iframe_paint_offset_translation->UnaliasedParent();
-  EXPECT_EQ(TransformationMatrix().Translate3d(1, 2, 3),
+  EXPECT_EQ(MakeTranslationMatrix(1, 2, 3),
             div_with_transform_transform->Matrix());
 
   LayoutObject* div_with_transform =
@@ -2603,8 +2603,7 @@ TEST_P(PaintPropertyTreeBuilderTest,
   LayoutObject* b = GetLayoutObjectByElementId("b");
   const ObjectPaintProperties* b_properties =
       b->FirstFragment().PaintProperties();
-  EXPECT_EQ(TransformationMatrix().Scale(10),
-            b_properties->Transform()->Matrix());
+  EXPECT_EQ(MakeScaleMatrix(10), b_properties->Transform()->Matrix());
   // The paint offset transform should not be snapped.
   EXPECT_EQ(gfx::Vector2dF(1, 1),
             ToUnaliased(*b_properties->Transform()->Parent()).Translation2D());
@@ -3303,7 +3302,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FlatteningIn3DContext) {
   const auto* b_properties = PaintPropertiesForElement("b");
   ASSERT_NE(b_properties, nullptr);
   ASSERT_NE(b_properties->Transform(), nullptr);
-  EXPECT_EQ(TransformationMatrix().Translate3d(0, 0, 33),
+  EXPECT_EQ(MakeTranslationMatrix(0, 0, 33),
             b_properties->Transform()->Matrix());
   EXPECT_EQ(a_properties->Transform()->RenderingContextId(),
             b_properties->Transform()->RenderingContextId());
@@ -3317,7 +3316,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FlatteningIn3DContext) {
   const auto* c_properties = PaintPropertiesForElement("c");
   ASSERT_NE(c_properties, nullptr);
   ASSERT_NE(c_properties->Transform(), nullptr);
-  EXPECT_EQ(TransformationMatrix().Translate3d(0, 0, -10),
+  EXPECT_EQ(MakeTranslationMatrix(0, 0, -10),
             c_properties->Transform()->Matrix());
   EXPECT_FALSE(c_properties->Transform()->HasRenderingContext());
   EXPECT_TRUE(c_properties->Transform()->FlattensInheritedTransform());
@@ -3326,7 +3325,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FlatteningIn3DContext) {
   const auto* d_properties = PaintPropertiesForElement("d");
   ASSERT_NE(d_properties, nullptr);
   ASSERT_NE(d_properties->Transform(), nullptr);
-  EXPECT_EQ(TransformationMatrix().Translate3d(0, -10, 22),
+  EXPECT_EQ(MakeTranslationMatrix(0, -10, 22),
             d_properties->Transform()->Matrix());
   EXPECT_EQ(a_properties->Transform()->RenderingContextId(),
             d_properties->Transform()->RenderingContextId());
@@ -5040,7 +5039,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformOriginWithAndWithoutTransform) {
   EXPECT_EQ(gfx::Point3F(), translation->Origin());
 
   auto* scale = PaintPropertiesForElement("scale")->Transform();
-  EXPECT_EQ(TransformationMatrix().Scale(2), scale->Matrix());
+  EXPECT_EQ(MakeScaleMatrix(2), scale->Matrix());
   EXPECT_EQ(gfx::Point3F(300, 75, 0), scale->Origin());
 
   auto* will_change = PaintPropertiesForElement("willChange")->Transform();
@@ -6042,11 +6041,18 @@ TEST_P(PaintPropertyTreeBuilderTest, RepeatingFixedPositionInPagedMedia) {
   EXPECT_EQ(3u, NumFragments(fixed));
   for (int i = 0; i < 3; i++) {
     const auto& fragment = FragmentAt(fixed, i);
-    // We don't composite and create PaintOffsetTranslation for the
-    // fixed-position element during printing.
-    EXPECT_EQ(PhysicalOffset(20, 400 * i - 180), fragment.PaintOffset());
-    EXPECT_FALSE(fragment.PaintProperties());
-    EXPECT_EQ(LayoutUnit(400 * i), fragment.LogicalTopInFlowThread());
+    auto* properties = fragment.PaintProperties();
+    ASSERT_TRUE(properties);
+    ASSERT_TRUE(properties->PaintOffsetTranslation());
+    if (RuntimeEnabledFeatures::LayoutNGPrintingEnabled()) {
+      EXPECT_EQ(gfx::Vector2dF(20, 20 + 400 * i),
+                properties->PaintOffsetTranslation()->Translation2D());
+    } else {
+      EXPECT_EQ(gfx::Vector2dF(20, 400 * i - 180),
+                properties->PaintOffsetTranslation()->Translation2D());
+      EXPECT_EQ(LayoutUnit(400 * i), fragment.LogicalTopInFlowThread());
+    }
+    EXPECT_EQ(PhysicalOffset(), fragment.PaintOffset());
   }
 
   EXPECT_FALSE(fixed_child->IsFixedPositionObjectInPagedMedia());
@@ -6055,11 +6061,15 @@ TEST_P(PaintPropertyTreeBuilderTest, RepeatingFixedPositionInPagedMedia) {
     const auto& fragment = FragmentAt(fixed_child, i);
     EXPECT_EQ(FragmentAt(fixed, i).PaintOffset() + PhysicalOffset(0, 10),
               fragment.PaintOffset());
-    EXPECT_EQ(LayoutUnit(i * 400), fragment.LogicalTopInFlowThread());
+    if (!RuntimeEnabledFeatures::LayoutNGPrintingEnabled())
+      EXPECT_EQ(LayoutUnit(i * 400), fragment.LogicalTopInFlowThread());
   }
 
   EXPECT_FALSE(normal->IsFixedPositionObjectInPagedMedia());
-  EXPECT_EQ(1u, NumFragments(normal));
+  if (RuntimeEnabledFeatures::LayoutNGPrintingEnabled())
+    EXPECT_EQ(3u, NumFragments(normal));
+  else
+    EXPECT_EQ(1u, NumFragments(normal));
 
   GetFrame().EndPrinting();
   UpdateAllLifecyclePhasesForTest();
@@ -6105,10 +6115,15 @@ TEST_P(PaintPropertyTreeBuilderTest,
   for (int i = 0; i < 3; i++) {
     const auto& fragment = FragmentAt(fixed, i);
     EXPECT_EQ(PhysicalOffset(), fragment.PaintOffset());
-    EXPECT_EQ(LayoutUnit(i * 400), fragment.LogicalTopInFlowThread());
     const auto* properties = fragment.PaintProperties();
-    EXPECT_EQ(gfx::Vector2dF(20, -180 + i * 400),
-              properties->PaintOffsetTranslation()->Translation2D());
+    if (RuntimeEnabledFeatures::LayoutNGPrintingEnabled()) {
+      EXPECT_EQ(gfx::Vector2dF(20, 20 + i * 400),
+                properties->PaintOffsetTranslation()->Translation2D());
+    } else {
+      EXPECT_EQ(gfx::Vector2dF(20, -180 + i * 400),
+                properties->PaintOffsetTranslation()->Translation2D());
+      EXPECT_EQ(LayoutUnit(i * 400), fragment.LogicalTopInFlowThread());
+    }
     EXPECT_EQ(gfx::Vector2dF(10, 0), properties->Transform()->Translation2D());
     EXPECT_EQ(properties->PaintOffsetTranslation(),
               properties->Transform()->Parent());
@@ -6118,7 +6133,8 @@ TEST_P(PaintPropertyTreeBuilderTest,
   for (int i = 0; i < 3; i++) {
     const auto& fragment = FragmentAt(fixed_child, i);
     EXPECT_EQ(PhysicalOffset(0, 10), fragment.PaintOffset());
-    EXPECT_EQ(LayoutUnit(i * 400), fragment.LogicalTopInFlowThread());
+    if (!RuntimeEnabledFeatures::LayoutNGPrintingEnabled())
+      EXPECT_EQ(LayoutUnit(i * 400), fragment.LogicalTopInFlowThread());
     EXPECT_EQ(FragmentAt(fixed, i).PaintProperties()->Transform(),
               &fragment.LocalBorderBoxProperties().Transform());
   }

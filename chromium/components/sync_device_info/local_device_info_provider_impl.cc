@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -122,8 +122,9 @@ void LocalDeviceInfoProviderImpl::Initialize(
   // the specifics when it will be synced up.
   local_device_info_ = std::make_unique<DeviceInfo>(
       cache_guid, session_name_override.empty()? client_name : session_name_override, version_, MakeUserAgentForSync(channel_),
-      GetLocalDeviceType(), sync_client_->GetSigninScopedDeviceId(),
-      manufacturer_name, model_name, full_hardware_class,
+      GetLocalDeviceType(), GetLocalDeviceOSType(), GetLocalDeviceFormFactor(),
+      sync_client_->GetSigninScopedDeviceId(), manufacturer_name, model_name,
+      full_hardware_class,
       /*last_updated_timestamp=*/base::Time(),
       DeviceInfoUtil::GetPulseInterval(),
       sync_client_->GetSendTabToSelfReceivingEnabled(),

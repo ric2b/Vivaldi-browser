@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -89,7 +89,7 @@ class AuthDialogContentsView::FingerprintView : public views::View {
     // views::View
     void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
       node_data->role = ax::mojom::Role::kStaticText;
-      node_data->SetName(accessible_name_);
+      node_data->SetNameChecked(accessible_name_);
     }
 
     void SetAccessibleName(const std::u16string& name) {
@@ -308,7 +308,7 @@ class AuthDialogContentsView::TitleLabel : public views::Label {
   // views::View
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     node_data->role = ax::mojom::Role::kStaticText;
-    node_data->SetName(accessible_name_);
+    node_data->SetNameChecked(accessible_name_);
   }
 
  private:

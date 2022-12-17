@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -13,8 +13,11 @@ source_set("device_check_eg2_tests") {
   sources = [ "device_check_egtest.mm" ]
   deps = [
     ":eg_test_support+eg2",
+    "//components/strings",
     "//ios/testing/earl_grey:eg_test_support+eg2",
     "//ios/third_party/earl_grey2:test_lib",
+    "//ios/web/public/test:element_selector",
+    "//ui/base",
     "//url",
   ]
   frameworks = [ "UIKit.framework" ]
@@ -30,10 +33,12 @@ source_set("hooks") {
     "//components/policy/core/common:test_support",
     "//ios/chrome/app:tests_hook",
     "//ios/chrome/browser",
+    "//ios/chrome/browser/flags:system_flags",
     "//ios/chrome/browser/policy:test_support",
     "//ios/chrome/browser/ui/authentication:eg_app_support+eg2",
     "//ios/chrome/test/app:test_support",
     "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/signin:constants",
     "//ios/public/provider/chrome/browser/signin:fake_chrome_identity",
     "//ios/public/provider/chrome/browser/signin:test_support",
   ]
@@ -152,6 +157,8 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/ui/settings/password:eg_app_support+eg2",
     "//ios/chrome/browser/ui/settings/password:password_constants",
     "//ios/chrome/browser/ui/settings/password/passwords_in_other_apps:eg_app_support+eg2",
+    "//ios/chrome/browser/ui/settings/price_notifications:constants",
+    "//ios/chrome/browser/ui/settings/price_notifications/tracking_price:constants",
     "//ios/chrome/browser/ui/settings/privacy:privacy_constants",
     "//ios/chrome/browser/ui/settings/privacy:privacy_ui",
     "//ios/chrome/browser/ui/settings/sync",
@@ -188,7 +195,6 @@ source_set("eg_app_support+eg2") {
     "//ios/web/common",
     "//ios/web/js_messaging:js_messaging",
     "//ios/web/public",
-    "//ios/web/public/deprecated",
     "//ios/web/public/js_messaging",
     "//ios/web/public/test:element_selector",
     "//ios/web/public/test:util",
@@ -288,6 +294,11 @@ source_set("chrome_egtest_bundle_main+eg2") {
   configs += [
     "//build/config/compiler:enable_arc",
     "//build/config/ios:xctest_config",
+
+    # Adding this config to exempt from the style check:
+    # "cannot use 'try' with exceptions disabled". This cannot be fixed because
+    # it's part of the gRPC library.
+    "//build/config/compiler:exceptions",
   ]
   testonly = true
 
@@ -297,9 +308,34 @@ source_set("chrome_egtest_bundle_main+eg2") {
   ]
 
   deps = [
+    ":chrome_egtest_plugin_client",
     "//base",
     "//base:i18n",
+    "//third_party/grpc:grpc++",
     "//ui/base",
+  ]
+}
+
+source_set("chrome_egtest_plugin_client") {
+  configs += [
+    "//build/config/compiler:enable_arc",
+
+    # Adding this config to exempt from the style check:
+    # "cannot use 'try' with exceptions disabled". This cannot be fixed because
+    # it's part of the gRPC library.
+    "//build/config/compiler:exceptions",
+  ]
+  testonly = true
+
+  sources = [
+    "chrome_egtest_plugin_client.h",
+    "chrome_egtest_plugin_client.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//ios/testing/plugin:test_plugin_service",
+    "//third_party/grpc:grpc++",
   ]
 }
 

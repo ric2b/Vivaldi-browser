@@ -1,17 +1,17 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef ASH_SERVICES_SECURE_CHANNEL_BLE_CHARACTERISTICS_FINDER_H_
 #define ASH_SERVICES_SECURE_CHANNEL_BLE_CHARACTERISTICS_FINDER_H_
 
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/secure_channel/remote_attribute.h"
 #include "base/callback.h"
 #include "base/containers/flat_set.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,14 +66,17 @@ AppServiceProxyLacros::AppServiceProxyLacros(Profile* profile)
 
 AppServiceProxyLacros::~AppServiceProxyLacros() = default;
 
-void AppServiceProxyLacros::ReInitializeForTesting(Profile* profile) {
+void AppServiceProxyLacros::ReinitializeForTesting(Profile* profile) {
   // Some test code creates a profile and profile-linked services, like the App
   // Service, before the profile is fully initialized. Such tests can call this
   // after full profile initialization to ensure the App Service implementation
   // has all of profile state it needs.
   crosapi_receiver_.reset();
+  remote_crosapi_app_service_proxy_ = nullptr;
   profile_ = profile;
   is_using_testing_profile_ = true;
+  app_registry_cache_.ReinitializeForTesting();  // IN-TEST
+
   Initialize();
 }
 
@@ -181,14 +184,17 @@ void AppServiceProxyLacros::LaunchAppWithFiles(
                      ConvertMojomFilePathsToFilePaths(std::move(file_paths)));
 }
 
-void AppServiceProxyLacros::LaunchAppWithIntent(const std::string& app_id,
-                                                int32_t event_flags,
-                                                IntentPtr intent,
-                                                LaunchSource launch_source,
-                                                WindowInfoPtr window_info) {
+void AppServiceProxyLacros::LaunchAppWithIntent(
+    const std::string& app_id,
+    int32_t event_flags,
+    IntentPtr intent,
+    LaunchSource launch_source,
+    WindowInfoPtr window_info,
+    base::OnceCallback<void(bool)> callback) {
   CHECK(intent);
 
   if (!remote_crosapi_app_service_proxy_) {
+    std::move(callback).Run(false);
     return;
   }
 
@@ -198,6 +204,7 @@ void AppServiceProxyLacros::LaunchAppWithIntent(const std::string& app_id,
     LOG(WARNING) << "Ash AppServiceProxy version "
                  << crosapi_app_service_proxy_version_
                  << " does not support Launch().";
+    std::move(callback).Run(false);
     return;
   }
 
@@ -207,6 +214,7 @@ void AppServiceProxyLacros::LaunchAppWithIntent(const std::string& app_id,
   params->intent =
       apps_util::ConvertAppServiceToCrosapiIntent(intent, profile_);
   ProxyLaunch(std::move(params));
+  std::move(callback).Run(true);
 }
 
 void AppServiceProxyLacros::LaunchAppWithIntent(
@@ -214,10 +222,12 @@ void AppServiceProxyLacros::LaunchAppWithIntent(
     int32_t event_flags,
     apps::mojom::IntentPtr intent,
     apps::mojom::LaunchSource launch_source,
-    apps::mojom::WindowInfoPtr window_info) {
+    apps::mojom::WindowInfoPtr window_info,
+    apps::mojom::Publisher::LaunchAppWithIntentCallback callback) {
   CHECK(intent);
 
   if (!remote_crosapi_app_service_proxy_) {
+    std::move(callback).Run(/*success=*/false);
     return;
   }
 
@@ -227,6 +237,7 @@ void AppServiceProxyLacros::LaunchAppWithIntent(
     LOG(WARNING) << "Ash AppServiceProxy version "
                  << crosapi_app_service_proxy_version_
                  << " does not support Launch().";
+    std::move(callback).Run(/*success=*/false);
     return;
   }
 
@@ -238,6 +249,7 @@ void AppServiceProxyLacros::LaunchAppWithIntent(
       apps_util::ConvertAppServiceToCrosapiIntent(intent, profile_);
 
   ProxyLaunch(std::move(params));
+  std::move(callback).Run(/*success=*/true);
 }
 
 void AppServiceProxyLacros::LaunchAppWithUrl(const std::string& app_id,
@@ -248,7 +260,18 @@ void AppServiceProxyLacros::LaunchAppWithUrl(const std::string& app_id,
   LaunchAppWithIntent(
       app_id, event_flags,
       std::make_unique<apps::Intent>(apps_util::kIntentActionView, url),
-      launch_source, std::move(window_info));
+      launch_source, std::move(window_info), base::DoNothing());
+}
+
+void AppServiceProxyLacros::LaunchAppWithUrlForBind(const std::string& app_id,
+                                                    int32_t event_flags,
+                                                    GURL url,
+                                                    LaunchSource launch_source,
+                                                    WindowInfoPtr window_info) {
+  LaunchAppWithIntent(
+      app_id, event_flags,
+      std::make_unique<apps::Intent>(apps_util::kIntentActionView, url),
+      launch_source, std::move(window_info), base::DoNothing());
 }
 
 void AppServiceProxyLacros::LaunchAppWithUrl(
@@ -258,7 +281,7 @@ void AppServiceProxyLacros::LaunchAppWithUrl(
     apps::mojom::LaunchSource launch_source,
     apps::mojom::WindowInfoPtr window_info) {
   LaunchAppWithIntent(app_id, event_flags, apps_util::CreateIntentFromUrl(url),
-                      launch_source, std::move(window_info));
+                      launch_source, std::move(window_info), {});
 }
 
 void AppServiceProxyLacros::LaunchAppWithParams(AppLaunchParams&& params,
@@ -364,10 +387,6 @@ void AppServiceProxyLacros::ExecuteContextMenuCommand(
 
 void AppServiceProxyLacros::OpenNativeSettings(const std::string& app_id) {
   NOTIMPLEMENTED();
-}
-
-void AppServiceProxyLacros::FlushMojoCallsForTesting() {
-  crosapi_receiver_.FlushForTesting();
 }
 
 apps::IconLoader* AppServiceProxyLacros::OverrideInnerIconLoaderForTesting(
@@ -500,6 +519,11 @@ void AppServiceProxyLacros::RemoveSupportedLinksPreference(
 }
 
 void AppServiceProxyLacros::SetWindowMode(const std::string& app_id,
+                                          WindowMode window_mode) {
+  NOTIMPLEMENTED();
+}
+
+void AppServiceProxyLacros::SetWindowMode(const std::string& app_id,
                                           apps::mojom::WindowMode window_mode) {
   NOTIMPLEMENTED();
 }
@@ -515,6 +539,10 @@ void AppServiceProxyLacros::SetCrosapiAppServiceProxyForTesting(
   // Set the proxy version to the newest version for testing.
   crosapi_app_service_proxy_version_ =
       crosapi::mojom::AppServiceProxy::Version_;
+}
+
+base::WeakPtr<AppServiceProxyLacros> AppServiceProxyLacros::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 AppServiceProxyLacros::InnerIconLoader::InnerIconLoader(

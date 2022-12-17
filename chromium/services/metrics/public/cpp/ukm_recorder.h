@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@
 #include "services/metrics/public/mojom/ukm_interface.mojom-forward.h"
 #include "url/gurl.h"
 
-class DIPSBounceDetector;
+class DIPSNavigationHandle;
 class PermissionUmaUtil;
 class WebApkUkmRecorder;
 
@@ -61,7 +61,7 @@ class SourceUrlRecorderWebContentsObserver;
 }  // namespace internal
 
 // This feature controls whether UkmService should be created.
-METRICS_EXPORT extern const base::Feature kUkmFeature;
+METRICS_EXPORT BASE_DECLARE_FEATURE(kUkmFeature);
 
 // Interface for recording UKM
 class METRICS_EXPORT UkmRecorder {
@@ -116,8 +116,8 @@ class METRICS_EXPORT UkmRecorder {
 
   // Gets a new SourceId of REDIRECT_ID type and updates the source url
   // from the redirect chain. This method should only be called in the
-  // DIPSBounceDetector class.
-  static SourceId GetSourceIdForRedirectUrl(base::PassKey<DIPSBounceDetector>,
+  // DIPSNavigationHandle class.
+  static SourceId GetSourceIdForRedirectUrl(base::PassKey<DIPSNavigationHandle>,
                                             const GURL& redirect_url);
 
   // Add an entry to the UkmEntry list.

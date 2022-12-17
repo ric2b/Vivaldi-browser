@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,7 @@ TEST(SandboxTypeTest, Utility) {
   SetCommandLineFlagsForSandboxType(&command_line4, Sandbox::kNoSandbox);
   EXPECT_EQ(Sandbox::kNoSandbox, SandboxTypeFromCommandLine(command_line4));
 
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
   base::CommandLine command_line5(command_line);
   SetCommandLineFlagsForSandboxType(&command_line5, Sandbox::kPpapi);
   EXPECT_EQ(Sandbox::kPpapi, SandboxTypeFromCommandLine(command_line5));
@@ -154,7 +154,7 @@ TEST(SandboxTypeTest, GPU) {
   EXPECT_EQ(Sandbox::kNoSandbox, SandboxTypeFromCommandLine(command_line));
 }
 
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
 TEST(SandboxTypeTest, PPAPIPlugin) {
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   command_line.AppendSwitchASCII(switches::kProcessType,
@@ -168,7 +168,7 @@ TEST(SandboxTypeTest, PPAPIPlugin) {
   command_line.AppendSwitch(switches::kNoSandbox);
   EXPECT_EQ(Sandbox::kNoSandbox, SandboxTypeFromCommandLine(command_line));
 }
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PPAPI)
 
 TEST(SandboxTypeTest, Nonesuch) {
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);

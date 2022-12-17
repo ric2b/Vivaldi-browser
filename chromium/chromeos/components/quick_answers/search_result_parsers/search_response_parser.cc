@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,7 +62,7 @@ void SearchResponseParser::OnJsonParsed(
     return;
   }
 
-  for (const auto& entry : entries->GetListDeprecated()) {
+  for (const auto& entry : entries->GetList()) {
     auto quick_answer = std::make_unique<QuickAnswer>();
     if (ProcessResult(&entry, quick_answer.get())) {
       std::move(complete_callback_).Run(std::move(quick_answer));

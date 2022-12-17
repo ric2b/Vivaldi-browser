@@ -12,7 +12,7 @@ namespace {
 
 const PathType kTypeList[PathTypeCount] = {
     PathType::kLocalPath,        PathType::kImage,
-    PathType::kCSSMod,           PathType::kNotesAttachment,
+    PathType::kCSSMod,           PathType::kSyncedStore,
     PathType::kDesktopWallpaper,
 };
 
@@ -173,34 +173,6 @@ TEST_F(VivaldiDataUrlUtilsTest, UrlParse) {
   type = ParseUrl("chrome://vivaldi-data/thumbnail/data.png?query", &data);
   EXPECT_EQ(type, PathType::kImage);
   EXPECT_EQ("data.png", data);
-}
-
-TEST_F(VivaldiDataUrlUtilsTest, MimeType) {
-  std::string mime_type;
-
-  mime_type = GetPathMimeType("/css-mods/css");
-  EXPECT_EQ(mime_type, "text/css");
-
-  mime_type = GetPathMimeType("/css-mods/custom.css");
-  EXPECT_EQ(mime_type, "text/css");
-
-  mime_type = GetPathMimeType("/css-mods/.css");
-  EXPECT_EQ(mime_type, "text/css");
-
-  // The must ends with .css to be treated as CSS.
-  mime_type = GetPathMimeType("/css-mods/a.css.bak");
-  EXPECT_EQ(mime_type, "image/png");
-
-  // For invalid paths the default is image.
-  mime_type = GetPathMimeType("");
-  EXPECT_EQ(mime_type, "image/png");
-
-  // The type should be image if path does no ends with .css.
-  for (PathType i : kTypeList) {
-    std::string path = std::string("/") + top_dir(i) + "/some_id";
-    mime_type = GetPathMimeType(path);
-    EXPECT_EQ(mime_type, "image/png");
-  }
 }
 
 TEST_F(VivaldiDataUrlUtilsTest, MakeUrl) {

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,12 +11,120 @@
 
 // clang-format off
 #define CROSS_PLATFORM_COLOR_IDS \
-  /* Core color concepts */ \
+  /* UI reference color tokens */ \
   /* Use the 3 param macro so kColorAccent is set to the correct value. */ \
+  E_CPONLY(kColorRefPrimary0, kUiColorsStart, kUiColorsStart) \
+  E_CPONLY(kColorRefPrimary10) \
+  E_CPONLY(kColorRefPrimary20) \
+  E_CPONLY(kColorRefPrimary30) \
+  E_CPONLY(kColorRefPrimary40) \
+  E_CPONLY(kColorRefPrimary50) \
+  E_CPONLY(kColorRefPrimary60) \
+  E_CPONLY(kColorRefPrimary70) \
+  E_CPONLY(kColorRefPrimary80) \
+  E_CPONLY(kColorRefPrimary90) \
+  E_CPONLY(kColorRefPrimary95) \
+  E_CPONLY(kColorRefPrimary99) \
+  E_CPONLY(kColorRefPrimary100) \
+  E_CPONLY(kColorRefSecondary0) \
+  E_CPONLY(kColorRefSecondary10) \
+  E_CPONLY(kColorRefSecondary20) \
+  E_CPONLY(kColorRefSecondary30) \
+  E_CPONLY(kColorRefSecondary40) \
+  E_CPONLY(kColorRefSecondary50) \
+  E_CPONLY(kColorRefSecondary60) \
+  E_CPONLY(kColorRefSecondary70) \
+  E_CPONLY(kColorRefSecondary80) \
+  E_CPONLY(kColorRefSecondary90) \
+  E_CPONLY(kColorRefSecondary95) \
+  E_CPONLY(kColorRefSecondary99) \
+  E_CPONLY(kColorRefSecondary100) \
+  E_CPONLY(kColorRefTertiary0) \
+  E_CPONLY(kColorRefTertiary10) \
+  E_CPONLY(kColorRefTertiary20) \
+  E_CPONLY(kColorRefTertiary30) \
+  E_CPONLY(kColorRefTertiary40) \
+  E_CPONLY(kColorRefTertiary50) \
+  E_CPONLY(kColorRefTertiary60) \
+  E_CPONLY(kColorRefTertiary70) \
+  E_CPONLY(kColorRefTertiary80) \
+  E_CPONLY(kColorRefTertiary90) \
+  E_CPONLY(kColorRefTertiary95) \
+  E_CPONLY(kColorRefTertiary99) \
+  E_CPONLY(kColorRefTertiary100) \
+  E_CPONLY(kColorRefError0) \
+  E_CPONLY(kColorRefError10) \
+  E_CPONLY(kColorRefError20) \
+  E_CPONLY(kColorRefError30) \
+  E_CPONLY(kColorRefError40) \
+  E_CPONLY(kColorRefError50) \
+  E_CPONLY(kColorRefError60) \
+  E_CPONLY(kColorRefError70) \
+  E_CPONLY(kColorRefError80) \
+  E_CPONLY(kColorRefError90) \
+  E_CPONLY(kColorRefError95) \
+  E_CPONLY(kColorRefError99) \
+  E_CPONLY(kColorRefError100) \
+  E_CPONLY(kColorRefNeutral0) \
+  E_CPONLY(kColorRefNeutral10) \
+  E_CPONLY(kColorRefNeutral20) \
+  E_CPONLY(kColorRefNeutral30) \
+  E_CPONLY(kColorRefNeutral40) \
+  E_CPONLY(kColorRefNeutral50) \
+  E_CPONLY(kColorRefNeutral60) \
+  E_CPONLY(kColorRefNeutral70) \
+  E_CPONLY(kColorRefNeutral80) \
+  E_CPONLY(kColorRefNeutral90) \
+  E_CPONLY(kColorRefNeutral95) \
+  E_CPONLY(kColorRefNeutral99) \
+  E_CPONLY(kColorRefNeutral100) \
+  E_CPONLY(kColorRefNeutralVariant0) \
+  E_CPONLY(kColorRefNeutralVariant10) \
+  E_CPONLY(kColorRefNeutralVariant20) \
+  E_CPONLY(kColorRefNeutralVariant30) \
+  E_CPONLY(kColorRefNeutralVariant40) \
+  E_CPONLY(kColorRefNeutralVariant50) \
+  E_CPONLY(kColorRefNeutralVariant60) \
+  E_CPONLY(kColorRefNeutralVariant70) \
+  E_CPONLY(kColorRefNeutralVariant80) \
+  E_CPONLY(kColorRefNeutralVariant90) \
+  E_CPONLY(kColorRefNeutralVariant95) \
+  E_CPONLY(kColorRefNeutralVariant99) \
+  E_CPONLY(kColorRefNeutralVariant100) \
+  \
+  /* UI system color tokens */ \
+  E_CPONLY(kColorSysPrimary) \
+  E_CPONLY(kColorSysOnPrimary) \
+  E_CPONLY(kColorSysPrimaryContainer) \
+  E_CPONLY(kColorSysOnPrimaryContainer) \
+  E_CPONLY(kColorSysSecondary) \
+  E_CPONLY(kColorSysOnSecondary) \
+  E_CPONLY(kColorSysSecondaryContainer) \
+  E_CPONLY(kColorSysOnSecondaryContainer) \
+  E_CPONLY(kColorSysTertiary) \
+  E_CPONLY(kColorSysOnTertiary) \
+  E_CPONLY(kColorSysTertiaryContainer) \
+  E_CPONLY(kColorSysOnTertiaryContainer) \
+  E_CPONLY(kColorSysError) \
+  E_CPONLY(kColorSysOnError) \
+  E_CPONLY(kColorSysErrorContainer) \
+  E_CPONLY(kColorSysOnErrorContainer) \
+  E_CPONLY(kColorSysSurfaceVariant) \
+  E_CPONLY(kColorSysOnSurfaceVariant) \
+  E_CPONLY(kColorSysOutline) \
+  E_CPONLY(kColorSysScrim) \
+  E_CPONLY(kColorSysSeparator) \
+  E_CPONLY(kColorSysSurface) \
+  E_CPONLY(kColorSysSurface1) \
+  E_CPONLY(kColorSysSurface2) \
+  E_CPONLY(kColorSysSurface3) \
+  E_CPONLY(kColorSysSurface4) \
+  E_CPONLY(kColorSysSurface5) \
+  /* Core color concepts */ \
   /* The kColorAccent color id is used in color_provider_css_colors_test.ts. \
   If changing the variable name, the variable name in the test needs to be \
   changed as well. */ \
-  E_CPONLY(kColorAccent, kUiColorsStart, kUiColorsStart) \
+  E_CPONLY(kColorAccent) \
   E_CPONLY(kColorAlertHighSeverity) \
   E_CPONLY(kColorAlertLowSeverity) \
   E_CPONLY(kColorAlertMediumSeverity) \
@@ -129,6 +237,9 @@
   E_CPONLY(kColorOverlayScrollbarStrokeHoveredLight) \
   E_CPONLY(kColorProgressBar) \
   E_CPONLY(kColorProgressBarPaused) \
+  E_CPONLY(kColorReadAnythingForegroundDark) \
+  E_CPONLY(kColorReadAnythingForegroundLight) \
+  E_CPONLY(kColorReadAnythingForegroundYellow) \
   E_CPONLY(kColorSeparator) \
   E_CPONLY(kColorShadowBase) \
   E_CPONLY(kColorShadowValueAmbientShadowElevationSixteen) \

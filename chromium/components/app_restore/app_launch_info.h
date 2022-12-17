@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,7 @@ struct COMPONENT_EXPORT(APP_RESTORE) AppLaunchInfo {
   absl::optional<int32_t> event_flag;
   absl::optional<int32_t> container;
   absl::optional<int32_t> disposition;
+  absl::optional<GURL> override_url;
   absl::optional<int32_t> arc_session_id;
   absl::optional<int64_t> display_id;
   absl::optional<std::string> handler_id;

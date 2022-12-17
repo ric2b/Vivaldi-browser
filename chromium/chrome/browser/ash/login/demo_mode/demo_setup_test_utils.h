@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,6 +42,10 @@ void SetupMockDemoModeOfflineEnrollmentHelper(DemoModeSetupResult result);
 // Creates fake offline policy directory to be used in tests.
 bool SetupDummyOfflinePolicyDir(const std::string& account_id,
                                 base::ScopedTempDir* temp_dir);
+
+// Set Install Attributes as part of faked enrollment so that the device is
+// considered enterprise managed
+void LockDemoDeviceInstallAttributes();
 
 }  // namespace test
 }  // namespace ash

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,8 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chromeos/ash/components/dbus/attestation/interface.pb.h"
+#include "chromeos/ash/components/dbus/constants/attestation_constants.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
-#include "chromeos/dbus/constants/attestation_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 class AccountId;
@@ -73,8 +73,6 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_ATTESTATION) AttestationFlow {
       AttestationCertificateProfile certificate_profile);
 
   explicit AttestationFlow(std::unique_ptr<ServerProxy> server_proxy);
-  AttestationFlow(std::unique_ptr<ServerProxy> server_proxy,
-                  ::attestation::KeyType crypto_key_type);
 
   AttestationFlow(const AttestationFlow&) = delete;
   AttestationFlow& operator=(const AttestationFlow&) = delete;
@@ -113,6 +111,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_ATTESTATION) AttestationFlow {
   //   force_new_key - If set to true, a new key will be generated even if a key
   //                   already exists for the profile.  The new key will replace
   //                   the existing key on success.
+  //   key_crypto_type - The crypto type of the key.
   //   key_name - The name of the key. If left empty, a default name derived
   //              from the |certificate_profile| and |account_id| will be used.
   //   callback - A callback which will be called when the operation completes.
@@ -122,6 +121,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_ATTESTATION) AttestationFlow {
                               const AccountId& account_id,
                               const std::string& request_origin,
                               bool force_new_key,
+                              ::attestation::KeyType key_crypto_type,
                               const std::string& key_name,
                               CertificateCallback callback);
 
@@ -198,6 +198,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_ATTESTATION) AttestationFlow {
   //   account_id - Identifies the active user.
   //   request_origin - An identifier for the origin of this request.
   //   generate_new_key - If set to true a new key is generated.
+  //   key_crypto_type - The crypto type of the key.
   //   key_name - The name of the key. If left empty, a default name derived
   //              from the |certificate_profile| and |account_id| will be used.
   //   callback - Called when the operation completes.
@@ -207,6 +208,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_ATTESTATION) AttestationFlow {
       const AccountId& account_id,
       const std::string& request_origin,
       bool generate_new_key,
+      ::attestation::KeyType key_crypto_type,
       const std::string& key_name,
       CertificateCallback callback,
       bool enrolled);
@@ -219,7 +221,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_ATTESTATION) AttestationFlow {
   //                         requested from the CA.
   //   account_id - Identifies the active user.
   //   request_origin - An identifier for the origin of this request.
-  //   generate_new_key - If set to true a new key is generated.
+  //   key_crypto_type - The crypto type of the key.
   //   key_name - The name of the key. If left empty, a default name derived
   //              from the |certificate_profile| and |account_id| will be used.
   //   callback - Called when the operation completes.
@@ -227,6 +229,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_ATTESTATION) AttestationFlow {
   void OnGetKeyInfoComplete(AttestationCertificateProfile certificate_profile,
                             const AccountId& account_id,
                             const std::string& request_origin,
+                            ::attestation::KeyType key_crypto_type,
                             const std::string& key_name,
                             AttestationKeyType key_type,
                             CertificateCallback callback,
@@ -279,9 +282,6 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_ATTESTATION) AttestationFlow {
 
   AttestationClient* attestation_client_;
   std::unique_ptr<ServerProxy> server_proxy_;
-
-  // The key type that asks attestation service to create with.
-  const ::attestation::KeyType crypto_key_type_;
 
   base::TimeDelta ready_timeout_;
   base::TimeDelta retry_delay_;

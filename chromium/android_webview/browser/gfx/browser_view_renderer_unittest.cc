@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -207,7 +207,7 @@ class TestAnimateInAndOutOfScreen : public RenderingTest {
     if (draw_gl_count_on_rt_ == 0)
       transform = new_constraints_.transform;
 
-    transform.matrix().getColMajor(params->transform);
+    transform.GetColMajorF(params->transform);
     return true;
   }
 

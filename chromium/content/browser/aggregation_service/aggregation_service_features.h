@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@
 namespace content {
 
 // Enables the Aggregation Service. See crbug.com/1207974.
-extern CONTENT_EXPORT const base::Feature kPrivacySandboxAggregationService;
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrivacySandboxAggregationService);
 extern CONTENT_EXPORT const base::FeatureParam<std::string>
     kPrivacySandboxAggregationServiceTrustedServerUrlParam;
 

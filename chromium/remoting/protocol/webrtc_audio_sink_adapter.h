@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,7 @@ namespace base {
 class SingleThreadTaskRunner;
 }  // namespace base
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class AudioStub;
 
@@ -39,7 +38,6 @@ class WebrtcAudioSinkAdapter : public webrtc::AudioTrackSinkInterface {
   rtc::scoped_refptr<webrtc::AudioTrackInterface> audio_track_;
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_WEBRTC_AUDIO_SINK_ADAPTER_H_

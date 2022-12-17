@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile_test_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_test_utils.h"
@@ -99,15 +100,6 @@ cart_db::ChromeCartContentProto BuildProtoWithProducts(
   }
   return proto;
 }
-
-#if !BUILDFLAG(IS_CHROMEOS)
-void UnblockOnProfileCreation(base::RunLoop* run_loop,
-                              Profile* profile,
-                              Profile::CreateStatus status) {
-  if (status == Profile::CREATE_STATUS_INITIALIZED)
-    run_loop->Quit();
-}
-#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 const char kMockExample[] = "guitarcenter.com";
 const char kMockExampleFallbackURL[] = "https://www.guitarcenter.com/cart";
@@ -512,9 +504,38 @@ IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest, AddToCartByURL_XHR) {
   ExpectUKMCount(XHREntry::kEntryName, "IsAddToCart", 1);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS)
-// TODO(crbug/1310497): This test is flaky on ChromeOS.
-IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest, VisitCart) {
+IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest, SkipAddToCart_FromComponent) {
+  bool is_populated =
+      commerce_hint_service_->InitializeCommerceHeuristicsForTesting(
+          base::Version("0.0.0.1"), R"###(
+          {
+            "guitarcenter.com": {
+              "skip_add_to_cart_regex": "dummy-request"
+            }
+          }
+      )###",
+          "{}", "", "");
+  DCHECK(is_populated);
+
+  NavigateToURL("https://www.guitarcenter.com/");
+  SendXHR("/add-to-cart", "product: 123");
+  WaitForUmaCount("Commerce.Carts.AddToCartByURL", 1);
+
+  SendXHR("/add-to-cart/dummy-request-url", "product: 123");
+  WaitForUmaCount("Commerce.Carts.AddToCartByURL", 1);
+}
+
+// TODO(https://crbug/1310497, https://crbug.com/1362442): This test is flaky
+// on ChromeOS and Linux Asan.
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_VisitCart DISABLED_VisitCart
+#elif BUILDFLAG(IS_LINUX) && defined(ADDRESS_SANITIZER)
+#define MAYBE_VisitCart DISABLED_VisitCart
+#else
+#define MAYBE_VisitCart VisitCart
+#endif
+
+IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest, MAYBE_VisitCart) {
   // Cannot use dummy page with zero products, or the cart would be deleted.
   NavigateToURL("https://www.guitarcenter.com/cart.html");
 
@@ -523,18 +544,9 @@ IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest, VisitCart) {
   WaitForCartCount(kExpectedExample);
 #endif
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS)
 
-// Flaky on Windows: https://crbug.com/1300332.
-#if BUILDFLAG(IS_WIN)
-#define MAYBE_VisitCart_GeneralPattern_FromComponent \
-  DISABLED_VisitCart_GeneralPattern_FromComponent
-#else
-#define MAYBE_VisitCart_GeneralPattern_FromComponent \
-  VisitCart_GeneralPattern_FromComponent
-#endif
 IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest,
-                       MAYBE_VisitCart_GeneralPattern_FromComponent) {
+                       VisitCart_GeneralPattern_FromComponent) {
   bool is_populated =
       commerce_hint_service_->InitializeCommerceHeuristicsForTesting(
           base::Version("0.0.0.1"), "{}", R"###(
@@ -599,6 +611,10 @@ IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest, ExtractCart_ScriptFromResource) {
       "Commerce.Heuristics.CartExtractionScriptSource",
       int(CommerceHeuristicsDataMetricsHelper::HeuristicsSource::FROM_RESOURCE),
       1);
+  WaitForUmaBucketCount("Commerce.Heuristics.ProductIDExtractionPatternSource",
+                        int(CommerceHeuristicsDataMetricsHelper::
+                                HeuristicsSource::FROM_FEATURE_PARAMETER),
+                        1);
   ExpectUKMCount(ExtractionEntry::kEntryName, "ExtractionExecutionTime", 1);
   ExpectUKMCount(ExtractionEntry::kEntryName, "ExtractionLongestTaskTime", 1);
   ExpectUKMCount(ExtractionEntry::kEntryName, "ExtractionTotalTasksTime", 1);
@@ -627,9 +643,10 @@ IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest, ExtractCart_ScriptFromComponent) {
     }
     extracted_results_promise = extractAllItems(document);
   )###";
+  std::string product_id_json = "{\"foo.com\": \"test\"}";
   bool is_populated =
       commerce_hint_service_->InitializeCommerceHeuristicsForTesting(
-          base::Version("0.0.0.1"), "{}", "{}", "",
+          base::Version("0.0.0.1"), "{}", "{}", std::move(product_id_json),
           std::move(extraction_script));
   DCHECK(is_populated);
 
@@ -645,6 +662,10 @@ IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest, ExtractCart_ScriptFromComponent) {
   WaitForProductCount(expected_carts);
 #endif
   WaitForUmaBucketCount("Commerce.Heuristics.CartExtractionScriptSource",
+                        int(CommerceHeuristicsDataMetricsHelper::
+                                HeuristicsSource::FROM_COMPONENT),
+                        1);
+  WaitForUmaBucketCount("Commerce.Heuristics.ProductIDExtractionPatternSource",
                         int(CommerceHeuristicsDataMetricsHelper::
                                 HeuristicsSource::FROM_COMPONENT),
                         1);
@@ -857,10 +878,7 @@ IN_PROC_BROWSER_TEST_F(CommerceHintAgentTest, MAYBE_MultipleProfiles) {
   // Create another profile.
   base::FilePath profile_path2 =
       profile_manager->GenerateNextProfileDirectoryPath();
-  base::RunLoop run_loop;
-  profile_manager->CreateProfileAsync(
-      profile_path2, base::BindRepeating(&UnblockOnProfileCreation, &run_loop));
-  run_loop.Run();
+  profiles::testing::CreateProfileSync(profile_manager, profile_path2);
   ASSERT_EQ(profile_manager->GetNumberOfProfiles(), 2U);
 
   NavigateToURL("https://www.guitarcenter.com/");
@@ -1311,7 +1329,8 @@ class CommerceHintCartPatternTest : public CommerceHintAgentTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(CommerceHintCartPatternTest, VisitCart) {
+// TODO(https://crbug.com/1362442): Deflake this test.
+IN_PROC_BROWSER_TEST_F(CommerceHintCartPatternTest, DISABLED_VisitCart) {
   // The test is flaky with same-site back/forward cache, presumably because it
   // doesn't expect a RenderView change on same-site navigations.
   // TODO(https://crbug.com/1302902): Investigate and fix this.

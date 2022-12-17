@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -79,7 +79,7 @@ SupportedLinksInfoBarPrefsService::~SupportedLinksInfoBarPrefsService() =
 bool SupportedLinksInfoBarPrefsService::ShouldHideInfoBarForApp(
     const std::string& app_id) {
   const base::Value::Dict& base_pref =
-      profile_->GetPrefs()->GetValueDict(kSupportedLinksAppPrefsKey);
+      profile_->GetPrefs()->GetDict(kSupportedLinksAppPrefsKey);
   const base::Value::Dict* app_value = base_pref.FindDict(app_id);
 
   if (app_value == nullptr) {
@@ -105,10 +105,10 @@ void SupportedLinksInfoBarPrefsService::MarkInfoBarDismissed(
   if (!AppIsInstalled(profile_, app_id))
     return;
 
-  DictionaryPrefUpdate infobar_prefs(profile_->GetPrefs(),
+  ScopedDictPrefUpdate infobar_prefs(profile_->GetPrefs(),
                                      kSupportedLinksAppPrefsKey);
 
-  infobar_prefs->GetDict().SetByDottedPath(
+  infobar_prefs->SetByDottedPath(
       base::JoinString({app_id, kInfoBarDismissedKey}, "."), true);
 }
 
@@ -117,22 +117,21 @@ void SupportedLinksInfoBarPrefsService::MarkInfoBarIgnored(
   if (!AppIsInstalled(profile_, app_id))
     return;
 
-  DictionaryPrefUpdate infobar_prefs(profile_->GetPrefs(),
+  ScopedDictPrefUpdate infobar_prefs(profile_->GetPrefs(),
                                      kSupportedLinksAppPrefsKey);
 
   auto path = base::JoinString({app_id, kInfoBarIgnoredCountKey}, ".");
-  absl::optional<int> ignore_count =
-      infobar_prefs->GetDict().FindIntByDottedPath(path);
-  infobar_prefs->GetDict().SetByDottedPath(path, ignore_count.value_or(0) + 1);
+  absl::optional<int> ignore_count = infobar_prefs->FindIntByDottedPath(path);
+  infobar_prefs->SetByDottedPath(path, ignore_count.value_or(0) + 1);
 }
 
 void SupportedLinksInfoBarPrefsService::OnAppUpdate(
     const apps::AppUpdate& update) {
   if (update.ReadinessChanged() &&
       !apps_util::IsInstalled(update.Readiness())) {
-    DictionaryPrefUpdate infobar_prefs(profile_->GetPrefs(),
+    ScopedDictPrefUpdate infobar_prefs(profile_->GetPrefs(),
                                        kSupportedLinksAppPrefsKey);
-    infobar_prefs->GetDict().Remove(update.AppId());
+    infobar_prefs->Remove(update.AppId());
   }
 }
 

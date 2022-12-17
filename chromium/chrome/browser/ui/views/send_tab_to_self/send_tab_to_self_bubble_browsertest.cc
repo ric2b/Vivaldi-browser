@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,17 +29,17 @@ class TestSendTabToSelfBubbleController : public SendTabToSelfBubbleController {
   std::vector<TargetDeviceInfo> GetValidDevices() override {
     const auto now = base::Time::Now();
     return {{"Device_1", "Device_1", "device_guid_1",
-             sync_pb::SyncEnums_DeviceType_TYPE_LINUX, now - base::Days(0)},
+             syncer::DeviceInfo::FormFactor::kDesktop, now - base::Days(0)},
             {"Device_2", "Device_2", "device_guid_2",
-             sync_pb::SyncEnums_DeviceType_TYPE_PHONE, now - base::Days(0)},
+             syncer::DeviceInfo::FormFactor::kPhone, now - base::Days(0)},
             {"Device_3", "Device_3", "device_guid_3",
-             sync_pb::SyncEnums_DeviceType_TYPE_WIN, now - base::Days(1)},
+             syncer::DeviceInfo::FormFactor::kDesktop, now - base::Days(1)},
             {"Device_4", "Device_4", "device_guid_4",
-             sync_pb::SyncEnums_DeviceType_TYPE_PHONE, now - base::Days(1)},
+             syncer::DeviceInfo::FormFactor::kPhone, now - base::Days(1)},
             {"Device_5", "Device_5", "device_guid_5",
-             sync_pb::SyncEnums_DeviceType_TYPE_MAC, now - base::Days(5)},
+             syncer::DeviceInfo::FormFactor::kDesktop, now - base::Days(5)},
             {"Device_6", "Device_6", "device_guid_6",
-             sync_pb::SyncEnums_DeviceType_TYPE_PHONE, now - base::Days(5)}};
+             syncer::DeviceInfo::FormFactor::kPhone, now - base::Days(5)}};
   }
 
   AccountInfo GetSharingAccountInfo() override {

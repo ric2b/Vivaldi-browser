@@ -1,31 +1,30 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/ntp/revamped_incognito_view.h"
 
-#include "base/ios/ns_range.h"
-#include "components/content_settings/core/common/features.h"
-#include "components/google/core/common/google_util.h"
-#include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/application_context.h"
+#import "base/ios/ns_range.h"
+#import "components/content_settings/core/common/features.h"
+#import "components/google/core/common/google_util.h"
+#import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/drag_and_drop/url_drag_drop_handler.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_url_loader_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
-#include "ios/chrome/browser/ui/util/rtl_geometry.h"
-#include "ios/chrome/browser/ui/util/ui_util.h"
+#import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/text_view_util.h"
 #import "ios/web/public/navigation/navigation_manager.h"
-#include "ios/web/public/navigation/referrer.h"
+#import "ios/web/public/navigation/referrer.h"
 #import "net/base/mac/url_conversions.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "url/gurl.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -185,12 +184,14 @@ NSAttributedString* FormatHTMLForLearnMoreSection() {
 - (instancetype)initWithFrame:(CGRect)frame {
   return [self initWithFrame:frame
       showTopIncognitoImageAndTitle:YES
-          stackViewHorizontalMargin:kStackViewHorizontalMargin];
+          stackViewHorizontalMargin:kStackViewHorizontalMargin
+                  stackViewMaxWidth:kStackViewMaxWidth];
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
     showTopIncognitoImageAndTitle:(BOOL)showTopIncognitoImageAndTitle
-        stackViewHorizontalMargin:(CGFloat)stackViewHorizontalMargin {
+        stackViewHorizontalMargin:(CGFloat)stackViewHorizontalMargin
+                stackViewMaxWidth:(CGFloat)stackViewMaxWidth {
   self = [super initWithFrame:frame];
   if (self) {
     _dragDropHandler = [[URLDragDropHandler alloc] init];
@@ -216,13 +217,23 @@ NSAttributedString* FormatHTMLForLearnMoreSection() {
       // Incognito icon.
       UIImage* incognitoImage;
       if (UseSymbols()) {
-        UIImageSymbolConfiguration* configuration = [UIImageSymbolConfiguration
-            configurationWithPointSize:kIncognitoSymbolImagePointSize
-                                weight:UIImageSymbolWeightLight
-                                 scale:UIImageSymbolScaleMedium];
-        incognitoImage = [CustomSymbolWithConfiguration(
-            kIncognitoCircleFillSymbol, configuration)
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        if (@available(iOS 15, *)) {
+          incognitoImage = CustomPaletteSymbol(
+              kIncognitoCircleFillSymbol, kIncognitoSymbolImagePointSize,
+              UIImageSymbolWeightLight, UIImageSymbolScaleMedium, @[
+                [UIColor colorNamed:kGrey100Color],
+                [UIColor colorNamed:kGrey700Color]
+              ]);
+        } else {
+          UIImageSymbolConfiguration* configuration =
+              [UIImageSymbolConfiguration
+                  configurationWithPointSize:kIncognitoSymbolImagePointSize
+                                      weight:UIImageSymbolWeightLight
+                                       scale:UIImageSymbolScaleMedium];
+          incognitoImage = [CustomSymbolWithConfiguration(
+              kIncognitoCircleFilliOS14Symbol, configuration)
+              imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        }
       } else {
         incognitoImage = [[UIImage imageNamed:@"incognito_icon"]
             imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
@@ -276,7 +287,7 @@ NSAttributedString* FormatHTMLForLearnMoreSection() {
 
       // Ensure that the stackview width is constrained.
       [self.stackView.widthAnchor
-          constraintLessThanOrEqualToConstant:kStackViewMaxWidth],
+          constraintLessThanOrEqualToConstant:stackViewMaxWidth],
 
       // Set a minimum top margin and make the bottom guide twice as tall as the
       // top guide.

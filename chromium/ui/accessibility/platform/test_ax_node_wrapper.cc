@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_role_properties.h"
+#include "ui/accessibility/ax_selection.h"
 #include "ui/accessibility/ax_table_info.h"
 #include "ui/accessibility/ax_tree_observer.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -145,7 +146,7 @@ const AXTreeData& TestAXNodeWrapper::GetTreeData() const {
   return tree_->data();
 }
 
-const AXTree::Selection TestAXNodeWrapper::GetUnignoredSelection() const {
+const AXSelection TestAXNodeWrapper::GetUnignoredSelection() const {
   return tree_->GetUnignoredSelection();
 }
 
@@ -153,18 +154,15 @@ AXNodePosition::AXPositionInstance TestAXNodeWrapper::CreatePositionAt(
     int offset,
     ax::mojom::TextAffinity affinity) const {
   if (node_->IsLeaf()) {
-    return ui::AXNodePosition::CreateTextPosition(
-        GetTreeData().tree_id, node_->id(), offset, affinity);
+    return AXNodePosition::CreateTextPosition(*node_, offset, affinity);
   }
-  return ui::AXNodePosition::CreateTreePosition(GetTreeData().tree_id,
-                                                node_->id(), offset);
+  return AXNodePosition::CreateTreePosition(*tree_, *node_, offset);
 }
 
 AXNodePosition::AXPositionInstance TestAXNodeWrapper::CreateTextPositionAt(
     int offset,
     ax::mojom::TextAffinity affinity) const {
-  return ui::AXNodePosition::CreateTextPosition(GetTreeData().tree_id,
-                                                node_->id(), offset, affinity);
+  return AXNodePosition::CreateTextPosition(*node_, offset, affinity);
 }
 
 gfx::NativeViewAccessible TestAXNodeWrapper::GetNativeViewAccessible() {
@@ -867,24 +865,7 @@ bool TestAXNodeWrapper::ShouldIgnoreHoveredStateForTesting() {
 }
 
 bool TestAXNodeWrapper::HasVisibleCaretOrSelection() const {
-  ui::AXTree::Selection unignored_selection = GetUnignoredSelection();
-  int32_t focus_id = unignored_selection.focus_object_id;
-  AXNode* focus_object = tree_->GetFromId(focus_id);
-  if (!focus_object)
-    return false;
-
-  // Selection or caret will be visible in a focused editable area.
-  if (HasState(ax::mojom::State::kEditable)) {
-    return GetData().IsAtomicTextField() ? focus_object == node_
-                                         : focus_object->IsDescendantOf(node_);
-  }
-
-  // The selection will be visible in non-editable content only if it is not
-  // collapsed into a caret.
-  return (focus_id != unignored_selection.anchor_object_id ||
-          unignored_selection.focus_offset !=
-              unignored_selection.anchor_offset) &&
-         focus_object->IsDescendantOf(node_);
+  return node_->HasVisibleCaretOrSelection();
 }
 
 std::set<AXPlatformNode*> TestAXNodeWrapper::GetReverseRelations(

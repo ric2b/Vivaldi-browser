@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,6 @@ bool MassageRotationIfMultipleOfNinetyDegrees(gfx::Transform* rotation,
   if (!IsMultipleOfNinetyDegrees(degrees) || !rotation)
     return false;
 
-  gfx::Transform transform;
   float degrees_by_ninety = degrees / 90.0f;
 
   int n = base::ClampRound(degrees_by_ninety);
@@ -39,17 +38,15 @@ bool MassageRotationIfMultipleOfNinetyDegrees(gfx::Transform* rotation,
     n += 4;
 
   // n should now be in the range [0, 3]
-  // clang-format off
-  if (n == 1) {
-    transform.matrix().setRotateAboutZAxisSinCos(1, 0);
+  if (n == 0) {
+    rotation->MakeIdentity();
+  } else if (n == 1) {
+    *rotation = gfx::Transform::Make90degRotation();
   } else if (n == 2) {
-    transform.matrix().setRotateAboutZAxisSinCos(0, -1);
+    *rotation = gfx::Transform::Make180degRotation();
   } else if (n == 3) {
-    transform.matrix().setRotateAboutZAxisSinCos(-1, 0);
+    *rotation = gfx::Transform::Make270degRotation();
   }
-  // clang-format on
-
-  *rotation = transform;
   return true;
 }
 
@@ -81,7 +78,7 @@ gfx::Transform InterpolatedTransform::Interpolate(float t) const {
     t = 1.0f - t;
   gfx::Transform result = InterpolateButDoNotCompose(t);
   if (child_.get()) {
-    result.ConcatTransform(child_->Interpolate(t));
+    result.PostConcat(child_->Interpolate(t));
   }
   return result;
 }

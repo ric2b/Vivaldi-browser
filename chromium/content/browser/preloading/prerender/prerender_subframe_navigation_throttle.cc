@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -86,6 +86,11 @@ PrerenderSubframeNavigationThrottle::WillProcessResponse() {
     return CANCEL;
   }
 
+  // Don't run cross-origin subframe navigation check for non-renderable
+  // contents like 204/205 as their GetOriginToCommit() is invalid. In this
+  // case, we can safely proceed with navigation without deferring it.
+  if (!navigation_request->response_should_be_rendered())
+    return PROCEED;
   // Defer cross-origin subframe navigation until page activation. The check is
   // added here, because this is the first place that the throttle can properly
   // check for cross-origin using GetOriginToCommit(). See comments in
@@ -173,7 +178,8 @@ PrerenderSubframeNavigationThrottle::DeferOrCancelCrossOriginSubframeNavigation(
   return NavigationThrottle::DEFER;
 }
 
-void PrerenderSubframeNavigationThrottle::OnHostDestroyed() {
+void PrerenderSubframeNavigationThrottle::OnHostDestroyed(
+    PrerenderHost::FinalStatus final_status) {
   observation_.Reset();
 }
 

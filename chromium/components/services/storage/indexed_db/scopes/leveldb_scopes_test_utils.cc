@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -226,34 +226,34 @@ bool LevelDBScopesTestBase::ScopeDataExistsOnDisk() {
              scopes_encoder_.TasksKeyPrefix(metadata_prefix_));
 }
 
-LeveledLockManager::LeveledLockRequest
+PartitionedLockManager::PartitionedLockRequest
 LevelDBScopesTestBase::CreateSimpleSharedLock() {
   return {0,
           {simple_lock_begin_, simple_lock_end_},
-          LeveledLockManager::LockType::kShared};
+          PartitionedLockManager::LockType::kShared};
 }
 
-LeveledLockManager::LeveledLockRequest
+PartitionedLockManager::PartitionedLockRequest
 LevelDBScopesTestBase::CreateSimpleExclusiveLock() {
   return {0,
           {simple_lock_begin_, simple_lock_end_},
-          LeveledLockManager::LockType::kExclusive};
+          PartitionedLockManager::LockType::kExclusive};
 }
 
-LeveledLockManager::LeveledLockRequest LevelDBScopesTestBase::CreateSharedLock(
-    int i) {
+PartitionedLockManager::PartitionedLockRequest
+LevelDBScopesTestBase::CreateSharedLock(int i) {
   return {0,
           {base::StringPrintf("%010d", i * 2),
            base::StringPrintf("%010d", i * 2 + 1)},
-          LeveledLockManager::LockType::kShared};
+          PartitionedLockManager::LockType::kShared};
 }
 
-LeveledLockManager::LeveledLockRequest
+PartitionedLockManager::PartitionedLockRequest
 LevelDBScopesTestBase::CreateExclusiveLock(int i) {
   return {0,
           {base::StringPrintf("%010d", i * 2),
            base::StringPrintf("%010d", i * 2 + 1)},
-          LeveledLockManager::LockType::kExclusive};
+          PartitionedLockManager::LockType::kExclusive};
 }
 
 const base::FilePath& LevelDBScopesTestBase::DatabaseDirFilePath() {

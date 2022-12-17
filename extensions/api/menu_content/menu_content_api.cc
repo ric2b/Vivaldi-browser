@@ -56,14 +56,13 @@ MenuTreeNode MakeAPITreeNode(Menu_Node* menu_node) {
   tree_node.id = base::NumberToString(menu_node->id());
   tree_node.action = menu_node->action();
   if (menu_node->origin() == Menu_Node::USER) {
-    tree_node.custom.reset(new bool(true));
+    tree_node.custom = true;
   }
   if (menu_node->hasCustomTitle()) {
-    tree_node.title.reset(
-        new std::string(base::UTF16ToUTF8(menu_node->GetTitle())));
+    tree_node.title = base::UTF16ToUTF8(menu_node->GetTitle());
   }
-  if (menu_node->showShortcut()) {
-    tree_node.showshortcut = std::make_unique<bool>(*menu_node->showShortcut());
+  if (menu_node->showShortcut().has_value()) {
+    tree_node.showshortcut = menu_node->showShortcut();
   }
   switch (menu_node->type()) {
     case menus::Menu_Node::MENU:
@@ -71,14 +70,14 @@ MenuTreeNode MakeAPITreeNode(Menu_Node* menu_node) {
       break;
     case menus::Menu_Node::COMMAND:
       tree_node.type = vivaldi::menu_content::NODE_TYPE_COMMAND;
-      tree_node.parameter.reset(new std::string(menu_node->parameter()));
+      tree_node.parameter = menu_node->parameter();
       break;
     case menus::Menu_Node::CHECKBOX:
       tree_node.type = vivaldi::menu_content::NODE_TYPE_CHECKBOX;
       break;
     case menus::Menu_Node::RADIO:
       tree_node.type = vivaldi::menu_content::NODE_TYPE_RADIO;
-      tree_node.radiogroup.reset(new std::string(menu_node->radioGroup()));
+      tree_node.radiogroup = menu_node->radioGroup();
       break;
     case menus::Menu_Node::FOLDER:
       tree_node.type = vivaldi::menu_content::NODE_TYPE_FOLDER;
@@ -103,8 +102,7 @@ MenuTreeNode MakeAPITreeNode(Menu_Node* menu_node) {
     for (auto& child : menu_node->children()) {
       children.push_back(MakeAPITreeNode(child.get()));
     }
-    tree_node.children.reset(
-        new std::vector<MenuTreeNode>(std::move(children)));
+    tree_node.children = std::move(children);
   }
 
   return tree_node;

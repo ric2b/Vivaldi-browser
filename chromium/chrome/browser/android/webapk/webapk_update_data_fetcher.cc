@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -170,7 +170,7 @@ void WebApkUpdateDataFetcher::OnDidGetInstallableData(
     return;
   }
 
-  GURL new_manifest_id(webapps::ShortcutInfo::GetManifestId(data.manifest));
+  GURL new_manifest_id(blink::GetIdFromManifest(data.manifest));
   // If the fetched manifest id is different from the current one, we also
   // continue observing as the id is the identity for the application. We
   // will treat the manifest with different id as the one of another WebAPK.

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1686,7 +1686,7 @@ void WebController::OnSetNativeExecution(
                                   : UnexpectedErrorStatus(__FILE__, __LINE__));
 }
 
-base::WeakPtr<WebController> WebController::GetWeakPtr() const {
+base::WeakPtr<WebController> WebController::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 

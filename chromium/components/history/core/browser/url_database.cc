@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,7 @@ void URLDatabase::FillURLRow(sql::Statement& s, URLRow* i) {
   i->set_title(s.ColumnString16(2));
   i->set_visit_count(s.ColumnInt(3));
   i->set_typed_count(s.ColumnInt(4));
-  i->set_last_visit(base::Time::FromInternalValue(s.ColumnInt64(5)));
+  i->set_last_visit(s.ColumnTime(5));
   i->set_hidden(s.ColumnInt(6) != 0);
 }
 
@@ -149,7 +149,7 @@ bool URLDatabase::UpdateURLRow(URLID url_id, const URLRow& info) {
   statement.BindString16(0, info.title());
   statement.BindInt(1, info.visit_count());
   statement.BindInt(2, info.typed_count());
-  statement.BindInt64(3, info.last_visit().ToInternalValue());
+  statement.BindTime(3, info.last_visit());
   statement.BindInt(4, info.hidden() ? 1 : 0);
   statement.BindInt64(5, url_id);
 
@@ -182,7 +182,7 @@ URLID URLDatabase::AddURLInternal(const URLRow& info, bool is_temporary) {
   statement.BindString16(1, info.title());
   statement.BindInt(2, info.visit_count());
   statement.BindInt(3, info.typed_count());
-  statement.BindInt64(4, info.last_visit().ToInternalValue());
+  statement.BindTime(4, info.last_visit());
   statement.BindInt(5, info.hidden() ? 1 : 0);
 
   if (!statement.Run()) {
@@ -237,7 +237,7 @@ bool URLDatabase::InsertOrUpdateURLRowByID(const URLRow& info) {
   statement.BindString16(2, info.title());
   statement.BindInt(3, info.visit_count());
   statement.BindInt(4, info.typed_count());
-  statement.BindInt64(5, info.last_visit().ToInternalValue());
+  statement.BindTime(5, info.last_visit());
   statement.BindInt(6, info.hidden() ? 1 : 0);
 
   return statement.Run();
@@ -617,8 +617,7 @@ void URLDatabase::GetMostRecentKeywordSearchTerms(
     visit->term = statement.ColumnString16(0);
     visit->normalized_term = statement.ColumnString16(1);
     visit->visit_count = statement.ColumnInt(2);
-    visit->last_visit_time =
-        base::Time::FromInternalValue(statement.ColumnInt64(3));
+    visit->last_visit_time = statement.ColumnTime(3);
     visits->push_back(std::move(visit));
   }
 }
@@ -721,8 +720,7 @@ void URLDatabase::GetMostRecentKeywordSearchTerms(
     visit->normalized_term = statement.ColumnString16(0);
     visit->term = statement.ColumnString16(1);
     visit->visit_count = statement.ColumnInt(2);
-    visit->last_visit_time =
-        base::Time::FromInternalValue(statement.ColumnInt64(3));
+    visit->last_visit_time = statement.ColumnTime(3);
     visits->push_back(std::move(visit));
   }
 }

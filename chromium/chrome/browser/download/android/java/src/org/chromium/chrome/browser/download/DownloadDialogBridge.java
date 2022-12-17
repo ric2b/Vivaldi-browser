@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,11 +47,6 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * Glues download dialogs UI code and handles the communication to download native backend.
- * When {@link ChromeFeatureList#DOWNLOAD_LATER} is enabled, the following dialogs will be shown in
- * a sequence.
- * Download later dialog ==> (optional) Download date time picker ==> Download location dialog
- * When {@link ChromeFeatureList#DOWNLOAD_LATER} is disabled, only the download location dialog will
- * be shown.
  */
 public class DownloadDialogBridge implements DownloadLocationDialogController {
     private static final long INVALID_START_TIME = -1;
@@ -67,12 +62,6 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
     private @DownloadLocationDialogType int mLocationDialogType;
     private String mSuggestedPath;
     private PrefService mPrefService;
-
-    // Whether the user clicked the edit text to open download location dialog.
-    private boolean mEditLocation;
-
-    // Whether to show the edit location text in download later dialog.
-    private boolean mShowEditLocation;
 
     public DownloadDialogBridge(
             long nativeDownloadDialogBridge, DownloadLocationDialogCoordinator locationDialog) {
@@ -98,7 +87,7 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
     @CalledByNative
     private void showDialog(WindowAndroid windowAndroid, long totalBytes,
             @ConnectionType int connectionType, @DownloadLocationDialogType int dialogType,
-            String suggestedPath, boolean supportsLaterDialog, boolean isIncognito) {
+            String suggestedPath, boolean isIncognito) {
         mWindowAndroid = windowAndroid;
         Activity activity = windowAndroid.getActivity().get();
         if (activity == null) {
@@ -107,7 +96,6 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
         }
 
         DownloadDirectoryProvider.getInstance().getAllDirectoriesOptions((dirs) -> {
-            mShowEditLocation = (dirs != null && dirs.size() > 1);
             ModalDialogManager modalDialogManager =
                     ((ModalDialogManagerHolder) activity).getModalDialogManager();
 
@@ -123,15 +111,14 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
             }
 
             showDialog(activity, modalDialogManager, getPrefService(), totalBytes, connectionType,
-                    suggestedDialogType, suggestedPath, supportsLaterDialog, isIncognito);
+                    suggestedDialogType, suggestedPath, isIncognito);
         });
     }
 
     @VisibleForTesting
     void showDialog(Context context, ModalDialogManager modalDialogManager, PrefService prefService,
             long totalBytes, @ConnectionType int connectionType,
-            @DownloadLocationDialogType int dialogType, String suggestedPath,
-            boolean supportsLaterDialog, boolean isIncognito) {
+            @DownloadLocationDialogType int dialogType, String suggestedPath, boolean isIncognito) {
         mContext = context;
         mModalDialogManager = modalDialogManager;
         mPrefService = prefService;
@@ -148,8 +135,8 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
     private void onComplete() {
         if (mNativeDownloadDialogBridge == 0) return;
 
-        DownloadDialogBridgeJni.get().onComplete(mNativeDownloadDialogBridge,
-                DownloadDialogBridge.this, mSuggestedPath, false, INVALID_START_TIME);
+        DownloadDialogBridgeJni.get().onComplete(
+                mNativeDownloadDialogBridge, DownloadDialogBridge.this, mSuggestedPath);
     }
 
     private void onCancel() {
@@ -172,27 +159,12 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
             DownloadLocationDialogMetrics.recordDownloadLocationSuggestionChoice(isSelected);
         }
 
-        // The location dialog is triggered automatically, complete the flow.
-        if (!mEditLocation) {
-            onComplete();
-            return;
-        }
-
-        // The location dialog is triggered by the "Edit" text. Show the download later dialog
-        // again.
-        mEditLocation = false;
+        onComplete();
     }
 
     @Override
     public void onDownloadLocationDialogCanceled() {
-        if (!mEditLocation) {
-            onCancel();
-            return;
-        }
-
-        // The location dialog is triggered by the "Edit" text. Show the download later dialog
-        // again.
-        mEditLocation = false;
+        onCancel();
     }
 
     void setPrefServiceForTesting(PrefService prefService) {
@@ -243,23 +215,17 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
         return DownloadDialogBridgeJni.get().isLocationDialogManaged();
     }
 
-    public static boolean shouldShowDateTimePicker() {
-        return DownloadDialogBridgeJni.get().shouldShowDateTimePicker();
-    }
-
     private static PrefService getPrefService() {
         return UserPrefs.get(Profile.getLastUsedRegularProfile());
     }
 
     @NativeMethods
     public interface Natives {
-        void onComplete(long nativeDownloadDialogBridge, DownloadDialogBridge caller,
-                String returnedPath, boolean onWifi, long startTime);
+        void onComplete(
+                long nativeDownloadDialogBridge, DownloadDialogBridge caller, String returnedPath);
         void onCanceled(long nativeDownloadDialogBridge, DownloadDialogBridge caller);
         String getDownloadDefaultDirectory();
         void setDownloadAndSaveFileDefaultDirectory(String directory);
-        long getDownloadLaterMinFileSize();
-        boolean shouldShowDateTimePicker();
         boolean isLocationDialogManaged();
     }
 

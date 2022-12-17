@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -265,7 +265,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest, Standard) {
 
   static constexpr char kExtensionPath[] = "content_settings/standard";
 
-  EXPECT_TRUE(RunExtensionTest(kExtensionPath, {.page_url = "test.html"}))
+  EXPECT_TRUE(RunExtensionTest(kExtensionPath, {.extension_url = "test.html"}))
       << message_;
   CheckContentSettingsSet();
 
@@ -309,7 +309,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest, IncognitoIsolation) {
 
   // Run extension, set all permissions to allow, and check if they are changed.
   ASSERT_TRUE(RunExtensionTest("content_settings/incognitoisolation",
-                               {.page_url = "test.html",
+                               {.extension_url = "test.html",
                                 .custom_arg = "allow",
                                 .open_in_incognito = true},
                                {.allow_in_incognito = true}))
@@ -321,7 +321,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest, IncognitoIsolation) {
 
   // Run extension, set all permissions to block, and check if they are changed.
   ASSERT_TRUE(RunExtensionTest("content_settings/incognitoisolation",
-                               {.page_url = "test.html",
+                               {.extension_url = "test.html",
                                 .custom_arg = "block",
                                 .open_in_incognito = true},
                                {.allow_in_incognito = true}))
@@ -337,7 +337,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContentSettingsApiTest,
                        IncognitoNotAllowedInRegular) {
   EXPECT_FALSE(
       RunExtensionTest("content_settings/incognitoisolation",
-                       {.page_url = "test.html", .custom_arg = "allow"}))
+                       {.extension_url = "test.html", .custom_arg = "allow"}))
       << message_;
 }
 

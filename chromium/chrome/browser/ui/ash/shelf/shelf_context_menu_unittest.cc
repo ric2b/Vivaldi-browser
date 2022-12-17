@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -227,7 +227,6 @@ class ShelfContextMenuTest : public ChromeAshTestBase {
 
   void SendRefreshAppList(const std::vector<arc::mojom::AppInfoPtr>& apps) {
     arc_test_.app_instance()->SendRefreshAppList(apps);
-    app_service_test_.FlushMojoCalls();
   }
 
   void LaunchApp(const std::string& app_id,
@@ -324,7 +323,6 @@ TEST_F(ShelfContextMenuTest, ArcLauncherMenusCheck) {
   std::vector<arc::mojom::AppInfoPtr> apps;
   apps.emplace_back(arc_test().fake_apps()[0]->Clone());
   arc_test().app_instance()->SendRefreshAppList(apps);
-  app_service_test().WaitForAppService();
   const std::string app_id = ArcAppTest::GetAppId(*arc_test().fake_apps()[0]);
   const std::string app_name = arc_test().fake_apps()[0]->name;
 
@@ -356,7 +354,6 @@ TEST_F(ShelfContextMenuTest, ArcLauncherMenusCheck) {
   CreateArcWindow(window_app_id1);
   arc_test().app_instance()->SendTaskCreated(1, *arc_test().fake_apps()[0],
                                              std::string());
-  app_service_test().WaitForAppService();
 
   item_delegate = model()->GetShelfItemDelegate(shelf_id);
   ASSERT_TRUE(item_delegate);
@@ -380,7 +377,6 @@ TEST_F(ShelfContextMenuTest, ArcLauncherMenusCheck) {
   CreateArcWindow(window_app_id2);
   arc_test().app_instance()->SendTaskCreated(2, *arc_test().fake_apps()[1],
                                              std::string());
-  app_service_test().WaitForAppService();
   const ash::ShelfID shelf_id2(app_id2);
   const ash::ShelfItem* item2 = controller()->GetItem(shelf_id2);
   ASSERT_TRUE(item2);
@@ -407,7 +403,6 @@ TEST_F(ShelfContextMenuTest, ArcLauncherMenusCheck) {
   shortcuts[0].intent_uri +=
       ";S.org.chromium.arc.shelf_group_id=arc_test_shelf_group;end";
   arc_test().app_instance()->SendInstallShortcuts(shortcuts);
-  app_service_test().WaitForAppService();
   const std::string app_id3 =
       arc::ArcAppShelfId("arc_test_shelf_group",
                          ArcAppTest::GetAppId(*arc_test().fake_apps()[2]))
@@ -426,7 +421,6 @@ TEST_F(ShelfContextMenuTest, ArcLauncherMenusCheck) {
     arc_test().app_instance()->SendTaskDescription(
         task_id, GetAppNameInShelfGroup(task_id),
         std::string() /* icon_png_data_as_string */);
-    app_service_test().WaitForAppService();
     const ash::ShelfID shelf_id3(app_id3);
     const ash::ShelfItem* item3 = controller()->GetItem(shelf_id3);
     ASSERT_TRUE(item3);
@@ -640,7 +634,6 @@ TEST_F(ShelfContextMenuTest, InternalAppShelfContextMenuOptionsNumber) {
 TEST_F(ShelfContextMenuTest, CrostiniNormalApp) {
   const std::string app_name = "foo";
   crostini_helper()->AddApp(crostini::CrostiniTestHelper::BasicApp(app_name));
-  app_service_test().FlushMojoCalls();
   const std::string app_id =
       crostini::CrostiniTestHelper::GenerateAppId(app_name);
   guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile())
@@ -701,7 +694,6 @@ TEST_F(ShelfContextMenuTest, WebApp) {
   constexpr char kWebAppUrl[] = "https://webappone.com/";
   constexpr char kWebAppName[] = "WebApp1";
 
-  app_service_test().FlushMojoCalls();
   const web_app::AppId app_id = web_app::test::InstallDummyWebApp(
       profile(), kWebAppName, GURL(kWebAppUrl));
 

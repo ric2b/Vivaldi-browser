@@ -73,9 +73,9 @@ class ContainerQueryEvaluator;
 class CSSPropertyName;
 class CSSPropertyValueSet;
 class CSSStyleDeclaration;
-class CSSToggle;
 class CSSToggleMap;
 class CustomElementDefinition;
+class CustomElementRegistry;
 class DOMRect;
 class DOMRectList;
 class DOMStringMap;
@@ -114,9 +114,6 @@ class StylePropertyMap;
 class StylePropertyMapReadOnly;
 class StyleRecalcContext;
 class StyleRequest;
-class ToggleRoot;
-class ToggleRootList;
-class ToggleTrigger;
 class V8UnionBooleanOrScrollIntoViewOptions;
 
 enum class CSSPropertyID;
@@ -194,6 +191,12 @@ enum class HidePopupForcingLevel {
 enum class HidePopupIndependence {
   kLeaveUnrelated,
   kHideUnrelated,
+};
+
+enum class PopUpAncestorType {
+  kDefault,
+  kNewPopUp,
+  kInclusive,
 };
 
 typedef HeapVector<Member<Attr>> AttrNodeList;
@@ -382,6 +385,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   Element* OffsetParent();
   int clientLeft();
   int clientTop();
+  int ClientLeftNoLayout() const;
+  int ClientTopNoLayout() const;
   int clientWidth();
   int clientHeight();
   double scrollLeft();
@@ -397,16 +402,29 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void scrollTo(const ScrollToOptions*);
   LayoutBox* GetLayoutBoxForScrolling() const override;
 
-  gfx::Rect BoundsInViewport() const;
-  // Returns an intersection rectangle of the bounds rectangle and the visual
-  // viewport's rectangle in the visual viewport's coordinate space.
-  // Applies ancestors' frames' clipping, but does not (yet) apply (overflow)
-  // element clipping (crbug.com/889840).
-  gfx::Rect VisibleBoundsInVisualViewport() const;
-  Vector<gfx::Rect> OutlineRectsInVisualViewport(
+  // Returns the bounds of this Element, unclipped, in the coordinate space of
+  // the local root's widget. That is, in the outermost main frame, this will
+  // scale and transform the bounds by the visual viewport transform (i.e.
+  // pinch-zoom). In a local root that isn't main (i.e. a remote frame), the
+  // returned bounds are unscaled by the visual viewport and are relative to
+  // the local root frame.
+  gfx::Rect BoundsInWidget() const;
+
+  // Same as above but for outline rects.
+  Vector<gfx::Rect> OutlineRectsInWidget(
       DocumentUpdateReason reason = DocumentUpdateReason::kUnknown) const;
 
+  // Returns the bounds of this element relative to the local root frame's
+  // origin. While the rect is relative to the local root, it is intersected
+  // with all ancestor frame clips, including the visual viewport transform and
+  // clip in the main frame. While this applies ancestor frame clipping, it
+  // does not (yet) apply (overflow) element clipping (crbug.com/889840).
+  gfx::Rect VisibleBoundsInLocalRoot() const;
+
   DOMRectList* getClientRects();
+  // Returns a rectangle in zoomed pixel units.
+  gfx::RectF GetBoundingClientRectNoLifecycleUpdateNoAdjustment() const;
+  // Returns a rectangle in CSS pixel units.  i.e. ignorign zoom.
   gfx::RectF GetBoundingClientRectNoLifecycleUpdate() const;
   DOMRect* getBoundingClientRect();
 
@@ -579,7 +597,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   // Popup API related functions.
   void UpdatePopupAttribute(String);
-  bool HasValidPopupAttribute() const;
+  bool HasPopupAttribute() const;
   PopupData* GetPopupData() const;
   PopupValueType PopupType() const;
   bool popupOpen() const;
@@ -588,8 +606,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void HidePopUpInternal(HidePopupFocusBehavior focus_behavior,
                          HidePopupForcingLevel forcing_level);
   void PopupHideFinishIfNeeded();
-  static const Element* NearestOpenAncestralPopup(const Node& node,
-                                                  bool inclusive = false);
+  static const Element* NearestOpenAncestralPopup(const Node&,
+                                                  PopUpAncestorType);
   // Retrieves the element pointed to by this element's 'anchor' content
   // attribute, if that element exists, and if this element is a pop-up.
   Element* anchorElement() const;
@@ -603,11 +621,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
                                  HidePopupFocusBehavior,
                                  HidePopupForcingLevel,
                                  HidePopupIndependence);
-  Element* PopupHoverTargetElement() const;
-  bool IsNodePopUpDescendant(const Node& node) const;
-  void MaybeQueuePopupHideEvent();
-  static void HoveredElementChanged(Element* old_element, Element* new_element);
-  void HandlePopupHovered(bool hovered);
 
   // TODO(crbug.com/1197720): The popup position should be provided by the new
   // anchored positioning scheme.
@@ -646,7 +659,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   const ComputedStyle* ParentComputedStyle() const;
 
-  void RecalcStyle(const StyleRecalcChange, const StyleRecalcContext&);
+  // Returns a StyleRecalcChange to be combined with the outer
+  // StyleRecalcChange. This is used to recalculate the style of subsequent
+  // siblings.
+  StyleRecalcChange RecalcStyle(const StyleRecalcChange,
+                                const StyleRecalcContext&);
   void RecalcStyleForTraversalRootAncestor();
   void RebuildLayoutTreeForTraversalRootAncestor() {
     RebuildFirstLetterLayoutTree();
@@ -713,7 +730,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   ShadowRoot& AttachShadowRootInternal(
       ShadowRootType,
       FocusDelegation focus_delegation = FocusDelegation::kNone,
-      SlotAssignmentMode slot_assignment_mode = SlotAssignmentMode::kNamed);
+      SlotAssignmentMode slot_assignment_mode = SlotAssignmentMode::kNamed,
+      CustomElementRegistry* registry = nullptr);
 
   // Returns the shadow root attached to this element if it is a shadow host.
   ShadowRoot* GetShadowRoot() const;
@@ -795,8 +813,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   Element* GetFocusableArea() const;
   Element* GetAutofocusDelegate() const;
   // Element focus function called through IDL (i.e. element.focus() in JS)
-  // Delegates to virtual Focus() with focus type set to kScript
-  void focusForBindings();
+  // Delegates to Focus() with focus type set to kScript
   void focusForBindings(const FocusOptions*);
   // Element focus function called from outside IDL (user focus,
   // accessibility, etc...)
@@ -1214,20 +1231,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   CSSToggleMap* GetToggleMap();
   CSSToggleMap& EnsureToggleMap();
 
-  // Create any toggles specified by 'toggle-root' that don't already exist on
-  // the element.
-  void CreateToggles(const ToggleRootList* toggle_roots);
-
-  // Find the toggle and corresponding element that has the toggle named name
-  // that is in scope on this element, or both null if no toggle is in scope.
-  // The element may be this.
-  //
-  // See https://tabatkins.github.io/css-toggle/#toggle-in-scope .
-  std::pair<CSSToggle*, Element*> FindToggleInScope(const AtomicString& name);
-
-  // Implement https://tabatkins.github.io/css-toggle/#fire-a-toggle-activation
-  void FireToggleActivation(const ToggleTrigger& activation);
-
  protected:
   const ElementData* GetElementData() const { return element_data_.Get(); }
   UniqueElementData& EnsureUniqueElementData();
@@ -1250,6 +1253,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void AddPropertyToPresentationAttributeStyle(MutableCSSPropertyValueSet*,
                                                CSSPropertyID,
                                                const CSSValue&);
+  void MapLanguageAttributeToLocale(const AtomicString&,
+                                    MutableCSSPropertyValueSet*);
 
   InsertionNotificationRequest InsertedInto(ContainerNode&) override;
   void RemovedFrom(ContainerNode&) override;
@@ -1277,10 +1282,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // This method cannot be moved to LayoutObject because some focusable nodes
   // don't have layoutObjects. e.g., HTMLOptionElement.
   virtual bool IsFocusableStyle() const;
-  // Contains the base logic for IsFocusableStyle. Doesn't require the node to
-  // have an up-to-date LayoutObject, it's up to the caller to pass the right
-  // one as an argument.
-  bool IsBaseElementFocusableStyle(const LayoutObject*) const;
+  // Contains the base logic for IsFocusableStyle.
+  bool IsBaseElementFocusableStyle() const;
   // Similar to IsFocusableStyle, except that it will ensure that any deferred
   // work to create layout objects is completed (e.g. in display-locked trees).
   bool IsFocusableStyleAfterUpdate() const;
@@ -1403,7 +1406,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   };
 
   // Special focus handling for popups.
-  Element* GetPopupFocusableArea(bool autofocus_only) const;
+  Element* GetPopupFocusableArea() const;
 
   void UpdateFirstLetterPseudoElement(StyleUpdatePhase,
                                       const StyleRecalcContext&);
@@ -1474,7 +1477,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   void ClientQuads(Vector<gfx::QuadF>& quads) const;
 
-  NodeType getNodeType() const final;
   bool ChildTypeAllowed(NodeType) const final;
 
   // Returns the attribute's index or `kNotFound` if not found.
@@ -1630,12 +1632,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // like *::selection. To improve runtime and keep copy-on-write inheritance,
   // avoid recalc if neither parent nor child matched any non-universal rules.
   bool CanSkipRecalcForHighlightPseudos(const ComputedStyle& new_style) const;
-
-  static void ChangeToggle(Element* toggle_element,
-                           CSSToggle* toggle,
-                           const ToggleTrigger& action,
-                           const ToggleRoot* override_spec);
-  void FireToggleChangeEvent(CSSToggle* toggle);
 
   Member<ElementData> element_data_;
 };

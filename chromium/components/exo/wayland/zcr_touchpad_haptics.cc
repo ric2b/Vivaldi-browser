@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol-core.h>
 
+#include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "build/chromeos_buildflags.h"
@@ -16,10 +17,6 @@
 #include "ui/events/devices/haptic_touchpad_effects.h"
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/constants/ash_features.h"
-#endif
 
 namespace exo {
 namespace wayland {
@@ -32,11 +29,9 @@ class WaylandTouchpadHapticsDelegate {
   ~WaylandTouchpadHapticsDelegate() = default;
 
   void UpdateTouchpadHapticsState() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
     if (!base::FeatureList::IsEnabled(
             chromeos::features::kExoHapticFeedbackSupport))
       return;
-#endif
 
     ui::InputController* controller =
         ui::OzonePlatform::GetInstance()->GetInputController();
@@ -81,11 +76,9 @@ void touchpad_haptics_play(wl_client* client,
                            wl_resource* resource,
                            uint32_t effect,
                            int32_t strength) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!base::FeatureList::IsEnabled(
           chromeos::features::kExoHapticFeedbackSupport))
     return;
-#endif
   GetUserDataAs<WaylandTouchpadHapticsDelegate>(resource)->Play(effect,
                                                                 strength);
 }

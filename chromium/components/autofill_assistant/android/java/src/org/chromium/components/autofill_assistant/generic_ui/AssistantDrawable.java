@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -218,6 +218,8 @@ public abstract class AssistantDrawable {
                     return R.drawable.ic_visibility_black;
                 case AssistantDrawableIcon.VISIBILITY_OFF:
                     return R.drawable.ic_visibility_off_black;
+                case AssistantDrawableIcon.INFO:
+                    return R.drawable.btn_info;
             }
 
             return INVALID_ICON_ID;

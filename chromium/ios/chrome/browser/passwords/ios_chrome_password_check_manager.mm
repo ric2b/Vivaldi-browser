@@ -1,18 +1,19 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
+#import "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
 
-#include "base/strings/utf_string_conversions.h"
-#include "components/keyed_service/core/service_access_type.h"
+#import "base/strings/utf_string_conversions.h"
+#import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/password_manager/core/browser/ui/credential_utils.h"
-#include "components/password_manager/core/common/password_manager_features.h"
-#include "components/password_manager/core/common/password_manager_pref_names.h"
-#include "components/prefs/pref_service.h"
-#include "ios/chrome/browser/passwords/ios_chrome_bulk_leak_check_service_factory.h"
-#include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "components/password_manager/core/common/password_manager_features.h"
+#import "components/password_manager/core/common/password_manager_pref_names.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/passwords/ios_chrome_affiliation_service_factory.h"
+#import "ios/chrome/browser/passwords/ios_chrome_bulk_leak_check_service_factory.h"
+#import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -79,7 +80,9 @@ IOSChromePasswordCheckManager::IOSChromePasswordCheckManager(
       password_store_(IOSChromePasswordStoreFactory::GetForBrowserState(
           browser_state,
           ServiceAccessType::EXPLICIT_ACCESS)),
-      saved_passwords_presenter_(password_store_),
+      saved_passwords_presenter_(
+          IOSChromeAffiliationServiceFactory::GetForBrowserState(browser_state),
+          password_store_),
       insecure_credentials_manager_(&saved_passwords_presenter_,
                                     password_store_),
       bulk_leak_check_service_adapter_(

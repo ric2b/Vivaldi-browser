@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -81,7 +81,7 @@ class CastInternalMessage {
 
   // Returns a CastInternalMessage for |message|, or nullptr is |message| is not
   // a valid Cast internal message.
-  static std::unique_ptr<CastInternalMessage> From(base::Value message);
+  static std::unique_ptr<CastInternalMessage> From(base::Value::Dict message);
 
   CastInternalMessage(const CastInternalMessage&) = delete;
   CastInternalMessage& operator=(const CastInternalMessage&) = delete;
@@ -116,9 +116,9 @@ class CastInternalMessage {
     return message_body_;
   }
 
-  const base::Value& v2_message_body() const {
+  const base::Value::Dict& v2_message_body() const {
     DCHECK(type_ == Type::kV2Message);
-    return message_body_;
+    return message_body_.GetDict();
   }
 
  private:
@@ -171,8 +171,8 @@ class CastSession {
   // ID of the app in the session.
   const std::string& app_id() const { return app_id_; }
 
-  // ID used for communicating with the session over the Cast channel.
-  const std::string& transport_id() const { return transport_id_; }
+  // The ID of the Cast device this session is communicating with.
+  const std::string& destination_id() const { return destination_id_; }
 
   // The set of accepted message namespaces. Must be non-empty, unless the
   // session represents a multizone leader.
@@ -183,14 +183,14 @@ class CastSession {
   // The dictionary representing this session, derived from |receiver_status|.
   // For convenience, this is used for generating messages sent to the SDK that
   // include the session value.
-  const base::Value& value() const { return value_; }
+  const base::Value::Dict& value() const { return value_; }
 
  private:
   std::string session_id_;
   std::string app_id_;
-  std::string transport_id_;
+  std::string destination_id_;
   base::flat_set<std::string> message_namespaces_;
-  base::Value value_;
+  base::Value::Dict value_;
 
   // The human-readable name of the Cast application, for example, "YouTube".
   // Mandatory.
@@ -230,11 +230,11 @@ blink::mojom::PresentationConnectionMessagePtr CreateAppMessage(
     const CastMessage& cast_message);
 blink::mojom::PresentationConnectionMessagePtr CreateV2Message(
     const std::string& client_id,
-    const base::Value& payload,
+    const base::Value::Dict& payload,
     absl::optional<int> sequence_number);
 blink::mojom::PresentationConnectionMessagePtr CreateErrorMessage(
     const std::string& client_id,
-    base::Value error,
+    base::Value::Dict error,
     absl::optional<int> sequence_number);
 blink::mojom::PresentationConnectionMessagePtr CreateLeaveSessionAckMessage(
     const std::string& client_id,
@@ -243,7 +243,7 @@ blink::mojom::PresentationConnectionMessagePtr CreateLeaveSessionAckMessage(
     const std::string& client_id,
     absl::optional<int> sequence_number);
 
-base::Value SupportedMediaCommandsToListValue(int media_commands);
+base::Value::List SupportedMediaCommandsToListValue(int media_commands);
 
 }  // namespace media_router
 

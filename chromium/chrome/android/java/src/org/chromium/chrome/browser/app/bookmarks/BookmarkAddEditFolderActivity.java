@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,11 +20,12 @@ import androidx.appcompat.widget.Toolbar;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.SynchronousInitializationActivity;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
+import org.chromium.chrome.browser.bookmarks.BookmarkModelObserver;
 import org.chromium.chrome.browser.bookmarks.BookmarkTextInputLayout;
+import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
 
 import java.util.ArrayList;
@@ -167,7 +168,7 @@ public class BookmarkAddEditFolderActivity
             final EditText editText = mFolderTitle.getEditText();
             editText.setText(bookmarkItem.getTitle());
             editText.setSelection(editText.getText().length());
-            mParentTextView.setEnabled(bookmarkItem.isMovable());
+            mParentTextView.setEnabled(BookmarkUtils.isMovable(bookmarkItem));
         }
 
         mParentTextView.setText(mModel.getBookmarkTitle(mParentId));

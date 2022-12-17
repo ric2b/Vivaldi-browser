@@ -58,10 +58,9 @@ std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow& row) {
   history_item->id = base::NumberToString(row.id());
   history_item->url = row.url().spec();
   history_item->title = base::UTF16ToUTF8(row.title());
-  history_item->last_visit_time.reset(
-      new double(MilliSecondsFromTime(row.last_visit())));
-  history_item->typed_count.reset(new int(row.typed_count()));
-  history_item->visit_count = int(row.visit_count());
+  history_item->last_visit_time = MilliSecondsFromTime(row.last_visit());
+  history_item->typed_count = row.typed_count();
+  history_item->visit_count = row.visit_count();
   history_item->transition_type =
       vivaldi::history_private::TRANSITION_TYPE_LINK;
 
@@ -196,11 +195,11 @@ void HistoryPrivateEventRouter::OnURLsModified(
     history::HistoryService* history_service,
     const history::URLRows& changed_urls) {
   OnVisitModified::Modified modified;
-  std::vector<std::string>* urls = new std::vector<std::string>();
+  std::vector<std::string> urls;
   for (const auto& row : changed_urls) {
-    urls->push_back(row.url().spec());
+    urls.push_back(row.url().spec());
   }
-  modified.urls.reset(urls);
+  modified.urls = std::move(urls);
   base::Value::List args = OnVisitModified::Create(modified);
 
   DispatchEvent(profile_, OnVisitModified::kEventName, std::move(args));
@@ -223,8 +222,8 @@ ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
 
   int max_hits = 100;
 
-  if (params->query.max_results.get())
-    max_hits = *params->query.max_results;
+  if (params->query.max_results.has_value())
+    max_hits = params->query.max_results.value();
 
   const char* sql_statement =
       "SELECT urls.id, urls.url, urls.title, urls.visit_count, "
@@ -272,12 +271,12 @@ ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
   options.SetRecentDayRange(1);
   options.max_count = 100;
 
-  if (params->query.start_time.get())
-    options.begin_time = GetTime(*params->query.start_time);
-  if (params->query.end_time.get())
-    options.end_time = GetTime(*params->query.end_time);
-  if (params->query.max_results.get())
-    options.max_count = *params->query.max_results;
+  if (params->query.start_time.has_value())
+    options.begin_time = GetTime(params->query.start_time.value());
+  if (params->query.end_time.has_value())
+    options.end_time = GetTime(params->query.end_time.value());
+  if (params->query.max_results.has_value())
+    options.max_count = params->query.max_results.value();
 
   if (params->query.result_grouping) {
     if (params->query.result_grouping ==
@@ -319,10 +318,9 @@ HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult& row,
   history_item.visit_time = double(MilliSecondsFromTime(row.visit_time()));
   history_item.url = row.url().spec();
   history_item.title = base::UTF16ToUTF8(row.title());
-  history_item.last_visit_time.reset(
-      new double(MilliSecondsFromTime(row.last_visit())));
-  history_item.typed_count.reset(new int(row.typed_count()));
-  history_item.visit_count = int(row.visit_count());
+  history_item.last_visit_time = MilliSecondsFromTime(row.last_visit());
+  history_item.typed_count = row.typed_count();
+  history_item.visit_count = row.visit_count();
 
   return history_item;
 }
@@ -404,7 +402,7 @@ std::unique_ptr<TopUrlItem> GetTopUrlPerDay(history::UrlVisitCount visit) {
 
   history_item->date = visit.date();
   history_item->url = visit.url().spec();
-  history_item->number_of_visit.reset(new int(visit.count()));
+  history_item->number_of_visit = visit.count();
 
   return history_item;
 }
@@ -456,10 +454,10 @@ ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
 
   history::QueryOptions options;
 
-  if (params->query.start_time.get())
-    options.begin_time = GetTime(*params->query.start_time);
-  if (params->query.end_time.get())
-    options.end_time = GetTime(*params->query.end_time);
+  if (params->query.start_time.has_value())
+    options.begin_time = GetTime(params->query.start_time.value());
+  if (params->query.end_time.has_value())
+    options.end_time = GetTime(params->query.end_time.value());
 
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {
@@ -518,6 +516,7 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
     item.title.assign(result.title);
     item.keyword_id = base::NumberToString(result.keyword_id);
     item.terms.assign(result.terms);
+    item.typed_count = result.typed_count;
     response.push_back(std::move(item));
   }
 

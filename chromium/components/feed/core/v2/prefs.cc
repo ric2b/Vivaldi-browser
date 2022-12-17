@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,7 @@ const char* RequestSchedulePrefName(RefreshTaskId task_id) {
 std::vector<int> GetThrottlerRequestCounts(PrefService& pref_service) {
   std::vector<int> result;
   const auto& value_list =
-      pref_service.GetValueList(kThrottlerRequestCountListPrefName);
+      pref_service.GetList(kThrottlerRequestCountListPrefName);
   for (const base::Value& value : value_list) {
     result.push_back(value.is_int() ? value.GetInt() : 0);
   }
@@ -77,7 +77,7 @@ void SetRequestSchedule(RefreshTaskId task_id,
 RequestSchedule GetRequestSchedule(RefreshTaskId task_id,
                                    PrefService& pref_service) {
   return RequestScheduleFromDict(
-      pref_service.GetValueDict(RequestSchedulePrefName(task_id)));
+      pref_service.GetDict(RequestSchedulePrefName(task_id)));
 }
 
 void SetPersistentMetricsData(const PersistentMetricsData& data,
@@ -86,7 +86,7 @@ void SetPersistentMetricsData(const PersistentMetricsData& data,
 }
 
 PersistentMetricsData GetPersistentMetricsData(PrefService& pref_service) {
-  return PersistentMetricsDataFromDict(pref_service.GetValueDict(kMetricsData));
+  return PersistentMetricsDataFromDict(pref_service.GetDict(kMetricsData));
 }
 
 std::string GetClientInstanceId(PrefService& pref_service) {
@@ -105,16 +105,24 @@ void ClearClientInstanceId(PrefService& pref_service) {
 void SetExperiments(const Experiments& experiments, PrefService& pref_service) {
   base::Value::Dict dict;
   for (const auto& exp : experiments) {
-    dict.Set(exp.first, exp.second);
+    base::Value::List list;
+    for (auto elem : exp.second) {
+      list.Append(elem);
+    }
+    dict.Set(exp.first, std::move(list));
   }
-  pref_service.SetDict(kExperiments, std::move(dict));
+  pref_service.SetDict(kExperimentsV2, std::move(dict));
 }
 
 Experiments GetExperiments(PrefService& pref_service) {
-  const auto& value = pref_service.GetValueDict(kExperiments);
+  const auto& dict = pref_service.GetDict(kExperimentsV2);
   Experiments experiments;
-  for (auto kv : value) {
-    experiments[kv.first] = kv.second.GetString();
+  for (auto kv : dict) {
+    std::vector<std::string> vect;
+    for (const auto& v : kv.second.GetList()) {
+      vect.push_back(v.GetString());
+    }
+    experiments[kv.first] = vect;
   }
   return experiments;
 }

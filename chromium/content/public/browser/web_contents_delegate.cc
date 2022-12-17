@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
+#include "content/public/browser/audio_stream_broker.h"
 #include "content/public/browser/color_chooser.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
@@ -249,6 +250,11 @@ std::string WebContentsDelegate::GetDefaultMediaDeviceID(
 std::string WebContentsDelegate::GetTitleForMediaControls(
     WebContents* web_contents) {
   return {};
+}
+
+std::unique_ptr<AudioStreamBrokerFactory>
+WebContentsDelegate::CreateAudioStreamBrokerFactory(WebContents* web_contents) {
+  return nullptr;
 }
 
 #if BUILDFLAG(IS_ANDROID)

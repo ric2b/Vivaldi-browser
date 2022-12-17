@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "base/bits.h"
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_encoding.h"
@@ -53,7 +54,7 @@ class LiteralBufferBase {
     return base::checked_cast<wtf_size_t>(end_ - begin_);
   }
 
-  ALWAYS_INLINE bool IsEmpty() const { return size() == 0; }
+  ALWAYS_INLINE bool IsEmpty() const { return begin_ == end_; }
 
   ALWAYS_INLINE const T& operator[](wtf_size_t index) const {
     CHECK_GT(size(), index);
@@ -70,6 +71,18 @@ class LiteralBufferBase {
     if (UNLIKELY(end_ == end_of_storage_))
       end_ = Grow();
     *end_++ = val;
+  }
+
+  template <typename OtherT>
+  void AppendSpan(const base::span<OtherT>& val) {
+    static_assert(sizeof(T) >= sizeof(OtherT),
+                  "T is not big enough to contain OtherT");
+    size_t count = val.size();
+    size_t new_size = size() + count;
+    if (capacity() < new_size)
+      Grow(new_size);
+    std::copy_n(val.data(), count, end_);
+    end_ += count;
   }
 
   template <typename OtherT, wtf_size_t kOtherSize>
@@ -198,6 +211,8 @@ class LCharLiteralBuffer : public LiteralBufferBase<LChar, kInlineSize> {
 
   ALWAYS_INLINE void AddChar(LChar val) { this->AddCharImpl(val); }
 
+  void Append(const base::span<const LChar>& span) { this->AppendSpan(span); }
+
   String AsString() const { return String(this->data(), this->size()); }
 };
 
@@ -243,6 +258,15 @@ class UCharLiteralBuffer : public LiteralBufferBase<UChar, kInlineSize> {
   template <wtf_size_t kOtherSize>
   void AppendLiteral(const LCharLiteralBuffer<kOtherSize>& val) {
     this->AppendLiteralImpl(val);
+  }
+
+  void Append(const String& string) {
+    if (string.empty())
+      return;
+    if (string.Is8Bit())
+      this->AppendSpan(string.Span8());
+    else
+      this->AppendSpan(string.Span16());
   }
 
   String AsString() const {

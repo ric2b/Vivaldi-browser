@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -222,7 +222,7 @@ void DesksTemplatesAppLaunchHandler::LaunchBrowsers() {
 
       if (app_restore_data->first_non_pinned_tab_index.has_value() &&
           app_restore_data->first_non_pinned_tab_index.value() <=
-              urls->size()) {
+              static_cast<int>(urls->size())) {
         chrome_desks_util::SetBrowserPinnedTabs(
             app_restore_data->first_non_pinned_tab_index.value(), browser);
       }

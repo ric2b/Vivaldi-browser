@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,6 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/extension_prefs.h"
@@ -458,16 +457,12 @@ void ExtensionManagement::Refresh() {
   // Parse default settings.
   const base::Value wildcard("*");
   if ((denied_list_pref &&
-       // TODO(crbug.com/1187106): Use base::Contains once |denied_list_pref| is
-       // not a ListValue.
-       std::find(denied_list_pref->GetListDeprecated().begin(),
-                 denied_list_pref->GetListDeprecated().end(),
-                 wildcard) != denied_list_pref->GetListDeprecated().end()) ||
+       base::Contains(denied_list_pref->GetList(), wildcard)) ||
       (extension_request_pref && extension_request_pref->GetBool())) {
     default_settings_->installation_mode = INSTALLATION_BLOCKED;
   }
 
-  const base::DictionaryValue* subdict = NULL;
+  const base::DictionaryValue* subdict = nullptr;
   if (dict_pref &&
       dict_pref->GetDictionary(schema_constants::kWildcard, &subdict)) {
     if (!default_settings_->Parse(
@@ -477,7 +472,7 @@ void ExtensionManagement::Refresh() {
     }
 
     // Settings from new preference have higher priority over legacy ones.
-    const base::ListValue* list_value = NULL;
+    const base::ListValue* list_value = nullptr;
     if (subdict->GetList(schema_constants::kInstallSources, &list_value))
       install_sources_pref = list_value;
     if (subdict->GetList(schema_constants::kAllowedTypes, &list_value))
@@ -486,14 +481,14 @@ void ExtensionManagement::Refresh() {
 
   // Parse legacy preferences.
   if (allowed_list_pref) {
-    for (const auto& entry : allowed_list_pref->GetListDeprecated()) {
+    for (const auto& entry : allowed_list_pref->GetList()) {
       if (entry.is_string() && crx_file::id_util::IdIsValid(entry.GetString()))
         AccessById(entry.GetString())->installation_mode = INSTALLATION_ALLOWED;
     }
   }
 
   if (denied_list_pref) {
-    for (const auto& entry : denied_list_pref->GetListDeprecated()) {
+    for (const auto& entry : denied_list_pref->GetList()) {
       if (entry.is_string() && crx_file::id_util::IdIsValid(entry.GetString()))
         AccessById(entry.GetString())->installation_mode = INSTALLATION_BLOCKED;
     }
@@ -503,7 +498,7 @@ void ExtensionManagement::Refresh() {
 
   if (install_sources_pref) {
     global_settings_->has_restricted_install_sources = true;
-    for (const auto& entry : install_sources_pref->GetListDeprecated()) {
+    for (const auto& entry : install_sources_pref->GetList()) {
       if (entry.is_string()) {
         std::string url_pattern = entry.GetString();
         URLPattern pattern(URLPattern::SCHEME_ALL);
@@ -520,7 +515,7 @@ void ExtensionManagement::Refresh() {
 
   if (allowed_types_pref) {
     global_settings_->has_restricted_allowed_types = true;
-    for (const auto& entry : allowed_types_pref->GetListDeprecated()) {
+    for (const auto& entry : allowed_types_pref->GetList()) {
       if (entry.is_int() && entry.GetInt() >= 0 &&
           entry.GetInt() < Manifest::Type::NUM_LOAD_TYPES) {
         global_settings_->allowed_types.push_back(
@@ -749,10 +744,10 @@ ExtensionManagement::GetInstallListByMode(
          installation_mode == INSTALLATION_RECOMMENDED);
 
   auto extension_dict = std::make_unique<base::DictionaryValue>();
-  for (const auto& entry : settings_by_id_) {
-    if (entry.second->installation_mode == installation_mode) {
-      ExternalPolicyLoader::AddExtension(extension_dict.get(), entry.first,
-                                         entry.second->update_url);
+  for (const auto& [id, settings] : settings_by_id_) {
+    if (settings->installation_mode == installation_mode) {
+      ExternalPolicyLoader::AddExtension(extension_dict->GetDict(), id,
+                                         settings->update_url);
     }
   }
   return extension_dict;
@@ -831,9 +826,9 @@ ExtensionManagementFactory* ExtensionManagementFactory::GetInstance() {
 }
 
 ExtensionManagementFactory::ExtensionManagementFactory()
-    : BrowserContextKeyedServiceFactory(
+    : ProfileKeyedServiceFactory(
           "ExtensionManagement",
-          BrowserContextDependencyManager::GetInstance()) {
+          ProfileSelections::BuildRedirectedInIncognito()) {
   DependsOn(InstallStageTrackerFactory::GetInstance());
 }
 
@@ -844,11 +839,6 @@ KeyedService* ExtensionManagementFactory::BuildServiceInstanceFor(
   TRACE_EVENT0("browser,startup",
                "ExtensionManagementFactory::BuildServiceInstanceFor");
   return new ExtensionManagement(Profile::FromBrowserContext(context));
-}
-
-content::BrowserContext* ExtensionManagementFactory::GetBrowserContextToUse(
-    content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
 }
 
 void ExtensionManagementFactory::RegisterProfilePrefs(

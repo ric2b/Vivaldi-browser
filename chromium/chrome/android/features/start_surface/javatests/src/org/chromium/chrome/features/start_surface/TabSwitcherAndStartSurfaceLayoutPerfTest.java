@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,7 +37,6 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.EnormousTest;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
@@ -186,7 +185,7 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
 
     @Test
     @EnormousTest
-    @FlakyTest(message = "https://crbug.com/1045938")
+    @DisabledTest(message = "https://crbug.com/1045938")
     @CommandLineFlags.Add({BASE_PARAMS})
     public void testTabToGridFromLiveTabWith10TabsWithoutThumbnail() throws InterruptedException {
         // Note that most of the tabs won't have thumbnails.
@@ -325,7 +324,7 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
     @Test
     @EnormousTest
     @CommandLineFlags.Add({BASE_PARAMS})
-    @DisableIf.Build(message = "See https://crbug.com/1184787", supported_abis_includes = "x86")
+    @DisabledTest(message = "https://crbug.com/1184787 and https://crbug.com/1363755")
     public void testGridToTabToCurrentNTP() throws InterruptedException, TimeoutException {
         prepareTabs(1, NTP_URL);
         reportGridToTabPerf(false, false, "Grid-to-Tab to current NTP");
@@ -352,7 +351,7 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
     @Test
     @EnormousTest
     @CommandLineFlags.Add({BASE_PARAMS})
-    @FlakyTest(message = "https://crbug.com/1225926")
+    @DisabledTest(message = "https://crbug.com/1225926")
     public void testGridToTabToOtherLive() throws InterruptedException, TimeoutException {
         prepareTabs(2, mUrl);
         reportGridToTabPerf(true, false, "Grid-to-Tab to other live tab");

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,25 +10,24 @@
 #include "base/callback_forward.h"
 #include "base/component_export.h"
 #include "base/observer_list_types.h"
-#include "chromeos/services/libassistant/public/mojom/speaker_id_enrollment_controller.mojom.h"
+#include "chromeos/ash/services/libassistant/public/mojom/speaker_id_enrollment_controller.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
 namespace ash::assistant {
 
 class COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) SpeakerIdEnrollmentClient
-    : public chromeos::libassistant::mojom::SpeakerIdEnrollmentClient {
+    : public libassistant::mojom::SpeakerIdEnrollmentClient {
  public:
   SpeakerIdEnrollmentClient();
   ~SpeakerIdEnrollmentClient() override;
 
-  mojo::PendingRemote<chromeos::libassistant::mojom::SpeakerIdEnrollmentClient>
+  mojo::PendingRemote<libassistant::mojom::SpeakerIdEnrollmentClient>
   BindNewPipeAndPassRemote();
 
   void ResetReceiver();
 
  private:
-  mojo::Receiver<chromeos::libassistant::mojom::SpeakerIdEnrollmentClient>
-      client_{this};
+  mojo::Receiver<libassistant::mojom::SpeakerIdEnrollmentClient> client_{this};
 };
 
 class COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) AssistantSettings {

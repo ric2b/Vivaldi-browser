@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,7 +76,7 @@ class MockAudioFocusDelegate : public content::AudioFocusDelegate {
   MOCK_METHOD0(AbandonAudioFocus, void());
 
   AudioFocusDelegate::AudioFocusResult RequestAudioFocus(
-      AudioFocusType audio_focus_type) {
+      AudioFocusType audio_focus_type) override {
     if (async_mode_) {
       requests_.push_back(audio_focus_type);
       return AudioFocusDelegate::AudioFocusResult::kDelayed;
@@ -86,7 +86,7 @@ class MockAudioFocusDelegate : public content::AudioFocusDelegate {
     }
   }
 
-  absl::optional<AudioFocusType> GetCurrentFocusType() const {
+  absl::optional<AudioFocusType> GetCurrentFocusType() const override {
     return audio_focus_type_;
   }
 
@@ -3314,7 +3314,7 @@ class MediaSessionImplWithBackForwardCacheBrowserTest
 #endif
     enabled_features.emplace_back(features::kBackForwardCache, params);
 
-    std::vector<base::Feature> disabled_features = {
+    std::vector<base::test::FeatureRef> disabled_features = {
         features::kBackForwardCacheMemoryControls,
     };
 

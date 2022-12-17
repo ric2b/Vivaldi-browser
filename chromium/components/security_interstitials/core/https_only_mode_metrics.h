@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,7 +34,10 @@ enum class Event {
   // Navigation failed due to timing out.
   kUpgradeTimedOut = 5,
 
-  kMaxValue = kUpgradeTimedOut,
+  // A prerendered HTTP navigation was cancelled.
+  kPrerenderCancelled = 6,
+
+  kMaxValue = kPrerenderCancelled,
 };
 
 }  // namespace https_only_mode

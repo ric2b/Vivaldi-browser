@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,8 +32,7 @@
 
 using testing::_;
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 namespace {
 
@@ -371,5 +370,4 @@ TEST_F(IceTransportTest, MAYBE_TestDelayedSignaling) {
   tester.RunAndCheckResults();
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

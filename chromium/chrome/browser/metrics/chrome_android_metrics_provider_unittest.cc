@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,24 @@ TEST_F(ChromeAndroidMetricsProviderTest,
        ProvideCurrentSessionData_AppNotifications) {
   metrics_provider_.ProvideCurrentSessionData(&uma_proto_);
   histogram_tester_.ExpectTotalCount("Android.AppNotificationStatus", 1);
+}
+
+TEST_F(ChromeAndroidMetricsProviderTest,
+       ProvideCurrentSessionData_HasMultipleUserProfiles) {
+  metrics_provider_.ProvideCurrentSessionData(&uma_proto_);
+  histogram_tester_.ExpectTotalCount("Android.MultipleUserProfilesState", 1);
+  // Caches value, test a second time.
+  metrics_provider_.ProvideCurrentSessionData(&uma_proto_);
+  histogram_tester_.ExpectTotalCount("Android.MultipleUserProfilesState", 2);
+}
+
+TEST_F(ChromeAndroidMetricsProviderTest,
+       ProvidePreviousSessionData_HasMultipleUserProfiles) {
+  metrics_provider_.ProvidePreviousSessionData(&uma_proto_);
+  histogram_tester_.ExpectTotalCount("Android.MultipleUserProfilesState", 1);
+  // Caches value, test a second time.
+  metrics_provider_.ProvidePreviousSessionData(&uma_proto_);
+  histogram_tester_.ExpectTotalCount("Android.MultipleUserProfilesState", 2);
 }
 
 TEST_F(ChromeAndroidMetricsProviderTest,

@@ -1,8 +1,8 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 
 import {startIOTask} from '../../common/js/api.js';
 import {AsyncUtil} from '../../common/js/async_util.js';
@@ -81,9 +81,7 @@ export class FileOperationManagerImpl {
    * @param {Object} fileManager reference to the 'foreground' app.
    */
   setFileManager(fileManager) {
-    if (window.isSWA) {
-      this.fileManager_ = fileManager;
-    }
+    this.fileManager_ = fileManager;
   }
 
   /**
@@ -247,208 +245,6 @@ export class FileOperationManagerImpl {
   }
 
   /**
-   * Kick off pasting.
-   *
-   * @param {Array<Entry>} sourceEntries Entries of the source files.
-   * @param {DirectoryEntry} targetEntry The destination entry of the target
-   *     directory.
-   * @param {boolean} isMove True if the operation is "move", otherwise (i.e.
-   *     if the operation is "copy") false.
-   * @param {string=} opt_taskId If the corresponding item has already created
-   *     at another places, we need to specify the ID of the item. If the
-   *     item is not created, FileOperationManager generates new ID.
-   */
-  paste(sourceEntries, targetEntry, isMove, opt_taskId) {
-    // Do nothing if sourceEntries is empty.
-    if (sourceEntries.length === 0) {
-      return;
-    }
-
-    this.filterSameDirectoryEntry(sourceEntries, targetEntry, isMove)
-        .then(entries => {
-          if (entries.length === 0) {
-            return;
-          }
-          if (!this.volumeManager_) {
-            volumeManagerFactory.getInstance().then(volumeManager => {
-              this.volumeManager_ = volumeManager;
-              this.queueCopy_(targetEntry, entries, isMove, opt_taskId);
-            });
-            return;
-          }
-          this.queueCopy_(targetEntry, entries, isMove, opt_taskId);
-        })
-        .catch(error => {
-          console.warn(error.stack || error);
-        });
-  }
-
-  /**
-   * Initiate a file copy. When copying files, null can be specified as source
-   * directory.
-   *
-   * @param {DirectoryEntry} targetDirEntry Target directory.
-   * @param {Array<Entry>} entries Entries to copy.
-   * @param {boolean} isMove In case of move.
-   * @param {string=} opt_taskId If the corresponding item has already created
-   *     at another places, we need to specify the ID of the item. If the
-   *     item is not created, FileOperationManagerImpl generates new ID.
-   * @private
-   */
-  queueCopy_(targetDirEntry, entries, isMove, opt_taskId) {
-    let task;
-    const taskId = opt_taskId || this.generateTaskId();
-    if (isMove) {
-      // When moving between different volumes, moving is implemented as a copy
-      // and delete. This is because moving between volumes is slow, and
-      // moveTo() is not cancellable nor provides progress feedback.
-      const sameFileSystem = util.isSameFileSystem(
-          entries[0].filesystem, targetDirEntry.filesystem);
-      let moveBetweenDownloadsAndMyFiles = false;
-      if (sameFileSystem &&
-          this.volumeManager_.getLocationInfo(assert(entries[0]))
-                  .volumeInfo.volumeType ===
-              VolumeManagerCommon.VolumeType.DOWNLOADS) {
-        // My files and Downloads should be seen as different filesystems, since
-        // a local move is not possible between these locations
-        // (crbug.com/1200251).
-        // TODO(crbug/959083): Remove this special case when move between
-        // MyFiles and Downloads is atomic.
-        const sourceInDownloads = entries[0].fullPath.startsWith('/Downloads/');
-        const destinationInDownloads =
-            targetDirEntry.fullPath.startsWith('/Downloads/') ||
-            targetDirEntry.fullPath === '/Downloads';
-        moveBetweenDownloadsAndMyFiles =
-            sourceInDownloads !== destinationInDownloads;
-      }
-      if (sameFileSystem && !moveBetweenDownloadsAndMyFiles) {
-        task = new fileOperationUtil.MoveTask(taskId, entries, targetDirEntry);
-      } else {
-        task = new fileOperationUtil.CopyTask(
-            taskId, entries, targetDirEntry, true);
-      }
-    } else {
-      task = new fileOperationUtil.CopyTask(
-          taskId, entries, targetDirEntry, false);
-    }
-
-    this.eventRouter_.sendProgressEvent(
-        FileOperationProgressEvent.EventType.BEGIN, this.getTaskStatus(task),
-        task.taskId);
-
-    task.initialize(() => {
-      this.pendingCopyTasks_.push(task);
-      this.serviceAllTasks_();
-    });
-  }
-
-  /**
-   * Service all pending tasks, as well as any that might appear during the
-   * copy. We allow to run tasks in parallel when destinations are different
-   * volumes.
-   *
-   * @private
-   */
-  serviceAllTasks_() {
-    if (this.pendingCopyTasks_.length === 0 &&
-        Object.keys(this.runningCopyTasks_).length === 0) {
-      // All tasks have been serviced, clean up and exit.
-      xfm.power.releaseKeepAwake();
-      return;
-    }
-
-    if (!this.volumeManager_) {
-      volumeManagerFactory.getInstance().then(volumeManager => {
-        this.volumeManager_ = volumeManager;
-        this.serviceAllTasks_();
-      });
-      return;
-    }
-
-    // Prevent the system from sleeping while copy is in progress.
-    xfm.power.requestKeepAwake('system');
-
-    // Find next task which can run at now.
-    let nextTask = null;
-    let nextTaskVolumeId = null;
-    for (let i = 0; i < this.pendingCopyTasks_.length; i++) {
-      const task = this.pendingCopyTasks_[i];
-
-      // Fails a copy task of which it fails to get volume info. The destination
-      // volume might be already unmounted.
-      const volumeInfo = this.volumeManager_.getVolumeInfo(
-          /** @type {!DirectoryEntry} */ (task.targetDirEntry));
-      if (volumeInfo === null) {
-        this.eventRouter_.sendProgressEvent(
-            FileOperationProgressEvent.EventType.ERROR,
-            this.getTaskStatus(task), task.taskId,
-            new FileOperationError(
-                util.FileOperationErrorType.FILESYSTEM_ERROR,
-                util.createDOMError(util.FileError.NOT_FOUND_ERR)));
-
-        this.pendingCopyTasks_.splice(i, 1);
-        i--;
-
-        continue;
-      }
-
-      // When no task is running for the volume, run the task.
-      if (!this.runningCopyTasks_[volumeInfo.volumeId]) {
-        nextTask = this.pendingCopyTasks_.splice(i, 1)[0];
-        nextTaskVolumeId = volumeInfo.volumeId;
-        break;
-      }
-    }
-
-    // There is no task which can run at now.
-    if (nextTask === null) {
-      return;
-    }
-
-    const onTaskProgress = function(task) {
-      this.eventRouter_.sendProgressEvent(
-          FileOperationProgressEvent.EventType.PROGRESS,
-          this.getTaskStatus(task), task.taskId);
-    }.bind(this, nextTask);
-
-    const onEntryChanged = (kind, entry) => {
-      this.eventRouter_.sendEntryChangedEvent(kind, entry);
-    };
-
-    // Since getVolumeInfo of targetDirEntry might not be available when this
-    // callback is called, bind volume id here.
-    const onTaskError = function(volumeId, err) {
-      const task = this.runningCopyTasks_[volumeId];
-      delete this.runningCopyTasks_[volumeId];
-
-      const reason = err.data.name === util.FileError.ABORT_ERR ?
-          FileOperationProgressEvent.EventType.CANCELED :
-          FileOperationProgressEvent.EventType.ERROR;
-      this.eventRouter_.sendProgressEvent(
-          reason, this.getTaskStatus(task), task.taskId, err);
-      this.serviceAllTasks_();
-    }.bind(this, nextTaskVolumeId);
-
-    const onTaskSuccess = function(volumeId) {
-      const task = this.runningCopyTasks_[volumeId];
-      delete this.runningCopyTasks_[volumeId];
-
-      this.eventRouter_.sendProgressEvent(
-          FileOperationProgressEvent.EventType.SUCCESS,
-          this.getTaskStatus(task), task.taskId);
-      this.serviceAllTasks_();
-    }.bind(this, nextTaskVolumeId);
-
-    // Add to running tasks and run it.
-    this.runningCopyTasks_[nextTaskVolumeId] = nextTask;
-
-    this.eventRouter_.sendProgressEvent(
-        FileOperationProgressEvent.EventType.PROGRESS,
-        this.getTaskStatus(nextTask), nextTask.taskId);
-    nextTask.run(onEntryChanged, onTaskProgress, onTaskSuccess, onTaskError);
-  }
-
-  /**
    * Returns true if all entries will use trash for delete.
    *
    * @param {!VolumeManager} volumeManager
@@ -469,10 +265,8 @@ export class FileOperationManagerImpl {
    */
   deleteEntries(entries, permanentlyDelete = false) {
     if (permanentlyDelete) {
-      if (window.isSWA) {
-        startIOTask(chrome.fileManagerPrivate.IOTaskType.DELETE, entries, {});
-        return;
-      }
+      startIOTask(chrome.fileManagerPrivate.IOTaskType.DELETE, entries, {});
+      return;
     }
     this.deleteOrRestore_(
         util.FileOperationType.DELETE, entries, permanentlyDelete);
@@ -529,28 +323,6 @@ export class FileOperationManagerImpl {
         this.serviceAllDeleteTasks_();
       }
     });
-  }
-
-  /**
-   * Schedules the Trash to be emptied.
-   */
-  emptyTrash() {
-    if (!this.volumeManager_) {
-      volumeManagerFactory.getInstance().then(volumeManager => {
-        this.volumeManager_ = volumeManager;
-        this.emptyTrash();
-      });
-      return;
-    }
-
-    const reader = new CombinedReaders(createTrashReaders(this.volumeManager_));
-    const onRead = (entries) => {
-      if (entries.length > 0) {
-        this.deleteEntries(entries, /*permanentlyDelete=*/ true);
-        reader.readEntries(onRead);
-      }
-    };
-    reader.readEntries(onRead);
   }
 
   /**
@@ -659,46 +431,17 @@ export class FileOperationManagerImpl {
   }
 
   /**
-   * Schedules the files to be restored.
-   *
-   * @param {!Array<!TrashEntry>} entries The trash entries.
-   */
-  restoreDeleted(entries) {
-    this.deleteOrRestore_(util.FileOperationType.RESTORE, entries);
-  }
-
-  /**
-   * Creates a zip file for the selection of files.
-   *
-   * @param {!Array<!Entry>} selectionEntries The selected entries.
-   * @param {!DirectoryEntry} dirEntry The directory containing the selection.
-   */
-  zipSelection(selectionEntries, dirEntry) {
-    const zipTask = new fileOperationUtil.ZipTask(
-        this.generateTaskId(), selectionEntries, dirEntry, dirEntry);
-    this.eventRouter_.sendProgressEvent(
-        FileOperationProgressEvent.EventType.BEGIN, this.getTaskStatus(zipTask),
-        zipTask.taskId);
-    zipTask.initialize(() => {
-      this.pendingCopyTasks_.push(zipTask);
-      this.serviceAllTasks_();
-    });
-  }
-
-  /**
    * Notifies File Manager that an extraction operation has finished.
    *
    * @param {number} taskId The unique task id for the IO operation.
    * @suppress {missingProperties}
    */
   notifyExtractDone(taskId) {
-    if (window.isSWA) {
-      // TODO(crbug.com/953256) Add closure annotation.
-      // taskController is set asynchronously, this can be called on startup
-      // if another SWA window is finishing an extract (crbug.com/1348432).
-      if (this.fileManager_.taskController) {
-        this.fileManager_.taskController.deleteExtractTaskDetails(taskId);
-      }
+    // TODO(crbug.com/953256) Add closure annotation.
+    // taskController is set asynchronously, this can be called on startup
+    // if another SWA window is finishing an extract (crbug.com/1348432).
+    if (this.fileManager_.taskController) {
+      this.fileManager_.taskController.deleteExtractTaskDetails(taskId);
     }
   }
 

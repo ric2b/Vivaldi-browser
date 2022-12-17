@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -785,8 +785,7 @@ IN_PROC_BROWSER_TEST_F(FindRequestManagerTest,
   options->run_synchronously_for_testing = true;
   Find("result", options->Clone());
   delegate()->WaitForFinalReply();
-  FindResults results = delegate()->GetFindResults();
-  EXPECT_EQ(19, results.number_of_matches);
+  EXPECT_EQ(19, delegate()->GetFindResults().number_of_matches);
 
   contents()->RequestFindMatchRects(-1);
   delegate()->WaitForMatchRects();
@@ -816,8 +815,7 @@ IN_PROC_BROWSER_TEST_F(FindRequestManagerTest,
     Find("result", options->Clone());
     delegate()->WaitForFinalReply();
 
-    FindResults results = delegate()->GetFindResults();
-    EXPECT_EQ(19, results.number_of_matches);
+    EXPECT_EQ(19, delegate()->GetFindResults().number_of_matches);
 
     // Request the find match rects.
     contents()->RequestFindMatchRects(-1);
@@ -969,8 +967,9 @@ class ZoomToFindInPageRectMessageFilter
 }  // namespace
 
 // Tests activating the find match nearest to a given point.
-// TODO(crbug.com/1285135): Fix flaky failures.
-IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, ActivateNearestFindMatch) {
+// TODO(crbug.com/1362116): Fix flaky failures.
+IN_PROC_BROWSER_TEST_P(FindRequestManagerTest,
+                       DISABLED_ActivateNearestFindMatch) {
   LoadAndWait("/find_in_page.html");
   if (test_with_oopif())
     MakeChildFrameCrossProcess();

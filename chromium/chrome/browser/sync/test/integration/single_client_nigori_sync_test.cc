@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -42,9 +42,9 @@
 #include "components/sync/engine/nigori/key_derivation_params.h"
 #include "components/sync/engine/nigori/nigori.h"
 #include "components/sync/nigori/cryptographer_impl.h"
-#include "components/sync/nigori/nigori_test_utils.h"
+#include "components/sync/test/fake_security_domains_server.h"
 #include "components/sync/test/fake_server_nigori_helper.h"
-#include "components/sync/trusted_vault/fake_security_domains_server.h"
+#include "components/sync/test/nigori_test_utils.h"
 #include "components/sync/trusted_vault/securebox.h"
 #include "components/sync/trusted_vault/trusted_vault_connection.h"
 #include "components/sync/trusted_vault/trusted_vault_server_constants.h"
@@ -1443,8 +1443,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
   // server.
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
-                       ShouldDeferAddingTrustedVaultRecoverabilityMethod) {
+IN_PROC_BROWSER_TEST_F(
+    SingleClientNigoriWithWebApiTest,
+    ShouldDeferAddingTrustedVaultRecoverabilityMethodUntilSignIn) {
   const int kTestMethodTypeHint = 8;
 
   // Mimic the account being already using a trusted vault passphrase.
@@ -1474,6 +1475,55 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
 
   // Sign in now and wait until sync initializes.
   ASSERT_TRUE(SetupSync());
+
+  // Wait until AddTrustedVaultRecoveryMethodFromWeb() completes.
+  run_loop.Run();
+
+  EXPECT_TRUE(TrustedVaultRecoverabilityDegradedStateChecker(GetSyncService(0),
+                                                             /*degraded=*/false)
+                  .Wait());
+  EXPECT_FALSE(GetSecurityDomainsServer()->IsRecoverabilityDegraded());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    SingleClientNigoriWithWebApiTest,
+    ShouldDeferAddingTrustedVaultRecoverabilityMethodUntilAuthErrorFixed) {
+  const int kTestMethodTypeHint = 8;
+
+  // Mimic the account being already using a trusted vault passphrase.
+  const std::vector<uint8_t> trusted_vault_key =
+      GetSecurityDomainsServer()->RotateTrustedVaultKey(
+          /*last_trusted_vault_key=*/syncer::GetConstantTrustedVaultKey());
+  SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics(
+                            /*trusted_vault_keys=*/{trusted_vault_key}),
+                        GetFakeServer());
+  ASSERT_TRUE(SetupClients());
+
+  // Mimic the key being available upon startup but recoverability degraded.
+  GetSecurityDomainsServer()->RequirePublicKeyToAvoidRecoverabilityDegraded(
+      kTestRecoveryMethodPublicKey);
+  GetSyncService(0)->AddTrustedVaultDecryptionKeysFromWeb(
+      kGaiaId, GetSecurityDomainsServer()->GetAllTrustedVaultKeys(),
+      /*last_key_version=*/GetSecurityDomainsServer()->GetCurrentEpoch());
+  ASSERT_TRUE(GetSecurityDomainsServer()->IsRecoverabilityDegraded());
+
+  // Sign in now and wait until sync initializes.
+  ASSERT_TRUE(SetupSync());
+
+  // Enter a persistent auth error state.
+  GetClient(0)->EnterSyncPausedStateForPrimaryAccount();
+  ASSERT_TRUE(GetSyncService(0)->GetAuthError().IsPersistentError());
+
+  // Mimic a recovery method being added during a persistent auth error, which
+  // should be deferred until the auth error is resolved.
+  base::RunLoop run_loop;
+  GetSyncService(0)->AddTrustedVaultRecoveryMethodFromWeb(
+      kGaiaId, kTestRecoveryMethodPublicKey, kTestMethodTypeHint,
+      run_loop.QuitClosure());
+
+  // Mimic the auth error state being resolved.
+  ASSERT_TRUE(GetSecurityDomainsServer()->IsRecoverabilityDegraded());
+  GetClient(0)->ExitSyncPausedStateForPrimaryAccount();
 
   // Wait until AddTrustedVaultRecoveryMethodFromWeb() completes.
   run_loop.Run();

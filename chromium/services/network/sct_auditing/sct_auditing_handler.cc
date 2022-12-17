@@ -1,10 +1,8 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "services/network/sct_auditing/sct_auditing_handler.h"
-
-#include <algorithm>
 
 #include "base/base64.h"
 #include "base/bind.h"
@@ -17,9 +15,9 @@
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -157,9 +155,7 @@ void SCTAuditingHandler::MaybeEnqueueReport(
     // Find the corresponding log entry metadata.
     const std::vector<mojom::CTLogInfoPtr>& logs =
         owner_network_context_->network_service()->log_list();
-    auto log = std::find_if(logs.begin(), logs.end(), [&sct](const auto& log) {
-      return log->id == sct->log_id;
-    });
+    auto log = base::ranges::find(logs, sct->log_id, &mojom::CTLogInfo::id);
     // It's possible that log entry metadata may not exist for a few reasons:
     //
     // 1) The PKI Metadata component has not yet been loaded and no log list
@@ -211,9 +207,9 @@ bool SCTAuditingHandler::SerializeData(std::string* output) {
                        reporter->sct_hashdance_metadata()->ToValue());
     }
 
-    base::Value backoff_entry_value =
-        net::BackoffEntrySerializer::SerializeToValue(
-            *reporter->backoff_entry(), base::Time::Now());
+    base::Value::List backoff_entry_value =
+        net::BackoffEntrySerializer::SerializeToList(*reporter->backoff_entry(),
+                                                     base::Time::Now());
     report_entry.Set(kBackoffEntryKey, std::move(backoff_entry_value));
     report_entry.Set(kAlreadyCountedKey,
                      reporter->counted_towards_report_limit());
@@ -250,7 +246,8 @@ void SCTAuditingHandler::DeserializeData(const std::string& serialized) {
     std::string* report_string = entry_dict->FindString(kReportKey);
     const absl::optional<base::Value> sct_metadata_value =
         entry_dict->Extract(kSCTHashdanceMetadataKey);
-    const base::Value* backoff_entry_value = entry_dict->Find(kBackoffEntryKey);
+    const base::Value::List* backoff_entry_value =
+        entry_dict->FindList(kBackoffEntryKey);
     const absl::optional<bool> counted_towards_report_limit =
         entry_dict->FindBool(kAlreadyCountedKey);
 
@@ -274,7 +271,7 @@ void SCTAuditingHandler::DeserializeData(const std::string& serialized) {
 
     // Try to recreate the BackoffEntry from the serialized value.
     std::unique_ptr<net::BackoffEntry> backoff_entry =
-        net::BackoffEntrySerializer::DeserializeFromValue(
+        net::BackoffEntrySerializer::DeserializeFromList(
             *backoff_entry_value, &SCTAuditingReporter::kDefaultBackoffPolicy,
             nullptr, base::Time::Now());
     if (!backoff_entry) {

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,8 +17,8 @@
 #include "net/base/features.h"
 #include "net/base/isolation_info.h"
 #include "net/base/load_timing_info.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/network_delegate.h"
-#include "net/base/network_isolation_key.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/mock_cert_verifier.h"
@@ -102,23 +102,23 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
       const X509Certificate* served_certificate_chain,
       const SignedCertificateTimestampAndStatusList&
           signed_certificate_timestamps,
-      const NetworkIsolationKey& network_isolation_key) override {
+      const NetworkAnonymizationKey& network_anonymization_key) override {
     num_failures_++;
     report_uri_ = report_uri;
-    network_isolation_key_ = network_isolation_key;
+    network_anonymization_key_ = network_anonymization_key;
   }
 
   int num_failures() const { return num_failures_; }
   const GURL& report_uri() const { return report_uri_; }
-  const NetworkIsolationKey& network_isolation_key() const {
-    return network_isolation_key_;
+  const NetworkAnonymizationKey& network_anonymization_key() const {
+    return network_anonymization_key_;
   }
 
  private:
   int num_failures_ = 0;
 
   GURL report_uri_;
-  NetworkIsolationKey network_isolation_key_;
+  NetworkAnonymizationKey network_anonymization_key_;
 };
 
 class URLRequestQuicTest
@@ -150,6 +150,8 @@ class URLRequestQuicTest
     context_builder_->set_http_network_session_params(params);
     context_builder_->SetCertVerifier(std::move(cert_verifier));
     context_builder_->set_net_log(NetLog::Get());
+
+    scoped_feature_list_.InitAndEnableFeature(kDynamicExpectCTFeature);
   }
 
   void TearDown() override {
@@ -285,6 +287,7 @@ class URLRequestQuicTest
   quic::QuicMemoryCacheBackend memory_cache_backend_;
   std::unique_ptr<URLRequestContextBuilder> context_builder_;
   quic::test::QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // A URLRequest::Delegate that checks LoadTimingInfo when response headers are
@@ -324,9 +327,9 @@ class CheckLoadTimingDelegate : public TestDelegate {
     EXPECT_EQ(load_timing_info.connect_timing.connect_end,
               load_timing_info.connect_timing.ssl_end);
     EXPECT_EQ(session_reused,
-              load_timing_info.connect_timing.dns_start.is_null());
+              load_timing_info.connect_timing.domain_lookup_start.is_null());
     EXPECT_EQ(session_reused,
-              load_timing_info.connect_timing.dns_end.is_null());
+              load_timing_info.connect_timing.domain_lookup_end.is_null());
   }
 
   bool session_reused_;
@@ -500,7 +503,7 @@ TEST_P(URLRequestQuicTest, ExpectCT) {
   IsolationInfo isolation_info = IsolationInfo::CreateTransient();
   context->transport_security_state()->AddExpectCT(
       kTestServerHost, base::Time::Now() + base::Days(1), true /* enforce */,
-      report_uri, isolation_info.network_isolation_key());
+      report_uri, isolation_info.network_anonymization_key());
 
   base::RunLoop run_loop;
   TestDelegate delegate;
@@ -513,8 +516,8 @@ TEST_P(URLRequestQuicTest, ExpectCT) {
   EXPECT_EQ(ERR_QUIC_PROTOCOL_ERROR, delegate.request_status());
   ASSERT_EQ(1, expect_ct_reporter()->num_failures());
   EXPECT_EQ(report_uri, expect_ct_reporter()->report_uri());
-  EXPECT_EQ(isolation_info.network_isolation_key(),
-            expect_ct_reporter()->network_isolation_key());
+  EXPECT_EQ(isolation_info.network_anonymization_key(),
+            expect_ct_reporter()->network_anonymization_key());
 }
 
 }  // namespace net

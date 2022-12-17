@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -153,16 +153,16 @@ void RecipesService::GetPrimaryTask(RecipesCallback callback) {
 }
 
 void RecipesService::DismissTask(const std::string& task_name) {
-  ListPrefUpdate update(profile_->GetPrefs(), kDismissedTasksPrefName);
-  base::Value::List& update_list = update->GetList();
+  ScopedListPrefUpdate update(profile_->GetPrefs(), kDismissedTasksPrefName);
+  base::Value::List& update_list = update.Get();
   base::Value task_name_value(task_name);
   if (!base::Contains(update_list, task_name_value))
     update_list.Append(std::move(task_name_value));
 }
 
 void RecipesService::RestoreTask(const std::string& task_name) {
-  ListPrefUpdate update(profile_->GetPrefs(), kDismissedTasksPrefName);
-  update->GetList().EraseValue(base::Value(task_name));
+  ScopedListPrefUpdate update(profile_->GetPrefs(), kDismissedTasksPrefName);
+  update->EraseValue(base::Value(task_name));
 }
 
 void RecipesService::OnDataLoaded(network::SimpleURLLoader* loader,
@@ -291,6 +291,6 @@ bool RecipesService::IsTaskDismissed(const std::string& task_name) {
     return false;
   }
   const base::Value::List& dismissed_tasks =
-      profile_->GetPrefs()->GetValueList(kDismissedTasksPrefName);
+      profile_->GetPrefs()->GetList(kDismissedTasksPrefName);
   return base::Contains(dismissed_tasks, base::Value(task_name));
 }

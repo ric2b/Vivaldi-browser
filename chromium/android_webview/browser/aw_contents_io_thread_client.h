@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -125,10 +125,6 @@ class AwContentsIoThreadClient {
 
   // Retrieve the SafeBrowsingEnabled setting value of this AwContents.
   bool GetSafeBrowsingEnabled() const;
-
-  // Retrieve RequestedWithHeaderMode setting value of this AwContents.
-  // This method is called on the IO thread only.
-  AwSettings::RequestedWithHeaderMode GetRequestedWithHeaderMode() const;
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> java_object_;

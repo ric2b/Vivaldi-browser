@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,10 @@
 #include "components/performance_manager/public/performance_manager_main_thread_observer.h"
 
 namespace performance_manager {
+
+namespace {
+class ActiveTabObserver;
+}
 
 class PageLiveStateDecoratorHelper
     : public MediaStreamCaptureIndicator::Observer,
@@ -48,6 +52,10 @@ class PageLiveStateDecoratorHelper
   // Additionally, all WebContentsObservers that are still in this list when the
   // destructor of PageLiveStateDecoratorHelper is invoked are destroyed.
   raw_ptr<WebContentsObserver> first_web_contents_observer_ = nullptr;
+
+#if !BUILDFLAG(IS_ANDROID)
+  std::unique_ptr<ActiveTabObserver> active_tab_observer_;
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

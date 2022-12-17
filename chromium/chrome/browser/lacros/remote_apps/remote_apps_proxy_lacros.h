@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,12 +76,16 @@ class RemoteAppsProxyLacros
               AddAppCallback callback) override;
   void DeleteApp(const std::string& app_id,
                  DeleteAppCallback callback) override;
+  void SortLauncherWithRemoteAppsFirst(
+      SortLauncherWithRemoteAppsFirstCallback callback) override;
 
   // remote_apps::mojom::RemoteAppLaunchObserver:
   void OnRemoteAppLaunched(const std::string& app_id,
                            const std::string& source_id) override;
 
  private:
+  using RemoteIds = std::map<std::string, mojo::RemoteSetElementId>;
+
   // Private constructor which allows setting of the `RemoteAppsLacrosBridge`
   // remote for testing. Called by `CreateForTesting()`.
   explicit RemoteAppsProxyLacros(
@@ -105,7 +109,7 @@ class RemoteAppsProxyLacros
       ash_observer_receiver_{this};
 
   raw_ptr<extensions::EventRouter> event_router_ = nullptr;
-  std::map<std::string, mojo::RemoteSetElementId> source_id_to_remote_id_map_;
+  RemoteIds source_id_to_remote_id_map_;
 };
 
 }  // namespace chromeos

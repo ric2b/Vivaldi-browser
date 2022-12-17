@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@
 #include "ui/accessibility/ax_hypertext.h"
 #include "ui/accessibility/ax_language_detection.h"
 #include "ui/accessibility/ax_role_properties.h"
+#include "ui/accessibility/ax_selection.h"
 #include "ui/accessibility/ax_table_info.h"
 #include "ui/accessibility/ax_tree.h"
 #include "ui/accessibility/ax_tree_manager.h"
@@ -31,7 +32,7 @@ constexpr char16_t AXNode::kEmbeddedObjectCharacterUTF16[];
 constexpr int AXNode::kEmbeddedObjectCharacterLengthUTF8;
 constexpr int AXNode::kEmbeddedObjectCharacterLengthUTF16;
 
-AXNode::AXNode(AXNode::OwnerTree* tree,
+AXNode::AXNode(AXTree* tree,
                AXNode* parent,
                AXNodeID id,
                size_t index_in_parent,
@@ -105,7 +106,7 @@ AXNode* AXNode::GetChildAtIndexCrossingTreeBoundary(size_t index) const {
     DCHECK_EQ(index, 0u)
         << "A node cannot be hosting both a child tree and other nodes as "
            "children.";
-    return child_tree_manager->GetRootAsAXNode();
+    return child_tree_manager->GetRoot();
   }
 
   return GetChildAtIndex(index);
@@ -135,7 +136,7 @@ AXNode* AXNode::GetUnignoredChildAtIndexCrossingTreeBoundary(
         << "A node cannot be hosting both a child tree and other nodes as "
            "children.";
     // A child tree is never ignored.
-    return child_tree_manager->GetRootAsAXNode();
+    return child_tree_manager->GetRoot();
   }
 
   return GetUnignoredChildAtIndex(index);
@@ -215,7 +216,7 @@ AXNode* AXNode::GetFirstUnignoredChildCrossingTreeBoundary() const {
 
   const AXTreeManager* child_tree_manager = AXTreeManager::ForChildTree(*this);
   if (child_tree_manager)
-    return child_tree_manager->GetRootAsAXNode();
+    return child_tree_manager->GetRoot();
 
   return ComputeFirstUnignoredChildRecursive();
 }
@@ -246,7 +247,7 @@ AXNode* AXNode::GetLastUnignoredChildCrossingTreeBoundary() const {
 
   const AXTreeManager* child_tree_manager = AXTreeManager::ForChildTree(*this);
   if (child_tree_manager)
-    return child_tree_manager->GetRootAsAXNode();
+    return child_tree_manager->GetRoot();
 
   return ComputeLastUnignoredChildRecursive();
 }
@@ -632,6 +633,23 @@ bool AXNode::CanFireEvents() const {
   return !IsChildOfLeaf();
 }
 
+AXNode* AXNode::GetLowestCommonAncestor(const AXNode& other) {
+  if (this == &other)
+    return this;
+
+  AXNode* common_ancestor = nullptr;
+  base::stack<AXNode*> our_ancestors = GetAncestorsCrossingTreeBoundary();
+  base::stack<AXNode*> other_ancestors =
+      other.GetAncestorsCrossingTreeBoundary();
+  while (!our_ancestors.empty() && !other_ancestors.empty() &&
+         our_ancestors.top() == other_ancestors.top()) {
+    common_ancestor = our_ancestors.top();
+    our_ancestors.pop();
+    other_ancestors.pop();
+  }
+  return common_ancestor;
+}
+
 absl::optional<int> AXNode::CompareTo(const AXNode& other) const {
   if (this == &other)
     return 0;
@@ -770,7 +788,7 @@ AXTreeManager* AXNode::GetManager() const {
 }
 
 bool AXNode::HasVisibleCaretOrSelection() const {
-  const OwnerTree::Selection selection = GetSelection();
+  const AXSelection selection = GetSelection();
   const AXNode* focus = tree()->GetFromId(selection.focus_object_id);
   if (!focus || !focus->IsDescendantOf(this))
     return false;
@@ -786,18 +804,18 @@ bool AXNode::HasVisibleCaretOrSelection() const {
   return !selection.IsCollapsed();
 }
 
-AXNode::OwnerTree::Selection AXNode::GetSelection() const {
+AXSelection AXNode::GetSelection() const {
   DCHECK(tree()) << "Cannot retrieve the current selection if the node is not "
                     "attached to an accessibility tree.\n"
                  << *this;
   return tree()->GetSelection();
 }
 
-AXNode::OwnerTree::Selection AXNode::GetUnignoredSelection() const {
+AXSelection AXNode::GetUnignoredSelection() const {
   DCHECK(tree()) << "Cannot retrieve the current selection if the node is not "
                     "attached to an accessibility tree.\n"
                  << *this;
-  OwnerTree::Selection selection = tree()->GetUnignoredSelection();
+  AXSelection selection = tree()->GetUnignoredSelection();
 
   // "selection.anchor_offset" and "selection.focus_ofset" might need to be
   // adjusted if the anchor or the focus nodes include ignored children.
@@ -942,7 +960,7 @@ const std::string& AXNode::GetNameUTF8() const {
     const AXTreeManager* child_tree_manager =
         AXTreeManager::ForChildTree(*this);
     if (child_tree_manager)
-      node = child_tree_manager->GetRootAsAXNode();
+      node = child_tree_manager->GetRoot();
   }
 
   return node->GetStringAttribute(ax::mojom::StringAttribute::kName);
@@ -1358,6 +1376,20 @@ const std::vector<AXNode*>* AXNode::GetExtraMacNodes() const {
   return &table_info->extra_mac_nodes;
 }
 
+bool AXNode::IsGenerated() const {
+  bool is_generated_node = id() < 0;
+#if DCHECK_IS_ON()
+  // Currently, the only generated nodes are columns and table header
+  // containers, and when those roles occur, they are always extra mac nodes.
+  // This could change in the future.
+  bool is_extra_mac_node_role =
+      GetRole() == ax::mojom::Role::kColumn ||
+      GetRole() == ax::mojom::Role::kTableHeaderContainer;
+  DCHECK_EQ(is_generated_node, is_extra_mac_node_role);
+#endif
+  return is_generated_node;
+}
+
 //
 // Table row-like nodes.
 //
@@ -1687,8 +1719,8 @@ bool AXNode::SetRoleMatchesItemRole(const AXNode* ordered_set) const {
       // and setsize.
       return item_role == ax::mojom::Role::kDescriptionListTerm ||
              item_role == ax::mojom::Role::kTerm;
-    case ax::mojom::Role::kPopUpButton:
-      // kPopUpButtons can wrap a kMenuListPopUp.
+    case ax::mojom::Role::kComboBoxSelect:
+      // kComboBoxSelect wraps a kMenuListPopUp.
       return item_role == ax::mojom::Role::kMenuListPopup;
     default:
       return false;
@@ -1765,14 +1797,6 @@ bool AXNode::IsReadOnlySupported() const {
   // the ancestor chain) so check this first.
   if (IsCellOrHeaderOfAriaGrid())
     return true;
-
-  // kPopUpButton is special in that it is the role Blink assigns for both
-  // role=button with aria-haspopup set, along with <select> elements.
-  // HTML AAM (https://w3c.github.io/html-aam/) maps <select> to the combobox
-  // role, which supports readonly, but readonly is not supported for button
-  // roles.
-  if (GetRole() == ax::mojom::Role::kPopUpButton && !IsMenuListPopUpButton())
-    return false;
 
   return ui::IsReadOnlySupported(GetRole());
 }
@@ -1931,9 +1955,9 @@ bool AXNode::IsLeaf() const {
   // On Windows, we want to hide the subtree of a collapsed <select> element.
   // Otherwise, ATs are always going to announce its options whether it's
   // collapsed or expanded. In the AXTree, this element corresponds to a node
-  // with role ax::mojom::Role::kPopUpButton that is the parent of a node with
-  // role ax::mojom::Role::kMenuListPopup.
-  if (IsCollapsedMenuListPopUpButton())
+  // with role ax::mojom::Role::kComboBoxSelect that is the parent of a node
+  // with // role ax::mojom::Role::kMenuListPopup.
+  if (IsCollapsedMenuListSelect())
     return true;
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -2044,24 +2068,9 @@ bool AXNode::IsInListMarker() const {
          grandparent_node->GetRole() == ax::mojom::Role::kListMarker;
 }
 
-bool AXNode::IsMenuListPopUpButton() const {
-  if (GetRole() != ax::mojom::Role::kPopUpButton)
-    return false;
-
-  // When a popup button contains a menu list popup, its only child is unignored
-  // and is a menu list popup.
-  AXNode* node = GetFirstUnignoredChild();
-  if (!node)
-    return false;
-
-  return node->GetRole() == ax::mojom::Role::kMenuListPopup;
-}
-
-bool AXNode::IsCollapsedMenuListPopUpButton() const {
-  if (!HasState(ax::mojom::State::kCollapsed))
-    return false;
-
-  return IsMenuListPopUpButton();
+bool AXNode::IsCollapsedMenuListSelect() const {
+  return HasState(ax::mojom::State::kCollapsed) &&
+         GetRole() == ax::mojom::Role::kComboBoxSelect;
 }
 
 bool AXNode::IsRootWebAreaForPresentationalIframe() const {
@@ -2073,22 +2082,22 @@ bool AXNode::IsRootWebAreaForPresentationalIframe() const {
   return parent->GetRole() == ax::mojom::Role::kIframePresentational;
 }
 
-AXNode* AXNode::GetCollapsedMenuListPopUpButtonAncestor() const {
+AXNode* AXNode::GetCollapsedMenuListSelectAncestor() const {
   AXNode* node = GetOrderedSet();
 
   if (!node)
     return nullptr;
 
-  // The ordered set returned is either the popup element child of the popup
-  // button (e.g., the AXMenuListPopup) or the popup button itself. We need
-  // |node| to point to the popup button itself.
-  if (node->GetRole() != ax::mojom::Role::kPopUpButton) {
+  // The ordered set returned is either the popup element child of the select
+  // combobox or the select combobox itself. We need |node| to point to the
+  // select combobox.
+  if (node->GetRole() != ax::mojom::Role::kComboBoxSelect) {
     node = node->GetParent();
     if (!node)
       return nullptr;
   }
 
-  return node->IsCollapsedMenuListPopUpButton() ? node : nullptr;
+  return node->IsCollapsedMenuListSelect() ? node : nullptr;
 }
 
 bool AXNode::IsEmbeddedGroup() const {

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/insets_f.h"
+#include "ui/gfx/geometry/mask_filter_info.h"
 #include "ui/gfx/geometry/outsets.h"
 #include "ui/gfx/geometry/outsets_f.h"
 #include "ui/gfx/geometry/point.h"
@@ -26,6 +27,7 @@
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/geometry/vector3d_f.h"
+#include "ui/gfx/selection_bound.h"
 
 namespace gfx {
 
@@ -88,8 +90,7 @@ template <typename T>
                                                      const Transform& rhs) {
   for (int row = 0; row < 4; ++row) {
     for (int col = 0; col < 4; ++col) {
-      if (!FloatAlmostEqual(lhs.matrix().rc(row, col),
-                            rhs.matrix().rc(row, col))) {
+      if (!FloatAlmostEqual(lhs.rc(row, col), rhs.rc(row, col))) {
         return EqFailure(lhs_expr, rhs_expr, lhs, rhs)
                << "\nFirst difference at row: " << row << " col: " << col;
       }
@@ -106,8 +107,7 @@ template <typename T>
                                                     float abs_error) {
   for (int row = 0; row < 4; ++row) {
     for (int col = 0; col < 4; ++col) {
-      if (!FloatNear(lhs.matrix().rc(row, col), rhs.matrix().rc(row, col),
-                     abs_error)) {
+      if (!FloatNear(lhs.rc(row, col), rhs.rc(row, col), abs_error)) {
         return NearFailure(lhs_expr, rhs_expr, abs_error_expr, lhs, rhs,
                            abs_error)
                << "\nFirst difference at row: " << row << " col: " << col;
@@ -394,6 +394,14 @@ void PrintTo(const Vector2dF& vector, ::std::ostream* os) {
 
 void PrintTo(const Vector3dF& vector, ::std::ostream* os) {
   *os << vector.ToString();
+}
+
+void PrintTo(const MaskFilterInfo& info, ::std::ostream* os) {
+  *os << info.ToString();
+}
+
+void PrintTo(const SelectionBound& bound, ::std::ostream* os) {
+  *os << bound.ToString();
 }
 
 }  // namespace gfx

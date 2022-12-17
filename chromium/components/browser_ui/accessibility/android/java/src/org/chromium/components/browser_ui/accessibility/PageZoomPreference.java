@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,7 +73,7 @@ public class PageZoomPreference extends Preference implements SeekBar.OnSeekBarC
 
         mCurrentValueText = (TextView) holder.findViewById(R.id.page_zoom_current_value_text);
         mCurrentValueText.setText(
-                getContext().getResources().getString(R.string.page_zoom_factor, 100));
+                getContext().getResources().getString(R.string.page_zoom_level, 100));
 
         mDecreaseButton =
                 (ChromeImageButton) holder.findViewById(R.id.page_zoom_decrease_zoom_button);
@@ -105,7 +105,7 @@ public class PageZoomPreference extends Preference implements SeekBar.OnSeekBarC
     }
 
     private void updateZoomPercentageText(int progress) {
-        mCurrentValueText.setText(getContext().getResources().getString(R.string.page_zoom_factor,
+        mCurrentValueText.setText(getContext().getResources().getString(R.string.page_zoom_level,
                 Math.round(100 * PageZoomUtils.convertSeekBarValueToZoomLevel(progress))));
     }
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "ash/constants/quick_settings_catalogs.h"
 #include "ash/system/model/clock_observer.h"
 #include "ash/system/unified/feature_pod_controller_base.h"
 
@@ -31,9 +32,9 @@ class ASH_EXPORT NightLightFeaturePodController
 
   // FeaturePodControllerBase:
   FeaturePodButton* CreateButton() override;
+  QsFeatureCatalogName GetCatalogName() override;
   void OnIconPressed() override;
   void OnLabelPressed() override;
-  SystemTrayItemUmaType GetUmaType() const override;
 
   // ClockObserver:
   void OnDateFormatChanged() override;

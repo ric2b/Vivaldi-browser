@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -405,8 +405,7 @@ void HardwareRendererViz::DrawAndSwap(const HardwareRendererDrawParams& params,
 
   viz::FrameTimingDetailsMap timing_details;
 
-  gfx::Transform transform(gfx::Transform::kSkipInitialization);
-  transform.matrix().setColMajor(params.transform);
+  gfx::Transform transform = gfx::Transform::ColMajorF(params.transform);
   transform.Translate(scroll_offset_.x(), scroll_offset_.y());
 
   gfx::Size viewport(params.width, params.height);

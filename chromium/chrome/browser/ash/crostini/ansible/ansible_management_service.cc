@@ -1,11 +1,13 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/crostini/ansible/ansible_management_service.h"
 
+#include <memory>
 #include <sstream>
 
+#include "base/check_op.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/task/task_traits.h"
@@ -14,6 +16,7 @@
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/views/crostini/crostini_ansible_software_config_view.h"
 #include "components/prefs/pref_service.h"
 
 namespace crostini {
@@ -76,18 +79,37 @@ void AnsibleManagementService::ConfigureContainer(
       std::make_pair(container_id, std::make_unique<AnsibleConfiguration>(
                                        playbook_path, std::move(callback))));
 
-  // Popup dialog is shown in case Crostini has already been installed.
-  if (!CrostiniManager::GetForProfile(profile_)->GetCrostiniDialogStatus(
-          DialogType::INSTALLER))
-    ShowCrostiniAnsibleSoftwareConfigView(profile_);
-
   for (auto& observer : observers_) {
     observer.OnAnsibleSoftwareConfigurationStarted(container_id);
   }
+  CreateUiElement(container_id);
   CrostiniManager::GetForProfile(profile_)->InstallLinuxPackageFromApt(
       container_id, kCrostiniDefaultAnsibleVersion,
       base::BindOnce(&AnsibleManagementService::OnInstallAnsibleInContainer,
                      weak_ptr_factory_.GetWeakPtr(), container_id));
+}
+
+void AnsibleManagementService::CreateUiElement(
+    const guest_os::GuestId& container_id) {
+  ui_elements_[container_id] = views::DialogDelegate::CreateDialogWidget(
+      std::make_unique<CrostiniAnsibleSoftwareConfigView>(profile_,
+                                                          container_id),
+      nullptr, nullptr);
+  ui_elements_[container_id]->Show();
+}
+
+views::Widget* AnsibleManagementService::GetDialogWidgetForTesting(
+    const guest_os::GuestId& container_id) {
+  return ui_elements_.count(container_id) > 0 ? ui_elements_[container_id]
+                                              : nullptr;
+}
+
+void AnsibleManagementService::AddConfigurationTaskForTesting(
+    const guest_os::GuestId& container_id,
+    views::Widget* widget) {
+  configuration_tasks_[container_id] = std::make_unique<AnsibleConfiguration>(
+      base::FilePath(), base::BindOnce([](bool success) {}));
+  ui_elements_[container_id] = widget;
 }
 
 void AnsibleManagementService::OnInstallAnsibleInContainer(
@@ -149,7 +171,7 @@ void AnsibleManagementService::OnInstallLinuxPackageProgress(
 
 void AnsibleManagementService::GetAnsiblePlaybookToApply(
     const guest_os::GuestId& container_id) {
-  DCHECK_GT(configuration_tasks_.count(container_id), 0);
+  DCHECK_GT(configuration_tasks_.count(container_id), 0u);
   const base::FilePath& ansible_playbook_file_path =
       configuration_tasks_[container_id]->path;
   bool success = base::ThreadPool::PostTaskAndReplyWithResult(
@@ -178,7 +200,7 @@ void AnsibleManagementService::OnAnsiblePlaybookRetrieved(
 
 void AnsibleManagementService::ApplyAnsiblePlaybook(
     const guest_os::GuestId& container_id) {
-  DCHECK_GT(configuration_tasks_.count(container_id), 0);
+  DCHECK_GT(configuration_tasks_.count(container_id), 0u);
   if (!GetCiceroneClient()->IsApplyAnsiblePlaybookProgressSignalConnected()) {
     // Technically we could still start the application, but we wouldn't be able
     // to detect when the application completes, successfully or otherwise.
@@ -270,7 +292,7 @@ void AnsibleManagementService::OnUninstallPackageProgress(
 void AnsibleManagementService::OnConfigurationFinished(
     const guest_os::GuestId& container_id,
     bool success) {
-  DCHECK_GT(configuration_tasks_.count(container_id), 0);
+  DCHECK_GT(configuration_tasks_.count(container_id), 0u);
   if (success && container_id == DefaultContainerId()) {
     profile_->GetPrefs()->SetBoolean(prefs::kCrostiniDefaultContainerConfigured,
                                      true);
@@ -278,15 +300,40 @@ void AnsibleManagementService::OnConfigurationFinished(
   for (auto& observer : observers_) {
     observer.OnAnsibleSoftwareConfigurationFinished(container_id, success);
   }
+  for (auto& observer : observers_) {
+    // Interactive prompt currently only occurs when there has been a failure.
+    observer.OnAnsibleSoftwareConfigurationUiPrompt(container_id, !success);
+  }
+}
+
+void AnsibleManagementService::RetryConfiguration(
+    const guest_os::GuestId& container_id) {
+  // We're not 100% sure where we lost connection, so we'll have to restart from
+  // the very beginning.
+  DCHECK_GT(configuration_tasks_.count(container_id), 0u);
+  VLOG(1) << "Retrying configuration";
+  CrostiniManager::GetForProfile(profile_)->InstallLinuxPackageFromApt(
+      container_id, kCrostiniDefaultAnsibleVersion,
+      base::BindOnce(&AnsibleManagementService::OnInstallAnsibleInContainer,
+                     weak_ptr_factory_.GetWeakPtr(), container_id));
+}
+
+void AnsibleManagementService::CompleteConfiguration(
+    const guest_os::GuestId& container_id,
+    bool success) {
+  DCHECK_GT(configuration_tasks_.count(container_id), 0u);
   auto callback = std::move(configuration_tasks_[container_id]->callback);
   configuration_tasks_.erase(configuration_tasks_.find(container_id));
+
+  ui_elements_[container_id]->CloseWithReason(
+      views::Widget::ClosedReason::kUnspecified);
+  ui_elements_.erase(container_id);
 
   // Clean up our observer if no more packages are awaiting this.
   if (configuration_tasks_.empty()) {
     CrostiniManager::GetForProfile(profile_)
         ->RemoveLinuxPackageOperationProgressObserver(this);
   }
-
   std::move(callback).Run(success);
 }
 

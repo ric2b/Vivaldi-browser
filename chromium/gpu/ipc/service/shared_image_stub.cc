@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,10 +11,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/ipc/common/command_buffer_id.h"
@@ -37,10 +35,7 @@ SharedImageStub::SharedImageStub(GpuChannel* channel, int32_t route_id)
           channel->sync_point_manager()->CreateSyncPointClientState(
               CommandBufferNamespace::GPU_IO,
               command_buffer_id_,
-              sequence_)) {
-  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      this, "gpu::SharedImageStub", channel_->task_runner());
-}
+              sequence_)) {}
 
 SharedImageStub::~SharedImageStub() {
   channel_->scheduler()->DestroySequence(sequence_);
@@ -49,8 +44,6 @@ SharedImageStub::~SharedImageStub() {
     bool have_context = MakeContextCurrent();
     factory_->DestroyAllSharedImages(have_context);
   }
-  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
-      this);
 }
 
 std::unique_ptr<SharedImageStub> SharedImageStub::Create(GpuChannel* channel,
@@ -107,11 +100,6 @@ void SharedImageStub::ExecuteDeferredRequest(
       break;
 
 #if BUILDFLAG(IS_WIN)
-    case mojom::DeferredSharedImageRequest::Tag::kCreateSharedImageVideoPlanes:
-      OnCreateSharedImageVideoPlanes(
-          std::move(request->get_create_shared_image_video_planes()));
-      break;
-
     case mojom::DeferredSharedImageRequest::Tag::kCopyToGpuMemoryBuffer: {
       auto& params = *request->get_copy_to_gpu_memory_buffer();
       OnCopyToGpuMemoryBuffer(params.mailbox, params.release_id);
@@ -321,32 +309,6 @@ void SharedImageStub::OnDestroySharedImage(const Mailbox& mailbox) {
 }
 
 #if BUILDFLAG(IS_WIN)
-void SharedImageStub::OnCreateSharedImageVideoPlanes(
-    mojom::CreateSharedImageVideoPlanesParamsPtr params) {
-  TRACE_EVENT0("gpu", "SharedImageStub::CreateSharedImageVideoPlanes");
-  for (const auto& mailbox : params->mailboxes) {
-    if (!mailbox.IsSharedImage()) {
-      DLOG(ERROR) << "SharedImageStub: Trying to create a SharedImage video "
-                     "plane with a non-SharedImage mailbox.";
-      OnError();
-      return;
-    }
-  }
-  if (!MakeContextCurrent()) {
-    OnError();
-    return;
-  }
-  if (!factory_->CreateSharedImageVideoPlanes(
-          std::move(params->mailboxes), std::move(params->gmb_handle),
-          params->format, params->size, params->usage)) {
-    DLOG(ERROR)
-        << "SharedImageStub: Failed to create shared image video planes";
-    OnError();
-    return;
-  }
-  sync_point_client_state_->ReleaseFenceSync(params->release_id);
-}
-
 void SharedImageStub::OnCopyToGpuMemoryBuffer(const Mailbox& mailbox,
                                               uint32_t release_id) {
   if (!mailbox.IsSharedImage()) {
@@ -505,7 +467,6 @@ ContextResult SharedImageStub::MakeContextCurrentAndCreateFactory() {
       channel_manager->gpu_preferences(),
       channel_manager->gpu_driver_bug_workarounds(),
       channel_manager->gpu_feature_info(), context_state_.get(),
-      channel_manager->mailbox_manager(),
       channel_manager->shared_image_manager(),
       gmb_factory ? gmb_factory->AsImageFactory() : nullptr, this,
       /*is_for_display_compositor=*/false);
@@ -541,28 +502,6 @@ int SharedImageStub::ClientId() const {
 
 uint64_t SharedImageStub::ContextGroupTracingId() const {
   return sync_point_client_state_->command_buffer_id().GetUnsafeValue();
-}
-
-bool SharedImageStub::OnMemoryDump(
-    const base::trace_event::MemoryDumpArgs& args,
-    base::trace_event::ProcessMemoryDump* pmd) {
-  if (!factory_)
-    return true;
-
-  if (args.level_of_detail ==
-      base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
-    std::string dump_name =
-        base::StringPrintf("gpu/shared_images/client_0x%" PRIX32, ClientId());
-    base::trace_event::MemoryAllocatorDump* dump =
-        pmd->CreateAllocatorDump(dump_name);
-    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                    base::trace_event::MemoryAllocatorDump::kUnitsBytes, size_);
-
-    // Early out, no need for more detail in a BACKGROUND dump.
-    return true;
-  }
-
-  return factory_->OnMemoryDump(args, pmd, ClientId(), ClientTracingId());
 }
 
 SharedImageStub::SharedImageDestructionCallback

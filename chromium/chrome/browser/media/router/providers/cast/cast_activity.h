@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,7 +87,7 @@ class CastActivity {
       const std::string& client_id,
       blink::mojom::PresentationConnectionMessagePtr message);
 
-  virtual void SendMediaStatusToClients(const base::Value& media_status,
+  virtual void SendMediaStatusToClients(const base::Value::Dict& media_status,
                                         absl::optional<int> request_id);
 
   // Handles a message forwarded by CastActivityManager.

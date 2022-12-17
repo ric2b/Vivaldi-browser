@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,11 +16,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
-#include "base/task/sequenced_task_runner.h"
-#include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "components/policy/core/common/policy_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/sync_prefs.h"
@@ -99,7 +96,7 @@ class SyncServiceImpl : public SyncService,
         nullptr;
     version_info::Channel channel = version_info::Channel::UNKNOWN;
     std::string debug_identifier;
-    raw_ptr<policy::PolicyService> policy_service = nullptr;
+    bool is_regular_profile_for_uma = false;
 
     GURL sync_server_url;
   };
@@ -152,7 +149,7 @@ class SyncServiceImpl : public SyncService,
   bool QueryDetailedSyncStatusForDebugging(SyncStatus* result) const override;
   base::Time GetLastSyncedTimeForDebugging() const override;
   SyncCycleSnapshot GetLastCycleSnapshotForDebugging() const override;
-  std::unique_ptr<base::Value> GetTypeStatusMapForDebugging() const override;
+  base::Value::List GetTypeStatusMapForDebugging() const override;
   void GetEntityCountsForDebugging(
       base::OnceCallback<void(const std::vector<TypeEntitiesCount>&)> callback)
       const override;
@@ -239,10 +236,6 @@ class SyncServiceImpl : public SyncService,
 
   void GetThrottledDataTypesForTest(
       base::OnceCallback<void(ModelTypeSet)> cb) const;
-
-  // Simulates that all policies just got loaded. This does nothing if the
-  // policies were already loaded.
-  void TriggerPoliciesLoadedForTest();
 
   bool IsDataTypeControllerRunningForTest(ModelType type) const;
 
@@ -469,6 +462,12 @@ class SyncServiceImpl : public SyncService,
 
  private:
   std::unique_ptr<SyncStoppedReporter> sync_stopped_reporter_;
+
+  // Whether the Profile that this SyncService is attached to is a "regular"
+  // profile, i.e. one for which sync actually makes sense. This excludes
+  // profiles types such as system and guest profiles, as well as sign-in and
+  // lockscreen profiles on Ash.
+  const bool is_regular_profile_for_uma_;
 
   // Used in OnSyncRequestedPrefChange() to know whether the notification was
   // caused by the service itself setting the pref.

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -231,6 +231,9 @@ public class ContextualSearchManager
     /** A means of observing scene changes and attaching overlays. */
     private LayoutManagerImpl mLayoutManager;
 
+    /** The pixel density. */
+    private final float mDpToPx;
+
     /**
      * The delegate that is responsible for promoting a {@link WebContents} to a {@link Tab}
      * when necessary.
@@ -273,6 +276,7 @@ public class ContextualSearchManager
         mWindowAndroid = windowAndroid;
         mTabModelSelector = tabModelSelector;
         mLastUserInteractionTimeSupplier = lastUserInteractionTimeSupplier;
+        mDpToPx = mActivity.getResources().getDisplayMetrics().density;
 
         final View controlContainer = mActivity.findViewById(R.id.control_container);
         mOnFocusChangeListener = new OnGlobalFocusChangeListener() {
@@ -914,10 +918,6 @@ public class ContextualSearchManager
         mLoadedSearchUrlTimeMs = System.currentTimeMillis();
         mLastSearchRequestLoaded = mSearchRequest;
         mSearchPanel.loadUrlInPanel(mSearchRequest.getSearchUrl());
-        // Prevent losing focus when clicking a suggestion. See https://crbug.com/1250825.
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.RELATED_SEARCHES)) {
-            mSearchPanel.getContainerView().setFocusableInTouchMode(false);
-        }
         mDidStartLoadingResolvedSearchRequest = true;
 
         // TODO(donnd): If the user taps on a word and quickly after that taps on the
@@ -971,6 +971,20 @@ public class ContextualSearchManager
         if (getSearchPanelWebContents() == null) return;
 
         getSearchPanelWebContents().stop();
+    }
+
+    /**
+     * Tells the Panel whether it can ever hide the Browser Controls (Toolbar).
+     * This is set to false by a Partial-height Chrome Custom Tab, and defaults to true.
+     * @param canHideAndroidBrowserControls whether hiding is ever allowed.
+     */
+    public void setCanHideAndroidBrowserControls(boolean canHideAndroidBrowserControls) {
+        mSearchPanel.setCanHideAndroidBrowserControls(canHideAndroidBrowserControls);
+    }
+
+    @VisibleForTesting
+    public boolean getCanHideAndroidBrowserControls() {
+        return mSearchPanel.getCanHideAndroidBrowserControls();
     }
 
     // ============================================================================================
@@ -1981,20 +1995,19 @@ public class ContextualSearchManager
 
     @VisibleForTesting
     public boolean isSuppressed() {
-        int viewHeightLimitPixels = mActivity.getResources().getDimensionPixelSize(
-                R.dimen.contextual_search_minimum_base_page_height);
-        return isSuppressed(viewHeightLimitPixels);
-    }
-
-    /** Whether triggering should be suppressed with the given view height limit. */
-    @VisibleForTesting
-    public boolean isSuppressed(int viewHeightLimitPixels) {
         boolean shouldSimplySuppress = mIsBottomSheetVisible || mIsAccessibilityModeEnabled;
         if (shouldSimplySuppress) return true;
 
         if (!ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_SEARCH_SUPPRESS_SHORT_VIEW)) {
             return false;
         }
+
+        int limitViewDp = ContextualSearchFieldTrial.getContextualSearchMinimumBasePageHeightDp();
+
+        int viewHeightLimitPixels = limitViewDp == 0
+                ? mActivity.getResources().getDimensionPixelSize(
+                        R.dimen.contextual_search_minimum_base_page_height)
+                : Math.round(limitViewDp * mDpToPx);
 
         boolean isViewTooSmall = isViewTooSmall(viewHeightLimitPixels);
         ContextualSearchUma.logViewTooSmall(isViewTooSmall);

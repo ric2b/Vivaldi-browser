@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,9 +22,9 @@ import '../controls/settings_radio_group.js';
 
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
+import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsRadioGroupElement} from '../controls/settings_radio_group.js';
@@ -140,15 +140,14 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
         },
       },
 
-      enableConsolidatedSiteStorageControls_: {
-        type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('consolidatedSiteStorageControlsEnabled'),
-      },
-
       focusConfig: {
         type: Object,
         observer: 'focusConfigChanged_',
+      },
+
+      enableFirstPartySetsUI_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('firstPartySetsUIEnabled'),
       },
     };
   }
@@ -162,7 +161,6 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
   private cookiesContentSettingType_: ContentSettingsTypes;
   private exceptionListsReadOnly_: boolean;
   private blockAllPref_: chrome.settingsPrivate.PrefObject;
-  private enableConsolidatedSiteStorageControls_: boolean;
   focusConfig: FocusConfig;
 
   private metricsBrowserProxy_: MetricsBrowserProxy =
@@ -170,23 +168,15 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
 
   private focusConfigChanged_(_newConfig: FocusConfig, oldConfig: FocusConfig) {
     assert(!oldConfig);
-    assert(
-        this.enableConsolidatedSiteStorageControls_ ?
-            routes.SITE_SETTINGS_ALL :
-            routes.SITE_SETTINGS_SITE_DATA);
     const selectSiteDataLinkRow = () => {
-      const toFocus = this.shadowRoot!.querySelector('#site-data-trigger');
+      const toFocus =
+          this.shadowRoot!.querySelector<HTMLElement>('#site-data-trigger');
       assert(toFocus);
       focusWithoutInk(toFocus);
     };
-    if (this.enableConsolidatedSiteStorageControls_) {
-      this.focusConfig.set(
-          `${routes.SITE_SETTINGS_ALL.path}_${routes.COOKIES.path}`,
-          selectSiteDataLinkRow);
-    } else {
-      this.focusConfig.set(
-          routes.SITE_SETTINGS_SITE_DATA.path, selectSiteDataLinkRow);
-    }
+    this.focusConfig.set(
+        `${routes.SITE_SETTINGS_ALL.path}_${routes.COOKIES.path}`,
+        selectSiteDataLinkRow);
   }
 
   override currentRouteChanged(route: Route) {
@@ -207,18 +197,8 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
   }
   // </if>
 
-  private getSiteDataLabel_(): string {
-    return this.enableConsolidatedSiteStorageControls_ ?
-        this.i18n('cookiePageAllSitesLink') :
-        this.i18n('siteSettingsCookieLink');
-  }
-
   private onSiteDataClick_() {
-    if (this.enableConsolidatedSiteStorageControls_) {
-      Router.getInstance().navigateTo(routes.SITE_SETTINGS_ALL);
-    } else {
-      Router.getInstance().navigateTo(routes.SITE_SETTINGS_SITE_DATA);
-    }
+    Router.getInstance().navigateTo(routes.SITE_SETTINGS_ALL);
   }
 
   private onGeneratedPrefsUpdated_() {
@@ -269,9 +249,7 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
     const currentCookieSetting =
         this.getPref('generated.cookie_primary_setting').value;
     const privacySandboxEnabled =
-        loadTimeData.getBoolean('privacySandboxSettings3Enabled') ?
-        this.getPref('privacy_sandbox.apis_enabled_v2').value :
-        this.getPref('privacy_sandbox.apis_enabled').value;
+        this.getPref('privacy_sandbox.apis_enabled_v2').value;
 
     if (privacySandboxEnabled &&
         (currentCookieSetting === CookiePrimarySetting.ALLOW_ALL ||
@@ -315,6 +293,11 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
     // TODO(crbug/1159942): Replace this with an ordinary OpenWindowProxy call.
     this.shadowRoot!.querySelector<HTMLAnchorElement>(
                         '#privacySandboxLink')!.click();
+  }
+
+  private firstPartySetsToggleDisabled_() {
+    return this.getPref('generated.cookie_primary_setting').value !==
+        CookiePrimarySetting.BLOCK_THIRD_PARTY;
   }
 }
 

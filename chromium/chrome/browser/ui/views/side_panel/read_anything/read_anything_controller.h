@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,6 +60,11 @@ class ReadAnythingController : public ReadAnythingToolbarView::Delegate,
   void OnFontSizeChanged(bool increase) override;
   void OnColorsChanged(int new_index) override;
   ui::ComboboxModel* GetColorsModel() override;
+  ui::ColorId GetForegroundColorId() override;
+  void OnLineSpacingChanged(int new_index) override;
+  ui::ComboboxModel* GetLineSpacingModel() override;
+  void OnLetterSpacingChanged(int new_index) override;
+  ui::ComboboxModel* GetLetterSpacingModel() override;
 
   // ReadAnythingPageHandler::Delegate:
   void OnUIReady() override;
@@ -74,7 +79,6 @@ class ReadAnythingController : public ReadAnythingToolbarView::Delegate,
 
   // content::WebContentsObserver:
   void DidStopLoading() override;
-  void WebContentsDestroyed() override;
 
   // Requests a distilled AXTree for the main frame of the currently active
   // web contents.
@@ -91,10 +95,6 @@ class ReadAnythingController : public ReadAnythingToolbarView::Delegate,
   // ReadAnythingController is owned by ReadAnythingCoordinator which is a
   // browser user data, so this pointer is always valid.
   raw_ptr<Browser> browser_;
-
-  // The active web contents whose distilled text is currently displayed in
-  // the Read Anything app.
-  raw_ptr<content::WebContents> active_contents_ = nullptr;
 
   // Whether the Read Anything feature is currently active. The feature is
   // active when it is currently shown in the Side Panel.

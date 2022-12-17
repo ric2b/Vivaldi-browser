@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,10 +14,6 @@
 // continue" button.
 @protocol WelcomeScreenViewControllerDelegate <PromoStyleViewControllerDelegate>
 
-// Returns whether the metrics reporting consent checkbox should be selected or
-// not by default.
-- (BOOL)isCheckboxSelectedByDefault;
-
 // Called when the user taps on "Manage" related to metric reporting.
 - (void)showUMADialog;
 
@@ -32,9 +28,6 @@
     : PromoStyleViewController <WelcomeScreenConsumer>
 
 @property(nonatomic, weak) id<WelcomeScreenViewControllerDelegate> delegate;
-
-// Whether the metrics reporting checkbox is selected.
-@property(nonatomic, readonly, assign) BOOL checkBoxSelected;
 
 // Init with the handler used to manage the display of TOS.
 - (instancetype)initWithTOSHandler:(id<TOSCommands>)TOSHandler

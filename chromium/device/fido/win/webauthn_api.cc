@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/strings/string_util_win.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/scoped_thread_priority.h"
@@ -26,15 +27,17 @@
 namespace device {
 
 namespace {
-std::u16string OptionalGURLToUTF16(const absl::optional<GURL>& in) {
-  return in ? base::UTF8ToUTF16(in->spec()) : std::u16string();
-}
-}  // namespace
 
 // Time out all Windows API requests after 5 minutes. We maintain our own
 // timeout and cancel the operation when it expires, so this value simply needs
 // to be larger than the largest internal request timeout.
 constexpr uint32_t kWinWebAuthnTimeoutMilliseconds = 1000 * 60 * 5;
+
+std::string HresultToHex(HRESULT hr) {
+  return base::StringPrintf("0x%0lX", hr);
+}
+
+}  // namespace
 
 class WinWebAuthnApiImpl : public WinWebAuthnApi {
  public:
@@ -204,9 +207,8 @@ class WinWebAuthnApiImpl : public WinWebAuthnApi {
 
   decltype(&WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable)
       is_user_verifying_platform_authenticator_available_ = nullptr;
-  decltype(
-      &WebAuthNAuthenticatorMakeCredential) authenticator_make_credential_ =
-      nullptr;
+  decltype(&WebAuthNAuthenticatorMakeCredential)
+      authenticator_make_credential_ = nullptr;
   decltype(&WebAuthNAuthenticatorGetAssertion) authenticator_get_assertion_ =
       nullptr;
   decltype(&WebAuthNCancelCurrentOperation) cancel_current_operation_ = nullptr;
@@ -247,13 +249,12 @@ AuthenticatorMakeCredentialBlocking(WinWebAuthnApi* webauthn_api,
 
   std::u16string rp_id = base::UTF8ToUTF16(request.rp.id);
   std::u16string rp_name = base::UTF8ToUTF16(request.rp.name.value_or(""));
-  std::u16string rp_icon_url = OptionalGURLToUTF16(request.rp.icon_url);
   WEBAUTHN_RP_ENTITY_INFORMATION rp_info{
       WEBAUTHN_RP_ENTITY_INFORMATION_CURRENT_VERSION, base::as_wcstr(rp_id),
-      base::as_wcstr(rp_name), base::as_wcstr(rp_icon_url)};
+      base::as_wcstr(rp_name),
+      /*pwszIcon=*/base::as_wcstr(base::EmptyString16())};
 
   std::u16string user_name = base::UTF8ToUTF16(request.user.name.value_or(""));
-  std::u16string user_icon_url = OptionalGURLToUTF16(request.user.icon_url);
   std::u16string user_display_name =
       base::UTF8ToUTF16(request.user.display_name.value_or(""));
   std::vector<uint8_t> user_id = request.user.id;
@@ -262,8 +263,8 @@ AuthenticatorMakeCredentialBlocking(WinWebAuthnApi* webauthn_api,
       base::checked_cast<DWORD>(user_id.size()),
       const_cast<unsigned char*>(user_id.data()),
       base::as_wcstr(user_name),
-      base::as_wcstr(user_icon_url),
-      base::as_wcstr(user_display_name),  // This appears to be ignored.
+      /*pwszIcon=*/base::as_wcstr(base::EmptyString16()),
+      base::as_wcstr(user_display_name),
   };
 
   std::vector<WEBAUTHN_COSE_CREDENTIAL_PARAMETER>
@@ -431,7 +432,8 @@ AuthenticatorMakeCredentialBlocking(WinWebAuthnApi* webauthn_api,
 
   if (hresult != S_OK) {
     FIDO_LOG(DEBUG) << "WebAuthNAuthenticatorMakeCredential()="
-                    << webauthn_api->GetErrorName(hresult);
+                    << HresultToHex(hresult) << " ("
+                    << webauthn_api->GetErrorName(hresult) << ")";
     return {WinErrorNameToCtapDeviceResponseCode(
                 base::as_u16cstr(webauthn_api->GetErrorName(hresult))),
             absl::nullopt};
@@ -544,7 +546,8 @@ AuthenticatorGetAssertionBlocking(WinWebAuthnApi* webauthn_api,
 
   if (hresult != S_OK) {
     FIDO_LOG(DEBUG) << "WebAuthNAuthenticatorGetAssertion()="
-                    << webauthn_api->GetErrorName(hresult);
+                    << HresultToHex(hresult) << " ("
+                    << webauthn_api->GetErrorName(hresult) << ")";
     return {WinErrorNameToCtapDeviceResponseCode(
                 base::as_u16cstr(webauthn_api->GetErrorName(hresult))),
             absl::nullopt};

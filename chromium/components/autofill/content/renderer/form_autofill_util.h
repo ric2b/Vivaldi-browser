@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -125,18 +125,18 @@ bool IsVisibleIframe(const blink::WebElement& iframe_element);
 // [1] https://html.spec.whatwg.org/multipage/forms.html#the-form-element
 blink::WebFormElement GetClosestAncestorFormElement(blink::WebNode node);
 
-// Returns true if a DOM traversal (pre-order, depth-first) visits |x| before
-// |y|. |common_ancestor| can be any shared ancestor of |x| and |y| (including
-// the WebDocument), with deeper ancestors leading to better performance since
-// the function compares the paths from |x| and |y| to |common_ancestor|.
+// Returns true if a DOM traversal (pre-order, depth-first) visits `x` before
+// `y`.
+// As a performance improvement, `ancestor_hint` can be set to a suspected
+// ancestor of `x` and `y`. Otherwise, `ancestor_hint` can be arbitrary.
 //
 // This function is a simplified/specialised version of Blink's private
 // Node::compareDocumentPosition().
 //
 // Exposed for testing purposes.
-bool IsDomPredecessor(const blink::WebNode& x,
+bool IsDOMPredecessor(const blink::WebNode& x,
                       const blink::WebNode& y,
-                      const blink::WebNode& common_ancestor);
+                      const blink::WebNode& ancestor_hint);
 
 // Gets up to kMaxListSize data list values (with corresponding label) for the
 // given element, each value and label have as far as kMaxDataLength.
@@ -195,20 +195,20 @@ bool IsWebElementFocusable(const blink::WebElement& element);
 // A heuristic visibility detection. See crbug.com/1335257 for an overview of
 // relevant aspects.
 //
-// Note that WebElement::BoundsInViewport(), WebElement::GetClientSize(), and
-// WebElement::GetScrollSize() include the padding but do not include the border
-// and margin. BoundsInViewport() additionally scales the dimensions according
-// to the zoom factor.
+// Note that WebElement::BoundsInWidget(), WebElement::GetClientSize(),
+// and WebElement::GetScrollSize() include the padding but do not include the
+// border and margin. BoundsInWidget() additionally scales the
+// dimensions according to the zoom factor.
 //
 // It seems that invisible fields on websites typically have dimensions between
 // 0 and 10 pixels, before the zoom factor. Therefore choosing `kMinPixelSize`
 // is easier without including the zoom factor. For that reason, this function
-// prefers GetClientSize() over BoundsInViewport().
+// prefers GetClientSize() over BoundsInWidget().
 //
 // This function does not check the position in the viewport because fields in
 // iframes commonly are visible despite the body having height zero. Therefore,
-// `e.GetDocument().Body().BoundsInViewport().Intersects(e.BoundsInViewport())`
-// yields false negatives.
+// `e.GetDocument().Body().BoundsInWidget().Intersects(
+//      e.BoundsInWidget())` yields false negatives.
 //
 // Exposed for testing purposes.
 //

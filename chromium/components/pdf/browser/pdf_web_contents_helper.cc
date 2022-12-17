@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -117,7 +117,8 @@ void PDFWebContentsHelper::SelectionChanged(const gfx::PointF& left,
 }
 
 void PDFWebContentsHelper::SetPluginCanSave(bool can_save) {
-  client_->SetPluginCanSave(&GetWebContents(), can_save);
+  client_->SetPluginCanSave(pdf_service_receivers_.GetCurrentTargetFrame(),
+                            can_save);
 }
 
 void PDFWebContentsHelper::DidScroll() {
@@ -310,7 +311,8 @@ void PDFWebContentsHelper::SaveUrlAs(const GURL& url,
 
 void PDFWebContentsHelper::UpdateContentRestrictions(
     int32_t content_restrictions) {
-  client_->UpdateContentRestrictions(&GetWebContents(), content_restrictions);
+  client_->UpdateContentRestrictions(
+      pdf_service_receivers_.GetCurrentTargetFrame(), content_restrictions);
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(PDFWebContentsHelper);

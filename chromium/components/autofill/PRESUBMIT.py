@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -60,7 +60,7 @@ def _CheckFeatureNames(input_api, output_api):
   """Checks that no features are enabled."""
 
   pattern = input_api.re.compile(
-          r'\bbase::Feature\s+k(\w*)\s*{\s*"(\w*)"',
+          r'\bBASE_FEATURE\s*\(\s*k(\w*)\s*,\s*"(\w*)"',
           input_api.re.MULTILINE)
   warnings = []
 

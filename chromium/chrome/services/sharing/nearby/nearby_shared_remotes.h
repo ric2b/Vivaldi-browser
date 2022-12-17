@@ -1,15 +1,15 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_SERVICES_SHARING_NEARBY_NEARBY_SHARED_REMOTES_H_
 #define CHROME_SERVICES_SHARING_NEARBY_NEARBY_SHARED_REMOTES_H_
 
-#include "ash/services/nearby/public/mojom/firewall_hole.mojom.h"
-#include "ash/services/nearby/public/mojom/sharing.mojom.h"
-#include "ash/services/nearby/public/mojom/tcp_socket_factory.mojom.h"
-#include "ash/services/nearby/public/mojom/webrtc.mojom.h"
-#include "ash/services/nearby/public/mojom/webrtc_signaling_messenger.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/firewall_hole.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/sharing.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/tcp_socket_factory.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/webrtc.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/webrtc_signaling_messenger.mojom.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "device/bluetooth/public/mojom/adapter.mojom.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"

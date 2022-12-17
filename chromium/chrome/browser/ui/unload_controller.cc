@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,11 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/location.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/devtools/devtools_window.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -52,7 +53,8 @@ bool UnloadController::ShouldRunUnloadEventsHelper(
     content::WebContents* contents) {
   // If |contents| is being inspected, devtools needs to intercept beforeunload
   // events.
-  return DevToolsWindow::GetInstanceForInspectedWebContents(contents) != NULL;
+  return DevToolsWindow::GetInstanceForInspectedWebContents(contents) !=
+         nullptr;
 }
 
 bool UnloadController::RunUnloadEventsHelper(content::WebContents* contents) {
@@ -379,7 +381,7 @@ bool UnloadController::RemoveFromSet(UnloadListenerSet* set,
                                      content::WebContents* web_contents) {
   DCHECK(is_attempting_to_close_browser_);
 
-  auto iter = std::find(set->begin(), set->end(), web_contents);
+  auto iter = base::ranges::find(*set, web_contents);
   if (iter != set->end()) {
     set->erase(iter);
     return true;

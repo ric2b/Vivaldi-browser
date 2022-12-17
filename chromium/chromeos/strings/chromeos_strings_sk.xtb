@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{Upraviť súbor}few{Upraviť súbory}many{Upraviť súbory}other{Upraviť súbory}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">Smer kľúča</translation>
+<translation id="3294437725009624529">Hosť</translation>
 <translation id="3310640316857623290">Latencia servera DNS výrazne prekračuje povolenú úroveň</translation>
 <translation id="3328783797891415197">Test prebieha</translation>
 <translation id="3340011300870565703">Úroveň batérie pravého slúchadla zariadenia je <ph name="BATTERY_PERCENTAGE" /> %.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">Počas aktualizovania firmvéru neodpájajte toto zariadenie ani nevypínajte počítač. Toto okno môžete minimalizovať. Táto aktualizácia môže trvať niekoľko minút a vaše externé zariadenie nemusí počas nej fungovať.</translation>
 <translation id="3486220673238053218">definícia</translation>
 <translation id="3488065109653206955">Čiastočne aktivované</translation>
+<translation id="3510890413042482857">Odosielať <ph name="BEGIN_LINK1" />údaje o sledovaní výkonnosti<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Aktualiz. ChromeOS</translation>
 <translation id="3527036260304016759">Nepodarilo sa – neznáma chyba</translation>
 <translation id="3532980081107202182">Zostávajúci čas je približne <ph name="MIN_REMAINING" /> min.</translation>
@@ -468,6 +470,7 @@ Skúste klepnúť na mikrofón a niečo prikázať.</translation>
 <translation id="5502931783115429516">Android nefunguje</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">Automaticky prepínať na tmavý motív pri západe slnka</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">Skenovať znova</translation>
 <translation id="5583640892426849032">Backspace</translation>

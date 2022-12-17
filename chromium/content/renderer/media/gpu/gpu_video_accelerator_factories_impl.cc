@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -174,17 +174,21 @@ void GpuVideoAcceleratorFactoriesImpl::BindOnTaskRunner(
   }
 
 #if BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
-  // Note: This is a bit of a hack, since we don't specify the implementation
-  // before asking for the map of supported configs.  We do this because it
-  // (a) saves an ipc call, and (b) makes the return of those configs atomic.
-  interface_factory_->CreateVideoDecoder(
-      video_decoder_.BindNewPipeAndPassReceiver(), /*dst_video_decoder=*/{});
-  video_decoder_.set_disconnect_handler(
-      base::BindOnce(&GpuVideoAcceleratorFactoriesImpl::OnDecoderSupportFailed,
-                     base::Unretained(this)));
-  video_decoder_->GetSupportedConfigs(base::BindOnce(
-      &GpuVideoAcceleratorFactoriesImpl::OnSupportedDecoderConfigs,
-      base::Unretained(this)));
+  if (video_decode_accelerator_enabled_) {
+    // Note: This is a bit of a hack, since we don't specify the implementation
+    // before asking for the map of supported configs.  We do this because it
+    // (a) saves an ipc call, and (b) makes the return of those configs atomic.
+    interface_factory_->CreateVideoDecoder(
+        video_decoder_.BindNewPipeAndPassReceiver(), /*dst_video_decoder=*/{});
+    video_decoder_.set_disconnect_handler(base::BindOnce(
+        &GpuVideoAcceleratorFactoriesImpl::OnDecoderSupportFailed,
+        base::Unretained(this)));
+    video_decoder_->GetSupportedConfigs(base::BindOnce(
+        &GpuVideoAcceleratorFactoriesImpl::OnSupportedDecoderConfigs,
+        base::Unretained(this)));
+  } else {
+    OnDecoderSupportFailed();
+  }
 #else
   OnDecoderSupportFailed();
 #endif  // BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
@@ -318,7 +322,10 @@ media::GpuVideoAcceleratorFactories::Supported
 GpuVideoAcceleratorFactoriesImpl::IsDecoderConfigSupported(
     const media::VideoDecoderConfig& config) {
   // There is no support for alpha channel hardware decoding yet.
-  if (config.alpha_mode() == media::VideoDecoderConfig::AlphaMode::kHasAlpha) {
+  // HEVC is the codec that only has platform hardware decoder support, and
+  // macOS currently support HEVC with alpha, so don't block HEVC here.
+  if (config.alpha_mode() == media::VideoDecoderConfig::AlphaMode::kHasAlpha &&
+      config.codec() != media::VideoCodec::kHEVC) {
     DVLOG(1) << "Alpha transparency formats are not supported.";
     return Supported::kFalse;
   }
@@ -515,6 +522,13 @@ GpuVideoAcceleratorFactoriesImpl::GetVideoEncodeAcceleratorSupportedProfiles() {
 viz::RasterContextProvider*
 GpuVideoAcceleratorFactoriesImpl::GetMediaContextProvider() {
   return CheckContextLost() ? nullptr : context_provider_.get();
+}
+
+const gpu::Capabilities*
+GpuVideoAcceleratorFactoriesImpl::ContextCapabilities() {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  return CheckContextLost() ? nullptr
+                            : &(context_provider_->ContextCapabilities());
 }
 
 void GpuVideoAcceleratorFactoriesImpl::SetRenderingColorSpace(

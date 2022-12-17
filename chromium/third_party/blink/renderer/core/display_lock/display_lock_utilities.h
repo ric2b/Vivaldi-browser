@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -315,6 +315,12 @@ class CORE_EXPORT DisplayLockUtilities {
   // functions such as IsDisplayLockedPreventingPaint or
   // LockedAncestorPreventing*.
   static bool IsUnlockedQuickCheck(const Node& node);
+
+  // True if unlocking would invalidate style and produce a style recalc root at
+  // the specified node.
+  //
+  // See StyleEngine::style_recalc_root_.
+  static bool IsPotentialStyleRecalcRoot(const Node& node);
 
  private:
   // This is a helper function for ShouldIgnoreNodeDueToDisplayLock() when the

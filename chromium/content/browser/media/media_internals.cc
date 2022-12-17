@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -110,6 +110,8 @@ std::string FormatToString(media::AudioParameters::Format format) {
       return "dtsxp2";
     case media::AudioParameters::AUDIO_BITSTREAM_IEC61937:
       return "iec61937";
+    case media::AudioParameters::AUDIO_BITSTREAM_DTS_HD_MA:
+      return "dtshd_ma";
     case media::AudioParameters::AUDIO_FAKE:
       return "fake";
   }
@@ -384,7 +386,7 @@ static bool ConvertEventToUpdate(int render_process_id,
   const double ticks_millis = ticks / base::Time::kMicrosecondsPerMillisecond;
   dict.Set("ticksMillis", ticks_millis);
 
-  base::Value::Dict cloned_params = event.params.GetDict().Clone();
+  base::Value::Dict cloned_params = event.params.Clone();
   switch (event.type) {
     case media::MediaLogRecord::Type::kMessage:
       dict.Set("type", "MEDIA_LOG_ENTRY");
@@ -487,21 +489,6 @@ void MediaInternals::SendGeneralAudioInformation() {
   };
 
   set_feature_data(features::kAudioServiceOutOfProcess);
-
-  std::string feature_value_string;
-  if (base::FeatureList::IsEnabled(
-          features::kAudioServiceOutOfProcessKillAtHang)) {
-    std::string timeout_value = base::GetFieldTrialParamValueByFeature(
-        features::kAudioServiceOutOfProcessKillAtHang, "timeout_seconds");
-    if (timeout_value.empty())
-      timeout_value = "<undefined>";
-    feature_value_string =
-        base::StrCat({"Enabled, timeout = ", timeout_value, " seconds"});
-  } else {
-    feature_value_string = "Disabled";
-  }
-  audio_info_data.Set(features::kAudioServiceOutOfProcessKillAtHang.name,
-                      base::Value(feature_value_string));
 
   set_feature_data(features::kAudioServiceLaunchOnStartup);
   set_explicit_feature_data(

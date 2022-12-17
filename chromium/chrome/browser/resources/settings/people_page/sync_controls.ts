@@ -1,19 +1,19 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '//resources/js/util.m.js';
+import '//resources/js/util.js';
 import '//resources/cr_components/localized_link/localized_link.js';
 import '//resources/cr_elements/cr_radio_button/cr_radio_button.js';
 import '//resources/cr_elements/cr_radio_group/cr_radio_group.js';
 import '//resources/cr_elements/cr_toggle/cr_toggle.js';
-import '//resources/cr_elements/shared_style_css.m.js';
-import '//resources/cr_elements/shared_vars_css.m.js';
+import '//resources/cr_elements/cr_shared_style.css.js';
+import '//resources/cr_elements/cr_shared_vars.css.js';
 import '//resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '../settings_shared.css.js';
 
 import {assert} from '//resources/js/assert_ts.js';
-import {WebUIListenerMixin} from '//resources/js/web_ui_listener_mixin.js';
+import {WebUIListenerMixin} from '//resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 // <if expr="is_chromeos">
@@ -109,15 +109,6 @@ export class SettingsSyncControlsElement extends
   // <if expr="is_chromeos">
   private shouldShowLacrosSideBySideWarning_(): boolean {
     return loadTimeData.getBoolean('shouldShowLacrosSideBySideWarning');
-  }
-
-  private shouldShowOSSyncSettingsLink_(): boolean {
-    // <if expr="chromeos_ash">
-    return loadTimeData.getBoolean('syncSettingsCategorizationEnabled');
-    // </if>
-    // <if expr="chromeos_lacros">
-    return true;  // Should always be shown on Lacros.
-    // </if>
   }
   // </if>
 

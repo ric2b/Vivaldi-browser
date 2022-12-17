@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <limits.h>
 #include <stddef.h>
 
-#include <algorithm>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -19,6 +18,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -159,18 +159,15 @@ constexpr PersistingImagesTable kPersistingImages[] = {
 };
 
 BrowserThemePack::PersistentID GetPersistentIDByName(const std::string& key) {
-  auto* it =
-      std::find_if(std::begin(kPersistingImages), std::end(kPersistingImages),
-                   [&](const auto& image) {
-                     return base::EqualsCaseInsensitiveASCII(key, image.key);
-                   });
+  auto* it = base::ranges::find_if(kPersistingImages, [&](const auto& image) {
+    return base::EqualsCaseInsensitiveASCII(key, image.key);
+  });
   return it == std::end(kPersistingImages) ? PRS::kInvalid : it->persistent_id;
 }
 
 BrowserThemePack::PersistentID GetPersistentIDByIDR(int idr) {
-  auto* it =
-      std::find_if(std::begin(kPersistingImages), std::end(kPersistingImages),
-                   [&](const auto& image) { return image.idr_id == idr; });
+  auto* it = base::ranges::find(kPersistingImages, idr,
+                                &PersistingImagesTable::idr_id);
   return it == std::end(kPersistingImages) ? PRS::kInvalid : it->persistent_id;
 }
 
@@ -608,31 +605,6 @@ ui::ColorTransform ChooseOmniboxBgBlendTarget() {
 }
 
 }  // namespace
-
-namespace internal {  // for testing
-
-// Calculate contrasting color for given |bg_color|. Returns lighter color if
-// the color is very dark and returns darker color otherwise.
-SkColor GetContrastingColorForBackground(SkColor bg_color,
-                                         float luminosity_change) {
-  color_utils::HSL hsl;
-  SkColorToHSL(bg_color, &hsl);
-
-  // If luminosity is 0, it means |bg_color| is black. Use white for black
-  // backgrounds.
-  if (hsl.l == 0)
-    return SK_ColorWHITE;
-
-  // Decrease luminosity, unless color is already dark.
-  if (hsl.l > 0.15)
-    luminosity_change *= -1;
-
-  hsl.l *= 1 + luminosity_change;
-  if (hsl.l >= 0.0f && hsl.l <= 1.0f)
-    return HSLToSkColor(hsl, 255);
-  return bg_color;
-}
-}  // namespace internal
 
 BrowserThemePack::~BrowserThemePack() {
   DCHECK(!data_pack_ || using_data_pack_);
@@ -1277,12 +1249,11 @@ void BrowserThemePack::SetTintsFromJSON(
 
   // Parse the incoming data from |tints_value| into an intermediary structure.
   std::map<int, color_utils::HSL> temp_tints;
-  for (base::DictionaryValue::Iterator iter(*tints_value); !iter.IsAtEnd();
-       iter.Advance()) {
-    if (!iter.value().is_list())
+  for (const auto item : tints_value->GetDict()) {
+    if (!item.second.is_list())
       continue;
 
-    base::Value::ConstListView tint_list = iter.value().GetListDeprecated();
+    base::Value::ConstListView tint_list = item.second.GetListDeprecated();
     if (tint_list.size() != 3)
       continue;
 
@@ -1295,7 +1266,7 @@ void BrowserThemePack::SetTintsFromJSON(
     color_utils::HSL hsl = {*h, *s, *l};
     MakeHSLShiftValid(&hsl);
 
-    int id = GetIntForString(iter.key(), kTintTable, kTintTableLength);
+    int id = GetIntForString(item.first, kTintTable, kTintTableLength);
     if (id != -1)
       temp_tints[id] = hsl;
   }
@@ -1398,28 +1369,27 @@ void BrowserThemePack::SetDisplayPropertiesFromJSON(
     return;
 
   std::map<int, int> temp_properties;
-  for (base::DictionaryValue::Iterator iter(*display_properties_value);
-       !iter.IsAtEnd(); iter.Advance()) {
-    int property_id = GetIntForString(iter.key(), kDisplayProperties,
-                                      kDisplayPropertiesSize);
+  for (const auto item : display_properties_value->GetDict()) {
+    int property_id =
+        GetIntForString(item.first, kDisplayProperties, kDisplayPropertiesSize);
     switch (property_id) {
       case TP::NTP_BACKGROUND_ALIGNMENT: {
-        if (iter.value().is_string()) {
+        if (item.second.is_string()) {
           temp_properties[TP::NTP_BACKGROUND_ALIGNMENT] =
-              TP::StringToAlignment(iter.value().GetString());
+              TP::StringToAlignment(item.second.GetString());
         }
         break;
       }
       case TP::NTP_BACKGROUND_TILING: {
-        if (iter.value().is_string()) {
+        if (item.second.is_string()) {
           temp_properties[TP::NTP_BACKGROUND_TILING] =
-              TP::StringToTiling(iter.value().GetString());
+              TP::StringToTiling(item.second.GetString());
         }
         break;
       }
       case TP::NTP_LOGO_ALTERNATE: {
-        if (iter.value().is_int())
-          temp_properties[TP::NTP_LOGO_ALTERNATE] = iter.value().GetInt();
+        if (item.second.is_int())
+          temp_properties[TP::NTP_LOGO_ALTERNATE] = item.second.GetInt();
         break;
       }
     }
@@ -1442,27 +1412,21 @@ void BrowserThemePack::ParseImageNamesFromJSON(
   if (!images_value)
     return;
 
-  for (base::DictionaryValue::Iterator iter(*images_value); !iter.IsAtEnd();
-       iter.Advance()) {
-    if (iter.value().is_dict()) {
-      const base::DictionaryValue* inner_value = nullptr;
-      if (iter.value().GetAsDictionary(&inner_value)) {
-        for (base::DictionaryValue::Iterator inner_iter(*inner_value);
-             !inner_iter.IsAtEnd();
-             inner_iter.Advance()) {
-          ui::ResourceScaleFactor scale_factor = ui::kScaleFactorNone;
-          if (GetScaleFactorFromManifestKey(inner_iter.key(), &scale_factor) &&
-              inner_iter.value().is_string()) {
-            AddFileAtScaleToMap(
-                iter.key(), scale_factor,
-                images_path.AppendASCII(inner_iter.value().GetString()),
-                file_paths);
-          }
+  for (const auto item : images_value->GetDict()) {
+    if (item.second.is_dict()) {
+      for (const auto inner_item : item.second.GetDict()) {
+        ui::ResourceScaleFactor scale_factor = ui::kScaleFactorNone;
+        if (GetScaleFactorFromManifestKey(inner_item.first, &scale_factor) &&
+            inner_item.second.is_string()) {
+          AddFileAtScaleToMap(
+              item.first, scale_factor,
+              images_path.AppendASCII(inner_item.second.GetString()),
+              file_paths);
         }
       }
-    } else if (iter.value().is_string()) {
-      AddFileAtScaleToMap(iter.key(), ui::k100Percent,
-                          images_path.AppendASCII(iter.value().GetString()),
+    } else if (item.second.is_string()) {
+      AddFileAtScaleToMap(item.first, ui::k100Percent,
+                          images_path.AppendASCII(item.second.GetString()),
                           file_paths);
     }
   }
@@ -1920,9 +1884,8 @@ void BrowserThemePack::GenerateMissingNtpColors() {
   if (logo_alternate == 1 && !has_background_image && has_background_color) {
     SkColor logo_color = color_utils::IsDark(background_color)
                              ? SK_ColorWHITE
-                             : internal::GetContrastingColorForBackground(
-                                   background_color,
-                                   /*luminosity_change=*/0.3f);
+                             : GetContrastingColor(background_color,
+                                                   /*luminosity_change=*/0.3f);
     SetColor(TP::COLOR_NTP_LOGO, logo_color);
   }
 
@@ -1931,9 +1894,9 @@ void BrowserThemePack::GenerateMissingNtpColors() {
   // color.
   if (!has_background_image && has_background_color &&
       background_color != SK_ColorWHITE) {
-    SetColor(TP::COLOR_NTP_SHORTCUT, internal::GetContrastingColorForBackground(
-                                         background_color,
-                                         /*luminosity_change=*/0.2f));
+    SetColor(TP::COLOR_NTP_SHORTCUT,
+             GetContrastingColor(background_color,
+                                 /*luminosity_change=*/0.2f));
   }
 
   // Calculate NTP section border color.

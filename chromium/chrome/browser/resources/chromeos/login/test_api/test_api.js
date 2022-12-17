@@ -1,12 +1,12 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 // clang-format off
 // #import {afterNextRender, Polymer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-// #import {$} from 'chrome://resources/js/util.m.js';
+// #import {$} from 'chrome://resources/js/util.js';
 // #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-// #import {assert} from 'chrome://resources/js/assert.m.js';
+// #import {assert} from 'chrome://resources/js/assert.js';
 // clang-format on
 
 /**
@@ -117,7 +117,7 @@ class HIDDetectionScreenTester extends ScreenElementApi {
 
   // Must be called to enable the next button
   emulateDevicesConnected() {
-    chrome.send('HIDDetectionScreen.emulateDevicesConnectedForTesting');
+    chrome.send('OobeTestApi.emulateDevicesForTesting');
   }
 
   touchscreenDetected() {
@@ -147,6 +147,10 @@ class HIDDetectionScreenTester extends ScreenElementApi {
 
   getUsbKeyboardDetectedText() {
     return loadTimeData.getString('hidDetectionUSBKeyboardConnected');
+  }
+
+  getPointingDeviceDetectedText() {
+    return loadTimeData.getString('hidDetectionPointingDeviceConnected');
   }
 
   getNextButtonName() {
@@ -315,16 +319,140 @@ class AssistantScreenTester extends ScreenElementApi {
 class MarketingOptInScreenTester extends ScreenElementApi {
   constructor() {
     super('marketing-opt-in');
+    this.accessibilityButton =
+        new PolymerElementApi(this, '#marketing-opt-in-accessibility-button');
+    this.accessibilityStep =
+        new PolymerElementApi(this, '#finalAccessibilityPage');
+    this.accessibilityToggle =
+        new PolymerElementApi(this, '#a11yNavButtonToggle');
+    this.marketingOptInGameDeviceTitle =
+        new PolymerElementApi(this, '#marketingOptInGameDeviceTitle');
   }
   /** @override */
   shouldSkip() {
     return !loadTimeData.getBoolean('testapi_isBrandedBuild');
+  }
+
+  /**
+   * Returns whether accessibility step is shown.
+   * @returns {boolean}
+   */
+  isAccessibilityStepReadyForTesting() {
+    return this.accessibilityStep.isVisible();
+  }
+
+  /**
+   * Returns whether a11y button is visible on the marketing-opt-in screen.
+   * @returns {boolean}
+   */
+  isAccessibilityButtonVisible() {
+    return this.accessibilityButton.isVisible();
+  }
+
+  /**
+   * Returns whether a11y toggle is on.
+   * @returns {boolean}
+   */
+  isAccessibilityToggleOn() {
+    return this.accessibilityToggle.element().checked;
+  }
+
+  /**
+   * Returns whether gaming-specific title is visible.
+   * @returns {boolean}
+   */
+  isMarketingOptInGameDeviceTitleVisible() {
+    return this.marketingOptInGameDeviceTitle.isVisible();
+  }
+
+  /**
+   * Returns a11y button name.
+   * @returns {string}
+   */
+  getAccessibilityButtonName() {
+    return loadTimeData.getString('marketingOptInA11yButtonLabel');
+  }
+
+  /**
+   * Returns name of Done button on a11y page.
+   * @returns {string}
+   */
+  getAccessibilityDoneButtonName() {
+    return loadTimeData.getString('finalA11yPageDoneButtonTitle');
+  }
+
+  /**
+   * Returns name of Get Started button.
+   * @returns {string}
+   */
+  getGetStartedButtonName() {
+    return loadTimeData.getString('marketingOptInScreenAllSet');
+  }
+
+  /**
+   * Returns gaming-specific title.
+   * @returns {string}
+   */
+  getCloudGamingDeviceTitle() {
+    return loadTimeData.getString('marketingOptInScreenGameDeviceTitle');
   }
 }
 
 class ThemeSelectionScreenTester extends ScreenElementApi {
   constructor() {
     super('theme-selection');
+    this.themeRadioButton = new PolymerElementApi(this, '#theme');
+    this.lightThemeButton = new PolymerElementApi(this, '#lightThemeButton');
+    this.darkThemeButton = new PolymerElementApi(this, '#darkThemeButton');
+    this.autoThemeButton = new PolymerElementApi(this, '#autoThemeButton');
+    this.textHeader = new PolymerElementApi(this, '#theme-selection-title');
+  }
+
+  /**
+   * Returns if the Theme Selection Screen is ready for test interaction.
+   * @return {boolean}
+   */
+  isReadyForTesting() {
+    return this.isVisible() && this.lightThemeButton.isVisible() &&
+        this.darkThemeButton.isVisible() && this.autoThemeButton.isVisible();
+  }
+
+  /**
+   * Presses light theme button to select it.
+   */
+  selectLightTheme() {
+    this.lightThemeButton.click();
+  }
+
+  /**
+   * Presses dark theme button to select it.
+   */
+  selectDarkTheme() {
+    this.darkThemeButton.click();
+  }
+
+  /**
+   * Presses auto theme button to select it.
+   */
+  selectAutoTheme() {
+    this.autoThemeButton.click();
+  }
+
+  /**
+   * Finds which theme is selected.
+   * @returns {string}
+   */
+  getNameOfSelectedTheme() {
+    return this.themeRadioButton.element().selected;
+  }
+
+  /**
+   * Retrieves computed color of the screen header. This value will be used to
+   * determine screen's color mode.
+   * @returns {string}
+   */
+  getHeaderTextColor() {
+    return window.getComputedStyle(this.textHeader.element()).color;
   }
 }
 

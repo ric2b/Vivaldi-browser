@@ -1,8 +1,11 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <Cocoa/Cocoa.h>
+
+#include <algorithm>
+
 #include "base/strings/sys_string_conversions.h"
 #include "content/browser/devtools/protocol/native_input_event_builder.h"
 #include "third_party/blink/public/common/input/web_input_event.h"

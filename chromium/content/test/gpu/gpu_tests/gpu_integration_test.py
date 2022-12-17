@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -64,6 +64,7 @@ class GpuIntegrationTest(
   # to relaunch it, if a new pixel test requires a different set of
   # arguments.
   _last_launched_browser_args = set()
+  _last_launched_profile = (None, None)
 
   # Keeps track of flaky tests that we're retrying.
   # TODO(crbug.com/1248602): Remove this in favor of a method that doesn't rely
@@ -145,14 +146,6 @@ class GpuIntegrationTest(
         action='store_true',
         default=False,
         help='Disables uploads of logs to cloud storage')
-    # TODO(skbug.com/12149): Remove this once Gold-based tests no longer clobber
-    # earlier results on retry attempts.
-    parser.add_option(
-        '--has-test-filter',
-        action='store_true',
-        default=False,
-        help=('Whether a test filter has been applied. Can be used as a proxy '
-              'for whether this is a retry without patch on a trybot.'))
     parser.add_option('--extra-intel-device-id-with-overlays',
                       dest='extra_intel_device_id_with_overlays',
                       help='The extra Intel device id with overlays')
@@ -235,12 +228,22 @@ class GpuIntegrationTest(
     return browser_args
 
   @classmethod
-  def _SetBrowserArgsForNextStartup(cls, browser_args: List[str]) -> None:
+  def _SetBrowserArgsForNextStartup(cls,
+                                    browser_args: List[str],
+                                    profile_dir: Optional[str] = None,
+                                    profile_type: Optional[str] = None) -> None:
     """Sets the browser arguments to use for the next browser startup.
 
     Args:
       browser_args: A list of strings containing the browser arguments to use
           for the next browser startup.
+      profile_dir: A string representing the profile directory to use. In
+          general this should be a temporary directory that is cleaned up at
+          some point.
+      profile_type: A string representing how the profile directory should be
+          used. Valid examples are 'clean' which means the profile_dir will be
+          used to seed a new temporary directory which is used, or 'exact' which
+          means the exact specified directory will be used instead.
     """
     cls._finder_options = cls.GetOriginalFinderOptions().Copy()
     browser_options = cls._finder_options.browser_options
@@ -251,14 +254,25 @@ class GpuIntegrationTest(
 
     # Append the new arguments.
     browser_options.AppendExtraBrowserArgs(browser_args)
+
+    # Override profile directory behavior if specified.
+    if profile_dir:
+      browser_options.profile_dir = profile_dir
+    if profile_type:
+      browser_options.profile_type = profile_type
+
+    # Save the last set of options for comparison.
     cls._last_launched_browser_args = set(browser_args)
+    cls._last_launched_profile = (profile_dir, profile_type)
     cls.SetBrowserOptions(cls._finder_options)
 
   @classmethod
   def RestartBrowserIfNecessaryWithArgs(
       cls,
       additional_args: Optional[List[str]] = None,
-      force_restart: bool = False) -> None:
+      force_restart: bool = False,
+      profile_dir: Optional[str] = None,
+      profile_type: Optional[str] = None) -> None:
     """Restarts the browser if it is determined to be necessary.
 
     A restart is necessary if restarting would cause the browser to run with
@@ -270,19 +284,37 @@ class GpuIntegrationTest(
           GenerateBrowserArgs implementation for default arguments.
       force_restart: True to force the browser to restart even if restarting
           the browser would not change any browser arguments.
+      profile_dir: A string representing the profile directory to use. In
+          general this should be a temporary directory that is cleaned up at
+          some point.
+      profile_type: A string representing how the profile directory should be
+          used. Valid examples are 'clean' which means the profile_dir will be
+          used to seed a new temporary directory which is used, or 'exact' which
+          means the exact specified directory will be used instead.
     """
     new_browser_args = cls._GenerateAndSanitizeBrowserArgs(additional_args)
-    if force_restart or set(
-        new_browser_args) != cls._last_launched_browser_args:
+
+    diff_browser_args = set(new_browser_args) != cls._last_launched_browser_args
+    diff_profile = (profile_dir, profile_type) != cls._last_launched_profile
+    if force_restart or diff_browser_args or diff_profile:
       logging.info('Restarting browser with arguments: %s', new_browser_args)
+      if diff_profile:
+        logging.info('Restarting browser with type (%s) --user-data-dir=%s',
+                     profile_type, profile_dir)
       cls.StopBrowser()
-      cls._SetBrowserArgsForNextStartup(new_browser_args)
+      cls._SetBrowserArgsForNextStartup(new_browser_args, profile_dir,
+                                        profile_type)
       cls.StartBrowser()
 
   @classmethod
-  def RestartBrowserWithArgs(cls, additional_args: Optional[List[str]] = None
-                             ) -> None:
-    cls.RestartBrowserIfNecessaryWithArgs(additional_args, force_restart=True)
+  def RestartBrowserWithArgs(cls,
+                             additional_args: Optional[List[str]] = None,
+                             profile_dir: Optional[str] = None,
+                             profile_type: str = 'clean') -> None:
+    cls.RestartBrowserIfNecessaryWithArgs(additional_args,
+                                          force_restart=True,
+                                          profile_dir=profile_dir,
+                                          profile_type=profile_type)
 
   # The following is the rest of the framework for the GPU integration tests.
 
@@ -423,6 +455,24 @@ class GpuIntegrationTest(
         return True
     return False
 
+  # pylint: disable=no-self-use
+  def _DetermineRetryWorkaround(self, exception: Exception) -> bool:
+    """Potentially allows retries depending on the exception type.
+
+    This is a temporary workaround for flaky timeouts in the WebGPU CTS which
+    should not be kept long term. See crbug.com/1353938.
+
+    Args:
+      exception: The exception the test failed with.
+
+    Returns:
+      A boolean indicating whether a retry on failure should be forced.
+    """
+    del exception
+    return False
+
+  # pylint: enable=no-self-use
+
   def _EnsureScreenOn(self) -> None:
     """Ensures the screen is on for applicable platforms."""
     os_name = self.browser.platform.GetOSName()
@@ -447,7 +497,13 @@ class GpuIntegrationTest(
       self.programmaticSkipIsExpected = True
       # pylint: enable=attribute-defined-outside-init
       raise
-    except Exception:
+    except Exception as e:
+      if not should_retry_on_failure and self._DetermineRetryWorkaround(e):
+        should_retry_on_failure = True
+        # Notify typ that it should retry this test.
+        # pylint: disable=attribute-defined-outside-init
+        self.retryOnFailure = True
+        # pylint: enable=attribute-defined-outside-init
       if ResultType.Failure in expected_results or should_retry_on_failure:
         self._HandleExpectedFailureOrFlake(test_name, expected_crashes,
                                            should_retry_on_failure)
@@ -757,6 +813,7 @@ class GpuIntegrationTest(
       gpu_tags.append(gpu_helper.GetCommandDecoder(gpu_info))
       gpu_tags.append(gpu_helper.GetOOPCanvasStatus(gpu_info.feature_status))
       gpu_tags.append(gpu_helper.GetAsanStatus(gpu_info))
+      gpu_tags.append(gpu_helper.GetTargetCpuStatus(gpu_info))
       if gpu_info and gpu_info.devices:
         for ii in range(0, len(gpu_info.devices)):
           gpu_vendor = gpu_helper.GetGpuVendorString(gpu_info, ii)
@@ -777,7 +834,7 @@ class GpuIntegrationTest(
             # without resorting to the more generic "intel" tag.
             if gpu_vendor == 'intel' and (gpu_device_id & 0xFF00) in (
                 0x1900, 0x3100, 0x3E00, 0x5900, 0x5A00, 0x9B00):
-              gpu_tags.extend(['intel-gen-9', 'intel-hd-630-family'])
+              gpu_tags.extend(['intel-gen-9'])
       # all spaces and underscores in the tag will be replaced by dashes
       tags.extend([re.sub('[ _]', '-', tag) for tag in gpu_tags])
 
@@ -850,6 +907,8 @@ class GpuIntegrationTest(
          'llvm-10.0.0)-(0x0000c0de)))'),
         ('google-vulkan-1.1.0-(swiftshader-device-('
          'llvm-10.0.0)-(0x0000c0de))'),
+        'google-0xc0de',
+        'chromium-os',  # ChromeOS
         'cros-chrome',  # ChromeOS
         'web-engine-shell',  # Fuchsia
         'cast-streaming-shell',  # Syonymous with cast_streaming suite

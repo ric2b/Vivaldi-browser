@@ -2,15 +2,16 @@
 
 #include "notes/notes_factory.h"
 
-#include "base/task/deferred_sequenced_task_runner.h"
 #include "base/files/file_path.h"
 #include "base/memory/singleton.h"
+#include "base/task/deferred_sequenced_task_runner.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
+#include "sync/file_sync/file_store_factory.h"
 #include "sync/note_sync_service_factory.h"
 #include "sync/notes/note_sync_service.h"
 
@@ -21,6 +22,7 @@ NotesModelFactory::NotesModelFactory()
           "Notes_Model",
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(NoteSyncServiceFactory::GetInstance());
+  DependsOn(SyncedFileStoreFactory::GetInstance());
 }
 
 NotesModelFactory::~NotesModelFactory() {}
@@ -48,7 +50,8 @@ KeyedService* NotesModelFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
   NotesModel* notes_model =
-      new NotesModel(NoteSyncServiceFactory::GetForProfile(profile));
+      new NotesModel(NoteSyncServiceFactory::GetForProfile(profile),
+                     SyncedFileStoreFactory::GetForBrowserContext(profile));
   notes_model->Load(profile->GetPath());
   return notes_model;
 }

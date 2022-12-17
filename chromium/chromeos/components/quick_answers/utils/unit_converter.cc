@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,7 +67,7 @@ const Value* UnitConverter::FindProperDestinationUnit(
   // no proper unit found, return nullptr.
   const Value* dst_unit = nullptr;
   double min_rate = preferred_range;
-  for (const Value& unit : units->GetListDeprecated()) {
+  for (const Value& unit : units->GetList()) {
     const auto* name = unit.FindStringPath(kNamePath);
     const auto rate_a = unit.FindDoublePath(kConversionRateAPath);
     if (*name == *src_name || !rate_a.has_value() || rate_a.value() == 0)
@@ -84,9 +84,9 @@ const Value* UnitConverter::FindProperDestinationUnit(
 
 const Value* UnitConverter::GetConversionForCategory(
     const std::string& target_category) {
-  if (rule_set_.GetListDeprecated().empty())
+  if (rule_set_.GetList().empty())
     return nullptr;
-  for (const Value& conversion : rule_set_.GetListDeprecated()) {
+  for (const Value& conversion : rule_set_.GetList()) {
     const auto* category = conversion.FindStringPath(kCategoryPath);
     if (category && *category == target_category)
       return &conversion;

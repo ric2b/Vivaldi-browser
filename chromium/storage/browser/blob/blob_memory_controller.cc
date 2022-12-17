@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,10 +43,9 @@ using base::FilePath;
 namespace storage {
 
 // static
-const base::Feature
-    BlobMemoryController::kInhibitBlobMemoryControllerMemoryPressureResponse{
-        "InhibitBlobMemoryControllerMemoryPressureResponse",
-        base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kInhibitBlobMemoryControllerMemoryPressureResponse,
+             "InhibitBlobMemoryControllerMemoryPressureResponse",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
 constexpr int64_t kUnknownDiskAvailability = -1ll;

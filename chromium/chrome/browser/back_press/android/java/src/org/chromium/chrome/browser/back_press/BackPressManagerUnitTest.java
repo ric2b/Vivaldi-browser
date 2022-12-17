@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -208,6 +208,22 @@ public class BackPressManagerUnitTest {
                 h2.getCallbackHelper().getCallCount());
 
         Assert.assertFalse("Callback should be disabled if no value is provided by handler",
+                manager.getCallback().isEnabled());
+    }
+
+    @Test
+    public void testDestroy() {
+        BackPressManager manager = new BackPressManager();
+        EmptyBackPressHandler h1 = new EmptyBackPressHandler();
+        EmptyBackPressHandler h2 = new EmptyBackPressHandler();
+        manager.addHandler(h1, 0);
+        manager.addHandler(h2, 1);
+        h1.getHandleBackPressChangedSupplier().set(true);
+        Assert.assertTrue("Callback should be enabled if any of handlers are enabled",
+                manager.getCallback().isEnabled());
+
+        manager.destroy();
+        Assert.assertFalse("Callback should be disabled if manager class has been destroyed",
                 manager.getCallback().isEnabled());
     }
 

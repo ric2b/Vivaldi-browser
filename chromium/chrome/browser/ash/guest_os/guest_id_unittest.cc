@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -82,10 +82,9 @@ TEST_F(GuestIdTest, DuplicateContainerNamesInPrefsAreRemoved) {
 
   RemoveDuplicateContainerEntries(prefs);
 
-  const base::Value::List& result =
-      prefs->GetValueList(prefs::kGuestOsContainers);
+  const base::Value::List& result = prefs->GetList(prefs::kGuestOsContainers);
 
-  ASSERT_EQ(result.size(), 3);
+  ASSERT_EQ(result.size(), 3u);
   EXPECT_EQ(result[0].GetDict(), dictionary1);
   EXPECT_EQ(result[1].GetDict(), dictionary2);
   EXPECT_EQ(result[2].GetDict(), dictionary3);
@@ -120,7 +119,7 @@ TEST_F(GuestIdTest, RoundTripViaPrefs) {
                               "container_name");
   AddContainerToPrefs(&profile_, id, {});
   auto list = GetContainers(&profile_, VmType::PLUGIN_VM);
-  ASSERT_EQ(list.size(), 1);
+  ASSERT_EQ(list.size(), 1u);
   EXPECT_EQ(list[0], id);
 }
 

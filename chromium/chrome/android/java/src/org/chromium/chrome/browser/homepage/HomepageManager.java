@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -169,7 +169,7 @@ public class HomepageManager implements HomepagePolicyManager.HomepagePolicyStat
         }
         if (!homepagePartnerDefaultUri.equals("")) return homepagePartnerDefaultUri;
 
-        return UrlConstants.NTP_NON_NATIVE_URL;
+        return UrlConstants.NTP_URL; // Vivaldi
     }
 
     /**
@@ -203,12 +203,10 @@ public class HomepageManager implements HomepagePolicyManager.HomepagePolicyStat
      */
     private @NonNull String getHomepageUriIgnoringEnabledState() {
         if (HomepagePolicyManager.isHomepageManagedByPolicy()) {
-            return HomepagePolicyManager.getHomepageUrl();
+            return HomepagePolicyManager.getHomepageUrl().getSpec();
         }
         if (getPrefHomepageUseChromeNTP()) {
-            if (ChromeApplicationImpl.isVivaldi())
-                return VivaldiUrlConstants.NTP_NON_NATIVE_URL;
-            return UrlConstants.NTP_NON_NATIVE_URL;
+            return UrlConstants.NTP_URL; // Vivaldi
         }
         if (getPrefHomepageUseDefaultUri()) {
             return getDefaultHomepageUri();

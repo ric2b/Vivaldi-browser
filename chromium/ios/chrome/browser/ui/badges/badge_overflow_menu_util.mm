@@ -1,20 +1,20 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/badges/badge_overflow_menu_util.h"
 
-#include "base/metrics/histogram_functions.h"
+#import "base/metrics/histogram_functions.h"
 #import "base/notreached.h"
-#include "components/password_manager/core/common/password_manager_features.h"
-#include "components/strings/grit/components_strings.h"
+#import "components/password_manager/core/common/password_manager_features.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/badges/badge_constants.h"
 #import "ios/chrome/browser/ui/badges/badges_histograms.h"
 #import "ios/chrome/browser/ui/icons/action_icon.h"
 #import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/icons/infobar_icon.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #import <UIKit/UIKit.h>
 
@@ -23,6 +23,23 @@
 #endif
 
 namespace {
+
+// The image used for password related badges.
+UIImage* GetPasswordImage() {
+  if (UseSymbols()) {
+    return CustomSymbolTemplateWithPointSize(kPasswordSymbol,
+                                             kSymbolImagePointSize);
+  } else {
+    NSString* passwordImageName =
+        base::FeatureList::IsEnabled(
+            password_manager::features::kIOSEnablePasswordManagerBrandingUpdate)
+            ? @"password_key"
+            : @"legacy_password_key";
+    return [[UIImage imageNamed:passwordImageName]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  }
+}
+
 // The menu element for `badgeType` shown in the overflow menu when the overflow
 // badge is tapped.
 UIAction* GetOverflowMenuElementForBadgeType(
@@ -33,26 +50,19 @@ UIAction* GetOverflowMenuElementForBadgeType(
   UIImage* image;
   MobileMessagesInfobarType histogram_type = MobileMessagesInfobarType::Confirm;
 
-  NSString* passwordImageName =
-      base::FeatureList::IsEnabled(
-          password_manager::features::kIOSEnablePasswordManagerBrandingUpdate)
-          ? @"password_key"
-          : @"legacy_password_key";
   switch (badge_type) {
     case kBadgeTypePasswordSave:
       action_identifier = kBadgeButtonSavePasswordActionIdentifier;
       title =
           l10n_util::GetNSString(IDS_IOS_PASSWORD_MANAGER_SAVE_PASSWORD_TITLE);
-      image = [[UIImage imageNamed:passwordImageName]
-          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      image = GetPasswordImage();
       histogram_type = MobileMessagesInfobarType::SavePassword;
       break;
     case kBadgeTypePasswordUpdate:
       action_identifier = kBadgeButtonUpdatePasswordActionIdentifier;
       title = l10n_util::GetNSString(
           IDS_IOS_PASSWORD_MANAGER_UPDATE_PASSWORD_TITLE);
-      image = [[UIImage imageNamed:passwordImageName]
-          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      image = GetPasswordImage();
       histogram_type = MobileMessagesInfobarType::UpdatePassword;
       break;
     case kBadgeTypeSaveAddressProfile:
@@ -129,6 +139,7 @@ UIAction* GetOverflowMenuElementForBadgeType(
                         identifier:action_identifier
                            handler:handler];
 }
+
 }  // namespace
 
 UIMenu* GetOverflowMenuFromBadgeTypes(NSArray<NSNumber*>* badge_types,

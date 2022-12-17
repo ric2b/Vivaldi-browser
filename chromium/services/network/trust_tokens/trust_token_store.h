@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -210,6 +210,10 @@ class TrustTokenStore {
   // Returns whether any data was deleted.
   [[nodiscard]] virtual bool DeleteStoredTrustTokens(
       const SuitableTrustTokenOrigin& issuer);
+
+  [[nodiscard]] bool IsRedemptionLimitHit(
+      const SuitableTrustTokenOrigin& issuer,
+      const SuitableTrustTokenOrigin& top_level) const;
 
  private:
   std::unique_ptr<TrustTokenPersister> persister_;

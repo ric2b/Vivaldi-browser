@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,7 +24,7 @@ bool HttpAuthHandler::InitFromChallenge(
     HttpAuthChallengeTokenizer* challenge,
     HttpAuth::Target target,
     const SSLInfo& ssl_info,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     const url::SchemeHostPort& scheme_host_port,
     const NetLogWithSource& net_log) {
   scheme_host_port_ = scheme_host_port;
@@ -35,7 +35,7 @@ bool HttpAuthHandler::InitFromChallenge(
 
   auth_challenge_ = challenge->challenge_text();
   net_log_.BeginEvent(NetLogEventType::AUTH_HANDLER_INIT);
-  bool ok = Init(challenge, ssl_info, network_isolation_key);
+  bool ok = Init(challenge, ssl_info, network_anonymization_key);
   net_log_.EndEvent(NetLogEventType::AUTH_HANDLER_INIT, [&]() {
     base::Value::Dict params;
     params.Set("succeeded", ok);

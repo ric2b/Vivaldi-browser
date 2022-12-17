@@ -13,6 +13,7 @@
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -325,18 +326,13 @@ BookmarkUpdater::BookmarkUpdater(
       model_(model) {}
 
 void BookmarkUpdater::SetDeletedPartners(PrefService* prefs) {
-  const base::Value* deleted_partners =
+  auto& deleted_partners =
       prefs->GetList(vivaldiprefs::kBookmarksDeletedPartners);
-  if (!deleted_partners->is_list()) {
-    LOG(ERROR) << vivaldiprefs::kBookmarksDeletedPartners
-               << " is no a list value";
-    return;
-  }
 
   std::vector<base::GUID> ids;
-  ids.reserve(deleted_partners->GetList().size());
+  ids.reserve(deleted_partners.size());
   bool has_locale_based_ids = false;
-  for (const base::Value& value : deleted_partners->GetList()) {
+  for (const base::Value& value : deleted_partners) {
     if (!value.is_string()) {
       LOG(ERROR) << vivaldiprefs::kBookmarksDeletedPartners
                  << " contains non-string entry";
@@ -510,9 +506,11 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
   }
 
   VLOG(2) << "Updatning " << item.title << " guid=" << node->guid();
-  model_->SetTitle(node, base::UTF8ToUTF16(item.title));
+  model_->SetTitle(node, base::UTF8ToUTF16(item.title),
+                   bookmarks::metrics::BookmarkEditSource::kUser);
   if (!item.url.is_empty()) {
-    model_->SetURL(node, item.url);
+    model_->SetURL(node, item.url,
+                   bookmarks::metrics::BookmarkEditSource::kUser);
   }
 
   vivaldi_bookmark_kit::CustomMetaInfo custom_meta;
@@ -562,6 +560,10 @@ void BookmarkUpdater::MovePartnerIfRequired(
   if (iter == guid_node_map_.end())
     return;
   const BookmarkNode* expected_parent = iter->second;
+  if (node->parent() == model_->trash_node()) {
+    // Normal case - no move out of trash
+    return;
+  }
   if (expected_parent == node->parent()) {
     // Normal case - no move between folders.
     return;
@@ -614,7 +616,7 @@ const BookmarkNode* BookmarkUpdater::TryToAdd(const DefaultBookmarkItem& item,
   // we guess that its parent was the original partner folder and update
   // children there.
   for (const DefaultBookmarkItem& child_item : item.children) {
-    auto iter = existing_partner_bookmarks_.find(child_item.guid);
+    iter = existing_partner_bookmarks_.find(child_item.guid);
     if (iter != existing_partner_bookmarks_.end()) {
       const BookmarkNode* node = iter->second->parent();
       VLOG(1) << "Guessed a folder from a child, title=" << node->GetTitle()

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -124,7 +124,7 @@ void WaylandPopup::Show(bool inactive) {
     return;
   }
 
-  connection()->ScheduleFlush();
+  connection()->Flush();
   WaylandWindow::Show(inactive);
 }
 
@@ -147,7 +147,7 @@ void WaylandPopup::Hide() {
     decorated_via_aura_popup_ = false;
   }
 
-  connection()->ScheduleFlush();
+  connection()->Flush();
 }
 
 bool WaylandPopup::IsVisible() const {
@@ -198,7 +198,7 @@ void WaylandPopup::HandlePopupConfigure(const gfx::Rect& bounds_dip) {
 
 void WaylandPopup::HandleSurfaceConfigure(uint32_t serial) {
   if (schedule_redraw_) {
-    delegate()->OnDamageRect(gfx::Rect{{0, 0}, size_px()});
+    delegate()->OnDamageRect(gfx::Rect{size_px()});
     schedule_redraw_ = false;
   }
   ProcessPendingBoundsDip(serial);
@@ -224,7 +224,7 @@ void WaylandPopup::ApplyPendingBounds() {
 void WaylandPopup::UpdateWindowMask() {
   // Popup doesn't have a shape. Update the opaqueness.
   std::vector<gfx::Rect> region{gfx::Rect{visual_size_px()}};
-  root_surface()->SetOpaqueRegion(IsOpaqueWindow() ? &region : nullptr);
+  root_surface()->set_opaque_region(IsOpaqueWindow() ? &region : nullptr);
 }
 
 void WaylandPopup::OnCloseRequest() {
@@ -252,14 +252,9 @@ bool WaylandPopup::IsSurfaceConfigured() {
 
 void WaylandPopup::SetWindowGeometry(gfx::Rect bounds_dip) {
   DCHECK(shell_popup_);
-  gfx::Point p;
-  // TODO(crbug.com/1306688): Use DIP for frame_sets.
-  if (frame_insets_px() && !frame_insets_px()->IsEmpty()) {
-    p = gfx::ScaleToRoundedPoint(
-        {frame_insets_px()->left(), frame_insets_px()->top()},
-        1.f / window_scale());
-  }
-  shell_popup_->SetWindowGeometry({p, bounds_dip.size()});
+  const auto insets = GetDecorationInsetsInDIP();
+  shell_popup_->SetWindowGeometry(
+      {{insets.left(), insets.top()}, bounds_dip.size()});
 }
 
 void WaylandPopup::AckConfigure(uint32_t serial) {

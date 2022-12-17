@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -941,7 +941,7 @@ void NodeController::OnAddBrokerClient(const ports::NodeName& from_node,
   }
 
   if (GetPeerChannel(client_name)) {
-    DLOG(ERROR) << "Ignoring AddBrokerClient for known client.";
+    LOG(ERROR) << "Ignoring AddBrokerClient for known client.";
     DropPeer(from_node, nullptr);
     return;
   }

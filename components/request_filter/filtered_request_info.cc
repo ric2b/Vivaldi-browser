@@ -27,8 +27,8 @@ FilteredRequestInfo::FilteredRequestInfo(FilteredRequestInfo&&) = default;
 FilteredRequestInfo::~FilteredRequestInfo() = default;
 
 void FilteredRequestInfo::AddResponse(
-    const network::mojom::URLResponseHead& response) {
-  this->response = response.Clone();
+    const network::mojom::URLResponseHead& added_response) {
+  response = added_response.Clone();
 }
 
 }  // namespace vivaldi

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,27 @@ class IntegrityBlockParser : WebBundleParser::SharedBundleDataSource::Observer {
   ~IntegrityBlockParser() override;
 
   void Start();
+
+  // CBOR of the bytes present at the start of the Signed Web Bundle, including
+  // the magic string "🖋📦".
+  //
+  // The first 10 bytes of the integrity block format are:
+  //   83                             -- Array of length 3
+  //      48                          -- Byte string of length 8
+  //         F0 9F 96 8B F0 9F 93 A6  -- "🖋📦" in UTF-8
+  // Note: The length of the top level array is 3 (magic, version, signature
+  // stack).
+  static constexpr uint8_t kIntegrityBlockMagicBytes[] = {
+      0x83, 0x48,
+      // "🖋📦" magic bytes
+      0xF0, 0x9F, 0x96, 0x8B, 0xF0, 0x9F, 0x93, 0xA6};
+
+  // CBOR of the version string "1b\0\0".
+  //   44               -- Byte string of length 4
+  //       31 62 00 00  -- "1b\0\0"
+  static constexpr uint8_t kIntegrityBlockVersionMagicBytes[] = {
+      0x44, '1', 'b', 0x00, 0x00,
+  };
 
  private:
   void ParseMagicBytesAndVersion(

@@ -1,8 +1,8 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 
 import {util} from '../../common/js/util.js';
 import {VolumeInfo} from '../../externs/volume_info.js';
@@ -184,6 +184,9 @@ export class DirectoryTreeNamingController {
 
       this.currentDirectoryItem_.entry = newEntry;
       this.currentDirectoryItem_.updateSubDirectories(/* recursive= */ true);
+      if (window.IN_TEST) {
+        this.currentDirectoryItem_.setAttribute('entry-label', newName);
+      }
 
       // If renamed directory was current directory, change it to new one.
       if (renamingCurrentDirectory) {

@@ -11,6 +11,7 @@
 #include "base/json/json_writer.h"
 #include "base/vivaldi_switches.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
@@ -38,9 +39,9 @@ constexpr int kMaxTranslateResponse = 1024 * 1024;
 }  // namespace
 
 VivaldiTranslateServerRequest::VivaldiTranslateServerRequest(
-    base::WeakPtr<content::BrowserContext> context,
+    base::WeakPtr<Profile> profile,
     VivaldiTranslateTextCallback callback)
-    : context_(std::move(context)), callback_(std::move(callback)) {}
+    : profile_(std::move(profile)), callback_(std::move(callback)) {}
 
 VivaldiTranslateServerRequest::VivaldiTranslateServerRequest() {}
 
@@ -105,7 +106,7 @@ void VivaldiTranslateServerRequest::StartRequest(
         }
       })");
 
-  auto url_loader_factory = context_->GetDefaultStoragePartition()
+  auto url_loader_factory = profile_->GetDefaultStoragePartition()
                                 ->GetURLLoaderFactoryForBrowserProcess();
 
   url_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),

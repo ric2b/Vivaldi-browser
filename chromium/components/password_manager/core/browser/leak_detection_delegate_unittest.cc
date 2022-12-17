@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,7 +88,7 @@ class MockLeakDetectionCheck : public LeakDetectionCheck {
 class LeakDetectionDelegateTest : public testing::Test {
  public:
   explicit LeakDetectionDelegateTest(
-      const std::vector<base::Feature>& enabled_features) {
+      const std::vector<base::test::FeatureRef>& enabled_features) {
     features_.InitWithFeatures(enabled_features, {});
 
     auto mock_factory =
@@ -105,7 +105,7 @@ class LeakDetectionDelegateTest : public testing::Test {
   }
 
   LeakDetectionDelegateTest()
-      : LeakDetectionDelegateTest(std::vector<base::Feature>()) {}
+      : LeakDetectionDelegateTest(std::vector<base::test::FeatureRef>()) {}
 
   ~LeakDetectionDelegateTest() override = default;
 
@@ -142,19 +142,20 @@ class LeakDetectionDelegateTest : public testing::Test {
 
   void ExpectPasswords(std::vector<PasswordForm> password_forms) {
     EXPECT_CALL(*mock_store_, GetAutofillableLogins)
-        .WillOnce(testing::WithArg<0>(
-            [password_forms](base::WeakPtr<PasswordStoreConsumer> consumer) {
-              std::vector<std::unique_ptr<PasswordForm>> results;
-              for (auto& form : password_forms) {
-                results.push_back(
-                    std::make_unique<PasswordForm>(std::move(form)));
-              }
-              base::ThreadTaskRunnerHandle::Get()->PostTask(
-                  FROM_HERE,
-                  base::BindOnce(
-                      &PasswordStoreConsumer::OnGetPasswordStoreResults,
-                      consumer, std::move(results)));
-            }));
+        .WillOnce(testing::WithArg<0>([password_forms,
+                                       store = mock_store_.get()](
+                                          base::WeakPtr<PasswordStoreConsumer>
+                                              consumer) {
+          std::vector<std::unique_ptr<PasswordForm>> results;
+          for (auto& form : password_forms) {
+            results.push_back(std::make_unique<PasswordForm>(std::move(form)));
+          }
+          base::ThreadTaskRunnerHandle::Get()->PostTask(
+              FROM_HERE,
+              base::BindOnce(
+                  &PasswordStoreConsumer::OnGetPasswordStoreResultsOrErrorFrom,
+                  consumer, base::Unretained(store), std::move(results)));
+        }));
   }
 
  private:

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,6 +50,7 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ApplicationStatus;
 import org.chromium.base.CallbackController;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.OneshotSupplier;
@@ -69,6 +70,7 @@ import org.chromium.chrome.browser.incognito.IncognitoDataTestUtils;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthSettingUtils;
+import org.chromium.chrome.browser.lifecycle.StartStopWithNativeObserver;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuItemProperties;
@@ -584,8 +586,13 @@ public class CustomTabActivityIncognitoTest {
                             .get();
 
             // Fake Chrome going background and coming back to foreground.
-            incognitoReauthController.onStopWithNative();
-            incognitoReauthController.onStartWithNative();
+            ApplicationStatus.TaskVisibilityListener visibilityListener =
+                    (ApplicationStatus.TaskVisibilityListener) incognitoReauthController;
+            visibilityListener.onTaskVisibilityChanged(customTabActivity.getTaskId(), false);
+
+            StartStopWithNativeObserver observer =
+                    (StartStopWithNativeObserver) incognitoReauthController;
+            observer.onStartWithNative();
 
             assertTrue("Re-auth screen should be shown.",
                     incognitoReauthController.isReauthPageShowing());

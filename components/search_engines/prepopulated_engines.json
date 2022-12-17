@@ -683,7 +683,7 @@
     },
 
     "yandex_tr": {
-      "name": "\u042f\u043d\u0434\u0435\u043a\u0441",
+      "name": "Yandex",
       "keyword": "y",
       "favicon_url": "https://yastatic.net/s3/web4static/_/v2/v9YNE_BX0evwMHbDyd0NZv8ReK0.png",
       "search_url": "https://yandex.com.tr/{yandex:searchPath}?text={searchTerms}",
@@ -830,6 +830,15 @@
       "search_url": "https://www.yelp.com/search?find_desc={searchTerms}&utm_source=Vivaldi&utm_medium=Partner&utm_campaign=vivaldi_search_widget&utm_content=speeddial",
       "type": "VIVALDI_SEARCH_ENGINE_YELP",
       "id": 16
+    },
+
+    "you": {
+      "name": "You",
+      "keyword": "u",
+      "favicon_url": "https://you.com/favicon/favicon-32x32.png",
+      "search_url": "https://you.com/search?q={searchTerms}&utm_source=vivaldi_browser",
+      "type": "VIVALDI_SEARCH_ENGINE_YOU",
+      "id": 17
     },
 
     // Unit tests rely on the google, bing and yahoo template urls to be a

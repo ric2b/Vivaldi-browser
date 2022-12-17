@@ -1,24 +1,10 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I2f30593ff98abc1b598b949152fa983b3117c08b",
+  "upstream_commit_id": "Ib7b22d6b6117fb8db372f1a5e39132cc4033d27b",
 }
 
 hooks = [
-  # Download and initialize "vpython" VirtualEnv environment packages for
-  # Python2. We do this before running any other hooks so that any other
-  # hooks that might use vpython don't trip over unexpected issues and
-  # don't run slower than they might otherwise need to.
-  {
-    'name': 'vpython_common',
-    'pattern': '.',
-    # TODO(https://crbug.com/1205263): Run this on mac/arm too once it works.
-    'condition': 'not (host_os == "mac" and host_cpu == "arm64")',
-    'action': [ 'vpython',
-                '-vpython-spec', 'chromium/.vpython',
-                '-vpython-tool', 'install',
-    ],
-  },
   # Download and initialize "vpython" VirtualEnv environment packages for
   # Python3. We do this before running any other hooks so that any other
   # hooks that might use vpython don't trip over unexpected issues and
@@ -469,7 +455,7 @@ hooks = [
   {
     'name': 'Fetch PGO profiles for mac arm',
     'pattern': '.',
-    'condition': 'checkout_pgo_profiles and checkout_mac',
+    'condition': 'checkout_pgo_profiles and (checkout_mac or checkout_android)',
     'action': [ 'python3',
                 'chromium/tools/update_pgo_profiles.py',
                 '--target=mac-arm',
@@ -489,16 +475,6 @@ hooks = [
     ],
   },
   {
-    # Clean up build dirs for crbug.com/1337238.
-    # After a libc++ roll and revert, .ninja_deps would get into a state
-    # that breaks Ninja on Windows.
-    # TODO(crbug.com/1337238): Remove in a month or so.
-    'name': 'del_ninja_deps_cache',
-    'pattern': '.',
-    'condition': 'host_os == "win"',
-    'action': ['python3', 'chromium/build/del_ninja_deps_cache.py'],
-  },
- {
     'name': 'bootstrap-gn',
     'pattern': '.',
     'action': [

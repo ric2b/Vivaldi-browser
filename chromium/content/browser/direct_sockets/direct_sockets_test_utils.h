@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,8 +43,8 @@ class MockHostResolver : public network::mojom::HostResolver {
   MockHostResolver(const MockHostResolver&) = delete;
   MockHostResolver& operator=(const MockHostResolver&) = delete;
 
-  void ResolveHost(const ::net::HostPortPair& host,
-                   const ::net::NetworkIsolationKey& network_isolation_key,
+  void ResolveHost(network::mojom::HostResolverHostPtr host,
+                   const ::net::NetworkAnonymizationKey& network_isolation_key,
                    network::mojom::ResolveHostParametersPtr optional_parameters,
                    ::mojo::PendingRemote<network::mojom::ResolveHostClient>
                        pending_response_client) override;
@@ -199,9 +199,9 @@ class IsolatedAppContentBrowserClient : public ContentBrowserClient {
   bool ShouldUrlUseApplicationIsolationLevel(BrowserContext* browser_context,
                                              const GURL& url) override;
 
-  blink::ParsedPermissionsPolicy GetPermissionsPolicyForIsolatedApp(
-      content::BrowserContext* browser_context,
-      const url::Origin& app_origin) override;
+  absl::optional<blink::ParsedPermissionsPolicy>
+  GetPermissionsPolicyForIsolatedApp(content::BrowserContext* browser_context,
+                                     const url::Origin& app_origin) override;
 };
 
 }  // namespace content::test

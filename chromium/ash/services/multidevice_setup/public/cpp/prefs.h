@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,15 @@ class PrefService;
 namespace ash {
 
 namespace multidevice_setup {
+
+enum class EcheSupportReceivedFromPhoneHub {
+  // Phone has not specified nor returned a value. Most likely due to the phone
+  // running an old version that does not supply the value.
+  kNotSpecified = 0,
+
+  kNotSupported = 1,
+  kSupported = 2
+};
 
 // Preferences which represent whether features are allowed by user policy. A
 // "false" value means that the administrator has prohibited the feature and
@@ -40,6 +49,11 @@ extern const char kPhoneHubCameraRollEnabledPrefName[];
 extern const char kPhoneHubNotificationsEnabledPrefName[];
 extern const char kPhoneHubTaskContinuationEnabledPrefName[];
 extern const char kEcheEnabledPrefName[];
+
+// Persists the Eche feature support last received from Phone Hub. Note that
+// in contrast to server-provided values, this is received over an active
+// secure connection, and is therefore more accurate.
+extern const char kEcheOverriddenSupportReceivedFromPhoneHubPrefName[];
 
 // The old pref which controlled if Smart Lock was enabled, prior to the
 // introduction of MultiDeviceSetupService. It will be removed once old Smart

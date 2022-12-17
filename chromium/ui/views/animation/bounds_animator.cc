@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -274,10 +274,9 @@ void BoundsAnimator::AnimationEndedOrCanceled(const gfx::Animation* animation,
       // where the animation stopped. See comment in AnimateViewTo() for details
       // as to why GetMirroredRect() is used.
       const gfx::Transform transform = view->GetTransform();
-      gfx::RectF bounds_f(parent_->GetMirroredRect(view->bounds()));
-      transform.TransformRect(&bounds_f);
-      view->SetBoundsRect(
-          parent_->GetMirroredRect(gfx::ToRoundedRect(bounds_f)));
+      gfx::Rect bounds = parent_->GetMirroredRect(view->bounds());
+      bounds = gfx::ToRoundedRect(transform.MapRect(gfx::RectF(bounds)));
+      view->SetBoundsRect(parent_->GetMirroredRect(bounds));
     }
     view->SetTransform(gfx::Transform());
   }

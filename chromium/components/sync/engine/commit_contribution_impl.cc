@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -250,8 +250,9 @@ void CommitContributionImpl::PopulateCommitProto(
     if (type == NOTES) {
       // Populate SyncEntity.folder for backward-compatibility.
       switch (entity_data.specifics.notes().special_node_type()) {
-        case sync_pb::NotesSpecifics::NORMAL:
+        case sync_pb::NotesSpecifics::ATTACHMENT:
         case sync_pb::NotesSpecifics::SEPARATOR:
+        case sync_pb::NotesSpecifics::NORMAL:
           commit_proto->set_folder(false);
           break;
         case sync_pb::NotesSpecifics::FOLDER:
@@ -310,8 +311,7 @@ void CommitContributionImpl::AdjustCommitProto(
         password_data,
         encrypted_password.mutable_password()->mutable_encrypted());
     DCHECK(result);
-    if (base::FeatureList::IsEnabled(
-            syncer::kReadWritePasswordNotesBackupField)) {
+    if (base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)) {
       // `encrypted_notes_backup` field needs to be populated regardless of
       // whether or not there are any notes.
       result = cryptographer_->Encrypt(password_data.notes(),

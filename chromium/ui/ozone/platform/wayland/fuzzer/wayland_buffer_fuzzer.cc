@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,7 +53,7 @@ class MockPlatformWindowDelegate : public ui::PlatformWindowDelegate {
   MockPlatformWindowDelegate& operator=(const MockPlatformWindowDelegate&) =
       delete;
 
-  ~MockPlatformWindowDelegate() = default;
+  ~MockPlatformWindowDelegate() override = default;
 
   MOCK_METHOD1(OnBoundsChanged, void(const BoundsChange& change));
   MOCK_METHOD1(OnDamageRect, void(const gfx::Rect& damaged_region));

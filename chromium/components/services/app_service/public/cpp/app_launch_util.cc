@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,6 +75,8 @@ LaunchSource ConvertMojomLaunchSourceToLaunchSource(
       return LaunchSource::kFromProtocolHandler;
     case apps::mojom::LaunchSource::kFromUrlHandler:
       return LaunchSource::kFromUrlHandler;
+    case apps::mojom::LaunchSource::kFromLockScreen:
+      return LaunchSource::kFromLockScreen;
   }
 }
 
@@ -145,6 +147,8 @@ apps::mojom::LaunchSource ConvertLaunchSourceToMojomLaunchSource(
       return apps::mojom::LaunchSource::kFromProtocolHandler;
     case LaunchSource::kFromUrlHandler:
       return apps::mojom::LaunchSource::kFromUrlHandler;
+    case LaunchSource::kFromLockScreen:
+      return apps::mojom::LaunchSource::kFromLockScreen;
   }
 }
 

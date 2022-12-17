@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,6 +61,7 @@ import org.chromium.chrome.browser.feed.webfeed.WebFeedBridge;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedBridge.FollowResults;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedBridge.UnfollowResults;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedBridgeJni;
+import org.chromium.chrome.browser.feed.webfeed.WebFeedRecommendationFollowAcceleratorController;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSubscriptionRequestStatus;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -71,16 +72,20 @@ import org.chromium.chrome.browser.xsurface.FeedActionsHandler;
 import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler;
+import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.OpenMode;
+import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.OpenUrlOptions;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.WebFeedFollowUpdate;
 import org.chromium.chrome.browser.xsurface.SurfaceScope;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.feed.proto.FeedUiProto;
 import org.chromium.components.feed.proto.wire.ReliabilityLoggingEnums.DiscoverLaunchResult;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.JUnitTestGURLs;
 import org.chromium.url.ShadowGURL;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -145,6 +150,8 @@ public class FeedStreamTest {
     @Captor
     private ArgumentCaptor<Map<String, String>> mMapCaptor;
     @Captor
+    private ArgumentCaptor<LoadUrlParams> mLoadUrlParamsCaptor;
+    @Captor
     private ArgumentCaptor<Callback<FollowResults>> mFollowResultsCallbackCaptor;
     @Captor
     private ArgumentCaptor<Callback<UnfollowResults>> mUnfollowResultsCallbackCaptor;
@@ -152,6 +159,8 @@ public class FeedStreamTest {
     private WebFeedFollowUpdate.Callback mWebFeedFollowUpdateCallback;
     @Mock
     private FeedContentFirstLoadWatcher mFeedContentFirstLoadWatcher;
+    @Mock
+    private Stream.StreamsMediator mStreamsMediator;
 
     @Rule
     public JniMocker mocker = new JniMocker();
@@ -164,6 +173,7 @@ public class FeedStreamTest {
         Map<String, Boolean> overrides = new ArrayMap<>();
         overrides.put(ChromeFeatureList.FEED_LOADING_PLACEHOLDER, feedLoadingPlaceholderOn);
         overrides.put(ChromeFeatureList.WEB_FEED_ONBOARDING, onboardingOn);
+        overrides.put(ChromeFeatureList.FEED_CLIENT_GOOD_VISITS, true);
         FeatureList.setTestFeatures(overrides);
     }
 
@@ -187,13 +197,14 @@ public class FeedStreamTest {
                 /* isPlaceholderShown= */ false, mWindowAndroid, mShareDelegateSupplier,
                 /* isInterestFeed= */ StreamKind.FOR_YOU,
                 /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
-                /*helpAndFeedbackLauncher=*/null, mFeedContentFirstLoadWatcher);
+                /*helpAndFeedbackLauncher=*/null, mFeedContentFirstLoadWatcher, mStreamsMediator);
         mFeedStream.mMakeGURL = url -> JUnitTestGURLs.getGURL(url);
         mRecyclerView = new RecyclerView(mActivity);
         mRecyclerView.setAdapter(mAdapter);
         mContentManager = new NtpListContentManager();
         mLayoutManager = new FakeLinearLayoutManager(mActivity);
         mRecyclerView.setLayoutManager(mLayoutManager);
+        when(mRenderer.getListLayoutHelper()).thenReturn(mLayoutManager);
 
         setFeatureOverrides(/*feedLoadingPlaceholderOn=*/true, /*onboardingOn=*/false);
 
@@ -471,13 +482,80 @@ public class FeedStreamTest {
 
     @Test
     @SmallTest
+    public void testOpenUrlSameTab() {
+        bindToView();
+        FeedStream.FeedSurfaceActionsHandler handler =
+                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
+                        SurfaceActionsHandler.KEY);
+        handler.openUrl(OpenMode.SAME_TAB, TEST_URL, new OpenUrlOptions() {});
+        verify(mActionDelegate)
+                .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.CURRENT_TAB),
+                        any(), eq(false), any(), any());
+    }
+
+    @Test
+    @SmallTest
+    public void testOpenUrlWithWebFeedRecommendation() {
+        bindToView();
+        FeedStream.FeedSurfaceActionsHandler handler =
+                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
+                        SurfaceActionsHandler.KEY);
+        handler.openUrl(OpenMode.SAME_TAB, TEST_URL, new OpenUrlOptions() {
+            @Override
+            public boolean shouldShowWebFeedAccelerator() {
+                return true;
+            }
+            @Override
+            public String webFeedName() {
+                return "someWebFeedName";
+            }
+        });
+        verify(mActionDelegate)
+                .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.CURRENT_TAB),
+                        mLoadUrlParamsCaptor.capture(), eq(false), any(), any());
+
+        assertEquals("someWebFeedName",
+                new String(
+                        WebFeedRecommendationFollowAcceleratorController
+                                .getWebFeedNameIfInLoadUrlParams(mLoadUrlParamsCaptor.getValue()),
+                        StandardCharsets.UTF_8));
+    }
+
+    @Test
+    @SmallTest
+    public void testOpenUrlNotShouldShowWebFeedAccelerator() {
+        bindToView();
+        FeedStream.FeedSurfaceActionsHandler handler =
+                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
+                        SurfaceActionsHandler.KEY);
+        handler.openUrl(OpenMode.SAME_TAB, TEST_URL, new OpenUrlOptions() {
+            @Override
+            public boolean shouldShowWebFeedAccelerator() {
+                return false;
+            }
+            @Override
+            public String webFeedName() {
+                return "someWebFeedName";
+            }
+        });
+        verify(mActionDelegate)
+                .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.CURRENT_TAB),
+                        mLoadUrlParamsCaptor.capture(), eq(false), any(), any());
+
+        assertEquals(null,
+                WebFeedRecommendationFollowAcceleratorController.getWebFeedNameIfInLoadUrlParams(
+                        mLoadUrlParamsCaptor.getValue()));
+    }
+
+    @Test
+    @SmallTest
     public void testLogLaunchFinishedOnOpenSuggestionUrl() {
         when(mLaunchReliabilityLogger.isLaunchInProgress()).thenReturn(true);
         bindToView();
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
-        handler.navigateTab(TEST_URL, null);
+        handler.openUrl(OpenMode.SAME_TAB, TEST_URL, new OpenUrlOptions() {});
         verify(mLaunchReliabilityLogger)
                 .logLaunchFinished(anyLong(), eq(DiscoverLaunchResult.CARD_TAPPED.getNumber()));
     }
@@ -490,7 +568,22 @@ public class FeedStreamTest {
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
-        handler.navigateNewTab(TEST_URL, null);
+        handler.openUrl(OpenMode.NEW_TAB, TEST_URL, new OpenUrlOptions() {});
+
+        // Don't log "launch finished" if the card was opened in a new tab in the background.
+        verify(mLaunchReliabilityLogger, never())
+                .logLaunchFinished(anyLong(), eq(DiscoverLaunchResult.CARD_TAPPED.getNumber()));
+    }
+
+    @Test
+    @SmallTest
+    public void testLogLaunchFinishedOnOpenUrlNewTab() {
+        when(mLaunchReliabilityLogger.isLaunchInProgress()).thenReturn(true);
+        bindToView();
+        FeedStream.FeedSurfaceActionsHandler handler =
+                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
+                        SurfaceActionsHandler.KEY);
+        handler.openUrl(OpenMode.NEW_TAB, TEST_URL, new OpenUrlOptions() {});
         // Don't log "launch finished" if the card was opened in a new tab in the background.
         verify(mLaunchReliabilityLogger, never())
                 .logLaunchFinished(anyLong(), eq(DiscoverLaunchResult.CARD_TAPPED.getNumber()));
@@ -526,6 +619,21 @@ public class FeedStreamTest {
 
     @Test
     @SmallTest
+    public void testOpenUrlInNewTab() {
+        bindToView();
+        FeedStream.FeedSurfaceActionsHandler handler =
+                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
+                        SurfaceActionsHandler.KEY);
+
+        handler.openUrl(OpenMode.NEW_TAB, TEST_URL, new OpenUrlOptions() {});
+        verify(mActionDelegate)
+                .openSuggestionUrl(
+                        eq(org.chromium.ui.mojom.WindowOpenDisposition.NEW_BACKGROUND_TAB), any(),
+                        eq(false), any(), any());
+    }
+
+    @Test
+    @SmallTest
     public void testNavigateNewTabInGroup() {
         bindToView();
         FeedStream.FeedSurfaceActionsHandler handler =
@@ -541,12 +649,40 @@ public class FeedStreamTest {
 
     @Test
     @SmallTest
+    public void testOpenUrlNewTabInGroup() {
+        bindToView();
+        FeedStream.FeedSurfaceActionsHandler handler =
+                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
+                        SurfaceActionsHandler.KEY);
+
+        handler.openUrl(OpenMode.NEW_TAB_IN_GROUP, TEST_URL, new OpenUrlOptions() {});
+        verify(mActionDelegate)
+                .openSuggestionUrl(
+                        eq(org.chromium.ui.mojom.WindowOpenDisposition.NEW_BACKGROUND_TAB), any(),
+                        eq(true), any(), any());
+    }
+
+    @Test
+    @SmallTest
     public void testNavigateIncognitoTab() {
         bindToView();
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
         handler.navigateIncognitoTab(TEST_URL);
+        verify(mActionDelegate)
+                .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.OFF_THE_RECORD),
+                        any(), eq(false), any(), any());
+    }
+
+    @Test
+    @SmallTest
+    public void testOpenUrlIncognitoTab() {
+        bindToView();
+        FeedStream.FeedSurfaceActionsHandler handler =
+                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
+                        SurfaceActionsHandler.KEY);
+        handler.openUrl(OpenMode.INCOGNITO_TAB, TEST_URL, new OpenUrlOptions() {});
         verify(mActionDelegate)
                 .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.OFF_THE_RECORD),
                         any(), eq(false), any(), any());
@@ -935,7 +1071,7 @@ public class FeedStreamTest {
                 /* isInterestFeed= */ StreamKind.FOLLOWING,
                 /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
-                /*FeedContentFirstLoadWatcher=*/null);
+                /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null);
         mFeedStream = stream;
         createHeaderContent(1);
         bindToView();
@@ -956,7 +1092,7 @@ public class FeedStreamTest {
                 /* isInterestFeed= */ StreamKind.FOR_YOU,
                 /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
-                /*FeedContentFirstLoadWatcher=*/null);
+                /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null);
         assertNull(stream.getUnreadContentObserverForTest());
     }
 
@@ -971,7 +1107,7 @@ public class FeedStreamTest {
                 /* isInterestFeed= */ StreamKind.FOLLOWING,
                 /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
-                /*FeedContentFirstLoadWatcher=*/null);
+                /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null);
         assertNotNull(stream.getUnreadContentObserverForTest());
         FeatureList.setTestFeatures(null);
     }
@@ -987,7 +1123,7 @@ public class FeedStreamTest {
                 StreamKind.FOLLOWING,
                 /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
-                /*FeedContentFirstLoadWatcher=*/null);
+                /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null);
         assertNotNull(stream.getUnreadContentObserverForTest());
         FeatureList.setTestFeatures(null);
     }
@@ -1003,7 +1139,7 @@ public class FeedStreamTest {
                 StreamKind.FOR_YOU,
                 /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
-                /*FeedContentFirstLoadWatcher=*/null);
+                /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null);
         assertFalse(stream.supportsOptions());
     }
 
@@ -1018,7 +1154,7 @@ public class FeedStreamTest {
                 StreamKind.FOR_YOU,
                 /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
-                /*FeedContentFirstLoadWatcher=*/null);
+                /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null);
         assertFalse(stream.supportsOptions());
     }
 
@@ -1033,7 +1169,7 @@ public class FeedStreamTest {
                 StreamKind.FOLLOWING,
                 /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
-                /*FeedContentFirstLoadWatcher=*/null);
+                /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null);
         assertFalse(stream.supportsOptions());
     }
 
@@ -1048,7 +1184,7 @@ public class FeedStreamTest {
                 StreamKind.FOLLOWING,
                 /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
-                /*FeedContentFirstLoadWatcher=*/null);
+                /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null);
         assertTrue(stream.supportsOptions());
     }
 

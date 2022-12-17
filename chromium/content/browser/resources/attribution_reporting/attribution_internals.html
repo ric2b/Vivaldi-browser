@@ -1,6 +1,8 @@
-<!-- Copyright 2020 The Chromium Authors. All rights reserved.
-   Use of this source code is governed by a BSD-style license that can be
-   found in the LICENSE file.-->
+<!--
+Copyright 2020 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 <!doctype html>
 <html dir="ltr" lang="en">
 <head>
@@ -26,6 +28,7 @@
     <div id="triggers-tab" slot="tab">Triggers</div>
     <div id="event-level-reports-tab" slot="tab">Event-Level Reports</div>
     <div id="aggregatable-reports-tab" slot="tab">Aggregatable Reports</div>
+    <div id="logs-tab" slot="tab">Logs</div>
     <div slot="panel">
       <h2>Sources</h2>
       <div class="content">
@@ -59,6 +62,13 @@
           <label id="show-debug-aggregatable-reports"><input type="checkbox" checked>Show Debug Reports<span></span></label>
         </div>
         <attribution-internals-table id="aggregatableReportTable">
+        </attribution-internals-table>
+      </div>
+    </div>
+    <div slot="panel">
+      <h2>Logs</h2>
+      <div class="content">
+        <attribution-internals-table id="logTable">
         </attribution-internals-table>
       </div>
     </div>

@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 
 namespace ash {
 
@@ -21,6 +22,9 @@ const uint32_t kOutputMaxSupportedChannels = 2;
 
 const uint32_t kInputAudioEffect = 1;
 const uint32_t kOutputAudioEffect = 0;
+
+const int32_t kInputNumberOfVolumeSteps = 0;
+const int32_t kOutputNumberOfVolumeSteps = 25;
 
 FakeCrasAudioClient::FakeCrasAudioClient() {
   CHECK(!g_instance);
@@ -38,6 +42,7 @@ FakeCrasAudioClient::FakeCrasAudioClient() {
   output_1.device_name = "Fake Speaker";
   output_1.type = "INTERNAL_SPEAKER";
   output_1.name = "Speaker";
+  output_1.number_of_volume_steps = kOutputNumberOfVolumeSteps;
   node_list_.push_back(output_1);
 
   AudioNode output_2;
@@ -49,6 +54,7 @@ FakeCrasAudioClient::FakeCrasAudioClient() {
   output_2.device_name = "Fake Headphone";
   output_2.type = "HEADPHONE";
   output_2.name = "Headphone";
+  output_2.number_of_volume_steps = kOutputNumberOfVolumeSteps;
   node_list_.push_back(output_2);
 
   AudioNode output_3;
@@ -60,6 +66,7 @@ FakeCrasAudioClient::FakeCrasAudioClient() {
   output_3.device_name = "Fake Bluetooth Headphone";
   output_3.type = "BLUETOOTH";
   output_3.name = "Headphone";
+  output_3.number_of_volume_steps = kOutputNumberOfVolumeSteps;
   node_list_.push_back(output_3);
 
   AudioNode output_4;
@@ -71,6 +78,7 @@ FakeCrasAudioClient::FakeCrasAudioClient() {
   output_4.device_name = "Fake HDMI Speaker";
   output_4.type = "HDMI";
   output_4.name = "HDMI Speaker";
+  output_4.number_of_volume_steps = kOutputNumberOfVolumeSteps;
   node_list_.push_back(output_4);
 
   // Fake audio input nodes
@@ -83,6 +91,7 @@ FakeCrasAudioClient::FakeCrasAudioClient() {
   input_1.device_name = "Fake Internal Mic";
   input_1.type = "INTERNAL_MIC";
   input_1.name = "Internal Mic";
+  input_1.number_of_volume_steps = kInputNumberOfVolumeSteps;
   node_list_.push_back(input_1);
 
   AudioNode input_2;
@@ -94,6 +103,7 @@ FakeCrasAudioClient::FakeCrasAudioClient() {
   input_2.device_name = "Fake USB Mic";
   input_2.type = "USB";
   input_2.name = "Mic";
+  input_2.number_of_volume_steps = kInputNumberOfVolumeSteps;
   node_list_.push_back(input_2);
 
   AudioNode input_3;
@@ -105,6 +115,7 @@ FakeCrasAudioClient::FakeCrasAudioClient() {
   input_3.device_name = "Fake Mic Jack";
   input_3.type = "MIC";
   input_3.name = "Some type of Mic";
+  input_3.number_of_volume_steps = kInputNumberOfVolumeSteps;
   node_list_.push_back(input_3);
 }
 
@@ -251,9 +262,10 @@ void FakeCrasAudioClient::SetActiveInputNode(uint64_t node_id) {
     observer.ActiveInputNodeChanged(node_id);
 }
 
-void FakeCrasAudioClient::SetHotwordModel(uint64_t node_id,
-                                          const std::string& hotword_model,
-                                          VoidDBusMethodCallback callback) {}
+void FakeCrasAudioClient::SetHotwordModel(
+    uint64_t node_id,
+    const std::string& hotword_model,
+    chromeos::VoidDBusMethodCallback callback) {}
 
 void FakeCrasAudioClient::SetFixA2dpPacketSize(bool enabled) {}
 
@@ -308,7 +320,7 @@ void FakeCrasAudioClient::ResendBluetoothBattery() {
 }
 
 void FakeCrasAudioClient::WaitForServiceToBeAvailable(
-    WaitForServiceToBeAvailableCallback callback) {
+    chromeos::WaitForServiceToBeAvailableCallback callback) {
   std::move(callback).Run(true);
 }
 
@@ -375,9 +387,7 @@ void FakeCrasAudioClient::SetActiveInputStreamsWithPermission(
 }
 
 AudioNodeList::iterator FakeCrasAudioClient::FindNode(uint64_t node_id) {
-  return std::find_if(
-      node_list_.begin(), node_list_.end(),
-      [node_id](const AudioNode& node) { return node_id == node.id; });
+  return base::ranges::find(node_list_, node_id, &AudioNode::id);
 }
 
 }  // namespace ash

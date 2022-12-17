@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -441,11 +441,11 @@ void ExtensionsMenuView::OnToolbarActionAdded(
 
 void ExtensionsMenuView::OnToolbarActionRemoved(
     const ToolbarActionsModel::ActionId& action_id) {
-  auto iter = base::ranges::find_if(
-      extensions_menu_items_,
-      [action_id](const InstalledExtensionMenuItemView* item) {
-        return item->view_controller()->GetId() == action_id;
-      });
+  auto iter =
+      base::ranges::find(extensions_menu_items_, action_id,
+                         [](const InstalledExtensionMenuItemView* item) {
+                           return item->view_controller()->GetId();
+                         });
   DCHECK(iter != extensions_menu_items_.end());
   InstalledExtensionMenuItemView* const view = *iter;
   DCHECK(Contains(view));

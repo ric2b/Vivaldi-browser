@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/commands/externally_managed_install_command.h"
@@ -173,6 +174,9 @@ IN_PROC_BROWSER_TEST_F(ExternallyManagedInstallCommandBrowserTest,
 
           std::make_unique<WebAppDataRetriever>()));
 
+  // Create a new tab to ensure that the browser isn't destroyed with the web
+  // contents closing.
+  chrome::NewTab(browser());
   web_contents->Close();
   run_loop.Run();
 }
@@ -208,4 +212,4 @@ IN_PROC_BROWSER_TEST_F(ExternallyManagedInstallCommandBrowserTest,
   run_loop.Run();
 }
 
-};  // namespace web_app
+}  // namespace web_app

@@ -1,10 +1,9 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/services/multidevice_setup/multidevice_setup_service.h"
 
-#include "ash/components/multidevice/logging/logging.h"
 #include "ash/services/multidevice_setup/account_status_change_delegate_notifier_impl.h"
 #include "ash/services/multidevice_setup/android_sms_app_installing_status_observer.h"
 #include "ash/services/multidevice_setup/global_state_feature_manager_impl.h"
@@ -20,6 +19,7 @@
 #include "ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "ash/services/multidevice_setup/wifi_sync_notification_controller.h"
 #include "base/bind.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
 
 namespace ash {
 

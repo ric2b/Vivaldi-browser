@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -112,7 +112,7 @@ base::Value Mapper::MapArray(const OncValueSignature& array_signature,
 
   base::Value result_array(base::Value::Type::LIST);
   int original_index = 0;
-  for (const auto& entry : onc_array.GetListDeprecated()) {
+  for (const auto& entry : onc_array.GetList()) {
     base::Value result_entry =
         MapEntry(original_index, *array_signature.onc_array_entry_signature,
                  entry, nested_error);

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ AudioProcessorHandler::AudioProcessorHandler(
     DeliverProcessedAudioCallback deliver_processed_audio_callback,
     mojo::PendingReceiver<media::mojom::AudioProcessorControls>
         controls_receiver,
-    AecdumpRecordingManager* aecdump_recording_manager)
+    media::AecdumpRecordingManager* aecdump_recording_manager)
     : audio_processor_(media::AudioProcessor::Create(
           std::move(deliver_processed_audio_callback),
           std::move(log_callback),

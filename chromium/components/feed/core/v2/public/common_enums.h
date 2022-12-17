@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,8 @@ enum class FeedEngagementType {
   kFeedInteracted = 2,
   kDeprecatedFeedScrolled = 3,
   kFeedScrolled = 4,
-  kMaxValue = kFeedScrolled,
+  kGoodVisit = 5,
+  kMaxValue = kGoodVisit,
 };
 
 // Values for the UMA ContentSuggestions.Feed.UserActions
@@ -106,8 +107,8 @@ enum class FeedUserActionType {
   kTappedRefollowAfterUnfollowOnSnackbar = 35,
   // User tapped to unfollow using the snackbar 'try again' option.
   kTappedUnfollowTryAgainOnSnackbar = 36,
-  // After following an active web feed, the user tapped to go to feed using the
-  // post-follow help dialog.
+  // After following an active web feed, the user tapped to go to Following feed
+  // using the post-follow help dialog.
   kTappedGoToFeedPostFollowActiveHelp = 37,
   // After following an active web feed, the user tapped to dismiss the
   // post-follow help dialog.
@@ -164,7 +165,14 @@ enum class FeedUserActionType {
   kFollowingFeedSelectedGroupByPublisher = 59,
   // User selected the "Sort by Latest" Following feed sort type.
   kFollowingFeedSelectedSortByLatest = 60,
-  kMaxValue = kFollowingFeedSelectedSortByLatest,
+  // After following an active web feed, the user tapped on 'got it' to
+  // close the post-follow help dialog.
+  kTappedGotItFeedPostFollowActiveHelp = 61,
+  // User tapped the follow accelerator which is presented after a user taps
+  // on a recommendation that is in the feed.
+  kTappedFollowOnRecommendationFollowAccelerator = 62,
+
+  kMaxValue = kTappedFollowOnRecommendationFollowAccelerator,
 };
 
 // For testing and debugging only.
@@ -185,6 +193,22 @@ enum class ContentOrder : int {
   kReverseChron = 2,
 
   kMaxValue = kReverseChron,
+};
+
+// Values for the UMA
+// ContentSuggestions.Feed.WebFeed.SortType* histograms.
+// These values are persisted to logs. Entries should never be reused.
+// This must be kept in sync with FeedSortType in enums.xml
+// TODO(crbug.com/1372865): should merge with ContentOrder.
+enum class FeedSortType : int {
+  // Sort Type unspecified.
+  kUnspecifiedSortType = 0,
+  // Content is grouped by publisher.
+  kGroupedByPublisher = 1,
+  // Content is ungrouped, and arranged in reverse chronological order.
+  kSortedByLatest = 2,
+
+  kMaxValue = kSortedByLatest,
 };
 
 }  // namespace feed

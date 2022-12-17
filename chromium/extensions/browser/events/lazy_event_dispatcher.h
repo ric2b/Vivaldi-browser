@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,8 +69,6 @@ class LazyEventDispatcher {
                           const base::DictionaryValue* listener_filter);
 
   void RecordAlreadyDispatched(const LazyContextId& dispatch_context);
-
-  content::BrowserContext* GetIncognitoContext(const Extension* extension);
 
   const raw_ptr<content::BrowserContext> browser_context_;
   DispatchFunction dispatch_function_;

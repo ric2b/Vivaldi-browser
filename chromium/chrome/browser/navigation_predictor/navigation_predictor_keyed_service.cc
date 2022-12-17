@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,17 +27,16 @@ void WritePredictionToConsoleLog(
   if (!prediction.web_contents())
     return;
 
-  base::DictionaryValue message;
+  base::Value::Dict message;
 
-  base::ListValue url_list;
+  base::Value::List url_list;
   for (const GURL& url : prediction.sorted_predicted_urls()) {
     url_list.Append(url.spec());
   }
 
-  message.SetKey("predictions", std::move(url_list));
+  message.Set("predictions", std::move(url_list));
   if (prediction.source_document_url()) {
-    message.SetStringKey("source_url",
-                         prediction.source_document_url()->spec());
+    message.Set("source_url", prediction.source_document_url()->spec());
   }
 
   std::string json_body;

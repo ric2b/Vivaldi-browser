@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,7 @@ bool TextMatchesTileQueryText(const std::u16string& input_text,
   return trimmed_input == trimmed_tile_text;
 }
 
-// Helper function to determine if we are currently showing an URL and the
+// Helper function to determine if we are currently showing a URL and the
 // omnibox text matches this URL.
 bool TextMatchesPageURL(const AutocompleteInput& input) {
   const GURL fixed_url(url_formatter::FixupURL(base::UTF16ToUTF8(input.text()),

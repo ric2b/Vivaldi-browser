@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,7 +25,7 @@
 #include "net/base/auth.h"
 #include "net/base/features.h"
 #include "net/base/isolation_info.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/proxy_server.h"
 #include "net/base/proxy_string_util.h"
 #include "net/base/request_priority.h"
@@ -383,10 +383,14 @@ class URLRequestHttpJobWithMockSocketsTest : public TestWithTaskEnvironment {
     auto context_builder = CreateTestURLRequestContextBuilder();
     context_builder->set_client_socket_factory_for_testing(&socket_factory_);
     context_ = context_builder->Build();
+    scoped_feature_list_.InitAndEnableFeature(kDynamicExpectCTFeature);
   }
 
   MockClientSocketFactory socket_factory_;
   std::unique_ptr<URLRequestContext> context_;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(URLRequestHttpJobWithMockSocketsTest,
@@ -919,25 +923,25 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
       const X509Certificate* served_certificate_chain,
       const SignedCertificateTimestampAndStatusList&
           signed_certificate_timestamps,
-      const NetworkIsolationKey& network_isolation_key) override {
+      const NetworkAnonymizationKey& network_anonymization_key) override {
     num_failures_++;
-    network_isolation_key_ = network_isolation_key;
+    network_anonymization_key_ = network_anonymization_key;
   }
 
   int num_failures() const { return num_failures_; }
-  const NetworkIsolationKey& network_isolation_key() const {
-    return network_isolation_key_;
+  const NetworkAnonymizationKey& network_anonymization_key() const {
+    return network_anonymization_key_;
   }
 
  private:
   int num_failures_ = 0;
-  NetworkIsolationKey network_isolation_key_;
+  NetworkAnonymizationKey network_anonymization_key_;
 };
 
 }  // namespace
 
 TEST_F(URLRequestHttpJobWithMockSocketsTest,
-       TestHttpJobSendsNetworkIsolationKeyWhenProcessingExpectCTHeader) {
+       TestHttpJobSendsNetworkAnonymizationKeyWhenProcessingExpectCTHeader) {
   SSLSocketDataProvider ssl_socket_data(net::ASYNC, net::OK);
   ssl_socket_data.ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
@@ -974,8 +978,8 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   EXPECT_THAT(delegate.request_status(), IsOk());
 
   ASSERT_EQ(1, reporter.num_failures());
-  EXPECT_EQ(isolation_info.network_isolation_key(),
-            reporter.network_isolation_key());
+  EXPECT_EQ(isolation_info.network_anonymization_key(),
+            reporter.network_anonymization_key());
 }
 
 TEST_F(URLRequestHttpJobWithMockSocketsTest, EncodingAdvertisementOnRange) {
@@ -1596,8 +1600,7 @@ TEST_F(URLRequestHttpJobTest, CookieSchemeRequestSchemeHistogram) {
 
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->SetCookieStore(std::make_unique<CookieMonster>(
-      /*store=*/nullptr, /*net_log=*/nullptr,
-      /*first_party_sets_enabled=*/false));
+      /*store=*/nullptr, /*net_log=*/nullptr));
   auto context = context_builder->Build();
 
   auto* cookie_store = static_cast<CookieMonster*>(context->cookie_store());
@@ -1691,8 +1694,7 @@ TEST_F(URLRequestHttpJobTest, PrivacyMode_ExclusionReason) {
 
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->SetCookieStore(std::make_unique<CookieMonster>(
-      /*store=*/nullptr, /*net_log=*/nullptr,
-      /*first_party_sets_enabled=*/false));
+      /*store=*/nullptr, /*net_log=*/nullptr));
   auto& network_delegate = *context_builder->set_network_delegate(
       std::make_unique<FilteringTestNetworkDelegate>());
   auto context = context_builder->Build();
@@ -1763,8 +1765,7 @@ TEST_F(URLRequestHttpJobTest, IndividuallyBlockedCookies) {
   network_delegate->SetCookieFilter("blocked_");
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->SetCookieStore(std::make_unique<CookieMonster>(
-      /*store=*/nullptr, /*net_log=*/nullptr,
-      /*first_party_sets_enabled=*/false));
+      /*store=*/nullptr, /*net_log=*/nullptr));
   context_builder->set_network_delegate(std::move(network_delegate));
   auto context = context_builder->Build();
 
@@ -1811,6 +1812,74 @@ TEST_F(URLRequestHttpJobTest, IndividuallyBlockedCookies) {
               MatchesCookieAccessResult(IsInclude(), _, _, _))));
 }
 
+namespace {
+
+int content_count = 0;
+std::unique_ptr<test_server::HttpResponse> IncreaseOnRequest(
+    const test_server::HttpRequest& request) {
+  auto http_response = std::make_unique<test_server::BasicHttpResponse>();
+  http_response->set_content(base::NumberToString(content_count));
+  content_count++;
+  return std::move(http_response);
+}
+
+void ResetContentCount() {
+  content_count = 0;
+}
+
+}  // namespace
+
+TEST_F(URLRequestHttpJobTest, GetFirstPartySetsCacheFilterMatchInfo) {
+  EmbeddedTestServer https_test(EmbeddedTestServer::TYPE_HTTPS);
+  https_test.AddDefaultHandlers(base::FilePath());
+  https_test.RegisterRequestHandler(base::BindRepeating(&IncreaseOnRequest));
+  ASSERT_TRUE(https_test.Start());
+
+  auto context_builder = CreateTestURLRequestContextBuilder();
+  auto* network_delegate = context_builder->set_network_delegate(
+      std::make_unique<TestNetworkDelegate>());
+  auto context = context_builder->Build();
+
+  const GURL kTestUrl = https_test.GetURL("/");
+  {
+    TestDelegate delegate;
+    std::unique_ptr<URLRequest> req(context->CreateRequest(
+        kTestUrl, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
+    req->Start();
+    delegate.RunUntilComplete();
+    EXPECT_EQ("0", delegate.data_received());
+  }
+  {  // Test using the cached response.
+    TestDelegate delegate;
+    std::unique_ptr<URLRequest> req(context->CreateRequest(
+        kTestUrl, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
+    req->SetLoadFlags(LOAD_SKIP_CACHE_VALIDATION);
+    req->Start();
+    delegate.RunUntilComplete();
+    EXPECT_EQ("0", delegate.data_received());
+  }
+
+  // Set cache filter and test cache is bypassed because the request site has a
+  // matched entry in the filter and its response cache was stored before being
+  // marked to clear.
+  const int64_t kClearAtRunId = 3;
+  const int64_t kBrowserRunId = 3;
+  FirstPartySetsCacheFilter cache_filter(
+      {{SchemefulSite(kTestUrl), kClearAtRunId}}, kBrowserRunId);
+  network_delegate->set_fps_cache_filter(std::move(cache_filter));
+  {
+    TestDelegate delegate;
+    std::unique_ptr<URLRequest> req(context->CreateRequest(
+        kTestUrl, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
+    req->SetLoadFlags(LOAD_SKIP_CACHE_VALIDATION);
+    req->Start();
+    delegate.RunUntilComplete();
+    EXPECT_EQ("1", delegate.data_received());
+  }
+
+  ResetContentCount();
+}
+
 class PartitionedCookiesURLRequestHttpJobTest
     : public URLRequestHttpJobTest,
       public testing::WithParamInterface<bool> {
@@ -1839,8 +1908,7 @@ TEST_P(PartitionedCookiesURLRequestHttpJobTest, SetPartitionedCookie) {
 
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->SetCookieStore(std::make_unique<CookieMonster>(
-      /*store=*/nullptr, /*net_log=*/nullptr,
-      /*first_party_sets_enabled=*/false));
+      /*store=*/nullptr, /*net_log=*/nullptr));
   auto context = context_builder->Build();
 
   const url::Origin kTopFrameOrigin =
@@ -1922,8 +1990,7 @@ TEST_P(PartitionedCookiesURLRequestHttpJobTest,
 
   auto context_builder = CreateTestURLRequestContextBuilder();
   auto cookie_monster = std::make_unique<CookieMonster>(
-      /*store=*/nullptr, /*net_log=*/nullptr,
-      /*first_party_sets_enabled=*/false);
+      /*store=*/nullptr, /*net_log=*/nullptr);
   auto cookie_access_delegate = std::make_unique<TestCookieAccessDelegate>();
   cookie_access_delegate->SetFirstPartySets({
       {kOwnerSite, net::FirstPartySetEntry(kOwnerSite, net::SiteType::kPrimary,
@@ -2027,8 +2094,7 @@ TEST_P(PartitionedCookiesURLRequestHttpJobTest, PrivacyMode) {
 
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->SetCookieStore(
-      std::make_unique<CookieMonster>(/*store=*/nullptr, /*net_log=*/nullptr,
-                                      /*first_party_sets_enabled=*/false));
+      std::make_unique<CookieMonster>(/*store=*/nullptr, /*net_log=*/nullptr));
   auto& network_delegate = *context_builder->set_network_delegate(
       std::make_unique<FilteringTestNetworkDelegate>());
   auto context = context_builder->Build();
@@ -2140,8 +2206,7 @@ TEST_P(PartitionedCookiesURLRequestHttpJobTest,
 
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->SetCookieStore(
-      std::make_unique<CookieMonster>(/*store=*/nullptr, /*net_log=*/nullptr,
-                                      /*first_party_sets_enabled=*/false));
+      std::make_unique<CookieMonster>(/*store=*/nullptr, /*net_log=*/nullptr));
   auto context = context_builder->Build();
 
   const url::Origin kTopFrameOrigin =

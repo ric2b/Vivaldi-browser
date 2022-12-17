@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "gpu/command_buffer/service/dxgi_shared_handle_manager.h"
-#include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
@@ -43,6 +42,24 @@ struct Mailbox;
 class GPU_GLES2_EXPORT D3DImageBacking
     : public ClearTrackingSharedImageBacking {
  public:
+  // Create a backing wrapping given D3D11 texture, optionally with a shared
+  // handle and keyed mutex state. Array slice is used to specify index in
+  // texture array used by video decoder and plane index is used to specify the
+  // plane (Y/0 or UV/1) in NV12/P010 video textures.
+  static std::unique_ptr<D3DImageBacking> Create(
+      const Mailbox& mailbox,
+      viz::SharedImageFormat format,
+      const gfx::Size& size,
+      const gfx::ColorSpace& color_space,
+      GrSurfaceOrigin surface_origin,
+      SkAlphaType alpha_type,
+      uint32_t usage,
+      Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
+      scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state = nullptr,
+      GLenum texture_target = GL_TEXTURE_2D,
+      size_t array_slice = 0u,
+      size_t plane_index = 0u);
+
   static std::unique_ptr<D3DImageBacking> CreateFromSwapChainBuffer(
       const Mailbox& mailbox,
       viz::ResourceFormat format,
@@ -54,17 +71,6 @@ class GPU_GLES2_EXPORT D3DImageBacking
       Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
       Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain,
       bool is_back_buffer);
-
-  static std::unique_ptr<D3DImageBacking> CreateFromDXGISharedHandle(
-      const Mailbox& mailbox,
-      viz::ResourceFormat format,
-      const gfx::Size& size,
-      const gfx::ColorSpace& color_space,
-      GrSurfaceOrigin surface_origin,
-      SkAlphaType alpha_type,
-      uint32_t usage,
-      Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
-      scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state);
 
   // TODO(sunnyps): Remove this after migrating DXVA decoder to EGLImage.
   static std::unique_ptr<D3DImageBacking> CreateFromGLTexture(
@@ -78,6 +84,7 @@ class GPU_GLES2_EXPORT D3DImageBacking
       Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
       scoped_refptr<gles2::TexturePassthrough> gl_texture);
 
+  // Helper used by D3D11VideoDecoder to create backings directly.
   static std::vector<std::unique_ptr<SharedImageBacking>>
   CreateFromVideoTexture(
       base::span<const Mailbox> mailboxes,
@@ -88,17 +95,6 @@ class GPU_GLES2_EXPORT D3DImageBacking
       unsigned array_slice,
       scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state = nullptr);
 
-  static std::unique_ptr<D3DImageBacking> CreateFromSharedMemoryHandle(
-      const Mailbox& mailbox,
-      viz::ResourceFormat format,
-      const gfx::Size& size,
-      const gfx::ColorSpace& color_space,
-      GrSurfaceOrigin surface_origin,
-      SkAlphaType alpha_type,
-      uint32_t usage,
-      Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
-      gfx::GpuMemoryBufferHandle shared_memory_handle);
-
   D3DImageBacking(const D3DImageBacking&) = delete;
   D3DImageBacking& operator=(const D3DImageBacking&) = delete;
 
@@ -107,8 +103,8 @@ class GPU_GLES2_EXPORT D3DImageBacking
   // SharedImageBacking implementation.
   SharedImageBackingType GetType() const override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
-  bool CopyToGpuMemoryBuffer() override;
-  bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override;
+  bool UploadFromMemory(const SkPixmap& pixmap) override;
+  bool ReadbackToMemory(SkPixmap& pixmap) override;
   bool PresentSwapChain() override;
   std::unique_ptr<DawnImageRepresentation> ProduceDawn(
       SharedImageManager* manager,
@@ -116,7 +112,7 @@ class GPU_GLES2_EXPORT D3DImageBacking
       WGPUDevice device,
       WGPUBackendType backend_type) override;
   void OnMemoryDump(const std::string& dump_name,
-                    base::trace_event::MemoryAllocatorDump* dump,
+                    base::trace_event::MemoryAllocatorDumpGuid client_guid,
                     base::trace_event::ProcessMemoryDump* pmd,
                     uint64_t client_tracing_id) override;
 
@@ -152,7 +148,7 @@ class GPU_GLES2_EXPORT D3DImageBacking
  private:
   D3DImageBacking(
       const Mailbox& mailbox,
-      viz::ResourceFormat format,
+      viz::SharedImageFormat format,
       const gfx::Size& size,
       const gfx::ColorSpace& color_space,
       GrSurfaceOrigin surface_origin,
@@ -160,8 +156,10 @@ class GPU_GLES2_EXPORT D3DImageBacking
       uint32_t usage,
       Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
       scoped_refptr<gles2::TexturePassthrough> gl_texture,
-      scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state = {},
-      gfx::GpuMemoryBufferHandle shared_memory_handle = {},
+      scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state = nullptr,
+      GLenum texture_target = GL_TEXTURE_2D,
+      size_t array_slice = 0u,
+      size_t plane_index = 0u,
       Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain = nullptr,
       bool is_back_buffer = false);
 
@@ -171,8 +169,6 @@ class GPU_GLES2_EXPORT D3DImageBacking
   gl::GLImage* GetGLImage() const;
 
   ID3D11Texture2D* GetOrCreateStagingTexture();
-
-  bool UploadToGpuIfNeeded();
 
   // Texture could be nullptr if an empty backing is needed for testing.
   Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture_;
@@ -185,8 +181,15 @@ class GPU_GLES2_EXPORT D3DImageBacking
   // backings created from duplicated handles that refer to the same texture.
   scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state_;
 
-  // Shared memory handle from CreateFromSharedMemoryHandle.
-  gfx::GpuMemoryBufferHandle shared_memory_handle_;
+  // GL texture target. Can be GL_TEXTURE_2D or GL_TEXTURE_EXTERNAL_OES.
+  // TODO(sunnyps): Switch to GL_TEXTURE_2D for all cases.
+  GLenum texture_target_;
+
+  // Index of texture slice in texture array e.g. those used by video decoder.
+  const size_t array_slice_;
+
+  // Texture plane index corresponding to this image.
+  const size_t plane_index_;
 
   // Swap chain corresponding to this backing.
   Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain_;
@@ -204,10 +207,6 @@ class GPU_GLES2_EXPORT D3DImageBacking
 
   // Staging texture used for copy to/from shared memory GMB.
   Microsoft::WRL::ComPtr<ID3D11Texture2D> staging_texture_;
-
-  // Tracks if we should upload from shared memory GMB to the GPU texture on the
-  // next BeginAccess.
-  bool needs_upload_to_gpu_ = false;
 };
 
 }  // namespace gpu

@@ -147,9 +147,9 @@ EnabledSet CreateEnabledSet(PrefService* prefs) {
   base::flat_map<std::string, bool> name_enabled = std::move(name_enabled_list);
 
   // Override with the user preferences.
-  const base::Value* list_value = prefs->Get(vivaldiprefs::kVivaldiExperiments);
-  if (list_value && list_value->is_list()) {
-    for (const base::Value& v : list_value->GetList()) {
+  const base::Value& list_value = prefs->GetValue(vivaldiprefs::kVivaldiExperiments);
+  if (list_value.is_list()) {
+    for (const base::Value& v : list_value.GetList()) {
       if (v.is_string()) {
         base::StringPiece name(v.GetString());
         bool enabled = true;
@@ -270,10 +270,10 @@ bool Enable(content::BrowserContext* browser_context,
   // Store the value in preferences.
   Profile* profile = ProfileFromBrowserContext(browser_context);
   profile = profile->GetOriginalProfile();
-  const base::Value* list_value =
-      profile->GetPrefs()->Get(vivaldiprefs::kVivaldiExperiments);
+  auto& list_value =
+      profile->GetPrefs()->GetList(vivaldiprefs::kVivaldiExperiments);
   base::Value::List updated;
-  for (const base::Value& v : list_value->GetList()) {
+  for (const base::Value& v : list_value) {
     if (!v.is_string())
       continue;
     base::StringPiece name = v.GetString();

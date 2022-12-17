@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@ import android.view.View;
 import android.widget.ListView;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 
 import org.chromium.chrome.browser.feed.R;
 import org.chromium.chrome.browser.feed.StreamKind;
@@ -45,21 +44,11 @@ public class FeedManagementCoordinator {
         ListView listView = (ListView) mView.findViewById(R.id.feed_management_menu);
         listView.setAdapter(adapter);
 
-        // Set up the toolbar and back button.
-        Toolbar toolbar = (Toolbar) mView.findViewById(R.id.action_bar);
-        toolbar.setNavigationIcon(R.drawable.back_arrow);
-        toolbar.setNavigationOnClickListener(this::handleBackArrowClick);
-
         mMediator = new FeedManagementMediator(mActivity, listItems, followManagementLauncher,
                 autoplayManagementLauncher, feedType);
     }
 
     public View getView() {
         return mView;
-    }
-
-    private void handleBackArrowClick(View view) {
-        // Navigate back.
-        mActivity.finish();
     }
 }

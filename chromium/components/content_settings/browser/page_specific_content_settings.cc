@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -563,7 +563,6 @@ bool PageSpecificContentSettings::IsContentBlocked(
       content_type == ContentSettingsType::MIXEDSCRIPT ||
       content_type == ContentSettingsType::MEDIASTREAM_MIC ||
       content_type == ContentSettingsType::MEDIASTREAM_CAMERA ||
-      content_type == ContentSettingsType::PPAPI_BROKER ||
       content_type == ContentSettingsType::MIDI_SYSEX ||
       content_type == ContentSettingsType::ADS ||
       content_type == ContentSettingsType::SOUND ||
@@ -591,7 +590,6 @@ bool PageSpecificContentSettings::IsContentAllowed(
 #endif  // VIVALDI_BUILD
       content_type != ContentSettingsType::MEDIASTREAM_MIC &&
       content_type != ContentSettingsType::MEDIASTREAM_CAMERA &&
-      content_type != ContentSettingsType::PPAPI_BROKER &&
       content_type != ContentSettingsType::MIDI_SYSEX &&
       content_type != ContentSettingsType::CLIPBOARD_READ_WRITE &&
       content_type != ContentSettingsType::SENSORS &&
@@ -611,10 +609,16 @@ void PageSpecificContentSettings::OnContentBlocked(ContentSettingsType type) {
       << "Media stream settings handled by OnMediaStreamPermissionSet";
   if (!content_settings::ContentSettingsRegistry::GetInstance()->Get(type))
     return;
-  ContentSettingsStatus& status = content_settings_status_[type];
 
+  ContentSettingsStatus& status = content_settings_status_[type];
   if (!status.blocked) {
     status.blocked = true;
+    if (!is_updating_synced_pscs_) {
+      base::AutoReset<bool> auto_reset(&is_updating_synced_pscs_, true);
+      if (auto* synced_pccs = MaybeGetSyncedSettingsForPictureInPicture()) {
+        synced_pccs->OnContentBlocked(type);
+      }
+    }
     MaybeUpdateLocationBar();
     NotifyDelegate(&Delegate::OnContentBlocked, type);
     MaybeUpdateParent(&PageSpecificContentSettings::OnContentBlocked, type);
@@ -640,6 +644,13 @@ void PageSpecificContentSettings::OnContentAllowed(ContentSettingsType type) {
   if (type == ContentSettingsType::SENSORS)
     must_reset_blocked_status = true;
 
+  // If this content settings is for the PiP window, must reset |blocked| status
+  // since it will not be updated in OnContentSettingChanged() like the normal
+  // browser window. We need the status to be precise to display the UI.
+  auto* synced_pccs = MaybeGetSyncedSettingsForPictureInPicture();
+  if (synced_pccs)
+    must_reset_blocked_status = true;
+
 #if BUILDFLAG(IS_ANDROID)
   // content_settings_status_[type].allowed is always set to true in
   // OnContentBlocked, so we have to use
@@ -660,6 +671,10 @@ void PageSpecificContentSettings::OnContentAllowed(ContentSettingsType type) {
   }
 
   if (access_changed) {
+    if (!is_updating_synced_pscs_ && synced_pccs) {
+      base::AutoReset<bool> auto_reset(&is_updating_synced_pscs_, true);
+      synced_pccs->OnContentAllowed(type);
+    }
     MaybeUpdateLocationBar();
     MaybeUpdateParent(&PageSpecificContentSettings::OnContentAllowed, type);
   }
@@ -894,6 +909,17 @@ void PageSpecificContentSettings::OnMediaStreamPermissionSet(
 
   if (microphone_camera_state_ != new_microphone_camera_state) {
     microphone_camera_state_ = new_microphone_camera_state;
+    if (!is_updating_synced_pscs_) {
+      base::AutoReset<bool> auto_reset(&is_updating_synced_pscs_, true);
+      if (auto* synced_pccs = MaybeGetSyncedSettingsForPictureInPicture()) {
+        synced_pccs->OnMediaStreamPermissionSet(
+            request_origin, new_microphone_camera_state,
+            media_stream_selected_audio_device,
+            media_stream_selected_video_device,
+            media_stream_requested_audio_device,
+            media_stream_requested_video_device);
+      }
+    }
     MaybeUpdateLocationBar();
   }
 }
@@ -902,19 +928,17 @@ void PageSpecificContentSettings::ClearPopupsBlocked() {
   ContentSettingsStatus& status =
       content_settings_status_[ContentSettingsType::POPUPS];
   status.blocked = false;
+  if (!is_updating_synced_pscs_) {
+    base::AutoReset<bool> auto_reset(&is_updating_synced_pscs_, true);
+    if (auto* synced_pccs = MaybeGetSyncedSettingsForPictureInPicture()) {
+      synced_pccs->ClearPopupsBlocked();
+    }
+  }
   MaybeUpdateLocationBar();
 }
 
 void PageSpecificContentSettings::OnAudioBlocked() {
   OnContentBlocked(ContentSettingsType::SOUND);
-}
-
-void PageSpecificContentSettings::SetPepperBrokerAllowed(bool allowed) {
-  if (allowed) {
-    OnContentAllowed(ContentSettingsType::PPAPI_BROKER);
-  } else {
-    OnContentBlocked(ContentSettingsType::PPAPI_BROKER);
-  }
 }
 
 void PageSpecificContentSettings::OnContentSettingChanged(
@@ -966,7 +990,6 @@ void PageSpecificContentSettings::OnContentSettingChanged(
     case ContentSettingsType::COOKIES:
     case ContentSettingsType::POPUPS:
     case ContentSettingsType::MIXEDSCRIPT:
-    case ContentSettingsType::PPAPI_BROKER:
     case ContentSettingsType::MIDI_SYSEX:
     case ContentSettingsType::ADS:
     case ContentSettingsType::SOUND:
@@ -1102,6 +1125,15 @@ void PageSpecificContentSettings::MaybeUpdateLocationBar() {
 
 content::WebContents* PageSpecificContentSettings::GetWebContents() const {
   return content::WebContents::FromRenderFrameHost(&page().GetMainDocument());
+}
+
+PageSpecificContentSettings*
+PageSpecificContentSettings::MaybeGetSyncedSettingsForPictureInPicture() {
+  content::WebContents* web_contents =
+      delegate_->MaybeGetSyncedWebContentsForPictureInPicture(GetWebContents());
+  if (web_contents)
+    return GetForFrame(web_contents->GetPrimaryMainFrame());
+  return nullptr;
 }
 
 PAGE_USER_DATA_KEY_IMPL(PageSpecificContentSettings);

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,11 +31,6 @@
 #include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "sandbox/policy/switches.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-#include "content/public/browser/plugin_service.h"
-#include "content/public/common/pepper_plugin_info.h"
-#endif
 
 namespace content {
 
@@ -165,12 +160,11 @@ void SetupNetworkSandboxParameters(sandbox::SeatbeltExecClient* client) {
   }
 }
 
-#if BUILDFLAG(ENABLE_PLUGINS)
-void SetupPPAPISandboxParameters(sandbox::SeatbeltExecClient* client) {
+#if BUILDFLAG(ENABLE_PPAPI)
+void SetupPPAPISandboxParameters(
+    const std::vector<content::WebPluginInfo>& plugins,
+    sandbox::SeatbeltExecClient* client) {
   SetupCommonSandboxParameters(client);
-
-  std::vector<content::WebPluginInfo> plugins;
-  PluginService::GetInstance()->GetInternalPlugins(&plugins);
 
   base::FilePath bundle_path =
       sandbox::policy::GetCanonicalPath(base::mac::MainBundlePath());
@@ -206,6 +200,9 @@ void SetupGpuSandboxParameters(sandbox::SeatbeltExecClient* client,
 
 void SetupSandboxParameters(sandbox::mojom::Sandbox sandbox_type,
                             const base::CommandLine& command_line,
+#if BUILDFLAG(ENABLE_PPAPI)
+                            const std::vector<content::WebPluginInfo>& plugins,
+#endif
                             sandbox::SeatbeltExecClient* client) {
   switch (sandbox_type) {
     case sandbox::mojom::Sandbox::kAudio:
@@ -229,9 +226,9 @@ void SetupSandboxParameters(sandbox::mojom::Sandbox sandbox_type,
     case sandbox::mojom::Sandbox::kNetwork:
       SetupNetworkSandboxParameters(client);
       break;
-#if BUILDFLAG(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PPAPI)
     case sandbox::mojom::Sandbox::kPpapi:
-      SetupPPAPISandboxParameters(client);
+      SetupPPAPISandboxParameters(plugins, client);
       break;
 #endif
     case sandbox::mojom::Sandbox::kNoSandbox:
@@ -240,6 +237,8 @@ void SetupSandboxParameters(sandbox::mojom::Sandbox sandbox_type,
       break;
     // Setup parameters for sandbox types handled by embedders below.
     case sandbox::mojom::Sandbox::kScreenAI:
+      AddDarwinDirs(client);
+      [[fallthrough]];
     case sandbox::mojom::Sandbox::kSpeechRecognition:
       SetupCommonSandboxParameters(client);
       CHECK(GetContentClient()->browser()->SetupEmbedderSandboxParameters(

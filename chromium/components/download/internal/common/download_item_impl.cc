@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,7 @@
 #include "base/guid.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/strings/string_piece.h"
@@ -2040,6 +2041,14 @@ void DownloadItemImpl::Completed() {
     }
   }
 
+  // TODO(crbug.com/1372476): Remove these histograms after debugging.
+  if (!IsTemporary()) {
+    base::UmaHistogramBoolean("Download.Complete.IsOpenWhenCompleteSet",
+                              GetOpenWhenComplete());
+    base::UmaHistogramBoolean(
+        "Download.Complete.IsShouldOpenFileBasedOnExtensionSet",
+        ShouldOpenFileBasedOnExtension());
+  }
   if (auto_opened_) {
     // If it was already handled by the delegate, do nothing.
   } else if (GetOpenWhenComplete() || ShouldOpenFileBasedOnExtension() ||

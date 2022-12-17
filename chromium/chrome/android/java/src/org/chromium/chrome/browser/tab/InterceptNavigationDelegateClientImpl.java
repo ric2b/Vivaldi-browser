@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,8 +44,14 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
             }
 
             @Override
-            public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
-                mInterceptNavigationDelegate.onNavigationFinished(navigation);
+            public void onDidFinishNavigationInPrimaryMainFrame(
+                    Tab tab, NavigationHandle navigation) {
+                mInterceptNavigationDelegate.onNavigationFinishedInPrimaryMainFrame(navigation);
+            }
+
+            @Override
+            public void onDidFinishNavigationNoop(Tab tab, NavigationHandle navigation) {
+                mInterceptNavigationDelegate.onNavigationFinishedNoop(navigation);
             }
 
             @Override

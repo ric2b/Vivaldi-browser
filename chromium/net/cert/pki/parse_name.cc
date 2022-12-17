@@ -1,11 +1,9 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/cert/pki/parse_name.h"
 
-#include "base/check_op.h"
-#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/der/parse_values.h"
 #include "third_party/boringssl/src/include/openssl/bytestring.h"
@@ -72,7 +70,7 @@ bool X509NameAttribute::ValueAsStringUnsafe(std::string* out) const {
     case der::kBmpString:
       return der::ParseBmpString(value, out);
     default:
-      NOTREACHED();
+      assert(0);  // NOTREACHED
       return false;
   }
 }

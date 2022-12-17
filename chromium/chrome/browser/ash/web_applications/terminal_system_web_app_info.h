@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,7 @@ class TerminalSystemAppDelegate : public ash::SystemWebAppDelegate {
                                         int command_id) const override;
   // TODO(crbug.com/1308961): Migrate to use PWA pinned home tab when ready.
   bool ShouldPinTab(GURL url) const override;
+  bool UseSystemThemeColor() const override;
 };
 
 // Returns a WebAppInstallInfo used to install the app.

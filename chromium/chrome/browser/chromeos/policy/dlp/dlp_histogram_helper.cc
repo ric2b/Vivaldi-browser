@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,9 +19,7 @@ void DlpBooleanHistogram(const std::string& suffix, bool value) {
   base::UmaHistogramBoolean(GetDlpHistogramPrefix() + suffix, value);
 }
 
-void DlpConfidentialContentsCountHistogram(const std::string& suffix,
-                                           int sample,
-                                           int max) {
+void DlpCountHistogram(const std::string& suffix, int sample, int max) {
   base::UmaHistogramExactLinear(GetDlpHistogramPrefix() + suffix, sample,
                                 max + 1);
 }

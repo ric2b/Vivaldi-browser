@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -310,8 +310,9 @@ class MediaStreamDispatcherHostTest : public testing::Test {
         std::make_unique<media::AudioSystemImpl>(audio_manager_.get());
     browser_context_ = std::make_unique<TestBrowserContext>();
     // Make sure we use fake devices to avoid long delays.
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kUseFakeDeviceForMediaStream);
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        switches::kUseFakeDeviceForMediaStream,
+        base::StringPrintf("display-media-type=browser"));
     auto mock_video_capture_provider =
         std::make_unique<MockVideoCaptureProvider>();
     mock_video_capture_provider_ = mock_video_capture_provider.get();

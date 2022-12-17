@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,6 +61,8 @@
 #include "components/dom_distiller/content/browser/uma_helper.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
 #include "components/dom_distiller/core/url_utils.h"
+#include "components/feature_engagement/public/event_constants.h"
+#include "components/performance_manager/public/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/profile_metrics/browser_profile_type.h"
 #include "components/signin/public/base/signin_metrics.h"
@@ -107,8 +109,10 @@
 using base::UserMetricsAction;
 using content::WebContents;
 
-DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(AppMenuModel, kHistoryMenuItem);
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(AppMenuModel, kDownloadsMenuItem);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(AppMenuModel, kHistoryMenuItem);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(AppMenuModel, kMoreToolsMenuItem);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ToolsMenuModel, kPerformanceMenuItem);
 
 namespace {
 
@@ -248,6 +252,14 @@ void ToolsMenuModel::Build(Browser* browser) {
   AddSeparator(ui::NORMAL_SEPARATOR);
   AddItemWithStringId(IDC_CLEAR_BROWSING_DATA, IDS_CLEAR_BROWSING_DATA);
   AddItemWithStringId(IDC_MANAGE_EXTENSIONS, IDS_SHOW_EXTENSIONS);
+  if (base::FeatureList::IsEnabled(
+          performance_manager::features::kHighEfficiencyModeAvailable) ||
+      base::FeatureList::IsEnabled(
+          performance_manager::features::kBatterySaverModeAvailable)) {
+    AddItemWithStringId(IDC_PERFORMANCE, IDS_SHOW_PERFORMANCE);
+    SetElementIdentifierAt(GetIndexOfCommandId(IDC_PERFORMANCE).value(),
+                           kPerformanceMenuItem);
+  }
   if (chrome::CanOpenTaskManager())
     AddItemWithStringId(IDC_TASK_MANAGER, IDS_TASK_MANAGER);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -271,12 +283,14 @@ const int AppMenuModel::kNumUnboundedMenuTypes;
 
 AppMenuModel::AppMenuModel(ui::AcceleratorProvider* provider,
                            Browser* browser,
-                           AppMenuIconController* app_menu_icon_controller)
+                           AppMenuIconController* app_menu_icon_controller,
+                           AlertMenuItem alert_item)
     : ui::SimpleMenuModel(this),
       uma_action_recorded_(false),
       provider_(provider),
       browser_(browser),
-      app_menu_icon_controller_(app_menu_icon_controller) {
+      app_menu_icon_controller_(app_menu_icon_controller),
+      alert_item_(alert_item) {
   DCHECK(browser_);
 }
 
@@ -385,6 +399,11 @@ void AppMenuModel::ExecuteCommand(int command_id, int event_flags) {
   if (error) {
     error->ExecuteMenuItem(browser_);
     return;
+  }
+
+  if (command_id == IDC_PERFORMANCE) {
+    browser()->window()->NotifyFeatureEngagementEvent(
+        feature_engagement::events::kPerformanceMenuItemActivated);
   }
 
   LogMenuMetrics(command_id);
@@ -780,6 +799,19 @@ bool AppMenuModel::IsCommandIdVisible(int command_id) const {
   }
 }
 
+bool AppMenuModel::IsCommandIdAlerted(int command_id) const {
+  if ((command_id == IDC_RECENT_TABS_MENU) ||
+      (command_id == AppMenuModel::kMinRecentTabsCommandId)) {
+    return alert_item_ == AlertMenuItem::kReopenTabs;
+  }
+
+  if (command_id == IDC_PERFORMANCE) {
+    return alert_item_ == AlertMenuItem::kPerformance;
+  }
+
+  return false;
+}
+
 bool AppMenuModel::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accelerator) const {
@@ -932,6 +964,8 @@ void AppMenuModel::Build() {
   sub_menus_.push_back(std::make_unique<ToolsMenuModel>(this, browser_));
   AddSubMenuWithStringId(IDC_MORE_TOOLS_MENU, IDS_MORE_TOOLS_MENU,
                          sub_menus_.back().get());
+  SetElementIdentifierAt(GetIndexOfCommandId(IDC_MORE_TOOLS_MENU).value(),
+                         kMoreToolsMenuItem);
   AddSeparator(ui::LOWER_SEPARATOR);
   CreateCutCopyPasteMenu();
   AddSeparator(ui::UPPER_SEPARATOR);

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -131,34 +131,13 @@ void AppLaunchHandler::LaunchApps() {
     }
   });
 
-#if !defined(OFFICIAL_BUILD)
-  base::TimeDelta current_delay = delay_;
-#endif
   for (const auto& app_id : app_ids) {
     // Chrome browser web pages are restored separately, so we don't need to
     // launch browser windows.
     if (app_id == app_constants::kChromeAppId)
       continue;
 
-    auto app_type = cache->GetAppType(app_id);
-#if !defined(OFFICIAL_BUILD)
-    // Make shift-click on the launch button launch apps with a delay. This
-    // allows developers to simulate delayed launch behaviors with ARC apps.
-    // TODO(crbug.com/1281685): Remove before feature launch.
-    if (delay_.is_zero()) {
-      LaunchApp(app_type, app_id);
-    } else {
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE,
-          base::BindOnce(&AppLaunchHandler::LaunchApp,
-                         GetWeakPtrAppLaunchHandler(), app_type, app_id),
-          current_delay);
-      current_delay += delay_;
-    }
-#else
-    DCHECK(delay_.is_zero());
-    LaunchApp(app_type, app_id);
-#endif
+    LaunchApp(cache->GetAppType(app_id), app_id);
   }
 }
 
@@ -251,6 +230,7 @@ void AppLaunchHandler::LaunchSystemWebAppOrChromeApp(
         app_id,
         static_cast<apps::LaunchContainer>(it.second->container.value()),
         static_cast<WindowOpenDisposition>(it.second->disposition.value()),
+        it.second->override_url.value_or(GURL()),
         apps::LaunchSource::kFromFullRestore, it.second->display_id.value(),
         it.second->file_paths.has_value() ? it.second->file_paths.value()
                                           : std::vector<base::FilePath>{},

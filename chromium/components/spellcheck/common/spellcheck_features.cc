@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,14 +28,17 @@ bool UseBrowserSpellChecker() {
 }
 
 #if BUILDFLAG(IS_WIN)
-const base::Feature kWinUseBrowserSpellChecker{
-    "WinUseBrowserSpellChecker", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kWinUseBrowserSpellChecker,
+             "WinUseBrowserSpellChecker",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kWinDelaySpellcheckServiceInit{
-    "WinDelaySpellcheckServiceInit", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kWinDelaySpellcheckServiceInit,
+             "WinDelaySpellcheckServiceInit",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-const base::Feature kWinRetrieveSuggestionsOnlyOnDemand{
-    "WinRetrieveSuggestionsOnlyOnDemand", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kWinRetrieveSuggestionsOnlyOnDemand,
+             "WinRetrieveSuggestionsOnlyOnDemand",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool WindowsVersionSupportsSpellchecker() {
   return base::win::GetVersion() > base::win::Version::WIN7 &&

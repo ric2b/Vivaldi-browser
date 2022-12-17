@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,6 @@
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface_egl.h"
-#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -39,6 +38,7 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
     gpu::GpuChannelManager* gpu_channel_manager,
     gpu::VulkanImplementation* vulkan_implementation,
     gpu::VulkanDeviceQueue* device_queue,
+    gl::GLDisplay* display,
     bool enable_watchdog) {
   DCHECK(gpu_channel_manager);
 
@@ -47,15 +47,20 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
     return nullptr;
   }
 
+#if DCHECK_IS_ON()
 #if BUILDFLAG(IS_ANDROID)
   // When using angle via enabling passthrough command decoder on android, angle
   // context virtualization group extension should be enabled. Also since angle
-  // currently always enables this extension, we are adding DCHECK() to ensure
-  // that instead of enabling/disabling DrDc based on the extension.
-  if (gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE)
-    DCHECK(gl::GLSurfaceEGL::GetGLDisplayEGL()
-               ->ext->b_EGL_ANGLE_context_virtualization);
+  // currently always enables this extension with GL backend, we are adding
+  // DCHECK() to ensure that instead of enabling/disabling DrDc based on the
+  // extension.
+  if (gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE &&
+      gl::GetANGLEImplementation() == gl::ANGLEImplementation::kOpenGLES) {
+    gl::GLDisplayEGL* display_egl = display->GetAs<gl::GLDisplayEGL>();
+    DCHECK(display_egl->ext->b_EGL_ANGLE_context_virtualization);
+  }
 #endif
+#endif  // DCHECK_IS_ON()
 
   scoped_refptr<VulkanContextProvider> vulkan_context_provider;
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -79,7 +84,7 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
 #endif
 
   auto compositor_gpu_thread = base::WrapUnique(new CompositorGpuThread(
-      gpu_channel_manager, std::move(vulkan_context_provider),
+      gpu_channel_manager, std::move(vulkan_context_provider), display,
       enable_watchdog));
 
   if (!compositor_gpu_thread->Initialize())
@@ -90,11 +95,13 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
 CompositorGpuThread::CompositorGpuThread(
     gpu::GpuChannelManager* gpu_channel_manager,
     scoped_refptr<VulkanContextProvider> vulkan_context_provider,
+    gl::GLDisplay* display,
     bool enable_watchdog)
     : base::Thread("CompositorGpuThread"),
       gpu_channel_manager_(gpu_channel_manager),
       enable_watchdog_(enable_watchdog),
       vulkan_context_provider_(std::move(vulkan_context_provider)),
+      display_(display),
       weak_ptr_factory_(this) {}
 
 CompositorGpuThread::~CompositorGpuThread() {
@@ -114,8 +121,7 @@ CompositorGpuThread::GetSharedContextState() {
   // Create a new share group. Note that this share group is different from the
   // share group which gpu main thread uses.
   auto share_group = base::MakeRefCounted<gl::GLShareGroup>();
-  auto surface =
-      gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplay(), gfx::Size());
+  auto surface = gl::init::CreateOffscreenGLSurface(display_, gfx::Size());
 
   const auto& gpu_preferences = gpu_channel_manager_->gpu_preferences();
 
@@ -236,11 +242,11 @@ void CompositorGpuThread::Init() {
   if (enable_watchdog_) {
     watchdog_thread_ = gpu::GpuWatchdogThread::Create(
         gpu_preferences.watchdog_starts_backgrounded, "GpuWatchdog_Compositor");
-  }
 
-  if (!watchdog_thread_)
-    return;
-  watchdog_thread_->OnInitComplete();
+    if (!watchdog_thread_)
+      return;
+    watchdog_thread_->OnInitComplete();
+  }
 
   // Making sure to create the |memory_pressure_listener_| on
   // CompositorGpuThread since this callback will be called on the thread it was

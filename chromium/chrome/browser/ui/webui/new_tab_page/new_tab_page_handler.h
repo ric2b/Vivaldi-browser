@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,7 +97,7 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   void GetDoodle(GetDoodleCallback callback) override;
   void ChooseLocalCustomBackground(
       ChooseLocalCustomBackgroundCallback callback) override;
-  void GetPromo(GetPromoCallback callback) override;
+  void UpdatePromoData() override;
   void BlocklistPromo(const std::string& promo_id) override;
   void UndoBlocklistPromo(const std::string& promo_id) override;
   void OnDismissModule(const std::string& module_id) override;
@@ -105,7 +105,8 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   void SetModulesVisible(bool visible) override;
   void SetModuleDisabled(const std::string& module_id, bool disabled) override;
   void UpdateDisabledModules() override;
-  void OnModulesLoadedWithData() override;
+  void OnModulesLoadedWithData(
+      const std::vector<std::string>& module_ids) override;
   void SetModulesOrder(const std::vector<std::string>& module_ids) override;
   void GetModulesOrder(GetModulesOrderCallback callback) override;
   void IncrementModulesShownCount() override;
@@ -201,7 +202,6 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   std::unordered_map<const network::SimpleURLLoader*,
                      std::unique_ptr<network::SimpleURLLoader>>
       loader_map_;
-  std::vector<GetPromoCallback> promo_callbacks_;
   raw_ptr<PromoService> promo_service_;
   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
       native_theme_observation_{this};

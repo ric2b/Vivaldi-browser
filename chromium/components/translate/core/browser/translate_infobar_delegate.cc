@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,8 +29,9 @@
 
 namespace translate {
 
-const base::Feature kTranslateCompactUI{"TranslateCompactUI",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kTranslateCompactUI,
+             "TranslateCompactUI",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const size_t TranslateInfoBarDelegate::kNoIndex = TranslateUIDelegate::kNoIndex;
 
@@ -53,7 +54,7 @@ void TranslateInfoBarDelegate::Create(
     translate::TranslateStep step,
     const std::string& source_language,
     const std::string& target_language,
-    TranslateErrors::Type error_type,
+    TranslateErrors error_type,
     bool triggered_from_menu) {
   DCHECK(translate_manager);
   DCHECK(infobar_manager);
@@ -154,7 +155,7 @@ void TranslateInfoBarDelegate::UpdateTargetLanguage(
   ui_delegate_.UpdateTargetLanguage(language_code);
 }
 
-void TranslateInfoBarDelegate::OnErrorShown(TranslateErrors::Type error_type) {
+void TranslateInfoBarDelegate::OnErrorShown(TranslateErrors error_type) {
   ui_delegate_.OnErrorShown(error_type);
 }
 
@@ -345,7 +346,7 @@ TranslateInfoBarDelegate::TranslateInfoBarDelegate(
     translate::TranslateStep step,
     const std::string& source_language,
     const std::string& target_language,
-    TranslateErrors::Type error_type,
+    TranslateErrors error_type,
     bool triggered_from_menu)
     : infobars::InfoBarDelegate(),
       step_(step),

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,9 +14,11 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
@@ -26,6 +28,7 @@
 #include "content/services/auction_worklet/trusted_signals.h"
 #include "content/services/auction_worklet/trusted_signals_request_manager.h"
 #include "content/services/auction_worklet/worklet_loader.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -101,9 +104,17 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
 
   int context_group_id_for_testing() const;
 
+  static bool IsKAnon(const mojom::BidderWorkletNonSharedParams*
+                          bidder_worklet_non_shared_params,
+                      const GURL& url);
+  static bool IsKAnon(const mojom::BidderWorkletNonSharedParams*
+                          bidder_worklet_non_shared_params,
+                      const mojom::BidderWorkletBidPtr& bid);
+
   // mojom::BidderWorklet implementation:
   void GenerateBid(
       mojom::BidderWorkletNonSharedParamsPtr bidder_worklet_non_shared_params,
+      mojom::KAnonymityBidMode kanon_mode,
       const url::Origin& interest_group_join_origin,
       const absl::optional<std::string>& auction_signals_json,
       const absl::optional<std::string>& per_buyer_signals_json,
@@ -113,7 +124,8 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
       mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
       base::Time auction_start_time,
       uint64_t trace_id,
-      GenerateBidCallback generate_bid_callback) override;
+      mojo::PendingAssociatedRemote<mojom::GenerateBidClient>
+          generate_bid_client) override;
   void SendPendingSignalsRequests() override;
   void ReportWin(
       const std::string& interest_group_name,
@@ -139,7 +151,11 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
     GenerateBidTask();
     ~GenerateBidTask();
 
+    base::CancelableTaskTracker::TaskId task_id =
+        base::CancelableTaskTracker::kBadTaskId;
+
     mojom::BidderWorkletNonSharedParamsPtr bidder_worklet_non_shared_params;
+    mojom::KAnonymityBidMode kanon_mode;
     url::Origin interest_group_join_origin;
     absl::optional<std::string> auction_signals_json;
     absl::optional<std::string> per_buyer_signals_json;
@@ -160,7 +176,12 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
     // reported on bid completion.
     absl::optional<std::string> trusted_bidding_signals_error_msg;
 
-    GenerateBidCallback callback;
+    // Set to true once the callback sent to the OnBiddingSignalsReceived()
+    // method of `generate_bid_client` has been invoked. the Javascript
+    // generateBid() method will not be run until that happens.
+    bool signals_received_callback_invoked = false;
+
+    mojo::AssociatedRemote<mojom::GenerateBidClient> generate_bid_client;
   };
 
   using GenerateBidTaskList = std::list<GenerateBidTask>;
@@ -207,10 +228,13 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
     // must be invoked on the main sequence, and passed to the V8State.
     using GenerateBidCallbackInternal = base::OnceCallback<void(
         mojom::BidderWorkletBidPtr bid,
+        mojom::BidderWorkletBidPtr alternate_bid,
         absl::optional<uint32_t> bidding_signals_data_version,
         absl::optional<GURL> debug_loss_report_url,
         absl::optional<GURL> debug_win_report_url,
         absl::optional<double> set_priority,
+        base::flat_map<std::string, mojom::PrioritySignalsDoublePtr>
+            update_priority_signals_overrides,
         PrivateAggregationRequests pa_requests,
         std::vector<std::string> error_msgs)>;
     using ReportWinCallbackInternal =
@@ -218,6 +242,40 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
                                 base::flat_map<std::string, GURL> ad_beacon_map,
                                 PrivateAggregationRequests pa_requests,
                                 std::vector<std::string> errors)>;
+
+    // Matches GenerateBidCallbackInternal, but with only one
+    // BidderWorkletBidPtr.
+    struct SingleGenerateBidResult {
+      SingleGenerateBidResult();
+      SingleGenerateBidResult(
+          mojom::BidderWorkletBidPtr bid,
+          absl::optional<uint32_t> bidding_signals_data_version,
+          absl::optional<GURL> debug_loss_report_url,
+          absl::optional<GURL> debug_win_report_url,
+          absl::optional<double> set_priority,
+          base::flat_map<std::string, mojom::PrioritySignalsDoublePtr>
+              update_priority_signals_overrides,
+          PrivateAggregationRequests pa_requests,
+          std::vector<std::string> error_msgs);
+
+      SingleGenerateBidResult(const SingleGenerateBidResult&) = delete;
+      SingleGenerateBidResult(SingleGenerateBidResult&&);
+
+      ~SingleGenerateBidResult();
+      SingleGenerateBidResult& operator=(const SingleGenerateBidResult&) =
+          delete;
+      SingleGenerateBidResult& operator=(SingleGenerateBidResult&&);
+
+      mojom::BidderWorkletBidPtr bid;
+      absl::optional<uint32_t> bidding_signals_data_version;
+      absl::optional<GURL> debug_loss_report_url;
+      absl::optional<GURL> debug_win_report_url;
+      absl::optional<double> set_priority;
+      base::flat_map<std::string, mojom::PrioritySignalsDoublePtr>
+          update_priority_signals_overrides;
+      PrivateAggregationRequests pa_requests;
+      std::vector<std::string> error_msgs;
+    };
 
     void ReportWin(const std::string& interest_group_name,
                    const absl::optional<std::string>& auction_signals_json,
@@ -236,6 +294,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
 
     void GenerateBid(
         mojom::BidderWorkletNonSharedParamsPtr bidder_worklet_non_shared_params,
+        mojom::KAnonymityBidMode kanon_mode,
         const url::Origin& interest_group_join_origin,
         const absl::optional<std::string>& auction_signals_json,
         const absl::optional<std::string>& per_buyer_signals_json,
@@ -247,6 +306,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
         base::Time auction_start_time,
         scoped_refptr<TrustedSignals::Result> trusted_bidding_signals_result,
         uint64_t trace_id,
+        base::ScopedClosureRunner cleanup_generate_bid_task,
         GenerateBidCallbackInternal callback);
 
     void ConnectDevToolsAgent(
@@ -255,6 +315,23 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
    private:
     friend class base::DeleteHelper<V8State>;
     ~V8State();
+
+    // Returns nullopt on error.
+    absl::optional<SingleGenerateBidResult> GenerateSingleBid(
+        const mojom::BidderWorkletNonSharedParamsPtr&
+            bidder_worklet_non_shared_params,
+        const url::Origin& interest_group_join_origin,
+        const std::string* auction_signals_json,
+        const std::string* per_buyer_signals_json,
+        const absl::optional<base::TimeDelta> per_buyer_timeout,
+        const url::Origin& browser_signal_seller_origin,
+        const url::Origin* browser_signal_top_level_seller_origin,
+        const mojom::BiddingBrowserSignalsPtr& bidding_browser_signals,
+        base::Time auction_start_time,
+        const scoped_refptr<TrustedSignals::Result>&
+            trusted_bidding_signals_result,
+        uint64_t trace_id,
+        bool restrict_to_kanon_ads);
 
     void FinishInit();
 
@@ -267,9 +344,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
 
     void PostErrorBidCallbackToUserThread(
         GenerateBidCallbackInternal callback,
-        std::vector<std::string> error_msgs = std::vector<std::string>(),
-        absl::optional<GURL> debug_loss_report_url = absl::nullopt,
-        PrivateAggregationRequests private_aggregation_requests = {});
+        std::vector<std::string> error_msgs = std::vector<std::string>());
 
     static void PostResumeToUserThread(
         base::WeakPtr<BidderWorklet> parent,
@@ -314,6 +389,15 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
       scoped_refptr<TrustedSignals::Result> result,
       absl::optional<std::string> error_msg);
 
+  // Invoked when the GenerateBidClient associated with `task` is destroyed.
+  // Cancels bid generation.
+  void OnGenerateBidClientDestroyed(GenerateBidTaskList::iterator task);
+
+  // Callback passed to mojom::GenerateBidClient::OnSignalsReceived. Sets
+  // `task->signals_received_callback_invoked` to true, and invokes
+  // GenerateBidIfReady().
+  void SignalsReceivedCallback(GenerateBidTaskList::iterator task);
+
   // Checks if the script has been loaded successfully, and the
   // TrustedSignals load has finished (successfully or not). If so, calls
   // generateBid(), and invokes `load_script_and_generate_bid_callback_` with
@@ -328,12 +412,20 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
   void DeliverBidCallbackOnUserThread(
       GenerateBidTaskList::iterator task,
       mojom::BidderWorkletBidPtr bid,
+      mojom::BidderWorkletBidPtr alternate_bid,
       absl::optional<uint32_t> bidding_signals_data_version,
       absl::optional<GURL> debug_loss_report_url,
       absl::optional<GURL> debug_win_report_url,
       absl::optional<double> set_priority,
+      base::flat_map<std::string, mojom::PrioritySignalsDoublePtr>
+          update_priority_signals_overrides,
       PrivateAggregationRequests pa_requests,
       std::vector<std::string> error_msgs);
+
+  // Removes `task` from `generate_bid_tasks_` only. Used in case where the
+  // V8 work for task was cancelled only (via the `cleanup_generate_bid_task`
+  // parameter getting destroyed).
+  void CleanUpBidTaskOnUserThread(GenerateBidTaskList::iterator task);
 
   // Invokes the `callback` of `task` with the provided values, and removes
   // `task` from `report_win_tasks_`.
@@ -387,6 +479,8 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet {
 
   // Errors that occurred while loading the code, if any.
   std::vector<std::string> load_code_error_msgs_;
+
+  base::CancelableTaskTracker cancelable_task_tracker_;
 
   SEQUENCE_CHECKER(user_sequence_checker_);
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -49,7 +49,6 @@ import org.chromium.chrome.browser.toolbar.LocationBarModel;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.ClickUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.permissions.AndroidPermissionDelegate;
@@ -83,7 +82,7 @@ public class LocationBarLayoutTest {
     public static final LocationBarModel.OfflineStatus OFFLINE_STATUS =
             new LocationBarModel.OfflineStatus() {
                 @Override
-                public boolean isShowingTrustedOfflinePage(WebContents webContents) {
+                public boolean isShowingTrustedOfflinePage(Tab tab) {
                     return false;
                 }
 
@@ -293,9 +292,7 @@ public class LocationBarLayoutTest {
             urlLayoutParams = (MarginLayoutParams) urlContainer.getLayoutParams();
             int endMarginWithIcon = MarginLayoutParamsCompat.getMarginEnd(urlLayoutParams);
 
-            Assert.assertEquals(endMarginNoIcon
-                            + locationBar.getStatusCoordinatorForTesting()
-                                      .getEndPaddingPixelSizeOnFocusDelta(),
+            Assert.assertEquals(endMarginNoIcon + locationBar.getEndPaddingPixelSizeOnFocusDelta(),
                     endMarginWithIcon);
         });
     }

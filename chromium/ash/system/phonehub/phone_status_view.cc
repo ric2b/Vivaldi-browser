@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -244,7 +244,7 @@ void PhoneStatusView::UpdateBatteryStatus() {
   const PowerStatus::BatteryImageInfo& info = CalculateBatteryInfo();
 
   const SkColor icon_bg_color = color_utils::GetResultingPaintColor(
-      ShelfConfig::Get()->GetShelfControlButtonColor(),
+      ShelfConfig::Get()->GetShelfControlButtonColor(GetWidget()),
       GetColorProvider()->GetColor(kColorAshShieldAndBaseOpaque));
   const SkColor icon_fg_color = AshColorProvider::Get()->GetContentLayerColor(
       IsBatterySaverModeOn(phone_status)

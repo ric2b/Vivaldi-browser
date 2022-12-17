@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -157,7 +157,8 @@ bool IsRestrictorOrLogicalOperator(const CSSParserToken& token) {
   return EqualIgnoringASCIICase(token.Value(), "not") ||
          EqualIgnoringASCIICase(token.Value(), "and") ||
          EqualIgnoringASCIICase(token.Value(), "or") ||
-         EqualIgnoringASCIICase(token.Value(), "only");
+         EqualIgnoringASCIICase(token.Value(), "only") ||
+         EqualIgnoringASCIICase(token.Value(), "layer");
 }
 
 bool ConsumeUntilCommaInclusive(CSSParserTokenRange& range) {

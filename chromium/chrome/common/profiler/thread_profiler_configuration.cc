@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -198,7 +198,11 @@ ThreadProfilerConfiguration::GenerateBrowserProcessConfiguration(
   if (!platform_configuration.IsSupported(release_channel))
     return absl::nullopt;
 
-  if (!UnwindPrerequisites::Available()) {
+  // We pass `version_info::Channel::UNKNOWN` instead of `absl::nullopt` here
+  // because `AreUnwindPrerequisitesAvailable` accounts for official build
+  // status internally.
+  if (!AreUnwindPrerequisitesAvailable(
+          release_channel.value_or(version_info::Channel::UNKNOWN))) {
     return kProfileDisabledModuleNotInstalled;
   }
 

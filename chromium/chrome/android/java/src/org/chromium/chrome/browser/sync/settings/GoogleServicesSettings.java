@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceGroup;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchFieldTrial;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
@@ -34,7 +35,6 @@ import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
 import org.chromium.chrome.browser.ui.signin.SignOutDialogCoordinator;
 import org.chromium.chrome.browser.ui.signin.SignOutDialogCoordinator.Listener;
 import org.chromium.components.autofill_assistant.AssistantFeatures;
-import org.chromium.components.autofill_assistant.AutofillAssistantPreferencesUtil;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
@@ -69,6 +69,7 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
     public static final String PREF_METRICS_SETTINGS = "metrics_settings";
     @VisibleForTesting
     public static final String PREF_PRICE_TRACKING_ANNOTATIONS = "price_tracking_annotations";
+    private static final String PREF_PRICE_NOTIFICATION_SECTION = "price_notifications_section";
 
     private final PrefService mPrefService = UserPrefs.get(Profile.getLastUsedRegularProfile());
     private final PrivacyPreferencesManagerImpl mPrivacyPrefManager =
@@ -83,6 +84,7 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
     private ChromeSwitchPreference mPriceTrackingAnnotations;
     private @Nullable ChromeSwitchPreference mAutofillAssistant;
     private @Nullable Preference mContextualSearch;
+    private Preference mPriceNotificationSection;
 
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, String rootKey) {
@@ -152,6 +154,14 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
         } else {
             mPriceTrackingAnnotations.setOnPreferenceChangeListener(this);
             mPriceTrackingAnnotations.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
+        }
+
+        mPriceNotificationSection = findPreference(PREF_PRICE_NOTIFICATION_SECTION);
+        if (ShoppingFeatures.isShoppingListEnabled()) {
+            mPriceNotificationSection.setVisible(true);
+        } else {
+            removePreference(getPreferenceScreen(), mPriceNotificationSection);
+            mPriceNotificationSection = null;
         }
 
         updatePreferences();
@@ -224,7 +234,7 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
             UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(
                     Profile.getLastUsedRegularProfile(), (boolean) newValue);
         } else if (PREF_AUTOFILL_ASSISTANT.equals(key)) {
-            setAutofillAssistantSwitchValue((boolean) newValue);
+            mPrefService.setBoolean(Pref.AUTOFILL_ASSISTANT_ENABLED, (boolean) newValue);
         } else if (PREF_PRICE_TRACKING_ANNOTATIONS.equals(key)) {
             PriceTrackingUtilities.setTrackPricesOnTabsEnabled((boolean) newValue);
         }
@@ -245,7 +255,7 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
                         Profile.getLastUsedRegularProfile()));
 
         if (mAutofillAssistant != null) {
-            mAutofillAssistant.setChecked(isAutofillAssistantSwitchOn());
+            mAutofillAssistant.setChecked(mPrefService.getBoolean(Pref.AUTOFILL_ASSISTANT_ENABLED));
         }
         if (mContextualSearch != null) {
             boolean isContextualSearchEnabled =
@@ -282,11 +292,11 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
 
     /**
      *  This checks whether Autofill Assistant is enabled and was shown at least once (only then
-     *  will the AA switch be assigned a value).
+     *  will the Autofill Assistant switch be assigned a value).
      */
     private boolean shouldShowAutofillAssistantPreference() {
         return AssistantFeatures.AUTOFILL_ASSISTANT.isEnabled()
-                && AutofillAssistantPreferencesUtil.containsAssistantEnabledPreference();
+                && !mPrefService.isDefaultValuePreference(Pref.AUTOFILL_ASSISTANT_ENABLED);
     }
 
     /**
@@ -296,15 +306,6 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
         return ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH)
                 && !ChromeFeatureList.isEnabled(
                         ChromeFeatureList.ASSISTANT_NON_PERSONALIZED_VOICE_SEARCH);
-    }
-
-    public boolean isAutofillAssistantSwitchOn() {
-        return AutofillAssistantPreferencesUtil.getAssistantEnabledPreference(
-                /* defaultValue= */ false);
-    }
-
-    public void setAutofillAssistantSwitchValue(boolean newValue) {
-        AutofillAssistantPreferencesUtil.setAssistantEnabledPreference(newValue);
     }
 
     // SignOutDialogListener implementation:

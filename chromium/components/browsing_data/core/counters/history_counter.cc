@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -154,7 +154,7 @@ void HistoryCounter::OnGetWebHistoryCount(
   if (!result)
     has_synced_visits_ = true;
   else if (const base::Value* events = result->FindListKey("event"))
-    has_synced_visits_ = !events->GetListDeprecated().empty();
+    has_synced_visits_ = !events->GetList().empty();
   else
     has_synced_visits_ = false;
   web_counting_finished_ = true;

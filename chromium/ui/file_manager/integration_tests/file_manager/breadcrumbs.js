@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
@@ -21,8 +21,7 @@ testcase.breadcrumbsNavigate = async () => {
   const breadcrumbsTag = await getBreadcrumbTagName();
 
   // Navigate to Downloads/photos.
-  await remoteCall.navigateWithDirectoryTree(
-      appId, '/Downloads/photos', 'My files');
+  await navigateWithDirectoryTree(appId, '/My files/Downloads/photos');
 
   // Use the breadcrumbs to navigate back to Downloads.
   await remoteCall.waitAndClickElement(
@@ -42,13 +41,6 @@ testcase.breadcrumbsNavigate = async () => {
 testcase.breadcrumbsDownloadsTranslation = async () => {
   // Switch UI to Portuguese (Portugal).
   await sendTestMessage({name: 'switchLanguage', language: 'pt-PT'});
-
-  // TODO(b/198106171): Remove call to reload, once Chrome App Files is removed.
-  // Reload Files app extension to pick up the new language.
-  const isFilesAppSwa = await sendTestMessage({name: 'isFilesAppSwa'});
-  if (isFilesAppSwa !== 'true') {
-    await remoteCall.callRemoteTestUtil('reload', null, []);
-  }
 
   // Open Files app.
   const appId =

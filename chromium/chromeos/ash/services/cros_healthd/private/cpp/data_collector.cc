@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,14 +12,15 @@
 #include "base/notreached.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "chromeos/ash/components/mojo_service_manager/connection.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/cros_system_api/mojo/service_constants.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/ozone/evdev/event_device_info.h"
 
-namespace chromeos {
-namespace cros_healthd {
-namespace internal {
+namespace ash::cros_healthd::internal {
+
 namespace {
 
 class DataCollectorDelegateImpl : public DataCollector::Delegate {
@@ -122,9 +123,15 @@ void GetTouchscreenDevicesOnUIThread(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(results)));
 }
 
-};  // namespace
+}  // namespace
 
-DataCollector::DataCollector() : DataCollector(GetDataCollectorDelegate()) {}
+DataCollector::DataCollector() : DataCollector(GetDataCollectorDelegate()) {
+  if (chromeos::mojo_service_manager::IsServiceManagerBound()) {
+    chromeos::mojo_service_manager::GetServiceManagerProxy()->Register(
+        chromeos::mojo_services::kChromiumCrosHealthdDataCollector,
+        provider_receiver_.BindNewPipeAndPassRemote());
+  }
+}
 
 DataCollector::DataCollector(Delegate* delegate) : delegate_(delegate) {}
 
@@ -132,7 +139,9 @@ DataCollector::~DataCollector() = default;
 
 mojo::PendingRemote<mojom::ChromiumDataCollector>
 DataCollector::BindNewPipeAndPassRemote() {
-  return receiver_.BindNewPipeAndPassRemote();
+  mojo::PendingRemote<mojom::ChromiumDataCollector> remote;
+  receiver_set_.Add(this, remote.InitWithNewPipeAndPassReceiver());
+  return remote;
 }
 
 void DataCollector::GetTouchscreenDevices(
@@ -148,6 +157,11 @@ void DataCollector::GetTouchpadLibraryName(
   std::move(callback).Run(delegate_->GetTouchpadLibraryName());
 }
 
-}  // namespace internal
-}  // namespace cros_healthd
-}  // namespace chromeos
+void DataCollector::Request(
+    chromeos::mojo_service_manager::mojom::ProcessIdentityPtr identity,
+    mojo::ScopedMessagePipeHandle receiver) {
+  receiver_set_.Add(this, mojo::PendingReceiver<mojom::ChromiumDataCollector>(
+                              std::move(receiver)));
+}
+
+}  // namespace ash::cros_healthd::internal

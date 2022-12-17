@@ -1,6 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+// IMPORTANT NOTE: All QtShim members that use `delegate_` must be decorated
+// with DISABLE_CFI_VCALL.
 
 #include "ui/qt/qt_shim.h"
 
@@ -50,7 +53,7 @@ FontHinting QtHintingToFontHinting(QFont::HintingPreference hinting) {
 SkColor GradientColor(const QGradient& gradient) {
   QGradientStops stops = gradient.stops();
   if (stops.empty())
-    return QColorConstants::Transparent.rgba();
+    return qRgba(0, 0, 0, 0);
 
   float a = 0;
   float r = 0;
@@ -84,7 +87,7 @@ SkColor GradientColor(const QGradient& gradient) {
 SkColor TextureColor(QImage image) {
   size_t size = image.width() * image.height();
   if (!size)
-    return QColorConstants::Transparent.rgba();
+    return qRgba(0, 0, 0, 0);
 
   if (image.format() != QImage::Format_ARGB32_Premultiplied)
     image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
@@ -270,10 +273,12 @@ int QtShim::GetAnimationDurationMs() const {
   return app_.style()->styleHint(QStyle::SH_Widget_Animation_Duration);
 }
 
+DISABLE_CFI_VCALL
 void QtShim::FontChanged(const QFont& font) {
   delegate_->FontChanged();
 }
 
+DISABLE_CFI_VCALL
 void QtShim::PaletteChanged(const QPalette& palette) {
   delegate_->ThemeChanged();
 }

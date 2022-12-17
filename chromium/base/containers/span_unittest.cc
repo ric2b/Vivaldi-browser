@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1022,6 +1022,13 @@ TEST(SpanTest, Empty) {
     int array[] = {1, 2, 3};
     span<int> span(array);
     EXPECT_FALSE(span.empty());
+  }
+
+  {
+    std::vector<int> vector = {1, 2, 3};
+    span<int> s = vector;
+    span<int> span_of_checked_iterators = {s.end(), s.end()};
+    EXPECT_TRUE(span_of_checked_iterators.empty());
   }
 }
 

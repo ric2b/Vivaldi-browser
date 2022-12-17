@@ -1,17 +1,17 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 import("//chrome/browser/resources/tools/optimize_webui.gni")
 import("//chrome/common/features.gni")
-import("//tools/code_coverage/create_js_source_maps/create_js_source_maps.gni")
 import("//tools/grit/grit_rule.gni")
+import("//tools/polymer/css_to_wrapper.gni")
 import("//tools/polymer/html_to_wrapper.gni")
-import("//tools/typescript/ts_library.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
 import("//ui/webui/webui_features.gni")
 import("./new_tab_page.gni")
 import("./preprocess_if_expr_sourcemaps.gni")
+import("./ts_library_sourcemaps.gni")
 
 assert(!is_android)
 
@@ -34,6 +34,20 @@ preprocess_if_expr("preprocess_html") {
   in_files = html_files
 }
 
+preprocess_if_expr("preprocess_css") {
+  defines = [ "is_official_build=$is_official_build" ]
+  out_folder = "$target_gen_dir/$preprocess_folder"
+  in_files = css_files
+}
+
+css_to_wrapper("css_wrapper_files") {
+  deps = [ ":preprocess_css" ]
+  in_folder = "$target_gen_dir/$preprocess_folder"
+  out_folder = "$target_gen_dir/$preprocess_folder"
+  in_files = css_files
+  minify = optimize_webui
+}
+
 html_to_wrapper("html_wrapper_files") {
   deps = [ ":preprocess_html" ]
   in_folder = "$target_gen_dir/$preprocess_folder"
@@ -53,6 +67,7 @@ copy("copy_mojom") {
     "//chrome/browser/new_tab_page/modules/recipes:mojo_bindings_js__generator",
     "//chrome/browser/ui/webui/new_tab_page:mojo_bindings_js__generator",
     "//chrome/browser/ui/webui/realbox:mojo_bindings_js__generator",
+    "//components/omnibox/browser:omnibox_js__generator",
   ]
   sources = [
     "$root_gen_dir/mojom-webui/chrome/browser/cart/chrome_cart.mojom-webui.js",
@@ -62,6 +77,7 @@ copy("copy_mojom") {
     "$root_gen_dir/mojom-webui/chrome/browser/new_tab_page/modules/recipes/recipes.mojom-webui.js",
     "$root_gen_dir/mojom-webui/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom-webui.js",
     "$root_gen_dir/mojom-webui/chrome/browser/ui/webui/realbox/realbox.mojom-webui.js",
+    "$root_gen_dir/mojom-webui/components/omnibox/browser/omnibox.mojom-webui.js",
   ]
 
   if (!is_official_build) {
@@ -102,6 +118,7 @@ grit("resources") {
     "//chrome/browser/ui/webui/new_tab_page:mojo_bindings_js",
     "//chrome/browser/ui/webui/realbox:mojo_bindings_js",
     "//chrome/common/search:mojo_bindings_js",
+    "//components/omnibox/browser:omnibox_js",
   ]
   if (!is_official_build) {
     deps += [ "//chrome/browser/ui/webui/new_tab_page/foo:mojo_bindings_js" ]
@@ -146,7 +163,7 @@ if (optimize_webui) {
   }
 }
 
-ts_library("build_ts") {
+ts_library_sourcemaps("build_ts") {
   root_dir = "$target_gen_dir/$preprocess_folder"
   out_dir = "$target_gen_dir/tsc"
   composite = true
@@ -155,11 +172,12 @@ ts_library("build_ts") {
   } else {
     tsconfig_base = "tsconfig_base.json"
   }
-  in_files = ts_files + html_wrapper_files + mojo_js_files
+  in_files = ts_files + html_wrapper_files + mojo_js_files + css_wrapper_files
 
   deps = [
     "//third_party/polymer/v3_0:library",
     "//ui/webui/resources:library",
+    "//ui/webui/resources/cr_components/color_change_listener:build_ts",
     "//ui/webui/resources/cr_components/customize_themes:build_ts",
     "//ui/webui/resources/cr_components/most_visited:build_ts",
   ]
@@ -171,6 +189,7 @@ ts_library("build_ts") {
 
   extra_deps = [
     ":copy_mojom",
+    ":css_wrapper_files",
     ":html_wrapper_files",
     ":preprocess",
   ]

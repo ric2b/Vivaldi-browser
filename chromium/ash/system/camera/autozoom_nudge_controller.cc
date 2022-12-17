@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,10 +52,10 @@ void AutozoomNudgeController::OnActiveUserPrefServiceChanged(
   // Reset the nudge prefs so that the nudge can be shown again. This observer
   // callback is only registered and called when
   // features::kAutozoomNudgeSessionReset is enabled.
-  DictionaryPrefUpdate update(prefs, prefs::kAutozoomNudges);
-  update->SetIntPath(kShownCount, 0);
-  update->SetPath(kLastTimeShown, base::TimeToValue(base::Time()));
-  update->SetBoolPath(kHadEnabled, false);
+  ScopedDictPrefUpdate update(prefs, prefs::kAutozoomNudges);
+  update->Set(kShownCount, 0);
+  update->Set(kLastTimeShown, base::TimeToValue(base::Time()));
+  update->Set(kHadEnabled, false);
 }
 
 base::Time AutozoomNudgeController::GetTime() {
@@ -68,31 +68,25 @@ void AutozoomNudgeController::HandleNudgeShown() {
   if (!prefs)
     return;
   const int shown_count = GetShownCount(prefs);
-  DictionaryPrefUpdate update(prefs, prefs::kAutozoomNudges);
-  update->SetIntPath(kShownCount, shown_count + 1);
-  update->SetPath(kLastTimeShown, base::TimeToValue(GetTime()));
+  ScopedDictPrefUpdate update(prefs, prefs::kAutozoomNudges);
+  update->Set(kShownCount, shown_count + 1);
+  update->Set(kLastTimeShown, base::TimeToValue(GetTime()));
 }
 
 bool AutozoomNudgeController::GetHadEnabled(PrefService* prefs) {
-  const base::Value* dictionary = prefs->GetDictionary(prefs::kAutozoomNudges);
-  if (!dictionary)
-    return false;
-  return dictionary->FindBoolPath(kHadEnabled).value_or(false);
+  const base::Value::Dict& dictionary = prefs->GetDict(prefs::kAutozoomNudges);
+  return dictionary.FindBool(kHadEnabled).value_or(false);
 }
 
 int AutozoomNudgeController::GetShownCount(PrefService* prefs) {
-  const base::Value* dictionary = prefs->GetDictionary(prefs::kAutozoomNudges);
-  if (!dictionary)
-    return 0;
-  return dictionary->FindIntPath(kShownCount).value_or(0);
+  const base::Value::Dict& dictionary = prefs->GetDict(prefs::kAutozoomNudges);
+  return dictionary.FindInt(kShownCount).value_or(0);
 }
 
 base::Time AutozoomNudgeController::GetLastShownTime(PrefService* prefs) {
-  const base::Value* dictionary = prefs->GetDictionary(prefs::kAutozoomNudges);
-  if (!dictionary)
-    return base::Time();
+  const base::Value::Dict& dictionary = prefs->GetDict(prefs::kAutozoomNudges);
   absl::optional<base::Time> last_shown_time =
-      base::ValueToTime(dictionary->FindPath(kLastTimeShown));
+      base::ValueToTime(dictionary.Find(kLastTimeShown));
   return last_shown_time.value_or(base::Time());
 }
 
@@ -140,8 +134,8 @@ void AutozoomNudgeController::OnAutozoomStateChanged(
         Shell::Get()->session_controller()->GetLastActiveUserPrefService();
     if (!prefs)
       return;
-    DictionaryPrefUpdate update(prefs, prefs::kAutozoomNudges);
-    update->SetBoolPath(kHadEnabled, true);
+    ScopedDictPrefUpdate update(prefs, prefs::kAutozoomNudges);
+    update->Set(kHadEnabled, true);
   }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,14 +39,18 @@ Suggestion::Suggestion() = default;
 Suggestion::Suggestion(std::u16string main_text)
     : main_text(std::move(main_text), Text::IsPrimary(true)) {}
 
+Suggestion::Suggestion(int frontend_id) : frontend_id(frontend_id) {}
+
 Suggestion::Suggestion(base::StringPiece main_text,
                        base::StringPiece label,
                        std::string icon,
                        int frontend_id)
     : frontend_id(frontend_id),
       main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
-      label(base::UTF8ToUTF16(label)),
-      icon(std::move(icon)) {}
+      icon(std::move(icon)) {
+  if (!label.empty())
+    this->labels = {{Text(base::UTF8ToUTF16(label))}};
+}
 
 Suggestion::Suggestion(base::StringPiece main_text,
                        base::StringPiece minor_text,
@@ -56,8 +60,10 @@ Suggestion::Suggestion(base::StringPiece main_text,
     : frontend_id(frontend_id),
       main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
       minor_text(base::UTF8ToUTF16(minor_text)),
-      label(base::UTF8ToUTF16(label)),
-      icon(std::move(icon)) {}
+      icon(std::move(icon)) {
+  if (!label.empty())
+    this->labels = {{Text(base::UTF8ToUTF16(label))}};
+}
 
 Suggestion::Suggestion(const Suggestion& other) = default;
 Suggestion::Suggestion(Suggestion&& other) = default;

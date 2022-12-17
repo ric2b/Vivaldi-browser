@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -89,7 +89,7 @@ class WaylandPointerGesturesTest : public WaylandTest {
 // See https://crbug.com/1283652
 TEST_P(WaylandPointerGesturesTest, PinchZoomScale) {
   auto* const mock_surface = server_.GetObject<wl::MockSurface>(
-      window_->root_surface()->GetSurfaceId());
+      window_->root_surface()->get_surface_id());
 
   uint32_t serial = 0;
   auto* pointer = server_.seat()->pointer();
@@ -109,13 +109,23 @@ TEST_P(WaylandPointerGesturesTest, PinchZoomScale) {
   constexpr double kScales[] = {1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.4,
                                 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7,
                                 0.6, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0};
+  [[maybe_unused]] auto previous_scale = kScales[0];
   for (auto scale : kScales) {
     zwp_pointer_gesture_pinch_v1_send_update(
         pinch_resource, /* time */ 0, /* dx */ 0, /* dy */ 0,
         wl_fixed_from_double(scale), /* rotation */ 0);
     Sync();
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
     EXPECT_FLOAT_EQ(observer.latest_scale_update(),
                     wl_fixed_to_double(wl_fixed_from_double(scale)));
+#else
+    // The conversion from double to fixed and back is necessary because it
+    // happens during the roundtrip, and it creates significant error.
+    EXPECT_FLOAT_EQ(
+        observer.latest_scale_update(),
+        wl_fixed_to_double(wl_fixed_from_double(scale)) / previous_scale);
+    previous_scale = wl_fixed_to_double(wl_fixed_from_double(scale));
+#endif
   }
 }
 

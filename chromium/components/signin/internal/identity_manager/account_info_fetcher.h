@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,8 +48,7 @@ class AccountInfoFetcher : public OAuth2AccessTokenManager::Consumer,
                          const GoogleServiceAuthError& error) override;
 
   // gaia::GaiaOAuthClient::Delegate implementation.
-  void OnGetUserInfoResponse(
-      std::unique_ptr<base::DictionaryValue> user_info) override;
+  void OnGetUserInfoResponse(const base::Value::Dict& user_info) override;
   void OnOAuthError() override;
   void OnNetworkError(int response_code) override;
 

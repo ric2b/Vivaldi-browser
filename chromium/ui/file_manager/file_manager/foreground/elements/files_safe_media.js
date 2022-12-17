@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,11 +64,7 @@ const FilesSafeMedia = Polymer({
       this.contentsNode_ = null;
     } else if (hasContent && !this.contentsNode_) {
       // Create node only if src exists to save resources.
-      if (window.isSWA) {
-        this.createUntrustedContents_();
-      } else {
-        this.createWebviewContents_();
-      }
+      this.createUntrustedContents_();
     } else if (hasContent && this.contentsNode_.contentWindow) {
       /** @type {!UntrustedPreviewData} */
       const data = {
@@ -80,17 +76,6 @@ const FilesSafeMedia = Polymer({
             data, toSandboxedURL().origin);
       });
     }
-  },
-
-  createWebviewContents_: function() {
-    const webview =
-        /** @type {!HTMLElement} */ (document.createElement('webview'));
-    this.contentsNode_ = webview;
-    webview.partition = 'trusted';
-    webview.allowtransparency = 'true';
-    this.$.content.appendChild(webview);
-    webview.addEventListener('contentload', () => this.onSrcChange_());
-    webview.src = this.sourceFile_();
   },
 
   createUntrustedContents_: function() {

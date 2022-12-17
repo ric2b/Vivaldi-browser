@@ -1,5 +1,5 @@
 #!/usr/bin/env vpython3
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -907,7 +907,7 @@ def main():
   logging.warning('Generated files will only appear once you\'ve built them.')
   logging.warning('Generated projects for Android Studio %s', channel)
   logging.warning('For more tips: https://chromium.googlesource.com/chromium'
-                  '/src.git/+/master/docs/android_studio.md')
+                  '/src.git/+/main/docs/android_studio.md')
 
 
 if __name__ == '__main__':

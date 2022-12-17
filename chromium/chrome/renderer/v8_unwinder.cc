@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -243,10 +243,9 @@ bool V8Unwinder::CanUnwindFrom(const base::Frame& current_frame) const {
   return loc != modules_.end();
 }
 
-base::UnwindResult V8Unwinder::TryUnwind(
-    base::RegisterContext* thread_context,
-    uintptr_t stack_top,
-    std::vector<base::Frame>* stack) const {
+base::UnwindResult V8Unwinder::TryUnwind(base::RegisterContext* thread_context,
+                                         uintptr_t stack_top,
+                                         std::vector<base::Frame>* stack) {
   v8::RegisterState register_state;
   register_state.pc = reinterpret_cast<void*>(
       base::RegisterContextInstructionPointer(thread_context));

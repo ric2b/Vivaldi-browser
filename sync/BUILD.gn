@@ -18,7 +18,8 @@ source_set("invalidation") {
       "invalidation/vivaldi_invalidation_service_factory.h",
     ]
     deps += [
-      "//content/public/common"
+      "//chrome/common:buildflags",
+      "//content/public/common",
     ]
   }
 }

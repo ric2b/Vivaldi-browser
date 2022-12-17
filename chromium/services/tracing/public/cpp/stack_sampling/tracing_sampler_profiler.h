@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,8 +67,12 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
     StackProfileWriter(const StackProfileWriter&) = delete;
     StackProfileWriter& operator=(const StackProfileWriter&) = delete;
 
+    // This function receives stack sample from profiler and returns InterningID
+    // corresponding to the callstack. Meanwhile it could emit extra entries
+    // to intern data. |function_name| member in Frame could be std::move(ed) by
+    // this method to reduce number of copies we have for function names.
     InterningID GetCallstackIDAndMaybeEmit(
-        const std::vector<base::Frame>& frames,
+        std::vector<base::Frame>& frames,
         perfetto::TraceWriter::TracePacketHandle* trace_packet);
 
     void ResetEmittedState();
@@ -87,6 +91,16 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
     InterningIndex<TypeList<std::string>, SizeList<1024>>
         interned_module_ids_{};
     InterningIndex<TypeList<uintptr_t>, SizeList<1024>> interned_modules_{};
+  };
+
+  // Different kinds of unwinders that are used for stack sampling.
+  enum class UnwinderType {
+    kUnknown,
+    kArm64Android,
+    kCfiAndroid,
+    kCustomAndroid,
+    kDefault,
+    kLibunwindstackUnwinderAndroid,
   };
 
   // This class will receive the sampling profiler stackframes and output them
@@ -116,10 +130,12 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
     void SetIsStartupTracing(bool is_startup_tracing) {
       is_startup_tracing_ = is_startup_tracing;
-    };
+    }
 #else
     void SetTraceWriter(std::unique_ptr<perfetto::TraceWriter> trace_writer);
 #endif
+
+    void SetUnwinderType(TracingSamplerProfiler::UnwinderType unwinder_type);
 
    private:
     struct BufferedSample {
@@ -136,7 +152,7 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
       std::vector<base::Frame> sample;
     };
 
-    void WriteSampleToTrace(const BufferedSample& sample);
+    void WriteSampleToTrace(BufferedSample sample);
 
     // TODO(ssid): Consider using an interning scheme to reduce memory usage
     // and increase the sample size.
@@ -166,6 +182,8 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
     uint32_t last_incremental_state_reset_id_ = 0;
     base::TimeTicks last_timestamp_;
     base::RepeatingClosure sample_callback_for_testing_;
+    // Which type of unwinder is being used for stack sampling?
+    UnwinderType unwinder_type_ = UnwinderType::kUnknown;
   };
 
   using CoreUnwindersCallback =
@@ -176,7 +194,8 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
   // be used to supply custom unwinders to be used during stack sampling.
   static std::unique_ptr<TracingSamplerProfiler> CreateOnMainThread(
       CoreUnwindersCallback core_unwinders_factory_function =
-          CoreUnwindersCallback());
+          CoreUnwindersCallback(),
+      UnwinderType unwinder_type = UnwinderType::kUnknown);
 
   TracingSamplerProfiler(const TracingSamplerProfiler&) = delete;
   TracingSamplerProfiler& operator=(const TracingSamplerProfiler&) = delete;
@@ -212,7 +231,8 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
 
   explicit TracingSamplerProfiler(
       base::SamplingProfilerThreadToken sampled_thread_token,
-      CoreUnwindersCallback core_unwinders_factory_function);
+      CoreUnwindersCallback core_unwinders_factory_function,
+      UnwinderType unwinder_type = UnwinderType::kUnknown);
   virtual ~TracingSamplerProfiler();
 
   // Sets a callback to create auxiliary unwinders, for handling additional,
@@ -243,6 +263,11 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
   CoreUnwindersCallback core_unwinders_factory_function_;
   base::RepeatingCallback<std::unique_ptr<base::Unwinder>()>
       aux_unwinder_factory_;
+  // To differentiate b/w different unwinders used for browser main
+  // thread sampling.
+  // TODO(crbug.com/1377364): Remove once we have single unwinder for browser
+  // main.
+  UnwinderType unwinder_type_;
 
   base::Lock lock_;
   std::unique_ptr<base::StackSamplingProfiler> profiler_;  // under |lock_|

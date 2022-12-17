@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,7 @@ namespace prerender_utils {
 // prerender2 to stop the location bar from the displaying prefetch flag, we
 // will turn if off after we confirm the prerendered document will handle it by
 // themselves.
-extern const base::Feature kHidePrefetchParameter;
+BASE_DECLARE_FEATURE(kHidePrefetchParameter);
 
 extern const char kDefaultSearchEngineMetricSuffix[];
 extern const char kDirectUrlInputMetricSuffix[];

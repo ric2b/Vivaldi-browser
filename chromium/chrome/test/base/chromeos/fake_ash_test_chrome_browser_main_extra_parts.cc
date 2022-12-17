@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/test/allow_check_is_test_to_be_called.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
@@ -26,7 +27,9 @@ namespace test {
 constexpr char kAshReadyFilePathFlag[] = "ash-ready-file-path";
 
 FakeAshTestChromeBrowserMainExtraParts::FakeAshTestChromeBrowserMainExtraParts()
-    : test_controller_ash_(std::make_unique<crosapi::TestControllerAsh>()) {}
+    : test_controller_ash_(std::make_unique<crosapi::TestControllerAsh>()) {
+  base::test::AllowCheckIsTestToBeCalled();
+}
 
 FakeAshTestChromeBrowserMainExtraParts::
     ~FakeAshTestChromeBrowserMainExtraParts() = default;
@@ -49,6 +52,10 @@ void AshIsReadyForTesting() {
   CHECK(base::WriteFile(path, "ash is ready"));
 }
 
+void FakeAshTestChromeBrowserMainExtraParts::PreProfileInit() {
+  crosapi::BrowserManager::DisableForTesting();
+}
+
 void FakeAshTestChromeBrowserMainExtraParts::PreBrowserStart() {
   // These are used by exo's weston-test protocol for event injection.
   ui_controls::InstallUIControlsAura(ash::test::CreateAshUIControls());
@@ -66,7 +73,6 @@ void FakeAshTestChromeBrowserMainExtraParts::PostBrowserStart() {
 
   crosapi::CrosapiManager::Get()->crosapi_ash()->SetTestControllerForTesting(
       test_controller_ash_.get());
-  crosapi::BrowserManager::Get()->DisableAutoLaunchForTesting();
   views::InputEventActivationProtector::DisableForTesting();
 
   ignore_signin_errors_ =

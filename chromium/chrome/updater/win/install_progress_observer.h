@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,6 +73,7 @@ struct AppCompletionInfo {
 
   AppCompletionInfo();
   AppCompletionInfo(const AppCompletionInfo&);
+  AppCompletionInfo& operator=(const AppCompletionInfo&);
   ~AppCompletionInfo();
 };
 
@@ -83,6 +84,8 @@ struct ObserverCompletionInfo {
   std::vector<AppCompletionInfo> apps_info;
 
   ObserverCompletionInfo();
+  ObserverCompletionInfo(const ObserverCompletionInfo&);
+  ObserverCompletionInfo& operator=(const ObserverCompletionInfo&);
   ~ObserverCompletionInfo();
 };
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@ class Time;
 namespace content {
 
 class AggregatableReport;
+class AggregatableReportRequest;
 
 // Observes events in the Aggregation Service. Observers are registered on
 // `AggregationService`.
@@ -35,9 +36,11 @@ class AggregationServiceObserver : public base::CheckedObserver {
 
   // Called when a report has been handled, i.e. attempted to be assembled and
   // sent, regardless of success. `report_handled_time` indicates when the
-  // report has been handled.
+  // report has been handled. `id` should be `absl::nullopt` iff the request was
+  // not stored/scheduled.
   virtual void OnReportHandled(
-      const AggregationServiceStorage::RequestAndId& request_and_id,
+      const AggregatableReportRequest& request,
+      absl::optional<AggregationServiceStorage::RequestId> id,
       const absl::optional<AggregatableReport>& report,
       base::Time report_handled_time,
       ReportStatus status) {}

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 #include <errno.h>
 #include <sys/socket.h>
 
-#include <algorithm>
 #include <atomic>
 #include <limits>
 #include <memory>
@@ -21,6 +20,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_pump_for_io.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/synchronization/lock.h"
 #include "base/task/current_thread.h"
 #include "base/task/task_runner.h"
@@ -156,8 +156,7 @@ void ChannelPosix::ShutDownImpl() {
 void ChannelPosix::Write(MessagePtr message) {
   bool log_histograms = true;
 #if !defined(MOJO_CORE_SHARED_LIBRARY)
-  static base::CpuReductionExperimentFilter filter;
-  log_histograms = filter.ShouldLogHistograms();
+  log_histograms = base::ShouldLogHistogramForCpuReductionExperiment();
 #endif
   if (log_histograms) {
     UMA_HISTOGRAM_COUNTS_100000("Mojo.Channel.WriteMessageSize",
@@ -683,9 +682,7 @@ bool ChannelPosix::CloseHandles(const int* fds, size_t num_fds) {
   if (!num_fds)
     return false;
 
-  auto start = std::find_if(
-      fds_to_close_.begin(), fds_to_close_.end(),
-      [&fds](const base::ScopedFD& fd) { return fd.get() == fds[0]; });
+  auto start = base::ranges::find(fds_to_close_, fds[0], &base::ScopedFD::get);
   if (start == fds_to_close_.end())
     return false;
 

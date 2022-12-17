@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -142,12 +142,6 @@ CompositorThreadSchedulerImpl::MonotonicallyIncreasingVirtualTime() {
 
 void CompositorThreadSchedulerImpl::SetV8Isolate(v8::Isolate* isolate) {
   NonMainThreadSchedulerBase::SetV8Isolate(isolate);
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-CompositorThreadSchedulerImpl::DeprecatedDefaultTaskRunner() {
-  NOTREACHED();
-  return nullptr;
 }
 
 }  // namespace scheduler

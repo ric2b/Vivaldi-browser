@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -100,7 +100,7 @@
 
 #include "base/callback_forward.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
-#include "extensions/browser/api/file_handlers/app_file_handler_util.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "url/gurl.h"
 
 class PrefService;
@@ -114,17 +114,15 @@ namespace storage {
 class FileSystemURL;
 }
 
-namespace file_manager {
-namespace file_tasks {
+namespace file_manager::file_tasks {
 
 extern const char kActionIdView[];
 extern const char kActionIdSend[];
 extern const char kActionIdSendMultiple[];
-extern const char kActionIdHandleOffice[];
 extern const char kActionIdWebDriveOfficeWord[];
 extern const char kActionIdWebDriveOfficeExcel[];
 extern const char kActionIdWebDriveOfficePowerPoint[];
-extern const char kActionIdUploadOfficeToDrive[];
+extern const char kActionIdOpenInOffice[];
 
 // Task types as explained in the comment above. Search for <task-type>.
 enum TaskType {
@@ -146,24 +144,34 @@ enum TaskType {
 TaskType StringToTaskType(const std::string& str);
 std::string TaskTypeToString(TaskType task_type);
 
-// UMA metric name that tracks the result of trying to enable the Web Drive
-// Office task.
-constexpr char kWebDriveOfficeMetricName[] =
-    "FileBrowser.OfficeFiles.WebDriveOffice";
+constexpr char kDriveErrorMetricName[] = "FileBrowser.OfficeFiles.Errors.Drive";
+constexpr char kDriveTaskResultMetricName[] =
+    "FileBrowser.OfficeFiles.TaskResult.Drive";
 
 // List of UMA enum value for Web Drive Office task results. The enum values
-// must be kept in sync with WebDriveOfficeTaskResult in
+// must be kept in sync with OfficeTaskResult in
 // tools/metrics/histograms/enums.xml.
-enum class WebDriveOfficeTaskResult {
-  AVAILABLE = 0,
-  FLAG_DISABLED = 1,
-  OFFLINE = 2,
-  NOT_ON_DRIVE = 3,
-  DRIVE_ERROR = 4,
-  DRIVE_METADATA_ERROR = 5,
-  INVALID_ALTERNATE_URL = 6,
-  DRIVE_ALTERNATE_URL = 7,
-  UNEXPECTED_ALTERNATE_URL = 8,
+enum class OfficeTaskResult {
+  FALLBACK_QUICKOFFICE = 0,
+  FALLBACK_OTHER = 1,
+  OPENED = 2,
+  MOVED = 3,
+  CANCELLED = 4,
+  FAILED = 5,
+  kMaxValue = FAILED,
+};
+
+// List of UMA enum values for Office File Handler task results for Drive. The
+// enum values must be kept in sync with OfficeDriveErrors in
+// tools/metrics/histograms/enums.xml.
+enum class OfficeDriveErrors {
+  OFFLINE = 0,
+  DRIVEFS_INTERFACE = 1,
+  TIMEOUT = 2,
+  NO_METADATA = 3,
+  INVALID_ALTERNATE_URL = 4,
+  DRIVE_ALTERNATE_URL = 5,
+  UNEXPECTED_ALTERNATE_URL = 6,
   kMaxValue = UNEXPECTED_ALTERNATE_URL,
 };
 
@@ -241,8 +249,31 @@ struct FullTaskDescriptor {
   bool is_file_extension_match;
 };
 
-// Returns true if the `task` is the generic task for Office files handling.
-bool IsHandleOfficeTask(const FullTaskDescriptor& task);
+// Describes how admin policy affects the default task in a ResultingTasks.
+enum class PolicyDefaultHandlerStatus {
+  // Indicates that the default task was selected according to the policy
+  // settings.
+  kDefaultHandlerAssignedByPolicy,
+
+  // Indicates that no default task was set due to some assignment conflicts.
+  // Possible reasons are:
+  //  * The user is trying to open multiple files which have different policy
+  //  default handlers;
+  //  * The admin-specified handler was not found in the list of tasks.
+  kIncorrectAssignment
+};
+
+// Represents a set of tasks capable of handling file entries.
+struct ResultingTasks {
+  ResultingTasks();
+  ~ResultingTasks();
+
+  std::vector<FullTaskDescriptor> tasks;
+  absl::optional<PolicyDefaultHandlerStatus> policy_default_handler_status;
+};
+
+// Registers profile prefs related to file_manager.
+void RegisterProfilePrefs(PrefRegistrySimple*);
 
 // Update the default file handler for the given sets of suffixes and MIME
 // types.
@@ -302,16 +333,14 @@ bool ExecuteFileTask(Profile* profile,
                      const std::vector<storage::FileSystemURL>& file_urls,
                      FileTaskFinishedCallback done);
 
-// Finds the file browser handler tasks (app/extensions declaring
-// "file_browser_handlers" in manifest.json) that can be used with the
-// given files, appending them to the |result_list|.
-void FindFileBrowserHandlerTasks(Profile* profile,
-                                 const std::vector<GURL>& file_urls,
-                                 std::vector<FullTaskDescriptor>* result_list);
+// Executes QuickOffice file handler for each element of |file_urls|. Returns
+// |false| if the execution cannot be initiated. Otherwise returns |true|.
+bool LaunchQuickOffice(Profile* profile,
+                       const std::vector<storage::FileSystemURL>& file_urls);
 
 // Callback function type for FindAllTypesOfTasks.
 typedef base::OnceCallback<void(
-    std::unique_ptr<std::vector<FullTaskDescriptor>> result)>
+    std::unique_ptr<ResultingTasks> resulting_tasks)>
     FindTasksCallback;
 
 // Finds all types (file handlers, file browser handlers) of
@@ -326,12 +355,13 @@ void FindAllTypesOfTasks(Profile* profile,
                          const std::vector<GURL>& file_urls,
                          FindTasksCallback callback);
 
-// Chooses the default task in |tasks| and sets it as default, if the default
-// task is found (i.e. the default task may not exist in |tasks|). No tasks
-// should be set as default before calling this function.
+// Chooses the default task in |resulting_tasks| and sets it as default, if the
+// default task is found (i.e. the default task may not exist in
+// |resulting_tasks|). No tasks should be set as default before calling this
+// function.
 void ChooseAndSetDefaultTask(Profile* profile,
                              const std::vector<extensions::EntryInfo>& entries,
-                             std::vector<FullTaskDescriptor>* tasks);
+                             ResultingTasks* resulting_tasks);
 
 // Returns whether |path| is an HTML file according to its extension.
 bool IsHtmlFile(const base::FilePath& path);
@@ -339,7 +369,6 @@ bool IsHtmlFile(const base::FilePath& path);
 // Returns whether |path| is a MS Office file according to its extension.
 bool IsOfficeFile(const base::FilePath& path);
 
-}  // namespace file_tasks
-}  // namespace file_manager
+}  // namespace file_manager::file_tasks
 
 #endif  // CHROME_BROWSER_ASH_FILE_MANAGER_FILE_TASKS_H_

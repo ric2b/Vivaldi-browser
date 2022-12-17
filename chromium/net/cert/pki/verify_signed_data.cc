@@ -1,10 +1,9 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/cert/pki/verify_signed_data.h"
 
-#include "base/numerics/safe_math.h"
 #include "crypto/openssl_util.h"
 #include "net/cert/pki/cert_errors.h"
 #include "net/cert/pki/signature_algorithm.h"
@@ -155,15 +154,6 @@ bool VerifySignedData(SignatureAlgorithm algorithm,
       digest = EVP_sha512();
       is_rsa_pss = true;
       break;
-
-    case SignatureAlgorithm::kDsaSha1:
-    case SignatureAlgorithm::kDsaSha256:
-    case SignatureAlgorithm::kRsaPkcs1Md2:
-    case SignatureAlgorithm::kRsaPkcs1Md4:
-    case SignatureAlgorithm::kRsaPkcs1Md5:
-      // DSA, MD2, MD4, and MD5 are not supported. See
-      // https://crbug.com/1321688.
-      return false;
   }
 
   if (expected_pkey_id != EVP_PKEY_id(public_key))

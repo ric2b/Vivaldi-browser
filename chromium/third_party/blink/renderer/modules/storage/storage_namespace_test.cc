@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,14 +53,13 @@ TEST(StorageNamespaceTest, BasicStorageAreas) {
 
   StorageController::DomStorageConnection connection;
   std::ignore = connection.dom_storage_remote.BindNewPipeAndPassReceiver();
-  StorageController controller(std::move(connection),
-                               scheduler::GetSingleThreadTaskRunnerForTesting(),
-                               kTestCacheLimit);
+  StorageController controller(std::move(connection), kTestCacheLimit);
 
   StorageNamespace* localStorage =
       MakeGarbageCollected<StorageNamespace>(&controller);
   StorageNamespace* sessionStorage = MakeGarbageCollected<StorageNamespace>(
-      &controller, kSessionStorageNamespace);
+      *local_dom_window_root->GetFrame()->GetPage(), &controller,
+      kSessionStorageNamespace);
 
   EXPECT_FALSE(localStorage->IsSessionStorage());
   EXPECT_TRUE(sessionStorage->IsSessionStorage());

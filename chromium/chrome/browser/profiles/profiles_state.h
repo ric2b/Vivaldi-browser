@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -110,9 +110,6 @@ void RemoveBrowsingDataForProfile(const base::FilePath& profile_path);
 
 // Returns whether a public session is being run currently.
 bool IsPublicSession();
-
-// Returns whether public session restrictions are enabled.
-bool ArePublicSessionRestrictionsEnabled();
 
 // Returns whether a kiosk session is being run currently.
 bool IsKioskSession();

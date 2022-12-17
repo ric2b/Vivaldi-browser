@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -985,7 +985,6 @@ public class AppBannerManagerTest {
     @Test
     @MediumTest
     @Feature({"AppBanners"})
-    @DisabledTest(message = "crbug.com/1238320 test is flaky")
     public void testDismissBottomSheetResolvesUserChoice() throws Exception {
         triggerBottomSheet(mTabbedActivityTestRule,
                 WebappTestPage.getServiceWorkerUrlWithManifestAndAction(mTestServer,
@@ -1064,7 +1063,7 @@ public class AppBannerManagerTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { backgroundTab.loadUrl(new LoadUrlParams(url)); });
 
-        waitForAppBannerPipelineStatus(backgroundTab, /* PENDING_PROMPT */ 8);
+        waitForAppBannerPipelineStatus(backgroundTab, /* PENDING_PROMPT */ 9);
 
         ThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(BottomSheetController.SheetState.HIDDEN,
@@ -1183,7 +1182,7 @@ public class AppBannerManagerTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { backgroundTab.loadUrl(new LoadUrlParams(url)); });
 
-        waitForAppBannerPipelineStatus(backgroundTab, /* PENDING_PROMPT */ 8);
+        waitForAppBannerPipelineStatus(backgroundTab, /* PENDING_PROMPT */ 9);
 
         assertNoHelpBubble(withText(R.string.iph_pwa_install_available_text));
     }

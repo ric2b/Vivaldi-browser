@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,11 +50,10 @@ class TestStatsDictionaryTest : public testing::Test {
     std::unique_ptr<base::Value> value =
         base::JSONReader::ReadDeprecated(kTestStatsReportJson);
     CHECK(value);
-    base::DictionaryValue* dictionary;
-    CHECK(value->GetAsDictionary(&dictionary));
-    std::ignore = value.release();
-    report_ = new TestStatsReportDictionary(
-        std::unique_ptr<base::DictionaryValue>(dictionary));
+    base::Value::Dict* dictionary = value->GetIfDict();
+    CHECK(dictionary);
+    report_ =
+        base::MakeRefCounted<TestStatsReportDictionary>(std::move(*dictionary));
   }
 
  protected:

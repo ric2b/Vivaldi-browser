@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -324,14 +324,18 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTestSanityTest, SingleProcess) {
 
 namespace {
 
-const base::Feature kTestFeatureForBrowserTest1{
-    "TestFeatureForBrowserTest1", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kTestFeatureForBrowserTest2{
-    "TestFeatureForBrowserTest2", base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kTestFeatureForBrowserTest3{
-    "TestFeatureForBrowserTest3", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kTestFeatureForBrowserTest4{
-    "TestFeatureForBrowserTest4", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kTestFeatureForBrowserTest1,
+             "TestFeatureForBrowserTest1",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kTestFeatureForBrowserTest2,
+             "TestFeatureForBrowserTest2",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kTestFeatureForBrowserTest3,
+             "TestFeatureForBrowserTest3",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kTestFeatureForBrowserTest4,
+             "TestFeatureForBrowserTest4",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace
 

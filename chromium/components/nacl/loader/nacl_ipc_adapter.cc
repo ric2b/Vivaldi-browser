@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,6 @@
 #include "base/location.h"
 #include "base/memory/platform_shared_memory_region.h"
 #include "base/memory/raw_ptr.h"
-#include "base/task/task_runner_util.h"
 #include "base/tuple.h"
 #include "build/build_config.h"
 #include "ipc/ipc_channel.h"

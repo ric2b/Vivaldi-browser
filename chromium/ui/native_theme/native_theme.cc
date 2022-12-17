@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,10 +11,12 @@
 #include "base/containers/fixed_flat_map.h"
 #include "base/logging.h"
 #include "base/observer_list.h"
+#include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/color/color_id.h"
+#include "ui/color/color_metrics.h"
 #include "ui/color/color_provider.h"
 #include "ui/color/color_provider_manager.h"
 #include "ui/color/color_provider_utils.h"
@@ -47,8 +49,7 @@ ColorProviderManager::Key NativeTheme::GetColorProviderKey(
           : ColorProviderManager::ColorMode::kLight,
       UserHasContrastPreference() ? ColorProviderManager::ContrastMode::kHigh
                                   : ColorProviderManager::ContrastMode::kNormal,
-      is_custom_system_theme_ ? ColorProviderManager::SystemTheme::kCustom
-                              : ColorProviderManager::SystemTheme::kDefault,
+      system_theme_,
       use_custom_frame ? ui::ColorProviderManager::FrameType::kChromium
                        : ui::ColorProviderManager::FrameType::kNative,
       user_color_, std::move(custom_theme));
@@ -77,15 +78,25 @@ void NativeTheme::RemoveObserver(NativeThemeObserver* observer) {
 }
 
 void NativeTheme::NotifyOnNativeThemeUpdated() {
+  base::ElapsedTimer timer;
+  auto& color_provider_manager = ui::ColorProviderManager::Get();
+  const size_t initial_providers_initialized =
+      color_provider_manager.num_providers_initialized();
+
   // This specific method is prone to being mistakenly called on the wrong
   // sequence, because it is often invoked from a platform-specific event
   // listener, and those events may be delivered on unexpected sequences.
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Reset the ColorProviderManager's cache so that ColorProviders requested
   // from this point onwards incorporate the changes to the system theme.
-  ui::ColorProviderManager::Get().ResetColorProviderCache();
+  color_provider_manager.ResetColorProviderCache();
   for (NativeThemeObserver& observer : native_theme_observers_)
     observer.OnNativeThemeUpdated(this);
+
+  RecordNumColorProvidersInitializedDuringOnNativeThemeUpdated(
+      color_provider_manager.num_providers_initialized() -
+      initial_providers_initialized);
+  RecordTimeSpentProcessingOnNativeThemeUpdatedEvent(timer.Elapsed());
 }
 
 void NativeTheme::NotifyOnCaptionStyleUpdated() {
@@ -95,6 +106,15 @@ void NativeTheme::NotifyOnCaptionStyleUpdated() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (NativeThemeObserver& observer : native_theme_observers_)
     observer.OnCaptionStyleUpdated();
+}
+
+void NativeTheme::NotifyOnPreferredContrastUpdated() {
+  // This specific method is prone to being mistakenly called on the wrong
+  // sequence, because it is often invoked from a platform-specific event
+  // listener, and those events may be delivered on unexpected sequences.
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  for (NativeThemeObserver& observer : native_theme_observers_)
+    observer.OnPreferredContrastChanged();
 }
 
 float NativeTheme::AdjustBorderWidthByZoom(float border_width,
@@ -114,9 +134,9 @@ float NativeTheme::AdjustBorderRadiusByZoom(Part part,
 }
 
 NativeTheme::NativeTheme(bool should_use_dark_colors,
-                         bool is_custom_system_theme)
+                         ui::SystemTheme system_theme)
     : should_use_dark_colors_(should_use_dark_colors || IsForcedDarkMode()),
-      is_custom_system_theme_(is_custom_system_theme),
+      system_theme_(system_theme),
       forced_colors_(IsForcedHighContrast()),
       preferred_color_scheme_(CalculatePreferredColorScheme()),
       preferred_contrast_(CalculatePreferredContrast()) {}
@@ -157,14 +177,22 @@ NativeTheme::PreferredContrast NativeTheme::GetPreferredContrast() const {
   return preferred_contrast_;
 }
 
-bool NativeTheme::IsForcedDarkMode() const {
+void NativeTheme::SetPreferredContrast(
+    NativeTheme::PreferredContrast preferred_contrast) {
+  if (preferred_contrast_ == preferred_contrast)
+    return;
+  preferred_contrast_ = preferred_contrast;
+  NotifyOnPreferredContrastUpdated();
+}
+
+bool NativeTheme::IsForcedDarkMode() {
   static bool kIsForcedDarkMode =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceDarkMode);
   return kIsForcedDarkMode;
 }
 
-bool NativeTheme::IsForcedHighContrast() const {
+bool NativeTheme::IsForcedHighContrast() {
   static bool kIsForcedHighContrast =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceHighContrast);
@@ -261,7 +289,7 @@ void NativeTheme::ColorSchemeNativeThemeObserver::OnNativeThemeUpdated(
     notify_observers = true;
   }
   if (theme_to_update_->GetPreferredContrast() != preferred_contrast) {
-    theme_to_update_->set_preferred_contrast(preferred_contrast);
+    theme_to_update_->SetPreferredContrast(preferred_contrast);
     notify_observers = true;
   }
 

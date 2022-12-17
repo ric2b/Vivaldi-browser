@@ -9,6 +9,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
@@ -218,8 +219,7 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
     PrefService* pref_service =
         window_->GetProfile()->GetOriginalProfile()->GetPrefs();
     const base::Value::Dict& partition_dict =
-        pref_service->GetDictionary(prefs::kPartitionPerHostZoomLevels)
-            ->GetDict();
+        pref_service->GetDict(prefs::kPartitionPerHostZoomLevels);
     for (auto partition : partition_dict) {
       if (const base::Value::Dict* host_dict = partition.second.GetIfDict()) {
         // Each entry in host_dict is another dictionary with settings
@@ -285,7 +285,8 @@ void VivaldiUIWebContentsDelegate::DidFinishNavigation(
       static_cast<content::RenderFrameHostImpl*>(
           navigation_handle->GetRenderFrameHost());
   DCHECK(host);
-  if (host->GetParent() == nullptr) {
+  if (host->GetParent() == nullptr && !has_resumed_) {
+    has_resumed_ = true;
     host->GetVivaldiFrameService()->ResumeParser();
   }
   // will run the callback set in WindowPrivateCreateFunction and then remove
@@ -360,3 +361,19 @@ void VivaldiUIWebContentsDelegate::CapturePaintPreviewOfSubframe(
   }
 }
 #endif
+
+void VivaldiUIWebContentsDelegate::BeforeUnloadFired(
+    content::WebContents* source,
+    bool proceed,
+    bool* proceed_to_fire_unload) {
+  // These should be the same main-webcontents in the VivaldiBrowserWindow.
+  DCHECK_EQ(source, web_contents());
+  *proceed_to_fire_unload = true;
+  window_->BeforeUnloadFired(web_contents());
+
+}
+
+void VivaldiUIWebContentsDelegate::BeforeUnloadFired(
+    bool proceed,
+    const base::TimeTicks& proceed_time) {
+}

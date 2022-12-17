@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,12 +9,7 @@
 #include <string>
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/public/cpp/style/color_mode_observer.h"
-#include "ash/public/cpp/style/color_provider.h"
-#include "ash/public/cpp/style/dark_light_mode_controller.h"
-#include "ash/public/cpp/style/scoped_light_mode_as_default.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -33,8 +28,10 @@
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/login_web_dialog.h"
 #include "chrome/browser/ash/login/ui/webui_login_view.h"
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/extensions/file_manager/select_file_dialog_extension_user_data.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_view_host.h"
@@ -49,8 +46,11 @@
 #include "chromeos/ui/base/window_properties.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window.h"
 #include "ui/base/base_window.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/color/color_provider.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/shell_dialogs/selected_file_info.h"
@@ -188,8 +188,7 @@ SelectFileDialogExtension::RoutingID GetRoutingID(
 // A customization of SystemWebDialogDelegate that provides notifications
 // to SelectFileDialogExtension about web dialog closing events. Must be outside
 // anonymous namespace for the friend declaration to work.
-class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate,
-                                     public ash::ColorModeObserver {
+class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate {
  public:
   SystemFilesAppDialogDelegate(base::WeakPtr<SelectFileDialogExtension> parent,
                                const std::string& id,
@@ -197,12 +196,8 @@ class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate,
                                std::u16string title)
       : chromeos::SystemWebDialogDelegate(url, title),
         id_(id),
-        parent_(std::move(parent)) {
-    ash::DarkLightModeController::Get()->AddObserver(this);
-  }
-  ~SystemFilesAppDialogDelegate() override {
-    ash::DarkLightModeController::Get()->RemoveObserver(this);
-  }
+        parent_(std::move(parent)) {}
+  ~SystemFilesAppDialogDelegate() override = default;
 
   void SetModal(bool modal) {
     set_modal_type(modal ? ui::MODAL_TYPE_WINDOW : ui::MODAL_TYPE_NONE);
@@ -251,6 +246,14 @@ class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate,
 
 SelectFileDialogExtension::Owner::Owner() = default;
 SelectFileDialogExtension::Owner::~Owner() = default;
+SelectFileDialogExtension::Owner::Owner(
+    const SelectFileDialogExtension::Owner&) = default;
+SelectFileDialogExtension::Owner& SelectFileDialogExtension::Owner::operator=(
+    const SelectFileDialogExtension::Owner&) = default;
+SelectFileDialogExtension::Owner::Owner(SelectFileDialogExtension::Owner&&) =
+    default;
+SelectFileDialogExtension::Owner& SelectFileDialogExtension::Owner::operator=(
+    SelectFileDialogExtension::Owner&&) = default;
 
 // static
 SelectFileDialogExtension* SelectFileDialogExtension::Create(
@@ -265,14 +268,11 @@ SelectFileDialogExtension::SelectFileDialogExtension(
     : SelectFileDialog(listener, std::move(policy)),
       system_files_app_web_contents_(nullptr) {}
 
-SelectFileDialogExtension::~SelectFileDialogExtension() {
-  if (extension_dialog_.get())
-    extension_dialog_->ObserverDestroyed();
-}
+SelectFileDialogExtension::~SelectFileDialogExtension() = default;
 
 bool SelectFileDialogExtension::IsRunning(
     gfx::NativeWindow owner_window) const {
-  return owner_window_ == owner_window;
+  return owner_.window == owner_window;
 }
 
 void SelectFileDialogExtension::ListenerDestroyed() {
@@ -281,50 +281,21 @@ void SelectFileDialogExtension::ListenerDestroyed() {
   PendingDialog::GetInstance()->Remove(routing_id_);
 }
 
-void SelectFileDialogExtension::ExtensionDialogClosing(
-    ExtensionDialog* /*dialog*/) {
-  if (!ash::features::IsFileManagerSwaEnabled() &&
-      ash::DarkLightModeController::Get()) {
-    ash::DarkLightModeController::Get()->RemoveObserver(this);
-  }
-  profile_ = nullptr;
-  owner_window_ = nullptr;
-  // Release our reference to the underlying dialog to allow it to close.
-  extension_dialog_ = nullptr;
-  system_files_app_web_contents_ = nullptr;
-  PendingDialog::GetInstance()->Remove(routing_id_);
-  // Actually invoke the appropriate callback on our listener.
-  NotifyListener();
-}
-
-void SelectFileDialogExtension::ExtensionTerminated(
-    ExtensionDialog* dialog) {
-  // The extension crashed (or the process was killed). Close the dialog.
-  dialog->GetWidget()->Close();
-}
-
-void SelectFileDialogExtension::OnColorModeChanged(bool dark_mode_enabled) {
-  if (!ash::features::IsFileManagerSwaEnabled() && extension_dialog_.get()) {
-    auto* color_provider = ash::ColorProvider::Get();
-    gfx::NativeWindow native_view =
-        extension_dialog_->GetWidget()->GetNativeView();
-    native_view->SetProperty(chromeos::kFrameActiveColorKey,
-                             color_provider->GetActiveDialogTitleBarColor());
-    native_view->SetProperty(chromeos::kFrameInactiveColorKey,
-                             color_provider->GetInactiveDialogTitleBarColor());
-  }
-}
-
 void SelectFileDialogExtension::OnSystemDialogShown(
     content::WebContents* web_contents,
     const std::string& id) {
   system_files_app_web_contents_ = web_contents;
-  SelectFileDialogExtensionUserData::SetRoutingIdForWebContents(web_contents,
-                                                                id);
+  SelectFileDialogExtensionUserData::SetDialogDataForWebContents(
+      web_contents, id, owner_.dialog_caller);
 }
 
 void SelectFileDialogExtension::OnSystemDialogWillClose() {
-  ExtensionDialogClosing(nullptr);
+  profile_ = nullptr;
+  owner_ = {};
+  system_files_app_web_contents_ = nullptr;
+  PendingDialog::GetInstance()->Remove(routing_id_);
+  // Actually invoke the appropriate callback on our listener.
+  NotifyListener();
 }
 
 // static
@@ -367,9 +338,7 @@ void SelectFileDialogExtension::OnFileSelectionCanceled(RoutingID routing_id) {
 }
 
 content::RenderFrameHost* SelectFileDialogExtension::GetPrimaryMainFrame() {
-  if (extension_dialog_)
-    return extension_dialog_->host()->main_frame_host();
-  else if (system_files_app_web_contents_)
+  if (system_files_app_web_contents_)
     return system_files_app_web_contents_->GetPrimaryMainFrame();
   return nullptr;
 }
@@ -446,7 +415,7 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
     const std::string& search_query,
     bool show_android_picker_apps,
     bool use_media_store_filter) {
-  if (owner_window_) {
+  if (owner_.window) {
     LOG(ERROR) << "File dialog already in use!";
     return;
   }
@@ -515,48 +484,19 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
   gfx::NativeWindow parent_window =
       base_window ? base_window->GetNativeWindow() : owner.window;
 
-  if (ash::features::IsFileManagerSwaEnabled()) {
-    auto* dialog_delegate = new SystemFilesAppDialogDelegate(
-        weak_factory_.GetWeakPtr(), routing_id, file_manager_url, dialog_title);
-    dialog_delegate->SetModal(owner.window != nullptr);
-    dialog_delegate->set_can_resize(can_resize_);
-    dialog_delegate->ShowSystemDialogForBrowserContext(profile_, parent_window);
-  } else {
-    ExtensionDialog::InitParams dialog_params(
-        {kFileManagerWidth, kFileManagerHeight});
-    dialog_params.is_modal = (owner.window != nullptr);
-    dialog_params.min_size = {kFileManagerMinimumWidth,
-                              kFileManagerMinimumHeight};
-    dialog_params.title = dialog_title;
-    auto* color_provider = ash::ColorProvider::Get();
-    ash::ScopedLightModeAsDefault scoped_light_mode_as_default;
-    dialog_params.title_color = color_provider->GetActiveDialogTitleBarColor();
-    dialog_params.title_inactive_color =
-        color_provider->GetInactiveDialogTitleBarColor();
+  owner_ = owner;
 
-    ash::DarkLightModeController::Get()->AddObserver(this);
-
-    ExtensionDialog* dialog = ExtensionDialog::Show(
-        file_manager_url, parent_window, profile_, web_contents,
-        /*ExtensionDialogObserver=*/this, dialog_params);
-    if (!dialog) {
-      LOG(ERROR) << "Unable to create extension dialog";
-      return;
-    }
-
-    dialog->SetCanResize(can_resize_);
-    SelectFileDialogExtensionUserData::SetRoutingIdForWebContents(
-        dialog->host()->host_contents(), routing_id);
-
-    extension_dialog_ = dialog;
-  }
+  auto* dialog_delegate = new SystemFilesAppDialogDelegate(
+      weak_factory_.GetWeakPtr(), routing_id, file_manager_url, dialog_title);
+  dialog_delegate->SetModal(owner.window != nullptr);
+  dialog_delegate->set_can_resize(can_resize_);
+  dialog_delegate->ShowSystemDialogForBrowserContext(profile_, parent_window);
 
   // Connect our listener to FileDialogFunction's per-tab callbacks.
   AddPending(routing_id);
 
   params_ = params;
   routing_id_ = routing_id;
-  owner_window_ = owner.window;
 }
 
 void SelectFileDialogExtension::SelectFileImpl(
@@ -567,10 +507,14 @@ void SelectFileDialogExtension::SelectFileImpl(
     int file_type_index,
     const base::FilePath::StringType& default_extension,
     gfx::NativeWindow owner_window,
-    void* params) {
+    void* params,
+    const GURL* caller) {
   // |default_extension| is ignored.
   Owner owner;
   owner.window = owner_window;
+  if (caller && caller->is_valid()) {
+    owner.dialog_caller.emplace(caller->spec());
+  }
   SelectFileWithFileManagerParams(type, title, default_path, file_types,
                                   file_type_index, params, owner,
                                   /*search_query=*/"",

@@ -8,6 +8,7 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "renderer/blink/vivaldi_spatnav_quad.h"
+#include "third_party/blink/public/web/web_element.h"
 
 #include "renderer/mojo/vivaldi_frame_service.mojom.h"
 
@@ -32,7 +33,6 @@ class VivaldiFrameServiceImpl : public vivaldi::mojom::VivaldiFrameService,
   // Mojo implementation
   void GetAccessKeysForPage(GetAccessKeysForPageCallback callback) override;
   void AccessKeyAction(const std::string& access_key) override;
-  void UpdateSpatnavRects() override;
   void ScrollPage(vivaldi::mojom::ScrollType scroll_type,
                   int scroll_amount) override;
   void GetCurrentSpatnavRect(GetCurrentSpatnavRectCallback callback) override;
@@ -41,7 +41,11 @@ class VivaldiFrameServiceImpl : public vivaldi::mojom::VivaldiFrameService,
   void GetFocusedElementInfo(GetFocusedElementInfoCallback callback) override;
   void DetermineTextLanguage(const std::string& text,
                              DetermineTextLanguageCallback callback) override;
+
   void ActivateSpatnavElement(int modifiers) override;
+  void CloseSpatnavOrCurrentOpenMenu(
+      CloseSpatnavOrCurrentOpenMenuCallback callback) override;
+
   void InsertText(const std::string& text) override;
   void ResumeParser() override;
   void RequestThumbnailForFrame(
@@ -53,19 +57,15 @@ class VivaldiFrameServiceImpl : public vivaldi::mojom::VivaldiFrameService,
  private:
   blink::Document* GetDocument();
   void GetScrollCoordinates(int& x, int& y);
-  void UpdateSpatnavQuads();
+  bool UpdateSpatnavQuads();
   QuadPtr NextQuadInDirection(
       vivaldi::mojom::SpatnavDirection direction);
   vivaldi::mojom::ScrollType ScrollTypeFromSpatnavDir(
       vivaldi::mojom::SpatnavDirection);
 
+  std::vector<blink::WebElement> spatnav_elements_;
   std::vector<QuadPtr> spatnav_quads_;
   QuadPtr current_quad_;
-  bool spatnav_needs_update_ = true;
-
-  // Maintain scroll position for Spatnav
-  int scrollx_;
-  int scrolly_;
 
   void BindService(
       mojo::PendingAssociatedReceiver<vivaldi::mojom::VivaldiFrameService>

@@ -30,6 +30,7 @@
           և նշումից հանեք «<ph name="NO_PREFETCH_DESCRIPTION" />»-ը։
           Եթե դա չլուծի խնդիրը, խորհուրդ ենք տալիս կրկին նշել այն՝
           ավելի լավ կատարողականության համար։</translation>
+<translation id="7496505986576158197">Vivaldi-ի իրագործումը հնարավոր է դարձել շնորհիվ <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> բաց կոդով նախագծի և այլ <ph name="BEGIN_LINK_OSS" />բաց կոդով ծրագրերի<ph name="END_LINK_OSS" />։</translation>
 <translation id="8187289872471304532">Բացեք
           Ծրագրեր &gt; Համակարգային կարգավորումներ &gt; Ցանց &gt; Լրացուցիչ &gt; Պրոքսիներ
           և նշումից հանեք բոլոր պրոքսիները, որոնք նշված են։</translation>

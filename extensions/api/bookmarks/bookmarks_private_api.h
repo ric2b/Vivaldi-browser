@@ -48,7 +48,8 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   void BookmarkNodeAdded(BookmarkModel* model,
                          const BookmarkNode* parent,
-                         size_t index) override {}
+                         size_t index,
+                         bool added_by_user) override {}
 
   // Invoked when the title or url of a node changes.
   void BookmarkNodeChanged(BookmarkModel* model,

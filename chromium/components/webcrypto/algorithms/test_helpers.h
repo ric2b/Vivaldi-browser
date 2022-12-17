@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -204,6 +204,8 @@ std::vector<uint8_t> GetKeyDataFromJsonTestCase(
 // WebCryptoNamedCurve.
 blink::WebCryptoNamedCurve GetCurveNameFromDictionary(
     const base::DictionaryValue* dict);
+
+blink::WebCryptoNamedCurve CurveNameToCurve(const std::string& name);
 
 // Creates an HMAC import algorithm whose inner hash algorithm is determined by
 // the specified algorithm ID. It is an error to call this method with a hash

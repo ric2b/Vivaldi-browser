@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,10 +35,6 @@ class MockIdleDeadlineScheduler final : public ThreadScheduler {
                            Thread::IdleTask) override {}
   void PostNonNestableIdleTask(const base::Location&,
                                Thread::IdleTask) override {}
-  scoped_refptr<base::SingleThreadTaskRunner> DeprecatedDefaultTaskRunner()
-      override {
-    return nullptr;
-  }
 
   base::TimeTicks MonotonicallyIncreasingVirtualTime() override {
     return base::TimeTicks();
@@ -86,7 +82,7 @@ TEST_F(IdleDeadlineTest, DeadlineInPast) {
 
 TEST_F(IdleDeadlineTest, YieldForHighPriorityWork) {
   MockIdleDeadlineScheduler scheduler;
-  ScopedSchedulerOverrider scheduler_overrider(&scheduler);
+  ScopedSchedulerOverrider scheduler_overrider(&scheduler, test_task_runner_);
 
   auto* deadline = MakeGarbageCollected<IdleDeadline>(
       base::TimeTicks() + base::Seconds(1.25),

@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -38,6 +38,8 @@ source_set("prediction_service") {
       "prediction_model_executor.h",
       "prediction_model_handler.cc",
       "prediction_model_handler.h",
+      "prediction_model_handler_provider.cc",
+      "prediction_model_handler_provider.h",
     ]
 
     deps += [

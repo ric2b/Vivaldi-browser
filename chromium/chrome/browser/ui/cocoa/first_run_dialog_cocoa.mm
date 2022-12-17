@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,7 @@ void FirstRunShowBridge::ShowDialog(base::OnceClosure quit_closure) {
 
 FirstRunShowBridge::~FirstRunShowBridge() {}
 
-void ShowFirstRunModal(Profile* profile) {
+void ShowFirstRunModal() {
   base::scoped_nsobject<FirstRunDialogController> dialog(
       [[FirstRunDialogController alloc] init]);
 
@@ -94,8 +94,8 @@ bool StatsCheckboxDefault() {
 
 namespace first_run {
 
-void ShowFirstRunDialogCocoa(Profile* profile) {
-  ShowFirstRunModal(profile);
+void ShowFirstRunDialogCocoa() {
+  ShowFirstRunModal();
 }
 
 }  // namespace first_run

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,20 +13,26 @@ import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.He
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.IMAGE_DRAWABLE_ID;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.ORIGIN_SECURE;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.SHOW_SUBMIT_SUBTITLE;
-import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.SINGLE_CREDENTIAL;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.TITLE;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.MANAGE_BUTTON_TEXT;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ON_CLICK_MANAGE;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.SHEET_ITEMS;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.VISIBLE;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.WebAuthnCredentialProperties.ON_WEBAUTHN_CLICK_LISTENER;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.WebAuthnCredentialProperties.SHOW_WEBAUTHN_SUBMIT_BUTTON;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.WebAuthnCredentialProperties.WEBAUTHN_CREDENTIAL;
-import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.WebAuthnCredentialProperties.WEBAUTHN_ICON;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.WebAuthnCredentialProperties.WEBAUTHN_FAVICON_OR_FALLBACK;
+
+import android.content.Context;
 
 import androidx.annotation.Px;
 
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillComponent.UserAction;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties;
+import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FaviconOrFallback;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.WebAuthnCredentialProperties;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
@@ -56,16 +62,18 @@ class TouchToFillMediator {
             "PasswordManager.TouchToFill.CredentialIndex";
     static final String UMA_TOUCH_TO_FILL_USER_ACTION = "PasswordManager.TouchToFill.UserAction";
 
+    private Context mContext;
     private TouchToFillComponent.Delegate mDelegate;
     private PropertyModel mModel;
     private LargeIconBridge mLargeIconBridge;
     private @Px int mDesiredIconSize;
-    private List<Credential> mCredentials;
     private List<WebAuthnCredential> mWebAuthnCredentials;
+    private List<Credential> mCredentials;
 
-    void initialize(TouchToFillComponent.Delegate delegate, PropertyModel model,
+    void initialize(Context context, TouchToFillComponent.Delegate delegate, PropertyModel model,
             LargeIconBridge largeIconBridge, @Px int desiredIconSize) {
         assert delegate != null;
+        mContext = context;
         mDelegate = delegate;
         mModel = model;
         mLargeIconBridge = largeIconBridge;
@@ -76,6 +84,7 @@ class TouchToFillMediator {
             List<WebAuthnCredential> webAuthnCredentials, boolean triggerSubmission) {
         assert credentials != null;
         mModel.set(ON_CLICK_MANAGE, this::onManagePasswordSelected);
+        mModel.set(MANAGE_BUTTON_TEXT, getManageButtonText(credentials, webAuthnCredentials));
 
         TouchToFillResourceProvider resourceProvider = new TouchToFillResourceProviderImpl();
 
@@ -84,8 +93,7 @@ class TouchToFillMediator {
 
         sheetItems.add(new ListItem(TouchToFillProperties.ItemType.HEADER,
                 new PropertyModel.Builder(HeaderProperties.ALL_KEYS)
-                        .with(SINGLE_CREDENTIAL,
-                                credentials.size() + webAuthnCredentials.size() == 1)
+                        .with(TITLE, getTitle(webAuthnCredentials, credentials))
                         .with(FORMATTED_URL,
                                 UrlFormatter.formatUrlForSecurityDisplay(
                                         url, SchemeDisplay.OMIT_HTTP_AND_HTTPS))
@@ -93,6 +101,16 @@ class TouchToFillMediator {
                         .with(SHOW_SUBMIT_SUBTITLE, triggerSubmission)
                         .with(IMAGE_DRAWABLE_ID, resourceProvider.getHeaderImageDrawableId())
                         .build()));
+
+        mWebAuthnCredentials = webAuthnCredentials;
+        for (WebAuthnCredential credential : webAuthnCredentials) {
+            final PropertyModel model = createWebAuthnModel(credential);
+            sheetItems.add(new ListItem(TouchToFillProperties.ItemType.WEBAUTHN_CREDENTIAL, model));
+            if (shouldCreateConfirmationButton(credentials, webAuthnCredentials)) {
+                sheetItems.add(new ListItem(TouchToFillProperties.ItemType.FILL_BUTTON, model));
+            }
+            requestWebAuthnIconOrFallbackImage(model, url);
+        }
 
         mCredentials = credentials;
         for (Credential credential : credentials) {
@@ -104,16 +122,35 @@ class TouchToFillMediator {
             requestIconOrFallbackImage(model, url);
         }
 
-        mWebAuthnCredentials = webAuthnCredentials;
-        for (WebAuthnCredential credential : webAuthnCredentials) {
-            final PropertyModel model = createWebAuthnModel(credential);
-            sheetItems.add(new ListItem(TouchToFillProperties.ItemType.WEBAUTHN_CREDENTIAL, model));
-            if (shouldCreateConfirmationButton(credentials, webAuthnCredentials)) {
-                sheetItems.add(new ListItem(TouchToFillProperties.ItemType.FILL_BUTTON, model));
-            }
+        mModel.set(VISIBLE, true);
+    }
+
+    private String getTitle(
+            List<WebAuthnCredential> webAuthnCredentials, List<Credential> credentials) {
+        if (webAuthnCredentials.size() > 0) {
+            return (credentials.size() > 0)
+                    ? mContext.getString(R.string.touch_to_fill_sheet_title_password_or_passkey)
+                    : mContext.getString(R.string.touch_to_fill_sheet_title_passkey);
         }
 
-        mModel.set(VISIBLE, true);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION)
+                || PasswordManagerHelper.usesUnifiedPasswordManagerUI()) {
+            return mContext.getString(R.string.touch_to_fill_sheet_uniform_title);
+        }
+
+        return mContext.getString((credentials.size() == 1)
+                        ? R.string.touch_to_fill_sheet_title_single
+                        : R.string.touch_to_fill_sheet_title);
+    }
+
+    private String getManageButtonText(
+            List<Credential> credentials, List<WebAuthnCredential> webAuthnCredentials) {
+        if (!PasswordManagerHelper.usesUnifiedPasswordManagerUI()
+                || webAuthnCredentials.size() == 0) {
+            return mContext.getString(R.string.manage_passwords);
+        }
+        return (credentials.size() > 0) ? mContext.getString(R.string.manage_passwords_and_passkeys)
+                                        : mContext.getString(R.string.manage_passkeys);
     }
 
     private void requestIconOrFallbackImage(PropertyModel credentialModel, GURL url) {
@@ -122,11 +159,32 @@ class TouchToFillMediator {
 
         final LargeIconCallback setIcon = (icon, fallbackColor, hasDefaultColor, type) -> {
             credentialModel.set(FAVICON_OR_FALLBACK,
-                    new CredentialProperties.FaviconOrFallback(iconOrigin, icon, fallbackColor,
-                            hasDefaultColor, type, mDesiredIconSize));
+                    new FaviconOrFallback(iconOrigin, icon, fallbackColor, hasDefaultColor, type,
+                            mDesiredIconSize));
         };
         final LargeIconCallback setIconOrRetry = (icon, fallbackColor, hasDefaultColor, type) -> {
             if (icon == null && iconOrigin.equals(credential.getOriginUrl())) {
+                mLargeIconBridge.getLargeIconForUrl(url, mDesiredIconSize, setIcon);
+                return; // Unlikely but retry for exact path if there is no icon for the origin.
+            }
+            setIcon.onLargeIconAvailable(icon, fallbackColor, hasDefaultColor, type);
+        };
+        mLargeIconBridge.getLargeIconForStringUrl(iconOrigin, mDesiredIconSize, setIconOrRetry);
+    }
+
+    private void requestWebAuthnIconOrFallbackImage(PropertyModel credentialModel, GURL url) {
+        WebAuthnCredential credential = credentialModel.get(WEBAUTHN_CREDENTIAL);
+
+        // WebAuthn credentials have already been filtered to match the current site's URL.
+        final String iconOrigin = url.getSpec();
+
+        final LargeIconCallback setIcon = (icon, fallbackColor, hasDefaultColor, type) -> {
+            credentialModel.set(WEBAUTHN_FAVICON_OR_FALLBACK,
+                    new FaviconOrFallback(iconOrigin, icon, fallbackColor, hasDefaultColor, type,
+                            mDesiredIconSize));
+        };
+        final LargeIconCallback setIconOrRetry = (icon, fallbackColor, hasDefaultColor, type) -> {
+            if (icon == null) {
                 mLargeIconBridge.getLargeIconForUrl(url, mDesiredIconSize, setIcon);
                 return; // Unlikely but retry for exact path if there is no icon for the origin.
             }
@@ -207,7 +265,6 @@ class TouchToFillMediator {
         TouchToFillResourceProvider resourceProvider = new TouchToFillResourceProviderImpl();
         return new PropertyModel.Builder(WebAuthnCredentialProperties.ALL_KEYS)
                 .with(WEBAUTHN_CREDENTIAL, credential)
-                .with(WEBAUTHN_ICON, resourceProvider.getWebAuthnIconId())
                 .with(ON_WEBAUTHN_CLICK_LISTENER, this::onSelectedWebAuthnCredential)
                 .with(SHOW_WEBAUTHN_SUBMIT_BUTTON, false)
                 .build();

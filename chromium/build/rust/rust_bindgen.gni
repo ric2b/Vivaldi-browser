@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -57,7 +57,7 @@ template("rust_bindgen") {
       configs += invoker.configs
     }
 
-    bindgen_target = "//third_party/rust/bindgen/v0_59:bindgen($host_toolchain)"
+    bindgen_target = "//third_party/rust/bindgen/v0_60:bindgen($host_toolchain)"
 
     bindgen_obj_dir = get_label_info(bindgen_target, "root_out_dir")
     bindgen_executable = "${bindgen_obj_dir}/bindgen"

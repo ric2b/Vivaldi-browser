@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,8 +95,7 @@ void AllowlistSimpleChallengeSigningKey() {
   AttestationClient::Get()->GetTestInterface()->AllowlistSignSimpleChallengeKey(
       /*username=*/"",
       attestation::GetKeyNameForProfile(
-          chromeos::attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE,
-          ""));
+          attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, ""));
 }
 
 class EnrollmentEmbeddedPolicyServerBase : public OobeBaseTest {
@@ -774,6 +773,23 @@ IN_PROC_BROWSER_TEST_F(EnrollmentEmbeddedPolicyServerBase,
   enrollment_ui_.RetryAfterError();
 }
 
+// Error during enrollment : Error 418: PACKAGED_DEVICE_KIOSK_DISALLOWED.
+IN_PROC_BROWSER_TEST_F(EnrollmentEmbeddedPolicyServerBase,
+                       EnrollmentErrorPackagedDeviceInvalidForKiosk) {
+  policy_server_.SetDeviceEnrollmentError(
+      policy::DeviceManagementService::kInvalidPackagedDeviceForKiosk);
+
+  TriggerEnrollmentAndSignInSuccessfully();
+
+  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepError);
+  enrollment_ui_.ExpectErrorMessage(
+      IDS_ENTERPRISE_ENROLLMENT_INVALID_PACKAGED_DEVICE_FOR_KIOSK,
+      /*can_retry=*/true);
+  enrollment_ui_.RetryAfterError();
+  EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
+  EXPECT_FALSE(InstallAttributes::Get()->IsEnterpriseManaged());
+}
+
 // Error during enrollment : Error fetching policy : 902 - policy not found.
 IN_PROC_BROWSER_TEST_F(EnrollmentEmbeddedPolicyServerBase,
                        EnrollmentErrorFetchingPolicyNotFound) {
@@ -866,8 +882,6 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentEmbeddedPolicyServer, DeviceDisabled) {
 
 // Attestation enrollment.
 IN_PROC_BROWSER_TEST_F(AutoEnrollmentEmbeddedPolicyServer, Attestation) {
-  // Even though the server would allow device attributes update, Chrome OS will
-  // not attempt that for attestation enrollment.
   policy_server_.SetUpdateDeviceAttributesPermission(true);
 
   AllowlistSimpleChallengeSigningKey();
@@ -879,6 +893,9 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentEmbeddedPolicyServer, Attestation) {
       test::kTestDomain));
 
   host()->StartWizard(AutoEnrollmentCheckScreenView::kScreenId);
+  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepDeviceAttributes);
+  enrollment_ui_.SubmitDeviceAttributes(test::values::kAssetId,
+                                        test::values::kLocation);
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
   EXPECT_TRUE(InstallAttributes::Get()->IsCloudManaged());

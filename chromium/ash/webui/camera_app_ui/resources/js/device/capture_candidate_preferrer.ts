@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -180,13 +180,14 @@ export class CaptureCandidatePreferrer {
   /**
    * Gets all the capture candidates sorted based on users preference.
    */
-  getSortedCandidates(infos: Camera3DeviceInfo[], deviceId: string, mode: Mode):
-      CaptureCandidate[] {
+  getSortedCandidates(
+      infos: Camera3DeviceInfo[], deviceId: string, mode: Mode,
+      hasAudio: boolean): CaptureCandidate[] {
     if (this.cameraInfos === null) {
       this.updateCapability(infos);
     }
     if (mode === Mode.VIDEO) {
-      return this.getVideoCandidates(deviceId);
+      return this.getVideoCandidates(deviceId, hasAudio);
     } else {
       const candidates = this.getPhotoCandidates(deviceId);
       if (mode === Mode.SCAN) {
@@ -424,7 +425,8 @@ export class CaptureCandidatePreferrer {
     return candidates;
   }
 
-  private getVideoCandidates(deviceId: string): CaptureCandidate[] {
+  private getVideoCandidates(deviceId: string, hasAudio: boolean):
+      CaptureCandidate[] {
     const cameraInfo = this.cameraInfos.get(deviceId);
     assert(cameraInfo !== undefined);
     const enableMultiStreamRecording =
@@ -451,10 +453,10 @@ export class CaptureCandidatePreferrer {
           let candidate;
           if (enableMultiStreamRecording) {
             candidate = new MultiStreamVideoCaptureCandidate(
-                deviceId, resolution, previewResolutions, constFps);
+                deviceId, resolution, previewResolutions, constFps, hasAudio);
           } else {
             candidate = new VideoCaptureCandidate(
-                deviceId, resolution, previewResolutions, constFps);
+                deviceId, resolution, previewResolutions, constFps, hasAudio);
           }
           if (prefFps === constFps) {
             targetFpsCandidates.push(candidate);
@@ -632,6 +634,10 @@ export class CaptureCandidatePreferrer {
       {
         level: VideoResolutionLevel.HD,
         resolution: new Resolution(1280, 720),
+      },
+      {
+        level: VideoResolutionLevel.THREE_SIXTY_P,
+        resolution: new Resolution(640, 360),
       },
     ];
     let matches: VideoLevelResolution[] = [];
@@ -911,6 +917,7 @@ function getFallbackVideoResolutionLevel(options: VideoResolutionOption[]):
     VideoResolutionLevel.QUAD_HD,
     VideoResolutionLevel.FULL_HD,
     VideoResolutionLevel.HD,
+    VideoResolutionLevel.THREE_SIXTY_P,
     VideoResolutionLevel.FULL,
     VideoResolutionLevel.MEDIUM,
   ];

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -517,7 +517,13 @@ void IconLabelBubbleView::AnimateIn(absl::optional<int> string_id) {
       // instance anyway.
       alert_virtual_view_->GetCustomData().RemoveState(
           ax::mojom::State::kInvisible);
-      alert_virtual_view_->GetCustomData().SetName(label);
+
+      // A valid role must be set prior to setting the name.
+      // TODO(crbug.com/1361281): Consider using AnnounceText instead of a
+      // virtual view.
+      alert_virtual_view_->GetCustomData().role =
+          ax::mojom::Role::kGenericContainer;
+      alert_virtual_view_->GetCustomData().SetNameChecked(label);
       alert_virtual_view_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert);
     }
     label()->SetVisible(true);

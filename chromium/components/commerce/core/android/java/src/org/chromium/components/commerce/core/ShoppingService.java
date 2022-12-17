@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -127,6 +127,25 @@ public class ShoppingService {
                 mNativeShoppingServiceAndroid, this, url, callback);
     }
 
+    /**
+     * Requests that the service fetch the price notification email preference from the backend.
+     * This call will update the preference kept by the pref service directly -- changes to the
+     * value should also be observed through the pref service. This method should only be used in
+     * the context of settings UI.
+     */
+    public void fetchPriceEmailPref() {
+        if (mNativeShoppingServiceAndroid == 0) return;
+
+        ShoppingServiceJni.get().fetchPriceEmailPref(mNativeShoppingServiceAndroid, this);
+    }
+
+    /** Schedules updates for all products that the user has saved in the bookmarks system. */
+    public void scheduleSavedProductUpdate() {
+        if (mNativeShoppingServiceAndroid == 0) return;
+
+        ShoppingServiceJni.get().scheduleSavedProductUpdate(mNativeShoppingServiceAndroid, this);
+    }
+
     @CalledByNative
     private void destroy() {
         mNativeShoppingServiceAndroid = 0;
@@ -172,5 +191,7 @@ public class ShoppingService {
                 long nativeShoppingServiceAndroid, ShoppingService caller, GURL url);
         void getMerchantInfoForUrl(long nativeShoppingServiceAndroid, ShoppingService caller,
                 GURL url, MerchantInfoCallback callback);
+        void fetchPriceEmailPref(long nativeShoppingServiceAndroid, ShoppingService caller);
+        void scheduleSavedProductUpdate(long nativeShoppingServiceAndroid, ShoppingService caller);
     }
 }

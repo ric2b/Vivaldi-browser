@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability_factory.h"
@@ -49,7 +50,6 @@ const char kSecureConnectApiGetSecondaryGoogleAccountUsageURL[] =
     "https://secureconnect-pa.clients6.google.com/"
     "v1:getManagedAccountsSigninRestriction?policy_name="
     "SecondaryGoogleAccountUsage";
-;
 
 // Fake responses for the URL requests that are part of the sign-in flow.
 const char kOnClientOAuthSuccessBody[] =
@@ -62,6 +62,11 @@ const char kUserInfoURLBodyWithHostedDomain[] = R"({"hd": "%s"})";
 const char kUserInfoURLBodyWithoutHostedDomain[] = R"({})";
 const char kSecureConnectApiGetSecondaryGoogleAccountUsageURLBody[] =
     R"({"policyValue": "%s"})";
+
+constexpr char kSecondaryGoogleAccountUsageHistogramName[] =
+    "Enterprise.SecondaryGoogleAccountUsage.PolicyFetch.Status";
+constexpr char kSecondaryGoogleAccountUsageLatencyHistogramName[] =
+    "Enterprise.SecondaryGoogleAccountUsage.PolicyFetch.ResponseLatency";
 
 // Convenience helper to allow a `closure` to be used in a context which is
 // expecting a callback with arguments.
@@ -534,6 +539,9 @@ class SigninHelperChromeOSTestSecondaryGoogleAccountUsage
                          gaia_id, email, kFakeAuthCode, kFakeDeviceId);
   }
 
+ protected:
+  base::HistogramTester histogram_tester_;
+
  private:
   base::test::ScopedFeatureList feature_list_;
 };
@@ -563,6 +571,11 @@ IN_PROC_BROWSER_TEST_F(SigninHelperChromeOSTestSecondaryGoogleAccountUsage,
   auto account = on_token_upserted_account();
   ASSERT_TRUE(account.has_value());
   EXPECT_EQ(account.value().raw_email, kFakeEmail);
+  histogram_tester_.ExpectBucketCount(
+      kSecondaryGoogleAccountUsageHistogramName,
+      ash::UserCloudSigninRestrictionPolicyFetcherChromeOS::Status::
+          kUnsupportedAccountTypeError,
+      1);
 }
 
 IN_PROC_BROWSER_TEST_F(SigninHelperChromeOSTestSecondaryGoogleAccountUsage,
@@ -591,6 +604,12 @@ IN_PROC_BROWSER_TEST_F(SigninHelperChromeOSTestSecondaryGoogleAccountUsage,
   auto account = on_token_upserted_account();
   ASSERT_TRUE(account.has_value());
   EXPECT_EQ(account.value().raw_email, kFakeEnterpriseEmail);
+  histogram_tester_.ExpectBucketCount(
+      kSecondaryGoogleAccountUsageHistogramName,
+      ash::UserCloudSigninRestrictionPolicyFetcherChromeOS::Status::kSuccess,
+      1);
+  histogram_tester_.ExpectTotalCount(
+      kSecondaryGoogleAccountUsageLatencyHistogramName, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -620,6 +639,12 @@ IN_PROC_BROWSER_TEST_F(
   auto account = on_token_upserted_account();
   ASSERT_TRUE(account.has_value());
   EXPECT_EQ(account.value().raw_email, kFakeEnterpriseEmail);
+  histogram_tester_.ExpectBucketCount(
+      kSecondaryGoogleAccountUsageHistogramName,
+      ash::UserCloudSigninRestrictionPolicyFetcherChromeOS::Status::kSuccess,
+      1);
+  histogram_tester_.ExpectTotalCount(
+      kSecondaryGoogleAccountUsageLatencyHistogramName, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -648,6 +673,12 @@ IN_PROC_BROWSER_TEST_F(
 
   // 0 account should be added.
   EXPECT_EQ(on_token_upserted_call_count(), 0);
+  histogram_tester_.ExpectBucketCount(
+      kSecondaryGoogleAccountUsageHistogramName,
+      ash::UserCloudSigninRestrictionPolicyFetcherChromeOS::Status::kSuccess,
+      1);
+  histogram_tester_.ExpectTotalCount(
+      kSecondaryGoogleAccountUsageLatencyHistogramName, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SigninHelperChromeOSTestSecondaryGoogleAccountUsage,
@@ -672,6 +703,11 @@ IN_PROC_BROWSER_TEST_F(SigninHelperChromeOSTestSecondaryGoogleAccountUsage,
 
   // 1 account should be upserted.
   EXPECT_EQ(on_token_upserted_call_count(), 1);
+  histogram_tester_.ExpectBucketCount(
+      kSecondaryGoogleAccountUsageHistogramName,
+      ash::UserCloudSigninRestrictionPolicyFetcherChromeOS::Status::
+          kUnsupportedAccountTypeError,
+      0);
 }
 
 }  // namespace chromeos

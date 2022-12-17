@@ -1,8 +1,9 @@
 {
   "android-angle-chromium-arm64-builder": {
     "gn_args": {
+      "android_static_analysis": "off",
       "dcheck_always_on": true,
-      "disable_android_lint": true,
+      "debuggable_apks": false,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,
@@ -10,7 +11,6 @@
       "symbol_level": 1,
       "target_cpu": "arm64",
       "target_os": "android",
-      "use_errorprone_java_compiler": false,
       "use_remoteexec": true,
       "use_static_angle": true
     }
@@ -38,7 +38,7 @@
       "target_cpu": "x64",
       "target_environment": "simulator",
       "target_os": "ios",
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "linux-angle-chromium-builder": {
@@ -60,7 +60,7 @@
       "is_debug": false,
       "proprietary_codecs": true,
       "symbol_level": 1,
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "win-angle-chromium-x64-builder": {

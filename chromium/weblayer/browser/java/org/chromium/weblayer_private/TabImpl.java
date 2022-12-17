@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -755,17 +755,34 @@ public final class TabImpl extends ITab.Stub {
     @Override
     public void executeScript(String script, boolean useSeparateIsolate, IObjectWrapper callback) {
         StrictModeWorkaround.apply();
-        Callback<String> nativeCallback = new Callback<String>() {
-            @Override
-            public void onResult(String result) {
-                ValueCallback<String> unwrappedCallback =
-                        (ValueCallback<String>) ObjectWrapper.unwrap(callback, ValueCallback.class);
-                if (unwrappedCallback != null) {
+
+        WebLayerOriginVerificationScheduler originVerifier =
+                WebLayerOriginVerificationScheduler.getInstance();
+        String url = mWebContents.getVisibleUrl().getSpec();
+        originVerifier.verify(url, mProfile, (verified) -> {
+            // Make sure the page hasn't changed since we started verification.
+            if (!url.equals(mWebContents.getVisibleUrl().getSpec())) {
+                return;
+            }
+
+            ValueCallback<String> unwrappedCallback =
+                    (ValueCallback<String>) ObjectWrapper.unwrap(callback, ValueCallback.class);
+            assert unwrappedCallback != null;
+
+            if (!verified) {
+                // TODO(swestphal): Propagate exception to calling api.
+                unwrappedCallback.onReceiveValue(null);
+                return;
+            }
+
+            Callback<String> nativeCallback = new Callback<String>() {
+                @Override
+                public void onResult(String result) {
                     unwrappedCallback.onReceiveValue(result);
                 }
-            }
-        };
-        TabImplJni.get().executeScript(mNativeTab, script, useSeparateIsolate, nativeCallback);
+            };
+            TabImplJni.get().executeScript(mNativeTab, script, useSeparateIsolate, nativeCallback);
+        });
     }
 
     @Override

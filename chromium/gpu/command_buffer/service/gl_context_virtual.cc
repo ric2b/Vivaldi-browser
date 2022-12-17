@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,11 +96,6 @@ unsigned int GLContextVirtual::CheckStickyGraphicsResetStatusImpl() {
 
 void GLContextVirtual::SetUnbindFboOnMakeCurrent() {
   shared_context_->SetUnbindFboOnMakeCurrent();
-}
-
-gl::YUVToRGBConverter* GLContextVirtual::GetYUVToRGBConverter(
-    const gfx::ColorSpace& color_space) {
-  return shared_context_->GetYUVToRGBConverter(color_space);
 }
 
 void GLContextVirtual::ForceReleaseVirtuallyCurrent() {

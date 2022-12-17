@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,14 +23,6 @@ namespace reporting {
 // that case it always connects to Missive Daemon.
 class StorageSelector {
  public:
-#if BUILDFLAG(IS_CHROMEOS)
-  // Features to select specific backends.
-  // By default storage is local (as opposed to missive daemon use)
-  // and upload is enabled.
-  static const char kUseMissiveDaemon[];
-  static const char kProvideUploader[];
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
   static bool is_use_missive();
   static bool is_uploader_required();
 

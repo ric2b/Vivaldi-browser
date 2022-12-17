@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,11 +59,11 @@ AccessCodeCastSinkServiceFactory::~AccessCodeCastSinkServiceFactory() = default;
 
 KeyedService* AccessCodeCastSinkServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  // TODO(b/243973085): Remove profile init duplication.
-  if (!GetAccessCodeCastEnabledPref(Profile::FromBrowserContext(context))) {
+  auto* profile = Profile::FromBrowserContext(context);
+  if (!profile || !GetAccessCodeCastEnabledPref(profile)) {
     return nullptr;
   }
-  return new AccessCodeCastSinkService(static_cast<Profile*>(context));
+  return new AccessCodeCastSinkService(profile);
 }
 
 bool AccessCodeCastSinkServiceFactory::ServiceIsCreatedWithBrowserContext()

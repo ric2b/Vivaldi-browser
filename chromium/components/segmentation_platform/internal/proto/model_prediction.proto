@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,16 @@ message PredictionResult {
   // The time when the prediction was made, in terms of the number of
   // microseconds since Windows epoch.
   optional int64 timestamp_us = 2;
+}
+
+// Partial training data set with only inputs, used when observation period has
+// not ended.
+message TrainingData {
+  // Input training data.
+  repeated float inputs = 1;
+
+  // The time at which inputs were recorded.
+  optional int64 decision_timestamp = 2;
 }
 
 // Top level message for a segment. Contains both the model metadata and

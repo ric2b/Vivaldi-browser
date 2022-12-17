@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,12 @@
 
 #import <UIKit/UIKit.h>
 
+#import "base/callback.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 
 @class LensConfiguration;
 @class UIViewController;
+class GURL;
 enum class LensEntrypoint;
 
 // A delegate that can receive Lens events forwarded by a ChromeLensController.
@@ -18,6 +20,9 @@ enum class LensEntrypoint;
 
 // Called when the Lens view controller's dimiss button has been tapped.
 - (void)lensControllerDidTapDismissButton;
+
+// Called when the user selects a URL in Lens.
+- (void)lensControllerDidSelectURL:(NSURL*)url;
 
 // Called when the user selects an image and the Lens controller has prepared
 // `params` for loading a Lens web page.
@@ -43,6 +48,11 @@ enum class LensEntrypoint;
 namespace ios {
 namespace provider {
 
+// Callback invoked when the web load params for a Lens query have been
+// generated.
+using LensWebParamsCallback =
+    base::OnceCallback<void(web::NavigationManager::WebLoadParams)>;
+
 // Returns a controller for the given configuration that can facilitate
 // communication with the downstream Lens controller.
 id<ChromeLensController> NewChromeLensController(LensConfiguration* config);
@@ -50,12 +60,23 @@ id<ChromeLensController> NewChromeLensController(LensConfiguration* config);
 // Returns whether Lens is supported for the current build.
 bool IsLensSupported();
 
+// Returns whether or not the url represents a Lens Web results page.
+bool IsLensWebResultsURL(const GURL& url);
+
 // Generates web load params for a Lens image search for the given
 // 'image' and 'entry_point'.
 web::NavigationManager::WebLoadParams GenerateLensLoadParamsForImage(
     UIImage* image,
     LensEntrypoint entry_point,
     bool is_incognito);
+
+// Generates web load params for a Lens image search for the given
+// 'image' and 'entry_point'. `completion` will be run on the main
+// thread.
+void GenerateLensLoadParamsForImageAsync(UIImage* image,
+                                         LensEntrypoint entry_point,
+                                         bool is_incognito,
+                                         LensWebParamsCallback completion);
 
 }  // namespace provider
 }  // namespace ios

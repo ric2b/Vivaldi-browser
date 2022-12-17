@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,8 @@
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/content_settings/browser/ui/cookie_controls_controller.h"
+#include "components/content_settings/browser/ui/cookie_controls_view.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/safe_browsing/buildflags.h"
@@ -44,7 +46,7 @@ class PageInfoUI;
 // information and allows users to change the permissions. |PageInfo|
 // objects must be created on the heap. They destroy themselves after the UI is
 // closed.
-class PageInfo {
+class PageInfo : private content_settings::CookieControlsView {
  public:
   // Status of a connection to a website.
   enum SiteConnectionStatus {
@@ -153,8 +155,8 @@ class PageInfo {
     PAGE_INFO_ABOUT_THIS_SITE_MORE_ABOUT_CLICKED = 32,
     PAGE_INFO_COOKIES_PAGE_OPENED = 33,
     PAGE_INFO_COOKIES_SETTINGS_OPENED = 34,
-    PAGE_INFO_ALL_SITES_OPENED = 35,
-    kMaxValue = PAGE_INFO_ALL_SITES_OPENED
+    PAGE_INFO_ALL_SITES_WITH_FPS_FILTER_OPENED = 35,
+    kMaxValue = PAGE_INFO_ALL_SITES_WITH_FPS_FILTER_OPENED
   };
 
   struct ChooserUIInfo {
@@ -192,7 +194,11 @@ class PageInfo {
   PageInfo(const PageInfo&) = delete;
   PageInfo& operator=(const PageInfo&) = delete;
 
-  ~PageInfo();
+  ~PageInfo() override;
+
+  // Called when the third-party blocking toggle in the cookies subpage gets
+  // clicked.
+  void OnThirdPartyToggleClicked(bool block_third_party_cookies);
 
   // Checks whether this permission is currently the factory default, as set by
   // Chrome. Specifically, that the following three conditions are true:
@@ -242,8 +248,9 @@ class PageInfo {
   // Handles opening the link to show cookies settings and records the event.
   void OpenCookiesSettingsView();
 
-  // Handles opening the link to show all sites settings and records the event.
-  void OpenAllSitesView();
+  // Handles opening the link to show all sites settings with a filter for
+  // current site's fps  and records the event.
+  void OpenAllSitesViewFilteredToFps();
 
   // Handles opening the cookies dialog and records the event.
   void OpenCookiesDialog();
@@ -296,6 +303,11 @@ class PageInfo {
   // subdomains.
   std::u16string GetSimpleSiteName() const;
 
+  // For Isolated Web Apps the origin's host name is a non-human-readable string
+  // of characters, so instead of displaying the origin, the short name of the
+  // app will be displayed.
+  std::u16string GetSiteOriginOrAppNameToDisplay() const;
+
   // Retrieves all the permissions that are shown in Page Info.
   // Exposed for testing.
   static std::vector<ContentSettingsType> GetAllPermissionsForTesting();
@@ -304,11 +316,21 @@ class PageInfo {
 
   void SetSiteNameForTesting(const std::u16string& site_name);
 
+  void SetIsolatedWebAppNameForTesting(
+      const std::u16string& isolated_web_app_name);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(PageInfoTest,
                            NonFactoryDefaultAndRecentlyChangedPermissionsShown);
   FRIEND_TEST_ALL_PREFIXES(PageInfoTest, IncognitoPermissionsEmptyByDefault);
   FRIEND_TEST_ALL_PREFIXES(PageInfoTest, IncognitoPermissionsDontShowAsk);
+
+  // CookieControlsView:
+  void OnStatusChanged(CookieControlsStatus status,
+                       CookieControlsEnforcement enforcement,
+                       int allowed_cookies,
+                       int blocked_cookies) override;
+  void OnCookiesCountChanged(int allowed_cookies, int blocked_cookies) override;
 
   // Populates this object's UI state with provided security context. This
   // function does not update visible UI-- that's part of Present*().
@@ -375,6 +397,8 @@ class PageInfo {
   int GetSitesWithAllowedCookiesAccessCount();
   int GetThirdPartySitesWithBlockedCookiesAccessCount(const GURL& site_url);
 
+  bool IsIsolatedWebApp() const;
+
   // The page info UI displays information and controls for site-
   // specific data (local stored objects like cookies), site-specific
   // permissions (location, pop-up, plugin, etc. permissions) and site-specific
@@ -394,6 +418,9 @@ class PageInfo {
   // The Omnibox URL of the website for which to display site permissions and
   // site information.
   GURL site_url_;
+
+  // The short name of an Isolated Web App. Empty for non-IWAs.
+  std::u16string isolated_web_app_name_;
 
   // Status of the website's identity verification check.
   SiteIdentityStatus site_identity_status_;
@@ -468,6 +495,18 @@ class PageInfo {
   bool was_about_this_site_shown_ = false;
 
   std::u16string site_name_for_testing_;
+
+  bool is_isolated_web_app_for_testing_ = false;
+
+  std::unique_ptr<content_settings::CookieControlsController> controller_;
+  base::ScopedObservation<content_settings::CookieControlsController,
+                          content_settings::CookieControlsView>
+      observation_{this};
+
+  CookieControlsStatus status_ = CookieControlsStatus::kUninitialized;
+
+  CookieControlsEnforcement enforcement_ =
+      CookieControlsEnforcement::kNoEnforcement;
 
   base::WeakPtrFactory<PageInfo> weak_factory_{this};
 };

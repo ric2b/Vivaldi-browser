@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,7 @@ SharedMemoryImageBackingFactory::~SharedMemoryImageBackingFactory() = default;
 std::unique_ptr<SharedImageBacking>
 SharedMemoryImageBackingFactory::CreateSharedImage(
     const Mailbox& mailbox,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     SurfaceHandle surface_handle,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
@@ -36,7 +36,7 @@ SharedMemoryImageBackingFactory::CreateSharedImage(
 std::unique_ptr<SharedImageBacking>
 SharedMemoryImageBackingFactory::CreateSharedImage(
     const Mailbox& mailbox,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
@@ -68,19 +68,19 @@ SharedMemoryImageBackingFactory::CreateSharedImage(
   }
 
   auto backing = std::make_unique<SharedMemoryImageBacking>(
-      mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-      std::move(shm_wrapper));
+      mailbox, viz::SharedImageFormat::SinglePlane(format), size, color_space,
+      surface_origin, alpha_type, usage, std::move(shm_wrapper));
   return backing;
 }
 
 bool SharedMemoryImageBackingFactory::IsSupported(
     uint32_t usage,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
+    const gfx::Size& size,
     bool thread_safe,
     gfx::GpuMemoryBufferType gmb_type,
     GrContextType gr_context_type,
-    bool* allow_legacy_mailbox,
-    bool is_pixel_used) {
+    base::span<const uint8_t> pixel_data) {
   if (gmb_type != gfx::SHARED_MEMORY_BUFFER) {
     return false;
   }
@@ -89,7 +89,6 @@ bool SharedMemoryImageBackingFactory::IsSupported(
     return false;
   }
 
-  *allow_legacy_mailbox = false;
   return true;
 }
 

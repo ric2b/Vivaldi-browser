@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@
 
 #include "base/unguessable_token.h"
 #include "services/network/public/mojom/blocked_by_response_reason.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
+#include "third_party/blink/renderer/bindings/core/v8/capture_source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_security_policy_violation_event_init.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/inspector/protocol/audits.h"
 #include "third_party/blink/renderer/core/inspector/protocol/network.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_error.h"
 
@@ -118,7 +119,7 @@ void AuditsIssue::ReportCorsIssue(
           .setCorsErrorStatus(std::move(protocol_cors_error_status))
           .build();
   cors_issue_details->setInitiatorOrigin(initiator_origin);
-  auto location = SourceLocation::Capture(execution_context);
+  auto location = CaptureSourceLocation(execution_context);
   if (location) {
     cors_issue_details->setLocation(CreateProtocolLocation(*location));
   }
@@ -219,12 +220,12 @@ void AuditsIssue::ReportNavigatorUserAgentAccess(
 
   // Try to get only the script name quickly.
   std::unique_ptr<SourceLocation> location;
-  String script_url = GetCurrentScriptUrl();
-  if (!script_url.IsEmpty()) {
+  String script_url = GetCurrentScriptUrl(execution_context->GetIsolate());
+  if (!script_url.empty()) {
     location =
         std::make_unique<SourceLocation>(script_url, String(), 1, 0, nullptr);
   } else {
-    location = SourceLocation::Capture(execution_context);
+    location = CaptureSourceLocation(execution_context);
   }
 
   if (location) {
@@ -402,7 +403,7 @@ void AuditsIssue::ReportSharedArrayBufferIssue(
     ExecutionContext* execution_context,
     bool shared_buffer_transfer_allowed,
     SharedArrayBufferIssueType issue_type) {
-  auto source_location = SourceLocation::Capture(execution_context);
+  auto source_location = CaptureSourceLocation(execution_context);
   auto sab_issue_details =
       protocol::Audits::SharedArrayBufferIssueDetails::create()
           .setSourceCodeLocation(CreateProtocolLocation(*source_location))
@@ -502,10 +503,6 @@ void AuditsIssue::ReportDeprecationIssue(ExecutionContext* execution_context,
       type = protocol::Audits::DeprecationIssueTypeEnum::
           InsecurePrivateNetworkSubresourceRequest;
       break;
-    case DeprecationIssueType::kLegacyConstraintGoogIPv6:
-      type =
-          protocol::Audits::DeprecationIssueTypeEnum::LegacyConstraintGoogIPv6;
-      break;
     case DeprecationIssueType::kLocalCSSFileExtensionRejected:
       type = protocol::Audits::DeprecationIssueTypeEnum::
           LocalCSSFileExtensionRejected;
@@ -516,14 +513,6 @@ void AuditsIssue::ReportDeprecationIssue(ExecutionContext* execution_context,
     case DeprecationIssueType::kMediaSourceDurationTruncatingBuffered:
       type = protocol::Audits::DeprecationIssueTypeEnum::
           MediaSourceDurationTruncatingBuffered;
-      break;
-    case DeprecationIssueType::kNavigateEventRestoreScroll:
-      type = protocol::Audits::DeprecationIssueTypeEnum::
-          NavigateEventRestoreScroll;
-      break;
-    case DeprecationIssueType::kNavigateEventTransitionWhile:
-      type = protocol::Audits::DeprecationIssueTypeEnum::
-          NavigateEventTransitionWhile;
       break;
     case DeprecationIssueType::kNoSysexWebMIDIWithoutPermission:
       type = protocol::Audits::DeprecationIssueTypeEnum::
@@ -551,6 +540,13 @@ void AuditsIssue::ReportDeprecationIssue(ExecutionContext* execution_context,
     case DeprecationIssueType::kOverflowVisibleOnReplacedElement:
       type = protocol::Audits::DeprecationIssueTypeEnum::
           OverflowVisibleOnReplacedElement;
+      break;
+    case DeprecationIssueType::kPaymentInstruments:
+      type = protocol::Audits::DeprecationIssueTypeEnum::PaymentInstruments;
+      break;
+    case DeprecationIssueType::kPaymentRequestCSPViolation:
+      type = protocol::Audits::DeprecationIssueTypeEnum::
+          PaymentRequestCSPViolation;
       break;
     case DeprecationIssueType::kPersistentQuotaType:
       type = protocol::Audits::DeprecationIssueTypeEnum::PersistentQuotaType;
@@ -651,7 +647,7 @@ void AuditsIssue::ReportDeprecationIssue(ExecutionContext* execution_context,
       break;
   }
 
-  auto source_location = SourceLocation::Capture(execution_context);
+  auto source_location = CaptureSourceLocation(execution_context);
   auto deprecation_issue_details =
       protocol::Audits::DeprecationIssueDetails::create()
           .setSourceCodeLocation(CreateProtocolLocation(*source_location))
@@ -694,7 +690,7 @@ protocol::Audits::ClientHintIssueReason ClientHintIssueReasonToProtocol(
 // static
 void AuditsIssue::ReportClientHintIssue(LocalDOMWindow* local_dom_window,
                                         ClientHintIssueReason reason) {
-  auto source_location = SourceLocation::Capture(local_dom_window);
+  auto source_location = CaptureSourceLocation(local_dom_window);
   auto client_hint_issue_details =
       protocol::Audits::ClientHintIssueDetails::create()
           .setSourceCodeLocation(CreateProtocolLocation(*source_location))

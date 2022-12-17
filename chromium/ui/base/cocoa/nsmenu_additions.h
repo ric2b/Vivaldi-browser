@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,12 @@
 // equivalent matching `event`. Returns nil if no corresponding
 // menu item exists.
 - (NSMenuItem*)cr_menuItemForKeyEquivalentEvent:(NSEvent*)event;
+
+// Locates the menu item corresponding to `chromeCommand` and flashes
+// its owning menu title in the menu bar (without executing the command).
+// Also causes VoiceOver to speak the menu item. Returns NO if the
+// command wasn't found in the menus.
++ (BOOL)flashMenuForChromeCommand:(int)chromeCommand;
 
 @end
 

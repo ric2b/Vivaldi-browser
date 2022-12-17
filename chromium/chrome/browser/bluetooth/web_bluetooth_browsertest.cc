@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -174,8 +174,9 @@ class FakeBluetoothGattCharacteristic
 
   void ReadRemoteCharacteristic(ValueCallback callback) override {
     if (!(GetProperties() & BluetoothGattCharacteristic::PROPERTY_READ)) {
-      std::move(callback).Run(BluetoothGattService::GATT_ERROR_NOT_PERMITTED,
-                              std::vector<uint8_t>());
+      std::move(callback).Run(
+          BluetoothGattService::GattErrorCode::kNotPermitted,
+          std::vector<uint8_t>());
       return;
     }
     if (defer_read_until_notification_start_) {
@@ -190,7 +191,7 @@ class FakeBluetoothGattCharacteristic
                           ErrorCallback error_callback) override {
     if (!(GetProperties() & BluetoothGattCharacteristic::PROPERTY_NOTIFY)) {
       std::move(error_callback)
-          .Run(BluetoothGattService::GATT_ERROR_NOT_PERMITTED);
+          .Run(BluetoothGattService::GattErrorCode::kNotPermitted);
       return;
     }
     auto fake_notify_session =

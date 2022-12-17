@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@ import {BackgroundGraphicsModeRestriction, CrButtonElement, CrCheckboxElement, N
 import {ColorModeRestriction, DuplexMode, DuplexModeRestriction, PinModeRestriction} from 'chrome://print/print_preview.js';
 // </if>
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse} from 'chrome://webui-test/chai_assert.js';
 import {TestPluralStringProxy} from 'chrome://webui-test/test_plural_string_proxy.js';
@@ -65,7 +65,8 @@ suite(policy_tests.suiteName, function() {
    */
   function loadInitialSettings(initialSettings: NativeInitialSettings):
       Promise<void> {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     const nativeLayer = new NativeLayerStub();
     nativeLayer.setInitialSettings(initialSettings);
     nativeLayer.setLocalDestinations(

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -120,12 +120,7 @@ bool SubframeHasAllowedContainerPolicy(LocalFrame* frame) {
   for (const auto& decl : frame_policy.container_policy) {
     if (decl.feature ==
         mojom::blink::PermissionsPolicyFeature::kAttributionReporting) {
-      // TODO(csharrison): This logic duplicates existing code in
-      // PermissionsPolicy::Allowlist. Clean this up by enhancing the logic
-      // exposed by PermissionsPolicy code and re-using that.
-      return decl.matches_all_origins ||
-             (decl.matches_opaque_src && origin->IsOpaque()) ||
-             base::Contains(decl.allowed_origins, origin->ToUrlOrigin());
+      return decl.Contains(origin->ToUrlOrigin());
     }
   }
   return false;
@@ -287,9 +282,9 @@ AttributionSrcLoader::CreateAndSendRequest(const KURL& src_url,
 
   if (document->IsPrerendering()) {
     document->AddPostPrerenderingActivationStep(
-        WTF::Bind(base::IgnoreResult(&AttributionSrcLoader::DoRegistration),
-                  WrapPersistentIfNeeded(this), src_url, src_type,
-                  associated_with_navigation));
+        WTF::BindOnce(base::IgnoreResult(&AttributionSrcLoader::DoRegistration),
+                      WrapPersistentIfNeeded(this), src_url, src_type,
+                      associated_with_navigation));
     return nullptr;
   }
 
@@ -441,9 +436,8 @@ bool AttributionSrcLoader::MaybeRegisterAttributionHeaders(
     return false;
 
   const uint64_t request_id = request.InspectorId();
-
   scoped_refptr<const SecurityOrigin> reporting_origin =
-      ReportingOriginForUrlIfValid(response.CurrentRequestUrl(),
+      ReportingOriginForUrlIfValid(response.ResponseUrl(),
                                    /*element=*/nullptr, request_id);
   if (!reporting_origin)
     return false;
@@ -568,7 +562,7 @@ void AttributionSrcLoader::ResourceClient::HandleResponseHeaders(
     return;
 
   scoped_refptr<const SecurityOrigin> reporting_origin =
-      loader_->ReportingOriginForUrlIfValid(response.CurrentRequestUrl(),
+      loader_->ReportingOriginForUrlIfValid(response.ResponseUrl(),
                                             /*element=*/nullptr, request_id);
   if (!reporting_origin)
     return;

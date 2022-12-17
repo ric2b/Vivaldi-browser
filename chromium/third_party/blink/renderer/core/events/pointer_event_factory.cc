@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -105,8 +105,12 @@ void UpdateCommonPointerEventInit(const WebPointerEvent& web_pointer_event,
 
   // If width/height is unknown we let PointerEventInit set it to 1.
   // See https://w3c.github.io/pointerevents/#dom-pointerevent-width
+  //
+  // For pointerup, even known width/height is ignored in favor of the default
+  // value of 1.  See https://github.com/w3c/pointerevents/issues/225.
   if (web_pointer_event_in_root_frame.HasWidth() &&
-      web_pointer_event_in_root_frame.HasHeight()) {
+      web_pointer_event_in_root_frame.HasHeight() &&
+      web_pointer_event.GetType() != WebInputEvent::Type::kPointerUp) {
     float scale_factor = 1.0f;
     if (dom_window && dom_window->GetFrame())
       scale_factor = 1.0f / dom_window->GetFrame()->PageZoomFactor();
@@ -157,7 +161,7 @@ HeapVector<Member<PointerEvent>> PointerEventFactory::CreateEventSequence(
   AtomicString type = PointerEventNameForEventType(web_pointer_event.GetType());
   HeapVector<Member<PointerEvent>> result;
 
-  if (!event_list.IsEmpty()) {
+  if (!event_list.empty()) {
     // Make a copy of LastPointerPosition so we can modify it after creating
     // each coalesced event.
     gfx::PointF last_global_position =

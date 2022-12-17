@@ -191,21 +191,18 @@ gfx::Rect OverlayWindowViews::GetStoredBoundsFromPrefs() {
   if (browser) {
     PrefService* prefs = browser->profile()->GetPrefs();
     if (prefs->FindPreference(vivaldiprefs::kVivaldiPIPPlacement)) {
-      const base::Value* dict =
-          prefs->GetDictionary(vivaldiprefs::kVivaldiPIPPlacement);
-      if (dict) {
-        int left = dict->FindIntPath(kPipLeft).value_or(0);
-        int top = dict->FindIntPath(kPipTop).value_or(0);
-        int width = dict->FindIntPath(kPipWidth).value_or(0);
-        int height = dict->FindIntPath(kPipHeight).value_or(0);
+      auto& dict = prefs->GetDict(vivaldiprefs::kVivaldiPIPPlacement);
+      int left = dict.FindInt(kPipLeft).value_or(0);
+      int top = dict.FindInt(kPipTop).value_or(0);
+      int width = dict.FindInt(kPipWidth).value_or(0);
+      int height = dict.FindInt(kPipHeight).value_or(0);
 
-        gfx::Rect placement(left, top, width, height);
+      gfx::Rect placement(left, top, width, height);
 
-        if (!placement.IsEmpty()) {
-          // Set has_been_shown_ so it will not use a default size.
-          has_been_shown_ = true;
-          return placement;
-        }
+      if (!placement.IsEmpty()) {
+        // Set has_been_shown_ so it will not use a default size.
+        has_been_shown_ = true;
+        return placement;
       }
     }
   }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -139,7 +139,7 @@ BrowsingDataRemoverBrowserTestBase::~BrowsingDataRemoverBrowserTestBase() =
     default;
 
 void BrowsingDataRemoverBrowserTestBase::InitFeatureList(
-    std::vector<base::Feature> enabled_features) {
+    std::vector<base::test::FeatureRef> enabled_features) {
   feature_list_.InitWithFeatures(enabled_features, {});
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -57,9 +57,6 @@ void UninstallApp(Profile* profile, int index);
 // Installs all pending synced apps for |profile|, including waiting for the
 // App Service to settle.
 void InstallAppsPendingForSync(Profile* profile);
-
-// Waits for the App Service state for |profile| to settle.
-void WaitForAppService(Profile* profile);
 
 // Enables the app for the given index on |profile|.
 void EnableApp(Profile* profile, int index);

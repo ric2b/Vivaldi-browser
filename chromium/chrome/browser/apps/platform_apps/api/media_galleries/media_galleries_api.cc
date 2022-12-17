@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,7 +55,6 @@
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
-#include "extensions/browser/blob_holder.h"
 #include "extensions/browser/blob_reader.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
@@ -93,10 +92,6 @@ const char kIsRemovableKey[] = "isRemovable";
 const char kNameKey[] = "name";
 
 const char kMetadataKey[] = "metadata";
-const char kAttachedImagesBlobInfoKey[] = "attachedImagesBlobInfo";
-const char kBlobUUIDKey[] = "blobUUID";
-const char kMediaGalleriesApiTypeKey[] = "type";
-const char kSizeKey[] = "size";
 
 const char kInvalidGalleryId[] = "-1";
 
@@ -232,8 +227,8 @@ class SelectDirectoryDialog : public ui::SelectFileDialog::Listener,
     select_file_dialog_->SelectFile(
         ui::SelectFileDialog::SELECT_FOLDER,
         l10n_util::GetStringUTF16(IDS_MEDIA_GALLERIES_DIALOG_ADD_GALLERY_TITLE),
-        default_path, NULL, 0, base::FilePath::StringType(),
-        platform_util::GetTopLevel(web_contents_->GetNativeView()), NULL);
+        default_path, nullptr, 0, base::FilePath::StringType(),
+        platform_util::GetTopLevel(web_contents_->GetNativeView()), nullptr);
   }
 
   // ui::SelectFileDialog::Listener implementation.
@@ -405,7 +400,7 @@ MediaGalleriesGetMediaFileSystemsFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
   MediaGalleries::GetMediaFileSystemsInteractivity interactive =
       MediaGalleries::GET_MEDIA_FILE_SYSTEMS_INTERACTIVITY_NO;
-  if (params->details.get() &&
+  if (params->details &&
       params->details->interactive !=
           MediaGalleries::GET_MEDIA_FILE_SYSTEMS_INTERACTIVITY_NONE) {
     interactive = params->details->interactive;
@@ -691,8 +686,7 @@ void MediaGalleriesGetMetadataFunction::GetMetadata(
     metadata.mime_type = mime_type;
 
     base::Value::Dict result_dictionary;
-    result_dictionary.Set(kMetadataKey,
-                          base::Value::FromUniquePtrValue(metadata.ToValue()));
+    result_dictionary.Set(kMetadataKey, metadata.ToValue());
     Respond(WithArguments(std::move(result_dictionary)));
     return;
   }
@@ -732,79 +726,55 @@ void MediaGalleriesGetMetadataFunction::OnSafeMediaMetadataParserDone(
 
   base::Value::Dict result_dictionary;
   result_dictionary.Set(kMetadataKey,
-                        base::Value::FromUniquePtrValue(
-                            SerializeMediaMetadata(std::move(metadata))));
+                        SerializeMediaMetadata(std::move(metadata)));
 
   if (attached_images->empty()) {
     Respond(WithArguments(std::move(result_dictionary)));
     return;
   }
 
-  result_dictionary.EnsureList(kAttachedImagesBlobInfoKey);
   metadata::AttachedImage* first_image = &attached_images->front();
   browser_context()->CreateMemoryBackedBlob(
-      base::as_bytes(base::make_span(first_image->data)), "",
+      base::as_bytes(base::make_span(first_image->data)), first_image->type,
       base::BindOnce(&MediaGalleriesGetMetadataFunction::ConstructNextBlob,
                      this, std::move(result_dictionary),
                      std::move(attached_images),
-                     base::WrapUnique(new std::vector<std::string>)));
+                     std::vector<blink::mojom::SerializedBlobPtr>()));
 }
 
 void MediaGalleriesGetMetadataFunction::ConstructNextBlob(
     base::Value::Dict result_dictionary,
     std::unique_ptr<std::vector<metadata::AttachedImage>> attached_images,
-    std::unique_ptr<std::vector<std::string>> blob_uuids,
+    std::vector<blink::mojom::SerializedBlobPtr> blobs,
     std::unique_ptr<content::BlobHandle> current_blob) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   DCHECK(attached_images.get());
-  DCHECK(blob_uuids.get());
   DCHECK(current_blob.get());
 
   DCHECK(!attached_images->empty());
-  DCHECK_LT(blob_uuids->size(), attached_images->size());
+  DCHECK_LT(blobs.size(), attached_images->size());
 
-  // For the newly constructed Blob, store its image's metadata and Blob UUID.
-  base::Value::List* attached_images_list =
-      result_dictionary.FindList(kAttachedImagesBlobInfoKey);
-  DCHECK(attached_images_list);
-  DCHECK_LT(attached_images_list->size(), attached_images->size());
-
-  metadata::AttachedImage* current_image =
-      &(*attached_images)[blob_uuids->size()];
-  base::Value::Dict attached_image;
-  attached_image.Set(kBlobUUIDKey, current_blob->GetUUID());
-  attached_image.Set(kMediaGalleriesApiTypeKey, current_image->type);
-  attached_image.Set(kSizeKey,
-                     base::checked_cast<int>(current_image->data.size()));
-  attached_images_list->Append(std::move(attached_image));
-
-  blob_uuids->push_back(current_blob->GetUUID());
+  blobs.push_back(current_blob->Serialize());
 
   if (!render_frame_host() || !render_frame_host()->GetProcess()) {
     Respond(Error(kNoRenderFrameOrRenderProcessError));
     return;
   }
 
-  extensions::BlobHolder* holder =
-      extensions::BlobHolder::FromRenderProcessHost(
-          render_frame_host()->GetProcess());
-  holder->HoldBlobReference(std::move(current_blob));
-
   // Construct the next Blob if necessary.
-  if (blob_uuids->size() < attached_images->size()) {
-    metadata::AttachedImage* next_image =
-        &(*attached_images)[blob_uuids->size()];
+  if (blobs.size() < attached_images->size()) {
+    metadata::AttachedImage* next_image = &(*attached_images)[blobs.size()];
     browser_context()->CreateMemoryBackedBlob(
-        base::as_bytes(base::make_span(next_image->data)), "",
+        base::as_bytes(base::make_span(next_image->data)), next_image->type,
         base::BindOnce(&MediaGalleriesGetMetadataFunction::ConstructNextBlob,
                        this, std::move(result_dictionary),
-                       std::move(attached_images), std::move(blob_uuids)));
+                       std::move(attached_images), std::move(blobs)));
     return;
   }
 
   // All Blobs have been constructed. The renderer will take ownership.
-  SetTransferredBlobUUIDs(*blob_uuids);
+  SetTransferredBlobs(std::move(blobs));
   Respond(WithArguments(std::move(result_dictionary)));
 }
 
@@ -880,10 +850,9 @@ void MediaGalleriesAddGalleryWatchFunction::HandleResponse(
   }
 
   result.success = error.empty();
-  Respond(error.empty()
-              ? WithArguments(base::Value::FromUniquePtrValue(result.ToValue()))
-              : ErrorWithArguments(AddGalleryWatch::Results::Create(result),
-                                   error));
+  Respond(error.empty() ? WithArguments(result.ToValue())
+                        : ErrorWithArguments(
+                              AddGalleryWatch::Results::Create(result), error));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

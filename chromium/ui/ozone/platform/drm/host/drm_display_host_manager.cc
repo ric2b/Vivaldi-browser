@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,13 +7,14 @@
 #include <fcntl.h>
 #include <stddef.h>
 #include <xf86drm.h>
+
 #include <memory>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
@@ -27,7 +28,6 @@
 #include "ui/ozone/platform/drm/host/drm_display_host.h"
 #include "ui/ozone/platform/drm/host/drm_native_display_delegate.h"
 #include "ui/ozone/platform/drm/host/gpu_thread_adapter.h"
-#include "ui/ozone/public/ozone_switches.h"
 
 namespace ui {
 
@@ -169,19 +169,6 @@ base::FilePath GetPrimaryDisplayCardPath() {
   return base::FilePath();  // Not reached.
 }
 
-class FindDrmDisplayHostById {
- public:
-  explicit FindDrmDisplayHostById(int64_t display_id)
-      : display_id_(display_id) {}
-
-  bool operator()(const std::unique_ptr<DrmDisplayHost>& display) const {
-    return display->snapshot()->display_id() == display_id_;
-  }
-
- private:
-  int64_t display_id_;
-};
-
 }  // namespace
 
 DrmDisplayHostManager::DrmDisplayHostManager(
@@ -210,15 +197,6 @@ DrmDisplayHostManager::DrmDisplayHostManager(
     }
     host_properties->supports_overlays =
         primary_drm_device_handle_->has_atomic_capabilities();
-    // TODO(b/192563524): The legacy video decoder wraps its frames with legacy
-    // mailboxes instead of SharedImages. The display compositor can composite
-    // these quads, but does not support promoting them to overlays. Thus, we
-    // disable overlays on platforms using the legacy video decoder.
-    auto* command_line = base::CommandLine::ForCurrentProcess();
-    if (command_line->HasSwitch(
-            switches::kPlatformDisallowsChromeOSDirectVideoDecoder)) {
-      host_properties->supports_overlays = false;
-    }
     drm_devices_[primary_graphics_card_path_] =
         primary_graphics_card_path_sysfs;
   }
@@ -260,8 +238,11 @@ DrmDisplayHostManager::DisplayEvent::operator=(const DisplayEvent&) = default;
 DrmDisplayHostManager::DisplayEvent::~DisplayEvent() = default;
 
 DrmDisplayHost* DrmDisplayHostManager::GetDisplay(int64_t display_id) {
-  auto it = std::find_if(displays_.begin(), displays_.end(),
-                         FindDrmDisplayHostById(display_id));
+  auto it =
+      base::ranges::find(displays_, display_id,
+                         [](const std::unique_ptr<DrmDisplayHost>& display) {
+                           return display->snapshot()->display_id();
+                         });
   if (it == displays_.end())
     return nullptr;
 
@@ -489,8 +470,11 @@ void DrmDisplayHostManager::GpuHasUpdatedNativeDisplays(
   std::vector<std::unique_ptr<DrmDisplayHost>> old_displays;
   displays_.swap(old_displays);
   for (auto& display : displays) {
-    auto it = std::find_if(old_displays.begin(), old_displays.end(),
-                           FindDrmDisplayHostById(display->display_id()));
+    auto it =
+        base::ranges::find(old_displays, display->display_id(),
+                           [](const std::unique_ptr<DrmDisplayHost>& display) {
+                             return display->snapshot()->display_id();
+                           });
     if (it == old_displays.end()) {
       displays_.push_back(std::make_unique<DrmDisplayHost>(
           proxy_, std::move(display), false /* is_dummy */));

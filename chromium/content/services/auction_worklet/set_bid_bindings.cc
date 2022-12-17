@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,10 +10,10 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
+#include "content/services/auction_worklet/bidder_worklet.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
@@ -32,11 +32,14 @@ namespace {
 // Checks that `url` is a valid URL and is in `ads`. Appends an error to
 // `out_errors` if not. `error_prefix` is used in output error messages
 // only.
-bool IsAllowedAdUrl(const GURL& url,
-                    std::string& error_prefix,
-                    const char* argument_name,
-                    const std::vector<blink::InterestGroup::Ad>& ads,
-                    std::vector<std::string>& out_errors) {
+bool IsAllowedAdUrl(
+    const GURL& url,
+    std::string& error_prefix,
+    const char* argument_name,
+    const std::vector<blink::InterestGroup::Ad>& ads,
+    const mojom::BidderWorkletNonSharedParams* bidder_worklet_non_shared_params,
+    bool restrict_to_kanon_ads,
+    std::vector<std::string>& out_errors) {
   if (!url.is_valid() || !url.SchemeIs(url::kHttpsScheme)) {
     out_errors.push_back(base::StrCat({error_prefix, "bid ", argument_name,
                                        " URL '", url.possibly_invalid_spec(),
@@ -45,6 +48,12 @@ bool IsAllowedAdUrl(const GURL& url,
   }
 
   for (const auto& ad : ads) {
+    if (restrict_to_kanon_ads &&
+        !BidderWorklet::IsKAnon(bidder_worklet_non_shared_params,
+                                ad.render_url)) {
+      continue;
+    }
+
     if (url == ad.render_url)
       return true;
   }
@@ -59,6 +68,9 @@ bool IsAllowedAdUrl(const GURL& url,
 
 mojom::BidderWorkletBidPtr SetBidBindings::TakeBid() {
   DCHECK(has_bid());
+  // Set `bid_duration` here instead of in SetBid(), so it can include the
+  // entire script execution time.
+  bid_->bid_duration = base::TimeTicks::Now() - start_;
   return std::move(bid_);
 }
 
@@ -70,13 +82,13 @@ SetBidBindings::~SetBidBindings() = default;
 void SetBidBindings::ReInitialize(
     base::TimeTicks start,
     bool has_top_level_seller_origin,
-    const absl::optional<std::vector<blink::InterestGroup::Ad>>* ads,
-    const absl::optional<std::vector<blink::InterestGroup::Ad>>*
-        ad_components) {
+    const mojom::BidderWorkletNonSharedParams* bidder_worklet_non_shared_params,
+    bool restrict_to_kanon_ads) {
+  DCHECK(bidder_worklet_non_shared_params->ads.has_value());
   start_ = start;
   has_top_level_seller_origin_ = has_top_level_seller_origin;
-  ads_ = ads;
-  ad_components_ = ad_components;
+  bidder_worklet_non_shared_params_ = bidder_worklet_non_shared_params;
+  restrict_to_kanon_ads_ = restrict_to_kanon_ads;
 }
 
 void SetBidBindings::FillInGlobalTemplate(
@@ -93,8 +105,8 @@ void SetBidBindings::FillInGlobalTemplate(
 void SetBidBindings::Reset() {
   bid_.reset();
   // Make sure we don't keep any dangling references to auction input.
-  ads_ = nullptr;
-  ad_components_ = nullptr;
+  bidder_worklet_non_shared_params_ = nullptr;
+  restrict_to_kanon_ads_ = false;
 }
 
 // static
@@ -103,15 +115,16 @@ void SetBidBindings::SetBid(const v8::FunctionCallbackInfo<v8::Value>& args) {
       static_cast<SetBidBindings*>(v8::External::Cast(*args.Data())->Value());
   AuctionV8Helper* v8_helper = bindings->v8_helper_;
 
-  if (args.Length() < 1 || args[0].IsEmpty()) {
-    args.GetIsolate()->ThrowException(
-        v8::Exception::TypeError(v8_helper->CreateStringFromLiteral(
-            "setBid requires 1 object parameter")));
-    return;
+  v8::Local<v8::Value> argument_value;
+  // Treat no arguments as an undefined argument, which should clear the bid.
+  if (args.Length() < 1) {
+    argument_value = v8::Undefined(v8_helper->isolate());
+  } else {
+    argument_value = args[0];
   }
 
   std::vector<std::string> errors;
-  if (!bindings->SetBid(args[0], /*error_prefix=*/"", errors)) {
+  if (!bindings->SetBid(argument_value, /*error_prefix=*/"", errors)) {
     DCHECK_EQ(1u, errors.size());
     // Remove the trailing period from the error message.
     std::string error_msg = errors[0].substr(0, errors[0].length() - 1);
@@ -128,8 +141,12 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
   bid_.reset();
 
-  DCHECK(ads_ && ad_components_)
+  DCHECK(bidder_worklet_non_shared_params_)
       << "ReInitialize() must be called before each use";
+
+  // Undefined and null are interpreted as choosing not to bid.
+  if (generate_bid_result->IsNullOrUndefined())
+    return true;
 
   if (!generate_bid_result->IsObject()) {
     errors_out.push_back(base::StrCat({error_prefix, "bid not an object."}));
@@ -138,11 +155,28 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
 
   gin::Dictionary result_dict(isolate, generate_bid_result.As<v8::Object>());
 
-  v8::Local<v8::Value> ad_object;
   double bid;
+  if (!result_dict.Get("bid", &bid)) {
+    errors_out.push_back(base::StrCat(
+        {error_prefix, "returned object must have numeric bid field."}));
+    return false;
+  }
+
+  if (!std::isfinite(bid)) {
+    // Bids should not be infinite or NaN.
+    errors_out.push_back(base::StringPrintf("%sbid of %lf is not a valid bid.",
+                                            error_prefix.c_str(), bid));
+    return false;
+  }
+  if (bid <= 0.0) {
+    // Not an error, just no bid.
+    return true;
+  }
+
+  v8::Local<v8::Value> ad_object;
   std::string render_url_string;
   // Parse and validate values.
-  if (!result_dict.Get("ad", &ad_object) || !result_dict.Get("bid", &bid) ||
+  if (!result_dict.Get("ad", &ad_object) ||
       !result_dict.Get("render", &render_url_string)) {
     errors_out.push_back(
         base::StrCat({error_prefix, "bid has incorrect structure."}));
@@ -175,19 +209,10 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
     }
   }
 
-  if (!std::isfinite(bid) || bid < 0.0) {
-    // Bids should not be infinite or NaN.
-    errors_out.push_back(base::StringPrintf("%sbid of %lf is not a valid bid.",
-                                            error_prefix.c_str(), bid));
-    return false;
-  }
-  if (bid <= 0.0) {
-    // Not an error, just no bid.
-    return false;
-  }
-
   GURL render_url(render_url_string);
-  if (!IsAllowedAdUrl(render_url, error_prefix, "render", ads_->value(),
+  if (!IsAllowedAdUrl(render_url, error_prefix, "render",
+                      bidder_worklet_non_shared_params_->ads.value(),
+                      bidder_worklet_non_shared_params_, restrict_to_kanon_ads_,
                       errors_out)) {
     return false;
   }
@@ -196,7 +221,7 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
   v8::Local<v8::Value> ad_components;
   if (result_dict.Get("adComponents", &ad_components) &&
       !ad_components->IsNullOrUndefined()) {
-    if (!ad_components_->has_value()) {
+    if (!bidder_worklet_non_shared_params_->ad_components.has_value()) {
       errors_out.push_back(
           base::StrCat({error_prefix,
                         "bid contains adComponents but InterestGroup has no "
@@ -231,18 +256,25 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
       }
 
       GURL ad_component_url(url_string);
-      if (!IsAllowedAdUrl(ad_component_url, error_prefix, "adComponents",
-                          ad_components_->value(), errors_out)) {
+      if (!IsAllowedAdUrl(
+              ad_component_url, error_prefix, "adComponents",
+              bidder_worklet_non_shared_params_->ad_components.value(),
+              bidder_worklet_non_shared_params_, restrict_to_kanon_ads_,
+              errors_out)) {
         return false;
       }
       ad_component_urls->emplace_back(std::move(ad_component_url));
     }
   }
 
-  bid_ = mojom::BidderWorkletBid::New(
-      std::move(ad_json), bid, std::move(render_url),
-      std::move(ad_component_urls),
-      /*bid_duration=*/base::TimeTicks::Now() - start_);
+  // `bid_duration` needs to include the entire time the bid script took to run,
+  // including the time from the last setBid() call to when the bidder worklet
+  // timed out, if the worklet did time out. So `bid_duration` is calculated
+  // when ownership of the bid is taken by the caller, instead of here.
+  bid_ = mojom::BidderWorkletBid::New(std::move(ad_json), bid,
+                                      std::move(render_url),
+                                      std::move(ad_component_urls),
+                                      /*bid_duration=*/base::TimeDelta());
   return true;
 }
 

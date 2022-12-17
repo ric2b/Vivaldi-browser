@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,6 +54,7 @@ class ApcExternalActionDelegate
   // ExternalActionDelegate:
   void OnActionRequested(
       const autofill_assistant::external::Action& action,
+      bool is_interrupt,
       base::OnceCallback<void(DomUpdateCallback)> start_dom_checks_callback,
       base::OnceCallback<void(const autofill_assistant::external::Result&
                                   result)> end_action_callback) override;
@@ -68,7 +69,9 @@ class ApcExternalActionDelegate
   // PasswordChangeRunController:
   void SetTopIcon(
       autofill_assistant::password_change::TopIcon top_icon) override;
-  void SetTitle(const std::u16string& title) override;
+  void SetTitle(
+      const std::u16string& title,
+      const std::u16string& accessibility_title = std::u16string()) override;
   void SetDescription(const std::u16string& description) override;
   void SetProgressBarStep(
       autofill_assistant::password_change::ProgressStep progress_step) override;
@@ -84,10 +87,12 @@ class ApcExternalActionDelegate
   void OnGeneratedPasswordSelected(bool selected) override;
   void ShowStartingScreen(const GURL& url) override;
   void ShowCompletionScreen(
-      base::RepeatingClosure onShowCompletionScreenDoneButtonClicked) override;
+      base::RepeatingClosure done_button_callback) override;
   void OpenPasswordManager() override;
   void ShowErrorScreen() override;
   bool PasswordWasSuccessfullyChanged() override;
+  void PauseProgressBarAnimation() override;
+  void ResumeProgressBarAnimation() override;
 
  private:
   friend class ApcExternalActionDelegateTest;
@@ -114,6 +119,9 @@ class ApcExternalActionDelegate
           UseGeneratedPasswordPromptSpecification& specification);
   void HandleUpdateSidePanel(
       const autofill_assistant::password_change::UpdateSidePanelSpecification&
+          specification);
+  void HandleSetFlowType(
+      const autofill_assistant::password_change::SetFlowTypeSpecification&
           specification);
 
   void OnBasePromptDomUpdateReceived(

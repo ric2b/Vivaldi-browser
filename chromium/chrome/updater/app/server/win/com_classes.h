@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,6 +95,7 @@ class UpdaterImpl
 
   // Overrides for IUpdater.
   IFACEMETHODIMP GetVersion(BSTR* version) override;
+  IFACEMETHODIMP FetchPolicies(IUpdaterCallback* callback) override;
   IFACEMETHODIMP CheckForUpdate(const wchar_t* app_id) override;
   IFACEMETHODIMP RegisterApp(const wchar_t* app_id,
                              const wchar_t* brand_code,
@@ -102,7 +103,7 @@ class UpdaterImpl
                              const wchar_t* tag,
                              const wchar_t* version,
                              const wchar_t* existence_checker_path,
-                             IUpdaterRegisterAppCallback* callback) override;
+                             IUpdaterCallback* callback) override;
   IFACEMETHODIMP RunPeriodicTasks(IUpdaterCallback* callback) override;
   IFACEMETHODIMP Update(const wchar_t* app_id,
                         const wchar_t* install_data_index,
@@ -116,6 +117,7 @@ class UpdaterImpl
                          const wchar_t* tag,
                          const wchar_t* version,
                          const wchar_t* existence_checker_path,
+                         const wchar_t* client_install_data,
                          const wchar_t* install_data_index,
                          LONG priority,
                          IUpdaterObserver* observer) override;

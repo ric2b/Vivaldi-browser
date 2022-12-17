@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_renderer_host.h"
 #include "net/base/ip_address.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "third_party/blink/public/mojom/direct_sockets/direct_sockets.mojom.h"
 
@@ -29,7 +30,12 @@ class DirectSocketsUnitTest : public RenderViewHostTestHarness {
 
   absl::optional<net::IPEndPoint> GetLocalAddr(
       const blink::mojom::DirectSocketOptions& options) {
-    return DirectSocketsServiceImpl::GetLocalAddrForTesting(options);
+    if (net::IPAddress address;
+        options.local_hostname &&
+        address.AssignFromIPLiteral(*options.local_hostname)) {
+      return net::IPEndPoint{std::move(address), options.local_port};
+    }
+    return {};
   }
 
  private:

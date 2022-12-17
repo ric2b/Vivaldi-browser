@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,6 +51,21 @@ struct BLINK_COMMON_EXPORT
 
   static double priority(const blink::InterestGroup& interest_group) {
     return interest_group.priority;
+  }
+
+  static bool enable_bidding_signals_prioritization(
+      const blink::InterestGroup& interest_group) {
+    return interest_group.enable_bidding_signals_prioritization;
+  }
+
+  static const absl::optional<base::flat_map<std::string, double>>&
+  priority_vector(const blink::InterestGroup& interest_group) {
+    return interest_group.priority_vector;
+  }
+
+  static const absl::optional<base::flat_map<std::string, double>>&
+  priority_signals_overrides(const blink::InterestGroup& interest_group) {
+    return interest_group.priority_signals_overrides;
   }
 
   static blink::InterestGroup::ExecutionMode execution_mode(

@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,7 @@
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/callback_helpers.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -134,12 +135,12 @@ using BrowserNonClientFrameViewChromeOSTest =
     TopChromeMdParamTest<InProcessBrowserTest>;
 using BrowserNonClientFrameViewChromeOSTestNoWebUiTabStrip =
     WebUiTabStripOverrideTest<false, BrowserNonClientFrameViewChromeOSTest>;
+using BrowserNonClientFrameViewChromeOSTestWithWebUiTabStrip =
+    WebUiTabStripOverrideTest<true, BrowserNonClientFrameViewChromeOSTest>;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 using BrowserNonClientFrameViewChromeOSTouchTest =
     TopChromeTouchTest<InProcessBrowserTest>;
-using BrowserNonClientFrameViewChromeOSTestWithWebUiTabStrip =
-    WebUiTabStripOverrideTest<true, BrowserNonClientFrameViewChromeOSTest>;
 using BrowserNonClientFrameViewChromeOSTouchTestWithWebUiTabStrip =
     WebUiTabStripOverrideTest<true, BrowserNonClientFrameViewChromeOSTouchTest>;
 
@@ -551,6 +552,23 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTestWithWebUiTabStrip,
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+// Tests to ensure caption buttons are not painted when the WebUI tab strip is
+// present for the browser window (crbug.com/1362731).
+IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTestWithWebUiTabStrip,
+                       CaptionButtonsHiddenWhenUsingWebUITabStrip) {
+  auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  auto* frame_view = GetFrameViewChromeOS(browser_view);
+  if (ui::TouchUiController::Get()->touch_ui()) {
+    EXPECT_TRUE(browser_view->webui_tab_strip());
+    EXPECT_FALSE(
+        frame_view->caption_button_container_for_testing()->GetVisible());
+  } else {
+    EXPECT_FALSE(browser_view->webui_tab_strip());
+    EXPECT_TRUE(
+        frame_view->caption_button_container_for_testing()->GetVisible());
+  }
+}
+
 IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTest,
                        IncognitoMarkedAsAssistantBlocked) {
   Browser* incognito_browser = CreateIncognitoBrowser();
@@ -591,10 +609,6 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTest,
   // Open a settings window.
   auto* settings_manager = chrome::SettingsWindowManager::GetInstance();
   settings_manager->ShowOSSettings(browser()->profile());
-
-  // The above ShowOSSettings() should trigger an asynchronous call to launch
-  // OS Settings SWA. Flush Mojo calls so the browser window is created.
-  ash::FlushSystemWebAppLaunchesForTesting(browser()->profile());
 
   Browser* settings_browser =
       settings_manager->FindBrowserForProfile(browser()->profile());
@@ -761,12 +775,9 @@ class WebAppNonClientFrameViewAshTest
             frame->GetProcess()->GetID(), frame->GetRoutingID());
     content_settings->OnContentAllowed(ContentSettingsType::GEOLOCATION);
 
-    return *std::find_if(
-        content_setting_views_->begin(), content_setting_views_->end(),
-        [](const auto* view) {
-          return view->GetTypeForTesting() ==
-                 ContentSettingImageModel::ImageType::GEOLOCATION;
-        });
+    return *base::ranges::find(*content_setting_views_,
+                               ContentSettingImageModel::ImageType::GEOLOCATION,
+                               &ContentSettingImageView::GetTypeForTesting);
   }
 
   void SimulateClickOnView(views::View* view) {
@@ -1097,7 +1108,13 @@ IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest, PopupHasNoToolbar) {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Test the normal type browser's kTopViewInset is always 0.
-IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTest, TopViewInset) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_TopViewInset DISABLED_TopViewInset
+#else
+#define MAYBE_TopViewInset TopViewInset
+#endif
+IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTest,
+                       MAYBE_TopViewInset) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   ImmersiveModeController* immersive_mode_controller =
       browser_view->immersive_mode_controller();
@@ -1139,12 +1156,24 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTest,
       aura::client::kResizeBehaviorKey,
       aura::client::kResizeBehaviorCanMaximize |
           aura::client::kResizeBehaviorCanResize);
-  EXPECT_TRUE(frame_view->caption_button_container_->GetVisible());
+
+  // Caption buttons are not supported when using the WebUI tab strip.
+  if (browser_view->webui_tab_strip()) {
+    EXPECT_FALSE(frame_view->caption_button_container_->GetVisible());
+  } else {
+    EXPECT_TRUE(frame_view->caption_button_container_->GetVisible());
+  }
 
   StartOverview();
   EXPECT_FALSE(frame_view->caption_button_container_->GetVisible());
   EndOverview();
-  EXPECT_TRUE(frame_view->caption_button_container_->GetVisible());
+
+  // Caption buttons are not supported when using the WebUI tab strip.
+  if (browser_view->webui_tab_strip()) {
+    EXPECT_FALSE(frame_view->caption_button_container_->GetVisible());
+  } else {
+    EXPECT_TRUE(frame_view->caption_button_container_->GetVisible());
+  }
 
   ASSERT_NO_FATAL_FAILURE(
       ash::ShellTestApi().SetTabletModeEnabledForTest(true));
@@ -1338,7 +1367,13 @@ IN_PROC_BROWSER_TEST_P(HomeLauncherBrowserNonClientFrameViewChromeOSTest,
   BrowserNonClientFrameViewChromeOS* frame_view =
       GetFrameViewChromeOS(browser_view);
 
-  EXPECT_TRUE(frame_view->caption_button_container_->GetVisible());
+  // Caption buttons are not supported when using the WebUI tab strip.
+  if (browser_view->webui_tab_strip()) {
+    EXPECT_FALSE(frame_view->caption_button_container_->GetVisible());
+  } else {
+    EXPECT_TRUE(frame_view->caption_button_container_->GetVisible());
+  }
+
   ASSERT_NO_FATAL_FAILURE(
       ash::ShellTestApi().SetTabletModeEnabledForTest(true));
   EXPECT_FALSE(frame_view->caption_button_container_->GetVisible());
@@ -1350,7 +1385,13 @@ IN_PROC_BROWSER_TEST_P(HomeLauncherBrowserNonClientFrameViewChromeOSTest,
 
   ASSERT_NO_FATAL_FAILURE(
       ash::ShellTestApi().SetTabletModeEnabledForTest(false));
-  EXPECT_TRUE(frame_view->caption_button_container_->GetVisible());
+
+  // Caption buttons are not supported when using the WebUI tab strip.
+  if (browser_view->webui_tab_strip()) {
+    EXPECT_FALSE(frame_view->caption_button_container_->GetVisible());
+  } else {
+    EXPECT_TRUE(frame_view->caption_button_container_->GetVisible());
+  }
 }
 
 // TODO(crbug.com/993974): When the test flake has been addressed, improve
@@ -1445,8 +1486,8 @@ IN_PROC_BROWSER_TEST_P(TabSearchFrameCaptionButtonTest,
 
 INSTANTIATE_TEST_SUITE(BrowserNonClientFrameViewChromeOSTest);
 INSTANTIATE_TEST_SUITE(BrowserNonClientFrameViewChromeOSTestNoWebUiTabStrip);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 INSTANTIATE_TEST_SUITE(BrowserNonClientFrameViewChromeOSTestWithWebUiTabStrip);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 INSTANTIATE_TEST_SUITE(WebAppNonClientFrameViewAshTest);
 INSTANTIATE_TEST_SUITE(FloatBrowserNonClientFrameViewChromeOSTest);
 INSTANTIATE_TEST_SUITE(HomeLauncherBrowserNonClientFrameViewChromeOSTest);

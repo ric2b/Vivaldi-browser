@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -107,6 +107,13 @@ const sync_pb::EntitySpecifics&
 ForwardingModelTypeChangeProcessor::GetPossiblyTrimmedRemoteSpecifics(
     const std::string& storage_key) const {
   return other_->GetPossiblyTrimmedRemoteSpecifics(storage_key);
+}
+
+base::WeakPtr<ModelTypeChangeProcessor>
+ForwardingModelTypeChangeProcessor::GetWeakPtr() {
+  // Note: Don't bother with a separate WeakPtrFactory for the forwarding
+  // processor; just hand out a WeakPtr directly to the real processor.
+  return other_->GetWeakPtr();
 }
 
 }  // namespace syncer

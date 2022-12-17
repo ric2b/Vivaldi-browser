@@ -1,8 +1,8 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 import {AsyncUtil} from '../../common/js/async_util.js';
@@ -144,12 +144,13 @@ export class FileTasks {
     // Cannot use fake entries with getFileTasks.
     entries = entries.filter(e => !util.isFakeEntry(e));
     if (entries.length !== 0) {
-      tasks = await new Promise(
+      const resultingTasks = await new Promise(
           fulfill => chrome.fileManagerPrivate.getFileTasks(entries, fulfill));
-      if (!tasks) {
+      if (!resultingTasks || !resultingTasks.tasks) {
         throw new Error(
             'Cannot get file tasks: ' + chrome.runtime.lastError.message);
       }
+      tasks = resultingTasks.tasks;
     }
 
     // Linux package installation is currently only supported for a single file
@@ -450,6 +451,9 @@ export class FileTasks {
         } else if (parsedActionId === 'open-web-drive-office-powerpoint') {
           task.iconType = 'gslides';
           task.title = loadTimeData.getString('TASK_OPEN_GSLIDES');
+          task.verb = chrome.fileManagerPrivate.Verb.OPEN_WITH;
+        } else if (parsedActionId === 'open-in-office') {
+          task.title = loadTimeData.getString('TASK_OPEN_OFFICE');
           task.verb = chrome.fileManagerPrivate.Verb.OPEN_WITH;
         } else if (parsedActionId === 'install-linux-package') {
           task.iconType = 'crostini';
@@ -1385,10 +1389,6 @@ function hasOfficeExtension(entry) {
  * @return {string}
  */
 export function parseActionId(actionId) {
-  if (window.isSWA) {
-    const swaUrl = SWA_FILES_APP_URL.toString() + '?';
-    return actionId.replace(swaUrl, '');
-  }
-
-  return actionId;
+  const swaUrl = SWA_FILES_APP_URL.toString() + '?';
+  return actionId.replace(swaUrl, '');
 }

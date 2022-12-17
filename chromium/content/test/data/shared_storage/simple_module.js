@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,7 +27,15 @@ class TestURLSelectionOperation {
   }
 }
 
+class RemainingBudgetOperation {
+  async run(data) {
+    console.log('remaining budget: ' +
+                (await sharedStorage.remainingBudget()).toString());
+  }
+}
+
 register("test-operation", TestOperation);
 register("test-url-selection-operation", TestURLSelectionOperation);
+register("remaining-budget-operation", RemainingBudgetOperation);
 
 console.log('Finish executing simple_module.js')

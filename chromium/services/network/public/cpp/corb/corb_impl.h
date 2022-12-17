@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -118,6 +118,7 @@ class COMPONENT_EXPORT(NETWORK_CPP) CrossOriginReadBlocking {
     Decision Sniff(base::StringPiece data) override;
     Decision HandleEndOfSniffableResponseBody() override;
     bool ShouldReportBlockedResponse() const override;
+    BlockedResponseHandling ShouldHandleBlockedResponseAs() const override;
 
     class ConfirmationSniffer;
     class SimpleConfirmationSniffer;

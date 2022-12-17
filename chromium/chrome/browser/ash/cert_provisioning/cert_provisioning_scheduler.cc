@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -294,7 +294,7 @@ void CertProvisioningSchedulerImpl::DeserializeWorkers() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   const base::Value::Dict& saved_workers =
-      pref_service_->GetValueDict(GetPrefNameForSerialization(cert_scope_));
+      pref_service_->GetDict(GetPrefNameForSerialization(cert_scope_));
 
   for (const auto kv : saved_workers) {
     const base::Value& saved_worker = kv.second;
@@ -552,7 +552,7 @@ absl::optional<CertProfile> CertProvisioningSchedulerImpl::GetOneCertProfile(
 
   const base::Value& profile_list = pref_service_->GetValue(pref_name_);
 
-  for (const base::Value& cur_profile : profile_list.GetListDeprecated()) {
+  for (const base::Value& cur_profile : profile_list.GetList()) {
     const CertProfileId* id = cur_profile.FindStringKey(kCertProfileIdKey);
     if (!id || (*id != cert_profile_id)) {
       continue;
@@ -570,7 +570,7 @@ std::vector<CertProfile> CertProvisioningSchedulerImpl::GetCertProfiles() {
   const base::Value& profile_list = pref_service_->GetValue(pref_name_);
 
   std::vector<CertProfile> result_profiles;
-  for (const base::Value& cur_profile : profile_list.GetListDeprecated()) {
+  for (const base::Value& cur_profile : profile_list.GetList()) {
     absl::optional<CertProfile> p = CertProfile::MakeFromValue(cur_profile);
     if (!p) {
       LOG(WARNING) << "Failed to parse certificate profile";

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,12 +20,14 @@ class BookmarkModel;
 @class ChromeActivityImageSource;
 @protocol ChromeActivityItemSource;
 @class ChromeActivityURLSource;
+@class ChromeActivityFileSource;
 @class DefaultBrowserPromoNonModalScheduler;
 @protocol FindInPageCommands;
 class PrefService;
 @protocol QRGenerationCommands;
 @class ShareImageData;
 @class ShareToData;
+@class ShareFileData;
 class WebNavigationBrowserAgent;
 
 // Mediator used to generate activities.
@@ -61,6 +63,11 @@ class WebNavigationBrowserAgent;
 // given objects in `dataItems`. The items returned will be those supported
 // by all objects in `dataItems`.
 - (NSArray*)applicationActivitiesForDataItems:(NSArray<ShareToData*>*)dataItems;
+
+// Generates an array of activity items to be shared via an activity view for
+// the given `data`.
+- (NSArray<ChromeActivityFileSource*>*)activityItemsForFileData:
+    (ShareFileData*)data;
 
 // Generates an array of activity items to be shared via an activity view for
 // the given `data`.

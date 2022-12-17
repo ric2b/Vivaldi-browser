@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,9 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/multidevice/fake_secure_message_delegate.h"
-#include "ash/components/multidevice/remote_device_test_util.h"
-#include "ash/components/multidevice/secure_message_delegate.h"
 #include "ash/services/secure_channel/authenticator.h"
 #include "ash/services/secure_channel/connection.h"
 #include "ash/services/secure_channel/device_to_device_responder_operations.h"
@@ -25,6 +22,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
 #include "base/timer/mock_timer.h"
+#include "chromeos/ash/components/multidevice/fake_secure_message_delegate.h"
+#include "chromeos/ash/components/multidevice/remote_device_test_util.h"
+#include "chromeos/ash/components/multidevice/secure_message_delegate.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 

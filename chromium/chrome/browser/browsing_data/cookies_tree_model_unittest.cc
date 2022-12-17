@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -274,7 +274,11 @@ class CookiesTreeModelTest : public testing::Test {
       case CookieTreeNode::DetailedInfo::TYPE_LOCAL_STORAGE:
       case CookieTreeNode::DetailedInfo::TYPE_SERVICE_WORKER:
       case CookieTreeNode::DetailedInfo::TYPE_SESSION_STORAGE:
-        return node->GetDetailedInfo().usage_info->origin.GetURL().spec() + ",";
+        return node->GetDetailedInfo()
+                   .usage_info->storage_key.origin()
+                   .GetURL()
+                   .spec() +
+               ",";
       case CookieTreeNode::DetailedInfo::TYPE_FILE_SYSTEM:
         return node->GetDetailedInfo()
                    .file_system_info->origin.GetURL()

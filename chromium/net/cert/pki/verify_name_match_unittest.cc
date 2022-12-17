@@ -1,11 +1,10 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "net/cert/pki/verify_name_match.h"
 
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
 #include "net/cert/pki/test_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -330,8 +329,10 @@ TEST(VerifyNameMatchInvalidDataTest, FailOnInvalidPrintableStringChars) {
   ASSERT_NE(std::string::npos, replace_location);
   for (int c = 0; c < 256; ++c) {
     SCOPED_TRACE(base::NumberToString(c));
-    if (base::IsAsciiAlpha(c) || base::IsAsciiDigit(c))
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9')) {
       continue;
+    }
     switch (c) {
       case ' ':
       case '\'':

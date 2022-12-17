@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -124,9 +124,7 @@ void ExtensionKeybindingRegistry::Init() {
 
 bool ExtensionKeybindingRegistry::ShouldIgnoreCommand(
     const std::string& command) const {
-  return command == manifest_values::kPageActionCommandEvent ||
-         command == manifest_values::kBrowserActionCommandEvent ||
-         command == manifest_values::kActionCommandEvent;
+  return Command::IsActionRelatedCommand(command);
 }
 
 bool ExtensionKeybindingRegistry::NotifyEventTargets(
@@ -145,7 +143,7 @@ void ExtensionKeybindingRegistry::CommandExecuted(
   base::Value::List args;
   args.Append(command);
 
-  std::unique_ptr<base::Value> tab_value;
+  base::Value tab_value;
   if (delegate_) {
     content::WebContents* web_contents =
         delegate_->GetWebContentsForExtension();
@@ -170,17 +168,13 @@ void ExtensionKeybindingRegistry::CommandExecuted(
       ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
           ExtensionTabUtil::GetScrubTabBehavior(extension, context_type,
                                                 web_contents);
-      tab_value = ExtensionTabUtil::CreateTabObject(
-                      web_contents, scrub_tab_behavior, extension)
-                      ->ToValue();
+      tab_value = base::Value(ExtensionTabUtil::CreateTabObject(
+                                  web_contents, scrub_tab_behavior, extension)
+                                  .ToValue());
     }
   }
 
-  if (!tab_value) {
-    // No currently-active tab. Push a null value.
-    tab_value = std::make_unique<base::Value>();
-  }
-  args.Append(base::Value::FromUniquePtrValue(std::move(tab_value)));
+  args.Append(std::move(tab_value));
 
   auto event =
       std::make_unique<Event>(events::COMMANDS_ON_COMMAND, kOnCommandEventName,

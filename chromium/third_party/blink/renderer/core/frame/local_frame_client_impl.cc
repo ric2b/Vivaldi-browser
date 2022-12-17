@@ -33,8 +33,8 @@
 
 #include <utility>
 
-#include "base/stl_util.h"
 #include "base/time/time.h"
+#include "base/types/optional_util.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
@@ -609,7 +609,7 @@ void LocalFrameClientImpl::BeginNavigation(
   if (!source_location) {
     DCHECK(!origin_window);
     source_location =
-        SourceLocation::Capture(web_frame_->GetFrame()->DomWindow());
+        CaptureSourceLocation(web_frame_->GetFrame()->DomWindow());
   }
   if (!source_location->IsUnknown()) {
     navigation_info->source_location.url = source_location->Url();
@@ -665,8 +665,7 @@ void LocalFrameClientImpl::BeginNavigation(
 }
 
 void LocalFrameClientImpl::DispatchWillSendSubmitEvent(HTMLFormElement* form) {
-  if (web_frame_->Client())
-    web_frame_->Client()->WillSendSubmitEvent(WebFormElement(form));
+  web_frame_->WillSendSubmitEvent(WebFormElement(form));
 }
 
 void LocalFrameClientImpl::DidStartLoading() {
@@ -795,11 +794,11 @@ String LocalFrameClientImpl::UserAgentOverride() {
 
 String LocalFrameClientImpl::UserAgent() {
   String override = UserAgentOverride();
-  if (!override.IsEmpty()) {
+  if (!override.empty()) {
     return override;
   }
 
-  if (user_agent_.IsEmpty())
+  if (user_agent_.empty())
     user_agent_ = Platform::Current()->UserAgent();
 
   // NOTE(igor@vivaldi.com): This is called to get the HTTP UserAgent header for
@@ -819,7 +818,7 @@ String LocalFrameClientImpl::UserAgent() {
 
     const KURL& url = document->Url();
     const String& url_str = url.GetString();
-    if (url_str.IsEmpty())
+    if (url_str.empty())
       break;
 
     base::StringPiece host;
@@ -844,22 +843,22 @@ String LocalFrameClientImpl::UserAgent() {
 
 String LocalFrameClientImpl::ReducedUserAgent() {
   String override = UserAgentOverride();
-  if (!override.IsEmpty()) {
+  if (!override.empty()) {
     return override;
   }
 
-  if (reduced_user_agent_.IsEmpty())
+  if (reduced_user_agent_.empty())
     reduced_user_agent_ = Platform::Current()->ReducedUserAgent();
   return reduced_user_agent_;
 }
 
 String LocalFrameClientImpl::FullUserAgent() {
   String override = UserAgentOverride();
-  if (!override.IsEmpty()) {
+  if (!override.empty()) {
     return override;
   }
 
-  if (full_user_agent_.IsEmpty())
+  if (full_user_agent_.empty())
     full_user_agent_ = Platform::Current()->FullUserAgent();
   return full_user_agent_;
 }
@@ -1169,8 +1168,7 @@ void LocalFrameClientImpl::UpdateSubresourceFactory(
 
 void LocalFrameClientImpl::DidChangeMobileFriendliness(
     const MobileFriendliness& mf) {
-  DCHECK(web_frame_->Client());
-  web_frame_->Client()->DidChangeMobileFriendliness(mf);
+  web_frame_->DidChangeMobileFriendliness(mf);
 }
 
 }  // namespace blink

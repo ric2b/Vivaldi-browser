@@ -112,8 +112,9 @@ std::u16string NodeTitleFromSpecifics(
 void MoveAllChildren(vivaldi::NotesModel* model,
                      const vivaldi::NoteNode* old_parent,
                      const vivaldi::NoteNode* new_parent) {
-  DCHECK(old_parent && old_parent->is_folder());
-  DCHECK(new_parent && new_parent->is_folder());
+  DCHECK(old_parent && (old_parent->is_folder() || old_parent->is_note()));
+  DCHECK(new_parent && (new_parent->is_folder() || new_parent->is_note()));
+  DCHECK(old_parent->is_folder() == new_parent->is_folder());
   DCHECK(old_parent != new_parent);
   DCHECK(new_parent->children().empty());
 
@@ -178,11 +179,6 @@ sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
   if (!node->is_folder() && !node->is_separator()) {
     notes_specifics->set_url(node->GetURL().spec());
     notes_specifics->set_content(base::UTF16ToUTF8(node->GetContent()));
-    if (!node->GetAttachments().empty())
-      for (const auto& attachment : node->GetAttachments()) {
-        auto* attachment_specifics = notes_specifics->add_attachments();
-        attachment_specifics->set_checksum(attachment.second.checksum());
-      }
   }
 
   DCHECK(node->guid().is_valid()) << "Actual: " << node->guid();
@@ -233,17 +229,15 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
                             GURL(specifics.url()),
                             base::UTF8ToUTF16(specifics.content()),
                             creation_time, guid);
-
-      for (auto it : specifics.attachments()) {
-        if (!it.has_checksum())
-          continue;
-        model->AddAttachment(node, vivaldi::NoteAttachment(it.checksum(), ""));
-      }
       return node;
     case sync_pb::NotesSpecifics::SEPARATOR:
       return model->AddSeparator(parent, index,
                                  NodeTitleFromSpecifics(specifics),
                                  creation_time, guid);
+    case sync_pb::NotesSpecifics::ATTACHMENT:
+      return model->AddAttachmentFromChecksum(
+          parent, index, NodeTitleFromSpecifics(specifics),
+          GURL(specifics.url()), specifics.content(), creation_time, guid);
     case sync_pb::NotesSpecifics::FOLDER:
       return model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
                               creation_time, guid);
@@ -270,13 +264,6 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
   }
 
   model->SetTitle(node, NodeTitleFromSpecifics(specifics));
-
-  for (auto it : specifics.attachments()) {
-    if (!it.has_checksum())
-      continue;
-    if (!node->GetAttachment(it.checksum()))
-      model->AddAttachment(node, vivaldi::NoteAttachment(it.checksum(), ""));
-  }
 }
 
 sync_pb::NotesSpecifics::VivaldiSpecialNotesType GetProtoTypeFromNoteNode(
@@ -290,6 +277,9 @@ sync_pb::NotesSpecifics::VivaldiSpecialNotesType GetProtoTypeFromNoteNode(
     case vivaldi::NoteNode::SEPARATOR:
       DCHECK(!node->is_folder());
       return sync_pb::NotesSpecifics::SEPARATOR;
+    case vivaldi::NoteNode::ATTACHMENT:
+      DCHECK(!node->is_folder());
+      return sync_pb::NotesSpecifics::ATTACHMENT;
     case vivaldi::NoteNode::FOLDER:
     case vivaldi::NoteNode::MAIN:
     case vivaldi::NoteNode::OTHER:
@@ -319,12 +309,17 @@ const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
     new_node = model->AddSeparator(
         node->parent(), node->parent()->GetIndexOf(node).value(),
         node->GetTitle(), node->GetCreationTime(), guid);
+  } else if (node->is_attachment()) {
+    new_node = model->AddAttachmentFromChecksum(
+        node->parent(), node->parent()->GetIndexOf(node).value(),
+        node->GetTitle(), node->GetURL(),
+        base::UTF16ToASCII(node->GetContent()), node->GetCreationTime(), guid);
   } else {
     new_node =
         model->AddNote(node->parent(), node->parent()->GetIndexOf(node).value(),
                        node->GetTitle(), node->GetURL(), node->GetContent(),
                        node->GetCreationTime(), guid);
-    model->SwapAttachments(new_node, node);
+    MoveAllChildren(model, node, new_node);
   }
   model->Remove(node);
 

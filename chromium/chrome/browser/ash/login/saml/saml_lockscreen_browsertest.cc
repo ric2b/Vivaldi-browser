@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,6 @@
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/logged_in_user_mixin.h"
-#include "chrome/browser/ash/login/test/network_portal_detector_mixin.h"
 #include "chrome/browser/ash/login/test/test_condition_waiter.h"
 #include "chrome/browser/ash/login/users/test_users.h"
 #include "chrome/browser/ash/policy/affiliation/affiliation_test_helper.h"
@@ -89,11 +88,7 @@ void SetDisconnected(const std::string& service_path) {
 
 class LockscreenWebUiTest : public MixinBasedInProcessBrowserTest {
  public:
-  LockscreenWebUiTest() {
-    feature_list_.InitAndEnableFeature(
-        features::kEnableSamlReauthenticationOnLockscreen);
-  }
-
+  LockscreenWebUiTest() = default;
   LockscreenWebUiTest(const LockscreenWebUiTest&) = delete;
   LockscreenWebUiTest& operator=(const LockscreenWebUiTest&) = delete;
 
@@ -689,14 +684,9 @@ class ProxyAuthLockscreenWebUiTest : public LockscreenWebUiTest {
   // Configure settings which are neccesarry for `NetworkStateInformer` to
   // report `NetworkStateInformer::PROXY_AUTH_REQUIRED` in the tests.
   void ConfigureNetworkBehindProxy() {
-    network_portal_detector_.SetDefaultNetwork(
-        kEthServicePath,
-        NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PROXY_AUTH_REQUIRED);
-
-    base::Value proxy_config = ProxyConfigDictionary::CreateFixedServers(
-        proxy_server_.host_port_pair().ToString(), "");
-
-    ProxyConfigDictionary proxy_config_dict(std::move(proxy_config));
+    ProxyConfigDictionary proxy_config_dict(
+        ProxyConfigDictionary::CreateFixedServers(
+            proxy_server_.host_port_pair().ToString(), ""));
     const NetworkState* network =
         network_state_test_helper_->network_state_handler()->DefaultNetwork();
     ASSERT_TRUE(network);
@@ -714,7 +704,6 @@ class ProxyAuthLockscreenWebUiTest : public LockscreenWebUiTest {
     return true;
   }
 
-  NetworkPortalDetectorMixin network_portal_detector_{&mixin_host_};
   net::SpawnedTestServer proxy_server_;
   std::unique_ptr<content::WindowedNotificationObserver> auth_needed_observer_;
   // Used for proxy server authentication.
@@ -894,7 +883,7 @@ class SAMLCookieTransferTest : public LockscreenWebUiTest {
               run_loop.Quit();
             }));
     run_loop.Run();
-    EXPECT_GT(cookie_list_.size(), 0);
+    EXPECT_GT(cookie_list_.size(), 0u);
 
     const auto saml_cookie_iterator = base::ranges::find(
         cookie_list_, cookie_name,

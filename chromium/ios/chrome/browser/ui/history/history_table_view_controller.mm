@@ -1,40 +1,39 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/chrome/browser/ui/history/history_table_view_controller.h"
+#import "ios/chrome/browser/ui/history/history_table_view_controller.h"
 
-#include "base/i18n/time_formatting.h"
+#import "base/i18n/time_formatting.h"
 #import "base/ios/ios_util.h"
-#include "base/mac/foundation_util.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/strings/grit/components_strings.h"
-#include "components/url_formatter/elide_url.h"
-#include "components/url_formatter/url_formatter.h"
+#import "base/mac/foundation_util.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/strings/grit/components_strings.h"
+#import "components/url_formatter/elide_url.h"
+#import "components/url_formatter/url_formatter.h"
 #import "ios/chrome/app/tests_hook.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#include "ios/chrome/browser/sync/sync_setup_service.h"
-#include "ios/chrome/browser/sync/sync_setup_service_factory.h"
+#import "ios/chrome/browser/sync/sync_setup_service.h"
+#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#include "ios/chrome/browser/ui/history/history_entries_status_item.h"
+#import "ios/chrome/browser/ui/history/history_entries_status_item.h"
 #import "ios/chrome/browser/ui/history/history_entries_status_item_delegate.h"
-#include "ios/chrome/browser/ui/history/history_entry_inserter.h"
+#import "ios/chrome/browser/ui/history/history_entry_inserter.h"
 #import "ios/chrome/browser/ui/history/history_entry_item.h"
-#include "ios/chrome/browser/ui/history/history_menu_provider.h"
+#import "ios/chrome/browser/ui/history/history_menu_provider.h"
 #import "ios/chrome/browser/ui/history/history_ui_constants.h"
-#include "ios/chrome/browser/ui/history/history_ui_delegate.h"
-#include "ios/chrome/browser/ui/history/history_util.h"
+#import "ios/chrome/browser/ui/history/history_ui_delegate.h"
+#import "ios/chrome/browser/ui/history/history_util.h"
 #import "ios/chrome/browser/ui/history/public/history_presentation_delegate.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
@@ -45,23 +44,25 @@
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#include "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/favicon/favicon_view.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/referrer.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
+#include "ios/panel/panel_constants.h"
 
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -98,6 +99,11 @@ const CGFloat kButtonHorizontalPadding = 30.0;
                                           UISearchBarDelegate> {
   // Closure to request next page of history.
   base::OnceClosure _query_history_continuation;
+
+  // Vivaldi
+  UIView* searchBarContainer;
+  // End Vivaldi
+
 }
 
 // Object to manage insertion of history entries into the table view model.
@@ -151,6 +157,8 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
 
+  // Vivaldi no need for this workaround any more (chr bug)
+  if (!vivaldi::IsVivaldiRunning()) {
   // Center search bar's cancel button vertically so it looks centered.
   // We change the cancel button proxy styles, so we will return it to
   // default in viewDidDisappear.
@@ -160,6 +168,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
       appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
   [cancelButton setTitlePositionAdjustment:offset
                              forBarMetrics:UIBarMetricsDefault];
+  } // Vivaldi
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -171,6 +180,13 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   [cancelButton setTitlePositionAdjustment:UIOffsetZero
                              forBarMetrics:UIBarMetricsDefault];
 }
+
+// Vivaldi
+- (void)viewDidLayoutSubviews{
+    if (vivaldi::IsVivaldiRunning())
+      self.searchController.searchBar.frame = searchBarContainer.bounds;
+}
+// End Vivaldi
 
 - (void)viewDidLoad {
   [super viewDidLoad];
@@ -209,13 +225,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
                      kHistoryNavigationControllerDoneButtonIdentifier];
   self.navigationItem.rightBarButtonItem = dismissButton;
 
-  // Vivaldi
-  if (vivaldi::IsVivaldiRunning()) {
-      self.navigationItem.rightBarButtonItem =
-        [self customizedDoneMenuButton];
-  }
-  // Vivaldi
-
   // SearchController Configuration.
   // Init the searchController with nil so the results are displayed on the same
   // TableView.
@@ -223,6 +232,12 @@ const CGFloat kButtonHorizontalPadding = 30.0;
       [[UISearchController alloc] initWithSearchResultsController:nil];
   self.searchController.obscuresBackgroundDuringPresentation = NO;
   self.searchController.searchBar.delegate = self;
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning())
+    self.searchController.delegate = self;
+  // End Vivaldi
+
   self.searchController.searchResultsUpdater = self;
   self.searchController.searchBar.backgroundColor = UIColor.clearColor;
   self.searchController.searchBar.accessibilityIdentifier =
@@ -234,7 +249,18 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   // UIKit needs to know which controller will be presenting the
   // searchController. If we don't add this trying to dismiss while
   // SearchController is active will fail.
+
+  // Vivaldi
+  if (!vivaldi::IsVivaldiRunning())
+  // End Vivaldi
   self.definesPresentationContext = YES;
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+    self.searchController.hidesNavigationBarDuringPresentation = NO;
+    [self setupHeaderWithSearch];
+  }
+  // End Vivaldi
 
   self.scrimView = [[UIControl alloc] init];
   self.scrimView.alpha = 0.0f;
@@ -249,12 +275,15 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   [self updateNavigationBar];
   self.navigationItem.hidesSearchBarWhenScrolling = NO;
 
+  // Vivaldi no need for this workaround any more (chr bug)
+  if (!vivaldi::IsVivaldiRunning()) {
   // Center search bar and cancel button vertically so it looks centered
   // in the header when searching.
   UIOffset offset =
       UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
   self.searchController.searchBar.searchFieldBackgroundPositionAdjustment =
       offset;
+  } // Vivaldi
 }
 
 #pragma mark - TableViewModel
@@ -494,6 +523,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 - (void)willPresentSearchController:(UISearchController*)searchController {
   [self showScrim];
+
 }
 
 - (void)didDismissSearchController:(UISearchController*)searchController {
@@ -545,6 +575,9 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 // tableView.
 - (void)deleteSelectedItemsFromHistory {
   if (!self.browser)
+    return;
+
+  if (!self.historyService)
     return;
 
   NSArray* toDeleteIndexPaths = self.tableView.indexPathsForSelectedRows;
@@ -765,6 +798,9 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   if (!self.browser)
     return;
 
+  if (!self.historyService)
+    return;
+
   self.loading = YES;
   // Add loading indicator if no items are shown.
   if (self.empty && !self.searchInProgress) {
@@ -928,6 +964,13 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 // Shows scrim overlay and hide toolbar.
 - (void)showScrim {
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+    return;
+  }
+  // End Vivaldi
+
   if (self.scrimView.alpha < 1.0f) {
     self.navigationController.toolbarHidden = YES;
     self.scrimView.alpha = 0.0f;
@@ -949,6 +992,13 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 // Hides scrim and restore toolbar.
 - (void)hideScrim {
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+    return;
+  }
+  // End Vivaldi
+
   if (self.scrimView.alpha > 0.0f) {
     self.navigationController.toolbarHidden = NO;
     __weak __typeof(self) weakSelf = self;
@@ -1013,6 +1063,9 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     self.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeNever;
   } else {
+
+    // Vivaldi
+    if (!vivaldi::IsVivaldiRunning())
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeAutomatic;
@@ -1181,12 +1234,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     return @[ self.deleteButton, [self createSpacerButton], self.cancelButton ];
   }
 
-  // Vivaldi
-  if (vivaldi::IsVivaldiRunning()) {
-      return @[];
-  }
-  // End Vivaldi
-
   return @[
     self.clearBrowsingDataButton, [self createSpacerButton], self.editButton
   ];
@@ -1226,6 +1273,12 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 // Dismisses this ViewController.
 - (void)dismissHistory {
   base::RecordAction(base::UserMetricsAction("MobileHistoryClose"));
+
+  // Vivaldi
+  if (self.searchController.active)
+      self.searchController.active = NO;
+  // End Vivaldi
+
   [self.delegate dismissHistoryWithCompletion:nil];
 }
 
@@ -1368,21 +1421,21 @@ const CGFloat kButtonHorizontalPadding = 30.0;
           [[NSMutableArray alloc] init];
    UIAction* clearHistoryAction =
     [actionFactory actionToClearHistoryWithBlock:^{
-        HistoryTableViewController* strongSelf = weakSelf;
-        if (!strongSelf)
+        HistoryTableViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
           return;
         [self openPrivacySettings];
     }];
 
   UIAction* editAction = [actionFactory actionToEditWithBlock:^{
-      HistoryTableViewController* strongSelf = weakSelf;
-      if (!strongSelf)
+      HistoryTableViewController* innerStrongSelf = weakSelf;
+      if (!innerStrongSelf)
         return;
       [self animateViewsConfigurationForEditingChange];
   }];
   UIAction* doneAction = [actionFactory actionDoneWithBlock:^{
-        HistoryTableViewController* strongSelf = weakSelf;
-        if (!strongSelf)
+        HistoryTableViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
           return;
         [self dismissHistory];
   }];
@@ -1391,6 +1444,60 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   [menuElements addObject:clearHistoryAction];
 
   return [UIMenu menuWithTitle:@"" children:menuElements];
+}
+
+- (void)setupHeaderWithSearch {
+  UIView* headerView = [[UIView alloc] init];
+  headerView.frame = CGRectMake(0, 0,0, panel_header_height);
+  UIView* topView = [[UIView alloc] init];
+  topView.frame = CGRectMake(0, 0, 0, panel_search_view_height);
+  [headerView addSubview:topView];
+
+  topView.translatesAutoresizingMaskIntoConstraints = NO;
+  [topView.leadingAnchor constraintEqualToAnchor:
+     headerView.leadingAnchor].active = YES;
+  [topView.widthAnchor
+     constraintEqualToAnchor:headerView.widthAnchor].active = YES;
+  [topView.topAnchor constraintEqualToAnchor:
+      headerView.topAnchor].active = YES;
+  [topView.heightAnchor constraintEqualToConstant:panel_top_view_height]
+        .active = YES;
+
+  searchBarContainer = [[UIView alloc] init];
+  searchBarContainer.frame = CGRectMake(0, 0, 0, search_bar_height);
+  searchBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
+  [searchBarContainer addSubview:self.searchController.searchBar];
+  [headerView addSubview:searchBarContainer];
+  self.searchController.searchBar.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  [searchBarContainer.widthAnchor
+   constraintEqualToAnchor:headerView.widthAnchor].active = YES;
+  self.searchController.searchBar.backgroundColor =
+      [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+  self.searchController.searchBar.alpha = 1.0;
+  self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+
+  [searchBarContainer.topAnchor constraintEqualToAnchor:
+      topView.bottomAnchor].active = YES;
+  [searchBarContainer.bottomAnchor constraintEqualToAnchor:
+      headerView.bottomAnchor].active = YES;
+  [searchBarContainer.leadingAnchor constraintEqualToAnchor:
+      headerView.leadingAnchor].active = YES;
+  [searchBarContainer.trailingAnchor constraintEqualToAnchor:
+      headerView.trailingAnchor].active = YES;
+  self.tableView.tableHeaderView = headerView;
+  headerView.translatesAutoresizingMaskIntoConstraints = NO;
+  [headerView.leadingAnchor constraintEqualToAnchor:
+      self.tableView.leadingAnchor].active = YES;
+  [headerView.trailingAnchor constraintEqualToAnchor:
+      self.tableView.trailingAnchor].active = YES;
+  [headerView.topAnchor constraintEqualToAnchor:
+      self.tableView.topAnchor].active = YES;
+  [headerView.heightAnchor constraintEqualToConstant:panel_header_height]
+        .active = YES;
+  [headerView.widthAnchor
+     constraintEqualToAnchor:self.view.widthAnchor multiplier:1.0].active = YES;
+  [self.searchController.searchBar sizeToFit];
 }
 
 @end

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@
 #include "base/threading/thread_local.h"
 #include "base/trace_event/interned_args_helper.h"
 #include "base/trace_event/typed_macros.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_group_controller.h"
 #include "mojo/public/cpp/bindings/interface_endpoint_controller.h"
@@ -389,7 +390,9 @@ void ThreadSafeInterfaceEndpointClientProxy::SendMessageWithResponder(
   }
 
   // If the Remote is bound on another sequence, post the call.
-  const bool allow_interrupt = !message.has_flag(Message::kFlagNoInterrupt);
+  const bool allow_interrupt =
+      SyncCallRestrictions::AreSyncCallInterruptsEnabled() &&
+      !message.has_flag(Message::kFlagNoInterrupt);
   auto response = base::MakeRefCounted<SyncResponseInfo>();
   auto response_signaler = std::make_unique<SyncResponseSignaler>(response);
   task_runner_->PostTask(
@@ -439,13 +442,13 @@ InterfaceEndpointClient::InterfaceEndpointClient(
     ScopedInterfaceEndpointHandle handle,
     MessageReceiverWithResponderStatus* receiver,
     std::unique_ptr<MessageReceiver> payload_validator,
-    bool expect_sync_requests,
+    base::span<const uint32_t> sync_method_ordinals,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     uint32_t interface_version,
     const char* interface_name,
     MessageToMethodInfoCallback method_info_callback,
     MessageToMethodNameCallback method_name_callback)
-    : expect_sync_requests_(expect_sync_requests),
+    : sync_method_ordinals_(sync_method_ordinals),
       handle_(std::move(handle)),
       incoming_receiver_(receiver),
       dispatcher_(&thunk_),
@@ -627,7 +630,9 @@ bool InterfaceEndpointClient::SendMessageWithResponder(
 
   const uint32_t message_name = message->name();
   const bool is_sync = message->has_flag(Message::kFlagIsSync);
-  const bool exclusive_wait = message->has_flag(Message::kFlagNoInterrupt);
+  const bool exclusive_wait =
+      message->has_flag(Message::kFlagNoInterrupt) ||
+      !SyncCallRestrictions::AreSyncCallInterruptsEnabled();
   if (!controller_->SendMessage(message))
     return false;
 
@@ -853,7 +858,8 @@ void InterfaceEndpointClient::InitControllerIfNecessary() {
 
   controller_ = handle_.group_controller()->AttachEndpointClient(handle_, this,
                                                                  task_runner_);
-  if (expect_sync_requests_ && task_runner_->RunsTasksInCurrentSequence())
+  if (!sync_method_ordinals_.empty() &&
+      task_runner_->RunsTasksInCurrentSequence())
     controller_->AllowWokenUpBySyncWatchOnSameThread();
 }
 
@@ -875,6 +881,12 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
               perfetto::StaticString{method_name_callback_(*message)},
               [&](perfetto::EventContext& ctx) {
                 auto* info = ctx.event()->set_chrome_mojo_event_info();
+#if BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_ARM64)
+                // ARM64 Android - set the interface tag unconditionally.
+                // TODO(kraskevich): Remove this special case once we're
+                // fully confident in crrev.com/c/3763052.
+                info->set_mojo_interface_tag(interface_name_);
+#else
                 // Generate mojo interface tag only for local traces.
                 //
                 // This saves trace buffer space for field traces. The
@@ -886,6 +898,7 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
                 if (!ctx.ShouldFilterDebugAnnotations()) {
                   info->set_mojo_interface_tag(interface_name_);
                 }
+#endif  // BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_ARM64)
                 const auto method_info = method_info_callback_(*message);
                 if (method_info) {
                   info->set_ipc_hash((*method_info)());

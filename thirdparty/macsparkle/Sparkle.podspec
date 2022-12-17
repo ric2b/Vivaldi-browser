@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name        = "Sparkle"
-  s.version     = "2.1.0"
+  s.version     = "2.3.0"
   s.summary     = "A software update framework for macOS"
   s.description = "Sparkle is an easy-to-use software update framework for macOS."
   s.homepage    = "https://sparkle-project.org"
@@ -18,7 +18,7 @@ Pod::Spec.new do |s|
     'Andy Matuschak' => 'andy@andymatuschak.org',
   }
 
-  s.platform = :osx, '10.11'
+  s.platform = :osx, '10.13'
   s.source   = { :http => "https://github.com/sparkle-project/Sparkle/releases/download/#{s.version}/Sparkle-#{s.version}.tar.xz" }
   s.source_files = 'Sparkle.framework/Versions/B/Headers/*.h'
 

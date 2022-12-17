@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,7 @@ void FrameSetPainter::PaintColumnBorder(const PaintInfo& paint_info,
   // meet at a join.
 
   AutoDarkMode auto_dark_mode(PaintAutoDarkMode(
-      layout_frame_set_.StyleRef(), DarkModeFilter::ElementRole::kBackground));
+      layout_frame_set_.StyleRef(), DarkModeFilter::ElementRole::kBorder));
 
   // Fill first.
   GraphicsContext& context = paint_info.context;
@@ -66,7 +66,7 @@ void FrameSetPainter::PaintRowBorder(const PaintInfo& paint_info,
   // meet at a join.
 
   AutoDarkMode auto_dark_mode(PaintAutoDarkMode(
-      layout_frame_set_.StyleRef(), DarkModeFilter::ElementRole::kBackground));
+      layout_frame_set_.StyleRef(), DarkModeFilter::ElementRole::kBorder));
 
   // Fill first.
   GraphicsContext& context = paint_info.context;

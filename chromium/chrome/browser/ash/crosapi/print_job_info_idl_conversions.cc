@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -158,7 +158,6 @@ idl::PrintJobInfo PrintJobInfoProtoToIdl(
   print_job_info.title = print_job_info_proto.title();
   print_job_info.source =
       PrintJobSourceProtoToIdl(print_job_info_proto.source());
-  print_job_info.source_id = nullptr;
   print_job_info.status =
       PrintJobStatusProtoToIdl(print_job_info_proto.status());
   print_job_info.creation_time =

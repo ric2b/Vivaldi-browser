@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -90,6 +90,11 @@
 namespace base {
 class CommandLine;
 class PersistentMemoryAllocator;
+#if BUILDFLAG(IS_ANDROID)
+namespace android {
+enum class ChildBindingState;
+}
+#endif
 }  // namespace base
 
 namespace blink {
@@ -119,6 +124,7 @@ class GpuClient;
 
 namespace content {
 class AgentSchedulingGroupHost;
+class BucketContext;
 class EmbeddedFrameSinkProviderImpl;
 class FileSystemManagerImpl;
 class FramelessMediaInterfaceProxy;
@@ -133,6 +139,7 @@ class ProcessLock;
 class PushMessagingManager;
 class RenderProcessHostCreationObserver;
 class RenderProcessHostFactory;
+class RenderProcessHostPriorityClients;
 class RenderProcessHostTest;
 class RenderWidgetHelper;
 class SiteInfo;
@@ -171,7 +178,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
       public blink::mojom::DomStorageProvider,
       public memory_instrumentation::mojom::CoordinatorConnector {
  public:
-  // Special depth used when there are no PriorityClients.
+  // Special depth used when there are no RenderProcessHostPriorityClients.
   static const unsigned int kMaxFrameDepthForPriority;
 
   // Exposed as a public constant to share with other entities that need to
@@ -201,7 +208,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void AddObserver(RenderProcessHostObserver* observer) override;
   void RemoveObserver(RenderProcessHostObserver* observer) override;
   void ShutdownForBadMessage(CrashReportMode crash_report_mode) override;
-  void UpdateClientPriority(PriorityClient* client) override;
+  void UpdateClientPriority(RenderProcessHostPriorityClient* client) override;
   int VisibleClientCount() override;
   unsigned int GetFrameDepth() override;
   bool GetIntersectsViewport() override;
@@ -227,13 +234,16 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void Cleanup() override;
   void AddPendingView() override;
   void RemovePendingView() override;
-  void AddPriorityClient(PriorityClient* priority_client) override;
-  void RemovePriorityClient(PriorityClient* priority_client) override;
+  void AddPriorityClient(
+      RenderProcessHostPriorityClient* priority_client) override;
+  void RemovePriorityClient(
+      RenderProcessHostPriorityClient* priority_client) override;
   void SetPriorityOverride(bool foreground) override;
   bool HasPriorityOverride() override;
   void ClearPriorityOverride() override;
 #if BUILDFLAG(IS_ANDROID)
   ChildProcessImportance GetEffectiveImportance() override;
+  base::android::ChildBindingState GetEffectiveChildBindingState() override;
   void DumpProcessStack() override;
 #endif
   void SetSuddenTerminationAllowed(bool enabled) override;
@@ -287,16 +297,13 @@ class CONTENT_EXPORT RenderProcessHostImpl
       const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
           coep_reporter,
-      const blink::StorageKey& storage_key,
+      const storage::BucketLocator& bucket_locator,
       mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) override;
   void BindIndexedDB(
       const blink::StorageKey& storage_key,
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) override;
-  void BindBucketManagerHostForRenderFrame(
-      const GlobalRenderFrameHostId& render_frame_host_id,
-      mojo::PendingReceiver<blink::mojom::BucketManagerHost> receiver) override;
-  void BindBucketManagerHostForWorker(
-      const blink::StorageKey& storage_key,
+  void BindBucketManagerHost(
+      base::WeakPtr<BucketContext> bucket_context,
       mojo::PendingReceiver<blink::mojom::BucketManagerHost> receiver) override;
   void ForceCrash() override;
   std::string GetInfoForBrowserContextDestructionCrashReporting() override;
@@ -339,7 +346,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   bool TakeFrameTokensForFrameRoutingID(
       int32_t new_routing_id,
       blink::LocalFrameToken& frame_token,
-      base::UnguessableToken& devtools_frame_token);
+      base::UnguessableToken& devtools_frame_token,
+      blink::DocumentToken& document_token);
 
   void AddInternalObserver(RenderProcessHostInternalObserver* observer);
   void RemoveInternalObserver(RenderProcessHostInternalObserver* observer);
@@ -678,7 +686,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
   void BindP2PSocketManager(
-      net::NetworkIsolationKey isolation_key,
+      net::NetworkAnonymizationKey isolation_key,
       mojo::PendingReceiver<network::mojom::P2PSocketManager> receiver,
       GlobalRenderFrameHostId render_frame_host_id);
 
@@ -691,6 +699,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
   PepperRendererConnection* pepper_renderer_connection() {
     return pepper_renderer_connection_.get();
   }
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  void ReinitializeLogging(uint32_t logging_dest,
+                           base::ScopedFD log_file_descriptor) override;
 #endif
 
   size_t keep_alive_ref_count() const { return keep_alive_ref_count_; }
@@ -1019,7 +1032,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #endif
 
   // Clients that contribute priority to this process.
-  base::flat_set<PriorityClient*> priority_clients_;
+  base::flat_set<RenderProcessHostPriorityClient*> priority_clients_;
 
   ChildProcessLauncherPriority priority_;
 

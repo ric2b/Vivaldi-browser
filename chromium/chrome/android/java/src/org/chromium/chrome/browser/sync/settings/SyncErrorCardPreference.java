@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,7 +55,7 @@ public class SyncErrorCardPreference extends Preference
 
         mProfileDataCache = ProfileDataCache.createWithDefaultImageSize(
                 context, R.drawable.ic_sync_badge_error_20dp);
-        setLayoutResource(R.layout.personalized_signin_promo_view_settings);
+        setLayoutResource(R.layout.sync_promo_view_settings);
         mSyncError = SyncError.NO_ERROR;
     }
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,6 +60,7 @@ class RestoreDataCollector {
     std::string template_name;
     aura::Window* root_window_to_show;
     std::vector<aura::Window*> unsupported_apps;
+    size_t incognito_window_count = 0;
     std::unique_ptr<app_restore::RestoreData> data;
     uint32_t pending_request_count = 0;
     GetDeskTemplateCallback callback;

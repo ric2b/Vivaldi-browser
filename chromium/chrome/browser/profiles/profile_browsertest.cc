@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -397,7 +397,8 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, MAYBE_CreateNewProfileSynchronous) {
 // Test OnProfileCreate is called with is_new_profile set to false when
 // creating a profile synchronously with an existing prefs file.
 // TODO(crbug.com/1304167): Failing on Mac.
-#if BUILDFLAG(IS_MAC)
+// TODO(crbug.com/): Flaky on linux-chromeos-rel.
+#if BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_CHROMEOS) && !defined(NDEBUG))
 #define MAYBE_CreateOldProfileSynchronous DISABLED_CreateOldProfileSynchronous
 #else
 #define MAYBE_CreateOldProfileSynchronous CreateOldProfileSynchronous

@@ -44,6 +44,7 @@
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/widget/constants.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/window_features/window_features.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/blink.h"
@@ -178,13 +179,13 @@ ChromeClientImpl::ChromeClientImpl(WebViewImpl* web_view)
 }
 
 ChromeClientImpl::~ChromeClientImpl() {
-  DCHECK(file_chooser_queue_.IsEmpty());
+  DCHECK(file_chooser_queue_.empty());
 }
 
 void ChromeClientImpl::Trace(Visitor* visitor) const {
   visitor->Trace(popup_opening_observers_);
   visitor->Trace(external_date_time_chooser_);
-  visitor->Trace(deferred_commit_observers_);
+  visitor->Trace(commit_observers_);
   ChromeClient::Trace(visitor);
 }
 
@@ -267,10 +268,11 @@ void ChromeClientImpl::StartDragging(LocalFrame* frame,
                                      const WebDragData& drag_data,
                                      DragOperationsMask mask,
                                      const SkBitmap& drag_image,
-                                     const gfx::Point& drag_image_offset) {
+                                     const gfx::Vector2d& cursor_offset,
+                                     const gfx::Rect& drag_obj_rect) {
   WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
-  web_frame->LocalRootFrameWidget()->StartDragging(drag_data, mask, drag_image,
-                                                   drag_image_offset);
+  web_frame->LocalRootFrameWidget()->StartDragging(
+      drag_data, mask, drag_image, cursor_offset, drag_obj_rect);
 }
 
 bool ChromeClientImpl::AcceptsLoadDrops() const {
@@ -354,11 +356,11 @@ void ChromeClientImpl::SetOverscrollBehavior(
 void ChromeClientImpl::Show(LocalFrame& frame,
                             LocalFrame& opener_frame,
                             NavigationPolicy navigation_policy,
-                            const gfx::Rect& initial_rect,
+                            const mojom::blink::WindowFeatures& window_features,
                             bool user_gesture) {
   DCHECK(web_view_);
   const gfx::Rect rect_adjusted_for_minimum =
-      AdjustWindowRectForMinimum(initial_rect);
+      AdjustWindowRectForMinimum(window_features.bounds);
   const gfx::Rect adjusted_rect =
       AdjustWindowRectForDisplay(rect_adjusted_for_minimum, frame);
   // Request the unadjusted rect if the browser may honor cross-screen bounds.
@@ -512,16 +514,32 @@ void ChromeClientImpl::ScheduleAnimation(const LocalFrameView* frame_view,
   }
 }
 
-gfx::Rect ChromeClientImpl::ViewportToScreen(
-    const gfx::Rect& rect_in_viewport,
+gfx::Rect ChromeClientImpl::LocalRootToScreenDIPs(
+    const gfx::Rect& rect_in_local_root,
     const LocalFrameView* frame_view) const {
   LocalFrame& frame = frame_view->GetFrame();
 
-  gfx::Rect screen_rect =
-      frame.GetWidgetForLocalRoot()->BlinkSpaceToEnclosedDIPs(rect_in_viewport);
-  gfx::Rect view_rect = frame.GetWidgetForLocalRoot()->ViewRect();
+  WebFrameWidgetImpl* widget =
+      WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
 
+  gfx::Rect rect_in_widget;
+  if (widget->ForTopMostMainFrame()) {
+    rect_in_widget = frame.GetPage()->GetVisualViewport().RootFrameToViewport(
+        rect_in_local_root);
+  } else {
+    // TODO(bokan): This method needs to account for the visual viewport
+    // transform when in a non-top-most local frame root. Unfortunately, the
+    // widget's ViewRect doesn't include the visual viewport so this cannot be
+    // done from here yet. See: https://crbug.com/928825,
+    // https://crbug.com/840944.
+    rect_in_widget = rect_in_local_root;
+  }
+
+  gfx::Rect view_rect = widget->ViewRect();
+
+  gfx::Rect screen_rect = widget->BlinkSpaceToEnclosedDIPs(rect_in_widget);
   screen_rect.Offset(view_rect.x(), view_rect.y());
+
   return screen_rect;
 }
 
@@ -614,8 +632,7 @@ void ChromeClientImpl::ShowMouseOverURL(const HitTestResult& result) {
   // scrollbar and an element in the case of overlay scrollbars.
   if (!result.GetScrollbar()) {
     // Find out if the mouse is over a link, and if so, let our UI know...
-    if (result.IsLiveLink() &&
-        !result.AbsoluteLinkURL().GetString().IsEmpty()) {
+    if (result.IsLiveLink() && !result.AbsoluteLinkURL().GetString().empty()) {
       url = result.AbsoluteLinkURL();
     } else if (result.InnerNode() &&
                (IsA<HTMLObjectElement>(*result.InnerNode()) ||
@@ -638,7 +655,7 @@ void ChromeClientImpl::UpdateTooltipUnderCursor(LocalFrame& frame,
                                                 TextDirection dir) {
   WebFrameWidgetImpl* widget =
       WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
-  if (!tooltip_text.IsEmpty()) {
+  if (!tooltip_text.empty()) {
     widget->UpdateTooltipUnderCursor(tooltip_text, dir);
     did_request_non_empty_tool_tip_ = true;
   } else if (did_request_non_empty_tool_tip_) {
@@ -769,14 +786,14 @@ void ChromeClientImpl::OpenFileChooser(
 }
 
 void ChromeClientImpl::DidCompleteFileChooser(FileChooser& chooser) {
-  if (!file_chooser_queue_.IsEmpty() &&
+  if (!file_chooser_queue_.empty() &&
       file_chooser_queue_.front().get() != &chooser) {
     // This function is called even if |chooser| wasn't stored in
     // file_chooser_queue_.
     return;
   }
   file_chooser_queue_.EraseAt(0);
-  if (file_chooser_queue_.IsEmpty())
+  if (file_chooser_queue_.empty())
     return;
   FileChooser* next_chooser = file_chooser_queue_.front().get();
   if (next_chooser->OpenFileChooser(*this))
@@ -1045,35 +1062,38 @@ void ChromeClientImpl::BeginLifecycleUpdates(LocalFrame& main_frame) {
   web_view_->StopDeferringMainFrameUpdate();
 }
 
-void ChromeClientImpl::RegisterForDeferredCommitObservation(
-    DeferredCommitObserver* observer) {
-  deferred_commit_observers_.insert(observer);
+void ChromeClientImpl::RegisterForCommitObservation(CommitObserver* observer) {
+  commit_observers_.insert(observer);
 }
 
-void ChromeClientImpl::UnregisterFromDeferredCommitObservation(
-    DeferredCommitObserver* observer) {
-  deferred_commit_observers_.erase(observer);
+void ChromeClientImpl::UnregisterFromCommitObservation(
+    CommitObserver* observer) {
+  commit_observers_.erase(observer);
 }
 
-void ChromeClientImpl::OnDeferCommitsChanged(
-    bool defer_status,
-    cc::PaintHoldingReason reason,
-    absl::optional<cc::PaintHoldingCommitTrigger> trigger) {
-  DCHECK(defer_status || trigger);
+void ChromeClientImpl::WillCommitCompositorFrame() {
   // Make a copy since callbacks may modify the set as we're iterating it.
-  auto observers = deferred_commit_observers_;
-  for (auto& observer : observers) {
-    if (defer_status)
-      observer->WillStartDeferringCommits(reason);
-    else
-      observer->WillStopDeferringCommits(*trigger);
-  }
+  auto observers = commit_observers_;
+  for (auto& observer : observers)
+    observer->WillCommitCompositorFrame();
+}
+
+std::unique_ptr<cc::ScopedPauseRendering> ChromeClientImpl::PauseRendering(
+    LocalFrame& frame) {
+  // If |frame| corresponds to an iframe this implies a transition in an iframe
+  // will pause rendering for the all ancestor frames (including the main frame)
+  // hosted in this process.
+  // TODO(khushalsagar): We need to switch to a different render-blocking
+  // mechanism for nested frames.
+  return WebLocalFrameImpl::FromFrame(frame)
+      ->FrameWidgetImpl()
+      ->PauseRendering();
 }
 
 bool ChromeClientImpl::StartDeferringCommits(LocalFrame& main_frame,
                                              base::TimeDelta timeout,
                                              cc::PaintHoldingReason reason) {
-  DCHECK(main_frame.IsMainFrame());
+  DCHECK(main_frame.IsLocalRoot());
   return WebLocalFrameImpl::FromFrame(main_frame)
       ->FrameWidgetImpl()
       ->StartDeferringCommits(timeout, reason);
@@ -1082,7 +1102,7 @@ bool ChromeClientImpl::StartDeferringCommits(LocalFrame& main_frame,
 void ChromeClientImpl::StopDeferringCommits(
     LocalFrame& main_frame,
     cc::PaintHoldingCommitTrigger trigger) {
-  DCHECK(main_frame.IsMainFrame());
+  DCHECK(main_frame.IsLocalRoot());
   WebLocalFrameImpl::FromFrame(main_frame)
       ->FrameWidgetImpl()
       ->StopDeferringCommits(trigger);

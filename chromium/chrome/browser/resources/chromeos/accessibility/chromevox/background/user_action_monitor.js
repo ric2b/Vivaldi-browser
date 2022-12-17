@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 import {KeyCode} from '../../common/key_code.js';
 import {BridgeConstants} from '../common/bridge_constants.js';
 import {BridgeHelper} from '../common/bridge_helper.js';
+import {Command} from '../common/command_store.js';
 import {KeySequence} from '../common/key_sequence.js';
 import {KeyUtil} from '../common/key_util.js';
 import {PanelCommand, PanelCommandType} from '../common/panel_command.js';
@@ -214,7 +215,7 @@ UserActionMonitor.CLOSE_CHROMEVOX_KEY_SEQUENCE_ = KeySequence.deserialize(
  *    shouldPropagate: (boolean|undefined),
  *    beforeActionMsg: (string|undefined),
  *    afterActionMsg: (string|undefined),
- *    afterActionCmd: (string|undefined),
+ *    afterActionCmd: (!Command|undefined),
  * }}
  */
 UserActionMonitor.ActionInfo;
@@ -356,7 +357,7 @@ UserActionMonitor.Action = class {
 
   /**
    * Uses the CommandHandler to perform a command.
-   * @param {string} command
+   * @param {!Command} command
    * @private
    */
   static onCommand_(command) {

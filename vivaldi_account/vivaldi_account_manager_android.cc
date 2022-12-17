@@ -77,15 +77,15 @@ base::android::ScopedJavaLocalRef<jobject>
 VivaldiAccountManagerAndroid::GetPendingRegistration(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
-  const base::Value* pending_registration = profile_->GetPrefs()->Get(
+  const base::Value& pending_registration = profile_->GetPrefs()->GetValue(
       vivaldiprefs::kVivaldiAccountPendingRegistration);
 
   const std::string* username =
-      pending_registration->FindStringKey(kUsernameKey);
+      pending_registration.FindStringKey(kUsernameKey);
   const std::string* encoded_password =
-      pending_registration->FindStringKey(kPasswordKey);
+      pending_registration.FindStringKey(kPasswordKey);
   const std::string* recovery_email =
-      pending_registration->FindStringKey(kRecoveryEmailKey);
+      pending_registration.FindStringKey(kRecoveryEmailKey);
 
   if (!username || !encoded_password || !recovery_email)
     return nullptr;

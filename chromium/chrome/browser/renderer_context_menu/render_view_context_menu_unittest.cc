@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,16 +26,22 @@
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/search_test_utils.h"
+#include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory_test_api.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/test_autofill_client.h"
+#include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/feed/feed_feature_list.h"
@@ -473,6 +479,7 @@ class RenderViewContextMenuPrefsTest : public ChromeRenderViewHostTestHarness {
   }
 
   void TearDown() override {
+    browser_.reset();
     registry_.reset();
     ChromeRenderViewHostTestHarness::TearDown();
     testing_local_state_.reset();
@@ -514,10 +521,32 @@ class RenderViewContextMenuPrefsTest : public ChromeRenderViewHostTestHarness {
 
   PrefService* local_state() { return testing_local_state_->Get(); }
 
+  Browser* GetBrowser() {
+    if (!browser_) {
+      Browser::CreateParams create_params(profile(), true);
+      auto test_window = std::make_unique<TestBrowserWindow>();
+      create_params.window = test_window.get();
+      browser_.reset(Browser::Create(create_params));
+    }
+    return browser_.get();
+  }
+
+  Browser* GetPwaBrowser() {
+    if (!browser_) {
+      Browser::CreateParams create_params(Browser::Type::TYPE_APP, profile(),
+                                          true);
+      auto test_window = std::make_unique<TestBrowserWindow>();
+      create_params.window = test_window.get();
+      browser_.reset(Browser::Create(create_params));
+    }
+    return browser_.get();
+  }
+
  private:
   std::unique_ptr<custom_handlers::ProtocolHandlerRegistry> registry_;
   std::unique_ptr<ScopedTestingLocalState> testing_local_state_;
   raw_ptr<TemplateURLService> template_url_service_;
+  std::unique_ptr<Browser> browser_;
 };
 
 // Verifies when Incognito Mode is not available (disabled by policy),
@@ -987,11 +1016,35 @@ class RenderViewContestMenuAutofillTest
         autofill::features::kAutofillShowManualFallbackInContextMenu);
   }
 
+  void SetUp() override {
+    ChromeRenderViewHostTestHarness::SetUp();
+    autofill_client_ = std::make_unique<autofill::TestAutofillClient>(
+        std::make_unique<autofill::TestPersonalDataManager>());
+  }
+
+  void TearDown() override {
+    autofill_client_.reset();
+    ChromeRenderViewHostTestHarness::TearDown();
+  }
+
  protected:
   // Returns true if the test needs to run in incognito mode.
   bool IsIncognito() const { return GetParam(); }
 
+  void InjectAutofillDriver(
+      content::RenderFrameHost* rfh,
+      std::unique_ptr<autofill::TestAutofillDriver> driver) {
+    autofill::ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
+        web_contents(), autofill_client_.get(),
+        autofill::ContentAutofillDriverFactory::DriverInitCallback());
+    auto* cadf =
+        autofill::ContentAutofillDriverFactory::FromWebContents(web_contents());
+    autofill::ContentAutofillDriverFactoryTestApi(cadf).SetDriver(
+        rfh, std::move(driver));
+  }
+
  private:
+  std::unique_ptr<autofill::TestAutofillClient> autofill_client_;
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -1007,7 +1060,6 @@ TEST_P(RenderViewContestMenuAutofillTest, ShowAutofillOptions) {
   DCHECK(pdm);
   pdm->AddServerCreditCardForTest(
       std::make_unique<autofill::CreditCard>(autofill::test::GetCreditCard()));
-
   if (IsIncognito()) {
     // Verify that Autofill context menu items are displayed on a number field
     // in Incognito.
@@ -1024,6 +1076,9 @@ TEST_P(RenderViewContestMenuAutofillTest, ShowAutofillOptions) {
   content::ContextMenuParams params = CreateParams(MenuItem::EDITABLE);
   params.input_field_type =
       blink::mojom::ContextMenuDataInputFieldType::kPlainText;
+
+  InjectAutofillDriver(web_contents()->GetPrimaryMainFrame(),
+                       std::make_unique<autofill::TestAutofillDriver>());
   auto menu = std::make_unique<TestRenderViewContextMenu>(
       *web_contents()->GetPrimaryMainFrame(), params);
   menu->Init();
@@ -1031,6 +1086,93 @@ TEST_P(RenderViewContestMenuAutofillTest, ShowAutofillOptions) {
   EXPECT_TRUE(
       menu->IsItemInRangePresent(IDC_CONTENT_CONTEXT_AUTOFILL_CUSTOM_FIRST,
                                  IDC_CONTENT_CONTEXT_AUTOFILL_CUSTOM_LAST));
+}
+
+// Verify that the Lens Image Search menu item is disabled on non-image content
+TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchNonImage) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  menu.SetBrowser(GetBrowser());
+  menu.Init();
+
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+}
+
+// Verify that the Lens Image Search menu item is enabled on image content
+TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchEnabled) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
+  params.has_image_contents = true;
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  menu.SetBrowser(GetBrowser());
+  menu.Init();
+
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+}
+
+// Verify that the Lens Image Search menu item is enabled for Progressive Web
+// Apps
+TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchForProgressiveWebApp) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
+  params.has_image_contents = true;
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  menu.SetBrowser(GetPwaBrowser());
+  menu.Init();
+
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+}
+
+// Verify that the Lens Image Search menu item is enabled for third-party
+// default search engines that support image search.
+TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchEnabledFor3pDse) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  SetUserSelectedDefaultSearchProvider("https://www.bing.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
+  params.has_image_contents = true;
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  menu.SetBrowser(GetBrowser());
+  menu.Init();
+
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+}
+
+// Verify that the Lens Image Search menu item is disabled for third-part
+// default search engines that do not support image search.
+TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchDisabledFor3pDse) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  SetUserSelectedDefaultSearchProvider("https://www.yahoo.com",
+                                       /*supports_image_search=*/false);
+  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
+  params.has_image_contents = true;
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  menu.SetBrowser(GetBrowser());
+  menu.Init();
+
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
 }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -1044,6 +1186,7 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearch) {
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
   TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
                                  params);
+  menu.SetBrowser(GetBrowser());
   menu.Init();
 
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
@@ -1063,6 +1206,7 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchPdfDisabled) {
           GURL("chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai")));
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
   TestRenderViewContextMenu menu(*render_frame_host, params);
+  menu.SetBrowser(GetBrowser());
   menu.Init();
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
@@ -1083,6 +1227,7 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchPdfEnabled) {
           GURL("chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai")));
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
   TestRenderViewContextMenu menu(*render_frame_host, params);
+  menu.SetBrowser(GetBrowser());
   menu.Init();
 
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
@@ -1101,6 +1246,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
   TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
                                  params);
+  menu.SetBrowser(GetBrowser());
   menu.Init();
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
@@ -1117,7 +1263,31 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchDisabledOnImage) {
   params.has_image_contents = true;
   TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
                                  params);
+  menu.SetBrowser(GetBrowser());
   AppendImageItems(&menu);
+
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_WEB_REGION_SEARCH));
+}
+
+// Verify that the Lens Region Search menu item is disabled when there is no
+// browser.
+TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchPdfDisabledNoBrowser) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({lens::features::kLensStandalone,
+                             lens::features::kEnableRegionSearchOnPdfViewer},
+                            {});
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
+  content::RenderFrameHost* render_frame_host =
+      web_contents()->GetPrimaryMainFrame();
+  OverrideLastCommittedOrigin(
+      render_frame_host,
+      url::Origin::Create(
+          GURL("chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai")));
+  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
+  TestRenderViewContextMenu menu(*render_frame_host, params);
+  menu.Init();
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_WEB_REGION_SEARCH));
@@ -1134,6 +1304,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
   TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
                                  params);
+  menu.SetBrowser(GetBrowser());
   menu.Init();
 
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_WEB_REGION_SEARCH));
@@ -1151,6 +1322,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
   TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
                                  params);
+  menu.SetBrowser(GetBrowser());
   menu.Init();
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_WEB_REGION_SEARCH));
@@ -1167,6 +1339,7 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchExperimentDisabled) {
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
   TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
                                  params);
+  menu.SetBrowser(GetBrowser());
   menu.Init();
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
@@ -1183,9 +1356,35 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchChromeUIScheme) {
   params.page_url = GURL(chrome::kChromeUISettingsURL);
   TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
                                  params);
+  menu.SetBrowser(GetBrowser());
   menu.Init();
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+}
+
+// Verify that the Lens Region Search menu item is enabled for Progressive Web
+// Apps. Region Search on PWAs is currently broken and therefore disabled on
+// Mac. b/250074889
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_LensRegionSearchProgressiveWebApp \
+  DISABLED_LensRegionSearchProgressiveWebApp
+#else
+#define MAYBE_LensRegionSearchProgressiveWebApp \
+  LensRegionSearchProgressiveWebApp
+#endif
+TEST_F(RenderViewContextMenuPrefsTest,
+       MAYBE_LensRegionSearchProgressiveWebApp) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  menu.SetBrowser(GetPwaBrowser());
+  menu.Init();
+
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
 }
 
 #endif

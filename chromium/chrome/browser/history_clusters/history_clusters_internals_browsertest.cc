@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,16 +6,17 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/webui/webui_util.h"
-#include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/mojo_web_ui_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/history_clusters/core/features.h"
+#include "components/history_clusters/core/url_constants.h"
 #include "components/history_clusters/history_clusters_internals/webui/history_clusters_internals_ui.h"
 #include "components/history_clusters/history_clusters_internals/webui/url_constants.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
@@ -52,6 +53,8 @@ class TestWebUIControllerFactory : public content::WebUIControllerFactory {
       Profile* profile = Profile::FromWebUI(web_ui);
       return std::make_unique<HistoryClustersInternalsUI>(
           web_ui, HistoryClustersServiceFactory::GetForBrowserContext(profile),
+          HistoryServiceFactory::GetForProfile(
+              profile, ServiceAccessType::EXPLICIT_ACCESS),
           base::BindOnce(&SetUpWebUIDataSource, web_ui,
                          history_clusters_internals::
                              kChromeUIHistoryClustersInternalsHost));
@@ -109,7 +112,7 @@ IN_PROC_BROWSER_TEST_F(HistoryClustersInternalsDisabledBrowserTest,
 
   // Trigger the debug messages to be added to the internals page.
   EXPECT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), GURL(chrome::kChromeUIHistoryClustersURL)));
+      browser(), GURL(history_clusters::kChromeUIHistoryClustersURL)));
 
   // Verify that log messages are not added to the UI. There are still two
   // entries in the UI - the table header and the feature disabled message.
@@ -148,7 +151,7 @@ IN_PROC_BROWSER_TEST_F(HistoryClustersInternalsBrowserTest,
 
   // Trigger the debug messages to be added to the internals page.
   EXPECT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), GURL(chrome::kChromeUIHistoryClustersURL)));
+      browser(), GURL(history_clusters::kChromeUIHistoryClustersURL)));
 
   // Verify that log messages are added to the UI.
   EXPECT_EQ(true, EvalJs(internals_page_web_contents, R"(

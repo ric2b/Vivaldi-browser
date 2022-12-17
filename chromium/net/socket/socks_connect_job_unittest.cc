@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,14 +73,14 @@ class SOCKSConnectJobTest : public testing::Test, public WithTaskEnvironment {
       SecureDnsPolicy secure_dns_policy = SecureDnsPolicy::kAllow) {
     return base::MakeRefCounted<SOCKSSocketParams>(
         base::MakeRefCounted<TransportSocketParams>(
-            HostPortPair(kProxyHostName, kProxyPort), NetworkIsolationKey(),
+            HostPortPair(kProxyHostName, kProxyPort), NetworkAnonymizationKey(),
             secure_dns_policy, OnHostResolutionCallback(),
             /*supported_alpns=*/base::flat_set<std::string>()),
         socks_version == SOCKSVersion::V5,
         socks_version == SOCKSVersion::V4
             ? HostPortPair(kSOCKS4TestHost, kSOCKS4TestPort)
             : HostPortPair(kSOCKS5TestHost, kSOCKS5TestPort),
-        NetworkIsolationKey(), TRAFFIC_ANNOTATION_FOR_TESTS);
+        NetworkAnonymizationKey(), TRAFFIC_ANNOTATION_FOR_TESTS);
   }
 
  protected:
@@ -122,11 +122,12 @@ TEST_F(SOCKSConnectJobTest, HostResolutionFailureSOCKS4Endpoint) {
     scoped_refptr<SOCKSSocketParams> socket_params =
         base::MakeRefCounted<SOCKSSocketParams>(
             base::MakeRefCounted<TransportSocketParams>(
-                HostPortPair(kProxyHostName, kProxyPort), NetworkIsolationKey(),
-                SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
+                HostPortPair(kProxyHostName, kProxyPort),
+                NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+                OnHostResolutionCallback(),
                 /*supported_alpns=*/base::flat_set<std::string>()),
             false /* socks_v5 */, HostPortPair(hostname, kSOCKS4TestPort),
-            NetworkIsolationKey(), TRAFFIC_ANNOTATION_FOR_TESTS);
+            NetworkAnonymizationKey(), TRAFFIC_ANNOTATION_FOR_TESTS);
 
     TestConnectJobDelegate test_delegate;
     SOCKSConnectJob socks_connect_job(
@@ -450,8 +451,10 @@ TEST_F(SOCKSConnectJobTest, ConnectTiming) {
   // Proxy name resolution is not considered resolving the host name for
   // ConnectionInfo. For SOCKS4, where the host name is also looked up via DNS,
   // the resolution time is not currently reported.
-  EXPECT_EQ(base::TimeTicks(), socks_connect_job.connect_timing().dns_start);
-  EXPECT_EQ(base::TimeTicks(), socks_connect_job.connect_timing().dns_end);
+  EXPECT_EQ(base::TimeTicks(),
+            socks_connect_job.connect_timing().domain_lookup_start);
+  EXPECT_EQ(base::TimeTicks(),
+            socks_connect_job.connect_timing().domain_lookup_end);
 
   // The "connect" time for socks proxies includes DNS resolution time.
   EXPECT_EQ(start, socks_connect_job.connect_timing().connect_start);

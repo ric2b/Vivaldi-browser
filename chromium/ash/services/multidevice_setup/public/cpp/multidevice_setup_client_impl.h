@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,13 +8,13 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/multidevice/remote_device.h"
-#include "ash/components/multidevice/remote_device_cache.h"
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "base/callback.h"
 #include "base/timer/timer.h"
+#include "chromeos/ash/components/multidevice/remote_device.h"
+#include "chromeos/ash/components/multidevice/remote_device_cache.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"

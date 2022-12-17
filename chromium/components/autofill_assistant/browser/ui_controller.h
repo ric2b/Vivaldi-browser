@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -103,7 +103,13 @@ class UiController : public ScriptExecutorUiDelegate,
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)> end_action_callback,
       base::OnceCallback<void(const ClientStatus&)>
-          view_inflation_finished_callback) override;
+          view_inflation_finished_callback,
+      base::RepeatingCallback<void(const RequestBackendDataProto&)>
+          request_backend_data_callback,
+      base::RepeatingCallback<void(const ShowAccountScreenProto&)>
+          show_account_screen_callback) override;
+  void ShowAccountScreen(const ShowAccountScreenProto& proto,
+                         const std::string& email_address) override;
   void SetPersistentGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
       base::OnceCallback<void(const ClientStatus&)>
@@ -111,7 +117,6 @@ class UiController : public ScriptExecutorUiDelegate,
   void ClearGenericUi() override;
   void ClearPersistentGenericUi() override;
   void SetShowFeedbackChip(bool show_feedback_chip) override;
-
   void SetExpandSheetForPromptAction(bool expand) override;
   void SetCollectUserDataOptions(CollectUserDataOptions* options) override;
   void SetCollectUserDataUiState(bool loading,
@@ -120,6 +125,8 @@ class UiController : public ScriptExecutorUiDelegate,
                                             collect_user_data_options) override;
   const CollectUserDataOptions* GetLastSuccessfulUserDataOptions()
       const override;
+
+  // Overrides autofill_assistant::WaitForDomObserver:
   void OnInterruptStarted() override;
   void OnInterruptFinished() override;
 
@@ -182,6 +189,7 @@ class UiController : public ScriptExecutorUiDelegate,
   bool SupportsExternalActions() override;
   void ExecuteExternalAction(
       const external::Action& external_action,
+      bool is_interrupt,
       base::OnceCallback<void(ExternalActionDelegate::DomUpdateCallback)>
           start_dom_checks_callback,
       base::OnceCallback<void(const external::Result& result)>

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,6 @@
 #include "chrome/browser/ui/webui/signin/turn_sync_on_helper.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -202,8 +201,10 @@ void OnFirstRunHasExited(ResumeTaskCallback original_intent_callback,
                           << static_cast<int>(status);
   std::move(original_intent_callback).Run(proceed);
 
-  if (proceed && post_first_run_callback)
+  if (proceed) {
+    DCHECK(post_first_run_callback);
     std::move(post_first_run_callback).Run();
+  }
 }
 
 }  // namespace
@@ -337,9 +338,10 @@ void LacrosFirstRunService::OpenFirstRunInternal(EntryPoint entry_point,
 // LacrosFirstRunServiceFactory ------------------------------------------------
 
 LacrosFirstRunServiceFactory::LacrosFirstRunServiceFactory()
-    : BrowserContextKeyedServiceFactory(
-          "LacrosFirstRunServiceFactory",
-          BrowserContextDependencyManager::GetInstance()) {
+    : ProfileKeyedServiceFactory("LacrosFirstRunServiceFactory",
+                                 ProfileSelections::Builder()
+                                     .WithGuest(ProfileSelection::kNone)
+                                     .Build()) {
   // Used for checking Sync consent level.
   DependsOn(IdentityManagerFactory::GetInstance());
 }

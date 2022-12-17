@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,6 +26,13 @@ class WebTestCookieManager
   // blink::test::mojom::CookieManagerAutomation implementation
   void DeleteAllCookies(
       blink::test::mojom::CookieManagerAutomation::DeleteAllCookiesCallback)
+      override;
+  void GetAllCookies(
+      blink::test::mojom::CookieManagerAutomation::GetAllCookiesCallback)
+      override;
+  void GetNamedCookie(
+      const std::string& name,
+      blink::test::mojom::CookieManagerAutomation::GetNamedCookieCallback)
       override;
 
  private:

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,6 +35,7 @@ void AddBookmarksToIndex(BookmarkLoadDetails* details, BookmarkNode* node) {
     if (node->url().is_valid())
       details->index()->Add(node);
   } else {
+    details->index()->AddPath(node);
     for (const auto& child : node->children())
       AddBookmarksToIndex(details, child.get());
   }
@@ -72,6 +73,8 @@ void LoadBookmarks(const base::FilePath& path,
       details->set_ids_reassigned(codec.ids_reassigned());
       details->set_guids_reassigned(codec.guids_reassigned());
       details->set_model_meta_info_map(codec.model_meta_info_map());
+      details->set_model_unsynced_meta_info_map(
+          codec.model_unsynced_meta_info_map());
 
       load_index = true;
     }
@@ -94,6 +97,10 @@ void LoadBookmarks(const base::FilePath& path,
   int64_t file_size_bytes;
   if (bookmark_file_exists && base::GetFileSize(path, &file_size_bytes)) {
     metrics::RecordFileSizeAtStartup(file_size_bytes);
+    metrics::RecordAverageNodeSizeAtStartup(
+        stats.total_url_bookmark_count == 0
+            ? 0
+            : file_size_bytes / stats.total_url_bookmark_count);
   }
 }
 

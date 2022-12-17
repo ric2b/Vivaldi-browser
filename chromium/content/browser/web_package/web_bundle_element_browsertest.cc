@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "components/web_package/web_bundle_builder.h"
@@ -131,8 +132,8 @@ class WebBundleElementBrowserTest : public ContentBrowserTest {
  protected:
   WebBundleElementBrowserTest() {
     feature_list_.InitWithFeatures(
-        {features::kSubresourceWebBundles},
-        {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame});
+        {}, {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame,
+             net::features::kEnableDoubleKeyNetworkAnonymizationKey});
   }
   ~WebBundleElementBrowserTest() override = default;
 
@@ -424,15 +425,13 @@ IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest,
       {"/web_bundle/uuid-in-package.wbn", "loaded"},
       {"/server-redirect?/web_bundle/uuid-in-package.wbn", "failed"}};
 
-  for (const auto& pair : test_cases) {
-    const char* url = pair.first;
-    std::string expected_message = pair.second;
-    ExecuteScriptAsync(shell(), GetScriptForWebBundle(url));
+  for (const auto& [input_url, expected_message] : test_cases) {
+    ExecuteScriptAsync(shell(), GetScriptForWebBundle(input_url));
     std::string message;
     EXPECT_TRUE(dom_message_queue.WaitForMessage(&message));
-    EXPECT_EQ("\"" + expected_message + "\"", message);
+    EXPECT_EQ(base::StrCat({"\"", expected_message, "\""}), message);
 
-    if (expected_message == "failed")
+    if (std::string(expected_message) == "failed")
       console_observer.Wait();
   }
 }
@@ -563,7 +562,7 @@ IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest,
   EXPECT_EQ(GURL(kUuidInPackageURL), GetObservedUnknownSchemeUrl());
 }
 
-IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest, NetworkIsolationKey) {
+IN_PROC_BROWSER_TEST_F(WebBundleElementBrowserTest, NetworkAnonymizationKey) {
   GURL bundle_url(https_server()->GetURL("bundle.test", kUuidTestBundlePath));
   GURL page_url(https_server()->GetURL(
       "page.test", "/web_bundle/frame_parent.html?wbn=" + bundle_url.spec() +

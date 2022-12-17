@@ -1,14 +1,14 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chromecast/browser/cast_web_service.h"
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -113,6 +113,7 @@ void CastWebService::ClearLocalStorage(ClearLocalStorageCallback callback) {
             partition->ClearData(
                 remove_data_mask,
                 content::StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
+                /*filter_builder=*/nullptr,
                 content::StoragePartition::StorageKeyPolicyMatcherFunction(),
                 std::move(cookie_delete_filter), /*perform_cleanup=*/true,
                 base::Time::Min(), base::Time::Max(), std::move(cb));
@@ -121,8 +122,7 @@ void CastWebService::ClearLocalStorage(ClearLocalStorageCallback callback) {
 }
 
 bool CastWebService::IsCastWebUIOrigin(const url::Origin& origin) {
-  return std::find(cast_webui_hosts_.begin(), cast_webui_hosts_.end(),
-                   origin.host()) != cast_webui_hosts_.end();
+  return base::Contains(cast_webui_hosts_, origin.host());
 }
 
 void CastWebService::RegisterWebUiClient(
@@ -152,12 +152,8 @@ void CastWebService::OwnerDestroyed(CastWebView* web_view) {
     content::MediaSession::Get(web_contents)
         ->Suspend(content::MediaSession::SuspendType::kSystem);
   }
-  if (std::none_of(web_views_.begin(), web_views_.end(),
-                   [web_view](const std::unique_ptr<CastWebView>& ptr) {
-                     return ptr.get() == web_view;
-                   })) {
+  if (!base::Contains(web_views_, web_view, &std::unique_ptr<CastWebView>::get))
     web_views_.emplace(web_view);
-  }
   auto delay = web_view->shutdown_delay();
   if (delay <= base::TimeDelta() || immediately_delete_webviews_) {
     LOG(INFO) << "Immediately deleting CastWebView for " << url;

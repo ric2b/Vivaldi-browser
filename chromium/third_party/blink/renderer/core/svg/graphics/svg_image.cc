@@ -29,6 +29,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "services/network/public/cpp/resource_request.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
@@ -78,6 +79,7 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -768,8 +770,9 @@ void SVGImage::LoadCompleted() {
       // to make LoadEventFinished() true when AsyncLoadCompleted() is called.
       GetFrame()
           ->GetTaskRunner(TaskType::kInternalLoading)
-          ->PostTask(FROM_HERE, WTF::Bind(&SVGImage::NotifyAsyncLoadCompleted,
-                                          scoped_refptr<SVGImage>(this)));
+          ->PostTask(FROM_HERE,
+                     WTF::BindOnce(&SVGImage::NotifyAsyncLoadCompleted,
+                                   scoped_refptr<SVGImage>(this)));
       break;
 
     case kDataChangedNotStarted:
@@ -825,7 +828,7 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
     // Because this page is detached, it can't get default font settings
     // from the embedder. Copy over font settings so we have sensible
     // defaults. These settings are fixed and will not update if changed.
-    if (!Page::OrdinaryPages().IsEmpty()) {
+    if (!Page::OrdinaryPages().empty()) {
       Settings& default_settings =
           (*Page::OrdinaryPages().begin())->GetSettings();
       page->GetSettings().GetGenericFontFamilySettings() =
@@ -864,7 +867,8 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
         FrameInsertType::kInsertInConstructor, LocalFrameToken(), nullptr,
         nullptr);
     frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame));
-    frame->Init(/*opener=*/nullptr, /*policy_container=*/nullptr, StorageKey());
+    frame->Init(/*opener=*/nullptr, DocumentToken(),
+                /*policy_container=*/nullptr, StorageKey());
   }
 
   // SVG Images will always synthesize a viewBox, if it's not available, and

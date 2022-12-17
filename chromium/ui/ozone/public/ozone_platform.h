@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -122,10 +122,6 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
     // Determines if the platform supports vulkan swap chain.
     bool supports_vulkan_swap_chain = false;
 
-    // Linux only: determines if the platform uses the external Vulkan image
-    // factory.
-    bool uses_external_vulkan_image_factory = false;
-
     // Linux only: determines if Skia can fall back to the X11 output device.
     bool skia_can_fall_back_to_x11 = false;
 
@@ -195,6 +191,14 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
     // Wayland only: determines whether BufferQueue needs a background image to
     // be stacked below an AcceleratedWidget to make a widget opaque.
     bool needs_background_image = false;
+
+    // Wayland only: determines whether clip rects can be delegated via the
+    // wayland protocol.
+    bool supports_clip_rect = false;
+
+    // Wayland only: determine whether toplevel surfaces can be activated and
+    // deactivated.
+    bool supports_activation = false;
   };
 
   // Corresponds to chrome_browser_main_extra_parts.h.

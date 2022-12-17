@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@ class FontFamily;
 class StyleColor;
 class StyleIntrinsicLength;
 class StylePropertyShorthand;
+class StyleTimeline;
 
 enum class CSSValuePhase { kComputedValue, kUsedValue };
 
@@ -146,6 +147,9 @@ class CORE_EXPORT ComputedStyleUtils {
   static CSSValue* ValueForAnimationPlayState(EAnimPlayState);
   static CSSValue* CreateTimingFunctionValue(const TimingFunction*);
   static CSSValue* ValueForAnimationTimingFunction(const CSSTimingData*);
+  static CSSValue* ValueForAnimationTimeline(const StyleTimeline&);
+  static CSSValue* SingleValueForViewTimelineShorthand(const AtomicString& name,
+                                                       TimelineAxis);
   static CSSValueList* ValuesForBorderRadiusCorner(const LengthSize&,
                                                    const ComputedStyle&);
   static CSSValue* ValueForBorderRadiusCorner(const LengthSize&,
@@ -257,12 +261,17 @@ class CORE_EXPORT ComputedStyleUtils {
   static CSSValueList* ValuesForContainerShorthand(const ComputedStyle&,
                                                    const LayoutObject*,
                                                    bool allow_visited_style);
+  static CSSValueList* ValuesForScrollTimelineShorthand(
+      const ComputedStyle&,
+      const LayoutObject*,
+      bool allow_visited_style);
   static CSSValue* ScrollCustomizationFlagsToCSSValue(
       scroll_customization::ScrollDirection);
   static CSSValue* ValueForGapLength(const absl::optional<Length>&,
                                      const ComputedStyle&);
   static CSSValue* ValueForStyleName(const StyleName&);
   static CSSValue* ValueForStyleNameOrKeyword(const StyleNameOrKeyword&);
+  static CSSValue* ValueForCustomIdentOrNone(const AtomicString&);
   static const CSSValue* ValueForStyleAutoColor(const ComputedStyle&,
                                                 const StyleAutoColor&,
                                                 CSSValuePhase);

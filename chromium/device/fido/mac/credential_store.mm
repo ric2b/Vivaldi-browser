@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,9 +15,11 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/device_event_log/device_event_log.h"
 #include "crypto/random.h"
+#include "device/fido/fido_parsing_utils.h"
 #include "device/fido/mac/credential_metadata.h"
 #include "device/fido/mac/keychain.h"
 #include "device/fido/mac/touch_id_context.h"
@@ -167,10 +169,12 @@ std::vector<uint8_t> GenerateRandomCredentialId() {
 
 Credential::Credential(base::ScopedCFTypeRef<SecKeyRef> private_key,
                        std::vector<uint8_t> credential_id,
-                       CredentialMetadata metadata)
+                       CredentialMetadata metadata,
+                       std::string rp_id)
     : private_key(std::move(private_key)),
       credential_id(std::move(credential_id)),
-      metadata(std::move(metadata)) {}
+      metadata(std::move(metadata)),
+      rp_id(rp_id) {}
 
 Credential::Credential(const Credential& other) = default;
 
@@ -265,7 +269,7 @@ TouchIdCredentialStore::CreateCredential(
 
   return std::make_pair(
       Credential(std::move(private_key), std::move(credential_id),
-                 std::move(credential_metadata)),
+                 std::move(credential_metadata), std::move(rp_id)),
       std::move(public_key));
 }
 
@@ -337,7 +341,7 @@ TouchIdCredentialStore::CreateCredentialLegacyCredentialForTesting(
 
   return std::make_pair(
       Credential(std::move(private_key), std::move(credential_id),
-                 std::move(*metadata)),
+                 std::move(*metadata), std::move(rp_id)),
       std::move(public_key));
 }
 
@@ -364,7 +368,7 @@ TouchIdCredentialStore::FindCredentialsFromCredentialDescriptorList(
 
 absl::optional<std::list<Credential>>
 TouchIdCredentialStore::FindResidentCredentials(
-    const std::string& rp_id) const {
+    const absl::optional<std::string>& rp_id) const {
   absl::optional<std::list<Credential>> credentials =
       FindCredentialsImpl(rp_id, /*credential_ids=*/{});
   if (!credentials) {
@@ -472,7 +476,7 @@ std::vector<Credential> TouchIdCredentialStore::FindCredentialsForTesting(
 
 absl::optional<std::list<Credential>>
 TouchIdCredentialStore::FindCredentialsImpl(
-    const std::string& rp_id,
+    const absl::optional<std::string>& rp_id,
     const std::set<std::vector<uint8_t>>& credential_ids) const {
   // Query all credentials for the RP. Filtering for `rp_id` here ensures we
   // don't retrieve credentials for other profiles, because their
@@ -505,6 +509,37 @@ TouchIdCredentialStore::FindCredentialsImpl(
   for (CFIndex i = 0; i < CFArrayGetCount(keychain_items); ++i) {
     CFDictionaryRef attributes = base::mac::CFCast<CFDictionaryRef>(
         CFArrayGetValueAtIndex(keychain_items, i));
+    if (!attributes) {
+      FIDO_LOG(ERROR) << "credential with missing attributes";
+      return absl::nullopt;
+    }
+    // Skip items that don't belong to the correct keychain access group
+    // because the kSecAttrAccessGroup filter is broken.
+    CFStringRef attr_access_group =
+        base::mac::GetValueFromDictionary<CFStringRef>(attributes,
+                                                       kSecAttrAccessGroup);
+    if (!attr_access_group) {
+      continue;
+    }
+    std::string rp_id_value;
+    if (!rp_id) {
+      CFStringRef sec_attr_label =
+          base::mac::GetValueFromDictionary<CFStringRef>(attributes,
+                                                         kSecAttrLabel);
+      if (!sec_attr_label) {
+        FIDO_LOG(ERROR) << "credential with missing kSecAttrLabel_data";
+        continue;
+      }
+      absl::optional<std::string> opt_rp_id = DecodeRpId(
+          config_.metadata_secret, base::SysCFStringRefToUTF8(sec_attr_label));
+      if (!opt_rp_id) {
+        FIDO_LOG(ERROR) << "could not decode RP ID";
+        continue;
+      }
+      rp_id_value = *opt_rp_id;
+    } else {
+      rp_id_value = *rp_id;
+    }
     CFDataRef application_label = base::mac::GetValueFromDictionary<CFDataRef>(
         attributes, kSecAttrApplicationLabel);
     if (!application_label) {
@@ -533,10 +568,10 @@ TouchIdCredentialStore::FindCredentialsImpl(
           CFDataGetBytePtr(application_tag_ref) +
               CFDataGetLength(application_tag_ref));
       metadata = UnsealMetadataFromApplicationTag(config_.metadata_secret,
-                                                  rp_id, application_tag);
+                                                  rp_id_value, application_tag);
     } else {
-      metadata = UnsealMetadataFromLegacyCredentialId(config_.metadata_secret,
-                                                      rp_id, credential_id);
+      metadata = UnsealMetadataFromLegacyCredentialId(
+          config_.metadata_secret, rp_id_value, credential_id);
     }
     if (!metadata) {
       FIDO_LOG(ERROR) << "credential with invalid metadata";
@@ -552,9 +587,9 @@ TouchIdCredentialStore::FindCredentialsImpl(
     base::ScopedCFTypeRef<SecKeyRef> private_key(key,
                                                  base::scoped_policy::RETAIN);
 
-    credentials.emplace_back(Credential{std::move(private_key),
-                                        std::move(credential_id),
-                                        std::move(*metadata)});
+    credentials.emplace_back(
+        Credential{std::move(private_key), std::move(credential_id),
+                   std::move(*metadata), std::move(rp_id_value)});
   }
   return std::move(credentials);
 }
@@ -590,6 +625,71 @@ bool TouchIdCredentialStore::DeleteCredentialById(
     OSSTATUS_DLOG(ERROR, status) << "SecItemDelete failed";
     return false;
   }
+  return true;
+}
+
+void RecordUpdateCredentialStatus(
+    TouchIdCredentialStoreUpdateCredentialStatus update_status) {
+  base::UmaHistogramEnumeration(
+      "WebAuthentication.TouchIdCredentialStore.UpdateCredential",
+      update_status);
+}
+
+bool TouchIdCredentialStore::UpdateCredential(
+    base::span<uint8_t> credential_id_span,
+    const std::string& username) {
+  std::vector<uint8_t> credential_id =
+      fido_parsing_utils::Materialize(credential_id_span);
+
+  absl::optional<std::list<Credential>> credentials = FindCredentialsImpl(
+      /*rp_id=*/absl::nullopt, {credential_id});
+  if (!credentials) {
+    FIDO_LOG(ERROR) << "no credentials found";
+    RecordUpdateCredentialStatus(
+        TouchIdCredentialStoreUpdateCredentialStatus::kNoCredentialsFound);
+    return false;
+  }
+  base::ScopedCFTypeRef<CFMutableDictionaryRef> params(
+      CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
+                                &kCFTypeDictionaryKeyCallBacks,
+                                &kCFTypeDictionaryValueCallBacks));
+  bool found_credential = false;
+  for (Credential& credential : *credentials) {
+    if (credential.credential_id == credential_id) {
+      credential.metadata.user_name = username;
+      std::vector<uint8_t> sealed_metadata = SealCredentialMetadata(
+          config_.metadata_secret, credential.rp_id, credential.metadata);
+      CFDictionarySetValue(params, kSecAttrApplicationTag,
+                           [NSData dataWithBytes:sealed_metadata.data()
+                                          length:sealed_metadata.size()]);
+      found_credential = true;
+      break;
+    }
+  }
+  if (!found_credential) {
+    FIDO_LOG(ERROR) << "no credential with matching credential_id";
+    RecordUpdateCredentialStatus(
+        TouchIdCredentialStoreUpdateCredentialStatus::kNoMatchingCredentialId);
+    return false;
+  }
+  base::ScopedCFTypeRef<CFMutableDictionaryRef> query(CFDictionaryCreateMutable(
+      kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+      &kCFTypeDictionaryValueCallBacks));
+  CFDictionarySetValue(query, kSecAttrAccessGroup,
+                       base::SysUTF8ToNSString(config_.keychain_access_group));
+  CFDictionarySetValue(query, kSecClass, kSecClassKey);
+  CFDictionarySetValue(query, kSecAttrApplicationLabel,
+                       [NSData dataWithBytes:credential_id.data()
+                                      length:credential_id.size()]);
+  OSStatus status = Keychain::GetInstance().ItemUpdate(query, params);
+  if (status != errSecSuccess) {
+    OSSTATUS_DLOG(ERROR, status) << "SecItemUpdate failed";
+    RecordUpdateCredentialStatus(
+        TouchIdCredentialStoreUpdateCredentialStatus::kSecItemUpdateFailure);
+    return false;
+  }
+  RecordUpdateCredentialStatus(
+      TouchIdCredentialStoreUpdateCredentialStatus::kUpdateCredentialSuccess);
   return true;
 }
 

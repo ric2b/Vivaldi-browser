@@ -1,10 +1,9 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "device/fido/fido_device_authenticator.h"
 
-#include <algorithm>
 #include <numeric>
 #include <utility>
 
@@ -12,6 +11,7 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -912,11 +912,10 @@ void FidoDeviceAuthenticator::OnHaveLargeBlobArrayForWrite(
     return;
   }
 
-  auto existing_large_blob =
-      std::find_if(large_blob_array->begin(), large_blob_array->end(),
-                   [&large_blob_key](const LargeBlobData& blob) {
-                     return blob.Decrypt(large_blob_key);
-                   });
+  auto existing_large_blob = base::ranges::find_if(
+      *large_blob_array, [&large_blob_key](const LargeBlobData& blob) {
+        return blob.Decrypt(large_blob_key).has_value();
+      });
 
   LargeBlobData new_large_blob_data(large_blob_key, std::move(large_blob));
   if (existing_large_blob != large_blob_array->end()) {
@@ -1084,6 +1083,14 @@ bool FidoDeviceAuthenticator::SupportsCredBlobOfSize(size_t num_bytes) const {
       device_->device_info();
   return get_info_response && get_info_response->max_cred_blob_length &&
          num_bytes <= get_info_response->max_cred_blob_length.value();
+}
+
+bool FidoDeviceAuthenticator::SupportsDevicePublicKey() const {
+  const absl::optional<AuthenticatorGetInfoResponse>& get_info_response =
+      device_->device_info();
+  return get_info_response && get_info_response->extensions &&
+         base::Contains(*get_info_response->extensions,
+                        kExtensionDevicePublicKey);
 }
 
 const absl::optional<AuthenticatorSupportedOptions>&

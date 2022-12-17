@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,19 +14,24 @@
 #include "base/containers/cxx20_erase.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/media/router/data_decoder_util.h"
 #include "chrome/browser/media/router/providers/cast/app_activity.h"
 #include "chrome/browser/media/router/providers/cast/cast_media_route_provider_metrics.h"
 #include "chrome/browser/media/router/providers/cast/cast_session_client.h"
 #include "chrome/browser/media/router/providers/cast/mirroring_activity.h"
-#include "components/cast_channel/cast_message_util.h"
-#include "components/cast_channel/enum_table.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/media_router/browser/logger_impl.h"
+#include "components/media_router/browser/media_router_metrics.h"
 #include "components/media_router/common/media_source.h"
 #include "components/media_router/common/mojom/media_router.mojom.h"
+#include "components/media_router/common/providers/cast/channel/cast_message_util.h"
+#include "components/media_router/common/providers/cast/channel/enum_table.h"
 #include "components/media_router/common/route_request_result.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/origin.h"
 
 using blink::mojom::PresentationConnectionCloseReason;
@@ -157,9 +162,9 @@ void CastActivityManager::LaunchSessionParsed(
 
   // If there is currently a session on the sink, it must be terminated before
   // the new session can be launched.
-  auto activity_it = std::find_if(
-      activities_.begin(), activities_.end(), [&sink_id](const auto& activity) {
-        return activity.second->route().media_sink_id() == sink_id;
+  auto activity_it =
+      base::ranges::find(activities_, sink_id, [](const auto& activity) {
+        return activity.second->route().media_sink_id();
       });
 
   if (activity_it == activities_.end()) {
@@ -253,10 +258,9 @@ AppActivity* CastActivityManager::FindActivityForSessionJoin(
 
   // Find activity by session ID.  Search should fail if the session ID is not
   // valid.
-  auto it = std::find_if(app_activities_.begin(), app_activities_.end(),
-                         [&session_id](const auto& entry) {
-                           return entry.second->session_id() == session_id;
-                         });
+  auto it = base::ranges::find(
+      app_activities_, session_id,
+      [](const auto& entry) { return entry.second->session_id(); });
   return it == app_activities_.end() ? nullptr : it->second;
 }
 
@@ -272,8 +276,8 @@ AppActivity* CastActivityManager::FindActivityForAutoJoin(
       return nullptr;
   }
 
-  auto it = std::find_if(
-      app_activities_.begin(), app_activities_.end(),
+  auto it = base::ranges::find_if(
+      app_activities_,
       [&cast_source, &origin, frame_tree_node_id](const auto& pair) {
         AutoJoinPolicy policy = cast_source.auto_join_policy();
         const AppActivity* activity = pair.second;
@@ -359,7 +363,7 @@ void CastActivityManager::JoinSession(
       client_id,
       CreateNewSessionMessage(*session, client_id, *sink, hash_token_));
   message_handler_->EnsureConnection(sink->cast_data().cast_channel_id,
-                                     client_id, session->transport_id(),
+                                     client_id, session->destination_id(),
                                      cast_source.connection_type());
 
   // Route is now local; update route queries.
@@ -479,22 +483,19 @@ bool CastActivityManager::CreateMediaController(
 
 CastActivityManager::ActivityMap::iterator
 CastActivityManager::FindActivityByChannelId(int channel_id) {
-  return std::find_if(
-      activities_.begin(), activities_.end(), [channel_id, this](auto& entry) {
-        const MediaRoute& route = entry.second->route();
-        const MediaSinkInternal* sink =
-            media_sink_service_->GetSinkByRoute(route);
-        return sink && sink->cast_data().cast_channel_id == channel_id;
-      });
+  return base::ranges::find_if(activities_, [channel_id, this](auto& entry) {
+    const MediaRoute& route = entry.second->route();
+    const MediaSinkInternal* sink = media_sink_service_->GetSinkByRoute(route);
+    return sink && sink->cast_data().cast_channel_id == channel_id;
+  });
 }
 
 CastActivityManager::ActivityMap::iterator
 CastActivityManager::FindActivityBySink(const MediaSinkInternal& sink) {
   const MediaSink::Id& sink_id = sink.sink().id();
-  return std::find_if(
-      activities_.begin(), activities_.end(), [&sink_id](const auto& activity) {
-        return activity.second->route().media_sink_id() == sink_id;
-      });
+  return base::ranges::find(activities_, sink_id, [](const auto& activity) {
+    return activity.second->route().media_sink_id();
+  });
 }
 
 AppActivity* CastActivityManager::AddAppActivity(const MediaRoute& route,
@@ -622,9 +623,10 @@ void CastActivityManager::OnSessionRemoved(const MediaSinkInternal& sink) {
   }
 }
 
-void CastActivityManager::OnMediaStatusUpdated(const MediaSinkInternal& sink,
-                                               const base::Value& media_status,
-                                               absl::optional<int> request_id) {
+void CastActivityManager::OnMediaStatusUpdated(
+    const MediaSinkInternal& sink,
+    const base::Value::Dict& media_status,
+    absl::optional<int> request_id) {
   auto it = FindActivityBySink(sink);
   if (it != activities_.end()) {
     it->second->SendMediaStatusToClients(media_status, request_id);
@@ -744,12 +746,19 @@ void CastActivityManager::NotifyAllOnRoutesUpdated() {
 
 void CastActivityManager::HandleLaunchSessionResponse(
     DoLaunchSessionParams params,
-    cast_channel::LaunchSessionResponse response) {
+    cast_channel::LaunchSessionResponse response,
+    cast_channel::LaunchSessionCallbackWrapper* out_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   const MediaRoute& route = params.route;
   const MediaRoute::Id& route_id = route.media_route_id();
   const MediaSinkInternal& sink = params.sink;
   const CastMediaSource& cast_source = params.cast_source;
+
+  // Make copies so that they outlive params, which gets moved before they are
+  // used.
+  const std::string sink_name = sink.sink().name();
+  const MediaSink::Id sink_id = sink.sink().id();
+  const base::Time request_creation_time = params.creation_time;
 
   auto activity_it = activities_.find(route_id);
   if (activity_it == activities_.end()) {
@@ -766,6 +775,38 @@ void CastActivityManager::HandleLaunchSessionResponse(
 
   if (response.result != cast_channel::LaunchSessionResponse::Result::kOk) {
     switch (response.result) {
+      case cast_channel::LaunchSessionResponse::Result::kPendingUserAuth:
+        HandleLaunchSessionResponseMiddleStages(
+            std::move(params),
+            "Pending user authentication for the cast request", out_callback);
+        SendPendingUserAuthNotification(sink_name, sink_id);
+        MediaRouterMetrics::RecordMediaRouterPendingUserAuthLatency(
+            base::Time::Now() - request_creation_time);
+        MediaRouterMetrics::RecordMediaRouterUserPromptWhenLaunchingCast(
+            MediaRouterUserPromptWhenLaunchingCast::kPendingUserAuth);
+        break;
+      case cast_channel::LaunchSessionResponse::Result::kUserAllowed:
+        HandleLaunchSessionResponseMiddleStages(
+            std::move(params), "The user accepted the cast request",
+            out_callback);
+        media_router_->ClearTopIssueForSink(sink_id);
+        break;
+      case cast_channel::LaunchSessionResponse::Result::kUserNotAllowed:
+        HandleLaunchSessionResponseFailures(
+            activity_it, std::move(params),
+            "Failed to launch session as the user declined the cast request.",
+            mojom::RouteRequestResultCode::USER_NOT_ALLOWED);
+        MediaRouterMetrics::RecordMediaRouterUserPromptWhenLaunchingCast(
+            MediaRouterUserPromptWhenLaunchingCast::kUserNotAllowed);
+        media_router_->ClearTopIssueForSink(sink_id);
+        break;
+      case cast_channel::LaunchSessionResponse::Result::kNotificationDisabled:
+        HandleLaunchSessionResponseFailures(
+            activity_it, std::move(params),
+            "Failed to launch session as the notifications are disabled on the "
+            "receiver device.",
+            mojom::RouteRequestResultCode::NOTIFICATION_DISABLED);
+        break;
       case cast_channel::LaunchSessionResponse::Result::kTimedOut:
         HandleLaunchSessionResponseFailures(
             activity_it, std::move(params),
@@ -791,13 +832,13 @@ void CastActivityManager::HandleLaunchSessionResponse(
         mojom::RouteRequestResultCode::ROUTE_NOT_FOUND);
     return;
   }
-  RecordLaunchSessionResponseAppType(session->value().FindKey("appType"));
+  RecordLaunchSessionResponseAppType(session->value().Find("appType"));
 
   mojom::RoutePresentationConnectionPtr presentation_connection;
   const std::string& client_id = cast_source.client_id();
   std::string app_id = ChooseAppId(cast_source, params.sink);
   const auto channel_id = sink.cast_data().cast_channel_id;
-  const auto destination_id = session->transport_id();
+  const auto destination_id = session->destination_id();
 
   if (MediaSource(cast_source.source_id()).IsCastPresentationUrl()) {
     presentation_connection = activity_it->second->AddClient(
@@ -829,11 +870,10 @@ void CastActivityManager::HandleLaunchSessionResponse(
   if (!client_id.empty() && base::Contains(session->message_namespaces(),
                                            cast_channel::kMediaNamespace)) {
     // Request media status from the receiver.
-    base::Value request(base::Value::Type::DICTIONARY);
-    request.SetStringKey("type",
-                         cast_util::EnumToString<
-                             cast_channel::V2MessageType,
-                             cast_channel::V2MessageType::kMediaGetStatus>());
+    base::Value::Dict request;
+    request.Set("type", cast_util::EnumToString<
+                            cast_channel::V2MessageType,
+                            cast_channel::V2MessageType::kMediaGetStatus>());
     message_handler_->SendMediaRequest(channel_id, request, client_id,
                                        destination_id);
   }
@@ -902,7 +942,24 @@ void CastActivityManager::HandleLaunchSessionResponseFailures(
   std::move(params.callback).Run(absl::nullopt, nullptr, message, result_code);
   RemoveActivity(activity_it, PresentationConnectionState::CLOSED,
                  PresentationConnectionCloseReason::CONNECTION_ERROR);
-  SendFailedToCastIssue(params.sink.id(), params.route.media_route_id());
+
+  if (result_code != mojom::RouteRequestResultCode::USER_NOT_ALLOWED &&
+      result_code != mojom::RouteRequestResultCode::NOTIFICATION_DISABLED)
+    SendFailedToCastIssue(params.sink.id(), params.route.media_route_id());
+}
+
+void CastActivityManager::HandleLaunchSessionResponseMiddleStages(
+    DoLaunchSessionParams params,
+    const std::string& message,
+    cast_channel::LaunchSessionCallbackWrapper* out_callback) {
+  DCHECK(out_callback);
+  logger_->LogInfo(mojom::LogCategory::kRoute, kLoggerComponent, message,
+                   params.sink.id(), params.cast_source.source_id(),
+                   MediaRoute::GetPresentationIdFromMediaRouteId(
+                       params.route.media_route_id()));
+  out_callback->callback =
+      base::BindOnce(&CastActivityManager::HandleLaunchSessionResponse,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(params));
 }
 
 void CastActivityManager::EnsureConnection(const std::string& client_id,
@@ -919,7 +976,7 @@ void CastActivityManager::EnsureConnection(const std::string& client_id,
   }
   if (cast_source.ContainsStreamingApp()) {
     message_handler_->EnsureConnection(
-        channel_id, message_handler_->sender_id(), destination_id,
+        channel_id, message_handler_->source_id(), destination_id,
         cast_channel::VirtualConnectionType::kStrong);
   }
 }
@@ -927,11 +984,26 @@ void CastActivityManager::EnsureConnection(const std::string& client_id,
 void CastActivityManager::SendFailedToCastIssue(
     const MediaSink::Id& sink_id,
     const MediaRoute::Id& route_id) {
-  // TODO(crbug.com/989237): i18n-ize the title string.
-  IssueInfo info("Failed to cast. Please try again.",
-                 IssueInfo::Action::DISMISS, IssueInfo::Severity::WARNING);
+  std::string issue_title =
+      l10n_util::GetStringUTF8(IDS_MEDIA_ROUTER_ISSUE_FAILED_TO_CAST);
+  IssueInfo info(issue_title, IssueInfo::Action::DISMISS,
+                 IssueInfo::Severity::WARNING);
+
   info.sink_id = sink_id;
   info.route_id = route_id;
+  media_router_->OnIssue(info);
+}
+
+void CastActivityManager::SendPendingUserAuthNotification(
+    const std::string& sink_name,
+    const MediaSink::Id& sink_id) {
+  std::string issue_title = l10n_util::GetStringFUTF8(
+      IDS_MEDIA_ROUTER_ISSUE_CREATE_ROUTE_USER_PENDING_AUTHORIZATION,
+      base::UTF8ToUTF16(sink_name));
+
+  IssueInfo info(issue_title, IssueInfo::Action::DISMISS,
+                 IssueInfo::Severity::NOTIFICATION);
+  info.sink_id = sink_id;
   media_router_->OnIssue(info);
 }
 
@@ -995,6 +1067,7 @@ CastActivityManager::DoLaunchSessionParams::DoLaunchSessionParams(
       sink(sink),
       origin(origin),
       frame_tree_node_id(frame_tree_node_id),
+      creation_time(base::Time::Now()),
       callback(std::move(callback)) {
   if (app_params)
     this->app_params = app_params->Clone();

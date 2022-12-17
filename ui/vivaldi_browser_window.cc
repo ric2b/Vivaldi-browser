@@ -22,6 +22,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/favicon/favicon_utils.h"
@@ -119,6 +120,8 @@
 
 #if BUILDFLAG(IS_LINUX)
 #include "chrome/browser/shell_integration_linux.h"
+#include "chrome/browser/ui/views/theme_profile_key.h"
+#include "ui/linux/linux_ui.h"
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -131,6 +134,9 @@
 
 // The document loaded in the browser-window content.
 #define VIVALDI_BROWSER_DOCUMENT "browser.html"
+
+// The document loaded in portal-windows.
+#define VIVALDI_WINDOW_DOCUMENT "window.html"
 
 using extensions::vivaldi::window_private::WindowState;
 WindowState ConvertToJSWindowState(ui::WindowShowState state) {
@@ -275,7 +281,7 @@ class VivaldiBrowserWindow::InterfaceHelper final
   // ExtensionFunctionDispatcher::Delegate overrides
 
   extensions::WindowController* GetExtensionWindowController() const override {
-    return nullptr;
+    return window_.browser()->extension_window_controller();
   }
 
   content::WebContents* GetAssociatedWebContents() const override {
@@ -474,17 +480,22 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
                                                    site_instance.get());
   int extension_process_id = site_instance->GetProcess()->GetID();
   if (creator_frame) {
-    create_params.opener_render_process_id =
-        creator_frame->GetProcess()->GetID();
-    create_params.opener_render_frame_id = creator_frame->GetRoutingID();
 
-    // All windows for the same profile should share the same process.
-    DCHECK(create_params.opener_render_process_id == extension_process_id);
-    if (create_params.opener_render_process_id != extension_process_id) {
-      LOG(ERROR) << "VivaldiWindow WebContents will be created in the process ("
-                 << extension_process_id << ") != creator ("
-                 << create_params.opener_render_process_id
-                 << "). Routing disabled.";
+    Profile* creatorprofile = Profile::FromBrowserContext(creator_frame->GetSiteInstance()->GetBrowserContext());
+
+    if (!creatorprofile->IsOffTheRecord()) {
+      create_params.opener_render_process_id =
+          creator_frame->GetProcess()->GetID();
+      create_params.opener_render_frame_id = creator_frame->GetRoutingID();
+
+      // All windows for the same profile should share the same process.
+      DCHECK(create_params.opener_render_process_id == extension_process_id);
+      if (create_params.opener_render_process_id != extension_process_id) {
+        LOG(ERROR) << "VivaldiWindow WebContents will be created in the process ("
+                   << extension_process_id << ") != creator ("
+                   << create_params.opener_render_process_id
+                   << "). Routing disabled.";
+      }
     }
   }
   LOG(INFO) << "VivaldiWindow WebContents will be created in the process "
@@ -619,25 +630,9 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
 
   if (vivaldi_runtime_feature::IsEnabled(browser->profile(),
                                          "portal_browserwindow")) {
-    gfx::Size display_size =
-        display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel();
-
-    VivaldiBrowserWindowParams wparams;
-    wparams.minimum_size = gfx::Size(std::min(500, display_size.width()),
-                                     std::min(300, display_size.height()));
-    wparams.native_decorations = browser->profile()->GetPrefs()->GetBoolean(
-        vivaldiprefs::kWindowsUseNativeDecoration);
-
-    chrome::GetSavedWindowBoundsAndShowState(
-        browser.get(), &wparams.content_bounds, &wparams.state);
-    wparams.resource_relative_url = "window.html";
-    wparams.workspace = browser->initial_workspace();
-    wparams.visible_on_all_workspaces =
-        browser->initial_visible_on_all_workspaces_state();
-
-    window->SetWindowURL(wparams.resource_relative_url);
-
-    window->CreateWebContents(std::move(browser), wparams);
+    params.resource_relative_url = VIVALDI_WINDOW_DOCUMENT;
+    window->SetWindowURL(params.resource_relative_url);
+    window->CreateWebContents(std::move(browser), params);
 
   } else {
     window->SetWindowURL(VIVALDI_BROWSER_DOCUMENT);
@@ -753,13 +748,18 @@ void VivaldiBrowserWindow::InitWidget(
   widget_delegate_ = std::make_unique<VivaldiWindowWidgetDelegate>(this);
   widget_delegate_->SetCanResize(browser_->create_params().can_resize);
 
-  widget_ = new views::Widget;
+  widget_ = new views::Widget();
   widget_->AddObserver(interface_helper_.get());
 
   views::Widget::InitParams init_params(views::Widget::InitParams::TYPE_WINDOW);
 
   init_params.delegate = widget_delegate_.get();
+
+  // On Windows it is not enough just to set this flag in InitParams to control
+  // the native frame. ShouldUseNativeFrame() and GetFrameMode() methods in
+  // VivaldiDesktopWindowTreeHostWin should be overwritten as well.
   init_params.remove_standard_frame = !with_native_frame_;
+
   init_params.use_system_default_icon = false;
   if (create_params.alpha_enabled) {
     init_params.opacity =
@@ -778,6 +778,7 @@ void VivaldiBrowserWindow::InitWidget(
 #elif BUILDFLAG(IS_LINUX)
   init_params.wm_class_name = shell_integration_linux::GetProgramClassName();
   init_params.wm_class_class = shell_integration_linux::GetProgramClassClass();
+  init_params.wayland_app_id = init_params.wm_class_class;
   const char kX11WindowRoleBrowser[] = "browser";
   const char kX11WindowRolePopup[] = "pop-up";
   init_params.wm_role_name =
@@ -815,6 +816,23 @@ void VivaldiBrowserWindow::InitWidget(
 #if BUILDFLAG(IS_WIN)
   SetupShellIntegration(create_params);
 #endif
+
+#if BUILDFLAG(IS_LINUX)
+  // This is required to make the code work.
+  SetThemeProfileForWindow(GetNativeWindow(), GetProfile());
+
+  // Setting the native theme on the top widget improves performance as the
+  // widget code would otherwise have to do more work in every call to
+  // Widget::GetNativeTheme(). Chrome does this in
+  // BrowserFrame::SelectNativeTheme()
+  ui::NativeTheme* native_theme = ui::NativeTheme::GetInstanceForNativeUi();
+  const auto* linux_ui_theme =
+      ui::LinuxUiTheme::GetForWindow(GetNativeWindow());
+  if (linux_ui_theme) {
+    native_theme = linux_ui_theme->GetNativeTheme();
+  }
+  widget_->SetNativeThemeForTest(native_theme);
+#endif
 }
 
 views::View* VivaldiBrowserWindow::GetWebView() const {
@@ -833,8 +851,7 @@ void VivaldiBrowserWindow::OnIconImagesLoaded(gfx::ImageFamily image_family) {
   }
 }
 
-void VivaldiBrowserWindow::ContentsDidStartNavigation() {
-}
+void VivaldiBrowserWindow::ContentsDidStartNavigation() {}
 
 void VivaldiBrowserWindow::ContentsLoadCompletedInMainFrame() {
   // inject the browser id when the document is done loading
@@ -845,9 +862,14 @@ void VivaldiBrowserWindow::ContentsLoadCompletedInMainFrame() {
     return;
   }
 
-  web_contents_->GetPrimaryMainFrame()->ExecuteJavaScript(script,
-                                                          base::NullCallback());
+  // Unretained is safe here because VivaldiBrowserWindow owns everything.
+  web_contents_->GetPrimaryMainFrame()->ExecuteJavaScript(
+      script,
+      base::BindOnce(&VivaldiBrowserWindow::InjectVivaldiWindowIdComplete,
+                     base::Unretained(this)));
+}
 
+void VivaldiBrowserWindow::InjectVivaldiWindowIdComplete(base::Value result) {
   ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnWebContentsHasWindow::kEventName,
       extensions::vivaldi::window_private::OnWebContentsHasWindow::Create(id()),
@@ -1403,7 +1425,7 @@ ShowTranslateBubbleResult VivaldiBrowserWindow::ShowTranslateBubble(
     translate::TranslateStep step,
     const std::string& source_language,
     const std::string& target_language,
-    translate::TranslateErrors::Type error_type,
+    translate::TranslateErrors error_type,
     bool is_user_gesture) {
   return ShowTranslateBubbleResult::BROWSER_WINDOW_NOT_VALID;
 }
@@ -1412,7 +1434,7 @@ void VivaldiBrowserWindow::UpdateDevTools() {
   TabStripModel* tab_strip_model = browser_->tab_strip_model();
 
   // Get the docking state.
-  const base::Value* prefs = browser_->profile()->GetPrefs()->GetDictionary(
+  auto& prefs = browser_->profile()->GetPrefs()->GetDict(
       prefs::kDevToolsPreferences);
 
   std::string docking_state;
@@ -1425,9 +1447,6 @@ void VivaldiBrowserWindow::UpdateDevTools() {
       extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
           browser_->profile());
   DCHECK(api);
-  scoped_refptr<extensions::DevtoolsConnectorItem> item =
-      base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
-          api->GetOrCreateDevtoolsConnectorItem(tab_id));
 
   // Iterate the list of inspected tabs and send events if any is
   // in the process of closing.
@@ -1449,7 +1468,9 @@ void VivaldiBrowserWindow::UpdateDevTools() {
     // We handle the closing devtools windows above.
     if (!window->IsClosing()) {
       const std::string* tmp_str =
-          prefs->GetDict().FindString("currentDockState");
+          prefs.FindString("currentDockState");
+      extensions::DevtoolsConnectorItem* item =
+          api->GetOrCreateDevtoolsConnectorItem(tab_id);
       if (tmp_str) {
         docking_state = *tmp_str;
         // Strip quotation marks from the state.
@@ -1461,7 +1482,7 @@ void VivaldiBrowserWindow::UpdateDevTools() {
               browser_->profile(), tab_id, docking_state);
         }
       }
-      tmp_str = prefs->GetDict().FindString("showDeviceMode");
+      tmp_str = prefs.FindString("showDeviceMode");
       if (tmp_str) {
         device_mode = *tmp_str;
         base::ReplaceChars(device_mode, "\"", "", &device_mode);
@@ -1479,9 +1500,9 @@ void VivaldiBrowserWindow::ResetDockingState(int tab_id) {
       extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
           browser_->profile());
   DCHECK(api);
-  scoped_refptr<extensions::DevtoolsConnectorItem> item =
-      base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
-          api->GetOrCreateDevtoolsConnectorItem(tab_id));
+
+  extensions::DevtoolsConnectorItem* item =
+          api->GetOrCreateDevtoolsConnectorItem(tab_id);
 
   item->ResetDockingState();
 
@@ -1568,15 +1589,8 @@ void VivaldiBrowserWindow::OnNativeClose() {
   if (modal_dialog_manager) {
     modal_dialog_manager->SetDelegate(nullptr);
   }
-  web_contents_.reset();
 
-  // For a while we used a direct "delete this" here. That causes the browser_
-  // object to be destoyed immediately and that will kill the private profile.
-  // The missing profile will (very often) trigger a crash on Linux. VB-34358
-  // TODO(all): There is missing cleanup in chromium code. See VB-34358.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&VivaldiBrowserWindow::DeleteThis,
-                                base::Unretained(this)));
+  web_contents_->DispatchBeforeUnload(false /* auto_cancel */);
 }
 
 void VivaldiBrowserWindow::DeleteThis() {
@@ -1861,8 +1875,7 @@ VivaldiBrowserWindow::GetFeaturePromoController() {
 }
 
 bool VivaldiBrowserWindow::IsFeaturePromoActive(
-    const base::Feature& iph_feature,
-    bool include_continued_promos) const {
+    const base::Feature& iph_feature) const {
   return false;
 }
 
@@ -1870,6 +1883,16 @@ bool VivaldiBrowserWindow::MaybeShowFeaturePromo(
     const base::Feature& iph_feature,
     user_education::FeaturePromoSpecification::StringReplacements
         body_text_replacements,
+    user_education::FeaturePromoController::BubbleCloseCallback
+        close_callback) {
+  return false;
+}
+
+bool VivaldiBrowserWindow::MaybeShowStartupFeaturePromo(
+    const base::Feature& iph_feature,
+    user_education::FeaturePromoSpecification::StringReplacements
+        body_text_replacements,
+    user_education::FeaturePromoController::StartupPromoCallback promo_callback,
     user_education::FeaturePromoController::BubbleCloseCallback
         close_callback) {
   return false;
@@ -1908,4 +1931,16 @@ void VivaldiBrowserWindow::UpdateDraggableRegions(
 
 void VivaldiBrowserWindow::UpdateMaximizeButtonPosition(const gfx::Rect& rect) {
   maximize_button_bounds_ = rect;
+}
+
+bool VivaldiBrowserWindow::IsBorderlessModeEnabled() const {
+  return false;
+}
+
+void VivaldiBrowserWindow::BeforeUnloadFired(content::WebContents* source) {
+  // web_contents_delegate_ calls back when unload has fired and we can self
+  // destruct. Note we cannot destruct here since cleanup is done.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&VivaldiBrowserWindow::DeleteThis,
+                                base::Unretained(this)));
 }

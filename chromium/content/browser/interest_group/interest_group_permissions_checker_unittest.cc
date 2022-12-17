@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -440,7 +440,8 @@ TEST_P(InterestGroupPermissionsCheckerParamaterizedTest,
               producer_handle->WriteData(response_body.data(), &bytes_written,
                                          MOJO_WRITE_DATA_FLAG_ALL_OR_NONE));
 
-    pending_request.client->OnReceiveResponse(std::move(head), std::move(body));
+    pending_request.client->OnReceiveResponse(std::move(head), std::move(body),
+                                              absl::nullopt);
 
     auto status = network::URLLoaderCompletionStatus();
     status.decoded_body_length = response_body.size();

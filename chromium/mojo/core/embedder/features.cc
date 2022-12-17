@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,8 +11,9 @@ namespace core {
 
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL) && !BUILDFLAG(IS_MAC)
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
-const base::Feature kMojoLinuxChannelSharedMem{
-    "MojoLinuxChannelSharedMem", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMojoLinuxChannelSharedMem,
+             "MojoLinuxChannelSharedMem",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<int> kMojoLinuxChannelSharedMemPages{
     &kMojoLinuxChannelSharedMem, "MojoLinuxChannelSharedMemPages", 4};
 const base::FeatureParam<bool> kMojoLinuxChannelSharedMemEfdZeroOnWake{
@@ -21,15 +22,20 @@ const base::FeatureParam<bool> kMojoLinuxChannelSharedMemEfdZeroOnWake{
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
         // BUILDFLAG(IS_ANDROID)
 
-const base::Feature kMojoPosixUseWritev{"MojoPosixUseWritev",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMojoPosixUseWritev,
+             "MojoPosixUseWritev",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL) && !BUILDFLAG(IS_MAC)
 
-const base::Feature kMojoInlineMessagePayloads{
-    "MojoInlineMessagePayloads", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMojoInlineMessagePayloads,
+             "MojoInlineMessagePayloads",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::Feature kMojoAvoidRandomPipeId{"MojoAvoidRandomPipeId",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kMojoAvoidRandomPipeId,
+             "MojoAvoidRandomPipeId",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kMojoIpcz, "MojoIpcz", base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace core
 }  // namespace mojo

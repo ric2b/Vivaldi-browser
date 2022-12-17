@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,14 +23,6 @@ public class FastCheckoutSheetContent implements BottomSheetContent {
         mContentView = contentView;
     }
 
-    /**
-     * Sets the screen to show on the bottom sheet.
-     * @param screenType A {@link ScreenType} specifying the screen to show.
-     */
-    void updateCurrentScreen(int screenType) {
-        // TODO(crbug.com/1334642): Implement.
-    }
-
     @Override
     public View getContentView() {
         return mContentView;
@@ -39,13 +31,11 @@ public class FastCheckoutSheetContent implements BottomSheetContent {
     @Nullable
     @Override
     public View getToolbarView() {
-        // TODO(crbug.com/1334642): Implement.
         return null;
     }
 
     @Override
     public int getVerticalScrollOffset() {
-        // TODO(crbug.com/1334642): Implement.
         return 0;
     }
 
@@ -54,7 +44,7 @@ public class FastCheckoutSheetContent implements BottomSheetContent {
 
     @Override
     public int getPriority() {
-        return BottomSheetContent.ContentPriority.HIGH;
+        return ContentPriority.HIGH;
     }
 
     @Override
@@ -69,19 +59,12 @@ public class FastCheckoutSheetContent implements BottomSheetContent {
 
     @Override
     public int getPeekHeight() {
-        return BottomSheetContent.HeightMode.DISABLED;
+        return HeightMode.DISABLED;
     }
 
     @Override
     public float getFullHeightRatio() {
-        // TODO(crbug.com/1334642): Implement.
-        return HeightMode.DEFAULT;
-    }
-
-    @Override
-    public float getHalfHeightRatio() {
-        // TODO(crbug.com/1334642): Implement.
-        return BottomSheetContent.HeightMode.DEFAULT;
+        return HeightMode.WRAP_CONTENT;
     }
 
     @Override
@@ -96,11 +79,11 @@ public class FastCheckoutSheetContent implements BottomSheetContent {
 
     @Override
     public int getSheetHalfHeightAccessibilityStringId() {
-        return R.string.fast_checkout_sheet_half_height;
+        return R.string.fast_checkout_content_description;
     }
 
     @Override
     public int getSheetFullHeightAccessibilityStringId() {
-        return R.string.fast_checkout_sheet_full_height;
+        return R.string.fast_checkout_content_description;
     }
 }

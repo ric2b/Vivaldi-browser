@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -304,7 +304,7 @@ class PDFEngine {
   virtual bool HandleInputEvent(const blink::WebInputEvent& event) = 0;
   virtual void PrintBegin() = 0;
   virtual std::vector<uint8_t> PrintPages(
-      const std::vector<int>& page_numbers,
+      const std::vector<int>& page_index,
       const blink::WebPrintParams& print_params) = 0;
   virtual void PrintEnd() = 0;
   virtual void StartFind(const std::string& text, bool case_sensitive) = 0;
@@ -508,7 +508,7 @@ class PDFEngineExports {
 #if BUILDFLAG(IS_WIN)
   // See the definition of RenderPDFPageToDC in pdf.cc for details.
   virtual bool RenderPDFPageToDC(base::span<const uint8_t> pdf_buffer,
-                                 int page_number,
+                                 int page_index,
                                  const RenderingSettings& settings,
                                  HDC dc) = 0;
 
@@ -517,7 +517,7 @@ class PDFEngineExports {
 
   // See the definition of RenderPDFPageToBitmap in pdf.cc for details.
   virtual bool RenderPDFPageToBitmap(base::span<const uint8_t> pdf_buffer,
-                                     int page_number,
+                                     int page_index,
                                      const RenderingSettings& settings,
                                      void* bitmap_buffer) = 0;
 
@@ -554,7 +554,7 @@ class PDFEngineExports {
   // See the definition of GetPDFPageSizeByIndex in pdf.cc for details.
   virtual absl::optional<gfx::SizeF> GetPDFPageSizeByIndex(
       base::span<const uint8_t> pdf_buffer,
-      int page_number) = 0;
+      int page_index) = 0;
 };
 
 }  // namespace chrome_pdf

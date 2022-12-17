@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,9 +16,6 @@ class DocumentPictureInPictureWindowController
  public:
   // Sets the contents inside the Picture in Picture window.
   virtual void SetChildWebContents(WebContents* child_contents) = 0;
-
-  // Returns the child WebContents for DocumentPip
-  virtual WebContents* GetChildWebContents() = 0;
 
  protected:
   // Use PictureInPictureWindowController::GetOrCreateForWebContents() to

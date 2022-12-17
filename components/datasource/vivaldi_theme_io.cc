@@ -83,12 +83,10 @@ void RemoveTempDirLater(const scoped_refptr<base::SequencedTaskRunner>& runner,
 
 // Return the index of the theme with the given id in |value| or SIZE_MAX if
 // not found.
-size_t FindThemeIndex(const base::Value* list, base::StringPiece theme_id) {
+size_t FindThemeIndex(const base::Value::List& list, base::StringPiece theme_id) {
   // Be defensive and do not assume any structure of the value.
-  if (!list || !list->is_list())
-    return SIZE_MAX;
-  for (size_t i = 0; i < list->GetList().size(); ++i) {
-    const base::Value& elem = list->GetList()[i];
+  for (size_t i = 0; i < list.size(); ++i) {
+    const base::Value& elem = list[i];
     if (!elem.is_dict())
       continue;
     if (const std::string* id = elem.FindStringKey(kIdKey)) {
@@ -104,11 +102,11 @@ size_t FindThemeIndex(const base::Value* list, base::StringPiece theme_id) {
 const base::Value* FindThemeValue(const PrefService* prefs,
                                   const std::string& theme_list_pref_path,
                                   base::StringPiece theme_id) {
-  const base::Value* themes = prefs->GetList(theme_list_pref_path);
+  auto& themes = prefs->GetList(theme_list_pref_path);
   size_t index = FindThemeIndex(themes, theme_id);
   if (index == SIZE_MAX)
     return nullptr;
-  return &themes->GetList()[index];
+  return &themes[index];
 }
 
 class Exporter : public base::RefCountedThreadSafe<Exporter> {
@@ -293,18 +291,18 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
 // Based on chromium/extensions/browser/zipfile_installer.cc
 class Importer : public base::RefCountedThreadSafe<Importer> {
  public:
-  Importer(base::WeakPtr<content::BrowserContext> browser_context,
+  Importer(base::WeakPtr<Profile> profile,
            ImportResult callback,
            base::FilePath theme_archive_path,
            std::vector<uint8_t> theme_archive_data)
-      : browser_context_(std::move(browser_context)),
+      : profile_(std::move(profile)),
         callback_(std::move(callback)),
         theme_archive_path_(std::move(theme_archive_path)),
         theme_archive_data_(std::move(theme_archive_data)) {}
 
   void Start() {
-    if (Profile* profile = GetProfile()) {
-      data_source_api_ = VivaldiImageStore::FromBrowserContext(profile);
+    if (profile_) {
+      data_source_api_ = VivaldiImageStore::FromBrowserContext(profile_.get());
     }
     if (!data_source_api_) {
       // Let the destructor call the callback.
@@ -325,13 +323,6 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     ui_thread_runner_->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback_), std::move(theme_id_),
                                   std::move(error_)));
-  }
-
-  Profile* GetProfile() {
-    DCHECK(ui_thread_runner_->RunsTasksInCurrentSequence());
-    if (!browser_context_)
-      return nullptr;
-    return Profile::FromBrowserContext(browser_context_.get());
   }
 
   void AddError(ImportError::Kind kind, std::string details) {
@@ -482,8 +473,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     if (error_)
       return;
 
-    Profile* profile = GetProfile();
-    if (!profile)
+    if (!profile_)
       return;
 
     theme_id_ = *theme_object_.FindStringKey(kIdKey);
@@ -493,19 +483,19 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     {
       // When importing a theme with an already existing id on the preview list
       // the new import replaces the old value.
-      ListPrefUpdate update(profile->GetPrefs(), vivaldiprefs::kThemesPreview);
-      base::Value* list_value = update.Get();
+      ScopedListPrefUpdate update(profile_->GetPrefs(), vivaldiprefs::kThemesPreview);
+      auto& list_value = update.Get();
       size_t index = FindThemeIndex(list_value, theme_id_);
       if (index != SIZE_MAX) {
-        list_value->GetList()[index] = std::move(theme_object_);
+        list_value[index] = std::move(theme_object_);
       } else {
-        list_value->Append(std::move(theme_object_));
+        list_value.Append(std::move(theme_object_));
       }
     }
     data_source_api_->ForgetNewbornUrl(std::move(background_image_url_));
   }
 
-  base::WeakPtr<content::BrowserContext> browser_context_;
+  base::WeakPtr<Profile> profile_;
 
   const scoped_refptr<base::SequencedTaskRunner> ui_thread_runner_ =
       base::SequencedTaskRunnerHandle::Get();
@@ -813,13 +803,13 @@ void Export(content::BrowserContext* browser_context,
                   std::move(theme_archive), std::move(callback));
 }
 
-void Import(base::WeakPtr<content::BrowserContext> browser_context,
+void Import(base::WeakPtr<Profile> profile,
             base::FilePath theme_archive_path,
             std::vector<uint8_t> theme_archive_data,
             ImportResult callback) {
   DCHECK(theme_archive_path.empty() != theme_archive_data.empty());
   scoped_refptr<Importer> importer = base::MakeRefCounted<Importer>(
-      std::move(browser_context), std::move(callback),
+      std::move(profile), std::move(callback),
       std::move(theme_archive_path), std::move(theme_archive_data));
   importer->Start();
 }
@@ -828,14 +818,12 @@ void EnumerateUserThemeUrls(
     PrefService* prefs,
     base::RepeatingCallback<void(base::StringPiece url)> callback) {
   auto enumerate_theme_list = [&](const std::string& theme_list_pref_path) {
-    const base::Value* themes = prefs->GetList(theme_list_pref_path);
-    if (themes) {
-      for (const base::Value& value : themes->GetList()) {
-        if (value.is_dict()) {
-          if (const std::string* image_url =
-                  value.FindStringKey(kBackgroundImageKey)) {
-            callback.Run(*image_url);
-          }
+    auto& themes = prefs->GetList(theme_list_pref_path);
+    for (const base::Value& value : themes) {
+      if (value.is_dict()) {
+        if (const std::string* image_url =
+                value.FindStringKey(kBackgroundImageKey)) {
+          callback.Run(*image_url);
         }
       }
     }
@@ -848,11 +836,11 @@ bool StoreImageUrl(PrefService* prefs,
                    base::StringPiece theme_id,
                    std::string url) {
   auto store_image = [&](const std::string& theme_list_pref_path) -> bool {
-    size_t index = FindThemeIndex(prefs->Get(theme_list_pref_path), theme_id);
+    size_t index = FindThemeIndex(prefs->GetList(theme_list_pref_path), theme_id);
     if (index == SIZE_MAX)
       return false;
-    ListPrefUpdate update(prefs, theme_list_pref_path);
-    update.Get()->GetList()[index].SetStringKey(kBackgroundImageKey, url);
+    ScopedListPrefUpdate update(prefs, theme_list_pref_path);
+    update.Get()[index].SetStringKey(kBackgroundImageKey, url);
     return true;
   };
 

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/containers/contains.h"
+#include "base/ranges/algorithm.h"
 #include "chrome/browser/ash/remote_apps/remote_apps_manager.h"
 #include "chrome/browser/ash/remote_apps/remote_apps_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -133,6 +134,12 @@ void RemoteAppsImpl::DeleteApp(const std::string& app_id,
   }
 }
 
+void RemoteAppsImpl::SortLauncherWithRemoteAppsFirst(
+    SortLauncherWithRemoteAppsFirstCallback callback) {
+  manager_->SortLauncherWithRemoteAppsFirst();
+  std::move(callback).Run(absl::nullopt);
+}
+
 void RemoteAppsImpl::OnAppLaunched(const std::string& source_id,
                                    const std::string& app_id) {
   // Dispatch events to broadcast observers.
@@ -176,11 +183,8 @@ void RemoteAppsImpl::OnAppAdded(AddAppCallback callback,
 }
 
 void RemoteAppsImpl::DisconnectHandler(mojo::RemoteSetElementId id) {
-  const auto& it = std::find_if(
-      source_id_to_remote_id_map_.begin(), source_id_to_remote_id_map_.end(),
-      [&id](const std::pair<std::string, mojo::RemoteSetElementId>& pair) {
-        return pair.second == id;
-      });
+  const auto& it = base::ranges::find(source_id_to_remote_id_map_, id,
+                                      &SourceToRemoteIds::value_type::second);
 
   if (it == source_id_to_remote_id_map_.end())
     return;

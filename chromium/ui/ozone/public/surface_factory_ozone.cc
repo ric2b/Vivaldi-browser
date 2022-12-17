@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,6 +84,13 @@ scoped_refptr<gfx::NativePixmap> SurfaceFactoryOzone::CreateNativePixmap(
     gfx::BufferUsage usage,
     absl::optional<gfx::Size> framebuffer_size) {
   return nullptr;
+}
+
+bool SurfaceFactoryOzone::CanCreateNativePixmapForFormat(
+    gfx::BufferFormat format) {
+  // It's up to specific implementations of this method to report an inability
+  // to create native pixmap handles for a specific format.
+  return true;
 }
 
 void SurfaceFactoryOzone::CreateNativePixmapAsync(

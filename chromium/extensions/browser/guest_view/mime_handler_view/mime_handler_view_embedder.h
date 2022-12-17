@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,10 @@ namespace content {
 class NavigationHandle;
 class RenderFrameHost;
 }  // namespace content
+
+namespace guest_view {
+class GuestViewBase;
+}  // namespace guest_view
 
 namespace extensions {
 
@@ -74,7 +78,7 @@ class MimeHandlerViewEmbedder : public content::WebContentsObserver {
   void DidCreateMimeHandlerViewGuest(
       mojo::PendingRemote<mime_handler::BeforeUnloadControl>
           before_unload_control_remote,
-      content::WebContents* guest_web_contents);
+      std::unique_ptr<guest_view::GuestViewBase> guest);
   // Returns null before |render_frame_host_| is known.
   mojom::MimeHandlerViewContainerManager* GetContainerManager();
 

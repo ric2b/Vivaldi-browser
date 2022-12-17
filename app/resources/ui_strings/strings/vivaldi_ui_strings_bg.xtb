@@ -14,11 +14,13 @@
 <translation id="2297836609126180313"><ph name="QUANTITY" /> ТБ/сек</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MБ</translation>
 <translation id="3291688615589870984">{DAYS, plural, =1 {1 ден} one {# ден} other {# дни}}</translation>
+<translation id="335581015389089642">Реч</translation>
 <translation id="3600566671520689681">{DAYS, plural, =1 {още 1 ден} one {още # ден} other {още # дни}}</translation>
 <translation id="3618849550573277856">Провери „<ph name="LOOKUP_STRING" />“</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> ГБ/сек</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> ГБ</translation>
 <translation id="3889424535448813030">Стрелка надясно</translation>
+<translation id="4289300219472526559">Пусни речта</translation>
 <translation id="4968171027979920686">{SECONDS, plural, =1 {1 секунда} one {# секунда} other {# секунди}}</translation>
 <translation id="5076340679995252485">&amp;Постави</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> ПБ</translation>
@@ -28,6 +30,7 @@
 <translation id="5906667377645263094">{SECONDS, plural, =1 {още 1 секунда} one {още # секунда} other {още # секунди}}</translation>
 <translation id="5943826764092288734">{HOURS, plural, =1 {1 час} one {# час} other {# часа}}</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> Б/сек</translation>
+<translation id="6397363302884558537">Спри речта</translation>
 <translation id="6404817160109697034">{SECONDS, plural, =1 {преди 1 сек} one {преди # сек} other {преди # сек}}</translation>
 <translation id="6483402905448010557">{SECONDS, plural, =1 {преди 1 секунда} one {преди # секунда} other {преди # секунди}}</translation>
 <translation id="6863590663815976734">{HOURS, plural, =1 {още 1 час} one {още # час} other {още # часа}}</translation>

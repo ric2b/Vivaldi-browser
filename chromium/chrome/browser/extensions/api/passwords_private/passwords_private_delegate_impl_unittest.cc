@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,8 +26,10 @@
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/password_manager_test_util.h"
 #include "chrome/browser/sync/sync_service_factory.h"
+#include "chrome/browser/ui/passwords/settings/password_manager_porter_interface.h"
 #include "chrome/common/extensions/api/passwords_private.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/device_reauth/mock_biometric_authenticator.h"
 #include "components/password_manager/content/browser/password_manager_log_router_factory.h"
 #include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/mock_password_feature_manager.h"
@@ -38,7 +40,7 @@
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/signin/public/base/signin_metrics.h"
-#include "components/sync/driver/test_sync_service.h"
+#include "components/sync/test/test_sync_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_renderer_host.h"
@@ -48,6 +50,14 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#include "base/test/scoped_feature_list.h"
+#include "components/password_manager/core/common/password_manager_features.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#endif
+
 using MockReauthCallback = base::MockCallback<
     password_manager::PasswordAccessAuthenticator::ReauthCallback>;
 using password_manager::ReauthPurpose;
@@ -56,7 +66,6 @@ using ::testing::_;
 using ::testing::Eq;
 using ::testing::IsNull;
 using ::testing::Ne;
-using ::testing::Pointee;
 using ::testing::Return;
 using ::testing::SizeIs;
 using ::testing::StrictMock;
@@ -70,6 +79,22 @@ using MockPlaintextPasswordCallback =
     base::MockCallback<PasswordsPrivateDelegate::PlaintextPasswordCallback>;
 using MockRequestCredentialDetailsCallback = base::MockCallback<
     PasswordsPrivateDelegate::RequestCredentialDetailsCallback>;
+
+class MockPasswordManagerPorter : public PasswordManagerPorterInterface {
+ public:
+  MOCK_METHOD(bool, Export, (content::WebContents * web_contents), (override));
+  MOCK_METHOD(void, CancelExport, (), (override));
+  MOCK_METHOD(password_manager::ExportProgressStatus,
+              GetExportProgressStatus,
+              (),
+              (override));
+  MOCK_METHOD(void,
+              Import,
+              (content::WebContents * web_contents,
+               password_manager::PasswordForm::Store to_store,
+               ImportResultsCallback results_callback),
+              (override));
+};
 
 class MockPasswordManagerClient : public ChromePasswordManagerClient {
  public:
@@ -94,11 +119,24 @@ class MockPasswordManagerClient : public ChromePasswordManagerClient {
     return &mock_password_feature_manager_;
   }
 
+  scoped_refptr<device_reauth::BiometricAuthenticator>
+  GetBiometricAuthenticator() override {
+    return biometric_authenticator_;
+  }
+
+  void SetBiometricAuthenticator(
+      scoped_refptr<device_reauth::MockBiometricAuthenticator>
+          biometric_authenticator) {
+    biometric_authenticator_ = std::move(biometric_authenticator);
+  }
+
  private:
   explicit MockPasswordManagerClient(content::WebContents* web_contents)
       : ChromePasswordManagerClient(web_contents, nullptr) {}
 
   password_manager::MockPasswordFeatureManager mock_password_feature_manager_;
+  scoped_refptr<device_reauth::MockBiometricAuthenticator>
+      biometric_authenticator_ = nullptr;
 };
 
 // static
@@ -199,7 +237,6 @@ password_manager::PasswordForm CreateSampleForm(
 MATCHER_P(PasswordUiEntryDataEquals, expected, "") {
   return testing::Value(expected.get().urls.link, arg.urls.link) &&
          testing::Value(expected.get().username, arg.username) &&
-         testing::Value(*expected.get().note, *arg.note) &&
          testing::Value(expected.get().stored_in, arg.stored_in) &&
          testing::Value(expected.get().is_android_credential,
                         arg.is_android_credential);
@@ -237,6 +274,9 @@ class PasswordsPrivateDelegateImplTest : public testing::Test {
       CreateAndUseTestAccountPasswordStore(&profile_);
   raw_ptr<ui::TestClipboard> test_clipboard_ =
       ui::TestClipboard::CreateForCurrentThread();
+  scoped_refptr<device_reauth::MockBiometricAuthenticator>
+      biometric_authenticator_ =
+          base::MakeRefCounted<device_reauth::MockBiometricAuthenticator>();
 
  private:
   base::HistogramTester histogram_tester_;
@@ -383,13 +423,13 @@ TEST_F(PasswordsPrivateDelegateImplTest, AddPassword) {
   api::passwords_private::PasswordUiEntry expected_entry1;
   expected_entry1.urls.link = "https://example1.com/";
   expected_entry1.username = "username1";
-  expected_entry1.note = std::make_unique<std::string>();
+  expected_entry1.note.emplace();
   expected_entry1.stored_in =
       api::passwords_private::PASSWORD_STORE_SET_ACCOUNT;
   api::passwords_private::PasswordUiEntry expected_entry2;
   expected_entry2.urls.link = "http://example2.com/login";
   expected_entry2.username = "";
-  expected_entry2.note = std::make_unique<std::string>("note");
+  expected_entry2.note = "note";
   expected_entry2.stored_in = api::passwords_private::PASSWORD_STORE_SET_DEVICE;
   EXPECT_CALL(callback,
               Run(testing::UnorderedElementsAre(
@@ -434,6 +474,58 @@ TEST_F(PasswordsPrivateDelegateImplTest, AddPasswordUpdatesDefaultStore) {
                                     web_contents.get()));
 }
 
+TEST_F(PasswordsPrivateDelegateImplTest,
+       ImportPasswordsDoesNotUpdateDefaultStore) {
+  // This enables uses of TestWebContents.
+  content::RenderViewHostTestEnabler test_render_host_factories;
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContentsTester::CreateTestWebContents(&profile_, nullptr);
+  auto* client =
+      MockPasswordManagerClient::CreateForWebContentsAndGet(web_contents.get());
+  PasswordsPrivateDelegateImpl delegate(&profile_);
+
+  auto mock_porter = std::make_unique<MockPasswordManagerPorter>();
+  auto* mock_porter_ptr = mock_porter.get();
+
+  delegate.SetPorterForTesting(std::move(mock_porter));
+
+  // NOT update default store if not opted-in for account storage.
+  ON_CALL(*(client->GetPasswordFeatureManager()), IsOptedInForAccountStorage)
+      .WillByDefault(Return(false));
+  EXPECT_CALL(*(client->GetPasswordFeatureManager()), SetDefaultPasswordStore)
+      .Times(0);
+  EXPECT_CALL(*mock_porter_ptr, Import).Times(1);
+  delegate.ImportPasswords(
+      api::passwords_private::PasswordStoreSet::PASSWORD_STORE_SET_DEVICE,
+      base::DoNothing(), web_contents.get());
+}
+
+TEST_F(PasswordsPrivateDelegateImplTest, ImportPasswordsUpdatesDefaultStore) {
+  // This enables uses of TestWebContents.
+  content::RenderViewHostTestEnabler test_render_host_factories;
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContentsTester::CreateTestWebContents(&profile_, nullptr);
+  auto* client =
+      MockPasswordManagerClient::CreateForWebContentsAndGet(web_contents.get());
+  PasswordsPrivateDelegateImpl delegate(&profile_);
+
+  auto mock_porter = std::make_unique<MockPasswordManagerPorter>();
+  auto* mock_porter_ptr = mock_porter.get();
+
+  delegate.SetPorterForTesting(std::move(mock_porter));
+
+  // Updates the default store if opted-in and operation succeeded.
+  ON_CALL(*(client->GetPasswordFeatureManager()), IsOptedInForAccountStorage)
+      .WillByDefault(Return(true));
+  EXPECT_CALL(*(client->GetPasswordFeatureManager()),
+              SetDefaultPasswordStore(
+                  password_manager::PasswordForm::Store::kAccountStore));
+  EXPECT_CALL(*mock_porter_ptr, Import).Times(1);
+  delegate.ImportPasswords(
+      api::passwords_private::PasswordStoreSet::PASSWORD_STORE_SET_ACCOUNT,
+      base::DoNothing(), web_contents.get());
+}
+
 TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPassword) {
   password_manager::PasswordForm sample_form = CreateSampleForm();
   SetUpPasswordStores({sample_form});
@@ -458,6 +550,7 @@ TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPassword) {
   api::passwords_private::ChangeSavedPasswordParams params;
   params.password = "new_pass";
   params.username = "new_user";
+  params.note = "new note";
 
   sample_form.username_value = u"new_user";
   sample_form.password_value = u"new_pass";
@@ -472,64 +565,11 @@ TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPassword) {
   base::RunLoop().RunUntilIdle();
 
   // Check that the changing the password got reflected in the passwords list.
+  // `note` field should not be filled when `GetSavedPasswordsList` is called.
   EXPECT_CALL(callback, Run(SizeIs(1)))
       .WillOnce([](const PasswordsPrivateDelegate::UiEntries& passwords) {
-        EXPECT_EQ("new_user", passwords[0].username);
-        EXPECT_THAT(passwords[0].note, Pointee(Eq("")));
-      });
-  delegate.GetSavedPasswordsList(callback.Get());
-}
-
-TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPasswordWithNote) {
-  password_manager::PasswordForm sample_form = CreateSampleForm();
-  sample_form.notes.emplace_back(
-      u"display name", u"note with non-empty display name",
-      /*date_created=*/base::Time::Now(), /*hide_by_default=*/true);
-  sample_form.notes.emplace_back(u"note with empty display name",
-                                 /*date_created=*/base::Time::Now());
-  SetUpPasswordStores({sample_form});
-
-  PasswordsPrivateDelegateImpl delegate(&profile_);
-  // Spin the loop to allow PasswordStore tasks posted on the creation of
-  // |delegate| to be completed.
-  base::RunLoop().RunUntilIdle();
-
-  // Double check that the contents of the passwords list matches our
-  // expectation. The note with an empty `unique_display_name` is returned.
-  base::MockCallback<PasswordsPrivateDelegate::UiEntriesCallback> callback;
-  EXPECT_CALL(callback, Run(SizeIs(1)))
-      .WillOnce([&](const PasswordsPrivateDelegate::UiEntries& passwords) {
-        EXPECT_EQ(sample_form.username_value,
-                  base::UTF8ToUTF16(passwords[0].username));
-        EXPECT_THAT(passwords[0].note,
-                    Pointee(Eq(base::UTF16ToUTF8(sample_form.notes[1].value))));
-      });
-  delegate.GetSavedPasswordsList(callback.Get());
-  int sample_form_id = delegate.GetIdForCredential(
-      password_manager::CredentialUIEntry(sample_form));
-
-  api::passwords_private::ChangeSavedPasswordParams params;
-  params.password = "new_pass";
-  params.username = "new_user";
-  params.note = std::make_unique<std::string>("new note");
-
-  sample_form.password_value = u"new_pass";
-  sample_form.username_value = u"new_user";
-  int new_form_id = delegate.GetIdForCredential(
-      password_manager::CredentialUIEntry(sample_form));
-
-  auto result = delegate.ChangeSavedPassword(sample_form_id, params);
-  EXPECT_EQ(result, new_form_id);
-
-  // Spin the loop to allow PasswordStore tasks posted when changing the
-  // password to be completed.
-  base::RunLoop().RunUntilIdle();
-
-  // Check that the changing the password got reflected in the passwords
-  EXPECT_CALL(callback, Run(SizeIs(1)))
-      .WillOnce([](const PasswordsPrivateDelegate::UiEntries& passwords) {
-        EXPECT_EQ("new_user", passwords[0].username);
-        EXPECT_THAT(passwords[0].note, Pointee(Eq("new note")));
+        EXPECT_THAT(passwords[0].username, Eq("new_user"));
+        EXPECT_THAT(passwords[0].note, Eq(absl::nullopt));
       });
   delegate.GetSavedPasswordsList(callback.Get());
 }
@@ -736,7 +776,10 @@ TEST_F(PasswordsPrivateDelegateImplTest, TestPassedReauthOnView) {
 
 TEST_F(PasswordsPrivateDelegateImplTest,
        TestPassedReauthOnRequestCredentialDetails) {
-  SetUpPasswordStores({CreateSampleForm()});
+  password_manager::PasswordForm sample_form = CreateSampleForm();
+  sample_form.notes.emplace_back(u"best note ever",
+                                 /*date_created=*/base::Time::Now());
+  SetUpPasswordStores({sample_form});
 
   PasswordsPrivateDelegateImpl delegate(&profile_);
   // Spin the loop to allow PasswordStore tasks posted on the creation of
@@ -755,8 +798,9 @@ TEST_F(PasswordsPrivateDelegateImplTest,
   EXPECT_CALL(password_callback, Run)
       .WillOnce(
           [&](absl::optional<api::passwords_private::PasswordUiEntry> entry) {
-            EXPECT_THAT(entry->password, Pointee(Eq("test")));
+            EXPECT_THAT(entry->password, Eq("test"));
             EXPECT_THAT(entry->username, Eq("test@gmail.com"));
+            EXPECT_THAT(entry->note, Eq("best note ever"));
           });
 
   delegate.RequestCredentialDetails(0, password_callback.Get(), nullptr);
@@ -958,7 +1002,6 @@ TEST_F(PasswordsPrivateDelegateImplTest, AndroidCredential) {
   expected_entry.urls.link =
       "https://play.google.com/store/apps/details?id=example.com";
   expected_entry.username = "test@gmail.com";
-  expected_entry.note = std::make_unique<std::string>();
   expected_entry.is_android_credential = true;
   expected_entry.stored_in = api::passwords_private::PASSWORD_STORE_SET_DEVICE;
   EXPECT_CALL(callback, Run(testing::ElementsAre(PasswordUiEntryDataEquals(
@@ -1076,5 +1119,60 @@ TEST_F(PasswordsPrivateDelegateImplTest, VerifyCastingOfImportResultsStatus) {
               password_manager::ImportResults::Status::NUM_PASSWORDS_EXCEEDED),
       "");
 }
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+// Checks if authentication is triggered.
+TEST_F(PasswordsPrivateDelegateImplTest,
+       SwitchBiometricAuthBeforeFillingState) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kBiometricAuthenticationForFilling);
+  // This enables uses of TestWebContents.
+  content::RenderViewHostTestEnabler test_render_host_factories;
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContentsTester::CreateTestWebContents(&profile_, nullptr);
+  auto* client =
+      MockPasswordManagerClient::CreateForWebContentsAndGet(web_contents.get());
+  client->SetBiometricAuthenticator(biometric_authenticator_);
+  profile_.GetPrefs()->SetBoolean(
+      password_manager::prefs::kBiometricAuthenticationBeforeFilling, false);
+  EXPECT_CALL(
+      *biometric_authenticator_.get(),
+      AuthenticateWithMessage(
+          device_reauth::BiometricAuthRequester::kPasswordsInSettings, _, _))
+      .WillOnce(testing::WithArgs<2>(
+          [](auto callback) { std::move(callback).Run(/*successful=*/true); }));
+  PasswordsPrivateDelegateImpl delegate(&profile_);
+  delegate.SwitchBiometricAuthBeforeFillingState(web_contents.get());
+  // Expects that the switch value will change.
+  EXPECT_TRUE(profile_.GetPrefs()->GetBoolean(
+      password_manager::prefs::kBiometricAuthenticationBeforeFilling));
+}
+
+// Checks if authentication is triggered.
+TEST_F(PasswordsPrivateDelegateImplTest,
+       SwitchBiometricAuthBeforeFillingCancelsLastTry) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kBiometricAuthenticationForFilling);
+  // This enables uses of TestWebContents.
+  content::RenderViewHostTestEnabler test_render_host_factories;
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContentsTester::CreateTestWebContents(&profile_, nullptr);
+  auto* client =
+      MockPasswordManagerClient::CreateForWebContentsAndGet(web_contents.get());
+  client->SetBiometricAuthenticator(biometric_authenticator_);
+
+  PasswordsPrivateDelegateImpl delegate(&profile_);
+  EXPECT_CALL(*biometric_authenticator_.get(), AuthenticateWithMessage);
+  delegate.SwitchBiometricAuthBeforeFillingState(web_contents.get());
+
+  // Invoking authentication again will cancel previous request.
+  EXPECT_CALL(*biometric_authenticator_.get(), Cancel);
+  EXPECT_CALL(*biometric_authenticator_.get(), AuthenticateWithMessage);
+  delegate.SwitchBiometricAuthBeforeFillingState(web_contents.get());
+}
+
+#endif
 
 }  // namespace extensions

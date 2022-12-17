@@ -213,13 +213,13 @@ class TokenPreloadScanner::StartTagScanner {
 
   void HandlePictureSourceURL(PictureData& picture_data) {
     if (Match(tag_impl_, html_names::kSourceTag) && matched_ &&
-        picture_data.source_url.IsEmpty()) {
+        picture_data.source_url.empty()) {
       picture_data.source_url = srcset_image_candidate_.ToString();
       picture_data.source_size_set = source_size_set_;
       picture_data.source_size = source_size_;
       picture_data.picked = true;
     } else if (Match(tag_impl_, html_names::kImgTag) &&
-               !picture_data.source_url.IsEmpty()) {
+               !picture_data.source_url.empty()) {
       SetUrlToLoad(picture_data.source_url, kAllowURLReplacement);
     }
   }
@@ -580,10 +580,10 @@ class TokenPreloadScanner::StartTagScanner {
   void SetUrlToLoad(const String& value, URLReplacement replacement) {
     // We only respect the first src/href, per HTML5:
     // http://www.whatwg.org/specs/web-apps/current-work/multipage/tokenization.html#attribute-name-state
-    if (replacement == kDisallowURLReplacement && !url_to_load_.IsEmpty())
+    if (replacement == kDisallowURLReplacement && !url_to_load_.empty())
       return;
     String url = StripLeadingAndTrailingHTMLSpaces(value);
-    if (url.IsEmpty())
+    if (url.empty())
       return;
     url_to_load_ = url;
   }
@@ -619,22 +619,22 @@ class TokenPreloadScanner::StartTagScanner {
 
   bool ShouldPreconnect() const {
     return Match(tag_impl_, html_names::kLinkTag) && link_is_preconnect_ &&
-           !url_to_load_.IsEmpty();
+           !url_to_load_.empty();
   }
 
   bool IsLinkRelPreload() const {
     return Match(tag_impl_, html_names::kLinkTag) && link_is_preload_ &&
-           !url_to_load_.IsEmpty();
+           !url_to_load_.empty();
   }
 
   bool IsLinkRelModulePreload() const {
     return Match(tag_impl_, html_names::kLinkTag) && link_is_modulepreload_ &&
-           !url_to_load_.IsEmpty();
+           !url_to_load_.empty();
   }
 
   bool ShouldPreloadLink(absl::optional<ResourceType>& type) const {
     if (link_is_style_sheet_) {
-      return type_attribute_value_.IsEmpty() ||
+      return type_attribute_value_.empty() ||
              MIMETypeRegistry::IsSupportedStyleSheetMIMEType(
                  ContentType(type_attribute_value_).GetType());
     } else if (link_is_preload_) {
@@ -642,7 +642,7 @@ class TokenPreloadScanner::StartTagScanner {
         return HTMLImageElement::SupportedImageType(type_attribute_value_,
                                                     disabled_image_types_);
       }
-      if (type_attribute_value_.IsEmpty())
+      if (type_attribute_value_.empty())
         return true;
       String type_from_attribute = ContentType(type_attribute_value_).GetType();
       if ((type == ResourceType::kFont &&
@@ -660,7 +660,7 @@ class TokenPreloadScanner::StartTagScanner {
   }
 
   bool ShouldPreload(absl::optional<ResourceType>& type) const {
-    if (url_to_load_.IsEmpty())
+    if (url_to_load_.empty())
       return false;
     if (!matched_)
       return false;
@@ -841,7 +841,7 @@ static void HandleMetaReferrer(const String& attribute_value,
                                CSSPreloadScanner* css_scanner) {
   network::mojom::ReferrerPolicy meta_referrer_policy =
       network::mojom::ReferrerPolicy::kDefault;
-  if (!attribute_value.IsEmpty() && !attribute_value.IsNull() &&
+  if (!attribute_value.empty() && !attribute_value.IsNull() &&
       SecurityPolicy::ReferrerPolicyFromString(
           attribute_value, kSupportReferrerPolicyLegacyKeywords,
           &meta_referrer_policy)) {
@@ -1069,18 +1069,22 @@ std::unique_ptr<HTMLPreloadScanner> HTMLPreloadScanner::Create(
 }
 
 // static
-WTF::SequenceBound<HTMLPreloadScanner> HTMLPreloadScanner::CreateBackground(
+HTMLPreloadScanner::BackgroundPtr HTMLPreloadScanner::CreateBackground(
     HTMLDocumentParser* parser,
     HTMLParserOptions options,
-    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
+    TakePreloadFn take_preload) {
   auto* document = parser->GetDocument();
-  return WTF::SequenceBound<HTMLPreloadScanner>(
-      std::move(task_runner), std::make_unique<HTMLTokenizer>(options),
-      options.priority_hints_origin_trial_enabled, document->Url(),
-      std::make_unique<CachedDocumentParameters>(document),
-      MediaValuesCached::MediaValuesCachedData(*document),
-      TokenPreloadScanner::ScannerType::kMainDocument,
-      BackgroundHTMLScanner::ScriptTokenScanner::Create(parser));
+  return BackgroundPtr(
+      new HTMLPreloadScanner(
+          std::make_unique<HTMLTokenizer>(options),
+          options.priority_hints_origin_trial_enabled, document->Url(),
+          std::make_unique<CachedDocumentParameters>(document),
+          MediaValuesCached::MediaValuesCachedData(*document),
+          TokenPreloadScanner::ScannerType::kMainDocument,
+          BackgroundHTMLScanner::ScriptTokenScanner::Create(parser),
+          std::move(take_preload)),
+      Deleter{task_runner});
 }
 
 HTMLPreloadScanner::HTMLPreloadScanner(
@@ -1091,14 +1095,16 @@ HTMLPreloadScanner::HTMLPreloadScanner(
     const MediaValuesCached::MediaValuesCachedData& media_values_cached_data,
     const TokenPreloadScanner::ScannerType scanner_type,
     std::unique_ptr<BackgroundHTMLScanner::ScriptTokenScanner>
-        script_token_scanner)
+        script_token_scanner,
+    TakePreloadFn take_preload)
     : scanner_(document_url,
                std::move(document_parameters),
                media_values_cached_data,
                scanner_type,
                priority_hints_origin_trial_enabled),
       tokenizer_(std::move(tokenizer)),
-      script_token_scanner_(std::move(script_token_scanner)) {}
+      script_token_scanner_(std::move(script_token_scanner)),
+      take_preload_(std::move(take_preload)) {}
 
 HTMLPreloadScanner::~HTMLPreloadScanner() = default;
 
@@ -1107,8 +1113,7 @@ void HTMLPreloadScanner::AppendToEnd(const SegmentedString& source) {
 }
 
 std::unique_ptr<PendingPreloadData> HTMLPreloadScanner::Scan(
-    const KURL& starting_base_element_url,
-    const TakePreloadFn& take_preload) {
+    const KURL& starting_base_element_url) {
   auto pending_data = std::make_unique<PendingPreloadData>();
 
   TRACE_EVENT1("blink", "HTMLPreloadScanner::scan", "source_length",
@@ -1147,19 +1152,19 @@ std::unique_ptr<PendingPreloadData> HTMLPreloadScanner::Scan(
       return pending_data;
     }
     // Incrementally add preloads when scanning in the background.
-    if (take_preload && !pending_data->requests.IsEmpty()) {
-      take_preload.Run(std::move(pending_data));
+    if (take_preload_ && !pending_data->requests.empty()) {
+      take_preload_.Run(std::move(pending_data));
       pending_data = std::make_unique<PendingPreloadData>();
     }
   }
   return pending_data;
 }
 
-void HTMLPreloadScanner::ScanInBackground(const String& source,
-                                          const KURL& document_base_element_url,
-                                          const TakePreloadFn& take_preload) {
+void HTMLPreloadScanner::ScanInBackground(
+    const String& source,
+    const KURL& document_base_element_url) {
   source_.Append(source);
-  take_preload.Run(Scan(document_base_element_url, take_preload));
+  take_preload_.Run(Scan(document_base_element_url));
 }
 
 CachedDocumentParameters::CachedDocumentParameters(Document* document) {

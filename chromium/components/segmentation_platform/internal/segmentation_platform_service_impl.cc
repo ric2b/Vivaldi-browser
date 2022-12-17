@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -83,7 +83,7 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
         init_params->storage_dir, init_params->db_provider,
         init_params->task_runner, init_params->clock,
         init_params->ukm_data_manager, all_segment_ids_,
-        model_provider_factory_.get());
+        model_provider_factory_.get(), profile_prefs_);
   }
 
   // Construct signal processors.
@@ -105,10 +105,11 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
 
   proxy_ = std::make_unique<ServiceProxyImpl>(
       storage_service_->segment_info_database(),
-      storage_service_->signal_storage_config(), &configs_,
+      storage_service_->default_model_manager(),
+      storage_service_->signal_storage_config(), &configs_, platform_options_,
       &segment_selectors_);
-  segment_score_provider_ =
-      SegmentScoreProvider::Create(storage_service_->segment_info_database());
+  segment_score_provider_ = SegmentScoreProvider::Create(
+      storage_service_->segment_info_database(), all_segment_ids_);
 
   // Kick off initialization of all databases. Internal operations will be
   // delayed until they are all complete.
@@ -187,8 +188,7 @@ void SegmentationPlatformServiceImpl::OnDatabaseInitialized(bool success) {
   if (!success) {
     for (const auto& config : configs_) {
       stats::RecordSegmentSelectionFailure(
-          config->segmentation_key,
-          stats::SegmentationSelectionFailureReason::kDBInitFailure);
+          *config, stats::SegmentationSelectionFailureReason::kDBInitFailure);
     }
     return;
   }
@@ -273,6 +273,8 @@ void SegmentationPlatformServiceImpl::RunDailyTasks(bool is_startup) {
 void SegmentationPlatformService::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kSegmentationResultPref);
+  registry->RegisterTimePref(kSegmentationLastDBCompactionTimePref,
+                             base::Time());
 }
 
 // static

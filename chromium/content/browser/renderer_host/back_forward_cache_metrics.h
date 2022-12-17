@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,18 +6,21 @@
 #define CONTENT_BROWSER_RENDERER_HOST_BACK_FORWARD_CACHE_METRICS_H_
 
 #include <bitset>
-#include <set>
+#include <memory>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/string_piece.h"
-#include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "content/browser/renderer_host/should_swap_browsing_instance.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
+#include "third_party/blink/public/mojom/back_forward_cache_not_restored_reasons.mojom-forward.h"
+
+namespace base {
+class TickClock;
+}
 
 namespace url {
 class Origin;
@@ -55,6 +58,9 @@ class BackForwardCacheMetrics
     kRelatedActiveContentsExist = 2,
     kHTTPStatusNotOK = 3,
     kSchemeNotHTTPOrHTTPS = 4,
+    // DOMContentLoaded event has not yet fired. This means that deferred
+    // scripts have not run yet and pagehide/pageshow event handlers may not be
+    // installed yet.
     kLoading = 5,
     kWasGrantedMediaAccess = 6,
     kBlocklistedFeatures = 7,
@@ -69,7 +75,7 @@ class BackForwardCacheMetrics
     kRendererProcessCrashed = 16,
     // 17: Dialogs are no longer a reason to exclude from BackForwardCache
     // 18: GrantedMediaStreamAccess is no longer blocking.
-    kSchedulerTrackedFeatureUsed = 19,
+    // 19: kSchedulerTrackedFeatureUsed is no longer used.
     kConflictingBrowsingInstance = 20,
     kCacheFlushed = 21,
     kServiceWorkerVersionActivation = 22,
@@ -228,6 +234,18 @@ class BackForwardCacheMetrics
   void SetNotRestoredReasons(
       BackForwardCacheCanStoreDocumentResultWithTree& can_store);
 
+  // Populate and return the mojom struct from |page_store_tree_result_|.
+  blink::mojom::BackForwardCacheNotRestoredReasonsPtr
+  GetWebExposedNotRestoredReasons();
+
+  // Record additional reason why navigation was not served from bfcache which
+  // are known only at the commit time, such as BrowsingInstanceNotSwapped,
+  // SessionRestored, Unknown etc. |before_commit| indicates whether this is
+  // called before commit or after commit and will be used for recording the
+  // right values for URL and origin.
+  void UpdateNotRestoredReasonsForNavigation(NavigationRequest* navigation,
+                                             bool before_commit);
+
   // Exported for testing.
   // The DisabledReason's source and id combined to give a unique uint64.
   CONTENT_EXPORT static uint64_t MetricValue(BackForwardCache::DisabledReason);
@@ -247,6 +265,10 @@ class BackForwardCacheMetrics
   void SetObserverForTesting(TestObserver* observer) {
     test_observer_ = observer;
   }
+
+  // Returns if |navigation| is cross-document main frame history navigation.
+  static bool IsCrossDocumentMainFrameHistoryNavigation(
+      NavigationRequest* navigation);
 
  private:
   friend class base::RefCounted<BackForwardCacheMetrics>;
@@ -275,10 +297,6 @@ class BackForwardCacheMetrics
   void RecordHistogramForReloadsAfterHistoryNavigations(
       bool is_reload,
       bool back_forward_cache_allowed) const;
-
-  // Record additional reason why navigation was not served from bfcache which
-  // are known only at the commit time.
-  void UpdateNotRestoredReasonsForNavigation(NavigationRequest* navigation);
 
   // Whether the last navigation swapped BrowsingInstance or not. Returns true
   // if the last navigation did swap BrowsingInstance, or if it's unknown

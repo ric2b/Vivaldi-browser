@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #include "ash/assistant/assistant_interaction_controller_impl.h"
 #include "ash/assistant/model/assistant_interaction_model.h"
 #include "ash/constants/ambient_animation_theme.h"
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/public/cpp/ambient/fake_ambient_backend_controller_impl.h"
@@ -25,6 +24,7 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/strcat.h"
@@ -36,11 +36,11 @@
 #include "base/time/time.h"
 #include "build/buildflag.h"
 #include "chromeos/ash/components/assistant/buildflags.h"
+#include "chromeos/ash/services/libassistant/public/cpp/assistant_interaction_metadata.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
-#include "chromeos/services/libassistant/public/cpp/assistant_interaction_metadata.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/platform/platform_event_source.h"
@@ -50,7 +50,7 @@
 namespace ash {
 namespace {
 
-using chromeos::assistant::AssistantInteractionMetadata;
+using assistant::AssistantInteractionMetadata;
 
 constexpr char kUser1[] = "user1@gmail.com";
 constexpr char kUser2[] = "user2@gmail.com";
@@ -114,10 +114,9 @@ class AmbientControllerTest : public AmbientAshTestBase {
 
   bool WidgetsVisible() {
     const auto& views = GetContainerViews();
-    return views.size() > 0 &&
-           std::all_of(views.cbegin(), views.cend(), [](const auto* view) {
-             return view->GetWidget()->IsVisible();
-           });
+    return !views.empty() && base::ranges::all_of(views, [](const auto* view) {
+      return view->GetWidget()->IsVisible();
+    });
   }
 
   bool AreSessionSpecificObserversBound() {
@@ -1237,8 +1236,6 @@ TEST_P(AmbientControllerTestForAnyTheme,
 
 TEST_F(AmbientControllerTest,
        ANIMATION_TEST_WITH_RESOURCES(RendersCorrectView)) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kPersonalizationHub);
   SetAmbientAnimationTheme(AmbientAnimationTheme::kFeelTheBreeze);
 
   LockScreen();
@@ -1280,8 +1277,6 @@ TEST_F(AmbientControllerTest,
 
 TEST_F(AmbientControllerTest,
        ANIMATION_TEST_WITH_RESOURCES(ClearsCacheWhenSwitchingThemes)) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kPersonalizationHub);
   SetAmbientAnimationTheme(AmbientAnimationTheme::kSlideshow);
 
   LockScreen();

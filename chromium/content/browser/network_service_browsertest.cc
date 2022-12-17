@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -180,7 +180,9 @@ class NetworkServiceBrowserTest : public ContentBrowserTest {
   base::FilePath GetCacheDirectory() { return temp_dir_.GetPath(); }
 
   base::FilePath GetCacheIndexDirectory() {
-    return GetCacheDirectory().AppendASCII("index-dir");
+    return GetCacheDirectory()
+        .AppendASCII("Cache_Data")
+        .AppendASCII("index-dir");
   }
 
   void LoadURL(const GURL& url,
@@ -282,7 +284,7 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest,
   context_params->cert_verifier_params = GetCertVerifierParams(
       cert_verifier::mojom::CertVerifierCreationParams::New());
   context_params->http_cache_directory = GetCacheDirectory();
-  GetNetworkService()->CreateNetworkContext(
+  CreateNetworkContextInNetworkService(
       network_context.BindNewPipeAndPassReceiver(), std::move(context_params));
 
   network::mojom::URLLoaderFactoryParamsPtr params =
@@ -468,7 +470,8 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, FactoryOverride) {
                                      "https://www2.example.com");
         response->headers->SetHeader("access-control-allow-methods", "*");
         client->OnReceiveResponse(std::move(response),
-                                  mojo::ScopedDataPipeConsumerHandle());
+                                  mojo::ScopedDataPipeConsumerHandle(),
+                                  absl::nullopt);
       } else if (resource_request.method == "custom-method") {
         has_received_request_ = true;
         auto response = network::mojom::URLResponseHead::New();
@@ -477,7 +480,8 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, FactoryOverride) {
         response->headers->SetHeader("access-control-allow-origin",
                                      "https://www2.example.com");
         client->OnReceiveResponse(std::move(response),
-                                  mojo::ScopedDataPipeConsumerHandle());
+                                  mojo::ScopedDataPipeConsumerHandle(),
+                                  absl::nullopt);
         client->OnComplete(network::URLLoaderCompletionStatus(net::OK));
       } else {
         client->OnComplete(
@@ -1491,10 +1495,10 @@ INSTANTIATE_TEST_SUITE_P(
 class NetworkServiceInProcessBrowserTest : public ContentBrowserTest {
  public:
   NetworkServiceInProcessBrowserTest() {
-    std::vector<base::Feature> features;
+    std::vector<base::test::FeatureRef> features;
     features.push_back(features::kNetworkServiceInProcess);
-    scoped_feature_list_.InitWithFeatures(features,
-                                          std::vector<base::Feature>());
+    scoped_feature_list_.InitWithFeatures(
+        features, std::vector<base::test::FeatureRef>());
   }
 
   NetworkServiceInProcessBrowserTest(
@@ -1599,7 +1603,7 @@ class NetworkServiceWithUDPSocketLimit : public NetworkServiceBrowserTest {
         network::mojom::NetworkContextParams::New();
     context_params->cert_verifier_params = GetCertVerifierParams(
         cert_verifier::mojom::CertVerifierCreationParams::New());
-    GetNetworkService()->CreateNetworkContext(
+    CreateNetworkContextInNetworkService(
         network_context.BindNewPipeAndPassReceiver(),
         std::move(context_params));
     return network_context;

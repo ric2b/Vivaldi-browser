@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,10 @@
 #include "third_party/webrtc/modules/desktop_capture/desktop_capture_types.h"
 
 namespace remoting {
+
+namespace protocol {
+class VideoLayout;
+}  // namespace protocol
 
 class ScreenResolution;
 
@@ -31,6 +35,8 @@ class ScreenControls {
   virtual void SetScreenResolution(
       const ScreenResolution& resolution,
       absl::optional<webrtc::ScreenId> screen_id) = 0;
+
+  virtual void SetVideoLayout(const protocol::VideoLayout& video_layout) = 0;
 };
 
 }  // namespace remoting

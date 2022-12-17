@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -54,8 +54,10 @@ ts_library("build_ts") {
     "wallpaper_preview_element_test.ts",
     "wallpaper_selected_element_test.ts",
   ]
-  deps = [ "//ash/webui/personalization_app/resources:build_ts" ]
-  extra_deps = [ "../..:generate_definitions" ]
+  deps = [
+    "../..:build_ts",
+    "//ash/webui/personalization_app/resources:build_ts",
+  ]
 }
 
 generate_grd("build_grdp") {

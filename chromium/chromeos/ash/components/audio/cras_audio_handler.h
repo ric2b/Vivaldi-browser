@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "base/component_export.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/user_metrics.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "chromeos/ash/components/audio/audio_device.h"
@@ -26,6 +27,7 @@
 #include "chromeos/ash/components/dbus/audio/volume_state.h"
 #include "media/base/video_facing.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/media_session/public/mojom/media_controller.mojom.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
@@ -219,6 +221,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // Returns true if audio output is muted for the system by policy.
   bool IsOutputMutedByPolicy();
 
+  // Returns true if audio output is muted for the system by security curtain.
+  bool IsOutputMutedBySecurityCurtain();
+
   // Returns true if audio input is muted.
   bool IsInputMuted();
 
@@ -305,12 +310,21 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // (negative percentage).
   void AdjustOutputVolumeByPercent(int adjust_by_percent);
 
+  // Adjusts all active output devices' volume higher by one volume step.
+  void IncreaseOutputVolumeByOneStep(int one_step_percent);
+
+  // Adjusts all active output devices' volume lower by one volume step
+  void DecreaseOutputVolumeByOneStep(int one_step_percent);
+
   // Adjusts all active output devices' volume to a minimum audible level if it
   // is too low.
   void AdjustOutputVolumeToAudibleLevel();
 
   // Mutes or unmutes audio output device.
   void SetOutputMute(bool mute_on);
+
+  // Mutes or unmutes audio output device by security curtain
+  void SetOutputMuteLockedBySecurityCurtain(bool mute_on);
 
   // Mutes or unmutes audio input device.
   void SetInputMute(bool mute_on);
@@ -386,6 +400,16 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
 
   // Returns true the device has dual internal microphones(front and rear).
   bool HasDualInternalMic() const;
+
+  // There are some audio devices which are not meant for simple usage. Keyboard
+  // mic is an example of a non simple device. There are cases when we need to
+  // know programmatically if there is an audio input device for simple usage
+  // available. Checking `active_input_node_id_` being non zero is not
+  // sufficient in this case. A non simple device can be the active input node
+  // during cras initialization depeneding the audio device enumeration process.
+  // This function returns true if an input device for simple usage is
+  // available.
+  bool HasActiveInputDeviceForSimpleUsage() const;
 
   // Returns true if |device| is front or rear microphone.
   bool IsFrontOrRearMic(const AudioDevice& device) const;
@@ -499,6 +523,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // change notification is received.
   void ApplyAudioPolicy();
 
+  // Helper method to apply the conditional audio mute change.
+  void UpdateAudioMute();
+
   // Sets output volume of |node_id| to |volume|.
   void SetOutputNodeVolume(uint64_t node_id, int volume);
 
@@ -572,6 +599,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   bool hdmi_rediscovering() const { return hdmi_rediscovering_; }
 
   void SetHDMIRediscoverGracePeriodForTesting(int duration_in_ms);
+  bool ShouldSwitchToHotPlugDevice(const AudioDevice& hotplug_device) const;
 
   enum DeviceStatus {
     OLD_DEVICE,
@@ -612,6 +640,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   void HandleHotPlugDevice(
       const AudioDevice& hotplug_device,
       const AudioDevicePriorityQueue& device_priority_queue);
+
+  // Handles the regular user hotplug case with user priority.
+  void HandleHotPlugDeviceByUserPriority(const AudioDevice& hotplug_device);
 
   void SwitchToTopPriorityDevice(bool is_input);
 
@@ -729,7 +760,8 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   bool has_alternative_input_ = false;
   bool has_alternative_output_ = false;
 
-  bool output_mute_locked_ = false;
+  bool output_mute_forced_by_policy_ = false;
+  bool output_mute_forced_by_security_curtain_ = false;
 
   // Audio output channel counts.
   int32_t output_channels_ = 2;

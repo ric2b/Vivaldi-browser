@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{ファイルを編集}other{ファイルを編集}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">鍵の方向</translation>
+<translation id="3294437725009624529">ゲスト</translation>
 <translation id="3310640316857623290">DNS の応答時間が許容値を大幅に超えています</translation>
 <translation id="3328783797891415197">テスト実行中</translation>
 <translation id="3340011300870565703">デバイスの右イヤフォンのバッテリー残量は <ph name="BATTERY_PERCENTAGE" />% です。</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">ファームウェアのアップデート中、この外部デバイスを電源から外したり、パソコンをシャットダウンしたりしないでください。このウィンドウは最小化できます。アップデートには数分かかることがあります。その間、外部デバイスは動作しない可能性があります。</translation>
 <translation id="3486220673238053218">定義</translation>
 <translation id="3488065109653206955">一部有効</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />パフォーマンス追跡データ<ph name="END_LINK1" />を送信する</translation>
 <translation id="3517001332549868749">ChromeOS の更新</translation>
 <translation id="3527036260304016759">失敗 - 不明なエラー</translation>
 <translation id="3532980081107202182">残り時間: 約 <ph name="MIN_REMAINING" /> 分</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">Android は実行されていません</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">日の入り時にダークテーマへ自動的に切り替える</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">再スキャン</translation>
 <translation id="5583640892426849032">Backspace</translation>

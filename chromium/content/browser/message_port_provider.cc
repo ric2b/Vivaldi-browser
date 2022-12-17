@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,6 +45,10 @@ void PostMessageToFrameInternal(
 
   blink::TransferableMessage message = blink::EncodeWebMessagePayload(data);
   message.ports = std::move(channels);
+  // As the message is posted from the embedder and not from another renderer,
+  // set the agent cluster ID to the embedder's.
+  message.sender_agent_cluster_id =
+      blink::WebMessagePort::GetEmbedderAgentClusterID();
 
   RenderFrameHostImpl* rfh =
       static_cast<RenderFrameHostImpl*>(&page.GetMainDocument());

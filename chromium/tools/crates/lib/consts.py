@@ -1,5 +1,5 @@
 # python3
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -27,6 +27,8 @@ ALLOWED_LICENSES = [
     ("ISC", "ISC"),
     ("MIT OR Zlib OR Apache-2.0", "Apache 2.0"),
     ("0BSD OR MIT OR Apache-2.0", "Apache 2.0"),
+    ("Unicode-DFS-2016",
+     "Unicode License Agreement - Data Files and Software (2016)"),
 ]
 
 # The subdirectory where crates are found, relative to the current working
@@ -77,7 +79,7 @@ version = "0.0.0"
 # Header at the top of BUILD.gn files. The {year} is substituted with the
 # appropriate year.
 GN_HEADER = \
-"""# Copyright {year} The Chromium Authors. All rights reserved.
+"""# Copyright {year} The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -85,7 +87,7 @@ import("//build/rust/cargo_crate.gni")
 
 """
 _GN_HEADER_YEAR = r"^# Copyright( \(c\))? (?P<year>[0-9]+) " \
-    r"The Chromium Authors\. All rights reserved\."
+    r"The Chromium Authors(\. All rights reserved\.)?"
 GN_HEADER_YEAR_REGEX = re.compile(_GN_HEADER_YEAR)
 
 # Comment on the build_native_rust_unit_tests field in BUILD.gn file output.

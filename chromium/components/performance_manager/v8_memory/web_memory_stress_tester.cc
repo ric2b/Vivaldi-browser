@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,11 +35,13 @@ namespace {
 #if DCHECK_IS_ON()
 // Give the feature a different name on the Albatross build so it can get
 // different parameters.
-constexpr base::Feature kStressTestFeature{"StressTestWebMeasureMemoryDcheck",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kStressTestFeature,
+             "StressTestWebMeasureMemoryDcheck",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #else
-constexpr base::Feature kStressTestFeature{"StressTestWebMeasureMemory",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kStressTestFeature,
+             "StressTestWebMeasureMemory",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 constexpr base::FeatureParam<double> kStressTestProbabilityParam{

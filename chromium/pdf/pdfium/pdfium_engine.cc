@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,13 +24,13 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "base/types/optional_util.h"
 #include "build/build_config.h"
 #include "gin/array_buffer.h"
 #include "gin/public/gin_embedders.h"
@@ -68,6 +68,7 @@
 #include "third_party/pdfium/public/fpdf_searchex.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -303,6 +304,10 @@ bool CheckIfEditableFormTextArea(int flags, int form_type) {
 
 bool IsLinkArea(PDFiumPage::Area area) {
   return area == PDFiumPage::WEBLINK_AREA || area == PDFiumPage::DOCLINK_AREA;
+}
+
+bool IsSelectableArea(PDFiumPage::Area area) {
+  return area == PDFiumPage::TEXT_AREA || IsLinkArea(area);
 }
 
 // Normalize a blink::WebMouseEvent. For macOS, normalization means transforming
@@ -1206,8 +1211,8 @@ void PDFiumEngine::OnMultipleClick(int click_count,
     start_index++;
 
   int end_index = char_index;
-  int total = pages_[page_index]->GetCharCount();
-  while (end_index++ <= total) {
+  const int total = pages_[page_index]->GetCharCount();
+  for (; end_index < total; ++end_index) {
     char16_t cur = pages_[page_index]->GetCharAtIndex(end_index);
     if (FindMultipleClickBoundary(is_double_click, cur))
       break;
@@ -1397,10 +1402,10 @@ bool PDFiumEngine::NavigateToLinkDestination(
       return true;
 
     if (disposition == WindowOpenDisposition::CURRENT_TAB) {
-      client_->NavigateToDestination(
-          target.page, base::OptionalOrNullptr(target.x_in_pixels),
-          base::OptionalOrNullptr(target.y_in_pixels),
-          base::OptionalOrNullptr(target.zoom));
+      client_->NavigateToDestination(target.page,
+                                     base::OptionalToPtr(target.x_in_pixels),
+                                     base::OptionalToPtr(target.y_in_pixels),
+                                     base::OptionalToPtr(target.zoom));
     } else {
       std::string parameters = base::StringPrintf("#page=%d", target.page + 1);
       parameters += base::StringPrintf(
@@ -1532,7 +1537,12 @@ bool PDFiumEngine::OnMouseMove(const blink::WebMouseEvent& event) {
 
   // We're selecting but right now we're not over text, so don't change the
   // current selection.
-  if (area != PDFiumPage::TEXT_AREA && !IsLinkArea(area))
+  if (page_index < 0 || char_index < 0)
+    return false;
+
+  // Similarly, do not select if `area` is not a selectable type. This can occur
+  // even if there is text in the area. e.g. When print previewing.
+  if (!IsSelectableArea(area))
     return false;
 
   SelectionChangeInvalidator selection_invalidator(this);
@@ -1595,6 +1605,9 @@ void PDFiumEngine::OnMouseEnter(const blink::WebMouseEvent& event) {
 }
 
 bool PDFiumEngine::ExtendSelection(int page_index, int char_index) {
+  DCHECK_GE(page_index, 0);
+  DCHECK_GE(char_index, 0);
+
   // Check if the user has decreased their selection area and we need to remove
   // pages from `selection_`.
   for (size_t i = 0; i < selection_.size(); ++i) {
@@ -1652,8 +1665,8 @@ bool PDFiumEngine::ExtendSelection(int page_index, int char_index) {
     }
 
     int count = pages_[page_index]->GetCharCount();
-    selection_.push_back(
-        PDFiumRange(pages_[page_index].get(), count, count - char_index));
+    selection_.emplace_back(pages_[page_index].get(), count - 1,
+                            char_index - count);
   }
 
   return true;

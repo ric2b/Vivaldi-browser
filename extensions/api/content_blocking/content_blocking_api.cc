@@ -719,8 +719,7 @@ ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
           blocked_tracker_info.tracker_info.emplace_back();
           blocked_tracker_info.tracker_info.back().source_id =
               source_to_info.first;
-          blocked_tracker_info.tracker_info.back().info.reset(
-              new base::Value(source_to_info.second.Clone()));
+          blocked_tracker_info.tracker_info.back().info = source_to_info.second.Clone();
         }
       }
 

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/webui/grit/ash_personalization_app_resources.h"
 #include "ash/webui/personalization_app/personalization_app_url_constants.h"
+#include "chrome/browser/ash/web_applications/personalization_app/personalization_app_utils.h"
 #include "chrome/browser/ash/web_applications/system_web_app_install_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
@@ -35,49 +36,35 @@ PersonalizationSystemAppDelegate::GetWebAppInfo() const {
   info->start_url =
       GURL(ash::personalization_app::kChromeUIPersonalizationAppURL);
   info->scope = GURL(ash::personalization_app::kChromeUIPersonalizationAppURL);
-  info->title =
-      (chromeos::features::IsPersonalizationHubEnabled())
-          ? l10n_util::GetStringUTF16(
-                IDS_PERSONALIZATION_APP_PERSONALIZATION_HUB_TITLE)
-          : l10n_util::GetStringUTF16(IDS_PERSONALIZATION_APP_WALLPAPER_LABEL);
-  if (ash::features::IsPersonalizationHubEnabled()) {
-    web_app::CreateIconInfoForSystemWebApp(
-        info->start_url,
-        {
-            {
-                "app_hub_icon_64.png",
-                64,
-                IDR_ASH_PERSONALIZATION_APP_HUB_ICON_64_PNG,
-            },
-            {
-                "app_hub_icon_128.png",
-                128,
-                IDR_ASH_PERSONALIZATION_APP_HUB_ICON_128_PNG,
-            },
-            {
-                "app_hub_icon_192.png",
-                192,
-                IDR_ASH_PERSONALIZATION_APP_HUB_ICON_192_PNG,
-            },
-            {
-                "app_hub_icon_256.png",
-                256,
-                IDR_ASH_PERSONALIZATION_APP_HUB_ICON_256_PNG,
-            },
-        },
-        *info);
-  } else {
-    web_app::CreateIconInfoForSystemWebApp(
-        info->start_url,
-        {
-            {
-                "app_icon_192.png",
-                192,
-                IDR_ASH_PERSONALIZATION_APP_ICON_192_PNG,
-            },
-        },
-        *info);
-  }
+  info->title = l10n_util::GetStringUTF16(
+      IDS_PERSONALIZATION_APP_PERSONALIZATION_HUB_TITLE);
+
+  web_app::CreateIconInfoForSystemWebApp(
+      info->start_url,
+      {
+          {
+              "app_hub_icon_64.png",
+              64,
+              IDR_ASH_PERSONALIZATION_APP_HUB_ICON_64_PNG,
+          },
+          {
+              "app_hub_icon_128.png",
+              128,
+              IDR_ASH_PERSONALIZATION_APP_HUB_ICON_128_PNG,
+          },
+          {
+              "app_hub_icon_192.png",
+              192,
+              IDR_ASH_PERSONALIZATION_APP_HUB_ICON_192_PNG,
+          },
+          {
+              "app_hub_icon_256.png",
+              256,
+              IDR_ASH_PERSONALIZATION_APP_HUB_ICON_256_PNG,
+          },
+      },
+      *info);
+
   info->display_mode = blink::mojom::DisplayMode::kStandalone;
   info->user_display_mode = web_app::UserDisplayMode::kStandalone;
 
@@ -101,7 +88,8 @@ bool PersonalizationSystemAppDelegate::ShouldCaptureNavigations() const {
 }
 
 bool PersonalizationSystemAppDelegate::IsAppEnabled() const {
-  return true;
+  return ash::personalization_app::CanSeeWallpaperOrPersonalizationApp(
+      profile());
 }
 
 bool PersonalizationSystemAppDelegate::ShouldShowInLauncher() const {

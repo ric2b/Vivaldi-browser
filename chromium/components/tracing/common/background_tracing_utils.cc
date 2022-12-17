@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -75,7 +75,7 @@ GetBackgroundTracingConfigFromFile(const base::FilePath& config_file) {
   }
 
   auto config = content::BackgroundTracingConfig::FromDict(
-      std::move(value_with_error->GetDict()));
+      std::move(*value_with_error).TakeDict());
 
   if (!config) {
     LOG(ERROR) << "Background tracing config dict has invalid contents";

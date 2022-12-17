@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -100,8 +100,7 @@ class DocumentServiceBFCacheBrowserTest : public DocumentServiceBrowserTest {
  public:
   DocumentServiceBFCacheBrowserTest() {
     std::vector<base::test::ScopedFeatureList::FeatureAndParams>
-        additional_features = {
-            {features::kBackForwardCache, {{"enable_same_site", "true"}}}};
+        additional_features = {{features::kBackForwardCache, {}}};
     feature_list_.InitWithFeaturesAndParameters(
         DefaultEnabledBackForwardCacheParametersForTests(additional_features),
         DefaultDisabledBackForwardCacheParametersForTests());

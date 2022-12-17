@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -203,8 +203,7 @@ void WallpaperSetWallpaperFunction::OnWallpaperFetched(
     bool success,
     const std::string& response) {
   if (success) {
-    params_->details.data = std::make_unique<std::vector<uint8_t>>(
-        response.begin(), response.end());
+    params_->details.data.emplace(response.begin(), response.end());
     SetWallpaperOnAsh();
   } else {
     Respond(Error(response));
@@ -214,7 +213,7 @@ void WallpaperSetWallpaperFunction::OnWallpaperFetched(
 void WallpaperSetWallpaperFunction::OnWallpaperSetOnAsh(
     const std::vector<uint8_t>& thumbnail_data) {
   Respond(params_->details.thumbnail
-              ? OneArgument(Value(std::move(thumbnail_data)))
+              ? WithArguments(Value(std::move(thumbnail_data)))
               : NoArguments());
 }
 

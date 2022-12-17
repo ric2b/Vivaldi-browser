@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,9 +62,9 @@ IN_PROC_BROWSER_TEST_F(LacrosExtensionAppsControllerTest, Uninstall) {
 
   // Check that the app is installed.
   {
-    const extensions::Extension* extension =
+    const extensions::Extension* installed_extension =
         lacros_extensions_util::MaybeGetExtension(profile(), extension_id);
-    EXPECT_TRUE(extension && extension->is_platform_app());
+    EXPECT_TRUE(installed_extension && installed_extension->is_platform_app());
   }
 
   // Uninstall the extension.

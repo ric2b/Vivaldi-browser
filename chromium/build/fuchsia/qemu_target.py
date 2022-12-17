@@ -1,4 +1,4 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -97,7 +97,7 @@ class QemuTarget(emu_target.EmuTarget):
         # any changes.
         '-snapshot',
         '-drive',
-        'file=%s,format=qcow2,if=none,id=blobstore,snapshot=on' %
+        'file=%s,format=qcow2,if=none,id=blobstore,snapshot=on,cache=unsafe' %
         _EnsureBlobstoreQcowAndReturnPath(self._out_dir,
                                           self._GetTargetSdkArch()),
         '-object',

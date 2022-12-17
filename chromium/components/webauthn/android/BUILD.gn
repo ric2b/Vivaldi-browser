@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -22,6 +22,7 @@ android_library("java") {
     "java/src/org/chromium/components/webauthn/Fido2CredentialRequest.java",
     "java/src/org/chromium/components/webauthn/FidoErrorResponseCallback.java",
     "java/src/org/chromium/components/webauthn/GetAssertionResponseCallback.java",
+    "java/src/org/chromium/components/webauthn/GetMatchingCredentialIdsResponseCallback.java",
     "java/src/org/chromium/components/webauthn/InternalAuthenticator.java",
     "java/src/org/chromium/components/webauthn/IsUvpaaResponseCallback.java",
     "java/src/org/chromium/components/webauthn/MakeCredentialResponseCallback.java",

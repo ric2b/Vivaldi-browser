@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -182,6 +182,11 @@ class ASH_EXPORT BackdropController : public AccessibilityObserver,
   // when updating the window stack, or delay hiding the backdrop
   // in overview mode.
   bool pause_update_ = false;
+
+  // If true, we're inside the stack of `Hide()`. This is used to avoid
+  // recursively calling `Hide()` which may lead to destroying the backdrop
+  // widget while it's still being hidden. https://crbug.com/1368587.
+  bool is_hiding_backdrop_ = false;
 
   base::ScopedMultiSourceObservation<WindowBackdrop, WindowBackdrop::Observer>
       window_backdrop_observations_{this};

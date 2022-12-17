@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,8 +24,6 @@ typedef NS_ENUM(NSUInteger, DefaultPromoType);
 @class MemoryWarningHelper;
 @class MetricsMediator;
 @protocol StartupInformation;
-@protocol TabOpening;
-@protocol TabSwitching;
 
 namespace base {
 class TimeTicks;

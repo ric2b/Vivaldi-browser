@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -241,7 +241,7 @@ bool ServiceWorkerDevToolsAgentHost::AttachSession(DevToolsSession* session,
 
   auto* target_handler = session->CreateAndAddHandler<protocol::TargetHandler>(
       protocol::TargetHandler::AccessMode::kAutoAttachOnly, GetId(),
-      auto_attacher_.get(), session->GetRootSession());
+      auto_attacher_.get(), session);
   DCHECK(target_handler);
   target_handler->DisableAutoAttachOfServiceWorkers();
 

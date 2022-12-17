@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -67,8 +67,9 @@ namespace {
 
 // Feature to control the delay between an extension becoming idle and sending a
 // ShouldSuspend message.
-const base::Feature kChangeExtensionEventPageSuspendDelay{
-    "ChangeExtensionEventPageSuspendDelay", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kChangeExtensionEventPageSuspendDelay,
+             "ChangeExtensionEventPageSuspendDelay",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // The delay between an extension becoming idle and sending a ShouldSuspend
 // message. The default value is used when the

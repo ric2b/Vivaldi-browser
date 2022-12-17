@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/dialog_model.h"
+#include "ui/base/models/dialog_model_field.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_dialog_model_host.h"
 
@@ -27,7 +29,7 @@ class PrivacySandboxNoticeBubbleModelDelegate : public ui::DialogModelDelegate {
       : browser_(browser) {
     if (auto* privacy_sandbox_serivce =
             PrivacySandboxServiceFactory::GetForProfile(browser_->profile())) {
-      privacy_sandbox_serivce->DialogOpenedForBrowser(browser_);
+      privacy_sandbox_serivce->PromptOpenedForBrowser(browser_);
     }
     NotifyServiceAboutPromptAction(PromptAction::kNoticeShown);
   }
@@ -38,7 +40,7 @@ class PrivacySandboxNoticeBubbleModelDelegate : public ui::DialogModelDelegate {
     }
     if (auto* privacy_sandbox_serivce =
             PrivacySandboxServiceFactory::GetForProfile(browser_->profile())) {
-      privacy_sandbox_serivce->DialogClosedForBrowser(browser_);
+      privacy_sandbox_serivce->PromptClosedForBrowser(browser_);
     }
   }
 
@@ -99,10 +101,10 @@ void ShowPrivacySandboxNoticeBubble(Browser* browser) {
                        IDR_PRIVACY_SANDBOX_CONFIRMATION_BANNER)),
                    ui::ImageModel::FromImageSkia(*bundle.GetImageSkiaNamed(
                        IDR_PRIVACY_SANDBOX_CONFIRMATION_BANNER_DARK)))
-          .AddBodyText(
-              ui::DialogModelLabel::CreateWithLink(
+          .AddParagraph(
+              ui::DialogModelLabel::CreateWithReplacement(
                   IDS_PRIVACY_SANDBOX_BUBBLE_NOTICE_DESCRIPTION,
-                  ui::DialogModelLabel::Link(
+                  ui::DialogModelLabel::CreateLink(
                       IDS_PRIVACY_SANDBOX_BUBBLE_NOTICE_DESCRIPTION_ESTIMATES_INTERESTS_LINK,
                       base::BindRepeating(
                           &PrivacySandboxNoticeBubbleModelDelegate::
@@ -110,14 +112,14 @@ void ShowPrivacySandboxNoticeBubble(Browser* browser) {
                           base::Unretained(bubble_delegate)),
                       l10n_util::GetStringUTF16(
                           IDS_PRIVACY_SANDBOX_BUBBLE_NOTICE_DESCRIPTION_ESTIMATES_INTERESTS_LINK_A11Y_NAME))),
-              kPrivacySandboxLearnMoreTextForTesting)
+              std::u16string(), kPrivacySandboxLearnMoreTextForTesting)
           .AddOkButton(
               base::BindRepeating(
                   &PrivacySandboxNoticeBubbleModelDelegate::OnOkButtonPressed,
                   base::Unretained(bubble_delegate)),
               l10n_util::GetStringUTF16(
                   IDS_PRIVACY_SANDBOX_DIALOG_NOTICE_ACKNOWLEDGE_BUTTON))
-          .AddExtraLink(ui::DialogModelLabel::Link(
+          .AddExtraLink(ui::DialogModelLabel::CreateLink(
               IDS_PRIVACY_SANDBOX_BUBBLE_NOTICE_SETTINGS_LINK,
               base::BindRepeating(&PrivacySandboxNoticeBubbleModelDelegate::
                                       OnSettingsLinkPressed,

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,6 @@ import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarPropert
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.IS_NEW_TAB_ENABLED;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.IS_VISIBLE;
-import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.LOGO_IS_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_BUTTON_HIGHLIGHT;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_CLICK_HANDLER;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_VIEW_IS_VISIBLE;
@@ -35,13 +34,10 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.BooleanSupplier;
-import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.layouts.LayoutType;
-import org.chromium.chrome.browser.logo.LogoLoadHelper;
+import org.chromium.chrome.browser.logo.LogoCoordinator;
 import org.chromium.chrome.browser.logo.LogoView;
-import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.IncognitoTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -49,6 +45,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
+import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
@@ -61,7 +58,7 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelAnimatorFactory;
 
 /** The mediator implements interacts between the views and the caller. */
-class StartSurfaceToolbarMediator {
+class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserver {
     private final PropertyModel mPropertyModel;
     private final Callback<IPHCommandBuilder> mShowIdentityIPHCallback;
     private final boolean mHideIncognitoSwitchWhenNoTabs;
@@ -73,9 +70,11 @@ class StartSurfaceToolbarMediator {
     private final MenuButtonCoordinator mMenuButtonCoordinator;
     private final TabModelSelectorObserver mTabModelSelectorObserver;
     private final IncognitoTabModelObserver mIncognitoTabModelObserver;
-    private final ObservableSupplier<Profile> mProfileSupplier;
     private final Callback<LoadUrlParams> mLogoClickedCallback;
     private final boolean mIsRefactorEnabled;
+    private final boolean mShouldFetchDoodle;
+    private final ButtonDataProvider mIdentityDiscController;
+    private final boolean mShouldCreateLogoInToolbar;
 
     private TabModelSelector mTabModelSelector;
     private TabCountProvider mTabCountProvider;
@@ -89,21 +88,23 @@ class StartSurfaceToolbarMediator {
     private CallbackController mCallbackController = new CallbackController();
     private float mNonIncognitoHomepageTranslationY;
 
-    private LogoLoadHelper mLogoLoadHelper;
-    private LogoView mLogoView;
+    private boolean mIsNativeInitializedForLogo;
+    private LogoCoordinator mLogoCoordinator;
 
     private Animator mAlphaAnimator;
+    private Callback<Boolean> mFinishedTransitionCallback;
 
     StartSurfaceToolbarMediator(PropertyModel model,
             Callback<IPHCommandBuilder> showIdentityIPHCallback,
             boolean hideIncognitoSwitchWhenNoTabs, MenuButtonCoordinator menuButtonCoordinator,
-            ObservableSupplier<Boolean> identityDiscStateSupplier,
+            ButtonDataProvider identityDiscController,
             Supplier<ButtonData> identityDiscButtonSupplier,
             boolean shouldShowTabSwitcherButtonOnHomepage, boolean isTabToGtsFadeAnimationEnabled,
             boolean isTabGroupsAndroidContinuationEnabled,
             BooleanSupplier isIncognitoModeEnabledSupplier,
-            ObservableSupplier<Profile> profileSupplier,
-            Callback<LoadUrlParams> logoClickedCallback, boolean isRefactorEnabled) {
+            Callback<LoadUrlParams> logoClickedCallback, boolean isRefactorEnabled,
+            boolean shouldFetchDoodle, boolean shouldCreateLogoInToolbar,
+            Callback<Boolean> finishedTransitionCallback) {
         mPropertyModel = model;
         mStartSurfaceState = StartSurfaceState.NOT_SHOWN;
         mShowIdentityIPHCallback = showIdentityIPHCallback;
@@ -113,15 +114,14 @@ class StartSurfaceToolbarMediator {
         mIsTabToGtsFadeAnimationEnabled = isTabToGtsFadeAnimationEnabled;
         mIsTabGroupsAndroidContinuationEnabled = isTabGroupsAndroidContinuationEnabled;
         mIsIncognitoModeEnabledSupplier = isIncognitoModeEnabledSupplier;
-        mProfileSupplier = profileSupplier;
         mLogoClickedCallback = logoClickedCallback;
         mDefaultSearchEngineHasLogo = true;
-        identityDiscStateSupplier.addObserver((canShowHint) -> {
-            // If the identity disc wants to be hidden and is hidden, there's nothing we need to do.
-            if (!canShowHint && !mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE)) return;
-            updateIdentityDisc(mIdentityDiscButtonSupplier.get());
-        });
+        mShouldFetchDoodle = shouldFetchDoodle;
+        mIdentityDiscController = identityDiscController;
+        mIdentityDiscController.addObserver(this);
+        mShouldCreateLogoInToolbar = shouldCreateLogoInToolbar;
         mIsRefactorEnabled = isRefactorEnabled;
+        mFinishedTransitionCallback = finishedTransitionCallback;
 
         mShouldShowTabSwitcherButtonOnHomepage = shouldShowTabSwitcherButtonOnHomepage;
 
@@ -158,18 +158,15 @@ class StartSurfaceToolbarMediator {
         if (mTabModelSelector != null && mIncognitoTabModelObserver != null) {
             mTabModelSelector.removeIncognitoTabModelObserver(mIncognitoTabModelObserver);
         }
-        if (mLogoView != null) {
-            mLogoView.destroy();
-            mLogoView = null;
-        }
-        if (mLogoLoadHelper != null) {
-            mLogoLoadHelper.destroy();
-            mLogoLoadHelper = null;
+        if (mLogoCoordinator != null) {
+            mLogoCoordinator.destroy();
+            mLogoCoordinator = null;
         }
         if (mCallbackController != null) {
             mCallbackController.destroy();
             mCallbackController = null;
         }
+        mIdentityDiscController.removeObserver(this);
     }
 
     void onStartSurfaceStateChanged(@StartSurfaceState int newState,
@@ -190,13 +187,6 @@ class StartSurfaceToolbarMediator {
 
     void onStartSurfaceHeaderOffsetChanged(int verticalOffset) {
         updateTranslationY(verticalOffset);
-    }
-
-    void onDefaultSearchEngineChanged() {
-        mDefaultSearchEngineHasLogo =
-                TemplateUrlServiceFactory.get().doesDefaultSearchEngineHaveLogo();
-        if (mLogoLoadHelper != null) mLogoLoadHelper.onDefaultSearchEngineChanged();
-        updateLogoVisibility();
     }
 
     /**
@@ -231,7 +221,7 @@ class StartSurfaceToolbarMediator {
     }
 
     /** Returns whether it's on grid tab switcher surface. */
-    private boolean isOnGridTabSwitcher() {
+    boolean isOnGridTabSwitcher() {
         return mIsRefactorEnabled
                 ? mLayoutType == LayoutType.TAB_SWITCHER
                 : (mStartSurfaceState == StartSurfaceState.SHOWN_TABSWITCHER
@@ -278,6 +268,11 @@ class StartSurfaceToolbarMediator {
         mTabModelSelector.addObserver(mTabModelSelectorObserver);
 
         mTabModelSelector.addIncognitoTabModelObserver(mIncognitoTabModelObserver);
+    }
+
+    void initLogoWithNative() {
+        mIsNativeInitializedForLogo = true;
+        if (mLogoCoordinator != null) mLogoCoordinator.initWithNative();
     }
 
     private void maybeInitializeIncognitoToggle() {
@@ -328,8 +323,15 @@ class StartSurfaceToolbarMediator {
      * @param logoView The logo view.
      */
     void onLogoViewReady(LogoView logoView) {
-        mLogoView = logoView;
-        mLogoLoadHelper = new LogoLoadHelper(mProfileSupplier, mLogoClickedCallback, logoView);
+        if (!mShouldCreateLogoInToolbar) return;
+
+        mLogoCoordinator = new LogoCoordinator(mLogoClickedCallback, logoView, mShouldFetchDoodle,
+                /*onLogoAvailableCallback=*/null,
+                /*onCachedLogoRevalidatedRunnable=*/null, isOnHomepage());
+
+        // The logo view may be ready after native is initialized, so we need to call
+        // mLogoCoordinator.initWithNative() here in case that initLogoNative() skip it.
+        if (mIsNativeInitializedForLogo) mLogoCoordinator.initWithNative();
     }
 
     private void setStartSurfaceToolbarVisibility(
@@ -372,17 +374,18 @@ class StartSurfaceToolbarMediator {
     private void finishAlphaAnimator(boolean shouldShowStartSurfaceToolbar) {
         mPropertyModel.set(ALPHA, 1.0f);
         mPropertyModel.set(IS_VISIBLE, shouldShowStartSurfaceToolbar);
+        mFinishedTransitionCallback.onResult(shouldShowStartSurfaceToolbar);
+
         mAlphaAnimator = null;
     }
 
     private void updateLogoVisibility() {
-        if (mLogoLoadHelper != null) {
-            mLogoLoadHelper.maybeLoadSearchProviderLogoOnHomepage(isOnHomepage(),
-                    isOnATab() || isOnGridTabSwitcher()
-                            || mStartSurfaceState == StartSurfaceState.DISABLED);
-        }
-        boolean shouldShowLogo = isOnHomepage() && mDefaultSearchEngineHasLogo;
-        mPropertyModel.set(LOGO_IS_VISIBLE, shouldShowLogo);
+        if (mLogoCoordinator == null) return;
+
+        mLogoCoordinator.maybeLoadSearchProviderLogo(isOnHomepage(),
+                isOnATab() || isOnGridTabSwitcher()
+                        || mStartSurfaceState == StartSurfaceState.DISABLED,
+                /*animationEnabled*/ false);
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
@@ -462,5 +465,22 @@ class StartSurfaceToolbarMediator {
     @LayoutType
     int getLayoutTypeForTesting() {
         return mLayoutType;
+    }
+
+    @VisibleForTesting
+    boolean isLogoVisibleForTesting() {
+        return mLogoCoordinator != null && mLogoCoordinator.isLogoVisible();
+    }
+
+    @VisibleForTesting
+    LogoCoordinator getLogoCoordinatorForTesting() {
+        return mLogoCoordinator;
+    }
+
+    @Override
+    public void buttonDataChanged(boolean canShowHint) {
+        // If the identity disc wants to be hidden and is hidden, there's nothing we need to do.
+        if (!canShowHint && !mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE)) return;
+        updateIdentityDisc(mIdentityDiscButtonSupplier.get());
     }
 }

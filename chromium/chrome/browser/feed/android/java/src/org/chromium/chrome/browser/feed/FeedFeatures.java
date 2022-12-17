@@ -1,8 +1,10 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.feed;
+
+import android.content.Context;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -15,6 +17,9 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.ui.base.DeviceFormFactor;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * Helper methods covering more complex Feed related feature checks and states.
@@ -26,6 +31,7 @@ public final class FeedFeatures {
     private static final String FEED_TAB_STICKYNESS_LOGIC_PARAM = "feed_tab_stickiness_logic";
     private static final String RESET_UPON_CHROME_RESTART = "reset_upon_chrome_restart";
     private static final String INDEFINITELY_PERSISTED = "indefinitely_persisted";
+    private static final long ONE_DAY_DELTA_MILLIS = TimeUnit.DAYS.toMillis(1L);
 
     private static PrefService sFakePrefServiceForTest;
     private static boolean sIsFirstFeedTabStickinessCheckSinceLaunch = true;
@@ -51,6 +57,62 @@ public final class FeedFeatures {
                            .getIdentityManager()
                            .hasPrimaryAccount(ConsentLevel.SYNC)
                 && !Profile.getLastUsedRegularProfile().isChild();
+    }
+
+    public static boolean shouldUseWebFeedAwarenessIPH() {
+        return ChromeFeatureList
+                .getFieldTrialParamByFeature(
+                        ChromeFeatureList.WEB_FEED_AWARENESS, "awareness_style")
+                .equals("IPH");
+    }
+
+    public static boolean shouldUseNewIndicator() {
+        // Return true if we are not rate limited.
+        if (ChromeFeatureList
+                        .getFieldTrialParamByFeature(
+                                ChromeFeatureList.WEB_FEED_AWARENESS, "awareness_style")
+                        .equals("new_animation_no_limit")) {
+            return true;
+        }
+        // Otherwise, the rate limit is:
+        // 1. We have never seen the web feed.
+        // 2. It's been > 1 day since we last seen the new indicator.
+        if (ChromeFeatureList
+                        .getFieldTrialParamByFeature(
+                                ChromeFeatureList.WEB_FEED_AWARENESS, "awareness_style")
+                        .equals("new_animation")
+                && !getPrefService().getBoolean(Pref.HAS_SEEN_WEB_FEED)) {
+            String timestamp = getPrefService().getString(Pref.LAST_BADGE_ANIMATION_TIME);
+            long currentTime = System.currentTimeMillis();
+            long parsedTime;
+            try {
+                parsedTime = Long.parseLong(timestamp);
+            } catch (NumberFormatException e) {
+                parsedTime = 0L;
+            }
+            // Ignore parsed timestamps in the future.
+            return currentTime < parsedTime || currentTime - parsedTime > ONE_DAY_DELTA_MILLIS;
+        }
+        return false;
+    }
+
+    /**
+     * Updates the timestamp for the last time the new indicator was seen to now.
+     */
+    public static void updateNewIndicatorTimestamp() {
+        getPrefService().setString(Pref.LAST_BADGE_ANIMATION_TIME, "" + System.currentTimeMillis());
+    }
+
+    /**
+     * Updates that the following feed has been seen.
+     */
+    public static void updateFollowingFeedSeen() {
+        getPrefService().setBoolean(Pref.HAS_SEEN_WEB_FEED, true);
+    }
+
+    public static boolean isMultiColumnFeedEnabled(Context context) {
+        return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_MULTI_COLUMN);
     }
 
     /**

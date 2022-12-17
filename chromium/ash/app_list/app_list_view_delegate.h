@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,9 +95,6 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
 
   // Invoked when the app list is closing.
   virtual void ViewClosing() = 0;
-
-  // Gets the wallpaper prominent colors.
-  virtual const std::vector<SkColor>& GetWallpaperProminentColors() = 0;
 
   // Activates (opens) the item.
   virtual void ActivateItem(const std::string& id,
@@ -197,10 +194,6 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
 
   // Returns whether tablet mode is currently enabled.
   virtual bool IsInTabletMode() = 0;
-
-  // Adjust scrolls that happen in the view. This needs to be delegated because
-  // it depends on the active user's preferences.
-  virtual int AdjustAppListViewScrollOffset(int offset, ui::EventType type) = 0;
 
   // Loads the icon of an app item identified by `app_id`.
   virtual void LoadIcon(const std::string& app_id) = 0;

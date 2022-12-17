@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -7,14 +7,20 @@ source_set("coordinator") {
   sources = [
     "lens_coordinator.h",
     "lens_coordinator.mm",
+    "lens_modal_animator.h",
+    "lens_modal_animator.mm",
   ]
   deps = [
     ":lens_entrypoint",
+    "//ios/chrome/browser/application_context",
     "//ios/chrome/browser/browser_state:browser_state",
     "//ios/chrome/browser/main:public",
+    "//ios/chrome/browser/signin:signin",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
     "//ios/chrome/browser/url_loading",
+    "//ios/chrome/browser/web:web",
+    "//ios/chrome/browser/web_state_list",
     "//ios/public/provider/chrome/browser/lens:lens_api",
     "//ios/web/public/navigation",
   ]

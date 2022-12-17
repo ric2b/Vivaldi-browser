@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -118,7 +118,7 @@ class MockMediaRouter : public MediaRouterBase {
       void(mojom::MediaRouteProviderId provider_id,
            mojom::MediaRouteProvider::GetStateCallback callback));
   MOCK_CONST_METHOD0(GetLogs, base::Value());
-  MOCK_CONST_METHOD0(GetState, base::Value());
+  MOCK_CONST_METHOD0(GetState, base::Value::Dict());
   MOCK_METHOD0(GetLogger, LoggerImpl*());
 #endif  // !BUILDFLAG(IS_ANDROID)
   MOCK_METHOD1(OnAddPresentationConnectionStateChangedCallbackInvoked,

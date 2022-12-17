@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -678,10 +678,9 @@ IN_PROC_BROWSER_TEST_F(
   VerifyHistoryNavPageEndReasons(expected_reasons_b, url_b);
 }
 
-// TODO(crbug.com/1261828): Flaky on all platforms.
 IN_PROC_BROWSER_TEST_F(
     BackForwardCachePageLoadMetricsObserverBrowserTest,
-    DISABLED_ResponsivenessMetricsNormalizationWithSendingAllLatencies) {
+    ResponsivenessMetricsNormalizationWithSendingAllLatencies) {
   Start();
   GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL url_b(embedded_test_server()->GetURL("b.com", "/title1.html"));
@@ -727,15 +726,15 @@ IN_PROC_BROWSER_TEST_F(
 
   std::vector<std::string> ukm_list = {
       "WorstUserInteractionLatencyAfterBackForwardCacheRestore."
-      "MaxEventduration",
+      "MaxEventDuration2",
       "SumOfUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore."
-      "MaxEventduration",
+      "MaxEventDuration2",
       "SlowUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore."
-      "HighPercentile2.MaxEventduration",
+      "HighPercentile2.MaxEventDuration2",
       "AverageUserInteractionLatencyOverBudgetAfterBackForwardCacheRestore."
-      "MaxEventduration",
+      "MaxEventDuration2",
       "UserInteractionLatencyAfterBackForwardCacheRestore."
-      "HighPercentile2.MaxEventduration",
+      "HighPercentile2.MaxEventDuration",
       "NumInteractionsAfterBackForwardCacheRestore"};
 
   for (auto& ukm : ukm_list) {

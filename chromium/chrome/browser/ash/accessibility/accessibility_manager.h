@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/accessibility/chromevox_panel.h"
+#include "chrome/browser/ash/accessibility/service/accessibility_service_client.h"
 #include "chrome/browser/extensions/api/braille_display_private/braille_controller.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -54,6 +55,7 @@ enum class SelectToSpeakState;
 enum class SelectToSpeakPanelAction;
 enum class Sound;
 struct AccessibilityFocusRingInfo;
+class AccessibilityServiceClient;
 
 enum class AccessibilityNotificationType {
   kManagerShutdown,
@@ -90,6 +92,8 @@ using AccessibilityStatusCallback =
 using GetDlcContentsCallback =
     base::OnceCallback<void(const std::vector<uint8_t>&,
                             absl::optional<std::string>)>;
+using InstallPumpkinCallback = base::OnceCallback<void(
+    std::unique_ptr<::extensions::api::accessibility_private::PumpkinData>)>;
 
 class AccessibilityPanelWidgetObserver;
 
@@ -379,6 +383,8 @@ class AccessibilityManager
   static void SetBrailleControllerForTest(
       extensions::api::braille_display_private::BrailleController* controller);
   void SetFocusRingObserverForTest(base::RepeatingCallback<void()> observer);
+  // Runs when highlights are set or updated, but not when they are removed.
+  void SetHighlightsObserverForTest(base::RepeatingCallback<void()> observer);
   void SetSelectToSpeakStateObserverForTest(
       base::RepeatingCallback<void()> observer);
   void SetCaretBoundsObserverForTest(
@@ -397,7 +403,7 @@ class AccessibilityManager
   // Triggers a request to install Pumpkin. Runs `callback` with a value of
   // true if the install was successful. Otherwise, runs `callback` with a
   // value of false.
-  void InstallPumpkinForDictation(base::OnceCallback<void(bool)> callback);
+  void InstallPumpkinForDictation(InstallPumpkinCallback callback);
 
   // Reads the contents of a DLC file and runs `callback` with the results.
   void GetDlcContents(::extensions::api::accessibility_private::DlcType dlc,
@@ -519,6 +525,9 @@ class AccessibilityManager
 
   void OnPumpkinInstalled(bool success);
   void OnPumpkinError(const std::string& error);
+  void OnPumpkinDataCreated(
+      std::unique_ptr<::extensions::api::accessibility_private::PumpkinData>
+          data);
 
   void OnAppTerminating();
 
@@ -548,6 +557,8 @@ class AccessibilityManager
   std::set<std::string> accessibility_common_enabled_features_;
 
   AccessibilityStatusCallbackList callback_list_;
+
+  std::unique_ptr<AccessibilityServiceClient> accessibility_service_client_;
 
   bool braille_display_connected_ = false;
   base::ScopedObservation<
@@ -602,6 +613,7 @@ class AccessibilityManager
   bool ignore_dictation_locale_pref_change_ = false;
 
   base::RepeatingCallback<void()> focus_ring_observer_for_test_;
+  base::RepeatingCallback<void()> highlights_observer_for_test_;
   base::RepeatingCallback<void()> select_to_speak_state_observer_for_test_;
   base::RepeatingCallback<void(const gfx::Rect&)>
       caret_bounds_observer_for_test_;
@@ -612,7 +624,7 @@ class AccessibilityManager
   // Whether the virtual keyboard was enabled before Switch Access loaded.
   bool was_vk_enabled_before_switch_access_ = false;
 
-  base::OnceCallback<void(bool)> install_pumpkin_callback_;
+  InstallPumpkinCallback install_pumpkin_callback_;
   bool is_pumpkin_installed_for_testing_ = false;
 
   base::FilePath dlc_path_for_test_;

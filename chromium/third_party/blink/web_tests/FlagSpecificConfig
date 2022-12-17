@@ -4,20 +4,12 @@
     "args": ["--enable-features=BackForwardCache"]
   },
   {
-    "name": "back-forward-cache-embed",
-    "args": ["--enable-features=BackForwardCacheEnabledForNonPluginEmbed"]
-  },
-  {
     "name": "disable-layout-ng",
     "args": ["--disable-blink-features=LayoutNG,LayoutNGBlockFragmentation"]
   },
   {
     "name": "disable-site-isolation-trials",
     "args": ["--disable-site-isolation-trials"]
-  },
-  {
-    "name": "enable-back-forward-cache-same-site",
-    "args": ["--enable-features=BackForwardCache:enable_same_site/true"]
   },
   {
     "name": "enable-blink-heap-concurrent-marking",
@@ -41,7 +33,8 @@
   },
   {
     "name": "highdpi",
-    "args": ["--force-device-scale-factor=1.5"]
+    "args": ["--force-device-scale-factor=1.5"],
+    "smoke_file": "SmokeTests/highdpi"
   },
   {
     "name": "skia-vulkan-swiftshader",

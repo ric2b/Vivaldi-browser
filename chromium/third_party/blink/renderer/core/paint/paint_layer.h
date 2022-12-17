@@ -557,8 +557,12 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   bool DescendantNeedsCullRectUpdate() const {
     return descendant_needs_cull_rect_update_;
   }
+  bool SelfOrDescendantNeedsCullRectUpdate() const {
+    return needs_cull_rect_update_ || descendant_needs_cull_rect_update_;
+  }
   void SetNeedsCullRectUpdate();
   void SetForcesChildrenCullRectUpdate();
+  void MarkCompositingContainerChainForNeedsCullRectUpdate();
   void SetDescendantNeedsCullRectUpdate();
   void ClearNeedsCullRectUpdate() {
     needs_cull_rect_update_ = false;
@@ -573,10 +577,7 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   PaintResult PreviousPaintResult() const {
     return static_cast<PaintResult>(previous_paint_result_);
   }
-  void SetPreviousPaintResult(PaintResult result) {
-    previous_paint_result_ = static_cast<unsigned>(result);
-    DCHECK(previous_paint_result_ == static_cast<unsigned>(result));
-  }
+  void SetPreviousPaintResult(PaintResult result);
 
   // Used to skip PaintPhaseDescendantOutlinesOnly for layers that have never
   // had descendant outlines.  The flag is set during paint invalidation on a
@@ -603,7 +604,7 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   }
 
   // See
-  // https://chromium.googlesource.com/chromium/src.git/+/master/third_party/blink/renderer/core/paint/README.md
+  // https://chromium.googlesource.com/chromium/src.git/+/main/third_party/blink/renderer/core/paint/README.md
   // for the definition of a replaced normal-flow stacking element.
   bool IsReplacedNormalFlowStacking() const;
 
@@ -619,7 +620,7 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
                       : PhysicalOffset();
   }
 
-  bool KnownToClipSubtree() const;
+  bool KnownToClipSubtreeToPaddingBox() const;
 
   void Trace(Visitor*) const override;
 
@@ -650,6 +651,9 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
                         const FragmentData* root_fragment = nullptr) const;
 
   struct HitTestRecursionData {
+    STACK_ALLOCATED();
+
+   public:
     const PhysicalRect& rect;
     // Whether location.Intersects(rect) returns true.
     const HitTestLocation& location;
@@ -744,6 +748,8 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   void MarkAncestorChainForFlagsUpdate(
       DescendantDependentFlagsUpdateFlag = kNeedsDescendantDependentUpdate);
 
+  void SetNeedsDescendantDependentFlagsUpdate();
+
   void UpdateTransform(const ComputedStyle* old_style,
                        const ComputedStyle& new_style);
 
@@ -770,9 +776,7 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   // PaintLayerPaintOrderIterator.
   PaintLayerStackingNode* StackingNode() const { return stacking_node_; }
 
-  void SetNeedsReorderOverlayOverflowControls(bool b) {
-    needs_reorder_overlay_overflow_controls_ = b;
-  }
+  void SetNeedsReorderOverlayOverflowControls(bool);
 
   bool ComputeHasFilterThatMovesPixels() const;
 

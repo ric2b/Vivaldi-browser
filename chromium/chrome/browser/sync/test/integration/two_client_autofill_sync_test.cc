@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -330,12 +330,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientAutofillProfileSyncTest, UpdateFields) {
 // be propagated.
 IN_PROC_BROWSER_TEST_F(TwoClientAutofillProfileSyncTest,
                        UpdateVerificationStatus) {
-  // This test is only applicable for structured names.
-  if (!base::FeatureList::IsEnabled(
-          autofill::features::kAutofillEnableSupportForMoreStructureInNames)) {
-    return;
-  }
-
   ASSERT_TRUE(SetupSync());
 
   AddProfile(0, CreateAutofillProfile(PROFILE_HOMER));

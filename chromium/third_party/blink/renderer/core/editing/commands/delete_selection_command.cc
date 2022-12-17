@@ -25,6 +25,7 @@
 
 #include "third_party/blink/renderer/core/editing/commands/delete_selection_command.h"
 
+#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -583,7 +584,7 @@ void DeleteSelectionCommand::RemoveCompletelySelectedNodes(
   }
 
   // Update leading, trailing whitespace position.
-  if (!nodes_to_be_removed.IsEmpty()) {
+  if (!nodes_to_be_removed.empty()) {
     leading_whitespace_ = ComputePositionForNodeRemoval(
         leading_whitespace_, *(nodes_to_be_removed[0].Get()));
     trailing_whitespace_ = ComputePositionForNodeRemoval(
@@ -594,9 +595,8 @@ void DeleteSelectionCommand::RemoveCompletelySelectedNodes(
   // Check if place holder is needed before actually removing nodes because
   // this requires document.NeedsLayoutTreeUpdate() returning false.
   if (!need_placeholder_) {
-    need_placeholder_ = std::any_of(
-        nodes_to_be_removed.begin(), nodes_to_be_removed.end(),
-        [&](Node* node) {
+    need_placeholder_ =
+        base::ranges::any_of(nodes_to_be_removed, [&](Node* node) {
           if (node == start_block_) {
             VisiblePosition previous = PreviousPositionOf(
                 VisiblePosition::FirstPositionInNode(*start_block_.Get()));

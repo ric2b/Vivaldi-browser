@@ -1,22 +1,21 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_COMPUTE_PRESSURE_PRESSURE_OBSERVER_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_COMPUTE_PRESSURE_PRESSURE_OBSERVER_H_
 
-#include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/device/public/mojom/pressure_state.mojom-blink.h"
-#include "third_party/blink/public/mojom/compute_pressure/pressure_service.mojom-blink.h"
-#include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink.h"
+#include "services/device/public/mojom/pressure_manager.mojom-blink.h"
+#include "services/device/public/mojom/pressure_update.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_pressure_record.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_pressure_update_callback.h"
+#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
-#include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
-#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
+#include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
 namespace blink {
 
@@ -28,30 +27,26 @@ constexpr wtf_size_t kMaxQueuedRecords = 10;
 }  // namespace
 
 class ExceptionState;
+class PressureObserverManager;
 class PressureObserverOptions;
 class ScriptState;
-class ScriptPromise;
-class ScriptPromiseResolver;
 class V8PressureSource;
 
-class PressureObserver final : public ScriptWrappable,
-                               public ExecutionContextLifecycleStateObserver,
-                               public mojom::blink::PressureObserver {
+class PressureObserver final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  PressureObserver(ExecutionContext* execution_context,
-                   V8PressureUpdateCallback* observer_callback,
-                   PressureObserverOptions* normalized_options);
+  PressureObserver(V8PressureUpdateCallback*,
+                   PressureObserverOptions*,
+                   ExceptionState&);
   ~PressureObserver() override;
 
-  static PressureObserver* Create(ScriptState*,
-                                  V8PressureUpdateCallback*,
+  static PressureObserver* Create(V8PressureUpdateCallback*,
                                   PressureObserverOptions*,
                                   ExceptionState&);
 
   // PressureObserver IDL implementation.
-  ScriptPromise observe(ScriptState*, V8PressureSource, ExceptionState&);
+  void observe(ScriptState*, V8PressureSource, ExceptionState&);
   void unobserve(V8PressureSource source);
   void disconnect();
   HeapVector<Member<PressureRecord>> takeRecords();
@@ -63,38 +58,45 @@ class PressureObserver final : public ScriptWrappable,
   // GarbageCollected implementation.
   void Trace(blink::Visitor*) const override;
 
-  // mojom::blink::PressureObserver implementation.
-  void OnUpdate(device::mojom::blink::PressureStatePtr state) override;
-
-  // ExecutionContextLifecycleObserver implementation.
-  void ContextDestroyed() override;
-
-  // ExecutionContextLifecycleStateObserver implementation.
-  void ContextLifecycleStateChanged(
-      mojom::blink::FrameLifecycleState state) override;
+  // Called by PressureObserverManager.
+  void OnUpdate(ExecutionContext*,
+                V8PressureSource::Enum,
+                V8PressureState::Enum,
+                const Vector<V8PressureFactor>&,
+                DOMHighResTimeStamp);
 
  private:
-  // Called when `receiver_` is disconnected.
-  void OnReceiverDisconnect();
+  // Verifies if the latest update was at least longer than the sample period.
+  bool PassesRateTest(V8PressureSource::Enum, const DOMHighResTimeStamp&) const;
 
-  void DidAddObserver(ScriptPromiseResolver* resolver,
-                      mojom::blink::PressureStatus status);
+  // Verifies if there is data change in between last update and new one.
+  bool HasChangeInData(V8PressureSource::Enum,
+                       V8PressureState::Enum,
+                       const Vector<V8PressureFactor>&) const;
+
+  // Scheduled method to invoke callback.
+  void ReportToCallback(ExecutionContext*);
+
+  // Manages registered observer list for each source.
+  WeakMember<PressureObserverManager> manager_;
 
   // The callback that receives pressure state updates.
   Member<V8PressureUpdateCallback> observer_callback_;
 
-  // The quantization scheme sent to the browser-side implementation.
-  Member<PressureObserverOptions> normalized_options_;
+  // Requested sample rate from the user.
+  // https://wicg.github.io/compute-pressure/#dfn-samplerate
+  double sample_rate_;
+
+  // The last valid record received from the observer manager.
+  // Stored to avoid sending updates whenever the new record is the same.
+  Member<PressureRecord> last_record_map_[V8PressureSource::kEnumSize];
 
   // Last received records from the platform collector.
   // The records are only collected when there is a change in the status.
   HeapVector<Member<PressureRecord>, kMaxQueuedRecords> records_;
 
-  // Connection to the browser-side implementation.
-  HeapMojoRemote<mojom::blink::PressureService> pressure_service_;
-
-  // Routes PressureObserver mojo messages to this instance.
-  HeapMojoReceiver<mojom::blink::PressureObserver, PressureObserver> receiver_;
+  // Task handle to check if the posted task is still pending.
+  TaskHandle pending_report_to_callback_;
 };
 
 }  // namespace blink

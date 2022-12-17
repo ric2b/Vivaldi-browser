@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@ void DisplayItemRasterInvalidator::Generate() {
     // Union of visual rects of all new display items of the client.
     gfx::Rect new_visual_rect;
     PaintInvalidationReason reason = PaintInvalidationReason::kNone;
+    DISALLOW_NEW();
   };
   HashMap<DisplayItemClientId, OldAndNewDisplayItems> clients_to_invalidate;
 

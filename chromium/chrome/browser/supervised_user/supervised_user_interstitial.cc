@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/supervised_user/supervised_user_features/supervised_user_features.h"
 #include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
@@ -37,6 +38,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/image/image_skia.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/supervised_user/child_accounts/child_account_feedback_reporter_android.h"
@@ -47,12 +49,35 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/favicon/large_icon_service_factory.h"
+#include "chrome/browser/supervised_user/chromeos/supervised_user_favicon_request_handler.h"
+#endif
+
 using content::WebContents;
 
 namespace {
 
 // For use in histograms.
-enum Commands { PREVIEW, BACK, NTP, ACCESS_REQUEST, HISTOGRAM_BOUNDING_VALUE };
+//
+// The enum values should remain synchronized with the enum
+// ManagedModeBlockingCommand in tools/metrics/histograms/enums.xml.
+//
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class Commands {
+  // PREVIEW = 0,
+  BACK = 1,
+  // NTP = 2,
+  REMOTE_ACCESS_REQUEST = 3,
+  LOCAL_ACCESS_REQUEST = 4,
+  HISTOGRAM_BOUNDING_VALUE = 5
+};
 
 // For use in histograms.The enum values should remain synchronized with the
 // enum ManagedUserURLRequestPermissionSource in
@@ -145,6 +170,15 @@ void CleanUpInfoBar(content::WebContents* web_contents) {
   }
 }
 
+// TODO(b/250924204): Implement shared logic to get the user's given name.
+std::u16string GetActiveUserFirstName() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  return user_manager::UserManager::Get()->GetActiveUser()->GetGivenName();
+#else
+  // TODO(b/243656773): Implement for LaCrOS.
+  return std::u16string();
+#endif
+}
 }  // namespace
 
 // static
@@ -176,7 +210,20 @@ SupervisedUserInterstitial::SupervisedUserInterstitial(
       url_(url),
       reason_(reason),
       frame_id_(frame_id),
-      interstitial_navigation_id_(interstitial_navigation_id) {}
+      interstitial_navigation_id_(interstitial_navigation_id) {
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (supervised_users::IsLocalWebApprovalsEnabled()) {
+    favicon_handler_ = std::make_unique<SupervisedUserFaviconRequestHandler>(
+        url_.GetWithEmptyPath(),
+        LargeIconServiceFactory::GetForBrowserContext(profile_));
+    // Prefetch the favicon which will be rendered as part of the web approvals
+    // ParentAccessDialog. Pass in DoNothing() for the favicon fetched callback
+    // because if the favicon is by the time the user triggers the opening of
+    // the ParentAccessDialog, we show the default favicon.
+    favicon_handler_->StartFaviconFetch(base::DoNothing());
+  }
+#endif
+}
 
 SupervisedUserInterstitial::~SupervisedUserInterstitial() {}
 
@@ -216,8 +263,8 @@ void SupervisedUserInterstitial::GoBack() {
   DCHECK_EQ(web_contents()->GetPrimaryMainFrame()->GetFrameTreeNodeId(),
             frame_id());
 
-  UMA_HISTOGRAM_ENUMERATION("ManagedMode.BlockingInterstitialCommand", BACK,
-                            HISTOGRAM_BOUNDING_VALUE);
+  UMA_HISTOGRAM_ENUMERATION("ManagedMode.BlockingInterstitialCommand",
+                            Commands::BACK, Commands::HISTOGRAM_BOUNDING_VALUE);
   AttemptMoveAwayFromCurrentFrameURL();
   OnInterstitialDone();
 }
@@ -225,16 +272,9 @@ void SupervisedUserInterstitial::GoBack() {
 void SupervisedUserInterstitial::RequestUrlAccessRemote(
     base::OnceCallback<void(bool)> callback) {
   UMA_HISTOGRAM_ENUMERATION("ManagedMode.BlockingInterstitialCommand",
-                            ACCESS_REQUEST, HISTOGRAM_BOUNDING_VALUE);
-
-  RequestPermissionSource source;
-  if (web_contents()->GetPrimaryMainFrame()->GetFrameTreeNodeId() == frame_id())
-    source = RequestPermissionSource::MAIN_FRAME;
-  else
-    source = RequestPermissionSource::SUB_FRAME;
-
-  UMA_HISTOGRAM_ENUMERATION("ManagedUsers.RequestPermissionSource", source,
-                            RequestPermissionSource::HISTOGRAM_BOUNDING_VALUE);
+                            Commands::REMOTE_ACCESS_REQUEST,
+                            Commands::HISTOGRAM_BOUNDING_VALUE);
+  OutputRequestPermissionSourceMetric();
 
   SupervisedUserService* supervised_user_service =
       SupervisedUserServiceFactory::GetForProfile(profile_);
@@ -244,12 +284,20 @@ void SupervisedUserInterstitial::RequestUrlAccessRemote(
 
 void SupervisedUserInterstitial::RequestUrlAccessLocal(
     base::OnceCallback<void(bool)> callback) {
-  // TODO(b/195461480): Log metrics.
+  UMA_HISTOGRAM_ENUMERATION("ManagedMode.BlockingInterstitialCommand",
+                            Commands::LOCAL_ACCESS_REQUEST,
+                            Commands::HISTOGRAM_BOUNDING_VALUE);
+  OutputRequestPermissionSourceMetric();
 
   SupervisedUserService* supervised_user_service =
       SupervisedUserServiceFactory::GetForProfile(profile_);
+  gfx::ImageSkia favicon;
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+  favicon = favicon_handler_->GetFaviconOrFallback();
+#endif
   supervised_user_service->web_approvals_manager().RequestLocalApproval(
-      web_contents(), url_, std::move(callback));
+      web_contents(), url_, GetActiveUserFirstName(), favicon,
+      std::move(callback));
 }
 
 void SupervisedUserInterstitial::ShowFeedback() {
@@ -298,4 +346,15 @@ void SupervisedUserInterstitial::OnInterstitialDone() {
   // it again.
   web_contents_ = nullptr;
   navigation_observer->OnInterstitialDone(frame_id_);
+}
+
+void SupervisedUserInterstitial::OutputRequestPermissionSourceMetric() {
+  RequestPermissionSource source;
+  if (web_contents()->GetPrimaryMainFrame()->GetFrameTreeNodeId() == frame_id())
+    source = RequestPermissionSource::MAIN_FRAME;
+  else
+    source = RequestPermissionSource::SUB_FRAME;
+
+  UMA_HISTOGRAM_ENUMERATION("ManagedUsers.RequestPermissionSource", source,
+                            RequestPermissionSource::HISTOGRAM_BOUNDING_VALUE);
 }

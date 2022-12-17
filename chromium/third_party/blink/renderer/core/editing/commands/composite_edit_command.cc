@@ -76,6 +76,7 @@
 #include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_li_element.h"
+#include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/html/html_quote_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -560,7 +561,7 @@ void CompositeEditCommand::InsertTextIntoNode(Text* node,
                                               unsigned offset,
                                               const String& text) {
   // InsertIntoTextNodeCommand is never aborted.
-  if (!text.IsEmpty())
+  if (!text.empty())
     ApplyCommandToComposite(
         MakeGarbageCollected<InsertIntoTextNodeCommand>(node, offset, text),
         ASSERT_NO_EDITING_ABORT);
@@ -731,7 +732,7 @@ void CompositeEditCommand::RebalanceWhitespaceOnTextSubstring(Text* text_node,
                                                               int start_offset,
                                                               int end_offset) {
   String text = text_node->data();
-  DCHECK(!text.IsEmpty());
+  DCHECK(!text.empty());
 
   // Set upstream and downstream to define the extent of the whitespace
   // surrounding text[offset].
@@ -864,7 +865,7 @@ void CompositeEditCommand::DeleteInsignificantText(Text* text_node,
   if (text_layout_object->IsInLayoutNGInlineFormattingContext()) {
     const String string = PlainText(
         EphemeralRange(Position(*text_node, start), Position(*text_node, end)));
-    if (string.IsEmpty())
+    if (string.empty())
       return DeleteTextFromNode(text_node, start, end - start);
     // Replace the text between start and end with collapsed version.
     return ReplaceTextInNode(text_node, start, end - start, string);
@@ -883,7 +884,7 @@ void CompositeEditCommand::DeleteInsignificantText(Text* text_node,
   if (text_layout_object->ContainsReversedText())
     std::sort(sorted_text_boxes.begin(), sorted_text_boxes.end(),
               InlineTextBox::CompareByStart);
-  InlineTextBox* box = sorted_text_boxes.IsEmpty()
+  InlineTextBox* box = sorted_text_boxes.empty()
                            ? nullptr
                            : sorted_text_boxes[sorted_text_boxes_position];
 
@@ -923,7 +924,7 @@ void CompositeEditCommand::DeleteInsignificantText(Text* text_node,
 
   if (!str.IsNull()) {
     // Replace the text between start and end with our pruned version.
-    if (!str.IsEmpty()) {
+    if (!str.empty()) {
       ReplaceTextInNode(text_node, start, end - start, str);
     } else {
       // Assert that we are not going to delete all of the text in the node.
@@ -981,7 +982,11 @@ HTMLBRElement* CompositeEditCommand::AppendBlockPlaceholder(
 
   // Should assert isLayoutBlockFlow || isInlineFlow when deletion improves. See
   // 4244964.
-  DCHECK(container->GetLayoutObject()) << container;
+  // Note: When `container` is newly created <object> as fallback content, it
+  // isn't associated to layout object. See http://crbug.com/1357082
+  DCHECK(container->GetLayoutObject() ||
+         Traversal<HTMLObjectElement>::FirstAncestor(*container))
+      << container;
 
   auto* placeholder = MakeGarbageCollected<HTMLBRElement>(GetDocument());
   AppendNode(placeholder, container, editing_state);

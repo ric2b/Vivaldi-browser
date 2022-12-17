@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -142,9 +142,9 @@ class ShellContentBrowserClient : public ContentBrowserClient {
 
   // Turns on features via permissions policy for Isolated App
   // Web Platform Tests.
-  blink::ParsedPermissionsPolicy GetPermissionsPolicyForIsolatedApp(
-      content::BrowserContext* browser_context,
-      const url::Origin& app_origin) override;
+  absl::optional<blink::ParsedPermissionsPolicy>
+  GetPermissionsPolicyForIsolatedApp(content::BrowserContext* browser_context,
+                                     const url::Origin& app_origin) override;
 
   void CreateFeatureListAndFieldTrials();
 

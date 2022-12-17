@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,7 +51,7 @@ scoped_refptr<gl::GLImageIOSurface> CreateGLImage(const gfx::Size& size,
                                                   gfx::BufferFormat format,
                                                   bool video) {
   scoped_refptr<gl::GLImageIOSurface> gl_image(
-      gl::GLImageIOSurface::Create(size, GL_RGBA));
+      gl::GLImageIOSurface::Create(size));
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
       gfx::CreateIOSurface(size, format));
   if (video) {
@@ -59,7 +59,8 @@ scoped_refptr<gl::GLImageIOSurface> CreateGLImage(const gfx::Size& size,
     CVPixelBufferCreateWithIOSurface(nullptr, io_surface, nullptr,
                                      cv_pixel_buffer.InitializeInto());
     gl_image->InitializeWithCVPixelBuffer(cv_pixel_buffer, 0,
-                                          gfx::GenericSharedMemoryId(), format);
+                                          gfx::GenericSharedMemoryId(), format,
+                                          gfx::ColorSpace::CreateREC709());
   } else {
     gl_image->Initialize(io_surface, 0, gfx::GenericSharedMemoryId(), format);
   }
@@ -177,9 +178,9 @@ class CALayerTreePropertyUpdatesTest : public CALayerTreeTest {
                 [clip_and_sorting_layer sublayerTransform].m42);
 
       // Validate the transform layer.
-      EXPECT_EQ(properties.transform.matrix().rc(3, 0),
+      EXPECT_EQ(properties.transform.rc(3, 0),
                 [transform_layer sublayerTransform].m41);
-      EXPECT_EQ(properties.transform.matrix().rc(3, 1),
+      EXPECT_EQ(properties.transform.rc(3, 1),
                 [transform_layer sublayerTransform].m42);
 
       // Validate the content layer.
@@ -264,9 +265,9 @@ class CALayerTreePropertyUpdatesTest : public CALayerTreeTest {
       EXPECT_EQ(transform_layer, [rounded_rect_layer sublayers][0]);
 
       // Validate the transform layer.
-      EXPECT_EQ(properties.transform.matrix().rc(3, 0),
+      EXPECT_EQ(properties.transform.rc(3, 0),
                 [transform_layer sublayerTransform].m41);
-      EXPECT_EQ(properties.transform.matrix().rc(3, 1),
+      EXPECT_EQ(properties.transform.rc(3, 1),
                 [transform_layer sublayerTransform].m42);
     }
 
@@ -471,12 +472,10 @@ class CALayerTreePropertyUpdatesTest : public CALayerTreeTest {
                 [clip_and_sorting_layer sublayerTransform].m42);
 
       // Validate the transform layer.
-      EXPECT_EQ(
-          properties.transform.matrix().rc(3, 0) / properties.scale_factor,
-          [transform_layer sublayerTransform].m41);
-      EXPECT_EQ(
-          properties.transform.matrix().rc(3, 1) / properties.scale_factor,
-          [transform_layer sublayerTransform].m42);
+      EXPECT_EQ(properties.transform.rc(3, 0) / properties.scale_factor,
+                [transform_layer sublayerTransform].m41);
+      EXPECT_EQ(properties.transform.rc(3, 1) / properties.scale_factor,
+                [transform_layer sublayerTransform].m42);
 
       // Validate the content layer.
       EXPECT_EQ(static_cast<id>(properties.gl_image->io_surface().get()),

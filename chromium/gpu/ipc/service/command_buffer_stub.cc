@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -700,7 +700,8 @@ void CommandBufferStub::CheckContextLost() {
     bool was_lost_by_robustness =
         decoder_context_ &&
         decoder_context_->WasContextLostByRobustnessExtension();
-    channel_->gpu_channel_manager()->OnContextLost(!was_lost_by_robustness);
+    channel_->gpu_channel_manager()->OnContextLost(/*context_lost_count=*/-1,
+                                                   !was_lost_by_robustness);
   }
 
   CheckCompleteWaits();

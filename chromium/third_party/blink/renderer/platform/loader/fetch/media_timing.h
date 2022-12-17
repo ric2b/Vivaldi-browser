@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,8 @@ class MediaTiming : public GarbageCollectedMixin {
  public:
   // Request URL of the media resource content.
   virtual const KURL& Url() const = 0;
+
+  virtual void SetIsSufficientContentLoadedForPaint() = 0;
 
   // True if enough of the media resource content has been loaded to decode and
   // display a frame. (The entire image for static media, and the first frame
@@ -42,6 +44,9 @@ class MediaTiming : public GarbageCollectedMixin {
   // decoded and rendered.
   // TODO(iclelland): Change this so that it applies to static images as well.
   virtual bool IsPaintedFirstFrame() const = 0;
+
+  virtual void SetFirstVideoFrameTime(base::TimeTicks) { NOTREACHED(); }
+  virtual base::TimeTicks GetFirstVideoFrameTime() const = 0;
 };
 
 }  // namespace blink

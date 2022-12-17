@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,16 +43,6 @@ class FetchUrlTest : public testing::Test,
       : io_thread_("io"),
         response_(kSendHello),
         task_environment_(base::test::TaskEnvironment::MainThreadType::IO) {
-    // The first executed test constructs a CacheTransparencySettings singletone
-    // inside services/network/url_loader.cc.
-    // This object is affined to the sequence that created it, i.e.
-    // to the IO sequence created and destroyed by the first test.
-    // The following test creates a new IO sequence and tries to use there
-    // the singletone affined to the already destroyed sequence.
-    // This leads to the sequence affinity check failure.
-    // In order to alleviate this we destroy this singletone before each test.
-    network::URLLoader::ResetPervasivePayloadsListForTesting();
-
     CHECK(io_thread_.StartWithOptions(
         base::Thread::Options(base::MessagePumpType::IO, 0)));
 
@@ -86,7 +76,7 @@ class FetchUrlTest : public testing::Test,
         url_loader_factory_owner_->GetURLLoaderFactory().get();
 
     std::unique_ptr<net::ServerSocket> server_socket(
-        new net::TCPServerSocket(NULL, net::NetLogSource()));
+        new net::TCPServerSocket(nullptr, net::NetLogSource()));
     server_socket->ListenWithAddressAndPort("127.0.0.1", 0, 1);
     server_ = std::make_unique<net::HttpServer>(std::move(server_socket), this);
     net::IPEndPoint address;
@@ -97,7 +87,7 @@ class FetchUrlTest : public testing::Test,
 
   void DestroyServerOnIO(base::WaitableEvent* event) {
     url_loader_factory_owner_.reset();
-    server_.reset(NULL);
+    server_.reset();
     event->Signal();
   }
 

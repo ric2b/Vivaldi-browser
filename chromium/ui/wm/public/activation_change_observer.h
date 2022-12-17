@@ -1,10 +1,11 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef UI_WM_PUBLIC_ACTIVATION_CHANGE_OBSERVER_H_
 #define UI_WM_PUBLIC_ACTIVATION_CHANGE_OBSERVER_H_
 
+#include "base/observer_list_types.h"
 #include "ui/wm/public/wm_public_export.h"
 
 namespace aura {
@@ -13,13 +14,15 @@ class Window;
 
 namespace wm {
 
-class WM_PUBLIC_EXPORT ActivationChangeObserver {
+class WM_PUBLIC_EXPORT ActivationChangeObserver : public base::CheckedObserver {
  public:
   // The reason or cause of a window activation change.
   enum class ActivationReason {
     // When a window is activated due to a call to the ActivationClient API.
     ACTIVATION_CLIENT,
-    // When a user clicks or taps a window in the 2-dimensional screen space.
+    // When a user clicks or taps a window in the 2-dimensional screen space or
+    // when a user moves a mouse over a window while focus follows cursor is
+    // enabled.
     INPUT_EVENT,
     // When a new window is activated as a side effect of a window
     // disposition changing.
@@ -48,7 +51,7 @@ class WM_PUBLIC_EXPORT ActivationChangeObserver {
   virtual void OnAttemptToReactivateWindow(aura::Window* request_active,
                                            aura::Window* actual_active) {}
 
-  virtual ~ActivationChangeObserver() {}
+  ~ActivationChangeObserver() override;
 };
 
 // Gets/Sets the ActivationChangeObserver for a specific window. This observer

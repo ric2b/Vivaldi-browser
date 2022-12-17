@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -145,8 +145,8 @@ void ReadData(
   mojo::Remote<network::mojom::URLLoaderClient> client(
       std::move(client_remote));
 
-  client->OnReceiveResponse(std::move(headers),
-                            std::move(pipe_consumer_handle));
+  client->OnReceiveResponse(std::move(headers), std::move(pipe_consumer_handle),
+                            absl::nullopt);
 
   network::URLLoaderCompletionStatus status(net::OK);
   status.encoded_data_length = output_size;

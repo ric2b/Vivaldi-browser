@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@ class TestHarness {
   reportSuccess() {
     this.finished = true;
     this.success = true;
+    this.log('Test completed');
   }
 
   reportFailure(error) {
@@ -329,7 +330,7 @@ function createCanvasCaptureSource(width, height) {
 async function prepareDecoderSource(
     frames_to_encode, width, height, codec, acceleration) {
   if (!acceleration)
-    acceleration = 'allow';
+    acceleration = 'no-preference';
   const encoder_config = {
     codec: codec,
     width: width,

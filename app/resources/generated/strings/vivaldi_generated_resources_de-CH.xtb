@@ -10,7 +10,6 @@
 <translation id="1165039591588034296">Fähler</translation>
 <translation id="1175364870820465910">&amp;Drocke...</translation>
 <translation id="1181037720776840403">Wegnäh</translation>
-<translation id="119944043368869598">Alli lösche</translation>
 <translation id="1221825588892235038">Nor Uswahl</translation>
 <translation id="1244303850296295656">Erwiiterigsfähler</translation>
 <translation id="125220115284141797">Standardihstellig</translation>
@@ -34,7 +33,6 @@
 <translation id="1828901632669367785">Öber s'Systemdialogfeld drocke...</translation>
 <translation id="1886996562706621347">Registrierig vo Internetsite als Standard-Handler för Protokoll zueloh (empfohle)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
-<translation id="1963227389609234879">Alli weg tue</translation>
 <translation id="1994173015038366702">Internetsite-URL</translation>
 <translation id="2019718679933488176">&amp;Audio im neue Tab uf tue</translation>
 <translation id="2050339315714019657">Hochformat</translation>
@@ -45,7 +43,6 @@
 <translation id="219008588003277019">Nativs Client-Modul: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">z. B. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Identifikatore för gschötzi Inhält zueloh (eventuell Neustart vom Computer erforderlech)</translation>
-<translation id="2277255602909579701">Alli Guetzli (Cookie) ond Internetsite-Date</translation>
 <translation id="2280486287150724112">Rechte Rand</translation>
 <translation id="2282146716419988068">GPU Verarbeitig</translation>
 <translation id="2301382460326681002">Stammverzeichnis vo dä Erwiterig esch ongöltig.</translation>
@@ -82,7 +79,6 @@
 <translation id="3080207940057008665">Es anders Programm uf Ehrem Computer hed en Darstellig dezue doh, wo sech vellecht ofd Fonktionswiis vo Viwaldi uswerkt.</translation>
 <translation id="3084548735795614657">Zom Installiere ablegge</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3127156390846601284">Dörr das werdet alli uf ehrem Grät gspeicherte Date för alli ahzeigte Internetsite glöscht. Möchtet Sie das?</translation>
 <translation id="3129173833825111527">Lenke Rand</translation>
 <translation id="3222066309010235055">Vorrendere: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Wähled Sie s'Stammverzeichnis vo dä Erwiterig, wo verpackt werde sell. Zor Aktualisierig vonere Erwiterig, wählet Sie en privati Schlösseldatei zom Wederverwende.</translation>
@@ -95,7 +91,6 @@
 <translation id="3341703758641437857">Zuegreff uf Datei-URLs erlaube</translation>
 <translation id="3360297538363969800">Fähler bem Drocke. Bitte öberprüefet Sie Ehre Drocker ond probieret Sies nomal.</translation>
 <translation id="3378572629723696641">Die Erwiiterig esch vellecht beschädigt.</translation>
-<translation id="3432227430032737297">Alli ahzeigte Guetzli (Cookies) weg tue</translation>
 <translation id="3494769164076977169">Nachefroge, wenn en Internetsite versuecht, nach dä erste Datei witeri dateie automatisch abezlade (empfohle)</translation>
 <translation id="3505030558724226696">Grätezuegreff ufhebe</translation>
 <translation id="3560034655160545939">&amp;Rechtschriebprüefig</translation>
@@ -134,7 +129,6 @@
 <translation id="4384652540891215547">Erwiterig ihschalte</translation>
 <translation id="4394049700291259645">Abschalte</translation>
 <translation id="4409697491990005945">Ränder</translation>
-<translation id="4579581181964204535"><ph name="HOST_NAME" /> chan ned öbertreiht werde.</translation>
 <translation id="4593021220803146968"><ph name="URL" /> öffne</translation>
 <translation id="4595560905247879544">Ahwendige ond Erwiterige chönd nome vom Administrator, <ph name="CUSTODIAN_NAME" />,veränderet werde.</translation>
 <translation id="4613271546271159013">D'Site, wo bem Öffne vomene neue Riter ahzeigt werd, het sech weg dere Erwiterig veränderet.</translation>
@@ -178,7 +172,6 @@
 <translation id="5715711091495208045">Plug-in-Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Als PDF speichere</translation>
 <translation id="5759728514498647443">Dokument, wo Sie öber <ph name="APP_NAME" /> zom Drocke schecket, chönd vo <ph name="APP_NAME" /> gläse werde.</translation>
-<translation id="577624874850706961">Guetzli (Cookies) sueche</translation>
 <translation id="5804241973901381774">Berechtigunge</translation>
 <translation id="5828633471261496623">am Drocke...</translation>
 <translation id="583281660410589416">Onbekannt</translation>
@@ -187,7 +180,6 @@
 <translation id="5965661248935608907">Sie bestemmt au, welli Site bi dä Suechi öber d'Adressleiste ahzeigt werd oder wenn Sie uf "Startsite" dröcket.</translation>
 <translation id="5978277834170881274">&amp;Rechtschriebprüefig bruche</translation>
 <translation id="5979421442488174909">Öbersetze uf <ph name="LANGUAGE" /></translation>
-<translation id="6011449291337289699">Internetsite-Date lösche</translation>
 <translation id="6042308850641462728">Meh</translation>
 <translation id="6101226222197207147">Neui App dezue doh (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Ehri Internetsiite werd beiiflosst</translation>
@@ -259,7 +251,6 @@ Speicheret Sie Ehri Schlösseldatei amene sechere Ort. Sie bruchet die Datei om 
 <translation id="8071432093239591881">Als Beld drocke</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8261378640211443080">Die Erwiiterig esch ned im <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ufgfüehrt ond esch vellecht ohni Ehres Wösse dezue gfüegt worde.</translation>
-<translation id="8339059274628563283">För <ph name="SITE" /> lokal gspeicherti Date</translation>
 <translation id="8351419472474436977">Die Erwiterig het d'Kontrolle öber Ehri Proxyihstellige öbernoh. Das heisst, dass sie alli Onlineaktivitäte chan ändere, störe oder öberwache. Wenn Sie ned secher send, wieso die Änderig passiert esch, eschs bestemmt kei Absecht gsi.</translation>
 <translation id="8413385045638830869">Erst froge (empfohle)</translation>
 <translation id="8569682776816196752">Kei Ziel gfonde</translation>

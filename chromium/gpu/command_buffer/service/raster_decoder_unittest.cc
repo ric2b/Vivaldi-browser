@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,6 @@
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/raster_cmd_format.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
-#include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/query_manager.h"
 #include "gpu/command_buffer/service/raster_decoder_unittest_base.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -232,7 +231,7 @@ class RasterDecoderOOPTest : public testing::Test, DecoderClient {
     workarounds.webgl_or_caps_max_texture_size = INT_MAX - 1;
     shared_image_factory_ = std::make_unique<SharedImageFactory>(
         GpuPreferences(), workarounds, GpuFeatureInfo(), context_state_.get(),
-        &mailbox_manager_, &shared_image_manager_, nullptr, nullptr,
+        &shared_image_manager_, nullptr, nullptr,
         /*is_for_display_compositor=*/false);
 
     client_texture_mailbox_ =
@@ -298,8 +297,10 @@ class RasterDecoderOOPTest : public testing::Test, DecoderClient {
     gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
     gfx::Size size(width, height);
     auto color_space = gfx::ColorSpace::CreateSRGB();
+    viz::SharedImageFormat si_format =
+        viz::SharedImageFormat::SinglePlane(resource_format);
     shared_image_factory_->CreateSharedImage(
-        mailbox, resource_format, size, color_space, kTopLeft_GrSurfaceOrigin,
+        mailbox, si_format, size, color_space, kTopLeft_GrSurfaceOrigin,
         kPremul_SkAlphaType, gpu::kNullSurfaceHandle,
         SHARED_IMAGE_USAGE_RASTER);
 
@@ -373,7 +374,6 @@ class RasterDecoderOOPTest : public testing::Test, DecoderClient {
 
   std::unique_ptr<SharedImageFactory> shared_image_factory_;
   SharedImageManager shared_image_manager_;
-  gles2::MailboxManagerImpl mailbox_manager_;
   raw_ptr<gl::GLDisplay> display_ = nullptr;
 };
 

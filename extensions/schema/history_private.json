@@ -44,6 +44,10 @@
           "terms": {
             "type": "string",
             "description": "If keyWordID is not -1, the terms that the user searched for."
+          },
+          "typedCount": {
+            "type": "integer",
+            "description": "The number of times the user has navigated to this page by typing in the address."
           }
         }
       },

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,6 +59,7 @@ class ChromiumDepGraph {
             licenseName: 'Apache 2.0'),
         com_google_code_gson_gson: new PropertyOverride(
             url: 'https://github.com/google/gson',
+            description: "A Java serialization/deserialization library to convert Java Objects into JSON and back",
             licenseUrl: 'https://raw.githubusercontent.com/google/gson/master/LICENSE',
             licenseName: 'Apache 2.0'),
         com_google_errorprone_error_prone_annotation: new PropertyOverride(
@@ -122,6 +123,8 @@ class ChromiumDepGraph {
             overrideLatest: true),
         org_codehaus_mojo_animal_sniffer_annotations: new PropertyOverride(
             url: 'http://www.mojohaus.org/animal-sniffer/animal-sniffer-annotations/',
+            description: 'Animal Sniffer Annotations allow marking methods which Animal Sniffer should ignore ' +
+                         'signature violations of.',
             /* groovylint-disable-next-line LineLength */
             licenseUrl: 'https://raw.githubusercontent.com/mojohaus/animal-sniffer/master/animal-sniffer-annotations/pom.xml',
             licensePath: 'licenses/Codehaus_License-2009.txt',
@@ -151,6 +154,16 @@ class ChromiumDepGraph {
             isShipped: false,  // Annotations are stripped by R8.
             licenseName: 'CDDLv1.0',
             licensePath: 'licenses/CDDLv1.0.txt'),
+        net_bytebuddy_byte_buddy: new PropertyOverride(
+            url: 'https://github.com/raphw/byte-buddy',
+            licenseUrl: 'https://raw.githubusercontent.com/raphw/byte-buddy/master/LICENSE',
+            licenseName: 'Apache 2.0',
+            overrideLatest: true),
+        net_bytebuddy_byte_buddy_agent: new PropertyOverride(
+            url: 'https://github.com/raphw/byte-buddy',
+            licenseUrl: 'https://raw.githubusercontent.com/raphw/byte-buddy/master/LICENSE',
+            licenseName: 'Apache 2.0',
+            overrideLatest: true),
         net_sf_kxml_kxml2: new PropertyOverride(
             licenseUrl: 'https://raw.githubusercontent.com/stefanhaustein/kxml2/master/license.txt',
             licenseName: 'MIT'),
@@ -160,6 +173,9 @@ class ChromiumDepGraph {
         org_checkerframework_checker_qual: new PropertyOverride(
             licenseUrl: 'https://raw.githubusercontent.com/typetools/checker-framework/master/LICENSE.txt',
             licenseName: 'GPL v2 with the classpath exception'),
+        org_checkerframework_checker_util: new PropertyOverride(
+            licenseUrl: 'https://raw.githubusercontent.com/typetools/checker-framework/master/checker-util/LICENSE.txt',
+            licenseName: 'MIT'),
         org_checkerframework_dataflow_errorprone: new PropertyOverride(
             licenseUrl: 'https://raw.githubusercontent.com/typetools/checker-framework/master/LICENSE.txt',
             licenseName: 'GPL v2 with the classpath exception'),
@@ -170,6 +186,14 @@ class ChromiumDepGraph {
             cpePrefix: 'cpe:/a:jsoup:jsoup:1.14.3',
             licenseUrl: 'https://raw.githubusercontent.com/jhy/jsoup/master/LICENSE',
             licenseName: 'The MIT License'),
+        org_mockito_mockito_core: new PropertyOverride(
+            licenseUrl: 'https://raw.githubusercontent.com/mockito/mockito/main/LICENSE',
+            licenseName: 'The MIT License'),
+        org_objenesis_objenesis: new PropertyOverride(
+            url: 'http://objenesis.org/index.html',
+            licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+            licenseName: 'Apache 2.0',
+            overrideLatest: true),
         org_ow2_asm_asm: new PropertyOverride(
             licenseUrl: 'https://gitlab.ow2.org/asm/asm/raw/master/LICENSE.txt',
             licenseName: 'BSD'),
@@ -218,9 +242,6 @@ class ChromiumDepGraph {
         org_robolectric_shadows_framework: new PropertyOverride(
             licensePath: 'licenses/Codehaus_License-2009.txt',
             licenseName: 'MIT'),
-        org_robolectric_shadows_multidex: new PropertyOverride(
-            licensePath: 'licenses/Codehaus_License-2009.txt',
-            licenseName: 'MIT'),
         org_robolectric_shadows_playservices: new PropertyOverride(
             licensePath: 'licenses/Codehaus_License-2009.txt',
             licenseName: 'MIT'),
@@ -239,6 +260,31 @@ class ChromiumDepGraph {
             resolveVersion: '1.6.20'),
         org_jetbrains_kotlin_kotlin_stdlib_jdk7: new PropertyOverride(
             resolveVersion: '1.6.20'),
+        org_jetbrains_kotlin_kotlin_stdlib: new PropertyOverride(
+            resolveVersion: '1.7.10'),
+        org_jetbrains_kotlin_kotlin_stdlib_common: new PropertyOverride(
+            resolveVersion: '1.7.10'),
+        io_grpc_grpc_binder: new PropertyOverride(
+            licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+            licenseName: 'Apache 2.0'),
+        io_grpc_grpc_core: new PropertyOverride(
+            licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+            licenseName: 'Apache 2.0'),
+        io_grpc_grpc_api: new PropertyOverride(
+            licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+            licenseName: 'Apache 2.0'),
+        io_grpc_grpc_context: new PropertyOverride(
+            licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+            licenseName: 'Apache 2.0'),
+        io_grpc_grpc_protobuf_lite: new PropertyOverride(
+            licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+            licenseName: 'Apache 2.0'),
+        io_grpc_grpc_stub: new PropertyOverride(
+            licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+            licenseName: 'Apache 2.0'),
+        io_perfmark_perfmark_api: new PropertyOverride(
+            licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+            licenseName: 'Apache 2.0'),
     ]
 
     private static final Set<String> ALLOWED_EMPTY_DEPS = [
@@ -389,8 +435,11 @@ class ChromiumDepGraph {
     private void recursivelyOverrideLatestVersion(DependencyDescription dep) {
         dep.overrideLatest = true
         dep.children.each { childID ->
-            DependencyDescription child = dependencies.get(childID)
-            recursivelyOverrideLatestVersion(child)
+            PropertyOverride overrides = PROPERTY_OVERRIDES.get(childID)
+            if (!overrides?.resolveVersion) {
+                DependencyDescription child = dependencies.get(childID)
+                recursivelyOverrideLatestVersion(child)
+            }
         }
     }
 
@@ -699,6 +748,13 @@ class ChromiumDepGraph {
     }
 
     private void checkDownloadable(String url) {
+        // file: URLs happen when using fetch_all_androidx.py --local-repo.
+        if (url.startsWith('file:')) {
+            if (!new File(new URI(url).getPath()).exists()) {
+                throw new RuntimeException("File not found: " + url)
+            }
+            return
+        }
         // Use a background thread to avoid slowing down main thread.
         // Saves about 80 seconds currently.
         new Thread().start(() -> {

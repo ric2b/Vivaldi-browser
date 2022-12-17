@@ -233,6 +233,7 @@
 <translation id="3283504360622356314">{0,plural, =1{ගොනුව සංස්කරණ කරන්න}one{ගොනු සංස්කරණ කරන්න}other{ගොනු සංස්කරණ කරන්න}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" />GHz</translation>
 <translation id="3291996639387199448">ප්‍රධාන මගපෙන්වීම</translation>
+<translation id="3294437725009624529">ආගන්තුක</translation>
 <translation id="3310640316857623290">DNS පමාව ඉඩ දිය හැකි මායිමෙන් සැලකිය යුතු ලෙස ඉහළය</translation>
 <translation id="3328783797891415197">පරීක්ෂණය ධාවනය වෙමින්</translation>
 <translation id="3340011300870565703">උපාංගයට දකුණු බඩ් බැටරිය <ph name="BATTERY_PERCENTAGE" />% ක් ඇත.</translation>
@@ -249,6 +250,7 @@
 <translation id="3484914941826596830">නිත්‍ය මෘදුකාංග යාවත්කාලීන වන අතරතුර, මෙම බාහිර උපාංගය විසන්ධි කිරීම හෝ ඔබගේ පරිගණකය වැසීම නොකරන්න. ඔබට මෙම කවුළුව කුඩා කළ හැකිය. මෙම යාවත්කාලීන කිරීමට මිනිත්තු කිහිපයක් ගත විය හැකි අතර මෙම කාලය තුළ ඔබගේ බාහිර උපාංගය ක්‍රියා නොකළ හැකිය.</translation>
 <translation id="3486220673238053218">නිර්වචනය</translation>
 <translation id="3488065109653206955">අර්ධව සක්‍රිය කළ</translation>
+<translation id="3510890413042482857"><ph name="BEGIN_LINK1" />ක්‍රියාකාරීත්ව අනුරේඛන දත්ත<ph name="END_LINK1" /> යවන්න</translation>
 <translation id="3517001332549868749">ChromeOS යාවත්කාලීනය</translation>
 <translation id="3527036260304016759">අසාර්ථක විය - නොදන්නා දෝෂයකි</translation>
 <translation id="3532980081107202182">මිනිත්තු <ph name="MIN_REMAINING" />ක් පමණ ඉතිරිය</translation>
@@ -468,6 +470,7 @@
 <translation id="5502931783115429516">Android ධාවනය නොවේ</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="554517032089923082">GTC</translation>
+<translation id="5559898619118303662">ඉර බැස යන විට ස්වයංක්‍රීයව අඳුරු තේමාව වෙත මාරු වන්න</translation>
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">යළි ස්කෑන් කරන්න</translation>
 <translation id="5583640892426849032">ආපසුයවනය</translation>

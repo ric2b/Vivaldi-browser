@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,13 +6,13 @@
 
 #include <utility>
 
-#include "ash/components/multidevice/logging/logging.h"
-#include "ash/components/multidevice/secure_message_delegate.h"
-#include "ash/components/multidevice/secure_message_delegate_impl.h"
 #include "ash/services/device_sync/value_string_encoding.h"
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
+#include "chromeos/ash/components/multidevice/secure_message_delegate.h"
+#include "chromeos/ash/components/multidevice/secure_message_delegate_impl.h"
 #include "third_party/securemessage/proto/securemessage.pb.h"
 
 namespace ash {

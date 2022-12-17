@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,6 @@
 #include <vector>
 
 #include "ash/components/peripheral_notification/peripheral_notification_manager.h"
-#include "ash/components/settings/cros_settings_names.h"
-#include "ash/components/timezone/timezone_resolver.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -51,6 +49,8 @@
 #include "chromeos/ash/components/dbus/pciguard/pciguard_client.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine.pb.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/timezone/timezone_resolver.h"
 #include "chromeos/components/disks/disks_prefs.h"
 #include "chromeos/system/devicemode.h"
 #include "chromeos/system/statistics_provider.h"
@@ -145,6 +145,7 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
       ::prefs::kLacrosLaunchSwitch,
       static_cast<int>(crosapi::browser_util::LacrosAvailability::kUserChoice));
+  registry->RegisterStringPref(::prefs::kLacrosDataBackwardMigrationMode, "");
   registry->RegisterBooleanPref(prefs::kDeviceSystemWideTracingEnabled, true);
   registry->RegisterBooleanPref(
       prefs::kLocalStateDevicePeripheralDataAccessEnabled, false);
@@ -446,6 +447,10 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(::prefs::kHatsCameraAppDeviceIsSelected, false);
 
+  registry->RegisterInt64Pref(::prefs::kHatsGeneralCameraSurveyCycleEndTs, 0);
+
+  registry->RegisterBooleanPref(::prefs::kHatsGeneralCameraIsSelected, false);
+
   // Personalization HaTS survey prefs for avatar, screensaver, and wallpaper
   // features.
   registry->RegisterInt64Pref(
@@ -460,6 +465,13 @@ void Preferences::RegisterProfilePrefs(
       ::prefs::kHatsPersonalizationWallpaperSurveyCycleEndTs, 0);
   registry->RegisterBooleanPref(
       ::prefs::kHatsPersonalizationWallpaperSurveyIsSelected, false);
+
+  // MediaApp HaTS prefs for Pdf and Photos experiences.
+  registry->RegisterInt64Pref(::prefs::kHatsMediaAppPdfCycleEndTs, 0);
+  registry->RegisterBooleanPref(::prefs::kHatsMediaAppPdfIsSelected, false);
+  registry->RegisterInt64Pref(::prefs::kHatsPhotosExperienceCycleEndTs, 0);
+  registry->RegisterBooleanPref(::prefs::kHatsPhotosExperienceIsSelected,
+                                false);
 
   registry->RegisterBooleanPref(::prefs::kPinUnlockFeatureNotificationShown,
                                 false);
@@ -522,6 +534,10 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(
       prefs::kFilesAppUIPrefsMigrated, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+
+  registry->RegisterBooleanPref(
+      prefs::kFilesAppTrashEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 }
 
@@ -1095,7 +1111,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     if (prefs_->IsManagedPreference(::prefs::kParentAccessCodeConfig) &&
         user_->IsChild()) {
       const base::Value::Dict& value =
-          prefs_->GetValueDict(::prefs::kParentAccessCodeConfig);
+          prefs_->GetDict(::prefs::kParentAccessCodeConfig);
       known_user.SetPath(user_->GetAccountId(),
                          ::prefs::kKnownUserParentAccessCodeConfig,
                          base::Value(value.Clone()));
@@ -1133,9 +1149,7 @@ void Preferences::OnIsSyncingChanged() {
 void Preferences::ForceNaturalScrollDefault() {
   DVLOG(1) << "ForceNaturalScrollDefault";
   // Natural scroll is a priority pref.
-  bool is_syncing = features::IsSyncSettingsCategorizationEnabled()
-                        ? prefs_->AreOsPriorityPrefsSyncing()
-                        : prefs_->IsPrioritySyncing();
+  bool is_syncing = prefs_->AreOsPriorityPrefsSyncing();
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kNaturalScrollDefault) &&
       is_syncing && !prefs_->GetUserPrefValue(prefs::kNaturalScroll)) {

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,6 @@
 #include <iostream>
 #include <sstream>
 
-#include "ash/components/multidevice/logging/logging.h"
-#include "ash/components/multidevice/remote_device_ref.h"
 #include "ash/services/device_sync/proto/cryptauth_api.pb.h"
 #include "ash/services/secure_channel/ble_constants.h"
 #include "ash/services/secure_channel/ble_synchronizer_base.h"
@@ -17,6 +15,8 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
+#include "chromeos/ash/components/multidevice/remote_device_ref.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"

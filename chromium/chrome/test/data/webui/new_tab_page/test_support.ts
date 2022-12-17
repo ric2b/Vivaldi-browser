@@ -1,10 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {DomIf} from 'chrome://new-tab-page/new_tab_page.js';
 import {BackgroundImage, Theme} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 
 import {assertEquals, assertNotEquals} from '../chai_assert.js';
@@ -87,32 +87,12 @@ export function createBackgroundImage(url: string): BackgroundImage {
   };
 }
 
-export function createTheme(): Theme {
+export function createTheme(isDark: boolean = false): Theme {
   const mostVisited = {
     backgroundColor: {value: 0xff00ff00},
-    isDark: false,
+    isDark,
     useTitlePill: false,
     useWhiteTileIcon: false,
-  };
-  const searchBox = {
-    bg: {value: 0xff000000},
-    bgHovered: {value: 0xff00000e},
-    borderColor: {value: 0xff00000e},
-    icon: {value: 0xff000001},
-    iconSelected: {value: 0xff000002},
-    isDark: false,
-    ntpBg: {value: 0xff00000e},
-    placeholder: {value: 0xff000003},
-    resultsBg: {value: 0xff000004},
-    resultsBgHovered: {value: 0xff000005},
-    resultsBgSelected: {value: 0xff000006},
-    resultsDim: {value: 0xff000007},
-    resultsDimSelected: {value: 0xff000008},
-    resultsText: {value: 0xff000009},
-    resultsTextSelected: {value: 0xff00000a},
-    resultsUrl: {value: 0xff00000b},
-    resultsUrlSelected: {value: 0xff00000c},
-    text: {value: 0xff00000d},
   };
   return {
     backgroundColor: {value: 0xffff0000},
@@ -121,10 +101,9 @@ export function createTheme(): Theme {
     backgroundImageAttribution2: '',
     backgroundImageAttributionUrl: undefined,
     dailyRefreshCollectionId: '',
-    isDark: false,
+    isDark,
     logoColor: undefined,
     mostVisited: mostVisited,
-    searchBox: searchBox,
     textColor: {value: 0xff0000ff},
     isCustomBackground: true,
   };

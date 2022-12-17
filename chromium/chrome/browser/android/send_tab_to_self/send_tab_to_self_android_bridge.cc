@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,7 +64,8 @@ JNI_SendTabToSelfAndroidBridge_GetAllTargetDeviceInfos(
   for (const TargetDeviceInfo& info : model->GetTargetDeviceInfoSortedList()) {
     infos.push_back(Java_TargetDeviceInfo_build(
         env, ConvertUTF8ToJavaString(env, info.device_name),
-        ConvertUTF8ToJavaString(env, info.cache_guid), info.device_type,
+        ConvertUTF8ToJavaString(env, info.cache_guid),
+        static_cast<int>(info.form_factor),
         info.last_updated_timestamp.ToJavaTime()));
   }
 

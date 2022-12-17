@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -375,7 +375,6 @@ class USER_MANAGER_EXPORT UserManager {
   // |gaia_id|. If data matches a known account, fills |out_account_id| with
   // account id and returns true.
   virtual bool GetPlatformKnownUserId(const std::string& user_email,
-                                      const std::string& gaia_id,
                                       AccountId* out_account_id) const = 0;
 
   // Returns account id of the Guest user.

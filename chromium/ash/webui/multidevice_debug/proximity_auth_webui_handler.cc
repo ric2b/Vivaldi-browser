@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,8 +9,6 @@
 #include <sstream>
 #include <utility>
 
-#include "ash/components/multidevice/logging/logging.h"
-#include "ash/components/multidevice/software_feature_state.h"
 #include "ash/services/device_sync/proto/enum_util.h"
 #include "base/base64url.h"
 #include "base/bind.h"
@@ -19,6 +17,8 @@
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/values.h"
+#include "chromeos/ash/components/multidevice/logging/logging.h"
+#include "chromeos/ash/components/multidevice/software_feature_state.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui.h"

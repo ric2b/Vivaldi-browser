@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -85,7 +85,7 @@ class BASE_EXPORT FileDescriptorWatcher {
 
     // Validates that the Controller is used on the sequence on which it was
     // instantiated.
-    SequenceChecker sequence_checker_;
+    SEQUENCE_CHECKER(sequence_checker_);
 
     WeakPtrFactory<Controller> weak_factory_{this};
   };

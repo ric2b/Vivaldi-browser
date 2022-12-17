@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,8 @@ class PairerBrokerImpl final : public PairerBroker {
   // Internal method called by BluetoothAdapterFactory to provide the adapter
   // object.
   void OnGetAdapter(scoped_refptr<device::BluetoothAdapter> adapter);
+
+  void EraseHandshakeAndFromPairers(scoped_refptr<Device> device);
 
   base::flat_map<std::string, std::unique_ptr<FastPairPairer>>
       fast_pair_pairers_;

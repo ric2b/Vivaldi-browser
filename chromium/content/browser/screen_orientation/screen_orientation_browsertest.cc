@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -271,9 +271,11 @@ IN_PROC_BROWSER_TEST_F(ScreenOrientationLockDisabledBrowserTest,
   GURL test_url = GetTestUrl("screen_orientation",
                              "screen_orientation_lock_disabled.html");
 
-  TestNavigationObserver navigation_observer(shell()->web_contents(), 1);
-  shell()->LoadURL(test_url);
-  navigation_observer.Wait();
+  {
+    TestNavigationObserver navigation_observer(shell()->web_contents(), 1);
+    shell()->LoadURL(test_url);
+    navigation_observer.Wait();
+  }
 
   {
     ASSERT_TRUE(ExecJs(shell(), "run();"));

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -182,7 +182,7 @@ void OneShotAccessibilityTreeSearch::SearchByWalkingTree() {
       // This needs to be handled carefully. If not, there is a chance of
       // getting into infinite loop.
       if (can_wrap_to_last_element_ && !stop_node &&
-          node->manager()->GetRoot() == node) {
+          node->manager()->GetBrowserAccessibilityRoot() == node) {
         stop_node = node;
       }
       node = tree_->PreviousInTreeOrder(node, can_wrap_to_last_element_);
@@ -267,7 +267,7 @@ bool AccessibilityComboboxPredicate(BrowserAccessibility* start,
   return (node->GetRole() == ax::mojom::Role::kComboBoxGrouping ||
           node->GetRole() == ax::mojom::Role::kComboBoxMenuButton ||
           node->GetRole() == ax::mojom::Role::kTextFieldWithComboBox ||
-          node->GetRole() == ax::mojom::Role::kPopUpButton);
+          node->GetRole() == ax::mojom::Role::kComboBoxSelect);
 }
 
 bool AccessibilityControlPredicate(BrowserAccessibility* start,
@@ -370,6 +370,9 @@ bool AccessibilityLandmarkPredicate(BrowserAccessibility* start,
     case ax::mojom::Role::kBanner:
     case ax::mojom::Role::kComplementary:
     case ax::mojom::Role::kContentInfo:
+    case ax::mojom::Role::kFooter:
+    case ax::mojom::Role::kForm:
+    case ax::mojom::Role::kHeader:
     case ax::mojom::Role::kMain:
     case ax::mojom::Role::kNavigation:
     case ax::mojom::Role::kRegion:

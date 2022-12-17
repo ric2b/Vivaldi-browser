@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,9 +16,6 @@ class LocalFontsPermissionContext : public permissions::PermissionContextBase {
   LocalFontsPermissionContext(const LocalFontsPermissionContext&) = delete;
   LocalFontsPermissionContext& operator=(const LocalFontsPermissionContext&) =
       delete;
-
- protected:
-  bool IsRestrictedToSecureOrigins() const override;
 };
 
 #endif  // COMPONENTS_PERMISSIONS_CONTEXTS_LOCAL_FONTS_PERMISSION_CONTEXT_H_

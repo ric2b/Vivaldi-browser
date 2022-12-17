@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,6 +80,8 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   void EnterTestMode(const GURL& url) const override {
     RunCommand("enter_test_mode", {Param("url", url.spec())});
   }
+
+  void ExitTestMode() const override { RunCommand("exit_test_mode"); }
 
   void SetGroupPolicies(const base::Value::Dict& values) const override {
     RunCommand("set_group_policies",
@@ -187,13 +189,17 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand("install_app", {Param("app_id", app_id)});
   }
 
-  void WaitForUpdaterExit() const override {
-    updater::test::WaitForUpdaterExit(updater_scope_);
+  bool WaitForUpdaterExit() const override {
+    return updater::test::WaitForUpdaterExit(updater_scope_);
   }
 
 #if BUILDFLAG(IS_WIN)
   void ExpectInterfacesRegistered() const override {
     RunCommand("expect_interfaces_registered");
+  }
+
+  void ExpectMarshalInterfaceSucceeds() const override {
+    RunCommand("expect_marshal_interface_succeeds");
   }
 
   void ExpectLegacyUpdate3WebSucceeds(const std::string& app_id,
@@ -292,7 +298,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand("uninstall_app", {Param("app_id", app_id)});
   }
 
-  void RunOfflineInstall() override { RunCommand("run_offline_install"); }
+  void RunOfflineInstall(bool is_legacy_install,
+                         bool is_silent_install) override {
+    RunCommand("run_offline_install",
+               {Param("legacy_install", is_legacy_install ? "true" : "false"),
+                Param("silent", is_silent_install ? "true" : "false")});
+  }
 
  private:
   ~IntegrationTestCommandsSystem() override = default;

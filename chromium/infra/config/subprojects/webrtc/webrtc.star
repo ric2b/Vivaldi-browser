@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -40,6 +40,9 @@ defaults.triggered_by.set(["chromium-gitiles-trigger"])
 defaults.properties.set({
     "perf_dashboard_machine_group": "ChromiumWebRTC",
 })
+
+# TODO(crbug.com/1362440): remove this.
+defaults.omit_python2.set(False)
 
 # Builders are defined in lexicographic order by name
 

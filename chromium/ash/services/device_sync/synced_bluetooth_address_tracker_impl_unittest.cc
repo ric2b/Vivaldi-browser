@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,9 +60,9 @@ class DeviceSyncSyncedBluetoothAddressTrackerImplTest : public testing::Test {
 
   void Initialize(bool is_flag_enabled,
                   const std::string& initial_bluetooth_pref_value) {
-    static const std::vector<base::Feature> kPhoneHubFeatureVector{
+    static const std::vector<base::test::FeatureRef> kPhoneHubFeatureVector{
         chromeos::features::kPhoneHub};
-    static const std::vector<base::Feature> kNoFeaturesVector;
+    static const std::vector<base::test::FeatureRef> kNoFeaturesVector;
 
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/is_flag_enabled ? kPhoneHubFeatureVector

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -103,7 +103,7 @@ void GeometryMapperTransformCache::Update(
       plane_root_transform_->plane_root = parent.plane_root();
       plane_root_transform_->to_plane_root.MakeIdentity();
       parent.ApplyToPlaneRoot(plane_root_transform_->to_plane_root);
-      plane_root_transform_->to_plane_root.Multiply(local);
+      plane_root_transform_->to_plane_root.PreConcat(local);
       plane_root_transform_->from_plane_root = local.Inverse();
       parent.ApplyFromPlaneRoot(plane_root_transform_->from_plane_root);
       plane_root_transform_->has_animation =
@@ -154,15 +154,14 @@ void GeometryMapperTransformCache::UpdateScreenTransform(
     const auto& translation = node.Translation2D();
     screen_transform_->to_screen.Translate(translation.x(), translation.y());
   } else {
-    screen_transform_->to_screen.Multiply(node.MatrixWithOriginApplied());
+    screen_transform_->to_screen.PreConcat(node.MatrixWithOriginApplied());
   }
 
   auto to_screen_flattened = screen_transform_->to_screen;
   to_screen_flattened.FlattenTo2d();
   screen_transform_->projection_from_screen_is_valid =
-      to_screen_flattened.IsInvertible();
-  if (screen_transform_->projection_from_screen_is_valid)
-    screen_transform_->projection_from_screen = to_screen_flattened.Inverse();
+      to_screen_flattened.GetInverse(
+          &screen_transform_->projection_from_screen);
 
   screen_transform_->has_animation |= node.HasActiveTransformAnimation();
 }

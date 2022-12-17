@@ -2,8 +2,6 @@
 // META: script=/common/dispatcher/dispatcher.js
 // META: script=/common/get-host-info.sub.js
 // META: script=/common/utils.js
-// META: script=/resources/testharness.js
-// META: script=/resources/testharnessreport.js
 // META: script=/html/browsers/browsing-the-web/remote-context-helper/resources/remote-context-helper.js
 // META: script=./resources/test-helper.js
 
@@ -28,7 +26,7 @@ promise_test(async t => {
   await assertSimplestScriptRuns(rc2);
 
   // Navigate back.
-  rc2.historyBack();
+  await rc2.historyBack();
 
   // Verify that the document was BFCached.
   assert_true(await rc1.executeScript(() => {

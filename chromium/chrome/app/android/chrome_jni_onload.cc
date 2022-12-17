@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "content/public/app/content_jni_onload.h"
 #include "content/public/app/content_main.h"
 
+// Vivaldi
 #include "extraparts/vivaldi_main_delegate.h"
 
 namespace android {
@@ -16,13 +17,11 @@ bool OnJNIOnLoadInit() {
   if (!content::android::OnJNIOnLoadInit())
     return false;
 
-  content::SetContentMainDelegate(
 #if defined(VIVALDI_BUILD)
-      new VivaldiMainDelegate
+  content::SetContentMainDelegate(new VivaldiMainDelegate());
 #else
-    new ChromeMainDelegateAndroid()
+  content::SetContentMainDelegate(new ChromeMainDelegateAndroid());
 #endif
-  );
   return true;
 }
 

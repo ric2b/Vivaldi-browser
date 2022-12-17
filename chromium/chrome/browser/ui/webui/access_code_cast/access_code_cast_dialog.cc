@@ -1,10 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/webui/access_code_cast/access_code_cast_dialog.h"
 
 #include "base/json/json_writer.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/ui/views/chrome_constrained_window_views_client.h"
 #include "chrome/browser/ui/views/chrome_web_dialog_view.h"
@@ -22,11 +23,15 @@ namespace media_router {
 
 namespace {
 
-void SetCurrentDialog(std::unique_ptr<AccessCodeCastDialog> dialog) {
-  static base::NoDestructor<std::unique_ptr<AccessCodeCastDialog>> instance;
-  DCHECK(!dialog || !*instance)
-      << "Can't show AccessCodeCastDialog when it is alreasdy being shown!";
-  *instance = std::move(dialog);
+void SetCurrentDialog(base::WeakPtr<AccessCodeCastDialog> dialog) {
+  // Keeps track of the dialog that is currently being displayed.
+  static base::NoDestructor<base::WeakPtr<AccessCodeCastDialog>>
+      current_instance;
+  if (*current_instance)
+    // Closing the dialog will cause the dialog to delete itself.
+    (*current_instance)->CloseDialogWidget();
+  if (dialog)
+    *current_instance = std::move(dialog);
 }
 
 }  // namespace
@@ -98,8 +103,13 @@ void AccessCodeCastDialog::Show(
       std::make_unique<AccessCodeCastDialog>(cast_mode_set,
                                              std::move(media_route_starter));
   dialog->ShowWebDialog(dialog_mode);
+  // Release the pointer from the unique_ptr after ShowWebDialog() since now the
+  // lifetime of the dialog is being managed by the WebDialog Delegate. The
+  // dialog will delete itself when OnDialogClosed() is called.
+  base::WeakPtr<AccessCodeCastDialog> new_dialog =
+      dialog.release()->GetWeakPtr();
   AccessCodeCastMetrics::RecordDialogOpenLocation(open_location);
-  SetCurrentDialog(std::move(dialog));
+  SetCurrentDialog(std::move(new_dialog));
 }
 
 // static
@@ -107,7 +117,8 @@ void AccessCodeCastDialog::ShowForDesktopMirroring(
     AccessCodeCastDialogOpenLocation open_location) {
   CastModeSet desktop_mode = {MediaCastMode::DESKTOP_MIRROR};
   std::unique_ptr<MediaRouteStarter> starter =
-      std::make_unique<MediaRouteStarter>(desktop_mode, nullptr, nullptr);
+      std::make_unique<MediaRouteStarter>(
+          MediaRouterUIParameters(desktop_mode, nullptr));
   Show(desktop_mode, std::move(starter), open_location,
        AccessCodeCastDialogMode::kSystem);
 }
@@ -129,6 +140,14 @@ views::Widget::InitParams AccessCodeCastDialog::CreateParams(
   return params;
 }
 
+void AccessCodeCastDialog::CloseDialogWidget() {
+  dialog_widget_->Close();
+}
+
+base::WeakPtr<AccessCodeCastDialog> AccessCodeCastDialog::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 // views::WidgetObserver:
 void AccessCodeCastDialog::OnWidgetActivationChanged(views::Widget* widget,
                                                      bool active) {
@@ -144,9 +163,9 @@ void AccessCodeCastDialog::OnWidgetActivationChanged(views::Widget* widget,
 }
 
 ui::ModalType AccessCodeCastDialog::GetDialogModalType() const {
-  // If there are no web_contents_, that means that the dialog was launched
-  // from the system tray, so therefore it shuold be a system dialog.
-  return web_contents_ ? ui::MODAL_TYPE_NONE : ui::MODAL_TYPE_SYSTEM;
+  // Make our dialog have no modality, so it will always close if another
+  // window is focused.
+  return ui::MODAL_TYPE_NONE;
 }
 
 std::u16string AccessCodeCastDialog::GetDialogTitle() const {
@@ -184,9 +203,7 @@ void AccessCodeCastDialog::OnDialogShown(content::WebUI* webui) {
 }
 
 void AccessCodeCastDialog::OnDialogClosed(const std::string& json_retval) {
-  // Setting the global ptr to null will cause the existing dialog (this) to be
-  // destructed.
-  SetCurrentDialog(nullptr);
+  delete this;
 }
 
 void AccessCodeCastDialog::OnCloseContents(content::WebContents* source,

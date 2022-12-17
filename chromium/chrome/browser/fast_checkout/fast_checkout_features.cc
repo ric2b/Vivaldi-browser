@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,8 +8,11 @@ namespace features {
 
 #if BUILDFLAG(IS_ANDROID)
 
-const base::Feature kFastCheckout{"FastCheckout",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kFastCheckout, "FastCheckout", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kForceEnableFastCheckoutCapabilities,
+             "ForceEnableFastCheckoutCapabilities",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace features

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -227,6 +227,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   bool IsMiniaturized() const { return is_miniaturized_; }
   bool IsWindowKey() const { return is_window_key_; }
   bool IsMouseCaptureActive() const { return is_mouse_capture_active_; }
+  bool IsZoomed() const { return is_zoomed_; }
 
   // Add a NSEvent local event monitor, which will send events to `client`
   // before they are dispatched to their ordinary target. Clients may specify
@@ -248,6 +249,10 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
       remote_cocoa::mojom::WindowControlsOverlayNSViewType overlay_type);
   void RemoveRemoteWindowControlsOverlayView(
       remote_cocoa::mojom::WindowControlsOverlayNSViewType overlay_type);
+
+  // Notify PWA whether can GoBack/GoForward.
+  void CanGoBack(bool can_go_back);
+  void CanGoForward(bool can_go_forward);
 
  private:
   friend class TextInputHost;
@@ -316,6 +321,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   void OnWindowFullscreenTransitionComplete(
       bool target_fullscreen_state) override;
   void OnWindowMiniaturizedChanged(bool miniaturized) override;
+  void OnWindowZoomedChanged(bool zoomed) override;
   void OnWindowDisplayChanged(const display::Display& display) override;
   void OnWindowWillClose() override;
   void OnWindowHasClosed() override;
@@ -341,12 +347,16 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   void SetRemoteAccessibilityTokens(
       const std::vector<uint8_t>& window_token,
       const std::vector<uint8_t>& view_token) override;
-  bool GetRootViewAccessibilityToken(int64_t* pid,
+  bool GetRootViewAccessibilityToken(base::ProcessId* pid,
                                      std::vector<uint8_t>* token) override;
   bool ValidateUserInterfaceItem(
       int32_t command,
       remote_cocoa::mojom::ValidateUserInterfaceItemResultPtr* out_result)
       override;
+  bool WillExecuteCommand(int32_t command,
+                          WindowOpenDisposition window_open_disposition,
+                          bool is_before_first_responder,
+                          bool* will_execute) override;
   bool ExecuteCommand(int32_t command,
                       WindowOpenDisposition window_open_disposition,
                       bool is_before_first_responder,
@@ -390,6 +400,10 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   void ValidateUserInterfaceItem(
       int32_t command,
       ValidateUserInterfaceItemCallback callback) override;
+  void WillExecuteCommand(int32_t command,
+                          WindowOpenDisposition window_open_disposition,
+                          bool is_before_first_responder,
+                          ExecuteCommandCallback callback) override;
   void ExecuteCommand(int32_t command,
                       WindowOpenDisposition window_open_disposition,
                       bool is_before_first_responder,
@@ -495,6 +509,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   bool is_window_key_ = false;
   bool is_mouse_capture_active_ = false;
   bool is_headless_mode_window_ = false;
+  bool is_zoomed_ = false;
   gfx::Rect window_bounds_before_fullscreen_;
 
   // Weak pointers to event monitors for this widget. The event monitors

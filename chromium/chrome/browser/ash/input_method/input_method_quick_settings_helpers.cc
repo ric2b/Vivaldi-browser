@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -86,7 +86,7 @@ std::vector<ui::ime::InputMethodMenuItem> CreateJapaneseMenuItems(
 mojom::ChineseQuickSettingsPtr GetChineseQuickSettingsAfterToggle(
     const std::vector<ui::ime::InputMethodMenuItem>& menu_items,
     std::string toggled_item_key) {
-  CHECK_EQ(menu_items.size(), 3);
+  CHECK_EQ(menu_items.size(), 3u);
   auto quick_settings = mojom::ChineseQuickSettings::New();
   quick_settings->mode = menu_items[0].is_selection_item_checked
                              ? mojom::ChineseLanguageMode::kChinese

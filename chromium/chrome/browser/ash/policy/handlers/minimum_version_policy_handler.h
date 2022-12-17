@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,7 +27,6 @@ class UpdateRequiredNotification;
 
 namespace base {
 class Clock;
-class DictionaryValue;
 class Time;
 }  // namespace base
 
@@ -105,7 +104,7 @@ class MinimumVersionPolicyHandler : public BuildStateObserver,
     // Method used to create an instance of MinimumVersionRequirement from
     // dictionary if it contains valid version string.
     static std::unique_ptr<MinimumVersionRequirement> CreateInstanceIfValid(
-        const base::DictionaryValue* dict);
+        const base::Value::Dict& dict);
 
     // This is used to compare two MinimumVersionRequirement objects
     // and returns 1 if the first object has version or warning time

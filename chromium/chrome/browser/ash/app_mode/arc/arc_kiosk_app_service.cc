@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -159,7 +159,7 @@ void ArcKioskAppService::OnComplianceReportReceived(
     return;
   }
 
-  for (const auto& detail : details->GetListDeprecated()) {
+  for (const auto& detail : details->GetList()) {
     const base::Value* const reason =
         detail.FindKeyOfType("nonComplianceReason", base::Value::Type::INTEGER);
     if (!reason || reason->GetInt() != kNonComplianceReasonAppNotInstalled)

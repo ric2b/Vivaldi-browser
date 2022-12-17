@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,9 +12,12 @@
 #include "components/webapps/browser/android/app_banner_manager_android.h"
 #include "components/webapps/browser/android/webapps_jni_headers/PwaBottomSheetControllerProvider_jni.h"
 #include "components/webapps/browser/android/webapps_jni_headers/PwaBottomSheetController_jni.h"
+#include "components/webapps/browser/installable/installable_data.h"
 #include "components/webapps/browser/webapps_client.h"
+#include "components/webapps/common/constants.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/gfx/android/java_bitmap.h"
+#include "ui/gfx/text_elider.h"
 
 using base::ASCIIToUTF16;
 using base::android::ConvertUTF16ToJavaString;
@@ -24,7 +27,7 @@ using base::android::ScopedJavaLocalRef;
 namespace {
 
 bool CanShowBottomSheet(content::WebContents* web_contents,
-                        const std::vector<SkBitmap>& screenshots) {
+                        const std::vector<webapps::Screenshot>& screenshots) {
   if (screenshots.size() == 0)
     return false;
 
@@ -62,7 +65,7 @@ bool PwaBottomSheetController::MaybeShow(
     const SkBitmap& primary_icon,
     const bool is_primary_icon_maskable,
     const GURL& start_url,
-    const std::vector<SkBitmap>& screenshots,
+    const std::vector<Screenshot>& screenshots,
     const std::u16string& description,
     bool expand_sheet,
     std::unique_ptr<AddToHomescreenParams> a2hs_params,
@@ -84,8 +87,10 @@ bool PwaBottomSheetController::MaybeShow(
     // longer needed).
     PwaBottomSheetController* controller = new PwaBottomSheetController(
         app_name, primary_icon, is_primary_icon_maskable, start_url,
-        screenshots, description, std::move(a2hs_params),
-        std::move(a2hs_event_callback));
+        screenshots,
+        gfx::TruncateString(description, webapps::kMaximumDescriptionLength,
+                            gfx::CHARACTER_BREAK),
+        std::move(a2hs_params), std::move(a2hs_event_callback));
     controller->ShowBottomSheetInstaller(web_contents, expand_sheet);
   }
   return true;
@@ -96,7 +101,7 @@ PwaBottomSheetController::PwaBottomSheetController(
     const SkBitmap& primary_icon,
     const bool is_primary_icon_maskable,
     const GURL& start_url,
-    const std::vector<SkBitmap>& screenshots,
+    const std::vector<Screenshot>& screenshots,
     const std::u16string& description,
     std::unique_ptr<AddToHomescreenParams> a2hs_params,
     base::RepeatingCallback<void(AddToHomescreenInstaller::Event,
@@ -181,8 +186,8 @@ void PwaBottomSheetController::ShowBottomSheetInstaller(
       j_bitmap, is_primary_icon_maskable_, j_user_title, j_url, j_description);
 
   for (const auto& screenshot : screenshots_) {
-    if (!screenshot.isNull())
-      UpdateScreenshot(screenshot, web_contents);
+    if (!screenshot.image.isNull())
+      UpdateScreenshot(screenshot.image, web_contents);
   }
 
   if (expand_sheet) {
@@ -197,6 +202,8 @@ void PwaBottomSheetController::UpdateScreenshot(
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> java_screenshot =
       gfx::ConvertToJavaBitmap(screenshot);
+  // TODO(https://crbug.com/1371279): support passing label to use as
+  // the accessibility string.
   Java_PwaBottomSheetController_addWebAppScreenshot(
       env, java_screenshot, web_contents->GetJavaWebContents());
 }

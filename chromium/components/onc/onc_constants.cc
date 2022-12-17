@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -164,6 +164,22 @@ const char kAuthentication[] = "Authentication";
 const char kLocalizedName[] = "LocalizedName";
 const char kLanguage[] = "Language";
 const char kAttach[] = "Attach";
+const char kId[] = "Id";
+const char kState[] = "State";
+const char kStateEnabled[] = "Enabled";
+const char kStateDisabled[] = "Disabled";
+const char kAuthenticationType[] = "AuthenticationType";
+const char kAuthenticationTypeAutomatic[] = "";
+const char kAuthenticationTypePap[] = "PAP";
+const char kAuthenticationTypeChap[] = "CHAP";
+const char kIpType[] = "IpType";
+const char kIpTypeAutomatic[] = "";
+const char kIpTypeIpv4[] = "IPv4";
+const char kIpTypeIpv6[] = "IPv6";
+const char kIpTypeIpv4Ipv6[] = "IPv4orIPv6";
+const char kApnTypes[] = "ApnTypes";
+const char kApnTypeDefault[] = "Default";
+const char kApnTypeAttach[] = "Attach";
 }  // namespace cellular_apn
 
 namespace cellular_found_network {

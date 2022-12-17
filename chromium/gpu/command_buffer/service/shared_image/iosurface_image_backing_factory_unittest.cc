@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/callback_helpers.h"
+#include "base/ranges/algorithm.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
-#include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
@@ -71,7 +71,7 @@ class IOSurfaceImageBackingFactoryTest : public testing::Test {
     backing_factory_ = std::make_unique<GLImageBackingFactory>(
         preferences, workarounds, context_state_->feature_info(),
         &image_factory_,
-        /*progress_reporter=*/nullptr, /*for_shared_memory_gmbs=*/false);
+        /*progress_reporter=*/nullptr);
 
     memory_type_tracker_ = std::make_unique<MemoryTypeTracker>(nullptr);
     shared_image_representation_factory_ =
@@ -86,7 +86,6 @@ class IOSurfaceImageBackingFactoryTest : public testing::Test {
   scoped_refptr<gl::GLContext> context_;
   scoped_refptr<SharedContextState> context_state_;
   std::unique_ptr<GLImageBackingFactory> backing_factory_;
-  gles2::MailboxManagerImpl mailbox_manager_;
   SharedImageManager shared_image_manager_;
   std::unique_ptr<MemoryTypeTracker> memory_type_tracker_;
   std::unique_ptr<SharedImageRepresentationFactory>
@@ -151,7 +150,7 @@ TEST_F(IOSurfaceImageBackingFactoryTest, Basic) {
   }
 
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
-  viz::ResourceFormat format = viz::ResourceFormat::RGBA_8888;
+  auto format = viz::SharedImageFormat::kRGBA_8888;
   gfx::Size size(256, 256);
   gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
   GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
@@ -170,31 +169,13 @@ TEST_F(IOSurfaceImageBackingFactoryTest, Basic) {
     EXPECT_TRUE(backing->IsCleared());
   }
 
-  // First, validate via a legacy mailbox.
-  GLenum expected_target = GL_TEXTURE_RECTANGLE;
-  EXPECT_TRUE(backing->ProduceLegacyMailbox(&mailbox_manager_));
-  TextureBase* texture_base = mailbox_manager_.ConsumeTexture(mailbox);
-
-  // Currently there is no support for passthrough texture on Mac and hence
-  // in IOSurface backing. So the TextureBase* should be pointing to a Texture
-  // object.
-  auto* texture = gles2::Texture::CheckedCast(texture_base);
-  ASSERT_TRUE(texture);
-  EXPECT_EQ(texture->target(), expected_target);
-  EXPECT_TRUE(texture->IsImmutable());
-  int width, height, depth;
-  bool has_level =
-      texture->GetLevelSize(GL_TEXTURE_2D, 0, &width, &height, &depth);
-  EXPECT_TRUE(has_level);
-  EXPECT_EQ(width, size.width());
-  EXPECT_EQ(height, size.height());
-
-  // Next validate via a GLTextureImageRepresentation.
+  // First, validate via a GLTextureImageRepresentation.
   std::unique_ptr<SharedImageRepresentationFactoryRef> factory_ref =
       shared_image_manager_.Register(std::move(backing),
                                      memory_type_tracker_.get());
   auto gl_representation =
       shared_image_representation_factory_->ProduceGLTexture(mailbox);
+  GLenum expected_target = GL_TEXTURE_RECTANGLE;
   EXPECT_TRUE(gl_representation);
   EXPECT_TRUE(gl_representation->GetTexture()->service_id());
   EXPECT_EQ(expected_target, gl_representation->GetTexture()->target());
@@ -204,7 +185,7 @@ TEST_F(IOSurfaceImageBackingFactoryTest, Basic) {
   EXPECT_EQ(usage, gl_representation->usage());
   gl_representation.reset();
 
-  // Finally, validate a SkiaImageRepresentation.
+  // Next, validate a SkiaImageRepresentation.
   auto skia_representation = shared_image_representation_factory_->ProduceSkia(
       mailbox, context_state_);
   EXPECT_TRUE(skia_representation);
@@ -237,7 +218,6 @@ TEST_F(IOSurfaceImageBackingFactoryTest, Basic) {
   skia_representation.reset();
 
   factory_ref.reset();
-  EXPECT_FALSE(mailbox_manager_.ConsumeTexture(mailbox));
 }
 
 // Test to check interaction between Gl and skia GL representations.
@@ -254,7 +234,7 @@ TEST_F(IOSurfaceImageBackingFactoryTest, GL_SkiaGL) {
 
   // Create a backing using mailbox.
   auto mailbox = Mailbox::GenerateForSharedImage();
-  auto format = viz::ResourceFormat::RGBA_8888;
+  auto format = viz::SharedImageFormat::kRGBA_8888;
   gfx::Size size(1, 1);
   auto color_space = gfx::ColorSpace::CreateSRGB();
   GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
@@ -305,70 +285,6 @@ TEST_F(IOSurfaceImageBackingFactoryTest, GL_SkiaGL) {
 
   CheckSkiaPixels(mailbox, size, {0, 255, 0, 255});
   factory_ref.reset();
-  EXPECT_FALSE(mailbox_manager_.ConsumeTexture(mailbox));
-}
-
-// Test which ensures that legacy texture clear status is kept in sync with the
-// SharedImageBacking.
-TEST_F(IOSurfaceImageBackingFactoryTest, LegacyClearing) {
-  Mailbox mailbox = Mailbox::GenerateForSharedImage();
-  viz::ResourceFormat format = viz::ResourceFormat::RGBA_8888;
-  gfx::Size size(256, 256);
-  gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
-  GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
-  SkAlphaType alpha_type = kPremul_SkAlphaType;
-  uint32_t usage = SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_SCANOUT;
-  gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
-
-  // Create a backing.
-  auto backing = backing_factory_->CreateSharedImage(
-      mailbox, format, surface_handle, size, color_space, surface_origin,
-      alpha_type, usage, false /* is_thread_safe */);
-  EXPECT_TRUE(backing);
-  backing->SetCleared();
-  EXPECT_TRUE(backing->IsCleared());
-
-  // Also create a legacy mailbox.
-  EXPECT_TRUE(backing->ProduceLegacyMailbox(&mailbox_manager_));
-  TextureBase* texture_base = mailbox_manager_.ConsumeTexture(mailbox);
-  auto* texture = gles2::Texture::CheckedCast(texture_base);
-  EXPECT_TRUE(texture);
-  GLenum target = texture->target();
-
-  // Check initial state.
-  EXPECT_TRUE(texture->IsLevelCleared(target, 0));
-  EXPECT_TRUE(backing->IsCleared());
-
-  // Un-clear the representation.
-  backing->SetClearedRect(gfx::Rect());
-  EXPECT_FALSE(texture->IsLevelCleared(target, 0));
-  EXPECT_FALSE(backing->IsCleared());
-
-  // Partially clear the representation.
-  gfx::Rect partial_clear_rect(0, 0, 128, 128);
-  backing->SetClearedRect(partial_clear_rect);
-  EXPECT_EQ(partial_clear_rect, texture->GetLevelClearedRect(target, 0));
-  EXPECT_EQ(partial_clear_rect, backing->ClearedRect());
-
-  // Fully clear the representation.
-  backing->SetCleared();
-  EXPECT_TRUE(texture->IsLevelCleared(target, 0));
-  EXPECT_TRUE(backing->IsCleared());
-
-  // Un-clear the texture.
-  texture->SetLevelClearedRect(target, 0, gfx::Rect());
-  EXPECT_FALSE(texture->IsLevelCleared(target, 0));
-  EXPECT_FALSE(backing->IsCleared());
-
-  // Partially clear the texture.
-  texture->SetLevelClearedRect(target, 0, partial_clear_rect);
-  EXPECT_EQ(partial_clear_rect, texture->GetLevelClearedRect(target, 0));
-  EXPECT_EQ(partial_clear_rect, backing->ClearedRect());
-
-  // Fully clear the representation.
-  texture->SetLevelCleared(target, 0, true);
-  EXPECT_TRUE(texture->IsLevelCleared(target, 0));
-  EXPECT_TRUE(backing->IsCleared());
 }
 
 #if BUILDFLAG(USE_DAWN)
@@ -379,12 +295,12 @@ TEST_F(IOSurfaceImageBackingFactoryTest, Dawn_SkiaGL) {
   instance.DiscoverDefaultAdapters();
 
   std::vector<dawn::native::Adapter> adapters = instance.GetAdapters();
-  auto adapter_it = std::find_if(
-      adapters.begin(), adapters.end(), [](dawn::native::Adapter adapter) {
-        wgpu::AdapterProperties properties;
-        adapter.GetProperties(&properties);
-        return properties.backendType == wgpu::BackendType::Metal;
-      });
+  auto adapter_it = base::ranges::find(adapters, wgpu::BackendType::Metal,
+                                       [](dawn::native::Adapter adapter) {
+                                         wgpu::AdapterProperties properties;
+                                         adapter.GetProperties(&properties);
+                                         return properties.backendType;
+                                       });
   ASSERT_NE(adapter_it, adapters.end());
 
   dawn::native::DawnDeviceDescriptor device_descriptor;
@@ -399,7 +315,7 @@ TEST_F(IOSurfaceImageBackingFactoryTest, Dawn_SkiaGL) {
 
   // Create a backing using mailbox.
   auto mailbox = Mailbox::GenerateForSharedImage();
-  auto format = viz::ResourceFormat::RGBA_8888;
+  auto format = viz::SharedImageFormat::kRGBA_8888;
   gfx::Size size(1, 1);
   auto color_space = gfx::ColorSpace::CreateSRGB();
   GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
@@ -456,7 +372,6 @@ TEST_F(IOSurfaceImageBackingFactoryTest, Dawn_SkiaGL) {
   dawnProcSetProcs(nullptr);
 
   factory_ref.reset();
-  EXPECT_FALSE(mailbox_manager_.ConsumeTexture(mailbox));
 }
 
 // 1. Draw a color to texture through GL
@@ -474,7 +389,7 @@ TEST_F(IOSurfaceImageBackingFactoryTest, GL_Dawn_Skia_UnclearTexture) {
 
   // Create a backing using mailbox.
   auto mailbox = Mailbox::GenerateForSharedImage();
-  const auto format = viz::ResourceFormat::RGBA_8888;
+  const auto format = viz::SharedImageFormat::kRGBA_8888;
   const gfx::Size size(1, 1);
   const auto color_space = gfx::ColorSpace::CreateSRGB();
   GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
@@ -530,12 +445,12 @@ TEST_F(IOSurfaceImageBackingFactoryTest, GL_Dawn_Skia_UnclearTexture) {
   instance.DiscoverDefaultAdapters();
 
   std::vector<dawn::native::Adapter> adapters = instance.GetAdapters();
-  auto adapter_it = std::find_if(
-      adapters.begin(), adapters.end(), [](dawn::native::Adapter adapter) {
-        wgpu::AdapterProperties properties;
-        adapter.GetProperties(&properties);
-        return properties.backendType == wgpu::BackendType::Metal;
-      });
+  auto adapter_it = base::ranges::find(adapters, wgpu::BackendType::Metal,
+                                       [](dawn::native::Adapter adapter) {
+                                         wgpu::AdapterProperties properties;
+                                         adapter.GetProperties(&properties);
+                                         return properties.backendType;
+                                       });
   ASSERT_NE(adapter_it, adapters.end());
 
   dawn::native::DawnDeviceDescriptor device_descriptor;
@@ -598,7 +513,7 @@ TEST_F(IOSurfaceImageBackingFactoryTest, GL_Dawn_Skia_UnclearTexture) {
 TEST_F(IOSurfaceImageBackingFactoryTest, UnclearDawn_SkiaFails) {
   // Create a backing using mailbox.
   auto mailbox = Mailbox::GenerateForSharedImage();
-  const auto format = viz::ResourceFormat::RGBA_8888;
+  const auto format = viz::SharedImageFormat::kRGBA_8888;
   const gfx::Size size(1, 1);
   const auto color_space = gfx::ColorSpace::CreateSRGB();
   GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
@@ -620,12 +535,12 @@ TEST_F(IOSurfaceImageBackingFactoryTest, UnclearDawn_SkiaFails) {
   instance.DiscoverDefaultAdapters();
 
   std::vector<dawn::native::Adapter> adapters = instance.GetAdapters();
-  auto adapter_it = std::find_if(
-      adapters.begin(), adapters.end(), [](dawn::native::Adapter adapter) {
-        wgpu::AdapterProperties properties;
-        adapter.GetProperties(&properties);
-        return properties.backendType == wgpu::BackendType::Metal;
-      });
+  auto adapter_it = base::ranges::find(adapters, wgpu::BackendType::Metal,
+                                       [](dawn::native::Adapter adapter) {
+                                         wgpu::AdapterProperties properties;
+                                         adapter.GetProperties(&properties);
+                                         return properties.backendType;
+                                       });
   ASSERT_NE(adapter_it, adapters.end());
 
   dawn::native::DawnDeviceDescriptor device_descriptor;
@@ -693,7 +608,7 @@ TEST_F(IOSurfaceImageBackingFactoryTest, UnclearDawn_SkiaFails) {
 TEST_F(IOSurfaceImageBackingFactoryTest, SkiaAccessFirstFails) {
   // Create a mailbox.
   auto mailbox = Mailbox::GenerateForSharedImage();
-  const auto format = viz::ResourceFormat::RGBA_8888;
+  const auto format = viz::SharedImageFormat::kRGBA_8888;
   const gfx::Size size(1, 1);
   const auto color_space = gfx::ColorSpace::CreateSRGB();
   GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;

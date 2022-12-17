@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -287,8 +287,9 @@ class VIEWS_EXPORT MenuItemView : public View {
   }
   const std::u16string& accessible_name() const { return accessible_name_; }
 
-  // Called when the drop status of this item changes.
-  void OnDropStatusChanged();
+  // Called when the drop or selection status (as determined by SubmenuView) may
+  // have changed.
+  void OnDropOrSelectionStatusMayHaveChanged();
 
   // Paints the menu item.
   void OnPaint(gfx::Canvas* canvas) override;

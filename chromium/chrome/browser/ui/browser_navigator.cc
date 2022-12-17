@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -845,8 +845,8 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
       params->browser->window()->LinkOpeningFromGesture(params->disposition);
 
     DCHECK(contents_to_insert);
-    if (params->viv_ext_data != nullptr) {
-      contents_to_insert->SetVivExtData(*params->viv_ext_data);
+    if (!params->viv_ext_data.empty()) {
+      contents_to_insert->SetVivExtData(params->viv_ext_data);
     }
     // The navigation should insert a new tab into the target Browser.
     params->browser->tab_strip_model()->AddWebContents(
@@ -943,7 +943,8 @@ bool IsHostAllowedInIncognito(const GURL& url) {
          host != chrome::kChromeUIHelpHost &&
          host != chrome::kChromeUIHistoryHost &&
          host != chrome::kChromeUIExtensionsHost &&
-         host != chrome::kChromeUIBookmarksHost;
+         host != chrome::kChromeUIBookmarksHost &&
+         host != chrome::kChromeUIPasswordManagerHost;
 }
 
 bool IsURLAllowedInIncognito(const GURL& url,

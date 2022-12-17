@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -119,7 +119,8 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
         mojo::NullRemote() /* url_loader_network_observer */,
         /*devtools_observer=*/mojo::NullRemote(),
         /*accept_ch_frame_observer=*/mojo::NullRemote(),
-        /*third_party_cookies_enabled=*/true);
+        /*third_party_cookies_enabled=*/true,
+        /*cache_transparency_settings=*/nullptr);
   }
 
   bool MaybeCreateLoaderForResponse(

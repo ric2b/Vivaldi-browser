@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,13 +7,13 @@
 
 #include <memory>
 
-#include "ash/components/settings/timezone_settings.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/reboot_notifications_scheduler.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/scheduled_task_executor.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/scoped_wake_lock.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
+#include "chromeos/ash/components/settings/timezone_settings.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "services/device/public/mojom/wake_lock.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"

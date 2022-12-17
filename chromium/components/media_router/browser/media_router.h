@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -176,7 +176,7 @@ class MediaRouter : public KeyedService {
   // Returns media router state as a JSON string represented by base::Value.
   // Includes known sinks and sink compatibility with media sources.
   // Used by chrome://media-router-internals.
-  virtual base::Value GetState() const = 0;
+  virtual base::Value::Dict GetState() const = 0;
 
   // Returns the media route provider state for |provider_id| via |callback|.
   // Includes details about routes/sessions owned by the MRP.

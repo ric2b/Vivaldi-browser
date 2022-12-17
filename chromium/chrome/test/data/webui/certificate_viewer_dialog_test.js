@@ -1,8 +1,8 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {eventToPromise} from 'chrome://test/test_util.js';
+import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
 /**
  * Find the first tree item (in the certificate fields tree) with a value.

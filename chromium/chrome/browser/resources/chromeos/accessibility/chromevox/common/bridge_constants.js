@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,14 +48,6 @@ BridgeConstants.BrailleCommandHandler = {
   TARGET: 'BrailleCommandHandler',
   Action: {
     SET_ENABLED: 'setEnabled',
-  },
-};
-
-/** @public {!BridgeEntry} */
-BridgeConstants.ChromeVoxBackground = {
-  TARGET: 'ChromeVoxBackground',
-  Action: {
-    GET_CURRENT_VOICE: 'getCurrentVoice',
   },
 };
 
@@ -145,8 +137,17 @@ BridgeConstants.PanelBackground = {
     PERFORM_STANDARD_ACTION_ON_CURRENT_NODE:
         'performStandardActionOnCurrentNode',
     SAVE_CURRENT_NODE: 'saveCurrentNode',
+    SET_PANEL_COLLAPSE_WATCHER: 'setPanelCollapseWatcher',
     SET_RANGE_TO_I_SEARCH_NODE: 'setRangeToISearchNode',
     WAIT_FOR_PANEL_COLLAPSE: 'waitForPanelCollapse',
+  },
+};
+
+/** @public {!BridgeEntry} */
+BridgeConstants.TtsBackground = {
+  TARGET: 'TtsBackground',
+  Action: {
+    GET_CURRENT_VOICE: 'getCurrentVoice',
   },
 };
 

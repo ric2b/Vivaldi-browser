@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,6 +38,7 @@ class SSLConfigServiceMojoTestWithCertVerifier : public testing::Test {
       : task_environment_(base::test::TaskEnvironment::MainThreadType::IO),
         service_(network::NetworkService::CreateForTesting()),
         cert_verifier_service_impl_(
+            /*params=*/nullptr,
             cert_verifier_service_remote_.BindNewPipeAndPassReceiver()) {}
   ~SSLConfigServiceMojoTestWithCertVerifier() override = default;
 

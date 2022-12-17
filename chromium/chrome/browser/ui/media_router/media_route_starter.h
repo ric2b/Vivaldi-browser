@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,15 +31,13 @@ class WebContents;
 namespace media_router {
 class MediaRouter;
 class QueryResultManager;
+struct MediaRouterUIParameters;
 
 // Provides cast services (lists of sinks, routes, start & terminate route) to
 // UI controllers
 class MediaRouteStarter : public content::PresentationObserver {
  public:
-  MediaRouteStarter(
-      const CastModeSet& initial_modes,
-      content::WebContents* web_contents,
-      std::unique_ptr<StartPresentationContext> start_presentation_context);
+  explicit MediaRouteStarter(MediaRouterUIParameters params);
   MediaRouteStarter(const MediaRouteStarter&) = delete;
   MediaRouteStarter& operator=(const MediaRouteStarter&) = delete;
 
@@ -106,11 +104,13 @@ class MediaRouteStarter : public content::PresentationObserver {
                            OnPresentationRequestSourceUpdated);
   FRIEND_TEST_ALL_PREFIXES(MediaRouteStarterTest, GetScreenCapturePermission);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest, SetDialogHeader);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest,
-                           RouteCreationTimeoutForPresentation);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest, RouteCreationTimeout);
 
   void InitPresentationSources(const CastModeSet& initial_modes);
   void InitMirroringSources(const CastModeSet& initial_modes);
+  void InitRemotePlaybackSources(const CastModeSet& initial_modes,
+                                 media::VideoCodec video_codec,
+                                 media::AudioCodec audio_codec);
 
   content::BrowserContext* GetBrowserContext() const;
 

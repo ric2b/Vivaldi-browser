@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/shutdown_signal_handlers_posix.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -150,7 +151,7 @@ int ChromeBrowserMainPartsPosix::PreEarlyInitialization() {
   struct sigaction action;
   memset(&action, 0, sizeof(action));
   action.sa_handler = SIGCHLDHandler;
-  CHECK_EQ(0, sigaction(SIGCHLD, &action, NULL));
+  CHECK_EQ(0, sigaction(SIGCHLD, &action, nullptr));
 
   return content::RESULT_CODE_NORMAL_EXIT;
 }

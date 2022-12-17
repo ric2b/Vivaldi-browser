@@ -1,4 +1,4 @@
-# Copyright 2015 The Chromium Authors. All rights reserved.
+# Copyright 2015 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -103,6 +103,7 @@ source_set("start_host_main") {
     "//mojo/core/embedder",
     "//net",
     "//remoting/base:base",
+    "//remoting/base:breakpad",
     "//remoting/host:common",
     "//remoting/host/setup",
     "//remoting/host/setup:start_host_main_headers",

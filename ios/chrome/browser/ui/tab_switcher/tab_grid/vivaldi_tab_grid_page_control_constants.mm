@@ -1,5 +1,6 @@
 // Copyright 2022 Vivaldi Technologies. All rights reserved.
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h"
+
 #include <algorithm>
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -38,6 +39,9 @@ const CGFloat vSliderCornerRadius = 6.0;
 // Color for the backrgound
 NSString* const vBackgroundColor = @"page_control_background_color";
 
+// Color for slider
+UIColor* const vSliderColor = UIColor.whiteColor;
+
 // Color for icons in unselected state
 NSString* const vNotSelectedColor = @"page_control_icon_not_selected_color";
 
@@ -46,3 +50,13 @@ NSString* const kImagePageControlClosedSelected =
     @"page_control_closed_tabs_selected";
 // Icon for recently closed tab not selected state
 NSString* const kImagePageControlClosedNotSelected = @"page_control_closed_tabs";
+
+// Slider shadow offset
+const CGSize vSliderShadowOffset = CGSizeMake(0.0, 1.0);
+// Slider shadow radius
+const CGFloat vSliderShadowRadius = 3.0;
+// Slider shadow opacity
+const CGFloat vSliderShadowOpacity = 1.0;
+// Slider shadow color
+UIColor* const vSliderShadowColor =
+  [[UIColor blackColor] colorWithAlphaComponent:0.14];

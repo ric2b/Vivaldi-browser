@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,7 +114,7 @@ IN_PROC_BROWSER_TEST_F(TutorialInteractiveUitest, SampleTutorial) {
       completed, Run,
       views::test::InteractionTestUtilSimulatorViews::PressButton(
           static_cast<HelpBubbleViews*>(
-              GetTutorialService()->currently_displayed_bubble())
+              GetTutorialService()->currently_displayed_bubble_for_testing())
               ->bubble_view()
               ->GetDefaultButtonForTesting(),
           ui::test::InteractionTestUtil::InputType::kKeyboard));

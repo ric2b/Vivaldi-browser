@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
 #include "ash/public/cpp/ash_typography.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "base/bind.h"
 #include "base/i18n/number_formatting.h"
@@ -41,7 +42,6 @@
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/views/accessibility/accessibility_paint_checks.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
@@ -286,10 +286,6 @@ SearchResultView::SearchResultView(
   // result views as needed.
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 
-  // TODO(crbug.com/1218186): Remove this, this is in place temporarily to be
-  // able to submit accessibility checks, but this focusable View needs to
-  // add a name so that the screen reader knows what to announce.
-  SetProperty(views::kSkipAccessibilityPaintChecks, true);
   SetCallback(base::BindRepeating(&SearchResultView::OnButtonPressed,
                                   base::Unretained(this)));
 
@@ -403,10 +399,6 @@ SearchResultView::SearchResultView(
       SearchResultTextItem::OverflowBehavior::kNoElide);
 
   rating_star_ = SetupChildImageView(title_and_details_container_);
-  rating_star_->SetImage(gfx::CreateVectorIcon(
-      kBadgeRatingIcon, kSearchRatingStarSize,
-      AppListColorProvider::Get()->GetSearchBoxSecondaryTextColor(
-          kDeprecatedSearchBoxTextDefaultColor)));
   rating_star_->SetBorder(views::CreateEmptyBorder(
       gfx::Insets::TLBR(0, kSearchRatingStarPadding, 0, 0)));
 
@@ -470,18 +462,27 @@ int SearchResultView::PreferredHeight() const {
         return kKeyboardShortcutViewHeight;
       return kDefaultViewHeight;
     case SearchResultViewType::kAnswerCard:
-      if (multi_line_label_height_ > 0) {
+      int height = kDefaultAnswerCardViewHeight;
+      if (multi_line_details_height_ > 0) {
         // kDefaultAnswerCardViewHeight is adjusted to accommodate multi-line
         // result's height. The assumed kAnswerCardDetailsLineHeight is replaced
         // with the multi-line label's height.
-        return kDefaultAnswerCardViewHeight + multi_line_label_height_ -
-               kAnswerCardDetailsLineHeight;
+        height =
+            height + multi_line_details_height_ - kAnswerCardDetailsLineHeight;
       }
-      return kDefaultAnswerCardViewHeight;
+      if (multi_line_title_height_ > 0) {
+        // kDefaultAnswerCardViewHeight is adjusted to accommodate multi-line
+        // title's height. The assumed kPrimaryTextHeight is replaced
+        // with the multi-line label's height.
+        height = height + multi_line_title_height_ - kPrimaryTextHeight;
+      }
+      return height;
   }
 }
 
 int SearchResultView::PrimaryTextHeight() const {
+  if (multi_line_title_height_ > 0)
+    return multi_line_title_height_;
   switch (view_type_) {
     case SearchResultViewType::kClassic:
     case SearchResultViewType::kDefault:
@@ -493,8 +494,8 @@ int SearchResultView::PrimaryTextHeight() const {
 int SearchResultView::SecondaryTextHeight() const {
   if (has_keyboard_shortcut_contents_)
     return kPrimaryTextHeight;
-  if (multi_line_label_height_ > 0)
-    return multi_line_label_height_;
+  if (multi_line_details_height_ > 0)
+    return multi_line_details_height_;
   switch (view_type_) {
     case SearchResultViewType::kClassic:
     case SearchResultViewType::kAnswerCard:
@@ -661,11 +662,21 @@ SearchResultView::SetupContainerViewForTextVector(
           non_elided_details_label_width_ = label->GetPreferredSize().width();
         }
         if (is_multi_line) {
-          // Each search result can have up to one non-elided label in its
-          // details text.
-          DCHECK_EQ(label_type, LabelType::kDetails);
-          multi_line_label_height_ =
-              label->GetHeightForWidth(kMultilineLabelWidth);
+          switch (label_type) {
+            case LabelType::kDetails:
+              multi_line_details_height_ =
+                  label->GetHeightForWidth(kMultilineLabelWidth);
+              break;
+            case LabelType::kTitle:
+              multi_line_title_height_ =
+                  label->GetHeightForWidth(kMultilineLabelWidth);
+              break;
+            case LabelType::kBigTitle:
+            case LabelType::kBigTitleSuperscript:
+            case LabelType::kKeyboardShortcut:
+              // Multiline behavior is not supported for these label types.
+              break;
+          }
         }
 
         label_tags.push_back(LabelAndTag(label, span.GetTextTags()));
@@ -759,6 +770,8 @@ void SearchResultView::UpdateBigTitleSuperscriptContainer() {
 }
 
 void SearchResultView::UpdateTitleContainer() {
+  // Updating the title label should reset `multi_line_details_height_`.
+  multi_line_title_height_ = 0;
   title_container_->RemoveAllChildViews();
   title_label_tags_.clear();
   if (!result() || result()->title_text_vector().empty()) {
@@ -771,7 +784,7 @@ void SearchResultView::UpdateTitleContainer() {
     title_label_tags_ = SetupContainerViewForTextVector(
         title_container_, result()->title_text_vector(), LabelType::kTitle,
         has_keyboard_shortcut_contents_,
-        /*is_multi_line=*/false);
+        /*is_multi_line=*/result()->multiline_title());
     StyleTitleContainer();
     text_container_->SetVisible(true);
     title_and_details_container_->SetVisible(true);
@@ -781,9 +794,9 @@ void SearchResultView::UpdateTitleContainer() {
 
 void SearchResultView::UpdateDetailsContainer() {
   should_show_result_text_separator_label_ = false;
-  // Updating the details label should reset `multi_line_label_height_` and
+  // Updating the details label should reset `multi_line_details_height_` and
   // `non_elided_details_label_width_`.
-  multi_line_label_height_ = 0;
+  multi_line_details_height_ = 0;
   non_elided_details_label_width_ = 0;
   details_container_->RemoveAllChildViews();
   details_label_tags_.clear();
@@ -916,15 +929,12 @@ void SearchResultView::StyleLabel(views::Label* label,
     case SearchResult::Tag::DIM:
       ABSL_FALLTHROUGH_INTENDED;
     case SearchResult::Tag::MATCH:
-      label->SetEnabledColor(
-          is_title_label
-              ? AppListColorProvider::Get()->GetSearchBoxTextColor(
-                    kDeprecatedSearchBoxTextDefaultColor)
-              : AppListColorProvider::Get()->GetSearchBoxSecondaryTextColor(
-                    kDeprecatedSearchBoxTextDefaultColor));
+      label->SetEnabledColorId(is_title_label
+                                   ? cros_tokens::kTextColorPrimary
+                                   : cros_tokens::kTextColorSecondary);
       break;
     case SearchResult::Tag::URL:
-      label->SetEnabledColor(AppListColorProvider::Get()->GetTextColorURL());
+      label->SetEnabledColorId(kColorAshTextColorURL);
       break;
     case SearchResult::Tag::GREEN:
       label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
@@ -1138,36 +1148,40 @@ void SearchResultView::PaintButtonContents(gfx::Canvas* canvas) {
 
   gfx::Rect content_rect(rect);
 
-    switch (view_type_) {
-      case SearchResultViewType::kDefault:
-      case SearchResultViewType::kClassic:
-        if (selected() && !actions_view()->HasSelectedAction()) {
-          canvas->FillRect(
-              content_rect,
-              AppListColorProvider::Get()->GetSearchResultViewHighlightColor());
-          PaintFocusBar(canvas, GetContentsBounds().origin(),
-                        /*height=*/GetContentsBounds().height());
-        }
-        break;
-      case SearchResultViewType::kAnswerCard: {
-        cc::PaintFlags flags;
-        flags.setAntiAlias(true);
-        flags.setColor(
-            AppListColorProvider::Get()->GetSearchResultViewHighlightColor());
-        canvas->DrawRoundRect(content_rect,
-                              kAnswerCardCardBackgroundCornerRadius, flags);
-        if (selected()) {
-          // Dynamically calculate the height of the answer card focus bar to
-          // accommodate different heights for multi-line results.
-          PaintFocusBar(canvas,
-                        gfx::Point(kAnswerCardFocusBarHorizontalOffset,
-                                   kAnswerCardFocusBarVerticalOffset),
-                        PreferredHeight() -
-                            kAnswerCardCardBackgroundCornerRadius * 2 -
-                            kAnswerCardFocusBarVerticalOffset);
-        }
-      } break;
-    }
+  const auto* app_list_widget = GetWidget();
+  switch (view_type_) {
+    case SearchResultViewType::kDefault:
+    case SearchResultViewType::kClassic:
+      if (selected() && !actions_view()->HasSelectedAction()) {
+        canvas->FillRect(
+            content_rect,
+            AppListColorProvider::Get()->GetSearchResultViewHighlightColor(
+                app_list_widget));
+        PaintFocusBar(canvas, GetContentsBounds().origin(),
+                      /*height=*/GetContentsBounds().height(), app_list_widget);
+      }
+      break;
+    case SearchResultViewType::kAnswerCard: {
+      cc::PaintFlags flags;
+      flags.setAntiAlias(true);
+      flags.setColor(
+          AppListColorProvider::Get()->GetSearchResultViewHighlightColor(
+              app_list_widget));
+      canvas->DrawRoundRect(content_rect, kAnswerCardCardBackgroundCornerRadius,
+                            flags);
+      if (selected()) {
+        // Dynamically calculate the height of the answer card focus bar to
+        // accommodate different heights for multi-line results.
+        PaintFocusBar(canvas,
+                      gfx::Point(kAnswerCardFocusBarHorizontalOffset,
+                                 kAnswerCardFocusBarVerticalOffset),
+                      PreferredHeight() -
+                          kAnswerCardCardBackgroundCornerRadius * 2 -
+                          kAnswerCardFocusBarVerticalOffset,
+                      app_list_widget);
+      }
+    } break;
+  }
 }
 
 void SearchResultView::OnMouseEntered(const ui::MouseEvent& event) {
@@ -1188,6 +1202,16 @@ void SearchResultView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // ChromeVox. see details in crbug.com/924776.
   node_data->role = ax::mojom::Role::kListBoxOption;
   node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kClick);
+
+  // It is possible for the view to be visible but lack a result. When this
+  // happens, GetAccessibleName() will return an empty string. Because the
+  // focusable state is set in the constructor and not updated when the
+  // result is removed, the accessibility paint checks will fail.
+  if (!result()) {
+    node_data->SetNameExplicitlyEmpty();
+    return;
+  }
+
   node_data->SetName(GetAccessibleName());
 }
 
@@ -1205,20 +1229,21 @@ void SearchResultView::OnThemeChanged() {
   if (!keyboard_shortcut_container_tags_.empty())
     StyleKeyboardShortcutContainer();
 
+  const auto* app_list_widget = GetWidget();
   result_text_separator_label_->SetEnabledColor(
       AppListColorProvider::Get()->GetSearchBoxSecondaryTextColor(
-          kDeprecatedSearchBoxTextDefaultColor));
+          kDeprecatedSearchBoxTextDefaultColor, app_list_widget));
 
   rating_separator_label_->SetEnabledColor(
       AppListColorProvider::Get()->GetSearchBoxSecondaryTextColor(
-          kDeprecatedSearchBoxTextDefaultColor));
+          kDeprecatedSearchBoxTextDefaultColor, app_list_widget));
   rating_->SetEnabledColor(
       AppListColorProvider::Get()->GetSearchBoxSecondaryTextColor(
-          kDeprecatedSearchBoxTextDefaultColor));
+          kDeprecatedSearchBoxTextDefaultColor, app_list_widget));
   rating_star_->SetImage(gfx::CreateVectorIcon(
       kBadgeRatingIcon, kSearchRatingStarSize,
       AppListColorProvider::Get()->GetSearchBoxSecondaryTextColor(
-          kDeprecatedSearchBoxTextDefaultColor)));
+          kDeprecatedSearchBoxTextDefaultColor, app_list_widget)));
   views::View::OnThemeChanged();
 }
 

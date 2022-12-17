@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,7 +60,7 @@ class PassKitTabHelper : public web::WebStateUserData<PassKitTabHelper>,
 
  protected:
   // Allow subclassing from PassKitTabHelper for testing purposes.
-  PassKitTabHelper(web::WebState* web_state);
+  explicit PassKitTabHelper(web::WebState* web_state);
 
  private:
   friend class web::WebStateUserData<PassKitTabHelper>;

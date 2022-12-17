@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -76,7 +76,8 @@ suite('CrSettingsPrefs', function() {
 
   // Initialize a <settings-prefs> before each test.
   setup(function() {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
 
     // Override chrome.settingsPrivate with FakeSettingsPrivate.
     fakeApi = new FakeSettingsPrivate(prefsTestCases.map(function(testCase) {
@@ -97,7 +98,8 @@ suite('CrSettingsPrefs', function() {
     CrSettingsPrefs.deferInitialization = false;
     prefs.resetForTesting();
 
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
   });
 
   test('receives and caches prefs', function testGetPrefs() {

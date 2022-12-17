@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -149,10 +149,6 @@ class FrameScheduler : public FrameOrWorkerScheduler {
   // the main thread.
   virtual void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
                                         NavigationType navigation_type) = 0;
-
-  // Tells the scheduler that the "DOMContentLoaded" event has occurred for this
-  // frame.
-  virtual void OnDomContentLoaded() = 0;
 
   // Tells the scheduler that the first contentful paint has occurred for this
   // frame. Only for main frames.

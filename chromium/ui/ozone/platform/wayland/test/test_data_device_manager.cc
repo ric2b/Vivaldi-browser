@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,7 +32,7 @@ void GetDataDevice(wl_client* client,
   wl_resource* resource = CreateResourceWithImpl<TestDataDevice>(
       client, &wl_data_device_interface,
       wl_resource_get_version(manager_resource), &kTestDataDeviceImpl, id,
-      client, manager);
+      manager);
 
   CHECK(GetUserDataAs<TestDataDevice>(resource));
   manager->set_data_device(GetUserDataAs<TestDataDevice>(resource));

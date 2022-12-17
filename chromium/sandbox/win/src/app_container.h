@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@ namespace sandbox {
 
 enum AppContainerType { kNone, kDerived, kProfile, kLowbox };
 
-class AppContainer {
+class [[clang::lto_visibility_public]] AppContainer {
  public:
   // Increments the reference count of this object. The reference count must
   // be incremented if this interface is given to another component.

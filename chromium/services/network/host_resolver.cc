@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,8 +98,8 @@ HostResolver::~HostResolver() {
 }
 
 void HostResolver::ResolveHost(
-    const net::HostPortPair& host,
-    const net::NetworkIsolationKey& network_isolation_key,
+    mojom::HostResolverHostPtr host,
+    const net::NetworkAnonymizationKey& network_anonymization_key,
     mojom::ResolveHostParametersPtr optional_parameters,
     mojo::PendingRemote<mojom::ResolveHostClient> response_client) {
 #if !BUILDFLAG(ENABLE_MDNS)
@@ -110,10 +110,12 @@ void HostResolver::ResolveHost(
 #endif  // !BUILDFLAG(ENABLE_MDNS)
 
   if (resolve_host_callback.Get())
-    resolve_host_callback.Get().Run(host.host());
+    resolve_host_callback.Get().Run(host->is_host_port_pair()
+                                        ? host->get_host_port_pair().host()
+                                        : host->get_scheme_host_port().host());
 
   auto request = std::make_unique<ResolveHostRequest>(
-      internal_resolver_, host, network_isolation_key,
+      internal_resolver_, std::move(host), network_anonymization_key,
       ConvertOptionalParameters(optional_parameters), net_log_);
 
   mojo::PendingReceiver<mojom::ResolveHostHandle> control_handle_receiver;

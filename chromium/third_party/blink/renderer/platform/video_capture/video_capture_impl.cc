@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -49,8 +49,9 @@ namespace blink {
 
 constexpr int kMaxFirstFrameLogs = 5;
 
-const base::Feature kTimeoutHangingVideoCaptureStarts{
-    "TimeoutHangingVideoCaptureStarts", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kTimeoutHangingVideoCaptureStarts,
+             "TimeoutHangingVideoCaptureStarts",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 using VideoFrameBufferHandleType = media::mojom::blink::VideoBufferHandle::Tag;
 
@@ -87,9 +88,6 @@ struct VideoCaptureImpl::BufferContext
         InitializeFromReadOnlyShmemRegion(
             std::move(buffer_handle->get_read_only_shmem_region()));
         break;
-      case VideoFrameBufferHandleType::kSharedMemoryViaRawFileDescriptor:
-        NOTREACHED();
-        break;
       case VideoFrameBufferHandleType::kMailboxHandles:
         InitializeFromMailbox(std::move(buffer_handle->get_mailbox_handles()));
         break;
@@ -113,6 +111,9 @@ struct VideoCaptureImpl::BufferContext
   VideoFrameBufferHandleType buffer_type() const { return buffer_type_; }
   const uint8_t* data() const { return data_; }
   size_t data_size() const { return data_size_; }
+  const base::ReadOnlySharedMemoryRegion* read_only_shmem_region() const {
+    return &read_only_shmem_region_;
+  }
   const Vector<gpu::MailboxHolder>& mailbox_holders() const {
     return mailbox_holders_;
   }
@@ -194,6 +195,7 @@ struct VideoCaptureImpl::BufferContext
     DCHECK(read_only_mapping_.IsValid());
     data_ = read_only_mapping_.GetMemoryAsSpan<uint8_t>().data();
     data_size_ = read_only_mapping_.size();
+    read_only_shmem_region_ = std::move(region);
   }
 
   void InitializeFromMailbox(
@@ -230,6 +232,7 @@ struct VideoCaptureImpl::BufferContext
   base::WritableSharedMemoryMapping writable_mapping_;
 
   // Only valid for |buffer_type_ == READ_ONLY_SHMEM_REGION|.
+  base::ReadOnlySharedMemoryRegion read_only_shmem_region_;
   base::ReadOnlySharedMemoryMapping read_only_mapping_;
 
   // Only valid for |buffer_type == GPU_MEMORY_BUFFER_HANDLE|
@@ -333,9 +336,7 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::Initialize() {
           frame_info_->visible_rect.size(),
           const_cast<uint8_t*>(buffer_context_->data()),
           buffer_context_->data_size(), frame_info_->timestamp);
-      break;
-    case VideoFrameBufferHandleType::kSharedMemoryViaRawFileDescriptor:
-      NOTREACHED();
+      frame_->BackWithSharedMemory(buffer_context_->read_only_shmem_region());
       break;
     case VideoFrameBufferHandleType::kMailboxHandles: {
       gpu::MailboxHolder mailbox_holder_array[media::VideoFrame::kMaxPlanes];
@@ -377,7 +378,8 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::Initialize() {
       // connection, while the capturer process will continue to produce
       // GPU backed frames.
       if (!video_capture_impl_.gpu_factories_ ||
-          !video_capture_impl_.media_task_runner_) {
+          !video_capture_impl_.media_task_runner_ ||
+          video_capture_impl_.gmb_not_supported_) {
         video_capture_impl_.RequirePremappedFrames();
         if (!frame_info_->is_premapped || !buffer_context_->data()) {
           // If the frame isn't premapped, can't do anything here.
@@ -485,6 +487,19 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::BindVideoFrameOnMediaThread(
     buffer_context_->SetGpuFactories(gpu_factories);
     should_recreate_shared_image = true;
   }
+#if BUILDFLAG(IS_WIN)
+  // If the renderer is running in d3d9 mode due to e.g. driver bugs
+  // workarounds, DXGI D3D11 textures won't be supported.
+  // Can't check this from the ::Initialize() since media context provider can
+  // be accessed only on the Media thread.
+  const gpu::Capabilities* context_capabilites =
+      gpu_factories->ContextCapabilities();
+  if (!context_capabilites || !context_capabilites->shared_image_d3d) {
+    video_capture_impl_.RequirePremappedFrames();
+    video_capture_impl_.gmb_not_supported_ = true;
+    return false;
+  }
+#endif
 
   // Create GPU texture and bind GpuMemoryBuffer to the texture.
   auto* sii = buffer_context_->gpu_factories()->SharedImageInterface();
@@ -507,7 +522,7 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::BindVideoFrameOnMediaThread(
 
   uint32_t usage =
       gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_RASTER |
-      gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_SCANOUT;
+      gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
 #if BUILDFLAG(IS_MAC)
   usage |= gpu::SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX;
 #endif
@@ -517,51 +532,43 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::BindVideoFrameOnMediaThread(
           gpu_memory_buffer_->GetFormat());
 
 #if BUILDFLAG(IS_WIN)
-  if (output_format ==
-      media::GpuVideoAcceleratorFactories::OutputFormat::NV12_DUAL_GMB) {
+  // Explicitly set GL_TEXTURE_EXTERNAL_OES since ImageTextureTarget() will
+  // return GL_TEXTURE_2D due to GMB factory not supporting NV12 DXGI GMBs.
+  // See https://crbug.com/1253791#c17
+  // TODO(sunnyps): This shouldn't be needed after
+  // https://chromium-review.googlesource.com/c/angle/angle/+/3856660
+  texture_target = GL_TEXTURE_EXTERNAL_OES;
+#endif  // BUILDFLAG(IS_WIN)
+
+  // TODO(sunnyps): Get rid of NV12_DUAL_GMB format and instead rely on enabled
+  // by default multi plane shared images on Windows.
+
+  const bool use_multiplane =
+#if BUILDFLAG(IS_WIN)
+      output_format ==
+          media::GpuVideoAcceleratorFactories::OutputFormat::NV12_DUAL_GMB ||
+#endif
+      base::FeatureList::IsEnabled(media::kMultiPlaneVideoCaptureSharedImages);
+
+  if (use_multiplane) {
     planes.push_back(gfx::BufferPlane::Y);
     planes.push_back(gfx::BufferPlane::UV);
-
-    // Explicitly set GL_TEXTURE_EXTERNAL_OES since ImageTextureTarget() will
-    // return GL_TEXTURE_2D due to GMB factory not supporting NV12 DXGI GMBs.
-    // See https://crbug.com/1253791#c17
-    texture_target = GL_TEXTURE_EXTERNAL_OES;
-
-    if (should_recreate_shared_image ||
-        buffer_context_->gmb_resources()->mailboxes[0].IsZero()) {
-      auto plane_mailboxes = sii->CreateSharedImageVideoPlanes(
-          gpu_memory_buffer_.get(),
-          buffer_context_->gpu_factories()->GpuMemoryBufferManager(), usage);
-      DCHECK_EQ(plane_mailboxes.size(), planes.size());
-      for (size_t plane = 0; plane < planes.size(); ++plane) {
-        buffer_context_->gmb_resources()->mailboxes[plane] =
-            plane_mailboxes[plane];
-      }
-    }
+  } else {
+    planes.push_back(gfx::BufferPlane::DEFAULT);
   }
-#endif  // BUILDFLAG(IS_WIN)
-  if (planes.empty()) {
-    if (base::FeatureList::IsEnabled(
-            media::kMultiPlaneVideoCaptureSharedImages)) {
-      planes.push_back(gfx::BufferPlane::Y);
-      planes.push_back(gfx::BufferPlane::UV);
+  for (size_t plane = 0; plane < planes.size(); ++plane) {
+    if (should_recreate_shared_image ||
+        buffer_context_->gmb_resources()->mailboxes[plane].IsZero()) {
+      buffer_context_->gmb_resources()->mailboxes[plane] =
+          sii->CreateSharedImage(
+              gpu_memory_buffer_.get(),
+              buffer_context_->gpu_factories()->GpuMemoryBufferManager(),
+              planes[plane], *(frame_info_->color_space),
+              kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage);
     } else {
-      planes.push_back(gfx::BufferPlane::DEFAULT);
-    }
-    for (size_t plane = 0; plane < planes.size(); ++plane) {
-      if (should_recreate_shared_image ||
-          buffer_context_->gmb_resources()->mailboxes[plane].IsZero()) {
-        buffer_context_->gmb_resources()->mailboxes[plane] =
-            sii->CreateSharedImage(
-                gpu_memory_buffer_.get(),
-                buffer_context_->gpu_factories()->GpuMemoryBufferManager(),
-                planes[plane], *(frame_info_->color_space),
-                kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage);
-      } else {
-        sii->UpdateSharedImage(
-            buffer_context_->gmb_resources()->release_sync_token,
-            buffer_context_->gmb_resources()->mailboxes[plane]);
-      }
+      sii->UpdateSharedImage(
+          buffer_context_->gmb_resources()->release_sync_token,
+          buffer_context_->gmb_resources()->mailboxes[plane]);
     }
   }
 

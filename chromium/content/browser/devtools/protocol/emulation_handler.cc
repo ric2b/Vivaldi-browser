@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -130,6 +130,7 @@ Response EmulationHandler::Disable() {
   if (focus_emulation_enabled_)
     SetFocusEmulationEnabled(false);
   prefers_color_scheme_ = "";
+  prefers_reduced_motion_ = "";
   return Response::Success();
 }
 
@@ -548,13 +549,16 @@ Response EmulationHandler::SetEmulatedMedia(
     return Response::InternalError();
 
   prefers_color_scheme_ = "";
+  prefers_reduced_motion_ = "";
   if (features.isJust()) {
     for (auto const& mediaFeature : *features.fromJust()) {
-      if (mediaFeature->GetName() == "prefers-color-scheme") {
-        auto const& value = mediaFeature->GetValue();
+      auto const& name = mediaFeature->GetName();
+      auto const& value = mediaFeature->GetValue();
+      if (name == "prefers-color-scheme") {
         prefers_color_scheme_ =
             (value == "light" || value == "dark") ? value : "";
-        return Response::FallThrough();
+      } else if (name == "prefers-reduced-motion") {
+        prefers_reduced_motion_ = (value == "reduce") ? value : "";
       }
     }
   }
@@ -590,7 +594,9 @@ WebContentsImpl* EmulationHandler::GetWebContents() {
 }
 
 void EmulationHandler::UpdateTouchEventEmulationState() {
-  DCHECK(host_);
+  if (!host_)
+    return;
+
   // We only have a single TouchEmulator for all frames, so let the main frame's
   // EmulationHandler enable/disable it.
   DCHECK(!host_->GetParentOrOuterDocument());
@@ -613,7 +619,9 @@ void EmulationHandler::UpdateTouchEventEmulationState() {
 }
 
 void EmulationHandler::UpdateDeviceEmulationState() {
-  DCHECK(host_);
+  if (!host_)
+    return;
+
   // Device emulation only happens on the outermost main frame.
   DCHECK(!host_->GetParentOrOuterDocument());
 
@@ -624,15 +632,13 @@ void EmulationHandler::UpdateDeviceEmulationState() {
   // this is tricky since we'd have to track the DevTools message id with the
   // WidgetMsg and acknowledgment, as well as plump the acknowledgment back to
   // the EmulationHandler somehow. Mojo callbacks should make this much simpler.
-  host_->ForEachRenderFrameHostIncludingSpeculative(base::BindRepeating(
-      [](EmulationHandler* handler, RenderFrameHostImpl* host) {
+  host_->ForEachRenderFrameHostIncludingSpeculative(
+      [this](RenderFrameHostImpl* host) {
         // The main frame of nested subpages (ex. fenced frames, portals) inside
         // this page are updated as well.
         if (host->is_main_frame())
-          handler->UpdateDeviceEmulationStateForHost(
-              host->GetRenderWidgetHost());
-      },
-      this));
+          UpdateDeviceEmulationStateForHost(host->GetRenderWidgetHost());
+      });
 }
 
 void EmulationHandler::UpdateDeviceEmulationStateForHost(
@@ -676,12 +682,21 @@ void EmulationHandler::ApplyOverrides(net::HttpRequestHeaders* headers,
   }
   *accept_language_overridden = !accept_language_.empty();
   if (!prefers_color_scheme_.empty()) {
-    const auto& prefersColorSchemeClientHintHeader =
+    const auto& prefers_color_scheme_client_hint_name =
         network::GetClientHintToNameMap().at(
             network::mojom::WebClientHintsType::kPrefersColorScheme);
-    if (headers->HasHeader(prefersColorSchemeClientHintHeader)) {
-      headers->SetHeader(prefersColorSchemeClientHintHeader,
+    if (headers->HasHeader(prefers_color_scheme_client_hint_name)) {
+      headers->SetHeader(prefers_color_scheme_client_hint_name,
                          prefers_color_scheme_);
+    }
+  }
+  if (!prefers_reduced_motion_.empty()) {
+    const auto& prefers_reduced_motion_client_hint_name =
+        network::GetClientHintToNameMap().at(
+            network::mojom::WebClientHintsType::kPrefersReducedMotion);
+    if (headers->HasHeader(prefers_reduced_motion_client_hint_name)) {
+      headers->SetHeader(prefers_reduced_motion_client_hint_name,
+                         prefers_reduced_motion_);
     }
   }
 }

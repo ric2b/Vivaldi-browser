@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/drop_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/android/overscroll_refresh_handler.h"
@@ -55,11 +56,8 @@ namespace {
 
 // Returns the minimum distance in DIPs, for drag event being considered as an
 // intentional drag.
-float DragMovementThresholdDip() {
-  static float radius = base::GetFieldTrialParamByFeatureAsDouble(
-      features::kTouchDragAndContextMenu,
-      features::kDragAndDropMovementThresholdDipParam,
-      /*default_value=*/gfx::ViewConfiguration::GetTouchSlopInDips());
+int DragMovementThresholdDip() {
+  static int radius = features::kTouchDragMovementThresholdDip.Get();
   return radius;
 }
 
@@ -291,6 +289,11 @@ void WebContentsViewAndroid::SetOverscrollControllerEnabled(bool enabled) {
 
 void WebContentsViewAndroid::OnCapturerCountChanged() {}
 
+void WebContentsViewAndroid::FullscreenStateChanged(bool is_fullscreen) {
+  if (select_popup_)
+    select_popup_->HideMenu();
+}
+
 void WebContentsViewAndroid::ShowContextMenu(RenderFrameHost& render_frame_host,
                                              const ContextMenuParams& params) {
   if (is_active_drag_ && drag_exceeded_movement_threshold_)
@@ -333,7 +336,8 @@ void WebContentsViewAndroid::StartDragging(
     const DropData& drop_data,
     blink::DragOperationsMask allowed_ops,
     const gfx::ImageSkia& image,
-    const gfx::Vector2d& image_offset,
+    const gfx::Vector2d& cursor_offset,
+    const gfx::Rect& drag_obj_rect,
     const blink::mojom::DragEventSourceInfo& event_info,
     RenderWidgetHostImpl* source_rwh) {
   if (!IsDragEnabledForDropData(drop_data)) {
@@ -361,6 +365,9 @@ void WebContentsViewAndroid::StartDragging(
     dummy_bitmap.eraseColor(0);
     bitmap = &dummy_bitmap;
   }
+
+  // TODO(crbug.com/1302094): The params `cursor_offset` and `drag_obj_rect`
+  // are unused.
 
   ScopedJavaLocalRef<jobject> jdrop_data = ToJavaDropData(drop_data);
   if (!native_view->StartDragAndDrop(gfx::ConvertToJavaBitmap(*bitmap),
@@ -460,7 +467,7 @@ void WebContentsViewAndroid::OnDragUpdated(const gfx::PointF& location,
       is_active_drag_ = true;
       drag_entered_location_ = location;
     } else if (!drag_exceeded_movement_threshold_) {
-      float radius = DragMovementThresholdDip();
+      int radius = DragMovementThresholdDip();
       if (!drag_location_.IsWithinDistance(drag_entered_location_, radius)) {
         drag_exceeded_movement_threshold_ = true;
         if (delegate_)

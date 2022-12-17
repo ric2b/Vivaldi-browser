@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,6 +54,13 @@ void SearchResult::SetTitleTags(const Tags& tags) {
 
 void SearchResult::SetTitleTextVector(const TextVector& vector) {
   metadata_->title_vector = vector;
+  for (auto& observer : observers_)
+    observer.OnMetadataChanged();
+}
+
+void SearchResult::SetMultilineTitle(bool multiline_title) {
+  DCHECK(metadata_->title_vector.size() <= 1 || !multiline_title);
+  metadata_->multiline_title = multiline_title;
   for (auto& observer : observers_)
     observer.OnMetadataChanged();
 }

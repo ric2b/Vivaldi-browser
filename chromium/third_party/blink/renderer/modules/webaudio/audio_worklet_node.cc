@@ -1,10 +1,11 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_node.h"
 
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/renderer/bindings/core/v8/capture_source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_param_descriptor.h"
@@ -230,7 +231,7 @@ void AudioWorkletNode::FireProcessorError(
       break;
   }
   ErrorEvent* event = ErrorEvent::Create(
-      error_message, SourceLocation::Capture(GetExecutionContext()), nullptr);
+      error_message, CaptureSourceLocation(GetExecutionContext()), nullptr);
   DispatchEvent(*event);
 }
 

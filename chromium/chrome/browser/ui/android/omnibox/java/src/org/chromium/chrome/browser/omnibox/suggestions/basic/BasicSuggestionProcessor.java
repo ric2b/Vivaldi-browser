@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -115,7 +115,7 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
 
         if (!isSearchSuggestion) {
             if (!suggestion.getUrl().isEmpty()
-                    && UrlBarData.shouldShowUrl(suggestion.getUrl().getSpec(), false)) {
+                    && UrlBarData.shouldShowUrl(suggestion.getUrl(), false)) {
                 SuggestionSpannable str = new SuggestionSpannable(suggestion.getDisplayText());
                 urlHighlighted = applyHighlightToMatchRegions(
                         str, suggestion.getDisplayTextClassifications());

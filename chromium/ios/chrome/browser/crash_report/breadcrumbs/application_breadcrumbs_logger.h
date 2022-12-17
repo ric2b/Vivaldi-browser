@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,8 +18,7 @@ class FilePath;
 extern const char kBreadcrumbOrientation[];
 
 // Listens for and logs application-wide breadcrumb events to the
-// BreadcrumbManager passed in the constructor. Includes iOS-specific events
-// such as device orientation.
+// BreadcrumbManager. Includes iOS-specific events such as device orientation.
 class ApplicationBreadcrumbsLogger
     : public breadcrumbs::ApplicationBreadcrumbsLogger {
  public:

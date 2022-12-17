@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,11 +56,15 @@ struct IdentityProvider {
 // This interface is called from a renderer process and implemented in the
 // browser process.
 interface FederatedAuthRequest {
-  // Requests a token to be generated, given an IdentityProvider.
-  // Returns the raw content of the token.
-  RequestToken(IdentityProvider identity_provider_ptr,
-                 bool prefer_auto_sign_in) =>
-      (RequestTokenStatus status, string? token);
+  // Requests a token to be generated, given an array of IdentityProviders.
+  // Returns:
+  // - Configuration URL of the identity provider that the user selected.
+  //   A null URL is returned if the token request failed or did not occur due
+  //   to an error earlier in the flow.
+  // - Raw content of the token.
+  RequestToken(array<IdentityProvider> identity_providers,
+               bool prefer_auto_sign_in, bool show_iframe_requester) =>
+      (RequestTokenStatus status, url.mojom.Url? selected_identity_provider_config_url, string? token);
 
   // Cancels the pending token request, if any.
   CancelTokenRequest();

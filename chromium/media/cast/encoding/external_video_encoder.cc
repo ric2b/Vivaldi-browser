@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,18 +13,17 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "base/cpu.h"                     // nogncheck
 #include "base/no_destructor.h"           // nogncheck
-#include "third_party/re2/src/re2/re2.h"  // nogncheck
 #endif
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -75,26 +74,16 @@ bool IsHardwareVP8EncodingSupported(
     base::StringPiece receiver_model_name,
     const std::vector<media::VideoEncodeAccelerator::SupportedProfile>&
         profiles) {
-#if BUILDFLAG(IS_CHROMEOS)
-  // NOTE: the hardware encoder on some Chrome OS devices does not play well
-  // with Vizio TVs. See https://crbug.com/1238774 for more information.
-  // Vizio uses the TV model string for the receiver model name.
-  const char* kVizioRegex =
-      R"(^(?i)(([DEMPV]|OLED)\d\d\w*-[A-Z]\w*)|(.*Vizio.*)$)";
-
-  if (RE2::FullMatch(re2::StringPiece(receiver_model_name.data(),
-                                      receiver_model_name.size()),
-                     RE2(kVizioRegex))) {
-    return false;
-  }
-#endif
-
+// The hardware encoder on ChromeOS has major issues when connecting to a
+// variety of first and third party devices. See https://crbug.com/1382591.
+#if !BUILDFLAG(IS_CHROMEOS)
   for (const auto& vea_profile : profiles) {
     if (vea_profile.profile >= media::VP8PROFILE_MIN &&
         vea_profile.profile <= media::VP8PROFILE_MAX) {
       return true;
     }
   }
+#endif
 
   return false;
 }  // namespace
@@ -293,22 +282,19 @@ class ExternalVideoEncoder::VEAClientImpl final
         video_frame->storage_type() !=
             media::VideoFrame::StorageType::STORAGE_SHMEM) {
       const int index = free_input_buffer_index_.back();
-      std::pair<base::UnsafeSharedMemoryRegion,
-                base::WritableSharedMemoryMapping>* input_buffer =
-          input_buffers_[index].get();
-      DCHECK(input_buffer->first.IsValid());
-      DCHECK(input_buffer->second.IsValid());
+      auto& mapped_region = input_buffers_[index];
+      DCHECK(mapped_region.IsValid());
       frame = VideoFrame::WrapExternalData(
           video_frame->format(), frame_coded_size_, video_frame->visible_rect(),
           video_frame->visible_rect().size(),
-          input_buffer->second.GetMemoryAsSpan<uint8_t>().data(),
-          input_buffer->second.size(), video_frame->timestamp());
+          static_cast<uint8_t*>(mapped_region.mapping.memory()),
+          mapped_region.mapping.size(), video_frame->timestamp());
       if (!frame || !media::I420CopyWithPadding(*video_frame, frame.get())) {
         LOG(DFATAL) << "Error: ExternalVideoEncoder: copy failed.";
         AbortLatestEncodeAttemptDueToErrors();
         return;
       }
-      frame->BackWithSharedMemory(&input_buffer->first);
+      frame->BackWithSharedMemory(&mapped_region.region);
 
       frame->AddDestructionObserver(media::BindToCurrentLoop(base::BindOnce(
           &ExternalVideoEncoder::VEAClientImpl::ReturnInputBufferToPool, this,
@@ -340,14 +326,9 @@ class ExternalVideoEncoder::VEAClientImpl final
   void AllocateInputBuffer(size_t size) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
-    auto memory = base::UnsafeSharedMemoryRegion::Create(size);
-    if (memory.IsValid()) {
-      base::WritableSharedMemoryMapping mapping = memory.Map();
-      DCHECK(mapping.IsValid());
-      input_buffers_.push_back(
-          std::make_unique<std::pair<base::UnsafeSharedMemoryRegion,
-                                     base::WritableSharedMemoryMapping>>(
-              std::move(memory), std::move(mapping)));
+    auto mapped_region = base::ReadOnlySharedMemoryRegion::Create(size);
+    if (mapped_region.IsValid()) {
+      input_buffers_.push_back(std::move(mapped_region));
       free_input_buffer_index_.push_back(input_buffers_.size() - 1);
     }
     allocate_input_buffer_in_progress_ = false;
@@ -422,7 +403,11 @@ class ExternalVideoEncoder::VEAClientImpl final
 
       auto encoded_frame = std::make_unique<SenderEncodedFrame>();
       encoded_frame->dependency =
-          metadata.key_frame ? EncodedFrame::KEY : EncodedFrame::DEPENDENT;
+          metadata.key_frame
+              ?
+
+              openscreen::cast::EncodedFrame::Dependency::kKeyFrame
+              : openscreen::cast::EncodedFrame::Dependency::kDependent;
       encoded_frame->frame_id = next_frame_id_++;
       if (metadata.key_frame) {
         encoded_frame->referenced_frame_id = encoded_frame->frame_id;
@@ -661,9 +646,7 @@ class ExternalVideoEncoder::VEAClientImpl final
   // |max_allowed_input_buffers_|. A VideoFrame wrapping the region will point
   // to it, so std::unique_ptr is used to ensure the region has a stable address
   // even if the vector grows or shrinks.
-  std::vector<std::unique_ptr<std::pair<base::UnsafeSharedMemoryRegion,
-                                        base::WritableSharedMemoryMapping>>>
-      input_buffers_;
+  std::vector<base::MappedReadOnlyRegion> input_buffers_;
 
   // Available input buffer index. These buffers are used in FILO order.
   std::vector<int> free_input_buffer_index_;

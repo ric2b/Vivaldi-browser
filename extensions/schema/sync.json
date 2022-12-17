@@ -53,8 +53,8 @@
         "description": "Error occuring as part of the sync cycle. This should be kept in sync with VivaldiSyncUIHelper::CycleStatus (sync/vivaldi_sync_ui_helper.h)",
         "type": "string",
         "enum": [ "not_synced", "success", "in_progress", "auth_error",
-          "server_error", "network_error", "client_error", "conflict",
-          "throttled", "other_error" ]
+          "server_error", "network_error", "conflict", "throttled",
+          "other_error" ]
       },
       {
         "id": "ProtocolErrorType",

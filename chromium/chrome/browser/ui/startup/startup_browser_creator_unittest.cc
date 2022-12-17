@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,15 +15,15 @@
 #endif
 
 TEST(StartupBrowserCreatorTest, ShouldLoadProfileWithoutWindow) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Forcibly set ash-chrome as the primary browser.
-  // This is the current default behavior.
-  crosapi::browser_util::SetLacrosPrimaryBrowserForTest(false);
-#endif
-
-  EXPECT_FALSE(StartupBrowserCreator::ShouldLoadProfileWithoutWindow(
-      base::CommandLine(base::CommandLine::NO_PROGRAM)));
   {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    // Forcibly set ash-chrome as the primary browser.
+    // This is the current default behavior.
+    auto set_lacros_primary =
+        crosapi::browser_util::SetLacrosPrimaryBrowserForTest(false);
+#endif
+    EXPECT_FALSE(StartupBrowserCreator::ShouldLoadProfileWithoutWindow(
+        base::CommandLine(base::CommandLine::NO_PROGRAM)));
     base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
     command_line.AppendSwitch(switches::kNoStartupWindow);
     EXPECT_TRUE(
@@ -31,12 +31,12 @@ TEST(StartupBrowserCreatorTest, ShouldLoadProfileWithoutWindow) {
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Check what happens if lacros-chrome becomes the primary browser.
-  crosapi::browser_util::SetLacrosPrimaryBrowserForTest(true);
-  EXPECT_TRUE(StartupBrowserCreator::ShouldLoadProfileWithoutWindow(
-      base::CommandLine(base::CommandLine::NO_PROGRAM)));
-
-  // Restore the global testing set up.
-  crosapi::browser_util::SetLacrosPrimaryBrowserForTest(absl::nullopt);
+  {
+    // Check what happens if lacros-chrome becomes the primary browser.
+    auto set_lacros_primary =
+        crosapi::browser_util::SetLacrosPrimaryBrowserForTest(true);
+    EXPECT_TRUE(StartupBrowserCreator::ShouldLoadProfileWithoutWindow(
+        base::CommandLine(base::CommandLine::NO_PROGRAM)));
+  }
 #endif
 }

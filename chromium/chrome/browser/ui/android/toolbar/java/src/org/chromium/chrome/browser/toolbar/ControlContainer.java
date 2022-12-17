@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,4 +44,10 @@ public interface ControlContainer {
      * @return The {@link View} associated with this container.
      */
     View getView();
+
+    /**
+     * Destroys the control container, causing it to release any owned native resources and cancel
+     * pending tasks.
+     */
+    void destroy();
 }

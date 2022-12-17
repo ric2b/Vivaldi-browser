@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,8 @@ suite('cr-toast-manager', () => {
   let toastManager: CrToastManagerElement;
 
   suiteSetup(() => {
-    document.body.innerHTML = '';
+    document.body.innerHTML =
+        window.trustedTypes!.emptyHTML as unknown as string;
     toastManager = /** @type {!CrToastManagerElement} */ (
         document.createElement('cr-toast-manager'));
     document.body.appendChild(toastManager);

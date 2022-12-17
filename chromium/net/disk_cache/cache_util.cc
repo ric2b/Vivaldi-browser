@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -128,8 +128,9 @@ namespace disk_cache {
 
 const int kDefaultCacheSize = 80 * 1024 * 1024;
 
-const base::Feature kChangeDiskCacheSizeExperiment{
-    "ChangeDiskCacheSize", base::FEATURE_DISABLED_BY_DEFAULT};
+BASE_FEATURE(kChangeDiskCacheSizeExperiment,
+             "ChangeDiskCacheSize",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 void DeleteCache(const base::FilePath& path, bool remove_folder) {
   if (remove_folder) {

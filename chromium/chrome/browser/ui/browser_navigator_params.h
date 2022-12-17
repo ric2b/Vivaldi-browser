@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -338,7 +338,7 @@ struct NavigateParams {
   PrivacySensitivity privacy_sensitivity = PrivacySensitivity::DEFAULT;
 
   // Ext data to assign to |contents_to_insert| on creation.
-  std::string* viv_ext_data = nullptr;
+  std::string viv_ext_data;
 
   // Create webcontentsview as a guest.
   bool should_create_guestframe = false;

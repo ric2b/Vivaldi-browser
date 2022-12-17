@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 #include "components/shared_highlighting/core/common/shared_highlighting_data_driven_test_results.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/renderer/core/annotation/annotation_agent_container_impl.h"
 #include "third_party/blink/renderer/core/annotation/annotation_agent_impl.h"
 #include "third_party/blink/renderer/core/editing/iterators/text_iterator.h"
@@ -140,7 +141,7 @@ String TextFragmentGenerationNavigationTest::GenerateSelector(
                    shared_highlighting::LinkGenerationError error) {
     selector = generated_selector.ToString();
   };
-  auto callback = WTF::Bind(lambda, std::ref(selector));
+  auto callback = WTF::BindOnce(lambda, std::ref(selector));
 
   MakeGarbageCollected<TextFragmentSelectorGenerator>(GetDocument().GetFrame())
       ->Generate(selection_range, std::move(callback));
@@ -186,7 +187,7 @@ TextFragmentGenerationNavigationTest::GenerateAndNavigate(
   // Generate text fragment selector.
   String selector = GenerateSelector(*selection_range);
 
-  if (selector.IsEmpty()) {
+  if (selector.empty()) {
     return shared_highlighting::SharedHighlightingDataDrivenTestResults();
   }
 

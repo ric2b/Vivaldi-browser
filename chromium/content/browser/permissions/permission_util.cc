@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,9 +8,12 @@
 #include "build/build_config.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+using blink::mojom::PermissionDescriptorPtr;
 
 namespace content {
 
@@ -35,6 +38,37 @@ GURL PermissionUtil::GetLastCommittedOriginAsURL(
 #endif
 
   return render_frame_host->GetLastCommittedOrigin().GetURL();
+}
+
+bool PermissionUtil::IsDomainOverride(
+    const PermissionDescriptorPtr& descriptor) {
+  return descriptor->extension && descriptor->extension->is_storage_access();
+}
+
+url::Origin PermissionUtil::ExtractDomainOverride(
+    const PermissionDescriptorPtr& descriptor) {
+  const blink::mojom::StorageAccessPermissionDescriptorPtr&
+      override_descriptor = descriptor->extension->get_storage_access();
+  return override_descriptor->siteOverride;
+}
+
+bool PermissionUtil::ValidateDomainOverride(
+    const std::vector<blink::PermissionType>& types,
+    RenderFrameHost* rfh) {
+  if (!base::FeatureList::IsEnabled(
+          blink::features::kStorageAccessAPIForOriginExtension)) {
+    return false;
+  }
+  if (types.size() > 1) {
+    // Requests with domain overrides must be requested individually.
+    return false;
+  }
+  if (!rfh || !rfh->IsInPrimaryMainFrame()) {
+    // Requests with domain overrides must be requested from a top-level
+    // browsing context.
+    return false;
+  }
+  return true;
 }
 
 }  // namespace content

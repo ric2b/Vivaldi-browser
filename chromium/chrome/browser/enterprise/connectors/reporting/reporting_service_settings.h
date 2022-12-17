@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,8 +19,8 @@
 namespace enterprise_connectors {
 
 // Feature flags for individual event types.
-extern const base::Feature kExtensionEventsEnabled;
-extern const base::Feature kBrowserCrashEventsEnabled;
+BASE_DECLARE_FEATURE(kExtensionEventsEnabled);
+BASE_DECLARE_FEATURE(kBrowserCrashEventsEnabled);
 
 // The settings for a report service obtained from a connector policy.
 class ReportingServiceSettings {

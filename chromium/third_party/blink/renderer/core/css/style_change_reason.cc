@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,6 +61,7 @@ DEFINE_GLOBAL(AtomicString, g_focus_visible);
 DEFINE_GLOBAL(AtomicString, g_focus_within);
 DEFINE_GLOBAL(AtomicString, g_hover);
 DEFINE_GLOBAL(AtomicString, g_past);
+DEFINE_GLOBAL(AtomicString, g_toggle);
 DEFINE_GLOBAL(AtomicString, g_unresolved);
 
 void Init() {
@@ -76,6 +77,7 @@ void Init() {
       AtomicString(":focus-within");
   new (NotNullTag::kNotNull, (void*)&g_hover) AtomicString(":hover");
   new (NotNullTag::kNotNull, (void*)&g_past) AtomicString(":past");
+  new (NotNullTag::kNotNull, (void*)&g_toggle) AtomicString(":toggle");
   new (NotNullTag::kNotNull, (void*)&g_unresolved) AtomicString(":unresolved");
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -384,7 +384,7 @@ void GamepadProvider::DoPoll() {
 
     // Send out disconnect events using the last polled data.
     if (ever_had_user_gesture_ && !state.is_newly_active && !state.is_active &&
-        state.source != GAMEPAD_SOURCE_NONE) {
+        state.source != GamepadSource::kNone) {
       auto pad = old_buffer.items[i];
       pad.connected = false;
       OnGamepadConnectionChange(false, i, pad);

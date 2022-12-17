@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -903,7 +903,8 @@ void NetworkQualityEstimator::AddEffectiveConnectionTypeObserver(
       FROM_HERE,
       base::BindOnce(&NetworkQualityEstimator::
                          NotifyEffectiveConnectionTypeObserverIfPresent,
-                     weak_ptr_factory_.GetWeakPtr(), observer));
+                     weak_ptr_factory_.GetWeakPtr(),
+                     base::UnsafeDanglingUntriaged(observer)));
 }
 
 void NetworkQualityEstimator::RemoveEffectiveConnectionTypeObserver(
@@ -924,7 +925,8 @@ void NetworkQualityEstimator::AddPeerToPeerConnectionsCountObserver(
       FROM_HERE,
       base::BindOnce(&NetworkQualityEstimator::
                          NotifyPeerToPeerConnectionsCountObserverIfPresent,
-                     weak_ptr_factory_.GetWeakPtr(), observer));
+                     weak_ptr_factory_.GetWeakPtr(),
+                     base::UnsafeDanglingUntriaged(observer)));
 }
 
 void NetworkQualityEstimator::RemovePeerToPeerConnectionsCountObserver(

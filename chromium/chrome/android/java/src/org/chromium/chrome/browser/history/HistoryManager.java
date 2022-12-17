@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.history;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Rect;
 import android.text.TextUtils;
 import android.transition.AutoTransition;
 import android.transition.Scene;
@@ -13,6 +14,8 @@ import android.transition.Transition;
 import android.transition.TransitionManager;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
+import android.view.TouchDelegate;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -56,6 +59,7 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
+import org.chromium.components.browser_ui.widget.CompositeTouchDelegate;
 import org.chromium.components.browser_ui.widget.DateDividedAdapter.DateViewHolder;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
@@ -71,9 +75,9 @@ import org.chromium.url.GURL;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
-import android.view.View;
 
 import org.vivaldi.browser.panels.PanelUtils;
 
@@ -158,8 +162,12 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
 
         mRootView = new FrameLayout(mActivity);
 
+        boolean historyClustersPrefIsManaged =
+                mPrefService.isManagedPreference(HISTORY_CLUSTERS_VISIBLE_PREF);
         boolean historyClustersEnabled =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.HISTORY_JOURNEYS);
+                ChromeFeatureList.isEnabled(ChromeFeatureList.HISTORY_JOURNEYS)
+                && !(historyClustersPrefIsManaged
+                        && !mPrefService.getBoolean(HISTORY_CLUSTERS_VISIBLE_PREF));
         if (historyClustersEnabled) {
             HistoryClustersDelegate historyClustersDelegate = new HistoryClustersDelegate() {
                 @Override
@@ -320,6 +328,11 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
                     .setTitle(historyClustersVisible
                                     ? R.string.history_clusters_disable_menu_item_label
                                     : R.string.history_clusters_enable_menu_item_label);
+            // In the unlikely event history clusters is force enabled by policy, remove the menu
+            // option to turn it off.
+            if (historyClustersPrefIsManaged) {
+                mToolbar.getMenu().removeItem(R.id.optout_menu_id);
+            }
         } else {
             mToolbar.getMenu().removeItem(R.id.optout_menu_id);
         }
@@ -396,11 +409,54 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
         });
 
         TabLayout.Tab firstTab = tabLayout.getTabAt(0);
+        TabLayout.Tab secondTab = tabLayout.getTabAt(1);
         int leftPadding = firstTab.view.getPaddingLeft();
         firstTab.view.setPadding(leftPadding, 0, leftPadding, 0);
-        tabLayout.getTabAt(1).view.setPadding(leftPadding, 0, leftPadding, 0);
+        secondTab.view.setPadding(leftPadding, 0, leftPadding, 0);
 
+        // The TabLayout is too short for the minimum touch target size (48dp) so we expand the true
+        // touch target by adding a CompositeTouchDelegate. This will route touch events from the
+        // full 48dp band to the correct tab.
+        CompositeTouchDelegate compositeTouchDelegate = new CompositeTouchDelegate(viewGroup);
+        viewGroup.setTouchDelegate(compositeTouchDelegate);
+        firstTab.view.addOnLayoutChangeListener(
+                (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom)
+                        -> updateTouchDelegate(
+                                compositeTouchDelegate, view, tabLayout, new AtomicReference<>()));
+        secondTab.view.addOnLayoutChangeListener(
+                (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom)
+                        -> updateTouchDelegate(
+                                compositeTouchDelegate, view, tabLayout, new AtomicReference<>()));
         return viewGroup;
+    }
+
+    private void updateTouchDelegate(CompositeTouchDelegate compositeTouchDelegate, View tabView,
+            View tabLayout, AtomicReference<TouchDelegate> touchDelegateRef) {
+        Rect tabBounds = getTabViewBoundsRelativeToGrandparent(tabView, tabLayout);
+        int addedTouchTargetHeight = tabView.getResources().getDimensionPixelSize(
+                R.dimen.history_toggle_added_touch_target_height);
+        tabBounds.top -= addedTouchTargetHeight;
+        tabBounds.bottom += addedTouchTargetHeight;
+
+        TouchDelegate oldTouchDelegate = touchDelegateRef.get();
+        if (oldTouchDelegate != null) {
+            compositeTouchDelegate.removeDelegateForDescendantView(oldTouchDelegate);
+        }
+
+        TouchDelegate newTouchDelegate = new TouchDelegate(tabBounds, tabView);
+        compositeTouchDelegate.addDelegateForDescendantView(newTouchDelegate);
+        touchDelegateRef.set(newTouchDelegate);
+    }
+
+    /**
+     * Gets the bounds of a TabView relative to its grandparent by offsetting its HitRect by the
+     * position of its parent TabLayout.
+     */
+    private Rect getTabViewBoundsRelativeToGrandparent(View tabView, View tabLayout) {
+        Rect tabBounds = new Rect();
+        tabView.getHitRect(tabBounds);
+        tabBounds.offset(tabLayout.getLeft(), tabLayout.getTop());
+        return tabBounds;
     }
 
     /**
@@ -459,6 +515,8 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
                 mContentManager.getRecyclerView().announceForAccessibility(mActivity.getString(
                         R.string.multiple_history_items_deleted, numItemsRemoved));
             }
+
+            notifyHistoryClustersCoordinatorOfDeletion();
 
             return true;
         } else if (item.getItemId() == R.id.search_menu_id) {
@@ -649,6 +707,11 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
         }
     }
 
+    private void notifyHistoryClustersCoordinatorOfDeletion() {
+        if (mHistoryClustersCoordinator == null) return;
+        mHistoryClustersCoordinator.onHistoryDeletedExternally();
+    }
+
     /**
      * @param action The user action string to record.
      */
@@ -756,6 +819,8 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
         if (mSelectionDelegate.isItemSelected(item)) {
             mSelectionDelegate.toggleSelectionForItem(item);
         }
+
+        notifyHistoryClustersCoordinatorOfDeletion();
     }
 
     // HistoryContentManager.Observer
@@ -781,6 +846,12 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
     public void onUserAccountStateChanged() {
         mToolbar.onSignInStateChange();
         mShouldShowClearBrowsingDataSupplier.set(mContentManager.getShouldShowClearData());
+    }
+
+    // HistoryContentManager.Observer
+    @Override
+    public void onHistoryDeletedExternally() {
+        notifyHistoryClustersCoordinatorOfDeletion();
     }
 
     @VisibleForTesting

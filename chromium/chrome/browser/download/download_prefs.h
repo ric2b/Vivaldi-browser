@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,13 +92,6 @@ class DownloadPrefs {
   // download location is not managed (which means the user shouldn't be able
   // to choose another download location).
   bool PromptForDownload() const;
-
-  // Returns whether to prompt download later dialog to let the user choose
-  // download time.
-  bool PromptDownloadLater() const;
-
-  // Returns whether the download later prompt is ever shown to the user.
-  bool HasDownloadLaterPromptShown() const;
 
   // Returns true if the download path preference is managed.
   bool IsDownloadPathManaged() const;

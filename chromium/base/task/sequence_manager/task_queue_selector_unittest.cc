@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -111,7 +111,7 @@ class TaskQueueSelectorTest : public testing::Test {
     for (size_t i = 0; i < kTaskQueueCount; i++) {
       std::unique_ptr<TaskQueueImpl> task_queue =
           std::make_unique<TaskQueueImpl>(nullptr, nullptr,
-                                          TaskQueue::Spec("test"));
+                                          TaskQueue::Spec(QueueName::TEST_TQ));
       selector_.AddQueue(task_queue.get());
       task_queues_.push_back(std::move(task_queue));
     }
@@ -134,7 +134,7 @@ class TaskQueueSelectorTest : public testing::Test {
 
   std::unique_ptr<TaskQueueImpl> NewTaskQueueWithBlockReporting() {
     return std::make_unique<TaskQueueImpl>(nullptr, nullptr,
-                                           TaskQueue::Spec("test"));
+                                           TaskQueue::Spec(QueueName::TEST_TQ));
   }
 
   const size_t kTaskQueueCount =

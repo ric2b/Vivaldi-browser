@@ -1,12 +1,13 @@
 <style include="cr-shared-style">
   :host {
-    --ntp-theme-text-color: var(--google-grey-800);
     --ntp-theme-text-shadow: none;
     --ntp-one-google-bar-height: 56px;
     --ntp-search-box-width: 337px;
     --ntp-module-width: var(--ntp-search-box-width);
     --ntp-module-layout-width: var(--ntp-search-box-width);
     --ntp-module-border-radius: 5px;
+    --ntp-protected-icon-background-color: transparent;
+    --ntp-protected-icon-background-color-hovered: rgba(255, 255, 255, .1);
   }
 
   @media (min-width: 560px) {
@@ -18,12 +19,6 @@
   @media (min-width: 672px) {
     :host {
       --ntp-search-box-width: 561px;
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :host {
-      --ntp-theme-text-color: white;
     }
   }
 
@@ -53,6 +48,13 @@
     --ntp-theme-text-shadow: 0 0 16px rgba(0, 0, 0, .3);
   }
 
+  :host([show-background-image_][remove-scrim_]) {
+    --ntp-theme-text-shadow: 0.5px 0.5px 1px rgba(0, 0, 0, 0.5),
+        0px 0px 2px rgba(0, 0, 0, 0.2), 0px 0px 10px rgba(0, 0, 0, 0.1);
+    --ntp-protected-icon-background-color: rgba(0, 0, 0, .6);
+    --ntp-protected-icon-background-color-hovered: rgba(0, 0, 0, .7);
+  }
+
   #oneGoogleBar {
     height: 100%;
     position: absolute;
@@ -76,13 +78,10 @@
     z-index: 1;  /* Needed so it layers on top of OneGoogleBar. */
   }
 
-  ntp-realbox {
+  #realboxContainer {
+    display: inherit;
     margin-bottom: 16px;
-  }
-
-  ntp-realbox {
-    flex-shrink: 0;
-    width: var(--ntp-search-box-width);
+    position: relative;
   }
 
   ntp-modules {
@@ -96,6 +95,7 @@
 
   ntp-realbox {
     visibility: hidden;
+    width: var(--ntp-search-box-width);
   }
 
   ntp-realbox[shown] {
@@ -104,7 +104,7 @@
 
   cr-most-visited {
     --most-visited-focus-shadow: var(--ntp-focus-shadow);
-    --most-visited-text-color: var(--ntp-theme-text-color);
+    --most-visited-text-color: var(--color-new-tab-page-most-visited-foreground);
     --most-visited-text-shadow: var(--ntp-theme-text-shadow);
   }
 
@@ -115,7 +115,7 @@
   }
 
   #customizeButtonContainer {
-    background-color: var(--ntp-background-override-color);
+    background-color: var(--color-new-tab-page-button-background);
     border-radius: calc(.5 * var(--cr-button-height));
     bottom: 16px;
     position: fixed;
@@ -130,14 +130,15 @@
   }
 
   :host([show-background-image_]) #customizeButtonContainer {
-    background-color: transparent;
+    background-color: var(--ntp-protected-icon-background-color);
   }
 
   :host([show-background-image_]) #customizeButtonContainer:hover {
-    background-color: rgba(255, 255, 255, .1);
+    background-color: var(--ntp-protected-icon-background-color-hovered);
   }
 
   #customizeButton {
+    --text-color: var(--color-new-tab-page-button-foreground);
     border: none;
     border-radius: calc(.5 * var(--cr-button-height));
     box-shadow: 0 3px 6px rgba(0, 0, 0, .16), 0 1px 2px rgba(0, 0, 0, .23);
@@ -214,7 +215,7 @@
   #themeAttribution {
     align-self: flex-start;
     bottom: 16px;
-    color: var(--cr-secondary-text-color);
+    color: var(--color-new-tab-page-secondary-foreground);
     margin-inline-start: 16px;
     position: fixed;
   }
@@ -222,13 +223,22 @@
   #backgroundImageAttribution {
     border-radius: 8px;
     bottom: 16px;
-    color: var(--ntp-theme-text-color);
+    color: var(--color-new-tab-page-attribution-foreground);
     line-height: 20px;
     max-width: 50vw;
     padding: 8px;
     position: fixed;
     text-shadow: var(--ntp-theme-text-shadow);
     z-index: -1;
+  }
+
+  :host([remove-scrim_]) #backgroundImageAttribution {
+    background-color: var(--ntp-protected-icon-background-color);
+    text-shadow: none;
+  }
+
+  :host([remove-scrim_]) #backgroundImageAttribution:hover {
+    background-color: var(--ntp-protected-icon-background-color-hovered);
   }
 
   :host-context([dir='ltr']) #backgroundImageAttribution {
@@ -253,7 +263,7 @@
     -webkit-mask-image: url(icons/link.svg);
     -webkit-mask-repeat: no-repeat;
     -webkit-mask-size: 100%;
-    background-color: var(--ntp-theme-text-color);
+    background-color: var(--color-new-tab-page-attribution-foreground);
     height: 16px;
     margin-inline-end: 8px;
     width: 16px;
@@ -283,14 +293,24 @@
   svg {
     position: fixed;
   }
+
+  ntp-lens-upload-dialog {
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 101;
+  }
 </style>
 <div id="content" style="
-        --ntp-theme-text-color: [[rgbaOrInherit_(theme_.textColor)]];
+        --color-new-tab-page-attribution-foreground: [[rgbaOrInherit_(theme_.textColor)]];
+        --color-new-tab-page-most-visited-foreground: [[rgbaOrInherit_(theme_.textColor)]];
         --ntp-logo-color: [[rgbaOrInherit_(logoColor_)]];">
   <template is="dom-if" if="[[lazyRender_]]">
     <template is="dom-if" if="[[oneGoogleBarEnabled_]]">
       <ntp-iframe id="oneGoogleBar" src="[[oneGoogleBarIframePath_]]"
-          hidden$="[[!oneGoogleBarLoaded_]]">
+          hidden$="[[!oneGoogleBarLoaded_]]"
+          allow="camera [[oneGoogleBarIframeOrigin_]]; display-capture [[oneGoogleBarIframeOrigin_]]"> <!-- presubmit: ignore-long-line -->
       </ntp-iframe>
     </template>
   </template>
@@ -302,9 +322,17 @@
       dark="[[theme_.isDark]]" background-color="[[backgroundColor_]]"
       hidden$="[[!logoEnabled_]]">
   </ntp-logo>
-  <ntp-realbox id="realbox" on-open-voice-search="onOpenVoiceSearch_"
-      theme="[[theme_.searchBox]]" shown$="[[realboxShown_]]">
-  </ntp-realbox>
+  <div id="realboxContainer">
+    <ntp-realbox id="realbox" is-dark="[[theme_.isDark]]"
+        on-open-lens-search="onOpenLensSearch_"
+        on-open-voice-search="onOpenVoiceSearch_" shown$="[[realboxShown_]]">
+    </ntp-realbox>
+    <template is="dom-if" if="[[realboxLensSearchEnabled_]]">
+      <ntp-lens-upload-dialog id="lensUploadDialog" 
+          on-close-lens-search="onCloseLensSearch_">
+      </ntp-lens-upload-dialog>
+    </template>
+  </div>
   <dom-if if="[[lazyRender_]]" on-dom-change="onLazyRendered_">
     <template>
       <template is="dom-if" if="[[shortcutsEnabled_]]">
@@ -343,7 +371,7 @@
       <!-- cr-button has a transparent background. This leads to incorrect
            results when a custom background is set. Therefore, wrap customize
            button in container to enforce solid background color. -->
-      <div id="customizeButtonContainer" 
+      <div id="customizeButtonContainer"
           hidden="[[customizeChromeSidePanelShowing_]]">
         <cr-button id="customizeButton" on-click="onCustomizeClick_"
             title="$i18n{customizeThisPage}">

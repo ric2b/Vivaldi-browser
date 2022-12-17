@@ -48,8 +48,8 @@
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/loader/testing/web_url_loader_factory_with_mock.h"
+#include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 
 namespace blink {
 
@@ -104,7 +104,8 @@ DummyPageHolder::DummyPageHolder(
   frame_->SetView(
       MakeGarbageCollected<LocalFrameView>(*frame_, initial_view_size));
   frame_->View()->GetPage()->GetVisualViewport().SetSize(initial_view_size);
-  frame_->Init(/*opener=*/nullptr, /*policy_container=*/nullptr, StorageKey());
+  frame_->Init(/*opener=*/nullptr, DocumentToken(),
+               /*policy_container=*/nullptr, StorageKey());
 
   CoreInitializer::GetInstance().ProvideModulesToPage(GetPage(),
                                                       base::EmptyString());

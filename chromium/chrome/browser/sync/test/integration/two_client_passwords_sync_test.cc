@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -533,8 +533,7 @@ class TwoClientPasswordsSyncTestWithNotes : public SyncTest {
  public:
   TwoClientPasswordsSyncTestWithNotes() : SyncTest(TWO_CLIENT) {
     feature_list_.InitWithFeatures(
-        /*enabled_features=*/{password_manager::features::kPasswordNotes,
-                              syncer::kReadWritePasswordNotesBackupField},
+        /*enabled_features=*/{syncer::kPasswordNotesWithBackup},
         /*disabled_features=*/{});
   }
   ~TwoClientPasswordsSyncTestWithNotes() override = default;

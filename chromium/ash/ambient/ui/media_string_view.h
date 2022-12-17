@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,10 +22,6 @@ class Label;
 }  // namespace views
 
 namespace ash {
-
-namespace {
-class FadeoutLayerDelegate;
-}
 
 // Container for displaying ongoing media information, including the name of the
 // media and the artist, formatted with a proceding music note symbol and a
@@ -104,8 +100,6 @@ class MediaStringView : public views::View,
 
   // With an extra copy of media info text for scrolling animation.
   views::Label* media_text_ = nullptr;
-
-  std::unique_ptr<FadeoutLayerDelegate> fadeout_layer_delegate_;
 
   // Used to receive updates to the active media controller.
   mojo::Remote<media_session::mojom::MediaController> media_controller_remote_;

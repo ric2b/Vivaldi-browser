@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/core/css/css_primitive_value_mappings.h"
 #include "third_party/blink/renderer/core/css/css_quad_value.h"
 #include "third_party/blink/renderer/core/css/css_reflect_value.h"
+#include "third_party/blink/renderer/core/css/css_scroll_value.h"
 #include "third_party/blink/renderer/core/css/css_shadow_value.h"
 #include "third_party/blink/renderer/core/css/css_string_value.h"
 #include "third_party/blink/renderer/core/css/css_timing_function_value.h"
@@ -1167,8 +1168,8 @@ class OrderedNamedLinesCollector {
   virtual ~OrderedNamedLinesCollector() = default;
 
   bool IsEmpty() const {
-    return ordered_named_grid_lines_.IsEmpty() &&
-           ordered_named_auto_repeat_grid_lines_.IsEmpty();
+    return ordered_named_grid_lines_.empty() &&
+           ordered_named_auto_repeat_grid_lines_.empty();
   }
   virtual void CollectLineNamesForIndex(
       cssvalue::CSSBracketedValueList&,
@@ -1408,7 +1409,7 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
   bool is_track_list_empty =
       is_layout_ng
           ? !computed_grid_track_list.TrackList().RepeaterCount()
-          : (legacy_track_sizes.IsEmpty() && auto_repeat_track_sizes.IsEmpty());
+          : (legacy_track_sizes.empty() && auto_repeat_track_sizes.empty());
   if (is_layout_grid && is_track_list_empty) {
     // For grids we should consider every listed track, whether implicitly or
     // explicitly created. Empty grids have a sole grid line per axis.
@@ -1459,7 +1460,7 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
     return SpecifiedValueForGridTrackSize(v, style);
   };
 
-  if (auto_repeat_track_sizes.IsEmpty()) {
+  if (auto_repeat_track_sizes.empty()) {
     if (!is_layout_ng) {
       // If it's legacy grid or there's no repeat(), just add all the line names
       // and track sizes.
@@ -1837,6 +1838,38 @@ CSSValue* ComputedStyleUtils::ValueForAnimationTimingFunction(
   return list;
 }
 
+CSSValue* ComputedStyleUtils::ValueForAnimationTimeline(
+    const StyleTimeline& timeline) {
+  if (timeline.IsKeyword()) {
+    DCHECK(timeline.GetKeyword() == CSSValueID::kAuto ||
+           timeline.GetKeyword() == CSSValueID::kNone);
+    return CSSIdentifierValue::Create(timeline.GetKeyword());
+  }
+  if (timeline.IsName())
+    return ValueForStyleName(timeline.GetName());
+  DCHECK(timeline.IsScroll());
+  const StyleTimeline::ScrollData& scroll_data = timeline.GetScroll();
+  CSSValue* axis = scroll_data.HasDefaultAxis()
+                       ? nullptr
+                       : CSSIdentifierValue::Create(scroll_data.GetAxis());
+  CSSValue* scroller =
+      scroll_data.HasDefaultScroller()
+          ? nullptr
+          : CSSIdentifierValue::Create(scroll_data.GetScroller());
+
+  return MakeGarbageCollected<cssvalue::CSSScrollValue>(axis, scroller);
+}
+
+CSSValue* ComputedStyleUtils::SingleValueForViewTimelineShorthand(
+    const AtomicString& name,
+    TimelineAxis axis) {
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  list->Append(*ValueForCustomIdentOrNone(name));
+  if (axis != TimelineAxis::kBlock)
+    list->Append(*CSSIdentifierValue::Create(axis));
+  return list;
+}
+
 CSSValueList* ComputedStyleUtils::ValuesForBorderRadiusCorner(
     const LengthSize& radius,
     const ComputedStyle& style) {
@@ -1872,11 +1905,9 @@ CSSFunctionValue* ComputedStyleUtils::ValueForTransformationMatrix(
   if (matrix.IsAffine() && !force_matrix3d) {
     auto* result = MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kMatrix);
     // CSS matrix values are returned in column-major order.
-    double values[6] = {matrix.A(), matrix.B(),  //
-                        matrix.C(), matrix.D(),  //
-                        // E and F are pixel lengths so unzoom
-                        matrix.E() / zoom, matrix.F() / zoom};
-    for (double value : values) {
+    auto unzoomed = matrix.ToAffineTransform().Zoom(1.f / zoom);
+    for (double value : {unzoomed.A(), unzoomed.B(), unzoomed.C(), unzoomed.D(),
+                         unzoomed.E(), unzoomed.F()}) {
       result->Append(*CSSNumericLiteralValue::Create(
           value, CSSPrimitiveValue::UnitType::kNumber));
     }
@@ -1885,19 +1916,11 @@ CSSFunctionValue* ComputedStyleUtils::ValueForTransformationMatrix(
     CSSFunctionValue* result =
         MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kMatrix3d);
     // CSS matrix values are returned in column-major order.
-    double values[16] = {
-        // Note that the transformation matrix operates on (Length^3 * R).
-        // Each column contains 3 scalars followed by a reciprocal length
-        // (with a value in 1/px) which must be unzoomed accordingly.
-        matrix.M11(), matrix.M12(), matrix.M13(), matrix.M14() * zoom,
-        matrix.M21(), matrix.M22(), matrix.M23(), matrix.M24() * zoom,
-        matrix.M31(), matrix.M32(), matrix.M33(), matrix.M34() * zoom,
-        // Last column has 3 pixel lengths and a scalar
-        matrix.M41() / zoom, matrix.M42() / zoom, matrix.M43() / zoom,
-        matrix.M44()};
-    for (double value : values) {
+    auto unzoomed = matrix;
+    unzoomed.Zoom(1.f / zoom);
+    for (int i = 0; i < 16; i++) {
       result->Append(*CSSNumericLiteralValue::Create(
-          value, CSSPrimitiveValue::UnitType::kNumber));
+          unzoomed.ColMajorData()[i], CSSPrimitiveValue::UnitType::kNumber));
     }
     return result;
   }
@@ -2392,7 +2415,7 @@ CSSValueList* ComputedStyleUtils::ValueForBorderRadiusShorthand(
 CSSValue* ComputedStyleUtils::StrokeDashArrayToCSSValueList(
     const SVGDashArray& dashes,
     const ComputedStyle& style) {
-  if (dashes.data.IsEmpty())
+  if (dashes.data.empty())
     return CSSIdentifierValue::Create(CSSValueID::kNone);
 
   CSSValueList* list = CSSValueList::CreateCommaSeparated();
@@ -2469,7 +2492,7 @@ CSSValue* ComputedStyleUtils::ValueForShadowList(const ShadowList* shadow_list,
 CSSValue* ComputedStyleUtils::ValueForFilter(
     const ComputedStyle& style,
     const FilterOperations& filter_operations) {
-  if (filter_operations.Operations().IsEmpty())
+  if (filter_operations.Operations().empty())
     return CSSIdentifierValue::Create(CSSValueID::kNone);
 
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
@@ -2974,6 +2997,44 @@ CSSValueList* ComputedStyleUtils::ValuesForContainerShorthand(
   return list;
 }
 
+CSSValueList* ComputedStyleUtils::ValuesForScrollTimelineShorthand(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style) {
+  CHECK_EQ(scrollTimelineShorthand().length(), 2u);
+  CHECK_EQ(scrollTimelineShorthand().properties()[0],
+           &GetCSSPropertyScrollTimelineAxis());
+  CHECK_EQ(scrollTimelineShorthand().properties()[1],
+           &GetCSSPropertyScrollTimelineName());
+
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+
+  const CSSValue* axis =
+      GetCSSPropertyScrollTimelineAxis().CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style);
+  const CSSValue* name =
+      GetCSSPropertyScrollTimelineName().CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style);
+
+  DCHECK(axis);
+  DCHECK(name);
+
+  // Append any value that's not the initial value.
+  if (To<CSSIdentifierValue>(*axis).GetValueID() != CSSValueID::kBlock) {
+    list->Append(*axis);
+  }
+  if (!(IsA<CSSIdentifierValue>(name) &&
+        To<CSSIdentifierValue>(*name).GetValueID() == CSSValueID::kNone)) {
+    list->Append(*name);
+  }
+
+  // If both values were the initial value, we append axis.
+  if (!list->length())
+    list->Append(*axis);
+
+  return list;
+}
+
 // Returns up to two values for 'scroll-customization' property. The values
 // correspond to the customization values for 'x' and 'y' axes.
 CSSValue* ComputedStyleUtils::ScrollCustomizationFlagsToCSSValue(
@@ -3027,6 +3088,13 @@ CSSValue* ComputedStyleUtils::ValueForStyleNameOrKeyword(
   if (value.IsKeyword())
     return CSSIdentifierValue::Create(value.GetKeyword());
   return ValueForStyleName(value.GetName());
+}
+
+CSSValue* ComputedStyleUtils::ValueForCustomIdentOrNone(
+    const AtomicString& ident) {
+  if (ident.empty())
+    return CSSIdentifierValue::Create(CSSValueID::kNone);
+  return MakeGarbageCollected<CSSCustomIdentValue>(ident);
 }
 
 const CSSValue* ComputedStyleUtils::ValueForStyleAutoColor(

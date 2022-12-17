@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/tray_background_view_catalog.h"
 #include "ash/focus_cycler.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
@@ -61,6 +62,7 @@
 #include "ui/compositor/presentation_time_recorder.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification_view_controller.h"
 #include "ui/views/controls/image_view.h"
@@ -174,6 +176,7 @@ void UnifiedSystemTray::UiDelegate::HideMessageCenter() {}
 UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
     : TrayBackgroundView(
           shelf,
+          TrayBackgroundViewCatalogName::kUnifiedSystem,
           (features::IsCalendarViewEnabled() ? kEndRounded : kAllRounded)),
       ui_delegate_(std::make_unique<UiDelegate>(this)),
       model_(base::MakeRefCounted<UnifiedSystemTrayModel>(shelf)),
@@ -190,10 +193,15 @@ UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
       ime_mode_view_(new ImeModeView(shelf)),
       managed_device_view_(new ManagedDeviceTrayItemView(shelf)),
       camera_view_(
-          new CameraMicTrayItemView(shelf,
-                                    CameraMicTrayItemView::Type::kCamera)),
+          !features::IsPrivacyIndicatorsEnabled()
+              ? new CameraMicTrayItemView(shelf,
+                                          CameraMicTrayItemView::Type::kCamera)
+              : nullptr),
       mic_view_(
-          new CameraMicTrayItemView(shelf, CameraMicTrayItemView::Type::kMic)),
+          !features::IsPrivacyIndicatorsEnabled()
+              ? new CameraMicTrayItemView(shelf,
+                                          CameraMicTrayItemView::Type::kMic)
+              : nullptr),
       time_view_(new TimeTrayItemView(shelf, TimeView::Type::kTime)),
       privacy_indicators_view_(features::IsPrivacyIndicatorsEnabled()
                                    ? new PrivacyIndicatorsTrayItemView(shelf)
@@ -233,8 +241,11 @@ UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
   AddTrayItemToContainer(current_locale_view_);
   AddTrayItemToContainer(ime_mode_view_);
   AddTrayItemToContainer(managed_device_view_);
-  AddTrayItemToContainer(camera_view_);
-  AddTrayItemToContainer(mic_view_);
+
+  if (!features::IsPrivacyIndicatorsEnabled()) {
+    AddTrayItemToContainer(camera_view_);
+    AddTrayItemToContainer(mic_view_);
+  }
 
   if (features::IsSeparateNetworkIconsEnabled()) {
     network_tray_view_ =
@@ -274,11 +285,13 @@ UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
 
   ShelfConfig::Get()->AddObserver(this);
   Shell::Get()->AddShellObserver(this);
+  Shell::Get()->tablet_mode_controller()->AddObserver(this);
 }
 
 UnifiedSystemTray::~UnifiedSystemTray() {
-  ShelfConfig::Get()->RemoveObserver(this);
+  Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
   Shell::Get()->RemoveShellObserver(this);
+  ShelfConfig::Get()->RemoveObserver(this);
 
   DestroyBubbles();
 
@@ -322,14 +335,6 @@ void UnifiedSystemTray::MaybeUpdateVerticalClockPadding() {
   const bool should_show_padding = MoreThanOneVisibleTrayItem();
   if (padding_is_visible != should_show_padding)
     vertical_clock_padding_->SetVisible(should_show_padding);
-}
-
-void UnifiedSystemTray::UpdatePrivacyIndicatorsTrayItem(
-    bool camera_is_used,
-    bool microphone_is_used) {
-  if (!features::IsPrivacyIndicatorsEnabled())
-    return;
-  privacy_indicators_view_->Update(camera_is_used, microphone_is_used);
 }
 
 void UnifiedSystemTray::OnViewVisibilityChanged(views::View* observed_view,
@@ -519,6 +524,14 @@ void UnifiedSystemTray::OnTransitioningFromCalendarToMainView() {
     observer.OnLeavingCalendarView();
 }
 
+void UnifiedSystemTray::OnTabletModeStarted() {
+  UpdateLayout();
+}
+
+void UnifiedSystemTray::OnTabletModeEnded() {
+  UpdateLayout();
+}
+
 void UnifiedSystemTray::OnDateTrayActionPerformed(const ui::Event& event) {
   if (!bubble_)
     ShowBubble();
@@ -570,7 +583,12 @@ void UnifiedSystemTray::ShowBubble() {
   // ShowBubbleInternal will be called from UiDelegate.
   if (!bubble_) {
     time_opened_ = base::TimeTicks::Now();
-    ui_delegate_->ui_controller()->ShowMessageCenterBubble();
+
+    if (features::IsQsRevampEnabled())
+      ShowBubbleInternal();
+    else
+      ui_delegate_->ui_controller()->ShowMessageCenterBubble();
+
     Shell::Get()->system_tray_notifier()->NotifySystemTrayBubbleShown();
   }
 }
@@ -592,6 +610,14 @@ std::u16string UnifiedSystemTray::GetAccessibleNameForBubble() {
 }
 
 std::u16string UnifiedSystemTray::GetAccessibleNameForQuickSettingsBubble() {
+  if (features::IsQsRevampEnabled()) {
+    if (bubble_->quick_settings_view()->IsDetailedViewShown())
+      return bubble_->quick_settings_view()->GetDetailedViewAccessibleName();
+
+    return l10n_util::GetStringUTF16(
+        IDS_ASH_QUICK_SETTINGS_BUBBLE_ACCESSIBLE_DESCRIPTION);
+  }
+
   if (bubble_->unified_view()->IsDetailedViewShown())
     return bubble_->unified_view()->GetDetailedViewAccessibleName();
 
@@ -620,12 +646,26 @@ std::u16string UnifiedSystemTray::GetAccessibleNameForTray() {
   status.push_back(network_tray_view_->GetVisible()
                        ? network_tray_view_->GetAccessibleNameString()
                        : base::EmptyString16());
-  status.push_back(mic_view_->GetVisible()
-                       ? mic_view_->GetAccessibleNameString()
-                       : base::EmptyString16());
-  status.push_back(camera_view_->GetVisible()
-                       ? camera_view_->GetAccessibleNameString()
-                       : base::EmptyString16());
+
+  // For privacy string, we use either `privacy_indicators_view_` or the combo
+  // of `mic_view_` and `camera_view_`.
+  if (features::IsPrivacyIndicatorsEnabled()) {
+    status.push_back(
+        privacy_indicators_view_ && privacy_indicators_view_->GetVisible()
+            ? privacy_indicators_view_->GetTooltipText(gfx::Point())
+            : base::EmptyString16());
+  } else {
+    auto mic_string = mic_view_ && mic_view_->GetVisible()
+                          ? mic_view_->GetAccessibleNameString()
+                          : base::EmptyString16();
+    auto camera_string = camera_view_ && camera_view_->GetVisible()
+                             ? camera_view_->GetAccessibleNameString()
+                             : base::EmptyString16();
+    status.push_back(l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_PRIVACY_ACCESSIBLE_DESCRIPTION,
+        {mic_string, camera_string}, nullptr));
+  }
+
   status.push_back(managed_device_view_->GetVisible()
                        ? managed_device_view_->image_view()->GetTooltipText()
                        : base::EmptyString16());
@@ -655,6 +695,8 @@ void UnifiedSystemTray::ClickedOutsideBubble() {
 void UnifiedSystemTray::UpdateLayout() {
   TrayBackgroundView::UpdateLayout();
   time_view_->UpdateAlignmentForShelf(shelf());
+  if (privacy_indicators_view_)
+    privacy_indicators_view_->UpdateAlignmentForShelf(shelf());
 }
 
 void UnifiedSystemTray::ShowBubbleInternal() {
@@ -674,8 +716,10 @@ void UnifiedSystemTray::ShowBubbleInternal() {
   bubble_ = std::make_unique<UnifiedSystemTrayBubble>(this);
   bubble_->unified_system_tray_controller()->AddObserver(this);
 
-  message_center_bubble_ = std::make_unique<UnifiedMessageCenterBubble>(this);
-  message_center_bubble_->ShowBubble();
+  if (!features::IsQsRevampEnabled()) {
+    message_center_bubble_ = std::make_unique<UnifiedMessageCenterBubble>(this);
+    message_center_bubble_->ShowBubble();
+  }
 
   // crbug/1310675 Add observers in `UnifiedSystemTrayBubble` after both bubbles
   // have been completely created, without this the bubbles can be destroyed

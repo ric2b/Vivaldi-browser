@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,11 +46,6 @@ class PasswordStoreBackendMetricsRecorder {
   void RecordMetrics(
       SuccessStatus success_status,
       absl::optional<ErrorFromPasswordStoreOrAndroidBackend> error) const;
-
-  // Records success, error and API error metrics from clients unenrolled from
-  // the UPM experiment after experiencing errors in the android backend.
-  void RecordMetricsForUnenrolledClients(
-      const absl::optional<AndroidBackendError>& error) const;
 
   // Returns the delta between creating this recorder and calling this method.
   base::TimeDelta GetElapsedTimeSinceCreation() const;

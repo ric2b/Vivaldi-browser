@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -18,6 +18,7 @@ generate_grd("build_grdp") {
     "colored_header.svg",
     "colors.svg",
     "copy.svg",
+    "drag_drop_illustration.svg",
     "drive_logo.svg",
     "facebook.svg",
     "generic_globe.svg",
@@ -28,6 +29,7 @@ generate_grd("build_grdp") {
     "link.svg",
     "mail.svg",
     "mic.svg",
+    "offline_dialog.svg",
     "shortcut_circles.svg",
     "twitter.svg",
     "upload.svg",

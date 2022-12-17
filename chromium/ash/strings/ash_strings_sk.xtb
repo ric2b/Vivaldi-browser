@@ -28,7 +28,6 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="1111021433905331574">Farbu podsvietenia klávesnice môžete zmeniť v sekcii Nastavenia &gt; <ph name="APP_TITLE" /></translation>
 <translation id="112308213915226829">Automatické skrývanie poličky</translation>
 <translation id="1142002900084379065">Najnovšie fotky</translation>
-<translation id="114451698114044150">Automatické priblíženie je zapnuté.</translation>
 <translation id="1148499908455722006">Otvoriť dialógové okno informácií o používateľovi <ph name="USER_NAME" /></translation>
 <translation id="1150989369772528668">Kalendár</translation>
 <translation id="1153356358378277386">Spárované zariadenia</translation>
@@ -79,7 +78,6 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="1306549533752902673">ODPORÚČANÉ APLIKÁCIE</translation>
 <translation id="1312604459020188865">Sila signálu <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="1316069254387866896">Vždy zobrazovať poličku</translation>
-<translation id="1316811122439383437">Tote: nedávne snímky obrazovky, stiahnuté a pripnuté súbory</translation>
 <translation id="132346741904777634">Kamera bola prichytená do ľavého horného rohu. Konflikt s platformou systému.</translation>
 <translation id="1333308631814936910">Pripojená obrazovka: <ph name="DISPLAY_NAME" /></translation>
 <translation id="1341651618736211726">Rozšírené</translation>
@@ -161,12 +159,22 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="1797271123677381264">Zabudnuté heslo</translation>
 <translation id="181103072419391116">Sila signálu <ph name="SIGNAL_STRENGTH" />, ovládané správcom</translation>
 <translation id="1812997170047690955">Čo je na obrazovke?</translation>
+<translation id="1823280932251546115">Stavový panel, čas <ph name="TIME" />,
+        <ph name="BATTERY" />
+        <ph name="CHANNEL" />
+        <ph name="NETWORK" />,
+        <ph name="PRIVACY" />,
+        <ph name="MANAGED" />
+        <ph name="NOTIFICATION" />,
+        <ph name="IME" />
+        <ph name="LOCALE" /></translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
 <translation id="1830308660060964064">Položka <ph name="ITEM_TITLE" /> bola odopnutá</translation>
 <translation id="1836215606488044471">Asistent (načítava sa...)</translation>
 <translation id="1838895407229022812">Nočný režim je vypnutý.</translation>
 <translation id="1862380676329487333">Aktualizovať a odhlásiť sa</translation>
 <translation id="1864454756846565995">Zariadenie USB-C (port vzadu)</translation>
+<translation id="1869497990620230175">Rýchle súbory</translation>
 <translation id="1879018240766558464">Okná inkognito momentálne nie sú podporované. Ostatné aplikácie budú uložené.</translation>
 <translation id="1882814835921407042">Žiadna mobilná sieť</translation>
 <translation id="1882897271359938046">Zrkadlenie na displej <ph name="DISPLAY_NAME" /></translation>
@@ -191,6 +199,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="1989113344093894667">Obsah nie je možné nasnímať</translation>
 <translation id="1990046457226896323">Súbory s balíkmi reči boli stiahnuté</translation>
 <translation id="1993072747612765854">Ďalšie informácie o najnovšej aktualizácii aplikácie <ph name="SYSTEM_APP_NAME" /></translation>
+<translation id="1995660704900986789">Vypnúť</translation>
 <translation id="1998100899771863792">Aktuálna plocha</translation>
 <translation id="2001444736072756133">Hľadajte <ph name="CATEGORY" />, súbory, aplikácie a ďalší obsah.</translation>
 <translation id="2016340657076538683">Zadajte správu</translation>
@@ -216,6 +225,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="2132302418721800944">Nahrať celú obrazovku</translation>
 <translation id="2135456203358955318">Ukotvená lupa</translation>
 <translation id="2148716181193084225">Dnes</translation>
+<translation id="2161132820593978283">Vyskúšajte centrovanie kamery, aby ste boli počas videohovorov v strede obrazovky. Zapnite ho v rýchlych nastaveniach.</translation>
 <translation id="2170530631236737939">Prehľad ukončíte potiahnutím troma prstami nadol</translation>
 <translation id="219905428774326614">Spúšťač, všetky aplikácie</translation>
 <translation id="2201071101391734388"><ph name="INDEX" /> nedávna fotka z <ph name="TOTAL_COUNT" />.</translation>
@@ -226,6 +236,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="2227179592712503583">Odstrániť návrh</translation>
 <translation id="225680501294068881">Hľadajú sa zariadenia...</translation>
 <translation id="2257486738914982088">Pri sťahovaní súboru <ph name="FILENAME" /> sa vyskytol problém</translation>
+<translation id="2258734398699965611">Navrhované súbory</translation>
 <translation id="2268130516524549846">Rozhranie Bluetooth je deaktivované</translation>
 <translation id="2268813581635650749">Odhlásiť všetkých</translation>
 <translation id="2269016722240250274">Nejaká aplikácia používa váš mikrofón</translation>
@@ -236,6 +247,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="2298170939937364391">Bola zapnutá lupa na celú obrazovku. Vypnete ju opätovným stlačením kombinácie klávesov Ctrl+Hľadať+M.</translation>
 <translation id="2302092602801625023">Tento účet spravuje aplikácia Family Link</translation>
 <translation id="2303600792989757991">Prepnúť prehľad okien</translation>
+<translation id="2315005022200073389"><ph name="HOLDING_SPACE_TITLE" />: nedávne záznamy obrazovky, stiahnuté a pripnuté súbory</translation>
 <translation id="2318576281648121272">Dnes o <ph name="TODAY_DATE" /></translation>
 <translation id="2322065293366551060"><ph name="CATEGORY" />, kategória výsledkov vyhľadávania</translation>
 <translation id="2322173485024759474">Dozadu o písmeno</translation>
@@ -254,6 +266,8 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="2405664212338326887">Nepripojené</translation>
 <translation id="2408955596600435184">Zadajte kód PIN</translation>
 <translation id="2412593942846481727">K dispozícii je aktualizácia</translation>
+<translation id="2417486498593892439">Prihlásenie do siete</translation>
+<translation id="2426051945783024481">Rám kamery sa automaticky umiestni do stredu</translation>
 <translation id="2427507373259914951">Kliknutie ľavým tlačidlom myši</translation>
 <translation id="2429753432712299108">Zariadenie Bluetooth s názvom <ph name="DEVICE_NAME" /> žiada o povolenie párovania. Skôr ako žiadosti vyhoviete, overte, či sa na danom zariadení zobrazuje nasledujúci prístupový kľúč: <ph name="PASSKEY" /></translation>
 <translation id="2435457462613246316">Zobraziť heslo</translation>
@@ -285,7 +299,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="2620436844016719705">Systém</translation>
 <translation id="2621713457727696555">Zabezpečená</translation>
 <translation id="263399434338050016">Vybrať všetko</translation>
-<translation id="2645435784669275700">Chrome OS</translation>
+<translation id="2645435784669275700">ChromeOS</translation>
 <translation id="2653019840645008922">Snímanie okna</translation>
 <translation id="2653659639078652383">Odoslať</translation>
 <translation id="2658778018866295321">Kliknúť a presunúť</translation>
@@ -326,11 +340,10 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="2865888419503095837">Informácie o sieti</translation>
 <translation id="2872961005593481000">Vypnúť</translation>
 <translation id="2878884018241093801">Žiadne nedávne položky</translation>
+<translation id="2885950158625301909">Ďalšie informácie</translation>
 <translation id="2891209721153296020">Zrušiť výber</translation>
 <translation id="2894949423239620203">Kábel môže ovplyvniť výkonnosť</translation>
-<translation id="2903844815300039659">Pripojené k sieti <ph name="NAME" />, <ph name="STRENGTH" /></translation>
 <translation id="2914580577416829331">Snímky obrazovky</translation>
-<translation id="2925246975070834767">Vyskúšajte automatické priblíženie, ktoré vám umožní byť v strede obrazovky. Môžete ho zapnúť v rýchlych nastaveniach.</translation>
 <translation id="2941112035454246133">Nízka</translation>
 <translation id="2942350706960889382">Ukotvená lupa</translation>
 <translation id="2942516765047364088">Pozícia poličky</translation>
@@ -370,11 +383,13 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3120421559657122717">Chcete zariadenie vypnúť?</translation>
 <translation id="3126069444801937830">Reštartovaním vykonáte aktualizáciu</translation>
+<translation id="3139382871451988441">Vypnúť prístup ku kamere.</translation>
 <translation id="3139942575505304791">1. plocha</translation>
 <translation id="315116470104423982">Mobilné dátové prenosy</translation>
 <translation id="3151786313568798007">Orientácia</translation>
 <translation id="3153444934357957346">V rámci viacnásobného prihlásenia môžete mať maximálne nasledujúci počet účtov: <ph name="MULTI_PROFILE_USER_LIMIT" />.</translation>
 <translation id="3154351730702813399">Správca zariadenia môže sledovať vašu aktivitu prehliadania.</translation>
+<translation id="3157931365184549694">Obnoviť</translation>
 <translation id="316086887565479535">Nepodporované aplikácie v šablóne</translation>
 <translation id="3161500364292033097">Zavrieť plochu a okná</translation>
 <translation id="316356270129335934"><ph name="MANAGER" /> vracia predchádzajúcu verziu vo vašom zariadení <ph name="DEVICE_TYPE" />. Zariadenie bude resetované a všetky údaje odstránené.</translation>
@@ -409,6 +424,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="3368922792935385530">Pripojené</translation>
 <translation id="3371140690572404006">zariadenia USB-C (port vpravo vpredu)</translation>
 <translation id="3375634426936648815">Pripojené</translation>
+<translation id="3378438761594387761">Tu nájdete svoje nedávno stiahnuté súbory a záznamy obrazovky</translation>
 <translation id="3378442621503952303">Pripája sa k profilu. Počkajte niekoľko minút.</translation>
 <translation id="3386978599540877378">lupa na celú obrazovku</translation>
 <translation id="3387527074123400161">Chromium OS</translation>
@@ -417,6 +433,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="3413817803639110246">Zatiaľ nie je čo zobraziť</translation>
 <translation id="3428447136709161042">Odpojiť od siete <ph name="NETWORK_NAME" /></translation>
 <translation id="3430396595145920809">Vrátite sa potiahnutím sprava</translation>
+<translation id="3431517721463707585">14. plocha</translation>
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" /> %</translation>
 <translation id="343571671045587506">Úprava pripomenutia</translation>
 <translation id="3435967511775410570">Odtlačok prsta bol rozpoznaný</translation>
@@ -452,6 +469,8 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="3600061223661453002">Vypnuté</translation>
 <translation id="3604801046548457007">Bola vytvorená plocha <ph name="DESK_TITILE" /></translation>
 <translation id="3606978283550408104">Bola pripojená Braillova obrazovka.</translation>
+<translation id="3609301425104788351"><ph name="MIC" />,
+        <ph name="CAMERA" /></translation>
 <translation id="3615926715408477684">Zapnutím mobilných dát aktivujete Bluetooth</translation>
 <translation id="3616883743181209306">Ponuka bola presunutá do pravého horného rohu obrazovky.</translation>
 <translation id="3619536907358025872">Nastavenia záznamu obrazovky</translation>
@@ -474,12 +493,10 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="3708186454126126312">Predtým pripojené zariadenia</translation>
 <translation id="371370241367527062">Predný mikrofón</translation>
 <translation id="3713734891607377840">Po dokončení otvoriť</translation>
-<translation id="3724279623330129812">Automatické priblíženie vycentrovalo kameru</translation>
 <translation id="3726171378575546917"><ph name="UNAVAILABLE_APPS_ONE" />, <ph name="UNAVAILABLE_APPS_TWO" /> a ďalšie (<ph name="UNAVAILABLE_APPS_COUNT" />) nie sú v tomto zariadení.</translation>
 <translation id="3735740477244556633">Zoradiť podľa</translation>
 <translation id="3742055079367172538">Vytvorila sa snímka obrazovky</translation>
 <translation id="3765841986579723851">Upravené dnes</translation>
-<translation id="3771549900096082774">Režim s vysokým kontrastom</translation>
 <translation id="3773700760453577392">Správca zakázal viacnásobné prihlásenie pre používateľa <ph name="USER_EMAIL" />. Všetci používatelia sa musia odhlásiť a až potom môžu pokračovať.</translation>
 <translation id="3779139509281456663">Pripája sa zariadenie <ph name="NAME" /></translation>
 <translation id="3783640748446814672">alt</translation>
@@ -493,7 +510,6 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="383058930331066723">Režim šetriča batérie je zapnutý</translation>
 <translation id="383629559565718788">Zobraziť nastavenia klávesnice</translation>
 <translation id="384082539148746321">Chcete šablónu odstrániť?</translation>
-<translation id="3842239759367498783">Pokračujte v čítaní v mobilnom zariadení <ph name="TITLE" /></translation>
 <translation id="3846575436967432996">Informácie o sieti nie sú k dispozícii</translation>
 <translation id="385051799172605136">Späť</translation>
 <translation id="385300504083504382">Začiatok</translation>
@@ -577,12 +593,10 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="4312840429157639164">Kamera bola prichytená do pravého horného rohu. Konflikt s platformou systému.</translation>
 <translation id="4316910396681052118">VŠETKY APLIKÁCIE</translation>
 <translation id="4321179778687042513">ctrl</translation>
-<translation id="4321776623976362024">Stlačili ste klávesovú skratku pre vysoký kontrast. Chcete ho zapnúť?</translation>
 <translation id="4322742403972824594">Klávesová skratka Ctrl + Alt + šípka nahor bola zmenená. Ak chcete použiť kláves Domov, stlačte klávesy <ph name="LAUNCHER_KEY_NAME" /> + šípka doľava.</translation>
 <translation id="4333628967105022692">Prehliadač Lacros nie je podporovaný, keď je prihlásených viacero používateľov.</translation>
 <translation id="4338109981321384717">Lupa</translation>
 <translation id="4351433414020964307">Asistent sa načítava...</translation>
-<translation id="4356930093361201197">režim s vysokým kontrastom</translation>
 <translation id="4371348193907997655">Nastavenia prenosu</translation>
 <translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, sila signálu: <ph name="SIGNAL_STRENGTH" /> %.</translation>
 <translation id="4378551569595875038">Pripája sa...</translation>
@@ -649,6 +663,7 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <ph name="QUERY" /></translation>
 <translation id="4659419629803378708">Funkcia ChromeVox je povolená</translation>
 <translation id="4665114317261903604">Prepnúť režim bez vyrušení. <ph name="STATE_TEXT" /></translation>
+<translation id="4666082839192943839">Ak chcete, aby boli všetky kamery stále blokované, vypnite v tomto zariadení prístup ku kamere.</translation>
 <translation id="4667099493359681081">Sťahuje sa <ph name="FILENAME" /></translation>
 <translation id="4690510401873698237">Polička dolu</translation>
 <translation id="4696813013609194136">Odomknutie zariadenia kódom rodiča</translation>
@@ -659,7 +674,7 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="4731797938093519117">Rodičovský prístup</translation>
 <translation id="4733161265940833579"><ph name="BATTERY_PERCENTAGE" /> % (ľavé)</translation>
 <translation id="4734965478015604180">Na šírku</translation>
-<translation id="4735498845456076464">Klávesová skratka <ph name="LAUNCHER_KEY_NAME" /> + číslo bola zmenená. Ak chcete použiť klávesy s funkciami, stlačte kláves <ph name="LAUNCHER_KEY_NAME" /> + kláves v hornom rade.</translation>
+<translation id="4735944890391795473">12. plocha</translation>
 <translation id="473775607612524610">Aktualizovať</translation>
 <translation id="4740516757091333363">Chcete odstrániť uloženú plochu?</translation>
 <translation id="4752784485658729358">Povolených je iba šesť uložených plôch. Ak chcete uložiť novú, niektorú odstráňte.</translation>
@@ -668,6 +683,7 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="4776917500594043016">Heslo pre účet <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="4777825441726637019">Obchod Play</translation>
 <translation id="4778095205580009397">Asistent Google nie je k dispozícii v relácii ukážky.</translation>
+<translation id="4789348252524569426">Rečové súbory sa nedajú nainštalovať. Zariadenie je potrebné aktualizovať. Reštartujte zariadenie a skúste to znova.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Odpojiť</translation>
 <translation id="4814539958450445987">Prihlasovacia obrazovka</translation>
@@ -679,6 +695,7 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="4860284199500934869">Ak chcete stiahnuť <ph name="FILENAME" />, skontrolujte pripojenie k sieti</translation>
 <translation id="486056901304535126">K pokusu o stiahnutie dôjde neskôr. Než sa sťahovanie dokončí, reč bude odosielaná na spracovanie Googlu.</translation>
 <translation id="4864369630010738180">Prebieha prihlasovanie...</translation>
+<translation id="4864648187878336334">15. plocha</translation>
 <translation id="4868492592575313542">aktivované</translation>
 <translation id="4872237917498892622">Alt + Hľadať alebo Shift</translation>
 <translation id="4881695831933465202">Otvoriť</translation>
@@ -705,6 +722,7 @@ Pripojte svoje zariadenie k napájaniu.</translation>
         <ph name="NOTIFICATION_1" />,
         <ph name="NOTIFICATION_2" />,
         <ph name="NUM_OTHER_NOTIFICATION" /></translation>
+<translation id="4987738733603015246">16. plocha</translation>
 <translation id="5003993274120026347">Ďalšia veta</translation>
 <translation id="5016558321564993266">Prepnite zvýrazňovač. <ph name="STATE_TEXT" /></translation>
 <translation id="5030687792513154421">Čas vypršal</translation>
@@ -718,7 +736,9 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="5083553833479578423">Odblokujte ďalšie funkcie Asistenta.</translation>
 <translation id="509790653408515442">Tu sa zobrazia aplikácie streamované z telefónu</translation>
 <translation id="5098537242461068432">Plocha a okná boli znova otvorené</translation>
+<translation id="5104236669533825617">Záznam z obrazovky sa nedá vytvoriť</translation>
 <translation id="5107522548814527560">Internet</translation>
+<translation id="5111318697104479778"><ph name="DESC" />, <ph name="STRENGTH" /></translation>
 <translation id="5117590920725113268">Zobraziť ďalší mesiac</translation>
 <translation id="5136175204352732067">Bola pripojená iná klávesnica</translation>
 <translation id="5147567197700016471">Odomknutý</translation>
@@ -746,6 +766,7 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="5283198616748585639">Pridať 1 minútu</translation>
 <translation id="528468243742722775">Koniec</translation>
 <translation id="5286194356314741248">Prebieha vyhľadávanie</translation>
+<translation id="5293671101077843611">Dnes žiadne udalosti</translation>
 <translation id="5297423144044956168">Nenašli sa žiadne mobilné zariadenia</translation>
 <translation id="5297704307811127955">Vypnuté</translation>
 <translation id="5300589172476337783">Zobraziť</translation>
@@ -762,22 +783,13 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="5344128444027639014"><ph name="BATTERY_PERCENTAGE" /> % (pravé)</translation>
 <translation id="5352250171825660495">Tmavý motív je zapnutý</translation>
 <translation id="5356963482258194581">Prepínajte medzi tmavým a svetlým motívom. Pravým tlačidlom kliknite na pracovnú plochu a vyberte Tapety a štýl.</translation>
+<translation id="536019650977002321">Správca nepovoľuje záznam zvuku. Ďalšie informácie vám poskytne správca.</translation>
 <translation id="5363163447017455357"><ph name="DELIMITER" /> Prejsť na túto kartu</translation>
 <translation id="5379115545237091094">Príliš veľa pokusov</translation>
 <translation id="5391307769715781764">Chcete nahradiť uloženú plochu?</translation>
 <translation id="5393156353051693207">Pridržte ľubovoľné miesto a zmeňte poradie aplikácií</translation>
 <translation id="5395308026110844773"><ph name="DRAGGED_APP_NAME" /> na aplikáciu <ph name="IN_PLACE_APP" />, uvoľnením vytvoríte priečinok.</translation>
 <translation id="5397578532367286026">Aktivitu a históriu tohto používateľa môže skontrolovať správca (<ph name="MANAGER_EMAIL" />) na adrese chrome.com.</translation>
-<translation id="5399673806694250334">Stavový panel, čas <ph name="TIME" />,
-        <ph name="BATTERY" />
-        <ph name="CHANNEL" />
-        <ph name="NETWORK" />,
-        <ph name="MIC" />,
-        <ph name="CAMERA" />,
-        <ph name="MANAGED" />
-        <ph name="NOTIFICATION" />,
-        <ph name="IME" />
-        <ph name="LOCALE" /></translation>
 <translation id="5400461572260843123">Rýchle nastavenia, do centra upozornení prejdete stlačením klávesa vyhľadávania + šípky doľava</translation>
 <translation id="5426063383988017631">Ponuka Nastavenia bola zavretá</translation>
 <translation id="5428899915242071344">Začať výber</translation>
@@ -814,6 +826,7 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="5625955975703555628">LTE+</translation>
 <translation id="5648021990716966815">Konektor mikrofónu</translation>
 <translation id="5652575806481723716"><ph name="FOCUSED_APP_NAME" /> vyžaduje vašu pozornosť.</translation>
+<translation id="5662075790140998213">10. plocha</translation>
 <translation id="5662709761327382534">Nahrávať mikrofón <ph name="CURRENT_STATE" />. Stlačením klávesa Enter zapnete nahrávanie zvuku z mikrofónu <ph name="NEW_STATE" />.</translation>
 <translation id="5669267381087807207">Aktivuje sa</translation>
 <translation id="5673434351075758678">Po synchronizácii nastavení bol zmenený z možnosti <ph name="FROM_LOCALE" /> na <ph name="TO_LOCALE" />.</translation>
@@ -877,7 +890,6 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="5980301590375426705">Ukončiť rel. hosťa</translation>
 <translation id="598407983968395253">Použiť šablónu</translation>
 <translation id="598882571027504733">Ak chcete získať aktualizáciu, Chromebook s pripojenou klávesnicou reštartujte.</translation>
-<translation id="5992218262414051481">Režim vysokého kontrastu je aktívny. Vypnete ho opätovným stlačením kombinácie klávesov Ctrl+Hľadať+H.</translation>
 <translation id="6012623610530968780">Stránka <ph name="SELECTED_PAGE" /> z <ph name="TOTAL_PAGE_NUM" /></translation>
 <translation id="6018164090099858612">Ukončuje sa režim zrkadlenia</translation>
 <translation id="602001110135236999">Posunúť doľava</translation>
@@ -898,9 +910,11 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="6064463340679478396">Tento súbor už nebudem používať</translation>
 <translation id="6073451960410192870">Zastaviť zaznamenávanie</translation>
 <translation id="6074087755403037157">Beta verzia</translation>
+<translation id="6095008505822982596">Rýchlosť reči</translation>
 <translation id="6099678161144790572">Upravené za posledný mesiac</translation>
 <translation id="6103838137565245112">systém</translation>
 <translation id="6114505516289286752">Súbory s balíkmi reči <ph name="LANGUAGE" /> boli stiahnuté</translation>
+<translation id="6116825164611323644">Prístup ku kamere je v tomto zariadení vypnutý</translation>
 <translation id="6119360623251949462"><ph name="CHARGING_STATE" />. <ph name="BATTERY_SAVER_STATE" /></translation>
 <translation id="6121838516699723042">Potvrďte stiahnutie súboru <ph name="FILENAME" /></translation>
 <translation id="612734058257491180">Asistent Google nie je k dispozícii v relácii hosťa.</translation>
@@ -908,7 +922,6 @@ Pripojte svoje zariadenie k napájaniu.</translation>
 <translation id="6137566720514957455">Otvoriť dialógové okno na odstránenie účtu <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="6141988275892716286">Potvrdenie sťahovania</translation>
 <translation id="6154006699632741460">Periféria nie je podporovaná</translation>
-<translation id="6156262341071374681">Rozbaliť na všetky aplikácie</translation>
 <translation id="615957422585914272">Zobraziť klávesnicu na obrazovke</translation>
 <translation id="6165508094623778733">Ďalšie informácie</translation>
 <translation id="6166852626429024716">Vyhľadávajte v zariadení, aplikáciách, nastaveniach a na internete…</translation>
@@ -1002,7 +1015,6 @@ Nová inštalácia</translation>
 <translation id="6700713906295497288">Tlačidlo ponuky IME</translation>
 <translation id="6707693040195709527">Termín na obnovenie predchádzajúcej verzie v zariadení vypršal</translation>
 <translation id="6710213216561001401">Späť</translation>
-<translation id="6713285437468012787">Zariadenie Bluetooth s názvom <ph name="DEVICE_NAME" /> bolo spárované a je k dispozícii pre všetkých používateľov. Párovanie môžete zrušiť pomocou ponuky Nastavenia.</translation>
 <translation id="6723839937902243910">Napájanie</translation>
 <translation id="6727969043791803658">Pripojené, <ph name="BATTERY_PERCENTAGE" /> % batérie</translation>
 <translation id="6732800389263199929">+<ph name="COUNT" /></translation>
@@ -1014,6 +1026,8 @@ Nová inštalácia</translation>
 <translation id="6753390234084146956">karty</translation>
 <translation id="6757237461819837179">Neprehrávajú sa žiadne médiá</translation>
 <translation id="6777216307882431711">Napájajú sa pripojené zariadenia USB-C</translation>
+<translation id="6781002679438061620">9. plocha</translation>
+<translation id="6782182743534150858">13. plocha</translation>
 <translation id="6786750046913594791">Zatvoriť priečinok</translation>
 <translation id="6787595647772650851">Obnoviť poslednú reláciu</translation>
 <translation id="6790428901817661496">Prehrať</translation>
@@ -1032,7 +1046,6 @@ Nová inštalácia</translation>
 <translation id="685782768769951078">{NUM_DIGITS,plural, =1{Zostáva jedna číslica}few{Zostávajú # číslice}many{# digits remaining}other{Zostáva # číslic}}</translation>
 <translation id="6867938213751067702">Sťahovanie súboru <ph name="FILENAME" /> bolo pozastavené</translation>
 <translation id="6878400149835617132">Skratka je vypnutá</translation>
-<translation id="6878709625737492815">Automatické priblíženie je vypnuté.</translation>
 <translation id="6884665277231944629">Prejsť späť na dnešok</translation>
 <translation id="6886172995547742638">Vaše zariadenie <ph name="DEVICE_TYPE" /> môže mať nižší výkon. Používajte nabíjačku s portom USB-C, ktorá má certifikovaný výkon minimálne <ph name="PREFERRED_MINIMUM_POWER" /> W</translation>
 <translation id="688631446150864480">Ak chcete prepnúť okná, stlačte kláves so šípkou nadol</translation>
@@ -1045,6 +1058,8 @@ Nová inštalácia</translation>
 <translation id="6960565108681981554">Neaktivované. Kontaktujte operátora.</translation>
 <translation id="6961121602502368900">Stíšenie telefónu nie je v pracovnom profile k dispozícii</translation>
 <translation id="6961840794482373852">Klávesová skratka Alt + šípka nahor bola zmenená. Ak chcete použiť kláves Page Up, stlačte klávesy <ph name="LAUNCHER_KEY_NAME" /> + šípka nahor.</translation>
+<translation id="696267987219125751">Centrovanie kamery je vypnuté.</translation>
+<translation id="6964690557625666701">Pripnuté položky sa nezobrazujú na poličke</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6972754398087986839">Začať</translation>
 <translation id="6979158407327259162">Disk Google</translation>
@@ -1074,6 +1089,7 @@ Nová inštalácia</translation>
 <translation id="7098053464892629930">Stiahnite si aplikáciu zariadenia <ph name="NAME" /> na Google Play, aby ste videli všetky dostupné funkcie</translation>
 <translation id="7098389117866926363">Zariadenie USB-C (ľavý port vzadu)</translation>
 <translation id="7106330611027933926">Zobraziť panel na ploche</translation>
+<translation id="7116969082764510092">11. plocha</translation>
 <translation id="7118268675952955085">snímka obrazovky</translation>
 <translation id="7126996685418858413">Otvorené v poslednom týždni</translation>
 <translation id="7130207228079676353">S NAJVÄČŠOU PRAVDEPODOBNOSŤOU</translation>
@@ -1100,7 +1116,6 @@ Nová inštalácia</translation>
 <translation id="7305884605064981971">EDGE</translation>
 <translation id="7313193732017069507">Rozbaliť kameru</translation>
 <translation id="731589979057211264">Režim Shelf Party je zapnutý.</translation>
-<translation id="7319740667687257810">Launcher, čiastočné zobrazenie</translation>
 <translation id="7346909386216857016">Dobre</translation>
 <translation id="7348093485538360975">Klávesnica na obrazovke</translation>
 <translation id="735745346212279324">Sieť VPN je odpojená</translation>
@@ -1128,6 +1143,7 @@ Nová inštalácia</translation>
 <translation id="746232733191930409">Režim nahrávania obrazovky</translation>
 <translation id="7466449121337984263">Dotknite sa senzora</translation>
 <translation id="7477793887173910789">Ovládajte svoju hudbu, videá a ďalší obsah</translation>
+<translation id="7490360161041035804">Dôležité súbory vrátane súborov z Disku Google si môžete pripnúť. Ak chcete položku pripnúť, umiestnite na ňu kurzor alebo otvorte Súbory a na príslušnú položku kliknite pravým tlačidlom.</translation>
 <translation id="7497767806359279797">Vybrať jazyk a klávesnicu</translation>
 <translation id="7508690557411636492">Otvorené v poslednom mesiaci</translation>
 <translation id="7509246181739783082">Overenie totožnosti</translation>
@@ -1135,6 +1151,7 @@ Nová inštalácia</translation>
 <translation id="7513922695575567867">Kalendár, týždeň s dátumom <ph name="DATE" />, momentálne je vybraný dátum <ph name="SELECTED_DATE" />.</translation>
 <translation id="7514365320538308">Stiahnuť</translation>
 <translation id="7515998400212163428">Android</translation>
+<translation id="7519206258459640379">Centrovanie kamery je zapnuté.</translation>
 <translation id="7526573455193969409">Sieť môže byť sledovaná</translation>
 <translation id="7536035074519304529">Adresa IP: <ph name="ADDRESS" /></translation>
 <translation id="7543399541175347147">Aplikácie pre Linux a okná inkognito momentálne nie sú podporované. Ostatné aplikácie budú uložené.</translation>
@@ -1144,6 +1161,7 @@ Nová inštalácia</translation>
 <translation id="7557816257942363084"><ph name="APP_NAME" /> momentálne používa mikrofón</translation>
 <translation id="7561982940498449837">Zavrieť ponuku</translation>
 <translation id="7564874036684306347">Presunutie okien na inú obrazovku môže spôsobiť neočakávané správanie. Nasledujúce upozornenia, okná a dialógové okná sa môžu zobraziť rozdelené na viacerých pracovných plochách.</translation>
+<translation id="7567076708801803118">Chcete v tomto zariadení vypnúť prístup ku kamere?</translation>
 <translation id="7569509451529460200">Funkcie Braille a ChromeVox sú povolené</translation>
 <translation id="7573585051776738856">Aktívne okno je ukotvené vpravo.</translation>
 <translation id="7579778809502851308">Snímanie obrazovky</translation>
@@ -1153,10 +1171,12 @@ Nová inštalácia</translation>
 <translation id="7607002721634913082">Pozastavené</translation>
 <translation id="7609951632080598826">Zobrazenie kalendára, <ph name="DATE" />, <ph name="TIME" /></translation>
 <translation id="7611213136657090146">Kamera bola odpojená</translation>
+<translation id="761736749114493194">Prepnúť centrovanie kamery. <ph name="STATE_TEXT" /></translation>
 <translation id="7624117708979618027"><ph name="TEMPERATURE_F" />° F</translation>
 <translation id="7633755430369750696">Zobraziť nastavenia Zdieľania nablízku</translation>
 <translation id="7634648064048557203">Kamera bola prichytená do pravého dolného rohu</translation>
 <translation id="7641938616688887143">Nahrať</translation>
+<translation id="7642106959537987271">režim inverzie farieb</translation>
 <translation id="7642647758716480637">Otvoriť nastavenia siete <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" /></translation>
 <translation id="7645176681409127223"><ph name="USER_NAME" /> (vlastník)</translation>
 <translation id="7647488630410863958">Ak si chcete zobraziť upozornenia, odomknite zariadenie</translation>
@@ -1168,6 +1188,7 @@ Nová inštalácia</translation>
 <translation id="7662283695561029522">Klepnutím spustíte konfiguráciu</translation>
 <translation id="7670953955701272011">Otvoriť tento dátum v Kalendári Google</translation>
 <translation id="7671610481353807627">Aplikácie sú zoradené podľa farby</translation>
+<translation id="7672095158465655885">Pripojené k sieti <ph name="NAME" />, <ph name="SUBTEXT" /></translation>
 <translation id="7684531502177797067">Pre kameru <ph name="CAMERA_NAME" /> je nastavený vstup.</translation>
 <translation id="7705524343798198388">VPN</translation>
 <translation id="7714767791242455379">Pridať novú mobilnú sieť</translation>
@@ -1198,7 +1219,6 @@ Nová inštalácia</translation>
 <translation id="7868900307798234037">Odomyká sa pomocou odtlačku prsta</translation>
 <translation id="7872195908557044066">Správca resetuje vašu eSIM kartu. Počkajte niekoľko minút.</translation>
 <translation id="7872786842639831132">Vypnuté</translation>
-<translation id="7875280185395705476">Aut. priblíž.</translation>
 <translation id="7875575368831396199">Rozhranie Bluetooth je v zariadení <ph name="DEVICE_TYPE" /> zrejme vypnuté. Ak chcete použiť Telefónne centrum, zapnite ho.</translation>
 <translation id="7877557217297072640">{0,plural, =0{Obnovte v zariadení predchádzajúcu verziu}=1{Do sekundy obnovte v zariadení predchádzajúcu verziu}few{Do # sekúnd obnovte v zariadení predchádzajúcu verziu}many{Do # sekundy obnovte v zariadení predchádzajúcu verziu}other{Do # sekúnd obnovte v zariadení predchádzajúcu verziu}}</translation>
 <translation id="7886169021410746335">Upravte nastavenia ochrany súkromia</translation>
@@ -1222,6 +1242,7 @@ Nová inštalácia</translation>
 <translation id="7982789257301363584">Sieť</translation>
 <translation id="7984197416080286869">Príliš veľa pokusov o nasnímanie odtlačku prsta</translation>
 <translation id="798779949890829624">Toto nastavenie spravuje váš správca.</translation>
+<translation id="799296642788192631">Dôležité súbory si môžete pripnúť. Ak chcete položku pripnúť, umiestnite na ňu kurzor alebo otvorte Súbory a na príslušnú položku kliknite pravým tlačidlom.</translation>
 <translation id="7994370417837006925">Viacnásobné prihlásenie</translation>
 <translation id="7995804128062002838">Obrazovku sa nepodarilo nasnímať</translation>
 <translation id="8000066093800657092">Žiadna sieť</translation>
@@ -1236,7 +1257,6 @@ Nová inštalácia</translation>
 <translation id="8051716679295756675">Šablóna s názvom <ph name="DESK_TEMPLATE_NAME" /> už existuje</translation>
 <translation id="8052898407431791827">Skopírované do schránky</translation>
 <translation id="8054466585765276473">Výpočet času výdrže batérie.</translation>
-<translation id="8061464966246066292">Vysoký kontrast</translation>
 <translation id="8083540854303889870">Uložené na neskôr</translation>
 <translation id="8091387634532529612">Automatické aktualizácie</translation>
 <translation id="8098591350844501178">Zastaviť prenos obrazovky do zariadenia <ph name="RECEIVER_NAME" /></translation>
@@ -1263,6 +1283,7 @@ Nová inštalácia</translation>
 <translation id="8209010265547628927">Resetovať</translation>
 <translation id="8214996719228530800">Kanál Canary</translation>
 <translation id="8219451629189078428">Chromebook musíte mať v tomto období zapnutý a pripojený k zásuvke. Uistite sa, či je kábel nabíjačky alebo adaptéra riadne pripojený do Chromebooku aj elektrickej zásuvky. Chromebook nevypínajte.</translation>
+<translation id="8230305195727960608">Režim inverzie farieb</translation>
 <translation id="8236042855478648955">Čas na prestávku</translation>
 <translation id="8246282815785366524">Vitajte späť, <ph name="GIVEN_NAME" /></translation>
 <translation id="8247060538831475781"><ph name="CONNECTION_STATUS" />, sila signálu <ph name="SIGNAL_STRENGTH" />, batéria telefónu <ph name="BATTERY_STATUS" /></translation>
@@ -1314,6 +1335,7 @@ Nová inštalácia</translation>
 <translation id="851458219935658693">Prepínač je prepnutý na možnosť zobrazenia okien z aktuálnej plochy</translation>
 <translation id="8517041960877371778">Vaše zariadenie <ph name="DEVICE_TYPE" /> sa nemusí nabíjať, keď je zapnuté.</translation>
 <translation id="8535393432370007982">Vrátiť späť poradie zoradenia podľa farby</translation>
+<translation id="8541078764854166027">Centr. kamery</translation>
 <translation id="8542053257095774575">Žiadne uložené plochy ani šablóny</translation>
 <translation id="8546059259582788728">Zoradenie sa podarilo vrátiť späť</translation>
 <translation id="8551588720239073785">Nastavenia dátumu a času</translation>
@@ -1321,7 +1343,6 @@ Nová inštalácia</translation>
 <translation id="856298576161209842"><ph name="MANAGER" /> odporúča, aby ste aktualizovali zariadenie <ph name="DEVICE_TYPE" /></translation>
 <translation id="8563862697512465947">Nastavenia upozornení</translation>
 <translation id="857201607579416096">Ponuka bola presunutá do pravého dolného rohu obrazovky.</translation>
-<translation id="8576288697319745668">Prepnite automatické priblíženie. <ph name="STATE_TEXT" /></translation>
 <translation id="8594115950068821369">-<ph name="FORMATTED_TIME" /></translation>
 <translation id="8598235756057743477">Zoraďte aplikácie podľa názvu alebo farby</translation>
 <translation id="8614517853887502247">Upozornenia z aplikácií <ph name="APP_1_TITLE" /> a <ph name="APP_2_TITLE" /> sú skryté, pretože je zapnutá ochrana pred zobrazením</translation>
@@ -1349,6 +1370,8 @@ Nová inštalácia</translation>
 <translation id="8734991477317290293">Je možné, že sa pokúša ukradnúť vaše stlačenia klávesov</translation>
 <translation id="8735678380411481005">Farba podsvietenia klávesnice</translation>
 <translation id="8735953464173050365">Zobraziť nastavenia klávesnice. Vybraná klávesnica: <ph name="KEYBOARD_NAME" /></translation>
+<translation id="8747464587821437069"><ph name="CAMERA_AND_MICROPHONE_ACCESS_STATUS" />, <ph name="SCREEN_SHARE_STATUS" /></translation>
+<translation id="8752416742247198423">Zapnite prístup ku kamere a povoľte tak aplikáciám a webovým stránkam s príslušným povolením používať kamery pripojené k tomuto zariadeniu.</translation>
 <translation id="8755498163081687682">Overte svoju totožnosť: <ph name="ORIGIN_NAME" /> chce potvrdiť, že ste to vy</translation>
 <translation id="875593634123171288">Zobraziť nastavenia VPN</translation>
 <translation id="8759408218731716181">Nie je možné nastaviť viacnásobné prihlásenie</translation>
@@ -1363,6 +1386,7 @@ Nová inštalácia</translation>
 <translation id="8819728065740986820">Je zapnuté adaptívne nabíjanie.</translation>
 <translation id="8825863694328519386">Vrátite sa potiahnutím zľava</translation>
 <translation id="8834539327799336565">Aktuálne pripojené</translation>
+<translation id="8834657930627018205">Zapnúť prístup ku kamere</translation>
 <translation id="8841375032071747811">Tlačidlo Späť</translation>
 <translation id="8843682306134542540">Prepnúť uzamknutie otočenia. <ph name="STATE_TEXT" /></translation>
 <translation id="8850991929411075241">Hľadať+Esc</translation>
@@ -1385,10 +1409,12 @@ Nová inštalácia</translation>
 <translation id="8936501819958976551">deaktivované</translation>
 <translation id="8938800817013097409">Zariadenie USB-C (pravý port vzadu)</translation>
 <translation id="8940956008527784070">Kapacita batérie je nízka (<ph name="PERCENTAGE" /> %)</translation>
+<translation id="8949925099261528566">Pripojené, bez internetu</translation>
 <translation id="8951539504029375108">S vaším Chromebookom sú kompatibilné iba schválené zariadenia Thunderbolt</translation>
 <translation id="8982906748181120328">Viditeľnosť nablízku</translation>
 <translation id="8983038754672563810">HSPA</translation>
 <translation id="8990809378771970590">Práve sa používa <ph name="IME_NAME" /></translation>
+<translation id="8991617137207906966">Režim inverzie farieb je zapnutý. Vypnete ho opätovným stlačením kombinácie klávesov Ctrl + Hľadať + H.</translation>
 <translation id="899350903320462459">Ak chcete vykonať akciu s upozornením, odomknite zariadenie ako <ph name="LOGIN_ID" /></translation>
 <translation id="9000771174482730261">SPRAVOVAŤ PRIESTOR</translation>
 <translation id="9017320285115481645">Zadajte prístupový kód rodiča Family Link.</translation>
@@ -1433,9 +1459,11 @@ Nová inštalácia</translation>
 <translation id="9211490828691860325">Všetky plochy</translation>
 <translation id="9211681782751733685">Zostávajúci čas do úplného nabitia batérie: <ph name="TIME_REMAINING" /></translation>
 <translation id="9215934040295798075">Nastaviť tapetu</translation>
+<translation id="9219103736887031265">Obrázky</translation>
 <translation id="921989828232331238">Rodič na dnes toto zariadenie uzamkol</translation>
 <translation id="9220525904950070496">Odstrániť účet</translation>
 <translation id="923686485342484400">Ak sa chcete odhlásiť, stlačte dvakrát kombináciu klávesov Ctrl, Shift a Q.</translation>
+<translation id="92580429198593979">Stlačili ste klávesovú skratku inverzie farieb. Chcete ju zapnúť?</translation>
 <translation id="925832987464884575">Skryť ukážky</translation>
 <translation id="937214777182567951"><ph name="MANAGER" /> vyžaduje, aby ste ihneď aktualizovali zariadenie <ph name="DEVICE_TYPE" /></translation>
 <translation id="938963181863597773">Čo mám v kalendári?</translation>
@@ -1445,5 +1473,6 @@ Nová inštalácia</translation>
 <translation id="974545358917229949">Zobrazujú sa výsledky (<ph name="RESULT_COUNT" />) pre <ph name="QUERY" /></translation>
 <translation id="98515147261107953">Na šírku</translation>
 <translation id="990277280839877440">Okno <ph name="WINDOW_TITILE" /> bolo zatvorené.</translation>
+<translation id="994354411665877646"><ph name="NETWORK_NAME" />, <ph name="SUBTEXT" /></translation>
 <translation id="996204416024568215">Dostávajte najnovšie funkcie a zlepšenia zabezpečenia. Aktualizácie prebiehajú na pozadí.</translation>
 </translationbundle>

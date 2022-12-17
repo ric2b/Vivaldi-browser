@@ -1,21 +1,23 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/login/screens/active_directory_login_screen.h"
 
-#include "ash/components/login/auth/public/cryptohome_key_constants.h"
-#include "ash/components/login/auth/public/key.h"
+#include "base/check_op.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/screens/signin_fatal_error_screen.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/signin_ui.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/webui/chromeos/login/active_directory_login_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
+#include "chromeos/ash/components/login/auth/public/key.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "components/user_manager/known_user.h"
@@ -82,7 +84,7 @@ void ActiveDirectoryLoginScreen::OnUserAction(const base::Value::List& args) {
     return;
   }
   if (action_id == "completeAdAuthentication") {
-    CHECK_EQ(args.size(), 3);
+    CHECK_EQ(args.size(), 3u);
     const std::string& username = args[1].GetString();
     const std::string& password = args[2].GetString();
     HandleCompleteAuth(username, password);
@@ -137,7 +139,8 @@ void ActiveDirectoryLoginScreen::OnAdAuthResult(
       DCHECK(account_info.has_account_id() &&
              !account_info.account_id().empty() &&
              LoginDisplayHost::default_host());
-      const AccountId account_id(user_manager::known_user::GetAccountId(
+      user_manager::KnownUser known_user(g_browser_process->local_state());
+      const AccountId account_id(known_user.GetAccountId(
           username, account_info.account_id(), AccountType::ACTIVE_DIRECTORY));
       LoginDisplayHost::default_host()->SetDisplayAndGivenName(
           account_info.display_name(), account_info.given_name());

@@ -1,4 +1,4 @@
-/* Copyright 2017 The Chromium Authors. All rights reserved.
+/* Copyright 2017 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
@@ -194,6 +194,7 @@
 #define arm_cpu_enable_pmull Cr_z_arm_cpu_enable_pmull
 #define arm_check_features Cr_z_arm_check_features
 #define armv8_crc32_little Cr_z_armv8_crc32_little
+#define armv8_crc32_pmull_little Cr_z_armv8_crc32_pmull_little
 
 /* Symbols added by cpu_features.c */
 #define cpu_check_features Cr_z_cpu_check_features

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,7 @@
 #include "base/task/task_runner.h"
 #include "remoting/protocol/clipboard_stub.h"
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 class ClipboardThreadProxy : public ClipboardStub {
  public:
@@ -42,7 +41,6 @@ class ClipboardThreadProxy : public ClipboardStub {
   scoped_refptr<base::TaskRunner> clipboard_stub_task_runner_;
 };
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol
 
 #endif  // REMOTING_PROTOCOL_CLIPBOARD_THREAD_PROXY_H_

@@ -31,6 +31,7 @@
 #include "base/memory/values_equivalent.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/clamped_math.h"
+#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "cc/input/overscroll_behavior.h"
 #include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-blink.h"
@@ -264,6 +265,35 @@ static bool DiffAffectsContainerQueries(const ComputedStyle& old_style,
   return false;
 }
 
+static bool DiffAffectsScrollAnimations(const ComputedStyle& old_style,
+                                        const ComputedStyle& new_style) {
+  if ((old_style.ScrollTimelineName() != new_style.ScrollTimelineName()) ||
+      (old_style.ScrollTimelineAxis() != new_style.ScrollTimelineAxis())) {
+    return true;
+  }
+  if ((old_style.ViewTimelineName() != new_style.ViewTimelineName()) ||
+      (old_style.ViewTimelineAxis() != new_style.ViewTimelineAxis()) ||
+      (old_style.ViewTimelineInset() != new_style.ViewTimelineInset())) {
+    return true;
+  }
+  return false;
+}
+
+// The transition to/from nullptr style can affect subsequent siblings
+// if they reference a named timeline which appeared/disappeared.
+static bool AffectsScrollAnimations(const ComputedStyle* old_style,
+                                    const ComputedStyle* new_style) {
+  if (old_style && !(old_style->ScrollTimelineName().empty() &&
+                     old_style->ViewTimelineName().empty())) {
+    return true;
+  }
+  if (new_style && !(new_style->ScrollTimelineName().empty() &&
+                     new_style->ViewTimelineName().empty())) {
+    return true;
+  }
+  return false;
+}
+
 bool ComputedStyle::NeedsReattachLayoutTree(const Element& element,
                                             const ComputedStyle* old_style,
                                             const ComputedStyle* new_style) {
@@ -334,8 +364,11 @@ ComputedStyle::Difference ComputedStyle::ComputeDifference(
     const ComputedStyle* new_style) {
   if (old_style == new_style)
     return Difference::kEqual;
-  if (!old_style || !new_style)
+  if (!old_style || !new_style) {
+    if (AffectsScrollAnimations(old_style, new_style))
+      return Difference::kSiblingDescendantAffecting;
     return Difference::kInherited;
+  }
 
   // For inline elements, the new computed first line style will be |new_style|
   // inheriting from the parent's first line style. If |new_style| is different
@@ -363,6 +396,8 @@ ComputedStyle::ComputeDifferenceIgnoringInheritedFirstLineStyle(
     const ComputedStyle& old_style,
     const ComputedStyle& new_style) {
   DCHECK_NE(&old_style, &new_style);
+  if (DiffAffectsScrollAnimations(old_style, new_style))
+    return Difference::kSiblingDescendantAffecting;
   if (old_style.Display() != new_style.Display() &&
       old_style.BlockifiesChildren() != new_style.BlockifiesChildren())
     return Difference::kDescendantAffecting;
@@ -1068,8 +1103,15 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
   if (ComputedStyleBase::UpdatePropertySpecificDifferencesZIndex(*this, other))
     diff.SetZIndexChanged();
 
-  if (UpdatePropertySpecificDifferencesTransform(*this, other))
-    diff.SetTransformChanged();
+  if (ComputedStyleBase::UpdatePropertySpecificDifferencesTransform(*this,
+                                                                    other)) {
+    diff.SetTransformPropertyChanged();
+  }
+
+  if (ComputedStyleBase::UpdatePropertySpecificDifferencesOtherTransform(
+          *this, other)) {
+    diff.SetOtherTransformPropertyChanged();
+  }
 
   if (ComputedStyleBase::UpdatePropertySpecificDifferencesOpacity(*this, other))
     diff.SetOpacityChanged();
@@ -1295,21 +1337,18 @@ static bool IsWillChangeCompositingHintProperty(CSSPropertyID property) {
 }
 
 bool ComputedStyle::HasWillChangeCompositingHint() const {
-  const auto& properties = WillChangeProperties();
-  return std::any_of(properties.begin(), properties.end(),
-                     IsWillChangeCompositingHintProperty);
+  return base::ranges::any_of(WillChangeProperties(),
+                              IsWillChangeCompositingHintProperty);
 }
 
 bool ComputedStyle::HasWillChangeTransformHint() const {
-  const auto& properties = WillChangeProperties();
-  return std::any_of(properties.begin(), properties.end(),
-                     IsWillChangeTransformHintProperty);
+  return base::ranges::any_of(WillChangeProperties(),
+                              IsWillChangeTransformHintProperty);
 }
 
 bool ComputedStyle::HasWillChangeHintForAnyTransformProperty() const {
-  const auto& properties = WillChangeProperties();
-  return std::any_of(properties.begin(), properties.end(),
-                     IsWillChangeHintForAnyTransformProperty);
+  return base::ranges::any_of(WillChangeProperties(),
+                              IsWillChangeHintForAnyTransformProperty);
 }
 
 bool ComputedStyle::RequireTransformOrigin(
@@ -1500,9 +1539,10 @@ void ComputedStyle::ApplyMotionPathTransform(
       path_position.point.y() - anchor_point.y() + origin_shift_y);
   transform.Rotate(path_position.tangent_in_degrees + rotate.angle);
 
-  if (!position.X().IsAuto() || !anchor.X().IsAuto())
+  if (!position.X().IsAuto() || !anchor.X().IsAuto()) {
     // Shift the origin back to transform-origin.
     transform.Translate(-origin_shift_x, -origin_shift_y);
+  }
 }
 
 bool ComputedStyle::TextShadowDataEquivalent(const ComputedStyle& other) const {
@@ -1674,13 +1714,8 @@ ETextAlign ComputedStyle::GetTextAlign(bool is_last_line) const {
   return GetTextAlign();
 }
 
-bool ComputedStyle::ShouldUseTextIndent(bool is_first_line,
-                                        bool is_after_forced_break) const {
-  bool should_use =
-      is_first_line || (is_after_forced_break &&
-                        GetTextIndentLine() != TextIndentLine::kFirstLine);
-  return GetTextIndentType() == TextIndentType::kNormal ? should_use
-                                                        : !should_use;
+bool ComputedStyle::ShouldUseTextIndent(bool is_first_line) const {
+  return is_first_line;
 }
 
 // Unicode 11 introduced Georgian capital letters (U+1C90 - U+1CBA,
@@ -2031,7 +2066,7 @@ const Vector<AtomicString>& ComputedStyle::GetVariableNames() const {
     inherited_variables->CollectNames(names);
   if (auto* non_inherited_variables = NonInheritedVariables())
     non_inherited_variables->CollectNames(names);
-  CopyToVector(names, cache);
+  cache.assign(names);
 
   return cache;
 }
@@ -2279,6 +2314,15 @@ void ComputedStyle::AddAppliedTextDecoration(
     list = base::MakeRefCounted<AppliedTextDecorationList>(list->data);
 
   list->data.push_back(decoration);
+
+  // Most of the time, this vector will only have a single element,
+  // and thus, the default Vector initial size of 4 is wasteful.
+  //
+  // In the rare case, AddAppliedTextDecoration() might be called twice
+  // for a single element (if it has both a simple underline and another
+  // decoration), and so this will cause two allocations instead of one,
+  // but that is an edge case we're willing to live with.
+  list->data.shrink_to_fit();
 }
 
 void ComputedStyle::OverrideTextDecorationColors(Color override_color) {
@@ -2650,13 +2694,11 @@ Color ComputedStyle::GetInternalForcedVisitedCurrentColor(
 }
 
 bool ComputedStyle::ShadowListHasCurrentColor(const ShadowList* shadow_list) {
-  if (!shadow_list)
-    return false;
-  return std::any_of(shadow_list->Shadows().begin(),
-                     shadow_list->Shadows().end(),
-                     [](const ShadowData& shadow) {
-                       return shadow.GetColor().IsCurrentColor();
-                     });
+  return shadow_list &&
+         base::ranges::any_of(shadow_list->Shadows(),
+                              [](const ShadowData& shadow) {
+                                return shadow.GetColor().IsCurrentColor();
+                              });
 }
 
 void ComputedStyle::ClearBackgroundImage() {

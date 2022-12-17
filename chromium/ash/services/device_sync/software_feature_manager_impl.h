@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/multidevice/software_feature.h"
 #include "ash/services/device_sync/feature_status_change.h"
 #include "ash/services/device_sync/network_request_error.h"
 #include "ash/services/device_sync/proto/cryptauth_api.pb.h"
@@ -18,6 +17,7 @@
 #include "base/callback_forward.h"
 #include "base/containers/queue.h"
 #include "base/memory/weak_ptr.h"
+#include "chromeos/ash/components/multidevice/software_feature.h"
 
 namespace ash {
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -199,7 +199,8 @@ void ServiceWorkerSingleScriptUpdateChecker::OnReceiveEarlyHints(
 
 void ServiceWorkerSingleScriptUpdateChecker::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr response_head,
-    mojo::ScopedDataPipeConsumerHandle consumer) {
+    mojo::ScopedDataPipeConsumerHandle consumer,
+    absl::optional<mojo_base::BigBuffer> cached_metadata) {
   TRACE_EVENT_WITH_FLOW0(
       "ServiceWorker",
       "ServiceWorkerSingleScriptUpdateChecker::OnReceiveResponse", this,
@@ -239,6 +240,21 @@ void ServiceWorkerSingleScriptUpdateChecker::OnReceiveResponse(
         response_head->parsed_headers
             ? response_head->parsed_headers->cross_origin_embedder_policy
             : network::CrossOriginEmbedderPolicy();
+
+    if (!GetContentClient()
+             ->browser()
+             ->ShouldServiceWorkerInheritPolicyContainerFromCreator(
+                 script_url_)) {
+      policy_container_host_ = base::MakeRefCounted<PolicyContainerHost>(
+          // TODO(https://crbug.com/1366920): Ensure parsed headers are
+          // available
+          response_head->parsed_headers
+              // This does not parse the referrer policy, which will be
+              // updated in ServiceWorkerGlobalScope::Initialize
+              ? PolicyContainerPolicies(script_url_, response_head.get(),
+                                        nullptr)
+              : PolicyContainerPolicies());
+    }
   }
 
   network_accessed_ = response_head->network_accessed;
@@ -280,9 +296,6 @@ void ServiceWorkerSingleScriptUpdateChecker::OnUploadProgress(
   // The network request for update checking shouldn't have upload data.
   NOTREACHED();
 }
-
-void ServiceWorkerSingleScriptUpdateChecker::OnReceiveCachedMetadata(
-    mojo_base::BigBuffer data) {}
 
 void ServiceWorkerSingleScriptUpdateChecker::OnTransferSizeUpdated(
     int32_t transfer_size_diff) {}

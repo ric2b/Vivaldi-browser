@@ -1,4 +1,4 @@
-// Copyright 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 
 #include "base/time/time.h"
 #include "cc/cc_export.h"
+#include "cc/input/browser_controls_state.h"
 #include "cc/input/compositor_input_interfaces.h"
 #include "cc/input/event_listener_properties.h"
 #include "cc/input/main_thread_scrolling_reason.h"
@@ -249,7 +250,7 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
     HANDLER_ON_SCROLLING_LAYER
   };
 
-  virtual base::WeakPtr<InputHandler> AsWeakPtr() const;
+  virtual base::WeakPtr<InputHandler> AsWeakPtr();
 
   // Binds a client to this handler to receive notifications. Only one client
   // can be bound to an InputHandler. The client must live at least until the
@@ -418,6 +419,10 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
   // compositor thread has had a chance to update the scroll offset.
   virtual void SetDeferBeginMainFrame(bool defer_begin_main_frame) const;
 
+  virtual void UpdateBrowserControlsState(BrowserControlsState constraints,
+                                          BrowserControlsState current,
+                                          bool animate);
+
   bool CanConsumeDelta(const ScrollState& scroll_state,
                        const ScrollNode& scroll_node);
   // Returns the amount of delta that can be applied to scroll_node, taking
@@ -468,7 +473,9 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
   // =========== InputDelegateForCompositor Interface - This section implements
   // the interface that LayerTreeHostImpl uses to communicate with the input
   // system.
-  void ProcessCommitDeltas(CompositorCommitData* commit_data) override;
+  void ProcessCommitDeltas(
+      CompositorCommitData* commit_data,
+      const MutatorHost* main_thread_mutator_host) override;
   void TickAnimations(base::TimeTicks monotonic_time) override;
   void WillShutdown() override;
   void WillDraw() override;
@@ -484,6 +491,7 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
   void SetPrefersReducedMotion(bool prefers_reduced_motion) override;
   bool IsCurrentlyScrolling() const override;
   ActivelyScrollingType GetActivelyScrollingType() const override;
+  bool IsCurrentScrollMainRepainted() const override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ScrollUnifiedLayerTreeHostImplTest,

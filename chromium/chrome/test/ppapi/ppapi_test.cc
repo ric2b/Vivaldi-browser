@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -124,7 +124,7 @@ void PPAPITestBase::InfoBarObserver::VerifyInfoBarState() {
   infobars::InfoBar* infobar = infobar_manager->infobar_at(0);
   ConfirmInfoBarDelegate* delegate =
       infobar->delegate()->AsConfirmInfoBarDelegate();
-  ASSERT_TRUE(delegate != NULL);
+  ASSERT_TRUE(delegate != nullptr);
   if (should_accept_)
     delegate->Accept();
   else
@@ -141,7 +141,7 @@ PPAPITestBase::InfoBarObserver::GetInfoBarManager() {
 }
 
 PPAPITestBase::PPAPITestBase() {
-  // These are needed to test that the right NetworkIsolationKey is used.
+  // These are needed to test that the right NetworkAnonymizationKey is used.
   scoped_feature_list_.InitWithFeatures(
       // enabled_features
       {net::features::kSplitHostCacheByNetworkIsolationKey,
@@ -173,15 +173,6 @@ void PPAPITestBase::SetUpOnMainThread() {
   host_resolver()->AddRuleWithFlags(
       "host_resolver.test", embedded_test_server()->host_port_pair().host(),
       net::HOST_RESOLVER_CANONNAME);
-
-  SetUpPPAPIBroker();
-}
-
-void PPAPITestBase::SetUpPPAPIBroker() {
-  // Always allow access to the PPAPI broker.
-  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetDefaultContentSetting(ContentSettingsType::PPAPI_BROKER,
-                                 CONTENT_SETTING_ALLOW);
 }
 
 GURL PPAPITestBase::GetTestFileUrl(const std::string& test_case) {
@@ -391,8 +382,6 @@ void PPAPINaClTest::SetUpCommandLine(base::CommandLine* command_line) {
 #endif
 }
 
-void PPAPINaClTest::SetUpPPAPIBroker() {}
-
 void PPAPINaClTest::RunTest(const std::string& test_case) {
 #if BUILDFLAG(ENABLE_NACL)
   PPAPITestBase::RunTest(test_case);
@@ -484,9 +473,4 @@ std::string PPAPINaClTestDisallowedSockets::BuildQuery(
     const std::string& test_case) {
   return base::StringPrintf("%smode=nacl_newlib&testcase=%s", base.c_str(),
                             test_case.c_str());
-}
-
-void PPAPIBrokerInfoBarTest::SetUpPPAPIBroker() {
-  // The default content setting for the PPAPI broker is ASK. We purposefully
-  // don't call PPAPITestBase::SetUpPPAPIBroker() to keep it that way.
 }

@@ -1,10 +1,9 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/updater/util.h"
 
-#include <algorithm>
 #include <cctype>
 #include <string>
 #include <vector>
@@ -21,6 +20,8 @@
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
+#include "base/ranges/algorithm.h"
+#include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -36,8 +37,16 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/updater/linux/linux_util.h"
+#elif BUILDFLAG(IS_MAC)
 #import "chrome/updater/mac/mac_util.h"
+#endif
+
+#if BUILDFLAG(IS_POSIX)
+#include <pwd.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace updater {
@@ -106,22 +115,17 @@ std::string EscapeQueryParamValue(base::StringPiece text, bool use_plus) {
 absl::optional<base::FilePath> GetBaseDataDirectory(UpdaterScope scope) {
   absl::optional<base::FilePath> app_data_dir;
 #if BUILDFLAG(IS_WIN)
-  base::FilePath path;
-  if (!base::PathService::Get(scope == UpdaterScope::kSystem
-                                  ? base::DIR_PROGRAM_FILES
-                                  : base::DIR_LOCAL_APP_DATA,
-                              &path)) {
-    LOG(ERROR) << "Can't retrieve app data directory.";
-    return absl::nullopt;
-  }
-  app_data_dir = path;
+  app_data_dir = GetApplicationDataDirectory(scope);
 #elif BUILDFLAG(IS_MAC)
   app_data_dir = GetApplicationSupportDirectory(scope);
+#elif BUILDFLAG(IS_LINUX)
+  app_data_dir = GetApplicationDataDirectory(scope);
+#endif
   if (!app_data_dir) {
     LOG(ERROR) << "Can't retrieve app data directory.";
     return absl::nullopt;
   }
-#endif
+
   const auto product_data_dir =
       app_data_dir->AppendASCII(COMPANY_SHORTNAME_STRING)
           .AppendASCII(PRODUCT_FULLNAME_STRING);
@@ -177,43 +181,79 @@ TagParsingResult GetTagArgsForCommandLine(
   std::string tag = command_line.HasSwitch(kTagSwitch)
                         ? command_line.GetSwitchValueASCII(kTagSwitch)
                         : command_line.GetSwitchValueASCII(kHandoffSwitch);
-#if BUILDFLAG(IS_WIN)
-    if (tag.empty())
-      tag = GetSwitchValueInLegacyFormat(command_line.GetCommandLineString(),
-                                         base::ASCIIToWide(kHandoffSwitch));
-#endif
-    if (tag.empty())
-      return {};
-    tagging::TagArgs tag_args;
-    const tagging::ErrorCode error =
-        tagging::Parse(tag, absl::nullopt, &tag_args);
-    VLOG_IF(1, error != tagging::ErrorCode::kSuccess)
-        << "Tag parsing returned " << error << ".";
-    return {tag_args, error};
+  if (tag.empty())
+    return {};
+
+  tagging::TagArgs tag_args;
+  const tagging::ErrorCode error = tagging::Parse(
+      tag, command_line.GetSwitchValueASCII(kAppArgsSwitch), &tag_args);
+  VLOG_IF(1, error != tagging::ErrorCode::kSuccess)
+      << "Tag parsing returned " << error << ".";
+  return {tag_args, error};
 }
 
 TagParsingResult GetTagArgs() {
   return GetTagArgsForCommandLine(*base::CommandLine::ForCurrentProcess());
 }
 
-absl::optional<tagging::AppArgs> GetAppArgs(const std::string& app_id) {
-  const absl::optional<tagging::TagArgs> tag_args = GetTagArgs().tag_args;
+absl::optional<tagging::AppArgs> GetAppArgsForCommandLine(
+    const base::CommandLine& command_line,
+    const std::string& app_id) {
+  const absl::optional<tagging::TagArgs> tag_args =
+      GetTagArgsForCommandLine(command_line).tag_args;
   if (!tag_args || tag_args->apps.empty())
     return absl::nullopt;
 
   const std::vector<tagging::AppArgs>& apps_args = tag_args->apps;
-  std::vector<tagging::AppArgs>::const_iterator it = std::find_if(
-      std::begin(apps_args), std::end(apps_args),
-      [&app_id](const tagging::AppArgs& app_args) {
+  std::vector<tagging::AppArgs>::const_iterator it = base::ranges::find_if(
+      apps_args, [&app_id](const tagging::AppArgs& app_args) {
         return base::EqualsCaseInsensitiveASCII(app_args.app_id, app_id);
       });
   return it != std::end(apps_args) ? absl::optional<tagging::AppArgs>(*it)
                                    : absl::nullopt;
 }
 
-std::string GetInstallDataIndexFromAppArgs(const std::string& app_id) {
-  const absl::optional<tagging::AppArgs> app_args = GetAppArgs(app_id);
+absl::optional<tagging::AppArgs> GetAppArgs(const std::string& app_id) {
+  return GetAppArgsForCommandLine(*base::CommandLine::ForCurrentProcess(),
+                                  app_id);
+}
+
+std::string GetDecodedInstallDataFromAppArgsForCommandLine(
+    const base::CommandLine& command_line,
+    const std::string& app_id) {
+  const absl::optional<tagging::AppArgs> app_args =
+      GetAppArgsForCommandLine(command_line, app_id);
+  if (!app_args)
+    return std::string();
+
+  std::string decoded_installer_data;
+  const bool result = base::UnescapeBinaryURLComponentSafe(
+      app_args->encoded_installer_data,
+      /*fail_on_path_separators=*/false, &decoded_installer_data);
+  VLOG_IF(1, !result) << "Failed to decode encoded installer data: ["
+                      << app_args->encoded_installer_data << "]";
+
+  // `decoded_installer_data` is set to empty if
+  // `UnescapeBinaryURLComponentSafe` fails.
+  return decoded_installer_data;
+}
+
+std::string GetDecodedInstallDataFromAppArgs(const std::string& app_id) {
+  return GetDecodedInstallDataFromAppArgsForCommandLine(
+      *base::CommandLine::ForCurrentProcess(), app_id);
+}
+
+std::string GetInstallDataIndexFromAppArgsForCommandLine(
+    const base::CommandLine& command_line,
+    const std::string& app_id) {
+  const absl::optional<tagging::AppArgs> app_args =
+      GetAppArgsForCommandLine(command_line, app_id);
   return app_args ? app_args->install_data_index : std::string();
+}
+
+std::string GetInstallDataIndexFromAppArgs(const std::string& app_id) {
+  return GetInstallDataIndexFromAppArgsForCommandLine(
+      *base::CommandLine::ForCurrentProcess(), app_id);
 }
 
 base::CommandLine MakeElevated(base::CommandLine command_line) {
@@ -242,8 +282,6 @@ void InitLogging(UpdaterScope updater_scope) {
                        /*enable_timestamp=*/true,
                        /*enable_tickcount=*/false);
   VLOG(1) << "Log file: " << settings.log_file_path;
-  VLOG(1) << "Process command line: "
-          << base::CommandLine::ForCurrentProcess()->GetCommandLineString();
 }
 
 // This function and the helper functions are copied from net/base/url_util.cc
@@ -263,22 +301,44 @@ GURL AppendQueryParameter(const GURL& url,
   return url.ReplaceComponents(replacements);
 }
 
-#if BUILDFLAG(IS_LINUX)
-
-// TODO(crbug.com/1276188) - implement the functions below.
-absl::optional<base::FilePath> GetBaseInstallDirectory(UpdaterScope scope) {
-  NOTIMPLEMENTED();
-  return absl::nullopt;
-}
-
-base::FilePath GetExecutableRelativePath() {
-  NOTIMPLEMENTED();
-  return base::FilePath();
-}
+#if BUILDFLAG(IS_POSIX)
 
 bool PathOwnedByUser(const base::FilePath& path) {
-  NOTIMPLEMENTED();
-  return false;
+  struct passwd* result = nullptr;
+  struct passwd user_info = {};
+  char pwbuf[2048] = {};
+  const uid_t user_uid = geteuid();
+
+  const int error =
+      getpwuid_r(user_uid, &user_info, pwbuf, sizeof(pwbuf), &result);
+
+  if (error) {
+    VLOG(1) << "Failed to get user info.";
+    return true;
+  }
+
+  if (result == nullptr) {
+    VLOG(1) << "No entry for user.";
+    return true;
+  }
+
+  base::stat_wrapper_t stat_info = {};
+  if (base::File::Lstat(path.value().c_str(), &stat_info) != 0) {
+    DPLOG(ERROR) << "Failed to get information on path " << path.value();
+    return false;
+  }
+
+  if (S_ISLNK(stat_info.st_mode)) {
+    DLOG(ERROR) << "Path " << path.value() << " is a symbolic link.";
+    return false;
+  }
+
+  if (stat_info.st_uid != user_uid) {
+    DLOG(ERROR) << "Path " << path.value() << " is owned by the wrong user.";
+    return false;
+  }
+
+  return true;
 }
 
 #endif  // BUILDFLAG(IS_LINUX)
@@ -287,8 +347,7 @@ bool PathOwnedByUser(const base::FilePath& path) {
 
 std::wstring GetTaskNamePrefix(UpdaterScope scope) {
   std::wstring task_name = GetTaskDisplayName(scope);
-  task_name.erase(std::remove_if(task_name.begin(), task_name.end(), isspace),
-                  task_name.end());
+  task_name.erase(base::ranges::remove_if(task_name, isspace), task_name.end());
   return task_name;
 }
 
@@ -296,6 +355,18 @@ std::wstring GetTaskDisplayName(UpdaterScope scope) {
   return base::StrCat({base::ASCIIToWide(PRODUCT_FULLNAME_STRING), L" Task ",
                        scope == UpdaterScope::kSystem ? L"System " : L"User ",
                        kUpdaterVersionUtf16});
+}
+
+base::CommandLine GetCommandLineLegacyCompatible() {
+  absl::optional<base::CommandLine> cmd_line =
+      CommandLineForLegacyFormat(::GetCommandLine());
+  return cmd_line ? *cmd_line : *base::CommandLine::ForCurrentProcess();
+}
+
+#else  // BUILDFLAG(IS_WIN)
+
+base::CommandLine GetCommandLineLegacyCompatible() {
+  return *base::CommandLine::ForCurrentProcess();
 }
 
 #endif  // BUILDFLAG(IS_WIN)

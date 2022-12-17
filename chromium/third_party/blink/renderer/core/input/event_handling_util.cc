@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -99,17 +99,6 @@ ScrollableArea* AssociatedScrollableArea(const PaintLayer* layer) {
   }
 
   return nullptr;
-}
-
-ContainerNode* ParentForClickEventInteractiveElementSensitive(
-    const Node& node) {
-  // IE doesn't dispatch click events for mousedown/mouseup events across form
-  // controls.
-  auto* html_element = DynamicTo<HTMLElement>(node);
-  if (html_element && html_element->IsInteractiveContent())
-    return nullptr;
-
-  return FlatTreeTraversal::Parent(node);
 }
 
 ContainerNode* ParentForClickEvent(const Node& node) {

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,6 +19,9 @@
 #include "content/browser/renderer_host/navigation_entry_impl.h"
 #include "content/public/android/content_jni_headers/NavigationControllerImpl_jni.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/resource_request_body_android.h"
@@ -234,7 +237,8 @@ void NavigationControllerAndroid::GoToNavigationIndex(
   navigation_controller_->GoToIndex(index);
 }
 
-void NavigationControllerAndroid::LoadUrl(
+base::android::ScopedJavaGlobalRef<jobject>
+NavigationControllerAndroid::LoadUrl(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& url,
@@ -322,7 +326,15 @@ void NavigationControllerAndroid::LoadUrl(
 
   params.navigation_ui_data = std::move(navigation_ui_data);
 
-  navigation_controller_->LoadURLWithParams(params);
+  base::WeakPtr<NavigationHandle> handle =
+      navigation_controller_->LoadURLWithParams(params);
+
+  if (!handle) {
+    return nullptr;
+  }
+
+  return base::android::ScopedJavaGlobalRef<jobject>(
+      handle->GetJavaNavigationHandle());
 }
 
 void NavigationControllerAndroid::ClearHistory(

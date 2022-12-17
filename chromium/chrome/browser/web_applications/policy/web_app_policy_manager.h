@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -131,6 +131,9 @@ class WebAppPolicyManager {
   void InitChangeRegistrarAndRefreshPolicy(bool enable_pwa_support);
 
   void RefreshPolicyInstalledApps();
+#if BUILDFLAG(IS_CHROMEOS)
+  void RefreshPolicyInstalledIsolatedApps();
+#endif
   void RefreshPolicySettings();
   void OnAppsSynchronized(
       std::map<GURL, ExternallyManagedAppManager::InstallResult>

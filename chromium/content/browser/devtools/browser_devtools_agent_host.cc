@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -122,13 +122,17 @@ class BrowserDevToolsAgentHost::BrowserAutoAttacher final
     // are created, otherwise if they don't incur any network activity we'll
     // never get a chance to throttle them (and auto-attach there).
 
-    if (IsMainFrameHost(host)) {
+    if (IsMainFrameHost(host) || IsSharedWorkerHost(host)) {
       DispatchAutoAttach(
           host, wait_for_debugger_on_start() && !processing_existent_targets_);
     }
   }
 
   bool ShouldForceDevToolsAgentHostCreation() override { return true; }
+
+  static bool IsSharedWorkerHost(DevToolsAgentHost* host) {
+    return host->GetType() == DevToolsAgentHost::kTypeSharedWorker;
+  }
 
   static bool IsMainFrameHost(DevToolsAgentHost* host) {
     WebContentsImpl* web_contents =
@@ -179,7 +183,7 @@ bool BrowserDevToolsAgentHost::AttachSession(DevToolsSession* session,
   session->SetBrowserOnly(true);
   session->CreateAndAddHandler<protocol::TargetHandler>(
       protocol::TargetHandler::AccessMode::kBrowser, GetId(),
-      auto_attacher_.get(), session->GetRootSession());
+      auto_attacher_.get(), session);
   if (only_discovery_)
     return true;
 
@@ -194,7 +198,8 @@ bool BrowserDevToolsAgentHost::AttachSession(DevToolsSession* session,
       base::BindRepeating([](base::OnceClosure cb) { std::move(cb).Run(); }));
   session->CreateAndAddHandler<protocol::MemoryHandler>();
   session->CreateAndAddHandler<protocol::SecurityHandler>();
-  session->CreateAndAddHandler<protocol::StorageHandler>();
+  session->CreateAndAddHandler<protocol::StorageHandler>(
+      session->GetClient()->IsTrusted());
   session->CreateAndAddHandler<protocol::SystemInfoHandler>();
   if (tethering_task_runner_) {
     session->CreateAndAddHandler<protocol::TetheringHandler>(

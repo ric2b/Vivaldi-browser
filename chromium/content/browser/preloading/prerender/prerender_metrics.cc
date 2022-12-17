@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,6 +72,23 @@ void RecordPrerenderCancelledInterface(
   }
 }
 
+void RecordPrerenderReasonForInactivePageRestriction(uint16_t reason,
+                                                     RenderFrameHostImpl& rfh) {
+  FrameTreeNode* outermost_frame =
+      rfh.GetOutermostMainFrameOrEmbedder()->frame_tree_node();
+  PrerenderHost* prerender_host =
+      rfh.delegate()->GetPrerenderHostRegistry()->FindNonReservedHostById(
+          outermost_frame->frame_tree_node_id());
+  if (prerender_host) {
+    base::UmaHistogramSparse(
+        GenerateHistogramName("Prerender.CanceledForInactivePageRestriction."
+                              "DisallowActivationReason",
+                              prerender_host->trigger_type(),
+                              prerender_host->embedder_histogram_suffix()),
+        reason);
+  }
+}
+
 void RecordPrerenderTriggered(ukm::SourceId ukm_id) {
   ukm::builders::PrerenderPageLoad(ukm_id).SetTriggeredPrerender(true).Record(
       ukm::UkmRecorder::Get());
@@ -139,6 +156,42 @@ void RecordPrerenderActivationNavigationParamsMatch(
           "Prerender.Experimental.ActivationNavigationParamsMatch",
           trigger_type, embedder_suffix),
       result);
+}
+
+void RecordPrerenderRedirectionMismatchType(
+    PrerenderCrossOriginRedirectionMismatch mismatch_type,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix) {
+  DCHECK_EQ(trigger_type, PrerenderTriggerType::kEmbedder);
+  base::UmaHistogramEnumeration(
+      GenerateHistogramName(
+          "Prerender.Experimental.PrerenderCrossOriginRedirectionMismatch",
+          trigger_type, embedder_histogram_suffix),
+      mismatch_type);
+}
+
+void RecordPrerenderRedirectionProtocolChange(
+    PrerenderCrossOriginRedirectionProtocolChange change_type,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix) {
+  DCHECK_EQ(trigger_type, PrerenderTriggerType::kEmbedder);
+  base::UmaHistogramEnumeration(
+      GenerateHistogramName(
+          "Prerender.Experimental.CrossOriginRedirectionProtocolChange",
+          trigger_type, embedder_histogram_suffix),
+      change_type);
+}
+
+void RecordPrerenderRedirectionDomain(
+    PrerenderCrossOriginRedirectionDomain domain_type,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix) {
+  DCHECK_EQ(trigger_type, PrerenderTriggerType::kEmbedder);
+  base::UmaHistogramEnumeration(
+      GenerateHistogramName(
+          "Prerender.Experimental.CrossOriginRedirectionDomain", trigger_type,
+          embedder_histogram_suffix),
+      domain_type);
 }
 
 }  // namespace content

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -71,8 +71,9 @@ namespace features {
 //
 // Currently this feature only changes AdTagging behavior for metrics recorded
 // in AdsPageLoadMetricsObserver, and for triggering the Heavy Ad Intervention.
-const base::Feature kRestrictedNavigationAdTagging{
-    "RestrictedNavigationAdTagging", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kRestrictedNavigationAdTagging,
+             "RestrictedNavigationAdTagging",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features
 
@@ -280,6 +281,10 @@ PageLoadMetricsObserver::ObservePolicy
 AdsPageLoadMetricsObserver::OnFencedFramesStart(
     content::NavigationHandle* navigation_handle,
     const GURL& currently_committed_url) {
+  // Need the observer-level forwarding for FrameReceivedUserActivation,
+  // FrameDisplayStateChanged, FrameSizeChanged, MediaStartedPlaying,
+  // OnMainFrameIntersectionRectChanged, OnMainFrameViewportRectChanged,
+  // and OnV8MemoryChanged.
   return FORWARD_OBSERVING;
 }
 
@@ -844,9 +849,30 @@ void AdsPageLoadMetricsObserver::RecordPageResourceTotalHistograms(
     ukm::SourceId source_id) {
   const auto& resource_data = aggregate_frame_data_->resource_data();
 
+  auto* ukm_recorder = ukm::UkmRecorder::Get();
+
+  // AdPageLoadCustomSampling2 is recorded on all pages
+  ukm::builders::AdPageLoadCustomSampling2 custom_sampling_builder(source_id);
+
+  page_ad_density_tracker_.Finalize();
+
+  UnivariateStats::DistributionMoments moments =
+      page_ad_density_tracker_.GetAdDensityByAreaStats();
+
+  custom_sampling_builder.SetAverageViewportAdDensity(
+      std::llround(moments.mean));
+  custom_sampling_builder.SetVarianceViewportAdDensity(
+      GetExponentialBucketForDistributionMoment(moments.variance));
+  custom_sampling_builder.SetSkewnessViewportAdDensity(
+      GetExponentialBucketForDistributionMoment(moments.skewness));
+  custom_sampling_builder.SetKurtosisViewportAdDensity(
+      GetExponentialBucketForDistributionMoment(moments.excess_kurtosis));
+  custom_sampling_builder.Record(ukm_recorder->Get());
+
   // Only records histograms on pages that have some ad bytes.
   if (resource_data.ad_bytes() == 0)
     return;
+
   PAGE_BYTES_HISTOGRAM("PageLoad.Clients.Ads.Resources.Bytes.Ads2",
                        resource_data.ad_network_bytes());
 
@@ -867,7 +893,6 @@ void AdsPageLoadMetricsObserver::RecordPageResourceTotalHistograms(
       page_ad_density_tracker_.MaxPageAdDensityByArea() != -1 &&
           page_ad_density_tracker_.MaxPageAdDensityByHeight() != -1);
 
-  auto* ukm_recorder = ukm::UkmRecorder::Get();
   ukm::builders::AdPageLoad builder(source_id);
   builder.SetTotalBytes(resource_data.network_bytes() >> 10)
       .SetAdBytes(resource_data.ad_network_bytes() >> 10)
@@ -888,24 +913,6 @@ void AdsPageLoadMetricsObserver::RecordPageResourceTotalHistograms(
   builder.SetAdCpuTime(
       aggregate_frame_data_->total_ad_cpu_usage().InMilliseconds());
   builder.Record(ukm_recorder->Get());
-
-  // Record custom sampling metrics.
-  ukm::builders::AdPageLoadCustomSampling custom_sampling_builder(source_id);
-
-  page_ad_density_tracker_.Finalize();
-
-  UnivariateStats::DistributionMoments moments =
-      page_ad_density_tracker_.GetAdDensityByAreaStats();
-
-  custom_sampling_builder.SetAverageViewportAdDensity(
-      std::llround(moments.mean));
-  custom_sampling_builder.SetVarianceViewportAdDensity(
-      GetExponentialBucketForDistributionMoment(moments.variance));
-  custom_sampling_builder.SetSkewnessViewportAdDensity(
-      GetExponentialBucketForDistributionMoment(moments.skewness));
-  custom_sampling_builder.SetKurtosisViewportAdDensity(
-      GetExponentialBucketForDistributionMoment(moments.excess_kurtosis));
-  custom_sampling_builder.Record(ukm_recorder->Get());
 }
 
 void AdsPageLoadMetricsObserver::RecordHistograms(ukm::SourceId source_id) {
@@ -1316,19 +1323,18 @@ void AdsPageLoadMetricsObserver::MaybeTriggerHeavyAdIntervention(
   // be available in the the unload handler.
   std::string report_message =
       GetHeavyAdReportMessage(*frame_data, action == HeavyAdAction::kUnload);
-  render_frame_host->ForEachRenderFrameHost(base::BindRepeating(
-      [](const std::string& report_message, const content::Page* page,
-         content::RenderFrameHost* frame) {
+  render_frame_host->ForEachRenderFrameHostWithAction(
+      [&report_message,
+       &page = render_frame_host->GetPage()](content::RenderFrameHost* frame) {
         // If `frame`'s page doesn't match the one we are associated with (for
         // fenced frames or portals) skip the subtree.
-        if (page != &frame->GetPage())
+        if (&page != &frame->GetPage())
           return content::RenderFrameHost::FrameIterationAction::kSkipChildren;
-        const char kReportId[] = "HeavyAdIntervention";
+        static constexpr char kReportId[] = "HeavyAdIntervention";
         if (frame->IsRenderFrameLive())
           frame->SendInterventionReport(kReportId, report_message);
         return content::RenderFrameHost::FrameIterationAction::kContinue;
-      },
-      report_message, &render_frame_host->GetPage()));
+      });
 
   // Report intervention to the blocklist.
   if (auto* blocklist = GetHeavyAdBlocklist()) {

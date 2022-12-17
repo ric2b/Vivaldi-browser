@@ -1,10 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "content/browser/browsing_topics/browsing_topics_document_host.h"
 
 #include "base/bind.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/render_frame_host.h"
@@ -58,6 +59,7 @@ void BrowsingTopicsDocumentHost::CreateMojoService(
 }
 
 void BrowsingTopicsDocumentHost::GetBrowsingTopics(
+    bool observe,
     GetBrowsingTopicsCallback callback) {
   // IPCs may race with navigation events, so:
   // - Ignore non-active frames, e.g. a frame placed into bfcache, or a
@@ -79,11 +81,21 @@ void BrowsingTopicsDocumentHost::GetBrowsingTopics(
     return;
   }
 
+  // Skip if the RFH's `StoragePartition` isn't the `BrowserContext`'s default
+  // one. The desired way to process it is TBD.
+  if (render_frame_host().GetStoragePartition() !=
+      render_frame_host().GetBrowserContext()->GetDefaultStoragePartition()) {
+    std::move(callback).Run(
+        blink::mojom::GetBrowsingTopicsResult::NewBrowsingTopics(
+            std::vector<blink::mojom::EpochTopicPtr>()));
+    return;
+  }
+
   std::move(callback).Run(
       blink::mojom::GetBrowsingTopicsResult::NewBrowsingTopics(
           GetContentClient()->browser()->GetBrowsingTopicsForJsApi(
               render_frame_host().GetLastCommittedOrigin(),
-              render_frame_host().GetMainFrame())));
+              render_frame_host().GetMainFrame(), observe)));
 }
 
 BrowsingTopicsDocumentHost::~BrowsingTopicsDocumentHost() = default;

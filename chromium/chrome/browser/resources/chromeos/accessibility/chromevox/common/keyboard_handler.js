@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
  */
 import {UserActionMonitor} from '../background/user_action_monitor.js';
 
+import {Command} from './command_store.js';
 import {KeyMap} from './key_map.js';
 import {KeyUtil} from './key_util.js';
 
@@ -22,7 +23,7 @@ ChromeVoxKbHandler.handlerKeyMap = KeyMap.get();
 /**
  * Handler for ChromeVox commands. Returns undefined if the command does not
  * exist. Otherwise, returns the result of executing the command.
- * @type {function(string): (boolean|undefined)}
+ * @type {function(!Command): (boolean|undefined)}
  */
 ChromeVoxKbHandler.commandHandler;
 

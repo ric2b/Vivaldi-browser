@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,7 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/base/privacy_mode.h"
 #include "net/base/proxy_delegate.h"
 #include "net/base/proxy_server.h"
@@ -35,6 +35,7 @@
 #include "net/base/test_completion_callback.h"
 #include "net/base/test_data_stream.h"
 #include "net/cert/ct_policy_status.h"
+#include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_request_info.h"
 #include "net/http/transport_security_state_test_util.h"
@@ -183,7 +184,7 @@ class SpdySessionTest : public PlatformTest, public WithTaskEnvironment {
              PRIVACY_MODE_DISABLED,
              SpdySessionKey::IsProxySession::kFalse,
              SocketTag(),
-             NetworkIsolationKey(),
+             NetworkAnonymizationKey(),
              SecureDnsPolicy::kAllow),
         ssl_(SYNCHRONOUS, OK) {}
 
@@ -2936,12 +2937,12 @@ TEST_F(SpdySessionTest, VerifyDomainAuthentication) {
 }
 
 // Check that VerifyDomainAuthentication respects Expect-CT failures, and uses
-// the correct NetworkIsolationKey.
+// the correct NetworkAnonymizationKey.
 TEST_F(SpdySessionTest, VerifyDomainAuthenticationExpectCT) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       /* enabled_features */
-      {TransportSecurityState::kDynamicExpectCTFeature,
+      {kDynamicExpectCTFeature,
        features::kPartitionExpectCTStateByNetworkIsolationKey,
        features::kPartitionConnectionsByNetworkIsolationKey,
        features::kPartitionSSLSessionsByNetworkIsolationKey},
@@ -2951,7 +2952,7 @@ TEST_F(SpdySessionTest, VerifyDomainAuthenticationExpectCT) {
   key_ = SpdySessionKey(HostPortPair::FromURL(test_url_), ProxyServer::Direct(),
                         PRIVACY_MODE_DISABLED,
                         SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                        NetworkIsolationKey::CreateTransient(),
+                        NetworkAnonymizationKey::CreateTransient(),
                         SecureDnsPolicy::kAllow);
   ssl_.ssl_info.ct_policy_compliance =
       ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS;
@@ -2975,15 +2976,16 @@ TEST_F(SpdySessionTest, VerifyDomainAuthenticationExpectCT) {
   EXPECT_FALSE(session_->VerifyDomainAuthentication("mail.google.com"));
 
   // Add Expect-CT data for all three hosts that passed the above checks, using
-  // different NetworkIsolationKeys.
+  // different NetworkAnonymizationKeys.
   const base::Time expiry = base::Time::Now() + base::Days(1);
   session_deps_.transport_security_state->AddExpectCT(
-      "www.example.org", expiry, true, GURL(), NetworkIsolationKey());
+      "www.example.org", expiry, true, GURL(), NetworkAnonymizationKey());
   session_deps_.transport_security_state->AddExpectCT(
-      "mail.example.org", expiry, true, GURL(), key_.network_isolation_key());
+      "mail.example.org", expiry, true, GURL(),
+      key_.network_anonymization_key());
   session_deps_.transport_security_state->AddExpectCT(
       "mail.example.com", expiry, true, GURL(),
-      NetworkIsolationKey::CreateTransient());
+      NetworkAnonymizationKey::CreateTransient());
 
   // The host with the Expect-CT data that matches the SpdySession's should fail
   // the check now.
@@ -3746,8 +3748,8 @@ TEST_F(SpdySessionTest, CloseOneIdleConnection) {
             connection2->Init(
                 ClientSocketPool::GroupId(
                     url::SchemeHostPort(url::kHttpScheme, "2.com", 80),
-                    PrivacyMode::PRIVACY_MODE_DISABLED, NetworkIsolationKey(),
-                    SecureDnsPolicy::kAllow),
+                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                    NetworkAnonymizationKey(), SecureDnsPolicy::kAllow),
                 ClientSocketPool::SocketParams::CreateForHttpForTesting(),
                 absl::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
                 SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
@@ -3792,7 +3794,7 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
   SpdySessionKey key1(HostPortPair("www.example.org", 80),
                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
                       SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                      NetworkIsolationKey(), SecureDnsPolicy::kAllow);
+                      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow);
   base::WeakPtr<SpdySession> session1 =
       ::net::CreateSpdySession(http_session_.get(), key1, NetLogWithSource());
   EXPECT_FALSE(pool->IsStalled());
@@ -3801,7 +3803,7 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
   SpdySessionKey key2(HostPortPair("mail.example.org", 80),
                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
                       SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                      NetworkIsolationKey(), SecureDnsPolicy::kAllow);
+                      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow);
   std::unique_ptr<SpdySessionPool::SpdySessionRequest> request;
   bool is_blocking_request_for_session = false;
   SpdySessionRequestDelegate request_delegate;
@@ -3812,11 +3814,13 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
       &request_delegate, &request, &is_blocking_request_for_session));
   EXPECT_TRUE(request);
 
+  HostResolverEndpointResult endpoint;
+  endpoint.ip_endpoints = {IPEndPoint(IPAddress(192, 168, 0, 2), 80)};
   // Simulate DNS resolution completing, which should set up an alias.
   EXPECT_EQ(OnHostResolutionCallbackResult::kMayBeDeletedAsync,
             spdy_session_pool_->OnHostResolutionComplete(
-                key2, /* is_websocket = */ false,
-                AddressList(IPEndPoint(IPAddress(192, 168, 0, 2), 80))));
+                key2, /* is_websocket = */ false, {endpoint},
+                /*aliases=*/{}));
 
   // Get a session for |key2|, which should return the session created earlier.
   base::WeakPtr<SpdySession> session2 =
@@ -3835,8 +3839,8 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
             connection3->Init(
                 ClientSocketPool::GroupId(
                     url::SchemeHostPort(url::kHttpScheme, "3.com", 80),
-                    PrivacyMode::PRIVACY_MODE_DISABLED, NetworkIsolationKey(),
-                    SecureDnsPolicy::kAllow),
+                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                    NetworkAnonymizationKey(), SecureDnsPolicy::kAllow),
                 ClientSocketPool::SocketParams::CreateForHttpForTesting(),
                 absl::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
                 SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
@@ -3915,8 +3919,8 @@ TEST_F(SpdySessionTest, CloseSessionOnIdleWhenPoolStalled) {
             connection2->Init(
                 ClientSocketPool::GroupId(
                     url::SchemeHostPort(url::kHttpScheme, "2.com", 80),
-                    PrivacyMode::PRIVACY_MODE_DISABLED, NetworkIsolationKey(),
-                    SecureDnsPolicy::kAllow),
+                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                    NetworkAnonymizationKey(), SecureDnsPolicy::kAllow),
                 ClientSocketPool::SocketParams::CreateForHttpForTesting(),
                 absl::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
                 SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
@@ -3949,11 +3953,11 @@ TEST_F(SpdySessionTest, SpdySessionKeyPrivacyMode) {
   SpdySessionKey key_privacy_enabled(
       host_port_pair, ProxyServer::Direct(), PRIVACY_MODE_ENABLED,
       SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-      NetworkIsolationKey(), SecureDnsPolicy::kAllow);
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow);
   SpdySessionKey key_privacy_disabled(
       host_port_pair, ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
       SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-      NetworkIsolationKey(), SecureDnsPolicy::kAllow);
+      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow);
 
   EXPECT_FALSE(HasSpdySession(spdy_session_pool_, key_privacy_enabled));
   EXPECT_FALSE(HasSpdySession(spdy_session_pool_, key_privacy_disabled));
@@ -6676,12 +6680,12 @@ TEST_F(AltSvcFrameTest, ProcessAltSvcFrame) {
                                            test_url_.EffectiveIntPort());
   AlternativeServiceInfoVector altsvc_info_vector =
       spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
-          session_origin, NetworkIsolationKey());
+          session_origin, NetworkAnonymizationKey());
   ASSERT_TRUE(altsvc_info_vector.empty());
 
   altsvc_info_vector =
       spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
-          url::SchemeHostPort(GURL(origin)), NetworkIsolationKey());
+          url::SchemeHostPort(GURL(origin)), NetworkAnonymizationKey());
   ASSERT_EQ(1u, altsvc_info_vector.size());
   AlternativeService alternative_service(kProtoQUIC, "alternative.example.org",
                                          443u);
@@ -6713,12 +6717,12 @@ TEST_F(AltSvcFrameTest, IgnoreQuicAltSvcWithUnsupportedVersion) {
                                            test_url_.EffectiveIntPort());
   AlternativeServiceInfoVector altsvc_info_vector =
       spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
-          session_origin, NetworkIsolationKey());
+          session_origin, NetworkAnonymizationKey());
   ASSERT_TRUE(altsvc_info_vector.empty());
 
   altsvc_info_vector =
       spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
-          url::SchemeHostPort(GURL(origin)), NetworkIsolationKey());
+          url::SchemeHostPort(GURL(origin)), NetworkAnonymizationKey());
   ASSERT_EQ(0u, altsvc_info_vector.size());
 }
 
@@ -6728,7 +6732,7 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameWithExpectCTError) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       /* enabled_features */
-      {TransportSecurityState::kDynamicExpectCTFeature,
+      {kDynamicExpectCTFeature,
        features::kPartitionExpectCTStateByNetworkIsolationKey,
        features::kPartitionConnectionsByNetworkIsolationKey,
        features::kPartitionSSLSessionsByNetworkIsolationKey},
@@ -6738,7 +6742,7 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameWithExpectCTError) {
   key_ = SpdySessionKey(HostPortPair::FromURL(test_url_), ProxyServer::Direct(),
                         PRIVACY_MODE_DISABLED,
                         SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                        NetworkIsolationKey::CreateTransient(),
+                        NetworkAnonymizationKey::CreateTransient(),
                         SecureDnsPolicy::kAllow);
   ssl_.ssl_info.ct_policy_compliance =
       ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS;
@@ -6749,7 +6753,7 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameWithExpectCTError) {
       std::make_unique<TransportSecurityState>();
   session_deps_.transport_security_state->AddExpectCT(
       GURL(origin).host(), base::Time::Now() + base::Days(1) /* expiry */, true,
-      GURL(), key_.network_isolation_key());
+      GURL(), key_.network_anonymization_key());
 
   spdy::SpdyAltSvcIR altsvc_ir(/* stream_id = */ 0);
   altsvc_ir.add_altsvc(alternative_service_);
@@ -6766,13 +6770,13 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameWithExpectCTError) {
                                            test_url_.EffectiveIntPort());
   ASSERT_TRUE(spdy_session_pool_->http_server_properties()
                   ->GetAlternativeServiceInfos(session_origin,
-                                               key_.network_isolation_key())
+                                               key_.network_anonymization_key())
                   .empty());
 
   ASSERT_TRUE(
       spdy_session_pool_->http_server_properties()
           ->GetAlternativeServiceInfos(url::SchemeHostPort(GURL(origin)),
-                                       key_.network_isolation_key())
+                                       key_.network_anonymization_key())
           .empty());
 }
 
@@ -6793,15 +6797,16 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameForOriginNotCoveredByCert) {
 
   const url::SchemeHostPort session_origin("https", test_url_.host(),
                                            test_url_.EffectiveIntPort());
+  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(session_origin,
+                                               NetworkAnonymizationKey())
+                  .empty());
+
   ASSERT_TRUE(
       spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(session_origin, NetworkIsolationKey())
+          ->GetAlternativeServiceInfos(url::SchemeHostPort(GURL(origin)),
+                                       NetworkAnonymizationKey())
           .empty());
-
-  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
-                  ->GetAlternativeServiceInfos(
-                      url::SchemeHostPort(GURL(origin)), NetworkIsolationKey())
-                  .empty());
 }
 
 // An ALTSVC frame on stream 0 with empty origin MUST be ignored.
@@ -6819,10 +6824,10 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameWithEmptyOriginOnStreamZero) {
 
   const url::SchemeHostPort session_origin("https", test_url_.host(),
                                            test_url_.EffectiveIntPort());
-  ASSERT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(session_origin, NetworkIsolationKey())
-          .empty());
+  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(session_origin,
+                                               NetworkAnonymizationKey())
+                  .empty());
 }
 
 // An ALTSVC frame on a stream other than stream 0 with non-empty origin MUST be
@@ -6842,10 +6847,10 @@ TEST_F(AltSvcFrameTest,
 
   const url::SchemeHostPort session_origin("https", test_url_.host(),
                                            test_url_.EffectiveIntPort());
-  ASSERT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(session_origin, NetworkIsolationKey())
-          .empty());
+  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(session_origin,
+                                               NetworkAnonymizationKey())
+                  .empty());
 }
 
 TEST_F(AltSvcFrameTest, ProcessAltSvcFrameOnActiveStream) {
@@ -6889,14 +6894,14 @@ TEST_F(AltSvcFrameTest, ProcessAltSvcFrameOnActiveStream) {
 
   const url::SchemeHostPort session_origin("https", test_url_.host(),
                                            test_url_.EffectiveIntPort());
-  ASSERT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(session_origin, NetworkIsolationKey())
-          .empty());
+  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(session_origin,
+                                               NetworkAnonymizationKey())
+                  .empty());
 
   AlternativeServiceInfoVector altsvc_info_vector =
       spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
-          url::SchemeHostPort(GURL(request_origin)), NetworkIsolationKey());
+          url::SchemeHostPort(GURL(request_origin)), NetworkAnonymizationKey());
   ASSERT_EQ(1u, altsvc_info_vector.size());
   EXPECT_EQ(kProtoQUIC, altsvc_info_vector[0].alternative_service().protocol);
   EXPECT_EQ("alternative.example.org",
@@ -6905,13 +6910,13 @@ TEST_F(AltSvcFrameTest, ProcessAltSvcFrameOnActiveStream) {
 }
 
 TEST_F(AltSvcFrameTest,
-       ProcessAltSvcFrameOnActiveStreamWithNetworkIsolationKey) {
+       ProcessAltSvcFrameOnActiveStreamWithNetworkAnonymizationKey) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       // enabled_features
       {features::kPartitionHttpServerPropertiesByNetworkIsolationKey,
-       // Need to partition connections by NetworkIsolationKey for
-       // SpdySessionKeys to include NetworkIsolationKeys.
+       // Need to partition connections by NetworkAnonymizationKey for
+       // SpdySessionKeys to include NetworkAnonymizationKeys.
        features::kPartitionConnectionsByNetworkIsolationKey},
       // disabled_features
       {});
@@ -6921,13 +6926,13 @@ TEST_F(AltSvcFrameTest,
       std::make_unique<HttpServerProperties>();
 
   const SchemefulSite kSite1(GURL("https://foo.test/"));
-  const net::NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
+  const net::NetworkAnonymizationKey kNetworkAnonymizationKey1(kSite1, kSite1);
   const SchemefulSite kSite2(GURL("https://bar.test/"));
-  const net::NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
+  const net::NetworkAnonymizationKey kNetworkAnonymizationKey2(kSite2, kSite2);
   key_ = SpdySessionKey(HostPortPair::FromURL(test_url_), ProxyServer::Direct(),
                         PRIVACY_MODE_DISABLED,
                         SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                        kNetworkIsolationKey1, SecureDnsPolicy::kAllow);
+                        kNetworkAnonymizationKey1, SecureDnsPolicy::kAllow);
 
   spdy::SpdyAltSvcIR altsvc_ir(/* stream_id = */ 1);
   altsvc_ir.add_altsvc(alternative_service_);
@@ -6969,14 +6974,14 @@ TEST_F(AltSvcFrameTest,
 
   const url::SchemeHostPort session_origin("https", test_url_.host(),
                                            test_url_.EffectiveIntPort());
-  ASSERT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(session_origin, NetworkIsolationKey())
-          .empty());
+  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(session_origin,
+                                               NetworkAnonymizationKey())
+                  .empty());
 
   AlternativeServiceInfoVector altsvc_info_vector =
       spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
-          url::SchemeHostPort(GURL(request_origin)), kNetworkIsolationKey1);
+          url::SchemeHostPort(GURL(request_origin)), kNetworkAnonymizationKey1);
   ASSERT_EQ(1u, altsvc_info_vector.size());
   EXPECT_EQ(kProtoQUIC, altsvc_info_vector[0].alternative_service().protocol);
   EXPECT_EQ("alternative.example.org",
@@ -6984,17 +6989,17 @@ TEST_F(AltSvcFrameTest,
   EXPECT_EQ(443u, altsvc_info_vector[0].alternative_service().port);
 
   // Make sure the alternative service information is only associated with
-  // kNetworkIsolationKey1.
-  EXPECT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(
-              url::SchemeHostPort(GURL(request_origin)), kNetworkIsolationKey2)
-          .empty());
-  EXPECT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(
-              url::SchemeHostPort(GURL(request_origin)), NetworkIsolationKey())
-          .empty());
+  // kNetworkAnonymizationKey1.
+  EXPECT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(
+                      url::SchemeHostPort(GURL(request_origin)),
+                      kNetworkAnonymizationKey2)
+                  .empty());
+  EXPECT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(
+                      url::SchemeHostPort(GURL(request_origin)),
+                      NetworkAnonymizationKey())
+                  .empty());
 }
 
 TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameOnStreamWithInsecureOrigin) {
@@ -7038,16 +7043,16 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameOnStreamWithInsecureOrigin) {
 
   const url::SchemeHostPort session_origin("https", test_url_.host(),
                                            test_url_.EffectiveIntPort());
-  ASSERT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(session_origin, NetworkIsolationKey())
-          .empty());
+  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(session_origin,
+                                               NetworkAnonymizationKey())
+                  .empty());
 
-  ASSERT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(
-              url::SchemeHostPort(GURL(request_origin)), NetworkIsolationKey())
-          .empty());
+  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(
+                      url::SchemeHostPort(GURL(request_origin)),
+                      NetworkAnonymizationKey())
+                  .empty());
 }
 
 TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameOnNonExistentStream) {
@@ -7063,10 +7068,10 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameOnNonExistentStream) {
 
   const url::SchemeHostPort session_origin("https", test_url_.host(),
                                            test_url_.EffectiveIntPort());
-  ASSERT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(session_origin, NetworkIsolationKey())
-          .empty());
+  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
+                  ->GetAlternativeServiceInfos(session_origin,
+                                               NetworkAnonymizationKey())
+                  .empty());
 }
 
 // Regression test for https://crbug.com/810404.
@@ -7093,7 +7098,7 @@ TEST_F(AltSvcFrameTest, InvalidOrigin) {
                                            test_url_.EffectiveIntPort());
   AlternativeServiceInfoVector altsvc_info_vector =
       spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
-          session_origin, NetworkIsolationKey());
+          session_origin, NetworkAnonymizationKey());
   EXPECT_TRUE(altsvc_info_vector.empty());
 }
 
@@ -7205,23 +7210,23 @@ TEST(CanPoolTest, CanPool) {
 
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "www.example.org",
-                                   NetworkIsolationKey()));
+                                   NetworkAnonymizationKey()));
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "mail.example.org",
-                                   NetworkIsolationKey()));
+                                   NetworkAnonymizationKey()));
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "mail.example.com",
-                                   NetworkIsolationKey()));
+                                   NetworkAnonymizationKey()));
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                     "www.example.org", "mail.google.com",
-                                    NetworkIsolationKey()));
+                                    NetworkAnonymizationKey()));
 }
 
 TEST(CanPoolTest, CanPoolExpectCT) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       /* enabled_features */
-      {TransportSecurityState::kDynamicExpectCTFeature,
+      {kDynamicExpectCTFeature,
        features::kPartitionExpectCTStateByNetworkIsolationKey},
       /* disabled_features */
       {});
@@ -7240,11 +7245,11 @@ TEST(CanPoolTest, CanPoolExpectCT) {
       ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS;
   ssl_info.is_issued_by_known_root = true;
 
-  net::NetworkIsolationKey network_isolation_key =
-      NetworkIsolationKey::CreateTransient();
+  net::NetworkAnonymizationKey network_anonymization_key =
+      NetworkAnonymizationKey::CreateTransient();
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "www.example.org",
-                                   network_isolation_key));
+                                   network_anonymization_key));
 
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::Seconds(1000);
@@ -7253,30 +7258,30 @@ TEST(CanPoolTest, CanPoolExpectCT) {
 
   // A different Expect-CT enabled host should not be allowed to pool.
   tss.AddExpectCT("mail.example.org", expiry, true, GURL(),
-                  network_isolation_key);
+                  network_anonymization_key);
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                     "www.example.org", "mail.example.org",
-                                    network_isolation_key));
+                                    network_anonymization_key));
   // A report-only Expect-CT configuration should not prevent pooling.
   tss.AddExpectCT("mail.example.org", expiry, false,
-                  GURL("https://report.test"), network_isolation_key);
+                  GURL("https://report.test"), network_anonymization_key);
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "mail.example.org",
-                                   network_isolation_key));
+                                   network_anonymization_key));
   // If Expect-CT becomes enabled for the same host for which the connection was
   // already made, subsequent connections to that host should not be allowed to
   // pool.
   tss.AddExpectCT("www.example.org", expiry, true, GURL(),
-                  network_isolation_key);
+                  network_anonymization_key);
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                     "www.example.org", "www.example.org",
-                                    network_isolation_key));
+                                    network_anonymization_key));
 
-  // With a different NetworkIsolationKey, CanPool() should still return true,
-  // as CT information is scoped to a single NetworkIsolationKey.
+  // With a different NetworkAnonymizationKey, CanPool() should still return
+  // true, as CT information is scoped to a single NetworkAnonymizationKey.
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "www.example.org",
-                                   NetworkIsolationKey::CreateTransient()));
+                                   NetworkAnonymizationKey::CreateTransient()));
 }
 
 TEST(CanPoolTest, CanNotPoolWithCertErrors) {
@@ -7294,7 +7299,7 @@ TEST(CanPoolTest, CanNotPoolWithCertErrors) {
 
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                     "www.example.org", "mail.example.org",
-                                    NetworkIsolationKey()));
+                                    NetworkAnonymizationKey()));
 }
 
 TEST(CanPoolTest, CanNotPoolWithClientCerts) {
@@ -7312,7 +7317,7 @@ TEST(CanPoolTest, CanNotPoolWithClientCerts) {
 
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                     "www.example.org", "mail.example.org",
-                                    NetworkIsolationKey()));
+                                    NetworkAnonymizationKey()));
 }
 
 TEST(CanPoolTest, CanNotPoolWithBadPins) {
@@ -7334,7 +7339,7 @@ TEST(CanPoolTest, CanNotPoolWithBadPins) {
 
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                     "www.example.org", "example.test",
-                                    NetworkIsolationKey()));
+                                    NetworkAnonymizationKey()));
 }
 
 TEST(CanPoolTest, CanNotPoolWithBadCTWhenCTRequired) {
@@ -7363,7 +7368,7 @@ TEST(CanPoolTest, CanNotPoolWithBadCTWhenCTRequired) {
 
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                     "www.example.org", "mail.example.org",
-                                    NetworkIsolationKey()));
+                                    NetworkAnonymizationKey()));
 }
 
 TEST(CanPoolTest, CanPoolWithBadCTWhenCTNotRequired) {
@@ -7392,7 +7397,7 @@ TEST(CanPoolTest, CanPoolWithBadCTWhenCTNotRequired) {
 
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "mail.example.org",
-                                   NetworkIsolationKey()));
+                                   NetworkAnonymizationKey()));
 }
 
 TEST(CanPoolTest, CanPoolWithGoodCTWhenCTRequired) {
@@ -7421,7 +7426,7 @@ TEST(CanPoolTest, CanPoolWithGoodCTWhenCTRequired) {
 
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "mail.example.org",
-                                   NetworkIsolationKey()));
+                                   NetworkAnonymizationKey()));
 }
 
 TEST(CanPoolTest, CanPoolWithAcceptablePins) {
@@ -7443,7 +7448,7 @@ TEST(CanPoolTest, CanPoolWithAcceptablePins) {
 
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "mail.example.org",
-                                   NetworkIsolationKey()));
+                                   NetworkAnonymizationKey()));
 }
 
 TEST(CanPoolTest, CanPoolWithClientCertsAndPolicy) {
@@ -7464,13 +7469,13 @@ TEST(CanPoolTest, CanPoolWithClientCertsAndPolicy) {
   // just one hostname.
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                    "www.example.org", "mail.example.org",
-                                   NetworkIsolationKey()));
+                                   NetworkAnonymizationKey()));
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                     "www.example.org", "mail.example.com",
-                                    NetworkIsolationKey()));
+                                    NetworkAnonymizationKey()));
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
                                     "mail.example.com", "www.example.org",
-                                    NetworkIsolationKey()));
+                                    NetworkAnonymizationKey()));
 }
 
 TEST(RecordPushedStreamHistogramTest, VaryResponseHeader) {

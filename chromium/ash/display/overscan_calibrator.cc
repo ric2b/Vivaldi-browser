@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 
 namespace ash {
 namespace {
@@ -62,8 +63,9 @@ void DrawTriangle(int x_offset,
   rotate_transform.Rotate(rotation_degree);
   gfx::Transform move_transform;
   move_transform.Translate(x_offset, y_offset);
-  rotate_transform.ConcatTransform(move_transform);
-  base_path.transform(rotate_transform.matrix().asM33(), &path);
+  rotate_transform.PostConcat(move_transform);
+  base_path.transform(gfx::TransformToFlattenedSkMatrix(rotate_transform),
+                      &path);
 
   canvas->DrawPath(path, content_flags);
   canvas->DrawPath(path, border_flags);

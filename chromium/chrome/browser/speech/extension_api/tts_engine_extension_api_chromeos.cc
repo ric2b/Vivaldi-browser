@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -254,5 +254,5 @@ void TtsExtensionEngineChromeOS::Play(std::unique_ptr<base::ListValue> args,
       engine_id, std::make_unique<extensions::Event>(
                      extensions::events::TTS_ENGINE_ON_SPEAK_WITH_AUDIO_STREAM,
                      tts_engine_events::kOnSpeakWithAudioStream,
-                     std::move(args->GetList()), profile));
+                     std::move(*args).TakeList(), profile));
 }

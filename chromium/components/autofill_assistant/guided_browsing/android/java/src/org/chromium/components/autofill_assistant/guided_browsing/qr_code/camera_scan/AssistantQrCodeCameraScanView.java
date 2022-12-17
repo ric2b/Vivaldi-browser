@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,6 +54,7 @@ class AssistantQrCodeCameraScanView {
         mRootView = createRootView();
         mCameraPermissionView = cameraPermissionView;
         mCameraPreviewOverlay = new AssistantQrCodeCameraPreviewOverlay(context);
+        mCameraPreviewOverlay.setId(R.id.autofill_assistant_qr_code_camera_preview_overlay);
     }
 
     public View getRootView() {

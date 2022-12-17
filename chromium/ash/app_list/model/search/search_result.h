@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,6 +70,9 @@ class APP_LIST_MODEL_EXPORT SearchResult {
     return metadata_->title_vector;
   }
   void SetTitleTextVector(const TextVector& vector);
+
+  bool multiline_title() const { return metadata_->multiline_title; }
+  void SetMultilineTitle(bool multiline_title);
 
   const std::u16string& details() const { return metadata_->details; }
   void SetDetails(const std::u16string& details);
@@ -197,6 +200,9 @@ class APP_LIST_MODEL_EXPORT SearchResult {
 
  private:
   friend class SearchController;
+  // TODO(crbug.com/1352636) Remove this friend class. Currently used to mock
+  // results for SearchResultImageView prototyping.
+  friend class SearchResultImageView;
 
   // Opens the result. Clients should use AppListViewDelegate::OpenSearchResult.
   virtual void Open(int event_flags);

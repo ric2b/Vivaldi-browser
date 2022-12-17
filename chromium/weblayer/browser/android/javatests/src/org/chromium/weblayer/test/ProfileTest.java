@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,6 +17,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.weblayer.Callback;
 import org.chromium.weblayer.CookieManager;
@@ -144,6 +145,7 @@ public class ProfileTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "see crbug.com/1359894")
     public void testEnumerateAllProfileNames() throws Exception {
         final String profileName = "TestEnumerateAllProfileNames";
         final InstrumentationActivity activity = mActivityTestRule.launchWithProfile(profileName);
@@ -182,6 +184,7 @@ public class ProfileTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "see crbug.com/1359894")
     public void testReuseProfile() throws Exception {
         final String profileName = "ReusedProfile";
         final Uri uri = Uri.parse("https://foo.bar");

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,7 +56,8 @@ class VulkanImplementationFlatland : public gpu::VulkanImplementation {
       gpu::VulkanDeviceQueue* device_queue,
       gfx::GpuMemoryBufferHandle gmb_handle,
       gfx::Size size,
-      VkFormat vk_format) override;
+      VkFormat vk_format,
+      const gfx::ColorSpace& color_space) override;
   std::unique_ptr<gpu::SysmemBufferCollection> RegisterSysmemBufferCollection(
       VkDevice device,
       gfx::SysmemBufferCollectionId id,

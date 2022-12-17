@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,7 +40,8 @@ class TabletModeFloatWindowResizer : public WindowResizer {
 
   // The snap position computed in `Drag()`. It is then cached for use in
   // `CompleteDrag()`.
-  SplitViewController::SnapPosition snap_position_ = SplitViewController::NONE;
+  SplitViewController::SnapPosition snap_position_ =
+      SplitViewController::SnapPosition::kNone;
 };
 
 }  // namespace ash

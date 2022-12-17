@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Fetches a copy of the latest state of a W3C test repository and commits.
@@ -11,7 +11,6 @@ If this script is given the argument --auto-update, it will also:
 """
 
 import argparse
-import datetime
 import json
 import logging
 import re
@@ -31,7 +30,6 @@ from blinkpy.w3c.wpt_expectations_updater import WPTExpectationsUpdater
 from blinkpy.w3c.wpt_github import WPTGitHub
 from blinkpy.w3c.wpt_manifest import WPTManifest, BASE_MANIFEST_NAME
 from blinkpy.web_tests.port.base import Port
-from blinkpy.web_tests.models.test_expectations import TestExpectations
 
 # Settings for how often to check try job results and how long to wait.
 POLL_DELAY_SECONDS = 2 * 60
@@ -193,9 +191,6 @@ class TestImporter(object):
         if not options.auto_update:
             return 0
 
-        if not self.record_version():
-            return 1
-
         if not self.run_commit_queue_for_cl():
             return 1
 
@@ -204,17 +199,6 @@ class TestImporter(object):
             return 1
 
         return 0
-
-    def record_version(self):
-        _log.info('Update external/Version to record upstream ToT.')
-        path_to_version = self.finder.path_from_web_tests('external', 'Version')
-        with open(path_to_version, "w") as f:
-            f.write("Version: %s\n" % self.wpt_revision)
-
-        message = 'Update revision'
-        self._commit_changes(message)
-        self._upload_patchset(message)
-        return True
 
     def update_expectations_for_cl(self):
         """Performs the expectation-updating part of an auto-import job.
@@ -227,8 +211,7 @@ class TestImporter(object):
 
         Returns True if everything is OK to continue, or False on failure.
         """
-        _log.info('Triggering try jobs for updating expectations.')
-        self.git_cl.trigger_try_jobs(self.blink_try_bots())
+        self._trigger_try_jobs()
         cl_status = self.git_cl.wait_for_try_jobs(
             poll_delay_seconds=POLL_DELAY_SECONDS,
             timeout_seconds=TIMEOUT_SECONDS)
@@ -259,6 +242,25 @@ class TestImporter(object):
                 self._commit_changes(message)
                 self._upload_patchset(message)
         return True
+
+    def _trigger_try_jobs(self):
+        _log.info('Triggering try jobs for updating expectations.')
+        try_bots = set(self.blink_try_bots())
+        wptrunner_builders = {
+            builder
+            for builder in try_bots
+            if self.host.builders.is_wpt_builder(builder)
+        }
+        rebaselining_builders = try_bots - wptrunner_builders
+        if rebaselining_builders:
+            _log.info('For rebaselining:')
+            for builder in sorted(rebaselining_builders):
+                _log.info('  %s', builder)
+        if wptrunner_builders:
+            _log.info('For updating WPT metadata:')
+            for builder in sorted(wptrunner_builders):
+                _log.info('  %s', builder)
+        self.git_cl.trigger_try_jobs(try_bots)
 
     def run_commit_queue_for_cl(self):
         """Triggers CQ and either commits or aborts; returns True on success."""
@@ -523,7 +525,7 @@ class TestImporter(object):
         # and the Port class.
         manifest_path = self.finder.path_from_web_tests(
             'external', 'wpt', 'MANIFEST.json')
-        manifest = WPTManifest(self.fs.read_text_file(manifest_path))
+        manifest = WPTManifest(self.host, manifest_path)
         wpt_urls = manifest.all_urls()
 
         # Currently baselines for tests with query strings are merged,
@@ -667,14 +669,33 @@ class TestImporter(object):
         This is the same as invoking the `wpt-update-expectations` script.
         """
         _log.info('Adding test expectations lines to TestExpectations.')
-        self.rebaselined_tests, self.new_test_expectations = (
+        tests_to_rebaseline = set()
+
+        to_rebaseline, self.new_test_expectations = (
             self._expectations_updater.update_expectations())
+        tests_to_rebaseline.update(to_rebaseline)
 
         _log.info('Adding test expectations lines for disable-layout-ng')
-        self._expectations_updater.update_expectations_for_flag_specific('disable-layout-ng')
+        to_rebaseline, _ = (
+            self._expectations_updater.update_expectations_for_flag_specific(
+                'disable-layout-ng'))
+        tests_to_rebaseline.update(to_rebaseline)
 
         _log.info('Adding test expectations lines for disable-site-isolation-trials')
-        self._expectations_updater.update_expectations_for_flag_specific('disable-site-isolation-trials')
+        to_rebaseline, _ = (
+            self._expectations_updater.update_expectations_for_flag_specific(
+                'disable-site-isolation-trials'))
+        tests_to_rebaseline.update(to_rebaseline)
+
+        # commit local changes so that rebaseline tool will be happy
+        if self.chromium_git.has_working_directory_changes():
+            message = 'Update test expectations'
+            self._commit_changes(message)
+
+        self._expectations_updater.download_text_baselines(
+            list(tests_to_rebaseline))
+
+        self.rebaselined_tests = sorted(tests_to_rebaseline)
 
     def _get_last_imported_wpt_revision(self):
         """Finds the last imported WPT revision."""

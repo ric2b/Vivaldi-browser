@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -20,10 +21,9 @@
 #include "chrome/browser/media/router/discovery/mdns/media_sink_util.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/test/provider_test_helpers.h"
-#include "components/cast_channel/cast_socket.h"
-#include "components/cast_channel/cast_socket_service.h"
-#include "components/cast_channel/cast_test_util.h"
-#include "components/media_router/browser/logger_impl.h"
+#include "components/media_router/common/providers/cast/channel/cast_socket.h"
+#include "components/media_router/common/providers/cast/channel/cast_socket_service.h"
+#include "components/media_router/common/providers/cast/channel/cast_test_util.h"
 #include "components/media_router/common/test/test_helper.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
@@ -1185,10 +1185,9 @@ TEST_P(CastMediaSinkServiceImplTest, CacheDialDiscoveredSinks) {
 
   // CastMediaSinkServiceImpl generates a Cast sink based on |sink2_dial|.
   const auto& sinks = media_sink_service_impl_.GetSinks();
-  auto sink2_it = std::find_if(
-      sinks.begin(), sinks.end(), [&ip_endpoint2](const auto& entry) {
-        return entry.second.cast_data().ip_endpoint == ip_endpoint2;
-      });
+  auto sink2_it = base::ranges::find(
+      sinks, ip_endpoint2,
+      [](const auto& entry) { return entry.second.cast_data().ip_endpoint; });
   ASSERT_TRUE(sink2_it != sinks.end());
   MediaSinkInternal sink2_cast_from_dial = sink2_it->second;
 
@@ -1420,27 +1419,6 @@ TEST_P(CastMediaSinkServiceImplTest, TestCreateCastSocketOpenParams) {
             open_params.connect_timeout.InSeconds());
   EXPECT_EQ(liveness_timeout_in_seconds,
             open_params.liveness_timeout.InSeconds());
-}
-
-TEST_P(CastMediaSinkServiceImplTest, BindLogger) {
-  std::unique_ptr<LoggerImpl> logger_1 = std::make_unique<LoggerImpl>();
-  mojo::PendingRemote<mojom::Logger> pending_remote_1;
-  logger_1->BindReceiver(pending_remote_1.InitWithNewPipeAndPassReceiver());
-  media_sink_service_impl_.BindLogger(std::move(pending_remote_1));
-
-  // Trying to bind another pending remote no-ops instead of causing
-  // a DCHECK failure from binding to a remote that's already bound.
-  mojo::PendingRemote<mojom::Logger> pending_remote_2;
-  std::unique_ptr<LoggerImpl> logger_2 = std::make_unique<LoggerImpl>();
-  logger_2->BindReceiver(pending_remote_2.InitWithNewPipeAndPassReceiver());
-  media_sink_service_impl_.BindLogger(std::move(pending_remote_2));
-
-  // Trying to bind a disconnected receiver should work.
-  logger_1.reset();
-  std::unique_ptr<LoggerImpl> logger_3 = std::make_unique<LoggerImpl>();
-  mojo::PendingRemote<mojom::Logger> pending_remote_3;
-  logger_3->BindReceiver(pending_remote_3.InitWithNewPipeAndPassReceiver());
-  media_sink_service_impl_.BindLogger(std::move(pending_remote_3));
 }
 
 TEST_P(CastMediaSinkServiceImplTest, TestHasSink) {

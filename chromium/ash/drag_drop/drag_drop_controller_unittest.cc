@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -1671,10 +1671,10 @@ TEST_F(DragDropControllerTest, TabletSplitViewDragTwoBrowserTabs) {
   std::unique_ptr<aura::Window> tab_window2 = CreateToplevelTestWindow();
   SplitViewController* const split_view_controller =
       SplitViewController::Get(tab_window1.get());
-  split_view_controller->SnapWindow(tab_window1.get(),
-                                    SplitViewController::SnapPosition::LEFT);
-  split_view_controller->SnapWindow(tab_window2.get(),
-                                    SplitViewController::SnapPosition::RIGHT);
+  split_view_controller->SnapWindow(
+      tab_window1.get(), SplitViewController::SnapPosition::kPrimary);
+  split_view_controller->SnapWindow(
+      tab_window2.get(), SplitViewController::SnapPosition::kSecondary);
   EXPECT_TRUE(split_view_controller->InTabletSplitViewMode());
 
   // Touch and hold the right tab window.

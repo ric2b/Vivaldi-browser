@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -86,8 +86,8 @@ void ExtensionApiTest::SetUpOnMainThread() {
 
 void ExtensionApiTest::TearDownOnMainThread() {
   ExtensionBrowserTest::TearDownOnMainThread();
-  TestGetConfigFunction::set_test_config_state(NULL);
-  test_config_.reset(NULL);
+  TestGetConfigFunction::set_test_config_state(nullptr);
+  test_config_.reset();
 }
 
 bool ExtensionApiTest::RunExtensionTest(const char* extension_name) {
@@ -116,7 +116,8 @@ bool ExtensionApiTest::RunExtensionTest(const base::FilePath& extension_path,
   // only valid with other options.
   CHECK(!(run_options.extension_url && run_options.page_url))
       << "'extension_url' and 'page_url' are mutually exclusive.";
-  CHECK(!run_options.open_in_incognito || run_options.page_url)
+  CHECK(!run_options.open_in_incognito || run_options.page_url ||
+        run_options.extension_url)
       << "'open_in_incognito' is only allowed if specifiying 'page_url'";
   CHECK(!(run_options.launch_as_platform_app && run_options.page_url))
       << "'launch_as_platform_app' and 'page_url' are mutually exclusive.";
@@ -134,6 +135,7 @@ bool ExtensionApiTest::RunExtensionTest(const base::FilePath& extension_path,
   GURL url_to_open;
   if (run_options.page_url) {
     url_to_open = GURL(run_options.page_url);
+    DCHECK(url_to_open.has_scheme() && url_to_open.has_host());
     // Note: We use is_valid() here in the expectation that the provided url
     // may lack a scheme & host and thus be a relative url within the loaded
     // extension.
@@ -142,6 +144,7 @@ bool ExtensionApiTest::RunExtensionTest(const base::FilePath& extension_path,
     if (!url_to_open.is_valid())
       url_to_open = extension->GetResourceURL(run_options.page_url);
   } else if (run_options.extension_url) {
+    DCHECK(!url_to_open.has_scheme() && !url_to_open.has_host());
     url_to_open = extension->GetResourceURL(run_options.extension_url);
   }
 
@@ -193,7 +196,7 @@ bool ExtensionApiTest::OpenTestURL(const GURL& url, bool open_in_incognito) {
 const Extension* ExtensionApiTest::GetSingleLoadedExtension() {
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser()->profile());
 
-  const Extension* result = NULL;
+  const Extension* result = nullptr;
   for (const scoped_refptr<const Extension>& extension :
        registry->enabled_extensions()) {
     // Ignore any component extensions. They are automatically loaded into all
@@ -201,12 +204,12 @@ const Extension* ExtensionApiTest::GetSingleLoadedExtension() {
     if (extension->location() == mojom::ManifestLocation::kComponent)
       continue;
 
-    if (result != NULL) {
+    if (result != nullptr) {
       // TODO(yoz): this is misleading; it counts component extensions.
       message_ = base::StringPrintf(
           "Expected only one extension to be present.  Found %u.",
           static_cast<unsigned>(registry->enabled_extensions().size()));
-      return NULL;
+      return nullptr;
     }
 
     result = extension.get();
@@ -214,7 +217,7 @@ const Extension* ExtensionApiTest::GetSingleLoadedExtension() {
 
   if (!result) {
     message_ = "extension pointer is NULL.";
-    return NULL;
+    return nullptr;
   }
   return result;
 }

@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -26,9 +26,6 @@ _BENCHMARK_UMA = [
     'Graphics.Smoothness.Checkerboarding.WheelScroll',
     'Graphics.Smoothness.Jank.Compositor.TouchScroll',
     'Graphics.Smoothness.Jank.Main.TouchScroll',
-    'Graphics.Smoothness.PercentDroppedFrames.AllAnimations',
-    'Graphics.Smoothness.PercentDroppedFrames.AllInteractions',
-    'Graphics.Smoothness.PercentDroppedFrames.AllSequences',
     'Graphics.Smoothness.PercentDroppedFrames3.AllAnimations',
     'Graphics.Smoothness.PercentDroppedFrames3.AllInteractions',
     'Graphics.Smoothness.PercentDroppedFrames3.AllSequences',

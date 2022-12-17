@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,7 @@ import org.chromium.chrome.browser.app.tab_activity_glue.TabReparentingControlle
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.banners.AppBannerInProductHelpController;
 import org.chromium.chrome.browser.banners.AppBannerInProductHelpControllerFactory;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
@@ -215,7 +215,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
      * @param shareDelegateSupplier Supplies the {@link ShareDelegate}.
      * @param tabProvider The {@link ActivityTabProvider} to get current tab of the activity.
      * @param profileSupplier Supplier of the currently applicable profile.
-     * @param bookmarkBridgeSupplier Supplier of the bookmark  bridge for the current profile.
+     * @param bookmarkModelSupplier Supplier of the bookmark  bridge for the current profile.
      * @param contextualSearchManagerSupplier Supplier of the {@link ContextualSearchManager}.
      * @param tabModelSelectorSupplier Supplies the {@link TabModelSelector}.
      * @param startSurfaceSupplier Supplier of the {@link StartSurface}.
@@ -259,7 +259,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             @NonNull ObservableSupplier<ShareDelegate> shareDelegateSupplier,
             @NonNull ActivityTabProvider tabProvider,
             @NonNull ObservableSupplier<Profile> profileSupplier,
-            @NonNull ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
+            @NonNull ObservableSupplier<BookmarkModel> bookmarkModelSupplier,
             @NonNull ObservableSupplier<TabBookmarker> tabBookmarkerSupplier,
             @NonNull Supplier<ContextualSearchManager> contextualSearchManagerSupplier,
             @NonNull ObservableSupplier<TabModelSelector> tabModelSelectorSupplier,
@@ -295,7 +295,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             OneshotSupplier<TabReparentingController> tabReparentingControllerSupplier,
             boolean initializeUiWithIncognitoColors, @NonNull BackPressManager backPressManager) {
         super(activity, onOmniboxFocusChangedListener, shareDelegateSupplier, tabProvider,
-                profileSupplier, bookmarkBridgeSupplier, tabBookmarkerSupplier,
+                profileSupplier, bookmarkModelSupplier, tabBookmarkerSupplier,
                 contextualSearchManagerSupplier, tabModelSelectorSupplier, startSurfaceSupplier,
                 tabSwitcherSupplier, intentMetadataOneshotSupplier,
                 layoutStateProviderOneshotSupplier, startSurfaceParentTabSupplier,
@@ -584,6 +584,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                 mModalDialogManagerSupplier.get(), new IncognitoReauthManager(),
                 new SettingsLauncherImpl(), tabSwitcherCustomViewSupplier,
                 incognitoReauthTopToolbarDelegate, mLayoutManager,
+                /*showRegularOverviewIntent= */ null,
                 /*isTabbedActivity=*/true);
     }
 
@@ -680,9 +681,10 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
 
         if (!ChromeApplicationImpl.isVivaldi()) {
         if (!didTriggerPromo) {
-            didTriggerPromo = RequestDesktopUtils.maybeShowGlobalSettingOptInMessage(
-                    getPrimaryDisplaySizeInInches(), Profile.getLastUsedRegularProfile(),
-                    mMessageDispatcher, mActivity, mActivityTabProvider.get());
+            didTriggerPromo = DeviceFormFactor.isWindowOnTablet(mWindowAndroid)
+                    && RequestDesktopUtils.maybeShowGlobalSettingOptInMessage(
+                            getPrimaryDisplaySizeInInches(), Profile.getLastUsedRegularProfile(),
+                            mMessageDispatcher, mActivity, mActivityTabProvider);
         }
 
         if (!didTriggerPromo) {
@@ -806,6 +808,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
         final BrowserControlsSizer browserControlsSizer = mBrowserControlsManager;
         mStatusIndicatorCoordinator = new StatusIndicatorCoordinator(mActivity,
                 mCompositorViewHolderSupplier.get().getResourceManager(), browserControlsSizer,
+                mTabObscuringHandlerSupplier.get(),
                 mStatusBarColorController::getStatusBarColorWithoutStatusIndicator,
                 mCanAnimateBrowserControls, layoutManager::requestUpdate);
         layoutManager.addSceneOverlay(mStatusIndicatorCoordinator.getSceneLayer());

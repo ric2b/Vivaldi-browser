@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -91,7 +91,7 @@ class LacrosAvailabilityPolicyObserverTest : public testing::Test {
         absl::optional<base::Value> parsed = base::JSONReader::Read(flag_value);
         std::vector<std::string> result;
         if (parsed && parsed->is_list()) {
-          for (const auto& element : parsed->GetListDeprecated()) {
+          for (const auto& element : parsed->GetList()) {
             result.push_back(element.GetString());
           }
         }
